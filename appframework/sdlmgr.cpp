@@ -18,15 +18,8 @@ static inline void SDL_GetWindowSizeInPixels( SDL_Window *window, int *w, int *h
 #include "appframework/ilaunchermgr.h"
 #include "inputsystem/ButtonCode.h"
 
-#include "SDL.h"
-#if !SDL_VERSION_ATLEAST(2, 26, 0)
-static inline void SDL_GetWindowSizeInPixels( SDL_Window *window, int *w, int *h )
-{
-	SDL_GL_GetDrawableSize( window, w, h );
-}
-#endif
-
-#if defined(IOS) || TOGLES
+#include <TargetConditionals.h>
+#if TARGET_OS_IPHONE
 #include "togles/rendermechanism.h"
 #else
 #include "togl/rendermechanism.h"

@@ -63,25 +63,22 @@ build_jpeg() {
 }
 
 build_freetype() {
-	local dir="$BUILD/freetype"
-	rm -rf "$dir"
-	mkdir -p "$dir"
-	cp -R "$ROOT/thirdparty/freetype/"* "$dir/"
-	cd "$dir"
+	cd "$ROOT/thirdparty/freetype"
+	git submodule update --init --recursive
+	make distclean 2>/dev/null || true
 	./configure --host=aarch64-apple-darwin --enable-static --disable-shared \
 		--without-harfbuzz --without-brotli --prefix="$PREFIX" \
-		CPPFLAGS="-I$PREFIX/include" LDFLAGS="-L$PREFIX/lib" LIBPNG_CFLAGS="-I$PREFIX/include" LIBPNG_LIBS="-L$PREFIX/lib -lpng -lz"
+		CPPFLAGS="-I$PREFIX/include" LDFLAGS="-L$PREFIX/lib" \
+		LIBPNG_CFLAGS="-I$PREFIX/include" LIBPNG_LIBS="-L$PREFIX/lib -lpng -lz"
 	make -j"$JOBS"
 	make install
 	cp objs/.libs/libfreetype.a "$PREFIX/libfreetype2.a"
 }
 
 build_curl() {
-	local dir="$BUILD/curl"
-	rm -rf "$dir"
-	mkdir -p "$dir"
-	cp -R "$ROOT/thirdparty/curl/"* "$dir/"
-	cd "$dir"
+	cd "$ROOT/thirdparty/curl"
+	make distclean 2>/dev/null || true
+	./buildconf 2>/dev/null || autoreconf -fi
 	./configure --host=aarch64-apple-darwin --enable-static --disable-shared \
 		--disable-ldap --disable-ldaps --without-libidn2 --without-libpsl \
 		--without-nghttp2 --without-zstd --with-zlib="$PREFIX" --prefix="$PREFIX"
@@ -90,11 +87,21 @@ build_curl() {
 	cp lib/.libs/libcurl.a "$PREFIX/libcurl.a"
 }
 
+# Ensure waf's lib checks find archives in the search path root.
+finalize_libs() {
+	for lib in libz libpng libjpeg libcurl libfreetype2 libbz2; do
+		if [ -f "$PREFIX/lib/${lib}.a" ] && [ ! -f "$PREFIX/${lib}.a" ]; then
+			cp "$PREFIX/lib/${lib}.a" "$PREFIX/${lib}.a"
+		fi
+	done
+}
+
 build_zlib
 build_bz2
 build_png
 build_jpeg
 build_freetype
 build_curl
+finalize_libs
 
 echo "iOS deps installed to $PREFIX"

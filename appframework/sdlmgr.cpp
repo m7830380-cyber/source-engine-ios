@@ -12,7 +12,11 @@
 #include "appframework/ilaunchermgr.h"
 #include "inputsystem/ButtonCode.h"
 
+#if TOGLES
+#include "togles/rendermechanism.h"
+#else
 #include "togl/rendermechanism.h"
+#endif
 
 #include "tier0/vprof_telemetry.h"
 #include "tier0/icommandline.h"

@@ -206,10 +206,10 @@ def define_platform(conf):
 		])
 
 	if conf.options.TOGLES:
-		conf.env.append_unique('DEFINES', ['TOGLES'])
+		conf.define('TOGLES', 1)
 
 	if conf.env.ANGLE:
-		conf.env.append_unique('DEFINES', ['ANGLE'])
+		conf.define('ANGLE', 1)
 
 	if conf.options.TESTS:
 		conf.define('UNITTESTS', 1)

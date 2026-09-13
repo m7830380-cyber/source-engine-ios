@@ -46,7 +46,13 @@ def build(bld):
 		'../public',
 		'../public/tier0',
 		'../public/tier1'
-	] + bld.env.INCLUDES_SDL2
+	]
+	if bld.env.INCLUDES_SDL2:
+		includes += list(bld.env.INCLUDES_SDL2)
+	if bld.env.IOS:
+		includes.append('../thirdparty/SDL-src/include')
+		if bld.env.ANGLE:
+			includes.append('../thirdparty/angle/include')
 
 	defines = []
 

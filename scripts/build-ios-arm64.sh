@@ -19,6 +19,8 @@ scripts/ios/build-angle.sh
 
 export ANGLE_FRAMEWORK_PATH="$ROOT/build/ios"
 SDL2_FW="$ROOT/build/ios/SDL2.framework"
+export CFLAGS="-I${SDL2_FW}/Headers ${CFLAGS:-}"
+export CXXFLAGS="-I${SDL2_FW}/Headers ${CXXFLAGS:-}"
 
 ./waf configure -T release --disable-warns --ios --angle --togles \
 	--skip-sdl2-sanity-check \

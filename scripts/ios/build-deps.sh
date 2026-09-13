@@ -64,7 +64,10 @@ build_jpeg() {
 
 build_freetype() {
 	cd "$ROOT/thirdparty/freetype"
-	git submodule update --init --recursive
+	if [ ! -f subprojects/dlg/include/dlg/output.h ]; then
+		rm -rf subprojects/dlg
+		git clone --depth 1 https://github.com/nyorain/dlg.git subprojects/dlg
+	fi
 	make distclean 2>/dev/null || true
 	./configure --host=aarch64-apple-darwin --enable-static --disable-shared \
 		--without-harfbuzz --without-brotli --prefix="$PREFIX" \

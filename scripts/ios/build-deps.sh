@@ -82,9 +82,12 @@ build_freetype() {
 }
 
 build_curl() {
-	cd "$ROOT/thirdparty/curl"
-	make distclean 2>/dev/null || true
-	autoreconf -fi
+	local dir="$BUILD/curl-src"
+	local ver="8.5.0"
+	rm -rf "$dir" "$BUILD/curl-$ver"
+	mkdir -p "$dir"
+	curl -fsSL "https://curl.se/download/curl-${ver}.tar.gz" | tar xz -C "$BUILD"
+	cd "$BUILD/curl-$ver"
 	./configure --host=aarch64-apple-darwin --enable-static --disable-shared \
 		--disable-ldap --disable-ldaps --without-libidn2 --without-libpsl \
 		--without-nghttp2 --without-zstd --without-ssl --without-libssh2 \

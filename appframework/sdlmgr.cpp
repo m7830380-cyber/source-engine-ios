@@ -39,9 +39,9 @@ static inline void SDL_GetWindowSizeInPixels( SDL_Window *window, int *w, int *h
 #include "EGL/egl.h"
 #include "EGL/eglext.h"
 #include "EGL/eglext_angle.h"
-#include "SDL2/SDL_rect.h"
-#include "SDL2/sdl_video.h"
-#include "SDL2/SDL_syswm.h"
+#include "SDL_rect.h"
+#include "SDL_video.h"
+#include "SDL_syswm.h"
 #endif
 
 // NOTE: This has to be the last file included! (turned off below, since this is included like a header)

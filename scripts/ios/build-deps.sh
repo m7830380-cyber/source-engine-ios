@@ -84,10 +84,11 @@ build_freetype() {
 build_curl() {
 	cd "$ROOT/thirdparty/curl"
 	make distclean 2>/dev/null || true
-	./buildconf 2>/dev/null || autoreconf -fi
+	autoreconf -fi
 	./configure --host=aarch64-apple-darwin --enable-static --disable-shared \
 		--disable-ldap --disable-ldaps --without-libidn2 --without-libpsl \
-		--without-nghttp2 --without-zstd --with-zlib="$PREFIX" --prefix="$PREFIX"
+		--without-nghttp2 --without-zstd --without-ssl --without-libssh2 \
+		--with-zlib="$PREFIX" --prefix="$PREFIX"
 	make -j"$JOBS"
 	make install
 	cp lib/.libs/libcurl.a "$PREFIX/libcurl.a"

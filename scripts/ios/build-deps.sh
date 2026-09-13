@@ -69,6 +69,9 @@ build_freetype() {
 		git clone --depth 1 https://github.com/nyorain/dlg.git subprojects/dlg
 	fi
 	make distclean 2>/dev/null || true
+	if [ ! -x builds/unix/configure ]; then
+		./autogen.sh
+	fi
 	./configure --host=aarch64-apple-darwin --enable-static --disable-shared \
 		--without-harfbuzz --without-brotli --prefix="$PREFIX" \
 		CPPFLAGS="-I$PREFIX/include" LDFLAGS="-L$PREFIX/lib" \

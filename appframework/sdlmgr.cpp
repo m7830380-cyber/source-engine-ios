@@ -7,10 +7,24 @@
 #ifdef USE_SDL
 #include "SDL.h"
 #include "SDL_opengl.h"
+#if !SDL_VERSION_ATLEAST(2, 26, 0)
+static inline void SDL_GetWindowSizeInPixels( SDL_Window *window, int *w, int *h )
+{
+	SDL_GL_GetDrawableSize( window, w, h );
+}
+#endif
 #endif
 
 #include "appframework/ilaunchermgr.h"
 #include "inputsystem/ButtonCode.h"
+
+#include "SDL.h"
+#if !SDL_VERSION_ATLEAST(2, 26, 0)
+static inline void SDL_GetWindowSizeInPixels( SDL_Window *window, int *w, int *h )
+{
+	SDL_GL_GetDrawableSize( window, w, h );
+}
+#endif
 
 #if TOGLES
 #include "togles/rendermechanism.h"

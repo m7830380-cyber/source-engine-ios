@@ -56,6 +56,11 @@ def build(bld):
 
 	defines = []
 
+	if bld.env.TOGLES:
+		defines += ['TOGLES=1', 'DX_TO_GL_ABSTRACTION']
+	if bld.env.ANGLE:
+		defines += ['ANGLE=1']
+
 	libs = []
 
 	if bld.env.DEST_OS == 'darwin' and not bld.env.IOS:

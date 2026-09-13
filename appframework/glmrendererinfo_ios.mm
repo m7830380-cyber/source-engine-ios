@@ -9,6 +9,14 @@
 
 #include "GL/gl.h"
 
+#include "SDL.h"
+#if !SDL_VERSION_ATLEAST(2, 26, 0)
+static inline void SDL_GetWindowSizeInPixels( SDL_Window *window, int *w, int *h )
+{
+	SDL_GL_GetDrawableSize( window, w, h );
+}
+#endif
+
 #undef MIN
 #undef MAX
 #include "tier0/threadtools.h"
@@ -16,7 +24,7 @@
 #include "tier1/interface.h"
 #include "tier1/strtools.h"
 #include "tier1/utllinkedlist.h"
-#include "togl/rendermechanism.h"
+#include "togles/rendermechanism.h"
 #include "appframework/ilaunchermgr.h"	// gets pulled in from glmgr.h
 #include "appframework/IAppSystemGroup.h"
 #include "inputsystem/ButtonCode.h"

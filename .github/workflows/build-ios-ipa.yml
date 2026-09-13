@@ -1,0 +1,29 @@
+name: Build iOS IPA
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-ios-ipa:
+    runs-on: macos-14
+    timeout-minutes: 180
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Build unsigned IPA
+        run: |
+          chmod +x scripts/build-ios-arm64.sh scripts/ios/*.sh
+          ./scripts/build-ios-arm64.sh
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: source-engine-ios-arm64
+          path: artifacts/source-engine-ios-arm64.ipa
+          if-no-files-found: error

@@ -4,6 +4,10 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 ROOT="$PWD"
 
+if ! command -v autoconf >/dev/null; then
+	brew install autoconf automake libtool pkg-config
+fi
+
 git submodule sync --recursive
 git submodule update --init --recursive
 

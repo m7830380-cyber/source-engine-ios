@@ -18,6 +18,7 @@
 #if defined( DX_TO_GL_ABSTRACTION )
 
 #if defined(IOS) || defined(_IOS) || defined(TOGLES)
+#include "GL/gl.h"
 #include "togles/linuxwin/glmgrbasics.h"
 #include "togles/linuxwin/glmdisplay.h"
 #else

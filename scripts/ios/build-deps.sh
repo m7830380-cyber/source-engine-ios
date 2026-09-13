@@ -22,7 +22,7 @@ build_zlib() {
 	local dir="$BUILD/zlib"
 	rm -rf "$dir"
 	mkdir -p "$dir"
-	cp -R thirdparty/zlib/* "$dir/"
+	cp -R "$ROOT/thirdparty/zlib/"* "$dir/"
 	cd "$dir"
 	CHOST=aarch64-apple-darwin ./configure --static --prefix="$PREFIX"
 	make -j"$JOBS"
@@ -40,7 +40,7 @@ build_png() {
 	local dir="$BUILD/libpng"
 	rm -rf "$dir"
 	mkdir -p "$dir"
-	cp -R thirdparty/libpng/* "$dir/"
+	cp -R "$ROOT/thirdparty/libpng/"* "$dir/"
 	cd "$dir"
 	./configure --host=aarch64-apple-darwin --enable-static --disable-shared \
 		--prefix="$PREFIX" CPPFLAGS="-I$PREFIX/include" LDFLAGS="-L$PREFIX/lib"
@@ -53,7 +53,7 @@ build_jpeg() {
 	local dir="$BUILD/libjpeg"
 	rm -rf "$dir"
 	mkdir -p "$dir"
-	cp -R thirdparty/libjpeg/* "$dir/"
+	cp -R "$ROOT/thirdparty/libjpeg/"* "$dir/"
 	cd "$dir"
 	./configure --host=aarch64-apple-darwin --enable-static --disable-shared \
 		--prefix="$PREFIX"
@@ -66,7 +66,7 @@ build_freetype() {
 	local dir="$BUILD/freetype"
 	rm -rf "$dir"
 	mkdir -p "$dir"
-	cp -R thirdparty/freetype/* "$dir/"
+	cp -R "$ROOT/thirdparty/freetype/"* "$dir/"
 	cd "$dir"
 	./configure --host=aarch64-apple-darwin --enable-static --disable-shared \
 		--without-harfbuzz --without-brotli --prefix="$PREFIX" \
@@ -80,7 +80,7 @@ build_curl() {
 	local dir="$BUILD/curl"
 	rm -rf "$dir"
 	mkdir -p "$dir"
-	cp -R thirdparty/curl/* "$dir/"
+	cp -R "$ROOT/thirdparty/curl/"* "$dir/"
 	cd "$dir"
 	./configure --host=aarch64-apple-darwin --enable-static --disable-shared \
 		--disable-ldap --disable-ldaps --without-libidn2 --without-libpsl \

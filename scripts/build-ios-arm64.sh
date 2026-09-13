@@ -21,6 +21,7 @@ export ANGLE_FRAMEWORK_PATH="$ROOT/build/ios"
 SDL2_FW="$ROOT/build/ios/SDL2.framework"
 
 ./waf configure -T release --disable-warns --ios --angle --togles \
+	--skip-sdl2-sanity-check \
 	--sdl2="$SDL2_FW" \
 	"$@"
 

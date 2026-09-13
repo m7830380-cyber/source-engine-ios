@@ -560,6 +560,8 @@ def configure(conf):
 			'-I'+os.path.abspath('.')+'/thirdparty/fontconfig',
 			'-I'+os.path.abspath('.')+'/thirdparty/freetype/include',
 		]
+		if conf.env.IOS and conf.options.SDL2_PATH:
+			flags += ['-I'+os.path.abspath(os.path.join(conf.options.SDL2_PATH, 'Headers'))]
 	if conf.env.DEST_OS == 'android':
 		flags += [
 			'-llog', 
@@ -660,7 +662,8 @@ def configure(conf):
 	if not conf.env.HAVE_SDL2:
 		conf.fatal("SDL2 isn't available")
 	else:
-		conf.env.append_unique('INCLUDES', conf.env.INCLUDES_SDL2)
+		for inc in conf.env.INCLUDES_SDL2:
+			conf.env.append_unique('INCLUDES', inc)
 		if conf.env.IOS and conf.options.SDL2_PATH:
 			sdl_headers = os.path.abspath(os.path.join(conf.options.SDL2_PATH, 'Headers'))
 			conf.env.append_unique('CFLAGS', '-I' + sdl_headers)

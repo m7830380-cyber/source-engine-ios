@@ -78,7 +78,11 @@ def build(bld):
 		'.',
 		'../public',
 		'../public/tier0',
-	] + bld.env.INCLUDES_SDL2
+	]
+	if bld.env.INCLUDES_SDL2:
+		includes += list(bld.env.INCLUDES_SDL2)
+	if bld.env.IOS:
+		includes.append('../build/ios/SDL2.framework/Headers')
 
 	defines = []
 

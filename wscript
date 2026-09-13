@@ -661,6 +661,11 @@ def configure(conf):
 		conf.fatal("SDL2 isn't available")
 	else:
 		conf.env.append_unique('INCLUDES', conf.env.INCLUDES_SDL2)
+		if conf.env.IOS and conf.options.SDL2_PATH:
+			sdl_headers = os.path.abspath(os.path.join(conf.options.SDL2_PATH, 'Headers'))
+			conf.env.append_unique('CFLAGS', '-I' + sdl_headers)
+			conf.env.append_unique('CXXFLAGS', '-I' + sdl_headers)
+			conf.env.append_unique('INCLUDES', sdl_headers)
 
 	# indicate if we are packaging for Linux/BSD
 	if conf.env.DEST_OS != 'android' and not conf.env.IOS:

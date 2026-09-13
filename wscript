@@ -561,7 +561,10 @@ def configure(conf):
 			'-I'+os.path.abspath('.')+'/thirdparty/freetype/include',
 		]
 		if conf.env.IOS:
-			flags += ['-I'+os.path.abspath('.')+'/thirdparty/SDL-src/include']
+			flags += [
+				'-I'+os.path.abspath('.')+'/thirdparty/SDL-src/include',
+				'-I'+os.path.abspath('.')+'/thirdparty/SDL-src/src/video/khronos',
+			]
 	if conf.env.DEST_OS == 'android':
 		flags += [
 			'-llog', 

@@ -51,8 +51,7 @@ def build(bld):
 		includes += list(bld.env.INCLUDES_SDL2)
 	if bld.env.IOS:
 		includes.append('../thirdparty/SDL-src/include')
-		if bld.env.ANGLE:
-			includes.append('../thirdparty/angle/include')
+		includes.append('../thirdparty/SDL-src/src/video/khronos')
 
 	defines = []
 

@@ -11,7 +11,7 @@ fi
 git submodule sync --recursive
 git submodule update --init --recursive
 
-chmod +x scripts/ios/*.sh
+chmod +x scripts/ios/*.sh waf
 
 scripts/ios/build-deps.sh
 scripts/ios/build-sdl2.sh

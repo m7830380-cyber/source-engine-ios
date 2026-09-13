@@ -26,7 +26,7 @@ static inline void SDL_GetWindowSizeInPixels( SDL_Window *window, int *w, int *h
 }
 #endif
 
-#if TOGLES
+#if defined(IOS) || TOGLES
 #include "togles/rendermechanism.h"
 #else
 #include "togl/rendermechanism.h"

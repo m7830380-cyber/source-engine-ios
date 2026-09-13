@@ -48,6 +48,7 @@ def build(bld):
 	if bld.env.IOS:
 		includes.append('../thirdparty/SDL-src/include')
 		includes.append('../thirdparty/SDL-src/src/video/khronos')
+		includes.append('../common')
 
 	defines = []
 	if bld.env.TOGLES:

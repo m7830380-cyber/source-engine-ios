@@ -564,6 +564,7 @@ def configure(conf):
 			flags += [
 				'-I'+os.path.abspath('.')+'/thirdparty/SDL-src/include',
 				'-I'+os.path.abspath('.')+'/thirdparty/SDL-src/src/video/khronos',
+				'-I'+os.path.abspath('.')+'/common',
 			]
 	if conf.env.DEST_OS == 'android':
 		flags += [

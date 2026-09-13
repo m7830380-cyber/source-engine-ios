@@ -560,8 +560,8 @@ def configure(conf):
 			'-I'+os.path.abspath('.')+'/thirdparty/fontconfig',
 			'-I'+os.path.abspath('.')+'/thirdparty/freetype/include',
 		]
-		if conf.env.IOS and conf.options.SDL2_PATH:
-			flags += ['-I'+os.path.abspath(os.path.join(conf.options.SDL2_PATH, 'Headers'))]
+		if conf.env.IOS:
+			flags += ['-I'+os.path.abspath('.')+'/thirdparty/SDL-src/include']
 	if conf.env.DEST_OS == 'android':
 		flags += [
 			'-llog', 
@@ -666,8 +666,10 @@ def configure(conf):
 			conf.env.append_unique('INCLUDES', inc)
 		if conf.env.IOS and conf.options.SDL2_PATH:
 			sdl_headers = os.path.abspath(os.path.join(conf.options.SDL2_PATH, 'Headers'))
-			conf.env.append_unique('CFLAGS', '-I' + sdl_headers)
-			conf.env.append_unique('CXXFLAGS', '-I' + sdl_headers)
+			sdl_source_headers = os.path.abspath('thirdparty/SDL-src/include')
+			conf.env.append_unique('CFLAGS', '-I' + sdl_source_headers)
+			conf.env.append_unique('CXXFLAGS', '-I' + sdl_source_headers)
+			conf.env.append_unique('INCLUDES', sdl_source_headers)
 			conf.env.append_unique('INCLUDES', sdl_headers)
 
 	# indicate if we are packaging for Linux/BSD

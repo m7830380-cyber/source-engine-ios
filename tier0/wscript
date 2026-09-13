@@ -82,7 +82,7 @@ def build(bld):
 	if bld.env.INCLUDES_SDL2:
 		includes += list(bld.env.INCLUDES_SDL2)
 	if bld.env.IOS:
-		includes.append('../build/ios/SDL2.framework/Headers')
+		includes.append('../thirdparty/SDL-src/include')
 
 	defines = []
 

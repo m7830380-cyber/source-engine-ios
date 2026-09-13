@@ -30,9 +30,14 @@ def my_dirname(path):
 def sdl2_configure_path(conf, path):
 	conf.env.HAVE_SDL2 = 1
 	if conf.env.DEST_OS == 'darwin':
-		conf.env.INCLUDES_SDL2 = [
-			os.path.abspath(os.path.join(path, 'Headers'))
-		]
+		if conf.env.IOS:
+			conf.env.INCLUDES_SDL2 = [
+				os.path.abspath('thirdparty/SDL-src/include')
+			]
+		else:
+			conf.env.INCLUDES_SDL2 = [
+				os.path.abspath(os.path.join(path, 'Headers'))
+			]
 		conf.env.FRAMEWORKPATH_SDL2 = [my_dirname(path)]
 		conf.env.FRAMEWORK_SDL2 = ['SDL2']
 	else:

@@ -844,7 +844,7 @@ void CBaseFileSystem::AddVPKFile( char const *pPath, const char *pPathID, Search
 		pVPK->m_PackFileID = m_FileTracker2.NotePackFileOpened( pVPK->FullPathName(), pPathID, 0 );
 		if ( pVPK->HasMissingChunkFiles() )
 		{
-			Warning( "Mounted incomplete VPK %s -- copy all matching *_000.vpk / *_001.vpk files next to the dir file or materials will be error textures.\n",
+			Warning( FILESYSTEM_WARNING, "Mounted incomplete VPK %s -- copy all matching *_000.vpk / *_001.vpk files next to the dir file or materials will be error textures.\n",
 				pVPK->FullPathName() );
 		}
 	}

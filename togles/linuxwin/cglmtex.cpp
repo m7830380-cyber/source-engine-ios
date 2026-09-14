@@ -3506,7 +3506,9 @@ void CompressedTexImage2D(GLenum target, GLint level, GLenum internalformat,
         int srgb = isDXTcSRGB(internalformat);
         int simpleAlpha = 0;
         int complexAlpha = 0;
-        int transparent0 = (internalformat==GL_COMPRESSED_RGBA_S3TC_DXT1_EXT || internalformat==GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT)?1:0;
+		// Always RGBA8 output. DXT1 RGB used to take the 3-byte writer, which
+		// then got uploaded as GL_RGBA (stride 4) and looked like analog static.
+		int transparent0 = 1;
         if (data) {
             pixels = uncompressDXTc(width, height, internalformat, imageSize, transparent0, &simpleAlpha, &complexAlpha, data);
         } else {

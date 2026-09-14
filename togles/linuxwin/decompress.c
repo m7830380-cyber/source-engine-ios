@@ -244,11 +244,10 @@ void DecompressBlockDXT1(uint32_t x, uint32_t y, uint32_t width,
 	};
 
 
-	if( transparent0 )
-		DecompressBlockDXT1Internal (blockStorage,
-			image + x + (y * width), width, transparent0, simpleAlpha, complexAlpha, const_alpha);
-	else
-		DecompressBlockDXT1InternalRGB(blockStorage, ((uint8_t*)image) + x*3 + (y*3 * width), width);
+	// Always write packed RGBA8. The RGB24 path (3 bytes/pixel) was uploaded as
+	// GL_RGBA and produced the wavy grayscale / tiled "CCTV" image on iOS.
+	DecompressBlockDXT1Internal (blockStorage,
+		image + x + (y * width), width, transparent0, simpleAlpha, complexAlpha, const_alpha);
 }
 
 /*

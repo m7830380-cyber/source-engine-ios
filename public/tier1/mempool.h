@@ -99,6 +99,13 @@ protected:
 	static MemoryPoolReportFunc_t g_ReportFunc;
 };
 
+// TF/GC SDK still use the old Valve names.
+#ifndef UTLMEMORYPOOL_GROW_NONE
+#define UTLMEMORYPOOL_GROW_NONE	CUtlMemoryPool::GROW_NONE
+#define UTLMEMORYPOOL_GROW_FAST	CUtlMemoryPool::GROW_FAST
+#define UTLMEMORYPOOL_GROW_SLOW	CUtlMemoryPool::GROW_SLOW
+#endif
+
 
 //-----------------------------------------------------------------------------
 // Multi-thread/Thread Safe Memory Class

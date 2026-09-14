@@ -7,10 +7,20 @@
 #ifdef USE_SDL
 #include "SDL.h"
 #include "SDL_opengl.h"
+#ifdef IOS
+#include "SDL_metal.h"
+#endif
 #if !SDL_VERSION_ATLEAST(2, 26, 0)
 static inline void SDL_GetWindowSizeInPixels( SDL_Window *window, int *w, int *h )
 {
+	// ANGLE on iOS presents through a CAMetalLayer. SDL_GL_GetDrawableSize is
+	// wrong here (no SDL GL context) and caused present blits into a points-sized
+	// corner of the retina framebuffer.
+#ifdef IOS
+	SDL_Metal_GetDrawableSize( window, w, h );
+#else
 	SDL_GL_GetDrawableSize( window, w, h );
+#endif
 }
 #endif
 #endif
@@ -970,8 +980,10 @@ bool CSDLMgr::CreateHiddenGameWindow( const char *pTitle, int width, int height 
 	SDL_MetalView metalView = SDL_Metal_CreateView(m_Window);
     void *renderLayer = SDL_Metal_GetLayer(metalView); 
 
+	// Match the known-good reference IPA: linear EGL surface. Requesting
+	// EGL_GL_COLORSPACE_SRGB_KHR here double-encoded with FakeSRGB/FRAMEBUFFER_SRGB
+	// and left the image permanently dark (screen recording no longer "fixed" it).
 	EGLint surface_attributes[] = {
-    EGL_GL_COLORSPACE_KHR, EGL_GL_COLORSPACE_SRGB_KHR,
     EGL_RENDER_BUFFER, EGL_BACK_BUFFER,
     EGL_NONE
 	};
@@ -1464,13 +1476,14 @@ void CSDLMgr::ShowPixels( CShowPixelsParams *params )
 			int srcxmax = params->m_width;
 			int srcymax = params->m_height;
 
-			// normal blit
+			// normal blit — destination must be drawable pixels, not window points,
+			// or the image lands in a corner while UI hit-testing still covers the full screen.
 			int dstxmin = 0;
 			int dstymin = 0;
 			int dstxmax = 0;
 			int dstymax = 0;
 
-			SDL_GetWindowSize(m_Window, &dstxmax, &dstymax);
+			SDL_GetWindowSizeInPixels(m_Window, &dstxmax, &dstymax);
 
 			if (gl_blit_halfx.GetInt())
 			{

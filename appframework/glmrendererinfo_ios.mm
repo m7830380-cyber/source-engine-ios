@@ -10,10 +10,11 @@
 #include "GL/gl.h"
 
 #include "SDL.h"
+#include "SDL_metal.h"
 #if !SDL_VERSION_ATLEAST(2, 26, 0)
 static inline void SDL_GetWindowSizeInPixels( SDL_Window *window, int *w, int *h )
 {
-	SDL_GL_GetDrawableSize( window, w, h );
+	SDL_Metal_GetDrawableSize( window, w, h );
 }
 #endif
 
@@ -50,12 +51,10 @@ GLMRendererInfo::GLMRendererInfo( GLMRendererInfoFields *info )
 	//-------------------------------------------------------------------
 	// booleans
 	//-------------------------------------------------------------------
-	// gamma writes - query actual sRGB framebuffer capability from ANGLE/Metal.
-	{
-		GLboolean srgb_capable = GL_FALSE;
-		gGL->glGetBooleanv( GL_FRAMEBUFFER_SRGB_CAPABLE_EXT, &srgb_capable );
-		m_info.m_hasGammaWrites = ( srgb_capable != GL_FALSE );
-	}
+	// gamma writes — keep the reference iOS port behavior (always true).
+	// Querying ANGLE's FRAMEBUFFER_SRGB_CAPABLE and pairing it with an sRGB EGL
+	// surface caused permanent dark output.
+	m_info.m_hasGammaWrites = true;
 	
 	
 	// extension string *could* be checked, but on 10.6.3 the ext string is not there, but the func *is*

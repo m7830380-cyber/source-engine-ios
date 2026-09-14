@@ -1160,16 +1160,6 @@ void GLMContext::Blit2( CGLMTex *srcTex, GLMRect *srcRect, int srcFace, int srcM
 	}
 
 	// final blit
-
-	GLBlendEnableSRGB_t oldSrgb;
-	oldSrgb.enable = false;
-	if ( blitToBack && m_caps.m_hasGammaWrites )
-	{
-		m_BlendEnableSRGB.Read( &oldSrgb, 0 );
-		GLBlendEnableSRGB_t enableSrgb;
-		enableSrgb.enable = true;
-		m_BlendEnableSRGB.Write( &enableSrgb );
-	}
 	
 	// i think in general, if we are blitting same size, gl_nearest is the right filter to pass.
 	// this re-steering won't kick in if there is scaling or a special scaled resolve going on.
@@ -1191,11 +1181,6 @@ void GLMContext::Blit2( CGLMTex *srcTex, GLMRect *srcRect, int srcFace, int srcM
 		gGL->glBlitFramebuffer(	srcRect->xmin, srcRect->ymin, srcRect->xmax, srcRect->ymax,
 								dstRect->xmin, dstRect->ymin, dstRect->xmax, dstRect->ymax,
 								blitMask, filter );
-	}
-
-	if ( blitToBack && m_caps.m_hasGammaWrites )
-	{
-		m_BlendEnableSRGB.Write( &oldSrgb );
 	}
 
 	//----------------------------------------------------------------- scrub READ and maybe DRAW FBO, and unbind

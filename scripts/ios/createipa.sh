@@ -23,6 +23,23 @@ for fw in SDL2 libEGL libGLESv2; do
 	cp -R "$BUILDDIR/${fw}.framework" "$APP/Frameworks/"
 done
 
+# Reject link-only stubs — these crash at launch with dyld "image not found".
+if [ ! -f "$APP/Frameworks/SDL2.framework/SDL2" ]; then
+	echo "Packaging failed: SDL2.framework has no SDL2 Mach-O binary (got a .tbd stub?)" >&2
+	ls -la "$APP/Frameworks/SDL2.framework" >&2 || true
+	exit 1
+fi
+if file -b "$APP/Frameworks/SDL2.framework/SDL2" | grep -qi tbd; then
+	echo "Packaging failed: SDL2.framework/SDL2 is a TBD stub" >&2
+	exit 1
+fi
+for fw in libEGL libGLESv2; do
+	if [ ! -f "$APP/Frameworks/${fw}.framework/${fw}" ]; then
+		echo "Packaging failed: missing $fw.framework/$fw" >&2
+		exit 1
+	fi
+done
+
 # waf defaults PREFIX=/usr/local, so binaries land under
 # hl2.app/usr/local/. Flatten into the .app root for CFBundleExecutable.
 export ANGLE_FRAMEWORK_PATH="$BUILDDIR"
@@ -36,7 +53,6 @@ flatten_dir() {
 	for f in "$src"/*; do
 		local base
 		base="$(basename "$f")"
-		# Prefer the flat copy if a same-named file already exists at root.
 		if [ -e "$APP/$base" ] && [ "$f" != "$APP/$base" ]; then
 			rm -rf "$APP/$base"
 		fi
@@ -46,7 +62,6 @@ flatten_dir() {
 	rmdir "$src" 2>/dev/null || rm -rf "$src"
 }
 
-# Common PREFIX layouts produced by waf install --destdir
 flatten_dir "$APP/usr/local/bin"
 flatten_dir "$APP/usr/local/lib"
 flatten_dir "$APP/usr/local"
@@ -63,13 +78,57 @@ fi
 
 chmod +x "$APP/hl2_launcher"
 
-if command -v install_name_tool >/dev/null; then
-	for dylib in "$APP"/lib*.dylib; do
-		[ -f "$dylib" ] || continue
-		install_name_tool -id "@rpath/$(basename "$dylib")" "$dylib" 2>/dev/null || true
+# Rewrite absolute CI/build load paths to @rpath so the IPA runs on device.
+# Also normalize ANGLE framework load paths to match the reference IPA.
+fix_macho() {
+	local bin="$1"
+	[ -f "$bin" ] || return 0
+
+	if [[ "$bin" == *.dylib ]]; then
+		install_name_tool -id "@rpath/$(basename "$bin")" "$bin" 2>/dev/null || true
+	fi
+
+	install_name_tool -add_rpath "@executable_path" "$bin" 2>/dev/null || true
+	install_name_tool -add_rpath "@executable_path/Frameworks" "$bin" 2>/dev/null || true
+
+	# otool -L: skip the first identity line via awk NR>1.
+	local dep
+	while IFS= read -r dep; do
+		dep="${dep%% (*}"
+		dep="$(echo "$dep" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+		[ -n "$dep" ] || continue
+
+		case "$dep" in
+			/System/*|/usr/lib/*|/usr/local/lib/*)
+				;;
+			@rpath/libEGL)
+				install_name_tool -change "$dep" "@rpath/libEGL.framework/libEGL" "$bin" 2>/dev/null || true
+				;;
+			@rpath/libGLESv2)
+				install_name_tool -change "$dep" "@rpath/libGLESv2.framework/libGLESv2" "$bin" 2>/dev/null || true
+				;;
+			/*/*.dylib|/*.dylib)
+				# Absolute build/CI paths baked by the linker.
+				install_name_tool -change "$dep" "@rpath/$(basename "$dep")" "$bin" 2>/dev/null || true
+				;;
+		esac
+	done < <(otool -L "$bin" 2>/dev/null | awk 'NR>1 {print $1}')
+}
+
+if command -v install_name_tool >/dev/null && command -v otool >/dev/null; then
+	fix_macho "$APP/hl2_launcher"
+	shopt -s nullglob
+	for dylib in "$APP"/*.dylib; do
+		fix_macho "$dylib"
 	done
-	install_name_tool -add_rpath "@executable_path" "$APP/hl2_launcher" 2>/dev/null || true
-	install_name_tool -add_rpath "@executable_path/Frameworks" "$APP/hl2_launcher" 2>/dev/null || true
+	shopt -u nullglob
+
+	# Fail the pack if any game dylib still points at the CI workspace.
+	if otool -L "$APP"/lib*.dylib "$APP/hl2_launcher" 2>/dev/null | grep -E '/Users/|/build/(tier0|vstdlib|togles|stub_steam)/'; then
+		echo "Packaging failed: absolute build paths still present in load commands:" >&2
+		otool -L "$APP"/lib*.dylib "$APP/hl2_launcher" 2>/dev/null | grep -E '/Users/|/build/(tier0|vstdlib|togles|stub_steam)/' >&2 || true
+		exit 1
+	fi
 fi
 
 rm -rf "$BUILDDIR/Payload"
@@ -86,3 +145,5 @@ zip -qr source-engine.ipa Payload
 echo "Created $BUILDDIR/source-engine.ipa"
 echo "App root contents:"
 ls -la "$APP" | head -n 40
+echo "SDL2 framework:"
+ls -la "$APP/Frameworks/SDL2.framework" | head -n 20

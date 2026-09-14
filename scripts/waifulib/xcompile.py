@@ -47,7 +47,17 @@ class iOS:
 		
 	def linkflags(self):
 		
-		linkflags = [ '-isysroot' + self.sdkpath, self.target, '-mios-version-min=12.0', '-liconv', '-framework', 'CoreFoundation', '-L'+os.path.abspath('.')+'/lib/darwin/aarch64/' ]
+		linkflags = [
+			'-isysroot' + self.sdkpath,
+			self.target,
+			'-mios-version-min=12.0',
+			'-liconv',
+			'-framework', 'CoreFoundation',
+			'-L'+os.path.abspath('.')+'/lib/darwin/aarch64/',
+			# Flat .app layout: dylibs and Frameworks live next to the executable.
+			'-Wl,-rpath,@executable_path',
+			'-Wl,-rpath,@executable_path/Frameworks',
+		]
 		return linkflags
 	
 	def cc(self):
@@ -464,3 +474,23 @@ def apply_android_soname(self):
 	libname = node.name
 	v = self.env.SONAME_ST % libname
 	self.env.append_value('LINKFLAGS', v.split())
+
+@TaskGen.feature('cshlib', 'cxxshlib', 'dshlib', 'fcshlib', 'vnum')
+@TaskGen.after_method('apply_link', 'propagate_uselib_vars')
+@TaskGen.before_method('apply_vnum')
+def apply_ios_install_name(self):
+	"""
+	Force @rpath install names on iOS so dependents do not bake absolute
+	CI/build paths into LC_LOAD_DYLIB (which crashes at launch on device).
+	"""
+	if not self.env.IOS:
+		return
+
+	setattr(self, 'vnum', None)
+	link = self.link_task
+	libname = link.outputs[0].name
+	self.env.append_value('LINKFLAGS', [
+		'-Wl,-install_name,@rpath/%s' % libname,
+		'-Wl,-rpath,@executable_path',
+		'-Wl,-rpath,@executable_path/Frameworks',
+	])

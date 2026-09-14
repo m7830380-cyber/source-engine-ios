@@ -21,10 +21,130 @@
 
 #ifdef IS_WINDOWS_PC
 #include <windows.h>
+#else
+#include <sys/stat.h>
+#include <dirent.h>
+#include <unistd.h>
 #endif
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
+
+
+static bool PackedStoreStatFile( const char *pszPath, int64 *pSize )
+{
+#ifdef IS_WINDOWS_PC
+	WIN32_FILE_ATTRIBUTE_DATA fad;
+	if ( !GetFileAttributesEx( pszPath, GetFileExInfoStandard, &fad ) )
+		return false;
+	if ( fad.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY )
+		return false;
+	if ( pSize )
+	{
+		*pSize = ( ( (int64)fad.nFileSizeHigh ) << 32 ) | fad.nFileSizeLow;
+	}
+	return true;
+#else
+	struct stat st;
+	if ( stat( pszPath, &st ) != 0 )
+		return false;
+	if ( !S_ISREG( st.st_mode ) )
+		return false;
+	if ( pSize )
+		*pSize = st.st_size;
+	return true;
+#endif
+}
+
+#ifndef IS_WINDOWS_PC
+static bool PackedStoreFindCaseInsensitive( const char *pszPath, char *pszOut, int nOut )
+{
+	int64 nSize = 0;
+	if ( PackedStoreStatFile( pszPath, &nSize ) )
+	{
+		V_strncpy( pszOut, pszPath, nOut );
+		return true;
+	}
+
+	char szDir[MAX_PATH];
+	V_ExtractFilePath( pszPath, szDir, sizeof( szDir ) );
+	const char *pszName = V_UnqualifiedFileName( pszPath );
+	if ( !pszName || !pszName[0] )
+		return false;
+
+	DIR *pDir = opendir( szDir[0] ? szDir : "." );
+	if ( !pDir )
+		return false;
+
+	bool bFound = false;
+	struct dirent *pEnt;
+	while ( ( pEnt = readdir( pDir ) ) != NULL )
+	{
+		if ( V_stricmp( pEnt->d_name, pszName ) != 0 )
+			continue;
+		V_ComposeFileName( szDir, pEnt->d_name, pszOut, nOut );
+		bFound = PackedStoreStatFile( pszOut, &nSize );
+		break;
+	}
+	closedir( pDir );
+	return bFound;
+}
+#endif
+
+static void PackedStoreCloseNativeHandle( PackDataFileHandle_t h )
+{
+	if ( h == PACKEDSTORE_INVALID_HANDLE )
+		return;
+#ifdef IS_WINDOWS_PC
+	CloseHandle( h );
+#else
+	fclose( h );
+#endif
+}
+
+static PackDataFileHandle_t PackedStoreOpenNativeHandle( const char *pszPath )
+{
+#ifdef IS_WINDOWS_PC
+	return CreateFile( pszPath, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL );
+#else
+	return fopen( pszPath, "rb" );
+#endif
+}
+
+static int PackedStoreNativeRead( PackDataFileHandle_t h, void *pOut, int nBytes )
+{
+#ifdef IS_WINDOWS_PC
+	DWORD nRead = 0;
+	ReadFile( h, pOut, nBytes, &nRead, NULL );
+	return (int)nRead;
+#else
+	return (int)fread( pOut, 1, nBytes, h );
+#endif
+}
+
+static void PackedStoreNativeSeek( PackDataFileHandle_t h, int nPos )
+{
+#ifdef IS_WINDOWS_PC
+	SetFilePointer( h, nPos, NULL, FILE_BEGIN );
+#else
+	fseek( h, nPos, SEEK_SET );
+#endif
+}
+
+static unsigned int PackedStoreNativeSize( PackDataFileHandle_t h )
+{
+#ifdef IS_WINDOWS_PC
+	return GetFileSize( h, NULL );
+#else
+	long nCur = ftell( h );
+	fseek( h, 0, SEEK_END );
+	long nEnd = ftell( h );
+	fseek( h, nCur, SEEK_SET );
+	if ( nEnd < 0 )
+		return 0;
+	return (unsigned int)nEnd;
+#endif
+}
 
 
 typedef uint16 PackFileIndex_t;
@@ -211,12 +331,15 @@ CFilePartDescr const *CFileHeaderFixedData::FileData( int nPart ) const
 void CPackedStore::Init( void )
 {
 	m_nHighestChunkFileIndex = -1;
+	m_nMissingChunkFileCount = 0;
 	m_bUseDirFile = false;
 	m_pszFileBaseName[0] = 0;
 	m_pszFullPathName[0] = 0;
 	memset( m_pExtensionData, 0, sizeof( m_pExtensionData ) );
 	m_nDirectoryDataSize = 0;
 	m_nWriteChunkSize = k_nVPKDefaultChunkSize;
+	m_bChunkFileMissing.RemoveAll();
+	m_ResolvedChunkFileNames.RemoveAll();
 
 	m_nSizeOfSignedData = 0;
 	m_Signature.Purge();
@@ -252,6 +375,85 @@ void CPackedStore::BuildHashTables( void )
 		}
 		// step past \0
 		pData++;
+	}
+	ValidateChunkFiles();
+}
+
+void CPackedStore::BuildDefaultDataFileName( char *pchFileNameOut, int cchFileNameOut, int nFileNumber ) const
+{
+	if ( nFileNumber == VPKFILENUMBER_EMBEDDED_IN_DIR_FILE )
+	{
+		if ( m_bUseDirFile )
+		{
+			V_snprintf( pchFileNameOut, cchFileNameOut, "%s_dir.vpk", m_pszFileBaseName );
+		}
+		else
+		{
+			V_snprintf( pchFileNameOut, cchFileNameOut, "%s.vpk", m_pszFileBaseName );
+		}
+	}
+	else
+	{
+		V_snprintf( pchFileNameOut, cchFileNameOut, "%s_%03d.vpk", m_pszFileBaseName, nFileNumber );
+	}
+}
+
+bool CPackedStore::IsChunkFileMissing( int nFileNumber ) const
+{
+	if ( nFileNumber == VPKFILENUMBER_EMBEDDED_IN_DIR_FILE )
+		return false;
+	if ( nFileNumber < 0 || nFileNumber >= m_bChunkFileMissing.Count() )
+		return false;
+	return m_bChunkFileMissing[nFileNumber] != 0;
+}
+
+void CPackedStore::ValidateChunkFiles( void )
+{
+	m_nMissingChunkFileCount = 0;
+	m_bChunkFileMissing.RemoveAll();
+	m_ResolvedChunkFileNames.RemoveAll();
+	if ( m_nHighestChunkFileIndex < 0 )
+		return;
+
+	m_bChunkFileMissing.SetCount( m_nHighestChunkFileIndex + 1 );
+	m_ResolvedChunkFileNames.SetCount( m_nHighestChunkFileIndex + 1 );
+	memset( m_bChunkFileMissing.Base(), 0, m_bChunkFileMissing.Count() * sizeof( uint8 ) );
+
+	for ( int i = 0; i <= m_nHighestChunkFileIndex; i++ )
+	{
+		char szName[MAX_PATH];
+		char szResolved[MAX_PATH];
+		BuildDefaultDataFileName( szName, sizeof( szName ), i );
+
+		int64 nSize = 0;
+		bool bOk = false;
+#ifdef IS_WINDOWS_PC
+		bOk = PackedStoreStatFile( szName, &nSize );
+		if ( bOk )
+			V_strncpy( szResolved, szName, sizeof( szResolved ) );
+#else
+		bOk = PackedStoreFindCaseInsensitive( szName, szResolved, sizeof( szResolved ) );
+		if ( bOk )
+			PackedStoreStatFile( szResolved, &nSize );
+#endif
+		if ( !bOk || nSize <= 0 )
+		{
+			m_bChunkFileMissing[i] = 1;
+			m_nMissingChunkFileCount++;
+			Warning( "VPK: missing or empty chunk file %s (needed by %s_dir.vpk). Maps may still load; materials/models stored in this chunk will be error textures.\n",
+				szName, m_pszFileBaseName );
+		}
+		else
+		{
+			m_ResolvedChunkFileNames[i] = szResolved;
+		}
+	}
+
+	if ( m_nMissingChunkFileCount > 0 )
+	{
+		Warning( "VPK: %s is incomplete (%d/%d chunk files missing). Copy every workshop_000.vpk / workshop_001.vpk / ... next to the dir file.\n",
+			m_pszFullPathName[0] ? m_pszFullPathName : m_pszFileBaseName,
+			m_nMissingChunkFileCount, m_nHighestChunkFileIndex + 1 );
 	}
 }
 
@@ -434,22 +636,16 @@ CPackedStore::CPackedStore( char const *pFileBasename, char *pszFName, IBaseFile
 
 void CPackedStore::GetDataFileName( char *pchFileNameOut, int cchFileNameOut, int nFileNumber ) const
 {
-	if ( nFileNumber == VPKFILENUMBER_EMBEDDED_IN_DIR_FILE )
+	if ( nFileNumber != VPKFILENUMBER_EMBEDDED_IN_DIR_FILE &&
+		 nFileNumber >= 0 &&
+		 nFileNumber < m_ResolvedChunkFileNames.Count() &&
+		 !m_ResolvedChunkFileNames[nFileNumber].IsEmpty() )
 	{
-		if ( m_bUseDirFile )
-		{
-			V_snprintf( pchFileNameOut, cchFileNameOut, "%s_dir.vpk", m_pszFileBaseName );
-		}
-		else
-		{
-			V_snprintf( pchFileNameOut, cchFileNameOut, "%s.vpk", m_pszFileBaseName );
-		}
-	}
-	else
-	{
-		V_snprintf( pchFileNameOut, cchFileNameOut, "%s_%03d.vpk", m_pszFileBaseName, nFileNumber );
+		V_strncpy( pchFileNameOut, m_ResolvedChunkFileNames[nFileNumber].Get(), cchFileNameOut );
+		return;
 	}
 
+	BuildDefaultDataFileName( pchFileNameOut, cchFileNameOut, nFileNumber );
 }
 
 CPackedStore::~CPackedStore( void )
@@ -463,12 +659,9 @@ CPackedStore::~CPackedStore( void )
 	{
 		if ( m_FileHandles[i].m_nFileNumber != -1 )
 		{
-#ifdef IS_WINDOWS_PC
-			CloseHandle( m_FileHandles[i].m_hFileHandle );
-#else
-			m_pFileSystem->Close( m_FileHandles[i].m_hFileHandle );
-#endif
-
+			PackedStoreCloseNativeHandle( m_FileHandles[i].m_hFileHandle );
+			m_FileHandles[i].m_hFileHandle = PACKEDSTORE_INVALID_HANDLE;
+			m_FileHandles[i].m_nFileNumber = -1;
 		}
 	}
 
@@ -585,7 +778,18 @@ CPackedStoreFileHandle CPackedStore::OpenFile( char const *pFileName )
 	
 	if ( pHeader )
 	{
-		ret.m_nFileNumber = pHeader->m_PartDescriptors[0].m_nFileNumber;
+		int nChunk = pHeader->m_PartDescriptors[0].m_nFileNumber;
+		uint32 nChunkDataSize = pHeader->m_PartDescriptors[0].m_nFileDataSize;
+		// Catalog entry exists even if the chunk payload is missing. Refuse files whose
+		// body lives in a missing chunk so FileExists/Open can fall through to another path
+		// instead of returning a truncated VTF that becomes an error texture.
+		if ( nChunkDataSize > 0 && IsChunkFileMissing( nChunk ) )
+		{
+			ret.m_nFileNumber = -1;
+			ret.m_pOwner = NULL;
+			return ret;
+		}
+		ret.m_nFileNumber = nChunk;
 		ret.m_nFileOffset = pHeader->m_PartDescriptors[0].m_nFileDataOffset;
 		ret.m_nFileSize = pHeader->m_PartDescriptors[0].m_nFileDataSize + pHeader->m_nMetaDataSize;
 		ret.m_nCurrentFileOffset = 0;
@@ -870,16 +1074,12 @@ bool CPackedStoreReadCache::BCanSatisfyFromReadCache( uint8 *pOutData, CPackedSt
 bool CPackedStoreReadCache::ReadCacheLine( FileHandleTracker_t &fHandle, CachedVPKRead_t &cachedVPKRead )
 {
 	cachedVPKRead.m_cubBuffer = 0;
-#ifdef IS_WINDOWS_PC
+	if ( !fHandle.IsValid() )
+		return false;
 	if ( cachedVPKRead.m_nFileFraction != fHandle.m_nCurOfs )
-		SetFilePointer ( fHandle.m_hFileHandle, cachedVPKRead.m_nFileFraction, NULL,  FILE_BEGIN); 
-	ReadFile( fHandle.m_hFileHandle, cachedVPKRead.m_pubBuffer, k_cubCacheBufferSize, (LPDWORD) &cachedVPKRead.m_cubBuffer, NULL );
-	SetFilePointer ( fHandle.m_hFileHandle, fHandle.m_nCurOfs, NULL,  FILE_BEGIN); 
-#else
-	m_pFileSystem->Seek( fHandle.m_hFileHandle, cachedVPKRead.m_nFileFraction, FILESYSTEM_SEEK_HEAD );
-	cachedVPKRead.m_cubBuffer = m_pFileSystem->Read( cachedVPKRead.m_pubBuffer, k_cubCacheBufferSize, fHandle.m_hFileHandle );
-	m_pFileSystem->Seek( fHandle.m_hFileHandle, fHandle.m_nCurOfs, FILESYSTEM_SEEK_HEAD );
-#endif
+		PackedStoreNativeSeek( fHandle.m_hFileHandle, cachedVPKRead.m_nFileFraction );
+	cachedVPKRead.m_cubBuffer = PackedStoreNativeRead( fHandle.m_hFileHandle, cachedVPKRead.m_pubBuffer, k_cubCacheBufferSize );
+	PackedStoreNativeSeek( fHandle.m_hFileHandle, fHandle.m_nCurOfs );
 	Assert( cachedVPKRead.m_hMD5RequestHandle == 0 );
 	if ( m_pFileTracker ) // file tracker doesn't exist in the VPK command line tool
 	{
@@ -1178,12 +1378,20 @@ int CPackedStore::ReadData( CPackedStoreFileHandle &handle, void *pOutData, int 
 		{
 			FileHandleTracker_t &fHandle = GetFileHandle( handle.m_nFileNumber );
 			int nDesiredPos = handle.m_nFileOffset + handle.m_nCurrentFileOffset - handle.m_nMetaDataSize;
-			int nRead;
+			int nRead = 0;
 			fHandle.m_Mutex.Lock();
 			if ( handle.m_nFileNumber == VPKFILENUMBER_EMBEDDED_IN_DIR_FILE )
 			{
 				// for file data in the directory header, all offsets are relative to the size of the dir header.
 				nDesiredPos += m_nDirectoryDataSize + sizeof( VPKDirHeader_t );
+			}
+
+			if ( !fHandle.IsValid() )
+			{
+				fHandle.m_Mutex.Unlock();
+				Warning( "VPK: failed to read %d bytes from missing chunk %d of %s\n",
+					nNumBytes, handle.m_nFileNumber, m_pszFileBaseName );
+				return nRet;
 			}
 
 			if ( m_PackedStoreReadCache.BCanSatisfyFromReadCache( (uint8 *)pOutData, handle, fHandle, nDesiredPos, nNumBytes, nRead ) )
@@ -1192,16 +1400,16 @@ int CPackedStore::ReadData( CPackedStoreFileHandle &handle, void *pOutData, int 
 			}
 			else
 			{
-#ifdef IS_WINDOWS_PC
 				if ( nDesiredPos != fHandle.m_nCurOfs )
-					SetFilePointer ( fHandle.m_hFileHandle, nDesiredPos, NULL,  FILE_BEGIN); 
-				ReadFile( fHandle.m_hFileHandle, pOutData, nNumBytes, (LPDWORD) &nRead, NULL );
-#else
-				m_pFileSystem->Seek( fHandle.m_hFileHandle, nDesiredPos, FILESYSTEM_SEEK_HEAD );
-				nRead = m_pFileSystem->Read( pOutData, nNumBytes, fHandle.m_hFileHandle );
-#endif
+					PackedStoreNativeSeek( fHandle.m_hFileHandle, nDesiredPos );
+				nRead = PackedStoreNativeRead( fHandle.m_hFileHandle, pOutData, nNumBytes );
 				handle.m_nCurrentFileOffset += nRead;
 				fHandle.m_nCurOfs = nRead + nDesiredPos;
+			}
+			if ( nRead != nNumBytes )
+			{
+				Warning( "VPK: short read from chunk %d of %s (%d/%d bytes) -- pack file may be incomplete or not fully copied\n",
+					handle.m_nFileNumber, m_pszFileBaseName, nRead, nNumBytes );
 			}
 			Assert( nRead == nNumBytes );
 			nRet += nRead;
@@ -1224,25 +1432,22 @@ bool CPackedStore::HashEntirePackFile( CPackedStoreFileHandle &handle, int64 &nF
 
 	FileHandleTracker_t &fHandle = GetFileHandle( handle.m_nFileNumber );
 	fHandle.m_Mutex.Lock();
-	
-#ifdef IS_WINDOWS_PC
-	unsigned int fileSizeHigh;
-	unsigned int fileLength = GetFileSize( fHandle.m_hFileHandle, (LPDWORD) &fileSizeHigh );
-#else
-	unsigned int fileLength = m_pFileSystem->Size( fHandle.m_hFileHandle );
-#endif
+	if ( !fHandle.IsValid() )
+	{
+		fHandle.m_Mutex.Unlock();
+		nFileSize = 0;
+		return false;
+	}
+
+	unsigned int fileLength = PackedStoreNativeSize( fHandle.m_hFileHandle );
 	nFileSize = fileLength;
 	MD5Context_t ctx;
 	memset(&ctx, 0, sizeof(MD5Context_t));
 	MD5Init(&ctx);
 
 	int nDesiredPos = nFileFraction;
-#ifdef IS_WINDOWS_PC
 	if ( nDesiredPos != fHandle.m_nCurOfs )
-		SetFilePointer ( fHandle.m_hFileHandle, nDesiredPos, NULL,  FILE_BEGIN); 
-#else
-	m_pFileSystem->Seek( fHandle.m_hFileHandle, nDesiredPos, FILESYSTEM_SEEK_HEAD );
-#endif
+		PackedStoreNativeSeek( fHandle.m_hFileHandle, nDesiredPos );
 
 	int nFractionLength = ( fileLength - nFileFraction );
 	if ( nFractionLength > nFractionSize )
@@ -1256,12 +1461,7 @@ bool CPackedStore::HashEntirePackFile( CPackedStoreFileHandle &handle, int64 &nF
 		if ( chunkLen == 0 )
 			break;
 
-		int nRead;
-#ifdef IS_WINDOWS_PC
-		ReadFile( fHandle.m_hFileHandle, tempBuf, chunkLen, (LPDWORD) &nRead, NULL );
-#else
-		nRead = m_pFileSystem->Read( tempBuf, chunkLen, fHandle.m_hFileHandle );
-#endif
+		int nRead = PackedStoreNativeRead( fHandle.m_hFileHandle, tempBuf, chunkLen );
 		MD5Update(&ctx, tempBuf, nRead);
 
 		curStartByte += CRC_CHUNK_SIZE;
@@ -1274,11 +1474,7 @@ bool CPackedStore::HashEntirePackFile( CPackedStoreFileHandle &handle, int64 &nF
 	fileHash.m_PackFileID = handle.m_pOwner->m_PackFileID;
 
 	// seek back to where it was
-#ifdef IS_WINDOWS_PC
-	SetFilePointer ( fHandle.m_hFileHandle, fHandle.m_nCurOfs, NULL,  FILE_BEGIN); 
-#else
-	m_pFileSystem->Seek( fHandle.m_hFileHandle, fHandle.m_nCurOfs, FILESYSTEM_SEEK_HEAD );
-#endif
+	PackedStoreNativeSeek( fHandle.m_hFileHandle, fHandle.m_nCurOfs );
 	fHandle.m_Mutex.Unlock();
 
 #ifdef COMPUTE_HASH_TIMES
@@ -1306,6 +1502,9 @@ void CPackedStore::HashChunkFile( int iChunkFileIndex )
 {
 	AUTO_LOCK( m_Mutex );
 	static const int k_nFileFractionSize = 0x00100000; // 1 MB
+
+	if ( IsChunkFileMissing( iChunkFileIndex ) )
+		return;
 
 	// Purge any hashes we already have for this chunk.
 	DiscardChunkHashes( iChunkFileIndex );
@@ -1437,39 +1636,63 @@ FileHandleTracker_t & CPackedStore::GetFileHandle( int nFileNumber )
 	else if ( m_FileHandles[nFileHandleIdx].m_nFileNumber == -1 )
 	{
 		// no luck finding the handle - need a new one
+		m_FileHandles[nFileHandleIdx].m_nCurOfs = 0;
+		m_FileHandles[nFileHandleIdx].m_hFileHandle = PACKEDSTORE_INVALID_HANDLE;
+
+		if ( IsChunkFileMissing( nFileNumber ) )
+		{
+			return m_FileHandles[nFileHandleIdx];
+		}
+
 		char pszDataFileName[MAX_PATH];
 		GetDataFileName( pszDataFileName, sizeof(pszDataFileName), nFileNumber );
-		m_FileHandles[nFileHandleIdx].m_nCurOfs = 0;
-#ifdef IS_WINDOWS_PC
-		m_FileHandles[nFileHandleIdx].m_hFileHandle = 
-			CreateFile( pszDataFileName,               // file to open
-						GENERIC_READ,          // open for reading
-						FILE_SHARE_READ,       // share for reading
-						NULL,                  // default security
-						OPEN_EXISTING,         // existing file only
-						FILE_ATTRIBUTE_NORMAL, // normal file
-						NULL);                 // no attr. template
-			
-		if ( m_FileHandles[nFileHandleIdx].m_hFileHandle != INVALID_HANDLE_VALUE )
+		PackDataFileHandle_t hFile = PackedStoreOpenNativeHandle( pszDataFileName );
+#ifndef IS_WINDOWS_PC
+		if ( hFile == PACKEDSTORE_INVALID_HANDLE )
 		{
-			m_FileHandles[nFileHandleIdx].m_nFileNumber = nFileNumber;
-		}
-#else
-		m_FileHandles[nFileHandleIdx].m_hFileHandle = m_pFileSystem->Open( pszDataFileName, "rb" );
-		if ( m_FileHandles[nFileHandleIdx].m_hFileHandle != FILESYSTEM_INVALID_HANDLE )
-		{
-			m_FileHandles[nFileHandleIdx].m_nFileNumber = nFileNumber;
+			char szResolved[MAX_PATH];
+			if ( PackedStoreFindCaseInsensitive( pszDataFileName, szResolved, sizeof( szResolved ) ) )
+			{
+				hFile = PackedStoreOpenNativeHandle( szResolved );
+				if ( hFile != PACKEDSTORE_INVALID_HANDLE &&
+					 nFileNumber != VPKFILENUMBER_EMBEDDED_IN_DIR_FILE &&
+					 nFileNumber >= 0 )
+				{
+					if ( nFileNumber >= m_ResolvedChunkFileNames.Count() )
+						m_ResolvedChunkFileNames.SetCount( nFileNumber + 1 );
+					m_ResolvedChunkFileNames[nFileNumber] = szResolved;
+				}
+			}
 		}
 #endif
+		m_FileHandles[nFileHandleIdx].m_hFileHandle = hFile;
+		if ( hFile != PACKEDSTORE_INVALID_HANDLE )
+		{
+			m_FileHandles[nFileHandleIdx].m_nFileNumber = nFileNumber;
+		}
+		else
+		{
+			Warning( "VPK: could not open chunk file %s (from %s_dir.vpk)\n", pszDataFileName, m_pszFileBaseName );
+			if ( nFileNumber != VPKFILENUMBER_EMBEDDED_IN_DIR_FILE && nFileNumber >= 0 )
+			{
+				if ( nFileNumber >= m_bChunkFileMissing.Count() )
+				{
+					int nOld = m_bChunkFileMissing.Count();
+					m_bChunkFileMissing.SetCount( nFileNumber + 1 );
+					memset( m_bChunkFileMissing.Base() + nOld, 0, ( nFileNumber + 1 - nOld ) * sizeof( uint8 ) );
+				}
+				if ( !m_bChunkFileMissing[nFileNumber] )
+				{
+					m_bChunkFileMissing[nFileNumber] = 1;
+					m_nMissingChunkFileCount++;
+				}
+			}
+		}
 		return m_FileHandles[nFileHandleIdx];
 	}
 	Error( "Exceeded limit of number of vpk files supported (%d)!\n", MAX_ARCHIVE_FILES_TO_KEEP_OPEN_AT_ONCE );
 	static FileHandleTracker_t invalid;
-#ifdef IS_WINDOWS_PC
-	invalid.m_hFileHandle = INVALID_HANDLE_VALUE;
-#else
-	invalid.m_hFileHandle = FILESYSTEM_INVALID_HANDLE;
-#endif
+	invalid.m_hFileHandle = PACKEDSTORE_INVALID_HANDLE;
 	return invalid;
 }
 

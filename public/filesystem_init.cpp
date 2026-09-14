@@ -17,10 +17,12 @@
 #include <process.h>
 #elif defined( POSIX )
 #include <unistd.h>
+#include <dirent.h>
 #define _chdir chdir
 #define _access access
 #endif
 #include <stdio.h>
+#include <stdlib.h>
 #include <sys/stat.h>
 #include "tier1/strtools.h"
 #include "tier1/utlbuffer.h"
@@ -534,6 +536,54 @@ static void FileSystem_AddLoadedSearchPath(
 	initInfo.m_pFileSystem->AddSearchPath( fullLocationPath, pPathID, PATH_ADD_TO_TAIL );
 }
 
+#if defined(IOS) || defined(_IOS)
+static void FileSystem_MountDirVpkInFolder( IFileSystem *pFS, const char *pszFolder )
+{
+	if ( !pFS || !pszFolder || !pszFolder[0] )
+		return;
+
+	DIR *pDir = opendir( pszFolder );
+	if ( !pDir )
+		return;
+
+	struct dirent *pEnt;
+	while ( ( pEnt = readdir( pDir ) ) != NULL )
+	{
+		const char *pszName = pEnt->d_name;
+		int nLen = (int)V_strlen( pszName );
+		if ( nLen < 9 )
+			continue;
+		if ( V_stricmp( pszName + nLen - 8, "_dir.vpk" ) != 0 )
+			continue;
+
+		char szAbs[MAX_PATH];
+		V_ComposeFileName( pszFolder, pszName, szAbs, sizeof( szAbs ) );
+		Msg( "iOS: auto-mounting addon VPK %s\n", szAbs );
+		pFS->AddSearchPath( szAbs, "GAME", PATH_ADD_TO_HEAD );
+	}
+	closedir( pDir );
+}
+
+static void FileSystem_MountAddonVpks( CFSSearchPathsInit &initInfo )
+{
+	FileSystem_MountDirVpkInFolder( initInfo.m_pFileSystem, initInfo.m_pDirectoryName );
+
+	char szCustom[MAX_PATH];
+	V_ComposeFileName( initInfo.m_pDirectoryName, "custom", szCustom, sizeof( szCustom ) );
+	FileSystem_MountDirVpkInFolder( initInfo.m_pFileSystem, szCustom );
+
+	const char *pszDocs = getenv( "VALVE_GAME_PATH" );
+	if ( pszDocs && pszDocs[0] && V_stricmp( pszDocs, initInfo.m_pDirectoryName ) != 0 )
+	{
+		FileSystem_MountDirVpkInFolder( initInfo.m_pFileSystem, pszDocs );
+
+		char szDocsCustom[MAX_PATH];
+		V_ComposeFileName( pszDocs, "custom", szDocsCustom, sizeof( szDocsCustom ) );
+		FileSystem_MountDirVpkInFolder( initInfo.m_pFileSystem, szDocsCustom );
+	}
+}
+#endif
+
 static int SortStricmp( char * const * sz1, char * const * sz2 )
 {
 	return V_stricmp( *sz1, *sz2 );
@@ -733,6 +783,12 @@ FSReturnCode_t FileSystem_LoadSearchPaths( CFSSearchPathsInit &initInfo )
 	}
 
 	pMainFile->deleteThis();
+
+#if defined(IOS) || defined(_IOS)
+	// Files-app copies of workshop_dir.vpk often sit in Documents / custom and
+	// are missed if gameinfo.txt has no custom/* wildcard.
+	FileSystem_MountAddonVpks( initInfo );
+#endif
 
 	// Also, mark specific path IDs as "by request only". That way, we won't waste time searching in them
 	// when people forget to specify a search path.

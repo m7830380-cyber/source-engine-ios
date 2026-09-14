@@ -22,7 +22,9 @@
 #include "tier1/utllinkedlist.h"
 #include "tier1/UtlSortVector.h"
 #include "tier1/utlmap.h"
+#include "tier1/utlstring.h"
 #include "tier1/checksum_md5.h"
+#include <stdio.h>
 
 //#define VPK_ENABLE_SIGNING
 
@@ -118,10 +120,12 @@ public:
 #define PACKEDFILE_EXT_HASH_SIZE 15
 
 
-#ifdef _WIN32
+#ifdef IS_WINDOWS_PC
 typedef HANDLE PackDataFileHandle_t;
+#define PACKEDSTORE_INVALID_HANDLE INVALID_HANDLE_VALUE
 #else
-typedef FileHandle_t PackDataFileHandle_t;
+typedef FILE *PackDataFileHandle_t;
+#define PACKEDSTORE_INVALID_HANDLE ((FILE *)NULL)
 #endif
 
 struct FileHandleTracker_t
@@ -134,6 +138,13 @@ struct FileHandleTracker_t
 	FileHandleTracker_t( void )
 	{
 		m_nFileNumber = -1;
+		m_hFileHandle = PACKEDSTORE_INVALID_HANDLE;
+		m_nCurOfs = 0;
+	}
+
+	bool IsValid() const
+	{
+		return m_nFileNumber != -1 && m_hFileHandle != PACKEDSTORE_INVALID_HANDLE;
 	}
 };
 
@@ -361,6 +372,8 @@ public:
 
 	int GetHighestChunkFileIndex() { return m_nHighestChunkFileIndex; }
 
+	bool HasMissingChunkFiles() const { return m_nMissingChunkFileCount > 0; }
+
 	void DiscardChunkHashes( int iChunkFileIndex );
 
 	const CUtlVector<uint8> &GetSignaturePublicKey() const { return m_SignaturePublicKey; }
@@ -409,6 +422,9 @@ private:
 	MD5Value_t m_TotalFileMD5;
 
 	int m_nHighestChunkFileIndex;
+	int m_nMissingChunkFileCount;
+	CUtlVector<uint8> m_bChunkFileMissing;
+	CUtlVector<CUtlString> m_ResolvedChunkFileNames;
 
 	/// The private key that will be used to sign the directory file.
 	/// This will be empty for unsigned VPK's, or if we don't know the
@@ -433,6 +449,9 @@ private:
 		uint8 **pExtBaseOut = NULL, uint8 **pNameBaseOut = NULL );
 
 	void BuildHashTables( void );
+	void ValidateChunkFiles( void );
+	bool IsChunkFileMissing( int nFileNumber ) const;
+	void BuildDefaultDataFileName( char *pchFileNameOut, int cchFileNameOut, int nFileNumber ) const;
 
 	FileHandleTracker_t &GetFileHandle( int nFileNumber );
 

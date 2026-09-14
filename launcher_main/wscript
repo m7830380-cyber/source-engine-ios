@@ -31,6 +31,10 @@ def build(bld):
 	if bld.env.IOS:
 		source += ['SDL_uikit_main.c', 'ios/Launchdiag.m']
 		libs += ['FOUNDATION', 'UIKIT', 'OBJC', 'COREGRAPHICS', 'AVFOUNDATION', 'SDL2']
+		includes += ['../thirdparty/SDL-src/include']
+		defines += ['IOS=1', '_IOS=1']
+		if bld.env.INCLUDES_SDL2:
+			includes += list(bld.env.INCLUDES_SDL2)
 
 	install_path = bld.env.BINDIR
 	bld(

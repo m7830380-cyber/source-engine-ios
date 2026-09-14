@@ -28,7 +28,7 @@
 #define MAX_PATH PATH_MAX
 #endif
 #ifdef IOS
-#include "SDL2/SDL.h"
+#include "SDL.h"
 extern "C" void IOS_LaunchDialog( void );
 extern "C" const char *IOS_GetExecDir( void );
 extern "C" int IOS_GetArgs( char ***out );

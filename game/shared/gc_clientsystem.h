@@ -89,7 +89,9 @@ private:
 	#ifdef CLIENT_DLL
 		void SteamLoggedOnCallback( const SteamLoggedOnChange_t &loggedOnState );
 	#else
-		STEAM_GAMESERVER_CALLBACK( CGCClientSystem, OnLogonSuccess, SteamServersConnected_t, m_CallbackLogonSuccess );
+		#if !defined(NO_STEAM)
+			STEAM_GAMESERVER_CALLBACK( CGCClientSystem, OnLogonSuccess, SteamServersConnected_t, m_CallbackLogonSuccess );
+		#endif
 	#endif
 
 	bool m_bInittedGC;

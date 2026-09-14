@@ -35,8 +35,10 @@
 #include "tf_hud_disconnect_prompt.h"
 
 #include "util_shared.h"
+#if !defined(NO_STEAM)
 #include <steamnetworkingsockets/isteamnetworkingutils.h>
 #include <steamnetworkingsockets/isteamnetworkingsockets.h>
+#endif
 #include "filesystem.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
@@ -71,7 +73,9 @@ static bool BPingDebug() { return tf_datacenter_ping_debug.GetBool(); }
 #define TFPingDbg(...) if ( BPingDebug() ) { TFPingMsg( __VA_ARGS__ ); }
 
 // Allow disabling for staging. Will only send dummy values set by the overrides above
-#ifdef TF_GC_PING_DEBUG
+#if defined(NO_STEAM)
+static bool BUseSteamDatagram() { return false; }
+#elif defined(TF_GC_PING_DEBUG)
 #include "tier0/icommandline.h"
 static bool BUseSteamDatagram() { return !CommandLine()->CheckParm("-nosteamdatagram" ); }
 #else
@@ -414,6 +418,9 @@ void CTFGCClientSystem::LoadCasualSearchCriteria()
 // Initialize steam client datagram lib if we haven't already
 static bool CheckInitSteamDatagramClientLib()
 {
+#if defined(NO_STEAM)
+	return false;
+#else
 	if ( !BUseSteamDatagram() )
 		return false;
 
@@ -448,6 +455,7 @@ static bool CheckInitSteamDatagramClientLib()
 	bInittedNetwork = true;
 
 	return true;
+#endif
 }
 bool CTFGCClientSystem::Init()
 {
@@ -464,8 +472,10 @@ bool CTFGCClientSystem::Init()
 	// init steamdatagram system ASAP so we're more likely to have initial ping data to the clusters ready by the time
 	// we ask for it
 	CheckInitSteamDatagramClientLib();
+#if !defined(NO_STEAM)
 	if ( SteamNetworkingUtils() )
 		SteamNetworkingUtils()->CheckPingDataUpToDate( 0.0f );
+#endif
 
 	// Just loading the library starts initial pinging
 	m_bPendingPingRefresh = true;
@@ -777,7 +787,9 @@ void CTFGCClientSystem::Shutdown()
 
 	BaseClass::Shutdown();
 
+#if !defined(NO_STEAM)
 	SteamDatagramClient_Kill();
+#endif
 }
 
 //-----------------------------------------------------------------------------
@@ -912,15 +924,20 @@ void CTFGCClientSystem::InvalidatePingData()
 	m_rtLastPingFix = 0; // 0 means never. Or time traveler. 50/50.
 	m_msgCachedPingUpdate = CMsgGCDataCenterPing_Update();
 
+#if !defined(NO_STEAM)
 	if ( BUseSteamDatagram() && SteamNetworkingUtils() )
 	{
 		SteamNetworkingUtils()->CheckPingDataUpToDate( 0.0f );
 	}
+#endif
 }
 
 //-----------------------------------------------------------------------------
 void CTFGCClientSystem::PingThink()
 {
+#if defined(NO_STEAM)
+	return;
+#else
 	ISteamNetworkingUtils *pUtils = SteamNetworkingUtils();
 	if ( !pUtils && BUseSteamDatagram() )
 	{
@@ -1050,6 +1067,7 @@ void CTFGCClientSystem::PingThink()
 	{
 		DumpPing();
 	}
+#endif
 }
 
 #ifdef TF_GC_PING_DEBUG

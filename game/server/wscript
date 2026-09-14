@@ -27,12 +27,23 @@ games = {
 
 _CODE_EXTS = ('.c', '.cc', '.cpp', '.cxx')
 
-def _code_sources(files):
+_TF_SKIP_STEAM = (
+	'/workshop/',
+	'ugc_utils',
+	'maps_workshop',
+	'tf_steamstats',
+	'sixense/',
+)
+
+def _code_sources(files, skip=()):
 	out = []
 	for s in files:
 		low = s.replace('\\', '/').lower()
-		if low.endswith(_CODE_EXTS):
-			out.append(s)
+		if not low.endswith(_CODE_EXTS):
+			continue
+		if any(tok in low for tok in skip):
+			continue
+		out.append(s)
 	return out
 
 def _tf_sources():
@@ -88,7 +99,8 @@ def build(bld):
 	if bld.env.DEST_OS != 'android' and not bld.env.IOS:
 		install_path += '/'+bld.env.GAMES+'/bin'
 
-	source = _code_sources(game["sources"]) + ['../../public/tier0/memoverride.cpp']
+	skip = _TF_SKIP_STEAM if bld.env.GAMES == 'tf' else ()
+	source = _code_sources(game["sources"], skip) + ['../../public/tier0/memoverride.cpp']
 	includes += game["includes"]
 	defines = game["defines"]
 
@@ -96,6 +108,7 @@ def build(bld):
 		source += _tf_sources()
 		includes = _tf_includes() + includes
 		libs += ['gcsdk', 'protobuf']
+		defines = [d for d in defines if d not in ('ENABLE_GC_MATCHMAKING',)]
 		defines.append('NO_STEAM=1')
 
 	defines.remove('PROTECTED_THINGS_ENABLE')

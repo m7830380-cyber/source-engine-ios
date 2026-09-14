@@ -72,7 +72,9 @@ CGCClientSystem::CGCClientSystem()
 	, m_GCClient( NULL, false )
 #else
 	, m_GCClient( NULL, true )
+#if !defined(NO_STEAM)
 	, m_CallbackLogonSuccess( this, &CGCClientSystem::OnLogonSuccess )
+#endif
 #endif
 {
 	m_bInittedGC = false;
@@ -152,13 +154,14 @@ void CGCClientSystem::PostInit()
 	CAutoGameSystemPerFrame::PostInit();
 
 	#ifdef CLIENT_DLL
+#if !defined(NO_STEAM)
 		// Install callback to be notified when our steam logged on status changes.
 		ClientSteamContext().InstallCallback( UtlMakeDelegate( this, &CGCClientSystem::SteamLoggedOnCallback ) );
 
 		// Except when debugging internally, we really should never launch the game
 		// while not logged on!
 		AssertMsg( ClientSteamContext().BLoggedOn(), "No Steam logged on for GC setup!" );
-
+#endif
 		ThinkConnection();
 	#endif
 }
@@ -181,11 +184,13 @@ void CGCClientSystem::SteamLoggedOnCallback( const SteamLoggedOnChange_t &logged
 
 #else
 
+#if !defined(NO_STEAM)
 //-----------------------------------------------------------------------------
 void CGCClientSystem::OnLogonSuccess( SteamServersConnected_t *pLogonSuccess )
 {
 	ThinkConnection();
 }
+#endif
 
 #endif
 
@@ -254,6 +259,10 @@ void CGCClientSystem::InitGC()
 	if ( m_bInittedGC )
 		return;
 
+#if defined(NO_STEAM)
+	// iOS / offline: never talk to Steam Game Coordinator.
+	return;
+#else
 	// Locate our steam client interface.
 	#ifdef CLIENT_DLL
 		ISteamClient *pSteamClient = SteamClient();
@@ -282,6 +291,7 @@ void CGCClientSystem::InitGC()
 		// Initialized the GCClient
 		m_bInittedGC = true;
 	}
+#endif
 }
 
 
@@ -312,6 +322,9 @@ void CGCClientSystem::ThinkConnection()
 	#else
 		bool bLoggedOn = steamgameserverapicontext && steamgameserverapicontext->SteamGameServer() && steamgameserverapicontext->SteamGameServer()->BLoggedOn();
 	#endif
+#if defined(NO_STEAM)
+	bLoggedOn = false;
+#endif
 	if ( bLoggedOn )
 	{
 

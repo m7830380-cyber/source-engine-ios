@@ -3,7 +3,7 @@
 *.vpc_crc
 *.vpc.*
 *.project
-*obj_*
+*.obj
 .waf*
 .lock-waf*
 __pycache__
@@ -14,7 +14,6 @@ Debug_*/
 Release/
 Release_*/
 *.tlog/
-*.obj
 *.pch
 *.log
 *.idb

@@ -1149,7 +1149,10 @@ void CServerGameDLL::GameServerSteamAPIActivated( void )
 #ifdef TF_DLL
 	GCClientSystem()->GameServerActivate();
 	InventoryManager()->GameServerSteamAPIActivated();
-	TFMapsWorkshop()->GameServerSteamAPIActivated();
+	if ( CTFMapsWorkshop *pWorkshop = TFMapsWorkshop() )
+	{
+		pWorkshop->GameServerSteamAPIActivated();
+	}
 #endif
 }
 
@@ -1932,7 +1935,10 @@ void CServerGameDLL::PrepareLevelResources( /* in/out */ char *pszMapName, size_
                                             /* in/out */ char *pszMapFile, size_t nMapFileSize )
 {
 #ifdef TF_DLL
-	TFMapsWorkshop()->PrepareLevelResources( pszMapName, nMapNameSize, pszMapFile, nMapFileSize );
+	if ( CTFMapsWorkshop *pWorkshop = TFMapsWorkshop() )
+	{
+		pWorkshop->PrepareLevelResources( pszMapName, nMapNameSize, pszMapFile, nMapFileSize );
+	}
 #endif // TF_DLL
 }
 
@@ -1943,7 +1949,10 @@ CServerGameDLL::AsyncPrepareLevelResources( /* in/out */ char *pszMapName, size_
                                             float *flProgress /* = NULL */ )
 {
 #ifdef TF_DLL
-	return TFMapsWorkshop()->AsyncPrepareLevelResources( pszMapName, nMapNameSize, pszMapFile, nMapFileSize, flProgress );
+	if ( CTFMapsWorkshop *pWorkshop = TFMapsWorkshop() )
+	{
+		return pWorkshop->AsyncPrepareLevelResources( pszMapName, nMapNameSize, pszMapFile, nMapFileSize, flProgress );
+	}
 #endif // TF_DLL
 
 	if ( flProgress )
@@ -1957,7 +1966,10 @@ CServerGameDLL::AsyncPrepareLevelResources( /* in/out */ char *pszMapName, size_
 IServerGameDLL::eCanProvideLevelResult CServerGameDLL::CanProvideLevel( /* in/out */ char *pMapName, int nMapNameMax )
 {
 #ifdef TF_DLL
-	return TFMapsWorkshop()->OnCanProvideLevel( pMapName, nMapNameMax );
+	if ( CTFMapsWorkshop *pWorkshop = TFMapsWorkshop() )
+	{
+		return pWorkshop->OnCanProvideLevel( pMapName, nMapNameMax );
+	}
 #endif // TF_DLL
 	return IServerGameDLL::eCanProvideLevel_CannotProvide;
 }

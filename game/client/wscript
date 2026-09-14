@@ -125,7 +125,6 @@ def build(bld):
 		source += _tf_sources()
 		includes = _tf_includes() + includes
 		libs += ['gcsdk', 'protobuf', 'JPEG']
-		defines = [d for d in defines if d not in ('ENABLE_GC_MATCHMAKING',)]
 		defines.append('NO_STEAM=1')
 
 	defines.remove('PROTECTED_THINGS_ENABLE')

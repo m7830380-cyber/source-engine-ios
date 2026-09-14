@@ -28,9 +28,7 @@ games = {
 _CODE_EXTS = ('.c', '.cc', '.cpp', '.cxx')
 
 _TF_SKIP_STEAM = (
-	'/workshop/',
 	'ugc_utils',
-	'maps_workshop',
 	'tf_steamstats',
 	'sixense/',
 )
@@ -108,7 +106,8 @@ def build(bld):
 		source += _tf_sources()
 		includes = _tf_includes() + includes
 		libs += ['gcsdk', 'protobuf']
-		defines = [d for d in defines if d not in ('ENABLE_GC_MATCHMAKING',)]
+		# Keep ENABLE_GC_MATCHMAKING so CTFGCServerSystem exists; Steam I/O is
+		# disabled via NO_STEAM and stub_steam.
 		defines.append('NO_STEAM=1')
 
 	defines.remove('PROTECTED_THINGS_ENABLE')

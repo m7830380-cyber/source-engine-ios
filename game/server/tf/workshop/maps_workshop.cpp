@@ -1002,4 +1002,11 @@ CON_COMMAND( tf_workshop_map_status, "Print information about workshop maps and 
 	g_TFMapsWorkshop.PrintStatusToConsole();
 }
 
-#endif // !_GAMECONSOLE
+#else // NO_STEAM or console: keep a symbol so dedicated/listen servers can boot.
+
+CTFMapsWorkshop *TFMapsWorkshop()
+{
+	return NULL;
+}
+
+#endif // !_GAMECONSOLE && !NO_STEAM

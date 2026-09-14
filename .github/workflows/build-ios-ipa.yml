@@ -14,14 +14,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Portal-only this run (iPad Metal DXT crash fix). Restore hl2 /
-          # episodic / cstrike / tf after this IPA is verified. iPad+iPhone
-          # support is in togles + Info.plist (UIDeviceFamily 1 and 2).
-          - game: portal
-            bundle_id: com.sourceengine.portal
-            display_name: portal-source
-            app_bundle: portal.app
-            artifact: source-engine-portal-ios-arm64
+          # TF2-only this run. iPad+iPhone support is in togles + Info.plist.
+          - game: tf
+            bundle_id: com.sourceengine.tf
+            display_name: tf-source
+            app_bundle: tf.app
+            artifact: source-engine-tf-ios-arm64
 
     steps:
       - uses: actions/checkout@v4

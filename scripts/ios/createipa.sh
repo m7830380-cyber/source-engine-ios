@@ -23,51 +23,46 @@ for fw in SDL2 libEGL libGLESv2; do
 	cp -R "$BUILDDIR/${fw}.framework" "$APP/Frameworks/"
 done
 
-# Install into a staging tree, then flatten into the .app root.
-# waf defaults PREFIX to /usr/local, which otherwise nests binaries under
-# hl2.app/usr/local/ and breaks CFBundleExecutable lookup.
-STAGE="$BUILDDIR/install-stage"
-rm -rf "$STAGE"
-mkdir -p "$STAGE"
-
+# waf defaults PREFIX=/usr/local, so binaries land under
+# hl2.app/usr/local/. Flatten into the .app root for CFBundleExecutable.
 export ANGLE_FRAMEWORK_PATH="$BUILDDIR"
-./waf install --destdir="$STAGE"
+./waf install --destdir="$APP"
 
-# Collect installed binaries from common PREFIX layouts into the app root.
-shopt -s nullglob
-for candidate in \
-	"$STAGE" \
-	"$STAGE/usr/local" \
-	"$STAGE/usr/local/bin" \
-	"$STAGE/usr/local/lib" \
-	"$STAGE/bin" \
-	"$STAGE/lib"
-do
-	[ -d "$candidate" ] || continue
-	for f in "$candidate"/*; do
+flatten_dir() {
+	local src="$1"
+	[ -d "$src" ] || return 0
+	shopt -s nullglob
+	local f
+	for f in "$src"/*; do
+		local base
 		base="$(basename "$f")"
-		case "$base" in
-			Frameworks|Payload|_CodeSignature|Info.plist|LaunchScreen.storyboard|extras_dir.vpk|usr|bin|lib|share|include)
-				continue
-				;;
-		esac
-		if [ -f "$f" ] || [ -L "$f" ]; then
-			cp -a "$f" "$APP/"
+		# Prefer the flat copy if a same-named file already exists at root.
+		if [ -e "$APP/$base" ] && [ "$f" != "$APP/$base" ]; then
+			rm -rf "$APP/$base"
 		fi
+		mv "$f" "$APP/"
 	done
-done
-shopt -u nullglob
+	shopt -u nullglob
+	rmdir "$src" 2>/dev/null || rm -rf "$src"
+}
+
+# Common PREFIX layouts produced by waf install --destdir
+flatten_dir "$APP/usr/local/bin"
+flatten_dir "$APP/usr/local/lib"
+flatten_dir "$APP/usr/local"
+flatten_dir "$APP/usr"
+flatten_dir "$APP/bin"
+flatten_dir "$APP/lib"
 
 if [ ! -f "$APP/hl2_launcher" ]; then
 	echo "Packaging failed: hl2_launcher missing from app root" >&2
-	echo "Stage tree:" >&2
-	find "$STAGE" -maxdepth 4 -print >&2 || true
+	echo "App tree:" >&2
+	find "$APP" -maxdepth 4 -print >&2 || true
 	exit 1
 fi
 
 chmod +x "$APP/hl2_launcher"
 
-# Ensure dylibs are loadable next to the executable.
 if command -v install_name_tool >/dev/null; then
 	for dylib in "$APP"/lib*.dylib; do
 		[ -f "$dylib" ] || continue
@@ -86,7 +81,6 @@ codesign --entitlements "$ROOT/scripts/ios/entitlements.plist" \
 
 cd "$BUILDDIR"
 rm -f source-engine.ipa
-# Store paths with Unix separators; keep Payload/hl2.app/... at archive root.
 zip -qr source-engine.ipa Payload
 
 echo "Created $BUILDDIR/source-engine.ipa"

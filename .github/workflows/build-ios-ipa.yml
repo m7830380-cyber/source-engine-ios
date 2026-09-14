@@ -29,6 +29,11 @@ jobs:
             display_name: episodic-source
             app_bundle: episodic.app
             artifact: source-engine-episodic-ios-arm64
+          - game: cstrike
+            bundle_id: com.sourceengine.cstrike
+            display_name: cstrike-source
+            app_bundle: cstrike.app
+            artifact: source-engine-cstrike-ios-arm64
 
     steps:
       - uses: actions/checkout@v4

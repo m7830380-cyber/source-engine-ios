@@ -53,13 +53,23 @@ SDL2_FW="$ROOT/build/ios/SDL2.framework"
 export CFLAGS="-I${SDL2_FW}/Headers ${CFLAGS:-}"
 export CXXFLAGS="-I${SDL2_FW}/Headers ${CXXFLAGS:-}"
 
+IOS_GAME="${IOS_GAME:-hl2}"
+IOS_BUNDLE_ID="${IOS_BUNDLE_ID:-com.sourceengine.port}"
+IOS_DISPLAY_NAME="${IOS_DISPLAY_NAME:-source-engine}"
+IOS_APP_BUNDLE="${IOS_APP_BUNDLE:-hl2.app}"
+IOS_IPA_NAME="${IOS_IPA_NAME:-source-engine-ios-arm64.ipa}"
+IOS_IPA_FILE="${IOS_IPA_FILE:-source-engine.ipa}"
+
+export IOS_BUNDLE_ID IOS_DISPLAY_NAME IOS_APP_BUNDLE IOS_IPA_FILE
+
 ./waf configure -T release --disable-warns --ios --angle --togles \
 	--skip-sdl2-sanity-check \
 	--sdl2="$SDL2_FW" \
+	--build-games="$IOS_GAME" \
 	"$@"
 
 ./waf build
 scripts/ios/createipa.sh
 
 mkdir -p artifacts
-cp build/ios/source-engine.ipa artifacts/source-engine-ios-arm64.ipa
+cp "build/ios/$IOS_IPA_FILE" "artifacts/$IOS_IPA_NAME"

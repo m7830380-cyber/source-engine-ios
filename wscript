@@ -184,6 +184,7 @@ def define_platform(conf):
 	conf.env.OPUS = conf.options.OPUS
 	conf.env.IOS = conf.options.IOS
 	conf.env.ANGLE = conf.options.ANGLE
+	conf.env.GAMES = conf.options.GAMES
 
 	arch32 = conf.run_test(CPP_32BIT_CHECK, 'Testing 32bit support')
 	arch64 = conf.run_test(CPP_64BIT_CHECK, 'Testing 64bit support')

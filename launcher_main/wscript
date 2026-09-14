@@ -35,6 +35,8 @@ def build(bld):
 		defines += ['IOS=1', '_IOS=1']
 		if bld.env.INCLUDES_SDL2:
 			includes += list(bld.env.INCLUDES_SDL2)
+		if getattr(bld.env, 'GAMES', None):
+			defines += ['IOS_DEFAULT_GAME="%s"' % bld.env.GAMES]
 
 	install_path = bld.env.BINDIR
 	bld(

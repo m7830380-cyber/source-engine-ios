@@ -4,8 +4,12 @@ set -euo pipefail
 cd "${0%/*}/../.."
 ROOT="$PWD"
 BUILDDIR="$ROOT/build/ios"
-APP="$BUILDDIR/hl2.app"
+APP_BUNDLE="${IOS_APP_BUNDLE:-hl2.app}"
+APP="$BUILDDIR/$APP_BUNDLE"
 BUNDLE="$ROOT/scripts/ios/bundle"
+BUNDLE_ID="${IOS_BUNDLE_ID:-com.sourceengine.port}"
+DISPLAY_NAME="${IOS_DISPLAY_NAME:-source-engine}"
+IPA_FILE="${IOS_IPA_FILE:-source-engine.ipa}"
 
 rm -rf "$APP"
 mkdir -p "$APP/Frameworks"
@@ -13,6 +17,16 @@ mkdir -p "$APP/Frameworks"
 cp "$BUNDLE/Info.plist" "$APP/"
 cp "$BUNDLE/LaunchScreen.storyboard" "$APP/"
 cp "$BUNDLE/extras_dir.vpk" "$APP/"
+
+if [ -x /usr/libexec/PlistBuddy ]; then
+	/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $BUNDLE_ID" "$APP/Info.plist"
+	/usr/libexec/PlistBuddy -c "Set :CFBundleName $DISPLAY_NAME" "$APP/Info.plist"
+	if /usr/libexec/PlistBuddy -c "Print :CFBundleDisplayName" "$APP/Info.plist" >/dev/null 2>&1; then
+		/usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName $DISPLAY_NAME" "$APP/Info.plist"
+	else
+		/usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string $DISPLAY_NAME" "$APP/Info.plist"
+	fi
+fi
 
 for fw in SDL2 libEGL libGLESv2; do
 	if [ ! -d "$BUILDDIR/${fw}.framework" ]; then
@@ -138,13 +152,15 @@ mkdir -p "$BUILDDIR/Payload"
 cp -a "$APP" "$BUILDDIR/Payload/"
 
 codesign --entitlements "$ROOT/scripts/ios/entitlements.plist" \
-	--sign "-" --force --deep "$BUILDDIR/Payload/hl2.app"
+	--sign "-" --force --deep "$BUILDDIR/Payload/$APP_BUNDLE"
 
 cd "$BUILDDIR"
-rm -f source-engine.ipa
-zip -qr source-engine.ipa Payload
+rm -f "$IPA_FILE"
+zip -qr "$IPA_FILE" Payload
 
-echo "Created $BUILDDIR/source-engine.ipa"
+echo "Created $BUILDDIR/$IPA_FILE"
+echo "Bundle ID: $BUNDLE_ID"
+echo "Display name: $DISPLAY_NAME"
 echo "App root contents:"
 ls -la "$APP" | head -n 40
 echo "SDL2 framework:"

@@ -10,6 +10,20 @@ jobs:
   build-ios-ipa:
     runs-on: macos-14
     timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - game: hl2
+            bundle_id: com.sourceengine.port
+            display_name: source-engine
+            app_bundle: hl2.app
+            artifact: source-engine-ios-arm64
+          - game: portal
+            bundle_id: com.sourceengine.portal
+            display_name: portal-source
+            app_bundle: portal.app
+            artifact: source-engine-portal-ios-arm64
 
     steps:
       - uses: actions/checkout@v4
@@ -17,6 +31,12 @@ jobs:
           submodules: recursive
 
       - name: Build unsigned IPA
+        env:
+          IOS_GAME: ${{ matrix.game }}
+          IOS_BUNDLE_ID: ${{ matrix.bundle_id }}
+          IOS_DISPLAY_NAME: ${{ matrix.display_name }}
+          IOS_APP_BUNDLE: ${{ matrix.app_bundle }}
+          IOS_IPA_NAME: ${{ matrix.artifact }}.ipa
         run: |
           chmod +x scripts/build-ios-arm64.sh scripts/ios/*.sh
           ./scripts/build-ios-arm64.sh
@@ -24,6 +44,6 @@ jobs:
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
-          name: source-engine-ios-arm64
-          path: artifacts/source-engine-ios-arm64.ipa
+          name: ${{ matrix.artifact }}
+          path: artifacts/${{ matrix.artifact }}.ipa
           if-no-files-found: error

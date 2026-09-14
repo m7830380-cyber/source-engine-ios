@@ -15,9 +15,14 @@
 
 #import <Foundation/Foundation.h>
 #include <stdlib.h>
+#include <string.h>
 #import <UIKit/UIKit.h>
 #import <AVFoundation/AVFoundation.h>
 #include <limits.h>
+
+#ifndef IOS_DEFAULT_GAME
+#define IOS_DEFAULT_GAME "hl2"
+#endif
 
 @interface XashPromptAlertViewDelegate : NSObject <UIAlertViewDelegate>
 
@@ -184,7 +189,10 @@ void IOS_LaunchDialog( void )
 	}
 	else
 	{
-		[args setText:@"-dev 2 -log"];
+		if ( strcmp( IOS_DEFAULT_GAME, "hl2" ) == 0 )
+			[args setText:@"-dev 2 -log"];
+		else
+			[args setText:[NSString stringWithFormat:@"-game %s -dev 2 -log", IOS_DEFAULT_GAME]];
 	}
 
 	scroll.contentSize=CGSizeMake(250, 200);

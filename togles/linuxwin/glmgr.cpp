@@ -2408,6 +2408,7 @@ GLMContext::GLMContext( IDirect3DDevice9 *pDevice, GLMDisplayParams *params )
 	}
 
 	m_nMaxUsedVertexProgramConstantsHint = 256;
+	m_FakeBlendEnableSRGB = false;
 
 	// flag our copy of display params as blank
 	m_displayParamsValid = false;
@@ -4808,6 +4809,7 @@ void GLMContext::SetDefaultStates( void )
 	m_BlendEquation.Default();
 	m_BlendColor.Default();
 	//m_BlendEnableSRGB.Default();	// this isn't useful until there is an FBO bound - in fact it will trip a GL error.
+	m_FakeBlendEnableSRGB = false;
 
 	m_DepthTestEnable.Default();
 	m_DepthFunc.Default();

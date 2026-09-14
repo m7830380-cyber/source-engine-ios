@@ -51,10 +51,10 @@ GLMRendererInfo::GLMRendererInfo( GLMRendererInfoFields *info )
 	//-------------------------------------------------------------------
 	// booleans
 	//-------------------------------------------------------------------
-	// gamma writes — keep the reference iOS port behavior (always true).
-	// Querying ANGLE's FRAMEBUFFER_SRGB_CAPABLE and pairing it with an sRGB EGL
-	// surface caused permanent dark output.
-	m_info.m_hasGammaWrites = true;
+	// ANGLE/Metal does not implement GL_FRAMEBUFFER_SRGB on the default drawable.
+	// Claiming it does makes shaders write linear values that iOS then shows as
+	// sRGB (always dark). FakeSRGBWrite encodes in the pixel shader instead.
+	m_info.m_hasGammaWrites = false;
 	
 	
 	// extension string *could* be checked, but on 10.6.3 the ext string is not there, but the func *is*

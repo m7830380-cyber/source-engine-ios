@@ -410,6 +410,7 @@ def check_deps(conf):
 		else:
 			conf.env.FRAMEWORK_UIKIT = "UIKit"
 			conf.env.FRAMEWORK_CFNETWORK = "CFNetwork"
+			conf.env.FRAMEWORK_QUARTZCORE = "QuartzCore"
 			conf.env.FRAMEWORK_SDL2 = "SDL2"
 			if not conf.env.ANGLE:
 				conf.env.FRAMEWORK_OPENGLES = "OpenGLES"

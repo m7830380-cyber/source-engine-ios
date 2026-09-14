@@ -488,6 +488,19 @@ FORCEINLINE void GLMContext::FlushDrawStates( uint nStartIndex, uint nEndIndex, 
 			gGL->glUniform1f( m_pBoundPair->m_locAlphaRef, m_AlphaTestFunc.GetData().ref );			
 	}
 
+	// Fake sRGB write: shaders mix linear vs encoded output with flSRGBWrite.
+	// This uniform was never pushed, so the suffix always stayed at the GLSL default (0)
+	// and present stayed linear/dark on iOS.
+	if ( m_pBoundPair->m_locFragmentFakeSRGBEnable >= 0 )
+	{
+		float fakeSRGBEnable = m_FakeBlendEnableSRGB ? 1.0f : 0.0f;
+		if ( fakeSRGBEnable != m_pBoundPair->m_fakeSRGBEnableValue )
+		{
+			gGL->glUniform1f( m_pBoundPair->m_locFragmentFakeSRGBEnable, fakeSRGBEnable );
+			m_pBoundPair->m_fakeSRGBEnableValue = fakeSRGBEnable;
+		}
+	}
+
 	Assert( ( m_pDevice->m_streams[0].m_vtxBuffer && ( m_pDevice->m_streams[0].m_vtxBuffer->m_vtxBuffer == m_pDevice->m_vtx_buffers[0] ) ) || ( ( !m_pDevice->m_streams[0].m_vtxBuffer ) && ( m_pDevice->m_vtx_buffers[0] == m_pDevice->m_pDummy_vtx_buffer ) ) );
 	Assert( ( m_pDevice->m_streams[1].m_vtxBuffer && ( m_pDevice->m_streams[1].m_vtxBuffer->m_vtxBuffer == m_pDevice->m_vtx_buffers[1] ) ) || ( ( !m_pDevice->m_streams[1].m_vtxBuffer ) && ( m_pDevice->m_vtx_buffers[1] == m_pDevice->m_pDummy_vtx_buffer ) ) );
 	Assert( ( m_pDevice->m_streams[2].m_vtxBuffer && ( m_pDevice->m_streams[2].m_vtxBuffer->m_vtxBuffer == m_pDevice->m_vtx_buffers[2] ) ) || ( ( !m_pDevice->m_streams[2].m_vtxBuffer ) && ( m_pDevice->m_vtx_buffers[2] == m_pDevice->m_pDummy_vtx_buffer ) ) );

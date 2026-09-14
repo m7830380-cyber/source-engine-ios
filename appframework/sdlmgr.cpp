@@ -978,11 +978,14 @@ bool CSDLMgr::CreateHiddenGameWindow( const char *pTitle, int width, int height 
 
 	//void* renderLayer = IOS_GetCALayerPointer( &info );
 	SDL_MetalView metalView = SDL_Metal_CreateView(m_Window);
-    void *renderLayer = SDL_Metal_GetLayer(metalView); 
+    void *renderLayer = SDL_Metal_GetLayer(metalView);
+#ifdef IOS
+	extern "C" void IOS_ConfigureMetalLayer( void *layerPtr );
+	IOS_ConfigureMetalLayer( renderLayer );
+#endif
 
-	// Match the known-good reference IPA: linear EGL surface. Requesting
-	// EGL_GL_COLORSPACE_SRGB_KHR here double-encoded with FakeSRGB/FRAMEBUFFER_SRGB
-	// and left the image permanently dark (screen recording no longer "fixed" it).
+	// Linear EGL surface: sRGB encoding is done in ToGLES shaders (FakeSRGBWrite).
+	// Requesting EGL_GL_COLORSPACE_SRGB_KHR here double-encodes and stays dark.
 	EGLint surface_attributes[] = {
     EGL_RENDER_BUFFER, EGL_BACK_BUFFER,
     EGL_NONE

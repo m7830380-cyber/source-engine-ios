@@ -682,6 +682,10 @@ def configure(conf):
 		conf.env.TESTDIR = conf.env.PREFIX+'/tests/'
 		conf.env.BINDIR = conf.env.PREFIX
 	else:
+		# iOS/Android: install flat into --destdir (the .app root). An empty
+		# PREFIX avoids nesting under usr/local inside the bundle.
+		if conf.env.IOS and (not conf.env.PREFIX or conf.env.PREFIX in ['/', '/usr/local']):
+			conf.env.PREFIX = ''
 		conf.env.LIBDIR = conf.env.BINDIR = conf.env.PREFIX
 
 	if conf.options.CCACHE:

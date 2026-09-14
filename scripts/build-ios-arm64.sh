@@ -54,6 +54,7 @@ export CFLAGS="-I${SDL2_FW}/Headers ${CFLAGS:-}"
 export CXXFLAGS="-I${SDL2_FW}/Headers ${CXXFLAGS:-}"
 
 ./waf configure -T release --disable-warns --ios --angle --togles \
+	--prefix= \
 	--skip-sdl2-sanity-check \
 	--sdl2="$SDL2_FW" \
 	"$@"

@@ -32,11 +32,15 @@
 
 #pragma once
 
-#ifdef USE_SDL
+#include <stdint.h>
+
+#if defined(IOS) || defined(_IOS)
+#include <GL/gl.h>
+#elif defined(USE_SDL)
 #include "SDL_opengl.h"
 #endif
 
-#ifdef OSX
+#if defined(OSX) && !defined(IOS) && !defined(_IOS)
 	#include <OpenGL/CGLTypes.h>
 	#include <OpenGL/CGLRenderers.h>
 	#include <OpenGL/CGLCurrent.h>

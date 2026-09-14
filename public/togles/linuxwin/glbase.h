@@ -37,11 +37,13 @@
 #define HAVE_GL_ARB_SYNC 1
 #endif
 
-#ifdef USE_SDL
+#if defined(IOS) || defined(_IOS)
+#include <GL/gl.h>
+#elif defined(USE_SDL)
 #include "SDL_opengl.h"
 #endif
 
-#ifdef OSX
+#if defined(OSX) && !defined(IOS) && !defined(_IOS)
 #include <OpenGL/CGLCurrent.h>
 #include <ApplicationServices/ApplicationServices.h>
 #endif

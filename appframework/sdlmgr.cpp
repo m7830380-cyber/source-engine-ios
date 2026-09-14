@@ -9,6 +9,7 @@
 #include "SDL_opengl.h"
 #ifdef IOS
 #include "SDL_metal.h"
+extern "C" void IOS_ConfigureMetalLayer( void *layerPtr );
 #endif
 #if !SDL_VERSION_ATLEAST(2, 26, 0)
 static inline void SDL_GetWindowSizeInPixels( SDL_Window *window, int *w, int *h )
@@ -980,7 +981,6 @@ bool CSDLMgr::CreateHiddenGameWindow( const char *pTitle, int width, int height 
 	SDL_MetalView metalView = SDL_Metal_CreateView(m_Window);
     void *renderLayer = SDL_Metal_GetLayer(metalView);
 #ifdef IOS
-	extern "C" void IOS_ConfigureMetalLayer( void *layerPtr );
 	IOS_ConfigureMetalLayer( renderLayer );
 #endif
 

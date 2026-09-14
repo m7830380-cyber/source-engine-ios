@@ -1065,8 +1065,20 @@ bool CSDLMgr::CreateHiddenGameWindow( const char *pTitle, int width, int height 
 	gGL->glGenFramebuffersEXT(1, &m_readFBO);
 #endif
 
-	gGL->glViewport(0, 0, width, height);    /* Reset The Current Viewport And Perspective Transformation */
-	gGL->glScissor(0, 0, width, height);    /* Reset The Current Viewport And Perspective Transformation */
+	{
+		int vpW = width;
+		int vpH = height;
+#ifdef IOS
+		SDL_GetWindowSizeInPixels( m_Window, &vpW, &vpH );
+		if ( vpW <= 0 || vpH <= 0 )
+		{
+			vpW = width;
+			vpH = height;
+		}
+#endif
+		gGL->glViewport(0, 0, vpW, vpH);
+		gGL->glScissor(0, 0, vpW, vpH);
+	}
 
 	// Blank out the initial window, so we're not looking at uninitialized
 	//  video RAM trash until we start proper drawing.
@@ -1762,8 +1774,22 @@ void CSDLMgr::SizeWindow( int width, int tall )
 	SDL_SetWindowSize( m_Window, width, tall );
 
 #if defined( DX_TO_GL_ABSTRACTION )
-	gGL->glViewport(0, 0, (GLsizei) width, (GLsizei) tall);
-	gGL->glScissor( 0,0, (GLsizei) width, (GLsizei) tall );
+	{
+		int vpW = width;
+		int vpH = tall;
+#ifdef IOS
+		// Window size is points; the Metal drawable is pixels. Viewport in
+		// points on a retina iPad covers a quarter of the framebuffer.
+		SDL_GetWindowSizeInPixels( m_Window, &vpW, &vpH );
+		if ( vpW <= 0 || vpH <= 0 )
+		{
+			vpW = width;
+			vpH = tall;
+		}
+#endif
+		gGL->glViewport(0, 0, (GLsizei) vpW, (GLsizei) vpH);
+		gGL->glScissor( 0,0, (GLsizei) vpW, (GLsizei) vpH );
+	}
 #endif
 
 	// If the Window hasn't been shown yet, show it now.

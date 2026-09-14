@@ -113,7 +113,14 @@ const GLMTexFormatDesc g_formatDescTable[] =
 
 	{ "_A8R8G8B8",		D3DFMT_A8R8G8B8,		GL_RGBA8,							GL_SRGB8_ALPHA8_EXT,				GL_BGRA,				GL_UNSIGNED_INT_8_8_8_8_REV,	1, 4 },
 	{ "_A4R4G4B4",		D3DFMT_A4R4G4B4,		GL_RGBA4,							0,									GL_BGRA,				GL_UNSIGNED_SHORT_4_4_4_4_REV,	1, 2 },
+	// iOS/ANGLE Metal: GL_RGB8 / GL_SRGB8 are not valid MTLPixelFormats on M-series
+	// iPads. The backbuffer is D3DFMT_X8R8G8B8 — using RGB8 presents as a grayscale,
+	// tiled, wavy still of the loading plaque. RGBA8 is the same 32-bit layout.
+#if defined(IOS)
+	{ "_X8R8G8B8",		D3DFMT_X8R8G8B8,		GL_RGBA8,							GL_SRGB8_ALPHA8_EXT,				GL_BGRA,				GL_UNSIGNED_INT_8_8_8_8_REV,	1, 4 },
+#else
 	{ "_X8R8G8B8",		D3DFMT_X8R8G8B8,		GL_RGB8,							GL_SRGB8_EXT,						GL_BGRA,				GL_UNSIGNED_INT_8_8_8_8_REV,	1, 4 },
+#endif
 	
 	{ "_X1R5G5B5",		D3DFMT_X1R5G5B5,		GL_RGB5,							0,									GL_BGRA,				GL_UNSIGNED_SHORT_1_5_5_5_REV,	1, 2 },
 	{ "_A1R5G5B5",		D3DFMT_A1R5G5B5,		GL_RGB5_A1,							0,									GL_BGRA,				GL_UNSIGNED_SHORT_1_5_5_5_REV,	1, 2 },
@@ -130,7 +137,11 @@ const GLMTexFormatDesc g_formatDescTable[] =
 
 	{ "_A32B32G32R32F",	D3DFMT_A32B32G32R32F,	GL_RGBA32F_ARB,						0,									GL_RGBA,				GL_FLOAT,						1, 16 },
 
+#if defined(IOS)
+	{ "_R8G8B8",		D3DFMT_R8G8B8,			GL_RGBA8,							GL_SRGB8_ALPHA8_EXT,				GL_BGR,					GL_UNSIGNED_BYTE,				1, 3 },
+#else
 	{ "_R8G8B8",		D3DFMT_R8G8B8,			GL_RGB8,							GL_SRGB8_EXT,						GL_BGR,					GL_UNSIGNED_BYTE,				1, 3 },
+#endif
 
 	{ "_A8",			D3DFMT_A8,				GL_ALPHA8,							0,									GL_ALPHA,				GL_UNSIGNED_BYTE,				1, 1 },
 	{ "_R5G6B5",		D3DFMT_R5G6B5,			GL_RGB,								GL_SRGB_EXT,						GL_RGB,					GL_UNSIGNED_SHORT_5_6_5,		1, 2 },
@@ -142,7 +153,11 @@ const GLMTexFormatDesc g_formatDescTable[] =
 
 	// U8V8 is exposed to the client as 2-bytes per texel, but we download it as 3-byte RGB.
 	// WriteTexels needs to do that conversion from rg8 to rgb8 in order to be able to download it correctly
+#if defined(IOS)
+	{ "_V8U8",			D3DFMT_V8U8,			GL_RGBA8,							0,									GL_RG,					GL_BYTE,						1, 2 },
+#else
 	{ "_V8U8",			D3DFMT_V8U8,			GL_RGB8,							0,									GL_RG,					GL_BYTE,						1, 2 },
+#endif
 	
 	{ "_R32F",			D3DFMT_R32F,			GL_R32F,							GL_R32F,							GL_RED,					GL_FLOAT,						1, 4 },
 //$ TODO: Need to merge bitmap changes over from Dota to get these formats.
@@ -808,6 +823,12 @@ CGLMTex::CGLMTex( GLMContext *ctx, GLMTexLayout *layout, uint levels, const char
 		}
 		
 		GLenum	msaaFormat = (layout->m_key.m_texFlags & kGLMTexSRGB) ? layout->m_format->m_glIntFormatSRGB : layout->m_format->m_glIntFormat;
+#if defined(IOS)
+		if ( msaaFormat == GL_RGB8 )
+			msaaFormat = GL_RGBA8;
+		if ( msaaFormat == GL_SRGB8 )
+			msaaFormat = GL_SRGB8_ALPHA8;
+#endif
 		gGL->glRenderbufferStorageMultisample(	GL_RENDERBUFFER,
 												sampleCount,	// not "layout->m_key.m_texSamples"
 												msaaFormat,
@@ -3332,7 +3353,12 @@ void convert_texture( GLenum &internalformat, GLsizei width, GLsizei height, GLe
 	if( format == GL_BGRA ) format = GL_RGBA;
 	if( format == GL_BGR ) format = GL_RGB;
 
-	if( internalformat == GL_SRGB8 && format == GL_RGBA )
+	// GLES/Metal has no RGB8 renderable. iPad M-series either aborts in
+	// MTLDebugValidateMTLPixelFormat or presents the backbuffer as a grayscale
+	// tiled still. X8R8G8B8 is 32-bit; RGBA8 is the matching Metal format.
+	if( internalformat == GL_RGB8 )
+		internalformat = GL_RGBA8;
+	if( internalformat == GL_SRGB8 )
 		internalformat = GL_SRGB8_ALPHA8;
 
 	if( format == GL_LUMINANCE || format == GL_LUMINANCE_ALPHA )

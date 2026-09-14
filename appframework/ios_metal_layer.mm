@@ -3,6 +3,16 @@
 #include <Metal/Metal.h>
 #include <UIKit/UIKit.h>
 
+extern "C" float IOS_NativeScreenScale( void )
+{
+	CGFloat scale = [UIScreen mainScreen].nativeScale;
+	if ( scale < 1.0 )
+		scale = [UIScreen mainScreen].scale;
+	if ( scale < 1.0 )
+		scale = 2.0;
+	return (float)scale;
+}
+
 extern "C" void IOS_ConfigureMetalLayer( void *layerPtr )
 {
 	CAMetalLayer *layer = (__bridge CAMetalLayer *)layerPtr;
@@ -14,11 +24,7 @@ extern "C" void IOS_ConfigureMetalLayer( void *layerPtr )
 	layer.pixelFormat = MTLPixelFormatBGRA8Unorm;
 	layer.framebufferOnly = YES;
 
-	CGFloat scale = [UIScreen mainScreen].nativeScale;
-	if ( scale < 1.0 )
-		scale = [UIScreen mainScreen].scale;
-	if ( scale < 1.0 )
-		scale = 2.0;
+	CGFloat scale = IOS_NativeScreenScale();
 	layer.contentsScale = scale;
 
 	CGSize points = CGSizeZero;

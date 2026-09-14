@@ -11,7 +11,8 @@
 
 #include "SDL.h"
 #include "SDL_metal.h"
-#include <UIKit/UIKit.h>
+
+extern "C" float IOS_NativeScreenScale( void );
 #if !SDL_VERSION_ATLEAST(2, 26, 0)
 static inline void SDL_GetWindowSizeInPixels( SDL_Window *window, int *w, int *h )
 {
@@ -615,11 +616,9 @@ GLMDisplayInfo::GLMDisplayInfo( CGDirectDisplayID displayID, CGOpenGLDisplayMask
         {
 			// iPhone is 3x, iPad is 2x. Hardcoding 3x made iPad report a
 			// framebuffer 1.5x too large and present as tiled garbage.
-			float scale = (float)[UIScreen mainScreen].nativeScale;
-			if ( scale < 1.0f )
-				scale = (float)[UIScreen mainScreen].scale;
-			if ( scale < 1.0f )
-				scale = 2.0f;
+			// UIKit is queried from ios_metal_layer.mm so ObjC BOOL does not
+			// collide with Valve's typedef int BOOL.
+			float scale = IOS_NativeScreenScale();
             m_info.m_displayPixelWidth  = mode.w * scale;
             m_info.m_displayPixelHeight = mode.h * scale;
         }

@@ -24,6 +24,11 @@ jobs:
             display_name: portal-source
             app_bundle: portal.app
             artifact: source-engine-portal-ios-arm64
+          - game: episodic
+            bundle_id: com.sourceengine.episodic
+            display_name: episodic-source
+            app_bundle: episodic.app
+            artifact: source-engine-episodic-ios-arm64
 
     steps:
       - uses: actions/checkout@v4

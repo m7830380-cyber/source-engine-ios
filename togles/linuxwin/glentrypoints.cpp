@@ -492,6 +492,17 @@ COpenGLEntryPoints::COpenGLEntryPoints()
 		m_bHave_GL_EXT_buffer_storage = false;
 	}
 
+#if defined(IOS)
+	// ANGLE Metal advertises S3TC/DXT on Apple GPU (especially M-series iPad).
+	// Uploading those formats calls MTLTextureDescriptor setPixelFormat with an
+	// unsupported compressed format and SIGABRTs in MTLDebugValidateMTLPixelFormat.
+	// Force the CPU decompress path in CGLMTex::WriteTexels instead.
+	m_bHave_GL_EXT_texture_compression_s3tc = false;
+	m_bHave_GL_EXT_texture_compression_dxt1 = false;
+	m_bHave_GL_ANGLE_texture_compression_dxt3 = false;
+	m_bHave_GL_ANGLE_texture_compression_dxt5 = false;
+#endif
+
 	printf( "GL_NV_bindless_texture: %s\n", m_bHave_GL_NV_bindless_texture ? "ENABLED" : "DISABLED" );
 	printf( "GL_AMD_pinned_memory: %s\n", m_bHave_GL_AMD_pinned_memory ? "ENABLED" : "DISABLED" );
 	printf( "GL_EXT_buffer_storage: %s\n", m_bHave_GL_EXT_buffer_storage ? "AVAILABLE" : "NOT AVAILABLE" );

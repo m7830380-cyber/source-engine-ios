@@ -36,5 +36,7 @@ waf3*/
 .vscode/
 .depproj/
 source-engine.sln
-Payload/
+# IPA staging directory from scripts/ios/createipa.sh (do not ignore TF2
+# game/server/tf/bot/behavior/scenario/payload/).
+build/ios/Payload/
 *.ipa

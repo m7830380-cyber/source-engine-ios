@@ -62,6 +62,7 @@ if ! xcodebuild -project "$SDL_SRC/Xcode/SDL/SDL.xcodeproj" \
 	-derivedDataPath "$OUT/sdl2-derived" \
 	ONLY_ACTIVE_ARCH=NO \
 	IPHONEOS_DEPLOYMENT_TARGET=12.0 \
+	TARGETED_DEVICE_FAMILY=1,2 \
 	CODE_SIGNING_ALLOWED=NO \
 	CODE_SIGNING_REQUIRED=NO; then
 	echo "SDL2 xcodebuild failed; falling back to reference IPA framework" >&2

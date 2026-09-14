@@ -14,31 +14,14 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - game: hl2
-            bundle_id: com.sourceengine.port
-            display_name: source-engine
-            app_bundle: hl2.app
-            artifact: source-engine-ios-arm64
+          # Portal-only this run (iPad Metal DXT crash fix). Restore hl2 /
+          # episodic / cstrike / tf after this IPA is verified. iPad+iPhone
+          # support is in togles + Info.plist (UIDeviceFamily 1 and 2).
           - game: portal
             bundle_id: com.sourceengine.portal
             display_name: portal-source
             app_bundle: portal.app
             artifact: source-engine-portal-ios-arm64
-          - game: episodic
-            bundle_id: com.sourceengine.episodic
-            display_name: episodic-source
-            app_bundle: episodic.app
-            artifact: source-engine-episodic-ios-arm64
-          - game: cstrike
-            bundle_id: com.sourceengine.cstrike
-            display_name: cstrike-source
-            app_bundle: cstrike.app
-            artifact: source-engine-cstrike-ios-arm64
-          - game: tf
-            bundle_id: com.sourceengine.tf
-            display_name: tf-source
-            app_bundle: tf.app
-            artifact: source-engine-tf-ios-arm64
 
     steps:
       - uses: actions/checkout@v4

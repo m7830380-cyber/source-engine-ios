@@ -3406,11 +3406,8 @@ static GLboolean isDXTcAlpha(GLenum format) {
 }
 
 GLvoid *uncompressDXTc(GLsizei width, GLsizei height, GLenum format, GLsizei imageSize, int transparent0, int* simpleAlpha, int* complexAlpha, const GLvoid *data) {
-    // uncompress a DXTc image
-    // get pixel size of uncompressed image => fixed RGBA
-    int pixelsize = 4;
-    if (format == GL_COMPRESSED_RGB_S3TC_DXT1_EXT || format == GL_COMPRESSED_SRGB_S3TC_DXT1_EXT)
-        pixelsize = 3;
+    // Decompress functions always write packed RGBA8 (uint32 per texel).
+    const int pixelsize = 4;
     // check with the size of the input data stream if the stream is in fact uncompressed
     if (imageSize == width*height*pixelsize || data==NULL) {
         // uncompressed stream
@@ -3470,10 +3467,11 @@ void CompressedTexImage2D(GLenum target, GLint level, GLenum internalformat,
         return;
     }
 
-	bool hasAlpha = (internalformat != GL_COMPRESSED_RGB_S3TC_DXT1_EXT) && (internalformat != GL_COMPRESSED_SRGB_S3TC_DXT1_EXT);
-
-   	GLenum format = hasAlpha ? GL_RGBA : GL_RGB;
-	GLenum intformat = hasAlpha ? GL_RGBA8 : GL_RGB8;
+	// Decompress always yields RGBA8. Upload RGBA on GLES/Metal — GL_RGB8 maps to
+	// an invalid MTLPixelFormat on Apple GPU iPads (M1/M2) and aborts in
+	// MTLDebugValidateMTLPixelFormat.
+   	GLenum format = GL_RGBA;
+	GLenum intformat = GL_RGBA8;
 	GLenum type = GL_UNSIGNED_BYTE;
 	GLvoid *pixels = NULL;
 
@@ -3492,7 +3490,7 @@ void CompressedTexImage2D(GLenum target, GLint level, GLenum internalformat,
         }
 
 		if( srgb )
-			intformat = hasAlpha ? GL_SRGB8_ALPHA8 : GL_SRGB8;
+			intformat = GL_SRGB8_ALPHA8;
 	}
 
 	gGL->glTexImage2D(target, level, intformat, width, height, border, format, type, pixels);
@@ -3662,10 +3660,16 @@ void CGLMTex::WriteTexels( GLMTexLockDesc *desc, bool writeWholeSlice, bool noDa
 				Assert( writeWholeSlice );	//subimage not implemented in this path yet
 				// compressed path
 				// http://www.opengl.org/sdk/docs/man/xhtml/glCompressedTexImage2D.xml
+				// iOS: never upload S3TC/DXT through ANGLE Metal. iPhone A-series
+				// can swallow it; M-series iPads abort in setPixelFormat.
+#if defined(IOS)
+				CompressedTexImage2D( target, desc->m_req.m_mip, intformat, slice->m_xSize, slice->m_ySize, 0, slice->m_storageSize, sliceAddress );
+#else
 				if( gGL->m_bHave_GL_EXT_texture_compression_dxt1 )
 					gGL->glCompressedTexImage2D( target, desc->m_req.m_mip, intformat, slice->m_xSize, slice->m_ySize, 0, slice->m_storageSize, sliceAddress );
 				else
 					CompressedTexImage2D( target, desc->m_req.m_mip, intformat, slice->m_xSize, slice->m_ySize, 0, slice->m_storageSize, sliceAddress );
+#endif
 			}
 			else
 			{

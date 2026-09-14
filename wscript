@@ -149,6 +149,13 @@ projects={
 	]
 }
 
+def game_projects(games):
+	prj = list(projects['game'])
+	if games == 'tf':
+		idx = prj.index('game/client')
+		prj[idx:idx] = ['protobuf', 'gcsdk']
+	return prj
+
 @Configure.conf
 def check_pkg(conf, package, uselib_store, fragment, *k, **kw):
 	errormsg = '{0} not available! Install {0} development package. Also you may need to set PKG_CONFIG_PATH environment variable'.format(package)
@@ -695,7 +702,7 @@ def configure(conf):
 	elif conf.options.DEDICATED:
 		conf.add_subproject(projects['dedicated'])
 	else:
-		conf.add_subproject(projects['game'])
+		conf.add_subproject(game_projects(conf.options.GAMES))
 
 def build(bld):
 	os.environ["CCACHE_DIR"] = os.path.abspath('.ccache/'+bld.env.COMPILER_CC+'/'+bld.env.DEST_OS+'/'+bld.env.DEST_CPU)
@@ -722,4 +729,4 @@ def build(bld):
 		elif bld.env.GL:
 			projects['game'] += ['togl']
 
-		bld.add_subproject(projects['game'])
+		bld.add_subproject(game_projects(bld.env.GAMES))

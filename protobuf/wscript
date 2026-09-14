@@ -1,0 +1,69 @@
+#! /usr/bin/env python
+# encoding: utf-8
+
+top = '.'
+PROJECT_NAME = 'protobuf'
+PB = '../thirdparty/protobuf-2.6.1/src'
+
+def options(opt):
+	return
+
+def configure(conf):
+	conf.env.append_unique('DEFINES', ['HAVE_PTHREAD=1'])
+
+def build(bld):
+	source = [
+		PB + '/google/protobuf/stubs/atomicops_internals_x86_gcc.cc',
+		PB + '/google/protobuf/stubs/common.cc',
+		PB + '/google/protobuf/stubs/once.cc',
+		PB + '/google/protobuf/stubs/stringprintf.cc',
+		PB + '/google/protobuf/extension_set.cc',
+		PB + '/google/protobuf/generated_message_util.cc',
+		PB + '/google/protobuf/message_lite.cc',
+		PB + '/google/protobuf/repeated_field.cc',
+		PB + '/google/protobuf/wire_format_lite.cc',
+		PB + '/google/protobuf/io/coded_stream.cc',
+		PB + '/google/protobuf/io/zero_copy_stream.cc',
+		PB + '/google/protobuf/io/zero_copy_stream_impl_lite.cc',
+		PB + '/google/protobuf/stubs/strutil.cc',
+		PB + '/google/protobuf/stubs/substitute.cc',
+		PB + '/google/protobuf/stubs/structurally_valid.cc',
+		PB + '/google/protobuf/descriptor.cc',
+		PB + '/google/protobuf/descriptor.pb.cc',
+		PB + '/google/protobuf/descriptor_database.cc',
+		PB + '/google/protobuf/dynamic_message.cc',
+		PB + '/google/protobuf/extension_set_heavy.cc',
+		PB + '/google/protobuf/generated_message_reflection.cc',
+		PB + '/google/protobuf/message.cc',
+		PB + '/google/protobuf/reflection_ops.cc',
+		PB + '/google/protobuf/service.cc',
+		PB + '/google/protobuf/text_format.cc',
+		PB + '/google/protobuf/unknown_field_set.cc',
+		PB + '/google/protobuf/wire_format.cc',
+		PB + '/google/protobuf/io/printer.cc',
+		PB + '/google/protobuf/io/strtod.cc',
+		PB + '/google/protobuf/io/tokenizer.cc',
+		PB + '/google/protobuf/io/zero_copy_stream_impl.cc',
+		PB + '/google/protobuf/compiler/importer.cc',
+		PB + '/google/protobuf/compiler/parser.cc',
+	]
+
+	if bld.env.DEST_OS == 'win32':
+		source += [PB + '/google/protobuf/stubs/atomicops_internals_x86_msvc.cc']
+
+	includes = [
+		'.',
+		PB,
+	]
+
+	bld.stlib(
+		source   = source,
+		target   = PROJECT_NAME,
+		name     = PROJECT_NAME,
+		features = 'c cxx',
+		includes = includes,
+		export_includes = includes,
+		defines  = ['HAVE_PTHREAD=1'],
+		subsystem = bld.env.MSVC_SUBSYSTEM,
+		idx      = bld.get_taskgen_count()
+	)

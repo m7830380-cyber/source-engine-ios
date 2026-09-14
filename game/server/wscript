@@ -20,11 +20,36 @@ games = {
 	'tf': [
 		'server_base.vpc',
 		'server_econ_base.vpc',
-		'tf/tf_gcmessages_include.vpc',
 		'nav_mesh.vpc',
 		'server_tf.vpc'
 	]
 }
+
+_CODE_EXTS = ('.c', '.cc', '.cpp', '.cxx')
+
+def _code_sources(files):
+	out = []
+	for s in files:
+		low = s.replace('\\', '/').lower()
+		if low.endswith(_CODE_EXTS):
+			out.append(s)
+	return out
+
+def _tf_sources():
+	return [
+		'../shared/tf/tf_gcmessages.cpp',
+	]
+
+def _tf_includes():
+	return [
+		'../../protobuf',
+		'../../thirdparty/protobuf-2.6.1/src',
+		'../shared/generated_proto',
+		'../../public/gcsdk',
+		'../../gcsdk',
+		'../../gcsdk/steamextra',
+		'./tf',
+	]
 
 def options(opt):
 	return
@@ -63,9 +88,15 @@ def build(bld):
 	if bld.env.DEST_OS != 'android' and not bld.env.IOS:
 		install_path += '/'+bld.env.GAMES+'/bin'
 
-	source = game["sources"] + ['../../public/tier0/memoverride.cpp']
+	source = _code_sources(game["sources"]) + ['../../public/tier0/memoverride.cpp']
 	includes += game["includes"]
 	defines = game["defines"]
+
+	if bld.env.GAMES == 'tf':
+		source += _tf_sources()
+		includes = _tf_includes() + includes
+		libs += ['gcsdk', 'protobuf']
+		defines.append('NO_STEAM=1')
 
 	defines.remove('PROTECTED_THINGS_ENABLE')
 

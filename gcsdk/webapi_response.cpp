@@ -5,7 +5,7 @@
 //=============================================================================
 
 #include "stdafx.h"
-#include "thirdparty/JSON_parser/JSON_parser.h"
+#include "JSON_parser.h"
 
 using namespace GCSDK;
 

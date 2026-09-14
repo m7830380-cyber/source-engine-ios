@@ -123,10 +123,12 @@ if command -v install_name_tool >/dev/null && command -v otool >/dev/null; then
 	done
 	shopt -u nullglob
 
-	# Fail the pack if any game dylib still points at the CI workspace.
-	if otool -L "$APP"/lib*.dylib "$APP/hl2_launcher" 2>/dev/null | grep -E '/Users/|/build/(tier0|vstdlib|togles|stub_steam)/'; then
+	# Fail the pack if any LC_LOAD_DYLIB still points at the CI workspace.
+	# otool -L prints "<path>:" headers — only check indented dependency lines.
+	bad_deps="$(otool -L "$APP"/lib*.dylib "$APP/hl2_launcher" 2>/dev/null | awk '/^\t/ {print $1}' | grep -E '^/Users/|/build/(tier0|vstdlib|togles|stub_steam)/' || true)"
+	if [ -n "$bad_deps" ]; then
 		echo "Packaging failed: absolute build paths still present in load commands:" >&2
-		otool -L "$APP"/lib*.dylib "$APP/hl2_launcher" 2>/dev/null | grep -E '/Users/|/build/(tier0|vstdlib|togles|stub_steam)/' >&2 || true
+		echo "$bad_deps" >&2
 		exit 1
 	fi
 fi

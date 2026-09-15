@@ -203,6 +203,9 @@ public:
 	
 	// Trigger a haptic pulse on a controller
 	virtual void TriggerHapticPulse( ControllerHandle_t controllerHandle, ESteamControllerPad eTargetPad, unsigned short usDurationMicroSec ) = 0;
+
+	virtual const char *GetGlyphForActionOrigin( EControllerActionOrigin eOrigin ) = 0;
+	virtual const char *GetStringForActionOrigin( EControllerActionOrigin eOrigin ) = 0;
 };
 
 #define STEAMCONTROLLER_INTERFACE_VERSION "SteamController003"

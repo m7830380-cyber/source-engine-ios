@@ -41,6 +41,14 @@ enum EGamepadTextInputLineMode
 	k_EGamepadTextInputLineModeMultipleLines = 1
 };
 
+enum ETextFilteringContext
+{
+	k_ETextFilteringContextUnknown = 0,
+	k_ETextFilteringContextGameContent = 1,
+	k_ETextFilteringContextChat = 2,
+	k_ETextFilteringContextName = 3,
+};
+
 
 // function prototype for warning message hook
 #if defined( POSIX )
@@ -163,7 +171,14 @@ public:
 	
 	// Sets the inset of the overlay notification from the corner specified by SetOverlayNotificationPosition.
 	virtual void SetOverlayNotificationInset( int nHorizontalInset, int nVerticalInset ) = 0;
+
+	virtual bool InitFilterText( uint32 unFilterOptions = 0 ) = 0;
+	virtual int FilterText( ETextFilteringContext eContext, CSteamID sourceSteamID, const char *pchInputMessage, char *pchOutFilteredText, uint32 nByteSizeOutFilteredText ) = 0;
 };
+
+#ifdef VERSION_SAFE_STEAM_API_INTERFACES
+inline ISteamUtils *SteamUtils() { return NULL; }
+#endif
 
 #define STEAMUTILS_INTERFACE_VERSION "SteamUtils007"
 

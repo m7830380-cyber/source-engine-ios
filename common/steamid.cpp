@@ -516,6 +516,13 @@ bool CSteamID::SetFromSteam2String( const char *pchSteam2ID, EUniverse eUniverse
 	SetFromSteam2( &steam2ID, eUniverse );
 	return true;
 }
+
+bool SteamIDFromSteam2String( const char *pchSteam2ID, EUniverse eUniverse, CSteamID *pSteamIDOut )
+{
+	if ( !pSteamIDOut )
+		return false;
+	return pSteamIDOut->SetFromSteam2String( pchSteam2ID, eUniverse );
+}
 #endif
 
 //-----------------------------------------------------------------------------

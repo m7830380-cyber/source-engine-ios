@@ -843,6 +843,8 @@ private:
 	} m_steamid;
 };
 
+bool SteamIDFromSteam2String( const char *pchSteam2ID, EUniverse eUniverse, CSteamID *pSteamIDOut );
+
 inline bool CSteamID::IsValid() const
 {
 	if ( m_steamid.m_comp.m_EAccountType <= k_EAccountTypeInvalid || m_steamid.m_comp.m_EAccountType >= k_EAccountTypeMax )

@@ -461,5 +461,8 @@ struct GlobalStatsReceived_t
 
 #pragma pack( pop )
 
+#ifdef VERSION_SAFE_STEAM_API_INTERFACES
+inline ISteamUserStats *SteamUserStats() { return NULL; }
+#endif
 
 #endif // ISTEAMUSER_H

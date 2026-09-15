@@ -391,6 +391,7 @@ public:
 	MESSAGE_FUNC( OnDelete, "Delete" );				// called to delete the panel; Panel::OnDelete() does simply { delete this; }
 	virtual void OnThink();							// called every frame before painting, but only if panel is visible
 	virtual void OnChildAdded(VPANEL child);		// called when a child has been added to this panel
+	virtual void OnChildRemoved( Panel* pChild ) {}	// called when a child gets removed as one of our children
 	virtual void OnSizeChanged(int newWide, int newTall);	// called after the size of a panel has been changed
 	
 	// called every frame if ivgui()->AddTickSignal() is called

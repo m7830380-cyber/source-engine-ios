@@ -12,6 +12,8 @@
 #pragma once
 #endif
 
+#include "tier0/platform.h"
+
 #define null 0L
 
 #define NeedProportional() (IsMobile() || CommandLine()->CheckParm("-gameuiproportionality"))
@@ -66,13 +68,13 @@ typedef uintp VPANEL;
 
 // handles to vgui objects
 // NULL values signify an invalid value
-typedef unsigned long HScheme;
+typedef uint32 HScheme;
 // Both -1 and 0 are used for invalid textures. Be careful.
-typedef unsigned long HTexture;
-typedef unsigned long HCursor;
-typedef unsigned long HPanel;
-const HPanel INVALID_PANEL = (HPanel)-1;
-typedef unsigned long HFont;
+typedef uint32 HTexture;
+typedef uint32 HCursor;
+typedef uint32 HPanel;
+const HPanel INVALID_PANEL = 0xffffffff;
+typedef uint32 HFont;
 const HFont INVALID_FONT = 0; // the value of an invalid font handle
 }
 

@@ -41,9 +41,9 @@ class Image;
 class Point;
 
 // handles
-typedef unsigned long HCursor;
-typedef unsigned long HTexture;
-typedef unsigned long HFont;
+typedef uint32 HCursor;
+typedef uint32 HTexture;
+typedef uint32 HFont;
 
 
 //SRC only defines

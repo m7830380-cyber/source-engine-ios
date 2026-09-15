@@ -114,6 +114,8 @@ protected:
 		matrix3x4_t	m_MDLToWorld;
 		bool		m_bDisabled;
 		float		m_flCycleStartTime;
+		CStudioHdr	*m_pStudioHdr;
+		uint32		m_unMdlCacheSerial;
 	};
 
 	MDLData_t				m_RootMDL;

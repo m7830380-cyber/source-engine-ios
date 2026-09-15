@@ -626,4 +626,8 @@ struct SetPersonaNameResponse_t
 
 #pragma pack( pop )
 
+#ifndef STEAM_API_H
+inline ISteamFriends *SteamFriends() { return NULL; }
+#endif
+
 #endif // ISTEAMFRIENDS_H

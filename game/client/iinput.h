@@ -11,6 +11,8 @@
 #pragma once
 #endif
 
+#include "inputsystem/InputEnums.h"
+
 class bf_write;
 class bf_read;
 class CUserCmd;
@@ -112,6 +114,9 @@ public:
 
 	virtual	bool		EnableJoystickMode() = 0;
 
+	virtual void		SetPreferredGameActionSet( GameActionSet_t action_set ) {}
+	virtual GameActionSet_t GetPreferredGameActionSet() { return GAME_ACTION_SET_NONE; }
+	virtual void		SetGameActionSetFlags( GameActionSetFlags_t action_set_flags ) {}
 	virtual bool		IsSteamControllerActive() { return false; }
 };
 

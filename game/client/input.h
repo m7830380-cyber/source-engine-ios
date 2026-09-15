@@ -112,6 +112,9 @@ public:
 
 	virtual	bool		EnableJoystickMode();
 
+	virtual void	SetPreferredGameActionSet( GameActionSet_t action_set ) {}
+	virtual GameActionSet_t GetPreferredGameActionSet() { return GAME_ACTION_SET_NONE; }
+	virtual void	SetGameActionSetFlags( GameActionSetFlags_t action_set_flags ) {}
 	virtual bool		IsSteamControllerActive() { return false; }
 
 // Private Implementation

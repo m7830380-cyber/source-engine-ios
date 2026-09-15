@@ -78,6 +78,9 @@ public:
 
 	// return the buildid of this app, may change at any time based on backend updates to the game
 	virtual int GetAppBuildId() = 0;
+
+	// Get command line if game was launched via Steam URL, e.g. steam://run/<appid>//<command line>/.
+	virtual int GetLaunchCommandLine( char *pszCommandLine, int cubCommandLine ) = 0;
 #ifdef _PS3
 	// Result returned in a RegisterActivationCodeResponse_t callresult
 	virtual SteamAPICall_t RegisterActivationCode( const char *pchActivationCode ) = 0;

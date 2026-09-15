@@ -12,6 +12,20 @@
 
 #ifdef STEAM_API_H
 // Engine steam_api.h already defines CCallbackBase and related helpers.
+#ifndef STEAM_DEFINE_INTERFACE_ACCESSOR
+#define STEAM_DEFINE_INTERFACE_ACCESSOR( type, name, expr, kind, version ) \
+	inline type name() { return NULL; }
+#define STEAM_DEFINE_USER_INTERFACE_ACCESSOR( type, name, version ) \
+	inline type name() { return NULL; }
+#define STEAM_DEFINE_GAMESERVER_INTERFACE_ACCESSOR( type, name, version ) \
+	inline type name() { return NULL; }
+#endif
+enum { k_iSteamNetworkingSocketsCallbacks = 1220 };
+enum { k_iSteamNetworkingMessagesCallbacks = 1250 };
+enum { k_iSteamNetworkingUtilsCallbacks = 1280 };
+enum { k_ISteamParentalSettingsCallbacks = 5000 };
+enum { k_iSteamRemotePlayCallbacks = 5700 };
+enum { k_iSteamChatCallbacks = 5900 };
 #else
 
 #include "steamtypes.h"

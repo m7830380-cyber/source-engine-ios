@@ -584,6 +584,10 @@ public:
 
 
 //-----------------------------------------------------------------------------
+// Utilities to suppress warnings or other annotations
+template< typename T > static inline void NoteUnused( const T& foo ) { (void)foo; }
+
+//-----------------------------------------------------------------------------
 // This macro predates universal static_assert support in our toolchains
 #define COMPILE_TIME_ASSERT( pred ) static_assert( pred, "Compile time assert constraint is not true: " #pred )
 

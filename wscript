@@ -151,7 +151,7 @@ projects={
 
 def game_projects(games):
 	prj = list(projects['game'])
-	if games == 'tf':
+	if games in ('tf', 'csgo'):
 		idx = prj.index('game/client')
 		prj[idx:idx] = ['protobuf', 'gcsdk']
 	return prj
@@ -197,6 +197,11 @@ def define_platform(conf):
 	# compiling the incomplete in-tree TF2 snapshot against full TF2 APIs.
 	if conf.options.GAMES == 'tf':
 		conf.env.append_unique('DEFINES', ['SOURCESDK'])
+
+	# CS:GO overlay: offline, no Steam, no Scaleform. NO_STEAM must be in
+	# env.DEFINES before VPC parse so !$NO_STEAM files are dropped.
+	if conf.options.GAMES == 'csgo':
+		conf.env.append_unique('DEFINES', ['NO_STEAM', 'NO_STEAM=1'])
 
 	arch32 = conf.run_test(CPP_32BIT_CHECK, 'Testing 32bit support')
 	arch64 = conf.run_test(CPP_64BIT_CHECK, 'Testing 64bit support')

@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright (c), Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Holds the CEconGameServerAccount object
 //
@@ -33,6 +33,28 @@ enum eGameServerScoreStandingTrend
 	kGSStandingTrend_Down,
 };
 
+#ifdef GC
+#include "gcsdk/schemasharedobject.h"
+
+//---------------------------------------------------------------------------------
+// Purpose: 
+//---------------------------------------------------------------------------------
+class CEconGameServerAccount : public GCSDK::CSchemaSharedObject< CSchGameServerAccount, k_EEconTypeGameServerAccount >
+{
+#ifdef GC_DLL
+	DECLARE_CLASS_MEMPOOL( CEconGameServerAccount );
+#endif
+
+public:
+	CEconGameServerAccount() {}
+	CEconGameServerAccount( uint32 unAccountID ) 
+	{
+		Obj().m_unAccountID = unAccountID;
+	}
+};
+
+void GameServerAccount_GenerateIdentityToken( char* pIdentityToken, uint32 unMaxChars );
+#endif // GC
 
 inline const char *GameServerAccount_GetStandingString( eGameServerScoreStanding standing )
 {
@@ -72,12 +94,5 @@ inline const char *GameServerAccount_GetStandingTrendString( eGameServerScoreSta
 	} // switch
 	return pStandingTrend;
 }
-
-//---------------------------------------------------------------------------------
-// Purpose: Selective account-level data for game servers
-//---------------------------------------------------------------------------------
-class CEconGameAccountForGameServers : public GCSDK::CProtoBufSharedObject < CSOEconGameAccountForGameServers, k_EEconTypeGameAccountForGameServers >
-{
-};
 
 #endif //ECON_GAME_SERVER_ACCOUNT_H

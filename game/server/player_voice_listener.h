@@ -1,4 +1,4 @@
-//========== Copyright ï¿½ Valve Corporation, All rights reserved. ============
+//========== Copyright © Valve Corporation, All rights reserved. ============
 //
 // Purpose: 
 //
@@ -42,8 +42,8 @@ public:
 private:
 	void	InitData( void );
 
-	float	m_flLastPlayerSpeechTime[MAX_PLAYERS_ARRAY_SAFE];
-	float	m_flPlayerSpeechDuration[MAX_PLAYERS_ARRAY_SAFE];
+	float	m_flLastPlayerSpeechTime[MAX_PLAYERS];
+	float	m_flPlayerSpeechDuration[MAX_PLAYERS];
 };
 
 extern CPlayerVoiceListener &PlayerVoiceListener( void );

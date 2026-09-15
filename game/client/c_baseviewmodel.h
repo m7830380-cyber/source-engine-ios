@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Client side view model implementation. Responsible for drawing
 //			the view model.
@@ -15,9 +15,5 @@
 #include "c_baseanimating.h"
 #include "utlvector.h"
 #include "baseviewmodel_shared.h"
-
-#ifdef TF_CLIENT_DLL
-bool TeamFortress_ShouldFlipClientViewModel( void );
-#endif //TF_CLIENT_DLL
 
 #endif // C_BASEVIEWMODEL_H

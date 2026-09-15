@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -24,6 +24,10 @@ public:
 	int				m_SerialNumber;
 	CEntInfo		*m_pPrev;
 	CEntInfo		*m_pNext;
+#ifdef GAME_DLL	
+	string_t		m_iName;
+	string_t		m_iClassName;
+#endif
 
 	void			ClearLinks();
 };
@@ -59,6 +63,10 @@ public:
 	const CEntInfo *NextEntInfo( const CEntInfo *pInfo ) const;
 	const CEntInfo *GetEntInfoPtr( const CBaseHandle &hEnt ) const;
 	const CEntInfo *GetEntInfoPtrByIndex( int index ) const;
+
+	// Used by Foundry when an entity is respawned/edited.
+	// We force the new entity's ehandle to be the same so anyone pointing at it still gets a valid CBaseEntity out of their ehandle.
+	void ForceEntSerialNumber( int iEntIndex, int iSerialNumber );
 
 // Overridables.
 protected:
@@ -135,11 +143,20 @@ inline CBaseHandle CBaseEntityList::GetNetworkableHandle( int iEntity ) const
 
 inline IHandleEntity* CBaseEntityList::LookupEntity( const CBaseHandle &handle ) const
 {
-	if ( handle.m_Index == INVALID_EHANDLE )
+	if ( handle.m_Index == INVALID_EHANDLE_INDEX )
 		return NULL;
 
+	// You can use this to determine when something is trying to resolve
+	// handles to static props as if they were handles to ordinary props,
+	// but in practice this is done a great deal and seems benign.
+	/*
+	// 0x40000000 = STATICPROP_EHANDLE_MASK
+	AssertMsg( ( handle.GetSerialNumber() != (0x40000000 >> NUM_SERIAL_NUM_SHIFT_BITS) ) , 
+		"Tried to look up a static prop as if it was a regular entity, a bad pointer and doom are the result.\n" ); 
+	*/
+
 	const CEntInfo *pInfo = &m_EntPtrArray[ handle.GetEntryIndex() ];
-	if ( pInfo && pInfo->m_SerialNumber == handle.GetSerialNumber() )
+	if ( pInfo->m_SerialNumber == handle.GetSerialNumber() )
 		return pInfo->m_pEntity;
 	else
 		return NULL;
@@ -153,10 +170,6 @@ inline IHandleEntity* CBaseEntityList::LookupEntityByNetworkIndex( int edictInde
 		return NULL;
 
 	Assert( edictIndex < NUM_ENT_ENTRIES );
-
-	if ( edictIndex >= NUM_ENT_ENTRIES )
-		return NULL;
-
 	return m_EntPtrArray[edictIndex].m_pEntity;
 }
 
@@ -206,6 +219,11 @@ inline const CEntInfo *CBaseEntityList::GetEntInfoPtr( const CBaseHandle &hEnt )
 inline const CEntInfo *CBaseEntityList::GetEntInfoPtrByIndex( int index ) const
 {
 	return &m_EntPtrArray[index];
+}
+
+inline void CBaseEntityList::ForceEntSerialNumber( int iEntIndex, int iSerialNumber )
+{
+	m_EntPtrArray[iEntIndex].m_SerialNumber = iSerialNumber;
 }
 
 extern CBaseEntityList *g_pEntityList;

@@ -92,6 +92,12 @@ fi
 
 chmod +x "$APP/hl2_launcher"
 
+# Offline game dir (gameinfo only in-repo; maps/vpks come from the Steam install).
+if [ -d "$ROOT/csgo" ]; then
+	mkdir -p "$APP/csgo"
+	cp -a "$ROOT/csgo/." "$APP/csgo/"
+fi
+
 # Rewrite absolute CI/build load paths to @rpath so the IPA runs on device.
 # Also normalize ANGLE framework load paths to match the reference IPA.
 fix_macho() {

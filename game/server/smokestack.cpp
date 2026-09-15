@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Implements the server side of a steam jet particle system entity.
 //
@@ -102,7 +102,8 @@ CSmokeStack::CSmokeStack()
 	IMPLEMENT_NETWORKVAR_CHAIN( &m_DirLight );
 
 	m_flTwist = 0;
-	SetRenderColor( 0, 0, 0, 255 );
+	SetRenderColor( 0, 0, 0 );
+	SetRenderAlpha( 255 );
 	m_vWind.GetForModify().Init();
 	m_WindAngle = m_WindSpeed = 0;
 	m_iMaterialModel = -1;
@@ -203,7 +204,7 @@ bool CSmokeStack::KeyValue( const char *szKeyName, const char *szValue )
 		char szStrippedName[512];
 
 		m_iMaterialModel = PrecacheModel( pName );
-		Q_StripExtension( pName, szStrippedName, V_ARRAYSIZE( szStrippedName ) );
+		Q_StripExtension( pName, szStrippedName, Q_strlen(pName)+1 );
 
 		int iLength = Q_strlen( szStrippedName );
 		szStrippedName[iLength-1] = '\0';

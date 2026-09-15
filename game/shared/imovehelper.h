@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -61,11 +61,14 @@ public:
 	// Methods associated with a particular entity
 	virtual	char const*		GetName( EntityHandle_t handle ) const = 0;
 
+	// sets the entity being moved
+	virtual void	SetHost( CBaseEntity *host ) = 0;
+
 	// Adds the trace result to touch list, if contact is not already in list.
 	virtual void	ResetTouchList( void ) = 0;
 	virtual bool	AddToTouched( const CGameTrace& tr, const Vector& impactvelocity ) = 0;
 	virtual void	ProcessImpacts( void ) = 0;
-	
+
 	// Numbered line printf
 	virtual void	Con_NPrintf( int idx, PRINTF_FORMAT_STRING char const* fmt, ... ) = 0;
 
@@ -83,9 +86,6 @@ public:
 	virtual IPhysicsSurfaceProps *GetSurfaceProps( void ) = 0;
 
 	virtual bool IsWorldEntity( const CBaseHandle &handle ) = 0;
-
-	// sets the entity being moved
-	virtual void	SetHost( CBasePlayer *host ) = 0;
 
 protected:
 	// Inherited classes can call this to set the singleton

@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -23,7 +23,7 @@
 #endif
 
 // CLIENT DLL includes
-#if defined( CLIENT_DLL )
+#if defined( CLIENT_DLL ) || defined( TOOL_DLL )
 
 #include "iclassmap.h"
 #include "recvproxy.h"
@@ -42,41 +42,30 @@ class SendTable;
 #define DECLARE_NETWORKCLASS()											\
 		DECLARE_CLIENTCLASS()
 
-#define DECLARE_NETWORKCLASS_OVERRIDE()									\
-		DECLARE_CLIENTCLASS_OVERRIDE()
-
 #define DECLARE_NETWORKCLASS_NOBASE()									\
-		DECLARE_CLIENTCLASS_NOBASE()
+		DECLARE_CLIENTCLASS_NOBASE()							
 
 #else
 
 #define DECLARE_NETWORKCLASS()											\
 		DECLARE_SERVERCLASS()
 
-#define DECLARE_NETWORKCLASS_OVERRIDE()									\
-		DECLARE_SERVERCLASS_OVERRIDE()
-
 #define DECLARE_NETWORKCLASS_NOBASE()									\
-		DECLARE_SERVERCLASS_NOBASE()
+		DECLARE_SERVERCLASS_NOBASE()	
 
 #endif
 
 #if defined( CLIENT_DLL )
 
 #ifndef NO_ENTITY_PREDICTION
-#define DECLARE_PREDICTABLE_IMPL( MAYBE_OVERRIDE )						\
+#define DECLARE_PREDICTABLE()											\
 	public:																\
 		static typedescription_t m_PredDesc[];							\
 		static datamap_t m_PredMap;										\
-		virtual datamap_t *GetPredDescMap( void ) MAYBE_OVERRIDE;		\
+		virtual datamap_t *GetPredDescMap( void );						\
 		template <typename T> friend datamap_t *PredMapInit(T *)
-#define DECLARE_PREDICTABLE()	DECLARE_PREDICTABLE_IMPL( /* override */; )
-// With warnings set to inconsistent-override, marking this properly as override would create warnings in all old files.
-// Instead, as files are converted to use override, just upgrade to this
-#define DECLARE_PREDICTABLE_OVERRIDE()	DECLARE_PREDICTABLE_IMPL( OVERRIDE )
 #else
 #define DECLARE_PREDICTABLE()	template <typename T> friend datamap_t *PredMapInit(T *)
-#define DECLARE_PREDICTABLE_OVERRIDE()	DECLARE_PREDICTABLE()
 #endif
 
 #ifndef NO_ENTITY_PREDICTION
@@ -103,7 +92,7 @@ class SendTable;
 		typedef className classNameTypedef; \
 		static typedescription_t predDesc[] = \
 		{ \
-		{ FIELD_VOID,0, {0,0},0,0,0,0,0,0}, /* so you can define "empty" tables */
+		{ FIELD_VOID,0,0,0,0,0,0,0,0}, /* so you can define "empty" tables */
 
 #define END_PREDICTION_DATA() \
 		}; \
@@ -129,7 +118,7 @@ class SendTable;
 			typedef className classNameTypedef; \
 			typedescription_t predDesc[] = \
 			{ \
-				{ FIELD_VOID,0, {0,0},0,0,0,0,0,0},
+				{ FIELD_VOID,0,0,0,0,0,0,0,0},
 
 #define BEGIN_PREDICTION_DATA_NO_BASE( className ) BEGIN_PREDICTION_DATA( className )
 
@@ -143,10 +132,9 @@ class SendTable;
 #else
 
 	// nothing, only client has a prediction system
-	#define DECLARE_PREDICTABLE()
-	#define DECLARE_PREDICTABLE_OVERRIDE()
-	#define BEGIN_PREDICTION_DATA( className )
-	#define END_PREDICTION_DATA()
+	#define DECLARE_PREDICTABLE()	
+	#define BEGIN_PREDICTION_DATA( className ) 
+	#define END_PREDICTION_DATA() 
 
 #endif
 
@@ -167,6 +155,23 @@ class SendTable;
 		{																	\
 			GetClassMap().Add( #localName, #className, sizeof( className ),	\
 				&C##className##Factory );									\
+			__g_##className##ClientClass.m_pMapClassname = #localName;		\
+		}																	\
+	};																		\
+	static C##localName##Foo g_C##localName##Foo;
+
+#define LINK_ENTITY_TO_CLASS_CLIENTONLY( localName, className )				\
+	static C_BaseEntity *C##className##Factory( void )						\
+	{																		\
+		return static_cast< C_BaseEntity * >( new className );				\
+	};																		\
+	class C##localName##Foo													\
+	{																		\
+	public:																	\
+		C##localName##Foo( void )											\
+		{																	\
+			GetClassMap().Add( #localName, #className, sizeof( className ),	\
+				&C##className##Factory );									\
 		}																	\
 	};																		\
 	static C##localName##Foo g_C##localName##Foo;
@@ -176,12 +181,26 @@ class SendTable;
 
 #define END_NETWORK_TABLE	END_RECV_TABLE
 
+#define LINK_ENTITY_TO_CLASS_ALIASED( localName, className ) LINK_ENTITY_TO_CLASS(localName, C_##className )
+
 #define IMPLEMENT_NETWORKCLASS_ALIASED(className, dataTable)			\
 	IMPLEMENT_CLIENTCLASS( C_##className, dataTable, C##className )
-#define IMPLEMENT_NETWORKCLASS(className, dataTable)			\
+#define IMPLEMENT_NETWORKCLASS(className, dataTable)					\
 	IMPLEMENT_CLIENTCLASS(className, dataTable, className)
-#define IMPLEMENT_NETWORKCLASS_DT(className, dataTable)			\
+#define IMPLEMENT_NETWORKCLASS_DT(className, dataTable)					\
 	IMPLEMENT_CLIENTCLASS_DT(className, dataTable, className)
+
+#define LINK_ENTITY_TO_CLASS_SIMPLE_DERIVED( classNameDerived, classNameBase, dataTableName, entity_name )		\
+	class C_##classNameDerived : public C_##classNameBase								\
+	{																						\
+	public:																					\
+		DECLARE_CLASS( C_##classNameDerived, C_##classNameBase );						\
+		DECLARE_NETWORKCLASS();																\
+	};																						\
+	IMPLEMENT_NETWORKCLASS_ALIASED( classNameDerived, dataTableName )	\
+	BEGIN_NETWORK_TABLE( C_##classNameDerived, dataTableName )		\
+	END_NETWORK_TABLE()																		\
+	LINK_ENTITY_TO_CLASS_ALIASED( entity_name, classNameDerived )
 
 #else
 
@@ -190,26 +209,27 @@ class SendTable;
 
 #define END_NETWORK_TABLE	END_SEND_TABLE
 
-#define IMPLEMENT_NETWORKCLASS_ALIASED(className, dataTable)			\
+#define LINK_ENTITY_TO_CLASS_ALIASED( localName, className ) LINK_ENTITY_TO_CLASS(localName, C##className )
+
+#define IMPLEMENT_NETWORKCLASS_ALIASED(className, dataTable)	\
 	IMPLEMENT_SERVERCLASS( C##className, dataTable )
 #define IMPLEMENT_NETWORKCLASS(className, dataTable)			\
 	IMPLEMENT_SERVERCLASS(className, dataTable)
 #define IMPLEMENT_NETWORKCLASS_DT(className, dataTable)			\
 	IMPLEMENT_SERVERCLASS_ST(className, dataTable)
 
+#define LINK_ENTITY_TO_CLASS_SIMPLE_DERIVED( classNameDerived, classNameBase, dataTableName, entity_name )		\
+	class C##classNameDerived : public C##classNameBase								\
+	{																						\
+	public:																					\
+		DECLARE_CLASS( C##classNameDerived, C##classNameBase );							\
+		DECLARE_NETWORKCLASS();																\
+	};																						\
+	IMPLEMENT_NETWORKCLASS_ALIASED( classNameDerived, dataTableName )	\
+	BEGIN_NETWORK_TABLE( C##classNameDerived, dataTableName )			\
+	END_NETWORK_TABLE()																		\
+	LINK_ENTITY_TO_CLASS_ALIASED( entity_name, classNameDerived )
+
 #endif																	
-
-// Interface used by client and server to track predictable entities
-abstract_class IPredictableList
-{
-public:
-	// Get predictables by index
-	virtual CBaseEntity		*GetPredictable( int slot ) = 0;
-	// Get count of predictables
-	virtual int				GetPredictableCount( void ) = 0;
-};
-
-// Expose interface to rest of .dll
-extern IPredictableList *predictables;
 
 #endif // PREDICTABLE_ENTITY_H

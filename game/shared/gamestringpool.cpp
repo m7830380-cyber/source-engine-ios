@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright � 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose:
 //
@@ -7,11 +7,13 @@
 
 #include "cbase.h"
 
-#include "utlhashtable.h"
-#include "igamesystem.h"
-#include "gamestringpool.h"
+#include "stringpool.h"
 
-#include "tier1/stringpool.h"
+#if !defined( GC )
+#include "igamesystem.h"
+#endif
+
+#include "gamestringpool.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
@@ -19,26 +21,25 @@
 //-----------------------------------------------------------------------------
 // Purpose: The actual storage for pooled per-level strings
 //-----------------------------------------------------------------------------
+#if !defined( GC )
 class CGameStringPool : public CStringPool,	public CBaseGameSystem
+#else
+class CGameStringPool : public CStringPool
+#endif
 {
 	virtual char const *Name() { return "CGameStringPool"; }
 
 	virtual void LevelShutdownPostEntity() 
 	{
-		Cleanup();
+		FreeAll();
+		PurgeDeferredDeleteList();
+		CGameString::IncrementSerialNumber();
 	}
 
 public:
 	~CGameStringPool()
 	{
-		Cleanup();
-	}
-
-	void Cleanup()
-	{
-		FreeAll();
 		PurgeDeferredDeleteList();
-		PurgeKeyLookupCache();
 	}
 	
 	void PurgeDeferredDeleteList()
@@ -48,11 +49,6 @@ public:
 			free( ( void * )m_DeferredDeleteList[ i ] );
 		}
 		m_DeferredDeleteList.Purge();
-	}
-
-	void PurgeKeyLookupCache()
-	{
-		m_KeyLookupCache.Purge();
 	}
 
 	void Dump( void )
@@ -75,32 +71,22 @@ public:
 		}
 	}
 
-	const char *AllocateWithKey(const char *string, const void* key)
-	{
-		const char * &cached = m_KeyLookupCache[ m_KeyLookupCache.Insert( key, NULL ) ];
-		if ( cached == NULL )
-		{
-			cached = Allocate( string );
-		}
-		return cached;
-	}
-
 private:
 	CUtlVector< const char * > m_DeferredDeleteList;
-
-	CUtlHashtable< const void*, const char* > m_KeyLookupCache;
 };
 
 static CGameStringPool g_GameStringPool;
 
+
 //-----------------------------------------------------------------------------
 // String system accessor
 //-----------------------------------------------------------------------------
+#if !defined( GC )
 IGameSystem *GameStringSystem()
 {
 	return &g_GameStringPool;
 }
-
+#endif
 
 //-----------------------------------------------------------------------------
 // Purpose: The public accessor for the level-global pooled strings
@@ -110,12 +96,6 @@ string_t AllocPooledString( const char * pszValue )
 	if (pszValue && *pszValue)
 		return MAKE_STRING( g_GameStringPool.Allocate( pszValue ) );
 	return NULL_STRING;
-}
-
-string_t AllocPooledString_StaticConstantStringPointer( const char * pszGlobalConstValue )
-{
-	Assert(pszGlobalConstValue && *pszGlobalConstValue);
-	return MAKE_STRING( g_GameStringPool.AllocateWithKey( pszGlobalConstValue, pszGlobalConstValue ) );
 }
 
 string_t FindPooledString( const char *pszValue )
@@ -128,10 +108,7 @@ void RemovePooledString( const char *pszValue )
 	g_GameStringPool.Remove( pszValue );
 }
 
-void PurgeDeferredPooledStrings()
-{
-	g_GameStringPool.PurgeDeferredDeleteList();
-}
+int CGameString::gm_iSerialNumber = 1;
 
 #if !defined(CLIENT_DLL) && !defined( GC )
 //------------------------------------------------------------------------------

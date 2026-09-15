@@ -28,8 +28,13 @@ const char *COM_GetModDirectory(); // return the mod dir (rather than the comple
 
 struct MumbleSharedMemory_t
 {
+#ifdef WIN32
 	uint32	uiVersion;
-	uint32	uiTick;
+	ulong	uiTick;
+#else
+	uint32_t uiVersion;
+	uint32_t uiTick;
+#endif
 	float	fAvatarPosition[3];
 	float	fAvatarFront[3];
 	float	fAvatarTop[3];
@@ -38,7 +43,11 @@ struct MumbleSharedMemory_t
 	float	fCameraFront[3];
 	float	fCameraTop[3];
 	wchar_t	identity[256];
+#ifdef WIN32
 	uint32	context_len;
+#else
+	uint32_t context_len;
+#endif
 	unsigned char context[256];
 	wchar_t description[2048];
 };
@@ -144,7 +153,7 @@ void CMumbleSystem::PostRender()
 
 	if ( g_pMumbleMemory->uiVersion != 2 )
 	{
-		V_wcscpy_safe( g_pMumbleMemory->name, L"Source engine: " );
+		V_wcscpy_safe( g_pMumbleMemory->name, L"Source: " );
 		wchar_t wcsGameDir[MAX_PATH];
 		Q_UTF8ToUnicode( COM_GetModDirectory(), wcsGameDir, sizeof(wcsGameDir) );
 		V_wcscat_safe( g_pMumbleMemory->name, wcsGameDir );
@@ -155,13 +164,22 @@ void CMumbleSystem::PostRender()
 
 	g_pMumbleMemory->uiTick++;
 
-	Vector vecOriginPlayer, vecOriginCamera = MainViewOrigin();
-	QAngle anglesPlayer, anglesCamera = MainViewAngles();
+	Vector vecOriginPlayer, vecOriginCamera = MainViewOrigin( 0 );
+	QAngle anglesPlayer, anglesCamera = MainViewAngles( 0 );
 
 	C_BasePlayer *pPlayer = C_BasePlayer::GetLocalPlayer();
 	if ( pPlayer )
 	{
-		vecOriginPlayer = pPlayer->EyePosition();
+		bool bIsOnTeam = pPlayer->GetTeamNumber() == TEAM_TERRORIST || pPlayer->GetTeamNumber() == TEAM_CT;
+		if ( pPlayer->IsAlive() && bIsOnTeam )
+		{
+			vecOriginPlayer = pPlayer->EyePosition();
+		}
+		else
+		{
+			// a zero player origin disables positional audio
+			vecOriginPlayer = vec3_origin;
+		}
 		anglesPlayer = pPlayer->GetAbsAngles();
 	}
 	else

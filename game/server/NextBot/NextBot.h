@@ -1,7 +1,7 @@
 // NextBotCombatCharacter.h
 // Next generation bot system
 // Author: Michael Booth, April 2005
-//========= Copyright Valve Corporation, All rights reserved. ============//
+// Copyright (c) 2005 Turtle Rock Studios, Inc. - All Rights Reserved
 
 #ifndef _NEXT_BOT_H_
 #define _NEXT_BOT_H_
@@ -30,7 +30,6 @@ public:
 	DECLARE_CLASS( NextBotCombatCharacter, CBaseCombatCharacter );
 	DECLARE_SERVERCLASS();
 	DECLARE_DATADESC();
-	DECLARE_ENT_SCRIPTDESC();
 	
 	NextBotCombatCharacter( void );
 	virtual ~NextBotCombatCharacter() { }
@@ -40,7 +39,6 @@ public:
 	virtual Vector EyePosition( void );
 
 	virtual INextBot *MyNextBotPointer( void ) { return this; }
-    virtual bool IsNextBot(void) const { return true; }
 
 	// Event hooks into NextBot system ---------------------------------------
 	virtual int OnTakeDamage_Alive( const CTakeDamageInfo &info );
@@ -75,6 +73,7 @@ public:
 	// begin INextBot public interface ----------------------------------------------------------------
 	virtual NextBotCombatCharacter *GetEntity( void ) const			{ return const_cast< NextBotCombatCharacter * >( this ); }
 	virtual NextBotCombatCharacter *GetNextBotCombatCharacter( void ) const	{ return const_cast< NextBotCombatCharacter * >( this ); }
+	
 
 private:
 	EHANDLE m_lastAttacker;

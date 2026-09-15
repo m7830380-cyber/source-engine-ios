@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Client VoteController
 //
@@ -41,7 +41,6 @@ protected:
 	bool			m_bVotesDirty;	// Received a vote, so remember to tell the Hud
 	bool			m_bTypeDirty;	// Vote type changed, so show or hide the Hud
 	bool			m_bIsYesNoVote;
-	int				m_nVoteIdx;
 };
 
 #endif // C_VoteController_H

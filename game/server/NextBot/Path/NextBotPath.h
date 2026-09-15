@@ -1,7 +1,7 @@
 // NextBotPath.h
 // Encapsulate and manipulate a path through the world
 // Author: Michael Booth, February 2006
-//========= Copyright Valve Corporation, All rights reserved. ============//
+// Copyright (c) 2006 Turtle Rock Studios, Inc. - All Rights Reserved
 
 #ifndef _NEXT_BOT_PATH_H_
 #define _NEXT_BOT_PATH_H_
@@ -192,12 +192,8 @@ public:
 		CNavArea *closestArea = NULL;
 		bool pathResult = NavAreaBuildPath( startArea, subjectArea, &subjectPos, costFunc, &closestArea, maxPathLength, bot->GetEntity()->GetTeamNumber() );
 
-		// Failed?
-		if ( closestArea == NULL )
-			return false;
-
 		//
-		// Build actual path by following parent links back from goal area
+		// Build actual path by following parent links back from subject area
 		//
 
 		// get count
@@ -212,10 +208,18 @@ public:
 				// startArea can be re-evaluated during the pathfind and given a parent...
 				break;
 			}
-			if ( count >= MAX_PATH_SEGMENTS-1 ) // save room for endpoint
-				break;
 		}
-		
+
+		// save room for endpoint
+		if ( count > MAX_PATH_SEGMENTS-1 )
+		{
+			count = MAX_PATH_SEGMENTS-1;
+		}
+		else if ( count == 0 )
+		{
+			return false;
+		}
+
 		if ( count == 1 )
 		{
 			BuildTrivialPath( bot, subjectPos );
@@ -270,7 +274,7 @@ public:
 	 * doesn't reach all the way to the goal.
 	 */
 	template< typename CostFunctor >
-	bool Compute( INextBot *bot, const Vector &goal, CostFunctor &costFunc, float maxPathLength = 0.0f, bool includeGoalIfPathFails = true, bool requireGoalArea = false )
+	bool Compute( INextBot *bot, const Vector &goal, CostFunctor &costFunc, float maxPathLength = 0.0f, bool includeGoalIfPathFails = true )
 	{
 		VPROF_BUDGET( "Path::Compute(goal)", "NextBotSpiky" );
 
@@ -288,13 +292,6 @@ public:
 		// check line-of-sight to the goal position when finding it's nav area
 		const float maxDistanceToArea = 200.0f;
 		CNavArea *goalArea = TheNavMesh->GetNearestNavArea( goal, true, maxDistanceToArea, true );
-
-		if ( requireGoalArea && !goalArea )
-		{
-			Invalidate();
-			OnPathChanged( bot, NO_PATH );
-			return false;
-		}
 
 		// if we are already in the goal area, build trivial path
 		if ( startArea == goalArea )
@@ -320,10 +317,6 @@ public:
 		CNavArea *closestArea = NULL;
 		bool pathResult = NavAreaBuildPath( startArea, goalArea, &goal, costFunc, &closestArea, maxPathLength, bot->GetEntity()->GetTeamNumber() );
 
-		// Failed?
-		if ( closestArea == NULL )
-			return false;
-
 		//
 		// Build actual path by following parent links back from goal area
 		//
@@ -340,10 +333,18 @@ public:
 				// startArea can be re-evaluated during the pathfind and given a parent...
 				break;
 			}
-			if ( count >= MAX_PATH_SEGMENTS-1 ) // save room for endpoint
-				break;
 		}
-		
+
+		// save room for endpoint
+		if ( count > MAX_PATH_SEGMENTS-1 )
+		{
+			count = MAX_PATH_SEGMENTS-1;
+		}
+		else if ( count == 0 )
+		{
+			return false;
+		}
+
 		if ( count == 1 )
 		{
 			BuildTrivialPath( bot, goal );

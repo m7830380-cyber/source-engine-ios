@@ -167,13 +167,13 @@ BEGIN_DATADESC( CLogicEventListenerItemEquip )
 	// Outputs
 	DEFINE_OUTPUT( m_OnEventFired,		"OnEventFired" ),
 
-END_DATADESC()
+	END_DATADESC()
 
 
-//-----------------------------------------------------------------------------
-// Purpose: Spawn
-//-----------------------------------------------------------------------------
-void CLogicEventListenerItemEquip::Spawn( void )
+	//-----------------------------------------------------------------------------
+	// Purpose: Spawn
+	//-----------------------------------------------------------------------------
+	void CLogicEventListenerItemEquip::Spawn( void )
 {
 	BaseClass::Spawn();
 

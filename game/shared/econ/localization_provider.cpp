@@ -1,36 +1,8 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
 
 #include "cbase.h"
 #include "localization_provider.h"
 
 enum { kScratchBufferSize = 1024 };
-
-
-
-// ----------------------------------------------------------------------------
-// Find a localized string, but return something safe if the key is null or the localized
-// string is missing.
-// ----------------------------------------------------------------------------
-locchar_t* CLocalizationProvider::FindSafe( const char* pchKey ) const
-{
-	if ( pchKey )
-	{
-		locchar_t* wszLocalized = Find( pchKey );
-		if ( !wszLocalized )
-		{
-			return const_cast<locchar_t*>(LOCCHAR(""));
-		}
-		else
-		{
-			return wszLocalized;
-		}
-	}
-	else
-	{
-		return const_cast<locchar_t*>(LOCCHAR(""));
-	}
-}
-
 
 CLocalizationProvider *GLocalizationProvider() 
 {
@@ -45,9 +17,22 @@ CVGUILocalizationProvider::CVGUILocalizationProvider()
 
 }
 
-locchar_t *CVGUILocalizationProvider::Find( const char *pchKey ) const
+locchar_t *CVGUILocalizationProvider::Find( const char *pchKey )
 {
 	return (locchar_t*)g_pVGuiLocalize->Find( pchKey );
+}
+
+void CVGUILocalizationProvider::ConstructString( locchar_t *unicodeOutput, int unicodeBufferSizeInBytes, const locchar_t *formatString, int numFormatParameters, ... )
+{
+	va_list argList;
+	va_start(argList, numFormatParameters);
+	g_pVGuiLocalize->ConstructStringVArgs( unicodeOutput, unicodeBufferSizeInBytes, formatString, numFormatParameters, argList);
+	va_end(argList);
+}
+
+void CVGUILocalizationProvider::ConstructString( OUT_Z_BYTECAP(unicodeBufferSizeInBytes) locchar_t *unicodeOutput, int unicodeBufferSizeInBytes, const locchar_t *formatString, KeyValues *localizationVariables )
+{
+	g_pVGuiLocalize->ConstructString( unicodeOutput, unicodeBufferSizeInBytes, formatString, localizationVariables );
 }
 
 void CVGUILocalizationProvider::ConvertLoccharToANSI( const locchar_t *loc_In, CUtlConstString *out_ansi ) const
@@ -67,24 +52,22 @@ void CVGUILocalizationProvider::ConvertUTF8ToLocchar( const char *utf8_In, CUtlC
 {
 	locchar_t loc_Scratch[kScratchBufferSize];
 
-	V_UTF8ToUnicode( utf8_In, loc_Scratch, kScratchBufferSize );
+	V_UTF8ToUnicode( utf8_In, loc_Scratch, sizeof( loc_Scratch ) );
 	*out_loc = loc_Scratch;
 }
 
-void CVGUILocalizationProvider::ConvertUTF8ToLocchar( const char *utf8, locchar_t *locchar, int loccharBufferSize ) const
+void CVGUILocalizationProvider::ConvertUTF8ToLocchar( const char *utf8, locchar_t *locchar, int cubDestSizeInBytes )
 {
-	V_UTF8ToUnicode( utf8, locchar, loccharBufferSize );
+	V_UTF8ToUnicode( utf8, locchar, cubDestSizeInBytes );
 }
 
-int CVGUILocalizationProvider::ConvertLoccharToANSI( const locchar_t *loc, char *ansi, int ansiBufferSize ) const
+int CVGUILocalizationProvider::ConvertLoccharToANSI( const locchar_t *loc, char *ansi, int ansiBufferSize )
 {
 	return g_pVGuiLocalize->ConvertUnicodeToANSI( loc, ansi, ansiBufferSize );
 }
 
-int CVGUILocalizationProvider::ConvertLoccharToUnicode( const locchar_t *loc, wchar_t *unicode, int unicodeBufferSize ) const
+int CVGUILocalizationProvider::ConvertLoccharToUnicode( const locchar_t *loc, wchar_t *unicode, int unicodeBufferSizeInBytes )
 {
-	Q_wcsncpy( unicode, loc, unicodeBufferSize );
+	Q_wcsncpy( unicode, loc, unicodeBufferSizeInBytes );
 	return 0;
 }
-
-

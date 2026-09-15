@@ -150,6 +150,8 @@ def parse_vpcs( env ,vpcs, basedir ):
 			if '-$File' in i and '.h"' not in i:
 				for k in i.split(';'):
 					k = k.replace('$SRCDIR', basedir)
+					k = k.replace('$SRVSRCDIR', '.')
+					k = k.replace('$GENERATED_PROTO_DIR', 'generated_proto')
 					s = fix_dos_path(k.split('"')[1])
 
 					for j in range(len(sources)):
@@ -160,6 +162,8 @@ def parse_vpcs( env ,vpcs, basedir ):
 			elif '$File' in i and '.h"' not in i:
 				for j in i.split(';'):
 					j = j.replace('$SRCDIR', basedir)
+					j = j.replace('$SRVSRCDIR', '.')
+					j = j.replace('$GENERATED_PROTO_DIR', 'generated_proto')
 					s = fix_dos_path(j.split('"')[1])
 					sources.append(s)
 
@@ -172,7 +176,7 @@ def parse_vpcs( env ,vpcs, basedir ):
 					if j != '' and j not in defines:
 						defines.append(j)
 			if '$AdditionalIncludeDirectories' in i:
-				i = i.replace('$BASE', '').replace('$SRCDIR', basedir)
+				i = i.replace('$BASE', '').replace('$SRCDIR', basedir).replace('$SRVSRCDIR', '.')
 				s = i.split('"')[1]
 				s = re.split(';|,', s)
 				for j in s:

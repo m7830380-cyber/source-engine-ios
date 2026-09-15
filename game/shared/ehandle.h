@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -67,30 +67,6 @@ public:
 	// The index should have come from a call to CBaseHandle::ToInt(). If it hasn't, you're in trouble.
 	static CHandle<T> UnsafeFromIndex( int index );
 
-	// h.ChangedFrom(p) is similar but not the same as h != p.
-	// There is one case where they are different:
-	//     h = someEntity;
-	//     UTIL_Remove(someEntity);
-	//     (wait for deletions to happen, usually at end of frame)
-	// h is now a stale pointer to a deleted entity; h.Get() returns nullptr.
-	//
-	// In this case
-	//    h != nullptr           -> false
-	//    h.ChangedFrom(nullptr) -> true
-	//
-	// This is useful when you want to use a handle as a cache of some observed object, and need to tell
-	// when your target has changed.  Using == fails if the target gets destroyed in the same frame that
-	// your target is changed to null (which is actually pretty common!)
-	//
-	// In this case you can use this pattern:
-	//    T* target = GetTargetedThing(); // might return null
-	//    if( m_target.ChangedFrom( target ) )
-	//    {
-	//        m_target = target;
-	//        // update stuff related to m_target
-	//    }
-	bool    ChangedFrom( T* ) const;
-
 	T*		Get() const;
 	void	Set( const T* pVal );
 
@@ -137,10 +113,7 @@ template<class T>
 inline CHandle<T> CHandle<T>::UnsafeFromBaseHandle( const CBaseHandle &handle )
 {
 	CHandle<T> ret;
-	// REI Hack: CBaseHandle doesn't allow us to directly access m_Index, but
-	// exposes it via ToInt().  Warning: code has not been tested
-	COMPILE_TIME_ASSERT( sizeof( uint32 ) == sizeof( handle.ToInt() ) );
-	ret.m_Index = (uint32)handle.ToInt();
+	ret.m_Index = handle.m_Index;
 	return ret;
 }
 
@@ -150,18 +123,6 @@ inline CHandle<T> CHandle<T>::UnsafeFromIndex( int index )
 	CHandle<T> ret;
 	ret.m_Index = index;
 	return ret;
-}
-
-template<class T>
-inline bool CHandle<T>::ChangedFrom( T* ent ) const
-{
-	// "valid" is kind of a misnomer here.  It really means 'not pointing to NULL',
-	// but it could be a stale handle (to a deleted entity), in which case
-	// Get() == null.  We really want to show up as different from null in that case.
-	if( ent == nullptr )
-		return IsValid();
-
-	return ent != Get();
 }
 
 template<class T>

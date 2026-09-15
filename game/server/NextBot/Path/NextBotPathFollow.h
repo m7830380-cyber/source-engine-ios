@@ -1,7 +1,7 @@
 // NextBotPathFollow.h
 // Path following
 // Author: Michael Booth, April 2005
-//========= Copyright Valve Corporation, All rights reserved. ============//
+// Copyright (c) 2005 Turtle Rock Studios, Inc. - All Rights Reserved
 
 #ifndef _NEXT_BOT_PATH_FOLLOWER_
 #define _NEXT_BOT_PATH_FOLLOWER_
@@ -38,10 +38,6 @@ public:
 
 	virtual bool IsDiscontinuityAhead( INextBot *bot, Path::SegmentType type, float range = -1.0f ) const;	// return true if there is a the given discontinuity ahead in the path within the given range (-1 = entire remaining path)
 
-	void SetGoalTolerance( float range );			// set tolerance within at which we're considered to be at our goal
-
-	Path::ResultType GetResult() const { return m_result;  }
-
 private:
 	const Path::Segment *m_goal;					// our current goal along the path
 	float m_minLookAheadRange;
@@ -51,8 +47,6 @@ private:
 
 	//bool IsOnStairs( INextBot *bot ) const;		// return true if bot is standing on a stairway
 	bool m_isOnStairs;
-
-	Path::ResultType m_result = NO_PATH;
 
 	CountdownTimer m_avoidTimer;					// do avoid check more often if we recently avoided
 
@@ -77,15 +71,7 @@ private:
 
 	bool LadderUpdate( INextBot *bot );				// move bot along ladder
 	CBaseEntity *FindBlocker( INextBot *bot );		// if entity is returned, it is blocking us from continuing along our path
-
-	float m_goalTolerance;
 };
-
-
-inline void PathFollower::SetGoalTolerance( float range )
-{
-	m_goalTolerance = range;
-}
 
 
 inline const Path::Segment *PathFollower::GetCurrentGoal( void ) const

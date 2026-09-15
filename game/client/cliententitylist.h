@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -109,6 +109,7 @@ public:
 public:
 
 	virtual IClientNetworkable*	GetClientNetworkable( int entnum );
+	virtual EntityCacheInfo_t	*GetClientNetworkableArray();
 	virtual IClientEntity*		GetClientEntity( int entnum );
 
 	virtual int					NumberOfEntities( bool bIncludeNonNetworkable = false );
@@ -182,16 +183,8 @@ public:
 
 	void NotifyCreateEntity( C_BaseEntity *pEnt );
 	void NotifyRemoveEntity( C_BaseEntity *pEnt );
-
+	void SetDormant( int entityIndex, bool bDormant );
 private:
-
-	// Cached info for networked entities.
-	struct EntityCacheInfo_t
-	{
-		// Cached off because GetClientNetworkable is called a *lot*
-		IClientNetworkable *m_pNetworkable;
-		unsigned short m_BaseEntitiesIndex;	// Index into m_BaseEntities (or m_BaseEntities.InvalidIndex() if none).
-	};
 
 	// Current count
 	int					m_iNumServerEnts;
@@ -253,12 +246,13 @@ private:
 //-----------------------------------------------------------------------------
 inline bool	CClientEntityList::IsHandleValid( ClientEntityHandle_t handle ) const
 {
-	return handle.Get() != 0;
+	return handle.Get() != nullptr;
 }
 
 inline IClientUnknown* CClientEntityList::GetListedEntity( int entnum )
 {
-	return (IClientUnknown*)LookupEntityByNetworkIndex( entnum );
+	IHandleEntity* pHandle = LookupEntityByNetworkIndex( entnum );
+	return static_cast< IClientUnknown* >( pHandle );
 }
 
 inline IClientUnknown* CClientEntityList::GetClientUnknownFromHandle( ClientEntityHandle_t hEnt )
@@ -279,7 +273,7 @@ inline ClientEntityHandle_t CClientEntityList::EntIndexToHandle( int entnum )
 {
 	if ( entnum < -1 )
 		return INVALID_EHANDLE;
-	IClientUnknown* pUnk = GetListedEntity(entnum);
+	IClientUnknown *pUnk = GetListedEntity( entnum );
 	return pUnk ? pUnk->GetRefEHandle() : INVALID_EHANDLE;
 }
 

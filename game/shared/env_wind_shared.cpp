@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 // Information about algorithmic stuff that can occur on both client + server
@@ -72,14 +72,32 @@
 #include "sharedInterface.h"
 #include "renderparm.h"
 
+#ifdef CLIENT_DLL 
+#include "physics_softbody.h"
+#endif
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
 
+#ifdef CLIENT_DLL
+// Test concommand for wind/tree sway. Couldn't think of a better way to put it.
+// Will move it out of this file when we figure out how the weather control will be implemented.
+CON_COMMAND( cl_tree_sway_dir, "sets tree sway wind direction and strength" )
+{
+	CMatRenderContextPtr pRenderContext( g_pMaterialSystem );
+	if ( args.ArgC() == 3 )
+	{
+		Vector windDir;
+		windDir.x = V_atof( args.Arg( 1 ) );
+		windDir.y = V_atof( args.Arg( 2 ) );
+		windDir.z = 0;
+		pRenderContext->SetVectorRenderingParameter( VECTOR_RENDERPARM_WIND_DIRECTION, windDir );
+	}
+}
+#endif
 
 //-----------------------------------------------------------------------------
 // globals
 //-----------------------------------------------------------------------------
-static Vector s_vecWindVelocity( 0, 0, 0 );
 
 static CUtlLinkedList< CEnvWindShared * > s_windControllers;
 
@@ -255,6 +273,9 @@ float CEnvWindShared::WindThink( float flTime )
 			QAngle vecWindAngle( 0, m_iWindDir + m_flWindAngleVariation, 0 );
 			AngleVectors( vecWindAngle, &m_currentWindVector );
 			float flTotalWindSpeed = m_flWindSpeed * m_flWindSpeedVariation;
+#ifdef CLIENT_DLL
+			g_SoftbodyEnvironment.SetWindDesc( m_currentWindVector, flTotalWindSpeed );
+#endif
 			m_currentWindVector *= flTotalWindSpeed;
 
 			// If we reached a steady state, we don't need to be called until the switch time
@@ -307,20 +328,20 @@ float CEnvWindShared::WindThink( float flTime )
 	}
 }
 
-void CEnvWindShared::Reset()
-{
-	m_currentWindVector.Init( 0, 0, 0 );
-}
 
 //-----------------------------------------------------------------------------
-// Method to reset windspeed..
+// Method to reset wind speed..
 //-----------------------------------------------------------------------------
 void ResetWindspeed()
 {
 	FOR_EACH_LL( s_windControllers, it )
 	{
-		s_windControllers[it]->Reset();
+		s_windControllers[it]->m_currentWindVector.Init( 0, 0, 0 );
 	}
+
+#ifdef CLIENT_DLL
+	g_SoftbodyEnvironment.SetNoWind();
+#endif
 }
 
 //-----------------------------------------------------------------------------
@@ -355,7 +376,6 @@ Vector GetWindspeedAtLocation( const Vector &location )
 
 	return Vector(0,0,0);// No wind
 }
-
 
 //-----------------------------------------------------------------------------
 // Method to sample the windspeed at a particular time

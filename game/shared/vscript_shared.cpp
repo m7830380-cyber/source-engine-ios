@@ -14,14 +14,10 @@
 #include "isaverestore.h"
 #include "gamerules.h"
 
-#if defined(CLIENT_DLL) && defined(PANORAMA_ENABLE)
-#include "panorama/uijsregistration.h"
-#endif
-
 IScriptVM * g_pScriptVM;
 extern ScriptClassDesc_t * GetScriptDesc( CBaseEntity * );
 
-DEFINE_LOGGING_CHANNEL_NO_TAGS( LOG_VScript, "VScript", 0, LS_MESSAGE, Color( 245, 175, 238, 255 ) );
+DEFINE_LOGGING_CHANNEL_NO_TAGS( LOG_VScript, "VScript", LCF_CONSOLE_ONLY, LS_WARNING );
 
 // #define VMPROFILE 1
 
@@ -37,26 +33,7 @@ DEFINE_LOGGING_CHANNEL_NO_TAGS( LOG_VScript, "VScript", 0, LS_MESSAGE, Color( 24
 
 #endif // VMPROFILE
 
-#ifdef CLIENT_DLL
-/*class CPanoramaVScript
-{
-public:
-	void RegisterVariable( const char *pszName, const char *pszInitialValue, const char *pszDesc )
-	{
-		KeyValues* pKey = m_KeyValues.CreateKey( pszName );
-		pKey->SetStringValue(pszInitialValue);
 
-		panorama::RegisterJSAccessorReadOnly(pszName, PANORAMA_DELEGATE(delegate), pszDesc);
-	}
-
-	void SetValue( const char *pszName, const char *pszValue )
-	{
-		m_KeyValues.SetBool( pszName, pszValue );
-	}
-private:
-	KeyValues m_KeyValues;
-};*/
-#endif
 
 HSCRIPT VScriptCompileScript( const char *pszScriptName, bool bWarnMissing )
 {

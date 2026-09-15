@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -22,10 +22,10 @@ struct ss_update_t
 	bool		bInRange;
 };
 
-class CEnvSoundscape : public CServerOnlyPointEntity
+class CEnvSoundscape : public CServerOnlyEntity
 {
 public:
-	DECLARE_CLASS( CEnvSoundscape, CServerOnlyPointEntity );
+	DECLARE_CLASS( CEnvSoundscape, CServerOnlyEntity );
 	DECLARE_DATADESC();
 
 	CEnvSoundscape();

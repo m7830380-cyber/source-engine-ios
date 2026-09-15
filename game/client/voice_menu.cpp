@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose:
 //
@@ -7,19 +7,14 @@
 #include "cbase.h"
 #include "c_baseplayer.h"
 #include "menu.h"
-#include "KeyValues.h"
+#include "keyvalues.h"
 #include "multiplay_gamerules.h"
-#if defined ( TF_CLIENT_DLL )
-#include "tf_gc_client.h"
-#include "hud_basechat.h"
-#include "hud_chat.h"
-#endif // TF_CLIENT_DLL
+
+// NOTE: This has to be the last file included!
+#include "tier0/memdbgon.h"
+
 
 static int g_ActiveVoiceMenu = 0;
-
-#if defined( TF_CLIENT_DLL )
-extern ConVar tf_voice_command_suspension_mode;
-#endif
 
 void OpenVoiceMenu( int index )
 {
@@ -31,22 +26,7 @@ void OpenVoiceMenu( int index )
 	if ( !pPlayer->IsAlive() || pPlayer->IsObserver() )
 		return;
 
-#if defined ( TF_CLIENT_DLL )
-	if ( GTFGCClientSystem() && GTFGCClientSystem()->BHaveChatSuspensionInCurrentMatch() && tf_voice_command_suspension_mode.GetInt() == 1 )
-	{
-		CBaseHudChat *pHUDChat = ( CBaseHudChat * ) GET_HUDELEMENT( CHudChat );
-		if ( pHUDChat )
-		{
-			char szLocalized[100];
-			g_pVGuiLocalize->ConvertUnicodeToANSI( g_pVGuiLocalize->Find( "#TF_Voice_Unavailable" ), szLocalized, sizeof( szLocalized ) );
-			pHUDChat->ChatPrintf( 0, CHAT_FILTER_NONE, "%s ", szLocalized );
-		}
-		
-		return;
-	}
-#endif // TF_CLIENT_DLL 
-
-	CHudMenu *pMenu = (CHudMenu *) gHUD.FindElement( "CHudMenu" );
+	CHudMenu *pMenu = (CHudMenu *) GetHud().FindElement( "CHudMenu" );
 	if ( !pMenu )
 		return;
 

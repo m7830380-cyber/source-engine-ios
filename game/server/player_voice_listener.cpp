@@ -1,4 +1,4 @@
-//========== Copyright ï¿½ Valve Corporation, All rights reserved. ============
+//========== Copyright © Valve Corporation, All rights reserved. ============
 //
 // Purpose: Maintain data about voice communications from various players
 //			so that the server can react to it.
@@ -200,8 +200,8 @@ float CPlayerVoiceListener::ScriptGetPlayerSpeechDuration( int nPlayerIndex )
 void CPlayerVoiceListener::InitData( void )
 {
 	// Clear our tracking data
-	memset( m_flLastPlayerSpeechTime, 0.0f, sizeof( m_flLastPlayerSpeechTime ) );
-	memset( m_flPlayerSpeechDuration, 0.0f, sizeof( m_flPlayerSpeechDuration ) );
+	memset( m_flLastPlayerSpeechTime, 0.0f, ARRAYSIZE(m_flLastPlayerSpeechTime) );
+	memset( m_flPlayerSpeechDuration, 0.0f, ARRAYSIZE(m_flPlayerSpeechDuration) );
 }
 
 //---------------------------------------------------------------------------

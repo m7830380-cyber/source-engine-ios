@@ -20,7 +20,8 @@ games = {
 	'hl1mp': ['client_base.vpc', 'client_hl1mp.vpc'],
 	'cstrike': ['client_base.vpc', 'client_cstrike.vpc'],
 	'dod': ['client_base.vpc', 'client_dod.vpc'],
-	'tf': ['client_base.vpc', 'client_econ_base.vpc', 'client_tf.vpc']
+	'tf': ['client_base.vpc', 'client_econ_base.vpc', 'client_tf.vpc'],
+	'csgo': ['client_base.vpc', 'client_econ_base.vpc', 'client_cstrike15.vpc'],
 }
 
 _CODE_EXTS = ('.c', '.cc', '.cpp', '.cxx')
@@ -37,6 +38,23 @@ _TF_SKIP_STEAM = (
 	'tf_gameserver_management',
 	'maps_workshop',
 	'abuse_report',
+)
+
+_CSGO_SKIP = (
+	'/scaleform/',
+	'steamoverlay',
+	'steamworks_gamestats',
+	'ugc_workshop',
+	'workshop_manager',
+	'dedicated_server_ugc',
+	'filesystem_init.cpp',
+	'linux_support.cpp',
+	'/utils/common/',
+	'sixense/',
+	'zip_utils.cpp',
+	'lumpfiles.cpp',
+	'/public/xzip.cpp',
+	'/public/xunzip.cpp',
 )
 
 def _code_sources(files, skip=()):
@@ -64,6 +82,42 @@ def _tf_includes():
 		'../../gcsdk',
 		'../../gcsdk/steamextra',
 	]
+
+def _csgo_proto_sources():
+	return [
+		'generated_proto/cstrike15_usermessages.pb.cc',
+		'generated_proto/cstrike15_gcmessages.pb.cc',
+		'generated_proto/base_gcmessages.pb.cc',
+		'generated_proto/steammessages.pb.cc',
+		'generated_proto/netmessages.pb.cc',
+		'generated_proto/network_connection.pb.cc',
+	]
+
+def _csgo_includes():
+	return [
+		'../../protobuf',
+		'../../thirdparty/protobuf-2.6.1/src',
+		'./generated_proto',
+		'../shared/generated_proto',
+		'../../public/gcsdk',
+		'../../gcsdk',
+		'../../gcsdk/steamextra',
+		'./cstrike15',
+		'./cstrike15/gameui',
+		'./cstrike15/VGUI',
+		'../shared/cstrike15',
+		'../shared/econ',
+		'./econ',
+	]
+
+def _strip_defines(defines, drop):
+	out = []
+	for d in defines:
+		key = d.split('=')[0]
+		if key in drop:
+			continue
+		out.append(d)
+	return out
 
 def configure(conf):
 	game = conf.options.GAMES
@@ -116,7 +170,11 @@ def build(bld):
 	if bld.env.DEST_OS == 'win32':
 		libs += ['USER32']
 
-	skip = _TF_SKIP_STEAM if bld.env.GAMES == 'tf' else ()
+	skip = ()
+	if bld.env.GAMES == 'tf':
+		skip = _TF_SKIP_STEAM
+	elif bld.env.GAMES == 'csgo':
+		skip = _CSGO_SKIP
 	source += _code_sources(game["sources"], skip) + ['../../public/tier0/memoverride.cpp']
 	includes += game["includes"]
 	defines = game["defines"]
@@ -126,8 +184,15 @@ def build(bld):
 		includes = _tf_includes() + includes
 		libs += ['gcsdk', 'protobuf', 'JPEG']
 		defines.append('NO_STEAM=1')
+	elif bld.env.GAMES == 'csgo':
+		source += _csgo_proto_sources()
+		includes = _csgo_includes() + includes
+		libs += ['gcsdk', 'protobuf', 'JPEG']
+		defines.append('NO_STEAM=1')
+		defines = _strip_defines(defines, ('INCLUDE_SCALEFORM',))
 
-	defines.remove('PROTECTED_THINGS_ENABLE')
+	if 'PROTECTED_THINGS_ENABLE' in defines:
+		defines.remove('PROTECTED_THINGS_ENABLE')
 
 	bld.shlib(
 		source   = source,
@@ -141,4 +206,3 @@ def build(bld):
 		subsystem = bld.env.MSVC_SUBSYSTEM,
 		idx      = bld.get_taskgen_count()
 	)
-

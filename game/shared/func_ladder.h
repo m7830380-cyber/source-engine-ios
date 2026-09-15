@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -21,20 +21,7 @@ public:
 	DECLARE_CLASS( CInfoLadderDismount, CBaseEntity );
 	DECLARE_NETWORKCLASS();
 
-	CInfoLadderDismount();
-	~CInfoLadderDismount();
-
 	virtual void DrawDebugGeometryOverlays();
-
-	virtual void Spawn() OVERRIDE;
-
-	static int GetDismountCount();
-	static CInfoLadderDismount* GetDismount( int index );
-	static CUtlVector< CInfoLadderDismount* >	s_Dismounts;
-
-#ifdef GAME_DLL
-	virtual int UpdateTransmitState();
-#endif
 };
 
 typedef CHandle< CInfoLadderDismount > CInfoLadderDismountHandle;
@@ -89,8 +76,10 @@ public:
 	void FindNearbyDismountPoints( const Vector& origin, float radius, CUtlVector< CInfoLadderDismountHandle >& list );
 	const char *GetSurfacePropName();
 
-	void	SearchForDismountPoints();
 private:
+
+
+	void	SearchForDismountPoints();
 
 	// Movement vector from "bottom" to "top" of ladder
 	CNetworkVector( m_vecLadderDir );

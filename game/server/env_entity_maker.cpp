@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -19,6 +19,8 @@
 #define SF_ENTMAKER_IGNOREFACING			0x0004
 #define SF_ENTMAKER_CHECK_FOR_SPACE			0x0008
 #define SF_ENTMAKER_CHECK_PLAYER_LOOKING	0x0010
+
+//extern ScriptClassDesc_t * GetScriptDesc( CBaseEntity * );
 
 
 //-----------------------------------------------------------------------------
@@ -177,7 +179,7 @@ void CEnvEntityMaker::SpawnEntity( Vector vecAlternateOrigin, QAngle vecAlternat
 	}
 
 	CUtlVector<CBaseEntity*> hNewEntities;
-	if ( !pTemplate->CreateInstance( vecSpawnOrigin, vecSpawnAngles, &hNewEntities ) )
+	if ( !pTemplate->CreateInstance( vecSpawnOrigin, vecSpawnAngles, &hNewEntities, this ) )
 		return;
 	
 	//Adrian: oops we couldn't spawn the entity (or entities) for some reason!
@@ -255,6 +257,7 @@ void CEnvEntityMaker::SpawnEntity( Vector vecAlternateOrigin, QAngle vecAlternat
 	pTemplate->CreationComplete( hNewEntities );
 }
 
+
 //-----------------------------------------------------------------------------
 // Purpose: Spawn an instance of the entity
 //-----------------------------------------------------------------------------
@@ -295,7 +298,6 @@ void CEnvEntityMaker::SpawnEntityAtLocationFromScript( const Vector &vecAlternat
 {
 	SpawnEntity( vecAlternateOrigin, *((QAngle *)&vecAlternateAngles) );
 }
-
 
 //-----------------------------------------------------------------------------
 // Purpose: Returns whether or not the template entities can fit if spawned.

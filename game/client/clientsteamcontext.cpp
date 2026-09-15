@@ -1,4 +1,3 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
 #include "cbase.h"
 #include "clientsteamcontext.h"
 
@@ -60,12 +59,12 @@ void CClientSteamContext::Activate()
 	m_bActive = true;
 
 #if !defined( NO_STEAM )
+	#ifndef _PS3
 	SteamAPI_InitSafe(); // ignore failure, that will fall out later when they don't get a valid logon cookie
 	SteamAPI_SetTryCatchCallbacks( false ); // We don't use exceptions, so tell steam not to use try/catch in callback handlers
-	Init(); // Steam API context init
+	#endif
 
-	if ( SteamUtils() )
-		SteamUtils()->InitFilterText();
+	Init(); // Steam API context init
 	
 	UpdateLoggedOnState();
 	Msg( "CClientSteamContext logged on = %d\n", m_bLoggedOn );
@@ -113,7 +112,6 @@ void CClientSteamContext::OnSteamServersConnected( SteamServersConnected_t *pCon
 	UpdateLoggedOnState();
 	Msg( "CClientSteamContext OnSteamServersConnected logged on = %d\n", m_bLoggedOn );
 }
-
 #endif // !defined(NO_STEAM)
 
 void CClientSteamContext::InstallCallback( CUtlDelegate< void ( const SteamLoggedOnChange_t & ) > delegate )

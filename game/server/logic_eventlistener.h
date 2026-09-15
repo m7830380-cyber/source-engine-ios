@@ -8,8 +8,6 @@
 #define LOGIC_EVENTLISTENER_H
 #pragma once
 
-#include "GameEventListener.h"
-
 //-----------------------------------------------------------------------------
 // Purpose: Used to relay outputs/inputs from the events to the world and vice versa
 //-----------------------------------------------------------------------------

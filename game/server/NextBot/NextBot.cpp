@@ -1,7 +1,7 @@
 // NextBotCombatCharacter.cpp
 // Next generation bot system
 // Author: Michael Booth, April 2005
-//========= Copyright Valve Corporation, All rights reserved. ============//
+// Copyright (c) 2005 Turtle Rock Studios, Inc. - All Rights Reserved
 
 #include "cbase.h"
 
@@ -16,7 +16,6 @@
 #include "TerrorGamerules.h"
 #endif
 
-#include "vprof.h"
 #include "datacache/imdlcache.h"
 #include "EntityFlame.h"
 
@@ -72,24 +71,6 @@ END_DATADESC()
 IMPLEMENT_SERVERCLASS_ST( NextBotCombatCharacter, DT_NextBot )
 END_SEND_TABLE()
 
-//-----------------------------------------------------------------------------------------------------
-
-BEGIN_ENT_SCRIPTDESC( NextBotCombatCharacter, CBaseCombatCharacter, "Nextbot combat character" )
-	DEFINE_SCRIPTFUNC( GetBotId, "Get this bot's id" )
-	DEFINE_SCRIPTFUNC( FlagForUpdate, "Flag this bot for update" )
-	DEFINE_SCRIPTFUNC( IsFlaggedForUpdate, "Is this bot flagged for update" )
-	DEFINE_SCRIPTFUNC( GetTickLastUpdate, "Get last update tick" )
-	DEFINE_SCRIPTFUNC_WRAPPED( GetLocomotionInterface, "Get this bot's locomotion interface" )
-	DEFINE_SCRIPTFUNC_WRAPPED( GetBodyInterface, "Get this bot's body interface" )
-	DEFINE_SCRIPTFUNC_WRAPPED( GetIntentionInterface, "Get this bot's intention interface" )
-	DEFINE_SCRIPTFUNC_WRAPPED( GetVisionInterface, "Get this bot's vision interface" )
-	DEFINE_SCRIPTFUNC_WRAPPED( IsEnemy, "Return true if given entity is our enemy" )
-	DEFINE_SCRIPTFUNC_WRAPPED( IsFriend, "Return true if given entity is our friend" )
-	DEFINE_SCRIPTFUNC( IsImmobile, "Return true if we haven't moved in awhile" )
-	DEFINE_SCRIPTFUNC( GetImmobileDuration, "How long have we been immobile" )
-	DEFINE_SCRIPTFUNC( ClearImmobileStatus, "Clear immobile status" )
-	DEFINE_SCRIPTFUNC( GetImmobileSpeedThreshold, "Return units/second below which this actor is considered immobile" )
-END_SCRIPTDESC();
 
 //-----------------------------------------------------------------------------------------------------
 NextBotDestroyer::NextBotDestroyer( int team )
@@ -107,7 +88,7 @@ bool NextBotDestroyer::operator() ( INextBot *bot  )
 		if ( bot->GetEntity()->IsPlayer() )
 		{
 			CBasePlayer *player = dynamic_cast< CBasePlayer * >( bot->GetEntity() );
-			engine->ServerCommand( UTIL_VarArgs( "kickid %d\n", player->GetUserID() ) );
+			engine->ServerCommand( UTIL_VarArgs( "kick \"%s\"\n", player->GetPlayerName() ) );
 		}
 		else
 		{
@@ -163,12 +144,12 @@ public:
 		CBasePlayer *player = UTIL_GetListenServerHost();
 		if ( player )
 		{
-			Vector forward;
-			player->EyeVectors( &forward );
+		Vector forward;
+		player->EyeVectors( &forward );
 
-			trace_t result;
+		trace_t result;
 			unsigned int mask = MASK_BLOCKLOS_AND_NPCS|CONTENTS_IGNORE_NODRAW_OPAQUE | CONTENTS_GRATE | CONTENTS_WINDOW;
-			UTIL_TraceLine( player->EyePosition(), player->EyePosition() + 999999.9f * forward, mask, player, COLLISION_GROUP_NONE, &result );
+		UTIL_TraceLine( player->EyePosition(), player->EyePosition() + 999999.9f * forward, mask, player, COLLISION_GROUP_NONE, &result );
 			if ( result.DidHit() )
 			{
 				NDebugOverlay::Cross3D( result.endpos, 5, 0, 255, 0, true, 10.0f );
@@ -176,10 +157,10 @@ public:
 				m_goal = result.endpos;
 			}
 			else
-			{
-				m_isGoalValid = false;
-			}
+		{
+			m_isGoalValid = false;
 		}
+	}
 	}
 
 	bool operator() ( INextBot *bot )
@@ -211,7 +192,7 @@ CON_COMMAND_F( nb_move_to_cursor, "Tell all NextBots to move to the cursor posit
 bool IgnoreActorsTraceFilterFunction( IHandleEntity *pServerEntity, int contentsMask )
 {
 	CBaseEntity *entity = EntityFromEntityHandle( pServerEntity );
-	return ( entity->MyCombatCharacterPointer() == NULL );	// includes all bots, npcs, players, and TF2 buildings
+	return ( entity->MyNextBotPointer() == NULL && !entity->IsPlayer() );
 }
 
 
@@ -221,7 +202,7 @@ bool VisionTraceFilterFunction( IHandleEntity *pServerEntity, int contentsMask )
 {
 	// Honor BlockLOS also to allow seeing through partially-broken doors
 	CBaseEntity *entity = EntityFromEntityHandle( pServerEntity );
-	return ( entity->MyCombatCharacterPointer() == NULL && entity->BlocksLOS() );
+	return ( entity->MyNextBotPointer() == NULL && !entity->IsPlayer() && entity->BlocksLOS() );
 }
 
 
@@ -360,10 +341,10 @@ void NextBotCombatCharacter::Ignite( float flFlameLifetime, CBaseEntity *pAttack
 		return;
 
 	// BaseClass::Ignite stuff, plus SetAttacker on the flame, so our attacker gets credit
-	CEntityFlame *pFlame = CEntityFlame::Create( this );
+	CEntityFlame *pFlame = CEntityFlame::Create( this, flFlameLifetime );
 	if ( pFlame )
 	{
-		pFlame->SetLifetime( flFlameLifetime );
+		pFlame->SetAttacker( pAttacker );
 		AddFlag( FL_ONFIRE );
 
 		SetEffectEntity( pFlame );

@@ -14,19 +14,11 @@
 #include "isaverestore.h"
 #include "gamerules.h"
 #include "vscript_client_nut.h"
-#include "gameui/gameui_interface.h"
 
-#ifdef PANORAMA_ENABLE
-#include "panorama/panorama.h"
-#include "panorama/uijsregistration.h"
-#endif
-
+#if defined ( PORTAL2 )
 #include "usermessages.h"
 #include "hud_macros.h"
-
-#if defined( PORTAL2_PUZZLEMAKER )
-#include "matchmaking/imatchframework.h"
-#endif // PORTAL2_PUZZLEMAKER
+#endif
 
 extern IScriptManager *scriptmanager;
 extern ScriptClassDesc_t * GetScriptDesc( CBaseEntity * );
@@ -44,34 +36,6 @@ extern ScriptClassDesc_t * GetScriptDesc( CBaseEntity * );
 #define VMPROF_SHOW
 
 #endif // VMPROFILE
-
-//-----------------------------------------------------------------------------
-//
-//-----------------------------------------------------------------------------
-
-#ifdef PANORAMA_ENABLE
-
-DECLARE_PANORAMA_EVENT2( VScriptTrigger, const char *, const char * );
-DEFINE_PANORAMA_EVENT( VScriptTrigger );
-
-class CScriptPanorama
-{
-public:
-
-	void DispatchEvent( const char *pszEventName, const char *pszMessage )
-	{
-		panorama::DispatchEvent( VScriptTrigger(), nullptr, pszEventName, pszMessage );
-	}
-
-
-private:
-} g_ScriptPanorama;
-
-BEGIN_SCRIPTDESC_ROOT_NAMED( CScriptPanorama, "CPanorama", SCRIPT_SINGLETON "Panorama VScript Interface" )
-	DEFINE_SCRIPTFUNC( DispatchEvent, "Trigger a panorama event" )
-END_SCRIPTDESC();
-
-#endif
 
 //-----------------------------------------------------------------------------
 //
@@ -102,24 +66,6 @@ bool DoIncludeScript( const char *pszScript, HSCRIPT hScope )
 	}
 	return true;
 }
-
-#if defined( PORTAL2_PUZZLEMAKER )
-void RequestMapRating( void )
-{
-	g_pMatchFramework->GetEventsSubscription()->BroadcastEvent( new KeyValues( "OnRequestMapRating" ) );		
-}
-
-//
-//  Hack solution for the moment
-//
-
-void OpenVoteDialog( void )
-{
-	RequestMapRating();
-}
-
-ConCommand cm_open_vote_dialog( "cm_open_vote_dialog", OpenVoteDialog, "Opens the map voting dialog for testing purposes" );
-#endif // PORTAL2_PUZZLEMAKER
 
 int GetDeveloperLevel()
 {
@@ -168,18 +114,13 @@ bool VScriptClientInit()
 				ScriptRegisterFunction( g_pScriptVM, Time, "Get the current server time" );
 				ScriptRegisterFunction( g_pScriptVM, DoIncludeScript, "Execute a script (internal)" );
 				ScriptRegisterFunction( g_pScriptVM, GetDeveloperLevel, "Gets the level of 'develoer'" );
-#if defined( PORTAL2_PUZZLEMAKER )
-				ScriptRegisterFunction( g_pScriptVM, RequestMapRating, "Pops up the map rating dialog for user input" );
-#endif // PORTAL2_PUZZLEMAKER
 				
 				if ( GameRules() )
 				{
 					GameRules()->RegisterScriptFunctions();
 				}
 
-#ifdef PANORAMA_ENABLE
-				g_pScriptVM->RegisterInstance( &g_ScriptPanorama, "Panorama" );
-#endif
+				//g_pScriptVM->RegisterInstance( &g_ScriptEntityIterator, "Entities" );
 
 				if ( scriptLanguage == SL_SQUIRREL )
 				{
@@ -260,27 +201,27 @@ bool IsEntityCreationAllowedInScripts( void )
 	return g_VScriptGameSystem.m_bAllowEntityCreationInScripts;
 }
 
-//
-// Slart: These were Portal 2 only, now they're not
-//
-
-bool __MsgFunc_SetMixLayerTriggerFactor(const CCSUsrMsg_SetMixLayerTriggerFactor &msg)
+#if defined ( PORTAL2 )
+void __MsgFunc_SetMixLayerTriggerFactor( bf_read &msg )
 {
-	int iLayerID = engine->GetMixLayerIndex(msg.layer().c_str());
-	if (iLayerID < 0)
+	char buf[MAX_PATH];
+
+	msg.ReadString( buf, ARRAYSIZE( buf ), false );
+	int iLayerID = engine->GetMixLayerIndex( buf );
+	if ( iLayerID < 0 )
 	{
-		Warning("Invalid mix layer passed to SetMixLayerTriggerFactor: '%s'\n", msg.layer().c_str());
-		return true;
+		Warning( "Invalid mix layer passed to SetMixLayerTriggerFactor: '%s'\n", buf ); 
+		return;
 	}
-	int iGroupID = engine->GetMixGroupIndex(msg.group().c_str());
-	if (iGroupID < 0)
+	msg.ReadString( buf, ARRAYSIZE( buf ), false );
+	int iGroupID = engine->GetMixGroupIndex( buf );
+	if ( iGroupID < 0 )
 	{
-		Warning("Invalid mix group passed to SetMixLayerTriggerFactor: '%s'\n", msg.group().c_str());
-		return true;
+		Warning( "Invalid mix group passed to SetMixLayerTriggerFactor: '%s'\n", buf ); 
+		return;
 	}
 
-	engine->SetMixLayerTriggerFactor(iLayerID, iGroupID, msg.factor());
-	return true;
+	engine->SetMixLayerTriggerFactor( iLayerID, iGroupID, msg.ReadFloat() );
 }
 
 class CSetMixLayerTriggerHelper : public CAutoGameSystem 
@@ -294,35 +235,7 @@ class CSetMixLayerTriggerHelper : public CAutoGameSystem
 		}
 		return true;
 	}
-
-	CUserMessageBinder m_UMCMsgSetMixLayerTriggerFactor;
 };
 
 static CSetMixLayerTriggerHelper g_SetMixLayerTriggerHelper;
-
-#ifdef PANORAMA_ENABLE
-
-bool __MsgFunc_PanoramaDispatchEvent( const CCSUsrMsg_PanoramaDispatchEvent &msg )
-{
-	g_ScriptPanorama.DispatchEvent( msg.event().c_str(), msg.message().c_str() );
-	return true;
-}
-
-class CVScriptPanoramaHelper : public CAutoGameSystem 
-{
-	virtual bool Init()
-	{
-		for( int i = 0; i < MAX_SPLITSCREEN_PLAYERS; ++i )
-		{
-			ACTIVE_SPLITSCREEN_PLAYER_GUARD( i );
-			HOOK_MESSAGE( PanoramaDispatchEvent );
-		}
-		return true;
-	}
-
-	CUserMessageBinder m_UMCMsgPanoramaDispatchEvent;
-};
-
-static CVScriptPanoramaHelper g_VScriptPanoramaHelper;
-
 #endif

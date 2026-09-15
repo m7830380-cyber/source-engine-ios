@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -44,7 +44,7 @@ public:
 
 	virtual bool IsWorldEntity( const CBaseHandle &handle );
 
-	virtual void SetHost( CBasePlayer* host ) OVERRIDE;
+	void			SetHost( CBaseEntity *host );
 
 private:
 	// results, tallied on client and server, but only used by server to run SV_Impact.
@@ -63,7 +63,7 @@ private:
 
 	CUtlVector<touchlist_t>			m_TouchList;
 
-	CBasePlayer*	m_pHost;
+	CBaseEntity*	m_pHost;
 };	
 
 //-----------------------------------------------------------------------------
@@ -80,7 +80,7 @@ static CMoveHelperClient s_MoveHelperClient;
 //-----------------------------------------------------------------------------
 CMoveHelperClient::CMoveHelperClient( void )
 {
-	m_pHost = NULL;
+	m_pHost = 0;
 	SetSingleton( this );
 }
 
@@ -92,7 +92,8 @@ CMoveHelperClient::~CMoveHelperClient( void )
 //-----------------------------------------------------------------------------
 // Indicates which entity we're going to move
 //-----------------------------------------------------------------------------
-void CMoveHelperClient::SetHost( CBasePlayer *host )
+
+void CMoveHelperClient::SetHost( CBaseEntity *host )
 {
 	m_pHost = host;
 
@@ -127,7 +128,7 @@ bool CMoveHelperClient::AddToTouched( const trace_t& tr, const Vector& impactvel
 	int i;
 
 	// Look for duplicates
-	for (i = 0; i < m_TouchList.Size(); i++)
+	for (i = 0; i < m_TouchList.Count(); i++)
 	{
 		if (m_TouchList[i].trace.m_pEnt == tr.m_pEnt)
 		{
@@ -142,32 +143,19 @@ bool CMoveHelperClient::AddToTouched( const trace_t& tr, const Vector& impactvel
 	return true;
 }
 
-ConVar cl_movehelper_process( "cl_movehelper_process", "1" );
-
-ConVar cl_movehelper_process_vel( "cl_movehelper_process_vel", "1", 0 );
-ConVar cl_movehelper_process_imp( "cl_movehelper_process_imp", "1", 0 );
-
 void CMoveHelperClient::ProcessImpacts( void )
 {
-	if ( !cl_movehelper_process.GetBool() )
-		return;
-
-	// Relink in order to build absorigin and absmin/max to reflect any changes
-	//  from prediction.  Relink will early out on SOLID_NOT
-
-	// TODO: Touch triggers on the client
-	//pPlayer->PhysicsTouchTriggers();
+	m_pHost->PhysicsTouchTriggers();
 
 	// Don't bother if the player ain't solid
 	if ( m_pHost->IsSolidFlagSet( FSOLID_NOT_SOLID ) )
 		return;
 
 	// Save off the velocity, cause we need to temporarily reset it
-	Vector vOldLocalVel = m_pHost->GetLocalVelocity();
-	Vector vOldAbsVel = m_pHost->GetAbsVelocity();
+	Vector vel = m_pHost->GetAbsVelocity();
 
 	// Touch other objects that were intersected during the movement.
-	for (int i = 0 ; i < m_TouchList.Size(); i++)
+	for (int i = 0 ; i < m_TouchList.Count(); i++)
 	{
 		// Run the impact function as if we had run it during movement.
 		C_BaseEntity *entity = ClientEntityList().GetEnt( m_TouchList[i].trace.m_pEnt->entindex() );
@@ -183,29 +171,13 @@ void CMoveHelperClient::ProcessImpacts( void )
 		m_TouchList[i].trace.m_pEnt = entity;
 
 		// Use the velocity we had when we collided, so boxes will move, etc.
-		if ( cl_movehelper_process_vel.GetBool() )
-			m_pHost->SetAbsVelocity( m_TouchList[i].deltavelocity );
+		m_pHost->SetAbsVelocity( m_TouchList[i].deltavelocity );
 
-		if ( cl_movehelper_process_imp.GetBool() )
-			entity->PhysicsImpact( m_pHost, m_TouchList[i].trace );
+		entity->PhysicsImpact( m_pHost, m_TouchList[i].trace );
 	}
 
-	// misyl: Debug
-//	if ( vOldLocalVel != vOldAbsVel )
-// 	{
-// 		Msg( "%d\n", gpGlobals->tickcount );
-// 		Msg( "vOldLocalVel: %f %f %f\n", vOldLocalVel.x, vOldLocalVel.y, vOldLocalVel.z );
-// 		Msg( "vOldAbsVel: %f %f %f\n", vOldAbsVel.x, vOldAbsVel.y, vOldAbsVel.z );
-// 	}
-		// Restore the velocity
-		m_pHost->SetAbsVelocity( vOldAbsVel );
-		//m_pHost->SetLocalVelocity( vOldLocalVel );
-
-	if ( vOldLocalVel != vOldAbsVel )
-	{
-		Msg( "vNewLocalVel: %f %f %f\n", m_pHost->GetLocalVelocity().x, m_pHost->GetLocalVelocity().y, m_pHost->GetLocalVelocity().z );
-		Msg( "vNewAbsVel: %f %f %f\n\n", m_pHost->GetAbsVelocity().x, m_pHost->GetAbsVelocity().y, m_pHost->GetAbsVelocity().z );
-	}
+	// Restore the velocity
+	m_pHost->SetAbsVelocity( vel );
 
 	// So no stuff is ever left over, sigh...
 	ResetTouchList();
@@ -284,7 +256,7 @@ void CMoveHelperClient::Con_NPrintf( int idx, char const* pFormat, ...)
 	Q_vsnprintf(msg, sizeof( msg ), pFormat, marker);
 	va_end(marker);
 	
-#if defined( CSTRIKE_DLL ) || defined( DOD_DLL ) // reltodo
+#if defined( CSTRIKE_DLL )
 	engine->Con_NPrintf( idx, "%s", msg );
 #else
 	engine->Con_NPrintf( idx, msg );

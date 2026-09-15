@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose:
 //
@@ -14,7 +14,7 @@
 
 class CAI_BaseNPC;
 class CAI_Enemies;
-typedef intp AI_TaskFailureCode_t;
+typedef int AI_TaskFailureCode_t;
 struct Task_t;
 
 //-----------------------------------------------------------------------------
@@ -46,6 +46,7 @@ public:
 	float 				GetHullHeight() const;
 	const Vector &		GetHullMins() const;
 	const Vector &		GetHullMaxs() const;
+	int					GetHullTraceMask() const;
 
 protected:
 	//

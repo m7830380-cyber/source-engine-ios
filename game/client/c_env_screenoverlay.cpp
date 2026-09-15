@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -13,7 +13,7 @@
 #include "view_shared.h"
 #include "texture_group_names.h"
 #include "tier0/icommandline.h"
-#include "KeyValues.h"
+#include "keyvalues.h"
 #include "ScreenSpaceEffects.h"
 #include "materialsystem/imaterialsystemhardwareconfig.h"
 
@@ -94,7 +94,7 @@ void C_EnvScreenOverlay::PostDataUpdate( DataUpdateType_t updateType )
 	{
 		for ( int i = 0; i < MAX_SCREEN_OVERLAYS; ++i )
 		{
-			if ( m_iszOverlayNames[ i ][ 0 ] )
+			if ( m_iszOverlayNames[ i ] && m_iszOverlayNames[ i ][ 0 ] )
 			{
 				materials->FindMaterial( m_iszOverlayNames[ i ], TEXTURE_GROUP_CLIENT_EFFECTS, false );
 			}
@@ -146,7 +146,7 @@ void C_EnvScreenOverlay::HandleOverlaySwitch( void )
 //-----------------------------------------------------------------------------
 void C_EnvScreenOverlay::StartCurrentOverlay( void )
 {
-	if ( m_iCurrentOverlay == MAX_SCREEN_OVERLAYS || !m_iszOverlayNames[m_iCurrentOverlay][0] )
+	if ( m_iCurrentOverlay == MAX_SCREEN_OVERLAYS || !m_iszOverlayNames[m_iCurrentOverlay] || !m_iszOverlayNames[m_iCurrentOverlay][0] )
 	{
 		// Hit the end of our overlays, so stop.
 		m_flStartTime = 0;
@@ -243,11 +243,6 @@ void C_EnvScreenEffect::ReceiveMessage( int classID, bf_read &msg )
 
 				if ( m_nType == SCREENEFFECT_EP1_INTRO )
 				{
-					if( g_pMaterialSystemHardwareConfig->GetDXSupportLevel() < 80 )
-					{
-						return;
-					}
-
 					// Set our keys
 					pKeys->SetFloat( "duration", m_flDuration );
 					pKeys->SetInt( "fadeout", 0 );
@@ -265,9 +260,6 @@ void C_EnvScreenEffect::ReceiveMessage( int classID, bf_read &msg )
 				}
 				else if ( m_nType == SCREENEFFECT_EP2_GROGGY )
 				{
-					if( g_pMaterialSystemHardwareConfig->GetDXSupportLevel() < 80 )
-						return;
-
 					// Set our keys
 					pKeys->SetFloat( "duration", m_flDuration );
 					pKeys->SetInt( "fadeout", 0 );
@@ -285,10 +277,6 @@ void C_EnvScreenEffect::ReceiveMessage( int classID, bf_read &msg )
 			
 			if ( m_nType == SCREENEFFECT_EP1_INTRO )
 			{
-				if( g_pMaterialSystemHardwareConfig->GetDXSupportLevel() < 80 )
-				{
-					return;
-				}
 				// Create a keyvalue block to set these params
 				KeyValues *pKeys = new KeyValues( "keys" );
 				if ( pKeys == NULL )
@@ -306,10 +294,6 @@ void C_EnvScreenEffect::ReceiveMessage( int classID, bf_read &msg )
 			}
 			else if ( m_nType == SCREENEFFECT_EP2_GROGGY )
 			{
-				if( g_pMaterialSystemHardwareConfig->GetDXSupportLevel() < 80 )
-				{
-					return;
-				}
 				// Create a keyvalue block to set these params
 				KeyValues *pKeys = new KeyValues( "keys" );
 				if ( pKeys == NULL )

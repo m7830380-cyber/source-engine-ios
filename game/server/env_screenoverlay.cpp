@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Entity to control screen overlays on a player
 //
@@ -81,10 +81,14 @@ BEGIN_DATADESC( CEnvScreenOverlay )
 
 END_DATADESC()
 
-extern void SendProxy_StringT_To_String( const SendProp *pProp, const void *pStruct, const void *pData, DVariant *pOut, int iElement, int objectID );
+void SendProxy_String_tToString( const SendProp *pProp, const void *pStruct, const void *pData, DVariant *pOut, int iElement, int objectID )
+{
+	string_t *pString = (string_t*)pData;
+	pOut->m_pString = (char*)STRING( *pString );
+}
 
 IMPLEMENT_SERVERCLASS_ST( CEnvScreenOverlay, DT_EnvScreenOverlay )
-	SendPropArray( SendPropString( SENDINFO_ARRAY( m_iszOverlayNames ), 0, SendProxy_StringT_To_String ), m_iszOverlayNames ),
+	SendPropArray( SendPropString( SENDINFO_ARRAY( m_iszOverlayNames ), 0, SendProxy_String_tToString ), m_iszOverlayNames ),
 	SendPropArray( SendPropFloat( SENDINFO_ARRAY( m_flOverlayTimes ), 11, SPROP_ROUNDDOWN, -1.0f, 63.0f ), m_flOverlayTimes ),
 	SendPropFloat( SENDINFO( m_flStartTime ), 32, SPROP_NOSCALE ),
 	SendPropInt( SENDINFO( m_iDesiredOverlay ), 5 ),
@@ -217,7 +221,6 @@ LINK_ENTITY_TO_CLASS( env_screeneffect, CEnvScreenEffect );
 BEGIN_DATADESC( CEnvScreenEffect )
 	DEFINE_FIELD( m_flDuration, FIELD_FLOAT ),
 	DEFINE_KEYFIELD( m_nType, FIELD_INTEGER, "type" ),
-	DEFINE_FIELD( m_flDuration, FIELD_FLOAT ),
 	DEFINE_INPUTFUNC( FIELD_FLOAT, "StartEffect", InputStartEffect ),
 	DEFINE_INPUTFUNC( FIELD_FLOAT, "StopEffect", InputStopEffect ),
 END_DATADESC()

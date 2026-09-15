@@ -1,7 +1,7 @@
 // NextBotInterface.h
 // Interface for NextBot
 // Author: Michael Booth, May 2006
-//========= Copyright Valve Corporation, All rights reserved. ============//
+// Copyright (c) 2006 Turtle Rock Studios, Inc. - All Rights Reserved
 
 #ifndef _NEXT_BOT_INTERFACE_H_
 #define _NEXT_BOT_INTERFACE_H_
@@ -63,10 +63,6 @@ public:
 	virtual IBody *			GetBodyInterface( void ) const;
 	virtual IIntention *	GetIntentionInterface( void ) const;
 	virtual IVision *		GetVisionInterface( void ) const;
-	HSCRIPT ScriptGetLocomotionInterface( void ) const { return ToHScript( this->GetLocomotionInterface() ); }
-	HSCRIPT ScriptGetIntentionInterface( void ) const { return ToHScript( this->GetIntentionInterface() ); }
-	HSCRIPT ScriptGetBodyInterface( void ) const { return ToHScript( this->GetBodyInterface() ); }
-	HSCRIPT ScriptGetVisionInterface( void ) const { return ToHScript( this->GetVisionInterface() ); }
 
 	/**
 	 * Attempt to change the bot's position. Return true if successful.
@@ -80,9 +76,6 @@ public:
 	virtual bool IsEnemy( const CBaseEntity *them ) const;			// return true if given entity is our enemy
 	virtual bool IsFriend( const CBaseEntity *them ) const;			// return true if given entity is our friend
 	virtual bool IsSelf( const CBaseEntity *them ) const;			// return true if 'them' is actually me
-	bool ScriptIsEnemy( HSCRIPT hThem ) const { return this->IsEnemy( ToEnt( hThem ) ); }
-	bool ScriptIsFriend( HSCRIPT hThem ) const { return this->IsFriend( ToEnt( hThem ) ); }
-	bool ScriptIsSelf( HSCRIPT hThem ) const { return this->IsSelf( ToEnt( hThem ) ); }
 
 	/**
 	 * Can we climb onto this entity?
@@ -142,7 +135,7 @@ public:
 	virtual const char *GetDebugIdentifier( void ) const;		// return the name of this bot for debugging purposes
 	virtual bool IsDebugFilterMatch( const char *name ) const;	// return true if we match the given debug symbol
 	virtual void DisplayDebugText( const char *text ) const;	// show a line of text on the bot in the world
-	void DebugConColorMsg( NextBotDebugType debugType, const Color &color, PRINTF_FORMAT_STRING const char *fmt, ... );
+	void DebugConColorMsg( NextBotDebugType debugType, const Color &color, const char *fmt, ... );
 
 	enum {
 		MAX_NEXTBOT_DEBUG_HISTORY = 100,

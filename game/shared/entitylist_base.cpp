@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -11,9 +11,10 @@
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
 
-// the max value of a serial number, rolls back to 0 when it hits this limit
-// we use 1 less than the number of serial bits, since highest bit is reserved for static props
-static const uint32 SERIAL_MASK = ( ( 1 << ( NUM_SERIAL_NUM_BITS - 1 ) ) - 1 ); 
+enum
+{
+	SERIAL_MASK = 0x7fff // the max value of a serial number, rolls back to 0 when it hits this limit
+};
 
 void CEntInfo::ClearLinks()
 {

@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Contains the set of functions for manipulating entity hierarchies.
 //
@@ -110,8 +110,19 @@ void UnlinkFromParent( CBaseEntity *pRemove )
 		pRemove->SetLocalOrigin(vecAbsOrigin);
 		pRemove->SetLocalAngles(angAbsRotation);
 		pRemove->SetLocalVelocity(vecAbsVelocity);
+
+		// objects with physics need to know that they got teleported. Otherwise physics will tell us where to go later.
+		IPhysicsObject *pObject = pRemove->VPhysicsGetObject();
+		if( pObject )
+		{
+			pObject->SetPosition( vecAbsOrigin, angAbsRotation, true );
+		}
+
 //		pRemove->SetLocalAngularVelocity(vecAbsAngVelocity);
-		pRemove->UpdateWaterState();
+		if ( pRemove->GetMoveType() != MOVETYPE_NONE && pRemove->GetMoveType() != MOVETYPE_VPHYSICS )
+		{
+			pRemove->UpdateWaterState();
+		}
 	}
 }
 

@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Implements visual effects entities: sprites, beams, bubbles, etc.
 //
@@ -29,6 +29,10 @@ class CTimedEventQueue
 public:
 	// The time passed in here represents the amount of time the queue stores
 	CTimedEventQueue( float flMaxTime );
+
+	// REI: Not sure why I have to declare these as delete, shouldn't that be inherited from CUtlLinkedList having a deleted copy constructor?
+	CTimedEventQueue( const CTimedEventQueue& ) = delete;
+	CTimedEventQueue& operator= ( const CTimedEventQueue& ) = delete;
 
 	// Adds an event to the queue, will pop off stale events from the queue
 	// NOTE: All events added to the queue must monotonically increase in time!
@@ -143,8 +147,10 @@ public:
 	CEnvWindShared();
 	~CEnvWindShared();
 
+	CEnvWindShared( const CEnvWindShared & ) = delete;
+	CEnvWindShared& operator= ( const CEnvWindShared& ) = delete;
+
 	void Init( int iEntIndex, int iRandomSeed, float flTime, int iWindDir, float flInitialWindSpeed );
-	void Reset();
 
 	void SetLocation( const Vector &location );
 
@@ -219,6 +225,8 @@ private:
 	float m_flWindAngleVariation;
 	float m_flWindSpeedVariation;
 
+
+
 	int m_iEntIndex;
 
 	// Used to generate random numbers
@@ -236,9 +244,6 @@ private:
 	// Event history required for prediction
 	CTimedEventQueue< WindAveEvent_t, unsigned short >	m_WindAveQueue;
 	CTimedEventQueue< WindVariationEvent_t, unsigned short > m_WindVariationQueue;
-
-private:
-	CEnvWindShared( const CEnvWindShared & ); // not defined, not accessible
 };
 
 //-----------------------------------------------------------------------------
@@ -258,9 +263,8 @@ Vector GetWindspeedAtLocation( const Vector &location );
 //-----------------------------------------------------------------------------
 void GetWindspeedAtTime( float flTime, Vector &vecVelocity );
 
-
 //-----------------------------------------------------------------------------
-// Method to reset windspeed..
+// Method to reset wind speed..
 //-----------------------------------------------------------------------------
 void ResetWindspeed();
 

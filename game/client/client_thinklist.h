@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -121,7 +121,7 @@ inline ClientThinkHandle_t CClientThinkList::GetInvalidThinkHandle()
 
 inline CClientThinkList::ThinkEntry_t* CClientThinkList::GetThinkEntry( ClientThinkHandle_t hThink )
 {
-	return &m_ThinkEntries[ (uintp)hThink ];
+	return &m_ThinkEntries[ (unsigned long)hThink ];
 }
 
 

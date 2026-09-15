@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Controls the loading, parsing and creation of the entities from the BSP.
 //
@@ -107,6 +107,7 @@ const char *MapEntity_SkipToNextEntity( const char *pMapData, char *pWorkBuffer 
 //-----------------------------------------------------------------------------
 const char *MapEntity_ParseToken( const char *data, char *newToken )
 {
+	int             c;
 	int             len;
 		
 	len = 0;
@@ -124,12 +125,11 @@ const char *MapEntity_ParseToken( const char *data, char *newToken )
 
 		for ( const char *c = s_BraceChars; *c; c++ )
 		{
-			s_BraceCharacters[(unsigned)*c] = true;
+			s_BraceCharacters[*c] = true;
 		}
 	}
 		
-	int             c;
-	// skip whitespace
+// skip whitespace
 skipwhite:
 	while ( (c = *data) <= ' ')
 	{
@@ -175,11 +175,6 @@ skipwhite:
 	{
 		newToken[len] = c;
 		len++;
-
-		if ( len >= MAPKEY_MAXLENGTH )
-		{
-			len--;
-		}
 		newToken[len] = 0;
 		return data+1;
 	}
@@ -190,6 +185,9 @@ skipwhite:
 		newToken[len] = c;
 		data++;
 		len++;
+		c = *data;
+		if ( s_BraceCharacters[c] /*c=='{' || c=='}'|| c==')'|| c=='(' || c=='\''*/ )
+			break;
 
 		if ( len >= MAPKEY_MAXLENGTH )
 		{
@@ -197,16 +195,8 @@ skipwhite:
 			newToken[len] = 0;
 		}
 
-		c = *data;
-		if ( s_BraceCharacters[c] /*c=='{' || c=='}'|| c==')'|| c=='(' || c=='\''*/ )
-			break;
-
 	} while (c>32);
 	
-	if ( len >= MAPKEY_MAXLENGTH )
-	{
-		len--;
-	}
 	newToken[len] = 0;
 	return data;
 }

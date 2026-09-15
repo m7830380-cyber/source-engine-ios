@@ -27,6 +27,7 @@
 #include "utlbuffer.h"
 #include "bitmap/bitmap.h"
 #include "vtf/vtf.h"
+#include <string.h>
 
 // clang3 on OSX folks the attribute into the prototype, causing a compile failure
 // filed radar bug 10397783

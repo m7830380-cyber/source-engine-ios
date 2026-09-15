@@ -168,6 +168,9 @@ private:
 	#define loc_scpy_safe	V_strcpy_safe
 	#define loc_strlen		Q_strlen
 	#define LOCCHAR( x )	x
+	#define LOCCHAR_FMT_LOCPRINTF "%s"
+	#define LOCCHAR_FMT_PRINTF    "%s"
+	#define LOCCHAR_FMT_WPRINTF   L"%hs"
 
 #else
 
@@ -181,6 +184,9 @@ private:
 	#define loc_scpy_safe	V_wcscpy_safe
 	#define loc_strlen		Q_wcslen
 	#define LOCCHAR(x)		L ## x
+	#define LOCCHAR_FMT_LOCPRINTF L"%ls"
+	#define LOCCHAR_FMT_PRINTF    "%ls"
+	#define LOCCHAR_FMT_WPRINTF   L"%ls"
 
 #endif
 

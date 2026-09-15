@@ -956,6 +956,14 @@ static FORCEINLINE double fsel(double fComparand, double fValGE, double fLT)
 #endif // _X360
 
 //-----------------------------------------------------------------------------
+// Portability casting
+//-----------------------------------------------------------------------------
+template < typename Tdst, typename Tsrc > inline Tdst size_cast( Tsrc val )
+{
+	return ( Tdst )val;
+}
+
+//-----------------------------------------------------------------------------
 // Purpose: Standard functions for handling endian-ness
 //-----------------------------------------------------------------------------
 

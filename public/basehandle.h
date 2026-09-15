@@ -22,6 +22,11 @@ class IHandleEntity;
 // CBaseHandle.
 // -------------------------------------------------------------------------------------------------- //
 
+enum INVALID_EHANDLE_tag
+{
+	INVALID_EHANDLE
+};
+
 class CBaseHandle
 {
 friend class CBaseEntityList;
@@ -29,6 +34,7 @@ friend class CBaseEntityList;
 public:
 
 	CBaseHandle();
+	CBaseHandle( INVALID_EHANDLE_tag );
 	CBaseHandle( const CBaseHandle &other );
 	CBaseHandle( uintp value );
 	CBaseHandle( int iEntry, int iSerialNumber );
@@ -71,6 +77,11 @@ protected:
 
 
 inline CBaseHandle::CBaseHandle()
+{
+	m_Index = INVALID_EHANDLE_INDEX;
+}
+
+inline CBaseHandle::CBaseHandle( INVALID_EHANDLE_tag )
 {
 	m_Index = INVALID_EHANDLE_INDEX;
 }

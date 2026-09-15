@@ -536,6 +536,7 @@ private:
 	int		GetTitleEntry( vgui::VPANEL panel );
 
 	virtual void DrawSetTextureRGBAEx(int id, const unsigned char *rgba, int wide, int tall, ImageFormat format );
+	virtual void DrawSetTextureRGBAEx2( int id, const unsigned char* rgba, int wide, int tall, ImageFormat format, bool bLinearFilter );
 
 	struct ScreenOverride_t
 	{

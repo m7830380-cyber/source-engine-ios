@@ -3994,6 +3994,12 @@ void CMatSystemSurface::DrawSetTextureRGBAEx( int id, const unsigned char* rgba,
 	TextureDictionary()->SetTextureRGBAEx( id, (const char *)rgba, wide, tall, format, true );
 }
 
+void CMatSystemSurface::DrawSetTextureRGBAEx2( int id, const unsigned char* rgba, int wide, int tall, ImageFormat format, bool bLinearFilter )
+{
+	NOTE_UNUSED( bLinearFilter );
+	DrawSetTextureRGBAEx( id, rgba, wide, tall, format );
+}
+
 void CMatSystemSurface::DrawSetSubTextureRGBA(int textureID, int drawX, int drawY, unsigned const char *rgba, int subTextureWide, int subTextureTall)
 {
 	TextureDictionary()->SetSubTextureRGBA( textureID, drawX, drawY, rgba, subTextureWide, subTextureTall );

@@ -320,7 +320,7 @@ void CTFFreezePanel::FireGameEvent( IGameEvent * event )
 		if ( !g_TF_PR )
 		{
 			if ( m_pNemesisSubPanel )
-				m_pNemesisSubPanel->SetDialogVariable( "nemesisname", NULL );
+				m_pNemesisSubPanel->SetDialogVariable( "nemesisname", (const char *)NULL );
 			return;
 		}
 

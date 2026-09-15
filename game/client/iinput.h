@@ -111,6 +111,8 @@ public:
 	virtual void		CAM_CameraThirdThink( void ) = 0;
 
 	virtual	bool		EnableJoystickMode() = 0;
+
+	virtual bool		IsSteamControllerActive() { return false; }
 };
 
 extern ::IInput *input;

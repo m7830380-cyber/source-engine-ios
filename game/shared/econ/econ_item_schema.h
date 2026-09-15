@@ -3327,10 +3327,9 @@ inline const ISchemaAttributeType *static_attrib_t::GetAttributeType() const
 int StringFieldToInt( const char *szValue, const char **pValueStrings, int iNumStrings, bool bDontAssert = false );
 int StringFieldToInt( const char *szValue, const CUtlVector<const char *>& vecValueStrings, bool bDontAssert = false );
 
-#ifdef GC_DLL
-// Global econ-level helper functionality.
 EUniverse GetUniverse();
 
+#ifdef GC_DLL
 bool BYieldingGetChangedItemDefinitions( int iComparisonColumn, CUtlVector<item_definition_index_t>& out_vecChangedDefIndices );
 bool BYieldingUpdateItemDefinitionStateHashValue( GCSDK::CSQLAccess& sqlAccess, item_definition_index_t unItemDef, int iUpdatedColumn );
 #endif // GC_DLL

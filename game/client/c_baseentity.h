@@ -745,7 +745,7 @@ public:
 	virtual void					SetHealth(int iHealth) {}
 	virtual int						GetHealth() const { return 0; }
 	virtual int						GetMaxHealth() const { return 1; }
-	virtual bool					IsVisibleToTargetID( void ) { return false; }
+	virtual bool					IsVisibleToTargetID( void ) const { return false; }
 
 	// Returns the health fraction
 	float							HealthFraction() const;

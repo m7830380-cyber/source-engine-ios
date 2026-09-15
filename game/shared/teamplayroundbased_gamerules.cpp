@@ -90,6 +90,7 @@ BEGIN_NETWORK_TABLE_NOBASE( CTeamplayRoundBasedRules, DT_TeamplayRoundBasedRules
 	RecvPropBool( RECVINFO( m_bStopWatch ) ),
 	RecvPropBool( RECVINFO( m_bMultipleTrains ) ),
 	RecvPropArray3( RECVINFO_ARRAY(m_bPlayerReady), RecvPropBool( RECVINFO(m_bPlayerReady[0]) ) ),
+	RecvPropInt( RECVINFO( m_nRoundsPlayed ) ),
 
 #else
 	SendPropInt( SENDINFO( m_iRoundState ), 5 ),
@@ -107,6 +108,7 @@ BEGIN_NETWORK_TABLE_NOBASE( CTeamplayRoundBasedRules, DT_TeamplayRoundBasedRules
 	SendPropBool( SENDINFO( m_bStopWatch ) ),
 	SendPropBool( SENDINFO( m_bMultipleTrains ) ),
 	SendPropArray3( SENDINFO_ARRAY3(m_bPlayerReady), SendPropBool( SENDINFO_ARRAY(m_bPlayerReady) ) ),
+	SendPropInt( SENDINFO( m_nRoundsPlayed ), 4, SPROP_UNSIGNED ),
 #endif
 END_NETWORK_TABLE()
 

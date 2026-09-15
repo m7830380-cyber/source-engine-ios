@@ -2635,6 +2635,13 @@ CSteamID GetSteamIDForPlayerIndex( int iPlayerIndex )
 	return CSteamID();
 }
 
+#else
+
+CSteamID GetSteamIDForPlayerIndex( int iPlayerIndex )
+{
+	return CSteamID();
+}
+
 #endif
 
  

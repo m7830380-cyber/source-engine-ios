@@ -9702,4 +9702,9 @@ EUniverse GetUniverse()
 {
 	return GGCHost()->GetUniverse();
 }
+#else
+EUniverse GetUniverse()
+{
+	return k_EUniversePublic;
+}
 #endif // GC_DLL

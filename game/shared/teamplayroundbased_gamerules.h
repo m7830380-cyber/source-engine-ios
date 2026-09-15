@@ -243,6 +243,7 @@ public:
 	bool HasMultipleTrains( void ){ return m_bMultipleTrains; }
 
 	virtual int		GetBonusRoundTime( bool bGameOver = false );
+	int				GetRoundsPlayed( void ) { return m_nRoundsPlayed; }
 
 #if defined(TF_CLIENT_DLL) || defined(TF_DLL)
 
@@ -367,7 +368,6 @@ public:
 	bool PlayThrottledAlert( int iTeam, const char *sound, float fDelayBeforeNext );
 
 	void BroadcastSound( int iTeam, const char *sound, int iAdditionalSoundFlags = 0 );
-	int GetRoundsPlayed( void ) { return m_nRoundsPlayed; }
 
 	virtual void RecalculateControlPointState( void ){ return; }
 
@@ -510,7 +510,6 @@ protected:
 	float						m_flRoundStartTime;		// time the current round started
 	float						m_flNewThrottledAlertTime;		// time that we can play another throttled alert
 
-	int							m_nRoundsPlayed;
 	bool						m_bUseAddScoreAnim;
 
 	gamerules_roundstate_t		m_prevState;
@@ -560,6 +559,7 @@ protected:
 	CNetworkVar( bool, m_bStopWatch );
 	CNetworkVar( bool, m_bMultipleTrains ); // two trains in this map?
 	CNetworkArray( bool,		m_bPlayerReady, MAX_PLAYERS );
+	CNetworkVar( int,			m_nRoundsPlayed );
 	
 public:
 	CNetworkArray( float,		m_TeamRespawnWaveTimes, MAX_TEAMS );	// Time between each team's respawn wave

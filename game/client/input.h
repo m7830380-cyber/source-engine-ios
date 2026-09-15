@@ -112,6 +112,8 @@ public:
 
 	virtual	bool		EnableJoystickMode();
 
+	virtual bool		IsSteamControllerActive() { return false; }
+
 // Private Implementation
 private:
 	// Implementation specific initialization

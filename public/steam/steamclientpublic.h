@@ -28,6 +28,7 @@
 // General result codes
 enum EResult
 {
+	k_EResultNone = 0,							// no result
 	k_EResultOK	= 1,							// success
 	k_EResultFail = 2,							// generic failure 
 	k_EResultNoConnection = 3,					// no/failed network connection

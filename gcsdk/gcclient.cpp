@@ -320,6 +320,35 @@ void CGCClient::AddSOCacheListener( const CSteamID &ownerID, ISharedObjectListen
 	pCache->AddListener( pListener );
 }
 
+CGCClientSharedObjectCache* CGCClient::AddLocalSOCache( const CSteamID& ownerID, void* pubData, uint32 cubData )
+{
+	CMsgSOCacheSubscribed msg;
+	if ( !pubData || cubData == 0 || !msg.ParseFromArray( pubData, cubData ) )
+		return NULL;
+
+	CGCClientSharedObjectCache *pSOCache = FindSOCache( ownerID, true );
+	if ( !pSOCache )
+		return NULL;
+
+	if ( !pSOCache->BParseCacheSubscribedMsg( msg ) )
+		return NULL;
+
+	return pSOCache;
+}
+
+void CGCClient::RemoveLocalSOCache( CGCClientSharedObjectCache* pSOCache )
+{
+	if ( !pSOCache )
+		return;
+
+	CUtlMap< CSteamID, CGCClientSharedObjectCache * >::IndexType_t nCache = m_mapSOCache.Find( pSOCache->GetOwner() );
+	if ( m_mapSOCache.IsValidIndex( nCache ) && m_mapSOCache[nCache] == pSOCache )
+	{
+		m_mapSOCache.RemoveAt( nCache );
+	}
+	delete pSOCache;
+}
+
 //------------------------------------------------------------------------------
 // Purpose: Remove listener from the SO cache, if he is listening
 //------------------------------------------------------------------------------

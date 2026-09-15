@@ -71,6 +71,9 @@ public:
 
 	void Dump();
 
+	CGCClientSharedObjectCache* AddLocalSOCache( const CSteamID& ownerID, void* pubData, uint32 cubData );
+	void RemoveLocalSOCache( CGCClientSharedObjectCache* pSOCache );
+
 #ifdef DBGFLAG_VALIDATE
 	static void ValidateStatics( CValidator &validator );
 #endif

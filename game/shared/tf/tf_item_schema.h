@@ -21,6 +21,8 @@
 #include "util_shared.h"
 #endif
 
+const char *UTIL_GetRandomSoundFromEntry( const char *pszSoundEntryName );
+
 const int k_iMvmMissionIndex_Any = -1;
 const int k_iMvmMissionIndex_NotInSchema = -2;
 

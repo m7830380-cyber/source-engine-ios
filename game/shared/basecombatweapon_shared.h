@@ -237,6 +237,8 @@ public:
 	virtual bool			HolsterOnDetach() { return false; }
 	virtual bool			IsHolstered(){ return false; }
 	virtual void			Detach() {}
+	virtual bool			ForceWeaponSwitch() const { return false; }
+	virtual bool			CanPerformSecondaryAttack() const { return true; }
 
 	// Weapon behaviour
 	virtual void			ItemPreFrame( void );					// called each frame by the player PreThink
@@ -265,7 +267,7 @@ public:
 	bool					DefaultReload( int iClipSize1, int iClipSize2, int iActivity );
 	bool					ReloadsSingly( void ) const;
 
-	virtual bool			AutoFiresFullClip( void ) { return false; }
+	virtual bool			AutoFiresFullClip( void ) const { return false; }
 	virtual bool			CanOverload( void ) { return false; }
 	virtual void			UpdateAutoFire( void );
 
@@ -388,6 +390,7 @@ public:
 	virtual Activity		ActivityOverride( Activity baseAct, bool *pRequired );
 	virtual	acttable_t*		ActivityList( void ) { return NULL; }
 	virtual	int				ActivityListCount( void ) { return 0; }
+	virtual	acttable_t*		ActivityList( int &iActivityCount ) { iActivityCount = ActivityListCount(); return ActivityList(); }
 
 	virtual void			Activate( void );
 
@@ -502,6 +505,7 @@ public:
 	virtual void			GetToolRecordingState( KeyValues *msg );
 
 	virtual void			GetWeaponCrosshairScale( float &flScale ) { flScale = 1.f; }
+	virtual const Vector&	GetViewmodelOffset() { return vec3_origin; }
 
 #if !defined USES_ECON_ITEMS
 	// Viewmodel overriding

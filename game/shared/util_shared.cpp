@@ -34,6 +34,8 @@
 bool NPC_CheckBrushExclude( CBaseEntity *pEntity, CBaseEntity *pBrush );
 #endif
 
+#include "SoundEmitterSystem/isoundemittersystembase.h"
+
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
@@ -1097,6 +1099,19 @@ int UTIL_StringFieldToInt( const char *szValue, const char **pValueStrings, int 
 
 	Assert(0);
 	return -1;
+}
+
+const char *UTIL_GetRandomSoundFromEntry( const char *pszSoundEntryName )
+{
+	if ( !pszSoundEntryName || !pszSoundEntryName[0] )
+		return NULL;
+
+	extern ISoundEmitterSystemBase *soundemitterbase;
+	if ( !soundemitterbase )
+		return pszSoundEntryName;
+
+	const char *pszWave = soundemitterbase->GetWavFileForSound( pszSoundEntryName, GENDER_NONE );
+	return ( pszWave && pszWave[0] ) ? pszWave : pszSoundEntryName;
 }
 
 

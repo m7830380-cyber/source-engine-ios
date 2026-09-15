@@ -58,6 +58,8 @@ class C_BaseCombatCharacter;
 class CEntityMapData;
 class ConVar;
 class CDmgAccumulator;
+class IHasAttributes;
+class IMaterial;
 
 struct CSoundParameters;
 
@@ -686,7 +688,7 @@ public:
 
 	virtual bool					ShouldDraw();
 	inline	bool					IsVisible() const { return m_hRender != INVALID_CLIENT_RENDER_HANDLE; }
-			void					UpdateVisibility();
+	virtual	void					UpdateVisibility();
 	
 	// Returns true if the entity changes its position every frame on the server but it doesn't
 	// set animtime. In that case, the client returns true here so it copies the server time to
@@ -993,6 +995,10 @@ public:
 
 	virtual void					PhysicsSimulate( void );
 	virtual bool					IsAlive( void );
+	virtual IHasAttributes			*GetHasAttributesInterfacePtr() const { return m_pAttributes; }
+	virtual IMaterial				*GetEconWeaponMaterialOverride( int iTeam ) { return NULL; }
+	virtual bool					IsHealthBarVisible( void ) const { return false; }
+	IHasAttributes					*m_pAttributes;
 
 	bool							IsInWorld( void ) { return true; }
 

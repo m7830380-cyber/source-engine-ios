@@ -586,6 +586,9 @@ char* ReadAndAllocStringValue( KeyValues *pSub, const char *pName, const char *p
 
 int UTIL_StringFieldToInt( const char *szValue, const char **pValueStrings, int iNumStrings );
 
+// Resolve a soundscript entry to a random wave. TF item schema uses this for quest lines.
+const char *UTIL_GetRandomSoundFromEntry( const char *pszSoundEntryName );
+
 //-----------------------------------------------------------------------------
 // Holidays
 //-----------------------------------------------------------------------------

@@ -78,6 +78,7 @@ class CAI_Senses;
 class CSquadNPC;
 class variant_t;
 class CEventAction;
+class IHasAttributes;
 typedef struct KeyValueData_s KeyValueData;
 class CUserCmd;
 class CSkyCamera;
@@ -910,6 +911,9 @@ public:
 	virtual int		TakeHealth( float flHealth, int bitsDamageType );
 
 	virtual bool	IsAlive( void );
+	virtual IHasAttributes *GetHasAttributesInterfacePtr() const { return m_pAttributes; }
+	virtual bool	IsHealthBarVisible( void ) const { return false; }
+	IHasAttributes	*m_pAttributes;
 	// Entity killed (only fired once)
 	virtual void	Event_Killed( const CTakeDamageInfo &info );
 	

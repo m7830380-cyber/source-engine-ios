@@ -388,7 +388,7 @@ public:
 
 #if defined USES_ECON_ITEMS
 	// Wearables
-	void					UpdateWearables();
+	virtual void			UpdateWearables();
 	C_EconWearable			*GetWearable( int i ) { return m_hMyWearables[i]; }
 	int						GetNumWearables( void ) { return m_hMyWearables.Count(); }
 #endif

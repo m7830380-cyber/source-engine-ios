@@ -230,10 +230,10 @@ public:
 	float GetRoundRestartTime( void ) { return m_flRestartRoundTime; }
 
 	//Arena Mode
-	virtual bool	IsInArenaMode( void ) { return false; }
+	virtual bool	IsInArenaMode( void ) const { return false; }
 
 	//Koth Mode
-	virtual bool	IsInKothMode( void ) { return false; }
+	virtual bool	IsInKothMode( void ) const { return false; }
 
 	//Training Mode
 	virtual bool	IsInTraining( void ) { return false; }
@@ -242,7 +242,7 @@ public:
 	void SetMultipleTrains( bool bMultipleTrains ){ m_bMultipleTrains = bMultipleTrains; }
 	bool HasMultipleTrains( void ){ return m_bMultipleTrains; }
 
-	virtual int		GetBonusRoundTime( void );
+	virtual int		GetBonusRoundTime( bool bGameOver = false );
 
 #if defined(TF_CLIENT_DLL) || defined(TF_DLL)
 

@@ -904,6 +904,7 @@ C_BaseEntity::C_BaseEntity() :
 	m_DataChangeEventRef = -1;
 	m_EntClientFlags = 0;
 	m_bEnableRenderingClipPlane = false;
+	m_pAttributes = NULL;
 
 	m_iParentAttachment = 0;
 	m_nRenderFXBlend = 255;

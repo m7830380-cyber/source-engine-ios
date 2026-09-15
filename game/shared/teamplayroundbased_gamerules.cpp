@@ -3241,7 +3241,7 @@ bool CTeamplayRoundBasedRules::IsInHighlanderMode( void )
 #endif
 }
 
-int CTeamplayRoundBasedRules::GetBonusRoundTime( void )
+int CTeamplayRoundBasedRules::GetBonusRoundTime( bool bGameOver )
 {
 	return MAX( 5, mp_bonusroundtime.GetFloat() );
 }

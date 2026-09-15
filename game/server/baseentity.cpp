@@ -358,6 +358,7 @@ CBaseEntity::CBaseEntity( bool bServerOnly )
 #endif
 
 	m_bAlternateSorting = false;
+	m_pAttributes = NULL;
 	m_CollisionGroup = COLLISION_GROUP_NONE;
 	m_iParentAttachment = 0;
 	CollisionProp()->Init( this );

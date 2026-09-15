@@ -152,6 +152,9 @@ protected:
 	void		ScaleMouse( float *x, float *y );
 	virtual void ApplyMouse( QAngle& viewangles, CUserCmd *cmd, float mouse_x, float mouse_y );
 	virtual void MouseMove ( CUserCmd *cmd );
+	void		TouchScale( float &dx, float &dy );
+	void		ApplyTouch( QAngle &viewangles, CUserCmd *cmd, float dx, float dy );
+	void		TouchMove( CUserCmd *cmd );
 
 	// Joystick  movement input helpers
 	void		ControllerMove ( float frametime, CUserCmd *cmd );

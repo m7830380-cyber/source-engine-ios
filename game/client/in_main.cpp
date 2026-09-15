@@ -952,6 +952,7 @@ void CInput::ControllerMove( float frametime, CUserCmd *cmd )
 
 	SteamControllerMove( frametime, cmd );
 	JoyStickMove( frametime, cmd );
+	TouchMove( cmd );
 
 	// NVNT if we have a haptic device..
 	if(haptics && haptics->HasDevice())

@@ -10,6 +10,10 @@
 #ifndef STEAM_API_COMMON_H
 #define STEAM_API_COMMON_H
 
+#ifdef STEAM_API_H
+// Engine steam_api.h already defines CCallbackBase and related helpers.
+#else
+
 #include "steamtypes.h"
 #include "steamclientpublic.h"
 
@@ -234,5 +238,7 @@ public:
 
 // Internal implementation details for all of the above
 #include "steam_api_internal.h"
+
+#endif // STEAM_API_H
 
 #endif // STEAM_API_COMMON_H

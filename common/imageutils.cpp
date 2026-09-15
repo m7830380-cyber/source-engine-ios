@@ -2290,6 +2290,23 @@ ConversionErrorType ImgUtl_LoadPNGBitmapFromBuffer( CUtlBuffer &fileData, Bitmap
 #endif
 }
 
+ConversionErrorType ImgUtl_GetPNGSize( CUtlBuffer &fileData, uint32_t &uWidth, uint32_t &uHeight )
+{
+	if ( fileData.TellPut() < 24 )
+		return CE_ERROR_PARSING_SOURCE;
+
+	const unsigned char *p = (const unsigned char *)fileData.Base();
+	static const unsigned char pngsig[8] = { 137, 80, 78, 71, 13, 10, 26, 10 };
+	if ( memcmp( p, pngsig, 8 ) != 0 )
+		return CE_ERROR_PARSING_SOURCE;
+	if ( memcmp( p + 12, "IHDR", 4 ) != 0 )
+		return CE_ERROR_PARSING_SOURCE;
+
+	uWidth  = ( (uint32_t)p[16] << 24 ) | ( (uint32_t)p[17] << 16 ) | ( (uint32_t)p[18] << 8 ) | (uint32_t)p[19];
+	uHeight = ( (uint32_t)p[20] << 24 ) | ( (uint32_t)p[21] << 16 ) | ( (uint32_t)p[22] << 8 ) | (uint32_t)p[23];
+	return CE_SUCCESS;
+}
+
 ConversionErrorType ImgUtl_SavePNGBitmapToBuffer( CUtlBuffer &fileData, const Bitmap_t &bitmap )
 {
 #if HAVE_PNG

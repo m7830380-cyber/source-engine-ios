@@ -38,7 +38,7 @@ public:
 	void EXPORT FlyThink( void );
 	void EXPORT PackTouch( CBaseEntity *pOther );
 
-	void InitWeaponDrop( CTFPlayer *pPlayer, CTFWeaponBase *pWeapon, int nSkin, bool bEmpty, bool bIsSuicide );
+	void InitAmmoPack( CTFPlayer *pPlayer, CTFWeaponBase *pWeapon, int nSkin, bool bEmpty, bool bIsSuicide, float flAmmoRatio = 0.5f );
 
 	virtual unsigned int PhysicsSolidMaskForEntity( void ) const;
 
@@ -63,6 +63,7 @@ private:
 	int m_iAmmo[TF_AMMO_COUNT];
 
 	float m_flCreationTime;
+	float m_flAmmoRatio;
 
 	bool m_bEmptyPack;		// If true, the pack gives nothing when picked up.
 

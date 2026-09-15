@@ -26,8 +26,12 @@ enum RelativePositionType
 
 struct EventInfo
 {
+	EventInfo() : m_delay(0.0f), m_param() {}
+	
 	CFmtStr m_target;
 	CFmtStr m_action;
+	variant_t m_param;
+	float m_delay;
 };
 
 enum SpawnLocationResult
@@ -191,7 +195,7 @@ class CTankSpawner : public IPopulationSpawner
 public:
 	CTankSpawner( IPopulator *populator );
 
-	virtual string_t GetClassIcon( int nSpawnNum = -1 ) { return MAKE_STRING( "tank" ); }
+	virtual string_t GetClassIcon( int nSpawnNum = -1 );
 	virtual int GetHealth( int nSpawnNum = -1  ){ return m_health; }
 
 	virtual bool Parse( KeyValues *data );
@@ -214,6 +218,7 @@ public:
 	int m_skin;
 	EventInfo *m_onKilledOutput;
 	EventInfo *m_onBombDroppedOutput;
+	string_t m_iszClassIcon;
 };
 
 //-----------------------------------------------------------------------

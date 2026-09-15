@@ -398,14 +398,6 @@ public:
 //---------------------------------------------------------------------------------------------
 bool CTFBotMedicHeal::CanDeployUber( CTFBot *me, const CWeaponMedigun* pMedigun ) const
 {
-#ifdef STAGING_ONLY
-	if ( TFGameRules()->IsMannVsMachineMode() && 
-			me && me->HasAttribute( CTFBot::PROJECTILE_SHIELD ) && 
-			pMedigun && ( pMedigun->GetMedigunShield() != NULL ) && pMedigun->HasPermanentShield() && ( ( pMedigun->GetMedigunType() == MEDIGUN_STANDARD ) || ( pMedigun->GetMedigunType() == MEDIGUN_UBER ) ) )
-	{
-		return false;
-	}
-#endif
 
 	return true;
 }
@@ -708,32 +700,6 @@ ActionResult< CTFBot >	CTFBotMedicHeal::Update( CTFBot *me, float interval )
 			}
 		}
 		
-#ifdef STAGING_ONLY
-		// try to activate shield when I'm not using uber so I don't waste it
-		if ( TFGameRules()->IsMannVsMachineMode() && me->HasAttribute( CTFBot::PROJECTILE_SHIELD ) && medigun->GetMedigunShield() == NULL )
-		{
-			// activate shield ASAP for permanent shield medigun
-			if ( medigun->HasPermanentShield() )
-			{
-				me->PressSpecialFireButton();
-				isUsingProjectileShield = true;
-			}
-			else
-			{
-				isUsingProjectileShield = me->m_Shared.IsRageDraining();
-				// when the rage is ready to deploy and we're not using uber
-				if ( me->m_Shared.GetRageMeter() >= 100.f && !isUsingProjectileShield && !useUber )
-				{
-					// use shield if me or my patient is getting attacked
-					if ( me->GetTimeSinceLastInjury( GetEnemyTeam( me->GetTeamNumber() ) ) < 1.0f || m_patient->GetTimeSinceLastInjury( GetEnemyTeam( m_patient->GetTeamNumber() ) ) < 1.0f )
-					{
-						me->PressSpecialFireButton();
-						isUsingProjectileShield = true;
-					}
-				}
-			}
-		}
-#else // remove this when we ship medic shield MVM update
 		// try to activate shield when I'm not using uber so I don't waste it
 		if ( TFGameRules()->IsMannVsMachineMode() && me->HasAttribute( CTFBot::PROJECTILE_SHIELD ) )
 		{
@@ -749,7 +715,6 @@ ActionResult< CTFBot >	CTFBotMedicHeal::Update( CTFBot *me, float interval )
 				}
 			}
 		}
-#endif
 	}
 
 	bool isThreatened = false;

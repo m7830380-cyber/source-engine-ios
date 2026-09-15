@@ -10,9 +10,7 @@
 
 #include "tf_weaponbase_gun.h"
 #include "tf_weaponbase_rocket.h"
-#ifdef STAGING_ONLY
-#include "tf_weapon_jar.h"
-#endif // STAGING_ONLY
+#include "tf_flame.h"
 
 // Client specific.
 #ifdef CLIENT_DLL
@@ -23,9 +21,7 @@
 
 	#define CTFFlameThrower C_TFFlameThrower
 	#define CTFFlameRocket C_TFFlameRocket
-#ifdef STAGING_ONLY
-	#define CTFProjectile_Napalm C_TFProjectile_Napalm
-#endif // STAGING_ONLY
+	#define CTFWeaponFlameBall C_TFWeaponFlameBall
 #else
 	#include "tf_projectile_rocket.h"
 	#include "baseentity.h"
@@ -41,15 +37,15 @@ enum FlameThrowerState_t
 	FT_STATE_SECONDARY,
 };
 
-enum EFlameThrowerAirblastFunction
+enum FlameThrowerMode_t
 {
-	TF_FUNCTION_AIRBLAST_PUSHBACK					= 0x01,
-	TF_FUNCTION_AIRBLAST_PUT_OUT_TEAMMATES			= 0x02,
-	TF_FUNCTION_AIRBLAST_REFLECT_PROJECTILES		= 0x04,
-
-	TF_FUNCTION_AIRBLAST_PUSHBACK__STUN				= 0x08,			// dependent on TF_FUNCTION_AIRBLAST_PUSHBACK
-	TF_FUNCTION_AIRBLAST_PUSHBACK__VIEW_PUNCH		= 0x10,			// dependent on TF_FUNCTION_AIRBLAST_PUSHBACK
+	TF_FLAMETHROWER_MODE_NORMAL = 0,
+	TF_FLAMETHROWER_MODE_PHLOG = 1,
+	TF_FLAMETHROWER_MODE_GIANT = 2,
+	TF_FLAMETHROWER_MODE_RAINBOW = 3
 };
+
+#define MAX_PARTICLE_EFFECT_NAME_LENGTH 128
 
 //=========================================================
 // Flamethrower Weapon
@@ -69,23 +65,27 @@ public:
 	CTFFlameThrower();
 	~CTFFlameThrower();
 
-	virtual void	Spawn( void );
+	virtual void	Spawn( void ) OVERRIDE;
+	virtual void	UpdateOnRemove( void ) OVERRIDE;
 
-	virtual int		GetWeaponID( void ) const { return TF_WEAPON_FLAMETHROWER; }
+	virtual int		GetWeaponID( void ) const OVERRIDE { return TF_WEAPON_FLAMETHROWER; }
 
-	virtual bool	Holster( CBaseCombatWeapon *pSwitchingTo );
-	virtual void	ItemPostFrame( void );
-	virtual void	PrimaryAttack();
-	virtual void	SecondaryAttack();
-	virtual bool	Lower( void );
-	virtual void	WeaponReset( void );
+	virtual bool	Holster( CBaseCombatWeapon *pSwitchingTo ) OVERRIDE;
+	virtual void	ItemPostFrame( void ) OVERRIDE;
+	virtual void	PrimaryAttack() OVERRIDE;
+	virtual void	SecondaryAttack() OVERRIDE;
+	virtual bool	Lower( void ) OVERRIDE;
+	virtual void	WeaponReset( void ) OVERRIDE;
+	virtual void	WeaponIdle( void ) OVERRIDE;
 
 	virtual void	DestroySounds( void );
-	virtual void	Precache( void );
+	virtual void	Precache( void ) OVERRIDE;
 
 	bool			CanAirBlast() const;
+	bool			CanAirBlastPushPlayer() const;
+	bool			CanAirBlastDeflectProjectile() const;
+	bool			CanAirBlastPutOutTeammate() const;
 
-	bool			SupportsAirBlastFunction( EFlameThrowerAirblastFunction eFunction ) const;
 	void			FireAirBlast( int iAmmoPerShot );
 
 	float			GetSpinUpTime( void ) const;
@@ -110,23 +110,23 @@ public:
 	const char*		GetEffectLabelText( void ) { return "#TF_PYRORAGE"; }
 	bool			EffectMeterShouldFlash( void );
 
-	virtual bool	Deploy( void );
+	virtual bool	Deploy( void ) OVERRIDE;
 
 #if defined( CLIENT_DLL )
 
-	virtual void	OnDataChanged(DataUpdateType_t updateType);
-	virtual void	UpdateOnRemove( void );
-	virtual void	SetDormant( bool bDormant );
-	virtual int		GetWorldModelIndex( void );
+	virtual void	OnDataChanged(DataUpdateType_t updateType) OVERRIDE;
+	virtual void	SetDormant( bool bDormant ) OVERRIDE;
+	virtual int		GetWorldModelIndex( void ) OVERRIDE;
 
 	//	Start/stop flame sound and particle effects
 	void			StartFlame();
 	void			StopFlame( bool bAbrupt = false );
 
-	virtual void		RestartParticleEffect();
+	virtual void		RestartParticleEffect() OVERRIDE;
 	virtual const char* FlameEffectName( bool bIsFirstPersonView );	
 	virtual const char* FlameCritEffectName( bool bIsFirstPersonView );
 	virtual const char* FullCritChargedEffectName( void );
+	const char*			GetParticleEffectName( void );
 
 	void ClientEffectsThink( void );
 
@@ -144,24 +144,29 @@ public:
 	void			SetHitTarget( void );
 	void			HitTargetThink( void );
 
-	virtual Vector	GetDeflectionSize();
-	virtual bool	DeflectPlayer( CTFPlayer *pTarget, CTFPlayer *pOwner, Vector &vecForward, Vector &vecCenter, Vector &vecSize );
-	virtual bool	DeflectEntity( CBaseEntity *pTarget, CTFPlayer *pOwner, Vector &vecForward, Vector &vecCenter, Vector &vecSize );
-	virtual void	PlayDeflectionSound( bool bPlayer );
+	virtual float	GetDeflectionRadius() const OVERRIDE;
+	virtual bool	DeflectPlayer( CTFPlayer *pTarget, CTFPlayer *pOwner, Vector &vecForward ) OVERRIDE;
+	virtual bool	DeflectEntity( CBaseEntity *pTarget, CTFPlayer *pOwner, Vector &vecForward ) OVERRIDE;
+	virtual void	PlayDeflectionSound( bool bPlayer ) OVERRIDE;
+
+	virtual float	GetInitialAfterburnDuration() const OVERRIDE;
+	virtual float	GetAfterburnRateOnHit() const OVERRIDE;
+
 #endif
 
-#ifdef STAGING_ONLY
-	bool			RocketPackCanActivate( int nAmmoCost );
-	bool			RocketPackLaunch( int nAmmoCost );
-	bool			ShootsNapalm( void );
-#endif // STAGING_ONLY
-
-	virtual void	FireGameEvent( IGameEvent *event );
+	virtual void	FireGameEvent( IGameEvent *event ) OVERRIDE;
 
 	void CalculateHalloweenSpell( void );
+	int GetFlameThrowerMode( void ) const { int iMode = 0; CALL_ATTRIB_HOOK_INT( iMode, set_weapon_mode ); return iMode; }
+	bool IsCritFire( void ) { return m_bCritFire; }
 
 private:
 	Vector GetMuzzlePosHelper( bool bVisualPos );
+	const char *GetNewFlameEffectInternal( int nTeam, bool bCrit );
+#if defined( GAME_DLL )
+	void ComputeCrayAirBlastForce( CTFPlayer *pTarget, CTFPlayer *pPlayer, Vector &vecForward, Vector &vecOutForce );
+#endif
+
 	CNetworkVar( int, m_iWeaponState );
 	CNetworkVar( bool, m_bCritFire );
 	CNetworkVar( bool, m_bHitTarget );
@@ -169,10 +174,13 @@ private:
 	CNetworkVar( int, m_iDamagingFlames );		// Number of flames that have done damage
 	CNetworkVar( float, m_flChargeBeginTime );
 	CNetworkVar( float, m_flSpinupBeginTime );
+	CNetworkHandle( CTFFlameManager, m_hFlameManager );
 	CNetworkVar( bool, m_bHasHalloweenSpell );
 
 	float m_flStartFiringTime;
 	float m_flNextPrimaryAttackAnim;
+	float m_flSecondaryAnimTime;
+	float m_flMinPrimaryAttackBurstTime;
 
 	int			m_iParticleWaterLevel;
 	float		m_flAmmoUseRemainder;
@@ -198,16 +206,22 @@ private:
 	class FlameEffect_t
 	{
 	public:
-		FlameEffect_t( CTFWeaponBase* pOwner ) : m_pFlameEffect(NULL), m_pOwner(pOwner), m_hEffectWeapon(NULL)
+		FlameEffect_t( CTFFlameThrower* pFlamethrower )
+			: m_pFlameEffect( NULL )
+			, m_pFlamethrower( pFlamethrower )
+			, m_pOwner( NULL )
+			, m_hEffectWeapon( NULL )
 		{}
 
-		void StartEffects( const char* pszEffectName);
+		void StartEffects( CTFPlayer *pTFOwner, const char *pszEffectName );
 		bool StopEffects();
+		CNewParticleEffect *GetEffect() { return m_pFlameEffect; }
 
 	private:
 		CNewParticleEffect*	m_pFlameEffect;
-		CTFWeaponBase*		m_pOwner;
-		EHANDLE			m_hEffectWeapon;
+		CTFFlameThrower*	m_pFlamethrower;
+		CTFPlayer*			m_pOwner;
+		EHANDLE				m_hEffectWeapon;
 	};
 
 	FlameEffect_t m_FlameEffects;
@@ -215,6 +229,12 @@ private:
 #else
 	float		m_flTimeToStopHitSound;
 #endif
+
+	// used for the new style flames (via CTFFlameManager)
+	char m_szParticleEffectBlue[MAX_PARTICLE_EFFECT_NAME_LENGTH];
+	char m_szParticleEffectRed[MAX_PARTICLE_EFFECT_NAME_LENGTH];
+	char m_szParticleEffectBlueCrit[MAX_PARTICLE_EFFECT_NAME_LENGTH];
+	char m_szParticleEffectRedCrit[MAX_PARTICLE_EFFECT_NAME_LENGTH];
 
 	CTFFlameThrower( const CTFFlameThrower & );
 };
@@ -270,7 +290,6 @@ private:
 	float					m_flDmgAmount;			// amount of base damage
 	CUtlVector<EHANDLE>		m_hEntitiesBurnt;		// list of entities this flame has burnt
 	EHANDLE					m_hAttacker;			// attacking player
-	int						m_iAttackerTeam;		// team of attacking player
 	bool					m_bCritFromBehind;		// Always crits from behind.
 	bool					m_bBurnedEnemy;			// We track hitting to calculate hit/miss ratio in the Flamethrower
 
@@ -278,50 +297,26 @@ private:
 };
 #endif // GAME_DLL
 
-
-#ifdef STAGING_ONLY
-//-----------------------------------------------------------------------------
-// Purpose:
-//-----------------------------------------------------------------------------
-class CTFProjectile_Napalm : public CTFProjectile_Jar
+class CTraceFilterIgnoreObjects : public CTraceFilterSimple
 {
-	DECLARE_CLASS( CTFProjectile_Napalm, CTFProjectile_Jar );
-	DECLARE_NETWORKCLASS();
-	DECLARE_PREDICTABLE();
-	DECLARE_DATADESC();
-
 public:
-	CTFProjectile_Napalm();
-	~CTFProjectile_Napalm();
+	// It does have a base, but we'll never network anything below here..
+	DECLARE_CLASS( CTraceFilterIgnoreObjects, CTraceFilterSimple );
 
-	virtual void Precache();
-	virtual void Spawn();
-#ifdef GAME_DLL
-	static CTFProjectile_Napalm *Create( CBaseCombatCharacter *pOwner, CTFFlameThrower *pLauncher );
-	virtual int UpdateTransmitState();
-	void NapalmThink( void );
-	virtual void Explode( trace_t *pTrace, int bitsDamageType );
-	virtual void PipebombTouch( CBaseEntity *pOther );
-	virtual void ApplyBlastDamage( CTFPlayer *pThrower, Vector vecOrigin );
-	virtual bool InitialExplodeEffects( CTFPlayer *pThrower, const trace_t *pTrace );
-	virtual void ExplodeEffectOnTarget( CTFPlayer *pThrower, CTFPlayer *pTarget, CBaseCombatCharacter *pBaseTarget );
-	virtual const char *GetImpactEffect( void );
-	virtual void SetCustomPipebombModel( void );
-#endif
+	CTraceFilterIgnoreObjects( const IHandleEntity *passentity, int collisionGroup )
+		: CTraceFilterSimple( passentity, collisionGroup )
+	{
+	}
 
-#ifdef CLIENT_DLL
-	virtual void OnDataChanged( DataUpdateType_t updateType );
-	virtual const char *GetTrailParticleName( void );
-#endif // CLIENT_DLL
-	
-	CNetworkHandle( CTFFlameThrower, m_hFlameThrower );
+	virtual bool ShouldHitEntity( IHandleEntity *pServerEntity, int contentsMask )
+	{
+		CBaseEntity *pEntity = EntityFromEntityHandle( pServerEntity );
 
-#ifdef GAME_DLL
-	Vector m_vecBaseVelocity;
-	float m_flRemoveTime;
-	int m_nHitCount;
-	float m_flLastBurnTime;
-#endif // CLIENT_DLL
+		if ( pEntity && pEntity->IsBaseObject() )
+			return false;
+
+		return BaseClass::ShouldHitEntity( pServerEntity, contentsMask );
+	}
 };
-#endif // STAGING_ONLY
+
 #endif // TF_WEAPON_FLAMETHROWER_H

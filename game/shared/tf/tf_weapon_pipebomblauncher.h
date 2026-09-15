@@ -111,13 +111,14 @@ protected:
 	typedef CHandle<CTFGrenadePipebombProjectile>	PipebombHandle;
 	CUtlVector<PipebombHandle>		m_Pipebombs;
 
-	CNetworkVar( float, m_flChargeBeginTime );
+	virtual void SetInternalChargeBeginTime( float flChargeBeginTime ) { m_flChargeBeginTime = flChargeBeginTime; }
+	float	GetInternalChargeBeginTime() const { return m_flChargeBeginTime; }
 	float	m_flLastDenySoundTime;
 	bool	m_bNoAutoRelease;
 	bool	m_bWantsToShoot;
 
 private:
-
+	CNetworkVar( float, m_flChargeBeginTime );
 	CTFPipebombLauncher( const CTFPipebombLauncher & ) {}
 };
 

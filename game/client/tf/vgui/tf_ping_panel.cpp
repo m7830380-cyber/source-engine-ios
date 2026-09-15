@@ -9,44 +9,46 @@
 
 #include "vgui_controls/ProgressBar.h"
 #include "vgui_controls/AnimationController.h"
+#include "vgui_controls/cvartogglecheckbutton.h"
+#include "vgui_controls/ComboBox.h"
 
 #include "tf_gc_client.h"
+#include "tf_partyclient.h"
 
 #include "clientmode_tf.h"
 
 #include "tf_matchmaking_shared.h"
+#include "tf_matchmaking_dashboard.h"
 
-static void OnConVarChangeCustomPingTolerance( IConVar *pConVar, const char *pOldString, float flOldValue )
+Panel* GetDashboardPingPanel()
 {
-	if ( GTFGCClientSystem() )
-	{
-		// Otherwise the client system will do this when it starts
-		GTFGCClientSystem()->UpdateCustomPingTolerance();
-	}
+	// Force to 12v12.  It's got the most players
+	CTFPingPanel* pPanel = new CTFPingPanel( NULL, "PingPanel", k_eTFMatchGroup_Casual_12v12 );
+	pPanel->AddActionSignalTarget( GetMMDashboard() );
+	return pPanel;
 }
 
-ConVar tf_custom_ping_enabled( "tf_custom_ping_enabled", "0", FCVAR_ARCHIVE, "",
-                               false, 0.f, false, 0.f, OnConVarChangeCustomPingTolerance );
-ConVar tf_custom_ping( "tf_custom_ping", "100", FCVAR_ARCHIVE, "",
-                       true, (float)CUSTOM_PING_TOLERANCE_MIN, true, (float)CUSTOM_PING_TOLERANCE_MAX,
-                       OnConVarChangeCustomPingTolerance );
+REGISTER_FUNC_FOR_DASHBOARD_PANEL_TYPE( GetDashboardPingPanel, k_eMMSettings );
 
-#ifdef STAGING_ONLY
-ConVar tf_custom_ping_add_random_datacenters( "tf_custom_ping_add_random_datacenters", "0" );
-#endif // STAGING_ONLY
 
-CTFPingPanel::CTFPingPanel( Panel* pPanel, const char *pszName, EMatchGroup eMatchGroup )
-	: EditablePanel( pPanel, pszName ),
+CTFPingPanel::CTFPingPanel( Panel* pPanel, const char *pszName, ETFMatchGroup eMatchGroup )
+	: CMatchMakingDashboardSidePanel( pPanel, pszName, "resource/ui/MatchMakingPingPanel.res", k_eSideLeft ),
 	m_eMatchGroup( eMatchGroup )
 {
 	SetProportional( true );
 
-	m_pMainContainer = new EditablePanel( this, "MainContainer" );
-	m_pCheckButton = new CheckButton( m_pMainContainer, "CheckButton", "" );
-	m_pCurrentPingLabel = new Label( m_pMainContainer, "CurrentPingLabel", "" );
-	m_pPingSlider = new CCvarSlider( m_pMainContainer, "PingSlider" );
+	m_pCurrentPingLabel = new Label( this, "CurrentPingLabel", "" );
+	m_pPingSlider = new CCvarSlider( this, "PingSlider" );
+	m_pInviteModeComboBox = new ComboBox( this, "InviteModeComboBox", 3, false );
+	m_pInviteModeComboBox->AddItem( "#TF_MM_InviteMode_Open", new KeyValues( NULL, "mode", CTFPartyClient::k_ePartyJoinRequestMode_OpenToFriends ) );
+	m_pInviteModeComboBox->AddItem( "#TF_MM_InviteMode_Invite", new KeyValues( NULL, "mode", CTFPartyClient::k_ePartyJoinRequestMode_FriendsCanRequestToJoin ) );
+	m_pInviteModeComboBox->AddItem( "#TF_MM_InviteMode_Closed", new KeyValues( NULL, "mode", CTFPartyClient::k_ePartyJoinRequestMode_ClosedToFriends ) );
+	m_pInviteModeComboBox->SilentActivateItemByRow( GTFPartyClient()->GetPartyJoinRequestMode() );
+	m_pInviteModeComboBox->SetEditable( false );
 
 	ListenForGameEvent( "ping_updated" );
+	ListenForGameEvent( "mmstats_updated" );
+	ListenForGameEvent( "party_pref_changed" );
 }
 
 
@@ -63,13 +65,25 @@ void CTFPingPanel::ApplySchemeSettings( IScheme *pScheme )
 {
 	BaseClass::ApplySchemeSettings( pScheme );
 
-	LoadControlSettings( "resource/ui/MatchMakingPingPanel.res" );
+	m_pCustomPingCheckBox = FindControl< CvarToggleCheckButton<UIConVarRef> >( "CustomPingCheckButton", true );
+	m_pIgnoreInvitesCheckBox = FindControl< CvarToggleCheckButton<UIConVarRef> >( "IgnorePartyInvites", true );
+	m_pKeepTeamTogetherCheckBox = FindControl< CvarToggleCheckButton<UIConVarRef> >( "KeepPartyOnSameTeam", true );
 
-	CleanupPingPanels();
+	if ( m_pKeepTeamTogetherCheckBox )
+	{
+		m_pKeepTeamTogetherCheckBox->SetSelected( true );
+		m_pKeepTeamTogetherCheckBox->SetEnabled( false );
+		m_pKeepTeamTogetherCheckBox->SetTooltip( GetDashboardTooltip( k_eMediumFont ), "#TF_MM_ComingSoon" );
+	}
 
-	m_pCheckButton->AddActionSignalTarget( this );
+	RegeneratePingPanels();
 	m_pPingSlider->AddActionSignalTarget( this );
+}
 
+//-----------------------------------------------------------------------------
+void CTFPingPanel::RegeneratePingPanels()
+{
+	CleanupPingPanels();
 	CScrollableList *pDataCenterList = FindControl< CScrollableList >( "DataCenterList", true );
 
 	static const wchar_t *s_pwszPingFormat = L"%ls (%d ms)";
@@ -80,24 +94,6 @@ void CTFPingPanel::ApplySchemeSettings( IScheme *pScheme )
 		const auto& dictDataCenterPopulations = GTFGCClientSystem()->GetDataCenterPopulationRatioDict( m_eMatchGroup );
 
 		bool bTesting = false;
-#ifdef STAGING_ONLY
-		if ( tf_custom_ping_add_random_datacenters.GetBool() )
-		{
-			bTesting = true;
-			const char* pszDataCenterNames[] = { "eat", "lax","iad","atl","gru","scl","lim","lux","vie","sto",
-												 "mad","sgp","hkg","tyo","syd","dxb","bom","maa","ord","waw","jhb" };
-
-			CUniformRandomStream randomstream;
-			randomstream.SetSeed( tf_custom_ping_add_random_datacenters.GetInt() );
-			for( int i=0; i < ARRAYSIZE( pszDataCenterNames ); ++i )
-			{
-				auto pNewPingData = pingData.add_pingdata();
-				pNewPingData->set_name( pszDataCenterNames[ i ] );
-				pNewPingData->set_ping( randomstream.RandomInt( 0, 250 ) );
-				pNewPingData->set_ping_status( CMsgGCDataCenterPing_Update_Status_Normal );
-			}
-		}
-#endif
 
 		// for each ping data, check for intersection with data center population from MMStats
 		for ( int iPing=0; iPing<pingData.pingdata_size(); ++iPing )
@@ -133,7 +129,7 @@ void CTFPingPanel::ApplySchemeSettings( IScheme *pScheme )
 				}
 
 				wchar_t wszLabelText[ 128 ];
-				V_snwprintf( wszLabelText, sizeof( wszLabelText ), s_pwszPingFormat, wszDataCenterName, pingEntry.ping() );
+				V_snwprintf( wszLabelText, V_ARRAYSIZE( wszLabelText ), s_pwszPingFormat, wszDataCenterName, pingEntry.ping() );
 
 				pDataCenterPopulationPanel->SetDialogVariable( "datacenter_name", wszLabelText );
 
@@ -154,6 +150,8 @@ void CTFPingPanel::ApplySchemeSettings( IScheme *pScheme )
 		}
 	};
 	m_vecDataCenterPingPanels.Sort( &PingPanelInfoSorter::SortPingPanelInfo );
+
+	InvalidateLayout();
 }
 
 
@@ -163,8 +161,6 @@ void CTFPingPanel::ApplySchemeSettings( IScheme *pScheme )
 void CTFPingPanel::PerformLayout()
 {
 	BaseClass::PerformLayout();
-
-	m_pCheckButton->SetSelected( tf_custom_ping_enabled.GetBool() );
 
 	FOR_EACH_VEC( m_vecDataCenterPingPanels, i )
 	{
@@ -204,6 +200,11 @@ void CTFPingPanel::OnCommand( const char *command )
 	BaseClass::OnCommand( command );
 }
 
+//-----------------------------------------------------------------------------
+void CTFPingPanel::OnThink()
+{
+	BaseClass::OnThink();
+}
 
 //-----------------------------------------------------------------------------
 // Purpose: 
@@ -211,9 +212,17 @@ void CTFPingPanel::OnCommand( const char *command )
 void CTFPingPanel::FireGameEvent( IGameEvent *event )
 {
 	const char *pszEventName = event->GetName();
-	if ( FStrEq( pszEventName, "ping_updated" ) )
+	if ( FStrEq( pszEventName, "ping_updated" ) || FStrEq( pszEventName, "mmstats_updated") )
 	{
-		InvalidateLayout( true, true );
+		RegeneratePingPanels();
+	}
+	else if ( FStrEq( pszEventName, "party_pref_changed" ) )
+	{
+		// Party preferences changed, make sure UI is in sync (they can change by e.g. manual convar setting)
+		//
+		// The checkboxes are the magical bound-to-the-underlying-convar things so we don't need to touch them.
+		if ( m_pInviteModeComboBox )
+			{ m_pInviteModeComboBox->SilentActivateItemByRow( GTFPartyClient()->GetPartyJoinRequestMode() ); }
 	}
 }
 
@@ -237,10 +246,13 @@ void CTFPingPanel::CleanupPingPanels()
 //-----------------------------------------------------------------------------
 void CTFPingPanel::UpdateCurrentPing()
 {
-	bool bUsePingLimit = m_pCheckButton->IsSelected();
+	uint32_t unCustomPingLimit = GTFPartyClient()->GetLocalGroupCriteria().GetCustomPingTolerance();
+	bool bUsePingLimit = ( unCustomPingLimit > 0 );
 	int nLowestDataCenterPing = m_vecDataCenterPingPanels.Count() ? m_vecDataCenterPingPanels[0].m_nPing : 0;
 	int nCurrentPingLimit = MAX( (int)m_pPingSlider->GetSliderValue(), nLowestDataCenterPing );
-	m_pCurrentPingLabel->SetText( bUsePingLimit ? CFmtStr( "Ping Limit: %d", nCurrentPingLimit ) : "Ping Limit: AUTO" );
+	m_pCurrentPingLabel->SetText( bUsePingLimit
+								  ? LocalizeNumberWithToken( "#TF_MM_PingSetting", nCurrentPingLimit )
+								  : g_pVGuiLocalize->Find( "#TF_MM_PingSetting_Auto" ) );
 
 	FOR_EACH_VEC( m_vecDataCenterPingPanels, i )
 	{
@@ -260,18 +272,32 @@ void CTFPingPanel::UpdateCurrentPing()
 	}
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+void CTFPingPanel::OnTextChanged( vgui::Panel *panel )
+{
+	if ( panel == m_pInviteModeComboBox )
+	{
+		using EPartyJoinRequestMode = CTFPartyClient::EPartyJoinRequestMode;
+		EPartyJoinRequestMode eMode = (EPartyJoinRequestMode)m_pInviteModeComboBox->GetActiveItemUserData()->GetInt( "mode" );
+		GTFPartyClient()->SetPartyJoinRequestMode( eMode );
+	}
+}
 
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
 void CTFPingPanel::OnCheckButtonChecked( vgui::Panel *panel )
 {
-	if ( m_pCheckButton == panel )
-	{
-		tf_custom_ping_enabled.SetValue( m_pCheckButton->IsSelected() );
-	}
+	if ( m_pCustomPingCheckBox == panel )
+		m_pCustomPingCheckBox->ApplyChanges();
+	if ( m_pIgnoreInvitesCheckBox == panel )
+		m_pIgnoreInvitesCheckBox->ApplyChanges();
+	if ( m_pKeepTeamTogetherCheckBox == panel )
+		m_pKeepTeamTogetherCheckBox->ApplyChanges();
 
-	m_pPingSlider->SetVisible( tf_custom_ping_enabled.GetBool() );
+	m_pPingSlider->SetVisible( GTFPartyClient()->GetLocalGroupCriteria().GetCustomPingTolerance() > 0 );
 
 	UpdateCurrentPing();
 }

@@ -148,58 +148,82 @@ void CTFViewModel::CalcViewModelView( CBasePlayer *owner, const Vector& eyePosit
 
 	vecNewAngles += vecLoweredAngles;
 
-	// we want to always enable this internally
-	bool bShouldUseMinMode = tf_use_min_viewmodels.GetBool();
-
-	// are we overriding vm offset?
-	const char *pszVMOffsetOverride = tf_viewmodels_offset_override.GetString();
-	bool bOverride = ( pszVMOffsetOverride && *pszVMOffsetOverride );
-	bShouldUseMinMode |= bOverride;
-
-	// alt view model
 	CTFWeaponBase *pWeapon = assert_cast< CTFWeaponBase* >( GetWeapon() );
-	if ( bShouldUseMinMode && pWeapon )
+	if ( pWeapon )
 	{
-		static float s_inspectInterp = 1.f;
-		if ( pWeapon->GetInspectStage() != CTFWeaponBase::INSPECT_INVALID )
+		bool bInspecting = pWeapon && pWeapon->GetInspectStage() != CTFWeaponBase::INSPECT_INVALID;
+
+		static float s_inspectInterp = 0.f;
+		if ( bInspecting )
 		{
 			if ( pWeapon->GetInspectStage() == CTFWeaponBase::INSPECT_END )
 			{
 				// use the last second of the anim
-				s_inspectInterp = Clamp( 1.f - ( pWeapon->GetInspectAnimTime() - gpGlobals->curtime ), 0.f, 1.f );
+				const float flOutroDuration = 0.3f;
+				s_inspectInterp = Clamp( ( pWeapon->GetInspectAnimEndTime() - gpGlobals->curtime ) - flOutroDuration, 0.f, 1.f );
 			}
 			else
 			{
-				s_inspectInterp = Clamp( s_inspectInterp - gpGlobals->frametime, 0.f, 1.f );
+				s_inspectInterp = Clamp( s_inspectInterp + gpGlobals->frametime, 0.f, 1.f );
 			}
 		}
 		else
 		{
-			s_inspectInterp = Clamp( s_inspectInterp + gpGlobals->frametime, 0.f, 1.f );
+			s_inspectInterp = Clamp( s_inspectInterp - gpGlobals->frametime, 0.f, 1.f );
 		}
 
-		Vector forward, right, up;
-		AngleVectors( eyeAngles, &forward, &right, &up );
+		// inspect custom offset
+		if ( bInspecting )
+		{
+			CAttribute_String attrInspectOffsetVMOverride;
+			CALL_ATTRIB_HOOK_STRING_ON_OTHER( pWeapon, attrInspectOffsetVMOverride, inspect_viewmodel_offset );
+			const char *pszValue = attrInspectOffsetVMOverride.value().c_str();
+			if ( pszValue && *pszValue )
+			{
+				Vector vmOffset;
+				UTIL_StringToVector( vmOffset.Base(), pszValue );
 
-		Vector viewmodelOffset;
-		if ( bOverride )
-		{
-			UTIL_StringToVector( viewmodelOffset.Base(), pszVMOffsetOverride );
+				Vector forward, right, up;
+				AngleVectors( eyeAngles, &forward, &right, &up );
+
+				Vector vOffset = vmOffset.x * forward + vmOffset.y * right + vmOffset.z * up;
+				vOffset *= Gain( s_inspectInterp, 0.5f );
+				vecNewOrigin += vOffset;
+			}
 		}
-		else
+
+		// we want to always enable this internally
+		bool bMinMode = tf_use_min_viewmodels.GetBool();
+
+		// are we overriding vm offset?
+		const char *pszVMOffsetOverride = tf_viewmodels_offset_override.GetString();
+		bool bForceOverride = ( pszVMOffsetOverride && *pszVMOffsetOverride );
+		bMinMode |= bForceOverride;
+
+		// min mode custom offset
+		if ( bMinMode )
 		{
-			viewmodelOffset = pWeapon->GetViewmodelOffset();
+			Vector forward, right, up;
+			AngleVectors( eyeAngles, &forward, &right, &up );
+
+			Vector viewmodelOffset;
+			if ( bForceOverride )
+			{
+				UTIL_StringToVector( viewmodelOffset.Base(), pszVMOffsetOverride );
+			}
+			else
+			{
+				viewmodelOffset = pWeapon->GetViewmodelOffset();
+			}
+			Vector vOffset = viewmodelOffset.x * forward + viewmodelOffset.y * right + viewmodelOffset.z * up;
+			vOffset *= Gain( 1.f - s_inspectInterp, 0.5f );
+			vecNewOrigin += vOffset;
 		}
-		Vector vOffset = viewmodelOffset.x * forward + viewmodelOffset.y * right + viewmodelOffset.z * up;
-		vOffset *= Gain( s_inspectInterp, 0.5f );
-		vecNewOrigin += vOffset;
 	}
-
-	
 
 	BaseClass::CalcViewModelView( owner, vecNewOrigin, vecNewAngles );
 
-#endif
+#endif // CLIENT_DLL
 }
 
 #ifdef CLIENT_DLL
@@ -247,6 +271,20 @@ int CTFViewModel::DrawModel( int flags )
 	}
 
 	return BaseClass::DrawModel( flags );
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+bool CTFViewModel::OnInternalDrawModel( ClientModelRenderInfo_t *pInfo )
+{
+	// Correct the ambient lighting position to match our owner entity
+	if ( GetOwner() && pInfo )
+	{
+		pInfo->pLightingOrigin = &( GetOwner()->WorldSpaceCenter() );
+	}
+
+	return BaseClass::OnInternalDrawModel( pInfo );
 }
 
 //-----------------------------------------------------------------------------
@@ -526,7 +564,11 @@ void CInvisProxy::OnBind( C_BaseEntity *pC_BaseEntity )
 	
 	if ( !pPlayer )
 	{
-		m_pPercentInvisible->SetFloatValue( 0.0f );
+		C_TFRagdoll *pRagdoll = dynamic_cast<C_TFRagdoll*>( pEnt );
+		if ( !pRagdoll || !pRagdoll->IsCloaked() )
+		{
+			m_pPercentInvisible->SetFloatValue( 0.0f );
+		}
 		return;
 	}
 

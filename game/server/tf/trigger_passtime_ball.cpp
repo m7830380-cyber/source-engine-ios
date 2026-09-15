@@ -40,7 +40,6 @@ void CTriggerPasstimeBall::Spawn()
 }
 
 //-----------------------------------------------------------------------------
-static CBaseEntity *s_EntitiesInSphere[32];
 bool CTriggerPasstimeBall::BTouching( CBaseEntity *pEnt )
 {
 	Ray_t ray;
@@ -54,7 +53,7 @@ bool CTriggerPasstimeBall::BTouching( CBaseEntity *pEnt )
 //-----------------------------------------------------------------------------
 void CTriggerPasstimeBall::Update()
 {
-	// This is a crappy way to do this, but I couldn't find any way to make
+	// This is a bad way to do this, but I couldn't find any way to make
 	// a normal trigger do what I want because I want enter/exit to be handled
 	// correctly when the ball is hidden.
 	// It would be more efficient to have the ball do this, but I'm 

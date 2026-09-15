@@ -53,6 +53,9 @@ void CTFAmmoPack::Spawn( void )
 
 	m_flCreationTime = gpGlobals->curtime;
 
+	// default to medium ammopack
+	m_flAmmoRatio = 0.5f;
+
 	// no pickup until flythink
 	m_bAllowOwnerPickup = false;
 	m_bNoPickup = false;
@@ -110,8 +113,10 @@ ConVar tf_weapon_ragdoll_velocity_min( "tf_weapon_ragdoll_velocity_min", "100", 
 ConVar tf_weapon_ragdoll_velocity_max( "tf_weapon_ragdoll_velocity_max", "150", FCVAR_CHEAT | FCVAR_DEVELOPMENTONLY );
 ConVar tf_weapon_ragdoll_maxspeed( "tf_weapon_ragdoll_maxspeed", "300", FCVAR_CHEAT | FCVAR_DEVELOPMENTONLY );
 
-void CTFAmmoPack::InitWeaponDrop( CTFPlayer *pPlayer, CTFWeaponBase *pWeapon, int nSkin, bool bEmpty, bool bIsSuicide )
+void CTFAmmoPack::InitAmmoPack( CTFPlayer *pPlayer, CTFWeaponBase *pWeapon, int nSkin, bool bEmpty, bool bIsSuicide, float flAmmoRatio /*= 0.5f*/ )
 {
+	m_flAmmoRatio = flAmmoRatio;
+
 	if ( !bEmpty )
 	{
 		// Might be a holiday pack.
@@ -137,7 +142,7 @@ void CTFAmmoPack::InitWeaponDrop( CTFPlayer *pPlayer, CTFWeaponBase *pWeapon, in
 		GiveAmmo( iPrimary, TF_AMMO_PRIMARY );			// Gets recalculated in PackTouch
 		GiveAmmo( iSecondary, TF_AMMO_SECONDARY );		// Gets recalculated in PackTouch
 		GiveAmmo( iMetal, TF_AMMO_METAL );
-		SetHealthInstead( pWeapon->GetWeaponID() == TF_WEAPON_LUNCHBOX && pPlayer->IsPlayerClass( TF_CLASS_HEAVYWEAPONS ) );
+		SetHealthInstead( pWeapon && pWeapon->GetWeaponID() == TF_WEAPON_LUNCHBOX && pPlayer->IsPlayerClass( TF_CLASS_HEAVYWEAPONS ) );
 	}
 	else
 	{
@@ -339,13 +344,11 @@ void CTFAmmoPack::PackTouch( CBaseEntity *pOther )
 		return;
 	}
 
-	float flAmmoRatio = 0.5f;
-
 	int iMaxPrimary = pPlayer->GetMaxAmmo(TF_AMMO_PRIMARY);
-	GiveAmmo( ceil( iMaxPrimary * flAmmoRatio ), TF_AMMO_PRIMARY );
+	GiveAmmo( ceil( iMaxPrimary * m_flAmmoRatio ), TF_AMMO_PRIMARY );
 
 	int iMaxSecondary = pPlayer->GetMaxAmmo(TF_AMMO_SECONDARY);
-	GiveAmmo( ceil( iMaxSecondary * flAmmoRatio ), TF_AMMO_SECONDARY );
+	GiveAmmo( ceil( iMaxSecondary * m_flAmmoRatio ), TF_AMMO_SECONDARY );
 
 	int iAmmoTaken = 0;
 
@@ -360,12 +363,12 @@ void CTFAmmoPack::PackTouch( CBaseEntity *pOther )
 	}
 
 	// give them a chunk of cloak power
-	if ( pPlayer->m_Shared.AddToSpyCloakMeter( 100.0f * flAmmoRatio ) )
+	if ( pPlayer->m_Shared.AddToSpyCloakMeter( 100.0f * m_flAmmoRatio ) )
 	{
 		iAmmoTaken++;
 	}
 
-	if ( pPlayer->AddToSpyKnife( 100.0f * flAmmoRatio, false ) )
+	if ( pPlayer->AddToSpyKnife( 100.0f * m_flAmmoRatio, false ) )
 	{
 		iAmmoTaken++;
 	}
@@ -378,7 +381,11 @@ void CTFAmmoPack::PackTouch( CBaseEntity *pOther )
 		float flCurrentCharge = pPlayer->m_Shared.GetDemomanChargeMeter();
 		if ( flCurrentCharge < 100.0f )
 		{
-			pPlayer->m_Shared.SetDemomanChargeMeter( flCurrentCharge + flAmmoRatio * 100.0f );
+			if ( TFGameRules() && TFGameRules()->IsPowerupMode() )
+			{
+				m_flAmmoRatio *= 0.2;
+			}
+			pPlayer->m_Shared.SetDemomanChargeMeter( flCurrentCharge + m_flAmmoRatio * 100.0f );
 			iAmmoTaken++;
 		}
 	}
@@ -386,7 +393,7 @@ void CTFAmmoPack::PackTouch( CBaseEntity *pOther )
 	if ( pPlayer->IsPlayerClass( TF_CLASS_ENGINEER ) )
 	{
 		int iMaxGrenades1 = pPlayer->GetMaxAmmo( TF_AMMO_GRENADES1 );
-		iAmmoTaken += pPlayer->GiveAmmo( ceil(iMaxGrenades1 * flAmmoRatio), TF_AMMO_GRENADES1 );
+		iAmmoTaken += pPlayer->GiveAmmo( ceil(iMaxGrenades1 * m_flAmmoRatio), TF_AMMO_GRENADES1 );
 	}
 
 	if ( m_PackType == AP_HALLOWEEN )

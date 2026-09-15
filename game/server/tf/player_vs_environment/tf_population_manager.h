@@ -64,6 +64,7 @@ public:
 	void CycleMission ( void );
 	bool LoadMissionCycleFile ( void );
 	bool IsValidMvMMap( const char *pszMapName );
+	bool IsValidPopfile( CUtlString fullPath );
 
 	// Waves
 	void ShowNextWaveDescription( void );
@@ -135,8 +136,6 @@ public:
 
 	bool IsBonusRound() const { return m_bBonusRound; }
 	CBaseCombatCharacter* GetBonusBoss() const { return m_hBonusBoss; }
-
-	enum { MVM_INVADERS_TEAM_SIZE = 22 };
 
 	static bool GetWavesUseReadyBetween() { return true; }
 

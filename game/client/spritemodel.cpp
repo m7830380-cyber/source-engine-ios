@@ -201,7 +201,7 @@ static void AdjustSubRect(CEngineSprite *pSprite, int frame, float *pfLeft, floa
 	*pw = rc.right - rc.left;
 	*ph = rc.bottom - rc.top;
 
-	f = 1.0 / (float)pSprite->GetWidth();;
+	f = 1.0 / (float)pSprite->GetWidth();
 	*pfLeft = ((float)rc.left + 0.5) * f;
 	*pfRight = ((float)rc.right - 0.5) * f;
 
@@ -269,7 +269,7 @@ bool CEngineSprite::Init( const char *pName )
 		Q_strncpy( pMaterialPath, pMaterialName, sizeof(pMaterialPath) );
 		Q_SetExtension( pMaterialPath, ".vmt", sizeof(pMaterialPath) );
 
-		KeyValues *kv = new KeyValues( "vmt" );
+		KeyValuesAD kv( "vmt" );
 		if ( !kv->LoadFromFile( g_pFullFileSystem, pMaterialPath, "GAME" ) )
 		{
 			Warning( "Unable to load sprite material %s!\n", pMaterialPath );
@@ -290,8 +290,6 @@ bool CEngineSprite::Init( const char *pName )
 			m_material[i] = g_pMaterialSystem->FindProceduralMaterial( pMaterialPath, TEXTURE_GROUP_CLIENT_EFFECTS, pMaterialKV );
 			m_material[ i ]->IncrementReferenceCount();
 		}
-
-		kv->deleteThis();
 
 		m_width = m_material[0]->GetMappingWidth();
 		m_height = m_material[0]->GetMappingHeight();
@@ -415,15 +413,14 @@ IMaterial *CEngineSprite::GetMaterial( RenderMode_t nRenderMode, int nFrame )
 		m_VideoMaterial->SetFrame( nFrame );
 	}
 	
-	
 	IMaterial *pMaterial = m_material[nRenderMode];
-	if( !pMaterial )
-		return NULL;
-
-	IMaterialVar* pFrameVar = pMaterial->FindVarFast( "$frame", &frameCache );
-	if ( pFrameVar )
+	if ( pMaterial )
 	{
-		pFrameVar->SetIntValue( nFrame );
+		IMaterialVar* pFrameVar = pMaterial->FindVarFast( "$frame", &frameCache );
+		if ( pFrameVar )
+		{
+			pFrameVar->SetIntValue( nFrame );
+		}
 	}
 
 	return pMaterial;

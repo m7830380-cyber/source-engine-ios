@@ -31,6 +31,7 @@ struct cart_item_t
 	const econ_store_entry_t *pEntry;
 	int						  iQuantity;
 	ECartItemType			  eType;
+	bool					  bPreviewItem;
 
 	item_price_t GetDisplayPrice() const;
 };
@@ -57,6 +58,7 @@ public:
 	item_price_t GetTotalPrice( void ) const;
 
 	bool		ContainsHolidayRestrictedItems() const;
+	bool		ContainsChanceRestrictedItems() const;
 	bool		ContainsItemDefinition( item_definition_index_t unItemDef ) const;
 
 private:
@@ -107,7 +109,7 @@ public:
 	bool		HasValidUpsellStamps( void );
 	void		UpsellStamps( void );
 	static void ConfirmUpsellStamps( bool bConfirmed, CSchemaItemDefHandle hItemDef, int nSecondsVisible );
-	void		InitiateCheckout( bool bSkipUpsell );
+	void		InitiateCheckout( bool bSkipUpsell, bool bSkipDecoderWarning = false );
 	void		CheckoutCancel( void );
 	virtual void OnAddToCart( void ) {}
 	void		AddToCartAndCheckoutImmediately( item_definition_index_t nDefIndex );
@@ -158,6 +160,7 @@ protected:
 
 protected:
 	static void ConfirmCheckout( bool bConfirmed, void *pContext );
+	static void ProceedCheckout_DecoderWarning( bool bConfirmed, void *pContext );
 
 	static bool	m_bPricesheetLoaded;
 	static bool	m_bShowWarnings;

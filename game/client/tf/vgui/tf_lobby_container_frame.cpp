@@ -13,6 +13,8 @@
 #include "vgui_controls/PropertySheet.h"
 
 #include "tf_party.h"
+#include "tf_partyclient.h"
+#include "tf_matchcriteria.h"
 #include "tf_lobbypanel.h"
 #include "tf_pvp_rank_panel.h"
 
@@ -28,18 +30,26 @@
 // memdbgon must be the last include file in a .cpp file!!!
 #include <tier0/memdbgon.h>
 
-bool BIsPartyLeader()
-{
-	CTFParty *pParty = GTFGCClientSystem()->GetParty();
-	return ( pParty == NULL || pParty->GetLeader() == steamapicontext->SteamUser()->GetSteamID() );
-}
-
 bool BIsPartyInUIState()
 {
 	if ( !GCClientSystem()->BConnectedtoGC() )
 		return false;
 	CTFParty *pParty = GTFGCClientSystem()->GetParty();
 	return ( pParty == NULL || pParty->GetState() == CSOTFParty_State_UI );
+}
+
+CSteamID SteamIDFromDecimalString( const char *pszUint64InDecimal )
+{
+	uint64 ulSteamID = 0;
+	if ( sscanf( pszUint64InDecimal, "%llu", &ulSteamID ) )
+	{
+		return CSteamID( ulSteamID );
+	}
+	else
+	{
+		Assert( false );
+		return CSteamID();
+	}
 }
 
 CSteamID SteamIDFromDecimalString( const char *pszUint64InDecimal )
@@ -107,15 +117,9 @@ void CBaseLobbyContainerFrame::ApplySchemeSettings( vgui::IScheme *pScheme )
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: 
-//-----------------------------------------------------------------------------
 void CBaseLobbyContainerFrame::ShowPanel(bool bShow)
 {
 	tmZone( TELEMETRY_LEVEL0, TMZF_NONE, "%s", __FUNCTION__ );
-
-	// Keep the MM dashboard on top of us
-	bShow ? GetMMDashboardParentManager()->PushModalFullscreenPopup( this ) 
-		  : GetMMDashboardParentManager()->PopModalFullscreenPopup( this );
 
 	m_pContents->SetControlVisible( "PartyActiveGroupBox", false );
 
@@ -140,7 +144,7 @@ void CBaseLobbyContainerFrame::ShowPanel(bool bShow)
 		InvalidateLayout( true );
 		m_pContents->InvalidateLayout( true, true );
 
-		GTFGCClientSystem()->SetLocalPlayerSquadSurplus( false );
+		GTFPartyClient()->MutLocalPlayerCriteria().SetSquadSurplus( false );
 		WriteControls();
 		m_pContents->UpdateControls();
 
@@ -166,8 +170,6 @@ void CBaseLobbyContainerFrame::ShowPanel(bool bShow)
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: 
-//-----------------------------------------------------------------------------
 void CBaseLobbyContainerFrame::SetNextButtonEnabled( bool bValue )
 {
 	m_bNextButtonEnabled = bValue;
@@ -175,30 +177,18 @@ void CBaseLobbyContainerFrame::SetNextButtonEnabled( bool bValue )
 
 
 //-----------------------------------------------------------------------------
-// Purpose: 
-//-----------------------------------------------------------------------------
 void CBaseLobbyContainerFrame::OnThink()
 {
 	BaseClass::OnThink();
-
-	// Check if we don't want to be here, then get out!
-	if ( GTFGCClientSystem()->GetMatchmakingUIState() == eMatchmakingUIState_Inactive )
-	{
-		Msg( "Hiding LobbyContainerFrame" );
-		ShowPanel(false);
-		return;
-	}
 
 	WriteControls();
 }
 
 
 //-----------------------------------------------------------------------------
-// Purpose: 
-//-----------------------------------------------------------------------------
 void CBaseLobbyContainerFrame::FireGameEvent( IGameEvent *event )
 {
-	if ( GTFGCClientSystem()->GetSearchMode() != GetHandledMode() )
+	if ( !CanHandleCurrentMatchGroup() )
 		return;
 
 	const char *pszEventname = event->GetName();
@@ -217,10 +207,10 @@ void CBaseLobbyContainerFrame::FireGameEvent( IGameEvent *event )
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: 
-//-----------------------------------------------------------------------------
 void CBaseLobbyContainerFrame::StartSearch( void )
 {
+	Assert( !GTFPartyClient()->BInQueue() );
+
 	// Is anyone banned from matchmaking?
 	RTime32 rtimeExpire = 0;
 	if ( m_pContents->IsAnyoneBanned( rtimeExpire ) )
@@ -238,12 +228,10 @@ void CBaseLobbyContainerFrame::StartSearch( void )
 
 	if ( VerifyPartyAuthorization() )
 	{
-		GTFGCClientSystem()->RequestSelectWizardStep( TF_Matchmaking_WizardStep_SEARCHING );
+		GTFPartyClient()->RequestQueueForMatch();
 	}
 }
 
-//-----------------------------------------------------------------------------
-// Purpose: 
 //-----------------------------------------------------------------------------
 void CBaseLobbyContainerFrame::OnCommand( const char *command )
 {
@@ -253,11 +241,12 @@ void CBaseLobbyContainerFrame::OnCommand( const char *command )
 	}
 	else if ( FStrEq( command, "back" ) )
 	{
-		if ( !GCClientSystem()->BConnectedtoGC() || !BIsPartyLeader() )
+		if ( !GCClientSystem()->BConnectedtoGC() || !GTFPartyClient()->BIsPartyLeader() )
 		{
+			// TODO(Universal Parties): --v
 			// TODO: Remove this when we have the dashboard everywhere.
 			//		 Well...this entire panel should be gone.
-			GTFGCClientSystem()->EndMatchmaking();
+			GTFGCClientSystem()->EndModalMM();
 			// And hide us
 			ShowPanel( false );
 			return;
@@ -278,14 +267,6 @@ void CBaseLobbyContainerFrame::OnCommand( const char *command )
 		m_pContents->SetControlVisible( "PartyActiveGroupBox", true );
 
 		Assert( steamapicontext );
-
-		IGameEvent *pEvent = gameeventmanager->CreateEvent( "mm_lobby_member_join" );
-		if ( pEvent )
-		{
-			pEvent->SetString( "steamid", CFmtStr( "%llu", steamapicontext->SteamUser()->GetSteamID().ConvertToUint64() ) );
-			pEvent->SetInt( "solo", 1 );
-			gameeventmanager->FireEventClientSide( pEvent );
-		}
 	}
 	else
 	{
@@ -296,9 +277,7 @@ void CBaseLobbyContainerFrame::OnCommand( const char *command )
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: 
-//-----------------------------------------------------------------------------
-void CBaseLobbyContainerFrame::PerformLayout( void ) 
+void CBaseLobbyContainerFrame::PerformLayout( void )
 {
 	if ( GetVParent() )
 	{
@@ -311,31 +290,14 @@ void CBaseLobbyContainerFrame::PerformLayout( void )
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: 
-//-----------------------------------------------------------------------------
 static void LeaveSearch( bool bConfirmed, void *pContext )
 {
 	if ( bConfirmed )
 	{
-		switch ( GTFGCClientSystem()->GetSearchMode() )
-		{
-		case TF_Matchmaking_MVM:
-			GTFGCClientSystem()->RequestSelectWizardStep( TF_Matchmaking_WizardStep_MVM_CHALLENGE );
-			break;
-
-		case TF_Matchmaking_LADDER:
-			GTFGCClientSystem()->RequestSelectWizardStep( TF_Matchmaking_WizardStep_LADDER );
-			break;
-
-		default:
-			AssertMsg1( false, "Unknown search mode %d", (int)GTFGCClientSystem()->GetSearchMode() );
-			break;
-		}
+		GTFPartyClient()->CancelQueueRequest();
 	}
 }
 
-//-----------------------------------------------------------------------------
-// Purpose: 
 //-----------------------------------------------------------------------------
 void CBaseLobbyContainerFrame::OnKeyCodeTyped(vgui::KeyCode code)
 {
@@ -348,7 +310,7 @@ void CBaseLobbyContainerFrame::OnKeyCodeTyped(vgui::KeyCode code)
 								&CBaseLobbyContainerFrame::LeaveLobbyPanel );
 			return;
 		}
-		else if ( GTFGCClientSystem()->GetWizardStep() == TF_Matchmaking_WizardStep_SEARCHING )
+		else if ( GTFPartyClient()->BInQueue() )
 		{
 			ShowConfirmDialog( "#TF_MM_LeaveQueue_Title", "#TF_MM_LeaveQueue_Confirm",
 								"#TF_Coach_Yes", "#TF_Coach_No",
@@ -397,18 +359,15 @@ void CBaseLobbyContainerFrame::WriteControls()
 	// Make sure we want to be in matchmaking.  (If we don't, the frame should hide us pretty quickly.)
 	// We might get an event or something right at the transition point occasionally when the UI should
 	// not be visible
-	if ( GTFGCClientSystem()->GetMatchmakingUIState() == eMatchmakingUIState_Inactive )
-	{
-		return;
-	}
+	if ( !GTFGCClientSystem()->BUserInModalMMUI() )
+		{ return; }
 
 	bool bNoGC = false;
-	if ( !GCClientSystem()->BConnectedtoGC() ||
-		GTFGCClientSystem()->BHaveLiveMatch() ||
-		( GTFGCClientSystem()->GetParty() && GTFGCClientSystem()->GetParty()->BOffline() ) )
+	if ( !GCClientSystem()->BConnectedtoGC() || GTFGCClientSystem()->BHaveLiveMatch() ||
+	     !GTFGCClientSystem()->BHealthyGCConnection() )
 	{
 		bNoGC = true;
-	}	
+	}
 
 	SetControlVisible( "PlayWithFriendsExplanation", !bNoGC && ShouldShowPartyButton(), true );
 	SetControlVisible( "RankPanel", !bNoGC, true );
@@ -556,30 +515,20 @@ void CBaseLobbyContainerFrame::WriteControls()
 //-----------------------------------------------------------------------------
 void CBaseLobbyContainerFrame::HandleBackPressed()
 {
-	// We dont know how or why we got here.  Failsafe and just leave.
-	if( GTFGCClientSystem()->GetSearchMode() != GetHandledMode() )
-	{
-		Msg( "Lobby handles mode %d, but search mode is %d. Ending matchmaking", (int)( GetHandledMode() ), (int)( GTFGCClientSystem()->GetSearchMode() ) );
-	}
-
-	GTFGCClientSystem()->EndMatchmaking();
+	GTFGCClientSystem()->EndModalMM();
 	ShowPanel( false );
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: 
-//-----------------------------------------------------------------------------
 bool CBaseLobbyContainerFrame::ShouldShowPartyButton() const
 {
-	return !m_pContents->IsPartyActiveGroupBoxVisible() && 
-			GTFGCClientSystem()->GetWizardStep() != TF_Matchmaking_WizardStep_SEARCHING &&
-			GCClientSystem()->BConnectedtoGC() &&
-			BIsPartyLeader();
+	return ( !m_pContents->IsPartyActiveGroupBoxVisible() &&
+	         GTFPartyClient()->BInQueue() &&
+	         GCClientSystem()->BConnectedtoGC() &&
+	         GTFPartyClient()->BIsPartyLeader() );
 }
 
 
-//-----------------------------------------------------------------------------
-// Purpose: 
 //-----------------------------------------------------------------------------
 void CBaseLobbyContainerFrame::OpenOptionsContextMenu()
 {
@@ -591,7 +540,7 @@ void CBaseLobbyContainerFrame::OpenOptionsContextMenu()
 	const char *pszContextMenuBorder = "NotificationDefault";
 	const char *pszContextMenuFont = "HudFontMediumSecondary";
 	m_pContextMenu->SetBorder( scheme()->GetIScheme( GetScheme() )->GetBorder( pszContextMenuBorder ) );
-	m_pContextMenu->SetFont( scheme()->GetIScheme( GetScheme() )->GetFont( pszContextMenuFont ) );
+	m_pContextMenu->SetFont( scheme()->GetIScheme( GetScheme() )->GetFont( pszContextMenuFont, IsProportional() ) );
 
 	contextMenuBuilder.AddMenuItem( "#TF_LobbyContainer_Ping", new KeyValues( "Context_Ping" ), "ping" );
 	contextMenuBuilder.AddMenuItem( "#TF_LobbyContainer_Help", "show_explanations", "help" );
@@ -619,6 +568,11 @@ void CBaseLobbyContainerFrame::OpenOptionsContextMenu()
 	}
 }
 
+//-----------------------------------------------------------------------------
+bool CBaseLobbyContainerFrame::CanHandleCurrentMatchGroup() const
+{
+	return CanHandleMatchGroup( GTFPartyClient()->GetEffectiveMatchGroup() );
+}
 
 //-----------------------------------------------------------------------------
 // Purpose: 

@@ -83,11 +83,14 @@ bool CHealthKit::MyTouch( CBasePlayer *pPlayer )
 			{
 				bSuccess = true;
 				bPerformPickup = true;
+				pTFPlayer->m_Shared.SetItemChargeMeter( LOADOUT_POSITION_SECONDARY, 100.f );
 			}
 		}
 		else
 		{
-			float flHealth = ceil( ( pPlayer->GetMaxHealth() - pTFPlayer->GetRuneHealthBonus() ) * PackRatios[GetPowerupSize()] );
+			float flRuneHealthBonus = ( pTFPlayer->m_Shared.GetCarryingRuneType() != RUNE_KNOCKOUT ) ? pTFPlayer->GetRuneHealthBonus() : 0;
+			
+			float flHealth = ceil( ( pPlayer->GetMaxHealth() - flRuneHealthBonus ) * PackRatios[GetPowerupSize()] );
 
 			CALL_ATTRIB_HOOK_FLOAT_ON_OTHER( pPlayer, flHealth, mult_health_frompacks );
 
@@ -182,6 +185,10 @@ bool CHealthKit::MyTouch( CBasePlayer *pPlayer )
 				{
 					if ( pPlayer->GiveAmmo( 1, TF_AMMO_GRENADES1, false ) )
 					{
+						if ( pTFPlayer )
+						{
+							pTFPlayer->m_Shared.SetItemChargeMeter( LOADOUT_POSITION_SECONDARY, 100.f );
+						}
 						bPerformPickup = true;
 						bSuccess = true;
 					}
@@ -297,5 +304,5 @@ bool CHealthAmmoKit::MyTouch( CBasePlayer *pPlayer )
 		}
 	}
 
-	return bAmmoSuccess | bHealthSuccess;
+	return bAmmoSuccess || bHealthSuccess;
 }

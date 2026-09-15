@@ -20,6 +20,8 @@
 #include "tf_projectile_arrow.h"
 #endif
 
+#define COMPOUND_BOW_ATTACHMENT_POINT "muzzle"
+
 //=============================================================================
 //
 // Weapon tables.
@@ -82,9 +84,11 @@ void CTFCompoundBow::Precache( void )
 //-----------------------------------------------------------------------------
 void CTFCompoundBow::WeaponReset( void )
 {
+	LowerBow();
+
 	BaseClass::WeaponReset();
 
-//	m_flChargeBeginTime = 0;	
+//	GetInternalChargeBeginTime() = 0;	
 	m_bArrowAlight = false;
 	m_bNoAutoRelease = true;
 	m_bNoFire = false;
@@ -92,32 +96,6 @@ void CTFCompoundBow::WeaponReset( void )
 
 #ifdef GAME_DLL
 
-#ifdef STAGING_ONLY
-void CTFCompoundBow::CreateExtraArrow( CTFProjectile_Arrow* pMainArrow, const QAngle& qSpreadAngles, float flSpeed )
-{
-	CTFProjectile_Arrow* pExtraArrow = CTFProjectile_Arrow::Create( pMainArrow->GetAbsOrigin(), qSpreadAngles, flSpeed, GetProjectileGravity(), (ProjectileType_t)GetWeaponProjectileType(), pMainArrow->GetOwnerEntity(), pMainArrow->GetOwnerEntity() );
-	if ( pExtraArrow )
-	{
-		pExtraArrow->SetLauncher( this );
-		pExtraArrow->SetCritical( IsCurrentAttackACrit() );
-		pExtraArrow->SetDamage( 0.5f * GetProjectileDamage() );
-		if ( pMainArrow->CanPenetrate() )
-		{
-			pExtraArrow->SetPenetrate( true );
-		}
-		pExtraArrow->SetCollisionGroup( pMainArrow->GetCollisionGroup() );
-	}
-}
-
-ConVar sv_arrow_spread_angle( "sv_arrow_spread_angle", "5.f" );
-ConVar sv_arrow_max_random_spread_angle( "sv_arrow_random_spread_angle", "5.f" );
-float CTFCompoundBow::GetRandomSpreadOffset( int iLevel )
-{
-	float flMaxRandomSpread = sv_arrow_max_random_spread_angle.GetFloat();
-	float flRandom = RemapValClamped( gpGlobals->curtime - m_flChargeBeginTime, 0.f, GetChargeMaxTime(), RandomFloat( -flMaxRandomSpread, flMaxRandomSpread ), 0.f );
-	return sv_arrow_spread_angle.GetFloat() * iLevel + flRandom;
-}
-#endif // STAGING_ONLY
 
 #endif
 
@@ -146,22 +124,6 @@ void CTFCompoundBow::LaunchGrenade( void )
 	{
 		pMainArrow->SetArrowAlight( m_bArrowAlight );
 
-#ifdef STAGING_ONLY
-		if ( TFGameRules() && TFGameRules()->GameModeUsesUpgrades() )
-		{
-			Vector vecMainVelocity = pMainArrow->GetAbsVelocity();
-			float flMainSpeed = vecMainVelocity.Length();
-			int iArrowMastery = 0;
-			CALL_ATTRIB_HOOK_INT( iArrowMastery, arrow_mastery );
-			for ( int i=0; i<iArrowMastery; ++i )
-			{
-				QAngle qOffset1 = pMainArrow->GetAbsAngles() + QAngle( 0, GetRandomSpreadOffset( i + 1 ), 0 );
-				CreateExtraArrow( pMainArrow, qOffset1, flMainSpeed );
-				QAngle qOffset2 = pMainArrow->GetAbsAngles() + QAngle( 0, -GetRandomSpreadOffset( i + 1 ), 0 );
-				CreateExtraArrow( pMainArrow, qOffset2, flMainSpeed );
-			}
-		}
-#endif
 	}
 
 #else
@@ -203,7 +165,7 @@ void CTFCompoundBow::LaunchGrenade( void )
 	pPlayer->m_Shared.RemoveCond( TF_COND_AIMING );
 	pPlayer->TeamFortress_SetSpeed();
 
-	m_flChargeBeginTime = 0;
+	SetInternalChargeBeginTime( 0 );
 	m_bArrowAlight = false;
 
 	// The bow doesn't actually reload, it instead uses the AE_WPN_INCREMENTAMMO anim event in the fire to reload the clip.
@@ -233,17 +195,17 @@ void CTFCompoundBow::PrimaryAttack( void )
 
 	if ( !CanAttack() )
 	{
-		m_flChargeBeginTime = 0;
+		SetInternalChargeBeginTime( 0 );
 		return;
 	}
 
-	if ( m_flChargeBeginTime <= 0 )
+	if ( GetInternalChargeBeginTime() <= 0 )
 	{
 		// Set the weapon mode.
 		m_iWeaponMode = TF_WEAPON_PRIMARY_MODE;
 
 		// save that we had the attack button down
-		m_flChargeBeginTime = gpGlobals->curtime;
+		SetInternalChargeBeginTime( gpGlobals->curtime );
 
 		SendWeaponAnim( ACT_VM_PULLBACK );
 
@@ -291,7 +253,7 @@ void CTFCompoundBow::PrimaryAttack( void )
 	}
 	else
 	{
-		float flTotalChargeTime = gpGlobals->curtime - m_flChargeBeginTime;
+		float flTotalChargeTime = gpGlobals->curtime - GetInternalChargeBeginTime();
 
 		if ( flTotalChargeTime >= GetChargeMaxTime() )
 		{
@@ -318,10 +280,10 @@ float CTFCompoundBow::GetChargeMaxTime( void )
 //-----------------------------------------------------------------------------
 float CTFCompoundBow::GetCurrentCharge( void )
 {
-	if ( m_flChargeBeginTime == 0 )
+	if ( GetInternalChargeBeginTime() == 0 )
 		return 0;
 	else
-		return MIN( gpGlobals->curtime - m_flChargeBeginTime, 1.f );
+		return MIN( gpGlobals->curtime - GetInternalChargeBeginTime(), 1.f );
 }
 
 //-----------------------------------------------------------------------------
@@ -331,7 +293,8 @@ float CTFCompoundBow::GetProjectileDamage( void )
 {
 	float flDamage = BaseClass::GetProjectileDamage();
 	float flBaseDamage = 50.f;
-	float flScale = MIN( GetCurrentCharge() / GetChargeMaxTime(), 1.f);
+	CALL_ATTRIB_HOOK_FLOAT( flBaseDamage, mult_dmg );
+	float flScale = Clamp( GetCurrentCharge() / GetChargeMaxTime(), 0.f, 1.f);
 	float flScaleDamage = flDamage * flScale;
 
 	return (flBaseDamage + flScaleDamage);
@@ -342,7 +305,7 @@ float CTFCompoundBow::GetProjectileDamage( void )
 //-----------------------------------------------------------------------------
 float CTFCompoundBow::GetProjectileSpeed( void )
 {
-	return RemapValClamped( GetCurrentCharge(), 0.0f, 1.f, 1800, 2600 );
+	return RemapValClamped( GetCurrentCharge(), 0.0f, GetChargeMaxTime(), 1800, 2600 );
 }
 
 //-----------------------------------------------------------------------------
@@ -350,7 +313,7 @@ float CTFCompoundBow::GetProjectileSpeed( void )
 //-----------------------------------------------------------------------------
 float CTFCompoundBow::GetProjectileGravity( void )
 {
-	return RemapValClamped( GetCurrentCharge(), 0.0f, 1.f, 0.5, 0.1 );
+	return RemapValClamped( GetCurrentCharge(), 0.0f, GetChargeMaxTime(), 0.5, 0.1 );
 }
 
 
@@ -377,7 +340,7 @@ void CTFCompoundBow::LowerBow( void )
 	if ( GetCurrentCharge() == 0.f )
 		return; // No arrow nocked.
 
-	m_flChargeBeginTime = 0;
+	SetInternalChargeBeginTime( 0 );
 
 	CTFPlayer *pPlayer = ToTFPlayer( GetPlayerOwner() );
 	if ( pPlayer )
@@ -405,17 +368,6 @@ bool CTFCompoundBow::DetonateRemotePipebombs( bool bFizzle )
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-bool CTFCompoundBow::OwnerCanJump( void )
-{
-	if ( GetCurrentCharge() > 0.f )
- 		return false;
-	else
-		return true;
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: 
-//-----------------------------------------------------------------------------
 bool CTFCompoundBow::Holster( CBaseCombatWeapon *pSwitchingTo )
 {
 	CTFPlayer *pPlayer = ToTFPlayer( GetPlayerOwner() );
@@ -426,6 +378,7 @@ bool CTFCompoundBow::Holster( CBaseCombatWeapon *pSwitchingTo )
 	}
 	m_bNoFire = false;
 	SetArrowAlight( false );
+	SetInternalChargeBeginTime( 0 );
 
 	return BaseClass::Holster( pSwitchingTo );
 }
@@ -445,7 +398,7 @@ bool CTFCompoundBow::SendWeaponAnim( int iActivity )
 		iActivity = ACT_ITEM2_VM_CHARGE;
 	}
 
-	float flTotalChargeTime = gpGlobals->curtime - m_flChargeBeginTime;
+	float flTotalChargeTime = gpGlobals->curtime - GetInternalChargeBeginTime();
 	if ( GetCurrentCharge() > 0 )
 	{
 		switch ( iActivity )
@@ -538,7 +491,7 @@ void CTFCompoundBow::GetProjectileFireSetup( CTFPlayer *pPlayer, Vector vecOffse
 {
 	BaseClass::GetProjectileFireSetup( pPlayer, vecOffset, vecSrc, angForward, bHitTeammates, flEndDist );
 
-	float flTotalChargeTime = gpGlobals->curtime - m_flChargeBeginTime;
+	float flTotalChargeTime = gpGlobals->curtime - GetInternalChargeBeginTime();
 	if ( flTotalChargeTime >= TF_ARROW_MAX_CHARGE_TIME )
 	{
 		// We want to fire a really inaccurate shot.
@@ -599,7 +552,7 @@ void CTFCompoundBow::StartBurningEffect( void )
 			pszEffect = "flaming_arrow";
 		}
 
-		m_pBurningArrowEffect = m_hParticleEffectOwner->ParticleProp()->Create( pszEffect, PATTACH_POINT_FOLLOW, "muzzle" );
+		m_pBurningArrowEffect = m_hParticleEffectOwner->ParticleProp()->Create( pszEffect, PATTACH_POINT_FOLLOW, COMPOUND_BOW_ATTACHMENT_POINT );
 	}
 }
 
@@ -638,13 +591,27 @@ void CTFCompoundBow::OnDataChanged( DataUpdateType_t type )
 	// Handle particle effect creation / destruction
 	if ( m_bArrowAlight && !m_pBurningArrowEffect )
 	{
-		StartBurningEffect();
-		EmitSound( "ArrowLight" );
+		if ( GetBaseAnimating()->LookupAttachment( COMPOUND_BOW_ATTACHMENT_POINT ) != INVALID_PARTICLE_ATTACHMENT )
+		{
+			StartBurningEffect();
+			EmitSound( "ArrowLight" );
+		}
 	}
 	else if ( !m_bArrowAlight && m_pBurningArrowEffect )
 	{
 		StopBurningEffect();
 	}
+}
+#else
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+float CTFCompoundBow::GetInitialAfterburnDuration() const
+{
+	// if the bow is lighting someone on fire it must have
+	// been the arrow was lit before it was fired
+	return 7.5f;
 }
 #endif
 
@@ -682,4 +649,12 @@ void CTFCompoundBow::SetArrowAlight( bool bAlight )
 	{
 		m_bArrowAlight = bAlight; 
 	}
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+bool CTFCompoundBow::OwnerCanJump( void )
+{
+	return GetInternalChargeBeginTime() == 0.f;
 }

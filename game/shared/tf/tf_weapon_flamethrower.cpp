@@ -9,13 +9,15 @@
 #include "in_buttons.h"
 #include "ammodef.h"
 #include "tf_gamerules.h"
+#include "tf_weapon_rocketpack.h"
+#include "debugoverlay_shared.h"
+#include "soundenvelope.h"
 
 #if defined( CLIENT_DLL )
 
 	#include "c_tf_player.h"
 	#include "vstdlib/random.h"
 	#include "engine/IEngineSound.h"
-	#include "soundenvelope.h"
 	#include "prediction.h"
 	#include "haptics/ihaptics.h"
 	#include "c_tf_gamestats.h"
@@ -33,37 +35,100 @@
 	#include "tf_weaponbase_grenadeproj.h"
 	#include "tf_weapon_compound_bow.h"
 	#include "tf_projectile_arrow.h"
-	#include "tf_gamestats.h"
 	#include "NextBot/NextBotManager.h"
 	#include "halloween/merasmus/merasmus_trick_or_treat_prop.h"
 	#include "tf_logic_robot_destruction.h"
-#ifdef STAGING_ONLY
-	#include "tf_fx.h"
-#endif // STAGING_ONLY
 	#include "tf_passtime_logic.h"
 
-	ConVar	tf_debug_flamethrower("tf_debug_flamethrower", "0", FCVAR_CHEAT , "Visualize the flamethrower damage." );
 	ConVar  tf_flamethrower_velocity( "tf_flamethrower_velocity", "2300.0", FCVAR_CHEAT | FCVAR_DEVELOPMENTONLY, "Initial velocity of flame damage entities." );
 	ConVar	tf_flamethrower_drag("tf_flamethrower_drag", "0.87", FCVAR_CHEAT | FCVAR_DEVELOPMENTONLY, "Air drag of flame damage entities." );
 	ConVar	tf_flamethrower_float("tf_flamethrower_float", "50.0", FCVAR_CHEAT | FCVAR_DEVELOPMENTONLY, "Upward float velocity of flame damage entities." );
 	ConVar  tf_flamethrower_vecrand("tf_flamethrower_vecrand", "0.05", FCVAR_CHEAT | FCVAR_DEVELOPMENTONLY, "Random vector added to initial velocity of flame damage entities." );
-	ConVar  tf_flamethrower_boxsize("tf_flamethrower_boxsize", "12.0", FCVAR_CHEAT , "Size of flame damage entities." );
+
 	ConVar  tf_flamethrower_maxdamagedist("tf_flamethrower_maxdamagedist", "350.0", FCVAR_CHEAT | FCVAR_DEVELOPMENTONLY, "Maximum damage distance for flamethrower." );
 	ConVar  tf_flamethrower_shortrangedamagemultiplier("tf_flamethrower_shortrangedamagemultiplier", "1.2", FCVAR_CHEAT | FCVAR_DEVELOPMENTONLY, "Damage multiplier for close-in flamethrower damage." );
 	ConVar  tf_flamethrower_velocityfadestart("tf_flamethrower_velocityfadestart", ".3", FCVAR_CHEAT | FCVAR_DEVELOPMENTONLY, "Time at which attacker's velocity contribution starts to fade." );
 	ConVar  tf_flamethrower_velocityfadeend("tf_flamethrower_velocityfadeend", ".5", FCVAR_CHEAT | FCVAR_DEVELOPMENTONLY, "Time at which attacker's velocity contribution finishes fading." );
 	ConVar	tf_flamethrower_burst_zvelocity( "tf_flamethrower_burst_zvelocity", "350", FCVAR_CHEAT | FCVAR_DEVELOPMENTONLY );
+	const float	tf_flamethrower_burn_frequency = 0.075f;
+	const float	tf_flamethrower_afterburn_rate = 0.4f;
 
 	static const char *s_pszFlameThrowerHitTargetThink = "FlameThrowerHitTargetThink";
-
-	extern ConVar tf_player_movement_stun_time;
-
 #endif
+
+ConVar	tf_debug_flamethrower("tf_debug_flamethrower", "0", FCVAR_CHEAT | FCVAR_REPLICATED, "Visualize the flamethrower damage." );
+ConVar  tf_flamethrower_boxsize("tf_flamethrower_boxsize", "12.0", FCVAR_CHEAT | FCVAR_REPLICATED, "Size of flame damage entities.", true, 1.f, true, 24.f );
+ConVar  tf_flamethrower_new_flame_offset( "tf_flamethrower_new_flame_offset", "40 5 0", FCVAR_CHEAT | FCVAR_DEVELOPMENTONLY | FCVAR_REPLICATED, "Starting position relative to the flamethrower." );
+const float	tf_flamethrower_initial_afterburn_duration = 3.f;
+const float	tf_flamethrower_airblast_cone_angle = 35.0f;
+
 
 #include "tf_pumpkin_bomb.h"
 
-ConVar  tf_flamethrower_burstammo("tf_flamethrower_burstammo", "20", FCVAR_CHEAT | FCVAR_DEVELOPMENTONLY | FCVAR_REPLICATED, "How much ammo does the air burst uses per shot." );
+const float	tf_flamethrower_new_flame_fire_delay = 0.02f;
+const float	tf_flamethrower_damage_per_tick = 13.f;
+ConVar  tf_flamethrower_burstammo("tf_flamethrower_burstammo", "20", FCVAR_CHEAT | FCVAR_DEVELOPMENTONLY | FCVAR_REPLICATED, "How much ammo does the air burst use per shot." );
 ConVar  tf_flamethrower_flametime("tf_flamethrower_flametime", "0.5", FCVAR_CHEAT | FCVAR_DEVELOPMENTONLY | FCVAR_REPLICATED, "Time to live of flame damage entities." );
+
+
+// If we're shipping this it needs to be better hooked with flame manager -- right now we just spawn 5 managers for
+// prototyping
+#ifdef WATERFALL_FLAMETHROWER_TEST
+// TODO:  ConVars for easier for easier testing, but should be attributes for shipping?
+// (TODO: Add con commands to modify stock attributes on the fly)
+ConVar	tf_flamethrower_waterfall_damage_per_tick( "tf_flamethrower_waterfall_damage_per_tick", "7", FCVAR_REPLICATED );
+#endif // WATERFALL_FLAMETHROWER_TEST
+
+#if defined( GAME_DLL )
+// TODO These should be cheat upon shipping probably
+ConVar tf_airblast_cray( "tf_airblast_cray", "1", FCVAR_CHEAT,
+                         "Use alternate cray airblast logic globally." );
+ConVar tf_airblast_cray_debug( "tf_airblast_cray_debug", "0", FCVAR_CHEAT,
+                               "Enable debugging overlays & output for cray airblast.  "
+                               "Value is length of time to show debug overlays in seconds." );
+ConVar tf_airblast_cray_power( "tf_airblast_cray_power", "600", FCVAR_CHEAT,
+                               "Amount of force cray airblast should apply unconditionally. "
+                               "Set to 0 to only perform player momentum reflection.");
+ConVar tf_airblast_cray_power_relative( "tf_airblast_cray_power_relative", "0", FCVAR_CHEAT,
+                                        "If set, the blast power power also inherits from the blast's forward momentum." );
+ConVar tf_airblast_cray_reflect_coeff( "tf_airblast_cray_reflect_coeff", "2", FCVAR_CHEAT,
+                                       "The coefficient of reflective power cray airblast employs.\n"
+                                       " 0   - No reflective powers\n"
+                                       " 0-1 - Cancel out some/all incoming velocity\n"
+                                       " 1-2 - Reflect some/all incoming velocity outwards\n"
+                                       " 2+  - Reflect incoming velocity outwards and then some\n" );
+ConVar tf_airblast_cray_reflect_cost_coeff( "tf_airblast_cray_reflect_cost_coeff", "0.5", FCVAR_CHEAT,
+                                            "What portion of power used for reflection is removed from the push effect. "
+                                            "Note that reflecting incoming momentum requires 2x the momentum - "
+                                            "to first neutralize and then reverse it.  Setting this to 1 means that a "
+                                            "target running towards the blast at more than 50% blast-speed would have "
+                                            "a net pushback half that of a stationary target, since half the power was "
+                                            "used to negate their incoming momentum. A value of 0.5 would mean that "
+                                            "running towards the blast would not be beneficial vs being still, while "
+                                            "values >.5 would make it beneficial to do so, and <.5 detrimental." );
+ConVar tf_airblast_cray_reflect_relative( "tf_airblast_cray_reflect_relative", "0", FCVAR_CHEAT,
+                                          "If set, the relative, rather than absolute, target velocity is considered "
+                                          "for reflection." );
+ConVar tf_airblast_cray_ground_reflect( "tf_airblast_cray_ground_reflect", "1", FCVAR_CHEAT,
+                                        "If set, cray airblast reflects any airblast power directed into the ground "
+                                        "off of it, to prevent ground-stuck and provide a bit more control over "
+                                        "up-vs-forward vectoring" );
+ConVar tf_airblast_cray_ground_minz( "tf_airblast_cray_ground_minz", "100", FCVAR_CHEAT,
+                                     "If set, cray airblast ensures the target has this minimum Z velocity after "
+                                     "reflections and impulse have been applied. "
+                                     "Set to 268.3281572999747 for exact old airblast Z behavior." );
+ConVar tf_airblast_cray_lose_footing_duration( "tf_airblast_cray_lose_footing_duration", "0.5", FCVAR_CHEAT,
+                                               "How long the player should be unable to regain their footing after "
+                                               "being airblast, separate from air-control stun." );
+ConVar tf_airblast_cray_stun_duration( "tf_airblast_cray_stun_duration", "0", FCVAR_CHEAT,
+                                       "If set, apply this duration of stun when initially hit by an airblast.  "
+                                       "Does not apply to repeated airblasts.", true, 0.0f, true, 1.0f );
+ConVar tf_airblast_cray_stun_amount( "tf_airblast_cray_stun_amount", "0", FCVAR_CHEAT,
+                                     "Amount of control loss to apply if stun_duration is set.",
+                                     true, 0.0f, true, 1.0f );
+ConVar tf_airblast_cray_pitch_control( "tf_airblast_cray_pitch_control", "0", FCVAR_CHEAT,
+                                       "If set, allow controlling the pitch of the airblast, in addition to the yaw." );
+#endif // defined( GAME_DLL )
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
@@ -117,10 +182,12 @@ BEGIN_NETWORK_TABLE_NOBASE( CTFFlameThrower, DT_LocalFlameThrower )
 	#if defined( CLIENT_DLL )
 		RecvPropInt( RECVINFO( m_iActiveFlames ) ),
 		RecvPropInt( RECVINFO( m_iDamagingFlames ) ),
+		RecvPropEHandle( RECVINFO( m_hFlameManager ) ),
 		RecvPropBool( RECVINFO( m_bHasHalloweenSpell ) ),
 	#else
 		SendPropInt( SENDINFO( m_iActiveFlames ), 5, SPROP_UNSIGNED | SPROP_CHANGES_OFTEN ),
 		SendPropInt( SENDINFO( m_iDamagingFlames ), 10, SPROP_UNSIGNED | SPROP_CHANGES_OFTEN ),
+		SendPropEHandle( SENDINFO( m_hFlameManager ) ),
 		SendPropBool( SENDINFO( m_bHasHalloweenSpell ) ),
 	#endif
 END_NETWORK_TABLE()
@@ -186,7 +253,15 @@ CTFFlameThrower::CTFFlameThrower()
 #else
 	m_flTimeToStopHitSound = 0;
 #endif
+
+	m_flSecondaryAnimTime = 0.f;
 	m_bHasHalloweenSpell.Set( false );
+	m_flMinPrimaryAttackBurstTime = 0.f;
+
+	m_szParticleEffectBlue[0] = '\0';
+	m_szParticleEffectRed[0] = '\0';	
+	m_szParticleEffectBlueCrit[0] = '\0';
+	m_szParticleEffectRedCrit[0] = '\0';
 
 	ListenForGameEvent( "recalculate_holidays" );
 }
@@ -205,6 +280,38 @@ CTFFlameThrower::~CTFFlameThrower()
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
+const char *CTFFlameThrower::GetNewFlameEffectInternal( int nTeam, bool bCrit )
+{
+	static CSchemaAttributeDefHandle pAttrDef_FireParticleBlue( "fire particle blue" );
+	static CSchemaAttributeDefHandle pAttrDef_FireParticleRed( "fire particle red" );
+	static CSchemaAttributeDefHandle pAttrDef_FireParticleBlueCrit( "fire particle blue crit" );
+	static CSchemaAttributeDefHandle pAttrDef_FireParticleRedCrit( "fire particle red crit" );
+
+	char *pszParticleEffect = ( nTeam == TF_TEAM_BLUE ) ? ( bCrit ? m_szParticleEffectBlueCrit : m_szParticleEffectBlue ) : ( bCrit ? m_szParticleEffectRedCrit : m_szParticleEffectRed );
+	if ( !pszParticleEffect[0] )
+	{
+		CEconItemView *pItem = GetAttributeContainer()->GetItem();
+		if ( pItem )
+		{
+			CAttribute_String attrModule;
+			const CEconItemAttributeDefinition *pAttrDef = ( nTeam == TF_TEAM_BLUE ) ? ( bCrit ? pAttrDef_FireParticleBlueCrit : pAttrDef_FireParticleBlue ) : ( bCrit ? pAttrDef_FireParticleRedCrit : pAttrDef_FireParticleRed );
+			if ( !pItem->FindAttribute( pAttrDef, &attrModule ) || !attrModule.has_value() )
+			{
+				V_strncpy( pszParticleEffect, bCrit ? ( ( nTeam == TF_TEAM_BLUE ) ? "new_flame_crit_blue" : "new_flame_crit_red" ) : "new_flame", MAX_PARTICLE_EFFECT_NAME_LENGTH );
+			}
+			else
+			{
+				V_strncpy( pszParticleEffect, attrModule.value().c_str(), MAX_PARTICLE_EFFECT_NAME_LENGTH );
+			}
+		}
+	}
+
+	return ( pszParticleEffect[0] ? pszParticleEffect : "new_flame" );
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFFlameThrower::Precache( void )
 {
 	BaseClass::Precache();
@@ -213,6 +320,7 @@ void CTFFlameThrower::Precache( void )
 	PrecacheGibsForModel( iModelIndex );
 
 	PrecacheParticleSystem( "pyro_blast" );
+	PrecacheParticleSystem( "flamethrower_rope" );
 	PrecacheScriptSound( "Weapon_FlameThrower.AirBurstAttack" );
 	PrecacheScriptSound( "TFPlayer.AirBlastImpact" );
 	PrecacheScriptSound( "Weapon_FlameThrower.AirBurstAttackDeflect" );
@@ -220,33 +328,94 @@ void CTFFlameThrower::Precache( void )
 	PrecacheParticleSystem( "drg_bison_idle" );
 	PrecacheParticleSystem( "medicgun_invulnstatus_fullcharge_blue" );
 	PrecacheParticleSystem( "medicgun_invulnstatus_fullcharge_red" );
-	PrecacheParticleSystem( "halloween_burningplayer_flyingbits");
+	PrecacheParticleSystem( "halloween_burningplayer_flyingbits" );
+	PrecacheParticleSystem( "torch_player_burn" );
+	PrecacheParticleSystem( "torch_red_core_1" );
 
-#ifdef STAGING_ONLY
-	PrecacheScriptSound( "Equipment.RocketPack_Activate" );
-	PrecacheParticleSystem( "muzzle_bignasty" );
-#endif // STAGING_ONLY
+	// for airblast projectile turn into ammopack
+	PrecacheModel( "models/items/ammopack_small.mdl" );
+
+
+#ifdef GAME_DLL
+	// only do this for the server here, since the client
+	// isn't ready for this yet when it calls into Precache()
+	PrecacheParticleSystem( GetNewFlameEffectInternal( TF_TEAM_BLUE, false ) );
+	PrecacheParticleSystem( GetNewFlameEffectInternal( TF_TEAM_BLUE, true ) );
+	PrecacheParticleSystem( GetNewFlameEffectInternal( TF_TEAM_RED, false ) );
+	PrecacheParticleSystem( GetNewFlameEffectInternal( TF_TEAM_RED, true ) );
+
+#endif // GAME_DLL
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 bool CTFFlameThrower::CanAirBlast() const
 {
+	CTFPlayer *pOwner = GetTFPlayerOwner();
+	if ( !pOwner )
+		return false;
+
 	int iAirblastDisabled = 0;
 	CALL_ATTRIB_HOOK_INT( iAirblastDisabled, airblast_disabled );
 
-	bool bAllowed = ( iAirblastDisabled == 0 );
-
-#ifdef STAGING_ONLY
-	int nRocketPack = 0;
-	CALL_ATTRIB_HOOK_INT_ON_OTHER( GetOwner(), nRocketPack, rocket_pack );
-	if ( nRocketPack )
-	{
-		bAllowed = false;
-	}
-#endif // STAGING_ONLY
-
-	return bAllowed;
+	return ( iAirblastDisabled == 0 );
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+bool CTFFlameThrower::CanAirBlastPushPlayer() const
+{
+	CTFPlayer *pOwner = GetTFPlayerOwner();
+	if ( !pOwner )
+		return false;
+
+	if ( !CanAirBlast() )
+		return false;
+
+	int iNoPushPlayer = 0;
+	CALL_ATTRIB_HOOK_INT( iNoPushPlayer, airblast_pushback_disabled );
+
+	return ( iNoPushPlayer == 0 );
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+bool CTFFlameThrower::CanAirBlastDeflectProjectile() const
+{
+	CTFPlayer *pOwner = GetTFPlayerOwner();
+	if ( !pOwner )
+		return false;
+
+	if ( !CanAirBlast() )
+		return false;
+
+	int iDeflectProjectilesDisabled = 0;
+	CALL_ATTRIB_HOOK_INT( iDeflectProjectilesDisabled, airblast_deflect_projectiles_disabled );
+
+	return ( iDeflectProjectilesDisabled == 0 );
+}
+
+bool CTFFlameThrower::CanAirBlastPutOutTeammate() const
+{
+	CTFPlayer *pOwner = GetTFPlayerOwner();
+	if ( !pOwner )
+		return false;
+
+	if ( !CanAirBlast() )
+		return false;
+
+	int iPutOutTeammateDisabled = 0;
+	CALL_ATTRIB_HOOK_INT( iPutOutTeammateDisabled, airblast_put_out_teammate_disabled );
+
+	return ( iPutOutTeammateDisabled == 0 );
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFFlameThrower::DestroySounds( void )
 {
 #if defined( CLIENT_DLL )
@@ -281,6 +450,10 @@ void CTFFlameThrower::DestroySounds( void )
 #endif
 
 }
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFFlameThrower::WeaponReset( void )
 {
 	BaseClass::WeaponReset();
@@ -288,12 +461,12 @@ void CTFFlameThrower::WeaponReset( void )
 	SetWeaponState( FT_STATE_IDLE );
 	m_bCritFire = false;
 	m_bHitTarget = false;
-	m_flStartFiringTime = 0;
-	m_flAmmoUseRemainder = 0;
-	m_flChargeBeginTime = 0;
-	m_flSpinupBeginTime = 0;
+	m_flStartFiringTime = 0.f;
+	m_flMinPrimaryAttackBurstTime = 0.f;
+	m_flAmmoUseRemainder = 0.f;
+	m_flChargeBeginTime = 0.f;
+	m_flSpinupBeginTime = 0.f;
 	ResetFlameHitCount();
-
 	DestroySounds();
 
 #if defined( CLIENT_DLL )
@@ -304,10 +477,36 @@ void CTFFlameThrower::WeaponReset( void )
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
+void CTFFlameThrower::WeaponIdle( void )
+{
+	BaseClass::WeaponIdle();
+
+	SetWeaponState( FT_STATE_IDLE );
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFFlameThrower::Spawn( void )
 {
 	m_iAltFireHint = HINT_ALTFIRE_FLAMETHROWER;
 	BaseClass::Spawn();
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+void CTFFlameThrower::UpdateOnRemove( void )
+{
+#ifdef CLIENT_DLL
+	m_FlameEffects.StopEffects();
+	m_MmmmphEffect.StopEffects();
+	StopPilotLight();
+	StopFullCritEffect();
+	m_bEffectsThinking = false;
+#endif // CLIENT_DLL
+
+	BaseClass::UpdateOnRemove();
 }
 
 //-----------------------------------------------------------------------------
@@ -370,21 +569,39 @@ void CTFFlameThrower::ItemPostFrame()
 		m_bFiredBothAttacks = false;
 	}
 
+	if ( !( pOwner->m_nButtons & IN_ATTACK ) )
+	{
+		// We were forced to fire, but time's up
+		if ( m_flMinPrimaryAttackBurstTime > 0.f && gpGlobals->curtime > m_flMinPrimaryAttackBurstTime )
+		{
+			m_flMinPrimaryAttackBurstTime = 0.f;
+#ifdef GAME_DLL
+			if ( m_hFlameManager )
+				{ m_hFlameManager->StopFiring(); }
+#endif // GAME_DLL
+			//DevMsg( "Stop Firing\n" );
+		}
+	}
+
 	if ( pOwner->m_nButtons & IN_ATTACK && pOwner->m_nButtons & IN_ATTACK2 )
 	{
 		m_bFiredBothAttacks = true;
 	}
 
+	// Force a min window of emission to prevent a case where
+	// tap-spamming +attack can create invisible flame points.
+	bool bForceFire = ( m_flMinPrimaryAttackBurstTime > 0.f && gpGlobals->curtime < m_flMinPrimaryAttackBurstTime );
+
 	if ( !m_bFiredSecondary )
 	{
 		bool bSpinDown = m_flSpinupBeginTime > 0.0f;
 
-		if ( pOwner->IsAlive() && ( pOwner->m_nButtons & IN_ATTACK ) && iAmmo > 0 )
+		if ( pOwner->IsAlive() && ( ( pOwner->m_nButtons & IN_ATTACK ) || bForceFire ) && iAmmo > 0 )
 		{
 			PrimaryAttack();
 			bSpinDown = false;
 		}
-		else if ( m_iWeaponState > FT_STATE_IDLE )
+		else if ( m_iWeaponState > FT_STATE_IDLE && m_iWeaponState != FT_STATE_SECONDARY )
 		{
 			SendWeaponAnim( ACT_MP_ATTACK_STAND_POSTFIRE );
 			pOwner->DoAnimationEvent( PLAYERANIMEVENT_ATTACK_POST );
@@ -410,10 +627,10 @@ void CTFFlameThrower::ItemPostFrame()
 		}
 	}
 
-	if (!((pOwner->m_nButtons & IN_ATTACK) || (pOwner->m_nButtons & IN_RELOAD)) || (!(pOwner->m_nButtons & IN_ATTACK2) || !m_bFiredSecondary))
+	if ( !( ( pOwner->m_nButtons & IN_ATTACK ) || ( pOwner->m_nButtons & IN_RELOAD ) || ( pOwner->m_nButtons & IN_ATTACK2 ) || m_bFiredSecondary ) && !bForceFire )
 	{
 		// no fire buttons down or reloading
-		if ( !ReloadOrSwitchWeapons() && ( m_bInReload == false ) )
+		if ( !ReloadOrSwitchWeapons() && ( m_bInReload == false ) && m_flSecondaryAnimTime < gpGlobals->curtime )
 		{
 			WeaponIdle();
 		}
@@ -426,12 +643,8 @@ void CTFFlameThrower::ItemPostFrame()
 	{
 		if ( m_flChargeBeginTime > 0 )
 		{
-			CTFPlayer *pPlayer = GetTFPlayerOwner();
-			if ( !pPlayer )
-				return;
-
 			// If we're not holding down the attack button, launch the flame rocket
-			if ( !(pPlayer->m_nButtons & IN_ATTACK2) )
+			if ( !(pOwner->m_nButtons & IN_ATTACK2) )
 			{
 				//FireProjectile( pOwner );
 				float flMultAmmoPerShot = 1.0f;
@@ -442,28 +655,6 @@ void CTFFlameThrower::ItemPostFrame()
 		}
 	}
 }
-
-class CTraceFilterIgnoreObjects : public CTraceFilterSimple
-{
-public:
-	// It does have a base, but we'll never network anything below here..
-	DECLARE_CLASS( CTraceFilterIgnoreObjects, CTraceFilterSimple );
-
-	CTraceFilterIgnoreObjects( const IHandleEntity *passentity, int collisionGroup )
-		: CTraceFilterSimple( passentity, collisionGroup )
-	{
-	}
-
-	virtual bool ShouldHitEntity( IHandleEntity *pServerEntity, int contentsMask )
-	{
-		CBaseEntity *pEntity = EntityFromEntityHandle( pServerEntity );
-
-		if ( pEntity && pEntity->IsBaseObject() )
-			return false;
-
-		return BaseClass::ShouldHitEntity( pServerEntity, contentsMask );
-	}
-};
 
 //-----------------------------------------------------------------------------
 // Purpose: 
@@ -560,6 +751,13 @@ void CTFFlameThrower::PrimaryAttack()
 			SendWeaponAnim( ACT_VM_PRIMARYATTACK );
 
 			m_flStartFiringTime = gpGlobals->curtime + 0.16;	// 5 frames at 30 fps
+			
+			// Force a min window of emission to prevent a case where
+			// tap-spamming +attack can create invisible flame points.
+			if ( m_flMinPrimaryAttackBurstTime == 0.f )
+			{
+				m_flMinPrimaryAttackBurstTime = gpGlobals->curtime + 0.2f;
+			}
 
 			SetWeaponState( FT_STATE_STARTFIRING );
 		}
@@ -622,13 +820,9 @@ void CTFFlameThrower::PrimaryAttack()
 #endif
 
 	float flFiringInterval = m_pWeaponInfo->GetWeaponData( m_iWeaponMode ).m_flTimeFireDelay;
-
-#ifdef STAGING_ONLY
-	if ( ShootsNapalm() )
 	{
-		flFiringInterval *= 4.f;
+		flFiringInterval = tf_flamethrower_new_flame_fire_delay;
 	}
-#endif // STAGING_ONLY
 
 	// Don't attack if we're underwater
 	if ( pOwner->GetWaterLevel() != WL_Eyes )
@@ -665,20 +859,42 @@ void CTFFlameThrower::PrimaryAttack()
 		// create the flame entity
 		int iDamagePerSec = m_pWeaponInfo->GetWeaponData( m_iWeaponMode ).m_nDamage;
 		float flDamage = (float)iDamagePerSec * flFiringInterval;
+		{
+			flDamage = tf_flamethrower_damage_per_tick;
+		}
+#ifdef WATERFALL_FLAMETHROWER_TEST
+		int iWaterfallMode = 0;
+		CALL_ATTRIB_HOOK_INT( iWaterfallMode, flame_waterfall );
+		if ( iWaterfallMode )
+		{
+			flDamage = tf_flamethrower_waterfall_damage_per_tick.GetFloat();
+		}
+#endif
 		CALL_ATTRIB_HOOK_FLOAT( flDamage, mult_dmg );
 
 		int iCritFromBehind = 0;
 		CALL_ATTRIB_HOOK_INT( iCritFromBehind, set_flamethrower_back_crit );
 
-#ifdef STAGING_ONLY
-		if ( ShootsNapalm() )
 		{
-			CTFProjectile_Napalm::Create( pOwner, this );
-		}
-		else
-#endif // STAGING_ONLY
-		{
-			CTFFlameEntity::Create( GetFlameOriginPos(), pOwner->EyeAngles(), this, tf_flamethrower_velocity.GetFloat(), iDmgType, flDamage, iCritFromBehind == 1 );
+			if ( !m_hFlameManager )
+			{
+				m_hFlameManager = CTFFlameManager::Create( this );
+				// This is a hack(?).  Right now, the flame manager goes outside of the shooter's
+				// own PVS when they get very close to a wall (or just looks down), so we end
+				// up creating flame managers repeatedly for the same burst of flames.  This
+				// call ensures that the new manager will create particle effects.
+				//
+				// The *real* fix is to figure out how to get the flame manager to not go out
+				// of the shooter's PVS ever.
+				m_hFlameManager->StartFiring();
+			}
+
+			if ( m_hFlameManager )
+			{
+				// update damage state
+				m_hFlameManager->UpdateDamage( iDmgType, flDamage, tf_flamethrower_burn_frequency, iCritFromBehind == 1 );
+				m_hFlameManager->AddPoint( TIME_TO_TICKS( gpGlobals->curtime ) );
+			}
 		}
 
 		// Pyros can become invis in some game modes.  Hitting fire normally handles this,
@@ -724,6 +940,8 @@ void CTFFlameThrower::PrimaryAttack()
 		g_pPasstimeLogic->GetBall()->FinishLagCompensation( pOwner );
 	}
 #endif
+
+	pOwner->m_Shared.OnAttack();
 }
 
 //-----------------------------------------------------------------------------
@@ -744,25 +962,6 @@ float AirBurstDamageForce( const Vector &size, float damage, float scale )
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-bool CTFFlameThrower::SupportsAirBlastFunction( EFlameThrowerAirblastFunction eFunction ) const
-{
-	int iSupportedAirBlastFunctions = 0;
-	CALL_ATTRIB_HOOK_INT( iSupportedAirBlastFunctions, airblast_functionality_flags );
-
-	// If we don't have this attribute specified, or it is set to the value 0, we interpret
-	// that as "I can do everything!".
-	if ( iSupportedAirBlastFunctions == 0 )
-	{
-		// They can do everything unless airblast is disabled, in which case they can do nothing
-		return CanAirBlast();
-	}
-
-	return (iSupportedAirBlastFunctions & eFunction) != 0;
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: 
-//-----------------------------------------------------------------------------
 void CTFFlameThrower::FireAirBlast( int iAmmoPerShot )
 {
 	CTFPlayer *pOwner = GetTFPlayerOwner();
@@ -778,10 +977,11 @@ void CTFFlameThrower::FireAirBlast( int iAmmoPerShot )
 
 	SetWeaponState( FT_STATE_SECONDARY );
 
-#ifdef GAME_DLL
 	SendWeaponAnim( ACT_VM_SECONDARYATTACK );
 	pOwner->DoAnimationEvent( PLAYERANIMEVENT_ATTACK_SECONDARY );
-
+	m_flSecondaryAnimTime = gpGlobals->curtime + SequenceDuration( GetSequence() );
+	
+#ifdef GAME_DLL
 	int nDash = 0;
 	CALL_ATTRIB_HOOK_INT( nDash, airblast_dashes );
 
@@ -791,22 +991,15 @@ void CTFFlameThrower::FireAirBlast( int iAmmoPerShot )
 	}
 	else
 	{
-#ifdef STAGING_ONLY
-		Vector vDashDir;
-		AngleVectors( pOwner->EyeAngles() + QAngle( 0.0f, 180.0f, 0.0f ), &vDashDir );
-#else
 		Vector vDashDir = pOwner->GetAbsVelocity();
 		if ( !pOwner->GetGroundEntity() || vDashDir.Length() == 0.0f )
 		{
 			AngleVectors( pOwner->EyeAngles(), &vDashDir );
 		}
-#endif
 		vDashDir.z = 0.0f;
 		VectorNormalize( vDashDir );
 
-		Vector vCenter = pOwner->WorldSpaceCenter();
-		Vector vSize = GetDeflectionSize();
-		DeflectPlayer( pOwner, pOwner, vDashDir, vCenter, vSize );
+		DeflectPlayer( pOwner, pOwner, vDashDir );
 	}
 
 	// for charged airblast
@@ -855,6 +1048,9 @@ void CTFFlameThrower::FireAirBlast( int iAmmoPerShot )
 	pOwner->RemoveAmmo( iAmmoPerShot, m_iPrimaryAmmoType );
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 float CTFFlameThrower::GetSpinUpTime( void ) const
 {
 	float flSpinUpTime = 0.0f;
@@ -863,6 +1059,9 @@ float CTFFlameThrower::GetSpinUpTime( void ) const
 	return flSpinUpTime;
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFFlameThrower::SetWeaponState( int nWeaponState )
 {
 	if ( m_iWeaponState == nWeaponState )
@@ -881,7 +1080,9 @@ void CTFFlameThrower::SetWeaponState( int nWeaponState )
 			{
 				pOwner->m_Shared.RemoveCond( TF_COND_SPEED_BOOST );
 			}
+			m_flMinPrimaryAttackBurstTime = 0.f;
 		}
+
 		break;
 
 	case FT_STATE_STARTFIRING:
@@ -894,7 +1095,20 @@ void CTFFlameThrower::SetWeaponState( int nWeaponState )
 				pOwner->m_Shared.AddCond( TF_COND_SPEED_BOOST );
 			}
 		}
+
 		break;
+	}
+
+	if ( m_hFlameManager )
+	{
+		if ( nWeaponState == FT_STATE_IDLE )
+		{
+			m_hFlameManager->StopFiring();
+		}
+		else
+		{
+			m_hFlameManager->StartFiring();
+		}
 	}
 
 	m_iWeaponState = nWeaponState;
@@ -937,6 +1151,10 @@ void CTFFlameThrower::UseRage( void )
 //-----------------------------------------------------------------------------
 void CTFFlameThrower::SecondaryAttack()
 {
+	CTFPlayer *pOwner = GetTFPlayerOwner();
+	if ( !pOwner )
+		return;
+
 	if ( m_flChargeBeginTime > 0 )
 	{
 		m_bFiredSecondary = true;
@@ -954,10 +1172,6 @@ void CTFFlameThrower::SecondaryAttack()
 		return;
 	}
 
-	CTFPlayer *pOwner = GetTFPlayerOwner();
-	if ( !pOwner )
-		return;
-
 	if ( pOwner->GetWaterLevel() == WL_Eyes )
 		return;
 
@@ -967,6 +1181,7 @@ void CTFFlameThrower::SecondaryAttack()
 		return;
 	}
 
+	
 	int iAmmo = pOwner->GetAmmoCount( m_iPrimaryAmmoType );
 
 	// charged airblast
@@ -994,22 +1209,12 @@ void CTFFlameThrower::SecondaryAttack()
 		return;
 	}
 
+	SetWeaponState( FT_STATE_SECONDARY );
+
 #ifdef CLIENT_DLL
 	// Stop the flame if we're currently firing
 	StopFlame( false );
-#endif
-
-	SetWeaponState( FT_STATE_SECONDARY );
-
-#ifdef STAGING_ONLY
-	if ( RocketPackCanActivate( iAmmoPerShot ) )
-	{
-		RocketPackLaunch( iAmmoPerShot );
-		return;
-	}
-#endif // STAGING_ONLY
-
-#ifdef GAME_DLL
+#else
 	m_iWeaponMode = TF_WEAPON_SECONDARY_MODE;
 	m_flChargeBeginTime = gpGlobals->curtime;
 	SendWeaponAnim( ACT_VM_PULLBACK );
@@ -1023,9 +1228,8 @@ void CTFFlameThrower::SecondaryAttack()
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-Vector CTFFlameThrower::GetDeflectionSize()
-{ 
-	const Vector vecBaseDeflectionSize = BaseClass::GetDeflectionSize();
+float CTFFlameThrower::GetDeflectionRadius() const
+{
 	float fMultiplier = 1.0f;
 
 	// int iChargedAirblast = 0;
@@ -1042,7 +1246,7 @@ Vector CTFFlameThrower::GetDeflectionSize()
 	// Allow custom attributes to scale the deflection size.
 	CALL_ATTRIB_HOOK_FLOAT( fMultiplier, deflection_size_multiplier );
 
-	return vecBaseDeflectionSize * fMultiplier;
+	return fMultiplier * BaseClass::GetDeflectionRadius();
 }
 
 //-----------------------------------------------------------------------------
@@ -1053,6 +1257,9 @@ ConVar tf_pushbackscalescale( "tf_pushbackscalescale", "1.0" );
 ConVar tf_pushbackscalescale_vertical( "tf_pushbackscalescale_vertical", "1.0" );
 #endif
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void ExtinguishPlayer( CEconEntity *pExtinguisher, CTFPlayer *pOwner, CTFPlayer *pTarget, const char *pExtinguisherName )
 {
 	pTarget->EmitSound( "TFPlayer.FlameOut" );
@@ -1093,11 +1300,324 @@ void ExtinguishPlayer( CEconEntity *pExtinguisher, CTFPlayer *pOwner, CTFPlayer 
 				(int)pTarget->GetAbsOrigin().x, (int)pTarget->GetAbsOrigin().y, (int)pTarget->GetAbsOrigin().z );
 }
 
-bool CTFFlameThrower::DeflectPlayer( CTFPlayer *pTarget, CTFPlayer *pOwner, Vector &vecForward, Vector &vecCenter, Vector &vecSize )
+//-----------------------------------------------------------------------------
+// Purpose: Computes the push vector to apply for the Cray-Airblast logic.
+//-----------------------------------------------------------------------------
+void CTFFlameThrower::ComputeCrayAirBlastForce( CTFPlayer *pTarget, CTFPlayer *pPlayer, Vector &vecForward, Vector &vecOutForce )
+{
+	// Setup
+	const float flDebugOverlayDuration = tf_airblast_cray_debug.GetFloat();
+	const bool  bDebug                 = flDebugOverlayDuration > 0.f;
+	const float flDebugOverlayScale    = .5f;
+	const float flDebugOverlayWidth    = 2.f;
+	const bool  bGroundReflect         = tf_airblast_cray_ground_reflect.GetBool();
+	const bool  bRelativeReflect       = tf_airblast_cray_reflect_relative.GetBool();
+	const float flGroundMinimumUpSpeed = tf_airblast_cray_ground_minz.GetFloat();
+	const bool  bRelativePower         = tf_airblast_cray_power_relative.GetBool();
+	const float flReflectCoeff         = tf_airblast_cray_reflect_coeff.GetFloat();
+	const float flReflectCostCoeff     = tf_airblast_cray_reflect_cost_coeff.GetFloat();
+
+	float flAirblastBasePower = tf_airblast_cray_power.GetFloat();
+	float flAirblastVerticalMultiplier = 1.f;
+
+	// Attributes.  Pushback scale is on the player, vulnerability multiplier on the victim.
+	CALL_ATTRIB_HOOK_FLOAT( flAirblastBasePower, airblast_pushback_scale );
+	CALL_ATTRIB_HOOK_FLOAT( flAirblastVerticalMultiplier, airblast_vertical_pushback_scale );
+	CALL_ATTRIB_HOOK_FLOAT_ON_OTHER( pTarget, flAirblastBasePower, airblast_vulnerability_multiplier );
+	CALL_ATTRIB_HOOK_FLOAT_ON_OTHER( pTarget, flAirblastVerticalMultiplier, airblast_vertical_vulnerability_multiplier );
+
+	// Debug convars
+#ifdef _DEBUG
+	flAirblastBasePower          *= tf_pushbackscalescale.GetFloat();
+	flAirblastVerticalMultiplier *= tf_pushbackscalescale_vertical.GetFloat();
+#endif
+
+	Vector vecTargetOrigin = pTarget->GetAbsOrigin();
+	Vector vecTargetVel = pTarget->GetAbsVelocity();
+	// Vector vecAbsPlayer = pPlayer->WorldSpaceCenter();
+	// Vector vecToTarget = vecAbsTarget - vecAbsPlayer;
+	Vector &vecAim = vecForward;
+
+	Vector vecResult( 0, 0, 0 );
+
+	// Only compute this if we're using one of the relative switches
+	float flForwardAimMomentum = -1.f;
+	if ( bRelativeReflect || bRelativePower )
+	{
+		Vector vecPlayerVel = pPlayer->GetAbsVelocity();
+		flForwardAimMomentum = DotProduct( vecPlayerVel, vecAim );
+	}
+
+	if ( bDebug )
+	{
+		Vector vecDebugMuzzle = GetVisualMuzzlePos() + Vector( 0, 0, 20 );
+		NDebugOverlay::Text( vecDebugMuzzle, "Airblast Aim", true, flDebugOverlayDuration );
+		NDebugOverlay::HorzArrow( vecDebugMuzzle, vecDebugMuzzle + vecAim * 5.f,
+		                          flDebugOverlayWidth, 100, 0, 0, 255, true, flDebugOverlayDuration );
+	}
+
+	//
+	// 1 - Reflect incoming velocity away from the pyro
+	//
+
+	// Aim is normalized, so this is the magnitude of the pyro-aim-axis momentum, negative if the target is coming at
+	// the pyro
+	float flMomentumAlongPyroAim = DotProduct( vecTargetVel, vecAim );
+	if ( bRelativeReflect )
+	{
+		// Negative means towards-us here, so everything else has a base of -1 * our forward-aim velocity in relative
+		// mode.
+		flMomentumAlongPyroAim -= flForwardAimMomentum;
+	}
+	if ( flMomentumAlongPyroAim < 0.f )
+	{
+		// If it is negative, reflect by applying 2x this force straight forward. This should perserve their
+		// non-aim-vector velocity but mirror it away from the pyro at that strength.
+		float flReflectForce = -1.f * flReflectCoeff * flMomentumAlongPyroAim;
+		Vector vecReflect = vecAim * flReflectForce;
+		vecResult += vecReflect;
+
+		if ( bDebug )
+		{
+			// This set of arrows will be from the target
+			Vector vecTargetCenter = pTarget->WorldSpaceCenter();
+			Vector vecIncomingVel = vecAim * flMomentumAlongPyroAim;
+			Vector vecOutgoingVel = vecIncomingVel + ( vecAim * flReflectForce );
+
+			// Visualize velocity towards pyro aim
+			NDebugOverlay::HorzArrow( vecTargetCenter,
+			                          vecTargetCenter + vecIncomingVel * flDebugOverlayScale,
+			                          flDebugOverlayWidth, 200, 0, 0, 255,
+			                          false, flDebugOverlayDuration );
+			// Visualize mirror'd velocity away from pyro aim
+			NDebugOverlay::HorzArrow( vecTargetCenter,
+			                          vecTargetCenter + vecOutgoingVel * flDebugOverlayScale,
+			                          flDebugOverlayWidth, 0, 200, 0, 255, true, flDebugOverlayDuration );
+			// Visualize push
+			NDebugOverlay::HorzArrow( vecTargetCenter,
+			                          vecTargetCenter + vecReflect * flDebugOverlayScale,
+			                          flDebugOverlayWidth, 150, 150, 150, 255, true, flDebugOverlayDuration );
+			CFmtStr strDebug( "Reflected player off blast ( into-blast momentum %f )", -1 * flMomentumAlongPyroAim );
+			NDebugOverlay::Text( vecTargetCenter, strDebug, true, flDebugOverlayDuration );
+		}
+	}
+
+	//
+	// 2 - If we have not yet applied minimum airblast force, add more
+	//
+
+	// This applies the remaining force for an enemy not moving fast enough to need it all for reflection.
+	//
+	// This generally results in:
+	// - Standing still will apply 100% airblast power full away from the pyro
+	//
+	// - Approaching the pyro at (0,.5] of airblast power causing a dampened pushback (some of the power went to
+	//   reflecting your incoming velocity, subtracted from the power then used to accelerate you).
+	//
+	// - Approaching at exactly 50% of airblast's power will be the minimum-strength pushback - we'll need 100% power to
+	//   reflect that momentum away.
+	//
+	// - Approaching at over 50% airblast's power will still result in a full reflection, which will then be a push in
+	// - excess of the normal full-force of airblast. (But no additional power beyond the reflect will be allowed below)
+	//
+	// Consider: If airblast force is 400.f, and ...
+	//           ... A player is standing still, we'll apply 0 reflective force above, and thus 400.f force here.
+	//
+	//           ... A player is running at a pyro at 200.f, it will take 400.f force to reflect that momentum
+	//           above. We'll then apply 0 additional here.  So they'll be pushed less forcefully than standing still.
+	//
+	//           ... A player is running at a pyro at 400.f.  Reflect will push them away at 400.f, requiring 800.f of
+	//           power, and apply no additional here.
+	float flPreampPower = vecResult.Length();
+	float flAirblastPower = flAirblastBasePower + ( bRelativePower ? flForwardAimMomentum : 0.f );
+	float flRemainingPushPower = flAirblastPower - flPreampPower * flReflectCostCoeff;
+	if ( flRemainingPushPower > 0.f )
+	{
+		Vector vecAdditionalPush = vecAim * flRemainingPushPower;
+		vecResult += vecAdditionalPush;
+
+		if ( bDebug )
+		{
+			Vector vecDebugMuzzle = GetVisualMuzzlePos();
+			Vector vecDebugBasePush = vecDebugMuzzle;
+			Vector vecEndArrow = vecDebugBasePush + ( vecAdditionalPush * flDebugOverlayScale );
+			NDebugOverlay::HorzArrow( vecDebugBasePush, vecEndArrow,
+			                          flDebugOverlayWidth, 0, 0, 200, 255, true, flDebugOverlayDuration );
+			CFmtStr strDebug("Remaining power after reflection ( %f power - %f reflection * %f cost coeff )",
+			                  flAirblastPower, flPreampPower, flReflectCostCoeff );
+			// Put at end of arrow since we're also drawing the final-impulse text at this origin
+			NDebugOverlay::Text( vecEndArrow, strDebug, false, flDebugOverlayDuration );
+		}
+	}
+
+	//
+	// 3 - If this puts the player's momentum vector into the ground, reflect it off of the ground
+	//
+
+	// This replaces the older logic of "always positive Z" with instead determining if this is pushing the target into
+	// their ground normal, and instead doing an elastic-mirroring upward.  This lets the pyro intentionally aim down to
+	// get a more upward bounce, trading away push momentum.
+	//
+	// A different version of this might be giving the player a bounce-attribute for some duration, rather than only
+	// doing reflects to entities currently-on-the-ground.  But this would mean you couldn't purposefully direct a
+	// flying enemy into the ground.
+
+	bool bTargetOnGround = pTarget->GetGroundEntity() != NULL;
+	if ( bGroundReflect && bTargetOnGround )
+	{
+		// Find ground normal
+		//
+		// TODO This duplicates tracing done in CGameMovement::CategorizePosition -- we should cache this off for
+		//      players on movement
+		Ray_t ray;
+		trace_t tr;
+		ray.Init( vecTargetOrigin, vecTargetOrigin + Vector( 0, 0, -5 ), pTarget->GetPlayerMins(), pTarget->GetPlayerMaxs() );
+		UTIL_TraceRay( ray, MASK_PLAYERSOLID, pTarget, COLLISION_GROUP_PLAYER_MOVEMENT, &tr );
+
+		bool bHit = tr.DidHit();
+		AssertMsg( bHit, "Airblast: Player on ground entity doesn't trace to it" );
+		if ( bHit )
+		{
+			Vector vecHypotheticalTargetVelocity = vecTargetVel + vecResult;
+			float flFromGroundForce = DotProduct( vecHypotheticalTargetVelocity, tr.plane.normal );
+			if ( flFromGroundForce < 0.f )
+			{
+				Vector vecReflectVector = tr.plane.normal * -2.f * flFromGroundForce;
+				vecResult += vecReflectVector;
+				if ( bDebug )
+				{
+					Vector vecDebugGround = vecTargetOrigin;
+
+					// Draw an arrow showing into-ground velocity
+					NDebugOverlay::HorzArrow( vecDebugGround,
+					                          vecDebugGround + vecHypotheticalTargetVelocity * flDebugOverlayScale,
+					                          flDebugOverlayWidth, 200, 0, 200, 255,
+					                          true, flDebugOverlayDuration );
+					// ... and post-reflect
+					NDebugOverlay::HorzArrow( vecDebugGround,
+					                          vecDebugGround + (vecHypotheticalTargetVelocity + vecReflectVector) * flDebugOverlayScale,
+					                          flDebugOverlayWidth, 200, 200, 0, 255, true, flDebugOverlayDuration );
+					CFmtStr strDebug( "Reflected player off ground ( into-ground momentum %f )", -1 * flFromGroundForce );
+					NDebugOverlay::Text( vecDebugGround, strDebug, false, flDebugOverlayDuration );
+				}
+			}
+		}
+	}
+
+	//
+	// 4 - Ensure the player has an absolute minimum away-from-ground velocity to prevent sliding them along it
+	//     just-right to cause pseudo-ground-stuck.
+	//
+
+	//
+	if ( bTargetOnGround && flGroundMinimumUpSpeed > 0.f )
+	{
+		float flGroundVelZ = ( vecTargetVel + vecResult ).z;
+		float flAddZ = flGroundMinimumUpSpeed - flGroundVelZ;
+		if ( flAddZ > 0.f )
+		{
+			// Steal necessary velocity from XY components, rather than adding any magical velocity, so we don't reward
+			// near-horizontal airblasts with more power than usual.
+			Vector vecXY( vecResult.x, vecResult.y, 0 );
+			float flInitialXY = vecXY.Length();
+			float flFinalXY = Max( flInitialXY - flAddZ, 0.f );
+			vecXY *= flInitialXY > 0.f ? ( flFinalXY / flInitialXY ) : 0.f;
+			// If we couldn't steal enough power for Z, reduce
+			flAddZ = Min( flAddZ, flInitialXY );
+
+			// If its total magnitude is less than z+flAddZ we'll just redirect to straight-up with that magnitude
+			// (maximum deflect up)
+			Vector vecUpwardCorrected;
+			float flCurrentMagnitudeSqr = vecResult.LengthSqr();
+			if ( flCurrentMagnitudeSqr < flAddZ * flAddZ )
+			{
+				// Just redirect all available power upwards
+				vecUpwardCorrected = Vector( 0, 0, FastSqrt( flCurrentMagnitudeSqr ) );
+			}
+			else
+			{
+				// Otherwise, to redirect the vector to a (z+flAddZ) Z component without changing its magnitude or xy
+				// projection, we want to solve for N in:
+				//   Vec(x,y,z).Length() = Vec(N*x, N*y, z + flAddZ).Length()
+				// Which is:
+				//   N = sqrt( -flAddZ^2 - 2(flAddZ)*z + x^2 + y^2 ) / sqrt( x^2 + y^2 )
+				//
+				// (Doing this the trigonometric way might be faster)
+				float flResultXYSqr = Vector( vecResult.x, vecResult.y, 0 ).LengthSqr();
+				float flXYScaleBase = -(flAddZ*flAddZ) - 2*flAddZ*vecResult.z + flResultXYSqr;
+				float flXYScale = FastSqrt( Max( flXYScaleBase, 0.f ) ) / FastSqrt( flResultXYSqr );
+				vecUpwardCorrected = Vector( vecResult.x * flXYScale, vecResult.y * flXYScale, vecResult.z + flAddZ );
+			}
+
+			if ( bDebug )
+			{
+				// Arrow from their feet showing Z redirect
+				Vector vecArrowEnd = vecTargetOrigin + ( vecUpwardCorrected - vecResult ) * flDebugOverlayScale;
+				NDebugOverlay::HorzArrow( vecTargetOrigin, vecArrowEnd,
+				                          flDebugOverlayWidth, 50, 50, 50, 255, true, flDebugOverlayDuration );
+				CFmtStr strDebug( "Applied redirect to maintain minimum Z ( %f -> %f )",
+				                  vecResult.z, vecUpwardCorrected.z );
+				NDebugOverlay::Text( vecArrowEnd, strDebug, false, flDebugOverlayDuration );
+			}
+
+			vecResult = vecUpwardCorrected;
+		}
+	}
+
+	// Other random thought:
+	// If the pyro is airborne he splits some portion of vecResult with himself. Eh? Eh?
+
+	//
+	// 5 - Apply flAirblastVerticalMultiplier if we have it (usually from attributes -- e.g. MvM bots have a additional
+	//     resistance to being pushed up, separate from their general resistance)
+	//
+	if ( flAirblastVerticalMultiplier != 1.f )
+	{
+		float flOldZ = vecResult.z;
+		vecResult.z *= flAirblastVerticalMultiplier;
+		if ( bDebug )
+		{
+			// Arrow from their feet showing bonus Z, offset to not conflict with flGroundMinimumUpSpeed arrow
+			Vector vecOffset = Vector( 20, 0, 0 );
+			Vector vecArrowEnd = vecTargetOrigin + Vector( 0, 0, vecResult.z - flOldZ );
+			NDebugOverlay::HorzArrow( vecTargetOrigin + vecOffset, vecArrowEnd + vecOffset,
+			                          flDebugOverlayWidth, 50, 90, 90, 255, true, flDebugOverlayDuration );
+			CFmtStr strDebug( "Airblast vertical push multiplier from attributes/vulnerabilities ( %f -> %f )",
+			                  flOldZ, vecResult.z );
+			NDebugOverlay::Text( vecArrowEnd + vecOffset, strDebug, false, flDebugOverlayDuration );
+		}
+	}
+
+	vecOutForce = vecResult;
+	if ( bDebug )
+	{
+		Vector vecDebugMuzzle = GetVisualMuzzlePos();
+		// Show applied push vector, transparent because it should be superceding the component arrows
+		NDebugOverlay::HorzArrow( vecDebugMuzzle, vecDebugMuzzle + vecResult * flDebugOverlayScale,
+		                          flDebugOverlayWidth + 1.f, 255, 255, 255, 150,
+		                          true, flDebugOverlayDuration );
+		CFmtStr strDebug( "Applied Impulse: %f", vecResult.Length() );
+		NDebugOverlay::Text( vecDebugMuzzle + Vector( 0, 0, -2 ), strDebug, true, flDebugOverlayDuration );
+
+		// Show overall outgoing vector
+		vecDebugMuzzle += Vector( 0, -20, 0 ); // Next to it
+		NDebugOverlay::HorzArrow( vecDebugMuzzle,
+		                          vecDebugMuzzle + ( vecTargetVel + vecResult ) * flDebugOverlayScale,
+		                          flDebugOverlayWidth + 1.f, 50, 50, 50, 200,
+		                          true, flDebugOverlayDuration );
+		CFmtStr strDebugFinal( "Expected result speed: %f", (vecTargetVel + vecResult).Length() );
+		NDebugOverlay::Text( vecDebugMuzzle + Vector( 0, 0, -2 ), strDebugFinal, true, flDebugOverlayDuration );
+	}
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+bool CTFFlameThrower::DeflectPlayer( CTFPlayer *pTarget, CTFPlayer *pOwner, Vector &vecForward )
 {
 	if ( pTarget->GetTeamNumber() == pOwner->GetTeamNumber() && pTarget != pOwner )
 	{
-		if ( pTarget->m_Shared.InCond( TF_COND_BURNING ) && SupportsAirBlastFunction( TF_FUNCTION_AIRBLAST_PUT_OUT_TEAMMATES ) )
+		if ( pTarget->m_Shared.InCond( TF_COND_BURNING ) && CanAirBlastPutOutTeammate() )
 		{
 			ExtinguishPlayer( this, pOwner, pTarget, "tf_weapon_flamethrower" );
 
@@ -1125,11 +1645,23 @@ bool CTFFlameThrower::DeflectPlayer( CTFPlayer *pTarget, CTFPlayer *pOwner, Vect
 			}
 		}
 
+		float flGiveTeammateSpeedBoost = 0;
+		CALL_ATTRIB_HOOK_FLOAT( flGiveTeammateSpeedBoost, airblast_give_teammate_speed_boost );
+		if ( flGiveTeammateSpeedBoost > 0.f )
+		{
+			pTarget->m_Shared.AddCond( TF_COND_SPEED_BOOST, flGiveTeammateSpeedBoost );
+			// give the owner extra time to catch up with faster class
+			pOwner->m_Shared.AddCond( TF_COND_SPEED_BOOST, flGiveTeammateSpeedBoost + 1.f );
+		}
+
 		return false;
 	}
 	
-	if ( SupportsAirBlastFunction( TF_FUNCTION_AIRBLAST_PUSHBACK ) )
+	if ( CanAirBlastPushPlayer() )
 	{
+		if ( pTarget->m_Shared.IsImmuneToPushback() )
+			return false;
+
 		int iReverseBlast = 0;
 		CALL_ATTRIB_HOOK_INT( iReverseBlast, reverse_airblast );
 
@@ -1147,34 +1679,31 @@ bool CTFFlameThrower::DeflectPlayer( CTFPlayer *pTarget, CTFPlayer *pOwner, Vect
 			VectorNormalize( vecToTarget );
 		}
 
-		// Quick Fix Uber is immune
-		if ( pTarget->m_Shared.InCond( TF_COND_MEGAHEAL )) 
-			return false;
-
-
-		// Require our target be in a cone in front of us. Default threshold is the dot-product needs to be at least 0.8 = 1 - 0.2. 
-		float flDot = DotProduct( vecForward, vecToTarget );
-		float flAirblastConeScale = 0.2f;
+		float flAirblastConeScale = 1.f;
 		CALL_ATTRIB_HOOK_FLOAT( flAirblastConeScale, mult_airblast_cone_scale );
-		float flAirblastConeThreshold = Clamp(1.0f - flAirblastConeScale, 0.0f, 1.0f);
-		if (flDot < flAirblastConeThreshold)
+
+		truncatedcone_t testCone;
+		testCone.origin	= pOwner->EyePosition();
+		testCone.normal	= vecForward;
+		testCone.h		= 2.f * GetDeflectionRadius(); // diameter of enum sphere
+		testCone.theta	= flAirblastConeScale * tf_flamethrower_airblast_cone_angle;
+
+
+		Vector vTargetAbsMins = pTarget->GetAbsOrigin() + pTarget->WorldAlignMins();
+		Vector vTargetAbsMaxs = pTarget->GetAbsOrigin() + pTarget->WorldAlignMaxs();
+
+		// Require our target be in a cone in front of us
+		if ( !physcollision->IsBoxIntersectingCone( vTargetAbsMins, vTargetAbsMaxs, testCone ) )
 		{
 			return false;
 		}
 
+
 		if ( pTarget != pOwner )
 		{
-			pTarget->SetAbsVelocity( vec3_origin );
-
-			if ( SupportsAirBlastFunction( TF_FUNCTION_AIRBLAST_PUSHBACK__STUN ) )
-			{
-				if ( !pTarget->m_Shared.InCond( TF_COND_KNOCKED_INTO_AIR ) )
-				{
-					pTarget->m_Shared.StunPlayer( tf_player_movement_stun_time.GetFloat(), 1.f, TF_STUN_MOVEMENT, pOwner );
-				}
-			}
-
-			if ( SupportsAirBlastFunction( TF_FUNCTION_AIRBLAST_PUSHBACK__VIEW_PUNCH ) )
+			int nNoViewpunch = 0;
+			CALL_ATTRIB_HOOK_INT( nNoViewpunch, airblast_pushback_no_viewpunch );
+			if ( nNoViewpunch == 0 )
 			{
 				pTarget->ApplyPunchImpulseX( RandomInt( 10, 15 ) );
 			}
@@ -1182,53 +1711,125 @@ bool CTFFlameThrower::DeflectPlayer( CTFPlayer *pTarget, CTFPlayer *pOwner, Vect
 
 		pTarget->SpeakConceptIfAllowed( MP_CONCEPT_DEFLECTED, "projectile:0,victim:1" );
 
-		float flForce = AirBurstDamageForce( pTarget->WorldAlignSize(), 60, 6.f );
+		//
+		// Apply force - Old & new modes
+		//
 
-		CALL_ATTRIB_HOOK_FLOAT( flForce, airblast_pushback_scale );
+		int nOldAirblast = 0;
+		if ( !nOldAirblast && tf_airblast_cray.GetBool() )
+		{
+			// TODO This is not honoring some of the attributes of old airblast
+			Vector vecPushDirection;
+			Vector vecForce;
+			if ( !tf_airblast_cray_pitch_control.GetBool() )
+			{
+				QAngle angForward;
+				QAngle angToTarget;
+				VectorAngles( vecForward, angForward );
+				VectorAngles( vecToTarget, angToTarget );
+				angForward[YAW] = angToTarget[YAW];
+				AngleVectors( angForward, &vecPushDirection, nullptr, nullptr );
+			}
+			else
+			{
+				vecPushDirection = vecForward;
+			}
+
+			ComputeCrayAirBlastForce( pTarget, pOwner, vecPushDirection, /* out */ vecForce );
+
+			// This is bypassing ApplyGenericPushbackImpulse because it implements its own pushback logic.
+			pTarget->RemoveFlag( FL_ONGROUND );
+			pTarget->SetGroundEntity( NULL ); // We'll restick if necessary, but we want to bypass the gamemovement
+											  // requirements for un-sticking.
+			// Only apply stun if we're about to apply knocked into air initially
+			if ( !pTarget->m_Shared.InCond( TF_COND_KNOCKED_INTO_AIR ) )
+			{
+				int nNoStun = 0;
+				CALL_ATTRIB_HOOK_INT( nNoStun, airblast_pushback_no_stun );
+				if ( !nNoStun )
+				{
+					float flStunDuration = tf_airblast_cray_stun_duration.GetFloat();
+					float flStunAmount = tf_airblast_cray_stun_amount.GetFloat();
+					if ( flStunDuration > 0.f && flStunAmount > 0.f )
+						{ pTarget->m_Shared.StunPlayer( flStunDuration, flStunAmount, TF_STUN_MOVEMENT, pOwner ); }
+				}
+			}
+			float flLoseFooting = tf_airblast_cray_lose_footing_duration.GetFloat();
+			if ( flLoseFooting )
+				{ pTarget->m_Shared.AddCond( TF_COND_LOST_FOOTING, flLoseFooting ); }
+			pTarget->m_Shared.AddCond( TF_COND_AIR_CURRENT );
+			pTarget->m_Shared.AddCond( TF_COND_KNOCKED_INTO_AIR );
+			pTarget->ApplyAbsVelocityImpulse( vecForce );
+		}
+		else
+		{
+
+			//
+			// Old airblast, most of this logic is in ApplyGenericPushbackImpulse, which is used by other things, so
+			// keeping it working is fairly easy for now.
+			//
+
+			// Apply stun, unless they are already in the air (only when leaving ground for the first time)
+			int nNoStun = 0;
+			CALL_ATTRIB_HOOK_INT( nNoStun, airblast_pushback_no_stun );
+			if ( nNoStun == 0 )
+			{
+				if ( !pTarget->m_Shared.InCond( TF_COND_KNOCKED_INTO_AIR ) )
+				{
+					// Old airblast stun values
+					pTarget->m_Shared.StunPlayer( 0.5f, 1.f, TF_STUN_MOVEMENT, pOwner );
+				}
+			}
+
+			float flForce = AirBurstDamageForce( pTarget->WorldAlignSize(), 60, 6.f );
+
+			CALL_ATTRIB_HOOK_FLOAT( flForce, airblast_pushback_scale );
 
 #ifdef _DEBUG
-		Vector vecForce = vecToTarget * flForce * tf_pushbackscalescale.GetFloat();
+			Vector vecForce = vecToTarget * flForce * tf_pushbackscalescale.GetFloat();
 #else
-		Vector vecForce = vecToTarget * flForce;	
+			Vector vecForce = vecToTarget * flForce;	
 #endif
 
-		if ( iReverseBlast )
-		{
-			vecForce = -vecForce;
-		}
+			if ( iReverseBlast )
+			{
+				vecForce = -vecForce;
+			}
 
-		float flVerticalPushbackScale = tf_flamethrower_burst_zvelocity.GetFloat();
-		if ( iReverseBlast )
-		{
-			// Don't give quite so big a vertical kick if we're sucking rather than blowing...
-			flVerticalPushbackScale *= 0.75f;
-		}
+			float flVerticalPushbackScale = tf_flamethrower_burst_zvelocity.GetFloat();
+			if ( iReverseBlast )
+			{
+				// Don't give quite so big a vertical kick if we're sucking rather than blowing...
+				flVerticalPushbackScale *= 0.75f;
+			}
 
-#ifdef STAGING_ONLY
-		if ( !( pTarget == pOwner && pOwner->GetGroundEntity() ) )
-#endif		
-		{
-			CALL_ATTRIB_HOOK_FLOAT( flVerticalPushbackScale, airblast_vertical_pushback_scale );
-		}
+			{
+				CALL_ATTRIB_HOOK_FLOAT( flVerticalPushbackScale, airblast_vertical_pushback_scale );
+			}
 
 #ifdef _DEBUG
-		vecForce.z += flVerticalPushbackScale * tf_pushbackscalescale_vertical.GetFloat();
+			vecForce.z += flVerticalPushbackScale * tf_pushbackscalescale_vertical.GetFloat();
 
-		/*
-		// Kyle says: this will force players off the ground for at least one frame.
-		//			  This is disabled on purpose right now to match previous flamethrower functionality.
-		if ( pTarget->GetFlags() & FL_ONGROUND )
-		{
+			/*
+			// Kyle says: this will force players off the ground for at least one frame.
+			//			  This is disabled on purpose right now to match previous flamethrower functionality.
+			if ( pTarget->GetFlags() & FL_ONGROUND )
+			{
 			vecForce.z += 268.3281572999747f;
-		}
-		*/
+			}
+			*/
 #else
-		vecForce.z += flVerticalPushbackScale;
+			vecForce.z += flVerticalPushbackScale;
 #endif
 
-		// Apply AirBlastImpulse
-		pTarget->ApplyAirBlastImpulse( vecForce );
-		
+			// Old airblast only - stomp velocity before applying
+			pTarget->SetAbsVelocity( vec3_origin );
+
+			// Apply GenericPushback
+			pTarget->ApplyGenericPushbackImpulse( vecForce, pOwner );
+		}
+
+
 		// Make sure we get credit for the airblast if the target falls to its death
 		pTarget->m_AchievementData.AddDamagerToHistory( pOwner );
 
@@ -1267,12 +1868,47 @@ void CTFFlameThrower::PlayDeflectionSound( bool bPlayer )
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-bool CTFFlameThrower::DeflectEntity( CBaseEntity *pTarget, CTFPlayer *pOwner, Vector &vecForward, Vector &vecCenter, Vector &vecSize )
+float CTFFlameThrower::GetInitialAfterburnDuration() const
 {
-	Assert( pTarget );
+	return tf_flamethrower_initial_afterburn_duration;
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+float CTFFlameThrower::GetAfterburnRateOnHit() const
+{
+	float flAfterburnDurationScale = 1.f;
+	CALL_ATTRIB_HOOK_FLOAT( flAfterburnDurationScale, afterburn_duration_mult );
+
+	return flAfterburnDurationScale * tf_flamethrower_afterburn_rate;
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+bool CTFFlameThrower::DeflectEntity( CBaseEntity *pTarget, CTFPlayer *pOwner, Vector &vecForward )
+{
+	// pTarget shouldn't be player. Call DeflectPlayer instead
+	Assert( pTarget && !pTarget->IsPlayer() );
 	Assert( pOwner );
 
-	if ( !SupportsAirBlastFunction( TF_FUNCTION_AIRBLAST_REFLECT_PROJECTILES ) )
+	int iAirblastDestroyProjectile = 0;
+	CALL_ATTRIB_HOOK_INT( iAirblastDestroyProjectile, airblast_destroy_projectile );
+	if ( iAirblastDestroyProjectile )
+	{
+		CBaseProjectile *pProjectile = dynamic_cast< CBaseProjectile* >( pTarget );
+		if ( !pProjectile || !pProjectile->IsDestroyable() )
+			return false;
+
+		pProjectile->Destroy( false, true );
+		EmitSound( "Halloween.HeadlessBossAxeHitWorld" );	// Todo: need a sound for stopping a projectile
+		CTF_GameStats.Event_PlayerAwardBonusPoints( pOwner, NULL, 2 );
+
+		return true;
+	}
+
+	if ( !CanAirBlastDeflectProjectile() )
 		return false;
 
 	// can't deflect things on our own team
@@ -1284,42 +1920,44 @@ bool CTFFlameThrower::DeflectEntity( CBaseEntity *pTarget, CTFPlayer *pOwner, Ve
 	}
 
 	// Grab the owner of the projectile *before* we reflect it.
-	CTFPlayer *pTFPlayerVictim = dynamic_cast<CTFPlayer *>( pTarget );
-	if ( !pTFPlayerVictim )
-	{
-		pTFPlayerVictim = dynamic_cast<CTFPlayer *>( pTarget->GetOwnerEntity() );
-	}
-
+	CTFPlayer *pTFPlayerVictim = dynamic_cast< CTFPlayer * >( pTarget->GetOwnerEntity() );
 	if ( !pTFPlayerVictim )
 	{
 		// We can't use OwnerEntity for grenades, because then the owner can't shoot them with his hitscan weapons (due to collide rules)
 		// Thrower is used to store the person who threw the grenade, for damage purposes.
-		CBaseGrenade *pBaseGrenade = dynamic_cast< CBaseGrenade*>( pTarget );
+		CBaseGrenade *pBaseGrenade = dynamic_cast< CBaseGrenade* >( pTarget );
 		if ( pBaseGrenade )
 		{
-			pTFPlayerVictim = dynamic_cast<CTFPlayer *>( pBaseGrenade->GetThrower() );
+			pTFPlayerVictim = dynamic_cast< CTFPlayer * >( pBaseGrenade->GetThrower() );
 		}
 	}
-
 	if ( !pTFPlayerVictim )
 	{
 		// Is the OwnerEntity() a base object, like a sentry gun shooting rockets at us?
 		if ( pTarget->GetOwnerEntity() && pTarget->GetOwnerEntity()->IsBaseObject() )
 		{
-			CBaseObject *pObj = dynamic_cast<CBaseObject *>( pTarget->GetOwnerEntity() );
+			CBaseObject *pObj = dynamic_cast< CBaseObject * >( pTarget->GetOwnerEntity() );
 			if ( pObj )
 			{
-				pTFPlayerVictim = dynamic_cast<CTFPlayer *>( pObj->GetOwner() );
+				pTFPlayerVictim = dynamic_cast< CTFPlayer * >( pObj->GetOwner() );
 			}
 		}
 	}
 
-	bool bDeflected = BaseClass::DeflectEntity( pTarget, pOwner, vecForward, vecCenter, vecSize );
+	bool bDeflected = BaseClass::DeflectEntity( pTarget, pOwner, vecForward );
 	if ( bDeflected )
 	{
-		pTarget->EmitSound( "Weapon_FlameThrower.AirBurstAttackDeflect" );
-
-		EconEntity_OnOwnerKillEaterEvent( this, pOwner, pTFPlayerVictim, kKillEaterEvent_ProjectileReflect );
+		int iAirblastTurnProjectileToAmmo = 0;
+		CALL_ATTRIB_HOOK_INT( iAirblastTurnProjectileToAmmo, airblast_turn_projectile_to_ammo );
+		if ( iAirblastTurnProjectileToAmmo )
+		{
+			pOwner->DropAmmoPackFromProjectile( pTarget );
+		}
+		else
+		{
+			pTarget->EmitSound( "Weapon_FlameThrower.AirBurstAttackDeflect" );
+			EconEntity_OnOwnerKillEaterEvent( this, pOwner, pTFPlayerVictim, kKillEaterEvent_ProjectileReflect );
+		}
 	}
 	return bDeflected;
 }
@@ -1472,23 +2110,26 @@ bool CTFFlameThrower::EffectMeterShouldFlash( void )
 //-----------------------------------------------------------------------------
 Vector CTFFlameThrower::GetMuzzlePosHelper( bool bVisualPos )
 {
-	Vector vecMuzzlePos;
+	Vector vecMuzzlePos = vec3_origin;
 	CTFPlayer *pOwner = GetTFPlayerOwner();
 	if ( pOwner ) 
 	{
 		Vector vecForward, vecRight, vecUp;
-		AngleVectors( pOwner->GetAbsAngles(), &vecForward, &vecRight, &vecUp );
-		vecMuzzlePos = pOwner->Weapon_ShootPosition();
-		vecMuzzlePos +=  vecRight * TF_FLAMETHROWER_MUZZLEPOS_RIGHT;
-		// if asking for visual position of muzzle, include the forward component
-		if ( bVisualPos )
+		AngleVectors( pOwner->GetNetworkEyeAngles(), &vecForward, &vecRight, &vecUp );
 		{
-			vecMuzzlePos +=  vecForward * TF_FLAMETHROWER_MUZZLEPOS_FORWARD;
+			Vector vecOffset;
+			UTIL_StringToVector( vecOffset.Base(), tf_flamethrower_new_flame_offset.GetString() );
+
+			vecOffset *= pOwner->GetModelScale();
+			vecMuzzlePos = pOwner->EyePosition() + vecOffset.x * vecForward + vecOffset.y * vecRight + vecOffset.z * vecUp;
 		}
 	}
 	return vecMuzzlePos;
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFFlameThrower::CalculateHalloweenSpell( void )
 {
 	m_bHasHalloweenSpell.Set( false );
@@ -1500,6 +2141,10 @@ void CTFFlameThrower::CalculateHalloweenSpell( void )
 	}
 }
 
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 bool CTFFlameThrower::Deploy( void )
 {
 #if defined( CLIENT_DLL )
@@ -1557,13 +2202,6 @@ void CTFFlameThrower::OnDataChanged(DataUpdateType_t updateType)
 			if ( ( m_iWeaponState == FT_STATE_SECONDARY && GetPlayerOwner() != C_BasePlayer::GetLocalPlayer() ) || m_iWeaponState != FT_STATE_SECONDARY )
 			{
 				StartFlame();
-
-#ifdef STAGING_ONLY
-				if ( ShootsNapalm() )
-				{
-					RestartParticleEffect();
-				}
-#endif // STAGING_ONLY
 			}
 		}
 		else
@@ -1578,7 +2216,7 @@ void CTFFlameThrower::OnDataChanged(DataUpdateType_t updateType)
 		StopFullCritEffect();
 		m_bEffectsThinking = false;
 	}
-	
+
 	if ( pPlayerOwner == pLocalPlayer )
 	{
 		if ( m_pFiringLoop )
@@ -1586,7 +2224,7 @@ void CTFFlameThrower::OnDataChanged(DataUpdateType_t updateType)
  			m_flFlameHitRatio = GetFlameHitRatio();
  			m_flFlameHitRatio = RemapValClamped( m_flFlameHitRatio, 0.0f, 1.0f, 1.0f, 100.f );
 
-			//Msg ( "%f\n", m_flFlameHitRatio );
+			// Msg ( "%f\n", m_flFlameHitRatio );
 
 			if ( m_flFlameHitRatio != m_flPrevFlameHitRatio )
 			{
@@ -1629,36 +2267,23 @@ void CTFFlameThrower::OnDataChanged(DataUpdateType_t updateType)
 			CSoundEnvelopeController::GetController().SoundDestroy( m_pFiringAccuracyLoop );
 			m_pFiringAccuracyLoop = NULL;
 		}
+	}
 
-		if ( GetBuffType() > 0 )
+	if ( GetBuffType() > 0 )
+	{
+		if ( !m_bFullRageEffect && pPlayerOwner && pPlayerOwner->m_Shared.GetRageMeter() >= 100.0f )
 		{
-			if ( !m_bFullRageEffect && pPlayerOwner && pPlayerOwner->m_Shared.GetRageMeter() >= 100.0f )
-			{
-				m_bFullRageEffect = true;
-				m_MmmmphEffect.StartEffects( FullCritChargedEffectName() );
-			}
-			else if ( m_bFullRageEffect && pPlayerOwner && pPlayerOwner->m_Shared.GetRageMeter() < 100.0f )
-			{
-				StopFullCritEffect();
-				m_MmmmphEffect.StopEffects();
-			}
+			m_bFullRageEffect = true;
+			m_MmmmphEffect.StartEffects( pPlayerOwner, FullCritChargedEffectName() );
+		}
+		else if ( m_bFullRageEffect && pPlayerOwner && pPlayerOwner->m_Shared.GetRageMeter() < 100.0f )
+		{
+			StopFullCritEffect();
+			m_MmmmphEffect.StopEffects();
 		}
 	}
 }
 
-//-----------------------------------------------------------------------------
-// Purpose: 
-//-----------------------------------------------------------------------------
-void CTFFlameThrower::UpdateOnRemove( void )
-{
-	m_FlameEffects.StopEffects();
-	m_MmmmphEffect.StopEffects();
-	StopPilotLight();
-	StopFullCritEffect();
-	m_bEffectsThinking = false;
-
-	BaseClass::UpdateOnRemove();
-}
 
 //-----------------------------------------------------------------------------
 // Purpose: 
@@ -1681,13 +2306,13 @@ void CTFFlameThrower::SetDormant( bool bDormant )
 	C_BaseEntity::SetDormant( bDormant );
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 int CTFFlameThrower::GetWorldModelIndex( void )
 {
-	int iParticleEffectIndex = 0;
-	CALL_ATTRIB_HOOK_INT( iParticleEffectIndex, set_weapon_mode );
-
 	// Pyro bubble wand support.
-	if ( iParticleEffectIndex == 3 )
+	if ( GetFlameThrowerMode() == TF_FLAMETHROWER_MODE_RAINBOW )
 	{
 		CTFPlayer *pPlayer = ToTFPlayer( GetOwner() );
 		if ( pPlayer && pPlayer->m_Shared.InCond( TF_COND_TAUNTING ) && pPlayer->m_Shared.GetTauntIndex() == TAUNT_BASE_WEAPON )
@@ -1778,7 +2403,7 @@ void CTFFlameThrower::StartFlame()
 	// check our "hit" sound
 	if ( m_bHitTarget != m_bFiringHitTarget )
 	{
-		if ( m_bHitTarget == false )
+		if ( !m_bHitTarget )
 		{
 			StopHitSound();
 		}
@@ -1786,10 +2411,7 @@ void CTFFlameThrower::StartFlame()
 		{
 			char *pchFireHitSound = "Weapon_FlameThrower.FireHit";
 
-			int iParticleEffectIndex = 0;
-			CALL_ATTRIB_HOOK_INT( iParticleEffectIndex, set_weapon_mode );
-
-			if ( iParticleEffectIndex == 3 )
+			if ( GetFlameThrowerMode() == TF_FLAMETHROWER_MODE_RAINBOW )
 			{
 				pchFireHitSound = "Weapon_Rainblower.FireHit";
 			}
@@ -1893,6 +2515,9 @@ void CTFFlameThrower::StopPilotLight()
 	}
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFFlameThrower::StopFullCritEffect()
 {
 	m_bFullRageEffect = false;
@@ -1916,10 +2541,90 @@ void CTFFlameThrower::RestartParticleEffect( void )
 
 	m_iParticleWaterLevel = pOwner->GetWaterLevel();
 
+	m_FlameEffects.StartEffects( pOwner, GetParticleEffectName() );
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+const char* CTFFlameThrower::FlameEffectName( bool bIsFirstPersonView )
+{
+	CTFPlayer *pOwner = GetTFPlayerOwner();
+	if ( !pOwner )
+		return NULL;
+
+	// Halloween Spell
+	if ( m_bHasHalloweenSpell )
+	{
+		return "flamethrower_halloween_new_flame";
+	}
+
+	switch ( GetFlameThrowerMode() )
+	{
+	case TF_FLAMETHROWER_MODE_PHLOG:	return "drg_phlo_stream_new_flame";
+	case TF_FLAMETHROWER_MODE_GIANT:	return "flamethrower_giant_mvm_new_flame";
+	case TF_FLAMETHROWER_MODE_RAINBOW:	return "flamethrower_rainbow_new_flame";
+	default:							
+		{
+			return GetNewFlameEffectInternal( pOwner->GetTeamNumber(), false );
+		}
+	}
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+const char* CTFFlameThrower::FlameCritEffectName( bool bIsFirstPersonView )
+{
+	CTFPlayer *pOwner = GetTFPlayerOwner();
+	if ( !pOwner )
+		return NULL;
+
+	// Halloween Spell
+	if ( m_bHasHalloweenSpell )
+	{
+		return ( pOwner->GetTeamNumber() == TF_TEAM_BLUE ? "flamethrower_halloween_crit_blue_new_flame" : "flamethrower_halloween_crit_red_new_flame" );
+	}
+
+	switch ( GetFlameThrowerMode() )
+	{
+	case TF_FLAMETHROWER_MODE_PHLOG:	return "drg_phlo_stream_crit_new_flame";
+	case TF_FLAMETHROWER_MODE_GIANT:	return "flamethrower_crit_giant_mvm_new_flame";
+	case TF_FLAMETHROWER_MODE_RAINBOW:	return "flamethrower_rainbow_new_flame";
+	default:
+		{
+			return GetNewFlameEffectInternal( pOwner->GetTeamNumber(), true );
+		}
+	}
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+const char* CTFFlameThrower::FullCritChargedEffectName( void )
+{
+	switch( GetTeamNumber() )
+	{
+	case TF_TEAM_BLUE:	return "medicgun_invulnstatus_fullcharge_blue";
+	case TF_TEAM_RED:	return "medicgun_invulnstatus_fullcharge_red";
+	default:			return "";
+	}
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+const char* CTFFlameThrower::GetParticleEffectName( void )
+{
+	CTFPlayer *pOwner = GetTFPlayerOwner();
+	if ( !pOwner )
+		return NULL;
+
+	const char *pszParticleEffect = NULL;
+
 	bool bIsFirstPersonView = IsFirstPersonView();
 
 	// Start the appropriate particle effect
-	const char *pszParticleEffect;
 	if ( pOwner->GetWaterLevel() == WL_Eyes )
 	{
 		pszParticleEffect = "flamethrower_underwater";
@@ -1936,88 +2641,7 @@ void CTFFlameThrower::RestartParticleEffect( void )
 		}
 	}
 
-	m_FlameEffects.StartEffects( pszParticleEffect );
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: 
-//-----------------------------------------------------------------------------
-const char* CTFFlameThrower::FlameEffectName( bool bIsFirstPersonView )
-{
-	CTFPlayer *pOwner = GetTFPlayerOwner();
-	if ( !pOwner )
-		return NULL;
-
-#ifdef STAGING_ONLY
-	if ( ShootsNapalm() )
-	{
-		return "muzzle_bignasty";
-	}
-#endif // STAGING_ONLY
-
-	// Halloween Spell
-	if ( m_bHasHalloweenSpell )
-	{
-		return "flamethrower_halloween";
-	}
-
-	int iParticleEffectIndex = 0;
-	CALL_ATTRIB_HOOK_INT( iParticleEffectIndex, set_weapon_mode );
-
-	switch ( iParticleEffectIndex )
-	{
-	case 1:		return "drg_phlo_stream";
-	case 2:		return "flamethrower_giant_mvm";
-	case 3:		return ( bIsFirstPersonView ? "flamethrower_rainbow_FP" : "flamethrower_rainbow" );
-	default:	return ( pOwner->GetTeamNumber() == TF_TEAM_BLUE ? "flamethrower_blue" : "flamethrower" );
-	}
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: 
-//-----------------------------------------------------------------------------
-const char* CTFFlameThrower::FlameCritEffectName( bool bIsFirstPersonView )
-{
-	CTFPlayer *pOwner = GetTFPlayerOwner();
-	if ( !pOwner )
-		return NULL;
-
-#ifdef STAGING_ONLY
-	if ( ShootsNapalm() )
-	{
-		return "muzzle_bignasty";
-	}
-#endif // STAGING_ONLY
-
-	// Halloween Spell
-	if ( m_bHasHalloweenSpell )
-	{
-		return ( pOwner->GetTeamNumber() == TF_TEAM_BLUE ? "flamethrower_halloween_crit_blue" : "flamethrower_halloween_crit_red" );
-	}
-
-	int iParticleEffectIndex = 0;
-	CALL_ATTRIB_HOOK_INT( iParticleEffectIndex, set_weapon_mode );
-
-	switch ( iParticleEffectIndex )
-	{
-	case 1:		return "drg_phlo_stream_crit";
-	case 2:		return "flamethrower_crit_giant_mvm";
-	case 3:		return ( bIsFirstPersonView ? "flamethrower_rainbow_FP" : "flamethrower_rainbow" );
-	default:	return ( pOwner->GetTeamNumber() == TF_TEAM_BLUE ? "flamethrower_crit_blue" : "flamethrower_crit_red" );
-	}
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: 
-//-----------------------------------------------------------------------------
-const char* CTFFlameThrower::FullCritChargedEffectName( void )
-{
-	switch( GetTeamNumber() )
-	{
-	case TF_TEAM_BLUE:	return "medicgun_invulnstatus_fullcharge_blue";
-	case TF_TEAM_RED:	return "medicgun_invulnstatus_fullcharge_red";
-	default:			return "";
-	}
+	return pszParticleEffect;
 }
 
 //-----------------------------------------------------------------------------
@@ -2059,19 +2683,30 @@ void CTFFlameThrower::ClientEffectsThink( void )
 	SetContextThink( &CTFFlameThrower::ClientEffectsThink, gpGlobals->curtime + 0.1f + RandomFloat( 1.0f, 5.0f ) * flRageInverse, "EFFECTS_THINK" );
 }
 
-void CTFFlameThrower::FlameEffect_t::StartEffects( const char* pszEffectName )
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+void CTFFlameThrower::FlameEffect_t::StartEffects( CTFPlayer *pTFOwner, const char *pszEffectName )
 {
+	if ( !pTFOwner )
+		return;
+
+	if ( !pszEffectName )
+		return;
+
+	m_pOwner = pTFOwner;
+
 	// Stop any old flame effects
 	StopEffects();
 
 	// Figure out which weapon this flame effect is to be attached to.  Store this for
 	// later so we know which weapon to deactivate the effect on
-	m_hEffectWeapon = m_pOwner->GetWeaponForEffect();
+	m_hEffectWeapon = m_pFlamethrower->GetWeaponForEffect();
 
-	if( m_hEffectWeapon )
+	if ( m_hEffectWeapon )
 	{
 		CParticleProperty* pParticleProp = m_hEffectWeapon->ParticleProp();
-		if( pParticleProp )
+		if ( pParticleProp )
 		{
 			// Flame on
 			m_pFlameEffect = pParticleProp->Create( pszEffectName, PATTACH_POINT_FOLLOW, "muzzle" );
@@ -2079,6 +2714,9 @@ void CTFFlameThrower::FlameEffect_t::StartEffects( const char* pszEffectName )
 	}
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 bool CTFFlameThrower::FlameEffect_t::StopEffects()
 {
 	bool bStopped = false;
@@ -2117,7 +2755,7 @@ void CTFFlameThrower::HitTargetThink( void )
 // Purpose: 
 //-----------------------------------------------------------------------------
 void CTFFlameThrower::SetHitTarget( void )
-{ 
+{
 	if ( m_iWeaponState > FT_STATE_IDLE )
 	{
 		m_bHitTarget = true;
@@ -2129,105 +2767,6 @@ void CTFFlameThrower::SetHitTarget( void )
 }
 
 #endif
-
-#ifdef STAGING_ONLY
-//-----------------------------------------------------------------------------
-// Purpose: 
-//-----------------------------------------------------------------------------
-bool CTFFlameThrower::RocketPackCanActivate( int nAmmoCost )
-{
-	CTFPlayer *pOwner = GetTFPlayerOwner();
-	if ( !pOwner )
-		return false;
-
-	int nRocketPack = 0;
-	CALL_ATTRIB_HOOK_INT_ON_OTHER( pOwner, nRocketPack, rocket_pack );
-	if ( !nRocketPack )
-		return false;
-
-	if ( pOwner->m_Shared.IsLoser() )
-		return false;
-
-	if ( pOwner->m_Shared.InCond( TF_COND_STUNNED ) )
-		return false;
-
-	if ( pOwner->IsTaunting() )
-		return false;
-
-// 	if ( pOwner->m_Shared.GetChargeMeter() < 100.f )
-// 		return false;
-
-	if ( pOwner->GetAmmoCount( TF_AMMO_PRIMARY ) < nAmmoCost )
-		return false;
-
-	return true;
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: 
-//-----------------------------------------------------------------------------
-bool CTFFlameThrower::RocketPackLaunch( int nAmmoCost )
-{
-	CTFPlayer *pOwner = GetTFPlayerOwner();
-	if ( !pOwner )
-		return false;
-
-#ifdef CLIENT_DLL
-	StopFlame( false );
-#endif // CLIENT_DLL
-
-#ifdef GAME_DLL
-	// Launch
-	if ( !pOwner->m_Shared.InCond( TF_COND_ROCKETPACK ) )
-	{
-		pOwner->m_Shared.AddCond( TF_COND_ROCKETPACK );
-		pOwner->m_Shared.StunPlayer( 0.5f, 1.0f, TF_STUN_MOVEMENT );
-	}
-
-	Vector vecDir;
-	pOwner->EyeVectors( &vecDir );
-	pOwner->SetAbsVelocity( vec3_origin );
-	Vector vecFlightDir = -vecDir;
-	VectorNormalize( vecFlightDir );
-	float flForce = 450.f;
-
-	const float flPushScale = ( pOwner->GetFlags() & FL_ONGROUND ) ? 1.2f : 1.8f;		// Greater force while airborne
-	const float flVertPushScale = ( pOwner->GetFlags() & FL_ONGROUND ) ? 1.2f : 0.25f;	// Less vertical force while airborne
-	Vector vecForce = vecFlightDir * -flForce * flPushScale;
-	vecForce.z += 1.f * flForce * flVertPushScale;
-	pOwner->RemoveFlag( FL_ONGROUND );
-	pOwner->ApplyAbsVelocityImpulse( vecForce );
-
-	m_flNextSecondaryAttack = gpGlobals->curtime + 0.75f;
-	m_flNextPrimaryAttack = gpGlobals->curtime + 1.f;
-	m_flResetBurstEffect = gpGlobals->curtime + 0.05f;
-	m_bFiredSecondary = true;
-	m_flChargeBeginTime = 0;
-
-	pOwner->RemoveAmmo( nAmmoCost, m_iPrimaryAmmoType );
-	pOwner->EmitSound( "Equipment.RocketPack_Activate" );
-#endif // GAME_DLL
-
-#ifdef CLIENT_DLL
-	if ( prediction->IsFirstTimePredicted() == true )
-	{
-		StartFlame();
-	}
-#endif // CLIENT_DLL
-
-	return true;
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: 
-//-----------------------------------------------------------------------------
-bool CTFFlameThrower::ShootsNapalm( void )
-{
-	int iNapalm = 0;
-	CALL_ATTRIB_HOOK_INT_ON_OTHER( GetOwnerEntity(), iNapalm, mod_flamethrower_napalm );
-	return ( iNapalm > 0 );
-}
-#endif // STAGING_ONLY
 
 IMPLEMENT_NETWORKCLASS_ALIASED( TFFlameRocket, DT_TFFlameRocket )
 BEGIN_NETWORK_TABLE( CTFFlameRocket, DT_TFFlameRocket )
@@ -2303,11 +2842,6 @@ CTFFlameEntity *CTFFlameEntity::Create( const Vector &vecOrigin, const QAngle &v
 		pFlame->m_hAttacker = pOwner->GetOwnerEntity();
 	else
 		pFlame->m_hAttacker = pOwner;
-	CBaseEntity *pAttacker = (CBaseEntity *) pFlame->m_hAttacker;
-	if ( pAttacker )
-	{
-		pFlame->m_iAttackerTeam = pAttacker->GetTeamNumber();
-	}
 
 	// Set team.
 	pFlame->ChangeTeam( pOwner->GetTeamNumber() );
@@ -2339,58 +2873,6 @@ CTFFlameEntity *CTFFlameEntity::Create( const Vector &vecOrigin, const QAngle &v
 
 	return pFlame;
 }
-
-//-----------------------------------------------------------------------------
-class CFlameEntityEnum : public IEntityEnumerator
-{
-public:
-	CFlameEntityEnum( CBaseEntity *pShooter )
-	{
-		m_pShooter = pShooter;
-	}
-
-	virtual bool EnumEntity( IHandleEntity *pHandleEntity )
-	{
-		CBaseEntity *pEnt = static_cast<CBaseEntity*>( pHandleEntity );
-
-		// Ignore collisions with the shooter
-		if ( pEnt == m_pShooter )
-			return true;
-
-		if ( pEnt->IsPlayer() && pEnt->IsAlive() )
-		{
-			m_Targets.AddToTail( pEnt );
-		}
-		else if ( pEnt->MyNextBotPointer() && pEnt->IsAlive() )
-		{
-			// add non-player bots
-			m_Targets.AddToTail( pEnt );
-		}
-		else if ( pEnt->IsBaseObject() && m_pShooter->GetTeamNumber() != pEnt->GetTeamNumber() )
-		{
-			// only add enemy objects
-			m_Targets.AddToTail( pEnt );
-		}
-		else if ( CTFRobotDestructionLogic::GetRobotDestructionLogic() && m_pShooter->GetTeamNumber() != pEnt->GetTeamNumber() && FClassnameIs( pEnt, "tf_robot_destruction_robot" ) )
-		{
-			// only add enemy robots
-			m_Targets.AddToTail( pEnt );
-		}
-		else if ( FClassnameIs( pEnt, "func_breakable" ) || FClassnameIs( pEnt, "tf_pumpkin_bomb" ) || FClassnameIs( pEnt, "tf_merasmus_trick_or_treat_prop" ) )
-		{
-			m_Targets.AddToTail( pEnt );
-		}
-
-		return true;
-	}
-
-	const CUtlVector< CBaseEntity* >& GetTargets() { return m_Targets; }
-
-public:
-	Ray_t		*m_pRay;
-	CBaseEntity	*m_pShooter;
-	CUtlVector< CBaseEntity* > m_Targets;
-};
 
 //-----------------------------------------------------------------------------
 // Purpose: Think method
@@ -2604,8 +3086,6 @@ void CTFFlameEntity::OnCollide( CBaseEntity *pOther )
 						pPlayerAttacker->AwardAchievement( ACHIEVEMENT_TF_PYRO_IGNITE_PLAYER_BEING_FLIPPED );
 					}
 				}
-
-				pVictim->m_Shared.AddCond( TF_COND_HEALING_DEBUFF, 2.f, pAttacker );
 			}
 		}
 	}
@@ -2724,377 +3204,3 @@ float CTFFlameEntity::GetFlameDrag( void )
 }
 
 #endif // GAME_DLL
-
-#ifdef STAGING_ONLY
-//-----------------------------------------------------------------------------
-// Purpose: Napalm
-//-----------------------------------------------------------------------------
-#ifdef GAME_DLL
-#define NAPALM_THINK_CONTEXT	"CTFMedigunShield_ShieldThink"
-#endif // GAME_DLL
-
-LINK_ENTITY_TO_CLASS( tf_projectile_napalm, CTFProjectile_Napalm );
-
-IMPLEMENT_NETWORKCLASS_ALIASED( TFProjectile_Napalm, DT_TFProjectile_Napalm )
-
-BEGIN_NETWORK_TABLE( CTFProjectile_Napalm, DT_TFProjectile_Napalm )
-#ifdef GAME_DLL
-	SendPropEHandle( SENDINFO( m_hFlameThrower ) ),
-#else
-	RecvPropEHandle( RECVINFO( m_hFlameThrower ) ),
-#endif
-END_NETWORK_TABLE()
-
-BEGIN_PREDICTION_DATA( CTFProjectile_Napalm )
-END_PREDICTION_DATA()
-
-// Data
-BEGIN_DATADESC( CTFProjectile_Napalm )
-#ifdef GAME_DLL
-DEFINE_THINKFUNC( NapalmThink ),
-#endif // GAME_DLL
-END_DATADESC()
-
-
-//-----------------------------------------------------------------------------
-// Purpose:
-//-----------------------------------------------------------------------------
-CTFProjectile_Napalm::CTFProjectile_Napalm()
-{
-#ifdef GAME_DLL
-	m_flRemoveTime = 0.f;
-	m_nHitCount = 0;
-	m_flLastBurnTime = 0.f;
-#endif // GAME_DLL
-}
-
-//-----------------------------------------------------------------------------
-// Purpose:
-//-----------------------------------------------------------------------------
-CTFProjectile_Napalm::~CTFProjectile_Napalm()
-{
-}
-
-//-----------------------------------------------------------------------------
-// Purpose:
-//-----------------------------------------------------------------------------
-void CTFProjectile_Napalm::Precache()
-{
-	// PrecacheModel( TF_MODEL_NAPALM );
-	PrecacheParticleSystem( "burninggibs" );
-	PrecacheParticleSystem( "flaming_arrow" );
-	
-	PrecacheScriptSound( "Player.PlasmaDamage" );
-
-	BaseClass::Precache();
-}
-
-//-----------------------------------------------------------------------------
-// Purpose:
-//-----------------------------------------------------------------------------
-void CTFProjectile_Napalm::Spawn()
-{
-	Precache();
-
-#ifdef GAME_DLL
-	m_flRemoveTime = gpGlobals->curtime + 2.2f;
-	SetContextThink( &CTFProjectile_Napalm::NapalmThink, gpGlobals->curtime, NAPALM_THINK_CONTEXT );
-#endif // GAME_DLL
-
-	BaseClass::Spawn();
-
-#ifdef GAME_DLL
-	SetDetonateTimerLength( FLT_MAX );
-#endif // GAME_DLL
-}
-
-#ifdef GAME_DLL
-//-----------------------------------------------------------------------------
-// Purpose: 
-//-----------------------------------------------------------------------------
-CTFProjectile_Napalm *CTFProjectile_Napalm::Create( CBaseCombatCharacter *pOwner, CTFFlameThrower *pLauncher )
-{
-	if ( pOwner )
-	{
-		Vector vecForward;
-		AngleVectors( pOwner->EyeAngles(), &vecForward, NULL, NULL );
-		CTFProjectile_Napalm *pProjectile = static_cast< CTFProjectile_Napalm* >( CBaseEntity::Create( "tf_projectile_napalm", pLauncher->GetVisualMuzzlePos(), pOwner->EyeAngles() ) );
-		if ( pProjectile )
-		{
-			pProjectile->ChangeTeam( pOwner->GetTeamNumber() );
-
-			// Setup the initial velocity.
-			float flVelocity = 1100.f;
-			pProjectile->m_vecBaseVelocity = vecForward * flVelocity;
-			pProjectile->m_vecBaseVelocity += RandomVector( -flVelocity * tf_flamethrower_vecrand.GetFloat(), flVelocity * tf_flamethrower_vecrand.GetFloat() );
-			pProjectile->InitGrenade( pProjectile->m_vecBaseVelocity, vec3_origin, pOwner, pLauncher->GetTFWpnData() );
-			pProjectile->m_hFlameThrower = pLauncher;
-
-			return pProjectile;
-		}
-	}
-
-	return NULL;
-}
-
-//-----------------------------------------------------------------------------
-// Purpose:
-//-----------------------------------------------------------------------------
-int CTFProjectile_Napalm::UpdateTransmitState()
-{
-	return SetTransmitState( FL_EDICT_PVSCHECK );
-}
-
-//-----------------------------------------------------------------------------
-// Purpose:
-//-----------------------------------------------------------------------------
-void CTFProjectile_Napalm::NapalmThink( void )
-{
-	if ( gpGlobals->curtime > m_flRemoveTime )
-	{
-		SetContextThink( &CBaseGrenade::SUB_Remove, gpGlobals->curtime, "RemoveThink" );
-		SetTouch( NULL );
-		return;
-	}
-
-	SetContextThink( &CTFProjectile_Napalm::NapalmThink, gpGlobals->curtime + 0.1f, NAPALM_THINK_CONTEXT );
-}
-
-//-----------------------------------------------------------------------------
-// Purpose:
-//-----------------------------------------------------------------------------
-void CTFProjectile_Napalm::Explode( trace_t *pTrace, int bitsDamageType )
-{
-	if ( !m_nHitCount )
-	{
-		SetModelName( NULL_STRING );
-		AddSolidFlags( FSOLID_TRIGGER );
-
-		m_takedamage = DAMAGE_NO;
-
-		// Pull out of the wall a bit.
-		if ( pTrace->fraction != 1.f )
-		{
-			SetAbsOrigin( pTrace->endpos + ( pTrace->plane.normal * 1.0f ) );
-		}
-
-		CTFPlayer *pThrower = ToTFPlayer( GetThrower() );
-		if ( pThrower )
-		{
-			const Vector& vecOrigin = GetAbsOrigin();
-
-			// Any effects from the initial explosion
-			if ( InitialExplodeEffects( pThrower, pTrace ) )
-			{
-				// Particle
-				if ( GetImpactEffect() )
-				{	
-					CPVSFilter filter( vecOrigin );
-
-					// Stick effect on the player
-					CBaseEntity *pEnt = pTrace->m_pEnt;
-					if ( pEnt && pEnt->IsPlayer() && !pThrower->InSameTeam( pEnt ) )
-					{
-						// TE_TFParticleEffect( filter, 0.f, GetImpactEffect(), pEnt->GetAbsOrigin(), vec3_angle, pEnt, PATTACH_ABSORIGIN_FOLLOW );
-						m_flRemoveTime = gpGlobals->curtime;
-					}
-					// World
-					else
-					{
-						TE_TFParticleEffect( filter, 0.0, GetImpactEffect(), vecOrigin, vec3_angle );
-					}
-				}
-
-				// Sounds
-				// EmitSound( "Player.PlasmaDamage" );
-
-				// Treat this trace exactly like radius damage
-				CTraceFilterIgnorePlayers traceFilter( pThrower, COLLISION_GROUP_PROJECTILE );
-
-				// Burn players in impact range
-				CBaseEntity *pListOfEntities[32];
-				int iEntities = UTIL_EntitiesInSphere( pListOfEntities, 32, vecOrigin, GetDamageRadius(), FL_CLIENT | FL_FAKECLIENT | FL_NPC );
-				for ( int i = 0; i < iEntities; ++i )
-				{
-					if ( pThrower->InSameTeam( pListOfEntities[i] ) )
-						continue;
-
-					CBaseCombatCharacter *pBaseCombatCharacter = NULL;
-					CTFPlayer *pPlayer = ToTFPlayer( pListOfEntities[i] );
-					if ( !pPlayer )
-					{
-						pBaseCombatCharacter = dynamic_cast< CBaseCombatCharacter* >( pListOfEntities[i] );
-					}
-					else
-					{
-						pBaseCombatCharacter = pPlayer;
-					}
-
-					if ( !pBaseCombatCharacter || !pBaseCombatCharacter->IsAlive() )
-						continue;
-
-					// Do a quick trace to see if there's any geometry in the way.
-					trace_t pImpactTrace;
-					UTIL_TraceLine( GetAbsOrigin(), pBaseCombatCharacter->GetAbsOrigin(), ( MASK_SHOT & ~( CONTENTS_HITBOX ) ), &traceFilter, &pImpactTrace );
-					if ( pImpactTrace.DidHitWorld() )
-						continue;
-
-					// Effects on the individual players
-					ExplodeEffectOnTarget( pThrower, pPlayer, pBaseCombatCharacter );
-				}
-
-				ApplyBlastDamage( pThrower, vecOrigin );
-			}
-		}
-
-		AddEffects( EF_NODRAW );
-		SetAbsVelocity( vec3_origin );
-		SetMoveType( MOVETYPE_NONE );
-	}
-
-	m_nHitCount++;
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: 
-//-----------------------------------------------------------------------------
-void CTFProjectile_Napalm::PipebombTouch( CBaseEntity *pOther )
-{
-	if ( gpGlobals->curtime - m_flLastBurnTime < 0.15f )
-		return;
-
-	if ( InSameTeam( pOther ) )
-		return;
-
-	if ( !m_hFlameThrower || !m_hFlameThrower->GetOwnerEntity() )
-		return;
-
-	CTakeDamageInfo info;
-	info.SetAttacker( m_hFlameThrower->GetOwnerEntity() );
-	info.SetInflictor( m_hFlameThrower ); 
-	info.SetWeapon( m_hFlameThrower );
-	info.SetDamage( 2.f );
-	info.SetDamageCustom( GetCustomDamageType() );
-	info.SetDamagePosition( GetAbsOrigin() );
-	info.SetDamageType( DMG_BURN );
-	pOther->TakeDamage( info );
-
-	m_flLastBurnTime = gpGlobals->curtime;
-
-	BaseClass::PipebombTouch( pOther );
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: Radius damage
-//-----------------------------------------------------------------------------
-void CTFProjectile_Napalm::ApplyBlastDamage( CTFPlayer *pThrower, Vector vecOrigin )
-{
-	CTakeDamageInfo info;
-	info.SetAttacker( pThrower );
-	info.SetInflictor( this ); 
-	info.SetWeapon( m_hFlameThrower );
-	info.SetDamage( 25.f );
-	info.SetDamageCustom( GetCustomDamageType() );
-	info.SetDamagePosition( vecOrigin );
-	info.SetDamageType( DMG_BURN );
-
-	CTFRadiusDamageInfo radiusinfo( &info, vecOrigin, 100.f, pThrower );
-	TFGameRules()->RadiusDamage( radiusinfo );
-}
-
-//-----------------------------------------------------------------------------
-// Purpose:
-//-----------------------------------------------------------------------------
-bool CTFProjectile_Napalm::InitialExplodeEffects( CTFPlayer *pThrower, const trace_t *pTrace )
-{
-	// Added Particle
-	Vector vecOrigin = GetAbsOrigin();
-	// Particle
-	CPVSFilter filter( vecOrigin );
-	TE_TFExplosion( filter, 0.0f, vecOrigin, pTrace->plane.normal, TF_WEAPON_FLAMETHROWER, kInvalidEHandleExplosion, -1, SPECIAL1, INVALID_STRING_INDEX );
-
-	return true;
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: Direct hit
-//-----------------------------------------------------------------------------
-void CTFProjectile_Napalm::ExplodeEffectOnTarget( CTFPlayer *pThrower, CTFPlayer *pTarget, CBaseCombatCharacter *pBaseTarget )
-{
-	if ( pBaseTarget->GetTeamNumber() == GetTeamNumber() )
-		return;
-
-	if ( pTarget )
-	{
-		if ( pTarget->m_Shared.IsInvulnerable() )
-			return;
-
-		if ( pTarget->m_Shared.InCond( TF_COND_PHASE ) || pTarget->m_Shared.InCond( TF_COND_PASSTIME_INTERCEPTION ) )
-			return;
-	}
-
-	Vector vecDir = pBaseTarget->WorldSpaceCenter() - GetAbsOrigin();
-	VectorNormalize( vecDir );
-
-	const trace_t *pTrace = &CBaseEntity::GetTouchTrace();
-	trace_t *pNewTrace = const_cast<trace_t*>( pTrace );
-
-	CBaseEntity *pInflictor = GetLauncher();
-	CTakeDamageInfo info;
-	info.SetAttacker( pThrower );
-	info.SetInflictor( this ); 
-	info.SetWeapon( pInflictor );
-	info.SetDamage( 50 );
-	info.SetDamageCustom( GetCustomDamageType() );
-	info.SetDamagePosition( GetAbsOrigin() );
-	info.SetDamageType( DMG_IGNITE );
-
-	// Hurt 'em.
-	Vector dir;
-	AngleVectors( GetAbsAngles(), &dir );
-	pBaseTarget->DispatchTraceAttack( info, dir, pNewTrace );
-	ApplyMultiDamage();
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: 
-//-----------------------------------------------------------------------------
-const char *CTFProjectile_Napalm::GetImpactEffect( void )
-{ 
-	return "burninggibs";
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: 
-//-----------------------------------------------------------------------------
-void CTFProjectile_Napalm::SetCustomPipebombModel( void )
-{ 
-	SetModel( "models/weapons/w_models/w_flaregun_shell.mdl" );
-}
-#endif // GAME_DLL
-
-#ifdef CLIENT_DLL
-//-----------------------------------------------------------------------------
-// Purpose: 
-//-----------------------------------------------------------------------------
-void CTFProjectile_Napalm::OnDataChanged( DataUpdateType_t updateType )
-{
-	BaseClass::OnDataChanged( updateType );
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: 
-//-----------------------------------------------------------------------------
-const char *CTFProjectile_Napalm::GetTrailParticleName( void )
-{
-	if ( GetTeamNumber() == TF_TEAM_BLUE )
-	{
-		return "flaming_arrow";
-	}
-	else
-	{
-		return "flaming_arrow";
-	}
-}
-#endif // CLIENT_DLL
-#endif // STAGING_ONLY

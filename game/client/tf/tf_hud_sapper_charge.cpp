@@ -42,9 +42,6 @@ private:
 	vgui::ContinuousProgressBar *m_pChargeMeter;
 };
 
-#ifdef STAGING_ONLY
-DECLARE_HUDELEMENT( CHudSapperChargeMeter );
-#endif
 
 //-----------------------------------------------------------------------------
 // Purpose: 

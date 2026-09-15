@@ -21,17 +21,10 @@
 
 #define ENABLE_TYPED_ATTRIBUTE_PARANOIA		1
 
-#ifdef GC_DLL
-class CSchItem;
-class CEconSharedObjectCache;
-#endif
 
 namespace GCSDK
 {
 	class CColumnSet;
-#ifdef GC_DLL
-	class CWebAPIValues;
-#endif
 };
 
 class CEconItem;
@@ -112,31 +105,6 @@ public:
 		COMPILE_TIME_ASSERT( !IsPointerType<TAttribInMemoryType>::kValue );
 	}
 
-#ifdef GC_DLL
-	// By default, without a specific type we don't support any sort of custom value generation, so all we can do
-	// to load an attribute is to copy the value out from the generic format (union) and turn it into whatever our
-	// type is, and then add that type to the item as an attribute.
-	//
-	// Unlike most of the functions in this class, this is not meant to be a catch-all default implementation but
-	// is instead a base implementation. Subclasses are intended to override to add or change functionality.
-	virtual void LoadOrGenerateEconAttributeValue( CEconItem *pTargetItem, const CEconItemAttributeDefinition *pAttrDef,  const static_attrib_t& staticAttrib, const CEconGameAccount *pGameAccount ) const OVERRIDE
-	{
-		Assert( pTargetItem );
-		Assert( pAttrDef );
-		AssertMsg( !staticAttrib.m_pKVCustomData, "Default implementation of LoadOrGenerateEconAttributeValue() doesn't support custom value generation!" );
-		AssertMsg( pGameAccount || !staticAttrib.m_pKVCustomData, "Cannot run custom logic with no game account object! Passing in NULL for pGameAccount is only supported when we know we won't be running custom value generation code!" );
-
-		LoadEconAttributeValue( pTargetItem, pAttrDef, staticAttrib.m_value );
-	}
-
-	// By default, we dont generate any custom value
-	virtual void GenerateEconAttributeValue( const CEconItemAttributeDefinition *pAttrDef, const static_attrib_t& staticAttrib, const CEconGameAccount *pGameAccount, attribute_data_union_t* out_pValue ) const OVERRIDE
-	{
-		Assert( pAttrDef );
-		Assert( pGameAccount );
-		Assert( out_pValue );
-	}
-#endif // GC_DLL
 
 	virtual void LoadEconAttributeValue( CEconItem *pTargetItem, const CEconItemAttributeDefinition *pAttrDef, const union attribute_data_union_t& value ) const OVERRIDE;
 
@@ -284,9 +252,6 @@ schema_attribute_stat_bucket_t ISchemaAttributeTypeBase<TAttribInMemoryType>::s_
 
 class CEconItem : public GCSDK::CSharedObject, public CMaterialOverrideContainer< IEconItemInterface >
 {
-#ifdef GC_DLL
-	DECLARE_CLASS_MEMPOOL( CEconItem );
-#endif
 
 public:
 	typedef GCSDK::CSharedObject BaseClass;
@@ -308,27 +273,6 @@ public:
 		equipped_slot_t m_unEquippedSlot;
 	};
 
-#ifdef GC_DLL
-	class CAuditEntry
-	{
-	public:
-		CAuditEntry( EItemAction eAction, uint32 unData ) : m_eAction( eAction ), m_unData( unData ) { }
-
-		bool BAddAuditEntryToTransaction( CSQLAccess& sqlAccess, const CEconItem *pItem ) const;
-
-	private:
-		EItemAction m_eAction;
-		uint32 m_unData;
-	};
-
-	// Set only the top 16 bits for field ID types! These will be or'd into the index of
-	// the field itself and then pulled apart later.
-	enum
-	{
-		kUpdateFieldIDType_FieldID				= 0x00000000,	// this must stay as 0 for legacy code
-		kUpdateFieldIDType_AttributeID			= 0x00010000,
-	};
-#endif // GC_DLL
 
 	const static int k_nTypeID = k_EEconTypeItem;
 	virtual int GetTypeID() const { return k_nTypeID; }
@@ -425,9 +369,6 @@ public:
 	void AdoptMoreRestrictedTradability( uint32 nTradabilityFlags, RTime32 nUntradableTime );
 	bool IsUsableInCrafting() const;
 
-#ifdef GC_DLL
-	RTime32 GetAssetInfoExpirationCacheExpirationTime() const;
-#endif // GC_DLL
 
 	// --------------------------------------------------------------------------------------------
 	// Typed attributes. These are methods for accessing and setting values of attributes with
@@ -447,18 +388,12 @@ public:
 		Assert( pAttrDef );
 
 		const ISchemaAttributeTypeBase<T> *pAttrType = GetTypedAttributeType<T>( pAttrDef );
-#ifdef GC_DLL
-		// The GC is expected to always have internally-consistent information and so be able to access the
-		// type information of any attribute if we started up successfully.
-		Assert( pAttrType );
-#else
 		// Game clients and servers may be running code that doesn't have all of the types for the new attributes
 		// for a GC that just propped. Because we're not authoritative over items here, about the best we can do
 		// here is abort entirely. This means that the client may not display certain attributes at all, or even
 		// have them in the attribute list in memory, but we don't understand those attributes anyway.
 		if ( !pAttrType )
 			return;
-#endif
 		
 		// Fail right off the bat if we're trying to write a dynamic attribute value for an item that already
 		// has this as a static value.
@@ -536,38 +471,13 @@ private:
 public:
 	void Compact();
 
-#ifdef GC
-	bool BDeserializeFromKV( KeyValues *pKVItem, CUtlVector<CUtlString> *pVecErrors );
-#endif // GC
 
-#ifdef GC_DLL
-	void ExportToAPI( GCSDK::CWebAPIValues *pValues ) const;
-	bool BImportFromAPI( GCSDK::CWebAPIValues *pValues );
-#endif // GC_DLL
 
 	// these are overridden to handle attributes
-#ifdef GC_DLL
-	virtual bool BYieldingAddInsertToTransaction( GCSDK::CSQLAccess & sqlAccess );
-	virtual bool BYieldingAddWriteToTransaction( GCSDK::CSQLAccess & sqlAccess, const CUtlVector< int > &fields );
-	virtual bool BYieldingAddRemoveToTransaction( GCSDK::CSQLAccess & sqlAccess );
-
-	void SerializeToSchemaItem( CSchItem &item ) const;
-	void DeserializeFromSchemaItem( const CSchItem &item );
-
-	void SetInteriorItem( CEconItem* pInteriorItem );
-#endif // GC_DLL
 	virtual bool BParseFromMessage( const CUtlBuffer &buffer ) OVERRIDE;
 	virtual bool BParseFromMessage( const std::string &buffer ) OVERRIDE;
 	virtual bool BUpdateFromNetwork( const CSharedObject & objUpdate ) OVERRIDE;
 
-#ifdef GC
-	virtual bool BAddToMessage( CUtlBuffer & bufOutput ) const OVERRIDE;
-	virtual bool BAddToMessage( std::string *pBuffer ) const OVERRIDE; // short cut to remove an extra copy
-	virtual bool BAddDestroyToMessage( CUtlBuffer & bufDestroy ) const OVERRIDE;
-	virtual bool BAddDestroyToMessage( std::string *pBuffer ) const OVERRIDE;
-
-	bool BYieldingSerializeFromDatabase( itemid_t ulItemID );
-#endif
 
 	virtual bool BIsKeyLess( const CSharedObject & soRHS ) const ;
 	virtual void Copy( const CSharedObject & soRHS );
@@ -577,14 +487,9 @@ public:
 	void SerializeToProtoBufItem( CSOEconItem &msgItem ) const;
 	void DeserializeFromProtoBufItem( const CSOEconItem &msgItem );
 
-#ifdef GC_DLL
-	CEconItem* YieldingGetInteriorItem();
-	const CEconItem* YieldingGetInteriorItem() const { return const_cast<CEconItem *>(this)->YieldingGetInteriorItem(); }
 
-	void SetEquippedThisGameServerSession( bool bEquipped ) { m_bEquippedThisGameServerSession = bEquipped; }
-	bool EquippedThisGameServerSession() const { return m_bEquippedThisGameServerSession; }
-#endif
-
+	// Return the ID of the interior item, regardless of if it is loaded.
+	itemid_t GetInteriorItemID();
 	// Non-yielding -- will return current interior item if it exists and is already loaded
 	// but will make no attempt to load.
 	CEconItem* GetInteriorItem();
@@ -657,10 +562,6 @@ public:
 	// optional data (custom name, additional attributes, etc.)
 	CEconItemCustomData *m_pCustomData;
 
-#ifdef GC_DLL
-private:
-	bool m_bEquippedThisGameServerSession;
-#endif // GC_DLL
 };
 
 //-----------------------------------------------------------------------------
@@ -689,9 +590,6 @@ public:
 
 	static void FreeAttributeMemory( CEconItem::attribute_t *pAttrib );
 
-#ifdef GC_DLL
-	DECLARE_CLASS_MEMPOOL( CEconItemCustomData );
-#endif
 };
 
 //-----------------------------------------------------------------------------
@@ -727,15 +625,6 @@ template < typename TAttribInMemoryType >
 	pTargetItem->SetDynamicAttributeValue( pAttrDef, GetTypedValueContentsFromEconAttributeValue( value ) );
 }
 
-#ifdef GC_DLL
-//-----------------------------------------------------------------------------
-// Purpose:
-//-----------------------------------------------------------------------------
-struct CEconItemEquipInstanceHelpers
-{
-	static void AssignItemToSlot( CEconSharedObjectCache *pSOCache, CEconItem *pItem, equipped_class_t unClass, equipped_slot_t unSlot, CEconUserSession *pOptionalSession = NULL );
-};
-#endif // GC_DLL
 
 void YieldingAddAuditRecord( GCSDK::CSQLAccess *sqlAccess, CEconItem *pItem, uint32 unOwnerID, EItemAction eAction, uint32 unData );
 void YieldingAddAuditRecord( GCSDK::CSQLAccess *sqlAccess, uint64 ulItemID, uint32 unOwnerID, EItemAction eAction, uint32 unData );

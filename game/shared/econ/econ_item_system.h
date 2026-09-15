@@ -30,6 +30,7 @@ public:
 
 	// Setup & parse in the item data files.
 	void		Init( void );
+	void		PostInit( void );
 	void		Shutdown( void );
 
 	// Return the static item data for the specified item index

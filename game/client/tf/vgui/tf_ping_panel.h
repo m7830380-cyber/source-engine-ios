@@ -12,35 +12,41 @@
 #endif
 
 #include <vgui_controls/EditablePanel.h>
+#include "tf_matchmaking_dashboard_side_panel.h"
 #include <../common/GameUI/cvarslider.h>
 
 using namespace vgui;
 
-class CTFPingPanel : public EditablePanel, public CGameEventListener
+class CTFPingPanel : public CMatchMakingDashboardSidePanel, public CGameEventListener
 {
-	DECLARE_CLASS_SIMPLE( CTFPingPanel, EditablePanel )
+	DECLARE_CLASS_SIMPLE( CTFPingPanel, CMatchMakingDashboardSidePanel )
 public:
-	CTFPingPanel( Panel* pPanel, const char *pszName, EMatchGroup eMatchGroup );
+	CTFPingPanel( Panel* pPanel, const char *pszName, ETFMatchGroup eMatchGroup );
 	~CTFPingPanel();
 
 	virtual void ApplySchemeSettings( IScheme *pScheme ) OVERRIDE;
 	virtual void PerformLayout() OVERRIDE;
 	virtual void OnCommand( const char *command ) OVERRIDE;
+	virtual void OnThink() OVERRIDE;
 
 	virtual void FireGameEvent( IGameEvent *event ) OVERRIDE;
 
 private:
 	void CleanupPingPanels();
+	void RegeneratePingPanels();
 	void UpdateCurrentPing();
 
+	MESSAGE_FUNC_PTR( OnTextChanged, "TextChanged", panel );
 	MESSAGE_FUNC_PTR( OnCheckButtonChecked, "CheckButtonChecked", panel );
 	MESSAGE_FUNC( OnSliderMoved, "SliderMoved" );
 
 	CPanelAnimationVarAliasType( int, m_iDataCenterY, "datacenter_y", "0", "proportional_int" );
 	CPanelAnimationVarAliasType( int, m_iDataCenterYSpace, "datacenter_y_space", "0", "proportional_int" );
 
-	EditablePanel *m_pMainContainer;
-	CheckButton *m_pCheckButton;
+	ComboBox* m_pInviteModeComboBox = NULL;
+	CvarToggleCheckButton<UIConVarRef> *m_pCustomPingCheckBox = NULL;
+	CvarToggleCheckButton<UIConVarRef> *m_pIgnoreInvitesCheckBox = NULL;
+	CvarToggleCheckButton<UIConVarRef> *m_pKeepTeamTogetherCheckBox = NULL;
 	Label *m_pCurrentPingLabel;
 	CCvarSlider *m_pPingSlider;
 
@@ -52,7 +58,7 @@ private:
 	};
 	CUtlVector< PingPanelInfo > m_vecDataCenterPingPanels;
 
-	EMatchGroup m_eMatchGroup;
+	ETFMatchGroup m_eMatchGroup;
 };
 
 #endif // TF_PING_PANEL_H

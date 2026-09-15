@@ -20,6 +20,7 @@
 #include "c_te_effect_dispatch.h"
 #include "input.h"
 #include "c_tf_player.h"
+#define CRecipientFilter C_RecipientFilter
 #else
 #include "tf_player.h"
 #endif
@@ -194,17 +195,23 @@ CTFBaseProjectile *CTFBaseProjectile::Create( const char *pszClassname, const Ve
 		UTIL_TraceLine( vecOrigin, vecOrigin + vecForward * MAX_COORD_RANGE, (CONTENTS_SOLID|CONTENTS_MOVEABLE|CONTENTS_WINDOW|CONTENTS_GRATE), &traceFilterChain, &tr );
 
 		bool bBroadcast = ( UTIL_PointContents( vecOrigin ) != UTIL_PointContents( tr.endpos ) );
-		IRecipientFilter *pFilter;
+
+		// Josh: This logic was never hooked up -- it only ever used
+		// the vecOrigin for PAS and leaked pFilter, but now it
+		// has been fixed to also do PAS for start + end
+		// instead of just the end/start!
+		CRecipientFilter filter;
 		if ( bBroadcast )
 		{
 			// The projectile is going to cross content types 
 			// (which will block PVS/PAS). Send to every client
-			pFilter = new CReliableBroadcastRecipientFilter();
+			filter.AddAllPlayers();
 		}
 		else
 		{
-			// just the PVS of where the projectile will hit.
-			pFilter = new CPASFilter( tr.endpos );
+			// just the PVS of where the projectile will start and hit.
+			filter.AddRecipientsByPAS( vecOrigin );
+			filter.AddRecipientsByPAS( tr.endpos );
 		}
 
 		CEffectData data;
@@ -225,7 +232,7 @@ CTFBaseProjectile *CTFBaseProjectile::Create( const char *pszClassname, const Ve
 		data.m_nMaterial = iProjModelIndex;
 		data.m_hEntity = ClientEntityList().EntIndexToHandle( pOwner->entindex() );
 	#endif
-		DispatchEffect( pszDispatchEffect, data );
+		DispatchEffect( pszDispatchEffect, data, filter );
 	}
 
 	return pProjectile;
@@ -319,6 +326,16 @@ C_LocalTempEntity *ClientsideProjectileCallback( const CEffectData &data, float 
 				pTFPlayer->GetActiveWeapon()->GetAttachment( "muzzle", vecSrc );
 			}
 		}
+
+		// Josh: Below is legacy code from when syringes used to come from the muzzle of the local player.
+		// They don't anymore, so this obstruction check is just wrong.
+		// This is only incorrect and gives false positives compared to the server state.
+		// This is problematic when the player has minimal viewmodels enabled, as it can make it look
+		// like needles haven't gone through when in fact they have on the server side.
+		//
+		// No check is needed anymore given the needles come from inside the player's head
+		// and that cannot be obstructed.
+#if 0
 		else
 		{
 			C_BaseEntity *pViewModel = pLocalPlayer->GetViewModel();
@@ -342,6 +359,7 @@ C_LocalTempEntity *ClientsideProjectileCallback( const CEffectData &data, float 
 				}
 			}
 		}
+#endif
 	}
 
 

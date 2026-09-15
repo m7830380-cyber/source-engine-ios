@@ -63,7 +63,6 @@ public:
 
 	virtual bool	Reload( void );
 
-	virtual bool	OwnerCanJump( void );
 	virtual bool	Holster( CBaseCombatWeapon *pSwitchingTo );
 
 	virtual bool	SendWeaponAnim( int iActivity );
@@ -79,14 +78,18 @@ public:
 	// The bow doesn't actually reload, it instead uses the AE_WPN_INCREMENTAMMO anim event in the fire to reload the clip.
 	virtual bool	CanReload( void ){ return false; }
 
-	virtual bool	CanPickupOtherWeapon() const { return m_flChargeBeginTime == 0.f; }
+	virtual bool	CanPickupOtherWeapon() const { return GetInternalChargeBeginTime() == 0.f; }
 	
 #ifdef CLIENT_DLL
 	virtual void	OnDataChanged( DataUpdateType_t type );
 	virtual void	UpdateOnRemove( void );
+#else
+	virtual float	GetInitialAfterburnDuration() const OVERRIDE;
 #endif
 
 	void			SetArrowAlight( bool bAlight );
+
+	bool			OwnerCanJump( void );
 
 private:
 #ifdef CLIENT_DLL
@@ -94,14 +97,9 @@ private:
 	virtual void	StopBurningEffect( void );
 #else
 
-#ifdef STAGING_ONLY
-	void CreateExtraArrow( CTFProjectile_Arrow* pMainArrow, const QAngle& qSpreadAngles, float flSpeed );
-	float GetRandomSpreadOffset( int iArrowMasteryLevel );
-#endif // STAGING_ONLY
 
 #endif
 
-private:
 	float		m_flLastDenySoundTime;
 	CNetworkVar( bool, m_bNoFire );
 	CNetworkVar( bool, m_bArrowAlight );

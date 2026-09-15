@@ -17,22 +17,16 @@ enum autobalance_state_t
 {
 	AB_STATE_INACTIVE = 0,
 	AB_STATE_MONITOR,
-	AB_STATE_FIND_VOLUNTEERS
-};
-
-enum volunteer_state_t
-{
-	AB_VOLUNTEER_STATE_ASKED = 0,
-	AB_VOLUNTEER_STATE_NO,
-	AB_VOLUNTEER_STATE_YES,
+	AB_STATE_FORCE_DEAD_CANDIDATES,
+	AB_STATE_FORCE_CANDIDATES_SETUP,
+	AB_STATE_FORCE_CANDIDATES_EXECUTION,
 };
 
 typedef struct
 {
 	CHandle<CTFPlayer> hPlayer;
-	volunteer_state_t  eState;
-	float flQueryExpireTime;
-} volunteer_info_s;
+	bool bSentForceMessage;
+} candidate_info_s;
 
 //-----------------------------------------------------------------------------
 class CTFAutobalance : public CAutoGameSystemPerFrame
@@ -50,29 +44,33 @@ public:
 	// called after entities think
 	virtual void FrameUpdatePostEntityThink();
 
-	void ReplyReceived( CTFPlayer *pTFPlayer, bool bResponse );
-
 private:
 	void Reset();
 	bool ShouldBeActive() const;
 	bool AreTeamsUnbalanced();
-	void MonitorTeams();
-	bool HaveAlreadyAskedPlayer( CTFPlayer *pTFPlayer ) const;
-	int GetTeamAutoBalanceScore( int nTeam ) const;
-	int GetPlayerAutoBalanceScore( CTFPlayer *pTFPlayer ) const;
-	CTFPlayer *FindPlayerToAsk();
-	void FindVolunteers();
-	void SwitchVolunteers();
+	void ForceDeadCandidates();
+	void ForceCandidatesSetup();
+	void ForceCandidatesExecution();
+
+	bool IsAlreadyCandidate( CTFPlayer *pTFPlayer ) const;
+	double GetTeamAutoBalanceScore( int nTeam ) const;
+	double GetPlayerAutoBalanceScore( CTFPlayer *pTFPlayer ) const;
+	CTFPlayer *FindNextCandidate();
+	bool FindCandidates();
+	bool ValidateCandidates();
+
 	bool IsOkayToBalancePlayers();
+	void PlayerChangeTeam( CTFPlayer *pTFPlayer, bool bFullBonus );
 
 private:
-	int m_iCurrentState;
+	autobalance_state_t m_eCurrentState;
+
 	int m_iLightestTeam;
 	int m_iHeaviestTeam;
 	int m_nNeeded;
-	float m_flBalanceTeamsTime;
+	float m_flNextStateChange;
 
-	CUtlVector< volunteer_info_s > m_vecPlayersAsked;
+	CUtlVector< candidate_info_s > m_vecCandidates;
 };
 
 CTFAutobalance *TFAutoBalance();

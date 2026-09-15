@@ -115,6 +115,9 @@ void CTFRune::Precache( void )
 	PrecacheScriptSound( "Powerup.PickUpSupernovaActivate" );
 	PrecacheScriptSound( "Powerup.PickUpPlagueInfected" );
 	PrecacheScriptSound( "Powerup.PickUpPlagueInfectedLoop" );
+	PrecacheScriptSound( "Mannpower.PlayerIsDominant" );
+	PrecacheScriptSound( "Mannpower.DominantPlayerOtherTeam" );
+	PrecacheScriptSound( "Mannpower.PlayerIsNoLongerDominant" );
 	PrecacheModel( GetDefaultPowerupModel() ); 
 	PrecacheModel( TF_RUNE_STRENGTH );
 	PrecacheModel( TF_RUNE_RESIST );
@@ -290,6 +293,11 @@ bool CTFRune::MyTouch( CBasePlayer *pPlayer )
 			break;
 		}
 		UTIL_Remove( this ); //power-up runes don't respawn, only one of them exists in the game
+		
+		if  ( pTFPlayer->m_bIsInMannpowerDominantCondition )
+		{
+			pTFPlayer->m_Shared.AddCond( TF_COND_MARKEDFORDEATH, 5.f );
+		}
 	}
 
 	return bSuccess;

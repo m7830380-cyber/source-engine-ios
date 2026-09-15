@@ -95,9 +95,6 @@ LINK_ENTITY_TO_CLASS( tf_halloween_gift_pickup, CHalloweenGiftPickup );
 
 ConVar tf_halloween_gift_lifetime( "tf_halloween_gift_lifetime", "240", FCVAR_CHEAT | FCVAR_REPLICATED );
 
-#ifdef STAGING_ONLY
-ConVar tf_halloween_gift_soul_value( "tf_halloween_gift_soul_value", "10", FCVAR_CHEAT | FCVAR_REPLICATED );
-#endif
 
 //=============================================================================
 //
@@ -688,11 +685,7 @@ bool CHalloweenGiftPickup::MyTouch( CBasePlayer *pPlayer )
 	EmitSound( touchingFilter, entindex(), "sf15.Merasmus.Gargoyle.Got" );
 
 	// Give souls to the collecting player
-#ifdef STAGING_ONLY
-	for( int i=0; i<tf_halloween_gift_soul_value.GetInt(); ++i )
-#else
 	for( int i=0; i<10; ++i )
-#endif // STAGING_ONLY
 	{
 		TFGameRules()->DropHalloweenSoulPack( 1, vecOrigin, pPlayer, TEAM_SPECTATOR );
 	}

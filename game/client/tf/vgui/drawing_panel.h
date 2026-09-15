@@ -75,7 +75,7 @@ private:
 
 	Color m_colorLine;
 
-	CUtlVector<MapLine> m_vecDrawnLines[MAX_PLAYERS+1];
+	CUtlVector<MapLine> m_vecDrawnLines[MAX_PLAYERS_ARRAY_SAFE];
 
 	int m_iPanelType;	
 	bool m_bTeamColors;

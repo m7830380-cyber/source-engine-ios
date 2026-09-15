@@ -152,7 +152,7 @@ struct ItemSlotBuyPanels
 		m_iItemID = INVALID_ITEM_ID;
 	}
 
-	void SetItemID( int iIndex ) { m_iItemID = iIndex; }
+	void SetItemID(itemid_t iIndex ) { m_iItemID = iIndex; }
 	itemid_t GetItemID( void ) { return m_iItemID; }
 
 	int nSlot;
@@ -190,7 +190,7 @@ public:
 	MESSAGE_FUNC_PTR( OnItemPanelExited, "ItemPanelExited", panel );
 	MESSAGE_FUNC_PTR( OnItemPanelMousePressed, "ItemPanelMousePressed", panel );
 
-	virtual GameActionSet_t GetPreferredActionSet() { return GAME_ACTION_SET_MENUCONTROLS; }
+	virtual GameActionSet_t GetPreferredActionSet() { return IsActive() ? GAME_ACTION_SET_MENUCONTROLS : GAME_ACTION_SET_NONE; }
 
 protected:
 	void			CreateItemModelPanel( int iLoadoutSlot );

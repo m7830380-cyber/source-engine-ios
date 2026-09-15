@@ -58,6 +58,7 @@ public:
 
 	virtual bool	DoSwingTrace( trace_t &trace );
 	virtual void	Smack( void );
+	virtual float	GetSmackTime( int iWeaponMode );
 	virtual void	DoMeleeDamage( CBaseEntity* ent, trace_t& trace );
 	virtual void	DoMeleeDamage( CBaseEntity* ent, trace_t& trace, float flDamageMod );
 
@@ -84,6 +85,7 @@ public:
 protected:
 
 	virtual void	Swing( CTFPlayer *pPlayer );
+	virtual void	PlaySwingSound( void );
 
 protected:
 

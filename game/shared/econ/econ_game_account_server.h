@@ -33,28 +33,6 @@ enum eGameServerScoreStandingTrend
 	kGSStandingTrend_Down,
 };
 
-#ifdef GC
-#include "gcsdk/schemasharedobject.h"
-
-//---------------------------------------------------------------------------------
-// Purpose: 
-//---------------------------------------------------------------------------------
-class CEconGameServerAccount : public GCSDK::CSchemaSharedObject< CSchGameServerAccount, k_EEconTypeGameServerAccount >
-{
-#ifdef GC_DLL
-	DECLARE_CLASS_MEMPOOL( CEconGameServerAccount );
-#endif
-
-public:
-	CEconGameServerAccount() {}
-	CEconGameServerAccount( uint32 unAccountID ) 
-	{
-		Obj().m_unAccountID = unAccountID;
-	}
-};
-
-void GameServerAccount_GenerateIdentityToken( char* pIdentityToken, uint32 unMaxChars );
-#endif // GC
 
 inline const char *GameServerAccount_GetStandingString( eGameServerScoreStanding standing )
 {
@@ -100,11 +78,6 @@ inline const char *GameServerAccount_GetStandingTrendString( eGameServerScoreSta
 //---------------------------------------------------------------------------------
 class CEconGameAccountForGameServers : public GCSDK::CProtoBufSharedObject < CSOEconGameAccountForGameServers, k_EEconTypeGameAccountForGameServers >
 {
-#ifdef GC
-	DECLARE_CLASS_MEMPOOL( CEconGameAccountForGameServers );
-public:
-	virtual bool BIsDatabaseBacked() const { return false; }
-#endif
 };
 
 #endif //ECON_GAME_SERVER_ACCOUNT_H

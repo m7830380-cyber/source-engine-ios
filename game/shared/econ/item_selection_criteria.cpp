@@ -9,7 +9,6 @@
 #include "cbase.h"
 #include "item_selection_criteria.h"
 
-#include "gcsdk/gcsystemmsgs.h"
 
 #if defined(TF_CLIENT_DLL) || defined(TF_DLL)
 #include "tf_gcmessages.h"
@@ -57,7 +56,6 @@ CItemSelectionCriteria::CItemSelectionCriteria( const CItemSelectionCriteria &th
 //-----------------------------------------------------------------------------
 CItemSelectionCriteria &CItemSelectionCriteria::operator=( const CItemSelectionCriteria &rhs )
 {
-
 	// Leverage the serialization code we already have for the copy
 	CSOItemCriteria msgTemp;
 	rhs.BSerializeToMsg( msgTemp );
@@ -148,6 +146,11 @@ bool CItemSelectionCriteria::BInitFromKV( KeyValues *pKVCriteria )
 		SetTags( pKVCriteria->GetString( "tags" ) );
 	}
 
+	if ( pKVCriteria->FindKey( "equip_regions" ) )
+	{
+		SetEquipRegions( pKVCriteria->GetString( "equip_regions" ) );
+	}
+
 	KeyValues *pKVConditions = pKVCriteria->FindKey( "conditions", true );
 
 	FOR_EACH_TRUE_SUBKEY( pKVConditions, pKVElement )
@@ -191,6 +194,22 @@ void CItemSelectionCriteria::SetTags( const char *pszTags )
 		{
 			m_vecTags.AddToTail( tagHandle );
 		}
+	}
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose:
+//-----------------------------------------------------------------------------
+void CItemSelectionCriteria::SetEquipRegions( const char *pszEquipRegions )
+{
+	m_unEquipRegionMask = 0;
+
+	m_strEquipRegions = pszEquipRegions;
+	CSplitString splitString( pszEquipRegions, " " );
+	for ( int i=0; i<splitString.Count(); ++i )
+	{
+		m_unEquipRegionMask |= GetItemSchema()->GetEquipRegionBitMaskByName( splitString[i] );
 	}
 }
 
@@ -334,6 +353,12 @@ bool CItemSelectionCriteria::BEvaluate( const CEconItemDefinition* pItemDef ) co
 		{
 			return false;
 		}
+	}
+
+	// check if we match "any" equip regions
+	if ( m_unEquipRegionMask != 0 && ( m_unEquipRegionMask & pItemDef->GetEquipRegionMask() )== 0 )
+	{
+		return false;
 	}
 
 	return true;
@@ -481,6 +506,7 @@ bool CItemSelectionCriteria::BSerializeToMsg( CSOItemCriteria & msg ) const
 	msg.set_initial_quantity( m_unInitialQuantity );
 	msg.set_ignore_enabled_flag( m_bIgnoreEnabledFlag );
 	msg.set_tags( m_strTags );
+	msg.set_equip_regions( m_strEquipRegions );
 
 	FOR_EACH_VEC( m_vecConditions, i )
 	{
@@ -507,6 +533,7 @@ bool CItemSelectionCriteria::BDeserializeFromMsg( const CSOItemCriteria & msg )
 	m_bIgnoreEnabledFlag = msg.ignore_enabled_flag();
 
 	SetTags( msg.tags().c_str() );
+	SetEquipRegions( msg.equip_regions().c_str() );
 
 	uint32 unCount = msg.conditions_size();
 	m_vecConditions.EnsureCapacity( unCount );

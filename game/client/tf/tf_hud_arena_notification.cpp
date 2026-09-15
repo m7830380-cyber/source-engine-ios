@@ -22,6 +22,7 @@
 #include "tf_hud_freezepanel.h"
 #include "tf_hud_teamswitch.h"
 #include "hud_chat.h"
+#include "usermessages.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
@@ -267,8 +268,8 @@ void CHudArenaNotification::SetupSwitchPanel( int iNotification )
 }
 
 //----------------------------------------------------------------------------------------------------------------
-// Receive the PlayerIgnitedInv user message and send out a clientside event for achievements to hook.
-void __MsgFunc_HudArenaNotify( bf_read &msg )
+// Receive the HudArenaNotify user message and send out a clientside event for achievements to hook.
+USER_MESSAGE( HudArenaNotify )
 {
 	int iPlayerIndex = (int) msg.ReadByte();
 	int iNotification = (int) msg.ReadByte();

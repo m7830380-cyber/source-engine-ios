@@ -35,7 +35,7 @@ class CItemPickupPanel : public vgui::Frame, public CGameEventListener
 {
 	DECLARE_CLASS_SIMPLE( CItemPickupPanel, vgui::Frame );
 public:
-	CItemPickupPanel( Panel *parent );
+	CItemPickupPanel( Panel *parent, bool bPopup = true );
 	virtual ~CItemPickupPanel();
 
 	virtual void	ApplySchemeSettings( vgui::IScheme *pScheme );
@@ -97,7 +97,7 @@ class CItemDiscardPanel : public vgui::Frame, public CGameEventListener
 {
 	DECLARE_CLASS_SIMPLE( CItemDiscardPanel, vgui::Frame );
 public:
-	CItemDiscardPanel( Panel *parent );
+	CItemDiscardPanel( Panel *parent, bool bPopup = true );
 
 	virtual void	ApplySchemeSettings( vgui::IScheme *pScheme );
 	virtual void	PerformLayout( void );

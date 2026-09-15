@@ -35,6 +35,10 @@ class CWaveSpawnPopulator;
 class CTFTauntProp;
 class CTFDroppedWeapon;
 
+extern const float tf_afterburn_max_duration;
+
+#define MAX_FIRE_WEAPON_SCENES 4
+
 //=============================================================================
 //
 // Player State Information
@@ -59,6 +63,47 @@ enum EAmmoSource
 	kAmmoSource_Pickup,					// this came from either a box of ammo or a player's dropped weapon
 	kAmmoSource_Resupply,				// resupply cabinet and/or full respawn
 	kAmmoSource_DispenserOrCart,		// the player is standing next to an engineer's dispenser or pushing the cart in a payload game
+	kAmmoSource_ResourceMeter,			// it regenerated after a cooldown
+};
+
+extern ConVar tf_voice_command_suspension_rate_limit_bucket_count;
+extern ConVar tf_voice_command_suspension_rate_limit_bucket_refill_rate;
+
+class CVoiceCommandBucketSizer
+{
+public:
+	int GetBucketSize() const { return tf_voice_command_suspension_rate_limit_bucket_count.GetInt(); }
+	float GetBucketRefillRate() const { return tf_voice_command_suspension_rate_limit_bucket_refill_rate.GetFloat(); }
+};
+
+template <typename TBucketSizer>
+class CRateLimitingTokenBucket : public TBucketSizer
+{
+public:
+	CRateLimitingTokenBucket()
+		: m_nBucket( this->GetBucketSize() )
+	{
+	}
+
+	bool BTakeToken( float flNow )
+	{
+		// misyl: This token bucket doesn't go negative, so you don't ever dig yourself into a hole by spamming.
+		// You might want that if you use this class, feel free to add something to the BucketSizer.
+
+		int nNewBucket = MIN( m_nBucket + ( flNow - m_flLastTokenTaken ) / this->GetBucketRefillRate(), this->GetBucketSize() ) - 1;
+		if ( nNewBucket <= 0 )
+		{
+			return false;
+		}
+
+		m_nBucket = nNewBucket;
+		m_flLastTokenTaken = flNow;
+
+		return true;
+	}
+private:
+	float m_flLastTokenTaken = 0.0f;
+	int m_nBucket = 0;
 };
 
 //=============================================================================
@@ -71,6 +116,7 @@ public:
 	DECLARE_CLASS( CTFPlayer, CBaseMultiplayerPlayer );
 	DECLARE_SERVERCLASS();
 	DECLARE_DATADESC();
+	DECLARE_ENT_SCRIPTDESC();
 
 	CTFPlayer();
 	~CTFPlayer();
@@ -153,6 +199,7 @@ public:
 	}
 	virtual int			GetNumberofDominations( void ) { return m_iNumberofDominations; }
 	void				OnKilledOther_Effects( CBaseEntity *pVictim, const CTakeDamageInfo &info );
+	void				CheckSpellHalloweenDeathGhosts( const CTakeDamageInfo &info, CTFPlayer *pTFVictim );
 
 	virtual int			OnTakeDamage( const CTakeDamageInfo &inputInfo );
 	void				AddConnectedPlayers( CUtlVector<CTFPlayer*> &vecPlayers, CTFPlayer *pPlayerToConsider );
@@ -173,6 +220,7 @@ public:
 	void				SetHealthBuffTime( float flTime )		{ m_flHealthBuffTime = flTime; }
 
 	CTFWeaponBase		*GetActiveTFWeapon( void ) const;
+	int					GetPassiveWeapons( CUtlVector<CTFWeaponBase*>& vecOut );
 	bool				IsActiveTFWeapon( const CSchemaItemDefHandle &weaponHandle ) const;
 	bool				IsActiveTFWeapon( CEconItemDefinition *weaponHandle ) const;
 	virtual void		RemoveAllWeapons();
@@ -240,6 +288,8 @@ public:
 	virtual void		Weapon_HandleAnimEvent( animevent_t *pEvent );
 	virtual bool		Weapon_ShouldSetLast( CBaseCombatWeapon *pOldWeapon, CBaseCombatWeapon *pNewWeapon );
 
+	void				Weapon_PoseParamOverride( CTFWeaponBase *pOldWeapon, CTFWeaponBase *pNewWeapon );
+
 	virtual void		GetStepSoundVelocities( float *velwalk, float *velrun );
 	virtual void		SetStepSoundTime( stepsoundtimes_t iStepSoundTime, bool bWalking );
 	virtual const char *GetOverrideStepSound( const char *pszBaseStepSoundName );
@@ -259,7 +309,7 @@ public:
 	virtual int			GetAmmoCount( int iAmmoIndex ) const;
 	int					GetMaxAmmo( int iAmmoIndex, int iClassIndex = -1 );
 	virtual int			GetMaxHealth()  const OVERRIDE;
-	int					GetMaxHealthForBuffing()  const;
+	int					GetMaxHealthForBuffing();
 	int					GetRuneHealthBonus() const;
 
 	//-----------------------------------------------------------------------------------------------------
@@ -268,6 +318,8 @@ public:
 	void				SetIsMiniBoss( bool isMiniBoss ) { m_bIsMiniBoss = isMiniBoss; }
 
 	bool				CanAttack( int iCanAttackFlags = 0 );
+	bool				CanJump() const;
+	bool				CanDuck() const;
 
 	void				RemoveMeleeCrit( void );
 
@@ -299,7 +351,7 @@ public:
 	bool CanPlayerMove() const;
 	float TeamFortress_CalculateMaxSpeed( bool bIgnoreSpecialAbility = false ) const;
 	void TeamFortress_SetSpeed();
-	EHANDLE TeamFortress_GetDisguiseTarget( int nTeam, int nClass );
+	CTFPlayer *TeamFortress_GetDisguiseTarget( int nTeam, int nClass );
 
 	void TeamFortress_ClientDisconnected();
 	void RemoveAllOwnedEntitiesFromWorld( bool bExplodeBuildings = false );
@@ -391,12 +443,13 @@ public:
 
 	// Feign Death
 	void SpyDeadRingerDeath( const CTakeDamageInfo& info );
-	void FeignDeath( const CTakeDamageInfo& info );
+	void FeignDeath( const CTakeDamageInfo& info, bool bDeathnotice );
 	void CreateFeignDeathRagdoll( const CTakeDamageInfo& info, bool bGib, bool bBurning, bool bDisguised );
 
 	// Dropping Ammo
 	bool ShouldDropAmmoPack( void );
 	void DropAmmoPack( const CTakeDamageInfo &info, bool bEmpty, bool bDisguisedWeapon );
+	void DropAmmoPackFromProjectile( CBaseEntity *pProjectile );
 	void DropExtraAmmo( const CTakeDamageInfo& info, bool bFromDeath = false );
 	void DropHealthPack( const CTakeDamageInfo &info, bool bEmpty );
 	void DropCurrencyPack( CurrencyRewards_t nSize = TF_CURRENCY_PACK_SMALL, int nAmount = 0, bool bForceDistribute = false, CBasePlayer* pMoneyMaker = NULL );	// Only pass in an amount when nSize = TF_CURRENCY_PACK_CUSTOM
@@ -434,6 +487,7 @@ public:
 	bool GetMedigunAutoHeal( void ){ return m_bMedigunAutoHeal; }
 	void SetMedigunAutoHeal( bool bMedigunAutoHeal ){ m_bMedigunAutoHeal = bMedigunAutoHeal; }
 	CBaseEntity		*MedicGetHealTarget( void );
+	HSCRIPT ScriptGetHealTarget() { return ToHScript( MedicGetHealTarget() ); }
 	float			MedicGetChargeLevel( CTFWeaponBase **pRetMedigun = NULL );
 	bool IsCallingForMedic( void ) const;			// return true if this player has called for a Medic in the last few seconds
 	float GetTimeSinceCalledForMedic( void ) const;
@@ -462,11 +516,14 @@ public:
 	virtual void NoteSpokeVoiceCommand( const char *pszScenePlayed );
 	void	SpeakWeaponFire( int iCustomConcept = MP_CONCEPT_NONE );
 	void	ClearWeaponFireScene( void );
+	void	FiringTalk() { SpeakWeaponFire(); }
 
 	virtual int DrawDebugTextOverlays( void );
 
 	float m_flNextVoiceCommandTime;
 	int m_iVoiceSpamCounter;
+
+	CRateLimitingTokenBucket<CVoiceCommandBucketSizer> m_RateLimitedVoiceCommandTokenBucket;
 
 	float m_flNextSpeakWeaponFire;
 
@@ -508,8 +565,24 @@ public:
 
 	void PlayerUse( void );
 
+	void IgnitePlayer();
+	void SetCustomModel( const char *pszModel );
+	void SetCustomModelWithClassAnimations( const char *pszModel );
+	void SetCustomModelOffset( const Vector &offset );
+	void SetCustomModelRotation( const QAngle &angle );
+	void ClearCustomModelRotation();
+	void SetCustomModelRotates( bool bRotates );
+	void SetCustomModelVisibleToSelf( bool bVisibleToSelf );
+	void SetForcedTauntCam( int nForceTauntCam );
+	void ExtinguishPlayerBurning();
+	void BleedPlayer( float flBleedingTime );
+	void BleedPlayerEx( float flBleedingTime, int nBleedDmg, bool bPermenantBleeding, int nDmgType );
+	void RollRareSpell();
+	void ClearSpells();
+
 	void InputIgnitePlayer( inputdata_t &inputdata );
 	void InputSetCustomModel( inputdata_t &inputdata );
+	void InputSetCustomModelWithClassAnimations( inputdata_t &inputdata );
 	void InputSetCustomModelOffset( inputdata_t &inputdata );
 	void InputSetCustomModelRotation( inputdata_t &inputdata );
 	void InputClearCustomModelRotation( inputdata_t &inputdata );
@@ -523,7 +596,7 @@ public:
 	void InputRollRareSpell( inputdata_t &inputdata );
 	void InputRoundSpawn( inputdata_t &inputdata );
 
-	bool InAirDueToExplosion( void ) { return (!(GetFlags() & FL_ONGROUND) && (GetWaterLevel() == WL_NotInWater) && (m_iBlastJumpState != 0) ); }
+	bool InAirDueToExplosion( void ) { return (!(GetFlags() & FL_ONGROUND) && (GetWaterLevel() == WL_NotInWater) && ( (m_iBlastJumpState != 0) ) || m_Shared.InCond( TF_COND_ROCKETPACK ) ); }
 	bool InAirDueToKnockback( void ) { return (!(GetFlags() & FL_ONGROUND) && (GetWaterLevel() == WL_NotInWater) && ( (m_iBlastJumpState != 0) || m_Shared.InCond( TF_COND_KNOCKED_INTO_AIR ) || m_Shared.InCond( TF_COND_GRAPPLINGHOOK ) || m_Shared.InCond( TF_COND_GRAPPLINGHOOK_SAFEFALL ) ) ); }
 
 	bool IsCoaching() const { return m_bIsCoaching; }
@@ -546,14 +619,14 @@ public:
 	bool HasWearablesEquipped( const CSchemaItemDefHandle *ppItemDefs, int nWearables ) const;
 
 	CEconItemView *GetEquippedItemForLoadoutSlot( int iLoadoutSlot ){ return m_Inventory.GetInventoryItemByItemID( m_EquippedLoadoutItemIndices[iLoadoutSlot] ); }
-	CBaseEntity *GetEntityForLoadoutSlot( int iLoadoutSlot );			//Gets whatever entity is associated with the loadout slot (wearable or weapon)
+	CBaseEntity *GetEntityForLoadoutSlot( int iLoadoutSlot, bool bForceCheckWearable = false );			//Gets whatever entity is associated with the loadout slot (wearable or weapon)
 	CTFWearable *GetEquippedWearableForLoadoutSlot( int iLoadoutSlot );
 
 	//Base entity overrides
 	// Functions that intercept Base Calls for Attribute Checking
 	void ApplyAbsVelocityImpulse ( const Vector &vecImpulse );
 	bool ApplyPunchImpulseX ( float flImpulse );
-	void ApplyAirBlastImpulse( const Vector &vecImpulse );
+	void ApplyGenericPushbackImpulse( const Vector &vecImpulse, CTFPlayer *pAttacker );
 
 	void SetUseBossHealthBar( bool bUseBossHealthBar ) { m_bUseBossHealthBar = bUseBossHealthBar; }
 
@@ -567,6 +640,8 @@ public:
 	CBaseEntity				*GetAttributeOwner( void ) { return NULL; }
 	CAttributeList			*GetAttributeList( void ) { return &m_AttributeList; }
 	virtual void			ReapplyProvision( void ) { return; }
+
+	CVoteController 		*GetTeamVoteController() OVERRIDE;
 
 protected:
 	CNetworkVarEmbedded( CAttributeContainerPlayer, m_AttributeManager );
@@ -665,17 +740,18 @@ public:
 	CEconItemView		*GetTauntEconItemView() { return m_TauntEconItemView.IsValid() ? &m_TauntEconItemView : NULL; }
 
 	int					GetTauntConcept( CEconItemDefinition *pItemDef );
-	bool				PlayTauntSceneFromItem( CEconItemView *pEconItemView );
+	bool				PlayTauntSceneFromItem( const CEconItemView *pEconItemView );
 	
 	void				OnTauntSucceeded( const char* pszSceneName, int iTauntIndex = 0, int iTauntConcept = 0 );
 	void				Taunt( taunts_t iTauntIndex = TAUNT_BASE_WEAPON, int iTauntConcept = 0 );
+	void				ScriptTaunt( int iTauntIndex, int iTauntConcept ) { Taunt((taunts_t)iTauntIndex, iTauntConcept); }
 	bool				IsTaunting( void ) const { return m_Shared.InCond( TF_COND_TAUNTING ); }
 	void				DoTauntAttack( void );
 	bool				IsAllowedToTaunt( void );
-	bool				FindOpenTauntPartnerPosition( CEconItemView *pEconItemView, Vector &position, float *flTolerance );
-	bool				IsAllowedToInitiateTauntWithPartner( CEconItemView *pEconItemView, char *pszErrorMessage = NULL, int cubErrorMessage = 0 );
+	bool				FindOpenTauntPartnerPosition( const CEconItemView *pEconItemView, Vector &position, float *flTolerance );
+	bool				IsAllowedToInitiateTauntWithPartner( const CEconItemView *pEconItemView, char *pszErrorMessage = NULL, int cubErrorMessage = 0 );
 	void				CancelTaunt( void );
-	void				StopTaunt( void );
+	void				StopTaunt( bool bForceRemoveProp = true );
 	void				EndLongTaunt();
 	float				GetTauntRemoveTime( void ) const { return m_flTauntRemoveTime; }
 	bool				IsAllowedToRemoveTaunt() const { return m_bAllowedToRemoveTaunt; }
@@ -697,13 +773,106 @@ public:
 	float				GetVehicleReverseTime() const { return m_flVehicleReverseTime; }
 	void				SetVehicleReverseTime( float flTime ) { m_flVehicleReverseTime = flTime; }
 
+	bool				IsViewingCYOAPDA( void ) const { return m_bViewingCYOAPDA; }
+	bool				IsRegenerating( void ) const { return m_bRegenerating; }
+
+	HSCRIPT				ScriptGetActiveWeapon( void ) { return ToHScript( GetActiveTFWeapon() ); }
+
+	void				ScriptAddCond( int nCond );
+	void				ScriptAddCondEx( int nCond, float flDuration, HSCRIPT hProvider );
+	void				ScriptRemoveCond( int nCond );
+	void				ScriptRemoveCondEx( int nCond, bool bIgnoreDuration );
+	bool				ScriptInCond( int nCond );
+	bool				ScriptWasInCond( int nCond );
+	void				ScriptRemoveAllCond();
+	float				ScriptGetCondDuration( int nCond );
+	void				ScriptSetCondDuration( int nCond, float flNewDuration );
+	HSCRIPT				ScriptGetDisguiseTarget();
+
+	bool				ScriptIsCarryingRune()						{ return m_Shared.IsCarryingRune(); }
+	bool				ScriptIsCritBoosted( void ) const			{ return m_Shared.IsCritBoosted(); }
+	bool				ScriptIsInvulnerable( void ) const			{ return m_Shared.IsInvulnerable(); }
+	bool				ScriptIsStealthed( void ) const				{ return m_Shared.IsStealthed(); }
+	bool				ScriptCanBeDebuffed( void ) const			{ return m_Shared.CanBeDebuffed(); }
+	bool				ScriptIsImmuneToPushback( void ) const		{ return m_Shared.IsImmuneToPushback(); }
+	int					ScriptGetDisguiseAmmoCount()				{ return m_Shared.GetDisguiseAmmoCount(); }
+	void				ScriptSetDisguiseAmmoCount( int nValue )	{ return m_Shared.SetDisguiseAmmoCount(nValue); }
+	int					ScriptGetDisguiseTeam()						{ return m_Shared.GetDisguiseTeam(); }
+	bool				ScriptIsFullyInvisible()					{ return m_Shared.IsFullyInvisible(); }
+	float				ScriptGetSpyCloakMeter()					{ return m_Shared.GetSpyCloakMeter(); }
+	void				ScriptSetSpyCloakMeter( float flValue )		{ return m_Shared.SetSpyCloakMeter( flValue ); }
+	bool				ScriptIsRageDraining()						{ return m_Shared.IsRageDraining(); }
+	float				ScriptGetRageMeter()						{ return m_Shared.GetRageMeter(); }
+	void				ScriptSetRageMeter( float flValue )			{ return m_Shared.SetRageMeter( flValue ); }
+	float				ScriptGetScoutHypeMeter()					{ return m_Shared.GetScoutHypeMeter(); }
+	void				ScriptSetScoutHypeMeter( float flValue )	{ return m_Shared.SetScoutHypeMeter( flValue ); }
+	bool				ScriptIsHypeBuffed()						{ return m_Shared.IsHypeBuffed(); }
+	bool				ScriptIsJumping()							{ return m_Shared.IsJumping(); }
+	bool				ScriptIsAirDashing()						{ return m_Shared.IsAirDashing(); }
+	bool				ScriptIsControlStunned()					{ return m_Shared.IsControlStunned(); }
+	bool				ScriptIsSnared()							{ return m_Shared.IsSnared(); }
+	int					ScriptGetCaptures() const					{ return m_Shared.GetCaptures( 0 ); }
+	int					ScriptGetDefenses() const					{ return m_Shared.GetDefenses( 0 ); }
+	int					ScriptGetDominations() const				{ return m_Shared.GetDominations( 0 ); }
+	int					ScriptGetRevenge() const					{ return m_Shared.GetRevenge( 0 ); }
+	int					ScriptGetBuildingsDestroyed() const			{ return m_Shared.GetBuildingsDestroyed( 0 ); }
+	int					ScriptGetHeadshots() const					{ return m_Shared.GetHeadshots( 0 ); }
+	int					ScriptGetBackstabs() const					{ return m_Shared.GetBackstabs( 0 ); }
+	int					ScriptGetHealPoints() const					{ return m_Shared.GetHealPoints( 0 ); }
+	int					ScriptGetInvulns() const					{ return m_Shared.GetInvulns( 0 ); }
+	int					ScriptGetTeleports() const					{ return m_Shared.GetTeleports( 0 ); }
+	int					ScriptGetResupplyPoints() const				{ return m_Shared.GetResupplyPoints( 0 ); }
+	int					ScriptGetKillAssists() const				{ return m_Shared.GetKillAssists( 0 ); }
+	int					ScriptGetBonusPoints() const				{ return m_Shared.GetBonusPoints( 0 ); }
+	void				ScriptResetScores()							{ m_Shared.ResetScores(); }
+	bool				ScriptIsParachuteEquipped()					{ return m_Shared.IsParachuteEquipped(); }
+
+	int					ScriptGetPlayerClass()
+	{
+		return GetPlayerClass()->GetClassIndex();
+	}
+
+	void				ScriptSetPlayerClass( int iClass )
+	{
+		GetPlayerClass()->Init( iClass );
+
+		for ( int i = 0; i < MAX_WEAPONS; i++ )
+		{
+			CTFWeaponBase *pWeapon = (CTFWeaponBase *)GetWeapon( i );
+			if ( pWeapon )
+			{
+				pWeapon->OnOwnerClassChange();
+			}
+		}
+	}
+
+	void				ScriptRemoveAllItems( bool bRemoveSuit )
+	{
+		RemoveAllItems( bRemoveSuit );
+	}
+
+	Vector	ScriptWeapon_ShootPosition();
+	bool	ScriptWeapon_CanUse( HSCRIPT hWeapon );
+	void	ScriptWeapon_Equip( HSCRIPT hWeapon );
+	void	ScriptWeapon_Drop( HSCRIPT hWeapon );
+	void	ScriptWeapon_DropEx( HSCRIPT hWeapon, Vector vecTarget, Vector vecVelocity );
+	void	ScriptWeapon_Switch( HSCRIPT hWeapon );
+	void	ScriptWeapon_SetLast( HSCRIPT hWeapon );
+	HSCRIPT	ScriptGetLastWeapon();
+	void ScriptEquipWearableViewModel( HSCRIPT hWearableViewModel );
+	bool ScriptIsFakeClient() const { return this->IsFakeClient(); }
+	int ScriptGetBotType() const { return this->GetBotType(); }
+	bool ScriptIsBotOfType(int nType) const { return this->IsBotOfType(nType); }
+
+	void ScriptStunPlayer( float flTime, float flReductionAmount, int iStunFlags = TF_STUN_MOVEMENT, HSCRIPT hAttacker = NULL );
+
 private:
 	void				GetReadyToTauntWithPartner( void );
 	void				CancelTauntWithPartner( void );
 	void				StopTauntSoundLoop();
 	float				PlayTauntOutroScene();
 	float				PlayTauntRemapInputScene();
-	void				ParseSharedTauntDataFromEconItemView( CEconItemView *pEconItemView );
+	void				ParseSharedTauntDataFromEconItemView( const CEconItemView *pEconItemView );
 
 	CNetworkVar( bool, m_bAllowMoveDuringTaunt );
 	CNetworkVar( bool, m_bIsReadyToHighFive );
@@ -742,6 +911,7 @@ private:
 
 	bool				m_bAllowedToRemoveTaunt;
 	float				m_flTauntStartTime;
+	float				m_flTauntNextStartTime;
 	float				m_flTauntRemoveTime;
 	float				m_flTauntOutroTime;
 	Vector				m_vecTauntStartPosition;
@@ -783,6 +953,8 @@ public:
 	CTFWeaponBase		*Weapon_OwnsThisID( int iWeaponID ) const;
 	CTFWeaponBase		*Weapon_GetWeaponByType( int iType );
 
+	virtual void		PlayStepSound( Vector &vecOrigin, surfacedata_t *psurface, float fvol, bool force );
+
 	medigun_charge_types	GetChargeEffectBeingProvided( void );
 
 	// Achievements
@@ -810,10 +982,9 @@ public:
 
 	bool				m_bSuicideExplode;
 
-	bool				m_bScattergunJump;
 	int					m_iOldStunFlags;
 
-	bool				m_bFlipViewModels;
+	CNetworkVar( bool, m_bFlipViewModels );
 	int					m_iBlastJumpState;
 	float				m_flBlastJumpLandTime;
 	bool				m_bTakenBlastDamageSinceLastMovement;
@@ -927,6 +1098,9 @@ public:
 	void				SetPrevRoundTeamNum( int nTeamNum ){ m_nPrevRoundTeamNum = nTeamNum; }
 	int					GetPrevRoundTeamNum( void ){ return m_nPrevRoundTeamNum; }
 
+	// Talk control
+	virtual bool		CanPlayerTalk() OVERRIDE;
+
 protected:
 
 	// Creation/Destruction.
@@ -940,6 +1114,7 @@ protected:
 	// Think.
 	void				TFPlayerThink();
 	void				UpdateTimers( void );
+	void				PostSpawnThink( void );
 
 	// Regeneration due to being a Medic, or derived from items
 	void				RegenThink();
@@ -991,6 +1166,8 @@ private:
 	bool				GetResponseSceneFromConcept( int iConcept, char *chSceneBuffer, int numSceneBufferBytes );
 
 public:
+	const QAngle& GetNetworkEyeAngles() const { return m_angEyeAngles; }
+
 	// Achievement data storage
 	CAchievementData	m_AchievementData;
 	CTFPlayerAnimState	*m_PlayerAnimState;
@@ -1004,7 +1181,8 @@ private:
 	bool				m_bHintShown;
 	bool				m_bAbortFreezeCam;
 	bool				m_bSeenRoundInfo;
-	bool				m_bRegenerating;
+	CNetworkVar( bool, m_bRegenerating );
+	bool				m_bRespawning;
 
 	// Items.
 	CNetworkHandle( CTFItem, m_hItem );
@@ -1042,7 +1220,8 @@ private:
 	int					m_iLastWeaponFireUsercmd;				// Firing a weapon.  Last usercmd we shot a bullet on.
 	int					m_iLastWeaponSlot;				            // To save last switch between lives
 	int					m_iLastSkin;
-	CNetworkVar( float, m_flLastDamageTime );
+	float				m_flLastDamageTime;
+	CNetworkVar( float, m_flMvMLastDamageTime );
 	float				m_flLastDamageDoneTime;
 	CHandle< CBaseEntity > m_hLastDamageDoneEntity;
 	float				m_flLastHealedTime;
@@ -1060,7 +1239,7 @@ private:
 
 	CHandle< CTFWeaponBuilder > m_hWeaponBuilder;
 
-	CUtlVector<EHANDLE>	m_aObjects;			// List of player objects
+	CUtlVector< CHandle< CBaseObject > >	m_aObjects;			// List of player objects
 
 	bool m_bIsClassMenuOpen;
 
@@ -1079,6 +1258,8 @@ private:
 	// Background expressions
 	string_t			m_iszExpressionScene;
 	EHANDLE				m_hExpressionSceneEnt;
+	EHANDLE				m_hFireWeaponScenes[ MAX_FIRE_WEAPON_SCENES ];
+	int					m_nNextFireWeaponScene = 0;
 	float				m_flNextRandomExpressionTime;
 
 	bool				m_bSpeakingConceptAsDisguisedSpy;
@@ -1092,12 +1273,6 @@ private:
 	int					m_nPrevRoundTeamNum;
 
 public:
-	// Powerplay cheats
-	bool				SetPowerplayEnabled( bool bOn );
-	bool				PlayerHasPowerplay( void );
-	void				PowerplayThink( void );
-	CNetworkVar( bool, m_bInPowerPlay );
-
 	bool				IsGoingFeignDeath( void ) { return m_bGoingFeignDeath; }
 
 	void					SetDeployingBombState( BombDeployingState_t nDeployingBombState ) { m_nDeployingBombState = nDeployingBombState; }
@@ -1154,7 +1329,12 @@ private:
 	int						m_nCanPurchaseUpgradesCount;
 	CUtlVector< CUpgradeInfo >	m_RefundableUpgrades;
 
+	CUtlVector< CUpgradeInfo > * GetPlayerUpgradeHistory( void );
+	CUtlVector< CUpgradeInfo >  m_LocalUpgradeHistory;
+
 public:
+	void GrantOrRemoveAllUpgrades( bool bRemove, bool bRefund );
+
 	// Marking for death.
 	CHandle<CTFPlayer>	m_pMarkedForDeathTarget;
 
@@ -1289,6 +1469,13 @@ public:
 
 	CBaseEntity *GetGrapplingHookTarget() const { return m_hGrapplingHookTarget; }
 	void SetGrapplingHookTarget( CBaseEntity *pTarget, bool bShouldBleed = false );
+	HSCRIPT ScriptGetGrapplingHookTarget() const { return ToHScript( m_hGrapplingHookTarget.Get() ); }
+	void ScriptSetGrapplingHookTarget( HSCRIPT pTarget, bool bShouldBleed ) { return SetGrapplingHookTarget( ToEnt( pTarget ), bShouldBleed ); }
+
+	void AddHudHideFlags(int flags) { m_Local.m_iHideHUD |= flags; }
+	void RemoveHudHideFlags(int flags) { m_Local.m_iHideHUD &= ~flags; }
+	void SetHudHideFlags(int flags) { m_Local.m_iHideHUD = flags; }
+	int GetHudHideFlags() { return m_Local.m_iHideHUD; }
 
 	bool IsUsingActionSlot() const { return m_bUsingActionSlot; }
 
@@ -1310,11 +1497,17 @@ public:
 	void InspectButtonReleased();
 	bool IsInspecting() const;
 
+	bool HandleHelpmeTrace();
+	void HelpmeButtonPressed();
+	void HelpmeButtonReleased();
+	bool IsHelpmeButtonPressed() const;
+
 	void SetNextScorePointForPD( float flTime ){ m_flNextScorePointForPD = flTime; }
 	bool CanScorePointForPD( void ) const;
 
 	void AddCustomAttribute( const char *pszAttributeName, float flVal, float flDuration = -1.f );
 	void RemoveCustomAttribute( const char *pszAttributeName );
+	float ScriptGetCustomAttribute( const char *pName, float flFallbackValue );
 
 	int GetSkinOverride() const { return m_iPlayerSkinOverride; }
 
@@ -1322,6 +1515,7 @@ public:
 
 	void SetLastAutobalanceTime( float flTime ) { m_flLastAutobalanceTime = flTime; }
 	float GetLastAutobalanceTime() { return m_flLastAutobalanceTime; }
+	bool IsMaxHealthDraining( void ) { return m_nMaxHealthDrainBucket != 0.0; }
 
 private:
 	bool PickupWeaponFromOther( CTFDroppedWeapon *pDroppedWeapon );
@@ -1338,6 +1532,10 @@ private:
 	CNetworkVar( bool, m_bUsingActionSlot );
 
 	CNetworkVar( float, m_flInspectTime );
+
+	CNetworkVar( float, m_flHelpmeButtonPressTime );
+
+	CNetworkVar( bool, m_bViewingCYOAPDA );
 
 	CUtlVector< CHandle< CTFWeaponBase > > m_hDisguiseWeaponList; // copy disguise target weapons to this list
 
@@ -1357,6 +1555,15 @@ private:
 	CUtlMap<int, float> m_PlayersExtinguished;	// userID and most recent time they were extinguished for bonus points
 
 	float m_flLastAutobalanceTime;
+
+	void ResetMaxHealthDrain( void );
+	int m_nMaxHealthDrainBucket;
+	double m_dMaxHealthDrainLastUpdate;
+	bool m_bMaxHealthRefilling;
+	double m_dMaxHealthDrainAccumulator;
+	double m_dMaxHealthDrainHealthAccumulator;
+
+	bool m_bAlreadyUsedExtendFreezeThisDeath = false;
 	
 	// begin passtime
 public:
@@ -1367,6 +1574,20 @@ public:
 	virtual bool ShouldForceTransmitsForTeam( int iTeam ) OVERRIDE;
 
 	virtual bool IsTruceValidForEnt( void ) const OVERRIDE;
+
+	virtual bool BHaveChatSuspensionInCurrentMatch() OVERRIDE;
+
+	void StartPowerupModeDominant( bool bIsAlreadyDominant );
+	void EndPowerupModeDominant( void );
+
+	float m_flRemoveDominantConditionTime = -1.f;
+	bool m_bIsInMannpowerDominantCondition = false;
+	int m_nMannpowerKills = 0;
+	int m_nMannpowerDeaths = 0;
+	bool m_bMannpowerHereForFullInterval = false;
+
+	virtual bool BCanCallVote() OVERRIDE;
+	bool m_bFirstSpawnAndCanCallVote = false;
 };
 
 //-----------------------------------------------------------------------------
@@ -1409,9 +1630,11 @@ inline void CTFPlayer::OnSapperFinished( float flStartTime )
 {
 	if (m_iSappingEvent == TF_SAPEVENT_NONE && flStartTime == m_flSapStartTime )
 	{
+		if ( m_bIsSapping )
+			m_iSappingEvent = TF_SAPEVENT_DONE;
+
 		m_bIsSapping = false;
 		m_flSapStartTime = 0.00;
-		m_iSappingEvent = TF_SAPEVENT_DONE;
 	}
 }
 inline bool CTFPlayer::IsSapping( void ) const

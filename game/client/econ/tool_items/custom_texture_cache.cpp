@@ -10,6 +10,9 @@
 #include "toolframework_client.h"
 #include "econ_gcmessages.h"
 #include "econ_item_inventory.h"
+#if defined( TF_CLIENT_DLL )
+#include "tf_dropped_weapon.h"
+#endif // TF_CLIENT_DLL
 
 #include "VGuiMatSurface/IMatSystemSurface.h"
 #include "bitmap/bitmap.h"
@@ -163,16 +166,20 @@ struct SCustomImageCacheEntry : private ITextureRegenerator
 	/// The main interface function that actually supplies the texture bits
 	virtual void RegenerateTextureBits( ITexture *pTexture, IVTFTexture *pVTFTexture, Rect_t *pRect )
 	{
-
-		Assert( pVTFTexture->FrameCount() == 1 );
-		Assert( pVTFTexture->FaceCount() == 1 );
-		Assert( pTexture == m_pTexture );
-		Assert( !pTexture->IsMipmapped() );
+		if ( pVTFTexture->FrameCount() != 1 || pVTFTexture->FaceCount() != 1 || pTexture != m_pTexture || pTexture->IsMipmapped() )
+		{
+			Warning( "Custom image invalid VTF setup.\n" );
+			return;
+		}
 
 		int nWidth, nHeight, nDepth;
 		pVTFTexture->ComputeMipLevelDimensions( 0, &nWidth, &nHeight, &nDepth );
-		Assert( nDepth == 1 );
-		Assert( nWidth == m_image.Width() && nHeight == m_image.Height() );
+
+		if ( nWidth != m_image.Width() || nHeight != m_image.Height() || nDepth != 1 )
+		{
+			Warning( "Custom image had invalid w/h/d: %dx%dx%d vs %dx%dx%d\n", m_image.Width(), m_image.Height(), 1, nWidth, nHeight, nDepth );
+			return;
+		}
 
 		CPixelWriter pixelWriter;
 		pixelWriter.SetPixelMemory( pVTFTexture->Format(), 
@@ -351,6 +358,21 @@ struct SCustomImageCacheEntry : private ITextureRegenerator
 		if ( pRemoteStorage->UGCRead( m_hCloudID, fileData.Base( ), nFileSizeInBytes, 0, k_EUGCRead_ContinueReadingUntilFinished ) != nFileSizeInBytes )
 		{
 			Warning( "UGCRead failed? (UGC=%08X%08X).\n", (uint32)(m_hCloudID >> 32), (uint32)(m_hCloudID) );
+			m_nStatus = -1;
+			return;
+		}
+
+		uint32_t uWidth, uHeight;
+		if ( ImgUtl_GetPNGSize( fileData, uWidth, uHeight ) != CE_SUCCESS )
+		{
+			Warning( "Corrupt PNG file, UGC=%08X%08X.\n", (uint32)(m_hCloudID >> 32), (uint32)(m_hCloudID) );
+			m_nStatus = -1;
+			return;
+		}
+
+		if ( uWidth != k_nCustomImageSize || uHeight != k_nCustomImageSize )
+		{
+			Warning( "Custom image with illegal size, rejecting, UGC=%08X%08X.\n", (uint32)(m_hCloudID >> 32), (uint32)(m_hCloudID) );
 			m_nStatus = -1;
 			return;
 		}
@@ -698,6 +720,16 @@ void CCustomTextureOnItemProxy::OnBind( void *pC_BaseEntity )
 			{
 				pScriptItem = pItem->GetAttributeContainer()->GetItem();
 			}
+#if defined( TF_CLIENT_DLL )
+			else
+			{
+				CTFDroppedWeapon *pDroppedWeapon = dynamic_cast<CTFDroppedWeapon *>( pEntity );
+				if ( pDroppedWeapon )
+				{
+					pScriptItem = pDroppedWeapon->GetItem();
+				}
+			}
+#endif // TF_CLIENT_DLL
 		}
 		else
 		{

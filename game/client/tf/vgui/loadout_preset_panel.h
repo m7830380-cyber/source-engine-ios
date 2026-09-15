@@ -36,6 +36,10 @@ public:
 
 	bool			HandlePresetKeyPressed( vgui::KeyCode code );
 
+	void			SetClassLoadoutPanel(CClassLoadoutPanel* pPanel) {
+		m_pClassLoadoutPanel = pPanel;
+	}
+
 private:
 	equipped_preset_t	GetSelectedPresetID() const;
 	void				UpdatePresetButtonStates();
@@ -50,6 +54,7 @@ private:
 	KeyValues				*m_pPresetButtonKv;
 	CExButton				*m_pPresetButtons[ MAX_PRESETS ];
 	bool					m_bDisplayVertical;
+	CClassLoadoutPanel*		m_pClassLoadoutPanel;
 
 	enum PresetButtonColors_t
 	{

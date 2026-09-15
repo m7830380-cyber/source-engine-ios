@@ -70,10 +70,6 @@ void CObjectSapper::UpdateOnRemove()
 	StopSound( "Weapon_Sapper.Timer" );
 	StopSound( "Weapon_sd_sapper.Timer" );
 	StopSound( "Weapon_p2rec.Timer" );
-#ifdef STAGING_ONLY
-	StopSound( "WeaponDynamiteSapper.TickTock" );
-	StopSound( "WeaponDynamiteSapper.BellRing" );
-#endif
 
 	if( GetBuilder() )
 	{
@@ -115,9 +111,6 @@ void CObjectSapper::Spawn()
 
 	SetSolid( SOLID_NONE );
 
-#ifdef STAGING_ONLY	
-	m_bIsRinging = false;
-#endif
 }
 
 //-----------------------------------------------------------------------------
@@ -126,11 +119,7 @@ void CObjectSapper::Spawn()
 void CObjectSapper::Precache()
 {
 	Precache( "c_sapper.mdl" );			// Precache the placed and placement models for the sappers
-#ifdef STAGING_ONLY	
 	Precache( "c_sd_sapper.mdl" );
-#else
-	Precache( "w_sd_sapper.mdl" );
-#endif
 	Precache( "c_p2rec.mdl" );
 	Precache( "c_sapper_xmas.mdl" );
 	Precache( "c_breadmonster_sapper.mdl" );
@@ -139,10 +128,6 @@ void CObjectSapper::Precache()
 	PrecacheScriptSound( "Weapon_Sapper.Timer" );
 	PrecacheScriptSound( "Weapon_sd_sapper.Timer" );
 	PrecacheScriptSound( "Weapon_p2rec.Timer" );
-#ifdef STAGING_ONLY	
-	PrecacheScriptSound( "WeaponDynamiteSapper.TickTock" );
-	PrecacheScriptSound( "WeaponDynamiteSapper.BellRing" );
-#endif
 
 	// Precache the Wheatley Sapper sounds
 	PrecacheScriptSound( "PSap.null" );
@@ -320,22 +305,6 @@ void CObjectSapper::OnGoActive( void )
 			m_flSelfDestructTime = gpGlobals->curtime + flTime;
 		}
 
-#ifdef STAGING_ONLY			
-		//if ( pBuilder )
-		//{
-		//	float flExplodeOnTimer = 0;
-		//	CALL_ATTRIB_HOOK_FLOAT_ON_OTHER( pBuilder, flExplodeOnTimer, sapper_explodes_on_timer )
-		//	{
-		//		if ( flExplodeOnTimer != 0 )
-		//		{
-		//			// timer is based on health of the object
-		//			// Sappers normally do 25dps
-		//			//float flTimer = pEntity->GetMaxHealth() * 0.04f;
-		//			//m_flSelfDestructTime = gpGlobals->curtime + flExplodeOnTimer;
-		//		}
-		//	}
-		//}
-#endif
 	}
 
 	UTIL_SetSize( this, SAPPER_MINS, SAPPER_MAXS );
@@ -386,35 +355,6 @@ void CObjectSapper::DetachObjectFromObject( void )
 	{
 		pParent->OnRemoveSapper();
 
-#ifdef STAGING_ONLY
-		CTFPlayer *pBuilder = GetBuilder();
-		if ( pBuilder && pParent->GetHealth() < 0 )
-		{
-			// Attr on Det
-			float flExplodeOnTimer = 0;
-			CALL_ATTRIB_HOOK_FLOAT_ON_OTHER( pBuilder, flExplodeOnTimer, sapper_explodes_on_det );
-
-			if ( flExplodeOnTimer )
-			{
-				float flDamage = pParent->GetMaxHealth() * 1.5;
-				Vector vecOrigin = GetAbsOrigin();
-
-				// Use the building as the det position			
-				CTakeDamageInfo detInfo;
-				detInfo.SetDamage( flDamage );
-				detInfo.SetAttacker( this );
-				detInfo.SetInflictor( this );
-				detInfo.SetDamageType( DMG_BLAST );
-
-				// Generate Large Radius Damage
-				float flRadius = 200.0f;
-				CTFRadiusDamageInfo radiusinfo( &detInfo, vecOrigin, flRadius, NULL, flRadius );
-				TFGameRules()->RadiusDamage( radiusinfo );
-
-				DispatchParticleEffect( "explosionTrail_seeds_mvm", vecOrigin, GetAbsAngles() );
-			}
-		}
-#endif
 	}
 
 	BaseClass::DetachObjectFromObject();
@@ -451,14 +391,6 @@ const char* CObjectSapper::GetSapperModelName( SapperModel_t nModel, const char 
 		V_FileBase( pchModelName, szModelName, sizeof( szModelName ) );
 		pchModelName = szModelName + 2;
 
-#ifdef STAGING_ONLY	
-		if (!V_strcmp(pchModelName, "sd_sapper"))
-		{
-			V_snprintf(m_szPlacementModel, sizeof(m_szPlacementModel), "models/workshop_partner/buildables/%s%s", pchModelName, "_placement.mdl");
-			V_snprintf(m_szSapperModel, sizeof(m_szSapperModel), "models/workshop_partner/buildables/%s%s", pchModelName, "_placed.mdl");
-		}
-		else
-#endif
 		{
 			V_snprintf(m_szPlacementModel, sizeof(m_szPlacementModel), "models/buildables/%s%s", pchModelName, "_placement.mdl");
 			V_snprintf(m_szSapperModel, sizeof(m_szSapperModel), "models/buildables/%s%s", pchModelName, "_placed.mdl");
@@ -487,16 +419,6 @@ const char* CObjectSapper::GetSapperSoundName( void )
 			}
 		}
 
-#ifdef STAGING_ONLY
-		// // Attr on Det
-		float flExplodeOnTimer = 0;
-		CALL_ATTRIB_HOOK_FLOAT_ON_OTHER( GetBuilder(), flExplodeOnTimer, sapper_explodes_on_det );
-		if ( flExplodeOnTimer )
-		{
-			EmitSound( "Weapon_Sapper.Timer" );
-			return "WeaponDynamiteSapper.TickTock";
-		}
-#endif
 
 		if ( !pchModelName )
 		{
@@ -538,19 +460,11 @@ void CObjectSapper::SapperThink( void )
 				bDestroy = true;
 			}
 
-#ifdef STAGING_ONLY 
-			/*if ( gpGlobals->curtime >= m_flSelfDestructTime )
-			{
-				bDestroy = true;
-				Explode();
-			}*/
-#else
 			if ( gpGlobals->curtime >= m_flSelfDestructTime )
 			{
 				bDestroy = true;
 				Explode();
 			}
-#endif			
 
 			if ( bDestroy )
 			{
@@ -631,48 +545,6 @@ void CObjectSapper::SapperThink( void )
 				}
 			}
 
-#ifdef STAGING_ONLY
-			if ( !m_bIsRinging && pObject->GetHealth() < 60.0f )
-			{
-				int iDetonate = 0;
-				CALL_ATTRIB_HOOK_INT_ON_OTHER( pBuilder, iDetonate, sapper_explodes_on_det );
-				if ( iDetonate )
-				{
-					EmitSound( "WeaponDynamiteSapper.BellRing" );
-					m_bIsRinging = true;
-				}
-			}
-			
-			//float flExplodeOnTimer = 0;
-			//CALL_ATTRIB_HOOK_FLOAT_ON_OTHER( pBuilder, flExplodeOnTimer, sapper_explodes_on_det );
-
-			////if ( flExplodeOnTimer != 0 && m_flSelfDestructTime < gpGlobals->curtime )
-			//if ( flExplodeOnTimer )
-			//{
-			//	float flDamage = pObject->GetMaxHealth() * 1.5;
-			//	Explode();
-			//	DestroyObject();
-
-			//	Vector vecOrigin = GetAbsOrigin();
-
-			//	// Use the building as the det position			
-			//	CTakeDamageInfo detInfo;
-			//	detInfo.SetDamage( flDamage );
-			//	detInfo.SetAttacker( this );
-			//	detInfo.SetInflictor( this );
-			//	detInfo.SetDamageType( DMG_BLAST );
-
-			//	// Destroy the building by doubly applying damage
-			//	pObject->TakeDamage( detInfo );
-
-			//	// Generate Large Radius Damage
-			//	float flRadius = 200.0f;	// same as pipebomb launcher
-			//	CTFRadiusDamageInfo radiusinfo( &detInfo, vecOrigin, flRadius, NULL, flRadius );
-			//	TFGameRules()->RadiusDamage( radiusinfo );
-
-			//	DispatchParticleEffect( "explosionTrail_seeds_mvm", vecOrigin, GetAbsAngles() );
-			//}
-#endif			
 		}
 	}
 

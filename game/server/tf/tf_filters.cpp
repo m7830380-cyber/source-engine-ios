@@ -190,57 +190,6 @@ DEFINE_KEYFIELD( m_iWeaponSlot,	FIELD_INTEGER,	"weaponSlot" ),
 
 END_DATADESC()
 
-#ifdef STAGING_ONLY
-
-class CFilterTFWearingItem : public CBaseFilter
-{
-	DECLARE_CLASS( CFilterTFWearingItem, CBaseFilter );
-
-public:
-
-	inline bool PassesFilterImpl( CBaseEntity *pCaller, CBaseEntity *pEntity )
-	{
-		CTFPlayer *pPlayer = ToTFPlayer( pEntity );
-
-		if ( !pPlayer )
-			return false;
-
-		// Are they wearing the item we're looking for?
-		for ( int i=0; i<pPlayer->GetNumWearables(); ++i )
-		{
-			CEconWearable *pWearable = pPlayer->GetWearable( i );
-			if ( pWearable && pWearable->GetAttributeContainer() )
-			{
-				CEconItemView *pItem = pWearable->GetAttributeContainer()->GetItem();
-				if ( pItem && pItem->IsValid() )
-				{
-					if ( pItem->GetItemDefIndex() == m_nItemIndex )
-					{
-						return true;
-					}
-				}
-			}
-		}
-
-		return false;
-	}
-
-private:
-
-	DECLARE_DATADESC();
-
-	int m_nItemIndex;
-};
-
-BEGIN_DATADESC( CFilterTFWearingItem )
-
-DEFINE_KEYFIELD( m_nItemIndex, FIELD_INTEGER, "econ_item_index" ),
-
-END_DATADESC()
-
-LINK_ENTITY_TO_CLASS( filter_tf_player_wearing_item, CFilterTFWearingItem );
-
-#endif
 
 
 // Only include bots with specific tags

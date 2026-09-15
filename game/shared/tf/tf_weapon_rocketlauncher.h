@@ -13,6 +13,8 @@
 #include "tf_weaponbase_rocket.h"
 #include "tf_weapon_sniperrifle.h"
 
+#include "tf_flame.h"
+
 #ifdef CLIENT_DLL
 #include "particle_property.h"
 #endif
@@ -24,7 +26,6 @@
 #define CTFRocketLauncher_AirStrike C_TFRocketLauncher_AirStrike
 #define CTFRocketLauncher_Mortar C_TFRocketLauncher_Mortar
 #define CTFCrossbow C_TFCrossbow
-
 #endif // CLIENT_DLL
 
 //=============================================================================
@@ -70,6 +71,8 @@ public:
 #ifdef CLIENT_DLL
 	virtual void CreateMuzzleFlashEffects( C_BaseEntity *pAttachEnt, int nIndex );
 #endif
+
+	virtual bool	CanInspect() const OVERRIDE;
 
 private:
 	float	m_flShowReloadHintAt;

@@ -65,6 +65,8 @@ void CNewParticleEffect::Construct()
 	m_MaxBounds = Vector( -1.0e6, -1.0e6, -1.0e6 );
 	m_pDebugName = NULL;
 
+	m_bViewModelEffect = m_pDef ? m_pDef->IsViewModelEffect() : false;
+
 	if ( IsValid() && clienttools->IsInRecordingMode() )
 	{
 		int nId = AllocateToolParticleEffectId();	
@@ -492,8 +494,11 @@ void CNewParticleEffect::DebugDrawBbox ( bool bCulled )
 		 
 	if ( bDraw )
 	{
-		debugoverlay->AddBoxOverlay( center, mins, maxs, QAngle( 0, 0, 0 ), r, g, b, 16, 0 );
-		debugoverlay->AddTextOverlayRGB( center, 0, 0, r, g, b, 64, "%s:(%d)", GetEffectName(), m_nActiveParticles );
+		if ( debugoverlay )
+		{
+			debugoverlay->AddBoxOverlay( center, mins, maxs, QAngle( 0, 0, 0 ), r, g, b, 16, 0 );
+			debugoverlay->AddTextOverlayRGB( center, 0, 0, r, g, b, 64, "%s:(%d)", GetEffectName(), m_nActiveParticles );
+		}
 	}
 }
 

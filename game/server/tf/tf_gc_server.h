@@ -19,9 +19,13 @@
 #include "GameEventListener.h"
 #include "rtime.h"
 #include "tf_shareddefs.h"
+#include "tf_gc_shared.h"
+#include "tf_lobby_shared.h"
+#include "vote_controller.h"
 
 class CTFGSLobby;
 class CTFParty;
+class CReliableMessageQueue;
 
 //enum EDOTA_Uploading_Match_Stats
 //{
@@ -56,14 +60,20 @@ public:
 
 	uint64 m_nMatchID;
 	uint64 m_nLobbyID;
-	EMatchGroup m_eMatchGroup;
+	ETFMatchGroup m_eMatchGroup;
 	uint32 m_uLobbyFlags;
-	uint32 m_uAverageRank;
+	uint32 m_uInitialAverageMMRating;
 	RTime32 m_rtMatchCreated;
 	uint32 m_unEventTeamStatus;
 	bool m_bFirstPersonActive;
 	int m_nBotsAdded;
-	bool m_bServerCreated;
+	// If we created this match speculatively while waiting for the GC to officially grant it a match ID
+	bool m_bAwaitingMatchID;
+	// If we created a new match for an lobby that had previously completed a match (NewMatchForExistingLobby), this was
+	// the originating match.
+	uint64 m_nPreviousMatchID;
+	// If we have requested a new match for this lobby, and the assignment arrived, but we haven't rotated to it yet.
+	uint64 m_nNextMatchID;
 
 	struct DailyStatsRankBucket_t
 	{
@@ -85,13 +95,17 @@ public:
 	{
 		friend class CTFGCServerSystem;
 		friend class CMatchInfo;
-		PlayerMatchData_t( CSteamID steamID, const CTFLobbyMember *pMemberData )
+		PlayerMatchData_t( CSteamID steamID, ConstTFLobbyPlayer memberData )
 			: steamID( steamID )
-			, uPartyID( pMemberData->party_id() )
-			, eGCTeam( pMemberData->team() )
+			, strOriginalName( memberData.GetName() )
+			, uOriginalPartyID( memberData.GetOriginalPartyID() )
+			, eGCTeam( memberData.GetTeam() )
 			, bDropped( false )
 			, bConnected( false )
 			, rtJoinedMatch( CRTime::RTime32TimeCur() )
+			, bPendingVoteKickRequest( false )
+			, bCannotCallVoteKicks( false )
+			, bCannotBeTargetedByVoteKicks( false )
 			, nVoteKickAttempts( 0 )
 			, nDisconnectedSeconds( 0 )
 			, nScoreMedal( 0 )
@@ -102,22 +116,28 @@ public:
 			, bLateJoin( false )
 			, nScore( 0 )
 			, bPlayed( false )
-			, unMMSkillRating( 0u )
-			, nDrilloRatingDelta( 0 )
+			, bEverConnected( false )
+			, bEverActive( false )
+			, bEverDisconnected( false )
+			, flNormalizedMMSkillRating( memberData.GetNormalizedRating() )
+			, nRank( memberData.GetRank() )
 			, unClassesPlayed( 0u )
+			, bChatSuspension( memberData.GetChatSuspension() )
+			, bVoteKickPending( false )
 			, rtLastActiveEvent( CRTime::RTime32TimeCur() )
 			, bAlwaysSafeToLeave( false )
-			, bEverConnected( false )
 			, bDropWasAbandon( false )
 			, eDropReason( TFMatchLeaveReason_UNSPECIFIED )
 			, nConnectingButNotActiveIndex( 0 )
 			, m_mapXPAccumulation( DefLessFunc( CMsgTFXPSource::XPSourceType ) )
-			{}
-
-		PlayerMatchData_t( const PlayerMatchData_t& rhs );
+			{ Assert( memberData.BMatchPlayer() ); }
 
 		CSteamID steamID;
-		uint64 uPartyID;
+		// A snapshot of the name the GC saw at lobby-join time
+		CUtlString strOriginalName;
+		// This is the original as-matched party they joined the server with, they're free to re-arrange their party
+		// while playing, but for purposes of premades/etc this is the party that joined.
+		uint64 uOriginalPartyID;
 		TF_GC_TEAM eGCTeam;
 
 		// If true, this player was dropped from the match and is not part of the active lobby.  This is important for
@@ -129,6 +149,12 @@ public:
 		RTime32 rtJoinedMatch;
 
 		uint32 nVoteKickAttempts;
+		// A message is in queue on this player's behalf to start a kick
+		bool bPendingVoteKickRequest;
+		// Not allowed to start further kicks
+		bool bCannotCallVoteKicks;
+		// Not allowed to be the target of kicks
+		bool bCannotBeTargetedByVoteKicks;
 
 		// Number of cumulative seconds the player has been absent, *not* including the initial connect timeout.  Used
 		// to determine when to award an abandon.  We may do odd things like "comp" you some seconds on a second, later,
@@ -144,13 +170,23 @@ public:
 		bool bLateJoin;
 		int nScore;
 		bool bPlayed;
+		bool bEverConnected;
+		bool bEverActive;
+		// Did the player ever disconnect after having entered the connected state (not active state!)
+		bool bEverDisconnected;
 		// This is a single-value skill rating given to each player by the GC
-		uint32 unMMSkillRating;
-		// This is the older drillo rating system that was done on the server.  It is still sent up to the GC as the
-		// input to the drillo backend there.  If we want to keep this long-term it should be moved to be a fully-gc
-		// backend like glicko
-		int nDrilloRatingDelta;
+		double flNormalizedMMSkillRating;
+		// This is the user's rank.  The rating might be glicko-2 or some other complex rating system that requires
+		// more than just the normalized skill rating value to compute your rank, so we pass is separately.
+		// This is only used for medals.
+		int nRank;
 		uint32 unClassesPlayed;
+
+		// Chat suspension on player
+		bool bChatSuspension;
+		// Whether they have a vote kick
+		// determined by the GC pending.
+		bool bVoteKickPending;
 
 		const CMsgTFXPSourceBreakdown& GetXPSources() const { return m_XPBreakdown; }
 
@@ -168,8 +204,8 @@ public:
 		struct XPBonusPool_t
 		{
 			XPBonusPool_t()
-				: m_flMultiplier( 1.f )
-				, m_nBonusPoolRemaining( 0 )
+				: m_nBonusPoolRemaining( 0 )
+				, m_flMultiplier( 1.f )
 			{}
 
 			CMsgTFXPSource_XPSourceType m_eType;
@@ -189,7 +225,6 @@ public:
 		// ( bConnected && !nConnectingButNotActiveIndex )
 		RTime32 rtLastActiveEvent;
 		bool bAlwaysSafeToLeave;
-		bool bEverConnected;
 		// If dropped - was it an abandon and what was the reason.
 		bool bDropWasAbandon;
 		TFMatchLeaveReason eDropReason;
@@ -237,7 +272,7 @@ public:
 	int GetNumActiveMatchPlayersForTeam( int nTeam ) const;
 
 	// Total skill rating for a team
-	int GetTotalSkillRatingForTeam( int nTeam ) const;
+	double GetTotalSkillRatingForTeam( int nTeam ) const;
 
 	// Subset of active match players who are currently connected
 	int GetNumConnectedMatchPlayers() const;
@@ -284,9 +319,7 @@ private:
 	CMatchInfo( const CMatchInfo &otherinfo );
 
 	// Track a new player participating in our match
-	void AddPlayer( CSteamID steamID, const CTFLobbyMember *pMemberData, bool bIsLateJoin, int nEntindex, bool bActive );
-	// Or with an existing player to copy from (e.g. old match)
-	void AddPlayer( const PlayerMatchData_t &oldPlayer, int nEntIndex, bool bActive );
+	void AddPlayer( CSteamID steamID, ConstTFLobbyPlayer memberData, bool bIsLateJoin, int nEntindex, bool bActive );
 
 	// Mark a player as dropped from the match
 	void DropPlayer( CSteamID steamID, TFMatchLeaveReason eReason, bool bWasAbandon );
@@ -313,6 +346,8 @@ class CTFGCServerSystem : public CGCClientSystem, public GCSDK::ISharedObjectLis
 	// Messages that need to do callbacks
 	friend class ReliableMsgNewMatchForLobby;
 	friend class ReliableMsgChangeMatchPlayerTeams;
+	friend class ReliableMsgVoteKickPlayerRequest;
+	friend class ReliableMsgProcessMatchVoteKick;
 public:
 	CTFGCServerSystem( void );
 	~CTFGCServerSystem( void );
@@ -323,12 +358,6 @@ public:
 	virtual void LevelShutdownPostEntity() OVERRIDE;
 	virtual void Shutdown() OVERRIDE;
 	virtual void PreClientUpdate() OVERRIDE;
-
-//	uint8 FindItemID( CTF_Item *pItem );
-	void MatchSignOut();
-//	const char *GetMatchStartTimeString();
-
-//	void GameRules_State_Enter( DOTA_GameState newState );
 
 	void SetHibernation( bool bHibernating );
 	bool ShouldHideServer();
@@ -349,6 +378,9 @@ public:
 	virtual bool SteamIDAllowedToConnect(const CSteamID &steamId) const;
 	virtual void UpdateServerDetails(void);
 	virtual bool ShouldHibernate();
+
+	bool MatchAllowsNameChanges();
+	bool GetPlayerGCMatchName( const CSteamID &steamId, char *pszOutGCMatchName, size_t nGCMatchNameLen );
 
 	// IGameEventListener2
 	virtual void FireGameEvent( IGameEvent *event ) OVERRIDE;
@@ -373,6 +405,27 @@ public:
 	float GetFirstConnectTimeForLobbyMember( const CSteamID &steamId ) const;
 	int GetVoteKickAttemptsByLobbyMember( const CSteamID &steamID ) const;
 	void IncrementVoteKickAttemptsByLobbyMember( const CSteamID &steamID );
+
+	// Called by the vote system when someone asks to perform a votekick.
+	//
+	// This function can return 'Handled' which means it will go talk to the GC and then submit the request back to the
+	// vote system when it has more data.
+	enum EVoteKickRequest {
+		eVoteKick_Allow,  // -> Clear to perform a votekick
+		eVoteKick_Deny,   // -> Tell them no
+		eVoteKick_Handled // -> We'll take it from here (e.g. need to go talk to the GC, we'll start a vote or tell them no
+		                  //    later when that resolves)
+	};
+	EVoteKickRequest PlayerRequestVoteKick( const CSteamID &steamID, const CSteamID &steamIDKickTarget, TFVoteKickReason eReason );
+
+	// Submit votekick results from the vote system (which should have gotten permission via PlayerRequestVoteKick)
+	void SubmitVoteKickResults( CSteamID steamIDInitiator, CSteamID steamIDTarget, TFVoteKickReason eReason,
+	                            const CUtlMap<CSteamID, int> &mapVotesBySteamID, bool bDefaultPass );
+	// If true, results of a vote kick were submitted and we're working on it.
+	bool BVoteKickPending( CSteamID steamIDTarget ) const;
+	// Was this player in the match, and then votekicked?  This is true even if they left and then were subsequently
+	// upgraded to kicked.
+	bool BPlayerWasVoteKicked( CSteamID steamID ) const;
 //
 //	EDOTA_Uploading_Match_Stats UploadingMatchStats() { return m_nUploadingMatchStats; }
 //	void OnStatsSubmitted( uint32 unMatchID, int32 nReplaySalt );
@@ -392,7 +445,7 @@ public:
 
 	float GetTimeLastConnectedToGC( void ) { return m_timeLastConnectedToGC; }
 
-	void EndManagedMatch( bool bKickPlayersToParties = false );
+	void EndManagedMatch();
 
 	// Sends match results. Expects the managed match be ended.
 
@@ -446,6 +499,16 @@ public:
 	// just means reboot the match server.
 	void AbortInvalidMatchState();
 
+	//
+	// Reliable Messages
+	//
+	const CReliableMessageQueue &ReliableMsgQueue() const { return m_ReliableMsgQueue; }
+	CReliableMessageQueue &ReliableMsgQueue() { return m_ReliableMsgQueue; }
+	bool BPendingReliableMessages() const { return ReliableMsgQueue().NumPendingMessages() > 0; }
+	bool BStalledReliableMessages() const { return ReliableMsgQueue().BStalled(); }
+
+	void ProcessPlayerInventoryRequest( CSteamID steamID, KeyValues* pKVRequest );
+
 protected:
 
 	// CGCClientSystem
@@ -469,7 +532,7 @@ private:
 
 	// Accepts a reservation request from the GC, adding this player to our reserved list, and, for MM mode, to the
 	// match.
-	void AcceptGCReservation( CSteamID steamID, const CTFLobbyMember *pMemberData, bool bIsLateJoin, int nEntindex, bool bActive );
+	void AcceptGCReservation( CSteamID steamID, ConstTFLobbyPlayer memberData, bool bIsLateJoin, int nEntindex, bool bActive );
 
 	// Rolling Matches (private)
 	//
@@ -484,6 +547,16 @@ private:
 
 	// Callbacks from the GC
 	void ChangeMatchPlayerTeamsResponse( bool bSuccess );
+	bool CanKickPlayer( CTFPlayer *pVoterPlayer, CTFPlayer *pTargetPlayer );
+	bool CanKickPlayerMvM( CTFPlayer *pVoterPlayer, CTFPlayer *pTargetPlayer );
+	void VoteKickPlayerRequestResponse( CSteamID voterSteamID,
+	                                    CSteamID targetSteamID,
+	                                    TFVoteKickReason eReason,
+	                                    bool bAllowed,         // Can this votekick proceed
+	                                    bool bVoterInhibit,    // Should voter be inhibited from further attempts
+	                                    bool bTargetInhibit ); // Should target be inhibited from further attempts
+	                                                           // against
+	void ProcessMatchVoteKickResponse( CSteamID voterSteamID, CSteamID targetSteamID, bool bSucceeded );
 	void NewMatchForLobbyResponse( bool bSuccess );
 	// Static callbacks that are just forwarding to us
 	static void ChangeMatchPlayerTeamsResponseCallback( GCSDK::CProtoBufMsg<CMsgGCChangeMatchPlayerTeamsResponse>& msg );
@@ -494,7 +567,6 @@ private:
 	RTime32 m_unGameStartTime;
 	float m_timeLastSendGameServerInfoAndConnectedPlayers;
 	ServerMatchmakingState m_eLastGameServerUpdateState;
-	TF_MatchmakingMode m_eLastGameServerUpdateMatchmakingMode;
 	CUtlString m_sLastGameServerUpdateMap;
 	CUtlString m_sLastGameServerUpdateTags;
 	int m_nLastGameServerUpdateBotCount;
@@ -516,6 +588,7 @@ private:
 	bool m_bOverridingVisibleMaxPlayers;
 	bool m_bWaitingForNewMatchID;
 	float m_flWaitingForNewMatchTime;
+	bool m_bCreatingVoteKick = false;
 
 	CMvMVictoryInfo m_mvmVictoryInfo;
 
@@ -528,8 +601,71 @@ private:
 
 	CMatchInfo *m_pMatchInfo;
 	float m_timeLastConnectedToGC;
-
 //	DOTAGameVersion	m_GameVersion;
+
+	enum EWebapiEquipmentState {
+		kWebapiEquipmentState_Init,
+
+		// Waiting for message from client listing equipped items
+		kWebapiEquipmentState_WaitingForClientRequest,
+
+		// Request inventory for the remote client
+		kWebapiEquipmentState_RequestInventory,
+		kWebapiEquipmentState_WaitingForInventory,
+		kWebapiEquipmentState_InventoryReceived,
+
+		// Failure that requires client intervention
+		// (they need to request a new auth token and send us more info)
+		kWebapiEquipmentState_NotifyClientOfFailure,
+	};
+
+	struct WebapiEquipmentState_t
+	{
+		CSteamID m_ownerID;
+
+		EWebapiEquipmentState m_eState = kWebapiEquipmentState_Init;
+
+		// Webapi equipment request
+		HTTPRequestHandle m_hEquipmentRequest = INVALID_HTTPREQUEST_HANDLE;
+		CCallResult<CTFGCServerSystem::WebapiEquipmentState_t, HTTPRequestCompleted_t> m_EquipmentRequestCompleted;
+
+		// Current request that is in flight
+		KeyValues* m_pKVCurrentRequest = nullptr;
+
+		// If we get a request to change loadout while we are waiting to get the items in the user's
+		// current inventory, we wait for the existing request to complete before asking for the new items
+		//
+		// Note that we will only request new items and assume that any existing items are up-to-date
+		// and unchanged, since sdk games cannot mutate the user's actual inventory.
+		KeyValues* m_pKVNextRequest = nullptr;
+
+		// Backoff
+		RTime32 m_rtNextRequest = 0;
+		int m_nBackoffSec = 0;
+		void Backoff();
+		void RequestSucceeded();	// resets backoff timers
+		bool IsBackingOff();
+
+		// Steam callback
+		void OnWebapiEquipmentReceived( HTTPRequestCompleted_t* pInfo, bool bIOFailure );
+	};
+	typedef CUtlMap< CSteamID, WebapiEquipmentState_t*, int, CDefLess<CSteamID> > TMapEquipmentRequests;
+	TMapEquipmentRequests m_mapEquipmentRequests;
+	WebapiEquipmentState_t& FindOrCreateWebapiEquipmentState( CSteamID steamID );
+
+	void WebapiEquipmentThink();
+	void WebapiEquipmentThinkRequest( CSteamID steamID, WebapiEquipmentState_t* pState );
+	void OnWebapiEquipmentReceived( CSteamID steamID, HTTPRequestCompleted_t* pInfo, bool bIOFailure );
+
+	void SDK_ApplyInventoryInfo( CGCClientSharedObjectCache* pCache, KeyValues* pKVRequest ); // mod expansion point
+	void SDK_ApplyLocalLoadout(CGCClientSharedObjectCache* pCache, KeyValues* pKVRequest);
+
+
+	//
+	// Reliable Messages
+	//
+
+	CReliableMessageQueue m_ReliableMsgQueue;
 };
 
 CTFGCServerSystem *GTFGCClientSystem();

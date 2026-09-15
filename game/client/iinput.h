@@ -11,8 +11,6 @@
 #pragma once
 #endif
 
-#include "inputsystem/InputEnums.h"
-
 class bf_write;
 class bf_read;
 class CUserCmd;
@@ -99,6 +97,10 @@ public:
 	virtual	bool		CAM_IsOrthographic() const = 0;
 	virtual	void		CAM_OrthographicSize( float& w, float& h ) const = 0;
 
+	virtual void		SetPreferredGameActionSet( GameActionSet_t action_set ) = 0;
+	virtual GameActionSet_t GetPreferredGameActionSet() = 0;
+	virtual void		SetGameActionSetFlags( GameActionSetFlags_t action_set_flags ) = 0;
+
 #if defined( HL2_CLIENT_DLL )
 	// IK back channel info
 	virtual void		AddIKGroundContactInfo( int entindex, float minheight, float maxheight ) = 0;
@@ -114,10 +116,7 @@ public:
 
 	virtual	bool		EnableJoystickMode() = 0;
 
-	virtual void		SetPreferredGameActionSet( GameActionSet_t action_set ) {}
-	virtual GameActionSet_t GetPreferredGameActionSet() { return GAME_ACTION_SET_NONE; }
-	virtual void		SetGameActionSetFlags( GameActionSetFlags_t action_set_flags ) {}
-	virtual bool		IsSteamControllerActive() { return false; }
+	virtual bool		IsSteamControllerActive() = 0;
 };
 
 extern ::IInput *input;

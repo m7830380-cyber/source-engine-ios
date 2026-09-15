@@ -20,6 +20,13 @@
 #include "tf_spectatorgui.h"
 #include "econ_quests.h"
 #include "inputsystem/iinputsystem.h"
+#include "tf_quest_map_node.h"
+#include "tf_controls.h"
+#include <vgui_controls/AnimationController.h>
+#include "clientmode_tf.h"
+#include "tf_quest_map_controller.h"
+#include "tf_gc_client.h"
+#include "iinput.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
@@ -27,6 +34,7 @@
 using namespace vgui;
 
 const float ATTRIB_TRACK_GLOW_HOLD_TIME = 2.f;
+const float ATTRIB_TRACK_GLOW_DECAY_TIME = 0.25f;
 const float ATTRIB_TRACK_BAR_GROW_RATE = 0.3f;
 const float ATTRIB_TRACK_COMPLETE_PULSE_RATE = 2.f;
 const float ATTRIB_TRACK_COMPLETE_PULSE_DIM_HOLD = 0.3f;
@@ -49,6 +57,8 @@ void cc_contract_progress_show_update( IConVar *pConVar, const char *pOldString,
 }
 ConVar tf_contract_progress_show( "tf_contract_progress_show", "1", FCVAR_CLIENTDLL | FCVAR_DONTRECORD | FCVAR_ARCHIVE, "Settings for the contract HUD element: 0 show nothing, 1 show everything, 2 show only active contracts.", cc_contract_progress_show_update );
 ConVar tf_contract_competitive_show( "tf_contract_competitive_show", "2", FCVAR_CLIENTDLL | FCVAR_DONTRECORD | FCVAR_ARCHIVE, "Settings for the contract HUD element during competitive matches: 0 show nothing, 1 show everything, 2 show only active contracts.", cc_contract_progress_show_update );
+ConVar tf_contract_progress_report_item_hold_time( "tf_contract_progress_report_item_hold_time", "2", FCVAR_DEVELOPMENTONLY );
+
 
 EContractHUDVisibility GetContractHUDVisibility()
 {
@@ -62,13 +72,10 @@ EContractHUDVisibility GetContractHUDVisibility()
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-CItemAttributeProgressPanel::CItemAttributeProgressPanel( Panel* pParent, const char *pElementName, const CQuestObjectiveDefinition *pObjectiveDef, const char* pszResFileName  )
+CQuestObjectiveTextPanel::CQuestObjectiveTextPanel( Panel* pParent, const char *pElementName, const QuestObjectiveInstance_t& objective, const char* pszResFileName  )
 	: EditablePanel( pParent, pElementName )
-	, m_nDefIndex( pObjectiveDef->GetDefinitionIndex() )
-	, m_flUpdateTime( 0.f )
-	, m_flLastThink( 0.f )
-	, m_bAdvanced( pObjectiveDef->IsAdvanced() )
 	, m_strResFileName( pszResFileName )
+	, m_objective( objective )
 {
 	Assert( !m_strResFileName.IsEmpty() );
 
@@ -78,18 +85,15 @@ CItemAttributeProgressPanel::CItemAttributeProgressPanel( Panel* pParent, const 
 
 	REGISTER_COLOR_AS_OVERRIDABLE( m_enabledTextColor, "enabled_text_color_override" );
 	REGISTER_COLOR_AS_OVERRIDABLE( m_disabledTextColor, "disabled_text_color_override" );
-
-	// We're being set for the first time, instantly be progressed
-	m_pAttribBlur->SetAlpha( 0 );
-	m_pAttribGlow->SetAlpha( 0 );
-	m_flUpdateTime = Plat_FloatTime() - ATTRIB_TRACK_GLOW_HOLD_TIME;
 }
 
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-void CItemAttributeProgressPanel::ApplySchemeSettings( vgui::IScheme *pScheme )
+void CQuestObjectiveTextPanel::ApplySchemeSettings( vgui::IScheme *pScheme )
 {
+	tmZone( TELEMETRY_LEVEL0, TMZF_NONE, "%s", __FUNCTION__);
+
 	BaseClass::ApplySchemeSettings( pScheme );
 	LoadControlSettings( m_strResFileName );
 }
@@ -97,16 +101,35 @@ void CItemAttributeProgressPanel::ApplySchemeSettings( vgui::IScheme *pScheme )
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-void CItemAttributeProgressPanel::ApplySettings( KeyValues *inResourceData )
+void CQuestObjectiveTextPanel::ApplySettings( KeyValues *inResourceData )
 {
 	BaseClass::ApplySettings( inResourceData );
+	//SetTall( GetContentTall() );
+	//m_pAttribDesc->SetTall( GetTall() );
+	m_bMapView = inResourceData->GetBool( "map_view", false );
 
-	m_strNormalPointLocToken = inResourceData->GetString( "normal_token" );
-	m_strAdvancedLocToken = inResourceData->GetString( "advanced_token" );
+	InvalidateLayout();
+}
 
-	const CQuestObjectiveDefinition *pObjectiveDef = GEconItemSchema().GetQuestObjectiveByDefIndex( m_nDefIndex );
-	if ( pObjectiveDef )
+void CQuestObjectiveTextPanel::PerformLayout()
+{
+	BaseClass::PerformLayout();
+
+	m_pAttribBlur->SetAlpha( 0 );
+	m_pAttribGlow->SetAlpha( 0 );
+
+	UpdateText();
+}
+
+void CQuestObjectiveTextPanel::UpdateText()
+{
+	const CQuestObjectiveDefinition *pObjectiveDef = m_objective.GetObjectiveDef();
+	if ( pObjectiveDef && m_pQuestDef )
 	{
+		auto pQuest = GetQuestMapHelper().GetQuestByDefindex( m_pQuestDef->GetDefIndex() );
+		const CQuestItemTracker* pItemTracker = pQuest ? QuestObjectiveManager()->GetTypedTracker< CQuestItemTracker* >( pQuest->GetID() ) : NULL;
+
+
 		const char *pszDescriptionToken = pObjectiveDef->GetDescriptionToken();
 
 		locchar_t loc_ItemDescription[MAX_ITEM_NAME_LENGTH];
@@ -119,26 +142,52 @@ void CItemAttributeProgressPanel::ApplySettings( KeyValues *inResourceData )
 		else
 		{
 			locchar_t loc_IntermediateName[ MAX_ITEM_NAME_LENGTH ];
-			locchar_t locValue[ MAX_ITEM_NAME_LENGTH ];
-			loc_sprintf_safe( locValue, LOCCHAR( "%d" ), pObjectiveDef->GetPoints() );
+			locchar_t locCPValue[ MAX_ITEM_NAME_LENGTH ];
+			loc_sprintf_safe( locCPValue, LOCCHAR( "%d" ), m_objective.GetPoints() );
 
-			loc_scpy_safe( loc_IntermediateName, CConstructLocalizedString( pLocalizedObjectiveName, locValue ) );
+			loc_scpy_safe( loc_IntermediateName, CConstructLocalizedString( pLocalizedObjectiveName, locCPValue ) );
 
-			locchar_t *pszLocString = GLocalizationProvider()->Find( pObjectiveDef->IsAdvanced() ? m_strAdvancedLocToken : m_strNormalPointLocToken );
+			locchar_t *pszLocObjectiveFormat = GLocalizationProvider()->Find( g_QuestPointsDefs[ m_objective.GetPointsType() ].m_pszObjectiveText );
 
-			loc_scpy_safe( loc_ItemDescription, CConstructLocalizedString( pszLocString, loc_IntermediateName ) );
+			int nPointsEarned = 0;
+			if ( pItemTracker )
+			{
+				nPointsEarned = pItemTracker->GetEarnedPoints( GetPointsType() );
+			}
+			else if ( pQuest )
+			{
+				nPointsEarned = pQuest->GetEarnedPoints( GetPointsType() );
+			}
+
+			int nMaxPoints = m_pQuestDef->GetMaxPoints( GetPointsType() );
+			int nNumEarnsRequired = ceil( (float)nMaxPoints / pObjectiveDef->GetPoints() );
+			int nNumEarned = nPointsEarned / pObjectiveDef->GetPoints();
+
+			CUtlString strBonusEarned( CFmtStr( "%d/%d", nNumEarned, nNumEarnsRequired ) );
+			while ( strBonusEarned.Length() < 5 )
+			{
+				strBonusEarned.Append( ' ' );
+			}
+			CStrAutoEncode wstrRatio( strBonusEarned );
+			locchar_t locBonusPrefix[ 32 ];
+			const char* pszBonusRatioFormat = m_bMapView ? "#QuestPoints_BonusRatio_InMap" : "#QuestPoints_BonusRatio_InGame";
+			loc_scpy_safe( locBonusPrefix, CConstructLocalizedString( GLocalizationProvider()->Find( pszBonusRatioFormat ), wstrRatio.ToWString() ) );
+
+			loc_scpy_safe( loc_ItemDescription, CConstructLocalizedString( pszLocObjectiveFormat, loc_IntermediateName, locBonusPrefix ) );
 		}
-	
+
 		SetDialogVariable( "attr_desc", loc_ItemDescription );
 	}
+}
 
-	//SetTall( GetContentTall() );
-	//m_pAttribDesc->SetTall( GetTall() );
-
+void CQuestObjectiveTextPanel::SetDefinitions( const QuestObjectiveInstance_t& objective, const CQuestDefinition* pQuestDef )
+{
+	m_objective = objective;
+	m_pQuestDef = pQuestDef;
 	InvalidateLayout();
 }
 
-void CItemAttributeProgressPanel::SetIsValid( bool bIsValid )
+void CQuestObjectiveTextPanel::SetIsValid( bool bIsValid )
 {
 	if ( bIsValid )
 	{
@@ -150,7 +199,7 @@ void CItemAttributeProgressPanel::SetIsValid( bool bIsValid )
 	}
 }
 
-int CItemAttributeProgressPanel::GetContentTall() const
+int CQuestObjectiveTextPanel::GetContentTall() const
 {
 	// Find the bottom of the text
 	int nTextWide = 0, nTextTall = 0;
@@ -162,197 +211,292 @@ int CItemAttributeProgressPanel::GetContentTall() const
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-void CItemAttributeProgressPanel::SetProgress( Color glowColor )
+void CQuestObjectiveTextPanel::SetProgress( Color glowColor )
 {
-	m_flUpdateTime = Plat_FloatTime();
-	m_pAttribBlur->SetAlpha( 255 );
-	m_pAttribGlow->SetAlpha( 255 );
-	m_pAttribDesc->SetAlpha( 0 );
-	m_pAttribBlur->SetFgColor( glowColor );
-	m_pAttribGlow->SetFgColor( glowColor );
+	auto pAnim = g_pClientMode->GetViewportAnimationController();
+	UpdateText();
+
+	// Snap highlight
+	pAnim->RunAnimationCommand( m_pAttribBlur, "alpha", 255, 0, 0, AnimationController::INTERPOLATOR_LINEAR, 0.f, true, false );
+	pAnim->RunAnimationCommand( m_pAttribBlur, "fgcolor", glowColor, 0, 0, AnimationController::INTERPOLATOR_LINEAR, 0.f, true, false );
+
+	pAnim->RunAnimationCommand( m_pAttribGlow, "alpha", 255, 0, 0, AnimationController::INTERPOLATOR_LINEAR, 0.f, true, false );
+	pAnim->RunAnimationCommand( m_pAttribGlow, "fgcolor", glowColor, 0, 0, AnimationController::INTERPOLATOR_LINEAR, 0.f, true, false );
+
+	pAnim->RunAnimationCommand( m_pAttribDesc, "alpha", 0, 0, 0, AnimationController::INTERPOLATOR_LINEAR, 0.f, true, false );
+	
+	// Lerp back
+	pAnim->RunAnimationCommand( m_pAttribBlur, "alpha", 0, ATTRIB_TRACK_GLOW_HOLD_TIME, ATTRIB_TRACK_GLOW_DECAY_TIME, AnimationController::INTERPOLATOR_LINEAR, 0.f, false, false );
+	pAnim->RunAnimationCommand( m_pAttribGlow, "alpha", 0, ATTRIB_TRACK_GLOW_HOLD_TIME, ATTRIB_TRACK_GLOW_DECAY_TIME, AnimationController::INTERPOLATOR_LINEAR, 0.f, false, false );
+	pAnim->RunAnimationCommand( m_pAttribDesc, "alpha", 255, ATTRIB_TRACK_GLOW_HOLD_TIME, ATTRIB_TRACK_GLOW_DECAY_TIME, AnimationController::INTERPOLATOR_LINEAR, 0.f, false, false );
 }
 
-//-----------------------------------------------------------------------------
-// Purpose: 
-//-----------------------------------------------------------------------------
-void CItemAttributeProgressPanel::OnThink()
+void CQuestObjectiveTextPanel::HighlightCompletion()
 {
-	float flGlowTime = Plat_FloatTime() - m_flUpdateTime;
-	if ( flGlowTime > ATTRIB_TRACK_GLOW_HOLD_TIME )
-	{
-		float flGlowAlpha = RemapValClamped( flGlowTime, ATTRIB_TRACK_GLOW_HOLD_TIME, ATTRIB_TRACK_GLOW_HOLD_TIME + 0.25f, 1.f, 0.f );
-		m_pAttribBlur->SetAlpha( 255 * flGlowAlpha );
-		m_pAttribGlow->SetAlpha( 255 * flGlowAlpha );
-		m_pAttribDesc->SetAlpha( 255 * ( 1.f - flGlowAlpha ) );
-	}
-
-	m_flLastThink = Plat_FloatTime();
+	Color colorHighlight = scheme()->GetIScheme( GetScheme() )->GetColor( "CreditsGreen", Color( 255, 255, 255, 255 ) );
+	BrigthenColor( colorHighlight, 50 );
+	// Highlight
+	SetProgress( colorHighlight );
+	// Fade to disabled since we're done
+	auto pAnim = g_pClientMode->GetViewportAnimationController();
+	pAnim->RunAnimationCommand( m_pAttribDesc, "alpha", 255, ATTRIB_TRACK_GLOW_HOLD_TIME, ATTRIB_TRACK_GLOW_DECAY_TIME, AnimationController::INTERPOLATOR_LINEAR, 0.f, true, false );
+	pAnim->RunAnimationCommand( m_pAttribDesc, "fgcolor", colorHighlight, 0, 0, AnimationController::INTERPOLATOR_LINEAR, 0.f, true, false );
+	pAnim->RunAnimationCommand( m_pAttribDesc, "fgcolor", m_disabledTextColor, ATTRIB_TRACK_GLOW_HOLD_TIME, ATTRIB_TRACK_GLOW_DECAY_TIME, AnimationController::INTERPOLATOR_LINEAR, 0.f, false, false );
 }
 
-float CItemTrackerPanel::m_sflEventRecievedTime = 0.f;
-//-----------------------------------------------------------------------------
-// Purpose: 
-//-----------------------------------------------------------------------------
-CItemTrackerPanel::CItemTrackerPanel( Panel* pParent, const char *pElementName, const CEconItem* pItem, const char* pszItemTrackerResFile )
-	: EditablePanel( pParent, pElementName )
-	, m_pItem( NULL )
-	, m_pCompletedContainer( NULL )
-	, m_pCompletedDescGlow( NULL )
-	, m_pCompletedNameGlow( NULL )
-	, m_flStandardTargetProgress( 0.f )
-	, m_flStandardCurrentProgress( 0.f )
-	, m_flBonusCurrentProgress( 0.f )
-	, m_flBonusTargetProgress( 0.f )
-	, m_flUpdateTime( 0.f )
-	, m_flLastThink( 0.f )
-	, m_nMaxStandardPoints( 0 )
-	, m_nMaxBonusPoints( 0 )
-	, m_eSoundToPlay( SOUND_NONE )
-	, m_nContentTall( 0 )
-	, m_bNoEffects( false )
-	, m_strItemTrackerResFile( pszItemTrackerResFile )
-{
-	Assert( pszItemTrackerResFile );
+static float m_sflEventRecievedTime = 0.f;
 
-	SetItem( pItem );
-	ListenForGameEvent( "quest_objective_completed" );
-	ListenForGameEvent( "player_spawn" );
-	ListenForGameEvent( "inventory_updated" );
-	ListenForGameEvent( "localplayer_changeclass" );
-	ListenForGameEvent( "schema_updated" );
-
-	m_pItemName = new Label( this, "ItemName", "" );
-	m_pCompletedContainer = new EditablePanel( this, "CompletedContainer" );
-
-	m_pProgressBarBackground = new EditablePanel( this, "ProgressBarBG" );
-	m_pProgressBarStandard = new EditablePanel( m_pProgressBarBackground, "ProgressBarStandard" );
-	m_pProgressBarBonus = new EditablePanel( m_pProgressBarBackground, "ProgressBarBonus" );
-	m_pProgressBarStandardHighlight = new EditablePanel( m_pProgressBarBackground, "ProgressBarStandardHighlight" );
-	m_pProgressBarBonusHighlight = new EditablePanel( m_pProgressBarBackground, "ProgressBarBonusHighlight" );
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: 
-//-----------------------------------------------------------------------------
-CItemTrackerPanel::~CItemTrackerPanel()
+CQuestProgressTrackerPanel::PointsView_t::PointsView_t()
+	: m_flCurrentProgress( 0 )
+	, m_flTargetProgress( 0 )
+	, m_nMaxPoints( 0 )
 {}
 
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-void CItemTrackerPanel::ApplySettings( KeyValues *inResourceData )
+CQuestProgressTrackerPanel::CQuestProgressTrackerPanel( Panel* pParent,
+														const char *pElementName,
+														const CQuest* pQuest,
+														const CQuestDefinition* pQuestDef,
+														const char* pszResFile /*= "resource/ui/quests/QuestItemTrackerPanel_Base.res"*/ )
+	: EditablePanel( pParent, pElementName )
+	, m_pQuest( NULL )
+	, m_flLastThink( 0.f )
+	, m_pszSoundToPlay( NULL )
+	, m_nContentTall( 0 )
+	, m_bMapView( false )
+	, m_pQuestDef( pQuestDef )
+	, m_strResFile( pszResFile )
 {
+	ListenForGameEvent( "quest_objective_completed" );
+	ListenForGameEvent( "player_spawn" );
+	ListenForGameEvent( "inventory_updated" );
+	ListenForGameEvent( "localplayer_changeclass" );
+	ListenForGameEvent( "schema_updated" );
+	ListenForGameEvent( "quest_turn_in_state" );
+
+	m_pItemName = new Label( this, "ItemName", "" );
+	m_pItemName->SetAutoDelete( false );
+
+
+	m_PointsBars.m_pBarBG = new EditablePanel( this, CFmtStr( "ProgressBarBG" ) );
+	m_PointsBars.m_pBarBG->SetAutoDelete( false );
+
+	m_PointsBars.m_pBarCommitted = new EditablePanel( m_PointsBars.m_pBarBG, "ProgressBarStandard" );
+	m_PointsBars.m_pBarCommitted ->SetAutoDelete( false );
+
+	m_PointsBars.m_pBarUncommitted = new EditablePanel( m_PointsBars.m_pBarBG, "ProgressBarStandardHighlight" );
+	m_PointsBars.m_pBarUncommitted->SetAutoDelete( false );
+
+	m_PointsBars.m_pBarJustEarned = new EditablePanel( m_PointsBars.m_pBarBG, "ProgressBarJustEarned" );
+	m_PointsBars.m_pBarJustEarned->SetAutoDelete( false );
+
+	m_PointsBars.m_flUpdateTime = 0.f;
+
+	m_bTurningIn = false;
+
+	m_pPrimaryObjectiveLabel = new CExLabel( this, "PrimaryLabel", (const char*)NULL );
+	m_pBonusObjectiveLabel = new CExLabel( this, "BonusLabel", (const char*)NULL );
+
+	for( int i=0; i < ARRAYSIZE( m_arStarImages ); ++i )
+	{
+		m_arStarImages[ i ] = new ImagePanel( this, CFmtStr( "star%d", i ) );
+	}
+
+	// Do this AFTER all the panels are created
+	SetQuest( pQuest );
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+CQuestProgressTrackerPanel::~CQuestProgressTrackerPanel()
+{
+	m_pItemName->MarkForDeletion();
+	m_PointsBars.m_pBarBG->MarkForDeletion();
+	m_PointsBars.m_pBarCommitted ->MarkForDeletion();
+	m_PointsBars.m_pBarUncommitted->MarkForDeletion();
+	m_PointsBars.m_pBarJustEarned->MarkForDeletion();
+
+	// Remove all expired labels
+	FOR_EACH_VEC_BACK( m_vecScorerLabels, i )
+	{
+		m_vecScorerLabels[ i ].second->MarkForDeletion();
+	}
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+void CQuestProgressTrackerPanel::ApplySettings( KeyValues *inResourceData )
+{
+	tmZone( TELEMETRY_LEVEL0, TMZF_NONE, "%s", __FUNCTION__);
+
 	BaseClass::ApplySettings( inResourceData );
 
+	KeyValues* pBarKV = inResourceData->FindKey( "progressbarKV" );
+	KeyValues* pBonusBarKV = inResourceData->FindKey( "bonusprogressbarKV" );
+
+	if ( pBarKV )
+	{
+		m_PointsBars.m_pBarBG->ApplySettings( pBarKV );
+	}
+
+	if ( pBonusBarKV == NULL )
+	{
+		pBonusBarKV = pBarKV;
+	}
+
+
 	m_strItemAttributeResFile = inResourceData->GetString( "item_attribute_res_file" );
-	m_strProgressBarStandardLocToken = inResourceData->GetString( "progress_bar_standard_loc_token" );
-	m_strProgressBarAdvancedLocToken = inResourceData->GetString( "progress_bar_advanced_loc_token" );
-
 	Assert( !m_strItemAttributeResFile.IsEmpty() );
-	Assert( !m_strProgressBarStandardLocToken.IsEmpty() );
-	Assert( !m_strProgressBarAdvancedLocToken.IsEmpty() );
-
-	m_strStandardObjectiveTick		= inResourceData->GetString( "standard_objective_tick_sound", NULL );
-	m_strStandardPointsComplete		= inResourceData->GetString( "standard_points_complete_sound", NULL );
-	m_strAdvancedObjectiveComplete	= inResourceData->GetString( "advanced_objective_sound_complete", NULL );
-	m_strAdvancedPointsComplete		= inResourceData->GetString( "advanced_points_complete_sound", NULL );
 }
 
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-void CItemTrackerPanel::ApplySchemeSettings( IScheme *pScheme )
+void CQuestProgressTrackerPanel::ApplySchemeSettings( IScheme *pScheme )
 {
+	tmZone( TELEMETRY_LEVEL0, TMZF_NONE, "%s", __FUNCTION__);
+
 	BaseClass::ApplySchemeSettings( pScheme );
-	LoadControlSettings( m_strItemTrackerResFile );
+	LoadControlSettings( m_strResFile );
 
-	m_pCompletedDescGlow = FindControl<Label>( "CompleteGlowText", true );
-	m_pCompletedNameGlow = FindControl<Label>( "CompleteItemNameGlow", true );
-
-	QuestObjectiveDefVec_t vecChosenObjectives;
-	if ( m_pItem )
-	{
-		m_pItem->GetItemDefinition()->GetQuestDef()->GetRolledObjectivesForItem( vecChosenObjectives, m_pItem->GetSOCData() );
-	}
-	FOR_EACH_VEC( vecChosenObjectives, i )
-	{
-		auto pObjective = vecChosenObjectives[ i ];
-
-		// Find or create the individual attribute panel
-		CItemAttributeProgressPanel *pPanel = GetPanelForObjective( pObjective );
-		pPanel->InvalidateLayout();
-	}
-
+	UpdateObjectives();
 	CaptureProgress();
+
+	InvalidateLayout();
+}
+
+void CQuestProgressTrackerPanel::UpdateObjectives()
+{
+	if ( m_pQuestDef )
+	{
+		const QuestObjectiveDefVec_t& vecObjectives = m_pQuestDef->GetObjectives();
+
+		// Reassign, or recreate objective panels
+		int i = 0;
+		for ( i=0; i < vecObjectives.Count(); ++i )
+		{
+			auto objective = vecObjectives[ i ];
+
+			// Create a new objective panel if we need
+			if ( i >= m_vecObjectivePanels.Count() )
+			{
+				CQuestObjectiveTextPanel* pObjectivePanel = new CQuestObjectiveTextPanel( this, "QuestObjectiveTextPanel", objective, m_strItemAttributeResFile );
+				pObjectivePanel->InvalidateLayout( true );
+				// This has to be here.  If this is not here, the objective text panel might not
+				// be size right when our parents PerformLayout happens
+				if ( !IsLayoutInvalid() )
+				{
+					pObjectivePanel->MakeReadyForUse();
+				}
+				m_vecObjectivePanels.AddToTail( pObjectivePanel );
+			}
+			else
+			{
+				// Re-use an existing objective panel if there's one available
+				CQuestObjectiveTextPanel* pObjectivePanel = m_vecObjectivePanels[ i ];
+				pObjectivePanel->SetVisible( true );
+				pObjectivePanel->SetDefinitions( objective, m_pQuestDef );
+				pObjectivePanel->InvalidateLayout( true );
+			}
+		}
+
+		// Remove unnecessary ones
+		while( m_vecObjectivePanels.Count() > vecObjectives.Count() )
+		{
+			m_vecObjectivePanels.Tail()->MarkForDeletion();
+			m_vecObjectivePanels.Remove( m_vecObjectivePanels.Count() - 1 );
+		}
+
+		InvalidateLayout();
+	}
 }
 
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-int QuestSort_PointsAscending( CItemAttributeProgressPanel* const* p1, CItemAttributeProgressPanel* const* p2 )
+int QuestSort_PointsAscending( CQuestObjectiveTextPanel* const* p1, CQuestObjectiveTextPanel* const* p2 )
 {
-	const CQuestObjectiveDefinition* pObj1 = GEconItemSchema().GetQuestObjectiveByDefIndex( (*p1)->m_nDefIndex );
-	const CQuestObjectiveDefinition* pObj2 = GEconItemSchema().GetQuestObjectiveByDefIndex( (*p2)->m_nDefIndex );
+	if ( (*p1)->GetPointsType() != (*p2)->GetPointsType() )
+	{
+		// Largest type at the bottom
+		return (*p1)->GetPointsType() - (*p2)->GetPointsType();
+	}
 
-	if ( pObj1->GetPoints() != pObj2->GetPoints() )
+	if ( (*p1)->GetPoints() != (*p2)->GetPoints() )
 	{
 		// Smallest point value on the bottom
-		return pObj1->GetPoints() - pObj2->GetPoints();
+		return (*p1)->GetPoints() - (*p2)->GetPoints();
 	}
 
-	return pObj1->GetDefinitionIndex() - pObj2->GetDefinitionIndex();
+	return (*p1)->GetDefIndex() - (*p2)->GetDefIndex();
 }
 
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-void CItemTrackerPanel::PerformLayout()
+void CQuestProgressTrackerPanel::PerformLayout()
 {
-	BaseClass::PerformLayout();
+	tmZone( TELEMETRY_LEVEL0, TMZF_NONE, "%s", __FUNCTION__);
 
-	if ( !m_pItem )
+	BaseClass::PerformLayout();	
+
+	if ( !m_pQuestDef )
 		return;
 
 	// Set the name into dialog variables
-	const wchar_t *pszLocToken = g_pVGuiLocalize->Find( m_pItem->GetItemDefinition()->GetQuestDef()->GetRolledNameForItem( m_pItem->GetSOCData() ) );
+	const wchar_t *pszLocToken = g_pVGuiLocalize->Find( m_pQuestDef->GetLocName() );
 	SetDialogVariable( "itemname", pszLocToken );
-	if ( m_pCompletedContainer )
+	m_pItemName->SetVisible( m_bShowItemName );
+
+	const CQuestItemTracker* pItemTracker = NULL;
+	const CQuestMapNode* pNode = NULL;
+	if ( m_pQuest )
 	{
-		m_pCompletedContainer->SetDialogVariable( "itemname", pszLocToken );
+		pNode = GetQuestMapHelper().GetQuestMapNodeByID( m_pQuest->GetSourceNodeID() );
+		pItemTracker = QuestObjectiveManager()->GetTypedTracker< CQuestItemTracker* >( m_pQuest->GetID() );
 	}
-
-	const CQuestItemTracker* pItemTracker = QuestObjectiveManager()->GetTypedTracker< CQuestItemTracker* >( m_pItem->GetItemID() );
 	
-	if ( pItemTracker )
+	//
+	// Layout the point bars
+	//
+	uint32 nCurrentPoints = 0;
+	if ( m_pQuest )
 	{
-		bool bStandardPointsCompleteAndBonusPossible = m_flStandardCurrentProgress == m_flStandardTargetProgress && m_flStandardTargetProgress == 1.f && m_nMaxBonusPoints > 0;
-		uint32 nCurrentPoints = bStandardPointsCompleteAndBonusPossible ? pItemTracker->GetEarnedBonusPoints() : pItemTracker->GetEarnedStandardPoints();
-		uint32 nTargetPoints = bStandardPointsCompleteAndBonusPossible ? m_nMaxBonusPoints : m_nMaxStandardPoints;
-			
-		locchar_t locValue[ MAX_ITEM_NAME_LENGTH ];
-		const locchar_t *pPointsToken = GLocalizationProvider()->Find( bStandardPointsCompleteAndBonusPossible ? m_strProgressBarAdvancedLocToken : m_strProgressBarStandardLocToken );
-		loc_scpy_safe( locValue, CConstructLocalizedString( pPointsToken, nCurrentPoints, nTargetPoints ) );
+		nCurrentPoints = pItemTracker ? pItemTracker->GetEarnedPoints( QUEST_POINTS_NOVICE ) : m_pQuest->GetEarnedPoints( QUEST_POINTS_NOVICE );
+	}
+	locchar_t locValue[ MAX_ITEM_NAME_LENGTH ];
 
-		m_pProgressBarBackground->SetDialogVariable( "points", locValue );
-		m_pProgressBarStandard->SetDialogVariable( "points" , locValue );
-		m_pProgressBarStandardHighlight->SetDialogVariable( "points" , locValue );
-		m_pProgressBarBonus->SetDialogVariable( "points", locValue );
-		m_pProgressBarBonusHighlight->SetDialogVariable( "points" , locValue );
+	if ( nCurrentPoints >= m_pQuestDef->GetMaxPoints( QUEST_POINTS_NOVICE ) )
+	{
+		if ( pNode && pNode->BIsMedalEarned( QUEST_POINTS_NOVICE ) )
+		{
+			loc_scpy_safe( locValue, g_pVGuiLocalize->Find( "#QuestPoints_Complete" ) );
+		}
+		else
+		{
+			loc_scpy_safe( locValue, g_pVGuiLocalize->Find( "#QuestPoints_ReadyTurnIn" ) );
+		}
 	}
 	else
 	{
-		m_pProgressBarBackground->SetDialogVariable( "points", "" );
-		m_pProgressBarStandard->SetDialogVariable( "points" , "" );
-		m_pProgressBarStandardHighlight->SetDialogVariable( "points" , "" );
-		m_pProgressBarBonus->SetDialogVariable( "points", "" );
-		m_pProgressBarBonusHighlight->SetDialogVariable( "points" , "" );
+		const locchar_t *pPointsToken = GLocalizationProvider()->Find( g_QuestPointsDefs[ QUEST_POINTS_NOVICE ].m_pszBarText );
+		loc_scpy_safe( locValue, CConstructLocalizedString( pPointsToken, nCurrentPoints, m_PointsBars.m_nMaxPoints ) );
 	}
 
-	m_pProgressBarStandardHighlight->SetVisible( !m_bNoEffects );
-	m_pProgressBarBonusHighlight->SetVisible( !m_bNoEffects );
+	m_PointsBars.m_pBarBG->SetDialogVariable( "points" , locValue );
+	m_PointsBars.m_pBarCommitted ->SetDialogVariable( "points" , locValue );
+	m_PointsBars.m_pBarUncommitted->SetDialogVariable( "points" , locValue );
+	m_PointsBars.m_pBarJustEarned->SetDialogVariable( "points", locValue );
+
+	m_PointsBars.m_pBarJustEarned->SetVisible( !m_bMapView );
+
 
 	int nWide = 0, nTall = 0;
-	if ( m_pItemName->IsVisible() && !m_bNoEffects )
+	if ( m_pItemName->IsVisible() && !m_bMapView )
 	{
 		m_pItemName->GetContentSize( nWide, nTall );
 	}
@@ -360,60 +504,92 @@ void CItemTrackerPanel::PerformLayout()
 	int nX = m_nAttribXOffset;
 	int nY = nTall + m_nAttribYStartOffset;
 
-	bool bCompleted = true;
+	bool bPendingCompletion = false;
 
-	m_vecAttribPanels.Sort( &QuestSort_PointsAscending );
-
-	if ( !IsStandardCompleted() )
+	if ( pItemTracker && m_pQuest )
 	{
-		bCompleted = false;
-	}
-
-	m_pCompletedContainer->SetVisible( bCompleted );
-
-	if ( bCompleted && !m_bNoEffects )
-	{
-		m_pCompletedContainer->SetVisible( true );
-		CExLabel* pCompleted = m_pCompletedContainer->FindControl< CExLabel >( "CompleteDesc", true );
-		CExLabel* pCompletedGlow = m_pCompletedContainer->FindControl< CExLabel > ( "CompleteGlowText", true );
-		if ( pCompleted && pCompletedGlow )
+		auto lambdaPendingCompletionForType = [ & ]( EQuestPoints eType )
 		{
-			const wchar_t *pszText = NULL;
-			const char *pszTextKey = "#QuestTracker_Complete";
-			if ( pszTextKey )
-			{
-				pszText = g_pVGuiLocalize->Find( pszTextKey );
-			}
-			if ( pszText )
-			{					
-				wchar_t wzFinal[512] = L"";
-				UTIL_ReplaceKeyBindings( pszText, 0, wzFinal, sizeof( wzFinal ), GAME_ACTION_SET_FPSCONTROLS );
-				pCompleted->SetText( wzFinal );
-				pCompletedGlow->SetText( wzFinal );
-			}
-		}
+			return pItemTracker->GetEarnedPoints( eType ) > m_pQuest->GetEarnedPoints( eType ) &&
+				   pItemTracker->GetEarnedPoints( eType ) >= m_pQuestDef->GetMaxPoints( eType );
+		};
 
-		nY = m_pCompletedContainer->GetTall();
+		bPendingCompletion = lambdaPendingCompletionForType( QUEST_POINTS_NOVICE ) ||
+							 lambdaPendingCompletionForType( QUEST_POINTS_ADVANCED ) ||
+							 lambdaPendingCompletionForType( QUEST_POINTS_EXPERT );
 	}
-	else
+
+	//
+	// Not yet committed panel
+	//
+	EditablePanel* pNotYetCommittedPanel = FindControl< EditablePanel >( "NotYetCommittedContainer", true );
+	if ( pNotYetCommittedPanel )
 	{
-		m_pCompletedContainer->SetVisible( false );
+		pNotYetCommittedPanel->SetVisible( bPendingCompletion );
+		if ( bPendingCompletion )
+		{
+			pNotYetCommittedPanel->SetPos( pNotYetCommittedPanel->GetXPos(), nY );
+			nY += pNotYetCommittedPanel->GetTall();
+		}
 	}
-
-	// Place the bars at the bottom of the text, not the bottom of the text panel
-	m_pProgressBarBackground->SetPos( m_pProgressBarBackground->GetXPos(), nY );
-	nY += m_pProgressBarBackground->GetTall() + m_nBarGap;
-
-	UpdateBars();
 
 	C_TFPlayer *pLocalPlayer = C_TFPlayer::GetLocalTFPlayer();
 
-	FOR_EACH_VEC( m_vecAttribPanels, i )
-	{
-		CItemAttributeProgressPanel* pPanel = m_vecAttribPanels[i];
+	m_vecObjectivePanels.Sort( &QuestSort_PointsAscending );
 
-		// Hide all objectives if everything is completed, or just hide standard objectives is standard points re completed
-		if ( !m_bNoEffects && ( IsEverythingCompleted() || ( IsStandardCompleted() && !pPanel->IsAdvanced() ) ) )
+	UpdateBars();
+	UpdateStars();
+
+	//
+	// Objective panels
+	//
+	m_vecObjectivePanels.Sort( &QuestSort_PointsAscending );
+	bool bBonusLabelPlaced = false;
+	FOR_EACH_VEC( m_vecObjectivePanels, i )
+	{
+		CQuestObjectiveTextPanel* pPanel = m_vecObjectivePanels[i];
+
+		// Check if any of the points at or below this type are needed.  If this is an Expert
+		// objective that is complete, but we still need normal points, then we should show.
+		int nPointType = pPanel->GetPointsType();
+		bool bObjectiveNeeded = false;
+		for( nPointType; nPointType >= QUEST_POINTS_NOVICE && !bObjectiveNeeded; --nPointType )
+		{
+			bObjectiveNeeded = bObjectiveNeeded || !ArePointsCompleted( nPointType );
+		}
+
+		if ( i == 0 )
+		{
+			m_pPrimaryObjectiveLabel->SetVisible( m_bMapView );
+			m_pBonusObjectiveLabel->SetVisible( false );
+
+			if ( m_bMapView )
+			{
+				m_pPrimaryObjectiveLabel->SetPos( m_pPrimaryObjectiveLabel->GetXPos(), nY );
+			}
+			else
+			{
+				m_pPrimaryObjectiveLabel->SetVisible( false );
+			}
+		}
+
+		if ( i > 0 && !bBonusLabelPlaced )
+		{
+			m_pBonusObjectiveLabel->SetVisible( m_bMapView );
+			if ( m_bMapView )
+			{
+				bBonusLabelPlaced = true;
+				m_pBonusObjectiveLabel->SetPos( m_pBonusObjectiveLabel->GetXPos(), nY );
+			}
+		}
+
+		if ( i < ARRAYSIZE( m_arStarImages ) )
+		{
+			m_arStarImages[ i ]->SetPos( m_arStarImages[ i ]->GetXPos(), nY - YRES( 1 ) );
+		}
+
+		// Hide all objectives if everything is completed, or just hide standard objectives if standard points are completed
+		if ( !m_bMapView && !bObjectiveNeeded )
 		{
 			pPanel->SetVisible( false );
 		}
@@ -427,18 +603,32 @@ void CItemTrackerPanel::PerformLayout()
 			if ( pItemTracker && pLocalPlayer )
 			{
 				// Fixup validity, which changes the color of the 
-				const CBaseQuestObjectiveTracker* pObjectiveTracker = pItemTracker->FindTrackerForDefIndex( pPanel->m_nDefIndex );
+				const CBaseQuestObjectiveTracker* pObjectiveTracker = pItemTracker->FindTrackerForDefIndex( pPanel->GetDefIndex() );
 				if ( pObjectiveTracker )
 				{
 					pObjectiveTracker->IsValidForPlayer( pLocalPlayer, invalidReasons );
 				}
 			}
 
-			pPanel->SetIsValid( invalidReasons.IsValid() );
+			if ( !m_bTurningIn )
+			{
+				pPanel->SetIsValid( invalidReasons.IsValid() && bObjectiveNeeded );
+			}
 
 			nY += m_nAttribYStep;
 		}
+
+		// Bar under the primary
+		if ( i == QUEST_POINTS_NOVICE )
+		{
+			nY += m_nBarGap;
+			m_PointsBars.m_pBarBG->SetPos( m_PointsBars.m_pBarBG->GetXPos(), nY );
+			nY += m_PointsBars.m_pBarBG->GetTall() + 2;
+			nY += m_nBarGap;
+		}
 	}
+	
+	nY += YRES( 2 );
 
 	m_nContentTall = nY;
 }
@@ -446,167 +636,259 @@ void CItemTrackerPanel::PerformLayout()
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-int CItemTrackerPanel::GetContentTall() const
+int CQuestProgressTrackerPanel::GetContentTall() const
 {
 	return m_nContentTall;
 }
 
+static double s_flLastSoundTime = 0;
+
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-void CItemTrackerPanel::OnThink()
+void CQuestProgressTrackerPanel::OnThink()
 {
 	BaseClass::OnThink();
 
-	if ( !m_pItem || m_bNoEffects )
+	if ( BIsTurningIn() )
+	{
+		if ( m_bTurningIn )
+		{
+			locchar_t locValue[ MAX_ITEM_NAME_LENGTH ];
+
+			float flPercentAnimated = (float)m_PointsBars.m_pBarCommitted->GetWide() / m_PointsBars.m_pBarBG->GetWide() * 100.f;
+
+			CStrAutoEncode strProgress( CFmtStr( "%.0f", flPercentAnimated ) );
+			loc_scpy_safe( locValue, CConstructLocalizedString( g_pVGuiLocalize->Find( "#QuestPoints_Transmitting" ), strProgress.ToWString() ) );
+			m_PointsBars.m_pBarCommitted->SetBgColor( scheme()->GetIScheme( GetScheme() )->GetColor( "StoreGreen", Color( 255, 255, 255, 255 ) ) );
+			m_PointsBars.m_pBarBG->SetDialogVariable( "points" , locValue );
+			m_PointsBars.m_pBarCommitted ->SetDialogVariable( "points" , locValue );
+			m_PointsBars.m_pBarUncommitted->SetDialogVariable( "points" , locValue );
+			m_PointsBars.m_pBarJustEarned->SetDialogVariable( "points", locValue );
+		}
+	}
+
+	const float flNow = Plat_FloatTime();
+	
+	// Prune expired scorer labels
+	FOR_EACH_VEC_BACK( m_vecScorerLabels, i )
+	{
+		if ( m_vecScorerLabels[ i ].first < flNow )
+		{
+			m_vecScorerLabels[ i ].second->MarkForDeletion();
+			m_vecScorerLabels.Remove( i );
+		}
+	}
+
+	if ( !m_pQuest || m_bMapView )
 		return;
 
-	static double s_flLastSoundTime = 0;
-	// Give a little time in case other messaes are in flight
-	if ( ( Plat_FloatTime() - m_sflEventRecievedTime ) > 0.1f )
+	// Give a little time in case other messages are in flight
+	if ( m_pszSoundToPlay && ( flNow - m_sflEventRecievedTime ) > 0.1f )
 	{
-		// Dont play sounds very frequently
-		if ( m_eSoundToPlay != SOUND_NONE && ( ( Plat_FloatTime() - s_flLastSoundTime ) > 0.1f ) )
-		{
-			const char *pszSoundName = NULL;
+		bool bConnectedToMatchServer = GTFGCClientSystem()->BConnectedToMatchServer( false );
+		bool bRoundEnd = !BInEndOfMatch() && ( !TFGameRules() || TFGameRules()->State_Get() != GR_STATE_TEAM_WIN );
 
-			// Figure out which sound to play
-			switch( m_eSoundToPlay )
+		if ( !bConnectedToMatchServer || !bRoundEnd || m_nQueuedSoundPriority < EQuestPoints_ARRAYSIZE )
 			{
-			case SOUND_STANDARD_OBJECTIVE_TICK:
-				pszSoundName = m_strStandardObjectiveTick;
-				break;
-			case SOUND_ADVANCED_OBJECTIVE_TICK:
-				pszSoundName = m_strAdvancedObjectiveComplete;
-				break;
-			case SOUND_QUEST_STANDARD_COMPLETE:
-				pszSoundName = m_strStandardPointsComplete;
-				break;
-			case SOUND_QUEST_ADVANCED_COMPLETE:
-				pszSoundName = m_strAdvancedPointsComplete;
-				break;
-			};
-
-			s_flLastSoundTime = Plat_FloatTime();
-			CLocalPlayerFilter filter;
+			// Dont play sounds very frequently
+			if ( ( flNow - s_flLastSoundTime ) > 0.1f )
+			{
+				s_flLastSoundTime = flNow;
+				CLocalPlayerFilter filter;
 			
-			C_BaseEntity::EmitSound( filter, SOUND_FROM_LOCAL_PLAYER, pszSoundName );
+				C_BaseEntity::EmitSound( filter, SOUND_FROM_LOCAL_PLAYER, m_pszSoundToPlay );
+			}
 		}
 
-		m_eSoundToPlay = SOUND_NONE;
+		m_pszSoundToPlay = NULL;
 	}
 
-	// If the highlight is done, and the quest is ready to turn in, pulse a glow behind
-	// the title and the completion instruction
-	if ( IsDoneProgressing() && IsStandardCompleted() )
-	{
-		if ( m_pCompletedDescGlow && m_pCompletedNameGlow )
-		{
-			float flPeriod = ( sin( gpGlobals->curtime * ATTRIB_TRACK_COMPLETE_PULSE_RATE ) * 0.5f ) + 0.5f;
-			float flGlowAlpha = RemapValClamped( flPeriod, ATTRIB_TRACK_COMPLETE_PULSE_DIM_HOLD, ATTRIB_TRACK_COMPLETE_PULSE_GLOW_HOLD, 0.f, 1.f );
-			m_pCompletedDescGlow->SetAlpha( 255 * flGlowAlpha );
-			m_pCompletedNameGlow->SetAlpha( 255 * flGlowAlpha );
-		}
-	}
+	float flGlowTime = flNow - m_PointsBars.m_flUpdateTime;
 
-	float flGlowTime = Plat_FloatTime() - m_flUpdateTime;
-	if ( flGlowTime > ATTRIB_TRACK_GLOW_HOLD_TIME && ( m_flStandardCurrentProgress != m_flStandardTargetProgress || m_flBonusCurrentProgress != m_flBonusTargetProgress ) )
+	if ( flGlowTime > ATTRIB_TRACK_GLOW_HOLD_TIME && !m_PointsBars.BIsDoneProgressing() )
 	{
-		float flDelta = Plat_FloatTime() - m_flLastThink;
-		m_flStandardCurrentProgress = Approach( m_flStandardTargetProgress, m_flStandardCurrentProgress, flDelta * ATTRIB_TRACK_BAR_GROW_RATE );
-		m_flBonusCurrentProgress = Approach( m_flBonusTargetProgress, m_flBonusCurrentProgress, flDelta * ATTRIB_TRACK_BAR_GROW_RATE );
-
 		// Resize/position the bars
 		UpdateBars();
 
 		// This happens when all the bars are all caught up
-		if ( IsDoneProgressing() )
+		if ( m_PointsBars.BIsDoneProgressing() )
 		{
 			InvalidateLayout();
 		}
 	}
 
-	if ( IsDoneProgressing() )
+	if ( m_PointsBars.BIsDoneProgressing() )
 	{
-		m_pProgressBarStandardHighlight->SetVisible( false );
-		m_pProgressBarBonusHighlight->SetVisible( false );
+		m_PointsBars.m_pBarUncommitted->SetVisible( true );
 	}
 
-	m_flLastThink = Plat_FloatTime();
+	m_flLastThink = flNow;
 }
+
 
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-void CItemTrackerPanel::FireGameEvent( IGameEvent *pEvent )
+void CQuestProgressTrackerPanel::FireGameEvent( IGameEvent *pEvent )
 {
 	if ( FStrEq( pEvent->GetName(), "quest_objective_completed" ) )
 	{
 		itemid_t nIDLow = 0x00000000FFFFFFFF & (itemid_t)pEvent->GetInt( "quest_item_id_low" );
 		itemid_t nIDHi =  0xFFFFFFFF00000000 & (itemid_t)pEvent->GetInt( "quest_item_id_hi" ) << 32;
 		itemid_t nID = nIDLow | nIDHi;
-		if ( !m_pItem || m_pItem->GetItemID() != nID )
+		int nUserID = pEvent->GetInt( "scorer_user_id", -1 );
+		if ( !m_pQuest || m_pQuest->GetID() != nID )
 			return;
 
-		// Capture whatever progress has happened
-		CaptureProgress();
-
 		uint32 nObjectiveDefIndex = pEvent->GetInt( "quest_objective_id" );
-
 		// Don't do sounds if there's no objective that made this progress
 		if ( nObjectiveDefIndex == (uint32)-1 )
 			return;
 
-		bool bAdvanced = false;
-		const CQuestObjectiveDefinition* pObjective = GEconItemSchema().GetQuestObjectiveByDefIndex( nObjectiveDefIndex );
+		const QuestObjectiveDefVec_t& vecObjectives = m_pQuest->GetDefinition()->GetObjectives();
+		const QuestObjectiveInstance_t* pObjective = NULL;
+
+		FOR_EACH_VEC( vecObjectives, i )
+		{
+			if ( vecObjectives[ i ].GetObjectiveDef()->GetDefIndex() == nObjectiveDefIndex )
+			{
+				pObjective = &vecObjectives[ i ];
+				break;
+			}
+		}
+
 		if ( !pObjective )
 			return;
 
-		bAdvanced = pObjective->IsAdvanced();
+		float flProgress = m_PointsBars.m_flTargetProgress;
+		// Capture whatever progress has happened
+		CaptureProgress();
+		flProgress = m_PointsBars.m_flTargetProgress - flProgress;
 
-		const CQuestItemTracker* pItemTracker = QuestObjectiveManager()->GetTypedTracker< CQuestItemTracker* >( m_pItem->GetItemID() );
+		
+
+		const CQuestItemTracker* pItemTracker = QuestObjectiveManager()->GetTypedTracker< CQuestItemTracker* >( m_pQuest->GetID() );
 
 		if ( pItemTracker )
 		{
-			const Color& glowColor = pItemTracker->GetEarnedStandardPoints() < m_nMaxStandardPoints ? m_clrStandardHighlight
-																									: m_clrBonusHighlight;
-			FOR_EACH_VEC( m_vecAttribPanels, i )
+			CQuestObjectiveTextPanel* pObjectivePanel = NULL;
+			FOR_EACH_VEC( m_vecObjectivePanels, i )
 			{
-				if ( m_vecAttribPanels[i]->m_nDefIndex == nObjectiveDefIndex )
+				if ( m_vecObjectivePanels[i]->GetDefIndex() == nObjectiveDefIndex )
 				{
-					m_vecAttribPanels[i]->SetProgress( glowColor );
+					pObjectivePanel = m_vecObjectivePanels[ i ];
 					break;
 				}
 			}
 
-			// Check if it's time to play a sound
-			ESoundToPlay eNewSound = SOUND_NONE;
+			// For sounds
+			EQuestPoints ePointsType = pObjective->GetPointsType();
+			const char* pszSoundToPlay = NULL;
 
-			if ( m_flStandardCurrentProgress < m_flStandardTargetProgress && pItemTracker->GetEarnedStandardPoints() == m_nMaxStandardPoints )
+			// Check if it's time to play a sound
+			Color colorToUse = m_clrStandardHighlight;
+			
+
+			bool bPartyCompleted = false;
+			C_BasePlayer* pScorerPlayer = UTIL_PlayerByUserId( nUserID );
+			if ( pScorerPlayer )
 			{
-				eNewSound = SOUND_QUEST_STANDARD_COMPLETE;
+				CSteamID scorerSteamID;
+				pScorerPlayer->GetSteamID( &scorerSteamID );
+
+				// If we didn't do the scoring, show a different color and show a label of who did
+				if ( !pScorerPlayer->IsLocalPlayer()
+					 )
+				{
+					bPartyCompleted = true;
+
+					colorToUse = Color( 0, 225, 50, 255 );
+
+					// Get the friend's name
+					wchar_t wszScorerNameBuf[ 128 ];
+					GetPlayerNameForSteamID( wszScorerNameBuf, sizeof( wszScorerNameBuf ), scorerSteamID );
+
+					// Create a panel to house the labels
+					EditablePanel* pScorerPanel = new EditablePanel( this, "Scorer" );
+					pScorerPanel->LoadControlSettings( "Resource/UI/Quests/QuestObjectiveScorer.res" );
+					pScorerPanel->MakeReadyForUse();
+					pScorerPanel->SetDialogVariable( "scorer", wszScorerNameBuf );
+					pScorerPanel->SetAutoDelete( false );
+					// Position it next to the objective that triggered
+					pScorerPanel->SetPos(m_PointsBars.m_pBarBG->GetXPos() - pScorerPanel->GetWide(),
+										  m_PointsBars.m_pBarBG->GetYPos() );
+					// Animate the label so it drifts off to the left
+					g_pClientMode->GetViewportAnimationController()->StartAnimationSequence( pScorerPanel, "ObjectiveCompletedByUser", false );
+
+					// Set the color on the labels to match everything else
+					Label * pScorerLabel = pScorerPanel->FindControl< Label >( "ScorerLabel" );
+					if ( pScorerLabel )
+						pScorerLabel->SetFgColor( colorToUse );
+					pScorerLabel = pScorerPanel->FindControl< Label >( "ScorerLabelBlur" );
+					if ( pScorerLabel )
+						pScorerLabel->SetFgColor( colorToUse );
+
+					// Store in a list that we'll delete when we need
+					std::pair< float, Panel* > newEntry;
+					newEntry.first = Plat_FloatTime() + ATTRIB_TRACK_GLOW_HOLD_TIME;
+					newEntry.second = pScorerPanel;
+					m_vecScorerLabels.AddToTail( newEntry );
+				}
 			}
-			else if ( m_flBonusCurrentProgress < m_flBonusTargetProgress && pItemTracker->GetEarnedBonusPoints() == m_nMaxBonusPoints )
+
+			bool bCompleteSound = false;
+			// Which sound to play
+			if ( pItemTracker->GetEarnedPoints( ePointsType ) >= m_pQuest->GetDefinition()->GetMaxPoints( ePointsType ) )
 			{
-				eNewSound = SOUND_QUEST_ADVANCED_COMPLETE;
-			}
-			else if ( bAdvanced )
-			{
-				eNewSound = SOUND_ADVANCED_OBJECTIVE_TICK;
+				pszSoundToPlay = g_QuestPointsDefs[ ePointsType ].m_pszPointsCompletedSound;
+				bCompleteSound = true;
 			}
 			else
 			{
-				eNewSound = SOUND_STANDARD_OBJECTIVE_TICK;
+				pszSoundToPlay = bPartyCompleted ? g_QuestPointsDefs[ ePointsType ].m_pszObjectiveCompletedSoundParty
+												 : g_QuestPointsDefs[ ePointsType ].m_pszObjectiveCompletedSound;
 			}
 
-			// Priority will handle this for us
-			if ( eNewSound > m_eSoundToPlay )
+			// Make the objective text highlight
+			if ( pObjectivePanel )
 			{
-				m_eSoundToPlay = eNewSound;
-				if ( m_sflEventRecievedTime < Plat_FloatTime() )
-				{
-					m_sflEventRecievedTime = Plat_FloatTime();
-				}
+				pObjectivePanel->SetProgress( colorToUse ); 
+			}
+
+			const float flHighlightHold = 1.f;
+			const float flHighlightFade = 2.f;
+
+			// Quickly turn bright
+			g_pClientMode->GetViewportAnimationController()->RunAnimationCommand(m_PointsBars.m_pBarJustEarned, "BgColor", colorToUse, 0.0f, 0.1f, vgui::AnimationController::INTERPOLATOR_GAIN, 0.8f, true, false );
+			// Then fade away after a bit
+			colorToUse.SetColor( colorToUse.r(), colorToUse.g(), colorToUse.b(), 0 );
+			g_pClientMode->GetViewportAnimationController()->RunAnimationCommand(m_PointsBars.m_pBarJustEarned, "BgColor", colorToUse, 1.f, 2.f, vgui::AnimationController::INTERPOLATOR_GAIN, 0.8f, false, false );
+
+			// If this scoring comes in while we're still highlighting a previous scoring, extend the
+			// just-earned to include the new scoring.  We clear the last earned progress here if it's
+			// NOT within the highlight time
+			if ( ( Plat_FloatTime() - m_sflEventRecievedTime ) > ( flHighlightHold + flHighlightFade ) )
+			{
+				m_flCurrentJustEarnedProgress = 0.f;
+			}
+
+			m_flCurrentJustEarnedProgress += flProgress;
+
+			// The just-earned bar goes at the end and is the size of the most recent score
+			float flJustEarnedWide = floor( m_flCurrentJustEarnedProgress * m_PointsBars.m_pBarBG->GetWide() ) ;
+			m_PointsBars.m_pBarJustEarned->SetWide( flJustEarnedWide );
+			m_PointsBars.m_pBarJustEarned->SetPos( floor( m_PointsBars.m_flTargetProgress * m_PointsBars.m_pBarBG->GetWide() ) - flJustEarnedWide, m_PointsBars.m_pBarJustEarned->GetYPos() );
+
+			//m_arPointsBars[ pObjective->GetPointsType() ].m_pProgressBarPointsHighlight->SetBgColor( colorToUse );
+
+			// Priority will handle this for us
+			if ( ePointsType > m_nQueuedSoundPriority || m_pszSoundToPlay == NULL )
+			{
+				m_nQueuedSoundPriority = bCompleteSound ? ePointsType + EQuestPoints_ARRAYSIZE : ePointsType;
+				m_pszSoundToPlay = pszSoundToPlay;
+
+				m_sflEventRecievedTime = Plat_FloatTime();
 			}
 		}
 	}
@@ -618,90 +900,276 @@ void CItemTrackerPanel::FireGameEvent( IGameEvent *pEvent )
 	}
 	else if ( FStrEq( pEvent->GetName(), "schema_updated" ) )
 	{
-		FOR_EACH_VEC( m_vecAttribPanels, i )
+		FOR_EACH_VEC( m_vecObjectivePanels, i )
 		{
-			m_vecAttribPanels[ i ]->InvalidateLayout();
+			m_vecObjectivePanels[ i ]->InvalidateLayout();
 		}
 
 		InvalidateLayout();
 	}
+	else if ( FStrEq( pEvent->GetName(), "quest_turn_in_state" ) )
+	{
+		// m_bMapView is what's used in the CYOA Map, so if it's false, it's the in-game version.
+		// We only want the CYOA Map to do all this
+		if ( !m_bMapView )
+			return;
+
+		EQuestTurnInState eState = (EQuestTurnInState)pEvent->GetInt( "state" );
+
+		switch( eState )
+		{
+			case TURN_IN_BEGIN:
+			{
+				m_bTurningIn = true;
+				m_bSuppressStarChanges = true;
+
+				//
+				// Setup initial turn-in animation state
+				//
+				m_PointsBars.m_pBarCommitted->SetBgColor( scheme()->GetIScheme( GetScheme() )->GetColor( "StoreGreen", Color( 255, 255, 255, 255 ) ) );
+				m_PointsBars.m_pBarCommitted->SetWide( 0 );
+				m_PointsBars.m_pBarCommitted->SetPos( 0, 0 );
+				g_pClientMode->GetViewportAnimationController()->RunAnimationCommand( m_PointsBars.m_pBarCommitted, "wide", m_PointsBars.m_pBarBG->GetWide(), 0.0f, k_flQuestTurnInTime, vgui::AnimationController::INTERPOLATOR_BIAS, RandomFloat( 0.1f, 0.3f ), true, false );
+
+				// Tell ourselves to end after a delay
+				PostMessage( this, new KeyValues( "EndTurnInAnimation" ), k_flQuestTurnInTime + 2.5f );
+
+				break;
+			}
+
+			case TURN_IN_SHOW_SUCCESS:
+			{
+				break;
+			}
+
+			case TURN_IN_HIDE_SUCCESS:
+			{
+				// If this is a bar that would be getting turned in, make the the highlight bar fill in
+				if ( m_bTurningIn )
+				{
+					// Snap to exaggerated bright green
+					Color colorHighlight = scheme()->GetIScheme( GetScheme() )->GetColor( "CreditsGreen", Color( 255, 255, 255, 255 ) );
+					BrigthenColor( colorHighlight, 20 );
+					g_pClientMode->GetViewportAnimationController()->RunAnimationCommand( m_PointsBars.m_pBarCommitted, "BgColor", colorHighlight, 0.0f, 0, vgui::AnimationController::INTERPOLATOR_BIAS, 0.f, true, false );
+					// Lerp down to natural color
+					Color colorNatural = scheme()->GetIScheme( GetScheme() )->GetColor( "QuestMap_ActiveOrange", Color( 255, 255, 255, 255 ) );
+					g_pClientMode->GetViewportAnimationController()->RunAnimationCommand( m_PointsBars.m_pBarCommitted, "BgColor", colorNatural, 0.5f, 1.0f, vgui::AnimationController::INTERPOLATOR_LINEAR, 0.f, false, false );
+
+					// Set them to say "Complete"
+					locchar_t* pwszCompleted = g_pVGuiLocalize->Find( "#QuestPoints_Complete" );
+					m_PointsBars.m_pBarBG->SetDialogVariable( "points" , pwszCompleted );
+					m_PointsBars.m_pBarCommitted ->SetDialogVariable( "points" , pwszCompleted );
+					m_PointsBars.m_pBarUncommitted->SetDialogVariable( "points" , pwszCompleted );
+					m_PointsBars.m_pBarJustEarned->SetDialogVariable( "points", pwszCompleted );
+				}
+
+				break;
+			}
+
+			case TURN_IN_SHOW_STARS_EARNED:
+			{
+				m_bSuppressStarChanges = false;
+			
+				auto& msgProgress = GetQuestMapController().GetMostRecentProgressReport();
+				float flDelay = 0.f;
+				auto lambdaUpdateStar = [&]( int nIndex )
+				{
+					PostMessage( this, new KeyValues( "UpdateStar", "index", nIndex ), flDelay );
+
+					auto pAnim = g_pClientMode->GetViewportAnimationController();
+					auto pStar = m_arStarImages[ nIndex ];
+					float flScale = 1.5;
+					pAnim->RunAnimationCommand( pStar, "wide", pStar->GetWide() * flScale,	flDelay + 0.0f,	0.05f, AnimationController::INTERPOLATOR_LINEAR, 0.f, true, false );
+					pAnim->RunAnimationCommand( pStar, "wide", pStar->GetWide() ,			flDelay + 0.1f, 0.2f, AnimationController::INTERPOLATOR_LINEAR, 0.f, false, false );
+					pAnim->RunAnimationCommand( pStar, "tall", pStar->GetTall() * flScale,	flDelay + 0.0f,	0.05f, AnimationController::INTERPOLATOR_LINEAR, 0.f, true, false );
+					pAnim->RunAnimationCommand( pStar, "tall", pStar->GetTall() ,			flDelay + 0.1f, 0.2f, AnimationController::INTERPOLATOR_LINEAR, 0.f, false, false );
+
+					int nDelta = ( ( pStar->GetWide() * flScale ) - pStar->GetWide() ) * 0.5f;
+					pAnim->RunAnimationCommand( pStar, "xpos", pStar->GetXPos() - nDelta,	flDelay + 0.0f, 0.05f, AnimationController::INTERPOLATOR_LINEAR, 0.f, true, false );
+					pAnim->RunAnimationCommand( pStar, "xpos", pStar->GetXPos(),			flDelay + 0.1f, 0.2f, AnimationController::INTERPOLATOR_LINEAR, 0.f, false, false );
+					pAnim->RunAnimationCommand( pStar, "ypos", pStar->GetYPos() - nDelta,	flDelay + 0.0f, 0.05f, AnimationController::INTERPOLATOR_LINEAR, 0.f, true, false );
+					pAnim->RunAnimationCommand( pStar, "ypos", pStar->GetYPos(),			flDelay + 0.1f, 0.2f, AnimationController::INTERPOLATOR_LINEAR, 0.f, false, false );
+
+					if ( nIndex < m_vecObjectivePanels.Count() )
+					{
+						PostMessage( m_vecObjectivePanels[ nIndex ], new KeyValues( "HighlightCompletion" ), flDelay );
+					}
+					flDelay += 0.3f;
+				};
+
+				if ( msgProgress.star_0_earned() )
+				{
+					lambdaUpdateStar( 0 );
+				}
+				if ( msgProgress.star_1_earned() )
+				{
+					lambdaUpdateStar( 1 );
+				}
+				if ( msgProgress.star_2_earned() )
+				{
+					lambdaUpdateStar( 2 );
+				}
+
+				break;
+			}
+
+			case TURN_IN_SHOW_BLOOD_MONEY_EARNED:
+			{
+				break;
+			}
+
+			case TURN_IN_SHOW_ITEM_PICKUP_SCREEN:
+			{
+				break;
+			}
+
+			case TURN_IN_SHOW_FAILURE:
+			{
+				break;
+			}
+
+			case TURN_IN_HIDE_FAILURE:
+			{
+				break;
+			}
+
+
+			case TURN_IN_COMPLETE:
+			{
+				m_bTurningIn = false;
+				m_bSuppressStarChanges = false;
+
+				InvalidateLayout( true );
+				break;
+			}
+
+			// Nothing to do for these
+			case TURN_IN_HIDE_NODE_VIEW:
+			case TURN_IN_SHOW_NODE_UNLOCKS:
+				break;
+		};
+	}
 }
 
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-void CItemTrackerPanel::UpdateBars()
+void CQuestProgressTrackerPanel::UpdateBars()
 {
-	// Everything is relative to the background bar
-	int nWide = m_pProgressBarBackground->GetWide();
+	if ( !BIsTurningIn() )
+	{
+		// Everything is relative to the background bar
+		int nWide = m_PointsBars.m_pBarBG->GetWide();
 
-	// Resize standard bar
-	m_pProgressBarStandard->SetWide( floor(m_flStandardCurrentProgress * nWide ) );
-	// Resize bonus bar
-	m_pProgressBarBonus->SetWide( floor(m_flBonusCurrentProgress * nWide ) );
+		// Resize standard bar
+		m_PointsBars.m_pBarCommitted->SetWide( floor(m_PointsBars.m_flCurrentProgress * nWide ) );
 
-	// Highlight bars snap to the target width
-	m_pProgressBarStandardHighlight->SetWide( floor(m_flStandardTargetProgress * nWide) );
-	m_pProgressBarBonusHighlight->SetWide( floor( m_flBonusTargetProgress * nWide ) );
+		// Highlight bars snap to the target width
+		m_PointsBars.m_pBarUncommitted->SetWide( floor(m_PointsBars.m_flTargetProgress * nWide) );
+	}
 }
 
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-void CItemTrackerPanel::CaptureProgress()
+void CQuestProgressTrackerPanel::CaptureProgress()
 {
-	if ( !m_pItem )
+	if ( !m_pQuest )
+	{
+
+		m_PointsBars.m_flCurrentProgress = 0.f;
+		m_PointsBars.m_flTargetProgress = 0.f;
+
 		return;
+	}
 
-	const CQuestItemTracker* pItemTracker = QuestObjectiveManager()->GetTypedTracker< CQuestItemTracker* >( m_pItem->GetItemID() );
+	const CQuestItemTracker* pItemTracker = QuestObjectiveManager()->GetTypedTracker< CQuestItemTracker* >( m_pQuest->GetID() );
 
 	// Fixup bar bounds
-	float flStandardProgress = 0.f;
-	float flBonusProgress = 0.f;
+	float flStandardProgress = m_pQuest->GetEarnedPoints( QUEST_POINTS_NOVICE ) / (float)( m_PointsBars.m_nMaxPoints );
+	m_PointsBars.m_flCurrentProgress = flStandardProgress;
 
 	if ( pItemTracker )
 	{
 		// We use the item trackers for quest progress since they're the most up-to-date
-		flStandardProgress = (float)pItemTracker->GetEarnedStandardPoints() / (float)( m_nMaxStandardPoints);
-		flBonusProgress = (float)pItemTracker->GetEarnedBonusPoints() / (float)( m_nMaxBonusPoints );
+		flStandardProgress = (float)pItemTracker->GetEarnedPoints( QUEST_POINTS_NOVICE ) / (float)( m_PointsBars.m_nMaxPoints );
 	}
 
 	// Standard progress
-	bool bChange = flStandardProgress != m_flStandardTargetProgress;
-	m_flStandardTargetProgress = flStandardProgress;
-
-	// Bonus progress
-	bChange |= flBonusProgress != m_flBonusTargetProgress;
-	m_flBonusTargetProgress = flBonusProgress;
+	bool bChange = flStandardProgress != m_PointsBars.m_flTargetProgress;
+	m_PointsBars.m_flTargetProgress = flStandardProgress;
 
 	// We're being set for the first time, instantly be progressed
-	if ( m_flUpdateTime == 0.f || m_bNoEffects )
+	if ( m_PointsBars.m_flUpdateTime == 0.f || m_bMapView )
 	{
-		m_flStandardCurrentProgress = m_flStandardTargetProgress;
-		m_flBonusCurrentProgress = m_flBonusTargetProgress;
+		//m_arPointsBars[ i ].m_flCurrentProgress = m_arPointsBars[ i ].m_flTargetProgress;
 
-		m_flUpdateTime = Plat_FloatTime() - ATTRIB_TRACK_GLOW_HOLD_TIME;
+		m_PointsBars.m_flUpdateTime = Plat_FloatTime() - ATTRIB_TRACK_GLOW_HOLD_TIME;
 		InvalidateLayout();
 	}
 	else if ( bChange ) // If this is a change, play effects
 	{
-		m_flUpdateTime = Plat_FloatTime();
+		m_PointsBars.m_flUpdateTime = Plat_FloatTime();
 		InvalidateLayout();
 	}
 
-	m_pProgressBarStandardHighlight->SetVisible( !m_bNoEffects );
-	m_pProgressBarBonusHighlight->SetVisible( !m_bNoEffects );
+	m_PointsBars.m_pBarJustEarned->SetVisible( !m_bMapView );
 }
 
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-bool CItemTrackerPanel::IsStandardCompleted() const
+void CQuestProgressTrackerPanel::UpdateStar( KeyValues* pParams )
 {
-	const CQuestItemTracker* pItemTracker = QuestObjectiveManager()->GetTypedTracker< CQuestItemTracker* >( m_pItem->GetItemID() );
-	if ( pItemTracker )
+	int nIndex = pParams->GetInt( "index" );
+	if( nIndex < EQuestPoints_ARRAYSIZE )
 	{
-		return pItemTracker->GetEarnedStandardPoints() >= m_nMaxStandardPoints;
+		if ( !m_bMapView )
+			m_arStarImages[ nIndex ]->SetVisible( false );
+
+		if ( m_pQuestDef && m_pQuestDef->GetMaxPoints( nIndex ) == 0 )
+		{
+			m_arStarImages[ nIndex ]->SetVisible( false );
+			return;
+		}
+
+		bool bStarEarned = false;
+		if ( m_pQuest )
+		{
+			const CQuestMapNode* pNode = GetQuestMapHelper().GetQuestMapNodeByID( m_pQuest->GetSourceNodeID() );
+			bStarEarned = pNode && pNode->BIsMedalEarned( (EQuestPoints)nIndex );
+		}
+
+		m_arStarImages[ nIndex ]->SetImage( bStarEarned ? "cyoa/star_on" : "cyoa/star_off" );
+	}
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+void CQuestProgressTrackerPanel::UpdateStars()
+{
+	if ( m_bSuppressStarChanges )
+		return;
+
+	for( int i=0; i < EQuestPoints_ARRAYSIZE; ++i )
+	{
+		PostMessage( this, new KeyValues( "UpdateStar", "index", i ) );
+	}
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+bool CQuestProgressTrackerPanel::ArePointsCompleted( uint32 nIndex ) const
+{
+	if ( !m_pQuest || !m_pQuestDef )
+		return false;
+
+ 	const CQuestMapNode* pNode = GetQuestMapHelper().GetQuestMapNodeByID( m_pQuest->GetSourceNodeID() );
+	if ( pNode )
+	{
+		return pNode->BIsMedalEarned( (EQuestPoints)nIndex );
 	}
 
 	return false;
@@ -710,80 +1178,75 @@ bool CItemTrackerPanel::IsStandardCompleted() const
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-bool CItemTrackerPanel::IsEverythingCompleted() const
+void CQuestProgressTrackerPanel::SetQuest( const CQuest* pQuest )
 {
-	const CQuestItemTracker* pItemTracker = QuestObjectiveManager()->GetTypedTracker< CQuestItemTracker* >( m_pItem->GetItemID() );
-	if ( pItemTracker )
+	m_pQuest = pQuest;
+
+	if ( pQuest )
 	{
-		return ( pItemTracker->GetEarnedBonusPoints() + pItemTracker->GetEarnedStandardPoints() ) >= ( m_nMaxBonusPoints + m_nMaxStandardPoints );
+		SetQuestDef( pQuest->GetDefinition() );
+		CaptureProgress();
 	}
-
-	return false;
 }
 
-//-----------------------------------------------------------------------------
-// Purpose: 
-//-----------------------------------------------------------------------------
-void CItemTrackerPanel::SetItem( const CEconItem* pItem )
+void CQuestProgressTrackerPanel::SetQuestDef( const CQuestDefinition* pQuestDef )
 {
-	m_pItem.SetItem( TFInventoryManager()->GetLocalTFInventory()->GetInventoryItemByItemID( pItem->GetItemID() ) );
+	m_pQuestDef = pQuestDef;
+	m_PointsBars.m_nMaxPoints = m_pQuestDef->GetMaxPoints( QUEST_POINTS_NOVICE );
 
-	m_nMaxStandardPoints = pItem->GetItemDefinition()->GetQuestDef()->GetMaxStandardPoints();
-	m_nMaxBonusPoints = pItem->GetItemDefinition()->GetQuestDef()->GetMaxBonusPoints();
+	if ( m_bTurningIn )
+		return;
 
-	InvalidateLayout();
-}
-
-
-//-----------------------------------------------------------------------------
-// Purpose: 
-//-----------------------------------------------------------------------------
-CItemAttributeProgressPanel* CItemTrackerPanel::GetPanelForObjective( const CQuestObjectiveDefinition* pObjective )
-{
-	FOR_EACH_VEC( m_vecAttribPanels, i )
+	if ( !IsLayoutInvalid() )
 	{
-		if ( m_vecAttribPanels[ i ]->m_nDefIndex == pObjective->GetDefinitionIndex() )
-			return m_vecAttribPanels[ i ];
+		UpdateObjectives();
 	}
-
-	CItemAttributeProgressPanel *pPanel = new CItemAttributeProgressPanel( this, "ItemAttributeProgressPanel", pObjective, m_strItemAttributeResFile );
-	SETUP_PANEL( pPanel );
-
-	m_vecAttribPanels.AddToTail( pPanel );
-
-	return pPanel;
+	else
+	{
+		InvalidateLayout( false, true );
+	}
 }
+
 
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-bool CItemTrackerPanel::IsValidForLocalPlayer() const
+bool CQuestProgressTrackerPanel::IsValidForLocalPlayer() const
 {
 	C_TFPlayer *pLocalPlayer = C_TFPlayer::GetLocalTFPlayer();
 	CSteamID steamID;
 	if ( !pLocalPlayer || !pLocalPlayer->GetSteamID( &steamID ) )
 		return false;
 
-	Assert( m_pItem );
+	Assert( m_pQuest );
 
 	// Safeguard.  There's a crash in public from this.
-	if ( !m_pItem )
+	if ( !m_pQuest )
 		return false;
 
-	const CQuestItemTracker* pItemTracker = QuestObjectiveManager()->GetTypedTracker< CQuestItemTracker* >( m_pItem->GetItemID() );
+	const CQuestItemTracker* pItemTracker = QuestObjectiveManager()->GetTypedTracker< CQuestItemTracker* >( m_pQuest->GetID() );
 	InvalidReasonsContainer_t invalidReasons;
 	if ( pItemTracker )
 	{
-		int nNumInvalid = pItemTracker->IsValidForPlayer( pLocalPlayer, invalidReasons );
-		if ( nNumInvalid < pItemTracker->GetTrackers().Count() )
+		int nNumInvalid = pItemTracker->GetNumInactiveObjectives( pLocalPlayer, invalidReasons );
+		if ( nNumInvalid < pItemTracker->GetObjectiveTrackers().Count() )
 		{
 			return true;
 		}
+
+		for( int i=0; i < EQuestPoints_ARRAYSIZE; ++i )
+		{
+			if ( pItemTracker->GetEarnedPoints( i ) > m_pQuest->GetEarnedPoints( EQuestPoints( i ) ) )
+			{
+				return true;
+			}
+		}
 	}
 
+	const CQuestMapNode* pNode = GetQuestMapHelper().GetQuestMapNodeByID( m_pQuest->GetSourceNodeID() );
+
 	// Check for completed quests.  They are always visible.
-	CEconItemView *pItem = TFInventoryManager()->GetLocalTFInventory()->GetInventoryItemByItemID( m_pItem->GetItemID() );
-	if ( pItem && IsQuestItemReadyToTurnIn( pItem ) && GetContractHUDVisibility() == CONTRACT_HUD_SHOW_EVERYTHING )
+	if ( pNode && GetQuestMapHelper().BCanNodeBeTurnedIn( pNode->GetNodeDefinition()->GetDefIndex() ) && GetContractHUDVisibility() == CONTRACT_HUD_SHOW_EVERYTHING )
 	{
 		return true;
 	}
@@ -819,6 +1282,8 @@ CHudItemAttributeTracker::CHudItemAttributeTracker( const char *pElementName )
 //-----------------------------------------------------------------------------
 void CHudItemAttributeTracker::ApplySchemeSettings( IScheme *pScheme )
 {
+	tmZone( TELEMETRY_LEVEL0, TMZF_NONE, "%s", __FUNCTION__);
+
 	BaseClass::ApplySchemeSettings( pScheme );
 
 	LoadControlSettings( "resource/UI/HudItemAttributeTracker.res" );
@@ -836,76 +1301,81 @@ void CHudItemAttributeTracker::PerformLayout()
 {
 	BaseClass::PerformLayout();
 
-	CUtlVector<CEconItemView*> vecQuestItems;
-	TFInventoryManager()->GetAllQuestItems( &vecQuestItems );
-	int nNumCompleted = 0;
-	int nNumUnidentified = 0;
-	int nNumInactive = 0;
+	bool bActiveContractIsUnavailable = false;
+	bool bSafeToChangeQuests = true;
+	bool bNoActiveContract = true;
+
 	C_TFPlayer *pLocalPlayer = C_TFPlayer::GetLocalTFPlayer();
-	FOR_EACH_VEC( vecQuestItems, i )
+	const CUtlVector< CQuest* >& vecQuests = GetQuestMapHelper().GetAllQuests();
+	for( int i=0; i < vecQuests.Count(); ++i )
 	{
-		const CEconItemView* pItem = vecQuestItems[i];
-		if ( IsQuestItemReadyToTurnIn( pItem ) )
+		const CQuest* pQuest = vecQuests[ i ];
+
+		if ( pQuest->Obj().active() )
 		{
-			++nNumCompleted;
+			bNoActiveContract = false;
 		}
-		else if ( IsQuestItemUnidentified( pItem->GetSOCData() ) )
+
+		if ( pLocalPlayer )
 		{
-			++nNumUnidentified;
-		}
-		else if ( pLocalPlayer )
-		{
-			const CQuestItemTracker* pItemTracker = QuestObjectiveManager()->GetTypedTracker< CQuestItemTracker* >( pItem->GetItemID() );
+			const CQuestItemTracker* pItemTracker = QuestObjectiveManager()->GetTypedTracker< CQuestItemTracker* >( pQuest->GetID() );
 			InvalidReasonsContainer_t invalidReasons;
 			if ( pItemTracker )
 			{
-				if ( pItemTracker->IsValidForPlayer( pLocalPlayer, invalidReasons ) == pItemTracker->GetTrackers().Count() )
+				if ( pQuest->Obj().active() && pItemTracker->GetNumInactiveObjectives( pLocalPlayer, invalidReasons ) == pItemTracker->GetObjectiveTrackers().Count() )
 				{
-					++nNumInactive;
+					bActiveContractIsUnavailable = true;
+				}
+
+				for( int nPointsType=0; nPointsType < 3; ++nPointsType )
+				{
+					if ( pItemTracker->GetEarnedPoints( nPointsType ) != pQuest->GetEarnedPoints( (EQuestPoints)nPointsType ) )
+					{
+						bSafeToChangeQuests = false;
+					}
 				}
 			}
 		}
 	}
 	
+	
 	const char* pszHeaderString = NULL;
 	const char* pszCallToActionString = NULL;
-	int nNumToShow = 0;
-	if ( nNumCompleted > 0 )
+	auto* pActiveQuest = GetQuestMapHelper().GetActiveQuest();
+	const CQuestMapNode* pNode = NULL;
+	if ( pActiveQuest )
 	{
-		nNumToShow = nNumCompleted;
-		pszHeaderString = nNumToShow == 1 ? "#QuestTracker_Complete_Single" : "#QuestTracker_Complete_Multiple";
-		pszCallToActionString = "QuestTracker_Complete";
+		pNode = GetQuestMapHelper().GetQuestMapNodeByID( pActiveQuest->GetSourceNodeID() );
 	}
-	else if ( nNumUnidentified > 0 )
+
+	// Most prominent is "You don't have a contract, but you could"
+	if ( pActiveQuest == NULL &&
+		 GetQuestMapHelper().GetNumCurrentlyUnlockableNodes() > 0 )
 	{
-		nNumToShow = nNumUnidentified;
-		pszHeaderString = nNumToShow == 1 ? "#QuestTracker_New_Single" : "#QuestTracker_New_Multiple";
+		pszHeaderString = "#QuestTracker_NoContract";
 		pszCallToActionString = "QuestTracker_New_CallToAction";
 	}
-	else if ( nNumInactive > 0 )
+	else if ( pNode &&
+			  GetQuestMapHelper().BCanNodeBeTurnedIn( pNode->GetNodeDefinition()->GetDefIndex() ) )
 	{
-		nNumToShow = nNumInactive;
-		pszHeaderString = nNumToShow == 1 ? "#QuestTracker_Inactive_Single" : "#QuestTracker_Inactive_Multiple";
+		pszHeaderString = "#QuestTracker_ReadyForTurnIn";
 		pszCallToActionString = "QuestTracker_New_CallToAction";
 	}
+	else if ( bSafeToChangeQuests && bActiveContractIsUnavailable )
+	{
+		pszHeaderString = "#QuestTracker_Inactive_Single";
+		pszCallToActionString = "QuestTracker_New_CallToAction";
+	}
+	
 
 	bool bAnyStatusToShow = pszHeaderString != NULL;
 
 	bool bShowExtras = bAnyStatusToShow && ( GetContractHUDVisibility() != CONTRACT_HUD_SHOW_ACTIVE );
 	if ( bShowExtras )
 	{
-		// Build the "X New Contracts" string
-		locchar_t locNumNewQuests[ 256 ];
-		const locchar_t *pLocalizedString = GLocalizationProvider()->Find( pszHeaderString );
-		if ( pLocalizedString && pLocalizedString[0] )
-		{
-			wchar_t wszCounter[ 256 ];
-			loc_sprintf_safe( wszCounter, LOCCHAR( "%d" ), nNumToShow);
-			loc_scpy_safe( locNumNewQuests,
-							CConstructLocalizedString( pLocalizedString, wszCounter ) );
-		}
-	
-		m_pStatusContainer->SetDialogVariable( "header", locNumNewQuests );
+		// Set the header
+		const locchar_t *pwszLocalizedHeader = GLocalizationProvider()->Find( pszHeaderString );
+		m_pStatusContainer->SetDialogVariable( "header", pwszLocalizedHeader );
 
 		// Build the "Press [ F2 ] to view" string.
 		const wchar_t *pszText = NULL;
@@ -916,7 +1386,7 @@ void CHudItemAttributeTracker::PerformLayout()
 		if ( pszText )
 		{					
 			wchar_t wzFinal[512] = L"";
-			UTIL_ReplaceKeyBindings( pszText, 0, wzFinal, sizeof( wzFinal ), GAME_ACTION_SET_FPSCONTROLS );
+			UTIL_ReplaceKeyBindings( pszText, 0, wzFinal, sizeof( wzFinal ), ::input->IsSteamControllerActive() ? GAME_ACTION_SET_FPSCONTROLS : GAME_ACTION_SET_NONE );
 			m_pStatusContainer->SetDialogVariable( "call_to_action", wzFinal );
 		}
 	}
@@ -938,19 +1408,19 @@ void CHudItemAttributeTracker::PerformLayout()
 			
 			m_pStatusHeaderLabel->SetPos( m_pStatusContainer->GetWide() - m_pStatusHeaderLabel->GetWide(), m_pStatusHeaderLabel->GetYPos() );
 			m_pCallToActionLabel->SetPos( m_pStatusContainer->GetWide() - m_pCallToActionLabel->GetWide(), m_pCallToActionLabel->GetYPos() );
-			m_pStatusContainer->SetPos( m_pStatusContainer->GetParent()->GetWide() - m_pStatusContainer->GetWide(), m_pStatusContainer->GetYPos() );
+			m_pStatusContainer->SetPos( m_pStatusContainer->GetParent()->GetWide() - m_pStatusContainer->GetWide() - YRES( 10 ), m_pStatusContainer->GetYPos() );
 		}
 	}
 
 	FOR_EACH_MAP( m_mapTrackers, i )
 	{
-		CItemTrackerPanel* pPanel = m_mapTrackers[ i ];
+		CQuestProgressTrackerPanel* pPanel = m_mapTrackers[ i ];
 		if ( pPanel )
 		{
 			if ( pPanel->IsValidForLocalPlayer() )
 			{
 				int nTall = pPanel->GetContentTall();
-				pPanel->SetPos( GetWide() - pPanel->GetWide(), nY );
+				pPanel->SetPos( GetWide() - pPanel->GetWide() - YRES( 10 ), nY );
 				nY += nTall;
 				pPanel->SetVisible( true );
 			}
@@ -985,7 +1455,14 @@ void CHudItemAttributeTracker::OnThink()
 //-----------------------------------------------------------------------------
 bool CHudItemAttributeTracker::ShouldDraw( void )
 {
+	return false;
+
 	if ( engine->IsPlayingDemo() )
+		return false;
+
+	// Don't draw in freezecam
+	C_TFPlayer *pPlayer = CTFPlayer::GetLocalTFPlayer();
+	if ( pPlayer && ( pPlayer->GetObserverMode() == OBS_MODE_FREEZECAM ) )
 		return false;
 
 	if ( GetContractHUDVisibility() == CONTRACT_HUD_SHOW_NONE )
@@ -1028,64 +1505,59 @@ void CHudItemAttributeTracker::FireGameEvent( IGameEvent *pEvent )
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-void CHudItemAttributeTracker::HandleSOEvent( const CSteamID & steamIDOwner, const CSharedObject *pObject, ETrackerHandling_t eHandling )
+void CHudItemAttributeTracker::HandleSOEvent( const CSteamID & steamIDOwner, const CSharedObject *pObject )
 {
-	// We only care about items!
-	if( pObject->GetTypeID() != CEconItem::k_nTypeID )
+	// We only care about quests!
+	if( pObject->GetTypeID() != CQuest::k_nTypeID )
 		return;
 
-	const CEconItem *pItem = (CEconItem *)pObject;
+	const CQuest *pQuest = (CQuest *)pObject;
 
-	// We only care about quests
-	if ( pItem->GetItemDefinition()->GetQuestDef() == NULL )
-		return;
+	// Make sure the node is still active too.  Maybe the it's expired now
+	const CQuestMapNode* pNode = GetQuestMapHelper().GetQuestMapNodeByID( pQuest->GetSourceNodeID() );
+	bool bNodeActive = pNode && pNode->GetNodeDefinition()->BIsActive();
 
-	// We dont do anything with trackers for unidentified quests
-	if ( IsQuestItemUnidentified( pItem ) )
-		return;
-
-	CItemTrackerPanel* pTracker = NULL;
-	switch ( eHandling )
+	CQuestProgressTrackerPanel* pTracker = NULL;
+	if ( pQuest->Obj().active() && bNodeActive )
 	{
-	case TRACKER_CREATE:
-	case TRACKER_UPDATE:
-		FindTrackerForItem( pItem, &pTracker, true );
+		FindTrackerForItem( pQuest, &pTracker, true );
 		if ( pTracker )
 		{
-			pTracker->SetItem( pItem );
+			pTracker->SetQuest( pQuest );
 		}
-		break;
-	case TRACKER_REMOVE:
-		FindTrackerForItem( pItem, &pTracker, false );
+	}
+	else
+	{
+		FindTrackerForItem( pQuest, &pTracker, false );
 		if ( pTracker )
 		{
-			m_mapTrackers.Remove( pItem->GetItemID() );
+			m_mapTrackers.Remove( pQuest->GetID() );
 			pTracker->MarkForDeletion();
 		}
-
-		break;
 	}
 
+	InvalidateLayout();
 }
 
 
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-bool CHudItemAttributeTracker::FindTrackerForItem( const CEconItem* pItem, CItemTrackerPanel** ppTracker, bool bCreateIfNotFound )
+bool CHudItemAttributeTracker::FindTrackerForItem( const CQuest* pItem, CQuestProgressTrackerPanel** ppTracker, bool bCreateIfNotFound )
 {
 	(*ppTracker) = NULL;
 	bool bCreatedNew = false;
 
-	auto idx = m_mapTrackers.Find( pItem->GetItemID() );
+	auto idx = m_mapTrackers.Find( pItem->GetID() );
 	if ( idx == m_mapTrackers.InvalidIndex() && bCreateIfNotFound )
 	{
-		(*ppTracker) = new CItemTrackerPanel( this
+		(*ppTracker) = new CQuestProgressTrackerPanel( this
 											, "ItemTrackerPanel"
 											, pItem
-											, pItem->GetItemDefinition()->GetQuestDef()->GetQuestTheme()->GetInGameTrackerResFile() );
+											, pItem->GetDefinition()
+											, "resource/UI/quests/QuestItemTrackerPanel_InGame_Base.res" );
 		(*ppTracker)->InvalidateLayout( true, true );
-		m_mapTrackers.Insert( pItem->GetItemID(), (*ppTracker) );
+		m_mapTrackers.Insert( pItem->GetID(), (*ppTracker) );
 		bCreatedNew = true;
 	}
 	else if ( idx != m_mapTrackers.InvalidIndex() )
@@ -1120,3 +1592,5 @@ void CHudItemAttributeTracker::LevelShutdown( void )
 		GCClientSystem()->GetGCClient()->RemoveSOCacheListener( steamID, this );
 	}
 }
+
+

@@ -193,6 +193,11 @@ def define_platform(conf):
 	conf.env.ANGLE = conf.options.ANGLE
 	conf.env.GAMES = conf.options.GAMES
 
+	# Official TF2 SDK path: stub Valve-private GC/schema/crypto instead of
+	# compiling the incomplete in-tree TF2 snapshot against full TF2 APIs.
+	if conf.options.GAMES == 'tf':
+		conf.env.append_unique('DEFINES', ['SOURCESDK'])
+
 	arch32 = conf.run_test(CPP_32BIT_CHECK, 'Testing 32bit support')
 	arch64 = conf.run_test(CPP_64BIT_CHECK, 'Testing 64bit support')
 

@@ -102,10 +102,6 @@ Action< CTFBot > *CTFBotScenarioMonitor::DesiredScenarioAndClassAction( CTFBot *
 	case CTFBot::MISSION_SNIPER:
 		return new CTFBotSniperLurk;
 
-#ifdef STAGING_ONLY
-	case CTFBot::MISSION_REPROGRAMMED:
-		return new CTFBotMissionReprogrammed;
-#endif
 	}
 
 #ifdef TF_RAID_MODE

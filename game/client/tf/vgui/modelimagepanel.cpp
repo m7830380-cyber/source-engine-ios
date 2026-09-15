@@ -16,9 +16,6 @@ using namespace vgui;
 const char *g_pszModelImagePanelRTName = "_rt_ModelImagePanel";
 static vgui::DHANDLE<CModelImagePanel> s_hModelImageLockPanel;
 
-#ifdef STAGING_ONLY
-ConVar tf_modelimagepanel_ignore_cache( "tf_modelimagepanel_ignore_cache", "0" );
-#endif
 
 DECLARE_BUILD_FACTORY( CModelImagePanel );
 
@@ -130,7 +127,7 @@ void CModelImagePanel::Paint()
 	}
 	
 	// can't find available cache render target, don't do anything
-	if ( s_hModelImageLockPanel != NULL && s_hModelImageLockPanel != this )
+	if ( s_hModelImageLockPanel && s_hModelImageLockPanel != this )
 	{
 		BaseClass::Paint();
 		return;
@@ -148,7 +145,7 @@ void CModelImagePanel::Paint()
 
 	// copy the rendered weapon skin from the render target
 	Assert( m_pCachedIcon == NULL );
-	CStudioHdr studioHdr( g_pMDLCache->GetStudioHdr( m_RootMDL.m_MDL.GetMDL() ), g_pMDLCache );
+	CStudioHdr &studioHdr = *m_RootMDL.m_pStudioHdr;
 	char buffer[_MAX_PATH];
 	CUtlString strMDLName = V_GetFileName( studioHdr.pszName() );
 	V_sprintf_safe( buffer, "proc/icon/mdl_%s_body%d_skin%d_w%d_h%d", strMDLName.StripExtension().Get(), m_RootMDL.m_MDL.m_nBody, m_RootMDL.m_MDL.m_nSkin, GetWide(), GetTall() );
@@ -156,9 +153,6 @@ void CModelImagePanel::Paint()
 
 	// If the icon still exists in the material system, don't bother regenerating it.
 	if ( materials->IsTextureLoaded( buffer ) 
-#ifdef STAGING_ONLY
-	&& !tf_modelimagepanel_ignore_cache.GetBool()	
-#endif
 		)
 	{
 		ITexture* resTexture = materials->FindTexture( buffer, TEXTURE_GROUP_RUNTIME_COMPOSITE, false, 0 );

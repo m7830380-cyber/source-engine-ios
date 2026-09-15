@@ -14,7 +14,6 @@
 
 extern ConVar tf_bot_path_lookahead_range;
 extern ConVar tf_bot_medic_follow_range;
-extern ConVar tf_bot_force_class;
 
 
 //---------------------------------------------------------------------------------------------

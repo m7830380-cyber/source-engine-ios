@@ -33,7 +33,6 @@
 #include "tf_gcmessages.h"
 #include "rtime.h"
 #include "team_train_watcher.h"
-#include "tf_gc_api.h"
 
 extern ConVar tf_mm_trusted;
 
@@ -391,7 +390,12 @@ void CTFGameStats::Event_LevelShutdown( float flElapsed )
 //-----------------------------------------------------------------------------
 void CTFGameStats::ResetPlayerStats( CTFPlayer *pPlayer )
 {
-	PlayerStats_t &stats = m_aPlayerStats[pPlayer->entindex()];
+	int iPlayerIndex = pPlayer->entindex();
+	
+	if ( !IsIndexIntoPlayerArrayValid(iPlayerIndex) )
+		return;
+
+	PlayerStats_t &stats = m_aPlayerStats[iPlayerIndex];
 	// reset the stats on this player
 	stats.Reset();
 	// reset the matrix of who killed whom with respect to this player
@@ -404,6 +408,9 @@ void CTFGameStats::ResetPlayerStats( CTFPlayer *pPlayer )
 void CTFGameStats::ResetKillHistory( CTFPlayer *pPlayer )
 {
 	int iPlayerIndex = pPlayer->entindex();
+	
+	if ( !IsIndexIntoPlayerArrayValid(iPlayerIndex) )
+		return;
 
 	// for every other player, set all all the kills with respect to this player to 0
 	for ( int i = 0; i < ARRAYSIZE( m_aPlayerStats ); i++ )
@@ -930,7 +937,7 @@ void CTFGameStats::Event_PlayerAwardBonusPoints( CTFPlayer *pPlayer, CBaseEntity
 	IncrementStat( pPlayer, TFSTAT_BONUS_POINTS, nCount );
 
 	// This event ends up drawing a combattext number
-	if ( pSource )
+	if ( pPlayer && pSource )
 	{
 		if ( nCount >= 10 )
 		{
@@ -1028,7 +1035,10 @@ void CTFGameStats::Event_PlayerDamage( CBasePlayer *pBasePlayer, const CTakeDama
 	// defensive guard against insanely huge damage values that apparently get into the stats system once in a while -- ignore insane values
 	const int INSANE_PLAYER_DAMAGE = TFGameRules()->IsMannVsMachineMode() ? 5000 : 1500;
 
-	Assert( iDamageTaken >= 0 );
+	if ( sv_cheats && !sv_cheats->GetBool() )
+	{
+		Assert( iDamageTaken >= 0 );
+	}
 	if ( ( iDamageTaken < 0 ) || ( iDamageTaken > INSANE_PLAYER_DAMAGE ) )
 		return;
 
@@ -1114,7 +1124,7 @@ void CTFGameStats::Event_PlayerDamage( CBasePlayer *pBasePlayer, const CTakeDama
 	Vector killerOrg(0, 0, 0);
 
 	// set the location where the target was hit
-	const Vector &org = pTarget->GetAbsOrigin();
+	const Vector &org = pTarget ? pTarget->GetAbsOrigin() : vec3_origin;
 	damage.nTargetPosition[ 0 ] = static_cast<int>( org.x );
 	damage.nTargetPosition[ 1 ] = static_cast<int>( org.y );
 	damage.nTargetPosition[ 2 ] = static_cast<int>( org.z );
@@ -1327,7 +1337,7 @@ void CTFGameStats::Event_PlayerKilledOther( CBasePlayer *pAttacker, CBaseEntity 
 	}
 
 	// Players get points for killing a Rune carrier
-	if ( pPlayerVictim->m_Shared.IsCarryingRune() )
+	if ( pPlayerVictim && pPlayerVictim->m_Shared.IsCarryingRune() )
 	{
 		IncrementStat( pPlayerAttacker, TFSTAT_KILLS_RUNECARRIER, 1 );
 	}
@@ -1731,7 +1741,7 @@ void CTFGameStats::AccumulateGameData()
 //-----------------------------------------------------------------------------
 void CTFGameStats::AccumulateVoteData( void )
 {
-	if ( !g_voteController )
+	if ( !g_voteControllerGlobal || !g_voteControllerRed || !g_voteControllerBlu )
 		return;
 
 	if ( !g_pStringTableServerMapCycle )
@@ -1847,6 +1857,9 @@ void CTFGameStats::TrackKillStats( CBasePlayer *pAttacker, CBasePlayer *pVictim 
 {
 	int iPlayerIndexAttacker = pAttacker->entindex();
 	int iPlayerIndexVictim = pVictim->entindex();
+	
+	if ( !IsIndexIntoPlayerArrayValid(iPlayerIndexAttacker) || !IsIndexIntoPlayerArrayValid(iPlayerIndexVictim) )
+		return;
 
 	PlayerStats_t &statsAttacker = m_aPlayerStats[iPlayerIndexAttacker];
 	PlayerStats_t &statsVictim = m_aPlayerStats[iPlayerIndexVictim];
@@ -2287,12 +2300,6 @@ void CTFGameStats::SW_GameStats_WriteRound( int iWinningTeam, bool bFullRound, i
 		pKVData->SetInt( "BlueBackstabs", m_currentRoundBlue.m_Summary.iBackstabs );
 	}
 
-	const char *pszReg = GameCoordinator_GetRegistrationString();
-	bool bOfficial = pszReg && V_strstr( pszReg, "'Gordon'" ) && tf_mm_trusted.GetBool();
-	pKVData->SetInt( "IsTrustedServer", bOfficial );
-	//INT_FIELD( nIsOfficial, IsTrustedServer, int8 )
-
-	GetSteamWorksSGameStatsUploader().AddStatsForUpload( pKVData );
 #endif
 }
 
@@ -2558,7 +2565,7 @@ void CTFGameStats::SW_GameStats_WriteKill( CTFPlayer* pKiller, CTFPlayer* pVicti
 	const char* log_name = event->GetString( "weapon_logclassname" );
 	pKVData->SetString( "WeaponLogNameID", log_name );
 
-	pKVData->SetString( "WeaponID", ClampedArrayElement( g_aWeaponNames, event->GetInt( "weaponid" ) ) );
+	pKVData->SetString( "WeaponID", GetWeaponIDName( event->GetInt( "weaponid" ) ) );
 
 	ETFDmgCustom iCustomKill = (ETFDmgCustom)event->GetInt( "customkill" );
 	if ( iCustomKill > 0 )
@@ -2877,15 +2884,6 @@ void CTFGameStats::Event_PlayerLoadoutChanged( CTFPlayer *pPlayer, bool bForceRe
 	{
 		if ( stats.loadoutStats.flStartTime > 0 && iSecondsUsed > 300 && bIsInit )
 		{
-			// IsCompetitive
-			bool bIsCompetitive = TFGameRules() ? TFGameRules()->IsCompetitiveMode() : false;
-
-			// IsTrusted
-			const char *pszReg = GameCoordinator_GetRegistrationString();
-			bool bOfficial = pszReg && V_strstr( pszReg, "'Gordon'" ) && tf_mm_trusted.GetBool();
-			
-			pKVData->SetInt( "IsTrustedServer", bOfficial );
-			pKVData->SetInt( "IsCompetitive", bIsCompetitive );
 			GetSteamWorksSGameStatsUploader().AddStatsForUpload( pKVData );
 		}
 	
@@ -2899,6 +2897,10 @@ void CTFGameStats::Event_PlayerLoadoutChanged( CTFPlayer *pPlayer, bool bForceRe
 //-----------------------------------------------------------------------------
 void CTFGameStats::Event_PlayerRevived( CTFPlayer *pPlayer )
 {
+	// Don't count revives between MvM waves
+	if ( TFGameRules() && TFGameRules()->IsMannVsMachineMode() && TFGameRules()->State_Get() != GR_STATE_RND_RUNNING )
+		return;
+
 	IncrementStat( pPlayer, TFSTAT_REVIVED, 1 );
 }
 
@@ -3128,7 +3130,6 @@ void CTFGameStats::SW_WriteHostsRow()
 	{
 		pKVData->SetInt( "IsCheats", cheatsWereOn );
 	}
-	ConVarRef mp_timelimit( "mp_timelimit" );
 	if ( mp_timelimit.GetInt() )
 	{
 		pKVData->SetInt( "TimeLimit", mp_timelimit.GetInt() );
@@ -3138,12 +3139,10 @@ void CTFGameStats::SW_WriteHostsRow()
 	{
 		pKVData->SetInt( "FlagCapsPerRound", tf_flag_caps_per_round.GetInt() );
 	}
-	ConVarRef mp_maxrounds( "mp_maxrounds" );
 	if ( mp_maxrounds.GetInt() )
 	{
 		pKVData->SetInt( "MaxRounds", mp_maxrounds.GetInt() );
 	}
-	ConVarRef mp_winlimit( "mp_winlimit" );
 	if ( mp_winlimit.GetInt() )
 	{
 		pKVData->SetInt( "WinLimit", mp_winlimit.GetInt() );
@@ -3153,12 +3152,10 @@ void CTFGameStats::SW_WriteHostsRow()
 	{
 		pKVData->SetInt( "DisableRespawnTimes", mp_disable_respawn_times.GetInt() );
 	}
-	ConVarRef mp_stalemate_meleeonly( "mp_stalemate_meleeonly" );
 	if ( mp_stalemate_meleeonly.GetInt() )
 	{
 		pKVData->SetInt( "StalemateMeleeOnly", mp_stalemate_meleeonly.GetInt() );
 	}
-	ConVarRef mp_forceautoteam( "mp_forceautoteam" );
 	if ( mp_forceautoteam.GetInt() )
 	{
 		pKVData->SetInt( "ForceAutoTeam", mp_forceautoteam.GetInt() );
@@ -3414,9 +3411,6 @@ void CTFGameStats::SW_PasstimeRoundEnded()
 		}
 	}
 
-	const char *pszReg = GameCoordinator_GetRegistrationString();
-	bool bOfficial = pszReg && V_strstr( pszReg, "'Gordon'" ) && tf_mm_trusted.GetBool();
-	pKVData->SetInt( "IsTrustedServer", bOfficial );
 
 	if ( tf_passtime_save_stats.GetBool() )
 	{
@@ -3485,14 +3479,11 @@ void CTFGameStats::Event_PowerUpModeDeath( CTFPlayer *pKiller, CTFPlayer *pVicti
 	if ( !killerID.IsValid() || !killerID.BIndividualAccount() )
 		return;
 
-	const char *pszReg = GameCoordinator_GetRegistrationString();
-	bool bOfficial = pszReg && V_strstr( pszReg, "'Gordon'" ) && tf_mm_trusted.GetBool();
 
 	KeyValues* pKVData = new KeyValues( "TF2PowerUpModeKillsv2" );
 
 	pKVData->SetInt( "AccountID", (int)killerID.GetAccountID() );
 	pKVData->SetInt( "ID", (int)m_iEvents++ );
-	pKVData->SetInt( "IsTrustedServer", bOfficial );
 	pKVData->SetInt( "KillerClass", pKiller->GetPlayerClass()->GetClassIndex() );
 	pKVData->SetInt( "KillerRune", GetConditionFromRuneType( pKiller->m_Shared.GetCarryingRuneType() ) );
 	pKVData->SetInt( "KillerKillstreak",  pKiller->m_Shared.GetStreak( CTFPlayerShared::kTFStreak_KillsAll ) );
@@ -3560,14 +3551,11 @@ void CTFGameStats::Event_PowerUpRuneDuration( CTFPlayer *pPlayer, int iDuration,
 	if ( !playerID.IsValid() || !playerID.BIndividualAccount() )
 		return;
 
-	const char *pszReg = GameCoordinator_GetRegistrationString();
-	bool bOfficial = pszReg && V_strstr( pszReg, "'Gordon'" ) && tf_mm_trusted.GetBool();
 
 	KeyValues* pKVData = new KeyValues( "TF2PowerUpModeRuneDuration" );
 
 	pKVData->SetInt( "AccountID", (int)playerID.GetAccountID() );
 	pKVData->SetInt( "ID", (int)m_iEvents++ );
-	pKVData->SetInt( "IsTrustedServer", bOfficial );
 	pKVData->SetInt( "PlayerClass", pPlayer->GetPlayerClass()->GetClassIndex() );
 	pKVData->SetInt( "PlayerRune", nRune );
 	pKVData->SetInt( "PlayerKillstreak", pPlayer->m_Shared.GetStreak( CTFPlayerShared::kTFStreak_KillsAll ) );

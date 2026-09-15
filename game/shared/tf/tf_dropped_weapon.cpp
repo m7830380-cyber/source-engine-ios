@@ -57,6 +57,10 @@ CTFDroppedWeapon::CTFDroppedWeapon()
 	, m_nDetonated( 0 )
 	, m_flEnergy( 0.f )
 	, m_flEffectBarRegenTime( 0.f )
+	, m_flNextPrimaryAttack ( 0.f )
+	, m_flNextSecondaryAttack( 0.f )
+	, m_bBroken( false )
+	, m_flMeter( 0.f )
 #endif
 {
 #ifdef CLIENT_DLL
@@ -162,8 +166,7 @@ void CTFDroppedWeapon::OnDataChanged( DataUpdateType_t updateType )
 			if ( iStrangeType != -1 )
 			{
 				CAttribute_String attrModule;
-				static CSchemaAttributeDefHandle pAttr_module( "weapon_uses_stattrak_module" );
-				if ( m_Item.FindAttribute( pAttr_module, &attrModule ) && attrModule.has_value() )
+				if ( GetStattrak( &m_Item, &attrModule ) )
 				{
 					static CSchemaAttributeDefHandle pAttr_moduleScale( "weapon_stattrak_module_scale" );
 					// Does it have a stat track module
@@ -175,7 +178,7 @@ void CTFDroppedWeapon::OnDataChanged( DataUpdateType_t updateType )
 					}
 
 					C_BaseAnimating *pStatTrakEnt = new class C_BaseAnimating;
-					if ( pStatTrakEnt && pStatTrakEnt->InitializeAsClientEntity( "models/weapons/c_models/stattrack.mdl", RENDER_GROUP_OPAQUE_ENTITY ) )
+					if ( pStatTrakEnt && pStatTrakEnt->InitializeAsClientEntity( attrModule.value().c_str(), RENDER_GROUP_OPAQUE_ENTITY ) )
 					{
 						pStatTrakEnt->AddEffects( EF_BONEMERGE );
 						pStatTrakEnt->AddEffects( EF_BONEMERGE_FASTCULL );
@@ -188,7 +191,7 @@ void CTFDroppedWeapon::OnDataChanged( DataUpdateType_t updateType )
 						pStatTrakEnt->SetModelScale( flScale );
 						pStatTrakEnt->UpdateVisibility();
 
-						pStatTrakEnt->SetBodygroup( 1, 1 );
+						pStatTrakEnt->SetBodygroup( 1, 0 );
 
 						pStatTrakEnt->m_nSkin = m_Item.GetTeamNumber();	// Use the "Sad" skin
 
@@ -283,6 +286,16 @@ bool CTFDroppedWeapon::OnInternalDrawModel( ClientModelRenderInfo_t *pInfo )
 	if ( !BaseClass::OnInternalDrawModel( pInfo ) )
 		return false;
 
+	// This flag says we should turn off the material overrides for attachments. 
+	IMaterial* pMaterialOverride = NULL;
+	OverrideType_t nMaterialOverrideType = OVERRIDE_NORMAL;
+
+	if ((pInfo->flags & STUDIO_NO_OVERRIDE_FOR_ATTACH) != 0)
+	{
+		modelrender->GetMaterialOverride(&pMaterialOverride, &nMaterialOverrideType);
+		modelrender->ForcedMaterialOverride(NULL, nMaterialOverrideType);
+	}
+
 	// Draw Attached Models
 	// Draw our attached models as well
 	for ( int i = 0; i < m_vecAttachedModels.Size(); i++ )
@@ -309,6 +322,9 @@ bool CTFDroppedWeapon::OnInternalDrawModel( ClientModelRenderInfo_t *pInfo )
 			DoInternalDrawModel( &infoAttached, ( bMarkAsDrawn && ( infoAttached.flags & STUDIO_RENDER ) ) ? &state : NULL, pBoneToWorld );
 		}
 	}
+
+	if (pMaterialOverride != NULL)
+		modelrender->ForcedMaterialOverride(pMaterialOverride, nMaterialOverrideType);
 
 	return true;
 }
@@ -555,6 +571,20 @@ void CTFDroppedWeapon::InitDroppedWeapon( CTFPlayer *pPlayer, CTFWeaponBase *pWe
 	m_flNextPrimaryAttack = pWeapon->m_flNextPrimaryAttack;
 	m_flNextSecondaryAttack = pWeapon->m_flNextSecondaryAttack;
 
+	m_bBroken = pWeapon->IsBroken();
+	m_nBody = pWeapon->m_nBody;
+
+	CEconItemView *pEconItemView = pWeapon->GetAttributeContainer() ? pWeapon->GetAttributeContainer()->GetItem() : NULL;
+	if ( pEconItemView )
+	{
+		CTFItemDefinition *pItemDef = pEconItemView->GetStaticData();
+		if ( pItemDef )
+		{
+			loadout_positions_t eLoadoutPosition = ( loadout_positions_t )( pItemDef->GetLoadoutSlot( pPlayer->GetPlayerClass()->GetClassIndex() ) );
+			m_flMeter = pPlayer->m_Shared.GetItemChargeMeter( eLoadoutPosition );
+		}
+	}
+
 	if ( bIsSuicide )
 	{
 		m_flChargeLevel = 0.f;
@@ -595,7 +625,8 @@ void CTFDroppedWeapon::InitPickedUpWeapon( CTFPlayer *pPlayer, CTFWeaponBase *pW
 	pWeapon->m_iClip1 = m_nClip;
 	if ( pWeapon->GetPrimaryAmmoType() != -1 )
 	{
-		pPlayer->SetAmmoCount( m_nAmmo, pWeapon->GetPrimaryAmmoType() );
+		int nMaxTotalAmmo = pPlayer->GetMaxAmmo( pWeapon->GetPrimaryAmmoType() );
+		pPlayer->SetAmmoCount( Min( m_nAmmo, nMaxTotalAmmo ), pWeapon->GetPrimaryAmmoType() );
 	}
 	// SetAmmoCount can override metal for some weapon
 	// Make sure engineer don't gain metal by picking up weapon
@@ -623,6 +654,20 @@ void CTFDroppedWeapon::InitPickedUpWeapon( CTFPlayer *pPlayer, CTFWeaponBase *pW
 	pWeapon->m_flEffectBarRegenTime = m_flEffectBarRegenTime;
  	pWeapon->m_flNextPrimaryAttack = m_flNextPrimaryAttack;
  	pWeapon->m_flNextSecondaryAttack = m_flNextSecondaryAttack;
+
+	pWeapon->SetBroken( m_bBroken );
+	pWeapon->m_nBody = m_nBody;
+
+	CEconItemView *pEconItemView = pWeapon->GetAttributeContainer() ? pWeapon->GetAttributeContainer()->GetItem() : NULL;
+	if ( pEconItemView )
+	{
+		CTFItemDefinition *pItemDef = pEconItemView->GetStaticData();
+		if ( pItemDef )
+		{
+			loadout_positions_t eLoadoutPosition = ( loadout_positions_t ) ( pItemDef->GetLoadoutSlot( pPlayer->GetPlayerClass()->GetClassIndex() ) );
+			pPlayer->m_Shared.SetItemChargeMeter( eLoadoutPosition, m_flMeter );
+		}
+	}
 }
 
 //-----------------------------------------------------------------------------

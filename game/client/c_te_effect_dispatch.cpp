@@ -176,9 +176,13 @@ void TE_DispatchEffect( IRecipientFilter& filter, float delay, const Vector &pos
 void DispatchEffect( const char *pName, const CEffectData &data )
 {
 	CPASFilter filter( data.m_vOrigin );
-	te->DispatchEffect( filter, 0.0, data.m_vOrigin, pName, data );
+	DispatchEffect( pName, data, filter );
 }
 
+void DispatchEffect( const char *pName, const CEffectData &data, C_RecipientFilter &filter )
+{
+	te->DispatchEffect( filter, 0.0, data.m_vOrigin, pName, data );
+}
 
 //-----------------------------------------------------------------------------
 // Playback
@@ -213,7 +217,7 @@ void TE_DispatchEffect( IRecipientFilter& filter, float delay, KeyValues *pKeyVa
 
 	// NOTE: Ptrs are our way of indicating it's an entindex
 	ClientEntityHandle_t hWorld = ClientEntityList().EntIndexToHandle( 0 );
-	data.m_hEntity = (intp)pKeyValues->GetPtr( "entindex", (void*)(intp)hWorld.ToInt() );
+	data.m_hEntity = ClientEntityHandle_t::UnsafeFromIndex( size_cast< int >( (intp) pKeyValues->GetPtr( "entindex", ( void* )(intp)hWorld.ToInt() ) ) );
 
 	const char *pEffectName = pKeyValues->GetString( "effectname" );
 

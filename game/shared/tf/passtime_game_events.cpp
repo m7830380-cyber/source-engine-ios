@@ -36,15 +36,18 @@ namespace
 //-----------------------------------------------------------------------------
 const char *const BallGet::s_eventName = "pass_get";
 const char *const BallGet::s_keyOwnerIndex = "owner";
+const char *const BallGet::s_keyTeam = "team";
 
 BallGet::BallGet( IGameEvent *pEvent )
 	: ownerIndex( pEvent->GetInt( s_keyOwnerIndex ) )
+	, team( pEvent->GetInt( s_keyTeam ) )
 {
 	Assert( IsType<BallGet>( pEvent ) );
 }
 
-BallGet::BallGet( int ownerIndex_ ) 
+BallGet::BallGet( int ownerIndex_, int team_ ) 
 	: ownerIndex( ownerIndex_ )
+	, team( team_ )
 {
 }
 
@@ -53,6 +56,7 @@ void BallGet::Fire()
 	if ( IGameEvent *pEvent = CreateEvent<BallGet>() )
 	{
 		pEvent->SetInt( s_keyOwnerIndex, ownerIndex );
+		pEvent->SetInt( s_keyTeam, team );
 		gameeventmanager->FireEvent(pEvent);
 	}
 }

@@ -548,6 +548,7 @@ void CTFStatsSummaryPanel::OnMapLoad( const char *pMapName )
 	bool bWidescreenBackground = false;
 
 	bool bIsMVM = ( pMapName && !Q_strncmp( pMapName, "mvm_", 4 ) );
+	bool bIsMVMBackground = false;
 	const char *pszBackgroundOverride = NULL;
 	const IMatchGroupDescription* pMatchDesc = GetMatchGroupDescription( GTFGCClientSystem()->GetLiveMatchGroup() );
 	if ( pMatchDesc )
@@ -574,10 +575,12 @@ void CTFStatsSummaryPanel::OnMapLoad( const char *pMapName )
 		}
 		
 	}
-	else if ( bIsMVM )
+	
+	if ( bIsMVM && !pszBackgroundOverride )
 	{
 		// this will preserve the current behavior for non-matchmaking servers
 		pszBackgroundOverride = "mvm_background_map";
+		bIsMVMBackground = true;
 	}
 
 	bool bIsCommunityMap = false;
@@ -631,7 +634,7 @@ void CTFStatsSummaryPanel::OnMapLoad( const char *pMapName )
 			Q_strlower( szMapImage );
 
 			IMaterial *pMapMaterial = materials->FindMaterial( szMapImage, TEXTURE_GROUP_VGUI, false );
-			if ( pMapMaterial && !IsErrorMaterial( pMapMaterial ) && !pszBackgroundOverride )
+			if ( pMapMaterial && !IsErrorMaterial( pMapMaterial ) && ( !pszBackgroundOverride || bIsMVMBackground ) )
 			{
 				// take off the vgui/ at the beginning when we set the image
 				Q_snprintf( szMapImage, sizeof( szMapImage ), "maps/menu_photos_%s", pMapName );

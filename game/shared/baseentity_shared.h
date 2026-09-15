@@ -11,7 +11,6 @@
 #pragma once
 #endif
 
-
 extern ConVar hl2_episodic;
 
 // Simple shared header file for common base entities
@@ -121,7 +120,11 @@ inline CBaseEntity	*CBaseEntity::GetEffectEntity() const
 
 inline int CBaseEntity::GetPredictionRandomSeed( bool bUseUnSyncedServerPlatTime )
 {
+#ifdef GAME_DLL
+	return bUseUnSyncedServerPlatTime ? m_nPredictionRandomSeedServer : m_nPredictionRandomSeed;
+#else
 	return m_nPredictionRandomSeed;
+#endif
 }
 
 inline CBasePlayer *CBaseEntity::GetPredictionPlayer( void )
@@ -246,6 +249,30 @@ inline bool CBaseEntity::IsEffectActive( int nEffects ) const
 { 
 	return (m_fEffects & nEffects) != 0; 
 }
+
+#ifdef GAME_DLL
+inline HSCRIPT ToHScript( CBaseEntity *pEnt )
+{
+	return ( pEnt ) ? pEnt->GetScriptInstance() : NULL;
+}
+
+template <> ScriptClassDesc_t *GetScriptDesc<CBaseEntity>( CBaseEntity * );
+inline CBaseEntity *ToEnt( HSCRIPT hScript )
+{
+
+	return ( hScript ) ? (CBaseEntity *)g_pScriptVM->GetInstanceValue( hScript, GetScriptDescForClass(CBaseEntity) ) : NULL;
+}
+
+template <typename T>
+inline T* ScriptToEntClass( HSCRIPT hScript )
+{
+	CBaseEntity *pEntity = ToEnt( hScript );
+	if ( !pEntity )
+		return NULL;
+
+	return dynamic_cast< T* >( pEntity );
+}
+#endif
 
 // Shared EntityMessage between game and client .dlls
 #define BASEENTITY_MSG_REMOVE_DECALS	1

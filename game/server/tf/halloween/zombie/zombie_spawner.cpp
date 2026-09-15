@@ -46,7 +46,13 @@ void CZombieSpawner::Think()
 
 	if ( m_bEnabled && ( ( m_bInfiniteZombies && m_activeZombies.Count() < m_nMaxActiveZombies ) || ( !m_bInfiniteZombies && m_nSpawned < m_nMaxActiveZombies ) ) )
 	{
-		CZombie *pZombie = CZombie::SpawnAtPos( GetAbsOrigin(), m_flZombieLifeTime, TF_TEAM_HALLOWEEN, NULL, (CZombie::SkeletonType_t)m_nSkeletonType );
+		int nZombieTeam = TF_TEAM_HALLOWEEN;
+		int nSpawnerTeam = GetTeamNumber();
+		if ( nSpawnerTeam == TF_TEAM_BLUE || nSpawnerTeam == TF_TEAM_RED )
+		{
+			nZombieTeam = nSpawnerTeam;
+		}
+		CZombie *pZombie = CZombie::SpawnAtPos( GetAbsOrigin(), m_flZombieLifeTime, nZombieTeam, NULL, (CZombie::SkeletonType_t)m_nSkeletonType );
 		if ( pZombie )
 		{
 			m_nSpawned++;

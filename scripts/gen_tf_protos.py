@@ -38,6 +38,7 @@ def main():
     gen(os.path.join(ROOT, 'game', 'shared'), 'base_gcmessages.proto')
     gen(os.path.join(ROOT, 'game', 'shared', 'econ'), 'econ_gcmessages.proto')
     gen(os.path.join(ROOT, 'game', 'shared', 'tf'), 'tf_gcmessages.proto')
+    gen(os.path.join(ROOT, 'game', 'shared', 'tf'), 'tf_proto_def_messages.proto')
     for name in os.listdir(OUT):
         print('OUT', name)
 

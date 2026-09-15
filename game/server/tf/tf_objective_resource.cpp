@@ -13,13 +13,14 @@
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
 
-void SendProxy_String_tToString( const SendProp *pProp, const void *pStruct, const void *pData, DVariant *pOut, int iElement, int objectID );
+extern void SendProxy_StringT_To_String( const SendProp *pProp, const void *pStruct, const void *pData, DVariant *pOut, int iElement, int objectID );
 
 // Datatable
 IMPLEMENT_SERVERCLASS_ST( CTFObjectiveResource, DT_TFObjectiveResource )
 	SendPropInt( SENDINFO(m_nMannVsMachineMaxWaveCount), 9, SPROP_UNSIGNED ),
 	SendPropInt( SENDINFO(m_nMannVsMachineWaveCount), 9, SPROP_UNSIGNED ),
 	SendPropInt( SENDINFO(m_nMannVsMachineWaveEnemyCount), 16, SPROP_UNSIGNED ),
+	SendPropBool( SENDINFO(m_nMannVsMachineWaveHasTanks) ),
 	SendPropInt( SENDINFO(m_nMvMWorldMoney), 16, SPROP_UNSIGNED ),
 	SendPropFloat( SENDINFO( m_flMannVsMachineNextWaveTime ) ),
 	SendPropBool( SENDINFO( m_bMannVsMachineBetweenWaves ) ),
@@ -31,11 +32,11 @@ IMPLEMENT_SERVERCLASS_ST( CTFObjectiveResource, DT_TFObjectiveResource )
 	SendPropInt( SENDINFO(m_nMvMEventPopfileType), 4, SPROP_UNSIGNED ),
 
 	SendPropArray3( SENDINFO_ARRAY3( m_nMannVsMachineWaveClassCounts ), SendPropInt( SENDINFO_ARRAY( m_nMannVsMachineWaveClassCounts ), 16 ) ),
-	SendPropArray( SendPropString( SENDINFO_ARRAY( m_iszMannVsMachineWaveClassNames ), 0, SendProxy_String_tToString ), m_iszMannVsMachineWaveClassNames ),
+	SendPropArray( SendPropString( SENDINFO_ARRAY( m_iszMannVsMachineWaveClassNames ), 0, SendProxy_StringT_To_String ), m_iszMannVsMachineWaveClassNames ),
 	SendPropArray3( SENDINFO_ARRAY3( m_nMannVsMachineWaveClassFlags ), SendPropInt( SENDINFO_ARRAY( m_nMannVsMachineWaveClassFlags ), 10, SPROP_UNSIGNED ) ),
 
 	SendPropArray3( SENDINFO_ARRAY3( m_nMannVsMachineWaveClassCounts2 ), SendPropInt( SENDINFO_ARRAY( m_nMannVsMachineWaveClassCounts2 ), 16 ) ),
-	SendPropArray( SendPropString( SENDINFO_ARRAY( m_iszMannVsMachineWaveClassNames2 ), 0, SendProxy_String_tToString ), m_iszMannVsMachineWaveClassNames2 ),
+	SendPropArray( SendPropString( SENDINFO_ARRAY( m_iszMannVsMachineWaveClassNames2 ), 0, SendProxy_StringT_To_String ), m_iszMannVsMachineWaveClassNames2 ),
 	SendPropArray3( SENDINFO_ARRAY3( m_nMannVsMachineWaveClassFlags2 ), SendPropInt( SENDINFO_ARRAY( m_nMannVsMachineWaveClassFlags2 ), 10, SPROP_UNSIGNED ) ),
 
 	SendPropArray3( SENDINFO_ARRAY3( m_bMannVsMachineWaveClassActive ), SendPropBool( SENDINFO_ARRAY( m_bMannVsMachineWaveClassActive ) ) ),
@@ -47,6 +48,7 @@ BEGIN_DATADESC( CTFObjectiveResource )
 	DEFINE_FIELD( m_nMannVsMachineMaxWaveCount, FIELD_INTEGER ),
 	DEFINE_FIELD( m_nMannVsMachineWaveCount, FIELD_INTEGER ),
 	DEFINE_FIELD( m_nMannVsMachineWaveEnemyCount, FIELD_INTEGER ),
+	DEFINE_FIELD( m_nMannVsMachineWaveHasTanks, FIELD_BOOLEAN),
 	DEFINE_FIELD( m_nMvMWorldMoney, FIELD_INTEGER ),
 	DEFINE_FIELD( m_flMannVsMachineNextWaveTime, FIELD_TIME ),
 	DEFINE_FIELD( m_bMannVsMachineBetweenWaves, FIELD_BOOLEAN ),
@@ -74,6 +76,7 @@ CTFObjectiveResource::CTFObjectiveResource()
 	m_nMannVsMachineMaxWaveCount = 0;
 	m_nMannVsMachineWaveCount = 0;
 	m_nMannVsMachineWaveEnemyCount = 0;
+	m_nMannVsMachineWaveHasTanks = false;
 	m_nMvMWorldMoney = 0;
 	m_flMannVsMachineNextWaveTime = 0;
 	m_bMannVsMachineBetweenWaves = false;

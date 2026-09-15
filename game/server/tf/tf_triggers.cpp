@@ -483,36 +483,27 @@ void CTriggerAddTFPlayerCondition::StartTouch( CBaseEntity *pOther )
 
 void CTriggerAddTFPlayerCondition::EndTouch( CBaseEntity *pOther )
 {
+	BaseClass::EndTouch( pOther );
+
 	if ( m_flDuration != PERMANENT_CONDITION )
-	{
 		return;
-	}
 
 	if ( m_bDisabled )
-	{
 		return;
-	}
 
 	if ( !PassesTriggerFilters(pOther) )
-	{
 		return;
-	}
 
 	if ( !pOther->IsPlayer() )
-	{
 		return;
-	}
 
 	CTFPlayer *pPlayer = ToTFPlayer( pOther );
 	if ( !pPlayer )
-	{
 		return;
-	}
 
 	if ( m_nCondition != TF_COND_INVALID )
 	{
 		pPlayer->m_Shared.RemoveCond( m_nCondition );
-		BaseClass::EndTouch( pOther );
 	}
 	else
 	{

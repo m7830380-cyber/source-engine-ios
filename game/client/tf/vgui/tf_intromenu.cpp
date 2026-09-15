@@ -171,7 +171,7 @@ void CTFIntroMenu::OnTick()
 
 			//=============================================================================
 			// HPE_BEGIN
-			// [msmith] Used for the client to tell the server that we're whatching a movie or not
+			// [msmith] Used for the client to tell the server that we're watching a movie or not
 			//=============================================================================
 			tf_training_client_message.SetValue( "" );
 			tf_training_client_message.SetValue( TRAINING_CLIENT_MESSAGE_NONE );
@@ -179,20 +179,15 @@ void CTFIntroMenu::OnTick()
 			// HPE_END
 			//=============================================================================
 
-
 			if ( GetLocalPlayerTeam() == TEAM_UNASSIGNED )
 			{
 				if ( TFGameRules()->IsInArenaMode() == true && tf_arena_use_queue.GetBool() == true )
 				{
 					m_pViewPort->ShowPanel( PANEL_ARENA_TEAM, true );
 				}
-				else if ( TFGameRules()->IsMannVsMachineMode() || TFGameRules()->IsCompetitiveMode() )
-				{
-					engine->ClientCmd( "autoteam" );
-				}
 				else
 				{
-					m_pViewPort->ShowPanel( PANEL_TEAM, true );
+					engine->ClientCmd( "team_ui_setup" );
 				}
 			}
 			else

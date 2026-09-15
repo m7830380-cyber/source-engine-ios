@@ -16,7 +16,7 @@
 #else
 #include "tf_viewmodel.h"
 #include "bone_setup.h"
-#include "tf_wearable_item_demoshield.h"
+#include "tf_wearable_weapons.h"
 #endif
 
 #ifdef CLIENT_DLL

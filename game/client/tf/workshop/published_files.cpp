@@ -18,10 +18,6 @@
 #include "vgui_bitmappanel.h"
 #include <vgui_controls/FileOpenDialog.h>
 
-#ifdef WORKSHOP_IMPORT_ENABLED
-#include "itemtest/itemtest.h"
-#include "workshop/item_import.h"
-#endif
 
 #include "steampublishedfiles/publish_file_dialog.h"
 
@@ -43,6 +39,7 @@ extern ConVar publish_file_last_dir;
 
 // milliseconds
 ConVar tf_steam_workshop_query_timeout( "tf_steam_workshop_query_timeout", "10", FCVAR_CLIENTDLL, "Time in seconds to allow communication with the Steam Workshop server." );
+ConVar tf_steam_workshop_page_skip( "tf_steam_workshop_page_skip", "10", FCVAR_ARCHIVE, "Number of pages to skip in the Steam Workshop dialog.", true, 1, true, 100 );
 
 //-----------------------------------------------------------------------------
 // Purpose: Utility function
@@ -339,6 +336,10 @@ static TagPair_t kOtherTags[] = {
 	{ "TagCheckbox_Taunt", "Taunt" },
 	{ "TagCheckbox_UnusualEffect", "Unusual Effect" },
 	{ "TagCheckbox_Jungle", "Jungle" },
+	{ "TagCheckbox_WarPaint", "War Paint" },
+	{ "TagCheckbox_Smissmas", "Smissmas" },
+	{ "TagCheckbox_Summer", "Summer" },
+	{ "TagCheckbox_CommunityFix", "Community Fix" },
 };
 static uint32 kNumOtherTags = ARRAYSIZE( kOtherTags );
 
@@ -362,6 +363,8 @@ static TagPair_t kMapTags[] = {
 	{ "MapsCheckbox_Smissmas", "Smissmas" },
 	{ "MapsCheckbox_Night", "Night" },
 	{ "MapsCheckbox_Jungle", "Jungle" },
+	{ "MapsCheckBox_PD", "Player Destruction" },
+	{ "MapsCheckBox_Summer", "Summer" },
 };
 static uint32 kNumMapTags = ARRAYSIZE( kMapTags );
 
@@ -376,19 +379,34 @@ class CTFFilePublishDialog : public CFilePublishDialog
 public:
 	CTFFilePublishDialog( Panel *parent, const char *name, PublishedFileDetails_t *pDetails ) : CFilePublishDialog( parent, name, pDetails ), m_bImported(false) {}
 
-	virtual ErrorCode_t ValidateFile( const char *lpszFilename )
+	virtual ErrorCode_t ValidateFile( const char *lpszFilename ) OVERRIDE
 	{
 		if( !g_pFullFileSystem->FileExists( lpszFilename ) )
 			return kFailedFileNotFound;
 
-		// TODO This is the nominal max of SteamUGC, but should be found dynamically
-		const uint32 kMaxFileSize = 400 * 1024 * 1024;
-		unsigned int unFileSize = g_pFullFileSystem->Size( lpszFilename );
-		if ( unFileSize == 0 || unFileSize > kMaxFileSize )
-		{
-			return kFailedFileTooLarge;
-		}
 		return kNoError;
+	}
+	virtual void OnFilePrepared( ErrorCode_t eResult ) OVERRIDE
+	{
+		if ( eResult == kNoError )
+		{
+			// Fail now if our prepared file didn't make it below the size limit.  We don't do this in ValidateFile
+			// because preparing files can shrink them -- maps are compressed as their prepare step.
+			char szPreparedFile[ MAX_PATH ] = { 0 };
+			GetPreparedFilename( szPreparedFile, sizeof( szPreparedFile ) );
+
+			// 400MB is the current nominal max of SteamUGC, softly encourage people to keep it below 200MB compressed
+			// for now, however.
+			const uint32 kMaxFileSize = 200 * 1024 * 1024;
+			unsigned int unFileSize = g_pFullFileSystem->Size( szPreparedFile );
+			if ( unFileSize == 0 || unFileSize > kMaxFileSize )
+			{
+				Warning( "TF Workshop: File was %u bytes after prepare step, max %u\n", unFileSize, kMaxFileSize );
+				eResult = kFailedFileTooLarge;
+			}
+		}
+
+		BaseClass::OnFilePrepared( eResult );
 	}
 	virtual AppId_t	GetTargetAppID( void ) { return engine->GetAppID(); }
 	virtual unsigned int DesiredPreviewHeight( void ) { return TF2_PREVIEW_IMAGE_HEIGHT; }
@@ -729,11 +747,9 @@ protected:
 			SetTagsVisible( true, m_FileDetails.publishedFileDetails.m_eFileType );
 		}
 
-#ifndef WORKSHOP_IMPORT_ENABLED
 		vgui::Button *pImportButton = FindControl<vgui::Button>( "ButtonSourceCosmetics" );
 		if ( pImportButton )
 			pImportButton->SetVisible( false );
-#endif
 	}
 
 	const char* GetStatusString( StatusCode_t statusCode )
@@ -764,19 +780,6 @@ protected:
 	{	
 		if ( V_stricmp( command, "MainFileCosmetics" ) == 0 )
 		{
-#ifdef WORKSHOP_IMPORT_ENABLED
-			if ( CItemUpload::InitManifest() )
-			{
-				CTFFileImportDialog *pImportDialog = new CTFFileImportDialog( this );
-				pImportDialog->SetDeleteSelfOnClose( true );
-				pImportDialog->SetSizeable( false );
-				MakeModalAndBringToFront( pImportDialog );
-			}
-			else
-			{
-				ShowMessageBox( "#TF_SteamWorkshop_Error", "#TF_ImportFile_InvalidManifest" );
-			}
-#endif
 		}
 		else if ( V_stricmp( command, "Publish" ) == 0 || V_stricmp( command, "Update" ) == 0 )
 		{
@@ -1102,7 +1105,11 @@ public:
 		SetupButton( "ViewLegalAgreementButton" );
 
 		SetupButton( "PrevPageButton" );
+		SetupButton( "PrevPageSkipButton" );
+		SetupButton( "SkipToStartButton" );
 		SetupButton( "NextPageButton" );
+		SetupButton( "NextPageSkipButton" );
+		SetupButton( "SkipToEndButton" );
 		SetupButton( "ViewButton" );
 		SetupButton( "EditButton" );
 		SetupButton( "DeleteButton" );
@@ -1218,16 +1225,51 @@ public:
 			{
 				--m_unCurrentPage;
 			}
+			else
+			{
+				m_unCurrentPage = ceil( (float)m_publishedFiles.m_FileDetails.Count() / (float)MAX_ITEMS_VIEWABLE ) - 1;
+			}
+			PopulatePublishedFilesUI();
+		}
+		else if ( FStrEq( pCommand, "prevpageskip" ) )
+		{
+			for ( int i = 0; i < tf_steam_workshop_page_skip.GetInt(); i++ )
+			{
+				if ( m_unCurrentPage > 0 )
+				{
+					--m_unCurrentPage;
+				}
+				else
+				{
+					m_unCurrentPage = ceil( (float)m_publishedFiles.m_FileDetails.Count() / (float)MAX_ITEMS_VIEWABLE ) - 1;
+				}
+			}
+			PopulatePublishedFilesUI();
+		}
+		else if ( FStrEq( pCommand, "skiptostart" ) )
+		{
+			m_unCurrentPage = 0;
 			PopulatePublishedFilesUI();
 		}
 		else if ( FStrEq( pCommand, "nextpage" ) )
 		{
-			uint32 unNumPages = ceil( (float)m_publishedFiles.m_FileDetails.Count() / (float)MAX_ITEMS_VIEWABLE );
-			if ( m_unCurrentPage < unNumPages )
+			++m_unCurrentPage;
+			if ( m_unCurrentPage > ceil( (float)m_publishedFiles.m_FileDetails.Count() / (float)MAX_ITEMS_VIEWABLE ) - 1 )
 			{
-				++m_unCurrentPage;
-				PopulatePublishedFilesUI();
+				m_unCurrentPage = 0;
 			}
+			PopulatePublishedFilesUI();
+		}
+		else if ( FStrEq( pCommand, "nextpageskip" ) )
+		{
+			uint32 unNumPages = ceil( (float)m_publishedFiles.m_FileDetails.Count() / (float)MAX_ITEMS_VIEWABLE );
+			m_unCurrentPage = ( ( m_unCurrentPage + tf_steam_workshop_page_skip.GetInt() ) % unNumPages );
+			PopulatePublishedFilesUI();
+		}
+		else if ( FStrEq( pCommand, "skiptoend" ) )
+		{
+			m_unCurrentPage = ceil( (float)m_publishedFiles.m_FileDetails.Count() / (float)MAX_ITEMS_VIEWABLE ) - 1;
+			PopulatePublishedFilesUI();
 		}
 		else if ( FStrEq( pCommand, "view" ) )
 		{
@@ -1384,10 +1426,12 @@ protected:
 			{
 				m_pItemsContainer->SetDialogVariable( "page", "" );
 			}
-			SetChildPanelVisible( m_pItemsContainer, "NextPageButton", bMultiplePages );
 			SetChildPanelVisible( m_pItemsContainer, "PrevPageButton", bMultiplePages );
-			SetChildPanelEnabled( m_pItemsContainer, "NextPageButton", m_unCurrentPage < unNumPages - 1 );
-			SetChildPanelEnabled( m_pItemsContainer, "PrevPageButton", m_unCurrentPage > 0 );
+			SetChildPanelVisible( m_pItemsContainer, "PrevPageSkipButton", bMultiplePages );
+			SetChildPanelVisible( m_pItemsContainer, "SkipToStartButton", bMultiplePages );
+			SetChildPanelVisible( m_pItemsContainer, "NextPageButton", bMultiplePages );
+			SetChildPanelVisible( m_pItemsContainer, "NextPageSkipButton", bMultiplePages );
+			SetChildPanelVisible( m_pItemsContainer, "SkipToEndButton", bMultiplePages );
 
 			// other controls
 			SetChildPanelEnabled( m_pItemsContainer, "ViewButton", bSelected );
@@ -1518,7 +1562,7 @@ static void CL_OpenSteamWorkshopDialog( const CCommand &args )
 	{
 		IViewPortPanel *pMMOverride = ( gViewPortInterface->FindPanelByName( PANEL_MAINMENUOVERRIDE ) );
 		g_pSteamWorkshopDialog = vgui::SETUP_PANEL( new CSteamWorkshopDialog( (CHudMainMenuOverride*)pMMOverride ) );
-	}								 
+	}
 	engine->ExecuteClientCmd( "gameui_activate" );
 	g_pSteamWorkshopDialog->Show();
 }

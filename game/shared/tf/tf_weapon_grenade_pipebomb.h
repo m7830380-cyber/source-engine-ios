@@ -46,7 +46,7 @@ public:
 	~CTFGrenadePipebombProjectile();
 
 	// Unique identifier.
-	virtual int			GetWeaponID( void ) const;
+	virtual int			GetWeaponID( void ) const OVERRIDE;
 
 	int GetType( void ) const { return m_iType; } 
 	virtual int			GetDamageType();
@@ -123,7 +123,7 @@ public:
 	virtual void	StickybombTouch( CBaseEntity *pOther );
 	virtual void	VPhysicsCollision( int index, gamevcollisionevent_t *pEvent );
 
-	virtual int		OnTakeDamage( const CTakeDamageInfo &info );
+	virtual int		OnTakeDamage( const CTakeDamageInfo &info ) OVERRIDE;
 	virtual void	IncrementDeflected( void );
 	virtual void	DetonateThink( void );
 	virtual void	PreArmThink( void );
@@ -131,12 +131,15 @@ public:
 
 	void			CreatePipebombGibs( void );
 
-	virtual bool	IsDeflectable( void ) { return true; }
+	virtual bool	IsDeflectable( void ) OVERRIDE { return true; }
 	virtual void	Deflected( CBaseEntity *pDeflectedBy, Vector& vecDir );
 
 	virtual int		GetDamageCustom();
 	float			GetTouchedTime()	{ return m_flTouchedTime; }
 	bool			IsTouched()			{ return m_bTouched; }
+
+	virtual int		UpdateTransmitState() OVERRIDE;
+	virtual int		ShouldTransmit( const CCheckTransmitInfo *pInfo ) OVERRIDE;
 public:
 
 	bool		m_bFizzle;

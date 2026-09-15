@@ -11,61 +11,101 @@
 #pragma once
 #endif
 
-#include "tf_match_join_handlers.h"
 #include <vgui_controls/EditablePanel.h>
 #include "tf_controls.h"
 #include <vgui_controls/PHandle.h>
 #include "local_steam_shared_object_listener.h"
+#include "tf_matchmaking_dashboard_side_panel.h"
+#include "vgui_controls/PHandle.h"
+#include "econ_notifications.h"
+#include "tf_party.h"
+#include "tf_matchmaking_dashboard_notification.h"
+#include "tf_matchmaking_party_invite_notification.h"
 
-CUtlVector< class CTFMatchmakingPopup* >& CreateMMPopupPanels( bool bRecreate = false );
-class CTFMatchmakingDashboard* GetMMDashboard();
-class CMMDashboardParentManager* GetMMDashboardParentManager();
-
-bool BInEndOfMatch();
-
-//-----------------------------------------------------------------------------
-// Purpose: Popup that goes underneath the dashboard and displays anything
-//			important the user needs to know about
-//-----------------------------------------------------------------------------
-class CTFMatchmakingPopup : public CExpandablePanel
-						  , public CGameEventListener
-						  , public IMatchJoiningHandler
+namespace vgui
 {
-	friend class CTFMatchmakingPopupState;
-	friend class CTFMatchmakingDashboard;
-	DECLARE_CLASS_SIMPLE( CTFMatchmakingPopup, CExpandablePanel );
+	class Menu;
+}
+
+class CMatchMakingDashboardSidePanel;
+
+enum EMMTooltips
+{
+	k_eSmallFont = 0,
+	k_eMediumFont,
+	k_eLargeFont,
+	k_eTooltipsCount
+};
+
+class CTFMatchmakingDashboard* GetMMDashboard();
+CTFTextToolTip* GetDashboardTooltip( EMMTooltips eTipType );
+extern void PromptOrFireCommand( const char* pszCommand );
+
+
+enum EMMDashboadSidePanel
+{
+	k_ePlayList = 0,
+	k_eCasual,
+	k_eCompetitive,
+	k_eMvM_Mode_Select,
+	k_eMvM_Mode_Configure,
+	k_eChat,
+	k_eBGDimmer,
+	k_eMMSettings,
+	k_eExplanations,
+	k_eNextMapWinnerPopup,
+	k_eNextMapVotePopup,
+	k_eToolTipSmallFont,
+	k_eToolTipMediumFont,
+	k_eToolTipLargeFont,
+	k_eCompAccess,
+	k_eEventMatch,
+	k_eToolTipCompRanks,
+	k_ePanelCount,
+};
+
+
+//-----------------------------------------------------------------------------
+// Purpose: Owns and holds all of the dashboard singleton panels
+//-----------------------------------------------------------------------------
+class CDashboardSingletonManager
+{
 public:
+	CDashboardSingletonManager();
 
-	CTFMatchmakingPopup( const char* pszName, const char* pszResFile );
-	virtual ~CTFMatchmakingPopup();
+	typedef vgui::Panel* (*pFnPanelCreationFunc)();
+	void RegisterFnForSingleton( EMMDashboadSidePanel ePanel, pFnPanelCreationFunc );
 
-	virtual void ApplySchemeSettings( vgui::IScheme *pScheme ) OVERRIDE;
-	virtual void OnThink() OVERRIDE;
-	virtual void OnCommand( const char *command ) OVERRIDE;
-	virtual void OnTick() OVERRIDE;
+	vgui::Panel* GetPanel( EMMDashboadSidePanel ePanel );
+	template< typename T >
+	T* GetTypedPanel( EMMDashboadSidePanel ePanel ) 
+	{
+		return assert_cast< T* >( GetPanel( ePanel ) );
+	}
 
-	virtual void OnEnter();
-	virtual void OnUpdate();
-	virtual void OnExit();
-	virtual void Update();
-
-	virtual void FireGameEvent( IGameEvent *pEvent ) OVERRIDE;
+	void RecreateAll();
 
 private:
 
-	virtual void MatchFound() {} // We dont need to do anything special
-	virtual bool ShouldBeActve() const = 0;
-	void UpdateRematchtime();
-	void UpdateAutoJoinTime();
-
-	bool m_bActive;
-	const char* m_pszResFile;
+	pFnPanelCreationFunc m_pFnCreation[ k_ePanelCount ];
+	vgui::Panel* m_pPanels[ k_ePanelCount ];
 };
+
+CDashboardSingletonManager& GetDashboardPanel();
+
+// Used to register a functiom for the creation of a dashboard panel
+class CDashboardSingletonPanelCreationFunc
+{
+public:
+	CDashboardSingletonPanelCreationFunc( CDashboardSingletonManager::pFnPanelCreationFunc func, EMMDashboadSidePanel eType ) { GetDashboardPanel().RegisterFnForSingleton( eType, func ); }
+};
+#define REGISTER_FUNC_FOR_DASHBOARD_PANEL_TYPE( func, type ) CDashboardSingletonPanelCreationFunc g_##type##CreationFunc( func, type );
 
 //-----------------------------------------------------------------------------
 // Purpose: Matchmaking panel that contains controls for matchmaking
 //-----------------------------------------------------------------------------
 class CTFMatchmakingDashboard : public CExpandablePanel
+							  , public CGameEventListener
 {
 public:
 	DECLARE_CLASS_SIMPLE( CTFMatchmakingDashboard, CExpandablePanel );
@@ -75,84 +115,75 @@ public:
 	virtual void ApplySchemeSettings( vgui::IScheme *pScheme ) OVERRIDE;
 	virtual void OnCommand( const char *command ) OVERRIDE;
 	virtual void OnTick() OVERRIDE;
-};
-
-//-----------------------------------------------------------------------------
-// CMMDashboardParentManager
-// Purpose: This guy keeps the MM dashboard as the top-most panel but does so
-//			*without making it a popup*.  This is important because popups look
-//			awful whenever they overlap and transparency is involved.  This class
-//			does its dirty work by keeping track of the top-most fullscreen popup
-//			and setting that panel as the MM dashboard's parent.  When that popup
-//			goes away, we set the parent to the next popup on the stack, or to
-//			the GameUI if none are active.  If we're in-game, then we parent to
-//			the our special popup container.  Why not always just parent to that
-//			single popup container?  Because we want the MINIMUM mouse focus area
-//			possible because the dashboard is not a rectangle (it grows/shrinks).
-//			
-//			
-//			If anything draws on top of the MM dashboard and you dont want it to
-//			have that panel add itself to this class using PushModalFullscreenPopup
-//			when it goes visible and PopModalFullscreenPopup when it hides itself
-//-----------------------------------------------------------------------------
-class CMMDashboardParentManager : public CGameEventListener
-{
-public:
-	friend class CTFMatchmakingDashboard;
-	friend class CTFMatchmakingPopup;
-
-	CMMDashboardParentManager();
-
 	virtual void FireGameEvent( IGameEvent *event ) OVERRIDE;
 
-	void PushModalFullscreenPopup( vgui::Panel* pPanel );
-	void PopModalFullscreenPopup( vgui::Panel* pPanel );
-	void UpdateParenting();
+	const Color& GetPartyMemberColor( int nSlot ) const;
+
+	vgui::Menu* ClearAndGetDashboardContextMenu();
+	void Reload();
+
+	bool BAnySidePanelsShowing() const;
+	bool BIsSidePanelShowing( const CMatchMakingDashboardSidePanel* pSidePanel ) const;
+
+	MESSAGE_FUNC( OnPlayCompetitive, "PlayCompetitive" );
+	MESSAGE_FUNC( OnPlayCasual, "PlayCasual" );
+	MESSAGE_FUNC( OnPlayMvM, "PlayMvM" );
+	MESSAGE_FUNC( OnPlayMvM_MannUp, "PlayMvM_MannUp" );
+	MESSAGE_FUNC( OnPlayMvM_BootCamp, "PlayMvM_BootCamp" );
+	MESSAGE_FUNC( OnPlayTraining, "PlayTraining" );
+	MESSAGE_FUNC( OnPlayCommunity, "PlayCommunity" );
+	MESSAGE_FUNC( OnCreateServer, "CreateServer" );
+	MESSAGE_FUNC( OnPlayEvent, "PlayEvent" );
+	MESSAGE_FUNC( OnShowCompAccess, "ShowCompAccess" );
+	MESSAGE_FUNC( OnViewMatchSettings, "ViewMatchSettings" );
+	MESSAGE_FUNC_PARAMS( OnCloseSideStack, "CloseSideStack", pParams );
+	MESSAGE_FUNC_PTR( OnNavigateSideStack, "NavigateSideStack", panel );
+
+	// Context menu actions
+	MESSAGE_FUNC( OnLeaveParty, "Context_LeaveParty" );
+	MESSAGE_FUNC( OnOpenSettings, "Context_OpenSettings" );
+
 private:
 
-	void AddPanel( CExpandablePanel* pPanel );
-	void RemovePanel( CExpandablePanel* pPanel );
+	// Notifications
+	MESSAGE_FUNC_PTR( OnNotificationCreated, "NotificationCreated", panel );
+	MESSAGE_FUNC_PTR( OnNotificationCleared, "NotificationCleared", panel );
+	void PositionNotifications();
 
-	void AttachToGameUI();
-	void AttachToTopMostPopup();
+	// Side panels
+	void PushSlidePanel( CMatchMakingDashboardSidePanel* pPanel );
+	void PopStack( int nLevels, EStackSide_t eSide );
+	void ClearAllStacks();
+	void RepositionSidePanels( EStackSide_t eSide );
+	void OpenPartyOptionsMenu();
 
-	bool m_bAttachedToGameUI;
+	// Queue panel
+	void UpdateQueuePanel();
+	void UpdateJoinPartyLobbyPanel();
 
-	class CUtlSortVectorPanelZPos
-	{
-	public:
-		bool Less( const vgui::Panel* lhs, const vgui::Panel* rhs, void * )
-		{
-			return lhs->GetZPos() < rhs->GetZPos();
-		}
-	};
+	void UpdateFindAGameButton();
+	void UpdateDisconnectAndResume();
+	void UpdateDimmer();
 
-	CUtlSortVector< CExpandablePanel*, CUtlSortVectorPanelZPos > m_vecPanels;
-	CUtlVector< vgui::Panel* > m_vecFullscreenPopups;
+	// Party invites
+	void UpdatePartyInvites();
 
-	vgui::PHandle m_pHUDPopup;
+	CUtlVector< vgui::DHANDLE< CMatchMakingDashboardSidePanel > >& GetStackForSide( EStackSide_t eSide ) { return m_vecSideSlideStack[ eSide ]; }
+
+	vgui::EditablePanel* m_pTopBar;
+	vgui::EditablePanel* m_pQueuePanel;
+	vgui::EditablePanel* m_pJoinPartyLobbyPanel;
+	CExImageButton* m_pQuitButton;
+	CExImageButton* m_pDisconnectButton;
+	CExImageButton* m_pPlayButton;
+	CExImageButton* m_pResumeButton;
+	vgui::Menu* m_pContextMenu = NULL;
+	CUtlVector< vgui::DHANDLE< CInviteNotification > > m_vecInviteHandles;
+
+	CUtlVector< vgui::DHANDLE< CMatchMakingDashboardSidePanel > > m_vecSideSlideStack[ 2 ]; // A left and right
+	CUtlVector< vgui::DHANDLE< CTFDashboardNotification > > m_vecNotifications;
+
+	Color m_colorPartyMembers[ MAX_PARTY_SIZE ];
 };
-
-class IMMPopupFactory
-{
-public:
-	virtual CTFMatchmakingPopup* Create() const = 0;
-	static CUtlVector< IMMPopupFactory* > s_vecPopupFactories;
-};
-
-template< typename Type >
-class CMMPopupFactoryImplementation : public IMMPopupFactory
-{
-public:
-	CMMPopupFactoryImplementation( const char* pszName, const char* pszResFile ) : m_pszName( pszName ), m_pszResFile( pszResFile )
-	{ s_vecPopupFactories.AddToTail( this ); }
-
-	virtual CTFMatchmakingPopup* Create() const OVERRIDE { return new Type( m_pszName, m_pszResFile ); }
-private:
-	const char* m_pszName;
-	const char* m_pszResFile;
-};
-
-#define REG_MM_POPUP_FACTORY( type, name, resfile )	 CMMPopupFactoryImplementation< type > g_##type##Factory( name, resfile );
 
 #endif // TF_MATCHMAKING_DASHBOARD_H

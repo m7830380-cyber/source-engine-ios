@@ -37,6 +37,15 @@ CTFParticlePanel::ParticleEffect_t::ParticleEffect_t()
 	, m_bStarted( false )
 {}
 
+CTFParticlePanel::ParticleEffect_t::~ParticleEffect_t()
+{
+	if ( m_pParticleSystem )
+	{
+		delete m_pParticleSystem;
+		m_pParticleSystem = NULL;
+	}
+}
+
 
 DECLARE_BUILD_FACTORY( CTFParticlePanel );
 //-----------------------------------------------------------------------------
@@ -60,6 +69,12 @@ CTFParticlePanel::~CTFParticlePanel()
 	m_pLightmapTexture.Shutdown();
 	m_DefaultEnvCubemap.Shutdown();
 	m_vecParticleEffects.PurgeAndDeleteElements();
+
+	if ( m_pKVParticles )
+	{
+		m_pKVParticles->deleteThis();
+		m_pKVParticles = NULL;
+	}
 }
 
 
@@ -70,142 +85,15 @@ void CTFParticlePanel::ApplySettings( KeyValues *inResourceData )
 	KeyValues *pKVParticleEffects = inResourceData->FindKey( "ParticleEffects" );
 	if ( pKVParticleEffects )
 	{
-		FOR_EACH_SUBKEY( pKVParticleEffects, pKVEffect )
+		if ( m_pKVParticles )
 		{
-			m_vecParticleEffects[ m_vecParticleEffects.AddToTail() ] = new ParticleEffect_t();
-			ParticleEffect_t* pEffect = m_vecParticleEffects.Tail();
-
-			// get the position
-			int alignScreenWide = GetWide(), alignScreenTall = GetTall();	// screen dimensions used for pinning in splitscreen
-
-			int x, y;
-			GetPos(x, y);
-			const char *xstr = pKVEffect->GetString( "particle_xpos", NULL );
-			const char *ystr = pKVEffect->GetString( "particle_ypos", NULL );
-
-			if (xstr)
-			{
-				bool bRightAlign = false;
-				bool bCenterAlign = false;
-				// look for alignment flags
-				if (xstr[0] == 'r' || xstr[0] == 'R')
-				{
-					bRightAlign = true;
-					xstr++;
-				}
-				else if (xstr[0] == 'c' || xstr[0] == 'C')
-				{
-					bCenterAlign = true;
-					xstr++;
-				}
-
-				// get the value
-				x = atoi(xstr);
-				// scale the x up to our screen co-ords
-				if ( IsProportional() )
-				{
-					x = scheme()->GetProportionalScaledValueEx(GetScheme(), x);
-				}
-				// now correct the alignment
-				if ( bRightAlign )
-				{
-					x = alignScreenWide - x;
-				}
-				else if ( bCenterAlign )
-				{
-					x = (alignScreenWide / 2) + x;
-				}
-			}
-
-			if (ystr)
-			{
-				bool bBottomAlign = false;
-				bool bCenterAlign = false;
-				// look for alignment flags
-				if (ystr[0] == 'r' || ystr[0] == 'R')
-				{
-					bBottomAlign = true;
-					ystr++;
-				}
-				else if (ystr[0] == 'c' || ystr[0] == 'C')
-				{
-					bCenterAlign = true;
-					ystr++;
-				}
-				y = atoi(ystr);
-				if (IsProportional())
-				{
-					// scale the y up to our screen co-ords
-					y = scheme()->GetProportionalScaledValueEx(GetScheme(), y);
-				}
-				// now correct the alignment
-				if ( bBottomAlign )
-				{
-					y = alignScreenTall - y;
-				}
-				else if ( bCenterAlign )
-				{
-					y = (alignScreenTall / 2) + y;
-				}
-			}
-
-			pEffect->m_nXPos = x;
-			pEffect->m_nYPos = y;
-
-			pEffect->m_flScale	= pKVEffect->GetFloat( "particle_scale", 1.f );
-			// Scale the scale factor the same way we do the XY position coordinates
-			if( IsProportional() )
-			{
-				int wide, tall;
-				surface()->GetScreenSize( wide, tall );
-
-				int proH, proW;
-				surface()->GetProportionalBase( proW, proH );
-				double scale = (double)tall / (double)proH;
-				pEffect->m_flScale *= scale;
-			}
-
-			pEffect->m_pParent	= this;
-			pEffect->m_bLoop		= pKVEffect->GetBool( "loop", true );
-			pEffect->m_bStartActivated = pKVEffect->GetBool( "start_activated", true );
-			pEffect->SetParticleSystem( pKVEffect->GetString( "particleName" ) );
-
-			// Read angles for the particle system
-			{
-				float x1,y1,z1;
-				const char* pszAngles = pKVEffect->GetString( "angles" );
-				if( *pszAngles )
-				{
-					if( pEffect->m_pParticleSystem && sscanf( pszAngles, "%f %f %f", &x1, &y1, &z1 ) == 3 )
-					{
-						pEffect->m_Angles = QAngle( x1, y1, z1 );
-						Quaternion q;
-						AngleQuaternion( pEffect->m_Angles , q );
-						pEffect->m_pParticleSystem->SetControlPointOrientation( 0, q );
-					}
-				}
-			}
-
-			pEffect->SetControlPointValue( 0, Vector(0,0,0) );
-			// Read all control point values
-			const char* pszControlPoint = NULL;
-			int nControlPointNumber = 0;
-			do
-			{
-				pszControlPoint = pKVEffect->GetString( VarArgs("control_point%d", nControlPointNumber), "" );
-				if ( *pszControlPoint )
-				{
-					float x2,y2,z2;
-					if (sscanf(pszControlPoint, "%f %f %f", &x2, &y2, &z2 ) == 3)
-					{
-						pEffect->SetControlPointValue( nControlPointNumber, Vector( x2, y2, z2 ) );
-					}
-				}
-
-				++nControlPointNumber;
-			}
-			while( *pszControlPoint );
+			m_pKVParticles->deleteThis();
+			m_pKVParticles = NULL;
 		}
+
+		m_pKVParticles = pKVParticleEffects->MakeCopy();
+
+		UpdateParticlesFromKV();
 	}
 }
 
@@ -286,6 +174,12 @@ void CTFParticlePanel::OnCommand( const char *command )
 	}
 }
 
+void CTFParticlePanel::OnSizeChanged( int wide, int tall )
+{
+	BaseClass::OnSizeChanged( wide, tall );
+	UpdateParticlesFromKV();
+}
+
 void CTFParticlePanel::FireParticleEffect( const char *pszName, int xPos, int yPos, float flScale, bool bLoop, float flEndTime )
 {
 	m_vecParticleEffects[ m_vecParticleEffects.AddToTail() ] = new ParticleEffect_t();
@@ -296,7 +190,7 @@ void CTFParticlePanel::FireParticleEffect( const char *pszName, int xPos, int yP
 
 	pEffect->m_pParent = this;
 	pEffect->m_nXPos = xPos - iParentAbsX;
-	pEffect->m_nYPos = yPos - iParentAbsY;
+	pEffect->m_nYPos = GetTall() - yPos - iParentAbsY;
 	pEffect->m_flScale = flScale;
 	pEffect->m_bLoop = bLoop;
 	pEffect->m_bAutoDelete = true; // This will get automatically deleted once it stops
@@ -374,14 +268,38 @@ void CTFParticlePanel::Paint()
 	if( m_vecParticleEffects.Count() == 0 )
 		return;
 
+	// See if anyone needs to even paint.  If not, let's not do anything else
+	{
+		bool bAnyNeedToPaint = false;
+		FOR_EACH_VEC( m_vecParticleEffects, i )
+		{
+			bAnyNeedToPaint |= m_vecParticleEffects[i]->BNeedsToPaint();
+		}
+
+		if ( !bAnyNeedToPaint )
+			return;
+	}
+
+	int iXPos, iYPos;
+	GetPos( iXPos, iYPos );
+	GetParent()->LocalToScreen( iXPos, iYPos );
+
+	int nWide, nTall;
+	GetSize( nWide, nTall );
+
 	int screenW, screenH;
 	vgui::surface()->GetScreenSize( screenW, screenH );
 
-	vgui::MatSystemSurface()->Begin3DPaint( 0, 0, screenW, screenH, false );
+	nWide = Min( nWide, screenW );
+	nTall = Min( nTall, screenH );
+
+	int nTallClipped = GetTall() - nTall;
+
+	vgui::MatSystemSurface()->Begin3DPaint( 0, 0, nWide, nTall, false );
 
 	VMatrix view, projection;
 	ComputeViewMatrix( &view, m_Camera );
-	ComputeProjectionMatrix( &projection, m_Camera, screenW, screenH );
+	ComputeProjectionMatrix( &projection, m_Camera, nWide, nTall );
 
 	CMatRenderContextPtr pRenderContext( g_pMaterialSystem );
 
@@ -397,28 +315,166 @@ void CTFParticlePanel::Paint()
 	pRenderContext->MatrixMode( MATERIAL_PROJECTION );
 	pRenderContext->LoadMatrix( projection );
 
-	int iXOffset, iYOffset;
-	vgui::ipanel()->GetAbsPos( GetVPanel(), iXOffset, iYOffset );
-	if ( iXOffset > 0 )
-		iXOffset = 0;
-	if ( iYOffset > 0 )
-		iYOffset = 0;
+	int clipRect[4];
+	ipanel()->GetClipRect( GetVPanel(), clipRect[0], clipRect[1], clipRect[2], clipRect[3] );
 
-	float flXScale = 1.f;
-	if ( GetWide() > screenW )
-		flXScale = (float)screenW / GetWide();
-	float flYScale = 1.f;
-	if ( GetTall() > screenH )
-		flYScale = (float)screenH / GetTall();
+	// Offset by where our edge is vs. where we wanted our edge to be
+	int iXOffset = clipRect[ 0 ] - iXPos;
+	int iYOffset = ( clipRect[ 1 ] - iYPos ) - nTallClipped;
 
 	FOR_EACH_VEC( m_vecParticleEffects, i )
 	{
-		m_vecParticleEffects[i]->Paint( pRenderContext, iXOffset, iYOffset, flXScale, flYScale, screenW, screenH );
+		m_vecParticleEffects[i]->Paint( pRenderContext, iXOffset, iYOffset, nWide, nTall );
 	}
 
 	pRenderContext->CullMode( MATERIAL_CULLMODE_CW );
 
 	vgui::MatSystemSurface()->End3DPaint();
+}
+
+void CTFParticlePanel::UpdateParticlesFromKV()
+{
+	if ( !m_pKVParticles )
+		return;
+
+	m_vecParticleEffects.PurgeAndDeleteElements();
+
+	FOR_EACH_SUBKEY( m_pKVParticles, pKVEffect )
+	{
+		m_vecParticleEffects[ m_vecParticleEffects.AddToTail() ] = new ParticleEffect_t();
+		ParticleEffect_t* pEffect = m_vecParticleEffects.Tail();
+
+		// get the position
+		int alignScreenWide = GetWide(), alignScreenTall = GetTall();	// screen dimensions used for pinning in splitscreen
+
+		int x, y;
+		GetPos(x, y);
+		const char *xstr = pKVEffect->GetString( "particle_xpos", NULL );
+		const char *ystr = pKVEffect->GetString( "particle_ypos", NULL );
+
+		if (xstr)
+		{
+			bool bRightAlign = false;
+			bool bCenterAlign = false;
+			// look for alignment flags
+			if (xstr[0] == 'r' || xstr[0] == 'R')
+			{
+				bRightAlign = true;
+				xstr++;
+			}
+			else if (xstr[0] == 'c' || xstr[0] == 'C')
+			{
+				bCenterAlign = true;
+				xstr++;
+			}
+
+			// get the value
+			x = atoi(xstr);
+			// scale the x up to our screen co-ords
+			if ( IsProportional() )
+			{
+				x = scheme()->GetProportionalScaledValueEx(GetScheme(), x);
+			}
+			// now correct the alignment
+			if ( bRightAlign )
+			{
+				x = alignScreenWide - x;
+			}
+			else if ( bCenterAlign )
+			{
+				x = (alignScreenWide / 2) + x;
+			}
+		}
+
+		if (ystr)
+		{
+			bool bBottomAlign = false;
+			bool bCenterAlign = false;
+			// look for alignment flags
+			if (ystr[0] == 'r' || ystr[0] == 'R')
+			{
+				bBottomAlign = true;
+				ystr++;
+			}
+			else if (ystr[0] == 'c' || ystr[0] == 'C')
+			{
+				bCenterAlign = true;
+				ystr++;
+			}
+			y = atoi(ystr);
+			if (IsProportional())
+			{
+				// scale the y up to our screen co-ords
+				y = scheme()->GetProportionalScaledValueEx(GetScheme(), y);
+			}
+			// now correct the alignment
+			if ( bBottomAlign )
+			{
+				y = alignScreenTall - y;
+			}
+			else if ( bCenterAlign )
+			{
+				y = (alignScreenTall / 2) + y;
+			}
+		}
+
+		pEffect->m_nXPos = x;
+		pEffect->m_nYPos = GetTall() - y;
+
+		pEffect->m_flScale	= pKVEffect->GetFloat( "particle_scale", 1.f );
+		// Scale the scale factor the same way we do the XY position coordinates
+		if( IsProportional() )
+		{
+			int wide, tall;
+			surface()->GetScreenSize( wide, tall );
+
+			int proH, proW;
+			surface()->GetProportionalBase( proW, proH );
+			double scale = (double)tall / (double)proH;
+			pEffect->m_flScale *= scale;
+		}
+
+		pEffect->m_pParent	= this;
+		pEffect->m_bLoop		= pKVEffect->GetBool( "loop", true );
+		pEffect->m_bStartActivated = pKVEffect->GetBool( "start_activated", true );
+		pEffect->SetParticleSystem( pKVEffect->GetString( "particleName" ) );
+
+		// Read angles for the particle system
+		{
+			float x1,y1,z1;
+			const char* pszAngles = pKVEffect->GetString( "angles" );
+			if( *pszAngles )
+			{
+				if( pEffect->m_pParticleSystem && sscanf( pszAngles, "%f %f %f", &x1, &y1, &z1 ) == 3 )
+				{
+					pEffect->m_Angles = QAngle( x1, y1, z1 );
+					Quaternion q;
+					AngleQuaternion( pEffect->m_Angles , q );
+					pEffect->m_pParticleSystem->SetControlPointOrientation( 0, q );
+				}
+			}
+		}
+
+		pEffect->SetControlPointValue( 0, Vector(0,0,0) );
+		// Read all control point values
+		const char* pszControlPoint = NULL;
+		int nControlPointNumber = 0;
+		do
+		{
+			pszControlPoint = pKVEffect->GetString( VarArgs("control_point%d", nControlPointNumber), "" );
+			if ( *pszControlPoint )
+			{
+				float x2,y2,z2;
+				if (sscanf(pszControlPoint, "%f %f %f", &x2, &y2, &z2 ) == 3)
+				{
+					pEffect->SetControlPointValue( nControlPointNumber, Vector( x2, y2, z2 ) );
+				}
+			}
+
+			++nControlPointNumber;
+		}
+		while( *pszControlPoint );
+	}
 }
 
 bool CTFParticlePanel::ParticleEffect_t::Update( float flTime )
@@ -527,7 +583,11 @@ void CTFParticlePanel::ParticleEffect_t::SetParticleSystem( const char* pszParti
 }
 
 
-void CTFParticlePanel::ParticleEffect_t::Paint( CMatRenderContextPtr& pRenderContext, int iXOffset, int iYOffset, float flXScale, float flYScale, int screenW, int screenH )
+void CTFParticlePanel::ParticleEffect_t::Paint( CMatRenderContextPtr& pRenderContext,
+												int iXOffset,
+												int iYOffset, 
+												int nWide,
+												int nTall )
 {
 	if ( !m_pParticleSystem || !m_bStarted )
 		return;
@@ -536,9 +596,12 @@ void CTFParticlePanel::ParticleEffect_t::Paint( CMatRenderContextPtr& pRenderCon
 	pRenderContext->PushMatrix();
 	pRenderContext->LoadIdentity();
 	
-	pRenderContext->Ortho( 0, 0, screenW, screenH, -9999, 9999 );
 
-	pRenderContext->Translate( flXScale * ( m_nXPos + iXOffset ), screenH - flYScale * ( m_nYPos + iYOffset ), 0.f );
+	pRenderContext->Ortho( 0, 0, nWide, nTall, -9999, 9999 );
+
+	int nX = m_nXPos - iXOffset;
+	int nY = m_nYPos + iYOffset;
+	pRenderContext->Translate( nX, nY, 0.f );
 	pRenderContext->Scale( m_flScale, m_flScale, m_flScale );
 
 	// Render Particles

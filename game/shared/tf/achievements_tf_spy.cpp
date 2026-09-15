@@ -134,7 +134,7 @@ class CAchievementTFSpy_SpyBackstabDisguiseTarget : public CBaseTFAchievement
 		// Achievement for backstabbing the player you are disguised as.
 		CTFPlayer *pTFVictim = ToTFPlayer( pVictim );
 		CTFPlayer *pTFAttacker = ToTFPlayer( pAttacker );
-		if ( pTFAttacker && pTFVictim && pTFVictim == pTFAttacker->m_Shared.GetDisguiseTarget().Get() )
+		if ( pTFAttacker && pTFVictim && pTFVictim == pTFAttacker->m_Shared.GetDisguiseTarget() )
 		{
 			int customkill = event->GetInt( "customkill" );
 			if ( customkill == TF_DMG_CUSTOM_BACKSTAB )
@@ -889,7 +889,10 @@ class CAchievementTFSpy_SapBuildingGrind : public CBaseTFAchievement
 			{
 				const char *pWeapon = event->GetString( "weapon" );
 
-				if ( FStrEq( "obj_attachment_sapper", pWeapon ) )
+				if ( FStrEq( "obj_attachment_sapper", pWeapon ) ||
+					 FStrEq( "snack_attack", pWeapon ) ||
+					 FStrEq( "psapper", pWeapon ) ||
+					 FStrEq( "recorder", pWeapon ) )
 				{
 					IncrementCount();
 				}

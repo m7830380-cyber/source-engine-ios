@@ -29,6 +29,9 @@
 #include "quest_log_panel.h"
 #include "local_steam_shared_object_listener.h"
 
+
+#include "mute_player_dialog.h"
+
 using namespace vgui;
 using namespace GCSDK;
 
@@ -39,6 +42,7 @@ class CTFStreamListPanel;
 class CLobbyContainerFrame_Comp;
 class CLobbyContainerFrame_MvM;
 class CLobbyContainerFrame_Casual;
+class CPvPRankPanel;
 
 enum mm_button_styles
 {
@@ -50,7 +54,7 @@ enum mm_button_styles
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-class CHudMainMenuOverride : public vgui::EditablePanel, public IViewPortPanel, public CGameEventListener, public CLocalSteamSharedObjectListener
+class CHudMainMenuOverride : public vgui::EditablePanel, public IViewPortPanel, public CGameEventListener
 {
 	DECLARE_CLASS_SIMPLE( CHudMainMenuOverride, vgui::EditablePanel );
 
@@ -62,7 +66,6 @@ class CHudMainMenuOverride : public vgui::EditablePanel, public IViewPortPanel, 
 		MMHA_OPTIONS,
 		MMHA_LOADOUT,
 		MMHA_STORE,
-		MMHA_WAR,
 
 		NUM_ANIMS
 	};
@@ -106,12 +109,8 @@ public:
 
 	void		 SetMOTDButtonVisible( bool bVisible );
 	void		 SetMOTDVisible( bool bVisible );
-	void		 SetQuestLogVisible( bool bVisible );
-	void		 SetWatchStreamVisible( bool bVisible );
-	void		 OpenMvMMMPanel();
-	void		 OpenCompMMPanel();
-	void		 OpenCasualMMPanel();
-	void		 ReloadMMPanels();
+	void		 SetQuestMapVisible( bool bVisible );
+//	void		 SetWatchStreamVisible( bool bVisible );
 	void		 UpdateMOTD( bool bNewMOTDs );
 	bool		 ReloadedAllMOTDs( void ) { return m_bReloadedAllMOTDs; }
 	CMOTDManager & GetMOTDManager() { return m_MOTDManager; }
@@ -121,11 +120,11 @@ public:
 	void		 UpdatePromotionalCodes( void );
 
 	void		 CheckTrainingStatus( void );
-	void		 StartHighlightAnimation( mm_highlight_anims iAnim );
-	void		 HideHighlight( mm_highlight_anims iAnim );
+	CExplanationPopup*	 StartHighlightAnimation( mm_highlight_anims iAnim );
 
 	MESSAGE_FUNC( OnUpdateMenu, "UpdateMenu" );
 	MESSAGE_FUNC_PARAMS( OnConfirm, "ConfirmDlgResult", data );
+	MESSAGE_FUNC( OnMainMenuStabilized, "MainMenuStabilized" );
 
 	void		ScheduleTrainingCheck( bool bWasInTraining ) { m_flCheckTrainingAt = (engine->Time() + 1.5); m_bWasInTraining = bWasInTraining; }
 	void		ScheduleItemCheck( void ) { m_flCheckUnclaimedItems = (engine->Time() + 1.5); }
@@ -134,30 +133,14 @@ public:
 
 	void		OnTick();
 
-	virtual GameActionSet_t GetPreferredActionSet() { return GAME_ACTION_SET_NONE; } // Seems like this should be GAME_ACTION_SET_MENU, but it's not because it's apparently visible *all* *the* *damn* *time*
+	virtual GameActionSet_t GetPreferredActionSet() { return GAME_ACTION_SET_NONE; } // Seems like this should be GAME_ACTION_SET_MENU, but it's not because it's apparently visible *all* *the* *time*
 
 #ifdef _DEBUG
 	void		Refresh();
 #endif
-	void		CheckForNewQuests( void );
-	void		UpdatePlaylistEntries( void );
 
-	virtual void SOCreated( const CSteamID & steamIDOwner, const CSharedObject *pObject, ESOCacheEvent eEvent ) OVERRIDE { SOEvent( pObject ); }
-	virtual void SOUpdated( const CSteamID & steamIDOwner, const CSharedObject *pObject, ESOCacheEvent eEvent ) OVERRIDE { SOEvent( pObject ); }
+	void UpdateRankPanelType();
 
-	CLobbyContainerFrame_Comp* GetCompLobbyPanel();
-	CLobbyContainerFrame_MvM* GetMvMLobbyPanel();
-	CLobbyContainerFrame_Casual* GetCasualLobbyPanel();
-
-#ifdef STAGING_ONLY
-	void		GenerateIconsThink( void );
-	void		GenerateIcons( bool bLarge, int min = -1, int max = -1 );
-
-	bool		m_bGeneratingIcons;
-	bool		m_bGeneratingLargeTestIcons;
-	CEconItemView *m_pIconData;
-	CUtlVector< item_definition_index_t > m_vecIconDefs;
-#endif
 
 protected:
 	virtual void PaintTraverse( bool Repaint, bool allowForce = true ) OVERRIDE;
@@ -167,19 +150,12 @@ private:
 	void SOEvent( const CSharedObject* pObject );
 
 	void		PerformKeyRebindings( void );
-	void		TogglePlayListMenu( void );
 
 	bool		CheckAndWarnForPREC( void );
 	void		StopUpdateGlow();
+	void		UpdateRankPanelVisibility();
 
 private:
-
-	// Store
-	CItemModelPanel			*m_pFeaturedItemPanel;
-	CItemModelPanel			*m_pFeaturedItemMouseOverPanel;
-
-	CItemModelPanel			*m_pMouseOverItemPanel;
-	CItemModelPanelToolTip	*m_pMouseOverTooltip;
 
 	// Notifications
 	vgui::EditablePanel				*m_pNotificationsShowPanel;
@@ -209,15 +185,13 @@ private:
 	CExButton						*m_pMOTDURLButton;
 
 	// MOTD handling
-	CMOTDManager			m_MOTDManager;
+	static CMOTDManager		m_MOTDManager;
 	bool					m_bHaveNewMOTDs;
 	RTime32					m_nLastMOTDRequestAt;
 	ELanguage				m_nLastMOTDRequestLanguage;
 	bool					m_bReloadedAllMOTDs;
 	int						m_iCurrentMOTD;
 	bool					m_bMOTDShownAtStartup;
-
-	class CWarLandingPanel			*m_pWarLandingPage;
 
 	vgui::ImagePanel		*m_pCharacterImagePanel;
 	int						 m_iCharacterImageIdx;
@@ -228,14 +202,13 @@ private:
 
 	CExButton				*m_pBackToReplaysButton;
 	ImagePanel				*m_pStoreHasNewItemsImage;
-	
+	CExButton				*m_pStoreButton;
+
 	CExButton				*m_pVRModeButton;
 	vgui::Panel				*m_pVRModeBackground;
 
 	KeyValues				*m_pButtonKV;
 	bool					m_bReapplyButtonKVs;
-
-	DHANDLE< CExplanationPopup >	m_pHighlightAnims[ NUM_ANIMS ];
 
 	float					m_flCheckTrainingAt;
 	bool					m_bWasInTraining;
@@ -261,26 +234,22 @@ private:
 	CMainMenuToolTip		*m_pToolTip;
 	vgui::EditablePanel		*m_pToolTipEmbeddedPanel;
 
-	CSimplePanelToolTip		*m_pFeaturedItemToolTip;
-
+	EditablePanel	*m_pWatchStreamButton;
 	EditablePanel	*m_pQuestLogButton;
 	EditablePanel	*m_pEventPromoContainer;
 	EditablePanel	*m_pSafeModeContainer;
 
-	vgui::DHANDLE<vgui::Frame> m_hReportPlayerDialog;
+	vgui::DHANDLE<CMutePlayerDialog> m_hMutePlayerDialog;
 
-	CTFStreamListPanel	*m_pWatchStreamsPanel;
+	//CTFStreamListPanel	*m_pWatchStreamsPanel;
 
-	bool m_bPlayListExpanded;
 	bool m_bStabilizedInitialLayout;
-	float m_flLastWarNagTime;
 	bool m_bBackgroundUsesCharacterImages;
+	const char* m_pszForcedCharacterImage = NULL;
 
-	EditablePanel *m_pCompetitiveAccessInfo;
-#ifdef SAXXYMAINMENU_ENABLED
-	CSaxxyAwardsPanel		*m_pSaxxyAwardsPanel;
-	KeyValues				*m_pSaxxySettings;
-#endif
+	CPvPRankPanel*	m_pRankPanel = NULL;
+	CPvPRankPanel*	m_pRankModelPanel = NULL;
+	vgui::Menu*		m_pRankTypeMenu = NULL;
 
 	CPanelAnimationVarAliasType( int, m_iButtonXOffset, "button_x_offset", "0", "proportional_int" );
 	CPanelAnimationVarAliasType( int, m_iButtonY, "button_y", "0", "proportional_int" );

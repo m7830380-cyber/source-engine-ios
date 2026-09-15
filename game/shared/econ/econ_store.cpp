@@ -69,6 +69,14 @@ ENUMSTRINGS_START( ECurrency )
 	{ k_ECurrencyCOP, "COP" },
 	{ k_ECurrencyPEN, "PEN" },
 	{ k_ECurrencyCLP, "CLP" },
+	{ k_ECurrencyARS, "ARS" },
+	{ k_ECurrencyCRC, "CRC" },
+	{ k_ECurrencyILS, "ILS" },
+	{ k_ECurrencyKWD, "KWD" },
+	{ k_ECurrencyQAR, "QAR" },
+	{ k_ECurrencyUYU, "UYU" },
+	{ k_ECurrencyKZT, "KZT" },
+	{ k_ECurrencyBYN, "BYN" },
 	{ k_ECurrencyInvalid, "Invalid" }
 ENUMSTRINGS_REVERSE( ECurrency, k_ECurrencyInvalid )
 
@@ -123,7 +131,7 @@ ENUMSTRINGS_END( EGCTransactionAuditReason )
 void econ_store_entry_t::InitCategoryTags( const char *pTags )
 {
 	// Default to "unrentable".
-	m_fRentalPriceScale = 1.0f;
+	m_fRentalPriceScale = 100.0f;
 
 	if ( !pTags || !pTags[0] )
 		return;
@@ -163,8 +171,8 @@ void econ_store_entry_t::InitCategoryTags( const char *pTags )
 	}
 
 	m_fRentalPriceScale = fMaxRentalPriceScale <= 0.0f || fMaxRentalPriceScale >= 100.0f
-						? 1.0f
-						: fMaxRentalPriceScale * 0.01f;
+						? 100.0f
+						: fMaxRentalPriceScale;
 	
 	// Clean up
 	vecTokens.PurgeAndDeleteElements();
@@ -214,7 +222,7 @@ bool econ_store_entry_t::IsOnSale( ECurrency eCurrency ) const
 
 bool econ_store_entry_t::IsRentable() const
 {
-	return m_fRentalPriceScale < 1.0f
+	return m_fRentalPriceScale < 100.0f
 		&& m_fRentalPriceScale > 0.0f;
 }
 
@@ -222,7 +230,8 @@ bool econ_store_entry_t::IsRentable() const
 bool econ_store_entry_t::HasDiscount( ECurrency eCurrency, item_price_t *out_punOptionalBasePrice ) const
 {
 	// Items on sale always report as being discounted.
-	if ( IsOnSale( eCurrency ) )
+	if ( IsOnSale( eCurrency ) ||
+		( GetItemDefinitionIndex() == InventoryManager()->GetLocalInventory()->GetPreviewItemDef() ) )
 	{
 		if ( out_punOptionalBasePrice )
 		{
@@ -317,9 +326,6 @@ void econ_store_entry_t::ValidatePrice( ECurrency eCurrency, item_price_t unPric
 	if ( unPrice == 0 && !m_bIsPackItem )
 	{
 		CFmtStr fmtError( "Warning: Invalid price for item (item def=%i)", GetItemDefinitionIndex() );
-#if defined( GC_DLL )
-		GGCGameBase()->PostAlert( GCSDK::k_EAlertTypeReport, true, fmtError.Access() );
-#endif
 		AssertMsg( false, "%s", fmtError.Access() );
 	}
 }
@@ -391,19 +397,6 @@ const econ_store_entry_t *CEconStorePriceSheet::GetEntry( item_definition_index_
 	return NULL;
 }
 
-#ifdef GC_DLL
-//-----------------------------------------------------------------------------
-// Purpose: Gets the entry details for a specific item and lets us modify the contents (GC-only)
-//-----------------------------------------------------------------------------
-econ_store_entry_t *CEconStorePriceSheet::GetEntryWriteable( item_definition_index_t unDefIndex )
-{
-	int iIndex = m_mapEntries.Find( unDefIndex );
-	if ( m_mapEntries.IsValidIndex( iIndex ) )
-		return &m_mapEntries[iIndex];
-
-	return NULL;
-}
-#endif // GC_DLL
 
 //-----------------------------------------------------------------------------
 // Purpose:
@@ -454,9 +447,6 @@ bool BInitializeCurrencyPricePoints( CurrencyPricePointMap_t& out_mapPricePoints
 			if ( eCurrency == k_ECurrencyInvalid )
 			{
 				// Spew
-#ifdef GC_DLL
-				EmitError( SPEW_GC, "Unknown Currency [%s] found in price sheet. Currency is unsupported!\n", pszCurrencyName );
-#endif
 				// don't crash, just conintue
 				continue;
 			}
@@ -481,18 +471,12 @@ bool CEconStorePriceSheet::InitFromKV( KeyValues *pKVRoot )
 	// Initialize categories - needed to initialize store entries
 	if ( !GEconStoreCategoryManager()->BInit( this, m_pKVRaw ) )
 	{
-#ifdef GC_DLL
-		EmitError( SPEW_GC, "Unable to Init GEconStoreCategoryManager \n" );
-#endif
 		return false;
 	}
 
 	// Initialize map of currency price points.
 	if ( !BInitializeCurrencyPricePoints( m_mapCurrencyPricePoints, pKVRoot->FindKey( "inventoryvalvegcpricesheet" ) ) )
 	{
-#ifdef GC_DLL
-		EmitError( SPEW_GC, "Unable to Init CurrencyPricePoints \n" );
-#endif
 		return false;
 	}
 
@@ -530,9 +514,6 @@ bool CEconStorePriceSheet::InitFromKV( KeyValues *pKVRoot )
 			const CurrencyPricePointMap_t::IndexType_t unIdx = m_mapCurrencyPricePoints.Find( key );
 			if ( unIdx == m_mapCurrencyPricePoints.InvalidIndex() )
 			{
-#ifdef GC_DLL
-				EmitError( SPEW_GC, "Unable to Find Currency %s in Currency Map.  Likely missing from inventoryvalvegcpricesheet.vdf  \n", PchNameFromECurrency(eCurrency) );
-#endif
 				continue;
 			}
 
@@ -555,9 +536,6 @@ bool CEconStorePriceSheet::InitFromKV( KeyValues *pKVRoot )
 		{
 			if ( !BInitEntryFromKV( pKVEntry ) )
 			{
-#ifdef GC_DLL
-				EmitError( SPEW_GC, "Unable to Find Entries in Currency KVP  \n" );
-#endif
 				continue;
 			}
 		}
@@ -599,25 +577,6 @@ bool CEconStorePriceSheet::InitFromKV( KeyValues *pKVRoot )
 	// Generate a hash of all item def indices and cache it off
 	m_unHashForAllItems = CalculateHashFromItems();
 
-#ifdef GC_DLL
-	// Parse the sales block on the GC. We'll use this to dynamically adjust prices.
-	KeyValues *pTimedSalesKV = m_pKVRaw->FindKey( "timed_sales" );
-	if ( pTimedSalesKV )
-	{
-		FOR_EACH_TRUE_SUBKEY( pTimedSalesKV, pKVSale )
-		{
-			if ( !InitTimedSaleEntryFromKV( pKVSale ) )
-			{
-				EmitError( SPEW_GC, "Unable to Init Timed Sale  \n" );
-			}
-				return false;
-		}
-
-		// Verify that none of our timed sales have overlapping items.
-		if ( !VerifyTimedSaleEntries() )
-			return false;
-	}
-#endif // GC_DLL
 
 	// Now that store entries are loaded, let the category manager do more stuff
 	if ( !GEconStoreCategoryManager()->BOnPriceSheetLoaded( this ) )
@@ -659,9 +618,6 @@ bool BInitializeStoreEntryPricePoints( econ_store_entry_t& out_entry, const Curr
 		// Looking for a price point that doesn't exist, or doesn't exist for this currency?
 		if ( unIdx == mapCurrencyPricePoints.InvalidIndex() )
 		{
-#ifdef GC_DLL
-			EmitError( SPEW_GC, "Unable to Find Currency %s in init price points.  Currency is missing from inventoryvalvegcpricesheet.vdf  \n", PchNameFromECurrency( eCurrency ) );
-#endif
 			continue;
 		}
 
@@ -677,7 +633,7 @@ bool BInitializeStoreEntryPricePoints( econ_store_entry_t& out_entry, const Curr
 
 		if ( ( nSalePercent > 0 ) && ( nSalePercent < 100 ) )
 		{
-			const item_price_t unSalePrice = out_entry.CalculateSalePrice( &out_entry, eCurrency, (float)nSalePercent );
+			const item_price_t unSalePrice = out_entry.CalculateSalePrice( out_entry.GetBasePrice( eCurrency ), eCurrency, (float)nSalePercent );
 			out_entry.SetSalePrice( eCurrency, unSalePrice );
 		}
 	}
@@ -811,267 +767,11 @@ bool CEconStorePriceSheet::BInitMarketEntryFromKV( KeyValues *pKVEntry )
 }
 #endif // CLIENT_DLL
 
-#ifdef GC_DLL
-//-----------------------------------------------------------------------------
-// Purpose: Parses the KV section piece and add a econ_store_entry_t
-//-----------------------------------------------------------------------------
-static RTime32 ConvertKVDateToRTime32( KeyValues *pKV, const char *pszKey )
-{
-	Assert( pKV );
-	Assert( pszKey );
-
-	const char *pszTime = pKV->GetString( pszKey, NULL );
-	if ( !pszTime || !pszTime[0] )
-		return 0;
-
-	RTime32 unConvertedTime = CRTime::RTime32FromString( pszTime );
-	if ( unConvertedTime == (RTime32)-1 )
-		return 0;
-
-	return unConvertedTime;
-}
-
-bool CEconStorePriceSheet::InitTimedSaleEntryFromKV( KeyValues *pKVTimedSaleEntry )
-{
-	Assert( pKVTimedSaleEntry );
-
-	econ_store_timed_sale_t TimedSale;
-
-	TimedSale.m_bSaleCurrentlyActive = false;
-	TimedSale.m_sIdentifier			 = pKVTimedSaleEntry->GetName();
-
-	TimedSale.m_SaleStartTime = ConvertKVDateToRTime32( pKVTimedSaleEntry, "sale_start_date" );
-	TimedSale.m_SaleEndTime	  = ConvertKVDateToRTime32( pKVTimedSaleEntry, "sale_end_date" );
-
-	// Sanity check -- make sure this sale lasts a greater-than-zero amount of time. This will also
-	// catch any cases where the end time was invalid and so returned 0.
-	if ( TimedSale.m_SaleStartTime >= TimedSale.m_SaleEndTime )
-	{
-		EG_ERROR( GCSDK::SPEW_GC, "Timed sale '%s' has invalid duration\n", pKVTimedSaleEntry->GetName() );
-		return false;
-	}
-
-	// Make sure the end time is also greater than 0.
-	if ( TimedSale.m_SaleStartTime <= 0 )
-	{
-		EG_ERROR( GCSDK::SPEW_GC, "Timed sale '%s' has invalid start time\n", pKVTimedSaleEntry->GetName() );
-		return false;
-	}
-
-	// What items does this sale apply to?
-	KeyValues *pKVSaleItems = pKVTimedSaleEntry->FindKey( "sale_items" );
-	if ( !pKVSaleItems )
-	{
-		EG_ERROR( GCSDK::SPEW_GC, "Timed sale '%s' missing \"sale_items\" section\n", pKVTimedSaleEntry->GetName() );
-		return false;
-	}
-
-	FOR_EACH_TRUE_SUBKEY( pKVSaleItems, pKVSaleItem )
-	{
-		const char *pszName = pKVSaleItem->GetString( "name", NULL );
-		if ( !pszName )
-		{
-			EG_ERROR( GCSDK::SPEW_GC, "Timed sale '%s' has invalid/missing item name for entry '%s'\n", pKVTimedSaleEntry->GetName(), pKVSaleItem->GetName() );
-			return false;
-		}
-
-		const CEconItemDefinition *pItemDef = GetItemSchema()->GetItemDefinitionByName( pszName );
-		if ( !pItemDef )
-		{
-			EG_ERROR( GCSDK::SPEW_GC, "Timed sale '%s' has missing item named '%s' for entry '%s'\n", pKVTimedSaleEntry->GetName(), pszName, pKVSaleItem->GetName() );
-			return false;
-		}
-
-		const float fSalePercentageOff = pKVSaleItem->GetFloat( "sale_percentage_off", -1.0f );
-		if ( fSalePercentageOff <= 0.0f || fSalePercentageOff > 100.0f )
-		{
-			EG_ERROR( GCSDK::SPEW_GC, "Timed sale '%s' has invalid sale percentage for item named '%s' for entry '%s'\n", pKVTimedSaleEntry->GetName(), pszName, pKVSaleItem->GetName() );
-			return false;
-		}
-
-		const econ_store_entry_t *pStoreEntry = GetEntry( pItemDef->GetDefinitionIndex() );
-		if ( !pStoreEntry )
-		{
-			EG_ERROR( GCSDK::SPEW_GC, "Timed sale '%s' has item named '%s' for entry '%s' that is not in the store\n", pKVTimedSaleEntry->GetName(), pszName, pKVSaleItem->GetName() );
-			return false;
-		}
-
-		// Verify that no item in a timed sale is already in a hard-coded sale as well. This would break
-		// our fragile pricing math assumptions.
-		FOR_EACH_CURRENCY( eCurrency )
-		{
-			if ( pStoreEntry->IsOnSale( eCurrency ) )
-			{
-				EG_ERROR( GCSDK::SPEW_GC, "Timed sale '%s' has item named '%s' for entry '%s' that hard-coded to be on sale (currency: %i)\n", pKVTimedSaleEntry->GetName(), pszName, pKVSaleItem->GetName(), eCurrency );
-				return false;
-			}
-		}
-		
-		econ_store_timed_sale_item_t SaleItem;
-		SaleItem.m_unItemDef = pItemDef->GetDefinitionIndex();
-		SaleItem.m_fPricePercentage = fSalePercentageOff;
-
-		TimedSale.m_vecSaleItems.AddToTail( SaleItem );
-	}
-
-	
-	if ( TimedSale.m_vecSaleItems.Count() <= 0 )
-	{
-		EG_ERROR( GCSDK::SPEW_GC, "Timed sale '%s' has no valid items to put on sale\n", pKVTimedSaleEntry->GetName() );
-		return false;
-	}
-	
-	// We made it this far with no errors, so add this as a timed sale block if it actually affects
-	// any items.
-	m_vecTimedSales.AddToTail( TimedSale );
-
-	return true;
-}
-
-//-----------------------------------------------------------------------------
-// Purpose:
-//-----------------------------------------------------------------------------
-bool CEconStorePriceSheet::VerifyTimedSaleEntries()
-{
-	// We could write an interval tree and be smart about this, but Fletcher made
-	// faces at me when I suggested it so we just brute force it -- we find each
-	// item in each sale sequentially, find each sale that overlaps with the current
-	// sale, and make sure that it doesn't have the same item.
-	for ( int i = 0; i < m_vecTimedSales.Count(); i++ )
-	{
-		const econ_store_timed_sale_t& BaseSale = m_vecTimedSales[i];
-		Assert( BaseSale.m_vecSaleItems.Count() > 0 );
-
-		for ( int j = 0; j < BaseSale.m_vecSaleItems.Count(); j++ )
-		{
-			const item_definition_index_t unSearchDefIndex = BaseSale.m_vecSaleItems[j].m_unItemDef;
-			
-			for ( int k = i; k < m_vecTimedSales.Count(); k++ )
-			{
-				// Does this sale overlap with our current sale?
-				const econ_store_timed_sale_t& OtherSale = m_vecTimedSales[k];
-
-				if ( k == i || MAX( BaseSale.m_SaleStartTime, OtherSale.m_SaleStartTime ) <= MIN( BaseSale.m_SaleEndTime, OtherSale.m_SaleEndTime ) )
-				{
-					// We overlap, so make sure this item doesn't show up in both lists. Start the search in our
-					// current sale to make sure the same entry doesn't show up twice and then look at the full
-					// list of items in other overlapping sales.
-					for ( int l = (k == i ? j + 1 : 0); l < OtherSale.m_vecSaleItems.Count(); l++ )
-					{
-						const item_definition_index_t unMaybeMatchDefIndex = OtherSale.m_vecSaleItems[l].m_unItemDef;
-						if ( unSearchDefIndex == unMaybeMatchDefIndex )
-						{
-							EG_ERROR( GCSDK::SPEW_GC, "Conflict detected for item index '%i' betweens timed sales '%s' / '%s'\n",
-											  unSearchDefIndex,
-											  BaseSale.m_sIdentifier.Get(),
-											  OtherSale.m_sIdentifier.Get() );
-							return false;
-						}
-					}
-				}
-			}
-		}
-	}
-
-	return true;
-}
-
-//-----------------------------------------------------------------------------
-// Purpose:
-//-----------------------------------------------------------------------------
-void CEconStorePriceSheet::UpdatePricesForTimedSales( const RTime32 curTime )
-{
-	FOR_EACH_VEC( m_vecTimedSales, i )
-	{
-		econ_store_timed_sale_t& TimedSale = m_vecTimedSales[i];
-		Assert( TimedSale.m_vecSaleItems.Count() > 0 );
-
-		// Is this sale active in our current time?
-		const bool bSaleShouldBeActive = (curTime >= TimedSale.m_SaleStartTime)
-									  && (curTime <= TimedSale.m_SaleEndTime);
-
-		// Last time we processed it, was this sale active?
-		const bool bSaleIsActive = TimedSale.m_bSaleCurrentlyActive;
-
-		// State transition?
-		if ( bSaleShouldBeActive != bSaleIsActive )
-		{
-			FOR_EACH_VEC( TimedSale.m_vecSaleItems, i )
-			{
-				econ_store_entry_t *unSaleStoreEntry = GetEntryWriteable( TimedSale.m_vecSaleItems[i].m_unItemDef );
-				Assert( unSaleStoreEntry );
-
-				// We don't support items being on sale in multiple ways at the same time (ie., a
-				// sale specified in the base prices in store.txt and also a timed sale) so we just stomp
-				// whatever the sale price is with the price we think we should be on sale for.
-				FOR_EACH_CURRENCY( eCurrency )
-				{
-					unSaleStoreEntry->SetSalePrice( eCurrency,
-													bSaleIsActive ? unSaleStoreEntry->GetBasePrice( eCurrency ) * TimedSale.m_vecSaleItems[i].m_fPricePercentage : 0 );
-				}
-			}
-
-			// Update our last-updated timestamp if any of these sales changed -- use the most recent
-			// "start of sale" date. This will allow people using the store prices WebAPI to know whether
-			// prices have changed.
-
-			// If items just went on sale, their price changed at the start of this sale.
-			if ( bSaleIsActive )
-			{
-				m_RTimeVersionStamp = MAX( m_RTimeVersionStamp, TimedSale.m_SaleStartTime );
-			}
-
-			// If items just got taken off sale, their price changed at the end of this sale.
-			else // if ( !bSaleIsActive )
-			{
-				m_RTimeVersionStamp = MAX( m_RTimeVersionStamp, TimedSale.m_SaleEndTime );
-			}
-
-			// Update our cached state.
-			TimedSale.m_bSaleCurrentlyActive = bSaleShouldBeActive;
-
-			// Debug output.
-			EmitInfo( GCSDK::SPEW_GC, SPEW_ALWAYS, LOG_ALWAYS, "Timed sale '%s' has been %s.\n", TimedSale.m_sIdentifier.Get(), bSaleShouldBeActive ? "enabled" : "disabled" );
-		}
-	}
-}
-
-//-----------------------------------------------------------------------------
-// Purpose:
-//-----------------------------------------------------------------------------
-void CEconStorePriceSheet::DumpTimeSaleState( const RTime32 curTime ) const
-{
-	char curTimeBuf[k_RTimeRenderBufferSize];
-	EmitInfo( GCSDK::SPEW_GC, SPEW_ALWAYS, LOG_ALWAYS, "Current sale calculation time: %s\n", CRTime::RTime32ToString( curTime, curTimeBuf ) );
-
-	FOR_EACH_VEC( m_vecTimedSales, i )
-	{
-		const econ_store_timed_sale_t& TimedSale = m_vecTimedSales[i];
-		Assert( TimedSale.m_vecSaleItems.Count() > 0 );
-
-		if ( !TimedSale.m_bSaleCurrentlyActive )
-		{
-			EmitInfo( GCSDK::SPEW_GC, SPEW_ALWAYS, LOG_ALWAYS, "\tSale '%s' (not active)\n", TimedSale.m_sIdentifier.Get() );
-		}
-		else
-		{
-			EmitInfo( GCSDK::SPEW_GC, SPEW_ALWAYS, LOG_ALWAYS, "\tSale '%s' (active):\n", TimedSale.m_sIdentifier.Get() );
-
-			FOR_EACH_VEC( TimedSale.m_vecSaleItems, i )
-			{
-				EmitInfo( GCSDK::SPEW_GC, SPEW_ALWAYS, LOG_ALWAYS, "\t\t%s is %.0f%% off\n",
-								 GetItemSchema()->GetItemDefinition( TimedSale.m_vecSaleItems[i].m_unItemDef )->GetDefinitionName(),
-								 TimedSale.m_vecSaleItems[i].m_fPricePercentage );
-			}
-		}
-	}
-}
-#endif // GC_DLL
 
 //-----------------------------------------------------------------------------
 // Performs calculation of a discounted price given a base price, and will then handle ensuring the appropriate number of zeros at the end of the price via rounding
 //-----------------------------------------------------------------------------
-/*static*/ item_price_t econ_store_entry_t::GetDiscountedPrice( ECurrency eCurrency, item_price_t unBasePrice, float fDiscountPercentage )
+/*static*/ item_price_t econ_store_entry_t::GetDiscountedPrice( item_price_t unBasePrice, ECurrency eCurrency, float fDiscountPercentage )
 {
 	Assert( fDiscountPercentage > 0.0f );
 	Assert( fDiscountPercentage < 100.0f );
@@ -1084,25 +784,28 @@ void CEconStorePriceSheet::DumpTimeSaleState( const RTime32 curTime ) const
 
 	//determine what the unit of granularity we want to use for pricing. For example if you use 1, we keep 1/100th level precision, if you use 100 we'll round it to the nearest 100th (in USD this would be round to
 	//the nearest dollar, etc)
+	//this information can be found on the partner site documentation for supported currencies
 	item_price_t unPriceGranularity = 1;
 	switch ( eCurrency )
 	{
-	case k_ECurrencyRUB: unPriceGranularity = 100;         break;
-	case k_ECurrencyJPY: unPriceGranularity = 100;        break;
-	case k_ECurrencyNOK: unPriceGranularity = 100;         break;
-	case k_ECurrencyPHP: unPriceGranularity = 100;         break;
-	case k_ECurrencyTHB: unPriceGranularity = 100;         break;
-	case k_ECurrencyKRW: unPriceGranularity = 1000;        break;
-	case k_ECurrencyUAH: unPriceGranularity = 10;          break;
-	case k_ECurrencyIDR: unPriceGranularity = 100;         break;
-	case k_ECurrencyVND: unPriceGranularity = 1000;        break;
-	case k_ECurrencyCNY: unPriceGranularity = 100;        break;
-	case k_ECurrencyTWD: unPriceGranularity = 100;        break;
-	case k_ECurrencyINR: unPriceGranularity = 100;        break;
-	case k_ECurrencyCOP: unPriceGranularity = 100;        break;
-	case k_ECurrencyCLP: unPriceGranularity = 100;        break;
+	case k_ECurrencyRUB: unPriceGranularity = 100;		break;
+	case k_ECurrencyJPY: unPriceGranularity = 100;		break;
+	case k_ECurrencyNOK: unPriceGranularity = 100;		break;
+	case k_ECurrencyPHP: unPriceGranularity = 100;		break;
+	case k_ECurrencyTHB: unPriceGranularity = 100;		break;
+	case k_ECurrencyKRW: unPriceGranularity = 1000;		break;
+	case k_ECurrencyUAH: unPriceGranularity = 100;		break;
+	case k_ECurrencyIDR: unPriceGranularity = 100;		break;
+	case k_ECurrencyVND: unPriceGranularity = 50000;	break;
+	case k_ECurrencyCNY: unPriceGranularity = 100;		break;
+	case k_ECurrencyTWD: unPriceGranularity = 100;		break;
+	case k_ECurrencyINR: unPriceGranularity = 100;		break;
+	case k_ECurrencyCOP: unPriceGranularity = 100;		break;
+	case k_ECurrencyCLP: unPriceGranularity = 100;		break;
+	case k_ECurrencyCRC: unPriceGranularity = 500;		break;
+	case k_ECurrencyUYU: unPriceGranularity = 100;		break;
+	case k_ECurrencyKZT: unPriceGranularity = 100;		break;
 	}
-
 
 	//now handle the rounding to the specified price granularity
 	if( unPriceGranularity > 1 )
@@ -1134,7 +837,7 @@ void CEconStorePriceSheet::DumpTimeSaleState( const RTime32 curTime ) const
 // will get you the actual discount percentage, which can be different for
 // NXP, which has its own nonlinear pricing structure.
 //-----------------------------------------------------------------------------
-/*static*/ item_price_t econ_store_entry_t::CalculateSalePrice( const econ_store_entry_t* pSaleStoreEntry, ECurrency eCurrency, float fDiscountPercentage, int32 *out_pAdjustedDiscountPercentage/*=NULL*/ )
+/*static*/ item_price_t econ_store_entry_t::CalculateSalePrice( item_price_t unPreDiscountPrice, ECurrency eCurrency, float fDiscountPercentage, int32 *out_pAdjustedDiscountPercentage/*=NULL*/ )
 {
 	item_price_t unSalePrice = 0;
 /*
@@ -1143,36 +846,36 @@ void CEconStorePriceSheet::DumpTimeSaleState( const RTime32 curTime ) const
 	{
 		// For these currencies, we calculate the sale price based on the discount percentage times the *USD* base price -- rather than the discount percentage
 		// times the base price for the given currency.
-		const item_price_t unSalePrice_USD = econ_store_entry_t::GetDiscountedPrice( k_ECurrencyUSD, pSaleStoreEntry->GetBasePrice( k_ECurrencyUSD ), fDiscountPercentage );
+		const item_price_t unSalePrice_USD = econ_store_entry_t::GetDiscountedPrice( unPreDiscountPrice, k_ECurrencyUSD, fDiscountPercentage );
 		unSalePrice = ( eCurrency == k_ECurrencyNXP ) ? ConvertUSDToNXP( unSalePrice_USD ) : ConvertUSDToRMB( unSalePrice_USD );
 
 		// Ensure that the sale price is strictly less
-		Assert( unSalePrice < pSaleStoreEntry->GetBasePrice( eCurrency ) );
-		if ( unSalePrice >= pSaleStoreEntry->GetBasePrice( eCurrency ) )
+		Assert( unSalePrice < unPreDiscountPrice );
+		if ( unSalePrice >= unPreDiscountPrice )
 		{
-			unSalePrice = pSaleStoreEntry->GetBasePrice( eCurrency );
+			unSalePrice = unPreDiscountPrice;
 		}
 	}
 	else
 */
 	{
-		unSalePrice = econ_store_entry_t::GetDiscountedPrice( eCurrency, pSaleStoreEntry->GetBasePrice( eCurrency ), fDiscountPercentage );
+		unSalePrice = econ_store_entry_t::GetDiscountedPrice( unPreDiscountPrice, eCurrency, fDiscountPercentage );
 	}
 
 	Assert( unSalePrice > 0 );
 
-	// Also set a percentage per currency, since they can be different. RMB and NXP, for example, 
-	// calculate a sale price based on the USD sale price.
-	const bool bUseDefaultDiscountPercentage = ( eCurrency == k_ECurrencyUSD );
-	const double fActualPercent = 100.0 * ( 1.0 - ( double )unSalePrice / ( double )pSaleStoreEntry->GetBasePrice( eCurrency ) );
-
-	const int32 nDiscountPercentageForCurrency = bUseDefaultDiscountPercentage ?
-		          RoundFloatToInt( fDiscountPercentage ) :
-		          RoundFloatToInt( fActualPercent );
-	AssertMsg( nDiscountPercentageForCurrency >= 0 && nDiscountPercentageForCurrency < 100, "Invalid discount percentage of %u specified for item %u currency %u", nDiscountPercentageForCurrency, pSaleStoreEntry->GetItemDefinitionIndex(), eCurrency );
-
 	if ( out_pAdjustedDiscountPercentage )
 	{
+		// Also set a percentage per currency, since they can be different. RMB and NXP, for example, 
+		// calculate a sale price based on the USD sale price.
+		const bool bUseDefaultDiscountPercentage = ( eCurrency == k_ECurrencyUSD );
+		const double fActualPercent = 100.0 * ( 1.0 - (double)unSalePrice / (double)unPreDiscountPrice );
+
+		const int32 nDiscountPercentageForCurrency = bUseDefaultDiscountPercentage ?
+			RoundFloatToInt( fDiscountPercentage ) :
+			RoundFloatToInt( fActualPercent );
+		AssertMsg( nDiscountPercentageForCurrency >= 0 && nDiscountPercentageForCurrency < 100, "Invalid discount percentage of %u specified for item ( currency %u )", nDiscountPercentageForCurrency, eCurrency );
+
 		*out_pAdjustedDiscountPercentage = nDiscountPercentageForCurrency;
 	}
 
@@ -1373,7 +1076,19 @@ static void InitStreamLocale( std::wostringstream &stream, ELanguage eLang, uint
 	// Don't display fractional rubles
 	// But if our amount is fractional, we should show it regardless
 	// hack hack - certain currencies should not show fractional symbol - see if we can wire this through from config at some point
-	if ( ( eCurrencyCode == k_ECurrencyRUB || eCurrencyCode == k_ECurrencyJPY || eCurrencyCode == k_ECurrencyIDR || eCurrencyCode == k_ECurrencyKRW )
+	if ( ( eCurrencyCode == k_ECurrencyRUB || 
+		   eCurrencyCode == k_ECurrencyJPY || 
+		   eCurrencyCode == k_ECurrencyIDR || 
+		   eCurrencyCode == k_ECurrencyVND ||
+		   eCurrencyCode == k_ECurrencyKRW ||
+		   eCurrencyCode == k_ECurrencyUAH ||
+		   eCurrencyCode == k_ECurrencyCNY ||
+		   eCurrencyCode == k_ECurrencyCOP ||
+		   eCurrencyCode == k_ECurrencyTWD ||
+		   eCurrencyCode == k_ECurrencyINR ||
+		   eCurrencyCode == k_ECurrencyCRC ||
+		   eCurrencyCode == k_ECurrencyUYU ||
+		   eCurrencyCode == k_ECurrencyKZT )
 		&& nExpectedAmount % 100 == 0 )
 	{
 		stream.precision( 0 );
@@ -1510,7 +1225,7 @@ int MakeMoneyStringInternal( wchar_t *pchDest, uint32 nDest, item_price_t unPric
 		break;
 
 	case k_ECurrencyCLP:
-		pchSymbol = "$"; // bugbug - prefix it with CLP?
+		pchSymbol = "CLP$";
 		break;
 
 	case k_ECurrencyPEN:
@@ -1541,6 +1256,38 @@ int MakeMoneyStringInternal( wchar_t *pchDest, uint32 nDest, item_price_t unPric
 		pchSymbol = "DH";
 		break;
 
+	case k_ECurrencyARS:
+		pchSymbol = "ARS$";
+		break;
+
+	case k_ECurrencyCRC:
+		pchSymbol = "\xE2\x82\xA1";
+		break;
+
+	case k_ECurrencyILS:
+		pchSymbol = "\xE2\x82\xAA";
+		break;
+
+	case k_ECurrencyKWD:
+		pchSymbol = "KD";
+		break;
+
+	case k_ECurrencyQAR:
+		pchSymbol = "QR";
+		break;
+
+	case k_ECurrencyUYU:
+		pchSymbol = "$U";
+		break;
+
+	case k_ECurrencyKZT:
+		pchSymbol = "\xE2\x82\xB8";
+		break;
+
+	case k_ECurrencyBYN:
+		pchSymbol = "Br";
+		break;
+
 	default:
 		AssertMsg( false, "Unknown currency code" );
 		pchSymbol = "$";
@@ -1569,6 +1316,8 @@ int MakeMoneyStringInternal( wchar_t *pchDest, uint32 nDest, item_price_t unPric
 	case k_ECurrencyPLN:
 	case k_ECurrencySAR:
 	case k_ECurrencyAED:
+	case k_ECurrencyKWD:
+	case k_ECurrencyQAR:
 		bFirstSymbolThenAmount = false;
 		bSpaceBetweenTokens = true;
 		break;
@@ -1577,15 +1326,17 @@ int MakeMoneyStringInternal( wchar_t *pchDest, uint32 nDest, item_price_t unPric
 	case k_ECurrencyCAD:
 	case k_ECurrencyAUD:
 	case k_ECurrencyNZD:
-	case k_ECurrencyPEN:
 	case k_ECurrencyCOP:
 	case k_ECurrencyZAR:
 	case k_ECurrencyHKD:
 	case k_ECurrencyTWD:
-	case k_ECurrencyKRW:
 	case k_ECurrencyCHF:
+	case k_ECurrencyARS:
+	case k_ECurrencyCLP:
+	case k_ECurrencyINR:
 		bFirstSymbolThenAmount = true;
 		bSpaceBetweenTokens = true;
+		break;
 	default:
 		bFirstSymbolThenAmount = true;
 		bSpaceBetweenTokens = false;
@@ -1627,7 +1378,7 @@ bool CEconStorePriceSheet::BItemExistsInPriceSheet( item_definition_index_t unDe
 	{
 		const CEconStoreCategoryManager::StoreCategory_t *pCat = pCategoryManager->GetCategoryFromIndex( i );
 
-		// Intentionally not using CUtlSortVector<>::Find(), since it calls Less(), which is slow as shit for m_vecEntries.
+		// Intentionally not using CUtlSortVector<>::Find(), since it calls Less(), which is slow for m_vecEntries.
 		FOR_EACH_VEC( pCat->m_vecEntries, j )
 		{
 			if ( pCat->m_vecEntries[j] == unDefIndex )
@@ -1661,12 +1412,8 @@ int GetStoreVersion()
 //-----------------------------------------------------------------------------
 const CEconStorePriceSheet *GetEconPriceSheet()
 {
-#ifdef GC_DLL
-	return GEconManager()->GetPriceSheet();
-#else
 	return EconUI() && EconUI()->GetStorePanel()
 		 ? EconUI()->GetStorePanel()->GetPriceSheet()
 		 : NULL;
-#endif
 }
 

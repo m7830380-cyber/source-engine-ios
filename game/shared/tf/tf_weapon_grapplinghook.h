@@ -63,7 +63,7 @@ public:
 	virtual acttable_t *ActivityList( int &iActivityCount ) OVERRIDE;
 
 	// poseparam override
-	virtual poseparamtable_t *PoseParamList( int &iPoseParamCount ) OVERRIDE;
+	virtual poseparamtable_t *GetPlayerPoseParamList( int &iPoseParamCount ) OVERRIDE;
 
 #ifdef GAME_DLL
 	void			ActivateRune();

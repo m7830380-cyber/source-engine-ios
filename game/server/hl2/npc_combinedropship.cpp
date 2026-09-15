@@ -314,7 +314,7 @@ private:
 	
 	// Misc Vars
 	CHandle<CBaseAnimating>	m_hContainer;
-	EHANDLE		m_hPickupTarget;
+	CHandle<CBaseAnimating>	m_hPickupTarget;
 	int			m_iContainerMoveType;
 	bool		m_bWaitForDropoffInput;
 
@@ -343,8 +343,6 @@ private:
 	int			m_iMachineGunRefAttachment;
 	int			m_iAttachmentTroopDeploy;
 	int			m_iAttachmentDeployStart;
-	int 			m_poseWeapon_Pitch;
-	int 			m_poseWeapon_Yaw;
 
 	// Sounds
 	CSoundPatch		*m_pCannonSound;
@@ -365,7 +363,8 @@ protected:
 	// Should the dropship end up having inheritors, their activate may
 	// stomp these numbers, in which case you should make these ordinary members
 	// again.
-	static int m_poseBody_Accel, m_poseBody_Sway, m_poseCargo_Body_Accel, m_poseCargo_Body_Sway;
+	static int m_poseBody_Accel, m_poseBody_Sway, m_poseCargo_Body_Accel, m_poseCargo_Body_Sway, 
+		m_poseWeapon_Pitch, m_poseWeapon_Yaw;
 	static bool m_sbStaticPoseParamsLoaded;
 	virtual void	PopulatePoseParameters( void );
 };
@@ -376,11 +375,13 @@ int CNPC_CombineDropship::m_poseBody_Accel = 0;
 int CNPC_CombineDropship::m_poseBody_Sway = 0;
 int CNPC_CombineDropship::m_poseCargo_Body_Accel = 0;
 int CNPC_CombineDropship::m_poseCargo_Body_Sway = 0;
+int CNPC_CombineDropship::m_poseWeapon_Pitch = 0;
+int CNPC_CombineDropship::m_poseWeapon_Yaw = 0;
 
 //-----------------------------------------------------------------------------
 // Purpose: Cache whatever pose parameters we intend to use
 //-----------------------------------------------------------------------------
-void CNPC_CombineDropship::PopulatePoseParameters( void )
+void	CNPC_CombineDropship::PopulatePoseParameters( void )
 {
 	if (!m_sbStaticPoseParamsLoaded)
 	{
@@ -388,14 +389,10 @@ void CNPC_CombineDropship::PopulatePoseParameters( void )
 		m_poseBody_Sway			= LookupPoseParameter( "body_sway" );
 		m_poseCargo_Body_Accel  = LookupPoseParameter( "cargo_body_accel" );
 		m_poseCargo_Body_Sway   = LookupPoseParameter( "cargo_body_sway" );
+		m_poseWeapon_Pitch		= m_hContainer ? m_hContainer->LookupPoseParameter( "weapon_pitch" ) : LookupPoseParameter( "weapon_pitch" );
+		m_poseWeapon_Yaw		= m_hContainer ? m_hContainer->LookupPoseParameter( "weapon_yaw" ) : LookupPoseParameter( "weapon_yaw" );
 
 		m_sbStaticPoseParamsLoaded = true;
-	}
-
-	if( m_hContainer )
-	{
-		m_poseWeapon_Pitch = m_hContainer->LookupPoseParameter( "weapon_pitch" );
-		m_poseWeapon_Yaw = m_hContainer->LookupPoseParameter( "weapon_yaw" );
 	}
 
 	BaseClass::PopulatePoseParameters();
@@ -848,7 +845,6 @@ CNPC_CombineDropship::~CNPC_CombineDropship(void)
 void CNPC_CombineDropship::Spawn( void )
 {
 	Precache( );
-	SetModel( "models/combine_dropship.mdl" );
 
 #ifdef _XBOX
 	AddEffects( EF_NOSHADOW );
@@ -864,8 +860,6 @@ void CNPC_CombineDropship::Spawn( void )
 	m_iMachineGunRefAttachment = -1;
 	m_iAttachmentTroopDeploy = -1;
 	m_iAttachmentDeployStart = -1;
-	m_poseWeapon_Pitch = -1;
-	m_poseWeapon_Yaw = -1;
 
 	// create the correct bin for the ship to carry
 	switch ( m_iCrateType )
@@ -901,9 +895,6 @@ void CNPC_CombineDropship::Spawn( void )
 			m_iMachineGunBaseAttachment = m_hContainer->LookupAttachment( "gun_base" );
 			// NOTE: gun_ref must have the same position as gun_base, but rotates with the gun
 			m_iMachineGunRefAttachment = m_hContainer->LookupAttachment( "gun_ref" );
-
-			m_poseWeapon_Pitch = m_hContainer->LookupPoseParameter( "weapon_pitch" );
-			m_poseWeapon_Yaw = m_hContainer->LookupPoseParameter( "weapon_yaw" );
 		}
 		break;
 
@@ -980,6 +971,10 @@ void CNPC_CombineDropship::Spawn( void )
 	default:
 		break;
 	}
+
+	// moving this after we've created m_hContainer so we can properly setup the
+	// weapon_pitch and weapon_yaw pose parameter indexes in PopulatePoseParameters()
+	SetModel( "models/combine_dropship.mdl" );
 
 	// Setup our bbox
 	if ( m_hContainer )
@@ -1850,9 +1845,15 @@ void CNPC_CombineDropship::InputPickup( inputdata_t &inputdata )
 		Warning("npc_combinedropship %s couldn't find pickup target named %s\n", STRING(GetEntityName()), STRING(iszTargetName) );
 		return;
 	}
+	CBaseAnimating *pTargetAnimating = pTarget->GetBaseAnimating();
+	if ( !pTargetAnimating )
+	{
+		Warning("npc_combinedropship %s with target %s wasn't a CBaseAnimating\n", STRING(GetEntityName()), STRING(iszTargetName) );
+		return;
+	}
 
 	// Start heading to the point
-	m_hPickupTarget = pTarget;
+	m_hPickupTarget = pTargetAnimating;
 
 	m_bHasDroppedOff = false;
 

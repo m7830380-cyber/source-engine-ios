@@ -18,6 +18,10 @@
 #include "tools/bonelist.h"
 #include <KeyValues.h>
 #include "hltvcamera.h"
+#ifdef TF_CLIENT_DLL
+	#include "c_tf_player.h"
+	#include "tf_weaponbase.h"
+#endif
 
 #if defined( REPLAY_ENABLED )
 #include "replay/replaycamera.h"
@@ -53,8 +57,8 @@ void FormatViewModelAttachment( Vector &vOrigin, bool bInverse )
 	// aspect ratio cancels out, so only need one factor
 	// the difference between the screen coordinates of the 2 systems is the ratio
 	// of the coefficients of the projection matrices (tan (fov/2) is that coefficient)
-	float factorX = worldx / viewx;
-
+	// NOTE: viewx was coming in as 0 when folks set their viewmodel_fov to 0 and show their weapon.
+	float factorX = viewx ? ( worldx / viewx ) : 0.0f;
 	float factorY = factorX;
 	
 	// Get the coordinates in the viewer's space.
@@ -88,6 +92,22 @@ void FormatViewModelAttachment( Vector &vOrigin, bool bInverse )
 	vOrigin = pViewSetup->origin + vOut;
 }
 
+#ifdef TF_CLIENT_DLL
+bool TeamFortress_ShouldFlipClientViewModel( void )
+{
+	if ( IsLocalPlayerSpectator() )
+	{
+		// Use spectated client's handedness preference
+		C_TFPlayer *pSpecTarget = ToTFPlayer( UTIL_PlayerByIndex( GetSpectatorTarget() ) );
+		if ( pSpecTarget )
+		{
+			return pSpecTarget->m_bFlipViewModels;
+		}
+	}
+
+	return cl_flipviewmodels.GetBool();
+}
+#endif //TF_CLIENT_DLL
 
 void C_BaseViewModel::FormatViewModelAttachment( int nAttachment, matrix3x4_t &attachmentToWorld )
 {
@@ -192,7 +212,7 @@ bool C_BaseViewModel::Interpolate( float currentTime )
 }
 
 
-inline bool C_BaseViewModel::ShouldFlipViewModel()
+bool C_BaseViewModel::ShouldFlipViewModel()
 {
 #ifdef CSTRIKE_DLL
 	// If cl_righthand is set, then we want them all right-handed.
@@ -208,7 +228,7 @@ inline bool C_BaseViewModel::ShouldFlipViewModel()
 	CBaseCombatWeapon *pWeapon = m_hWeapon.Get();
 	if ( pWeapon )
 	{
-		return pWeapon->m_bFlipViewModel != cl_flipviewmodels.GetBool();
+		return pWeapon->m_bFlipViewModel != TeamFortress_ShouldFlipClientViewModel();
 	}
 #endif
 
@@ -302,6 +322,17 @@ int C_BaseViewModel::DrawModel( int flags )
 		
 	C_BasePlayer *pPlayer = C_BasePlayer::GetLocalPlayer();
 	C_BaseCombatWeapon *pWeapon = GetOwningWeapon();
+
+#ifdef TF_CLIENT_DLL
+	CTFWeaponBase* pTFWeapon = dynamic_cast<CTFWeaponBase*>( pWeapon );
+	if ( ( flags & STUDIO_RENDER ) && pTFWeapon && pTFWeapon->m_viewmodelStatTrakAddon )
+	{
+		pTFWeapon->m_viewmodelStatTrakAddon->RemoveEffects( EF_NODRAW );
+		pTFWeapon->m_viewmodelStatTrakAddon->DrawModel( flags );
+		pTFWeapon->m_viewmodelStatTrakAddon->AddEffects( EF_NODRAW );
+	}
+#endif
+
 	int ret;
 	// If the local player's overriding the viewmodel rendering, let him do it
 	if ( pPlayer && pPlayer->IsOverridingViewmodel() )

@@ -186,6 +186,13 @@ void C_ObjectTeleporter::StopActiveEffects()
 		ParticleProp()->StopEmission( m_hChargedRightArmEffect );
 		m_hChargedRightArmEffect = NULL;
 	}
+
+	if ( m_pSpinSound && IsCarried() )
+	{
+		CSoundEnvelopeController& controller = CSoundEnvelopeController::GetController();
+		controller.SoundDestroy( m_pSpinSound );
+		m_pSpinSound = NULL;
+	}
 }
 
 //-----------------------------------------------------------------------------
@@ -206,16 +213,6 @@ void C_ObjectTeleporter::SetInvisibilityLevel( float flValue )
 //-----------------------------------------------------------------------------
 void C_ObjectTeleporter::UpdateTeleporterEffects( void )
 {
-#ifdef STAGING_ONLY
-	C_TFPlayer *pTFOwner = GetOwner();
-	if ( ( pTFOwner && pTFOwner->m_Shared.IsEnteringOrExitingFullyInvisible() ) || GetInvisibilityLevel() == 1.f  )
-	{
-		StopActiveEffects();
-		StopBuildingEffects();
-		StopChargedEffects();
-		return;
-	}
-#endif // STAGING_ONLY
 
 	if ( m_bMatchBuilding )
 	{
@@ -329,13 +326,6 @@ void C_ObjectTeleporter::ClientThink( void )
 		SetPoseParameter( m_iDirectionArrowPoseParam, m_flYawToExit);
 	}
 
-#ifdef STAGING_ONLY
-	C_TFPlayer *pTFOwner = GetOwner();
-	if ( pTFOwner && pTFOwner->m_Shared.IsEnteringOrExitingFullyInvisible() )
-	{
-		UpdateTeleporterEffects();
-	}
-#endif // STAGING_ONLY
 }
 
 //-----------------------------------------------------------------------------

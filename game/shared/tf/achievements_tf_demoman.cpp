@@ -1266,7 +1266,8 @@ class CAchievementTFDemoman_EnvironmentalKill : public CBaseTFAchievement
 				( pAttacker && pAttacker->IsBrushModel() ) || // They were smashed by the world! Gah!
 				( !pAttacker || (pAttacker == pVictim) ) || // He killed himself!
 				( custom == TF_DMG_CUSTOM_SUICIDE ) ||
-				( custom == TF_DMG_CUSTOM_TRIGGER_HURT ) ) // A trigger-hurt got him! 
+				( custom == TF_DMG_CUSTOM_TRIGGER_HURT ) ||  // A trigger-hurt got him! 
+				( custom == TF_DMG_CUSTOM_CROC ) ) // a croc got him!
 			{
 				IncrementCount();
 			}
@@ -1784,7 +1785,7 @@ public:
 		CTFPlayer *pTFVictim = ToTFPlayer( pVictim );
 		if ( pTFAttacker && pTFVictim && ( pTFAttacker == C_TFPlayer::GetLocalTFPlayer() ) )
 		{
-			if ( ( pTFAttacker->m_Shared.InCond( TF_COND_PARACHUTE_DEPLOYED ) ) && ( pTFVictim->m_Shared.InCond( TF_COND_PARACHUTE_DEPLOYED ) ) )
+			if ( ( pTFAttacker->m_Shared.InCond( TF_COND_PARACHUTE_ACTIVE ) ) && ( pTFVictim->m_Shared.InCond( TF_COND_PARACHUTE_ACTIVE ) ) )
 			{
 				IncrementCount();
 			}

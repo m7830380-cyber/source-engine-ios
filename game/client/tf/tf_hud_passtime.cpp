@@ -813,6 +813,8 @@ CTFHudPasstimeBallStatus::CTFHudPasstimeBallStatus( Panel *pParent )
 //-----------------------------------------------------------------------------
 CTFHudPasstimeBallStatus::~CTFHudPasstimeBallStatus()
 {
+	delete m_pEventText;
+	m_pEventText = nullptr;
 }
 
 //-----------------------------------------------------------------------------
@@ -916,9 +918,11 @@ void CTFHudPasstimeBallStatus::ApplySchemeSettings( IScheme *pScheme )
 		{
 			V_sprintf_safe( controlname, "playericon%i", i ); // ugh
 			m_pPlayerIcons[i] = FindControl<vgui::ImagePanel>( controlname );
-			Assert( m_pPlayerIcons[i] );
-			m_pPlayerIcons[i]->SetEnabled( true );
-			m_pPlayerIcons[i]->SetShouldScaleImage( true );
+			if ( m_pPlayerIcons[i] )
+			{
+				m_pPlayerIcons[i]->SetEnabled( true );
+				m_pPlayerIcons[i]->SetShouldScaleImage( true );
+			}
 		}
 	}
 }
@@ -1056,7 +1060,8 @@ void CTFHudPasstimeBallStatus::OnTickHidden()
 
 	for ( int i = 0; i < MAX_PLAYERS; ++i )
 	{
-		m_pPlayerIcons[i]->SetVisible( false );
+		if ( m_pPlayerIcons[i] )
+			m_pPlayerIcons[i]->SetVisible( false );
 	}
 
 	m_iPrevBallPower = g_pPasstimeLogic 
@@ -1152,6 +1157,9 @@ void CTFHudPasstimeBallStatus::OnTickVisible( C_TFPlayer *pLocalPlayer, C_Passti
 	for ( int iEntIndex = 1; iEntIndex <= MAX_PLAYERS; iEntIndex++ )
 	{
 		vgui::ImagePanel *pIcon = m_pPlayerIcons[iEntIndex - 1];
+		if ( !pIcon )
+			break;
+
 		if ( !g_TF_PR->IsConnected( iEntIndex ) )
 		{
 			pIcon->SetVisible( false );

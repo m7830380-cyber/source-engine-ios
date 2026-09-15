@@ -20,6 +20,7 @@
 
 #if defined(TF_CLIENT_DLL)
 #include "c_tf_player.h"
+#include "c_baseviewmodel.h"
 #include "tf_gamerules.h"
 #include "c_playerresource.h"
 #include "tf_shareddefs.h"
@@ -82,12 +83,16 @@ END_NETWORK_TABLE()
 BEGIN_DATADESC( CBaseAttributableItem )
 END_DATADESC()
 
-#ifdef TF_CLIENT_DLL
-extern ConVar cl_flipviewmodels;
-#ifdef STAGING_ONLY
-ConVar unusual_force_weapon_effect( "unusual_force_weapon_effect", "-1", FCVAR_CHEAT, "Set to force an Unusual effect on your weapon (Primary, Secondary, Melee)" );
-ConVar unusual_force_cosmetic_effect( "unusual_force_cosmetic_effect", "-1", FCVAR_CHEAT, "Set to force an Unusual effect on your equipped cosmetics" );
+#ifdef GAME_DLL
+BEGIN_ENT_SCRIPTDESC( CEconEntity, CBaseAnimating, "Econ Entity" )
+	DEFINE_SCRIPTFUNC( AddAttribute, "Add an attribute to the entity" )
+	DEFINE_SCRIPTFUNC( RemoveAttribute, "Remove an attribute to the entity" )
+	DEFINE_SCRIPTFUNC( ReapplyProvision, "Flush any attribute changes we provide onto our owner" )
+	DEFINE_SCRIPTFUNC_NAMED( ScriptGetAttribute, "GetAttribute", "Get an attribute float from the entity" )
+END_SCRIPTDESC();
 #endif
+
+#ifdef TF_CLIENT_DLL
 #endif
 
 
@@ -300,6 +305,26 @@ void CEconEntity::ReapplyProvision( void )
 	}
 
 	m_hOldProvidee = pNewOwner;
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+float CEconEntity::ScriptGetAttribute( const char *pName, float flFallbackValue )
+{
+	CEconItemView *pItem = GetAttributeContainer()->GetItem();
+	if ( pItem )
+	{
+		CEconItemAttributeDefinition *pDef = GetItemSchema()->GetAttributeDefinitionByName( pName );
+		if ( pDef )
+		{
+			CEconGetAttributeIterator it( pDef->GetDefinitionIndex(), flFallbackValue );
+			pItem->IterateAttributes( &it );
+			return it.m_flValue;
+		}
+	}
+
+	return flFallbackValue;
 }
 
 //-----------------------------------------------------------------------------
@@ -577,9 +602,9 @@ bool CEconEntity::ValidateEntityAttachedToPlayer( bool &bShouldRetry )
 	// on the items carried by the person we're disguised as.
 	/*if ( pOwner->m_Shared.InCond( TF_COND_DISGUISED ) )
 	{
-		// DAMN: This won't work. If our disguise target is a player we've never seen before,
+		// This won't work. If our disguise target is a player we've never seen before,
 		//		 we won't have a client entity, and hence we don't have their inventory.
-		C_TFPlayer *pDisguiseTarget = ToTFPlayer( pOwner->m_Shared.GetDisguiseTarget() );
+		C_TFPlayer *pDisguiseTarget = pOwner->m_Shared.GetDisguiseTarget();
 		if ( pDisguiseTarget && pDisguiseTarget != pOwner )
 		{
 			pOwner = pDisguiseTarget;
@@ -726,13 +751,6 @@ bool CEconEntity::ValidateEntityAttachedToPlayer( bool &bShouldRetry )
 
 		if ( FStrEq( pszClientModel, pszScriptModel ) == false )
 		{
-#if defined( STAGING_ONLY ) && defined _DEBUG
-			CUtlString strScriptModel( pszScriptModel );
-			strScriptModel.FixSlashes();
-			CUtlString strClientModel( pszClientModel );
-			strClientModel.FixSlashes();
-			AssertMsg( strScriptModel != strClientModel, "Model path separator differs between script and client!" );
-#endif // STAGING_ONLY
 			// The regular model didn't work...let's try the Alt version if it exists
 			const char *pszScriptModelAlt = pScriptItem->GetStaticData()->GetPlayerDisplayModelAlt( iClass );
 			if ( !pszScriptModelAlt || !pszScriptModelAlt[0] || ( FStrEq( pszClientModel, pszScriptModelAlt ) == false ) )
@@ -839,7 +857,7 @@ int C_ViewmodelAttachmentModel::InternalDrawModel( int flags )
 {
 #ifdef TF_CLIENT_DLL
 	CMatRenderContextPtr pRenderContext( materials );
-	if ( cl_flipviewmodels.GetBool() != m_bAlwaysFlip )
+	if ( TeamFortress_ShouldFlipClientViewModel() != m_bAlwaysFlip )
 	{
 		pRenderContext->CullMode( MATERIAL_CULLMODE_CW );
 	}
@@ -1024,10 +1042,13 @@ void CEconEntity::OnDataChanged( DataUpdateType_t updateType )
 		}
 #endif
 
+		// if we have paintkit material override, stomp all material override
+		const char *pszPaintKitMaterialOverride = GetPaintKitMaterialOverride( pItem );
+
 		// Find & cache for easy leaf code usage
 		for ( int team = 0; team < TEAM_VISUAL_SECTIONS; team++ )
 		{
-			const char *pszMaterial = pItem->GetStaticData()->GetMaterialOverride( team );
+			const char *pszMaterial = pszPaintKitMaterialOverride ? pszPaintKitMaterialOverride : pItem->GetStaticData()->GetMaterialOverride( team );
 			if ( pszMaterial )
 			{
 				m_MaterialOverrides[team].Init( pszMaterial, TEXTURE_GROUP_CLIENT_EFFECTS );
@@ -1197,7 +1218,7 @@ bool CEconEntity::HasCustomParticleSystems( void ) const
 	return m_bHasParticleSystems;
 }
 
-//-----------------------------------------------------------------z------------
+//-----------------------------------------------------------------------------
 // Purpose: Create / Destroy particle systems on this item as appropriate
 //-----------------------------------------------------------------------------
 void CEconEntity::UpdateParticleSystems( void )
@@ -1225,7 +1246,7 @@ void CEconEntity::UpdateParticleSystems( void )
 		// Make sure the entity we're attaching to is being drawn
 		CTFWeaponBase *pWeapon = dynamic_cast< CTFWeaponBase* >( this );
 		C_BasePlayer *pLocalPlayer = C_BasePlayer::GetLocalPlayer();
-		if ( pLocalPlayer && pLocalPlayer == GetOwnerEntity() && pLocalPlayer->GetViewModel() && pLocalPlayer->GetViewModel()->GetWeapon() == pWeapon && !C_BasePlayer::ShouldDrawLocalPlayer() )
+		if ( pLocalPlayer && pLocalPlayer == GetOwnerEntity() && pLocalPlayer->GetViewModel() && pLocalPlayer->GetViewModel()->GetWeapon() == pWeapon && !C_BasePlayer::ShouldDrawLocalPlayer() && pLocalPlayer->IsAlive() )
 		{
 			nVisible = PARTICLE_SYSTEM_STATE_VISIBLE_VM;
 		}
@@ -1439,28 +1460,6 @@ void CEconEntity::GetEconParticleSystems( CUtlVector<const attachedparticlesyste
 	CALL_ATTRIB_HOOK_INT( iIsThrowableTrail, throwable_particle_trail_only );
 
 #if defined(TF_CLIENT_DLL)
-#ifdef STAGING_ONLY
-	if ( pEconItemView )
-	{
-		const GameItemDefinition_t *pItemDef = pEconItemView->GetStaticData();
-
-		int iSlot = pItemDef->GetLoadoutSlot( 0 );
-		if ( unusual_force_weapon_effect.GetInt() > 0 )
-		{
-			if ( iSlot == LOADOUT_POSITION_PRIMARY || iSlot == LOADOUT_POSITION_SECONDARY || iSlot == LOADOUT_POSITION_MELEE )
-			{
-				iDynamicParticleEffect = unusual_force_weapon_effect.GetInt();
-			}
-		}
-		if ( unusual_force_cosmetic_effect.GetInt() > 0 )
-		{
-			if ( iSlot == LOADOUT_POSITION_MISC )
-			{
-				iDynamicParticleEffect = unusual_force_cosmetic_effect.GetInt();
-			}
-		}
-	}
-#endif
 #endif
 
 	if ( iDynamicParticleEffect > 0 && !iIsThrowableTrail )
@@ -1552,7 +1551,36 @@ void CEconEntity::SetParticleSystemsVisible( ParticleSystemState_t nState )
 		if ( pSystem->iCustomType )
 			continue;
 
-		UpdateSingleParticleSystem( nState != PARTICLE_SYSTEM_STATE_NOT_VISIBLE, pSystem );
+		ParticleSystemState_t nIndividualParticleState = nState;
+		if ( nIndividualParticleState == PARTICLE_SYSTEM_STATE_VISIBLE )
+		{
+			// double check that we don't have a style overriding us to not draw 
+			// (e.g. two styles have cig_smoke and the third doesn't)
+			const CEconItemView *pItem = GetAttributeContainer()->GetItem();
+			if ( pItem )
+			{
+				GameItemDefinition_t *pDef = pItem->GetStaticData();
+				if ( pDef && pDef->GetNumStyles() )
+				{
+					style_index_t unStyle = pItem->GetItemStyle();
+					if ( unStyle != INVALID_STYLE_INDEX )
+					{
+						const CEconStyleInfo *pStyle = pDef->GetStyleInfo( unStyle );
+
+						// It's possible to get back a NULL pStyle if GetItemStyle() returns INVALID_STYLE_INDEX.
+						if ( pStyle )
+						{
+							if ( !pStyle->UseSmokeParticleEffect() && ( FStrEq( pSystem->pszSystemName, "drg_pipe_smoke" ) ) )
+							{
+								nIndividualParticleState = PARTICLE_SYSTEM_STATE_NOT_VISIBLE;
+							}
+						}
+					}
+				}
+			}
+		}
+
+		UpdateSingleParticleSystem( nIndividualParticleState != PARTICLE_SYSTEM_STATE_NOT_VISIBLE, pSystem );
 	}
 
 	m_nParticleSystemsCreated = nState;
@@ -1627,8 +1655,8 @@ void CEconEntity::UpdateSingleParticleSystem( bool bVisible, const attachedparti
 	// Stop it on both the viewmodel & the world model, because it may be removed due to first/thirdperson switch
 	// Get Full name
 	const CEconItemView *pEconItemView = m_AttributeManager.GetItem();
-	static char pszTempName[256];
-	static char pszTempNameVM[256];
+	static char pszTempName[256] = { 0 };
+	static char pszTempNameVM[256] = { 0 };
 	const char* pszSystemName = pSystem->pszSystemName;
 	
 
@@ -1641,15 +1669,17 @@ void CEconEntity::UpdateSingleParticleSystem( bool bVisible, const attachedparti
 		pszSystemName = pszTempName;
 	}
 	
-	if ( pSystem->bHasViewModelSpecificEffect )
+	bool bHasUniqueVMEffect = true;
+	if ( pSystem->bDrawInViewModel )
 	{
 		V_strcpy_safe( pszTempNameVM, pszSystemName );
 		V_strcat_safe( pszTempNameVM, "_vm" );
 		
-		// VM doesnt exist so fall back to regular
+		// VM doesn't exist so fall back to regular
 		if ( g_pParticleSystemMgr->FindParticleSystem( pszTempNameVM ) == NULL )
 		{
 			V_strcpy_safe( pszTempNameVM, pszSystemName );
+			bHasUniqueVMEffect = false;
 		}
 
 		if ( bIsVM )
@@ -1668,7 +1698,7 @@ void CEconEntity::UpdateSingleParticleSystem( bool bVisible, const attachedparti
 
 		if ( pEffectOwnerVM )
 		{
-			if ( pSystem->bHasViewModelSpecificEffect )
+			if ( bHasUniqueVMEffect )
 			{
 				pEffectOwnerVM->ParticleProp()->StopParticlesWithNameAndAttachment( pszTempNameVM, iAttachment, true );
 			}
@@ -1681,7 +1711,7 @@ void CEconEntity::UpdateSingleParticleSystem( bool bVisible, const attachedparti
 
 		if ( pEffectOwnerVM )
 		{
-			if ( pSystem->bHasViewModelSpecificEffect )
+			if ( bHasUniqueVMEffect )
 			{
 				pEffectOwnerVM->ParticleProp()->StopParticlesNamed( pszTempNameVM, true );
 			}
@@ -1807,9 +1837,9 @@ bool CEconEntity::IsTransparent( void )
 {
 #ifdef TF_CLIENT_DLL
 	C_TFPlayer *pPlayer = ToTFPlayer( GetOwnerEntity() );
-	if ( pPlayer )
+	if ( pPlayer && pPlayer->IsTransparent() )
 	{
-		return pPlayer->IsTransparent();
+		return true;
 	}
 #endif // TF_CLIENT_DLL
 
@@ -1920,6 +1950,12 @@ bool CEconEntity::OnInternalDrawModel( ClientModelRenderInfo_t *pInfo )
 {
 	if ( !BaseClass::OnInternalDrawModel( pInfo ) )
 		return false;
+
+	// Correct the ambient lighting position to match our owner entity
+	if ( GetOwnerEntity() && pInfo )
+	{
+		pInfo->pLightingOrigin = &( GetOwnerEntity()->WorldSpaceCenter() );
+	}
 
 	DrawEconEntityAttachedModels( this, this, pInfo, kAttachedModelDisplayFlag_WorldModel );
 	return true;

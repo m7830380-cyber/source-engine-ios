@@ -33,14 +33,14 @@ extern CBaseEntity *BreakModelCreateSingle( CBaseEntity *pOwner, breakmodel_t *p
 //-----------------------------------------------------------------------------
 // Purpose: Creates a "Calling Card" prop at the victim's location
 //-----------------------------------------------------------------------------
-void CreateDeathCallingCard( 
-	const Vector &vecOrigin, 
-	const QAngle &vAngle, 
+void CreateDeathCallingCard(
+	const Vector &vecOrigin,
+	const QAngle &vAngle,
 	const int iVictimIndex,
 	const int iShooterIndex,
 	const int iCallingCardIndex
 ) {
-	if ( iCallingCardIndex < 1 || iCallingCardIndex > TF_CALLING_CARD_MODEL_COUNT )
+	if ( iCallingCardIndex < 1 || iCallingCardIndex >= TF_CALLING_CARD_MODEL_COUNT )
 	{
 		Warning( "Attempted to Call CreateDeathCallingCard With invalid index %d", iCallingCardIndex );
 		return;

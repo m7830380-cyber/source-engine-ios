@@ -137,6 +137,7 @@ public:
 	bool					m_bOfflineIconGeneration;
 
 private:
+	bool					ShouldUseRenderTargetAsIcon() const;
 	bool					UseRenderTargetAsIcon() const { return m_bUseRenderTargetAsIcon || m_bUseItemRenderTarget; }
 
 	CEconItemView			*m_pItem;			// For directly specifying the item associated with this panel.
@@ -151,6 +152,8 @@ private:
 	bool					m_bGreyedOut;
 	bool					m_bModelIsHidden;
 
+	bool					m_bIsFestivized;
+	bool					m_bIsPaintKitItem;
 	bool					m_bUseRenderTargetAsIcon; // same as m_bUseItemRenderTarget but set by attribute instead of res file
 
 	void					CleanUpCachedWeaponIcon();
@@ -191,9 +194,6 @@ private:
 
 	particle_data_t			*m_pItemParticle;
 
-#ifdef STAGING_ONLY
-	double					m_flStartUpdateTime;
-#endif // STAGING_ONLY
 };
 
 IMaterial* GetMaterialForImage( CEmbeddedItemModelPanel::InventoryImageType_t eImageType, const char* pszBaseName );
@@ -279,7 +279,7 @@ public:
 	CEmbeddedItemModelPanel::InventoryImageType_t	GetInventoryImageType() /*const*/													 { return m_pModelPanel->GetInventoryImageType(); }
 	void											SetInventoryImageType( CEmbeddedItemModelPanel::InventoryImageType_t eNewImageType ) { m_pModelPanel->SetInventoryImageType( eNewImageType ); }
 
-	void	UpdateDescription();
+	void	UpdateDescription( bool bIsToolTip = false );
 	void	DirtyDescription();
 
 	virtual void OnCommand( const char *command ) OVERRIDE;
@@ -417,6 +417,8 @@ private:
 	CPanelAnimationVar( bool, m_bHideModifierIcons, "hide_modifier_icons", "0" );
 
 	bool m_bFakeButton;
+
+	bool m_bInitializedAsContainedItem = false;
 };
 
 //-----------------------------------------------------------------------------

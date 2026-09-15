@@ -66,23 +66,7 @@ void C_TFProjectile_Arrow::OnDataChanged( DataUpdateType_t updateType )
 	{
 		SetNextClientThink( CLIENT_THINK_ALWAYS );
 
-#ifdef STAGING_ONLY
-		if ( m_iProjectileType == TF_PROJECTILE_SNIPERBULLET )
-		{
-			switch ( GetTeamNumber() )
-			{
-			case TF_TEAM_BLUE:
-				ParticleProp()->Create( "bullet_distortion_trail", PATTACH_ABSORIGIN_FOLLOW );
-				break;
-			case TF_TEAM_RED:
-				ParticleProp()->Create( "bullet_distortion_trail", PATTACH_ABSORIGIN_FOLLOW );
-				break;
-			}
-		}
-		else if ( m_bArrowAlight )
-#else
 		if ( m_bArrowAlight )
-#endif // STAGING_ONLY
 		{
 			ParticleProp()->Create( "flying_flaming_arrow", PATTACH_POINT_FOLLOW, "muzzle" );
 		}
@@ -161,11 +145,6 @@ void C_TFProjectile_Arrow::ClientThink( void )
 //-----------------------------------------------------------------------------
 void C_TFProjectile_Arrow::CheckNearMiss( void )
 {
-	// Check against the local player. If we're near him play a near miss sound.
-	C_TFPlayer *pLocalPlayer = C_TFPlayer::GetLocalTFPlayer();
-	if ( !pLocalPlayer || !pLocalPlayer->IsAlive() )
-		return;
-
 	// If we are attached to something or stationary we don't want to do near miss checks.
 	if ( m_pAttachedTo || (GetMoveType() == MOVETYPE_NONE) )
 	{
@@ -173,50 +152,11 @@ void C_TFProjectile_Arrow::CheckNearMiss( void )
 		return;
 	}
 
-	// Can't hear near miss sounds from friendly arrows.
-	if ( pLocalPlayer->GetTeamNumber() == GetTeamNumber() )
-		return;
-
-	Vector vecPlayerPos = pLocalPlayer->GetAbsOrigin();
-	Vector vecArrowPos = GetAbsOrigin(), forward;
-	AngleVectors( GetAbsAngles(), &forward );
-	Vector vecArrowDest = GetAbsOrigin() + forward * 200.f;
-
-	// If the arrow is moving away from the player just stop checking.
-	float dist1 = vecArrowPos.DistToSqr( vecPlayerPos );
-	float dist2 = vecArrowDest.DistToSqr( vecPlayerPos );
-	if ( dist2 > dist1 )
+	if ( UTIL_BPerformNearMiss( this, "Weapon_Arrow.Nearmiss", NEAR_MISS_THRESHOLD ) )
 	{
+		SetNextClientThink( CLIENT_THINK_NEVER );
 		m_bNearMiss = true;
-		return;
 	}
-
-	// Check to see if the arrow is passing near the player.
-	Vector vecClosestPoint;
-	float dist;
-	CalcClosestPointOnLineSegment( vecPlayerPos, vecArrowPos, vecArrowDest, vecClosestPoint, &dist );
-	dist = vecPlayerPos.DistTo( vecClosestPoint );
-	if ( dist > NEAR_MISS_THRESHOLD )
-		return;
-
-	// The arrow is passing close to the local player.
-	m_bNearMiss = true;
-	SetNextClientThink( CLIENT_THINK_NEVER );
-
-	// If the arrow is about to hit something, don't play the sound and stop this check.
-	trace_t tr;
-	UTIL_TraceLine( vecArrowPos, vecArrowPos + forward * 400.f, CONTENTS_HITBOX|CONTENTS_MONSTER|CONTENTS_SOLID, this, COLLISION_GROUP_NONE, &tr );
-	if ( tr.DidHit() )
-		return;
-
-	// We're good for a near miss!
-	float soundlen = 0;
-	EmitSound_t params;
-	params.m_flSoundTime = 0;
-	params.m_pSoundName = "Weapon_Arrow.Nearmiss";
-	params.m_pflSoundDuration = &soundlen;
-	CSingleUserRecipientFilter localFilter( pLocalPlayer );
-	EmitSound( localFilter, pLocalPlayer->entindex(), params );
 }
 
 

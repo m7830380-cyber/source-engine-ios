@@ -141,14 +141,7 @@ bool CEconStoreCategoryManager::BInitCategory( CEconStorePriceSheet *pPriceSheet
 	pCategory->m_bInGameOnly = pKVTab->GetBool( "ingame_only", false );
 	pCategory->m_bDefaultTab = pKVTab->GetBool( "default", false );
 
-#if defined( GC_DLL )
-	// Until we replace the in-game store with the web store, we have this hacky override property, so
-	// that we can call the home page "HOME" in the game client and "TOP SELLERS" on the web. The home page
-	// will be evolving shortly to include a lot more than just a list of top sellers.
-	const char *pchLabelTokenWebOverride = pKVTab->GetString( "web_label_token_override", NULL );
-#else
 	const char *pchLabelTokenWebOverride = NULL;
-#endif
 	pCategory->m_pchName = pchLabelTokenWebOverride ? pchLabelTokenWebOverride : pKVTab->GetString( "label_token", "#Store_Unknown" );
 
 	pCategory->m_pchPageClass = pKVTab->GetString( "page_class", "CStorePage" );
@@ -156,22 +149,6 @@ bool CEconStoreCategoryManager::BInitCategory( CEconStorePriceSheet *pPriceSheet
 	pCategory->m_pchSortType = pKVTab->GetString( "sort_type", "" );
 
 	// Important for web store but not needed for VGUI store
-#if defined( GC_DLL )
-	if ( !bIsHome )
-	{
-		const char *pchDropdownPrefabName = pKVTab->GetString( "dropdown_prefab", NULL );
-		pCategory->m_pDropdownPrefab = GEconStoreMetaData()->FindDropdownPrefab( pchDropdownPrefabName );
-		if ( !pCategory->m_pDropdownPrefab )
-		{
-			AssertMsg( pCategory->m_pDropdownPrefab, CFmtStr( "Invalid dropdown prefab name, '%s'!", pchDropdownPrefabName ).Access() );
-			return false;
-		}
-	}
-	else
-	{
-		pCategory->m_pDropdownPrefab = NULL;
-	}
-#endif
 
 	// Look for a parent category for non-home categories
 	if ( !bIsHome )

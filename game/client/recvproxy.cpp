@@ -83,7 +83,7 @@ void RecvProxy_IntToEHandle( const CRecvProxyData *pData, void *pStruct, void *p
 	
 	if ( pData->m_Value.m_Int == INVALID_NETWORKED_EHANDLE_VALUE )
 	{
-		*pEHandle = INVALID_EHANDLE_INDEX;
+		*pEHandle = INVALID_EHANDLE;
 	}
 	else
 	{

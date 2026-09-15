@@ -523,13 +523,13 @@ void CSlideshowDisplay::BuildSlideShowImagesList( void )
 		char szFullFileName[_MAX_PATH];
 		Q_snprintf( szFullFileName, sizeof( szFullFileName ), "materials/vgui/%s/%s", m_szSlideshowDirectory.Get(), szMatFileName );
 
-		KeyValues *pMaterialKeys = new KeyValues( "material" );
+		KeyValuesAD pMaterialKeys( "material" );
 		bool bLoaded = pMaterialKeys->LoadFromFile( g_pFullFileSystem, szFullFileName, NULL );
 
 		if ( bLoaded )
 		{
-			char szKeywords[ 256 ];
-			Q_strcpy( szKeywords, pMaterialKeys->GetString( "%keywords", "" ) );
+			char szKeywords[ 256 ] = {0};
+			V_strcpy_safe( szKeywords, pMaterialKeys->GetString( "%keywords", "" ) );
 
 			char *pchKeyword = szKeywords;
 
@@ -562,7 +562,7 @@ void CSlideshowDisplay::BuildSlideShowImagesList( void )
 				{
 					// Couldn't find the list, so create it
 					iList = m_SlideKeywordList.AddToTail( new SlideKeywordList_t );
-					Q_strcpy( m_SlideKeywordList[ iList ]->szSlideKeyword, pchKeyword );
+					V_strcpy_safe( m_SlideKeywordList[iList]->szSlideKeyword, pchKeyword );
 				}
 
 				pchKeyword = pNextKeyword;
@@ -581,7 +581,7 @@ void CSlideshowDisplay::BuildSlideShowImagesList( void )
 		{
 			// Couldn't find the generic list, so create it
 			iList = m_SlideKeywordList.AddToHead( new SlideKeywordList_t );
-			Q_strcpy( m_SlideKeywordList[ iList ]->szSlideKeyword, "" );
+			V_strcpy_safe( m_SlideKeywordList[iList]->szSlideKeyword, "" );
 		}
 
 		if ( IsX360() )

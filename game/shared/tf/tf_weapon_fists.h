@@ -59,7 +59,8 @@ public:
 
 	int			 GetFistType( void ) { int iMode = 0; CALL_ATTRIB_HOOK_INT( iMode, set_weapon_mode ); return iMode; };
 
-	virtual void	SetWeaponVisible( bool visible ){}  // intentionally never hiding the fists
+	virtual void SetWeaponVisible( bool visible ) OVERRIDE;
+	virtual bool Deploy( void );
 
 private:
 

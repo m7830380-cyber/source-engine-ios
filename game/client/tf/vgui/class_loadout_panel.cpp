@@ -74,21 +74,21 @@ void HatOffset_Callback( IConVar *pConVar, char const *pOldString, float flOldVa
 	ConVarRef cVarRef( pConVar );
 	ParticleSlider_UpdateRequest( LOADOUT_POSITION_HEAD, cVarRef.GetFloat() );
 }
-ConVar tf_hat_effect_offset( "tf_hat_effect_offset", "0", FCVAR_DEVELOPMENTONLY, "Adjust the position of the unusual effect for your hat.", HatOffset_Callback );
+ConVar tf_hat_effect_offset( "tf_hat_effect_offset", "0", FCVAR_HIDDEN, "Adjust the position of the unusual effect for your hat.", true, -8.0f, true, 8.0f, HatOffset_Callback );
 
 void Misc1Offset_Callback( IConVar *pConVar, char const *pOldString, float flOldValue )
 {
 	ConVarRef cVarRef( pConVar );
 	ParticleSlider_UpdateRequest( LOADOUT_POSITION_MISC, cVarRef.GetFloat() );
 }
-ConVar tf_misc1_effect_offset( "tf_misc1_effect_offset", "0", FCVAR_DEVELOPMENTONLY, "Adjust the position of the unusual effect for your hat.", Misc1Offset_Callback );
+ConVar tf_misc1_effect_offset( "tf_misc1_effect_offset", "0", FCVAR_HIDDEN, "Adjust the position of the unusual effect for your hat.", true, -8.0f, true, 8.0f, Misc1Offset_Callback );
 
 void Misc2Offset_Callback( IConVar *pConVar, char const *pOldString, float flOldValue )
 {
 	ConVarRef cVarRef( pConVar );
 	ParticleSlider_UpdateRequest( LOADOUT_POSITION_MISC2, cVarRef.GetFloat() );
 }
-ConVar tf_misc2_effect_offset( "tf_misc2_effect_offset", "0", FCVAR_DEVELOPMENTONLY, "Adjust the position of the unusual effect for your hat.", Misc2Offset_Callback );
+ConVar tf_misc2_effect_offset( "tf_misc2_effect_offset", "0", FCVAR_HIDDEN, "Adjust the position of the unusual effect for your hat.", true, -8.0f, true, 8.0f, Misc2Offset_Callback );
 
 
 // Hacky solution to different classes wanting different slots visible in their loadouts, and in different positions
@@ -125,20 +125,6 @@ const LoadoutPanelPositioningInstance g_DefaultLoadoutPanelPositioning =
 		15,	// LOADOUT_POSITION_TAUNT7,
 		16,	// LOADOUT_POSITION_TAUNT8,
 
-#ifdef STAGING_ONLY
-		0,	// LOADOUT_POSITION_PDA_ADDON1,
-		0,	// LOADOUT_POSITION_PDA_ADDON2,
-		0,  // LOADOUT_POSITION_PDA3,
-		//9,	// LOADOUT_POSITION_MISC3,
-		//10,	// LOADOUT_POSITION_MISC4,
-		//11,	// LOADOUT_POSITION_MISC5,
-		//12,	// LOADOUT_POSITION_MISC6,
-		//13,	// LOADOUT_POSITION_MISC7,
-		//14,	// LOADOUT_POSITION_MISC8,
-		//15,	// LOADOUT_POSITION_MISC9,
-		//16,	// LOADOUT_POSITION_MISC10,
-		0,	// LOADOUT_POSITION_BUILDING2,
-#endif // STAGING_ONLY
 	}
 };
 
@@ -164,20 +150,6 @@ const LoadoutPanelPositioningInstance g_LoadoutPanelPositioning_Spy =
 		14,	// LOADOUT_POSITION_TAUNT6,
 		15,	// LOADOUT_POSITION_TAUNT7,
 		16,	// LOADOUT_POSITION_TAUNT8,
-#ifdef STAGING_ONLY
-		0,	// LOADOUT_POSITION_PDA_ADDON1,
-		0,	// LOADOUT_POSITION_PDA_ADDON2,
-		0,  // LOADOUT_POSITION_PDA3,
-		//9,	// LOADOUT_POSITION_MISC3,
-		//10,	// LOADOUT_POSITION_MISC4,
-		//11,	// LOADOUT_POSITION_MISC5,
-		//12,	// LOADOUT_POSITION_MISC6,
-		//13,	// LOADOUT_POSITION_MISC7,
-		//14,	// LOADOUT_POSITION_MISC8,
-		//15,	// LOADOUT_POSITION_MISC9,
-		//16,	// LOADOUT_POSITION_MISC10,
-		0,	// LOADOUT_POSITION_BUILDING2,
-#endif // STAGING_ONLY
 	}
 };
 
@@ -203,20 +175,6 @@ const LoadoutPanelPositioningInstance g_LoadoutPanelPositioning_Engineer =
 		14,	// LOADOUT_POSITION_TAUNT6,
 		15,	// LOADOUT_POSITION_TAUNT7,
 		16,	// LOADOUT_POSITION_TAUNT8,
-#ifdef STAGING_ONLY
-		17,	// LOADOUT_POSITION_PDA_ADDON1,
-		18,	// LOADOUT_POSITION_PDA_ADDON2,
-		0,  // LOADOUT_POSITION_PDA3,
-		//9,	// LOADOUT_POSITION_MISC3,
-		//10,	// LOADOUT_POSITION_MISC4,
-		//11,	// LOADOUT_POSITION_MISC5,
-		//12,	// LOADOUT_POSITION_MISC6,
-		//13,	// LOADOUT_POSITION_MISC7,
-		//14,	// LOADOUT_POSITION_MISC8,
-		//15,	// LOADOUT_POSITION_MISC9,
-		//16,	// LOADOUT_POSITION_MISC10,
-		0,	// LOADOUT_POSITION_BUILDING2,
-#endif // STAGING_ONLY
 	}
 };
 
@@ -378,7 +336,8 @@ void CLoadoutItemOptionsPanel::UpdateItemOptionsUI()
 
 	// Resize the background and list panel to contain all the controls
 	int nVertPixels = m_pListPanel->ComputeVPixelsNeeded();
-	int nNewTall = Min( 200, nVertPixels );
+	int nMinTall = YRES( 200 );
+	int nNewTall = Min( nMinTall, nVertPixels );
 	m_pListPanel->SetTall( nNewTall );
 	SetTall( nNewTall );
 	InvalidateLayout( true, false );
@@ -507,6 +466,10 @@ void CClassLoadoutPanel::ApplySchemeSettings( vgui::IScheme *pScheme )
 	m_pTauntLoadoutButton = dynamic_cast<CExImageButton*>( FindChildByName("TauntLoadoutButton") );
 	m_pPassiveAttribsLabel = dynamic_cast<CExLabel*>( FindChildByName("PassiveAttribsLabel") );
 	m_pLoadoutPresetPanel = dynamic_cast<CLoadoutPresetPanel*>( FindChildByName( "loadout_preset_panel" ) );
+	if (m_pLoadoutPresetPanel)
+	{
+		m_pLoadoutPresetPanel->SetClassLoadoutPanel(this);
+	}
 	m_pPresetsExplanationPopup = dynamic_cast<CExplanationPopup*>( FindChildByName( "PresetsExplanation" ) );
 	m_pTauntsExplanationPopup = dynamic_cast<CExplanationPopup*>( FindChildByName( "TauntsExplanation" ) );
 	m_pTopLinePanel = FindChildByName( "TopLine" );
@@ -550,20 +513,6 @@ void CClassLoadoutPanel::ApplySettings( KeyValues *inResourceData )
 		pItemKV->CopySubkeys( m_pItemOptionPanelKVs );
 	}
 
-#ifdef STAGING_ONLY
-	// PDA Panels
-	if ( m_pItemModelPanels.Count() > LOADOUT_POSITION_PDA_ADDON2 )
-	{
-		for ( int i = LOADOUT_POSITION_PDA_ADDON1; i <= LOADOUT_POSITION_PDA_ADDON2; i++ )
-		{
-			int wide = m_pItemModelPanels[i]->GetWide();
-			int tall = m_pItemModelPanels[i]->GetTall();
-
-			m_pItemModelPanels[i]->SetSize( wide / 2, tall / 2 );
-			m_pItemModelPanels[i]->InvalidateLayout();
-		}
-	}
-#endif
 }
 
 //-----------------------------------------------------------------------------
@@ -646,31 +595,6 @@ void CClassLoadoutPanel::PerformLayout( void )
 				iButtonPos--;
 			}
 			
-#ifdef STAGING_ONLY
-			// Override for the PDA AddOnSlots
-			if ( i == LOADOUT_POSITION_PDA_ADDON1 )
-			{
-				int iYPos, iXPos;
-				m_pItemModelPanels[ LOADOUT_POSITION_PDA ]->GetPos( iXPos, iYPos );
-				int iWide, iTall;
-				m_pItemModelPanels[ LOADOUT_POSITION_PDA ]->GetSize( iWide, iTall );
-
-				m_pItemModelPanels[i]->SetPos( iXPos + iWide + XRES(1), iYPos );
-				m_pItemModelPanels[i]->SetSize( iWide / 2.1, iTall / 2.1 );
-				continue;
-			}
-			else if ( i == LOADOUT_POSITION_PDA_ADDON2 )
-			{
-				int iYPos, iXPos;
-				m_pItemModelPanels[LOADOUT_POSITION_PDA]->GetPos( iXPos, iYPos );
-				int iWide, iTall;
-				m_pItemModelPanels[LOADOUT_POSITION_PDA]->GetSize( iWide, iTall );
-
-				m_pItemModelPanels[i]->SetPos( iXPos + iWide + XRES(1), iYPos + iTall - (iTall / 2.1 ) );
-				m_pItemModelPanels[i]->SetSize( iWide / 2.1, iTall / 2.1 );
-				continue;
-			}
-#endif
 
 			m_pItemModelPanels[i]->SetNoItemText( ItemSystem()->GetItemSchema()->GetLoadoutStringsForDisplay( EEquipType_t::EQUIP_TYPE_CLASS )[i] );
 
@@ -944,28 +868,12 @@ void CClassLoadoutPanel::AddNewItemPanel( int iPanelIndex )
 //-----------------------------------------------------------------------------
 void CClassLoadoutPanel::UpdateModelPanels( void )
 {
-	// Search for a Robot Costume
-	bool bIsRobot = false;
-	static CSchemaAttributeDefHandle pAttrDef_PlayerRobot( "appear as mvm robot" );
-	// For now, fill them out with the local player's currently wielded items
-	for ( int i = 0; i < m_pItemModelPanels.Count(); i++ )
-	{
-		CEconItemView *pItemData = TFInventoryManager()->GetItemInLoadoutForClass( m_iCurrentClassIndex, i );
-		if ( !pItemData )
-			continue;
-		if ( FindAttribute( pItemData, pAttrDef_PlayerRobot ) )
-		{
-			bIsRobot = true;
-			break;
-		}
-	}
-
 	// We're showing the loadout for a specific class.
 	TFPlayerClassData_t *pData = GetPlayerClassData( m_iCurrentClassIndex );
 	if ( m_pPlayerModelPanel )
 	{
 		m_pPlayerModelPanel->ClearCarriedItems();
-		m_pPlayerModelPanel->SetToPlayerClass( m_iCurrentClassIndex, bIsRobot );
+		m_pPlayerModelPanel->SetToPlayerClass( m_iCurrentClassIndex );
 		m_pPlayerModelPanel->SetTeam( m_iCurrentTeamIndex );
 	}
 
@@ -1154,8 +1062,8 @@ void CClassLoadoutPanel::SetBorderForItem( CItemModelPanel *pItemPanel, bool bMo
 		{
 			iRarity = pItemPanel->GetItem()->GetItemQuality();
 
-			uint8 nRarity = pItemPanel->GetItem()->GetItemDefinition()->GetRarity();
-			if ( ( nRarity != k_unItemRarity_Any ) && ( iRarity != AE_SELFMADE ) )
+			uint8 nRarity = pItemPanel->GetItem()->GetRarity();
+			if ( ( nRarity != k_unItemRarity_Any ) && ( iRarity != AE_SELFMADE ) && ( iRarity != AE_UNUSUAL ) )
 			{
 				// translate this quality to rarity
 				iRarity = nRarity + AE_RARITY_DEFAULT;

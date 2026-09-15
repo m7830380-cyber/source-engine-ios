@@ -33,8 +33,14 @@
 #include <tier0/memdbgon.h>
 
 static vgui::DHANDLE<CCharacterInfoPanel> g_CharInfoPanel;
-IEconRootUI* EconUI( void )
+CCharacterInfoPanel* GetCharInfoPanel( bool bRecreate )
 {
+	if ( bRecreate && g_CharInfoPanel.Get() )
+	{
+		g_CharInfoPanel->MarkForDeletion();
+		g_CharInfoPanel = NULL;
+	}
+
 	if (!g_CharInfoPanel.Get())
 	{
 		g_CharInfoPanel = new CCharacterInfoPanel( NULL );
@@ -42,6 +48,16 @@ IEconRootUI* EconUI( void )
 		g_CharInfoPanel->InvalidateLayout( false, true );
 	}
 	return g_CharInfoPanel;
+}
+
+CON_COMMAND( reload_char_info, "Reloads the char info panel" )
+{
+	GetCharInfoPanel( true );
+}
+
+IEconRootUI* EconUI( void )
+{
+	return GetCharInfoPanel( false );
 }
 
 //-----------------------------------------------------------------------------
@@ -141,10 +157,6 @@ void CCharacterInfoPanel::ShowPanel(bool bShow)
 {
 	m_bPreventClosure = false;
 
-	// Keep the MM dashboard on top of us
-	bShow ? GetMMDashboardParentManager()->PushModalFullscreenPopup( this ) 
-		  : GetMMDashboardParentManager()->PopModalFullscreenPopup( this );
-
 	if ( bShow )
 	{
 		if ( GetPropertySheet()->GetActivePage() != m_pLoadoutPanel )
@@ -178,6 +190,7 @@ void CCharacterInfoPanel::ShowPanel(bool bShow)
 		m_iClosePanel = ECONUI_BASEUI;
 		m_iDefaultTeam = TF_TEAM_RED;
 	}
+
 	m_pLoadoutPanel->SetVisible( bShow );
 
 	// When we first appear, if we're on a server that couldn't get our loadout, show the failure dialog.
@@ -257,7 +270,6 @@ void CCharacterInfoPanel::NotifyListenersOfCloseEvent()
 		}
 	}
 
-	// Clear that motherfucker out
 	m_vecOnCloseListeners.RemoveAll();
 }
 
@@ -268,6 +280,20 @@ void CCharacterInfoPanel::OnCommand( const char *command )
 {
 	if ( FStrEq( command, "back" ) )
 	{
+		// If we're inspecting an item, just close the inspection panel
+		if ( m_pLoadoutPanel->GetInspectionPanel()->IsVisible() )
+		{
+			m_pLoadoutPanel->GetInspectionPanel()->OnCommand( "close" );
+			// This is such a hack.  I don't have time to figure this out, so we're just going
+			// to special case this.  Don't "open" the CHAP_LOADOUT if the backback was up or
+			// else we'll get sucked back to CHAP_LOADOUT
+			if ( !m_pLoadoutPanel->GetBackpackPanel()->IsVisible() )
+			{
+				m_pLoadoutPanel->OpenSubPanel( CHAP_LOADOUT );
+			}
+			return;
+		}
+
 		// If we're at the base loadout page, or if we want to force it, close the dialog completely...
 		// NOTE: Right now we don't support closing from the item selection screen.
 		const int iShowingPanel = m_pLoadoutPanel->GetShowingPanel();
@@ -337,6 +363,14 @@ void CCharacterInfoPanel::OpenLoadoutToArmory( void )
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
+void CCharacterInfoPanel::OpenToPaintkitPreview( CEconItemView* pItem, bool bFixedItem, bool bFixedPaintkit )
+{
+	m_pLoadoutPanel->OpenToPaintkitPreview( pItem, bFixedItem, bFixedPaintkit );
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CCharacterInfoPanel::OnOpenArmoryDirect( KeyValues *data )
 {
 	int iItemDef = data->GetInt( "itemdef", 0 );
@@ -369,7 +403,7 @@ void CCharacterInfoPanel::OnKeyCodePressed(vgui::KeyCode code)
 {
 	ButtonCode_t nButtonCode = GetBaseButtonCode( code );
 
-	if ( nButtonCode == KEY_XBUTTON_B )
+	if ( nButtonCode == KEY_XBUTTON_B || nButtonCode == STEAMCONTROLLER_B )
 	{
 		if ( !m_bPreventClosure )
 		{
@@ -388,17 +422,23 @@ void CCharacterInfoPanel::OnKeyCodePressed(vgui::KeyCode code)
 //-----------------------------------------------------------------------------
 void CCharacterInfoPanel::OnThink()
 {
-	bool bShouldBeVisible = NotificationQueue_GetNumNotifications() != 0;
-	if ( m_pNotificationsPresentPanel != NULL && m_pNotificationsPresentPanel->IsVisible() != bShouldBeVisible )
+	if ( g_pClientMode && g_pClientMode->GetViewport() && g_pClientMode->GetViewportAnimationController() )
 	{
-		m_pNotificationsPresentPanel->SetVisible( bShouldBeVisible );
-		if ( bShouldBeVisible )
+		bool bShouldBeVisible = NotificationQueue_GetNumNotifications() != 0;
+
+		bShouldBeVisible = false;
+
+		if ( m_pNotificationsPresentPanel != NULL && m_pNotificationsPresentPanel->IsVisible() != bShouldBeVisible )
 		{
-			g_pClientMode->GetViewportAnimationController()->StartAnimationSequence( this, "NotificationsPresentBlink" );
-		}
-		else
-		{
-			g_pClientMode->GetViewportAnimationController()->StartAnimationSequence( this, "NotificationsPresentBlinkStop" );
+			m_pNotificationsPresentPanel->SetVisible( bShouldBeVisible );
+			if ( bShouldBeVisible )
+			{
+				g_pClientMode->GetViewportAnimationController()->StartAnimationSequence( this, "NotificationsPresentBlink" );
+			}
+			else
+			{
+				g_pClientMode->GetViewportAnimationController()->StartAnimationSequence( this, "NotificationsPresentBlinkStop" );
+			}
 		}
 	}
 }
@@ -408,6 +448,11 @@ void CCharacterInfoPanel::OnThink()
 //-----------------------------------------------------------------------------
 IEconRootUI	*CCharacterInfoPanel::OpenEconUI( int iDirectToPage, bool bCheckForInventorySpaceOnExit )
 {
+	if ( IsLayoutInvalid() )
+	{
+		MakeReadyForUse();
+	}
+
 	engine->ClientCmd_Unrestricted( "gameui_activate" );
 	ShowPanel( true );
 
@@ -728,6 +773,8 @@ void CCharacterInfoPanel::CreateStorePanel( void )
 //-----------------------------------------------------------------------------
 CStorePanel	*CCharacterInfoPanel::OpenStorePanel( int iItemDef, bool bAddToCart )
 {
+	return NULL;
+
 	// Make sure we've got the appropriate connections to Steam
 	if ( !steamapicontext || !steamapicontext->SteamUtils() )
 	{

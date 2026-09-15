@@ -46,6 +46,7 @@ IMPLEMENT_SERVERCLASS_ST( CTFPlayerResource, DT_TFPlayerResource )
 	SendPropInt( SENDINFO( m_iEventTeamStatus ), -1, SPROP_UNSIGNED | SPROP_VARINT ),
 	SendPropArray3( SENDINFO_ARRAY3( m_iPlayerClassWhenKilled ), SendPropInt( SENDINFO_ARRAY( m_iPlayerClassWhenKilled ), 5, SPROP_UNSIGNED ) ),
 	SendPropArray3( SENDINFO_ARRAY3( m_iConnectionState ), SendPropInt( SENDINFO_ARRAY( m_iConnectionState ), 3, SPROP_UNSIGNED ) ),
+	SendPropArray3( SENDINFO_ARRAY3( m_flConnectTime ), SendPropTime( SENDINFO_ARRAY( m_flConnectTime ) ) ),
 END_SEND_TABLE()
 
 LINK_ENTITY_TO_CLASS( tf_player_manager, CTFPlayerResource );
@@ -274,6 +275,8 @@ void CTFPlayerResource::UpdateConnectedPlayer( int iIndex, CBasePlayer *pPlayer 
 	}
 	m_flNextRespawnTime.Set( iIndex, flRespawnTime );
 
+	m_flConnectTime.Set( iIndex, pTFPlayer->GetConnectionTime() );
+
 	for ( int streak_type = 0; streak_type < CTFPlayerShared::kTFStreak_COUNT; streak_type++ )
 	{
 		m_iStreaks.Set( iIndex * CTFPlayerShared::kTFStreak_COUNT + streak_type, pTFPlayer->m_Shared.GetStreak( (CTFPlayerShared::ETFStreak)streak_type ) );
@@ -300,7 +303,16 @@ void CTFPlayerResource::UpdateConnectedPlayer( int iIndex, CBasePlayer *pPlayer 
 		CMatchInfo::PlayerMatchData_t *pData = pMatch->GetMatchDataForPlayer( steamID );
 		if ( pData )
 		{
-			iTeam = TFGameRules()->GetGameTeamForGCTeam( pData->eGCTeam );
+			int iGCTeam = TFGameRules()->GetGameTeamForGCTeam( pData->eGCTeam );
+
+			// if the team hasn't been set yet in-game, we want to show them on the
+			// team the GC has assigned them to instead of spectator or unassigned
+			if ( ( iTeam == TEAM_UNASSIGNED ) || ( iTeam == TEAM_SPECTATOR ) )
+			{
+				m_iTeam.Set( iIndex, iGCTeam );
+			}
+
+			iTeam = iGCTeam;
 		}
 	}
 

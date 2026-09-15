@@ -203,7 +203,7 @@ C_TETFExplosion::C_TETFExplosion( void )
 	m_vecOrigin.Init();
 	m_vecNormal.Init();
 	m_iWeaponID = TF_WEAPON_NONE;
-	m_hEntity = INVALID_EHANDLE_INDEX;
+	m_hEntity = INVALID_EHANDLE;
 	m_nDefID = -1;
 	m_nSound = SPECIAL1;
 	m_iCustomParticleIndex = INVALID_STRING_INDEX;
@@ -225,7 +225,7 @@ static void RecvProxy_ExplosionEntIndex( const CRecvProxyData *pData, void *pStr
 	// The 'new' encoding for INVALID_EHANDLE_INDEX is 2047, but the old encoding
 	// was -1. Old demos and replays will use the old encoding so we have to check
 	// for it. The field is now unsigned so -1 will not be created in new replays.
-	((C_TETFExplosion*)pStruct)->m_hEntity = (nEntIndex == kInvalidEHandleExplosion || nEntIndex == -1) ? INVALID_EHANDLE_INDEX : ClientEntityList().EntIndexToHandle( nEntIndex );
+	((C_TETFExplosion*)pStruct)->m_hEntity = (nEntIndex == kInvalidEHandleExplosion || nEntIndex == -1) ? INVALID_EHANDLE : ClientEntityList().EntIndexToHandle( nEntIndex );
 }
 
 IMPLEMENT_CLIENTCLASS_EVENT_DT( C_TETFExplosion, DT_TETFExplosion, CTETFExplosion )

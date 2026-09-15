@@ -48,9 +48,6 @@ ConVar tf_populator_active_buffer_range( "tf_populator_active_buffer_range", "30
 ConVar tf_mvm_default_sentry_buster_damage_dealt_threshold( "tf_mvm_default_sentry_buster_damage_dealt_threshold", "3000", FCVAR_CHEAT | FCVAR_DEVELOPMENTONLY );
 ConVar tf_mvm_default_sentry_buster_kill_threshold( "tf_mvm_default_sentry_buster_kill_threshold", "15", FCVAR_CHEAT | FCVAR_DEVELOPMENTONLY );
 
-#ifdef STAGING_ONLY
-ConVar tf_mvm_mm_bonus( "tf_mvm_mm_bonus", "0.2" );
-#endif // STAGING_ONLY
 
 void MinibossScaleChangedCallBack( IConVar *pVar, const char *pOldString, float flOldValue )
 {
@@ -426,7 +423,7 @@ bool CPopulationManager::Initialize( void )
 {
 	if ( ( TheNavMesh == NULL ) || ( TheNavMesh->GetNavAreaCount() <= 0 ) )
 	{
-		Warning( "No Nav Mesh CPopulationManager::Initialize for %s", m_popfileFull );
+		Warning( "No Nav Mesh CPopulationManager::Initialize for %s\n", m_popfileFull );
 		return false;
 	}
 
@@ -434,35 +431,10 @@ bool CPopulationManager::Initialize( void )
 
 	if ( !Parse() )
 	{
-		Warning( "Parse Failed in CPopulationManager::Initialize for %s", m_popfileFull );
+		Warning( "Parse Failed in CPopulationManager::Initialize for %s\n", m_popfileFull );
 		return false;
 	}
 
-#ifdef STAGING_ONLY
-	// only calculate lobby bonus one time when the lobby first match to the server
-	CMatchInfo *pMatch = GTFGCClientSystem()->GetMatch();
-	if ( pMatch && GetWaveNumber() == 0 && m_nLobbyBonusCurrency == 0 )
-	{
-		// Count unique parties
-		CUtlVector<uint64> vecPartyIDs;
-		int total = pMatch->GetNumTotalMatchPlayers();
-
-		for ( int idx = 0; idx < total; idx++ )
-		{
-			uint64 uPartyID = pMatch->GetMatchDataForPlayer( idx )->uPartyID;
-			if ( vecPartyIDs.Find( uPartyID ) == vecPartyIDs.InvalidIndex() )
-			{
-				vecPartyIDs.AddToTail( uPartyID );
-			}
-		}
-
-		int nUniqueParties = vecPartyIDs.Count();
-
-		// give some bonus currency for each extra unique party in the lobby
-		float flBonusScale = tf_mvm_mm_bonus.GetFloat() * ( nUniqueParties - 1 );
-		m_nLobbyBonusCurrency = flBonusScale * m_nStartingCurrency;
-	}
-#endif // STAGING_ONLY
 
 	if ( TFGameRules()->State_Get() == GR_STATE_PREGAME )
 	{
@@ -563,6 +535,10 @@ bool CPopulationManager::FindPopulationFileByShortName( const char *pShortName, 
 	V_sprintf_safe( szFullPath, MVM_POP_FILE_PATH "/%s.pop", STRING( gpGlobals->mapname ) );
 	if ( g_pFullFileSystem->FileExists( szFullPath, "GAME" ) )
 	{
+		if ( !FStrEq( pShortName, "normal" ) )
+		{
+			Msg( "Population file '%s' not found, falling back to %s.pop\n", pShortName, STRING( gpGlobals->mapname ) );
+		}
 		outFullName = szFullPath;
 		return true;
 	}
@@ -807,6 +783,7 @@ void CPopulationManager::UpdateObjectiveResource( void )
 	{
 		TFObjectiveResource()->SetMannVsMachineWaveEnemyCount( wave->GetEnemyCount() );
 		TFObjectiveResource()->ClearMannVsMachineWaveClassFlags();
+		TFObjectiveResource()->SetMannVsMachineWaveHasTanks( wave->HasTanks() );
 
 		int i = 0;
 		bool bHasEngineer = false;
@@ -1074,9 +1051,6 @@ void CPopulationManager::ShowNextWaveDescription( void )
 }
 
 //-------------------------------------------------------------------------
-#ifdef STAGING_ONLY
-ConVar tf_mvm_bonus( "tf_mvm_bonus", "0" );
-#endif
 void CPopulationManager::StartCurrentWave( void )
 {
 	if ( TFObjectiveResource() )
@@ -1090,40 +1064,6 @@ void CPopulationManager::StartCurrentWave( void )
 
 	TFGameRules()->State_Transition( GR_STATE_RND_RUNNING );
 
-#ifdef STAGING_ONLY
-	m_bBonusRound = tf_mvm_bonus.GetBool();
-	if ( m_bBonusRound )
-	{
-		Assert( m_hBonusBoss == NULL );
-		m_hBonusBoss = dynamic_cast< CBaseCombatCharacter * >( CreateEntityByName( "eyeball_boss" ) );
-		if ( m_hBonusBoss )
-		{
-			bool bFoundSpawnPoint = false;
-			CBaseEntity *spawnPoint = NULL;
-			while( ( spawnPoint = gEntList.FindEntityByClassname( spawnPoint, "info_target" ) ) != NULL )
-			{
-				if ( FStrEq( STRING( spawnPoint->GetEntityName() ), "spawn_boss_startpoint" ) )
-				{
-					bFoundSpawnPoint = true;
-					break;
-				}
-			}
-
-			if ( bFoundSpawnPoint )
-			{
-				m_hBonusBoss->SetAbsOrigin( spawnPoint->GetAbsOrigin() );
-				DispatchSpawn( m_hBonusBoss );
-			}
-			else
-			{
-				AssertMsg( 0, "CPopulationManager::StartCurrentWave trying to spawn a bonus boss, but cannot find spawn_boss_startpoint info_target in the map" );
-				UTIL_Remove( m_hBonusBoss );
-				m_hBonusBoss = NULL;
-				m_bBonusRound = false;
-			}
-		}
-	}
-#endif
 
 	m_nRespecsAwardedInWave = 0;
 
@@ -2059,6 +1999,45 @@ void CPopulationManager::PostInitialize( void )
 }
 
 //-------------------------------------------------------------------------
+// Purpose : 
+//-------------------------------------------------------------------------
+bool CPopulationManager::IsValidPopfile( CUtlString fullPath )
+{
+	const char *pszFullPath = fullPath.Get();
+
+	// known templates that are not valid by themselves
+	if ( Q_stristr( pszFullPath, "robot_standard" ) ||
+		 Q_stristr( pszFullPath, "robot_giant" ) ||
+		 Q_stristr( pszFullPath, "robot_gatebot" ) )
+	{
+		return false;
+	}
+
+	KeyValues *values = new KeyValues( "Population" );
+
+	if ( !values->LoadFromFile( filesystem, pszFullPath, "GAME" ) )
+		return false;
+
+	for ( KeyValues *data = values->GetFirstSubKey(); data != NULL; data = data->GetNextKey() )
+	{
+		const char *name = data->GetName();
+
+		if ( Q_strlen( name ) <= 0 )
+		{
+			continue;
+		}
+		else if ( !Q_stricmp( name, "Wave" ) )
+		{
+			values->deleteThis();
+			return true;
+		}
+	}
+
+	values->deleteThis();
+	return false;
+}
+
+//-------------------------------------------------------------------------
 // Purpose : Read the target file (m_filename) and populate initial data fields
 //-------------------------------------------------------------------------
 bool CPopulationManager::Parse( void )
@@ -2648,7 +2627,7 @@ void CPopulationManager::AllocateBots()
 		Warning( "%d bots were already allocated some how before CPopulationManager::AllocateBots was called\n", botVector.Count() );
 	}
 
-	for ( int i = nNumEnemyBots; i < MVM_INVADERS_TEAM_SIZE; ++i )
+	for ( int i = nNumEnemyBots; i < tf_mvm_max_invaders.GetInt(); ++i )
 	{
 		CTFBot* newBot = NextBotCreatePlayerBot< CTFBot >( "TFBot", false );
 		if ( newBot )

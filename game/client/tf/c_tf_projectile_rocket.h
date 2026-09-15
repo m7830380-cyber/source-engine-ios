@@ -29,7 +29,8 @@ public:
 	virtual void	OnDataChanged(DataUpdateType_t updateType);
 
 	virtual void	CreateTrails( void );
-	virtual const char *GetTrailParticleName( void ) { return "rockettrail"; }
+	virtual const char *GetTrailParticleName( void );
+	bool			IsCritical() const { return m_bCritical; }
 
 private:
 	bool	m_bCritical;

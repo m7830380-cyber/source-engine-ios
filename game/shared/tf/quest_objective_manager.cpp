@@ -41,33 +41,20 @@ CQuestObjectiveManager::~CQuestObjectiveManager()
 
 CSOTrackerManager::SOTrackerMap_t::KeyType_t CQuestObjectiveManager::GetKeyForObjectTracker( const CSharedObject* pItem, CSteamID steamIDOwner )
 {
-	return assert_cast< const CEconItem* >( pItem )->GetItemID();
+	return assert_cast< const CQuest* >( pItem )->GetID();
 }
 
 bool CQuestObjectiveManager::ShouldTrackObject( const CSteamID & steamIDOwner, const CSharedObject *pObject ) const
 {
-	// We only care about items!
-	if( pObject->GetTypeID() != CEconItem::k_nTypeID )
+	// We only care about quests!
+	if( pObject->GetTypeID() != CQuest::k_nTypeID )
 		return false;
 
-	CEconItem *pItem = (CEconItem *)pObject;
-	const GameItemDefinition_t* pItemDef = pItem->GetItemDefinition();
-
-	// Not a quest?  Don't care
-	if ( pItemDef->GetQuestDef() == NULL )
-	{
-		SO_TRACKER_SPEW( CFmtStr( "Not accepting item %llu with defindex %d.  It doesn't have a quest def.\n", pItem->GetID(), pItemDef->GetDefinitionIndex() ), SO_TRACKER_SPEW_TRACKER_ACCEPTANCE );
+	CQuest* pQuest = (CQuest*)( pObject );
+	if ( !pQuest->Obj().active() || !pQuest->GetDefinition()->BActive() )
 		return false;
-	}
 
-	// We only create trackers for identified items
-	if ( IsQuestItemUnidentified( pItem ) )
-	{
-		SO_TRACKER_SPEW( CFmtStr( "Not accepting item %llu with defindex %d.  It's not identified.\n", pItem->GetID(), pItemDef->GetDefinitionIndex() ), SO_TRACKER_SPEW_TRACKER_ACCEPTANCE );
-		return false;
-	}
-
-	SO_TRACKER_SPEW( CFmtStr( "Accepting item %llu with defindex %d.\n", pItem->GetID(), pItemDef->GetDefinitionIndex() ), SO_TRACKER_SPEW_TRACKER_ACCEPTANCE );
+	SO_TRACKER_SPEW( CFmtStr( "Accepting quest %llu with defindex %d.\n", pQuest->GetID(), pQuest->GetDefinition()->GetDefIndex() ), SO_TRACKER_SPEW_TRACKER_ACCEPTANCE );
 	return true;
 }
 
@@ -76,19 +63,20 @@ int CQuestObjectiveManager::CompareRecords( const ::google::protobuf::Message* p
 	const CMsgGCQuestObjective_PointsChange* pNew = assert_cast< const CMsgGCQuestObjective_PointsChange* >( pNewProtoMsg );
 	const CMsgGCQuestObjective_PointsChange* pExisting = assert_cast< const CMsgGCQuestObjective_PointsChange* >( pExistingProtoMsg );
 
-	int nNewPoints = pNew->standard_points() + pNew->bonus_points();
-	int nExistingPoints = pExisting->standard_points() + pExisting->bonus_points();
+
+	int nNewPoints =		( pNew->points_2() << 16 )		+ ( pNew->points_1() << 8 )		 + pNew->points_0();
+	int nExistingPoints =	( pExisting->points_2() << 16 ) + ( pExisting->points_1() << 8 ) + pExisting->points_0();
 
 	return nNewPoints - nExistingPoints;
 }
 
 #ifdef CLIENT_DLL
-void CQuestObjectiveManager::UpdateFromServer( itemid_t nID, uint32 nStandardPoints, uint32 nBonusPoints )
+void CQuestObjectiveManager::UpdateFromServer( itemid_t nID, uint32 nPoints0, uint32 nPoints1, uint32 nPoints2 )
 {
 	CQuestItemTracker* pTracker = assert_cast< CQuestItemTracker* >( GetTracker( nID ) );
 	if ( pTracker )
 	{
-		pTracker->UpdateFromServer( nStandardPoints, nBonusPoints );
+		pTracker->UpdateFromServer( nPoints0, nPoints1, nPoints2 );
 	}
 	else
 	{
@@ -106,10 +94,15 @@ void CQuestObjectiveManager::SendMessageForCommit( const ::google::protobuf::Mes
 }
 #endif
 
+int CQuestObjectiveManager::GetType() const
+{
+	return CQuest::k_nTypeID; 
+}
+
 CFmtStr CQuestObjectiveManager::GetDebugObjectDescription( const CSharedObject* pSObject ) const
 {
-	const CEconItem* pItem = assert_cast< const CEconItem* >( pSObject );
-	return CFmtStr( "%llu (%s)", pItem->GetItemID(), pItem->GetItemDefinition()->GetQuestDef()->GetRolledNameForItem( pItem ) );
+	const CQuest* pItem = assert_cast< const CQuest* >( pSObject );
+	return CFmtStr( "%llu (%s)", pItem->GetID(), pItem->GetDefinition()->GetLocName() );
 }
 
 CBaseSOTracker* CQuestObjectiveManager::AllocateNewTracker( const CSharedObject* pItem, CSteamID steamIDOwner, CSOTrackerManager* pManager ) const
@@ -133,7 +126,7 @@ void CQuestObjectiveManager::OnCommitRecieved( const ::google::protobuf::Message
 	// where the player has disconnected from (this could be ourselves).
 	if ( pPointsChangeMsg->update_base_points() )
 	{
-		CQuestItemTracker* pItemTracker = assert_cast<CQuestItemTracker*>( GetTracker( pPointsChangeMsg->quest_item_id() ) );
+		CQuestItemTracker* pItemTracker = assert_cast<CQuestItemTracker*>( GetTracker( pPointsChangeMsg->quest_id() ) );
 		if ( pItemTracker )
 		{
 			pItemTracker->UpdatePointsFromSOItem();
@@ -155,15 +148,8 @@ CON_COMMAND( ensure_so_trackers_for_steamid, "Ensures a steamID has all the trac
 		return;
 	}
 
-	 CSteamID steamID( (uint32)V_atoi( args[1] ), 
+	 CSteamID steamID( (uint32)V_atoi( args[1] ), GetUniverse(), k_EAccountTypeIndividual );
 
-		 // GetUniverse() DOESNT WORK on servers, so we're hacking this for now
-#ifdef STAGING_ONLY
-		 k_EUniverseDev,
-#else
-		 k_EUniversePublic,
-#endif
-		 k_EAccountTypeIndividual );
 	 if ( !steamID.IsValid() )
 	 {
 		 Warning( "SteamID is not valid!\n" );
@@ -197,7 +183,7 @@ public:
 	{
 		GCSDK::CProtoBufMsg< CMsgGCQuestObjective_PointsChange > msg( pNetPacket );
 
-		QuestObjectiveManager()->AcknowledgeCommit( &msg.Body(), msg.Body().quest_item_id() );
+		QuestObjectiveManager()->AcknowledgeCommit( &msg.Body(), msg.Body().quest_id() );
 
 		return true;
 	}
@@ -207,45 +193,3 @@ public:
 GC_REG_JOB( GCSDK::CGCClient, CGCQuestObjective_PointsChangeResponse, "CGCQuestObjective_PointsChangeResponse", k_EMsgGCQuestObjective_PointsChange, GCSDK::k_EServerTypeGCClient );
 
 #endif // GAME_DLL
-
-
-
-#if ( defined( DEBUG ) || defined( STAGING_ONLY ) ) && defined( GAME_DLL )
-CON_COMMAND( tf_quests_complete_all, "Completes all quests" )
-{
-	QuestObjectiveManager()->DBG_CompleteQuests();
-}
-
-void CQuestObjectiveManager::DBG_CompleteQuests()
-{
-	CTFPlayer *pPlayer = ToTFPlayer( UTIL_GetCommandClient() );
-	if ( !pPlayer )
-		return;
-
-	CSteamID steamIDForPlayer;
-	if ( !pPlayer->GetSteamID( &steamIDForPlayer ) )
-		return;
-
-	CTFPlayerInventory* pInv = TFInventoryManager()->GetInventoryForPlayer( steamIDForPlayer );
-	if ( pInv )
-	{
-		int iCount = pInv->GetItemCount();
-		for ( int i = 0; i < iCount; i++ )
-		{
-			CEconItemView *pItem = pInv->GetItem(i);
-			if ( !pItem )
-				continue;
-
-			if( !pItem->GetStaticData() || !pItem->GetStaticData()->GetQuestDef() )
-				continue;
-
-			CQuestItemTracker* pTracker = assert_cast<CQuestItemTracker*>( GetTracker( pItem->GetItemID() ) );
-			if ( pTracker )
-			{
-				pTracker->DBG_CompleteQuest();
-			}
-		}
-	}
-}
-
-#endif // ( defined( DEBUG ) || defined( STAGING_ONLY ) ) && defined( GAME_DLL )

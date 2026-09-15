@@ -39,6 +39,7 @@ CCollectionCraftingPanel::CCollectionCraftingPanel( vgui::Panel *parent, CItemMo
 
 	m_pTradeUpContainer = new EditablePanel( this, "TradeUpContainer" );
 	m_pInspectPanel = new CTFItemInspectionPanel( this, "NewItemPanel" );
+	m_pInspectPanel->SetOptions( true, true, false );
 	m_pCosmeticResultItemModelPanel = new CItemModelPanel( m_pInspectPanel, "CosmeticResultItemModelPanel" );
 	m_pStampPanel = new ImagePanel( this, "Stamp" );
 	m_pStampButton = new CExButton( this, "ApplyStampButton", "" );
@@ -119,6 +120,9 @@ void CCollectionCraftingPanel::ApplySchemeSettings( vgui::IScheme *pScheme )
 
 	m_pItemNamePanel = m_pInspectPanel->FindControl< CItemModelPanel >( "ItemName" );
 	Assert( m_pItemNamePanel );
+
+	// Hide the BG image.  The crafting panel has a BG already
+	m_pInspectPanel->SetControlVisible( "BGImage", false, true );
 }
 
 //-----------------------------------------------------------------------------

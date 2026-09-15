@@ -446,10 +446,6 @@ public:
 		return ::FindAttribute( this, pAttrDef, out_pValue );
 	}
 
-	// Helpers to look for specific attribute values
-	virtual CEconItemPaintKitDefinition *GetCustomPainkKitDefinition( void ) const { return GetItemDefinition() ? GetItemDefinition()->GetCustomPainkKitDefinition() : NULL; }
-	virtual bool GetCustomPaintKitWear( float &flWear ) const;
-
 	// IEconItemInterface common implementation.
 	virtual bool IsTradable() const;
 	virtual int  GetUntradabilityFlags() const;
@@ -472,6 +468,10 @@ public:
 	virtual int				GetQuantity() const = 0;
 	virtual uint32			GetItemLevel() const = 0;
 	virtual bool			GetInUse() const = 0;			// is this item in use somewhere in the backend? (ie., cross-game trading)
+	uint8		GetRarity() const;
+	EEconItemQuality GetMarketQuality() const;
+	bool					BIsStrange() const;
+	bool					BIsUnusual() const;
 
 	virtual const char	   *GetCustomName() const = 0;		// get a user-generated name, if present, otherwise NULL; return value is UTF8
 	virtual const char	   *GetCustomDesc() const = 0;		// get a user-generated flavor text, if present, otherwise NULL; return value is UTF8
@@ -496,6 +496,29 @@ protected:
 	bool IsTemporarilyUntradable() const;
 };
 
+bool GetPaintKitWear( const IEconItemInterface *pItem, float &flWear );
+
+template <typename TAttributeContainerType>
+bool GetPaintKitDefIndex( const TAttributeContainerType *pAttrContainer, uint32 *punPaintKitDefIndex = NULL )
+{
+	static CSchemaAttributeDefHandle pAttrDef_PaintKitProtoDefIndex( "paintkit_proto_def_index" );
+	uint32 unPaintKitDefIndex;
+	if ( pAttrDef_PaintKitProtoDefIndex && FindAttribute_UnsafeBitwiseCast<attrib_value_t>( pAttrContainer, pAttrDef_PaintKitProtoDefIndex, &unPaintKitDefIndex ) )
+	{
+		if ( punPaintKitDefIndex )
+		{
+			*punPaintKitDefIndex = unPaintKitDefIndex;
+		}
+		return true;
+	}
+
+	return false;
+}
+
+bool GetStattrak( const IEconItemInterface *pItem, CAttribute_String *pAttrModule = NULL );
+const char *GetPaintKitMaterialOverride( const IEconItemInterface *pItem );
+const CEconItemCollectionDefinition* GetCollection( const IEconItemInterface* pItem );
+
 //-----------------------------------------------------------------------------
 // Purpose: Classes that want default behavior for GetMaterialOverride, which 
 // currently derive from IEconItemInterface can instead derive from 
@@ -508,38 +531,59 @@ class CMaterialOverrideContainer : public TBaseClass
 public:
 	virtual IMaterial* GetMaterialOverride( int iTeam ) OVERRIDE
 	{
-		#ifdef CLIENT_DLL
+#ifdef CLIENT_DLL
+		if ( iTeam < 0 || iTeam >= ARRAYSIZE( m_materialOverrides ) )
+		{
 			Assert( iTeam >= 0 && iTeam < ARRAYSIZE( m_materialOverrides ) );
+			return nullptr;
+		}
 
+		if ( m_bInitMaterialOverride[ iTeam ] )
+		{
 			if ( m_materialOverrides[ iTeam ].IsValid() )
+			{
 				return m_materialOverrides[ iTeam ];
+			}
+		}
+		else
+		{
+			m_bInitMaterialOverride[ iTeam ] = true;
 
-			if ( !this->GetItemDefinition() )
-				return NULL;
+			// always use paintkit first
+			const char *pszMaterialOverride = GetPaintKitMaterialOverride( this );
+			if ( !pszMaterialOverride )
+			{
+				if ( !this->GetItemDefinition() )
+					return NULL;
 
-			const char* pName = this->GetItemDefinition()->GetMaterialOverride( iTeam );
-			if ( pName == NULL )
-				return NULL;
+				pszMaterialOverride = this->GetItemDefinition()->GetMaterialOverride( iTeam );
+				if ( pszMaterialOverride == NULL )
+					return NULL;
+			}
 
-			m_materialOverrides[ iTeam ].Init( pName, TEXTURE_GROUP_CLIENT_EFFECTS );
+			m_materialOverrides[ iTeam ].Init( pszMaterialOverride, TEXTURE_GROUP_CLIENT_EFFECTS );
 			return m_materialOverrides[ iTeam ];
-		#else
-			return NULL;
-		#endif
+		}
+#endif // CLIENT_DLL
+		return NULL;
 	}
 
 protected:
 	void ResetMaterialOverrides()
 	{
-		#ifdef CLIENT_DLL
-			for ( int i = 0; i < TF_TEAM_COUNT; ++i ) 
-				m_materialOverrides[ i ].Shutdown();
-		#endif
+#ifdef CLIENT_DLL
+		for ( int i = 0; i < TF_TEAM_COUNT; ++i ) 
+		{
+			m_materialOverrides[ i ].Shutdown();
+			m_bInitMaterialOverride[ i ] = false;
+		}
+#endif // CLIENT_DLL
 	}
 
 private:
 #ifdef CLIENT_DLL
 	CMaterialReference m_materialOverrides[ TF_TEAM_COUNT ];
+	bool m_bInitMaterialOverride[ TF_TEAM_COUNT ];
 #endif
 };
 

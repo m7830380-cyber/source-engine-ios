@@ -65,7 +65,7 @@ public:
 	void			FireGameEvent( IGameEvent* event );
 	virtual void	CreateBanner();
 
-	virtual bool	SendWeaponAnim( int iActivity );
+	virtual Activity TranslateViewmodelHandActivityInternal( Activity actBase ) OVERRIDE;
 
 	void			BlowHorn( void );
 	void			RaiseFlag( void );

@@ -95,7 +95,7 @@ public:
 	float m_fTurnRate;		// actual turn rate
 	int m_iOrientation;		// 0 = floor, 1 = Ceiling
 	int	m_iOn;
-	int m_fBeserk;			// Sometimes this bitch will just freak out
+	int m_fBeserk;			// Sometimes it will just freak out
 	int m_iAutoStart;		// true if the turret auto deploys when a target
 							// enters its range
 

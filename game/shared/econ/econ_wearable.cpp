@@ -265,6 +265,11 @@ void CEconWearable::OnWearerDeath( void )
 {
 #ifdef CLIENT_DLL
 	UpdateParticleSystems();
+
+	// make sure we remove all particles on player death
+	// some particles could be created from animation
+	// UpdateParticleSystems only updates particles on cosmetics/weapons
+	ParticleProp()->StopParticlesInvolving( this );
 #endif
 }
 
@@ -512,7 +517,7 @@ public:
 
 			if ( pScriptItem && pScriptItem->IsValid() )
 			{
-				const bool bAltColor = pEntity && pEntity->GetTeam() > 0
+				const bool bAltColor = pEntity && pEntity->GetTeam() != nullptr
 									 ? pEntity->GetTeam()->GetTeamNumber() == TF_TEAM_BLUE
 									 : pScriptItem->GetFlags() & kEconItemFlagClient_ForceBlueTeam
 									 ? true

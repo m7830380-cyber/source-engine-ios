@@ -242,12 +242,12 @@ void CDisguiseStatus::CheckName( void )
 	if ( !pPlayer )
 		return;
 
-	int nIndex = pPlayer->m_Shared.GetDisguiseTargetIndex();
-	if ( nIndex != TF_DISGUISE_TARGET_INDEX_NONE )
+	C_TFPlayer *pTargetPlayer = pPlayer->m_Shared.GetDisguiseTarget();
+	if ( pTargetPlayer )
 	{
 		if ( g_PR != NULL )
 		{
-			const char *pszName = g_PR->GetPlayerName( nIndex );
+			const char *pszName = pTargetPlayer->GetPlayerName();
 			if ( pszName && pszName[0] )
 			{
 				SetDialogVariable( "disguisename", pszName );

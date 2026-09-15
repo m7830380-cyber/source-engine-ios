@@ -598,11 +598,6 @@ void CDynamicRecipePanel::ApplySchemeSettings( vgui::IScheme *pScheme )
 	if( m_pPrevInputPageButton )
 		m_pPrevInputPageButton->AddActionSignalTarget( this );
 
-#ifdef STAGING_ONLY
-	m_pDevGiveInputsButton = new CExButton( m_pInventoryContainer, "dev_giveinputsbutton", "[Debug] Give Inputs", this, "dev_giveinputs" );
-	m_pDevGiveInputsButton->SetEnabled( true );
-	m_pDevGiveInputsButton->SetVisible( true );
-#endif
 
 	InvalidateLayout();
 }
@@ -622,17 +617,6 @@ void CDynamicRecipePanel::PerformLayout( void )
 {
 	BaseClass::PerformLayout();
 
-#ifdef STAGING_ONLY
-	if( m_pDevGiveInputsButton )
-	{
-		m_pDevGiveInputsButton->SetPos( XRES(0) , YRES(290) );
-		m_pDevGiveInputsButton->SetWide( 210 );
-		m_pDevGiveInputsButton->SetTall( 40 );
-		m_pDevGiveInputsButton->MoveToFront();
-		m_pDevGiveInputsButton->SetEnabled( true );
-		m_pDevGiveInputsButton->SetVisible( true );
-	}
-#endif
 
 	if( m_pSortByComboBox )
 	{
@@ -730,14 +714,6 @@ void CDynamicRecipePanel::OnCommand( const char *command )
 		// Gobble up these commands
 		return;
 	}
-#ifdef STAGING_ONLY
-	else if( !Q_strnicmp( command, "dev_giveinputs", 14 ) )
-	{
-		Debug_GiveRequiredInputs();
-		if( m_pDevGiveInputsButton )
-			m_pDevGiveInputsButton->SetEnabled( false );
-	}
-#endif
 
 	BaseClass::OnCommand( command );
 }
@@ -1964,50 +1940,3 @@ public:
 
 GC_REG_JOB( GCSDK::CGCClient, CGCCompleteDynamicRecipeResponse, "CGCCompleteDynamicRecipeResponse", k_EMsgGCFulfillDynamicRecipeComponentResponse, GCSDK::k_EServerTypeGCClient );
 
-#ifdef STAGING_ONLY
-void CDynamicRecipePanel::Debug_GiveRequiredInputs() const
-{
-	if ( !steamapicontext || !steamapicontext->SteamUser() )
-	{
-		Msg("Not connected to Steam.\n");
-		return;
-	}
-	CSteamID steamIDForPlayer = steamapicontext->SteamUser()->GetSteamID();
-	if ( !steamIDForPlayer.IsValid() )
-	{
-		Msg("Failed to find a valid steamID for the local player.\n");
-		return;
-	}
-
-	FOR_EACH_VEC( m_vecRecipeInputModelPanels, i )
-	{
-		CInputPanelItemModelPanel *pInputPanel = m_vecRecipeInputModelPanels[i];
-
-		int nPage = 0;
-		for( const CEconItemAttributeDefinition *pAttrDef = pInputPanel->GetAttrib( nPage ); pAttrDef != NULL; pAttrDef = pInputPanel->GetAttrib( ++nPage ) )
-		{
-			CAttribute_DynamicRecipeComponent attribValue;
-			if( m_pDynamicRecipeItem->FindAttribute<CAttribute_DynamicRecipeComponent >( pAttrDef, &attribValue ) )
-			{
-				GCSDK::CProtoBufMsg<CMsgDevNewItemRequest> msg( k_EMsgGCDev_NewItemRequest );
-				msg.Body().set_receiver( steamIDForPlayer.ConvertToUint64() );
-				CItemSelectionCriteria criteria;
-
-				if( attribValue.component_flags() & DYNAMIC_RECIPE_FLAG_PARAM_ITEM_DEF_SET )
-				{
-					criteria.BAddCondition( "name", k_EOperator_String_EQ, GetItemSchema()->GetItemDefinition( attribValue.def_index() )->GetDefinitionName(), true );
-				}
-
-				if( attribValue.component_flags() & DYNAMIC_RECIPE_FLAG_PARAM_QUALITY_SET )
-				{
-					criteria.SetQuality( attribValue.item_quality() );
-				}
-
-				criteria.SetIgnoreEnabledFlag( true );
-				criteria.BSerializeToMsg( *msg.Body().mutable_criteria() );
-				GCClientSystem()->BSendMessage( msg );
-			}
-		}
-	}
-}
-#endif

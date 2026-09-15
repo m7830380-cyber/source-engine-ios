@@ -67,11 +67,6 @@ ConVar tf_quickplay_pref_community_servers( "tf_quickplay_pref_community_servers
 static inline int GetTfMatchmakingAppID()
 {
 	// !TEST!
-	#ifdef STAGING_ONLY
-		ConVarRef sb_fake_app_id( "sb_fake_app_id" );
-		if ( sb_fake_app_id.GetInt() != 0 )
-			return sb_fake_app_id.GetInt();
-	#endif
 	// return 440;
 
 	return engine->GetAppID();
@@ -2716,11 +2711,7 @@ public:
 			QuickplaySearchOptions opt;
 			opt.m_eSelectedGameType = m_vecItems[m_iCurrentItem].gameType;
 			opt.m_eServers = (QuickplaySearchOptions::EServers)( bBetaContent ? 
-#ifdef STAGING_ONLY
-				2 :
-#else
 				0 :
-#endif
 				tf_quickplay_pref_community_servers.GetInt() );
 			opt.m_eRandomCrits = (QuickplaySearchOptions::ERandomCrits)( bBetaContent ? 2 : tf_quickplay_pref_disable_random_crits.GetInt() );
 			opt.m_eDamageSpread = (QuickplaySearchOptions::EDamageSpread)( bBetaContent ? 2 : tf_quickplay_pref_enable_damage_spread.GetInt() );

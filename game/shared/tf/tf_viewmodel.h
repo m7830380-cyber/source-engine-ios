@@ -52,6 +52,7 @@ public:
 	BobState_t	&GetBobState() { return m_BobState; }
 
 	virtual int DrawModel( int flags );
+	virtual bool OnInternalDrawModel( ClientModelRenderInfo_t *pInfo ) OVERRIDE;
 	virtual bool OnPostInternalDrawModel( ClientModelRenderInfo_t *pInfo );
 
 	virtual const char* ModifyEventParticles( const char* token );

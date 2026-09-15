@@ -251,7 +251,7 @@ ActionResult< CTFBot >	CTFBotRetreatToCover::Update( CTFBot *me, float interval 
 			if ( medic && medic->MedicGetChargeLevel() > 0.9f )
 			{
 				// wait for uber to finish
-				return Continue();
+				return ( medic->MedicGetChargeLevel() < 1.f ) ? Continue() : Done();
 			}
 		}
 

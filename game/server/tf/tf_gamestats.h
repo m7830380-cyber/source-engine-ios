@@ -136,7 +136,7 @@ protected:
 
 public:
 	TFReportedStats_t			m_reportedStats;		// Stats which are uploaded from TF server to Steam
-	PlayerStats_t				m_aPlayerStats[MAX_PLAYERS+1];	// List of stats for each player for current life - reset after each death or class change
+	PlayerStats_t				m_aPlayerStats[MAX_PLAYERS_ARRAY_SAFE];	// List of stats for each player for current life - reset after each death or class change
 
 	// Stats structs used for the new steamworks reporting.
 	TF_Gamestats_RoundStats_t	m_currentRoundRed;

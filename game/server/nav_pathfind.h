@@ -16,7 +16,6 @@
 #include "mathlib/ssemath.h"
 #include "nav_area.h"
 
-extern int g_DebugPathfindCounter;
 
 
 //-------------------------------------------------------------------------------------------------------------------
@@ -108,7 +107,6 @@ bool NavAreaBuildPath( CNavArea *startArea, CNavArea *goalArea, const Vector *go
 		*closestArea = startArea;
 	}
 
-	bool isDebug = ( g_DebugPathfindCounter-- > 0 );
 
 	if (startArea == NULL)
 		return false;
@@ -154,10 +152,6 @@ bool NavAreaBuildPath( CNavArea *startArea, CNavArea *goalArea, const Vector *go
 		// get next area to check
 		CNavArea *area = CNavArea::PopOpenList();
 
-		if ( isDebug )
-		{
-			area->DrawFilled( 0, 255, 0, 128, 30.0f );
-		}
 
 		// don't consider blocked areas
 		if ( area->IsBlocked( teamID, ignoreNavBlockers ) )
@@ -339,7 +333,13 @@ bool NavAreaBuildPath( CNavArea *startArea, CNavArea *goalArea, const Vector *go
 				continue;
 
 			float newCostSoFar = costFunc( newArea, area, ladder, elevator, length );
-			
+
+			// NaNs really mess this function up causing tough to track down hangs. If
+			//  we get inf back, clamp it down to a really high number.
+			DebuggerBreakOnNaN_StagingOnly( newCostSoFar );
+			if ( IS_NAN( newCostSoFar ) )
+				newCostSoFar = 1e30f;
+
 			// check if cost functor says this area is a dead-end
 			if ( newCostSoFar < 0.0f )
 				continue;
@@ -352,7 +352,7 @@ bool NavAreaBuildPath( CNavArea *startArea, CNavArea *goalArea, const Vector *go
 			// Make sure that any jump to a new area incurs some pathfinsing
 			// cost, to avoid us spinning our wheels over insignificant cost
 			// benefit, floating point precision bug, or busted cost functor.
-			float minNewCostSoFar = area->GetCostSoFar() * 1.00001 + 0.00001;
+			float minNewCostSoFar = area->GetCostSoFar() * 1.00001f + 0.00001f;
 			newCostSoFar = Max( newCostSoFar, minNewCostSoFar );
 				
 			// stop if path length limit reached

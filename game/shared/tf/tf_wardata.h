@@ -17,9 +17,6 @@
 	#include "gc_clientsystem.h"
 #endif
 
-#ifdef GC
-	#include "tf_gc.h"
-#endif
 
 //---------------------------------------------------------------------------------
 // Purpose: The shared object that contains a user's stats for a war	
@@ -28,17 +25,6 @@ class CWarData : public GCSDK::CProtoBufSharedObject< CSOWarData, k_EEConTypeWar
 {
 public:
 	CWarData();
-#ifdef GC
-	DECLARE_CLASS_MEMPOOL( CWarData );
-	CWarData( uint32 unAccountID, war_definition_index_t eWarID, war_side_t eSide );
-
-	virtual bool BYieldingAddInsertToTransaction( GCSDK::CSQLAccess & sqlAccess );
-	virtual bool BYieldingAddWriteToTransaction( GCSDK::CSQLAccess & sqlAccess, const CUtlVector< int > &fields );
-	virtual bool BYieldingAddRemoveToTransaction( GCSDK::CSQLAccess & sqlAccess );
-
-	void WriteToRecord( CSchWarData *pWarData ) const;
-	void ReadFromRecord( const CSchWarData & warData );
-#endif // GC
 };
 
 
@@ -119,9 +105,6 @@ CTFWarGlobalDataHelper& GetWarData();
 #endif // CLIENT_DLL || GC
 
 CWarData* GetPlayerWarData( const CSteamID& steamID, war_definition_index_t warDefIndex, bool bLoadEvenIfWarInactive 
-#ifdef GC_DLL
-	, bool bLoadSOCacheIfNeeded
-#endif
 	);
 #ifdef CLIENT_DLL
 CWarData* GetLocalPlayerWarData( war_definition_index_t warDefIndex );

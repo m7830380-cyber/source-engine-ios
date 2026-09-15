@@ -9,6 +9,7 @@
 // Client specific.
 #ifdef CLIENT_DLL
 #include "c_tf_player.h"
+#include "prediction.h"
 // Server specific.
 #else
 #include "tf_player.h"
@@ -25,9 +26,18 @@
 IMPLEMENT_NETWORKCLASS_ALIASED( TFLunchBox, DT_WeaponLunchBox )
 
 BEGIN_NETWORK_TABLE( CTFLunchBox, DT_WeaponLunchBox )
+#if defined( CLIENT_DLL )
+RecvPropBool( RECVINFO( m_bBroken ), 0, CTFLunchBox::RecvProxy_Broken )
+#else
+SendPropBool( SENDINFO( m_bBroken ) )
+#endif
 END_NETWORK_TABLE()
 
 BEGIN_PREDICTION_DATA( CTFLunchBox )
+#ifdef CLIENT_DLL
+DEFINE_PRED_FIELD( m_bBroken, FIELD_BOOLEAN, FTYPEDESC_INSENDTABLE ),
+DEFINE_PRED_FIELD( m_nBody, FIELD_INTEGER, FTYPEDESC_OVERRIDE | FTYPEDESC_INSENDTABLE )
+#endif // CLIENT_DLL
 END_PREDICTION_DATA()
 
 LINK_ENTITY_TO_CLASS( tf_weapon_lunchbox, CTFLunchBox );
@@ -53,13 +63,21 @@ END_DATADESC()
 #endif
 
 #define LUNCHBOX_DROP_MODEL  "models/items/plate.mdl"
-#define LUNCHBOX_STEAK_DROP_MODEL  "models/items/plate_steak.mdl"
+#define LUNCHBOX_STEAK_DROP_MODEL  "models/workshop/weapons/c_models/c_buffalo_steak/plate_buffalo_steak.mdl"
 #define LUNCHBOX_ROBOT_DROP_MODEL  "models/items/plate_robo_sandwich.mdl"
 #define LUNCHBOX_FESTIVE_DROP_MODEL  "models/items/plate_sandwich_xmas.mdl"
-#define LUNCHBOX_CHOCOLATE_BAR		"models/props_halloween/halloween_medkit_small.mdl"
+#define LUNCHBOX_CHOCOLATE_BAR_DROP_MODEL		"models/workshop/weapons/c_models/c_chocolate/plate_chocolate.mdl"
+#define LUNCHBOX_BANANA_DROP_MODEL  "models/items/banana/plate_banana.mdl"
+#define LUNCHBOX_FISHCAKE_DROP_MODEL	"models/workshop/weapons/c_models/c_fishcake/plate_fishcake.mdl"
 
 #define LUNCHBOX_DROPPED_MINS	Vector( -17, -17, -10 )
 #define LUNCHBOX_DROPPED_MAXS	Vector( 17, 17, 10 )
+
+#define LUNCHBOX_BREAK_BODYGROUP 0
+// Absolute body number of broken/not-broken since the server can't figure them out from the studiohdr.  Would only
+// matter if we had other body groups going on anyway
+#define LUNCHBOX_BODY_NOTBROKEN 0
+#define LUNCHBOX_BODY_BROKEN 1
 
 static const char *s_pszLunchboxMaxHealThink = "LunchboxMaxHealThink";
 
@@ -73,6 +91,7 @@ static const char *s_pszLunchboxMaxHealThink = "LunchboxMaxHealThink";
 //-----------------------------------------------------------------------------
 CTFLunchBox::CTFLunchBox()
 {
+	m_bBroken = false;
 }
 
 //-----------------------------------------------------------------------------
@@ -105,7 +124,9 @@ void CTFLunchBox::Precache( void )
 		PrecacheModel( LUNCHBOX_STEAK_DROP_MODEL );
 		PrecacheModel( LUNCHBOX_ROBOT_DROP_MODEL );
 		PrecacheModel( LUNCHBOX_FESTIVE_DROP_MODEL );
-		PrecacheModel( LUNCHBOX_CHOCOLATE_BAR );
+		PrecacheModel( LUNCHBOX_CHOCOLATE_BAR_DROP_MODEL );
+		PrecacheModel( LUNCHBOX_BANANA_DROP_MODEL );
+		PrecacheModel( LUNCHBOX_FISHCAKE_DROP_MODEL );
 	}
 
 	BaseClass::Precache();
@@ -118,6 +139,11 @@ void CTFLunchBox::Precache( void )
 void CTFLunchBox::WeaponReset( void )
 {
 	BaseClass::WeaponReset();
+
+	if ( !GetOwner() || !GetOwner()->IsAlive() )
+	{
+		m_bBroken = false;
+	}
 }
 
 //-----------------------------------------------------------------------------
@@ -194,7 +220,9 @@ void CTFLunchBox::SecondaryAttack( void )
 	const char *pszHealthKit;	
 	switch ( nLunchBoxType )
 	{
-	case LUNCHBOX_ADDS_MAXHEALTH:
+	case LUNCHBOX_CHOCOLATE_BAR:
+	case LUNCHBOX_BANANA:
+	case LUNCHBOX_FISHCAKE:
 		pszHealthKit = "item_healthkit_small";
 		break;
 
@@ -228,9 +256,19 @@ void CTFLunchBox::SecondaryAttack( void )
 			pMedKit->SetModel( LUNCHBOX_FESTIVE_DROP_MODEL );
 			pMedKit->m_nSkin = ( pPlayer->GetTeamNumber() == TF_TEAM_RED ) ? 0 : 1;
 		}
-		else if ( nLunchBoxType == LUNCHBOX_ADDS_MAXHEALTH )
+		else if ( nLunchBoxType == LUNCHBOX_CHOCOLATE_BAR )
 		{
-			pMedKit->SetModel( LUNCHBOX_CHOCOLATE_BAR );
+			pMedKit->SetModel( LUNCHBOX_CHOCOLATE_BAR_DROP_MODEL );
+			pMedKit->m_nSkin = ( pPlayer->GetTeamNumber() == TF_TEAM_RED ) ? 0 : 1;
+		}
+		else if ( nLunchBoxType == LUNCHBOX_BANANA )
+		{
+			pMedKit->SetModel( LUNCHBOX_BANANA_DROP_MODEL );
+		}
+		else if ( nLunchBoxType == LUNCHBOX_FISHCAKE )
+		{
+			pMedKit->SetModel( LUNCHBOX_FISHCAKE_DROP_MODEL );
+			pMedKit->m_nSkin = ( pPlayer->GetTeamNumber() == TF_TEAM_RED ) ? 0 : 1;
 		}
 		else
 		{
@@ -253,7 +291,7 @@ void CTFLunchBox::SecondaryAttack( void )
 	pPlayer->RemoveAmmo( m_pWeaponInfo->GetWeaponData( m_iWeaponMode ).m_iAmmoPerShot, m_iPrimaryAmmoType );
 	g_pGameRules->SwitchToNextBestWeapon( pPlayer, this );
 
-	StartEffectBarRegen();
+	pPlayer->m_Shared.SetItemChargeMeter( LOADOUT_POSITION_SECONDARY, 0.f );
 }
 
 //-----------------------------------------------------------------------------
@@ -268,12 +306,13 @@ void CTFLunchBox::DrainAmmo( bool bForceCooldown )
 #ifdef GAME_DLL
 
 	int iLunchboxType = GetLunchboxType();
+
 	// If we're damaged while eating/taunting, bForceCooldown will be true
 	if ( pOwner->IsPlayerClass( TF_CLASS_HEAVYWEAPONS ) )
 	{
-		if ( pOwner->GetHealth() < pOwner->GetMaxHealth() || GetLunchboxType() == LUNCHBOX_ADDS_MINICRITS || iLunchboxType == LUNCHBOX_ADDS_MAXHEALTH || bForceCooldown )
+		if ( pOwner->GetHealth() < pOwner->GetMaxHealth() || GetLunchboxType() == LUNCHBOX_ADDS_MINICRITS || iLunchboxType == LUNCHBOX_CHOCOLATE_BAR || iLunchboxType == LUNCHBOX_FISHCAKE || bForceCooldown )
 		{
-			StartEffectBarRegen();
+			pOwner->m_Shared.SetItemChargeMeter( LOADOUT_POSITION_SECONDARY, 0.f );
 		}
 		else	// Full health regular sandwhich, I can eat forever
 		{	
@@ -295,8 +334,11 @@ void CTFLunchBox::DrainAmmo( bool bForceCooldown )
 #else
 	
 	pOwner->RemoveAmmo( 1, m_iPrimaryAmmoType );
-	StartEffectBarRegen();
 
+	if ( pOwner->IsPlayerClass( TF_CLASS_SCOUT ) )
+	{
+		StartEffectBarRegen();
+	}
 #endif
 }
 
@@ -307,7 +349,7 @@ void CTFLunchBox::Detach( void )
 {
 #ifdef GAME_DLL
 	// Terrible - but for now, we're the only place that adds this (custom) attribute
-	if ( GetLunchboxType() == LUNCHBOX_ADDS_MAXHEALTH )
+	if ( GetLunchboxType() == LUNCHBOX_CHOCOLATE_BAR || GetLunchboxType() == LUNCHBOX_FISHCAKE )
 	{
 		CTFPlayer *pOwner = ToTFPlayer( GetPlayerOwner() );
 		if ( pOwner )
@@ -322,18 +364,32 @@ void CTFLunchBox::Detach( void )
 	BaseClass::Detach();
 }
 
+//-----------------------------------------------------------------------------
+// Purpose:
+//-----------------------------------------------------------------------------
+bool CTFLunchBox::Holster( CBaseCombatWeapon *pSwitchingTo /* = NULL */ )
+{ 
+//	SetBroken( false );
+
+	return BaseClass::Holster( pSwitchingTo );
+}
+
 #ifdef GAME_DLL
 //-----------------------------------------------------------------------------
 // Purpose:
 //-----------------------------------------------------------------------------
 void CTFLunchBox::ApplyBiteEffects( CTFPlayer *pPlayer )
 {
+	SetBroken( true );
+
 	int nLunchBoxType = GetLunchboxType();
 
-	if ( nLunchBoxType == LUNCHBOX_ADDS_MAXHEALTH )
+	const float DALOKOHS_MAXHEALTH_BUFF = 50.f;
+
+	if ( nLunchBoxType == LUNCHBOX_CHOCOLATE_BAR || nLunchBoxType == LUNCHBOX_FISHCAKE )
 	{
 		// add 50 health to player for 30 seconds
-		pPlayer->AddCustomAttribute( "hidden maxhealth non buffed", 50.f, 30.f );
+		pPlayer->AddCustomAttribute( "hidden maxhealth non buffed", DALOKOHS_MAXHEALTH_BUFF, 30.f );
 	}
 	else if ( nLunchBoxType == LUNCHBOX_ADDS_MINICRITS )
 	{
@@ -348,12 +404,12 @@ void CTFLunchBox::ApplyBiteEffects( CTFPlayer *pPlayer )
 	}
 	
 	// Then heal the player
-	int iHeal = ( nLunchBoxType == LUNCHBOX_ADDS_MAXHEALTH ) ? 25 : 75;
+	int iHeal = ( nLunchBoxType == LUNCHBOX_CHOCOLATE_BAR || nLunchBoxType == LUNCHBOX_FISHCAKE ) ? 25 : 75;
 	int iHealType = DMG_GENERIC;
-	if ( nLunchBoxType == LUNCHBOX_ADDS_MAXHEALTH && pPlayer->GetHealth() < 400 )
+	if ( ( nLunchBoxType == LUNCHBOX_CHOCOLATE_BAR || nLunchBoxType == LUNCHBOX_FISHCAKE ) && pPlayer->GetHealth() < ( 300.f + DALOKOHS_MAXHEALTH_BUFF ) )
 	{
 		iHealType = DMG_IGNORE_MAXHEALTH;
-		iHeal = Min( 25, 400 - pPlayer->GetHealth() );
+		iHeal = Min( 25, 350 - pPlayer->GetHealth() );
 	}
 
 	float flHealScale = 1.0f;
@@ -374,7 +430,88 @@ void CTFLunchBox::ApplyBiteEffects( CTFPlayer *pPlayer )
 		pPlayer->GiveAmmo( maxPrimary * 0.25, TF_AMMO_PRIMARY, true );
 	}
 }
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+void CTFLunchBox::OnResourceMeterFilled()
+{
+	CTFPlayer *pOwner = GetTFPlayerOwner();
+	if ( !pOwner )
+		return;
+
+	pOwner->GiveAmmo( 1, m_iPrimaryAmmoType, false, kAmmoSource_ResourceMeter );
+}
 #endif // GAME_DLL
+
+//-----------------------------------------------------------------------------
+// Purpose:  
+//-----------------------------------------------------------------------------
+void CTFLunchBox::SwitchBodyGroups( void )
+{
+	int iState = 0;
+
+	if ( m_bBroken )
+	{
+		iState = 1;
+	}
+
+#ifdef CLIENT_DLL
+	// We'll successfully predict m_nBody along with m_bBroken, but this can be called outside prediction, in which case
+	// we want to use the networked m_nBody value -- but still fixup our viewmodel which is clientside only.
+	if ( prediction->InPrediction() )
+	{
+		SetBodygroup( LUNCHBOX_BREAK_BODYGROUP, iState );
+	}
+
+	CTFPlayer *pTFPlayer = ToTFPlayer( GetOwner() );
+	if ( pTFPlayer && pTFPlayer->GetActiveWeapon() == this )
+	{
+		C_BaseAnimating *pViewWpn = GetAppropriateWorldOrViewModel();
+		if ( pViewWpn != this )
+		{
+			pViewWpn->SetBodygroup( LUNCHBOX_BREAK_BODYGROUP, iState );
+		}
+	}
+#else // CLIENT_DLL
+	m_nBody = iState ? LUNCHBOX_BODY_BROKEN : LUNCHBOX_BODY_NOTBROKEN;
+#endif // CLIENT_DLL
+}
+
+//-----------------------------------------------------------------------------
+// Purpose:  
+//-----------------------------------------------------------------------------
+bool CTFLunchBox::UpdateBodygroups( CBaseCombatCharacter* pOwner, int iState )
+{
+	SwitchBodyGroups();
+
+	return BaseClass::UpdateBodygroups( pOwner, iState );
+}
+
+//-----------------------------------------------------------------------------
+// Purpose:  
+//-----------------------------------------------------------------------------
+void CTFLunchBox::SetBroken( bool bBroken )
+{
+	m_bBroken = bBroken;
+	SwitchBodyGroups();
+}
+
+#ifdef CLIENT_DLL
+//-----------------------------------------------------------------------------
+// Purpose:  
+//-----------------------------------------------------------------------------
+/* static */ void CTFLunchBox::RecvProxy_Broken( const CRecvProxyData *pData, void *pStruct, void *pOut )
+{
+	CTFLunchBox* pLunchBox = ( CTFLunchBox* ) pStruct;
+
+	if ( !!pData->m_Value.m_Int != pLunchBox->m_bBroken )
+	{
+		pLunchBox->m_bBroken = !!pData->m_Value.m_Int;
+		pLunchBox->SwitchBodyGroups();
+	}
+}
+#endif // CLIENT_DLL
 
 //-----------------------------------------------------------------------------
 // Purpose:  Energy Drink

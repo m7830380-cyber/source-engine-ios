@@ -49,24 +49,4 @@ private:
 
 };
 
-class CAutobalanceVolunteerNotification : public CEconNotification
-{
-public:
-	CAutobalanceVolunteerNotification() : CEconNotification() {}
-
-	virtual ~CAutobalanceVolunteerNotification() OVERRIDE {}
-
-	virtual bool BShowInGameElements() const OVERRIDE { return true; }
-	virtual EType NotificationType() OVERRIDE { return eType_AcceptDecline; }
-
-	virtual void Accept() OVERRIDE { SendResponse( true ); }
-	virtual void Decline() OVERRIDE { SendResponse( false ); }
-	virtual void Expired() OVERRIDE { Decline(); }
-
-	static bool IsNotificationType( CEconNotification *pNotification ) { return dynamic_cast<CAutobalanceVolunteerNotification *>( pNotification ) != NULL; }
-
-private:
-	void SendResponse( bool bResponse );
-};
-
 #endif // C_TF_NOTIFICATIONS_H

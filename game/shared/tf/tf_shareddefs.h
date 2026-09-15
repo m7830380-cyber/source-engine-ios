@@ -35,6 +35,13 @@ enum
 	TF_TEAM_COUNT
 };
 
+enum
+{
+	CRATETYPE_NORMAL = 0,
+	CRATETYPE_ROBO = 1,
+	CRATETYPE_WINTER = 2,
+};
+
 #define TF_TEAM_AUTOASSIGN (TF_TEAM_COUNT + 1 )
 
 #define TF_TEAM_HALLOWEEN	TF_TEAM_AUTOASSIGN
@@ -114,9 +121,6 @@ enum PowerupBottleType_t
 	POWERUP_BOTTLE_REFILL_AMMO,
 	POWERUP_BOTTLE_BUILDINGS_INSTANT_UPGRADE,
 	POWERUP_BOTTLE_RADIUS_STEALTH,
-#ifdef STAGING_ONLY
-	POWERUP_BOTTLE_SEE_CASH_THROUGH_WALL,
-#endif
 
 	POWERUP_BOTTLE_TOTAL
 };
@@ -171,8 +175,6 @@ enum
 
 #define PANEL_MAINMENUOVERRIDE	"MainMenuOverride"
 
-#define PANEL_QUEST_LOG				"QuestLog"
-
 // file we'll save our list of viewed intro movies in
 #define MOVIES_FILE				"viewed.res"
 
@@ -198,7 +200,7 @@ enum
 
 #define	TF_CLASS_MENU_BUTTONS	( TF_CLASS_RANDOM + 1 )
 
-enum
+enum ETFClass
 {
 	TF_CLASS_UNDEFINED = 0,
 
@@ -505,11 +507,14 @@ enum ETFWeaponType
 	TF_WEAPON_PARACHUTE,
 	TF_WEAPON_GRAPPLINGHOOK,
 	TF_WEAPON_PASSTIME_GUN,
-#ifdef STAGING_ONLY
-	TF_WEAPON_SNIPERRIFLE_REVOLVER,
-#endif
-
 	TF_WEAPON_CHARGED_SMG,
+	TF_WEAPON_BREAKABLE_SIGN,
+	TF_WEAPON_ROCKETPACK,
+	TF_WEAPON_SLAP,
+	TF_WEAPON_JAR_GAS,
+	TF_WEAPON_GRENADE_JAR_GAS,
+	TF_WEAPON_FLAME_BALL,
+
 
 	//
 	// ADD NEW WEAPONS HERE TO AVOID BREAKING DEMOS
@@ -518,9 +523,9 @@ enum ETFWeaponType
 	TF_WEAPON_COUNT
 };
 
-extern const char *g_aWeaponNames[TF_WEAPON_COUNT];
 extern int g_aWeaponDamageTypes[TF_WEAPON_COUNT];
 
+const char *GetWeaponIDName( int iWeaponID );
 int GetWeaponId( const char *pszWeaponName );
 #ifdef GAME_DLL
 int GetWeaponFromDamage( const CTakeDamageInfo &info );
@@ -566,20 +571,12 @@ enum ProjectileType_t
 	TF_PROJECTILE_FESTIVE_HEALING_BOLT,
 	TF_PROJECTILE_BREADMONSTER_JARATE,
 	TF_PROJECTILE_BREADMONSTER_MADMILK,
-
 	TF_PROJECTILE_GRAPPLINGHOOK,
 	TF_PROJECTILE_SENTRY_ROCKET,
 	TF_PROJECTILE_BREAD_MONSTER,
+	TF_PROJECTILE_JAR_GAS,
+	TF_PROJECTILE_FLAME_BALL,	
 
-#ifdef STAGING_ONLY
-	// STAGING ONLY
-	TF_PROJECTILE_TRANQ,
-	TF_PROJECTILE_SNIPERBULLET,
-	TF_PROJECTILE_THROWING_KNIFE,
-	TF_PROJECTILE_GRENADE_CONCUSSION,
-	TF_PROJECTILE_GRENADE_TELEPORT,
-	TF_PROJECTILE_MILK_BOLT,
-#endif
 	// Add new entries here!
 
 	TF_NUM_PROJECTILES
@@ -666,10 +663,8 @@ extern const char *g_pszItemClassImagesBlue[];
 // Burning
 #define TF_BURNING_FREQUENCY		0.5f
 #define TF_BURNING_FLAME_LIFE		10.0
-#define TF_BURNING_FLAME_LIFE_PYRO	0.25		// pyro only displays burning effect momentarily
-#define TF_BURNING_FLAME_LIFE_FLARE 10.0
-#define TF_BURNING_FLAME_LIFE_PLASMA 6.0
-#define TF_BURNING_DMG				3
+#define TF_BURNING_FLAME_LIFE_PYRO	0.25
+#define TF_BURNING_DMG				4
 
 // Bleeding
 #define TF_BLEEDING_FREQUENCY		0.5f
@@ -685,160 +680,167 @@ extern const char *g_pszItemClassImagesBlue[];
 #define TF_SCOUT_NUMBEROFPHASEATTACHMENTS	5
 
 #define SHOW_DISGUISE_EFFECT 1
-#define TF_DISGUISE_TARGET_INDEX_NONE	( MAX_PLAYERS + 1 )
-#define TF_PLAYER_INDEX_NONE			( MAX_PLAYERS + 1 )
 
 //
 // ADD NEW WEAPONS HERE TO AVOID BREAKING DEMOS
 //
 enum ETFCond
 {
-	TF_COND_INVALID = -1,
-	TF_COND_AIMING = 0,		// Sniper aiming, Heavy minigun.
-	TF_COND_ZOOMED,
-	TF_COND_DISGUISING,
-	TF_COND_DISGUISED,
-	TF_COND_STEALTHED,		// Spy specific
-	TF_COND_INVULNERABLE,
-	TF_COND_TELEPORTED,
-	TF_COND_TAUNTING,
-	TF_COND_INVULNERABLE_WEARINGOFF,
-	TF_COND_STEALTHED_BLINK,
-	TF_COND_SELECTED_TO_TELEPORT,
-	TF_COND_CRITBOOSTED,	// DO NOT RE-USE THIS -- THIS IS FOR KRITZKRIEG AND REVENGE CRITS ONLY
-	TF_COND_TMPDAMAGEBONUS,
-	TF_COND_FEIGN_DEATH,
-	TF_COND_PHASE,
-	TF_COND_STUNNED,		// Any type of stun. Check iStunFlags for more info.
-	TF_COND_OFFENSEBUFF,
-	TF_COND_SHIELD_CHARGE,
-	TF_COND_DEMO_BUFF,
-	TF_COND_ENERGY_BUFF,
-	TF_COND_RADIUSHEAL,
-	TF_COND_HEALTH_BUFF,
-	TF_COND_BURNING,
-	TF_COND_HEALTH_OVERHEALED,
-	TF_COND_URINE,
-	TF_COND_BLEEDING,
-	TF_COND_DEFENSEBUFF,	// 35% defense! No crit damage.
-	TF_COND_MAD_MILK,
-	TF_COND_MEGAHEAL,
-	TF_COND_REGENONDAMAGEBUFF,
-	TF_COND_MARKEDFORDEATH,
-	TF_COND_NOHEALINGDAMAGEBUFF,
-	TF_COND_SPEED_BOOST,				// = 32
-	TF_COND_CRITBOOSTED_PUMPKIN,		// Brandon hates bits
-	TF_COND_CRITBOOSTED_USER_BUFF,
-	TF_COND_CRITBOOSTED_DEMO_CHARGE,
-	TF_COND_SODAPOPPER_HYPE,
-	TF_COND_CRITBOOSTED_FIRST_BLOOD,	// arena mode first blood
-	TF_COND_CRITBOOSTED_BONUS_TIME,
-	TF_COND_CRITBOOSTED_CTF_CAPTURE,
-	TF_COND_CRITBOOSTED_ON_KILL,		// =40. KGB, etc.
-	TF_COND_CANNOT_SWITCH_FROM_MELEE,
-	TF_COND_DEFENSEBUFF_NO_CRIT_BLOCK,	// 35% defense! Still damaged by crits.
-	TF_COND_REPROGRAMMED,				// Bots only
-	TF_COND_CRITBOOSTED_RAGE_BUFF,
-	TF_COND_DEFENSEBUFF_HIGH,			// 75% defense! Still damaged by crits.
-	TF_COND_SNIPERCHARGE_RAGE_BUFF,		// Sniper Rage - Charge time speed up
-	TF_COND_DISGUISE_WEARINGOFF,		// Applied for half-second post-disguise
-	TF_COND_MARKEDFORDEATH_SILENT,		// Sans sound
-	TF_COND_DISGUISED_AS_DISPENSER,
-	TF_COND_SAPPED,						// =50. Bots only
-	TF_COND_INVULNERABLE_HIDE_UNLESS_DAMAGED,
-	TF_COND_INVULNERABLE_USER_BUFF,
-	TF_COND_HALLOWEEN_BOMB_HEAD,
-	TF_COND_HALLOWEEN_THRILLER,
-	TF_COND_RADIUSHEAL_ON_DAMAGE,
-	TF_COND_CRITBOOSTED_CARD_EFFECT,
-	TF_COND_INVULNERABLE_CARD_EFFECT,
-	TF_COND_MEDIGUN_UBER_BULLET_RESIST,
-	TF_COND_MEDIGUN_UBER_BLAST_RESIST,
-	TF_COND_MEDIGUN_UBER_FIRE_RESIST,		// =60
-	TF_COND_MEDIGUN_SMALL_BULLET_RESIST,
-	TF_COND_MEDIGUN_SMALL_BLAST_RESIST,
-	TF_COND_MEDIGUN_SMALL_FIRE_RESIST,
-	TF_COND_STEALTHED_USER_BUFF,			// Any class can have this
-	TF_COND_MEDIGUN_DEBUFF,
-	TF_COND_STEALTHED_USER_BUFF_FADING,
-	TF_COND_BULLET_IMMUNE,
-	TF_COND_BLAST_IMMUNE,
-	TF_COND_FIRE_IMMUNE,
-	TF_COND_PREVENT_DEATH,					// =70
-	TF_COND_MVM_BOT_STUN_RADIOWAVE, 		// Bots only
-	TF_COND_HALLOWEEN_SPEED_BOOST,
-	TF_COND_HALLOWEEN_QUICK_HEAL,
-	TF_COND_HALLOWEEN_GIANT,
-	TF_COND_HALLOWEEN_TINY,
-	TF_COND_HALLOWEEN_IN_HELL,
-	TF_COND_HALLOWEEN_GHOST_MODE,			// =77
-	TF_COND_MINICRITBOOSTED_ON_KILL,
-	TF_COND_OBSCURED_SMOKE,
-	TF_COND_PARACHUTE_DEPLOYED,				// =80
-	TF_COND_BLASTJUMPING,
-	TF_COND_HALLOWEEN_KART,
-	TF_COND_HALLOWEEN_KART_DASH,
-	TF_COND_BALLOON_HEAD,					// =84 larger head, lower-gravity-feeling jumps
-	TF_COND_MELEE_ONLY,						// =85 melee only
-	TF_COND_SWIMMING_CURSE,					// player movement become swimming movement
-	TF_COND_FREEZE_INPUT,					// freezes player input
-	TF_COND_HALLOWEEN_KART_CAGE,			// attach cage model to player while in kart
-	TF_COND_DONOTUSE_0,
-	TF_COND_RUNE_STRENGTH,
-	TF_COND_RUNE_HASTE,
-	TF_COND_RUNE_REGEN,
-	TF_COND_RUNE_RESIST,
-	TF_COND_RUNE_VAMPIRE,
-	TF_COND_RUNE_REFLECT,
-	TF_COND_RUNE_PRECISION,
-	TF_COND_RUNE_AGILITY,
-	TF_COND_GRAPPLINGHOOK,
-	TF_COND_GRAPPLINGHOOK_SAFEFALL,
-	TF_COND_GRAPPLINGHOOK_LATCHED,
-	TF_COND_GRAPPLINGHOOK_BLEEDING,
-	TF_COND_AFTERBURN_IMMUNE,
-	TF_COND_RUNE_KNOCKOUT,
-	TF_COND_RUNE_IMBALANCE,
-	TF_COND_CRITBOOSTED_RUNE_TEMP,
-	TF_COND_PASSTIME_INTERCEPTION,
-	TF_COND_SWIMMING_NO_EFFECTS,			// =107_DNOC_FT
-	TF_COND_PURGATORY,
-	TF_COND_RUNE_KING,
-	TF_COND_RUNE_PLAGUE,
-	TF_COND_RUNE_SUPERNOVA,
-	TF_COND_PLAGUE,
-	TF_COND_KING_BUFFED,
-	TF_COND_TEAM_GLOWS,						// used to show team glows to living players
-	TF_COND_KNOCKED_INTO_AIR,
-	TF_COND_COMPETITIVE_WINNER,
-	TF_COND_COMPETITIVE_LOSER,
-	TF_COND_HEALING_DEBUFF,
-	TF_COND_PASSTIME_PENALTY_DEBUFF,		// when carrying the ball without any teammates nearby	
-	TF_COND_GRAPPLED_TO_PLAYER,
-	TF_COND_GRAPPLED_BY_PLAYER,
-	//
+	TF_COND_INVALID                          = -1,
+	TF_COND_AIMING                           = 0, // Sniper aiming, Heavy minigun.
+	TF_COND_ZOOMED                           = 1,
+	TF_COND_DISGUISING                       = 2,
+	TF_COND_DISGUISED                        = 3,
+	TF_COND_STEALTHED                        = 4, // Spy specific
+	TF_COND_INVULNERABLE                     = 5,
+	TF_COND_TELEPORTED                       = 6,
+	TF_COND_TAUNTING                         = 7,
+	TF_COND_INVULNERABLE_WEARINGOFF          = 8,
+	TF_COND_STEALTHED_BLINK                  = 9,
+	TF_COND_SELECTED_TO_TELEPORT             = 10,
+	TF_COND_CRITBOOSTED                      = 11, // DO NOT RE-USE THIS -- THIS IS FOR KRITZKRIEG AND REVENGE CRITS ONLY
+	TF_COND_TMPDAMAGEBONUS                   = 12,
+	TF_COND_FEIGN_DEATH                      = 13,
+	TF_COND_PHASE                            = 14,
+	TF_COND_STUNNED                          = 15, // Any type of stun. Check iStunFlags for more info.
+	TF_COND_OFFENSEBUFF                      = 16,
+	TF_COND_SHIELD_CHARGE                    = 17,
+	TF_COND_DEMO_BUFF                        = 18,
+	TF_COND_ENERGY_BUFF                      = 19,
+	TF_COND_RADIUSHEAL                       = 20,
+	TF_COND_HEALTH_BUFF                      = 21,
+	TF_COND_BURNING                          = 22,
+	TF_COND_HEALTH_OVERHEALED                = 23,
+	TF_COND_URINE                            = 24,
+	TF_COND_BLEEDING                         = 25,
+	TF_COND_DEFENSEBUFF                      = 26, // 35% defense! No crit damage.
+	TF_COND_MAD_MILK                         = 27,
+	TF_COND_MEGAHEAL                         = 28,
+	TF_COND_REGENONDAMAGEBUFF                = 29,
+	TF_COND_MARKEDFORDEATH                   = 30,
+	TF_COND_NOHEALINGDAMAGEBUFF              = 31,
+	TF_COND_SPEED_BOOST                      = 32, // = 32
+	TF_COND_CRITBOOSTED_PUMPKIN              = 33, // Brandon hates bits
+	TF_COND_CRITBOOSTED_USER_BUFF            = 34,
+	TF_COND_CRITBOOSTED_DEMO_CHARGE          = 35,
+	TF_COND_SODAPOPPER_HYPE                  = 36,
+	TF_COND_CRITBOOSTED_FIRST_BLOOD          = 37, // arena mode first blood
+	TF_COND_CRITBOOSTED_BONUS_TIME           = 38,
+	TF_COND_CRITBOOSTED_CTF_CAPTURE          = 39,
+	TF_COND_CRITBOOSTED_ON_KILL              = 40, // =40. KGB, etc.
+	TF_COND_CANNOT_SWITCH_FROM_MELEE         = 41,
+	TF_COND_DEFENSEBUFF_NO_CRIT_BLOCK        = 42, // 35% defense! Still damaged by crits.
+	TF_COND_REPROGRAMMED                     = 43, // Bots only
+	TF_COND_CRITBOOSTED_RAGE_BUFF            = 44,
+	TF_COND_DEFENSEBUFF_HIGH                 = 45, // 75% defense! Still damaged by crits.
+	TF_COND_SNIPERCHARGE_RAGE_BUFF           = 46, // Sniper Rage - Charge time speed up
+	TF_COND_DISGUISE_WEARINGOFF              = 47, // Applied for half-second post-disguise
+	TF_COND_MARKEDFORDEATH_SILENT            = 48, // Sans sound
+	TF_COND_DISGUISED_AS_DISPENSER           = 49,
+	TF_COND_SAPPED                           = 50, // =50. Bots only
+	TF_COND_INVULNERABLE_HIDE_UNLESS_DAMAGED = 51,
+	TF_COND_INVULNERABLE_USER_BUFF           = 52,
+	TF_COND_HALLOWEEN_BOMB_HEAD              = 53,
+	TF_COND_HALLOWEEN_THRILLER               = 54,
+	TF_COND_RADIUSHEAL_ON_DAMAGE             = 55,
+	TF_COND_CRITBOOSTED_CARD_EFFECT          = 56,
+	TF_COND_INVULNERABLE_CARD_EFFECT         = 57,
+	TF_COND_MEDIGUN_UBER_BULLET_RESIST       = 58,
+	TF_COND_MEDIGUN_UBER_BLAST_RESIST        = 59,
+	TF_COND_MEDIGUN_UBER_FIRE_RESIST         = 60, // =60
+	TF_COND_MEDIGUN_SMALL_BULLET_RESIST      = 61,
+	TF_COND_MEDIGUN_SMALL_BLAST_RESIST       = 62,
+	TF_COND_MEDIGUN_SMALL_FIRE_RESIST        = 63,
+	TF_COND_STEALTHED_USER_BUFF              = 64, // Any class can have this
+	TF_COND_MEDIGUN_DEBUFF                   = 65,
+	TF_COND_STEALTHED_USER_BUFF_FADING       = 66,
+	TF_COND_BULLET_IMMUNE                    = 67,
+	TF_COND_BLAST_IMMUNE                     = 68,
+	TF_COND_FIRE_IMMUNE                      = 69,
+	TF_COND_PREVENT_DEATH                    = 70, // =70
+	TF_COND_MVM_BOT_STUN_RADIOWAVE           = 71, // Bots only
+	TF_COND_HALLOWEEN_SPEED_BOOST            = 72,
+	TF_COND_HALLOWEEN_QUICK_HEAL             = 73,
+	TF_COND_HALLOWEEN_GIANT                  = 74,
+	TF_COND_HALLOWEEN_TINY                   = 75,
+	TF_COND_HALLOWEEN_IN_HELL                = 76,
+	TF_COND_HALLOWEEN_GHOST_MODE             = 77, // =77
+	TF_COND_MINICRITBOOSTED_ON_KILL          = 78,
+	TF_COND_OBSCURED_SMOKE                   = 79,
+	TF_COND_PARACHUTE_ACTIVE                 = 80, // actively being used (not retracted)
+	TF_COND_BLASTJUMPING                     = 81,
+	TF_COND_HALLOWEEN_KART                   = 82,
+	TF_COND_HALLOWEEN_KART_DASH              = 83,
+	TF_COND_BALLOON_HEAD                     = 84, // =84 larger head, lower-gravity-feeling jumps
+	TF_COND_MELEE_ONLY                       = 85, // =85 melee only
+	TF_COND_SWIMMING_CURSE                   = 86, // player movement become swimming movement
+	TF_COND_FREEZE_INPUT                     = 87, // freezes player input
+	TF_COND_HALLOWEEN_KART_CAGE              = 88, // attach cage model to player while in kart
+	TF_COND_DONOTUSE_0                       = 89,
+	TF_COND_RUNE_STRENGTH                    = 90,
+	TF_COND_RUNE_HASTE                       = 91,
+	TF_COND_RUNE_REGEN                       = 92,
+	TF_COND_RUNE_RESIST                      = 93,
+	TF_COND_RUNE_VAMPIRE                     = 94,
+	TF_COND_RUNE_REFLECT                     = 95,
+	TF_COND_RUNE_PRECISION                   = 96,
+	TF_COND_RUNE_AGILITY                     = 97,
+	TF_COND_GRAPPLINGHOOK                    = 98,
+	TF_COND_GRAPPLINGHOOK_SAFEFALL           = 99,
+	TF_COND_GRAPPLINGHOOK_LATCHED            = 100,
+	TF_COND_GRAPPLINGHOOK_BLEEDING           = 101,
+	TF_COND_AFTERBURN_IMMUNE                 = 102,
+	TF_COND_RUNE_KNOCKOUT                    = 103,
+	TF_COND_RUNE_IMBALANCE                   = 104,
+	TF_COND_CRITBOOSTED_RUNE_TEMP            = 105,
+	TF_COND_PASSTIME_INTERCEPTION            = 106,
+	TF_COND_SWIMMING_NO_EFFECTS              = 107, // =107_DNOC_FT
+	TF_COND_PURGATORY                        = 108,
+	TF_COND_RUNE_KING                        = 109,
+	TF_COND_RUNE_PLAGUE                      = 110,
+	TF_COND_RUNE_SUPERNOVA                   = 111,
+	TF_COND_PLAGUE                           = 112,
+	TF_COND_KING_BUFFED                      = 113,
+	TF_COND_TEAM_GLOWS                       = 114, // used to show team glows to living players
+	TF_COND_KNOCKED_INTO_AIR                 = 115,
+	TF_COND_COMPETITIVE_WINNER               = 116,
+	TF_COND_COMPETITIVE_LOSER                = 117,
+	TF_COND_HEALING_DEBUFF                   = 118,
+	TF_COND_PASSTIME_PENALTY_DEBUFF          = 119, // when carrying the ball without any teammates nearby
+	TF_COND_GRAPPLED_TO_PLAYER               = 120,
+	TF_COND_GRAPPLED_BY_PLAYER               = 121,
+	TF_COND_PARACHUTE_DEPLOYED               = 122, // activated at least once while player's been airborne, but not does mean it's active now (see TF_COND_PARACHUTE_ACTIVE)
+	TF_COND_GAS                              = 123,
+	TF_COND_BURNING_PYRO                     = 124,
+	TF_COND_ROCKETPACK                       = 125,
+	// Players who lose their footing have lessened friction and don't re-stick to the ground unless they're below a
+	// tf_movement_lost_footing_restick speed
+	TF_COND_LOST_FOOTING                     = 126,
+	// When in the air, slide up/along surfaces with momentum as if caught up in a... blast of air of some sort.
+	// Reduces air control as well.  See tf_movement_aircurrent convars.  Removed upon touching ground.
+	TF_COND_AIR_CURRENT                      = 127,
+	TF_COND_HALLOWEEN_HELL_HEAL              = 128,
+	TF_COND_POWERUPMODE_DOMINANT			 = 129,
+	TF_COND_IMMUNE_TO_PUSHBACK				 = 130,
+		//
 	// ADD NEW ITEMS HERE TO AVOID BREAKING DEMOS
 	//
 
 	// ******** Keep this block last! ********
 	// Keep experimental conditions below and graduate out of it before shipping
-#ifdef STAGING_ONLY
-	TF_COND_NO_COMBAT_SPEED_BOOST,		// STAGING_ENGY
-	TF_COND_TRANQ_SPY_BOOST,			// STAGING_SPY
-	TF_COND_TRANQ_MARKED,
-//	TF_COND_SPACE_GRAVITY,
-//	TF_COND_SELF_CONC,
-	TF_COND_ROCKETPACK,
-	TF_COND_STEALTHED_PHASE,  	
-	TF_COND_CLIP_OVERLOAD,
-	TF_COND_SPY_CLASS_STEAL,
-#endif // STAGING_ONLY
 
 	TF_COND_LAST
 };
 
 const char *GetTFConditionName( ETFCond eCond );
 ETFCond GetTFConditionFromName( const char *pszCondName );
+inline ETFCond TFCondIndexToEnum( int nCond )
+{
+	if ( nCond >= TF_COND_AIMING && nCond < TF_COND_LAST )
+		return (ETFCond) nCond;
+
+	return TF_COND_INVALID;
+}
 
 // If you want your condition to expire faster under healing,
 // add it to this function in tf_shareddefs.cpp
@@ -963,6 +965,8 @@ enum taunt_attack_t
 	TAUNTATK_PYRO_SCORCHSHOT,
 	TAUNTATK_ALLCLASS_GUITAR_RIFF,
 	TAUNTATK_MEDIC_HEROIC_TAUNT,
+	TAUNTATK_PYRO_GASBLAST,
+	TAUNTATK_ENGINEER_TRICKSHOT,
 
 	//
 	// INSERT NEW ITEMS HERE TO AVOID BREAKING DEMOS
@@ -1252,6 +1256,15 @@ enum ETFDmgCustom
 	TF_DMG_CUSTOM_KART,
 	TF_DMG_CUSTOM_GIANT_HAMMER,
 	TF_DMG_CUSTOM_RUNE_REFLECT,
+	TF_DMG_CUSTOM_DRAGONS_FURY_IGNITE,
+	TF_DMG_CUSTOM_DRAGONS_FURY_BONUS_BURNING,
+	TF_DMG_CUSTOM_SLAP_KILL,
+	TF_DMG_CUSTOM_CROC,
+	TF_DMG_CUSTOM_TAUNTATK_GASBLAST,
+	TF_DMG_CUSTOM_AXTINGUISHER_BOOSTED,
+	TF_DMG_CUSTOM_KRAMPUS_MELEE,
+	TF_DMG_CUSTOM_KRAMPUS_RANGED,
+	TF_DMG_CUSTOM_TAUNTATK_TRICKSHOT,
 	//
 	// INSERT NEW ITEMS HERE TO AVOID BREAKING DEMOS
 	//
@@ -1275,7 +1288,9 @@ inline bool IsTauntDmg( int iType )
 			iType == TF_DMG_CUSTOM_TAUNTATK_ENGINEER_GUITAR_SMASH || 
 			iType == TF_DMG_CUSTOM_TAUNTATK_ARMAGEDDON ||
 			iType == TF_DMG_CUSTOM_TAUNTATK_ALLCLASS_GUITAR_RIFF || 
-			iType == TF_DMG_CUSTOM_TAUNTATK_ENGINEER_ARM_KILL );
+			iType == TF_DMG_CUSTOM_TAUNTATK_ENGINEER_ARM_KILL ||
+			iType == TF_DMG_CUSTOM_TAUNTATK_GASBLAST ||
+			iType == TF_DMG_CUSTOM_TAUNTATK_TRICKSHOT );
 }
 inline bool IsDOTDmg( int iType )
 {
@@ -1324,6 +1339,8 @@ enum
 #define TF_STUN_LOSER_STATE					(1<<6)
 #define TF_STUN_BY_TRIGGER					(1<<7)
 #define TF_STUN_BOTH						TF_STUN_MOVEMENT | TF_STUN_CONTROLS
+#define TF_STUN_SOUND						(1<<8)
+
 
 //-----------------
 // TF Objects Info
@@ -1341,7 +1358,6 @@ enum
 
 // Dispenser's maximum carrying capability
 #define DISPENSER_MAX_METAL_AMMO		400
-#define	MAX_DISPENSER_HEALING_TARGETS	32
 #define MINI_DISPENSER_MAX_METAL	200
 
 //--------------------------------------------------------------------------
@@ -1362,10 +1378,6 @@ enum ObjectType_t
 	//
 	// ADD NEW ITEMS HERE TO AVOID BREAKING DEMOS
 	//
-#ifdef STAGING_ONLY
-	OBJ_CATAPULT,
-	OBJ_SPY_TRAP,
-#endif
 
 	OBJ_LAST,
 };
@@ -1376,10 +1388,6 @@ enum
 {
 	MODE_TELEPORTER_ENTRANCE=0,
 	MODE_TELEPORTER_EXIT,
-#ifdef STAGING_ONLY
-	MODE_TELEPORTER_SPEED,
-	MODE_TELEPORTER_SPEED2,
-#endif
 };
 
 enum
@@ -1454,7 +1462,7 @@ typedef enum
 #define TF_SCORE_BONUS_POINT_DIVISOR			10
 #define TF_SCORE_DAMAGE							250
 #define TF_SCORE_CURRENCY_COLLECTED				20
-#define TF_SCORE_CAPTURE_POWERUPMODE			10 // With these CTF rules capturing flags is tougher, hence the higher scoring for flag events
+#define TF_SCORE_CAPTURE_POWERUPMODE			5 // With these CTF rules capturing flags is tougher, hence the higher scoring for flag events
 #define TF_SCORE_FLAG_RETURN					4
 #define TF_SCORE_KILL_RUNECARRIER				1
 
@@ -1596,6 +1604,7 @@ enum
 #define TF_AE_CIGARETTE_THROW			7000
 #define TF_AE_GUN_SALUTE				7001
 #define TF_AE_PICKAXE_THROW				7002
+#define TF_AE_HEAD_THROW				7003
 
 #define OBJECT_COST_MULTIPLIER_PER_OBJECT			3
 #define OBJECT_UPGRADE_COST_MULTIPLIER_PER_LEVEL	3
@@ -1626,11 +1635,7 @@ bool IsObjectADefensiveBuilding( int iObjectType );
 class CHudTexture;
 
 #define OBJECT_MAX_GIB_MODELS	9
-#ifdef STAGING_ONLY
-#define OBJECT_MAX_MODES		4
-#else
 #define OBJECT_MAX_MODES		3
-#endif
 
 // This should be moved into its own header.
 class CObjectInfo
@@ -1871,14 +1876,15 @@ enum EHorriblePyroVisionHack
 
 enum EAttackBonusEffects_t
 {
-	kBonusEffect_None = 4, // Must be 4.  Yep.
 	kBonusEffect_Crit = 0,
 	kBonusEffect_MiniCrit,
 	kBonusEffect_DoubleDonk,
 	kBonusEffect_WaterBalloonSploosh,
+	kBonusEffect_None = 4, // Must be 4.  Yep.
+	kBonusEffect_DragonsFury,
+	kBonusEffect_Stomp,
 
 	kBonusEffect_Count, // Must be 2nd to last
-	
 };
 
 
@@ -2810,6 +2816,19 @@ enum MM_PlayerConnectionState_t
 	MM_LOADING, // loading into the server
 	MM_WAITING_FOR_PLAYER
 };
+
+enum AttributeMeter_Type_t
+{
+	ATTRIBUTE_METER_TYPE_NONE = 0,
+	ATTRIBUTE_METER_TYPE_TIME,
+	ATTRIBUTE_METER_TYPE_DAMAGE,
+	ATTRIBUTE_METER_TYPE_COMBO,
+};
+
+#define PYRO_AFTERBURN_HEALING_REDUCTION 0.2f
+
+#define TF_GRENADE_PROJECTILE_MINS	Vector( -2.0f, -2.0f, -2.0f )
+#define TF_GRENADE_PROJECTILE_MAXS	Vector( 2.0f, 2.0f, 2.0f )
 
 #endif // TF_SHAREDDEFS_H
   

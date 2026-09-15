@@ -44,6 +44,8 @@ class CEconItemSchema;
 class CEconItem;
 class CEconSharedObjectCache;
 class CSOItemRecipe;
+class CQuestLootlist;
+class CQuestObjectiveDefinition;
 
 union attribute_data_union_t
 {
@@ -58,37 +60,20 @@ struct static_attrib_t
 	{
 		iDefIndex = 0;
 		m_value.asBlobPointer = NULL;
-#ifdef GC_DLL
-		bForceGCToGenerate = false;
-		m_pKVCustomData = NULL;
-#endif // GC_DLL
 	}
 
 	~static_attrib_t()
 	{
-#ifdef GC_DLL
-		if ( m_pKVCustomData )
-			m_pKVCustomData->deleteThis();
-		m_pKVCustomData = NULL;
-#endif
 	}
 
 	static_attrib_t( const static_attrib_t& rhs )
 	{
 		iDefIndex = rhs.iDefIndex;
 		m_value = rhs.m_value;
-#ifdef GC_DLL
-		m_pKVCustomData = rhs.m_pKVCustomData ? rhs.m_pKVCustomData->MakeCopy() : NULL;
-		bForceGCToGenerate = rhs.bForceGCToGenerate;
-#endif
 	}
 
 	attrib_definition_index_t	iDefIndex;
 	attribute_data_union_t m_value;
-#ifdef GC_DLL
-	bool	bForceGCToGenerate;
-	KeyValues *m_pKVCustomData;
-#endif // GC_DLL
 
 	// Parses a single subsection from a multi-line attribute block that looks like:
 	//
@@ -318,7 +303,7 @@ public:
 
 public:
 
-	const char							   *m_pszName;
+	CUtlString							    m_strName;
 	const char							   *m_pszLocalizedName;
 	CUtlVector<item_definition_index_t>		m_iItemDefs;
 	int										m_iBundleItemDef;	// Item def of the store bundle for this set, if any
@@ -340,13 +325,13 @@ public:
 	~CEconItemCollectionDefinition( void ) {}
 
 	bool	BInitFromKV( KeyValues *pKVItemCollection, CUtlVector<CUtlString> *pVecErrors = NULL );
+	bool	BPostSchemaInit( CUtlVector<CUtlString> *pVecErrors );
 
 	uint8	GetMinRarity() const { return m_iRarityMin; }
 	uint8	GetMaxRarity() const { return m_iRarityMax; }
 
 public:
-
-	const char							   *m_pszName;
+	CUtlString							    m_strName;
 	const char							   *m_pszLocalizedName;
 	const char							   *m_pszLocalizedDesc;
 	CUtlVector<item_definition_index_t>		m_iItemDefs;
@@ -356,29 +341,6 @@ private:
 
 	uint8	m_iRarityMin;
 	uint8	m_iRarityMax;
-};
-
-//-----------------------------------------------------------------------------
-class CEconItemPaintKitDefinition
-{
-public:
-	CEconItemPaintKitDefinition( void );
-	~CEconItemPaintKitDefinition( void );
-
-	bool	BInitFromKV( KeyValues *pKVItemPaintKit, CUtlVector<CUtlString> *pVecErrors = NULL );
-
-	//KeyValues *GetKVP()				{ return m_pKVItem; }
-
-	const char *GetName() const			{ return m_pszName; }
-	const char *GetLocalizeName() const	{ return m_pszLocalizedName; }
-
-	KeyValues *GetPaintKitWearKV( int nWear );
-
-private:
-	const char							*m_pszName;
-	const char							*m_pszLocalizedName;
-
-	CUtlVector< KeyValues * >			m_vecPaintKitWearKVP;
 };
 
 //-----------------------------------------------------------------------------
@@ -407,34 +369,16 @@ public:
 	RTime32	GetStartDate() const { return m_OperationStartDate; }
 	RTime32 GetStopGivingToPlayerDate() const { return m_StopGivingToPlayerDate; }
 	RTime32 GetStopAddingToQueueDate() const { return m_StopAddingToQueueDate; }
+	RTime32 GetStopContractsDate() const { return m_ContractProgressEndDate; }
 
 	const char *GetOperationLootlist() const { return m_pszOperationLootList; }
 	bool	IsCampaign() const { return m_bIsCampaign; }
+	bool	UsesCredits() const { return m_bUsesCredits; }
 	uint32	GetMaxDropCount() const { return m_unMaxDropCount; }
 
-#ifdef GC_DLL
-	enum EContractRewardLootlist_t
-	{
-		REWARD_CASE,
-		REWARD_WEAPON,
+	int32 GetKillEaterEventType_Contracts() const { return m_nKillEaterEventType_Contracts; }
+	int32 GetKillEaterEventType_Points() const { return m_nKillEaterEventType_Points; }
 
-		NUM_REWARDS
-	};
-	const char *GetContractRewardLootlist( EContractRewardLootlist_t eType ) const { return m_pszContractRewardLootlist[ eType ]; }
-
-	RTime32	GetMinQueueFreq() const;
-	RTime32	GetMaxQueueFreq() const;
-	RTime32	GetMinDropFreq() const;
-	RTime32	GetMaxDropFreq() const;
-
-	uint8	GetNumSeededContracts() const { return m_unSeed; }
-	uint16	GetNumMaxHeldDrops() const { return m_unMaxHeldDrops; }
-
-	int		GetNumMaxQueueCount() const { return m_nMaxQueueCount; }
-
-	uint8	GetMaxDropPerThink() const { return m_unMaxDropPerThink; }
-
-#endif // GC_DLL
 
 private:
 	const char			*m_pszName;
@@ -443,6 +387,9 @@ private:
 	// things operation periodically drops
 	const char			*m_pszOperationLootList;
 	bool				m_bIsCampaign;
+	bool				m_bUsesCredits;
+	int32				m_nKillEaterEventType_Contracts;
+	int32				m_nKillEaterEventType_Points;
 	uint32				m_unMaxDropCount;
 
 	const char			*m_pszQuestLogResFile;
@@ -454,26 +401,12 @@ private:
 	RTime32				m_OperationStartDate;		// when the operation starts and gives out rewards
 	RTime32				m_StopGivingToPlayerDate;	// when the operation stops giving quests to player
 	RTime32				m_StopAddingToQueueDate;	// when the operation stops adding more quests to the bucket
+	RTime32				m_ContractProgressEndDate;	// When players can no longer accept or work on Contracts associated with this operation
 
-#ifdef GC_DLL
-	const char			*m_pszContractRewardLootlist[ NUM_REWARDS ];
-
-	// in seconds
-	RTime32				m_rtQueueFreqMin;
-	RTime32				m_rtQueueFreqMax;
-	RTime32				m_rtDropFreqMin;
-	RTime32				m_rtDropFreqMax;
-
-	uint8				m_unSeed;
-	uint16				m_unMaxHeldDrops;
-	int					m_nMaxQueueCount;
-
-	uint8				m_unMaxDropPerThink;
-
-#endif // GC_DLL
 
 	KeyValues				   *m_pKVItem;
 };
+
 
 //-----------------------------------------------------------------------------
 // CEconLootListDefinition
@@ -498,71 +431,121 @@ public:
 
 	virtual void EnumerateUserFacingPotentialDrops( IEconLootListIterator *pIt ) const = 0;
 
-#ifdef GC_DLL
-	MUST_CHECK_RETURN virtual bool BGenerateSingleRollRandomItems( const CEconGameAccount *pGameAccount, bool bFreeAccount, CUtlVector<CEconItem *> *out_pvecItems, const CUtlVector< item_definition_index_t > *pVecAvoidItemDefs = NULL ) const = 0;
-#endif // GC_DLL
 };
 
-#ifdef GC_DLL
+struct drop_period_t
+{
+	bool IsValidForTime( const RTime32& time ) const;
+
+	RTime32		m_DropStartDate;
+	RTime32		m_DropEndDate;
+};
+
+struct drop_item_t
+{
+	int m_iItemOrLootlistDef;			// negative values indicate nested loot lists
+	float m_flWeight;
+	drop_period_t m_dropPeriod;
+};
+
+typedef CUtlVector< CItemSelectionCriteria* > ItemSelectionCriteriaVec_t;
+
 struct lootlist_attrib_t
 {
+	lootlist_attrib_t()
+		:	m_pVecCriteria( NULL ),
+			m_flWeight( 1.f ),
+			m_bAllowDuplicate( false )
+	{
+	}
+
 	static_attrib_t	m_staticAttrib;
+	ItemSelectionCriteriaVec_t *m_pVecCriteria; // this points to the one in random_attrib_t
 	float	m_flWeight;
+	bool	m_bAllowDuplicate;
 
 	bool BInitFromKV( const char *pszContext, KeyValues *pKVKey, CEconItemSchema &pschema, CUtlVector<CUtlString> *pVecErrors );
+	bool BHasAnyCriteria() const { return m_pVecCriteria != NULL; }
+	bool BItemPassAllCriteria( const CEconItemDefinition* pItemDef ) const;
 };
+
+typedef CUtlVector< lootlist_attrib_t > LootListAttributeVec_t;
+
 
 struct random_attrib_t
 {
-	float				m_flChanceOfRandomAttribute;
-	float				m_flTotalAttributeWeight;
-	bool				m_bPickAllAttributes;
-	CUtlVector<lootlist_attrib_t> m_RandomAttributes;
+	random_attrib_t()
+	{
+	}
 
-	bool RollRandomAttributes( CUtlVector< static_attrib_t >& vecAttributes, const CEconGameAccount *pGameAccount ) const;
+	~random_attrib_t()
+	{
+	}
+
+	float				m_flTotalAttributeWeight;
+	LootListAttributeVec_t m_RandomAttributes;
+	ItemSelectionCriteriaVec_t m_vecCriteria;
+
 };
-#endif // GC_DLL
+
+class CEconLootListDefinition;
+
+struct loot_list_additional_drop_t
+{
+
+	bool		m_bPremiumOnly;
+	const char *m_pszOwnerName;
+	const char *m_pszLootListDefName;
+	int		    m_iRequiredHolidayIndex;
+	drop_period_t m_dropPeriod;
+};
+
+class CLootlistJob
+{
+public:
+	CLootlistJob( const char *pszOwnerName );
+	~CLootlistJob();
+	bool BInitFromKV( const char *pszContext, KeyValues *pKVKey, CEconItemSchema &pschema, CUtlVector<CUtlString> *pVecErrors );
+	bool BPostInit( CUtlVector<CUtlString> *pVecErrors );
+
+	struct RandomAttributeInfo_t
+	{
+		random_attrib_t* m_pRandomAttributes;
+		bool m_bFromTemplate;
+	};
+	const CUtlVector< RandomAttributeInfo_t >& GetAttributes() const { return m_vecAttributes; }
+	const CUtlVector<loot_list_additional_drop_t>& GetAdditionalDrops() const { return m_vecAdditionalDrops; }
+
+
+private:
+	bool AddRandomAtrributes( KeyValues *pRandomAttributesKV, CEconItemSchema &pschema, CUtlVector<CUtlString> *pVecErrors = NULL );
+	bool AddRandomAttributesFromTemplates( KeyValues *pRandomAttributesKV, CEconItemSchema &pschema, CUtlVector<CUtlString> *pVecErrors = NULL );
+
+	const char *		m_pszOwnerName;
+	float				m_flChanceToRunJob;
+
+	CUtlVector< RandomAttributeInfo_t > m_vecAttributes;
+	CUtlVector< loot_list_additional_drop_t > m_vecAdditionalDrops;
+};
 
 class CEconLootListDefinition : public IEconLootList
 {
 public:
-	struct drop_period_t
-	{
-		bool IsValidForTime( const RTime32& time ) const;
-
-		RTime32		m_DropStartDate;
-		RTime32		m_DropEndDate;
-	};
-
-	struct drop_item_t
-	{
-		int m_iItemOrLootlistDef;			// negative values indicate nested loot lists
-		float m_flWeight;
-		drop_period_t m_dropPeriod;
-	};
-
-	struct loot_list_additional_drop_t
-	{
-		float		m_fChance;
-		bool		m_bPremiumOnly;
-		const char *m_pszLootListDefName;
-		int		    m_iRequiredHolidayIndex;
-		drop_period_t m_dropPeriod;
-	};
 
 	virtual ~CEconLootListDefinition();
 	
 	bool BInitFromKV( KeyValues *pKVLootList, CEconItemSchema &pschema, CUtlVector<CUtlString> *pVecErrors );
+	bool BPostInit( CUtlVector<CUtlString> *pVecErrors );
 
-	const char *GetName() const { return m_pszName; }
+	const char *GetName() const { return m_strName; }
 	virtual const char *GetLootListHeaderLocalizationKey() const OVERRIDE { return m_pszLootListHeader; }
 	virtual const char *GetLootListFooterLocalizationKey() const OVERRIDE { return m_pszLootListFooter; }
 	virtual const char *GetLootListCollectionReference() const OVERRIDE { return m_pszCollectionReference; }
 		
 	const CUtlVector<drop_item_t>& GetLootListContents() const { return m_DropList; }
-#ifdef GC_DLL
-	const CUtlVector<loot_list_additional_drop_t>& GetAdditionalDrops() const { return m_AdditionalDrops; }
-#endif
+
+	const CUtlVector<CLootlistJob*>& GetLootlistJobs() const { return m_jobs; }
+
 	virtual void EnumerateUserFacingPotentialDrops( IEconLootListIterator *pIt ) const OVERRIDE;
 
 	virtual bool BPublicListContents() const OVERRIDE
@@ -570,40 +553,10 @@ public:
 		return m_bPublicListContents;
 	}
 
-#ifdef GC_DLL
-
-public:
-	struct rolled_item_defs_t
-	{
-		const CEconItemDefinition			*m_pItemDef;
-		CCopyableUtlVector< const CEconLootListDefinition * > m_vecAffectingLootLists;
-	};
-
-	bool AddRandomAtrributes( KeyValues *pRandomAttributesKV, CEconItemSchema &pschema, CUtlVector<CUtlString> *pVecErrors = NULL );
-	bool AddRandomAttributesFromTemplates( KeyValues *pRandomAttributesKV, CEconItemSchema &pschema, CUtlVector<CUtlString> *pVecErrors = NULL );
-
-
-	// Generates a single roll for this loot list as well as each "additional drop" loot list specified. This will return
-	// true if all items were created successfully or false if anything went wrong in any of the relevant lootlists. All
-	// items created will be returned via out_pvecItems.
-	MUST_CHECK_RETURN virtual bool BGenerateSingleRollRandomItems( const CEconGameAccount *pGameAccount, bool bFreeAccount, CUtlVector<CEconItem *> *out_pvecItems, const CUtlVector< item_definition_index_t > *pVecAvoidItemDefs = NULL ) const OVERRIDE;
-
-	void	RollRandomAttributes( CUtlVector< static_attrib_t >& vecAttributes, const CEconGameAccount *pGameAccount ) const;
-	bool	RollRandomItemsAndAdditionalItems( IUniformRandomStream *pRandomStream, bool bFreeAccount, CUtlVector<rolled_item_defs_t> *out_pVecRolledItems, const CUtlVector< item_definition_index_t > *pVecAvoidItemDefs = NULL ) const;
-
-	uint8	GetRarity() const { return m_unRarity; }
-	void	GetRarityLootLists( CUtlVector< const CEconLootListDefinition* > *out_pVecRarityLootList ) const;
-	void	GetItemDefs( CUtlVector< item_definition_index_t > *out_pVecItemDefs ) const;
 
 private:
-	bool	RollRandomItemDef( IUniformRandomStream *pRandomStream, bool bFreeAccount, CUtlVector<rolled_item_defs_t> *out_pVecRolledItems, const CUtlVector< item_definition_index_t > *pVecAvoidItemDefs = NULL ) const;
-	bool	BIsInternalNoDupesLootList() const { return m_iNoDupesIterations >= 0; }
 
-	MUST_CHECK_RETURN bool BInitPropertyGeneratorsFromKV( KeyValues *pKV, CUtlVector<CUtlString> *pVecErrors );
-#endif
-
-private:
-	const char			*m_pszName;
+	CUtlString			 m_strName;
 	const char			*m_pszLootListHeader;
 	const char			*m_pszLootListFooter;
 	const char			*m_pszCollectionReference;
@@ -611,19 +564,21 @@ private:
 
 	bool				m_bPublicListContents;	// do not show loot list contents to users (ie., when listing crate contents on Steam)
 
-#ifdef GC_DLL
+	bool AddLootlistJob( KeyValues *pLootlistJobKV, CEconItemSchema &pschema, CUtlVector<CUtlString> *pVecErrors = NULL );
 
-	MUST_CHECK_RETURN bool	BAttachLootListAttributes( const CEconGameAccount *pGameAccount, CEconItem *pItem ) const;
+	CUtlVector<CLootlistJob*>						m_jobs;
 
-	int					m_iNoDupesIterations;	// if less than zero, "no dupes" functionality disabled; if greater than or equal to zero, the number of iterations we want to run through passing no-dupe sets
-
-	CUtlVector<random_attrib_t*>					m_RandomAttribs;
-	CUtlVector<loot_list_additional_drop_t>			m_AdditionalDrops;
-	CUtlVector<const IEconItemPropertyGenerator *>	m_PropertyGenerators;
-
-	uint8				m_unRarity;
-#endif // GC_DLL
 };
+
+struct LootListInfo_t
+{
+	CUtlVector< random_attrib_t* > m_vecAttributes;
+	CUtlVector< item_definition_index_t > m_vecItems;
+	CUtlVector< item_definition_index_t > m_vecAdditionalItems;
+};
+bool GetClientLootListInfo( const CEconLootListDefinition *pLootList, LootListInfo_t &lootListInfo );
+bool GetClientLootListInfo( const char *pszLootListName, LootListInfo_t &lootListInfo );
+bool GetClientLootListInfo( const IEconItemInterface *pEconItem, LootListInfo_t &lootListInfo );
 
 //-----------------------------------------------------------------------------
 // CEconCraftingRecipeDefinition
@@ -637,9 +592,6 @@ public:
 
 	bool		BInitFromKV( KeyValues *pKVItem, CUtlVector<CUtlString> *pVecErrors = NULL );
 
-#ifdef GC_DLL
-	bool		BIsCraftableByUnverifiedClients() const { return m_bIsCraftableByUnverifiedClient; }
-#endif // GC_DLL
 
 	virtual void CopyPolymorphic( const CEconCraftingRecipeDefinition *pSourceDef ) { *this = *pSourceDef; }
 
@@ -703,9 +655,6 @@ protected:
 	CUtlString	m_strDO_C;
 
 	bool		m_bDisabled;
-#ifdef GC_DLL
-	bool		m_bIsCraftableByUnverifiedClient;
-#endif // GC_DLL
 	bool		m_bRequiresAllSameClass;
 	bool		m_bRequiresAllSameSlot;
 	int			m_iCacheClassUsageForOutputFromItem;
@@ -803,7 +752,6 @@ public:
 
 	const class ISchemaAttributeType *GetAttributeType( void ) const { return m_pAttrType; }
 
-#ifndef GC_DLL
 	void		ClearStringCache( void ) const		{ m_iszAttributeClass = NULL_STRING; }
 	string_t	GetCachedClass( void ) const
 	{
@@ -813,7 +761,6 @@ public:
 		}
 		return m_iszAttributeClass;
 	}
-#endif
 
 #ifdef DBGFLAG_VALIDATE
 	void Validate( CValidator &validator, const char *pchName )
@@ -892,9 +839,7 @@ private:
 	// Do item definitions with this attribute specified automatically get an additional tag applied?
 	econ_tag_handle_t	m_ItemDefinitionTag;
 
-#ifndef GC_DLL
 	mutable string_t	m_iszAttributeClass;	// Same as the above, but used for fast lookup when applying attributes.
-#endif
 };
 
 
@@ -914,7 +859,6 @@ struct attachedparticlesystem_t
 		, fRefireTime( 0 )			// only works for taunt effects, currently
 		, bDrawInViewModel( false )
 		, bUseSuffixName( false )
-		, bHasViewModelSpecificEffect ( false )
 	{
 		V_memset( pszControlPoints, 0, sizeof( pszControlPoints ) );
 	}
@@ -926,7 +870,6 @@ struct attachedparticlesystem_t
 	float		fRefireTime;				// only works for taunt effects, currently
 	bool		bDrawInViewModel;
 	bool		bUseSuffixName;
-	bool		bHasViewModelSpecificEffect;
 
 	const char *pszControlPoints[7];
 };
@@ -986,23 +929,33 @@ struct codecontrolledbodygroupdata_t
 struct perteamvisuals_maps_t
 {
 	perteamvisuals_maps_t()
-	{
-		m_ModifiedBodyGroupNames.SetLessFunc( StringLessThan );
-		m_CodeControlledBodyGroupNames.SetLessFunc( StringLessThan );
-	}
+		: m_ModifiedBodyGroupNames( k_eDictCompareTypeCaseSensitive )
+		, m_CodeControlledBodyGroupNames( k_eDictCompareTypeCaseSensitive )
+	{}
 
 	void operator=( const perteamvisuals_maps_t& other )
 	{
-		DeepCopyMap( other.m_ModifiedBodyGroupNames, &m_ModifiedBodyGroupNames );
-		DeepCopyMap( other.m_CodeControlledBodyGroupNames, &m_CodeControlledBodyGroupNames );
+		FOR_EACH_DICT_FAST( other.m_ModifiedBodyGroupNames, i )
+		{
+			m_ModifiedBodyGroupNames.Insert( other.m_ModifiedBodyGroupNames.GetElementName(i), other.m_ModifiedBodyGroupNames[i] );
+		}
+		FOR_EACH_DICT_FAST( other.m_CodeControlledBodyGroupNames, i )
+		{
+			m_CodeControlledBodyGroupNames.Insert( other.m_CodeControlledBodyGroupNames.GetElementName(i), other.m_CodeControlledBodyGroupNames[i] );
+		}
 	}
 
-	CUtlMap<const char*, int> m_ModifiedBodyGroupNames; // Better method: hide multiple body groups by name.
-	CUtlMap<const char*, codecontrolledbodygroupdata_t> m_CodeControlledBodyGroupNames;
+	CUtlDict<int> m_ModifiedBodyGroupNames; // Better method: hide multiple body groups by name.
+	CUtlDict<codecontrolledbodygroupdata_t> m_CodeControlledBodyGroupNames;
+};
+
+struct poseparamtable_t
+{
+	CUtlString strName;
+	float      flValue;
 };
 
 #endif // defined(CLIENT_DLL) || defined(GAME_DLL)
-
 class CEconStyleInfo
 {
 public:
@@ -1017,6 +970,7 @@ public:
 		m_pszName = NULL;
 		m_pszBasePlayerModel = NULL;
 		m_bIsSelectable = true;
+		m_bUseSmokeParticleEffect = true;
 		m_pszInventoryImage = NULL;
 
 		m_pszBodygroupName = NULL;
@@ -1052,8 +1006,9 @@ public:
 
 	const char *GetName() const { return m_pszName; }
 	const char *GetBasePlayerDisplayModel() const { return m_pszBasePlayerModel; }
-	const CUtlVector<const char *>& GetAdditionalHideBodygroups() const { return m_vecAdditionalHideBodygroups; }
+	const CUtlVector<CUtlString>& GetAdditionalHideBodygroups() const { return m_vecAdditionalHideBodygroups; }
 	bool IsSelectable() const { return m_bIsSelectable; }
+	bool UseSmokeParticleEffect() const { return m_bUseSmokeParticleEffect; }
 	const char *GetInventoryImage() const { return m_pszInventoryImage; }
 
 	const char *GetBodygroupName() const { return m_pszBodygroupName; }
@@ -1071,11 +1026,12 @@ protected:
 	const char *m_pszBasePlayerModel;
 	bool m_bIsSelectable;
 	const char *m_pszInventoryImage;
+	bool m_bUseSmokeParticleEffect;
 
 	const char *m_pszBodygroupName;
 	int m_iBodygroupSubmodelIndex;
 
-	CUtlVector<const char *> m_vecAdditionalHideBodygroups;
+	CUtlVector<CUtlString> m_vecAdditionalHideBodygroups;
 
 private:
 
@@ -1131,6 +1087,8 @@ struct perteamvisuals_t
 	CUtlVector<attachedparticlesystem_t> m_AttachedParticles;
 	CUtlVector<animation_on_wearable_t> m_Animations;
 	CUtlVector<activity_on_wearable_t> m_Activities;
+	CUtlVector<poseparamtable_t> m_PlayerPoseParams;
+	CUtlVector<poseparamtable_t> m_ItemPoseParams;
 	const char *pszCustomSounds[MAX_VISUALS_CUSTOM_SOUNDS];
 	const char *pszMaterialOverride;
 	const char *pszMuzzleFlash;
@@ -1184,21 +1142,6 @@ struct bundleinfo_t
 	CUtlVector<CEconItemDefinition *> vecItemDefs;
 };
 
-#ifdef GC_DLL
-enum EPaymentRuleType
-{
-	kPaymentRule_SteamWorkshopFileID	= 0x01,
-	kPaymentRule_PartnerSteamID			= 0x02,
-	kPaymentRule_Bundle					= 0x04,
-};
-
-struct econ_item_payment_rule_t
-{
-	double						m_RevenueShare;
-	EPaymentRuleType			m_eRuleType;
-	CCopyableUtlVector<uint64>	m_vecValues;
-};
-#endif // GC_DLL
 
 #ifdef CLIENT_DLL
 namespace vgui
@@ -1272,42 +1215,12 @@ public:
 	}
 #endif // CLIENT_DLL
 
-#ifdef GC_DLL
-	virtual class CGCEconConsumableBehavior *CreateGCConsumableBehavior() const;
-	virtual bool BGenerateDynamicAttributes( CEconItem* pItem,  const CEconGameAccount *pGameAccount ) const { return true; }
-#endif // GC_DLL
 
 private:
 	const char *m_pszTypeName;
 	const char *m_pszUseString;
 	const char *m_pszUsageRestriction;
 	item_capabilities_t m_unCapabilities;
-};
-
-//-----------------------------------------------------------------------------
-// CQuestObjectiveDefinition
-//-----------------------------------------------------------------------------
-class CQuestObjectiveDefinition
-{
-public:
-
-	CQuestObjectiveDefinition( void );
-	virtual ~CQuestObjectiveDefinition( void );
-
-	virtual bool BInitFromKV( KeyValues *pKVItem, CUtlVector<CUtlString> *pVecErrors = NULL );
-
-	uint32 GetDefinitionIndex( void ) const { return m_nDefIndex; }
-	const char *GetDescriptionToken( void ) const { return m_pszDescriptionToken; }
-	bool IsOptional() const { return m_bOptional; }
-	bool IsAdvanced() const { return m_bAdvanced; }
-	uint32 GetPoints() const { return m_nPoints; } // TODO: change to a float
-
-private:
-	const char *m_pszDescriptionToken;
-	uint32 m_nDefIndex;
-	uint32 m_nPoints;
-	bool m_bOptional;
-	bool m_bAdvanced;
 };
 
 //-----------------------------------------------------------------------------
@@ -1322,6 +1235,7 @@ public:
 
 	// BInitFromKV can be implemented on subclasses to parse additional values.
 	virtual bool	BInitFromKV( KeyValues *pKVItem, CUtlVector<CUtlString> *pVecErrors = NULL );
+	virtual bool	BPostInit( CUtlVector<CUtlString> *pVecErrors = NULL );
 #if defined(CLIENT_DLL) || defined(GAME_DLL)
 	virtual bool	BInitFromTestItemKVs( int iNewDefIndex, KeyValues *pKVItem, CUtlVector<CUtlString>* pVecErrors = NULL );
 	virtual void	GeneratePrecacheModelStrings( bool bDynamicLoad, CUtlVector<const char *> *out_pVecModelStrings ) const;
@@ -1335,6 +1249,7 @@ public:
 	void		BInitStylesBlockFromKV( KeyValues *pKVStyles, perteamvisuals_t *pVisData, CUtlVector<CUtlString> *pVecErrors );
 
 	item_definition_index_t	GetDefinitionIndex( void ) const	{ return m_nDefIndex; }
+	item_definition_index_t GetRemappedItemDefIndex( void ) const { return m_nRemappedDefIndex != INVALID_ITEM_DEF_INDEX ? m_nRemappedDefIndex : m_nDefIndex; }
 	bool		BEnabled( void ) const				{ return m_bEnabled; }
 	bool		BLoadOnDemand( void ) const			{ return m_bLoadOnDemand; }
 	bool		BHasBeenLoaded( void ) const		{ return m_bHasBeenLoaded; }
@@ -1391,9 +1306,6 @@ public:
 
 	const CEconItemCollectionDefinition *GetItemCollectionDefinition( void ) const { return m_pItemCollectionDef; }
 	void  SetItemCollectionDefinition( const CEconItemCollectionDefinition *pItemCollectionDef ) { Assert( !m_pItemCollectionDef ); m_pItemCollectionDef = pItemCollectionDef; }
-
-	CEconItemPaintKitDefinition *GetCustomPainkKitDefinition( void ) const { return m_pItemPaintKitDef; }
-	void  SetItemPaintKitDefinition( CEconItemPaintKitDefinition *pItemPaintKitDef ) { Assert( !m_pItemPaintKitDef ); m_pItemPaintKitDef = pItemPaintKitDef; }
 
 	perteamvisuals_t	*GetPerTeamVisual( int iTeam ) const	{ return m_PerTeamVisuals[iTeam]; }
 
@@ -1487,6 +1399,11 @@ public:
 	Activity				GetActivityOverride( int iTeam, Activity baseAct ) const;
 	const char				*GetActivityOverride( int iTeam, const char *pszActivity ) const;
 	const char				*GetReplacementForActivityOverride( int iTeam, Activity baseAct ) const;
+	// poseparam
+	int						GetNumPlayerPoseParameters( int iTeam ) const;
+	poseparamtable_t		*GetPlayerPoseParameters( int iTeam, int iIdx ) const;
+	int						GetNumItemPoseParameters( int iTeam ) const;
+	poseparamtable_t		*GetItemPoseParameters( int iTeam, int iIdx ) const;
 	// Should the content (meshes, etc.) for this be streamed or preloaded?
 	virtual bool			IsContentStreamable() const;
 #endif // defined(CLIENT_DLL) || defined(GAME_DLL)
@@ -1524,23 +1441,8 @@ public:
 	bool					BValidForShuffle( void ) const { return m_bValidForShuffle; }
 	bool					BValidForSelfMade( void ) const { return m_bValidForSelfMade; }
 
-#ifdef GC_DLL
-private:
-	MUST_CHECK_RETURN bool	BInitializeEconItemGenerators( KeyValues *pKV, CUtlVector<CUtlString> *pVecErrors );
+	const CUtlVector<CLootlistJob*>& GetLootlistJobs() const { return m_jobs; }
 
-public:
-	// If this returns true, all relevant property generators were applied to the item instance
-	// passed in. If this returns false, some or none of the generators may have been applied,
-	// but there are no guarantees about the item state.
-	MUST_CHECK_RETURN bool	BApplyPropertyGenerators( CEconItem *pItem ) const;
-
-	const CUtlVector<econ_tag_handle_t>& GetEconTags() const { return m_vecTags; }		// meant for internal/debug use only, not for runtime iteration
-	const CUtlVector<econ_item_payment_rule_t>& GetPaymentRules() const { return m_vecPaymentRules; }
-
-private:
-	int AddPaymentRule( const econ_item_payment_rule_t& newRule );	// returns which payment rule number was just created
-public:
-#endif // GC_DLL
 
 #if defined(CLIENT_DLL) || defined(GAME_DLL)
 	int						GetStyleSkin( style_index_t unStyle, int iTeam, bool bViewmodel ) const;
@@ -1568,6 +1470,8 @@ private:
 
 	// The number used to refer to this definition in the DB
 	item_definition_index_t	m_nDefIndex;
+	item_definition_index_t	m_nRemappedDefIndex;
+	const char *m_pszRemappedDefItemName;
 
 	// False if this definition has been turned off and we're not using it to generate items
 	bool		m_bEnabled;
@@ -1658,8 +1562,6 @@ private:
 	// The set this item is a member of
 	const CEconItemSetDefinition *m_pItemSetDef;
 	const CEconItemCollectionDefinition *m_pItemCollectionDef;
-
-	CEconItemPaintKitDefinition *m_pItemPaintKitDef;
 
 	// A list of per-team visual data used to modify base model for visual recognition
 	perteamvisuals_t	*m_PerTeamVisuals[TEAM_VISUAL_SECTIONS];
@@ -1757,10 +1659,8 @@ private:
 
 	item_definition_index_t m_unSetItemRemapDefIndex;	// reference to the definition index we want to consider this item for set matching purposes; see GetSetItemRemap()
 
-#ifdef GC_DLL
-	CUtlVector<const IEconItemPropertyGenerator *> m_vecPropertyGenerators;
-	CUtlVector<econ_item_payment_rule_t> m_vecPaymentRules;
-#endif // GC_DLL
+
+	CUtlVector<CLootlistJob*>						m_jobs;
 
 	// False if this definition is not allowed to be part of a shuffled crate's contents
 	bool		m_bValidForShuffle;
@@ -1960,6 +1860,74 @@ inline animation_on_wearable_t *CEconItemDefinition::GetAnimationData( int iTeam
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
+inline int CEconItemDefinition::GetNumPlayerPoseParameters( int iTeam ) const
+{
+#ifndef CSTRIKE_DLL
+	iTeam = GetBestVisualTeamData( iTeam );
+	if ( iTeam < 0 || iTeam >= TEAM_VISUAL_SECTIONS || !GetPerTeamVisual(iTeam) )
+		return 0;
+	return GetPerTeamVisual(iTeam)->m_PlayerPoseParams.Count(); 
+#else
+	return 0;
+#endif
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+inline poseparamtable_t *CEconItemDefinition::GetPlayerPoseParameters( int iTeam, int iIdx ) const
+{
+#ifndef CSTRIKE_DLL
+	iTeam = GetBestVisualTeamData( iTeam );
+	if ( iTeam < 0 || iTeam >= TEAM_VISUAL_SECTIONS || !GetPerTeamVisual(iTeam) )
+		return NULL;
+
+	if ( iIdx >= GetPerTeamVisual(iTeam)->m_PlayerPoseParams.Count() )
+		return NULL;
+
+	return &GetPerTeamVisual(iTeam)->m_PlayerPoseParams[iIdx];
+#else
+	return NULL;
+#endif
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+inline int CEconItemDefinition::GetNumItemPoseParameters( int iTeam ) const
+{
+#ifndef CSTRIKE_DLL
+	iTeam = GetBestVisualTeamData( iTeam );
+	if ( iTeam < 0 || iTeam >= TEAM_VISUAL_SECTIONS || !GetPerTeamVisual(iTeam) )
+		return 0;
+	return GetPerTeamVisual(iTeam)->m_ItemPoseParams.Count(); 
+#else
+	return 0;
+#endif
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+inline poseparamtable_t *CEconItemDefinition::GetItemPoseParameters( int iTeam, int iIdx ) const
+{
+#ifndef CSTRIKE_DLL
+	iTeam = GetBestVisualTeamData( iTeam );
+	if ( iTeam < 0 || iTeam >= TEAM_VISUAL_SECTIONS || !GetPerTeamVisual(iTeam) )
+		return NULL;
+
+	if ( iIdx >= GetPerTeamVisual(iTeam)->m_ItemPoseParams.Count() )
+		return NULL;
+
+	return &GetPerTeamVisual(iTeam)->m_ItemPoseParams[iIdx];
+#else
+	return NULL;
+#endif
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 inline int CEconItemDefinition::GetNumAttachedParticles( int iTeam ) const
 { 
 #ifndef CSTRIKE_DLL
@@ -2093,7 +2061,7 @@ inline const char* CEconItemDefinition::GetModifiedBodyGroup( int iTeam, int i, 
 	if ( iTeam < 0 || iTeam >= TEAM_VISUAL_SECTIONS || !GetPerTeamVisual(iTeam) )
 		return NULL;
 	body = GetPerTeamVisual(iTeam)->m_Maps.m_ModifiedBodyGroupNames[i];
-	return GetPerTeamVisual(iTeam)->m_Maps.m_ModifiedBodyGroupNames.Key(i);
+	return GetPerTeamVisual(iTeam)->m_Maps.m_ModifiedBodyGroupNames.GetElementName(i);
 #else
 	return NULL;
 #endif
@@ -2124,7 +2092,7 @@ inline const char* CEconItemDefinition::GetCodeControlledBodyGroup( int iTeam, i
 	if ( iTeam < 0 || iTeam >= TEAM_VISUAL_SECTIONS || !GetPerTeamVisual(iTeam) )
 		return NULL;
 	ccbgd = GetPerTeamVisual(iTeam)->m_Maps.m_CodeControlledBodyGroupNames[i];
-	return GetPerTeamVisual(iTeam)->m_Maps.m_CodeControlledBodyGroupNames.Key(i);
+	return GetPerTeamVisual(iTeam)->m_Maps.m_CodeControlledBodyGroupNames.GetElementName(i);
 #else
 	return NULL;
 #endif
@@ -2334,50 +2302,6 @@ private:
 	item_definition_index_t m_iRequiredItemDef;
 };
 
-#ifdef GC_DLL
-//-----------------------------------------------------------------------------
-// CExperimentDefinition
-//-----------------------------------------------------------------------------
-struct experiment_group_t
-{
-	const char* m_pName;
-	uint32 m_unNumParticipants;
-	uint32 m_unMaxParticipants;
-	KeyValues *m_pKeyValues;
-};
-
-class CExperimentDefinition
-{
-public:
-	CExperimentDefinition( void );
-	~CExperimentDefinition( void );
-
-	bool BInitFromKV( KeyValues *pKVExperiment, CUtlVector<CUtlString> *pVecErrors = NULL );
-
-	CUtlVector< experiment_group_t > &GetGroups() { return m_vecGroups; }
-
-	uint32 GetID() const { return m_unExperimentID; }
-	const char	*GetName( void ) const { return m_pKeyValues->GetString( "name", "unknown" ); }
-	const char	*GetDescription( void ) const { return m_pKeyValues->GetString( "description", "unknown" ); }
-
-	bool IsEnabled() const { return m_bEnabled; }
-	bool IsFull() const { return m_unNumParticipants >= m_unMaxParticipants; }
-
-	uint32 GetNumParticipants() const { return m_unNumParticipants; }
-	void SetNumParticipants( uint32 unNumParticipants ) { m_unNumParticipants = unNumParticipants; }
-	uint32 GetMaxParticipants() const { return m_unMaxParticipants; }
-
-	bool ChooseGroup( uint32 &unGroup );
-
-private:
-	bool m_bEnabled;
-	uint32 m_unExperimentID;
-	uint32 m_unNumParticipants;
-	uint32 m_unMaxParticipants;
-	KeyValues *m_pKeyValues;
-	CUtlVector< experiment_group_t > m_vecGroups;
-};
-#endif
 
 //-----------------------------------------------------------------------------
 // CItemLevelingDefinition
@@ -2440,11 +2364,6 @@ struct kill_eater_score_type_t
 	const char *m_pszTypeString;
 	const char *m_pszLevelBlockName;
 	bool		m_bAllowBotVictims;			// if true, we don't check for a valid Steam ID on the client before sending or a valid session on the GC before incrementing
-#ifdef GC_DLL
-	bool		m_bGCUpdateOnly;
-	bool		m_AllowIncrementValues;		// if true, clients are allowed to send up the amount to increment by (ie., "did 100 damage") rather than implicitly assuming a value of 1
-	bool		m_bIsBaseKillType;			// if true, when clients send up a notification of this type we'll also look for other relevant things on the GC, like whether the victim was a friend, etc.
-#endif
 };
 
 // Index-to-string table, currently used for attribute value string lookups.
@@ -2474,14 +2393,6 @@ private:
 //-----------------------------------------------------------------------------
 // ISchemaAttributeType
 //-----------------------------------------------------------------------------
-#ifdef GC_DLL
-namespace GCSDK
-{
-	class CColumnSet;
-	class CRecordBase;
-	class CWebAPIValues;
-};
-#endif // GC_DLL
 
 // ISchemaAttributeType is the base interface for a "type" of attribute, where "type" is defined as
 // "something that describes the memory layout, the DB layout, how to convert between them, etc.".
@@ -2556,33 +2467,6 @@ public:
 	// The only important thing is that during a single run the value for a single type is consistent.
 	virtual unsigned int GetTypeUniqueIdentifier() const = 0;
 
-#ifdef GC_DLL
-	// What's the whole column set (and associated DB table) that this attribute uses? Meant to be
-	// implemented by subclasses that have DB type information.
-	virtual const GCSDK::CColumnSet& GetFullColumnSet() const = 0;
-
-	// Create an instance of a schema row. Mananging the memory is the responsibility of the caller.
-	// Meant to be implemented by subclasses that have DB type information.
-	virtual GCSDK::CRecordBase *CreateTypedSchRecord() const = 0;
-
-	// ...
-	virtual bool BAssetClassExportedAttributeValue( const CEconItemAttributeDefinition *pAttrDef, const attribute_data_union_t& value ) const { return true; }
-
-	// Prepare a DB row describing an instance of this attribute for writing.
-	virtual void ConvertEconAttributeValueToSch( itemid_t unItemId, const CEconItemAttributeDefinition *pAttrDef, const union attribute_data_union_t& value, GCSDK::CRecordBase *out_pSchRecord ) const = 0;
-
-	// We have a row read from the database and an item to add it as an attribute for. This
-	// does the opposite work of ConvertEconAttributeValueToSch() and also adds it to the CEconItem.
-	virtual void LoadSchToEconAttributeValue( CEconItem *pTargetItem, const CEconItemAttributeDefinition *pAttrDef, const GCSDK::CRecordBase *pSchRecord ) const = 0;
-
-	// Have this attribute type either copy the data straight out of the value union, or run the logic
-	// described by pszCustomLogicDesc to generate a new value. Either way, some correctly-typed data
-	// will wind up in an attribute on the target item. This is intended to call through to LoadEconAttributeValue()
-	// to do the actual assignment.	This is only accessible on the GC.
-	virtual void LoadOrGenerateEconAttributeValue( CEconItem *pTargetItem, const CEconItemAttributeDefinition *pAttrDef, const static_attrib_t& staticAttrib, const CEconGameAccount *pGameAccount ) const = 0;
-
-	virtual void GenerateEconAttributeValue( const CEconItemAttributeDefinition *pAttrDef, const static_attrib_t& staticAttrib, const CEconGameAccount *pGameAccount, attribute_data_union_t* out_pValue ) const = 0;
-#endif // GC_DLL
 
 	// Have this attribute type copy the data out of the value union and type-copy it onto the item. This
 	// is accessible on clients as well as the GC.
@@ -2672,9 +2556,6 @@ public:
 	virtual bool BInit( const char *fileName, const char *pathID, CUtlVector<CUtlString> *pVecErrors = NULL );
 	bool		BInitBinaryBuffer( CUtlBuffer &buffer, CUtlVector<CUtlString> *pVecErrors = NULL );
 	bool		BInitTextBuffer( CUtlBuffer &buffer, CUtlVector<CUtlString> *pVecErrors = NULL );
-#ifdef GC_DLL
-	virtual bool DoPostPriceSheetLoadInit( CEconStorePriceSheet *pPriceSheet );	// Called once the price sheet's been loaded
-#endif
 
 	uint32		GetVersion() const { return m_unVersion; }
 	CSHA		GetSchemaSHA() const { return m_schemaSHA; }
@@ -2729,30 +2610,19 @@ public:
 	typedef CUtlMap<int, CEconItemDefinition*, int>	BaseItemDefinitionMap_t;
 	const BaseItemDefinitionMap_t &GetBaseItemDefinitionMap() const { return m_mapBaseItems; }
 
-	typedef CUtlMap<const char*, CEconLootListDefinition *, int>	LootListDefinitionMap_t;
-	const LootListDefinitionMap_t &GetLootLists() const { return m_mapLootLists; }
+	typedef CUtlDict<CEconLootListDefinition *>	LootListDefinitionMap_t;
+	const LootListDefinitionMap_t &GetLootLists() const { return m_dictLootLists; }
 
-	typedef CUtlMap<int, const char*> RevolvingLootListDefinitionMap_t;
+	typedef CUtlMap<int, CUtlString> RevolvingLootListDefinitionMap_t;
 	const RevolvingLootListDefinitionMap_t  &GetRevolvingLootLists() const { return m_mapRevolvingLootLists; }
 
-	typedef CUtlMap<const char*, int> BodygroupStateMap_t;
-	const BodygroupStateMap_t  &GetDefaultBodygroupStateMap() const { return m_mapDefaultBodygroupState; }
+	typedef CUtlDict<int> BodygroupStateMap_t;
+	const BodygroupStateMap_t  &GetDefaultBodygroupStateMap() const { return m_dictDefaultBodygroupState; }
 
 	typedef CUtlVector<CEconColorDefinition *>	ColorDefinitionsList_t;
 
-	typedef CUtlMap<const char *, KeyValues *, int> PrefabMap_t;
+	typedef CUtlDict<KeyValues *> PrefabMap_t;
 
-#ifdef GC_DLL
-	struct periodic_score_t
-	{
-		eEconPeriodicScoreEvents	m_eEventType;
-		bool						m_bGCUpdateOnly;				// if set, only code that runs on the GC can initiate a change of this stat (ie., counting gifts -> true; bots killed -> false)
-		uint32						m_unTimePeriodLengthInSeconds;
-		CEconItemDefinition		   *m_pRewardItemDefinition;
-	};
-
-	typedef CUtlVector<periodic_score_t> PeriodicScoreTypeList_t;
-#endif // GC_DLL
 
 #if defined(CLIENT_DLL) || defined(GAME_DLL)
 	CEconItemDefinition *GetDefaultItemDefinition() { return m_pDefaultItemDefinition; }
@@ -2766,20 +2636,19 @@ public:
 	typedef CUtlMap<int, CEconCraftingRecipeDefinition*, int > RecipeDefinitionMap_t;
 	const RecipeDefinitionMap_t &GetRecipeDefinitionMap() const { return m_mapRecipes; }
 
-	typedef CUtlMap<const char*, CEconItemSetDefinition*, int > ItemSetMap_t;
-	const ItemSetMap_t &GetItemSets() const { return m_mapItemSets; }
+	typedef CUtlDict<CEconItemSetDefinition*> ItemSetMap_t;
+	const ItemSetMap_t &GetItemSets() const { return m_dictItemSets; }
 
-	typedef CUtlMap<const char*, CEconItemCollectionDefinition*, int > ItemCollectionMap_t;
-	const ItemCollectionMap_t &GetItemCollections() const { return m_mapItemCollections; }
+	typedef CUtlDict<CEconItemCollectionDefinition*> ItemCollectionMap_t;
+	const ItemCollectionMap_t &GetItemCollections() const { return m_dictItemCollections; }
 
-	typedef CUtlVector< int > ItemCollectionCrateMap_t;
-	const ItemCollectionCrateMap_t &GetItemCollectionCrates() const { return m_vecItemCollectionCrates; }
+	typedef CUtlDict<CEconOperationDefinition*> OperationDefinitionMap_t;
+	const OperationDefinitionMap_t &GetOperationDefinitions() const { return m_dictOperationDefinitions; }
+	const CEconOperationDefinition* GetOperationByName( const char* pszName ) const;
 
-	typedef CUtlMap<const char*, CEconItemPaintKitDefinition*, int > ItemPaintKitMap_t;
-	const ItemPaintKitMap_t &GetItemPaintKits() const { return m_mapItemPaintKits; }
-
-	typedef CUtlMap<const char*, CEconOperationDefinition*, int > OperationDefinitionMap_t;
-	const OperationDefinitionMap_t &GetOperationDefinitions() const { return m_mapOperationDefinitions; }
+	typedef CUtlMap< uint32, const CEconItemDefinition* > PaintKitItemDefinitionMap_t;
+	const CEconItemDefinition *GetPaintKitItemDefinition( uint32 unPaintKitDefIndex ) const;
+	const CEconItemCollectionDefinition *GetPaintKitCollectionFromItem( const IEconItemInterface *pItem, uint32 *pUnPaintKitDefIndex = NULL ) const;
 	
 
 #if defined(CLIENT_DLL) || defined(GAME_DLL)
@@ -2787,20 +2656,12 @@ public:
 	const ArmoryStringDict_t	&GetArmoryDataItemTypes() const { return m_dictArmoryItemTypesDataStrings; }
 	const ArmoryStringDict_t	&GetArmoryDataItems() const { return m_dictArmoryItemDataStrings; }
 	const ArmoryStringDict_t	&GetArmoryDataAttributes() const { return m_dictArmoryAttributeDataStrings; }
-#elif defined(GC_DLL)
-	CUtlVector< CExperimentDefinition > &GetExperiments() { return m_vecExperiments; }
-
-	const CUtlVector< AppId_t > & GetForeignApps() const { return m_vecForeignApps; }
-	const CEconItemDefinition *GetAppItemImport( AppId_t unAppID, uint16 usDefIndex ) const;
 #endif
 
 	const CTimedItemRewardDefinition* GetTimedReward( eTimedRewardType type ) const;
 
 	const CEconLootListDefinition* GetLootListByName( const char* pListName, int *out_piIndex = NULL ) const;
-	const CEconLootListDefinition* GetLootListByIndex( int iIdx ) const { return m_mapLootLists.IsValidIndex(iIdx) ? m_mapLootLists[iIdx] : NULL; }
-
-	const CQuestObjectiveDefinition* GetQuestObjectiveByDefIndex( int iIdx ) const;
-	const CUtlMap<int, CQuestObjectiveDefinition*, int >& GetQuestObjectives() const { return m_mapQuestObjectives; }
+	const CEconLootListDefinition* GetLootListByIndex( int iIdx ) const { return m_dictLootLists.IsValidIndex(iIdx) ? m_dictLootLists[iIdx] : NULL; }
 
 	uint8 GetDefaultQuality() const { return AE_UNIQUE; }
 
@@ -2821,7 +2682,7 @@ public:
 	equip_region_mask_t GetEquipRegionBitMaskByName( const char *pRegionName ) const;
 
 	KeyValues *FindDefinitionPrefabByName( const char *pszPrefabName ) const;
-	const PrefabMap_t& GetPrefabMap() const { return m_mapDefinitionPrefabs; }
+	const PrefabMap_t& GetPrefabMap() const { return m_dictDefinitionPrefabs; }
 	
 	CUtlVector< CEconItemDefinition * > &GetBundles() { return m_vecBundles; }	// Retrieve a cached list of all bundles
 
@@ -2867,10 +2728,6 @@ public:
 #endif // CLIENT_DLL
 	
 	bool BCanGSCreateItems( uint32 unIP ) const;
-#ifdef GC_DLL
-	const AchievementAward_t *GetAchievementReward( const char *pchAchievementName, AppId_t unAppID ) const;
-	const AchievementAward_t *GetAchievementRewardByData( uint32 unData ) const;
-#endif
 	const AchievementAward_t *GetAchievementRewardByDefIndex( uint16 usDefIndex ) const;
 	bool BHasAchievementRewards( void ) const { return (m_dictAchievementRewards.Count() > 0); }
 
@@ -2880,9 +2737,8 @@ public:
 	CEconItemDefinition *GetItemDefinitionByName( const char *pszDefName );
 	const CEconItemDefinition *GetItemDefinitionByName( const char *pszDefName ) const;
 
-#ifdef GC_DLL
 	random_attrib_t *GetRandomAttributeTemplateByName( const char *pszAttrTemplateName ) const;
-#endif // GC_DLL
+	CLootlistJob *GetLootlistJobTemplateByName( const char *pszLootlistJobTemplateName ) const;
 
 	attachedparticlesystem_t* GetAttributeControlledParticleSystem( int id );
 	attachedparticlesystem_t* FindAttributeControlledParticleSystem( const char *pchSystemName );
@@ -2897,16 +2753,6 @@ public:
 	locchar_t *GetParticleSystemLocalizedName( int index ) const;
 #endif // CLIENT_DLL
 
-#ifdef GC_DLL
-	const PeriodicScoreTypeList_t& GetPeriodicScoreTypeList() const { return m_vecPeriodicScoreTypes; }
-
-	int						GetPeriodicScoreTypeCount() const { return GetPeriodicScoreTypeList().Count(); }	// how many types of events are we tracking? the range goes from 0 through this return value
-	const periodic_score_t& GetPeriodicScoreInfo( int iPeriodicScoreIndex ) const;								// get the full info block for this periodic score -- event type, time period, etc.
-
-	// Only intended to be used for generating data for the WebAPI.
-	const KillEaterScoreMap_t& GetKillEaterScoreTypes() const { return m_mapKillEaterScoreTypes; }
-	const SchemaStringTableDict_t& GetStringTables() const { return m_dictStringTable; }
-#endif // GC_DLL
 
 	item_definition_index_t GetCommunityMarketRemappedDefinitionIndex( item_definition_index_t unSearchItemDef ) const;
 
@@ -2928,10 +2774,6 @@ public:
 	const char *GetKillEaterScoreTypeLocString( uint32 unScoreType ) const;
 	const char *GetKillEaterScoreTypeLevelingDataName( uint32 unScoreType ) const;
 	bool GetKillEaterScoreTypeAllowsBotVictims( uint32 unScoreType ) const;
-#ifdef GC_DLL
-	bool GetKillEaterScoreTypeGCOnlyUpdate( uint32 unScoreType ) const;
-	bool GetKillEaterScoreTypeAllowsIncrementValues( uint32 unScoreType ) const;
-#endif
 
 #if defined(CLIENT_DLL) || defined(GAME_DLL)
 	void		ItemTesting_CreateTestDefinition( int iCloneFromItemDef, int iNewDef, KeyValues *pNewKV );
@@ -2945,9 +2787,6 @@ public:
 	econ_tag_handle_t GetHandleForTag( const char *pszTagName );			// non-const because it may create a new tag handle
 
 	typedef CUtlDict<econ_tag_handle_t> EconTagDict_t;
-#ifdef GC_DLL
-	const EconTagDict_t& GetEconTagDict() const { return m_dictTags; }		// meant for internal/debug use only, not for runtime iteration
-#endif // GC_DLL
 
 	virtual RTime32 GetCustomExpirationDate( const char *pszExpirationDate ) const { return k_RTime32Nil; }
 
@@ -2956,26 +2795,23 @@ public:
 	virtual CEconItemDefinition				*CreateEconItemDefinition()			{ return new CEconItemDefinition; }
 	virtual CEconCraftingRecipeDefinition	*CreateCraftingRecipeDefinition()	{ return new CEconCraftingRecipeDefinition; }
 	virtual CEconStyleInfo					*CreateEconStyleInfo()				{ return new CEconStyleInfo; }
-	virtual CQuestObjectiveDefinition		*CreateQuestDefinition()			{ return new CQuestObjectiveDefinition; }
+	virtual CQuestObjectiveDefinition		*CreateQuestDefinition();
 
 	virtual IEconTool						*CreateEconToolImpl( const char *pszToolType, const char *pszUseString, const char *pszUsageRestriction, item_capabilities_t unCapabilities, KeyValues *pUsageKV );
 
-#ifdef GC_DLL
+	virtual CItemSelectionCriteria			*CreateItemCriteria( const char *pszContext, KeyValues *pItemCriteriaKV, CUtlVector<CUtlString> *pVecErrors = NULL );
 	virtual random_attrib_t					*CreateRandomAttribute( const char *pszContext, KeyValues *pRandomAttributesKV, CUtlVector<CUtlString> *pVecErrors = NULL );
-#endif // GC_DLL
+	virtual CLootlistJob					*CreateLootlistJob( const char *pszContext, KeyValues *pLootlistJobKV, CUtlVector<CUtlString> *pVecErrors = NULL );
 
 	virtual bool							BCanStrangeFilterApplyToStrangeSlotInItem( uint32 /*strange_event_restriction_t*/ unRestrictionType, uint32 unRestrictionValue, const IEconItemInterface *pItem, int iStrangeSlot, uint32 *out_pOptionalScoreType ) const;
-	bool									AddQuestObjective( const CQuestObjectiveDefinition **ppQuestObjective, KeyValues *pKVObjective, CUtlVector<CUtlString> *pVecErrors );
 
 	bool BInsertLootlist( const char *pListName, KeyValues *pKVLootList, CUtlVector<CUtlString> *pVecErrors );
 
-#ifdef GC_DLL
-	void PerformCaseBehaviorCheck();
-#endif
 protected:
 	virtual void Reset( void );
 
 	virtual bool BInitSchema( KeyValues *pKVRawDefinition, CUtlVector<CUtlString> *pVecErrors = NULL );
+	virtual bool BPostSchemaInit( CUtlVector<CUtlString> *pVecErrors );
 #ifdef TF_CLIENT_DLL
 	virtual int CalculateNumberOfConcreteItems( const CEconItemDefinition *pItemDef );	// Let derived classes handle custom item types
 #endif // TF_CLIENT_DLL
@@ -2983,9 +2819,6 @@ protected:
 private:
 	bool BInitGameInfo( KeyValues *pKVGameInfo, CUtlVector<CUtlString> *pVecErrors );
 	bool BInitAttributeTypes( CUtlVector<CUtlString> *pVecErrors );
-#ifdef GC_DLL
-	bool BInitPeriodicScoring( KeyValues *pKVGameInfo, CUtlVector<CUtlString> *pVecErrors );
-#endif // GC_DLL
 	bool BInitDefinitionPrefabs( KeyValues *pKVPrefabs, CUtlVector<CUtlString> *pVecErrors );
 	bool BInitItemSeries( KeyValues *pKVSeries, CUtlVector<CUtlString> *pVecErrors );
 	bool BVerifyBaseItemNames( CUtlVector<CUtlString> *pVecErrors );
@@ -2999,15 +2832,14 @@ private:
 	bool BInitItemSets( KeyValues *pKVItemSets, CUtlVector<CUtlString> *pVecErrors );
 	bool BInitTimedRewards( KeyValues *pKVTimeRewards, CUtlVector<CUtlString> *pVecErrors );
 	bool BInitAchievementRewards( KeyValues *pKVTimeRewards, CUtlVector<CUtlString> *pVecErrors );
-#ifdef GC_DLL
+	bool BInitItemCriteriaTemplates( KeyValues *pKVItemCriteriaTemplates, CUtlVector<CUtlString> *pVecErrors );
 	bool BInitRandomAttributeTemplates( KeyValues *pKVRandomAttributeTemplates, CUtlVector<CUtlString> *pVecErrors );
-#endif // GC_DLL
+	bool BInitLootlistJobTemplates( KeyValues *pKVLootlistJobTemplates, CUtlVector<CUtlString> *pVecErrors );
 	bool BInitRecipes( KeyValues *pKVRecipes, CUtlVector<CUtlString> *pVecErrors );
 	bool BInitLootLists( KeyValues *pKVLootLists, CUtlVector<CUtlString> *pVecErrors );
 	bool BInitRevolvingLootLists( KeyValues *pKVRevolvingLootLists, CUtlVector<CUtlString> *pVecErrors );
 	bool BInitItemCollections( KeyValues *pKVItemSets, CUtlVector<CUtlString> *pVecErrors );
 	bool BInitCollectionReferences( CUtlVector<CUtlString> *pVecErrors );
-	bool BInitItemPaintKitDefinitions( KeyValues *pKVPaintKits, CUtlVector<CUtlString> *pVecErrors );
 	bool BInitOperationDefinitions( KeyValues *pKVGameInfo, KeyValues *pOperations, CUtlVector<CUtlString> *pVecErrors );
 
 #ifdef TF_CLIENT_DLL
@@ -3019,7 +2851,6 @@ private:
 	bool BInitStringTables( KeyValues *pKVStringTables, CUtlVector<CUtlString> *pVecErrors );
 	bool BInitCommunityMarketRemaps( KeyValues *pKVCommunityMarketRemaps, CUtlVector<CUtlString> *pVecErrors );
 
-	bool BPostSchemaInit( CUtlVector<CUtlString> *pVecErrors ) const;
 	bool BInitAttributeControlledParticleSystems( KeyValues *pKVParticleSystems, CUtlVector<CUtlString> *pVecErrors );
 
 #if defined(CLIENT_DLL) || defined(GAME_DLL)
@@ -3088,6 +2919,9 @@ private:
 	// List of all the tool items, is a sublist of mapItems
 	ToolsItemDefinitionMap_t							m_mapToolsItems;
 
+	// List of all paintkit tool item definitions
+	PaintKitItemDefinitionMap_t							m_mapPaintKitTools;
+
 	// List of all base items, is a sublist of mapItems
 	BaseItemDefinitionMap_t								m_mapBaseItems;
 
@@ -3103,20 +2937,16 @@ private:
 	RecipeDefinitionMap_t								m_mapRecipes;
 
 	// Contains the list of item sets.
-	ItemSetMap_t										m_mapItemSets;
-	ItemCollectionMap_t									m_mapItemCollections;
-	ItemCollectionCrateMap_t							m_vecItemCollectionCrates;
+	ItemSetMap_t										m_dictItemSets;
+	ItemCollectionMap_t									m_dictItemCollections;
 
-	OperationDefinitionMap_t							m_mapOperationDefinitions;
-
-	// Paint Kit defintions
-	ItemPaintKitMap_t									m_mapItemPaintKits;
+	OperationDefinitionMap_t							m_dictOperationDefinitions;
 
 	// Revolving loot lists.
-	CUtlMap<int, const char*>							m_mapRevolvingLootLists;
+	CUtlMap<int, CUtlString>							m_mapRevolvingLootLists;
 
 	// Contains the list of loot lists.
-	LootListDefinitionMap_t								m_mapLootLists;
+	LootListDefinitionMap_t								m_dictLootLists;
 
 	// List of events that award items based on time played
 	CUtlVector<CTimedItemRewardDefinition>				m_vecTimedRewards;
@@ -3125,10 +2955,13 @@ private:
 	CUtlDict< AchievementAward_t *, int >				m_dictAchievementRewards;
 	CUtlMap< uint32, AchievementAward_t * >				m_mapAchievementRewardsByData;
 
-#ifdef GC_DLL
+	CUtlDict< CItemSelectionCriteria* >					m_dictItemCriteriaTemplates;
+
 	// list of random attribute templates
 	CUtlDict< random_attrib_t * >						m_dictRandomAttributeTemplates;
-#endif // GC_DLL
+
+	// list of lootlist job templates
+	CUtlDict< CLootlistJob * >							m_dictLootlistJobTemplates;
 
 	// Contains information for attribute attached particle systems
 	CUtlMap<int, attachedparticlesystem_t >				m_mapAttributeControlledParticleSystems;
@@ -3143,22 +2976,18 @@ private:
 
 	// Contains information about prefab KeyValues blocks that be can referenced elsewhere
 	// in the schema.
-	PrefabMap_t											m_mapDefinitionPrefabs;
+	PrefabMap_t											m_dictDefinitionPrefabs;
 
 	// Contains runtime color information, looked-up by name.
 	ColorDefinitionsList_t								m_vecColorDefs;
 
 	// Contains information about: a) every bodygroup that appears anywhere in the schema, and
 	// b) whether they default to on or off.
-	BodygroupStateMap_t									m_mapDefaultBodygroupState;
+	BodygroupStateMap_t									m_dictDefaultBodygroupState;
 
 	// Various definitions can have any number of unique tags associated with them.
 	EconTagDict_t										m_dictTags;
 
-#ifdef GC_DLL
-	// Information about our periodic score accumulators.
-	PeriodicScoreTypeList_t								m_vecPeriodicScoreTypes;
-#endif // GC_DLL
 
 	// List of item leveling data.
 	KillEaterScoreMap_t									m_mapKillEaterScoreTypes;
@@ -3185,19 +3014,11 @@ private:
 
 	// Used for delaying the parsing of the item schema until its safe to swap out the back end data.
 	IDelayedSchemaData *m_pDelayedSchemaData;
-#elif defined(GC_DLL)
-	// GC only
-	CUtlVector< CExperimentDefinition > m_vecExperiments;
-	CUtlMap< AppId_t, CForeignAppImports *> m_mapForeignImports;
-	CUtlVector< AppId_t > m_vecForeignApps;
 #endif
 
 	CUtlVector< CEconItemDefinition * > m_vecBundles;	// A cached list of all bundles
 };
 
-#ifdef GC_DLL
-	void PerformIncrementKillEaterAttributeScore( CEconUserSession *pLockedOwnerSession, CEconItem *pItem, uint32 unEventType, uint32 unIncrementCount, bool bGCOrigination, GCSDK::CSharedObjectTransactionEx *pTransaction );
-#endif // GC_DLL
 
 extern CEconItemSchema & GEconItemSchema();
 
@@ -3327,12 +3148,6 @@ inline const ISchemaAttributeType *static_attrib_t::GetAttributeType() const
 int StringFieldToInt( const char *szValue, const char **pValueStrings, int iNumStrings, bool bDontAssert = false );
 int StringFieldToInt( const char *szValue, const CUtlVector<const char *>& vecValueStrings, bool bDontAssert = false );
 
-EUniverse GetUniverse();
-
-#ifdef GC_DLL
-bool BYieldingGetChangedItemDefinitions( int iComparisonColumn, CUtlVector<item_definition_index_t>& out_vecChangedDefIndices );
-bool BYieldingUpdateItemDefinitionStateHashValue( GCSDK::CSQLAccess& sqlAccess, item_definition_index_t unItemDef, int iUpdatedColumn );
-#endif // GC_DLL
 
 //-----------------------------------------------------------------------------
 // Purpose:
@@ -3341,10 +3156,6 @@ class CAttributeLineItemLootList : public IEconLootList
 {
 public:
 	static CSchemaAttributeDefHandle s_pAttrDef_RandomDropLineItems[4];
-#ifdef GC_DLL
-	static CSchemaAttributeDefHandle s_pAttrDef_RandomDropLineItemUnusualChance;
-	static CSchemaAttributeDefHandle s_pAttrDef_RandomDropLineItemUnusualList;
-#endif // GC_DLL
 	static CSchemaAttributeDefHandle s_pAttrDef_RandomDropLineItemFooterDesc;
 
 public:
@@ -3360,14 +3171,16 @@ public:
 	virtual const char *GetLootListFooterLocalizationKey() const OVERRIDE;
 	virtual const char *GetLootListCollectionReference() const OVERRIDE;
 	
-#ifdef GC_DLL
-	MUST_CHECK_RETURN virtual bool BGenerateSingleRollRandomItems( const CEconGameAccount *pGameAccount, bool bFreeAccount, CUtlVector<CEconItem *> *out_pvecItems, const CUtlVector< item_definition_index_t > *pVecAvoidItemDefs = NULL ) const OVERRIDE;
-#endif // GC_DLL
 
 private:
 	const IEconItemInterface *m_pEconItem;
 };
 
 void MergeDefinitionPrefab( KeyValues *pKVWriteItem, KeyValues *pKVSourceItem );
+bool IsUnusualAttribute( const CEconItemAttributeDefinition *pAttrDef );
+bool ItemHasUnusualAttribute( const IEconItemInterface *pItem, const CEconItemAttributeDefinition **pUnusualAttribute = NULL, uint32 *pUnAttributeValue = NULL );
+bool IsPaintKitTool( const CEconItemDefinition *pItemDef );
+bool CheckValveSignature(const void *data, uint32 nDataSize, const void *signature, uint32 nSignatureSize);
+bool TF_CheckSignature(const char* fileName, const char *pathID, CUtlBuffer& bufRawData);
 
 #endif //ECONITEMSCHEMA_H

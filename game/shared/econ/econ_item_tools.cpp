@@ -6,6 +6,7 @@
 #include "econ_item_constants.h"
 #include "econ_dynamic_recipe.h"
 #include "schemainitutils.h"
+#include "econ_paintkit.h"
 
 
 
@@ -298,6 +299,13 @@ bool CEconTool_StrangePart::CanApplyTo( const IEconItemInterface *pTool, const I
 	{
 		return true;
 	}
+
+	// Strange Battery Canteen (30015) and Strange Kritz Or Treat Canteen (30535) can take on any part
+	item_definition_index_t iSubjectItemDef = pSubjectItemDef->GetDefinitionIndex();
+	if ( ( iSubjectItemDef == (item_definition_index_t)30015 ) || ( iSubjectItemDef == (item_definition_index_t)30535 ) )
+	{
+		return true;
+	}
 #endif
 
 	FOR_EACH_VEC( m_RequiredTags.GetTagsList(), i )
@@ -482,11 +490,7 @@ bool CEconTool_ItemDynamicRecipe::BFinishInitialization()
 	// Emit any errors we've accumulated during initialization
 	FOR_EACH_VEC( m_vecErrors, i )
 	{
-#ifdef GC_DLL
-		EmitError( SPEW_GC, "%s\n", m_vecErrors[i].Get() );
-#else
 		AssertMsg1( 0, "%s\n", m_vecErrors[i].Get() );
-#endif
 	}
 
 	if( m_vecErrors.Count() > 0 )
@@ -543,41 +547,6 @@ CEconTool_ItemDynamicRecipe::CBaseRecipeComponent::~CBaseRecipeComponent()
 //-----------------------------------------------------------------------------
 // Purpose:	 Roll chance of component applying to the tool
 //-----------------------------------------------------------------------------
-#ifdef GC_DLL
-int CEconTool_ItemDynamicRecipe::CBaseRecipeComponent::RollCount() const
-{
-	if( m_vecCountChances.Count() == 0 )
-		return 1;
-
-	float flRand = RandomFloat( 0.f, 1.f ) * m_flTotalWeights;
-	float flAccum = 0.f;
-
-	// Go through and see which counts gets rolled
-	FOR_EACH_VEC( m_vecCountChances, i )
-	{
-		const CountChance_t& countChance = m_vecCountChances[i];
-
-		flAccum += countChance.m_flChance;
-		if ( flRand <= flAccum )
-		{
-			// Winner!  Roll within its range
-			return RandomInt( countChance.m_nMinCount, countChance.m_nMaxCount );
-		}
-	}
-
-	AssertMsg( 0, "Failed to generate a count for recipe component.  Defaulting to 1" );
-	return 1;
-}
-
-bool CEconTool_ItemDynamicRecipe::CBaseRecipeComponent::RollChanceOfApplying() const
-{
-	// Guaranteed!
-	if( m_flChanceOfApplying == 1.f )
-		return true;
-
-	return RandomFloat() < m_flChanceOfApplying;
-}
-#endif
 
 //-----------------------------------------------------------------------------
 // Purpose: Set chance for attributes to apply.
@@ -667,15 +636,6 @@ bool CEconTool_ItemDynamicRecipe::CDynamicRecipeComponentDefinedItem::BFinishIni
 	// We better have one of the above
 	SCHEMA_INIT_CHECK( bAnyDataSet, "Not enough data to describe component" );
 
-#ifdef GC_DLL
-	// Get next available attrib def for defining the item
-	CEconItemAttributeDefinition* pAttribDef = GetNextAvailableAttributeWithBaseName( GetAttributeName(), pAttribVec );
-	SCHEMA_INIT_CHECK( pAttribDef, "Too many potential components" );
-	if( pAttribDef )
-	{
-		pAttribVec->AddToTail( pAttribDef );
-	}
-#endif
 
 	SCHEMA_INIT_SUBSTEP( BaseClass::BFinishInitialization_Internal( pVecErrors, pAttribVec ) );
 
@@ -712,155 +672,12 @@ bool CEconTool_ItemDynamicRecipe::CDynamicRecipeComponentDefinedItem::ParseKV( K
 // Purpose: Convert ourselves into an attribute.  Return false if our encoded
 //			attributes exceed the allocated space for attributes
 //-----------------------------------------------------------------------------
-#ifdef GC_DLL
-bool CEconTool_ItemDynamicRecipe::CDynamicRecipeComponentDefinedItem::AddRecipeComponentAsAttribute( CEconItem *pItem, const CEconGameAccount *pGameAccount ) const
-{
-	// Check if we should even apply
-	if( !RollChanceOfApplying() )
-		return true;
-
-	// Gather up all the current attributes on the item
-	ComponentAttribVector_t attribVec;
-	CRecipeComponentMatchingIterator matchingIterator( pItem, NULL );
-	pItem->IterateAttributes( &matchingIterator );
-	attribVec.AddVectorToTail( matchingIterator.GetMatchingComponentInputs() );
-	attribVec.AddVectorToTail( matchingIterator.GetMatchingComponentOutputs() );
-
-	// Get next available attrib def for defining the item
-	const CEconItemAttributeDefinition* pAttribDef = GetNextAvailableAttributeWithBaseName( GetAttributeName(), &attribVec );
-	if( !pAttribDef )
-		return false;
-
-	uint32 nFlags = 0;
-	CAttribute_DynamicRecipeComponent typedValue;
-
-	// Check if our item name is specified to use our parent's
-	const char* pszItemDefName = m_strName;
-	if ( m_strName && m_strName[0] )
-	{
-		if( BStringsEqual( m_pszUseParentNameIdentifier, pszItemDefName ) && m_pParent )
-		{
-			// It's only possible to have another CDynamicRecipeComponentDefinedItem as a parent
-			const CDynamicRecipeComponentDefinedItem* pParentDefinedItemComponent = dynamic_cast< const CDynamicRecipeComponentDefinedItem* >( m_pParent );
-			AssertMsg( pParentDefinedItemComponent, "Parent attribute passed into defined item component is not a defined item component" );
-			if( !pParentDefinedItemComponent )
-			{
-				return false;
-			}
-			// Adopt our parent's item name
-			pszItemDefName = pParentDefinedItemComponent->m_strName;
-		}
-	
-		// Make sure this item def exists
-		CEconItemDefinition* pItemDef = GetItemSchema()->GetItemDefinitionByName( pszItemDefName );
-		AssertMsg1( pItemDef, "No item def named %s found when applying defined item component", pszItemDefName );
-		if( !pItemDef )
-		{
-			return false;
-		}
-
-		// Set the item def
-		typedValue.set_def_index( (uint32)pItemDef->GetDefinitionIndex() );
-		nFlags |= DYNAMIC_RECIPE_FLAG_PARAM_ITEM_DEF_SET;
-	}
-
-	// Set the quality, if we're supposed to
-	if ( m_eQuality != AE_UNDEFINED )
-	{
-		typedValue.set_item_quality( (uint32)m_eQuality );
-		nFlags |= DYNAMIC_RECIPE_FLAG_PARAM_QUALITY_SET;
-	}
-
-	nFlags |= m_bIsOutput ? DYNAMIC_RECIPE_FLAG_IS_OUTPUT : 0;
-
-	if ( m_attributesMatchingType == ATTRIBUTES_MATCH_ALL )
-	{
-		nFlags |= DYNAMIC_RECIPE_FLAG_PARAM_ATTRIBUTE_SET_ALL;
-	}
-	else if ( m_attributesMatchingType == ATTRIBUTES_MATCH_ANY )
-	{
-		nFlags |= DYNAMIC_RECIPE_FLAG_PARAM_ATTRIBUTE_SET_ANY;
-	}
-
-	// Make sure any of the flags (besides the output flag) is set
-	if ( ( nFlags & ~DYNAMIC_RECIPE_FLAG_IS_OUTPUT ) == 0 )
-	{
-		AssertMsg(0, "Created component without any data flags set!" );
-		return false;
-	}
-	
-	typedValue.set_component_flags( nFlags );
-	typedValue.set_num_required( RollCount() );
-	typedValue.set_num_fulfilled( 0 );
-
-	// Write out attribute all attribute indexes and values, separated by what we expect to be an invalid character sequence
-	CUtlString strAttribs;
-	FOR_EACH_VEC( m_vecDynamicAttributes, i )
-	{
-		if( i != 0 ) 
-		{
-			strAttribs.Append( g_pszAttrEncodeSeparator );
-		}
-		// Convert all of our attributes into a string.
-		strAttribs.Append( CFmtStr( "%d", m_vecDynamicAttributes[i].m_AttrIndex ) );
-		strAttribs.Append( g_pszAttrEncodeSeparator );
-		strAttribs.Append( m_vecDynamicAttributes[i].m_strAttrData.Get() );
-	}
-
-	// Make sure we're not too long
-	if( strAttribs.Length() >= 1024 )
-	{
-		AssertMsg1( 0, "String-encoded attributes exceeds 1024 characters, when encoding component %s", m_strName.Get() );
-		return false;
-	}
-
-	// Set it in there!
-	typedValue.set_attributes_string( strAttribs.Get() );
-
-	// Check to see if we're about to create a duplicate.  There's no need to spend another
-	// attribute to describe the same item.  Let's instead just increase the count on the
-	// already-existing attribute.
-	FOR_EACH_VEC( attribVec, i )
-	{
-		CAttribute_DynamicRecipeComponent existingValue;
-		if( pItem->FindAttribute( attribVec[i], &existingValue ) )
-		{
-			if( typedValue.def_index()			== existingValue.def_index() &&
-				typedValue.item_quality()		== existingValue.item_quality() &&
-				typedValue.component_flags()			== existingValue.component_flags() &&
-				typedValue.attributes_string()	== existingValue.attributes_string() )
-			{
-				pAttribDef = attribVec[i];
-				existingValue.set_num_required( existingValue.num_required() + typedValue.num_required() );
-				typedValue = existingValue;
-				break;
-			}
-		}
-	}
-	
-
-	pItem->SetDynamicAttributeValue( pAttribDef, typedValue );
-
-	// Go through and add any additional components that depend on this component
-	FOR_EACH_VEC( m_vecAdditionalComponents, i )
-	{
-		CBaseRecipeComponent* pAdditionalComponent = m_vecAdditionalComponents[i];
-		pAdditionalComponent->AddRecipeComponentAsAttribute( pItem, pGameAccount );
-	}
-
-	return true;
-}
-
-#endif
 
 //-----------------------------------------------------------------------------
 // Purpose:
 //-----------------------------------------------------------------------------
 CEconTool_ItemDynamicRecipe::CDynamicRecipeComponentLootList::CDynamicRecipeComponentLootList( bool bIsOutput, const CBaseRecipeComponent* pParent )
 	: CEconTool_ItemDynamicRecipe::CBaseRecipeComponent( bIsOutput, pParent )
-#ifdef GC_DLL
-	, m_eUniqueness( UNIQUE_AMONG_NOTHING )
-#endif
 {}
 
 
@@ -874,21 +691,6 @@ CEconTool_ItemDynamicRecipe::CDynamicRecipeComponentLootList::~CDynamicRecipeCom
 bool CEconTool_ItemDynamicRecipe::CDynamicRecipeComponentLootList::BFinishInitialization_Internal( CUtlVector<CUtlString>* pVecErrors, ComponentAttribVector_t* pAttribVec )
 {
 	// The game doesn't have all of the lootlists
-#ifdef GC_DLL
-	SCHEMA_INIT_CHECK( GEconItemSchema().GetLootListByName( m_strName ),
-					   "CDynamicRecipeComponentLootList has invalid loot list: %s", m_strName.Get() );
-
-	// Get next available attrib def for defining the item
-	CEconItemAttributeDefinition* pAttribDef = GetNextAvailableAttributeWithBaseName( GetAttributeName(), pAttribVec );
-	SCHEMA_INIT_CHECK( pAttribDef, "Too many potential recipe components!" );
-	if( pAttribDef )
-	{
-		pAttribVec->AddToTail( pAttribDef );
-	}
-
-	// Inputs are not allowed to be marked UNIQUE_AMONG_OUTPUTS.  Rather, mark the outputs UNIQUE_AMONG_INPUTS
-	SCHEMA_INIT_CHECK( !(m_eUniqueness == UNIQUE_AMONG_OUTPUTS && !GetIsOutput() ), "Input component marked to be unique among inputs.  Not supported!" );
-#endif
 
 	// Skip defined item
 	SCHEMA_INIT_SUBSTEP( BaseClass::BFinishInitialization_Internal( pVecErrors, pAttribVec ) );
@@ -909,23 +711,6 @@ bool CEconTool_ItemDynamicRecipe::CDynamicRecipeComponentLootList::ParseKV( KeyV
 
 	bool bBaseResult = BaseClass::ParseKV( pKV, pVecErrors );
 
-#ifdef GC_DLL
-	// By default, outputs try to avoid rolling as input, and inputs dont try to avoid anything
-	m_eUniqueness = GetIsOutput() ? UNIQUE_AMONG_INPUTS : UNIQUE_AMONG_NOTHING;
-	const char* pszUniqueness = pKV->GetString( "uniqueness" );
-	if ( !V_stricmp( "unique_among_inputs", pszUniqueness ) )
-	{
-		m_eUniqueness = UNIQUE_AMONG_INPUTS;
-	}
-	else if ( !V_stricmp( "unique_among_outputs", pszUniqueness ) )
-	{
-		m_eUniqueness = UNIQUE_AMONG_OUTPUTS;
-	}
-	else if ( !V_stricmp( "unique_among_everything", pszUniqueness ) )
-	{
-		m_eUniqueness = UNIQUE_AMONG_EVERYTHING;
-	}
-#endif
 
 	return bBaseResult;
 }
@@ -934,141 +719,6 @@ bool CEconTool_ItemDynamicRecipe::CDynamicRecipeComponentLootList::ParseKV( KeyV
 //-----------------------------------------------------------------------------
 // Purpose:	Roll our item definition, then call our base to convert ourselves into an attribute
 //-----------------------------------------------------------------------------
-#ifdef GC_DLL
-bool CEconTool_ItemDynamicRecipe::CDynamicRecipeComponentLootList::AddRecipeComponentAsAttribute( CEconItem *pItem, const CEconGameAccount *pGameAccount ) const
-{
-	// Check if we should even apply
-	if( !RollChanceOfApplying() )
-		return true;
-
-	// See if there's any item defs we should try to avoid
-	CRecipeComponentInputDefIndexIterator inputIterator( m_eUniqueness );
-	pItem->IterateAttributes( &inputIterator );
-
-	const char* pszItemDefName = NULL;
-	// Roll the item and any additional attributes
-	CUtlVector< StringEncodedAttribute_t > vecLootlistGeneratedAttributes;
-	if (!RollLootlistItemAndAttributes( vecLootlistGeneratedAttributes, &pszItemDefName, &inputIterator.GetMatchingComponentInputs(), pGameAccount ) )
-	{
-		return false;
-	}
-	vecLootlistGeneratedAttributes.AddVectorToTail( m_vecDynamicAttributes );
-
-	// Create a temporary defined item component based on the lootlist roll
-	CDynamicRecipeComponentDefinedItem definedItem( m_bIsOutput, this );
-	definedItem.m_eQuality = m_eQuality;
-	definedItem.m_strName = pszItemDefName;
-	definedItem.m_attributesMatchingType = m_attributesMatchingType;
-	definedItem.m_vecDynamicAttributes = vecLootlistGeneratedAttributes;
-	definedItem.m_vecCountChances = m_vecCountChances;
-	definedItem.m_flTotalWeights = m_flTotalWeights;
-
-	// Write out this defined item
-	definedItem.AddRecipeComponentAsAttribute( pItem, pGameAccount );
-
-	// Create any additional components that depend on this component existing
-	FOR_EACH_VEC( m_vecAdditionalComponents, i )
-	{
-		CBaseRecipeComponent* pAdditionalComponent = m_vecAdditionalComponents[i];
-		// Update the parent to be the item we generated
-		pAdditionalComponent->SetParent( &definedItem );
-		pAdditionalComponent->AddRecipeComponentAsAttribute( pItem, pGameAccount );
-	}
-
-	return true;
-}
-
-//-----------------------------------------------------------------------------
-// Purpose:	Roll our item definition, then call our base to convert ourselves into an attribute
-//-----------------------------------------------------------------------------
-class CAttributeToStringIterator : public IEconItemUntypedAttributeIterator
-{
-public:
-	CAttributeToStringIterator( CUtlVector< CEconTool_ItemDynamicRecipe::CDynamicRecipeComponentLootList::StringEncodedAttribute_t >& vecAdditionalAttribs, CEconItem* pItem )
-		: m_vecAdditionalAttribs( vecAdditionalAttribs )
-		, m_pItem( pItem )
-	{}
-
-	virtual bool OnIterateAttributeValueUntyped( const CEconItemAttributeDefinition *pAttrDef )
-	{
-		const CEconItem::attribute_t *pAttrInternalData = m_pItem->FindDynamicAttributeInternal( pAttrDef );
-
-		// Only export attributes that we have dynamic data for.
-		if ( pAttrInternalData )
-		{
-			const ISchemaAttributeType *pAttrType = pAttrDef->GetAttributeType();
-			Assert( pAttrType );
-
-			// Set the definition index
-			auto& attrib = m_vecAdditionalAttribs[ m_vecAdditionalAttribs.AddToTail() ];
-			attrib.m_AttrIndex = pAttrDef->GetDefinitionIndex();
-
-			// Convert the value to a string
-			std::string sAttrValue;
-			pAttrType->ConvertEconAttributeValueToString( pAttrDef, pAttrInternalData->m_value, &sAttrValue );
-
-			Assert( sAttrValue.length() > 0 );
-			attrib.m_strAttrData.Set( sAttrValue.c_str() );
-		}
-
-		return true;
-	}
-	
-private:
-
-	CUtlVector< CEconTool_ItemDynamicRecipe::CDynamicRecipeComponentLootList::StringEncodedAttribute_t >& m_vecAdditionalAttribs;
-	CEconItem* m_pItem;
-};
-
-//-----------------------------------------------------------------------------
-// Purpose: Roll our item definition.  This will give us a list of item definition.  From this list
-//			we take the first one and set our item def name and quality to be its.  We then take any
-//			attributes that it may have rolled and add them to our attributes as well.  Return false
-//			if any of these steps fail.
-//-----------------------------------------------------------------------------
-bool CEconTool_ItemDynamicRecipe::CDynamicRecipeComponentLootList::RollLootlistItemAndAttributes( CUtlVector< StringEncodedAttribute_t >& vecAdditionalAttribs
-																								, const char** pszDefName
-																								, const CUtlVector< item_definition_index_t > *pVecAvoidItemDefs
-																								, const CEconGameAccount *pGameAccount ) const
-{
-	const CEconLootListDefinition* pLootList = GEconItemSchema().GetLootListByName( m_strName );
-
-	if( !pLootList )
-	{
-		AssertMsg1( 0, "Lootlist %s not found when adding dynamic attribute", m_strName.Get() );
-		return false;
-	}
-
-	CUtlVector<CEconItem *> vecRolledItems;
-	// Roll our items
-	CDefaultUniformRandomStream RandomStream;
-	if ( !pLootList->BGenerateSingleRollRandomItems( pGameAccount, false, &vecRolledItems ) )
-	{
-		AssertMsg1( 0, "Error generating item defs from lootlist \"%s\"", m_strName.Get() );
-		return false;
-	}
-
-	// We're just going to use the first one
-	CEconItem* pGeneratedItem = vecRolledItems.Head();
-
-	// Set our name and quality
-	(*pszDefName) = pGeneratedItem->GetItemDefinition()->GetDefinitionName();
-	const_cast<CDynamicRecipeComponentLootList*>(this)->m_eQuality = (EEconItemQuality)pGeneratedItem->GetQuality();
-
-	// Sniff and encode the attributes
-	CAttributeToStringIterator attrToString( vecAdditionalAttribs, pGeneratedItem );
-	pGeneratedItem->IterateAttributes( &attrToString );
-
-	// Cleanup
-	for( auto pItem : vecRolledItems )
-	{
-		delete pItem;
-	}
-
-	return true;
-}
-
-#endif
 
 
 //-----------------------------------------------------------------------------
@@ -1125,16 +775,6 @@ bool CEconTool_ItemDynamicRecipe::BInitFromKV( KeyValues *pKVDef, CUtlVector<CUt
 
 	m_vecComponents.Sort( &RecipeComponentSorter::SortRecipeComponentVector );
 	
-#ifdef GC_DLL
-	int nFlags = 0;
-	FOR_EACH_VEC( m_vecComponents, i )
-	{
-		m_vecComponents[i]->GetIsGuaranteed( nFlags );
-	}
-
-	SCHEMA_INIT_CHECK( nFlags & GUARANTEED_OUTPUT, "No guaranteed outputs for dynamic recipe" );
-	SCHEMA_INIT_CHECK( nFlags & GUARANTEED_INPUT, "No guaranteed inputs for dynamic recipe" );
-#endif
 
 	return SCHEMA_INIT_SUCCESS();
 }
@@ -1147,9 +787,6 @@ bool CEconTool_ItemDynamicRecipe::CBaseRecipeComponent::ParseComponentsBlock( Ke
 	// The components block doesn't exist on the client
 
 	KeyValues *pKVComponents = pKV->FindKey( "components" );
-#ifdef GC_DLL
-	SCHEMA_INIT_CHECK( pKVComponents || pParent, "Failed to parse components block in dynamic recipe" );
-#endif
 	if ( pKVComponents )
 	{
 		// There's duplicate code when we read in like this, but it makes the
@@ -1162,14 +799,6 @@ bool CEconTool_ItemDynamicRecipe::CBaseRecipeComponent::ParseComponentsBlock( Ke
 			ParseComponents( pKVParameters, vecComponents, false, pVecErrors, pParent );
 		}
 
-#ifdef GC_DLL
-		// Parse all the outputs
-		pKVParameters = pKVComponents->FindKey( "output" );
-		if( pKVParameters )
-		{
-			ParseComponents( pKVParameters, vecComponents, true, pVecErrors, pParent );
-		}
-#endif
 	}
 
 
@@ -1308,59 +937,6 @@ bool CEconTool_ItemDynamicRecipe::CBaseRecipeComponent::ParseKV( KeyValues *pKV,
 }
 
 
-#ifdef GC_DLL
-//-----------------------------------------------------------------------------
-// Purpose:	This tool will apply recipe components as attributes.  Go through each
-//			of our attributes, roll to see if it applies, and convert it to an attribute
-//			and add it to the item if we do.  Return false if we ever fail.
-//-----------------------------------------------------------------------------
-bool CEconTool_ItemDynamicRecipe::BGenerateDynamicAttributes( CEconItem* pItem, const CEconGameAccount *pGameAccount ) const
-{
-	// Go through our inputs and write them out into attributes
-	FOR_EACH_VEC( m_vecComponents, i )
-	{
-		if( !m_vecComponents[i]->AddRecipeComponentAsAttribute( pItem, pGameAccount ) )
-				return false;
-	}
-
-	return true;
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: Scan the item for numbered attributes with the passed in base name.
-//			Return the attribute of the next available index or NULL if there are
-//			none available
-//-----------------------------------------------------------------------------
-CEconItemAttributeDefinition* CEconTool_ItemDynamicRecipe::CBaseRecipeComponent::GetNextAvailableAttributeWithBaseName( const char* pszBaseAttribName, ComponentAttribVector_t* pAttribVec )
-{
-	Assert( pAttribVec );
-	if( !pAttribVec )
-		return NULL;
-
-	CEconItemAttributeDefinition *pAttribDef = NULL;
-	int i=1;
-	while( pAttribDef == NULL )
-	{
-		const char* pszAttribName = CFmtStr( "%s %d", pszBaseAttribName, i++ );
-
-		CEconItemAttributeDefinition *pTempAttribDef = GEconItemSchema().GetAttributeDefinitionByName( pszAttribName );
-
-		// Check to see if this attribute we're talking about even exists
-		if( !pTempAttribDef )
-		{
-			return NULL;
-		}
-
-		// Check if the vector doesn't have this attribute.  If not, it's available
-		if( pAttribVec->Find( pTempAttribDef ) == pAttribVec->InvalidIndex() )
-		{
-			pAttribDef = pTempAttribDef;
-		}
-	}
-
-	return pAttribDef;
-}
-#endif
 
 //-----------------------------------------------------------------------------
 bool CEconTool_Xifier::CanApplyTo( const IEconItemInterface *pTool, const IEconItemInterface *pToolSubject ) const
@@ -1398,15 +974,14 @@ bool CEconTool_Xifier::CanApplyTo( const IEconItemInterface *pTool, const IEconI
 	}
 
 	// if rarity restriction, target needs rarity of this or lower
+	// only paintkited items have rarity restriction
 	if ( m_ItemRarityRestriction != k_unItemRarity_Any )
 	{
-		uint8 unSubjectRarity = pToolSubject->GetItemDefinition()->GetRarity();
+		uint8 unSubjectRarity = pToolSubject->GetRarity();
 		if ( unSubjectRarity == k_unItemRarity_Any || unSubjectRarity == 0 || unSubjectRarity > m_ItemRarityRestriction )
 			return false;
 
-		// needs to be equippable
-		static CSchemaAttributeDefHandle pAttribDef_StatModule( "weapon_uses_stattrak_module" );
-		if ( !pToolSubject->FindAttribute( pAttribDef_StatModule ) )
+		if ( !GetStattrak( pToolSubject ) )
 			return false;
 	}
 
@@ -1455,17 +1030,12 @@ bool CEconTool_Strangifier::CanApplyTo( const IEconItemInterface *pTool, const I
 	Assert( pToolSubject );
 
 	// Do not allow for already strange items
-	if ( pToolSubject->GetQuality() == AE_STRANGE )
+	if ( pToolSubject->BIsStrange() )
 		return false;
 
-	// Go over the attributes of the item, if it has any strange attributes the item is strange and don't apply
-	for ( int i = 0; i < GetKillEaterAttrCount(); i++ )
-	{
-		if ( pToolSubject->FindAttribute( GetKillEaterAttr_Score( i ) ) )
-		{
-			return false;
-		}
-	}
+	// Don't allow for War Painted items if the rarity is not required
+	if ( GetPaintKitDefIndex( pToolSubject ) && GetRarityRestriction() == k_unItemRarity_Any )
+		return false;
 
 	// Default rules
 	return CEconTool_Xifier::CanApplyTo( pTool, pToolSubject );
@@ -1674,6 +1244,7 @@ bool CEconTool_DuckToken::CanApplyTo( const IEconItemInterface *pTool, const IEc
 	// Default rules
 	return IEconTool::CanApplyTo( pTool, pToolSubject );
 }
+
 
 //---------------------------------------------------------------------------------------
 // Purpose: given a tool and an item to apply the tool's effects upon, return true if the

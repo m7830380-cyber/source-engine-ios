@@ -35,13 +35,12 @@ public:
 	virtual int		GetRenderGroupPriority() OVERRIDE { return 51; }
 	void			WantsToTeleport( void );
 
-	virtual GameActionSet_t GetPreferredActionSet() { return GAME_ACTION_SET_IN_GAME_HUD; }
+	virtual GameActionSet_t GetPreferredActionSet() { return IsActive() ? GAME_ACTION_SET_IN_GAME_HUD : GAME_ACTION_SET_NONE; }
 
 private:
 	void SetSelectedItem( eEurekaTeleportTargets eSelectedTeleportTarget );
 	void SendTeleportMessage( eEurekaTeleportTargets eTeleportTarget );
 	bool CanTeleport() const;
-	void UpdateHintLabels( void );	// show/hide the bright and dim build, destroy hint labels
 
 	bool m_bWantsToTeleport;
 	eEurekaTeleportTargets m_eSelectedTeleportTarget;

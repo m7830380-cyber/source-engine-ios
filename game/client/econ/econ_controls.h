@@ -337,11 +337,13 @@ public:
 	const char	*GetNextExplanation( void ) { return m_szNextExplanation; }
 	void	SetPrevExplanation( const char *pszPrev );
 
+	virtual void ApplySchemeSettings( vgui::IScheme *pScheme ) OVERRIDE;
 	virtual void ApplySettings( KeyValues *inResourceData );
 	virtual void OnCommand( const char *command );
 	virtual void OnTick( void );
 	virtual void OnKeyCodeTyped( vgui::KeyCode code );
 	virtual void OnKeyCodePressed( vgui::KeyCode code );
+	virtual void OnSizeChanged( int newWide, int newTall ) OVERRIDE;
 
 	void	PositionCallout( float flElapsed );
 	virtual void	FireGameEvent( IGameEvent *event );
@@ -357,7 +359,11 @@ private:
 	int		m_iTotalInChain;
 	bool	m_bFinishedPopup;
 
+	CUtlString m_strTitle;
+	CUtlString m_strBody;
+
 	CPanelAnimationVar( bool, m_bForceClose, "force_close", "0" );
+	CPanelAnimationVar( bool, m_bUseResFileForControls, "res_file_controls", "0" );
 
 	CPanelAnimationVarAliasType( int, m_iCalloutInParentsX, "callout_inparents_x", "0", "proportional_xpos" );
 	CPanelAnimationVarAliasType( int, m_iCalloutInParentsY, "callout_inparents_y", "0", "proportional_ypos" );

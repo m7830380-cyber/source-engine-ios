@@ -141,9 +141,17 @@ enum ECurrency
 	k_ECurrencyCOP = 32,
 	k_ECurrencyPEN = 33,
 	k_ECurrencyCLP = 34,
+	k_ECurrencyARS = 35,
+	k_ECurrencyCRC = 36,
+	k_ECurrencyILS = 37,
+	k_ECurrencyKWD = 38,
+	k_ECurrencyQAR = 39,
+	k_ECurrencyUYU = 40,
+	k_ECurrencyKZT = 41,
+	k_ECurrencyBYN = 42,
 
 	// NOTE: Not actually the Maximum currency value, but the Terminator for the possible currency code range.
-	k_ECurrencyMax = 35,
+	k_ECurrencyMax = 43,
 
 	// make this a big number so we can avoid having to move it when we add another currency type
 	k_ECurrencyInvalid = 255,
@@ -174,13 +182,13 @@ inline bool BIsCurrencyValid( ECurrency eCurrency )
 	case k_ECurrencyTHB:
 	case k_ECurrencyVND:
 	case k_ECurrencyKRW:
-	case k_ECurrencyTRY:
+	// case k_ECurrencyTRY: // not valid since 2023
 	case k_ECurrencyUAH:
 	case k_ECurrencyMXN:
 	case k_ECurrencyCAD:
 	case k_ECurrencyAUD:
 	case k_ECurrencyNZD:
-	//case k_ECurrencyPLN:
+	case k_ECurrencyPLN:
 	case k_ECurrencyCHF:
 	case k_ECurrencyCNY:
 	case k_ECurrencyTWD:
@@ -192,6 +200,14 @@ inline bool BIsCurrencyValid( ECurrency eCurrency )
 	case k_ECurrencyCOP:
 	case k_ECurrencyPEN:
 	case k_ECurrencyCLP:
+	// case k_ECurrencyARS: // not valid since 2023
+	case k_ECurrencyCRC:
+	case k_ECurrencyILS:
+	case k_ECurrencyKWD:
+	case k_ECurrencyQAR:
+	case k_ECurrencyUYU:
+	case k_ECurrencyKZT:
+	//case k_ECurrencyBYN: // not yet launched as of Autumn 2017
 		return true;
 	}
 
@@ -259,10 +275,7 @@ struct econ_store_entry_t
 
 	uint32 GetGiftSteamPackageID() const { return m_unGiftSteamPackageID; }
 
-	// Helper function -- so we do this calculation in a single place.
-	static item_price_t GetDiscountedPrice( ECurrency eCurrency, item_price_t unBasePrice, float fDiscountPercentage );
-
-	static item_price_t CalculateSalePrice( const econ_store_entry_t* pSaleStoreEntry, ECurrency eCurrency, float fDiscountPercentage, int32 *out_pAdjustedDiscountPercentage = NULL );
+	static item_price_t CalculateSalePrice( item_price_t unPreDiscountPrice, ECurrency eCurrency, float fDiscountPercentage, int32 *out_pAdjustedDiscountPercentage = NULL );
 
 	item_price_t GetBasePrice( ECurrency eCurrency ) const
 	{
@@ -409,6 +422,9 @@ struct econ_store_entry_t
 	bool							m_bIsMarketItem;					// Is Market Item Link
 
 private:
+	// Helper function -- so we do this calculation in a single place. Use CalculateSalePrice() instead of trying to call this directly.
+	static item_price_t GetDiscountedPrice( item_price_t unBasePrice, ECurrency eCurrency, float fDiscountPercentage );
+
 	item_definition_index_t			m_usDefIndex;						// DefIndex of the item
 
 	// Private data so that we can check in the accessor functions that the data fits before returning it.
@@ -428,33 +444,6 @@ private:
 	const char					*m_pchCategoryTags;						// All tags - this string will something like: "New" or "Weapons+New" etc.
 };
 
-#ifdef GC_DLL
-struct econ_store_timed_sale_item_t
-{
-	item_definition_index_t m_unItemDef;
-	float					m_fPricePercentage;	// 100.0 = regular price; 50.0 = half price
-};
-
-struct econ_store_timed_sale_t
-{
-	bool m_bSaleCurrentlyActive;				// set in ::UpdatePricesForTimedSales()
-	CUtlConstString m_sIdentifier;				// can't point to memory in the base KV because we toss it afterwards
-	RTime32	m_SaleStartTime;
-	RTime32	m_SaleEndTime;
-	CUtlVector<econ_store_timed_sale_item_t> m_vecSaleItems;
-
-	// Work around protected default vector constructor.
-	econ_store_timed_sale_t() { }
-	econ_store_timed_sale_t( const econ_store_timed_sale_t& other )
-		: m_bSaleCurrentlyActive( other.m_bSaleCurrentlyActive )
-		, m_sIdentifier( other.m_sIdentifier )
-		, m_SaleStartTime( other.m_SaleStartTime )
-		, m_SaleEndTime( other.m_SaleEndTime )
-	{
-		m_vecSaleItems.CopyArray( other.m_vecSaleItems.Base(), other.m_vecSaleItems.Count() );
-	}
-};
-#endif // GC_DLL
 
 // Spend xxx amount of money, get a free item from the loot list
 struct store_promotion_spend_for_free_item_t
@@ -520,9 +509,6 @@ public:
 	typedef CUtlMap<uint16, econ_store_entry_t> EconStoreEntryMap_t;
 	EconStoreEntryMap_t &GetEntries() { return m_mapEntries; }
 	
-#ifdef GC_DLL
-	econ_store_entry_t *GetEntryWriteable( item_definition_index_t unDefIndex );
-#endif // GC_DLL
 
 	const StoreEntryMap_t &GetEntries() const { return m_mapEntries; }
 	const CEconStoreCategoryManager::StoreCategory_t *GetFeaturedItems( void ) { return &m_FeaturedItems; }
@@ -548,17 +534,13 @@ public:
 	{
 		RentalPriceScaleMap_t::IndexType_t i = m_mapRentalPriceScales.Find( pszCategory );
 		if ( i == RentalPriceScaleMap_t::InvalidIndex() )
-			return 1.0f;
+			return 100.0f;
 
 		return m_mapRentalPriceScales[i];
 	}
 
 	KeyValues *GetRawData() const { return m_pKVRaw; }
 
-#ifdef GC_DLL
-	void UpdatePricesForTimedSales( const RTime32 curTime );
-	void DumpTimeSaleState( const RTime32 curTime ) const;
-#endif // GC_DLL
 
 #ifdef CLIENT_DLL
 	const FeaturedItems_t& GetFeaturedItems() const { return m_vecFeaturedItems; }
@@ -570,10 +552,6 @@ private:
 	bool BInitMarketEntryFromKV( KeyValues *pKVEntry );
 #endif // CLIENT_DLL
 
-#ifdef GC_DLL
-	bool InitTimedSaleEntryFromKV( KeyValues *pKVTimedSaleEntry );
-	bool VerifyTimedSaleEntries();
-#endif // GC_DLL
 
 private:
 	void Clear();
@@ -585,16 +563,13 @@ private:
 	StoreEntryMap_t m_mapEntries;
 	RentalPriceScaleMap_t m_mapRentalPriceScales;
 	store_promotion_spend_for_free_item_t m_StorePromotionSpendForFreeItem;
-	CEconItemDefinition* m_pStorePromotionFirstTimePurchaseItem;
-	CEconItemDefinition* m_pStorePromotionFirstTimeWebPurchaseItem;
+	const CEconItemDefinition* m_pStorePromotionFirstTimePurchaseItem;
+	const CEconItemDefinition* m_pStorePromotionFirstTimeWebPurchaseItem;
 
 #ifdef CLIENT_DLL
 	FeaturedItems_t m_vecFeaturedItems;
 #endif // CLIENT_DLL
 
-#ifdef GC_DLL
-	CUtlVector<econ_store_timed_sale_t> m_vecTimedSales;
-#endif // GC_DLL
 
 	// changes based on experiments
 	uint32	m_unFeaturedItemIndex;

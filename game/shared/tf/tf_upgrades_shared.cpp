@@ -143,12 +143,6 @@ void CMannVsMachineUpgradeManager::LoadUpgradesFile( void )
 	{
 		pszPath = pszCustomUpgradesFile;
 	}
-#ifdef STAGING_ONLY
-	else if ( TFGameRules() && !TFGameRules()->IsMannVsMachineMode() )
-	{
-		pszPath = "scripts/items/bountymode_upgrades.txt";
-	}
-#endif // STAGING_ONLY
 
 	LoadUpgradesFileFromPath( pszPath );
 }
@@ -171,7 +165,7 @@ void CMannVsMachineUpgradeManager::LoadUpgradesFileFromPath( const char *pszPath
 	}
 
 	KeyValues *pKV = new KeyValues( "Upgrades" );
-	if ( !pKV->LoadFromFile( filesystem, pszPath, "MOD" ) )
+	if ( !pKV->LoadFromFile( filesystem, pszPath, "GAME" ) )
 	{
 		Warning( "Can't open %s\n", pszPath );
 		pKV->deleteThis();

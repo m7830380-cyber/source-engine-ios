@@ -19,9 +19,6 @@
 #define WAR_KILL_POINTS 2
 #define WAR_WIN_POINTS 20
 
-#ifdef STAGING_ONLY
-ConVar tf_commit_every_war_point( "tf_commit_every_war_point", "0" );
-#endif
 
 
 CTFWarTrackerManager* GetWarTrackerManager()
@@ -162,10 +159,4 @@ void CTFWarTracker::FireGameEvent( IGameEvent *pEvent )
 		m_ProtoData.set_score( m_ProtoData.score() + nDelta );
 	}
 
-#ifdef STAGING_ONLY
-	if ( tf_commit_every_war_point.GetBool() )
-	{
-		CommitChangesToDB();
-	}
-#endif
 }

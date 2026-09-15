@@ -125,13 +125,17 @@ void CCaptureZone::PlayerDestructionThink( void )
 				CTFPlayer *pTFPlayer = ToTFPlayer( pEnt );
 				if ( pTFPlayer && pTFPlayer->IsAlive() )
 				{
-					if ( pTFPlayer->GetTeamNumber() == TF_TEAM_RED )
+					bool bHidden = ( pTFPlayer->m_Shared.IsStealthed() || pTFPlayer->m_Shared.InCond( TF_COND_DISGUISED ) || pTFPlayer->m_Shared.InCond( TF_COND_DISGUISING ) );
+					if ( !bHidden )
 					{
-						bRedInZone = true;
-					}
-					else if ( pTFPlayer->GetTeamNumber() == TF_TEAM_BLUE )
-					{
-						bBlueInZone = true;
+						if ( pTFPlayer->GetTeamNumber() == TF_TEAM_RED )
+						{
+							bRedInZone = true;
+						}
+						else if ( pTFPlayer->GetTeamNumber() == TF_TEAM_BLUE )
+						{
+							bBlueInZone = true;
+						}
 					}
 				}
 			}
@@ -345,7 +349,7 @@ void CCaptureZone::Capture( CBaseEntity *pOther )
 		}
 		else if ( !TFGameRules()->CanFlagBeCaptured( pOther ) && TFGameRules()->IsPowerupMode() )
 		{ 
-			ClientPrint( pPlayer, HUD_PRINTCENTER, "Cannot capture - your flag is not at base!" );
+			ClientPrint( pPlayer, HUD_PRINTCENTER, "#TF_CTF_Cannot_Capture" );
 		}
 	}
 }
@@ -535,10 +539,6 @@ void CFlagDetectionZone::EndTouch( CBaseEntity *pOther )
 			}
 			else if ( hOther->IsPlayer() && !hOther->IsAlive() )
 			{
-#ifdef STAGING_ONLY
-				AssertMsg( false, "Dead player [%s] is still touching this trigger at [%f %f %f]", hOther->GetEntityName().ToCStr(), XYZ( hOther->GetAbsOrigin() ) );
-				Warning( "Dead player [%s] is still touching this trigger at [%f %f %f]", hOther->GetEntityName().ToCStr(), XYZ( hOther->GetAbsOrigin() ) );
-#endif
 				m_hTouchingEntities.Remove( i );
 			}
 			else
@@ -582,10 +582,6 @@ void CFlagDetectionZone::InputTest( inputdata_t &inputdata )
 		}
 		else if ( hOther->IsPlayer() && !hOther->IsAlive() )
 		{
-#ifdef STAGING_ONLY
-			AssertMsg( false, "Dead player [%s] is still touching this trigger at [%f %f %f]", hOther->GetEntityName().ToCStr(), XYZ( hOther->GetAbsOrigin() ) );
-			Warning( "Dead player [%s] is still touching this trigger at [%f %f %f]", hOther->GetEntityName().ToCStr(), XYZ( hOther->GetAbsOrigin() ) );
-#endif
 			m_hTouchingEntities.Remove( i );
 		}
 	}

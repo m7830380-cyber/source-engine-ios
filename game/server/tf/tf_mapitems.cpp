@@ -2715,7 +2715,7 @@ void CTFGoalItem::item_tfgoal_touch( CBaseEntity *pOther )
 	}
 	m_flDroppedAt = 0;
 
-	ASSERT( pOther != GetOwnerEntity() );	// There is no way in hell this should ever happen, and yet it still does.
+	ASSERT( pOther != GetOwnerEntity() );	// There is no way this should ever happen, and yet it still does.
 
 	// Prevent picking up flags through thin walls
 	trace_t tr;

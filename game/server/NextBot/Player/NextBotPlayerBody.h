@@ -112,6 +112,8 @@ public:
 	virtual unsigned int GetSolidMask( void ) const;				// return the bot's collision mask (hack until we get a general hull trace abstraction here or in the locomotion interface)
 
 	virtual CBaseEntity *GetEntity( void );					// get the entity
+
+	CBaseEntity *GetLookAtSubject( void ) const;
 private:
 	CBasePlayer *m_player;
 	

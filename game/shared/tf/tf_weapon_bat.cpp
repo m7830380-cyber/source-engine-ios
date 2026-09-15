@@ -121,10 +121,6 @@ PRECACHE_WEAPON_REGISTER( tf_projectile_ball_ornament );
 
 #define TF_WEAPON_BALL_ORNAMENT_VM_MODEL		"models/weapons/c_models/c_xms_festive_ornament.mdl"
 #define TF_WEAPON_BALL_ORNAMENT_MODEL			"models/weapons/c_models/c_xms_festive_ornament.mdl"
-
-#if defined( GAME_DLL )
-//ConVar tf_scout_stunball_base_duration( "tf_scout_stunball_base_duration", "6.0", FCVAR_DEVELOPMENTONLY );
-#endif
 // -- CTFBall_Ornament
 
 
@@ -183,6 +179,9 @@ void CTFBat::PlayDeflectionSound( bool bPlayer )
 // CTFBat_Wood
 //
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 CTFBat_Wood::CTFBat_Wood()
 {
 	m_iEnemyBallID = 0;
@@ -282,6 +281,8 @@ void CTFBat_Wood::SecondaryAttack( void )
 			pPlayer->RemoveInvisibility();
 		}
 #endif // GAME_DLL
+
+		pPlayer->m_Shared.OnAttack();
 	}
 }
 
@@ -598,6 +599,9 @@ bool CTFBat_Wood::SendWeaponAnim( int iActivity )
 // SERVER ONLY --
 #ifdef GAME_DLL
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 CTFStunBall::CTFStunBall()
 {
 	s_iszTrainName = AllocPooledString( "models/props_vehicles/train_enginecar.mdl" );
@@ -701,7 +705,7 @@ void CTFStunBall::Explode( trace_t *pTrace, int bitsDamageType )
 //-----------------------------------------------------------------------------
 // Purpose: Stun the person we smashed into.
 //-----------------------------------------------------------------------------
-#define FLIGHT_TIME_TO_MAX_STUN	1.f
+#define FLIGHT_TIME_TO_MAX_STUN	0.8f
 void CTFStunBall::ApplyBallImpactEffectOnVictim( CBaseEntity *pOther )
 {
 	if ( !pOther || !pOther->IsPlayer() )
@@ -723,42 +727,41 @@ void CTFStunBall::ApplyBallImpactEffectOnVictim( CBaseEntity *pOther )
 		return;
 
 	// We have a more intense stun based on our travel time.
-	float flLifeTime = MIN( gpGlobals->curtime - m_flCreationTime, FLIGHT_TIME_TO_MAX_STUN );
+	float flLifeTime = Min( gpGlobals->curtime - m_flCreationTime, FLIGHT_TIME_TO_MAX_STUN );
 	float flLifeTimeRatio = flLifeTime / FLIGHT_TIME_TO_MAX_STUN;
 	if ( flLifeTimeRatio > 0.1f )
 	{
-
-		float flStun = 0.5f;
-		float flStunDuration = tf_scout_stunball_base_duration.GetFloat() * flLifeTimeRatio;
-		if ( IsCritical() )
-			flStunDuration += 2.0; // Extra two seconds of effect time if we're a critical hit.
-		int iStunFlags = TF_STUN_LOSER_STATE | TF_STUN_MOVEMENT;
-		if ( flLifeTimeRatio >= 1.f )
+		bool bMax = flLifeTimeRatio >= 1.f;
+		int iStunFlags = ( bMax ) ? TF_STUN_SPECIAL_SOUND | TF_STUN_MOVEMENT : TF_STUN_SOUND | TF_STUN_MOVEMENT;
+		float flStunAmount = 0.5f;
+		float flStunDuration = Max( 2.f, tf_scout_stunball_base_duration.GetFloat() * flLifeTimeRatio );
+		if ( bMax )
 		{
 			flStunDuration += 1.0;
-			iStunFlags = TF_STUN_CONTROLS;
-			iStunFlags |= TF_STUN_SPECIAL_SOUND;
-			CTF_GameStats.Event_PlayerStunBall( pOwner, true );
-		}
-		else
-		{
-			CTF_GameStats.Event_PlayerStunBall( pOwner, false );
 		}
 
-		// Adjust stun amount and flags if we're hitting a boss or scaled enemy
-		if ( TFGameRules() && TFGameRules()->GameModeUsesMiniBosses() && ( pPlayer->IsMiniBoss() || pPlayer->GetModelScale() > 1.0f ) )
+		// MvM bots
+		if ( TFGameRules() && TFGameRules()->IsMannVsMachineMode() && pPlayer->IsBot() )
 		{
-			// If max range, freeze them in place - otherwise adjust it based on distance
-			flStun = flLifeTimeRatio >= 1.f ? 1.f : RemapValClamped( flLifeTimeRatio, 0.1f, 0.99f, 0.5f, 0.75 );
-			iStunFlags = flLifeTimeRatio >= 1.f ? ( TF_STUN_SPECIAL_SOUND | TF_STUN_MOVEMENT ) : TF_STUN_MOVEMENT; 
+			// Distance mod
+			flStunAmount = ( bMax ) ? 1.f : RemapValClamped( flLifeTimeRatio, 0.1f, 0.99f, 0.5f, 0.75 );
+
+			bool bBoss = TFGameRules() && TFGameRules()->GameModeUsesMiniBosses() && ( pPlayer->IsMiniBoss() || pPlayer->GetModelScale() > 1.0f );
+			if ( bMax && !bBoss )
+			{
+				iStunFlags |= TF_STUN_CONTROLS; 
+			}
 		}
+
+		CTF_GameStats.Event_PlayerStunBall( pOwner, ( bMax ) ? true : false );
 
 		if ( pPlayer->GetWaterLevel() != WL_Eyes )
 		{
-			pPlayer->m_Shared.StunPlayer( flStunDuration, flStun, iStunFlags, pOwner );
+			pPlayer->m_Shared.StunPlayer( flStunDuration, flStunAmount, iStunFlags, pOwner );
+
 			if ( pPlayer->GetUserID() == m_iOriginalOwnerID )
 			{
-				// Holy crap! We just stunned a scout with their own ball.
+				// We just stunned a scout with their own ball.
 				// Give the player an achievement for this.
 				if ( pOwner->IsPlayerClass( TF_CLASS_SCOUT ) )
 				{
@@ -777,7 +780,7 @@ void CTFStunBall::ApplyBallImpactEffectOnVictim( CBaseEntity *pOther )
 	info.SetAttacker( GetOwnerEntity() );
 	info.SetInflictor( pInflictor ); 
 	info.SetWeapon( pInflictor );
-	info.SetDamage( GetDamage() );
+	info.SetDamage( ( flLifeTimeRatio >= 1.f ) ? GetDamage() * 1.5f : GetDamage() );
 	info.SetDamageCustom( TF_DMG_CUSTOM_BASEBALL );
 	info.SetDamageForce( GetDamageForce() );
 	info.SetDamagePosition( GetAbsOrigin() );
@@ -798,11 +801,17 @@ void CTFStunBall::ApplyBallImpactEffectOnVictim( CBaseEntity *pOther )
 	m_bTouched = true;
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 float CTFStunBall::GetDamage( void )
 {
 	return sv_proj_stunball_damage.GetFloat();
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 Vector CTFStunBall::GetDamageForce( void )
 {
 	Vector vecVelocity = GetAbsVelocity();
@@ -821,34 +830,12 @@ Vector CTFStunBall::GetDamageForce( void )
 //-----------------------------------------------------------------------------
 void CTFStunBall::PipebombTouch( CBaseEntity *pOther )
 {
+	if ( !ShouldBallTouch( pOther ) )
+		return;
+
 	CTFPlayer* pOwner = ToTFPlayer( GetOwnerEntity() );
 	if ( !pOwner )
 		return;
-
-	if ( !pOther || !pOther->IsSolid() || pOther->IsSolidFlagSet( FSOLID_VOLUME_CONTENTS ) )
-	{
-		pOwner->SpeakConceptIfAllowed( MP_CONCEPT_BALL_MISSED );
-		return;
-	}
-
-	// Go away if we're hit by a moving train.
-	if ( pOther->GetModelName() == s_iszTrainName && ( pOther->GetAbsVelocity().LengthSqr() > 1.0f ) )
-	{
-		UTIL_Remove( this );
-		return;
-	}
-
-	// Go away if we hit the skybox.
-	trace_t pTrace;
-	Vector velDir = GetAbsVelocity();
-	VectorNormalize( velDir );
-	Vector vecSpot = GetAbsOrigin() - velDir * 32;
-	UTIL_TraceLine( vecSpot, vecSpot + velDir * 64, MASK_SOLID, this, COLLISION_GROUP_NONE, &pTrace );
-	if ( pTrace.fraction < 1.0 && pTrace.surface.flags & SURF_SKY )
-	{
-		UTIL_Remove( this );
-		return;
-	}
 
 	// Ignore things that aren't players.
 	if ( !pOther->IsPlayer() )
@@ -940,6 +927,53 @@ void CTFStunBall::RemoveBallTrail( void )
 			SetContextThink( &CTFStunBall::RemoveBallTrail, gpGlobals->curtime + 0.05, "FadeBallTrail");
 		}
 	}
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: Basic touch screening
+//-----------------------------------------------------------------------------
+bool CTFStunBall::ShouldBallTouch( CBaseEntity *pOther )
+{
+	CTFPlayer* pOwner = ToTFPlayer( GetOwnerEntity() );
+	if ( !pOwner )
+		return false;
+
+	Assert( pOther );
+	if ( !pOther ||
+		 !pOther->IsSolid() ||
+		 pOther->IsSolidFlagSet( FSOLID_VOLUME_CONTENTS ) ||
+		 pOther->GetCollisionGroup() == TFCOLLISION_GROUP_RESPAWNROOMS )
+	{
+		pOwner->SpeakConceptIfAllowed( MP_CONCEPT_BALL_MISSED );
+		return false;
+	}
+
+	if ( pOther->IsFuncLOD() || pOther->IsBaseProjectile() )
+		return false;
+
+	// Go away if we hit the skybox.
+	const trace_t *pTrace = &CBaseEntity::GetTouchTrace();
+	if ( pTrace->surface.flags & SURF_SKY )
+	{
+		UTIL_Remove( this );
+		return false;
+	}
+
+	// Pass through ladders
+	if ( pTrace->surface.flags & CONTENTS_LADDER )
+		return false;
+
+	if ( !ShouldTouchNonWorldSolid( pOther, pTrace ) )
+		return false;
+
+	// Go away if we're hit by a moving train.
+	if ( pOther->GetModelName() == s_iszTrainName && ( pOther->GetAbsVelocity().LengthSqr() > 1.0f ) )
+	{
+		UTIL_Remove( this );
+		return false;
+	}
+
+	return true;
 }
 
 // -- SERVER ONLY
@@ -1183,30 +1217,19 @@ void CTFBall_Ornament::ApplyBallImpactEffectOnVictim( CBaseEntity *pOther )
 	m_bTouched = true;
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFBall_Ornament::PipebombTouch( CBaseEntity *pOther )
 {
-	CTFPlayer* pOwner = ToTFPlayer( GetOwnerEntity() );
-	if ( !pOwner )
+	if ( !ShouldBallTouch( pOther ) )
 		return;
 
-	// Go away if we're hit by a moving train.
-	if ( pOther->GetModelName() == s_iszTrainName && ( pOther->GetAbsVelocity().LengthSqr() > 1.0f ) )
-	{
-		UTIL_Remove( this );
-		return;
-	}
-
-	// Go away if we hit the skybox.
 	trace_t pTrace;
 	Vector velDir = GetAbsVelocity();
 	VectorNormalize( velDir );
 	Vector vecSpot = GetAbsOrigin() - velDir * 32;
 	UTIL_TraceLine( vecSpot, vecSpot + velDir * 64, MASK_SOLID, this, COLLISION_GROUP_NONE, &pTrace );
-	if ( pTrace.fraction < 1.0 && pTrace.surface.flags & SURF_SKY )
-	{
-		UTIL_Remove( this );
-		return;
-	}
 
 	if ( pOther == GetThrower() )
 		return;
@@ -1220,6 +1243,9 @@ void CTFBall_Ornament::PipebombTouch( CBaseEntity *pOther )
 	}
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFBall_Ornament::VPhysicsCollision( int index, gamevcollisionevent_t *pEvent )
 {
 	BaseClass::VPhysicsCollision( index, pEvent );
@@ -1239,6 +1265,9 @@ void CTFBall_Ornament::VPhysicsCollision( int index, gamevcollisionevent_t *pEve
 	}
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFBall_Ornament::VPhysicsCollisionThink( void )
 {
 	trace_t pTrace;
@@ -1250,6 +1279,9 @@ void CTFBall_Ornament::VPhysicsCollisionThink( void )
 	Explode( &pTrace, DMG_BLAST|DMG_PREVENT_PHYSICS_FORCE );
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFBall_Ornament::Explode( trace_t *pTrace, int bitsDamageType )
 {
 	// Create smashed glass particles when we explode
@@ -1287,8 +1319,6 @@ void CTFBall_Ornament::Explode( trace_t *pTrace, int bitsDamageType )
 
 	UTIL_Remove( this );
 }
-
-
 
 #endif
 

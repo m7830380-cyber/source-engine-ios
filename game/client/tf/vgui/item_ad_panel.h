@@ -16,6 +16,7 @@
 
 using namespace vgui;
 class CExButton;
+class CItemModelPanelToolTip;
 
 class CBaseAdPanel : public EditablePanel
 {
@@ -49,12 +50,22 @@ public:
 	virtual void OnTick() OVERRIDE;
 	virtual void OnCommand( const char *command ) OVERRIDE;
 
-private:
+	virtual const CTFItemDefinition* GetItemDef() const;
+	const CEconItemView& GetItem() const { return m_item; }
+	void SetItemTooltip( CItemModelPanelToolTip* pItemToolTip );
 
-	const CTFItemDefinition* GetItemDef() const;
+protected:
+	CEconItemView m_item;
+
+private: 
+
+	virtual void SetupItemPanel();
+
 	bool m_bShowMarketButton;
-
-	item_definition_index_t m_ItemDefIndex;
+	bool m_bShowItemName = true;
+	bool m_bShowAdText = true;
+	bool m_bShowBackground = true;
+	bool m_bLoadingControls = false;
 };
 
 class CCyclingAdContainerPanel : public EditablePanel
@@ -70,7 +81,7 @@ public:
 	virtual void OnCommand( const char *command ) OVERRIDE;
 	virtual void OnThink() OVERRIDE;
 
-	void SetItemKVs( KeyValues* pKVItems );
+	bool BSetItemKVs( KeyValues* pKVItems );
 
 private:
 
@@ -89,10 +100,6 @@ private:
 
 	struct AdData_t
 	{
-		~AdData_t()
-		{
-			delete m_pAdPanel;
-		}
 		CBaseAdPanel* m_pAdPanel;
 		KeyValues* m_pSettingsKVs;
 	};

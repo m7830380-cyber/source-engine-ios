@@ -348,7 +348,7 @@ class CAchievementTFHeavy_KillUnderwater : public CBaseTFAchievement
 
 		if ( pAttacker == pLocalPlayer && pVictim != pLocalPlayer )
 		{
-			if ( pLocalPlayer->GetWaterLevel() >= WL_Eyes && pVictim->GetWaterLevel() >= WL_Waist )
+			if ( pLocalPlayer->GetWaterLevel() >= WL_Eyes && pVictim->GetWaterLevel() >= WL_Eyes )
 			{
 				IncrementCount();
 			}

@@ -33,10 +33,15 @@ public:
 	virtual void OnKeyCodePressed(vgui::KeyCode code) OVERRIDE;
 	virtual void OnCommand( const char *command ) OVERRIDE;
 
+	static bool TypeCanHandleMatchGroup( ETFMatchGroup eMatchGroup );
+	virtual bool CanHandleMatchGroup( ETFMatchGroup eMatchGroup ) const OVERRIDE
+	{
+		return TypeCanHandleMatchGroup( eMatchGroup );
+	}
+
 private:
 
 	virtual const char* GetResFile() const OVERRIDE { return "Resource/UI/LobbyContainerFrame_MvM.res"; }
-	virtual TF_MatchmakingMode GetHandledMode() const { return TF_Matchmaking_MVM; }
 	virtual bool VerifyPartyAuthorization() const OVERRIDE;
 	virtual void WriteControls() OVERRIDE;
 	virtual void HandleBackPressed() OVERRIDE;

@@ -88,7 +88,7 @@ public:
 	virtual void		LaunchBall( void );
 	void				LaunchBallThink( void );
 
-	virtual float		InternalGetEffectBarRechargeTime( void ) { return 15.0; }
+	virtual float		InternalGetEffectBarRechargeTime( void ) { return 10.f; }
 	virtual int			GetEffectBarAmmo( void ) { return TF_AMMO_GRENADES1; }
 
 #ifdef GAME_DLL
@@ -162,7 +162,8 @@ public:
 	virtual float		GetShakeRadius( void )				{ return 0.0; }
 	void				RemoveBallTrail( void );
 	
-	virtual bool		IsDestroyable( void ) OVERRIDE { return false; }
+	virtual bool		IsDestroyable( bool bOrbAttack = false ) OVERRIDE { return ( !bOrbAttack ? false : true ); }
+	virtual bool		ShouldBallTouch( CBaseEntity *pOther );
 
 	int					m_iOriginalOwnerID;
 

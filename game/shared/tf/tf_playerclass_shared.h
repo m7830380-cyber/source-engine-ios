@@ -53,9 +53,9 @@ public:
 #ifndef CLIENT_DLL
 	#define USE_CLASS_ANIMATIONS true
 	void		SetCustomModel( const char *pszModelName, bool isUsingClassAnimations = false );
-	void		SetCustomModelOffset( Vector &vecOffset )		{ m_vecCustomModelOffset = vecOffset; }
+	void		SetCustomModelOffset( const Vector &vecOffset )		{ m_vecCustomModelOffset = vecOffset; }
 	void		SetCustomModelRotates( bool bRotates )			{ m_bCustomModelRotates = bRotates; }
-	void		SetCustomModelRotation( QAngle &vecOffset )		{ m_angCustomModelRotation = vecOffset; m_bCustomModelRotationSet = true; }
+	void		SetCustomModelRotation( const QAngle &vecOffset )		{ m_angCustomModelRotation = vecOffset; m_bCustomModelRotationSet = true; }
 	void		ClearCustomModelRotation( void )				{ m_bCustomModelRotationSet = false; }
 	void		SetCustomModelVisibleToSelf( bool bVisible )	{ m_bCustomModelVisibleToSelf = bVisible; }
 #endif

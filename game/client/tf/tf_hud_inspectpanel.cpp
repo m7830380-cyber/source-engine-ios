@@ -22,6 +22,8 @@
 #include "view.h"
 #include "player_vs_environment/c_tf_upgrades.h"
 #include "tf_hud_inspectpanel.h"
+#include "clientmode_tf.h"
+#include "vguicenterprint.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
@@ -169,6 +171,12 @@ void CHudInspectPanel::UserCmd_InspectTarget( void )
 			// Inspect a player
 			else if ( pTargetPlayer && ( pTargetPlayer->GetTeamNumber() != TF_TEAM_PVE_INVADERS ) )
 			{
+				if ( !GetClientModeTFNormal()->BIsFriendOrPartyMember( pTargetPlayer ) )
+				{
+					internalCenterPrint->Print( "#TF_Invalid_Inspect_Target" );
+					return;
+				}
+				
 				pUpgradePanel->InspectUpgradesForPlayer( pTargetPlayer );
 			}
 			// Inspect self
@@ -235,7 +243,7 @@ C_TFPlayer *CHudInspectPanel::GetInspectTarget( C_TFPlayer *pLocalTFPlayer )
 			if ( pLocalTFPlayer->m_Shared.IsSpyDisguisedAsMyTeam( pTargetPlayer ) )
 			{
 				// Get the player that the spy is disguised as
-				C_TFPlayer *pDisguiseTarget = ToTFPlayer( pTargetPlayer->m_Shared.GetDisguiseTarget().Get() );
+				C_TFPlayer *pDisguiseTarget = pTargetPlayer->m_Shared.GetDisguiseTarget();
 				if ( pDisguiseTarget && pDisguiseTarget->GetPlayerClass()->GetClassIndex() == pTargetPlayer->m_Shared.GetDisguiseClass() )
 				{
 					// The spy is disguised as the same class as the target, so inspect the disguise target instead

@@ -40,13 +40,7 @@ public:
 
 	CTFBonesaw() {}
 	virtual void		Activate( void );
-	virtual int			GetWeaponID( void ) const			
-	{ 
-		const CEconItemView *pEconItemView = GetAttributeContainer()->GetItem();
-		if ( !V_strcmp( pEconItemView->GetItemDefinition()->GetDefinitionName(), "Harvester" ) )
-			return TF_WEAPON_HARVESTER_SAW;
-		return TF_WEAPON_BONESAW; 
-	}
+	virtual int			GetWeaponID( void ) const { return TF_WEAPON_BONESAW; }
 
 	virtual void		SecondaryAttack();
 
@@ -55,13 +49,14 @@ public:
 
 	virtual void		DoMeleeDamage( CBaseEntity* ent, trace_t& trace ) OVERRIDE;
 	
-	float				GetProgress( void ) { return 0; }
-	int					GetCount( void );
+	float				GetProgress( void ) { return 0.f; }
 	const char*			GetEffectLabelText( void ) { return "#TF_ORGANS"; }
 
 	float				GetBoneSawSpeedMod( void );
 
-#ifdef CLIENT_DLL
+#ifdef GAME_DLL
+	virtual void		OnPlayerKill( CTFPlayer *pVictim, const CTakeDamageInfo &info ) OVERRIDE;
+#else
 	virtual void		OnDataChanged( DataUpdateType_t updateType );
 	void				UpdateChargePoseParam( void );
 	virtual void		GetPoseParameters( CStudioHdr *pStudioHdr, float poseParameter[MAXSTUDIOPOSEPARAM] );

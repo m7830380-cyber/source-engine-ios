@@ -6,11 +6,7 @@
 // only be included ONCE on the client, and ONCE on the GC.
 //
 
-#ifdef GC
-	#define TF2SCORECONVAR(name, defaultval, desc) GCConVar name(#name, defaultval, FCVAR_REPLICATED, desc)
-#else
 	#define TF2SCORECONVAR(name, defaultval, desc) ConVar name(#name, defaultval, FCVAR_NONE, desc)
-#endif
 
 TF2SCORECONVAR(tf_matchmaking_numbers_serverfull_headroom, "1", "Scoring will consider the server 'full' when this many slots are available" );
 TF2SCORECONVAR(tf_matchmaking_numbers_valve_bonus_hrs_a, "8.00", "Valve server scoring bonus: hours played A" );

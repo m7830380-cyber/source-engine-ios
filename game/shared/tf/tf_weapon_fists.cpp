@@ -233,3 +233,30 @@ void CTFFists::OnEntityHit( CBaseEntity *pEntity, CTakeDamageInfo *info )
 	}
 }
 #endif
+
+void CTFFists::SetWeaponVisible( bool visible )
+{ 
+	if ( visible )	// intentionally never hiding the fists
+	{ 
+		BaseClass::SetWeaponVisible( visible );
+	} 
+}  
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+bool CTFFists::Deploy( void )
+{
+// #ifdef GAME_DLL
+// 	if ( GetFistType() == FISTTYPE_GRU )
+// 	{
+// 		CTFPlayer *pTFOwner = GetTFPlayerOwner();
+// 		if ( pTFOwner )
+// 		{
+			// TODO: Penalty for spam-equipping gloves
+// 		}
+// 	}
+// #endif
+
+	return BaseClass::Deploy();
+}

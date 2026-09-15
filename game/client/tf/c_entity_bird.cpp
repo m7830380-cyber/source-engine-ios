@@ -7,6 +7,7 @@
 #include "cbase.h"
 #include "tf_gamerules.h"
 #include "c_baseanimating.h"
+#include "usermessages.h"
 
 #define ENTITY_FLYING_BIRD_MODEL	"models/props_forest/dove.mdl"
 
@@ -40,7 +41,7 @@ private:
 //-----------------------------------------------------------------------------
 // Purpose: Server message that tells us to create a dove
 //-----------------------------------------------------------------------------
-void __MsgFunc_SpawnFlyingBird( bf_read &msg )
+USER_MESSAGE( SpawnFlyingBird )
 {
 	Vector vecPos;
 	msg.ReadBitVec3Coord( vecPos );

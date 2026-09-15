@@ -17,6 +17,9 @@
 #include "props.h"
 #include "filters.h"
 #include "NextBotUtil.h"
+#include "doors.h"
+#include "props.h"
+#include "BasePropDoor.h"
 
 // NOTE: nav_debug_blocked ConVar is also use for debugging NAV_MESH_NAV_BLOCKER and TF_NAV_BLOCKED...
 
@@ -550,6 +553,72 @@ void CTFNavMesh::OnRoundRestart( void )
 	DevMsg( "CTFNavMesh: %d nav areas in mesh.\n", GetNavAreaCount() );
 }
 
+//--------------------------------------------------------------------------------------------------------
+class DoorSetter
+{
+	CBaseEntity *m_door;
+public:
+	DoorSetter( CBaseEntity *door )
+	{
+		m_door = door;
+		m_count = 0;
+	}
+
+	bool operator()( CNavArea *area )
+	{
+		CTFNavArea *doorArea = static_cast< CTFNavArea * >(area);
+		doorArea->OnDoorCreated( m_door );
+		++m_count;
+		return true;
+	}
+
+	int m_count;
+};
+
+
+//--------------------------------------------------------------------------------------------------------
+/**
+ * Invoked when a door is created
+ */
+void CTFNavMesh::OnDoorCreated( CBaseEntity *door )
+{
+	Extent doorExtent;
+
+	CBaseDoor *funcDoor = dynamic_cast< CBaseDoor * >(door);
+	if ( funcDoor )
+	{
+		QAngle savedAngles = funcDoor->GetLocalAngles();
+		Vector savedOrigin = funcDoor->GetLocalOrigin();
+		TOGGLE_STATE savedToggleState = funcDoor->m_toggle_state;
+
+		// Closed extent
+		funcDoor->SetToggleState( TS_AT_BOTTOM );
+		door->CollisionProp()->WorldSpaceAABB( &doorExtent.lo, &doorExtent.hi );
+
+		funcDoor->SetToggleState( savedToggleState );
+		funcDoor->SetLocalOrigin( savedOrigin );
+		funcDoor->SetLocalAngles( savedAngles );
+	}
+	else
+	{
+		CBasePropDoor *propDoor = dynamic_cast< CBasePropDoor * >(door);
+		if ( propDoor )
+		{
+			propDoor->ComputeDoorExtent( &doorExtent, CBasePropDoor::DOOR_EXTENT_CLOSED );
+			doorExtent.Encompass( doorExtent );
+		}
+		else
+		{
+			Assert( false );
+			return;
+		}
+	}
+
+	doorExtent.hi.z -= StepHeight;
+	doorExtent.lo.z -= StepHeight;	// in case the areas are sitting *just* below the door
+	DoorSetter setter( door );
+	ForAllAreasOverlappingExtent( setter, doorExtent );
+}
 
 //-------------------------------------------------------------------------
 /**

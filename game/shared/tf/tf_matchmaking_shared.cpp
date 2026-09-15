@@ -9,11 +9,6 @@
 #include "tf_match_description.h"
 #include "tf_ladder_data.h"
 
-#ifdef GC_DLL
-#include "tf_lobbymanager.h"
-#include "tf_partymanager.h"
-#include "tf_party.h"
-#endif
 
 #ifdef CLIENT_DLL
 #include "tf_gc_client.h"
@@ -30,43 +25,57 @@ const char *s_pszMatchGroups[] =
 {
 	"MatchGroup_MvM_Practice",
 	"MatchGroup_MvM_MannUp",
-	
+
 	"MatchGroup_Ladder_6v6",
 	"MatchGroup_Ladder_9v9",
 	"MatchGroup_Ladder_12v12",
-	
+
 	"MatchGroup_Casual_6v6",
 	"MatchGroup_Casual_9v9",
 	"MatchGroup_Casual_12v12",
+
+	"MatchGroup_Competitive_Event",
 };
 
-COMPILE_TIME_ASSERT( ARRAYSIZE( s_pszMatchGroups ) == k_nMatchGroup_Count );
+COMPILE_TIME_ASSERT( ARRAYSIZE( s_pszMatchGroups ) == ETFMatchGroup_ARRAYSIZE );
 
-#ifdef GC_DLL
-void On6v6MatchSizeChanged( IConVar *pConVar, const char *pOldString, float flOldValue )
+const char *GetMatchGroupLocalizationName( ETFMatchGroup eMatchGroup )
 {
-	if ( !GGCBase()->BIsInLogonSurge() && !GGCTF()->GetIsShuttingDown() && TFLobbyManager()->GetMatchmaker() )
+	if ( eMatchGroup < 0 || (unsigned int)eMatchGroup >= ARRAYSIZE( s_pszMatchGroups ) )
 	{
-		TFLobbyManager()->GetMatchmaker()->timeRemove6v6LadderGroupsExpire = CRTime::RTime32DateAdd( CRTime::RTime32TimeCur(), 10.f, k_ETimeUnitSecond );
+		return "MatchGroup_UNKNOWN";
 	}
+	return s_pszMatchGroups[ eMatchGroup ];
 }
-#endif
 
-#if !defined GC_DLL
+// These are the official names of the leaderboards in the steam API.  Changing/adding these requires publishing the
+// same changes on the partner site.
+//
+// --> Update EMatchGroupLeaderboard if you change this
+const char *g_szMatchGroupLeaderboardNames[] =
+{
+	"tf2_ladder_6v6",
+	"tf2_casual_12v12",
+};
+COMPILE_TIME_ASSERT( ARRAYSIZE( g_szMatchGroupLeaderboardNames ) == k_eMatchGroupLeaderboard_Count );
+
+const char *GetMatchGroupLeaderboardName( EMatchGroupLeaderboard eMatchGroupLeaderboard )
+{
+	if ( eMatchGroupLeaderboard < 0 || eMatchGroupLeaderboard >= ARRAYSIZE( g_szMatchGroupLeaderboardNames ) )
+	{
+		AssertMsg( false, "Bogus value passed to GetMatchGroupLeaderboardName" );
+		return nullptr;
+	}
+	return g_szMatchGroupLeaderboardNames[ eMatchGroupLeaderboard ];
+}
+
 	#define GCConVar ConVar
 	#define FCVAR_MATCHSIZE_THING ( FCVAR_REPLICATED )
-#else
-	#define FCVAR_MATCHSIZE_THING 0
-#endif
 
 GCConVar tf_mm_match_size_mvm( "tf_mm_match_size_mvm", "6", FCVAR_MATCHSIZE_THING,
                                "How many players in an MvM matchmade group?" );
 GCConVar tf_mm_match_size_ladder_6v6( "tf_mm_match_size_ladder_6v6", "12", FCVAR_MATCHSIZE_THING,
-                                      "Number of players required to play a 6v6 ladder game.", true, 1, true, 12
-#ifdef GC_DLL
-									  , On6v6MatchSizeChanged
-#endif
-									  );
+                                      "Number of players required to play a 6v6 ladder game.", true, 1, true, 12 );
 
 GCConVar tf_mm_match_size_ladder_9v9( "tf_mm_match_size_ladder_9v9", "18", FCVAR_MATCHSIZE_THING,
                                       "Number of players required to play a 9v9 ladder game." );
@@ -79,7 +88,7 @@ GCConVar tf_mm_match_size_ladder_12v12_minimum( "tf_mm_match_size_ladder_12v12_m
 //-----------------------------------------------------------------------------
 // Purpose: Init internal bitvec with ints from the protobuf message
 //-----------------------------------------------------------------------------
-CCasualCriteriaHelper::CCasualCriteriaHelper( const CMsgCasualMatchmakingSearchCriteria& criteria )
+CCasualCriteriaHelper::CCasualCriteriaHelper( const CTFCasualMatchCriteria& criteria )
 {
 	m_mapsBits.Resize( GetItemSchema()->GetMasterMapsList().Count(), true );
 	Assert( m_mapsBits.GetNumDWords() >= criteria.selected_maps_bits_size() );
@@ -187,9 +196,9 @@ bool CCasualCriteriaHelper::IsValid() const
 //-----------------------------------------------------------------------------
 // Purpose: Turn helper back into protobuf message
 //-----------------------------------------------------------------------------
-CMsgCasualMatchmakingSearchCriteria CCasualCriteriaHelper::GetCasualCriteria() const
+CTFCasualMatchCriteria CCasualCriteriaHelper::GetCasualCriteria() const
 {
-	CMsgCasualMatchmakingSearchCriteria outCriteria;
+	CTFCasualMatchCriteria outCriteria;
 	for( int i=0; i < m_mapsBits.GetNumDWords(); ++i )
 	{
 		outCriteria.add_selected_maps_bits( m_mapsBits.GetDWord( i ) );
@@ -201,7 +210,7 @@ CMsgCasualMatchmakingSearchCriteria CCasualCriteriaHelper::GetCasualCriteria() c
 //-----------------------------------------------------------------------------
 // Purpose: Intersection of this criteria and another
 //-----------------------------------------------------------------------------
-void CCasualCriteriaHelper::Intersect( const CMsgCasualMatchmakingSearchCriteria& otherCriteria )
+void CCasualCriteriaHelper::Intersect( const CTFCasualMatchCriteria& otherCriteria )
 {
 	CCasualCriteriaHelper otherHelper( otherCriteria );
 	m_mapsBits.And( otherHelper.m_mapsBits, &m_mapsBits );
@@ -289,20 +298,47 @@ bool CMvMMissionSet::IsEmpty() const
 	return ( m_bits == 0 );
 }
 
-const char *GetMatchGroupName( EMatchGroup eMatchGroup )
+ETFMatchGroup ETFMatchGroup_FuzzyParse( const char *pArg )
+{
+	// Numeric?
+	int nMatchGroupID = -1;
+	if ( sscanf( pArg, "%d", &nMatchGroupID ) == V_strlen( pArg ) )
+	{
+		if ( !ETFMatchGroup_IsValid( nMatchGroupID ) )
+			{ return k_eTFMatchGroup_Invalid; }
+
+		return (ETFMatchGroup)nMatchGroupID;
+	}
+
+	// Non-numeric, try as enum value (e.g. "k_eTFMatchGroup_Foo")
+	ETFMatchGroup eMatchGroup;
+	if ( ETFMatchGroup_Parse( pArg, &eMatchGroup ) )
+		{ return eMatchGroup; }
+
+	// Try prepending k_eTFMatchGroup_ so you could do e.g. "Casual_12v12"
+	if ( ETFMatchGroup_Parse( CFmtStr( "k_eTFMatchGroup_%s", pArg ).Get(), &eMatchGroup ) )
+		{ return eMatchGroup; }
+
+	return k_eTFMatchGroup_Invalid;
+}
+
+const char *GetMatchGroupName( ETFMatchGroup eMatchGroup )
 {
 	switch ( eMatchGroup )
 	{
-		case k_nMatchGroup_Invalid: return "(Invalid)";
-		case k_nMatchGroup_MvM_Practice: return "MvM Practice";
-		case k_nMatchGroup_MvM_MannUp: return "MvM MannUp";
-		case k_nMatchGroup_Ladder_6v6: return "6v6 Ladder Match";
-		case k_nMatchGroup_Ladder_9v9: return "9v9 Ladder Match";
-		case k_nMatchGroup_Ladder_12v12: return "12v12 Ladder Match";
-		case k_nMatchGroup_Casual_6v6: return "6v6 Casual Match";
-		case k_nMatchGroup_Casual_9v9: return "9v9 Casual Match";
-		case k_nMatchGroup_Casual_12v12: return "12v12 Casual Match";
+		case k_eTFMatchGroup_Invalid: return "(Invalid)";
+		case k_eTFMatchGroup_MvM_Practice: return "MvM Practice";
+		case k_eTFMatchGroup_MvM_MannUp: return "MvM MannUp";
+		case k_eTFMatchGroup_Ladder_6v6: return "6v6 Ladder Match";
+		case k_eTFMatchGroup_Ladder_9v9: return "9v9 Ladder Match";
+		case k_eTFMatchGroup_Ladder_12v12: return "12v12 Ladder Match";
+		case k_eTFMatchGroup_Casual_6v6: return "6v6 Casual Match";
+		case k_eTFMatchGroup_Casual_9v9: return "9v9 Casual Match";
+		case k_eTFMatchGroup_Casual_12v12: return "12v12 Casual Match";
+		case k_eTFMatchGroup_Event_Placeholder: return "12v12 Competitive Event Match";
 	}
+	// Update this list if you added more! ^
+	COMPILE_TIME_ASSERT( k_eTFMatchGroup_Event_Placeholder == ETFMatchGroup_MAX );
 
 	AssertMsg1( false, "Invalid match group %d", eMatchGroup );
 	return "(Invalid match group)";

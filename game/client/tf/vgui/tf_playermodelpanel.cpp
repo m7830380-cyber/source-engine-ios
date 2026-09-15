@@ -34,17 +34,31 @@
 
 DECLARE_BUILD_FACTORY( CTFPlayerModelPanel );
 
+#define SCENE_LERP_TIME 0.1f
+
 char g_szSceneTmpName[256];
 
 static bool IsTauntItem( GameItemDefinition_t *pItemDef, const int iTeam, const int iClass, const char **ppSequence = NULL, const char **ppRequiredItem = NULL, const char **ppScene = NULL )
 {
+	if ( !IsTauntSlot( pItemDef->GetLoadoutSlot( iClass ) ) )
+	{
+		return false;
+	}
+
 	CTFTauntInfo *pTauntData = pItemDef->GetTauntData();
 	if ( pTauntData )
 	{
 		if ( ppScene )
 		{
-			int iTauntIndex = RandomInt( 0, pTauntData->GetIntroSceneCount( iClass ) - 1 );
-			*ppScene = pTauntData->GetIntroScene( iClass, iTauntIndex );
+			if ( pItemDef->GetDefinitionIndex() == 1183 )
+			{
+				*ppScene = "scenes/player/items/taunts/yeti_taunt.vcd";
+			}
+			else
+			{
+				int iTauntIndex = RandomInt( 0, pTauntData->GetIntroSceneCount( iClass ) - 1 );
+				*ppScene = pTauntData->GetIntroScene( iClass, iTauntIndex );
+			}
 		}
 
 		if ( ppRequiredItem )
@@ -125,7 +139,7 @@ CTFPlayerModelPanel::CTFPlayerModelPanel( vgui::Panel *pParent, const char *pNam
 	m_pszEyeGlowParticleName[0] = '\0';
 	m_bDrawActionSlotEffects = false;
 	m_bDrawTauntParticles = false;
-	m_bIsRobot = false;
+	m_strPlayerModelOverride = "";
 }
 
 //-----------------------------------------------------------------------------
@@ -181,13 +195,13 @@ void CTFPlayerModelPanel::ApplySettings( KeyValues *inResourceData )
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-void CTFPlayerModelPanel::SetToPlayerClass( int iClass, bool bIsRobot, bool bForceRefresh /*= false*/ )
+void CTFPlayerModelPanel::SetToPlayerClass( int iClass, bool bForceRefresh /*= false*/, const char *pszPlayerModelOverride /*= NULL*/, bool bOverrideUsesClassAnimations /*= false*/ )
 {
-	if ( m_bIsRobot != bIsRobot )
+	if ( !m_strPlayerModelOverride.IsEqual_CaseInsensitive( pszPlayerModelOverride ) )
 	{
 		bForceRefresh = true;
+		m_strPlayerModelOverride = pszPlayerModelOverride ? pszPlayerModelOverride : "";
 	}
-	m_bIsRobot = bIsRobot;
 
 	if ( m_iCurrentClassIndex == iClass && !bForceRefresh )
 		return;
@@ -202,17 +216,20 @@ void CTFPlayerModelPanel::SetToPlayerClass( int iClass, bool bIsRobot, bool bFor
 
 	if ( IsValidTFPlayerClass( m_iCurrentClassIndex ) )
 	{
-		if ( bIsRobot )
+		if ( !m_strPlayerModelOverride.IsEmpty() )
 		{
-			SetMDL( g_szPlayerRobotModels[ m_iCurrentClassIndex ] );
+			SetMDL( m_strPlayerModelOverride.Get() );
+			if ( bOverrideUsesClassAnimations )
+			{
+				HoldFirstValidItem( true );
+			}
 		}
 		else
 		{
 			TFPlayerClassData_t *pData = GetPlayerClassData( m_iCurrentClassIndex );
 			SetMDL( pData->GetModelName() );
+			HoldFirstValidItem();
 		}
-
-		HoldFirstValidItem();
 
 		// set custom class data
 		if ( m_customClassData.IsValidIndex( m_iCurrentClassIndex ) )
@@ -242,7 +259,7 @@ void CTFPlayerModelPanel::SetToPlayerClass( int iClass, bool bIsRobot, bool bFor
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-void CTFPlayerModelPanel::HoldFirstValidItem( void )
+void CTFPlayerModelPanel::HoldFirstValidItem( bool bPreserveModelOverride /*= false*/ )
 {
 	RemoveAdditionalModels();
 
@@ -270,7 +287,7 @@ void CTFPlayerModelPanel::HoldFirstValidItem( void )
 
 	if ( iDesiredSlot != -1 )
 	{
-		UpdateHeldItem( iDesiredSlot );
+		UpdateHeldItem( iDesiredSlot, bPreserveModelOverride );
 		return;
 	}
 
@@ -284,19 +301,19 @@ void CTFPlayerModelPanel::HoldFirstValidItem( void )
 
 	if ( pItem && pItem->IsValid() )
 	{
-		SwitchHeldItemTo( pItem );
+		SwitchHeldItemTo( pItem, bPreserveModelOverride );
 	}
 }
 
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-bool CTFPlayerModelPanel::HoldItemInSlot( int iSlot )
+bool CTFPlayerModelPanel::HoldItemInSlot( int iSlot, bool bPreserveModelOverride /*= false*/ )
 {
 	if ( m_iCurrentClassIndex == TF_CLASS_UNDEFINED )
 		return false;
 
-	return UpdateHeldItem( iSlot );
+	return UpdateHeldItem( iSlot, bPreserveModelOverride );
 }
 
 //-----------------------------------------------------------------------------
@@ -338,7 +355,7 @@ bool CTFPlayerModelPanel::HoldItem( int iItemNumber )
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-bool CTFPlayerModelPanel::UpdateHeldItem( int iDesiredSlot )
+bool CTFPlayerModelPanel::UpdateHeldItem( int iDesiredSlot, bool bPreserveModelOverride /*= false*/ )
 {
 	m_pHeldItem = NULL;
 
@@ -350,8 +367,7 @@ bool CTFPlayerModelPanel::UpdateHeldItem( int iDesiredSlot )
 		// Also ignore requests to equip non-wearables that are never actively equipped
 		if ( bIsTauntItem || ( !pItem->GetStaticData()->IsAWearable() && pItem->GetAnimationSlot() != -2 ) )
 		{
-			SwitchHeldItemTo( pItem );
-			m_pHeldItem = pItem;
+			SwitchHeldItemTo( pItem, bPreserveModelOverride );
 			return true;
 		}
 	}
@@ -359,12 +375,12 @@ bool CTFPlayerModelPanel::UpdateHeldItem( int iDesiredSlot )
 	// If we were trying to switch to a new item, and it's not valid, stick to our current
 	if ( iDesiredSlot != m_iCurrentSlotIndex )
 	{
-		UpdateHeldItem( m_iCurrentSlotIndex );
+		UpdateHeldItem( m_iCurrentSlotIndex, bPreserveModelOverride );
 		return false;
 	}
 
 	// We were trying to stay on the current weapon, and it's not valid. Find anything.
-	HoldFirstValidItem();
+	HoldFirstValidItem( bPreserveModelOverride );
 	return false;
 }
 
@@ -456,7 +472,7 @@ CChoreoScene *LoadSceneForModel( const char *filename, IChoreoEventCallback *pCa
 
 		if ( bSetEndTime )
 		{
-			*flSceneEndTime += 0.1f; // give time for lerp to idle pose
+			*flSceneEndTime += SCENE_LERP_TIME; // give time for lerp to idle pose
 		}
 	}
 
@@ -502,26 +518,45 @@ void CTFPlayerModelPanel::FireEvent( const char *pszEventName, const char *pszEv
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-void CTFPlayerModelPanel::SwitchHeldItemTo( CEconItemView *pItem )
+void CTFPlayerModelPanel::SwitchHeldItemTo( CEconItemView *pItem, bool bPreserveModelOverride /*= false*/ )
 {
 	m_nBody = 0;
 
 	ClearScene();
 
+	m_pHeldItem = pItem;
+	// force yeti model for yeti taunt item
+	bool bYeti = false;
+	if ( m_pHeldItem )
+	{
+		if ( m_pHeldItem->GetItemDefinition()->GetDefinitionIndex() == 1183 )
+		{
+			SetToPlayerClass( m_iCurrentClassIndex, false, "models/player/items/taunts/yeti/yeti.mdl" );
+			bYeti = true;
+		}
+		else
+		{
+			SetToPlayerClass( m_iCurrentClassIndex, false, bPreserveModelOverride ? m_strPlayerModelOverride.Get() : NULL, bPreserveModelOverride );
+		}
+	}
+
 	// Clear out visible items, and re-equip out wearables
 	RemoveAdditionalModels();
-	EquipAllWearables( pItem );
+	if ( !bYeti )
+	{
+		EquipAllWearables( pItem );
+	}
 
 	// Then equip the held item
 	EquipItem( pItem );
 	m_iCurrentSlotIndex = pItem->GetStaticData()->GetLoadoutSlot( m_iCurrentClassIndex );
-	m_pHeldItem = pItem;
 
 	m_StatTrackModel.m_bDisabled = true;
 	m_StatTrackModel.m_MDL.SetMDL( MDLHANDLE_INVALID );
+	m_StatTrackModel.m_pStudioHdr = NULL;  // ADDED: Clear the studio header
+
 	CAttribute_String attrModule;
-	static CSchemaAttributeDefHandle pAttr_module( "weapon_uses_stattrak_module" );
-	if ( m_pHeldItem->FindAttribute( pAttr_module, &attrModule ) && attrModule.has_value() )
+	if ( GetStattrak( m_pHeldItem, &attrModule ) )
 	{
 		// Allow for already strange items
 		bool bIsStrange = false;
@@ -554,18 +589,33 @@ void CTFPlayerModelPanel::SwitchHeldItemTo( CEconItemView *pItem )
 				m_flStatTrackScale = (float&)unFloatAsUint32;
 			}
 
-			MDLHandle_t hStatTrackMDL = mdlcache->FindMDL( "models/weapons/c_models/stattrack.mdl" );
+			MDLHandle_t hStatTrackMDL = mdlcache->FindMDL( attrModule.value().c_str() );
 			if ( mdlcache->IsErrorModel( hStatTrackMDL ) )
 			{
 				hStatTrackMDL = MDLHANDLE_INVALID;
 			}
-			m_StatTrackModel.m_MDL.SetMDL( hStatTrackMDL );
-			mdlcache->Release( hStatTrackMDL ); // counterbalance addref from within FindMDL
 
-			m_StatTrackModel.m_MDL.m_pProxyData = static_cast<IClientRenderable*>(pItem);
-			m_StatTrackModel.m_bDisabled = false;
-			m_StatTrackModel.m_MDL.m_nSequence = ACT_IDLE;
-			SetIdentityMatrix( m_StatTrackModel.m_MDLToWorld );
+			if ( hStatTrackMDL != MDLHANDLE_INVALID )
+			{
+				m_StatTrackModel.m_MDL.SetMDL( hStatTrackMDL );
+
+				studiohdr_t* pStudioHdr = mdlcache->GetStudioHdr( hStatTrackMDL );
+				if ( pStudioHdr )
+				{
+					if ( !m_StatTrackModel.m_pStudioHdr )
+					{
+						m_StatTrackModel.m_pStudioHdr = new CStudioHdr();
+					}
+					m_StatTrackModel.m_pStudioHdr->Init( pStudioHdr, mdlcache );
+				}
+
+				mdlcache->Release( hStatTrackMDL );
+
+				m_StatTrackModel.m_MDL.m_pProxyData = static_cast<IClientRenderable*>( pItem );
+				m_StatTrackModel.m_bDisabled = false;
+				m_StatTrackModel.m_MDL.m_nSequence = ACT_IDLE;
+				SetIdentityMatrix( m_StatTrackModel.m_MDLToWorld );
+			}
 		}
 	}
 
@@ -643,7 +693,7 @@ void CTFPlayerModelPanel::SwitchHeldItemTo( CEconItemView *pItem )
 		{
 			ClearScene();
 
-			CStudioHdr studioHdr( GetStudioHdr(), g_pMDLCache );
+			CStudioHdr &studioHdr = *m_RootMDL.m_pStudioHdr;
 			int iSequence = LookupSequence( &studioHdr, pSequence );
 			if ( iSequence >= 0 )
 			{
@@ -667,9 +717,9 @@ void CTFPlayerModelPanel::SwitchHeldItemTo( CEconItemView *pItem )
 		}
 
 		// Taunt Particles
-		static CSchemaAttributeDefHandle pAttrDef_OnTauntAttachParticleIndex( "on taunt attach particle index" );
+		static CSchemaAttributeDefHandle pAttrDef_TauntAttachParticleIndex( "taunt attach particle index" );
 		uint32 unUnusualEffectIndex = 0;
-		if ( pItem->FindAttribute( pAttrDef_OnTauntAttachParticleIndex, &unUnusualEffectIndex ) && unUnusualEffectIndex > 0 )
+		if ( pItem->FindAttribute( pAttrDef_TauntAttachParticleIndex, &unUnusualEffectIndex ) && unUnusualEffectIndex > 0 )
 		{
 			const attachedparticlesystem_t *pParticleSystem = GetItemSchema()->GetAttributeControlledParticleSystem( unUnusualEffectIndex );
 			if ( pParticleSystem )
@@ -684,22 +734,26 @@ void CTFPlayerModelPanel::SwitchHeldItemTo( CEconItemView *pItem )
 		}
 	}
 
+	// update poseparam
+	if ( pItem->GetStaticData()->GetNumPlayerPoseParameters( m_iTeam ) > 0 )
+	{
+		for ( int iPlayerPoseParam=0; iPlayerPoseParam < pItem->GetStaticData()->GetNumPlayerPoseParameters( m_iTeam ); ++iPlayerPoseParam )
+		{
+			poseparamtable_t *pPoseParam = pItem->GetStaticData()->GetPlayerPoseParameters( m_iTeam, iPlayerPoseParam );
+			SetPoseParameterByName( pPoseParam->strName, pPoseParam->flValue );
+		}
+	}
+	else
+	{
+		SetPoseParameterByName( "r_hand_grip", 0.f );
+	}
+
 	// Clear out taunt particles
 	if ( bRemoveTauntParticles && m_aParticleSystems[SYSTEM_TAUNT] )
 	{
 		m_bDrawTauntParticles = false;
 		SafeDeleteParticleData( &m_aParticleSystems[SYSTEM_TAUNT] );
 	}
-
-	// Check if it has a PoseParameter Attributes (r_hand_grip)
-	float flPose = 0;
-	static CSchemaAttributeDefHandle pAttrDef_RightHandPose( "righthand pose parameter" );
-	uint32 iValue = 0;
-	if ( pItem->FindAttribute( pAttrDef_RightHandPose, &iValue ) )
-	{
-		flPose = (float&)iValue;
-	}
-	SetPoseParameterByName( "r_hand_grip", flPose );
 
 	// Check for hand particles (spell book)
 	// always nuke
@@ -784,7 +838,7 @@ void CTFPlayerModelPanel::UpdateWeaponBodygroups( bool bModifyDeployedOnlyBodygr
 void CTFPlayerModelPanel::UpdateHiddenBodyGroups( CEconItemView* pItem )
 {
 	MDLCACHE_CRITICAL_SECTION();
-	CStudioHdr studioHdr( GetStudioHdr(), g_pMDLCache );
+	CStudioHdr &studioHdr = *m_RootMDL.m_pStudioHdr;
 
 	int iNumBodyGroups = pItem->GetStaticData()->GetNumModifiedBodyGroups( 0 );
 	for ( int i=0; i<iNumBodyGroups; ++i )
@@ -855,13 +909,13 @@ void CTFPlayerModelPanel::EquipAllWearables( CEconItemView *pHeldItem )
 {
 	// First, reset all our bodygroups
 	MDLCACHE_CRITICAL_SECTION();
-	CStudioHdr studioHdr( GetStudioHdr(), g_pMDLCache );
+	CStudioHdr &studioHdr = *m_RootMDL.m_pStudioHdr;
 
 	const CEconItemSchema::BodygroupStateMap_t& mapBodygroupState = GetItemSchema()->GetDefaultBodygroupStateMap();
 
-	FOR_EACH_MAP_FAST( mapBodygroupState, i )
+	FOR_EACH_DICT_FAST( mapBodygroupState, i )
 	{
-		const char *pszBodygroupName = mapBodygroupState.Key(i);
+		const char *pszBodygroupName = mapBodygroupState.GetElementName(i);
 		int iBodyGroup = FindBodygroupByName( &studioHdr, pszBodygroupName );
 		if ( iBodyGroup > -1 )
 		{
@@ -903,6 +957,27 @@ void CTFPlayerModelPanel::EquipAllWearables( CEconItemView *pHeldItem )
 	UpdatePreviewVisuals();
 }
 
+static const char *s_pszDefaultAnimForWpnSlot[] =
+{
+	"ACT_MP_STAND_PRIMARY",			// TF_WPN_TYPE_PRIMARY
+	"ACT_MP_STAND_SECONDARY",		// TF_WPN_TYPE_SECONDARY
+	"ACT_MP_STAND_MELEE",			// TF_WPN_TYPE_MELEE
+	NULL,							// TF_WPN_TYPE_GRENADE
+	"ACT_MP_STAND_BUILDING",		// TF_WPN_TYPE_BUILDING
+	"ACT_MP_STAND_PDA",				// TF_WPN_TYPE_PDA
+	"ACT_MP_STAND_ITEM1",			// TF_WPN_TYPE_ITEM1
+	"ACT_MP_STAND_ITEM2",			// TF_WPN_TYPE_ITEM2
+	NULL,							// TF_WPN_TYPE_HEAD
+	NULL,							// TF_WPN_TYPE_MISC
+	"ACT_MP_STAND_MELEE_ALLCLASS",	// TF_WPN_TYPE_MELEE_ALLCLASS
+	"ACT_MP_STAND_SECONDARY2",		// TF_WPN_TYPE_SECONDARY2
+	"ACT_MP_STAND_PRIMARY",			// TF_WPN_TYPE_PRIMARY2
+	"ACT_MP_STAND_ITEM3",			// TF_WPN_TYPE_ITEM3
+	"ACT_MP_STAND_ITEM4",			// TF_WPN_TYPE_ITEM4
+	"ACT_MP_STAND_PASSTIME",		// TF_WPN_TYPE_PASSTIME_BALL
+};
+COMPILE_TIME_ASSERT( ARRAYSIZE( s_pszDefaultAnimForWpnSlot ) == TF_WPN_TYPE_COUNT );
+
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
@@ -934,8 +1009,18 @@ void CTFPlayerModelPanel::EquipItem( CEconItemView *pItem )
 		const CUtlVector<const char *>& vecWeaponTypeSubstrings = GetItemSchema()->GetWeaponTypeSubstrings();
 		if ( vecWeaponTypeSubstrings.IsValidIndex( iAnimSlot ) )
 		{
-			int iAnim = FindAnimByName( vecWeaponTypeSubstrings[iAnimSlot] );
-			SetModelAnim( iAnim );
+			MDLCACHE_CRITICAL_SECTION();
+
+			// Get the studio header of the root model.
+			if ( !m_RootMDL.m_pStudioHdr )
+				return;
+
+			CStudioHdr &studioHdr = *m_RootMDL.m_pStudioHdr;
+			int iSequence = FindSequenceFromActivity( &studioHdr, s_pszDefaultAnimForWpnSlot[ iAnimSlot ] );
+			if ( iSequence != ACT_INVALID )
+			{
+				SetSequence( iSequence, true );
+			}
 		}
 	}
 
@@ -1139,8 +1224,7 @@ void CTFPlayerModelPanel::OnModelLoadComplete( const model_t *pModel )
 				{
 					// Classes start at 1, bodygroups at 0, so we shift them all back 1.
 					MDLCACHE_CRITICAL_SECTION();
-					CStudioHdr sHDR( pMDL->GetStudioHdr(), g_pMDLCache );
-					::SetBodygroup( &sHDR, nBody, 1, m_iCurrentClassIndex-1 );
+					::SetBodygroup( GetMergeMDLStudioHdr( hMDL ), nBody, 1, m_iCurrentClassIndex-1 );
 					pMDL->m_nBody = nBody;
 				}
 			}
@@ -1187,6 +1271,14 @@ void CTFPlayerModelPanel::UpdatePreviewVisuals()
 	if ( m_MergeMDL && m_pHeldItem )
 	{
 		SetMDLSkinForTeam( GetMergeMDL( m_MergeMDL ), GetPreviewItem( m_pHeldItem ), m_iTeam );
+	}
+
+	// Set the StatTrack model skin
+	if ( !m_StatTrackModel.m_bDisabled )
+	{
+		int iSkin = 0;
+		iSkin = m_iTeam == TF_TEAM_RED ? 0 : 1;
+		m_StatTrackModel.m_MDL.m_nSkin = iSkin;
 	}
 
 	// Set the skin for all other equipped items (wearables, etc).
@@ -1341,6 +1433,8 @@ CEconItemView *CTFPlayerModelPanel::GetLoadoutItemFromMDLHandle( loadout_positio
 	// Check if we have a particle hat, if not ignore
 	CEconItemView *pEconItem = NULL;
 
+	const char *pszModelName = vgui::MDLCache()->GetModelName( mdlHandle );
+
 	// Find this item
 	FOR_EACH_VEC( m_ItemsToCarry, i )
 	{
@@ -1352,15 +1446,12 @@ CEconItemView *CTFPlayerModelPanel::GetLoadoutItemFromMDLHandle( loadout_positio
 			const char * pDisplayModel = pItem->GetPlayerDisplayModel( m_iCurrentClassIndex, m_iTeam );
 			if ( pDisplayModel )
 			{
-				MDLHandle_t hMDLFindResult = vgui::MDLCache()->FindMDL( pDisplayModel );
 				// compare the model to make sure that this is the same item
-				if ( hMDLFindResult == mdlHandle )
+				if ( !V_strcmp( pszModelName, pDisplayModel )  )
 				{
 					pEconItem = pItem;
-					vgui::MDLCache()->Release(hMDLFindResult);	// counterbalance addref from within FindMDL
 					break;
 				}
-				vgui::MDLCache()->Release(hMDLFindResult);
 			}
 		}
 	}
@@ -1456,17 +1547,31 @@ bool CTFPlayerModelPanel::RenderStatTrack( CStudioHdr *pStudioHdr, matrix3x4_t *
 	{
 		matrix3x4_t matMergeBoneToWorld[MAXSTUDIOBONES];
 
-		// Get the merge studio header.
-		studiohdr_t *pStatTrackStudioHdr = m_StatTrackModel.m_MDL.GetStudioHdr();
-		matrix3x4_t *pMergeBoneToWorld = &matMergeBoneToWorld[0];
+		// Get the StatTrak model's studio header from the MDL cache
+		CStudioHdr* pStatTrackStudioHdr = m_StatTrackModel.m_pStudioHdr;
+
+		// If m_pStudioHdr isn't set, try to get it from the MDL directly
+		if ( !pStatTrackStudioHdr )
+		{
+			MDLHandle_t hStatTrackMDL = m_StatTrackModel.m_MDL.GetMDL();
+			if ( hStatTrackMDL != MDLHANDLE_INVALID )
+			{
+				pStatTrackStudioHdr = GetMergeMDLStudioHdr( hStatTrackMDL );
+			}
+		}
+
+		matrix3x4_t* pMergeBoneToWorld = &matMergeBoneToWorld[0];
 
 		// If we have a valid mesh, bonemerge it. If we have an invalid mesh we can't bonemerge because
 		// it'll crash trying to pull data from the missing header.
-		if ( pStatTrackStudioHdr != NULL )
+		if ( pStatTrackStudioHdr != NULL && pStudioHdr != NULL )
 		{
-			CStudioHdr mergeHdr( pStatTrackStudioHdr, g_pMDLCache );
-			m_StatTrackModel.m_MDL.SetupBonesWithBoneMerge( &mergeHdr, pMergeBoneToWorld, pStudioHdr, pWorldMatrix, m_StatTrackModel.m_MDLToWorld );
-			for ( int i=0; i<mergeHdr.numbones(); ++i )
+			// The StatTrak model should bone-merge with the WEAPON (pStudioHdr), not the player model
+			// Parameters: (source header, output matrices, parent header, parent matrices, local transform)
+			m_StatTrackModel.m_MDL.SetupBonesWithBoneMerge( pStatTrackStudioHdr, pMergeBoneToWorld, pStudioHdr, pWorldMatrix, m_StatTrackModel.m_MDLToWorld );
+
+			// Scale the StatTrak model's bones, not the player model bones
+			for ( int i = 0; i < pStatTrackStudioHdr->numbones(); ++i )
 			{
 				MatrixScaleBy( m_flStatTrackScale, pMergeBoneToWorld[i] );
 			}
@@ -1494,25 +1599,22 @@ bool CTFPlayerModelPanel::UpdateCosmeticParticles(
 
 	attachedparticlesystem_t *pParticleSystem = NULL;
 
-	// do community_sparkle effect if this is a community item?
-	const int iQualityParticleType = pEconItem->GetQualityParticleType();
-	if ( iQualityParticleType > 0 )
+	static CSchemaAttributeDefHandle pAttrDef_AttachParticleEffect( "attach particle effect" );
+	uint32 iValue = 0;
+	if ( pEconItem->FindAttribute( pAttrDef_AttachParticleEffect, &iValue ) )
 	{
-		pParticleSystem = GetItemSchema()->GetAttributeControlledParticleSystem( iQualityParticleType );
+		const float& value_as_float = (float&)iValue;
+		pParticleSystem = GetItemSchema()->GetAttributeControlledParticleSystem( value_as_float );
 	}
 
 	if ( !pParticleSystem )
 	{
-		// does this hat even have a particle effect
-		static CSchemaAttributeDefHandle pAttrDef_AttachParticleEffect( "attach particle effect" );
-		uint32 iValue = 0;
-		if ( !pEconItem->FindAttribute( pAttrDef_AttachParticleEffect, &iValue ) )
+		// do community_sparkle effect if this is a community item?
+		const int iQualityParticleType = pEconItem->GetQualityParticleType();
+		if ( iQualityParticleType > 0 )
 		{
-			return false;
+			pParticleSystem = GetItemSchema()->GetAttributeControlledParticleSystem( iQualityParticleType );
 		}
-
-		const float& value_as_float = (float&)iValue;
-		pParticleSystem = GetItemSchema()->GetAttributeControlledParticleSystem( value_as_float );
 	}
 
 	// failed to find any particle effect
@@ -1994,7 +2096,7 @@ void CTFPlayerModelPanel::ProcessSequence( CChoreoScene *scene, CChoreoEvent *ev
 {
 	Assert( event->GetType() == CChoreoEvent::SEQUENCE );
 
-	CStudioHdr studioHdr( GetStudioHdr(), g_pMDLCache );
+	CStudioHdr &studioHdr = *m_RootMDL.m_pStudioHdr;
 
 	if ( !event->GetActor() )
 		return;
@@ -2072,7 +2174,7 @@ void CTFPlayerModelPanel::ProcessLoop( CChoreoScene *scene, CChoreoEvent *event 
 //-----------------------------------------------------------------------------
 LocalFlexController_t CTFPlayerModelPanel::GetNumFlexControllers( void )
 {
-	CStudioHdr studioHdr( GetStudioHdr(), g_pMDLCache );
+	CStudioHdr &studioHdr = *m_RootMDL.m_pStudioHdr;
 	return studioHdr.numflexcontrollers();
 }
 
@@ -2081,7 +2183,7 @@ LocalFlexController_t CTFPlayerModelPanel::GetNumFlexControllers( void )
 //-----------------------------------------------------------------------------
 const char *CTFPlayerModelPanel::GetFlexDescFacs( int iFlexDesc )
 {
-	CStudioHdr studioHdr( GetStudioHdr(), g_pMDLCache );
+	CStudioHdr &studioHdr = *m_RootMDL.m_pStudioHdr;
 
 	mstudioflexdesc_t *pflexdesc = studioHdr.pFlexdesc( iFlexDesc );
 
@@ -2093,7 +2195,7 @@ const char *CTFPlayerModelPanel::GetFlexDescFacs( int iFlexDesc )
 //-----------------------------------------------------------------------------
 const char *CTFPlayerModelPanel::GetFlexControllerName( LocalFlexController_t iFlexController )
 {
-	CStudioHdr studioHdr( GetStudioHdr(), g_pMDLCache );
+	CStudioHdr &studioHdr = *m_RootMDL.m_pStudioHdr;
 
 	mstudioflexcontroller_t *pflexcontroller = studioHdr.pFlexcontroller( iFlexController );
 
@@ -2105,7 +2207,7 @@ const char *CTFPlayerModelPanel::GetFlexControllerName( LocalFlexController_t iF
 //-----------------------------------------------------------------------------
 const char *CTFPlayerModelPanel::GetFlexControllerType( LocalFlexController_t iFlexController )
 {
-	CStudioHdr studioHdr( GetStudioHdr(), g_pMDLCache );
+	CStudioHdr &studioHdr = *m_RootMDL.m_pStudioHdr;
 
 	mstudioflexcontroller_t *pflexcontroller = studioHdr.pFlexcontroller( iFlexController );
 
@@ -2136,7 +2238,7 @@ void CTFPlayerModelPanel::SetFlexWeight( LocalFlexController_t index, float valu
 {
 	if (index >= 0 && index < GetNumFlexControllers())
 	{
-		CStudioHdr studioHdr( GetStudioHdr(), g_pMDLCache );
+		CStudioHdr &studioHdr = *m_RootMDL.m_pStudioHdr;
 
 		mstudioflexcontroller_t *pflexcontroller = studioHdr.pFlexcontroller( index );
 
@@ -2157,7 +2259,7 @@ float CTFPlayerModelPanel::GetFlexWeight( LocalFlexController_t index )
 {
 	if (index >= 0 && index < GetNumFlexControllers())
 	{
-		CStudioHdr studioHdr( GetStudioHdr(), g_pMDLCache );
+		CStudioHdr &studioHdr = *m_RootMDL.m_pStudioHdr;
 
 		mstudioflexcontroller_t *pflexcontroller = studioHdr.pFlexcontroller( index );
 
@@ -2180,7 +2282,7 @@ void CTFPlayerModelPanel::SetupFlexWeights( void )
 		return;
 
 	// initialize the models local to global flex controller mappings
-	CStudioHdr studioHdr( GetStudioHdr(), g_pMDLCache );
+	CStudioHdr &studioHdr = *m_RootMDL.m_pStudioHdr;
 	if (studioHdr.pFlexcontroller( LocalFlexController_t(0) )->localToGlobal == -1)
 	{
 		for ( LocalFlexController_t i = LocalFlexController_t(0); i < studioHdr.numflexcontrollers(); i++)
@@ -2234,10 +2336,11 @@ void CTFPlayerModelPanel::SetupFlexWeights( void )
 		// Advance time
 		if ( m_flLastTickTime < FLT_EPSILON )
 		{
-			m_flLastTickTime = m_RootMDL.m_MDL.m_flTime - 0.1;
+			m_flLastTickTime = m_RootMDL.m_MDL.m_flTime - SCENE_LERP_TIME;
 		}
 
 		m_flSceneTime += (m_RootMDL.m_MDL.m_flTime - m_flLastTickTime);
+		m_flSceneTime = Max( m_flSceneTime, -SCENE_LERP_TIME );
 		m_flLastTickTime = m_RootMDL.m_MDL.m_flTime;
 
 		if ( m_flSceneEndTime > FLT_EPSILON && m_flSceneTime > m_flSceneEndTime )
@@ -2411,7 +2514,7 @@ void CTFPlayerModelPanel::ProcessFlexAnimation( CChoreoScene *scene, CChoreoEven
 {
 	Assert( event->GetType() == CChoreoEvent::FLEXANIMATION );
 
-	CStudioHdr studioHdr( GetStudioHdr(), g_pMDLCache );
+	CStudioHdr &studioHdr = *m_RootMDL.m_pStudioHdr;
 	CStudioHdr *hdr = &studioHdr;
 	if ( !hdr )
 		return;
@@ -2626,7 +2729,7 @@ void CTFPlayerModelPanel::AddVisemesForSentence( Emphasized_Phoneme *classes, fl
 //-----------------------------------------------------------------------------
 void CTFPlayerModelPanel::AddViseme( Emphasized_Phoneme *classes, float emphasis_intensity, int phoneme, float scale, bool newexpression )
 {
-	CStudioHdr studioHdr( GetStudioHdr(), g_pMDLCache );
+	CStudioHdr &studioHdr = *m_RootMDL.m_pStudioHdr;
 	CStudioHdr *hdr = &studioHdr;
 	if ( !hdr )
 		return;
@@ -2799,11 +2902,11 @@ void CTFPlayerModelPanel::ComputeBlendedSetting( Emphasized_Phoneme *classes, fl
 //-----------------------------------------------------------------------------
 void CTFPlayerModelPanel::InitPhonemeMappings( void )
 {
-	CStudioHdr studioHdr( GetStudioHdr(), g_pMDLCache );
-	if ( studioHdr.IsValid() )
+	CStudioHdr *pStudioHdr = m_RootMDL.m_pStudioHdr;
+	if ( pStudioHdr && pStudioHdr->IsValid() )
 	{
 		char szBasename[MAX_PATH];
-		Q_StripExtension( studioHdr.pszName(), szBasename, sizeof( szBasename ) );
+		Q_StripExtension( pStudioHdr->pszName(), szBasename, sizeof( szBasename ) );
 
 		char szExpressionName[MAX_PATH];
 		Q_snprintf( szExpressionName, sizeof( szExpressionName ), "%s/phonemes/phonemes", szBasename );

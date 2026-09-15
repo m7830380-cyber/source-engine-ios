@@ -34,7 +34,7 @@ public:
 	virtual void ApplySchemeSettings( vgui::IScheme *pScheme ) OVERRIDE;
 	virtual void PerformLayout( void ) OVERRIDE;
 
-	virtual EMatchGroup GetMatchGroup( void ) const OVERRIDE;
+	virtual ETFMatchGroup GetMatchGroup( void ) const OVERRIDE { return k_eMatchGroup_Casual_12v12; }
 
 	virtual void OnThink() OVERRIDE;
 

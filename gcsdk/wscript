@@ -43,6 +43,7 @@ def build(bld):
 		'../game/shared/generated_proto/base_gcmessages.pb.cc',
 		'../game/shared/generated_proto/econ_gcmessages.pb.cc',
 		'../game/shared/generated_proto/tf_gcmessages.pb.cc',
+		'../game/shared/generated_proto/tf_proto_def_messages.pb.cc',
 	]
 
 	includes = [

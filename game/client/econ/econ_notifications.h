@@ -50,6 +50,7 @@ public:
 	const CSteamID &GetSteamID() const;
 
 	virtual bool BShowInGameElements() const { return true; }
+	bool BCreateMainMenuPanel() const { return m_bCreateMainMenuPanel; }
 
 	virtual void MarkForDeletion();
 
@@ -105,6 +106,8 @@ public:
 		return "ui/notification_alert.wav";
 	}
 
+	int GetKVVersion() const { return m_iKVVersion; }
+
 protected:
 	const char *m_pText;
 	const char *m_pSoundFilename;
@@ -112,11 +115,13 @@ protected:
 	KeyValues *m_pKeyValues;
 	wchar_t m_wszBuffer[1024];
 	CSteamID m_steamID;
+	bool m_bCreateMainMenuPanel = true;
 
 private:
 	friend class CEconNotificationQueue;
 	int m_iID;
 	bool m_bInUse;
+	int m_iKVVersion = 0;
 };
 
 
@@ -197,6 +202,11 @@ void NotificationQueue_Visit( CEconNotificationVisitor &visitor );
  * Update the notification queue
  */
 void NotificationQueue_Update();
+
+/*
+*  @return the number of notifications that should show on the main menu
+*/
+int NotificationQueue_GetNumMainMenuNotifications();
 
 /**
  * @return the number of notifications

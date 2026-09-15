@@ -37,15 +37,23 @@ public:
 	void Show( bool bMakePopup = true );
 	void SetIconImage( const char *pszIcon );
 
+	virtual GameActionSet_t GetPreferredActionSet() const { return GAME_ACTION_SET_MENUCONTROLS; }
+
 protected:
 	virtual void		OnSizeChanged(int nNewWide, int nNewTall );
 	virtual void		ApplySchemeSettings( vgui::IScheme *pScheme );
+	virtual void		PerformLayout() OVERRIDE;
 	virtual void		OnCommand( const char *command );
 	virtual void		OnKeyCodeTyped( vgui::KeyCode code );
 	virtual void		OnKeyCodePressed( vgui::KeyCode code );
 	virtual const char *GetResFile();
 
 	void				FinishUp();		// Hide the panel, mark for deletion, remove from modal stack.
+
+	// Override these in a derived class to override the action set and action names specified in the res file in the case of Steam Controller.
+	virtual const char* GetActionSet() const { return nullptr; }
+	virtual const char* GetCancelActionName() const { return nullptr; }
+	virtual const char* GetConfirmActionName() const { return nullptr; }
 
 	CExButton		*m_pConfirmButton;
 	CExButton		*m_pCancelButton;
@@ -175,9 +183,15 @@ public:
 	virtual const char *GetResFile() OVERRIDE { return "Resource/UI/ReviveDialog.res"; }
 	void SetOwner( CBaseEntity *pEntity );
 
+	virtual GameActionSet_t GetPreferredActionSet() const OVERRIDE { return GAME_ACTION_SET_IN_GAME_HUD; }
+
 	CTFSpectatorGUIHealth *m_pTargetHealth;
 	CHandle< C_BaseEntity >	m_hEntity;
 	float m_flPrevHealth;
+
+protected:
+	// Revive dialog occurs in game, so we expect to be in this action set
+	virtual const char* GetActionSet() const { return "InGameHUDControls"; }
 };
 
 CTFReviveDialog *ShowRevivePrompt( CBaseEntity *pOwner,
@@ -198,9 +212,13 @@ public:
 
 	virtual const char *GetResFile() OVERRIDE;
 	virtual void ApplySchemeSettings( vgui::IScheme *pScheme ) OVERRIDE;
-	virtual void OnCommand( const char *command ) OVERRIDE;
+	virtual void PerformLayout() OVERRIDE;
 
 	CSchemaItemDefHandle m_hItemDef;
+
+private:
+
+	class CCyclingAdContainerPanel* m_pItemAd;
 };
 
 void ShowEconRequirementDialog( const char *pTitle, const char *pText, const char *pItemDefName );

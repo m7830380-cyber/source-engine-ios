@@ -14,16 +14,12 @@
 #endif
 
 #include "language.h"
-#include "gcsdk/gcsystemmsgs.h"
 
 // Protobuf headers interfere with the valve min/max/malloc overrides. so we need to do all
 // this funky wrapping to make the include happy.
 #include <tier0/valve_minmax_off.h>
 
 #include "tf_gcmessages.pb.h"
-#ifdef GC
-#include "tf_gcmessages_interserver.pb.h" // These should not be exposed to clients/servers
-#endif // #ifdef GC
 
 #include <tier0/valve_minmax_on.h>
 
@@ -44,6 +40,7 @@ enum EGCTFProtoObjectTypes
 //	k_EProtoObjectBetaParticipation		= k_EProtoObjectTypesGameBase + 5,
 	k_EProtoObjectTFPartyInvite			= k_EProtoObjectTypesGameBase + 6,
 	k_EProtoObjectTFRatingData			= k_EProtoObjectTypesGameBase + 7,
+	k_EProtoObjectTFLobbyInvite			= k_EProtoObjectTypesGameBase + 8,
 };
 
 //=============================================================================
@@ -131,19 +128,6 @@ struct MsgGCChatMessage_t
 	int32 m_cMsgLen;
 	// binary message
 };
-
-//=============================================================================
-
-// do not re-order, stored in DB
-enum
-{
-	kVoteKickBanPlayerReason_Other,
-	kVoteKickBanPlayerReason_Cheating,
-	kVoteKickBanPlayerReason_Idle,
-	kVoteKickBanPlayerReason_Scamming,
-};
-
-uint32 GetKickBanPlayerReason( const char *pReasonString );
 
 //=============================================================================
 

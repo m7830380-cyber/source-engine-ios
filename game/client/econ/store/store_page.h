@@ -335,8 +335,8 @@ protected:
 	const CEconStoreCategoryManager::StoreCategory_t	*m_pPageData;
 	CStorePreviewItemPanel		*m_pPreviewPanel;
 	const char					*m_pPreviewItemResFile;
-	vgui::EditablePanel			*m_pItemDetailsButtonPanel;
-	vgui::EditablePanel			*m_pItemPreviewButtonPanel;
+	vgui::EditablePanel			*m_pItemDetailsButtonPanel = NULL;
+	vgui::EditablePanel			*m_pItemPreviewButtonPanel = NULL;
 
 	// Filtering
 	CUtlVector< const econ_store_entry_t* >	m_FilteredEntries;

@@ -201,21 +201,24 @@ void CUpgrades::GrantOrRemoveAllUpgrades( CTFPlayer *pTFPlayer, bool bRemove /*=
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: 
+// Purpose: Handles a player upgrade purchase request.
+//   Returns false if upgrade request is invalid.
 //-----------------------------------------------------------------------------
-void CUpgrades::PlayerPurchasingUpgrade( CTFPlayer *pTFPlayer, int iItemSlot, int iUpgrade, bool bDowngrade, bool bFree /*= false */, bool bRespec /*= false*/ )
+bool CUpgrades::PlayerPurchasingUpgrade( CTFPlayer *pTFPlayer, int iItemSlot, int iUpgrade, bool bDowngrade, bool bFree /*= false */, bool bRespec /*= false*/ )
 {
-	if ( !pTFPlayer || 
-		 iUpgrade < 0 || 
+	if ( !pTFPlayer ||
+		 iUpgrade < 0 ||
 		 iUpgrade >= g_MannVsMachineUpgrades.m_Upgrades.Count() )
-		return;
+	{
+		return false;
+	}
 
 	// Verify that this upgrade can be accepted on this player
 	CMannVsMachineUpgrades upgrade = g_MannVsMachineUpgrades.m_Upgrades[ iUpgrade ];
 	CEconItemAttributeDefinition *pAttribDef = ItemSystem()->GetStaticDataForAttributeByName( upgrade.szAttrib );
 	if ( !bRespec && ( !TFGameRules() || !TFGameRules()->CanUpgradeWithAttrib( pTFPlayer, iItemSlot, pAttribDef->GetDefinitionIndex(), &upgrade ) ) )
 	{
-		return;
+		return false;
 	}
 
 	int nCost = 0;
@@ -250,7 +253,7 @@ void CUpgrades::PlayerPurchasingUpgrade( CTFPlayer *pTFPlayer, int iItemSlot, in
 	{
 		// Make sure the player can afford it
 		if ( pTFPlayer->GetCurrency() < nCost )
-			return;
+			{ return false; }
 	}
 
 	CEconItemView *pItem = NULL;
@@ -259,7 +262,7 @@ void CUpgrades::PlayerPurchasingUpgrade( CTFPlayer *pTFPlayer, int iItemSlot, in
 	if ( g_MannVsMachineUpgrades.m_Upgrades[ iUpgrade ].nUIGroup != UIGROUP_UPGRADE_ATTACHED_TO_PLAYER )
 	{
 		if ( !( iItemSlot == LOADOUT_POSITION_ACTION || ( iItemSlot >= LOADOUT_POSITION_PRIMARY && iItemSlot <= LOADOUT_POSITION_PDA2 ) ) )
-			return;
+			{ return false; }
 
 		pItem = CTFPlayerSharedUtils::GetEconItemViewByLoadoutSlot( pTFPlayer, iItemSlot );
 	}
@@ -294,7 +297,7 @@ void CUpgrades::PlayerPurchasingUpgrade( CTFPlayer *pTFPlayer, int iItemSlot, in
 			{
 				// No matched recent purchases!
 				// No sale!
-				return;
+				return false;
 			}
 		}
 	}
@@ -303,27 +306,48 @@ void CUpgrades::PlayerPurchasingUpgrade( CTFPlayer *pTFPlayer, int iItemSlot, in
 		// If the upgrade has a tier, it's mutually exclusive with upgrades of the same tier for the same itemslot
 		int nTier = TFGameRules()->GetUpgradeTier( iUpgrade );
 		if ( nTier && !TFGameRules()->IsUpgradeTierEnabled( pTFPlayer, iItemSlot, iUpgrade ) )
-			return;
+			{ return false; }
 	}
 
 	const attrib_definition_index_t nUpgradedAttrDefIndex = ApplyUpgradeToItem( pTFPlayer, pItem, iUpgrade, nCost, bDowngrade, !bFree );
-	if ( nUpgradedAttrDefIndex != INVALID_ATTRIB_DEF_INDEX )
-	{
-		if ( !bFree )
-		{
-			// Remove Currency
-			pTFPlayer->RemoveCurrency( nCost );
-		}
-		
-		// remember our upgrades so we can restore them at a checkpoint
-		pTFPlayer->RememberUpgrade( pTFPlayer->GetPlayerClass()->GetClassIndex(), pItem, iUpgrade, nCost, bDowngrade );
 
-		// Only regenerate if between waves
-		pTFPlayer->Regenerate( TFObjectiveResource()->GetMannVsMachineIsBetweenWaves() );
+	// Failed to apply
+	if ( nUpgradedAttrDefIndex == INVALID_ATTRIB_DEF_INDEX )
+		{ return false; }
+
+	if ( !bFree )
+	{
+		// Remove Currency
+		pTFPlayer->RemoveCurrency( nCost );
+	}
+
+	// remember our upgrades so we can restore them at a checkpoint
+	pTFPlayer->RememberUpgrade( pTFPlayer->GetPlayerClass()->GetClassIndex(), pItem, iUpgrade, nCost, bDowngrade );
+
+	// Only regenerate if between waves
+	pTFPlayer->Regenerate( TFObjectiveResource()->GetMannVsMachineIsBetweenWaves() );
+
+	// If we're upgrading an item, figure out if it's a weapon and then notify it (gives it a chance to re-hook attributes)
+	if ( pItem )
+	{
+		for ( int i = 0; i < MAX_WEAPONS; i++ )
+		{
+			CTFWeaponBase *pWeapon = (CTFWeaponBase *)pTFPlayer->GetWeapon( i );
+			if ( !pWeapon )
+				continue;
+
+			if ( pWeapon->GetAttributeContainer()->GetItem() == pItem )
+			{
+				pWeapon->OnUpgraded();
+			}
+		}
 	}
 
 	// See if we need to notify items about an upgrade
 	NotifyItemOnUpgrade( pTFPlayer, nUpgradedAttrDefIndex, bDowngrade );
+
+	// Upgrade succeeded
+	return true;
 }
 
 //-----------------------------------------------------------------------------
@@ -679,71 +703,6 @@ void CUpgrades::NotifyItemOnUpgrade( CTFPlayer *pTFPlayer, attrib_definition_ind
 			}
 		}
 		break;
-#ifdef STAGING_ONLY
-	case 555:	// medigun specialist
-		{
-			static UpgradeAttribBlock_t upgradeBlock[] = 
-			{
-				{ "healing mastery", 4.f, LOADOUT_POSITION_SECONDARY },
-				{ "overheal expert", 4.f, LOADOUT_POSITION_SECONDARY },
-				{ "uber duration bonus", 4.f, LOADOUT_POSITION_SECONDARY },
-				{ "ubercharge rate bonus", 2.f, LOADOUT_POSITION_SECONDARY },
-			};
-
-			ApplyUpgradeAttributeBlock( upgradeBlock, ARRAYSIZE( upgradeBlock ), pTFPlayer, bDowngrade );
-		}
-		break;
-	case 605:	// master sniper
-		{
-			static UpgradeAttribBlock_t upgradeBlock[] = 
-			{
-				{ "projectile penetration", 1.f, LOADOUT_POSITION_PRIMARY },
-				{ "SRifle Charge rate increased", 1.5f, LOADOUT_POSITION_PRIMARY },
-				{ "faster reload rate", 0.6f, LOADOUT_POSITION_PRIMARY },
-			};
-
-			ApplyUpgradeAttributeBlock( upgradeBlock, ARRAYSIZE( upgradeBlock ), pTFPlayer, bDowngrade );
-		}
-		break;
-	case 611:	// airborne infantry
-		{
-			static UpgradeAttribBlock_t upgradeBlock[] = 
-			{
-				{ "increased air control", 10.f, LOADOUT_POSITION_PRIMARY },
-				{ "rocket launch impulse", 1, LOADOUT_POSITION_PRIMARY },
-				{ "cancel falling damage", 1, LOADOUT_POSITION_PRIMARY },
-			};
-
-			ApplyUpgradeAttributeBlock( upgradeBlock, ARRAYSIZE( upgradeBlock ), pTFPlayer, bDowngrade );
-		}
-		break;
-	case 624:	// construction expert
-		{
-			static UpgradeAttribBlock_t upgradeBlock[] = 
-			{
-				{ "build rate bonus", 0.7f, LOADOUT_POSITION_MELEE },
-				{ "maxammo metal increased", 1.5f, LOADOUT_POSITION_INVALID },
-				{ "engy building health penalty", 0.7f, LOADOUT_POSITION_MELEE },
-			};
-
-			ApplyUpgradeAttributeBlock( upgradeBlock, ARRAYSIZE( upgradeBlock ), pTFPlayer, bDowngrade );
-		}
-		break;
-	case 626:	// support engineer
-		{
-			static UpgradeAttribBlock_t upgradeBlock[] = 
-			{
-				{ "teleporter recharge rate bonus", 0.5f, LOADOUT_POSITION_INVALID },
-				{ "teleporter speed boost", 1, LOADOUT_POSITION_INVALID },
-				{ "bidirectional teleport", 1, LOADOUT_POSITION_INVALID },
-				{ "dispenser rate bonus", 1.25f, LOADOUT_POSITION_INVALID },
-				{ "engy dispenser radius increased", 3.f, LOADOUT_POSITION_INVALID },
-			};
-
-			ApplyUpgradeAttributeBlock( upgradeBlock, ARRAYSIZE( upgradeBlock ), pTFPlayer, bDowngrade );
-		}
-		break;
-#endif // STAGING_ONLY
 
 	default:
 		break;
@@ -887,7 +846,7 @@ void CUpgrades::ApplyUpgradeAttributeBlock( UpgradeAttribBlock_t *upgradeBlock, 
 
 	for ( int i = 0; i < upgradeCount; i++ )
 	{
-		if ( !upgradeBlock[i].szName || !upgradeBlock[i].szName[0] )
+		if ( !upgradeBlock[i].szName[0] )
 			continue;
 
 		CAttributeList *pAttribList = NULL;

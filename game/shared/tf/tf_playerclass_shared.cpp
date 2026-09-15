@@ -132,9 +132,6 @@ bool CTFPlayerClassShared::CustomModelHasChanged( void )
 //-----------------------------------------------------------------------------
 // Purpose:
 //-----------------------------------------------------------------------------
-#ifdef STAGING_ONLY
-ConVar tf_player_use_female_models( "tf_player_use_female_models", "0", FCVAR_CHEAT | FCVAR_REPLICATED, "For testing. Appends '_female' to the model filename loaded" );
-#endif
 
 const char	*CTFPlayerClassShared::GetModelName( void ) const						
 { 
@@ -152,27 +149,6 @@ const char	*CTFPlayerClassShared::GetModelName( void ) const
 
 	Q_strncpy( modelFilename, GetPlayerClassData( m_iClass )->GetModelName(), sizeof( modelFilename ) );
 	
-#ifdef STAGING_ONLY
-	if ( tf_player_use_female_models.GetBool() )
-	{
-		// find the ".mdl" part
-		char *ext;
-		for( ext = modelFilename; *ext != '\000'; ++ext )
-		{
-			if ( *ext == '.' )
-			{
-				V_strncpy( ext, "_female.mdl", sizeof( modelFilename ) - ( ext - modelFilename ) );
-				break;
-			}
-		}
-
-		// make sure the test model is precached
-		bool bAllowPrecache = CBaseEntity::IsPrecacheAllowed();
-		CBaseEntity::SetAllowPrecache( true );
-		CBaseEntity::PrecacheModel( modelFilename );
-		CBaseEntity::SetAllowPrecache( bAllowPrecache );
-	}
-#endif
 
 	return modelFilename;
 }

@@ -64,7 +64,7 @@ CHudDemomanPipes::CHudDemomanPipes( const char *pElementName ) : CHudElement( pE
 	m_pPipesPresent = new EditablePanel( this, "PipesPresentPanel" );
 	m_pNoPipesPresent = new EditablePanel( this, "NoPipesPresentPanel" );
 
-	SetHiddenBits( HIDEHUD_MISCSTATUS );
+	SetHiddenBits( HIDEHUD_MISCSTATUS | HIDEHUD_PIPES_AND_CHARGE );
 
 	vgui::ivgui()->AddTickSignal( GetVPanel(), 100 );
 

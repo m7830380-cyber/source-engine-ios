@@ -700,11 +700,38 @@ bool CBaseObject::IsPlacementPosValid( void )
 	if ( tr.fraction < 1.0f )
 		return false;
 
-	// Make sure we can see the final position
-	UTIL_TraceLine( pPlayer->EyePosition(), m_vecBuildOrigin + Vector(0,0,m_vecBuildMaxs[2] * 0.5), MASK_PLAYERSOLID_BRUSHONLY, pPlayer, COLLISION_GROUP_NONE, &tr );
+	// Make sure we can see the final position (using a small hull to catch being able to build through seams in the map)
+	UTIL_TraceHull( pPlayer->EyePosition(), m_vecBuildOrigin + Vector( 0, 0, m_vecBuildMaxs[2] * 0.5 ), Vector( -2, -2, -2 ), Vector( 2, 2, 2 ), MASK_PLAYERSOLID_BRUSHONLY, pPlayer, COLLISION_GROUP_NONE, &tr );
 	if ( tr.fraction < 1.0 )
 	{
 		return false;
+	}
+
+	// Make sure we're not building on top of another building (only an issue on stairs, inclines)
+	// Note: Didn't use a hulltrace as it always returned the world, and not whatever objects were there (but maybe I was doing something wrong).
+	const int nMaxEnts = 64;
+	const float flBoxSize = 24.f;	// TODO(driller): Ask each object for Mins/Maxs, but this will do for now
+	const float flBoxDepth = 32.f;
+	CBaseEntity *pList[nMaxEnts];
+	int nCount = UTIL_EntitiesInBox( pList, nMaxEnts, m_vecBuildOrigin + Vector( -flBoxSize, -flBoxSize, -flBoxDepth ), m_vecBuildOrigin + Vector( flBoxSize, flBoxSize, flBoxSize ), FL_OBJECT );
+	// 	NDebugOverlay::Box( vecTestPos, Vector( -flBoxSize, -flBoxSize, -flBoxDepth ), TELEPORTER_MAXS, 255, 0, 0, 25, 0.5f );
+	// 	NDebugOverlay::Cross3D( vecTestPos, 64, 0, 255, 25, false, 0.5f );
+	for ( int i = 0; i < nCount; ++i )
+	{
+		if ( !pList[i] )
+			continue;
+
+		if ( pList[i] == this )
+			continue;
+
+		if ( pList[i]->IsBaseObject() )
+		{
+			CBaseObject *pObject = static_cast< CBaseObject* >( pList[i] );
+			if ( pObject->IsPlacing() )
+				continue;
+
+			return false;
+		}
 	}
 
 	return true;

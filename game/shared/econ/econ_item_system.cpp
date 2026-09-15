@@ -41,7 +41,7 @@
 
 #if ( defined( GAME_DLL ) || defined( CLIENT_DLL ) ) && ( defined( _DEBUG ) || defined( STAGING_ONLY ) )
 ConVar item_debug( "item_debug", "0", FCVAR_REPLICATED | FCVAR_DEVELOPMENTONLY );
-ConVar items_game_use_gc_copy( "items_game_use_gc_copy", "1", FCVAR_CHEAT | FCVAR_REPLICATED | FCVAR_ARCHIVE, "If set, items_game.txt will be stomped by the GC." );
+ConVar items_game_use_gc_copy( "items_game_use_gc_copy", "0", FCVAR_CHEAT | FCVAR_REPLICATED | FCVAR_ARCHIVE, "If set, items_game.txt will be stomped by the GC." );
 ConVar item_debug_validation( "item_debug_validation", "1", FCVAR_REPLICATED | FCVAR_ARCHIVE, "If set, CEconEntity::ValidateEntityAttachedToPlayer behaves as it would in release builds and also allows bot players to take the same code path as real players." );
 #endif
 
@@ -94,9 +94,29 @@ CEconItemSystem::~CEconItemSystem( void )
 //-----------------------------------------------------------------------------
 void CEconItemSystem::Init( void )
 {
-#if defined(USES_ECON_ITEMS)
+#ifdef USES_ECON_ITEMS
 	ParseItemSchemaFile( "scripts/items/items_game.txt" );
-#endif
+#endif // USES_ECON_ITEMS
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+void CEconItemSystem::PostInit( void )
+{
+#ifdef USES_ECON_ITEMS
+	CUtlVector< CUtlString > vecErrors;
+	bool bSuccess = m_itemSchema.BPostSchemaInit( &vecErrors );
+
+	if( !bSuccess )
+	{
+		FOR_EACH_VEC( vecErrors, nError )
+		{
+			Warning( "%s\n", vecErrors[nError].String() );
+		}
+	}
+#endif // USES_ECON_ITEMS
 
 #ifdef CLIENT_DLL
 	IGameEvent *event = gameeventmanager->CreateEvent( "item_schema_initialized" );
@@ -106,6 +126,7 @@ void CEconItemSystem::Init( void )
 	}
 #endif
 }
+
 
 //-----------------------------------------------------------------------------
 // Purpose: 
@@ -156,10 +177,14 @@ void CEconItemSystem::ReloadWhitelist( void )
 
 	// If we didn't find a file, we're done.
 	if ( !bFoundWhitelist )
+	{
+		pWhitelistKV->deleteThis();
 		return;
+	}
 
 	// Otherwise, go through the KVs and turn on the matching items.
 	Msg("Parsing item whitelist (default: %s)\n", bDefault ? "allowed" : "disallowed" );
+	KeyValues* ownerWhitelistKV = pWhitelistKV;
 	pWhitelistKV = pWhitelistKV->GetFirstSubKey();
 	while ( pWhitelistKV )
 	{
@@ -183,6 +208,8 @@ void CEconItemSystem::ReloadWhitelist( void )
 		pWhitelistKV = pWhitelistKV->GetNextKey();
 	}
 	Msg("Finished.\n");
+
+	ownerWhitelistKV->deleteThis();
 }
 
 #ifdef GAME_DLL
@@ -259,15 +286,14 @@ bool CEconItemSystem::DecryptItemFiles( KeyValues *pKV, const char *pName )
 void CEconItemSystem::ParseItemSchemaFile( const char *pFilename )
 {
 	CUtlVector< CUtlString > vecErrors;
-	bool bSuccess = m_itemSchema.BInit( pFilename, "MOD", &vecErrors );
+
+	bool bSuccess = m_itemSchema.BInit(pFilename, "GAME", &vecErrors);
 
 	if( !bSuccess )
 	{
 		FOR_EACH_VEC( vecErrors, nError )
 		{
-			// we want this to be an Error because several
-			// places rely on loading a valid item schema 
-			Error( "%s\n", vecErrors[nError].String() );
+			Warning( "%s\n", vecErrors[nError].String() );
 		}
 	}
 }
@@ -403,6 +429,25 @@ bool IDelayedSchemaData::InitializeSchemaInternal( CEconItemSchema *pItemSchema,
 		FOR_EACH_VEC( vecErrors, nError )
 		{
 			Warning( "%s\n", vecErrors[nError].Get() );
+		}
+
+		// Try to fall-back to the local copy.
+		Msg( "Falling back to item schema from local file.\n" );
+		KeyValuesAD pItemsGameKV( "ItemsGameFile" );
+		if ( pItemsGameKV->LoadFromFile( g_pFullFileSystem, "scripts/items/items_game.txt", "GAME" ) )
+		{
+			CUtlBuffer buffer;
+			pItemsGameKV->WriteAsBinary( buffer );
+
+			vecErrors.PurgeAndDeleteElements();
+			bSuccess = pItemSchema->BInitBinaryBuffer( buffer, &vecErrors );
+			if ( !bSuccess )
+			{
+				FOR_EACH_VEC( vecErrors, nError )
+				{
+					Warning( "%s\n", vecErrors[ nError ].Get() );
+				}
+			}
 		}
 	}
 	return bSuccess;
@@ -659,36 +704,3 @@ CON_COMMAND_F( econ_show_items_with_tag, "Lists the item definitions that have a
 }
 #endif // CLIENT_DLL
 
-#ifdef STAGING_ONLY
-//-----------------------------------------------------------------------------
-// Purpose: Update the item schema from the GC
-//-----------------------------------------------------------------------------
-#ifdef CLIENT_DLL
-CON_COMMAND_F( cl_reload_local_item_schema, "Reloads the local item schema copy.", FCVAR_CLIENTDLL )
-#else
-CON_COMMAND_F( sv_reload_local_item_schema, "Reloads the local item schema copy.", FCVAR_GAMEDLL )
-#endif
-{
-#ifdef CLIENT_DLL
-	engine->ClientCmd_Unrestricted( "cmd sv_reload_local_item_schema" );
-#endif
-
-	Msg( "Loading item schema from local file.\n" );
-	KeyValuesAD pItemsGameKV( "ItemsGameFile" );
-	if ( pItemsGameKV->LoadFromFile( g_pFullFileSystem, "scripts/items/items_game.txt", "GAME" ) )
-	{
-		CUtlBuffer buffer;
-		pItemsGameKV->WriteAsBinary( buffer );
-
-		CUtlVector< CUtlString > vecErrors;
-		bool bSuccess = ItemSystem()->GetItemSchema()->BInitBinaryBuffer( buffer, &vecErrors );
-		if( !bSuccess )
-		{
-			FOR_EACH_VEC( vecErrors, nError )
-			{
-				Warning( "%s\n", vecErrors[nError].Get() );
-			}
-		}
-	}
-}
-#endif

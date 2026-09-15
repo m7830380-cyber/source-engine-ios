@@ -18,9 +18,11 @@
 #include "vgui_controls/CheckButton.h"
 #include "vgui_controls/ScrollableEditablePanel.h"
 #include "econ_item_inventory.h"
+#include "tf_proto_script_obj_def.h"
 
 using namespace vgui;
-#define NEVER_REPEAT -1.f
+
+class CQuest;
 
 class CQuestNotificationPanel;
 
@@ -30,7 +32,7 @@ class CQuestNotificationPanel;
 class CQuestNotification
 {
 public:
-	CQuestNotification( CEconItem *pItem );
+	CQuestNotification( const CQuestThemeDefinition* pTheme );
 
 	enum ENotificationType_t
 	{
@@ -44,16 +46,14 @@ public:
 	virtual ~CQuestNotification() {}
 
 	virtual float Present( CQuestNotificationPanel* pNotificationPanel );
-	virtual void Update( CQuestNotificationPanel* pNotificationPanel ) = 0;
+	virtual void Update() = 0;
 	virtual bool IsDone() const = 0;
 	virtual bool ShouldPresent() const = 0;
 	virtual ENotificationType_t GetType() const = 0;
 	virtual float GetReplayTime() const = 0;
 
-	CEconItemHandle& GetItemHandle() { return m_hItem; } 
-
 protected:
-	CEconItemHandle m_hItem;
+	const ProtoDefID_t m_defID;
 	RealTimeCountdownTimer	m_timerDialog;
 	RealTimeCountdownTimer	m_timerShow; 
 };
@@ -65,11 +65,11 @@ class CQuestNotification_Speaking : public CQuestNotification
 {
 public:
 
-	CQuestNotification_Speaking( CEconItem *pItem );
+	CQuestNotification_Speaking( const CQuestThemeDefinition* pTheme );
 	virtual ~CQuestNotification_Speaking() {}
 
 	virtual float Present( CQuestNotificationPanel* pNotificationPanel ) OVERRIDE;
-	virtual void Update( CQuestNotificationPanel* pNotificationPanel ) OVERRIDE;
+	virtual void Update() OVERRIDE;
 	virtual bool IsDone() const OVERRIDE;
 
 protected:
@@ -85,8 +85,8 @@ class CQuestNotification_NewQuest : public CQuestNotification_Speaking
 {
 	DECLARE_CLASS_SIMPLE( CQuestNotification_NewQuest, CQuestNotification_Speaking );
 public:
-	CQuestNotification_NewQuest( CEconItem *pItem )
-		: CQuestNotification_Speaking( pItem )
+	CQuestNotification_NewQuest( const CQuestThemeDefinition* pTheme )
+		: CQuestNotification_Speaking( pTheme )
 	{}
 
 	virtual ~CQuestNotification_NewQuest() {}
@@ -98,8 +98,6 @@ public:
 
 protected:
 	virtual const char *GetSoundEntry( const CQuestThemeDefinition* pTheme, int nClassIndex ) OVERRIDE;
-
-	static CUtlVector< itemid_t > m_vecNotifiedItemIDs;
 };
 
 //-----------------------------------------------------------------------------
@@ -109,13 +107,13 @@ class CQuestNotification_CompletedQuest : public CQuestNotification_Speaking
 {
 	DECLARE_CLASS_SIMPLE( CQuestNotification_CompletedQuest, CQuestNotification_Speaking );
 public:
-	CQuestNotification_CompletedQuest( CEconItem *pItem );
+	CQuestNotification_CompletedQuest( const CQuestThemeDefinition* pTheme );
 
 	virtual ~CQuestNotification_CompletedQuest() {}
 
 	virtual bool ShouldPresent() const;
 	ENotificationType_t GetType() const { return NOTIFICATION_TYPE_COMPLETED; }
-	virtual float GetReplayTime() const { return NEVER_REPEAT; }
+	virtual float GetReplayTime() const { return 0.f; }
 
 protected:
 	virtual const char *GetSoundEntry( const CQuestThemeDefinition* pTheme, int nClassIndex ) OVERRIDE;
@@ -127,7 +125,7 @@ class CQuestNotification_FullyCompletedQuest : public CQuestNotification_Complet
 {
 	DECLARE_CLASS_SIMPLE( CQuestNotification_FullyCompletedQuest, CQuestNotification_CompletedQuest );
 public:
-	CQuestNotification_FullyCompletedQuest( CEconItem *pItem ) : CQuestNotification_CompletedQuest( pItem )
+	CQuestNotification_FullyCompletedQuest( const CQuestThemeDefinition* pTheme ) : CQuestNotification_CompletedQuest( pTheme )
 	{
 	}
 
@@ -156,12 +154,13 @@ public:
 	virtual void OnThink() OVERRIDE;
 private:
 
+	void CheckForAvailableNodeNotification();
+
 	bool ShouldPresent();
 
 	void Update();
-	void CheckForNotificationOpportunities();
 
-	bool AddNotificationForItem( const CEconItemView *pItem, CQuestNotification* pNotification );
+	void AddNotification( CQuestNotification* pNotification );
 	void SetCharacterImage( const char *pszImageName );
 
 	CUtlVector< CQuestNotification* > m_vecNotifications;
@@ -174,7 +173,7 @@ private:
 	EditablePanel  *m_pMainContainer;
 	bool			m_bInitialized;
 
-	CUtlMap< itemid_t, CCopyableUtlVector< float > > m_mapNotifiedItemIDs;
+	float m_flLastNotifiedTime[ CQuestNotification::NUM_NOTIFICATION_TYPES ];
 };
 
 #endif // QUEST_NOTIFICATION_PANEL_H

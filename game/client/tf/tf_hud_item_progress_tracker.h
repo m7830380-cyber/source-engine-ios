@@ -18,6 +18,8 @@
 #include "baseachievement.h"
 #include "gcsdk/gcclient_sharedobjectcache.h"
 #include "econ_item_inventory.h"
+#include "econ_quests.h"
+#include <functional>
 
 
 // memdbgon must be the last include file in a .cpp file!!!
@@ -26,30 +28,35 @@
 using namespace vgui;
 using namespace GCSDK;
 
+class CQuest;
+class CQuestDefinition;
 
-class CItemAttributeProgressPanel : public vgui::EditablePanel
+class CQuestObjectiveTextPanel : public vgui::EditablePanel
 {
-	DECLARE_CLASS_SIMPLE( CItemAttributeProgressPanel, vgui::EditablePanel );
+	DECLARE_CLASS_SIMPLE( CQuestObjectiveTextPanel, vgui::EditablePanel );
 public:
-	CItemAttributeProgressPanel( vgui::Panel* pParent, const char *pElementName, const CQuestObjectiveDefinition *pObjectiveDef, const char* pszResFileName );
-	virtual ~CItemAttributeProgressPanel() {}
+	CQuestObjectiveTextPanel( vgui::Panel* pParent, const char *pElementName, const QuestObjectiveInstance_t& objective, const char* pszResFileName );
+	virtual ~CQuestObjectiveTextPanel() {}
 
 	virtual void ApplySchemeSettings( vgui::IScheme *pScheme ) OVERRIDE;
 	virtual void ApplySettings( KeyValues *inResourceData ) OVERRIDE;
-
-	virtual void OnThink() OVERRIDE;
+	virtual void PerformLayout() OVERRIDE;
 
 	void SetProgress( Color glowColor );
 	int GetContentTall() const;
+	EQuestPoints GetPointsType() const { return m_objective.GetPointsType(); }
+	int GetPoints() const { return m_objective.GetPoints(); }
 
 	void SetIsValid( bool bIsValid );
-	bool IsAdvanced() const { return m_bAdvanced; }
 
-	const uint32 m_nDefIndex;
+	void SetDefinitions( const QuestObjectiveInstance_t& objective, const CQuestDefinition* pQuestDef );
+	uint32 GetDefIndex() const { return m_objective.GetObjectiveDef()->GetDefIndex(); }
+	const CQuestObjectiveDefinition* GetObjective() const { return m_objective.GetObjectiveDef(); }
+
+	MESSAGE_FUNC( HighlightCompletion, "HighlightCompletion" );
 private:
-	float	m_flLastThink;
-	float	m_flUpdateTime;
-	bool	m_bAdvanced;
+
+	void UpdateText();
 
 	Label *m_pAttribDesc;
 	Label *m_pAttribGlow;
@@ -58,19 +65,24 @@ private:
 	Color m_enabledTextColor;
 	Color m_disabledTextColor;
 
-	CUtlString m_strNormalPointLocToken;
-	CUtlString m_strAdvancedLocToken;
+	QuestObjectiveInstance_t m_objective;
+	const CQuestDefinition* m_pQuestDef = NULL;
 
 	CUtlString m_strResFileName;
+	bool m_bMapView = false;
 };
 
-class CItemTrackerPanel : public vgui::EditablePanel, public CGameEventListener
+class CQuestProgressTrackerPanel : public vgui::EditablePanel, public CGameEventListener
 {
-	DECLARE_CLASS_SIMPLE( CItemTrackerPanel, vgui::EditablePanel );
+	DECLARE_CLASS_SIMPLE( CQuestProgressTrackerPanel, vgui::EditablePanel );
 public:
 
-	CItemTrackerPanel( vgui::Panel* pParent, const char *pElementName, const CEconItem* pItem, const char* pszItemTrackerResFile );
-	virtual ~CItemTrackerPanel();
+	CQuestProgressTrackerPanel( vgui::Panel* pParent,
+								const char *pElementName,
+								const CQuest* pQuest,
+								const CQuestDefinition* pQuestDef,
+								const char* pszResFile = "resource/ui/quests/QuestItemTrackerPanel_Base.res" );
+	virtual ~CQuestProgressTrackerPanel();
 
 	virtual void ApplySettings( KeyValues *inResourceData ) OVERRIDE;
 	virtual void ApplySchemeSettings( vgui::IScheme *pScheme ) OVERRIDE;
@@ -80,93 +92,98 @@ public:
 	virtual void OnThink() OVERRIDE;
 	virtual void FireGameEvent( IGameEvent *event ) OVERRIDE;
 
-	bool IsStandardCompleted() const;
-	bool IsEverythingCompleted() const;
-	bool IsDoneProgressing() const { return m_flStandardCurrentProgress == m_flStandardTargetProgress && m_flBonusCurrentProgress == m_flBonusTargetProgress; }
+	bool ArePointsCompleted( uint32 nIndex ) const;
+	bool IsDoneProgressing() const
+	{
+		if ( !m_PointsBars.BIsDoneProgressing() )
+			return false;
 
-	void SetItem( const CEconItem* pItem );
-	CItemAttributeProgressPanel* GetPanelForObjective( const CQuestObjectiveDefinition* pObjective );
+		return true;
+	}
+
+	void SetQuest( const CQuest* pQuest );
+	void SetQuestDef( const CQuestDefinition* pQuestDef );
+	const CQuestDefinition* GetQuestDef() const { return m_pQuestDef; }
 	bool IsValidForLocalPlayer() const;
 
-	const CUtlVector< CItemAttributeProgressPanel* >& GetAttributePanels() const { return m_vecAttribPanels; }
+	const CUtlVector< CQuestObjectiveTextPanel* >& GetAttributePanels() const { return m_vecObjectivePanels; }
 
 protected:
+	MESSAGE_FUNC_PARAMS( UpdateStar, "UpdateStar", pParams );
 
-	enum ESoundToPlay
-	{
-		SOUND_NONE = 0,
-		SOUND_STANDARD_OBJECTIVE_TICK,
-		SOUND_ADVANCED_OBJECTIVE_TICK,
-		SOUND_QUEST_STANDARD_COMPLETE,
-		SOUND_QUEST_ADVANCED_COMPLETE,
-	};
-
+	void UpdateStars();
 	void CaptureProgress();
 	void UpdateBars();
+	void UpdateObjectives();
+	bool BIsTurningIn() const { return m_bTurningIn; };
+
+	
 
 	vgui::Label *m_pItemName;
 
 
-	CEconItemViewHandle m_pItem;
-	CUtlVector< CItemAttributeProgressPanel* > m_vecAttribPanels;
-	EditablePanel	*m_pCompletedContainer;
-	Label			*m_pCompletedDescGlow;
-	Label			*m_pCompletedNameGlow;
+	const CQuest* m_pQuest;
+	const CQuestDefinition* m_pQuestDef;
+	CUtlVector< CQuestObjectiveTextPanel* > m_vecObjectivePanels;
 
-	EditablePanel		*m_pProgressBarBackground;
-	EditablePanel		*m_pProgressBarStandard;
-	EditablePanel		*m_pProgressBarBonus;
-	EditablePanel		*m_pProgressBarStandardHighlight;
-	EditablePanel		*m_pProgressBarBonusHighlight;
+	struct PointsView_t
+	{
+		PointsView_t();
+		bool BIsDoneProgressing() const { return m_flCurrentProgress == m_flTargetProgress; }
 
-	float m_flStandardCurrentProgress;
-	float m_flStandardTargetProgress;
-	float m_flBonusCurrentProgress;
-	float m_flBonusTargetProgress;
-	float m_flUpdateTime;
+		EditablePanel		*m_pBarBG;
+		EditablePanel		*m_pBarCommitted;
+		EditablePanel		*m_pBarUncommitted;
+		EditablePanel		*m_pBarJustEarned;
+
+		float m_flCurrentProgress;
+		float m_flTargetProgress;
+		float m_flUpdateTime;
+		uint32 m_nMaxPoints;
+		CUtlString m_strObjectiveTick;
+		CUtlString m_strPointsComplete;
+	};
+
+	PointsView_t m_PointsBars;
+	ImagePanel* m_arStarImages[ EQuestPoints_ARRAYSIZE ];
+	Label* m_pPrimaryObjectiveLabel = NULL;
+	Label* m_pBonusObjectiveLabel = NULL;
+
 	float m_flLastThink;
 
-	uint32 m_nMaxStandardPoints;
-	uint32 m_nMaxBonusPoints;
-
-	ESoundToPlay m_eSoundToPlay;
-	static float m_sflEventRecievedTime;
+	const char* m_pszSoundToPlay;
+	int			m_nQueuedSoundPriority;
+	float		m_flCurrentJustEarnedProgress;
 
 	int m_nContentTall;
 
-	CUtlString m_strStandardObjectiveTick;
-	CUtlString m_strStandardPointsComplete;
-	CUtlString m_strAdvancedObjectiveComplete;
-	CUtlString m_strAdvancedPointsComplete;
-
+	CUtlString m_strResFile;
 	CUtlString m_strItemAttributeResFile;
-	CUtlString m_strItemTrackerResFile;
 
-	CUtlString m_strProgressBarStandardLocToken;
-	CUtlString m_strProgressBarAdvancedLocToken;
+	CUtlVector< std::pair< float, vgui::Panel* > >m_vecScorerLabels;
 
 	CPanelAnimationVarAliasType( int, m_nAttribYStartOffset, "attrib_y_start_offset", "5", "proportional_int");
 	CPanelAnimationVarAliasType( int, m_nAttribYStep, "attrib_y_step", "0", "proportional_int");
 	CPanelAnimationVarAliasType( int, m_nAttribXOffset, "attrib_x_offset", "5", "proportional_int");
-	CPanelAnimationVar( bool, m_bNoEffects, "no_effects", "0" );
+
+	// No effects.  Meaning, don't glow, dont show call to action panels ( ie. "Press F2 to turn in!")
+	CPanelAnimationVar( bool, m_bMapView, "map_view", "0" );
+	CPanelAnimationVar( bool, m_bShowItemName, "show_item_name", "1" );
+
+
+	CPanelAnimationVar( bool, m_bGroupBarsWithObjectives, "group_bars_with_objectives", "0" );
 
 	CPanelAnimationVarAliasType( int, m_nBarGap, "bar_gap", "0", "proportional_int");
 
-	CPanelAnimationVar( Color, m_clrStandardHighlight, "standard_glow_color", "QuestStandardHighlight" );
-	CPanelAnimationVar( Color, m_clrBonusHighlight, "bonus_glow_color", "QuestBonusHighlight" );
+	CPanelAnimationVar( Color, m_clrStandardHighlight, "standard_glow_color", "QuestMap_ActiveOrange" );
+	bool m_bTurningIn;
+	bool m_bSuppressStarChanges = false;
 };
 
 class CHudItemAttributeTracker : public CHudElement, public EditablePanel, public ISharedObjectListener
 {
 	DECLARE_CLASS_SIMPLE( CHudItemAttributeTracker, EditablePanel );
 public:
-	enum ETrackerHandling_t
-	{
-		TRACKER_INVALID,
-		TRACKER_CREATE,
-		TRACKER_UPDATE,
-		TRACKER_REMOVE,
-	};
 
 	CHudItemAttributeTracker( const char *pElementName );
 	virtual void ApplySchemeSettings( IScheme *pScheme ) OVERRIDE;
@@ -177,17 +194,17 @@ public:
 
 	virtual void SOCreated( const CSteamID & steamIDOwner, const CSharedObject *pObject, ESOCacheEvent eEvent ) OVERRIDE
 	{
-		HandleSOEvent( steamIDOwner, pObject, TRACKER_CREATE );
+		HandleSOEvent( steamIDOwner, pObject );
 	}
 	virtual void PreSOUpdate( const CSteamID & steamIDOwner, ESOCacheEvent eEvent ) OVERRIDE {};
 	virtual void SOUpdated( const CSteamID & steamIDOwner, const CSharedObject *pObject, ESOCacheEvent eEvent ) OVERRIDE
 	{
-		HandleSOEvent( steamIDOwner, pObject, TRACKER_UPDATE );
+		HandleSOEvent( steamIDOwner, pObject );
 	}
 	virtual void PostSOUpdate( const CSteamID & steamIDOwner, ESOCacheEvent eEvent ) OVERRIDE {};
 	virtual void SODestroyed( const CSteamID & steamIDOwner, const CSharedObject *pObject, ESOCacheEvent eEvent ) OVERRIDE
 	{
-		HandleSOEvent( steamIDOwner, pObject, TRACKER_REMOVE );
+		HandleSOEvent( steamIDOwner, pObject );
 	}
 	virtual void SOCacheSubscribed( const CSteamID & steamIDOwner, ESOCacheEvent eEvent ) OVERRIDE {};
 	virtual void SOCacheUnsubscribed( const CSteamID & steamIDOwner, ESOCacheEvent eEvent ) OVERRIDE {};
@@ -197,17 +214,16 @@ public:
 
 private:
 
-	void HandleSOEvent( const CSteamID & steamIDOwner, const CSharedObject *pObject, ETrackerHandling_t eHandling );
-	bool FindTrackerForItem( const CEconItem* pItem, CItemTrackerPanel** ppTracker, bool bCreateIfNotFound );
+	void HandleSOEvent( const CSteamID & steamIDOwner, const CSharedObject *pObject );
+	bool FindTrackerForItem( const CQuest* pItem, CQuestProgressTrackerPanel** ppTracker, bool bCreateIfNotFound );
 
-	CUtlMap< itemid_t, CItemTrackerPanel* > m_mapTrackers;
+	CUtlMap< uint64, CQuestProgressTrackerPanel* > m_mapTrackers;
 	EditablePanel *m_pStatusContainer;
 	Label *m_pCallToActionLabel;
 	Label *m_pStatusHeaderLabel;
 	CPanelAnimationVarAliasType( int, m_nStatusBufferWidth, "stats_buffer_width", "0", "proportional_int");
-
 };
 
-int QuestSort_PointsAscending( CItemAttributeProgressPanel* const* p1, CItemAttributeProgressPanel* const* p2 );
+int QuestSort_PointsAscending( CQuestObjectiveTextPanel* const* p1, CQuestObjectiveTextPanel* const* p2 );
 
 #endif // TF_HUD_ITEM_PROGRESS_TRACKER_H

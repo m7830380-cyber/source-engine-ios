@@ -25,6 +25,8 @@ BEGIN_DATADESC( CTFBaseBoss )
 	DEFINE_INPUTFUNC( FIELD_VOID, "Enable", InputEnable ),
 	DEFINE_INPUTFUNC( FIELD_VOID, "Disable", InputDisable ),
 	DEFINE_INPUTFUNC( FIELD_FLOAT, "SetSpeed", InputSetSpeed ),
+	DEFINE_INPUTFUNC( FIELD_FLOAT, "SetStepHeight", InputSetStepHeight ),
+	DEFINE_INPUTFUNC( FIELD_FLOAT, "SetMaxJumpHeight", InputSetMaxJumpHeight ),
 
 	DEFINE_INPUTFUNC( FIELD_INTEGER, "SetHealth", InputSetHealth ),
 	DEFINE_INPUTFUNC( FIELD_INTEGER, "SetMaxHealth", InputSetMaxHealth ),
@@ -46,6 +48,10 @@ BEGIN_DATADESC( CTFBaseBoss )
 	DEFINE_THINKFUNC( BossThink ),
 
 END_DATADESC()
+
+BEGIN_ENT_SCRIPTDESC( CTFBaseBoss, NextBotCombatCharacter, "Team Fortress 2 Base Boss" )
+	DEFINE_SCRIPTFUNC( SetResolvePlayerCollisions, "" )
+END_SCRIPTDESC();
 
 ConVar tf_base_boss_speed( "tf_base_boss_speed", "75", FCVAR_CHEAT );
 ConVar tf_base_boss_max_turn_rate( "tf_base_boss_max_turn_rate", "25", FCVAR_CHEAT );
@@ -635,5 +641,23 @@ void CTFBaseBoss::InputRemoveHealth( inputdata_t &inputdata )
 	{
 		CTakeDamageInfo info( inputdata.pCaller, inputdata.pActivator, vec3_origin, GetAbsOrigin(), iDamage, DMG_GENERIC, TF_DMG_CUSTOM_NONE );
 		Event_Killed( info );
+	}
+}
+
+//-----------------------------------------------------------------------------
+void CTFBaseBoss::InputSetStepHeight( inputdata_t &inputdata )
+{
+	if ( m_locomotor )
+	{
+		m_locomotor->SetStepHeight( inputdata.value.Float() );
+	}
+}
+
+//-----------------------------------------------------------------------------
+void CTFBaseBoss::InputSetMaxJumpHeight( inputdata_t &inputdata )
+{
+	if ( m_locomotor )
+	{
+		m_locomotor->SetMaxJumpHeight( inputdata.value.Float() );
 	}
 }

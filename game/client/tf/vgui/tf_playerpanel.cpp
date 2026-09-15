@@ -98,15 +98,17 @@ bool CTFPlayerPanel::Update( void )
 	CTFGSLobby *pLobby = GTFGCClientSystem()->GetLobby();
 	if ( pLobby )
 	{
-		const CTFLobbyMember *pMember = pLobby->GetMemberDetails( m_steamID );
-		if ( pMember )
+		int idxMember = pLobby->GetMemberIndexBySteamID( m_steamID );
+		if ( idxMember >= 0 )
 		{
+			ConstTFLobbyPlayer member = pLobby->GetMemberDetails( idxMember );
 			// Keep this updated
-			m_nGCTeam = pMember->team();
+			m_nGCTeam = member.GetTeam();
 
-			if ( !m_iPlayerIndex && pMember->has_last_connect_time() )
+			RTime32 rtLastConnect = member.GetLastConnectTime();
+			if ( !m_iPlayerIndex && rtLastConnect != 0 )
 			{
-				iRespawnWait = CRTime::RTime32DateAdd( pMember->last_connect_time(), 180, k_ETimeUnitSecond ) - CRTime::RTime32TimeCur();
+				iRespawnWait = CRTime::RTime32DateAdd( rtLastConnect, 180, k_ETimeUnitSecond ) - CRTime::RTime32TimeCur();
 				if ( iRespawnWait <= 0 )
 					iRespawnWait = -1;
 			}

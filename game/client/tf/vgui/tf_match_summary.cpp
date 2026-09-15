@@ -33,6 +33,7 @@
 #include "tf_pvp_rank_panel.h"
 #include "tf_badge_panel.h"
 #include "tf_survey_questions.h"
+#include "tf_ladder_data.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
@@ -53,19 +54,6 @@ DECLARE_BUILD_FACTORY( TFSectionedListPanel );
 
 DECLARE_HUDELEMENT( CTFMatchSummary );
 
-#ifdef STAGING_ONLY
-static void cc_tf_restart_match_summary()
-{
-	CTFMatchSummary *pMatchSummary = GET_HUDELEMENT( CTFMatchSummary );
-	if (pMatchSummary)
-	{
-		pMatchSummary->InvalidateLayout(true, true);
-		pMatchSummary->SetVisible( false );
-		pMatchSummary->SetVisible( true );
-	}
-}
-ConCommand tf_restart_match_summary("tf_restart_match_summary", cc_tf_restart_match_summary);
-#endif
 
 //-----------------------------------------------------------------------------
 // Purpose: Constructor
@@ -190,12 +178,27 @@ void CTFMatchSummary::ApplySchemeSettings( vgui::IScheme *pScheme )
 		const IMatchGroupDescription* pMatch = GetMatchGroupDescription( TFGameRules()->GetCurrentMatchGroup() );
 		if ( pMatch )
 		{
-			if ( pMatch->m_params.m_pmm_match_group_size->GetInt() > 12 )
+			auto lambdaAddCondition = [ &pConditions ]( const char* pszCondition )
 			{
-				pConditions = new KeyValues( "conditions" );
-				AddSubKeyNamed( pConditions, "if_large" );
+				if ( !pConditions )
+					pConditions = new KeyValues( "conditions" );
+				AddSubKeyNamed( pConditions, pszCondition );
+			};
 
+			if ( pMatch->GetMatchSize() > 12 )
+			{
+				lambdaAddCondition( "if_large" );
 				m_bLargeMatchGroup = true;
+			}
+
+			if ( pMatch->BUsesPlacementMatches() )
+			{
+				lambdaAddCondition( "if_uses_placement" );
+			}
+			
+			if ( pMatch->BUsesXP() )
+			{
+				lambdaAddCondition( "if_uses_xp" );
 			}
 		}
 	}
@@ -333,6 +336,12 @@ void CTFMatchSummary::SetVisible( bool state )
 		m_flDrawingPanelTime = gpGlobals->curtime + 4.5f;
 
 		CPvPRankPanel* pPvPRankPanel = FindControl< CPvPRankPanel >( "RankPanel" );
+		if ( pPvPRankPanel )
+		{
+			pPvPRankPanel->SetMatchGroup( TFGameRules()->GetCurrentMatchGroup() );
+		}
+
+		pPvPRankPanel = FindControl< CPvPRankPanel >( "RankModelPanel" );
 		if ( pPvPRankPanel )
 		{
 			pPvPRankPanel->SetMatchGroup( TFGameRules()->GetCurrentMatchGroup() );
@@ -524,9 +533,12 @@ void CTFMatchSummary::UpdateTeamInfo()
 // Purpose: Returns the last medal (column) added so we can display some effects
 //-----------------------------------------------------------------------------
 matchsummary_columns_t CTFMatchSummary::InternalAddMedalKeyValues( int iIndex, StatMedal_t eMedal, KeyValues *pKeyValues, int nTotalMedals /*= -1*/ )
-{
+{	
 	int nMedal = (int)eMedal;
 	matchsummary_columns_t retVal = MS_COLUMN_INVALID;
+	
+	if ( !IsIndexIntoPlayerArrayValid( iIndex ) )
+		return retVal;
 
 	if ( ( nTotalMedals < 0 ) || ( m_nNumMedalsThisUpdate <= nTotalMedals ) )
 	{
@@ -823,8 +835,7 @@ void CTFMatchSummary::UpdateBadgePanels( CUtlVector<CTFBadgePanel*> &pBadgePanel
 		return;
 
 	const IMatchGroupDescription *pMatchDesc = GetMatchGroupDescription( TFGameRules()->GetCurrentMatchGroup() );
-	const IProgressionDesc *pProgressionDesc = pMatchDesc ? pMatchDesc->m_pProgressionDesc : NULL; 
-	if ( pProgressionDesc )
+	if ( pMatchDesc && pMatchDesc->m_pProgressionDesc )
 	{
 		if ( pPlayerList )
 		{
@@ -839,11 +850,7 @@ void CTFMatchSummary::UpdateBadgePanels( CUtlVector<CTFBadgePanel*> &pBadgePanel
 					continue;
 
 				const CSteamID steamID = GetSteamIDForPlayerIndex( pKeyValues->GetInt( "playerIndex" ) );
-#ifdef STAGING_ONLY
-				if ( steamID.IsValid() || tf_test_match_summary.GetBool() )
-#else
 				if ( steamID.IsValid() )
-#endif // STAGING_ONLY
 				{
 					if ( iNumPanels >= pBadgePanels.Count() )
 					{
@@ -893,7 +900,7 @@ void CTFMatchSummary::UpdateBadgePanels( CUtlVector<CTFBadgePanel*> &pBadgePanel
 						pPanel->InvalidateLayout( true, true );
 					}
 
-					pPanel->SetupBadge( pProgressionDesc, steamID );
+					pPanel->SetupBadge( pMatchDesc, steamID );
 					iNumPanels++;
 				}
 			}
@@ -969,8 +976,6 @@ void CTFMatchSummary::FireGameEvent( IGameEvent *event )
 		Assert( iIndex > 0 && iIndex <= MAX_PLAYERS );
 		if ( iIndex > 0 && iIndex <= MAX_PLAYERS )
 		{
-			m_SkillRatings[iIndex].unRating = event->GetInt( "rating" );			// Rank
-			m_SkillRatings[iIndex].nDelta = event->GetInt( "delta" );
 			m_SkillRatings[iIndex].nScoreRank = event->GetInt( "score_rank" );		// Medal for Score (Gold, Silver, Bronze, or nothing)		
 			m_SkillRatings[iIndex].nKillsRank = event->GetInt( "kills_rank" );		// Medal for Kills
 			m_SkillRatings[iIndex].nDamageRank = event->GetInt( "damage_rank" );	// Medal for Damage
@@ -1105,7 +1110,7 @@ void CTFMatchSummary::OnTick()
 	if ( !pMatchDesc )
 		return;
 
-	if ( pMatchDesc->m_params.m_bAllowDrawingAtMatchSummary 
+	if ( pMatchDesc->BAllowDrawingAtMatchHistory()
 	     && m_pDrawingPanel 
 	     && ( m_flDrawingPanelTime > 0 ) 
 	     && ( m_flDrawingPanelTime < gpGlobals->curtime ) )
@@ -1128,11 +1133,7 @@ void CTFMatchSummary::OnTick()
 	bool bMapHasMatchSummaryStage = ( TFGameRules() && TFGameRules()->MapHasMatchSummaryStage() );
 
 	
-#ifdef STAGING_ONLY
-	bool bUseMatchSummaryStage = tf_test_match_summary.GetBool() || ( pMatchDesc && pMatchDesc->m_params.m_bUseMatchSummaryStage );
-#else
-	bool bUseMatchSummaryStage = ( pMatchDesc && pMatchDesc->m_params.m_bUseMatchSummaryStage );
-#endif
+	bool bUseMatchSummaryStage = ( pMatchDesc && pMatchDesc->BUseMatchSummaryStage() );
 
 	switch ( m_iCurrentState )
 	{
@@ -1415,7 +1416,7 @@ void CTFMatchSummary::OnTick()
 
 			if ( !m_bXPShown /*&& ( !bShowMedals || bMedalSoundTimeComplete ) */)
 			{
-				g_pClientMode->GetViewportAnimationController()->StartAnimationSequence( "CompetitiveGame_ShowPvPRankPanel", false );	
+				g_pClientMode->GetViewportAnimationController()->StartAnimationSequence( this, "CompetitiveGame_ShowPvPRankPanel", false );	
 				m_bXPShown = true;
 			}
 
@@ -1474,7 +1475,7 @@ bool CTFMatchSummary::ShowPerformanceMedals( void )
 	const IMatchGroupDescription* pMatchDesc = GetMatchGroupDescription( TFGameRules()->GetCurrentMatchGroup() );
 	if ( pMatchDesc )
 	{
-		bDistributePerformanceMedals = pMatchDesc->m_params.m_bDistributePerformanceMedals;
+		bDistributePerformanceMedals = pMatchDesc->BDistributePerformanceMedals();
 	}
 
 	return ( bDistributePerformanceMedals && !m_bPlayerAbandoned );

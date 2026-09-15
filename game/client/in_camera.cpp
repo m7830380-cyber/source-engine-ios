@@ -60,6 +60,7 @@ void CAM_ToThirdPerson(void)
 {
 	if ( cl_thirdperson.GetBool() == false )
 	{
+		g_ThirdPersonManager.SetDesiredCameraOffset( Vector( cam_idealdist.GetFloat(), cam_idealdistright.GetFloat(), cam_idealdistup.GetFloat() ) );
 		g_ThirdPersonManager.SetOverridingThirdPerson( true );
 	}
 
@@ -682,7 +683,7 @@ void CInput::CAM_ToThirdPerson(void)
 	{
 		m_fCameraInThirdPerson = true; 
 	
-		g_ThirdPersonManager.SetCameraOffsetAngles( Vector( viewangles[ YAW ], viewangles[ PITCH ], CAM_MIN_DIST ) );
+		g_ThirdPersonManager.SetCameraOffsetAngles( Vector( viewangles[ PITCH ], viewangles[ YAW ], CAM_MIN_DIST ) );
 	}
 
 	cam_command.SetValue( 0 );

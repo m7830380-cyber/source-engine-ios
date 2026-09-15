@@ -22,7 +22,6 @@
 // Creates and sets CTFBotManager as the NextBotManager singleton
 static CTFBotManager sTFBotManager;
 
-extern ConVar tf_bot_force_class;
 ConVar tf_bot_difficulty( "tf_bot_difficulty", "1", FCVAR_NONE, "Defines the skill of bots joining the game.  Values are: 0=easy, 1=normal, 2=hard, 3=expert." );
 ConVar tf_bot_quota( "tf_bot_quota", "0", FCVAR_NONE, "Determines the total number of tf bots in the game." );
 ConVar tf_bot_quota_mode( "tf_bot_quota_mode", "normal", FCVAR_NONE, "Determines the type of quota.\nAllowed values: 'normal', 'fill', and 'match'.\nIf 'fill', the server will adjust bots to keep N players in the game, where N is bot_quota.\nIf 'match', the server will maintain a 1:N ratio of humans to bots, where N is bot_quota." );
@@ -476,15 +475,14 @@ void CTFBotManager::MaintainBotQuota()
 				// join a team before we pick our class, since we use our teammates to decide what class to be
 				pBot->HandleCommand_JoinTeam( "auto" );
 
-				const char *classname = FStrEq( tf_bot_force_class.GetString(), "" ) ? pBot->GetNextSpawnClassname() : tf_bot_force_class.GetString();
-				pBot->HandleCommand_JoinClass( classname );
+				pBot->HandleCommand_JoinClass( pBot->GetNextSpawnClassname() );
 
 				// give the bot a proper name
 				char name[256];
 				CTFBot::DifficultyType skill = pBot->GetDifficulty();
 				CreateBotName( pBot->GetTeamNumber(), pBot->GetPlayerClass()->GetClassIndex(), skill, name, sizeof( name ) );
 				engine->SetFakeClientConVarValue( pBot->edict(), "name", name );
-				
+
 				// Keep track of any bots we add during a match
 				CMatchInfo *pMatchInfo = GTFGCClientSystem()->GetMatch();
 				if ( pMatchInfo )

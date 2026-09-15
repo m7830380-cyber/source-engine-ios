@@ -87,7 +87,7 @@ void RegisterUserMessages()
 	usermessages->Register( "CallVoteFailed", -1 );
 	usermessages->Register( "VoteStart", -1 );
 	usermessages->Register( "VotePass", -1 );
-	usermessages->Register( "VoteFailed", 2 );
+	usermessages->Register( "VoteFailed", 6 );
 	usermessages->Register( "VoteSetup", -1 );  // Initiates client-side voting UI
 
 	usermessages->Register( "PlayerBonusPoints", 3 );
@@ -123,12 +123,14 @@ void RegisterUserMessages()
 
 	usermessages->Register( "PlayerPickupWeapon", -1 );
 
-	usermessages->Register( "QuestObjectiveCompleted", 8 + 2 + 2 + 2 ); // ItemID(8) + StandardPoints(2) + BonusPoints(2) + ObjectiveDef(2)
+	usermessages->Register( "QuestObjectiveCompleted", 8 + 1 + 1 + 1 + 2 + 1 ); // QuestID(8) + Points0(1) + Points1(1) + Points2(1) + ObjectiveDef(2) + ScorerUserID(1)
 
-	usermessages->Register( "AutoBalanceVolunteer", -1 );
-	usermessages->Register( "AutoBalanceVolunteer_Cancel", -1 );
+	usermessages->Register( "SdkRequestEquipment", -1 );
+
+	usermessages->Register( "BuiltObject", 3 ); // object type, object mode (entrance vs. exit), index
 
 	// NVNT register haptic user messages
 	RegisterHapticMessages();
+	RegisterScriptMessages();
 }
 

@@ -21,65 +21,6 @@
 
 using namespace vgui;
 
-#ifdef STAGING_ONLY
-extern ConVar tf_use_card_tooltips;
-#endif // STAGING_ONLY
-
-//-----------------------------------------------------------------------------
-// Purpose: A label that can have multiple fonts specified and will try to use
-//			them in order specified, using the first one that fits.
-//-----------------------------------------------------------------------------
-class CAutoFittingLabel : public Label
-{
-	DECLARE_CLASS_SIMPLE( CAutoFittingLabel, Label );
-public:
-
-	CAutoFittingLabel( Panel *parent, const char *name )
-		: Label( parent, name, (const char*)NULL )
-	{}
-
-	virtual void ApplySettings( KeyValues *inResourceData )
-	{
-		BaseClass::ApplySettings( inResourceData );
-
-		KeyValues *pFonts = inResourceData->FindKey( "fonts" );
-		if ( pFonts )
-		{
-			vgui::IScheme *pScheme = scheme()->GetIScheme( GetScheme() );
-	
-			// Get all the fonts
-			FOR_EACH_SUBKEY( pFonts, pFont )
-			{
-				const HFont& font = pScheme->GetFont( pFont->GetString( "font" ), true );
-				m_vecFonts.AddToTail( font );			
-			}
-		}
-	}
-
-	virtual void PerformLayout()
-	{
-		BaseClass::PerformLayout();
-
-		SetFont( m_vecFonts.Head() );
-
-		// Go through all the fonts and try to find one that fits
-		int nIndex = 0;
-		GetTextImage()->ResizeImageToContentMaxWidth( GetWide() );
-		while ( ( GetTextImage()->IsWrapping() || GetTextImage()->GetEllipsesPosition() ) && nIndex < m_vecFonts.Count() )
-		{
-			SetFont( m_vecFonts[ nIndex ] );
-			GetTextImage()->ResizeImageToContentMaxWidth( GetWide() );
-
-			++nIndex;
-		}
-	}
-
-private:
-
-	CUtlVector< HFont > m_vecFonts;
-};
-
-DECLARE_BUILD_FACTORY( CAutoFittingLabel );
 
 
 DECLARE_BUILD_FACTORY( CRepeatingContainer );
@@ -370,12 +311,6 @@ void CTFItemCardPanel::SetItem( CEconItemView* pItem )
 //-----------------------------------------------------------------------------
 void CTFItemCardPanel::PinCard( bool bPin ) 
 {
-#ifdef STAGING_ONLY
-	if ( !tf_use_card_tooltips.GetBool() )
-	{
-		return;
-	}
-#endif // STAGING_ONLY
 
 	bool bDiff = bPin != m_bPinned;
 	m_bPinned = bPin; 

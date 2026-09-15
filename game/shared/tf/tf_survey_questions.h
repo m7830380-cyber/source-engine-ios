@@ -16,9 +16,6 @@
 	#include "vgui_controls/EditablePanel.h"
 #endif
 
-#ifdef GC
-	#include "tf_gc.h"
-#endif
 
 #ifdef CLIENT_DLL
 	using namespace vgui;
@@ -150,6 +147,20 @@ public:
 	virtual const char* GetResFile() const OVERRIDE
 	{
 		return  "resource/ui/SurveyPanel_CasualInquiry.res";
+	}
+};
+
+//-----------------------------------------------------------------------------
+// Purpose: Survey players to see how they feel about random crits
+//-----------------------------------------------------------------------------
+class CRandomCritSurvey : public CMultipleChoiceSurveyQuestionPanel
+{
+public:
+	CRandomCritSurvey( Panel* pParent, CMsgGCSurveyRequest msgSurveyQuestion ) : CMultipleChoiceSurveyQuestionPanel( pParent, msgSurveyQuestion, 6 ) {}
+
+	virtual const char* GetResFile() const OVERRIDE
+	{
+		return  "resource/ui/SurveyPanel_RandomCrit.res";
 	}
 };
 

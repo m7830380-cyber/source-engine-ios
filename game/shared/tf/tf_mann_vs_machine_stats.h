@@ -232,9 +232,6 @@ struct CPlayerWaveSpendingStats
 };
 //-----------------------------------------------------------------------------
 
-// initialize the stats for Mann Vs Machine
-void MannVsMachineStats_Init();
-
 // get the current wave
 uint32 MannVsMachineStats_GetCurrentWave();
 
@@ -244,6 +241,9 @@ uint32 MannVsMachineStats_GetDroppedCredits( int idxWave = -1 );
 uint32 MannVsMachineStats_GetMissedCredits( int idxWave = -1 );
 
 #ifdef GAME_DLL 
+
+// initialize the stats for Mann Vs Machine
+void MannVsMachineStats_Init();
 
 struct edict_t;
 
@@ -263,14 +263,9 @@ void MannVsMachineStats_PlayerEvent_BoughtInstantRespawn( CTFPlayer *pTFPlayer, 
 void MannVsMachineStats_SetPopulationFile( const char * pPopulationFile );
 #endif // GAME_DLL
 
-#ifdef CLIENT_DLL
-float MannVsMachineStats_GetFirstEventTime();
-float MannVsMachineStats_GetLastEventTime();
-#endif // end defined(CLIENT_DLL)
-
 struct CAllPlayerSpendingStats
 {
-	CPlayerWaveSpendingStats m_playerStats[MAX_PLAYERS+1];
+	CPlayerWaveSpendingStats m_playerStats[MAX_PLAYERS_ARRAY_SAFE];
 };
 
 //-----------------------------------------------------------------------------
@@ -390,7 +385,7 @@ private:
 	// Submitting Data to OGS
 	void SW_ReportWaveSummary ( int waveIndex, bool bIsSuccess );
 
-	CMannVsMachinePlayerStats m_playerStats[MAX_PLAYERS+1];
+	CMannVsMachinePlayerStats m_playerStats[MAX_PLAYERS_ARRAY_SAFE];
 
 	const char *m_pPopFileName;
 	const char *m_pMapName;

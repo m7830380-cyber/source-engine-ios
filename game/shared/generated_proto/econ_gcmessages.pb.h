@@ -222,7 +222,6 @@ enum EGCItemMsg {
   k_EMsgGCQuestObjective_Progress = 2558,
   k_EMsgGCQuestCompleted = 2559,
   k_EMsgGCApplyDuckToken = 2560,
-  k_EMsgGCQuestComplete_Request = 2561,
   k_EMsgGCQuestObjective_PointsChange = 2562,
   k_EMsgGCQuestObjective_RequestLoanerItems = 2564,
   k_EMsgGCQuestObjective_RequestLoanerResponse = 2565,
@@ -2456,12 +2455,12 @@ class CMsgGCQuestObjective_Progress : public ::google::protobuf::Message {
 
   // accessors -------------------------------------------------------
 
-  // optional uint64 quest_item_id = 1;
-  inline bool has_quest_item_id() const;
-  inline void clear_quest_item_id();
-  static const int kQuestItemIdFieldNumber = 1;
-  inline ::google::protobuf::uint64 quest_item_id() const;
-  inline void set_quest_item_id(::google::protobuf::uint64 value);
+  // optional uint64 quest_id = 1;
+  inline bool has_quest_id() const;
+  inline void clear_quest_id();
+  static const int kQuestIdFieldNumber = 1;
+  inline ::google::protobuf::uint64 quest_id() const;
+  inline void set_quest_id(::google::protobuf::uint64 value);
 
   // optional uint32 quest_attrib_index = 2;
   inline bool has_quest_attrib_index() const;
@@ -2486,8 +2485,8 @@ class CMsgGCQuestObjective_Progress : public ::google::protobuf::Message {
 
   // @@protoc_insertion_point(class_scope:CMsgGCQuestObjective_Progress)
  private:
-  inline void set_has_quest_item_id();
-  inline void clear_has_quest_item_id();
+  inline void set_has_quest_id();
+  inline void clear_has_quest_id();
   inline void set_has_quest_attrib_index();
   inline void clear_has_quest_attrib_index();
   inline void set_has_delta();
@@ -2499,7 +2498,7 @@ class CMsgGCQuestObjective_Progress : public ::google::protobuf::Message {
 
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
-  ::google::protobuf::uint64 quest_item_id_;
+  ::google::protobuf::uint64 quest_id_;
   ::google::protobuf::uint32 quest_attrib_index_;
   ::google::protobuf::uint32 delta_;
   ::google::protobuf::uint64 owner_steamid_;
@@ -2565,26 +2564,12 @@ class CMsgGCQuestObjective_PointsChange : public ::google::protobuf::Message {
 
   // accessors -------------------------------------------------------
 
-  // optional uint64 quest_item_id = 1;
-  inline bool has_quest_item_id() const;
-  inline void clear_quest_item_id();
-  static const int kQuestItemIdFieldNumber = 1;
-  inline ::google::protobuf::uint64 quest_item_id() const;
-  inline void set_quest_item_id(::google::protobuf::uint64 value);
-
-  // optional uint32 standard_points = 2;
-  inline bool has_standard_points() const;
-  inline void clear_standard_points();
-  static const int kStandardPointsFieldNumber = 2;
-  inline ::google::protobuf::uint32 standard_points() const;
-  inline void set_standard_points(::google::protobuf::uint32 value);
-
-  // optional uint32 bonus_points = 3;
-  inline bool has_bonus_points() const;
-  inline void clear_bonus_points();
-  static const int kBonusPointsFieldNumber = 3;
-  inline ::google::protobuf::uint32 bonus_points() const;
-  inline void set_bonus_points(::google::protobuf::uint32 value);
+  // optional uint64 quest_id = 1;
+  inline bool has_quest_id() const;
+  inline void clear_quest_id();
+  static const int kQuestIdFieldNumber = 1;
+  inline ::google::protobuf::uint64 quest_id() const;
+  inline void set_quest_id(::google::protobuf::uint64 value);
 
   // optional fixed64 owner_steamid = 4;
   inline bool has_owner_steamid() const;
@@ -2600,28 +2585,52 @@ class CMsgGCQuestObjective_PointsChange : public ::google::protobuf::Message {
   inline bool update_base_points() const;
   inline void set_update_base_points(bool value);
 
+  // optional uint32 points_0 = 6;
+  inline bool has_points_0() const;
+  inline void clear_points_0();
+  static const int kPoints0FieldNumber = 6;
+  inline ::google::protobuf::uint32 points_0() const;
+  inline void set_points_0(::google::protobuf::uint32 value);
+
+  // optional uint32 points_1 = 7;
+  inline bool has_points_1() const;
+  inline void clear_points_1();
+  static const int kPoints1FieldNumber = 7;
+  inline ::google::protobuf::uint32 points_1() const;
+  inline void set_points_1(::google::protobuf::uint32 value);
+
+  // optional uint32 points_2 = 8;
+  inline bool has_points_2() const;
+  inline void clear_points_2();
+  static const int kPoints2FieldNumber = 8;
+  inline ::google::protobuf::uint32 points_2() const;
+  inline void set_points_2(::google::protobuf::uint32 value);
+
   // @@protoc_insertion_point(class_scope:CMsgGCQuestObjective_PointsChange)
  private:
-  inline void set_has_quest_item_id();
-  inline void clear_has_quest_item_id();
-  inline void set_has_standard_points();
-  inline void clear_has_standard_points();
-  inline void set_has_bonus_points();
-  inline void clear_has_bonus_points();
+  inline void set_has_quest_id();
+  inline void clear_has_quest_id();
   inline void set_has_owner_steamid();
   inline void clear_has_owner_steamid();
   inline void set_has_update_base_points();
   inline void clear_has_update_base_points();
+  inline void set_has_points_0();
+  inline void clear_has_points_0();
+  inline void set_has_points_1();
+  inline void clear_has_points_1();
+  inline void set_has_points_2();
+  inline void clear_has_points_2();
 
   ::google::protobuf::UnknownFieldSet _unknown_fields_;
 
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
-  ::google::protobuf::uint64 quest_item_id_;
-  ::google::protobuf::uint32 standard_points_;
-  ::google::protobuf::uint32 bonus_points_;
+  ::google::protobuf::uint64 quest_id_;
   ::google::protobuf::uint64 owner_steamid_;
   bool update_base_points_;
+  ::google::protobuf::uint32 points_0_;
+  ::google::protobuf::uint32 points_1_;
+  ::google::protobuf::uint32 points_2_;
   friend void  protobuf_AddDesc_econ_5fgcmessages_2eproto();
   friend void protobuf_AssignDesc_econ_5fgcmessages_2eproto();
   friend void protobuf_ShutdownFile_econ_5fgcmessages_2eproto();
@@ -2684,23 +2693,23 @@ class CMsgGCQuestComplete_Request : public ::google::protobuf::Message {
 
   // accessors -------------------------------------------------------
 
-  // optional uint64 quest_item_id = 1;
-  inline bool has_quest_item_id() const;
-  inline void clear_quest_item_id();
-  static const int kQuestItemIdFieldNumber = 1;
-  inline ::google::protobuf::uint64 quest_item_id() const;
-  inline void set_quest_item_id(::google::protobuf::uint64 value);
+  // optional uint64 quest_id = 1;
+  inline bool has_quest_id() const;
+  inline void clear_quest_id();
+  static const int kQuestIdFieldNumber = 1;
+  inline ::google::protobuf::uint64 quest_id() const;
+  inline void set_quest_id(::google::protobuf::uint64 value);
 
   // @@protoc_insertion_point(class_scope:CMsgGCQuestComplete_Request)
  private:
-  inline void set_has_quest_item_id();
-  inline void clear_has_quest_item_id();
+  inline void set_has_quest_id();
+  inline void clear_has_quest_id();
 
   ::google::protobuf::UnknownFieldSet _unknown_fields_;
 
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
-  ::google::protobuf::uint64 quest_item_id_;
+  ::google::protobuf::uint64 quest_id_;
   friend void  protobuf_AddDesc_econ_5fgcmessages_2eproto();
   friend void protobuf_AssignDesc_econ_5fgcmessages_2eproto();
   friend void protobuf_ShutdownFile_econ_5fgcmessages_2eproto();
@@ -2832,23 +2841,23 @@ class CMsgGCQuestObjective_RequestLoanerItems : public ::google::protobuf::Messa
 
   // accessors -------------------------------------------------------
 
-  // optional uint64 quest_item_id = 1;
-  inline bool has_quest_item_id() const;
-  inline void clear_quest_item_id();
-  static const int kQuestItemIdFieldNumber = 1;
-  inline ::google::protobuf::uint64 quest_item_id() const;
-  inline void set_quest_item_id(::google::protobuf::uint64 value);
+  // optional uint64 quest_id = 1;
+  inline bool has_quest_id() const;
+  inline void clear_quest_id();
+  static const int kQuestIdFieldNumber = 1;
+  inline ::google::protobuf::uint64 quest_id() const;
+  inline void set_quest_id(::google::protobuf::uint64 value);
 
   // @@protoc_insertion_point(class_scope:CMsgGCQuestObjective_RequestLoanerItems)
  private:
-  inline void set_has_quest_item_id();
-  inline void clear_has_quest_item_id();
+  inline void set_has_quest_id();
+  inline void clear_has_quest_id();
 
   ::google::protobuf::UnknownFieldSet _unknown_fields_;
 
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
-  ::google::protobuf::uint64 quest_item_id_;
+  ::google::protobuf::uint64 quest_id_;
   friend void  protobuf_AddDesc_econ_5fgcmessages_2eproto();
   friend void protobuf_AssignDesc_econ_5fgcmessages_2eproto();
   friend void protobuf_ShutdownFile_econ_5fgcmessages_2eproto();
@@ -3246,23 +3255,23 @@ class CMsgGCQuestDiscard_Request : public ::google::protobuf::Message {
 
   // accessors -------------------------------------------------------
 
-  // optional uint64 quest_item_id = 1;
-  inline bool has_quest_item_id() const;
-  inline void clear_quest_item_id();
-  static const int kQuestItemIdFieldNumber = 1;
-  inline ::google::protobuf::uint64 quest_item_id() const;
-  inline void set_quest_item_id(::google::protobuf::uint64 value);
+  // optional uint64 quest_id = 1;
+  inline bool has_quest_id() const;
+  inline void clear_quest_id();
+  static const int kQuestIdFieldNumber = 1;
+  inline ::google::protobuf::uint64 quest_id() const;
+  inline void set_quest_id(::google::protobuf::uint64 value);
 
   // @@protoc_insertion_point(class_scope:CMsgGCQuestDiscard_Request)
  private:
-  inline void set_has_quest_item_id();
-  inline void clear_has_quest_item_id();
+  inline void set_has_quest_id();
+  inline void clear_has_quest_id();
 
   ::google::protobuf::UnknownFieldSet _unknown_fields_;
 
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
-  ::google::protobuf::uint64 quest_item_id_;
+  ::google::protobuf::uint64 quest_id_;
   friend void  protobuf_AddDesc_econ_5fgcmessages_2eproto();
   friend void protobuf_AssignDesc_econ_5fgcmessages_2eproto();
   friend void protobuf_ShutdownFile_econ_5fgcmessages_2eproto();
@@ -4383,28 +4392,28 @@ inline void CMsgGCShuffleCrateContents::set_allocated_user_code_string(::std::st
 
 // CMsgGCQuestObjective_Progress
 
-// optional uint64 quest_item_id = 1;
-inline bool CMsgGCQuestObjective_Progress::has_quest_item_id() const {
+// optional uint64 quest_id = 1;
+inline bool CMsgGCQuestObjective_Progress::has_quest_id() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
-inline void CMsgGCQuestObjective_Progress::set_has_quest_item_id() {
+inline void CMsgGCQuestObjective_Progress::set_has_quest_id() {
   _has_bits_[0] |= 0x00000001u;
 }
-inline void CMsgGCQuestObjective_Progress::clear_has_quest_item_id() {
+inline void CMsgGCQuestObjective_Progress::clear_has_quest_id() {
   _has_bits_[0] &= ~0x00000001u;
 }
-inline void CMsgGCQuestObjective_Progress::clear_quest_item_id() {
-  quest_item_id_ = GOOGLE_ULONGLONG(0);
-  clear_has_quest_item_id();
+inline void CMsgGCQuestObjective_Progress::clear_quest_id() {
+  quest_id_ = GOOGLE_ULONGLONG(0);
+  clear_has_quest_id();
 }
-inline ::google::protobuf::uint64 CMsgGCQuestObjective_Progress::quest_item_id() const {
-  // @@protoc_insertion_point(field_get:CMsgGCQuestObjective_Progress.quest_item_id)
-  return quest_item_id_;
+inline ::google::protobuf::uint64 CMsgGCQuestObjective_Progress::quest_id() const {
+  // @@protoc_insertion_point(field_get:CMsgGCQuestObjective_Progress.quest_id)
+  return quest_id_;
 }
-inline void CMsgGCQuestObjective_Progress::set_quest_item_id(::google::protobuf::uint64 value) {
-  set_has_quest_item_id();
-  quest_item_id_ = value;
-  // @@protoc_insertion_point(field_set:CMsgGCQuestObjective_Progress.quest_item_id)
+inline void CMsgGCQuestObjective_Progress::set_quest_id(::google::protobuf::uint64 value) {
+  set_has_quest_id();
+  quest_id_ = value;
+  // @@protoc_insertion_point(field_set:CMsgGCQuestObjective_Progress.quest_id)
 }
 
 // optional uint32 quest_attrib_index = 2;
@@ -4483,87 +4492,39 @@ inline void CMsgGCQuestObjective_Progress::set_owner_steamid(::google::protobuf:
 
 // CMsgGCQuestObjective_PointsChange
 
-// optional uint64 quest_item_id = 1;
-inline bool CMsgGCQuestObjective_PointsChange::has_quest_item_id() const {
+// optional uint64 quest_id = 1;
+inline bool CMsgGCQuestObjective_PointsChange::has_quest_id() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
-inline void CMsgGCQuestObjective_PointsChange::set_has_quest_item_id() {
+inline void CMsgGCQuestObjective_PointsChange::set_has_quest_id() {
   _has_bits_[0] |= 0x00000001u;
 }
-inline void CMsgGCQuestObjective_PointsChange::clear_has_quest_item_id() {
+inline void CMsgGCQuestObjective_PointsChange::clear_has_quest_id() {
   _has_bits_[0] &= ~0x00000001u;
 }
-inline void CMsgGCQuestObjective_PointsChange::clear_quest_item_id() {
-  quest_item_id_ = GOOGLE_ULONGLONG(0);
-  clear_has_quest_item_id();
+inline void CMsgGCQuestObjective_PointsChange::clear_quest_id() {
+  quest_id_ = GOOGLE_ULONGLONG(0);
+  clear_has_quest_id();
 }
-inline ::google::protobuf::uint64 CMsgGCQuestObjective_PointsChange::quest_item_id() const {
-  // @@protoc_insertion_point(field_get:CMsgGCQuestObjective_PointsChange.quest_item_id)
-  return quest_item_id_;
+inline ::google::protobuf::uint64 CMsgGCQuestObjective_PointsChange::quest_id() const {
+  // @@protoc_insertion_point(field_get:CMsgGCQuestObjective_PointsChange.quest_id)
+  return quest_id_;
 }
-inline void CMsgGCQuestObjective_PointsChange::set_quest_item_id(::google::protobuf::uint64 value) {
-  set_has_quest_item_id();
-  quest_item_id_ = value;
-  // @@protoc_insertion_point(field_set:CMsgGCQuestObjective_PointsChange.quest_item_id)
-}
-
-// optional uint32 standard_points = 2;
-inline bool CMsgGCQuestObjective_PointsChange::has_standard_points() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
-}
-inline void CMsgGCQuestObjective_PointsChange::set_has_standard_points() {
-  _has_bits_[0] |= 0x00000002u;
-}
-inline void CMsgGCQuestObjective_PointsChange::clear_has_standard_points() {
-  _has_bits_[0] &= ~0x00000002u;
-}
-inline void CMsgGCQuestObjective_PointsChange::clear_standard_points() {
-  standard_points_ = 0u;
-  clear_has_standard_points();
-}
-inline ::google::protobuf::uint32 CMsgGCQuestObjective_PointsChange::standard_points() const {
-  // @@protoc_insertion_point(field_get:CMsgGCQuestObjective_PointsChange.standard_points)
-  return standard_points_;
-}
-inline void CMsgGCQuestObjective_PointsChange::set_standard_points(::google::protobuf::uint32 value) {
-  set_has_standard_points();
-  standard_points_ = value;
-  // @@protoc_insertion_point(field_set:CMsgGCQuestObjective_PointsChange.standard_points)
-}
-
-// optional uint32 bonus_points = 3;
-inline bool CMsgGCQuestObjective_PointsChange::has_bonus_points() const {
-  return (_has_bits_[0] & 0x00000004u) != 0;
-}
-inline void CMsgGCQuestObjective_PointsChange::set_has_bonus_points() {
-  _has_bits_[0] |= 0x00000004u;
-}
-inline void CMsgGCQuestObjective_PointsChange::clear_has_bonus_points() {
-  _has_bits_[0] &= ~0x00000004u;
-}
-inline void CMsgGCQuestObjective_PointsChange::clear_bonus_points() {
-  bonus_points_ = 0u;
-  clear_has_bonus_points();
-}
-inline ::google::protobuf::uint32 CMsgGCQuestObjective_PointsChange::bonus_points() const {
-  // @@protoc_insertion_point(field_get:CMsgGCQuestObjective_PointsChange.bonus_points)
-  return bonus_points_;
-}
-inline void CMsgGCQuestObjective_PointsChange::set_bonus_points(::google::protobuf::uint32 value) {
-  set_has_bonus_points();
-  bonus_points_ = value;
-  // @@protoc_insertion_point(field_set:CMsgGCQuestObjective_PointsChange.bonus_points)
+inline void CMsgGCQuestObjective_PointsChange::set_quest_id(::google::protobuf::uint64 value) {
+  set_has_quest_id();
+  quest_id_ = value;
+  // @@protoc_insertion_point(field_set:CMsgGCQuestObjective_PointsChange.quest_id)
 }
 
 // optional fixed64 owner_steamid = 4;
 inline bool CMsgGCQuestObjective_PointsChange::has_owner_steamid() const {
-  return (_has_bits_[0] & 0x00000008u) != 0;
+  return (_has_bits_[0] & 0x00000002u) != 0;
 }
 inline void CMsgGCQuestObjective_PointsChange::set_has_owner_steamid() {
-  _has_bits_[0] |= 0x00000008u;
+  _has_bits_[0] |= 0x00000002u;
 }
 inline void CMsgGCQuestObjective_PointsChange::clear_has_owner_steamid() {
-  _has_bits_[0] &= ~0x00000008u;
+  _has_bits_[0] &= ~0x00000002u;
 }
 inline void CMsgGCQuestObjective_PointsChange::clear_owner_steamid() {
   owner_steamid_ = GOOGLE_ULONGLONG(0);
@@ -4581,13 +4542,13 @@ inline void CMsgGCQuestObjective_PointsChange::set_owner_steamid(::google::proto
 
 // optional bool update_base_points = 5 [default = false];
 inline bool CMsgGCQuestObjective_PointsChange::has_update_base_points() const {
-  return (_has_bits_[0] & 0x00000010u) != 0;
+  return (_has_bits_[0] & 0x00000004u) != 0;
 }
 inline void CMsgGCQuestObjective_PointsChange::set_has_update_base_points() {
-  _has_bits_[0] |= 0x00000010u;
+  _has_bits_[0] |= 0x00000004u;
 }
 inline void CMsgGCQuestObjective_PointsChange::clear_has_update_base_points() {
-  _has_bits_[0] &= ~0x00000010u;
+  _has_bits_[0] &= ~0x00000004u;
 }
 inline void CMsgGCQuestObjective_PointsChange::clear_update_base_points() {
   update_base_points_ = false;
@@ -4603,32 +4564,104 @@ inline void CMsgGCQuestObjective_PointsChange::set_update_base_points(bool value
   // @@protoc_insertion_point(field_set:CMsgGCQuestObjective_PointsChange.update_base_points)
 }
 
+// optional uint32 points_0 = 6;
+inline bool CMsgGCQuestObjective_PointsChange::has_points_0() const {
+  return (_has_bits_[0] & 0x00000008u) != 0;
+}
+inline void CMsgGCQuestObjective_PointsChange::set_has_points_0() {
+  _has_bits_[0] |= 0x00000008u;
+}
+inline void CMsgGCQuestObjective_PointsChange::clear_has_points_0() {
+  _has_bits_[0] &= ~0x00000008u;
+}
+inline void CMsgGCQuestObjective_PointsChange::clear_points_0() {
+  points_0_ = 0u;
+  clear_has_points_0();
+}
+inline ::google::protobuf::uint32 CMsgGCQuestObjective_PointsChange::points_0() const {
+  // @@protoc_insertion_point(field_get:CMsgGCQuestObjective_PointsChange.points_0)
+  return points_0_;
+}
+inline void CMsgGCQuestObjective_PointsChange::set_points_0(::google::protobuf::uint32 value) {
+  set_has_points_0();
+  points_0_ = value;
+  // @@protoc_insertion_point(field_set:CMsgGCQuestObjective_PointsChange.points_0)
+}
+
+// optional uint32 points_1 = 7;
+inline bool CMsgGCQuestObjective_PointsChange::has_points_1() const {
+  return (_has_bits_[0] & 0x00000010u) != 0;
+}
+inline void CMsgGCQuestObjective_PointsChange::set_has_points_1() {
+  _has_bits_[0] |= 0x00000010u;
+}
+inline void CMsgGCQuestObjective_PointsChange::clear_has_points_1() {
+  _has_bits_[0] &= ~0x00000010u;
+}
+inline void CMsgGCQuestObjective_PointsChange::clear_points_1() {
+  points_1_ = 0u;
+  clear_has_points_1();
+}
+inline ::google::protobuf::uint32 CMsgGCQuestObjective_PointsChange::points_1() const {
+  // @@protoc_insertion_point(field_get:CMsgGCQuestObjective_PointsChange.points_1)
+  return points_1_;
+}
+inline void CMsgGCQuestObjective_PointsChange::set_points_1(::google::protobuf::uint32 value) {
+  set_has_points_1();
+  points_1_ = value;
+  // @@protoc_insertion_point(field_set:CMsgGCQuestObjective_PointsChange.points_1)
+}
+
+// optional uint32 points_2 = 8;
+inline bool CMsgGCQuestObjective_PointsChange::has_points_2() const {
+  return (_has_bits_[0] & 0x00000020u) != 0;
+}
+inline void CMsgGCQuestObjective_PointsChange::set_has_points_2() {
+  _has_bits_[0] |= 0x00000020u;
+}
+inline void CMsgGCQuestObjective_PointsChange::clear_has_points_2() {
+  _has_bits_[0] &= ~0x00000020u;
+}
+inline void CMsgGCQuestObjective_PointsChange::clear_points_2() {
+  points_2_ = 0u;
+  clear_has_points_2();
+}
+inline ::google::protobuf::uint32 CMsgGCQuestObjective_PointsChange::points_2() const {
+  // @@protoc_insertion_point(field_get:CMsgGCQuestObjective_PointsChange.points_2)
+  return points_2_;
+}
+inline void CMsgGCQuestObjective_PointsChange::set_points_2(::google::protobuf::uint32 value) {
+  set_has_points_2();
+  points_2_ = value;
+  // @@protoc_insertion_point(field_set:CMsgGCQuestObjective_PointsChange.points_2)
+}
+
 // -------------------------------------------------------------------
 
 // CMsgGCQuestComplete_Request
 
-// optional uint64 quest_item_id = 1;
-inline bool CMsgGCQuestComplete_Request::has_quest_item_id() const {
+// optional uint64 quest_id = 1;
+inline bool CMsgGCQuestComplete_Request::has_quest_id() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
-inline void CMsgGCQuestComplete_Request::set_has_quest_item_id() {
+inline void CMsgGCQuestComplete_Request::set_has_quest_id() {
   _has_bits_[0] |= 0x00000001u;
 }
-inline void CMsgGCQuestComplete_Request::clear_has_quest_item_id() {
+inline void CMsgGCQuestComplete_Request::clear_has_quest_id() {
   _has_bits_[0] &= ~0x00000001u;
 }
-inline void CMsgGCQuestComplete_Request::clear_quest_item_id() {
-  quest_item_id_ = GOOGLE_ULONGLONG(0);
-  clear_has_quest_item_id();
+inline void CMsgGCQuestComplete_Request::clear_quest_id() {
+  quest_id_ = GOOGLE_ULONGLONG(0);
+  clear_has_quest_id();
 }
-inline ::google::protobuf::uint64 CMsgGCQuestComplete_Request::quest_item_id() const {
-  // @@protoc_insertion_point(field_get:CMsgGCQuestComplete_Request.quest_item_id)
-  return quest_item_id_;
+inline ::google::protobuf::uint64 CMsgGCQuestComplete_Request::quest_id() const {
+  // @@protoc_insertion_point(field_get:CMsgGCQuestComplete_Request.quest_id)
+  return quest_id_;
 }
-inline void CMsgGCQuestComplete_Request::set_quest_item_id(::google::protobuf::uint64 value) {
-  set_has_quest_item_id();
-  quest_item_id_ = value;
-  // @@protoc_insertion_point(field_set:CMsgGCQuestComplete_Request.quest_item_id)
+inline void CMsgGCQuestComplete_Request::set_quest_id(::google::protobuf::uint64 value) {
+  set_has_quest_id();
+  quest_id_ = value;
+  // @@protoc_insertion_point(field_set:CMsgGCQuestComplete_Request.quest_id)
 }
 
 // -------------------------------------------------------------------
@@ -4639,28 +4672,28 @@ inline void CMsgGCQuestComplete_Request::set_quest_item_id(::google::protobuf::u
 
 // CMsgGCQuestObjective_RequestLoanerItems
 
-// optional uint64 quest_item_id = 1;
-inline bool CMsgGCQuestObjective_RequestLoanerItems::has_quest_item_id() const {
+// optional uint64 quest_id = 1;
+inline bool CMsgGCQuestObjective_RequestLoanerItems::has_quest_id() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
-inline void CMsgGCQuestObjective_RequestLoanerItems::set_has_quest_item_id() {
+inline void CMsgGCQuestObjective_RequestLoanerItems::set_has_quest_id() {
   _has_bits_[0] |= 0x00000001u;
 }
-inline void CMsgGCQuestObjective_RequestLoanerItems::clear_has_quest_item_id() {
+inline void CMsgGCQuestObjective_RequestLoanerItems::clear_has_quest_id() {
   _has_bits_[0] &= ~0x00000001u;
 }
-inline void CMsgGCQuestObjective_RequestLoanerItems::clear_quest_item_id() {
-  quest_item_id_ = GOOGLE_ULONGLONG(0);
-  clear_has_quest_item_id();
+inline void CMsgGCQuestObjective_RequestLoanerItems::clear_quest_id() {
+  quest_id_ = GOOGLE_ULONGLONG(0);
+  clear_has_quest_id();
 }
-inline ::google::protobuf::uint64 CMsgGCQuestObjective_RequestLoanerItems::quest_item_id() const {
-  // @@protoc_insertion_point(field_get:CMsgGCQuestObjective_RequestLoanerItems.quest_item_id)
-  return quest_item_id_;
+inline ::google::protobuf::uint64 CMsgGCQuestObjective_RequestLoanerItems::quest_id() const {
+  // @@protoc_insertion_point(field_get:CMsgGCQuestObjective_RequestLoanerItems.quest_id)
+  return quest_id_;
 }
-inline void CMsgGCQuestObjective_RequestLoanerItems::set_quest_item_id(::google::protobuf::uint64 value) {
-  set_has_quest_item_id();
-  quest_item_id_ = value;
-  // @@protoc_insertion_point(field_set:CMsgGCQuestObjective_RequestLoanerItems.quest_item_id)
+inline void CMsgGCQuestObjective_RequestLoanerItems::set_quest_id(::google::protobuf::uint64 value) {
+  set_has_quest_id();
+  quest_id_ = value;
+  // @@protoc_insertion_point(field_set:CMsgGCQuestObjective_RequestLoanerItems.quest_id)
 }
 
 // -------------------------------------------------------------------
@@ -4821,28 +4854,28 @@ CMsgCraftCommonStatClock::mutable_item_id() {
 
 // CMsgGCQuestDiscard_Request
 
-// optional uint64 quest_item_id = 1;
-inline bool CMsgGCQuestDiscard_Request::has_quest_item_id() const {
+// optional uint64 quest_id = 1;
+inline bool CMsgGCQuestDiscard_Request::has_quest_id() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
-inline void CMsgGCQuestDiscard_Request::set_has_quest_item_id() {
+inline void CMsgGCQuestDiscard_Request::set_has_quest_id() {
   _has_bits_[0] |= 0x00000001u;
 }
-inline void CMsgGCQuestDiscard_Request::clear_has_quest_item_id() {
+inline void CMsgGCQuestDiscard_Request::clear_has_quest_id() {
   _has_bits_[0] &= ~0x00000001u;
 }
-inline void CMsgGCQuestDiscard_Request::clear_quest_item_id() {
-  quest_item_id_ = GOOGLE_ULONGLONG(0);
-  clear_has_quest_item_id();
+inline void CMsgGCQuestDiscard_Request::clear_quest_id() {
+  quest_id_ = GOOGLE_ULONGLONG(0);
+  clear_has_quest_id();
 }
-inline ::google::protobuf::uint64 CMsgGCQuestDiscard_Request::quest_item_id() const {
-  // @@protoc_insertion_point(field_get:CMsgGCQuestDiscard_Request.quest_item_id)
-  return quest_item_id_;
+inline ::google::protobuf::uint64 CMsgGCQuestDiscard_Request::quest_id() const {
+  // @@protoc_insertion_point(field_get:CMsgGCQuestDiscard_Request.quest_id)
+  return quest_id_;
 }
-inline void CMsgGCQuestDiscard_Request::set_quest_item_id(::google::protobuf::uint64 value) {
-  set_has_quest_item_id();
-  quest_item_id_ = value;
-  // @@protoc_insertion_point(field_set:CMsgGCQuestDiscard_Request.quest_item_id)
+inline void CMsgGCQuestDiscard_Request::set_quest_id(::google::protobuf::uint64 value) {
+  set_has_quest_id();
+  quest_id_ = value;
+  // @@protoc_insertion_point(field_set:CMsgGCQuestDiscard_Request.quest_id)
 }
 
 

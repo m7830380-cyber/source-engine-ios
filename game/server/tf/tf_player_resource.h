@@ -41,37 +41,39 @@ protected:
 	virtual void UpdateConnectedPlayer( int iIndex, CBasePlayer *pPlayer ) OVERRIDE;
 	virtual void UpdateDisconnectedPlayer( int iIndex ) OVERRIDE;
 
-	CNetworkArray( int,	m_iTotalScore, MAX_PLAYERS+1 );
-	CNetworkArray( int, m_iPlayerClass, MAX_PLAYERS+1 );
-	CNetworkArray( int, m_iMaxHealth, MAX_PLAYERS+1 );
-	CNetworkArray( int, m_iMaxBuffedHealth, MAX_PLAYERS+1 );
-	CNetworkArray( bool, m_bArenaSpectator, MAX_PLAYERS+1 );
-	CNetworkArray( int,	m_iActiveDominations, MAX_PLAYERS+1 );
+	CNetworkArray( int,	m_iTotalScore, MAX_PLAYERS_ARRAY_SAFE );
+	CNetworkArray( int, m_iPlayerClass, MAX_PLAYERS_ARRAY_SAFE );
+	CNetworkArray( int, m_iMaxHealth, MAX_PLAYERS_ARRAY_SAFE );
+	CNetworkArray( int, m_iMaxBuffedHealth, MAX_PLAYERS_ARRAY_SAFE );
+	CNetworkArray( bool, m_bArenaSpectator, MAX_PLAYERS_ARRAY_SAFE );
+	CNetworkArray( int,	m_iActiveDominations, MAX_PLAYERS_ARRAY_SAFE );
 
 	// These variables are only networked in tournament mode
-	CNetworkArray( float,m_flNextRespawnTime, MAX_PLAYERS+1 );
-	CNetworkArray( int,	m_iChargeLevel, MAX_PLAYERS+1 );
+	CNetworkArray( float,m_flNextRespawnTime, MAX_PLAYERS_ARRAY_SAFE );
+	CNetworkArray( int,	m_iChargeLevel, MAX_PLAYERS_ARRAY_SAFE );
 
-	CNetworkArray( int,	m_iDamage, MAX_PLAYERS+1 );
-	CNetworkArray( int,	m_iDamageAssist, MAX_PLAYERS+1 );
-	CNetworkArray( int, m_iDamageBoss, MAX_PLAYERS+1 );
-	CNetworkArray( int, m_iHealing, MAX_PLAYERS+1 );
-	CNetworkArray( int, m_iHealingAssist, MAX_PLAYERS+1 );
-	CNetworkArray( int, m_iDamageBlocked, MAX_PLAYERS+1 );
-	CNetworkArray( int, m_iCurrencyCollected, MAX_PLAYERS+1 );
-	CNetworkArray( int, m_iBonusPoints, MAX_PLAYERS+1 );
-	CNetworkArray( int, m_iPlayerLevel, MAX_PLAYERS+1 );
-	// Pseudo multidimensional array [MAX_PLAYERS + 1][CTFPlayerShared::kTFStreak_COUNT]
-	CNetworkArray( int, m_iStreaks, ( ( MAX_PLAYERS + 1 ) * CTFPlayerShared::kTFStreak_COUNT ) );
-	CNetworkArray( int, m_iUpgradeRefundCredits, MAX_PLAYERS + 1 );
-	CNetworkArray( int, m_iBuybackCredits, MAX_PLAYERS + 1 );
+	CNetworkArray( int,	m_iDamage, MAX_PLAYERS_ARRAY_SAFE );
+	CNetworkArray( int,	m_iDamageAssist, MAX_PLAYERS_ARRAY_SAFE );
+	CNetworkArray( int, m_iDamageBoss, MAX_PLAYERS_ARRAY_SAFE );
+	CNetworkArray( int, m_iHealing, MAX_PLAYERS_ARRAY_SAFE );
+	CNetworkArray( int, m_iHealingAssist, MAX_PLAYERS_ARRAY_SAFE );
+	CNetworkArray( int, m_iDamageBlocked, MAX_PLAYERS_ARRAY_SAFE );
+	CNetworkArray( int, m_iCurrencyCollected, MAX_PLAYERS_ARRAY_SAFE );
+	CNetworkArray( int, m_iBonusPoints, MAX_PLAYERS_ARRAY_SAFE );
+	CNetworkArray( int, m_iPlayerLevel, MAX_PLAYERS_ARRAY_SAFE );
+	// Pseudo multidimensional array [MAX_PLAYERS_ARRAY_SAFE][CTFPlayerShared::kTFStreak_COUNT]
+	CNetworkArray( int, m_iStreaks, ( ( MAX_PLAYERS_ARRAY_SAFE ) * CTFPlayerShared::kTFStreak_COUNT ) );
+	CNetworkArray( int, m_iUpgradeRefundCredits, MAX_PLAYERS_ARRAY_SAFE );
+	CNetworkArray( int, m_iBuybackCredits, MAX_PLAYERS_ARRAY_SAFE );
 
 	CNetworkVar( int, m_iPartyLeaderRedTeamIndex );
 	CNetworkVar( int, m_iPartyLeaderBlueTeamIndex );
 	CNetworkVar( int, m_iEventTeamStatus );
 
-	CNetworkArray( int, m_iPlayerClassWhenKilled, MAX_PLAYERS+1 );
-	CNetworkArray( MM_PlayerConnectionState_t, m_iConnectionState, MAX_PLAYERS + 1 );
+	CNetworkArray( int, m_iPlayerClassWhenKilled, MAX_PLAYERS_ARRAY_SAFE );
+	CNetworkArray( MM_PlayerConnectionState_t, m_iConnectionState, MAX_PLAYERS_ARRAY_SAFE );
+
+	CNetworkArray( float, m_flConnectTime, MAX_PLAYERS_ARRAY_SAFE );
 
 	float	m_flNextDamageAndHealingSend;
 

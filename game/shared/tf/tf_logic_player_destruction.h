@@ -97,8 +97,8 @@ private:
 	COutputEvent m_OnCountdownTimerExpired;
 #endif // GAME_DLL
 
-	CNetworkVar( CHandle<CTFPlayer>, m_hRedTeamLeader );
-	CNetworkVar( CHandle<CTFPlayer>, m_hBlueTeamLeader );
+	CNetworkHandle( CTFPlayer, m_hRedTeamLeader );
+	CNetworkHandle( CTFPlayer, m_hBlueTeamLeader );
 
 	CNetworkVar( bool, m_bUsingCountdownImage );
 

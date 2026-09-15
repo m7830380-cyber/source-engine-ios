@@ -375,6 +375,8 @@ const char *g_pszItemPickupMethodStrings[] =
 	"#NewItemMethod_TradeUp",		// UNACK_ITEM_TRADE_UP
 	"#NewItemMethod_QuestMerasmissionOutput", //UNACK_ITEM_QUEST_MERASMISSION_OUTPUT
 	"#NewItemMethod_ViralCompetitiveBetaPassSpread", //UNACK_ITEM_VIRAL_COMPETITIVE_BETA_PASS_SPREAD
+	"#NewItemMethod_BloodMoneyPurchase", //UNACK_ITEM_CYOA_BLOOD_MONEY_PURCHASE
+	"#NewItemMethod_PaintKit", //UNACK_ITEM_PAINTKIT
 #ifdef ENABLE_STORE_RENTAL_BACKEND
 	"#NewItemMethod_RentalPurchase",	// UNACK_ITEM_RENTAL_PURCHASE
 #endif
@@ -410,6 +412,8 @@ const char *g_pszItemPickupMethodStringsUnloc[] =
 	"trade_up",			// UNACK_ITEM_TRADE_UP
 	"quest_output",		// UNACK_ITEM_QUEST_MERASMISSION_OUTPUT
 	"viral_competitive_beta_pass", //UNACK_ITEM_VIRAL_COMPETITIVE_BETA_PASS_SPREAD
+	"cyoa_blood_money_purcahase", //UNACK_ITEM_CYOA_BLOOD_MONEY_PURCHASE
+	"paintkit",			// UNACK_ITEM_PAINTKIT
 #ifdef ENABLE_STORE_RENTAL_BACKEND
 	"rental_purchase",	// UNACK_ITEM_RENTAL_PURCHASE
 #endif
@@ -447,6 +451,8 @@ const char *g_pszItemFoundMethodStrings[] =
 	"#Item_TradeUp",			// UNACK_ITEM_TRADE_UP
 	"#Item_QuestMerasmissionOutput", // UNACK_ITEM_QUEST_MERASMISSION_OUTPUT
 	"#Item_ViralCompetitiveBetaPassSpread", //UNACK_ITEM_VIRAL_COMPETITIVE_BETA_PASS_SPREAD
+	"#Item_CYOABloodMoneyPurchase", // UNACK_ITEM_CYOA_BLOOD_MONEY_PURCHASE
+	"#Item_Painkit", // UNACK_ITEM_PAINTKIT
 #ifdef ENABLE_STORE_RENTAL_BACKEND
 	NULL,						// UNACK_ITEM_RENTAL_PURCHASE
 #endif
@@ -639,12 +645,17 @@ const char* GetCollectionCraftingInvalidReason( const IEconItemInterface *pTestI
 		return "#TF_CollectionCrafting_NoItem";
 	}
 
+	uint32 nPaintkitDefindex = 0;
+	bool bIsPaintkit = GetPaintKitDefIndex( pTestItem, &nPaintkitDefindex );
+
 	// Needs to have a collection
-	const CEconItemCollectionDefinition* pTestCollection = pTestItem->GetItemDefinition()->GetItemCollectionDefinition();
+	const CEconItemCollectionDefinition* pTestCollection = GetCollection( pTestItem );
 	if ( !pTestCollection )
 	{
 		return "#TF_CollectionCrafting_NoCollection";
 	}
+
+	const CEconItemDefinition* pEffectiveItemDef = pTestItem->GetItemDefinition();
 
 	// Make sure this item is a part of the collection it claims to be in
 	{
@@ -653,6 +664,26 @@ const char* GetCollectionCraftingInvalidReason( const IEconItemInterface *pTestI
 		for( int i=0; i < pTestCollection->m_iItemDefs.Count() && !bFound; ++i )
 		{
 			bFound |= pTestCollection->m_iItemDefs[i] == nThisDefIndex;
+
+			// Paintkit items get extra checks.  We want to test if the item has a 
+			// paintkit defindex that corresponds to the paintkit defindex of one
+			// of the items in the collection.  That is, if you have a Pizza Minigun,
+			// then it's technically within the collection that contains the
+			// Pizza War Paint.
+			if ( !bIsPaintkit )
+				continue;
+			
+			uint32 nCollectionItemPaintkitDefindex = 0;
+			const CEconItemDefinition* pCollectionItemDef = GetItemSchema()->GetItemDefinition( pTestCollection->m_iItemDefs[i] );
+			if ( !GetPaintKitDefIndex( pCollectionItemDef, &nCollectionItemPaintkitDefindex ) )
+				continue;
+
+			if ( nCollectionItemPaintkitDefindex == nPaintkitDefindex )
+			{
+				// This is our source War Paint
+				bFound = true;
+				pEffectiveItemDef = pCollectionItemDef;			
+			}
 		}
 
 		if ( !bFound )
@@ -662,7 +693,7 @@ const char* GetCollectionCraftingInvalidReason( const IEconItemInterface *pTestI
 	}
 	 
 	// Needs rarity
-	uint8 nRarity = pTestItem->GetItemDefinition()->GetRarity();
+	uint8 nRarity = pTestItem->GetRarity();
 	if( nRarity == k_unItemRarity_Any )
 	{
 		return "#TF_CollectionCrafting_NoRarity";
@@ -681,15 +712,8 @@ const char* GetCollectionCraftingInvalidReason( const IEconItemInterface *pTestI
 		return "#TF_CollectionCrafting_NoUnusual";
 	}
 
-	// This is how we test for unusuals.  Don't let unusuals be crafted
-	static CSchemaAttributeDefHandle pAttrDef_ParticleEffect( "attach particle effect" );
-	if ( pTestItem->FindAttribute( pAttrDef_ParticleEffect ) )
-	{
-		return "#TF_CollectionCrafting_NoUnusual";
-	}
-
-	static CSchemaAttributeDefHandle pAttrDef_TauntUnusualAttr( "on taunt attach particle index" );
-	if ( pTestItem->FindAttribute( pAttrDef_TauntUnusualAttr ) )
+	// Don't let unusuals be crafted
+	if ( pTestItem->BIsUnusual() )
 	{
 		return "#TF_CollectionCrafting_NoUnusual";
 	}
@@ -704,7 +728,7 @@ const char* GetCollectionCraftingInvalidReason( const IEconItemInterface *pTestI
 	if ( pSourceItem )
 	{
 		// Need to have the same rarity
-		if ( nRarity != pSourceItem->GetItemDefinition()->GetRarity() )
+		if ( nRarity != pSourceItem->GetRarity() )
 		{
 			return "#TF_CollectionCrafting_MismatchRarity";
 		}
@@ -752,7 +776,7 @@ const char* GetHalloweenOfferingInvalidReason( const IEconItemInterface *pTestIt
 		return "#TF_CollectionCrafting_NoUnusual";
 	}
 
-	static CSchemaAttributeDefHandle pAttrDef_TauntUnusualAttr( "on taunt attach particle index" );
+	static CSchemaAttributeDefHandle pAttrDef_TauntUnusualAttr( "taunt attach particle index" );
 	if ( pTestItem->FindAttribute( pAttrDef_TauntUnusualAttr ) )
 	{
 		return "#TF_CollectionCrafting_NoUnusual";
@@ -890,7 +914,7 @@ const char* GetCraftCommonStatClockInvalidReason( const class IEconItemInterface
 	if ( pTestItem->FindAttribute( pAttrDef_ParticleEffect ) )
 		return "#TF_CollectionCrafting_NoUnusual";
 
-	static CSchemaAttributeDefHandle pAttrDef_TauntUnusualAttr( "on taunt attach particle index" );
+	static CSchemaAttributeDefHandle pAttrDef_TauntUnusualAttr( "taunt attach particle index" );
 	if ( pTestItem->FindAttribute( pAttrDef_TauntUnusualAttr ) )
 		return "#TF_CollectionCrafting_NoUnusual";
 
@@ -912,7 +936,7 @@ const char* GetCraftCommonStatClockInvalidReason( const class IEconItemInterface
 	}
 
 	// Needs Rarity
-	uint8 nRarity = pTestItem->GetItemDefinition()->GetRarity();
+	uint8 nRarity = pTestItem->GetRarity();
 	if ( nRarity != k_unItemRarity_Any && nRarity > 1 ) // do not allow default nor common rarity
 	{
 		return NULL;

@@ -40,9 +40,6 @@ BEGIN_DATADESC( CTFRevolver )
 END_DATADESC()
 #endif
 
-#ifdef STAGING_ONLY
-CREATE_SIMPLE_WEAPON_TABLE( TFRevolver_Secondary, tf_weapon_revolver_secondary )
-#endif
 
 //=============================================================================
 //
@@ -97,14 +94,18 @@ int	CTFRevolver::GetDamageType( void ) const
 //-----------------------------------------------------------------------------
 // Purpose:
 //-----------------------------------------------------------------------------
-bool CTFRevolver::CanFireCriticalShot( bool bIsHeadshot )
+bool CTFRevolver::CanFireCriticalShot( bool bIsHeadshot, CBaseEntity *pTarget /*= NULL*/ )
 {
-	if ( !BaseClass::CanFireCriticalShot( bIsHeadshot ) )
+	if ( !BaseClass::CanFireCriticalShot( bIsHeadshot, pTarget ) )
 		return false;
 
 	CTFPlayer *pPlayer = GetTFPlayerOwner();
 	if ( pPlayer && pPlayer->m_Shared.IsCritBoosted() )
 		return true;
+
+	// Magic.
+	if ( pTarget && ( pPlayer->GetAbsOrigin() - pTarget->GetAbsOrigin() ).Length2DSqr() > Square( 1200.f ) )
+		return false;
 
 	// can only fire a crit shot if this is a headshot, unless we're critboosted
 	if ( !bIsHeadshot )
@@ -191,8 +192,10 @@ float CTFRevolver::GetWeaponSpread( void )
 	{
 		// We are highly accurate for our first shot.
 		float flTimeSinceCheck = gpGlobals->curtime - m_flLastAccuracyCheck;
-		fSpread = RemapValClamped( flTimeSinceCheck, 1.0f, 0.5f, 0.0f, fSpread+0.0f );
+		fSpread = RemapValClamped( flTimeSinceCheck, 1.0f, 0.5f, 0.f, fSpread );
 	}
+
+	//DevMsg( "Spread: base %3.5f mod: %3.5f\n", BaseClass::GetWeaponSpread(), fSpread );
 
 	return fSpread;
 }

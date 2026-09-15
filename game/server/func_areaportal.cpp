@@ -45,8 +45,9 @@ public:
 	DECLARE_DATADESC();
 
 private:
-	bool UpdateState( void );
-	int m_state;
+	bool	UpdateState( void );
+
+	int		m_state;
 };
 
 LINK_ENTITY_TO_CLASS( func_areaportal, CAreaPortal );

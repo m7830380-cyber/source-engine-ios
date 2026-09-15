@@ -57,14 +57,16 @@
 #include "tf_mann_vs_machine_stats.h"
 #include "player_vs_environment/c_tf_upgrades.h"
 #include "tf_badge_panel.h"
-#include "report_player_dialog.h"
+
 
 using namespace vgui;
 
 #define SCOREBOARD_MAX_LIST_ENTRIES 12
 
-ConVar tf_scoreboard_mouse_mode( "tf_scoreboard_mouse_mode", "0", FCVAR_ARCHIVE );
+ConVar tf_scoreboard_mouse_mode( "tf_scoreboard_mouse_mode", "2", FCVAR_ARCHIVE );
+ConVar sv_vote_issue_kick_allowed( "sv_vote_issue_kick_allowed", "0", FCVAR_REPLICATED, "Can players call votes to kick players from the server?" );
 
+ConVar tf_show_all_scoreboard_elements( "tf_show_all_scoreboard_elements", "0", FCVAR_DEVELOPMENTONLY );
 
 void cc_scoreboard_convar_changed( IConVar *pConVar, const char *pOldString, float flOldValue )
 {
@@ -208,9 +210,6 @@ CTFClientScoreBoardDialog::CTFClientScoreBoardDialog( IViewPort *pViewPort ) : C
 	Q_memset( m_iImageDomDead, NULL, sizeof( m_iImageDomDead ) );
 	
 	ListenForGameEvent( "server_spawn" );
-#ifdef STAGING_ONLY
-//	ListenForGameEvent( "bountymode_toggled" );
-#endif
 
 	SetDialogVariable( "server", "" );
 	SetVisible( false );
@@ -257,7 +256,7 @@ void CTFClientScoreBoardDialog::UpdatePlayerModel()
 
 	int nClass = pPlayer->GetPlayerClass()->GetClassIndex();
 	int nTeam = pPlayer->GetTeamNumber();
-	int nItemSlot = ( pPlayer->IsAlive() && pPlayer->GetActiveTFWeapon() ) ? pPlayer->GetActiveTFWeapon()->GetAttributeContainer()->GetItem()->GetStaticData()->GetLoadoutSlot( nClass ) : LOADOUT_POSITION_PRIMARY;;
+	int nItemSlot = ( pPlayer->IsAlive() && pPlayer->GetActiveTFWeapon() ) ? pPlayer->GetActiveTFWeapon()->GetAttributeContainer()->GetItem()->GetStaticData()->GetLoadoutSlot( nClass ) : LOADOUT_POSITION_PRIMARY;
 	CEconItemView *pWeapon = NULL;
 
 	CTFWeaponBase *pEnt = dynamic_cast<CTFWeaponBase*>( pPlayer->GetEntityForLoadoutSlot( nItemSlot ) );
@@ -266,13 +265,8 @@ void CTFClientScoreBoardDialog::UpdatePlayerModel()
 		pWeapon = pEnt->GetAttributeContainer()->GetItem();
 	}
 
-	bool bIsRobot = false;
-	int iRobot = 0;
-	CALL_ATTRIB_HOOK_INT_ON_OTHER( pPlayer, iRobot, appear_as_mvm_robot );
-	bIsRobot = iRobot ? true : false;
-
 	m_pPlayerModelPanel->ClearCarriedItems();
-	m_pPlayerModelPanel->SetToPlayerClass( nClass, bIsRobot );
+	m_pPlayerModelPanel->SetToPlayerClass( nClass );
 	m_pPlayerModelPanel->SetTeam( nTeam );
 
 	if ( pWeapon )
@@ -605,6 +599,26 @@ void CTFClientScoreBoardDialog::OnCommand( const char *command )
 			}
 		}
 	}
+	else if ( !V_strcmp( command, "votekickplayer" ) )
+	{
+		SectionedListPanel* pList = GetSelectedPlayerList();
+		if ( pList )
+		{
+			int iSelectedItem = pList->GetSelectedItem();
+			if ( iSelectedItem >= 0 )
+			{
+				KeyValues* pIssueKeyValues = pList->GetItemData( iSelectedItem );
+				if ( !pIssueKeyValues )
+					return;
+
+				int playerIndex = pIssueKeyValues->GetInt( "playerIndex", 0 );
+				if ( playerIndex > 0 && playerIndex <= MAX_PLAYERS )
+				{
+					engine->ClientCmd_Unrestricted( VarArgs( "spec_player %d\n", playerIndex ) );
+				}
+			}
+		}
+	}
 }
 
 //-----------------------------------------------------------------------------
@@ -645,12 +659,15 @@ void CTFClientScoreBoardDialog::OnItemContextMenu( vgui::Panel *panel )
 	}
 }
 
-void CTFClientScoreBoardDialog::OnReportPlayer( KeyValues *pData )
+
+void CTFClientScoreBoardDialog::OnVoteKickPlayer( KeyValues *pData )
 {
 	int playerIndex = pData->GetInt( "playerIndex" );
-	int nReason = pData->GetInt( "reason" );
-	CSteamID steamID = GetSteamIDForPlayerIndex( playerIndex );
-	ReportPlayerAccount( steamID, nReason );
+	const char *pszReason = pData->GetString( "reason" );
+
+	char szVoteCommand[256];
+	Q_snprintf( szVoteCommand, sizeof( szVoteCommand ), "callvote %s \"%d %s\"\n;", "Kick", g_PR->GetUserID( playerIndex ), pszReason );
+	engine->ClientCmd( szVoteCommand );
 }
 
 //-----------------------------------------------------------------------------
@@ -701,32 +718,50 @@ void CTFClientScoreBoardDialog::OnScoreBoardMouseRightRelease( void )
 	const char *pszContextMenuBorder = "DarkComboBoxBorder";
 	const char *pszContextMenuFont = "HudFontMediumSecondary";
 	m_pRightClickMenu = new Menu( pList, "RightClickMenu" );
+	m_pRightClickMenu->SetProportional( true );
 	m_pRightClickMenu->SetKeyBoardInputEnabled( false );
 	m_pRightClickMenu->SetBorder( scheme()->GetIScheme( GetScheme() )->GetBorder( pszContextMenuBorder ) );
 	m_pRightClickMenu->SetFgColor( Color( 0, 0, 255, 255 ) );
 	m_pRightClickMenu->SetPaintBackgroundEnabled( true );
 	m_pRightClickMenu->SetPaintBackgroundType( 0 );
-	m_pRightClickMenu->SetFont( scheme()->GetIScheme( GetScheme() )->GetFont( pszContextMenuFont ) );
+	m_pRightClickMenu->SetFont( scheme()->GetIScheme( GetScheme() )->GetFont( pszContextMenuFont, true ) );
 
 	bool bFakeClient = ( g_TF_PR->IsFakePlayer( playerIndex ) );
 	bool bTournamentGame = ( g_TF_PR->GetTeam( playerIndex ) >= FIRST_GAME_TEAM && TFGameRules() && TFGameRules()->UsePlayerReadyStatusMode() && TFGameRules()->State_Get() == GR_STATE_RND_RUNNING );
 
 	MenuBuilder contextMenuBuilder( m_pRightClickMenu, this );
 
-	// Report
-	if ( !bFakeClient && engine->GetLocalPlayer() != playerIndex )
+
+	// Vote Kick
+	if ( sv_vote_issue_kick_allowed.GetBool() && engine->GetLocalPlayer() != playerIndex )
 	{
-		Menu *pReportSubMenu = new Menu( this, "ReportSubMenu" );
-		pReportSubMenu->SetBorder( scheme()->GetIScheme( GetScheme() )->GetBorder( pszContextMenuBorder ) );
-		pReportSubMenu->SetFont( scheme()->GetIScheme( GetScheme() )->GetFont( pszContextMenuFont ) );
-		contextMenuBuilder.AddCascadingMenuItem( "#TF_ScoreBoard_Context_Report", pReportSubMenu, "report" );
-		for ( int iReason=CMsgGC_ReportPlayer_EReason_kReason_INVALID+1; iReason<CMsgGC_ReportPlayer_EReason_kReason_COUNT; ++iReason )
+		C_TFPlayer* pTFTarget = ToTFPlayer( UTIL_PlayerByIndex( playerIndex ) );
+		if ( pTFTarget && pTFTarget->GetTeamNumber() == pLocalTFPlayer->GetTeamNumber() )
 		{
-			CFmtStr name( "#TF_ScoreBoard_Context_Report_Reason%d", iReason );
-			KeyValues *pReport = new KeyValues( "ReportPlayer" );
-			pReport->SetInt( "playerIndex", playerIndex );
-			pReport->SetInt( "reason", iReason );
-			pReportSubMenu->AddMenuItem( name, pReport, this );
+			Menu *pVoteKickSubMenu = new Menu( this, "VoteKickSubMenu" );
+			pVoteKickSubMenu->SetBorder( scheme()->GetIScheme( GetScheme() )->GetBorder( pszContextMenuBorder ) );
+			pVoteKickSubMenu->SetFont( scheme()->GetIScheme( GetScheme() )->GetFont( pszContextMenuFont, true ) );
+			contextMenuBuilder.AddCascadingMenuItem( "#TF_ScoreBoard_VoteKick", pVoteKickSubMenu, "votekick" );
+
+			struct VoteKickReason_t
+			{
+				const char *pszReason;
+				const char *pszText;
+			} g_pszVoteKickReasons[] =
+			{
+				{ "other", "#TF_VoteKickReason_Other" },
+				{ "cheating", "#TF_VoteKickReason_Cheating" },
+				{ "idle", "#TF_VoteKickReason_Idle" },
+				{ "scamming", "#TF_VoteKickReason_Scamming" },
+			};
+
+			for ( auto &reason : g_pszVoteKickReasons )
+			{
+				KeyValues *pReport = new KeyValues( "VoteKickPlayer" );
+				pReport->SetInt( "playerIndex", playerIndex );
+				pReport->SetString( "reason", reason.pszReason );
+				pVoteKickSubMenu->AddMenuItem( reason.pszText, pReport, this );
+			}
 		}
 	}
 
@@ -859,17 +894,17 @@ void CTFClientScoreBoardDialog::InitPlayerList( SectionedListPanel *pPlayerList 
 	pPlayerList->SetBgColor( Color( 0, 0, 0, 0 ) );
 	pPlayerList->SetBorder( NULL );
 
-	pPlayerList->AddColumnToSection( 0, "medal", "", SectionedListPanel::COLUMN_IMAGE | SectionedListPanel::COLUMN_CENTER, m_iMedalWidth );
+	pPlayerList->AddColumnToSection( 0, "medal", "", SectionedListPanel::COLUMN_IMAGE | SectionedListPanel::COLUMN_CENTER, m_iMedalColumnWidth );
 
 	// Avatars are always displayed at 32x32 regardless of resolution
 	if ( ShowAvatars() )
 	{
-		pPlayerList->AddColumnToSection( 0, "avatar", "", SectionedListPanel::COLUMN_IMAGE | SectionedListPanel::COLUMN_RIGHT, m_iAvatarWidth );
+		pPlayerList->AddColumnToSection( 0, "avatar", "", SectionedListPanel::COLUMN_IMAGE, m_iAvatarWidth );
 		pPlayerList->AddColumnToSection( 0, "spacer", "", 0, m_iSpacerWidth );
 	}
 	
 	// the player avatar is always a fixed size, so as we change resolutions we need to vary the size of the name column to adjust the total width of all the columns
-	m_nExtraSpace = pPlayerList->GetWide() - m_iMedalWidth - m_iAvatarWidth - m_iSpacerWidth - m_iNameWidth - m_iKillstreakWidth - m_iKillstreakImageWidth - m_iNemesisWidth - m_iNemesisWidth - m_iScoreWidth - m_iClassWidth - m_iPingWidth - m_iSpacerWidth - ( 2 * SectionedListPanel::COLUMN_DATA_INDENT ); // the SectionedListPanel will indent the columns on either end by SectionedListPanel::COLUMN_DATA_INDENT 
+	m_nExtraSpace = pPlayerList->GetWide() - m_iMedalColumnWidth - m_iAvatarWidth - m_iSpacerWidth - m_iNameWidth - m_iKillstreakWidth - m_iKillstreakImageWidth - m_iNemesisWidth - m_iNemesisWidth - m_iScoreWidth - m_iClassWidth - m_iPingWidth - m_iSpacerWidth - ( 2 * SectionedListPanel::COLUMN_DATA_INDENT ); // the SectionedListPanel will indent the columns on either end by SectionedListPanel::COLUMN_DATA_INDENT 
 
 	pPlayerList->AddColumnToSection( 0, "name", "#TF_Scoreboard_Name", 0, m_iNameWidth + m_nExtraSpace );
 	pPlayerList->AddColumnToSection( 0, "killstreak", "", SectionedListPanel::COLUMN_RIGHT, m_iKillstreakWidth );
@@ -887,12 +922,6 @@ void CTFClientScoreBoardDialog::InitPlayerList( SectionedListPanel *pPlayerList 
 	{
 		pPlayerList->AddColumnToSection( 0, "ping", "", SectionedListPanel::COLUMN_IMAGE | SectionedListPanel::COLUMN_RIGHT, m_iPingWidth );
 	}
-#ifdef STAGING_ONLY
-// 	if ( m_bDisplayLevel )
-// 	{
-//		pPlayerList->AddColumnToSection( 0, "level", "#TF_ScoreBoard_LevelLabel", SectionedListPanel::COLUMN_RIGHT, m_iPingWidth );
-// 	}
-#endif // STAGING_ONLY
 }
 
 //-----------------------------------------------------------------------------
@@ -1073,66 +1102,127 @@ void CTFClientScoreBoardDialog::UpdateBadgePanels( CUtlVector<CTFBadgePanel*> &p
 {
 	int iNumPanels = 0;
 
-	const IMatchGroupDescription *pMatchDesc = TFGameRules() ? GetMatchGroupDescription( TFGameRules()->GetCurrentMatchGroup() ) : NULL;
-	const IProgressionDesc *pProgressionDesc = pMatchDesc ? pMatchDesc->m_pProgressionDesc : NULL;
-	if ( pProgressionDesc && pPlayerList )
+	if ( tf_show_all_scoreboard_elements.GetBool() )
 	{
-		if ( TFGameRules()->IsMatchTypeCasual() )
-		{
-			int parentTall = pPlayerList->GetTall();
-			CTFBadgePanel *pPanel = NULL;
+		int parentTall = pPlayerList->GetTall();
+		CTFBadgePanel *pPanel = NULL;
 
-			for ( int i = 0; i < pPlayerList->GetItemCount(); i++ )
+		for ( int i = 0; i < pPlayerList->GetItemCount(); i++ )
+		{
+			KeyValues* pKeyValues = pPlayerList->GetItemData( i );
+			if ( !pKeyValues )
+				continue;
+
+			//int iPlayerIndex = pKeyValues->GetInt( "playerIndex" );
 			{
-				KeyValues *pKeyValues = pPlayerList->GetItemData( i );
-				if ( !pKeyValues )
+				if ( iNumPanels >= pBadgePanels.Count() )
+				{
+					pPanel = new CTFBadgePanel( this, "BadgePanel" );
+					pPanel->MakeReadyForUse();
+					pPanel->SetVisible( true );
+					pPanel->SetZPos( 9999 );
+					pBadgePanels.AddToTail( pPanel );
+				}
+				else
+				{
+					pPanel = pBadgePanels[iNumPanels];
+				}
+
+				int x, y, wide, tall;
+				pPlayerList->GetMaxCellBounds( i, 0, x, y, wide, tall );
+
+				wide = m_iMedalWidth;
+
+				if ( y + tall > parentTall )
 					continue;
 
-				int iPlayerIndex = pKeyValues->GetInt( "playerIndex" );
-				const CSteamID steamID = GetSteamIDForPlayerIndex( iPlayerIndex );
-				if ( steamID.IsValid() )
+				if ( !pPanel->IsVisible() )
 				{
-					if ( iNumPanels >= pBadgePanels.Count() )
-					{
-						pPanel = new CTFBadgePanel( this, "BadgePanel" );
-						pPanel->MakeReadyForUse();
-						pPanel->SetVisible( true );
-						pPanel->SetZPos( 9999 );
-						pBadgePanels.AddToTail( pPanel );
-					}
-					else
-					{
-						pPanel = pBadgePanels[iNumPanels];
-					}
+					pPanel->SetVisible( true );
+				}
 
-					int x, y, wide, tall;
-					pPlayerList->GetMaxCellBounds( i, 0, x, y, wide, tall );
+				int xParent, yParent;
+				pPlayerList->GetPos( xParent, yParent );
 
-					if ( y + tall > parentTall )
+				int nPanelXPos, nPanelYPos, nPanelWide, nPanelTall;
+				pPanel->GetBounds( nPanelXPos, nPanelYPos, nPanelWide, nPanelTall );
+
+				if ( ( nPanelXPos != xParent + x )
+					|| ( nPanelYPos != yParent + y )
+					|| ( nPanelWide != wide )
+					|| ( nPanelTall != tall ) )
+				{
+					pPanel->SetBounds( xParent + x, yParent + y, wide, tall );
+					pPanel->InvalidateLayout( true, true );
+				}
+
+				pPanel->SetupDummyBadge( 100, false );
+				iNumPanels++;
+			}
+		}
+	}
+	else
+	{
+		const IMatchGroupDescription *pMatchDesc = TFGameRules() ? GetMatchGroupDescription( TFGameRules()->GetCurrentMatchGroup() ) : NULL;
+		if ( pMatchDesc && pPlayerList )
+		{
+			if ( TFGameRules()->IsMatchTypeCasual() )
+			{
+				int parentTall = pPlayerList->GetTall();
+				CTFBadgePanel *pPanel = NULL;
+
+				for ( int i = 0; i < pPlayerList->GetItemCount(); i++ )
+				{
+					KeyValues *pKeyValues = pPlayerList->GetItemData( i );
+					if ( !pKeyValues )
 						continue;
 
-					if ( !pPanel->IsVisible() )
+					int iPlayerIndex = pKeyValues->GetInt( "playerIndex" );
+					const CSteamID steamID = GetSteamIDForPlayerIndex( iPlayerIndex );
+					if ( steamID.IsValid() )
 					{
-						pPanel->SetVisible( true );
+						if ( iNumPanels >= pBadgePanels.Count() )
+						{
+							pPanel = new CTFBadgePanel( this, "BadgePanel" );
+							pPanel->MakeReadyForUse();
+							pPanel->SetVisible( true );
+							pPanel->SetZPos( 9999 );
+							pBadgePanels.AddToTail( pPanel );
+						}
+						else
+						{
+							pPanel = pBadgePanels[iNumPanels];
+						}
+
+						int x, y, wide, tall;
+						pPlayerList->GetMaxCellBounds( i, 0, x, y, wide, tall );
+
+						if ( y + tall > parentTall )
+							continue;
+
+						if ( !pPanel->IsVisible() )
+						{
+							pPanel->SetVisible( true );
+						}
+
+						int xParent, yParent;
+						pPlayerList->GetPos( xParent, yParent );
+
+						int nPanelXPos, nPanelYPos, nPanelWide, nPanelTall;
+						pPanel->GetBounds( nPanelXPos, nPanelYPos, nPanelWide, nPanelTall );
+
+						if ( ( nPanelXPos != xParent + x )
+							|| ( nPanelYPos != yParent + y )
+							|| ( nPanelWide != wide )
+							|| ( nPanelTall != tall ) )
+						{
+							pPanel->SetBounds( xParent + x, yParent + y, wide, tall );
+							pPanel->InvalidateLayout( true, true );
+						}
+
+						pPanel->SetupBadge( pMatchDesc, steamID );
+						iNumPanels++;
 					}
-
-					int xParent, yParent;
-					pPlayerList->GetPos( xParent, yParent );
-
-					int nPanelXPos, nPanelYPos, nPanelWide, nPanelTall;
-					pPanel->GetBounds( nPanelXPos, nPanelYPos, nPanelWide, nPanelTall );
-
-					if ( ( nPanelXPos != xParent + x )
-						|| ( nPanelYPos != yParent + y )
-						|| ( nPanelWide != wide )
-						|| ( nPanelTall != tall ) )
-					{
-						pPanel->SetBounds( xParent + x, yParent + y, wide, tall );
-						pPanel->InvalidateLayout( true, true );
-					}
-
-					pPanel->SetupBadge( pProgressionDesc, steamID );
-					iNumPanels++;
 				}
 			}
 		}
@@ -1428,12 +1518,17 @@ void CTFClientScoreBoardDialog::UpdatePlayerList()
 				}
 			}
 
-#ifdef STAGING_ONLY
-// 				if ( m_bDisplayLevel )
-// 				{
-// 					pKeyValues->SetInt( "level", g_TF_PR->GetPlayerLevel( playerIndex ) );
-// 				}
-#endif // STAGING_ONLY
+			if ( tf_show_all_scoreboard_elements.GetBool() )
+			{
+				pKeyValues->SetString( "name", g_TF_PR->GetPlayerName( playerIndex ) );
+				pKeyValues->SetInt( "dominating", m_iImageDom[1] );
+				pKeyValues->SetInt( "score", 9999 );
+				pKeyValues->SetInt( "connected", 2 );
+				pKeyValues->SetInt( "killstreak_image", bAlive ? m_iImageStreak : m_iImageStreakDead );
+				pKeyValues->SetInt( "killstreak", 100 );
+				pKeyValues->SetInt( "nemesis", bAlive ? m_iImageNemesis : m_iImageNemesisDead );
+			}
+
 
 			UpdatePlayerAvatar( playerIndex, pKeyValues );
 
@@ -2189,13 +2284,6 @@ void CTFClientScoreBoardDialog::FireGameEvent( IGameEvent *event )
 		SetDialogVariable( "mapname", GetMapDisplayName( pMapName ) );
 		// m_pLocalPlayerStatsPanel->SetDialogVariable( "gametype", g_pVGuiLocalize->Find( GetMapType( pMapName ) ) );
 	}
-#ifdef STAGING_ONLY
-// 	else if ( FStrEq( type, "bountymode_toggled" ) )
-// 	{
-// 		m_bDisplayLevel = event->GetBool( "active" );
-// 		InvalidateLayout( true, true );
-// 	}
-#endif
 
 	if ( IsVisible() )
 	{

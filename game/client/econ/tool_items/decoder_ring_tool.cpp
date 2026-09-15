@@ -21,20 +21,15 @@
 #include "econ_ui.h"
 #include "gc_clientsystem.h"
 #include "collection_crafting_panel.h"
+#include "tf_shareddefs.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include <tier0/memdbgon.h>
 
-enum 
-{
-	CRATETYPE_NORMAL = 0,
-	CRATETYPE_ROBO = 1,
-};
-
 #define ROBOCRATE_UNLOCKING_SND		"/mvm/mvm_tank_deploy.wav"
 #define ROBOCRATE_OPENED_SND		"/mvm/mvm_tank_explode.wav"
 
-static int s_iCrateType = CRATETYPE_NORMAL;
+int s_iCrateType = CRATETYPE_NORMAL;
 
 //-----------------------------------------------------------------------------
 // Purpose: Confirm / abort tool application
@@ -71,13 +66,19 @@ void CConfirmDecodeDialog::ApplySchemeSettings( vgui::IScheme *pScheme )
 	// Check Crate Type
 	if ( pCrate )
 	{
-		if ( pCrate->GetItemDefIndex() == 5635 ) // Robo Crate items_tools_crafting
+		static CSchemaAttributeDefHandle pAttrib_IsWinterCase( "is winter case" );
+		uint32 nIsWinterCase = 0;
+		if ( pCrate->FindAttribute( pAttrib_IsWinterCase, &nIsWinterCase ) && nIsWinterCase != 0 )
+		{
+			s_iCrateType = CRATETYPE_WINTER;
+		}
+		else if ( pCrate->GetItemDefIndex() == 5635 ) // Robo Crate items_tools_crafting
 		{
 			s_iCrateType = CRATETYPE_ROBO;
 		}
 	}
 
-	if ( V_strstr( pCrate->GetItemDefinition()->GetDefinitionName(), "Case" ) )
+	if ( pCrate && V_strstr( pCrate->GetItemDefinition()->GetDefinitionName(), "Case" ) )
 	{
 		SetDialogVariable( "confirm_text", GLocalizationProvider()->Find("#ToolDecodeConfirmCase") );
 	}
@@ -176,7 +177,6 @@ protected:
 		{
 			vgui::surface()->PlaySound( "misc/achievement_earned.wav" );
 		}
-		
 
 		// Show them their loot!
 		InventoryManager()->ShowItemsPickedUp( true );
@@ -199,6 +199,10 @@ public:
 		if ( s_iCrateType == CRATETYPE_ROBO )
 		{
 			vgui::surface()->PlaySound( ROBOCRATE_UNLOCKING_SND );
+		}
+		else if ( s_iCrateType == CRATETYPE_WINTER )
+		{
+			vgui::surface()->PlaySound( "ui/item_open_holiday_crate.wav" );
 		}
 		else
 		{

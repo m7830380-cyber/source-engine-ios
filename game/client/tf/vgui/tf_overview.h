@@ -68,7 +68,7 @@ private:
 
 	bool m_bDisabled;
 
-	float m_flPlayerChatTime[MAX_PLAYERS];
+	float m_flPlayerChatTime[MAX_PLAYERS_ARRAY_SAFE];
 
 	int m_nMapTextureOverlayID;	// texture id for current overlay image (shown over the current overview image)
 

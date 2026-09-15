@@ -28,13 +28,8 @@ const char *COM_GetModDirectory(); // return the mod dir (rather than the comple
 
 struct MumbleSharedMemory_t
 {
-#ifdef WIN32
 	uint32	uiVersion;
-	ulong	uiTick;
-#else
-	uint32_t uiVersion;
-	uint32_t uiTick;
-#endif
+	uint32	uiTick;
 	float	fAvatarPosition[3];
 	float	fAvatarFront[3];
 	float	fAvatarTop[3];
@@ -43,11 +38,7 @@ struct MumbleSharedMemory_t
 	float	fCameraFront[3];
 	float	fCameraTop[3];
 	wchar_t	identity[256];
-#ifdef WIN32
 	uint32	context_len;
-#else
-	uint32_t context_len;
-#endif
 	unsigned char context[256];
 	wchar_t description[2048];
 };
@@ -98,8 +89,6 @@ void CMumbleSystem::LevelInitPostEntity()
 		g_hMapObject = NULL;
 		return;
 	}
-#elif defined( ANDROID ) || defined( IOS )
-	return; // TODO(JusicP): implement
 #elif defined( POSIX )
 	char memname[256];
 	V_sprintf_safe( memname, "/MumbleLink.%d", getuid() );

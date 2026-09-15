@@ -114,14 +114,15 @@ private:
 };
 
 //=========================================================
-class CCurrencyStatusPanel : public vgui::EditablePanel
+class CCurrencyStatusPanel : public CHudElement, public vgui::EditablePanel
 {
 	DECLARE_CLASS_SIMPLE( CCurrencyStatusPanel, vgui::EditablePanel );
 public:
-	CCurrencyStatusPanel( Panel *parent, const char *name );
+	CCurrencyStatusPanel( const char *pszElementName );
 
 	virtual void ApplySchemeSettings( vgui::IScheme *pScheme );
 	virtual void OnTick( void );
+	virtual bool ShouldDraw( void );
 
 	virtual bool UpdateHUD( void );
 
@@ -328,7 +329,7 @@ public:
 		return m_pVictoryContainer && m_pVictoryContainer->IsVictoryPanelVisible();
 	}
 
-	virtual GameActionSet_t GetPreferredActionSet() { return IsVictoryPanelVisible() ? GAME_ACTION_SET_MENUCONTROLS : CHudElement::GetPreferredActionSet(); }
+	virtual GameActionSet_t GetPreferredActionSet() { return IsActive() ? (IsVictoryPanelVisible() ? GAME_ACTION_SET_MENUCONTROLS : CHudElement::GetPreferredActionSet()) : GAME_ACTION_SET_NONE; }
 
 	bool IsWaveCompletePanelVisible()
 	{

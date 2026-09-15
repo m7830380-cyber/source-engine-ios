@@ -19,11 +19,6 @@
 //---------------------------------------------------------------------------------
 class CTFPlayerInfo : public GCSDK::CProtoBufSharedObject< CSOTFPlayerInfo, k_EEconTypePlayerInfo >
 {
-#ifdef GC
-	DECLARE_CLASS_MEMPOOL( CTFPlayerInfo );
-public:
-	virtual bool BIsDatabaseBacked() const { return false; }
-#endif
 };
 
 #endif // TFPLAYERINFO_H

@@ -39,9 +39,17 @@
 #include "store/v1/tf_store_page.h"
 #include "econ_item_description.h"
 #include "weapon_selection.h"
+#include "collection_crafting_panel.h"
+#include "clientmode_tf.h"
+#include "vgui_controls/AnimationController.h"
+#include "tf_matchmaking_dashboard_explanations.h"
+#include "tf_matchmaking_dashboard_parent_manager.h"
+#include "tf_shareddefs.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include <tier0/memdbgon.h>
+
+ConVar tf_warpaint_explanation_viewed( "tf_warpaint_explanation_viewed", 0, FCVAR_ARCHIVE );
 
 //-----------------------------------------------------------------------------
 // Wrapped Gift Declarations
@@ -133,6 +141,20 @@ static void UseItemConfirm( bool bConfirmed, void *pContext )
 	CUseItemConfirmContext *pConfirmContext = (CUseItemConfirmContext *)pContext;
 	CEconItemView *pEconItemView = pConfirmContext->m_pEconItemView;
 
+	// Chance restricted? Check if the item is and fail.
+	const char *pUserTxnCC = GCClientSystem()->GetTxnCountryCode();
+	bool bUserChanceRestricted = pUserTxnCC && !BEconCountryAllowDecodableContainers( pUserTxnCC );
+	if ( bUserChanceRestricted )
+	{
+		// Restricted country?
+		const GameItemDefinition_t *pItemDef = pEconItemView->GetItemDefinition();
+		if ( pItemDef && pItemDef->IsChanceRestricted() )
+		{
+			ShowMessageBox( "#ToolContainerRestrictedTitle", "#ToolContainerRestricted", "#GameUI_OK" );
+			return;
+		}
+	}
+
 	if ( bConfirmed )
 	{
 		pConfirmContext->OnConfirmUse();
@@ -213,7 +235,7 @@ void GetPlayerNameBySteamID( const CSteamID &steamID, OUT_Z_CAP(maxLenInChars) c
 				CSteamID steamIDTemp( pi.friendsID, 1, GetUniverse(), k_EAccountTypeIndividual );
 				if ( steamIDTemp == steamID )
 				{
-					V_strncpy( pDestBuffer, pi.name, maxLenInChars );
+					V_strncpy( pDestBuffer, UTIL_GetFilteredPlayerName( steamID, pi.name ), maxLenInChars );
 					return;
 				}
 			}
@@ -226,11 +248,13 @@ void GetPlayerNameBySteamID( const CSteamID &steamID, OUT_Z_CAP(maxLenInChars) c
 	if ( pszName != NULL )
 	{
 		V_strncpy( pDestBuffer, pszName, maxLenInChars );
-		return;
 	}
-
-	// otherwise, return what we would normally return
-	V_strncpy( pDestBuffer, steamapicontext->SteamFriends()->GetFriendPersonaName( steamID ), maxLenInChars );
+	else
+	{
+		// otherwise, return what we would normally return
+		V_strncpy( pDestBuffer, steamapicontext->SteamFriends()->GetFriendPersonaName( steamID ), maxLenInChars );
+	}
+	UTIL_GetFilteredPlayerName( steamID, pDestBuffer );
 }
 
 static bool IsGCUseableItem( const GameItemDefinition_t *pItemDef )
@@ -460,7 +484,8 @@ void CEconTool_ClaimCode::OnClientUseConsumable( CEconItemView *pItem, vgui::Pan
 //			special-case handling (ie., paint); called into from other code
 //-----------------------------------------------------------------------------
 static bool s_bConsumableToolOpeningGift = false;
-static void ClientConsumableTool_Generic( CEconItemView *pItem, vgui::Panel *pParent )
+extern int s_iCrateType;
+static void ClientConsumableTool_CustomCallback( CEconItemView *pItem, vgui::Panel *pParent, GenericConfirmDialogCallback callback )
 {
 	Assert( pItem );
 	Assert( pItem->GetItemDefinition() );
@@ -468,7 +493,7 @@ static void ClientConsumableTool_Generic( CEconItemView *pItem, vgui::Panel *pPa
 
 	CTFGenericConfirmDialog *pDialog = ShowConfirmDialog( "#TF_UseItem_Title", "#TF_UseItem_Text", 
 														  "#GameUI_OK", "#Cancel", 
-														  &UseItemConfirm );
+														  callback );
 	pDialog->AddStringToken( "item_name", pItem->GetItemName() );
 	wchar_t wszUsesLeft[32];
 	_snwprintf( wszUsesLeft, ARRAYSIZE(wszUsesLeft), L"%d", pItem->GetItemQuantity() );
@@ -486,6 +511,23 @@ static void ClientConsumableTool_Generic( CEconItemView *pItem, vgui::Panel *pPa
 	{
 		s_bConsumableToolOpeningGift = true;
 	}
+
+	s_iCrateType = CRATETYPE_NORMAL;
+	// Check Crate Type
+	if ( pItem )
+	{
+		static CSchemaAttributeDefHandle pAttrib_IsWinterCase( "is winter case" );
+		uint32 nIsWinterCase = 0;
+		if ( pItem->FindAttribute( pAttrib_IsWinterCase, &nIsWinterCase ) && nIsWinterCase != 0 )
+		{
+			s_iCrateType = CRATETYPE_WINTER;
+		}
+	}
+}
+
+static void ClientConsumableTool_Generic( CEconItemView *pItem, vgui::Panel *pParent )
+{
+	ClientConsumableTool_CustomCallback( pItem, pParent, &UseItemConfirm );
 }
 
 //-----------------------------------------------------------------------------
@@ -599,6 +641,238 @@ void CEconTool_GrantOperationPass::OnClientUseConsumable( CEconItemView *pItem, 
 	_snwprintf( wszUsesLeft, ARRAYSIZE( wszUsesLeft ), L"%d", pItem->GetItemQuantity() );
 	pDialog->AddStringToken( "uses_left", wszUsesLeft );
 	pDialog->SetContext( new CUseItemConfirmContext( pItem, kServerPlayers_DontSend, "ui/quest_operation_pass_use.wav" ) );
+}
+//-----------------------------------------------------------------------------
+static void OpenKeylessCase( bool bConfirmed, void *pContext )
+{
+	const char *pUserTxnCC = GCClientSystem()->GetTxnCountryCode();
+	bool bUserChanceRestricted = pUserTxnCC && !BEconCountryAllowDecodableContainers( pUserTxnCC );
+
+	if ( bUserChanceRestricted )
+	{
+		ShowMessageBox( "#ToolContainerRestrictedTitle", "#ToolContainerRestricted", "#GameUI_OK" );
+		return;
+	}
+
+	CUseItemConfirmContext *pConfirmContext = (CUseItemConfirmContext *)pContext;
+	CEconItemView *pCaseEconItemView = pConfirmContext->m_pEconItemView;
+
+	if ( bConfirmed )
+	{
+		static CSchemaAttributeDefHandle pAttrDef_SupplyCrateSeries( "set supply crate series" );
+
+		// Tell the GC to unlock the subject item.
+		GCSDK::CGCMsg< MsgGCUnlockCrate_t > msg( k_EMsgGCUnlockCrate );
+
+		msg.Body().m_unToolItemID = INVALID_ITEM_ID;
+		msg.Body().m_unSubjectItemID = pCaseEconItemView->GetItemID();
+
+		int iSeries = 0;
+		float fSeries;
+		if ( FindAttribute_UnsafeBitwiseCast<attrib_value_t>( pCaseEconItemView, pAttrDef_SupplyCrateSeries, &fSeries ) )
+		{
+			iSeries = fSeries;
+		}
+
+		EconUI()->Gamestats_ItemTransaction( IE_ITEM_USED_CONSUMABLE, pCaseEconItemView, "unlocked_supply_crate", iSeries );
+
+		GCClientSystem()->BSendMessage( msg );
+
+		CCollectionCraftingPanel *pPanel = EconUI()->GetBackpackPanel()->GetCollectionCraftPanel();
+		if ( pPanel )
+		{
+			pPanel->SetWaitingForItem( kEconItemOrigin_FoundInCrate );
+		}
+	}
+	delete pConfirmContext;
+}
+
+void CEconTool_KeylessCase::OnClientUseConsumable( CEconItemView *pItem, vgui::Panel *pParent ) const
+{
+	ClientConsumableTool_CustomCallback( pItem, pParent, &OpenKeylessCase );
+}
+
+
+void PaintkitConfirmCallback( bool bConfirmed, void *pContext );
+
+class CTFPainkitConsumeDialog : public EditablePanel
+							  , public CLocalSteamSharedObjectListener
+{
+public:
+	DECLARE_CLASS_SIMPLE( CTFPainkitConsumeDialog, EditablePanel );
+	CTFPainkitConsumeDialog( C_EconItemView* pItem )
+		: BaseClass( NULL, "PaintkitConsume" )
+		, m_pItem( pItem )
+		, m_nSourceItemID( pItem->GetID() )
+	{
+		TFModalStack()->PushModal( this );
+		GetMMDashboardParentManager()->AddPanel( this );
+
+		m_pIspectionPanel = new CTFItemInspectionPanel( this, "InspectionPanel" );
+		m_pIspectionPanel->SetOptions( false, true, true );
+
+		if ( !tf_warpaint_explanation_viewed.GetBool() )
+		{
+			tf_warpaint_explanation_viewed.SetValue( true );
+			ShowDashboardExplanation( "WarPaintUse" );
+		}
+	}
+
+	virtual ~CTFPainkitConsumeDialog()
+	{
+		TFModalStack()->PopModal( this );
+		GetMMDashboardParentManager()->RemovePanel( this );
+	}
+
+	virtual void ApplySchemeSettings( IScheme *pScheme ) OVERRIDE
+	{
+		LoadControlSettings( "Resource/UI/econ/PaintkitConsumeDialog.res" );
+		m_pWorkingLogoPanel = FindControl< CTFLogoPanel >( "WorkingLogo", true );
+		m_pSuccessLogoPanel = FindControl< CTFLogoPanel >( "SuccessLogo", true );
+		m_pIspectionPanel->InvalidateLayout( true, true );
+		BaseClass::ApplySchemeSettings( pScheme );
+
+		m_pIspectionPanel->SetItemCopy( m_pItem, true );
+	}
+
+	virtual void OnCommand( const char* pszCommand ) OVERRIDE
+	{
+		if ( FStrEq( pszCommand, "accept" ) ) 
+		{
+			CTFGenericConfirmDialog *pDialog = ShowConfirmDialog( "#TF_UsePaintkit_Title", "#TF_UsePaintkit_Text", 
+																  "#GameUI_OK", "#Cancel", 
+																  PaintkitConfirmCallback );
+			pDialog->AddStringToken( "item_name", m_pItem->GetItemName() );
+			pDialog->SetContext( this );
+			pDialog->MakeReadyForUse();
+			
+			int nX = 0;
+			int nY = YRES( 250 );
+			LocalToScreen( nX, nY );
+			pDialog->SetPos( pDialog->GetXPos(), nY );
+			pDialog->SetTall( YRES( 150 ) );
+		}
+		else if ( FStrEq( pszCommand, "cancel" ) ) 
+		{
+			MarkForDeletion();
+			return;
+		}
+	}
+
+	MESSAGE_FUNC( OnConfirmPopup, "ConfirmPopup" )
+	{
+		// Tell the GC to consume the paintkit and give a painted item
+		GCSDK::CProtoBufMsg< CMsgConsumePaintkit > msg( k_EMsgGCConsumePaintKit );
+
+		msg.Body().set_source_id( m_nSourceItemID );
+		msg.Body().set_target_defindex( m_nSelectedItem );
+
+		GCClientSystem()->BSendMessage( msg );
+
+		PlaySoundEntry( "UI.WarPaintApplyStart" );
+		g_pClientMode->GetViewportAnimationController()->RunAnimationCommand( m_pWorkingLogoPanel, "velocity", 200, 0.0f, 0.f, vgui::AnimationController::INTERPOLATOR_ACCEL, 0.75f, true, false );
+		SetControlVisible( "RedeemingPanel", true );
+		SetControlVisible( "Shade", true );
+		PostMessage( this, new KeyValues( "NoResponse" ), 5.f );
+		m_bSuccess = false;
+	}
+
+	MESSAGE_FUNC_PARAMS( OnItemSelected, "ItemSelected", pKVParams )
+	{
+		m_nSelectedItem = pKVParams->GetInt( "defindex" );
+	}
+
+	MESSAGE_FUNC( AckItems, "AckItems" )
+	{
+		MarkForDeletion();
+		// Play an exciting sound!
+		vgui::surface()->PlaySound( "misc/achievement_earned.wav" );
+		InventoryManager()->ShowItemsPickedUp( true, false );
+	}
+
+	MESSAGE_FUNC( NoResponse, "NoResponse" )
+	{
+		// We succeeded, so don't do anything
+		if ( m_bSuccess )
+			return;
+
+		SetControlVisible( "RedeemingPanel", false );
+		SetControlVisible( "SuccessPanel", false );
+		SetControlVisible( "FailurePanel", true );
+
+		PostMessage( this, new KeyValues( "Reset" ), 3.f );
+	}
+
+	MESSAGE_FUNC( Reset, "Reset" )
+	{
+		SetControlVisible( "Shade", false );
+		SetControlVisible( "RedeemingPanel", false );
+		SetControlVisible( "SuccessPanel", false );
+		SetControlVisible( "FailurePanel", false );
+	}
+
+	MESSAGE_FUNC( ShowSuccess, "ShowSuccess" )
+	{
+		SetControlVisible( "RedeemingPanel", false );
+		SetControlVisible( "SuccessPanel", true );
+
+		Color creditsGreen = GetColor( "CreditsGreen" );
+		Color brightGreen = creditsGreen;
+		BrigthenColor( brightGreen, 50 );
+		g_pClientMode->GetViewportAnimationController()->RunAnimationCommand( m_pSuccessLogoPanel, "fgcolor", brightGreen, 0.f, 0.f, vgui::AnimationController::INTERPOLATOR_ACCEL, 0.75f, true, false );
+		g_pClientMode->GetViewportAnimationController()->RunAnimationCommand( m_pSuccessLogoPanel, "fgcolor", creditsGreen, 0.f, 1.5f, vgui::AnimationController::INTERPOLATOR_DEACCEL, 0.75f, false, false );
+
+		g_pClientMode->GetViewportAnimationController()->RunAnimationCommand( m_pSuccessLogoPanel, "radius", 40, 0.f, 0.05f, vgui::AnimationController::INTERPOLATOR_LINEAR, 0.75f, true, false );
+		g_pClientMode->GetViewportAnimationController()->RunAnimationCommand( m_pSuccessLogoPanel, "radius", 30, 0.05f, 0.2f, vgui::AnimationController::INTERPOLATOR_DEACCEL, 0.75f, false, false );
+	}
+
+	virtual void SOCreated( const CSteamID & steamIDOwner, const GCSDK::CSharedObject *pObject, GCSDK::ESOCacheEvent eEvent ) OVERRIDE
+	{
+		if ( eEvent != eSOCacheEvent_Incremental)
+			return;
+
+		if ( pObject->GetTypeID() != CEconItem::k_nTypeID )
+			return;
+
+		const CEconItem* pItem = assert_cast< const CEconItem* >( pObject );
+		unacknowledged_item_inventory_positions_t reason = GetUnacknowledgedReason( pItem->GetInventoryToken() );
+		if ( reason != UNACK_ITEM_PAINTKIT )
+			return;
+
+		PlaySoundEntry( "UI.WarPaintApplyStop" );
+
+		// This is what we were waiting for
+		g_pClientMode->GetViewportAnimationController()->RunAnimationCommand( m_pWorkingLogoPanel, "velocity", 1000, 0.0f, 2.f, vgui::AnimationController::INTERPOLATOR_BIAS, 0.01f, true, false );
+		PostMessage( this, new KeyValues( "ShowSuccess" ), 3.f );
+		PostMessage( this, new KeyValues( "AckItems" ), 6.f );
+		m_bSuccess = true;
+	}
+
+
+private:
+
+	CTFItemInspectionPanel* m_pIspectionPanel;
+	C_EconItemView* m_pItem;
+	uint64 m_nSourceItemID;
+	uint32 m_nSelectedItem;
+	CTFLogoPanel* m_pWorkingLogoPanel;
+	CTFLogoPanel* m_pSuccessLogoPanel;
+	bool m_bSuccess = false;
+};
+
+void PaintkitConfirmCallback( bool bConfirmed, void *pContext )
+{
+	if ( bConfirmed )
+	{
+		CTFPainkitConsumeDialog* pPanel = (CTFPainkitConsumeDialog*)pContext;
+		pPanel->PostMessage( pPanel, new KeyValues( "ConfirmPopup" ) );
+	}
+}
+
+//-----------------------------------------------------------------------------
+void CEconTool_PaintKit::OnClientUseConsumable( class C_EconItemView *pItem, vgui::Panel *pParent ) const
+{
+	new CTFPainkitConsumeDialog( pItem );
 }
 //-----------------------------------------------------------------------------
 // Purpose:
@@ -1113,6 +1387,12 @@ public:
 			break;
 		case k_EGCMsgUseItemResponse_CannotBeUsedByAccount:
 			SetText( "#TF_UseItem_CannotBeUsedByAccount" );
+			break;
+		case k_EGCMsgUseItemResponse_CannotUseWhileUntradable:
+			SetText( "#TF_UseItem_CannotUseWhileUntradable" );
+			break;
+		case k_EGCMsgUseItemResponse_RecipientCannotRecieve:
+			SetText( "#TF_UseItem_RecipientCannotRecieve" );
 			break;
 		default:
 			Assert( !"Unknown response in CTFUseItemNotification!" );

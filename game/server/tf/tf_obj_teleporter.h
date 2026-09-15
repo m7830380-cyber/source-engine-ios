@@ -21,9 +21,6 @@ enum
 	TTYPE_NONE=0,
 	TTYPE_ENTRANCE,
 	TTYPE_EXIT,
-#ifdef STAGING_ONLY	
-	TTYPE_SPEEDPAD,
-#endif
 };
 
 #define TELEPORTER_MAX_HEALTH	150
@@ -84,7 +81,7 @@ public:
 	}
 
 	// Wrench hits
-	virtual bool	Command_Repair( CTFPlayer *pActivator, float flRepairMod );   
+	virtual int		Command_Repair( CTFPlayer *pActivator, float flAmount, float flRepairMod, float flRepairToMetalRatio = 3.f, bool bSendEvent = true ) OVERRIDE;
 	void			AddHealth( int nHealthToAdd )
 	{
 		SetHealth( MIN( GetMaxHealth(), GetHealth() + nHealthToAdd ) );
@@ -104,10 +101,6 @@ public:
 	int				GetTeleporterType( void ) { return m_iTeleportType; }
 	bool			IsEntrance( void ) { return m_iTeleportType == TTYPE_ENTRANCE; }
 	bool			IsExit( void ) { return m_iTeleportType == TTYPE_EXIT; }
-#ifdef STAGING_ONLY
-	// STAGING_ENGY
-	bool			IsSpeedPad( void ) { return m_iTeleportType == TTYPE_SPEEDPAD; }
-#endif
 
 	virtual void	MakeCarriedObject( CTFPlayer *pCarrier );
 
@@ -131,10 +124,6 @@ public:
 	virtual void	InputEnable( inputdata_t &inputdata ) OVERRIDE;
 	virtual void	InputDisable( inputdata_t &inputdata ) OVERRIDE;
 
-#ifdef STAGING_ONLY
-	// STAGING_ENGY
-	void			ApplySpeedBoost( CTFPlayer *pPlayer );
-#endif
 
 	CTFPlayer *GetTeleportingPlayer( void ){ return m_hTeleportingPlayer.Get(); }
 

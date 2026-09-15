@@ -306,6 +306,7 @@ public:
 	virtual int OnTakeDamage( const CTakeDamageInfo &info ) OVERRIDE;
 	virtual void TraceAttack( const CTakeDamageInfo &inputInfo, const Vector &vecDir, trace_t *ptr, CDmgAccumulator *pAccumulator ) OVERRIDE;
 	virtual void UpdateAnimsThink( void );
+	virtual bool IsProjectileCollisionTarget( void ) const OVERRIDE { return true; }
 	
 	void RepairSelfThink( void );
 	bool GetShieldedState( void ) const { return m_bShielded; }

@@ -54,11 +54,6 @@ void C_HeadlessHatman::Spawn( void )
 
 	m_vecViewOffset = Vector( 0, 0, 100.0f );
 
-	if ( !m_ghostEffect )
-	{
-		m_ghostEffect = ParticleProp()->Create( "ghost_pumpkin", PATTACH_ABSORIGIN_FOLLOW );
-	}
-
 	SetNextClientThink( gpGlobals->curtime + 1.0f );
 }
 
@@ -74,6 +69,11 @@ void C_HeadlessHatman::ClientThink( void )
 	if ( !m_rightEyeEffect )
 	{
 		m_rightEyeEffect = ParticleProp()->Create( "halloween_boss_eye_glow", PATTACH_POINT_FOLLOW, "righteye" );
+	}
+
+	if ( !m_ghostEffect )
+	{
+		m_ghostEffect = ParticleProp()->Create( "ghost_pumpkin", PATTACH_ABSORIGIN_FOLLOW );
 	}
 
 	SetNextClientThink( CLIENT_THINK_NEVER );

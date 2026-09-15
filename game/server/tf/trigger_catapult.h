@@ -51,7 +51,7 @@ private:
 	void			LaunchByDirection( CBaseEntity *pVictim  );
 	void			OnLaunchedVictim( CBaseEntity *pVictim );
 
-	float m_flRefireDelay[MAX_PLAYERS + 1];
+	float m_flRefireDelay[MAX_PLAYERS_ARRAY_SAFE];
 	float m_flPlayerVelocity;
 	float m_flPhysicsVelocity;
 	QAngle m_vecLaunchAngles;
@@ -69,7 +69,7 @@ private:
 	float m_flAirControlSupressionTime;
 	bool m_bDirectionSuppressAirControl;
 
-	//CNetworkArray( float, m_flRefireDelay, MAX_PLAYERS + 1 ); // 0 for physics object the rest for each player userid
+	//CNetworkArray( float, m_flRefireDelay, MAX_PLAYERS_ARRAY_SAFE ); // 0 for physics object the rest for each player userid
 	//CNetworkVar( float, m_flPlayerVelocity );
 	//CNetworkVar( float, m_flPhysicsVelocity );
 	//CNetworkQAngle( m_vecLaunchAngles );

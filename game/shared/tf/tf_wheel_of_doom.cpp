@@ -126,24 +126,15 @@ LINK_ENTITY_TO_CLASS( wheel_of_doom_spiral, CWheelOfDoomSpiral );
 BEGIN_DATADESC( CWheelOfDoomSpiral )
 END_DATADESC()
 
-#ifdef STAGING_ONLY
-static void ProcWheelEffect( const CCommand &args )
-{
-	CBaseEntity *pOther = gEntList.FindEntityByClassname( NULL, "wheel_of_doom" );
-
-	CWheelOfDoom* pWheel = dynamic_cast<CWheelOfDoom*>( pOther );
-	if( pWheel )
-	{
-		pWheel->DBG_ApplyEffectByName( args.ArgS() );
-	}
-}
-ConCommand cc_proc_wheel_effect( "cc_proc_wheel_effect", ProcWheelEffect, "Force a Wheel of Doom entity to apply the specified effect" );
-#endif
 
 
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
+#ifdef _WIN32
+// Old code, stricter compiler
+#pragma warning(disable : 4355) // warning C4355: 'this': used in base member initializer list
+#endif
 CWheelOfDoom::CWheelOfDoom( void ) :
 	m_EffectManager( this ),
 	m_pChosenEffect( NULL ),

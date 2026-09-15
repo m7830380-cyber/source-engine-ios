@@ -1436,7 +1436,7 @@ public:
 				( pAttacker == C_TFPlayer::GetLocalTFPlayer() ) && 
 				( IsHeadshot( event->GetInt( "customkill" ) ) ) && 
 				( event->GetInt( "damagebits" ) & DMG_CRITICAL ) && 
-				( pTFVictim->m_Shared.InCond( TF_COND_PARACHUTE_DEPLOYED ) ) )
+				( pTFVictim->m_Shared.InCond( TF_COND_PARACHUTE_ACTIVE ) ) )
 			{
 				IncrementCount();
 			}

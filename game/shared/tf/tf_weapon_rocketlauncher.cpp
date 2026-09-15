@@ -114,10 +114,6 @@ END_NETWORK_TABLE()
 BEGIN_PREDICTION_DATA( CTFRocketLauncher_Mortar )
 END_PREDICTION_DATA()
 
-#ifdef STAGING_ONLY
-LINK_ENTITY_TO_CLASS( tf_weapon_rocketlauncher_mortar, CTFRocketLauncher_Mortar );
-PRECACHE_WEAPON_REGISTER( tf_weapon_rocketlauncher_mortar );
-#endif // STAGING_ONLY
 
 // Server specific.
 #ifndef CLIENT_DLL
@@ -153,10 +149,6 @@ BEGIN_DATADESC( CTFCrossbow )
 END_DATADESC()
 #endif
 
-#ifdef STAGING_ONLY
-ConVar  tf_airstrike_dmg_scale( "tf_airstrike_dmg_scale", "0.65", FCVAR_REPLICATED, "How much damage the mini rockets do compared to regular rocket" );
-ConVar  tf_mortar_allow_fulltracking( "tf_mortar_allow_fulltracking", "0.0", FCVAR_REPLICATED, "Enable to allow full tracking / infinte redirects for Mortar Launcher" );
-#endif // STAGING_ONLY
 
 //-----------------------------------------------------------------------------
 // Purpose: 
@@ -227,6 +219,10 @@ void CTFRocketLauncher::ModifyEmitSoundParams( EmitSound_t &params )
 		IncrementAmmo();
 		m_bReloadedThroughAnimEvent = true;
 	}
+	else if ( UsesCenterFireProjectile() && ( bBaseReloadSound || V_strcmp( params.m_pSoundName, "Weapon_QuakeRPG.Reload" ) == 0 ) )
+	{
+		params.m_pSoundName = "Weapon_QuakeRPG.Reload";
+	}
 }
 
 void CTFRocketLauncher::Misfire( void )
@@ -290,6 +286,17 @@ bool CTFRocketLauncher::ShouldBlockPrimaryFire()
 }
 
 //-----------------------------------------------------------------------------
+// Purpose:
+//-----------------------------------------------------------------------------
+bool CTFRocketLauncher::CanInspect() const
+{
+	if ( AutoFiresFullClip() && ( m_iClip1 > 0 ) )
+		return false;
+
+	return BaseClass::CanInspect();
+}
+
+//-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
 CBaseEntity *CTFRocketLauncher::FireProjectile( CTFPlayer *pPlayer )
@@ -327,34 +334,6 @@ CBaseEntity *CTFRocketLauncher::FireProjectile( CTFPlayer *pPlayer )
 		PlayUpgradedShootSound( "Weapon_Upgrade.DamageBonus" );
 	}
 
-#ifdef STAGING_ONLY
-#ifdef GAME_DLL
-	if ( pRocket && pPlayer && pPlayer->RocketJumped() )
-	{
-		int iRocketsApplyImpuse = 0;
-		CALL_ATTRIB_HOOK_INT_ON_OTHER( pPlayer, iRocketsApplyImpuse, mod_rocket_launch_impulse );
-		if ( iRocketsApplyImpuse )
-		{
-			// Apply force in opposite direction of rocket
-			Vector vecDir = pRocket->GetAbsVelocity();
-			Vector vecFlightDir = -vecDir;
-			VectorNormalize( vecFlightDir );
-
-			// Apply more force if looking down
-			QAngle angEye = EyeAngles();
-			float flForce = ( angEye.x > 60.f ) ? 700.f : 400.f;
-			Vector vecForce = vecFlightDir * flForce;
-
-			// DevMsg( "x.Ang: %f\tForce: %f\n", angEye.x, flForce );
-
-			// Prevent insane speeds
-			float flSpeed = vecForce.NormalizeInPlace();
-			const float flLimit = Min( 800.f, flSpeed );
-			pPlayer->ApplyAbsVelocityImpulse( flLimit * vecForce );
-		}
-	}
-#endif // GAME_DLL
-#endif // STAGING_ONLY
 
 	return pRocket;
 }
@@ -683,15 +662,7 @@ void CTFRocketLauncher_Mortar::RedirectRockets( void )
 		VectorAngles( -vecDir, newAngles );
 		pRocket->SetAbsAngles( newAngles );
 
-#ifdef STAGING_ONLY
-		if ( !tf_mortar_allow_fulltracking.GetBool() )
-		{
-			// only allow a single redirect
-			m_vecRockets.Remove( i );
-		}
-#else 
 		m_vecRockets.Remove( i );
-#endif
 	}
 #endif
 }
@@ -814,3 +785,4 @@ inline float CTFCrossbow::GetProgress( void )
 	float meltedTime = gpGlobals->curtime - m_flLastUsedTimestamp;
 	return meltedTime / m_flRegenerateDuration;
 }
+

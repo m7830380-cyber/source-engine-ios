@@ -1757,6 +1757,24 @@ void CExplanationPopup::Popup( int iPosition, int iTotalPanels )
 	Q_snprintf(szTmp, 16, "%d/%d", m_iPositionInChain, m_iTotalInChain );
 	SetDialogVariable( "explanationnumber", szTmp );
 
+	if ( m_bUseResFileForControls )
+	{
+		Assert( !m_strTitle.IsEmpty() );
+		Assert( !m_strBody.IsEmpty() );
+		InvalidateLayout( true, true );
+		SetDialogVariable( "title", g_pVGuiLocalize->Find( m_strTitle ) );
+		SetDialogVariable( "body", g_pVGuiLocalize->Find( m_strBody ) );
+		SetControlVisible( "PrevButton", m_iPositionInChain > 1 );
+		SetControlVisible( "NextButton", m_iPositionInChain < m_iTotalInChain );
+		SetControlVisible( "PositionLabel", m_iTotalInChain > 1 );
+
+		// Set the end height to be just below the body label
+		CExLabel* pBodyLabel = FindControl< CExLabel >( "TextLabel" );
+		int nContentWide, nContentTall;
+		pBodyLabel->GetContentSize( nContentWide, nContentTall );
+		m_iEndH = nContentTall + pBodyLabel->GetYPos() + YRES( 30 );
+	}
+
 	SetBounds( m_iStartX, m_iStartY, m_iStartW, m_iStartH );
 	SetVisible( true );
 	vgui::ivgui()->AddTickSignal( GetVPanel() );
@@ -1892,7 +1910,7 @@ void CExplanationPopup::OnKeyCodePressed( vgui::KeyCode code )
 		ButtonCode_t nButtonCode = GetBaseButtonCode( code );
 
 		// swallow all keys
-		if ( nButtonCode == KEY_XBUTTON_B )
+		if ( nButtonCode == KEY_XBUTTON_B || nButtonCode == STEAMCONTROLLER_B )
 		{
 			OnCommand( "close" );
 			return;
@@ -1900,6 +1918,7 @@ void CExplanationPopup::OnKeyCodePressed( vgui::KeyCode code )
 		else if ( nButtonCode == KEY_XBUTTON_LEFT || 
 				  nButtonCode == KEY_XSTICK1_LEFT ||
 				  nButtonCode == KEY_XSTICK2_LEFT ||
+				  nButtonCode == STEAMCONTROLLER_DPAD_LEFT ||
 				  code == KEY_LEFT )
 		{
 			OnCommand( "prevexplanation" );
@@ -1908,6 +1927,7 @@ void CExplanationPopup::OnKeyCodePressed( vgui::KeyCode code )
 		else if ( nButtonCode == KEY_XBUTTON_RIGHT || 
 				  nButtonCode == KEY_XSTICK1_RIGHT ||
 				  nButtonCode == KEY_XSTICK2_RIGHT ||
+				  nButtonCode == STEAMCONTROLLER_DPAD_RIGHT ||
 				  code == KEY_RIGHT )
 		{
 			OnCommand( "nextexplanation" );
@@ -1916,6 +1936,53 @@ void CExplanationPopup::OnKeyCodePressed( vgui::KeyCode code )
 	}
 
 	BaseClass::OnKeyCodePressed( code );
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: Keep controls in place as we resize
+//-----------------------------------------------------------------------------
+void CExplanationPopup::OnSizeChanged( int newWide, int newTall ) 
+{
+	BaseClass::OnSizeChanged( newWide, newTall );
+
+	if ( !m_bUseResFileForControls )
+		return;
+
+	// Prev button
+	{
+		Panel* pPrev = FindChildByName( "PrevButton" );
+		if ( pPrev )
+		{
+			pPrev->SetPos( 0, GetTall() - pPrev->GetTall() );
+		}
+	}
+
+	// Next button
+	{
+		Panel* pNext = FindChildByName( "NextButton" );
+		if( pNext )
+		{
+			pNext->SetPos( GetWide() - pNext->GetWide(), GetTall() - pNext->GetTall() );
+		}
+	}
+
+	// Position label
+	{
+		Panel* pPosition = FindChildByName( "PositionLabel" );
+		if ( pPosition )
+		{
+			pPosition->SetPos( GetWide() * 0.5f - pPosition->GetWide() * 0.5f, GetTall() - pPosition->GetTall() ); 
+		}
+	}
+
+	// Close button
+	{
+		Panel* pClose = FindChildByName( "CloseButton" );
+		if ( pClose )
+		{
+			pClose->SetPos( GetWide() - pClose->GetWide(), 0 ); 
+		}
+	}
 }
 
 //-----------------------------------------------------------------------------
@@ -2025,11 +2092,27 @@ void CExplanationPopupCalloutArrow::Paint( void )
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
+void CExplanationPopup::ApplySchemeSettings( vgui::IScheme *pScheme )
+{
+	BaseClass::ApplySchemeSettings( pScheme );
+
+	if ( m_bUseResFileForControls )
+	{
+		LoadControlSettings( "resource/ui/ExplanationPopup.res" );
+	}
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CExplanationPopup::ApplySettings( KeyValues *inResourceData )
 {
 	BaseClass::ApplySettings( inResourceData );
 
 	Q_strncpy( m_szNextExplanation, inResourceData->GetString( "next_explanation", "" ), sizeof( m_szNextExplanation ) );
+
+	m_strTitle = inResourceData->GetString( "explanation_title", NULL );
+	m_strBody = inResourceData->GetString( "explanation_body", NULL );
 }
 
 //-----------------------------------------------------------------------------

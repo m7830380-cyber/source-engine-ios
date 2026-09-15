@@ -12,6 +12,7 @@
 #include "input.h"
 #ifdef TF_CLIENT_DLL
 #include "cdll_util.h"
+#include "tf_gamerules.h"
 #endif
 #include "rope_helpers.h"
 #include "engine/ivmodelinfo.h"
@@ -193,7 +194,7 @@ public:
 		if( pReturn == NULL )
 		{
 			int iMaxSize = m_QueuedRopeMemory[m_nCurrentStack].GetMaxSize();
-			Warning( "Overflowed rope queued rendering memory stack. Needed %d, have %d/%d\n", bytes, iMaxSize - m_QueuedRopeMemory[m_nCurrentStack].GetUsed(), iMaxSize );
+			Warning( "Overflowed rope queued rendering memory stack. Needed %llu, have %d/%d\n", (uint64)bytes, iMaxSize - m_QueuedRopeMemory[m_nCurrentStack].GetUsed(), iMaxSize );
 			pReturn = malloc( bytes );
 			m_DeleteOnSwitch[m_nCurrentStack].AddToTail( pReturn );
 		}
@@ -376,7 +377,7 @@ void CRopeManager::AddToRenderCache( C_RopeKeyframe *pRope )
 	// If we didn't find one, then allocate the mofo.
 	if ( iRenderCache == nRenderCacheCount )
 	{
-		int iRenderCache = m_aRenderCache.AddToTail();
+		iRenderCache = m_aRenderCache.AddToTail();
 		m_aRenderCache[iRenderCache].m_pSolidMaterial = pRope->GetSolidMaterial();
 		if ( m_aRenderCache[iRenderCache].m_pSolidMaterial )
 		{
@@ -639,6 +640,18 @@ bool CRopeManager::IsHolidayLightMode( void )
 	{
 		return false;
 	}
+
+#ifdef TF_CLIENT_DLL
+	if ( TFGameRules() )
+	{
+		// We don't want to draw the lights for the grapple.
+		// They get left behind for a while and look bad.
+		if ( TFGameRules()->IsPowerupMode() || !TFGameRules()->GetRopesHolidayLightsAllowed() )
+		{
+			return false;
+		}
+	}
+#endif
 
 	bool bDrawHolidayLights = false;
 
@@ -1022,6 +1035,8 @@ void C_RopeKeyframe::CPhysicsDelegate::ApplyConstraints( CSimplePhysics::CNode *
 // C_RopeKeyframe
 // ------------------------------------------------------------------------------------ //
 
+int C_RopeKeyframe::s_nLastRopeIndex = 0;
+
 C_RopeKeyframe::C_RopeKeyframe()
 {
 	m_bEndPointAttachmentPositionsDirty = true;
@@ -1044,6 +1059,8 @@ C_RopeKeyframe::C_RopeKeyframe()
 	m_flCurScroll = m_flScrollSpeed = 0;
 	m_TextureScale = 4;	// 4:1
 	m_flImpulse.Init();
+
+	m_nRopeIndex = s_nLastRopeIndex++;
 
 	g_Ropes.AddToTail( this );
 }
@@ -1638,12 +1655,12 @@ struct catmull_t
 };
 
 // bake out the terms of the catmull rom spline
-void Catmull_Rom_Spline_Matrix( const Vector &p1, const Vector &p2, const Vector &p3, const Vector &p4, catmull_t &output )
+void Catmull_Rom_Spline_Matrix( const Vector &vecP1, const Vector &vecP2, const Vector &vecP3, const Vector &vecP4, catmull_t &output )
 {
-	output.t3 = 0.5f * ((-1*p1) + (3*p2) + (-3*p3) + p4);	// 0.5 t^3 * [ (-1*p1) + ( 3*p2) + (-3*p3) + p4 ]
-	output.t2 = 0.5f * ((2*p1) + (-5*p2) + (4*p3) - p4);		// 0.5 t^2 * [ ( 2*p1) + (-5*p2) + ( 4*p3) - p4 ]
-	output.t = 0.5f * ((-1*p1) + p3);						// 0.5 t * [ (-1*p1) + p3 ]
-	output.c = p2;											// p2
+	output.t3 = 0.5f * ( ( -1 * vecP1 ) + ( 3 * vecP2 ) + ( -3 * vecP3 ) + vecP4 );	// 0.5 t^3 * [ (-1*p1) + ( 3*p2) + (-3*p3) + p4 ]
+	output.t2 = 0.5f * ( ( 2 * vecP1 ) + ( -5 * vecP2 ) + ( 4 * vecP3 ) - vecP4 );		// 0.5 t^2 * [ ( 2*p1) + (-5*p2) + ( 4*p3) - p4 ]
+	output.t = 0.5f * ( ( -1 * vecP1 ) + vecP3 );						// 0.5 t * [ (-1*p1) + p3 ]
+	output.c = vecP2;											// p2
 }
 
 // evaluate one point on the spline, t is a vector of (t, t^2, t^3)
@@ -1691,7 +1708,9 @@ void C_RopeKeyframe::BuildRope( RopeSegData_t *pSegmentData, const Vector &vCurr
 
 		if ( !bQueued && RopeManager()->IsHolidayLightMode() && r_rope_holiday_light_scale.GetFloat() > 0.0f )
 		{
-			data.m_nMaterial = (intp)this;
+			// misyl: This used to be janky pointer thing,
+			// now it's some global index thing.
+			data.m_nMaterial = m_nRopeIndex;
 			data.m_nHitBox = ( iNode << 8 );
 			data.m_flScale = r_rope_holiday_light_scale.GetFloat();
 			data.m_vOrigin = pSegmentData->m_Segments[nSegmentCount].m_vPos;
@@ -1917,10 +1936,10 @@ bool C_RopeKeyframe::CalculateEndPointAttachment( C_BaseEntity *pEnt, int iAttac
 			if ( !pModel )
 				return false;
 
-			int iAttachment = pModel->LookupAttachment( "buff_attach" );
+			int iAttachmentBuf = pModel->LookupAttachment( "buff_attach" );
 			if ( pAngles )
-				return pModel->GetAttachment( iAttachment, vPos, *pAngles );
-			return pModel->GetAttachment( iAttachment, vPos );
+				return pModel->GetAttachment( iAttachmentBuf, vPos, *pAngles );
+			return pModel->GetAttachment( iAttachmentBuf, vPos );
 		}
 	}
 

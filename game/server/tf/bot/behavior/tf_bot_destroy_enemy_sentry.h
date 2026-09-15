@@ -28,6 +28,7 @@ public:
 private:
 	PathFollower m_path;
 	CountdownTimer m_repathTimer;
+	CountdownTimer m_abandonTimer;
 
 	bool m_canMove;
 

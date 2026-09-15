@@ -15,14 +15,21 @@ class CTFPlayer;
 class CTFBaseBossLocomotion : public NextBotGroundLocomotion
 {
 public:
-	CTFBaseBossLocomotion( INextBot *bot ) : NextBotGroundLocomotion( bot ) { }
+	CTFBaseBossLocomotion( INextBot *bot ) : NextBotGroundLocomotion( bot ) { m_flStepHeight = m_flMaxJumpHeight = 100.0f; }
 	virtual ~CTFBaseBossLocomotion() { }
 
 	virtual float GetRunSpeed( void ) const;							// get maximum running speed
-	virtual float GetStepHeight( void ) const		{ return 100.0f; }	// if delta Z is greater than this, we have to jump to get up
-	virtual float GetMaxJumpHeight( void ) const	{ return 100.0f; }	// return maximum height of a jump
+	virtual float GetStepHeight( void ) const		{ return m_flStepHeight; }	// if delta Z is greater than this, we have to jump to get up
+	virtual float GetMaxJumpHeight( void ) const	{ return m_flMaxJumpHeight; }	// return maximum height of a jump
 
 	virtual void FaceTowards( const Vector &target );	// rotate body to face towards "target"
+
+	void SetStepHeight( float flStepHeight ) { m_flStepHeight = flStepHeight; }
+	void SetMaxJumpHeight( float flMaxJumpHeight ) { m_flMaxJumpHeight = flMaxJumpHeight; }
+
+private:
+	float m_flStepHeight = 100.0f;
+	float m_flMaxJumpHeight = 100.0f;
 };
 
 
@@ -33,6 +40,7 @@ public:
 	DECLARE_CLASS( CTFBaseBoss, NextBotCombatCharacter );
 	DECLARE_SERVERCLASS();
 	DECLARE_DATADESC();
+	DECLARE_ENT_SCRIPTDESC();
 
 	CTFBaseBoss();
 	virtual ~CTFBaseBoss();
@@ -69,6 +77,8 @@ public:
 	void InputSetMaxHealth( inputdata_t &inputdata );
 	void InputAddHealth( inputdata_t &inputdata );
 	void InputRemoveHealth( inputdata_t &inputdata );
+	void InputSetStepHeight( inputdata_t &inputdata );
+	void InputSetMaxJumpHeight( inputdata_t &inputdata );
 
 	void SetInitialHealth( int value );
 	void SetCurrencyValue( int value );				// how much cash do we drop when we die?

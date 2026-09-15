@@ -19,6 +19,7 @@
 #include "tf_item_inventory.h"
 #include "trading_start_dialog.h"
 #include "gc_clientsystem.h"
+#include "tf_item_system.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include <tier0/memdbgon.h>
@@ -266,6 +267,7 @@ const char *g_pszSubButtonNames[CHSB_NUM_BUTTONS] =
 	"ShowCraftingButton",	// CHSB_CRAFTING,
 	"ShowArmoryButton",		// CHSB_ARMORY,
 	"ShowTradeButton",		// CHSB_TRADING,
+	"ShowPaintkitsButton"	// CHSB_PAINTKITS
 };
 const char *g_pszSubButtonLabelNames[CHSB_NUM_BUTTONS] =
 {
@@ -273,6 +275,7 @@ const char *g_pszSubButtonLabelNames[CHSB_NUM_BUTTONS] =
 	"ShowCraftingLabel",	// CHSB_CRAFTING,
 	"ShowArmoryLabel",		// CHSB_ARMORY,
 	"ShowTradeLabel",		// CHSB_TRADING,
+	"ShowPaintkitsLabel",	// CHSB_PAINTKITS
 };
 
 int g_nLoadoutClassOrder[] =
@@ -328,6 +331,7 @@ CCharInfoLoadoutSubPanel::CCharInfoLoadoutSubPanel(Panel *parent) : vgui::Proper
 	m_pBackpackPanel = new CBackpackPanel( this, "backpack_panel" );
 	m_pCraftingPanel = new CCraftingPanel( this, "crafting_panel" );
 	m_pArmoryPanel = new CArmoryPanel( this, "armory_panel" );
+	m_pInspectPanel = new CTFItemInspectionPanel( this, "InspectionPanel" );
 	m_pArmoryPanel->AllowGotoStore();
 	m_pSelectLabel = NULL;
 	m_pLoadoutChangesLabel = NULL;
@@ -536,6 +540,51 @@ void CCharInfoLoadoutSubPanel::OnCommand( const char *command )
 	{
 		OpenTradingStartDialog( this );
 	}
+	else if ( FStrEq( command, "paintkit_preview" ) )
+	{
+		// When opening from the charinfo panel, just show a random weapon
+		CUtlVector< CTFItemDefinition* > vecWeaponDefs;
+
+		// Dig up all the weapons
+		const CEconItemSchema::ItemDefinitionMap_t& mapItemDefs = ItemSystem()->GetItemSchema()->GetItemDefinitionMap();
+		FOR_EACH_MAP_FAST( mapItemDefs, i )
+		{
+			CTFItemDefinition *pData = assert_cast< CTFItemDefinition* >( mapItemDefs[i] );
+
+			if ( pData->GetDefaultLoadoutSlot() == LOADOUT_POSITION_PRIMARY ||
+				 pData->GetDefaultLoadoutSlot() == LOADOUT_POSITION_SECONDARY ||
+				 pData->GetDefaultLoadoutSlot() == LOADOUT_POSITION_MELEE )
+			{
+
+				float flInspect = 0;
+				static CSchemaAttributeDefHandle pAttrib_WeaponAllowInspect( "weapon_allow_inspect" );
+				if ( FindAttribute_UnsafeBitwiseCast<attrib_value_t>( pData, pAttrib_WeaponAllowInspect, &flInspect ) )
+				{
+					vecWeaponDefs.AddToTail( pData );
+				}
+			}
+		}
+
+		Assert( vecWeaponDefs.Count() );
+		if ( vecWeaponDefs.Count() )
+		{
+			// Randomly pick one that supports paintkits.  We don't want to do GetValidPaintkits() in the above
+			// loop because it causes the CTFItemDefinition to populate its valid paintkits list, which isn't cheap
+			int nSafeguard = 0;
+			int nRandomIndex = 0;
+			do 
+			{
+				nRandomIndex = RandomInt( 0, vecWeaponDefs.Count() - 1 );
+				++nSafeguard;
+			} while ( vecWeaponDefs[ nRandomIndex ]->GetValidPaintkits().IsEmpty() && nSafeguard < 100 );
+
+			// Open up the inspection panel with the random weapon we've chosen
+			CEconItemView itemTemp;
+			itemTemp.Init( vecWeaponDefs[ nRandomIndex ]->GetDefinitionIndex(), AE_UNIQUE, AE_USE_SCRIPT_VALUE, true );
+
+			OpenToPaintkitPreview( &itemTemp, false, false );
+		}
+	}
 	else if ( !Q_stricmp( command, "show_explanations" ) )
 	{
 		if ( !m_flStartExplanationsAt )
@@ -598,6 +647,19 @@ void CCharInfoLoadoutSubPanel::SetTeamIndex( int iTeam )
 }
 
 
+void CCharInfoLoadoutSubPanel::OpenToPaintkitPreview( CEconItemView* pItem, bool bFixedItem, bool bFixedPaintkit )
+{
+	if ( m_pInspectPanel->IsLayoutInvalid() )
+		m_pInspectPanel->InvalidateLayout( true, true );
+
+	if ( pItem )
+	{
+		m_pInspectPanel->SetOptions( bFixedItem, bFixedPaintkit, false );
+		m_pInspectPanel->SetItemCopy( pItem );
+	}
+	OpenSubPanel( CHAP_PAINTKIT_PREVIEW );
+}
+
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
@@ -627,6 +689,7 @@ void CCharInfoLoadoutSubPanel::UpdateModelPanels( bool bOpenClassLoadout )
 		m_pBackpackPanel->SetVisible( false );
 		m_pArmoryPanel->SetVisible( false );
 		m_pCraftingPanel->ShowPanel( m_iCurrentClassIndex, true, (m_iPrevShowingPanel == CHAP_ARMORY) );
+		m_pInspectPanel->SetVisible( false );
 	}
 	else if ( m_iShowingPanel == CHAP_BACKPACK )
 	{
@@ -634,6 +697,7 @@ void CCharInfoLoadoutSubPanel::UpdateModelPanels( bool bOpenClassLoadout )
 		m_pCraftingPanel->SetVisible( false );
 		m_pArmoryPanel->SetVisible( false );
 		m_pBackpackPanel->ShowPanel( m_iCurrentClassIndex, true, (m_iPrevShowingPanel == CHAP_ARMORY) );
+		m_pInspectPanel->SetVisible( false );
 	}
 	else if ( m_iShowingPanel == CHAP_ARMORY )
 	{
@@ -641,6 +705,11 @@ void CCharInfoLoadoutSubPanel::UpdateModelPanels( bool bOpenClassLoadout )
 		m_pCraftingPanel->SetVisible( false );
 		m_pBackpackPanel->SetVisible( false );
 		m_pArmoryPanel->ShowPanel( m_iArmoryItemDef );
+		m_pInspectPanel->SetVisible( false );
+	}
+	else if ( m_iShowingPanel == CHAP_PAINTKIT_PREVIEW )
+	{
+		m_pInspectPanel->SetVisible( true );
 	}
 	else
 	{
@@ -648,6 +717,7 @@ void CCharInfoLoadoutSubPanel::UpdateModelPanels( bool bOpenClassLoadout )
 		m_pArmoryPanel->SetVisible( false );
 		m_pBackpackPanel->SetVisible( false );
 		m_pCraftingPanel->SetVisible( false );
+		m_pInspectPanel->SetVisible( false );
 		m_pClassLoadoutPanel->SetTeam( m_iCurrentTeamIndex );
 		m_pClassLoadoutPanel->SetClass( iClassIndexToSet );
 		m_pClassLoadoutPanel->ShowPanel( iClassIndexToSet, false, (m_iPrevShowingPanel == CHAP_ARMORY) );
@@ -690,7 +760,7 @@ void CCharInfoLoadoutSubPanel::PerformLayout( void )
 	if ( !TFInventoryManager()->GetLocalTFInventory()->RetrievedInventoryFromSteam() )
 	{
 		bool bLoggedIntoSteam = steamapicontext && steamapicontext->SteamUser() && steamapicontext->SteamUser()->BLoggedOn();
-		if ( m_pItemsLabel ) 
+		if ( m_pNoGCLabel ) 
 			m_pNoGCLabel->SetVisible( bLoggedIntoSteam );
 		if ( m_pNoSteamLabel ) 
 			m_pNoSteamLabel->SetVisible( !bLoggedIntoSteam );
@@ -889,7 +959,6 @@ void CCharInfoLoadoutSubPanel::UpdateLabelFromSubButton( int nButton )
 
 	switch ( nButton )
 	{
-	default:
 	case CHSB_BACKPACK:
 		{
 			int iNumItems = TFInventoryManager()->GetLocalTFInventory()->GetItemCount();
@@ -917,6 +986,11 @@ void CCharInfoLoadoutSubPanel::UpdateLabelFromSubButton( int nButton )
 	case CHSB_TRADING:
 		m_pItemsLabel->SetText( g_pVGuiLocalize->Find( "Loadout_OpenTradingDesc" ) );
 		break;
+	case CHSB_PAINTKITS:
+		m_pItemsLabel->SetText( g_pVGuiLocalize->Find( "Loadout_OpenPaintkitPreview" ) );
+		break;
+	default:
+		Assert( false );
 	}
 
 	int iX, iY;
@@ -1158,7 +1232,7 @@ void CCharInfoLoadoutSubPanel::OnKeyCodePressed(vgui::KeyCode code)
 	{
 		// let escape and B (aka "go back") through so we 
 		// can actually get out of the loadout screen
-		if ( nButtonCode == KEY_XBUTTON_B )
+		if ( nButtonCode == KEY_XBUTTON_B || nButtonCode == STEAMCONTROLLER_B )
 		{
 			BaseClass::OnKeyCodePressed( code );
 		}

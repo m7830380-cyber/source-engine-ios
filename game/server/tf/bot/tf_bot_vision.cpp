@@ -254,12 +254,6 @@ bool CTFBotVision::IsIgnored( CBaseEntity *subject ) const
 			break;
 		}
 
-#ifdef STAGING_ONLY
-		if ( enemy->m_Shared.InCond( TF_COND_REPROGRAMMED ) )
-		{
-			return true;
-		}
-#endif // STAGING_ONLY
 
 		if ( me->IsKnownSpy( enemy ) )
 		{
@@ -369,13 +363,6 @@ bool CTFBotVision::IsVisibleEntityNoticed( CBaseEntity *subject ) const
 			return true;
 		}
 
-#ifdef STAGING_ONLY
-		// Bots can be hacked/reprogrammed by spies.  Ignore.
-		if ( player->m_Shared.InCond( TF_COND_REPROGRAMMED ) )
-		{
-			return false;
-		}
-#endif // STAGING_ONLY
 
 		// An upgrade in MvM grants AE stealth where the player can fire
 		// while in stealth, and for a short period after it drops

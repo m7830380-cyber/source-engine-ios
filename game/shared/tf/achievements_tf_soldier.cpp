@@ -1505,19 +1505,19 @@ class CAchievementTFSoldier_KillFiveStunned : public CBaseTFAchievement
 
 	virtual void Event_EntityKilled( CBaseEntity *pVictim, CBaseEntity *pAttacker, CBaseEntity *pInflictor, IGameEvent *event ) 
 	{
-		CTFPlayer *pLocalPlayer = ToTFPlayer( C_TFPlayer::GetLocalPlayer() );
+		if ( !pVictim || !pVictim->IsPlayer() )
+			return;
 
-		if ( pLocalPlayer )
+		CBasePlayer *pLocalPlayer = C_TFPlayer::GetLocalPlayer();
+		if ( !pLocalPlayer )
+			return;
+
+		if ( pLocalPlayer == pAttacker )
 		{
-			if ( pAttacker == pLocalPlayer )
+			CTFPlayer *pTFVictim = ToTFPlayer( pVictim );
+			if ( pTFVictim && pTFVictim->m_Shared.InCond( TF_COND_STUNNED ) )
 			{
-				int iStunFlags = event->GetInt( "stun_flags" );
-
-				if ( ( iStunFlags & TF_STUN_LOSER_STATE ) != 0 ||
-					 ( iStunFlags & TF_STUN_CONTROLS ) != 0 )
-				{
-					IncrementCount();
-				}
+				IncrementCount();
 			}
 		}
 	}
@@ -1773,7 +1773,7 @@ public:
 		CTFPlayer *pTFVictim = ToTFPlayer( pVictim );
 		if ( pTFAttacker && pTFVictim && ( pTFAttacker == C_TFPlayer::GetLocalTFPlayer() ) )
 		{
-			if ( ( pTFAttacker->m_Shared.InCond( TF_COND_PARACHUTE_DEPLOYED ) ) && ( pTFVictim->m_Shared.InCond( TF_COND_PARACHUTE_DEPLOYED ) ) )
+			if ( ( pTFAttacker->m_Shared.InCond( TF_COND_PARACHUTE_ACTIVE ) ) && ( pTFVictim->m_Shared.InCond( TF_COND_PARACHUTE_ACTIVE ) ) )
 			{
 				IncrementCount();
 			}

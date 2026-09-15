@@ -33,10 +33,10 @@ enum PlayerTeamSpawn_MatchSummary_t
 
 DECLARE_AUTO_LIST( ITFTeamSpawnAutoList );
 
-class CTFTeamSpawn : public CPointEntity, public ITFTeamSpawnAutoList
+class CTFTeamSpawn : public CServerOnlyPointEntity, public ITFTeamSpawnAutoList
 {
 public:
-	DECLARE_CLASS( CTFTeamSpawn, CPointEntity );
+	DECLARE_CLASS( CTFTeamSpawn, CServerOnlyPointEntity );
 
 	CTFTeamSpawn();
 

@@ -759,7 +759,7 @@ void CTFStorePreviewItemPanel2::OnCommand( const char *command )
 		if ( steamapicontext && steamapicontext->SteamFriends() && m_pItemFullImage )
 		{
 			CEconItemView *pItem = m_pItemFullImage->GetItem();
-			if ( pItem->IsValid() )
+			if ( pItem && pItem->IsValid() )
 			{
 				// Determine which language we should use
 				char uilanguage[ 64 ];
@@ -960,6 +960,8 @@ void CTFStorePreviewItemPanel2::PreviewItem( int iClass, CEconItemView *pItem, c
 																   ? pYesNo[0]
 																   : pYesNo[1] );
 
+				m_pDetailsViewChild->SetDialogVariable( "item_level_info", "" );
+
 				// Setup price
 				if ( pEntry )
 				{
@@ -974,7 +976,8 @@ void CTFStorePreviewItemPanel2::PreviewItem( int iClass, CEconItemView *pItem, c
 					if ( pEntry->IsRentable() && pwsRentalPriceFormat )
 					{
 						wchar_t wzRentalLocalizedPrice[ kLocalizedPriceSizeInChararacters ];
-						MakeMoneyString( wzRentalLocalizedPrice, ARRAYSIZE( wzRentalLocalizedPrice ), pEntry->GetRentalPriceScale() * iTotalPrice, eCurrency )
+						float flRentalPriceScale = ( pEntry->GetRentalPriceScale() * 0.01f );
+						MakeMoneyString( wzRentalLocalizedPrice, ARRAYSIZE( wzRentalLocalizedPrice ), flRentalPriceScale * iTotalPrice, eCurrency )
 
 						wchar_t wzLocalizedPriceString[96];
 						::ILocalize::ConstructString_safe( wzLocalizedPriceString, pwsRentalPriceFormat, 2, wzLocalizedPrice, wzRentalLocalizedPrice );
@@ -1079,6 +1082,10 @@ void CTFStorePreviewItemPanel2::PreviewItem( int iClass, CEconItemView *pItem, c
 			for ( uint32 i = 0; i < pDescription->GetLineCount(); ++i )
 			{
 				const econ_item_description_line_t& line = pDescription->GetLine(i);
+
+				if ( line.unMetaType & kDescLineFlag_MouseOverPanel )
+					continue;
+
 				int nLineLength = StringFuncs<locchar_t>::Length( line.sText.Get() );
 				if ( ( line.unMetaType & kDescLineFlag_Type	) != 0 )
 				{

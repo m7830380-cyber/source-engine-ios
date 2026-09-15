@@ -13,30 +13,12 @@
 	#define PROJECT_TF
 #endif
 
-#define TF_ANTI_IDLEBOT_VERIFICATION		defined( PROJECT_TF )
 
-#if TF_ANTI_IDLEBOT_VERIFICATION
-	#define TF_ANTI_IDLEBOT_VERIFICATION_ONLY_COMMA ,
-	#define TF_ANTI_IDLEBOT_VERIFICATION_ONLY_ARG( arg ) arg
-#else
 	#define TF_ANTI_IDLEBOT_VERIFICATION_ONLY_COMMA
 	#define TF_ANTI_IDLEBOT_VERIFICATION_ONLY_ARG( arg )
-#endif
+	#define TF_ANTI_IDLEBOT_VERIFICATION_ONLY_ARG_BOOL_TRUE( arg ) true
 
-#if TF_ANTI_IDLEBOT_VERIFICATION
-	#include "checksum_md5.h"
-	#include "tf_gcmessages.pb.h"
-	#include "tf_gcmessages.h"
-#ifdef CLIENT_DLL
-	#include "gc_clientsystem.h"
-#endif // CLIENT_DLL
 
-#endif // TF_ANTI_IDLEBOT_VERIFICATION
-
-#ifdef GC_DLL
-#include "gcsdk/gclogger.h"
-using namespace GCSDK;
-#endif
 
 class IEconItemInterface;
 namespace GCSDK
@@ -65,6 +47,9 @@ enum EDescriptionLineMetaFlags
 	kDescLineFlag_Collection			= 0x200,			// this line is associated with item collections
 	kDescLineFlag_CollectionCurrentItem	= 0x400,			// this line is the current item being describe
 	kDescLineFlag_CollectionName		= 0x800,			// this line is the collection name
+	kDescLineFlag_CaseBonusContent		= 0x1000,			// this line is the case bonus content
+	kDescLineFlag_MouseOverPanel		= 0x2000,			// this line is for mouse over panel only
+	kDescLineFlag_UserProvided			= 0x4000,			// user-generated content
 
 	kDescLineFlagSet_DisplayInAttributeBlock = ~(kDescLineFlag_Name | kDescLineFlag_Type),
 };
@@ -132,15 +117,8 @@ class CEconItemDescription : public IEconItemDescription, public IAccountPersona
 public:
 	// Instances should be filled out via YieldingFillOutEconItemDescription().
 	CEconItemDescription()
-#if TF_ANTI_IDLEBOT_VERIFICATION
-		: m_pHashContext( NULL )
-		, m_bIsVerbose( false )
-#ifdef GC_DLL
-		, m_bTextModeEnabled( false )
-#else // if defined( CLIENT_DLL )
-		, m_bUnknownPlayer( false )
-#endif // GC_DLL
-#endif // TF_ANTI_IDLEBOT_VERIFICATION
+		: m_bUnknownPlayer( false )
+		, m_bIsToolTip( false )
 	{
 		//
 	}
@@ -217,38 +195,15 @@ public:
 		virtual bool OnIterateAttributeValue( const CEconItemAttributeDefinition *pAttrDef, attrib_value_t value ) OVERRIDE;
 	};
 
-#if TF_ANTI_IDLEBOT_VERIFICATION
-	void SetHashContext( MD5Context_t *pHashContext )
-	{
-		AssertMsg( pHashContext == NULL || m_pHashContext == NULL, "Only one hash context allowed per item description!" );
 
-		m_pHashContext = pHashContext;
-	}
-
-	void SetVerbose( bool bIsVerbose )
-	{
-		m_bIsVerbose = bIsVerbose;
-	}
-
-#ifdef GC_DLL
-	void SetHashGCTextModeEnabled( bool bTextModeEnabled )
-	{
-		m_bTextModeEnabled = bTextModeEnabled;
-	}
-#endif // GC_DLL
-#endif // TF_ANTI_IDLEBOT_VERIFICATION
-
-#ifdef GC_DLL
-	bool HasUnknownPlayer( ) const
-	{
-		return false;
-	}
-#else // if defined( CLIENT_DLL )
 	bool HasUnknownPlayer( ) const
 	{
 		return m_bUnknownPlayer;	
 	}
-#endif
+	void SetIsToolTip( bool bIsToolTip )
+	{
+		m_bIsToolTip = bIsToolTip;
+	}
 
 private:
 	// IEconItemDescription interface.
@@ -257,13 +212,10 @@ private:
 
 private:
 	// Internal.
-	virtual void AddAttributeDescription( const CLocalizationProvider *pLocalizationProvider, const CEconItemAttributeDefinition *pAttribDef, attrib_value_t value, attrib_colors_t eOverrideDisplayColor = NUM_ATTRIB_COLORS );
+	virtual void AddAttributeDescription( const CLocalizationProvider *pLocalizationProvider, const CEconItemAttributeDefinition *pAttribDef, attrib_value_t value, attrib_colors_t eOverrideDisplayColor = NUM_ATTRIB_COLORS, uint32 unAdditionalMetaType = 0 );
 	
 	virtual void Generate_ItemName( const CLocalizationProvider *pLocalizationProvider, const IEconItemInterface *pEconItem );
 	virtual void Generate_ItemLevelDesc( const CLocalizationProvider *pLocalizationProvider, const IEconItemInterface *pEconItem );
-#if defined( STAGING_ONLY ) && defined( CLIENT_DLL )
-	virtual void Generate_DebugInformation( const CLocalizationProvider *pLocalizationProvider, const IEconItemInterface *pEconItem );
-#endif // defined( DEBUG ) && defined( CLIENT_DLL )
 	virtual void Generate_CraftTag( const CLocalizationProvider *pLocalizationProvider, const IEconItemInterface *pEconItem );
 	virtual void Generate_StyleDesc( const CLocalizationProvider *pLocalizationProvider, const IEconItemInterface *pEconItem );
 	virtual void Generate_HolidayRestriction( const CLocalizationProvider *pLocalizationProvider, const IEconItemInterface *pEconItem );
@@ -276,12 +228,13 @@ private:
 #ifdef PROJECT_TF
 	virtual void Generate_DuelingMedal( const CLocalizationProvider *pLocalizationProvider, const IEconItemInterface *pEconItem );
 	virtual void Generate_MapContributor( const CLocalizationProvider *pLocalizationProvider, const IEconItemInterface *pEconItem );
+	virtual void Generate_MapStampBundleTooltip( const CLocalizationProvider *pLocalizationProvider, const IEconItemInterface *pEconItem );
 	virtual void Generate_FriendlyHat( const CLocalizationProvider *pLocalizationProvider, const IEconItemInterface *pEconItem );
 	virtual void Generate_SaxxyAwardDesc( const CLocalizationProvider *pLocalizationProvider, const IEconItemInterface *pEconItem );
 	virtual void Generate_MvmChallenges( const CLocalizationProvider *pLocalizationProvider, const IEconItemInterface *pEconItem );
 	virtual void Generate_SquadSurplusClaimedBy( const CLocalizationProvider *pLocalizationProvider, const IEconItemInterface *pEconItem );
 	virtual void Generate_DynamicRecipe( const CLocalizationProvider *pLocalizationProvider, const IEconItemInterface *pEconItem );
-	virtual void Generate_Leaderboard( const CLocalizationProvider *pLocalizationProvider, const IEconItemInterface *pEconItem );
+	virtual void Generate_UnusualifierEffectList( const CLocalizationProvider *pLocalizationProvider, const IEconItemInterface *pEconItem );
 #endif // PROJECT_TF
 	virtual void Generate_XifierToolTargetItem( const CLocalizationProvider *pLocalizationProvider, const IEconItemInterface *pEconItem );
 	virtual void Generate_Painted( const CLocalizationProvider *pLocalizationProvider, const IEconItemInterface *pEconItem );
@@ -290,6 +243,7 @@ private:
 	virtual void Generate_EventDetail( const CLocalizationProvider *pLocalizationProvider, const IEconItemInterface *pEconItem );
 	virtual void Generate_ItemSetDesc( const CLocalizationProvider *pLocalizationProvider, const IEconItemInterface *pEconItem );
 	virtual void Generate_CollectionDesc( const CLocalizationProvider *pLocalizationProvider, const IEconItemInterface *pEconItem );
+	virtual void Generate_BonusContentDesc( const CLocalizationProvider *pLocalizationProvider, const IEconItemInterface *pEconItem );
 	virtual void Generate_ExpirationDesc( const CLocalizationProvider *pLocalizationProvider, const IEconItemInterface *pEconItem );
 	virtual void Generate_MarketInformation( const CLocalizationProvider *pLocalizationProvider, const IEconItemInterface *pEconItem );
 	virtual void Generate_FlagsAttributes( const CLocalizationProvider *pLocalizationProvider, const IEconItemInterface *pEconItem );
@@ -332,15 +286,8 @@ private:
 
 	CUtlVector<steam_account_type_cache_t> vecTypeCaches;
 
-#if TF_ANTI_IDLEBOT_VERIFICATION
-	MD5Context_t *m_pHashContext;
-	bool m_bIsVerbose;
-#ifdef GC_DLL
-	bool m_bTextModeEnabled;
-#else // if defined( CLIENT_DLL )
 	bool m_bUnknownPlayer;
-#endif // GC_DLL
-#endif // TF_ANTI_IDLEBOT_VERIFICATION
+	bool m_bIsToolTip;
 };
 
 //-----------------------------------------------------------------------------
@@ -396,7 +343,6 @@ enum EGenerateLocalizedFullItemNameFlag_t
 	k_EGenerateLocalizedFullItemName_WithPaintWear = ( 1 << 0 ),
 	k_EGenerateLocalizedFullItemName_WithoutCustomName = ( 1 << 1 ),
 	k_EGenerateLocalizedFullItemName_WithoutQuality = ( 1 << 2 ),
-	k_EGenerateLocalizedFullItemName_WithPaintkitNoItem = ( 1 << 3 ),
 };
 
 //-----------------------------------------------------------------------------
@@ -419,7 +365,7 @@ private:
 class CEconItemLocalizedMarketNameGenerator
 {
 public:
-	CEconItemLocalizedMarketNameGenerator( const CLocalizationProvider *pLocalizationProvider, CEconItem *pItem, bool bUseingHashContext = true );
+	CEconItemLocalizedMarketNameGenerator( const CLocalizationProvider *pLocalizationProvider, IEconItemInterface *pItem, bool bUseingHashContext = true );
 
 	const locchar_t *GetFullName() const { return m_loc_LocalizedItemName; }
 
@@ -456,55 +402,6 @@ private:
 // --------------------------------------------------------------------------
 // Purpose:
 // --------------------------------------------------------------------------
-#if TF_ANTI_IDLEBOT_VERIFICATION
-
-#include "checksum_md5.h"
-
-enum
-{
-	kTFDescriptionHash_TextmodeArbitraryKey		= 0x19a04480,
-	kTFDescriptionHash_ValidArbitraryKey		= 0xa0939180,
-	kTFDescriptionHash_MultiRunArbitraryKey		= 0x5790a31d,
-	kTFDescriptionHash_ChallengeXorShenanigans	= 0x1870f0d2,
-};
-
-// Global function/variable names show up in Mac binaries so we give them names that will stand out less
-// here and then #define them back so the code is readable.
-#define TF_Description_HashDataMungeContents			CompressFragments
-inline void TFDescription_HashDataMungeContents( MD5Context_t *out_pContext, const void *pContents, size_t unContentLength, bool bIsVerbose, const char* pszInfo )
-{
-	Assert( out_pContext );
-	Assert( pContents );
-
-	MD5Update( out_pContext, static_cast<const uint8 *>( pContents ), unContentLength );
-
-	// if Verbose, report the contents to the GC
-	if ( bIsVerbose )
-	{
-		MD5Context_t md5ContextEx = *out_pContext;
-		MD5Value_t md5ResultEx;
-		MD5Final( &md5ResultEx.bits[0], &md5ContextEx );
-
-#ifdef GC_DLL
-		EmitInfo( SPEW_GC, SPEW_ALWAYS, LOG_ALWAYS, "Verbose Verification GC  :  [ %s ] - [ %s ] \n", MD5_Print( md5ResultEx.bits, MD5_DIGEST_LENGTH ), pszInfo );
-#else
-	// Client reports this to the GC
-		GCSDK::CProtoBufMsg<CGCMsgTFSyncEx> msgResponse( k_EMsgGC_ClientVerificationVerboseResponse );
-		msgResponse.Body().set_version_checksum( pszInfo );						// before
-		msgResponse.Body().set_version_checksum_ex( &md5ResultEx.bits[0], MD5_DIGEST_LENGTH );		// after
-		GCClientSystem()->BSendMessage( msgResponse );
-#endif
-		//delete [] pArr;
-	}
-}
-
-// Okay, this one is actually just a helper macro.
-#define TFDescription_HashDataMunge( context, field, bIsVerbose, pszInfo ) \
-	{ \
-		TFDescription_HashDataMungeContents( context, (void *)&field, sizeof( field ), bIsVerbose, pszInfo ); \
-	}
-
-#endif // TF_ANTI_IDLEBOT_VERIFICATION
 
 #endif // BUILD_ITEM_NAME_AND_DESC
 

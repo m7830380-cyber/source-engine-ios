@@ -25,19 +25,20 @@ public:
 	virtual void ApplySettings( KeyValues *inResourceData );
 	virtual void ApplySchemeSettings( vgui::IScheme *pScheme );
 	virtual void OnCommand( const char *command ) OVERRIDE;
+	virtual void OnSizeChanged( int wide, int tall ) OVERRIDE;
 
 	void FireParticleEffect( const char *pszName, int xPos, int yPos, float flScale, bool bLoop, float flEndTime = FLT_MAX );
 private:
 
 	// paint it!
 	virtual void Paint() OVERRIDE;
-
-private:
+	void UpdateParticlesFromKV();
 
 	// Class to contain all of the per-instance particle system data
 	struct ParticleEffect_t
 	{
 		ParticleEffect_t();
+		~ParticleEffect_t();
 
 		// Shutdown, startup particle collection
 		void StartupParticleCollection();
@@ -50,7 +51,8 @@ private:
 		void SetParticleSystem( const char* pszParticleSystemName );
 
 		bool Update( float flTime );
-		void Paint( CMatRenderContextPtr& pRenderContext, int iXOffset, int iYOffset, float flXScale, float flYScale, int screenW, int screenH );
+		void Paint( CMatRenderContextPtr& pRenderContext, int iXOffset, int iYOffset, int nWide, int nTall );
+		bool BNeedsToPaint() const { return m_pParticleSystem && m_bStarted; }
 
 		Vector m_pControlPointValue[MAX_PARTICLE_CONTROL_POINTS];
 		CParticleCollection *m_pParticleSystem;
@@ -71,6 +73,7 @@ private:
 	};
 
 	CUtlVector< ParticleEffect_t* > m_vecParticleEffects;
+	KeyValues* m_pKVParticles = NULL;
 
 	// A texture to use for a lightmap
 	CTextureReference m_pLightmapTexture;

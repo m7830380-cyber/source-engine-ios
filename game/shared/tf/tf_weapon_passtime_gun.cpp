@@ -318,7 +318,7 @@ void CPasstimeGun::AttackInputState::Update( int held, int pressed, int released
 	}
 
 	// this exists so i don't have to do lots of confusing "if button pressed and my 
-	// charge timer is < curtime and some other bullshit then do this thing unless some
+	// charge timer is < curtime and some other stuff then do this thing unless some
 	// other variable says do something else".
 	// note: can go directly from RELEASED to PRESSED without visiting UP along the way
 
@@ -1055,7 +1055,7 @@ CPasstimeGun::LaunchParams CPasstimeGun::CalcLaunch( CTFPlayer *pPlayer, bool bH
 
 	if ( !bHoming )
 	{
-		float speed, arc;
+		float speed = 0.0f, arc = 0.0f;
 		GetThrowParams( pPlayer, &speed, &arc );
 		params.startVel = VectorLerp( params.startDir, Vector(0,0,1), arc );
 		params.startVel.NormalizeInPlace();

@@ -200,6 +200,29 @@ public:
 	int m_nCost;								// price of the upgrade
 };
 
+#define CONTROL_STUN_ANIM_TIME	1.5f
+
+enum TFStunAnimState_t
+{
+	STUN_ANIM_NONE = 0,
+	STUN_ANIM_LOOP,
+	STUN_ANIM_END
+};
+
+enum TFPassTimeThrowAnimState_t
+{
+	PASSTIME_THROW_ANIM_NONE = 0,
+	PASSTIME_THROW_ANIM_LOOP,
+	PASSTIME_THROW_ANIM_END
+};
+
+enum TFCYOAPDAAnimState_t
+{
+	CYOA_PDA_ANIM_NONE = 0,
+	CYOA_PDA_ANIM_IDLE,
+	CYOA_PDA_ANIM_OUTRO
+};
+
 //=============================================================================
 //
 // Shared player class.
@@ -275,6 +298,8 @@ public:
 	void	SetState( int nState )				{ m_nPlayerState = nState; }
 	bool	InState( int nState )				{ return ( m_nPlayerState == nState ); }
 
+	void	SharedThink( void );
+
 	// Condition (TF_COND_*).
 	void	AddCond( ETFCond eCond, float flDuration = PERMANENT_CONDITION, CBaseEntity *pProvider = NULL );
 	void	RemoveCond( ETFCond eCond, bool ignore_duration=false );
@@ -303,8 +328,13 @@ public:
 	void	CheckDisguiseTimer( void );
 
 	int		GetMaxBuffedHealth( bool bIgnoreAttributes = false, bool bIgnoreHealthOverMax = false );
+#ifdef GAME_DLL
+	float	GetMaxOverhealMultiplier( void );
+#endif 
 
 	bool	IsAiming( void );
+
+	bool	ShouldSuppressPrediction( void );
 
 	void SetCarryingRuneType( RuneTypes_t rt );
 	RuneTypes_t GetCarryingRuneType( void ) const;
@@ -332,6 +362,7 @@ public:
 	bool	IsInvulnerable( void ) const;
 	bool	IsStealthed( void ) const;
 	bool	CanBeDebuffed( void ) const;
+	bool	IsImmuneToPushback( void ) const;
 
 	void	Disguise( int nTeam, int nClass, CTFPlayer* pDesiredTarget=NULL, bool bOnKill = false );
 	void	CompleteDisguise( void );
@@ -345,18 +376,12 @@ public:
 	int		GetDesiredDisguiseClass( void )	const	{ return m_nDesiredDisguiseClass; }
 	int		GetDesiredDisguiseTeam( void ) const	{ return m_nDesiredDisguiseTeam; }
 	bool	WasLastDisguiseAsOwnTeam( void ) const	{ return m_bLastDisguisedAsOwnTeam; }
-	int		GetDisguiseTargetIndex( void ) const	{ return m_iDisguiseTargetIndex; }
-	EHANDLE GetDisguiseTarget( void ) const
-	{
-#ifdef CLIENT_DLL
-		if ( m_iDisguiseTargetIndex == TF_DISGUISE_TARGET_INDEX_NONE )
-			return NULL;
-		return cl_entitylist->GetNetworkableHandle( m_iDisguiseTargetIndex );
-#else
-		return m_hDisguiseTarget.Get();
+	// Josh: Hack for not including c_tf_player.h in replay code
+	// as it causes a bunch of issues with redefines.
+#ifndef REPLAY_SOURCE_FILE
+	CTFPlayer *GetDisguiseTarget( void ) const			{ return m_hDisguiseTarget; }
 #endif
-	}
-	CTFWeaponBase *GetDisguiseWeapon( void )			{ return m_hDisguiseWeapon; }
+	CTFWeaponBase *GetDisguiseWeapon( void ) const		{ return m_hDisguiseWeapon; }
 	int		GetDisguiseHealth( void )			{ return m_iDisguiseHealth; }
 	void	SetDisguiseHealth( int iDisguiseHealth );
 	int		GetDisguiseMaxHealth( void );
@@ -416,7 +441,7 @@ public:
 
 	void	Burn( CTFPlayer *pPlayer, CTFWeaponBase *pWeapon, float flBurningTime = -1.0f );
 	void	SelfBurn( float flBurningTime );		// Boss Burn
-	void    MakeBleed( CTFPlayer *pPlayer, CTFWeaponBase *pWeapon, float flBleedingTime, int nBleedDmg = TF_BLEEDING_DMG, bool bPermanentBleeding = false );
+	void    MakeBleed( CTFPlayer *pPlayer, CTFWeaponBase *pWeapon, float flBleedingTime, int nBleedDmg = TF_BLEEDING_DMG, bool bPermanentBleeding = false, int nDmgType = TF_DMG_CUSTOM_BLEEDING );
 #ifdef GAME_DLL
 	void	StopBleed( CTFPlayer *pPlayer, CTFWeaponBase *pWeapon );
 #endif // GAME_DLL
@@ -440,11 +465,7 @@ public:
 	void	OnSpyTouchedByEnemy( void );
 	float	GetLastStealthExposedTime( void ) { return m_flLastStealthExposeTime; }
 	void	SetNextStealthTime( float flTime ) { m_flStealthNextChangeTime = flTime; }
-#ifdef STAGING_ONLY
-	bool	IsFullyInvisible( void ) { return GetPercentInvisible() == 1.f || InCond( TF_COND_STEALTHED_PHASE ); }
-#else
 	bool	IsFullyInvisible( void ) { return ( GetPercentInvisible() == 1.f ); }
-#endif 
 
 	bool	IsEnteringOrExitingFullyInvisible( void );
 
@@ -453,13 +474,19 @@ public:
 	void	SetRuneCharge( float flVal ) { m_flRuneCharge = Clamp( flVal, 0.f, 100.f ); }
 	bool	IsRuneCharged() const { return m_flRuneCharge == 100.f; }
 
-#ifdef STAGING_ONLY
-	bool	HasPhaseCloakAbility( void );
+	bool	IsRocketPackReady( void ) { return GetItemChargeMeter( LOADOUT_POSITION_SECONDARY ) >= 50.f; }
+	float	GetRocketPackCharge( void ) { return GetItemChargeMeter( LOADOUT_POSITION_SECONDARY ); }
+	void	SetRocketPackCharge( float flValue ) { SetItemChargeMeter( LOADOUT_POSITION_SECONDARY, flValue ); }
 
-	float	GetSpaceJumpChargeMeter() const		{ return m_flSpaceJumpCharge; }
-	void	SetSpaceJumpChargeMeter( float val )  { m_flSpaceJumpCharge = Min( val, 100.0f); }
+	// generic meter per wpn slot
+	// lets assume the value goes from 0.f->100.f for now
+	void	UpdateItemChargeMeters();
+	float	GetItemChargeMeter( loadout_positions_t slot ) const { return m_flItemChargeMeter[ slot ]; }
+	float	GetItemChargeMeterPrev( loadout_positions_t slot ) const { return m_flPrevItemChargeMeter[ slot ]; }
+	void	SetItemChargeMeter( loadout_positions_t slot, float flValue );
 
-#endif // STAGING_ONLY
+	bool	CanFallStomp( void );
+
 
 	int		GetDesiredPlayerClassIndex( void );
 	bool	IsInUpgradeZone( void ) { return m_bInUpgradeZone; }
@@ -533,9 +560,7 @@ public:
 
 	// Stuns
 	stun_struct_t *GetActiveStunInfo( void ) const;
-#ifdef GAME_DLL
 	void	StunPlayer( float flTime, float flReductionAmount, int iStunFlags = TF_STUN_MOVEMENT, CTFPlayer* pAttacker = NULL );
-#endif // GAME_DLL
 	float	GetAmountStunned( int iStunFlags );
 	bool	IsLoserStateStunned( void ) const;
 	bool	IsControlStunned( void );
@@ -553,8 +578,11 @@ public:
 	CTFPlayer *GetAssist( void ) const			{ return m_hAssist; }
 	void	SetAssist( CTFPlayer* newAssist )	{ m_hAssist = newAssist; }
 
+#ifdef GAME_DLL
 	CTFPlayer *GetBurnAttacker( void ) const			{ return m_hBurnAttacker; }
 	CTFPlayer *GetOriginalBurnAttacker( void ) const	{ return m_hOriginalBurnAttacker; }
+	CTFWeaponBase *GetBurnWeapon( void ) const			{ return m_hBurnWeapon; }
+#endif // GAME_DLL
 
 	void SetCloakConsumeRate( float newCloakConsumeRate ) { m_fCloakConsumeRate = newCloakConsumeRate; }
 	void SetCloakRegenRate( float newCloakRegenRate ) { m_fCloakRegenRate = newCloakRegenRate; }
@@ -651,10 +679,6 @@ public:
 	void SetVehicleMoveAngles( const QAngle& angVehicleMoveAngles ) { m_angVehicleMovePitchLast = angVehicleMoveAngles[PITCH]; m_angVehicleMoveAngles = angVehicleMoveAngles; }
 #endif
 
-#ifdef STAGING_ONLY
-	void DoRocketPack();
-#endif // STAGING_ONLY
-
 #ifdef GAME_DLL
 	void SetBestOverhealDecayMult( float fValue )	{ m_flBestOverhealDecayMult = fValue; }
 	float GetBestOverhealDecayMult() const			{ return m_flBestOverhealDecayMult; }
@@ -692,21 +716,27 @@ public:
 
 	void	FireGameEvent( IGameEvent *event );
 	
+#ifdef GAME_DLL
 	float	GetFlameBurnTime( void ) const { return m_flFlameBurnTime; }
+#endif // GAME_DLL
 
 	void GetConditionsBits( CBitVec< TF_COND_LAST >& vbConditions ) const;
 
-#ifdef STAGING_ONLY
-	void	UpdateRocketPack( void );
-	void	ApplyRocketPackStun( float flStunDuration );
-	bool	CanBuildSpyTraps( void );
-#endif // STAGING_ONLY
+	void ApplyRocketPackStun( float flStunDuration );
+
+
+	void OnAttack( void );
+
+#ifdef GAME_DLL
+	void SetDefaultItemChargeMeters( void );
+#endif // GAME_DLL
 
 private:
 	CNetworkVarEmbedded( localplayerscoring_t,	m_ScoreData );
 	CNetworkVarEmbedded( localplayerscoring_t,	m_RoundScoreData );
 
 private:
+
 #ifdef CLIENT_DLL
 	typedef std::pair<const char *, float> taunt_particle_state_t;
 	taunt_particle_state_t GetClientTauntParticleDesiredState() const;
@@ -787,16 +817,9 @@ private:
 	void OnAddInPurgatory( void );
 	void OnAddCompetitiveWinner( void );
 	void OnAddCompetitiveLoser( void );
-
-#ifdef STAGING_ONLY
-	void OnAddTranqMark( void );
-	void OnAddSpaceGravity( void );
-	void OnAddSelfConc( void );
+	void OnAddCondGas( void );
 	void OnAddRocketPack( void );
-	void OnAddStealthedPhase( void );
-	void OnAddClipOverload( void );
-	void OnAddCondSpyClassSteal( void );
-#endif // STAGING_ONLY
+
 
 	void OnRemoveZoomed( void );
 	void OnRemoveBurning( void );
@@ -873,20 +896,17 @@ private:
 	void OnRemoveInPurgatory( void );
 	void OnRemoveCompetitiveWinner( void );
 	void OnRemoveCompetitiveLoser( void );
-	
-#ifdef STAGING_ONLY
-	void OnRemoveTranqMark( void );
-	void OnRemoveSpaceGravity( void );
-	void OnRemoveSelfConc( void );
+	void OnRemoveCondGas( void );
 	void OnRemoveRocketPack( void );
-	void OnRemoveStealthedPhase( void );
-	void OnRemoveClipOverload( void );
-	void OnRemoveCondSpyClassSteal( void );
-#endif // STAGING_ONLY
+	void OnRemoveBurningPyro( void );
+	
 
 	// Starting a new trend, putting Add and Remove next to each other
 	void OnAddCondParachute( void );
 	void OnRemoveCondParachute( void );
+
+	void OnAddHalloweenHellHeal( void );
+	void OnRemoveHalloweenHellHeal( void );
 
 	float GetCritMult( void );
 
@@ -909,6 +929,10 @@ private:
 	// Attr for Conditions
 	void ApplyAttributeToPlayer( const char* pszAttribName, float flValue );
 	void RemoveAttributeFromPlayer( const char* pszAttribName );
+
+public:
+	void SetAfterburnDuration( float flDuration ) { m_flAfterburnDuration = flDuration; }
+	float GetAfterburnDuration( void ) { return m_flAfterburnDuration; }
 #endif // GAME_DLL
 
 private:
@@ -918,6 +942,7 @@ private:
 	CNetworkVar( int, m_nPlayerCondEx );		// Player condition flags (extended -- we overflowed 32 bits).
 	CNetworkVar( int, m_nPlayerCondEx2 );		// Player condition flags (extended -- we overflowed 64 bits).
 	CNetworkVar( int, m_nPlayerCondEx3 );		// Player condition flags (extended -- we overflowed 96 bits).
+	CNetworkVar( int, m_nPlayerCondEx4 );		// Player condition flags (extended -- we overflowed 128 bits).
 
 	CNetworkVarEmbedded( CTFConditionList, m_ConditionList );
 
@@ -927,10 +952,7 @@ private:
 	CNetworkVar( int, m_nDisguiseClass );		// Class spy is disguised as.
 	CNetworkVar( int, m_nDisguiseSkinOverride ); // skin override value of the player spy disguised as.
 	CNetworkVar( int, m_nMaskClass );
-#ifdef GAME_DLL
-	EHANDLE m_hDisguiseTarget;					// Playing the spy is using for name disguise.
-#endif // GAME_DLL
-	CNetworkVar( int, m_iDisguiseTargetIndex );
+	CNetworkHandle( CTFPlayer, m_hDisguiseTarget ); // Player the spy is using for name disguise.
 	CNetworkVar( int, m_iDisguiseHealth );		// Health to show our enemies in player id
 	CNetworkVar( int, m_nDesiredDisguiseClass );
 	CNetworkVar( int, m_nDesiredDisguiseTeam );
@@ -940,7 +962,7 @@ private:
 	int m_iDisguiseAmmo;
 
 	bool m_bEnableSeparation;		// Keeps separation forces on when player stops moving, but still penetrating
-	Vector m_vSeparationVelocity;	// Velocity used to keep player seperate from teammates
+	Vector m_vSeparationVelocity;	// Velocity used to keep player separate from teammates
 
 	float m_flInvisibility;
 	float m_flPrevInvisibility;
@@ -1007,16 +1029,15 @@ private:
 
 	CNetworkVar( bool, m_bLastDisguisedAsOwnTeam );
 
+#ifdef GAME_DLL
 	// Burn handling
 	CHandle<CTFPlayer>		m_hBurnAttacker;
 	CHandle<CTFPlayer>		m_hOriginalBurnAttacker;		// Player who originally ignited this target
 	CHandle<CTFWeaponBase>	m_hBurnWeapon;
-	CNetworkVar( int,		m_nNumFlames );
 	float					m_flFlameBurnTime;
-	float					m_flFlameRemoveTime;
+	float					m_flAfterburnDuration;
 
 	// Bleeding
-#ifdef GAME_DLL
 	struct bleed_struct_t
 	{
 		CHandle<CTFPlayer>		hBleedingAttacker;
@@ -1025,6 +1046,7 @@ private:
 		float					flBleedingRemoveTime;
 		int						nBleedDmg;
 		bool					bPermanentBleeding;
+		int						nDmgType;
 	};
 	CUtlVector <bleed_struct_t> m_PlayerBleeds;
 #endif // GAME_DLL
@@ -1043,18 +1065,22 @@ private:
 #ifdef CLIENT_DLL
 	bool m_bSyncingConditions;
 #endif
+
+	// conditions
 	int	m_nOldConditions;
 	int m_nOldConditionsEx;
 	int m_nOldConditionsEx2;
 	int m_nOldConditionsEx3;
-	int	m_nOldDisguiseClass;
-	int	m_nOldDisguiseTeam;
+	int m_nOldConditionsEx4;
 
 	int	m_nForceConditions;
 	int m_nForceConditionsEx;
 	int m_nForceConditionsEx2;
 	int m_nForceConditionsEx3;
+	int m_nForceConditionsEx4;
 
+	int	m_nOldDisguiseClass;
+	int	m_nOldDisguiseTeam;
 
 	// Feign Death
 	float					m_flFeignDeathEnd;
@@ -1093,15 +1119,16 @@ private:
 
 	CNetworkVar( float, m_flRuneCharge );
 
-#ifdef STAGING_ONLY
-	// Space 
-	CNetworkVar( float, m_flSpaceJumpCharge );
-#endif
+	// generic charge percentage for weapon to use
+	
+	CNetworkArray( float, m_flItemChargeMeter, LAST_LOADOUT_SLOT_WITH_CHARGE_METER + 1 );
+	float m_flPrevItemChargeMeter[ LAST_LOADOUT_SLOT_WITH_CHARGE_METER + 1 ];
+
 
 	CNetworkVar( int, m_iCritMult );
 
-	CNetworkArray( bool, m_bPlayerDominated, MAX_PLAYERS+1 );		// array of state per other player whether player is dominating other players
-	CNetworkArray( bool, m_bPlayerDominatingMe, MAX_PLAYERS+1 );	// array of state per other player whether other players are dominating this player
+	CNetworkArray( bool, m_bPlayerDominated, MAX_PLAYERS_ARRAY_SAFE );		// array of state per other player whether player is dominating other players
+	CNetworkArray( bool, m_bPlayerDominatingMe, MAX_PLAYERS_ARRAY_SAFE );	// array of state per other player whether other players are dominating this player
 
 	CNetworkVar( float, m_flMovementStunTime );
 	CNetworkVar( int, m_iMovementStunAmount );
@@ -1153,7 +1180,6 @@ private:
 #ifdef CLIENT_DLL
 	const WheelEffect_t *m_pWheelEffect;
 	QAngle m_angVehicleMoveAngles;
-	bool m_bPreKartPredictionState;
 	float m_angVehicleMovePitchLast;
 
 	CHandle<CBaseAnimating>		m_hKartParachuteEntity;
@@ -1164,6 +1190,7 @@ public:
 	CNetworkVar( float, m_flFirstPrimaryAttack );
 
 	CNetworkVar( float, m_flSpyTranqBuffDuration );
+
 private:
 
 #ifdef GAME_DLL
@@ -1189,10 +1216,12 @@ private:
 #endif
 
 public:
+	bool m_bScattergunJump;
+
 	float	m_flStunFade;
 	float	m_flStunEnd;
 	float	m_flStunMid;
-	int		m_iStunAnimState;
+	TFStunAnimState_t	m_iStunAnimState;
 	int		m_iPhaseDamage;
 	
 	// Movement stun state.
@@ -1221,7 +1250,6 @@ public:
 
 	bool	m_bBiteEffectWasApplied;
 
-	float	m_flNextRocketPackTime;
 	float	m_flLastNoMovementTime;
 
 	CNetworkVar( bool, m_bArenaFirstBloodBoost );
@@ -1238,25 +1266,21 @@ public:
 	void SetAskForBallTime( float time ) { m_askForBallTime = time; }
 	float AskForBallTime() const { return m_askForBallTime; }
 
-	float   m_flPasstimeThrowAnimStateTime;
-	int     m_iPasstimeThrowAnimState;
+	float m_flPasstimeThrowAnimStateTime;
+	TFPassTimeThrowAnimState_t	m_iPasstimeThrowAnimState;
+
+	float m_flCYOAPDAAnimStateTime;
+	TFCYOAPDAAnimState_t m_iCYOAPDAAnimState;
 
 private:
 	CNetworkVar( bool, m_bHasPasstimeBall );
 	CNetworkVar( bool, m_bIsTargetedForPasstimePass );
 	CNetworkHandle( CTFPlayer, m_hPasstimePassTarget );
 	CNetworkVar( float, m_askForBallTime );
+
+	CNetworkVar( float, m_flHolsterAnimTime );
+	CNetworkHandle( CBaseCombatWeapon, m_hSwitchTo );
 };
-
-#define CONTROL_STUN_ANIM_TIME	1.5f
-#define STUN_ANIM_NONE	0
-#define STUN_ANIM_LOOP	1
-#define STUN_ANIM_END	2
-
-#define PASSTIME_THROW_ANIM_NONE   0
-#define PASSTIME_THROW_ANIM_LOOP   1
-#define PASSTIME_THROW_ANIM_END    2
-#define PASSTIME_THROW_ANIM_CANCEL  3
 
 extern const char *g_pszBDayGibs[22];
 

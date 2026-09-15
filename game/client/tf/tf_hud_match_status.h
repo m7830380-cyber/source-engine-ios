@@ -85,6 +85,7 @@ public:
 	virtual void OnThink() OVERRIDE;
 	virtual void PerformLayout() OVERRIDE;
 
+	virtual bool IsVisible( void ) OVERRIDE;
 	virtual bool ShouldDraw( void ) OVERRIDE;
 
 	virtual void Reset() OVERRIDE;
@@ -106,7 +107,7 @@ private:
 	CModelPanel			*m_pRoundSignModel;
 	CTFTeamStatus		*m_pTeamStatus;
 	CModelPanel			*m_pMatchStartModelPanel;
-	EMatchGroup			m_eMatchGroupSettings;
+	ETFMatchGroup			m_eMatchGroupSettings;
 
 	vgui::EditablePanel			*m_pBlueTeamPanel;
 	vgui::SectionedListPanel	*m_pPlayerListBlue;

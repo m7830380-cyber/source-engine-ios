@@ -148,14 +148,6 @@ PowerupBottleType_t CTFPowerupBottle::GetPowerupType( void ) const
 		return POWERUP_BOTTLE_BUILDINGS_INSTANT_UPGRADE;
 	}
 
-#ifdef STAGING_ONLY
-	int iSeeCashThroughWall = 0;
-	CALL_ATTRIB_HOOK_INT( iSeeCashThroughWall, mvm_see_cash_through_wall );
-	if ( iSeeCashThroughWall )
-	{
-		return POWERUP_BOTTLE_SEE_CASH_THROUGH_WALL;
-	}
-#endif
 
 	return POWERUP_BOTTLE_NONE;
 }
@@ -287,7 +279,7 @@ void CTFPowerupBottle::ReapplyProvision( void )
 					// Refill weapon clips
 					for ( int i = 0; i < MAX_WEAPONS; i++ )
 					{
-						CBaseCombatWeapon *pWeapon = pTFPlayer->GetWeapon(i);
+						CTFWeaponBase *pWeapon = dynamic_cast<CTFWeaponBase *>( pTFPlayer->GetWeapon( i ) );
 						if ( !pWeapon )
 							continue;
 
@@ -295,7 +287,8 @@ void CTFPowerupBottle::ReapplyProvision( void )
 						if ( TFGameRules() && TFGameRules()->IsMannVsMachineMode() )
 						{
 							if ( ( pWeapon->UsesPrimaryAmmo() && !pWeapon->HasPrimaryAmmo() ) ||
-								( pWeapon->UsesSecondaryAmmo() && !pWeapon->HasSecondaryAmmo() ) )
+								 ( pWeapon->UsesSecondaryAmmo() && !pWeapon->HasSecondaryAmmo() ) ||
+								 ( pWeapon->IsEnergyWeapon() && !pWeapon->Energy_HasEnergy() ) )
 							{
 								pTFPlayer->AwardAchievement( ACHIEVEMENT_TF_MVM_USE_AMMO_BOTTLE ); 
 							}
@@ -305,7 +298,7 @@ void CTFPowerupBottle::ReapplyProvision( void )
 
 						if ( iShareBottle && pHealTarget )
 						{
-							CBaseCombatWeapon *pPatientWeapon = pHealTarget->GetWeapon(i);
+							CTFWeaponBase *pPatientWeapon = dynamic_cast<CTFWeaponBase *>( pHealTarget->GetWeapon( i ) );
 							if ( !pPatientWeapon )
 								continue;
 
@@ -600,10 +593,6 @@ const char* CTFPowerupBottle::GetEffectLabelText( void )
 
 	case POWERUP_BOTTLE_RADIUS_STEALTH:
 		return "#TF_PVE_UsePowerup_RadiusStealth";
-#ifdef STAGING_ONLY
-	case POWERUP_BOTTLE_SEE_CASH_THROUGH_WALL:
-		return "#TF_PVE_UsePowerup_SeeCashThroughWall";
-#endif
 	}
 
 	return "#TF_PVE_UsePowerup_CritBoost";
@@ -630,10 +619,6 @@ const char* CTFPowerupBottle::GetEffectIconName( void )
 
 	case POWERUP_BOTTLE_RADIUS_STEALTH:
 		return "../vgui/achievements/tf_soldier_kill_spy_killer";
-#ifdef STAGING_ONLY
-	case POWERUP_BOTTLE_SEE_CASH_THROUGH_WALL:
-		return "../vgui/achievements/tf_mvm_earn_money_bonus";
-#endif
 	}
 
 	return "../hud/ico_powerup_critboost_red";
@@ -681,9 +666,6 @@ int CTFPowerupBottle::GetWorldModelIndex( void )
 			return modelinfo->GetModelIndex( "models/player/items/mvm_loot/all_class/mvm_flask_build.mdl" );
 
 		case POWERUP_BOTTLE_RADIUS_STEALTH:
-#ifdef STAGING_ONLY
-		case POWERUP_BOTTLE_SEE_CASH_THROUGH_WALL:
-#endif
 			return modelinfo->GetModelIndex( "models/player/items/mvm_loot/all_class/mvm_flask_tele.mdl" );
 		}
 	}
@@ -763,8 +745,6 @@ void CEquipMvMCanteenNotification::Accept()
 	TFInventoryManager()->EquipItemInLoadout( pLocalPlayer->GetPlayerClass()->GetClassIndex(), LOADOUT_POSITION_ACTION, iItemId );
 
 	// Tell the GC to tell server that we should respawn if we're in a respawn room
-	GCSDK::CGCMsg< GCSDK::MsgGCEmpty_t > msg( k_EMsgGCRespawnPostLoadoutChange );
-	GCClientSystem()->BSendMessage( msg );
 
 	MarkForDeletion();
 }

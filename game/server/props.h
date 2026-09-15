@@ -293,7 +293,6 @@ public:
 	void InputTurnOff( inputdata_t &inputdata );
 	void InputDisableCollision( inputdata_t &inputdata );
 	void InputEnableCollision( inputdata_t &inputdata );
-	void InputSetPlaybackRate( inputdata_t &inputdata );
 
 	COutputEvent		m_pOutputAnimBegun;
 	COutputEvent		m_pOutputAnimOver;
@@ -327,7 +326,8 @@ protected:
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-class CPhysicsProp : public CBreakableProp
+DECLARE_AUTO_LIST( IPhysicsPropAutoList );
+class CPhysicsProp : public CBreakableProp, public IPhysicsPropAutoList
 {
 	DECLARE_CLASS( CPhysicsProp, CBreakableProp );
 	DECLARE_SERVERCLASS();

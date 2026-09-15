@@ -7,9 +7,7 @@
 
 #include "cbase.h"
 #include "econ_dynamic_recipe.h"
-#ifndef GC_DLL
 	#include "quest_objective_manager.h"
-#endif
 
 // This pattern was chosen to not be:
 //		- a valid string acceptable for user-input (ie., custom name)
@@ -150,9 +148,6 @@ bool DecodeAttributeStringIntoAttributes( const CAttribute_DynamicRecipeComponen
 		const CEconItemAttributeDefinition *pAttrDef = GEconItemSchema().GetAttributeDefinition( index );
 		if ( !pAttrDef )
 		{
-#ifdef GC
-			EmitError( SPEW_GC, __FUNCTION__ ": Unable to find attribute definition '%s' (index %d)!\n", vecAttributeStrings[j], j );
-#endif
 			return false;
 		}
 
@@ -167,9 +162,6 @@ bool DecodeAttributeStringIntoAttributes( const CAttribute_DynamicRecipeComponen
 		const char* pszAttribValue = vecAttributeStrings[j+1];
 		if ( !pAttrType->BConvertStringToEconAttributeValue( pAttrDef, pszAttribValue, &attrib.m_value ) )
 		{
-#ifdef GC
-			EmitError( SPEW_GC, __FUNCTION__ ": Unable to parse attribute value '%s' for attribute '%s'!\n", pszAttribValue, pAttrDef->GetDefinitionName() );
-#endif
 			return false;
 		}
 	}

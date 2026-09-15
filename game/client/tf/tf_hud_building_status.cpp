@@ -388,10 +388,10 @@ void CBuildingStatusItem::OnTick()
 			m_pWrenchIcon->SetVisible( bAlertTrayFullyDeployed );
 			break;
 
-			// do not show low health for mini-sentry
+			// do not show low health for the disposable mini-sentry
 		case BUILDING_HUD_ALERT_LOW_HEALTH:
 		case BUILDING_HUD_ALERT_VERY_LOW_HEALTH:
-			bShowAlertTray = pObj->IsMiniBuilding() == false;
+			bShowAlertTray = pObj->IsDisposableBuilding() == false;
 			m_pWrenchIcon->SetVisible( bAlertTrayFullyDeployed && bShowAlertTray );
 			break;
 
@@ -1086,87 +1086,6 @@ void CBuildingStatusItem_TeleporterExit::PerformLayout( void )
 	m_pUpgradeProgress->SetVisible( iUpgradeLevel < 3 );
 }
 
-#ifdef STAGING_ONLY
-//============================================================================
-CBuildingStatusItem_TeleporterSpeed::CBuildingStatusItem_TeleporterSpeed( Panel *parent, int ETeleporterMode ) :
-CBuildingStatusItem( parent, "resource/UI/hud_obj_tele_speedpad.res", OBJ_TELEPORTER, ETeleporterMode )
-{
-	// Panel and children when we are charging
-	m_pChargingPanel = new vgui::EditablePanel( GetRunningPanel(), "ChargingPanel" );
-	m_pRechargeTimer = new vgui::ContinuousProgressBar( m_pChargingPanel, "Recharge" );
-
-	// Panel and children when we are fully charged
-	m_pFullyChargedPanel = new vgui::EditablePanel( GetRunningPanel(), "FullyChargedPanel" );
-
-	m_iTimesUsed = -1;	// force first update of 0
-	m_iTeleporterState = -1;
-
-	m_pUpgradeProgress = new vgui::ContinuousProgressBar( GetRunningPanel(), "Upgrade" );
-	m_pUpgradeIcon = new CIconPanel( GetRunningPanel(), "UpgradeIcon" );
-
-	vgui::ivgui()->AddTickSignal( GetVPanel() );
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: 
-//-----------------------------------------------------------------------------
-void CBuildingStatusItem_TeleporterSpeed::OnTick( void )
-{
-	// We only tick while active and with a valid built object
-	C_ObjectTeleporter *pTeleporter = static_cast<C_ObjectTeleporter*>( GetRepresentativeObject() );
-
-	if ( pTeleporter && IsActive() )
-	{
-		if ( pTeleporter->GetState() == TELEPORTER_STATE_RECHARGING )
-		{
-			// Update the recharge
-			float flMaxRecharge = pTeleporter->GetCurrentRechargeDuration();
-			float flChargeTime = pTeleporter->GetChargeTime();
-			m_pRechargeTimer->SetProgress( 1.0 - ( flChargeTime / flMaxRecharge ) );
-		}
-	}
-
-	BaseClass::OnTick();
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: 
-//-----------------------------------------------------------------------------
-void CBuildingStatusItem_TeleporterSpeed::PerformLayout( void )
-{
-	BaseClass::PerformLayout();
-
-	// We only tick while active and with a valid built object
-	C_ObjectTeleporter *pTeleporter = static_cast<C_ObjectTeleporter*>( GetRepresentativeObject() );
-
-	if ( !IsActive() || !pTeleporter )
-	{
-		return;
-	}
-
-	bool bRecharging = ( pTeleporter->GetState() == TELEPORTER_STATE_RECHARGING );
-
-	m_pChargingPanel->SetVisible( bRecharging );
-	m_pFullyChargedPanel->SetVisible( !bRecharging );
-
-	// How many times has this teleporter been used?
-	m_pFullyChargedPanel->SetDialogVariable( "timesused", pTeleporter->GetTimesUsed() );
-
-	int iUpgradeLevel = pTeleporter->GetUpgradeLevel();
-
-	Assert( iUpgradeLevel >= 1 && iUpgradeLevel <= 3 );
-
-	// upgrade progress
-	int iMetal = pTeleporter->GetUpgradeMetal();
-	int iMetalRequired = pTeleporter->GetUpgradeMetalRequired();
-	float flUpgrade = (float)iMetal / (float)iMetalRequired;
-	m_pUpgradeProgress->SetProgress( flUpgrade );
-
-	// upgrade label only in 1 or 2
-	m_pUpgradeIcon->SetVisible( iUpgradeLevel < 3 );
-	m_pUpgradeProgress->SetVisible( iUpgradeLevel < 3 );
-}
-#endif
 
 //-----------------------------------------------------------------------------
 // Purpose: 
@@ -1272,10 +1191,6 @@ BaseClass( "BuildingStatus_Engineer" )
 	AddBuildingPanel( OBJ_TELEPORTER, MODE_TELEPORTER_ENTRANCE );
 	AddBuildingPanel( OBJ_TELEPORTER, MODE_TELEPORTER_EXIT );
 	AddBuildingPanel( OBJ_SENTRYGUN, MODE_SENTRYGUN_DISPOSABLE );
-#ifdef STAGING_ONLY
-	AddBuildingPanel( OBJ_TELEPORTER, MODE_TELEPORTER_SPEED );
-	AddBuildingPanel( OBJ_TELEPORTER, MODE_TELEPORTER_SPEED2 );
-#endif
 
 	vgui::ivgui()->AddTickSignal( GetVPanel(), 500 );
 }
@@ -1327,10 +1242,6 @@ void CHudBuildingStatusContainer_Engineer::OnTick()
 			}
 		}
 
-#ifdef STAGING_ONLY	
-		int iSpeedPad = 0;
-		CALL_ATTRIB_HOOK_INT_ON_OTHER( pLocalPlayer, iSpeedPad, teleporter_is_speedpad );
-#endif // STAGING_ONLY		
 
 		for ( int i = 0 ; i < m_BuildingPanels.Count() ; i++ )
 		{
@@ -1343,25 +1254,9 @@ void CHudBuildingStatusContainer_Engineer::OnTick()
 					pItem->SetVisible( bDisposableSentriesVisible );
 				}
 
-#ifndef STAGING_ONLY	
 				break;
-#endif // !STAGING_ONLY
 			}
 
-#ifdef STAGING_ONLY	
-			// Disable entrance and exit
-			if ( pItem && ( pItem->GetRepresentativeObjectType() == OBJ_TELEPORTER ) )
-			{
-				if ( pItem->GetRepresentativeObjectMode() == MODE_TELEPORTER_SPEED || pItem->GetRepresentativeObjectMode() == MODE_TELEPORTER_SPEED2 )
-				{
-					pItem->SetVisible( iSpeedPad );
-				}
-				else
-				{
-					pItem->SetVisible( !(bool)(iSpeedPad) );
-				}
-			}
-#endif // STAGING_ONLY		
 		}
 	}
 }
@@ -1384,7 +1279,7 @@ CHudElement( pElementName ), BaseClass( NULL, pElementName )
 	vgui::Panel *pParent = g_pClientMode->GetViewport();
 	SetParent( pParent );
 
-	SetHiddenBits( HIDEHUD_MISCSTATUS );
+	SetHiddenBits( HIDEHUD_MISCSTATUS | HIDEHUD_BUILDING_STATUS );
 
 	SetProportional(true);
 
@@ -1462,16 +1357,6 @@ CBuildingStatusItem *CHudBuildingStatusContainer::CreateItemPanel( int iObjectTy
 		{
 			pBuildingItem = new CBuildingStatusItem_TeleporterExit( this );
 		}
-#ifdef STAGING_ONLY		
-		else if ( iObjectMode == 2 )
-		{
-			pBuildingItem = new CBuildingStatusItem_TeleporterSpeed( this, MODE_TELEPORTER_SPEED );
-		}
-		else
-		{
-			pBuildingItem = new CBuildingStatusItem_TeleporterSpeed( this, MODE_TELEPORTER_SPEED2 );
-		}
-#endif
 		break;
 	case OBJ_ATTACHMENT_SAPPER:
 		pBuildingItem = new CBuildingStatusItem_Sapper( this );
@@ -1609,14 +1494,6 @@ void CHudBuildingStatusContainer::RepositionObjectPanels( void )
 						flTeleExitY = flYPos;
 						flYPos += pItem->GetTall();
 						break;
-#ifdef STAGING_ONLY						
-					case MODE_TELEPORTER_SPEED:
-						pItem->SetPos( flXPos, flTeleEntranceY );
-						break;
-					case MODE_TELEPORTER_SPEED2:
-						pItem->SetPos( flXPos, flTeleExitY );						
-						break;
-#endif						
 				}
 			}
 			else

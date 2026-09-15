@@ -48,6 +48,8 @@ CTFTeamSpawn::CTFTeamSpawn()
 	m_bDisabled = false;
 	m_nMatchSummaryType = PlayerTeamSpawn_MatchSummary_None;
 	m_bAlreadyUsedForMatchSummary = false;
+
+	AddEFlags( EFL_FORCE_ALLOW_MOVEPARENT );
 }
 
 //-----------------------------------------------------------------------------

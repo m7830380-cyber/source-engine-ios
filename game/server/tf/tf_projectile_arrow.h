@@ -76,10 +76,10 @@ public:
 	virtual bool	ShouldNotDetonate( void ) { return true; }
 	bool			IsAlight() { return m_bArrowAlight; }
 	void			SetArrowAlight( bool bAlight ) { m_bArrowAlight = bAlight; }
-	virtual bool	IsDeflectable() OVERRIDE { return true; }
+	virtual bool	IsDeflectable() OVERRIDE { return ( GetMoveType() != MOVETYPE_NONE ); }
 	void			SetPenetrate( bool bPenetrate = false ) { m_bPenetrate = bPenetrate; SetSolidFlags( FSOLID_NOT_SOLID | FSOLID_TRIGGER ); }
 	bool			CanPenetrate() const { return m_bPenetrate; }
-	virtual bool	IsDestroyable( void ) OVERRIDE { return false; }
+	virtual bool	IsDestroyable( bool bOrbAttack = false ) OVERRIDE { return ( !bOrbAttack ? false : true ); }
 	virtual bool	IsBreakable( void ) const { return true; }
 	
 	void SetApplyMilkOnHit() { m_bApplyMilkOnHit = true; }
@@ -165,52 +165,6 @@ private:
 	void StopImpactFleshSoundLoop();
 
 	CSoundPatch *m_pImpactFleshSoundLoop;
-};
-
-//-----------------------------------------------------------------------------
-// Purpose: 
-//-----------------------------------------------------------------------------
-class CTraceFilterCollisionArrows : public CTraceFilterEntitiesOnly
-{
-public:
-	DECLARE_CLASS_NOBASE( CTraceFilterCollisionArrows );
-
-	CTraceFilterCollisionArrows( const IHandleEntity *passentity, const IHandleEntity *passentity2 )
-		: m_pPassEnt(passentity), m_pPassEnt2(passentity2)
-	{
-	}
-
-	virtual bool ShouldHitEntity( IHandleEntity *pHandleEntity, int contentsMask )
-	{
-		if ( !PassServerEntityFilter( pHandleEntity, m_pPassEnt ) )
-			return false;
-		CBaseEntity *pEntity = EntityFromEntityHandle( pHandleEntity );
-		if ( pEntity )
-		{
-			if ( pEntity == m_pPassEnt2 )
-				return false;
-			if ( pEntity->GetCollisionGroup() == TF_COLLISIONGROUP_GRENADES )
-				return false;
-			if ( pEntity->GetCollisionGroup() == TFCOLLISION_GROUP_ROCKETS )
-				return false;
-			if ( pEntity->GetCollisionGroup() == TFCOLLISION_GROUP_ROCKET_BUT_NOT_WITH_OTHER_ROCKETS )
-				return false;
-			if ( pEntity->GetCollisionGroup() == COLLISION_GROUP_DEBRIS )
-				return false;
-			if ( pEntity->GetCollisionGroup() == TFCOLLISION_GROUP_RESPAWNROOMS )
-				return false;
-			if ( pEntity->GetCollisionGroup() == COLLISION_GROUP_NONE )
-				return false;
-
-			return true;
-		}
-
-		return true;
-	}
-
-protected:
-	const IHandleEntity *m_pPassEnt;
-	const IHandleEntity *m_pPassEnt2;
 };
 
 #endif	//TF_PROJECTILE_ARROW_H

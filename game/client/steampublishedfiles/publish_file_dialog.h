@@ -140,6 +140,9 @@ protected:
 	virtual void HideStatusWindow( void );
 
 	virtual void PopulateEditFields( void );
+
+	virtual void OnFilePrepared( ErrorCode_t eResult );
+
 	void DownloadPreviewImage( void );
 
 	void SetPublishButtonState( void );
@@ -147,6 +150,7 @@ protected:
 	bool UpdateFile( void );
 	bool UpdateFileInternal( void );
 	void GetPreviewFilename( char *szOut, size_t outLen );
+	void GetPreparedFilename( char *szOut, size_t outLen );
 
 	bool PublishFile();
 	void SetPreviewImage( const char *lpszFilename );
@@ -157,8 +161,6 @@ protected:
 	void ErrorMessage( const char *lpszText );
 
 	void StartPrepareFile();
-
-	void OnFilePrepared( bool bSucceeded );
 
 	inline bool IsSourceImageSquare() const
 	{

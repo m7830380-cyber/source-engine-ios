@@ -28,6 +28,7 @@
 #include "bot/tf_bot.h"
 #include "tf_weapon_medigun.h"
 #include "soundenvelope.h"
+#include "tf_obj_sentrygun.h"
 
 
 //=============================================================================
@@ -89,24 +90,6 @@ BEGIN_DATADESC( CTFProjectile_GrapplingHook )
 END_DATADESC()
 
 //-----------------------------------------------------------------------------
-// Purpose: Helper to set a grappling hook target on all healers of this player
-//-----------------------------------------------------------------------------
-static void SetMedicsGrapplingHookTarget( CTFPlayer *pTFPlayer, CBaseEntity *pGrappleTarget )
-{
-	int i;
-	int iNumHealers = pTFPlayer->m_Shared.GetNumHealers();
-	for ( i = 0 ; i < iNumHealers ; i++ )
-	{
-		CTFPlayer *pMedic = ToTFPlayer( pTFPlayer->m_Shared.GetHealerByIndex( i ) );
-		// Only want medics who are directly healing us with their medigun, not e.g. AoE healers.
-		if ( pMedic && ToTFPlayer ( pMedic->MedicGetHealTarget() ) == pTFPlayer )
-		{
-			pMedic->SetGrapplingHookTarget( pGrappleTarget );
-		}
-	}
-}
-
-//-----------------------------------------------------------------------------
 // Purpose:
 //-----------------------------------------------------------------------------
 CTFProjectile_Arrow::CTFProjectile_Arrow()
@@ -138,9 +121,6 @@ static const char* GetArrowEntityName( ProjectileType_t projectileType )
 	{
 	case TF_PROJECTILE_HEALING_BOLT:
 	case TF_PROJECTILE_FESTIVE_HEALING_BOLT:
-#ifdef STAGING_ONLY
-	case TF_PROJECTILE_MILK_BOLT:
-#endif
 		return "tf_projectile_healing_bolt";
 	case TF_PROJECTILE_GRAPPLINGHOOK:
 		return "tf_projectile_grapplinghook";
@@ -211,14 +191,6 @@ void CTFProjectile_Arrow::InitArrow( const QAngle &vecAngles, const float fSpeed
 
 	m_flInitTime = gpGlobals->curtime;
 
-#ifdef STAGING_ONLY
-	if ( m_iProjectileType == TF_PROJECTILE_SNIPERBULLET )
-	{
-		CTFPlayer* pTFOwner = ToTFPlayer( pOwner );
-		m_bFiredWhileZoomed = ( pTFOwner && pTFOwner->m_Shared.InCond( TF_COND_ZOOMED ) );
-	}
-	else
-#endif // STAGING_ONLY
 	{
 		m_bFiredWhileZoomed = false;
 	}
@@ -239,9 +211,6 @@ void CTFProjectile_Arrow::Spawn()
 		SetModel( g_pszArrowModels[MODEL_FESTIVE_ARROW_REGULAR] );
 	}
 	else if ( m_iProjectileType == TF_PROJECTILE_HEALING_BOLT 
-#ifdef STAGING_ONLY
-		|| m_iProjectileType == TF_PROJECTILE_MILK_BOLT 
-#endif
 	) {
 		SetModel( g_pszArrowModels[MODEL_SYRINGE] );
 		SetModelScale( 3.0f );
@@ -251,13 +220,6 @@ void CTFProjectile_Arrow::Spawn()
 		SetModel( g_pszArrowModels[MODEL_FESTIVE_HEALING_BOLT] );
 		SetModelScale( 3.0f );
 	}
-#ifdef STAGING_ONLY
-	else if ( m_iProjectileType == TF_PROJECTILE_SNIPERBULLET )
-	{
-		SetModel( g_pszArrowModels[MODEL_SYRINGE] );
-		//SetModelScale( 3.0f );
-	}
-#endif // STAGING_ONLY
 	else if ( m_iProjectileType == TF_PROJECTILE_GRAPPLINGHOOK )
 	{
 		SetModel( g_pszArrowModels[MODEL_GRAPPLINGHOOK] );
@@ -339,19 +301,10 @@ bool CTFProjectile_Arrow::CanHeadshot()
 	if ( m_iProjectileType == TF_PROJECTILE_BUILDING_REPAIR_BOLT 
 		|| m_iProjectileType == TF_PROJECTILE_HEALING_BOLT 
 		|| m_iProjectileType == TF_PROJECTILE_FESTIVE_HEALING_BOLT 
-#ifdef STAGING_ONLY
-		|| m_iProjectileType == TF_PROJECTILE_MILK_BOLT
-#endif
 	) {
 		return false;
 	}
 
-#ifdef STAGING_ONLY
-	if ( m_iProjectileType == TF_PROJECTILE_SNIPERBULLET )
-	{
-		return m_bFiredWhileZoomed;
-	}
-#endif // STAGING_ONLY
 
 	return true; 
 }
@@ -363,9 +316,6 @@ float CTFProjectile_Arrow::GetDamage()
 {
 	if ( m_iProjectileType == TF_PROJECTILE_HEALING_BOLT
 		|| m_iProjectileType == TF_PROJECTILE_FESTIVE_HEALING_BOLT
-#ifdef STAGING_ONLY
-		|| m_iProjectileType == TF_PROJECTILE_MILK_BOLT 
-#endif
 	) {
 		float lifeTimeScale = RemapValClamped( gpGlobals->curtime - m_flInitTime, 0.0f, 0.6f, 0.5f, 1.0f );	
 		return m_flDamage * lifeTimeScale;
@@ -466,9 +416,9 @@ bool CTFProjectile_Arrow::StrikeTarget( mstudiobbox_t *pBox, CBaseEntity *pOther
 		}
 	}
 
-	// Block and break on invulnerable players
+	// Block and break on invulnerable players, ignoring teammates under normal rules
 	CTFPlayer *pTFPlayerOther = ToTFPlayer( pOther );
-	if ( pTFPlayerOther && pTFPlayerOther->m_Shared.IsInvulnerable() )
+	if ( pTFPlayerOther && ( pTFPlayerOther != GetOwnerEntity() ) && pTFPlayerOther->m_Shared.IsInvulnerable() && ( !InSameTeam( pTFPlayerOther ) || CanCollideWithTeammates() ) )
 		return false;
 
 	CBaseAnimating *pOtherAnim = dynamic_cast< CBaseAnimating* >(pOther);
@@ -705,48 +655,32 @@ void CTFProjectile_Arrow::BuildingHealingArrow( CBaseEntity *pOther )
 	if ( !pOther->IsBaseObject() )
 		return;
 
-	CBaseEntity *pAttacker = GetScorer();
-	if ( pAttacker == NULL )
+	CTFPlayer *pTFAttacker = ToTFPlayer( GetScorer() );
+	if ( !pTFAttacker )
 		return;
 
 	// if not on our team, forget about it
 	if ( GetTeamNumber() != pOther->GetTeamNumber() )
 		return;
 
-	int iArrowsHealBuildings = 0;
-	CALL_ATTRIB_HOOK_INT_ON_OTHER( pAttacker, iArrowsHealBuildings, arrow_heals_buildings );
-	if ( iArrowsHealBuildings == 0 )
+	int iArrowHealAmount = 0;
+	CALL_ATTRIB_HOOK_INT_ON_OTHER( pTFAttacker, iArrowHealAmount, arrow_heals_buildings );
+	if ( iArrowHealAmount == 0 )
 		return;
 
 	CBaseObject *pBuilding = dynamic_cast< CBaseObject * >( pOther );
-	if ( !pBuilding || !pBuilding->CanBeRepaired() || pBuilding->HasSapper() || pBuilding->IsPlasmaDisabled() || pBuilding->IsBuilding() || pBuilding->IsPlacing() )
+	if ( !pBuilding || pBuilding->HasSapper() || pBuilding->IsPlasmaDisabled() || pBuilding->IsBuilding() || pBuilding->IsPlacing() )
 		return;
 
-	// if building is sheilded, reduce health gain
+	// if building is shielded, reduce health gain
 	if ( pBuilding->GetShieldLevel() == SHIELD_NORMAL )
 	{
-		iArrowsHealBuildings *= SHIELD_NORMAL_VALUE;
+		iArrowHealAmount *= SHIELD_NORMAL_VALUE;
 	}
 
-	float flNewHealth = MIN( pBuilding->GetMaxHealth(), (int)pBuilding->GetHealth() + iArrowsHealBuildings );
-	int iHealthAdded = (int)(flNewHealth - pBuilding->GetHealth());
-	if ( iHealthAdded > 0 )
+	int nHealed = pBuilding->Command_Repair( pTFAttacker, iArrowHealAmount, 1.f, 4.f, true );
+	if ( nHealed > 0 )
 	{
-		pBuilding->SetHealth( flNewHealth );
-
-		IGameEvent * event = gameeventmanager->CreateEvent( "building_healed" );
-		if ( event )
-		{
-			// HLTV event priority, not transmitted
-			event->SetInt( "priority", 1 );	
-
-			// Healed by another player.
-			event->SetInt( "building", pBuilding->entindex() );
-			event->SetInt( "healer", pAttacker->entindex() );
-			event->SetInt( "amount", iHealthAdded );
-			gameeventmanager->FireEvent( event );
-		}
-
 		const char *pParticleName = GetTeamNumber() == TF_TEAM_BLUE ? CLAW_REPAIR_EFFECT_BLU : CLAW_REPAIR_EFFECT_RED;
 		CPVSFilter filter( GetAbsOrigin() );
 		TE_TFParticleEffect( filter, 0.0, pParticleName, GetAbsOrigin(), vec3_angle );
@@ -872,7 +806,7 @@ void CTFProjectile_Arrow::ArrowTouch( CBaseEntity *pOther )
 
 	// If we hit a hitbox, stop tracing.
 	mstudiobbox_t *closest_box = NULL;
-	if ( tr.m_pEnt && tr.m_pEnt->GetTeamNumber() != GetTeamNumber() )
+	if ( tr.m_pEnt && tr.m_pEnt == pOther && tr.m_pEnt->GetTeamNumber() != GetTeamNumber() )
 	{
 		// This means the arrow was true and was flying directly at a hitbox on the target.
 		// We'll attach to that hitbox.
@@ -1130,9 +1064,6 @@ void CTFProjectile_Arrow::CreateTrail( void )
 			case TF_PROJECTILE_HEALING_BOLT:
 			case TF_PROJECTILE_FESTIVE_HEALING_BOLT:
 			case TF_PROJECTILE_GRAPPLINGHOOK:
-#ifdef STAGING_ONLY
-			case TF_PROJECTILE_SNIPERBULLET:
-#endif // STAGING_ONLY
 				return; // do not create arrow trail for healing bolt, use particle instead (client only)
 		}
 		
@@ -1259,6 +1190,8 @@ void CTFProjectile_HealingBolt::InitArrow( const QAngle &vecAngles, const float 
 	//SetNextThink( gpGlobals->curtime );
 }
 
+// ConVar healingbolt_uber_scale( "healingbolt_uber_scale", "1.0", FCVAR_REPLICATED, "" );
+
 //-----------------------------------------------------------------------------
 // Purpose: Healing bolt heal.
 //-----------------------------------------------------------------------------
@@ -1267,11 +1200,6 @@ void CTFProjectile_HealingBolt::ImpactTeamPlayer( CTFPlayer *pOther )
 	if ( !pOther )
 		return;
 
-#ifdef STAGING_ONLY
-	// Milk Arrows only heal teammates on special shot
-	if ( GetProjectileType() == TF_PROJECTILE_MILK_BOLT && !m_bApplyMilkOnHit )
-		return;
-#endif
 
 	CTFPlayer *pOwner = ToTFPlayer( GetOwnerEntity() );
 	if ( !pOwner )
@@ -1289,20 +1217,15 @@ void CTFProjectile_HealingBolt::ImpactTeamPlayer( CTFPlayer *pOther )
 
 	float flHealth = GetDamage() * 2.0f;
 
-#ifdef STAGING_ONLY
-	// Milk Arrows give a resist bubble on hitting a teammate
-	if ( GetProjectileType() == TF_PROJECTILE_MILK_BOLT )
-	{
-		// use damage to scale time
-		float flResistDuration = RemapValClamped( flHealth, 0, 150, 1, 3 );
-		pOther->m_Shared.AddCond( TF_COND_MEDIGUN_UBER_BULLET_RESIST, flResistDuration, pOwner );
-		pOther->m_Shared.AddCond( TF_COND_MEDIGUN_UBER_BLAST_RESIST, flResistDuration, pOwner );
-		pOther->m_Shared.AddCond( TF_COND_MEDIGUN_UBER_FIRE_RESIST, flResistDuration, pOwner );
-	}
-#endif
 
 	// Scale this if needed
 	CALL_ATTRIB_HOOK_FLOAT_ON_OTHER( pOther, flHealth, mult_healing_from_medics );
+
+	CTFWeaponBase *pActiveWeapon = pOther->GetActiveTFWeapon();
+	if ( pActiveWeapon )
+	{
+		CALL_ATTRIB_HOOK_FLOAT_ON_OTHER( pActiveWeapon, flHealth, mult_health_fromhealers_penalty_active );
+	}
 	
 	int iActualHealed = pOther->TakeHealth( flHealth, DMG_GENERIC );
 	if ( iActualHealed <= 0 )
@@ -1349,14 +1272,16 @@ void CTFProjectile_HealingBolt::ImpactTeamPlayer( CTFPlayer *pOther )
 		gameeventmanager->FireEvent( event ); 
 	}
 
-	// Give a litte bit of uber based on actual healing
-	// Give them a little bit of Uber
+	// Add ubercharge based on amount healed
 	CWeaponMedigun *pMedigun = static_cast<CWeaponMedigun *>( pOwner->Weapon_OwnsThisID( TF_WEAPON_MEDIGUN ) );
 	if ( pMedigun )
 	{
-		// On Mediguns, per frame, the amount of uber added is based on 
-		// Default heal rate is 24per second, we scale based on that and frametime
-		pMedigun->AddCharge( ( iActualHealed / 24.0f ) * gpGlobals->frametime );
+		float flTimeSinceDamage = gpGlobals->curtime - pOther->GetLastDamageReceivedTime();
+		float flScale = RemapValClamped( flTimeSinceDamage, 10.f, 15.f, 3.f, 1.f ); /*healingbolt_uber_scale.GetFloat()*/
+		const float flGainRate = 24.f * flScale;
+
+		// Ubercharge rate is based on the medigun's heal rate, then scaled based on last combat time (same rule as the medigun's heal rate)
+		pMedigun->AddCharge( ( iActualHealed / flGainRate ) * gpGlobals->frametime );
 	}
 	pOther->m_Shared.AddCond( TF_COND_HEALTH_OVERHEALED, 1.2f );
 
@@ -1400,8 +1325,6 @@ void CTFProjectile_GrapplingHook::UpdateOnRemove()
 	CTFPlayer *pTFPlayer = ToTFPlayer( GetOwnerEntity() );
 	if ( pTFPlayer )
 	{
-		// Clear any healers grappling with us
-		SetMedicsGrapplingHookTarget( pTFPlayer, NULL );
 		pTFPlayer->SetGrapplingHookTarget( NULL );
 		pTFPlayer->m_Shared.RemoveCond( TF_COND_GRAPPLINGHOOK );
 	}
@@ -1506,8 +1429,6 @@ void CTFProjectile_GrapplingHook::HookTarget( CBaseEntity *pOther )
 	ImpactSound( pszSoundName );
 
 	pTFPlayer->SetGrapplingHookTarget( pTarget, true );
-	// Grapple any medics to us
-	SetMedicsGrapplingHookTarget( pTFPlayer, pTFPlayer );
 
 	// Stop moving!
 	if ( pOther->IsPlayer() )

@@ -159,7 +159,7 @@ static valid_item_pos kValidPositions_MannManor[] = {
 	{ -575.000000, 3562.500000, -1064.084229 },
 	{ -2450.000000, 3400.000000, -1092.235474 },
 	{ -1675.000000, 3537.500000, -1058.036133 },
-	{ -1187.500000, 2562.500000, -990.317749 },
+	{ -1187.500000, 2562.500000, -959.968750 },
 	{ -1612.500000, 2975.000000, -815.968750 },
 	{ -1175.000000, 4000.000000, -1059.968750 },
 	{ -2200.000000, 2425.000000, -1023.968750 },
@@ -252,8 +252,6 @@ static valid_item_pos kValidPositions_Hightower[] =
 	{ 5629.083984,  7272.486816, 186.031311f  - g_flPlayerEyeHeight },
 	{ 7569.272461,  7356.835938, 30.543331f   - g_flPlayerEyeHeight },
 	{ 7620.356445,  7806.569824, 43.632362f   - g_flPlayerEyeHeight },
-	{ 10225.334961, 7462.086914, -366.968689f - g_flPlayerEyeHeight },
-	{ 10208.725586, 7768.193848, -366.968689f - g_flPlayerEyeHeight },
 };
 
 struct halloween_map_info
@@ -290,3 +288,4 @@ void AddHalloweenGiftPositionsForMap( const char *pszMapName, CUtlVector<Vector>
 		}
 	}
 }
+

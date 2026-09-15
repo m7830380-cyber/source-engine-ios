@@ -530,6 +530,7 @@ ActionResult< CTFBot >	CTFBotDestroyEnemySentry::OnStart( CTFBot *me, Action< CT
 
 	m_path.Invalidate();
 	m_repathTimer.Invalidate();
+	m_abandonTimer.Invalidate();
 
 	m_isAttackingSentry = false;
 	m_wasUber = false;
@@ -705,57 +706,66 @@ ActionResult< CTFBot >	CTFBotDestroyEnemySentry::Update( CTFBot *me, float inter
 
 	bool isInAttackPosition = ( m_hasSafeAttackSpot && me->IsRangeLessThan( m_safeAttackSpot, 20.0f ) );
 
-	if ( isInAttackPosition || me->IsLineOfFireClear( me->GetEnemySentry() ) )
+	if ( isInAttackPosition )
 	{
-		// must look at sentry entity to make use of SelectTargetPoint() 
-		me->GetBodyInterface()->AimHeadTowards( me->GetEnemySentry(), IBody::MANDATORY, 1.0f, NULL, "Aiming at enemy sentry" );
-
-		// because sentries are stationary, check if XY is on target to allow SelectTargetPoint() to adjust Z for grenades
-		Vector toSentry = me->GetEnemySentry()->WorldSpaceCenter() - me->EyePosition();
-		toSentry.NormalizeInPlace();
-		Vector forward;
-		me->EyeVectors( &forward );
-
-		if ( ( forward.x * toSentry.x + forward.y * toSentry.y ) > 0.95f )
+		if ( !m_abandonTimer.HasStarted() )
 		{
-			if ( me->EquipLongRangeWeapon() == false )
+			m_abandonTimer.Start( 2.f );
+		}
+
+		if ( me->IsLineOfFireClear( me->GetEnemySentry() ) )
+		{
+			// must look at sentry entity to make use of SelectTargetPoint() 
+			me->GetBodyInterface()->AimHeadTowards( me->GetEnemySentry(), IBody::MANDATORY, 1.0f, NULL, "Aiming at enemy sentry" );
+
+			// because sentries are stationary, check if XY is on target to allow SelectTargetPoint() to adjust Z for grenades
+			Vector toSentry = me->GetEnemySentry()->WorldSpaceCenter() - me->EyePosition();
+			toSentry.NormalizeInPlace();
+			Vector forward;
+			me->EyeVectors( &forward );
+
+			if ( ( forward.x * toSentry.x + forward.y * toSentry.y ) > 0.95f )
 			{
-				return SuspendFor( new CTFBotRetreatToCover( 0.1f ), "No suitable range weapon available right now" );
+				if ( me->EquipLongRangeWeapon() == false )
+				{
+					return SuspendFor( new CTFBotRetreatToCover( 0.1f ), "No suitable range weapon available right now" );
+				}
+
+				me->PressFireButton();
+				m_isAttackingSentry = true;
+				m_abandonTimer.Invalidate();
+			}
+			else
+			{
+				m_isAttackingSentry = false;
 			}
 
-			me->PressFireButton();
-			m_isAttackingSentry = true;
-		}
-		else
-		{
-			m_isAttackingSentry = false;
-		}
-
-		if ( me->IsRangeGreaterThan( me->GetEnemySentry(), 1.1f * SENTRY_MAX_RANGE ) )
-		{
-			// safely out of range of the gun - hold here and fire at it
-			return Continue();
-		}
-
-		// we are in range of the gun - if it is pointed at us and firing, retreat to cover
-		if ( me->GetEnemySentry()->GetTimeSinceLastFired() < 1.0f )
-		{
-			Vector sentryForward;
-			AngleVectors( me->GetEnemySentry()->GetTurretAngles(), &sentryForward );
-
-			Vector to = me->GetAbsOrigin() - me->GetEnemySentry()->GetAbsOrigin();
-			to.NormalizeInPlace();
-
-			if ( DotProduct( to, sentryForward ) > 0.8f )
+			if ( me->IsRangeGreaterThan( me->GetEnemySentry(), 1.1f * SENTRY_MAX_RANGE ) )
 			{
-				return SuspendFor( new CTFBotRetreatToCover( 0.1f ), "Taking cover from sentry fire" );
+				// safely out of range of the gun - hold here and fire at it
+				return Continue();
 			}
-		}
 
-		if ( isInAttackPosition )
-		{
-			// we're at our attack position, hold here
-			return Continue();
+			// we are in range of the gun - if it is pointed at us and firing, retreat to cover
+			if ( me->GetEnemySentry()->GetTimeSinceLastFired() < 1.0f )
+			{
+				Vector sentryForward;
+				AngleVectors( me->GetEnemySentry()->GetTurretAngles(), &sentryForward );
+
+				Vector to = me->GetAbsOrigin() - me->GetEnemySentry()->GetAbsOrigin();
+				to.NormalizeInPlace();
+
+				if ( DotProduct( to, sentryForward ) > 0.8f )
+				{
+					return SuspendFor( new CTFBotRetreatToCover( 0.1f ), "Taking cover from sentry fire" );
+				}
+			}
+
+			if ( isInAttackPosition )
+			{
+				// we're at our attack position, hold here
+				return Continue();
+			}
 		}
 	}
 
@@ -776,6 +786,11 @@ ActionResult< CTFBot >	CTFBotDestroyEnemySentry::Update( CTFBot *me, float inter
 	// move along path to vantage point
 	m_path.Update( me );
 
+	if ( m_abandonTimer.IsElapsed() )
+	{
+		return Done( "Can't attack sentry - giving up!" );
+	}
+
 	return Continue();
 }
 
@@ -785,6 +800,7 @@ ActionResult< CTFBot > CTFBotDestroyEnemySentry::OnResume( CTFBot *me, Action< C
 {
 	m_path.Invalidate();
 	m_repathTimer.Invalidate();
+	m_abandonTimer.Invalidate();
 
 	if ( me->IsPlayerClass( TF_CLASS_DEMOMAN ) )
 	{

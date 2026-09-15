@@ -8,8 +8,15 @@
 #include "report_player_dialog.h"
 #include "gc_clientsystem.h"
 #include "ienginevgui.h"
+#include "c_tf_playerresource.h"
+#include "c_tf_player.h"
+#include "vgui_avatarimage.h"
+#include <vgui_controls/ImageList.h>
+#include "tf_gamerules.h"
 
 using namespace vgui;
+
+extern const char *FormatSeconds( int seconds );
 
 // in seconds
 static const float MIN_REPORT_INTERVAL = 300.f;
@@ -79,23 +86,16 @@ bool ReportPlayerAccount( CSteamID steamID, int nReason )
 //-----------------------------------------------------------------------------
 CReportPlayerDialog::CReportPlayerDialog( vgui::Panel *parent ) : BaseClass( parent, "ReportPlayerDialog" )
 {
-	vgui::VPANEL gameuiPanel = enginevgui->GetPanel( PANEL_GAMEUIDLL );
-	SetParent( gameuiPanel );
-
-	vgui::HScheme scheme = vgui::scheme()->LoadSchemeFromFile("resource/SourceScheme.res", "Client");
-	SetScheme(scheme);
-
 	SetSize( 320, 270 );
 	SetTitle( "#GameUI_ReportPlayerCaps", true );
 
 	m_pReportButton = new Button( this, "ReportButton", "" );
 	m_pPlayerList = new ListPanel( this, "PlayerList" );
-	m_pPlayerList->AddColumnHeader( 0, "Name", "#GameUI_PlayerName", 180 );
-	m_pPlayerList->AddColumnHeader( 1, "Properties", "#GameUI_Properties", 80 );
 	m_pPlayerList->SetEmptyListText( "#GameUI_NoOtherPlayersInGame" );
 	m_pReasonBox = new ComboBox( this, "ReasonBox", 5, false );
 
-	LoadControlSettings( "Resource/ReportPlayerDialog.res" );
+	m_mapAvatarsToImageList.SetLessFunc( DefLessFunc( CSteamID ) );
+	m_mapAvatarsToImageList.RemoveAll();
 }
 
 //-----------------------------------------------------------------------------
@@ -108,38 +108,138 @@ CReportPlayerDialog::~CReportPlayerDialog()
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
+void CReportPlayerDialog::ApplySchemeSettings( vgui::IScheme *pScheme )
+{
+	BaseClass::ApplySchemeSettings( pScheme );
+	
+	LoadControlSettings( "Resource/ReportPlayerDialog.res" );
+
+	if ( m_pImageList )
+	{
+		delete m_pImageList;
+	}
+	m_pImageList = new ImageList( false ); 
+
+	if ( m_pPlayerList )
+	{
+		m_pPlayerList->DeleteAllItems();
+
+		m_pPlayerList->AddColumnHeader( 0, "medal", "", m_iMedalWidth, ListPanel::COLUMN_IMAGE );
+
+		// Avatars are always displayed at 32x32 regardless of resolution
+		m_pPlayerList->AddColumnHeader( 1, "avatar", "", m_iAvatarWidth, ListPanel::COLUMN_IMAGE );
+
+		// The player avatar is always a fixed size, so as we change resolutions we need to vary the size of the name column to adjust the total width of all the columns
+		m_nExtraSpace = m_pPlayerList->GetWide() - m_iMedalWidth - m_iAvatarWidth - m_iNameWidth - m_iScoreWidth - m_iTimeWidth;
+
+		m_pPlayerList->AddColumnHeader( 2, "name", "#TF_Scoreboard_Name", m_iNameWidth + m_nExtraSpace );
+		m_pPlayerList->AddColumnHeader( 3, "score", "#TF_Scoreboard_Score", m_iScoreWidth );
+		m_pPlayerList->AddColumnHeader( 4, "time", "#TF_Connected", m_iTimeWidth );
+		
+		// doesn't make sense to sort with the images
+		m_pPlayerList->SetColumnSortable( 0, false );
+		m_pPlayerList->SetColumnSortable( 1, false );
+
+		m_pPlayerList->SetImageList( m_pImageList, false );
+		m_pPlayerList->SetVisible( true );
+	}
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CReportPlayerDialog::Activate()
 {
 	BaseClass::Activate();
 
-	m_pPlayerList->DeleteAllItems();
-
-	static EUniverse universe = steamapicontext->SteamUtils()->GetConnectedUniverse();
-
-	for ( int i = 1; i <= engine->GetMaxClients(); i++ )
+	if ( m_pPlayerList )
 	{
-		player_info_t pi;
-		if ( !engine->GetPlayerInfo( i, &pi ) )
-			continue;
+		m_pPlayerList->DeleteAllItems();
 
-		// no need to add local player
-		if ( engine->GetLocalPlayer() == i )
-			continue;
+		static EUniverse universe = steamapicontext->SteamUtils()->GetConnectedUniverse();
 
-		// Already reported
-		CSteamID steamID( pi.friendsID, universe, k_EAccountTypeIndividual );
-		if ( !CanReportPlayer( steamID, false ) )
+		for ( int playerIndex = 1; playerIndex <= MAX_PLAYERS; playerIndex++ )
 		{
-			continue;
+			if ( g_PR->IsConnected( playerIndex ) || g_PR->IsValid( playerIndex ) )
+			{
+				if ( g_TF_PR->GetPlayerConnectionState( playerIndex ) != MM_CONNECTED )
+					continue;
+
+				// No need to add local player
+				if ( engine->GetLocalPlayer() == playerIndex )
+					continue;
+
+				player_info_t pi;
+				if ( !engine->GetPlayerInfo( playerIndex, &pi ) )
+					continue;
+				
+				// Don't add bots
+				if ( pi.fakeplayer )
+					continue;
+
+				// Already reported
+				CSteamID steamID( pi.friendsID, universe, k_EAccountTypeIndividual );
+				if ( !CanReportPlayer( steamID, false ) )
+					continue;
+
+				int nTeam = g_PR->GetTeam( playerIndex );
+
+				KeyValues *pKeyValues = new KeyValues( "data" );
+				pKeyValues->SetInt( "index", playerIndex );
+				pKeyValues->SetString( "name", g_TF_PR->GetPlayerName( playerIndex ) );
+				pKeyValues->SetInt( "score", g_TF_PR->GetTotalScore( playerIndex ) );
+
+				// Update their avatar
+				if ( steamapicontext->SteamFriends() && steamapicontext->SteamUtils() )
+				{
+					if ( pi.friendsID )
+					{
+						CSteamID steamIDForPlayer( pi.friendsID, 1, GetUniverse(), k_EAccountTypeIndividual );
+
+						// See if we already have that avatar in our list
+						int iMapIndex = m_mapAvatarsToImageList.Find( steamIDForPlayer );
+						int iImageIndex;
+						if ( iMapIndex == m_mapAvatarsToImageList.InvalidIndex() )
+						{
+							CAvatarImage *pImage = new CAvatarImage();
+							pImage->SetAvatarSteamID( steamIDForPlayer );
+							pImage->SetAvatarSize( 32, 32 );	// Deliberately non scaling
+							iImageIndex = m_pImageList->AddImage( pImage );
+
+							m_mapAvatarsToImageList.Insert( steamIDForPlayer, iImageIndex );
+						}
+						else
+						{
+							iImageIndex = m_mapAvatarsToImageList[iMapIndex];
+						}
+
+						pKeyValues->SetInt( "avatar", iImageIndex );
+
+						CAvatarImage *pAvIm = ( CAvatarImage * ) m_pImageList->GetImage( iImageIndex );
+						pAvIm->UpdateFriendStatus();
+					}
+				}
+
+				// The medal column is just a place holder for the images that are displayed later
+				pKeyValues->SetInt( "medal", 0 );
+
+				if ( pi.fakeplayer )
+				{
+					pKeyValues->SetString( "time", "#TF_Scoreboard_Bot" );
+				}
+				else
+				{
+					pKeyValues->SetString( "time", FormatSeconds( gpGlobals->curtime - g_TF_PR->GetConnectTime( playerIndex ) ) );
+				}
+
+				Color clr = g_PR->GetTeamColor( nTeam );
+				pKeyValues->SetColor( "cellcolor", clr );
+
+				m_pPlayerList->AddItem( pKeyValues, 0, false, false );
+
+				pKeyValues->deleteThis();
+			}
 		}
-
-		char szPlayerIndex[32];
-		Q_snprintf( szPlayerIndex, sizeof( szPlayerIndex ), "%d", i );
-
-		KeyValues *pData = new KeyValues( szPlayerIndex );
-		pData->SetString( "Name", pi.name );
-		pData->SetInt( "index", i );
-		m_pPlayerList->AddItem( pData, 0, false, false );
 	}
 
 	m_pReasonBox->RemoveAll();
@@ -158,43 +258,12 @@ void CReportPlayerDialog::Activate()
 	m_pReasonBox->SilentActivateItemByRow( 0 );
 	pKeyValues->deleteThis();
 
-	RefreshPlayerProperties();
+	m_pPlayerList->InvalidateLayout( true );
+
+	UpdateBadgePanels();
+	
 	m_pPlayerList->SetSingleSelectedItem( m_pPlayerList->GetItemIDFromRow( 0 ) );
 	OnItemSelected();
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: walks the players and sets their info display in the list
-//-----------------------------------------------------------------------------
-void CReportPlayerDialog::RefreshPlayerProperties()
-{
-	for ( int i = 0; i <= m_pPlayerList->GetItemCount(); i++ )
-	{
-		KeyValues *pData = m_pPlayerList->GetItem( i );
-		if ( !pData )
-			continue;
-
-		int playerIndex = pData->GetInt( "index" );
-		
-		player_info_t pi;
-		if ( !engine->GetPlayerInfo( playerIndex, &pi ) )
-		{
-			pData->SetString( "properties", "Disconnected" );
-			continue;
-		}
-
-		pData->SetString( "name", pi.name );
-
-		if ( pi.fakeplayer )
-		{
-			pData->SetString( "properties", "CPU Player" );
-		}
-		else
-		{
-			pData->SetString( "properties", "" );
-		}
-	}
-	m_pPlayerList->RereadAllItems();
 }
 
 //-----------------------------------------------------------------------------
@@ -265,7 +334,6 @@ void CReportPlayerDialog::ReportPlayer()
 		return;
 	}
 
-	RefreshPlayerProperties();
 	OnItemSelected();
 }
 
@@ -274,8 +342,6 @@ void CReportPlayerDialog::ReportPlayer()
 //-----------------------------------------------------------------------------
 void CReportPlayerDialog::OnItemSelected()
 {
-	RefreshPlayerProperties();
-
 	bool bReportButtonEnabled = IsValidPlayerSelected();
 	if ( !bReportButtonEnabled )
 	{
@@ -302,4 +368,98 @@ void CReportPlayerDialog::OnTextChanged( KeyValues *data )
 		bReportButtonEnabled = bReportButtonEnabled && pReasonData && pReasonData->GetInt( "reason", 0 ) > 0;
 		m_pReportButton->SetEnabled( bReportButtonEnabled );
 	}
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+void CReportPlayerDialog::UpdateBadgePanels()
+{
+	int iNumPanels = 0;
+
+	const IMatchGroupDescription *pMatchDesc = TFGameRules() ? GetMatchGroupDescription( TFGameRules()->GetCurrentMatchGroup() ) : NULL;
+	if ( pMatchDesc && m_pPlayerList )
+	{
+		if ( TFGameRules()->IsMatchTypeCasual() )
+		{
+			int parentTall = m_pPlayerList->GetTall();
+			CTFBadgePanel *pPanel = NULL;
+
+			for ( int i = 0; i < m_pPlayerList->GetItemCount(); i++ )
+			{
+				KeyValues *pKeyValues = m_pPlayerList->GetItem( m_pPlayerList->GetItemIDFromRow( i ) );
+				if ( !pKeyValues )
+					continue;
+
+				int iPlayerIndex = pKeyValues->GetInt( "index" );
+				const CSteamID steamID = GetSteamIDForPlayerIndex( iPlayerIndex );
+				if ( steamID.IsValid() )
+				{
+					if ( iNumPanels >= m_pBadgePanels.Count() )
+					{
+						pPanel = new CTFBadgePanel( this, "BadgePanel" );
+						pPanel->MakeReadyForUse();
+						pPanel->SetVisible( true );
+						pPanel->SetZPos( 9999 );
+						m_pBadgePanels.AddToTail( pPanel );
+					}
+					else
+					{
+						pPanel = m_pBadgePanels[iNumPanels];
+					}
+
+					int x, y, wide, tall;
+					m_pPlayerList->GetCellBounds( i, 0, x, y, wide, tall );
+
+					if ( y + tall > parentTall )
+						continue;
+
+					if ( !pPanel->IsVisible() )
+					{
+						pPanel->SetVisible( true );
+					}
+
+					int xParent, yParent;
+					m_pPlayerList->GetPos( xParent, yParent );
+
+					int nPanelXPos, nPanelYPos, nPanelWide, nPanelTall;
+					pPanel->GetBounds( nPanelXPos, nPanelYPos, nPanelWide, nPanelTall );
+
+					if ( ( nPanelXPos != xParent + x )
+						|| ( nPanelYPos != yParent + y )
+						|| ( nPanelWide != wide )
+						|| ( nPanelTall != tall ) )
+					{
+						pPanel->SetBounds( xParent + x, yParent + y, wide, tall );
+						pPanel->InvalidateLayout( true, true );
+					}
+
+					pPanel->SetupBadge( pMatchDesc, steamID );
+					iNumPanels++;
+				}
+			}
+		}
+	}
+
+	// hide any unused images
+	for ( int i = iNumPanels; i < m_pBadgePanels.Count(); i++ )
+	{
+		if ( m_pBadgePanels[i]->IsVisible() )
+		{
+			m_pBadgePanels[i]->SetVisible( false );
+		}
+	}
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+void CReportPlayerDialog::OnThink()
+{
+	if ( IsVisible() )
+	{
+		UpdateBadgePanels();
+	}
+
+	BaseClass::OnThink();
 }

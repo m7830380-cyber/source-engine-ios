@@ -15,9 +15,7 @@
 // memdbgon must be the last include file in a .cpp file!!!
 #include <tier0/memdbgon.h>
 
-bool BIsPartyLeader();
 bool BIsPartyInUIState();
-CSteamID SteamIDFromDecimalString( const char *pszUint64InDecimal );
 
 class CBaseLobbyPanel;
 
@@ -60,8 +58,12 @@ public:
 
 	MESSAGE_FUNC( OpenPingOptions, "Context_Ping" );
 
+	// What is this panel good for?
+	virtual bool CanHandleMatchGroup( ETFMatchGroup eMatchGroup ) const = 0;
+	// Helper that checks against the currently selected party matchgroup
+	bool CanHandleCurrentMatchGroup() const;
+
 protected:
-	
 	bool ShouldShowPartyButton() const;
 	virtual void WriteControls();
 	virtual void HandleBackPressed();
@@ -72,10 +74,9 @@ protected:
 	vgui::Button *m_pBackButton;
 
 private:
-	
 	virtual const char* GetResFile() const = 0;
-	virtual TF_MatchmakingMode GetHandledMode() const = 0;
 	virtual bool VerifyPartyAuthorization() const = 0;
+
 
 	vgui::Button *m_pStartPartyButton;
 	vgui::Menu *m_pContextMenu;

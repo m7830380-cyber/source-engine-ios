@@ -617,13 +617,13 @@ bool CObjectSentrygun::OnWrenchHit( CTFPlayer *pPlayer, CTFWrench *pWrench, Vect
 	{
 		// STAGING_ENGY
 		// Mod repair value by shield value
-		float flRepairValue = pWrench->GetRepairValue();
+		float flRepairAmount = pWrench->GetRepairAmount();
 		if ( m_nShieldLevel == SHIELD_NORMAL )
 		{
-			flRepairValue *= SHIELD_NORMAL_VALUE;
+			flRepairAmount *= SHIELD_NORMAL_VALUE;
 		}
 		
-		if ( Command_Repair( pPlayer, flRepairValue ) )
+		if ( Command_Repair( pPlayer, flRepairAmount, 1.f ) )
 		{
 			DoWrenchHitEffect( hitLoc, true, false );
 			bDidWork = true;
@@ -1367,6 +1367,7 @@ bool CObjectSentrygun::FireRocket()
 		// Setup next rocket shot
 		if ( m_bPlayerControlled )
 		{
+			AddGesture( ACT_RANGE_ATTACK2, 2.25, true );
 			m_flNextRocketAttack = gpGlobals->curtime + 2.25;
 		}
 		else
@@ -1472,6 +1473,16 @@ bool CObjectSentrygun::Fire()
 
 		int iAttachment = GetFireAttachment();
 		GetAttachment( iAttachment, vecSrc, vecAng );
+
+		// Because the muzzle is so long, it can stick through a wall if the sentry is right up against it.
+		// Make sure the sentry can't fire in this condition by tracing a line between the center of the gun and the end of the muzzle.
+		trace_t trace;
+		UTIL_TraceLine( WorldSpaceCenter(), vecSrc, MASK_SOLID, this, COLLISION_GROUP_NONE, &trace );
+		if ( ( trace.fraction < 1.0f ) && ( !trace.m_pEnt || trace.m_pEnt->m_takedamage == DAMAGE_NO ) )
+		{
+			// there is something between the center and the end of the muzzle, most likely a wall, so don't fire
+			return false;
+		}
 
 		Vector vecMidEnemy = GetEnemyAimPosition( m_hEnemy );
 
@@ -1952,8 +1963,11 @@ int CObjectSentrygun::OnTakeDamage( const CTakeDamageInfo &info )
 		newInfo.SetDamage( flDamage );
 	}
 	
+	int iAttackIgnoresResists = 0;
+	CALL_ATTRIB_HOOK_INT_ON_OTHER( info.GetWeapon(), iAttackIgnoresResists, mod_pierce_resists_absorbs );
+
 	// If we are shielded due to player control, we take less damage.
-	bool bFullyShielded = ( m_nShieldLevel > 0 ) && !HasSapper() && !IsPlasmaDisabled();
+	bool bFullyShielded = ( m_nShieldLevel > 0 && !iAttackIgnoresResists ) && !HasSapper() && !IsPlasmaDisabled();
 	if ( bFullyShielded )
 	{
 		float flDamage = newInfo.GetDamage();
@@ -2382,60 +2396,3 @@ void CTFProjectile_SentryRocket::Spawn()
 	ResetSequence( LookupSequence("idle") );
 }
 
-#ifdef STAGING_ONLY
-//-----------------------------------------------------------------------------
-// Purpose: Directly create a sentry gun at the precise position and orientation desired
-//-----------------------------------------------------------------------------
-void CC_SentrygunSpawn( const CCommand& args )
-{
-	if ( !UTIL_IsCommandIssuedByServerAdmin() )
-		return; 
-
-	CObjectSentrygun *sentry = (CObjectSentrygun *)CreateEntityByName( "obj_sentrygun" );
-	if ( sentry )
-	{
-		CBasePlayer* pPlayer = UTIL_GetCommandClient();
-		trace_t tr;
-		Vector forward;
-		pPlayer->EyeVectors( &forward );
-		UTIL_TraceLine( pPlayer->EyePosition(),
-						pPlayer->EyePosition() + forward * MAX_TRACE_LENGTH,MASK_SOLID, 
-						pPlayer, COLLISION_GROUP_NONE, &tr );
-
-		if ( tr.fraction != 1.0 )
-		{
-			sentry->SetAbsOrigin( tr.endpos );
-			QAngle angles = pPlayer->BodyAngles();
-			angles.x = 0.0f;
-			angles.z = 0.0f;
-			sentry->SetAbsAngles( angles );
-		}
-
-		int iSentryLevel = 2;
-		int iTeamNum = pPlayer->GetTeamNumber();
-
-		if ( args.ArgC() > 1 )
-		{
-			int i = atoi(args[1]);
-			if ( abs(i) >= 1 && abs(i) <= 3)
-			{
-				iSentryLevel = abs(i)-1;
-			}
-
-			if ( i < 0)
-			{
-				iTeamNum = GetEnemyTeam( iTeamNum );
-			}
-		}
-
-		sentry->m_nDefaultUpgradeLevel = iSentryLevel;
-
-		sentry->Spawn();
-		sentry->ChangeTeam( iTeamNum );
-
-		sentry->InitializeMapPlacedObject();
-	}
-}
-static ConCommand sentrygun_spawn( "sentrygun_spawn", CC_SentrygunSpawn, "Spawns a Sentrygun where the player is looking. Takes a parameter for level of sentry [1-3: default 3]. If the passed sentry level < 0, an enemy sentry is spawned.", FCVAR_GAMEDLL | FCVAR_CHEAT );
-
-#endif // STAGING_ONLY

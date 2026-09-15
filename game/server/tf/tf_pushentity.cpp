@@ -70,7 +70,7 @@ CTFPhysicsPushEntities::~CTFPhysicsPushEntities()
 bool CTFPhysicsPushEntities::SpeculativelyCheckRotPush( const RotatingPushMove_t &rotPushMove, CBaseEntity *pRoot )
 {
 	// Only do this for "payload" or "escort" maps.
-	if ( !( TFGameRules()->GetGameType() == TF_GAMETYPE_ESCORT ) )
+	if ( !TFGameRules()->GameModeUsesEscortPushLogic() )
 		return BaseClass::SpeculativelyCheckRotPush( rotPushMove, pRoot );
 
 	Vector vecAbsPush( 0.0f, 0.0f, 0.0f );
@@ -111,7 +111,7 @@ bool CTFPhysicsPushEntities::SpeculativelyCheckRotPush( const RotatingPushMove_t
 bool CTFPhysicsPushEntities::SpeculativelyCheckLinearPush( const Vector &vecAbsPush )
 {
 	// Only do this for "payload" or "escort" maps.
-	if ( !( TFGameRules()->GetGameType() == TF_GAMETYPE_ESCORT ) )
+	if ( !TFGameRules()->GameModeUsesEscortPushLogic() )
 		return BaseClass::SpeculativelyCheckLinearPush( vecAbsPush );
 
 	m_nBlocker = -1;
@@ -466,7 +466,7 @@ void CTFPhysicsPushEntities::MovePlayer( CBaseEntity *pBlocker, PhysicsPushedInf
 void CTFPhysicsPushEntities::FinishRotPushedEntity( CBaseEntity *pPushedEntity, const RotatingPushMove_t &rotPushMove )
 {
 	// Only do this for "payload" or "escort" maps.
-	if ( !( TFGameRules()->GetGameType() == TF_GAMETYPE_ESCORT ) )
+	if ( !TFGameRules()->GameModeUsesEscortPushLogic() )
 		return BaseClass::FinishRotPushedEntity( pPushedEntity, rotPushMove );
 
 	if ( !pPushedEntity->IsPlayer() )

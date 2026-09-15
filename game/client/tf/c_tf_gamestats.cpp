@@ -821,7 +821,7 @@ void C_CTFGameStats::SW_GameStats_WriteClientWeapons()
 
 		TF_Gamestats_WeaponInfo_t info = m_mapWeaponInfo[i];
 
-		pKVData->SetString( "WeaponID", ClampedArrayElement( g_aWeaponNames, info.weaponID ) );
+		pKVData->SetString( "WeaponID", GetWeaponIDName( info.weaponID ) );
 
 		if ( info.shotsFired > 0 )
 		{

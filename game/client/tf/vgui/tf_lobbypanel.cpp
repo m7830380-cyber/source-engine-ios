@@ -7,6 +7,8 @@
 #include "cbase.h"
 
 #include "tf_party.h"
+#include "tf_partyclient.h"
+#include "tf_matchcriteria.h"
 #include "tf_item_inventory.h"
 #include "vgui_controls/PropertySheet.h"
 #include "vgui_controls/SectionedListPanel.h"
@@ -45,9 +47,10 @@ static void GetMvmChallengeSet( int idxChallenge, CMvMMissionSet &result )
 		return;
 	}
 
-	bool bMannUP = GTFGCClientSystem()->GetSearchPlayForBraggingRights();
+	auto &groupCriteria = GTFPartyClient()->GetEffectiveGroupCriteria();
+	bool bMannUP = IsMannUpGroup( groupCriteria.GetMatchGroup() );
 #ifdef USE_MVM_TOUR
-	int idxTour = GTFGCClientSystem()->GetSearchMannUpTourIndex();
+	int idxTour = groupCriteria.GetMannUpTourIndex();
 	Assert( bMannUP || idxTour < 0 );
 #endif // USE_MVM_TOUR
 
@@ -153,11 +156,6 @@ Color s_colorChallengeForegroundHaunted( 135, 79, 173, 255 );
 Color s_colorChallengeForegroundDisabled( 100, 100, 100, 128 );
 Color s_colorChallengeHeader( 250, 114, 45, 255 );
 
-static void GetPlayerNameForSteamID( wchar_t *wCharPlayerName, int nBufSizeBytes, const CSteamID &steamID )
-{
-	const char *pszName = steamapicontext->SteamFriends()->GetFriendPersonaName( steamID );
-	V_UTF8ToUnicode( pszName, wCharPlayerName, nBufSizeBytes );
-}
 
 CBaseLobbyPanel::CBaseLobbyPanel( vgui::Panel *pParent, CBaseLobbyContainerFrame* pContainer ) 
 	: vgui::PropertySheet( pParent, "LobbyPanel" ), m_sPersonaStateChangedCallback( this, &CBaseLobbyPanel::OnPersonaStateChanged )
@@ -337,29 +335,30 @@ void CBaseLobbyPanel::FireGameEvent( IGameEvent *event )
 			int nBufSize = l * sizeof(wchar_t) + 4;
 			wchar_t *wText = (wchar_t *)stackalloc( nBufSize );
 			V_UTF8ToUnicode( pszText, wText, nBufSize );
-			switch ( event->GetInt( "type", CTFGCClientSystem::k_eLobbyMsg_UserChat ) )
-			{
-				default:
-					Assert( !"Unknown chat message type" );
-				case CTFGCClientSystem::k_eLobbyMsg_SystemMsgFromLeader:
-					m_pChatLog->InsertColorChange( s_colorChatDefault );
-					m_pChatLog->InsertString( wText );
-					m_pChatLog->InsertString("\n");
-					break;
-
-				case CTFGCClientSystem::k_eLobbyMsg_UserChat:
-				{
-
-					wchar_t wCharPlayerName[ 128 ];
-					GetPlayerNameForSteamID( wCharPlayerName, sizeof(wCharPlayerName), steamID );
-					m_pChatLog->InsertColorChange( s_colorChatPlayerChatName );
-					m_pChatLog->InsertString( wCharPlayerName );
-					m_pChatLog->InsertString( ": " );
-					m_pChatLog->InsertColorChange( s_colorChatPlayerChatText );
-					m_pChatLog->InsertString( wText );
-					m_pChatLog->InsertString("\n");
-				} break;
-			}
+			// TODO(Universal Parties):
+			// switch ( event->GetInt( "type", CTFGCClientSystem::k_eLobbyMsg_UserChat ) )
+			// {
+			// 	default:
+			// 		Assert( !"Unknown chat message type" );
+			// 	case CTFGCClientSystem::k_eLobbyMsg_SystemMsgFromLeader:
+			// 		m_pChatLog->InsertColorChange( s_colorChatDefault );
+			// 		m_pChatLog->InsertString( wText );
+			// 		m_pChatLog->InsertString("\n");
+			// 		break;
+			//
+			// 	case CTFGCClientSystem::k_eLobbyMsg_UserChat:
+			// 	{
+			//
+			// 		wchar_t wCharPlayerName[ 128 ];
+			// 		GetPlayerNameForSteamID( wCharPlayerName, sizeof(wCharPlayerName), steamID );
+			// 		m_pChatLog->InsertColorChange( s_colorChatPlayerChatName );
+			// 		m_pChatLog->InsertString( wCharPlayerName );
+			// 		m_pChatLog->InsertString( ": " );
+			// 		m_pChatLog->InsertColorChange( s_colorChatPlayerChatText );
+			// 		m_pChatLog->InsertString( wText );
+			// 		m_pChatLog->InsertString("\n");
+			// 	} break;
+			// }
 		}
 
 		return;
@@ -429,7 +428,7 @@ void CBaseLobbyPanel::OnCommand( const char *command )
 {
 	if ( FStrEq( command, "invite" ) )
 	{
-		GTFGCClientSystem()->RequestActivateInvite();
+		// TODO(Universal Parties): GTFGCClientSystem()->RequestActivateInvite();
 	}
 	else if ( FStrEq( command, "open_charinfo" ) )
 	{
@@ -447,13 +446,6 @@ bool CBaseLobbyPanel::IsAnyoneBanned( RTime32 &rtimeExpire ) const
 {
 	bool bBanned = false;
 	RTime32 rtimeHighest = 0;
-
-	// This only matters if we're searching for a mannup or ladder game
-	CTFParty *pParty = GTFGCClientSystem()->GetParty();
-	if ( pParty && ( !pParty->GetSearchPlayForBraggingRights() && !IsLadderGroup( pParty->GetMatchGroup() ) ) )
-	{	
-		return false;
-	}
 
 	for( int i=0; i<m_vecPlayers.Count(); ++i )
 	{
@@ -491,10 +483,6 @@ bool CBaseLobbyPanel::IsAnyoneLowPriority( RTime32 &rtimeExpire ) const
 	bool bLowPriority = false;
 	RTime32 rtimeHighest = 0;
 
-	CTFParty *pParty = GTFGCClientSystem()->GetParty();
-	if ( pParty && !pParty->GetSearchPlayForBraggingRights() && !IsLadderGroup( pParty->GetMatchGroup() ) )
-		return false;
-
 	for ( int i = 0; i < m_vecPlayers.Count(); ++i )
 	{
 		if ( m_vecPlayers[i].m_bIsLowPriority )
@@ -525,10 +513,10 @@ void CBaseLobbyPanel::OnCheckButtonChecked( vgui::Panel *panel )
 		return;
 	if ( panel == m_pJoinLateCheckButton )
 	{
-		if ( BIsPartyLeader() && GCClientSystem()->BConnectedtoGC() )
+		if ( GTFPartyClient()->BIsPartyLeader() && GCClientSystem()->BConnectedtoGC() )
 		{
 			tf_matchmaking_join_in_progress.SetValue( m_pJoinLateCheckButton->IsSelected() ? 1 : 0 );
-			GTFGCClientSystem()->SetSearchJoinLate( m_pJoinLateCheckButton->IsSelected() );
+			GTFPartyClient()->MutLocalGroupCriteria().SetLateJoin( m_pJoinLateCheckButton->IsSelected() );
 		}
 		else
 		{
@@ -573,19 +561,15 @@ void CBaseLobbyPanel::WriteStatusControls()
 	EDisabledState eDisabled = DISABLED_NONE;
 
 	if ( GTFGCClientSystem()->BHaveLiveMatch() )
-	{
-		eDisabled = DISABLED_MATCH_IN_PROGRESS;
-	}
+		{ eDisabled = DISABLED_MATCH_IN_PROGRESS; }
 
-	if ( !GCClientSystem()->BConnectedtoGC() || ( GTFGCClientSystem()->GetParty() && GTFGCClientSystem()->GetParty()->BOffline() ) )
-	{
-		eDisabled = DISABLED_NO_GC;
-	}	
+	if ( !GTFGCClientSystem()->BHealthyGCConnection() )
+		{ eDisabled = DISABLED_NO_GC; }
 
 	SetControlVisible( "NoGCGroupBox", eDisabled == DISABLED_NO_GC, true );
 	SetControlVisible( "MatchInProgressGroupBox", eDisabled == DISABLED_MATCH_IN_PROGRESS, true );
 
-	if ( GTFGCClientSystem()->GetWizardStep() == TF_Matchmaking_WizardStep_SEARCHING )
+	if ( GTFPartyClient()->BInQueue() )
 	{
 		m_pSearchActiveGroupBox->SetVisible(  true );
 
@@ -679,21 +663,20 @@ void CBaseLobbyPanel::WriteGameSettingsControls()
 	// Make sure we want to be in matchmaking.  (If we don't, the frame should hide us pretty quickly.)
 	// We might get an event or something right at the transition point occasionally when the UI should
 	// not be visible
-	if ( GTFGCClientSystem()->GetMatchmakingUIState() == eMatchmakingUIState_Inactive )
-	{
-		return;
-	}
+	if ( !GTFGCClientSystem()->BUserInModalMMUI() )
+		{ return; }
 
 	SetMatchmakingModeBackground();
 
-	bool bLeader = BIsPartyLeader();
+	bool bLeader = GTFPartyClient()->BIsPartyLeader();
 	bool bInUIState = BIsPartyInUIState();
+	bool bLateJoinSelected = GTFPartyClient()->GetEffectiveGroupCriteria().GetLateJoin();
 
-	m_pJoinLateCheckButton->ToggleButton::SetSelected( GTFGCClientSystem()->GetSearchJoinLate() ); // !KLUDGE! call base to avoid firing the signal
+	m_pJoinLateCheckButton->ToggleButton::SetSelected( bLateJoinSelected ); // !KLUDGE! call base to avoid firing the signal
 
 	bool bShowLateJoin = ShouldShowLateJoin();
 	m_pJoinLateCheckButton->SetVisible( bShowLateJoin && bLeader );
-	m_pJoinLateValueLabel->SetText( GTFGCClientSystem()->GetSearchJoinLate() ? "#TF_Matchmaking_SearchForAll" : "#TF_Matchmaking_SearchForNew" );
+	m_pJoinLateValueLabel->SetText( bLateJoinSelected ? "#TF_Matchmaking_SearchForAll" : "#TF_Matchmaking_SearchForNew" );
 	m_pJoinLateValueLabel->SetVisible( bShowLateJoin && !bLeader );
 	//m_pJoinLateValueLabel->SetEnabled( bInUIState );
 
@@ -716,8 +699,8 @@ void CBaseLobbyPanel::UpdatePlayerList()
 	m_pChatPlayerList->RemoveAll();
 	m_vecPlayers.RemoveAll();
 
-	bool bLadderGame = GTFGCClientSystem()->GetSearchMode() == TF_Matchmaking_LADDER &&
-					   IsLadderGroup( (EMatchGroup)GTFGCClientSystem()->GetLadderType() );
+	ETFMatchGroup eMatchGroup = GTFPartyClient()->GetEffectiveGroupCriteria().GetMatchGroup();
+	bool bLadderGame = IsLadderGroup( eMatchGroup );
 	const IMatchGroupDescription *pMatchDesc = GetMatchGroupDescription( GetMatchGroup() );
 	EMMPenaltyPool ePenaltyPool = pMatchDesc ? pMatchDesc->m_params.m_ePenaltyPool : eMMPenaltyPool_Invalid;
 
@@ -733,9 +716,9 @@ void CBaseLobbyPanel::UpdatePlayerList()
 		p.m_steamID = steamapicontext->SteamUser()->GetSteamID();
 		p.m_sName = steamapicontext->SteamFriends()->GetPersonaName();
 		p.m_bHasTicket = GTFGCClientSystem()->BLocalPlayerInventoryHasMvmTicket();
-		p.m_bSquadSurplus = GTFGCClientSystem()->GetLocalPlayerSquadSurplus();
+		p.m_bSquadSurplus = GTFPartyClient()->GetLocalPlayerCriteria().GetSquadSurplus();
 #ifdef USE_MVM_TOUR
-		int idxTour = GTFGCClientSystem()->GetSearchMannUpTourIndex();
+		int idxTour = GTFPartyClient()->GetEffectiveGroupCriteria().GetMannUpTourIndex();
 		if ( idxTour < 0 || !GTFGCClientSystem()->BGetLocalPlayerBadgeInfoForTour( idxTour, &p.m_nBadgeLevel, &p.m_nCompletedChallenges ) )
 		{
 			p.m_nBadgeLevel = 0;
@@ -744,7 +727,7 @@ void CBaseLobbyPanel::UpdatePlayerList()
 #endif // USE_MVM_TOUR
 		p.m_pAvatarImage = NULL;
 		p.m_bHasCompetitiveAccess = GTFGCClientSystem()->BHasCompetitiveAccess();
-		CSOTFLadderData *pData = GetLocalPlayerLadderData( (EMatchGroup)GTFGCClientSystem()->GetLadderType() );
+		CSOTFLadderData *pData = GetLocalPlayerLadderData( eMatchGroup );
 		p.m_unLadderRank = ( pData ? pData->Obj().rank() : 1u );
 
 		uint32 unExperienceLevel = 1u;
@@ -804,8 +787,8 @@ void CBaseLobbyPanel::UpdatePlayerList()
 			p.m_bHasTicket = pParty->Obj().members( i ).owns_ticket();
 			p.m_nBadgeLevel = pParty->Obj().members( i ).badge_level();
 			p.m_nCompletedChallenges = pParty->Obj().members( i ).completed_missions();
-			p.m_bSquadSurplus = pParty->Obj().members( i ).squad_surplus();
-			p.m_pAvatarImage = NULL;
+			p.m_bSquadSurplus = pParty->GetMemberMatchCriteria( i ).GetSquadSurplus();
+			p.m_pAvatarImage = nullptr;
 			p.m_bIsBanned = pParty->Obj().members( i ).is_banned();
 			p.m_bHasCompetitiveAccess = pParty->Obj().members( i ).competitive_access();
 			p.m_unLadderRank = pParty->Obj().members( i ).ladder_rank();
@@ -894,7 +877,7 @@ void CBaseLobbyPanel::UpdatePlayerList()
 
 	int iPanelCount = 0;
 	// This only works in 6v6 Comp and 12v12 Casual for now
-	if ( ( GetMatchGroup() == k_nMatchGroup_Ladder_6v6 ) || ( GetMatchGroup() == k_nMatchGroup_Casual_12v12 ) )
+	if ( ( GetMatchGroup() == k_eTFMatchGroup_Ladder_6v6 ) || ( GetMatchGroup() == k_eTFMatchGroup_Casual_12v12 ) )
 	{
 		int nColumn = m_pChatPlayerList->GetColumnIndexByName( 0, "rank" );
 
@@ -909,7 +892,7 @@ void CBaseLobbyPanel::UpdatePlayerList()
 				continue;
 
  			uint32 unLevel = pKeyValues->GetInt( "ladder_rank" );
-			if ( GetMatchGroup() == k_nMatchGroup_Casual_12v12 )
+			if ( GetMatchGroup() == k_eTFMatchGroup_Casual_12v12 )
 			{
 				unLevel = pKeyValues->GetInt( "experience_level" );
 			}
@@ -939,7 +922,7 @@ void CBaseLobbyPanel::UpdatePlayerList()
 				m_vecChatBadges[iPanelCount].m_steamIDOwner = steamID;
 
 				const LevelInfo_t& level = pMatchDesc->m_pProgressionDesc->GetLevelByNumber( unLevel );
-				m_vecChatBadges[iPanelCount].m_pBadgeModel->SetupBadge( pMatchDesc->m_pProgressionDesc, level );
+				m_vecChatBadges[iPanelCount].m_pBadgeModel->SetupBadge( pMatchDesc->m_pProgressionDesc, level, &steamID );
 
 				wchar_t wszOutString[128];
 				char szLocalized[512];
@@ -1036,8 +1019,9 @@ void CBaseLobbyPanel::ApplySchemeSettings( vgui::IScheme *pScheme )
 	m_pChatPlayerList->SetClickable( false );
 	//m_pChatPlayerList->SetClickable( true ); // enable context menu to trade / kick?
 
-	bool bPartyLeader = BIsPartyLeader() && GCClientSystem()->BConnectedtoGC();
 
+#if 0 // TODO(Universal Parties): Is this totally dead code?
+	bool bPartyLeader = GTFPartyClient()->BIsPartyLeader() && GCClientSystem()->BConnectedtoGC();
 	if ( bPartyLeader )
 	{
 		extern bool TF_IsHolidayActive( int eHoliday );
@@ -1049,11 +1033,9 @@ void CBaseLobbyPanel::ApplySchemeSettings( vgui::IScheme *pScheme )
 			bForcedOnce = true;
 		}
 	}
+#endif
 
-	if ( bPartyLeader )
-	{
-		GTFGCClientSystem()->SetSearchJoinLate( tf_matchmaking_join_in_progress.GetBool() );
-	}
+	GTFPartyClient()->MutLocalGroupCriteria().SetLateJoin( tf_matchmaking_join_in_progress.GetBool() );
 }
 
 void CBaseLobbyPanel::PerformLayout()
@@ -1075,33 +1057,5 @@ void CBaseLobbyPanel::OnItemContextMenu( vgui::Panel* panel )
 		return;
 	}
 }
-
-
-//-----------------------------------------------------------------------------
-// Command to launch the lobby UI, connecting to a particular lobby
-//-----------------------------------------------------------------------------
-static void CL_ConnectLobby( const CCommand &args )
-{
-	if ( args.ArgC() < 2 )
-	{
-		Warning( "connect_lobby missing LobbyID argument\n" );
-		return;
-	}
-	
-	uint64 ulSteamID = 0;
-	sscanf( args.Arg( 1 ), "%lld", &ulSteamID );
-	CSteamID steamIDLobby( ulSteamID );
-	if ( !steamIDLobby.IsValid() || !steamIDLobby.IsLobby() )
-	{
-		Warning( "connect_lobby passed invalid LobbyID '%s'\n", args.Arg( 1 ) );
-		return;
-	}
-
-	GTFGCClientSystem()->AcceptFriendInviteToJoinLobby( steamIDLobby );
-}
-
-void OnSteamGameLobbyJoinRequested( GameLobbyJoinRequested_t *pInfo );
-
-static ConCommand connect_lobby_command( "connect_lobby", &CL_ConnectLobby, "<64-bit lobby ID> Accept friend invite, connecting to specified Steam lobby and joining the corresponding search party" );
 
 #endif // #ifdef ENABLE_GC_MATCHMAKING

@@ -50,22 +50,20 @@ public:
 	virtual void OnPostQuery( SpatialPartitionListMask_t listMask );
 
 	void AddEntity( CBaseEntity *pEntity );
-
+	
 	~CDirtySpatialPartitionEntityList();
 	void LockPartitionForRead()
 	{
-		int nThreadId = g_nThreadID;
-		if (  m_nReadLockCount[nThreadId] == 0 )
+		if ( m_readLockCount == 0 )
 		{
 			m_partitionMutex.LockForRead();
 		}
-		m_nReadLockCount[nThreadId]++;
+		m_readLockCount++;
 	}
 	void UnlockPartitionForRead()
 	{
-		int nThreadId = g_nThreadID;
-		m_nReadLockCount[nThreadId]--;
-		if ( m_nReadLockCount[nThreadId] == 0 )
+		m_readLockCount--;
+		if ( m_readLockCount == 0 )
 		{
 			m_partitionMutex.UnlockRead();
 		}
@@ -73,12 +71,10 @@ public:
 
 
 private:
-	int m_nReadLockCount[MAX_THREADS_SUPPORTED];
-
 	CTSListWithFreeList<CBaseHandle> m_DirtyEntities;
 	CThreadSpinRWLock	 m_partitionMutex;
-	uint32			 m_partitionWriteId;
-	CTHREADLOCALINT	 m_readLockCount;
+	ThreadId_t			 m_partitionWriteId;
+	CThreadLocalInt<>	 m_readLockCount;
 };
 
 
@@ -110,7 +106,7 @@ void UpdateDirtySpatialPartitionEntities()
 CDirtySpatialPartitionEntityList::CDirtySpatialPartitionEntityList( char const *name ) : CAutoGameSystem( name )
 {
 	m_DirtyEntities.Purge();
-	memset( m_nReadLockCount, 0, sizeof( m_nReadLockCount ) );
+	m_readLockCount = 0;
 }
 
 //-----------------------------------------------------------------------------
@@ -126,13 +122,13 @@ CDirtySpatialPartitionEntityList::~CDirtySpatialPartitionEntityList()
 //-----------------------------------------------------------------------------
 bool CDirtySpatialPartitionEntityList::Init()
 {
-	partition->InstallQueryCallback( this );
+	::partition->InstallQueryCallback( this );
 	return true;
 }
 
 void CDirtySpatialPartitionEntityList::Shutdown()
 {
-	partition->RemoveQueryCallback( this );
+	::partition->RemoveQueryCallback( this );
 }
 
 
@@ -168,9 +164,7 @@ void CDirtySpatialPartitionEntityList::OnPreQuery( SpatialPartitionListMask_t li
 	if ( !( listMask & validMask ) )
 		return;
 
-	int nThreadID = g_nThreadID;
-
-	if ( m_partitionWriteId != 0 && m_partitionWriteId == nThreadID + 1 )
+	if ( m_partitionWriteId != 0 && m_partitionWriteId == ThreadGetCurrentId() )
 		return;
 
 #ifdef CLIENT_DLL
@@ -186,11 +180,11 @@ void CDirtySpatialPartitionEntityList::OnPreQuery( SpatialPartitionListMask_t li
 	// or became dirty due to some other thread or callback. Updating them may cause corruption further up the
 	// stack (e.g. partition iterator).  Ignoring the state change should be safe since it happened after the 
 	// trace was requested or was unable to be resolved in a previous attempt (still dirty).
-	if ( m_DirtyEntities.Count() && !m_nReadLockCount[nThreadID] )
+	if ( m_DirtyEntities.Count() && !m_readLockCount )
 	{
 		CUtlVector< CBaseHandle > vecStillDirty;
 		m_partitionMutex.LockForWrite();
-		m_partitionWriteId = nThreadID + 1;
+		m_partitionWriteId = ThreadGetCurrentId();
 		CTSListWithFreeList<CBaseHandle>::Node_t *pCurrent, *pNext;
 		while ( ( pCurrent = m_DirtyEntities.Detach() ) != NULL )
 		{
@@ -274,6 +268,7 @@ void CDirtySpatialPartitionEntityList::OnPostQuery( SpatialPartitionListMask_t l
 		DEFINE_FIELD( m_nSurroundType, FIELD_CHARACTER ),
 		DEFINE_FIELD( m_flRadius, FIELD_FLOAT ),
 		DEFINE_FIELD( m_triggerBloat, FIELD_CHARACTER ),
+		DEFINE_FIELD( m_bUniformTriggerBloat, FIELD_BOOLEAN ),
 		DEFINE_FIELD( m_vecSpecifiedSurroundingMinsPreScaled, FIELD_VECTOR ),
 		DEFINE_FIELD( m_vecSpecifiedSurroundingMaxsPreScaled, FIELD_VECTOR ),
 		DEFINE_FIELD( m_vecSpecifiedSurroundingMins, FIELD_VECTOR ),
@@ -299,6 +294,7 @@ BEGIN_PREDICTION_DATA_NO_BASE( CCollisionProperty )
 	DEFINE_PRED_FIELD( m_nSolidType, FIELD_CHARACTER, FTYPEDESC_INSENDTABLE ),
 	DEFINE_PRED_FIELD( m_usSolidFlags, FIELD_SHORT, FTYPEDESC_INSENDTABLE ),
 	DEFINE_PRED_FIELD( m_triggerBloat, FIELD_CHARACTER, FTYPEDESC_INSENDTABLE ),
+	DEFINE_PRED_FIELD( m_bUniformTriggerBloat, FIELD_BOOLEAN, FTYPEDESC_INSENDTABLE ),
 
 END_PREDICTION_DATA()
 
@@ -379,6 +375,7 @@ BEGIN_NETWORK_TABLE_NOBASE( CCollisionProperty, DT_CollisionProperty )
 	RecvPropInt( RECVINFO( m_usSolidFlags ),	0, RecvProxy_SolidFlags ),
 	RecvPropInt( RECVINFO(m_nSurroundType), 0, RecvProxy_IntDirtySurround ),
 	RecvPropInt( RECVINFO(m_triggerBloat), 0, RecvProxy_IntDirtySurround ), 
+	RecvPropBool( RECVINFO(m_bUniformTriggerBloat) ),
 	RecvPropVector( RECVINFO(m_vecSpecifiedSurroundingMinsPreScaled), 0, RecvProxy_VectorDirtySurround ),
 	RecvPropVector( RECVINFO(m_vecSpecifiedSurroundingMaxsPreScaled), 0, RecvProxy_VectorDirtySurround ),
 	RecvPropVector( RECVINFO(m_vecSpecifiedSurroundingMins), 0, RecvProxy_VectorDirtySurround ),
@@ -392,6 +389,7 @@ BEGIN_NETWORK_TABLE_NOBASE( CCollisionProperty, DT_CollisionProperty )
 	SendPropInt( SENDINFO( m_usSolidFlags ),	FSOLID_MAX_BITS, SPROP_UNSIGNED, SendProxy_SolidFlags ),
 	SendPropInt( SENDINFO( m_nSurroundType ), SURROUNDING_TYPE_BIT_COUNT, SPROP_UNSIGNED ),
 	SendPropInt( SENDINFO(m_triggerBloat), 0, SPROP_UNSIGNED),
+	SendPropBool( SENDINFO(m_bUniformTriggerBloat) ),
 	SendPropVector( SENDINFO(m_vecSpecifiedSurroundingMinsPreScaled), 0, SPROP_NOSCALE),
 	SendPropVector( SENDINFO(m_vecSpecifiedSurroundingMaxsPreScaled), 0, SPROP_NOSCALE),
 	SendPropVector( SENDINFO(m_vecSpecifiedSurroundingMins), 0, SPROP_NOSCALE),
@@ -428,6 +426,7 @@ void CCollisionProperty::Init( CBaseEntity *pEntity )
 	m_vecMaxs.GetForModify().Init();
 	m_flRadius = 0.0f;
 	m_triggerBloat = 0;
+	m_bUniformTriggerBloat = false;
 	m_usSolidFlags = 0;
 	m_nSolidType = SOLID_NONE;
 
@@ -755,19 +754,33 @@ void CCollisionProperty::WorldSpaceTriggerBounds( Vector *pVecWorldMins, Vector 
 	if ( ( GetSolidFlags() & FSOLID_USE_TRIGGER_BOUNDS ) == 0 )
 		return;
 
-	// Don't bloat below, we don't want to trigger it with our heads
-	pVecWorldMins->x -= m_triggerBloat;
-	pVecWorldMins->y -= m_triggerBloat;
+	if ( m_bUniformTriggerBloat )
+	{
+		pVecWorldMins->x -= m_triggerBloat;
+		pVecWorldMins->y -= m_triggerBloat;
+		pVecWorldMins->z -= m_triggerBloat;
 
-	pVecWorldMaxs->x += m_triggerBloat;
-	pVecWorldMaxs->y += m_triggerBloat;
-	pVecWorldMaxs->z += (float)m_triggerBloat * 0.5f;
+		pVecWorldMaxs->x += m_triggerBloat;
+		pVecWorldMaxs->y += m_triggerBloat;
+		pVecWorldMaxs->z += m_triggerBloat;
+	}
+	else
+	{
+		// Don't bloat below, we don't want to trigger it with our heads
+		pVecWorldMins->x -= m_triggerBloat;
+		pVecWorldMins->y -= m_triggerBloat;
+
+		pVecWorldMaxs->x += m_triggerBloat;
+		pVecWorldMaxs->y += m_triggerBloat;
+		pVecWorldMaxs->z += (float)m_triggerBloat * 0.5f;
+	}
 }
 
-void CCollisionProperty::UseTriggerBounds( bool bEnable, float flBloat )
+void CCollisionProperty::UseTriggerBounds( bool bEnable, float flBloat, bool bUniformBloat )
 {
 	Assert( flBloat <= 127.0f );
 	m_triggerBloat = (char )flBloat;
+	m_bUniformTriggerBloat = bUniformBloat;
 	if ( bEnable )
 	{
 		AddSolidFlags( FSOLID_USE_TRIGGER_BOUNDS );
@@ -1295,14 +1308,14 @@ void CCollisionProperty::CreatePartitionHandle()
 {
 	// Put the entity into the spatial partition.
 	Assert( m_Partition == PARTITION_INVALID_HANDLE );
-	m_Partition = partition->CreateHandle( GetEntityHandle() );
+	m_Partition = ::partition->CreateHandle( GetEntityHandle() );
 }
 
 void CCollisionProperty::DestroyPartitionHandle()
 {
 	if ( m_Partition != PARTITION_INVALID_HANDLE )
 	{
-		partition->DestroyHandle( m_Partition );
+		::partition->DestroyHandle( m_Partition );
 		m_Partition = PARTITION_INVALID_HANDLE;
 	}
 }
@@ -1320,7 +1333,7 @@ void CCollisionProperty::UpdateServerPartitionMask( )
 
 	// Remove it from whatever lists it may be in at the moment
 	// We'll re-add it below if we need to.
-	partition->Remove( handle );
+	::partition->Remove( handle );
 
 	// Don't bother with deleted things
 	if ( !m_pOuter->edict() )
@@ -1334,7 +1347,7 @@ void CCollisionProperty::UpdateServerPartitionMask( )
 	bool bIsSolid = IsSolid() || IsSolidFlagSet(FSOLID_TRIGGER);
 	if ( bIsSolid || m_pOuter->IsEFlagSet(EFL_USE_PARTITION_WHEN_NOT_SOLID) )
 	{
-		partition->Insert( PARTITION_ENGINE_NON_STATIC_EDICTS, handle );
+		::partition->Insert( PARTITION_ENGINE_NON_STATIC_EDICTS, handle );
 	}
 
 	if ( !bIsSolid )
@@ -1352,7 +1365,7 @@ void CCollisionProperty::UpdateServerPartitionMask( )
 		mask |=	PARTITION_ENGINE_TRIGGER_EDICTS;
 	}
 	Assert( mask != 0 );
-	partition->Insert( mask, handle );
+	::partition->Insert( mask, handle );
 #endif
 }
 
@@ -1415,11 +1428,11 @@ void CCollisionProperty::UpdatePartition( )
 				WorldSpaceSurroundingBounds( &vecSurroundMins, &vecSurroundMaxs );
 				vecSurroundMins -= Vector( 1, 1, 1 );
 				vecSurroundMaxs += Vector( 1, 1, 1 );
-				partition->ElementMoved( GetPartitionHandle(), vecSurroundMins,  vecSurroundMaxs );
+				::partition->ElementMoved( GetPartitionHandle(), vecSurroundMins,  vecSurroundMaxs );
 			}
 			else
 			{
-				partition->ElementMoved( GetPartitionHandle(), GetCollisionOrigin(),  GetCollisionOrigin() );
+				::partition->ElementMoved( GetPartitionHandle(), GetCollisionOrigin(),  GetCollisionOrigin() );
 			}
 		}
 	}

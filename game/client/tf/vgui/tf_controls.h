@@ -15,6 +15,7 @@
 #include <vgui/KeyCode.h>
 #include <KeyValues.h>
 #include <vgui/IVGui.h>
+#include <vgui_controls/Panel.h>
 #include <vgui_controls/ScrollBar.h>
 #include <vgui_controls/EditablePanel.h>
 #include <vgui_controls/Button.h>
@@ -36,6 +37,31 @@
 #include <vgui_controls/CheckButton.h>
 
 wchar_t* LocalizeNumberWithToken( const char* pszLocToken, int nValue );
+wchar_t* LocalizeNumberWithToken( const char* pszLocToken, int nValue1, int nValue2 );
+void GetPlayerNameForSteamID( wchar_t *wCharPlayerName, int nBufSizeBytes, const CSteamID &steamID );
+bool BGeneralPaintSetup( const Color& color );
+void DrawFilledColoredCircle( float flXPos, float flYPos, float flRadius, const Color& color );
+void DrawFilledColoredCircleSegment( float flXPos, float flYPos, float flRadiusOuter, float flRadiusInner, const Color& color, float flStartAngleOuter, float flEndAngleOuter, bool bCW = true );
+void DrawFilledColoredCircleSegment( float flXPos, float flYPos, float flRadiusOuter, float flRadiusInner, const Color& color, float flStartAngleOuter, float flEndAngleOuter, float flStartAngleInner, float flEndAngleInner, bool bCW = true );
+void DrawColoredCircle( float flXPos, float flYPos, float flRadius, const Color& color );
+void BrigthenColor( Color& color, int nBrigthenAmount );
+void CreateSwoop( int nX, int nY, int nWide, int nTall, float flDelay, bool bDown );
+
+enum tooltippos_t
+{
+	TTP_ABOVE = 0,
+	TTP_RIGHT_CENTERED,
+	TTP_RIGHT,
+	TTP_BELOW,
+	TTP_LEFT,
+	TTP_LEFT_CENTERED,
+
+	MAX_POSITIONS
+};
+
+void PositionTooltip( const tooltippos_t ePreferredTooltipPosition, 
+					  vgui::Panel* pMouseOverPanel,
+					  vgui::Panel *pToolTipPanel );
 
 //-----------------------------------------------------------------------------
 // Purpose: Xbox-specific panel that displays button icons text labels
@@ -127,11 +153,17 @@ public:
 	}
 	virtual void PerformLayout();
 	virtual void PositionWindow( vgui::Panel *pTipPanel );
+	virtual void ShowTooltip( vgui::Panel* pCurrentPanel ) OVERRIDE;
 	virtual void SetText(const char *text)
 	{
 		_isDirty = true;
 		BaseClass::SetText( text );
 	}
+	void SetMaxWide( int nMaxWide ) { m_nMaxWide = YRES( nMaxWide ); }
+
+private:
+
+	int m_nMaxWide = 0;
 };
 
 
@@ -194,6 +226,7 @@ public:
 	MESSAGE_FUNC( OnScrollBarSliderMoved, "ScrollBarSliderMoved" );
 	virtual void OnMouseWheeled( int delta ) OVERRIDE;	// respond to mouse wheel events
 	void ResetScrollAmount() { m_nLastScrollValue = 0; m_pScrollBar->SetValue(0); }
+	int GetScrollAmount() const { return m_nLastScrollValue; }
 protected:
 
 	void ShiftChildren( int nDistance );
@@ -280,20 +313,38 @@ class CExpandablePanel : public vgui::EditablePanel
 {
 	DECLARE_CLASS_SIMPLE( CExpandablePanel, vgui::EditablePanel );
 public:
+
+	enum EExpandDir_t
+	{
+		EXPAND_DOWN,
+		EXPAND_UP,
+		EXPAND_LEFT,
+		EXPAND_RIGHT
+	};
+
 	CExpandablePanel( Panel* pParent, const char* pszName );
 
+	virtual void ApplySettings( KeyValues *inResourceData ) OVERRIDE;
 	virtual void OnCommand( const char *command ) OVERRIDE;
 	virtual void OnThink() OVERRIDE;
 
 	virtual void OnToggleCollapse( bool bIsExpanded ) {}
 
-	void SetCollapsed( bool bCollapsed );
+	void SetCollapsed( bool bCollapsed, bool bInstant = false );
 	void ToggleCollapse();
 	bool BIsExpanded() const { return m_bExpanded; }
-	void SetExpandedHeight( int nNewHeight );
+	void SetExpandedHeight( int nNewHeight ) { m_nExpandedHeight = nNewHeight; }
+	void SetCollapsedHeight( int nNewHeight ) { m_nCollapsedHeight = nNewHeight; }
 	float GetPercentAnimated() const;
+	float GetPercentExpanded() const;
+
+	int GetExpandedHeight() const { return m_nExpandedHeight; }
+	int GetCollapsedHeight() const { return m_nCollapsedHeight; }
 
 protected:
+
+	int GetDimension();
+	void SetDimension( int nNewValue );
 
 	CPanelAnimationVarAliasType( float, m_flResizeTime, "resize_time", "0.4", "float" );
 	CPanelAnimationVarAliasType( int, m_nCollapsedHeight, "collapsed_height", "17", "proportional_int" );
@@ -301,8 +352,148 @@ protected:
 
 private:
 
+	bool bInvalidateParentOnResize = true;
+	EExpandDir_t m_eExpandDir = EXPAND_DOWN;
 	bool m_bExpanded;
 	float m_flAnimEndTime;
 };
 
+//-----------------------------------------------------------------------------
+// Purpose: A panel that can dragged and zoomed
+//-----------------------------------------------------------------------------
+class CDraggableScrollingPanel : public vgui::EditablePanel
+{
+	DECLARE_CLASS_SIMPLE( CDraggableScrollingPanel, vgui::EditablePanel );
+public:
+
+	enum EPinPosition
+	{
+		PIN_TOP_LEFT = 0,
+		PIN_TOP_RIGHT,
+		PIN_BOTTOM_LEFT,
+		PIN_BOTTOM_RIGHT,
+		PIN_CENTER
+	};
+
+	// Child panel positions as a function of our width and height so that
+	// when we scale the background, we can reposition these panels
+	struct ChildPositionInfo_t
+	{
+		Panel* m_pChild;
+		CUtlString m_strName;
+		float m_flX;
+		float m_flY;
+		float m_flWide;
+		float m_flTall;
+		bool m_bScaleWithZoom;
+		bool m_bMoveWithDrag;
+		bool m_bWaitingForSettings;
+		EPinPosition m_ePinPosition;
+	};
+
+	CDraggableScrollingPanel( Panel *pParent, const char *pszPanelname );
+
+	virtual void ApplySettings( KeyValues *inResourceData ) OVERRIDE;
+	virtual void OnChildRemoved( Panel* pChild ) OVERRIDE;
+	virtual void OnTick() OVERRIDE;
+
+	virtual void OnMousePressed( vgui::MouseCode code ) OVERRIDE;
+	virtual void OnMouseReleased( vgui::MouseCode code ) OVERRIDE;
+	virtual void OnMouseWheeled( int delta ) OVERRIDE;
+
+	MESSAGE_FUNC_INT_INT( InternalCursorMoved, "CursorMoved", xpos, ypos );
+	MESSAGE_FUNC_PARAMS( OnSliderMoved, "SliderMoved", pParams );
+
+	void AddOrUpdateChild( Panel* pChild, bool bScaleWithZoom, bool bMoveWithDrag, EPinPosition ePinPosition );
+	void SetZoomAmount( float flZoomAmount, int nXZoomFocus, int nYZoomFocus );
+	float GetZoomAmount() const { return m_flZoom; }
+
+	const ChildPositionInfo_t* GetChildPositionInfo( const Panel* pChildPanel ) const;
+
+private:
+
+	bool BCheckForPendingChildren();
+	virtual void OnChildSettingsApplied( KeyValues *pInResourceData, Panel *pChild ) OVERRIDE;
+	void UpdateChildren();
+	void CaptureChildSettings( Panel* pChild );
+
+	CUtlVector< ChildPositionInfo_t > m_vecChildOriginalData;
+	CUtlVector< ChildPositionInfo_t > m_vecPendingChildren;
+
+	float m_flMinZoom;
+	float m_flMaxZoom;
+	float m_flZoom;
+	float m_flMouseWheelZoomRate;
+
+	int m_iOriginalWide;
+	int m_iOriginalTall;
+	int m_iDragStartX;
+	int m_iDragStartY;
+	int m_iDragTotalDistance;
+	bool m_bDragging;
+};
+
+class CTFLogoPanel : public vgui::Panel
+{
+	DECLARE_CLASS_SIMPLE( CTFLogoPanel, vgui::Panel );
+public:
+	CTFLogoPanel( Panel *pParent, const char *pszPanelname );
+
+	virtual void Paint() OVERRIDE;
+
+protected:
+	CPanelAnimationVarAliasType( float, m_flRadius, "radius", "5", "float" );
+	CPanelAnimationVarAliasType( float, m_flVelocity, "velocity", "0", "float" );
+
+private:
+	void PaintTFLogo( float flAngle, const Color& color ) const;
+
+	float m_flOffsetAngle = 0.f;
+};
+
+void CreateScrollingIndicator( int nXPos,
+							   int nYPos,
+							   const wchar* pwszText,
+							   const char* pszSoundName,
+							   float flDelay,
+							   int nXTravel,
+							   int nYTravel, 
+							   bool bPositive );
+
+// Helper to create a string that can blame users for some action.
+// Example: They don't have a Widget.
+//			"User1 doesn't have a Widget"
+//			"User1 and User2 don't have a Widget"
+//			"User1, User2, and User3 don't have a Widget"
+struct BlameNames_t
+{
+public:
+	BlameNames_t( const CUtlVector< CSteamID >& vecBlameSteamIDs, const char* pszReason, const char* pszSingularVerb, const char* pszPluralVerb )
+	{
+		wchar_t wszMembers[ 512 ];
+
+		FOR_EACH_VEC( vecBlameSteamIDs, i )
+		{
+			if ( i == 0 )
+			{
+				g_pVGuiLocalize->ConstructString_safe( wszMembers, L"%s1", 1, CStrAutoEncode( SteamFriends()->GetFriendPersonaName( vecBlameSteamIDs[ i ] ) ).ToWString() );
+			}
+			else if ( i == vecBlameSteamIDs.Count() - 1 )
+			{
+				g_pVGuiLocalize->ConstructString_safe( wszMembers, g_pVGuiLocalize->Find( "#TF_PartyMemberState_LastTwo" ), 2, CStrAutoEncode( wszMembers ).ToWString(), CStrAutoEncode( SteamFriends()->GetFriendPersonaName( vecBlameSteamIDs[ i ] ) ).ToWString() );
+			}
+			else
+			{
+				g_pVGuiLocalize->ConstructString_safe( wszMembers, L"%s1, %s2", 2, CStrAutoEncode( wszMembers ).ToWString(), CStrAutoEncode( SteamFriends()->GetFriendPersonaName( vecBlameSteamIDs[ i ] ) ).ToWString() );
+			}
+		}
+
+		g_pVGuiLocalize->ConstructString_safe( wszMembers, vecBlameSteamIDs.Count() == 1 ? g_pVGuiLocalize->Find( pszSingularVerb ) : g_pVGuiLocalize->Find( pszPluralVerb ) , 1, CStrAutoEncode( wszMembers ).ToWString() );
+		g_pVGuiLocalize->ConstructString_safe( m_wszBuff, g_pVGuiLocalize->Find( pszReason ), 1, wszMembers );
+	}
+
+	const wchar_t* Get() const { return m_wszBuff; }
+private:
+	wchar_t m_wszBuff[ 1024 ];
+};
 #endif // TF_CONTROLS_H

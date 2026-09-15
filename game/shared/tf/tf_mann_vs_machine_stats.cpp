@@ -92,7 +92,7 @@ END_NETWORK_TABLE()
 //-----------------------------------------------------------------------------
 // Purpose: Server message that tells that a mann vs machine event occurred
 //-----------------------------------------------------------------------------
-static void __MsgFunc_MVMStatsReset( bf_read &msg )
+USER_MESSAGE( MVMStatsReset )
 {
 	if ( g_pMVMStats )
 	{
@@ -103,7 +103,7 @@ static void __MsgFunc_MVMStatsReset( bf_read &msg )
 //-----------------------------------------------------------------------------
 // Purpose: Server message that tells that a mann vs machine event occurred
 //-----------------------------------------------------------------------------
-static void __MsgFunc_MVMPlayerEvent( bf_read &msg )
+USER_MESSAGE( MVMPlayerEvent )
 {
 	// Deprecated.
 	// Dont delete this or its HOOK_MESSAGE below or else demos will break
@@ -112,7 +112,7 @@ static void __MsgFunc_MVMPlayerEvent( bf_read &msg )
 //-----------------------------------------------------------------------------
 // Purpose: Reports Player Spending
 //-----------------------------------------------------------------------------
-static void  __MsgFunc_MVMLocalPlayerWaveSpendingValue( bf_read &msg )
+USER_MESSAGE( MVMLocalPlayerWaveSpendingValue )
 {
 	if ( !g_pMVMStats )
 		return;
@@ -162,7 +162,7 @@ static void  __MsgFunc_MVMLocalPlayerWaveSpendingValue( bf_read &msg )
 //-----------------------------------------------------------------------------
 // Purpose: Server message that tells that a mann vs machine event occurred
 //-----------------------------------------------------------------------------
-static void __MsgFunc_MVMResetPlayerStats( bf_read &msg )
+USER_MESSAGE( MVMResetPlayerStats )
 {
 	if ( !g_pMVMStats )
 		return;
@@ -179,7 +179,7 @@ static void __MsgFunc_MVMResetPlayerStats( bf_read &msg )
 //-----------------------------------------------------------------------------
 // Purpose: Handling a Server message that notifies that a player has upgraded in MvM
 //-----------------------------------------------------------------------------
-static void __MsgFunc_MVMPlayerUpgradedEvent( bf_read &msg )
+USER_MESSAGE( MVMPlayerUpgradedEvent )
 {
 	//if ( !g_pMVMStats )
 	//	return;
@@ -211,7 +211,7 @@ static void __MsgFunc_MVMPlayerUpgradedEvent( bf_read &msg )
 
 //-----------------------------------------------------------------------------
 // Message for the Local Player that it should clear its upgrade vector
-static void __MsgFunc_MVMLocalPlayerUpgradesClear( bf_read &msg )
+USER_MESSAGE( MVMLocalPlayerUpgradesClear )
 {
 	if ( !g_pMVMStats )
 		return;
@@ -224,7 +224,7 @@ static void __MsgFunc_MVMLocalPlayerUpgradesClear( bf_read &msg )
 
 //-----------------------------------------------------------------------------
 // Message for the local player about an upgrade that it owns
-static void __MsgFunc_MVMLocalPlayerUpgradesValue( bf_read &msg )
+USER_MESSAGE( MVMLocalPlayerUpgradesValue )
 {
 	if ( !g_pMVMStats )
 		return;
@@ -241,7 +241,7 @@ static void __MsgFunc_MVMLocalPlayerUpgradesValue( bf_read &msg )
 
 //-----------------------------------------------------------------------------
 // Message for the player that it should clear spending stats history for target wave
-static void __MsgFunc_MVMResetPlayerWaveSpendingStats( bf_read &msg )
+USER_MESSAGE( MVMResetPlayerWaveSpendingStats )
 {
 	if ( !g_pMVMStats )
 		return;
@@ -256,7 +256,7 @@ static void __MsgFunc_MVMResetPlayerWaveSpendingStats( bf_read &msg )
 //-----------------------------------------------------------------------------
 // Purpose: Server message that tells that the current wave has ended and a new one has begun (including resets)
 //-----------------------------------------------------------------------------
-static void __MsgFunc_MVMWaveChange( bf_read &msg )
+USER_MESSAGE( MVMWaveChange )
 {
 	if ( !g_pMVMStats )
 		return;
@@ -278,7 +278,7 @@ static void __MsgFunc_MVMWaveChange( bf_read &msg )
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-static void __MsgFunc_MVMResetPlayerUpgradeSpending( bf_read &msg )
+USER_MESSAGE( MVMResetPlayerUpgradeSpending )
 {
 	if ( !g_pMVMStats )
 		return;
@@ -545,7 +545,12 @@ void CMannVsMachineStats::RoundEvent_WaveEnd( bool bSuccess )
 	for( int i=0; i<playerVector.Count(); ++i )
 	{
 		CTFPlayer *player = playerVector[i];
-		CMannVsMachinePlayerStats stats = m_playerStats[player->entindex()];
+		
+		int nPlayerEntIdx = player->entindex();
+		if ( !IsIndexIntoPlayerArrayValid(nPlayerEntIdx) )
+			continue;
+		
+		CMannVsMachinePlayerStats stats = m_playerStats[ nPlayerEntIdx ];
 
 		CSingleUserRecipientFilter filter( player );
 		filter.MakeReliable();
@@ -635,8 +640,12 @@ void CMannVsMachineStats::PlayerEvent_Died( CTFPlayer *pTFPlayer )
 {
 	if ( pTFPlayer->IsBot() || !TFGameRules() || !TFGameRules()->IsPVEModeActive() )
 		return;
+		
+	int nPlayerEntIdx = pTFPlayer->entindex();
+	if ( !IsIndexIntoPlayerArrayValid(nPlayerEntIdx) )
+		return;
 
-	m_playerStats[pTFPlayer->entindex()].nDeaths += 1;
+	m_playerStats[nPlayerEntIdx].nDeaths += 1;
 }
 
 //-----------------------------------------------------------------------------
@@ -707,8 +716,12 @@ void CMannVsMachineStats::PlayerEvent_DealtDamageToBots( CTFPlayer *pTFPlayer, i
 {
 	if ( pTFPlayer->IsBot() || !TFGameRules() || !TFGameRules()->IsPVEModeActive() )
 		return;
+		
+	int nPlayerEntIdx = pTFPlayer->entindex();
+	if ( !IsIndexIntoPlayerArrayValid(nPlayerEntIdx) )
+		return;
 
-	m_playerStats[pTFPlayer->entindex()].nBotDamage += damage;
+	m_playerStats[nPlayerEntIdx].nBotDamage += damage;
 }
 
 //-----------------------------------------------------------------------------
@@ -719,7 +732,11 @@ void CMannVsMachineStats::PlayerEvent_DealtDamageToGiants( CTFPlayer *pTFPlayer,
 	if ( pTFPlayer->IsBot() || !TFGameRules() || !TFGameRules()->IsPVEModeActive() )
 		return;
 
-	m_playerStats[pTFPlayer->entindex()].nGiantDamage += damage;
+	int nPlayerEntIdx = pTFPlayer->entindex();
+	if ( !IsIndexIntoPlayerArrayValid(nPlayerEntIdx) )
+		return;
+
+	m_playerStats[nPlayerEntIdx].nGiantDamage += damage;
 }
 
 //-----------------------------------------------------------------------------
@@ -1328,7 +1345,7 @@ void CMannVsMachineStats::SW_ReportClientWaveSummary( uint16 waveID, CMannVsMach
 	// Make a V2 if this data is wanted
 	// Old Table
 	//-----------------------------------------------------------------------------   
-	// OGS TF2ClientMvMWaveSummary: MvM mode – Player wave summary information   
+	// OGS TF2ClientMvMWaveSummary: MvM mode ï¿½ Player wave summary information   
 	//-----------------------------------------------------------------------------   
 	//START_TABLE( k_ESchemaCatalogOGS, TF2ClientMvMWaveSummary, TABLE_PROP_NORMAL )   
 	//INT_FIELD( nID, ID, int32 )                                           // Auto-increment fake key
@@ -1572,24 +1589,6 @@ void CMannVsMachineStats::SW_ReportWaveSummary ( int waveIdx, bool bIsSuccess )
 // End CMannVsMachineStats
 //-----------------------------------------------------------------------------
 
-void MannVsMachineStats_Init()
-{
-#ifdef GAME_DLL
-	CBaseEntity::Create( "tf_mann_vs_machine_stats", vec3_origin, vec3_angle );
-#else
-	HOOK_MESSAGE( MVMPlayerEvent );
-	HOOK_MESSAGE( MVMResetPlayerStats );
-	HOOK_MESSAGE( MVMStatsReset );
-	HOOK_MESSAGE( MVMPlayerUpgradedEvent );
-	HOOK_MESSAGE( MVMLocalPlayerUpgradesClear );
-	HOOK_MESSAGE( MVMLocalPlayerUpgradesValue );
-	HOOK_MESSAGE( MVMResetPlayerWaveSpendingStats );
-	HOOK_MESSAGE( MVMLocalPlayerWaveSpendingValue );
-	HOOK_MESSAGE( MVMWaveChange );
-	HOOK_MESSAGE( MVMResetPlayerUpgradeSpending );
-#endif
-}
-
 //-----------------------------------------------------------------------------
 // Helper Functions
 //-----------------------------------------------------------------------------
@@ -1620,6 +1619,11 @@ CMannVsMachineStats *MannVsMachineStats_GetInstance()
 
 
 #ifdef GAME_DLL
+
+void MannVsMachineStats_Init()
+{
+	CBaseEntity::Create( "tf_mann_vs_machine_stats", vec3_origin, vec3_angle );
+}
 
 void MannVsMachineStats_ResetPlayerEvents( CTFPlayer *pTFPlayer )
 {
@@ -1686,4 +1690,3 @@ void MannVsMachineStats_SetPopulationFile( const char * pPopulationFile)
 }
 
 #endif // GAME_DLL
-

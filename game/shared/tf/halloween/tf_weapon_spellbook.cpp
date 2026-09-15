@@ -23,6 +23,8 @@
 	#include "gc_clientsystem.h"
 	#include "tf_logic_halloween_2014.h"
 	#include "tf_hud_itemeffectmeter.h"
+	#include "dlight.h"
+	#include "iefx.h"
 	extern void AddSubKeyNamed( KeyValues *pKeys, const char *pszName );
 // Server specific.
 #else
@@ -46,6 +48,7 @@
 	#include "halloween/merasmus/merasmus.h"
 	#include "tf_weapon_grenade_pipebomb.h"
 	#include "tf_obj_dispenser.h"
+	#include "tf_weapon_flamethrower.h"
 #endif
 
 ConVar tf_test_spellindex( "tf_test_spellindex", "-1", FCVAR_CHEAT | FCVAR_REPLICATED, "Set to index to always get a specific spell" );
@@ -511,8 +514,6 @@ void CEquipSpellbookNotification::Accept()
 	TFInventoryManager()->EquipItemInLoadout( pLocalPlayer->GetPlayerClass()->GetClassIndex(), LOADOUT_POSITION_ACTION, iItemId );
 	
 	// Tell the GC to tell server that we should respawn if we're in a respawn room
-	GCSDK::CGCMsg< GCSDK::MsgGCEmpty_t > msg( k_EMsgGCRespawnPostLoadoutChange );
-	GCClientSystem()->BSendMessage( msg );
 
 	MarkForDeletion();
 }
@@ -938,14 +939,14 @@ void CTFSpellBook::TossJarThink( void )
 	Vector vecForward, vecRight, vecUp;
 	AngleVectors( pPlayer->EyeAngles(), &vecForward, &vecRight, &vecUp );
 
-	float fRight = 8.f;
+	float fRight = 7.f;
 	if ( IsViewModelFlipped() )
 	{
 		fRight *= -1;
 	}
 	Vector vecSrc = pPlayer->Weapon_ShootPosition();
 	// Make spell toss position at the hand
-	vecSrc = vecSrc + (vecUp * -9.0f) + (vecRight * 7.0f) + (vecForward * 3.0f);
+	vecSrc = vecSrc + ( vecUp * -9.0f ) + ( vecRight * fRight ) + ( vecForward * 3.0f );
 
 	Vector vecVelocity = GetVelocityVector( vecForward, vecRight, vecUp ) * pSpellData->m_flSpeedScale;
 	QAngle angForward = pPlayer->EyeAngles();
@@ -1287,8 +1288,8 @@ bool CTFSpellBook::CastSelfHeal( CTFPlayer *pPlayer )
 	CTraceFilterIgnorePlayers traceFilter( pPlayer, COLLISION_GROUP_PROJECTILE );
 
 	// Splash pee on everyone nearby.
-	CBaseEntity *pListOfEntities[32];
-	int iEntities = UTIL_EntitiesInSphere( pListOfEntities, 32, origin, 250.0f, FL_CLIENT | FL_FAKECLIENT | FL_NPC );
+	CBaseEntity *pListOfEntities[MAX_PLAYERS_ARRAY_SAFE];
+	int iEntities = UTIL_EntitiesInSphere( pListOfEntities, ARRAYSIZE( pListOfEntities ), origin, 250.0f, FL_CLIENT | FL_FAKECLIENT | FL_NPC );
 	for ( int i = 0; i < iEntities; ++i )
 	{
 		CBaseCombatCharacter *pBaseTarget = NULL;
@@ -1329,7 +1330,7 @@ bool CTFSpellBook::CastSelfHeal( CTFPlayer *pPlayer )
 		{
 			if ( pTarget )
 			{
-				pTarget->ApplyAirBlastImpulse( vecDir * 300.0f );
+				pTarget->ApplyGenericPushbackImpulse( vecDir * 300.0f, pPlayer );
 			}
 			else
 			{
@@ -1374,8 +1375,8 @@ bool CTFSpellBook::CastRocketJump( CTFPlayer *pPlayer )
 	CTraceFilterIgnorePlayers traceFilter( pPlayer, COLLISION_GROUP_PROJECTILE );
 
 	// Splash pee on everyone nearby.
-	CBaseEntity *pListOfEntities[32];
-	int iEntities = UTIL_EntitiesInSphere( pListOfEntities, 32, origin, flBlastRadius, FL_CLIENT | FL_FAKECLIENT | FL_NPC );
+	CBaseEntity *pListOfEntities[MAX_PLAYERS_ARRAY_SAFE];
+	int iEntities = UTIL_EntitiesInSphere( pListOfEntities, ARRAYSIZE( pListOfEntities ), origin, flBlastRadius, FL_CLIENT | FL_FAKECLIENT | FL_NPC );
 	for ( int i = 0; i < iEntities; ++i )
 	{
 		CBaseCombatCharacter *pBaseTarget = NULL;
@@ -1405,7 +1406,7 @@ bool CTFSpellBook::CastRocketJump( CTFPlayer *pPlayer )
 		
 		if ( pTarget )
 		{
-			pTarget->ApplyAirBlastImpulse( vecDir * 800.0f );
+			pTarget->ApplyGenericPushbackImpulse( vecDir * 800.0f, pPlayer );
 		}
 		else
 		{
@@ -1483,15 +1484,15 @@ bool CTFSpellBook::CastKartRocketJump( CTFPlayer *pPlayer )
 	// Give a little health to compensate for fall damage
 	//pPlayer->TakeHealth( 25, DMG_GENERIC );
 	pPlayer->RemoveFlag( FL_ONGROUND );
-	pPlayer->m_Shared.AddCond( TF_COND_PARACHUTE_DEPLOYED );
+	pPlayer->m_Shared.AddCond( TF_COND_PARACHUTE_ACTIVE );
 
 	// Collect players and cause knockback to enemies
 	// Treat this trace exactly like radius damage
 	CTraceFilterIgnorePlayers traceFilter( pPlayer, COLLISION_GROUP_PROJECTILE );
 
 	// Trace entity radius
-	CBaseEntity *pListOfEntities[32];
-	int iEntities = UTIL_EntitiesInSphere( pListOfEntities, 32, origin, flBlastRadius, FL_CLIENT | FL_FAKECLIENT | FL_NPC );
+	CBaseEntity *pListOfEntities[MAX_PLAYERS_ARRAY_SAFE];
+	int iEntities = UTIL_EntitiesInSphere( pListOfEntities, ARRAYSIZE( pListOfEntities ), origin, flBlastRadius, FL_CLIENT | FL_FAKECLIENT | FL_NPC );
 	for ( int i = 0; i < iEntities; ++i )
 	{
 		CTFPlayer *pTarget = ToTFPlayer( pListOfEntities[i] );
@@ -1571,7 +1572,7 @@ public:
 #ifdef GAME_DLL
 	virtual void Spawn() OVERRIDE
 	{
-		SetModelScale( 0.01f );
+		SetModelScale( GetFireballScale() );
 		BaseClass::Spawn();
 	}
 	virtual int UpdateTransmitState() OVERRIDE { return SetTransmitState( FL_EDICT_PVSCHECK ); }
@@ -1579,7 +1580,7 @@ public:
 	virtual void RocketTouch( CBaseEntity *pOther ) OVERRIDE
 	{
 		Assert( pOther );
-		if ( !pOther->IsSolid() || pOther->IsSolidFlagSet( FSOLID_VOLUME_CONTENTS ) )
+		if ( !pOther || !pOther->IsSolid() || pOther->IsSolidFlagSet( FSOLID_VOLUME_CONTENTS ) || pOther->IsFuncLOD() )
 			return;
 
 		if ( pOther->GetParent() == GetOwnerEntity() )
@@ -1596,6 +1597,9 @@ public:
 
 		// pass through ladders
 		if( pTrace->surface.flags & CONTENTS_LADDER )
+			return;
+
+		if ( !ShouldTouchNonWorldSolid( pOther, pTrace ) )
 			return;
 
 		Explode( pTrace );
@@ -1641,8 +1645,8 @@ public:
 				CTraceFilterIgnorePlayers traceFilter( pThrower, COLLISION_GROUP_PROJECTILE );
 
 				// Splash pee on everyone nearby.
-				CBaseEntity *pListOfEntities[32];
-				int iEntities = UTIL_EntitiesInSphere( pListOfEntities, 32, vecOrigin, GetDamageRadius(), FL_CLIENT | FL_FAKECLIENT | FL_NPC );
+				CBaseEntity *pListOfEntities[MAX_PLAYERS_ARRAY_SAFE];
+				int iEntities = UTIL_EntitiesInSphere( pListOfEntities, ARRAYSIZE( pListOfEntities ), vecOrigin, GetDamageRadius(), FL_CLIENT | FL_FAKECLIENT | FL_NPC );
 				for ( int i = 0; i < iEntities; ++i )
 				{
 					CBaseCombatCharacter *pBasePlayer = NULL;
@@ -1749,7 +1753,7 @@ public:
 
 		if ( pTarget )
 		{
-			pTarget->ApplyAirBlastImpulse( vecDir * 5 );
+			pTarget->ApplyGenericPushbackImpulse( vecDir * 5, pThrower );
 		}
 	}
 
@@ -1764,6 +1768,9 @@ public:
 		return GetTeamNumber() == TF_TEAM_BLUE ? "spell_fireball_small_blue" : "spell_fireball_small_red";
 	}
 #endif
+
+protected:
+	virtual float GetFireballScale() const { return 0.01f; }
 
 private:
 	bool m_bIsMeteor;
@@ -1844,8 +1851,8 @@ public:
 				CTraceFilterIgnorePlayers traceFilter( pThrower, COLLISION_GROUP_PROJECTILE );
 
 				// Splash pee on everyone nearby.
-				CBaseEntity *pListOfEntities[32];
-				int iEntities = UTIL_EntitiesInSphere( pListOfEntities, 32, vecOrigin, GetDamageRadius(), FL_CLIENT | FL_FAKECLIENT | FL_NPC );
+				CBaseEntity *pListOfEntities[MAX_PLAYERS_ARRAY_SAFE];
+				int iEntities = UTIL_EntitiesInSphere( pListOfEntities, ARRAYSIZE( pListOfEntities ), vecOrigin, GetDamageRadius(), FL_CLIENT | FL_FAKECLIENT | FL_NPC );
 				for ( int i = 0; i < iEntities; ++i )
 				{
 					CBaseCombatCharacter *pBasePlayer = NULL;
@@ -1940,7 +1947,7 @@ public:
 
 		if ( pTarget )
 		{
-			pTarget->ApplyAirBlastImpulse( vecDir * 200.0f + Vector(0, 0, 800 ) );
+			pTarget->ApplyGenericPushbackImpulse( vecDir * 200.0f + Vector(0, 0, 800 ), pThrower );
 			const char* pszEffectName = GetTeamNumber() == TF_TEAM_RED ? "spell_batball_red" : "spell_batball_blue";
 			DispatchParticleEffect( pszEffectName, PATTACH_ABSORIGIN_FOLLOW, pTarget );
 
@@ -2802,10 +2809,7 @@ public:
 	virtual void RocketTouch( CBaseEntity *pOther ) OVERRIDE
 	{
 		Assert( pOther );
-		if ( !pOther )
-			return;
-
-		if ( !pOther->IsSolid() || pOther->IsSolidFlagSet( FSOLID_VOLUME_CONTENTS ) )
+		if ( !pOther || !pOther->IsSolid() || pOther->IsSolidFlagSet( FSOLID_VOLUME_CONTENTS ) || pOther->IsFuncLOD() )
 			return;
 
 		const trace_t *pTrace = &CBaseEntity::GetTouchTrace();
@@ -2826,6 +2830,9 @@ public:
 
 		// pass through ladders
 		if( pTrace->surface.flags & CONTENTS_LADDER )
+			return;
+
+		if ( !ShouldTouchNonWorldSolid( pOther, pTrace ) )
 			return;
 
 		if ( pOther->IsPlayer() )
@@ -3213,10 +3220,7 @@ public:
 	virtual void RocketTouch( CBaseEntity *pOther ) OVERRIDE
 	{
 		Assert( pOther );
-		if ( !pOther )
-			return;
-
-		if ( !pOther->IsSolid() || pOther->IsSolidFlagSet( FSOLID_VOLUME_CONTENTS ) )
+		if ( !pOther || !pOther->IsSolid() || pOther->IsSolidFlagSet( FSOLID_VOLUME_CONTENTS ) || pOther->IsFuncLOD() )
 			return;
 
 		// Handle hitting skybox (disappear).
@@ -3241,6 +3245,9 @@ public:
 
 		// pass through ladders
 		if ( pTrace->surface.flags & CONTENTS_LADDER )
+			return;
+
+		if ( !ShouldTouchNonWorldSolid( pOther, pTrace ) )
 			return;
 
 		if ( pOther->IsPlayer() )
@@ -3326,8 +3333,8 @@ public:
 				CTraceFilterIgnorePlayers traceFilter( pThrower, COLLISION_GROUP_PROJECTILE );
 
 				// Splash pee on everyone nearby.
-				CBaseEntity *pListOfEntities[32];
-				int iEntities = UTIL_EntitiesInSphere( pListOfEntities, 32, vecOrigin, GetDamageRadius(), FL_CLIENT | FL_FAKECLIENT | FL_NPC );
+				CBaseEntity *pListOfEntities[MAX_PLAYERS_ARRAY_SAFE];
+				int iEntities = UTIL_EntitiesInSphere( pListOfEntities, ARRAYSIZE( pListOfEntities ), vecOrigin, GetDamageRadius(), FL_CLIENT | FL_FAKECLIENT | FL_NPC );
 				for ( int i = 0; i < iEntities; ++i )
 				{
 					CBaseCombatCharacter *pBasePlayer = NULL;

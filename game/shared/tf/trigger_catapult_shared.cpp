@@ -377,9 +377,9 @@ void CTriggerCatapult::StartTouch( CBaseEntity *pOther )
 
 	// Don't refire too quickly
 	int nRefireIndex = pOther->IsPlayer() ? static_cast< CBasePlayer* >( pOther )->entindex() : 0;
-	if ( nRefireIndex >= MAX_PLAYERS + 1 )
+	if ( !IsIndexIntoPlayerArrayValid(nRefireIndex) )
 	{
-		Warning( "CTriggerCatapult::StartTouch Trying to store a refire index for an entity( %d ) outside the expected range ( < %d ).\n", nRefireIndex, MAX_PLAYERS + 1 );
+		Warning( "CTriggerCatapult::StartTouch Trying to store a refire index for an entity( %d ) outside the expected range ( < %d ).\n", nRefireIndex, MAX_PLAYERS_ARRAY_SAFE );
 		nRefireIndex = 0;
 	}
 

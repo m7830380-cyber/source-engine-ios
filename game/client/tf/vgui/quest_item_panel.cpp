@@ -19,6 +19,8 @@
 #include "item_model_panel.h"
 #include "tf_gc_client.h"
 
+#if 0
+
 // memdbgon must be the last include file in a .cpp file!!!
 #include <tier0/memdbgon.h>
 															 
@@ -73,13 +75,13 @@ static void ConfirmTurnInQuest( bool bConfirmed, void* pContext )
 //-----------------------------------------------------------------------------
 // Purpose: fill vecLoanerItems with loaners def indices from pQuest
 //-----------------------------------------------------------------------------
-static int GetLoanerListFromQuest( const CEconItemView *pQuest, CUtlVector< item_definition_index_t >& vecLoanerItems )
+static int GetLoanerListFromQuest( const CQuest *pQuest, CUtlVector< item_definition_index_t >& vecLoanerItems )
 {
-	if ( !pQuest )
+	if ( !pQuest || !pQuest->Obj().has_quest_id() )
 		return 0;
 
 	// loaners from the quest
-	const CUtlVector< CTFRequiredQuestItemsSet >& vecQuestRequiredItems = pQuest->GetItemDefinition()->GetQuestDef()->GetRequiredItemSets();
+	const CUtlVector< CTFRequiredQuestItemsSet >& vecQuestRequiredItems = pQuest->GetDefinition()->GetRequiredItemSets();
 	FOR_EACH_VEC( vecQuestRequiredItems, i )
 	{
 		// don't add dups
@@ -88,27 +90,6 @@ static int GetLoanerListFromQuest( const CEconItemView *pQuest, CUtlVector< item
 			vecLoanerItems.AddToTail( vecQuestRequiredItems[i].GetLoanerItemDef() );
 		}
 	}
-
-	// loaners from the objectives
-	//{
-	//	// Get all the objectives
-	//	QuestObjectiveDefVec_t vecChosenObjectives;
-	//	pQuest->GetItemDefinition()->GetQuestDef()->GetRolledObjectivesForItem( vecChosenObjectives, pQuest );
-
-	//	// Get all the items we need to give as loaners from the objectives
-	//	FOR_EACH_VEC( vecChosenObjectives, i )
-	//	{
-	//		const CUtlVector< CTFRequiredQuestItemsSet >& vecObjectiveRequiredItems = vecChosenObjectives[ i ]->GetConditions()->GetRequiredItemSets();
-	//		FOR_EACH_VEC( vecObjectiveRequiredItems, iRequired )
-	//		{
-	//			// don't add dups
-	//			if ( vecLoanerItems.Find( vecObjectiveRequiredItems[ iRequired ].GetLoanerItemDef() ) == vecLoanerItems.InvalidIndex() )
-	//			{
-	//				vecLoanerItems.AddToTail( vecObjectiveRequiredItems[ iRequired ].GetLoanerItemDef() );
-	//			}
-	//		}
-	//	}
-	//}
 
 	return vecLoanerItems.Count();
 }
@@ -131,7 +112,7 @@ static int GetLoanersFromLocalInventory( const itemid_t& questID, const CUtlVect
 			// check if the item is a loaner and is associated with this quest
 			FOR_EACH_VEC( vecLoanerItems, iLoaner )
 			{
-				if ( vecLoanerItems[iLoaner] == pItem->GetItemDefIndex() && GetAssociatedQuestItemID( pItem ) == questID )
+				if ( vecLoanerItems[iLoaner] == pItem->GetItemDefIndex() && GetAssociatedQuestID( pItem ) == questID )
 				{
 					bIsLoaner = true;
 					break;
@@ -265,9 +246,9 @@ void CQuestStatusPanel::OnThink()
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-CQuestItemPanel::CQuestItemPanel( Panel *parent, const char *pszPanelName, CEconItemView* pQuestItem, CScrollableQuestList* pQuestList )
+CQuestItemPanel::CQuestItemPanel( Panel *parent, const char *pszPanelName, CQuest* pQuestItem, CScrollableQuestList* pQuestList )
 	: EditablePanel( parent, pszPanelName )
-	, m_hQuestItem( NULL )
+	, m_pLiveQuest( NULL )
 	, m_eState( STATE_NORMAL )
 	, m_pTurnInContainer( NULL )
 	, m_pTurnInDimmer( NULL )
@@ -298,7 +279,9 @@ CQuestItemPanel::CQuestItemPanel( Panel *parent, const char *pszPanelName, CEcon
 	, m_pTurnInButton( NULL )
 	, m_bHasAllControls( false )
 	, m_pDiscardButton( NULL )
+	, m_pCompleteButton( NULL )
 {
+	m_quest.Obj().Clear();
 	SetItem( pQuestItem );
 	m_StateTimer.Invalidate();
 
@@ -338,11 +321,9 @@ void CQuestItemPanel::LoadResFileForCurrentItem()
 	tmZone( TELEMETRY_LEVEL0, TMZF_NONE, "%s", __FUNCTION__ );
 	const char *pszResFile = "Resource/UI/quests/QuestItemPanel_Base.res";
 
-	if ( m_hQuestItem )
+	if ( m_quest.Obj().has_quest_id() )
 	{
-		const GameItemDefinition_t *pItemDef = m_hQuestItem->GetItemDefinition();
-		// Get our quest theme
-		const CQuestThemeDefinition *pTheme = pItemDef->GetQuestDef()->GetQuestTheme();
+		const CQuestThemeDefinition *pTheme = m_quest.GetDefinition()->GetQuestTheme();
 		if ( pTheme )
 		{
 			pszResFile = pTheme->GetQuestItemResFile();
@@ -402,6 +383,13 @@ void CQuestItemPanel::LoadResFileForCurrentItem()
 		m_pDiscardButton->SetZPos( 101 );
 		m_pDiscardButton->SetPos( 70, 40 );
 		m_pDiscardButton->SetVisible( false );
+
+		m_pCompleteButton = new CExButton( m_pQuestPaperContainer, "Complete", "Complete", this, "complete_quest" );
+		m_pCompleteButton->SetEnabled( true );
+		m_pCompleteButton->SizeToContents();
+		m_pCompleteButton->SetZPos( 101 );
+		m_pCompleteButton->SetPos( 100, 40 );
+		m_pCompleteButton->SetVisible( false );
 #endif // STAGING_ONLY || DEBUG
 
 		m_pFindServerButton = m_pQuestPaperContainer->FindControl< CExButton >( "FindServerButton", true );
@@ -544,7 +532,7 @@ void CQuestItemPanel::ApplySettings( KeyValues *inResourceData )
 	tmZone( TELEMETRY_LEVEL0, TMZF_NONE, "%s", __FUNCTION__ );
 	BaseClass::ApplySettings( inResourceData );
 
-	if ( m_hQuestItem )
+	if ( m_quest.Obj().has_quest_id() )
 	{
 		m_vecFoldersImages.Purge();
 		KeyValues *pKVFoldersBlock = inResourceData->FindKey( "folders" );
@@ -560,12 +548,11 @@ void CQuestItemPanel::ApplySettings( KeyValues *inResourceData )
 		}
 		else
 		{
-			const GameItemDefinition_t *pItemDef = m_hQuestItem->GetItemDefinition();
 			// Get our quest theme
-			const CQuestThemeDefinition *pTheme = pItemDef->GetQuestDef()->GetQuestTheme();
+			const CQuestThemeDefinition *pTheme = m_quest.GetDefinition()->GetQuestTheme();
 			if ( pTheme )
 			{
-				Warning( "%s %s is missing 'folders' data\n", pItemDef->GetQuestDef()->GetCorrespondingOperationName(), pTheme->GetQuestItemResFile() );
+				Warning( "%s %s is missing 'folders' data\n", m_quest.GetDefinition()->GetCorrespondingOperationName(), pTheme->GetQuestItemResFile() );
 			}
 		}
 	}
@@ -623,18 +610,23 @@ void CQuestItemPanel::PerformLayout( void )
 		m_pDiscardButton->SetVisible( m_eState == STATE_NORMAL );
 	}
 
+	if ( m_pCompleteButton )
+	{
+		m_pCompleteButton->SetVisible( m_eState == STATE_NORMAL );
+	}
+
 	// loaners
 	if ( m_eState == STATE_NORMAL || m_eState == STATE_COMPLETED )
 	{	
 		// get all loaners required from quest
 		CUtlVector< item_definition_index_t > vecLoanerItems;
-		bool bRequiredLoaners = GetLoanerListFromQuest( m_hQuestItem, vecLoanerItems ) > 0;
+		bool bRequiredLoaners = GetLoanerListFromQuest( &m_quest, vecLoanerItems ) > 0;
 
 		// get all granted loaners from this quest
 		CUtlVector< CEconItemView* > vecGrantedLoaners;
 		if ( bRequiredLoaners )
 		{
-			GetLoanersFromLocalInventory( m_hQuestItem->GetItemID(), vecLoanerItems, vecGrantedLoaners );
+			GetLoanersFromLocalInventory( m_quest.GetID(), vecLoanerItems, vecGrantedLoaners );
 		}
 
 		if ( bRequiredLoaners )
@@ -691,13 +683,15 @@ void CQuestItemPanel::PerformLayout( void )
 
 	m_pEncodedImage->SetAlpha( m_eState == STATE_UNIDENTIFIED ? 255 : 0 );
 
-	if ( m_hQuestItem )
+	if ( m_quest.Obj().has_quest_id() )
 	{
 		m_pTitleButton->SetText( GetDecodedString( "name", flDecodeAmount ) );
 
 		int nScrollableYOffset = 0;
+
+		// TODO Brett: Lookup the operation?
 		// Check if the quest is going to expire soon (within a week).  If so, show a "This is going to be destroyed" message.
-		const CRTime nExpirationTime = m_hQuestItem->GetExpirationDate();
+		/*const CRTime nExpirationTime = m_hQuestItem->GetExpirationDate();
 		const CRTime nOneWeekFromNow = CRTime::RTime32DateAdd( CRTime::RTime32TimeCur(), 1, k_ETimeUnitWeek );
 		const bool bExpiringSoon = nExpirationTime.GetRTime32() != RTime32(0) && nExpirationTime < nOneWeekFromNow;
 		m_pExpirationLabel->SetVisible( bExpiringSoon );
@@ -708,7 +702,8 @@ void CQuestItemPanel::PerformLayout( void )
 			m_pExpirationLabel->InvalidateLayout( true );
 			m_pExpirationLabel->SizeToContents();
 			nScrollableYOffset += m_pExpirationLabel->GetTall();
-		}
+		}*/
+		m_pExpirationLabel->SetVisible( false );
 
 		m_pObjectiveExplanationLabel->SetPos( 0, nScrollableYOffset );
 		m_pObjectiveExplanationLabel->SetText( GetDecodedString( "explanation", flDecodeAmount ) );
@@ -735,7 +730,7 @@ void CQuestItemPanel::PerformLayout( void )
 		// Randomize our folder images based on original ID
 		if ( m_vecFoldersImages.Count() )
 		{
-			RandomSeed( m_hQuestItem->GetSOCData() ? m_hQuestItem->GetSOCData()->GetOriginalID() : m_hQuestItem->GetItemDefIndex() );
+			RandomSeed( m_quest.GetID() );
 			int idx = RandomInt( 0, m_vecFoldersImages.Count() - 1 );
 
 			m_pFrontFolderImage->SetImage( m_vecFoldersImages[ idx ].m_strFront );
@@ -779,19 +774,19 @@ void CQuestItemPanel::SetupObjectivesPanels( bool bRecreate )
 		m_pItemTrackerPanel = NULL;
 	}
 
-	if ( !m_hQuestItem )
+	if ( !m_quest.Obj().has_quest_id() )
 		return;
 
 	if ( !m_pItemTrackerPanel )
 	{
-		m_pItemTrackerPanel = new CItemTrackerPanel( m_pFlavorScrollingContainer, "ItemTrackerPanel", m_hQuestItem->GetSOCData(), m_strItemTrackerResFile );
+		m_pItemTrackerPanel = new CQuestProgressTrackerPanel( m_pFlavorScrollingContainer, "ItemTrackerPanel", &m_quest, m_strItemTrackerResFile );
 		m_pItemTrackerPanel->SetAutoDelete( false );
 		SETUP_PANEL( m_pItemTrackerPanel );
 	}
 	else
 	{
 		// Get all the panels created
-		m_pItemTrackerPanel->SetItem( m_hQuestItem->GetSOCData() );
+		m_pItemTrackerPanel->SetItem( &m_quest );
 		m_pItemTrackerPanel->InvalidateLayout( true );
 	}
 
@@ -805,42 +800,42 @@ void CQuestItemPanel::SetupObjectivesPanels( bool bRecreate )
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-void CQuestItemPanel::SetItem( CEconItemView* pItem )
+void CQuestItemPanel::SetItem( CQuest* pItem )
 {
 	tmZone( TELEMETRY_LEVEL0, TMZF_NONE, "%s", __FUNCTION__ );
-	if ( pItem == m_hQuestItem )
+	if ( m_pLiveQuest == pItem )
 	{
 		return;
 	}
 
 	m_bCollapsed = true;
-	m_hQuestItem.SetItem( pItem );
+	m_quest.Obj().Clear();
+	m_pLiveQuest = pItem;
+
+	if ( pItem )
+	{
+		m_quest.Obj().CopyFrom( pItem->Obj() );
+	}
 
 	if ( m_pItemTrackerPanel && pItem )
 	{
-		m_pItemTrackerPanel->SetItem( pItem->GetSOCData() );
+		m_pItemTrackerPanel->SetItem( m_pLiveQuest );
 	}
 
 	// By default
 	SetState( STATE_NORMAL );
 
-	if ( m_hQuestItem )
+	if ( m_quest.Obj().has_quest_id() )
 	{
-		if ( IsQuestItemReadyToTurnIn( m_hQuestItem ) )
+		if ( m_quest.IsQuestReadyToTurnIn() )
 		{
 			SetState( STATE_COMPLETED );
 		}
-		else if ( IsUnacknowledged() )
-		{
-			SetState( STATE_UNIDENTIFIED );
-		}
 
-		// Snag the quickplay map (if there is one)
-		m_strQuickPlayMap = m_hQuestItem->GetItemDefinition()->GetQuestDef()->GetQuickplayMapName();
-
-		m_strMatchmakingGroupName = m_hQuestItem->GetItemDefinition()->GetQuestDef()->GetMatchmakingGroupName();
-		m_strMatchmakingCategoryName = m_hQuestItem->GetItemDefinition()->GetQuestDef()->GetMatchmakingCategoryName();
-		m_strMatchmakingMapName = m_hQuestItem->GetItemDefinition()->GetQuestDef()->GetMatchmakingMapName();
+		// Snag the matchmaking map (if there is one)
+		m_strMatchmakingGroupName = m_quest.GetDefinition()->GetMatchmakingGroupName();
+		m_strMatchmakingCategoryName = m_quest.GetDefinition()->GetMatchmakingCategoryName();
+		m_strMatchmakingMapName = m_quest.GetDefinition()->GetMatchmakingMapName();
 	}
 
 	// Reload res file so we get the right art
@@ -884,7 +879,7 @@ void CQuestItemPanel::CaptureAndEncodeStrings()
 {
 	tmZone( TELEMETRY_LEVEL0, TMZF_NONE, "%s", __FUNCTION__ );
 
-	if ( !m_hQuestItem )
+	if ( !m_quest.Obj().has_quest_id() )
 		return;
 
 	// Clean up any existing values
@@ -900,7 +895,7 @@ void CQuestItemPanel::CaptureAndEncodeStrings()
 
 	{
 		// Capture the description/flavor string
-		const char *pszLocToken = m_hQuestItem->GetItemDefinition()->GetQuestDef()->GetRolledDescriptionForItem( m_hQuestItem->GetSOCData() );
+		const char *pszLocToken = m_quest.GetDefinition()->GetLocDescription();
 		pKVDecoded->SetWString( "desc", g_pVGuiLocalize->Find( pszLocToken ) );
 	}
 
@@ -915,7 +910,7 @@ void CQuestItemPanel::CaptureAndEncodeStrings()
 	// Capture objective strings
 	FOR_EACH_VEC( vecObjectives, i )
 	{
-		CItemAttributeProgressPanel *pObjective = vecObjectives[ i ];
+		CQuestObjectiveTextPanel *pObjective = vecObjectives[ i ];
 		KeyValues *pKV = pObjective->GetDialogVariables();
 		pKVDecoded->SetWString( CFmtStr( "objective%d", i ), pKV->GetWString( "attr_desc" ) );
 	}
@@ -926,7 +921,7 @@ void CQuestItemPanel::CaptureAndEncodeStrings()
 	
 	m_pKVCipherStrings->AddSubKey( pKVEncoded );
 
-	RandomSeed( m_hQuestItem->GetSOCData() ? m_hQuestItem->GetSOCData()->GetOriginalID() : m_hQuestItem->GetItemDefIndex() );
+	RandomSeed( m_quest.GetID() );
 
 	// "encode" each string by scrambling
 	FOR_EACH_VALUE( pKVEncoded, pKVString )
@@ -958,7 +953,7 @@ void CQuestItemPanel::CaptureAndEncodeStrings()
 		pKVEncoded->SetWString( pKVString->GetName(), wszBuff );
 	}
 
-	const char *pszLocToken = m_hQuestItem->GetItemDefinition()->GetQuestDef()->GetRolledNameForItem( m_hQuestItem->GetSOCData() );
+	const char *pszLocToken = m_quest.GetDefinition()->GetLocName();
 	const wchar_t* pwszName = g_pVGuiLocalize->Find( pszLocToken );
 	// Force the encrypted version of the quest title to be "<Encrypted>".
 	pKVEncoded->SetWString( "name", g_pVGuiLocalize->Find( m_strEncodedText ) );
@@ -978,15 +973,21 @@ void CQuestItemPanel::OnCommand( const char *command )
 	{
 		OnDiscardQuest();
 	}
+	else if ( FStrEq( command, "complete_quest" ) )
+	{
+		GCSDK::CProtoBufMsg< CMsgGCQuestComplete_Debug > msg( k_EMsgGCQuestComplete_Debug );
+		msg.Body().set_quest_id( m_pLiveQuest->GetID() );
+		GCClientSystem()->BSendMessage( msg );
+	}
 	else if ( FStrEq( command, "select" ) )
 	{
 		m_pQuestList->SetSelected( this, false );
 	}
 	else if ( FStrEq( command, "turnin" ) ) 
 	{
-		if ( m_hQuestItem && m_hQuestItem->GetItemDefinition() && m_hQuestItem->GetItemDefinition()->GetQuestDef() )
+		if ( m_pLiveQuest )
 		{
-			if ( !tf_quest_turn_in_confirm_opt_out.GetBool() && ( GetEarnedBonusPoints( m_hQuestItem ) != m_hQuestItem->GetItemDefinition()->GetQuestDef()->GetMaxBonusPoints() ) )
+		/*	if ( !tf_quest_turn_in_confirm_opt_out.GetBool() && ( m_pLiveQuest->GetEarnedBonusPoints() != m_pLiveQuest->GetDefinition()->GetMaxBonusPoints() ) )
 			{
 				CTFGenericConfirmOptOutDialog *pPanel = ShowConfirmOptOutDialog( "#TF_Quest_TurnIn_Title", "#TF_Quest_TurnIn_Text",
 																				 "#TF_Quest_TurnIn_Yes", "#TF_Quest_TurnIn_No",
@@ -998,21 +999,20 @@ void CQuestItemPanel::OnCommand( const char *command )
 					return;
 				}
 			}
-			else
+			else*/
 			{
 				OnCompleteQuest();
 			}
 		}
 	}
-	else if ( FStrEq( command, "identify" ) )
-	{
-		OnIdentify();
-	}
 	else if ( FStrEq( command, "request_loaner_items" ) )
 	{
-		GCSDK::CProtoBufMsg< CMsgGCQuestObjective_RequestLoanerItems > msg( k_EMsgGCQuestObjective_RequestLoanerItems );
-		msg.Body().set_quest_item_id( m_hQuestItem->GetItemID() );
-		GCClientSystem()->BSendMessage( msg );
+		if ( m_pLiveQuest )
+		{
+			GCSDK::CProtoBufMsg< CMsgGCQuestObjective_RequestLoanerItems > msg( k_EMsgGCQuestObjective_RequestLoanerItems );
+			msg.Body().set_quest_id( m_pLiveQuest->GetID() );
+			GCClientSystem()->BSendMessage( msg );
+		}
 	}
 	else if ( FStrEq( command, "equip_loaner_items" ) )
 	{
@@ -1063,7 +1063,7 @@ void CQuestItemPanel::OnCommand( const char *command )
 		}
 
 		// Defaulting to 12v12
-		GTFGCClientSystem()->SetLadderType( k_nMatchGroup_Casual_12v12 );
+		GTFGCClientSystem()->SetLadderType( k_eTFMatchGroup_Casual_12v12 );
 		PromptOrFireCommand( "OpenMatchmakingLobby casual" );
 	}
 }
@@ -1119,8 +1119,7 @@ void CQuestItemPanel::OnThink()
 			SetState( STATE_NORMAL );
 
 			// Play a reveal sound?
-			const GameItemDefinition_t *pItemDef = m_hQuestItem->GetItemDefinition();
-			const CQuestThemeDefinition *pTheme = pItemDef->GetQuestDef()->GetQuestTheme();
+			const CQuestThemeDefinition *pTheme = m_pLiveQuest->GetDefinition()->GetQuestTheme();
 			if ( pTheme )
 			{
 				const char *pszRevealSound = pTheme->GetRevealSound();
@@ -1276,11 +1275,11 @@ void CQuestItemPanel::FireGameEvent( IGameEvent *event )
 		itemid_t nIDLow = 0x00000000FFFFFFFF & (itemid_t)event->GetInt( "quest_item_id_low" );
 		itemid_t nIDHi =  0xFFFFFFFF00000000 & (itemid_t)event->GetInt( "quest_item_id_hi" ) << 32;
 		itemid_t nID = nIDLow | nIDHi;
-		if ( m_hQuestItem && nID == m_hQuestItem->GetID() )
+		if ( m_pLiveQuest && nID == m_pLiveQuest->GetID() )
 		{
 			SetupObjectivesPanels( false );
 
-			if ( IsQuestItemReadyToTurnIn( m_hQuestItem ) )
+			if ( m_pLiveQuest->IsQuestReadyToTurnIn() )
 			{
 				SetState( STATE_COMPLETED );
 			}
@@ -1292,10 +1291,6 @@ void CQuestItemPanel::FireGameEvent( IGameEvent *event )
 		   || FStrEq( event->GetName(), "client_disconnect" ) )
 	{
 		InvalidateLayout();
-	}
-	else if ( FStrEq( "inventory_updated", event->GetName() ) )
-	{
-		// InvalidateLayout();
 	}
 }
 
@@ -1314,15 +1309,15 @@ void CQuestItemPanel::UpdateInvalidReasons()
 	bool bAllAreInvalid = false;
 
 	C_TFPlayer *pLocalPlayer = C_TFPlayer::GetLocalTFPlayer();
-	if ( pLocalPlayer && m_hQuestItem )
+	if ( pLocalPlayer && m_pLiveQuest )
 	{
 		// Get the tracker for the items
-		const CQuestItemTracker* pItemTracker = QuestObjectiveManager()->GetTypedTracker< CQuestItemTracker* >( m_hQuestItem->GetItemID() );
+		const CQuestItemTracker* pItemTracker = QuestObjectiveManager()->GetTypedTracker< CQuestItemTracker* >( m_pLiveQuest->GetID() );
 		// Get invalid reasons
 		if ( pItemTracker )
 		{
-			int nNumInvalid = pItemTracker->IsValidForPlayer( pLocalPlayer, invalidReasons );
-			bAllAreInvalid = pItemTracker->GetTrackers().Count() == nNumInvalid;
+			int nNumInvalid = pItemTracker->GetNumInactiveObjectives( pLocalPlayer, invalidReasons );
+			bAllAreInvalid = pItemTracker->GetObjectiveTrackers().Count() == nNumInvalid;
 		}
 
 		// Build a string describing why the current quest can't be worked on
@@ -1392,9 +1387,8 @@ void CQuestItemPanel::OnDiscardQuest( void )
 			pDialog->Show();
 		}
 
-		const GameItemDefinition_t *pItemDef = m_hQuestItem->GetItemDefinition();
 		// Get our quest theme
-		const CQuestThemeDefinition *pTheme = pItemDef->GetQuestDef()->GetQuestTheme();
+		const CQuestThemeDefinition *pTheme = m_pLiveQuest->GetDefinition()->GetQuestTheme();
 		if ( pTheme )
 		{
 			const char *pszDiscardSound = pTheme->GetDiscardSound();
@@ -1411,7 +1405,7 @@ void CQuestItemPanel::OnDiscardQuest( void )
 //-----------------------------------------------------------------------------
 void CQuestItemPanel::OnEquipLoaners( void )
 {
-	if ( !m_hQuestItem )
+	if ( !m_pLiveQuest )
 		return;
 
 	if ( m_pQuestList->GetCompletingPanel() == NULL )
@@ -1431,11 +1425,11 @@ void CQuestItemPanel::OnEquipLoaners( void )
 //-----------------------------------------------------------------------------
 void CQuestItemPanel::OnCompleteQuest( void )
 {
-	if ( !m_hQuestItem )
+	if ( !m_pLiveQuest )
 		return;
 
 	// Double check that they're not just forcing the command
-	if ( IsQuestItemReadyToTurnIn( m_hQuestItem ) && m_pQuestList->GetCompletingPanel() == NULL )
+	if ( m_pLiveQuest->IsQuestReadyToTurnIn() && m_pQuestList->GetCompletingPanel() == NULL )
 	{
 		m_pQuestList->SetCompletingPanel( this );
 
@@ -1447,7 +1441,7 @@ void CQuestItemPanel::OnCompleteQuest( void )
 
 		GCSDK::CProtoBufMsg< CMsgGCQuestComplete_Request > msg( k_EMsgGCQuestComplete_Request );
 	
-		msg.Body().set_quest_item_id( m_hQuestItem->GetItemID() );
+		msg.Body().set_quest_id( m_pLiveQuest->GetID() );
 
 		GCClientSystem()->BSendMessage( msg );
 
@@ -1455,32 +1449,12 @@ void CQuestItemPanel::OnCompleteQuest( void )
 
 		g_pClientMode->GetViewportAnimationController()->StartAnimationSequence( this, m_strTurningIn );	
 		
-		const GameItemDefinition_t *pItemDef = m_hQuestItem->GetItemDefinition();
 		// Get our quest theme
-		const CQuestThemeDefinition *pTheme = pItemDef->GetQuestDef()->GetQuestTheme();
+		const CQuestThemeDefinition *pTheme = m_pLiveQuest->GetDefinition()->GetQuestTheme();
 		if ( pTheme )
 		{
 			m_pszCompleteSound = pTheme->GetRewardSound();
 		}
-	}
-}
-
-void CQuestItemPanel::OnIdentify()
-{
-	if ( IsUnacknowledged() )
-	{
-		SetState( STATE_IDENTIFYING );
-
-		// Use the timer for identifying progress
-		m_StateTimer.Start( k_flQuestDecodeTime );
-		vgui::surface()->PlaySound( m_strDecodeSound );
-		
-		// ack item
-		CEconItemView *pModifyItem = m_hQuestItem;
-		TFInventoryManager()->AcknowledgeItem( pModifyItem, false );
-		TFInventoryManager()->SetItemBackpackPosition( pModifyItem, (uint32)-1, false, true );
-
-		g_pClientMode->GetViewportAnimationController()->StartAnimationSequence( m_pQuestPaperContainer, "QuestItem_StaticPhoto_Reveal" );
 	}
 }
 
@@ -1490,11 +1464,11 @@ void CQuestItemPanel::OnIdentify()
 void CQuestItemPanel::OnConfirmDelete( bool bConfirm )
 {
 	// Delete the quest
-	if ( bConfirm && m_hQuestItem )
+	if ( bConfirm && m_pLiveQuest )
 	{
 		GCSDK::CProtoBufMsg< CMsgGCQuestDiscard_Request > msg( k_EMsgGCQuestDiscard_Request );
 	
-		msg.Body().set_quest_item_id( m_hQuestItem->GetItemID() );
+		msg.Body().set_quest_id( m_pLiveQuest->GetID() );
 
 		GCClientSystem()->BSendMessage( msg );
 	}
@@ -1506,17 +1480,17 @@ void CQuestItemPanel::OnConfirmDelete( bool bConfirm )
 void CQuestItemPanel::OnConfirmEquipLoaners( bool bConfirm )
 {
 	// equip loaners
-	if ( bConfirm && m_hQuestItem )
+	if ( bConfirm && m_pLiveQuest )
 	{
 		// get all loaners required from quest
 		CUtlVector< item_definition_index_t > vecLoanerItems;
-		bool bRequiredLoaners = GetLoanerListFromQuest( m_hQuestItem, vecLoanerItems );
+		bool bRequiredLoaners = GetLoanerListFromQuest( m_pLiveQuest, vecLoanerItems );
 
 		// get all granted loaners from this quest
 		CUtlVector< CEconItemView* > vecGrantedLoaners;
 		if ( bRequiredLoaners )
 		{
-			GetLoanersFromLocalInventory( m_hQuestItem->GetItemID(), vecLoanerItems, vecGrantedLoaners );
+			GetLoanersFromLocalInventory( m_pLiveQuest->GetID(), vecLoanerItems, vecGrantedLoaners );
 		}
 
 		for ( int i=0; i<vecGrantedLoaners.Count(); ++i )
@@ -1584,17 +1558,6 @@ void CQuestItemPanel::SetSelected( bool bSelected, bool bImmediate )
 	}
 }
 
-//-----------------------------------------------------------------------------
-// Purpose: 
-//-----------------------------------------------------------------------------
-bool CQuestItemPanel::IsUnacknowledged()
-{
-	if ( !m_hQuestItem )
-		return false;
-
-	return IsQuestItemUnidentified( m_hQuestItem->GetSOCData() );
-}
-
 void CQuestItemPanel::SetState( EItemPanelState_t eState )
 {
 	m_eState = eState;
@@ -1623,3 +1586,5 @@ public:
 };
 
 GC_REG_JOB( GCSDK::CGCClient, CGCLoanerRequestResponse, "CGCLoanerRequestResponse", k_EMsgGCQuestObjective_RequestLoanerResponse, GCSDK::k_EServerTypeGCClient );
+
+#endif // 0

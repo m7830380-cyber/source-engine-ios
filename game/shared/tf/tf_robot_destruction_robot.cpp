@@ -39,11 +39,7 @@ RobotData_t* g_RobotData[ NUM_ROBOT_TYPES ] =
 { 
 					// Model									// Busted model										// Pain			// Death		// Collide		// Idle				// Bar offset
 	new RobotData_t( "models/bots/bot_worker/bot_worker_A.mdl",	"models/bots/bot_worker/bot_worker_A.mdl",			"Robot.Pain",	"Robot.Death",	"Robot.Collide", "Robot.Greeting", -35.f ),
-#ifdef STAGING_ONLY
-	new RobotData_t( "models/bots/bot_worker/bot_worker_b.mdl",	"models/bots/bot_worker/bot_worker_b.mdl",			"Robot.Pain",	"Robot.Death",	"Robot.Collide", "Robot.Greeting", -30.f ),
-#else
 	new RobotData_t( "models/bots/bot_worker/bot_worker2.mdl", "models/bots/bot_worker/bot_worker2.mdl",			"Robot.Pain",	"Robot.Death",	"Robot.Collide", "Robot.Greeting", -30.f ),
-#endif
 	new RobotData_t( "models/bots/bot_worker/bot_worker3.mdl",	"models/bots/bot_worker/bot_worker3_nohead.mdl",	"Robot.Pain",	"Robot.Death",	"Robot.Collide", "Robot.Greeting", -10.f ),
 };
 
@@ -145,6 +141,10 @@ END_DATADESC()
 
 LINK_ENTITY_TO_CLASS( tf_robot_destruction_robot, CTFRobotDestruction_Robot );
 
+#ifdef _WIN32
+// Old code, stricter compiler
+#pragma warning(disable : 4355) // warning C4355: 'this': used in base member initializer list
+#endif
 CTFRobotDestruction_Robot::CTFRobotDestruction_Robot()
 	: m_animController( this )
 {
@@ -1114,9 +1114,6 @@ ActionResult< CTFRobotDestruction_Robot > CRobotBehavior::OnStart( CTFRobotDestr
 	return Continue();
 }
 
-#ifdef STAGING_ONLY
-ConVar sv_rd_bots_STFU( "sv_rd_bots_STFU", "0", FCVAR_ARCHIVE );
-#endif
 ActionResult< CTFRobotDestruction_Robot > CRobotBehavior::Update( CTFRobotDestruction_Robot *pMe, float interval )
 {
 	//const CKnownEntity *pThreat = pMe->GetVisionInterface()->GetPrimaryKnownThreat();
@@ -1124,9 +1121,6 @@ ActionResult< CTFRobotDestruction_Robot > CRobotBehavior::Update( CTFRobotDestru
 	//{
 	//	return SuspendFor( new CRobotAttackEnemy, "I see an enemy!" );
 	//}
-#ifdef STAGING_ONLY
-	if ( !sv_rd_bots_STFU.GetBool() )
-#endif
 	{
 		// We've been wandering for a bit.  Speak!
 		if ( m_IdleSpeakTimer.IsElapsed() && m_SpeakTimer.IsElapsed() )
@@ -1154,9 +1148,6 @@ EventDesiredResult< CTFRobotDestruction_Robot > CRobotBehavior::OnContact( CTFRo
 	{
 		m_SpeakTimer.Start( 3.f );
 
-#ifdef STAGING_ONLY
-		if ( !sv_rd_bots_STFU.GetBool() )
-#endif
 		{
 			const RobotSpawnData_t & data = pMe->GetRobotSpawnData();
 			pMe->EmitSound( g_RobotData[ data.m_eType ]->GetStringData( RobotData_t::COLLIDE_SOUND_KEY ) );

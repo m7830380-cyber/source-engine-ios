@@ -121,7 +121,7 @@ void CTFKnife::ApplyOnInjuredAttributes( CTFPlayer *pVictim, CTFPlayer *pAttacke
 
 	int iMeltsInFire = 0;
 	CALL_ATTRIB_HOOK_INT( iMeltsInFire, melts_in_fire );
-	if ( iMeltsInFire > 0 && info.GetDamageType() & DMG_BURN )
+	if ( iMeltsInFire > 0 && ( ( info.GetDamageType() & DMG_BURN ) || ( info.GetDamageType() & DMG_IGNITE ) ) )
 	{
 		if ( m_bKnifeExists )
 		{
@@ -185,6 +185,7 @@ void CTFKnife::PrimaryAttack( void )
 
 	m_hBackstabVictim = NULL;
 	int iBackstabVictimHealth = 0;
+	int nBackStabVictimRuneType = 0;
 
 #if !defined (CLIENT_DLL)
 	// Move other players back to history positions based on local player's lag
@@ -207,10 +208,17 @@ void CTFKnife::PrimaryAttack( void )
 					// store the victim to compare when we do the damage
 					m_hBackstabVictim.Set( pTarget );
 					iBackstabVictimHealth = Max( m_hBackstabVictim->GetHealth(), 75 );
+					nBackStabVictimRuneType = m_hBackstabVictim->m_Shared.GetCarryingRuneType();
 				}
 			}
 		} 
 	}
+#ifdef GAME_DLL
+	if ( TFGameRules() && TFGameRules()->IsPowerupMode() && m_hBackstabVictim )
+	{
+		iBackstabVictimHealth = Max( ( m_hBackstabVictim->GetHealth() - m_hBackstabVictim->GetRuneHealthBonus() ), 75 );
+	}
+#endif
 
 #ifndef CLIENT_DLL
 	pPlayer->RemoveInvisibility();
@@ -232,21 +240,22 @@ void CTFKnife::PrimaryAttack( void )
 	C_CTF_GameStats.Event_PlayerFiredWeapon( pPlayer, IsCurrentAttackACrit() );
 #endif
 
-	bool bSuccessfulBackstab = IsBackstab() && !m_hBackstabVictim->IsAlive();
+	bool bSuccessfulBackstab = IsBackstab() && ( !m_hBackstabVictim->IsAlive() || m_hBackstabVictim->m_Shared.InCond( TF_COND_HALLOWEEN_GHOST_MODE ) );
 
 	ETFFlagType ignoreTypes[] = { TF_FLAGTYPE_PLAYER_DESTRUCTION };
 	if ( ShouldDisguiseOnBackstab() && bSuccessfulBackstab && !pPlayer->HasTheFlag( ignoreTypes, ARRAYSIZE( ignoreTypes ) ) )
 	{
 		// Different rules in MvM when stabbing bots
-		bool bMvM = TFGameRules() && TFGameRules()->IsMannVsMachineMode() && m_hBackstabVictim->IsBot();
-		if ( bMvM )
+		bool bDropDisguise = m_hBackstabVictim->IsBot() && ( ( TFGameRules() && TFGameRules()->IsMannVsMachineMode() ) 
+			);
+		if ( bDropDisguise )
 		{
 			// Remove the disguise first, otherwise this attribute is overpowered
 			pPlayer->RemoveDisguise();
 		}
 
 		// We should very quickly disguise as our victim.
-		const float flDelay = bMvM ? 1.5f : 0.2f;
+		const float flDelay = ( bDropDisguise ) ? 1.5f : 0.2f;
 		SetContextThink( &CTFKnife::DisguiseOnKill, gpGlobals->curtime + flDelay, "DisguiseOnKill" );
 	}
 	else
@@ -262,9 +271,14 @@ void CTFKnife::PrimaryAttack( void )
 	{
 		// Our health cap is 3x our default maximum health cap. This is so high to make up for
 		// the fact that our default is lowered by equipping the weapon.
-		int iBaseMaxHealth = pPlayer->GetMaxHealth() * 3,
+		int iBaseMaxHealth = ( pPlayer->GetMaxHealth() - pPlayer->GetRuneHealthBonus() ) * 3,
 			iNewHealth	   = MIN( pPlayer->GetHealth() + iBackstabVictimHealth, iBaseMaxHealth ),
 			iDeltaHealth   = iNewHealth - pPlayer->GetHealth();
+
+		if ( TFGameRules() && TFGameRules()->IsPowerupMode() && ( nBackStabVictimRuneType == RUNE_REFLECT ) )
+		{
+			iDeltaHealth = 0;
+		}
 
 		if ( iDeltaHealth > 0 )
 		{
@@ -273,6 +287,26 @@ void CTFKnife::PrimaryAttack( void )
 		}
 	}
 #endif // GAME_DLL
+}
+
+// -----------------------------------------------------------------------------
+// Purpose:
+// -----------------------------------------------------------------------------
+void CTFKnife::SecondaryAttack( void )
+{
+	if ( m_bInAttack2 )
+		return;
+
+	CTFPlayer *pOwner = GetTFPlayerOwner();
+	if ( !pOwner )
+		return;
+
+	pOwner->DoClassSpecialSkill();
+
+	m_bInAttack2 = true;
+
+
+	m_flNextSecondaryAttack = gpGlobals->curtime + GetNextSecondaryAttackDelay();
 }
 
 //-----------------------------------------------------------------------------
@@ -284,13 +318,14 @@ void CTFKnife::DisguiseOnKill()
 	if ( !m_hBackstabVictim.Get() )
 		return;
 
+	CTFPlayer *pPlayer = ToTFPlayer( GetPlayerOwner() );
+	if ( !pPlayer || !pPlayer->CanDisguise() )
+		return;
+	
 	int nTeam = m_hBackstabVictim->GetTeamNumber();
 	int nClass = m_hBackstabVictim->GetPlayerClass()->GetClassIndex();
-	CTFPlayer *pPlayer = ToTFPlayer( GetPlayerOwner() );
-	if ( pPlayer )
-	{
-		pPlayer->m_Shared.Disguise( nTeam, nClass, m_hBackstabVictim.Get(), true );
-	}
+		
+	pPlayer->m_Shared.Disguise( nTeam, nClass, m_hBackstabVictim.Get(), true );
 #endif
 }
 
@@ -372,6 +407,23 @@ bool CTFKnife::CanPerformBackstabAgainstTarget( CTFPlayer *pTarget )
 	if ( iNoBackstab )
 		return false;
 
+	// Can't backstab if attached to someone with grapple or if the victim is flying fast by grapple
+	if ( TFGameRules() && TFGameRules()->IsPowerupMode() )
+	{
+		CTFPlayer *pPlayer = ToTFPlayer( GetPlayerOwner() );
+		float flTargetVel = pTarget->GetAbsVelocity().Length();
+ 		bool bTargetOffGround = ( pTarget->GetGroundEntity() == NULL );
+		if ( pPlayer )
+		{
+			if ( pPlayer->m_Shared.InCond( TF_COND_GRAPPLED_BY_PLAYER ) || pPlayer->m_Shared.InCond( TF_COND_GRAPPLED_TO_PLAYER ) )
+				return false;
+		}
+		if ( bTargetOffGround && pTarget->GetGrapplingHookTarget() && ( flTargetVel > 400 ) )
+		{
+			return false;
+		}
+	}
+	
 	// Behind and facing target's back?
 	if ( IsBehindAndFacingTarget( pTarget ) )
 		return true;

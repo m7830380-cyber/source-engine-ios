@@ -20,11 +20,13 @@
 enum lunchbox_weapontypes_t
 {
 	LUNCHBOX_STANDARD = 0,		// Careful, can be the Scout BONK drink, or the Heavy sandvich.
-	LUNCHBOX_ADDS_MAXHEALTH,
+	LUNCHBOX_CHOCOLATE_BAR,
 	LUNCHBOX_ADDS_MINICRITS,
 	LUNCHBOX_STANDARD_ROBO,
 	LUNCHBOX_STANDARD_FESTIVE,
 	LUNCHBOX_ADDS_AMMO,
+	LUNCHBOX_BANANA,
+	LUNCHBOX_FISHCAKE,
 };
 
 #define TF_SANDWICH_REGENTIME	30
@@ -39,8 +41,8 @@ class CTFLunchBox : public CTFWeaponBase
 public:
 
 	DECLARE_CLASS( CTFLunchBox, CTFWeaponBase );
-	DECLARE_NETWORKCLASS(); 
-	DECLARE_PREDICTABLE();
+	DECLARE_NETWORKCLASS_OVERRIDE();
+	DECLARE_PREDICTABLE_OVERRIDE();
 
 // Server specific.
 #ifdef GAME_DLL
@@ -49,27 +51,34 @@ public:
 
 	CTFLunchBox();
 
-	virtual void	UpdateOnRemove( void );
-	virtual void	Precache();
-	virtual int		GetWeaponID( void ) const			{ return TF_WEAPON_LUNCHBOX; }
-	virtual void	PrimaryAttack();
-	virtual void	SecondaryAttack();
-	virtual void	WeaponReset( void );
-	virtual bool	UsesPrimaryAmmo();
+	virtual void	UpdateOnRemove( void ) OVERRIDE;
+	virtual void	Precache() OVERRIDE;
+	virtual int		GetWeaponID( void ) const OVERRIDE { return TF_WEAPON_LUNCHBOX; }
+	virtual void	PrimaryAttack() OVERRIDE;
+	virtual void	SecondaryAttack() OVERRIDE;
+	virtual void	WeaponReset( void ) OVERRIDE;
+	virtual bool	UsesPrimaryAmmo() OVERRIDE;
 
 	virtual bool	DropAllowed( void );
 	int				GetLunchboxType( void ) const { int iMode = 0; CALL_ATTRIB_HOOK_INT( iMode, set_weapon_mode ); return iMode; };
 
-	float			GetProgress( void ) { return GetEffectBarProgress(); }
-	const char*		GetEffectLabelText( void )	{ return "#TF_SANDWICH"; }
-
 	void			DrainAmmo( bool bForceCooldown = false );
 
-	virtual float	InternalGetEffectBarRechargeTime( void ) { return GetLunchboxType() == LUNCHBOX_ADDS_MAXHEALTH ? TF_CHOCOLATE_BAR_REGENTIME : TF_SANDWICH_REGENTIME; }
 	virtual void	Detach( void ) OVERRIDE;
+	virtual bool	Holster( CBaseCombatWeapon *pSwitchingTo = NULL ) OVERRIDE;
 
 #ifdef GAME_DLL
 	void			ApplyBiteEffects( CTFPlayer *pPlayer );
+	virtual void	OnResourceMeterFilled() OVERRIDE;
+#endif
+
+	virtual void		SwitchBodyGroups( void );
+	virtual bool		UpdateBodygroups( CBaseCombatCharacter* pOwner, int iState ) OVERRIDE;
+	virtual bool		IsBroken( void ) const OVERRIDE { return m_bBroken; }
+	virtual void		SetBroken( bool bBroken ) OVERRIDE;
+
+#ifdef CLIENT_DLL
+	static void RecvProxy_Broken( const CRecvProxyData *pData, void *pStruct, void *pOut );
 #endif
 
 private:
@@ -77,6 +86,8 @@ private:
 
 	// Prevent spamming with resupply cabinets: only 1 thrown at a time
 	EHANDLE		m_hThrownPowerup;
+	
+	CNetworkVar( bool,	m_bBroken  );
 };
 
 //=============================================================================
@@ -98,6 +109,8 @@ public:
 	virtual bool		DropAllowed( void ) { return false; }
 
 	const char*			GetEffectLabelText( void )	{ return "#TF_ENERGYDRINK"; }
+	float				GetProgress( void ) { return GetEffectBarProgress(); }
+	virtual float		InternalGetEffectBarRechargeTime( void ) { return TF_SANDWICH_REGENTIME; }
 
 #ifdef CLIENT_DLL
 	virtual const char* ModifyEventParticles( const char* token );

@@ -110,7 +110,7 @@ public:
 
 #if defined( CLIENT_DLL )
 	// Stop all sounds being output.
-	void			StopHealSound( bool bStopHealingSound = true, bool bStopNoTargetSound = true );
+	void			StopHealSound( bool bStopHealingSound = true, bool bStopNoTargetSound = true, bool bStopDetachSound = true );
 
 	virtual void	OnDataChanged( DataUpdateType_t updateType );
 	virtual void	ClientThink();
@@ -129,6 +129,7 @@ public:
 #endif
 
 	void			SetChargeLevel( float flChargeLevel ) { m_flChargeLevel = flChargeLevel; }
+	void			SetChargeLevelToPreserve( float flAmount );
 	float			GetChargeLevel( void ) const { return m_flChargeLevel; }
 	float			GetMinChargeAmount( void ) const;
 
@@ -139,6 +140,9 @@ public:
 	float			GetProgress( void );
 	const char*		GetEffectLabelText( void ) { return "#TF_Rescue"; }
 	bool			EffectMeterShouldFlash( void );
+	float			GetOverHealBonus( CTFPlayer *pTFTarget );
+	float			GetOverHealDecayMult( CTFPlayer *pTFTarget );
+	virtual void	HookAttributes( void ) OVERRIDE;
 
 private:
 	void					SubtractChargeAndUpdateDeployState( float flSubtractAmount, bool bForceDrain );
@@ -152,9 +156,10 @@ private:
 	void					StartHealingTarget( CBaseEntity *pTarget );
 	void					StopHealingOwner( void );
 
+#ifdef CLIENT_DLL
 	const char				*GetHealSound() const;
-
-#ifdef GAME_DLL
+	const char				*GetDetachSound() const;
+#else
 	void					UberchargeChunkDeployed();
 #endif
 
@@ -163,17 +168,9 @@ private:
 
 public:
 
-#ifdef STAGING_ONLY
-	CTFMedigunShield		*GetMedigunShield() const { return m_hMedigunShield; }
-	bool					HasPermanentShield() const;
-#endif // STAGING_ONLY
 
-#ifdef GAME_DLL
 	CNetworkHandle( CBaseEntity, m_hHealingTarget );
-	CHandle< CBaseEntity > m_hLastHealingTarget;
-#else
-	CNetworkHandle( C_BaseEntity, m_hHealingTarget );
-#endif
+	CNetworkHandle( CBaseEntity, m_hLastHealingTarget );
 
 	bool					m_bWasHealingBeforeDeath;
 
@@ -211,6 +208,8 @@ protected:
 	int						m_nHealTargetClass;
 	int						m_nChargesReleased;
 #endif
+	float					m_flChargeLevelToPreserve;
+	float					m_flOverHealExpert;		// Upgrade
 
 	CHandle< CTFMedigunShield > m_hMedigunShield;
 	CHandle< CTFReviveMarker > m_hReviveMarker;
@@ -235,6 +234,8 @@ protected:
 	CNewParticleEffect	*m_pChargeEffect;
 	CSoundPatch			*m_pChargedSound;
 	CSoundPatch			*m_pDisruptSound;
+	CSoundPatch			*m_pHealSound;
+	CSoundPatch			*m_pDetachSound;
 
 	CUtlVector< int >	m_iAutoCallers;
 	float				m_flAutoCallerCheckTime;
@@ -275,9 +276,6 @@ public:
 	void ShieldThink( void );
 	void RemoveShield( void );
 
-#ifdef STAGING_ONLY
-	void SetPermanentShield( bool bPermanent ) { m_bPermanentShield = bPermanent; }
-#endif // STAGING_ONLY
 
 #else
 	virtual void ClientThink();
@@ -289,9 +287,6 @@ private:
 	float m_flShieldEnergyLevel;
 	CSoundPatch	*m_pTouchLoop;
 
-#ifdef STAGING_ONLY
-	bool m_bPermanentShield;
-#endif // STAGING_ONLY
 
 #endif // GAME_DLL
 };

@@ -7,7 +7,7 @@
 $Include "$SRCDIR\gcsdk\gcsdk_game_include.vpc"
 $Include "$SRCDIR\game\shared\base_gcmessages_include.vpc"
 $Include "$SRCDIR\game\shared\econ_gcmessages_include.vpc"
-$include "$SRCDIR\vpc_scripts\source_cryptlib_include.vpc"
+$include "$SRCDIR\vpc_scripts\source_cryptlib_include.vpc" [!$SOURCESDK]
 
 $Configuration
 {
@@ -20,6 +20,7 @@ $Configuration
 	$Linker
 	{
         $SystemLibraries                        "$BASE;z" [$OSXALL]
+		$SystemLibraries                        "$BASE;z" [$LINUXALL]
 	}
 }
 
@@ -59,6 +60,8 @@ $Project
 			$File	"$SRCDIR\game\shared\econ\econ_item_constants.h"
 			$File	"$SRCDIR\game\shared\econ\econ_item_schema.cpp"
 			$File	"$SRCDIR\game\shared\econ\econ_item_schema.h"
+			$File	"$SRCDIR\game\shared\econ\econ_item_schema_private.cpp" [!$SOURCESDK]
+			$File	"$SRCDIR\game\shared\econ\econ_item_schema_sdk.cpp" [$SOURCESDK]
 			$File	"$SRCDIR\game\shared\econ\econ_item_tools.cpp"
 			$File	"$SRCDIR\game\shared\econ\econ_item_tools.h"
 			$File	"$SRCDIR\game\shared\econ\econ_store.cpp"
@@ -71,6 +74,8 @@ $Project
 			$File	"$SRCDIR\game\shared\econ\econ_dynamic_recipe.h"
 			$File	"$SRCDIR\game\shared\econ\econ_quests.cpp"
 			$File	"$SRCDIR\game\shared\econ\econ_quests.h"
+			$File	"$SRCDIR\game\shared\econ\econ_paintkit.cpp"
+			$File	"$SRCDIR\game\shared\econ\econ_paintkit.h"
 			
 			$File	"$SRCDIR\game\client\econ\econ_consumables.cpp"
 			
@@ -178,9 +183,8 @@ $Project
 	
 	$Folder	"Link Libraries" 
 	{
-		$Lib "$LIBCOMMON/libjpeg"
-		$Lib libpng [!$VS2015]
-		$Lib $LIBCOMMON/libpng [$VS2015]
-		$Lib libz
+		$Lib "$LIBCOMMON/jpeglib"
+		$Lib "$LIBCOMMON/libspng"
+		$Lib libz [!$LINUXALL]
 	}
 }

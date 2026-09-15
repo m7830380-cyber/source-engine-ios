@@ -81,6 +81,7 @@ public:
 
 	float				GetProgress( void );
 	const char*			GetEffectLabelText( void ) { return "#TF_KNIFE"; }
+	virtual void		SecondaryAttack( void ) OVERRIDE;
 
 private:
 	void 				ResetVars( void );

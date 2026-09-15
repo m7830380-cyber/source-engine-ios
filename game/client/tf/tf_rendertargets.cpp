@@ -12,6 +12,9 @@
 #include "replay/replay_screenshot.h"
 #endif
 
+ConVar tf_water_resolution( "tf_water_resolution", "1024", FCVAR_NONE, "Needs to be set at game launch time to override." );
+ConVar tf_monitor_resolution( "tf_monitor_resolution", "1024", FCVAR_NONE, "Needs to be set at game launch time to override." );
+
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
@@ -35,7 +38,7 @@ extern const char *g_ItemModelPanelRenderTargetNames[];
 extern const char *g_pszModelImagePanelRTName;
 void CTFRenderTargets::InitClientRenderTargets( IMaterialSystem* pMaterialSystem, IMaterialSystemHardwareConfig* pHardwareConfig )
 {
-	BaseClass::InitClientRenderTargets( pMaterialSystem, pHardwareConfig );
+	BaseClass::InitClientRenderTargets( pMaterialSystem, pHardwareConfig, tf_water_resolution.GetInt(), tf_monitor_resolution.GetInt() );
 
 	// rt for item model panels
 	for ( int i = 0; i < ITEM_MODEL_IMAGE_CACHE_SIZE; i++ )

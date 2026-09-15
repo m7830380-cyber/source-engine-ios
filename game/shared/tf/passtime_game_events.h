@@ -25,12 +25,14 @@ namespace PasstimeGameEvents
 	struct BallGet
 	{
 		BallGet( IGameEvent *pEvent );
-		BallGet( int ownerIndex );
+		BallGet( int ownerIndex, int team );
 		void Fire();
 		
 		static const char *const s_eventName;
 		static const char *const s_keyOwnerIndex;
+		static const char *const s_keyTeam;
 		int ownerIndex;
+		int team;
 	};
 	
 	//-----------------------------------------------------------------------------

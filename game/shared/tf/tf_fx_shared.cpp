@@ -108,6 +108,7 @@ void EndGroupingSounds() {}
 
 #endif
 
+// 10, Square
 Vector g_vecFixedWpnSpreadPellets[] = 
 {
 	Vector( 0,0,0 ),	// First pellet goes down the middle
@@ -120,6 +121,34 @@ Vector g_vecFixedWpnSpreadPellets[] =
 	Vector( -0.85,-0.85,0 ),	
 	Vector( -0.85,0.85,0 ),	
 	Vector( 0,0,0 ),	// last pellet goes down the middle as well to reward fine aim
+};
+
+// 15, Rectangle - slight noise applied below (+/- 0.07)
+Vector g_vecFixedWpnSpreadPelletsWideLarge[] =
+{
+	Vector( 0.f, 0.f, 0.f ),
+	Vector( -0.5f, 0.f, 0.f ),
+	Vector( -1.f, 0.f, 0.f ),
+	Vector( 0.5f, 0.f, 0.f ),
+	Vector( 1.f, 0.f, 0.f ),
+
+	Vector( 0.f, 0.5f, 0.f ),
+	Vector( -0.5f, 0.5f, 0.f ),
+	Vector( -1.f, 0.5f, 0.f ),
+	Vector( 0.5f, 0.5f, 0.f ),
+	Vector( 1.f, 0.5f, 0.f ),
+
+	Vector( 0.f, -0.5f, 0.f ),
+	Vector( -0.5f, -0.5f, 0.f ),
+	Vector( -1.f, -0.5f, 0.f ),
+	Vector( 0.5f, -0.5f, 0.f ),
+	Vector( 1.f, -0.5f, 0.f ),
+
+// 	Vector( 0.f, 0.f, 0.f ),
+// 	Vector( 0.25f, 0.f, 0.f ),
+// 	Vector( -0.25f, 0.f, 0.f ),
+// 	Vector( 0.f, -0.25f, 0.f ),
+// 	Vector( 0.f, 0.25f, 0.f ),
 };
 
 //-----------------------------------------------------------------------------
@@ -270,7 +299,7 @@ void FX_FireBullets( CTFWeaponBase *pWpn, int iPlayer, const Vector &vecOrigin, 
 #endif // !CLIENT
 
 	int nBulletsPerShot = pWeaponInfo->GetWeaponData( iMode ).m_nBulletsPerShot;
-	bool bFixedSpread = ( nDamageType & DMG_BUCKSHOT ) && ( nBulletsPerShot > 1 ) && IsFixedWeaponSpreadEnabled();
+	bool bFixedSpread = ( nDamageType & DMG_BUCKSHOT ) && ( nBulletsPerShot > 1 ) && IsFixedWeaponSpreadEnabled( pWpn );
 	if ( pWeapon )
 	{
 		CALL_ATTRIB_HOOK_FLOAT_ON_OTHER( pWeapon, nBulletsPerShot, mult_bullets_per_shot );
@@ -280,46 +309,71 @@ void FX_FireBullets( CTFWeaponBase *pWpn, int iPlayer, const Vector &vecOrigin, 
 		// Initialize random system with this seed.
 		RandomSeed( iSeed );	
 
-		// Get circular gaussian spread. Under some cases we fire a bullet right down the crosshair:
-		//	- The first bullet of a spread weapon (except for rapid fire spread weapons like the minigun)
-		//	- The first bullet of a non-spread weapon if it's been >1.25 second since firing
-		bool bFirePerfect = false;
-		if ( iBullet == 0 && pWpn )
-		{
-			float flTimeSinceLastShot = (gpGlobals->curtime - pWpn->m_flLastFireTime );
-			if ( nBulletsPerShot > 1 && flTimeSinceLastShot > 0.25 )
-			{
-				bFirePerfect = true;
-			}
-			else if ( nBulletsPerShot == 1 && flTimeSinceLastShot > 1.25 )
-			{
-				bFirePerfect = true;
-			}
-		}
+		float x = 0.f;
+		float y = 0.f;
 
-		float x,y;
 		if ( bFixedSpread )
 		{
-			int iSpread = iBullet;
-			while ( iSpread >= ARRAYSIZE(g_vecFixedWpnSpreadPellets) )
+			if ( nBulletsPerShot >= 15 )
 			{
-				iSpread -= ARRAYSIZE(g_vecFixedWpnSpreadPellets);
+				int iSpread = iBullet;
+				while ( iSpread >= ARRAYSIZE( g_vecFixedWpnSpreadPelletsWideLarge ) )
+				{
+					iSpread -= ARRAYSIZE( g_vecFixedWpnSpreadPelletsWideLarge );
+				}
+				float flScalar = 1.f;
+				x = ( g_vecFixedWpnSpreadPelletsWideLarge[iSpread].x + random->RandomFloat( -0.07f, 0.07f ) ) * flScalar;
+				y = ( g_vecFixedWpnSpreadPelletsWideLarge[iSpread].y + random->RandomFloat( -0.07f, 0.07f ) ) * flScalar;
 			}
-			float flScalar = 0.5;
-			x = g_vecFixedWpnSpreadPellets[iSpread].x * flScalar;
-			y = g_vecFixedWpnSpreadPellets[iSpread].y * flScalar;
-		}
-		else if ( bFirePerfect )
-		{
-			x = y = 0;
+			else
+			{
+				int iSpread = iBullet;
+				while ( iSpread >= ARRAYSIZE( g_vecFixedWpnSpreadPellets ) )
+				{
+					iSpread -= ARRAYSIZE( g_vecFixedWpnSpreadPellets );
+				}
+				float flScalar = 0.5f;
+				x = g_vecFixedWpnSpreadPellets[iSpread].x * flScalar;
+				y = g_vecFixedWpnSpreadPellets[iSpread].y * flScalar;
+			}
 		}
 		else
 		{
-			x = RandomFloat( -0.5, 0.5 ) + RandomFloat( -0.5, 0.5 );
-			y = RandomFloat( -0.5, 0.5 ) + RandomFloat( -0.5, 0.5 );
+			float flVariance = 0.5f;
+
+			if ( iBullet == 0 && pWpn )
+			{
+				bool bAccuracyBonus = false;
+				float flTimeSinceLastShot = ( gpGlobals->curtime - pWpn->m_flLastFireTime );
+
+				if ( nBulletsPerShot > 1 && flTimeSinceLastShot > 0.25f )
+				{
+					bAccuracyBonus = true;
+				}
+				else if ( nBulletsPerShot == 1 && flTimeSinceLastShot > 1.25f )
+				{
+					bAccuracyBonus = true;
+				}
+
+				if ( bAccuracyBonus )
+				{
+					float flMult = 0.f;
+
+					// By default, all guns have perfect accuracy on the first shot (unless this attribute is present).
+					CALL_ATTRIB_HOOK_FLOAT_ON_OTHER( pWpn, flMult, mult_spread_scale_first_shot );
+
+					flVariance = flMult;
+				}
+			}
+
+			if ( flVariance != 0.f )
+			{
+				x = RandomFloat( -flVariance, flVariance ) + RandomFloat( -flVariance, flVariance );
+				y = RandomFloat( -flVariance, flVariance ) + RandomFloat( -flVariance, flVariance );
+			}
 		}
 
-		// Initialize the varialbe firing information.
+		// Initialize the variable firing information.
 		fireInfo.m_vecDirShooting = vecShootForward + ( x *  flSpread * vecShootRight ) + ( y * flSpread * vecShootUp );
 		fireInfo.m_vecDirShooting.NormalizeInPlace();
 		fireInfo.m_bUseServerRandomSeed = pWpn && pWpn->UseServerRandomSeed();
@@ -358,11 +412,23 @@ void FX_FireBullets( CTFWeaponBase *pWpn, int iPlayer, const Vector &vecOrigin, 
 //-----------------------------------------------------------------------------
 // Purpose: Should we make this a per-weapon property?
 //-----------------------------------------------------------------------------
-bool IsFixedWeaponSpreadEnabled( void )
+bool IsFixedWeaponSpreadEnabled( CTFWeaponBase *pWeapon /*= NULL*/ )
 {
+	bool bFixedSpread = tf_use_fixed_weaponspreads.GetBool();
+
 	const IMatchGroupDescription *pMatchDesc = GetMatchGroupDescription( TFGameRules()->GetCurrentMatchGroup() );
 	if ( pMatchDesc )
-		return pMatchDesc->m_params.m_bFixedWeaponSpread;
+	{
+		bFixedSpread = pMatchDesc->BUsesFixedWeaponSpread();
+	}
 
-	return tf_use_fixed_weaponspreads.GetBool();
+	if ( pWeapon && !bFixedSpread )
+	{
+		int iFixedSpread = 0;
+		CALL_ATTRIB_HOOK_INT_ON_OTHER( pWeapon, iFixedSpread, fixed_shot_pattern );
+		if ( iFixedSpread )
+			return true;
+	}
+
+	return bFixedSpread;
 }

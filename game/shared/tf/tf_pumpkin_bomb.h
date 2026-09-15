@@ -45,6 +45,8 @@ public:
 	virtual int		OnTakeDamage( const CTakeDamageInfo &info );
 
 	void			SetSpell( bool bSpell ) { m_bIsSpell = bSpell; }
+
+	virtual bool	IsProjectileCollisionTarget( void ) const OVERRIDE { return true; }
 #endif
 
 private:

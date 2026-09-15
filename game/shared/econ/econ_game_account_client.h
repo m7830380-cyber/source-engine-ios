@@ -19,11 +19,6 @@
 //---------------------------------------------------------------------------------
 class CEconGameAccountClient : public GCSDK::CProtoBufSharedObject< CSOEconGameAccountClient, k_EEconTypeGameAccountClient >
 {
-#ifdef GC
-	DECLARE_CLASS_MEMPOOL( CEconGameAccountClient );
-public:
-	virtual bool BIsDatabaseBacked() const { return false; }
-#endif
 };
 
 #endif //ECON_GAME_ACCOUNT_CLIENT_H

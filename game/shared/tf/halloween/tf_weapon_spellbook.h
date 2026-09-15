@@ -43,6 +43,8 @@
 	#define CTFProjectile_SpellKartBats				C_TFProjectile_SpellKartBats
 	#define CTFProjectile_SpellKartMirv				C_TFProjectile_SpellKartMirv
 	#define CTFProjectile_SpellKartPumpkin			C_TFProjectile_SpellKartPumpkin
+
+	#define CTFProjectile_BallOfFire			C_TFProjectile_BallOfFire	
 #else
 	#include "tf_projectile_rocket.h"
 #endif

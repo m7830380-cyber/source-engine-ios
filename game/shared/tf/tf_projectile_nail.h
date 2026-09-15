@@ -29,23 +29,5 @@ public:
 	virtual float GetGravity( void );
 };
 
-#ifdef STAGING_ONLY
-//-----------------------------------------------------------------------------
-class CTFProjectile_Tranq : public CTFProjectile_Syringe
-{
-	DECLARE_CLASS( CTFProjectile_Tranq, CTFProjectile_Syringe );
-
-public:
-	// Creation.
-	static CTFBaseProjectile *Create( const Vector &vecOrigin, const QAngle &vecAngles, CTFWeaponBaseGun *pLauncher = NULL, CBaseEntity *pOwner = NULL, CBaseEntity *pScorer = NULL, bool bCritical = false );
-
-	virtual const char *GetProjectileModelName( void )		{ return "models/weapons/w_models/w_syringe_proj.mdl"; }
-	virtual float GetGravity( void );
-
-#ifdef GAME_DLL
-	virtual void ProjectileTouch( CBaseEntity *pOther );
-#endif // GAME_DLL
-};
-#endif // STAGING_ONLY
 
 #endif	//TF_PROJECTILE_NAIL_H

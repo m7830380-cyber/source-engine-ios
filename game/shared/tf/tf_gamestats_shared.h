@@ -426,9 +426,9 @@ struct KillStats_t
 		Q_memset( iNumKilledByUnanswered, 0, sizeof( iNumKilledByUnanswered ) );
 	}
 
-	int iNumKilled[MAX_PLAYERS+1];					// how many times this player has killed every other player
-	int iNumKilledBy[MAX_PLAYERS+1];				// how many times this player has been killed by every other player
-	int iNumKilledByUnanswered[MAX_PLAYERS+1];		// how many unanswered kills this player has been dealt by every other player
+	int iNumKilled[MAX_PLAYERS_ARRAY_SAFE];					// how many times this player has killed every other player
+	int iNumKilledBy[MAX_PLAYERS_ARRAY_SAFE];				// how many times this player has been killed by every other player
+	int iNumKilledByUnanswered[MAX_PLAYERS_ARRAY_SAFE];		// how many unanswered kills this player has been dealt by every other player
 };
 
 //=============================================================================
@@ -617,9 +617,9 @@ struct RobotDestructionStats_t
 	int		iRobotsDamageFromClass[ TF_CLASS_COUNT ];
 
 	// Player Interaction
-	int		iRobotInteraction[MAX_PLAYERS];
-	int		iRobotCoreInteraction[MAX_PLAYERS];
-	int		iFlagInteraction[MAX_PLAYERS];
+	int		iRobotInteraction[MAX_PLAYERS_ARRAY_SAFE];
+	int		iRobotCoreInteraction[MAX_PLAYERS_ARRAY_SAFE];
+	int		iFlagInteraction[MAX_PLAYERS_ARRAY_SAFE];
 };
 
 //=============================================================================

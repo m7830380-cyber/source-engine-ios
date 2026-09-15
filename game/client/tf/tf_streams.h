@@ -23,15 +23,11 @@ public:
 public:
 	CUtlString m_sGlobalName;
 	int m_numViewers;
-	CUtlString m_sDisplayName;
 	CUtlString m_sTextDescription;
 	CUtlString m_sUpdatedAtStamp;
 	CUtlString m_sPreviewImage;
 	CUtlString m_sPreviewImageLocalFile;
 	CUtlString m_sPreviewImageSF;
-	CUtlString m_sLanguage;
-	CUtlString m_sCountry;
-	CUtlString m_sVideoFeedUrl;
 };
 
 class CTFStreamPanel : public EditablePanel

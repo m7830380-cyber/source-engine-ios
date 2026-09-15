@@ -37,41 +37,6 @@ public:
 };
 CLocalizationProvider *GLocalizationProvider();
 
-#ifdef GC 
-// GC localization is handled by the GC itself
-class CGCLocalizationProvider : public CLocalizationProvider
-{
-public:
-	CGCLocalizationProvider( CGCGameBase *pGC, ELanguage eLang = k_Lang_English )
-	{
-		m_pGC = pGC;
-		m_eLang = eLang;
-	}
-
-	static bool BEnsureCleanUTF8Truncation( char *unicodeOutput );
-
-	virtual locchar_t *Find( const char *pchKey ) const;
-
-	// new interface
-	virtual void ConvertLoccharToANSI	( const locchar_t *loc_In, CUtlConstString *out_ansi ) const;
-	virtual void ConvertLoccharToUnicode( const locchar_t *loc_In, CUtlConstWideString *out_unicode ) const;
-	virtual void ConvertUTF8ToLocchar	( const char *utf8_In, CUtlConstStringBase<locchar_t> *out_loc ) const;
-
-	// old C-style interface
-	virtual int ConvertLoccharToANSI( const locchar_t *loc, char *ansi, int ansiBufferSize ) const;
-	virtual int ConvertLoccharToUnicode( const locchar_t *loc, wchar_t *unicode, int unicodeBufferSize ) const;
-
-	virtual void ConvertUTF8ToLocchar( const char *utf8, locchar_t *locchar, int loccharBufferSize ) const;
-
-	virtual ELanguage GetELang() const { return m_eLang; }
-
-private:
-	CGCGameBase		*m_pGC;
-	ELanguage		m_eLang;
-};
-
-
-#else
 
 #include "vgui/ILocalize.h"
 extern vgui::ILocalize				*g_pVGuiLocalize;
@@ -98,6 +63,5 @@ public:
 	virtual ELanguage GetELang() const { return k_Lang_None; }
 
 };
-#endif
 
 #endif // LOCALIZATION_PROVIDER_H

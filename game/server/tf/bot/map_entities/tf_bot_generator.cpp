@@ -5,6 +5,7 @@
 
 #include "cbase.h"
 
+#include "bot/tf_bot.h"
 #include "tf_bot_generator.h"
 
 #include "bot/tf_bot.h"
@@ -12,6 +13,7 @@
 #include "tf_gamerules.h"
 #include "tier3/tier3.h"
 #include "vgui/ILocalize.h"
+#include "econ_item_system.h"
 
 extern ConVar tf_bot_prefix_name_with_difficulty;
 extern ConVar tf_bot_difficulty;
@@ -64,6 +66,19 @@ enum
 	kOnDeath_RemoveSelf,
 	kOnDeath_MoveToSpectatorTeam,
 };
+
+void AppyCustomAttribute( CTFBot *me, const char *pszName, float flValue )
+{
+	const CEconItemAttributeDefinition *pDef = ItemSystem()->GetItemSchema()->GetAttributeDefinitionByName( pszName );
+	if ( pDef )
+	{
+		CAttributeList *pAttribList = me->GetAttributeList();
+		if ( pAttribList )
+		{
+			pAttribList->SetRuntimeAttributeValue( pDef, flValue );
+		}
+	}
+}
 
 //------------------------------------------------------------------------------
 CTFBotGenerator::CTFBotGenerator( void ) 
@@ -392,6 +407,7 @@ void CTFBotGenerator::SpawnBot( void )
 		{
 			bot->ForceRespawn();
 		}
+
 
 		// make sure the bot is facing the right way.
 		// @todo Tom Bui: for some reason it is still turning towards another direction...need to investigate

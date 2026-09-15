@@ -616,7 +616,7 @@ class CAchievementTFPyro_KillWithTaunt : public CBaseTFAchievement
 		if ( pAttacker == pLocalPlayer )
 		{
 			C_TFPlayer *pTFVictim = ToTFPlayer( pVictim );
-			if ( pTFVictim && ( event->GetInt( "customkill" ) == TF_DMG_CUSTOM_TAUNTATK_HADOUKEN || event->GetInt( "customkill" ) == TF_DMG_CUSTOM_TAUNTATK_ARMAGEDDON ) )
+			if ( pTFVictim && ( event->GetInt( "customkill" ) == TF_DMG_CUSTOM_TAUNTATK_HADOUKEN || event->GetInt( "customkill" ) == TF_DMG_CUSTOM_TAUNTATK_ARMAGEDDON || event->GetInt( "customkill" ) == TF_DMG_CUSTOM_TAUNTATK_GASBLAST ) )
 			{
 				IncrementCount();
 			}

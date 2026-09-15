@@ -7,8 +7,12 @@
 
 
 #include "cbase.h"
-#ifdef _WIN32
-#include "typeinfo"
+#if defined( WIN32 ) && _MSC_VER <= 1920
+#include "typeinfo.h"
+// BUGBUG: typeinfo stomps some of the warning settings (in yvals.h)
+#pragma warning(disable:4244)
+#elif defined( WIN32 )
+#include <typeinfo>
 // BUGBUG: typeinfo stomps some of the warning settings (in yvals.h)
 #pragma warning(disable:4244)
 #elif POSIX
@@ -126,7 +130,7 @@ void CPhysicsPushedEntities::UnlinkPusherList( int *pPusherHandles )
 {
 	for ( int i = m_rgPusher.Count(); --i >= 0; )
 	{
-		pPusherHandles[i] = partition->HideElement( m_rgPusher[i].m_pEntity->CollisionProp()->GetPartitionHandle() );
+		pPusherHandles[i] = ::partition->HideElement( m_rgPusher[i].m_pEntity->CollisionProp()->GetPartitionHandle() );
 	}
 }
 
@@ -134,7 +138,7 @@ void CPhysicsPushedEntities::RelinkPusherList( int *pPusherHandles )
 {
 	for ( int i = m_rgPusher.Count(); --i >= 0; )
 	{
-		partition->UnhideElement( m_rgPusher[i].m_pEntity->CollisionProp()->GetPartitionHandle(), pPusherHandles[i] );
+		::partition->UnhideElement( m_rgPusher[i].m_pEntity->CollisionProp()->GetPartitionHandle(), pPusherHandles[i] );
 	}
 }
 
@@ -696,7 +700,7 @@ void CPhysicsPushedEntities::GenerateBlockingEntityList()
 
 		Vector vecAbsMins, vecAbsMaxs;
 		pPusher->CollisionProp()->WorldSpaceAABB( &vecAbsMins, &vecAbsMaxs );
-		partition->EnumerateElementsInBox( PARTITION_ENGINE_NON_STATIC_EDICTS, vecAbsMins, vecAbsMaxs, false, &blockerEnum );
+		::partition->EnumerateElementsInBox( PARTITION_ENGINE_NON_STATIC_EDICTS, vecAbsMins, vecAbsMaxs, false, &blockerEnum );
 
 		//Go back throught the generated list.
 	}
@@ -736,19 +740,22 @@ void CPhysicsPushedEntities::GenerateBlockingEntityListAddBox( const Vector &vec
 			}
 		}
 
-		partition->EnumerateElementsInBox( PARTITION_ENGINE_NON_STATIC_EDICTS, vecAbsMins, vecAbsMaxs, false, &blockerEnum );
+		::partition->EnumerateElementsInBox( PARTITION_ENGINE_NON_STATIC_EDICTS, vecAbsMins, vecAbsMaxs, false, &blockerEnum );
 
 		//Go back throught the generated list.
 	}
 }
 
-
+#ifdef TF_DLL
+#include "tf_logic_robot_destruction.h"
+#endif
 //-----------------------------------------------------------------------------
 // Purpose: Gets a list of all entities hierarchically attached to the root 
 //-----------------------------------------------------------------------------
 void CPhysicsPushedEntities::SetupAllInHierarchy( CBaseEntity *pParent )
 {
-	if (!pParent)
+	// Server-only entities do not have a valid partition
+	if ( !pParent || pParent->IsEFlagSet( EFL_SERVER_ONLY ) )
 		return;
 
 	VPROF("CPhysicsPushedEntities::SetupAllInHierarchy");
@@ -1841,7 +1848,9 @@ void CBaseEntity::PhysicsStepRunTimestep( float timestep )
 {
 	bool	wasonground;
 	bool	inwater;
+#if 0
 	bool	hitsound = false;
+#endif
 	float	speed, newspeed, control;
 	float	friction;
 
@@ -1862,10 +1871,12 @@ void CBaseEntity::PhysicsStepRunTimestep( float timestep )
 		{
 			if ( !( ( GetFlags() & FL_SWIM ) && ( GetWaterLevel() > 0 ) ) )
 			{
+#if 0
 				if ( GetAbsVelocity()[2] < ( GetCurrentGravity() * -0.1 ) )
 				{
 					hitsound = true;
 				}
+#endif
 
 				if ( !inwater )
 				{

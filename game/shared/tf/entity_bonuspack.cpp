@@ -133,7 +133,7 @@ bool CBonusPack::MyTouch( CBasePlayer *pPlayer )
 //-----------------------------------------------------------------------------
 bool CBonusPack::ValidTouch( CBasePlayer *pPlayer )
 {
-	if( pPlayer->GetTeamNumber() != GetTeamNumber() )
+	if ( ( GetTeamNumber() > LAST_SHARED_TEAM ) && ( pPlayer->GetTeamNumber() != GetTeamNumber() ) )
 		return false;
 
 	CTFPlayer *pTFPlayer = ToTFPlayer( pPlayer );

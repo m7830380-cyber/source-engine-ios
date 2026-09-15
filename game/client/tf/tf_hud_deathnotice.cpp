@@ -651,6 +651,7 @@ void CTFHudDeathNotice::Init()
 	ListenForGameEvent( "fish_notice" );
 	ListenForGameEvent( "fish_notice__arm" );
 	ListenForGameEvent( "duck_xp_level_up" );
+	ListenForGameEvent( "slap_notice" );
 	//ListenForGameEvent( "throwable_hit" );
 
 	m_bShowItemOnKill = true;
@@ -774,6 +775,7 @@ bool CTFHudDeathNotice::EventIsPlayerDeath( const char* eventName )
 {
 	return FStrEq( eventName, "fish_notice" )
 		|| FStrEq( eventName, "fish_notice__arm" )
+		|| FStrEq( eventName, "slap_notice" )
 		//|| FStrEq( eventName, "throwable_hit" )
 		|| BaseClass::EventIsPlayerDeath( eventName );
 }
@@ -1047,6 +1049,22 @@ void CTFHudDeathNotice::OnGameEvent( IGameEvent *event, int iDeathNoticeMsg )
 				}			
 				break;
 			}
+
+		case TF_DMG_CUSTOM_CROC:
+		{
+			// display a different message if this was suicide, or assisted suicide (suicide w/recent damage, kill awarded to damager)
+			bool bAssistedSuicide = event->GetInt( "attacker" ) && ( event->GetInt( "userid" ) != event->GetInt( "attacker" ) );
+			if ( bAssistedSuicide )
+			{
+				pMsg = g_pVGuiLocalize->Find( "#DeathMsg_AssistedSuicide" );
+				if ( pMsg )
+				{
+					V_wcsncpy( msg.wzInfoText, pMsg, sizeof( msg.wzInfoText ) );
+				}
+			}
+			break;
+		}
+
 		case TF_DMG_CUSTOM_EYEBALL_ROCKET:
 			{
 				if ( msg.Killer.iTeam == TEAM_UNASSIGNED )
@@ -1088,6 +1106,11 @@ void CTFHudDeathNotice::OnGameEvent( IGameEvent *event, int iDeathNoticeMsg )
 					char szLocalizedName[MAX_PLAYER_NAME_LENGTH];
 					szLocalizedName[ 0 ] = 0;
 					const wchar_t *wszLocalizedName = g_pVGuiLocalize->Find( "#TF_HALLOWEEN_SKELETON_DEATHCAM_NAME" );
+					if ( FStrEq( engine->GetLevelName(), "maps/koth_slime.bsp" ) )
+					{
+						wszLocalizedName = g_pVGuiLocalize->Find( "#koth_slime_salmann" );
+					}
+
 					if ( wszLocalizedName )
 					{
 						g_pVGuiLocalize->ConvertUnicodeToANSI( wszLocalizedName, szLocalizedName, ARRAYSIZE( szLocalizedName ) );
@@ -1108,6 +1131,36 @@ void CTFHudDeathNotice::OnGameEvent( IGameEvent *event, int iDeathNoticeMsg )
 			Q_strncpy( msg.szIcon, "d_necro_smasher", ARRAYSIZE( msg.szIcon ) );
 			msg.wzInfoText[0] = 0;
 			break;
+		case TF_DMG_CUSTOM_KRAMPUS_MELEE:
+			{
+				char szLocalizedName[ MAX_PLAYER_NAME_LENGTH ];
+				szLocalizedName[ 0 ] = 0;
+				const wchar_t *wszLocalizedName = g_pVGuiLocalize->Find( "#koth_krampus_boss" );
+				if ( wszLocalizedName )
+				{
+					g_pVGuiLocalize->ConvertUnicodeToANSI( wszLocalizedName, szLocalizedName, ARRAYSIZE( szLocalizedName ) );
+					Q_strncpy( msg.Killer.szName, szLocalizedName, ARRAYSIZE( msg.Killer.szName ) );
+					msg.Killer.iTeam = TF_TEAM_HALLOWEEN; // This will set the name to green for THE UNDEAD!
+				}
+				Q_strncpy( msg.szIcon, "d_krampus_melee", ARRAYSIZE( msg.szIcon ) );
+				msg.wzInfoText[ 0 ] = 0;
+				break;
+			}
+		case TF_DMG_CUSTOM_KRAMPUS_RANGED:
+			{
+				char szLocalizedName[ MAX_PLAYER_NAME_LENGTH ];
+				szLocalizedName[ 0 ] = 0;
+				const wchar_t *wszLocalizedName = g_pVGuiLocalize->Find( "#koth_krampus_boss" );
+				if ( wszLocalizedName )
+				{
+					g_pVGuiLocalize->ConvertUnicodeToANSI( wszLocalizedName, szLocalizedName, ARRAYSIZE( szLocalizedName ) );
+					Q_strncpy( msg.Killer.szName, szLocalizedName, ARRAYSIZE( msg.Killer.szName ) );
+					msg.Killer.iTeam = TF_TEAM_HALLOWEEN; // This will set the name to green for THE UNDEAD!
+				}
+				Q_strncpy( msg.szIcon, "d_krampus_ranged", ARRAYSIZE( msg.szIcon ) );
+				msg.wzInfoText[ 0 ] = 0;
+				break;
+			}
 		default:
 			break;
 		}
@@ -1200,21 +1253,6 @@ void CTFHudDeathNotice::OnGameEvent( IGameEvent *event, int iDeathNoticeMsg )
 
 		// STAGING ONLY test
 		// If Local Player killed someone and they have an item waiting, let them know
-#ifdef STAGING_ONLY
-		//if ( iLocalPlayerIndex == iKillerID && m_bShowItemOnKill )
-		//{
-		//	if ( CEconNotification_HasNewItemsOnKill::HasUnacknowledgedItems() )
-		//	{
-		//		CEconNotification_HasNewItemsOnKill *pNotification = new CEconNotification_HasNewItemsOnKill( iVictimID );
-		//		NotificationQueue_Add( pNotification );
-		//		m_bShowItemOnKill = false;
-		//	}
-		//}
-		//if ( iLocalPlayerIndex == iVictimID )
-		//{
-		//	m_bShowItemOnKill = true;
-		//}
-#endif
 	} 
 	else if ( FStrEq( "teamplay_point_captured", pszEventName ) ||
 			  FStrEq( "teamplay_capture_blocked", pszEventName ) || 
@@ -1238,15 +1276,24 @@ void CTFHudDeathNotice::OnGameEvent( IGameEvent *event, int iDeathNoticeMsg )
 
 		Q_strncpy( msg.szIcon, bDefense ? szDefenseIcons[iIndex] : szCaptureIcons[iIndex], ARRAYSIZE( msg.szIcon ) );
 	}
-	else if ( FStrEq( "fish_notice", pszEventName ) || FStrEq( "fish_notice__arm", pszEventName ) )
+	else if ( FStrEq( "fish_notice", pszEventName ) || FStrEq( "fish_notice__arm", pszEventName ) || FStrEq( "slap_notice", pszEventName ) )
 	{
 		DeathNoticeItem &msg = m_DeathNotices[ iDeathNoticeMsg ];
 		int deathFlags = event->GetInt( "death_flags" );
 		int iCustomDamage = event->GetInt( "customkill" );
 
-		if ( ( iCustomDamage == TF_DMG_CUSTOM_FISH_KILL ) || ( deathFlags & TF_DEATH_FEIGN_DEATH ) )
+		if ( ( iCustomDamage == TF_DMG_CUSTOM_FISH_KILL ) || ( deathFlags & TF_DEATH_FEIGN_DEATH ) || ( iCustomDamage == TF_DMG_CUSTOM_SLAP_KILL ) )
 		{
-			g_pVGuiLocalize->ConstructString_safe( msg.wzInfoText, FStrEq( "fish_notice", pszEventName ) ? g_pVGuiLocalize->Find("#Humiliation_Kill") : g_pVGuiLocalize->Find("#Humiliation_Kill_Arm"), 0 );
+			const wchar_t *wpszFormat = g_pVGuiLocalize->Find( "#Humiliation_Kill" );
+			if ( FStrEq( "fish_notice__arm", pszEventName ) )
+			{
+				wpszFormat = g_pVGuiLocalize->Find( "#Humiliation_Kill_Arm" );
+			}
+			else if ( FStrEq( "slap_notice", pszEventName ) )
+			{
+				wpszFormat = g_pVGuiLocalize->Find( "#Humiliation_Kill_Slap" );
+			}
+			g_pVGuiLocalize->ConstructString_safe( msg.wzInfoText, wpszFormat, 0 );
 		}
 		else
 		{
@@ -1301,6 +1348,10 @@ void CTFHudDeathNotice::OnGameEvent( IGameEvent *event, int iDeathNoticeMsg )
 
 		int killer = engine->GetPlayerForUserID( event->GetInt( "attacker" ) );
 		const char *killedwith = event->GetString( "weapon" );
+
+		// flags
+		if ( GetLocalPlayerIndex() == killer )
+			msg.bLocalPlayerInvolved = true;
 
 		msg.Killer.iTeam = g_PR->GetTeam( killer );
 		Q_strncpy( msg.Killer.szName, g_PR->GetPlayerName( killer ), ARRAYSIZE( msg.Killer.szName ) );
@@ -1589,7 +1640,7 @@ int CTFHudDeathNotice::UseExistingNotice( IGameEvent *event )
 	// Fish Notices and Throwables
 	// Add check for all throwables
 	int iTarget = event->GetInt( "weaponid" );
-	if (iTarget == TF_WEAPON_BAT_FISH || iTarget == TF_WEAPON_THROWABLE || iTarget == TF_WEAPON_GRENADE_THROWABLE )
+	if ( ( iTarget == TF_WEAPON_BAT_FISH ) || ( iTarget == TF_WEAPON_SLAP ) || ( iTarget == TF_WEAPON_THROWABLE ) || ( iTarget == TF_WEAPON_GRENADE_THROWABLE ) )
 	{
 		// Look for a matching pre-existing notice.
 		for ( int i=0; i<m_DeathNotices.Count(); ++i )

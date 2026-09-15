@@ -636,17 +636,17 @@ float CTFWeaponBuilder::WheatleyEmitSound( const char *snd, bool bEmitToAll /*= 
 		}
 	}
 	//Look for special cases that require us to pick the next lines from a sequential list
-	if ( Q_strcmp( params.soundname, "vo/items/wheatley_sapper/wheatley_sapper_idle38.mp3") == NULL )
+	if ( Q_strcmp( params.soundname, "vo/items/wheatley_sapper/wheatley_sapper_idle38.mp3") == 0 )
 	{
 		SetWheatleyState( TF_PSAPSTATE_SPECIALIDLE_HARMLESS );
 		m_iWheatleyVOSequenceOffset = 0;
 	}
-	else if ( Q_strcmp( params.soundname, "vo/items/wheatley_sapper/wheatley_sapper_idle41.mp3") == NULL )
+	else if ( Q_strcmp( params.soundname, "vo/items/wheatley_sapper/wheatley_sapper_idle41.mp3") == 0 )
 	{
 		SetWheatleyState( TF_PSAPSTATE_SPECIALIDLE_HACK );
 		m_iWheatleyVOSequenceOffset = 0;
 	}
-	else if ( Q_strcmp( params.soundname, "vo/items/wheatley_sapper/wheatley_sapper_idle35.mp3") == NULL )
+	else if ( Q_strcmp( params.soundname, "vo/items/wheatley_sapper/wheatley_sapper_idle35.mp3") == 0 )
 	{
 		SetWheatleyState( TF_PSAPSTATE_SPECIALIDLE_KNIFE );
 		m_iWheatleyVOSequenceOffset = 0;
@@ -1131,13 +1131,6 @@ void CTFWeaponBuilder::StartBuilding( void )
 					StartEffectBarRegen();
 				}
 			}
-#ifdef STAGING_ONLY
-			// Traps use TF_AMMO_GRENADES1
-			else if ( pObj->GetType() == OBJ_SPY_TRAP )
-			{
-				pOwner->RemoveAmmo( 1, TF_AMMO_GRENADES1 );
-			}
-#endif // STAGING_ONLY
 		}
 	}
 }
@@ -1267,34 +1260,6 @@ CTFWeaponSapper::CTFWeaponSapper()
 //-----------------------------------------------------------------------------
 void CTFWeaponSapper::ItemPostFrame( void )
 {
-#ifdef STAGING_ONLY
-	CTFPlayer *pPlayer = ToTFPlayer( GetPlayerOwner() );
-	if ( pPlayer )
-	{
-		float flSapperDeployTime = 0;
-		CALL_ATTRIB_HOOK_FLOAT( flSapperDeployTime, sapper_deploy_time );
-		if ( flSapperDeployTime )
-		{
-			//IsValidPlacement
-			if ( !( pPlayer->m_nButtons & IN_ATTACK ) || !IsValidPlacement() )
-			{
-				m_bAttackDown = false;
-				m_flChargeBeginTime = 0;
-			}
-			else if ( m_bAttackDown == false && ( pPlayer->m_nButtons & IN_ATTACK ) )
-			{
-				m_bAttackDown = true;
-				m_flChargeBeginTime = gpGlobals->curtime;
-			}
-
-			if ( ( m_bAttackDown == true && m_flChargeBeginTime + flSapperDeployTime < gpGlobals->curtime ) || !( pPlayer->m_nButtons & IN_ATTACK ) )
-			{
-				BaseClass::ItemPostFrame();
-			}
-			return;
-		}
-	}
-#endif // STAGING_ONLY
 	BaseClass::ItemPostFrame();
 }
 //-----------------------------------------------------------------------------

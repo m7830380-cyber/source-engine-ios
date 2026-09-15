@@ -62,6 +62,7 @@ enum charinfo_activepanels_t
 	CHAP_BACKPACK,
 	CHAP_CRAFTING,
 	CHAP_ARMORY,
+	CHAP_PAINTKIT_PREVIEW,
 };
 
 enum charinfosubbuttons_t
@@ -70,6 +71,7 @@ enum charinfosubbuttons_t
 	CHSB_CRAFTING,
 	CHSB_ARMORY,
 	CHSB_TRADING,
+	CHSB_PAINTKITS,
 
 	CHSB_NUM_BUTTONS
 };
@@ -95,6 +97,7 @@ public:
 	void			OpenToBackpack( void ) { OpenSubPanel( CHAP_BACKPACK ); }
 	void			OpenToCrafting( void ) { OpenSubPanel( CHAP_CRAFTING ); }
 	void			OpenToArmory( int iItemDef = 0 ) { m_iArmoryItemDef = iItemDef; OpenSubPanel( CHAP_ARMORY ); }
+	void			OpenToPaintkitPreview( CEconItemView* pItem, bool bFixedItem, bool bFixedPaintkit );
 	void			OpenSubPanel( charinfo_activepanels_t iPanel );
 	void			UpdateModelPanels( bool bOpenClassLoadout = true );
 
@@ -102,6 +105,7 @@ public:
 	CBackpackPanel	*GetBackpackPanel( void ) { return m_pBackpackPanel; }
 	CCraftingPanel	*GetCraftingPanel( void ) { return m_pCraftingPanel; }
 	CArmoryPanel	*GetArmoryPanel( void ) { return m_pArmoryPanel; }
+	CTFItemInspectionPanel* GetInspectionPanel( void ) { return m_pInspectPanel; }
 
 	void UpdateLabelFromClass( int nClass );
 	void UpdateLabelFromSubButton( int nButton );
@@ -145,6 +149,7 @@ private:
 	CBackpackPanel		*m_pBackpackPanel;
 	CCraftingPanel		*m_pCraftingPanel;
 	CArmoryPanel		*m_pArmoryPanel;
+	CTFItemInspectionPanel *m_pInspectPanel;
 	vgui::Label			*m_pSelectLabel;
 	vgui::Label			*m_pLoadoutChangesLabel;
 	vgui::Label			*m_pNoSteamLabel;

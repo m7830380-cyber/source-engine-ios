@@ -11,7 +11,9 @@
 #pragma once
 #endif
 
+#include "tf_gcmessages.h"
 #include "vote_controller.h"
+#include "GameEventListener.h"
 
 class CTFPlayer;
 
@@ -22,7 +24,7 @@ class CBaseTFIssue : public CBaseIssue
 {
 	// Overrides to BaseIssue standard to this mod.
 public:
-	CBaseTFIssue(const char *typeString) : CBaseIssue(typeString)
+	CBaseTFIssue( const char *typeString, CVoteController *pVoteController ) : CBaseIssue(typeString, pVoteController)
 	{
 	}
 };
@@ -33,11 +35,11 @@ public:
 class CRestartGameIssue : public CBaseTFIssue
 {
 public:
-	CRestartGameIssue() : CBaseTFIssue( "RestartGame" ) { } // This string will have "Vote_" glued onto the front for localization (i.e. "#Vote_RestartGame")
+	CRestartGameIssue( CVoteController *pVoteController ) : CBaseTFIssue( "RestartGame", pVoteController ) { } // This string will have "Vote_" glued onto the front for localization (i.e. "#Vote_RestartGame")
 	
 	virtual void		ExecuteCommand( void ) OVERRIDE;
 	virtual bool		IsEnabled( void ) OVERRIDE;
-	virtual bool		CanCallVote( int iEntIndex, const char *pszDetails, vote_create_failed_t &nFailCode, int &nTime ) OVERRIDE;
+	virtual bool		RequestCallVote( int iEntIndex, const char *pszDetails, vote_create_failed_t &nFailCode, int &nTime ) OVERRIDE;
 	virtual const char *GetDisplayString( void ) OVERRIDE;
 	virtual void		ListIssueDetails( CBasePlayer *forWhom ) OVERRIDE;
 	virtual const char *GetVotePassedString( void ) OVERRIDE;
@@ -49,11 +51,11 @@ public:
 class CKickIssue : public CBaseTFIssue
 {
 public:
-	CKickIssue() : CBaseTFIssue( "Kick" ) { } // This string will have "Vote_" glued onto the front for localization (i.e. "#Vote_Kick")
-	
+	CKickIssue( CVoteController *pVoteController ) : CBaseTFIssue( "Kick", pVoteController ) { } // This string will have "Vote_" glued onto the front for localization (i.e. "#Vote_Kick")
+
 	virtual void		ExecuteCommand( void ) OVERRIDE;
 	virtual bool		IsEnabled( void ) OVERRIDE;
-	virtual bool		CanCallVote( int iEntIndex, const char *pszDetails, vote_create_failed_t &nFailCode, int &nTime ) OVERRIDE;
+	virtual bool		RequestCallVote( int iEntIndex, const char *pszDetails, vote_create_failed_t &nFailCode, int &nTime ) OVERRIDE;
 	virtual const char *GetDisplayString( void ) OVERRIDE;
 	virtual void		ListIssueDetails( CBasePlayer *pForWhom ) OVERRIDE;
 	virtual const char *GetVotePassedString( void ) OVERRIDE;
@@ -61,7 +63,17 @@ public:
 	virtual void		OnVoteFailed( int iEntityHoldingVote ) OVERRIDE;
 	virtual void		OnVoteStarted( void ) OVERRIDE;
 	virtual const char *GetDetailsString( void ) OVERRIDE;
-	virtual bool		NeedsPermissionFromGC( void ) OVERRIDE;
+	// Process results specially due to match-system overrides in votekicks
+	virtual EVoteAction ProcessResults( const CUtlVector <const char*> &vecOptions, const int arVoteCountByOption[],
+	                                    const CUtlMap<CSteamID, int> &mapVotesBySteamID, int nHighestCountOption,
+	                                    int nTotalVotes, int nPotentialVoters ) OVERRIDE;
+
+	// Get a kick reason from string and vice versa.  String is the case-insensitive suffix, so "cheating" <->
+	// TFVoteKickReason_Cheating
+	static TFVoteKickReason ParseKickReason( const char *pszReason );
+	static const char*      KickReasonString( TFVoteKickReason );
+
+	virtual void OnPlayerDisconnected( CBasePlayer *pPlayer ) OVERRIDE;
 
 private:
 	void				Init( void );
@@ -71,8 +83,9 @@ private:
 
 	CSteamID			m_steamIDVoteCaller;
 	CSteamID			m_steamIDVoteTarget;
-	char				m_szTargetPlayerName[MAX_PLAYER_NAME_LENGTH];
-	uint32				m_unKickReason;
+	char				m_szTargetPlayerName[MAX_PLAYER_NAME_LENGTH] = { 0 };
+	TFVoteKickReason	m_eKickReason                                = TFVoteKickReason_Other;
+	bool				m_bSubmittedToMatchSystem                    = false;
 };
 
 //-----------------------------------------------------------------------------
@@ -81,12 +94,12 @@ private:
 class CChangeLevelIssue : public CBaseTFIssue
 {
 public:
-	CChangeLevelIssue() : CBaseTFIssue( "ChangeLevel" ) { } // This string will have "Vote_" glued onto the front for localization (i.e. "#Vote_ChangeLevel")
+	CChangeLevelIssue( CVoteController *pVoteController ) : CBaseTFIssue( "ChangeLevel", pVoteController ) { } // This string will have "Vote_" glued onto the front for localization (i.e. "#Vote_ChangeLevel")
 	
 	virtual void		ExecuteCommand( void ) OVERRIDE;
 	virtual bool		IsEnabled( void ) OVERRIDE;
 	virtual bool		CanTeamCallVote( int iTeam ) const OVERRIDE;
-	virtual bool		CanCallVote( int iEntIndex, const char *pszDetails, vote_create_failed_t &nFailCode, int &nTime ) OVERRIDE;
+	virtual bool		RequestCallVote( int iEntIndex, const char *pszDetails, vote_create_failed_t &nFailCode, int &nTime ) OVERRIDE;
 	virtual const char *GetDisplayString( void ) OVERRIDE;
 	virtual void		ListIssueDetails( CBasePlayer *pForWhom ) OVERRIDE;
 	virtual const char *GetVotePassedString( void ) OVERRIDE;
@@ -100,12 +113,12 @@ public:
 class CNextLevelIssue : public CBaseTFIssue
 {
 public:
-	CNextLevelIssue() : CBaseTFIssue( "NextLevel" ) { } // This string will have "Vote_" glued onto the front for localization (i.e. "#Vote_NextLevel")
+	CNextLevelIssue( CVoteController *pVoteController ) : CBaseTFIssue( "NextLevel", pVoteController ) { } // This string will have "Vote_" glued onto the front for localization (i.e. "#Vote_NextLevel")
 	
 	virtual void		ExecuteCommand( void ) OVERRIDE;
 	virtual bool		IsEnabled( void ) OVERRIDE;
 	virtual bool		CanTeamCallVote( int iTeam ) const OVERRIDE;
-	virtual bool		CanCallVote( int iEntIndex, const char *pszDetails, vote_create_failed_t &nFailCode, int &nTime ) OVERRIDE;
+	virtual bool		RequestCallVote( int iEntIndex, const char *pszDetails, vote_create_failed_t &nFailCode, int &nTime ) OVERRIDE;
 	virtual const char *GetDisplayString( void ) OVERRIDE;
 	virtual void		ListIssueDetails( CBasePlayer *pForWhom ) OVERRIDE;
 	virtual const char *GetVotePassedString( void ) OVERRIDE;
@@ -125,11 +138,11 @@ private:
 class CExtendLevelIssue : public CBaseTFIssue
 {
 public:
-	CExtendLevelIssue() : CBaseTFIssue( "ExtendLevel" ) { } // This string will have "Vote_" glued onto the front for localization (i.e. "#Vote_ExtendLevel")
+	CExtendLevelIssue( CVoteController *pVoteController ) : CBaseTFIssue( "ExtendLevel", pVoteController ) { } // This string will have "Vote_" glued onto the front for localization (i.e. "#Vote_ExtendLevel")
 
 	virtual void		ExecuteCommand( void ) OVERRIDE;
 	virtual bool		IsEnabled( void ) OVERRIDE;
-	virtual bool		CanCallVote( int iEntIndex, const char *pszDetails, vote_create_failed_t &nFailCode, int &nTime ) OVERRIDE;
+	virtual bool		RequestCallVote( int iEntIndex, const char *pszDetails, vote_create_failed_t &nFailCode, int &nTime ) OVERRIDE;
 	virtual const char *GetDisplayString( void ) OVERRIDE;
 	virtual void		ListIssueDetails( CBasePlayer *pForWhom ) OVERRIDE;
 	virtual const char *GetVotePassedString( void ) OVERRIDE;
@@ -142,11 +155,11 @@ public:
 class CScrambleTeams : public CBaseTFIssue
 {
 public:
-	CScrambleTeams() : CBaseTFIssue( "ScrambleTeams" ) { } // This string will have "Vote_" glued onto the front for localization (i.e. "#Vote_ScrambleTeams")
+	CScrambleTeams( CVoteController *pVoteController ) : CBaseTFIssue( "ScrambleTeams", pVoteController ) { } // This string will have "Vote_" glued onto the front for localization (i.e. "#Vote_ScrambleTeams")
 
 	virtual void		ExecuteCommand( void ) OVERRIDE;
 	virtual bool		IsEnabled( void ) OVERRIDE;
-	virtual bool		CanCallVote( int iEntIndex, const char *pszDetails, vote_create_failed_t &nFailCode, int &nTime ) OVERRIDE;
+	virtual bool		RequestCallVote( int iEntIndex, const char *pszDetails, vote_create_failed_t &nFailCode, int &nTime ) OVERRIDE;
 	virtual const char *GetDisplayString( void ) OVERRIDE;
 	virtual void		ListIssueDetails( CBasePlayer *pForWhom ) OVERRIDE;
 	virtual const char *GetVotePassedString( void ) OVERRIDE;
@@ -158,12 +171,12 @@ public:
 class CMannVsMachineChangeChallengeIssue : public CBaseTFIssue
 {
 public:
-	CMannVsMachineChangeChallengeIssue() : CBaseTFIssue( "ChangeMission" ) { } // This string will have "Vote_" glued onto the front for localization (i.e. "#Vote_ChangeMission")
+	CMannVsMachineChangeChallengeIssue( CVoteController *pVoteController ) : CBaseTFIssue( "ChangeMission", pVoteController ) { } // This string will have "Vote_" glued onto the front for localization (i.e. "#Vote_ChangeMission")
 	
 	virtual void		ExecuteCommand( void ) OVERRIDE;
 	virtual bool		IsEnabled( void ) OVERRIDE;
 	virtual bool		CanTeamCallVote( int iTeam ) const OVERRIDE;
-	virtual bool		CanCallVote( int iEntIndex, const char *pszDetails, vote_create_failed_t &nFailCode, int &nTime ) OVERRIDE;
+	virtual bool		RequestCallVote( int iEntIndex, const char *pszDetails, vote_create_failed_t &nFailCode, int &nTime ) OVERRIDE;
 	virtual const char *GetDisplayString( void ) OVERRIDE;
 	virtual void		ListIssueDetails( CBasePlayer *pForWhom ) OVERRIDE;
 	virtual const char *GetVotePassedString( void ) OVERRIDE;
@@ -181,7 +194,7 @@ private:
 class CEnableTemporaryHalloweenIssue : public CBaseTFIssue
 {
 public:
-	CEnableTemporaryHalloweenIssue() : CBaseTFIssue( "Eternaween" ) { } // This string will have "Vote_" glued onto the front for localization (i.e. "#Vote_Eternaween")
+	CEnableTemporaryHalloweenIssue( CVoteController *pVoteController ) : CBaseTFIssue( "Eternaween", pVoteController ) { } // This string will have "Vote_" glued onto the front for localization (i.e. "#Vote_Eternaween")
 
 	virtual void		ExecuteCommand( void ) OVERRIDE;
 	virtual void		OnVoteFailed( int iEntityHoldingVote ) OVERRIDE;
@@ -193,7 +206,7 @@ public:
 
 	virtual bool		BRecordVoteFailureEventForEntity( int iVoteCallingEntityIndex ) const OVERRIDE	{ return true; }
 
-	virtual bool		CanCallVote( int iEntIndex, const char *pszDetails, vote_create_failed_t &nFailCode, int &nTime ) OVERRIDE;
+	virtual bool		RequestCallVote( int iEntIndex, const char *pszDetails, vote_create_failed_t &nFailCode, int &nTime ) OVERRIDE;
 	virtual void		ListIssueDetails( CBasePlayer *forWhom ) OVERRIDE;
 };
 
@@ -203,12 +216,12 @@ public:
 class CTeamAutoBalanceIssue : public CBaseTFIssue
 {
 public:
-	CTeamAutoBalanceIssue() : CBaseTFIssue( "TeamAutoBalance" ) { } // This string will have "Vote_" glued onto the front for localization (i.e. "#Vote_TeamAutoBalance")
+	CTeamAutoBalanceIssue( CVoteController *pVoteController ) : CBaseTFIssue( "TeamAutoBalance", pVoteController ) { } // This string will have "Vote_" glued onto the front for localization (i.e. "#Vote_TeamAutoBalance")
 	
 	virtual const char	*GetTypeStringLocalized( void ) OVERRIDE;
 	virtual void		ExecuteCommand( void ) OVERRIDE;
 	virtual bool		IsEnabled( void ) OVERRIDE;
-	virtual bool		CanCallVote( int iEntIndex, const char *pszDetails, vote_create_failed_t &nFailCode, int &nTime ) OVERRIDE;
+	virtual bool		RequestCallVote( int iEntIndex, const char *pszDetails, vote_create_failed_t &nFailCode, int &nTime ) OVERRIDE;
 	virtual const char *GetDisplayString( void ) OVERRIDE;
 	virtual void		ListIssueDetails( CBasePlayer *forWhom ) OVERRIDE;
 	virtual const char *GetVotePassedString( void ) OVERRIDE;
@@ -221,12 +234,12 @@ public:
 class CClassLimitsIssue : public CBaseTFIssue
 {
 public:
-	CClassLimitsIssue() : CBaseTFIssue( "ClassLimits" ) { } // This string will have "Vote_" glued onto the front for localization (i.e. "#Vote_ClassLimits")
+	CClassLimitsIssue( CVoteController *pVoteController ) : CBaseTFIssue( "ClassLimits", pVoteController ) { } // This string will have "Vote_" glued onto the front for localization (i.e. "#Vote_ClassLimits")
 
 	virtual const char	*GetTypeStringLocalized( void ) OVERRIDE;
 	virtual void		ExecuteCommand( void ) OVERRIDE;
 	virtual bool		IsEnabled( void ) OVERRIDE;
-	virtual bool		CanCallVote( int iEntIndex, const char *pszDetails, vote_create_failed_t &nFailCode, int &nTime ) OVERRIDE;
+	virtual bool		RequestCallVote( int iEntIndex, const char *pszDetails, vote_create_failed_t &nFailCode, int &nTime ) OVERRIDE;
 	virtual const char *GetDisplayString( void ) OVERRIDE;
 	virtual void		ListIssueDetails( CBasePlayer *forWhom ) OVERRIDE;
 	virtual const char *GetVotePassedString( void ) OVERRIDE;
@@ -241,11 +254,11 @@ private:
 class CPauseGameIssue : public CBaseTFIssue
 {
 public:
-	CPauseGameIssue() : CBaseTFIssue( "PauseGame" ) {}	// This string will have "Vote_" glued onto the front for localization (i.e. "#Vote_PauseGame")
+	CPauseGameIssue( CVoteController *pVoteController ) : CBaseTFIssue( "PauseGame", pVoteController ) {}	// This string will have "Vote_" glued onto the front for localization (i.e. "#Vote_PauseGame")
 
 	virtual void		ExecuteCommand( void ) OVERRIDE;
 	virtual bool		IsEnabled( void ) OVERRIDE;
-	virtual bool		CanCallVote( int iEntIndex, const char *pszDetails, vote_create_failed_t &nFailCode, int &nTime ) OVERRIDE;
+	virtual bool		RequestCallVote( int iEntIndex, const char *pszDetails, vote_create_failed_t &nFailCode, int &nTime ) OVERRIDE;
 	virtual const char *GetDisplayString( void ) OVERRIDE;
 	virtual void		ListIssueDetails( CBasePlayer *forWhom ) OVERRIDE;
 	virtual const char *GetVotePassedString( void ) OVERRIDE;

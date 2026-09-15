@@ -339,7 +339,7 @@ void CSelectPlayerDialog::SetupSelectServer( bool bFriendsOnly )
 				int idx = m_PlayerInfoList.AddToTail();
 				partner_info_t &info = m_PlayerInfoList[idx];
 				info.m_steamID = steamID;
-				info.m_name = pi.name;
+				info.m_name = UTIL_GetFilteredPlayerName( iPlayerIndex, pi.name );
 			}
 		}
 	}

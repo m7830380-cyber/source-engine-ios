@@ -36,6 +36,8 @@
 #include "tf_gcmessages.h"
 #include "c_tf_freeaccount.h"
 #include "c_tf_player.h"
+
+static ConVar tf_hide_custom_decals( "tf_hide_custom_decals", "0", FCVAR_ARCHIVE );
 #endif
 
 #include "materialsystem/itexture.h"
@@ -47,17 +49,11 @@
 #include "gc_clientsystem.h"
 #endif // CLIENT_DLL
 
-#ifdef GC_DLL
-#error "CEconItemView is not meant to be compiled on the GC! There are silent assumptions made about attributes, etc."
-#endif // GC_DLL
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
 
 
-#ifdef STAGING_ONLY
-ConVar econ_force_style_index( "econ_force_style_index", "-1", FCVAR_REPLICATED );
-#endif // STAGING_ONLY
 
 
 // Networking tables for attributes
@@ -653,6 +649,8 @@ void CEconItemView::IterateAttributes( class IEconItemAttributeIterator *pIterat
 //-----------------------------------------------------------------------------
 void CEconItemView::EnsureDescriptionIsBuilt() const
 {
+	tmZone( TELEMETRY_LEVEL1, TMZF_NONE, "%s", __FUNCTION__ );
+
 #if BUILD_ITEM_NAME_AND_DESC
 	if ( m_pDescription )
 	{
@@ -660,6 +658,9 @@ void CEconItemView::EnsureDescriptionIsBuilt() const
 	}
 
 	m_pDescription = new CEconItemDescription;
+#if defined( CLIENT_DLL )
+	m_pDescription->SetIsToolTip( m_bIsToolTip );
+#endif // CLIENT_DLL
 
 	IEconItemDescription::YieldingFillOutEconItemDescription( m_pDescription, GLocalizationProvider(), this );
 
@@ -729,10 +730,6 @@ int CEconItemView::GetItemQuantity() const
 //-----------------------------------------------------------------------------
 style_index_t CEconItemView::GetItemStyle() const
 {
-#ifdef STAGING_ONLY
-	if ( econ_force_style_index.GetInt() != -1 )
-		return econ_force_style_index.GetInt();
-#endif // STAGING_ONLY
 
 #ifdef CLIENT_DLL
 	// Are we overriding the backing store style?
@@ -1640,6 +1637,15 @@ uint64 CEconItemView::GetCustomUserTextureID()
 {
 	static CSchemaAttributeDefHandle pAttr_CustomTextureLo( "custom texture lo" );
 	static CSchemaAttributeDefHandle pAttr_CustomTextureHi( "custom texture hi" );
+
+#if defined( TF_CLIENT_DLL )
+	if ( tf_hide_custom_decals.GetBool() )
+	{
+		CBasePlayer *pPlayer = GetPlayerByAccountID( m_iAccountID );
+		if ( !pPlayer || ( pPlayer != C_BasePlayer::GetLocalPlayer() ) )
+			return 0;
+	}
+#endif // TF_CLIENT_DLL
 
 	uint32 unLowVal, unHighVal;
 	const bool bHasLowVal = FindAttribute( pAttr_CustomTextureLo, &unLowVal ),

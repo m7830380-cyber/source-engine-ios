@@ -14,6 +14,7 @@
 #include <tier0/memdbgon.h>
 
 extern ConVar cl_mute_all_comms;
+extern ConVar cl_enable_text_chat;
 
 Color g_DrawPanel_TeamColors[TF_TEAM_COUNT] = 
 {
@@ -239,7 +240,11 @@ void CDrawingPanel::SendMapLine( int x, int y, bool bInitial )
 	if ( engine->IsPlayingDemo() )
 		return;
 
-	int iIndex = GetLocalPlayerIndex(); 
+	int iIndex = GetLocalPlayerIndex();
+	
+	if (!IsIndexIntoPlayerArrayValid(iIndex))
+		return;
+	
 	int nMaxLines = 750; // 12.5 seconds of drawing at 60fps
 	if ( m_iPanelType == DRAWING_PANEL_TYPE_MATCH_SUMMARY )
 	{
@@ -280,6 +285,9 @@ void CDrawingPanel::SendMapLine( int x, int y, bool bInitial )
 
 void CDrawingPanel::ClearLines( int iIndex )
 {
+	if (!IsIndexIntoPlayerArrayValid(iIndex))
+		return;
+
 	m_vecDrawnLines[iIndex].Purge();
 }
 
@@ -300,6 +308,12 @@ void CDrawingPanel::FireGameEvent( IGameEvent *event )
 		// if this is NOT the local player (we've already stored our own data)
 		if ( ( iIndex != GetLocalPlayerIndex() ) || engine->IsPlayingDemo() )
 		{
+			if ( !cl_enable_text_chat.GetBool() )
+			{
+				ClearLines( iIndex );
+				return;
+			}
+
 			// If a player is muted for voice, also mute them for lines because jerks gonna jerk.
 			if ( cl_mute_all_comms.GetBool() && ( iIndex != 0 ) )
 			{
@@ -327,6 +341,9 @@ void CDrawingPanel::FireGameEvent( IGameEvent *event )
 				{
 					line.bLink = true;
 				}
+				
+				if (!IsIndexIntoPlayerArrayValid(iIndex))
+					return;
 
 				m_vecDrawnLines[iIndex].AddToTail( line );
 			}

@@ -11,6 +11,7 @@
 #include "KeyValues.h"
 #include "filesystem.h"
 #include "game.h"
+#include "util_shared.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
@@ -62,7 +63,7 @@ void CSoundscapeSystem::AddSoundscapeFile( const char *filename )
 	MEM_ALLOC_CREDIT();
 	// Open the soundscape data file, and abort if we can't
 	KeyValues *pKeyValuesData = new KeyValues( filename );
-	if ( pKeyValuesData->LoadFromFile( filesystem, filename, "GAME" ) )
+	if ( filesystem->LoadKeyValues( *pKeyValuesData, IFileSystem::TYPE_SOUNDSCAPE, filename, "GAME" ) )
 	{
 		// parse out all of the top level sections and save their names
 		KeyValues *pKeys = pKeyValuesData;
@@ -129,7 +130,9 @@ bool CSoundscapeSystem::Init()
 {
 	m_soundscapeCount = 0;
 
-	const char *mapname = STRING( gpGlobals->mapname );
+	char maptmp[256];
+	const char *mapname = GetCleanMapName( STRING( gpGlobals->mapname ), maptmp );
+
 	const char *mapSoundscapeFilename = NULL;
 	if ( mapname && *mapname )
 	{
@@ -137,7 +140,7 @@ bool CSoundscapeSystem::Init()
 	}
 
 	KeyValues *manifest = new KeyValues( SOUNDSCAPE_MANIFEST_FILE );
-	if( manifest->LoadFromFile( filesystem, SOUNDSCAPE_MANIFEST_FILE, "GAME" ) )
+	if ( filesystem->LoadKeyValues( *manifest, IFileSystem::TYPE_SOUNDSCAPE, SOUNDSCAPE_MANIFEST_FILE, "GAME" ) )
 	{
 		for ( KeyValues *sub = manifest->GetFirstSubKey(); sub != NULL; sub = sub->GetNextKey() )
 		{
@@ -326,12 +329,12 @@ void CSoundscapeSystem::FrameUpdatePostEntityThink()
 
 				// if we got this far, we're looking at an entity that is contending
 				// for current player sound. the closest entity to player wins.
-				CEnvSoundscape *pCurrent = (CEnvSoundscape *)( audio.ent.Get() );
-				if ( pCurrent )
+				CEnvSoundscape *pCurrent = NULL;
+				if ( audio.entIndex > 0 && audio.entIndex <= m_soundscapeEntities.Count() )
 				{
-					int nEntIndex = pCurrent->m_soundscapeEntityId - 1;
-					NOTE_UNUSED( nEntIndex );
-					Assert( m_soundscapeEntities[nEntIndex] == pCurrent );
+					int ssIndex = audio.entIndex - 1;
+							  
+					pCurrent = m_soundscapeEntities[ssIndex];
 				}
 				ss_update_t update;
 				update.pPlayer = pPlayer;

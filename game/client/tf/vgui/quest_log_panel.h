@@ -11,9 +11,11 @@
 #pragma once
 #endif
 
+#if 0
 #include "vgui_controls/EditablePanel.h"
 #include <game/client/iviewport.h>
 #include "quest_item_panel.h"
+#include "local_steam_shared_object_listener.h"
 
 using namespace vgui;
 
@@ -69,7 +71,11 @@ protected:
 //-----------------------------------------------------------------------------
 // The default quest log panel
 //-----------------------------------------------------------------------------
-class CQuestLogPanel : public EditablePanel, public IViewPortPanel, public CGameEventListener
+class CQuestLogPanel 
+	: public EditablePanel
+	, public IViewPortPanel
+	, public CGameEventListener
+	, public CLocalSteamSharedObjectListener
 {
 	DECLARE_CLASS_SIMPLE( CQuestLogPanel, EditablePanel );
 public:
@@ -98,6 +104,10 @@ public:
 	virtual void OnKeyCodePressed( KeyCode code ) OVERRIDE;
 	virtual void OnKeyCodeTyped(KeyCode code) OVERRIDE;
 
+	virtual void SOCreated( const CSteamID & steamIDOwner, const GCSDK::CSharedObject *pObject, GCSDK::ESOCacheEvent eEvent ) OVERRIDE { SOEvent( pObject ); }
+	virtual void SOUpdated( const CSteamID & steamIDOwner, const GCSDK::CSharedObject *pObject, GCSDK::ESOCacheEvent eEvent ) OVERRIDE { SOEvent( pObject ); }
+	virtual void SODestroyed( const CSteamID & steamIDOwner, const GCSDK::CSharedObject *pObject, GCSDK::ESOCacheEvent eEvent ) OVERRIDE { SOEvent( pObject ); }
+
 	virtual GameActionSet_t GetPreferredActionSet() { return GAME_ACTION_SET_NONE; }
 
 	void QuestCompletedResponse();
@@ -111,6 +121,8 @@ public:
 	MESSAGE_FUNC( OnCompleteQuest, "CompleteQuest" );
 
 private:
+
+	void SOEvent( const GCSDK::CSharedObject *pObject );
 
 	CScrollableQuestList *m_pQuestList;
 
@@ -130,3 +142,5 @@ private:
 };
 
 #endif // QUEST_LOG_PANEL_H
+
+#endif

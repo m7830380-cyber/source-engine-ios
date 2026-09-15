@@ -408,7 +408,7 @@ bool CBaseEntity::KeyValue( const char *szKeyName, const char *szValue )
 		}
 
 		// Do this so inherited classes looking for 'angles' don't have to bother with 'angle'
-		return KeyValue( "angles", szBuf );
+		return KeyValue( szKeyName, szBuf );
 	}
 
 	// NOTE: Have to do these separate because they set two values instead of one
@@ -636,10 +636,17 @@ void CBaseEntity::SetPredictionRandomSeed( const CUserCmd *cmd )
 	if ( !cmd )
 	{
 		m_nPredictionRandomSeed = -1;
+#ifdef GAME_DLL
+		m_nPredictionRandomSeedServer = -1;
+#endif
+
 		return;
 	}
 
 	m_nPredictionRandomSeed = ( cmd->random_seed );
+#ifdef GAME_DLL
+	m_nPredictionRandomSeedServer = ( cmd->server_random_seed );
+#endif
 }
 
 
@@ -648,15 +655,15 @@ void CBaseEntity::SetPredictionRandomSeed( const CUserCmd *cmd )
 //------------------------------------------------------------------------------
 void CBaseEntity::DecalTrace( trace_t *pTrace, char const *decalName )
 {
-	int index = decalsystem->GetDecalIndexForName( decalName );
-	if ( index < 0 )
+	int indexD = decalsystem->GetDecalIndexForName( decalName );
+	if ( indexD < 0 )
 		return;
 
 	Assert( pTrace->m_pEnt );
 
 	CBroadcastRecipientFilter filter;
 	te->Decal( filter, 0.0, &pTrace->endpos, &pTrace->startpos,
-		pTrace->GetEntityIndex(), pTrace->hitbox, index );
+		pTrace->GetEntityIndex(), pTrace->hitbox, indexD );
 }
 
 //-----------------------------------------------------------------------------
@@ -752,22 +759,8 @@ int CBaseEntity::RegisterThinkContext( const char *szContext )
 //-----------------------------------------------------------------------------
 BASEPTR	CBaseEntity::ThinkSet( BASEPTR func, float thinkTime, const char *szContext )
 {
-#if !defined( CLIENT_DLL )
-#ifdef _DEBUG
-#ifdef PLATFORM_64BITS
-#ifdef GNUC
-	COMPILE_TIME_ASSERT( sizeof(func) == 16 );
-#else
-	COMPILE_TIME_ASSERT( sizeof(func) == 8 );
-#endif
-#else
-#ifdef GNUC
-	COMPILE_TIME_ASSERT( sizeof(func) == 8 );
-#else
-	COMPILE_TIME_ASSERT( sizeof(func) == 4 );
-#endif
-#endif
-#endif
+#if !defined( CLIENT_DLL ) && defined( _DEBUG )
+	COMPILE_TIME_ASSERT( sizeof(func) == ENTITYFUNCPTR_SIZE );
 #endif
 
 	// Old system?
@@ -1400,9 +1393,9 @@ bool CBaseEntity::IsBSPModel() const
 	if ( GetSolid() == SOLID_BSP )
 		return true;
 	
-	const model_t *model = modelinfo->GetModel( GetModelIndex() );
+	const model_t *pModel = modelinfo->GetModel( GetModelIndex() );
 
-	if ( GetSolid() == SOLID_VPHYSICS && modelinfo->GetModelType( model ) == mod_brush )
+	if ( GetSolid() == SOLID_VPHYSICS && modelinfo->GetModelType( pModel ) == mod_brush )
 		return true;
 
 	return false;
@@ -2258,6 +2251,15 @@ int CBaseEntity::GetTracerAttachment( void )
 	return iAttachment;
 }
 
+float CBaseEntity::HealthFraction() const
+{
+	if ( GetMaxHealth() == 0 )
+		return 1.0f;
+
+	float flFraction = ( float )GetHealth() / ( float )GetMaxHealth();
+	flFraction = clamp( flFraction, 0.0f, 1.0f );
+	return flFraction;
+}
 
 int CBaseEntity::BloodColor()
 {

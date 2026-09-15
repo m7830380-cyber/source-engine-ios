@@ -6,7 +6,6 @@
 #include "game_controls/slideshowpanel.h"
 #include "vgui/IVGui.h"
 #include "filesystem.h"
-#include "fmtstr.h"
 
 //-----------------------------------------------------------------------------
 

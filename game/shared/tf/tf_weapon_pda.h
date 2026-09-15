@@ -66,6 +66,8 @@ public:
 
 	virtual const char *GetPanelName() { return "pda_panel"; }
 
+	virtual bool	CanInspect() const OVERRIDE { return false; }
+
 
 public:	
 	CTFWeaponInfo	*m_pWeaponInfo;
@@ -164,29 +166,5 @@ public:
 	virtual void		UnEquip( CBasePlayer *pOwner );
 };
 
-#ifdef STAGING_ONLY
-//-----------------------------------------------------------------------------
-//
-//-----------------------------------------------------------------------------
-class CTFWeaponPDA_Spy_Build : public CTFWeaponPDA
-{
-public:
-	DECLARE_CLASS( CTFWeaponPDA_Spy_Build, CTFWeaponPDA );
-	DECLARE_NETWORKCLASS(); 
-	DECLARE_PREDICTABLE();
-
-	virtual bool CanDeploy( void ) OVERRIDE;
-	virtual const char *GetPanelName() { return ""; }
-	virtual int	GetWeaponID( void ) const { return TF_WEAPON_PDA_SPY_BUILD; }
-	virtual bool VisibleInWeaponSelection( void ) OVERRIDE;
-#ifdef CLIENT_DLL
-	virtual CHudBaseBuildMenu *GetBuildMenu() const OVERRIDE;
-#endif
-
-	float GetProgress( void );
-	int	GetCount( void );
-	const char*	GetEffectLabelText( void ) { return "#TF_Traps"; }
-};
-#endif
 
 #endif // TF_WEAPON_PDA_H

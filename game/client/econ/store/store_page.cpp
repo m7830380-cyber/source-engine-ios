@@ -409,7 +409,6 @@ void CStorePricePanel::SetItem( const econ_store_entry_t *pEntry )
 	const ECurrency eCurrency = EconUI()->GetStorePanel()->GetCurrency();
 
 	item_price_t unPrice = pEntry->GetCurrentPrice( eCurrency );
-	SetPriceText( unPrice, "price", pEntry );
 
 	const bool bIsItemPreviewed = IsItemPreviewed( pEntry, eCurrency );
 
@@ -421,8 +420,10 @@ void CStorePricePanel::SetItem( const econ_store_entry_t *pEntry )
 		Assert( unPrice == pEntry->GetBasePrice( eCurrency ) );
 
 		// Apply the preview period discount.
-		unPrice *= EconUI()->GetStorePanel()->GetPriceSheet()->GetPreviewPeriodDiscount();
+		unPrice = econ_store_entry_t::CalculateSalePrice( unPrice, eCurrency, EconUI()->GetStorePanel()->GetPriceSheet()->GetPreviewPeriodDiscount() );
 	}
+
+	SetPriceText( unPrice, "price", pEntry );
 
 	item_price_t unBasePrice;
 	const bool bIsDiscounted = pEntry->HasDiscount( eCurrency, &unBasePrice );
@@ -430,7 +431,7 @@ void CStorePricePanel::SetItem( const econ_store_entry_t *pEntry )
 	if ( m_pDiscount && m_pOGPrice )
 	{
 		// and discount
-		if ( bIsDiscounted == false )
+		if ( !bIsDiscounted )
 		{
 			m_pDiscount->SetVisible( false );
 			m_pOGPrice->SetVisible( false );
@@ -2115,7 +2116,8 @@ void CStorePage::UpdateBackpackLabel( void )
 	// consideration expanders, account upgrades, etc.
 	const int iMaxItemCount = InventoryManager()->GetLocalInventory()->GetMaxItemCount(),
 			  iCurItemCount = InventoryManager()->GetLocalInventory()->GetItemCount();
-	AssertMsg( iMaxItemCount - iCurItemCount >= 0, "You have a negative number of backpack slots available - fix me!" );
+	// misyl: This triggers when you have a bunch of pending items to acknowledge from drops, disabling this assert for now.
+	//AssertMsg( iMaxItemCount - iCurItemCount >= 0, "You have a negative number of backpack slots available - fix me!" );
 	const int iBaseFreeSlots = MAX( 0, iMaxItemCount - iCurItemCount );
 	_snwprintf( wszBackpackSlotCount, ARRAYSIZE( wszBackpackSlotCount ), L"%d", iBaseFreeSlots );
 

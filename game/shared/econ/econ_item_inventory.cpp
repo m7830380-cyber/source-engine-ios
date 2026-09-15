@@ -39,12 +39,9 @@
 #include "tf_wardata.h"
 #include "tf_ladder_data.h"
 #include "tf_rating_data.h"
+#include "econ_quests.h"
 #endif
 
-#if defined(TF_DLL) && defined(GAME_DLL)
-#include "tf_gc_api.h"
-#include "econ/econ_game_account_server.h"
-#endif
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
@@ -190,9 +187,6 @@ void CInventoryManager::SteamRequestInventory( CPlayerInventory *pInventory, CSt
 //-----------------------------------------------------------------------------
 void CInventoryManager::GameServerSteamAPIActivated()
 {
-#if defined(TF_DLL) && defined(GAME_DLL)
-	GameCoordinator_NotifyGameState();
-#endif
 }
 
 //-----------------------------------------------------------------------------
@@ -296,6 +290,8 @@ void CInventoryManager::OnPersonaStateChanged( PersonaStateChange_t *info )
 //-----------------------------------------------------------------------------
 bool CInventoryManager::Init( void )
 {
+	// Initialize the item system.
+	ItemSystem()->Init();
 	return true;
 }
 
@@ -304,8 +300,7 @@ bool CInventoryManager::Init( void )
 //-----------------------------------------------------------------------------
 void CInventoryManager::PostInit( void )
 {
-	// Initialize the item system.
-	ItemSystem()->Init();
+	ItemSystem()->PostInit();
 }
 
 
@@ -332,11 +327,9 @@ void CInventoryManager::PreInitGC()
 	REG_SHARED_OBJECT_SUBCLASS( CTFPlayerInfo );
 	REG_SHARED_OBJECT_SUBCLASS( CEconClaimCode );
 	REG_SHARED_OBJECT_SUBCLASS( CSOTFLadderData );
+	REG_SHARED_OBJECT_SUBCLASS( CQuest );
 #endif
 
-#ifdef TF_DLL
-	REG_SHARED_OBJECT_SUBCLASS( CEconGameAccountForGameServers );
-#endif // TF_DLL
 }
 
 
@@ -445,12 +438,12 @@ void CInventoryManager::LevelShutdownPostEntity( void )
 
 
 //-----------------------------------------------------------------------------
-// Purpose: Lets the client know that we're now connected to the GC
+// Purpose: Lets the client know that we're now ready to mess with inventory
 //-----------------------------------------------------------------------------
 #ifdef CLIENT_DLL
-void CInventoryManager::SendGCConnectedEvent( void )
+void CInventoryManager::SendItemSystemConnectedEvent( void )
 {
-	IGameEvent *event = gameeventmanager->CreateEvent( "gc_connected" );
+	IGameEvent *event = gameeventmanager->CreateEvent( "econ_inventory_connected" );
 	if ( event )
 	{
 		gameeventmanager->FireEventClientSide( event );
@@ -1276,6 +1269,8 @@ void CInventoryManager::PersonaName_Store( uint32 unAccountID, const char *pPers
 // Purpose: 
 //-----------------------------------------------------------------------------
 CPlayerInventory::CPlayerInventory( void )
+	: m_mapItemDefsToItems( DefLessFunc( item_definition_index_t ) )
+	, m_mapPaintkitsToItems( DefLessFunc( uint32 ) )
 {
 	m_bGotItemsFromSteam = false;
 	m_iPendingRequests = 0;
@@ -1371,6 +1366,28 @@ void CPlayerInventory::RemoveItemHandle( CEconItemViewHandle* pHandle )
 	Assert( !"Could not find item handle to remove!" );
 }
 
+const CCopyableUtlVector< itemid_t >& CPlayerInventory::GetItemsWithDefindex( item_definition_index_t defindex )
+{
+	auto idx = m_mapItemDefsToItems.Find( defindex );
+	if ( idx == m_mapItemDefsToItems.InvalidIndex() )
+	{
+		idx = m_mapItemDefsToItems.Insert( defindex );
+	}
+
+	return m_mapItemDefsToItems[ idx ];
+}
+
+const CCopyableUtlVector< itemid_t >& CPlayerInventory::GetItemsWithPaintkitDefindex( uint32 nDefindex )
+{
+	auto idx = m_mapPaintkitsToItems.Find( nDefindex );
+	if ( idx == m_mapPaintkitsToItems.InvalidIndex() )
+	{
+		idx = m_mapPaintkitsToItems.Insert( nDefindex );
+	}
+
+	return m_mapPaintkitsToItems[ idx ];
+}
+
 
 void	CPlayerInventory::Clear()
 {
@@ -1429,6 +1446,16 @@ void CPlayerInventory::RemoveListener( GCSDK::ISharedObjectListener *pListener )
 	}
 }
 
+template< class MapType, class KeyType >
+void AddToMapVec( MapType& mapVec, const CEconItemView* pItem, KeyType key )
+{
+	auto idx = mapVec.Find( key );
+	if ( mapVec.InvalidIndex() == idx )
+	{
+		idx = mapVec.Insert( key );
+	}
+	mapVec[ idx ].AddToTail( pItem->GetItemID() );
+}
 
 //-----------------------------------------------------------------------------
 // Purpose: Helper function to add a new item for a econ item
@@ -1448,6 +1475,17 @@ bool CPlayerInventory::AddEconItem( CEconItem * pItem, bool bUpdateAckFile, bool
 	ItemHasBeenUpdated( &m_aInventoryItems[iIdx], bUpdateAckFile, bWriteAckFile );
 
 #ifdef CLIENT_DLL
+
+	// Update map of item defs to items
+	AddToMapVec( m_mapItemDefsToItems, &m_aInventoryItems[iIdx], newItem.GetItemDefIndex() );
+
+	// Update map of paintkits to items
+	uint32 nPaintkitDefindex = 0;
+	if ( GetPaintKitDefIndex( &newItem, &nPaintkitDefindex ) )
+	{
+		AddToMapVec( m_mapPaintkitsToItems, &m_aInventoryItems[iIdx], nPaintkitDefindex );
+	}
+
 	if ( bCheckForNewItems && InventoryManager()->GetLocalInventory() == this )
 	{
 		bool bNotify = IsUnacknowledged( pItem->GetInventoryToken() );
@@ -1466,6 +1504,7 @@ bool CPlayerInventory::AddEconItem( CEconItem * pItem, bool bUpdateAckFile, bool
 			case UNACK_ITEM_TRADED:
 			case UNACK_ITEM_GIFTED:
 			case UNACK_ITEM_QUEST_LOANER:
+			case UNACK_ITEM_CYOA_BLOOD_MONEY_PURCHASE:
 			case UNACK_ITEM_VIRAL_COMPETITIVE_BETA_PASS_SPREAD:
 				break;
 			default:
@@ -1670,8 +1709,8 @@ void CPlayerInventory::SOCacheSubscribed( const CSteamID & steamIDOwner, GCSDK::
 		// Only validate the local player inventory
 		ValidateInventoryPositions();
 
-		// tell the entire client that we're 'connected' to the GC now
-		CInventoryManager::SendGCConnectedEvent();
+		// tell the entire client that we're ready to look at items
+		CInventoryManager::SendItemSystemConnectedEvent();
 	}
 #endif
 
@@ -1833,6 +1872,21 @@ void CPlayerInventory::DumpInventoryToConsole( bool bRoot )
 	}
 }
 
+template< class MapType, class KeyType >
+void RemoveItemFromVecMap( MapType& mapVec, const CEconItemView* pItem, KeyType key )
+{
+	auto idx = mapVec.Find( key );
+	if ( mapVec.InvalidIndex() != idx )
+	{
+		auto idxVec = mapVec[ idx ].Find( pItem->GetItemID() );
+		Assert( idxVec != mapVec[ idx ].InvalidIndex() );
+		if ( idxVec != mapVec[ idx ].InvalidIndex() )
+		{
+			mapVec[ idx ].Remove( idxVec );
+		}
+	}
+}
+
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
@@ -1849,6 +1903,17 @@ void CPlayerInventory::RemoveItem( itemid_t iItemID )
 			m_vecItemHandles[ i ]->MarkDirty();
 			m_vecItemHandles[ i ]->ItemIsBeingDeleted( pItem );
 		}
+
+		// Update map of item defs to items
+		RemoveItemFromVecMap( m_mapItemDefsToItems, pItem, pItem->GetItemDefIndex() );
+		
+		// Update map of paintkits to items
+		uint32 nPaintkitDefindex = 0;
+		if ( GetPaintKitDefIndex( pItem, &nPaintkitDefindex ) )
+		{
+			RemoveItemFromVecMap( m_mapPaintkitsToItems, pItem, nPaintkitDefindex );
+		}
+
 
 		m_aInventoryItems.Remove(iIndex);
 

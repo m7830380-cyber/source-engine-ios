@@ -294,32 +294,9 @@ CTFHUDRobotDestruction::CTFHUDRobotDestruction( Panel *parent, const char *name 
 	: EditablePanel( parent, name )
 	, m_bPlayingRD( false )
 {
-	m_pPlayingTo = NULL;
 	m_pRobotIndicatorKVs = NULL;
 
-	m_pCarriedContainer = new EditablePanel( this, "CarriedContainer" );
-	m_pCarriedImage = new ImagePanel( m_pCarriedContainer, "CarriedImage" );
-	m_pCarriedFlagProgressBar = new CProgressPanel( m_pCarriedContainer, "CarriedProgressBar" );
-	m_pScoreContainer = new EditablePanel( this, "ScoreContainer" );
-	m_pBlueStolenContainer = new EditablePanel( m_pScoreContainer, "BlueStolenContainer" );
-	m_pBlueDroppedPanel = new EditablePanel( m_pBlueStolenContainer, "DroppedIntelContainer" );
-	m_pRedStolenContainer = new EditablePanel( m_pScoreContainer, "RedStolenContainer" );
-	m_pRedDroppedPanel = new EditablePanel( m_pRedStolenContainer, "DroppedIntelContainer" );
-
-	m_pBlueScoreValueContainer = new EditablePanel( m_pScoreContainer, "BlueScoreValueContainer" );
-	m_pRedScoreValueContainer = new EditablePanel( m_pScoreContainer, "RedScoreValueContainer" );
-
-	m_pProgressBarsContainer = new EditablePanel( m_pScoreContainer, "ProgressBarContainer" );
-	m_pBlueVictoryPanel = new EditablePanel( m_pProgressBarsContainer, "BlueVictoryContainer" );
-	m_pBlueProgressBar = new CProgressPanel( m_pProgressBarsContainer, "BlueProgressBarFill" );
-	m_pBlueProgressBarEscrow = new CProgressPanel( m_pProgressBarsContainer, "BlueProgressBarEscrow" );
-
-	m_pRedVictoryPanel = new EditablePanel( m_pProgressBarsContainer, "RedVictoryContainer" );
-	m_pRedProgressBar = new CProgressPanel( m_pProgressBarsContainer, "RedProgressBarFill" );
-	m_pRedProgressBarEscrow = new CProgressPanel( m_pProgressBarsContainer, "RedProgressBarEscrow" );
-
-	m_pCountdownContainer = NULL;
-	m_pTeamLeaderImage = NULL;
+	ReinitializeEverything();
 
 	vgui::ivgui()->AddTickSignal( GetVPanel(), 50 );
 
@@ -380,11 +357,55 @@ int SortRobotVec( CTFHudRobotDestruction_RobotIndicator * const *p1, CTFHudRobot
 		return (*p2)->GetGroupNumber() - (*p1)->GetGroupNumber();		
 }
 
+void CTFHUDRobotDestruction::ReinitializeEverything()
+{
+	// misyl: Avoid custom maps' res files leaking into other maps
+	// by cleaning up all the children and entirely reinitializing.
+
+	while (vgui::ipanel()->GetChildCount(GetVPanel()))
+	{
+		VPANEL child = vgui::ipanel()->GetChild(GetVPanel(), 0);
+		vgui::ipanel()->DeletePanel(child);
+	}
+
+	m_pPlayingTo = NULL;
+
+	m_pCarriedContainer = new EditablePanel( this, "CarriedContainer" );
+	m_pCarriedImage = new ImagePanel( m_pCarriedContainer, "CarriedImage" );
+	m_pCarriedFlagProgressBar = new CProgressPanel( m_pCarriedContainer, "CarriedProgressBar" );
+	m_pScoreContainer = new EditablePanel( this, "ScoreContainer" );
+	m_pBlueStolenContainer = new EditablePanel( m_pScoreContainer, "BlueStolenContainer" );
+	m_pBlueDroppedPanel = new EditablePanel( m_pBlueStolenContainer, "DroppedIntelContainer" );
+	m_pRedStolenContainer = new EditablePanel( m_pScoreContainer, "RedStolenContainer" );
+	m_pRedDroppedPanel = new EditablePanel( m_pRedStolenContainer, "DroppedIntelContainer" );
+
+	m_pBlueScoreValueContainer = new EditablePanel( m_pScoreContainer, "BlueScoreValueContainer" );
+	m_pRedScoreValueContainer = new EditablePanel( m_pScoreContainer, "RedScoreValueContainer" );
+
+	m_pProgressBarsContainer = new EditablePanel( m_pScoreContainer, "ProgressBarContainer" );
+	m_pBlueVictoryPanel = new EditablePanel( m_pProgressBarsContainer, "BlueVictoryContainer" );
+	m_pBlueProgressBar = new CProgressPanel( m_pProgressBarsContainer, "BlueProgressBarFill" );
+	m_pBlueProgressBarEscrow = new CProgressPanel( m_pProgressBarsContainer, "BlueProgressBarEscrow" );
+
+	m_pRedVictoryPanel = new EditablePanel( m_pProgressBarsContainer, "RedVictoryContainer" );
+	m_pRedProgressBar = new CProgressPanel( m_pProgressBarsContainer, "RedProgressBarFill" );
+	m_pRedProgressBarEscrow = new CProgressPanel( m_pProgressBarsContainer, "RedProgressBarEscrow" );
+
+	m_pCountdownContainer = NULL;
+
+	m_pTeamLeaderImage = NULL;
+
+	m_vecRedRobots.Purge();
+	m_vecBlueRobots.Purge();
+}
+
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
 void CTFHUDRobotDestruction::ApplySchemeSettings( IScheme *pScheme )
 {
+	ReinitializeEverything();
+
 	BaseClass::ApplySchemeSettings( pScheme );
 	
 	CTFRobotDestructionLogic* pRoboLogic = CTFRobotDestructionLogic::GetRobotDestructionLogic();
@@ -392,13 +413,8 @@ void CTFHUDRobotDestruction::ApplySchemeSettings( IScheme *pScheme )
 	if ( !pRoboLogic )
 		return;
 
-	
 	// load control settings...
 	LoadControlSettings( pRoboLogic->GetResFile() );
-
-	// Clear out any old robot panels and bars
-	m_vecRedRobots.PurgeAndDeleteElements();
-	m_vecBlueRobots.PurgeAndDeleteElements();
 
 	CUtlVector< CTFRobotDestruction_RobotGroup * > vecSeenGroups;
 
@@ -538,9 +554,6 @@ void CTFHUDRobotDestruction::SetPlayingToLabelVisible( bool bVisible )
 	}
 }
 
-#ifdef STAGING_ONLY
-ConVar rd_hud_test_bars( "rd_hud_test_bars", 0 );
-#endif
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
@@ -565,20 +578,6 @@ void CTFHUDRobotDestruction::OnTick()
 	m_pRedScoreValueContainer->SetDialogVariable( "score", pRoboLogic->GetScore( TF_TEAM_RED ) );
 	m_pBlueScoreValueContainer->SetDialogVariable( "score", pRoboLogic->GetScore( TF_TEAM_BLUE ) );
 
-#ifdef STAGING_ONLY
-	if ( rd_hud_test_bars.GetBool() )
-	{
-		float flProgress = (sin( gpGlobals->curtime ) * 0.5f) + 0.5f;
-		m_pBlueProgressBar->SetProgress( flProgress, true );
-		m_pRedProgressBar->SetProgress( flProgress, true );
-		m_pBlueProgressBarEscrow->SetProgress( 0.f, true );
-		m_pRedProgressBarEscrow->SetProgress( 0.f, true );
-
-		m_pRedScoreValueContainer->SetDialogVariable( "score", flProgress );
-		m_pBlueScoreValueContainer->SetDialogVariable( "score", flProgress );
-	}
-	else
-#endif
 	{
 		int nBlueEscrow = 0, nRedEscrow = 0;
 

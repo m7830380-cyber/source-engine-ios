@@ -108,6 +108,7 @@ public:
 	};
 	void ScheduleRecomputationOfInternalData( RecomputeReasonType reason, int whichPoint );
 
+	virtual void OnDoorCreated( CBaseEntity *door );					// invoked when a door is created
 
 protected:
 	virtual void BeginCustomAnalysis( bool bIncremental );

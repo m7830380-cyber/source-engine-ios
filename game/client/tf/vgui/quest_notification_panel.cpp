@@ -21,6 +21,8 @@
 #include "tf_hud_item_progress_tracker.h"
 #include "tf_spectatorgui.h"
 #include "econ_quests.h"
+#include "tf_quest_map_node.h"
+#include "tf_quest_map_utils.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include <tier0/memdbgon.h>
@@ -32,8 +34,8 @@ CQuestNotificationPanel *g_pQuestNotificationPanel = NULL;
 
 DECLARE_HUDELEMENT( CQuestNotificationPanel );
 
-CQuestNotification::CQuestNotification( CEconItem *pItem )
-	: m_hItem( pItem )
+CQuestNotification::CQuestNotification( const CQuestThemeDefinition* pTheme )
+	: m_defID( pTheme->GetID() )
 {}
 
 //-----------------------------------------------------------------------------
@@ -49,8 +51,8 @@ float CQuestNotification::Present( CQuestNotificationPanel* pNotificationPanel )
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-CQuestNotification_Speaking::CQuestNotification_Speaking( CEconItem *pItem )
-	: CQuestNotification( pItem )
+CQuestNotification_Speaking::CQuestNotification_Speaking( const CQuestThemeDefinition* pTheme )
+	: CQuestNotification( pTheme )
 {
 	m_pszSoundToSpeak = NULL;
 }
@@ -62,32 +64,29 @@ float CQuestNotification_Speaking::Present( CQuestNotificationPanel* pNotificati
 {
 	CQuestNotification::Present( pNotificationPanel );
 
-	if ( m_hItem )
+	C_BasePlayer *pPlayer = C_BasePlayer::GetLocalPlayer();
+	if ( !pPlayer )
+		return 0.f;
+
+	CTFPlayer* pTFPlayer = ToTFPlayer( pPlayer );
+	if ( !pTFPlayer )
+		return 0.f;
+
+	const CQuestThemeDefinition* pTheme = GetProtoScriptObjDefManager()->GetTypedDefinition< CQuestThemeDefinition >( m_defID );
+	Assert( pTheme );
+
+	if ( pTheme )
 	{
-		C_BasePlayer *pPlayer = C_BasePlayer::GetLocalPlayer();
-		if ( !pPlayer )
-			return 0.f;
-
-		CTFPlayer* pTFPlayer = ToTFPlayer( pPlayer );
-		if ( !pTFPlayer )
-			return 0.f;
-
-		const GameItemDefinition_t *pItemDef = m_hItem->GetItemDefinition();
-		// Get our quest theme
-		const CQuestThemeDefinition *pTheme = pItemDef->GetQuestDef()->GetQuestTheme();
-		if ( pTheme )
+		// Get the sound we need to speak
+		m_pszSoundToSpeak = GetSoundEntry( pTheme, pTFPlayer->GetPlayerClass()->GetClassIndex() );
+		float flPresentTime = 0.f;
+		if ( m_pszSoundToSpeak )
 		{
-			// Get the sound we need to speak
-			m_pszSoundToSpeak = GetSoundEntry( pTheme, pTFPlayer->GetPlayerClass()->GetClassIndex() );
-			float flPresentTime = 0.f;
-			if ( m_pszSoundToSpeak )
-			{
-				flPresentTime = enginesound->GetSoundDuration( m_pszSoundToSpeak ) + m_timerDialog.GetCountdownDuration() + 1.f;
-				m_timerShow.Start( enginesound->GetSoundDuration( m_pszSoundToSpeak ) + m_timerDialog.GetCountdownDuration() + 1.f );
-			}
-
-			return flPresentTime;
+			flPresentTime = enginesound->GetSoundDuration( m_pszSoundToSpeak ) + m_timerDialog.GetCountdownDuration() + 1.f;
+			m_timerShow.Start( enginesound->GetSoundDuration( m_pszSoundToSpeak ) + m_timerDialog.GetCountdownDuration() + 1.f );
 		}
+
+		return flPresentTime;
 	}
 
 	return 0.f;
@@ -96,9 +95,9 @@ float CQuestNotification_Speaking::Present( CQuestNotificationPanel* pNotificati
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-void CQuestNotification_Speaking::Update( CQuestNotificationPanel* pNotificationPanel )
+void CQuestNotification_Speaking::Update()
 {
-	if ( m_timerDialog.IsElapsed() && m_timerDialog.HasStarted() && m_hItem )
+	if ( m_timerDialog.IsElapsed() && m_timerDialog.HasStarted() )
 	{
 		m_timerDialog.Invalidate();
 
@@ -153,8 +152,8 @@ bool CQuestNotification_NewQuest::ShouldPresent() const
 	return true;
 }
 
-CQuestNotification_CompletedQuest::CQuestNotification_CompletedQuest( CEconItem *pItem )
-	: CQuestNotification_Speaking( pItem )
+CQuestNotification_CompletedQuest::CQuestNotification_CompletedQuest( const CQuestThemeDefinition* pTheme )
+	: CQuestNotification_Speaking( pTheme )
 {
 	const char *pszSoundName = UTIL_GetRandomSoundFromEntry( "Quest.StatusTickComplete" );
 	m_PresentTimer.Start( enginesound->GetSoundDuration( pszSoundName ) - 2.f );
@@ -192,7 +191,6 @@ CQuestNotificationPanel::CQuestNotificationPanel( const char *pszElementName )
 	, EditablePanel( NULL, "QuestNotificationPanel" )
 	, m_flTimeSinceLastShown( 0.f )
 	, m_bIsPresenting( false )
-	, m_mapNotifiedItemIDs( DefLessFunc( itemid_t ) )
 	, m_bInitialized( false )
 	, m_pMainContainer( NULL )
 {
@@ -201,9 +199,9 @@ CQuestNotificationPanel::CQuestNotificationPanel( const char *pszElementName )
 
 	g_pQuestNotificationPanel = this;
 
-	ListenForGameEvent( "player_death" );
-	ListenForGameEvent( "inventory_updated" );
-	ListenForGameEvent( "player_initial_spawn" );
+	ListenForGameEvent( "player_spawn" );
+
+	memset( &m_flLastNotifiedTime, 0.f, sizeof( m_flLastNotifiedTime ) );
 }
 
 //-----------------------------------------------------------------------------
@@ -256,23 +254,17 @@ void CQuestNotificationPanel::PerformLayout()
 //-----------------------------------------------------------------------------
 void CQuestNotificationPanel::FireGameEvent( IGameEvent * event )
 {
-	const char *pszName = event->GetName();
+	if ( FStrEq( event->GetName(), "player_spawn" ) )
+	{
+		const int iUserID = event->GetInt( "userid" );
+		C_TFPlayer *pLocalPlayer = C_TFPlayer::GetLocalTFPlayer();
+		if ( !pLocalPlayer )
+			return;
 
-	if ( FStrEq( pszName, "inventory_updated" ) || FStrEq( pszName, "player_death" ) )
-	{
-		CheckForNotificationOpportunities();
-	}
-	else if ( FStrEq( pszName, "player_initial_spawn" ) )
-	{
-		CTFPlayer *pNewPlayer = ToTFPlayer( UTIL_PlayerByIndex( event->GetInt( "index" ) ) );
-		if ( pNewPlayer == C_BasePlayer::GetLocalPlayer() )
-		{
-			// Reset every round
-			m_mapNotifiedItemIDs.Purge();
-			m_vecNotifications.PurgeAndDeleteElements();
-			m_timerNotificationCooldown.Start( 0 );
-			m_bInitialized = false;
-		}
+		if ( iUserID != pLocalPlayer->GetUserID() )
+			return;
+
+		CheckForAvailableNodeNotification();
 	}
 }
 
@@ -281,126 +273,54 @@ void CQuestNotificationPanel::FireGameEvent( IGameEvent * event )
 //-----------------------------------------------------------------------------
 void CQuestNotificationPanel::Reset()
 {
-	CheckForNotificationOpportunities();
 }
 
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-void CQuestNotificationPanel::CheckForNotificationOpportunities()
+void CQuestNotificationPanel::CheckForAvailableNodeNotification()
 {
-	// Suppress making new notifications while in competitive play
 	if ( TFGameRules() && TFGameRules()->IsCompetitiveMode() )
 		return;
 
-	FOR_EACH_VEC_BACK( m_vecNotifications, i )
+	// If this node is locked, requirements are met then
+	// we should remind them to go unlock a node, so long as there isn't already
+	// a quest active.
+	if ( GetQuestMapHelper().GetActiveQuest() == NULL &&
+		 GetQuestMapHelper().GetNumCurrentlyUnlockableNodes() > 0 )
 	{
-		// Clean up old entires for items that are now gone
-		if ( m_vecNotifications[i]->GetItemHandle() == NULL )
-		{
-			delete m_vecNotifications[i];
-			m_vecNotifications.Remove( i );
-		}
-	}
-
-	CPlayerInventory *pInv = InventoryManager()->GetLocalInventory();
-	Assert( pInv );
-	if ( pInv )
-	{
-		for ( int i = 0 ; i < pInv->GetItemCount(); ++i )
-		{
-			CEconItemView *pItem = pInv->GetItem( i );
-
-			// Check if this is a quest at all
-			if ( pItem->GetItemDefinition()->GetQuestDef() == NULL ) 
-				continue;
-
-			CQuestNotification* pNotification = NULL;
-			if ( IsUnacknowledged( pItem->GetInventoryPosition() ) )
-			{
-				pNotification = new CQuestNotification_NewQuest( pItem->GetSOCData() );
-			}
-			else if ( IsQuestItemFullyCompleted( pItem ) ) // Fully completed
-			{
-				pNotification = new CQuestNotification_FullyCompletedQuest( pItem->GetSOCData() );
-			}
-			else if ( IsQuestItemReadyToTurnIn( pItem ) ) // Ready to turn in
-			{
-				pNotification = new CQuestNotification_CompletedQuest( pItem->GetSOCData() );
-			}
-			else
-			{
-				// Clean up any pending notifications for normal quests
-				FOR_EACH_VEC_BACK( m_vecNotifications, j )
-				{
-					if ( m_vecNotifications[j]->GetItemHandle() == pItem->GetSOCData() )
-					{
-						delete m_vecNotifications[j];
-						m_vecNotifications.Remove( j );
-					}
-				}
-			}
-
-			if ( pNotification && !AddNotificationForItem( pItem, pNotification ) )
-			{
-				delete pNotification;
-				pNotification = NULL;
-			}
-		}
-
-		m_bInitialized = pInv->GetOwner().IsValid();
+		AddNotification( new CQuestNotification_NewQuest( GetProtoScriptObjDefManager()->GetTypedDefinition< CQuestThemeDefinition >( 1 ) ) ); // Super hack for now
 	}
 }
+
 
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-bool CQuestNotificationPanel::AddNotificationForItem( const CEconItemView *pItem, CQuestNotification* pNotification )
+void CQuestNotificationPanel::AddNotification( CQuestNotification* pNotification )
 {
-	bool bTypeAlreadyInQueue = false;
 	// Check if there's already a notification of this type
 	FOR_EACH_VEC_BACK( m_vecNotifications, i )
 	{
 		// There's already a quest of this type in queue, no need to add another
 		if ( m_vecNotifications[i]->GetType() == pNotification->GetType() )
 		{
-			bTypeAlreadyInQueue = true;
-			break;
-		}
-	}
-
-	// Find the notified bits
-	auto idx = m_mapNotifiedItemIDs.Find( pItem->GetItemID() );
-	if ( idx == m_mapNotifiedItemIDs.InvalidIndex() )
-	{
-		// Create if missing
-		idx = m_mapNotifiedItemIDs.Insert( pItem->GetItemID() );
-		m_mapNotifiedItemIDs[ idx ].SetSize( CQuestNotification::NUM_NOTIFICATION_TYPES );
-		FOR_EACH_VEC( m_mapNotifiedItemIDs[ idx ], i )
-		{
-			m_mapNotifiedItemIDs[ idx ][ i ] = 0.f;
+			delete pNotification;
+			return;
 		}
 	}
 
 	// Check if we've already done a notification for this type recently
-	if ( Plat_FloatTime() < m_mapNotifiedItemIDs[ idx ][ pNotification->GetType() ] || m_mapNotifiedItemIDs[ idx ][ pNotification->GetType() ] == NEVER_REPEAT )
+	if ( Plat_FloatTime() < m_flLastNotifiedTime[ pNotification->GetType() ])
 	{
-		return false;
+		delete pNotification;
+		return;
 	}
 
-	bool bNotificationUsed = false;
-	// Don't play completed notifications unless they happen mid-play
-	if ( !bTypeAlreadyInQueue && ( m_bInitialized || pNotification->GetType() == CQuestNotification::NOTIFICATION_TYPE_NEW_QUEST ) )
-	{
-		// Add notification
-		m_vecNotifications.AddToTail( pNotification );
-		bNotificationUsed = true;
-	}
-
+	// Add notification
+	m_vecNotifications.AddToTail( pNotification );
 	// Mark that we've created a notification of this type for this item
-	m_mapNotifiedItemIDs[ idx ][ pNotification->GetType() ] = pNotification->GetReplayTime() == NEVER_REPEAT ? NEVER_REPEAT : Plat_FloatTime() + pNotification->GetReplayTime();
-
-	return bNotificationUsed;
+	m_flLastNotifiedTime[ pNotification->GetType() ] = Plat_FloatTime() + pNotification->GetReplayTime();
 }
 
 //-----------------------------------------------------------------------------
@@ -408,6 +328,8 @@ bool CQuestNotificationPanel::AddNotificationForItem( const CEconItemView *pItem
 //-----------------------------------------------------------------------------
 bool CQuestNotificationPanel::ShouldDraw()
 {
+	return false;
+
 	C_BasePlayer *pPlayer = C_BasePlayer::GetLocalPlayer();
 	if ( !pPlayer )
 		return false;
@@ -472,6 +394,10 @@ void CQuestNotificationPanel::OnThink()
 //-----------------------------------------------------------------------------
 bool CQuestNotificationPanel::ShouldPresent()
 {
+	// Suppress making new notifications while in competitive play
+	if ( TFGameRules() && TFGameRules()->IsCompetitiveMode() )
+		return false;
+
 	if ( !m_timerNotificationCooldown.IsElapsed() )
 		return false;
 
@@ -518,7 +444,7 @@ void CQuestNotificationPanel::Update()
 	{
 		if ( m_vecNotifications.Count() )
 		{
-			m_vecNotifications.Head()->Update( this );
+			m_vecNotifications.Head()->Update();
 			// Check if the notification is done
 			if ( m_vecNotifications.Head()->IsDone() )
 			{

@@ -14,7 +14,7 @@
 
 class CAI_BaseNPC;
 class CAI_Enemies;
-typedef int AI_TaskFailureCode_t;
+typedef intp AI_TaskFailureCode_t;
 struct Task_t;
 
 //-----------------------------------------------------------------------------
@@ -136,11 +136,6 @@ public:
 		memset( pResult, 0, nBytes );
 		return pResult;
 	}
-
-	void operator delete(void *p)
-	{
-		MemAlloc_Free( p );
-	};
 
 private:
 	CAI_BaseNPC *m_pOuter;

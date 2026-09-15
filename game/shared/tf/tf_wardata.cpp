@@ -26,9 +26,6 @@ using namespace GCSDK;
 //			SOCache if needed in order to try and get their war data
 //-----------------------------------------------------------------------------
 CWarData* GetPlayerWarData( const CSteamID& steamID, war_definition_index_t warDefIndex, bool bLoadEvenIfWarInactive
-#ifdef GC_DLL
-	, bool bLoadSOCacheIfNeeded
-#endif
 	)
 {
 	const CWarDefinition* pWarDef = GetItemSchema()->GetWarDefinitionByIndex( warDefIndex );
@@ -36,17 +33,7 @@ CWarData* GetPlayerWarData( const CSteamID& steamID, war_definition_index_t warD
 	if ( !pWarDef || ( !bLoadEvenIfWarInactive && !pWarDef->IsActive() ) )
 		return NULL;
 
-#ifdef GC_DLL
-	CGCSharedObjectCache *pSOCache = GGCBase()->FindSOCache( steamID );
-
-	// Load their SO cache if needed
-	if ( pSOCache == NULL && bLoadSOCacheIfNeeded )
-	{
-		pSOCache = GGCBase()->YieldingFindOrLoadSOCache( steamID );
-	}
-#else
 	GCSDK::CGCClientSharedObjectCache *pSOCache = GCClientSystem()->GetSOCache( steamID );
-#endif
 
 	if ( pSOCache )
 	{
@@ -178,72 +165,6 @@ CWarData::CWarData()
 	Obj().set_affiliation( INVALID_WAR_SIDE );
 	Obj().set_points_scored( 0 );
 }
-#ifdef GC
-
-IMPLEMENT_CLASS_MEMPOOL( CWarData, 1000, UTLMEMORYPOOL_GROW_SLOW );
-
-// memdbgon must be the last include file in a .cpp file!!!
-#include "tier0/memdbgon.h"
-
-CWarData::CWarData( uint32 unAccountID, war_definition_index_t eWarID, war_side_t eSide )
-{
-	Obj().set_account_id( unAccountID );
-	Obj().set_war_id( eWarID );
-	Obj().set_affiliation( eSide );
-	Obj().set_points_scored( 0 );
-}
-
-bool CWarData::BYieldingAddInsertToTransaction( GCSDK::CSQLAccess & sqlAccess )
-{
-	CSchWarData schWarData;
-	WriteToRecord( &schWarData );
-	return CSchemaSharedObjectHelper::BYieldingAddInsertToTransaction( sqlAccess, &schWarData );
-}
-
-bool CWarData::BYieldingAddWriteToTransaction( GCSDK::CSQLAccess & sqlAccess, const CUtlVector< int > &fields )
-{
-	CSchWarData schWarData;
-	WriteToRecord( &schWarData );
-	CColumnSet csDatabaseDirty( schWarData.GetPSchema()->GetRecordInfo() );
-	csDatabaseDirty.MakeEmpty();
-	FOR_EACH_VEC( fields, nField )
-	{
-		switch ( fields[nField] )
-		{
-			case CSOWarData::kAccountIdFieldNumber		: csDatabaseDirty.BAddColumn( CSchWarData::k_iField_unAccountID );		break;
-			case CSOWarData::kWarIdFieldNumber			: csDatabaseDirty.BAddColumn( CSchWarData::k_iField_unWarID );			break;
-			case CSOWarData::kAffiliationFieldNumber	: csDatabaseDirty.BAddColumn( CSchWarData::k_iField_unAffiliation );	break;
-			case CSOWarData::kPointsScoredFieldNumber	: csDatabaseDirty.BAddColumn( CSchWarData::k_iField_unPointsScored );	break;
-			default:
-				Assert( false );
-		}
-	}
-	return CSchemaSharedObjectHelper::BYieldingAddWriteToTransaction( sqlAccess, &schWarData, csDatabaseDirty );
-}
-
-bool CWarData::BYieldingAddRemoveToTransaction( GCSDK::CSQLAccess & sqlAccess )
-{
-	CSchWarData schDuelSummary;
-	WriteToRecord( &schDuelSummary );
-	return CSchemaSharedObjectHelper::BYieldingAddRemoveToTransaction( sqlAccess, &schDuelSummary );
-}
-
-void CWarData::WriteToRecord( CSchWarData *pWarData ) const
-{
-	pWarData->m_unAccountID = Obj().account_id();
-	pWarData->m_unWarID = Obj().war_id();
-	pWarData->m_unAffiliation = Obj().affiliation();
-	pWarData->m_unPointsScored = Obj().points_scored();
-}
-
-void CWarData::ReadFromRecord( const CSchWarData & warData )
-{
-	Obj().set_account_id( warData.m_unAccountID );
-	Obj().set_war_id( warData.m_unWarID );
-	Obj().set_affiliation( warData.m_unAffiliation );
-	Obj().set_points_scored( warData.m_unPointsScored );
-}
-#endif
 
 #if defined( CLIENT_DLL ) || defined( GC )
 CTFWarGlobalDataHelper::CTFWarGlobalDataHelper()
@@ -329,40 +250,9 @@ CGCMsgGC_War_GlobalStatsResponse_SideScore* CTFWarGlobalDataHelper::FindOrCreate
 //-----------------------------------------------------------------------------
 void CTFWarGlobalDataHelper::Init()
 {
-#ifdef GC
-	TSQLCmdStr sStatement;
-	const CColumnSet csCountsCount = CSET_FULL( CSchWarData );
-	BuildSelectStatementText( &sStatement, csCountsCount  );
-	TSQLCmdStr sLoadQuery;
-
-	CSQLAccess sqlAccess;
-	if( !sqlAccess.BYieldingExecute( "CTFWarGlobalDataHelper::Init", sLoadQuery ) )
-	{
-		EmitError( SPEW_GC, __FUNCTION__": Failed to run load query!\n" );
-		return;
-	}
-
-	CUtlVector< CSchWarData > vecRecords;
-	if ( !sqlAccess.BYieldingReadRecordsWithQuery< CSchWarData >( &vecRecords, sStatement, csCountsCount ) )
-	{
-		EmitError( SPEW_GC, __FUNCTION__": Failed to read spy vs engy points!\n" );
-		return;
-	}
-
-	// Tally up points for each side
-	FOR_EACH_VEC( vecRecords, i )
-	{
-		const CSchWarData& record = vecRecords[i];
-
-		AddToSideScore( record.m_unWarID, record.m_unAffiliation, record.m_unPointsScored );
-	}
-
-	m_bInitialized = true;
-#else
 
 	RequestUpdateGlobalStats();
 	RequestLeaderboard();
-#endif
 }
 
 //-----------------------------------------------------------------------------
@@ -548,12 +438,8 @@ GC_REG_JOB( GCSDK::CGCClient, CGC_War_GlobalStatsResponse, "CGC_War_GlobalStatsR
 
 CTFWarGlobalDataHelper& GetWarData()
 {
-#ifdef GC
-	return GGCTF()->GetGlobalWarData();
-#else
 	static CTFWarGlobalDataHelper s_WarData;
 	return s_WarData;
-#endif
 }
 
 #endif // defined( CLIENT_DLL ) || defined( GC )

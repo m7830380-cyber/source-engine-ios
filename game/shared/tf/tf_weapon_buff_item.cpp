@@ -40,13 +40,8 @@ PRECACHE_WEAPON_REGISTER( tf_weapon_buff_item );
 const char* BannerModels[] =
 {
 	"models/weapons/c_models/c_buffbanner/c_buffbanner.mdl",
-#ifdef STAGING_ONLY	
 	"models/workshop/weapons/c_models/c_battalion_buffbanner/c_battalion_buffbanner.mdl",
 	"models/workshop_partner/weapons/c_models/c_shogun_warbanner/c_shogun_warbanner.mdl",
-#else
-	"models/weapons/c_models/c_battalion_buffbanner/c_batt_buffbanner.mdl",
-	"models/weapons/c_models/c_shogun_warbanner/c_shogun_warbanner.mdl",
-#endif
 	"models/workshop/weapons/c_models/c_paratooper_pack/c_paratrooper_parachute.mdl"
 };
 
@@ -100,13 +95,8 @@ void CTFBuffItem::Precache()
 	}
 
 	PrecacheModel( "models/weapons/c_models/c_buffpack/c_buffpack.mdl" );
-#ifdef STAGING_ONLY	
 	PrecacheModel( "models/workshop/weapons/c_models/c_battalion_buffpack/c_battalion_buffpack.mdl" );
 	PrecacheModel( "models/workshop_partner/weapons/c_models/c_shogun_warpack/c_shogun_warpack.mdl" );
-#else
-	PrecacheModel( "models/weapons/c_models/c_battalion_buffpack/c_batt_buffpack.mdl" );
-	PrecacheModel( "models/weapons/c_models/c_shogun_warpack/c_shogun_warpack.mdl" );
-#endif
 	PrecacheModel( OPEN_PARACHUTE_MDL );
 	PrecacheModel( CLOSED_PARACHUTE_MDL );
 
@@ -138,16 +128,9 @@ void CTFBuffItem::PrimaryAttack()
 	if ( m_bPlayingHorn )
 		return;
 
-	if ( pPlayer->GetTeamNumber() == TF_TEAM_RED )
-	{
-		pPlayer->DoAnimationEvent( PLAYERANIMEVENT_ATTACK_PRIMARY );
-		SendWeaponAnim( ACT_VM_PRIMARYATTACK );
-	}
-	else
-	{
-		pPlayer->DoAnimationEvent( PLAYERANIMEVENT_ATTACK_SECONDARY );
-		SendWeaponAnim( ACT_VM_SECONDARYATTACK );
-	}
+	pPlayer->DoAnimationEvent( PLAYERANIMEVENT_ATTACK_SECONDARY );
+	SendWeaponAnim( ACT_VM_SECONDARYATTACK );
+
 	SetContextThink( &CTFBuffItem::BlowHorn, gpGlobals->curtime + 0.22f, "BlowHorn" );
 }
 
@@ -400,12 +383,9 @@ void CTFBuffItem::WeaponReset( void )
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-bool CTFBuffItem::SendWeaponAnim( int iActivity )
+Activity CTFBuffItem::TranslateViewmodelHandActivityInternal( Activity actBase )
 {
-	CTFPlayer *pPlayer = GetTFPlayerOwner();
-	if ( !pPlayer )
-		return BaseClass::SendWeaponAnim( iActivity );
-
+	Activity iActivity = actBase;
 	switch ( iActivity )
 	{
 	case ACT_VM_DRAW:
@@ -449,8 +429,9 @@ bool CTFBuffItem::SendWeaponAnim( int iActivity )
 		break;
 	}
 
-	return BaseClass::SendWeaponAnim( iActivity );
+	return BaseClass::TranslateViewmodelHandActivityInternal( iActivity );
 }
+
 
 bool CTFBuffItem::CanReload( void )
 {

@@ -19,6 +19,7 @@
 #include "achievements_tf.h"
 #include "c_tf_objective_resource.h"
 #include "tf_weapon_shotgun.h"
+#include "usermessages.h"
 
 //----------------------------------------------------------------------------------------------------------------
 class CAchievementTFScout_FirstBlood : public CBaseTFAchievement
@@ -275,7 +276,7 @@ class CAchievementTFScout_DestroySentryWithPistol : public CBaseTFAchievement
 				int iType = event->GetInt( "objecttype" );
 				int iWeaponID = event->GetInt( "weaponid" );
 				if ( (iType == OBJ_SENTRYGUN) &&
-					(iWeaponID == TF_WEAPON_PISTOL_SCOUT) &&
+					( (iWeaponID == TF_WEAPON_PISTOL_SCOUT) || (iWeaponID == TF_WEAPON_HANDGUN_SCOUT_SECONDARY) ) &&
 					!event->GetBool( "was_building" ) )
 				{
 					IncrementCount();
@@ -660,7 +661,7 @@ class CAchievementTFScout_KnockIntoTrain : public CBaseTFAchievement
 		if ( !pTFVictim )
 			return;
 
-		CTFPlayer *pLocalPlayer = ToTFPlayer( CBasePlayer::GetLocalPlayer() );
+		CBasePlayer *pLocalPlayer = C_TFPlayer::GetLocalPlayer();
 		if ( !pLocalPlayer )
 			return;
 
@@ -672,7 +673,8 @@ class CAchievementTFScout_KnockIntoTrain : public CBaseTFAchievement
 				 ( pAttacker && pAttacker->IsBrushModel() ) || // They were smashed by the world! Gah!
 				 ( !pAttacker || (pAttacker == pVictim) ) || // He killed himself!
 				 ( custom == TF_DMG_CUSTOM_SUICIDE ) ||
-				 ( custom == TF_DMG_CUSTOM_TRIGGER_HURT ) ) // A trigger-hurt got him! 
+				 ( custom == TF_DMG_CUSTOM_TRIGGER_HURT ) ||  // A trigger-hurt got him! 
+				 ( custom == TF_DMG_CUSTOM_CROC ) ) // a croc got him!
 			{
 				IncrementCount();
 			}
@@ -693,28 +695,30 @@ class CAchievementTFScout_KillStunned : public CBaseTFAchievement
 
 	virtual void Event_EntityKilled( CBaseEntity *pVictim, CBaseEntity *pAttacker, CBaseEntity *pInflictor, IGameEvent *event ) 
 	{
+		if ( !pVictim || !pVictim->IsPlayer() )
+			return;
+
+		CBasePlayer *pLocalPlayer = C_TFPlayer::GetLocalPlayer();
+		if ( !pLocalPlayer )
+			return;
+
 		CTFPlayer *pTFVictim = ToTFPlayer( pVictim );
 		if ( !pTFVictim )
 			return;
 
-		CTFPlayer *pLocalPlayer = ToTFPlayer( C_TFPlayer::GetLocalPlayer() );
-		if ( !pLocalPlayer )
-			return;
-
-		if ( pAttacker != pLocalPlayer )
+		if ( pTFVictim->m_Shared.InCond( TF_COND_STUNNED ) )
 		{
-			int iAssisterIndex = engine->GetPlayerForUserID( event->GetInt( "assister" ) );
-			if ( iAssisterIndex <= 0 )
-				return;
+			if ( pAttacker != pLocalPlayer )
+			{
+				int iAssisterIndex = engine->GetPlayerForUserID( event->GetInt( "assister" ) );
+				if ( iAssisterIndex <= 0 )
+					return;
 
-			CTFPlayer *pAssister = ToTFPlayer( UTIL_PlayerByIndex( iAssisterIndex ) );
-			if ( pAssister != pLocalPlayer )
-				return;
-		}
+				CTFPlayer *pAssister = ToTFPlayer( UTIL_PlayerByIndex( iAssisterIndex ) );
+				if ( pAssister != pLocalPlayer )
+					return;
+			}
 
-		int iStunFlags = event->GetInt( "stun_flags" );
-		if ( ((iStunFlags & TF_STUN_CONTROLS) != 0) || ((iStunFlags & TF_STUN_LOSER_STATE) != 0) )
-		{
 			IncrementCount();
 		}
 	}
@@ -732,18 +736,19 @@ class CAchievementTFScout_StunIntoTrain : public CBaseTFAchievement
 
 	virtual void Event_EntityKilled( CBaseEntity *pVictim, CBaseEntity *pAttacker, CBaseEntity *pInflictor, IGameEvent *event ) 
 	{
+		if ( !pVictim || !pVictim->IsPlayer() )
+			return;
+
 		CTFPlayer *pTFVictim = ToTFPlayer( pVictim );
 		if ( !pTFVictim )
 			return;
 
 		// Achievement for causing someone we stunned to die by the environment.
-		CTFPlayer *pLocalPlayer = ToTFPlayer( C_TFPlayer::GetLocalPlayer() );
-		if ( !pLocalPlayer )
+		CTFPlayer *pLocalTFPlayer =  C_TFPlayer::GetLocalTFPlayer();
+		if ( !pLocalTFPlayer )
 			return;
 
-		int iStunFlags = event->GetInt( "stun_flags" );
-		bool bLegalStun = ((iStunFlags & TF_STUN_CONTROLS) != 0) || ((iStunFlags & TF_STUN_LOSER_STATE) != 0);
-		if ( bLegalStun && (pTFVictim->m_Shared.GetStunner() == pLocalPlayer) )
+		if ( pTFVictim->m_Shared.GetStunner() == pLocalTFPlayer && pTFVictim->m_Shared.InCond( TF_COND_STUNNED ) )
 		{
 			int custom = event->GetInt( "customkill" );
 			int damagebits = event->GetInt( "damagebits" );
@@ -751,7 +756,8 @@ class CAchievementTFScout_StunIntoTrain : public CBaseTFAchievement
 				( pAttacker && pAttacker->IsBrushModel() ) || // They were smashed by the world! Gah!
 				( !pAttacker || (pAttacker == pVictim) ) || // He killed himself!
 				( custom == TF_DMG_CUSTOM_SUICIDE ) ||
-				( custom == TF_DMG_CUSTOM_TRIGGER_HURT ) ) // A trigger-hurt got him! 
+				( custom == TF_DMG_CUSTOM_TRIGGER_HURT ) ||  // A trigger-hurt got him! 
+				( custom == TF_DMG_CUSTOM_CROC ) ) // a croc got him!
 			{
 				IncrementCount();
 			}
@@ -1424,10 +1430,9 @@ class CAchievementTFScout_TauntKill : public CBaseTFAchievement
 		}
 		else if ( FStrEq( pszEventName, "scout_slamdoll_landed" ) )
 		{
-			int iTargetIndex = event->GetInt( "target_index" ); // target_index is an entindex
-			EHANDLE hPlayer = cl_entitylist->GetNetworkableHandle( iTargetIndex );
-			if ( !hPlayer )
-				return;
+			// Josh: This comes straight through from a GetRefEHandle().ToInt()
+			// so this is safe.
+			CBaseHandle hPlayer = CBaseHandle::UnsafeFromIndex( event->GetInt( "target_index" ) );
 			C_TFPlayer *pPlayer = dynamic_cast< C_TFPlayer* >( hPlayer.Get() );
 			if ( pPlayer && (m_iTargetID == pPlayer->GetUserID()) &&
 				 (m_vSlamOrigin != Vector(0,0,0)) )
@@ -1490,7 +1495,7 @@ public:
 DECLARE_ACHIEVEMENT( CAchievementTFScout_AchieveProgress3, ACHIEVEMENT_TF_SCOUT_ACHIEVE_PROGRESS3, "TF_SCOUT_ACHIEVE_PROGRESS3", 5 );
 
 // Receive the DamageDodged user message and send out a clientside event for achievements to hook.
-void __MsgFunc_DamageDodged( bf_read &msg )
+USER_MESSAGE( DamageDodged )
 {
 	int iDamage = msg.ReadShort();
 

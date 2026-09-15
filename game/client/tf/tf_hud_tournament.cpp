@@ -196,21 +196,11 @@ void CHudTournament::PlaySounds( int nTime )
 			{
 				int nMaxWaves = TFObjectiveResource()->GetMannVsMachineMaxWaveCount();
 				int nCurWave = TFObjectiveResource()->GetMannVsMachineWaveCount();
-				bool bHasTank = false;
-				for ( int i = 0; i < MVM_CLASS_TYPES_PER_WAVE_MAX_NEW; ++i )
-				{
-	// 				int nClassCount = TFObjectiveResource()->GetMannVsMachineWaveClassCount( i );
- 					const char *pchClassIconName = TFObjectiveResource()->GetMannVsMachineWaveClassName( i );
-					if( V_stristr( pchClassIconName, "tank" ))
-					{
-						bHasTank = true;
-					}
-				}
 				if( nCurWave == nMaxWaves )
 				{
 					pLocalPlayer->EmitSound( "music.mvm_start_last_wave" );	
 				}
-				else if( bHasTank )
+				else if( TFObjectiveResource()->GetMannVsMachineWaveHasTanks() )
 				{
 					pLocalPlayer->EmitSound( "music.mvm_start_tank_wave" );
 				}
@@ -274,7 +264,7 @@ void CHudTournament::PreparePanel( void )
 		const IMatchGroupDescription* pMatchDesc = GetMatchGroupDescription( TFGameRules()->GetCurrentMatchGroup() );
 		if ( pMatchDesc )
 		{
-			bAutoReady = pMatchDesc->m_params.m_bAutoReady;
+			bAutoReady = pMatchDesc->BUsesAutoReady();
 		}
 
 		if ( !bAutoReady && ( TFGameRules()->IsWaitingForTeams() || TFGameRules()->GetRoundRestartTime() < 0 ) )
@@ -441,7 +431,10 @@ void CHudTournament::PreparePanel( void )
 
 		if ( mp_timelimit.GetInt() > 0 )
 		{
-			_snwprintf( szWindConditions, ARRAYSIZE( szWindConditions ), STRING_FMT L"%d " STRING_FMT, szWindConditions, mp_timelimit.GetInt(), mp_timelimit.GetInt() == 1 ? g_pVGuiLocalize->Find( "Tournament_WinConditionsMinute" ) : g_pVGuiLocalize->Find( "Tournament_WinConditionsMinutes" ) );
+			wchar_t szWindConditionsTmp[1024];
+			V_wcscpy_safe( szWindConditionsTmp, szWindConditions );
+
+			_snwprintf( szWindConditions, ARRAYSIZE( szWindConditions ), STRING_FMT L"%d " STRING_FMT, szWindConditionsTmp, mp_timelimit.GetInt(), mp_timelimit.GetInt() == 1 ? g_pVGuiLocalize->Find( "Tournament_WinConditionsMinute" ) : g_pVGuiLocalize->Find( "Tournament_WinConditionsMinutes" ) );
 			bPrev = true;
 		}
 
@@ -449,14 +442,14 @@ void CHudTournament::PreparePanel( void )
 		{
 			if ( bPrev )
 			{
-#ifdef WIN32
-				_snwprintf( szWindConditions, ARRAYSIZE( szWindConditions ), L"%s, ", szWindConditions );
-#else
-				_snwprintf( szWindConditions, ARRAYSIZE( szWindConditions ), L"%S, ", szWindConditions );
-#endif
+				wchar_t szWindConditionsTmp[1024];
+				V_wcscpy_safe( szWindConditionsTmp, szWindConditions );
+				_snwprintf( szWindConditions, ARRAYSIZE( szWindConditions ), STRING_FMT L", ", szWindConditionsTmp );
 			}
 
-			_snwprintf( szWindConditions, ARRAYSIZE( szWindConditions ), STRING_FMT L"%d " STRING_FMT, szWindConditions, mp_winlimit.GetInt(), mp_winlimit.GetInt() == 1 ? g_pVGuiLocalize->Find( "Tournament_WinConditionsWin" ) : g_pVGuiLocalize->Find( "Tournament_WinConditionsWins" ) );
+			wchar_t szWindConditionsTmp2[1024];
+			V_wcscpy_safe( szWindConditionsTmp2, szWindConditions );
+			_snwprintf( szWindConditions, ARRAYSIZE( szWindConditions ), STRING_FMT L"%d " STRING_FMT, szWindConditionsTmp2, mp_winlimit.GetInt(), mp_winlimit.GetInt() == 1 ? g_pVGuiLocalize->Find( "Tournament_WinConditionsWin" ) : g_pVGuiLocalize->Find( "Tournament_WinConditionsWins" ) );
 			bPrev = true;
 		}
 
@@ -464,15 +457,21 @@ void CHudTournament::PreparePanel( void )
 		{
 			if ( bPrev )
 			{
-				_snwprintf( szWindConditions, ARRAYSIZE( szWindConditions ), STRING_FMT L", ", szWindConditions );
+				wchar_t szWindConditionsTmp[1024];
+				V_wcscpy_safe( szWindConditionsTmp, szWindConditions );
+				_snwprintf( szWindConditions, ARRAYSIZE( szWindConditions ), STRING_FMT L", ", szWindConditionsTmp );
 			}
 
-			_snwprintf( szWindConditions, ARRAYSIZE( szWindConditions ), STRING_FMT L"%d " STRING_FMT, szWindConditions, mp_maxrounds.GetInt(), mp_maxrounds.GetInt() == 1 ? g_pVGuiLocalize->Find( "Tournament_WinConditionsRound" ) : g_pVGuiLocalize->Find( "Tournament_WinConditionsRounds" ) );
+			wchar_t szWindConditionsTmp2[1024];
+			V_wcscpy_safe( szWindConditionsTmp2, szWindConditions );
+			_snwprintf( szWindConditions, ARRAYSIZE( szWindConditions ), STRING_FMT L"%d " STRING_FMT, szWindConditionsTmp2, mp_maxrounds.GetInt(), mp_maxrounds.GetInt() == 1 ? g_pVGuiLocalize->Find( "Tournament_WinConditionsRound" ) : g_pVGuiLocalize->Find( "Tournament_WinConditionsRounds" ) );
 		}
 	}
 	else
 	{
-		_snwprintf( szWindConditions, ARRAYSIZE( szWindConditions ), STRING_FMT STRING_FMT, szWindConditions, g_pVGuiLocalize->Find( "Tournament_WinConditionsNone" ) );
+		wchar_t szWindConditionsTmp[1024];
+		V_wcscpy_safe( szWindConditionsTmp, szWindConditions );
+		_snwprintf( szWindConditions, ARRAYSIZE( szWindConditions ), STRING_FMT STRING_FMT, szWindConditionsTmp, g_pVGuiLocalize->Find( "Tournament_WinConditionsNone" ) );
 	}
 
 	SetDialogVariable( "winconditions", szWindConditions );
@@ -541,7 +540,7 @@ void CHudTournament::FireGameEvent( IGameEvent * event )
 			if ( event->GetInt( "time" ) == 10 )
 			{
 				g_pClientMode->GetViewportAnimationController()->StartAnimationSequence( this, "HudTournament_MoveTimerDown", false );
-				g_pClientMode->GetViewportAnimationController()->StartAnimationSequence( "HudTournament_MoveChatWindow", false );
+				//g_pClientMode->GetViewportAnimationController()->StartAnimationSequence( "HudTournament_MoveChatWindow", false );
 			}
 		}
 	}
@@ -620,7 +619,7 @@ void CHudTournament::OnTick( void )
 		if ( m_bReadyStatusMode )
 		{
 			const IMatchGroupDescription* pMatchDesc = GetMatchGroupDescription( TFGameRules()->GetCurrentMatchGroup() );
-			if ( !pMatchDesc || !pMatchDesc->m_params.m_bAutoReady )
+			if ( !pMatchDesc || !pMatchDesc->BUsesAutoReady() )
 			{
 				RecalculatePlayerPanels();
 
@@ -857,9 +856,12 @@ void CHudTournament::RecalculatePlayerPanels( void )
 	{
 		for ( int i = 0; i < pLobby->GetNumMembers(); ++i )
 		{
-			CSteamID steamID = pLobby->GetMember( i );
+			ConstTFLobbyPlayer lobbyPlayer = pLobby->GetMemberDetails( i );
+			if ( !lobbyPlayer.BMatchPlayer() )
+				{ continue; }
 
 			// Already have a panel for him?
+			CSteamID steamID = lobbyPlayer.GetSteamID();
 			bool bFound = false;
 			for ( int j = 0; j < iPanel; ++j )
 			{
@@ -872,7 +874,7 @@ void CHudTournament::RecalculatePlayerPanels( void )
 			if ( !bFound )
 			{
 				CTFPlayerPanel *pPanel = GetOrAddPanel( iPanel );
-				pPanel->Setup( 0, steamID, pLobby->GetMemberDetails( i )->name().c_str(), pLobby->GetMemberDetails( steamID )->team() );
+				pPanel->Setup( 0, steamID, lobbyPlayer.GetName(), lobbyPlayer.GetTeam() );
 				++iPanel;
 			}
 		}
@@ -933,13 +935,31 @@ void CHudTournament::UpdatePlayerPanels( void )
 		iTeam2 = ( iTeam1 == TF_TEAM_BLUE ) ? TF_TEAM_RED : TF_TEAM_BLUE;
 	}
 
-	int iTeam1Count = g_TF_PR->GetNumPlayersForTeam( iTeam1, false );
-	if ( GTFGCClientSystem()->GetLobby() )
+	int iTeamSize = g_TF_PR->GetNumPlayersForTeam( iTeam1, false );
+	CTFGSLobby *pLobby = GTFGCClientSystem()->GetLobby();
+	if ( pLobby )
 	{
-		// Everyone's on the same team in MvM, and any other lobby-based game is assumed to be two teams.
-		iTeam1Count = TFGameRules()->IsMannVsMachineMode() ? 
-					  GTFGCClientSystem()->GetLobby()->GetNumMembers() : 
-					  GTFGCClientSystem()->GetLobby()->GetNumMembers()>>1;
+		int iTeam1Count = 0;
+		int iTeam2Count = 0;
+		for ( int i = 0; i < pLobby->GetNumMembers(); i++ )
+		{
+			ConstTFLobbyPlayer details = pLobby->GetMemberDetails( i );
+			if ( !details.BMatchPlayer() )
+				{ continue; }
+
+			switch ( details.GetTeam() )
+			{
+				case TF_GC_TEAM_INVADERS:
+					++iTeam1Count;
+					break;
+				case TF_GC_TEAM_DEFENDERS:
+					++iTeam2Count;
+					break;
+				default:
+					break;
+			}
+			iTeamSize = Max( iTeam1Count, iTeam2Count );
+		}
 	}
 	int iTeam1Processed = 0;
 	int iTeam2Processed = 0;
@@ -961,13 +981,13 @@ void CHudTournament::UpdatePlayerPanels( void )
 			// Two teams.  First team left of center.
 			if ( m_bReadyStatusMode && !TFGameRules()->IsMannVsMachineMode() )
 			{
-				int iTeam1LeftCorner = iCenter - ( iTeam1Count * nOffset );
+				int iTeam1LeftCorner = iCenter - ( iTeamSize * nOffset );
 				iXPos += ( iTeam1LeftCorner + ( iTeam1Processed * nOffset ) );
 			}
 			// One team.  Centered.
 			else
 			{
-				int iTeam1LeftCorner = ( iCenter - ( iTeam1Count * nOffset ) * 0.5 );
+				int iTeam1LeftCorner = ( iCenter - ( iTeamSize * nOffset ) * 0.5 );
 				iXPos += ( iTeam1LeftCorner + ( iTeam1Processed * nOffset ) );
 			}
 			m_PlayerPanels[i]->SetSpecIndex( 6 - iTeam1Processed );
@@ -981,7 +1001,7 @@ void CHudTournament::UpdatePlayerPanels( void )
 			m_PlayerPanels[i]->SetSpecIndex( 7 + iTeam2Processed );
 			++iTeam2Processed;
 		}
-		
+
 		m_PlayerPanels[i]->SetPos( iXPos, iYPos );
 	}
 }

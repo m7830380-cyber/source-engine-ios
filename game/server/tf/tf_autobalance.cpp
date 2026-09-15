@@ -21,10 +21,11 @@ extern ConVar mp_developer;
 extern ConVar mp_teams_unbalance_limit;
 extern ConVar tf_arena_use_queue;
 extern ConVar mp_autoteambalance;
-extern ConVar tf_autobalance_query_lifetime;
+extern ConVar tf_autobalance_ask_candidates_maxtime;
+extern ConVar tf_autobalance_dead_candidates_maxtime;
+extern ConVar tf_autobalance_force_candidates_maxtime;
 extern ConVar tf_autobalance_xp_bonus;
 
-ConVar tf_autobalance_detected_delay( "tf_autobalance_detected_delay", "30", FCVAR_NONE );
 
 //-----------------------------------------------------------------------------
 // Purpose: 
@@ -46,27 +47,12 @@ CTFAutobalance::~CTFAutobalance()
 //-----------------------------------------------------------------------------
 void CTFAutobalance::Reset()
 {
-	m_iCurrentState = AB_STATE_INACTIVE;
+	m_eCurrentState = AB_STATE_INACTIVE;
 	m_iLightestTeam = m_iHeaviestTeam = TEAM_INVALID;
 	m_nNeeded = 0;
-	m_flBalanceTeamsTime = -1.f;
+	m_flNextStateChange = -1.f;
 
-	if ( m_vecPlayersAsked.Count() > 0 )
-	{
-		// if we're resetting and we have people we haven't heard from yet, tell them to close their notification
-		FOR_EACH_VEC( m_vecPlayersAsked, i )
-		{
-			if ( m_vecPlayersAsked[i].hPlayer.Get() && ( m_vecPlayersAsked[i].eState == AB_VOLUNTEER_STATE_ASKED ) )
-			{
-				CSingleUserRecipientFilter filter( m_vecPlayersAsked[i].hPlayer.Get() );
-				filter.MakeReliable();
-				UserMessageBegin( filter, "AutoBalanceVolunteer_Cancel" );
-				MessageEnd();
-			}
-		}
-
-		m_vecPlayersAsked.Purge();
-	}
+	m_vecCandidates.Purge();
 }
 
 //-----------------------------------------------------------------------------
@@ -99,6 +85,9 @@ bool CTFAutobalance::ShouldBeActive() const
 	if ( TFGameRules()->IsInArenaMode() && tf_arena_use_queue.GetBool() )
 		return false;
 
+	if ( TFGameRules()->IsCommunityGameMode() )
+		return false;
+
 #if defined( _DEBUG ) || defined( STAGING_ONLY )
 	if ( mp_developer.GetBool() )
 		return false;
@@ -110,7 +99,7 @@ bool CTFAutobalance::ShouldBeActive() const
 	const IMatchGroupDescription *pMatchDesc = GetMatchGroupDescription( TFGameRules()->GetCurrentMatchGroup() );
 	if ( pMatchDesc )
 	{
-		return pMatchDesc->m_params.m_bUseAutoBalance;
+		return pMatchDesc->BUsesAutoBalance();
 	}
 
 	// outside of managed matches, we don't normally do any balancing for tournament mode
@@ -138,6 +127,9 @@ bool CTFAutobalance::AreTeamsUnbalanced()
 	if ( TFGameRules()->ArePlayersInHell() )
 		return false;
 
+	if ( !IsOkayToBalancePlayers() )
+		return false;
+
 	int nDiffBetweenTeams = 0;
 	m_iLightestTeam = m_iHeaviestTeam = TEAM_INVALID;
 	m_nNeeded = 0;
@@ -156,7 +148,7 @@ bool CTFAutobalance::AreTeamsUnbalanced()
 	else
 	{
 		int iMostPlayers = 0;
-		int iLeastPlayers = MAX_PLAYERS + 1;
+		int iLeastPlayers = MAX_PLAYERS_ARRAY_SAFE;
 		int i = FIRST_GAME_TEAM;
 
 		for ( CTeam *pTeam = GetGlobalTeam( i ); pTeam != NULL; pTeam = GetGlobalTeam( ++i ) )
@@ -191,38 +183,11 @@ bool CTFAutobalance::AreTeamsUnbalanced()
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-void CTFAutobalance::MonitorTeams()
+bool CTFAutobalance::IsAlreadyCandidate( CTFPlayer *pTFPlayer ) const
 {
-	if ( AreTeamsUnbalanced() )
+	FOR_EACH_VEC( m_vecCandidates, i )
 	{
-		if ( m_flBalanceTeamsTime < 0.f )
-		{
-			// trigger a small waiting period to see if the GC sends us someone before we need to balance the teams 
-			m_flBalanceTeamsTime = gpGlobals->curtime + tf_autobalance_detected_delay.GetInt();
-		}
-		else if ( m_flBalanceTeamsTime < gpGlobals->curtime )
-		{
-			if ( IsOkayToBalancePlayers() )
-			{
-				UTIL_ClientPrintAll( HUD_PRINTTALK, "#TF_Autobalance_Start", ( m_iHeaviestTeam == TF_TEAM_RED ) ? "#TF_RedTeam_Name" : "#TF_BlueTeam_Name" );
-				m_iCurrentState = AB_STATE_FIND_VOLUNTEERS;
-			}
-		}
-	}
-	else
-	{
-		m_flBalanceTeamsTime = -1.f;
-	}
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: 
-//-----------------------------------------------------------------------------
-bool CTFAutobalance::HaveAlreadyAskedPlayer( CTFPlayer *pTFPlayer ) const
-{
-	FOR_EACH_VEC( m_vecPlayersAsked, i )
-	{
-		if ( m_vecPlayersAsked[i].hPlayer == pTFPlayer )
+		if ( m_vecCandidates[i].hPlayer.Get() == pTFPlayer )
 			return true;
 	}
 
@@ -232,7 +197,7 @@ bool CTFAutobalance::HaveAlreadyAskedPlayer( CTFPlayer *pTFPlayer ) const
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-int CTFAutobalance::GetTeamAutoBalanceScore( int nTeam ) const
+double CTFAutobalance::GetTeamAutoBalanceScore( int nTeam ) const
 {
 	CMatchInfo *pMatch = GTFGCClientSystem()->GetLiveMatch();
 	if ( pMatch && TFGameRules() )
@@ -241,33 +206,37 @@ int CTFAutobalance::GetTeamAutoBalanceScore( int nTeam ) const
 	}
 
 	int nTotalScore = 0;
+	int nTeamScore = 0;
 	CTFPlayerResource *pTFPlayerResource = dynamic_cast<CTFPlayerResource *>( g_pPlayerResource );
-	if ( pTFPlayerResource )
+	CTeam *pTeam = GetGlobalTeam( nTeam );
+	if ( pTFPlayerResource && pTeam )
 	{
-		CTeam *pTeam = GetGlobalTeam( nTeam );
-		if ( pTeam )
+		// Tally up total score across everyone and for the specified team
+		for ( int i = 1; i <= MAX_PLAYERS; i++ )
 		{
-			for ( int i = 0; i < pTeam->GetNumPlayers(); i++ )
+			CTFPlayer *pPlayer = ToTFPlayer( UTIL_PlayerByIndex( i ) );
+			if ( !pPlayer )
+				continue;
+
+			if ( pPlayer->GetTeam() == pTeam )
 			{
-				CTFPlayer *pTFPlayer = ToTFPlayer( pTeam->GetPlayer( i ) );
-				if ( pTFPlayer )
-				{
-					nTotalScore += pTFPlayerResource->GetTotalScore( pTFPlayer->entindex() );
-				}
+				nTeamScore = pTFPlayerResource->GetTotalScore( pPlayer->entindex() );
 			}
+
+			nTotalScore += pTFPlayerResource->GetTotalScore( pPlayer->entindex() );
 		}
 	}
 
-	return nTotalScore;
+	return (double)nTeamScore / (double)nTotalScore;
 }
 
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-int CTFAutobalance::GetPlayerAutoBalanceScore( CTFPlayer *pTFPlayer ) const
+double CTFAutobalance::GetPlayerAutoBalanceScore( CTFPlayer *pTFPlayer ) const
 {
 	if ( !pTFPlayer )
-		return 0;
+		return 0.0;
 
 	CMatchInfo *pMatch = GTFGCClientSystem()->GetLiveMatch();
 	if ( pMatch )
@@ -280,31 +249,61 @@ int CTFAutobalance::GetPlayerAutoBalanceScore( CTFPlayer *pTFPlayer ) const
 			const CMatchInfo::PlayerMatchData_t* pPlayerMatchData = pMatch->GetMatchDataForPlayer( steamID );
 			if ( pPlayerMatchData )
 			{
-				FixmeMMRatingBackendSwapping(); // Make sure this makes sense with arbitrary skill rating values --
-												// e.g. maybe we want a smarter glicko-weighting thing.
-				return (int)pPlayerMatchData->unMMSkillRating;
+				return pPlayerMatchData->flNormalizedMMSkillRating;
 			}
 		}
 	}
 
+	int nPlayerScore = 0;
 	int nTotalScore = 0;
 	CTFPlayerResource *pTFPlayerResource = dynamic_cast<CTFPlayerResource *>( g_pPlayerResource );
 	if ( pTFPlayerResource )
 	{
-		nTotalScore = pTFPlayerResource->GetTotalScore( pTFPlayer->entindex() );
+		// Tally up total score across everyone and find the particular player's score
+		for ( int i = 1; i <= MAX_PLAYERS; i++ )
+		{
+			CTFPlayer *pPlayer = ToTFPlayer( UTIL_PlayerByIndex( i ) );
+			if ( !pPlayer )
+				continue;
+
+			if ( pPlayer == pTFPlayer )
+			{
+				nPlayerScore = pTFPlayerResource->GetTotalScore( pPlayer->entindex() );
+			}
+
+			nTotalScore += pTFPlayerResource->GetTotalScore( pPlayer->entindex() );
+		}
+		
 	}
 
-	return nTotalScore;
+	return (double)nPlayerScore / (double)nTotalScore;
 }
 
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-CTFPlayer *CTFAutobalance::FindPlayerToAsk()
+bool CTFAutobalance::ValidateCandidates()
+{
+	FOR_EACH_VEC_BACK( m_vecCandidates, i )
+	{
+		CTFPlayer *pTFPlayer = m_vecCandidates[i].hPlayer.Get();
+		if ( !pTFPlayer || !pTFPlayer->CanBeAutobalanced() )
+		{
+			m_vecCandidates.Remove( i );
+		}
+	}
+
+	return ( m_vecCandidates.Count() > 0 );
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+CTFPlayer *CTFAutobalance::FindNextCandidate()
 {
 	CTFPlayer *pRetVal = NULL;
 
-	CUtlVector< CTFPlayer* > vecCandiates;
+	CUtlVector< CTFPlayer* > vecCandidates;
 	CTeam *pTeam = GetGlobalTeam( m_iHeaviestTeam );
 	if ( pTeam )
 	{
@@ -312,32 +311,32 @@ CTFPlayer *CTFAutobalance::FindPlayerToAsk()
 		for ( int i = 0; i < pTeam->GetNumPlayers(); i++ )
 		{
 			CTFPlayer *pTFPlayer = ToTFPlayer( pTeam->GetPlayer( i ) );
-			if ( pTFPlayer && !HaveAlreadyAskedPlayer( pTFPlayer ) && pTFPlayer->CanBeAutobalanced() )
+			if ( pTFPlayer && !IsAlreadyCandidate( pTFPlayer ) && pTFPlayer->CanBeAutobalanced() )
 			{
-				vecCandiates.AddToTail( pTFPlayer );
+				vecCandidates.AddToTail( pTFPlayer );
 			}
 		}
 	}
 
 	// no need to go any further if there's only one candidate
-	if ( vecCandiates.Count() == 1 )
+	if ( vecCandidates.Count() == 1 )
 	{
-		pRetVal = vecCandiates[0];
+		pRetVal = vecCandidates[0];
 	}
-	else if ( vecCandiates.Count() > 1 )
+	else if ( vecCandidates.Count() > 1 )
 	{
-		int nTotalDiff = abs( GetTeamAutoBalanceScore( m_iHeaviestTeam ) - GetTeamAutoBalanceScore( m_iLightestTeam ) );
-		int nAverageNeeded = ( nTotalDiff / 2 ) / m_nNeeded;
+		double fTotalDiff = fabs( GetTeamAutoBalanceScore( m_iHeaviestTeam ) - GetTeamAutoBalanceScore( m_iLightestTeam ) );
+		double fAverageNeeded = ( fTotalDiff / 2.0 ) / m_nNeeded;
 
-		// now look a player on the heaviest team with skillrating closest to that average
-		int nClosest = INT_MAX;
-		FOR_EACH_VEC( vecCandiates, iIndex )
+		// now look for a player on the heaviest team with skill rating closest to that average
+		float fClosest = FLT_MAX;
+		FOR_EACH_VEC( vecCandidates, iIndex )
 		{
-			int nDiff = abs( nAverageNeeded - GetPlayerAutoBalanceScore( vecCandiates[iIndex] ) );
-			if ( nDiff < nClosest )
+			double fDiff = fabs( fAverageNeeded - GetPlayerAutoBalanceScore( vecCandidates[iIndex] ) );
+			if ( fDiff < fClosest )
 			{
-				nClosest = nDiff;
-				pRetVal = vecCandiates[iIndex];
+				fClosest = fDiff;
+				pRetVal = vecCandidates[iIndex];
 			}
 		}
 	}
@@ -348,82 +347,176 @@ CTFPlayer *CTFAutobalance::FindPlayerToAsk()
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-void CTFAutobalance::FindVolunteers()
+bool CTFAutobalance::FindCandidates()
 {
-	// keep track of the state of things, this will also update our counts if more players drop from the server
-	if ( !AreTeamsUnbalanced() || !IsOkayToBalancePlayers() )
+	if ( !AreTeamsUnbalanced() )
+	{
+		Reset();
+		return false;
+	}
+
+	m_vecCandidates.Purge();
+
+	int nMinToFind = 0;
+	CTeam *pTeam = GetGlobalTeam( m_iHeaviestTeam );
+	if ( pTeam )
+	{
+		nMinToFind = ( int ) ( pTeam->GetNumPlayers() * 0.4f ); // 40% of the team
+	}
+
+	int nTotal = Max( ( m_nNeeded * 2 ), nMinToFind );
+	int nNumFound = 0;
+
+	while ( nNumFound < nTotal )
+	{
+		CTFPlayer *pTFPlayer = FindNextCandidate();
+		if ( pTFPlayer )
+		{
+			// the best candidates are towards the tail of the list so
+			// we can use for_each_vec_back to remove entries later
+			int iIndex = m_vecCandidates.AddToHead();
+			m_vecCandidates[iIndex].hPlayer = pTFPlayer;
+			m_vecCandidates[iIndex].bSentForceMessage = false;
+
+			nNumFound++;
+			continue;
+		}
+
+		break;
+	}
+
+	if ( nNumFound <= 0 )
+	{
+		// we couldn't find anyone
+		Reset();
+		return false;
+	}
+
+	return true;
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+void CTFAutobalance::PlayerChangeTeam( CTFPlayer *pTFPlayer, bool bFullBonus )
+{
+	CMatchInfo *pMatch = GTFGCClientSystem()->GetLiveMatch();
+	if ( pMatch )
+	{
+		CSteamID steamID;
+		pTFPlayer->GetSteamID( &steamID );
+
+		// We're going to give the switching player a bonus pool of XP. This should encourage
+		// them to keep playing to earn what's in the pool, rather than just quit after getting
+		// a big payout
+		if ( !pMatch->BSentResult() )
+		{
+			pMatch->GiveXPBonus( steamID, CMsgTFXPSource_XPSourceType_SOURCE_AUTOBALANCE_BONUS, 1, bFullBonus ? tf_autobalance_xp_bonus.GetInt() : ( tf_autobalance_xp_bonus.GetInt() / 2 ) );
+		}
+
+		GTFGCClientSystem()->ChangeMatchPlayerTeam( steamID, TFGameRules()->GetGCTeamForGameTeam( m_iLightestTeam ) );
+	}
+
+	pTFPlayer->ChangeTeam( m_iLightestTeam, false, false, true );
+	pTFPlayer->ForceRespawn();
+	pTFPlayer->SetLastAutobalanceTime( gpGlobals->curtime );
+
+	IGameEvent *event = gameeventmanager->CreateEvent( "teamplay_teambalanced_player" );
+	if ( event )
+	{
+		event->SetInt( "player", pTFPlayer->entindex() );
+		event->SetInt( "team", m_iLightestTeam );
+		gameeventmanager->FireEvent( event );
+	}
+
+	// tell people that we've switched this player
+	CReliableBroadcastRecipientFilter filter;
+	filter.RemoveRecipient( pTFPlayer );
+	UTIL_ClientPrintFilter( filter, HUD_PRINTTALK, "#game_player_was_team_balanced", pTFPlayer->GetPlayerName() );
+
+	// let the player know what happened
+	const char *pszTeam = ( m_iLightestTeam == TF_TEAM_RED ) ? "#TF_RedTeam_Name" : "#TF_BlueTeam_Name";
+	ClientPrint( pTFPlayer, HUD_PRINTTALK, ( pMatch ? "#TF_Autobalance_TeamChangeDone_Match" : "#TF_Autobalance_TeamChangeDone" ), pszTeam, CFmtStr( "%d", ( int ) ( bFullBonus ? tf_autobalance_xp_bonus.GetInt() : ( tf_autobalance_xp_bonus.GetInt() / 2 ) ) ) );
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+void CTFAutobalance::ForceDeadCandidates()
+{
+	if ( !AreTeamsUnbalanced() || !ValidateCandidates() )
 	{
 		Reset();
 		return;
 	}
 
-	int nPendingReplies = 0;
-	int nRepliedNo = 0;
-
-	FOR_EACH_VEC( m_vecPlayersAsked, i )
+	FOR_EACH_VEC_BACK( m_vecCandidates, i )
 	{
-		// if the player is valid
-		if ( m_vecPlayersAsked[i].hPlayer.Get() )
+		CTFPlayer *pTFPlayer = m_vecCandidates[i].hPlayer.Get();
+		if ( !pTFPlayer->IsAlive() && ( pTFPlayer->GetObserverMode() > OBS_MODE_FREEZECAM ) )
 		{
-			switch ( m_vecPlayersAsked[i].eState )
+			PlayerChangeTeam( pTFPlayer, true );
+			m_vecCandidates.Remove( i );
+
+			if ( !AreTeamsUnbalanced() )
 			{
-			case AB_VOLUNTEER_STATE_ASKED:
-				if ( m_vecPlayersAsked[i].flQueryExpireTime < gpGlobals->curtime )
-				{
-					// they've timed out the request period without replying
-					m_vecPlayersAsked[i].eState = AB_VOLUNTEER_STATE_NO;
-					nRepliedNo++;
-				}
-				else
-				{
-					nPendingReplies++;
-				}
-				break;
-			case AB_VOLUNTEER_STATE_NO:
-				nRepliedNo++;
-				break;
-			default:
+				Reset();
 				break;
 			}
 		}
 	}
+}
 
-	int nNumToAsk = ( m_nNeeded * 2 );
-
-	// do we need to ask for more volunteers?
-	if ( nPendingReplies < nNumToAsk )
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+void CTFAutobalance::ForceCandidatesSetup()
+{
+	if ( !AreTeamsUnbalanced() || !ValidateCandidates() )
 	{
-		int nNumNeeded = nNumToAsk - nPendingReplies;
-		int nNumAsked = 0;
+		Reset();
+		return;
+	}
 
-		while ( nNumAsked < nNumNeeded )
+	// pick the number of players we need to switch and let them know it's going to happen
+	const char *pszTeam = ( m_iLightestTeam == TF_TEAM_RED ) ? "#TF_RedTeam_Name" : "#TF_BlueTeam_Name";
+
+	int nNumTold = 0;
+	FOR_EACH_VEC_BACK( m_vecCandidates, i )
+	{
+		CTFPlayer *pTFPlayer = m_vecCandidates[i].hPlayer.Get();
+		if ( pTFPlayer && ( nNumTold < m_nNeeded ) )
 		{
-			CTFPlayer *pTFPlayer = FindPlayerToAsk();
-			if ( pTFPlayer )
+			ClientPrint( pTFPlayer, HUD_PRINTCENTER, "#TF_Autobalance_TeamChangePending", pszTeam, CFmtStr( "%d", tf_autobalance_force_candidates_maxtime.GetInt() ) );
+			m_vecCandidates[i].bSentForceMessage = true;
+			nNumTold++;
+		}
+	}
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+void CTFAutobalance::ForceCandidatesExecution()
+{
+	if ( !AreTeamsUnbalanced() || !ValidateCandidates() )
+	{
+		Reset();
+		return;
+	}
+
+	int nNumSwitched = 0;
+	FOR_EACH_VEC_BACK( m_vecCandidates, i )
+	{
+		// did we warn this player?
+		CTFPlayer *pTFPlayer = m_vecCandidates[i].hPlayer.Get();
+		if ( pTFPlayer && m_vecCandidates[i].bSentForceMessage )
+		{
+			// do we still need to switch players?
+			if ( nNumSwitched < m_nNeeded )
 			{
-				int iIndex = m_vecPlayersAsked.AddToTail();
-				m_vecPlayersAsked[iIndex].hPlayer = pTFPlayer;
-				m_vecPlayersAsked[iIndex].eState = AB_VOLUNTEER_STATE_ASKED;
-				m_vecPlayersAsked[iIndex].flQueryExpireTime = gpGlobals->curtime + tf_autobalance_query_lifetime.GetInt() + 3; // add 3 seconds to allow for travel time to/from the client
-
-				CSingleUserRecipientFilter filter( pTFPlayer );
-				filter.MakeReliable();
-				UserMessageBegin( filter, "AutoBalanceVolunteer" );
-				MessageEnd();
-
-				nNumAsked++;
-				nPendingReplies++;
-			}
-			else
-			{
-				// we couldn't find anyone else to ask
-				if ( nPendingReplies <= 0 )
-				{
-					// we're not waiting on anyone else to reply....so we should just reset
-					Reset();
-				}
-
-				return;
+				PlayerChangeTeam( pTFPlayer, true );
+				nNumSwitched++;
 			}
 		}
 	}
@@ -434,24 +527,76 @@ void CTFAutobalance::FindVolunteers()
 //-----------------------------------------------------------------------------
 void CTFAutobalance::FrameUpdatePostEntityThink()
 {
-	bool bActive = ShouldBeActive();
-	if ( !bActive )
+	if ( !ShouldBeActive() )
 	{
 		Reset();
 		return;
 	}
 
-	switch ( m_iCurrentState )
+	switch ( m_eCurrentState )
 	{
 	case AB_STATE_INACTIVE:
 		// we should be active if we've made it this far
-		m_iCurrentState = AB_STATE_MONITOR;
+		m_eCurrentState = AB_STATE_MONITOR;
+		m_flNextStateChange = -1.f;
 		break;
 	case AB_STATE_MONITOR:
-		MonitorTeams();
+		if ( ( m_flNextStateChange > 0 ) && ( m_flNextStateChange < gpGlobals->curtime ) )
+		{
+			if ( FindCandidates() )
+			{
+				m_eCurrentState = AB_STATE_FORCE_DEAD_CANDIDATES;
+				m_flNextStateChange = -1.f;
+			}
+		}
+		else
+		{
+			if ( AreTeamsUnbalanced() )
+			{
+				if ( m_flNextStateChange < 0 )
+				{
+					m_flNextStateChange = gpGlobals->curtime;
+				}
+			}
+			else
+			{
+				m_flNextStateChange = -1.f;
+			}
+		}
 		break;
-	case AB_STATE_FIND_VOLUNTEERS:
-		FindVolunteers();
+	case AB_STATE_FORCE_DEAD_CANDIDATES:
+		if ( ( m_flNextStateChange > 0 ) && ( m_flNextStateChange < gpGlobals->curtime ) )
+		{
+			m_eCurrentState = AB_STATE_FORCE_CANDIDATES_SETUP;
+			m_flNextStateChange = -1.f;
+		}
+		else
+		{
+			if ( m_flNextStateChange < 0 )
+			{
+				m_flNextStateChange = gpGlobals->curtime + tf_autobalance_dead_candidates_maxtime.GetFloat();
+			}
+			ForceDeadCandidates();
+		}
+		break;
+	case AB_STATE_FORCE_CANDIDATES_SETUP:
+		if ( ( m_flNextStateChange > 0 ) && ( m_flNextStateChange < gpGlobals->curtime ) )
+		{
+			m_eCurrentState = AB_STATE_FORCE_CANDIDATES_EXECUTION;
+			m_flNextStateChange = -1.f;
+		}
+		else
+		{
+			if ( m_flNextStateChange < 0 )
+			{
+				m_flNextStateChange = gpGlobals->curtime + tf_autobalance_force_candidates_maxtime.GetFloat();
+				ForceCandidatesSetup();
+			}
+		}
+		break;
+	case AB_STATE_FORCE_CANDIDATES_EXECUTION:
+		ForceCandidatesExecution();
+		Reset();
 		break;
 	default:
 		break;
@@ -467,53 +612,6 @@ bool CTFAutobalance::IsOkayToBalancePlayers()
 		return false;
 
 	return true;
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: 
-//-----------------------------------------------------------------------------
-void CTFAutobalance::ReplyReceived( CTFPlayer *pTFPlayer, bool bResponse )
-{
-	if ( m_iCurrentState != AB_STATE_FIND_VOLUNTEERS )
-		return;
-
-	if ( !AreTeamsUnbalanced() || !IsOkayToBalancePlayers() )
-	{
-		Reset();
-		return;
-	}
-
-	FOR_EACH_VEC( m_vecPlayersAsked, i )
-	{
-		// is this a player we asked?
-		if ( m_vecPlayersAsked[i].hPlayer == pTFPlayer )
-		{
-			m_vecPlayersAsked[i].eState = bResponse ? AB_VOLUNTEER_STATE_YES : AB_VOLUNTEER_STATE_NO;
-			if ( bResponse  && pTFPlayer->CanBeAutobalanced() )
-			{
-				pTFPlayer->ChangeTeam( m_iLightestTeam, false, false, true );
-				pTFPlayer->ForceRespawn();
-				pTFPlayer->SetLastAutobalanceTime( gpGlobals->curtime );
-
-				CMatchInfo *pMatch = GTFGCClientSystem()->GetLiveMatch();
-				if ( pMatch )
-				{
-					CSteamID steamID;
-					pTFPlayer->GetSteamID( &steamID );
-
-					// We're going to give the switching player a bonus pool of XP. This should encourage
-					// them to keep playing to earn what's in the pool, rather than just quit after getting
-					// a big payout
-					if ( !pMatch->BSentResult() )
-					{
-						pMatch->GiveXPBonus( steamID, CMsgTFXPSource_XPSourceType_SOURCE_AUTOBALANCE_BONUS, 1, tf_autobalance_xp_bonus.GetInt() );
-					}
-
-					GTFGCClientSystem()->ChangeMatchPlayerTeam( steamID, TFGameRules()->GetGCTeamForGameTeam( m_iLightestTeam ) );
-				}
-			}
-		}
-	}
 }
 
 CTFAutobalance gTFAutobalance;

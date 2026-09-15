@@ -787,28 +787,7 @@ void CTFClassMenu::SelectClass( int iClass )
 	}
 	else
 	{
-		bool bIsRobot = false;
-		// Check for Robot
-		static CSchemaAttributeDefHandle pAttrDef_PlayerRobot( "appear as mvm robot" );
-		for ( int i = 0; i < CLASS_LOADOUT_POSITION_COUNT; i++ )
-		{
-			CEconItemView *pItemData = TFInventoryManager()->GetItemInLoadoutForClass( iClass, i );
-			if ( !pItemData )
-				continue;
-			if ( FindAttribute( pItemData, pAttrDef_PlayerRobot ) )
-			{
-				bIsRobot = true;
-				break;
-			}
-		}
-
-		/*if ( pLocalPlayer )
-		{
-			int iRobot = 0;
-			CALL_ATTRIB_HOOK_INT_ON_OTHER( pLocalPlayer, iRobot, appear_as_mvm_robot );
-			bIsRobot = iRobot ? true : false;
-		}*/
-		m_pTFPlayerModelPanel->SetToPlayerClass( iClass, bIsRobot, bClassWasRandom );
+		m_pTFPlayerModelPanel->SetToPlayerClass( iClass, bClassWasRandom );
 
 		m_pEditLoadoutButton->SetVisible( true );
 		if ( m_pEditLoadoutHintIcon )

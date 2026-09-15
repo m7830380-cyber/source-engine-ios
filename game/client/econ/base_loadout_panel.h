@@ -106,10 +106,6 @@ protected:
 	CItemModelPanelToolTip	*m_pMouseOverTooltip;
 	CItemModelPanel		*m_pItemPanelBeingMousedOver;
 
-#ifdef STAGING_ONLY
-	CTFItemCardPanel		*m_pMouseOverCardPanel;
-	CItemCardPanelToolTip	*m_pMouseOverCardTooltip;
-#endif
 };
 
 #endif // BASE_LOADOUT_PANEL_H

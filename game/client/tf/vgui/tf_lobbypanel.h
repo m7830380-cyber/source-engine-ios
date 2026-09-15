@@ -16,6 +16,7 @@
 #include "vgui_controls/RichText.h"
 #include "vgui_controls/CheckButton.h"
 #include "tf_gc_client.h"
+#include "vgui_controls/PropertySheet.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include <tier0/memdbgon.h>
@@ -57,7 +58,7 @@ public:
 
 	void UpdateControls();
 
-	virtual EMatchGroup GetMatchGroup( void ) const = 0;
+	virtual ETFMatchGroup GetMatchGroup( void ) const = 0;
 
 protected:
 
@@ -165,7 +166,8 @@ private:
 					int nUtf8BufferSizeBytes = nBufSizeBytes * 2;
 					char *szText = (char *)stackalloc( nUtf8BufferSizeBytes );
 					V_UnicodeToUTF8( wText, szText, nUtf8BufferSizeBytes );
-					GTFGCClientSystem()->SendSteamLobbyChat( CTFGCClientSystem::k_eLobbyMsg_UserChat, szText );
+					// TODO(Universal Parties):
+					// GTFGCClientSystem()->SendSteamLobbyChat( CTFGCClientSystem::k_eLobbyMsg_UserChat, szText );
 				}
 			}
 			else if ( code == KEY_TAB )
@@ -211,7 +213,7 @@ private:
 		ChatLog *m_pChatLog;
 		ChatTextEntry *m_pChatTextEntry;
 
-	int					m_iImageAvatars[MAX_PLAYERS+1];
+	int					m_iImageAvatars[MAX_PLAYERS_ARRAY_SAFE];
 	CUtlMap<int,int>	m_mapAvatarsToImageList;
 
 	vgui::HFont m_fontPlayerListItem;

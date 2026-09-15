@@ -7,6 +7,7 @@
 #include "cbase.h"
 #include "tf_weapon_bonesaw.h"
 #include "tf_weapon_medigun.h"
+#include "tf_gamerules.h"
 #ifdef GAME_DLL
 #include "tf_player.h"
 #else
@@ -15,6 +16,7 @@
 
 
 #define UBERSAW_CHARGE_POSEPARAM		"syringe_charge_level"
+#define VITASAW_CHARGE_PER_HIT 0.15f
 
 //=============================================================================
 //
@@ -74,24 +76,49 @@ bool CTFBonesaw::DefaultDeploy( char *szViewModel, char *szWeaponModel, int iAct
 }
 
 //-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFBonesaw::DoMeleeDamage( CBaseEntity* ent, trace_t& trace )
 {
-	// We hit a target, take a head
-	CTFPlayer *pPlayer = ToTFPlayer( GetOwnerEntity() );
-	CTFPlayer *pVictim = ToTFPlayer( ent );
-	
-	int iTakeHeads = 0;
-	CALL_ATTRIB_HOOK_INT( iTakeHeads, add_head_on_hit );
-	if ( pPlayer && pVictim && iTakeHeads && (pVictim->GetTeamNumber() != pPlayer->GetTeamNumber() ) )
+	if ( !TFGameRules() || !TFGameRules()->IsTruceActive() )
 	{
-		int iDecaps = pPlayer->m_Shared.GetDecapitations() + 1;
-		pPlayer->m_Shared.SetDecapitations( iDecaps );
-		pPlayer->TeamFortress_SetSpeed();
+		if ( ent && ent->IsPlayer() )
+		{
+			CTFPlayer *pTFOwner = ToTFPlayer( GetOwnerEntity() );
+			if ( pTFOwner && pTFOwner->GetTeamNumber() != ent->GetTeamNumber() )
+			{
+				int iDecaps = pTFOwner->m_Shared.GetDecapitations() + 1;
+
+				int iTakeHeads = 0;
+				CALL_ATTRIB_HOOK_INT( iTakeHeads, add_head_on_hit );
+				if ( iTakeHeads )
+				{
+					// We hit a target, take a head
+					pTFOwner->m_Shared.SetDecapitations( iDecaps );
+					pTFOwner->TeamFortress_SetSpeed();
+				}
+
+				float flPreserveUber = 0.f;
+				CALL_ATTRIB_HOOK_FLOAT( flPreserveUber, ubercharge_preserved_on_spawn_max );
+				if ( flPreserveUber )
+				{
+					pTFOwner->m_Shared.SetDecapitations( iDecaps );
+
+					CWeaponMedigun *pMedigun = dynamic_cast< CWeaponMedigun* >( pTFOwner->Weapon_OwnsThisID( TF_WEAPON_MEDIGUN ) );
+					if ( pMedigun )
+					{
+						pMedigun->SetChargeLevelToPreserve( ( iDecaps * VITASAW_CHARGE_PER_HIT ) );
+					}
+				}
+			}
+		}
 	}
 
 	BaseClass::DoMeleeDamage( ent, trace );
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: 
 //-----------------------------------------------------------------------------
 float CTFBonesaw::GetBoneSawSpeedMod( void ) 
 { 
@@ -109,15 +136,34 @@ float CTFBonesaw::GetBoneSawSpeedMod( void )
 	return 1.f; 
 }
 
+#ifdef GAME_DLL
 //-----------------------------------------------------------------------------
-int CTFBonesaw::GetCount( void )
+// Purpose: 
+//-----------------------------------------------------------------------------
+void CTFBonesaw::OnPlayerKill( CTFPlayer *pVictim, const CTakeDamageInfo &info )
 {
-	CTFPlayer *pOwner = ToTFPlayer( GetOwner() );
-	if ( !pOwner )
-		return 0;
+	BaseClass::OnPlayerKill( pVictim, info );
 
-	return pOwner->m_Shared.GetDecapitations();
+	CTFPlayer *pTFOwner = ToTFPlayer( GetOwnerEntity() );
+	if ( !pTFOwner )
+		return;
+
+	int iTakeHeads = 0;
+	CALL_ATTRIB_HOOK_INT( iTakeHeads, add_head_on_kill );
+	if ( iTakeHeads )
+	{
+		int nOrgans = pTFOwner->m_Shared.GetDecapitations() + 1;
+		pTFOwner->m_Shared.SetDecapitations( nOrgans );
+
+		CWeaponMedigun *pMedigun = dynamic_cast< CWeaponMedigun* >( pTFOwner->Weapon_OwnsThisID( TF_WEAPON_MEDIGUN ) );
+		if ( pMedigun )
+		{
+			pMedigun->SetChargeLevelToPreserve( ( nOrgans * VITASAW_CHARGE_PER_HIT ) );
+		}
+	}
 }
+#endif
+
 
 #ifdef CLIENT_DLL
 //-----------------------------------------------------------------------------

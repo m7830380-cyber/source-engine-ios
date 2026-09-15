@@ -520,9 +520,8 @@ void CTFWinPanel::FireGameEvent( IGameEvent * event )
 			if ( pBadgePanel )
 			{
 				const IMatchGroupDescription *pMatchDesc = TFGameRules() ? GetMatchGroupDescription( TFGameRules()->GetCurrentMatchGroup() ) : NULL;
-				const IProgressionDesc *pProgressionDesc = pMatchDesc ? pMatchDesc->m_pProgressionDesc : NULL; 
 
-				bool bVisible = ( pMatchDesc && pProgressionDesc );
+				bool bVisible = pMatchDesc && pMatchDesc->m_pProgressionDesc;
 				if ( bVisible )
 				{
 					if ( !bGameOver && TFGameRules()->IsMatchTypeCompetitive() )
@@ -536,7 +535,7 @@ void CTFWinPanel::FireGameEvent( IGameEvent * event )
 					const CSteamID steamID = GetSteamIDForPlayerIndex( iPlayerIndex );
 					if ( steamID.IsValid() )
 					{
-						pBadgePanel->SetupBadge( pProgressionDesc, steamID );
+						pBadgePanel->SetupBadge( pMatchDesc, steamID );
 					}
 					else
 					{
@@ -631,15 +630,14 @@ void CTFWinPanel::FireGameEvent( IGameEvent * event )
 			if ( pBadgePanel )
 			{
 				const IMatchGroupDescription *pMatchDesc = GetMatchGroupDescription( TFGameRules()->GetCurrentMatchGroup() );
-				const IProgressionDesc *pProgressionDesc = pMatchDesc ? pMatchDesc->m_pProgressionDesc : NULL;
 
-				bool bVisible = ( bShow && pMatchDesc && pProgressionDesc );
+				bool bVisible = ( bShow && pMatchDesc );
 				if ( bVisible )
 				{
 					const CSteamID steamID = GetSteamIDForPlayerIndex( iPlayerIndex );
 					if ( steamID.IsValid() )
 					{
-						pBadgePanel->SetupBadge( pProgressionDesc, steamID );
+						pBadgePanel->SetupBadge( pMatchDesc, steamID );
 					}
 					else
 					{

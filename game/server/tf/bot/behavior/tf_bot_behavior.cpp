@@ -51,10 +51,8 @@ ConVar tf_bot_hitscan_range_limit( "tf_bot_hitscan_range_limit", "1800", FCVAR_C
 ConVar tf_bot_always_full_reload( "tf_bot_always_full_reload", "0", FCVAR_CHEAT );
 
 ConVar tf_bot_fire_weapon_allowed( "tf_bot_fire_weapon_allowed", "1", FCVAR_CHEAT, "If zero, TFBots will not pull the trigger of their weapons (but will act like they did)" );
+ConVar tf_bot_reevaluate_class_in_spawnroom( "tf_bot_reevaluate_class_in_spawnroom", "1", FCVAR_CHEAT, "If set, bots will opportunisticly switch class while in spawnrooms if their current class is no longer their first choice." );
 
-#ifdef STAGING_ONLY
-ConVar tf_bot_use_items( "tf_bot_use_items", "0", FCVAR_CHEAT, "0-100: Chance bot will use random item." );
-#endif
 
 //---------------------------------------------------------------------------------------------
 Action< CTFBot > *CTFBotMainAction::InitialContainedAction( CTFBot *me )
@@ -92,18 +90,6 @@ ActionResult< CTFBot >	CTFBotMainAction::OnStart( CTFBot *me, Action< CTFBot > *
 #endif // TF_CREEP_MODE
 
 
-#ifdef STAGING_ONLY
-	if ( tf_bot_use_items.GetInt() && ( RandomInt(0, 100) <= tf_bot_use_items.GetInt() ) )
-	{
-		me->GiveRandomItem( LOADOUT_POSITION_PRIMARY );
-		me->GiveRandomItem( LOADOUT_POSITION_SECONDARY );
-		me->GiveRandomItem( LOADOUT_POSITION_MELEE );
-
-		me->GiveRandomItem( LOADOUT_POSITION_HEAD );
-		me->GiveRandomItem( LOADOUT_POSITION_MISC );
-		me->GiveRandomItem( LOADOUT_POSITION_MISC2 );
-	}
-#endif // STAGING_ONLY
 
 	return Continue();
 }
@@ -160,6 +146,34 @@ ActionResult< CTFBot >	CTFBotMainAction::Update( CTFBot *me, float interval )
 // 		}
 	}
 
+	CTFNavArea *myArea = me->GetLastKnownArea();
+	int spawnRoomFlag = me->GetTeamNumber() == TF_TEAM_RED ? TF_NAV_SPAWN_ROOM_RED : TF_NAV_SPAWN_ROOM_BLUE;
+
+	// should I try to change class?
+	if ( tf_bot_reevaluate_class_in_spawnroom.GetBool() &&
+	     !TFGameRules()->IsMannVsMachineMode() && 
+		 !TFGameRules()->IsInTraining() && 
+		 myArea && myArea->HasAttributeTF( spawnRoomFlag ) )
+	{
+		if ( !m_reevaluateClassTimer.HasStarted() )
+		{
+			// try to reevaluate class in a bit
+			m_reevaluateClassTimer.Start( RandomFloat( 1.f, 2.f ) );
+		}
+		else if ( m_reevaluateClassTimer.IsElapsed() )
+		{
+			// try changing class
+			m_reevaluateClassTimer.Invalidate();
+
+			// reevaluate if we need to
+			if ( me->ShouldReEvaluateCurrentClass() )
+			{
+				me->ReEvaluateCurrentClass();
+				return Continue();
+			}
+		}
+	}
+
 	if ( TFGameRules()->IsMannVsMachineMode() && me->GetTeamNumber() == TF_TEAM_PVE_INVADERS )
 	{
 		// infinite ammo
@@ -171,10 +185,7 @@ ActionResult< CTFBot >	CTFBotMainAction::Update( CTFBot *me, float interval )
 		//me->GiveAmmo( 100, TF_AMMO_GRENADES2, true );
 		me->GiveAmmo( 100, TF_AMMO_METAL, true );
 
-		me->m_Shared.AddToSpyCloakMeter( 100.0f );
-
-		CTFNavArea *myArea = me->GetLastKnownArea();
-		int spawnRoomFlag = me->GetTeamNumber() == TF_TEAM_RED ? TF_NAV_SPAWN_ROOM_RED : TF_NAV_SPAWN_ROOM_BLUE;
+		me->m_Shared.AddToSpyCloakMeter( 100.0f, true );
 
 		if ( myArea && myArea->HasAttributeTF( spawnRoomFlag ) )
 		{
@@ -182,6 +193,7 @@ ActionResult< CTFBot >	CTFBotMainAction::Update( CTFBot *me, float interval )
 			me->m_Shared.AddCond( TF_COND_INVULNERABLE, 0.5f );
 			me->m_Shared.AddCond( TF_COND_INVULNERABLE_HIDE_UNLESS_DAMAGED, 0.5f );
 			me->m_Shared.AddCond( TF_COND_INVULNERABLE_WEARINGOFF, 0.5f );
+			me->m_Shared.AddCond( TF_COND_IMMUNE_TO_PUSHBACK, 1.0f );
 		}
 
 		// watch for bots that have fallen through the ground
@@ -544,13 +556,6 @@ EventDesiredResult< CTFBot > CTFBotMainAction::OnOtherKilled( CTFBot *me, CBaseC
 
 	bool do_taunt = victim && victim->IsPlayer();
 
-#ifdef STAGING_ONLY
-	if ( !do_taunt )
-	{
-		// If bots are using items, go ahead and let bots taunt other bots.
-		do_taunt = victim && tf_bot_use_items.GetBool();
-	}
-#endif
 
 	if ( do_taunt )
 	{

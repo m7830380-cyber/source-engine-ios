@@ -23,6 +23,7 @@
 #include "tf_pumpkin_bomb.h"
 #include "halloween/merasmus/merasmus_trick_or_treat_prop.h"
 #include "tf_robot_destruction_robot.h"
+#include "tf_generic_bomb.h"
 #endif
 
 #define ENERGY_RING_DISPATCH_EFFECT			"ClientProjectile_EnergyRing"
@@ -62,6 +63,10 @@ void PrecacheRing(void *pUser)
 }
 PRECACHE_REGISTER_FN(PrecacheRing);
 
+#ifdef GAME_DLL
+ConVar tf_bison_tick_time( "tf_bison_tick_time", "0.025", FCVAR_CHEAT );
+#endif
+
 
 //-----------------------------------------------------------------------------
 // Purpose:
@@ -69,6 +74,10 @@ PRECACHE_REGISTER_FN(PrecacheRing);
 CTFProjectile_EnergyRing::CTFProjectile_EnergyRing()
 {
 	m_vecPrevPos = vec3_origin;
+
+#ifdef GAME_DLL
+	m_flLastHitTime = 0.f;
+#endif
 }
 
 //-----------------------------------------------------------------------------
@@ -89,7 +98,7 @@ float CTFProjectile_EnergyRing::GetGravity( void )
 
 float CTFProjectile_EnergyRing::GetInitialVelocity( void )
 {
-	return ShouldPenetrate() ? 840.f : 1200.f; 
+	return 1200.f; 
 }
 
 //-----------------------------------------------------------------------------
@@ -202,14 +211,6 @@ void CTFProjectile_EnergyRing::Precache()
 }
 
 #ifdef GAME_DLL
-
-struct collidelist_t
-{
-	const CPhysCollide	*pCollide;
-	Vector			origin;
-	QAngle			angles;
-};
-
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
@@ -217,9 +218,14 @@ void CTFProjectile_EnergyRing::ProjectileTouch( CBaseEntity *pOther )
 {
 	// Verify a correct "other."
 	Assert( pOther );
-	if ( !pOther->IsSolid() || pOther->IsSolidFlagSet( FSOLID_VOLUME_CONTENTS ) || pOther->IsSolidFlagSet( FSOLID_NOT_SOLID ) 
-		|| pOther->GetCollisionGroup() == TFCOLLISION_GROUP_RESPAWNROOMS )
+	if ( !pOther || 
+		 !pOther->IsSolid() ||
+		 pOther->IsSolidFlagSet( FSOLID_VOLUME_CONTENTS ) ||
+		 ( pOther->GetCollisionGroup() == TFCOLLISION_GROUP_RESPAWNROOMS ) ||
+		 pOther->IsFuncLOD() )
+	{
 		return;
+	}
 
 	CBaseEntity* pOwner = GetOwnerEntity();
 	// Don't shoot ourselves
@@ -228,100 +234,35 @@ void CTFProjectile_EnergyRing::ProjectileTouch( CBaseEntity *pOther )
 
 	// Handle hitting skybox (disappear).
 	const trace_t *pTrace = &CBaseEntity::GetTouchTrace();
-	if( pTrace->surface.flags & SURF_SKY )
+	if ( pTrace->surface.flags & SURF_SKY )
 	{
 		UTIL_Remove( this );
 		return;
 	}
 
 	// pass through ladders
-	if( pTrace->surface.flags & CONTENTS_LADDER )
+	if ( pTrace->surface.flags & CONTENTS_LADDER )
 		return;
 
-	// Used when checking against things like FUNC_BRUSHES
-	if ( !pOther->IsWorld() && pOther->GetSolid() == SOLID_VPHYSICS )
-	{
-		CPhysCollide *pTriggerCollide = modelinfo->GetVCollide( GetModelIndex() )->solids[0];
-		Assert( pTriggerCollide );
-
-		CUtlVector<collidelist_t> collideList;
-		IPhysicsObject *pList[VPHYSICS_MAX_OBJECT_LIST_COUNT];
-		int physicsCount = pOther->VPhysicsGetObjectList( pList, ARRAYSIZE(pList) );
-		vcollide_t *pVCollide = modelinfo->GetVCollide( pOther->GetModelIndex() );
-
-		if ( physicsCount )
-		{
-			for ( int i = 0; i < physicsCount; i++ )
-			{
-				const CPhysCollide *pCollide = pList[i]->GetCollide();
-				if ( pCollide )
-				{
-					collidelist_t element;
-					element.pCollide = pCollide;
-					pList[i]->GetPosition( &element.origin, &element.angles );
-					collideList.AddToTail( element );
-				}
-			}
-		}
-		else if ( pVCollide && pVCollide->solidCount )
-		{
-			collidelist_t element;
-			element.pCollide = pVCollide->solids[0];
-			element.origin = pOther->GetAbsOrigin();
-			element.angles = pOther->GetAbsAngles();
-			collideList.AddToTail( element );
-		}
-		else
-		{
-			return;
-		}
-
-		for ( int i = collideList.Count()-1; i >= 0; --i )
-		{
-			const collidelist_t &element = collideList[i];
-			trace_t tr;
-			physcollision->TraceCollide( pTrace->startpos, element.origin, element.pCollide, element.angles, pTriggerCollide, GetAbsOrigin(), GetAbsAngles(), &tr );
-			if ( !tr.DidHit() )
-				return;
-		}
-	}
+	if ( !ShouldTouchNonWorldSolid( pOther, pTrace ) )
+		return;
 
 	// The stuff we collide with
 	bool bCombatEntity = pOther->IsPlayer() || 
 						 pOther->IsBaseObject() || 
 						 pOther->IsCombatCharacter() || 
-						 pOther->IsCombatItem();
+						 pOther->IsCombatItem() ||
+						 pOther->IsProjectileCollisionTarget();
 
-	if ( !bCombatEntity )
-	{
-		// Couple more things that we collide with
-		// HACK: these are the same checks we do in CTFProjectile_Arrow::ArrowTouch()...need to figure out a better way to do this when we have time
-		CTFPumpkinBomb *pPumpkinBomb = dynamic_cast<CTFPumpkinBomb*>( pOther );
-		CTFMerasmusTrickOrTreatProp *pMerasmusProp = dynamic_cast<CTFMerasmusTrickOrTreatProp*>( pOther );
-		CTFRobotDestruction_Robot *pRobot = dynamic_cast<CTFRobotDestruction_Robot*>( pOther );
-		if ( pPumpkinBomb || pMerasmusProp || pRobot )
-		{
-			bCombatEntity = true;
-		}
-	}
-
-	if ( bCombatEntity && ( pOther != pOwner ) )
+	if ( bCombatEntity )
 	{
 		// Bison projectiles shouldn't collide with friendly things
-		if ( pOther->GetTeamNumber() == GetTeamNumber() && ShouldPenetrate() )
-		{
+		if ( ShouldPenetrate() && ( pOther->InSameTeam( this ) || ( gpGlobals->curtime - m_flLastHitTime ) < tf_bison_tick_time.GetFloat() ) )
 			return;
-		}
 
-		FOR_EACH_VEC( m_vecHitEnemies, i )
-		{
-			// Check if we've already damaged this entity.  If so, don't do it again
-			if ( m_vecHitEnemies[i] == pOther )
-				return;
-		}
+		m_flLastHitTime = gpGlobals->curtime;
 
-		const int nMaxPenetrates = 5;
-		const int nDamage = GetDamage() * pow( 0.75f, m_vecHitEnemies.Count() ); 
+		const int nDamage = GetDamage();
 
 		CTakeDamageInfo info( this, pOwner, GetLauncher(), nDamage, GetDamageType(), TF_DMG_CUSTOM_PLASMA );
 		info.SetReportedPosition( pOwner->GetAbsOrigin() );
@@ -339,8 +280,6 @@ void CTFProjectile_EnergyRing::ProjectileTouch( CBaseEntity *pOther )
 
 		ApplyMultiDamage();
 
-		m_vecHitEnemies.AddToTail( pOther );
-
 		// Get a position on whatever we hit
 		Vector vecDelta = pOther->GetAbsOrigin() - GetAbsOrigin();
 		Vector vecNormalVel = GetAbsVelocity().Normalized();
@@ -348,13 +287,8 @@ void CTFProjectile_EnergyRing::ProjectileTouch( CBaseEntity *pOther )
 
 		PlayImpactEffects( vecNewPos, pOther->IsPlayer() );
 
-		int iPenetrate = 0;
-		CALL_ATTRIB_HOOK_INT_ON_OTHER( GetOwnerEntity(), iPenetrate, energy_weapon_penetration );
-		if ( iPenetrate && m_vecHitEnemies.Count() < nMaxPenetrates )
-		{
+		if ( ShouldPenetrate() )
 			return;
-		}
-	
 		
 		UTIL_Remove( this );
 		return;
@@ -424,7 +358,7 @@ void CTFProjectile_EnergyRing::OnDataChanged( DataUpdateType_t updateType )
 //-----------------------------------------------------------------------------
 float CTFProjectile_EnergyRing::GetDamage()
 {
-	return ShouldPenetrate() ? 45.f : 60.f;
+	return ShouldPenetrate() ? 20.f : 60.f;
 }
 
 bool CTFProjectile_EnergyRing::ShouldPenetrate() const

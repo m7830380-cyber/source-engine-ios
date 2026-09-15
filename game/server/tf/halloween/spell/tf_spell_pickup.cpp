@@ -77,7 +77,7 @@ bool CSpellPickup::ItemCanBeTouchedByPlayer( CBasePlayer *pPlayer )
 		if ( !pSpellBook )
 		{
 			// TEMP
-			ClientPrint( pPlayer, HUD_PRINTCENTER, "Equip a SpellBook in your ActionSlot to pick this up.", pPlayer->GetPlayerName() );
+			ClientPrint( pPlayer, HUD_PRINTCENTER, "#TF_SpellBook_Equip", pPlayer->GetPlayerName() );
 			return false;
 		}
 		

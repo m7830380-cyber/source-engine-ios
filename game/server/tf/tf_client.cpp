@@ -46,6 +46,8 @@ extern CBaseEntity *FindPickerEntity( CBasePlayer *pPlayer );
 
 extern bool			g_fGameOver;
 
+extern ConVar tf_allow_player_name_change;
+
 
 void FinishClientPutInServer( CTFPlayer *pPlayer )
 {
@@ -73,6 +75,11 @@ void FinishClientPutInServer( CTFPlayer *pPlayer )
 	if ( !pPlayer->IsFakeClient() )
 	{
 		UTIL_ClientPrintAll( HUD_PRINTNOTIFY, "#Game_connected", sName[0] != 0 ? sName : "<unconnected>" );
+
+		if ( pPlayer->BHaveChatSuspensionInCurrentMatch() || !tf_allow_player_name_change.GetBool() )
+		{
+			engine->ServerCommand( UTIL_VarArgs( "lockplayername %d\n", pPlayer->GetUserID() ) );
+		}
 	}
 }
 
@@ -147,6 +154,10 @@ void ClientGamePrecache( void )
 			else if ( !Q_stricmp( pData->GetName(), "scriptsound" ) )
 			{
 				CBaseEntity::PrecacheScriptSound( pszFile );
+			}
+			else if ( !Q_stricmp( pData->GetName(), "particle" ) )
+			{
+				PrecacheParticleSystem( pszFile );
 			}
 		}
 	}

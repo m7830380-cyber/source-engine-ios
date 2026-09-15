@@ -35,7 +35,7 @@
 
 using namespace vgui;
 
-const char *GetMapDisplayName( const char *mapName );
+const char *GetMapDisplayName( const char *mapName, bool bTitleCase = false );
 
 class RoundInfoOverlay : public vgui::EditablePanel
 {

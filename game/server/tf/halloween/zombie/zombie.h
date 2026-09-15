@@ -61,6 +61,7 @@ class CZombie : public NextBotCombatCharacter, public IZombieAutoList
 public:
 	DECLARE_CLASS( CZombie, NextBotCombatCharacter );
 	DECLARE_SERVERCLASS();
+	DECLARE_DATADESC();
 
 	CZombie();
 	virtual ~CZombie();
@@ -97,6 +98,8 @@ public:
 
 	float GetAttackRange() const { return m_flAttackRange; }
 	float GetAttackDamage() const { return m_flAttackDamage; }
+
+	void FireDeathOutput( CBaseEntity *pCulprit );
 private:
 	CZombieIntention *m_intention;
 	CZombieLocomotion *m_locomotor;
@@ -107,12 +110,23 @@ private:
 
 	CHandle< CBaseAnimating > m_hHat;
 
+	struct RecentDamager_t
+	{
+		EHANDLE m_hEnt;
+		float m_flDamageTime;
+	};
+
+	CUtlVector< RecentDamager_t > m_vecRecentDamagers;
+
 	float m_flAttackRange;
 	float m_flAttackDamage;
 
 	bool m_bSpy;
 	bool m_bForceSuicide;
 	CountdownTimer m_lifeTimer;
+
+	bool m_bDeathOutputFired;
+	COutputEvent m_OnDeath;
 };
 
 
@@ -185,7 +199,7 @@ public:
 			float preference = 1.0f + 50.0f * ( 1.0f + FastCos( (float)( m_me->GetEntity()->entindex() * area->GetID() * timeMod ) ) );
 			float cost = dist * preference;
 
-			return cost + fromArea->GetCostSoFar();;
+			return cost + fromArea->GetCostSoFar();
 		}
 	}
 

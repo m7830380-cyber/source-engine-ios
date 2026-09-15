@@ -216,7 +216,7 @@ public:
 	CTFPlayer *m_pPreviousTargetPlayer;
 #endif
 
-	CNetworkVar( CHandle<CTFPlayer>, m_hTargetPlayer );
+	CNetworkHandle( CTFPlayer, m_hTargetPlayer );
 
 	DECLARE_DATADESC();
 };

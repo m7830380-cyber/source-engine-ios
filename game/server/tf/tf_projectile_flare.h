@@ -67,7 +67,7 @@ public:
 
 	virtual bool	IsDeflectable() { return true; }
 	virtual void	Deflected( CBaseEntity *pDeflectedBy, Vector &vecDir );
-	virtual bool	IsDestroyable( void ) OVERRIDE { return false; }
+	virtual bool	IsDestroyable( bool bOrbAttack = false ) OVERRIDE { return ( !bOrbAttack ? false : true ); }
 
 	float GetProjectileSpeed( void ) const;
 	float GetHeatSeekPower( void ) const;

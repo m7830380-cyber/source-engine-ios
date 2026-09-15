@@ -2,7 +2,7 @@
 //
 // Purpose:  A group of players stored on the GC.
 //			 Implementation and networking via shared objects is done in game specific derived classes.
-//			
+//
 //=============================================================================
 
 #ifndef PLAYERGROUP_H
@@ -24,19 +24,11 @@ class IPlayerGroupInvite
 public:
 	virtual ~IPlayerGroupInvite() { }
 
-	virtual const CSteamID GetSenderID() const = 0;
+	virtual CSteamID GetInviter() const = 0;
 	virtual PlayerGroupID_t GetGroupID() const = 0;
-	virtual const char* GetSenderName() const = 0;
 
 	virtual CSharedObject* GetSharedObject() = 0;
 
-#ifdef GC
-	virtual void SetSenderID( const CSteamID &steamID ) = 0;
-	virtual void SetGroupID( PlayerGroupID_t nGroupID ) = 0;
-	virtual void SetSenderName( const char *szName ) = 0;
-
-	virtual void YldInitFromPlayerGroup( IPlayerGroup *pPlayerGroup ) = 0;
-#endif
 };
 
 class IPlayerGroup
@@ -59,21 +51,16 @@ public:
 
 	virtual const CSteamID GetLeader() const = 0;
 
-	virtual int GetNumPendingInvites() const = 0;
-	virtual const CSteamID GetPendingInvite( int i ) const = 0;
-	virtual int GetPendingInviteIndexBySteamID( const CSteamID &steamID ) const = 0;
+	enum EPendingType {
+		ePending_Invite,
+		ePending_JoinRequest
+	};
+	virtual int GetNumPendingPlayers() const = 0;
+	virtual const CSteamID GetPendingPlayer( int i ) const = 0;
+	virtual CSteamID GetPendingPlayerInviter( int i ) const = 0;
+	virtual EPendingType GetPendingPlayerType( int i ) const = 0;
+	virtual int GetPendingPlayerIndexBySteamID( const CSteamID &steamID ) const = 0;
 
-	virtual bool AllowInvites() const = 0;
-
-#ifdef GC
-	virtual void SetGroupID( PlayerGroupID_t nPartyID ) = 0;
-	virtual void AddMember( const CSteamID &steamID ) = 0;
-	virtual void RemoveMember( const CSteamID &steamID ) = 0;
-
-	virtual void SetLeader( const CSteamID &steamID ) = 0;
-	virtual void AddPendingInvite( const CSteamID &steamID ) = 0;
-	virtual void RemovePendingInvite( const CSteamID &steamID ) = 0;
-#endif
 };
 
 }

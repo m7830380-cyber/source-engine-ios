@@ -170,9 +170,9 @@ void CTFPistol_ScoutPrimary::Push( void )
 		{
 			Vector vecToVictim = pVictim->GetAbsOrigin() - pOwner->GetAbsOrigin();
 			VectorNormalize( vecToVictim );
-			pVictim->ApplyAirBlastImpulse( vecToVictim * 400.f );
+			pVictim->ApplyGenericPushbackImpulse( vecToVictim * 400.f, pOwner );
 			float flDamage = 1.f;
-			CTakeDamageInfo info( pOwner, pVictim, this, flDamage, DMG_MELEE | DMG_NEVERGIB | DMG_CLUB, TF_DMG_CUSTOM_NONE );
+			CTakeDamageInfo info( pVictim, pOwner, this, flDamage, DMG_MELEE | DMG_NEVERGIB | DMG_CLUB, TF_DMG_CUSTOM_NONE );
 			CalculateMeleeDamageForce( &info, vecForward, GetAbsOrigin() + vecForward * flDist, 1.f / flDamage * 80.f );
 			pVictim->DispatchTraceAttack( info, vecForward, &trace );
 			ApplyMultiDamage();

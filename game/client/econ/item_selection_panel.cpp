@@ -49,21 +49,19 @@ const char *g_szEquipSlotHeader[] =
 	"#ItemSel_TAUNT",		// LOADOUT_POSITION_TAUNT6
 	"#ItemSel_TAUNT",		// LOADOUT_POSITION_TAUNT7
 	"#ItemSel_TAUNT",		// LOADOUT_POSITION_TAUNT8
-#ifdef STAGING_ONLY	
-	"#ItemSel_PDA_ADDON1",		// LOADOUT_POSITION_PDA_ADDON1
-	"#ItemSel_PDA_ADDON2",		// LOADOUT_POSITION_PDA_ADDON2
-	"",						// LOADOUT_POSITION_PDA3,
-	"",						// LOADOUT_POSITION_BUILDING2,
-#endif // STAGING_ONLY
 };
 COMPILE_TIME_ASSERT( ARRAYSIZE( g_szEquipSlotHeader ) == CLASS_LOADOUT_POSITION_COUNT );
 
 static bool ShouldItemNotStack( CEconItemView *pItemData )
 {
 	CEconItem *pSOCData = pItemData->GetSOCData();
-	if ( pSOCData && pSOCData->BHasDynamicAttributes() )
+	if ( pSOCData )
 	{
-		return true;
+		if ( pSOCData->BHasDynamicAttributes() )
+			return true;
+
+		if ( pSOCData->GetOrigin() == kEconItemOrigin_UntradableFreeContractReward )
+			return true;
 	}
 
 	return false;
@@ -380,9 +378,10 @@ void CItemSelectionPanel::OnKeyCodePressed( vgui::KeyCode code )
 			NotifySelectionReturned( pItemPanel );
 		}
 	}
-	else if( nButtonCode == KEY_XBUTTON_B )
+	else if( nButtonCode == KEY_XBUTTON_B || nButtonCode == STEAMCONTROLLER_B )
 	{
-		PostMessageSelectionReturned( INVALID_ITEM_ID );
+		//match the same behaviour as pressing ESC
+		PostMessageSelectionReturned( 0 );
 		OnClose();
 	}
 	else
@@ -1087,8 +1086,9 @@ void CEquipSlotItemSelectionPanel::UpdateModelPanelsForSelection( void )
 	int nPageStart = GetCurrentPage() * GetNumSlotsPerPage();
 	nOldSelection += nPageStart;
 
-	static ConVarRef joystick( "joystick" );
-	if ( joystick.IsValid() && joystick.GetBool() )
+	//static ConVarRef joystick( "joystick" );
+	bool bSteamController = ::input->IsSteamControllerActive();
+	if ( bSteamController )
 	{
 		if( nOldSelection == -1 || nOldSelection >= vecDisplayItems.Count() )
 			nOldSelection = nPageStart;
@@ -1104,7 +1104,7 @@ void CEquipSlotItemSelectionPanel::UpdateModelPanelsForSelection( void )
 		m_pItemModelPanels[i]->SetShowGreyedOutTooltip( true );
 		m_pItemModelPanels[i]->SetGreyedOut( NULL );
 		m_pItemModelPanels[i]->SetNoItemText( "#SelectNoItemSlot" );
-		bool bSelected = joystick.IsValid() && joystick.GetBool() && iItemIndex == nOldSelection;
+		bool bSelected = bSteamController && iItemIndex == nOldSelection;
 		m_pItemModelPanels[i]->SetSelected( bSelected );
 		m_pItemModelPanels[i]->SetShowQuantity( true );
 		m_pItemModelPanels[i]->SetForceShowEquipped( false );

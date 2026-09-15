@@ -59,12 +59,7 @@ protected:
 	const CUtlVector< int >	*GetUnusualList() const;
 	virtual bool	AllowUnusualPreview() const
 	{
-#ifdef STAGING_ONLY
-		// we want to be able to use this everywhere in staging for testing purpose
-		return true;
-#else
 		return false;
-#endif
 	}
 
 	void			CyclePaint( bool bActuallyCycle = true );

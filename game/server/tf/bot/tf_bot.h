@@ -19,6 +19,7 @@
 #include "func_capture_zone.h"
 #include "nav_entities.h"
 #include "utlstack.h"
+#include "bot/map_entities/tf_bot_generator.h"		// action point
 
 #define TF_BOT_TYPE	1337
 
@@ -53,6 +54,8 @@ class CTFBot: public NextBotPlayer< CTFPlayer >, public CGameEventListener
 {
 public:
 	DECLARE_CLASS( CTFBot, NextBotPlayer< CTFPlayer > );
+
+	DECLARE_ENT_SCRIPTDESC();
 
 	CTFBot();
 	virtual ~CTFBot();
@@ -135,6 +138,7 @@ public:
 	CBaseEntity *FindClosestReachableObject( const char *objectName, CNavArea *from, float maxRange = 2000.0f ) const;
 
 	CTFNavArea *GetSpawnArea( void ) const;							// get area where we spawned in
+	HSCRIPT ScriptGetSpawnArea( void ) const { return ToHScript( this->GetSpawnArea() ); }
 
 	bool IsAmmoLow( void ) const;
 	bool IsAmmoFull( void ) const;
@@ -151,12 +155,20 @@ public:
 	void ClearAttentionFocus( void );								// remove attention focus restrictions
 	bool IsAttentionFocused( void ) const;
 	bool IsAttentionFocusedOn( CBaseEntity *who ) const;
+	void ScriptSetAttentionFocus( HSCRIPT hFocusOn ) { this->SetAttentionFocus( ToEnt( hFocusOn ) ); }
+	bool ScriptIsAttentionFocusedOn( HSCRIPT hWho ) const { return this->IsAttentionFocusedOn( ToEnt( hWho ) ); }
 
 	void DelayedThreatNotice( CHandle< CBaseEntity > who, float noticeDelay );	// notice the given threat after the given number of seconds have elapsed
 	void UpdateDelayedThreatNotices( void );
+	void ScriptDelayedThreatNotice( HSCRIPT hWho, float flNoticeDelay ) { this->DelayedThreatNotice( ToEnt( hWho ), flNoticeDelay ); }
 
 	CTFNavArea *FindVantagePoint( float maxTravelDistance = 2000.0f ) const;	// return a nearby area where we can see a member of the enemy team
+	HSCRIPT ScriptFindVantagePoint( float maxTravelDistance ) { return ToHScript( this->FindVantagePoint( maxTravelDistance ) ); }
 
+	bool GetWeightDesiredClassToSpawn( CUtlVector< ETFClass > &vecClassToSpawn ) const;	// return true if class in the output vector is required
+	ETFClass GetPresetClassToSpawn() const;	// return next class from preset table to spawn
+	bool CanChangeClass() const;
+	
 	const char *GetNextSpawnClassname( void ) const;
 
 	float GetThreatDanger( CBaseCombatCharacter *who ) const;		// return perceived danger of threat (0=none, 1=immediate deadly danger)
@@ -189,8 +201,10 @@ public:
 	};
 	void ClearWeaponRestrictions( void );
 	void SetWeaponRestriction( int restrictionFlags );
+	void RemoveWeaponRestriction( int restrictionFlags );
 	bool HasWeaponRestriction( int restrictionFlags ) const;
 	bool IsWeaponRestricted( CTFWeaponBase *weapon ) const;
+	bool ScriptIsWeaponRestricted( HSCRIPT script ) const;
 
 	bool ShouldFireCompressionBlast( void );
 
@@ -273,9 +287,14 @@ public:
 	DifficultyType GetDifficulty( void ) const;
 	void SetDifficulty( DifficultyType difficulty );
 	bool IsDifficulty( DifficultyType skill ) const;
+	int ScriptGetDifficulty( void ) const { return this->GetDifficulty(); }
+	void ScriptSetDifficulty( int difficulty ) { this->SetDifficulty( (DifficultyType) difficulty ); }
+	bool ScriptIsDifficulty( int difficulty ) const { return this->IsDifficulty( (DifficultyType) difficulty ); }
 
 	void SetHomeArea( CTFNavArea *area );
 	CTFNavArea *GetHomeArea( void ) const;
+	void ScriptSetHomeArea( HSCRIPT hScript ) { this->SetHomeArea( ToNavArea( hScript ) ); }
+	HSCRIPT ScriptGetHomeArea( void ) { return ToHScript( this->GetHomeArea() ); }
 
 	CObjectSentrygun *GetEnemySentry( void ) const;			// if we've been attacked/killed by an enemy sentry, this will return it, otherwise NULL
 	void RememberEnemySentry( CObjectSentrygun *sentry, const Vector &injurySpot );
@@ -283,6 +302,8 @@ public:
 
 	void SetActionPoint( CTFBotActionPoint *point );
 	CTFBotActionPoint *GetActionPoint( void ) const;
+	void ScriptSetActionPoint( HSCRIPT hPoint ) { SetActionPoint( ScriptToEntClass< CTFBotActionPoint >( hPoint ) ); }
+	HSCRIPT ScriptGetActionPoint( void ) const { return ToHScript( GetActionPoint() ); }
 
 	bool HasProxy( void ) const;
 	void SetProxy( CTFBotProxy *proxy );					// attach this bot to a bot_proxy entity for map I/O communications
@@ -303,15 +324,21 @@ public:
 	bool HasBrokenFormation( void ) const;					// return true if this bot is far out of formation, or has no path back
 	void SetBrokenFormation( bool state );
 
+	void ScriptDisbandCurrentSquad( void ) { if ( GetSquad() ) GetSquad()->DisbandAndDeleteSquad(); }
+
 	float TransientlyConsistentRandomValue( float period = 10.0f, int seedValue = 0 ) const;		// compute a pseudo random value (0-1) that stays consistent for the given period of time, but changes unpredictably each period
 
 	void SetBehaviorFlag( unsigned int flags );
 	void ClearBehaviorFlag( unsigned int flags );
 	bool IsBehaviorFlagSet( unsigned int flags ) const;
+	void ScriptSetBehaviorFlag( int flags ) { this->SetBehaviorFlag( (unsigned int)flags ); }
+	void ScriptClearBehaviorFlag( int flags ) { this->ClearBehaviorFlag( (unsigned int)flags ); }
+	bool ScriptIsBehaviorFlagSet( int flags ) const { return this->IsBehaviorFlagSet( (unsigned int)flags ); }
 
 	bool FindSplashTarget( CBaseEntity *target, float maxSplashRadius, Vector *splashTarget ) const;
 
 	void GiveRandomItem( loadout_positions_t loadoutPosition );
+	void ScriptGenerateAndWearItem( const char *pszItemName ) { if ( pszItemName ) BotGenerateAndWearItem( this, pszItemName ); }
 
 	enum MissionType
 	{
@@ -334,6 +361,13 @@ public:
 	CBaseEntity *GetMissionTarget( void ) const;
 	void SetMissionString( CUtlString string );
 	CUtlString *GetMissionString( void );
+	void ScriptSetMission( int mission, bool resetBehaviorSystem = true ) { this->SetMission( (MissionType)mission, resetBehaviorSystem ); }
+	void ScriptSetPrevMission( int mission ) { this->SetPrevMission( (MissionType)mission ); }
+	int ScriptGetMission( void ) const { return (int)this->GetMission(); }
+	int ScriptGetPrevMission( void ) const { return (int)this->GetPrevMission(); }
+	bool ScriptHasMission( int mission ) const { return this->HasMission( (MissionType)mission ); }
+	void ScriptSetMissionTarget( HSCRIPT hTarget ) { this->SetMissionTarget( ToEnt( hTarget ) ); }
+	HSCRIPT ScriptGetMissionTarget( void ) const { return ToHScript( this->GetMissionTarget() ); }
 
 	void SetTeleportWhere( const CUtlStringList& teleportWhereName );
 	const CUtlStringList& GetTeleportWhere();
@@ -346,11 +380,13 @@ public:
 
 	void DisguiseAsMemberOfEnemyTeam( void );		// set Spy disguise to be a class that someone on the enemy team is actually using
 	CBaseObject *GetNearestKnownSappableTarget( void );
+	HSCRIPT ScriptGetNearestKnownSappableTarget( void ) { return ToHScript( this->GetNearestKnownSappableTarget() ); }
 
 	void ClearTags( void );
 	void AddTag( const char *tag );
 	void RemoveTag( const char *tag );
 	bool HasTag( const char *tag );
+	void ScriptGetAllTags( HSCRIPT hTable );
 
 	Action< CTFBot > *OpportunisticallyUseWeaponAbilities( void );
 
@@ -452,6 +488,9 @@ public:
 
 	int GetUberHealthThreshold();
 	float GetUberDeployDelayDuration();
+
+	bool ShouldReEvaluateCurrentClass( void ) const;
+	void ReEvaluateCurrentClass( void );
 
 private:
 	CTFBotLocomotion	*m_locomotor;
@@ -746,6 +785,11 @@ inline void CTFBot::ClearWeaponRestrictions( void )
 inline void CTFBot::SetWeaponRestriction( int restrictionFlags )
 {
 	m_weaponRestrictionFlags |= restrictionFlags;
+}
+
+inline void CTFBot::RemoveWeaponRestriction( int restrictionFlags )
+{
+	m_weaponRestrictionFlags &= ~restrictionFlags;
 }
 
 inline bool CTFBot::HasWeaponRestriction( int restrictionFlags ) const

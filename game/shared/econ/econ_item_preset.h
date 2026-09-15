@@ -25,9 +25,6 @@ typedef uint8	equipped_preset_t;
 
 struct PresetSlotItem_t
 {
-#ifdef GC_DLL
-	DECLARE_CLASS_MEMPOOL( PresetSlotItem_t );
-#endif
 
 	equipped_slot_t		m_unSlotID;
 	itemid_t			m_ulItemOriginalID;		// Original ID of the item in this slot. We store this instead of the current ID to avoid breaking presets when items get renamed, etc.
@@ -38,9 +35,6 @@ struct PresetSlotItem_t
 // --------------------------------------------------------------------------
 class CEconItemPerClassPresetData : public GCSDK::CSharedObject
 {
-#ifdef GC_DLL
-	DECLARE_CLASS_MEMPOOL( CEconItemPerClassPresetData );
-#endif
 
 public:
 	typedef GCSDK::CSharedObject BaseClass;
@@ -53,15 +47,6 @@ public:
 
 	virtual bool BIsKeyLess( const CSharedObject& soRHS ) const;
 
-#ifdef GC
-	virtual bool BYieldingAddInsertToTransaction( GCSDK::CSQLAccess &sqlAccess ) OVERRIDE;
-	virtual bool BYieldingAddWriteToTransaction( GCSDK::CSQLAccess &sqlAccess, const CUtlVector< int > &fields ) OVERRIDE;
-	virtual bool BYieldingAddRemoveToTransaction( GCSDK::CSQLAccess &sqlAccess ) OVERRIDE;
-	virtual bool BAddToMessage( CUtlBuffer & bufOutput ) const OVERRIDE;
-	virtual bool BAddToMessage( std::string *pBuffer ) const OVERRIDE;
-	virtual bool BAddDestroyToMessage( CUtlBuffer & bufDestroy ) const OVERRIDE;
-	virtual bool BAddDestroyToMessage( std::string *pBuffer ) const OVERRIDE;
-#endif
 
 	virtual bool BParseFromMessage( const CUtlBuffer & buffer ) OVERRIDE;
 	virtual bool BParseFromMessage( const std::string &buffer ) OVERRIDE;
@@ -78,14 +63,6 @@ public:
 		kPerClassPresetDataDirtyField_PresetData_Base,
 	};
 
-#ifdef GC_DLL
-	const CUtlVector<PresetSlotItem_t> *FindItemsForPresetIndex( equipped_preset_t unPreset ) const;
-	void EquipItemIntoActivePresetSlot( equipped_slot_t unSlot, itemid_t unOriginalItemID );
-	void RemoveAllItemsFromPresetIndex( equipped_preset_t unPreset );
-
-	void SetActivePreset( equipped_preset_t unPreset );
-	equipped_class_t GetClass() const { return m_unClassID; }
-#endif // GC_DLL
 	equipped_preset_t GetActivePreset() const { return m_unActivePreset; }
 
 private:

@@ -46,6 +46,7 @@ public:
 	virtual void ComputePoseParam_AimYaw( CStudioHdr *pStudioHdr );
 
 	void CheckPasstimeThrowAnimation();
+	void CheckCYOAPDAAnimtion();
 
 	virtual float GetCurrentMaxGroundSpeed();
 	virtual float GetGesturePlaybackRate( void );
@@ -80,6 +81,9 @@ private:
 	float		m_flVehicleLeanVel;
 	float		m_flVehicleLeanPos;
 	Vector		m_vecSmoothedUp;
+
+	typedef std::pair< int, float > CachedPoseParam_t;
+	CUtlVector< CachedPoseParam_t > m_PlayerPoseParams;
 };
 
 CTFPlayerAnimState *CreateTFPlayerAnimState( CTFPlayer *pPlayer );

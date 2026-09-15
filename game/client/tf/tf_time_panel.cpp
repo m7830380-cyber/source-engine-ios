@@ -625,8 +625,7 @@ void CTFHudTimeStatus::ApplySchemeSettings( IScheme *pScheme )
 
 	if ( TFGameRules() )
 	{
-		const IMatchGroupDescription* pMatch = GetMatchGroupDescription( TFGameRules()->GetCurrentMatchGroup() );
-		if ( pMatch && pMatch->m_params.m_bUseMatchHud )
+		if ( ShouldUseMatchHUD() )
 		{
 			pConditions = new KeyValues( "conditions" );
 			AddSubKeyNamed( pConditions, "if_match" );
@@ -989,8 +988,7 @@ void CTFHudKothTimeStatus::ApplySchemeSettings( IScheme *pScheme )
 
 	if ( TFGameRules() )
 	{
-		const IMatchGroupDescription* pMatch = GetMatchGroupDescription( TFGameRules()->GetCurrentMatchGroup() );
-		if ( pMatch && pMatch->m_params.m_bUseMatchHud )
+		if ( ShouldUseMatchHUD() )
 		{
 			pConditions = new KeyValues( "conditions" );
 			AddSubKeyNamed( pConditions, "if_match" );

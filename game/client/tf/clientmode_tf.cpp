@@ -61,9 +61,7 @@
 #include "tf_hud_menu_taunt_selection.h"
 #include "tf_hud_inspectpanel.h"
 #include "engine/IEngineSound.h"
-#ifdef STAGING_ONLY
-#include "tf_hud_menu_spy_build.h"
-#endif // STAGING_ONLY
+#include "tf_partyclient.h"
 
 #include "quest_objective_manager.h"
 #include "econ_item_system.h"
@@ -96,37 +94,12 @@
 #include "hud_vote.h"
 #include "c_tf_notification.h"
 
+#if !defined( _X360 ) && !defined( NO_STEAM )
+#include "steam/isteamtimeline.h"
+#endif
+
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
-
-void __MsgFunc_AutoBalanceVolunteer( bf_read &msg );
-void __MsgFunc_AutoBalanceVolunteer_Cancel( bf_read &msg );
-void __MsgFunc_PlayerIgnitedInv( bf_read &msg );
-void __MsgFunc_PlayerIgnited( bf_read &msg );
-void __MsgFunc_Damage( bf_read &msg );
-void __MsgFunc_HudArenaNotify( bf_read &msg );
-void __MsgFunc_UpdateAchievement( bf_read &msg );
-void __MsgFunc_DamageDodged( bf_read &msg );
-void __MsgFunc_PlayerJarated( bf_read &msg );
-void __MsgFunc_PlayerExtinguished( bf_read &msg );
-void __MsgFunc_BreakModel( bf_read &msg );
-void __MsgFunc_BreakModel_Pumpkin( bf_read &msg );
-void __MsgFunc_BreakModelRocketDud( bf_read &msg );
-void __MsgFunc_CheapBreakModel( bf_read &msg );
-void __MsgFunc_PlayerJaratedFade( bf_read &msg );
-void __MsgFunc_PlayerShieldBlocked( bf_read &msg );
-void __MsgFunc_PlayerBonusPoints( bf_read &msg );
-void __MsgFunc_SpawnFlyingBird( bf_read &msg );
-void __MsgFunc_PlayerGodRayEffect( bf_read &msg );
-void __MsgFunc_PlayerTeleportHomeEffect( bf_read &msg );
-void __MsgFunc_RDTeamPointsChanged( bf_read &msg );
-void __MsgFunc_PlayerLoadoutUpdated( bf_read &msg );
-void __MsgFunc_PlayerTauntSoundLoopStart( bf_read &msg );
-void __MsgFunc_PlayerTauntSoundLoopEnd( bf_read &msg );
-void __MsgFunc_ForcePlayerViewAngles( bf_read &msg );
-void __MsgFunc_BonusDucks( bf_read &msg );
-void __MsgFunc_PlayerPickupWeapon( bf_read &msg );
-void __MsgFunc_QuestObjectiveCompleted( bf_read &msg );
 
 #if !defined(NO_STEAM)
 extern ConVar cl_steamscreenshots;
@@ -140,15 +113,19 @@ static Color colorMerasmusText( 112, 176, 74, 255 );
 ConVar default_fov( "default_fov", "75", FCVAR_CHEAT );
 ConVar fov_desired( "fov_desired", "75", FCVAR_ARCHIVE | FCVAR_USERINFO, "Sets the base field-of-view.", true, 20.0, true, MAX_FOV );
 
+
 #define TF_HIGHFIVE_HINT_MAXDIST		512.0f
 #define TF_HIGHFIVE_HINT_MAXHINTS		3
 #define TF_HIGHFIVE_HINT_MINTIMEBETWEEN	10.0f
 ConVar tf_highfive_hintcount( "tf_highfive_hintcount", "0", FCVAR_CLIENTDLL | FCVAR_DONTRECORD | FCVAR_ARCHIVE, "Counts the number of times the high five hint has been displayed", true, 0, false, 0 );
 
+ConVar tf_delete_temp_files( "tf_delete_temp_files", "1", FCVAR_CLIENTDLL | FCVAR_ARCHIVE, "Delete custom player sprays and other temp files during shutdown" );
+
 ConVar tf_taunt_always_show_hint( "tf_taunt_always_show_hint", "1", FCVAR_CLIENTDLL );
 extern ConVar tf_allow_all_team_partner_taunt;
 extern ConVar tf_mvm_buybacks_method;
-extern ConVar tf_autobalance_query_lifetime;
+extern ConVar tf_autobalance_ask_candidates_maxtime;
+extern ConVar tf_autobalance_dead_candidates_maxtime;
 extern ConVar tf_autobalance_xp_bonus;
 extern ConVar cl_notifications_show_ingame;
 
@@ -386,9 +363,6 @@ ClientModeTFNormal::ClientModeTFNormal()
 	m_pMenuSpyDisguise = NULL;
 	m_pEurekaTeleportMenu = NULL;
 	m_pMenuTauntSelection = NULL;
-#ifdef STAGING_ONLY
-	m_pMenuSpyBuild = NULL;
-#endif // STAGING_ONLY
 	m_pGameUI = NULL;
 	m_pFreezePanel = NULL;
 	m_pQuickSwitch = NULL;
@@ -403,37 +377,6 @@ ClientModeTFNormal::ClientModeTFNormal()
 #if defined( _X360 )
 	m_pScoreboard = NULL;
 #endif
-
-	HOOK_MESSAGE( AutoBalanceVolunteer );
-	HOOK_MESSAGE( AutoBalanceVolunteer_Cancel );
-
-	// Hook global message handlers
-	HOOK_MESSAGE( PlayerIgnited );
-	HOOK_MESSAGE( PlayerIgnitedInv );
-	HOOK_MESSAGE( Damage );
-	HOOK_MESSAGE( HudArenaNotify );
-	HOOK_MESSAGE( UpdateAchievement );
-	HOOK_MESSAGE( DamageDodged );
-	HOOK_MESSAGE( PlayerJarated );
-	HOOK_MESSAGE( PlayerExtinguished );
-	HOOK_MESSAGE( BreakModel );
-	HOOK_MESSAGE( CheapBreakModel );
-	HOOK_MESSAGE( BreakModel_Pumpkin );
-	HOOK_MESSAGE( BreakModelRocketDud );
-	HOOK_MESSAGE( PlayerJaratedFade );
-	HOOK_MESSAGE( PlayerShieldBlocked );
-	HOOK_MESSAGE( PlayerBonusPoints );
-	HOOK_MESSAGE( SpawnFlyingBird );
-	HOOK_MESSAGE( PlayerGodRayEffect );
-	HOOK_MESSAGE( PlayerTeleportHomeEffect );
-	HOOK_MESSAGE( RDTeamPointsChanged );
-	HOOK_MESSAGE( PlayerLoadoutUpdated );
-	HOOK_MESSAGE( PlayerTauntSoundLoopStart );
-	HOOK_MESSAGE( PlayerTauntSoundLoopEnd );
-	HOOK_MESSAGE( ForcePlayerViewAngles );
-	HOOK_MESSAGE( BonusDucks );
-	HOOK_MESSAGE( PlayerPickupWeapon );
-	HOOK_MESSAGE( QuestObjectiveCompleted );
 	
 #if !defined(NO_STEAM)
 	m_CallbackScreenshotRequested.Register( this, &ClientModeTFNormal::OnScreenshotRequested );
@@ -477,10 +420,6 @@ void ClientModeTFNormal::Init()
 
 	m_pMenuUpgradePanel = ( CHudUpgradePanel* )GET_HUDELEMENT( CHudUpgradePanel );
 
-#ifdef STAGING_ONLY
-	m_pMenuSpyBuild = ( CHudMenuSpyBuild * )GET_HUDELEMENT( CHudMenuSpyBuild );
-	Assert( m_pMenuSpyBuild );
-#endif // STAGING_ONLY
 
 	m_pMenuSpell = ( CHudSpellMenu * )GET_HUDELEMENT( CHudSpellMenu);
 	Assert( m_pMenuSpell );
@@ -543,7 +482,6 @@ void ClientModeTFNormal::Init()
 	ListenForGameEvent( "player_buyback" );
 	ListenForGameEvent( "player_death" );
 	ListenForGameEvent( "player_used_powerup_bottle" );
-	MannVsMachineStats_Init();
 
 	ListenForGameEvent( "pve_win_panel" );
 
@@ -570,6 +508,7 @@ void ClientModeTFNormal::Init()
 	ListenForGameEvent( "player_highfive_success" );
 
 	ListenForGameEvent( "client_beginconnect" );
+	ListenForGameEvent( "client_disconnect" );
 
 	ListenForGameEvent( "player_teleported" );
 	ListenForGameEvent( "scorestats_accumulated_reset" );
@@ -579,6 +518,8 @@ void ClientModeTFNormal::Init()
 	Training_Init();
 
 	BaseClass::Init();
+
+	m_bPendingRichPresenceUpdate = true;
 }
 
 //-----------------------------------------------------------------------------
@@ -586,6 +527,13 @@ void ClientModeTFNormal::Init()
 //-----------------------------------------------------------------------------
 void ClientModeTFNormal::Shutdown()
 {
+	if ( tf_delete_temp_files.GetBool() )
+	{
+		RemoveFilesInPath( "materials/temp" );
+		RemoveFilesInPath( "download/user_custom" );
+		RemoveFilesInPath( "sound/temp" );
+	}
+
 	DestroyStatsSummaryPanel();
 }
 
@@ -758,15 +706,24 @@ void ClientModeTFNormal::FireGameEvent( IGameEvent *event )
 		}
 	}
 #endif // TF_RAID_MODE
-
 	else if ( FStrEq( "player_connect_client", eventname ) || FStrEq( "player_disconnect", eventname ) )
 	{
 		// ignore these
 		if ( TFGameRules() && TFGameRules()->IsPVEModeActive() && event->GetInt( "bot" ) != 0 )
 			return;
 	}
+	else if ( FStrEq( "client_disconnect", eventname ) )
+	{
+		m_eConnectState = k_eConnectState_Disconnected;
+		m_szMapBaseName[0] = '\0';
+		m_bPendingRichPresenceUpdate = true;
+#if !defined( _X360 ) && !defined( NO_STEAM )
+		if ( SteamTimeline() )
+			SteamTimeline()->ClearTimelineStateDescription( 0 );
+#endif
+	}
 	else if ( FStrEq( "server_cvar", eventname ) )
-	{		
+	{
 		if ( TFGameRules() && TFGameRules()->IsPVEModeActive() && !Q_strcmp( event->GetString("cvarname"), "tf_bot_count" ) )
 			return;
 	}
@@ -876,9 +833,6 @@ void ClientModeTFNormal::FireGameEvent( IGameEvent *event )
 			case POWERUP_BOTTLE_REFILL_AMMO: pText = "#TF_PVE_Player_UsedRefillAmmoBottle"; break;
 			case POWERUP_BOTTLE_BUILDINGS_INSTANT_UPGRADE: pText = "#TF_PVE_Player_UsedBuildingUpgrade"; break;
 			case POWERUP_BOTTLE_RADIUS_STEALTH: pText = "#TF_PVE_Player_UsedRadiusStealth"; break;
-#ifdef STAGING_ONLY
-			case POWERUP_BOTTLE_SEE_CASH_THROUGH_WALL: pText = "#TF_PVE_Player_SeeCashThroughWall"; break;
-#endif
 			}
 			if ( pText != NULL )
 			{
@@ -903,6 +857,9 @@ void ClientModeTFNormal::FireGameEvent( IGameEvent *event )
 	}
 	else if ( FStrEq( "server_spawn", eventname ) )
 	{
+		m_eConnectState = k_eConnectState_Connected;
+		V_strncpy( m_szMapBaseName, event->GetString( "mapname" ), sizeof( m_szMapBaseName ) );
+
 		uint32 newServerIP = 0;
 		int newServerPort = event->GetInt( "port" );
 
@@ -914,7 +871,7 @@ void ClientModeTFNormal::FireGameEvent( IGameEvent *event )
 
 			if ( IPs.Count() == 4 )
 			{
-				byte ip[4];
+				byte ip[4] = { 0 };
 				for ( int i=0; i<IPs.Count() && i<4; ++i )
 				{
 					ip[i] = (byte) Q_atoi( IPs[i] );
@@ -956,18 +913,22 @@ void ClientModeTFNormal::FireGameEvent( IGameEvent *event )
 		{
 			engine->FlashWindow();
 
-			// If minimized, Blink and play noise
-			if ( engine->IsActiveApp() )
 			{
-				vgui::surface()->PlaySound( "ui/vote_started.wav" );
-			}
-			else
-			{
-				char fullpath[ 512 ];
-				g_pFullFileSystem->RelativePathToFullPath( "sound/ui/vote_started.wav", "GAME", fullpath, sizeof( fullpath ) );
-				PlayOutOfGameSound( fullpath );
+				// If minimized, Blink and play noise
+				if ( engine->IsActiveApp() )
+				{
+					vgui::surface()->PlaySound( "ui/vote_started.wav" );
+				}
+				else
+				{
+					char fullpath[ 512 ];
+					g_pFullFileSystem->RelativePathToFullPath( "sound/ui/vote_started.wav", "GAME", fullpath, sizeof( fullpath ) );
+					PlayOutOfGameSound( fullpath );
+				}
 			}
 		}
+
+		m_bPendingRichPresenceUpdate = true;
 	}
 	else if ( FStrEq( "pumpkin_lord_summoned", eventname ) )
 	{
@@ -1446,6 +1407,8 @@ void ClientModeTFNormal::FireGameEvent( IGameEvent *event )
 	}
 	else if ( FStrEq( "client_beginconnect", eventname ) )
 	{
+		m_eConnectState = k_eConnectState_Connecting;
+		m_bPendingRichPresenceUpdate = true;
 		const char *pchSource = event->GetString( "source" );
 		m_bRestrictInfoPanel = pchSource && ( FStrEq( "matchmaking", pchSource ) || !Q_strncmp( pchSource, "quickplay_", 10 ) );
 
@@ -1581,15 +1544,6 @@ int	ClientModeTFNormal::HudElementKeyInput( int down, ButtonCode_t keynum, const
 		}
 	}
 
-#ifdef STAGING_ONLY
-	if ( m_pMenuSpyBuild )
-	{
-		if ( !m_pMenuSpyBuild->HudElementKeyInput( down, keynum, pszCurrentBinding ) )
-		{
-			return 0;
-		}
-	}
-#endif // STAGING_ONLY
 
 	if ( m_pEurekaTeleportMenu )
 	{
@@ -1841,10 +1795,47 @@ void ClientModeTFNormal::AskFavoriteOrBlacklist() const
 	}
 }
 
+
+//----------------------------------------------------------------------------
+void ClientModeTFNormal::RemoveFilesInPath( const char *pszPath ) const
+{
+	FileFindHandle_t hFind = NULL;
+
+	const char *pszSearch = CFmtStr( "%s/*", pszPath );
+	char const *szFileName = g_pFullFileSystem->FindFirstEx( pszSearch, "MOD", &hFind );
+	while ( szFileName )
+	{
+		if ( szFileName[ 0 ] != '.' )
+		{
+			CFmtStr fmtFilename( "%s/%s", pszPath, szFileName );
+
+			if ( g_pFullFileSystem->IsDirectory( fmtFilename, "MOD" ) )
+			{
+				RemoveFilesInPath( fmtFilename );
+			}
+			else
+			{
+				g_pFullFileSystem->RemoveFile( fmtFilename, "MOD" );
+			}
+		}
+
+		szFileName = g_pFullFileSystem->FindNext( hFind );
+	}
+
+	g_pFullFileSystem->FindClose( hFind );
+}
+
+
 //----------------------------------------------------------------------------
 void ClientModeTFNormal::Update()
 {
 	BaseClass::Update();
+
+	if ( m_bPendingRichPresenceUpdate )
+	{
+		m_bPendingRichPresenceUpdate = false;
+		UpdateSteamRichPresence();
+	}
 
 	TFModalStack()->Update();
 
@@ -1881,7 +1872,7 @@ void ClientModeTFNormal::Update()
 		} );
 
 		gHUD.ForEachHudElement( [&]( CHudElement* pElement ) {
-			if ( pElement && pElement->IsActive() )
+			if ( pElement )
 			{
 				auto actionset = pElement->GetPreferredActionSet();
 				if ( actionset == GAME_ACTION_SET_MENUCONTROLS )
@@ -1899,6 +1890,33 @@ void ClientModeTFNormal::Update()
 			}
 		} );
 
+		// See if there's a modal dialog which wants to change the action set
+		if ( !TFModalStack()->IsEmpty() )
+		{
+			vgui::VPANEL panelTop = TFModalStack()->Top().Get();
+			vgui::Panel* pPanel =  vgui::ipanel()->GetPanel( panelTop, "ClientDLL" );
+			if ( pPanel )
+			{
+				CConfirmDialog* pDialog = dynamic_cast<CConfirmDialog*>( pPanel );
+				if ( pDialog )
+				{
+					GameActionSet_t actionset = pDialog->GetPreferredActionSet();
+					if ( actionset == GAME_ACTION_SET_MENUCONTROLS )
+					{
+						bNeedMenu = true;
+					}
+					else if ( actionset == GAME_ACTION_SET_IN_GAME_HUD )
+					{
+						bNeedMenu = true;
+					}
+					else if ( actionset == GAME_ACTION_SET_SPECTATOR )
+					{
+						bNeedSpectator = true;
+					}
+				}
+			}
+		}
+		
 		// Set the preferred action set. Requesting menu trumps hud, which trumps spectator, which trumps fps.
 		if ( !engine->IsInGame() || !engine->IsConnected() || enginevgui->IsGameUIVisible() || bNeedMenu )
 		{
@@ -1951,6 +1969,11 @@ void ClientModeTFNormal::Update()
 			m_wasConnectedLastUpdate = false;
 
 			AskFavoriteOrBlacklist();
+
+			// Reset our sound mixed in case we were in a freeze cam when we
+			// disconnected, which would cause the snd_soundmixer to be left modified.
+			ConVar *pVar = ( ConVar * ) cvar->FindVar( "snd_soundmixer" );
+			pVar->Revert();
 
 			m_lastServerConnectTime = 0;
 		}
@@ -2033,6 +2056,212 @@ bool ClientModeTFNormal::IsTauntSelectPanelVisible() const
 }
 
 //----------------------------------------------------------------------------
+void ClientModeTFNormal::UpdateSteamRichPresence() const
+{
+	tmZone( TELEMETRY_LEVEL0, TMZF_NONE, "%s", __FUNCTION__ );
+
+	// Update our steam rich presence keys when some event changes that would require it
+	// We don't explicitly flush keys, so this (and callees) should always touch/clear all keys they manage
+
+	ISteamFriends *pSteamFriends = steamapicontext->SteamFriends();
+	if ( !pSteamFriends )
+		{ return; }
+
+	bool bConnected = ( m_eConnectState == k_eConnectState_Connected );
+	bool bConnecting = ( m_eConnectState == k_eConnectState_Connecting );
+	// BConnectedToMatchServer includes the connecting state
+	bool bInMatch = GTFGCClientSystem()->BConnectedToMatchServer( false );
+
+	//
+	// Set 'currentmap'
+	//
+	const char *pszPrettyMap = nullptr;
+	if ( m_szMapBaseName[0] )
+		{ pszPrettyMap = GetMapDisplayName( m_szMapBaseName, /* bTitleCase */ true ); }
+
+	if ( bConnected )
+		{ pSteamFriends->SetRichPresence( "currentmap", pszPrettyMap );}
+	else
+		{ pSteamFriends->SetRichPresence( "currentmap", nullptr ); }
+
+	//
+	// Set 'connect'
+	//
+	//   The underlying engine calls AdvertiseGame(), so setting it to null is sufficient to get a "+connect <ip>"
+	//   action, but in some cases we may want to direct joiners to the player's party instead (such as main menu, in a
+	//   MM match you cannot directly join)
+	//
+	// Note that AdvertiseGame() happens as soon as we begin connecting
+	if ( ( bInMatch || ( !bConnected && !bConnecting ) ) && steamapicontext->SteamUser() )
+	{
+		// If they have an MM match, or if they're just on the menus, direct joiners to join their party, they cannot
+		// join the server directly.
+		CFmtStr strConnect( "+tf_party_request_join_user %llu",
+		                    steamapicontext->SteamUser()->GetSteamID().ConvertToUint64() );
+
+		engine->SetRichPresenceConnect( strConnect );
+	}
+	else
+	{
+		// Otherwise, no connect string.  If they're connected, the engine will handle updating this
+		// correctly.
+		engine->SetRichPresenceConnect( nullptr );
+	}
+
+	//
+	// Set 'steam_player_group' and 'steam_player_group_size'
+	//
+	if ( GTFPartyClient()->BHaveActiveParty() )
+	{
+		pSteamFriends->SetRichPresence( "steam_player_group",
+		                                CFmtStr( "party_%llu", GTFPartyClient()->GetActivePartyID() ) );
+		// Only tell steam about online party members, since offline members may still be on steam, but their rich
+		// presence won't attest to their membership in this party.
+		pSteamFriends->SetRichPresence( "steam_player_group_size",
+		                                CFmtStr( "%d", GTFPartyClient()->CountNumOnlinePartyMembers() ) );
+	}
+	else
+	{
+		pSteamFriends->SetRichPresence( "steam_player_group", nullptr );
+		pSteamFriends->SetRichPresence( "steam_player_group_size", nullptr );
+	}
+
+	//
+	// Set 'state'
+	// Set 'matchgrouploc' if used by given state
+	//
+
+	// Used below for building 'status'
+	const char *pszState = nullptr;
+	const char *pszMatchGroupLoc = nullptr;
+
+	// Playing -- MM Match
+	if ( bInMatch )
+	{
+		ETFMatchGroup eMatchGroup = GTFGCClientSystem()->GetLiveMatchGroup();
+		auto *pDesc = GetMatchGroupDescription( eMatchGroup );
+		const char *pLoc = pDesc ? pDesc->GetRichPresenceLocToken() : nullptr;
+		if ( pLoc )
+		{
+			pszMatchGroupLoc = pLoc;
+			if ( pszPrettyMap && pszPrettyMap[0] )
+				{ pszState = "PlayingMatchGroup"; }
+			else
+				{ pszState = "LoadingMatchGroup"; }
+		}
+		else
+		{
+			// Nameless match group
+			if ( pszPrettyMap && pszPrettyMap[0] )
+				{ pszState = "PlayingGeneric"; }
+			else
+				{ pszState = "LoadingGeneric"; }
+		}
+	}
+	// Playing -- community server
+	else if ( bConnecting || bConnected )
+	{
+		// In a server, but partyclient doesn't know about it -- set community server
+		if ( pszPrettyMap && pszPrettyMap[0] )
+			{ pszState = "PlayingCommunity"; }
+		else
+			{ pszState = "LoadingCommunity"; }
+	}
+	// Main menu -- searching for a match
+	else if ( GTFPartyClient()->BInStandbyQueue() || GTFPartyClient()->BInAnyMatchQueue() )
+	{
+		// If we're searching for just one group, use the more specific message
+		bool bSpecificQueue = ( !GTFPartyClient()->BInStandbyQueue() &&
+		                        GTFPartyClient()->GetNumQueuedMatchGroups() == 1 );
+
+		const char *pMatchLoc = nullptr;
+		if ( bSpecificQueue )
+		{
+			// Set 'matchgrouploc' used for this field
+			ETFMatchGroup eMatchGroup = GTFPartyClient()->GetQueuedMatchGroupByIdx( 0 );
+			auto *pDesc = GetMatchGroupDescription( eMatchGroup );
+			pMatchLoc = pDesc ? pDesc->GetRichPresenceLocToken() : nullptr;
+
+			if ( pMatchLoc )
+				{ pszMatchGroupLoc = pMatchLoc; }
+			else
+				{ bSpecificQueue = false; }
+		}
+
+		if ( bSpecificQueue )
+			{ pszState = "SearchingMatchGroup"; }
+		else
+			{ pszState = "SearchingGeneric"; }
+	}
+	// Main menu -- not searching
+	else
+	{
+		pszState = "MainMenu";
+	}
+
+	pSteamFriends->SetRichPresence( "state", pszState );
+	pSteamFriends->SetRichPresence( "matchgrouploc", pszMatchGroupLoc );
+
+	//
+	// 'steam_display' embeds our state and matchgrouploc set above.
+	//
+	pSteamFriends->SetRichPresence( "steam_display", "#TF_RichPresence_Display" );
+
+	//
+	// 'status' field -- used by legacy steam client only right now
+	//
+	// If we're connecting or connected, the source engine called AdvertiseGame() which shows a this-server status we
+	// don't want to override -- except if we're in a match which cannot be ad-hoc joined.
+	wchar_t wzStatus[256] = { 0 };
+	if ( ( bInMatch || ( !bConnecting && !bConnected ) ) &&
+	     BuildRichPresenceStatus( wzStatus, pszState, pszMatchGroupLoc, pszPrettyMap ))
+	{
+			char szStatus[256] = { 0 };
+			V_UnicodeToUTF8( wzStatus, szStatus, sizeof( szStatus ) );
+			pSteamFriends->SetRichPresence( "status", szStatus );
+	}
+	else
+	{
+		pSteamFriends->SetRichPresence( "status", nullptr );
+	}
+}
+
+//----------------------------------------------------------------------------
+bool ClientModeTFNormal::BuildRichPresenceStatusDirect( wchar_t *pwzOutStatus, size_t uOutSizeBytes,
+                                                        const char *pszState,
+                                                        const char *pszMatchGroupLocTokenSuffix,
+                                                        const char *pszPrettyMapName )
+{
+	tmZone( TELEMETRY_LEVEL0, TMZF_NONE, "%s", __FUNCTION__ );
+
+	// We don't support the {#TF_SomeToken} recursion steam does in our localize library, but we only use a few specific
+	// pieces of indirection
+	KeyValues *pKV = new KeyValues( "loc" );
+	KeyValuesAD kvAutoDestruct( pKV );
+
+	wchar_t *pwzStateToken = g_pVGuiLocalize->Find( CFmtStr( "#TF_RichPresence_State_%s", pszState ) );
+	if ( !pwzStateToken )
+		{ return false; }
+
+	wchar_t *pwzMatchGroupLocToken = nullptr;
+	if ( pszMatchGroupLocTokenSuffix && pszMatchGroupLocTokenSuffix[0] )
+	{
+		pwzMatchGroupLocToken = g_pVGuiLocalize->Find( CFmtStr( "#TF_RichPresence_MatchGroup_%s",
+		                                                        pszMatchGroupLocTokenSuffix ) );
+		if ( !pwzMatchGroupLocToken )
+			{ return false; }
+	}
+
+	pKV->SetWString( "matchgrouploc_token", pwzMatchGroupLocToken ? pwzMatchGroupLocToken : L"" );
+	pKV->SetString( "matchgrouploc", pszMatchGroupLocTokenSuffix ? pszMatchGroupLocTokenSuffix : "" );
+	pKV->SetString( "state", pszState ? pszState : "" );
+	pKV->SetString( "currentmap", pszPrettyMapName ? pszPrettyMapName : "" );
+
+	g_pVGuiLocalize->ConstructString( pwzOutStatus, uOutSizeBytes, pwzStateToken, pKV );
+	return true;
+}
+
+//----------------------------------------------------------------------------
 void ClientModeTFNormal::PrintTextToChat( const char *pText, KeyValues *pKeyValues )
 {
 	CBaseHudChat *pHUDChat = (CBaseHudChat *)GET_HUDELEMENT( CHudChat );
@@ -2075,7 +2304,35 @@ void ClientModeTFNormal::OnDemoRecordStop()
 	BaseClass::OnDemoRecordStop();
 }
 
-void __MsgFunc_PlayerBonusPoints( bf_read &msg )
+bool ClientModeTFNormal::BCanSendPartyChatMessages() const
+{
+	return GTFPartyClient()->BHaveActiveParty();
+}
+
+bool ClientModeTFNormal::BIsFriendOrPartyMember( C_TFPlayer *pPlayer )
+{
+	player_info_t pi;
+	if ( !pPlayer || !engine->GetPlayerInfo( pPlayer->entindex(), &pi ) || !pi.friendsID )
+		return false;
+
+	CSteamID targetSteamID( pi.friendsID, 1, GetUniverse(), k_EAccountTypeIndividual );
+	EFriendRelationship eRelationship = steamapicontext->SteamFriends()->GetFriendRelationship( targetSteamID );
+	if ( eRelationship == k_EFriendRelationshipFriend )
+		return true;
+
+	if ( GTFPartyClient()->BHaveActiveParty() )
+	{
+		for ( int nSlot = 0; nSlot < GTFPartyClient()->GetNumPartyMembers(); ++nSlot )
+		{
+			if ( targetSteamID == GTFPartyClient()->GetPartyMember( nSlot ) )
+				return true;
+		}
+	}
+
+	return false;
+}
+
+USER_MESSAGE( PlayerBonusPoints )
 {
 	int nPoints = (int) msg.ReadByte();
 	int iPlayerEntIndex = (int) msg.ReadByte();
@@ -2091,7 +2348,7 @@ void __MsgFunc_PlayerBonusPoints( bf_read &msg )
 	}
 }
 
-void __MsgFunc_PlayerGodRayEffect( bf_read &msg )
+USER_MESSAGE( PlayerGodRayEffect )
 {
 	int iPlayerEntIndex = (int)msg.ReadByte();
 
@@ -2102,7 +2359,7 @@ void __MsgFunc_PlayerGodRayEffect( bf_read &msg )
 	}
 }
 
-void __MsgFunc_PlayerTeleportHomeEffect( bf_read &msg )
+USER_MESSAGE( PlayerTeleportHomeEffect )
 {
 	int iPlayerEntIndex = (int)msg.ReadByte();
 
@@ -2113,7 +2370,7 @@ void __MsgFunc_PlayerTeleportHomeEffect( bf_read &msg )
 	}
 }
 
-void __MsgFunc_RDTeamPointsChanged( bf_read &msg )
+USER_MESSAGE( RDTeamPointsChanged )
 {
 	int nPoints = (int)msg.ReadShort();
 	int nTeam = (int)msg.ReadByte();
@@ -2129,7 +2386,7 @@ void __MsgFunc_RDTeamPointsChanged( bf_read &msg )
 	}
 }
 
-void __MsgFunc_PlayerLoadoutUpdated( bf_read &msg )
+USER_MESSAGE( PlayerLoadoutUpdated )
 {
 	int iPlayerEntIndex = (int)msg.ReadByte();
 	C_TFPlayer *pPlayer = ToTFPlayer( UTIL_PlayerByIndex( iPlayerEntIndex ) );
@@ -2143,7 +2400,7 @@ void __MsgFunc_PlayerLoadoutUpdated( bf_read &msg )
 	}
 }
 
-void __MsgFunc_PlayerTauntSoundLoopStart( bf_read &msg )
+USER_MESSAGE( PlayerTauntSoundLoopStart )
 {
 	int iPlayerEntIndex = (int)msg.ReadByte();
 	C_TFPlayer *pPlayer = ToTFPlayer( UTIL_PlayerByIndex( iPlayerEntIndex ) );
@@ -2155,7 +2412,7 @@ void __MsgFunc_PlayerTauntSoundLoopStart( bf_read &msg )
 	}
 }
 
-void __MsgFunc_PlayerTauntSoundLoopEnd( bf_read &msg )
+USER_MESSAGE( PlayerTauntSoundLoopEnd )
 {
 	int iPlayerEntIndex = (int)msg.ReadByte();
 	C_TFPlayer *pPlayer = ToTFPlayer( UTIL_PlayerByIndex( iPlayerEntIndex ) );
@@ -2166,7 +2423,7 @@ void __MsgFunc_PlayerTauntSoundLoopEnd( bf_read &msg )
 }
 
 
-void __MsgFunc_ForcePlayerViewAngles( bf_read &msg )
+USER_MESSAGE( ForcePlayerViewAngles )
 {
 	// Read flag byte. Should be 1 right now.
 	int iFlags = (int)msg.ReadByte();
@@ -2189,7 +2446,7 @@ void __MsgFunc_ForcePlayerViewAngles( bf_read &msg )
 }
 
 ConVar tf_halloween_bonus_ducks_cooldown( "tf_halloween_bonus_ducks_cooldown", "20", FCVAR_ARCHIVE );
-void __MsgFunc_BonusDucks( bf_read &msg )
+USER_MESSAGE( BonusDucks )
 {
 	static float sflNextBonusDucks = 0.f;
 
@@ -2209,53 +2466,27 @@ void __MsgFunc_BonusDucks( bf_read &msg )
 	}
 }
 
-void __MsgFunc_PlayerPickupWeapon( bf_read &msg )
+USER_MESSAGE( PlayerPickupWeapon )
 {
 	IGameEvent *event = gameeventmanager->CreateEvent( "localplayer_pickup_weapon" );
-	gameeventmanager->FireEventClientSide( event );
-}
-
-void __MsgFunc_AutoBalanceVolunteer( bf_read &msg )
-{
-	KeyValuesAD pKeyValues( "data" );
-	pKeyValues->SetInt( "points", tf_autobalance_xp_bonus.GetInt() );
-
-	CAutobalanceVolunteerNotification *pNotification = new CAutobalanceVolunteerNotification();
-	pNotification->SetText( GTFGCClientSystem()->BConnectedToMatchServer( true ) ? "#TF_AutoBalanceVolunteerXPBonus" : "#TF_AutoBalanceVolunteer" );
-	pNotification->SetLifetime( tf_autobalance_query_lifetime.GetInt() );
-	pNotification->SetKeyValues( pKeyValues );
-	NotificationQueue_Add( pNotification );
-
-	if ( cl_notifications_show_ingame.GetInt() == 0 )
+	if ( event )
 	{
-		// player has turned off the in-game notifications so let's throw a chat 
-		// message to see if they will check their notifications in the main menu
-		C_TFPlayer *pPlayer = C_TFPlayer::GetLocalTFPlayer();
-		CBaseHudChat *pHUDChat = (CBaseHudChat *)GET_HUDELEMENT( CHudChat );
-		if ( pPlayer && pHUDChat )
-		{
-			char szLocalized[100];
-			g_pVGuiLocalize->ConvertUnicodeToANSI(g_pVGuiLocalize->Find( "#TF_AutoBalanceVolunteer_ChatText" ), szLocalized, sizeof( szLocalized ) );
-			pHUDChat->ChatPrintf( pPlayer->entindex(), CHAT_FILTER_NONE, "%s ", szLocalized );
-		}
+		gameeventmanager->FireEventClientSide( event );
 	}
 }
 
-void __MsgFunc_AutoBalanceVolunteer_Cancel( bf_read &msg )
-{
-	NotificationQueue_Remove( &CAutobalanceVolunteerNotification::IsNotificationType );
-}
-
-void __MsgFunc_QuestObjectiveCompleted( bf_read &msg )
+USER_MESSAGE( QuestObjectiveCompleted )
 {
 	tmZone( TELEMETRY_LEVEL0, TMZF_NONE, "%s", __FUNCTION__ );
 
 	itemid_t itemID = (itemid_t)msg.ReadLongLong();
-	uint16 nStandardPoints = msg.ReadWord();
-	uint16 nBonusPoints = msg.ReadWord();
+	uint16 nPoints0 = msg.ReadByte();
+	uint16 nPoints1 = msg.ReadByte();
+	uint16 nPoints2 = msg.ReadByte();
 	uint32 nObjectiveDefIndex = msg.ReadWord();
+	uint16 nScorerUserID = msg.ReadByte();
 
-	QuestObjectiveManager()->UpdateFromServer( itemID, nStandardPoints, nBonusPoints );
+	QuestObjectiveManager()->UpdateFromServer( itemID, nPoints0, nPoints1, nPoints2 );
 	QuestObjectiveManager()->EnsureTrackersForPlayer( steamapicontext->SteamUser()->GetSteamID() );
 
 	// Passing a -1 means this is a ninja update where we don't want the fanfare
@@ -2267,9 +2498,35 @@ void __MsgFunc_QuestObjectiveCompleted( bf_read &msg )
 			pEvent->SetInt( "quest_item_id_low", itemID & 0xFFFFFFFF );
 			pEvent->SetInt( "quest_item_id_hi", itemID >> 32 );
 			pEvent->SetInt( "quest_objective_id", nObjectiveDefIndex );
+			pEvent->SetInt( "scorer_user_id", nScorerUserID );
 			gameeventmanager->FireEventClientSide( pEvent );
 		}	
 	}
+}
+
+USER_MESSAGE( BuiltObject )
+{
+	int nObjType = (int)msg.ReadByte();
+	int nObjMode = (int)msg.ReadByte();
+	int nObjIndex = (int)msg.ReadByte();
+
+	IGameEvent *event = gameeventmanager->CreateEvent( "localplayer_builtobject" );
+	if ( event )
+	{
+		event->SetInt( "object", nObjType );
+		event->SetInt( "object_mode", nObjMode );
+		event->SetInt ( "index", nObjIndex );
+		gameeventmanager->FireEventClientSide( event );
+	}
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: Hook for servers requesting our current loadout
+// (SDK mods do not connect to the gc and get subscriptions)
+//-----------------------------------------------------------------------------
+USER_MESSAGE( SdkRequestEquipment )
+{
+	GTFGCClientSystem()->ServerRequestEquipment();
 }
 
 float PlaySoundEntry( const char* pszSoundEntryName )
@@ -2283,6 +2540,68 @@ float PlaySoundEntry( const char* pszSoundEntryName )
 
 	return 0.f;
 }
+
+#if defined( STAGING_ONLY ) || defined( _DEBUG )
+CON_COMMAND( tf_rich_presence_set, "Set rich presence key" )
+{
+	if ( args.ArgC() != 3 )
+	{
+		ConMsg( "Usage: tf_rich_presence_set - <key> <value>\n" );
+		return;
+	}
+
+	const char *pKey = args[1];
+	const char *pValue = args[2];
+
+	auto *pSteamFriends = steamapicontext->SteamFriends();
+	if ( !pSteamFriends )
+	{
+		ConMsg( "Set rich presence failed - No SteamFriends API\n" );
+		return;
+	}
+
+	pSteamFriends->SetRichPresence( pKey, pValue );
+	ConMsg( "Set rich presence key \"%s\" -> \"%s\"\n", pKey, pValue );
+}
+
+CON_COMMAND( tf_rich_presence_clear, "Clear all rich presence" )
+{
+	if ( args.ArgC() != 1 )
+	{
+		ConMsg( "Usage: tf_rich_presence_clear - no arguments, clears all rich presence\n" );
+		return;
+	}
+
+	auto *pSteamFriends = steamapicontext->SteamFriends();
+	if ( !pSteamFriends )
+	{
+		ConMsg( "Clearing rich presence failed - No SteamFriends API\n" );
+		return;
+	}
+
+	pSteamFriends->ClearRichPresence();
+	ConMsg( "Clear all rich presence keys\n" );
+}
+
+CON_COMMAND( tf_rich_presence_force_update, "Force a rich presence update" )
+{
+	if ( args.ArgC() != 1 )
+	{
+		ConMsg( "Usage: tf_rich_presence_force_update - - no arguments, forces a rich presence update\n" );
+		return;
+	}
+
+	auto *pSteamFriends = steamapicontext->SteamFriends();
+	if ( !pSteamFriends )
+	{
+		ConMsg( "Updating rich presence failed - No SteamFriends API\n" );
+		return;
+	}
+
+	GetClientModeTFNormal()->UpdateSteamRichPresence();
+	ConMsg( "Forced rich presence update\n" );
+}
+#endif // defined( STAGING_ONLY ) || defined( _DEBUG )
 
 #ifdef _WIN32
 

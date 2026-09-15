@@ -37,6 +37,7 @@ BEGIN_DATADESC( CTFGenericBomb )
 	DEFINE_KEYFIELD( m_strExplodeParticleName, FIELD_STRING, "explode_particle" ),
 	DEFINE_KEYFIELD( m_strExplodeSoundName, FIELD_STRING, "sound" ),
 	DEFINE_KEYFIELD( m_eWhoToDamage, FIELD_INTEGER, "friendlyfire" ),
+	DEFINE_KEYFIELD( m_bPassActivator, FIELD_BOOLEAN, "passActivator" ),
 
 	// Output
 	DEFINE_OUTPUT( m_OnDetonate, "OnDetonate" ),
@@ -54,6 +55,7 @@ CTFGenericBomb::CTFGenericBomb()
 {
 	m_bDead = false;
 	m_bPrecached = false;
+	m_bPassActivator = false;
 }
 
 //-----------------------------------------------------------------------------
@@ -220,6 +222,10 @@ void CTFGenericBomb::Event_Killed( const CTakeDamageInfo &info )
 
 	CTakeDamageInfo damage_info( this, pAttacker, NULL, m_flDamage, DMG_BLAST | DMG_HALF_FALLOFF | DMG_NOCLOSEDISTANCEMOD );
 	damage_info.SetDamageCustom( TF_DMG_CUSTOM_NONE );
+	if ( !V_stricmp( gpGlobals->mapname.ToCStr(), "koth_slaughter_event" ) || !V_stricmp( gpGlobals->mapname.ToCStr(), "koth_slime" ) )
+	{
+		damage_info.SetDamageCustom( TF_DMG_CUSTOM_PUMPKIN_BOMB );
+	}
 
 	damage_info.SetForceFriendlyFire( m_eWhoToDamage == DAMAGE_EVERYONE );
 
@@ -243,7 +249,8 @@ void CTFGenericBomb::Event_Killed( const CTakeDamageInfo &info )
 		WRITE_SHORT( m_nSkin );
 	MessageEnd();
 
-	m_OnDetonate.FireOutput( this, this );
+	CBaseEntity *pArg = m_bPassActivator ? pAttacker : this;
+	m_OnDetonate.FireOutput( pArg, this );
 	
 	BaseClass::Event_Killed( info );
 }

@@ -55,7 +55,7 @@ CHudDemomanChargeMeter::CHudDemomanChargeMeter( const char *pElementName ) : CHu
 
 	m_pChargeMeter = new ContinuousProgressBar( this, "ChargeMeter" );
 
-	SetHiddenBits( HIDEHUD_MISCSTATUS );
+	SetHiddenBits( HIDEHUD_MISCSTATUS | HIDEHUD_PIPES_AND_CHARGE );
 
 	vgui::ivgui()->AddTickSignal( GetVPanel() );
 
@@ -88,12 +88,6 @@ bool CHudDemomanChargeMeter::ShouldDraw( void )
 	if ( !pWpn || !pChargeupWeapon || !pChargeupWeapon->CanCharge() )
 		return false;
 
-#ifdef STAGING_ONLY	
-	int iCustomHUD = 0;
-	CALL_ATTRIB_HOOK_INT_ON_OTHER( pWpn, iCustomHUD, custom_charge_meter );
-	if ( iCustomHUD )
-		return false;
-#endif // STAGING_ONLY
 
 	if ( pPlayer->m_Shared.InCond( TF_COND_HALLOWEEN_GHOST_MODE ) )
 		return false;
@@ -119,12 +113,6 @@ void CHudDemomanChargeMeter::OnTick( void )
 
 	CTFWeaponBase *pWpn = pPlayer->GetActiveTFWeapon();
 	
-#ifdef STAGING_ONLY		
-	int iCustomHUD = 0;
-	CALL_ATTRIB_HOOK_INT_ON_OTHER( pWpn, iCustomHUD, custom_charge_meter );
-	if ( iCustomHUD )
-		return;
-#endif // STAGING_ONLY
 
 	ITFChargeUpWeapon *pChargeupWeapon = dynamic_cast< ITFChargeUpWeapon *>( pWpn );
 	if ( !pWpn || !pChargeupWeapon || !pChargeupWeapon->CanCharge() )

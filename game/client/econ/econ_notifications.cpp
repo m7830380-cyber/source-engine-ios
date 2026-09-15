@@ -272,13 +272,18 @@ public:
 	CGenericNotificationToast( vgui::Panel *parent, int iNotificationID, bool bMainMenu );
 	virtual ~CGenericNotificationToast();
 
-	virtual void ApplySchemeSettings( vgui::IScheme *pScheme );
-	virtual void PerformLayout();
+	virtual void ApplySchemeSettings( vgui::IScheme *pScheme ) OVERRIDE;
+	virtual void PerformLayout() OVERRIDE;
+	virtual void OnThink() OVERRIDE;
 protected:
+
+	void UpdateKVs( CEconNotification* pNotification );
+
 	int 				m_iNotificationID;
 	vgui::Panel			*m_pAvatarBG;
 	CAvatarImagePanel	*m_pAvatar;
 	bool				m_bMainMenu;
+	int					m_iKVVersion = 0;
 };
 
 CGenericNotificationToast::CGenericNotificationToast( vgui::Panel *parent, int iNotificationID, bool bMainMenu )
@@ -329,17 +334,7 @@ void CGenericNotificationToast::ApplySchemeSettings( vgui::IScheme *pScheme )
 	m_pAvatar = dynamic_cast< CAvatarImagePanel *>( FindChildByName("AvatarImage") );
 	m_pAvatarBG = FindChildByName("AvatarBGPanel");
 
-	if ( pNotification )
-	{
-		if ( pNotification->GetSteamID() == CSteamID() )
-		{
-			ColorizeText( pNotification, dynamic_cast< CExLabel* >( FindChildByName( "TextLabel" ) ), pNotification->GetText() );
-		}
-		else
-		{
-			ColorizeText( pNotification, dynamic_cast< CExLabel* >( FindChildByName( "AvatarTextLabel" ) ), pNotification->GetText() );
-		}
-	}
+	UpdateKVs( pNotification );
 }
 
 void CGenericNotificationToast::PerformLayout()
@@ -394,6 +389,36 @@ void CGenericNotificationToast::PerformLayout()
 		int iContainerWidth, iContainerHeight;
 		GetSize( iContainerWidth, iContainerHeight );
 		SetSize( iContainerWidth, MAX( iContainerHeight + iDelta, iMinHeight ) );
+	}
+}
+
+void CGenericNotificationToast::OnThink()
+{
+	BaseClass::OnThink();
+
+	CEconNotification *pNotification = NotificationQueue_Get( m_iNotificationID );
+	// Keep our KVs in sync with the notification's KVs
+	if ( pNotification && m_iKVVersion != pNotification->GetKVVersion() )
+	{
+		UpdateKVs( pNotification );
+		InvalidateLayout( true, false );
+	}
+}
+
+void CGenericNotificationToast::UpdateKVs( CEconNotification* pNotification )
+{
+	if ( pNotification )
+	{
+		if ( pNotification->GetSteamID() == CSteamID() )
+		{
+			ColorizeText( pNotification, dynamic_cast< CExLabel* >( FindChildByName( "TextLabel" ) ), pNotification->GetText() );
+		}
+		else
+		{
+			ColorizeText( pNotification, dynamic_cast< CExLabel* >( FindChildByName( "AvatarTextLabel" ) ), pNotification->GetText() );
+		}
+
+		m_iKVVersion = pNotification->GetKVVersion();
 	}
 }
 
@@ -490,6 +515,8 @@ public:
 
 		BaseClass::ApplySchemeSettings( scheme );
 
+		m_pTriggerButton = NULL;
+
 		GetSize( m_iOriginalWidth, m_iOriginalHeight );
 
 		CExButton *pDeleteButton = dynamic_cast< CExButton *>( FindChildByName( "DeleteButton" ) );
@@ -518,6 +545,7 @@ public:
 				m_iButtonOffsetY = GetTall() - posY;
 			}
 		}
+
 		if ( bCanTrigger )
 		{
 			m_pTriggerButton = dynamic_cast< CExButton *>( FindChildByName( "TriggerButton" ) );
@@ -961,6 +989,7 @@ void CEconNotification::SetKeyValues( KeyValues *pKeyValues )
 		m_pKeyValues->deleteThis();
 	}
 	m_pKeyValues = pKeyValues->MakeCopy();
+	++m_iKVVersion;
 }
 
 KeyValues *CEconNotification::GetKeyValues() const
@@ -1105,6 +1134,11 @@ public:
 		for ( int i = 0; i < notifications.Count(); ++i )
 		{
 			CEconNotification *pNotification = notifications[i];
+			if ( !pNotification->BCreateMainMenuPanel() )
+			{
+				continue;
+			}
+
 			int mapIdx = m_mapNotificationPanels.Find( pNotification->GetID() );
 			if ( m_mapNotificationPanels.IsValidIndex( mapIdx ) == false )
 			{
@@ -1255,10 +1289,14 @@ DECLARE_BUILD_FACTORY( CNotificationsPresentPanel );
 
 int NotificationQueue_Add( CEconNotification *pNotification )
 {
-	if ( !engine->IsInGame() || (cl_notifications_show_ingame.GetBool() && pNotification->BShowInGameElements()) )
+	return 0;
+
+	if ( ( !engine->IsInGame() && pNotification->BCreateMainMenuPanel() ) ||
+		 ( engine->IsInGame() && cl_notifications_show_ingame.GetBool() && pNotification->BShowInGameElements()) )
 	{
 		vgui::surface()->PlaySound( pNotification->GetSoundFilename() );
 	}
+
 	return g_notificationQueue.AddNotification( pNotification );
 }
 
@@ -1305,6 +1343,19 @@ void NotificationQueue_Visit( CEconNotificationVisitor &visitor )
 void NotificationQueue_Update()
 {
 	g_notificationQueue.Update();
+}
+
+int NotificationQueue_GetNumMainMenuNotifications()
+{
+	auto& vecNotification = g_notificationQueue.GetItems();
+	int nCount = 0;
+	FOR_EACH_VEC( vecNotification, i )
+	{
+		if ( vecNotification[ i ]->BCreateMainMenuPanel() )
+			++nCount;
+	}
+
+	return nCount;
 }
 
 int NotificationQueue_GetNumNotifications()

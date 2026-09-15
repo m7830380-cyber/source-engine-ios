@@ -25,6 +25,7 @@
 	#include "particle_parse.h"
 	#include "tf_fx.h"
 	#include "tf_obj_sentrygun.h"
+	#include "ilagcompensationmanager.h"
 #endif
 
 // Maximum time between robo arm hits to maintain the three-hit-combo
@@ -120,17 +121,17 @@ void CTFWrench::OnFriendlyBuildingHit( CBaseObject *pObject, CTFPlayer *pPlayer,
 
 	CDisablePredictionFiltering disabler;
 
-	if ( pObject->IsDisposableBuilding() )
+	if ( bUsefulHit )
 	{
-		CSingleUserRecipientFilter singleFilter( pPlayer );
-		EmitSound( singleFilter, pObject->entindex(), "Player.UseDeny" );
+		// play success sound
+		WeaponSound( SPECIAL1 );
 	}
 	else
 	{
-		if ( bUsefulHit )
+		if ( pObject->IsDisposableBuilding() )
 		{
-			// play success sound
-			WeaponSound( SPECIAL1 );
+			CSingleUserRecipientFilter singleFilter( pPlayer );
+			EmitSound( singleFilter, pObject->entindex(), "Player.UseDeny" );
 		}
 		else
 		{
@@ -337,10 +338,15 @@ float CTFWrench::GetConstructionValue( void )
 	return flValue;
 }
 
-float CTFWrench::GetRepairValue( void )
+//-----------------------------------------------------------------------------
+// Purpose:
+//-----------------------------------------------------------------------------
+float CTFWrench::GetRepairAmount( void )
 {
-	float flValue = 1.0;
-	CALL_ATTRIB_HOOK_FLOAT( flValue, mult_repair_value );
+	float flRepairAmount = 100.f;
+
+	float flMod = 1.f;
+	CALL_ATTRIB_HOOK_FLOAT( flMod, mult_repair_value );
 
 #ifdef GAME_DLL
 	if ( GetOwner() )
@@ -348,12 +354,12 @@ float CTFWrench::GetRepairValue( void )
 		CBaseCombatWeapon* pWpn = GetOwner()->Weapon_GetSlot( TF_WPN_TYPE_PRIMARY );
 		if ( pWpn )
 		{
-			CALL_ATTRIB_HOOK_FLOAT_ON_OTHER( pWpn, flValue, mult_repair_value );
+			CALL_ATTRIB_HOOK_FLOAT_ON_OTHER( pWpn, flMod, mult_repair_value );
 		}
 	}
 #endif
 
-	return flValue;
+	return flRepairAmount * flMod;
 }
 
 //-----------------------------------------------------------------------------
@@ -487,6 +493,10 @@ void CTFRobotArm::Smack( void )
 	if ( !pPlayer )
 		return;
 
+#if !defined (CLIENT_DLL)
+	lagcompensation->StartLagCompensation( pPlayer, pPlayer->GetCurrentCommand() );
+#endif
+
 	trace_t trace;
 	bool btrace = DoSwingTrace( trace );
 	if ( btrace && trace.DidHitNonWorldEntity() && trace.m_pEnt && trace.m_pEnt->IsPlayer() &&
@@ -506,6 +516,10 @@ void CTFRobotArm::Smack( void )
 	{
 		m_iComboCount = 0;
 	}
+
+#if !defined (CLIENT_DLL)	
+	lagcompensation->FinishLagCompensation( pPlayer );
+#endif
 
 	BaseClass::Smack();
 

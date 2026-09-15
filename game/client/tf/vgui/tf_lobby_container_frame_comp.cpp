@@ -7,6 +7,8 @@
 #include "cbase.h"
 #include "tf_gc_client.h"
 #include "tf_party.h"
+#include "tf_partyclient.h"
+#include "tf_matchcriteria.h"
 
 #include "vgui_controls/PropertySheet.h"
 #include "vgui_controls/ComboBox.h"
@@ -22,9 +24,7 @@
 #include <tier0/memdbgon.h>
 
 //-----------------------------------------------------------------------------
-
 // Purpose: Override of the generic messagebox dialog to provide a welcome-to-competitive message
-
 //-----------------------------------------------------------------------------
 ConVar tf_comp_welcome_hide_forever( "tf_comp_welcome_hide_forever", "0", FCVAR_ARCHIVE | FCVAR_HIDDEN );
 ConVar tf_comp_welcome_hide( "tf_comp_welcome_hide", "0", FCVAR_HIDDEN );
@@ -47,8 +47,9 @@ public:
 		}
 		else if ( FStrEq( "show_explanations", command ) )
 		{
-			CHudMainMenuOverride *pMMOverride = (CHudMainMenuOverride*)( gViewPortInterface->FindPanelByName( PANEL_MAINMENUOVERRIDE ) );
-			pMMOverride->GetCompLobbyPanel()->OnCommand( command );
+			//CHudMainMenuOverride *pMMOverride = (CHudMainMenuOverride*)( gViewPortInterface->FindPanelByName( PANEL_MAINMENUOVERRIDE ) );
+			// TODO BRETT: Show this elsewhere
+		//	pMMOverride->GetCompLobbyPanel()->OnCommand( command );
 			OnCommand( "confirm" );
 			return;
 		}
@@ -94,9 +95,9 @@ void CLobbyContainerFrame_Comp::ShowPanel( bool bShow )
 {
 	if ( bShow )
 	{
-		if ( tf_comp_welcome_hide.GetBool() == false 
-		  && tf_comp_welcome_hide_forever.GetBool() == false
-		  && GTFGCClientSystem()->GetWizardStep() == TF_Matchmaking_WizardStep_LADDER )
+		if ( tf_comp_welcome_hide.GetBool() == false
+		     && tf_comp_welcome_hide_forever.GetBool() == false
+		     && !GTFPartyClient()->BInQueue() )
 		{
 			CTFCompetitiveWelcomeDialog *pDialog = vgui::SETUP_PANEL( new CTFCompetitiveWelcomeDialog() );
 
@@ -121,16 +122,7 @@ void CLobbyContainerFrame_Comp::OnCommand( const char *command )
 {
 	if ( FStrEq( command, "next" ) )
 	{
-		switch ( GTFGCClientSystem()->GetWizardStep() )
-		{
-			case TF_Matchmaking_WizardStep_LADDER:
-				StartSearch();
-				break;
-
-			default:
-				AssertMsg1( false, "Unexpected wizard step %d", (int)GTFGCClientSystem()->GetWizardStep() );
-				break;
-		}
+		StartSearch();
 		return;
 	}
 	else if ( FStrEq( command, "show_explanations" ) )
@@ -152,36 +144,24 @@ void CLobbyContainerFrame_Comp::WriteControls()
 	// Make sure we want to be in matchmaking.  (If we don't, the frame should hide us pretty quickly.)
 	// We might get an event or something right at the transition point occasionally when the UI should
 	// not be visible
-	if ( GTFGCClientSystem()->GetMatchmakingUIState() == eMatchmakingUIState_Inactive )
-	{
-		return;
-	}
+	if ( !GTFGCClientSystem()->BUserInModalMMUI() )
+		{ return; }
 
 	const char *pszBackButtonText = "#TF_Matchmaking_Back";
 	const char *pszNextButtonText = NULL;
-	
+
 	if ( GCClientSystem()->BConnectedtoGC() )
 	{
-		if ( BIsPartyLeader()  )
+		if ( GTFPartyClient()->BIsPartyLeader()  )
 		{
-			switch ( GTFGCClientSystem()->GetWizardStep() )
+			if ( GTFPartyClient()->BInQueue() )
 			{
-				case TF_Matchmaking_WizardStep_LADDER:
-					pszBackButtonText = "#TF_Matchmaking_Back";
-					pszNextButtonText = "#TF_Matchmaking_StartSearch";
-					break;
-
-				case TF_Matchmaking_WizardStep_SEARCHING:
-					pszBackButtonText = "#TF_Matchmaking_CancelSearch";
-					break;
-
-				case TF_Matchmaking_WizardStep_INVALID:
-					// Still being setup
-					break;
-
-				default:
-					AssertMsg1( false, "Unknown wizard step %d", (int)GTFGCClientSystem()->GetWizardStep() );
-					break;
+				pszBackButtonText = "#TF_Matchmaking_CancelSearch";
+			}
+			else
+			{
+				pszBackButtonText = "#TF_Matchmaking_Back";
+				pszNextButtonText = "#TF_Matchmaking_StartSearch";
 			}
 		}
 		else
@@ -203,6 +183,13 @@ bool CheckCompetitiveConvars()
 {
 	static ConVarRef mat_dxlevel( "mat_dxlevel");
 	return mat_dxlevel.GetInt() >= 90;
+}
+
+//-----------------------------------------------------------------------------
+/* static */ bool CLobbyContainerFrame_Comp::TypeCanHandleMatchGroup( ETFMatchGroup eMatchGroup )
+{
+	// All we know about
+	return eMatchGroup == k_eTFMatchGroup_Ladder_6v6;
 }
 
 //-----------------------------------------------------------------------------
@@ -242,7 +229,8 @@ bool CLobbyContainerFrame_Comp::VerifyPartyAuthorization() const
 				g_pVGuiLocalize->ConstructString_safe( wszLocalized, g_pVGuiLocalize->Find( "#TF_Matchmaking_MissingPass" ), 1, wszCharPlayerName );
 				g_pVGuiLocalize->ConvertUnicodeToANSI( wszLocalized, szLocalized, sizeof( szLocalized ) );
 
-				GTFGCClientSystem()->SendSteamLobbyChat( CTFGCClientSystem::k_eLobbyMsg_SystemMsgFromLeader, szLocalized );
+				// TODO(Universal Parties):
+				//GTFGCClientSystem()->SendSteamLobbyChat( CTFGCClientSystem::k_eLobbyMsg_SystemMsgFromLeader, szLocalized );
 			}
 		}
 
@@ -256,11 +244,11 @@ bool CLobbyContainerFrame_Comp::VerifyPartyAuthorization() const
 	CLobbyPanel_Comp* pCompContents = static_cast< CLobbyPanel_Comp* >( m_pContents );
 	if ( pCompContents )
 	{
-		uint32 unModeType = pCompContents->GetMatchGroup();
+		ETFMatchGroup eMatchGroup = pCompContents->GetMatchGroup();
 
-		if ( unModeType >= k_nMatchGroup_Ladder_First && unModeType <= k_nMatchGroup_Ladder_Last )
+		if ( eMatchGroup >= k_eTFMatchGroup_Ladder_First && eMatchGroup <= k_eTFMatchGroup_Ladder_Last )
 		{
-			GTFGCClientSystem()->SetLadderType( unModeType );
+			GTFPartyClient()->MutLocalGroupCriteria().SetMatchGroup( eMatchGroup );
 		}
 	}
 
@@ -269,29 +257,14 @@ bool CLobbyContainerFrame_Comp::VerifyPartyAuthorization() const
 
 void CLobbyContainerFrame_Comp::HandleBackPressed()
 {
-	switch ( GTFGCClientSystem()->GetWizardStep() )
+	if ( GTFPartyClient()->BInQueue() )
 	{
-		case TF_Matchmaking_WizardStep_LADDER:
-			// !FIXME! Really need to confirm this!
-			GTFGCClientSystem()->EndMatchmaking();
-			// And hide us
-			ShowPanel( false );
-			return;
-
-		case TF_Matchmaking_WizardStep_SEARCHING:
-			switch ( GTFGCClientSystem()->GetSearchMode() )
-			{
-				case TF_Matchmaking_LADDER:
-					GTFGCClientSystem()->RequestSelectWizardStep( TF_Matchmaking_WizardStep_LADDER );
-					return;
-			}
-			break;
-
-		default:
-			Msg( "Unexpected wizard step %d", (int)GTFGCClientSystem()->GetWizardStep() );
-			break;
+		GTFPartyClient()->CancelQueueRequest();
+		GTFPartyClient()->SetLocalUIState( k_eTFMatchmakingSyncedUIState_Configuring_Mode );
+		return;
 	}
 
-	// Unhandled case
-	BaseClass::HandleBackPressed();
+	GTFGCClientSystem()->EndModalMM();
+	// And hide us
+	ShowPanel( false );
 }

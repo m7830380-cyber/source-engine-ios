@@ -115,6 +115,12 @@ void CTFPipebombLauncher::Spawn( void )
 //-----------------------------------------------------------------------------
 bool CTFPipebombLauncher::Holster( CBaseCombatWeapon *pSwitchingTo )
 {
+#ifdef CLIENT_DLL
+	if ( m_flChargeBeginTime > 0.f )
+	{
+		StopSound( TF_WEAPON_PIPEBOMB_LAUNCHER_CHARGE_SOUND );
+	}
+#endif
 	m_flChargeBeginTime = 0;
 
 	return BaseClass::Holster( pSwitchingTo );

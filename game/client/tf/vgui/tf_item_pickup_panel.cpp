@@ -27,16 +27,27 @@
 #include "econ_ui.h"
 #include "c_tf_player.h"
 #include "character_info_panel.h"
+#include "tf_matchmaking_dashboard_parent_manager.h"
 
 ConVar tf_explanations_discardpanel( "tf_explanations_discardpanel", "0", FCVAR_ARCHIVE, "Whether the user has seen explanations for this panel." );
 
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-CTFItemPickupPanel::CTFItemPickupPanel( Panel *parent ) : CItemPickupPanel( parent )
+CTFItemPickupPanel::CTFItemPickupPanel( Panel *parent ) : CItemPickupPanel( parent, false )
 {
 	m_pClassImage = NULL;
 	m_pClassImageBG = NULL;
+	SetZPos( 10000 );
+	GetMMDashboardParentManager()->AddPanel( this );
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+CTFItemPickupPanel::~CTFItemPickupPanel()
+{
+	GetMMDashboardParentManager()->RemovePanel( this );
 }
 
 //-----------------------------------------------------------------------------
@@ -232,6 +243,16 @@ CTFItemDiscardPanel::CTFItemDiscardPanel( Panel *parent ) : CItemDiscardPanel( p
 	m_pExplanationALabel = NULL;
 	m_pExplanationBLabel = NULL;
 	m_pExplanationCaratLabel = NULL;
+	SetZPos( 10000 );
+	GetMMDashboardParentManager()->AddPanel( this );
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+CTFItemDiscardPanel::~CTFItemDiscardPanel()
+{
+	GetMMDashboardParentManager()->RemovePanel( this );
 }
 
 //-----------------------------------------------------------------------------

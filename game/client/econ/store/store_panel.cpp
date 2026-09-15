@@ -423,12 +423,6 @@ void CStorePanel::ShowPanel(bool bShow)
 {
 	m_bPreventClosure = false;
 
-#ifdef TF_CLIENT_DLL
-	// Keep the MM dashboard on top of us
-	bShow ? GetMMDashboardParentManager()->PushModalFullscreenPopup( this ) 
-		  : GetMMDashboardParentManager()->PopModalFullscreenPopup( this );
-#endif
-
 	if ( bShow )
 	{
 		if ( !m_bOGSLogging )
@@ -905,7 +899,7 @@ void CStorePanel::UpsellStamps( void )
 	wchar_t *pwchMapName = g_pVGuiLocalize->Find( pUpsellMap->pszMapNameLocKey );
 
 	char szMapHours[ 8 ];
-	V_snprintf( szMapHours, sizeof( szMapHours ), "%i", nUpsellNumHours );
+	V_sprintf_safe( szMapHours, "%i", nUpsellNumHours );
 
 	wchar_t wszMapHours[ 8 ];
 	g_pVGuiLocalize->ConvertANSIToUnicode( szMapHours, wszMapHours, sizeof( wszMapHours ) );
@@ -930,8 +924,27 @@ void CStorePanel::UpsellStamps( void )
 //-----------------------------------------------------------------------------
 // Purpose: Attempts to begin a checkout.
 //-----------------------------------------------------------------------------
-void CStorePanel::InitiateCheckout( bool bSkipUpsell )
+void CStorePanel::InitiateCheckout( bool bSkipUpsell, bool bSkipDecoderWarning /* = false */ )
 {
+	// If this user's TxnCC is not allowed decodable containers, check if this is a decoder and show them a warning
+	//
+	// Note this warning goes to ProceedCheckout_DecoderWarning, which loops back with skip set.  The below checks just
+	// go straight to confirm.
+	const char *pTxnCC = GCClientSystem()->GetTxnCountryCode();
+	if ( !bSkipDecoderWarning && pTxnCC && !BEconCountryAllowDecodableContainers( pTxnCC ) &&
+	     m_Cart.ContainsChanceRestrictedItems() )
+	{
+		CTFGenericConfirmDialog *pDialog = ShowConfirmDialog( "#Store_ConfirmHolidayRestrictionCheckoutTitle",
+		                                                      "#Store_ConfirmDecoderRestrictionCheckoutText",
+		                                                      "#Store_OK", "#TF_Back", &ProceedCheckout_DecoderWarning );
+
+		if ( pDialog )
+		{
+			pDialog->SetContext( this );
+		}
+		return;
+	}
+
 	// Check for holiday-restricted items and confirm with user before allowing checkout
 	if ( m_Cart.ContainsHolidayRestrictedItems() )
 	{
@@ -958,6 +971,18 @@ void CStorePanel::InitiateCheckout( bool bSkipUpsell )
 	}
 
 	DoCheckout();
+}
+
+//-----------------------------------------------------------------------------
+// Purpose:
+//-----------------------------------------------------------------------------
+/*static*/ void CStorePanel::ProceedCheckout_DecoderWarning( bool bConfirmed, void *pContext )
+{
+	CStorePanel *pStorePanel = ( CStorePanel * )pContext;
+	if ( bConfirmed )
+	{
+		pStorePanel->InitiateCheckout( /* bSkipUpsell */ false, /* bSkipDecoderWarning */ true );
+	}
 }
 
 //-----------------------------------------------------------------------------
@@ -1164,7 +1189,7 @@ bool CGCClientJobInitPurchase::BYieldingRunJob( void *pvStartParam )
 	}
 
 #ifdef _DEBUG
-	Msg( "CGCClientJobInitPurchase - Result: %d, TxnID: %llu\n", msgResponse.Body().result(), msgResponse.Body().txn_id());
+	Msg( "CGCClientJobInitPurchase - Result: %d, TxnID: %llu\n", msgResponse.Body().result(), (unsigned long long) msgResponse.Body().txn_id());
 #endif
 
 	// If we fail at this point Steam hasn't opened a transaction that we need to worry about.
@@ -1349,7 +1374,7 @@ bool CGCClientJobFinalizePurchase::BYieldingRunJob( void *pvStartParam )
 	{
 		for ( int i = 0; i < msgResponse.Body().item_ids_size(); i++ )
 		{
-			Msg( "\t%llu\n", msgResponse.Body().item_ids(i) );
+			Msg( "\t%llu\n", (unsigned long long) msgResponse.Body().item_ids(i) );
 		}
 	}
 #endif
@@ -1617,7 +1642,7 @@ void CStoreCart::AddToCart( const econ_store_entry_t *pEntry, const char* pszPag
 			g_pVGuiLocalize->ConvertUnicodeToANSI( g_pVGuiLocalize->Find( pItemDef->GetItemBaseName() ), pszItemName, sizeof( pszItemName ) );
 
 			char szURL[512];
-			V_snprintf( szURL, sizeof( szURL ), "http://%ssteamcommunity.com/market/listings/%d/%s", pszPrefix, engine->GetAppID(), pszItemName );
+			V_sprintf_safe( szURL, "http://%ssteamcommunity.com/market/listings/%d/%s", pszPrefix, engine->GetAppID(), pszItemName );
 			steamapicontext->SteamFriends()->ActivateGameOverlayToWebPage( szURL );
 		}
 		return;
@@ -1630,6 +1655,7 @@ void CStoreCart::AddToCart( const econ_store_entry_t *pEntry, const char* pszPag
 		m_Items[iIndex].pEntry = pEntry;
 		m_Items[iIndex].iQuantity = 0;
 		m_Items[iIndex].eType = eCartItemType;
+		m_Items[iIndex].bPreviewItem = ( eCartItemType == kCartItem_TryOutUpgrade );
 	}
 
 	m_Items[iIndex].iQuantity++;
@@ -1657,24 +1683,47 @@ void CStoreCart::AddToCart( const econ_store_entry_t *pEntry, const char* pszPag
 //-----------------------------------------------------------------------------
 void CStoreCart::RemoveFromCart( int iIndex )
 {
-	if ( iIndex >= 0 && iIndex < m_Items.Count() )
+	if ( ( iIndex >= 0 ) && ( iIndex < m_Items.Count() ) )
 	{
+		int iIndexToDelete = iIndex;
+		CEconItemDefinition *pItemDef = NULL;
+
 		// play item's "drop" sound
-		if ( m_Items[iIndex].pEntry )
+		if ( m_Items[iIndexToDelete].pEntry )
 		{
-			CEconItemDefinition *pDef = ItemSystem()->GetStaticDataForItemByDefIndex( m_Items[iIndex].pEntry->GetItemDefinitionIndex() );
-			const char *soundFilename = pDef->GetDefinitionString( "drop_sound", "ui/item_default_drop.wav" );
+			pItemDef = ItemSystem()->GetStaticDataForItemByDefIndex( m_Items[iIndexToDelete].pEntry->GetItemDefinitionIndex() );
+			const char *soundFilename = pItemDef->GetDefinitionString( "drop_sound", "ui/item_default_drop.wav" );
 
 			vgui::surface()->PlaySound( soundFilename );
 		}
 
-		m_Items[iIndex].iQuantity--;
-
-		EconUI()->Gamestats_Store( IE_STORE_ITEM_REMOVED_FROM_CART, NULL, NULL, 0, &m_Items[iIndex] );
-
-		if ( m_Items[iIndex].iQuantity <= 0 )
+		// before we remove this item, let's see if the item is the preview item 
+		// and we have a similar item in the cart that is not being previewed (the
+		// previewed item will be at a discount so we want to keep the lower priced item)
+		if ( m_Items[iIndexToDelete].bPreviewItem && pItemDef )
 		{
-			m_Items.Remove(iIndex);
+			FOR_EACH_VEC( m_Items, i )
+			{
+				// don't compare against item we're removing
+				if ( ( i != iIndexToDelete ) && m_Items[i].pEntry )
+				{
+					CEconItemDefinition *pTempDef = ItemSystem()->GetStaticDataForItemByDefIndex( m_Items[i].pEntry->GetItemDefinitionIndex() );
+					if ( pTempDef && ( pItemDef->GetDefinitionIndex() == pTempDef->GetDefinitionIndex() ) )
+					{
+						iIndexToDelete = i;
+						break;
+					}
+				}
+			}
+		}
+
+		m_Items[iIndexToDelete].iQuantity--;
+
+		EconUI()->Gamestats_Store( IE_STORE_ITEM_REMOVED_FROM_CART, NULL, NULL, 0, &m_Items[iIndexToDelete] );
+
+		if ( m_Items[iIndexToDelete].iQuantity <= 0 )
+		{
+			m_Items.Remove( iIndexToDelete );
 		}
 	}
 
@@ -1752,13 +1801,21 @@ int	CStoreCart::GetTotalConcreteItems( void ) const
 //-----------------------------------------------------------------------------
 item_price_t cart_item_t::GetDisplayPrice() const
 {
-	const float fPriceScale = eType == kCartItem_TryOutUpgrade
+	const float flDiscount = eType == kCartItem_TryOutUpgrade
 							? GetEconPriceSheet()->GetPreviewPeriodDiscount()
 							: IsRentalCartItemType( eType )
 							? pEntry->GetRentalPriceScale()
-							: 1.0f;
+							: 100.0f;
 
-	return (item_price_t)( pEntry->GetCurrentPrice( EconUI()->GetStorePanel()->GetCurrency() ) * fPriceScale ) * iQuantity;
+	const ECurrency eCurrency = EconUI()->GetStorePanel()->GetCurrency();
+	item_price_t unDisplayPrice = (item_price_t)( pEntry->GetCurrentPrice( eCurrency ) );
+
+	if ( ( flDiscount < 100.0f ) && ( flDiscount > 0.0f ) )
+	{
+		unDisplayPrice = econ_store_entry_t::CalculateSalePrice( unDisplayPrice, eCurrency, flDiscount );
+	}
+
+	return ( unDisplayPrice * iQuantity );
 }
 
 //-----------------------------------------------------------------------------
@@ -1772,6 +1829,36 @@ item_price_t CStoreCart::GetTotalPrice( void ) const
 		unTotal += m_Items[i].GetDisplayPrice();
 	}
 	return unTotal;
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+bool CStoreCart::ContainsChanceRestrictedItems() const
+{
+	FOR_EACH_VEC( m_Items, i )
+	{
+		CEconItemDefinition *pEconDef = ItemSystem()->GetStaticDataForItemByDefIndex( m_Items[i].pEntry->GetItemDefinitionIndex() );
+		if ( !pEconDef )
+			continue;
+
+		const GameItemDefinition_t *pItemDef = dynamic_cast<const GameItemDefinition_t *>( pEconDef );
+
+		// All decoder ring items
+		if ( pItemDef && pItemDef->GetEconTool() &&
+		     ( Q_strcmp( pItemDef->GetEconTool()->GetTypeName(), "decoder_ring" ) == 0 ) )
+		{
+			return true;
+		}
+
+		// Explicitly flagged items
+		if ( pItemDef && pItemDef->IsChanceRestricted() )
+		{
+			return true;
+		}
+	}
+
+	return false;
 }
 
 //-----------------------------------------------------------------------------

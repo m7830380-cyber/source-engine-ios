@@ -69,6 +69,7 @@ private:
 	EAbandonGameStatus m_eAbandonStatus;
 
 };
+CTFRejoinConfirmDialog * BuildRejoinConfirmDialog();
 
 bool HandleDisconnectAttempt();
 

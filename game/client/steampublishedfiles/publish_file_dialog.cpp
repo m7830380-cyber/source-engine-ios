@@ -288,7 +288,7 @@ void CFilePublishDialog::OnTick( void )
 			int result = m_pPrepareFileThread->GetResult();
 			delete m_pPrepareFileThread;
 			m_pPrepareFileThread = NULL;
-			OnFilePrepared( result == 0 );
+			OnFilePrepared( result == 0 ? kNoError : kFailedToPrepareFile );
 		}
 	}
 
@@ -456,6 +456,15 @@ void CFilePublishDialog::GetPreviewFilename( char *szOut, size_t outLen )
 }
 
 //-----------------------------------------------------------------------------
+// Purpose: Helper to build prepared file name
+//-----------------------------------------------------------------------------
+void CFilePublishDialog::GetPreparedFilename( char *szOut, size_t outLen )
+{
+	V_ComposeFileName( WORKSHOP_TEMP_UPLOAD_DIR, V_GetFileName( g_MapFilename ),
+	                   szOut, outLen );
+}
+
+//-----------------------------------------------------------------------------
 // Purpose: Callback when our create item has completed. Need to do initial update.
 //-----------------------------------------------------------------------------
 void CFilePublishDialog::Steam_OnCreateItem( CreateItemResult_t *pResult, bool bError )
@@ -484,15 +493,18 @@ void CFilePublishDialog::Steam_OnCreateItem( CreateItemResult_t *pResult, bool b
 //-----------------------------------------------------------------------------
 // Purpose: Callback from our map compression thread finishing
 //-----------------------------------------------------------------------------
-void CFilePublishDialog::OnFilePrepared( bool bSucceeded )
+void CFilePublishDialog::OnFilePrepared( ErrorCode_t eResult )
 {
-	if ( bSucceeded )
+	if ( eResult == kNoError )
 	{
 		// Move on to final publishing
-		bSucceeded = UpdateFileInternal();
+		if ( !UpdateFileInternal() )
+		{
+			eResult = kFailedToUpdateFile;
+		}
 	}
 
-	if ( bSucceeded )
+	if ( eResult == kNoError )
 	{
 		// Done, waiting on file publish callback
 		return;
@@ -511,7 +523,7 @@ void CFilePublishDialog::OnFilePrepared( bool bSucceeded )
 	}
 
 	HideStatusWindow();
-	ErrorMessage( kFailedToUpdateFile );
+	ErrorMessage( eResult );
 }
 
 //-----------------------------------------------------------------------------
@@ -521,8 +533,7 @@ void CFilePublishDialog::Steam_OnPublishFile( SubmitItemUpdateResult_t *pResult,
 {
 	// Remove prepared map
 	char szPreparedMap[MAX_PATH] = { 0 };
-	V_ComposeFileName( WORKSHOP_TEMP_UPLOAD_DIR, V_GetFileName( g_MapFilename ),
-	                   szPreparedMap, sizeof( szPreparedMap ) );
+	GetPreparedFilename( szPreparedMap, sizeof( szPreparedMap ) );
 	g_pFullFileSystem->RemoveFile( szPreparedMap, UGC_PATHID );
 
 	// Remove local thumbnail
@@ -615,8 +626,7 @@ void CFilePublishDialog::StartPrepareFile( void )
 	g_pFullFileSystem->CreateDirHierarchy( WORKSHOP_TEMP_UPLOAD_DIR, UGC_PATHID );
 
 	char szOutPath[MAX_PATH] = { 0 };
-	V_ComposeFileName( WORKSHOP_TEMP_UPLOAD_DIR, V_GetFileName( g_MapFilename ),
-	                   szOutPath, sizeof( szOutPath ) );
+	GetPreparedFilename( szOutPath, sizeof( szOutPath ) );
 
 	// Ensure this file isn't leftover in output dir
 	g_pFullFileSystem->RemoveFile( szOutPath, UGC_PATHID );
@@ -715,8 +725,7 @@ bool CFilePublishDialog::UpdateFileInternal()
 	char szFullPreparedPath[MAX_PATH] = { 0 };
 	if ( m_bAddingNewFile || m_nFileDetailsChanges & PFILE_FIELD_FILE )
 	{
-		V_ComposeFileName( WORKSHOP_TEMP_UPLOAD_DIR, V_GetFileName( g_MapFilename ),
-		                   szPreparedMap, sizeof( szPreparedMap ) );
+		GetPreparedFilename( szPreparedMap, sizeof( szPreparedMap ) );
 
 		g_pFullFileSystem->RelativePathToFullPath( szPreparedMap, UGC_PATHID,
 		                                           szFullPreparedPath,
@@ -932,6 +941,7 @@ void CFilePublishDialog::OnCommand( const char *command )
 //-----------------------------------------------------------------------------
 CFilePublishDialog::ErrorCode_t CFilePublishDialog::ValidateFile( const char *lpszFilename )
 {
+	NoteUnused( lpszFilename );
 	return kNoError;
 }
 
@@ -950,6 +960,7 @@ void CFilePublishDialog::SetFile( const char *lpszFilename, bool bImported )
 
 	m_bValidFile = true;
 	g_MapFilename = lpszFilename;
+
 	char szShortName[ MAX_PATH ];
 	Q_FileBase( g_MapFilename, szShortName, sizeof(szShortName) );
 	const char *szExt = Q_GetFileExtension( lpszFilename );

@@ -10,9 +10,6 @@
 #pragma once
 #endif
 
-#if defined( GC_DLL )
-#include "econ/econ_storemetadata.h"
-#endif
 
 //-------------------------------------------------------------------------------------------------------------------------------
 
@@ -77,9 +74,6 @@ public:
 		StoreCategoryID_t	m_unParentCategoryID;
 		CUtlVector<const StoreCategory_t *>	m_vecSubcategories;	// A list of ID's for all subcategories
 		CUtlSortVector<uint16, CEconStoreEntryLess>	m_vecEntries;		// Vector of items for sale
-#if defined( GC_DLL )
-		const CEconStoreMetaData::DropdownPrefabInfo_t	*m_pDropdownPrefab;
-#endif
 	};
 
 	const StoreCategoryID_t GetHomeCategoryID() const { Assert( m_unHomeCategoryID != k_CategoryID_Invalid ); return m_unHomeCategoryID; }

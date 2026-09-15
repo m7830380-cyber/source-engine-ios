@@ -28,6 +28,9 @@
 #include "quest_log_panel.h"
 #include "backpack_panel.h"
 #include "materialsystem/itexture.h"
+
+#include "tf_gc_client.h"
+
 #else
 #include "tf_player.h"
 #endif
@@ -44,6 +47,8 @@
 #include "tier0/memdbgon.h"
 
 using namespace GCSDK;
+
+#define LOCAL_LOADOUT_FILE		"cfg/local_loadout.txt"
 
 #ifdef CLIENT_DLL
 //-----------------------------------------------------------------------------
@@ -327,30 +332,6 @@ int	CTFInventoryManager::GetAllUsableItemsForSlot( int iClass, int iSlot, CUtlVe
 	return pList->Count();
 }
 
-//-----------------------------------------------------------------------------
-// Purpose: Fills out pList with all quest item in the local inventory
-//-----------------------------------------------------------------------------
-int CTFInventoryManager::GetAllQuestItems( CUtlVector<CEconItemView*> *pList )
-{
-	if ( !pList )
-		return 0;
-
-	pList->RemoveAll();
-
-	for ( int i = 0 ; i < m_LocalInventory.GetItemCount() ; ++i )
-	{
-		CEconItemView *pItem = m_LocalInventory.GetItem( i );
-
-		// Cheapest test
-		if ( pItem->GetItemDefinition()->GetQuestDef() == NULL ) 
-			continue;
-
-		pList->AddToTail( pItem );
-	}
-
-	return pList->Count();
-}
-
 #endif // CLIENT_DLL
 
 //-----------------------------------------------------------------------------
@@ -359,13 +340,14 @@ int CTFInventoryManager::GetAllQuestItems( CUtlVector<CEconItemView*> *pList )
 CEconItemView *CTFInventoryManager::GetItemInLoadoutForClass( int iClass, int iSlot, CSteamID *pID )
 {
 #ifdef CLIENT_DLL
+	CSteamID localSteamID;
 	if ( !pID )
 	{
 		// If they didn't specify a steamID, use the local player
 		if ( !steamapicontext || !steamapicontext->SteamUser() )
 			return NULL;
 
-		CSteamID localSteamID = steamapicontext->SteamUser()->GetSteamID();
+		localSteamID = steamapicontext->SteamUser()->GetSteamID();
 		pID = &localSteamID;
 	}
 #endif
@@ -664,13 +646,8 @@ bool CTFInventoryManager::SlotContainsBaseItems( EEquipType_t eType, int iSlot )
 		if ( TFGameRules() && TFGameRules()->IsUsingGrapplingHook() )
 			return true;
 	}
-#ifdef STAGING_ONLY	
-	return ( ( iSlot < LOADOUT_POSITION_HEAD && iSlot != LOADOUT_POSITION_UTILITY && !IsTauntSlot( iSlot ) )	// Allow utility slots to be empty
-			|| iSlot == LOADOUT_POSITION_PDA3 );
-#else // STAGING_ONLY
 	// Normal game
 	return iSlot < LOADOUT_POSITION_HEAD;
-#endif // #else
 }
 
 //-----------------------------------------------------------------------------
@@ -802,10 +779,10 @@ void CTFInventoryManager::GetActiveSets( CUtlVector<const CEconItemSetDefinition
 		if ( !pItemSet )
 			continue;
 
-		if ( testedSets.HasElement( pItemSet->m_pszName ) )
+		if ( testedSets.HasElement( pItemSet->m_strName ) )
 			continue; // Don't try to apply set bonuses we have already tested.
 
-		testedSets.AddToTail( pItemSet->m_pszName );
+		testedSets.AddToTail( pItemSet->m_strName );
 
 		// Count how much of this set we have equipped.
 		int iSetItemsEquipped = 0;
@@ -873,6 +850,9 @@ CTFPlayerInventory::CTFPlayerInventory()
 #ifdef CLIENT_DLL
 	for ( int i = 0; i < TF_TEAM_COUNT; ++i ) 
 		m_CachedBaseTextureLowRes[ i ].SetLessFunc( DefLessFunc( itemid_t ) );
+
+	memset(m_ActivePreset, LOADOUT_SLOT_USE_BASE_ITEM, sizeof(m_ActivePreset));
+	memset(m_PresetItems, LOADOUT_SLOT_USE_BASE_ITEM, sizeof(m_PresetItems));
 #endif
 
 	memset( m_LoadoutItems, LOADOUT_SLOT_USE_BASE_ITEM, sizeof( m_LoadoutItems ) );
@@ -918,7 +898,192 @@ void CTFPlayerInventory::UpdateCachedServerLoadoutItems()
 {
 	V_memcpy( m_CachedServerLoadoutItems, m_LoadoutItems, sizeof( itemid_t ) * ARRAYSIZE( m_CachedServerLoadoutItems ) * ARRAYSIZE( m_CachedServerLoadoutItems[0] ) );
 }
+	
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+void CTFPlayerInventory::UpdateRealTFLoadoutItems()
+{
+	V_memcpy( m_RealTFLoadoutItems, m_LoadoutItems, sizeof( itemid_t ) * ARRAYSIZE( m_RealTFLoadoutItems ) * ARRAYSIZE( m_RealTFLoadoutItems[0] ) );
+}
+
+void CTFPlayerInventory::LoadLocalLoadout()
+{
+	if (GetOwner() != steamapicontext->SteamUser()->GetSteamID())
+		return;
+
+	if (!g_pFullFileSystem) {
+		return;
+	}
+
+	KeyValues *pLoadoutKV = new KeyValues("local_loadout");
+	if (!pLoadoutKV->LoadFromFile(g_pFullFileSystem, LOCAL_LOADOUT_FILE, "MOD"))
+	{
+		SaveLocalLoadout( true, true );
+
+		if ( !pLoadoutKV->LoadFromFile( g_pFullFileSystem, LOCAL_LOADOUT_FILE, "MOD" ) )
+		{
+			Warning( "Unable to parse local_loadout.txt into keyvalues.\n" );
+			return;
+		}
+	}
+
+	KeyValues *pActivePresetKV = pLoadoutKV->FindKey("active_preset");
+	if (pActivePresetKV) 
+	{
+		for (int iClass = 1; iClass < TF_CLASS_COUNT_ALL; ++iClass)
+		{
+			const char* pszClassName = g_aPlayerClassNames_NonLocalized[iClass];
+			int activePreset = pActivePresetKV->GetInt(pszClassName);
+			m_ActivePreset[iClass] = activePreset;
+		}
+	}
+
+	int numPresets = static_cast<int>(GetItemSchema()->GetNumAllowedItemPresets());
+	for (int iPreset = 0; iPreset < numPresets; ++iPreset)
+	{
+		char szPreset[256];
+		V_snprintf(szPreset, sizeof(szPreset), "%i", iPreset);
+		KeyValues* pPresetKV = pLoadoutKV->FindKey(szPreset);
+		if (!pPresetKV)
+			continue;
+
+		FOR_EACH_TRUE_SUBKEY(pPresetKV, pClassKey)
+		{
+			const char *pszClassName = pClassKey->GetName();
+			const int iClass = GetClassIndexFromString(pszClassName, TF_CLASS_COUNT_ALL);
+
+			FOR_EACH_SUBKEY(pClassKey, pLoadoutEntry)
+			{
+				const int iSlot = V_atoi(pLoadoutEntry->GetName());
+				const itemid_t uItemId = pLoadoutEntry->GetUint64();
+
+				m_PresetItems[iPreset][iClass][iSlot] = uItemId;
+
+				if (iPreset == m_ActivePreset[iClass]) {
+					m_LoadoutItems[iClass][iSlot] = uItemId;
+
+					CEconItemView *pItem = GetInventoryItemByItemID(uItemId);
+					if (pItem) {
+						pItem->GetSOCData()->Equip(iClass, iSlot);
+					}
+				}
+			}
+		}
+	}
+
+	pLoadoutKV->deleteThis();
+
+	GTFGCClientSystem()->LocalInventoryChanged();
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: If we are in mod mode, we track loadout changes locally.
+//-----------------------------------------------------------------------------
+void CTFPlayerInventory::SaveLocalLoadout( bool bReset, bool bDefaultToGC )
+{
+	if (GetOwner() != steamapicontext->SteamUser()->GetSteamID())
+		return;
+
+	if (!g_pFullFileSystem) {
+		return;
+	}
+
+	KeyValues *pLoadoutKV = new KeyValues("local_loadout");
+
+	KeyValues *pActivePresetKV = new KeyValues("active_preset");
+	for (int iClass = 1; iClass < TF_CLASS_COUNT_ALL; ++iClass)
+	{
+		const char* pszClassName = g_aPlayerClassNames_NonLocalized[iClass];
+		pActivePresetKV->SetInt(pszClassName, m_ActivePreset[iClass]);
+	}
+	pLoadoutKV->AddSubKey(pActivePresetKV);
+
+	int numPresets = static_cast<int>(GetItemSchema()->GetNumAllowedItemPresets());
+	for (int iPreset = 0; iPreset < numPresets; ++iPreset)
+	{
+		char szPreset[256];
+		V_snprintf(szPreset, sizeof(szPreset), "%i", iPreset);
+		KeyValues *pPresetKV = new KeyValues(szPreset);
+		pLoadoutKV->AddSubKey(pPresetKV);
+
+		for (int iClass = 1; iClass < TF_CLASS_COUNT_ALL; ++iClass)
+		{
+			const char* pszClassName = g_aPlayerClassNames_NonLocalized[iClass];
+
+			KeyValues *pClassKV = new KeyValues(pszClassName);
+			pPresetKV->AddSubKey(pClassKV);
+
+			for (int iSlot = 0; iSlot < CLASS_LOADOUT_POSITION_COUNT; ++iSlot)
+			{
+				char szSlot[256];
+				V_snprintf(szSlot, sizeof(szSlot), "%i", iSlot);
+
+				itemid_t uItemId = m_PresetItems[iPreset][iClass][iSlot];
+				//itemid_t uItemId = m_LoadoutItems[iClass][iSlot];
+				if (bReset) {
+					uItemId = ( bDefaultToGC && iPreset == 0 ) ? m_RealTFLoadoutItems[iClass][iSlot] : 0;
+				}
+
+				pClassKV->SetUint64(szSlot, uItemId);
+			}
+		}
+	}
+
+	pLoadoutKV->SaveToFile(g_pFullFileSystem, LOCAL_LOADOUT_FILE, "MOD");
+
+	pLoadoutKV->deleteThis();
+}
+
+
 #endif // CLIENT_DLL
+
+//-----------------------------------------------------------------------------
+// Purpose: If we are in mod mode, we track loadout changes locally.
+//-----------------------------------------------------------------------------
+void CTFPlayerInventory::EquipLocal(uint64 ulItemID, equipped_class_t unClass, equipped_slot_t unSlot)
+{
+	// These interactions normally result from a round-trip with the GC.
+	// We will never get those messages, so we do everything locally.
+
+	// Unequip whatever was previously in the slot.
+	{
+		itemid_t ulPreviousItem = m_LoadoutItems[unClass][unSlot];
+		CEconItemView *pPreviousItem = GetInventoryItemByItemID(ulPreviousItem);
+		if (pPreviousItem) {
+			pPreviousItem->GetSOCData()->UnequipFromClass(unClass);
+		}
+	}
+
+	// Equip the new item and add it to our loadout.
+	CEconItemView *pItem = GetInventoryItemByItemID(ulItemID);
+	if ( pItem )
+	{
+		pItem->GetSOCData()->Equip(unClass, unSlot);
+	}
+
+	m_LoadoutItems[unClass][unSlot] = ulItemID;
+
+#ifdef CLIENT_DLL
+	int activePreset = m_ActivePreset[unClass];
+	m_PresetItems[activePreset][unClass][unSlot] = ulItemID;
+
+	GTFGCClientSystem()->LocalInventoryChanged();
+#endif
+}
+
+void CTFPlayerInventory::UnequipLocal(uint64 ulItemID)
+{
+	for (int iClass = 1; iClass < TF_CLASS_COUNT_ALL; ++iClass)
+	{
+		for (int iSlot = 0; iSlot < CLASS_LOADOUT_POSITION_COUNT; ++iSlot)
+		{
+			if (m_LoadoutItems[iClass][iSlot] == ulItemID) {
+				m_LoadoutItems[iClass][iSlot] = 0;
+			}
+		}
+	}
+}
 
 //-----------------------------------------------------------------------------
 // Purpose: 
@@ -1127,7 +1292,7 @@ void CTFPlayerInventory::SOCreated( const CSteamID & steamIDOwner, const GCSDK::
 	}
  #else
 	// Summer 2015 Operation Pass so players can display the coin
-	//tagES remove this when we have a coin equip slot
+	// remove this when we have a coin equip slot
 	static CSchemaItemDefHandle pItemDef_Summer2015Operation( "Activated Summer 2015 Operation Pass" );
 	if ( pEconItem->GetItemDefinition() == pItemDef_Summer2015Operation )
 	{
@@ -1139,7 +1304,7 @@ void CTFPlayerInventory::SOCreated( const CSteamID & steamIDOwner, const GCSDK::
 	}
 
 	// Invasion Community Update Pass so players can display the coin
-	//tagES remove this when we have a coin equip slot
+	// remove this when we have a coin equip slot
 	static CSchemaItemDefHandle pItemDef_InvasionPass( "Activated Invasion Pass" );
 	if ( pEconItem->GetItemDefinition() == pItemDef_InvasionPass )
 	{
@@ -1151,7 +1316,7 @@ void CTFPlayerInventory::SOCreated( const CSteamID & steamIDOwner, const GCSDK::
 	}
 
 	// Halloween Pass so players can display the coin
-	//tagES remove this when we have a coin equip slot
+	// remove this when we have a coin equip slot
 	static CSchemaItemDefHandle pItemDef_HalloweenPass( "Activated Halloween Pass" );
 	if ( pEconItem->GetItemDefinition() == pItemDef_HalloweenPass )
 	{
@@ -1163,7 +1328,7 @@ void CTFPlayerInventory::SOCreated( const CSteamID & steamIDOwner, const GCSDK::
 	}
 
 	// Winter2016 Pass so players can display the stamp
-	//tagES remove this when we have a coin equip slot
+	// remove this when we have a coin equip slot
 	static CSchemaItemDefHandle pItemDef_Winter2016Pass( "Activated Operation Tough Break Pass" );
 	if ( pEconItem->GetItemDefinition() == pItemDef_Winter2016Pass )
 	{
@@ -1538,7 +1703,6 @@ void CTFPlayerInventory::ItemHasBeenUpdated( CEconItemView *pItem, bool bUpdateA
 	const CEconItem *pEconItem = pItem->GetSOCData();
 
 #ifdef CLIENT_DLL
-	static CSchemaAttributeDefHandle pAttrib_WeaponAllowInspect( "weapon_allow_inspect" );
 	bool bLocalInv = InventoryManager()->GetLocalInventory() == this;
 #endif // CLIENT_DLL
 
@@ -1557,8 +1721,7 @@ void CTFPlayerInventory::ItemHasBeenUpdated( CEconItemView *pItem, bool bUpdateA
 #ifdef CLIENT_DLL
 			// if we can inspect this item, it has unique skin.
 			// draw it once per team to tell the system to generate unique skin
-			float flInspect = 0;
-			if ( bLocalInv && FindAttribute_UnsafeBitwiseCast<attrib_value_t>( pItem, pAttrib_WeaponAllowInspect, &flInspect ) )
+			if ( bLocalInv && GetPaintKitDefIndex( pItem ) )
 			{
 				SkinRequest_t req = { TF_TEAM_RED, pItem->GetItemID(), MDLHANDLE_INVALID };
 				m_vecWeaponSkinRequestList.AddToTail( req );
@@ -1621,6 +1784,9 @@ void CTFPlayerInventory::PostSOUpdate( const CSteamID & steamIDOwner, GCSDK::ESO
 void CTFPlayerInventory::SOCacheSubscribed( const CSteamID & steamIDOwner, GCSDK::ESOCacheEvent eEvent )
 {
 	BaseClass::SOCacheSubscribed( steamIDOwner, eEvent );
+
+	UpdateRealTFLoadoutItems();
+	LoadLocalLoadout();
 
 	VerifyChangedLoadoutsAreValid();
 	UpdateCachedServerLoadoutItems();
@@ -1685,6 +1851,18 @@ void CTFPlayerInventory::VerifyLoadoutItemsAreValid( int iClass )
 //-----------------------------------------------------------------------------
 void CTFPlayerInventory::VerifyChangedLoadoutsAreValid()
 {
+	// We assume that each local client will verify their own inventory, but we don't want my client to verify that
+    // your loadout is valid -- we expect that'll be done either by the server or the GC or, worst case, your local
+    // client.
+    //
+    // A note on this: this change is being made because some malicious users are intentionally equipping invalid sets
+    // of items on bots (and players?) and joining servers. Later on, this code calls InventoryManager() functions to
+    // remove the problematic items, but the inventory manager is a global for the local player. This means that another
+    // played connected with an invalid inventory can cause changes in your inventory because we don't distinguish
+    // self/other state past this point.
+    if ( GetOwner() != steamapicontext->SteamUser()->GetSteamID() )
+        return;
+
 	// We maybe changed equip state for an item and it's possible if we're sending bad messages and/or
 	// hacking state that we'll now have conflicting items equipped. Walk all of our items for this class
 	// to verify our state is good.
@@ -1730,6 +1908,21 @@ CTFPlayerInventory	*CTFInventoryManager::GetLocalTFInventory( void )
 { 
 	return &m_LocalInventory; 
 }
+#endif
+
+#ifdef CLIENT_DLL
+void CTFInventoryManager::UpdateInventoryEquippedState(CPlayerInventory *pInventory, uint64 ulItemID, equipped_class_t unClass, equipped_slot_t unSlot)
+{
+	BaseClass::UpdateInventoryEquippedState(pInventory, ulItemID, unClass, unSlot);
+
+	CTFPlayerInventory* pTFInventory = dynamic_cast<CTFPlayerInventory*>(pInventory);
+	if (pTFInventory) 
+	{
+		pTFInventory->EquipLocal(ulItemID, unClass, unSlot);
+		pTFInventory->SaveLocalLoadout();
+	}
+}
+
 #endif
 
 #ifdef _DEBUG
@@ -1817,3 +2010,114 @@ CON_COMMAND( load_itempreset, "Equip all items for a given preset on the player.
 	}
 }
 #endif	// TF_CLIENT_DLL
+
+#if defined( TF_CLIENT_DLL ) && INVENTORY_VIA_WEBAPI
+CON_COMMAND(save_loadout, "Save local loadout.")
+{
+	CSteamID steamID = steamapicontext->SteamUser()->GetSteamID();
+
+	CTFPlayerInventory* pInventory = TFInventoryManager()->GetInventoryForPlayer(steamID);
+	if (!pInventory)
+		return;
+
+	pInventory->SaveLocalLoadout();
+}
+
+CON_COMMAND(reset_loadout, "Reset local loadout to what is active on TF2.")
+{
+	CSteamID steamID = steamapicontext->SteamUser()->GetSteamID();
+
+	CTFPlayerInventory* pInventory = TFInventoryManager()->GetInventoryForPlayer(steamID);
+	if (!pInventory)
+		return;
+
+	pInventory->SaveLocalLoadout(true, true);
+	pInventory->LoadLocalLoadout();
+}
+
+CON_COMMAND(clear_loadout, "Clear local loadout back to defaults")
+{
+	CSteamID steamID = steamapicontext->SteamUser()->GetSteamID();
+
+	CTFPlayerInventory* pInventory = TFInventoryManager()->GetInventoryForPlayer(steamID);
+	if (!pInventory)
+		return;
+
+	pInventory->SaveLocalLoadout(true, false);
+	pInventory->LoadLocalLoadout();
+}
+
+CON_COMMAND(reset_loadout_ui, "Reset local loadout to what is active on TF2 (show confirmation)")
+{
+	ShowConfirmDialog( "#TF_SDK_ResetLoadout_Title",
+		"#TF_SDK_ResetLoadout_Desc",
+		"#MessageBox_OK",
+		"#cancel", []( bool bConfirmed, void* pContext )
+		{
+			if ( bConfirmed )
+				engine->ClientCmd_Unrestricted( "reset_loadout\n" );
+		});
+}
+
+CON_COMMAND(clear_loadout_ui, "Clear local loadout back to stock defaults (show confirmation)")
+{
+	ShowConfirmDialog( "#TF_SDK_ClearLoadout_Title",
+		"#TF_SDK_ClearLoadout_Desc",
+		"#MessageBox_OK",
+		"#cancel", []( bool bConfirmed, void* pContext )
+		{
+			if ( bConfirmed )
+				engine->ClientCmd_Unrestricted( "clear_loadout\n" );
+		} );
+}
+#endif	// TF_CLIENT_DLL
+
+#if defined( TF_CLIENT_DLL ) && INVENTORY_VIA_WEBAPI
+bool CTFInventoryManager::LoadPreset(equipped_class_t unClass, equipped_preset_t unPreset)
+{
+	if (!IsValidPlayerClass(unClass))
+		return false;
+
+	if (!IsPresetIndexValid(unPreset))
+		return false;
+
+	if (!GetLocalInventory()->GetSOC())
+		return false;
+
+	if (!steamapicontext || !steamapicontext->SteamUser())
+		return false;
+
+	CSteamID localSteamID = steamapicontext->SteamUser()->GetSteamID();
+	CTFPlayerInventory *pInv = GetInventoryForPlayer(localSteamID);
+	if (!pInv)
+		return false;
+
+	if (m_flNextLoadPresetChange > gpGlobals->realtime)
+	{
+		Msg("Loadout change denied. Changing presets too quickly.\n");
+		return false;
+	}
+
+	m_flNextLoadPresetChange = gpGlobals->realtime + 0.5f;
+
+	return pInv->EquipLocalPreset(unClass, unPreset);
+}
+
+bool CTFPlayerInventory::EquipLocalPreset(equipped_class_t unClass, equipped_preset_t unPreset)
+{
+	if (!InventoryManager()->IsPresetIndexValid(unPreset))
+		return false;
+
+	m_ActivePreset[unClass] = unPreset;
+
+	for (int iSlot = 0; iSlot < CLASS_LOADOUT_POSITION_COUNT; ++iSlot)
+	{
+		itemid_t uItemId = m_PresetItems[unPreset][unClass][iSlot];
+		EquipLocal(uItemId, unClass, iSlot);
+	}
+
+	SaveLocalLoadout();
+
+	return true;
+}
+#endif

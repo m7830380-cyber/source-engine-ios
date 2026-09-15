@@ -123,6 +123,8 @@ public:
 	CGameRules(void);
 	virtual ~CGameRules( void );
 
+	virtual void	LevelShutdownPostEntity() OVERRIDE;
+
 	// Damage Queries - these need to be implemented by the various subclasses (single-player, multi-player, etc).
 	// The queries represent queries against damage types and properties.
 	virtual bool	Damage_IsTimeBased( int iDmgType ) = 0;			// Damage types that are time-based.
@@ -201,9 +203,11 @@ public:
 
 	virtual void ModifySentChat( char *pBuf, int iBufSize ) { return; }
 
-	virtual bool ShouldWarnOfAbandonOnQuit() { return false; }
+	virtual bool ShouldConfirmOnDisconnect() { return false; }
 	
 #else
+
+	virtual void Status( void (*print) (const char *fmt, ...) ) {}
 
 	virtual void GetTaggedConVarList( KeyValues *pCvarTagList ) {}
 
@@ -415,6 +419,21 @@ public:
 	virtual void OnFileReceived( const char * fileName, unsigned int transferID ) { return; }
 
 	virtual bool IsHolidayActive( /*EHoliday*/ int eHoliday ) const { return false; }
+
+	virtual bool IsManualMapChangeOkay( const char **pszReason ){ return true; }
+
+	virtual void RegisterScriptFunctions() { }
+
+	virtual void SaveConvar( const ConVarRef & cvar );
+	virtual void RevertSavedConvars();
+	virtual bool HasSavedConvar( const string_t cvarName );
+
+#ifdef GAME_DLL
+	virtual bool IsOfficialMap() { return false; }
+#endif
+
+protected:
+	CUtlVector< string_t > m_SavedConvars;
 
 #ifndef CLIENT_DLL
 private:

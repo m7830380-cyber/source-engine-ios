@@ -84,7 +84,7 @@ void CTFParachute::ParachuteAnimThink( void )
 	if ( !m_hBannerEntity )
 		return;
 
-	bool bInCondition = pPlayer->m_Shared.InCond( TF_COND_PARACHUTE_DEPLOYED );
+	bool bInCondition = pPlayer->m_Shared.InCond( TF_COND_PARACHUTE_ACTIVE );
 	if ( pPlayer->m_Shared.InCond( TF_COND_HALLOWEEN_KART ) )
 	{
 		// Halloween Kart has its own parachute and we don't want to interfer with it here

@@ -9,9 +9,6 @@
 
 using namespace vgui;
 
-#ifdef STAGING_ONLY
-ConVar tf_tips_show_captain_canteen( "tf_tips_show_captain_canteen", 0, FCVAR_NONE, "Show Captain Canteen when displaying tips" );
-#endif
 
 
 const char *g_pszInactiveClassPortraits[] =
@@ -203,17 +200,7 @@ void CMvMWaveLossPanel::ShowPanel()
 		int iClassUsed;
 		m_pHintContainer->SetDialogVariable( "hint1", g_TFTips.GetRandomMvMTip( iClassUsed ) );
 
-#ifdef STAGING_ONLY
-		bool bShowCaptainCanteen = tf_tips_show_captain_canteen.GetBool();
-
-		if ( tf_tips_show_captain_canteen.GetInt() > 1 )
-		{
-			// Force Captain Canteen on to test
-			iClassUsed = TF_LAST_NORMAL_CLASS;
-		}
-#else	
 		bool bShowCaptainCanteen = false;
-#endif
 
 		if ( m_pHintImage1 )
 		{

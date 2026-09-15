@@ -44,6 +44,7 @@ inline static char *CopyString( const char *in )
 	return out;
 }
 
+#pragma pack(1)
 class Matcher
 {
 public:
@@ -541,6 +542,7 @@ struct Rule
 	bool				m_bMatchOnce : 1;
 	bool				m_bEnabled : 1;
 };
+#pragma pack()
 
 //-----------------------------------------------------------------------------
 // Purpose: 
@@ -1455,7 +1457,7 @@ int CResponseSystem::SelectWeightedResponseFromResponseGroup( ResponseGroup *g, 
 	{
 		for ( i = 0; i < fakedDepletes.Count(); i++ )
 		{
-			g->group[ fakedDepletes[ i ] ].depletioncount = 0;;
+			g->group[ fakedDepletes[ i ] ].depletioncount = 0;
 		}
 	}
 

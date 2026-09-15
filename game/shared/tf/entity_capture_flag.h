@@ -415,10 +415,13 @@ private:
 
 	COutputEvent	m_outputOnReturn;	// Fired when the flag is returned via timer.
 	COutputEvent	m_outputOnPickUp;	// Fired when the flag is picked up.
+	COutputEvent	m_outputOnPickUp1;	// Fired with the player as the activator when the flag is picked up.
 	COutputEvent	m_outputOnPickUpTeam1;	// Fired when the flag is picked up by RED.
 	COutputEvent	m_outputOnPickUpTeam2;	// Fired when the flag is picked up by BLU.
 	COutputEvent	m_outputOnDrop;		// Fired when the flag is dropped.
+	COutputEvent	m_outputOnDrop1;	// Fired with the player as the activator when the flag is dropped.
 	COutputEvent	m_outputOnCapture;	// Fired when the flag is captured.
+	COutputEvent	m_outputOnCapture1;	// Fired with the player as the activator when the flag is captured.
 	COutputEvent	m_OnCapTeam1;
 	COutputEvent	m_OnCapTeam2;
 	COutputEvent	m_OnTouchSameTeam;

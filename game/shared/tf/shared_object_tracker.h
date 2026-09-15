@@ -52,7 +52,7 @@ public:
 
 	virtual void		 CommitChangesToDB() = 0;
 	virtual	void		 OnUpdate() = 0;
-	virtual void		 OnRemove() = 0;
+	virtual void		 OnRemove();
 protected:
 
 	const CSharedObject* m_pSObject;

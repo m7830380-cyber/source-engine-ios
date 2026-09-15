@@ -884,7 +884,7 @@ void CPasstimeBall::UpdateLagCompensationHistory()
 	m_flLagCompensationTeleportDistanceSqr = 64*64;
 	
 	// remove tail records that are too old
-	int tailIndex = m_lagCompensationHistory.Tail();
+	intp tailIndex = m_lagCompensationHistory.Tail();
 	int flDeadtime = gpGlobals->curtime - sv_maxunlag.GetFloat();
 	while ( m_lagCompensationHistory.IsValidIndex( tailIndex ) )
 	{
@@ -964,7 +964,7 @@ void CPasstimeBall::StartLagCompensation( CBasePlayer *player, CUserCmd *cmd )
 	Vector org;
 	float flTargetTime = TICKS_TO_TIME( targettick );
 	{
-		int curr = m_lagCompensationHistory.Head();
+		intp curr = m_lagCompensationHistory.Head();
 		LagRecord *prevRecord = 0;
 		LagRecord *record = 0;
 		Vector prevOrg = GetAbsOrigin();

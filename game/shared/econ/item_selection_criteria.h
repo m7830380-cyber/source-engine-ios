@@ -67,7 +67,8 @@ public:
 		  m_unInitialInventory( 0 ),
 		  m_bInitialQuantitySet( false ),
 		  m_unInitialQuantity( 1 ),
-		  m_bIgnoreEnabledFlag( false )
+		  m_bIgnoreEnabledFlag( false ),
+		  m_unEquipRegionMask( 0 )
 	  { 
 	  }
 
@@ -92,6 +93,8 @@ public:
 	  // Tags
 	  void			SetTags( const char *pszTags );
 
+	  // equip regions
+	  void			SetEquipRegions( const char *pszEquipRegions );
 
 	  // Add conditions to the criteria
 	  class ICondition
@@ -281,6 +284,10 @@ private:
 	// A list of tags
 	CUtlString		m_strTags;
 	CUtlVector<econ_tag_handle_t>	m_vecTags;
+
+	// list of equip regions
+	CUtlString		m_strEquipRegions;
+	equip_region_mask_t	m_unEquipRegionMask;			// which equip regions does this item cover directly
 
 	// A list of the conditions
 	CUtlVector<ICondition *>	m_vecConditions;

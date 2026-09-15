@@ -52,8 +52,8 @@ private:
 	C_PasstimeReticle *m_pBallReticle;
 	CUtlVector<C_PasstimeReticle*> m_pGoalReticles;
 	C_PasstimeReticle *m_pPassReticle;
-	CNewParticleEffect *m_apPackBeams[MAX_PLAYERS + 1];
-	bool m_bPlayerIsPackMember[MAX_PLAYERS + 1];
+	CNewParticleEffect *m_apPackBeams[MAX_PLAYERS_ARRAY_SAFE];
+	bool m_bPlayerIsPackMember[MAX_PLAYERS_ARRAY_SAFE];
 
 	CNetworkHandle( C_PasstimeBall, m_hBall );
 	CNetworkArray( Vector, m_trackPoints, 16 );

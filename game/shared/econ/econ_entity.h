@@ -38,6 +38,9 @@ class CEconEntity : public CBaseAnimating, public IHasAttributes
 public:
 	DECLARE_NETWORKCLASS();
 	DECLARE_DATADESC();
+#ifdef GAME_DLL
+	DECLARE_ENT_SCRIPTDESC();
+#endif
 	CEconEntity();
 	~CEconEntity();
 
@@ -141,6 +144,27 @@ public:
 	CBaseEntity					*GetAttributeOwner( void ) { return GetOwnerEntity(); }
 	CAttributeList				*GetAttributeList( void ) { return m_AttributeManager.GetItem()->GetAttributeList(); }
 	virtual void				ReapplyProvision( void );
+	float						ScriptGetAttribute( const char *pName, float flFallbackValue );
+
+	void AddAttribute( const char *pszAttributeName, float flVal, float flDuration )
+	{
+		const CEconItemAttributeDefinition *pDef = GetItemSchema()->GetAttributeDefinitionByName( pszAttributeName );
+		if ( !pDef )
+			return;
+
+		GetAttributeList()->SetRuntimeAttributeValue( pDef, flVal );
+		GetAttributeManager()->OnAttributeValuesChanged();
+	}
+
+	void RemoveAttribute( const char* pszAttribName )
+	{
+		const CEconItemAttributeDefinition *pDef = GetItemSchema()->GetAttributeDefinitionByName( pszAttribName );
+		if ( !pDef )
+			return;
+
+		GetAttributeList()->RemoveAttribute( pDef );
+		GetAttributeManager()->OnAttributeValuesChanged();
+	}
 
 	virtual bool			UpdateBodygroups( CBaseCombatCharacter* pOwner, int iState );
 

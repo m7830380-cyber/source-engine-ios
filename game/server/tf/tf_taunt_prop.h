@@ -26,8 +26,14 @@ public:
 
 	virtual void UpdateOnRemove() OVERRIDE;
 
+	void SetAutoRemove( bool bAutoRemove ) { m_bAutoRemove = bAutoRemove; }
+	bool ShouldSelfRemove() const { return m_bAutoRemove; }
+
+	CBaseEntity *GetSceneEntity() { return m_hScene.Get(); }
+
 private:
 	EHANDLE m_hScene;
+	bool m_bAutoRemove;
 };
 
 #endif // TF_TAUNT_PROP_H

@@ -48,8 +48,6 @@ extern const char *g_pszItemClassImages[];
 extern int g_ClassDefinesRemap[];
 extern ConVar tf_mvm_buybacks_method;
 
-const char *GetMapDisplayName( const char *mapName );
-
 static const wchar_t* GetSCGlyph( const char* action )
 {
 	auto origin = g_pInputSystem->GetSteamControllerActionOrigin( action, GAME_ACTION_SET_SPECTATOR );
@@ -102,6 +100,8 @@ CTFSpectatorGUI::CTFSpectatorGUI(IViewPort *pViewPort) : CSpectatorGUI(pViewPort
 	m_pCycleTargetRevKeyLabel = new Label( this, "CycleTargetRevKeyLabel", "" );
 	m_pMapLabel = new Label( this, "MapLabel", "" );
 	m_pItemPanel = new CItemModelPanel( this, "itempanel" );
+	m_pCycleTargetRevHintIcon = m_pCycleTargetFwdHintIcon = nullptr;
+	m_pClassOrTeamHintIcon = nullptr;
 
 	m_pStudentHealth = new CTFSpectatorGUIHealth( this, "StudentGUIHealth" );
 	m_pAvatar = NULL;
@@ -219,11 +219,13 @@ void CTFSpectatorGUI::ApplySchemeSettings( vgui::IScheme *pScheme )
 	m_pAvatar = dynamic_cast<CAvatarImagePanel *>( FindChildByName("AvatarImage") );
 	if ( ::input->IsSteamControllerActive() )
 	{
-		m_pClassOrTeamKeyLabel = dynamic_cast< CExLabel* >( FindChildByName( "ClassOrTeamKeyLabel" ) );
+		m_pCycleTargetFwdHintIcon = dynamic_cast< CSCHintIcon* >( FindChildByName( "CycleTargetFwdHintIcon", true ) );
+		m_pCycleTargetRevHintIcon = dynamic_cast< CSCHintIcon* >( FindChildByName( "CycleTargetRevHintIcon", true ) );
+		m_pClassOrTeamHintIcon = dynamic_cast<CSCHintIcon*>( FindChildByName( "ClassOrTeamHintIcon", true ) );
 	}
 	else
 	{
-		m_pClassOrTeamKeyLabel = nullptr;
+		m_pClassOrTeamHintIcon = m_pCycleTargetRevHintIcon = m_pCycleTargetFwdHintIcon = nullptr;
 	}
 
 	if ( m_bCoaching )
@@ -495,12 +497,11 @@ void CTFSpectatorGUI::UpdateKeyLabels( void )
 			{
 				static wchar_t wzFinal[512] = L"";
 				const wchar_t *wzTemp = NULL;
-				const wchar_t *wzIcon = nullptr;
+				const char *szAction = nullptr;
 
 				if ( TFGameRules() && TFGameRules()->IsInTraining() )
 				{
 					wzTemp = L"";
-					wzIcon = L"";
 				}
 				else if ( bIsHLTV )
 				{
@@ -511,7 +512,7 @@ void CTFSpectatorGUI::UpdateKeyLabels( void )
 					if ( bSteamController )
 					{
 						wzTemp = g_pVGuiLocalize->Find( "#TF_Spectator_ChangeTeam_NoKey" );
-						wzIcon = GetSCGlyph( "changeteam" );
+						szAction = "changeteam";
 					}
 					else
 					{
@@ -523,7 +524,7 @@ void CTFSpectatorGUI::UpdateKeyLabels( void )
 					if ( bSteamController )
 					{
 						wzTemp = g_pVGuiLocalize->Find( "#TF_Spectator_ChangeClass_NoKey" );
-						wzIcon = GetSCGlyph( "changeclass" );
+						szAction = "changeclass";
 					}
 					else
 					{
@@ -538,16 +539,16 @@ void CTFSpectatorGUI::UpdateKeyLabels( void )
 
 				m_pClassOrTeamLabel->SetText( wzFinal, true );
 
-				if ( m_pClassOrTeamKeyLabel )
+				if ( m_pClassOrTeamHintIcon )
 				{
-					if ( wzIcon && m_pClassOrTeamLabel->IsVisible() )
+					if ( szAction && m_pClassOrTeamLabel->IsVisible() )
 					{
-						m_pClassOrTeamKeyLabel->SetText( wzIcon );
-						m_pClassOrTeamKeyLabel->SetVisible( true );
+						m_pClassOrTeamHintIcon->SetVisible( true );
+						m_pClassOrTeamHintIcon->SetAction( szAction );
 					}
 					else
 					{
-						m_pClassOrTeamKeyLabel->SetVisible( false );
+						m_pClassOrTeamHintIcon->SetVisible( false );
 					}
 				}
 			}
@@ -591,9 +592,11 @@ void CTFSpectatorGUI::UpdateKeyLabels( void )
 				}
 			}
 
+			bool bSuppressCycle = ( pPlayer && pPlayer->GetTeamNumber() > TEAM_SPECTATOR ) && ( mp_fadetoblack.GetBool() || ( mp_forcecamera.GetInt() == OBS_ALLOW_NONE ) );
+
 			if ( m_pCycleTargetFwdKeyLabel )
 			{
-				if ( ( pPlayer && pPlayer->GetTeamNumber() > TEAM_SPECTATOR ) && ( mp_fadetoblack.GetBool() || ( mp_forcecamera.GetInt() == OBS_ALLOW_NONE ) ) )
+				if ( bSuppressCycle )
 				{
 					if ( m_pCycleTargetFwdKeyLabel->IsVisible() )
 					{
@@ -619,23 +622,25 @@ void CTFSpectatorGUI::UpdateKeyLabels( void )
 						}
 					}
 
-					if ( !bSteamController )
-					{
-						wchar_t wLabel[256] = L"";
-						const wchar_t *wzTemp = g_pVGuiLocalize->Find( "#TF_Spectator_CycleTargetFwdKey" );
-						UTIL_ReplaceKeyBindings( wzTemp, 0, wLabel, sizeof( wLabel ) );
-						m_pCycleTargetFwdKeyLabel->SetText( wLabel, true );
-					}
-					else
-					{
-						m_pCycleTargetFwdKeyLabel->SetText( GetSCGlyph( "next_target" ) );
-					}
+					wchar_t wLabel[ 256 ] = L"";
+					const wchar_t *wzTemp = g_pVGuiLocalize->Find( "#TF_Spectator_CycleTargetFwdKey" );
+					UTIL_ReplaceKeyBindings( wzTemp, 0, wLabel, sizeof( wLabel ) );
+					m_pCycleTargetFwdKeyLabel->SetText( wLabel, true );
+				}
+
+				if ( bSteamController )
+				{
+					m_pCycleTargetFwdKeyLabel->SetVisible( false );
 				}
 			}
 
+			if ( m_pCycleTargetFwdHintIcon )
+				m_pCycleTargetFwdHintIcon->SetVisible( bSteamController && !bSuppressCycle );
+
+
 			if ( m_pCycleTargetRevKeyLabel )
 			{
-				if ( ( pPlayer && pPlayer->GetTeamNumber() > TEAM_SPECTATOR ) && ( mp_fadetoblack.GetBool() || ( mp_forcecamera.GetInt() == OBS_ALLOW_NONE ) ) )
+				if ( bSuppressCycle )
 				{
 					if ( m_pCycleTargetRevKeyLabel->IsVisible() )
 					{
@@ -661,19 +666,21 @@ void CTFSpectatorGUI::UpdateKeyLabels( void )
 						}
 					}
 
-					if ( !bSteamController )
-					{
-						wchar_t wLabel[256] = L"";
-						const wchar_t *wzTemp = g_pVGuiLocalize->Find( "#TF_Spectator_CycleTargetRevKey" );
-						UTIL_ReplaceKeyBindings( wzTemp, 0, wLabel, sizeof( wLabel ) );
-						m_pCycleTargetRevKeyLabel->SetText( wLabel, true );
-					}
-					else
-					{
-						m_pCycleTargetRevKeyLabel->SetText( GetSCGlyph( "prev_target" ) );
-					}
+					wchar_t wLabel[ 256 ] = L"";
+					const wchar_t *wzTemp = g_pVGuiLocalize->Find( "#TF_Spectator_CycleTargetRevKey" );
+					UTIL_ReplaceKeyBindings( wzTemp, 0, wLabel, sizeof( wLabel ) );
+					m_pCycleTargetRevKeyLabel->SetText( wLabel, true );
+				}
+
+				if ( bSteamController )
+				{
+					m_pCycleTargetRevKeyLabel->SetVisible( false );
 				}
 			}
+
+			if ( m_pCycleTargetRevHintIcon )
+				m_pCycleTargetRevHintIcon->SetVisible( bSteamController && !bSuppressCycle );
+
 
 			if ( m_pMapLabel )
 			{
@@ -967,7 +974,7 @@ void CTFSpectatorGUI::UpdateItemPanel( bool bForce )
 						m_bShownItems = true;
 					}
 
-					if ( pItemToShow )
+					if ( pItemToShow && !pItemToShow->IsUndefined() )
 					{
 						if ( !m_iFirstItemShown )
 						{
@@ -976,12 +983,14 @@ void CTFSpectatorGUI::UpdateItemPanel( bool bForce )
 
 						Label* pItemLabel = m_pItemPanel->FindControl<Label>( "ItemLabel" );
 
+						CBasePlayer *pOriginalOwner = GetPlayerByAccountID( pItemToShow->GetAccountID() );
+
 						// Change the label text depending on if the original owner is holding the weapon
 						if ( pItemLabel )
 						{
 							CSteamID steamIDOwner;
 							pPlayer->GetSteamID( &steamIDOwner );
-							bool bOriginalOwner = steamIDOwner.GetAccountID() == pItemToShow->GetAccountID();
+							bool bOriginalOwner = !pOriginalOwner || steamIDOwner.GetAccountID() == pItemToShow->GetAccountID();
 							pItemLabel->SetText( bOriginalOwner ? "#FreezePanel_Item" : "#FreezePanel_ItemOtherOwner" );
 						}
 						
@@ -990,7 +999,6 @@ void CTFSpectatorGUI::UpdateItemPanel( bool bForce )
 						m_pItemPanel->SetDialogVariable( "killername", g_TF_PR->GetPlayerName( pPlayer->entindex() ) );
 
 						// Set the item owner's name
-						CBasePlayer *pOriginalOwner = GetPlayerByAccountID( pItemToShow->GetAccountID() );
 						if ( pOriginalOwner )
 						{
 							m_pItemPanel->SetDialogVariable( "ownername", g_TF_PR->GetPlayerName( pOriginalOwner->entindex() ) );

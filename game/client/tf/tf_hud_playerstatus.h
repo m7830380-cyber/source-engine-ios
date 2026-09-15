@@ -83,10 +83,8 @@ private:
 	int					m_nCloakLevel;
 	int					m_nLoadoutPosition;
 	int					m_nKillStreak;
+	int					m_nVisionFilterFlags;
 
-#ifdef STAGING_ONLY
-	int					m_nLOD;
-#endif // STAGING_ONLY
 	
 	bool				m_bUsePlayerModel;
 };
@@ -193,9 +191,11 @@ private:
 	vgui::ImagePanel	*m_pBleedImage;
 	vgui::ImagePanel	*m_pHookBleedImage;
 	vgui::ImagePanel	*m_pMilkImage;
+	vgui::ImagePanel	*m_pGasImage;
 	vgui::ImagePanel	*m_pMarkedForDeathImage;
 	vgui::ImagePanel	*m_pMarkedForDeathImageSilent;
 	vgui::ImagePanel	*m_pWheelOfDoomImage;
+	vgui::ImagePanel	*m_pSlowedImage;
 	CExLabel			*m_pPlayerLevelLabel;
 
 	CUtlVector<CTFBuffInfo*> m_vecBuffInfo;

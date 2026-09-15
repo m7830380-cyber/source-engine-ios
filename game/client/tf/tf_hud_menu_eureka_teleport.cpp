@@ -374,8 +374,6 @@ void CHudEurekaEffectTeleportMenu::SetSelectedItem( eEurekaTeleportTargets eSele
 			y -= XRES(4);
 
 			m_pActiveSelection->SetPos( x, y );
-
-			UpdateHintLabels();			
 		}
 	}
 }
@@ -407,9 +405,4 @@ void CHudEurekaEffectTeleportMenu::OnTick( void )
 	m_pUnavailableTargets[ EUREKA_TELEPORT_TELEPORTER_EXIT ]->SetVisible( !bTeleAvailable );
 }
 
-//-----------------------------------------------------------------------------
-// Purpose: 
-//-----------------------------------------------------------------------------
-void CHudEurekaEffectTeleportMenu::UpdateHintLabels( void )
-{
-}
+//----------------------------------------------------------------------------

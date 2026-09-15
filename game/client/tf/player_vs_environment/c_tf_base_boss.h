@@ -18,6 +18,8 @@ public:
 	// ITFMvMBossProgressUser
 	virtual float GetBossStatusProgress() const OVERRIDE { return m_lastHealthPercentage; }
 
+	virtual Vector GetObserverCamOrigin( void ) { return WorldSpaceCenter(); }
+
 private:
 
 	float m_lastHealthPercentage;

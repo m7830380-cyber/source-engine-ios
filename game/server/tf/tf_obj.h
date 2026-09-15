@@ -184,7 +184,7 @@ public:
 	virtual bool	InputWrenchHit( CTFPlayer *pPlayer, CTFWrench *pWrench, Vector hitLoc );
 	virtual bool	OnWrenchHit( CTFPlayer *pPlayer, CTFWrench *pWrench, Vector hitLoc );
 	virtual bool	CheckUpgradeOnHit( CTFPlayer *pPlayer );
-	virtual bool	Command_Repair( CTFPlayer *pActivator, float flRepairMod );
+	virtual int		Command_Repair( CTFPlayer *pActivator, float flAmount, float flRepairMod, float flRepairToMetalRatio = 3.f, bool bSendEvent = true );
 	virtual void	DoWrenchHitEffect( Vector hitLoc, bool bRepairHit, bool bUpgradeHit );
 
 	virtual bool	ShouldBeMiniBuilding( CTFPlayer* pPlayer );
@@ -269,9 +269,11 @@ public:
 	virtual int		GetBaseHealth( void ) = 0;
 	void			DoQuickBuild( bool bForceMax = false );
 	bool			ShouldQuickBuild( void );
+	float			GetUpgradeDuration( void );
 	void			DoReverseBuild( void );
 	float			GetReversesBuildingConstructionSpeed( void );
 	virtual int		GetMaxUpgradeLevel( void ) { return OBJ_MAX_UPGRADE_LEVEL; }
+	int				GetUpgradeAmountPerHit( void );
 
 	// Carrying
 	virtual void	MakeCarriedObject( CTFPlayer *pCarrier );
@@ -341,6 +343,9 @@ public:
 	virtual int	GetShieldLevel() { return SHIELD_NONE; }
 
 	virtual bool CanBeRepaired() const { return !IsDisposableBuilding(); }
+
+	Vector GetBuildOrigin() { return m_vecBuildOrigin; }
+	Vector GetBuildCenterOfMass() { return m_vecBuildCenterOfMass; }
 protected:
 
 	virtual bool CanBeUpgraded() const { return !( IsDisposableBuilding() || IsMiniBuilding() ); }

@@ -70,43 +70,46 @@ public:
 	int GetPlayerClassWhenKilled( int iIndex ) { return GetArrayValue( iIndex, m_iPlayerClassWhenKilled, TF_CLASS_UNDEFINED ); }
 
 	MM_PlayerConnectionState_t GetPlayerConnectionState( int iIndex ) const;
+
+	float GetConnectTime( int iIndex ) { return ( IsConnected( iIndex ) ? m_flConnectTime[iIndex] : 0.f ); }
 	
 protected:
 	int GetArrayValue( int iIndex, int *pArray, int defaultVal );
 
-	int		m_iTotalScore[MAX_PLAYERS+1];
-	int		m_iMaxHealth[MAX_PLAYERS+1];
+	int		m_iTotalScore[MAX_PLAYERS_ARRAY_SAFE];
+	int		m_iMaxHealth[MAX_PLAYERS_ARRAY_SAFE];
 	// !! This is actually m_iMaxHealthForBuffing, but we can't fix it now because of demos :-/
-	int		m_iMaxBuffedHealth[MAX_PLAYERS+1];
-	int		m_iPlayerClass[MAX_PLAYERS+1];
-	bool	m_bArenaSpectator[MAX_PLAYERS+1];
-	int		m_iActiveDominations[MAX_PLAYERS+1];
+	int		m_iMaxBuffedHealth[MAX_PLAYERS_ARRAY_SAFE];
+	int		m_iPlayerClass[MAX_PLAYERS_ARRAY_SAFE];
+	bool	m_bArenaSpectator[MAX_PLAYERS_ARRAY_SAFE];
+	int		m_iActiveDominations[MAX_PLAYERS_ARRAY_SAFE];
 
 	// These variables are only networked in tournament mode
-	float	m_flNextRespawnTime[MAX_PLAYERS+1];
-	int		m_iChargeLevel[MAX_PLAYERS+1];
+	float	m_flNextRespawnTime[MAX_PLAYERS_ARRAY_SAFE];
+	int		m_iChargeLevel[MAX_PLAYERS_ARRAY_SAFE];
 
 private:
-	int		m_iDamage[MAX_PLAYERS+1];
-	int		m_iDamageAssist[MAX_PLAYERS+1];
-	int		m_iDamageBoss[MAX_PLAYERS+1];
-	int		m_iHealing[MAX_PLAYERS+1];
-	int		m_iHealingAssist[MAX_PLAYERS+1];
-	int		m_iDamageBlocked[MAX_PLAYERS+1];
-	int		m_iCurrencyCollected[MAX_PLAYERS+1];
-	int		m_iBonusPoints[MAX_PLAYERS+1];
-	int		m_iPlayerLevel[MAX_PLAYERS+1];
-	// Pseudo multidimensional array [MAX_PLAYERS + 1][CTFPlayerShared::kTFStreak_COUNT]
-	int		m_iStreaks[(MAX_PLAYERS+1) * CTFPlayerShared::kTFStreak_COUNT];
-	int		m_iUpgradeRefundCredits[MAX_PLAYERS + 1];
-	int		m_iBuybackCredits[MAX_PLAYERS + 1];
+	int		m_iDamage[MAX_PLAYERS_ARRAY_SAFE];
+	int		m_iDamageAssist[MAX_PLAYERS_ARRAY_SAFE];
+	int		m_iDamageBoss[MAX_PLAYERS_ARRAY_SAFE];
+	int		m_iHealing[MAX_PLAYERS_ARRAY_SAFE];
+	int		m_iHealingAssist[MAX_PLAYERS_ARRAY_SAFE];
+	int		m_iDamageBlocked[MAX_PLAYERS_ARRAY_SAFE];
+	int		m_iCurrencyCollected[MAX_PLAYERS_ARRAY_SAFE];
+	int		m_iBonusPoints[MAX_PLAYERS_ARRAY_SAFE];
+	int		m_iPlayerLevel[MAX_PLAYERS_ARRAY_SAFE];
+	// Pseudo multidimensional array [MAX_PLAYERS_ARRAY_SAFE][CTFPlayerShared::kTFStreak_COUNT]
+	int		m_iStreaks[(MAX_PLAYERS_ARRAY_SAFE) * CTFPlayerShared::kTFStreak_COUNT];
+	int		m_iUpgradeRefundCredits[MAX_PLAYERS_ARRAY_SAFE];
+	int		m_iBuybackCredits[MAX_PLAYERS_ARRAY_SAFE];
 
 	int		m_iPartyLeaderBlueTeamIndex;
 	int		m_iPartyLeaderRedTeamIndex;
 	int		m_iEventTeamStatus;
 
-	int		m_iPlayerClassWhenKilled[MAX_PLAYERS+1];
-	MM_PlayerConnectionState_t	m_iConnectionState[MAX_PLAYERS+1];
+	int		m_iPlayerClassWhenKilled[MAX_PLAYERS_ARRAY_SAFE];
+	MM_PlayerConnectionState_t	m_iConnectionState[MAX_PLAYERS_ARRAY_SAFE];
+	float	m_flConnectTime[MAX_PLAYERS_ARRAY_SAFE];
 
 	struct PlayerScoreboardStats_t
 	{
@@ -120,7 +123,7 @@ private:
 		int	m_iPrevBonusPoints;
 	};
 
-	PlayerScoreboardStats_t m_aPlayerScoreStats[MAX_PLAYERS+1];
+	PlayerScoreboardStats_t m_aPlayerScoreStats[MAX_PLAYERS_ARRAY_SAFE];
 };
 
 extern C_TF_PlayerResource *g_TF_PR;

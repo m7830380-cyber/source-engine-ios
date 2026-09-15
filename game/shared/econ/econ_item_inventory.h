@@ -128,6 +128,9 @@ public:
 	void				AddItemHandle( CEconItemViewHandle* pHandle );
 	void				RemoveItemHandle( CEconItemViewHandle* pHandle );
 
+	const CCopyableUtlVector< itemid_t >& GetItemsWithDefindex( item_definition_index_t defindex ) ;
+	const CCopyableUtlVector< itemid_t >& GetItemsWithPaintkitDefindex( uint32 nDefindex );
+
 #ifdef CLIENT_DLL
 	virtual ITexture	*GetWeaponSkinBaseLowRes( itemid_t nItemId, int iTeam ) const { return NULL; }
 #endif
@@ -168,6 +171,9 @@ protected:
 protected:
 	// The Steam Id of the player who owns this inventory
 	CSteamID	m_OwnerID;
+
+	CUtlMap< item_definition_index_t, CCopyableUtlVector< itemid_t > > m_mapItemDefsToItems;
+	CUtlMap< uint32, CCopyableUtlVector< itemid_t > > m_mapPaintkitsToItems;
 
 	// The items the player has in his inventory, received from steam.
 	CUtlSortVector<CEconItemView,CInventoryListLess>		m_aInventoryItems;
@@ -243,7 +249,7 @@ public:
 
 	// Equip all items for the given class and preset (all the work is done on the GC -- this just
 	// sends the message up)
-	bool				LoadPreset( equipped_class_t unClass, equipped_preset_t unPreset );
+	virtual bool		LoadPreset( equipped_class_t unClass, equipped_preset_t unPreset );
 
 	//-----------------------------------------------------------------------
 	// LOCAL INVENTORY
@@ -264,7 +270,7 @@ public:
 	virtual const char *PersonaName_Get( uint32 unAccountID );
 	virtual void		PersonaName_Store( uint32 unAccountID, const char *pPersonaName );
 
-	static void			SendGCConnectedEvent( void );
+	static void			SendItemSystemConnectedEvent( void );
 
 	// Returns the item at the specified backpack position
 	virtual CEconItemView	*GetItemByBackpackPosition( int iBackpackPosition );
@@ -361,7 +367,7 @@ protected:
 
 	friend class CPlayerInventory;
 
-	inline bool			IsValidPlayerClass( equipped_class_t unClass );
+	bool			IsValidPlayerClass( equipped_class_t unClass );
 
 #ifdef CLIENT_DLL
 	// Keep track of the number of items we've tried to discard, but haven't recieved responses on

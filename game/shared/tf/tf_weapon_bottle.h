@@ -1,8 +1,4 @@
 //========= Copyright Valve Corporation, All rights reserved. ============//
-//
-// Purpose: 
-//
-//=============================================================================
 
 #ifndef TF_WEAPON_BOTTLE_H
 #define TF_WEAPON_BOTTLE_H
@@ -13,34 +9,36 @@
 #include "tf_weaponbase_melee.h"
 
 #ifdef CLIENT_DLL
+#define CTFBreakableMelee C_TFBreakableMelee
 #define CTFBottle C_TFBottle
+#define CTFBreakableSign C_TFBreakableSign
 #define CTFStickBomb C_TFStickBomb
 #endif
 
-//=============================================================================
-//
-// Bottle class.
-//
-class CTFBottle : public CTFWeaponBaseMelee
+class CTFBreakableMelee : public CTFWeaponBaseMelee
 {
 public:
 
-	DECLARE_CLASS( CTFBottle, CTFWeaponBaseMelee );
-	DECLARE_NETWORKCLASS(); 
-	DECLARE_PREDICTABLE();
+	DECLARE_CLASS( CTFBreakableMelee, CTFWeaponBaseMelee );
+	DECLARE_NETWORKCLASS_OVERRIDE();
+	DECLARE_PREDICTABLE_OVERRIDE();
 
-	CTFBottle();
-	virtual int			GetWeaponID( void ) const			{ return TF_WEAPON_BOTTLE; }
+	CTFBreakableMelee();
 
-	virtual void		Smack( void );
-	virtual void		WeaponReset( void );
-	virtual bool		DefaultDeploy( char *szViewModel, char *szWeaponModel, int iActivity, char *szAnimExt );
+	virtual void		Smack( void ) OVERRIDE;
+	virtual void		WeaponReset( void ) OVERRIDE;
+	virtual bool		DefaultDeploy( char *szViewModel, char *szWeaponModel, int iActivity, char *szAnimExt ) OVERRIDE;
 
 	virtual void		SwitchBodyGroups( void );
 
-private:
+	virtual bool		UpdateBodygroups( CBaseCombatCharacter* pOwner, int iState ) OVERRIDE;
 
-	CTFBottle( const CTFBottle & ) {}
+	virtual bool		IsBroken( void ) const OVERRIDE { return m_bBroken; }
+	virtual void		SetBroken( bool bBroken ) OVERRIDE;
+
+#ifdef CLIENT_DLL
+	static void RecvProxy_Broken( const CRecvProxyData *pData, void *pStruct, void *pOut );
+#endif
 
 protected:
 
@@ -49,27 +47,57 @@ protected:
 
 //=============================================================================
 //
-// StickBomb class.
+// Bottle class.
 //
-class CTFStickBomb : public CTFBottle
+class CTFBottle : public CTFBreakableMelee
 {
 public:
 
-	DECLARE_CLASS( CTFStickBomb, CTFBottle );
-	DECLARE_NETWORKCLASS(); 
-	DECLARE_PREDICTABLE();
+	DECLARE_CLASS( CTFBottle, CTFBreakableMelee );
+	DECLARE_NETWORKCLASS_OVERRIDE();
+	DECLARE_PREDICTABLE_OVERRIDE();
+
+	virtual int			GetWeaponID( void ) const OVERRIDE { return TF_WEAPON_BOTTLE; }
+};
+
+//=============================================================================
+//
+// Breakable Sign class.
+//
+class CTFBreakableSign : public CTFBreakableMelee
+{
+public:
+
+	DECLARE_CLASS( CTFBreakableSign, CTFBreakableMelee );
+	DECLARE_NETWORKCLASS_OVERRIDE();
+	DECLARE_PREDICTABLE_OVERRIDE();
+
+	virtual int			GetWeaponID( void ) const OVERRIDE { return TF_WEAPON_BREAKABLE_SIGN; }
+};
+
+//=============================================================================
+//
+// StickBomb class.
+//
+class CTFStickBomb : public CTFBreakableMelee
+{
+public:
+
+	DECLARE_CLASS( CTFStickBomb, CTFBreakableMelee );
+	DECLARE_NETWORKCLASS_OVERRIDE();
+	DECLARE_PREDICTABLE_OVERRIDE();
 
 	CTFStickBomb();
 
-	virtual void		Precache( void );
-	virtual int			GetWeaponID( void ) const			{ return TF_WEAPON_STICKBOMB; }
-	virtual void		Smack( void );
-	virtual void		WeaponReset( void );
-	virtual void		WeaponRegenerate( void );
-	virtual void		SwitchBodyGroups( void );
-	virtual const char*	GetWorldModel( void ) const;
+	virtual void		Precache( void ) OVERRIDE;
+	virtual int			GetWeaponID( void ) const OVERRIDE { return TF_WEAPON_STICKBOMB; }
+	virtual void		Smack( void ) OVERRIDE;
+	virtual void		WeaponReset( void ) OVERRIDE;
+	virtual void		WeaponRegenerate( void ) OVERRIDE;
+	virtual void		SwitchBodyGroups( void ) OVERRIDE;
+	virtual const char*	GetWorldModel( void ) const OVERRIDE;
 #ifdef CLIENT_DLL
-	virtual int			GetWorldModelIndex( void );
+	virtual int			GetWorldModelIndex( void ) OVERRIDE;
 #endif
 
 	void				SetDetonated( int iVal ) { m_iDetonated = iVal; }

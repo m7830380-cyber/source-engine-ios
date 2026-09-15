@@ -106,6 +106,11 @@ void CBaseSOTracker::Spew() const
 	m_pSObject->Dump();
 }
 
+void CBaseSOTracker::OnRemove()
+{
+	CommitChangesToDB();
+}
+
 CSOTrackerManager::CSOTrackerManager()
 	: m_mapItemTrackers( DefLessFunc( SOTrackerMap_t::KeyType_t ) )
 	, m_mapUnacknowledgedCommits( DefLessFunc( CommitsMap_t::KeyType_t ) )
@@ -261,8 +266,14 @@ void CSOTrackerManager::SOCacheUnsubscribed( const CSteamID & steamIDOwner, ESOC
 
 void CSOTrackerManager::HandleSOEvent( const CSteamID & steamIDOwner, const CSharedObject *pObject, ETrackerHandling_t eHandling )
 {
-	if ( !ShouldTrackObject( steamIDOwner, pObject ) )
+	if ( pObject->GetTypeID() != GetType() )
 		return;
+
+	// We might not want to track this thing anymore
+	if ( eHandling == TRACKER_CREATE_OR_UPDATE && !ShouldTrackObject( steamIDOwner, pObject ) )
+	{
+		eHandling = TRACKER_REMOVE;
+	}
 
 	UpdateTrackerForItem( pObject, eHandling, steamIDOwner );
 }
@@ -388,7 +399,6 @@ void CSOTrackerManager::RemoveTrackersForSteamID( const CSteamID & steamIDOwner 
 		// Don't care about the itemIDs, just the steamID
 		if ( m_mapItemTrackers[ idx ]->GetOwnerSteamID() == steamIDOwner )
 		{
-			m_mapItemTrackers[ idx ]->CommitChangesToDB();
 			m_mapItemTrackers[ idx ]->OnRemove();
 
 			delete m_mapItemTrackers[ idx ];

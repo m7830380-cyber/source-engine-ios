@@ -253,7 +253,12 @@ void CEconTool_DuckToken::OnClientUseConsumable( CEconItemView *pItem, vgui::Pan
 //-----------------------------------------------------------------------------
 void CEconTool_GrantOperationPass::OnClientUseConsumable( CEconItemView *pItem, vgui::Panel *pParent ) const
 {
-	Assert( !"CEconTool_DuckToken::CEconTool_GrantOperationPass() is unimplemented!" );
+	Assert( !"CEconTool_GrantOperationPass::OnClientUseConsumable() is unimplemented!" );
+}
+//-----------------------------------------------------------------------------
+void CEconTool_KeylessCase::OnClientUseConsumable( CEconItemView *pItem, vgui::Panel *pParent ) const
+{
+	Assert( !"CEconTool_KeylessCase::OnClientUseConsumable() is unimplemented!" );
 }
 //-----------------------------------------------------------------------------
 // Purpose:

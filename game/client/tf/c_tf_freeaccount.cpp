@@ -318,9 +318,6 @@ GC_REG_JOB( GCSDK::CGCClient, CGCFreeTrialConvertedToPremium, "CGCFreeTrialConve
 ConVar tf_forcetrialaccount( "tf_forcetrialaccount", "0", FCVAR_CLIENTDLL | FCVAR_ARCHIVE );
 #endif
 
-#ifdef STAGING_ONLY
-ConVar tf_thank_a_friend_enabled( "tf_thank_a_friend_enabled", "1", FCVAR_CLIENTDLL | FCVAR_ARCHIVE );
-#endif // STAGING_ONLY
 
 bool IsFreeTrialAccount()
 {
@@ -340,9 +337,6 @@ bool IsFreeTrialAccount()
 
 bool NeedsToChooseMostHelpfulFriend()
 {
-#ifdef STAGING_ONLY
-	if ( tf_thank_a_friend_enabled.GetBool() )
-#endif // STAGING_ONLY
 	{
 		if ( InventoryManager() && TFInventoryManager()->GetLocalTFInventory() && TFInventoryManager()->GetLocalTFInventory()->GetSOC() )
 		{

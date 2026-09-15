@@ -21,6 +21,7 @@ class CTFItemPickupPanel : public CItemPickupPanel
 	DECLARE_CLASS_SIMPLE( CTFItemPickupPanel, CItemPickupPanel );
 public:
 	CTFItemPickupPanel( Panel *parent );
+	virtual ~CTFItemPickupPanel();
 
 	virtual void	ApplySchemeSettings( vgui::IScheme *pScheme );
 	virtual void	OnCommand( const char *command );
@@ -41,6 +42,7 @@ class CTFItemDiscardPanel : public CItemDiscardPanel
 	DECLARE_CLASS_SIMPLE( CTFItemDiscardPanel, CItemDiscardPanel );
 public:
 	CTFItemDiscardPanel( Panel *parent );
+	virtual ~CTFItemDiscardPanel();
 
 	virtual void	ApplySchemeSettings( vgui::IScheme *pScheme );
 	virtual void	PerformLayout( void );

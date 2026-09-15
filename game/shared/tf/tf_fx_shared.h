@@ -20,7 +20,7 @@
 void FX_WeaponSound ( int iPlayer, WeaponSound_t soundType, const Vector &vecOrigin, CTFWeaponInfo *pWeaponInfo );
 void StartGroupingSounds( void );
 void EndGroupingSounds( void );
-bool IsFixedWeaponSpreadEnabled( void );
+bool IsFixedWeaponSpreadEnabled( CTFWeaponBase *pWeapon = NULL );
 
 // This runs on both the client and the server.
 // On the server, it only does the damage calculations.

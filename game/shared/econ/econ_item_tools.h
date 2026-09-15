@@ -44,9 +44,6 @@ public:
 	virtual void OnClientUseConsumable( CEconItemView *pItem, vgui::Panel *pParent ) const;
 #endif // CLIENT_DLL
 
-#ifdef GC_DLL
-	virtual class CGCEconConsumableBehavior *CreateGCConsumableBehavior() const;
-#endif // GC_DLL
 };
 
 //---------------------------------------------------------------------------------------
@@ -78,17 +75,14 @@ public:
 	const CEconItemDefinition *GetDeliveredItemDefinition() const { return m_pDeliveredGiftItemDef; }	// can return NULL! (means "don't change definitions on delivery")
 
 #ifdef CLIENT_DLL
-	virtual bool CanBeUsedNow( const IEconItemInterface *pItem ) const;
-	virtual bool ShouldShowContainedItemPanel( const IEconItemInterface *pItem ) const;
-	virtual const char *GetUseCommandLocalizationToken( const IEconItemInterface *pItem, int i = 0 ) const;
-	virtual void OnClientUseConsumable( CEconItemView *pItem, vgui::Panel *pParent ) const;
-	virtual int GetUseCommandCount( const IEconItemInterface *pItem ) const;
-	virtual const char* GetUseCommand( const IEconItemInterface *pItem, int i = 0 ) const;
+	virtual bool CanBeUsedNow( const IEconItemInterface *pItem ) const OVERRIDE;
+	virtual bool ShouldShowContainedItemPanel( const IEconItemInterface *pItem ) const OVERRIDE;
+	virtual const char *GetUseCommandLocalizationToken( const IEconItemInterface *pItem, int i = 0 ) const OVERRIDE;
+	virtual void OnClientUseConsumable( CEconItemView *pItem, vgui::Panel *pParent ) const OVERRIDE;
+	virtual int GetUseCommandCount( const IEconItemInterface *pItem ) const OVERRIDE;
+	virtual const char* GetUseCommand( const IEconItemInterface *pItem, int i = 0 ) const OVERRIDE;
 #endif // CLIENT_DLL
 
-#ifdef GC_DLL
-	virtual class CGCEconConsumableBehavior *CreateGCConsumableBehavior() const;
-#endif // GC_DLL
 
 private:
 	const char *m_pszDeliveredGiftItemDefName;			// points to memory inside our init KV -- only valid between the constructor call and the BFinishInitialization() call (this is messy but Fletcher and I agree it makes more sense than switching to a full two-pass schema parse just for this)
@@ -113,9 +107,6 @@ public:
 	virtual void OnClientUseConsumable( CEconItemView *pItem, vgui::Panel *pParent ) const;
 #endif // CLIENT_DLL
 
-#ifdef GC_DLL
-	virtual class CGCEconConsumableBehavior *CreateGCConsumableBehavior() const;
-#endif // GC_DLL
 };
 
 //---------------------------------------------------------------------------------------
@@ -179,7 +170,7 @@ public:
 	virtual bool CanApplyTo( const IEconItemInterface *pTool, const IEconItemInterface *pToolSubject ) const;
 
 #ifdef CLIENT_DLL
-	virtual bool ShouldDisplayAsUseableOnItemsInArmory() const { return false; }
+	virtual bool ShouldDisplayAsUseableOnItemsInArmory() const OVERRIDE { return false; }
 
 	virtual void OnClientApplyTool( CEconItemView *pTool, CEconItemView *pSubject, vgui::Panel *pParent ) const;
 #endif // CLIENT_DLL
@@ -200,7 +191,7 @@ public:
 	virtual bool CanApplyTo( const IEconItemInterface *pTool, const IEconItemInterface *pToolSubject ) const;
 	virtual bool BFinishInitialization() OVERRIDE;
 #ifdef CLIENT_DLL
-	virtual bool ShouldDisplayAsUseableOnItemsInArmory() const { return false; }
+	virtual bool ShouldDisplayAsUseableOnItemsInArmory() const OVERRIDE { return false; }
 
 	virtual void OnClientApplyTool( CEconItemView *pTool, CEconItemView *pSubject, vgui::Panel *pParent ) const;
 #endif // CLIENT_DLL
@@ -256,14 +247,11 @@ public:
 	virtual bool BFinishInitialization() OVERRIDE;
 
 #ifdef CLIENT_DLL
-	virtual bool ShouldDisplayAsUseableOnItemsInArmory() const { return false; }
+	virtual bool ShouldDisplayAsUseableOnItemsInArmory() const OVERRIDE { return false; }
 #endif // CLIENT_DLL
 
 
 	virtual bool BInitFromKV( KeyValues *pKVDefinition, CUtlVector<CUtlString> *pVecErrors );
-#ifdef GC_DLL
-	virtual bool BGenerateDynamicAttributes( CEconItem* pItem, const CEconGameAccount *pGameAccount ) const OVERRIDE;
-#endif
 
 	class CBaseRecipeComponent
 	{
@@ -298,17 +286,7 @@ public:
 		bool GetIsOutput() const { return m_bIsOutput; }
 		void GetIsGuaranteed( int &nFlags ) const;
 		const CUtlVector< CountChance_t >& GetRollChances() const { return m_vecCountChances; }
-#ifdef GC_DLL
-		bool RollChanceOfApplying() const;
-		float GetRollChance() const { return m_flChanceOfApplying; }
-		int RollCount() const;
-		virtual bool AddRecipeComponentAsAttribute( CEconItem *pItem, const CEconGameAccount *pGameAccount ) const = 0;
-#endif
 	protected: 
-#ifdef GC_DLL
-		virtual const char* GetAttributeName() const { return "recipe component defined item"; }
-		static CEconItemAttributeDefinition* GetNextAvailableAttributeWithBaseName( const char* pszBaseAttribName, ComponentAttribVector_t *pAttribVec );
-#endif
 		const CBaseRecipeComponent* m_pParent;
 		CUtlVector< CBaseRecipeComponent* > m_vecAdditionalComponents;
 		float m_flChanceOfApplying;
@@ -346,9 +324,6 @@ public:
 		CDynamicRecipeComponentDefinedItem( bool bIsOutput, const CBaseRecipeComponent* pParent );
 		virtual ~CDynamicRecipeComponentDefinedItem();
 		virtual bool BFinishInitialization_Internal( CUtlVector<CUtlString>* pVecErrors, ComponentAttribVector_t* attribVec ) OVERRIDE;
-#ifdef GC_DLL
-		virtual bool AddRecipeComponentAsAttribute( CEconItem *pItem, const CEconGameAccount *pGameAccount ) const OVERRIDE;
-#endif
 	protected:
 
 		virtual bool ParseKV( KeyValues *pKV, CUtlVector<CUtlString> *pVecErrors ) OVERRIDE;
@@ -371,15 +346,6 @@ public:
 		virtual bool ParseKV( KeyValues *pKV, CUtlVector<CUtlString> *pVecErrors ) OVERRIDE;
 	
 	private:
-#ifdef GC_DLL
-		virtual bool AddRecipeComponentAsAttribute( CEconItem *pItem, const CEconGameAccount *pGameAccount ) const OVERRIDE;
-		bool RollLootlistItemAndAttributes( CUtlVector< StringEncodedAttribute_t >& vecAdditionalAttributes
-										  , const char** pszDefName
-										  , const CUtlVector< item_definition_index_t > *pVecAvoidItemDefs
-										  , const CEconGameAccount *pGameAccount ) const;
-
-		EItemDefUniqueness_t m_eUniqueness;
-#endif
 	};
 
 	class CRecipeComponentInputDefIndexIterator : public CEconItemSpecificAttributeIterator
@@ -438,6 +404,7 @@ public:
 	CEconTool_Xifier( const char *pszTypeName, const char *pszUseString, item_capabilities_t unCapabilities, KeyValues *pUsageKV )
 		: IEconTool( pszTypeName, pszUseString, NULL, unCapabilities ) 
 		, m_RequiredTags( pUsageKV ? pUsageKV->FindKey( "required_tags" ) : NULL )
+		, m_ItemRarityRestriction( k_unItemRarity_Any )
 	{
 		if ( pUsageKV )
 		{
@@ -460,14 +427,15 @@ public:
 
 	const char *GetItemDescToolTargetLocToken() const { return m_sItemDescLocToken.String(); }
 
-#ifdef GC
-	virtual CEconItem *GenerateNewItem( const IEconItemInterface *pTool, const CEconItem *pTarget ) const = 0;
-#endif
 
 #ifdef CLIENT_DLL
-	virtual bool ShouldDisplayAsUseableOnItemsInArmory() const { return false; }
+	virtual bool ShouldDisplayAsUseableOnItemsInArmory() const OVERRIDE { return false; }
 	virtual void OnClientUseConsumable( CEconItemView *pItem, vgui::Panel *pParent ) const;
 #endif // CLIENT_DLL
+
+protected:
+
+	uint8 GetRarityRestriction() const { return m_ItemRarityRestriction; }
 
 private:
 	bool ItemDefMatch( const CEconItemDefinition* pTargetItemDef, const CEconItemDefinition* pSubjectItemDef ) const;
@@ -475,7 +443,6 @@ private:
 	CUtlString m_sItemDescLocToken;
 	CEconTool_TagsList m_RequiredTags;
 	CUtlVector<item_definition_index_t> m_ItemDefTargetRestrictions;
-
 	uint8 m_ItemRarityRestriction;
 };
 
@@ -487,9 +454,6 @@ public:
 
 	virtual bool CanApplyTo( const IEconItemInterface *pTool, const IEconItemInterface *pToolSubject ) const;
 
-#ifdef GC
-	virtual CEconItem *GenerateNewItem( const IEconItemInterface *pTool, const CEconItem *pTarget ) const;
-#endif
 
 #ifdef CLIENT_DLL
 	virtual void OnClientApplyTool( CEconItemView *pTool, CEconItemView *pSubject, vgui::Panel *pParent ) const;
@@ -505,9 +469,6 @@ public:
 
 	virtual bool CanApplyTo( const IEconItemInterface *pTool, const IEconItemInterface *pToolSubject ) const;
 
-#ifdef GC
-	virtual CEconItem *GenerateNewItem( const IEconItemInterface *pTool, const CEconItem *pTarget ) const;
-#endif
 
 #ifdef CLIENT_DLL
 	virtual void OnClientApplyTool( CEconItemView *pTool, CEconItemView *pSubject, vgui::Panel *pParent ) const;
@@ -524,9 +485,6 @@ public:
 
 	virtual bool CanApplyTo( const IEconItemInterface *pTool, const IEconItemInterface *pToolSubject ) const;
 
-#ifdef GC
-	virtual CEconItem *GenerateNewItem( const IEconItemInterface *pTool, const CEconItem *pTarget ) const;
-#endif
 
 #ifdef CLIENT_DLL
 	virtual void OnClientApplyTool( CEconItemView *pTool, CEconItemView *pSubject, vgui::Panel *pParent ) const;
@@ -542,9 +500,6 @@ public:
 
 	virtual bool CanApplyTo( const IEconItemInterface *pTool, const IEconItemInterface *pToolSubject ) const;
 
-#ifdef GC
-	virtual CEconItem *GenerateNewItem( const IEconItemInterface *pTool, const CEconItem *pTarget ) const;
-#endif
 
 #ifdef CLIENT_DLL
 	virtual void OnClientApplyTool( CEconItemView *pTool, CEconItemView *pSubject, vgui::Panel *pParent ) const;
@@ -581,14 +536,11 @@ public:
 	virtual bool CanApplyTo( const IEconItemInterface *pTool, const IEconItemInterface *pToolSubject ) const;
 
 #ifdef CLIENT_DLL
-	virtual bool ShouldDisplayAsUseableOnItemsInArmory() const { return false; }
+	virtual bool ShouldDisplayAsUseableOnItemsInArmory() const OVERRIDE { return false; }
 	virtual void OnClientUseConsumable( CEconItemView *pItem, vgui::Panel *pParent ) const;
 	virtual void OnClientApplyTool( CEconItemView *pTool, CEconItemView *pSubject, vgui::Panel *pParent ) const;
 #endif // CLIENT_DLL
 
-#ifdef GC_DLL
-	virtual class CGCEconConsumableBehavior *CreateGCConsumableBehavior() const;
-#endif // GC_DLL
 
 private:
 	CEconTool_TagsList m_RequiredTags;
@@ -666,12 +618,12 @@ public:
 
 	const UpgradeCardAttributeVec_t& GetAttributes() const { return m_vecAttributes; }
 
-	virtual bool CanApplyTo( const IEconItemInterface *pTool, const IEconItemInterface *pToolSubject ) const;
+	virtual bool CanApplyTo( const IEconItemInterface *pTool, const IEconItemInterface *pToolSubject ) const OVERRIDE;
 
 #ifdef CLIENT_DLL
-	virtual bool ShouldDisplayAsUseableOnItemsInArmory() const { return false; }
+	virtual bool ShouldDisplayAsUseableOnItemsInArmory() const OVERRIDE { return false; }
 
-	virtual void OnClientApplyTool( CEconItemView *pTool, CEconItemView *pSubject, vgui::Panel *pParent ) const;
+	virtual void OnClientApplyTool( CEconItemView *pTool, CEconItemView *pSubject, vgui::Panel *pParent ) const OVERRIDE;
 #endif // CLIENT_DLL
  
 private:
@@ -710,7 +662,7 @@ public:
 	virtual bool CanApplyTo( const IEconItemInterface *pTool, const IEconItemInterface *pToolSubject ) const;
 
 #ifdef CLIENT_DLL
-	virtual bool ShouldDisplayAsUseableOnItemsInArmory() const { return false; }
+	virtual bool ShouldDisplayAsUseableOnItemsInArmory() const OVERRIDE { return false; }
 
 	virtual void OnClientApplyTool( CEconItemView *pTool, CEconItemView *pSubject, vgui::Panel *pParent ) const;
 #endif // CLIENT_DLL
@@ -745,12 +697,9 @@ public:
 	int GetBackpackSlots() const { return m_iBackpackSlots; }
 
 #ifdef CLIENT_DLL
-	virtual void OnClientUseConsumable( CEconItemView *pItem, vgui::Panel *pParent ) const;
+	virtual void OnClientUseConsumable( CEconItemView *pItem, vgui::Panel *pParent ) const OVERRIDE;
 #endif // CLIENT_DLL
 
-#ifdef GC_DLL
-	virtual class CGCEconConsumableBehavior *CreateGCConsumableBehavior() const;
-#endif // GC_DLL
 
 private:
 	int m_iBackpackSlots;
@@ -768,9 +717,6 @@ public:
 	virtual void OnClientUseConsumable( CEconItemView *pItem, vgui::Panel *pParent ) const;
 #endif // CLIENT_DLL
 
-#ifdef GC_DLL
-	virtual class CGCEconConsumableBehavior *CreateGCConsumableBehavior() const;
-#endif // GC_DLL
 };
 
 //---------------------------------------------------------------------------------------
@@ -786,9 +732,6 @@ public:
 	virtual void OnClientApplyTool( CEconItemView *pTool, CEconItemView *pSubject, vgui::Panel *pParent ) const;
 #endif // CLIENT_DLL
 
-#ifdef GC_DLL
-	//virtual class CGCEconConsumableBehavior *CreateGCConsumableBehavior() const;
-#endif // GC_DLL
 };
 
 //---------------------------------------------------------------------------------------
@@ -811,9 +754,6 @@ public:
 	virtual void OnClientUseConsumable( CEconItemView *pItem, vgui::Panel *pParent ) const;
 #endif // CLIENT_DLL
 
-#ifdef GC_DLL
-	virtual class CGCEconConsumableBehavior *CreateGCConsumableBehavior() const;
-#endif // GC_DLL
 	
 	const char *m_pOperationPassName;
 	const char *m_pOptionalBonusLootList;
@@ -847,9 +787,6 @@ public:
 	virtual void OnClientUseConsumable( CEconItemView *pItem, vgui::Panel *pParent ) const;
 #endif // CLIENT_DLL
 
-#ifdef GC_DLL
-	virtual class CGCEconConsumableBehavior *CreateGCConsumableBehavior() const;
-#endif // GC_DLL
 
 private:
 	const char *m_pszClaimType;
@@ -899,9 +836,6 @@ public:
 	virtual void OnClientUseConsumable( CEconItemView *pItem, vgui::Panel *pParent ) const;
 #endif // CLIENT_DLL
 
-#ifdef GC_DLL
-	virtual class CGCEconConsumableBehavior *CreateGCConsumableBehavior() const;
-#endif // GC_DLL
 
 private:
 	const char *m_pszLootListName;
@@ -997,6 +931,33 @@ public:
 	virtual void OnClientApplyTool( CEconItemView *pTool, CEconItemView *pSubject, vgui::Panel *pParent ) const;
 #endif // CLIENT_DLL
 };
+
+//---------------------------------------------------------------------------------------
+// Purpose:
+//---------------------------------------------------------------------------------------
+class CEconTool_KeylessCase : public IEconTool
+{
+public:
+	CEconTool_KeylessCase( const char *pszTypeName, const char *pszUseString ) : IEconTool( pszTypeName, pszUseString, NULL, ITEM_CAP_NONE ) { }
+
+#ifdef CLIENT_DLL
+	virtual void OnClientUseConsumable( CEconItemView *pItem, vgui::Panel *pParent ) const;
+#endif // CLIENT_DLL
+};
+
+//---------------------------------------------------------------------------------------
+class CEconTool_PaintKit : public IEconTool
+{
+public:
+	CEconTool_PaintKit( const char *pszTypeName, const char *pszUseString, item_capabilities_t unCapabilities )
+		: IEconTool( pszTypeName, pszUseString, NULL, unCapabilities ) {}
+
+#ifdef CLIENT_DLL
+	virtual void OnClientUseConsumable( class C_EconItemView *pItem, vgui::Panel *pParent ) const OVERRIDE;
+	virtual bool ShouldDisplayAsUseableOnItemsInArmory() const OVERRIDE { return false; }
+#endif // CLIENT_DLL
+};
+
 
 //---------------------------------------------------------------------------------------
 // Purpose:

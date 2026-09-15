@@ -951,6 +951,20 @@ void CTeamControlPointMaster::FireRoundEndOutput( void )
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
+const CTeamControlPointRound* CTeamControlPointMaster::GetRoundByIndex( int nIndex ) const
+{
+	if ( nIndex < 0 || nIndex >= m_ControlPointRounds.Count() )
+	{
+		Assert( false );
+		return 0;
+	}
+
+	return m_ControlPointRounds[ nIndex ];
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 float CTeamControlPointMaster::PointLastContestedAt( int point )
 {
 	CTeamControlPoint *pPoint = GetControlPoint(point);
@@ -1056,65 +1070,44 @@ bool CTeamControlPointMaster::IsBaseControlPoint( int iPointIndex )
 int	CTeamControlPointMaster::GetBaseControlPoint( int iTeam )
 {
 	int iRetVal = -1;
-	int nLowestValue = 999, nHighestValue = -1;
-	int iLowestIndex = 0, iHighestIndex = 0;
+	int nLowestValue = 999;
+	int nHighestValue = -1;
+	CTeamControlPoint *pLowestPoint = NULL;
+	CTeamControlPoint *pHighestPoint = NULL;
 
-	for( int i = 0 ; i < (int)m_ControlPoints.Count() ; i++ )
+	for( unsigned int i = 0 ; i < m_ControlPoints.Count() ; i++ )
 	{
 		CTeamControlPoint *pPoint = m_ControlPoints[i];
 
-		int iPointIndex = m_ControlPoints[i]->GetPointIndex();
-
-		if ( PlayingMiniRounds() && iTeam > LAST_SHARED_TEAM )
+		if ( !PlayingMiniRounds() || ( IsInRound( pPoint ) && ( iTeam > LAST_SHARED_TEAM ) ) )
 		{
-			if ( IsInRound( pPoint ) ) // is this point in the current round?
-			{
-				if ( iPointIndex > nHighestValue )
-				{
-					nHighestValue = iPointIndex;
-					iHighestIndex = i;
-				}
+			int nTempValue = pPoint->GetPointIndex();
 
-				if ( iPointIndex < nLowestValue )
-				{
-					nLowestValue = iPointIndex;
-					iLowestIndex = i;
-				}
-			}
-		}
-		else
-		{
-			if ( pPoint->GetDefaultOwner() != iTeam )
+			if ( nTempValue > nHighestValue )
 			{
-				continue;
+				nHighestValue = nTempValue;
+				pHighestPoint = pPoint;
 			}
 
-			// If it's the first or the last point, it's their base
-			if ( iPointIndex == 0 || iPointIndex == (((int)m_ControlPoints.Count())-1) )
+			if ( nTempValue < nLowestValue )
 			{
-				iRetVal = iPointIndex;
-				break;
+				nLowestValue = nTempValue;
+				pLowestPoint = pPoint;
 			}
 		}
 	}
 
-	if ( PlayingMiniRounds() && iTeam > LAST_SHARED_TEAM )
+	if ( pLowestPoint && pHighestPoint )
 	{
-		if ( nLowestValue != 999 && nHighestValue != -1 )
+		// which point is owned by this team?
+		if ( ( pLowestPoint->GetDefaultOwner() == iTeam && pHighestPoint->GetDefaultOwner() == iTeam ) || // if the same team owns both, take the highest value to be the last point
+				( pHighestPoint->GetDefaultOwner() == iTeam ) )
 		{
-			CTeamControlPoint *pLowestPoint = m_ControlPoints[iLowestIndex];
-			CTeamControlPoint *pHighestPoint = m_ControlPoints[iHighestIndex];
-
-			// which point is owned by this team?
-			if ( ( pLowestPoint->GetDefaultOwner() == iTeam && pHighestPoint->GetDefaultOwner() == iTeam ) || // if the same team owns both, take the highest value to be the last point
-				 ( pHighestPoint->GetDefaultOwner() == iTeam ) )
-			{
-				iRetVal = nHighestValue;
-			}
-			else if ( pLowestPoint->GetDefaultOwner() == iTeam )
-			{
-				iRetVal = nLowestValue;
-			}
+			iRetVal = nHighestValue;
+		}
+		else if ( pLowestPoint->GetDefaultOwner() == iTeam )
+		{
+			iRetVal = nLowestValue;
 		}
 	}
 	
@@ -1163,6 +1156,9 @@ int CTeamControlPointMaster::GetNumPointsOwnedByTeam( int iTeam )
 //-----------------------------------------------------------------------------	
 int CTeamControlPointMaster::CalcNumRoundsRemaining( int iTeam )
 {
+	if ( m_ControlPointRounds.IsEmpty() )
+		return 0;
+
 	// To determine how many rounds remain for a given team if it consistently wins mini-rounds, we have to 
 	// simulate forward each mini-round and track the control point ownership that would result
 
@@ -1267,9 +1263,6 @@ float CTeamControlPointMaster::GetPartialCapturePointRate( void )
 	return m_flPartialCapturePointsRate;
 }
 
-/*
-//-----------------------------------------------------------------------------
-// Purpose: 
 //-----------------------------------------------------------------------------
 void CTeamControlPointMaster::ListRounds( void )
 {
@@ -1295,10 +1288,11 @@ void CTeamControlPointMaster::ListRounds( void )
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: 
-//-----------------------------------------------------------------------------	
 void cc_ListRounds( void )
 {
+	if ( !UTIL_IsCommandIssuedByServerAdmin() )
+		{ return; }
+
 	CTeamControlPointMaster *pMaster = g_hControlPointMasters.Count() ? g_hControlPointMasters[0] : NULL;
 	if ( pMaster )
 	{
@@ -1306,13 +1300,14 @@ void cc_ListRounds( void )
 	}
 }
 
-static ConCommand listrounds( "listrounds", cc_ListRounds, "List the rounds for the current map", FCVAR_CHEAT );
+static ConCommand tf_listrounds( "tf_listrounds", cc_ListRounds, "List the rounds for the current map", FCVAR_CHEAT );
 
 //-----------------------------------------------------------------------------
-// Purpose: 
-//-----------------------------------------------------------------------------	
 void cc_PlayRound( const CCommand& args )
 {
+	if ( !UTIL_IsCommandIssuedByServerAdmin() )
+		{ return; }
+
 	if ( args.ArgC() > 1 )
 	{
 		CTeamplayRoundBasedRules *pRules = dynamic_cast<CTeamplayRoundBasedRules*>( GameRules() );
@@ -1339,9 +1334,8 @@ void cc_PlayRound( const CCommand& args )
 	}
 	else
 	{
-		ConMsg( "Usage:  playround < round name >\n" );
+		ConMsg( "Usage:  tf_playround < round name >\n" );
 	}
 }
 
-static ConCommand playround( "playround", cc_PlayRound, "Play the selected round\n\tArgument: {round name given by \"listrounds\" command}", FCVAR_CHEAT );
-*/
+static ConCommand tf_playround( "tf_playround", cc_PlayRound, "Play the selected round\n\tArgument: {round name given by \"tf_listrounds\" command}", FCVAR_CHEAT );

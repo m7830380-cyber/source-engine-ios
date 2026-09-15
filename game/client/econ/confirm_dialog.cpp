@@ -19,16 +19,17 @@
 #include "store/store_panel.h"
 #ifdef TF_CLIENT_DLL
 #include "tf_playerpanel.h"
+#include "item_ad_panel.h"
 #endif // TF_CLIENT_DLL
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include <tier0/memdbgon.h>
 
-static const wchar_t* GetSCGlyph( const char* action )
+/*static const wchar_t* GetSCGlyph( const char* action )
 {
 	auto origin = g_pInputSystem->GetSteamControllerActionOrigin( action, GAME_ACTION_SET_FPSCONTROLS );
 	return g_pInputSystem->GetSteamControllerFontCharacterForActionOrigin( origin );
-}
+}*/
 
 //-----------------------------------------------------------------------------
 // Purpose: 
@@ -59,21 +60,40 @@ void CConfirmDialog::ApplySchemeSettings( vgui::IScheme *pScheme )
 
 	SetDialogVariable( "text", GetText() );
 
+	auto confirmHint = dynamic_cast<CSCHintIcon*>( FindChildByName( "ConfirmButtonHintIcon", true ) );
+	auto cancelHint = dynamic_cast<CSCHintIcon*>( FindChildByName( "CancelButtonHintIcon", true ) );
+
+	if ( confirmHint )
+		confirmHint->SetVisible( ::input->IsSteamControllerActive() );
+	if ( cancelHint )
+		cancelHint->SetVisible( ::input->IsSteamControllerActive() );
+
 	if ( ::input->IsSteamControllerActive() )
 	{
-		auto iconConfirm = GetSCGlyph( "cl_trigger_first_notification" );
-		auto iconCancel = GetSCGlyph( "cl_decline_first_notification" );
-		auto confirmHint = dynamic_cast< CExLabel* >( FindChildByName( "ConfirmButtonHintIcon" ) );
-		auto cancelHint = dynamic_cast< CExLabel* >( FindChildByName( "CancelButtonHintIcon" ) );
 		if ( confirmHint )
 		{
-			confirmHint->SetText( iconConfirm );
+			confirmHint->SetAction( GetConfirmActionName(), GetActionSet() );
 		}
 
 		if ( cancelHint )
 		{
-			cancelHint->SetText( iconCancel );
+			confirmHint->SetAction( GetCancelActionName(), GetActionSet() );
 		}
+	}
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+void CConfirmDialog::PerformLayout()
+{
+	BaseClass::PerformLayout();
+
+	Label* pBody = FindControl< Label >( "ExplanationLabel" );
+	if ( pBody )
+	{
+		pBody->SizeToContents();
+		SetTall( pBody->GetYPos() + pBody->GetTall() + m_pConfirmButton->GetTall() + YRES(15) + YRES( 15 ) );
 	}
 }
 
@@ -94,17 +114,7 @@ void CConfirmDialog::Show( bool bMakePopup )
 
 	if ( ::input->IsSteamControllerActive() )
 	{
-		auto iconConfirm = GetSCGlyph( "vote_option1" );
-		auto iconCancel = GetSCGlyph( "vote_option2" );
-		bool bControllerMapped = iconConfirm[0] && iconCancel[0];
-		if ( bControllerMapped )
-		{
-			SetMouseInputEnabled( false );
-		}
-		else
-		{
-			SetMouseInputEnabled( true );
-		}
+		SetMouseInputEnabled( false );
 	}
 	else
 	{
@@ -219,6 +229,9 @@ void CConfirmDialog::FinishUp()
 void CConfirmDialog::OnSizeChanged( int nNewWide, int nNewTall )
 {
 	int nX, nY;
+
+	m_pConfirmButton = dynamic_cast< CExButton* >( FindChildByName( "ConfirmButton" ) );
+	m_pCancelButton = dynamic_cast< CExButton* >( FindChildByName( "CancelButton" ) );
 
 	// Shift buttons up
 	if ( m_pCancelButton )
@@ -338,6 +351,8 @@ void CTFGenericConfirmDialog::ApplySchemeSettings( vgui::IScheme *pScheme )
 //-----------------------------------------------------------------------------
 void CTFGenericConfirmDialog::PerformLayout()
 {
+	BaseClass::PerformLayout();
+
 	// Center it, keeping requested size
 	int x, y, ww, wt, wide, tall;
 	vgui::surface()->GetWorkspaceBounds( x, y, ww, wt );
@@ -479,7 +494,7 @@ const char *CTFGenericConfirmOptOutDialog::GetResFile()
 //-----------------------------------------------------------------------------
 void CTFGenericConfirmOptOutDialog::OnButtonChecked( KeyValues *pData )
 {
-	ConVarRef var( m_optOutConVarName );
+	UIConVarRef var( g_pVGui->GetVGUIEngine(), m_optOutConVarName );
 	if ( !var.IsValid() )
 		return;
 
@@ -780,7 +795,6 @@ CTFReviveDialog::CTFReviveDialog( const char *pTitle, const char *pText, const c
 	m_pTargetHealth->HideHealthBonusImage();
 	
 	vgui::ivgui()->AddTickSignal( GetVPanel(), 50 );
-	OnTick();
 }
 
 //-----------------------------------------------------------------------------
@@ -798,12 +812,15 @@ void CTFReviveDialog::OnTick()
 {
 	BaseClass::OnTick();
 
-	if ( !m_pTargetHealth )
+	if (!m_hEntity)
+	{
+		FinishUp();
 		return;
+	}
 
-	if ( !m_hEntity )
+	if (!m_pTargetHealth)
 		return;
-
+	
 	float flHealth = m_hEntity->GetHealth();
 	if ( flHealth != m_flPrevHealth )
 	{
@@ -856,6 +873,9 @@ CEconRequirementDialog::CEconRequirementDialog( const char *pTitle, const char *
 	: CTFGenericConfirmDialog( pTitle, pTextKey, NULL, NULL, NULL, NULL )
 	, m_hItemDef( pItemDefName )
 {
+	m_pItemAd = new CCyclingAdContainerPanel( this, "CyclingAd" );
+
+	
 }
 
 //-----------------------------------------------------------------------------
@@ -873,32 +893,21 @@ void CEconRequirementDialog::ApplySchemeSettings( vgui::IScheme *pScheme )
 {
 	BaseClass::ApplySchemeSettings( pScheme );
 
-	vgui::ImagePanel *pItemImagePanel = dynamic_cast<vgui::ImagePanel *>( FindChildByName( "ItemImagePanel", true ) ); Assert( pItemImagePanel );
-	Assert( pItemImagePanel );
-	if ( pItemImagePanel && m_hItemDef )
-	{
-		pItemImagePanel->SetImage( CFmtStr( "../%s_large", m_hItemDef->GetInventoryImage() ) );
-	}
+	KeyValuesAD pKVItemAd( "items" ); // The panel will copy these
+	KeyValues* pKVItem = pKVItemAd->CreateNewKey();
+	pKVItem->SetName( "0" );
+	pKVItem->SetString( "item", m_hItemDef->GetItemDefinitionName() );
+	pKVItem->SetBool( "show_market", false );
+	m_pItemAd->BSetItemKVs( pKVItemAd );
+
+	m_pItemAd->InvalidateLayout( true, true );
 }
 
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-void CEconRequirementDialog::OnCommand( const char *command )
-{
-	if ( m_hItemDef && !Q_stricmp( command, "show_in_store" ) )
-	{
-		FinishUp();
-
-		// Open the store, and show the upgrade advice
-		EconUI()->CloseEconUI();
-		EconUI()->OpenStorePanel( m_hItemDef->GetDefinitionIndex(), false );
-	}
-	else
-	{
-		BaseClass::OnCommand( command );
-	}
-}
+void CEconRequirementDialog::PerformLayout()
+{}
 
 //-----------------------------------------------------------------------------
 // Purpose: 
@@ -927,6 +936,5 @@ const char* CTFMessageBoxDialog::GetResFile()
 		return "Resource/UI/econ/MessageBoxDialog.res";
 	}
 }
-
 
 #endif // TF_CLIENT_DLL

@@ -35,7 +35,7 @@ public:
 							CTFWeaponBaseGrenadeProj();
 	virtual					~CTFWeaponBaseGrenadeProj();
 	virtual void			Spawn();
-	virtual void			Precache();
+	virtual void			Precache() OVERRIDE;
 
 #ifdef GAME_DLL
 	virtual void			InitGrenade( const Vector &velocity, const AngularImpulse &angVelocity, CBaseCombatCharacter *pOwner, const CTFWeaponInfo &weaponInfo );
@@ -125,21 +125,18 @@ public:
 	const Vector			&GetImpactNormal( void ) const				{ return m_vecImpactNormal; }
 
 	bool					IsCritical() { return m_bCritical; }
-	virtual bool			IsDestroyable( void ){ return gpGlobals->curtime > m_flDestroyableTime; }
+	virtual bool			IsDestroyable( bool bOrbAttack = false ) OVERRIDE { return ( !bOrbAttack ? ( gpGlobals->curtime > m_flDestroyableTime ) : true ); }
 
 	virtual CBaseEntity		*GetEnemy( void )			{ return m_hEnemy; }
 
 protected:
 
-#ifdef STAGING_ONLY
-	void					DrawRadius( float flRadius );
-#endif
 
 	bool					m_bUseImpactNormal;
 	Vector					m_vecImpactNormal;
 
 	// Custom collision to allow for constant elasticity on hit surfaces.
-	virtual void			ResolveFlyCollisionCustom( trace_t &trace, Vector &vecVelocity );
+	virtual void			ResolveFlyCollisionCustom( trace_t &trace, Vector &vecVelocity ) OVERRIDE;
 
 	float					m_flDetonateTime;
 	CHandle<CBaseEntity>	m_hEnemy;

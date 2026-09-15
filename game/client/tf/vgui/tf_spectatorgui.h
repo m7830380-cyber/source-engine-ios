@@ -20,6 +20,7 @@
 extern ConVar cl_use_tournament_specgui;
 class CAvatarImagePanel;
 class CTFPlayerPanel;
+class CSCHintIcon;
 
 //-----------------------------------------------------------------------------
 // Purpose: Custom health panel used to show spectator target's health
@@ -106,6 +107,9 @@ protected:
 	vgui::Label				*m_pCycleTargetRevKeyLabel;
 	vgui::Label				*m_pMapLabel;
 	CItemModelPanel			*m_pItemPanel;
+	CSCHintIcon				*m_pCycleTargetFwdHintIcon;
+	CSCHintIcon				*m_pCycleTargetRevHintIcon;
+	CSCHintIcon				*m_pClassOrTeamHintIcon;
 
 	float					m_flNextItemPanelUpdate;
 	EHANDLE					m_hPrevItemPlayer;

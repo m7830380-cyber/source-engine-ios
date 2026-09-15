@@ -1,9 +1,4 @@
 //========= Copyright Valve Corporation, All rights reserved. ============//
-//
-// Purpose: 
-//
-// $NoKeywords: $
-//=============================================================================//
 
 #include "cbase.h"
 #include "tf_hud_mainmenuoverride.h"
@@ -31,6 +26,7 @@
 #include "filesystem.h"
 #include "tf_hud_disconnect_prompt.h"
 #include "tf_gc_client.h"
+#include "tf_partyclient.h"
 #include "sourcevr/isourcevirtualreality.h"
 #include "materialsystem/imaterialsystem.h"
 #include "materialsystem/materialsystem_config.h"
@@ -44,6 +40,12 @@
 #include "tf_lobby_container_frame_comp.h"
 #include "tf_lobby_container_frame_mvm.h"
 #include "tf_lobby_container_frame_casual.h"
+#include "tf_badge_panel.h"
+#include "tf_quest_map_panel.h"
+#include "tf_matchmaking_dashboard_explanations.h"
+#include "tf_matchmaking_dashboard_comp_rank_tooltip.h"
+#include "tf_rating_data.h"
+#include "tf_progression.h"
 
 #include "replay/ireplaysystem.h"
 #include "replay/ienginereplay.h"
@@ -52,17 +54,21 @@
 #include "imageutils.h"
 #include "icommandline.h"
 #include "vgui/ISystem.h"
-#include "report_player_dialog.h"
+#include "mute_player_dialog.h"
+#include "tf_quest_map_utils.h"
+#include "tf_matchmaking_dashboard.h"
+#include "tf_pvp_rank_panel.h"
 
-#ifdef SAXXYMAINMENU_ENABLED
-#include "tf_hud_saxxycontest.h"
-#endif
+#include "econ_paintkit.h"
+#include "ienginevgui.h"
+
 
 #include "c_tf_gamestats.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
 
+CMOTDManager CHudMainMenuOverride::m_MOTDManager;
 
 void AddSubKeyNamed( KeyValues *pKeys, const char *pszName );
 
@@ -78,7 +84,18 @@ void cc_tf_safemode_toggle( IConVar *pConVar, const char *pOldString, float flOl
 	}
 }
 
+void cc_tf_mainmenu_match_panel_type( IConVar *pConVar, const char *pOldString, float flOldValue )
+{
+	CHudMainMenuOverride *pMMOverride = (CHudMainMenuOverride*)( gViewPortInterface->FindPanelByName( PANEL_MAINMENUOVERRIDE ) );
+	if ( pMMOverride )
+	{
+		pMMOverride->UpdateRankPanelType();
+	}
+}
+
+
 ConVar tf_recent_achievements( "tf_recent_achievements", "0", FCVAR_ARCHIVE );
+ConVar tf_find_a_match_hint_viewed( "tf_find_a_match_hint_viewed", "0", FCVAR_ARCHIVE );
 ConVar tf_training_has_prompted_for_training( "tf_training_has_prompted_for_training", "0", FCVAR_ARCHIVE, "Whether the user has been prompted for training" );
 ConVar tf_training_has_prompted_for_offline_practice( "tf_training_has_prompted_for_offline_practice", "0", FCVAR_ARCHIVE, "Whether the user has been prompted to try offline practice." );
 ConVar tf_training_has_prompted_for_forums( "tf_training_has_prompted_for_forums", "0", FCVAR_ARCHIVE, "Whether the user has been prompted to view the new user forums." );
@@ -89,6 +106,7 @@ ConVar cl_mainmenu_operation_motd_start( "cl_mainmenu_operation_motd_start", "0"
 ConVar cl_mainmenu_operation_motd_reset( "cl_mainmenu_operation_motd_reset", "0", FCVAR_ARCHIVE | FCVAR_HIDDEN );
 ConVar cl_mainmenu_safemode( "cl_mainmenu_safemode", "0", FCVAR_NONE, "Enable safe mode", cc_tf_safemode_toggle );
 ConVar cl_mainmenu_updateglow( "cl_mainmenu_updateglow", "1", FCVAR_ARCHIVE | FCVAR_HIDDEN );
+ConVar tf_mainmenu_match_panel_type( "tf_mainmenu_match_panel_type", "7", FCVAR_ARCHIVE | FCVAR_HIDDEN, "The match group data to show on the main menu", cc_tf_mainmenu_match_panel_type );
 
 void cc_promotional_codes_button_changed( IConVar *pConVar, const char *pOldString, float flOldValue )
 {
@@ -102,403 +120,25 @@ ConVar cl_promotional_codes_button_show( "cl_promotional_codes_button_show", "1"
 
 extern bool Training_IsComplete();
 
-//-----------------------------------------------------------------------------
-// Callback to launch the lobby UI
-//-----------------------------------------------------------------------------
-static void CL_OpenMatchmakingLobby( const CCommand &args )
+void PromptOrFireCommand( const char* pszCommand )
 {
-	if ( GTFGCClientSystem()->GetMatchmakingUIState() != eMatchmakingUIState_InGame )
+	if ( engine->IsInGame()  )
 	{
-		const char *arg1 = "";
-		if ( args.ArgC() > 1 )
+		CTFDisconnectConfirmDialog *pDialog = BuildDisconnectConfirmDialog();
+		if ( pDialog )
 		{
-			arg1 = args[1];
-		}
-
-		// Make sure we are connected to steam, or they are going to be disappointed
-		if ( steamapicontext == NULL
-			|| steamapicontext->SteamUtils() == NULL
-			|| steamapicontext->SteamMatchmakingServers() == NULL
-			|| steamapicontext->SteamUser() == NULL
-			|| !steamapicontext->SteamUser()->BLoggedOn()
-		) {
-			Warning( "Steam not properly initialized or connected.\n" );
-			ShowMessageBox( "#TF_MM_GenericFailure_Title", "#TF_MM_GenericFailure", "#GameUI_OK" );
-			return;
-		}
-
-		// Make sure we have a GC connection
-		if ( !GCClientSystem()->BConnectedtoGC() )
-		{
-			Warning( "Not connected to GC.\n" );
-			ShowMessageBox( "#TF_MM_NoGC_Title", "#TF_MM_NoGC", "#GameUI_OK" );
-			return;
-		}
-
-		// If we're idle, use our argument to start matchmaking.
-		if ( GTFGCClientSystem()->GetMatchmakingUIState() == eMatchmakingUIState_Inactive )
-		{
-			TF_MatchmakingMode mode = TF_Matchmaking_LADDER;
-			if ( FStrEq( args[1], "mvm" ) )
-			{
-				mode = TF_Matchmaking_MVM;
-			}
-			else if ( FStrEq( args[1], "ladder" ) )
-			{
-				mode = TF_Matchmaking_LADDER;
-			}
-			else if ( FStrEq( args[1], "casual" ) )
-			{
-				mode = TF_Matchmaking_CASUAL;
-			}
-
-			GTFGCClientSystem()->BeginMatchmaking( mode );
+			pDialog->Show();
+			pDialog->AddConfirmCommand( pszCommand );
 		}
 	}
-
-	CHudMainMenuOverride* pMMOverride = (CHudMainMenuOverride*)( gViewPortInterface->FindPanelByName( PANEL_MAINMENUOVERRIDE ) );
-	if ( pMMOverride )
+	else
 	{
-		switch( GTFGCClientSystem()->GetSearchMode() )
-		{
-		case TF_Matchmaking_MVM:
-			pMMOverride->OpenMvMMMPanel();
-			break;
-
-		case TF_Matchmaking_LADDER:
-			pMMOverride->OpenCompMMPanel();
-			break;
-
-		case TF_Matchmaking_CASUAL:
-			pMMOverride->OpenCasualMMPanel();
-
-		default:
-			return;
-		}
+		engine->ClientCmd_Unrestricted( pszCommand );
 	}
 }
 
-static ConCommand openmatchmakinglobby_command( "OpenMatchmakingLobby", &CL_OpenMatchmakingLobby, "Activates the matchmaking lobby." );
-
-static void CL_ReloadMMPanels( const CCommand &args )
-{
-	CHudMainMenuOverride* pMMOverride = (CHudMainMenuOverride*)( gViewPortInterface->FindPanelByName( PANEL_MAINMENUOVERRIDE ) );
-	if ( pMMOverride )
-	{
-		pMMOverride->ReloadMMPanels();
-	}
-}
-ConCommand reload_mm_panels( "reload_mm_panels", &CL_ReloadMMPanels );
-
 //-----------------------------------------------------------------------------
-// Purpose: Prompt the user and ask if they really want to start training (if they are in a game)
-//-----------------------------------------------------------------------------
-class CTFConfirmTrainingDialog : public CConfirmDialog
-{
-	DECLARE_CLASS_SIMPLE( CTFConfirmTrainingDialog, CConfirmDialog );
-public:
-	CTFConfirmTrainingDialog( const char *pText, const char *pTitle, vgui::Panel *parent ) : BaseClass(parent), m_pText( pText ), m_pTitle( pTitle ) {}
-
-	virtual const wchar_t *GetText()
-	{
-		return g_pVGuiLocalize->Find( m_pText );
-	}
-
-	virtual void ApplySchemeSettings( vgui::IScheme *pScheme )
-	{
-		BaseClass::ApplySchemeSettings( pScheme );
-
-		// Set the X to be bright, and the rest dull
-		if ( m_pConfirmButton )
-		{
-			m_pConfirmButton->SetText( "#TF_Training_Prompt_ConfirmButton" );
-		}
-		if ( m_pCancelButton )
-		{
-			m_pCancelButton->SetText( "#TF_Training_Prompt_CancelButton" );
-		}
-
-		CExLabel *pTitle = dynamic_cast< CExLabel* >( FindChildByName( "TitleLabel" ) );
-		if ( pTitle )
-		{
-			pTitle->SetText( m_pTitle );
-		}
-	}
-protected:
-	const char *m_pText;
-	const char *m_pTitle;
-};
-
-class CCompetitiveAccessInfoPanel : public EditablePanel, public CLocalSteamSharedObjectListener
-{
-	DECLARE_CLASS_SIMPLE( CCompetitiveAccessInfoPanel, EditablePanel );
-public:
-	CCompetitiveAccessInfoPanel( Panel* pParent, const char* pszName )
-		: EditablePanel( pParent, pszName )
-	{
-		m_pPhoneButton = NULL;
-		m_pPremiumButton = NULL;
-		m_pPhoneCheckImage = NULL;
-		m_pPremiumCheckImage = NULL;
-	}
-
-	virtual void ApplySchemeSettings( IScheme *pScheme ) OVERRIDE
-	{
-		BaseClass::ApplySchemeSettings( pScheme );
-		LoadControlSettings( "resource/ui/CompetitiveAccessInfo.res" );
-
-		m_pPhoneButton = FindControl< CExImageButton >( "PhoneButton", true );
-		m_pPremiumButton = FindControl< CExImageButton >( "PremiumButton", true );
-		m_pPhoneCheckImage = FindControl< ImagePanel >( "PhoneCheckImage", true );
-		m_pPremiumCheckImage = FindControl< ImagePanel >( "PremiumCheckImage", true );
-	}
-
-	virtual void PerformLayout() OVERRIDE
-	{
-		BaseClass::PerformLayout();
-
-		bool bIsFreeAccount = IsFreeTrialAccount();
-		if ( m_pPremiumButton )
-		{
-			m_pPremiumButton->SetEnabled( bIsFreeAccount );
-		}
-		if ( m_pPremiumCheckImage )
-		{
-			m_pPremiumCheckImage->SetVisible( !bIsFreeAccount );
-		}
-
-		bool bIsPhoneVerified = GTFGCClientSystem()->BIsPhoneVerified();
-		bool bIsPhoneIdentifying = GTFGCClientSystem()->BIsPhoneIdentifying();
-		bool bPhoneReady = bIsPhoneVerified && bIsPhoneIdentifying;
-		if ( m_pPhoneButton )
-		{
-			m_pPhoneButton->SetEnabled( !bPhoneReady );
-		}
-		if ( m_pPhoneCheckImage )
-		{
-			m_pPhoneCheckImage->SetVisible( bPhoneReady );
-		}
-	}
-
-	virtual void OnCommand(  const char *command ) OVERRIDE
-	{
-		if ( FStrEq( command, "close" ) )
-		{
-			SetVisible( false );
-			return;
-		}
-		else if ( FStrEq( command, "addphone" ) )
-		{
-			if ( steamapicontext && steamapicontext->SteamFriends() )
-			{
-				steamapicontext->SteamFriends()->ActivateGameOverlayToWebPage( "https://support.steampowered.com/kb_article.php?ref=8625-WRAH-9030#addphone" );
-			}
-			return;
-		}
-		else if ( FStrEq( command, "addpremium" ) )
-		{
-			if ( steamapicontext && steamapicontext->SteamFriends() )
-			{
-				steamapicontext->SteamFriends()->ActivateGameOverlayToWebPage( "https://steamcommunity.com/sharedfiles/filedetails/?id=143430756" );
-			}
-			return;
-		}
-
-		BaseClass::OnCommand( command );
-	}
-
-	virtual void SOCreated( const CSteamID & steamIDOwner, const CSharedObject *pObject, ESOCacheEvent eEvent ) OVERRIDE
-	{
-		if ( pObject->GetTypeID() != CEconGameAccountClient::k_nTypeID )
-			return;
-
-		if ( GTFGCClientSystem()->BHasCompetitiveAccess() )
-		{
-			SetVisible( false );
-		}
-		else
-		{
-			InvalidateLayout();
-		}
-	}
-
-	virtual void SOUpdated( const CSteamID & steamIDOwner, const CSharedObject *pObject, ESOCacheEvent eEvent ) OVERRIDE
-	{
-		if ( pObject->GetTypeID() != CEconGameAccountClient::k_nTypeID )
-			return;
-
-		if ( GTFGCClientSystem()->BHasCompetitiveAccess() )
-		{
-			SetVisible( false );
-		}
-		else
-		{
-			InvalidateLayout();
-		}
-	}
-
-private:
-	CExImageButton	*m_pPhoneButton;
-	CExImageButton	*m_pPremiumButton;
-	ImagePanel		*m_pPhoneCheckImage;
-	ImagePanel		*m_pPremiumCheckImage;
-};
-DECLARE_BUILD_FACTORY( CCompetitiveAccessInfoPanel );
-
-class CMainMenuPlayListEntry : public EditablePanel
-{
-	DECLARE_CLASS_SIMPLE( CMainMenuPlayListEntry, EditablePanel );
-public:
-
-	enum EDisabledStates_t
-	{
-		NOT_DISABLED = 0,
-		DISABLED_NO_COMP_ACCESS,
-		DISABLED_NO_GC,
-		DISABLED_MATCH_RUNNING,
-
-		NUM_DISABLED_STATES
-	};
-
-	CMainMenuPlayListEntry( Panel* pParent, const char* pszName )
-		: EditablePanel( pParent, pszName )
-	{
-		m_pToolTip = NULL;
-	}
-
-	~CMainMenuPlayListEntry()
-	{
-		if (m_pToolTip != NULL)
-		{
-			delete m_pToolTip;
-			m_pToolTip = NULL;
-		}
-	}
-
-	virtual void ApplySchemeSettings( IScheme *pScheme ) OVERRIDE
-	{
-		BaseClass::ApplySchemeSettings( pScheme );
-		LoadControlSettings( "resource/ui/MainMenuPlayListEntry.res" );
-
-		CExImageButton *pLockImage = FindControl< CExImageButton >("LockImage");
-		if (pLockImage)
-		{
-			EditablePanel *pToolTipPanel = FindControl< EditablePanel >("TooltipPanel");
-			if (pToolTipPanel)
-			{
-				m_pToolTip = new CTFTextToolTip(this);
-				m_pToolTip->SetEmbeddedPanel(pToolTipPanel);
-				pToolTipPanel->MakePopup(false, true);
-				pToolTipPanel->SetKeyBoardInputEnabled(false);
-				pToolTipPanel->SetMouseInputEnabled(false);
-				m_pToolTip->SetText("#TF_Competitive_Requirements");
-				m_pToolTip->SetTooltipDelay(0);
-				pLockImage->SetTooltip(m_pToolTip, "#TF_Competitive_Requirements");
-			}
-		}
-
-		SetDisabledReason( NOT_DISABLED );
-	}
-
-	virtual void ApplySettings( KeyValues *inResourceData ) OVERRIDE
-	{
-		BaseClass::ApplySettings( inResourceData );
-
-		m_strImageName = inResourceData->GetString( "image_name" );
-		m_strButtonCommand = inResourceData->GetString( "button_command" );
-		m_strButtonToken = inResourceData->GetString( "button_token" );
-		m_strDescToken = inResourceData->GetString( "desc_token" );
-	}
-
-	void SetDisabledReason( EDisabledStates_t eReason )
-	{
-		static const DisabledStateDesc_t s_DisabledStates[] = { { NULL,								NULL,				NULL }				// NOT_DISABLED
-															  , { "#TF_Competitive_Requirements",	"comp_access_info", "locked_icon" }		// DISABLED_NO_COMP_ACCESS
-															  , { "#TF_MM_NoGC",					NULL,				"gc_dc"		}		// DISABLED_NO_GC
-															  , { "#TF_Competitive_MatchRunning",			NULL,				NULL } };			// DISABLED_MATCH_RUNNING
-
-		COMPILE_TIME_ASSERT( ARRAYSIZE( s_DisabledStates ) == NUM_DISABLED_STATES );
-
-		const DisabledStateDesc_t& stateDisabled = s_DisabledStates[ eReason ];
-
-		SetControlEnabled( "ModeButton", stateDisabled.m_pszLocToken == NULL );
-		SetControlVisible( "LockImage", stateDisabled.m_pszLocToken != NULL );
-
-		CExImageButton *pLockImage = FindControl< CExImageButton >("LockImage");
-		if ( pLockImage )
-		{
-			if ( stateDisabled.m_pszImageName )
-			{
-				pLockImage->SetSubImage( stateDisabled.m_pszImageName );
-			}
-
-			// Button behavior
-			pLockImage->SetEnabled( stateDisabled.m_pszButtonCommand != NULL );
-			pLockImage->SetCommand( stateDisabled.m_pszButtonCommand );
-			pLockImage->GetImage()->SetVisible( stateDisabled.m_pszImageName != NULL );
-
-			m_pToolTip->SetText( stateDisabled.m_pszLocToken );
-			pLockImage->SetTooltip( m_pToolTip, stateDisabled.m_pszLocToken );
-			m_pToolTip->PerformLayout();
-		}
-	}
-
-	virtual void PerformLayout() OVERRIDE
-	{
-		BaseClass::PerformLayout();
-
-		ImagePanel* pModeImage = FindControl< ImagePanel >( "ModeImage" );
-		if ( pModeImage )
-		{
-			pModeImage->SetImage( m_strImageName );
-		}
-
-		Button* pButton = FindControl< Button >( "ModeButton" );
-		if ( pButton )
-		{
-			pButton->SetCommand( m_strButtonCommand );
-		}
-
-		Label* pLabel = FindControl< Label >( "ModeButton" );
-		if ( pLabel )
-		{
-			pLabel->SetText( m_strButtonToken );
-		}
-		pLabel = FindControl< Label >( "DescLabel" );
-		if ( pLabel )
-		{
-			pLabel->SetText( m_strDescToken );
-		}
-		pLabel = FindControl< Label >( "DescLabelShadow" );
-		if ( pLabel )
-		{
-			pLabel->SetText( m_strDescToken );
-		}
-	}
-
-	
-
-private:
-
-	struct DisabledStateDesc_t
-	{
-		const char* m_pszLocToken;
-		const char* m_pszButtonCommand;
-		const char* m_pszImageName;
-	};
-
-	CUtlString m_strImageName;
-	CUtlString m_strButtonCommand;
-	CUtlString m_strButtonToken;
-	CUtlString m_strDescToken;
-
-	CTFTextToolTip *m_pToolTip;
-};
-
-DECLARE_BUILD_FACTORY( CMainMenuPlayListEntry );
-
-//-----------------------------------------------------------------------------
-// Purpose: 
+// Purpose:
 //-----------------------------------------------------------------------------
 CHudMainMenuOverride::CHudMainMenuOverride( IViewPort *pViewPort ) : BaseClass( NULL, PANEL_MAINMENUOVERRIDE )
 {
@@ -506,7 +146,6 @@ CHudMainMenuOverride::CHudMainMenuOverride( IViewPort *pViewPort ) : BaseClass( 
 	SetAutoDelete( false );
 	SetVisible( true );
 
-	m_bPlayListExpanded = false;
 	m_pVRModeButton = NULL;
 	m_pVRModeBackground = NULL;
 
@@ -529,12 +168,7 @@ CHudMainMenuOverride::CHudMainMenuOverride( IViewPort *pViewPort ) : BaseClass( 
 	m_pMOTDPrevButton = NULL;
 	m_iNotiPanelWide = 0;
 
-	m_pFeaturedItemPanel = NULL;//new CItemModelPanel( m_pStoreSpecialPanel, "FeaturedItemModelPanel" );
 	m_bReapplyButtonKVs = false;
-
-	m_pMouseOverItemPanel = vgui::SETUP_PANEL( new CItemModelPanel( this, "mouseoveritempanel" ) );
-	m_pMouseOverTooltip = new CItemModelPanelToolTip( this );
-	m_pMouseOverTooltip->SetupPanels( this, m_pMouseOverItemPanel );
 	
 	m_pMOTDHeaderLabel = NULL;
 	m_pMOTDHeaderIcon = NULL;
@@ -543,53 +177,42 @@ CHudMainMenuOverride::CHudMainMenuOverride( IViewPort *pViewPort ) : BaseClass( 
 	m_pMOTDTitleImage = NULL;
 	m_hTitleLabelFont = vgui::INVALID_FONT;
 
-	m_pQuestLogButton = new EditablePanel( this, "QuestLogButton" );
-
-#ifdef STAGING_ONLY
-	m_bGeneratingIcons = false;
-	m_pIconData = NULL;
-#endif
 
 	m_bHaveNewMOTDs = false;
 	m_bMOTDShownAtStartup = false;
 
-	m_pCharacterImagePanel = NULL;
 	m_iCharacterImageIdx = -1;
 
-#ifdef SAXXYMAINMENU_ENABLED
-	m_pSaxxyAwardsPanel = NULL;
-	m_pSaxxySettings = NULL;
-#endif
-
-	m_pWarLandingPage = new CWarLandingPanel( this, "WarPanel" );
 
 	m_flCheckTrainingAt = 0;
 	m_bWasInTraining = false;
-	m_flLastWarNagTime = 0.f;
 
 	ScheduleItemCheck();
 
  	m_pToolTip = new CMainMenuToolTip( this );
  	m_pToolTipEmbeddedPanel = new vgui::EditablePanel( this, "TooltipPanel" );
-	m_pToolTipEmbeddedPanel->MakePopup( false, true );
 	m_pToolTipEmbeddedPanel->SetKeyBoardInputEnabled( false );
 	m_pToolTipEmbeddedPanel->SetMouseInputEnabled( false );
+	m_pToolTipEmbeddedPanel->MoveToFront();
  	m_pToolTip->SetEmbeddedPanel( m_pToolTipEmbeddedPanel );
 	m_pToolTip->SetTooltipDelay( 0 );
 
-	ListenForGameEvent( "gc_connected" );
+	ListenForGameEvent( "gc_new_session" );
 	ListenForGameEvent( "item_schema_initialized" );
 	ListenForGameEvent( "store_pricesheet_updated" );
-	ListenForGameEvent( "inventory_updated" );
 	ListenForGameEvent( "gameui_activated" );
 	ListenForGameEvent( "party_updated" );
+	ListenForGameEvent( "server_spawn" );
+
+	m_pRankPanel = new CPvPRankPanel( this, "rankpanel" );
+	m_pRankModelPanel = new CPvPRankPanel( this, "rankmodelpanel" );
 
 	// Create our MOTD scrollable section
 	m_pMOTDPanel = new vgui::EditablePanel( this, "MOTD_Panel" );
 	m_pMOTDPanel->SetVisible( true );
 	m_pMOTDTextPanel = new vgui::EditablePanel( this, "MOTD_TextPanel" );
 	m_pMOTDTextScroller = new vgui::ScrollableEditablePanel( m_pMOTDPanel, m_pMOTDTextPanel, "MOTD_TextScroller" );
-	
+
 	m_pMOTDTextScroller->GetScrollbar()->SetAutohideButtons( true );
 	m_pMOTDTextScroller->GetScrollbar()->SetPaintBorderEnabled( false );
 	m_pMOTDTextScroller->GetScrollbar()->SetPaintBackgroundEnabled( false );
@@ -606,30 +229,28 @@ CHudMainMenuOverride::CHudMainMenuOverride( IViewPort *pViewPort ) : BaseClass( 
 	m_pNotificationsControl = NotificationQueue_CreateMainMenuUIElement( m_pNotificationsPanel, "Notifications_Control" );
 	m_pNotificationsScroller = new vgui::ScrollableEditablePanel( m_pNotificationsPanel, m_pNotificationsControl, "Notifications_Scroller" );
 
-	m_iNumNotifications = 0;
+	m_pNotificationsPanel->SetVisible(false);
+	m_pNotificationsControl->SetVisible(false);
+	m_pNotificationsScroller->SetVisible(false);
 
-	m_pFeaturedItemMouseOverPanel = new CItemModelPanel( this, "FeaturedItemMouseOverItemPanel" );
-	m_pFeaturedItemToolTip = new CSimplePanelToolTip( this );
-	m_pFeaturedItemToolTip->SetControlledPanel( m_pFeaturedItemMouseOverPanel );
+	m_iNumNotifications = 0;
 
 	m_pBackground = new vgui::ImagePanel( this, "Background" );
 	m_pEventPromoContainer = new EditablePanel( this, "EventPromo" );
 	m_pSafeModeContainer = new EditablePanel( this, "SafeMode" );
 
-	// Cause the quest UI to be created
-	GetQuestLog();
-
 	m_bStabilizedInitialLayout = false;
 
 	m_bBackgroundUsesCharacterImages = true;
 
-	m_pWatchStreamsPanel = new CTFStreamListPanel( this, "StreamListPanel" );
+	//m_pWatchStreamsPanel = new CTFStreamListPanel( this, "StreamListPanel" );
+	m_pCharacterImagePanel = new ImagePanel( this, "TFCharacterImage" );
 
 	vgui::ivgui()->AddTickSignal( GetVPanel(), 50 );
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: 
+// Purpose:
 //-----------------------------------------------------------------------------
 CHudMainMenuOverride::~CHudMainMenuOverride( void )
 {
@@ -669,15 +290,14 @@ void CHudMainMenuOverride::PaintTraverse( bool Repaint, bool allowForce )
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: 
+// Purpose:
 //-----------------------------------------------------------------------------
 void CHudMainMenuOverride::OnTick()
 {
-	if ( m_iNumNotifications != NotificationQueue_GetNumNotifications() )
+	if ( m_iNumNotifications != NotificationQueue_GetNumMainMenuNotifications() )
 	{
-		m_iNumNotifications = NotificationQueue_GetNumNotifications();
+		m_iNumNotifications = NotificationQueue_GetNumMainMenuNotifications();
 		UpdateNotifications();
-		CheckForNewQuests();
 	}
 	else if ( m_pNotificationsPanel->IsVisible() )
 	{
@@ -687,7 +307,7 @@ void CHudMainMenuOverride::OnTick()
 	static bool s_bRanOnce = false;
 	if ( !s_bRanOnce )
 	{
-		s_bRanOnce = true; 
+		s_bRanOnce = true;
 		if ( char const *szConnectAdr = CommandLine()->ParmValue( "+connect" ) )
 		{
 			Msg( "Executing deferred connect command: %s\n", szConnectAdr );
@@ -695,53 +315,11 @@ void CHudMainMenuOverride::OnTick()
 		}
 	}
 
-	// See if its time to nag about joining the war
-	float flTimeSinceWarNag = Plat_FloatTime() - m_flLastWarNagTime;
-	if ( !m_bPlayListExpanded && m_pHighlightAnims[ MMHA_WAR ] && ( flTimeSinceWarNag > 300.f || m_flLastWarNagTime == 0.f ) )
-	{
-		// Make sure our SOCache is ready
-		GCSDK::CGCClientSharedObjectCache *pSOCache = NULL;
-		if ( steamapicontext && steamapicontext->SteamUser() )
-		{
-			CSteamID steamID = steamapicontext->SteamUser()->GetSteamID();
-			pSOCache = GCClientSystem()->GetSOCache( steamID );
-		}
 
-		// Need to be initialized.  If we're not, we'll get false positives
-		// when we actually go to look for our war data
-		if ( pSOCache && pSOCache->BIsInitialized() )
-		{
-			m_flLastWarNagTime = Plat_FloatTime();
-
-			// Get war data
-			const CWarDefinition* pWarDef = GetItemSchema()->GetWarDefinitionByIndex( PYRO_VS_HEAVY_WAR_DEF_INDEX );
-			CWarData *pWarData = GetLocalPlayerWarData( pWarDef->GetDefIndex() );
-			war_side_t nAffiliation = INVALID_WAR_SIDE;
-			if ( pWarData )
-			{
-				// Get affiliation if they have one.
-				nAffiliation = pWarData->Obj().affiliation();
-			}
-
-			// They haven't joined the war!  Nag 'em
-			if ( nAffiliation == INVALID_WAR_SIDE && pWarDef->IsActive() )
-			{
-				StartHighlightAnimation( MMHA_WAR );
-			}
-		}
-	}
-
-
-#ifdef STAGING_ONLY
-	if ( m_bGeneratingIcons )
-	{
-		GenerateIconsThink();
-	}
-#endif
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: 
+// Purpose:
 //-----------------------------------------------------------------------------
 void CHudMainMenuOverride::AttachToGameUI( void )
 {
@@ -758,7 +336,7 @@ void CHudMainMenuOverride::AttachToGameUI( void )
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: 
+// Purpose:
 //-----------------------------------------------------------------------------
 ConVar tf_last_store_pricesheet_version( "tf_last_store_pricesheet_version", "0", FCVAR_CLIENTDLL | FCVAR_ARCHIVE | FCVAR_DONTRECORD | FCVAR_HIDDEN );
 
@@ -766,13 +344,7 @@ void CHudMainMenuOverride::FireGameEvent( IGameEvent *event )
 {
 	const char * type = event->GetName();
 
-	if ( FStrEq( type, "gameui_activated" ) )
-	{
-		g_pClientMode->GetViewportAnimationController()->StartAnimationSequence( this, "MMenu_PlayList_Collapse_Immediate", false );
-		m_bPlayListExpanded = false;
-		return;
-	}
-	if ( Q_strcmp( type, "gc_connected" ) == 0 )
+	if ( Q_strcmp( type, "gc_new_session" ) == 0 )
 	{
 		char uilanguage[ 64 ];
 		uilanguage[0] = 0;
@@ -802,9 +374,8 @@ void CHudMainMenuOverride::FireGameEvent( IGameEvent *event )
 		m_nLastMOTDRequestAt = CRTime::RTime32TimeCur();
 
 		// Load the store info, so we can display the current special
-		CStorePanel::RequestPricesheet();
-		CheckForNewQuests();
-		UpdatePlaylistEntries();
+
+		UpdateRankPanelVisibility();
 	}
 	else if ( Q_strcmp( type, "item_schema_initialized" ) == 0 )
 	{
@@ -862,18 +433,10 @@ void CHudMainMenuOverride::FireGameEvent( IGameEvent *event )
 			NotifyNeedsToChooseMostHelpfulFriend();
 		}
 	}
-	else if ( FStrEq( "inventory_updated", type ) )
-	{
-		CheckForNewQuests();
-	}
-	else if ( FStrEq( "party_updated", type ) )
-	{
-		UpdatePlaylistEntries();
-	}
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: 
+// Purpose:
 //-----------------------------------------------------------------------------
 void CHudMainMenuOverride::ApplySettings( KeyValues *inResourceData )
 {
@@ -888,34 +451,14 @@ void CHudMainMenuOverride::ApplySettings( KeyValues *inResourceData )
 		}
 		m_pButtonKV = new KeyValues("button_kv");
 		pItemKV->CopySubkeys( m_pButtonKV );
-		
+
 		m_bReapplyButtonKVs = true;
 	}
 
-#ifdef SAXXYMAINMENU_ENABLED
-	KeyValues *pSaxxySettings = inResourceData->FindKey( "SaxxySettings" );
-	if ( pSaxxySettings )
-	{
-		if ( m_pSaxxySettings )
-		{
-			m_pSaxxySettings->deleteThis();
-		}
-		m_pSaxxySettings = pSaxxySettings->MakeCopy();
-
-		if ( m_pSaxxyAwardsPanel )
-		{
-			m_pSaxxyAwardsPanel->ApplySettings( m_pSaxxySettings );
-		}
-	}
-#endif
-
-	m_bPlayListExpanded = false;
-
-	UpdatePlaylistEntries();
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: 
+// Purpose:
 //-----------------------------------------------------------------------------
 void CHudMainMenuOverride::ApplySchemeSettings( IScheme *scheme )
 {
@@ -924,12 +467,14 @@ void CHudMainMenuOverride::ApplySchemeSettings( IScheme *scheme )
 	SetScheme(pScheme);
 	SetProportional( true );
 
-	m_pFeaturedItemMouseOverPanel->InvalidateLayout( true, true );
 	m_bBackgroundUsesCharacterImages = true;
+	m_pszForcedCharacterImage = NULL;
 
 	bool bHolidayActive = false;
 	KeyValues *pConditions = NULL;
 	const char *pszHoliday = UTIL_GetActiveHolidayString();
+
+
 	if ( pszHoliday && pszHoliday[0] )
 	{
 		pConditions = new KeyValues( "conditions" );
@@ -940,32 +485,24 @@ void CHudMainMenuOverride::ApplySchemeSettings( IScheme *scheme )
 
 		if ( FStrEq( pszHoliday, "halloween" ) )
 		{
+
 			// for Halloween we also want to pick a random background
-			int nBackground = RandomInt( 0, 4 );
+			int nBackground = RandomInt( 0, 5 );
+
 			AddSubKeyNamed( pConditions, CFmtStr( "if_halloween_%d", nBackground ) );
 			if ( ( nBackground == 3 ) || ( nBackground == 4 ) )
 			{
 				m_bBackgroundUsesCharacterImages = false;
 			}
 		}
+		else if ( FStrEq( pszHoliday, "christmas" ) )
+		{
+			// for Christmas we also want to pick a random background
+			int nBackground = RandomInt( 0, 1 );
+			AddSubKeyNamed( pConditions, CFmtStr( "if_christmas_%d", nBackground ) );
+		}
 
 		bHolidayActive = true;
-	}
-
-	if ( !bHolidayActive )
-	{
-		FOR_EACH_MAP_FAST( GetItemSchema()->GetOperationDefinitions(), iOperation )
-		{
-			CEconOperationDefinition *pOperation = GetItemSchema()->GetOperationDefinitions()[iOperation];
-			if ( !pOperation || !pOperation->IsActive() || !pOperation->IsCampaign() )
-				continue;
-
-			if ( !pConditions )
-				pConditions = new KeyValues( "conditions" );
-
-			AddSubKeyNamed( pConditions, "if_operation" );
-			break;
-		}
 	}
 
 	if ( !pConditions )
@@ -992,6 +529,25 @@ void CHudMainMenuOverride::ApplySchemeSettings( IScheme *scheme )
 	m_pDisconnectButton = dynamic_cast<CExButton*>( FindChildByName("DisconnectButton") );
 	m_pBackToReplaysButton = dynamic_cast<CExButton*>( FindChildByName("BackToReplaysButton") );
 	m_pStoreHasNewItemsImage = dynamic_cast<ImagePanel*>( FindChildByName( "StoreHasNewItemsImage", true ) );
+	m_pStoreButton = dynamic_cast<CExButton*>(FindChildByName("GeneralStoreButton"));
+	if (m_pStoreButton)
+	{
+		m_pStoreButton->SetVisible(false);
+	}
+
+	m_pWatchStreamButton = dynamic_cast<EditablePanel*>(FindChildByName("WatchStreamButton"));
+	if (m_pWatchStreamButton)
+	{
+		m_pWatchStreamButton->SetVisible(false);
+		m_pWatchStreamButton->SetEnabled(false);
+	}
+
+	m_pQuestLogButton = dynamic_cast<EditablePanel*>(FindChildByName("QuestLogButton"));
+	if (m_pQuestLogButton)
+	{
+		m_pQuestLogButton->SetVisible(false);
+		m_pQuestLogButton->SetEnabled(false);
+	}
 
 	{
 		Panel *pButton = FindChildByName( "VRModeButton" );
@@ -1018,10 +574,13 @@ void CHudMainMenuOverride::ApplySchemeSettings( IScheme *scheme )
 	// m_pNotificationsShowPanel shows number of unread notifications. Pressing it pops up the first notification.
 	m_pNotificationsShowPanel = dynamic_cast<vgui::EditablePanel*>( FindChildByName("Notifications_ShowButtonPanel") );
 
+	m_pNotificationsShowPanel->SetVisible(false);
+
 	m_iNotiPanelWide = m_pNotificationsPanel->GetWide();
 
 	// m_pMOTDShowPanel shows that the player has an unread MOTD. Pressing it pops up the MOTD.
 	m_pMOTDShowPanel = dynamic_cast<vgui::EditablePanel*>( FindChildByName("MOTD_ShowButtonPanel") );
+	m_pMOTDShowPanel->SetVisible(false);
 
 	vgui::EditablePanel* pHeaderContainer = dynamic_cast<vgui::EditablePanel*>( m_pMOTDPanel->FindChildByName( "MOTD_HeaderContainer" ) );
 	if ( pHeaderContainer )
@@ -1036,9 +595,9 @@ void CHudMainMenuOverride::ApplySchemeSettings( IScheme *scheme )
 	{
 		m_hTitleLabelFont = m_pMOTDTitleLabel->GetFont();
 	}
-	
+
 	m_pMOTDTextLabel = dynamic_cast<vgui::Label*>( m_pMOTDTextPanel->FindChildByName( "MOTD_TextLabel" ) );
-	
+
 	m_pMOTDTitleImageContainer = dynamic_cast<vgui::EditablePanel*>( m_pMOTDPanel->FindChildByName("MOTD_TitleImageContainer") );
 	if ( m_pMOTDTitleImageContainer )
 	{
@@ -1054,164 +613,171 @@ void CHudMainMenuOverride::ApplySchemeSettings( IScheme *scheme )
 	m_pNotificationsScroller->GetScrollbar()->GetButton(1)->SetPaintBackgroundEnabled( false );
 
 	// Add tooltips for various buttons
-	CExImageButton *pImageButton = dynamic_cast<CExImageButton *>( FindChildByName("CommentaryButton") );
-	if ( pImageButton )
+	auto lambdaAddTooltip = [&]( const char* pszPanelName, const char* pszTooltipText )
 	{
-		pImageButton->SetTooltip( m_pToolTip, "#MMenu_Tooltip_Commentary" );
-	}
-	pImageButton = dynamic_cast<CExImageButton *>( FindChildByName("CoachPlayersButton") );
-	if ( pImageButton )
-	{
-		pImageButton->SetTooltip( m_pToolTip, "#MMenu_Tooltip_Coach" );
-	}
-	pImageButton = dynamic_cast<CExImageButton *>( FindChildByName("ReportBugButton") );
-	if ( pImageButton )
-	{
-		pImageButton->SetTooltip( m_pToolTip, "#MMenu_Tooltip_ReportBug" );
-	}
-	pImageButton = dynamic_cast<CExImageButton *>( FindChildByName("AchievementsButton") );
-	if ( pImageButton )
-	{
-		pImageButton->SetTooltip( m_pToolTip, "#MMenu_Tooltip_Achievements" );
-	}
-	pImageButton = dynamic_cast<CExImageButton *>( FindChildByName("NewUserForumsButton") );
-	if ( pImageButton )
-	{
-		pImageButton->SetTooltip( m_pToolTip, "#MMenu_Tooltip_NewUserForum" );
-	}
-	pImageButton = dynamic_cast<CExImageButton *>( FindChildByName("ReplayButton") );
-	if ( pImageButton )
-	{
-		pImageButton->SetTooltip( m_pToolTip, "#MMenu_Tooltip_Replay" );
-	}
-	pImageButton = dynamic_cast<CExImageButton *>( FindChildByName("WorkshopButton") );
-	if ( pImageButton )
-	{
-		pImageButton->SetTooltip( m_pToolTip, "#MMenu_Tooltip_Workshop" );
-	}
-	
-	// Highlights
-	m_pHighlightAnims[ MMHA_TUTORIAL ]		= FindControl< CExplanationPopup >( "TutorialHighlight" );
-	m_pHighlightAnims[ MMHA_PRACTICE ]		= FindControl< CExplanationPopup >( "PracticeHighlight" );
-	m_pHighlightAnims[ MMHA_NEWUSERFORUM ]	= FindControl< CExplanationPopup >( "NewUserForumHighlight" );
-	m_pHighlightAnims[ MMHA_OPTIONS ]		= FindControl< CExplanationPopup >( "OptionsHighlightPanel" );
-	m_pHighlightAnims[ MMHA_LOADOUT ]		= FindControl< CExplanationPopup >( "LoadoutHighlightPanel" );
-	m_pHighlightAnims[ MMHA_STORE ]			= FindControl< CExplanationPopup >( "StoreHighlightPanel" );
-	m_pHighlightAnims[ MMHA_WAR ]			= FindControl< CExplanationPopup >( "WarHighlightPanel" );
+		Panel* pPanelToAddTooltipTipTo = FindChildByName( pszPanelName );
+		if ( pPanelToAddTooltipTipTo)
+		{
+			pPanelToAddTooltipTipTo->SetTooltip( m_pToolTip, pszTooltipText );
 
-	m_pCompetitiveAccessInfo = dynamic_cast<vgui::EditablePanel*>( FindChildByName("CompetitiveAccessInfoPanel") );
+			pPanelToAddTooltipTipTo->SetVisible(false);
+		}
+	};
+
+	lambdaAddTooltip( "CommentaryButton", "#MMenu_Tooltip_Commentary" );
+	lambdaAddTooltip( "CoachPlayersButton", "#MMenu_Tooltip_Coach" );
+	lambdaAddTooltip( "ReportBugButton", "#MMenu_Tooltip_ReportBug" );
+	lambdaAddTooltip( "AchievementsButton", "#MMenu_Tooltip_Achievements" );
+	lambdaAddTooltip( "NewUserForumsButton", "#MMenu_Tooltip_NewUserForum" );
+	lambdaAddTooltip( "ReplayButton", "#MMenu_Tooltip_Replay" );
+	lambdaAddTooltip( "WorkshopButton", "#MMenu_Tooltip_Workshop" );
+	lambdaAddTooltip( "SettingsButton", "#MMenu_Tooltip_Options" );
+	lambdaAddTooltip( "TF2SettingsButton", "#MMenu_Tooltip_AdvOptions" );
+
 
 	LoadCharacterImageFile();
 
 	RemoveAllMenuEntries();
 	LoadMenuEntries();
-	
+
 	UpdateNotifications();
 	UpdatePromotionalCodes();
 
 	ScheduleTrainingCheck( false );
 
 	PerformKeyRebindings();
-	CheckForNewQuests();
 
-	// Asking for these will create them if they dont already exist.
-	GetCasualLobbyPanel()->InvalidateLayout( false, true );
-	GetCompLobbyPanel()->InvalidateLayout( false, true );
-	GetMvMLobbyPanel()->InvalidateLayout( false, true );
+	GetMMDashboard();
+	GetCompRanksTooltip();
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: 
+// Purpose:
 //-----------------------------------------------------------------------------
 void CHudMainMenuOverride::LoadCharacterImageFile( void )
 {
+	m_pCharacterImagePanel->SetVisible( m_bBackgroundUsesCharacterImages );
+
 	if ( !m_bBackgroundUsesCharacterImages )
-		return;
-
-	m_pCharacterImagePanel = dynamic_cast<vgui::ImagePanel*>( FindChildByName( "TFCharacterImage" ) );
-	if ( m_pCharacterImagePanel )
 	{
-		KeyValues *pCharacterFile = new KeyValues( "CharacterBackgrounds" );
+		return;
+	}
 
-		if ( pCharacterFile->LoadFromFile( g_pFullFileSystem, "scripts/CharacterBackgrounds.txt" ) )
+	// If we've got a forced image, use that
+	if ( m_pszForcedCharacterImage && *m_pszForcedCharacterImage )
+	{
+		m_pCharacterImagePanel->SetImage( m_pszForcedCharacterImage );
+		return;
+	}
+
+	KeyValues *pCharacterFile = new KeyValues( "CharacterBackgrounds" );
+
+	if ( pCharacterFile->LoadFromFile( g_pFullFileSystem, "scripts/CharacterBackgrounds.txt" ) )
+	{
+		CUtlVector<KeyValues *> vecUseableCharacters;
+
+		const char* pszActiveWarName = NULL;
+		const WarDefinitionMap_t& mapWars = GetItemSchema()->GetWarDefinitions();
+		FOR_EACH_MAP_FAST( mapWars, i )
 		{
-			CUtlVector<KeyValues *> vecUseableCharacters;
-
-			const char* pszActiveWarName = NULL;
-			const WarDefinitionMap_t& mapWars = GetItemSchema()->GetWarDefinitions();
-			FOR_EACH_MAP_FAST( mapWars, i )
+			const CWarDefinition* pWarDef = mapWars[i];
+			if ( pWarDef->IsActive() )
 			{
-				const CWarDefinition* pWarDef = mapWars[i];
-				if ( pWarDef->IsActive() )
-				{
-					pszActiveWarName = pWarDef->GetDefName();
-					break;
-				}
-			}
-
-			// Count the number of possible characters.
-			FOR_EACH_SUBKEY( pCharacterFile, pCharacter )
-			{
-				EHoliday eHoliday = (EHoliday)UTIL_GetHolidayForString( pCharacter->GetString( "holiday_restriction" ) );
-				const char* pszAssociatedWar = pCharacter->GetString( "war_restriction" );	
-
-				int iWeight = 1;
-
-				// If a War is active, that's all we want to show.  If not, then bias towards holidays
-				if ( pszActiveWarName != NULL )
-				{
-					if ( !FStrEq( pszAssociatedWar, pszActiveWarName ) )
-					{
-						iWeight = 0;
-					}
-				}
-				else if ( eHoliday != kHoliday_None )
-				{
-					iWeight = UTIL_IsHolidayActive( eHoliday ) ? 6 : 0;
-				}
-
-				for ( int i = 0; i < iWeight; i++ )
-				{
-					vecUseableCharacters.AddToTail( pCharacter );
-				}
-			}
-
-			// Pick a character at random.
-			if ( m_iCharacterImageIdx < 0 && vecUseableCharacters.Count() > 0 )
-			{
-				m_iCharacterImageIdx = rand() % vecUseableCharacters.Count();
-			}
-
-			// Make sure we found a character we can use.
-			if ( vecUseableCharacters.IsValidIndex( m_iCharacterImageIdx ) )
-			{
-				KeyValues *pCharacter = vecUseableCharacters[m_iCharacterImageIdx];
-
-				if ( IsFreeTrialAccount( ) && m_pHighlightAnims[ MMHA_STORE ] && !m_bPlayListExpanded )
-				{
-					const char* text = pCharacter->GetString( "store_text" );
-					if ( text )
-					{
-						m_pHighlightAnims[ MMHA_STORE ]->SetDialogVariable( "highlighttext", g_pVGuiLocalize->Find( text ) );
-						StartHighlightAnimation( MMHA_STORE );
-					}
-				}
-
-				const char* image_name = pCharacter->GetString( "image" );
-				m_pCharacterImagePanel->SetImage( image_name );
+				pszActiveWarName = pWarDef->GetDefName();
+				break;
 			}
 		}
 
-		pCharacterFile->deleteThis();
+		bool bActiveOperation = false;
+
+		// Uncomment if another operation happens
+		//FOR_EACH_MAP_FAST( GetItemSchema()->GetOperationDefinitions(), iOperation )
+		//{
+		//	CEconOperationDefinition *pOperation = GetItemSchema()->GetOperationDefinitions()[iOperation];
+		//	if ( !pOperation || !pOperation->IsActive() || !pOperation->IsCampaign() )
+		//		continue;
+
+		//	bActiveOperation = true;
+		//	break;
+		//}
+
+		// Count the number of possible characters.
+		FOR_EACH_SUBKEY( pCharacterFile, pCharacter )
+		{
+			bool bIsOperationCharacter = bActiveOperation && pCharacter->GetBool( "operation", false );
+
+			EHoliday eHoliday = (EHoliday)UTIL_GetHolidayForString( pCharacter->GetString( "holiday_restriction" ) );
+
+
+			const char* pszAssociatedWar = pCharacter->GetString( "war_restriction" );
+
+			int iWeight = pCharacter->GetInt( "weight", 1 );
+
+			// If a War is active, that's all we want to show.  If not, then bias towards holidays
+			if ( pszActiveWarName != NULL )
+			{
+				if ( !FStrEq( pszAssociatedWar, pszActiveWarName ) )
+				{
+					iWeight = 0;
+				}
+			}
+			else if ( eHoliday != kHoliday_None )
+			{
+				iWeight = UTIL_IsHolidayActive( eHoliday ) ? MAX( iWeight, 6 ) : 0;
+			}
+			else if ( bActiveOperation && !bIsOperationCharacter )
+			{
+				iWeight = 0;
+			}
+			else
+			{
+				// special cases for summer, halloween, fullmoon, and christmas...turn off anything not covered above
+				if ( UTIL_IsHolidayActive( kHoliday_Summer ) || UTIL_IsHolidayActive( kHoliday_HalloweenOrFullMoon ) || UTIL_IsHolidayActive( kHoliday_Christmas ) )
+				{
+					iWeight = 0;
+				}
+			}
+
+			for ( int i = 0; i < iWeight; i++ )
+			{
+				vecUseableCharacters.AddToTail( pCharacter );
+			}
+		}
+
+		// Pick a character at random.
+		if ( vecUseableCharacters.Count() > 0 )
+		{
+			m_iCharacterImageIdx = rand() % vecUseableCharacters.Count();
+		}
+
+		// Make sure we found a character we can use.
+		if ( vecUseableCharacters.IsValidIndex( m_iCharacterImageIdx ) )
+		{
+			KeyValues *pCharacter = vecUseableCharacters[m_iCharacterImageIdx];
+
+			if ( IsFreeTrialAccount( ) && GetQuestMapPanel()->IsVisible() )
+			{
+				const char* text = pCharacter->GetString( "store_text" );
+				if ( text )
+				{
+					StartHighlightAnimation( MMHA_STORE )->SetDialogVariable( "highlighttext", g_pVGuiLocalize->Find( text ) );
+				}
+			}
+
+			const char* image_name = pCharacter->GetString( "image" );
+			m_pCharacterImagePanel->SetImage( image_name );
+		}
 	}
+
+	pCharacterFile->deleteThis();
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: 
+// Purpose:
 //-----------------------------------------------------------------------------
 void CHudMainMenuOverride::LoadMenuEntries( void )
 {
-	KeyValues *datafile = new KeyValues("GameMenu");
+	KeyValuesAD datafile("GameMenu");
 	datafile->UsesEscapeSequences( true );	// VGUI uses escape sequences
 	bool bLoaded = datafile->LoadFromFile( g_pFullFileSystem, "Resource/GameMenu.res", "custom_mod" );
 	if ( !bLoaded )
@@ -1265,7 +831,7 @@ void CHudMainMenuOverride::LoadMenuEntries( void )
 			if ( m_pButtonKV && iStyle != MMBS_CUSTOM )
 			{
 				pPanel->ApplySettings( m_pButtonKV );
-			} 
+			}
 
 			int iIdx = m_pMMButtonEntries.AddToTail();
 			m_pMMButtonEntries[iIdx].pPanel = pPanel;
@@ -1303,7 +869,7 @@ void CHudMainMenuOverride::LoadMenuEntries( void )
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: 
+// Purpose:
 //-----------------------------------------------------------------------------
 void CHudMainMenuOverride::RemoveAllMenuEntries( void )
 {
@@ -1322,7 +888,7 @@ void CHudMainMenuOverride::RemoveAllMenuEntries( void )
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: 
+// Purpose:
 //-----------------------------------------------------------------------------
 void CHudMainMenuOverride::PerformLayout( void )
 {
@@ -1358,11 +924,6 @@ void CHudMainMenuOverride::PerformLayout( void )
 		iYPos += m_pMMButtonEntries[i].pPanel->GetTall() + m_iButtonYDelta;
 	}
 
-	if ( m_pFeaturedItemMouseOverPanel->IsVisible() )
-	{
-		m_pFeaturedItemMouseOverPanel->SetVisible( false );
-	}
-
 	if ( m_pEventPromoContainer && m_pSafeModeContainer )
 	{
 		m_pEventPromoContainer->SetVisible( !cl_mainmenu_safemode.GetBool() );
@@ -1380,21 +941,25 @@ void CHudMainMenuOverride::PerformLayout( void )
 	// Make the glows behind the update buttons pulse
 	if ( m_pEventPromoContainer && cl_mainmenu_updateglow.GetInt() )
 	{
-		EditablePanel* pUpdateBackground = m_pEventPromoContainer->FindControl< EditablePanel >( "Background", true );	
+		EditablePanel* pUpdateBackground = m_pEventPromoContainer->FindControl< EditablePanel >( "Background", true );
 		if ( pUpdateBackground )
 		{
 			g_pClientMode->GetViewportAnimationController()->StartAnimationSequence( pUpdateBackground, "MMenu_UpdateButton_StartGlow" );
 		}
 	}
+
+	m_pEventPromoContainer->SetVisible(false);
+
+	UpdateRankPanelVisibility();
 }
 
 
 //-----------------------------------------------------------------------------
-// Purpose: 
+// Purpose:
 //-----------------------------------------------------------------------------
 void CHudMainMenuOverride::OnUpdateMenu( void )
 {
-	// The dumb gameui.dll basepanel calls this every damn frame it's visible.
+	// The dumb gameui.dll basepanel calls this every frame it's visible.
 	// So try and do the least amount of work if nothing has changed.
 
 	bool bSomethingChanged = false;
@@ -1426,16 +991,16 @@ void CHudMainMenuOverride::OnUpdateMenu( void )
 	// Hide the character if we're in game.
 	if ( bInGame || bInReplay )
 	{
-		if ( m_pCharacterImagePanel && m_pCharacterImagePanel->IsVisible() )
+		if ( m_pCharacterImagePanel->IsVisible() )
 		{
 			m_pCharacterImagePanel->SetVisible( false );
 		}
 	}
 	else if ( !bInGame && !bInReplay )
 	{
-		if ( m_pCharacterImagePanel && !m_pCharacterImagePanel->IsVisible() )
+		if ( !m_pCharacterImagePanel->IsVisible() )
 		{
-			m_pCharacterImagePanel->SetVisible( true );
+			m_pCharacterImagePanel->SetVisible( m_bBackgroundUsesCharacterImages );
 		}
 	}
 
@@ -1477,7 +1042,7 @@ void CHudMainMenuOverride::OnUpdateMenu( void )
 	{
 		bool bShowQuit = !( bInGame || bInReplay );
 		bool bShowDisconnect = bInGame && !bInReplay;
-		
+
 		if ( m_pQuitButton->IsVisible() != bShowQuit )
 		{
 			m_pQuitButton->SetVisible( bShowQuit );
@@ -1536,7 +1101,7 @@ void CHudMainMenuOverride::OnUpdateMenu( void )
 				}
 			}
 		}
-	} 
+	}
 
 	if ( bSomethingChanged )
 	{
@@ -1557,25 +1122,6 @@ void CHudMainMenuOverride::OnUpdateMenu( void )
 		CheckUnclaimedItems();
 	}
 
-#ifdef SAXXYMAINMENU_ENABLED
-	const bool bSaxxyShouldBeVisible = !bInGame && !bInReplay;
-	if ( !m_pSaxxyAwardsPanel && bSaxxyShouldBeVisible )
-	{
-		m_pSaxxyAwardsPanel = new CSaxxyAwardsPanel( this, "SaxxyPanel" );
-
-		if ( m_pSaxxySettings )
-		{
-			m_pSaxxyAwardsPanel->ApplySettings( m_pSaxxySettings );
-		}
-
-		m_pSaxxyAwardsPanel->InvalidateLayout( true, true );
-	}
-	else if ( m_pSaxxyAwardsPanel && !bSaxxyShouldBeVisible )
-	{
-		m_pSaxxyAwardsPanel->MarkForDeletion();
-		m_pSaxxyAwardsPanel = NULL;
-	}
-#endif
 
 	if ( m_pVRModeButton && m_pVRModeButton->IsVisible() )
 	{
@@ -1587,10 +1133,23 @@ void CHudMainMenuOverride::OnUpdateMenu( void )
 
 	if ( !IsLayoutInvalid() )
 	{
+		if ( !m_bStabilizedInitialLayout )
+		{
+			PostMessage( this, new KeyValues( "MainMenuStabilized" ), 2.f );
+		}
+
 		m_bStabilizedInitialLayout = true;
 	}
 }
 
+void CHudMainMenuOverride::OnMainMenuStabilized()
+{
+	IGameEvent *event = gameeventmanager->CreateEvent( "mainmenu_stabilized" );
+	if ( event )
+	{
+		gameeventmanager->FireEventClientSide( event );
+	}
+}
 
 //-----------------------------------------------------------------------------
 // Purpose: Check to see if we need to hound the player about unclaimed items.
@@ -1618,7 +1177,7 @@ void CHudMainMenuOverride::CheckUnclaimedItems()
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: 
+// Purpose:
 //-----------------------------------------------------------------------------
 void CHudMainMenuOverride::OnConfirm( KeyValues *pParams )
 {
@@ -1630,20 +1189,22 @@ void CHudMainMenuOverride::OnConfirm( KeyValues *pParams )
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: 
+// Purpose:
 //-----------------------------------------------------------------------------
 void CHudMainMenuOverride::UpdateMOTD( bool bNewMOTDs )
-{	
+{
+	return;
+
 	if ( m_bInitMOTD == false )
 	{
 		m_pMOTDPanel->InvalidateLayout( true, true );
-		m_bInitMOTD = true;	
+		m_bInitMOTD = true;
 	}
 
 	if ( bNewMOTDs )
 	{
 		m_bHaveNewMOTDs = true;
-		m_iCurrentMOTD = -1;		
+		m_iCurrentMOTD = -1;
 	}
 
 	int iCount = GetMOTDManager().GetNumMOTDs();
@@ -1678,7 +1239,7 @@ void CHudMainMenuOverride::UpdateMOTD( bool bNewMOTDs )
 		{
 			m_pMOTDHeaderLabel->SetText( pMOTD->GetHeaderTitle(nCurLang) );
 			int iHeaderType = pMOTD->GetHeaderType();
-			switch ( iHeaderType ) 
+			switch ( iHeaderType )
 			{
 			case 0:
 				m_pMOTDHeaderLabel->SetBgColor( Color ( 183, 108, 58, 255 ) );
@@ -1741,7 +1302,7 @@ void CHudMainMenuOverride::UpdateMOTD( bool bNewMOTDs )
 					m_pMOTDTitleLabel->SetFont( hMediumBoldFont );
 				}
 			}
-			else 
+			else
 			{
 				if ( m_hTitleLabelFont != vgui::INVALID_FONT )
 				{
@@ -1752,7 +1313,7 @@ void CHudMainMenuOverride::UpdateMOTD( bool bNewMOTDs )
 		m_pMOTDPanel->SetDialogVariable( "motdtitle", pMOTD->GetTitle(nCurLang) );
 
 		// Body Text
-		m_pMOTDTextPanel->SetDialogVariable( "motdtext", pMOTD->GetText(nCurLang) );	
+		m_pMOTDTextPanel->SetDialogVariable( "motdtext", pMOTD->GetText(nCurLang) );
 
 		// Image
 		const char* pszImage = pMOTD->GetImage();
@@ -1764,7 +1325,7 @@ void CHudMainMenuOverride::UpdateMOTD( bool bNewMOTDs )
 			{
 				m_pMOTDTitleImage->SetImage( "../logo/new_tf2_logo" );
 			}
-			else 
+			else
 			{
 				m_pMOTDTitleImage->SetImage( pszImage );
 			}
@@ -1773,7 +1334,7 @@ void CHudMainMenuOverride::UpdateMOTD( bool bNewMOTDs )
 			int iContentWide = 0;
 			int iContentTall = 0;
 			if ( m_pMOTDTitleImageContainer )
-			{	
+			{
 				m_pMOTDTitleImageContainer->GetSize( iContentWide, iContentTall );
 			}
 
@@ -1802,7 +1363,7 @@ void CHudMainMenuOverride::UpdateMOTD( bool bNewMOTDs )
 			m_pMOTDTextLabel->SetSize( m_pMOTDTextPanel->GetWide(), tall );
 			m_pMOTDTextPanel->SetSize( m_pMOTDTextPanel->GetWide(), m_pMOTDTextLabel->GetTall() );
 		}
-		
+
 		if ( m_pMOTDURLButton )
 		{
 			const char *pszURL = pMOTD->GetURL();
@@ -1822,7 +1383,7 @@ void CHudMainMenuOverride::UpdateMOTD( bool bNewMOTDs )
 		// Move our scrollbar to the top.
 		m_pMOTDTextScroller->InvalidateLayout();
 		m_pMOTDTextScroller->Repaint();
-		m_pMOTDTextScroller->GetScrollbar()->SetValue( 0 );	
+		m_pMOTDTextScroller->GetScrollbar()->SetValue( 0 );
 		m_pMOTDTextScroller->GetScrollbar()->SetVisible( m_pMOTDTextPanel->GetTall() > m_pMOTDTextScroller->GetScrollbar()->GetTall() );
 		m_pMOTDTextScroller->GetScrollbar()->InvalidateLayout();
 		m_pMOTDTextScroller->GetScrollbar()->Repaint();
@@ -1840,10 +1401,20 @@ void CHudMainMenuOverride::UpdateMOTD( bool bNewMOTDs )
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: 
+// Purpose:
 //-----------------------------------------------------------------------------
 void CHudMainMenuOverride::SetMOTDButtonVisible( bool bVisible )
 {
+	if (m_pMOTDShowPanel)
+	{
+		m_pMOTDShowPanel->SetVisible(false);
+	}
+	if (m_pMOTDPanel)
+	{
+		m_pMOTDPanel->SetVisible(false);
+	}
+	return;
+
 	if ( bVisible && m_pMOTDPanel && m_pMOTDPanel->IsVisible() )
 		return;
 
@@ -1864,7 +1435,7 @@ void CHudMainMenuOverride::SetMOTDButtonVisible( bool bVisible )
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: 
+// Purpose:
 //-----------------------------------------------------------------------------
 void CHudMainMenuOverride::SetMOTDVisible( bool bVisible )
 {
@@ -1873,13 +1444,12 @@ void CHudMainMenuOverride::SetMOTDVisible( bool bVisible )
 	if ( bVisible )
 	{
 		// Ensure the text is correct.
-		UpdateMOTD( false ); 
+		UpdateMOTD( false );
 
 		// Clear MOTD button.
 		SetMOTDButtonVisible( true );
 		SetNotificationsPanelVisible( false );
-		SetQuestLogVisible( false );
-		SetWatchStreamVisible( false );
+		//SetWatchStreamVisible( false );
 		//SetNotificationsButtonVisible( false );
 
 		// Consider new MOTDs as having been viewed.
@@ -1893,41 +1463,43 @@ void CHudMainMenuOverride::SetMOTDVisible( bool bVisible )
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: 
+// Purpose:
 //-----------------------------------------------------------------------------
-void CHudMainMenuOverride::SetQuestLogVisible( bool bVisible )
+void CHudMainMenuOverride::SetQuestMapVisible( bool bVisible )
 {
-	GetQuestLog()->ShowPanel( bVisible );
+	return;
 
 	if ( bVisible )
 	{
+		GetQuestMapPanel()->InvalidateLayout( true );
 		SetMOTDVisible( false );
 		SetNotificationsPanelVisible( false );
-		SetWatchStreamVisible( false );
+		//SetWatchStreamVisible( false );
 	}
+
+	GetQuestMapPanel()->SetVisible( bVisible );
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: 
+// Purpose:
 //-----------------------------------------------------------------------------
-void CHudMainMenuOverride::SetWatchStreamVisible( bool bVisible )
-{
-	m_pWatchStreamsPanel->SetVisible( bVisible );
-
-	if ( bVisible )
-	{
-		SetMOTDVisible( false );
-		SetNotificationsPanelVisible( false );
-		SetQuestLogVisible( false );
-	}
-}
+//void CHudMainMenuOverride::SetWatchStreamVisible( bool bVisible )
+//{
+//	m_pWatchStreamsPanel->SetVisible( bVisible );
+//
+//	if ( bVisible )
+//	{
+//		SetMOTDVisible( false );
+//		SetNotificationsPanelVisible( false );
+//	}
+//}
 
 bool CHudMainMenuOverride::CheckAndWarnForPREC( void )
 {
 	enum check_state
 	{
 		INVALID,
-		FOUND, 
+		FOUND,
 		NOT_FOUND,
 	};
 
@@ -1936,9 +1508,9 @@ bool CHudMainMenuOverride::CheckAndWarnForPREC( void )
 	{
 		s_state = NOT_FOUND;
 
-		ICvar::Iterator iter( g_pCVar ); 
+		ICvar::Iterator iter( g_pCVar );
 		for ( iter.SetFirst() ; iter.IsValid() ; iter.Next() )
-		{  
+		{
 			ConCommandBase *cmd = iter.Get();
 			if ( cmd )
 			{
@@ -1948,7 +1520,7 @@ bool CHudMainMenuOverride::CheckAndWarnForPREC( void )
 					break;
 				}
 			}
-		} 
+		}
 	}
 
 	if ( s_state == FOUND )
@@ -1959,90 +1531,14 @@ bool CHudMainMenuOverride::CheckAndWarnForPREC( void )
 	return ( s_state == FOUND );
 }
 
-void CHudMainMenuOverride::OpenMvMMMPanel()
-{
-	if ( CheckAndWarnForPREC() )
-		return;
-
-	GetMvMLobbyPanel()->ShowPanel( true );
-}
-
-void CHudMainMenuOverride::OpenCompMMPanel()
-{
-	if ( CheckAndWarnForPREC() )
-		return;
-
-	GetCompLobbyPanel()->ShowPanel( true );
-}
-
-void CHudMainMenuOverride::OpenCasualMMPanel()
-{
-	if ( CheckAndWarnForPREC() )
-		return;
-
-	GetCasualLobbyPanel()->ShowPanel( true );
-}
-
-CLobbyContainerFrame_Comp* CHudMainMenuOverride::GetCompLobbyPanel()
-{
-	static CLobbyContainerFrame_Comp* pCompPanel = NULL;
-	if ( pCompPanel == NULL )
-	{
-		pCompPanel = SETUP_PANEL( new CLobbyContainerFrame_Comp() );
-	}
-
-	return pCompPanel;
-}
-
-CLobbyContainerFrame_MvM* CHudMainMenuOverride::GetMvMLobbyPanel()
-{
-	static CLobbyContainerFrame_MvM* pMvMPanel = NULL;
-	if ( pMvMPanel == NULL )
-	{
-		pMvMPanel = SETUP_PANEL( new CLobbyContainerFrame_MvM() );
-	}
-
-	return pMvMPanel;
-}
-
-CLobbyContainerFrame_Casual* CHudMainMenuOverride::GetCasualLobbyPanel()
-{
-	static CLobbyContainerFrame_Casual* pCasualPanel = NULL;
-	if ( pCasualPanel == NULL )
-	{
-		pCasualPanel = SETUP_PANEL( new CLobbyContainerFrame_Casual() );
-	}
-
-	return pCasualPanel;
-}
-
-void CHudMainMenuOverride::ReloadMMPanels()
-{
-	if ( GetCasualLobbyPanel()->IsVisible() )
-	{
-		GetCasualLobbyPanel()->InvalidateLayout( true, true );
-		GetCasualLobbyPanel()->ShowPanel( true );
-	}
-
-	if ( GetCompLobbyPanel()->IsVisible() )
-	{
-		GetCompLobbyPanel()->InvalidateLayout( true, true );
-		GetCompLobbyPanel()->ShowPanel( true );
-	}
-
-	if ( GetMvMLobbyPanel()->IsVisible() )
-	{
-		GetMvMLobbyPanel()->InvalidateLayout( true, true );
-		GetMvMLobbyPanel()->ShowPanel( true );
-	}
-}
-
 //-----------------------------------------------------------------------------
-// Purpose: 
+// Purpose:
 //-----------------------------------------------------------------------------
 void CHudMainMenuOverride::UpdateNotifications()
 {
-	int iNumNotifications = NotificationQueue_GetNumNotifications();
+	return;
+
+	int iNumNotifications = NotificationQueue_GetNumMainMenuNotifications();
 
 	wchar_t wszNumber[16]=L"";
 	V_swprintf_safe( wszNumber, L"%i", iNumNotifications );
@@ -2078,10 +1574,12 @@ void CHudMainMenuOverride::UpdateNotifications()
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: 
+// Purpose:
 //-----------------------------------------------------------------------------
 void CHudMainMenuOverride::SetNotificationsButtonVisible( bool bVisible )
 {
+	return;
+
 	if ( bVisible && ( m_pNotificationsPanel && m_pNotificationsPanel->IsVisible() ) )
 		return;
 
@@ -2093,19 +1591,21 @@ void CHudMainMenuOverride::SetNotificationsButtonVisible( bool bVisible )
 		// Set the notification count variable.
 		if ( m_pNotificationsShowPanel )
 		{
-			m_pNotificationsShowPanel->SetDialogVariable( "noticount", NotificationQueue_GetNumNotifications() );
+			m_pNotificationsShowPanel->SetDialogVariable( "noticount", NotificationQueue_GetNumMainMenuNotifications() );
 		}
 	}
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: 
+// Purpose:
 //-----------------------------------------------------------------------------
 void CHudMainMenuOverride::SetNotificationsPanelVisible( bool bVisible )
 {
+	return;
+
 	if ( m_pNotificationsPanel )
 	{
-		bool bHasNotifications = NotificationQueue_GetNumNotifications() != 0;
+		bool bHasNotifications = NotificationQueue_GetNumMainMenuNotifications() != 0;
 
 		if ( bHasNotifications )
 		{
@@ -2121,8 +1621,8 @@ void CHudMainMenuOverride::SetNotificationsPanelVisible( bool bVisible )
 			m_pNotificationsScroller->GetScrollbar()->SetValue( 0 );
 
 			SetMOTDVisible( false );
-			SetQuestLogVisible( false );
-			SetWatchStreamVisible( false );
+			SetQuestMapVisible( false );
+			//SetWatchStreamVisible( false );
 
 			m_pNotificationsShowPanel->SetVisible( false );
 
@@ -2150,10 +1650,12 @@ void CHudMainMenuOverride::SetNotificationsPanelVisible( bool bVisible )
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: 
+// Purpose:
 //-----------------------------------------------------------------------------
 void CHudMainMenuOverride::AdjustNotificationsPanelHeight()
 {
+	return;
+
 	// Fit to our contents, which may change without notifying us.
 	int iNotiTall = m_pNotificationsControl->GetTall();
 	if ( iNotiTall > m_pNotificationsScroller->GetTall() )
@@ -2165,7 +1667,7 @@ void CHudMainMenuOverride::AdjustNotificationsPanelHeight()
 	// Adjust visibility of the slider buttons and our width, as contents change.
 	if ( m_pNotificationsScroller )
 	{
-		if ( m_pNotificationsScroller->GetScrollbar()->GetSlider() && 
+		if ( m_pNotificationsScroller->GetScrollbar()->GetSlider() &&
 			m_pNotificationsScroller->GetScrollbar()->GetSlider()->IsSliderVisible() )
 		{
 			m_pNotificationsPanel->SetWide( m_iNotiPanelWide +  m_pNotificationsScroller->GetScrollbar()->GetSlider()->GetWide() );
@@ -2180,7 +1682,7 @@ void CHudMainMenuOverride::AdjustNotificationsPanelHeight()
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: 
+// Purpose:
 //-----------------------------------------------------------------------------
 void CHudMainMenuOverride::UpdatePromotionalCodes( void )
 {
@@ -2200,7 +1702,7 @@ void CHudMainMenuOverride::UpdatePromotionalCodes( void )
 			}
 		}
 
-		// The promo code button collides with the VR mode button. Turn off the promo code button 
+		// The promo code button collides with the VR mode button. Turn off the promo code button
 		// in that case since the people who deliberately enabled VR are much more likely to want that
 		// than to claim their Well Spun Hat in Rift.
 		bool bShowVR = materials->GetCurrentConfigForVideoCard().m_nVRModeAdapter == materials->GetCurrentAdapter();
@@ -2228,7 +1730,7 @@ void CHudMainMenuOverride::UpdatePromotionalCodes( void )
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: 
+// Purpose:
 //-----------------------------------------------------------------------------
 bool CHudMainMenuOverride::IsVisible( void )
 {
@@ -2242,72 +1744,22 @@ bool CHudMainMenuOverride::IsVisible( void )
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: 
+// Purpose:
 //-----------------------------------------------------------------------------
-void CHudMainMenuOverride::StartHighlightAnimation( mm_highlight_anims iAnim )
+CExplanationPopup* CHudMainMenuOverride::StartHighlightAnimation( mm_highlight_anims iAnim )
 {
-	vgui::surface()->PlaySound( "ui/hint.wav" );
-
-	if ( m_pHighlightAnims[ iAnim ] )
+	switch( iAnim )
 	{
-		m_pHighlightAnims[ iAnim ]->Popup();
-	}
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: 
-//-----------------------------------------------------------------------------
-void CHudMainMenuOverride::HideHighlight( mm_highlight_anims iAnim )
-{
-	if ( m_pHighlightAnims[ iAnim ] )
-	{
-		m_pHighlightAnims[ iAnim ]->Hide( 0 );
-	}
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: 
-//-----------------------------------------------------------------------------
-void CHudMainMenuOverride::TogglePlayListMenu( void )
-{
-	if ( m_bPlayListExpanded )
-	{
-		g_pClientMode->GetViewportAnimationController()->StartAnimationSequence( this, "MMenu_PlayList_Collapse", false );
-	}
-	else
-	{
-		g_pClientMode->GetViewportAnimationController()->StartAnimationSequence( this, "MMenu_PlayList_Expand", false );
-		UpdatePlaylistEntries();
+		case MMHA_TUTORIAL:		return ShowDashboardExplanation( "TutorialHighlight" );
+		case MMHA_PRACTICE:		return ShowDashboardExplanation( "PracticeHighlight" );
+		case MMHA_NEWUSERFORUM:	return ShowDashboardExplanation( "NewUserForumHighlight" );
+		case MMHA_OPTIONS:		return ShowDashboardExplanation( "OptionsHighlightPanel" );
+		case MMHA_LOADOUT:		return ShowDashboardExplanation( "LoadoutHighlightPanel" );
+		case MMHA_STORE:		return ShowDashboardExplanation( "StoreHighlightPanel" );
 	}
 
-	// These all rely on the playlist being in a specific state.  If we're 
-	// toggling, then there's no guarantees anything is where we think it is anymore
-	HideHighlight( MMHA_TUTORIAL );
-	HideHighlight( MMHA_PRACTICE );
-	HideHighlight( MMHA_LOADOUT );
-	HideHighlight( MMHA_STORE );
-	HideHighlight( MMHA_WAR );
-
-	m_bPlayListExpanded = !m_bPlayListExpanded;
-
-	CheckTrainingStatus();
-}
-
-void PromptOrFireCommand( const char* pszCommand )
-{
-	if ( engine->IsInGame()  )
-	{
-		CTFDisconnectConfirmDialog *pDialog = BuildDisconnectConfirmDialog();
-		if ( pDialog )
-		{
-			pDialog->Show();
-			pDialog->AddConfirmCommand( pszCommand );
-		}
-	}
-	else
-	{
-		engine->ClientCmd_Unrestricted( pszCommand );
-	}
+	Assert( false );
+	return NULL;
 }
 
 //-----------------------------------------------------------------------------
@@ -2324,7 +1776,7 @@ void CHudMainMenuOverride::StopUpdateGlow()
 
 	if ( m_pEventPromoContainer )
 	{
-		EditablePanel* pUpdateBackground = m_pEventPromoContainer->FindControl< EditablePanel >( "Background", true );	
+		EditablePanel* pUpdateBackground = m_pEventPromoContainer->FindControl< EditablePanel >( "Background", true );
 		if ( pUpdateBackground )
 		{
 			g_pClientMode->GetViewportAnimationController()->StopAnimationSequence( pUpdateBackground, "MMenu_UpdateButton_StartGlow" );
@@ -2335,66 +1787,32 @@ void CHudMainMenuOverride::StopUpdateGlow()
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: 
+// Purpose: Show or hide the rank panels if the GC is connected
+//-----------------------------------------------------------------------------
+void CHudMainMenuOverride::UpdateRankPanelVisibility()
+{
+	bool bConnectedToGC = GTFGCClientSystem()->BConnectedtoGC();
+
+	m_pRankPanel->SetVisible( bConnectedToGC );
+	m_pRankModelPanel->SetVisible( bConnectedToGC );
+	SetControlVisible( "CycleRankTypeButton", bConnectedToGC );
+	SetControlVisible( "NoGCMessage", !bConnectedToGC, true );
+	SetControlVisible( "NoGCImage", !bConnectedToGC, true );
+	UpdateRankPanelType();
+
+	SetControlVisible("NoGCMessage", false);
+	SetControlVisible("NoGCImage", false);
+	SetControlVisible("RankBorder", false);
+}
+
+//-----------------------------------------------------------------------------
+// Purpose:
 //-----------------------------------------------------------------------------
 void CHudMainMenuOverride::OnCommand( const char *command )
 {
 	C_CTFGameStats::ImmediateWriteInterfaceEvent( "on_command(main_menu_override)", command );
 
-	if ( FStrEq( "toggle_play_menu", command ) )
-	{
-		TogglePlayListMenu();
-		return;
-	}
-	else if ( FStrEq( "play_competitive", command ) )
-	{
-		// Defaulting to 6v6
-		GTFGCClientSystem()->SetLadderType( k_nMatchGroup_Ladder_6v6 );
-		PromptOrFireCommand( "OpenMatchmakingLobby ladder" ); 
-		return;
-	}
-	else if ( FStrEq( "play_casual", command ) )
-	{
-		// Defaulting to 12v12
-		GTFGCClientSystem()->SetLadderType( k_nMatchGroup_Casual_12v12 );
-		PromptOrFireCommand( "OpenMatchmakingLobby casual" ); 
-		return;
-	}
-	else if ( FStrEq( "play_mvm", command ) ) 
-	{
-		PromptOrFireCommand( "OpenMatchmakingLobby mvm" ); 
-		return;
-	}
-	else if ( FStrEq( "play_quickplay", command ) )
-	{
-		PromptOrFireCommand( "OpenQuickplayDialog" ); 
-		return;
-	}
-	else if ( FStrEq( "play_training", command ) )
-	{
-		HideHighlight( MMHA_TUTORIAL );
-
-		if ( engine->IsInGame() )
-		{
-			const char *pText = "#TF_Training_Prompt";
-			const char *pTitle = "#TF_Training_Prompt_Title";
-			if ( TFGameRules() && TFGameRules()->IsInTraining() )
-			{
-				pTitle = "#TF_Training_Restart_Title";				
-				pText = "#TF_Training_Restart_Text";
-			}
-			CTFConfirmTrainingDialog *pConfirm = vgui::SETUP_PANEL( new CTFConfirmTrainingDialog( pText, pTitle, this ) );
-			if ( pConfirm )
-			{
-				pConfirm->Show();
-			}
-		}
-		else
-		{
-			GetClientModeTFNormal()->GameUI()->SendMainMenuCommand( "engine training_showdlg" );
-		}
-	}
-	else if ( Q_strnicmp( command, "soundentry", 10 ) == 0 )
+	if ( Q_strnicmp( command, "soundentry", 10 ) == 0 )
 	{
 		PlaySoundEntry( command + 11 );
 		return;
@@ -2417,18 +1835,14 @@ void CHudMainMenuOverride::OnCommand( const char *command )
 	}
 	else if ( !Q_stricmp( command, "view_newuser_forums" ) )
 	{
-		HideHighlight( MMHA_NEWUSERFORUM );
-
 		if ( steamapicontext && steamapicontext->SteamFriends() )
 		{
-			steamapicontext->SteamFriends()->ActivateGameOverlayToWebPage( "http://forums.steampowered.com/forums/forumdisplay.php?f=906" );
+			steamapicontext->SteamFriends()->ActivateGameOverlayToWebPage( "https://steamcommunity.com/app/440/discussions/" );
 		}
 		return;
 	}
 	else if ( !Q_stricmp( command, "opentf2options" ) )
 	{
-		HideHighlight( MMHA_OPTIONS );
-
 		GetClientModeTFNormal()->GameUI()->SendMainMenuCommand( "engine opentf2options" );
 	}
 	else if ( !Q_stricmp( command, "motd_prev" ) )
@@ -2467,8 +1881,8 @@ void CHudMainMenuOverride::OnCommand( const char *command )
 	}
 	else if ( !Q_stricmp( command, "notifications_update" ) )
 	{
-		// force visible if 
-		if ( NotificationQueue_GetNumNotifications() != 0 )
+		// force visible if
+		if ( NotificationQueue_GetNumMainMenuNotifications() != 0 )
 		{
 			SetNotificationsButtonVisible( true );
 		}
@@ -2479,7 +1893,7 @@ void CHudMainMenuOverride::OnCommand( const char *command )
 	}
 	else if ( !Q_stricmp( command, "test_anim" ) )
 	{
-		InvalidateLayout( true, true ); 
+		InvalidateLayout( true, true );
 
 		StartHighlightAnimation( MMHA_TUTORIAL );
 		StartHighlightAnimation( MMHA_PRACTICE );
@@ -2487,17 +1901,10 @@ void CHudMainMenuOverride::OnCommand( const char *command )
 		StartHighlightAnimation( MMHA_OPTIONS );
 		StartHighlightAnimation( MMHA_STORE );
 		StartHighlightAnimation( MMHA_LOADOUT );
-		StartHighlightAnimation( MMHA_WAR );
 	}
 	else if ( !Q_stricmp( command, "offlinepractice" ) )
 	{
-		HideHighlight( MMHA_PRACTICE );
-
 		GetClientModeTFNormal()->GameUI()->SendMainMenuCommand( "engine training_showdlg" );
-	}
-	else if ( !Q_stricmp( command, "buyfeatured" ) )
-	{
-		GetClientModeTFNormal()->GameUI()->SendMainMenuCommand( VarArgs("engine open_store %d 1", m_pFeaturedItemPanel ? m_pFeaturedItemPanel->GetItem()->GetItemDefIndex() : 0 ) );
 	}
 	else if ( !Q_stricmp( command, "armory_open" ) )
 	{
@@ -2545,21 +1952,18 @@ void CHudMainMenuOverride::OnCommand( const char *command )
 		pEditor->Exit_ShowDialogs();
 #endif // REPLAY_ENABLED
 	}
-	else if ( FStrEq( "showcomic", command ) )
-	{
-		if ( m_pWarLandingPage )
-		{
-			m_pWarLandingPage->InvalidateLayout( true, true );
-			m_pWarLandingPage->SetVisible( true );
-		}
-	}
 	else if ( FStrEq( "questlog", command ) )
 	{
-		SetQuestLogVisible( !GetQuestLog()->IsVisible() );
+		SetQuestMapVisible( !GetQuestMapPanel()->IsVisible() );
 	}
 	else if ( FStrEq( "watch_stream", command ) )
 	{
-		SetWatchStreamVisible( !m_pWatchStreamsPanel->IsVisible() );
+		//SetWatchStreamVisible( !m_pWatchStreamsPanel->IsVisible() );
+		vgui::system()->ShellExecute( "open", "https://www.twitch.tv/directory/game/Team%20Fortress%202" );
+	}
+	else if ( FStrEq( "close_quest_map", command ) )
+	{
+		SetQuestMapVisible( false );
 	}
 	else if ( FStrEq( "view_update_page", command ) )
 	{
@@ -2599,36 +2003,79 @@ void CHudMainMenuOverride::OnCommand( const char *command )
 		}
 		return;
 	}
-	else if ( FStrEq( "view_war", command ) )
+	else if ( FStrEq( "OpenMutePlayerDialog", command ) )
 	{
-		HideHighlight( MMHA_WAR );
-		StopUpdateGlow();
-
-		m_pWarLandingPage->InvalidateLayout( true, true );
-		m_pWarLandingPage->SetVisible( true );
-
-		return;
-	}
-	else if ( FStrEq( "comp_access_info", command ) )
-	{
-		if ( m_pCompetitiveAccessInfo )
+		if ( !m_hMutePlayerDialog.Get() )
 		{
-			m_pCompetitiveAccessInfo->SetVisible( true );
-		}
-	}
-	else if ( FStrEq( "OpenReportPlayerDialog", command ) )
-	{
-		if ( !m_hReportPlayerDialog.Get() )
-			{
-				m_hReportPlayerDialog = vgui::SETUP_PANEL( new CReportPlayerDialog( this ) );
-				int x, y, ww, wt, wide, tall;
-				vgui::surface()->GetWorkspaceBounds( x, y, ww, wt );
-				m_hReportPlayerDialog->GetSize(wide, tall);
+			VPANEL hPanel = enginevgui->GetPanel( PANEL_GAMEUIDLL );
+			vgui::Panel* pPanel = vgui::ipanel()->GetPanel( hPanel, "BaseUI" );
 
-				// Center it, keeping requested size
-				m_hReportPlayerDialog->SetPos(x + ((ww - wide) / 2), y + ((wt - tall) / 2));
+			m_hMutePlayerDialog = vgui::SETUP_PANEL( new CMutePlayerDialog( pPanel ) );
+			int x, y, ww, wt, wide, tall;
+			vgui::surface()->GetWorkspaceBounds( x, y, ww, wt );
+			m_hMutePlayerDialog->GetSize( wide, tall );
+
+			// Center it, keeping requested size
+			m_hMutePlayerDialog->SetPos( x + ( ( ww - wide ) / 2 ), y + ( ( wt - tall ) / 2 ) );
+		}
+		m_hMutePlayerDialog->Activate();
+	}
+	else if ( FStrEq( "open_rank_type_menu", command ) )
+	{
+		if ( m_pRankTypeMenu )
+		{
+			m_pRankTypeMenu->MarkForDeletion();
+			m_pRankTypeMenu = NULL;
+		}
+
+		m_pRankTypeMenu = new Menu( this, "ranktypemenu" );
+
+		MenuBuilder builder( m_pRankTypeMenu, this );
+		const char *pszContextMenuBorder = "NotificationDefault";
+		const char *pszContextMenuFont = "HudFontMediumSecondary";
+		m_pRankTypeMenu->SetBorder( scheme()->GetIScheme( GetScheme() )->GetBorder( pszContextMenuBorder ) );
+		m_pRankTypeMenu->SetFont( scheme()->GetIScheme( GetScheme() )->GetFont( pszContextMenuFont, IsProportional() ) );
+
+		auto lambdaAddMatchTypeMenuOption = [ &builder ]( ETFMatchGroup eMatchGroup, bool bRequireRatingData = false )
+		{
+			auto pMatchGroup = GetMatchGroupDescription( eMatchGroup );
+			Assert( pMatchGroup );
+			if ( !pMatchGroup )
+				return;
+
+			if ( bRequireRatingData )
+			{
+				if ( !SteamUser() )
+					return;
+
+				EMMRating eRating = pMatchGroup->GetCurrentDisplayRank();
+				CTFRatingData* pRatingData = CTFRatingData::YieldingGetPlayerRatingDataBySteamID( SteamUser()->GetSteamID(), eRating );
+
+				if ( !pRatingData )
+					return;
 			}
-			m_hReportPlayerDialog->Activate();
+
+			wchar_t* pwszLocName = g_pVGuiLocalize->Find( pMatchGroup->GetNameLocToken() );
+			CFmtStr strCommand( "view_match_rank_%d", eMatchGroup );
+			builder.AddMenuItem( pwszLocName, strCommand.Get(), "type" );
+		};
+	
+		lambdaAddMatchTypeMenuOption( k_eTFMatchGroup_Casual_12v12 );
+		lambdaAddMatchTypeMenuOption( k_eTFMatchGroup_Ladder_6v6 );
+		lambdaAddMatchTypeMenuOption( k_eTFMatchGroup_Event_Placeholder, true );
+
+		// Position to the cursor's position
+		int nX, nY;
+		g_pVGuiInput->GetCursorPosition( nX, nY );
+		m_pRankTypeMenu->SetPos( nX - 1, nY - 1 );
+
+		m_pRankTypeMenu->SetVisible(true);
+		m_pRankTypeMenu->AddActionSignalTarget(this);
+	}
+	else if ( V_strnicmp( "view_match_rank_", command, 16 ) == 0 )
+	{
+		ETFMatchGroup eMatchGroup = (ETFMatchGroup)atoi( command + 16 );
+		tf_mainmenu_match_panel_type.SetValue( eMatchGroup );
 	}
 	else
 	{
@@ -2656,7 +2103,7 @@ void CHudMainMenuOverride::OnKeyCodePressed( KeyCode code )
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: 
+// Purpose:
 //-----------------------------------------------------------------------------
 void CHudMainMenuOverride::CheckTrainingStatus( void )
 {
@@ -2665,6 +2112,7 @@ void CHudMainMenuOverride::CheckTrainingStatus( void )
 	bool bShowForum = tf_training_has_prompted_for_forums.GetInt() <= 0;
 	bool bShowOptions = tf_training_has_prompted_for_options.GetInt() <= 0;
 	bool bWasInTraining = m_bWasInTraining;
+	bool bDashboardSidePanels = GetMMDashboard()->BAnySidePanelsShowing();
 	m_bWasInTraining = false;
 
 	bool bShowLoadout = false;
@@ -2678,41 +2126,48 @@ void CHudMainMenuOverride::CheckTrainingStatus( void )
 		}
 	}
 
-	if ( bShowLoadout && !m_bPlayListExpanded )
+	if ( !tf_find_a_match_hint_viewed.GetBool() )
+	{
+		tf_find_a_match_hint_viewed.SetValue( true );
+		ShowDashboardExplanation( "FindAMatch" );
+	}
+	else if ( !bDashboardSidePanels && bShowLoadout )
 	{
 		tf_training_has_prompted_for_loadout.SetValue( 1 );
 		StartHighlightAnimation( MMHA_LOADOUT );
 	}
-	else if ( bNeedsTraining && m_bPlayListExpanded )
+	else if ( bDashboardSidePanels && bNeedsTraining)
 	{
 		tf_training_has_prompted_for_training.SetValue( 1 );
 
-		if ( m_pHighlightAnims[ MMHA_TUTORIAL ] )
+		auto pExplanation = StartHighlightAnimation( MMHA_TUTORIAL );
+		pExplanation->AddActionSignalTarget( this );
+
+		if ( pExplanation )
 		{
 			if ( UTIL_HasLoadedAnyMap() )
 			{
-				m_pHighlightAnims[ MMHA_TUTORIAL ]->SetDialogVariable( "highlighttext", g_pVGuiLocalize->Find( "#MMenu_TutorialHighlight_Title2" ) );
+				pExplanation->SetDialogVariable( "highlighttext", g_pVGuiLocalize->Find( "#MMenu_TutorialHighlight_Title2" ) );
 			}
 			else
 			{
-				m_pHighlightAnims[ MMHA_TUTORIAL ]->SetDialogVariable( "highlighttext", g_pVGuiLocalize->Find( "#MMenu_TutorialHighlight_Title" ) );
+				pExplanation->SetDialogVariable( "highlighttext", g_pVGuiLocalize->Find( "#MMenu_TutorialHighlight_Title" ) );
 			}
 		}
 
-		StartHighlightAnimation( MMHA_TUTORIAL );
+		
 	}
-	else if ( bWasInTraining && Training_IsComplete() == false && tf_training_has_prompted_for_training.GetInt() < 2 && m_bPlayListExpanded)
+	else if ( bDashboardSidePanels && bWasInTraining && Training_IsComplete() == false && tf_training_has_prompted_for_training.GetInt() < 2 )
 	{
 		tf_training_has_prompted_for_training.SetValue( 2 );
 
-		if ( m_pHighlightAnims[ MMHA_TUTORIAL ] )
+		auto pExplanation = StartHighlightAnimation( MMHA_TUTORIAL );
+		if ( pExplanation )
 		{
-			m_pHighlightAnims[ MMHA_TUTORIAL ]->SetDialogVariable( "highlighttext", g_pVGuiLocalize->Find( "#MMenu_TutorialHighlight_Title3" ) );
+			pExplanation->SetDialogVariable( "highlighttext", g_pVGuiLocalize->Find( "#MMenu_TutorialHighlight_Title3" ) );
 		}
-
-		StartHighlightAnimation( MMHA_TUTORIAL );
 	}
-	else if ( bNeedsPractice && m_bPlayListExpanded )
+	else if ( bDashboardSidePanels && bNeedsPractice )
 	{
 		tf_training_has_prompted_for_offline_practice.SetValue( 1 );
 		StartHighlightAnimation( MMHA_PRACTICE );
@@ -2729,110 +2184,46 @@ void CHudMainMenuOverride::CheckTrainingStatus( void )
 	}
 }
 
-void CHudMainMenuOverride::CheckForNewQuests( void )
+void CHudMainMenuOverride::UpdateRankPanelType()
 {
-	CUtlVector< CEconItemView * > questItems;
-	TFInventoryManager()->GetAllQuestItems( &questItems );
+	ETFMatchGroup eMatchGroup = (ETFMatchGroup)tf_mainmenu_match_panel_type.GetInt();
 
-	ImagePanel *pImage = m_pQuestLogButton->FindControl< ImagePanel >( "SubImage", true );
-	if ( pImage )
+	// Sanitize the matchgroup they want to see.
+	switch ( eMatchGroup )
 	{
-		if ( questItems.Count() > 0 )
-		{
-			pImage->SetImage( "button_quests" );
-		}
-		else
-		{
-			pImage->SetImage( "button_quests_disabled" );
-		}
+	case k_eTFMatchGroup_Casual_12v12:
+	case k_eTFMatchGroup_Event_Placeholder:
+	case k_eTFMatchGroup_Ladder_6v6:
+		break;
+
+	default:
+		eMatchGroup = k_eTFMatchGroup_Casual_12v12;
 	}
 
-	EditablePanel *pNotiPanel = m_pQuestLogButton->FindControl< EditablePanel >( "NotificationsContainer", true );
-	if ( pNotiPanel )
-	{
-		// how many quests are unidentified?
-		int iUnidentified = 0;
-		FOR_EACH_VEC( questItems, i )
-		{
-			if ( IsQuestItemUnidentified( questItems[i]->GetSOCData() ) )
-			{
-				iUnidentified++;
-			}
-		}
+	m_pRankPanel->SetMatchGroup( eMatchGroup );
+	m_pRankPanel->InvalidateLayout( true, true );
+	m_pRankModelPanel->SetMatchGroup( eMatchGroup );
+	m_pRankModelPanel->InvalidateLayout( true, true );
 
-		pNotiPanel->SetDialogVariable( "noticount", iUnidentified );
-		pNotiPanel->SetVisible( iUnidentified > 0 );
+	m_pRankPanel->OnCommand( "begin_xp_lerp" );
+	m_pRankModelPanel->OnCommand( "begin_xp_lerp" );
+
+	// Show the comp ranks tooltip mouseover panel? (the little '(i)' image)
+	bool bShowCompRankTooltip = false;
+	auto pMatchGroup = GetMatchGroupDescription( eMatchGroup );
+	if ( GetProgressionDesc( k_eProgression_Glicko ) == pMatchGroup->m_pProgressionDesc
+		 && GTFGCClientSystem()->BConnectedtoGC() )
+	{
+		bShowCompRankTooltip = true;
+	}
+
+	Panel* pRankTooltipPanel = FindChildByName( "RankTooltipPanel" );
+	if( pRankTooltipPanel )
+	{
+		pRankTooltipPanel->SetVisible( bShowCompRankTooltip );
+		pRankTooltipPanel->SetTooltip( GetCompRanksTooltip(), nullptr );
 	}
 }
-
-void CHudMainMenuOverride::UpdatePlaylistEntries( void )
-{
-	CMainMenuPlayListEntry::EDisabledStates_t eDisabledState = CMainMenuPlayListEntry::NOT_DISABLED;
-
-	CTFParty* pParty = GTFGCClientSystem()->GetParty();
-	if ( ( pParty && pParty->BOffline() ) || !GTFGCClientSystem()->BConnectedtoGC() || GTFGCClientSystem()->BHasOutstandingMatchmakingPartyMessage() )
-	{
-		eDisabledState = CMainMenuPlayListEntry::DISABLED_NO_GC;
-	}
-
-	// If we have a live match, and a we're not in it, but we should be in,
-	// dont let the user click the MM UI buttons.  GTFGCClientSystem::Update() will nag them 
-	// to rejoin their match or abandon.
-	if ( pParty && pParty->GetState() == CSOTFParty_State_IN_MATCH )
-	{
-		eDisabledState = CMainMenuPlayListEntry::DISABLED_MATCH_RUNNING;
-	}
-
-	CMainMenuPlayListEntry* pEntry = FindControl< CMainMenuPlayListEntry >( "CasualEntry", true );
-	if ( pEntry )
-	{
-		pEntry->SetDisabledReason( eDisabledState );
-	}
-
-	pEntry = FindControl< CMainMenuPlayListEntry >( "MvMEntry", true );
-	if ( pEntry )
-	{
-		pEntry->SetDisabledReason( eDisabledState );
-	}
-
-	pEntry = FindControl< CMainMenuPlayListEntry >( "CompetitiveEntry", true );
-	if ( pEntry )
-	{
-		// Only check competitive access last
-		if ( eDisabledState == CMainMenuPlayListEntry::NOT_DISABLED )
-		{
-			eDisabledState = !GTFGCClientSystem()->BHasCompetitiveAccess() ? CMainMenuPlayListEntry::DISABLED_NO_COMP_ACCESS : eDisabledState;
-		}
-		pEntry->SetDisabledReason( eDisabledState );
-	}
-}
-
-void CHudMainMenuOverride::SOEvent( const CSharedObject* pObject )
-{
-	if ( pObject->GetTypeID() == CEconGameAccountClient::k_nTypeID )
-	{
-		UpdatePlaylistEntries();
-	}
-
-	if ( pObject->GetTypeID() != CEconItem::k_nTypeID )
-		return;
-
-	CEconItem *pEconItem = (CEconItem *)pObject;
-
-	// If the item is a competitive pass - update the main menu lock
-	// From _items_main.txt
-	const item_definition_index_t kCompetitivePassID = 1167;
-	if ( pEconItem->GetItemDefIndex() == kCompetitivePassID )
-	{
-		CHudMainMenuOverride *pMMPanel = (CHudMainMenuOverride*)gViewPortInterface->FindPanelByName(PANEL_MAINMENUOVERRIDE);
-		if (pMMPanel)
-		{
-			pMMPanel->UpdatePlaylistEntries();
-		}
-	}
-
-}
-
 
 
 #define REMAP_COMMAND( oldCommand, newCommand ) \
@@ -2883,7 +2274,7 @@ public:
 
 		//V_strcpy_safe( uilanguage, "german" );
 
-		KeyValues *pEntriesKV = new KeyValues( "motd_entries");
+		KeyValuesAD pEntriesKV( "motd_entries");
 
 		// Try and load the cache file. If we fail, we'll just create a new one.
 		if ( !pMMPanel->ReloadedAllMOTDs() )
@@ -2971,7 +2362,7 @@ GC_REG_JOB( GCSDK::CGCClient, CGCMOTDRequestResponse, "CGCMOTDRequestResponse", 
 
 
 //-----------------------------------------------------------------------------
-// Purpose: 
+// Purpose:
 //-----------------------------------------------------------------------------
 void CMainMenuToolTip::PerformLayout()
 {
@@ -3018,7 +2409,7 @@ void CMainMenuToolTip::PerformLayout()
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: 
+// Purpose:
 //-----------------------------------------------------------------------------
 void CMainMenuToolTip::HideTooltip()
 {
@@ -3031,10 +2422,10 @@ void CMainMenuToolTip::HideTooltip()
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: 
+// Purpose:
 //-----------------------------------------------------------------------------
-void CMainMenuToolTip::SetText(const char *pszText) 
-{ 
+void CMainMenuToolTip::SetText(const char *pszText)
+{
 	if ( m_pEmbeddedPanel )
 	{
 		_isDirty = true;
@@ -3054,374 +2445,3 @@ void CMainMenuToolTip::SetText(const char *pszText)
 //-----------------------------------------------------------------------------
 // Purpose: Reload the .res file
 //-----------------------------------------------------------------------------
-#if defined( STAGING_ONLY )
-ConVar tf_icon_festive( "tf_icon_festive", 0 );
-CON_COMMAND( mainmenu_refresh, "" )
-{
-	CHudMainMenuOverride *pMMPanel = (CHudMainMenuOverride*)gViewPortInterface->FindPanelByName( PANEL_MAINMENUOVERRIDE );
-	if ( !pMMPanel )
-		return;
-
-	pMMPanel->InvalidateLayout( true, true );
-}
-
-CON_COMMAND( create_icons, "Generate 512 x 512 Paint Kit Item Icons for SteamMarket, Specify min and max itemdef ranges if desired" )
-{
-	tf_icon_festive.SetValue( false );
-	CHudMainMenuOverride *pMMPanel = (CHudMainMenuOverride*)gViewPortInterface->FindPanelByName( PANEL_MAINMENUOVERRIDE );
-	if ( !pMMPanel )
-		return;
-
-	int min = args.ArgC() > 1 ? atoi( args[1] ) : -1;
-	int max = args.ArgC() > 2 ? atoi( args[2] ) : -1;
-
-	pMMPanel->GenerateIcons( false, min, max );
-}
-
-CON_COMMAND( create_icons_large, "Generate 1024 x 1024 Paint Kit Item Icons for Testing, Specify min and max itemdef ranges if desired" )
-{
-	tf_icon_festive.SetValue( false );
-	CHudMainMenuOverride *pMMPanel = (CHudMainMenuOverride*)gViewPortInterface->FindPanelByName( PANEL_MAINMENUOVERRIDE );
-	if ( !pMMPanel )
-		return;
-
-	int min = args.ArgC() > 1 ? atoi( args[1] ) : -1;
-	int max = args.ArgC() > 2 ? atoi( args[2] ) : -1;;
-
-	pMMPanel->GenerateIcons( true, min, max );
-}
-
-CON_COMMAND( create_icons_festive, "" )
-{
-	tf_icon_festive.SetValue( true );
-
-	CHudMainMenuOverride *pMMPanel = (CHudMainMenuOverride*)gViewPortInterface->FindPanelByName( PANEL_MAINMENUOVERRIDE );
-	if ( !pMMPanel )
-		return;
-
-	int min = args.ArgC() > 1 ? atoi( args[1] ) : -1;
-	int max = args.ArgC() > 2 ? atoi( args[2] ) : -1;
-
-	pMMPanel->GenerateIcons( false, min, max );
-}
-
-//-----------------------------------------------------------------------------
-void BuildPaintkitItemInventoryImagePath( char *pchOutfile, int nMaxPath, const CTFItemDefinition *pItemDef, int iWear, bool bLargeTestIcons )
-{
-//	CUtlString strDefName( pItemDef->GetDefinitionName() );
-	//strDefName = strDefName.Replace( ' ', '_' );
-	//strDefName.ToLower();
-//	const char *pchDefName = strDefName;
-
-	bool bIsPaintkitItem = pItemDef->GetCustomPainkKitDefinition() != NULL;
-	const char *pchOutputFolder;
-	if ( bIsPaintkitItem )
-	{
-		pchOutputFolder = bLargeTestIcons ? "resource/econ/generated_icons/LargeTest/" : "scripts/items/unencrypted/icons/generated_paintkit_icons/";
-	}
-	else
-	{
-		pchOutputFolder = "scripts/items/unencrypted/icons/generated_item_icons/";
-	}
-
-//	const char *pWear = bIsPaintkitItem ? CFmtStr( "_wear%d", iWear ) : "";
-	char fname[ MAX_PATH ];
-	V_FileBase( pItemDef->GetInventoryImage(), fname, sizeof(fname) );
-
-	if ( tf_icon_festive.GetBool() == true )
-	{
-		V_snprintf( pchOutfile, nMaxPath, "%s%s_festive.png",
-			pchOutputFolder,
-			fname
-		);
-	}
-	else
-	{
-		V_snprintf( pchOutfile, nMaxPath, "%s%s.png",
-			pchOutputFolder,
-			fname
-		);
-	}
-}
-//-----------------------------------------------------------------------------
-bool SaveImageIconAsPng( CEconItemView *pItem, ITexture *pInputTexture, const char *pszFilePath )
-{
-	bool bRet = false;
-	ITexture *pTexture = materials->FindTexture( "_rt_FullFrameFB1", TEXTURE_GROUP_RENDER_TARGET );
-
-	if ( !pTexture )
-		return bRet;
-
-	// If this is 3 4, we're only generating the actual composite texture for SFM
-	ConVarRef r_texcomp_dump( "r_texcomp_dump" );
-	if ( r_texcomp_dump.GetInt() == 4 )
-	{
-		return true;	
-	}
-
-	if ( pTexture->GetImageFormat() == IMAGE_FORMAT_RGBA8888 ||
-		pTexture->GetImageFormat() == IMAGE_FORMAT_ABGR8888 ||
-		pTexture->GetImageFormat() == IMAGE_FORMAT_ARGB8888 ||
-		pTexture->GetImageFormat() == IMAGE_FORMAT_BGRA8888 ||
-		pTexture->GetImageFormat() == IMAGE_FORMAT_BGRX8888 )
-	{
-		int width = Min( pInputTexture->GetActualWidth(), pTexture->GetActualWidth() );
-		int height = Min( pInputTexture->GetActualHeight(), pTexture->GetActualHeight() );
-		Rect_t SrcRect = { 0, 0, width, height };
-		Rect_t DstRect = SrcRect;
-
-		if ( ( width > 0 ) && ( height > 0 ) )
-		{
-			void *pixelValue = malloc( width * height * sizeof( RGBA8888_t ) );
-
-			if ( pixelValue )
-			{
-				CMatRenderContextPtr pRenderContext( materials );
-
-				pRenderContext->PushRenderTargetAndViewport( pTexture, 0, 0, width, height );
-				pRenderContext->CopyTextureToRenderTargetEx( 0, pInputTexture, &SrcRect, &DstRect );
-
-				pRenderContext->ReadPixels( 0, 0, width, height, (unsigned char *)pixelValue, pInputTexture->GetImageFormat() );
-
-				CUtlBuffer outBuffer;
-				ImgUtl_WriteRGBAAsPNGToBuffer( reinterpret_cast<const unsigned char *>( pixelValue ), width, height, outBuffer );
-
-				FileHandle_t hFileOut = g_pFullFileSystem->Open( pszFilePath, "wb" );
-				if ( hFileOut != FILESYSTEM_INVALID_HANDLE )
-				{
-					Msg( "Saved.. %s\n", pszFilePath );
-					g_pFullFileSystem->Write( outBuffer.Base(), outBuffer.TellPut(), hFileOut );
-					g_pFullFileSystem->Close( hFileOut );
-					bRet = true;
-				}
-
-				// restore our previous state
-				pRenderContext->PopRenderTargetAndViewport();
-
-				free( pixelValue );
-			}
-		}
-	}
-	return bRet;
-}
-//-----------------------------------------------------------------------------
-extern ConVar tf_paint_kit_force_wear;
-
-ConVar tf_paint_kit_icon_generating_index( "tf_paint_kit_icon_generating_index", 0 );
-
-void StartNextImage( CEconItemView *pItemData, CEmbeddedItemModelPanel *pItemModelPanel, const CUtlVector< item_definition_index_t > &vecItemDef, float flCurrentWear )
-{
-	// Init the item
-	item_definition_index_t iDefIndex = vecItemDef[ tf_paint_kit_icon_generating_index.GetInt() ];
-	pItemData->Init( iDefIndex, AE_PAINTKITWEAPON, AE_USE_SCRIPT_VALUE, true );
-	pItemData->SetWeaponSkinBase( NULL );
-	pItemData->SetWeaponSkinBaseCompositor( NULL );
-
-	bool bIsPaintkitItem = pItemData->GetCustomPainkKitDefinition() != NULL;
-	if ( bIsPaintkitItem )
-	{
-		// Set up the wear
-		static CSchemaAttributeDefHandle pAttrDef_TextureWear( "set_item_texture_wear" );
-		pItemData->GetAttributeList()->SetRuntimeAttributeValue( pAttrDef_TextureWear, flCurrentWear );
-
-		Msg( "Force Setting PaintKit Wear for Icon Generation : Wear Level %d", tf_paint_kit_force_wear.GetInt() );
-	}
-	else
-	{
-		// force use_model_cache_icon
-		static CSchemaAttributeDefHandle pAttrDef_UseModelCacheIcon( "use_model_cache_icon" );
-		uint32 unUseModelCacheIcon = 1;
-		pItemData->GetAttributeList()->SetRuntimeAttributeValue( pAttrDef_UseModelCacheIcon, unUseModelCacheIcon );
-	}
-
-	// Add festive attr if enabled
-	if ( tf_icon_festive.GetBool() == true )
-	{
-		static CSchemaAttributeDefHandle pAttrDef_IsFestivized( "is_festivized" );
-		pItemData->GetAttributeList()->SetRuntimeAttributeValue( pAttrDef_IsFestivized, 1 );
-	}
-	//int iWear = EconWear_ToIntCategory( flCurrentWear );
-
-	// Force set convar for wear
-	//tf_paint_kit_force_wear.SetValue( iWear );
-	
-	// force image generation to use high res
-	pItemData->SetWeaponSkinUseHighRes( true );
-
-	pItemModelPanel->SetItem( pItemData );
-	pItemModelPanel->InvalidateLayout( true, true );
-}
-
-extern ConVar tf_paint_kit_generating_icons;
-void CHudMainMenuOverride::GenerateIconsThink()
-{
-	CEmbeddedItemModelPanel *pItemModelPanel = dynamic_cast<CEmbeddedItemModelPanel *>( FindChildByName( "icon_generator" ) );
-	if ( !pItemModelPanel )
-		return;
-
-	ITexture *pIcon = pItemModelPanel->GetCachedGeneratedIcon();
-	if ( !pIcon )
-		return;
-
-	Msg( "Saving.. [%d] - %s\n", m_pIconData->GetItemDefIndex(), m_pIconData->GetItemDefinition()->GetDefinitionName() );
-
-	// Generate filepath
-	char outfile[ MAX_PATH ];
-	BuildPaintkitItemInventoryImagePath( outfile, sizeof(outfile), m_pIconData->GetItemDefinition(), tf_paint_kit_force_wear.GetInt(), m_bGeneratingLargeTestIcons );
-	SaveImageIconAsPng( m_pIconData, pIcon, outfile );
-
-	// Generate next step
-	while ( true )
-	{
-		int iIndex = tf_paint_kit_icon_generating_index.GetInt();
-		iIndex++;
-
-		// Increment Index, if index is greater, increment wear
-		if ( iIndex >= m_vecIconDefs.Count() )
-		{
-			iIndex = 0;
-			if ( tf_paint_kit_force_wear.GetInt() == 5 )
-			{
-				// reset bg color
-				SetBgColor( Color( 0, 0, 0, 0 ) );
-				m_bGeneratingIcons = false;
-				Msg( "Icon Generating Completed" );
-				tf_paint_kit_generating_icons.SetValue( 0 );
-				tf_paint_kit_icon_generating_index.SetValue( 0 );
-				return;
-			}
-			else
-			{
-				tf_paint_kit_force_wear.SetValue( tf_paint_kit_force_wear.GetInt() + 1 );
-			}
-		}
-
-		tf_paint_kit_icon_generating_index.SetValue( iIndex );
-
-		// only render non-paintkit item one time
-		if ( tf_paint_kit_force_wear.GetInt() > 0 )
-		{
-			// search for the next paintkit item to draw
-			 item_definition_index_t iDefIndex = m_vecIconDefs[ tf_paint_kit_icon_generating_index.GetInt() ];
-			CEconItemView temp;
-			temp.Init( iDefIndex, AE_PAINTKITWEAPON, AE_USE_SCRIPT_VALUE, true );
-			if ( temp.GetCustomPainkKitDefinition() )
-			{
-				// draw this one
-				break;
-			}
-		}
-	}
-
-	// start next item, other wise increment wear and go again
-	delete m_pIconData;
-	m_pIconData = new CEconItemView;
-	StartNextImage( m_pIconData, pItemModelPanel, m_vecIconDefs, 0.2f );
-}
-
-ConVar tf_icon_bgcolor_override( "tf_icon_bgcolor_override", "" );
-ConVar tf_icon_allow_all_items( "tf_icon_allow_all_items", "0" );
-void CHudMainMenuOverride::GenerateIcons( bool bLarge, int min /*= -1*/, int max /*= -1*/ )
-{
-	CEmbeddedItemModelPanel *pItemModelPanel = dynamic_cast<CEmbeddedItemModelPanel *>( FindChildByName("icon_generator") );
-	if ( !pItemModelPanel )
-		return;
-
-	const char *pszBGColor = tf_icon_bgcolor_override.GetString();
-	if ( pszBGColor && *pszBGColor )
-	{
-		color32 bgcolor;
-		UTIL_StringToColor32( &bgcolor, pszBGColor );
-		SetBgColor( Color( bgcolor.r, bgcolor.g, bgcolor.b, 255 ) );
-	}
-
-
-	const char *pchOutputFolder = bLarge ? "resource/econ/generated_icons/LargeTest/" : "scripts/items/unencrypted/icons/generated_paintkit_icons";
-	g_pFullFileSystem->CreateDirHierarchy( pchOutputFolder, NULL );
-
-	pItemModelPanel->SetTall( 1024 );
-	pItemModelPanel->SetWide( 1024 );
-	//pItemModelPanel->SetZPos( 1000 );
-
-	pItemModelPanel->SetInventoryImageType( CEmbeddedItemModelPanel::IMAGETYPE_LARGE );
-	pItemModelPanel->SetVisible( true );
-	pItemModelPanel->m_bOfflineIconGeneration = true;
-
-	int rtSize = bLarge ? 1024 : 512;
-
-	// Create a larger render target
-	materials->OverrideRenderTargetAllocation( true );
-
-	materials->CreateNamedRenderTargetTextureEx2( 
-		"offline_icon_generation", 
-		rtSize, rtSize, 
-		RT_SIZE_DEFAULT, 
-		materials->GetBackBufferFormat(), 
-		MATERIAL_RT_DEPTH_SHARED, 
-		TEXTUREFLAGS_CLAMPS | TEXTUREFLAGS_CLAMPT, 
-		0 );
-	materials->OverrideRenderTargetAllocation( false );
-
-	// Populate list of item icons
-	m_vecIconDefs.RemoveAll();
-	const CEconItemSchema::SortedItemDefinitionMap_t &mapItems = GetItemSchema()->GetSortedItemDefinitionMap();
-
-	int nPaintkitItems = 0;
-	int nNormalItems = 0;
-
-	FOR_EACH_MAP( mapItems, idxItem )
-	{
-		CEconItemDefinition *pItem = mapItems[idxItem];
-		CTFItemDefinition *pTFDef = (CTFItemDefinition *)pItem;
-		item_definition_index_t iDefIndex = pTFDef->GetDefinitionIndex();
-		
-		// skip numbers below min
-		if ( min != -1 && iDefIndex < min )
-			continue;
-
-		// skip numbers if above.  do not 'break;' since mapItems may NOT be in defindex order
-		if ( max != -1 && iDefIndex > max )
-			continue;
-
-		if ( pTFDef->GetCustomPainkKitDefinition() )
-		{
-			m_vecIconDefs.AddToTail( iDefIndex );
-
-			nPaintkitItems++;
-		}
-		else if ( tf_icon_allow_all_items.GetBool() )
-		{
-			m_vecIconDefs.AddToTail( iDefIndex );
-
-			nNormalItems++;
-		}
-	}
-
-	if ( !m_vecIconDefs.Count() )
-	{
-		Msg( "Didn't find any valid itemdefs to generate icons for" );
-		return;
-	}
-
-	Msg( "Found %d Valid Item defs. %d normal items and %d paintkit items\n", m_vecIconDefs.Count(), nNormalItems, nPaintkitItems );
-	
-	int nNumGeneratingIcons = nNormalItems + nPaintkitItems * 5;
-	Msg( "Generating Icons for %d Items and 5 Wear Levels for each paintkit items (%d icons total)\n", m_vecIconDefs.Count(), nNumGeneratingIcons );
-
-
-	// Starting conditions
-	tf_paint_kit_force_wear.SetValue( 1 );
-	tf_paint_kit_generating_icons.SetValue( 1 );
-
-	// Create a dummy item
-	m_pIconData = new CEconItemView;
-	StartNextImage( m_pIconData, pItemModelPanel, m_vecIconDefs, 0.2 );
-
-	m_bGeneratingIcons = true;
-	m_bGeneratingLargeTestIcons = bLarge;
-}
-#endif
-
-
-
-

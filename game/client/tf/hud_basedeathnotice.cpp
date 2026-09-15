@@ -531,8 +531,20 @@ void CHudBaseDeathNotice::FireGameEvent( IGameEvent *event )
 			}
 			else if ( ( event->GetInt( "damagebits" ) & DMG_VEHICLE ) || ( 0 == Q_stricmp( m_DeathNotices[iMsg].szIcon, "d_tracktrain" ) ) )
 			{
-				// special case icon for hit-by-vehicle death
-				Q_strncpy( m_DeathNotices[iMsg].szIcon, "d_vehicle", ARRAYSIZE( m_DeathNotices[iMsg].szIcon ) );
+#ifdef TF_CLIENT_DLL
+				char mapname[ MAX_MAP_NAME ];
+				Q_FileBase( engine->GetLevelName(), mapname, sizeof( mapname ) );
+				Q_strlower( mapname );
+				if ( FStrEq( mapname, "pd_galleria" ) )
+				{
+					Q_strncpy( m_DeathNotices[ iMsg ].szIcon, "d_resurfacer", ARRAYSIZE( m_DeathNotices[ iMsg ].szIcon ) );
+				}
+				else
+#endif // TF_CLIENT_DLL
+				{
+					// special case icon for hit-by-vehicle death
+					Q_strncpy( m_DeathNotices[ iMsg ].szIcon, "d_vehicle", ARRAYSIZE( m_DeathNotices[ iMsg ].szIcon ) );
+				}
 			}			
 		}
 

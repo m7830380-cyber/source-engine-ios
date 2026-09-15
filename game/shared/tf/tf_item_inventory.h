@@ -72,7 +72,15 @@ public:
 
 #ifdef CLIENT_DLL
 	virtual ITexture	*GetWeaponSkinBaseLowRes( itemid_t nItemId, int iTeam ) const;
+
+	void				LoadLocalLoadout();
+	void				SaveLocalLoadout( bool bReset=false, bool bDefaultToGC=false );
+	bool				EquipLocalPreset(equipped_class_t unClass, equipped_preset_t unPreset);
+	int					GetActiveLocalPreset(equipped_class_t unClass) { return m_ActivePreset[unClass]; }
+
 #endif
+	void				EquipLocal(uint64 ulItemID, equipped_class_t unClass, equipped_slot_t unSlot);
+	void				UnequipLocal(uint64 ulItemID);
 
 	void				OnHasNewQuest();
 
@@ -112,7 +120,8 @@ protected:
 private:
 	void				CheckSaxtonMaskAchievement( const CEconItem *pEconItem );
 	void				UpdateCachedServerLoadoutItems();
-#endif
+	void				UpdateRealTFLoadoutItems();
+#endif // CLIENT_DLL
 
 protected:
 	// Global indices of the items in our inventory in the loadout slots
@@ -130,11 +139,16 @@ protected:
 
 	CUtlMap< itemid_t, ITexture* > m_CachedBaseTextureLowRes[ TF_TEAM_COUNT ];
 
+	int				m_ActivePreset[TF_CLASS_COUNT];
+	itemid_t		m_PresetItems[CEconItemSchema::kMaxItemPresetCount][TF_CLASS_COUNT][CLASS_LOADOUT_POSITION_COUNT];
+#ifdef CLIENT_DLL
+	itemid_t		m_RealTFLoadoutItems[ TF_CLASS_COUNT ][ CLASS_LOADOUT_POSITION_COUNT ];
+#endif
+
 #endif // CLIENT_DLL
 	itemid_t		m_LoadoutItems[ TF_CLASS_COUNT ][ CLASS_LOADOUT_POSITION_COUNT ];
 	bool			m_bLoadoutChanged[ TF_CLASS_COUNT ];
 	itemid_t		m_AccountLoadoutItems[ ACCOUNT_LOADOUT_POSITION_COUNT ];
-
 
 	friend class CTFInventoryManager;
 };
@@ -175,6 +189,8 @@ public:
 
 	// Gets called each frame
 	virtual void		Update( float frametime ) OVERRIDE;
+
+	virtual bool		LoadPreset(equipped_class_t unClass, equipped_preset_t unPreset);
 #endif
 
 	// Returns the item data for the base item in the loadout slot for a given class
@@ -220,8 +236,7 @@ public:
 
 	virtual int			GetBackpackPositionFromBackend( uint32 iBackendPosition ) { return ExtractBackpackPositionFromBackend(iBackendPosition); }
 
-	// Fills out pList with all quest item in the local inventory
-	int					GetAllQuestItems( CUtlVector<CEconItemView*> *pList );
+	virtual void		UpdateInventoryEquippedState(CPlayerInventory *pInventory, uint64 ulItemID, equipped_class_t unClass, equipped_slot_t unSlot);
 
 private:
 	CTFPlayerInventory	m_LocalInventory;

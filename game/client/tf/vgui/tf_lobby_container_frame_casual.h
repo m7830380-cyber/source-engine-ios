@@ -65,14 +65,19 @@ public:
 
 	CMainMenuToolTip *GetTooltipPanel(){ return m_pToolTip; }
 
+	static bool TypeCanHandleMatchGroup( ETFMatchGroup eMatchGroup );
+	virtual bool CanHandleMatchGroup( ETFMatchGroup eMatchGroup ) const OVERRIDE
+	{
+		return TypeCanHandleMatchGroup( eMatchGroup );
+	}
+
 protected:
 
-	virtual void WriteControls();
+	virtual void WriteControls() OVERRIDE;
 
 private:
 	virtual const char* GetResFile() const OVERRIDE { return "Resource/UI/LobbyContainerFrame_Casual.res"; }
-	virtual TF_MatchmakingMode GetHandledMode() const { return TF_Matchmaking_CASUAL; }
-	virtual bool VerifyPartyAuthorization() const;
+	virtual bool VerifyPartyAuthorization() const OVERRIDE;
 	virtual void HandleBackPressed() OVERRIDE;
 
 

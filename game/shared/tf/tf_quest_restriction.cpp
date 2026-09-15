@@ -26,6 +26,7 @@
 #include "tier2/fileutils.h"
 #include "steamworks_gamestats.h"
 #include "tf_quickplay_shared.h"
+#include "econ_wearable.h"
 
 static const int s_nMinConnectedPlayersForQuestProgress = 2;
 static const int s_nMaxInputCount = 100;
@@ -56,7 +57,10 @@ typedef CTFQuestCondition *(*pfnQuestCreate)();
 #define FIELD_WEAPON_CLASS				1<<14
 #define FIELD_BONUSEFFECT				1<<15
 #define FIELD_DEFLECTED_PROJECTILE		1<<16
-#define FIELD_LAST_FIELD		FIELD_DEFLECTED_PROJECTILE
+#define FIELD_NUM_HIT					1<<17
+#define FIELD_NUM_DIRECT_HIT			1<<18
+#define FIELD_VAR						1<<19
+#define FIELD_LAST_FIELD				FIELD_VAR
 
 
 const char* k_pszQuestConditionRequiredFieldStrings[] =
@@ -78,6 +82,9 @@ const char* k_pszQuestConditionRequiredFieldStrings[] =
 	"weapon_class",			// FIELD_WEAPON_CLASS
 	"bonuseffect",			// FIELD_BONUSEFFECT
 	"deflected_projectile", // FIELD_DEFLECTED_PROJECTILE
+	"num_hit",				// FIELD_NUM_HIT
+	"num_direct_hit",		// FIELD_NUM_DIRECT_HIT
+	"var",					// FIELD_VAR
 };
 
 
@@ -99,25 +106,39 @@ struct QuestConditionEntry_t
 
 #define REGISTER_QUEST_CONDITION_SUB_CLASS( derivedClass, condName, nCondReqFields ) QuestConditionEntry_t k_s##condName##RegisteredEntry( #condName, nCondReqFields, CreateCTFQuestConditionSubClass< derivedClass > );
 
-bool IsValidServerForQuests( CSteamID steamIDQuestOwner )
+void IsValidServerForQuests( CSteamID steamIDQuestOwner, InvalidReasonsContainer_t& invalidReasons )
 {
 	// Check if we're on beta.  If so, allow it.
 	if ( ( engine->GetAppID() == 810 || engine->GetAppID() == 440 )
 		&& ( steamIDQuestOwner.GetEUniverse() == k_EUniverseBeta || steamIDQuestOwner.GetEUniverse() == k_EUniverseDev ) )
-		return true;
+		return;
 
-	// TODO Do we want to exclude quest progress after the match is over or during warm-up? We'd need another function
-	//      and to check it in appropriate spots -- this guy returning false if the match is over gives the user
-	//      "Invalid server" status on their quest display and so on.
+	if ( TFGameRules() )
+	{
+		// TODO Do we want to exclude quest progress after the match is over or during warm-up? We'd need another function
+		//      and to check it in appropriate spots -- this guy returning false if the match is over gives the user
+		//      "Invalid server" status on their quest display and so on.
 
-	// We only allow for quests to be tracked on Valve servers -- check if we joined via MM. Don't care if the match is
-	// still running.
-	EMatchGroup eMatchGroup = TFGameRules()->GetCurrentMatchGroup();
-	bool bTrustedMatch = ( eMatchGroup != k_nMatchGroup_Invalid ) && GetMatchGroupDescription( eMatchGroup )->BIsTrustedServersOnly();
-	if ( !bTrustedMatch )
-		return false;
+		// We only allow for quests to be tracked on Valve servers -- check if we joined via MM. Don't care if the match is
+		// still running.
+		ETFMatchGroup eMatchGroup = TFGameRules()->GetCurrentMatchGroup();
+		bool bTrustedMatch = ( eMatchGroup != k_eTFMatchGroup_Invalid ) && GetMatchGroupDescription( eMatchGroup )->BIsTrustedServersOnly();
+		if ( !bTrustedMatch )
+		{
+			invalidReasons.m_bits.Set( INVALID_QUEST_REASON_VALVE_SERVERS_ONLY );
+		}
 
-	return true;
+		// Cannot do quests when not in a match or in a match that doesn't allow for quests 
+		auto pMatchDesc = GetMatchGroupDescription( eMatchGroup );
+
+		if ( !pMatchDesc || !pMatchDesc->BAllowsQuestProgress() )
+		{
+			invalidReasons.m_bits.Set( INVALID_QUEST_REASON_MATCH_TYPE );
+		}
+	}
+
+
+	return;
 }
 
 void GetInvalidReasonsNames( const InvalidReasonsContainer_t& invalidReasons, CUtlVector< CUtlString >& vecStrings )
@@ -129,7 +150,7 @@ void GetInvalidReasonsNames( const InvalidReasonsContainer_t& invalidReasons, CU
 		"#TF_QuestInvalid_GameMode",			// INVALID_QUEST_REASON_WRONG_GAME_MODE,
 		"#TF_QuestInvalid_NotEnoughPlayers",	// INVALID_QUEST_REASON_NOT_ENOUGH_PLAYERS,
 		"#TF_QuestInvalid_ValveServers",		// INVALID_QUEST_REASON_VALVE_SERVERS_ONLY,
-		"#TF_QuestInvalid_MvM",					// INVALID_QUEST_REASON_NO_MVM	
+		"#TF_QuestInvalid_MatchType",			// INVALID_QUEST_REASON_MATCH_TYPE
 	};
 
 	for( int i=0; i < invalidReasons.m_bits.GetNumBits(); ++i )
@@ -212,6 +233,10 @@ void GetValidParamsKeyFromEvent( const char *pszKeyName, const char *pszRestrict
 									}
 								}
 
+								pWeaponNames->AddSubKey( new KeyValues( "$var1" ) );
+								pWeaponNames->AddSubKey( new KeyValues( "$var2" ) );
+								pWeaponNames->AddSubKey( new KeyValues( "$var3" ) );
+
 								pRequiredKeys->AddSubKey( pWeaponNames );
 							}
 							else if ( FStrEq( pszType, "weapon_name" ) )
@@ -232,6 +257,10 @@ void GetValidParamsKeyFromEvent( const char *pszKeyName, const char *pszRestrict
 										pWeaponNames->AddSubKey( new KeyValues( pItemDef->GetIconClassname() ) );
 									}
 								}
+
+								pWeaponNames->AddSubKey( new KeyValues( "$var1" ) );
+								pWeaponNames->AddSubKey( new KeyValues( "$var2" ) );
+								pWeaponNames->AddSubKey( new KeyValues( "$var3" ) );
 
 								pRequiredKeys->AddSubKey( pWeaponNames );
 							}
@@ -344,16 +373,7 @@ bool CTFQuestCondition::IsValidForPlayer( const CTFPlayer *pOwner, InvalidReason
 		const_cast< CTFPlayer* >( pOwner )->GetSteamID( &steamIDOwner ); // Ugh
 
 		// Can only do quests on Valve servers
-		if ( !IsValidServerForQuests( steamIDOwner ) )
-		{
-			invalidReasons.m_bits.Set( INVALID_QUEST_REASON_VALVE_SERVERS_ONLY );
-		}
-	}
-
-	// Cannot do quests in MvM 
-	if ( TFGameRules() && TFGameRules()->IsMannVsMachineMode() )
-	{
-		invalidReasons.m_bits.Set( INVALID_QUEST_REASON_NO_MVM );
+		IsValidServerForQuests( steamIDOwner, invalidReasons );
 	}
 
 	return true;
@@ -424,6 +444,10 @@ CTFQuestEvaluator::CTFQuestEvaluator()
 	m_pszAction = NULL;
 }
 
+CTFQuestEvaluator::~CTFQuestEvaluator()
+{
+	m_vecModifiers.PurgeAndDeleteElements();
+}
 
 void CTFQuestEvaluator::GetOutputKeyValues( KeyValues *pOutputKeys )
 {
@@ -441,6 +465,22 @@ void CTFQuestEvaluator::GetValidTypes( CUtlVector< const char* >& vecOutValidChi
 void CTFQuestEvaluator::GetValidChildren( CUtlVector< const char* >& vecOutValidChildren ) const
 {
 	GetValidRestrictions( vecOutValidChildren );
+}
+
+void CTFQuestEvaluator::AddModifiers( ITFQuestModifier* pModifier )
+{
+	m_vecModifiers.AddToTail( pModifier );
+}
+
+bool CTFQuestEvaluator::IsValidForPlayer( const CTFPlayer *pOwner, InvalidReasonsContainer_t& invalidReasons ) const
+{
+	FOR_EACH_VEC( m_vecModifiers, i )
+	{
+		if ( !m_vecModifiers[ i ]->BPassesModifier( pOwner, invalidReasons ) )
+			return false;
+	}
+
+	return CTFQuestCondition::IsValidForPlayer( pOwner, invalidReasons );
 }
 
 
@@ -691,6 +731,8 @@ public:
 		m_pszValue = pKVItem->GetString( "value" );
 		SCHEMA_INIT_CHECK( m_pszValue != NULL, "Missing value to compare against for generic_string restriction!" );
 
+		m_bStringsEqual = pKVItem->GetBool( "strings_equal", "1" );
+
 		return true;
 	}
 
@@ -699,7 +741,14 @@ public:
 		const char* pszValue = pEvent->GetString( m_pszKeyName );
 		if ( pszValue )
 		{
-			return FStrEq( pszValue, m_pszValue );
+			if ( m_bStringsEqual )
+			{
+				return FStrEq( pszValue, m_pszValue );
+			}
+			else
+			{
+				return V_strnicmp( pszValue, m_pszValue, Min( V_strlen( pszValue ), V_strlen( m_pszValue ) ) ) == 0;
+			}
 		}
 
 		return false;
@@ -725,6 +774,7 @@ protected:
 
 	const char *m_pszKeyName;
 	const char *m_pszValue;
+	bool m_bStringsEqual = true;
 };
 
 class CTFGenericSubStringRestriction : public CTFGenericStringRestriction
@@ -769,14 +819,48 @@ public:
 
 };
 
+class CTFWeaponDefindexRestriction : public CTFGenericStringRestriction
+{
+public:
+	CTFWeaponDefindexRestriction()
+	{}
+
+	virtual bool PassesRestrictions( IGameEvent *pEvent ) const OVERRIDE
+	{
+		const char* pszValue = pEvent->GetString( m_pszKeyName );
+		if ( pszValue )
+		{
+			const CEconItemDefinition* pItemDef = GetItemSchema()->GetItemDefinition( atoi( pszValue ) );
+			const CEconItemDefinition* pRequiredItemDef = GetItemSchema()->GetItemDefinition( atoi( m_pszValue ) );
+			Assert( pItemDef );
+			Assert( pRequiredItemDef );
+			if ( pItemDef && pRequiredItemDef )
+			{
+				if ( pRequiredItemDef == pItemDef )
+					return true;
+
+				if ( pItemDef->GetXifierRemapClass() && pRequiredItemDef->GetXifierRemapClass() &&
+					 FStrEq( pItemDef->GetXifierRemapClass(), pRequiredItemDef->GetXifierRemapClass() ) )
+					return true;
+			}
+		}
+
+		return false;
+	}
+
+};
+
 REGISTER_QUEST_CONDITION_SUB_CLASS( CTFGenericStringRestriction, crit_kill, FIELD_CRIT );
-REGISTER_QUEST_CONDITION_SUB_CLASS( CTFGenericStringRestriction, weapon_def_index, FIELD_WEAPON_DEF_INDEX );
+REGISTER_QUEST_CONDITION_SUB_CLASS( CTFWeaponDefindexRestriction, weapon_def_index, FIELD_WEAPON_DEF_INDEX );
 REGISTER_QUEST_CONDITION_SUB_CLASS( CTFGenericStringRestriction, weapon_name, FIELD_WEAPON_NAME );
 REGISTER_QUEST_CONDITION_SUB_CLASS( CTFGenericStringRestriction, halloween_boss_type, FIELD_HALLOWEEN_BOSS_TYPE );
 REGISTER_QUEST_CONDITION_SUB_CLASS( CTFGenericStringRestriction, minigame_type, FIELD_HALLOWEEN_MINIGAME_TYPE );
 REGISTER_QUEST_CONDITION_SUB_CLASS( CTFGenericStringRestriction, bonuseffect, FIELD_BONUSEFFECT );
 REGISTER_QUEST_CONDITION_SUB_CLASS( CTFWeaponClassRestriction, weapon_class, FIELD_WEAPON_CLASS );
 REGISTER_QUEST_CONDITION_SUB_CLASS( CTFGenericSubStringRestriction, deflected_projectile, FIELD_DEFLECTED_PROJECTILE );
+REGISTER_QUEST_CONDITION_SUB_CLASS( CTFGenericStringRestriction, num_hit, FIELD_NUM_HIT );
+REGISTER_QUEST_CONDITION_SUB_CLASS( CTFGenericStringRestriction, num_direct_hit, FIELD_NUM_DIRECT_HIT );
+REGISTER_QUEST_CONDITION_SUB_CLASS( CTFGenericStringRestriction, var, FIELD_VAR );
 
 //-----------------------------------------------------------------------------
 // Purpose: quest player restriction
@@ -959,8 +1043,8 @@ protected:
 	virtual bool BPlayerCheck( const CTFPlayer* pPlayer, IGameEvent *pEvent ) const OVERRIDE
 	{
 		// Disguise state check
-		const CTFPlayer* pPlayerDisguiseTarget = ToTFPlayer( pPlayer->m_Shared.GetDisguiseTarget() );
-		const CTFPlayer* pOwnerDisguiseTarget = ToTFPlayer( GetQuestOwner()->m_Shared.GetDisguiseTarget() );
+		const CTFPlayer* pPlayerDisguiseTarget = pPlayer->m_Shared.GetDisguiseTarget();
+		const CTFPlayer* pOwnerDisguiseTarget = GetQuestOwner()->m_Shared.GetDisguiseTarget();
 
 		// owner in disguise
 		if ( pOwnerDisguiseTarget )
@@ -1060,7 +1144,7 @@ protected:
 
 		int nNumJumps = pNonConstPlayer->GetGroundEntity() == NULL ? 1 : 0;
 		nNumJumps += pPlayer->m_Shared.GetAirDash();
-		nNumJumps += pPlayer->m_bScattergunJump;
+		nNumJumps += pPlayer->m_Shared.m_bScattergunJump;
 
 		if ( m_eJumpingState == JUMPING_STATE_IS_NOT_JUMPING )
 		{
@@ -1286,6 +1370,43 @@ private:
 REGISTER_QUEST_CONDITION_SUB_CLASS( CTFQuestPlayerIsOwnerRestriction, player_is_owner, FIELD_PLAYER );
 
 //-----------------------------------------------------------------------------
+// Purpose: quest player restriction
+//-----------------------------------------------------------------------------
+class CTFQuestPlayerIsEnemyRestriction : public CTFQuestBasePlayerRestriction
+{
+public:
+	CTFQuestPlayerIsEnemyRestriction() {}
+
+	virtual bool BInitFromKV( KeyValues *pKVItem, CUtlVector<CUtlString> *pVecErrors /* = NULL */ ) OVERRIDE
+	{
+		if ( !CTFQuestBasePlayerRestriction::BInitFromKV( pKVItem, pVecErrors ) )
+			return false;
+
+		// should check if this player is an enemy of the quest owner
+		m_bIsEnemy = pKVItem->GetBool( "is_enemy" );
+
+		return true;
+	}
+
+	virtual bool IsValidForPlayer( const CTFPlayer *pOwner, InvalidReasonsContainer_t& invalidReasons ) const
+	{
+		return true;
+	}
+
+private:
+
+	virtual bool BPlayerCheck( const CTFPlayer* pPlayer, IGameEvent *pEvent ) const OVERRIDE
+	{
+		Assert( pPlayer != GetQuestOwner() );
+		bool bSameTeam = pPlayer->GetTeamNumber() == GetQuestOwner()->GetTeamNumber();
+		return m_bIsEnemy == !bSameTeam;
+	}
+
+	bool m_bIsEnemy;
+};
+REGISTER_QUEST_CONDITION_SUB_CLASS( CTFQuestPlayerIsOwnerRestriction, player_is_enemy, FIELD_PLAYER );
+
+//-----------------------------------------------------------------------------
 // Purpose: quest class restriction
 //-----------------------------------------------------------------------------
 class CTFQuestPlayerClassRestriction : public CTFQuestBasePlayerRestriction
@@ -1308,9 +1429,9 @@ public:
 		if ( !CTFQuestBasePlayerRestriction::BInitFromKV( pKVItem, pVecErrors ) )
 			return false;
 
-		const char *pszClassName = pKVItem->GetString( "value", NULL );
-		m_iClass = StringFieldToInt( pszClassName, GetItemSchema()->GetClassUsabilityStrings() );
-		SCHEMA_INIT_CHECK( IsValidTFPlayerClass( m_iClass ), "%s", CFmtStr( "Invalid owner class restriction '%s' for quest objective", pszClassName ).Get() );
+		m_strValue = pKVItem->GetString( "value", NULL );
+		m_iClass = StringFieldToInt( m_strValue, GetItemSchema()->GetClassUsabilityStrings(), true );
+		SCHEMA_INIT_CHECK( IsValidTFPlayerClass( m_iClass ), "%s", CFmtStr( "Invalid owner class restriction '%s' for quest objective", m_strValue.Get() ).Get() );
 
 		return true;
 	}
@@ -1336,6 +1457,10 @@ public:
 			pClassesKey->AddSubKey( new KeyValues( pszClassName ) );
 		}
 
+		pClassesKey->AddSubKey( new KeyValues( "$var1" ) );
+		pClassesKey->AddSubKey( new KeyValues( "$var2" ) );
+		pClassesKey->AddSubKey( new KeyValues( "$var3" ) );
+
 		pRequiredKeys->AddSubKey( pClassesKey );
 	}
 
@@ -1343,7 +1468,14 @@ public:
 	{
 		CTFQuestBasePlayerRestriction::GetOutputKeyValues( pOutputKeys );
 
-		pOutputKeys->SetString( "value", GetValueString() );
+		if ( m_iClass >= 0 && m_iClass <= GetItemSchema()->GetClassUsabilityStrings().Count() )
+		{
+			pOutputKeys->SetString( "value", GetValueString() );
+		}
+		else
+		{
+			pOutputKeys->SetString( "value", m_strValue );
+		}
 	}
 
 private:
@@ -1355,6 +1487,8 @@ private:
 		return m_iClass == iClass;
 	}
 
+
+	CUtlString m_strValue;
 	int m_iClass;
 };
 REGISTER_QUEST_CONDITION_SUB_CLASS( CTFQuestPlayerClassRestriction, player_class, FIELD_PLAYER );
@@ -1543,7 +1677,7 @@ public:
 		return true;
 	}
 
-	virtual bool IsValidForPlayer( const CTFPlayer *pOwner, InvalidReasonsContainer_t& invalidReasons ) const
+	virtual bool IsValidForPlayer( const CTFPlayer *pOwner, InvalidReasonsContainer_t& invalidReasons ) const OVERRIDE
 	{
 		BaseClass::IsValidForPlayer( pOwner, invalidReasons );
 
@@ -1632,7 +1766,7 @@ class CTFQuestCustomDamageRestriction : public CTFQuestRestriction
 public:
 	virtual const char *GetValueString() const OVERRIDE
 	{
-		return GetCustomDamageName( m_eCustomDamageType );
+		return m_strValue;
 	}
 
 	virtual bool BInitFromKV( KeyValues *pKVItem, CUtlVector<CUtlString> *pVecErrors /* = NULL */ ) OVERRIDE
@@ -1640,9 +1774,9 @@ public:
 		if ( !CTFQuestRestriction::BInitFromKV( pKVItem, pVecErrors ) )
 			return false;
 
-		const char *pszCustomDamageName = pKVItem->GetString( "value", NULL );
-		m_eCustomDamageType = GetCustomDamageFromName( pszCustomDamageName );
-		SCHEMA_INIT_CHECK( m_eCustomDamageType != TF_DMG_CUSTOM_NONE, "%s", CFmtStr( "Invalid weapon restriction '%s' for quest objective", pszCustomDamageName ).Get() );
+		m_strValue = pKVItem->GetString( "value", NULL );
+		m_eCustomDamageType = GetCustomDamageFromName( m_strValue );
+		SCHEMA_INIT_CHECK( m_eCustomDamageType != TF_DMG_CUSTOM_NONE, "%s", CFmtStr( "Invalid weapon restriction '%s' for quest objective", m_strValue.Get() ).Get() );
 
 		m_pszCustomDamageKey = pKVItem->GetString( "custom_damage_key", NULL );
 		SCHEMA_INIT_CHECK( m_pszCustomDamageKey != NULL, "Invalid custom_damage_key!" );
@@ -1669,6 +1803,10 @@ public:
 			pDamageKey->AddSubKey( new KeyValues( pszCustomDamageName ) );
 		}
 
+		pDamageKey->AddSubKey( new KeyValues( "$var1" ) );
+		pDamageKey->AddSubKey( new KeyValues( "$var2" ) );
+		pDamageKey->AddSubKey( new KeyValues( "$var3" ) );
+
 		pRequiredKeys->AddSubKey( pDamageKey );
 	}
 
@@ -1682,6 +1820,7 @@ public:
 private:
 	ETFDmgCustom m_eCustomDamageType;
 	const char *m_pszCustomDamageKey;
+	CUtlString m_strValue;
 };
 REGISTER_QUEST_CONDITION_SUB_CLASS( CTFQuestCustomDamageRestriction, custom_damage, FIELD_CUSTOM_DAMAGE );
 
@@ -2008,57 +2147,6 @@ private:
 REGISTER_QUEST_CONDITION_SUB_CLASS( CTFQuestGameTypeRestriction, game_type, FIELD_NONE );
 
 
-static const char *s_loadout_position_names[] =
-{
-	// Weapons & Equipment
-	"LOADOUT_POSITION_PRIMARY",
-	"LOADOUT_POSITION_SECONDARY",
-	"LOADOUT_POSITION_MELEE",
-	"LOADOUT_POSITION_UTILITY",
-	"LOADOUT_POSITION_BUILDING",
-	"LOADOUT_POSITION_PDA",
-	"LOADOUT_POSITION_PDA2",
-
-	// Wearables. If you add new wearable slots, make sure you add them to IsWearableSlot() below this.
-	"LOADOUT_POSITION_HEAD",
-	"LOADOUT_POSITION_MISC",
-	
-	// other
-	"LOADOUT_POSITION_ACTION",
-	
-	// More wearables, yay!
-	"LOADOUT_POSITION_MISC2",
-	
-	// taunts
-	"LOADOUT_POSITION_TAUNT",
-	"LOADOUT_POSITION_TAUNT2",
-	"LOADOUT_POSITION_TAUNT3",
-	"LOADOUT_POSITION_TAUNT4",
-	"LOADOUT_POSITION_TAUNT5",
-	"LOADOUT_POSITION_TAUNT6",
-	"LOADOUT_POSITION_TAUNT7",
-	"LOADOUT_POSITION_TAUNT8",
-	
-#ifdef STAGING_ONLY
-	// Extra PDA mod slots 
-	"LOADOUT_POSITION_PDA_ADDON1",
-	"LOADOUT_POSITION_PDA_ADDON2",
-	
-	"LOADOUT_POSITION_PDA3",
-	//LOADOUT_POSITION_MISC3,
-	//LOADOUT_POSITION_MISC4,
-	//LOADOUT_POSITION_MISC5,
-	//LOADOUT_POSITION_MISC6,
-	//LOADOUT_POSITION_MISC7,
-	//LOADOUT_POSITION_MISC8,
-	//LOADOUT_POSITION_MISC9,
-	//LOADOUT_POSITION_MISC10,
-	"LOADOUT_POSITION_BUILDING2",
-#endif // STAGING_ONLY
-};
-COMPILE_TIME_ASSERT( ARRAYSIZE( s_loadout_position_names ) == CLASS_LOADOUT_POSITION_COUNT );
-
-
 //-----------------------------------------------------------------------------
 // Purpose: quest loadout position restriction
 //-----------------------------------------------------------------------------
@@ -2071,15 +2159,6 @@ public:
 		: m_eLoadoutPosition( LOADOUT_POSITION_INVALID )
 		, m_pszLoadoutKey( NULL )
 	{}
-
-	virtual const char *GetValueString() const OVERRIDE
-	{
-		if ( m_eLoadoutPosition == LOADOUT_POSITION_INVALID )
-		{
-			return "LOADOUT_POSITION_INVALID";
-		}
-		return s_loadout_position_names[ m_eLoadoutPosition ];
-	}
 
 	virtual bool BInitFromKV( KeyValues *pKVItem, CUtlVector<CUtlString> *pVecErrors /* = NULL */ ) OVERRIDE
 	{
@@ -2107,10 +2186,9 @@ public:
 		GetValidParamsKeyFromEvent( "loadout_key", GetConditionName(), m_pszEventName, pRequiredKeys );
 
 		KeyValues *pLoadoutPositions = new KeyValues( "value" );
-		int iLoadoutPositionCount = ARRAYSIZE( s_loadout_position_names );
-		for ( int i=0; i<iLoadoutPositionCount; ++i )
+		for ( int i=0; i<CLASS_LOADOUT_POSITION_COUNT; ++i )
 		{
-			const char *pszLoadoutPosition = s_loadout_position_names[i];
+			const char *pszLoadoutPosition = GetLoadoutPositionName( loadout_positions_t( i ) );
 			pLoadoutPositions->AddSubKey( new KeyValues( pszLoadoutPosition ) );
 		}
 
@@ -2121,25 +2199,12 @@ public:
 	{
 		CTFQuestBasePlayerRestriction::GetOutputKeyValues( pOutputKeys );
 
-		pOutputKeys->SetString( "value", GetValueString() );
+		pOutputKeys->SetString( "value", GetLoadoutPositionName( m_eLoadoutPosition ) );
 
 		pOutputKeys->SetString( "loadout_key", m_pszLoadoutKey );
 	}
 
 private:
-	loadout_positions_t GetLoadoutPositionByName( const char *pszLoadoutPositionName )
-	{
-		int iLoadoutPositionCount = ARRAYSIZE( s_loadout_position_names );
-		for ( int i=0; i<iLoadoutPositionCount; ++i )
-		{
-			if ( FStrEq( pszLoadoutPositionName, s_loadout_position_names[i] ) )
-			{
-				return loadout_positions_t(i);
-			}
-		}
-
-		return LOADOUT_POSITION_INVALID;
-	}
 
 	virtual bool BPlayerCheck( const CTFPlayer* pPlayer, IGameEvent *pEvent ) const OVERRIDE
 	{
@@ -2317,9 +2382,9 @@ public:
 		return true;
 	}
 
-	virtual bool IsValidForPlayer( const CTFPlayer *pOwner, InvalidReasonsContainer_t& invalidReasons ) const
+	virtual bool IsValidForPlayer( const CTFPlayer *pOwner, InvalidReasonsContainer_t& invalidReasons ) const OVERRIDE
 	{
-		BaseClass::IsValidForPlayer( pOwner, invalidReasons );
+		bool bValid = BaseClass::IsValidForPlayer( pOwner, invalidReasons );
 
 		int nNumFound = 0;
 		for ( int i = 1; i <= gpGlobals->maxClients && nNumFound < s_nMinConnectedPlayersForQuestProgress; ++i )
@@ -2338,14 +2403,17 @@ public:
 		}
 
 		if ( nNumFound < s_nMinConnectedPlayersForQuestProgress )
+		{
 			invalidReasons.m_bits.Set( INVALID_QUEST_REASON_NOT_ENOUGH_PLAYERS );
+			bValid = false;
+		}
 
 		if ( m_pRestrictions )
 		{
-			m_pRestrictions->IsValidForPlayer( pOwner, invalidReasons );
+			bValid &= m_pRestrictions->IsValidForPlayer( pOwner, invalidReasons );
 		}
 
-		return true;
+		return bValid;
 	}
 
 	virtual void FireGameEvent( IGameEvent *pEvent ) OVERRIDE
@@ -2356,7 +2424,8 @@ public:
 			return;
 
 		InvalidReasonsContainer_t invalidReasons;
-		IsValidForPlayer( GetQuestOwner(), invalidReasons );
+		if ( !IsValidForPlayer( GetQuestOwner(), invalidReasons ) )
+			return;
 
 		if ( !invalidReasons.m_bits.IsAllClear() )
 			return;
@@ -2509,7 +2578,8 @@ public:
 		if ( !CTFQuestEvaluator::BInitFromKV( pKVItem, pVecErrors ) )
 			return false;
 
-		m_nStart = m_nCount = pKVItem->GetInt( "start" );
+		m_flPeriod = pKVItem->GetFloat( "period" );
+		m_strEnd = pKVItem->GetString( "end" );
 		m_nEnd = pKVItem->GetInt( "end" );
 
 		FOR_EACH_TRUE_SUBKEY( pKVItem, pSubKey )
@@ -2530,54 +2600,83 @@ public:
 
 	virtual bool IsValidForPlayer( const CTFPlayer *pOwner, InvalidReasonsContainer_t& invalidReasons ) const
 	{
-		BaseClass::IsValidForPlayer( pOwner, invalidReasons );
+		bool bValid = BaseClass::IsValidForPlayer( pOwner, invalidReasons );
 
-		bool bIsForLocalPlayer = false;
 		FOR_EACH_VEC( m_vecChildren, i )
 		{
-			bIsForLocalPlayer |= m_vecChildren[i]->IsValidForPlayer( pOwner, invalidReasons );
+			bValid &= m_vecChildren[i]->IsValidForPlayer( pOwner, invalidReasons );
 		}
 
-		return bIsForLocalPlayer;
+		return bValid;
 	}
 
 	virtual void EvaluateCondition( CTFQuestEvaluator *pSender, int nScore ) OVERRIDE
 	{
+		InvalidReasonsContainer_t invalidReasons;
+		if ( !IsValidForPlayer( GetQuestOwner(), invalidReasons ) )
+			return;
+
+		if ( !invalidReasons.m_bits.IsAllClear() )
+			return;
+
 		const char *pszAction = pSender->GetAction();
 		if ( FStrEq( pszAction, "increment" ) )
 		{
-			m_nCount += nScore;
-		}
-		else if ( FStrEq( pszAction, "decrement" ) )
-		{
-			m_nCount -= nScore;
-			// Don't dip below 0!
-			m_nCount = Max( 0, m_nCount );
+			ScoreRecord_t& score = m_vecScoreRecords[ m_vecScoreRecords.AddToTail() ];
+			score.m_nCount = nScore;
+			score.m_flScoreTime = gpGlobals->curtime;
 		}
 		else if ( FStrEq( pszAction, "reset" ) )
 		{
-			m_nCount = 0;
+			m_vecScoreRecords.Purge();
 		}
 		else
 		{
 			AssertMsg( 0, "Invalid evaluation condition '%s' for '%s'", pSender->GetConditionName(), GetConditionName() );
 		}
 
-		// Check how many time over we've scored
-		int nNumScored = m_nCount / m_nEnd;
-		// Store the remainded
-		m_nCount -= ( nNumScored * m_nEnd );
+		int nTotalCount = GetTotalCount();
+
+		// Check how many times over we've scored
+		int nNumScored = 1;
+		// If m_nEnd is 0, the event happening (regardless of the value) counts as 1 score
+		if ( m_nEnd > 0 )
+		{
+			nNumScored = nTotalCount / m_nEnd;
+		}
 
 		if ( nNumScored > 0 )
 		{
 			Assert( GetParent() && GetParent()->IsEvaluator() );
 			assert_cast< CTFQuestEvaluator* >( GetParent() )->EvaluateCondition( this, nNumScored ) ;
+
+			// Consume all records
+			m_vecScoreRecords.Purge();
+
+			if ( m_nEnd > 0 )
+			{
+				// Check if there's a remainder
+				nTotalCount -= ( nNumScored * m_nEnd );
+			}
+			else
+			{
+				// If m_nEnd is 0, no remainder
+				nTotalCount = 0;
+			}
+
+			// Store the remainder in a new record
+			if ( nTotalCount )
+			{
+				ScoreRecord_t& score = m_vecScoreRecords[ m_vecScoreRecords.AddToTail() ];
+				score.m_flScoreTime = gpGlobals->curtime;
+				score.m_nCount = nTotalCount;
+			}
 		}
 	}
 
 	virtual void ResetCondition() OVERRIDE
 	{
-		m_nCount = 0;
+		m_vecScoreRecords.Purge();
 		
 		FOR_EACH_VEC( m_vecChildren, i )
 		{
@@ -2588,7 +2687,6 @@ public:
 	enum ECounterSubType
 	{
 		COUNTER_INCREMENT = 0,
-		COUNTER_DECREMENT,
 		COUNTER_RESET,
 
 		COUNTER_TYPE_COUNT
@@ -2646,7 +2744,7 @@ public:
 	{
 		CTFQuestEvaluator::GetOutputKeyValues( pOutputKeys );
 
-		pOutputKeys->SetInt( "end", m_nEnd );
+		pOutputKeys->SetString( "end", m_strEnd );
 	}
 
 	virtual void GetValidChildren( CUtlVector< const char* >& vecOutValidChildren ) const OVERRIDE
@@ -2658,9 +2756,46 @@ public:
 private:
 
 	CUtlVector< CTFQuestEvaluator* > m_vecChildren;
-	int m_nCount;
-	int m_nStart;
+
+	int GetTotalCount()
+	{
+		PruneOldRecords();
+
+		int nAccum = 0;
+		FOR_EACH_VEC( m_vecScoreRecords, i )
+		{
+			nAccum += m_vecScoreRecords[ i ].m_nCount;
+		}
+
+		return nAccum;
+	}
+
+	void PruneOldRecords()
+	{
+		// 0 period means don't use a period
+		if ( m_flPeriod == 0.f )
+			return;
+
+		float flCutoffTime = gpGlobals->curtime - m_flPeriod;
+		FOR_EACH_VEC_BACK( m_vecScoreRecords, i )
+		{
+			if ( m_vecScoreRecords[ i ].m_flScoreTime < flCutoffTime )
+			{
+				m_vecScoreRecords.Remove( i );
+			}
+		}
+	}
+
+	struct ScoreRecord_t
+	{
+		float m_flScoreTime;
+		int m_nCount;
+	};
+	CUtlVector< ScoreRecord_t > m_vecScoreRecords;
+
 	int m_nEnd;
+	float m_flPeriod;
+	CUtlString m_strEnd;
 };
 
 
@@ -2670,7 +2805,6 @@ void CTFQuestEvaluator::GetRequiredParamKeys( KeyValues *pRequiredKeys )
 	{
 		KeyValues *pActionsKey = new KeyValues( "action" );
 		pActionsKey->AddSubKey( new KeyValues( "increment" ) );
-		pActionsKey->AddSubKey( new KeyValues( "decrement" ) );
 		pActionsKey->AddSubKey( new KeyValues( "reset" ) );
 
 		pRequiredKeys->AddSubKey( pActionsKey );
@@ -2697,4 +2831,210 @@ CTFQuestEvaluator *CreateEvaluatorByName( const char *pszName, CTFQuestCondition
 	
 	AssertMsg( pNewEvaluator, "Invalid quest evaluator type '%s'", pszName );
 	return pNewEvaluator;
+}
+
+
+bool CTFClassQuestModifier::BPassesModifier( const CTFPlayer *pOwner, InvalidReasonsContainer_t& invalidReasons ) const
+{
+	int iClass = pOwner->GetPlayerClass()->GetClassIndex();
+	if ( ( m_nValidClassesMask & ( 1 << iClass ) ) == 0 )
+	{
+		invalidReasons.m_bits.Set( INVALID_QUEST_REASON_WRONG_CLASS );
+		return false;
+	}
+
+	return true;
+}
+
+void CTFMapQuestModifier::AddMapName( const char* pszMapName )
+{
+	m_vecStrMapNames.AddToTail( pszMapName );
+}
+
+bool CTFMapQuestModifier::BPassesModifier( const CTFPlayer *pOwner, InvalidReasonsContainer_t& invalidReasons ) const
+{
+#ifdef CLIENT_DLL
+	const char *pszMapName = TFGameRules()->MapName();
+#else
+	const char *pszMapName = gpGlobals->mapname.ToCStr();
+#endif
+
+	// Just need one to match
+	FOR_EACH_VEC( m_vecStrMapNames, i )
+	{
+		if ( !V_stricmp( pszMapName, m_vecStrMapNames[ i ].Get() ) )
+		{
+			return true;
+		}
+	}
+
+	invalidReasons.m_bits.Set( INVALID_QUEST_REASON_WRONG_MAP );
+	return false;
+}
+
+bool CTFGameModeQuestModifier::BPassesModifier( const CTFPlayer *pOwner, InvalidReasonsContainer_t& invalidReasons ) const
+{
+	if ( !TFGameRules() )
+		return false;
+
+#ifdef CLIENT_DLL
+	const MapDef_t* pMapDef = GetItemSchema()->GetMasterMapDefByName ( TFGameRules()->MapName() );
+#else
+	const MapDef_t* pMapDef = GetItemSchema()->GetMasterMapDefByName ( STRING( gpGlobals->mapname ) );
+#endif
+	if ( !pMapDef ) 
+		return false;
+
+	FOR_EACH_VEC( pMapDef->m_vecAssociatedGameCategories, i )
+	{
+		uint32 nMask = 1 << pMapDef->m_vecAssociatedGameCategories[ i ];
+		if ( ( nMask & m_nValidGameModesMask ) != 0 )
+			return true;
+	}
+
+	return false;
+}
+
+bool CTFTeamQuestModifier::BPassesModifier( const CTFPlayer *pOwner, InvalidReasonsContainer_t& invalidReasons ) const
+{
+	if ( pOwner->GetTeamNumber() != m_nTeamNum )
+	{
+		return false;
+	}
+
+	return true;
+}
+
+bool CTFConditionQuestModifier::BPassesModifier( const CTFPlayer *pOwner, InvalidReasonsContainer_t& invalidReasons ) const
+{
+	switch( m_Operation )
+	{
+		// Must have all of the conditions
+		case LogicalOperation::AND:
+		{
+			FOR_EACH_VEC( m_vecRequiredConditions, i )
+			{
+				if ( !pOwner->m_Shared.InCond( m_vecRequiredConditions[ i ] ) )
+					return false;
+			}
+
+			return true;
+		}
+
+		// Must have any of the conditions
+		case LogicalOperation::OR:
+		{
+			FOR_EACH_VEC( m_vecRequiredConditions, i )
+			{
+				if ( pOwner->m_Shared.InCond( m_vecRequiredConditions[ i ] ) )
+					return true;
+			}
+
+			return false;
+		}
+
+		// Can't have any of the conditions
+		case LogicalOperation::NOT:
+		{
+			FOR_EACH_VEC( m_vecRequiredConditions, i )
+			{
+				if ( pOwner->m_Shared.InCond( m_vecRequiredConditions[ i ] ) )
+					return false;
+			}
+
+			return true;
+		}
+	}
+
+	return true;
+}
+
+bool CTFEquippedItemsQuestModifier::BPassesModifier( const CTFPlayer *pOwner, InvalidReasonsContainer_t& invalidReasons ) const
+{
+	auto lambdaIsItemEquipped = [ &pOwner ]( const CSchemaItemDefHandle& def ) -> bool
+	{
+		auto pNonConstOwner = const_cast< CTFPlayer* >( pOwner );
+		for ( int i = LOADOUT_POSITION_PRIMARY ; i < LOADOUT_POSITION_ACTION; ++i )
+		{
+			CEconItemView *pCurItemData = CTFPlayerSharedUtils::GetEconItemViewByLoadoutSlot( pNonConstOwner, i );
+			if ( !pCurItemData )
+				continue;
+
+			if ( pCurItemData->GetItemDefinition() == def )
+			{
+				return true;	
+			}
+
+			const char *pszRemapClass = pCurItemData->GetItemDefinition()->GetXifierRemapClass();
+			if ( pszRemapClass )
+			{
+				if ( FStrEq( def.GetName(), pszRemapClass ) )
+				{
+					return true;
+				}
+			}
+		}
+
+		return false;
+	};
+
+	switch( m_Operation )
+	{
+		// Must have all of the items equipped
+		case LogicalOperation::AND:
+		{
+			FOR_EACH_VEC( m_vecRequiredItemDefs, i )
+			{
+				if ( !lambdaIsItemEquipped( m_vecRequiredItemDefs[ i ] ) )
+					return false;
+			}
+
+			return true;
+		}
+
+		// Must have any of the items equipped
+		case LogicalOperation::OR:
+		{
+			FOR_EACH_VEC( m_vecRequiredItemDefs, i )
+			{
+				if ( lambdaIsItemEquipped( m_vecRequiredItemDefs[ i ] ) )
+					return true;
+			}
+
+			return false;
+		}
+
+		// Can't have any of the items equipped
+		case LogicalOperation::NOT:
+		{
+			FOR_EACH_VEC( m_vecRequiredItemDefs, i )
+			{
+				if ( lambdaIsItemEquipped( m_vecRequiredItemDefs[ i ] ) )
+					return false;
+			}
+
+			return true;
+		}
+	}
+
+	return true;
+}
+
+bool CTFJumpStateQuestModifier::BPassesModifier( const CTFPlayer *pOwner, InvalidReasonsContainer_t& invalidReasons ) const
+{
+#ifdef CLIENT_DLL
+	return true;
+#else
+	int nNumJumps = const_cast< CTFPlayer* >( pOwner )->GetGroundEntity() == NULL ? 1 : 0;
+	nNumJumps += pOwner->m_Shared.GetAirDash();
+	nNumJumps += pOwner->m_Shared.m_bScattergunJump;
+
+	// If we want them on the ground, make sure they're on the ground
+	if ( m_nJumpCount == 0 )
+		return nNumJumps == 0;
+
+	// If we want them jumping, make sure they are at least as jumpy as
+	// we want them to be
+	return nNumJumps >= m_nJumpCount;
+#endif
 }

@@ -440,8 +440,8 @@ void CConfirmStrangePartApplicationDialog::Apply()
 {
 	GCSDK::CProtoBufMsg<CMsgApplyStrangePart> msg( k_EMsgGCApplyStrangePart );
 
-	msg.Body().set_strange_part_item_id( m_pSubjectModelPanel->GetItem()->GetItemID() );
-	msg.Body().set_item_item_id( m_pToolModelPanel->GetItem()->GetItemID() );
+	msg.Body().set_strange_part_item_id( m_pToolModelPanel->GetItem()->GetItemID() );
+	msg.Body().set_item_item_id( m_pSubjectModelPanel->GetItem()->GetItemID() );
 
 	EconUI()->Gamestats_ItemTransaction( IE_ITEM_USED_TOOL, m_pToolModelPanel->GetItem(), "applied_strange_part", m_pToolModelPanel->GetItem()->GetItemDefIndex() );
 
@@ -504,8 +504,8 @@ void CConfirmStrangeRestrictionApplicationDialog::Apply()
 {
 	GCSDK::CProtoBufMsg<CMsgApplyStrangeRestriction> msg( k_EMsgGCApplyStrangeRestriction );
 
-	msg.Body().set_strange_part_item_id( m_pSubjectModelPanel->GetItem()->GetItemID() );
-	msg.Body().set_item_item_id( m_pToolModelPanel->GetItem()->GetItemID() );
+	msg.Body().set_strange_part_item_id( m_pToolModelPanel->GetItem()->GetItemID() );
+	msg.Body().set_item_item_id( m_pSubjectModelPanel->GetItem()->GetItemID() );
 	msg.Body().set_strange_attr_index( m_iStrangeSlot );
 
 	EconUI()->Gamestats_ItemTransaction( IE_ITEM_USED_TOOL, m_pToolModelPanel->GetItem(), "applied_strange_restriction", m_pToolModelPanel->GetItem()->GetItemDefIndex() );
@@ -627,13 +627,16 @@ public:
 		, m_sPromptLocToken( pszPromptLocToken )
 		, m_sTransactionReason( pszTransactionReason )
 		, m_sUpdatingText( pszUpdatingText )
+		, m_resultItem( *pToolSubject )
 	{
-		//
+		m_pModelInspectPanel = new CEmbeddedItemModelPanel( this, "ModelInspectionPanel" );
 	}
+
+	virtual const char* GetResFile() const { return "Resource/UI/econ/ConfirmApplyStrangifierDialog.res"; }
 
 	virtual void ApplySchemeSettings( vgui::IScheme *pScheme )
 	{
-		LoadControlSettings( "Resource/UI/econ/ConfirmApplyStrangifierDialog.res" );
+		LoadControlSettings( GetResFile() );
 		BaseClass::ApplySchemeSettings( pScheme );
 
 		CExLabel* pTextLabel = dynamic_cast<CExLabel*>( FindChildByName( "ConfirmLabel" ) );
@@ -663,6 +666,7 @@ public:
 			pTextLabel->SetText( wTempFinalString );
 		}
 
+		SetupItem();
 	}
 
 	virtual void Apply( void )
@@ -690,6 +694,17 @@ public:
 			ShowWaitingDialog( new CWaitingDialog( NULL ), m_sUpdatingText.String(), true, false, 5.0f );
 		}
 	}
+
+	// Be default don't actually do anything.  Can be overridden for specific tools since the client
+	// doesn't know what happens when a tool is applied to an item
+	virtual void SetupItem() 
+	{
+		m_pModelInspectPanel->SetVisible( false );
+	}
+
+protected:
+	CEmbeddedItemModelPanel *m_pModelInspectPanel;
+	CEconItemView m_resultItem;
 
 private:
 	CUtlString m_sPromptLocToken;
@@ -807,8 +822,8 @@ public:
 	{
 		GCSDK::CProtoBufMsg<CMsgApplyUpgradeCard> msg( k_EMsgGCApplyUpgradeCard );
 
-		msg.Body().set_upgrade_card_item_id( m_pSubjectModelPanel->GetItem()->GetItemID() );
-		msg.Body().set_subject_item_id( m_pToolModelPanel->GetItem()->GetItemID() );
+		msg.Body().set_upgrade_card_item_id( m_pToolModelPanel->GetItem()->GetItemID() );
+		msg.Body().set_subject_item_id( m_pSubjectModelPanel->GetItem()->GetItemID() );
 
 		EconUI()->Gamestats_ItemTransaction( IE_ITEM_USED_TOOL, m_pToolModelPanel->GetItem(), "applied_upgrade_card", m_pToolModelPanel->GetItem()->GetItemDefIndex() );
 
@@ -965,4 +980,6 @@ void CEconTool_DuckToken::OnClientApplyTool( CEconItemView *pTool, CEconItemView
 	CConfirmDuckTokenApplicationDialog *pDialog = vgui::SETUP_PANEL( new CConfirmDuckTokenApplicationDialog( pParent, pTool, pSubject ) );
 	MakeModalAndBringToFront( pDialog );
 }
+
+
 #endif // TF_CLIENT_DLL

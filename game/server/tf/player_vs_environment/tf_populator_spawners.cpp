@@ -162,6 +162,14 @@ static EventInfo *ParseEvent( KeyValues *values )
 		{
 			eventInfo->m_action.sprintf( "%s", data->GetString() );
 		}
+		else if ( !Q_stricmp( name, "Param" ) )
+        {
+            eventInfo->m_param.SetString( AllocPooledString( data->GetString() ) );
+        }
+        else if ( !Q_stricmp( name, "Delay" ) )
+        {
+            eventInfo->m_delay = data->GetFloat();
+        }
 		else
 		{
 			Warning( "Unknown field '%s' in WaveSpawn event definition.\n", data->GetString() );
@@ -1006,7 +1014,7 @@ bool CTFBotSpawner::Spawn( const Vector &rawHere, EntityHandleVector_t *result )
 
 			nNumEnemyBots = botVector.Count();
 
-			if ( nNumEnemyBots >= CPopulationManager::MVM_INVADERS_TEAM_SIZE )
+			if ( nNumEnemyBots >= tf_mvm_max_invaders.GetInt() )
 			{
 				// no room for more
 				if ( tf_populator_debug.GetBool() ) 
@@ -1015,10 +1023,10 @@ bool CTFBotSpawner::Spawn( const Vector &rawHere, EntityHandleVector_t *result )
 				}
 
 				// extra guard if we're over full on bots
-				if ( nNumEnemyBots > CPopulationManager::MVM_INVADERS_TEAM_SIZE )
+				if ( nNumEnemyBots > tf_mvm_max_invaders.GetInt() )
 				{
 					// Kick bots until we are at the proper number starting with spectator bots
-					int iNumberToKick = nNumEnemyBots - CPopulationManager::MVM_INVADERS_TEAM_SIZE;
+					int iNumberToKick = nNumEnemyBots - tf_mvm_max_invaders.GetInt();
 					int iKickedBots = 0;
 
 					// loop through spectators and invaders in that order
@@ -1368,6 +1376,7 @@ CTankSpawner::CTankSpawner( IPopulator *populator ) : IPopulationSpawner( popula
 	m_startingPathTrackNodeName = NULL;
 	m_onKilledOutput = NULL;
 	m_onBombDroppedOutput = NULL;
+	m_iszClassIcon = NULL_STRING;
 }
 
 
@@ -1386,6 +1395,10 @@ bool CTankSpawner::Parse( KeyValues *values )
 		if ( !Q_stricmp( name, "Health" ) )
 		{
 			m_health = data->GetInt();
+		}
+		else if (!Q_stricmp(name, "ClassIcon"))
+		{
+			m_iszClassIcon = AllocPooledString(data->GetString());
 		}
 		else if ( !Q_stricmp( name, "Speed" ) )
 		{
@@ -1443,6 +1456,7 @@ bool CTankSpawner::Spawn( const Vector &here, EntityHandleVector_t *result )
 
 		tank->DefineOnKilledOutput( m_onKilledOutput );
 		tank->DefineOnBombDroppedOutput( m_onBombDroppedOutput );
+		tank->SetClassIconName( GetClassIcon() );
 
 		if ( result )
 		{
@@ -1459,6 +1473,15 @@ bool CTankSpawner::Spawn( const Vector &here, EntityHandleVector_t *result )
 	return false;
 }
 
+string_t CTankSpawner::GetClassIcon(int nSpawnNum)
+{
+	if (m_iszClassIcon != NULL_STRING)
+	{
+		return m_iszClassIcon;
+	}
+
+	return MAKE_STRING( "tank" );
+}
 
 //-----------------------------------------------------------------------
 //-----------------------------------------------------------------------

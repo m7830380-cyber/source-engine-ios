@@ -25,6 +25,7 @@
 #include "tf_gamerules.h"
 #include "particle_parse.h"
 #include "bone_setup.h"
+#include "tf_flame.h"
 #endif
 
 //=============================================================================
@@ -84,28 +85,11 @@ PRECACHE_WEAPON_REGISTER( tf_projectile_cleaver );
 #define TF_CLEAVER_LAUNCH_SPEED		7000.f
 #define TF_WEAPON_PEEJAR_MODEL	"models/weapons/c_models/urinejar.mdl"
 #define TF_WEAPON_FESTIVE_PEEJAR_MODEL	"models/weapons/c_models/c_xms_urinejar.mdl"
-#ifdef STAGING_ONLY	
 #define TF_WEAPON_MILKJAR_MODEL	"models/workshop/weapons/c_models/c_madmilk/c_madmilk.mdl"
 #define TF_WEAPON_CLEAVER_MODEL	"models/workshop_partner/weapons/c_models/c_sd_cleaver/c_sd_cleaver.mdl"
-#else
-#define TF_WEAPON_MILKJAR_MODEL	"models/weapons/c_models/c_madmilk/c_madmilk.mdl"
-#define TF_WEAPON_CLEAVER_MODEL	"models/weapons/c_models/c_sd_cleaver/c_sd_cleaver.mdl"
-#endif
-#define TF_WEAPON_PEEJAR_EXPLODE_SOUND	"Jar.Explode"
 #define TF_WEAPON_CLEAVER_IMPACT_FLESH_SOUND	"Cleaver.ImpactFlesh"
 #define TF_WEAPON_CLEAVER_IMPACT_WORLD_SOUND	"Cleaver.ImpactWorld"
 
-#ifdef STAGING_ONLY
-#define TF_WEAPON_WATER_BALLOON_KILL_SOUND		"Game.PenetrationKill"
-#define TF_WEAPON_WATER_BALLOON_HIT_SOUND		"Weapon_waterbomb.hit"
-#define TF_WEAPON_WATER_BALLOON_SCORE_SOUND		"Weapon_waterbomb.score"
-
-#define TF_BREAD_MODEL			"models/props_gameplay/small_loaf.mdl"
-
-#define TF_WATERBALLOON_RADIUS				32
-#define TF_WATERBALLOON_CHARGEDRADIUS		64
-#define TF_WATERBALLOON_EXPLODE_SOUND		"Weapon_waterbomb.explode"
-#endif
 
 //=============================================================================
 //
@@ -222,6 +206,17 @@ void CTFJar::TossJarThink( void )
 		pPlayer->SpeakWeaponFire( MP_CONCEPT_JARATE_LAUNCH );
 	}
 
+	if ( pProjectile->ExplodesOnHit() )
+	{
+		Vector vecEnd = pProjectile->GetAbsOrigin() + ( vecVelocity.Normalized() * 32.0f );
+		UTIL_TraceHull( pProjectile->GetAbsOrigin(), vecEnd, -Vector( 8, 8, 8 ), Vector( 8, 8, 8 ), MASK_SOLID_BRUSHONLY, &traceFilter, &trace );
+
+		if ( trace.fraction < 1.0 )
+		{
+			pProjectile->Explode( &trace, pProjectile->GetDamageType() );
+		}
+	}
+
 #endif
 }
 //-----------------------------------------------------------------------------
@@ -320,7 +315,7 @@ CTFProjectile_Jar* CTFProjectile_Jar::Create( const Vector &position, const QAng
 
 extern void ExtinguishPlayer( CEconEntity *pExtinguisher, CTFPlayer *pOwner, CTFPlayer *pTarget, const char *pExtinguisherName );
 
-void JarExplode( int iEntIndex, CTFPlayer *pAttacker, CBaseEntity *pOriginalWeapon, CBaseEntity *pWeapon, const Vector& vContactPoint, int iTeam, float flRadius, ETFCond cond, float flDuration, const char *pszImpactEffect )
+void JarExplode( int iEntIndex, CTFPlayer *pAttacker, CBaseEntity *pOriginalWeapon, CBaseEntity *pWeapon, const Vector& vContactPoint, int iTeam, float flRadius, ETFCond cond, float flDuration, const char *pszImpactEffect, const char *pszExplodeSound )
 {
 	// Splash!
 	CPVSFilter particleFilter( vContactPoint );
@@ -329,138 +324,146 @@ void JarExplode( int iEntIndex, CTFPlayer *pAttacker, CBaseEntity *pOriginalWeap
 	// Explosion effect.
 	CBroadcastRecipientFilter soundFilter;
 	Vector vecOrigin = vContactPoint;
-	CBaseEntity::EmitSound( soundFilter, iEntIndex, TF_WEAPON_PEEJAR_EXPLODE_SOUND, &vecOrigin );
+	CBaseEntity::EmitSound( soundFilter, iEntIndex, pszExplodeSound, &vecOrigin );
 
 	// Treat this trace exactly like radius damage
 	CTraceFilterIgnorePlayers traceFilter( pAttacker, COLLISION_GROUP_PROJECTILE );
 
 	// Splash pee on everyone nearby.
-	CBaseEntity *pListOfEntities[32];
-	int iEntities = UTIL_EntitiesInSphere( pListOfEntities, 32, vContactPoint, flRadius, FL_CLIENT );
+	CBaseEntity *pListOfEntities[MAX_PLAYERS_ARRAY_SAFE];
+	int iEntities = UTIL_EntitiesInSphere( pListOfEntities, ARRAYSIZE( pListOfEntities ), vContactPoint, flRadius, FL_CLIENT | FL_NPC );
 	for ( int i = 0; i < iEntities; ++i )
 	{
 		CTFPlayer *pPlayer = ToTFPlayer( pListOfEntities[i] );
-
-		if ( !pPlayer || !pPlayer->IsAlive() )
-			continue;
-
-		// Do a quick trace to see if there's any geometry in the way.
-		// Pee isn't stopped by other entities. Splishy splashy.
-		trace_t trace;
-		UTIL_TraceLine( vContactPoint, pPlayer->GetAbsOrigin(), ( MASK_SHOT & ~( CONTENTS_HITBOX ) ), &traceFilter, &trace );
-		if ( trace.DidHitWorld() )
-			continue;
-
-		// Drench the target.
-		if ( pPlayer->GetTeamNumber() != iTeam )
+		if ( pPlayer )
 		{
-			if ( pPlayer->m_Shared.IsInvulnerable() )
+			if ( !pPlayer->IsAlive() )
 				continue;
 
-			if ( pPlayer->m_Shared.InCond( TF_COND_PHASE ) || pPlayer->m_Shared.InCond( TF_COND_PASSTIME_INTERCEPTION ) )
+			// Do a quick trace to see if there's any geometry in the way.
+			// Pee isn't stopped by other entities. Splishy splashy.
+			trace_t trace;
+			UTIL_TraceLine( vContactPoint, pPlayer->GetAbsOrigin(), ( MASK_SHOT & ~( CONTENTS_HITBOX ) ), &traceFilter, &trace );
+			if ( trace.DidHitWorld() )
 				continue;
 
-			if ( !pPlayer->CanGetWet() )
-				continue;
-
-			pPlayer->m_Shared.AddCond( cond, flDuration, pAttacker );
-			pPlayer->m_Shared.SetPeeAttacker( pAttacker );
-			pPlayer->SpeakConceptIfAllowed( MP_CONCEPT_JARATE_HIT );
-
-			if ( pAttacker )
+			// Drench the target.
+			if ( pPlayer->GetTeamNumber() != iTeam )
 			{
-				if ( pPlayer->IsPlayerClass( TF_CLASS_SPY ) && pPlayer->m_Shared.GetPercentInvisible() == 1.0f )
-				{
-					pAttacker->AwardAchievement( ACHIEVEMENT_TF_SNIPER_JARATE_REVEAL_SPY );
-				}
+				if ( TFGameRules() && TFGameRules()->IsTruceActive() )
+					continue;
 
-				float flStun = 1.0f;
-				CALL_ATTRIB_HOOK_FLOAT_ON_OTHER( pAttacker, flStun, applies_snare_effect );
-				if ( flStun != 1.0f )
-				{
-					pPlayer->m_Shared.StunPlayer( flDuration, flStun, TF_STUN_MOVEMENT, pAttacker );
-				}
+				if ( pPlayer->m_Shared.IsInvulnerable() )
+					continue;
 
-				// Stats tracking?
-				if ( cond == TF_COND_URINE || cond == TF_COND_MAD_MILK )
+				if ( pPlayer->m_Shared.InCond( TF_COND_PHASE ) || pPlayer->m_Shared.InCond( TF_COND_PASSTIME_INTERCEPTION ) )
+					continue;
+
+				if ( !pPlayer->CanGetWet() )
+					continue;
+
+				pPlayer->m_Shared.AddCond( cond, flDuration, pAttacker );
+				pPlayer->m_Shared.SetPeeAttacker( pAttacker );
+				pPlayer->SpeakConceptIfAllowed( MP_CONCEPT_JARATE_HIT );
+
+				if ( pAttacker )
 				{
-					if ( TFGameRules() && TFGameRules()->IsPVEModeActive() )
+					if ( pPlayer->IsPlayerClass( TF_CLASS_SPY ) && pPlayer->m_Shared.GetPercentInvisible() == 1.0f )
 					{
-						// These if statements are intentionally split to avoid falling through to the normal kKillEaterEvent_PeeVictims event if we're in
-						// IsPVEModeActive() but not a robot, or don't have the stun.
-						if ( pPlayer->GetTeamNumber() == TF_TEAM_PVE_INVADERS && flStun != 1.0f )
+						pAttacker->AwardAchievement( ACHIEVEMENT_TF_SNIPER_JARATE_REVEAL_SPY );
+					}
+
+					float flStun = 1.0f;
+					CALL_ATTRIB_HOOK_FLOAT_ON_OTHER( pAttacker, flStun, applies_snare_effect );
+					if ( flStun != 1.0f )
+					{
+						pPlayer->m_Shared.StunPlayer( flDuration, flStun, TF_STUN_MOVEMENT, pAttacker );
+					}
+
+					// Stats tracking?
+					if ( cond == TF_COND_URINE || cond == TF_COND_MAD_MILK || cond == TF_COND_GAS )
+					{
+						if ( TFGameRules() && TFGameRules()->IsPVEModeActive() )
 						{
-							EconEntity_OnOwnerKillEaterEvent( dynamic_cast<CEconEntity *>( pWeapon ), pAttacker, pPlayer, kKillEaterEvent_RobotsSlowed );
+							// These if statements are intentionally split to avoid falling through to the normal kKillEaterEvent_PeeVictims event if we're in
+							// IsPVEModeActive() but not a robot, or don't have the stun.
+							if ( pPlayer->GetTeamNumber() == TF_TEAM_PVE_INVADERS && flStun != 1.0f )
+							{
+								EconEntity_OnOwnerKillEaterEvent( dynamic_cast<CEconEntity *>( pWeapon ), pAttacker, pPlayer, kKillEaterEvent_RobotsSlowed );
+							}
+						}
+						else
+						{
+							EconEntity_OnOwnerKillEaterEvent( dynamic_cast<CEconEntity *>( pWeapon ), pAttacker, pPlayer, kKillEaterEvent_PeeVictims );
 						}
 					}
-					else
+
+					// Tell the clients involved in the jarate
+					CRecipientFilter involved_filter;
+					involved_filter.AddRecipient( pPlayer );
+					involved_filter.AddRecipient( pAttacker );
+					UserMessageBegin( involved_filter, "PlayerJarated" );
+						WRITE_BYTE( pAttacker->entindex() );
+						WRITE_BYTE( pPlayer->entindex() );
+					MessageEnd();
+
+					const char *pszEvent = NULL;
+					switch( cond )
 					{
-						EconEntity_OnOwnerKillEaterEvent( dynamic_cast<CEconEntity *>( pWeapon ), pAttacker, pPlayer, kKillEaterEvent_PeeVictims );
+					case TF_COND_URINE:
+						pszEvent = "jarate_attack";
+						break;
+					case TF_COND_MAD_MILK:
+						pszEvent = "milk_attack";
+						break;
+					case TF_COND_GAS:
+						pszEvent = "gas_attack";
+						break;
+					}
+
+					if ( pszEvent && pszEvent[0] )
+					{
+						UTIL_LogPrintf( "\"%s<%i><%s><%s>\" triggered \"%s\" against \"%s<%i><%s><%s>\" with \"%s\" (attacker_position \"%d %d %d\") (victim_position \"%d %d %d\")\n",    
+							pAttacker->GetPlayerName(),
+							pAttacker->GetUserID(),
+							pAttacker->GetNetworkIDString(),
+							pAttacker->GetTeam()->GetName(),
+							pszEvent,
+							pPlayer->GetPlayerName(),
+							pPlayer->GetUserID(),
+							pPlayer->GetNetworkIDString(),
+							pPlayer->GetTeam()->GetName(),
+							"tf_weapon_jar",
+							(int)pAttacker->GetAbsOrigin().x, 
+							(int)pAttacker->GetAbsOrigin().y,
+							(int)pAttacker->GetAbsOrigin().z,
+							(int)pPlayer->GetAbsOrigin().x, 
+							(int)pPlayer->GetAbsOrigin().y,
+							(int)pPlayer->GetAbsOrigin().z );
 					}
 				}
-
-				// Tell the clients involved in the jarate
-				CRecipientFilter involved_filter;
-				involved_filter.AddRecipient( pPlayer );
-				involved_filter.AddRecipient( pAttacker );
-				UserMessageBegin( involved_filter, "PlayerJarated" );
-					WRITE_BYTE( pAttacker->entindex() );
-					WRITE_BYTE( pPlayer->entindex() );
-				MessageEnd();
-
-				const char *pszEvent = NULL;
-				switch( cond )
-				{
-				case TF_COND_URINE:
-					pszEvent = "jarate_attack";
-					break;
-				case TF_COND_MAD_MILK:
-					pszEvent = "milk_attack";
-					break;
-				}
-
-				if ( pszEvent && pszEvent[0] )
-				{
-					UTIL_LogPrintf( "\"%s<%i><%s><%s>\" triggered \"%s\" against \"%s<%i><%s><%s>\" with \"%s\" (attacker_position \"%d %d %d\") (victim_position \"%d %d %d\")\n",    
-						pAttacker->GetPlayerName(),
-						pAttacker->GetUserID(),
-						pAttacker->GetNetworkIDString(),
-						pAttacker->GetTeam()->GetName(),
-						pszEvent,
-						pPlayer->GetPlayerName(),
-						pPlayer->GetUserID(),
-						pPlayer->GetNetworkIDString(),
-						pPlayer->GetTeam()->GetName(),
-						"tf_weapon_jar",
-						(int)pAttacker->GetAbsOrigin().x, 
-						(int)pAttacker->GetAbsOrigin().y,
-						(int)pAttacker->GetAbsOrigin().z,
-						(int)pPlayer->GetAbsOrigin().x, 
-						(int)pPlayer->GetAbsOrigin().y,
-						(int)pPlayer->GetAbsOrigin().z );
-				}
 			}
-		}
-		else
-		{
-			if ( pAttacker && pPlayer->m_Shared.InCond( TF_COND_BURNING ) )
+			else
 			{
-				ExtinguishPlayer( dynamic_cast<CEconEntity *>( pWeapon ), pAttacker, pPlayer, "tf_weapon_jar" );
-
-				// Return some percentage of the jar to the thrown weapon if extinguishing an ally
-				auto pLauncher = dynamic_cast< CTFWeaponBase* >( pOriginalWeapon );
-				if ( pLauncher && pAttacker != pPlayer && pLauncher->HasEffectBarRegeneration() )
+				if ( pAttacker && pPlayer->m_Shared.InCond( TF_COND_BURNING ) )
 				{
-					float fCooldown = 1.0f;
-					CALL_ATTRIB_HOOK_FLOAT_ON_OTHER( pLauncher, fCooldown, extinguish_reduces_cooldown );
-					fCooldown = 1.0f - fCooldown;
-					if ( fCooldown > 0 )
+					ExtinguishPlayer( dynamic_cast<CEconEntity *>( pWeapon ), pAttacker, pPlayer, "tf_weapon_jar" );
+
+					// Return some percentage of the jar to the thrown weapon if extinguishing an ally
+					auto pLauncher = dynamic_cast< CTFWeaponBase* >( pOriginalWeapon );
+					if ( pLauncher && pAttacker != pPlayer && pLauncher->HasEffectBarRegeneration() )
 					{
-						if ( pLauncher->GetEffectBarProgress() < fCooldown )
+						float fCooldown = 1.0f;
+						CALL_ATTRIB_HOOK_FLOAT_ON_OTHER( pLauncher, fCooldown, extinguish_reduces_cooldown );
+						fCooldown = 1.0f - fCooldown;
+						if ( fCooldown > 0 )
 						{
-							float fDuration = pLauncher->GetEffectBarRechargeTime();
-							float fIncrement = fDuration * fCooldown;
-							pLauncher->DecrementBarRegenTime( fIncrement );
+							if ( pLauncher->GetEffectBarProgress() < fCooldown )
+							{
+								float fDuration = pLauncher->GetEffectBarRechargeTime();
+								float fIncrement = fDuration * fCooldown;
+								pLauncher->DecrementBarRegenTime( fIncrement );
+							}
 						}
 					}
 				}
@@ -487,7 +490,7 @@ void CTFProjectile_Jar::Explode( trace_t *pTrace, int bitsDamageType )
 	}
 
 	CTFPlayer *pThrower = ToTFPlayer( GetThrower() );
-	JarExplode( entindex(), pThrower, GetOriginalLauncher(), GetLauncher(), GetAbsOrigin(), GetTeamNumber(), GetDamageRadius(), GetEffectCondition(), 10.f, GetImpactEffect() );
+	JarExplode( entindex(), pThrower, GetOriginalLauncher(), GetLauncher(), GetAbsOrigin(), GetTeamNumber(), GetDamageRadius(), GetEffectCondition(), 10.f, GetImpactEffect(), GetExplodeSound() );
 
 	// Debug radius draw.
 	//DrawRadius( GetDamageRadius() );
@@ -905,9 +908,7 @@ Vector CTFCleaver::GetVelocityVector( const Vector &vecForward, const Vector &ve
 	Vector vecVelocity;
 
 	// Calculate the initial impulse on the item.
-	vecVelocity = Vector( 0.0f, 0.0f, 0.0f );
-	vecVelocity += vecForward * 10;
-	vecVelocity += vecUp * 1;
+	vecVelocity = vecForward * 10 + vecUp;
 	VectorNormalize( vecVelocity );
 	vecVelocity *= 3000;
 
@@ -985,7 +986,7 @@ CTFProjectile_Cleaver::CTFProjectile_Cleaver()
 }
 
 #ifdef GAME_DLL
-#define FLIGHT_TIME_TO_MAX_DMG	1.f
+#define FLIGHT_TIME_TO_REDUCE_COOLDOWN	0.5f
 //-----------------------------------------------------------------------------
 // Purpose:
 //-----------------------------------------------------------------------------
@@ -1013,36 +1014,40 @@ void CTFProjectile_Cleaver::OnHit( CBaseEntity *pOther )
 		return;
 
 	if ( TFGameRules() && TFGameRules()->IsTruceActive() && pOwner->IsTruceValidForEnt() )
+	{
+		RemoveCleaver();
 		return;
+	}
 
-	bool bIsCriticalHit = IsCritical();
-	bool bIsMiniCrit = false;
-	float flBleedTime = 5.0f;
+	CBaseEntity *pInflictor = GetLauncher();
 
 	float flLifeTime = gpGlobals->curtime - m_flCreationTime;
-	if ( flLifeTime >= FLIGHT_TIME_TO_MAX_DMG )
+	if ( flLifeTime >= FLIGHT_TIME_TO_REDUCE_COOLDOWN )
 	{
-		bIsMiniCrit = true;
+		auto pLauncher = dynamic_cast<CTFWeaponBase*>( pInflictor );
+		if ( pLauncher && pOwner != pPlayer && pLauncher->HasEffectBarRegeneration() )
+		{
+			pLauncher->DecrementBarRegenTime( 1.5f );
+		}
 	}
 
 	// just do the bleed effect directly since the bleed
 	// attribute comes from the inflictor, which is the cleaver.
-	pPlayer->m_Shared.MakeBleed( pOwner, (CTFCleaver *)GetLauncher(), flBleedTime );
+	pPlayer->m_Shared.MakeBleed( pOwner, (CTFCleaver *)GetLauncher(), 5.f );
 
 	// Give 'em a love tap.
 	const trace_t *pTrace = &CBaseEntity::GetTouchTrace();
 	trace_t *pNewTrace = const_cast<trace_t*>( pTrace );
 
-	CBaseEntity *pInflictor = GetLauncher();
 	CTakeDamageInfo info;
 	info.SetAttacker( pOwner );
 	info.SetInflictor( pInflictor ); 
 	info.SetWeapon( pInflictor );
 	info.SetDamage( GetDamage() );
-	info.SetDamageCustom( bIsMiniCrit ? TF_DMG_CUSTOM_CLEAVER_CRIT : TF_DMG_CUSTOM_CLEAVER );
+	info.SetDamageCustom( TF_DMG_CUSTOM_CLEAVER );
 	info.SetDamagePosition( GetAbsOrigin() );
 	int iDamageType = GetDamageType();
-	if ( bIsCriticalHit )
+	if ( IsCritical() )
 	{
 		iDamageType |= DMG_CRITICAL;
 	}
@@ -1067,11 +1072,7 @@ void CTFProjectile_Cleaver::OnHit( CBaseEntity *pOther )
 	CSingleUserRecipientFilter attackerFilter( pOwner );
 	EmitSound( attackerFilter, pOwner->entindex(), params );
 
-	AddEffects( EF_NODRAW );
-	SetAbsVelocity( vec3_origin );
-
-	SetContextThink( &CBaseGrenade::SUB_Remove, gpGlobals->curtime + 2, "RemoveThink" );
-	SetTouch( NULL );
+	RemoveCleaver();
 
 	m_bHitPlayer = true;
 }
@@ -1134,6 +1135,17 @@ CTFProjectile_Cleaver* CTFProjectile_Cleaver::Create( const Vector &position, co
 	}
 
 	return pGrenade;
+}
+
+//-----------------------------------------------------------------------------
+// Purpose:
+//-----------------------------------------------------------------------------
+void CTFProjectile_Cleaver::RemoveCleaver( void )
+{
+	AddEffects( EF_NODRAW );
+	SetAbsVelocity( vec3_origin );
+	SetContextThink( &CBaseGrenade::SUB_Remove, gpGlobals->curtime + 2, "RemoveThink" );
+	SetTouch( NULL );
 }
 
 #else

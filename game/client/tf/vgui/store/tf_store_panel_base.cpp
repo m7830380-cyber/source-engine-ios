@@ -89,6 +89,9 @@ void CTFBaseStorePanel::OnArmoryClosed( void )
 void CTFBaseStorePanel::OnThink()
 {
 	bool bShouldBeVisible = NotificationQueue_GetNumNotifications() != 0;
+
+	bShouldBeVisible = false;
+
 	if ( m_pNotificationsPresentPanel != NULL && m_pNotificationsPresentPanel->IsVisible() != bShouldBeVisible )
 	{
 		m_pNotificationsPresentPanel->SetVisible( bShouldBeVisible );

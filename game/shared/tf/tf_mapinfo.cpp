@@ -19,7 +19,7 @@
 #include "tf_matchmaking_shared.h"
 
 #ifdef CLIENT_DLL
-	#include "hud_macros.h"
+#include "usermessages.h"
 #endif // CLIENT_DLL
 
 // memdbgon must be the last include file in a .cpp file!!!
@@ -28,17 +28,6 @@
 #ifdef CLIENT_DLL
 ConVar tf_duck_upload_rate( "tf_duck_upload_rate", "2400", FCVAR_DEVELOPMENTONLY );		// Make this DevOnly At ship and 60 seconds
 #endif
-
-const char *g_szLadderLeaderboardNames[] =
-{
-	"tf2_ladder_6v6",
-	"tf2_ladder_public",
-	"tf2_ladder_9v9",
-	"tf2_ladder_12v12",
-};
-COMPILE_TIME_ASSERT( ARRAYSIZE( g_szLadderLeaderboardNames ) == LADDER_LEADERBOARDS_MAX );
-
-void __MsgFunc_EOTLDuckEvent( bf_read &msg );
 
 //-----------------------------------------------------------------------------
 int SortLeaderboardVec( LeaderboardEntry_t * const *p1, LeaderboardEntry_t * const *p2 )
@@ -484,9 +473,6 @@ public:
 	virtual bool Init()
 	{
 		ListenForGameEvent( "item_schema_initialized" );
-#ifdef CLIENT_DLL
-		HOOK_MESSAGE( EOTLDuckEvent );
-#endif // CLIENT_DLL
 		return true;
 	}
 
@@ -514,7 +500,7 @@ public:
 		{
 			SteamAPICall_t apicall = steamapicontext->SteamUserStats()->FindLeaderboard( "duel_wins" );
 			m_findLeaderboardCallback.Set( apicall, this, &CMapInfoContainer::OnFindDuelLeaderboard );
-		}		
+		}
 
 		// find duck leaderboards
 		for ( int i = 0; i < DUCK_NUM_LEADERBOARDS; i++ )
@@ -528,9 +514,10 @@ public:
 		}
 
 		// Ladder
-		for ( int i = 0; i < LADDER_LEADERBOARDS_MAX; i++ )
+		for ( int i = 0; i < k_eMatchGroupLeaderboard_Count; i++ )
 		{
-			CLeaderboardInfo *pInfo = new CLeaderboardInfo( g_szLadderLeaderboardNames[i] );
+			EMatchGroupLeaderboard eLeaderboard = (EMatchGroupLeaderboard)i;
+			CLeaderboardInfo *pInfo = new CLeaderboardInfo( GetMatchGroupLeaderboardName( eLeaderboard ) );
 			pInfo->m_kLeaderboardType = kLadderLeaderboard;
 			m_vecLadderLeaderboards.AddToTail( pInfo );
 
@@ -627,9 +614,9 @@ int Leaderboards_GetDuckLeaderboardTotalEntryCount( const char* kName )
 
 //-----------------------------------------------------------------------------
 // DUCK Collected Message from Server
-void __MsgFunc_EOTLDuckEvent( bf_read &msg )
-{
 #ifdef CLIENT_DLL
+USER_MESSAGE( EOTLDuckEvent )
+{
 	CBasePlayer *pLocalPlayer = CBasePlayer::GetLocalPlayer();
 	if ( !pLocalPlayer )
 		return;
@@ -708,9 +695,8 @@ void __MsgFunc_EOTLDuckEvent( bf_read &msg )
 			gMapInfoContainer.DuckUpdateScore( iCount * DUCK_XP_WEIGHT_GENERATION, TF_DUCK_SCORING_OVERALL_RATING );
 		}
 	}
-
-#endif
 }
+#endif // CLIENT
 //-----------------------------------------------------------------------------
 
 void Leaderboards_Refresh()

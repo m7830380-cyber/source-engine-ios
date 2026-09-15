@@ -69,6 +69,8 @@ private:
 	void Dodge( CTFBot *me );
 
 	IntervalTimer m_undergroundTimer;
+
+	CountdownTimer m_reevaluateClassTimer;
 };
 
 

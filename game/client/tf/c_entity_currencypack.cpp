@@ -44,21 +44,6 @@ void C_CurrencyPack::OnDataChanged( DataUpdateType_t updateType )
 //-----------------------------------------------------------------------------
 void C_CurrencyPack::ClientThink()
 {
-#ifdef STAGING_ONLY
-	int iSeeCashThroughWall = 0;
-	C_TFPlayer *pTFPlayer = C_TFPlayer::GetLocalTFPlayer();
-	if ( pTFPlayer && pTFPlayer->IsAlive() )
-	{
-		CALL_ATTRIB_HOOK_INT_ON_OTHER( pTFPlayer, iSeeCashThroughWall, mvm_see_cash_through_wall );
-	}
-
-	bool bShouldGlowForLocalPlayer =  iSeeCashThroughWall != 0;
-	if ( m_bShouldGlowForLocalPlayer != bShouldGlowForLocalPlayer )
-	{
-		m_bShouldGlowForLocalPlayer = bShouldGlowForLocalPlayer;
-		UpdateGlowEffect();
-	}
-#endif // STAGING_ONLY
 }
 
 //-----------------------------------------------------------------------------

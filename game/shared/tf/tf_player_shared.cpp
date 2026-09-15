@@ -31,9 +31,12 @@
 #include "tf_mapinfo.h"
 #include "tf_dropped_weapon.h"
 #include "tf_weapon_passtime_gun.h"
+#include "tf_weapon_rocketpack.h"
+#include <functional>
 
 // Client specific.
 #ifdef CLIENT_DLL
+#include "c_baseviewmodel.h"
 #include "c_tf_player.h"
 #include "c_te_effect_dispatch.h"
 #include "c_tf_fx.h"
@@ -92,10 +95,12 @@
 #include "halloween/merasmus/merasmus.h"
 #include "tf_weapon_grapplinghook.h"
 #include "tf_wearable_levelable_item.h"
+#include "tf_weapon_rocketpack.h"
 #include "tf_obj_sentrygun.h"
+#include "func_respawnroom.h"
 #endif
 
-#include "tf_wearable_item_demoshield.h"
+#include "tf_wearable_weapons.h"
 #include "tf_weapon_bonesaw.h"
 
 static ConVar tf_demoman_charge_frametime_scaling( "tf_demoman_charge_frametime_scaling", "1", FCVAR_REPLICATED | FCVAR_CHEAT, "When enabled, scale yaw limiting based on client performance (frametime)." );
@@ -114,7 +119,7 @@ ConVar tf_spy_max_cloaked_speed( "tf_spy_max_cloaked_speed", "999", FCVAR_DEVELO
 ConVar tf_whip_speed_increase( "tf_whip_speed_increase", "105", FCVAR_DEVELOPMENTONLY | FCVAR_REPLICATED );
 ConVar tf_max_health_boost( "tf_max_health_boost", "1.5", FCVAR_DEVELOPMENTONLY | FCVAR_REPLICATED, "Max health factor that players can be boosted to by healers.", true, 1.0, false, 0 );
 ConVar tf_invuln_time( "tf_invuln_time", "1.0", FCVAR_DEVELOPMENTONLY | FCVAR_REPLICATED, "Time it takes for invulnerability to wear off." );
-ConVar tf_player_movement_stun_time( "tf_player_movement_stun_time", "0.5", FCVAR_DEVELOPMENTONLY | FCVAR_REPLICATED );
+
 extern ConVar tf_player_movement_restart_freeze;
 extern ConVar mp_tournament_readymode_countdown;
 extern ConVar tf_max_charge_speed;
@@ -156,9 +161,6 @@ ConVar tf_allow_sliding_taunt( "tf_allow_sliding_taunt", "0", FCVAR_NONE, "1 - A
 
 #endif // GAME_DLL
 
-#ifdef STAGING_ONLY
-ConVar tf_force_allow_move_during_taunt( "tf_force_allow_move_during_taunt", "0", FCVAR_REPLICATED );
-#endif // STAGING_ONLY
 
 ConVar tf_useparticletracers( "tf_useparticletracers", "1", FCVAR_DEVELOPMENTONLY | FCVAR_REPLICATED, "Use particle tracers instead of old style ones." );
 ConVar tf_spy_cloak_consume_rate( "tf_spy_cloak_consume_rate", "10.0", FCVAR_DEVELOPMENTONLY | FCVAR_REPLICATED, "cloak to use per second while cloaked, from 100 max )" );	// 10 seconds of invis
@@ -182,14 +184,16 @@ ConVar tf_allow_taunt_switch( "tf_allow_taunt_switch", "0", FCVAR_REPLICATED, "0
 
 ConVar tf_allow_all_team_partner_taunt( "tf_allow_all_team_partner_taunt", "1", FCVAR_REPLICATED | FCVAR_DEVELOPMENTONLY );
 
-#ifdef STAGING_ONLY
-ConVar tf_random_item_min( "tf_random_item_min", "-1", FCVAR_REPLICATED, "Min Itemdef for random cosmetics" );
-ConVar tf_random_item_max( "tf_random_item_max", "-1", FCVAR_REPLICATED, "Max Itemdef for random cosmetics" );
+// AFTERBURN
+const float tf_afterburn_max_duration = 10.f;
+const float tf_afterburn_duration_ratio_second_degree = 0.4f;
+const float tf_afterburn_duration_ratio_third_degree = 0.8f;
+const float tf_afterburn_mult_second_degree = 1.f;
+const float tf_afterburn_mult_third_degree = 1.f;
+#ifdef DEBUG
+ConVar tf_afterburn_debug( "tf_afterburn_debug", "0", FCVAR_REPLICATED | FCVAR_CHEAT );
+#endif // DEBUG
 
-ConVar tf_killstreak_eyeglow( "tf_killstreak_eyeglow", "0", FCVAR_REPLICATED, "Force Kill Streak effect index for Eye Glows. -1 to disable regardless of equipped items.  Stats at 2002" );
-ConVar tf_killstreak_color( "tf_killstreak_color", "0", FCVAR_REPLICATED, "Force Kill Streak color." );
-ConVar tf_eyeglow_wip( "tf_eyeglow_wip", "0", FCVAR_REPLICATED, "Activate to Always have specific wip eyeglow (DEV)" );
-#endif // Staging only
 
 #ifdef CLIENT_DLL
 ConVar tf_colorblindassist( "tf_colorblindassist", "0", FCVAR_CLIENTDLL | FCVAR_ARCHIVE, "Setting this to 1 turns on colorblind mode." );
@@ -225,6 +229,7 @@ extern ConVar mp_developer;
 #define TF_SCREEN_OVERLAY_MATERIAL_BLEED			"effects/bleed_overlay" 
 #define TF_SCREEN_OVERLAY_MATERIAL_STEALTH			"effects/stealth_overlay"
 #define TF_SCREEN_OVERLAY_MATERIAL_SWIMMING_CURSE	"effects/jarate_overlay" 
+#define TF_SCREEN_OVERLAY_MATERIAL_GAS				"effects/gas_overlay" 
 
 #define TF_SCREEN_OVERLAY_MATERIAL_PHASE	"effects/dodge_overlay"
 
@@ -336,6 +341,7 @@ BEGIN_RECV_TABLE_NOBASE( CTFPlayerShared, DT_TFPlayerSharedLocal )
 	RecvPropBool( RECVINFO( m_bRageDraining ) ),
 	RecvPropTime( RECVINFO( m_flNextRageEarnTime ) ),
 	RecvPropBool( RECVINFO( m_bInUpgradeZone ) ),
+	RecvPropArray3( RECVINFO_ARRAY( m_flItemChargeMeter ), RecvPropFloat( RECVINFO( m_flItemChargeMeter[0] ) ) ),
 	RecvPropArray3( RECVINFO_ARRAY( m_bPlayerDominated ), RecvPropBool( RECVINFO( m_bPlayerDominated[0] ) ) ),
 	RecvPropArray3( RECVINFO_ARRAY( m_bPlayerDominatingMe ), RecvPropBool( RECVINFO( m_bPlayerDominatingMe[0] ) ) ),
 	RecvPropDataTable( RECVINFO_DT(m_ScoreData),0, &REFERENCE_RECV_TABLE(DT_TFPlayerScoringDataExclusive) ),
@@ -395,7 +401,7 @@ BEGIN_RECV_TABLE_NOBASE( CTFPlayerShared, DT_TFPlayerShared )
 	RecvPropInt( RECVINFO( m_nDisguiseClass ) ),
 	RecvPropInt( RECVINFO( m_nDisguiseSkinOverride ) ),
 	RecvPropInt( RECVINFO( m_nMaskClass ) ),
-	RecvPropInt( RECVINFO( m_iDisguiseTargetIndex ) ),
+	RecvPropEHandle( RECVINFO ( m_hDisguiseTarget ) ),
 	RecvPropInt( RECVINFO( m_iDisguiseHealth ) ),
 	RecvPropBool( RECVINFO( m_bFeignDeathReady ) ),
 	RecvPropEHandle( RECVINFO( m_hDisguiseWeapon ) ),
@@ -421,9 +427,6 @@ BEGIN_RECV_TABLE_NOBASE( CTFPlayerShared, DT_TFPlayerShared )
 	RecvPropInt( RECVINFO( m_unTauntSourceItemID_Low ) ),
 	RecvPropInt( RECVINFO( m_unTauntSourceItemID_High ) ),
 	RecvPropFloat( RECVINFO( m_flRuneCharge ) ),
-#ifdef STAGING_ONLY
-	RecvPropFloat( RECVINFO( m_flSpaceJumpCharge ) ),
-#endif
 	RecvPropBool( RECVINFO( m_bHasPasstimeBall ) ),
 	RecvPropBool( RECVINFO( m_bIsTargetedForPasstimePass ) ),
 	RecvPropEHandle( RECVINFO( m_hPasstimePassTarget ) ),
@@ -431,6 +434,11 @@ BEGIN_RECV_TABLE_NOBASE( CTFPlayerShared, DT_TFPlayerShared )
 	RecvPropBool( RECVINFO( m_bKingRuneBuffActive ) ),
 
 	RecvPropUtlVectorDataTable( m_ConditionData, TF_COND_LAST, DT_TFPlayerConditionSource ),
+
+	RecvPropInt( RECVINFO( m_nPlayerCondEx4 ) ),
+
+	RecvPropFloat( RECVINFO( m_flHolsterAnimTime ) ),
+	RecvPropEHandle( RECVINFO( m_hSwitchTo ) ),
 END_RECV_TABLE()
 
 BEGIN_PREDICTION_DATA_NO_BASE( CTFPlayerShared )
@@ -448,6 +456,8 @@ BEGIN_PREDICTION_DATA_NO_BASE( CTFPlayerShared )
 	DEFINE_PRED_FIELD( m_nAirDucked, FIELD_INTEGER, FTYPEDESC_INSENDTABLE ),
 	DEFINE_PRED_FIELD( m_flDuckTimer, FIELD_FLOAT, FTYPEDESC_INSENDTABLE ),
 	DEFINE_PRED_FIELD( m_flInvisChangeCompleteTime, FIELD_FLOAT, FTYPEDESC_INSENDTABLE ),
+	DEFINE_PRED_FIELD( m_flLastStealthExposeTime, FIELD_FLOAT, 0 ),
+	DEFINE_PRED_FIELD( m_flStealthNextChangeTime, FIELD_INTEGER, 0 ),
 	DEFINE_PRED_FIELD( m_nDisguiseTeam, FIELD_INTEGER, FTYPEDESC_INSENDTABLE  ),
 	DEFINE_PRED_FIELD( m_nDisguiseClass, FIELD_INTEGER, FTYPEDESC_INSENDTABLE  ),
 	DEFINE_PRED_FIELD( m_nDisguiseSkinOverride, FIELD_INTEGER, FTYPEDESC_INSENDTABLE ),
@@ -459,11 +469,16 @@ BEGIN_PREDICTION_DATA_NO_BASE( CTFPlayerShared )
 	DEFINE_PRED_FIELD( m_nPlayerCondEx, FIELD_INTEGER, FTYPEDESC_INSENDTABLE ),
 	DEFINE_PRED_FIELD( m_nPlayerCondEx2, FIELD_INTEGER, FTYPEDESC_INSENDTABLE ),
 	DEFINE_PRED_FIELD( m_nPlayerCondEx3, FIELD_INTEGER, FTYPEDESC_INSENDTABLE ),
+	DEFINE_PRED_FIELD( m_nPlayerCondEx4, FIELD_INTEGER, FTYPEDESC_INSENDTABLE ),
 //	DEFINE_PRED_FIELD( m_hDisguiseWeapon, FIELD_EHANDLE, FTYPEDESC_INSENDTABLE ),
 	DEFINE_FIELD( m_flDisguiseCompleteTime, FIELD_FLOAT ),
 	DEFINE_PRED_FIELD( m_bHasPasstimeBall, FIELD_BOOLEAN, FTYPEDESC_INSENDTABLE ),
 	DEFINE_PRED_FIELD( m_bIsTargetedForPasstimePass, FIELD_BOOLEAN, FTYPEDESC_INSENDTABLE ), // does this belong here?
 	DEFINE_PRED_FIELD( m_askForBallTime, FIELD_FLOAT, FTYPEDESC_INSENDTABLE ),
+	DEFINE_PRED_FIELD( m_flHolsterAnimTime, FIELD_FLOAT, FTYPEDESC_INSENDTABLE ),
+	DEFINE_PRED_ARRAY( m_flItemChargeMeter, FIELD_FLOAT, LAST_LOADOUT_SLOT_WITH_CHARGE_METER, FTYPEDESC_INSENDTABLE ),
+	DEFINE_PRED_FIELD( m_iStunIndex, FIELD_INTEGER, FTYPEDESC_INSENDTABLE ),
+	DEFINE_PRED_FIELD( m_bScattergunJump, FIELD_BOOLEAN, 0 ),
 END_PREDICTION_DATA()
 
 // Server specific.
@@ -503,6 +518,7 @@ BEGIN_SEND_TABLE_NOBASE( CTFPlayerShared, DT_TFPlayerSharedLocal )
 	SendPropBool( SENDINFO( m_bRageDraining ) ),
 	SendPropTime( SENDINFO( m_flNextRageEarnTime ) ),
 	SendPropBool( SENDINFO( m_bInUpgradeZone ) ),
+	SendPropArray3( SENDINFO_ARRAY3( m_flItemChargeMeter ), SendPropFloat( SENDINFO_ARRAY( m_flItemChargeMeter ), -1, SPROP_NOSCALE ) ),
 	SendPropArray3( SENDINFO_ARRAY3( m_bPlayerDominated ), SendPropBool( SENDINFO_ARRAY( m_bPlayerDominated ) ) ),
 	SendPropArray3( SENDINFO_ARRAY3( m_bPlayerDominatingMe ), SendPropBool( SENDINFO_ARRAY( m_bPlayerDominatingMe ) ) ),
 	SendPropDataTable( SENDINFO_DT(m_ScoreData), &REFERENCE_SEND_TABLE(DT_TFPlayerScoringDataExclusive) ),
@@ -562,7 +578,7 @@ BEGIN_SEND_TABLE_NOBASE( CTFPlayerShared, DT_TFPlayerShared )
 	SendPropInt( SENDINFO( m_nDisguiseClass ), 4, SPROP_UNSIGNED ),
 	SendPropInt( SENDINFO( m_nDisguiseSkinOverride ), 1, SPROP_UNSIGNED ),
 	SendPropInt( SENDINFO( m_nMaskClass ), 4, SPROP_UNSIGNED ),
-	SendPropInt( SENDINFO( m_iDisguiseTargetIndex ), 7, SPROP_UNSIGNED ),
+	SendPropEHandle( SENDINFO( m_hDisguiseTarget ) ),
 	SendPropInt( SENDINFO( m_iDisguiseHealth ), -1, SPROP_VARINT ),
 	SendPropBool( SENDINFO( m_bFeignDeathReady ) ),
 	SendPropEHandle( SENDINFO( m_hDisguiseWeapon ) ),
@@ -588,10 +604,7 @@ BEGIN_SEND_TABLE_NOBASE( CTFPlayerShared, DT_TFPlayerShared )
 	SendPropArray3( SENDINFO_ARRAY3( m_nStreaks ), SendPropInt( SENDINFO_ARRAY( m_nStreaks ) ) ),
 	SendPropInt( SENDINFO( m_unTauntSourceItemID_Low ), -1, SPROP_UNSIGNED ),
 	SendPropInt( SENDINFO( m_unTauntSourceItemID_High ), -1, SPROP_UNSIGNED ),
-	SendPropFloat( SENDINFO( m_flRuneCharge ), 8, 0, 0.0, 100.0 ),
-#ifdef STAGING_ONLY
-	SendPropFloat( SENDINFO( m_flSpaceJumpCharge ), 8, 0, 0.0, 100.0 ),
-#endif
+	SendPropFloat( SENDINFO( m_flRuneCharge ), 8, 0, 0.f, 100.f ),
 	SendPropBool( SENDINFO( m_bHasPasstimeBall ) ),
 	SendPropBool( SENDINFO( m_bIsTargetedForPasstimePass ) ),
 	SendPropEHandle( SENDINFO( m_hPasstimePassTarget ) ),
@@ -599,6 +612,11 @@ BEGIN_SEND_TABLE_NOBASE( CTFPlayerShared, DT_TFPlayerShared )
 	SendPropBool( SENDINFO( m_bKingRuneBuffActive ) ),
 
 	SendPropUtlVectorDataTable( m_ConditionData, TF_COND_LAST, DT_TFPlayerConditionSource ),
+
+	SendPropInt( SENDINFO( m_nPlayerCondEx4 ), -1, SPROP_VARINT | SPROP_UNSIGNED ),
+	
+	SendPropFloat( SENDINFO( m_flHolsterAnimTime ) ),
+	SendPropEHandle( SENDINFO( m_hSwitchTo ) ),
 END_SEND_TABLE()
 
 #endif
@@ -756,10 +774,10 @@ CTFPlayerShared::CTFPlayerShared()
 {
 	// If you hit this assert, CONGRATULATIONS!  You've added a condition that has gone 
 	// beyond the amount of bits we network for conditions.  Take a look at the pattern
-	// of m_nPlayerCond, m_nPlayerCondEx, m_nPlayerCondEx2, and m_nPlayerCondEx3 to get more bits.
+	// of m_nPlayerCond, m_nPlayerCondEx, m_nPlayerCondEx2, m_nPlayerCondEx3, and m_nPlayerCondEx4 to get more bits.
 	// This pattern is as such to preserve replays.
 	// Don't forget to add an m_nOldCond* and m_nForceCond*
-	COMPILE_TIME_ASSERT( TF_COND_LAST < (32 + 32 + 32 + 32) );
+	COMPILE_TIME_ASSERT( TF_COND_LAST < (32 + 32 + 32 + 32 + 32) );
 
 	m_nPlayerState.Set( TF_STATE_WELCOME );
 	m_bJumping = false;
@@ -772,6 +790,8 @@ CTFPlayerShared::CTFPlayerShared()
 	m_flInvisibility = 0.0f;
 	m_flPrevInvisibility = 0.f;
 	m_flTmpDamageBonusAmount = 1.0f;
+
+	m_bScattergunJump = false;
 
 	m_bFeignDeathReady = false;
 
@@ -842,8 +862,6 @@ CTFPlayerShared::CTFPlayerShared()
 	m_pWheelEffect = NULL;
 	m_angVehicleMoveAngles = QAngle( 0.f, 0.f, 0.f );
 	m_angVehicleMovePitchLast = 0.0f;
-	// Save Prediction value
-	m_bPreKartPredictionState = cl_predict->GetBool();
 	m_hKartParachuteEntity = NULL;
 #endif
 
@@ -851,6 +869,7 @@ CTFPlayerShared::CTFPlayerShared()
 	m_nForceConditionsEx = 0;
 	m_nForceConditionsEx2 = 0;
 	m_nForceConditionsEx3 = 0;
+	m_nForceConditionsEx4 = 0;
 
 	m_flChargeEndTime = -1000;
 	m_flLastChargeTime = -1000;
@@ -874,19 +893,30 @@ CTFPlayerShared::CTFPlayerShared()
 	m_iStunIndex = -1;
 	m_flLastNoMovementTime = -1.f;
 	m_flRuneCharge = 0.f;
-#ifdef STAGING_ONLY
-	m_flSpaceJumpCharge = 100.0f;
-	m_flSpyTranqBuffDuration = 0.0f;
-#endif
+	
+	// generic meters
+	for( int i=0; i < m_flItemChargeMeter.Count(); ++i )
+	{
+		SetItemChargeMeter( loadout_positions_t(i), 0.f );
+	}
+
 	m_iPasstimeThrowAnimState = PASSTIME_THROW_ANIM_NONE;
 	m_bHasPasstimeBall = false;
 	m_bIsTargetedForPasstimePass = false;
 	m_askForBallTime = 0.0f;
 
+	m_flHolsterAnimTime = 0.f;
+	m_hSwitchTo = NULL;
+
+	m_iCYOAPDAAnimState = CYOA_PDA_ANIM_NONE;
+
 	// make sure we have all conditions in the list
 	m_ConditionData.EnsureCount( TF_COND_LAST );
 }
 
+//-----------------------------------------------------------------------------
+// Purpose:
+//-----------------------------------------------------------------------------
 void CTFPlayerShared::Init( CTFPlayer *pPlayer )
 {
 	m_pOuter = pPlayer;
@@ -903,6 +933,8 @@ void CTFPlayerShared::Init( CTFPlayer *pPlayer )
 	m_bHasPasstimeBall = false;
 	m_bIsTargetedForPasstimePass = false;
 	m_askForBallTime = 0.0f;
+
+	m_iCYOAPDAAnimState = CYOA_PDA_ANIM_NONE;
 
 	m_bMotionCloak = false;
 
@@ -926,6 +958,9 @@ void CTFPlayerShared::Init( CTFPlayer *pPlayer )
 	Spawn();
 }
 
+//-----------------------------------------------------------------------------
+// Purpose:
+//-----------------------------------------------------------------------------
 void CTFPlayerShared::ResetRageBuffs( void )
 {
 	for ( int i = 0; i < kBuffSlot_MAX; i++ )
@@ -936,6 +971,9 @@ void CTFPlayerShared::ResetRageBuffs( void )
 	}
 }
 
+//-----------------------------------------------------------------------------
+// Purpose:
+//-----------------------------------------------------------------------------
 void CTFPlayerShared::Spawn( void )
 {
 #ifdef GAME_DLL
@@ -958,13 +996,24 @@ void CTFPlayerShared::Spawn( void )
 
 	m_bBiteEffectWasApplied = false;
 
-	m_flNextRocketPackTime = 0.f;
 	m_iSpawnRoomTouchCount = 0;
 
+	for( int i = FIRST_LOADOUT_SLOT_WITH_CHARGE_METER; i <= LAST_LOADOUT_SLOT_WITH_CHARGE_METER; ++i )
+	{
+		CBaseEntity* pItem = m_pOuter->GetEntityForLoadoutSlot( i, true );
+		if ( pItem )
+		{
+			int iDenyMeterResupply = 0;
+			loadout_positions_t eSlot = loadout_positions_t(i);
+			CALL_ATTRIB_HOOK_INT_ON_OTHER( pItem, iDenyMeterResupply, item_meter_resupply_denied );
+			SetItemChargeMeter( eSlot, ( iDenyMeterResupply > 0 ) ? GetItemChargeMeter( eSlot ) : pItem->GetDefaultItemChargeMeterValue() );
+			m_flPrevItemChargeMeter[ eSlot ] = GetItemChargeMeter( eSlot );
+		}
+	}
+	
 	SetRevengeCrits( 0 );
 
 	m_PlayerStuns.RemoveAll();
-	m_iStunIndex = -1;
 
 	m_iPasstimeThrowAnimState = PASSTIME_THROW_ANIM_NONE;
 	m_bHasPasstimeBall = false;
@@ -973,6 +1022,7 @@ void CTFPlayerShared::Spawn( void )
 #else
 	m_bSyncingConditions = false;
 #endif
+	m_iStunIndex = -1;
 	m_bKingRuneBuffActive = false;
 
 	// Reset our assist here incase something happens before we get killed
@@ -983,40 +1033,55 @@ void CTFPlayerShared::Spawn( void )
 //-----------------------------------------------------------------------------
 // Purpose:
 //-----------------------------------------------------------------------------
-template < typename tIntType >
+template < typename tType >
 class CConditionVars
 {
 public:
-	CConditionVars( tIntType& nPlayerCond, tIntType& nPlayerCondEx, tIntType& nPlayerCondEx2, tIntType& nPlayerCondEx3, ETFCond eCond )
+	template < typename t0, typename t1, typename t2, typename t3, typename t4 >
+	CConditionVars( CTFPlayer* pOuter, ETFCond eCond, t0& nPlayerCond, t1& nPlayerCondEx, t2& nPlayerCondEx2, t3& nPlayerCondEx3, t4& nPlayerCondEx4 )
 	{
-		if ( eCond >= 96 )
+		m_pOuter = pOuter;
+
+		if ( eCond >= 128 )
+		{
+			Assert( eCond < 128 + 32 );
+			m_pnCondVar = ( tType* )&nPlayerCondEx4;
+			m_nCondBit = eCond - 128;
+		}
+		else if ( eCond >= 96 )
 		{
 			Assert( eCond < 96 + 32 );
-			m_pnCondVar = &nPlayerCondEx3;
+			m_pnCondVar = ( tType* )&nPlayerCondEx3;
 			m_nCondBit = eCond - 96;
 		}
-		else if( eCond >= 64 )
+		else if ( eCond >= 64 )
 		{
-			Assert( eCond < (64 + 32) );
-			m_pnCondVar = &nPlayerCondEx2;
+			Assert( eCond < ( 64 + 32 ) );
+			m_pnCondVar = ( tType* )&nPlayerCondEx2;
 			m_nCondBit = eCond - 64;
 		}
 		else if ( eCond >= 32 )
 		{
-			Assert( eCond < (32 + 32) );
-			m_pnCondVar = &nPlayerCondEx;
+			Assert( eCond < ( 32 + 32 ) );
+			m_pnCondVar = ( tType* )&nPlayerCondEx;
 			m_nCondBit = eCond - 32;
 		}
 		else
 		{
-			m_pnCondVar = &nPlayerCond;
+			m_pnCondVar = ( tType* )&nPlayerCond;
 			m_nCondBit = eCond;
 		}
 	}
 
-	tIntType& CondVar() const
+	const int& CondVar() const
 	{
-		return *m_pnCondVar;
+		return m_pnCondVar->m_Value;
+	}
+
+	int& CondVarForModify()
+	{
+		m_pOuter->NetworkStateChanged( m_pnCondVar );
+		return m_pnCondVar->m_Value;
 	}
 
 	int CondBit() const
@@ -1025,9 +1090,13 @@ public:
 	}
 
 private:
-	tIntType *m_pnCondVar;
+	CTFPlayer* m_pOuter;
+	tType* m_pnCondVar;
 	int m_nCondBit;
 };
+
+#define CONDITION_VARS( name, cond ) \
+CConditionVars< decltype( m_nPlayerCond ) > name( m_pOuter, cond, m_nPlayerCond, m_nPlayerCondEx, m_nPlayerCondEx2, m_nPlayerCondEx3, m_nPlayerCondEx4 )
 
 //-----------------------------------------------------------------------------
 // Purpose: Add a condition and duration
@@ -1060,14 +1129,14 @@ void CTFPlayerShared::AddCond( ETFCond eCond, float flDuration /* = PERMANENT_CO
 
 	// Which bitfield are we tracking this condition variable in? Which bit within
 	// that variable will we track it as?
-	CConditionVars<int> cPlayerCond( m_nPlayerCond.m_Value, m_nPlayerCondEx.m_Value, m_nPlayerCondEx2.m_Value, m_nPlayerCondEx3.m_Value, eCond );
+	CONDITION_VARS( cPlayerCond, eCond );
 
 	// See if there is an object representation of the condition.
 	bool bAddedToExternalConditionList = m_ConditionList.Add( eCond, flDuration, m_pOuter, pProvider );
 	if ( !bAddedToExternalConditionList )
 	{
 		// Set the condition bit for this condition.
-		cPlayerCond.CondVar() |= cPlayerCond.CondBit();
+		cPlayerCond.CondVarForModify() |= cPlayerCond.CondBit();
 
 		// Flag for gamecode to query
 		m_ConditionData[eCond].m_bPrevActive = ( m_ConditionData[eCond].m_flExpireTime != 0.f ) ? true : false;
@@ -1085,7 +1154,7 @@ void CTFPlayerShared::AddCond( ETFCond eCond, float flDuration /* = PERMANENT_CO
 
 		m_ConditionData[eCond].m_flExpireTime = flDuration;
 		m_ConditionData[eCond].m_pProvider = pProvider;
-		m_ConditionData[ eCond ].m_nPreventedDamageFromCondition = 0;
+		m_ConditionData[eCond].m_nPreventedDamageFromCondition = 0;
 
 		OnConditionAdded( eCond );
 	}
@@ -1102,14 +1171,14 @@ void CTFPlayerShared::RemoveCond( ETFCond eCond, bool ignore_duration )
 	if ( !InCond( eCond ) )
 		return;
 
-	CConditionVars<int> cPlayerCond( m_nPlayerCond.m_Value, m_nPlayerCondEx.m_Value, m_nPlayerCondEx2.m_Value, m_nPlayerCondEx3.m_Value, eCond );
+	CONDITION_VARS( cPlayerCond, eCond );
 
 	// If this variable is handled by the condition list, abort before doing the
 	// work for the condition flags.
 	if ( m_ConditionList.Remove( eCond, ignore_duration ) )
 		return;
 
-	cPlayerCond.CondVar() &= ~cPlayerCond.CondBit();
+	cPlayerCond.CondVarForModify() &= ~cPlayerCond.CondBit();
 	OnConditionRemoved( eCond );
 
 	if ( m_ConditionData[ eCond ].m_nPreventedDamageFromCondition )
@@ -1145,7 +1214,7 @@ bool CTFPlayerShared::InCond( ETFCond eCond ) const
 	if ( eCond < 32 && m_ConditionList.InCond( eCond ) )
 		return true;
 
-	CConditionVars<const int> cPlayerCond( m_nPlayerCond.m_Value, m_nPlayerCondEx.m_Value, m_nPlayerCondEx2.m_Value, m_nPlayerCondEx3.m_Value, eCond );
+	CONDITION_VARS( cPlayerCond, eCond );
 	return (cPlayerCond.CondVar() & cPlayerCond.CondBit()) != 0;
 }
 
@@ -1159,7 +1228,7 @@ bool CTFPlayerShared::WasInCond( ETFCond eCond ) const
 	// assert. And this comment).
 	Assert( eCond >= 32 && eCond < TF_COND_LAST );
 
-	CConditionVars<const int> cPlayerCond( m_nOldConditions, m_nOldConditionsEx, m_nOldConditionsEx2, m_nOldConditionsEx3, eCond );
+	CONDITION_VARS( cPlayerCond, eCond );
 	return (cPlayerCond.CondVar() & cPlayerCond.CondBit()) != 0;
 }
 
@@ -1172,8 +1241,8 @@ void CTFPlayerShared::ForceRecondNextSync( ETFCond eCond )
 	// Please check if you hit the assert. (And then remove the assert. And this comment).
 	Assert(eCond >= 32 && eCond < TF_COND_LAST);
 
-	CConditionVars<int> playerCond( m_nForceConditions, m_nForceConditionsEx, m_nForceConditionsEx2, m_nForceConditionsEx3, eCond );
-	playerCond.CondVar() |= playerCond.CondBit();
+	CONDITION_VARS( cPlayerCond, eCond );
+	cPlayerCond.CondVarForModify() |= cPlayerCond.CondBit();
 }
 
 //-----------------------------------------------------------------------------
@@ -1228,6 +1297,7 @@ CBaseEntity *CTFPlayerShared::GetConditionAssistFromVictim( void )
 		TF_COND_URINE,
 		TF_COND_MAD_MILK,
 		TF_COND_MARKEDFORDEATH,
+		TF_COND_GAS,
 	};
 
 	CBaseEntity *pProvider = NULL;
@@ -1348,12 +1418,16 @@ void CTFPlayerShared::OnPreDataChanged( void )
 	m_nOldConditionsEx = m_nPlayerCondEx;
 	m_nOldConditionsEx2 = m_nPlayerCondEx2;
 	m_nOldConditionsEx3 = m_nPlayerCondEx3;
+	m_nOldConditionsEx4 = m_nPlayerCondEx4;
 	m_nOldDisguiseClass = GetDisguiseClass();
 	m_nOldDisguiseTeam = GetDisguiseTeam();
 	m_iOldMovementStunParity = m_iMovementStunParity;
 
-	InvisibilityThink();
-	ConditionThink();
+	// Local player will run this in PreThink
+	if ( !prediction->InPrediction() )
+	{
+		SharedThink();
+	}
 }
 
 //-----------------------------------------------------------------------------
@@ -1380,18 +1454,21 @@ void CTFPlayerShared::OnDataChanged( void )
 	SyncConditions( m_nOldConditionsEx, m_nPlayerCondEx, m_nForceConditionsEx, 32 );
 	SyncConditions( m_nOldConditionsEx2, m_nPlayerCondEx2, m_nForceConditionsEx2, 64 );
 	SyncConditions( m_nOldConditionsEx3, m_nPlayerCondEx3, m_nForceConditionsEx3, 96 );
+	SyncConditions( m_nOldConditionsEx4, m_nPlayerCondEx4, m_nForceConditionsEx4, 128 );
 
 	// Make sure these items are present
 	m_nPlayerCond		|= m_nForceConditions;
 	m_nPlayerCondEx		|= m_nForceConditionsEx;
 	m_nPlayerCondEx2	|= m_nForceConditionsEx2;
 	m_nPlayerCondEx3	|= m_nForceConditionsEx3;
+	m_nPlayerCondEx4	|= m_nForceConditionsEx4;
 
 	// Clear our force bits now that we've used them.
 	m_nForceConditions = 0;
 	m_nForceConditionsEx = 0;
 	m_nForceConditionsEx2 = 0;
 	m_nForceConditionsEx3 = 0;
+	m_nForceConditionsEx4 = 0;
 
 	if ( m_nOldDisguiseClass != GetDisguiseClass() || m_nOldDisguiseTeam != GetDisguiseTeam() )
 	{
@@ -1402,11 +1479,22 @@ void CTFPlayerShared::OnDataChanged( void )
 	{
 		m_hDisguiseWeapon->UpdateVisibility();
 		m_hDisguiseWeapon->UpdateParticleSystems();
+		m_hDisguiseWeapon->UpdateAttachmentModels();
 	}
 
+	// XXX(JohnS): This is not the right place to do these things, SetWeaponVisible on the *client* is just stomping
+	//             bugs elsewhere.  I'm not going to go re-fix all the spots doing this, but don't use this as a
+	//             template!  Add a check in TFWeaponBase::ShouldDraw() and call TFWeapon->UpdateVisibility() on the
+	//             edges.
 	if ( ( IsLoser() || InCond( TF_COND_COMPETITIVE_LOSER ) ) && GetActiveTFWeapon() && !GetActiveTFWeapon()->IsEffectActive( EF_NODRAW ) )
 	{
 		GetActiveTFWeapon()->SetWeaponVisible( false );
+	}
+
+	// Local player will run this in PreThink
+	if ( !prediction->InPrediction() )
+	{
+		InvisibilityThink();
 	}
 }
 
@@ -1472,6 +1560,7 @@ void CTFPlayerShared::RemoveAllCond()
 	m_nPlayerCondEx = 0;
 	m_nPlayerCondEx2 = 0;
 	m_nPlayerCondEx3 = 0;
+	m_nPlayerCondEx4 = 0;
 }
 
 
@@ -1624,9 +1713,6 @@ void CTFPlayerShared::OnConditionAdded( ETFCond eCond )
 		break;
 
 	case TF_COND_SPEED_BOOST:				OnAddSpeedBoost( false );		break;
-#ifdef STAGING_ONLY //STAGING_ENGY
-	case TF_COND_NO_COMBAT_SPEED_BOOST:		OnAddSpeedBoost( true );		break;
-#endif
 
 	case TF_COND_SAPPED:
 		OnAddSapped();
@@ -1721,7 +1807,7 @@ void CTFPlayerShared::OnConditionAdded( ETFCond eCond )
 		OnAddHalloweenGhostMode();
 		break;
 
-	case TF_COND_PARACHUTE_DEPLOYED:
+	case TF_COND_PARACHUTE_ACTIVE:
 		OnAddCondParachute();
 		break;
 
@@ -1781,40 +1867,18 @@ void CTFPlayerShared::OnConditionAdded( ETFCond eCond )
 		OnAddCompetitiveLoser();
 		break;
 
-#ifdef STAGING_ONLY
-	case TF_COND_SPY_CLASS_STEAL:
-		OnAddCondSpyClassSteal();
+	case TF_COND_GAS:
+		OnAddCondGas();
 		break;
 
-	case TF_COND_TRANQ_MARKED:
-		OnAddTranqMark();
-		break;
-/*
-	case TF_COND_SPACE_GRAVITY:
-		OnAddSpaceGravity();
-		break;
-	case TF_COND_SELF_CONC:
-		OnAddSelfConc();
-		break;
-*/
 	case TF_COND_ROCKETPACK:
 		OnAddRocketPack();
 		break;
 
-	case TF_COND_STEALTHED_PHASE:
-		OnAddStealthedPhase();
+	case TF_COND_HALLOWEEN_HELL_HEAL:
+		OnAddHalloweenHellHeal();
 		break;
 
-	case TF_COND_CLIP_OVERLOAD:
-		OnAddClipOverload();
-		break;
-
-	case TF_COND_KING_BUFFED:
-		OnAddKingBuff();
-		break;
-
-
-#endif // STAGING_ONLY
 
 	default:
 		break;
@@ -1977,9 +2041,6 @@ void CTFPlayerShared::OnConditionRemoved( ETFCond eCond )
 		break;
 
 	case TF_COND_SPEED_BOOST:					OnRemoveSpeedBoost( false );		break;
-#ifdef STAGING_ONLY
-	case TF_COND_NO_COMBAT_SPEED_BOOST:			OnRemoveSpeedBoost( true );			break;
-#endif
 		
 
 	case TF_COND_SAPPED:
@@ -2075,7 +2136,7 @@ void CTFPlayerShared::OnConditionRemoved( ETFCond eCond )
 		OnRemoveHalloweenGhostMode();
 		break;
 
-	case TF_COND_PARACHUTE_DEPLOYED:
+	case TF_COND_PARACHUTE_ACTIVE:
 		OnRemoveCondParachute();
 		break;
 
@@ -2146,35 +2207,22 @@ void CTFPlayerShared::OnConditionRemoved( ETFCond eCond )
 		OnRemoveCompetitiveLoser();
 		break;
 
-#ifdef STAGING_ONLY
-	case TF_COND_SPY_CLASS_STEAL:
-		OnRemoveCondSpyClassSteal();
+	case TF_COND_GAS:
+		OnRemoveCondGas();
 		break;
 
-	case TF_COND_TRANQ_MARKED:
-		OnRemoveTranqMark();
-		break;
-/*
-	case TF_COND_SPACE_GRAVITY:
-		OnRemoveSpaceGravity();
-		break;
-	case TF_COND_SELF_CONC:
-		OnRemoveSelfConc();
-		break;
-*/
 	case TF_COND_ROCKETPACK:
 		OnRemoveRocketPack();
 		break;
 
-	case TF_COND_STEALTHED_PHASE:
-		OnRemoveStealthedPhase();
+	case TF_COND_BURNING_PYRO:
+		OnRemoveBurningPyro();
 		break;
 
-	case TF_COND_CLIP_OVERLOAD:
-		OnRemoveClipOverload();
+	case TF_COND_HALLOWEEN_HELL_HEAL:
+		OnRemoveHalloweenHellHeal();
 		break;
 
-#endif // STAGING_ONLY
 
 	default:
 		break;
@@ -2182,22 +2230,22 @@ void CTFPlayerShared::OnConditionRemoved( ETFCond eCond )
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: Returns the overheal bonus the specified healer is capable of buffing to
+// Purpose: The highest possible overheal this player is able to receive
 //-----------------------------------------------------------------------------
 int CTFPlayerShared::GetMaxBuffedHealth( bool bIgnoreAttributes /*= false*/, bool bIgnoreHealthOverMax /*= false*/ )
 {
-	// Find the healer we have who's providing the most overheal
-	float flBoostMax = m_pOuter->GetMaxHealthForBuffing() * tf_max_health_boost.GetFloat();
+	int nMaxHealthForBuffing = m_pOuter->GetMaxHealthForBuffing();
+	float flBoostMax = nMaxHealthForBuffing * tf_max_health_boost.GetFloat();
+
 #ifdef GAME_DLL
+	// Look for any attributes that might change the answer
 	if ( !bIgnoreAttributes )
 	{
-		for ( int i = 0; i < m_aHealers.Count(); i++ )
+		// MvM can boost medics past the default max
+		int nMaxMedicOverheal = nMaxHealthForBuffing * GetMaxOverhealMultiplier();
+		if ( nMaxMedicOverheal > flBoostMax )
 		{
-			float flOverheal = m_pOuter->GetMaxHealthForBuffing() * m_aHealers[i].flOverhealBonus;
-			if ( flOverheal > flBoostMax )
-			{
-				flBoostMax = flOverheal;
-			}
+			flBoostMax = nMaxMedicOverheal;
 		}
 	}
 #endif
@@ -2208,7 +2256,7 @@ int CTFPlayerShared::GetMaxBuffedHealth( bool bIgnoreAttributes /*= false*/, boo
 	if ( !bIgnoreHealthOverMax )
 	{
 		// Don't allow overheal total to be less than the buffable + unbuffable max health or the current health
-		int nBoostMin = MAX( m_pOuter->GetMaxHealth(), m_pOuter->GetHealth() );
+		int nBoostMin = Max( m_pOuter->GetMaxHealth(), m_pOuter->GetHealth() );
 		if ( iRoundDown < nBoostMin )
 		{
 			iRoundDown = nBoostMin;
@@ -2217,6 +2265,30 @@ int CTFPlayerShared::GetMaxBuffedHealth( bool bIgnoreAttributes /*= false*/, boo
 
 	return iRoundDown;
 }
+
+#ifdef GAME_DLL
+//-----------------------------------------------------------------------------
+// Purpose: Based on active medics
+//-----------------------------------------------------------------------------
+float CTFPlayerShared::GetMaxOverhealMultiplier( void )
+{
+	float flMax = 1.f;
+
+	// Find out if any healer is providing more than the default max overheal
+	for ( int i = 0; i < m_aHealers.Count(); i++ )
+	{
+		CTFPlayer *pTFMedic = ToTFPlayer( m_aHealers[i].pHealer );
+		CWeaponMedigun *pMedigun = ( ( pTFMedic && pTFMedic->GetActiveTFWeapon() && pTFMedic->GetActiveTFWeapon()->GetWeaponID() == TF_WEAPON_MEDIGUN ) ? static_cast<CWeaponMedigun*>( pTFMedic->GetActiveTFWeapon() ) : NULL );
+		float flOverHealBonus = ( ( pMedigun ) ? pMedigun->GetOverHealBonus( m_pOuter ) : m_aHealers[i].flOverhealBonus );
+		if ( flOverHealBonus > flMax )
+		{
+			flMax = flOverHealBonus;
+		}
+	}
+
+	return flMax;
+}
+#endif // GAME_DLL
 
 //-----------------------------------------------------------------------------
 // Purpose: 
@@ -2253,21 +2325,6 @@ int CTFPlayerShared::GetDisguiseMaxBuffedHealth( bool bIgnoreAttributes /*= fals
 	}
 
 	return iRoundDown;
-}
-
-//-----------------------------------------------------------------------------
-bool ShouldRemoveConditionOnTimeout( ETFCond eCond )
-{
-	switch( eCond )
-	{
-	case TF_COND_HALLOWEEN_GHOST_MODE:
-	case TF_COND_HALLOWEEN_IN_HELL:
-	case TF_COND_HALLOWEEN_KART:
-		break;
-		return !TFGameRules()->ArePlayersInHell();
-	}
-
-	return true;
 }
 
 //-----------------------------------------------------------------------------
@@ -2322,25 +2379,9 @@ void CTFPlayerShared::ConditionGameRulesThink( void )
 				// Prevent hacked usercommand exploits
 				if ( m_pOuter->GetTimeSinceLastUserCommand() > 5.f || m_pOuter->GetTimeSinceLastThink() > 5.f )
 				{
-					ETFCond eCond = (ETFCond)i;
-
 					if ( GetCarryingRuneType() != RUNE_NONE )
 					{
 						m_pOuter->DropRune();
-					}
-
-					if ( ShouldRemoveConditionOnTimeout( eCond ) )
-					{
-						RemoveCond( eCond );
-
-						// Reset active weapon to prevent stale-state bugs
-						CTFWeaponBase *pTFWeapon = m_pOuter->GetActiveTFWeapon();
-						if ( pTFWeapon )
-						{
-							pTFWeapon->WeaponReset();
-						}
-
-						m_pOuter->TeamFortress_SetSpeed();
 					}
 				}
 #endif
@@ -2358,12 +2399,18 @@ void CTFPlayerShared::ConditionGameRulesThink( void )
 	{
 		// Heal faster if we haven't been in combat for a while
 		float flTimeSinceDamage = gpGlobals->curtime - m_pOuter->GetLastDamageReceivedTime();
-		float flScale = RemapValClamped( flTimeSinceDamage, 10, 15, 1.0, 3.0 );
-		float flAttribModScale = 1.0;
+		float flScale = RemapValClamped( flTimeSinceDamage, 10.f, 15.f, 1.f, 3.f );
+		float flAttribModScale = 1.f;
+		
+		// Any attributes affecting heal rate?
 		CALL_ATTRIB_HOOK_FLOAT_ON_OTHER( m_pOuter, flAttribModScale, mult_health_fromhealers );
+		CTFWeaponBase *pActiveWeapon = m_pOuter->GetActiveTFWeapon();
+		if ( pActiveWeapon )
+		{
+			CALL_ATTRIB_HOOK_FLOAT_ON_OTHER( pActiveWeapon, flAttribModScale, mult_health_fromhealers_penalty_active );
+		}
 
 		float flCurOverheal = (float)m_pOuter->GetHealth() / (float)m_pOuter->GetMaxHealth();
-
 		if ( flCurOverheal > 1.0f )
 		{
 			// If they're over their max health the overheal calculation is relative to the max buffable amount scale
@@ -2489,7 +2536,7 @@ void CTFPlayerShared::ConditionGameRulesThink( void )
 
 		if ( InCond( TF_COND_HEALING_DEBUFF ) )
 		{
-			m_flHealFraction *= 0.75f;
+			m_flHealFraction *= ( 1.f - PYRO_AFTERBURN_HEALING_REDUCTION );
 		}
 
 		int nHealthToAdd = (int)m_flHealFraction;
@@ -2629,8 +2676,8 @@ void CTFPlayerShared::ConditionGameRulesThink( void )
 		if ( InCond( TF_COND_BURNING ) )
 		{
 			// Reduce the duration of this burn 
-			float flReduction = 2;	 // ( flReduction + 1 ) x faster reduction
-			m_flFlameRemoveTime -= flReduction * gpGlobals->frametime;
+			float flReduction = 2.f * gpGlobals->frametime;	 // ( flReduction + 1 ) x faster reduction
+			m_flAfterburnDuration -= flReduction;
 		}
 		if ( InCond( TF_COND_BLEEDING ) )
 		{
@@ -2660,10 +2707,16 @@ void CTFPlayerShared::ConditionGameRulesThink( void )
 		if ( m_pOuter->GetHealth() > m_pOuter->GetMaxHealth() )
 		{
 			// Items exist that get us over max health, without ever being healed, in which case our m_flBestOverhealDecayMult will still be -1.
-			float flDrainMult = (m_flBestOverhealDecayMult == -1) ? 1.0 : m_flBestOverhealDecayMult;
+			float flDrainMult = ( m_flBestOverhealDecayMult == -1.f ) ? 1.f : m_flBestOverhealDecayMult;
 			float flBoostMaxAmount = flOverheal - m_pOuter->GetMaxHealth();
 			float flDrain = flBoostMaxAmount / (tf_boost_drain_time.GetFloat() * flDrainMult);
 			m_flHealFraction += (gpGlobals->frametime * flDrain);
+
+			// Vampires have generous overheal on damage, so we decay it quickly
+			if ( GetCarryingRuneType() == RUNE_VAMPIRE ) 
+			{
+				m_flHealFraction *= 3.0;
+			}
 
 			int nHealthToDrain = (int)m_flHealFraction;
 			if ( nHealthToDrain > 0 )
@@ -2712,14 +2765,13 @@ void CTFPlayerShared::ConditionGameRulesThink( void )
 			RemoveCond( TF_COND_TAUNTING );
 		}
 	}
-
-	if ( InCond( TF_COND_BURNING ) && !m_pOuter->m_bInPowerPlay )
+	if ( InCond( TF_COND_BURNING ) )
 	{
 		if ( TFGameRules() && TFGameRules()->IsTruceActive() && m_hBurnAttacker && m_hBurnAttacker->IsTruceValidForEnt() )
 		{
 			RemoveCond( TF_COND_BURNING );
 		}
-		else if ( gpGlobals->curtime > m_flFlameRemoveTime || m_pOuter->GetWaterLevel() >= WL_Waist )
+		else if ( m_flAfterburnDuration <= 0.f || m_pOuter->GetWaterLevel() >= WL_Waist )
 		{
 			// If we're underwater, put the fire out
 			if ( m_pOuter->GetWaterLevel() >= WL_Waist )
@@ -2820,63 +2872,91 @@ void CTFPlayerShared::ConditionGameRulesThink( void )
 						event->SetInt( "victim", m_pOuter->entindex() );
 						event->SetInt( "healer", pHealer->entindex() );
 
+						item_definition_index_t nDefIndex = INVALID_ITEM_DEF_INDEX;
+						if ( pTFPlayer && pTFPlayer->GetActiveTFWeapon() && pTFPlayer->GetActiveTFWeapon()->GetAttributeContainer() && pTFPlayer->GetActiveTFWeapon()->GetAttributeContainer()->GetItem() )
+						{
+							nDefIndex = pTFPlayer->GetActiveTFWeapon()->GetAttributeContainer()->GetItem()->GetItemDefinition()->GetDefinitionIndex();
+						}
+
+						event->SetInt( "itemdefindex", nDefIndex );
+
 						gameeventmanager->FireEvent( event, true );
 					}
 				}
 			}
 		}
-		else if ( ( gpGlobals->curtime >= m_flFlameBurnTime ) && ( TF_CLASS_PYRO != m_pOuter->GetPlayerClass()->GetClassIndex() ) )
+		else if ( gpGlobals->curtime >= m_flFlameBurnTime )
 		{
 			// Burn the player (if not pyro, who does not take persistent burning damage)
-
-			float flBurnDamage = TF_BURNING_DMG;
-			int nKillType = TF_DMG_CUSTOM_BURNING;
-
-			if ( m_hBurnWeapon )
+			if ( ( TF_CLASS_PYRO != m_pOuter->GetPlayerClass()->GetClassIndex() ) || InCond( TF_COND_BURNING_PYRO ) )
 			{
-				CALL_ATTRIB_HOOK_FLOAT_ON_OTHER( m_hBurnWeapon, flBurnDamage, mult_wpn_burndmg );
+				float flBurnDamage = TF_BURNING_DMG;
+				int nKillType = TF_DMG_CUSTOM_BURNING;
 
-				if ( m_hBurnWeapon.Get()->GetWeaponID() == TF_WEAPON_FLAREGUN )
+				if ( m_hBurnWeapon )
 				{
-					nKillType = TF_DMG_CUSTOM_BURNING_FLARE;
-				}
-				else if ( m_hBurnWeapon.Get()->GetWeaponID() == TF_WEAPON_COMPOUND_BOW )
-				{
-					nKillType = TF_DMG_CUSTOM_BURNING_ARROW;
-				}
-			}
-		
-			// Halloween Spell
-			if ( TF_IsHolidayActive( kHoliday_HalloweenOrFullMoon ) )
-			{
-				int iHalloweenSpell = 0;
-				CALL_ATTRIB_HOOK_INT_ON_OTHER( m_hBurnWeapon, iHalloweenSpell, halloween_green_flames );
-				if ( iHalloweenSpell > 0 )
-				{
-					const char *pEffectName = "halloween_burningplayer_flyingbits";
-					// Extra Halloween Particles
-					DispatchParticleEffect( pEffectName, PATTACH_ABSORIGIN_FOLLOW, m_pOuter, 0, false );
-				}
-			}
-	
-			CTakeDamageInfo info( m_hBurnAttacker, m_hBurnAttacker, m_hBurnWeapon, flBurnDamage, DMG_BURN | DMG_PREVENT_PHYSICS_FORCE, nKillType );
-			m_pOuter->TakeDamage( info );
+					CALL_ATTRIB_HOOK_FLOAT_ON_OTHER( m_hBurnWeapon, flBurnDamage, mult_wpn_burndmg );
 
-			// Give health to attacker if they are carrying the Vampire Powerup.
-			if ( TFGameRules() && TFGameRules()->IsPowerupMode() )  
-			{
-				CTFPlayer *pTFAttacker = ToTFPlayer( GetConditionProvider( TF_COND_BURNING ) );
-
-				if ( pTFAttacker && pTFAttacker != m_pOuter )
-				{
-					if ( pTFAttacker->m_Shared.GetCarryingRuneType() == RUNE_VAMPIRE )
+					if ( m_hBurnWeapon.Get()->GetWeaponID() == TF_WEAPON_FLAREGUN )
 					{
-						pTFAttacker->TakeHealth( flBurnDamage, DMG_GENERIC );
+						nKillType = TF_DMG_CUSTOM_BURNING_FLARE;
+					}
+					else if ( m_hBurnWeapon.Get()->GetWeaponID() == TF_WEAPON_COMPOUND_BOW )
+					{
+						nKillType = TF_DMG_CUSTOM_BURNING_ARROW;
+					}
+				}
+
+#ifdef DEBUG
+				if ( tf_afterburn_debug.GetBool() )
+				{
+					engine->Con_NPrintf( 0, "Tick afterburn duration = %f", m_flAfterburnDuration );
+				}
+#endif // DEBUG
+
+				// which degree are we burning?
+				if ( m_flAfterburnDuration >= tf_afterburn_duration_ratio_third_degree * tf_afterburn_max_duration )
+				{
+					flBurnDamage *= tf_afterburn_mult_third_degree;
+				}
+				else if ( m_flAfterburnDuration >= tf_afterburn_duration_ratio_second_degree * tf_afterburn_max_duration )
+				{
+					flBurnDamage *= tf_afterburn_mult_second_degree;
+				}
+		
+				// Halloween Spell
+				if ( TF_IsHolidayActive( kHoliday_HalloweenOrFullMoon ) )
+				{
+					int iHalloweenSpell = 0;
+					CALL_ATTRIB_HOOK_INT_ON_OTHER( m_hBurnWeapon, iHalloweenSpell, halloween_green_flames );
+					if ( iHalloweenSpell > 0 )
+					{
+						const char *pEffectName = "halloween_burningplayer_flyingbits";
+						// Extra Halloween Particles
+						DispatchParticleEffect( pEffectName, PATTACH_ABSORIGIN_FOLLOW, m_pOuter, 0, false );
+					}
+				}
+	
+				CTakeDamageInfo info( m_hBurnAttacker, m_hBurnAttacker, m_hBurnWeapon, flBurnDamage, DMG_BURN | DMG_PREVENT_PHYSICS_FORCE, nKillType );
+				m_pOuter->TakeDamage( info );
+
+				// Give health to attacker if they are carrying the Vampire Powerup.
+				if ( TFGameRules() && TFGameRules()->IsPowerupMode() )  
+				{
+					CTFPlayer *pTFAttacker = ToTFPlayer( GetConditionProvider( TF_COND_BURNING ) );
+
+					if ( pTFAttacker && pTFAttacker != m_pOuter )
+					{
+						if ( pTFAttacker->m_Shared.GetCarryingRuneType() == RUNE_VAMPIRE )
+						{
+							pTFAttacker->TakeHealth( flBurnDamage, DMG_IGNORE_MAXHEALTH );
+						}
 					}
 				}
 			}
 
 			m_flFlameBurnTime = gpGlobals->curtime + TF_BURNING_FREQUENCY;
+			m_flAfterburnDuration -= TF_BURNING_FREQUENCY;
 		}
 
 		if ( m_flNextBurningSound < gpGlobals->curtime )
@@ -2935,6 +3015,12 @@ void CTFPlayerShared::ConditionGameRulesThink( void )
 			// If we're underwater, wash off the Mad Milk.
 			RemoveCond( TF_COND_MAD_MILK );
 		}
+
+		if ( InCond( TF_COND_GAS ) )
+		{
+			// If we're underwater, wash off the Gas.
+			RemoveCond( TF_COND_GAS );
+		}
 	}
 
 	if ( !InCond( TF_COND_DISGUISED ) )
@@ -2963,7 +3049,7 @@ void CTFPlayerShared::ConditionGameRulesThink( void )
 			{
 				bleed.flBleedingTime = gpGlobals->curtime + TF_BLEEDING_FREQUENCY;
 
-				CTakeDamageInfo info( bleed.hBleedingAttacker, bleed.hBleedingAttacker, bleed.hBleedingWeapon, bleed.nBleedDmg, DMG_SLASH, TF_DMG_CUSTOM_BLEEDING );
+				CTakeDamageInfo info( bleed.hBleedingAttacker, bleed.hBleedingAttacker, bleed.hBleedingWeapon, bleed.nBleedDmg, DMG_SLASH, bleed.nDmgType );
 				m_pOuter->TakeDamage( info );
 
 				// It's very possible we died from the take damage, which clears all our conditions
@@ -2979,13 +3065,6 @@ void CTFPlayerShared::ConditionGameRulesThink( void )
 		}
 	}
 
-#ifdef STAGING_ONLY
-	if ( InCond( TF_COND_TRANQ_SPY_BOOST ) )
-	{
-		m_flSpyTranqBuffDuration = GetConditionDuration( TF_COND_TRANQ_SPY_BOOST );
-	}
-	else
-#endif // STAGING_ONLY
 	{
 		m_flSpyTranqBuffDuration = 0;
 	}
@@ -3009,6 +3088,21 @@ void CTFPlayerShared::ConditionGameRulesThink( void )
 }
 
 //-----------------------------------------------------------------------------
+// Purpose: call all the shared think funcs here
+//-----------------------------------------------------------------------------
+void CTFPlayerShared::SharedThink( void )
+{
+	ConditionThink();
+	InvisibilityThink();
+
+	// keep trying to switch weapon if needed
+	if ( m_flHolsterAnimTime > 0.f )
+	{
+		m_pOuter->Weapon_Switch( m_hSwitchTo );
+	}
+}
+
+//-----------------------------------------------------------------------------
 // Purpose: Do CLIENT/SERVER SHARED condition thinks.
 //-----------------------------------------------------------------------------
 void CTFPlayerShared::ConditionThink( void )
@@ -3023,17 +3117,50 @@ void CTFPlayerShared::ConditionThink( void )
 		UpdateEnergyDrinkMeter();
 		UpdateChargeMeter();
 		DemoShieldChargeThink();
-
-#ifdef STAGING_ONLY
-		UpdateRocketPack();
-#endif // STAGING_ONLY
 	}
 
 	VehicleThink();
 
-	if ( m_pOuter->GetFlags() & FL_ONGROUND && InCond( TF_COND_PARACHUTE_DEPLOYED ))
+	if ( m_pOuter->GetFlags() & FL_ONGROUND )
 	{
+		// Airborne conditions end on ground contact
+		RemoveCond( TF_COND_KNOCKED_INTO_AIR );
+		RemoveCond( TF_COND_AIR_CURRENT );
+
+		RemoveCond( TF_COND_PARACHUTE_ACTIVE );
 		RemoveCond( TF_COND_PARACHUTE_DEPLOYED );
+
+		if ( InCond( TF_COND_ROCKETPACK ) )
+		{
+			// Make sure we're still not dealing with launch, where it's possible
+			// to hit your head and fall to the ground before the second stage.
+			CTFWeaponBase *pRocketPack = m_pOuter->Weapon_OwnsThisID( TF_WEAPON_ROCKETPACK );
+			if ( pRocketPack )
+			{
+				if ( gpGlobals->curtime > ( static_cast< CTFRocketPack* >( pRocketPack )->GetRefireTime() ) )
+				{
+#ifdef CLIENT_DLL
+					if ( prediction->IsFirstTimePredicted() )
+#endif
+					{
+						CPASAttenuationFilter filter( m_pOuter );
+						filter.UsePredictionRules();
+						m_pOuter->EmitSound( filter, m_pOuter->entindex(), "Weapon_RocketPack.BoostersShutdown" );
+						m_pOuter->EmitSound( filter, m_pOuter->entindex(), "Weapon_RocketPack.Land" );
+					}
+					RemoveCond( TF_COND_ROCKETPACK );
+
+#ifdef GAME_DLL
+					IGameEvent *pEvent = gameeventmanager->CreateEvent( "rocketpack_landed" );
+					if ( pEvent )
+					{
+						pEvent->SetInt( "userid", m_pOuter->GetUserID() );
+						gameeventmanager->FireEvent( pEvent );
+					}
+#endif
+				}
+			}
+		}
 	}
 
 	// See if we should be pulsing our radius heal
@@ -3359,16 +3486,16 @@ void CTFPlayerShared::OnAddInvulnerable( void )
 	{
 		RemoveCond( TF_COND_MAD_MILK );
 	}
+
+	if ( InCond( TF_COND_GAS ) )
+	{
+		RemoveCond( TF_COND_GAS );
+	}
+
 	if ( InCond( TF_COND_PLAGUE ) )
 	{
 		RemoveCond( TF_COND_PLAGUE );
 	}
-#ifdef STAGING_ONLY
-	if ( InCond( TF_COND_TRANQ_MARKED ) )
-	{
-		RemoveCond( TF_COND_TRANQ_MARKED );
-	}
-#endif // STAGING_ONLY
 #endif
 }
 
@@ -3435,6 +3562,15 @@ void CTFPlayerShared::OnRemovePhase( void )
 	UserMessageBegin( user, "DamageDodged" );
 		WRITE_SHORT( clamp( m_iPhaseDamage, 0, 10000 ) );
 	MessageEnd();
+
+	if ( m_iPhaseDamage )
+	{
+		// Apply slow based on how much damage we took while active
+		float flSlowDuration = 5.f; //RemapValClamped( m_iPhaseDamage, 10.f, 1000.f, 2.f, 6.f );
+		float flSlowAmount = RemapValClamped( m_iPhaseDamage, 10.f, 200.f, 0.25f, 0.5f );
+		StunPlayer( flSlowDuration, flSlowAmount, TF_STUN_MOVEMENT | TF_STUN_SOUND, m_pOuter );
+	}
+
 	m_iPhaseDamage = 0;
 
 #endif
@@ -3572,56 +3708,6 @@ void CTFPlayerShared::OnRemoveMarkedForDeath( void )
 #endif
 }
 
-#ifdef STAGING_ONLY
-//-----------------------------------------------------------------------------
-// Purpose: 
-//-----------------------------------------------------------------------------
-void CTFPlayerShared::OnAddTranqMark( void )
-{
-#ifdef CLIENT_DLL
-	//if ( !InCond( TF_COND_DISGUISED ) && !IsStealthed() )
-	//{
-		m_pOuter->UpdateTranqMark( true );
-	//}
-
-	//if ( m_pOuter->IsLocalPlayer() )
-	//{
-	//	m_pOuter->EmitSound( "Weapon_Marked_for_Death.Indicator" );
-	//}
-	//else if ( !InCond( TF_COND_DISGUISED ) && !IsStealthed() )
-	//{
-	//	m_pOuter->EmitSound( "Weapon_Marked_for_Death.Initial" );
-	//}
-#endif
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: 
-//-----------------------------------------------------------------------------
-void CTFPlayerShared::OnRemoveTranqMark( void )
-{
-#ifdef CLIENT_DLL
-	m_pOuter->UpdateTranqMark( false );
-#endif
-}
-
-//-----------------------------------------------------------------------------
-void CTFPlayerShared::OnAddCondSpyClassSteal( void )
-{
-#ifdef CLIENT_DLL
-	m_pOuter->UpdateSpyClassStealParticle( true );
-#endif
-}
-
-//-----------------------------------------------------------------------------
-void CTFPlayerShared::OnRemoveCondSpyClassSteal( void )
-{
-#ifdef CLIENT_DLL
-	m_pOuter->UpdateSpyClassStealParticle( false );
-#endif
-}
-
-#endif // STAGING_ONLY
 
 //-----------------------------------------------------------------------------
 // Purpose: PARACHUTE
@@ -3693,6 +3779,23 @@ void CTFPlayerShared::OnRemoveCondParachute( void )
 		}
 	}
 #endif
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+void CTFPlayerShared::OnAddHalloweenHellHeal( void )
+{
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+void CTFPlayerShared::OnRemoveHalloweenHellHeal( void )
+{
+#ifdef GAME_DLL
+	StopHealing( m_pOuter );
+#endif // SERVER_DLL
 }
 
 //-----------------------------------------------------------------------------
@@ -3778,20 +3881,9 @@ CTFPlayerShared::taunt_particle_state_t CTFPlayerShared::GetClientTauntParticleD
 
 		if ( pTauntItem )
 		{
-			// do community_sparkle effect if this is a community item?
-			const int iQualityParticleType = pTauntItem->GetQualityParticleType();
-			if ( iQualityParticleType > 0 )
-			{
-				const attachedparticlesystem_t *pParticleSystem = GetItemSchema()->GetAttributeControlledParticleSystem( iQualityParticleType );
-				if ( pParticleSystem )
-				{
-					return taunt_particle_state_t( pParticleSystem->pszSystemName, pParticleSystem->fRefireTime );
-				}
-			}
-
-			static CSchemaAttributeDefHandle pAttrDef_OnTauntAttachParticleIndex( "on taunt attach particle index" );
+			static CSchemaAttributeDefHandle pAttrDef_TauntAttachParticleIndex( "taunt attach particle index" );
 			uint32 unUnusualEffectIndex = 0;
-			if ( pTauntItem->FindAttribute( pAttrDef_OnTauntAttachParticleIndex, &unUnusualEffectIndex ) && unUnusualEffectIndex > 0 )
+			if ( pTauntItem->FindAttribute( pAttrDef_TauntAttachParticleIndex, &unUnusualEffectIndex ) && unUnusualEffectIndex > 0 )
 			{
 				const attachedparticlesystem_t *pParticleSystem = GetItemSchema()->GetAttributeControlledParticleSystem( unUnusualEffectIndex );
 				if ( pParticleSystem )
@@ -3821,7 +3913,7 @@ CTFPlayerShared::taunt_particle_state_t CTFPlayerShared::GetClientTauntParticleD
 				CEconItemView *pItem = pWearable && pWearable->GetAttributeContainer() && pWearable->GetAttributeContainer()->GetItem() ? pWearable->GetAttributeContainer()->GetItem() : NULL;
 				
 				// check for Unusual Cap def index (1173)
-				if ( pItem && pItem->GetItemDefIndex() == 1173 && pItem->FindAttribute( pAttrDef_OnTauntAttachParticleIndex, &unUnusualEffectIndex ) && unUnusualEffectIndex > 0 )
+				if ( pItem && pItem->GetItemDefIndex() == 1173 && pItem->FindAttribute( pAttrDef_TauntAttachParticleIndex, &unUnusualEffectIndex ) && unUnusualEffectIndex > 0 )
 				{
 					const attachedparticlesystem_t *pParticleSystem = GetItemSchema()->GetAttributeControlledParticleSystem( unUnusualEffectIndex );
 					if ( pParticleSystem )
@@ -3843,6 +3935,17 @@ CTFPlayerShared::taunt_particle_state_t CTFPlayerShared::GetClientTauntParticleD
 
 						return taunt_particle_state_t( pParticleSystem->pszSystemName, pParticleSystem->fRefireTime );
 					}
+				}
+			}
+
+			// do community_sparkle effect if this is a self-made or community item
+			const int iQualityParticleType = pTauntItem->GetQualityParticleType();
+			if ( iQualityParticleType > 0 )
+			{
+				const attachedparticlesystem_t *pParticleSystem = GetItemSchema()->GetAttributeControlledParticleSystem( iQualityParticleType );
+				if ( pParticleSystem )
+				{
+					return taunt_particle_state_t( pParticleSystem->pszSystemName, pParticleSystem->fRefireTime );
 				}
 			}
 		}
@@ -3933,14 +4036,8 @@ void CTFPlayerShared::OnAddTaunting( void )
 void CTFPlayerShared::OnRemoveTaunting( void )
 {
 #ifdef GAME_DLL
-#ifdef STAGING_ONLY
-	if ( !m_pOuter->m_hTauntScene.Get() )
-	{
-		Warning( "Why do we not have taunt scene?\n" );
-	}
-#endif
 
-	m_pOuter->StopTaunt();
+	m_pOuter->StopTaunt( false );
 
 	if ( IsControlStunned() )
 	{
@@ -4334,18 +4431,6 @@ void CTFPlayerShared::OnRemoveSapped( void )
 //-----------------------------------------------------------------------------
 void CTFPlayerShared::OnAddReprogrammed( void )
 {
-#ifdef STAGING_ONLY
-#ifdef GAME_DLL
-	CTFBot *pBot = ToTFBot( m_pOuter );
-	if ( pBot )
-	{
-		pBot->ChangeTeam( GetEnemyTeam( pBot->GetTeamNumber() ), false, true );
-		pBot->SetMission( CTFBot::MISSION_REPROGRAMMED );
-		pBot->Update();
-		pBot->MarkAsMissionEnemy();
-	}
-#endif	// GAME_DLL
-#endif	// STAGING_ONLY
 }
 
 //-----------------------------------------------------------------------------
@@ -4483,19 +4568,11 @@ void CTFPlayerShared::OnRemoveDisguisedAsDispenser( void )
 	m_pOuter->TeamFortress_SetSpeed();
 }
 
-#ifdef STAGING_ONLY
 //-----------------------------------------------------------------------------
 // Purpose:
 //-----------------------------------------------------------------------------
 void CTFPlayerShared::OnAddRocketPack( void )
 {
-#ifdef CLIENT_DLL
-	if ( !m_pOuter->m_pRocketPackEffect )
-	{
-		const char* szParticle = "rocketbackblast";
-		m_pOuter->m_pRocketPackEffect = m_pOuter->ParticleProp()->Create( szParticle, PATTACH_POINT_FOLLOW, "flag" );
-	}
-#endif	// CLIENT_DLL
 }
 
 //-----------------------------------------------------------------------------
@@ -4503,33 +4580,19 @@ void CTFPlayerShared::OnAddRocketPack( void )
 //-----------------------------------------------------------------------------
 void CTFPlayerShared::OnRemoveRocketPack( void )
 {
-#ifdef CLIENT_DLL
-	if ( m_pOuter->m_pRocketPackEffect )
-	{
-		m_pOuter->ParticleProp()->StopEmission( m_pOuter->m_pRocketPackEffect );
-		m_pOuter->m_pRocketPackEffect = NULL;
-	}
-#endif	// CLIENT_DLL
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: 
+// Purpose:
 //-----------------------------------------------------------------------------
-void CTFPlayerShared::UpdateRocketPack( void )
+void CTFPlayerShared::OnRemoveBurningPyro( void )
 {
-	if ( !m_pOuter->IsPlayerClass( TF_CLASS_PYRO ) )
-		return;
-
-	if ( InCond( TF_COND_ROCKETPACK ) )
-	{
 #ifdef GAME_DLL
-		// Check for landing
-		if ( m_pOuter->GetFlags() & FL_ONGROUND )
-		{
-			RemoveCond( TF_COND_ROCKETPACK );
-		}
-#endif
+	if ( m_pOuter->IsPlayerClass( TF_CLASS_PYRO) && InCond( TF_COND_BURNING ) )
+	{
+		RemoveCond( TF_COND_BURNING );
 	}
+#endif // GAME_DLL
 }
 
 //-----------------------------------------------------------------------------
@@ -4541,6 +4604,8 @@ void CTFPlayerShared::ApplyRocketPackStun( float flStunDuration )
 		return;
 
 #ifdef GAME_DLL
+	int nStunFlags = TF_STUN_CONTROLS;
+	float flStunAmount = 0.85f;
 	const int nMaxEnts = 24;
 	CBaseEntity	*pObjects[ nMaxEnts ];
 	int nCount = UTIL_EntitiesInSphere( pObjects, nMaxEnts, m_pOuter->GetAbsOrigin(), 192.f, FL_CLIENT );
@@ -4558,37 +4623,64 @@ void CTFPlayerShared::ApplyRocketPackStun( float flStunDuration )
 		if ( !m_pOuter->FVisible( pObjects[i], MASK_OPAQUE ) )
 			continue;
 
-		CTFPlayer *pTFPlayer = static_cast< CTFPlayer* >( pObjects[i] );
+		CTFPlayer *pTFPlayer = ToTFPlayer( pObjects[i] );
 		if ( !pTFPlayer )
 			continue;
 
-		pTFPlayer->m_Shared.StunPlayer( flStunDuration, 0.75f, TF_STUN_CONTROLS );
+		if ( pTFPlayer->IsMiniBoss() )
+		{
+			nStunFlags = TF_STUN_MOVEMENT | TF_STUN_NO_EFFECTS;
+		}
+
+		pTFPlayer->m_Shared.StunPlayer( flStunDuration, flStunAmount, nStunFlags );
 	}
 #endif // GAME_DLL
 }
 
+
+//-----------------------------------------------------------------------------
+// Purpose: Central place to handle specific effects/events when a player attacks
+//-----------------------------------------------------------------------------
+void CTFPlayerShared::OnAttack( void )
+{
+	if ( InCond( TF_COND_ENERGY_BUFF ) )
+	{
+		float flMarkedForDeathTime = 1.f;
+		CALL_ATTRIB_HOOK_FLOAT_ON_OTHER( m_pOuter, flMarkedForDeathTime, mod_mark_attacker_for_death );
+		if ( flMarkedForDeathTime > 1.f )
+		{
+			AddCond( TF_COND_MARKEDFORDEATH_SILENT, flMarkedForDeathTime );
+		}
+	}
+}
+
+#ifdef GAME_DLL
+//-----------------------------------------------------------------------------
+// Purpose:
+//-----------------------------------------------------------------------------
+void CTFPlayerShared::SetDefaultItemChargeMeters( void )
+{
+	for ( int i = FIRST_LOADOUT_SLOT_WITH_CHARGE_METER; i <= LAST_LOADOUT_SLOT_WITH_CHARGE_METER; ++i )
+	{
+		float flValue = 0.f;
+
+		CBaseEntity *pItem = m_pOuter->GetEntityForLoadoutSlot( i, true );
+		if ( pItem )
+		{
+			flValue = pItem->GetDefaultItemChargeMeterValue();
+		}
+
+		loadout_positions_t eSlot = loadout_positions_t( i );
+		SetItemChargeMeter( eSlot, flValue );
+		m_flPrevItemChargeMeter[eSlot] = GetItemChargeMeter( eSlot );
+	}
+}
+#endif // GAME_DLL
+
+#ifdef CLIENT_DLL
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-bool CTFPlayerShared::CanBuildSpyTraps( void )
-{
-	if ( !m_pOuter->IsPlayerClass( TF_CLASS_SPY ) )
-		return false;
-
-	if ( m_pOuter->IsBot() )
-		return false;
-
-	if ( TFGameRules()->IsMannVsMachineMode() )
-		return true;
-
-	int iTraps = 0;
-	CALL_ATTRIB_HOOK_INT_ON_OTHER( m_pOuter, iTraps, ability_spy_traps );
-
-	return ( iTraps > 0 );
-}
-#endif // STAGING_ONLY
-
-#ifdef CLIENT_DLL
 static void AddUberScreenEffect( const CTFPlayer* pPlayer )
 {
 	// Add the uber effect onto the local player's screen
@@ -4612,6 +4704,9 @@ static void AddUberScreenEffect( const CTFPlayer* pPlayer )
 	}
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 static void RemoveUberScreenEffect( const CTFPlayer* pPlayer )
 {
 	if ( pPlayer && pPlayer->IsLocalPlayer() )
@@ -4642,6 +4737,9 @@ static const char* s_pszBlueResistOverheadEffectName[] =
 };
 COMPILE_TIME_ASSERT( ARRAYSIZE( s_pszRedResistOverheadEffectName ) == MEDIGUN_NUM_RESISTS && ARRAYSIZE( s_pszBlueResistOverheadEffectName ) == MEDIGUN_NUM_RESISTS );
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 static void AddResistParticle( CTFPlayer* pPlayer, medigun_resist_types_t nResistType, ETFCond eYeildToCond = TF_COND_LAST )
 {
 	// Don't spawn it over the local player's head
@@ -4666,6 +4764,9 @@ static void AddResistParticle( CTFPlayer* pPlayer, medigun_resist_types_t nResis
 	}
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 static void RemoveResistParticle( CTFPlayer* pPlayer, medigun_resist_types_t nResistType )
 {
 	if ( !pPlayer || pPlayer->IsLocalPlayer() )
@@ -4692,16 +4793,13 @@ static void RemoveResistParticle( CTFPlayer* pPlayer, medigun_resist_types_t nRe
 	if ( bKeep )
 		return;
 	
-	if ( pPlayer->m_Shared.GetDisplayedTeam() == TF_TEAM_RED )
-	{
-		pPlayer->RemoveOverheadEffect( s_pszRedResistOverheadEffectName[ nResistType ], true );
-	}
-	else
-	{
-		pPlayer->RemoveOverheadEffect( s_pszBlueResistOverheadEffectName[ nResistType ], true );
-	}
+	pPlayer->RemoveOverheadEffect( s_pszRedResistOverheadEffectName[ nResistType ], true );
+	pPlayer->RemoveOverheadEffect( s_pszBlueResistOverheadEffectName[ nResistType ], true );
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 static int GetResistShieldSkinForResistType( ETFCond eCond )
 {
 	switch( eCond )
@@ -4721,6 +4819,9 @@ static int GetResistShieldSkinForResistType( ETFCond eCond )
 	}
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 static void AddResistShield( C_LocalTempEntity** pShield, CTFPlayer* pPlayer, ETFCond eCond  )
 {
 	if( CBasePlayer::GetLocalPlayer() == pPlayer )
@@ -4752,6 +4853,9 @@ static void AddResistShield( C_LocalTempEntity** pShield, CTFPlayer* pPlayer, ET
 	}
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 static void RemoveResistShield( C_LocalTempEntity** pShield, CTFPlayer* pPlayer )
 {
 	if ( *pShield )
@@ -4791,6 +4895,9 @@ static void RemoveResistShield( C_LocalTempEntity** pShield, CTFPlayer* pPlayer 
 }
 #endif // CLIENT_DLL
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFPlayerShared::OnAddMedEffectUberBulletResist( void )
 {
 #ifdef CLIENT_DLL
@@ -4800,6 +4907,9 @@ void CTFPlayerShared::OnAddMedEffectUberBulletResist( void )
 #endif
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFPlayerShared::OnRemoveMedEffectUberBulletResist( void )
 {
 #ifdef CLIENT_DLL
@@ -4810,7 +4920,9 @@ void CTFPlayerShared::OnRemoveMedEffectUberBulletResist( void )
 #endif
 }
 
-
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFPlayerShared::OnAddMedEffectUberBlastResist( void )
 {
 #ifdef CLIENT_DLL
@@ -4820,6 +4932,9 @@ void CTFPlayerShared::OnAddMedEffectUberBlastResist( void )
 #endif
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFPlayerShared::OnRemoveMedEffectUberBlastResist( void )
 {
 #ifdef CLIENT_DLL
@@ -4830,6 +4945,9 @@ void CTFPlayerShared::OnRemoveMedEffectUberBlastResist( void )
 #endif
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFPlayerShared::OnAddMedEffectUberFireResist( void )
 {
 #ifdef CLIENT_DLL
@@ -4839,6 +4957,9 @@ void CTFPlayerShared::OnAddMedEffectUberFireResist( void )
 #endif
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFPlayerShared::OnRemoveMedEffectUberFireResist( void )
 {
 #ifdef CLIENT_DLL
@@ -4849,6 +4970,9 @@ void CTFPlayerShared::OnRemoveMedEffectUberFireResist( void )
 #endif
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFPlayerShared::OnAddMedEffectSmallBulletResist( void )
 {
 #ifdef CLIENT_DLL
@@ -4859,6 +4983,9 @@ void CTFPlayerShared::OnAddMedEffectSmallBulletResist( void )
 #endif
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFPlayerShared::OnRemoveMedEffectSmallBulletResist( void )
 {
 #ifdef CLIENT_DLL
@@ -4866,7 +4993,9 @@ void CTFPlayerShared::OnRemoveMedEffectSmallBulletResist( void )
 #endif
 }
 
-
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFPlayerShared::OnAddMedEffectSmallBlastResist( void )
 {
 #ifdef CLIENT_DLL
@@ -4877,6 +5006,9 @@ void CTFPlayerShared::OnAddMedEffectSmallBlastResist( void )
 #endif
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFPlayerShared::OnRemoveMedEffectSmallBlastResist( void )
 {
 #ifdef CLIENT_DLL
@@ -4884,6 +5016,9 @@ void CTFPlayerShared::OnRemoveMedEffectSmallBlastResist( void )
 #endif
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFPlayerShared::OnAddMedEffectSmallFireResist( void )
 {
 #ifdef CLIENT_DLL
@@ -4894,6 +5029,9 @@ void CTFPlayerShared::OnAddMedEffectSmallFireResist( void )
 #endif
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFPlayerShared::OnRemoveMedEffectSmallFireResist( void )
 {
 #ifdef CLIENT_DLL
@@ -4901,6 +5039,9 @@ void CTFPlayerShared::OnRemoveMedEffectSmallFireResist( void )
 #endif
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFPlayerShared::OnAddRuneResist( void )
 {
 #ifdef CLIENT_DLL
@@ -4909,6 +5050,9 @@ void CTFPlayerShared::OnAddRuneResist( void )
 #endif
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFPlayerShared::OnRemoveRuneResist( void )
 {
 #ifdef CLIENT_DLL
@@ -4916,6 +5060,9 @@ void CTFPlayerShared::OnRemoveRuneResist( void )
 #endif
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFPlayerShared::OnRemoveRuneKing( void )
 {
 #ifdef CLIENT_DLL
@@ -4923,18 +5070,25 @@ void CTFPlayerShared::OnRemoveRuneKing( void )
 #endif
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFPlayerShared::OnAddGrapplingHookLatched( void )
 {
 	m_pOuter->DoAnimationEvent( PLAYERANIMEVENT_CUSTOM_GESTURE, ACT_GRAPPLE_PULL_START );
 }
 
-
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFPlayerShared::OnRemoveGrapplingHookLatched( void )
 {
 	// DO NOTHING
 }
 
-
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFPlayerShared::OnAddBulletImmune( void )
 {
 #ifdef CLIENT_DLL
@@ -4944,7 +5098,9 @@ void CTFPlayerShared::OnAddBulletImmune( void )
 #endif
 }
 
-
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFPlayerShared::OnRemoveBulletImmune( void )
 {
 #ifdef CLIENT_DLL
@@ -4954,6 +5110,9 @@ void CTFPlayerShared::OnRemoveBulletImmune( void )
 #endif
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFPlayerShared::OnAddBlastImmune( void )
 {
 #ifdef CLIENT_DLL
@@ -4963,7 +5122,9 @@ void CTFPlayerShared::OnAddBlastImmune( void )
 #endif
 }
 
-
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFPlayerShared::OnRemoveBlastImmune( void )
 {
 #ifdef CLIENT_DLL
@@ -4973,6 +5134,9 @@ void CTFPlayerShared::OnRemoveBlastImmune( void )
 #endif
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFPlayerShared::OnAddFireImmune( void )
 {
 #ifdef CLIENT_DLL
@@ -4985,7 +5149,9 @@ void CTFPlayerShared::OnAddFireImmune( void )
 #endif
 }
 
-
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFPlayerShared::OnRemoveFireImmune( void )
 {
 #ifdef CLIENT_DLL
@@ -4998,7 +5164,9 @@ void CTFPlayerShared::OnRemoveFireImmune( void )
 #endif
 }
 
-
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFPlayerShared::OnAddMVMBotRadiowave( void )
 {
 #ifdef CLIENT_DLL
@@ -5017,7 +5185,9 @@ void CTFPlayerShared::OnAddMVMBotRadiowave( void )
 #endif
 }
 
-
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFPlayerShared::OnRemoveMVMBotRadiowave( void )
 {
 #ifdef CLIENT_DLL
@@ -5032,7 +5202,9 @@ void CTFPlayerShared::OnRemoveMVMBotRadiowave( void )
 #endif
 }
 
-
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFPlayerShared::OnAddHalloweenSpeedBoost( void )
 {
 #ifdef GAME_DLL
@@ -5044,6 +5216,9 @@ void CTFPlayerShared::OnAddHalloweenSpeedBoost( void )
 #endif
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFPlayerShared::OnRemoveHalloweenSpeedBoost( void )
 {
 #ifdef GAME_DLL
@@ -5054,6 +5229,9 @@ void CTFPlayerShared::OnRemoveHalloweenSpeedBoost( void )
 #endif
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFPlayerShared::OnAddHalloweenQuickHeal( void )
 {
 #ifdef GAME_DLL
@@ -5062,6 +5240,9 @@ void CTFPlayerShared::OnAddHalloweenQuickHeal( void )
 #endif
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFPlayerShared::OnRemoveHalloweenQuickHeal( void )
 {
 #ifdef GAME_DLL
@@ -5070,6 +5251,9 @@ void CTFPlayerShared::OnRemoveHalloweenQuickHeal( void )
 #endif
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFPlayerShared::OnAddHalloweenGiant( void )
 {
 #ifdef GAME_DLL
@@ -5083,6 +5267,9 @@ void CTFPlayerShared::OnAddHalloweenGiant( void )
 #endif
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFPlayerShared::OnRemoveHalloweenGiant( void )
 {
 #ifdef GAME_DLL
@@ -5096,6 +5283,9 @@ void CTFPlayerShared::OnRemoveHalloweenGiant( void )
 #endif
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFPlayerShared::OnAddHalloweenTiny( void )
 {
 #ifdef GAME_DLL
@@ -5105,6 +5295,9 @@ void CTFPlayerShared::OnAddHalloweenTiny( void )
 #endif
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFPlayerShared::OnAddHalloweenGhostMode( void )
 {
 	m_pOuter->SetGroundEntity( NULL );
@@ -5168,6 +5361,9 @@ void CTFPlayerShared::OnAddHalloweenGhostMode( void )
 #endif
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFPlayerShared::OnAddHalloweenKartDash()
 {
 	m_pOuter->SetFOV( m_pOuter, 110.f, 1.f, 0.f );
@@ -5180,6 +5376,9 @@ void CTFPlayerShared::OnAddHalloweenKartDash()
 #endif // GAME_DLL
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFPlayerShared::OnRemoveHalloweenKartDash()
 {
 	m_pOuter->SetFOV( m_pOuter, 0.f, 1.f, 0.f );
@@ -5194,6 +5393,9 @@ void CTFPlayerShared::OnRemoveHalloweenKartDash()
 #endif // GAME_DLL
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFPlayerShared::OnRemoveHalloweenTiny( void )
 {
 #ifdef GAME_DLL
@@ -5246,6 +5448,9 @@ void CTFPlayerShared::OnRemoveHalloweenTiny( void )
 #endif
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFPlayerShared::OnRemoveHalloweenGhostMode( void )
 {
 #ifdef CLIENT_DLL
@@ -5275,127 +5480,10 @@ void CTFPlayerShared::OnRemoveHalloweenGhostMode( void )
 #endif
 }
 
-#ifdef STAGING_ONLY
-void CTFPlayerShared::OnAddSpaceGravity()
-{
-#ifdef CLIENT_DLL
-	if ( m_pOuter->IsLocalPlayer() )
-	{
-		m_pOuter->EmitSound( "RD.SpaceGravityTransition" );
-	}
-#endif
-}
-
-void CTFPlayerShared::OnRemoveSpaceGravity()
-{
-#ifdef CLIENT_DLL
-	if ( m_pOuter->IsLocalPlayer() )
-	{
-		m_pOuter->EmitSound( "RD.SpaceGravityTransition" );
-	}
-#endif
-}
-
-//-----------------------------------------------------------------------------
-void CTFPlayerShared::OnAddSelfConc()
-{
-	UpdatePhaseEffects();
-}
-
-//-----------------------------------------------------------------------------
-void CTFPlayerShared::OnRemoveSelfConc()
-{
-	RemovePhaseEffects();
-}
 
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-void CTFPlayerShared::OnAddStealthedPhase( void )
-{
-#ifdef GAME_DLL
-	AddCond( TF_COND_SPEED_BOOST );
-	m_pOuter->m_takedamage = DAMAGE_NO;
-#else
-	IMaterial *pMaterial = materials->FindMaterial( TF_SCREEN_OVERLAY_MATERIAL_STEALTH, TEXTURE_GROUP_CLIENT_EFFECTS, false );
-	if ( !IsErrorMaterial( pMaterial ) )
-	{
-		view->SetScreenOverlayMaterial( pMaterial );
-	}
-#endif
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: 
-//-----------------------------------------------------------------------------
-void CTFPlayerShared::OnRemoveStealthedPhase( void )
-{
-#ifdef GAME_DLL
-	RemoveCond( TF_COND_SPEED_BOOST );
-	m_pOuter->m_takedamage = DAMAGE_YES;
-
-	// See if the spy is inside another player or object
-	Vector vecPos = m_pOuter->GetAbsOrigin();			
-	trace_t trace;
-	UTIL_TraceHull( vecPos, vecPos, VEC_HULL_MIN_SCALED( m_pOuter ), VEC_HULL_MAX_SCALED( m_pOuter ), ( MASK_SOLID | CONTENTS_PLAYERCLIP ), m_pOuter, COLLISION_GROUP_NONE, &trace );
-	if ( trace.fraction < 1.f )
-	{
-		// Telefrag!
-		m_pOuter->TakeDamage( CTakeDamageInfo( m_pOuter, m_pOuter, 1000, DMG_CRUSH, TF_DMG_CUSTOM_TELEFRAG ) );
-	}
-#else
-	if ( m_pOuter->IsLocalPlayer() )
-	{
-		IMaterial *pMaterial = view->GetScreenOverlayMaterial();
-		if ( pMaterial && FStrEq( pMaterial->GetName(), TF_SCREEN_OVERLAY_MATERIAL_STEALTH ) )
-		{
-			view->SetScreenOverlayMaterial( NULL );
-		}
-	}
-#endif
-}
-
-void CTFPlayerShared::OnAddClipOverload( void )
-{
-#ifdef GAME_DLL
-	m_pOuter->GiveAmmo( 1000, TF_AMMO_PRIMARY );
-	m_pOuter->GiveAmmo( 1000, TF_AMMO_SECONDARY );
-	m_pOuter->GiveAmmo( 1000, TF_AMMO_METAL );
-	m_pOuter->GiveAmmo( 1000, TF_AMMO_GRENADES1 );
-	m_pOuter->GiveAmmo( 1000, TF_AMMO_GRENADES2 );
-	m_pOuter->GiveAmmo( 1000, TF_AMMO_GRENADES3 );
-
-	// Refills weapon clips, too
-	for ( int i = 0; i < MAX_WEAPONS; i++ )
-	{
-		CTFWeaponBase *pWeapon = dynamic_cast< CTFWeaponBase* >( m_pOuter->GetWeapon( i ) );
-		if ( !pWeapon )
-			continue;
-
-		float flPrevClipScale = pWeapon->GetClipScale();
-		if ( m_pOuter->GetActiveTFWeapon() == pWeapon )
-		{
-			pWeapon->AbortReload();	// Abort reload or else their reload will "fix" their clip size
-			pWeapon->SendWeaponAnim( ACT_VM_IDLE );
-		}
-		pWeapon->SetClipScale( 3.f );
-		pWeapon->GiveDefaultAmmo();
-		pWeapon->SetClipScale( flPrevClipScale );
-
-		if ( pWeapon->IsEnergyWeapon() )
-		{
-			pWeapon->WeaponRegenerate();
-		}
-	}
-#endif
-}
-
-void CTFPlayerShared::OnRemoveClipOverload( void )
-{
-	// Nothing required
-}
-#endif // STAGING_ONLY
-
 void CTFPlayerShared::OnAddHalloweenKart( void )
 {
 #ifdef GAME_DLL
@@ -5424,6 +5512,9 @@ void CTFPlayerShared::OnAddHalloweenKart( void )
 	}
 
 	m_pOuter->m_flNextBonusDucksVOAllowedTime = gpGlobals->curtime + 17.f; // The longest Merasmus line + 1 second
+
+	// Force client to update all view angles (including kart and taunt yaw)
+	m_pOuter->ForcePlayerViewAngles( m_pOuter->GetAbsAngles() );
 #else
 	extern ConVar tf_halloween_kart_cam_dist;
 	m_pOuter->SetTauntCameraTargets( tf_halloween_kart_cam_dist.GetFloat(), 0.0f );
@@ -5434,6 +5525,10 @@ void CTFPlayerShared::OnAddHalloweenKart( void )
 	//$ This is handled in the ForcePlayerViewAngles user message.
 	//$ m_angVehicleMoveAngles = m_pOuter->GetAbsAngles();
 
+	// XXX(JohnS): This is not the right place to do these things, SetWeaponVisible on the *client* is just stomping
+	//             bugs elsewhere.  I'm not going to go re-fix all the spots doing this, but don't use this as a
+	//             template!  Add a check in TFWeaponBase::ShouldDraw() and call TFWeapon->UpdateVisibility() on the
+	//             edges.
 	if ( m_pOuter->GetActiveWeapon() )
 	{
 		m_pOuter->GetActiveWeapon()->SetWeaponVisible( false );
@@ -5441,6 +5536,9 @@ void CTFPlayerShared::OnAddHalloweenKart( void )
 #endif
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFPlayerShared::OnRemoveHalloweenKart( void )
 {
 #ifdef GAME_DLL
@@ -5468,6 +5566,10 @@ void CTFPlayerShared::OnRemoveHalloweenKart( void )
 		m_pOuter->m_PlayerAnimState->SetRenderangles( renderAngles );
 	}
 
+	// XXX(JohnS): This is not the right place to do these things, SetWeaponVisible on the *client* is just stomping
+	//             bugs elsewhere.  I'm not going to go re-fix all the spots doing this, but don't use this as a
+	//             template!  Add a check in TFWeaponBase::ShouldDraw() and call TFWeapon->UpdateVisibility() on the
+	//             edges.
 	if ( m_pOuter->GetActiveWeapon() )
 	{
 		m_pOuter->GetActiveWeapon()->SetWeaponVisible( true );
@@ -5481,6 +5583,9 @@ void CTFPlayerShared::OnRemoveHalloweenKart( void )
 #endif
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFPlayerShared::OnAddBalloonHead( void )
 {
 #ifdef GAME_DLL
@@ -5492,7 +5597,9 @@ void CTFPlayerShared::OnAddBalloonHead( void )
 	m_pOuter->SetGravity( 0.3f );
 }
 
-
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFPlayerShared::OnRemoveBalloonHead( void )
 {
 #ifdef GAME_DLL
@@ -5504,7 +5611,9 @@ void CTFPlayerShared::OnRemoveBalloonHead( void )
 	m_pOuter->SetGravity( 0.f );
 }
 
-
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFPlayerShared::OnAddMeleeOnly( void )
 {
 #ifdef GAME_DLL
@@ -5522,7 +5631,9 @@ void CTFPlayerShared::OnAddMeleeOnly( void )
 #endif // GAME_DLL
 }
 
-
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFPlayerShared::OnRemoveMeleeOnly( void )
 {
 #ifdef GAME_DLL
@@ -5533,7 +5644,9 @@ void CTFPlayerShared::OnRemoveMeleeOnly( void )
 #endif // GAME_DLL
 }
 
-
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFPlayerShared::OnAddSwimmingCurse( void )
 {
 #ifdef CLIENT_DLL
@@ -5548,6 +5661,9 @@ void CTFPlayerShared::OnAddSwimmingCurse( void )
 #endif // CLIENT_DLL
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFPlayerShared::OnRemoveSwimmingCurse( void )
 {
 #ifdef CLIENT_DLL
@@ -5566,6 +5682,9 @@ void CTFPlayerShared::OnRemoveSwimmingCurse( void )
 #endif // CLIENT_DLL
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFPlayerShared::OnAddHalloweenKartCage( void )
 {
 #ifdef CLIENT_DLL
@@ -5580,6 +5699,9 @@ void CTFPlayerShared::OnAddHalloweenKartCage( void )
 #endif // CLIENT_DLL
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFPlayerShared::OnRemoveHalloweenKartCage( void )
 {
 #ifdef CLIENT_DLL
@@ -5595,6 +5717,9 @@ void CTFPlayerShared::OnRemoveHalloweenKartCage( void )
 #endif // CLIENT_DLL
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFPlayerShared::OnAddPasstimeInterception( void )
 {
 #ifdef CLIENT_DLL
@@ -5620,6 +5745,9 @@ void CTFPlayerShared::OnAddPasstimeInterception( void )
 #endif
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFPlayerShared::OnRemovePasstimeInterception( void )
 {
 #ifdef CLIENT_DLL
@@ -5646,7 +5774,9 @@ void CTFPlayerShared::OnRemovePasstimeInterception( void )
 #endif
 }
 
-
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFPlayerShared::OnAddRunePlague( void )
 {
 #ifdef CLIENT_DLL
@@ -5662,7 +5792,9 @@ void CTFPlayerShared::OnAddRunePlague( void )
 #endif // CLIENT_DLL
 }
 
-
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFPlayerShared::OnRemoveRunePlague( void )
 {
 #ifdef CLIENT_DLL
@@ -5675,7 +5807,9 @@ void CTFPlayerShared::OnRemoveRunePlague( void )
 #endif // CLIENT_DLL
 }
 
-
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFPlayerShared::OnAddPlague( void )
 {
 #ifdef CLIENT_DLL
@@ -5706,6 +5840,9 @@ void CTFPlayerShared::OnAddPlague( void )
 #endif // CLIENT_DLL
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CTFPlayerShared::OnRemovePlague( void )
 {
 	m_pOuter->StopSound( "Powerup.PickUpPlagueInfectedLoop" );
@@ -5902,9 +6039,14 @@ void CTFPlayerShared::UpdateChargeMeter( void )
 		// Recharge the meter while we are not charging.
 		float flChargeRegenMod = tf_demoman_charge_regen_rate.GetFloat();
 		CALL_ATTRIB_HOOK_FLOAT_ON_OTHER( m_pOuter, flChargeRegenMod, charge_recharge_rate );
-		if ( TFGameRules() && TFGameRules()->IsPowerupMode() && GetCarryingRuneType() == RUNE_KNOCKOUT )
+		if ( TFGameRules() && TFGameRules()->IsPowerupMode() )
 		{
-			flChargeRegenMod *= 0.2f;
+			if ( GetCarryingRuneType() != RUNE_NONE )
+			{
+				flChargeRegenMod *= 0.2f;
+			}
+			else
+				flChargeRegenMod *= 0.4f;
 		}
 		
 		flChargeRegenMod = Max( flChargeRegenMod, 1.f );
@@ -6479,9 +6621,7 @@ bool CTFPlayerShared::ShouldShowRecentlyTeleported( void )
 //-----------------------------------------------------------------------------
 void CTFPlayerShared::Burn( CTFPlayer *pAttacker, CTFWeaponBase *pWeapon, float flBurningTime /*=-1*/ )
 {
-#ifdef CLIENT_DLL
-
-#else
+#ifdef GAME_DLL
 	// Don't bother igniting players who have just been killed by the fire damage.
 	if ( !m_pOuter->IsAlive() )
 		return;
@@ -6491,51 +6631,97 @@ void CTFPlayerShared::Burn( CTFPlayer *pAttacker, CTFWeaponBase *pWeapon, float 
 		return;
 
 	// pyros don't burn persistently or take persistent burning damage, but we show brief burn effect so attacker can tell they hit
-	bool bVictimIsPyro = ( TF_CLASS_PYRO ==  m_pOuter->GetPlayerClass()->GetClassIndex() );
+	bool bVictimIsImmunePyro = ( TF_CLASS_PYRO ==  m_pOuter->GetPlayerClass()->GetClassIndex() );
+	if ( bVictimIsImmunePyro )
+	{
+		bVictimIsImmunePyro = !InCond( TF_COND_BURNING_PYRO );
+	}
+
+#ifdef DEBUG
+	static float s_flStartAfterburnTime = 0.f;
+	static float s_flReachMaxAfterburnTime = 0.f;
+#endif // DEBUG
 
 	if ( !InCond( TF_COND_BURNING ) )
 	{
 		// Start burning
 		AddCond( TF_COND_BURNING, -1.f, pAttacker );
-		m_flFlameBurnTime = gpGlobals->curtime;	//asap
+		m_flFlameBurnTime = gpGlobals->curtime + TF_BURNING_FREQUENCY;
+		m_flAfterburnDuration = pWeapon ? pWeapon->GetInitialAfterburnDuration() : 0.f;
+		
+		// Reduces direct healing effectiveness
+		AddCond( TF_COND_HEALING_DEBUFF, m_flAfterburnDuration, pAttacker );
+
 		// let the attacker know he burned me
-		if ( pAttacker && !bVictimIsPyro )
+		if ( pAttacker && !bVictimIsImmunePyro )
 		{
 			pAttacker->OnBurnOther( m_pOuter, pWeapon );
 
 			m_hOriginalBurnAttacker = pAttacker;
 		}
+
+#ifdef DEBUG
+		s_flStartAfterburnTime = gpGlobals->curtime;
+		s_flReachMaxAfterburnTime = 0.f;
+#endif // DEBUG
 	}
 
-	int nAfterburnImmunity = 0;
+	int bAfterburnImmunity = bVictimIsImmunePyro;
 
 	// Check my weapon
-	CTFWeaponBase *pMyWeapon = GetActiveTFWeapon();
-	if ( pMyWeapon )
+	if ( !bAfterburnImmunity )
 	{
-		CALL_ATTRIB_HOOK_INT_ON_OTHER( pMyWeapon, nAfterburnImmunity, afterburn_immunity );
+		int nAfterburnImmunity = 0;
+		CTFWeaponBase *pMyWeapon = GetActiveTFWeapon();
+		if ( pMyWeapon )
+		{
+			CALL_ATTRIB_HOOK_INT_ON_OTHER( pMyWeapon, nAfterburnImmunity, afterburn_immunity );
+		}
+
+		bAfterburnImmunity |= nAfterburnImmunity != 0;
 	}
 
 	// STAGING_SPY
 	if ( InCond( TF_COND_AFTERBURN_IMMUNE ) )
 	{
-		nAfterburnImmunity = 1;
-		m_flFlameRemoveTime = 0;
+		bAfterburnImmunity = true;
 	}
 
-	// Check shield
-	if ( !nAfterburnImmunity && IsShieldEquipped() )
+	// Check demo shield
+	if ( !bAfterburnImmunity && IsShieldEquipped() )
 	{
+		int nAfterburnImmunity = 0;
 		CTFWearableDemoShield *pWearableShield = GetEquippedDemoShield( m_pOuter );
 		if ( pWearableShield && !pWearableShield->IsDisguiseWearable() )
 		{
 			CALL_ATTRIB_HOOK_INT_ON_OTHER( pWearableShield, nAfterburnImmunity, afterburn_immunity );
 		}
+
+		bAfterburnImmunity |= nAfterburnImmunity != 0;
+	}
+	
+	// Check sniper shields (e.g. Darwin's)
+	if ( !bAfterburnImmunity && m_pOuter->IsPlayerClass( TF_CLASS_SNIPER ) )
+	{
+		for ( int i = 0; i < m_pOuter->GetNumWearables(); ++i )
+		{
+			CTFWearable *pWearableItem = dynamic_cast< CTFWearable* >( m_pOuter->GetWearable( i ) );
+			if ( !pWearableItem )
+				continue;
+
+			int nAfterburnImmunity = 0;
+			CALL_ATTRIB_HOOK_INT_ON_OTHER( pWearableItem, nAfterburnImmunity, afterburn_immunity );
+			if ( nAfterburnImmunity )
+			{
+				bAfterburnImmunity = true;
+				break;
+			}
+		}
 	}
 
-	bool bIsFlareGun = ( pWeapon && pWeapon->GetWeaponID() == TF_WEAPON_FLAREGUN );
-	float flFlameLife;
-	if ( bVictimIsPyro || nAfterburnImmunity )
+	// check afterburn duration
+	float flFlameLife = pWeapon ? pWeapon->GetAfterburnRateOnHit() : 0.f;
+	if ( bAfterburnImmunity )
 	{
 		flFlameLife = TF_BURNING_FLAME_LIFE_PYRO;
 	}
@@ -6543,31 +6729,39 @@ void CTFPlayerShared::Burn( CTFPlayer *pAttacker, CTFWeaponBase *pWeapon, float 
 	{
 		flFlameLife = flBurningTime;
 	}
-	else if ( bIsFlareGun )
-	{
-		flFlameLife = TF_BURNING_FLAME_LIFE_FLARE;
-	}
-	else if ( pWeapon && pWeapon->GetWeaponID() == TF_WEAPON_PARTICLE_CANNON )
-	{
-		flFlameLife = TF_BURNING_FLAME_LIFE_PLASMA;
-	}
-	else
-	{
-		flFlameLife = TF_BURNING_FLAME_LIFE;
-	}
 	
 	CALL_ATTRIB_HOOK_FLOAT_ON_OTHER( pWeapon, flFlameLife, mult_wpn_burntime );
 
-	float flBurnEnd = gpGlobals->curtime + flFlameLife;
-	if ( flBurnEnd > m_flFlameRemoveTime )
+	// flame immunity will always have a fixed duration
+	if ( bAfterburnImmunity )
 	{
-		m_flFlameRemoveTime = flBurnEnd;
+		m_flAfterburnDuration = flFlameLife;
 	}
+	// otherwise stack the duration
+	else
+	{
+		m_flAfterburnDuration += flFlameLife;
+	}
+
+	m_flAfterburnDuration = Clamp( m_flAfterburnDuration, 0.f, tf_afterburn_max_duration );
+
+#ifdef DEBUG
+	if ( tf_afterburn_debug.GetBool() )
+	{
+		engine->Con_NPrintf( 1, "Added afterburn duration = %f", m_flAfterburnDuration );
+
+		if ( s_flReachMaxAfterburnTime == 0.f && m_flAfterburnDuration == tf_afterburn_max_duration )
+		{
+			s_flReachMaxAfterburnTime = gpGlobals->curtime;
+			DevMsg( "took %f seconds to reach max afterburn duration\n", s_flReachMaxAfterburnTime - s_flStartAfterburnTime );
+		}
+	}
+#endif // DEBUG
 
 	m_hBurnAttacker = pAttacker;
 	m_hBurnWeapon = pWeapon;
 
-#endif
+#endif // GAME_DLL
 }
 
 
@@ -6585,7 +6779,7 @@ void CTFPlayerShared::SelfBurn( float flBurningTime )
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-void CTFPlayerShared::MakeBleed( CTFPlayer *pPlayer, CTFWeaponBase *pWeapon, float flBleedingTime, int nBleedDmg /* = TF_BLEEDING_DMG */, bool bPermanentBleeding /*= false*/ )
+void CTFPlayerShared::MakeBleed( CTFPlayer *pPlayer, CTFWeaponBase *pWeapon, float flBleedingTime, int nBleedDmg /* = TF_BLEEDING_DMG */, bool bPermanentBleeding /*= false*/, int nDmgType /*= TF_DMG_CUSTOM_BLEEDING*/ )
 {
 #ifdef CLIENT_DLL
 
@@ -6623,7 +6817,8 @@ void CTFPlayerShared::MakeBleed( CTFPlayer *pPlayer, CTFWeaponBase *pWeapon, flo
 		flBleedingTime,		// flBleedingTime
 		flExpireTime,		// flBleedingRemoveTime
 		nBleedDmg,			// nBleedDmg
-		bPermanentBleeding
+		bPermanentBleeding,
+		nDmgType			// DmgType
 	};
 	m_PlayerBleeds.AddToTail( bleedinfo );
 
@@ -6700,6 +6895,11 @@ void CTFPlayerShared::OnRemoveBurning( void )
 	{
 		HatAndMiscEconEntities_OnOwnerKillEaterEventNoParter( m_pOuter, kKillEaterEvent_FiresSurvived );
 	}
+
+	if ( InCond( TF_COND_HEALING_DEBUFF ) )
+	{
+		RemoveCond( TF_COND_HEALING_DEBUFF );
+	}
 #endif
 }
 
@@ -6752,19 +6952,23 @@ void CTFPlayerShared::OnRemoveTmpDamageBonus( void )
 void CTFPlayerShared::OnAddStealthed( void )
 {
 #ifdef CLIENT_DLL
-	if ( m_pOuter->GetPredictable() && ( !prediction->IsFirstTimePredicted() || m_bSyncingConditions ) )
-		return;
+	// Local player wants to predict the offhand weapon, but not the fancy effects multiple times!
+	// Other players always run everything
+	bool bFirstPrediction = !m_pOuter->GetPredictable() || ( prediction->IsFirstTimePredicted() && !m_bSyncingConditions );
 
-	if ( !InCond( TF_COND_FEIGN_DEATH ) )
+	if ( bFirstPrediction )
 	{
-		m_pOuter->EmitSound( "Player.Spy_Cloak" );
-	}
-	m_pOuter->RemoveAllDecals();
-	UpdateCritBoostEffect();
+		if ( !InCond( TF_COND_FEIGN_DEATH ) )
+		{
+			m_pOuter->EmitSound( "Player.Spy_Cloak" );
+		}
+		m_pOuter->RemoveAllDecals();
+		UpdateCritBoostEffect();
 
-	if ( m_pOuter->m_pTempShield && GetCarryingRuneType() == RUNE_RESIST )
-	{
-		RemoveResistShield( &m_pOuter->m_pTempShield, m_pOuter );
+		if ( m_pOuter->m_pTempShield && GetCarryingRuneType() == RUNE_RESIST )
+		{
+			RemoveResistShield( &m_pOuter->m_pTempShield, m_pOuter );
+		}
 	}
 #endif
 
@@ -6776,7 +6980,7 @@ void CTFPlayerShared::OnAddStealthed( void )
 		bSetInvisChangeTime = false;
 	}
 
-	if ( InCond( TF_COND_STEALTHED_USER_BUFF ) && m_pOuter->IsLocalPlayer() )
+	if ( bFirstPrediction && InCond( TF_COND_STEALTHED_USER_BUFF ) && m_pOuter->IsLocalPlayer() )
 	{
 		IMaterial *pMaterial = materials->FindMaterial( TF_SCREEN_OVERLAY_MATERIAL_STEALTH, TEXTURE_GROUP_CLIENT_EFFECTS, false );
 		if ( !IsErrorMaterial( pMaterial ) )
@@ -6823,11 +7027,14 @@ void CTFPlayerShared::OnAddStealthed( void )
 	m_pOuter->TeamFortress_SetSpeed();
 
 #ifdef CLIENT_DLL
-	// Remove water balloon effect if it on player
-	m_pOuter->ParticleProp()->StopParticlesNamed( "balloontoss_drip", true );
+	if ( bFirstPrediction )
+	{
+		// Remove water balloon effect if it on player
+		m_pOuter->ParticleProp()->StopParticlesNamed( "balloontoss_drip", true );
 
-	m_pOuter->UpdateSpyStateChange();
-	m_pOuter->UpdateKillStreakEffects( GetStreak( kTFStreak_Kills ) );
+		m_pOuter->UpdateSpyStateChange();
+		m_pOuter->UpdateKillStreakEffects( GetStreak( kTFStreak_Kills ) );
+	}
 #endif
 
 #ifdef GAME_DLL
@@ -6841,39 +7048,43 @@ void CTFPlayerShared::OnAddStealthed( void )
 void CTFPlayerShared::OnRemoveStealthed( void )
 {
 #ifdef CLIENT_DLL
-	if ( !m_bSyncingConditions )
-		return;
+	// Local player wants to predict the offhand weapon, but not the fancy effects multiple times!
+	// Other players always run everything
+	bool bFirstPrediction = !m_pOuter->GetPredictable() || ( prediction->IsFirstTimePredicted() && !m_bSyncingConditions );
 
-	CTFWeaponInvis *pWpn = (CTFWeaponInvis *) m_pOuter->Weapon_OwnsThisID( TF_WEAPON_INVIS );
+	if ( bFirstPrediction )
+	{
+		CTFWeaponInvis* pWpn = (CTFWeaponInvis*)m_pOuter->Weapon_OwnsThisID( TF_WEAPON_INVIS );
 
-	int iReducedCloak = 0;
-	CALL_ATTRIB_HOOK_INT_ON_OTHER( m_pOuter, iReducedCloak, set_quiet_unstealth );
-	if ( iReducedCloak == 1 )
-	{
-		m_pOuter->EmitSound( "Player.Spy_UnCloakReduced" );
-	}
-	else if ( pWpn && pWpn->HasFeignDeath() )
-	{
-		m_pOuter->EmitSound( "Player.Spy_UnCloakFeignDeath" );
-	}
-	else
-	{
-		m_pOuter->EmitSound( "Player.Spy_UnCloak" );
-	}
-	UpdateCritBoostEffect( kCritBoost_ForceRefresh );
-
-	if ( m_pOuter->IsLocalPlayer() && !InCond( TF_COND_STEALTHED_USER_BUFF_FADING ) )
-	{
-		IMaterial *pMaterial = view->GetScreenOverlayMaterial();
-		if ( pMaterial && FStrEq( pMaterial->GetName(), TF_SCREEN_OVERLAY_MATERIAL_STEALTH ) )
+		int iReducedCloak = 0;
+		CALL_ATTRIB_HOOK_INT_ON_OTHER( m_pOuter, iReducedCloak, set_quiet_unstealth );
+		if ( iReducedCloak == 1 )
 		{
-			view->SetScreenOverlayMaterial( NULL );
+			m_pOuter->EmitSound( "Player.Spy_UnCloakReduced" );
 		}
-	}
+		else if ( pWpn && pWpn->HasFeignDeath() )
+		{
+			m_pOuter->EmitSound( "Player.Spy_UnCloakFeignDeath" );
+		}
+		else
+		{
+			m_pOuter->EmitSound( "Player.Spy_UnCloak" );
+		}
+		UpdateCritBoostEffect( kCritBoost_ForceRefresh );
 
-	if ( !m_pOuter->m_pTempShield && GetCarryingRuneType() == RUNE_RESIST )
-	{
-		AddResistShield( &m_pOuter->m_pTempShield, m_pOuter, TF_COND_RUNE_RESIST );
+		if ( m_pOuter->IsLocalPlayer() && !InCond( TF_COND_STEALTHED_USER_BUFF_FADING ) )
+		{
+			IMaterial* pMaterial = view->GetScreenOverlayMaterial();
+			if ( pMaterial && FStrEq( pMaterial->GetName(), TF_SCREEN_OVERLAY_MATERIAL_STEALTH ) )
+			{
+				view->SetScreenOverlayMaterial( NULL );
+			}
+		}
+
+		if ( !m_pOuter->m_pTempShield && GetCarryingRuneType() == RUNE_RESIST )
+		{
+			AddResistShield( &m_pOuter->m_pTempShield, m_pOuter, TF_COND_RUNE_RESIST );
+		}
 	}
 #else
 	if ( m_flCloakStartTime > 0 )
@@ -6907,16 +7118,13 @@ void CTFPlayerShared::OnRemoveStealthed( void )
 	m_bMotionCloak = false;
 
 #ifdef CLIENT_DLL
-	m_pOuter->UpdateSpyStateChange();
-	m_pOuter->UpdateKillStreakEffects( GetStreak( kTFStreak_Kills ) );
-#endif
-
-#ifdef STAGING_ONLY
-	if ( HasPhaseCloakAbility() )
+	if ( bFirstPrediction )
 	{
-		RemoveCond( TF_COND_STEALTHED_PHASE );
+		m_pOuter->UpdateSpyStateChange();
+		m_pOuter->UpdateKillStreakEffects( GetStreak( kTFStreak_Kills ) );
 	}
 #endif
+
 }
 
 //-----------------------------------------------------------------------------
@@ -7022,6 +7230,8 @@ void CTFPlayerShared::OnRemoveDisguising( void )
 void CTFPlayerShared::OnRemoveDisguised( void )
 {
 #ifdef CLIENT_DLL
+	// Save the disguise target before clearing it, so we can mark bodygroups dirty.
+	CTFPlayer *pOldDisguiseTarget = ToTFPlayer( m_hDisguiseTarget.Get() );
 
 	if ( m_pOuter->GetPredictable() && ( !prediction->IsFirstTimePredicted() || m_bSyncingConditions ) )
 		return;
@@ -7046,12 +7256,18 @@ void CTFPlayerShared::OnRemoveDisguised( void )
 	UpdateCritBoostEffect( kCritBoost_ForceRefresh );
 	m_pOuter->UpdateSpyStateChange();
 
+	// Mark the old disguise target's bodygroups as dirty so they'll be recalculated.
+	if ( pOldDisguiseTarget )
+	{
+		pOldDisguiseTarget->SetBodygroupsDirty();
+	}
+
 #else
+
 	m_nDisguiseTeam  = TF_SPY_UNDEFINED;
 	m_nDisguiseClass.Set( TF_CLASS_UNDEFINED );
 	m_nDisguiseSkinOverride = 0;
 	m_hDisguiseTarget.Set( NULL );
-	m_iDisguiseTargetIndex = TF_DISGUISE_TARGET_INDEX_NONE;
 	m_iDisguiseHealth = 0;
 	SetDisguiseBody( 0 );
 	m_iDisguiseAmmo = 0;
@@ -7170,6 +7386,8 @@ void CTFPlayerShared::OnRemoveStunned( void )
 	m_iStunFlags = 0;
 	m_hStunner = NULL;
 
+	m_iStunIndex = -1;
+
 #ifdef CLIENT_DLL
 	if ( m_pOuter->m_pStunnedEffect )
 	{
@@ -7179,7 +7397,6 @@ void CTFPlayerShared::OnRemoveStunned( void )
 		m_pOuter->m_pStunnedEffect = NULL;
 	}
 #else
-	m_iStunIndex = -1;
 	m_PlayerStuns.RemoveAll();
 #endif
 
@@ -7232,10 +7449,6 @@ void CTFPlayerShared::UpdateLegacyStunSystem( void )
 		m_flStunFade = gpGlobals->curtime + pStun->flDuration;
 		m_flMovementStunTime = pStun->flDuration; 
 		m_flStunEnd = pStun->flExpireTime;
-		if ( pStun->iStunFlags & TF_STUN_CONTROLS )
-		{
-			m_flStunEnd = pStun->flExpireTime;
-		}
 		m_iMovementStunAmount = pStun->flStunAmount; 
 		m_iStunFlags = pStun->iStunFlags;
 
@@ -7424,6 +7637,57 @@ void CTFPlayerShared::OnRemoveSodaPopperHype( void )
 }
 
 //-----------------------------------------------------------------------------
+// Soda Popper Condition
+//-----------------------------------------------------------------------------
+void CTFPlayerShared::OnAddCondGas( void )
+{
+#ifdef CLIENT_DLL
+	// don't need to add the effect if they're already burning
+	if ( !InCond( TF_COND_BURNING ) && !m_pOuter->m_pGasEffect )
+	{
+		// You'll only have the drip effect from the opposing team
+		m_pOuter->m_pGasEffect = m_pOuter->ParticleProp()->Create( ( m_pOuter->GetTeamNumber() == TF_TEAM_BLUE ) ? "gas_can_drips_red" : "gas_can_drips_blue", PATTACH_ABSORIGIN_FOLLOW );
+	}
+
+	if ( m_pOuter->m_pGasEffect )
+	{
+		m_pOuter->ParticleProp()->AddControlPoint( m_pOuter->m_pGasEffect, 1, m_pOuter, PATTACH_ABSORIGIN_FOLLOW );
+	}
+
+	if ( m_pOuter->IsLocalPlayer() )
+	{
+		IMaterial *pMaterial = materials->FindMaterial( TF_SCREEN_OVERLAY_MATERIAL_GAS, TEXTURE_GROUP_CLIENT_EFFECTS, false );
+		if ( !IsErrorMaterial( pMaterial ) )
+		{
+			view->SetScreenOverlayMaterial( pMaterial );
+		}
+	}
+
+#endif // CLIENT_DLL
+}
+//-----------------------------------------------------------------------------
+void CTFPlayerShared::OnRemoveCondGas( void )
+{
+#ifdef CLIENT_DLL
+	if ( m_pOuter->m_pGasEffect )
+	{
+		m_pOuter->ParticleProp()->StopEmission( m_pOuter->m_pGasEffect );
+		m_pOuter->m_pGasEffect = NULL;
+	}
+
+	if ( m_pOuter->IsLocalPlayer() )
+	{
+		// only remove the overlay if it is urine
+		IMaterial *pMaterial = view->GetScreenOverlayMaterial();
+		if ( pMaterial && FStrEq( pMaterial->GetName(), TF_SCREEN_OVERLAY_MATERIAL_GAS ) )
+		{
+			view->SetScreenOverlayMaterial( NULL );
+		}
+	}
+#endif // CLIENT_DLL
+}
+
+//-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
 float CTFPlayerShared::GetStealthNoAttackExpireTime( void )
@@ -7561,18 +7825,98 @@ bool CTFPlayerShared::CanRuneCharge() const
 	return InCond( TF_COND_RUNE_SUPERNOVA );
 }
 
-#ifdef STAGING_ONLY
+
 //-----------------------------------------------------------------------------
 // Purpose:
 //-----------------------------------------------------------------------------
-bool CTFPlayerShared::HasPhaseCloakAbility( void )
-{
-	int iPhaseStealth = 0;
-	CALL_ATTRIB_HOOK_INT_ON_OTHER( m_pOuter, iPhaseStealth, ability_cloak_phase );
-	return iPhaseStealth > 0;
+void CTFPlayerShared::SetItemChargeMeter( loadout_positions_t slot, float flValue )
+{ 
+	if ( ( slot >= FIRST_LOADOUT_SLOT_WITH_CHARGE_METER ) && ( slot <= LAST_LOADOUT_SLOT_WITH_CHARGE_METER ) )
+	{
+		m_flPrevItemChargeMeter[ slot ] = m_flItemChargeMeter[ slot ];
+		m_flItemChargeMeter.Set( slot, Clamp( flValue, 0.f, 100.f ) );
+
+		if ( !m_pOuter )
+			return;
+		
+		IHasGenericMeter *pGenericMeterUser = dynamic_cast< IHasGenericMeter* >( m_pOuter->GetEntityForLoadoutSlot( slot, true ) );
+		if ( !pGenericMeterUser )
+			return;
+
+		const float flEndVal = pGenericMeterUser->GetMeterMultiplier() >= 0.f ? 100.f : 0.f;
+		float flCurrentCharge = m_flItemChargeMeter[slot];
+		float flPrevCharge = m_flPrevItemChargeMeter[slot];
+
+		// no change
+		if ( flCurrentCharge == flPrevCharge )
+			return;
+
+		// Check if we just filled an interval of this meter, let the item know in case it wants to do something special
+		const float flChargeInterval = pGenericMeterUser->GetChargeInterval();
+		const float flPrevChargeInterval = ceil( flPrevCharge / flChargeInterval ) * flChargeInterval;
+
+		float flCurSign = Sign( flCurrentCharge - flPrevChargeInterval );
+		float flPrevSign = Sign( flPrevCharge - flPrevChargeInterval );
+		if ( ( flCurSign > 0 ) && ( flCurSign != flPrevSign ) )
+		{
+			pGenericMeterUser->OnResourceMeterFilled();
+		}
+	}
 }
 
-#endif // STAGING_ONLY
+//-----------------------------------------------------------------------------
+// Purpose:
+//-----------------------------------------------------------------------------
+void CTFPlayerShared::UpdateItemChargeMeters()
+{
+	for( int i= FIRST_LOADOUT_SLOT_WITH_CHARGE_METER; i <= LAST_LOADOUT_SLOT_WITH_CHARGE_METER; ++i )
+	{
+		int nMeterChargeType = 0;
+		float flMeterChargeRate = 0.f;
+		loadout_positions_t slot( (loadout_positions_t)i );
+		CBaseEntity* pItem = m_pOuter->GetEntityForLoadoutSlot( i, true );
+		if ( !pItem )
+			continue;
+
+		CALL_ATTRIB_HOOK_INT_ON_OTHER( pItem, nMeterChargeType, item_meter_charge_type );
+		if ( ( nMeterChargeType == ATTRIBUTE_METER_TYPE_TIME ) || ( nMeterChargeType == ATTRIBUTE_METER_TYPE_COMBO ) )
+		{
+			// See how fast to charge
+			CALL_ATTRIB_HOOK_FLOAT_ON_OTHER( pItem, flMeterChargeRate, item_meter_charge_rate );
+			if ( flMeterChargeRate == 0.f )
+				continue;
+
+			// Modify it?
+			float flMeterChargeRateMod = 1.f;
+			CALL_ATTRIB_HOOK_FLOAT_ON_OTHER( pItem, flMeterChargeRateMod, mult_item_meter_charge_rate );
+			flMeterChargeRate *= flMeterChargeRateMod;
+
+			// Should we even charge?  The item can pause this if it wants
+			IHasGenericMeter *pGenericMeterUser = dynamic_cast< IHasGenericMeter* >( m_pOuter->GetEntityForLoadoutSlot( slot, true ) );
+			if ( !pGenericMeterUser || !pGenericMeterUser->ShouldUpdateMeter() )
+				continue;
+			
+			// Fill up based on time
+			const float flDeltaTime = ( gpGlobals->frametime ) * 100.f;
+			SetItemChargeMeter( slot, GetItemChargeMeter( slot ) + pGenericMeterUser->GetMeterMultiplier() * ( flDeltaTime / flMeterChargeRate ) );
+		}
+	}
+}
+
+//-----------------------------------------------------------------------------
+// Purpose:
+//-----------------------------------------------------------------------------
+bool CTFPlayerShared::CanFallStomp( void )
+{
+	if ( InCond( TF_COND_ROCKETPACK ) )
+		return true;
+
+	int iHeadStomp = 0;
+	CALL_ATTRIB_HOOK_INT_ON_OTHER( m_pOuter, iHeadStomp, boots_falling_stomp );
+
+	return iHeadStomp != 0;
+}
+
 
 //-----------------------------------------------------------------------------
 // Purpose:
@@ -7694,38 +8038,6 @@ void CTFPlayerShared::InvisibilityThink( void )
 	m_flPrevInvisibility = m_flInvisibility;
 	m_flInvisibility = clamp( flTargetInvis, 0.0f, 1.0f );
 
-#ifdef STAGING_ONLY
-	// Sniper cloak
-	int iSniperCloak = 0;
-	CALL_ATTRIB_HOOK_INT_ON_OTHER( m_pOuter, iSniperCloak, ability_cloak_sniper );
-	if ( iSniperCloak )
-	{
-		static const float flSniperCloakDelay = 2.f;
-		bool bMoving = !m_pOuter->GetAbsVelocity().IsZero();
-		bool bAiming = IsAiming();
-
-		if ( !bMoving && !bAiming && !IsCarryingObject() )
-		{
-			if ( m_flLastNoMovementTime == -1.f )
-			{
-				m_flLastNoMovementTime = gpGlobals->curtime;
-			}
-
-			if ( !InCond( TF_COND_STEALTHED_USER_BUFF ) && !m_flInvisibility && m_flLastNoMovementTime > 0.f && gpGlobals->curtime - m_flLastNoMovementTime > flSniperCloakDelay )
-			{
-				AddCond( TF_COND_STEALTHED_USER_BUFF, -1.f, m_pOuter );
-			}
-		}
-		else
-		{
-			if ( IsStealthed() )
-			{
-				FadeInvis( 0.1f );
-			}
-			m_flLastNoMovementTime = -1.f;
-		}
-	}
-#endif // STAGING_ONLY
 }
 
 
@@ -7734,14 +8046,6 @@ void CTFPlayerShared::InvisibilityThink( void )
 //-----------------------------------------------------------------------------
 float CTFPlayerShared::GetPercentInvisible( void ) const
 {
-#ifdef STAGING_ONLY
-#ifdef CLIENT_DLL
-	// This is a client hack to make everyone else invisible to the local player
-	C_TFPlayer *pLocalTFPlayer = C_TFPlayer::GetLocalTFPlayer();
-	if ( pLocalTFPlayer && pLocalTFPlayer->m_Shared.InCond( TF_COND_STEALTHED_PHASE ) && pLocalTFPlayer != m_pOuter )
-		return 1.f;
-#endif // CLIENT_DLL
-#endif // STAGING_ONLY
 
 	return m_flInvisibility;
 }
@@ -7807,18 +8111,13 @@ bool CTFPlayerShared::IsInvulnerable( void ) const
 //-----------------------------------------------------------------------------
 bool CTFPlayerShared::IsStealthed( void ) const
 {
-#ifdef STAGING_ONLY
-#ifdef CLIENT_DLL
-	// This is a client hack to make everyone else invisible to the local player
-	C_TFPlayer *pLocalTFPlayer = C_TFPlayer::GetLocalTFPlayer();
-	if ( pLocalTFPlayer && pLocalTFPlayer->m_Shared.InCond( TF_COND_STEALTHED_PHASE ) && pLocalTFPlayer != m_pOuter )
-		return true;
-#endif // CLIENT_DLL
-#endif // STAGING_ONLY
 
 	return ( InCond( TF_COND_STEALTHED ) || InCond( TF_COND_STEALTHED_USER_BUFF ) || InCond( TF_COND_STEALTHED_USER_BUFF_FADING ) );
 }
 
+//-----------------------------------------------------------------------------
+// Purpose:
+//-----------------------------------------------------------------------------
 bool CTFPlayerShared::CanBeDebuffed( void ) const
 {
 	if ( IsInvulnerable() )
@@ -7828,6 +8127,28 @@ bool CTFPlayerShared::CanBeDebuffed( void ) const
 		return false;
 
 	return true;
+}
+
+//-----------------------------------------------------------------------------
+// Purpose:
+//-----------------------------------------------------------------------------
+bool CTFPlayerShared::IsImmuneToPushback( void ) const
+{
+	if ( InCond( TF_COND_MEGAHEAL ) )
+		return true;
+
+	if ( InCond( TF_COND_IMMUNE_TO_PUSHBACK ) )
+		return true;
+
+	if ( m_pOuter->IsPlayerClass( TF_CLASS_HEAVYWEAPONS ) && InCond( TF_COND_AIMING ) )
+	{
+		int iImmune = 0;
+		CALL_ATTRIB_HOOK_INT_ON_OTHER( m_pOuter, iImmune, spunup_push_force_immunity );
+		if ( iImmune )
+			return true;
+	}
+
+	return false;
 }
 
 //-----------------------------------------------------------------------------
@@ -7890,6 +8211,37 @@ void CTFPlayerShared::Disguise( int nTeam, int nClass, CTFPlayer* pDesiredTarget
 		}
 	}
 
+	if ( !bOnKill )
+	{
+		int nDisguiseConsumesCloak = 0;
+		CALL_ATTRIB_HOOK_INT_ON_OTHER ( m_pOuter, nDisguiseConsumesCloak, mod_disguise_consumes_cloak );
+		if ( nDisguiseConsumesCloak )
+		{
+			if ( m_flCloakMeter < 100.f )
+			{
+				CSingleUserRecipientFilter filter ( m_pOuter );
+				m_pOuter->EmitSound ( filter, m_pOuter->entindex (), "Player.UseDeny", NULL, 0.f );
+				return;
+			}
+
+#ifdef GAME_DLL
+			if ( !PointInRespawnRoom( m_pOuter, m_pOuter->WorldSpaceCenter() ) )
+			{
+				m_flCloakMeter = 0.f;
+			}
+#endif // GAME_DLL
+		}
+	}
+
+#ifdef CLIENT_DLL
+	// Save the old disguise target before changing disguise, so we can clean up bodygroups.
+	CTFPlayer *pOldDisguiseTarget = ToTFPlayer( m_hDisguiseTarget.Get() );
+	if ( pOldDisguiseTarget )
+	{
+		pOldDisguiseTarget->SetBodygroupsDirty();
+	}
+#endif
+
 	m_hDesiredDisguiseTarget.Set( pDesiredTarget );
 	m_nDesiredDisguiseClass = nClass;
 	m_nDesiredDisguiseTeam = nTeam;
@@ -7924,25 +8276,15 @@ void CTFPlayerShared::FindDisguiseTarget( void )
 {
 	if ( m_hDesiredDisguiseTarget )
 	{
-		m_hDisguiseTarget.Set( m_hDesiredDisguiseTarget.Get() );
-		m_hDesiredDisguiseTarget.Set( NULL );
+		m_hDisguiseTarget = m_hDesiredDisguiseTarget;
+		m_hDesiredDisguiseTarget = NULL;
 	}
 	else
 	{
 		m_hDisguiseTarget = m_pOuter->TeamFortress_GetDisguiseTarget( m_nDisguiseTeam, m_nDisguiseClass );
 	}
 
-	if ( m_hDisguiseTarget )
-	{
-		m_iDisguiseTargetIndex.Set( m_hDisguiseTarget.Get()->entindex() );
-		Assert( m_iDisguiseTargetIndex >= 1 && m_iDisguiseTargetIndex <= MAX_PLAYERS );
-	}
-	else
-	{
-		m_iDisguiseTargetIndex.Set( TF_DISGUISE_TARGET_INDEX_NONE );
-	}
-
-	m_pOuter->CreateDisguiseWeaponList( ToTFPlayer( m_hDisguiseTarget.Get() ) );
+	m_pOuter->CreateDisguiseWeaponList( m_hDisguiseTarget );
 }
 
 #endif
@@ -7973,6 +8315,8 @@ void CTFPlayerShared::CompleteDisguise( void )
 	// Update the player model and skin.
 	m_pOuter->UpdateModel();
 	m_pOuter->ClearExpression();
+
+	RemoveDisguiseWeapon();
 
 	FindDisguiseTarget();
 
@@ -8079,6 +8423,7 @@ void CTFPlayerShared::DetermineDisguiseWeapon( bool bForcePrimary )
 	{
 		CTFWeaponBase *pLastDisguiseWeapon = m_hDisguiseWeapon;
 		CTFWeaponBase *pFirstValidWeapon = NULL;
+
 		// Cycle through the target's weapons and see if we have a match.
 		// Note that it's possible the disguise target doesn't have a weapon in the slot we want,
 		// for example if they have replaced it with an unlockable that isn't a weapon (wearable).
@@ -8134,6 +8479,7 @@ void CTFPlayerShared::DetermineDisguiseWeapon( bool bForcePrimary )
 			if ( pData->m_aWeapons[i] == TF_WEAPON_NONE )
 				continue;
 			const char *pWpnName = WeaponIdToAlias( pData->m_aWeapons[i] );
+			pWpnName = TranslateWeaponEntForClass( pWpnName, m_nDisguiseClass );
 			WEAPON_FILE_INFO_HANDLE	hWpnInfo = LookupWeaponInfoSlot( pWpnName );
 			Assert( hWpnInfo != GetInvalidWeaponInfoHandle() );
 			CTFWeaponInfo *pWeaponInfo = dynamic_cast<CTFWeaponInfo*>( GetFileWeaponInfoFromHandle( hWpnInfo ) );
@@ -8170,6 +8516,8 @@ void CTFPlayerShared::DetermineDisguiseWeapon( bool bForcePrimary )
 		m_hDisguiseWeapon.Set( dynamic_cast<CTFWeaponBase*>(m_pOuter->GiveNamedItem( strDisguiseWeapon, iSubType, pItem, true )) );
 		if ( m_hDisguiseWeapon )
 		{
+			m_hDisguiseWeapon->SetSolid( SOLID_NONE );
+			m_hDisguiseWeapon->SetSolidFlags( FSOLID_NOT_SOLID );
 			m_hDisguiseWeapon->SetTouch( NULL );// no touch
 			m_hDisguiseWeapon->SetOwner( dynamic_cast<CBaseCombatCharacter*>(m_pOuter) );
 			m_hDisguiseWeapon->SetOwnerEntity( m_pOuter );
@@ -8178,7 +8526,25 @@ void CTFPlayerShared::DetermineDisguiseWeapon( bool bForcePrimary )
 			m_hDisguiseWeapon->m_iState = WEAPON_IS_ACTIVE;
 			m_hDisguiseWeapon->m_bDisguiseWeapon = true;
 			m_hDisguiseWeapon->SetContextThink( &CTFWeaponBase::DisguiseWeaponThink, gpGlobals->curtime + 0.5, "DisguiseWeaponThink" );
+			m_hDisguiseWeapon->RemoveExtraWearables();
 
+			// Cap accumulated disguise wearables. Each disguise-weapon swap
+			// intentionally orphans the prior weapon's world extras (so banners
+			// etc. stay visible across swaps); skip recreation once we're at
+			// the cap so they can't grow unbounded under rapid cycling.
+			// fully cleaned up after disguise removal.
+			const int kMaxDisguiseWearables = 5;
+			int nDisguiseWearableCount = 0;
+			for ( int i = 0; i < m_pOuter->GetNumWearables(); ++i )
+			{
+				CTFWearable *pWearable = dynamic_cast< CTFWearable * >( m_pOuter->GetWearable( i ) );
+				if ( pWearable && pWearable->IsDisguiseWearable() )
+					nDisguiseWearableCount++;
+			}
+			if ( nDisguiseWearableCount < kMaxDisguiseWearables )
+			{
+				m_hDisguiseWeapon->UpdateExtraWearables();
+			}
 
 			// Ammo/clip state is displayed to attached medics
 			m_iDisguiseAmmo = 0;
@@ -8213,14 +8579,31 @@ void CTFPlayerShared::DetermineDisguiseWeapon( bool bForcePrimary )
 void CTFPlayerShared::DetermineDisguiseWearables()
 {
 	CTFPlayer *pDisguiseTarget = ToTFPlayer( m_hDisguiseTarget.Get() );
-	if ( !pDisguiseTarget )
-		return;
 
 	// Remove any existing disguise wearables.
 	RemoveDisguiseWearables();
 
-	if ( GetDisguiseClass() != pDisguiseTarget->GetPlayerClass()->GetClassIndex() )
+	if ( !pDisguiseTarget )
+	{
+		// No target exists, reset disguise body to default state.
+		SetDisguiseBody( 0 );
 		return;
+	}
+
+	if ( GetDisguiseClass() != pDisguiseTarget->GetPlayerClass()->GetClassIndex() )
+	{
+		// Class mismatch, reset disguise body to default.
+		SetDisguiseBody( 0 );
+#ifdef CLIENT_DLL
+		// Mark bodygroups dirty even when not copying wearables (class mismatch).
+		pDisguiseTarget->SetBodygroupsDirty();
+#endif
+		return;
+	}
+
+	// Reset disguise body to default before applying new wearables.
+	// This ensures old bodygroup modifications don't carry over.
+	SetDisguiseBody( 0 );
 
 	// Equip us with copies of our disguise target's wearables.
 	int iPlayerSkinOverride = 0;
@@ -8232,7 +8615,8 @@ void CTFPlayerShared::DetermineDisguiseWearables()
 			if ( pWearable->IsDisguiseWearable() )
 				continue; // Never copy a target's disguise wearables.
 			CEconItemView *pScriptItem = pWearable->GetAttributeContainer()->GetItem();
-			if ( pScriptItem && pScriptItem->IsValid() && pScriptItem->GetStaticData()->GetItemClass() )
+			// Never copy target's action slot items
+			if ( pScriptItem && pScriptItem->IsValid() && pScriptItem->GetStaticData()->GetItemClass() && ( pScriptItem->GetStaticData()->GetLoadoutSlot( GetDisguiseClass() ) != LOADOUT_POSITION_ACTION ) )
 			{
 				CEconEntity *pNewItem = dynamic_cast<CEconEntity*>( m_pOuter->GiveNamedItem( pScriptItem->GetStaticData()->GetItemClass(), 0, pScriptItem ) );
 				CTFWearable *pNewWearable = dynamic_cast<CTFWearable*>( pNewItem );
@@ -8265,6 +8649,11 @@ void CTFPlayerShared::DetermineDisguiseWearables()
 	}
 
 	m_nDisguiseSkinOverride = iPlayerSkinOverride;
+
+#ifdef CLIENT_DLL
+	// Mark bodygroups dirty after creating disguise wearables.
+	pDisguiseTarget->SetBodygroupsDirty();
+#endif
 }
 
 void CTFPlayerShared::RemoveDisguiseWearables()
@@ -8476,7 +8865,7 @@ void CTFPlayerShared::RecalculateChargeEffects( bool bInstantRemove )
 
 	for ( int i = 0; i < ARRAYSIZE( aCharges ); i++ )
 	{
-		aCharges[i].bActive = m_pOuter->m_bInPowerPlay;
+		aCharges[ i ].bActive = false;
 		aCharges[i].pProvider = NULL;
 	}
 
@@ -8663,8 +9052,12 @@ void CTFPlayerShared::SetChargeEffect( medigun_charge_types iCharge, bool bState
 		return;
 	}
 
+	float flNonBotMaxDuration = weapon_medigun_chargerelease_rate.GetFloat();
+	CALL_ATTRIB_HOOK_FLOAT_ON_OTHER( pProvider, flNonBotMaxDuration, add_uber_time );
+	flNonBotMaxDuration += 1.0f;
+
 	// Avoid infinite duration, because... the internet.
-	float flMaxDuration = ( pProvider && pProvider->IsBot() ) ? PERMANENT_CONDITION : weapon_medigun_chargerelease_rate.GetFloat() + ( ( TFGameRules() && TFGameRules()->GameModeUsesUpgrades() ) ? 8.f : 1.f );
+	float flMaxDuration = ( pProvider && pProvider->IsBot() ) ? PERMANENT_CONDITION : flNonBotMaxDuration;
 
 	if ( bState )
 	{
@@ -8926,20 +9319,33 @@ void CTFPlayerShared::RadiusSpyScan( void )
 		m_flRadiusSpyScanTime = gpGlobals->curtime + 0.3f;
 	}
 }
+
+//-----------------------------------------------------------------------------
+// Purpose: 
 //-----------------------------------------------------------------------------
 void CTFPlayerShared::ApplyAttributeToPlayer( const char* pszAttribName, float flValue )
 {
 	const CEconItemAttributeDefinition *pDef = GetItemSchema()->GetAttributeDefinitionByName( pszAttribName );
+	if ( !pDef )
+		return;
 
 	m_pOuter->GetAttributeList()->SetRuntimeAttributeValue( pDef, flValue );
 	m_pOuter->TeamFortress_SetSpeed();
+	m_pOuter->GetAttributeManager()->OnAttributeValuesChanged();
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: 
 //-----------------------------------------------------------------------------
 void CTFPlayerShared::RemoveAttributeFromPlayer( const char* pszAttribName )
 {
 	const CEconItemAttributeDefinition *pDef = GetItemSchema()->GetAttributeDefinitionByName( pszAttribName );
+	if ( !pDef )
+		return;
+
 	m_pOuter->GetAttributeList()->RemoveAttribute( pDef );
+	m_pOuter->TeamFortress_SetSpeed();
+	m_pOuter->GetAttributeManager()->OnAttributeValuesChanged();
 }
 
 //-----------------------------------------------------------------------------
@@ -9054,7 +9460,7 @@ void CTFPlayerShared::GetConditionsBits( CBitVec< TF_COND_LAST >& vbConditions )
 	vbConditions.Set( 1u, (uint32)m_nPlayerCondEx );
 	vbConditions.Set( 2u, (uint32)m_nPlayerCondEx2 );
 	vbConditions.Set( 3u, (uint32)m_nPlayerCondEx3 );
-	COMPILE_TIME_ASSERT( 32 + 32 + 32 + 32 > TF_COND_LAST );
+	vbConditions.Set( 4u, (uint32)m_nPlayerCondEx4 );
 }
 
 //-----------------------------------------------------------------------------
@@ -9324,12 +9730,18 @@ bool CTFPlayerShared::AddToSpyCloakMeter( float val, bool bForce )
 	if ( !pWpn )
 		return false;
 
-	// STAGING_SPY
-	// Special cloaks only get cloak if not active and receive a smaller portion
-	int iNoCloakedPickup = 0;
-	CALL_ATTRIB_HOOK_INT_ON_OTHER( pWpn, iNoCloakedPickup, NoCloakWhenCloaked );
 	if ( !bForce )
 	{
+		int iNoItemRegen = 0;
+		CALL_ATTRIB_HOOK_INT_ON_OTHER( pWpn, iNoItemRegen, mod_cloak_no_regen_from_items );
+		if ( iNoItemRegen )
+			return false;
+
+		// STAGING_SPY
+		// Special cloaks only get cloak if not active and receive a smaller portion
+		int iNoCloakedPickup = 0;
+		CALL_ATTRIB_HOOK_INT_ON_OTHER( pWpn, iNoCloakedPickup, NoCloakWhenCloaked );
+
 		if ( InCond( TF_COND_STEALTHED ) && iNoCloakedPickup )
 		{
 			return false;
@@ -9350,15 +9762,16 @@ bool CTFPlayerShared::AddToSpyCloakMeter( float val, bool bForce )
 
 #endif
 
-#ifdef GAME_DLL
 //-----------------------------------------------------------------------------
 // Purpose: Stun & Snare Application
 //-----------------------------------------------------------------------------
 void CTFPlayerShared::StunPlayer( float flTime, float flReductionAmount, int iStunFlags, CTFPlayer* pAttacker )
 {
+#ifdef GAME_DLL
 	// Insanity prevention
 	if ( ( m_PlayerStuns.Count() + 1 ) >= 250 )
 		return;
+#endif
 
 	if ( InCond( TF_COND_PHASE ) || InCond( TF_COND_PASSTIME_INTERCEPTION ) )
 		return;
@@ -9369,15 +9782,19 @@ void CTFPlayerShared::StunPlayer( float flTime, float flReductionAmount, int iSt
 	if ( InCond( TF_COND_INVULNERABLE_HIDE_UNLESS_DAMAGED ) && !InCond( TF_COND_MVM_BOT_STUN_RADIOWAVE ) )
 		return;
 
+#ifdef GAME_DLL
 	if ( pAttacker && TFGameRules() && TFGameRules()->IsTruceActive() && pAttacker->IsTruceValidForEnt() )
 	{
 		if ( ( pAttacker->GetTeamNumber() == TF_TEAM_RED ) || ( pAttacker->GetTeamNumber() == TF_TEAM_BLUE ) )
 			return;
 	}
+#endif
 
 	float flRemapAmount = RemapValClamped( flReductionAmount, 0.0, 1.0, 0, 255 );
 
+#ifdef GAME_DLL
 	int iOldStunFlags = GetStunFlags();
+#endif
 
 	// Already stunned
 	bool bStomp = false;
@@ -9400,10 +9817,13 @@ void CTFPlayerShared::StunPlayer( float flTime, float flReductionAmount, int iSt
 	}
 	else if ( GetActiveStunInfo() )
 	{
+#ifdef GAME_DLL
 		// Something yanked our TF_COND_STUNNED in an unexpected way
 		if ( !HushAsserts() )
 			Assert( !"Something yanked out TF_COND_STUNNED." );
 		m_PlayerStuns.RemoveAll();
+#endif
+		m_iStunIndex = -1;
 		return;
 	}
 
@@ -9425,7 +9845,16 @@ void CTFPlayerShared::StunPlayer( float flTime, float flReductionAmount, int iSt
 		// This can happen when stuns use TF_STUN_CONTROLS or TF_STUN_LOSER_STATE.
 		float flOldStun = GetActiveStunInfo() ? GetActiveStunInfo()->flStunAmount : 0.f;
 
+#ifdef GAME_DLL
 		m_iStunIndex = m_PlayerStuns.AddToTail( stunEvent );
+#else
+		m_iStunIndex = 0;
+
+		if ( prediction->IsFirstTimePredicted() )
+		{
+			m_ActiveStunInfo = stunEvent;
+		}
+#endif
 
 		if ( flOldStun > flRemapAmount )
 		{
@@ -9435,10 +9864,18 @@ void CTFPlayerShared::StunPlayer( float flTime, float flReductionAmount, int iSt
 	else
 	{
 		// Done for now
+#ifdef GAME_DLL
 		m_PlayerStuns.AddToTail( stunEvent );
+#else
+		if ( prediction->IsFirstTimePredicted() )
+		{
+			m_ActiveStunInfo = stunEvent;
+		}
+#endif
 		return;
 	}
 
+#ifdef GAME_DLL
 	// Add in extra time when TF_STUN_CONTROLS
 	if ( GetActiveStunInfo()->iStunFlags & TF_STUN_CONTROLS )
 	{
@@ -9463,7 +9900,10 @@ void CTFPlayerShared::StunPlayer( float flTime, float flReductionAmount, int iSt
 		}
 	}
 
-	if ( !( GetActiveStunInfo()->iStunFlags & TF_STUN_NO_EFFECTS ) )
+	if ( ( GetActiveStunInfo()->iStunFlags & TF_STUN_SOUND ) ||
+		 ( GetActiveStunInfo()->iStunFlags & TF_STUN_SPECIAL_SOUND ) ||
+		 ( GetActiveStunInfo()->iStunFlags & TF_STUN_CONTROLS ) ||
+		 ( GetActiveStunInfo()->iStunFlags & TF_STUN_LOSER_STATE ) )
 	{
 		m_pOuter->StunSound( pAttacker, GetActiveStunInfo()->iStunFlags, iOldStunFlags );
 	}
@@ -9489,10 +9929,10 @@ void CTFPlayerShared::StunPlayer( float flTime, float flReductionAmount, int iSt
 		m_pOuter->ClearExpression();
 		m_pOuter->ClearWeaponFireScene();
 	}
+#endif
 
 	AddCond( TF_COND_STUNNED, -1.f, pAttacker );
 }
-#endif // GAME_DLL
 
 //-----------------------------------------------------------------------------
 // Purpose: Returns the intensity of the current stun effect, if we have the type of stun indicated.
@@ -9562,9 +10002,10 @@ struct penetrated_target_list
 class CBulletPenetrateEnum : public IEntityEnumerator
 {
 public:
-	CBulletPenetrateEnum( Ray_t *pRay, CBaseEntity *pShooter, int nCustomDamageType, bool bIgnoreTeammates = true )
+	CBulletPenetrateEnum( Vector vecStart, Vector vecEnd, CBaseEntity *pShooter, int nCustomDamageType, bool bIgnoreTeammates = true )
 	{
-		m_pRay = pRay;
+		m_vecStart = vecStart;
+		m_vecEnd = vecEnd;
 		m_pShooter = pShooter;
 		m_nCustomDamageType = nCustomDamageType;
 		m_bIgnoreTeammates = bIgnoreTeammates;
@@ -9595,7 +10036,9 @@ public:
 			if ( m_bIgnoreTeammates && pEnt->GetTeam() == m_pShooter->GetTeam() )
 				return true;
 
-			enginetrace->ClipRayToEntity( *m_pRay, MASK_SOLID | CONTENTS_HITBOX, pHandleEntity, &tr );
+			Ray_t ray;
+			ray.Init( m_vecStart, m_vecEnd );
+			enginetrace->ClipRayToEntity( ray, MASK_SOLID | CONTENTS_HITBOX, pHandleEntity, &tr );
 
 			if (tr.fraction < 1.0f)
 			{
@@ -9611,7 +10054,8 @@ public:
 	}
 
 public:
-	Ray_t		*m_pRay;
+	Vector		 m_vecStart;
+	Vector		 m_vecEnd;
 	int			 m_nCustomDamageType;
 	CBaseEntity	*m_pShooter;
 	bool		 m_bIgnoreTeammates;
@@ -9705,6 +10149,14 @@ void CTFPlayer::GetHorriblyHackedRailgunPosition( const Vector& vStart, Vector *
 	Vector vForward, vRight, vUp;
 	AngleVectors( EyeAngles(), &vForward, &vRight, &vUp );
 
+#ifdef CLIENT_DLL
+	// Flips the horizontal position.
+	if ( TeamFortress_ShouldFlipClientViewModel() )
+	{
+		vRight *= -1;
+	}
+#endif // CLIENT_DLL
+
 	*out_pvStartPos = vStart
 					+ (vForward * 60.9f)
 					+ (vRight * 13.1f)
@@ -9754,6 +10206,72 @@ void CTFPlayer::ModifyDamageInfo( CTakeDamageInfo *pInfo, const CBaseEntity *pTa
 }
 #endif
 
+// Josh: Go on, pick a better name!
+class CTraceFilterIgnoreAllPlayersExceptThisOne : public CTraceFilterSimple
+{
+public:
+	DECLARE_CLASS( CTraceFilterIgnoreAllPlayersExceptThisOne, CTraceFilterSimple );
+
+	CTraceFilterIgnoreAllPlayersExceptThisOne( const IHandleEntity* passentity, int collisionGroup )
+		: CTraceFilterSimple( passentity, collisionGroup )
+	{
+	}
+
+	virtual bool ShouldHitEntity( IHandleEntity* pServerEntity, int contentsMask )
+	{
+		CBaseEntity *pEntity = EntityFromEntityHandle( pServerEntity );
+		const CBaseEntity *pPassEntity = EntityFromEntityHandle( GetPassEntity() );
+
+		if ( pEntity->IsPlayer() )
+			return pEntity == pPassEntity;
+
+		return BaseClass::ShouldHitEntity( pServerEntity, contentsMask );
+	}
+};
+
+// Josh:
+// This function exists to handle hitting hitboxes outside of the player's
+// bbox in a way that works for TF2.
+// 
+// One of the major problems it that if a player gets up against a thin wall or
+// door, you can shoot them through it if their hitbox is outside of their bbox
+//
+// This fixes that problem in a simple way by tracing from the hitbox hit point
+// to the player's origin at the hitbox hit height and checking if it hit the
+// player or not.
+static void UTIL_PlayerBulletTrace( const Vector& vecStart, const Vector& vecEnd, const Vector &vecDir, unsigned int mask, ITraceFilter* pFilter, trace_t* trace )
+{
+	UTIL_TraceLine( vecStart, vecEnd, mask | CONTENTS_HITBOX, pFilter, trace );
+
+	if ( !trace->startsolid && !trace->DidHitNonWorldEntity() )
+	{
+		// Josh: Extend the ray length by ~ size of the bbox if we are clipping
+		// to the player to keep the ray length consistent with the normal bbox path.
+		const float rayExtension = 40.0f;
+
+		trace_t playerClipTrace;
+		memcpy( &playerClipTrace, trace, sizeof( trace_t ) );
+
+		UTIL_ClipTraceToPlayers( vecStart, vecEnd + vecDir * rayExtension, mask | CONTENTS_HITBOX, pFilter, &playerClipTrace );
+		if ( playerClipTrace.m_pEnt )
+		{
+			Vector entOrigin = playerClipTrace.m_pEnt->GetAbsOrigin();
+
+			CTraceFilterIgnoreAllPlayersExceptThisOne playerClipValidationFilter( playerClipTrace.m_pEnt, COLLISION_GROUP_NONE );
+			// Josh:
+			// Trace from the hitbox to the player origin at hitbox hit height to see if they are obstructed by the world.
+			// Don't use hitboxes on this trace.
+			//
+			// It's unfair if a player is poking through a thin wall and gets shot! :(
+			trace_t playerClipValidationTrace;
+			UTIL_TraceLine( playerClipTrace.endpos, Vector( entOrigin.x, entOrigin.y, playerClipTrace.endpos.z ), mask, &playerClipValidationFilter, &playerClipValidationTrace );
+
+			if ( playerClipValidationTrace.m_pEnt == playerClipTrace.m_pEnt )
+				memcpy( trace, &playerClipTrace, sizeof( trace_t ) );
+		}
+	}
+}
+
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
@@ -9770,18 +10288,16 @@ void CTFPlayer::FireBullet( CTFWeaponBase *pWpn, const FireBulletsInfo_t &info, 
 		ePenetrateType = (ETFDmgCustom)nCustomDamageType;
 	}
 
-	Ray_t ray;
-	ray.Init( vecStart, vecEnd );
-
 	// Ignore teammates and their (physical) upgrade items when shooting in MvM
 	if ( TFGameRules() && TFGameRules()->GameModeUsesUpgrades() )
 	{
 		CTraceFilterIgnoreFriendlyCombatItems traceFilter( this, COLLISION_GROUP_NONE, GetTeamNumber() );
-		UTIL_TraceLine( vecStart, vecEnd, MASK_SOLID | CONTENTS_HITBOX, &traceFilter, &trace );
+		UTIL_PlayerBulletTrace( vecStart, vecEnd, info.m_vecDirShooting, MASK_SOLID, &traceFilter, &trace );
 	}
 	else
 	{
-		UTIL_TraceLine( vecStart, vecEnd, MASK_SOLID | CONTENTS_HITBOX, this, COLLISION_GROUP_NONE, &trace );
+		CTraceFilterSimple traceFilter( this, COLLISION_GROUP_NONE );
+		UTIL_PlayerBulletTrace( vecStart, vecEnd, info.m_vecDirShooting, MASK_SOLID, &traceFilter, &trace );
 	}
 
 #ifndef CLIENT_DLL
@@ -9791,8 +10307,15 @@ void CTFPlayer::FireBullet( CTFWeaponBase *pWpn, const FireBulletsInfo_t &info, 
 	{
 		if ( trace.m_pEnt->IsCombatCharacter() || trace.m_pEnt->IsBaseObject() )
 		{
+			const float penetrationHullExtension = 40.0f;
+			// Josh: EnumerateEntities only collides with bboxes, extend the ray to a larger hull, then we clip to it.
+			Ray_t ray;
+			ray.Init( vecStart, vecEnd,
+				Vector( -penetrationHullExtension, -penetrationHullExtension, -penetrationHullExtension ),
+				Vector(  penetrationHullExtension,  penetrationHullExtension,  penetrationHullExtension ) );
+
 			// Penetrating shot: Strikes everything along the bullet's path.
-			CBulletPenetrateEnum bulletpenetrate( &ray,  this, ePenetrateType, ePenetrateType == TF_DMG_CUSTOM_PENETRATE_MY_TEAM );
+			CBulletPenetrateEnum bulletpenetrate( vecStart, vecEnd, this, ePenetrateType, ePenetrateType == TF_DMG_CUSTOM_PENETRATE_MY_TEAM );
 			enginetrace->EnumerateEntities( ray, false, &bulletpenetrate );
 			
 			FOR_EACH_VEC( bulletpenetrate.m_Targets, i )
@@ -9876,7 +10399,7 @@ void CTFPlayer::FireBullet( CTFWeaponBase *pWpn, const FireBulletsInfo_t &info, 
 			}
 
 			CTargetOnlyFilter penetrateFilter( this, pTarget );
-			UTIL_TraceLine( vecStart, vecEnd, (MASK_SOLID|CONTENTS_HITBOX), &penetrateFilter, pTraceToUse );
+			UTIL_PlayerBulletTrace( vecStart, vecEnd, info.m_vecDirShooting, MASK_SOLID, &penetrateFilter, pTraceToUse );
 
 			if ( pTraceToUse->m_pEnt == pTarget )
 			{
@@ -10163,6 +10686,28 @@ CTFWeaponBase *CTFPlayer::GetActiveTFWeapon( void ) const
 }
 
 //-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+int CTFPlayer::GetPassiveWeapons( CUtlVector<CTFWeaponBase*>& vecOut )
+{
+	Assert( vecOut.IsEmpty() );
+
+	for ( int i = 0; i < WeaponCount(); i++ )
+	{
+		CTFWeaponBase *pWpn = ( CTFWeaponBase * )GetWeapon( i );
+		if ( !pWpn )
+			continue;
+
+		if ( !pWpn->IsPassiveWeapon() )
+			continue;
+
+		vecOut.AddToTail( pWpn );
+	}
+
+	return vecOut.Count();
+}
+
+//-----------------------------------------------------------------------------
 // Purpose: Return true if we are currently wielding a weapon that
 // matches the given item def handle.
 //-----------------------------------------------------------------------------
@@ -10241,9 +10786,18 @@ float CTFPlayer::GetMovementForwardPull( void ) const
 //-----------------------------------------------------------------------------
 bool CTFPlayer::CanPlayerMove() const
 {
+	if ( GetMoveType() == MOVETYPE_OBSERVER )
+		return true;
+
+	if ( GetMoveType() == MOVETYPE_NOCLIP )
+		return true;
+
 	// No one can move when in a final countdown transition.
 	if ( TFGameRules() && TFGameRules()->BInMatchStartCountdown() )
-		{ return false; }
+		return false;
+
+	if ( IsViewingCYOAPDA() )
+		return false;
 
 	bool bFreezeOnRestart = tf_player_movement_restart_freeze.GetBool();
 	if ( bFreezeOnRestart )
@@ -10364,11 +10918,7 @@ float CTFPlayer::TeamFortress_CalculateMaxSpeed( bool bIgnoreSpecialAbility /*= 
 	}
 
 #ifdef GAME_DLL
-#ifdef STAGING_ONLY
-	if ( m_Shared.InCond( TF_COND_SPEED_BOOST ) || m_Shared.InCond( TF_COND_NO_COMBAT_SPEED_BOOST ) )
-#else
 	if ( m_Shared.InCond( TF_COND_SPEED_BOOST ) )
-#endif
 	{
 		// We only allow our speed boost to apply if we have a base speed to work with. If we're supposed
 		// to be stationary for whatever reason we don't allow a speed to allow us to move.
@@ -10434,13 +10984,6 @@ float CTFPlayer::TeamFortress_CalculateMaxSpeed( bool bIgnoreSpecialAbility /*= 
 
 	if ( m_Shared.IsCarryingObject() && bCarryPenalty && bAllowSlowing )
 	{
-#ifdef STAGING_ONLY
-		CBaseObject* pObject = m_Shared.GetCarriedObject();
-		if ( pObject && pObject->GetType() == OBJ_TELEPORTER )
-		{
-			CALL_ATTRIB_HOOK_FLOAT( maxfbspeed, teleporter_carry_speed );
-		}
-#endif // STAGING_ONLY
 		// STAGING_ENGY
 		maxfbspeed *= 0.90f;
 	}
@@ -10514,13 +11057,20 @@ float CTFPlayer::TeamFortress_CalculateMaxSpeed( bool bIgnoreSpecialAbility /*= 
 		}
 	}
 
+	float flItemSpeedMod = 1.f;
+	CALL_ATTRIB_HOOK_FLOAT_ON_OTHER( pWeapon, flItemSpeedMod, mult_player_movespeed_active );
+	if ( flItemSpeedMod != 1.f )
+	{
+		maxfbspeed *= flItemSpeedMod;
+	}
+
 	// If we're a heavy with berzerker mode...
 	if ( playerclass == TF_CLASS_HEAVYWEAPONS )
 	{
 		float heavy_max_speed = default_speed * 1.35f;
 		if ( m_Shared.InCond( TF_COND_ENERGY_BUFF ) )
 		{
-			maxfbspeed *= 1.35f;
+			maxfbspeed *= 1.3f;
 			if ( maxfbspeed > heavy_max_speed )
 			{
 				// Prevent other speed modifiers like GRU from making berzerker mode too fast.
@@ -10536,11 +11086,11 @@ float CTFPlayer::TeamFortress_CalculateMaxSpeed( bool bIgnoreSpecialAbility /*= 
 			// Make this change based on attrs, hardcode right now
 			maxfbspeed *= RemapValClamped( m_Shared.GetScoutHypeMeter(), 0.0f, 100.0f, 1.0f, 1.45f );
 		}
-		// Crit-a-Cola gives a move bonus while active
-		if ( m_Shared.InCond( TF_COND_ENERGY_BUFF ) )
-		{
-			maxfbspeed *= 1.25f;
-		}
+		// Atomic Punch gives a move bonus while active
+// 		if ( m_Shared.InCond( TF_COND_PHASE ) )
+// 		{
+// 			maxfbspeed *= 1.25f;
+// 		}
 	}
 
 	// Mann Vs Machine mode has a speed penalty for carrying the flag
@@ -10555,13 +11105,6 @@ float CTFPlayer::TeamFortress_CalculateMaxSpeed( bool bIgnoreSpecialAbility /*= 
 		}
 	}
 
-#ifdef STAGING_ONLY
-	// Overloaded circuits!
-	if ( m_Shared.InCond( TF_COND_REPROGRAMMED ) )
-	{
-		maxfbspeed *= 2.f;
-	}
-#endif // STAGING_ONLY
 	
 	if ( m_Shared.GetCarryingRuneType() == RUNE_HASTE )
 	{
@@ -10900,6 +11443,15 @@ bool CTFPlayerShared::IsAiming( void )
 }
 
 //-----------------------------------------------------------------------------
+// Purpose:
+//-----------------------------------------------------------------------------
+bool CTFPlayerShared::ShouldSuppressPrediction( void )
+{
+	// c_tf_player will decide to do this, bits in gamerules will allow it. Sorry.
+	return InCond( TF_COND_HALLOWEEN_KART ) && !InCond( TF_COND_HALLOWEEN_GHOST_MODE );
+}
+
+//-----------------------------------------------------------------------------
 // Purpose: Set what type of rune we are carrying--or that we are not carrying any.
 //-----------------------------------------------------------------------------
 void CTFPlayerShared::SetCarryingRuneType( RuneTypes_t rt )
@@ -10970,11 +11522,7 @@ int CTFPlayerShared::CalculateObjectCost( CTFPlayer* pBuilder, int iObjectType )
 {
 	if ( TFGameRules() && TFGameRules()->IsMannVsMachineMode() )
 	{
-#ifdef STAGING_ONLY
-		if ( ( TFGameRules()->InSetup() || TFObjectiveResource()->GetMannVsMachineIsBetweenWaves() ) && iObjectType != OBJ_SPY_TRAP )
-#else
 		if ( TFGameRules()->InSetup() || TFObjectiveResource()->GetMannVsMachineIsBetweenWaves() )
-#endif
 		{
 			return 0;
 		}
@@ -10989,23 +11537,6 @@ int CTFPlayerShared::CalculateObjectCost( CTFPlayer* pBuilder, int iObjectType )
 		nCost -= 30;
 	}
 	
-#ifdef STAGING_ONLY	
-	// Mini dispensers are 30 metal cheaper
-	int nMiniDispenserEnabled = 0;
-	CALL_ATTRIB_HOOK_INT_ON_OTHER( pBuilder, nMiniDispenserEnabled, allows_building_mini_dispenser );
-	if ( nMiniDispenserEnabled != 0 && iObjectType == OBJ_DISPENSER )
-	{
-		nCost -= 30;
-	}
-
-	// Speed Pads are cheaper
-	int nSpeedPad = 0;
-	CALL_ATTRIB_HOOK_INT_ON_OTHER( pBuilder, nSpeedPad, teleporter_is_speedpad );
-	if ( nSpeedPad != 0 && iObjectType == OBJ_TELEPORTER )
-	{
-		nCost -= 25;
-	}
-#endif
 
 	if ( iObjectType == OBJ_TELEPORTER )
 	{
@@ -11087,6 +11618,11 @@ int CTFPlayer::GetNumObjects( int iObjectType, int iObjectMode /*= 0*/ )
 //-----------------------------------------------------------------------------
 void CTFPlayer::ItemPostFrame()
 {
+	m_Shared.UpdateItemChargeMeters();
+
+	// cache buttons because some weapons' ItemPostFrame could change m_nButtons against other weapons
+	int nButtons = m_nButtons;
+
 	if ( m_hOffHandWeapon.Get() && m_hOffHandWeapon->IsWeaponVisible() )
 	{
 		if ( gpGlobals->curtime < m_flNextAttack )
@@ -11105,6 +11641,32 @@ void CTFPlayer::ItemPostFrame()
 		}
 	}
 
+	CUtlVector< CTFWeaponBase* > vecPassiveWeapons;
+	if ( GetPassiveWeapons( vecPassiveWeapons ) )
+	{
+		if ( gpGlobals->curtime < m_flNextAttack )
+		{
+			FOR_EACH_VEC( vecPassiveWeapons, i )
+			{
+				vecPassiveWeapons[i]->ItemBusyFrame();
+			}
+		}
+		else
+		{
+			FOR_EACH_VEC( vecPassiveWeapons, i )
+			{
+
+#if defined( CLIENT_DLL )
+				// Not predicting this weapon
+				if ( vecPassiveWeapons[i]->IsPredicted() )
+#endif
+				{
+					vecPassiveWeapons[i]->ItemPostFrame();
+				}
+			}
+		}
+	}
+
 #ifdef GAME_DLL
 	CTFWeaponBase *pActiveWeapon = GetActiveTFWeapon();
 	if ( pActiveWeapon )
@@ -11114,6 +11676,9 @@ void CTFPlayer::ItemPostFrame()
 #endif // GAME_DLL
 
 	BaseClass::ItemPostFrame();
+
+	// restore m_nButtons so all the afButtons are in correct state
+	m_nButtons = nButtons;
 }
 
 void CTFPlayer::SetOffHandWeapon( CTFWeaponBase *pWeapon )
@@ -11150,6 +11715,40 @@ bool CTFPlayer::Weapon_ShouldSetLast( CBaseCombatWeapon *pOldWeapon, CBaseCombat
 	}
 
 	return BaseClass::Weapon_ShouldSetLast( pOldWeapon, pNewWeapon );
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose:
+//-----------------------------------------------------------------------------
+void CTFPlayer::Weapon_PoseParamOverride( CTFWeaponBase *pOldWeapon, CTFWeaponBase *pNewWeapon )
+{
+	auto lambdaUpdatePoseParam = []( CBaseAnimating *pAnim, CTFWeaponBase *pWeapon, bool bReset, bool bPlayer )
+	{
+		if ( pWeapon )
+		{
+			int iCount = 0;
+			const poseparamtable_t *pPoseParamList = bPlayer ? pWeapon->GetPlayerPoseParamList( iCount ) : pWeapon->GetItemPoseParamList( iCount );
+			if ( pPoseParamList )
+			{
+				for ( int i=0; i<iCount; ++i )
+				{
+					const char *pszPoseParamName = pPoseParamList[i].strName;
+					float flNewVal = bReset ? 0 : pPoseParamList[i].flValue;
+					pAnim->SetPoseParameter( pszPoseParamName, flNewVal );
+				}
+			}
+		}
+	};
+
+	// reset poseparam on the old weapon
+	lambdaUpdatePoseParam( this, pOldWeapon, true, true );
+
+	// set new one on the new weapon
+	lambdaUpdatePoseParam( this, pNewWeapon, false, true );
+
+	// update poseparam on weapon if necessary
+	lambdaUpdatePoseParam( pNewWeapon, pNewWeapon, false, false );
 }
 
 
@@ -11198,6 +11797,36 @@ bool CTFPlayer::Weapon_Switch( CBaseCombatWeapon *pWeapon, int viewmodelindex )
 		return false;
 	}
 
+	if ( m_Shared.m_flHolsterAnimTime == 0.f
+#ifdef GAME_DLL
+		&& !m_bSwitchedClass && !m_bRespawning && !m_bRegenerating
+#endif // GAME_DLL
+		)
+	{
+		CTFWeaponBase *pActiveWeapon = GetActiveTFWeapon();
+		if ( pActiveWeapon && pActiveWeapon->CanHolster() && pWeapon != pActiveWeapon )
+		{
+			float flHolsterAnimTime = 0.f;
+			CALL_ATTRIB_HOOK_FLOAT_ON_OTHER( pActiveWeapon, flHolsterAnimTime, holster_anim_time );
+			if ( flHolsterAnimTime > 0.f )
+			{
+				// this actually calls Holster() to start the anim. Then we do another Holster call when we actually switch weapon.
+				pActiveWeapon->StartHolsterAnim();
+				m_Shared.m_flHolsterAnimTime = gpGlobals->curtime + flHolsterAnimTime;
+				m_Shared.m_hSwitchTo = pWeapon;
+				return false;
+			}
+		}
+	}
+	else if ( m_Shared.m_flHolsterAnimTime > 0.f && gpGlobals->curtime < m_Shared.m_flHolsterAnimTime )
+	{
+		return false;
+	}
+	else
+	{
+		m_Shared.m_flHolsterAnimTime = 0.f;
+	}
+
 	// set last weapon before we switch to a new weapon to make sure that we can get the correct last weapon in Deploy/Holster
 	// This should be done in CBasePlayer::Weapon_Switch, but we don't want to break other games
 	CBaseCombatWeapon *pPreviousLastWeapon = GetLastWeapon();
@@ -11243,6 +11872,9 @@ bool CTFPlayer::Weapon_Switch( CBaseCombatWeapon *pWeapon, int viewmodelindex )
 		{
 			Weapon_SetLast( pPreviousLastWeapon );
 		}
+
+		// override pose params
+		Weapon_PoseParamOverride( assert_cast< CTFWeaponBase * >( pPreviousActiveWeapon ), assert_cast< CTFWeaponBase * >( pWeapon ) );
 	}
 	else
 	{
@@ -11295,10 +11927,10 @@ CTFWearable *CTFPlayer::GetEquippedWearableForLoadoutSlot( int iLoadoutSlot )
 }
 
 //-----------------------------------------------------------------------------
-CBaseEntity *CTFPlayer::GetEntityForLoadoutSlot( int iLoadoutSlot )
+CBaseEntity *CTFPlayer::GetEntityForLoadoutSlot( int iLoadoutSlot, bool bForceCheckWearable /*= false*/ )
 {
 	CBaseEntity *pEntity = NULL;
-	if ( IsWearableSlot( iLoadoutSlot ) )
+	if ( IsWearableSlot( iLoadoutSlot ) || bForceCheckWearable )
 	{
 		// Search Wearables first otherwise search Weapons as a fall back
 		pEntity = GetEquippedWearableForLoadoutSlot( iLoadoutSlot );
@@ -11497,7 +12129,7 @@ void CTFPlayer::OnEmitFootstepSound( const CSoundParameters& params, const Vecto
 	// and play them quietly to the local player so they don't go insane
 	int iJingle = 0;
 	CALL_ATTRIB_HOOK_INT( iJingle, add_jingle_to_footsteps );
-	if ( iJingle > 0 )
+	if ( ( iJingle > 0 ) && !m_Shared.IsStealthed() && !m_Shared.InCond( TF_COND_DISGUISED ) )
 	{
 		CRecipientFilter filter;
 		filter.AddRecipientsByPAS( vecOrigin );
@@ -11569,6 +12201,10 @@ void CTFPlayer::ModifyEmitSoundParams( EmitSound_t &params )
 	{
 		pWeapon->ModifyEmitSoundParams( params );
 	}
+
+#ifdef CLIENT_DLL
+	ClientAdjustStartSoundParams( params );
+#endif // CLIENT_DLL
 }
 
 //-----------------------------------------------------------------------------
@@ -11579,6 +12215,9 @@ bool CTFPlayer::CanAttack( int iCanAttackFlags )
 	CTFGameRules *pRules = TFGameRules();
 
 	Assert( pRules );
+
+	if ( IsViewingCYOAPDA() )
+		return false;
 
 	if ( m_Shared.HasPasstimeBall() ) 
 	{
@@ -11622,7 +12261,48 @@ bool CTFPlayer::CanAttack( int iCanAttackFlags )
 		return false;
 	}
 
+
+	int iNoAttack = 0;
+	CALL_ATTRIB_HOOK_INT( iNoAttack, no_attack );
+	if ( iNoAttack )
+	{
+		return false;
+	}
+
 	return true;
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+bool CTFPlayer::CanJump() const
+{
+	// Cannot jump while taunting
+	if ( m_Shared.InCond( TF_COND_TAUNTING ) )
+		return false;
+
+	CTFWeaponBase *pActiveWeapon = m_Shared.GetActiveTFWeapon();
+	if ( pActiveWeapon )
+	{
+		if ( !pActiveWeapon->OwnerCanJump() )
+			return false;
+	}
+
+	int iNoJump = 0;
+	CALL_ATTRIB_HOOK_INT( iNoJump, no_jump );
+
+	return iNoJump == 0;
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+bool CTFPlayer::CanDuck() const
+{
+	int iNoDuck = 0;
+	CALL_ATTRIB_HOOK_INT( iNoDuck, no_duck );
+
+	return iNoDuck == 0;
 }
 
 
@@ -11761,6 +12441,9 @@ bool CTFPlayer::CanPickupBuilding( CBaseObject *pPickupObject )
 	if ( pPickupObject->GetUpgradeLevel() != pPickupObject->GetHighestUpgradeLevel() )
 		return false;
 
+	if ( !IsAlive() )
+		return false;
+
 	if ( m_Shared.IsCarryingObject() )
 		return false;
 
@@ -11785,7 +12468,7 @@ bool CTFPlayer::CanPickupBuilding( CBaseObject *pPickupObject )
 	if ( m_Shared.GetCarryingRuneType() == RUNE_KNOCKOUT )
 //		ClientPrint( this, HUD_PRINTCENTER, "#TF_Powerup_Pickup_Deny" );
 		{
-			ClientPrint( this, HUD_PRINTCENTER, "You can't pickup buildings while holding the KNOCKOUT powerup" );
+		ClientPrint( this, HUD_PRINTCENTER, "#TF_Powerup_No_Building_Pickup" );
 			return false;
 		}
 
@@ -11875,11 +12558,14 @@ bool CTFPlayer::TryToPickupBuilding()
 		iPickUpRange = TF_BUILDING_RESCUE_MAX_RANGE;
 	}
 	
+	const Vector vecStart = EyePosition();
+	const Vector vecEnd   = vecStart + vecForward * iPickUpRange;
+
 	// Create a ray a see if any of my objects touch it
 	Ray_t ray;
-	ray.Init( EyePosition(), EyePosition() + vecForward * iPickUpRange );
+	ray.Init( vecStart, vecEnd );
 
-	CBulletPenetrateEnum ePickupPenetrate( &ray, this, TF_DMG_CUSTOM_PENETRATE_ALL_PLAYERS, false );
+	CBulletPenetrateEnum ePickupPenetrate( vecStart, vecEnd, this, TF_DMG_CUSTOM_PENETRATE_ALL_PLAYERS, false );
 	enginetrace->EnumerateEntities( ray, false, &ePickupPenetrate );
 
 	CBaseObject *pPickupObject = NULL;
@@ -12139,6 +12825,16 @@ bool CTFPlayer::Weapon_CanSwitchTo( CBaseCombatWeapon *pWeapon )
 	return bCanSwitch;
 }
 
+void CTFPlayer::PlayStepSound( Vector &vecOrigin, surfacedata_t *psurface, float fvol, bool force )
+{
+#ifdef CLIENT_DLL
+	// Don't make predicted footstep sounds in third person, animevents will take care of that.
+	if ( prediction->InPrediction() && C_BasePlayer::ShouldDrawLocalPlayer() )
+		return;
+#endif
+
+	BaseClass::PlayStepSound( vecOrigin, psurface, fvol, force );
+}
 
 //-----------------------------------------------------------------------------
 // Purpose: Gives the player an opportunity to abort a double jump.
@@ -12163,10 +12859,20 @@ bool CTFPlayer::CanAirDash( void ) const
  			return false;
 	}
 
+	CTFWeaponBase *pTFActiveWeapon = GetActiveTFWeapon();
 	int iDashCount = tf_scout_air_dash_count.GetInt();
-	CALL_ATTRIB_HOOK_INT( iDashCount, air_dash_count );
-	if ( m_Shared.GetAirDash() >= iDashCount ) 
+	CALL_ATTRIB_HOOK_INT_ON_OTHER( pTFActiveWeapon, iDashCount, air_dash_count );
+
+	if ( m_Shared.GetAirDash() >= iDashCount )
 		return false;
+
+	if ( pTFActiveWeapon )
+	{
+		// TODO(driller): Hack fix to restrict this to The Atomzier (currently the only item that uses this attribute) on what would be the third jump
+		float flTimeSinceDeploy = gpGlobals->curtime - pTFActiveWeapon->GetLastDeployTime();
+		if ( iDashCount >= 2 && m_Shared.GetAirDash() == 1 && flTimeSinceDeploy < 0.7f )
+			return false;
+	}
 
 	int iNoAirDash = 0;
 	CALL_ATTRIB_HOOK_INT( iNoAirDash, set_scout_doublejump_disabled );
@@ -12414,12 +13120,6 @@ bool CTFPlayer::CanMoveDuringTaunt()
 		}
 #endif // GAME_DLL
 
-#ifdef STAGING_ONLY
-		if ( tf_force_allow_move_during_taunt.GetBool() )
-		{
-			return true;
-		}
-#endif // STAGING_ONLY
 
 		if ( m_bAllowMoveDuringTaunt )
 		{
@@ -12442,18 +13142,20 @@ bool CTFPlayer::CanMoveDuringTaunt()
 bool CTFPlayer::ShouldStopTaunting()
 {
 	// stop taunt if we're under water
-	return GetWaterLevel() > WL_Waist;
+	if ( GetWaterLevel() > WL_Waist )
+		return true;
+
+	if ( IsViewingCYOAPDA() )
+		return true;
+
+	return false;
 }
 
 
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-#if defined( CLIENT_DLL ) && defined( STAGING_ONLY )
-static ConVar tf_tauntcam_dist_override( "tf_tauntcam_dist_override", "0", FCVAR_CHEAT );
-static ConVar tf_tauntcam_distup_override( "tf_tauntcam_distup_override", "0", FCVAR_CHEAT );
-#endif // CLIENT_DLL && STAGING_ONLY
-void CTFPlayer::ParseSharedTauntDataFromEconItemView( CEconItemView *pEconItemView )
+void CTFPlayer::ParseSharedTauntDataFromEconItemView( const CEconItemView *pEconItemView )
 {
 	static CSchemaAttributeDefHandle pAttrDef_TauntForceMoveForward( "taunt force move forward" );
 	attrib_value_t attrTauntForceMoveForward = 0;
@@ -12490,13 +13192,6 @@ void CTFPlayer::ParseSharedTauntDataFromEconItemView( CEconItemView *pEconItemVi
 		if ( pTauntInfo->GetCameraDistUp() != 0 )
 			m_flTauntCamTargetDistUp = pTauntInfo->GetCameraDistUp();
 
-#ifdef STAGING_ONLY
-		if ( tf_tauntcam_dist_override.GetFloat() != 0 )
-			m_flTauntCamTargetDist = tf_tauntcam_dist_override.GetFloat();
-
-		if ( tf_tauntcam_distup_override.GetFloat() != 0 )
-			m_flTauntCamTargetDistUp = tf_tauntcam_distup_override.GetFloat();
-#endif // STAGING_ONLY
 	}
 #endif // CLIENT_DLL
 }
@@ -13134,7 +13829,7 @@ void CTFPlayerShared::UpdateRageBuffsAndRage( void )
 		CALL_ATTRIB_HOOK_FLOAT_ON_OTHER( m_pOuter, nBuffPulses, mod_buff_duration );
 		if ( nBuffPulses > 0 )
 		{
-			m_flRageMeter -= gpGlobals->frametime * ( 100 / nBuffPulses );
+			m_flRageMeter -= gpGlobals->frametime * ( 100.f / (float)nBuffPulses );
 			if ( m_flRageMeter <= 0.0f )
 			{
 				m_flRageMeter = 0.0f;
@@ -13154,26 +13849,6 @@ void CTFPlayerShared::UpdateRageBuffsAndRage( void )
 		}
 	}
 	
-#ifdef STAGING_ONLY
-	if ( m_flRageMeter >= 100.f )
-	{
-		if ( TFGameRules() && TFGameRules()->GameModeUsesUpgrades() )
-		{
-			if ( CanBuildSpyTraps() )
-			{
-				// Whenever a spy fills their rage meter, give them a speed boost and grenade (used by traps)
-				if ( m_pOuter->GetAmmoCount( TF_AMMO_GRENADES1 ) <= m_pOuter->GetMaxAmmo( TF_AMMO_GRENADES1 ) )
-				{
-#ifdef GAME_DLL
-					m_pOuter->GiveAmmo( 1, TF_AMMO_GRENADES1 );
-					AddCond( TF_COND_SPEED_BOOST, 5.f );
-#endif // GAME_DLL
-					m_flRageMeter = 0.f;
-				}
-			}
-		}
-	}
-#endif // STAGING_ONLY
 
 	// Handle pulsing all of our active rage buffs.
 	for ( int i = 0; i < ARRAYSIZE( m_RageBuffSlots ); i++ )
@@ -13263,7 +13938,7 @@ void CTFPlayerShared::PulseRageBuff( ERageBuffSlot eBuffSlot )
 
 	int iSoldierBuffType = m_RageBuffSlots[eBuffSlot].m_iBuffTypeActive;
 	ETFCond eBuffCond = TF_COND_LAST;
-	if ( iSoldierBuffType > 0 || iSoldierBuffType <= kSoldierBuffCount )
+	if ( iSoldierBuffType > 0 && iSoldierBuffType <= kSoldierBuffCount )
 	{
 		eBuffCond = g_SoldierBuffAttributeIDToConditionMap[iSoldierBuffType];
 	}
@@ -13412,11 +14087,6 @@ void CTFPlayerShared::UpdateEnergyDrinkMeter( void )
 			// If we've drained the meter, remove the condition
 			if ( m_flEnergyDrinkMeter <= 0.f )
 			{
-				if ( InCond( TF_COND_ENERGY_BUFF ) )
-				{
-					AddCond( TF_COND_MARKEDFORDEATH_SILENT, 2.f );
-				}
-
 				RemoveCond( TF_COND_PHASE );
 				RemoveCond( TF_COND_ENERGY_BUFF );
 
@@ -13539,8 +14209,8 @@ void CTFPlayerShared::UpdateCloakMeter( void )
 				// Burning and Bleeding and extra timers
 				if ( g_aDebuffConditions[i] == TF_COND_BURNING )
 				{
-					// Reduce the duration of this burn 
-					m_flFlameRemoveTime -= flReduction;
+					// Reduce the duration of this burn
+					m_flAfterburnDuration -= flReduction;
 				}
 				else if ( g_aDebuffConditions[i] == TF_COND_BLEEDING )
 				{
@@ -13603,52 +14273,6 @@ void CTFPlayerShared::Heal_Radius( bool bActive )
 #endif	// CLIENT_DLL
 	}
 }
-
-#ifdef STAGING_ONLY
-//-----------------------------------------------------------------------------
-// Purpose: 
-//-----------------------------------------------------------------------------
-ConVar tf_rocket_pack_cooldown( "tf_rocket_pack_cooldown", "1.f", FCVAR_CHEAT | FCVAR_REPLICATED );
-ConVar tf_rocket_pack_enabled( "tf_rocket_pack_enabled", "0", FCVAR_CHEAT | FCVAR_REPLICATED );
-void CTFPlayerShared::DoRocketPack()
-{
-	if ( !tf_rocket_pack_enabled.GetBool() )
-		return;
-
-	if ( !( m_pOuter->m_nButtons & IN_ATTACK3 ) )
-		return;
-
-	if ( gpGlobals->curtime < m_flNextRocketPackTime )
-		return;
-
-#ifdef GAME_DLL
-	// Launch
-	if ( !InCond( TF_COND_ROCKETPACK ) )
-	{
-		AddCond( TF_COND_ROCKETPACK );
-		StunPlayer( 0.5f, 1.0f, TF_STUN_MOVEMENT );
-	}
-#endif
-
-	Vector vecDir;
-	m_pOuter->EyeVectors( &vecDir );
-	m_pOuter->SetAbsVelocity( vec3_origin );
-	Vector vecFlightDir = -vecDir;
-	VectorNormalize( vecFlightDir );
-	float flForce = 450.f;
-
-	const float flPushScale = ( m_pOuter->GetFlags() & FL_ONGROUND ) ? 1.2f : 1.8f;		// Greater force while airborne
-	const float flVertPushScale = ( m_pOuter->GetFlags() & FL_ONGROUND ) ? 1.2f : 0.25f;	// Less vertical force while airborne
-	Vector vecForce = vecFlightDir * -flForce * flPushScale;
-	vecForce.z += 1.f * flForce * flVertPushScale;
-	m_pOuter->RemoveFlag( FL_ONGROUND );
-	m_pOuter->ApplyAbsVelocityImpulse( vecForce );
-
-	m_pOuter->EmitSound( "Equipment.RocketPack_Activate" );
-
-	m_flNextRocketPackTime = gpGlobals->curtime + tf_rocket_pack_cooldown.GetFloat();
-}
-#endif // STAGING_ONLY
 
 //-----------------------------------------------------------------------------
 // Purpose: Emits an area-of-effect heal around the medic
@@ -13724,7 +14348,7 @@ void CTFPlayerShared::PulseMedicRadiusHeal( void )
 				if ( m_iRadiusHealTargets.Find( iPlayerIndex ) == m_iRadiusHealTargets.InvalidIndex() )
 				{
 					m_iRadiusHealTargets.AddToTail( iPlayerIndex );
-					pTFPlayer->m_Shared.Heal( m_pOuter, 25, 1, 1 );
+					pTFPlayer->m_Shared.Heal( m_pOuter, 25.f, 1.f, 1.f );
 				}
 			}
 			else
@@ -14160,3 +14784,13 @@ bool CTFPlayer::IsInspecting() const
 {
 	return m_flInspectTime != 0.f && gpGlobals->curtime - m_flInspectTime > 0.2f;
 }
+
+
+//-----------------------------------------------------------------------------
+// Purpose: Returns true if helpme button is pressed
+//-----------------------------------------------------------------------------
+bool CTFPlayer::IsHelpmeButtonPressed() const
+{
+	return m_flHelpmeButtonPressTime != 0.f;
+}
+

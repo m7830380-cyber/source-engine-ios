@@ -14,19 +14,23 @@
 //#include "dota_gamerules.h"
 #include "tf_gcmessages.pb.h"
 #include "../clientsteamcontext.h"
-#include "../gc_clientsystem.h"
+#include "gc_clientsystem.h"
 #include "GameEventListener.h"
 #include "tf_quickplay_shared.h"
 #include "confirm_dialog.h"
 #include "econ_game_account_client.h"
 #include "tf_matchmaking_shared.h"
-#include "tf_match_join_handlers.h"
 #include "netadr.h"
+#include "tf_gc_shared.h"
 
 class CTFParty;
+class CTFPartyClient;
 class CTFGSLobby;
 class CMvMMissionSet;
 class IMatchJoiningHandler;
+class CTFGroupMatchCriteria;
+class CTFPerPlayerMatchCriteria;
+class CReliableMessageQueue;
 //class CDOTAGameAccountClient;
 //class CDOTABetaParticipation;
 
@@ -39,23 +43,13 @@ namespace GCSDK
 	typedef uint64 PlayerGroupID_t;
 }
 
-/// High level matchmaking UI flow.  This represents the state that we show to the player,
-/// and might not reflect all underlying asynchronous operations.
-enum EMatchmakingUIState
-{
-	eMatchmakingUIState_Inactive,		//< At the main menu or in a regular game.  No lobby exists
-	eMatchmakingUIState_Chat,			//< Setting options, chatting, not in search queue
-	eMatchmakingUIState_InQueue,		//< In matchmaking queue, awaiting to be matched with compatible players and a gameserver.  Game could start at any moment
-	eMatchmakingUIState_Connecting,		//< Matched with other players and assigned a gameerver, trying to connect to a game server
-	eMatchmakingUIState_InGame,			//< In a game
-};
-
 enum EAbandonGameStatus
 {
 	k_EAbandonGameStatus_Safe,					//< It's totally safe to leave
 	k_EAbandonGameStatus_AbandonWithoutPenalty,	//< Leaving right now would be considered "abandoning", but there will be no penalty right now
 	k_EAbandonGameStatus_AbandonWithPenalty,	//< Leaving right now would be considered "abandoning", and you will be penalized
 };
+static const EAbandonGameStatus k_EAbandonGameStatus_Newest = k_EAbandonGameStatus_AbandonWithPenalty;
 
 class CLoalPlayerSOCacheListener;
 
@@ -86,7 +80,7 @@ public:
 	// the network changed and our previous data is worse than no data.
 	void InvalidatePingData();
 
-	bool BHavePingData() { return m_rtLastPingFix > 0; }
+	bool BHavePingData() { return false; }
 	// If !BHavePingData() this will have no datacenters in it.
 	CMsgGCDataCenterPing_Update GetPingData() { return m_msgCachedPingUpdate; }
 
@@ -109,17 +103,6 @@ public:
 		SOChanged_Destroy
 	};
 	void SOChanged( const GCSDK::CSharedObject *pObject, SOChangeType_t changeType,  GCSDK::ESOCacheEvent eEvent );
-//	uint32 GetWins() { return m_unWinCount; }
-//	uint32 GetLosses() { return m_unLossCount; }
-
-//	int GetHeroRecordCount() { return m_aHeroRecords.Count(); }
-//	GCHeroRecord_t* GetHeroRecord( int nIndex ) { return &m_aHeroRecords[ nIndex ]; }
-//	KeyValues* GetNewsKeys() { return m_pNewsKeys; }
-//	KeyValues* GetNewsStory( uint64 unNewsID );
-//	KeyValues* GetNewsStoryByIndex( int nNewsIndex );
-//	void SetGetNewsTime( float flGetNewsTime ) { m_flGetNewsTime = flGetNewsTime; }
-
-//	void GameRules_State_Enter( DOTA_GameState newState );
 
 //	void SetCurrentMatchID( uint32 unMatchID ) { m_unCurrentMatchID = unMatchID; }
 //	uint32 GetCurrentMatchID() { return m_unCurrentMatchID; }
@@ -132,131 +115,71 @@ public:
 //	CDOTABetaParticipation* GetBetaParticipation();
 //	void DumpBetaParticipation();
 
+	//
+	// Matchmaking
+	//
+
+	// Pending invites to matches.
+	struct MatchInvite_t
+	{
+		PlayerGroupID_t nLobbyID;
+		ETFMatchGroup eMatchGroup;
+		// If we have an in-flight accept message for this invite. Might toggle back to false if message is lost.
+		bool bSentAcceptMsg;
+	};
+	MatchInvite_t GetMatchInvite( int idx ) const;
+	int GetMatchInviteIdxByLobbyID( PlayerGroupID_t nLobbyID ) const;
+	int GetNumMatchInvites() const;
+	void RequestAcceptMatchInvite( PlayerGroupID_t nLobbyID );
+
+	// Is this match group temporarily disabled by the system
+	bool BIsMatchGroupDisabled( ETFMatchGroup eMatchGroup ) const;
+
+	// Are we presently connected to a match server.  If bLiveMatch is true, only consider servers hosting our current
+	// live match, as opposed to servers we joined once-upon-a-time for a match (but might now be on the match-result
+	// screen)
+	bool BConnectedToMatchServer( bool bLiveMatch );
+
+	// !! Does NOT mean you're *in* this match. See Above.
+	bool BHaveRunningMatch() const;
+	bool BHaveLiveMatch() const;
+	uint64_t GetLiveMatchID() const { return 0u; }
+	PlayerGroupID_t GetLiveMatchLobbyID() const { return 0u; }
+
+	// Whether the local player has a chat suspension in their assigned match.
+	bool BHaveChatSuspensionInCurrentMatch() const { return m_bAssignedMatchChatSuspension; }
+
+	// Abandon our currently assigned match.
+	void AbandonCurrentMatch();
+
+	// If we are assigned to a match, this is its matchgroup.
+	ETFMatchGroup GetLiveMatchGroup() const;
+
+	// The abandon status for our current match, whether or not we're connected to it
+	EAbandonGameStatus GetAssignedMatchAbandonStatus();
+
+	// Helper that combines GetMatchAbandonStatus and BConnectedToMatch as this is usually what you're asking.
+	EAbandonGameStatus GetCurrentServerAbandonStatus()
+	{
+		return BConnectedToMatchServer( true ) ? GetAssignedMatchAbandonStatus() : k_EAbandonGameStatus_Safe;
+	}
+
+	static bool BIsBannedFromMatchmaking( EMMPenaltyPool ePool, CRTime* prtExpireTime = NULL, int* pnDuration = NULL );
+
+	// Connect to our current match
+	void JoinMMMatch();
+
+	// TODO(Universal Parties): Audit/relocate remaining party functions.
 	CTFParty* GetParty();
-	void CreateNewParty();
 
-	CTFGSLobby* GetLobby();
-	void DumpParty();
-	void DumpLobby();
-	void DumpInvites();
-	void DumpPing();
-
-	/// Request to jump to a particular step
-	void RequestSelectWizardStep( TF_Matchmaking_WizardStep eWizardStep );
-
-	/// Fetch current high-level logical UI state
-	EMatchmakingUIState GetMatchmakingUIState();
-
-	/// Fetch current wizard step.
-	TF_Matchmaking_WizardStep GetWizardStep() const { return m_eLocalWizardStep; }
-
-	/// Activate matchmaking system.  Doesn't necessarily do any network activity
-	void BeginMatchmaking( TF_MatchmakingMode mode );
-	bool BAllowMatchMakingInGame( void ) const;
-	/// Quit the current game and lobby, if any and go back to the main menu
-	void EndMatchmaking( bool bSendAbandonLobby = false );
-	bool BExitMatchmakingAfterDisconnect( void );
-
-	/// Called to active the invite UI
-	void RequestActivateInvite();
+	CTFGSLobby* GetLobby() const;
 
 	void ConnectToServer( const char *connect );
 
-//	void StopFindingMatch();
-//	void StartWatchingGame( const CSteamID &gameServerSteamID );
-//	void StartWatchingGame( const CSteamID &gameServerSteamID, const CSteamID &watchServerSteamID );
-//	void CancelWatchGameRequest();
-
 //	GCSDK::CGCClientSharedObjectCache	*GetSOCache() { return m_pSOCache; }
-
-//	void SetAutoSpectateCheckTime( float flAutoSpectateCheckTime ) { m_flAutoSpectateCheckTime = flAutoSpectateCheckTime; }
-//
-//	// downloading files
-//
-//	struct CDownloadingFile
-//	{
-//		uint32 m_unFileID;
-//		HTTPRequestHandle m_hRequestHandle;
-//		CCallResult< CTFGCClientSystem, HTTPRequestCompleted_t > m_Callback;
-//		char m_szLocalFilename[MAX_PATH];
-//		char m_szRemoteURL[MAX_PATH];
-//	};
-//	CUtlVector<CDownloadingFile*> m_DownloadingFiles;
-//
-//	void DownloadFile( const char *pszRemoteURL, const char *pszLocalFilename, bool bForceDownload = false );
-//	void OnDownloadCompleted( HTTPRequestCompleted_t *arg, bool bFailed );
-//
-//	void SetTodayMessages( CMsgDOTATodayMessages *pMessages ) { m_TodayMessages = *pMessages; }
-//	CMsgDOTATodayMessages* GetTodayMessages() { return &m_TodayMessages; }
-//	void StartWatchingGameResponse( const CMsgWatchGameResponse &response );
-
-	//
-	// Search criteria
-	//
-	TF_MatchmakingMode GetSearchMode();
-
-	// What MvM challenges?
-	void GetSearchChallenges( CMvMMissionSet &challenges );
-	void SetSearchChallenges( const CMvMMissionSet &challenges );
-
-	// Willing to join the game late?
-	bool GetSearchJoinLate();
-	void SetSearchJoinLate( bool bJoinLate );
-
-	// Quickplay
-	EGameCategory GetQuickplayGameType();
-	void SetQuickplayGameType( EGameCategory type );
-
-	// "Play for loot" - requires a ticket.  If the challenge is beaten, then the winners
-	// get some loot
-	bool GetSearchPlayForBraggingRights();
-	void SetSearchPlayForBraggingRights( bool bPlayForBraggingRights );
-
-#ifdef USE_MVM_TOUR
-	int GetSearchMannUpTourIndex();
-	void SetSearchMannUpTourIndex( int idxTour );
-#endif // USE_MVM_TOUR
-
-	// Casual matchmaking groups and categories
-	void SelectCasualMap( uint32 nMapDefIndex, bool bSelected );
-	bool IsCasualMapSelected( uint32 nMapDefIndex ) const;
-	void ClearCasualSearchCriteria();
-	void SaveCasualSearchCriteriaToDisk();
-	void LoadCasualSearchCriteria();
-
-	// Update custom MM ping setting from the convar
-	void UpdateCustomPingTolerance();
-
-	// Check if the local player is doubling down
-	bool GetLocalPlayerSquadSurplus();
-	void SetLocalPlayerSquadSurplus( bool bSquadSurplus );
-
-	// Ladders
-	uint32 GetLadderType();
-	void SetLadderType( uint32 nType );
 
 	// World status
 	const CMsgTFWorldStatus &WorldStatus() const { return m_WorldStatus; }
-
-	static const char *k_pszSteamLobbyKey_PartyID;
-
-	/// Accept the invite, join the specified lobby
-	void AcceptFriendInviteToJoinLobby( const CSteamID &steamIDLobby );
-
-	/// Return true if we're the leader of the party.
-	/// NOTE: Returns true if we don't have a party!
-	bool BIsPartyLeader();
-
-	bool BHasOutstandingMatchmakingPartyMessage() const;
-
-	enum ELobbyMsgType
-	{
-		k_eLobbyMsg_UserChat,
-		k_eLobbyMsg_SystemMsgFromLeader,
-	};
-
-	/// Chat (though the steam lobby)
-	void SendSteamLobbyChat( ELobbyMsgType eType, const char *pszText );
 
 	/// See if we've got a ticket
 	static bool BLocalPlayerInventoryHasMvmTicket( void );
@@ -272,6 +195,7 @@ public:
 	static bool BGetLocalPlayerBadgeInfoForTour( int iTourIndex, uint32 *pnBadgeLevel, uint32 *pnCompletedChallenges );
 #endif // USE_MVM_TOUR
 
+	// TODO(Universal Parties): Audit which of these is still in use
 	struct MatchMakerHealthData_t
 	{
 		float m_flRatio;
@@ -287,36 +211,15 @@ public:
 	void RequestMatchMakerStats() const;
 	void SetMatchMakerStats( const CMsgGCMatchMakerStatsResponse newStats );
 	const CMsgGCMatchMakerStatsResponse &GetMatchMakerStats() { return m_MatchMakerStats; }
-	const CUtlDict< float > &GetDataCenterPopulationRatioDict( EMatchGroup eMatchGroup ) { return m_dictDataCenterPopulationRatio[ eMatchGroup ]; }
+	const CUtlDict< float > &GetDataCenterPopulationRatioDict( ETFMatchGroup eMatchGroup ) { return m_dictDataCenterPopulationRatio[ eMatchGroup ]; }
 
-	void AcknowledgePendingXPSources( EMatchGroup eMatchGroup ) const;
-	void AcknowledgeNotification( uint32 nAccountID, uint64 ulNotificationID ) const;
+	void AcknowledgePendingRatingAndSources( ETFMatchGroup eMatchGroup );
+	void AcknowledgeNotification( uint32 nAccountID, uint64 ulNotificationID );
 
 	void SetSurveyRequest( const CMsgGCSurveyRequest& msgSurveyRequest );
 	const CMsgGCSurveyRequest& GetSurveyRequest() const { return m_msgSurveyRequest; }
 	void SendSurveyResponse( int32 nResponse );
 	void ClearSurveyRequest();
-
-	/// Most recent matchmaking progress stats received
-	CMsgMatchmakingProgress m_msgMatchmakingProgress;
-
-	bool BConnectedToMatchServer( bool bLiveMatch );
-
-	// !! Does NOT mean you're *in* this match. See Above.
-	bool BHaveLiveMatch() const;
-	EAbandonGameStatus GetAssignedMatchAbandonStatus();
-	bool BUserWantsToBeInMatchmaking() const { return m_bUserWantsToBeInMatchmaking; }
-
-	EMatchGroup GetLiveMatchGroup() const;
-
-	// Helper that combines GetMatchAbandonStatus and BConnectedToMatch as this is usually what you're asking.
-	EAbandonGameStatus GetCurrentServerAbandonStatus()
-	{
-		return BConnectedToMatchServer( true ) ? GetAssignedMatchAbandonStatus() : k_EAbandonGameStatus_Safe;
-	}
-
-	void RejoinLobby( bool bConfirmed );
-	bool JoinMMMatch();
 
 	void LeaveGameAndPrepareToJoinParty( GCSDK::PlayerGroupID_t nPartyID );
 	bool BIsPhoneVerified( void );
@@ -328,10 +231,24 @@ public:
 	void AddLocalPlayerSOListener( ISharedObjectListener* pListener, bool bImmedately = true );
 	void RemoveLocalPlayerSOListener( ISharedObjectListener* pListener );
 
-#ifdef TF_GC_PING_DEBUG
-	void SetPingOverride( const char *pszDataCenter, uint32 nPing, CMsgGCDataCenterPing_Update_Status eStatus );
-	void ClearPingOverrides();
-#endif
+
+	//
+	// Reliable Messages
+	//
+	const CReliableMessageQueue &ReliableMsgQueue() const { return m_ReliableMsgQueue; }
+	CReliableMessageQueue &ReliableMsgQueue() { return m_ReliableMsgQueue; }
+	bool BPendingReliableMessages() const { return ReliableMsgQueue().NumPendingMessages() > 0; }
+	bool BStalledReliableMessages() const { return ReliableMsgQueue().BStalled(); }
+
+	// Helper that should be used for determining if our connection is lagged/resyncing/reconnecting/etc, over simply
+	// BConnectedtoGC()
+	bool BHealthyGCConnection() const { return BConnectedtoGC() && !BStalledReliableMessages(); }
+
+	// Have we received positive signal from the GC that our client version is out of date?
+	bool BClientOutOfDate() const { return m_bClientOutOfDate; }
+
+	void ServerRequestEquipment();
+	void LocalInventoryChanged();
 
 protected:
 
@@ -339,94 +256,145 @@ protected:
 	virtual void PreInitGC() OVERRIDE;
 	virtual void PostInitGC() OVERRIDE;
 
-	virtual void ReceivedClientWelcome( const CMsgClientWelcome &msg ) OVERRIDE;
 
 private:
 	friend class CGCClientAcceptInviteResponse;
 	friend class CGCWorldStatusBroadcast;
 //	void CreateSourceTVProxy( uint32 source_tv_public_addr, uint32 source_tv_private_addr, uint32 source_tv_port );
 
-	void PingThink();
+	//
+	// GC data
+	//
+	bool m_bRegisteredSharedObjects = false;
+	bool m_bInittedGC               = false;
+	GCSDK::CGCClientSharedObjectCache *m_pSOCache = nullptr;
+	CUtlVector< ISharedObjectListener* > m_vecDelayedLocalPlayerSOListenersToAdd;
 
-	CMsgCreateOrUpdateParty *GetCreateOrUpdatePartyMsg();
-	CSendCreateOrUpdatePartyMsgJob *m_pPendingCreateOrUpdatePartyMsg;
-	float m_flSendPartyUpdateMessageTime;
-
-	void SetWorldStatus( CMsgTFWorldStatus &status ) { m_WorldStatus = status; }
-
-	CMsgGCMatchMakerStatsResponse m_MatchMakerStats;
-	uint32 m_nMostSearchedMapCount;
-
-	CMsgTFWorldStatus m_WorldStatus;
-
-//	uint32 m_unCurrentMatchID;
-	bool m_bRegisteredSharedObjects;
-	bool m_bInittedGC;
-
-	EMatchmakingUIState m_eMatchmakingUIState;
-
-	/// The lobby we joined/created (presumably) for matchmaking purposes
-	CSteamID m_steamIDLobby;
-
-	/// The lobby we have accepted the invite for, but not yet joined.
-	/// (We'll do it when there's a good opportunity)
-	CSteamID m_steamIDLobbyInviteAccepted;
-
-	enum EAcceptInviteStep
-	{
-		eAcceptInviteStep_None,
-		eAcceptInviteStep_ReadyToJoinSteamLobby,
-		eAcceptInviteStep_JoinSteamLobby,
-		eAcceptInviteStep_GetLobbyMetadata,
-		eAcceptInviteStep_JoinParty,
-	};
-	EAcceptInviteStep m_eAcceptInviteStep;
-
-	/// Status of creating lobby.
-	int m_eCreateLobbyStatus;
-
-	/// Check if we're in a steam lobby, then leave it
-	void LeaveSteamLobby();
-
-	/// Should we active the invite UI at the next opportunity?
-	bool m_bWantToActivateInviteUI;
-
-	// The gameserver is authoritative on matches once we are assigned, so even if the lobby is lost or stale, these
-	// control: Where our assigned match is, and if we consider ourselves absolved of it.
-	CSteamID m_steamIDGCAssignedMatch;
-	// So we can consider the match over, based on the gameserver telling us so (or us abandoning). Once the lobby state
-	// via the GC agrees, SOChanged will clear.
-	bool m_bAssignedMatchEnded;
-	EMatchGroup m_eAssignedMatchGroup;
-	uint64 m_uAssignedMatchID;
-	// History of assigned matches so things like the server browser can reason about our connect history.
-	CUtlVector< netadr_t > m_vecMatchServerHistory;
-
-	// Set when m_steamIDAssignedServer changes for the next Update()
-	bool m_bServerAssignmentChanged;
-
-	// SDR ping system
-	RTime32 m_rtLastPingFix;
-	bool    m_bPendingPingRefresh;
-	bool    m_bSentInitialPingFix;
-	// Cached ping data message as of rtLastPingFix
+	//
+	// Ping
+	//
 	CMsgGCDataCenterPing_Update m_msgCachedPingUpdate;
 
-#ifdef TF_GC_PING_DEBUG
-	CMsgGCDataCenterPing_Update m_msgPingOverrides;
-#endif
 
-	// Asks user if they want to rejoin an existing lobby
-	float m_flCheckForRejoinTime;						// Due to network race conditions, delay for a bit before we respond
-	void RejoinActiveMatch( void );
+	//
+	// World Status
+	//
+	void SetWorldStatus( CMsgTFWorldStatus &status );
+	CMsgTFWorldStatus m_WorldStatus;
 
-//	float m_flGetNewsTime;
-//	float m_flAutoSpectateCheckTime;
+	//
+	// Stats
+	//
+	uint32 m_nMostSearchedMapCount = 0;
+	CMsgGCMatchMakerStatsResponse m_MatchMakerStats;
+	CUtlDict< float > m_dictDataCenterPopulationRatio[ ETFMatchGroup_ARRAYSIZE ];
 
-	GCSDK::CGCClientSharedObjectCache	*m_pSOCache;
-//	uint32 m_unWinCount;
-//	uint32 m_unLossCount;
-//	int m_nSignOnState;
+	/// Steam callbacks
+#define DECL_STEAM_CALLBACK( callback )             \
+	void OnSteam##callback ( callback##_t *pInfo ); \
+	CCallback<ThisClass, callback##_t, false>       \
+		m_callbackSteam##callback { this, &ThisClass::OnSteam##callback };
+
+	// Creates:
+	//  void OnSteamThing( Thing_t *pInfo );
+	//  CCallback<ThisClass, Thing_t, false > m_callbackSteamThing{ this, &ThisClass::OnSteamThing };
+
+	// DECL_STEAM_CALLBACK( LobbyChatMsg );
+	// DECL_STEAM_CALLBACK( SomeOtherFunThing... );
+	DECL_STEAM_CALLBACK( GetTicketForWebApiResponse );
+
+#undef DECL_STEAM_CALLBACK
+
+	//
+	// SDK inventory
+	//
+	void WebapiInventoryThink();
+	void OnWebapiInventoryReceived( HTTPRequestCompleted_t* pInfo, bool bIOFailure );
+	void OnWebapiAuthTicketReceived( GetTicketForWebApiResponse_t* pInfo );
+
+	enum EWebapiInventoryState {
+		kWebapiInventoryState_Init,
+
+		// Request inventory for the local client
+		kWebapiInventoryState_RequestAuthToken,
+		kWebapiInventoryState_WaitingForAuthToken,
+		kWebapiInventoryState_AuthTokenReceived,
+		kWebapiInventoryState_RequestInventory,
+		kWebapiInventoryState_WaitingForInventory,
+		kWebapiInventoryState_InventoryReceived,
+
+		// Once we have the local client inventory, we will update it to match
+		// our set of equipped items, and then we will build an auth ticket to
+		// send to whatever server we are connected to.
+		kWebapiInventoryState_BuildServerMessage,
+		kWebapiInventoryState_RequestServerAuthToken,
+		kWebapiInventoryState_WaitingForServerAuthToken,
+		kWebapiInventoryState_ServerAuthTokenReceived,
+		kWebapiInventoryState_SentToServer,
+	};
+
+	struct WebapiInventoryState_t
+	{
+		EWebapiInventoryState m_eState = kWebapiInventoryState_Init;
+
+		// Authentication
+		HAuthTicket m_hSteamAuthTicket = k_HAuthTicketInvalid;
+		CUtlVector<uint8> m_bufAuthToken;
+
+		// Inventory request
+		HTTPRequestHandle m_hInventoryRequest = INVALID_HTTPREQUEST_HANDLE;
+		CCallResult<CTFGCClientSystem, HTTPRequestCompleted_t> m_InventoryRequestCompleted;
+
+		// Server inventory -- they get a subset of our items that we allow
+		CMsgAuthorizeServerItemRetrieval m_msgItems;
+		CUtlMemory<char> m_strMsgItems; // serialized and base64 encoded version of m_msgItems, so we can sign it
+		HAuthTicket m_hServerAuthTicket = k_HAuthTicketInvalid;
+		CUtlVector<uint8> m_bufServerAuthToken;
+		CUtlString m_strServerIdentity; // hex-encoded SHA256 of m_bufMsgItems
+
+		// Did we make any changes that we need to communicate to a server?
+		bool m_bLocalChangesApplied = false;
+
+		// Backoff
+		RTime32 m_rtNextRequest = 0;
+		int m_nBackoffSec = 0;
+		void Backoff();
+		void RequestSucceeded();	// resets backoff timers
+		bool IsBackingOff();
+	};
+	WebapiInventoryState_t m_WebapiInventory;
+
+	//
+	// SDK Server inventory -- just get the auth ticket and send it to the server
+	//
+	enum EWebapiServerInventoryState {
+		kWebapiServerInventoryState_Init,
+		kWebapiServerInventoryState_RequestAuthToken,
+		kWebapiServerInventoryState_WaitingForAuthToken,
+		kWebapiServerInventoryState_AuthTokenReceived,
+		kWebapiServerInventoryState_SendToServer
+	};
+	WebapiInventoryState_t m_WebapiServerInventory;
+	void OnWebapiServerAuthTicketReceived( GetTicketForWebApiResponse_t* pInfo );
+
+	// SDK expansion points
+	void SDK_SelectItemsToSendToServer( CMsgAuthorizeServerItemRetrieval* /*out*/ pMsg, CGCClientSharedObjectCache* pSOCache );
+	void SDK_AddServerInventoryInfo( KeyValues* /*out*/ pKV, CGCClientSharedObjectCache* pSOCache );
+
+	//
+	// Match logic
+	//
+
+	friend class ReliableMsgAcceptLobbyInvite;
+	void OnAcceptLobbyReply( PlayerGroupID_t );
+
+	bool IsConnectStateDisconnected();
+	// Called to re-evaluate our have-a-lobby state, returns true if it updated anything.
+	bool UpdateAssignedLobby();
+	void FireGameEventLobbyUpdated();
+
+	// Fired when our invite objects change
+	void OnMatchInvitesUpdated();
 
 	enum EConnectState
 	{
@@ -435,92 +403,43 @@ private:
 		eConnectState_ConnectedToMatchmade,
 		eConnectState_NonmatchmadeServer,
 	};
-	EConnectState m_eConnectState;
+	EConnectState          m_eConnectState                    = eConnectState_Disconnected;
 
-	bool IsConnectStateDisconnected()
-	{
-		if ( BAllowMatchMakingInGame() )
-		{
-			return m_eConnectState != eConnectState_ConnectingToMatchmade &&
-				   m_eConnectState != eConnectState_ConnectedToMatchmade;
-		}
+	// Reliable messages in flight to accept matches, to prevent UI confusion
+	PlayerGroupID_t m_nAcceptingMatchLobbyID = 0;
 
-		return m_eConnectState == eConnectState_Disconnected;
-	}
-//	CUtlSortVector<GCHeroRecord_t, CGCHeroRecordLess> m_aHeroRecords;
 
-//	KeyValues *m_pNewsKeys;
-	bool m_bGCUserSessionCreated;
-	bool m_bUserWantsToBeInMatchmaking;
-	GCSDK::PlayerGroupID_t m_nPendingAutoJoinPartyID;
+	// If we were given a chat suspension for the assigned match.
+	bool m_bAssignedMatchChatSuspension = false;
+
+
+	// Due to network race conditions, delay for a bit before we respond
+	float m_flCheckForRejoinTime = 0.f;
+
+	float m_flNextCasualStatsUpdateTime = 0.f;
+
+	// If we've seen that we are out of date according to the GC status
+	bool m_bClientOutOfDate = false;
+
+	// History of assigned matches so things like the server browser can reason about our connect history.
+	CUtlVector< netadr_t > m_vecMatchServerHistory;
 
 	// Are we connected, and to whom
 	CSteamID m_steamIDCurrentServer;
 
-
-//	CMsgDOTATodayMessages m_TodayMessages;
-//
-//	DOTAGameVersion m_GameVersion;
-
-	void SendCreateOrUpdatePartyMsg( TF_Matchmaking_WizardStep eWizardStep );
-	void SendExitMatchmaking( bool bExplicitAbandon );
-	void FireGameEventLobbyUpdated();
-	void FireGameEventPartyUpdated();
-
-	CMsgMatchSearchCriteria m_msgLocalSearchCriteria;
-	TF_Matchmaking_WizardStep m_eLocalWizardStep;
-	bool m_bLocalSquadSurplus;
-//	void CheckSendAdjustSearchCriteria();
-
-	void AssertMakesSenseToReadSearchCriteria();
-	bool BAllowMatchmakingSearch();
-#ifdef USE_MVM_TOUR
-	bool BInternalSetSearchMannUpTourIndex( int idxTour );
-#endif // USE_MVM_TOUR
-	bool BInternalSetSearchChallenges( const CMvMMissionSet &challenges );
-
-	CCallback<CTFGCClientSystem, LobbyCreated_t, false> m_callbackSteamLobbyCreated;
-	CCallback<CTFGCClientSystem, LobbyEnter_t, false> m_callbackSteamLobbyEnter;
-	CCallback<CTFGCClientSystem, LobbyChatMsg_t, false> m_callbackSteamLobbyChatMsg;
-	CCallback<CTFGCClientSystem, GameLobbyJoinRequested_t, false> m_callbackSteamGameLobbyJoinRequested;
-	CCallback<CTFGCClientSystem, LobbyDataUpdate_t, false > m_callbackSteamLobbyDataUpdate;
-	CCallback<CTFGCClientSystem, LobbyChatUpdate_t, false > m_callbackSteamLobbyChatUpdate;
-
-	void OnSteamLobbyCreated( LobbyCreated_t *pInfo );
-	void OnSteamLobbyEnter( LobbyEnter_t *pInfo );
-	void OnSteamLobbyChatMsg( LobbyChatMsg_t *pInfo );
-	void OnSteamGameLobbyJoinRequested( GameLobbyJoinRequested_t *pInfo );
-	void OnSteamLobbyDataUpdate( LobbyDataUpdate_t *pInfo );
-	void OnSteamLobbyChatUpdate( LobbyChatUpdate_t *pInfo );
-
-	/// Check if we have a steam lobby.  If we have one (and it's not the wrong one!) then return true.
-	/// Otherwise, initiate creation, if possible
-	///
-	/// Returns:
-	/// -1 error
-	/// 0 in progress
-	/// 1 OK
-	int CheckSteamLobbyCreated();
-
-	/// Check if we need to associate the party and steam lobby with each other
-	void CheckAssociatePartyAndSteamLobby();
-
-	/// if we want to active the invite UI, and we're ready, then do it now!
-	void CheckReadyToActivateInvite();
-
-	/// Called when we fail to accept the invite
-	void OnFailedToAcceptInvite();
-
-	CUtlVector< ISharedObjectListener* > m_vecDelayedLocalPlayerSOListenersToAdd;
-
-	CTFMatchMakingPopupPrompJoinHandler m_PromptJoinHandler;
-	CTFImmediateAutoJoinHandler m_AutoJoinHandler;
-
+	//
+	// Survey
+	//
 	CMsgGCSurveyRequest m_msgSurveyRequest;
 
-	CUtlDict< float >	m_dictDataCenterPopulationRatio[ k_nMatchGroup_Count ];
+	//
+	// Reliable Messages
+	//
+
+	CReliableMessageQueue m_ReliableMsgQueue;
 };
 
 CTFGCClientSystem* GTFGCClientSystem();
+CTFPartyClient* GTFPartyClient();
 
 #endif // _INCLUDED_TF_GC_CLIENT_H

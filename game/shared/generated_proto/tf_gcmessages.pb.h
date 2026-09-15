@@ -40,8 +40,6 @@ class CMsgGCTFSpecificItemBroadcast;
 class CMsgTFWorldStatus;
 class CSOTFDuelSummary;
 class CSOTFMapContribution;
-class CMsgTFVoteKickBanPlayer;
-class CMsgTFVoteKickBanPlayerResult;
 class CMsgTFFreeTrialChooseMostHelpfulFriend;
 class CMsgTFRequestTF2Friends;
 class CMsgTFRequestTF2FriendsResponse;
@@ -95,34 +93,47 @@ class CMsgGC_Halloween_ItemClaimed;
 class CMsgGC_PickupItemEligibility_Query;
 class CMsgGC_PickupItemEligibility_QueryResponse;
 class CSOTFPartyMember;
-class CMsgMatchSearchCriteria;
-class CMsgCasualMatchmakingSearchCriteria;
-class CMsgCreateOrUpdateParty;
-class CMsgCreateOrUpdatePartyReply;
+class CSOTFPartyMember_Activity;
+class TFPendingPartyMember;
+class TFSyncedMMUIState;
+class CTFGroupMatchCriteriaProto;
+class CTFCasualMatchCriteria;
+class CTFPerPlayerMatchCriteriaProto;
+class CTFPartyOptions;
+class CMsgPartySetOptions;
+class CMsgPartySetOptionsResponse;
+class CMsgPartyQueueForMatch;
+class CMsgPartyQueueForMatchResponse;
+class CMsgPartyQueueForStandby;
+class CMsgPartyQueueForStandbyResponse;
+class CMsgPartyRemoveFromQueue;
+class CMsgPartyRemoveFromQueueResponse;
+class CMsgPartyRemoveFromStandbyQueue;
+class CMsgPartyRemoveFromStandbyQueueResponse;
+class CMsgPartyInvitePlayer;
+class CMsgPartyRequestJoinPlayer;
+class CMsgPartyClearPendingPlayer;
+class CMsgPartyMMError;
+class CMsgPartyClearPendingPlayerResponse;
+class CMsgPartyClearOtherPartyRequest;
+class CMsgPartyClearOtherPartyRequestResponse;
+class CMsgPartyPromoteToLeader;
+class CMsgPartyKickMember;
+class CMsgPartySendChat;
+class CMsgPartyChatMsg;
 class CSOTFParty;
+class CSOTFParty_QueueEntry;
 class CSOTFPartyInvite;
 class CSOTFPartyInvite_PartyMember;
-class CTFLobbyMember;
-class CLobbyPendingPlayerReport;
+class CTFLobbyPlayerProto;
+class CTFLobbyInviteProto;
 class CSOTFGameServerLobby;
 class CMsgExitMatchmaking;
-class CMsgAcceptInvite;
-class CMsgAcceptInviteResponse;
-class CMsgReadyUp;
+class CMsgAcceptLobbyInvite;
+class CMsgAcceptLobbyInviteReply;
 class CMsgMatchmakingSearchCountRequest;
 class CMsgMatchmakingSearchCountResponse;
 class CMsgKickedFromMatchmakingQueue;
-class CMsgTFJoinChatChannel;
-class CMsgTFLeaveChatChannel;
-class CMsgTFJoinChatChannelResponse;
-class CMsgTFJoinChatChannelResponse_ChatMember;
-class CMsgTFOtherJoinedChatChannel;
-class CMsgTFOtherLeftChatChannel;
-class CMsgTFRequestDefaultChatChannel;
-class CMsgTFRequestDefaultChatChannelResponse;
-class CMsgTFRequestChatChannelList;
-class CMsgTFRequestChatChannelListResponse;
-class CMsgTFRequestChatChannelListResponse_ChatChannel;
 class CMsgGameServerMatchmakingStatus;
 class CMsgGameServerMatchmakingStatus_Player;
 class CMsgMatchmakingProgress;
@@ -140,8 +151,9 @@ class CMsgGameServerKickingLobbyResponse;
 class CMsgLeaveGameAndPrepareToJoinParty;
 class CMsgPlayerLeftMatch;
 class CMsgPlayerLeftMatchResponse;
-class CMsgPlayerVoteKickedAfterLeavingMatch;
-class CMsgPlayerVoteKickedAfterLeavingMatchResponse;
+class CMsgProcessMatchVoteKick;
+class CMsgProcessMatchVoteKick_Vote;
+class CMsgProcessMatchVoteKickResponse;
 class CMsgHalloween_ServerBossEvent;
 class CMsgHalloween_Merasmus2012;
 class CMsgUpdateHalloweenMerasmusLootLevel;
@@ -193,11 +205,31 @@ class CMsgGCDataCenterPing_Update_PingEntry;
 class CMsgGC_KickPlayerFromLobby;
 class CMsgGCSurveyRequest;
 class CMsgGCSurveyResponse;
+class CSOQuestMapNode;
+class CSOQuest;
+class CSOQuestMapRewardPurchase;
+class CMsgGCQuestIdentify;
+class CMsgGCQuestDevGive;
+class CMsgGCQuestNodeTurnIn;
+class CMsgGCQuestMapUnlockNode;
 class CMsgGCNewMatchForLobbyRequest;
 class CMsgGCNewMatchForLobbyResponse;
 class CMsgGCChangeMatchPlayerTeamsRequest;
 class CMsgGCChangeMatchPlayerTeamsRequest_Member;
 class CMsgGCChangeMatchPlayerTeamsResponse;
+class CMsgGCQuestComplete_Debug;
+class CMsgGCQuestMap_Debug;
+class CMsgGCQuestMapPurchaseReward;
+class CMsgGCQuestResponse;
+class CMsgGCSetDisablePartyQuestProgress;
+class CMsgQuestProgressReport;
+class CMsgConsumePaintkit;
+class CMsgPainkitDevGrant;
+class GCQuestStrangeEvent;
+class CMsgSDRTicket;
+class CMsgAuthorizeServerItemRetrieval;
+class CMsgGCToGCSendAccountBannedNotifications;
+class CMsgGCToGCSendNotification;
 
 enum CMsgGC_GameServer_CreateIdentityResponse_EStatus {
   CMsgGC_GameServer_CreateIdentityResponse_EStatus_kStatus_GenericFailure = 0,
@@ -262,48 +294,105 @@ inline bool CMsgGC_GameServer_UseServerModificationItem_Response_EServerModifica
   return ::google::protobuf::internal::ParseNamedEnum<CMsgGC_GameServer_UseServerModificationItem_Response_EServerModificationItemServerResponse>(
     CMsgGC_GameServer_UseServerModificationItem_Response_EServerModificationItemServerResponse_descriptor(), name, value);
 }
-enum CSOTFParty_State {
-  CSOTFParty_State_UI = 0,
-  CSOTFParty_State_FINDING_MATCH = 1,
-  CSOTFParty_State_IN_MATCH = 2,
-  CSOTFParty_State_AWAITING_RESERVATION_CONFIRMATION = 3
+enum TFPendingPartyMember_EType {
+  TFPendingPartyMember_EType_Invited = 0,
+  TFPendingPartyMember_EType_RequestedToJoin = 1
 };
-bool CSOTFParty_State_IsValid(int value);
-const CSOTFParty_State CSOTFParty_State_State_MIN = CSOTFParty_State_UI;
-const CSOTFParty_State CSOTFParty_State_State_MAX = CSOTFParty_State_AWAITING_RESERVATION_CONFIRMATION;
-const int CSOTFParty_State_State_ARRAYSIZE = CSOTFParty_State_State_MAX + 1;
+bool TFPendingPartyMember_EType_IsValid(int value);
+const TFPendingPartyMember_EType TFPendingPartyMember_EType_EType_MIN = TFPendingPartyMember_EType_Invited;
+const TFPendingPartyMember_EType TFPendingPartyMember_EType_EType_MAX = TFPendingPartyMember_EType_RequestedToJoin;
+const int TFPendingPartyMember_EType_EType_ARRAYSIZE = TFPendingPartyMember_EType_EType_MAX + 1;
 
-const ::google::protobuf::EnumDescriptor* CSOTFParty_State_descriptor();
-inline const ::std::string& CSOTFParty_State_Name(CSOTFParty_State value) {
+const ::google::protobuf::EnumDescriptor* TFPendingPartyMember_EType_descriptor();
+inline const ::std::string& TFPendingPartyMember_EType_Name(TFPendingPartyMember_EType value) {
   return ::google::protobuf::internal::NameOfEnum(
-    CSOTFParty_State_descriptor(), value);
+    TFPendingPartyMember_EType_descriptor(), value);
 }
-inline bool CSOTFParty_State_Parse(
-    const ::std::string& name, CSOTFParty_State* value) {
-  return ::google::protobuf::internal::ParseNamedEnum<CSOTFParty_State>(
-    CSOTFParty_State_descriptor(), name, value);
+inline bool TFPendingPartyMember_EType_Parse(
+    const ::std::string& name, TFPendingPartyMember_EType* value) {
+  return ::google::protobuf::internal::ParseNamedEnum<TFPendingPartyMember_EType>(
+    TFPendingPartyMember_EType_descriptor(), name, value);
 }
-enum CTFLobbyMember_ConnectState {
-  CTFLobbyMember_ConnectState_INVALID = 0,
-  CTFLobbyMember_ConnectState_RESERVATION_PENDING = 1,
-  CTFLobbyMember_ConnectState_RESERVED = 2,
-  CTFLobbyMember_ConnectState_CONNECTED = 3,
-  CTFLobbyMember_ConnectState_DISCONNECTED = 5
+enum CMsgPartyMMError_Type {
+  CMsgPartyMMError_Type_QUEUE_KICK_NO_PING = 1,
+  CMsgPartyMMError_Type_QUEUE_KICK_AUTH = 2
 };
-bool CTFLobbyMember_ConnectState_IsValid(int value);
-const CTFLobbyMember_ConnectState CTFLobbyMember_ConnectState_ConnectState_MIN = CTFLobbyMember_ConnectState_INVALID;
-const CTFLobbyMember_ConnectState CTFLobbyMember_ConnectState_ConnectState_MAX = CTFLobbyMember_ConnectState_DISCONNECTED;
-const int CTFLobbyMember_ConnectState_ConnectState_ARRAYSIZE = CTFLobbyMember_ConnectState_ConnectState_MAX + 1;
+bool CMsgPartyMMError_Type_IsValid(int value);
+const CMsgPartyMMError_Type CMsgPartyMMError_Type_Type_MIN = CMsgPartyMMError_Type_QUEUE_KICK_NO_PING;
+const CMsgPartyMMError_Type CMsgPartyMMError_Type_Type_MAX = CMsgPartyMMError_Type_QUEUE_KICK_AUTH;
+const int CMsgPartyMMError_Type_Type_ARRAYSIZE = CMsgPartyMMError_Type_Type_MAX + 1;
 
-const ::google::protobuf::EnumDescriptor* CTFLobbyMember_ConnectState_descriptor();
-inline const ::std::string& CTFLobbyMember_ConnectState_Name(CTFLobbyMember_ConnectState value) {
+const ::google::protobuf::EnumDescriptor* CMsgPartyMMError_Type_descriptor();
+inline const ::std::string& CMsgPartyMMError_Type_Name(CMsgPartyMMError_Type value) {
   return ::google::protobuf::internal::NameOfEnum(
-    CTFLobbyMember_ConnectState_descriptor(), value);
+    CMsgPartyMMError_Type_descriptor(), value);
 }
-inline bool CTFLobbyMember_ConnectState_Parse(
-    const ::std::string& name, CTFLobbyMember_ConnectState* value) {
-  return ::google::protobuf::internal::ParseNamedEnum<CTFLobbyMember_ConnectState>(
-    CTFLobbyMember_ConnectState_descriptor(), name, value);
+inline bool CMsgPartyMMError_Type_Parse(
+    const ::std::string& name, CMsgPartyMMError_Type* value) {
+  return ::google::protobuf::internal::ParseNamedEnum<CMsgPartyMMError_Type>(
+    CMsgPartyMMError_Type_descriptor(), name, value);
+}
+enum CSOTFPartyInvite_Type {
+  CSOTFPartyInvite_Type_PENDING_INVITE = 1,
+  CSOTFPartyInvite_Type_PENDING_JOIN_REQUEST = 2
+};
+bool CSOTFPartyInvite_Type_IsValid(int value);
+const CSOTFPartyInvite_Type CSOTFPartyInvite_Type_Type_MIN = CSOTFPartyInvite_Type_PENDING_INVITE;
+const CSOTFPartyInvite_Type CSOTFPartyInvite_Type_Type_MAX = CSOTFPartyInvite_Type_PENDING_JOIN_REQUEST;
+const int CSOTFPartyInvite_Type_Type_ARRAYSIZE = CSOTFPartyInvite_Type_Type_MAX + 1;
+
+const ::google::protobuf::EnumDescriptor* CSOTFPartyInvite_Type_descriptor();
+inline const ::std::string& CSOTFPartyInvite_Type_Name(CSOTFPartyInvite_Type value) {
+  return ::google::protobuf::internal::NameOfEnum(
+    CSOTFPartyInvite_Type_descriptor(), value);
+}
+inline bool CSOTFPartyInvite_Type_Parse(
+    const ::std::string& name, CSOTFPartyInvite_Type* value) {
+  return ::google::protobuf::internal::ParseNamedEnum<CSOTFPartyInvite_Type>(
+    CSOTFPartyInvite_Type_descriptor(), name, value);
+}
+enum CTFLobbyPlayerProto_ConnectState {
+  CTFLobbyPlayerProto_ConnectState_INVALID = 0,
+  CTFLobbyPlayerProto_ConnectState_RESERVATION_PENDING = 1,
+  CTFLobbyPlayerProto_ConnectState_RESERVED = 2,
+  CTFLobbyPlayerProto_ConnectState_CONNECTED = 3,
+  CTFLobbyPlayerProto_ConnectState_DISCONNECTED = 5
+};
+bool CTFLobbyPlayerProto_ConnectState_IsValid(int value);
+const CTFLobbyPlayerProto_ConnectState CTFLobbyPlayerProto_ConnectState_ConnectState_MIN = CTFLobbyPlayerProto_ConnectState_INVALID;
+const CTFLobbyPlayerProto_ConnectState CTFLobbyPlayerProto_ConnectState_ConnectState_MAX = CTFLobbyPlayerProto_ConnectState_DISCONNECTED;
+const int CTFLobbyPlayerProto_ConnectState_ConnectState_ARRAYSIZE = CTFLobbyPlayerProto_ConnectState_ConnectState_MAX + 1;
+
+const ::google::protobuf::EnumDescriptor* CTFLobbyPlayerProto_ConnectState_descriptor();
+inline const ::std::string& CTFLobbyPlayerProto_ConnectState_Name(CTFLobbyPlayerProto_ConnectState value) {
+  return ::google::protobuf::internal::NameOfEnum(
+    CTFLobbyPlayerProto_ConnectState_descriptor(), value);
+}
+inline bool CTFLobbyPlayerProto_ConnectState_Parse(
+    const ::std::string& name, CTFLobbyPlayerProto_ConnectState* value) {
+  return ::google::protobuf::internal::ParseNamedEnum<CTFLobbyPlayerProto_ConnectState>(
+    CTFLobbyPlayerProto_ConnectState_descriptor(), name, value);
+}
+enum CTFLobbyPlayerProto_Type {
+  CTFLobbyPlayerProto_Type_INVALID_PLAYER = 0,
+  CTFLobbyPlayerProto_Type_MATCH_PLAYER = 1,
+  CTFLobbyPlayerProto_Type_STANDBY_PLAYER = 2,
+  CTFLobbyPlayerProto_Type_OBSERVING_PLAYER = 3
+};
+bool CTFLobbyPlayerProto_Type_IsValid(int value);
+const CTFLobbyPlayerProto_Type CTFLobbyPlayerProto_Type_Type_MIN = CTFLobbyPlayerProto_Type_INVALID_PLAYER;
+const CTFLobbyPlayerProto_Type CTFLobbyPlayerProto_Type_Type_MAX = CTFLobbyPlayerProto_Type_OBSERVING_PLAYER;
+const int CTFLobbyPlayerProto_Type_Type_ARRAYSIZE = CTFLobbyPlayerProto_Type_Type_MAX + 1;
+
+const ::google::protobuf::EnumDescriptor* CTFLobbyPlayerProto_Type_descriptor();
+inline const ::std::string& CTFLobbyPlayerProto_Type_Name(CTFLobbyPlayerProto_Type value) {
+  return ::google::protobuf::internal::NameOfEnum(
+    CTFLobbyPlayerProto_Type_descriptor(), value);
+}
+inline bool CTFLobbyPlayerProto_Type_Parse(
+    const ::std::string& name, CTFLobbyPlayerProto_Type* value) {
+  return ::google::protobuf::internal::ParseNamedEnum<CTFLobbyPlayerProto_Type>(
+    CTFLobbyPlayerProto_Type_descriptor(), name, value);
 }
 enum CSOTFGameServerLobby_State {
   CSOTFGameServerLobby_State_UNKNOWN = 0,
@@ -324,28 +413,6 @@ inline bool CSOTFGameServerLobby_State_Parse(
     const ::std::string& name, CSOTFGameServerLobby_State* value) {
   return ::google::protobuf::internal::ParseNamedEnum<CSOTFGameServerLobby_State>(
     CSOTFGameServerLobby_State_descriptor(), name, value);
-}
-enum CSOTFGameServerLobby_LobbyType {
-  CSOTFGameServerLobby_LobbyType_INVALID = -1,
-  CSOTFGameServerLobby_LobbyType_MATCH = 0,
-  CSOTFGameServerLobby_LobbyType_PRACTICE = 1,
-  CSOTFGameServerLobby_LobbyType_TOURNAMENT = 2,
-  CSOTFGameServerLobby_LobbyType_TUTORIAL = 3
-};
-bool CSOTFGameServerLobby_LobbyType_IsValid(int value);
-const CSOTFGameServerLobby_LobbyType CSOTFGameServerLobby_LobbyType_LobbyType_MIN = CSOTFGameServerLobby_LobbyType_INVALID;
-const CSOTFGameServerLobby_LobbyType CSOTFGameServerLobby_LobbyType_LobbyType_MAX = CSOTFGameServerLobby_LobbyType_TUTORIAL;
-const int CSOTFGameServerLobby_LobbyType_LobbyType_ARRAYSIZE = CSOTFGameServerLobby_LobbyType_LobbyType_MAX + 1;
-
-const ::google::protobuf::EnumDescriptor* CSOTFGameServerLobby_LobbyType_descriptor();
-inline const ::std::string& CSOTFGameServerLobby_LobbyType_Name(CSOTFGameServerLobby_LobbyType value) {
-  return ::google::protobuf::internal::NameOfEnum(
-    CSOTFGameServerLobby_LobbyType_descriptor(), value);
-}
-inline bool CSOTFGameServerLobby_LobbyType_Parse(
-    const ::std::string& name, CSOTFGameServerLobby_LobbyType* value) {
-  return ::google::protobuf::internal::ParseNamedEnum<CSOTFGameServerLobby_LobbyType>(
-    CSOTFGameServerLobby_LobbyType_descriptor(), name, value);
 }
 enum CSOTFGameServerLobby_WarMatch {
   CSOTFGameServerLobby_WarMatch_NOPE = 0,
@@ -438,11 +505,11 @@ enum CMsgTFXPSource_XPSourceType {
   CMsgTFXPSource_XPSourceType_SOURCE_COMPETITIVE_WIN = 4,
   CMsgTFXPSource_XPSourceType_SOURCE_COMPETITIVE_LOSS = 5,
   CMsgTFXPSource_XPSourceType_SOURCE_AUTOBALANCE_BONUS = 6,
-  CMsgTFXPSource_XPSourceType_NUM_SOURCE_TYPES = 7
+  CMsgTFXPSource_XPSourceType_SOURCE_PRESTIGE_BONUS = 7
 };
 bool CMsgTFXPSource_XPSourceType_IsValid(int value);
 const CMsgTFXPSource_XPSourceType CMsgTFXPSource_XPSourceType_XPSourceType_MIN = CMsgTFXPSource_XPSourceType_SOURCE_SCORE;
-const CMsgTFXPSource_XPSourceType CMsgTFXPSource_XPSourceType_XPSourceType_MAX = CMsgTFXPSource_XPSourceType_NUM_SOURCE_TYPES;
+const CMsgTFXPSource_XPSourceType CMsgTFXPSource_XPSourceType_XPSourceType_MAX = CMsgTFXPSource_XPSourceType_SOURCE_PRESTIGE_BONUS;
 const int CMsgTFXPSource_XPSourceType_XPSourceType_ARRAYSIZE = CMsgTFXPSource_XPSourceType_XPSourceType_MAX + 1;
 
 const ::google::protobuf::EnumDescriptor* CMsgTFXPSource_XPSourceType_descriptor();
@@ -548,8 +615,6 @@ inline bool CMsgGCDataCenterPing_Update_Status_Parse(
 }
 enum ETFGCMsg {
   k_EMsgGCReportWarKill = 5001,
-  k_EMsgGCVoteKickBanPlayer = 5018,
-  k_EMsgGCVoteKickBanPlayerResult = 5019,
   k_EMsgGCKickPlayer_DEPRECATED = 5020,
   k_EMsgGCStartedTraining_DEPRECATED = 5021,
   k_EMsgGCFreeTrial_ChooseMostHelpfulFriend = 5022,
@@ -620,7 +685,6 @@ enum ETFGCMsg {
   k_EMsgGC_PickupItemEligibility_Query_DEPRECATED_2 = 6001,
   k_EMsgGC_IncrementKillCountAttribute_DEPRECATED = 6100,
   k_EMsgGC_IncrementKillCountResponse_DEPRECATED = 6101,
-  k_EMsgGCCreateOrUpdateParty = 6233,
   k_EMsgGCAbandonCurrentGame = 6235,
   k_EMsgForceSOCacheResend = 6237,
   k_EMsgGCRequestChatChannelList = 6260,
@@ -630,12 +694,9 @@ enum ETFGCMsg {
   k_EMsgGCLeaverDetected = 6272,
   k_EMsgGCLeaverDetectedResponse = 6287,
   k_EMsgGCExitMatchmaking = 6289,
-  k_EMsgGCAcceptInvite = 6291,
-  k_EMsgGCAcceptInviteResponse = 6292,
   k_EMsgGCMatchmakingProgress = 6293,
   k_EMsgGCMvMVictoryInfo = 6294,
   k_EMsgGCGameServerMatchmakingStatus = 6295,
-  k_EMsgGCCreateOrUpdatePartyReply = 6296,
   k_EMsgGCMvMVictory = 6297,
   k_EMsgGCMvMVictoryReply = 6298,
   k_EMsgGCGameServerKickingLobby = 6299,
@@ -680,8 +741,46 @@ enum ETFGCMsg {
   k_EMsgGC_NewMatchForLobbyResponse = 6538,
   k_EMsgGC_ChangeMatchPlayerTeamsRequest = 6539,
   k_EMsgGC_ChangeMatchPlayerTeamsResponse = 6540,
-  k_EMsgGCPlayerVoteKickedAfterLeavingMatch = 6551,
-  k_EMsgGCPlayerVoteKickedAfterLeavingMatchResponse = 6552,
+  k_EMsgGC_QuestIdentify = 6541,
+  k_EMsgGC_QuestDevGive = 6542,
+  k_EMsgGCQuestComplete_Debug = 6544,
+  k_EMsgGC_QuestMapDebug = 6545,
+  k_EMsgGC_QuestMapUnlockNode = 6547,
+  k_EMsgGC_QuestMapPurchaseReward = 6549,
+  k_EMsgGC_SetDisablePartyQuestProgress = 6550,
+  k_EMsgGCQuestProgressReport = 6553,
+  k_EMsgGCParty_SetOptions = 6554,
+  k_EMsgGCParty_SetOptionsResponse = 6555,
+  k_EMsgGCParty_QueueForMatch = 6556,
+  k_EMsgGCParty_QueueForMatchResponse = 6557,
+  k_EMsgGCParty_RemoveFromQueue = 6558,
+  k_EMsgGCParty_RemoveFromQueueResponse = 6559,
+  k_EMsgGCParty_InvitePlayer = 6560,
+  k_EMsgGCParty_RequestJoinPlayer = 6561,
+  k_EMsgGCParty_SendChat = 6562,
+  k_EMsgGCParty_ChatMsg = 6563,
+  k_EMsgGCQuestNodeTurnIn = 6564,
+  k_EMsgGCConsumePaintKit = 6565,
+  k_EMsgGC_Painkit_DevGrant = 6566,
+  k_EMsgGCParty_QueueForStandby = 6567,
+  k_EMsgGCParty_QueueForStandbyResponse = 6568,
+  k_EMsgGCParty_RemoveFromStandbyQueue = 6569,
+  k_EMsgGCParty_RemoveFromStandbyQueueResponse = 6570,
+  k_EMsgGCParty_ClearPendingPlayer = 6571,
+  k_EMsgGCParty_ClearPendingPlayerResponse = 6572,
+  k_EMsgGCParty_ClearOtherPartyRequest = 6573,
+  k_EMsgGCParty_ClearOtherPartyRequestResponse = 6574,
+  k_EMsgGCParty_PromoteToLeader = 6575,
+  k_EMsgGCParty_KickMember = 6576,
+  k_EMsgGCQuestStrangeEvent = 6577,
+  k_EMsgGC_AcceptLobbyInvite = 6578,
+  k_EMsgGC_AcceptLobbyInviteReply = 6579,
+  k_EMsgGC_SDRTicket = 6580,
+  k_EMsgGC_ProcessMatchVoteKick = 6581,
+  k_EMsgGC_ProcessMatchVoteKickResponse = 6582,
+  k_EMsgGCToGC_SendAccountBannedNotifications = 6584,
+  k_EMsgGCToGC_SendNotification = 6585,
+  k_EMsgGCParty_MMError = 6586,
   k_EMsgGCDev_GrantWarKill = 10001
 };
 bool ETFGCMsg_IsValid(int value);
@@ -717,50 +816,92 @@ inline bool EServerModificationItemType_Parse(
   return ::google::protobuf::internal::ParseNamedEnum<EServerModificationItemType>(
     EServerModificationItemType_descriptor(), name, value);
 }
-enum TF_MatchmakingMode {
-  TF_Matchmaking_INVALID = 0,
-  TF_Matchmaking_MVM = 1,
-  TF_Matchmaking_LADDER = 2,
-  TF_Matchmaking_CASUAL = 3
+enum ETFSyncedMMMenuStep {
+  k_eTFSyncedMMMenuStep_Invalid = -1,
+  k_eTFSyncedMMMenuStep_None = 0,
+  k_eTFSyncedMMMenuStep_Configuring_Mode = 1,
+  k_eTFSyncedMMMenuStep_MvM_Selecting_Mode = 2,
+  k_eTFSyncedMMMenuStep_MvM_Selecting_Tour = 3,
+  k_eTFSyncedMMMenuStep_MvM_Selecting_Missions = 4
 };
-bool TF_MatchmakingMode_IsValid(int value);
-const TF_MatchmakingMode TF_MatchmakingMode_MIN = TF_Matchmaking_INVALID;
-const TF_MatchmakingMode TF_MatchmakingMode_MAX = TF_Matchmaking_CASUAL;
-const int TF_MatchmakingMode_ARRAYSIZE = TF_MatchmakingMode_MAX + 1;
+bool ETFSyncedMMMenuStep_IsValid(int value);
+const ETFSyncedMMMenuStep ETFSyncedMMMenuStep_MIN = k_eTFSyncedMMMenuStep_Invalid;
+const ETFSyncedMMMenuStep ETFSyncedMMMenuStep_MAX = k_eTFSyncedMMMenuStep_MvM_Selecting_Missions;
+const int ETFSyncedMMMenuStep_ARRAYSIZE = ETFSyncedMMMenuStep_MAX + 1;
 
-const ::google::protobuf::EnumDescriptor* TF_MatchmakingMode_descriptor();
-inline const ::std::string& TF_MatchmakingMode_Name(TF_MatchmakingMode value) {
+const ::google::protobuf::EnumDescriptor* ETFSyncedMMMenuStep_descriptor();
+inline const ::std::string& ETFSyncedMMMenuStep_Name(ETFSyncedMMMenuStep value) {
   return ::google::protobuf::internal::NameOfEnum(
-    TF_MatchmakingMode_descriptor(), value);
+    ETFSyncedMMMenuStep_descriptor(), value);
 }
-inline bool TF_MatchmakingMode_Parse(
-    const ::std::string& name, TF_MatchmakingMode* value) {
-  return ::google::protobuf::internal::ParseNamedEnum<TF_MatchmakingMode>(
-    TF_MatchmakingMode_descriptor(), name, value);
+inline bool ETFSyncedMMMenuStep_Parse(
+    const ::std::string& name, ETFSyncedMMMenuStep* value) {
+  return ::google::protobuf::internal::ParseNamedEnum<ETFSyncedMMMenuStep>(
+    ETFSyncedMMMenuStep_descriptor(), name, value);
 }
-enum TF_Matchmaking_WizardStep {
-  TF_Matchmaking_WizardStep_INVALID = 0,
-  TF_Matchmaking_WizardStep_MVM_PLAY_FOR_BRAGGING_RIGHTS = 1,
-  TF_Matchmaking_WizardStep_MVM_TOUR_OF_DUTY = 2,
-  TF_Matchmaking_WizardStep_MVM_CHALLENGE = 3,
-  TF_Matchmaking_WizardStep_SEARCHING = 4,
-  TF_Matchmaking_WizardStep_LADDER = 5,
-  TF_Matchmaking_WizardStep_CASUAL = 6
+enum ETFMatchGroup {
+  k_eTFMatchGroup_Invalid = -1,
+  k_eTFMatchGroup_MvM_Practice = 0,
+  k_eTFMatchGroup_MvM_MannUp = 1,
+  k_eTFMatchGroup_First = 0,
+  k_eTFMatchGroup_MvM_Default = 0,
+  k_eTFMatchGroup_MvM_First = 0,
+  k_eTFMatchGroup_MvM_Last = 1,
+  k_eTFMatchGroup_Ladder_6v6 = 2,
+  k_eTFMatchGroup_Ladder_9v9 = 3,
+  k_eTFMatchGroup_Ladder_12v12 = 4,
+  k_eTFMatchGroup_Ladder_Default = 2,
+  k_eTFMatchGroup_Ladder_First = 2,
+  k_eTFMatchGroup_Ladder_Last = 4,
+  k_eTFMatchGroup_Casual_6v6 = 5,
+  k_eTFMatchGroup_Casual_9v9 = 6,
+  k_eTFMatchGroup_Casual_12v12 = 7,
+  k_eTFMatchGroup_Casual_Default = 7,
+  k_eTFMatchGroup_Casual_First = 5,
+  k_eTFMatchGroup_Casual_Last = 7,
+  k_eTFMatchGroup_Event_Placeholder = 8,
+  k_eTFMatchGroup_Event_Default = 8,
+  k_eTFMatchGroup_Event_First = 8,
+  k_eTFMatchGroup_Event_Last = 8
 };
-bool TF_Matchmaking_WizardStep_IsValid(int value);
-const TF_Matchmaking_WizardStep TF_Matchmaking_WizardStep_MIN = TF_Matchmaking_WizardStep_INVALID;
-const TF_Matchmaking_WizardStep TF_Matchmaking_WizardStep_MAX = TF_Matchmaking_WizardStep_CASUAL;
-const int TF_Matchmaking_WizardStep_ARRAYSIZE = TF_Matchmaking_WizardStep_MAX + 1;
+bool ETFMatchGroup_IsValid(int value);
+const ETFMatchGroup ETFMatchGroup_MIN = k_eTFMatchGroup_Invalid;
+const ETFMatchGroup ETFMatchGroup_MAX = k_eTFMatchGroup_Event_Placeholder;
+const int ETFMatchGroup_ARRAYSIZE = ETFMatchGroup_MAX + 1;
 
-const ::google::protobuf::EnumDescriptor* TF_Matchmaking_WizardStep_descriptor();
-inline const ::std::string& TF_Matchmaking_WizardStep_Name(TF_Matchmaking_WizardStep value) {
+const ::google::protobuf::EnumDescriptor* ETFMatchGroup_descriptor();
+inline const ::std::string& ETFMatchGroup_Name(ETFMatchGroup value) {
   return ::google::protobuf::internal::NameOfEnum(
-    TF_Matchmaking_WizardStep_descriptor(), value);
+    ETFMatchGroup_descriptor(), value);
 }
-inline bool TF_Matchmaking_WizardStep_Parse(
-    const ::std::string& name, TF_Matchmaking_WizardStep* value) {
-  return ::google::protobuf::internal::ParseNamedEnum<TF_Matchmaking_WizardStep>(
-    TF_Matchmaking_WizardStep_descriptor(), name, value);
+inline bool ETFMatchGroup_Parse(
+    const ::std::string& name, ETFMatchGroup* value) {
+  return ::google::protobuf::internal::ParseNamedEnum<ETFMatchGroup>(
+    ETFMatchGroup_descriptor(), name, value);
+}
+enum ETFPartyChatType {
+  k_eTFPartyChatType_Invalid = 0,
+  k_eTFPartyChatType_MemberChat = 1,
+  k_eTFPartyChatType_Synthetic_MemberJoin = 1000,
+  k_eTFPartyChatType_Synthetic_MemberLeave = 1001,
+  k_eTFPartyChatType_Synthetic_SendFailed = 1002,
+  k_eTFPartyChatType_Synthetic_MemberOnline = 1003,
+  k_eTFPartyChatType_Synthetic_MemberOffline = 1004
+};
+bool ETFPartyChatType_IsValid(int value);
+const ETFPartyChatType ETFPartyChatType_MIN = k_eTFPartyChatType_Invalid;
+const ETFPartyChatType ETFPartyChatType_MAX = k_eTFPartyChatType_Synthetic_MemberOffline;
+const int ETFPartyChatType_ARRAYSIZE = ETFPartyChatType_MAX + 1;
+
+const ::google::protobuf::EnumDescriptor* ETFPartyChatType_descriptor();
+inline const ::std::string& ETFPartyChatType_Name(ETFPartyChatType value) {
+  return ::google::protobuf::internal::NameOfEnum(
+    ETFPartyChatType_descriptor(), value);
+}
+inline bool ETFPartyChatType_Parse(
+    const ::std::string& name, ETFPartyChatType* value) {
+  return ::google::protobuf::internal::ParseNamedEnum<ETFPartyChatType>(
+    ETFPartyChatType_descriptor(), name, value);
 }
 enum TF_GC_GameState {
   TF_GC_GAMESTATE_STATE_INIT = 0,
@@ -833,46 +974,27 @@ inline bool TFMatchLeaveReason_Parse(
   return ::google::protobuf::internal::ParseNamedEnum<TFMatchLeaveReason>(
     TFMatchLeaveReason_descriptor(), name, value);
 }
-enum TFLobbyReadyState {
-  TFLobbyReadyState_UNDECLARED = 0,
-  TFLobbyReadyState_ACCEPTED = 1,
-  TFLobbyReadyState_DECLINED = 2
+enum TFVoteKickReason {
+  TFVoteKickReason_Invalid = -1,
+  TFVoteKickReason_Other = 0,
+  TFVoteKickReason_Cheating = 1,
+  TFVoteKickReason_Idle = 2,
+  TFVoteKickReason_Scamming = 3
 };
-bool TFLobbyReadyState_IsValid(int value);
-const TFLobbyReadyState TFLobbyReadyState_MIN = TFLobbyReadyState_UNDECLARED;
-const TFLobbyReadyState TFLobbyReadyState_MAX = TFLobbyReadyState_DECLINED;
-const int TFLobbyReadyState_ARRAYSIZE = TFLobbyReadyState_MAX + 1;
+bool TFVoteKickReason_IsValid(int value);
+const TFVoteKickReason TFVoteKickReason_MIN = TFVoteKickReason_Invalid;
+const TFVoteKickReason TFVoteKickReason_MAX = TFVoteKickReason_Scamming;
+const int TFVoteKickReason_ARRAYSIZE = TFVoteKickReason_MAX + 1;
 
-const ::google::protobuf::EnumDescriptor* TFLobbyReadyState_descriptor();
-inline const ::std::string& TFLobbyReadyState_Name(TFLobbyReadyState value) {
+const ::google::protobuf::EnumDescriptor* TFVoteKickReason_descriptor();
+inline const ::std::string& TFVoteKickReason_Name(TFVoteKickReason value) {
   return ::google::protobuf::internal::NameOfEnum(
-    TFLobbyReadyState_descriptor(), value);
+    TFVoteKickReason_descriptor(), value);
 }
-inline bool TFLobbyReadyState_Parse(
-    const ::std::string& name, TFLobbyReadyState* value) {
-  return ::google::protobuf::internal::ParseNamedEnum<TFLobbyReadyState>(
-    TFLobbyReadyState_descriptor(), name, value);
-}
-enum ChatChannelType_t {
-  ChatChannelType_Regional = 0,
-  ChatChannelType_Custom = 1,
-  ChatChannelType_Party = 2,
-  ChatChannelType_Lobby = 3
-};
-bool ChatChannelType_t_IsValid(int value);
-const ChatChannelType_t ChatChannelType_t_MIN = ChatChannelType_Regional;
-const ChatChannelType_t ChatChannelType_t_MAX = ChatChannelType_Lobby;
-const int ChatChannelType_t_ARRAYSIZE = ChatChannelType_t_MAX + 1;
-
-const ::google::protobuf::EnumDescriptor* ChatChannelType_t_descriptor();
-inline const ::std::string& ChatChannelType_t_Name(ChatChannelType_t value) {
-  return ::google::protobuf::internal::NameOfEnum(
-    ChatChannelType_t_descriptor(), value);
-}
-inline bool ChatChannelType_t_Parse(
-    const ::std::string& name, ChatChannelType_t* value) {
-  return ::google::protobuf::internal::ParseNamedEnum<ChatChannelType_t>(
-    ChatChannelType_t_descriptor(), name, value);
+inline bool TFVoteKickReason_Parse(
+    const ::std::string& name, TFVoteKickReason* value) {
+  return ::google::protobuf::internal::ParseNamedEnum<TFVoteKickReason>(
+    TFVoteKickReason_descriptor(), name, value);
 }
 enum ServerMatchmakingState {
   ServerMatchmakingState_INVALID = 0,
@@ -900,11 +1022,12 @@ enum SurveyQuestionType {
   QUESTION_MATCH_QUALITY = 0,
   QUESTION_MAP_QUALITY = 1,
   QUESTION_COMP_INQUIRY = 2,
-  QUESTION_CASUAL_INQUIRY = 3
+  QUESTION_CASUAL_INQUIRY = 3,
+  QUESTION_RANDOM_CRIT = 4
 };
 bool SurveyQuestionType_IsValid(int value);
 const SurveyQuestionType SurveyQuestionType_MIN = QUESTION_MATCH_QUALITY;
-const SurveyQuestionType SurveyQuestionType_MAX = QUESTION_CASUAL_INQUIRY;
+const SurveyQuestionType SurveyQuestionType_MAX = QUESTION_RANDOM_CRIT;
 const int SurveyQuestionType_ARRAYSIZE = SurveyQuestionType_MAX + 1;
 
 const ::google::protobuf::EnumDescriptor* SurveyQuestionType_descriptor();
@@ -1281,16 +1404,57 @@ class CMsgTFWorldStatus : public ::google::protobuf::Message {
   inline bool beta_stress_test_event_active() const;
   inline void set_beta_stress_test_event_active(bool value);
 
+  // optional .ETFMatchGroup event_match_group = 2 [default = k_eTFMatchGroup_Invalid];
+  inline bool has_event_match_group() const;
+  inline void clear_event_match_group();
+  static const int kEventMatchGroupFieldNumber = 2;
+  inline ::ETFMatchGroup event_match_group() const;
+  inline void set_event_match_group(::ETFMatchGroup value);
+
+  // optional fixed32 event_expire_time = 3 [default = 0];
+  inline bool has_event_expire_time() const;
+  inline void clear_event_expire_time();
+  static const int kEventExpireTimeFieldNumber = 3;
+  inline ::google::protobuf::uint32 event_expire_time() const;
+  inline void set_event_expire_time(::google::protobuf::uint32 value);
+
+  // optional uint32 active_client_version = 4;
+  inline bool has_active_client_version() const;
+  inline void clear_active_client_version();
+  static const int kActiveClientVersionFieldNumber = 4;
+  inline ::google::protobuf::uint32 active_client_version() const;
+  inline void set_active_client_version(::google::protobuf::uint32 value);
+
+  // repeated .ETFMatchGroup disabled_match_groups = 5;
+  inline int disabled_match_groups_size() const;
+  inline void clear_disabled_match_groups();
+  static const int kDisabledMatchGroupsFieldNumber = 5;
+  inline ::ETFMatchGroup disabled_match_groups(int index) const;
+  inline void set_disabled_match_groups(int index, ::ETFMatchGroup value);
+  inline void add_disabled_match_groups(::ETFMatchGroup value);
+  inline const ::google::protobuf::RepeatedField<int>& disabled_match_groups() const;
+  inline ::google::protobuf::RepeatedField<int>* mutable_disabled_match_groups();
+
   // @@protoc_insertion_point(class_scope:CMsgTFWorldStatus)
  private:
   inline void set_has_beta_stress_test_event_active();
   inline void clear_has_beta_stress_test_event_active();
+  inline void set_has_event_match_group();
+  inline void clear_has_event_match_group();
+  inline void set_has_event_expire_time();
+  inline void clear_has_event_expire_time();
+  inline void set_has_active_client_version();
+  inline void clear_has_active_client_version();
 
   ::google::protobuf::UnknownFieldSet _unknown_fields_;
 
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
   bool beta_stress_test_event_active_;
+  int event_match_group_;
+  ::google::protobuf::uint32 event_expire_time_;
+  ::google::protobuf::uint32 active_client_version_;
+  ::google::protobuf::RepeatedField<int> disabled_match_groups_;
   friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
   friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
   friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
@@ -1525,234 +1689,6 @@ class CSOTFMapContribution : public ::google::protobuf::Message {
 
   void InitAsDefaultInstance();
   static CSOTFMapContribution* default_instance_;
-};
-// -------------------------------------------------------------------
-
-class CMsgTFVoteKickBanPlayer : public ::google::protobuf::Message {
- public:
-  CMsgTFVoteKickBanPlayer();
-  virtual ~CMsgTFVoteKickBanPlayer();
-
-  CMsgTFVoteKickBanPlayer(const CMsgTFVoteKickBanPlayer& from);
-
-  inline CMsgTFVoteKickBanPlayer& operator=(const CMsgTFVoteKickBanPlayer& from) {
-    CopyFrom(from);
-    return *this;
-  }
-
-  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
-    return _unknown_fields_;
-  }
-
-  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
-    return &_unknown_fields_;
-  }
-
-  static const ::google::protobuf::Descriptor* descriptor();
-  static const CMsgTFVoteKickBanPlayer& default_instance();
-
-  void Swap(CMsgTFVoteKickBanPlayer* other);
-
-  // implements Message ----------------------------------------------
-
-  CMsgTFVoteKickBanPlayer* New() const;
-  void CopyFrom(const ::google::protobuf::Message& from);
-  void MergeFrom(const ::google::protobuf::Message& from);
-  void CopyFrom(const CMsgTFVoteKickBanPlayer& from);
-  void MergeFrom(const CMsgTFVoteKickBanPlayer& from);
-  void Clear();
-  bool IsInitialized() const;
-
-  int ByteSize() const;
-  bool MergePartialFromCodedStream(
-      ::google::protobuf::io::CodedInputStream* input);
-  void SerializeWithCachedSizes(
-      ::google::protobuf::io::CodedOutputStream* output) const;
-  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
-  int GetCachedSize() const { return _cached_size_; }
-  private:
-  void SharedCtor();
-  void SharedDtor();
-  void SetCachedSize(int size) const;
-  public:
-  ::google::protobuf::Metadata GetMetadata() const;
-
-  // nested types ----------------------------------------------------
-
-  // accessors -------------------------------------------------------
-
-  // optional uint32 account_id_subject = 1;
-  inline bool has_account_id_subject() const;
-  inline void clear_account_id_subject();
-  static const int kAccountIdSubjectFieldNumber = 1;
-  inline ::google::protobuf::uint32 account_id_subject() const;
-  inline void set_account_id_subject(::google::protobuf::uint32 value);
-
-  // optional uint32 kick_reason = 2;
-  inline bool has_kick_reason() const;
-  inline void clear_kick_reason();
-  static const int kKickReasonFieldNumber = 2;
-  inline ::google::protobuf::uint32 kick_reason() const;
-  inline void set_kick_reason(::google::protobuf::uint32 value);
-
-  // @@protoc_insertion_point(class_scope:CMsgTFVoteKickBanPlayer)
- private:
-  inline void set_has_account_id_subject();
-  inline void clear_has_account_id_subject();
-  inline void set_has_kick_reason();
-  inline void clear_has_kick_reason();
-
-  ::google::protobuf::UnknownFieldSet _unknown_fields_;
-
-  ::google::protobuf::uint32 _has_bits_[1];
-  mutable int _cached_size_;
-  ::google::protobuf::uint32 account_id_subject_;
-  ::google::protobuf::uint32 kick_reason_;
-  friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
-  friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
-  friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
-
-  void InitAsDefaultInstance();
-  static CMsgTFVoteKickBanPlayer* default_instance_;
-};
-// -------------------------------------------------------------------
-
-class CMsgTFVoteKickBanPlayerResult : public ::google::protobuf::Message {
- public:
-  CMsgTFVoteKickBanPlayerResult();
-  virtual ~CMsgTFVoteKickBanPlayerResult();
-
-  CMsgTFVoteKickBanPlayerResult(const CMsgTFVoteKickBanPlayerResult& from);
-
-  inline CMsgTFVoteKickBanPlayerResult& operator=(const CMsgTFVoteKickBanPlayerResult& from) {
-    CopyFrom(from);
-    return *this;
-  }
-
-  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
-    return _unknown_fields_;
-  }
-
-  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
-    return &_unknown_fields_;
-  }
-
-  static const ::google::protobuf::Descriptor* descriptor();
-  static const CMsgTFVoteKickBanPlayerResult& default_instance();
-
-  void Swap(CMsgTFVoteKickBanPlayerResult* other);
-
-  // implements Message ----------------------------------------------
-
-  CMsgTFVoteKickBanPlayerResult* New() const;
-  void CopyFrom(const ::google::protobuf::Message& from);
-  void MergeFrom(const ::google::protobuf::Message& from);
-  void CopyFrom(const CMsgTFVoteKickBanPlayerResult& from);
-  void MergeFrom(const CMsgTFVoteKickBanPlayerResult& from);
-  void Clear();
-  bool IsInitialized() const;
-
-  int ByteSize() const;
-  bool MergePartialFromCodedStream(
-      ::google::protobuf::io::CodedInputStream* input);
-  void SerializeWithCachedSizes(
-      ::google::protobuf::io::CodedOutputStream* output) const;
-  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
-  int GetCachedSize() const { return _cached_size_; }
-  private:
-  void SharedCtor();
-  void SharedDtor();
-  void SetCachedSize(int size) const;
-  public:
-  ::google::protobuf::Metadata GetMetadata() const;
-
-  // nested types ----------------------------------------------------
-
-  // accessors -------------------------------------------------------
-
-  // optional uint32 account_id_initiator = 1;
-  inline bool has_account_id_initiator() const;
-  inline void clear_account_id_initiator();
-  static const int kAccountIdInitiatorFieldNumber = 1;
-  inline ::google::protobuf::uint32 account_id_initiator() const;
-  inline void set_account_id_initiator(::google::protobuf::uint32 value);
-
-  // optional uint32 account_id_subject = 2;
-  inline bool has_account_id_subject() const;
-  inline void clear_account_id_subject();
-  static const int kAccountIdSubjectFieldNumber = 2;
-  inline ::google::protobuf::uint32 account_id_subject() const;
-  inline void set_account_id_subject(::google::protobuf::uint32 value);
-
-  // optional uint32 kick_reason = 3;
-  inline bool has_kick_reason() const;
-  inline void clear_kick_reason();
-  static const int kKickReasonFieldNumber = 3;
-  inline ::google::protobuf::uint32 kick_reason() const;
-  inline void set_kick_reason(::google::protobuf::uint32 value);
-
-  // optional bool kick_successful = 4;
-  inline bool has_kick_successful() const;
-  inline void clear_kick_successful();
-  static const int kKickSuccessfulFieldNumber = 4;
-  inline bool kick_successful() const;
-  inline void set_kick_successful(bool value);
-
-  // optional uint32 num_yes_votes = 5;
-  inline bool has_num_yes_votes() const;
-  inline void clear_num_yes_votes();
-  static const int kNumYesVotesFieldNumber = 5;
-  inline ::google::protobuf::uint32 num_yes_votes() const;
-  inline void set_num_yes_votes(::google::protobuf::uint32 value);
-
-  // optional uint32 num_no_votes = 6;
-  inline bool has_num_no_votes() const;
-  inline void clear_num_no_votes();
-  static const int kNumNoVotesFieldNumber = 6;
-  inline ::google::protobuf::uint32 num_no_votes() const;
-  inline void set_num_no_votes(::google::protobuf::uint32 value);
-
-  // optional uint32 num_possible_votes = 7;
-  inline bool has_num_possible_votes() const;
-  inline void clear_num_possible_votes();
-  static const int kNumPossibleVotesFieldNumber = 7;
-  inline ::google::protobuf::uint32 num_possible_votes() const;
-  inline void set_num_possible_votes(::google::protobuf::uint32 value);
-
-  // @@protoc_insertion_point(class_scope:CMsgTFVoteKickBanPlayerResult)
- private:
-  inline void set_has_account_id_initiator();
-  inline void clear_has_account_id_initiator();
-  inline void set_has_account_id_subject();
-  inline void clear_has_account_id_subject();
-  inline void set_has_kick_reason();
-  inline void clear_has_kick_reason();
-  inline void set_has_kick_successful();
-  inline void clear_has_kick_successful();
-  inline void set_has_num_yes_votes();
-  inline void clear_has_num_yes_votes();
-  inline void set_has_num_no_votes();
-  inline void clear_has_num_no_votes();
-  inline void set_has_num_possible_votes();
-  inline void clear_has_num_possible_votes();
-
-  ::google::protobuf::UnknownFieldSet _unknown_fields_;
-
-  ::google::protobuf::uint32 _has_bits_[1];
-  mutable int _cached_size_;
-  ::google::protobuf::uint32 account_id_initiator_;
-  ::google::protobuf::uint32 account_id_subject_;
-  ::google::protobuf::uint32 kick_reason_;
-  bool kick_successful_;
-  ::google::protobuf::uint32 num_yes_votes_;
-  ::google::protobuf::uint32 num_no_votes_;
-  ::google::protobuf::uint32 num_possible_votes_;
-  friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
-  friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
-  friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
-
-  void InitAsDefaultInstance();
-  static CMsgTFVoteKickBanPlayerResult* default_instance_;
 };
 // -------------------------------------------------------------------
 
@@ -6432,6 +6368,125 @@ class CMsgGC_PickupItemEligibility_QueryResponse : public ::google::protobuf::Me
 };
 // -------------------------------------------------------------------
 
+class CSOTFPartyMember_Activity : public ::google::protobuf::Message {
+ public:
+  CSOTFPartyMember_Activity();
+  virtual ~CSOTFPartyMember_Activity();
+
+  CSOTFPartyMember_Activity(const CSOTFPartyMember_Activity& from);
+
+  inline CSOTFPartyMember_Activity& operator=(const CSOTFPartyMember_Activity& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const CSOTFPartyMember_Activity& default_instance();
+
+  void Swap(CSOTFPartyMember_Activity* other);
+
+  // implements Message ----------------------------------------------
+
+  CSOTFPartyMember_Activity* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const CSOTFPartyMember_Activity& from);
+  void MergeFrom(const CSOTFPartyMember_Activity& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional fixed64 lobby_id = 1;
+  inline bool has_lobby_id() const;
+  inline void clear_lobby_id();
+  static const int kLobbyIdFieldNumber = 1;
+  inline ::google::protobuf::uint64 lobby_id() const;
+  inline void set_lobby_id(::google::protobuf::uint64 value);
+
+  // optional .ETFMatchGroup lobby_match_group = 2;
+  inline bool has_lobby_match_group() const;
+  inline void clear_lobby_match_group();
+  static const int kLobbyMatchGroupFieldNumber = 2;
+  inline ::ETFMatchGroup lobby_match_group() const;
+  inline void set_lobby_match_group(::ETFMatchGroup value);
+
+  // optional bool multiqueue_blocked = 3;
+  inline bool has_multiqueue_blocked() const;
+  inline void clear_multiqueue_blocked();
+  static const int kMultiqueueBlockedFieldNumber = 3;
+  inline bool multiqueue_blocked() const;
+  inline void set_multiqueue_blocked(bool value);
+
+  // optional bool online = 4;
+  inline bool has_online() const;
+  inline void clear_online();
+  static const int kOnlineFieldNumber = 4;
+  inline bool online() const;
+  inline void set_online(bool value);
+
+  // optional uint32 client_version = 5;
+  inline bool has_client_version() const;
+  inline void clear_client_version();
+  static const int kClientVersionFieldNumber = 5;
+  inline ::google::protobuf::uint32 client_version() const;
+  inline void set_client_version(::google::protobuf::uint32 value);
+
+  // @@protoc_insertion_point(class_scope:CSOTFPartyMember.Activity)
+ private:
+  inline void set_has_lobby_id();
+  inline void clear_has_lobby_id();
+  inline void set_has_lobby_match_group();
+  inline void clear_has_lobby_match_group();
+  inline void set_has_multiqueue_blocked();
+  inline void clear_has_multiqueue_blocked();
+  inline void set_has_online();
+  inline void clear_has_online();
+  inline void set_has_client_version();
+  inline void clear_has_client_version();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::google::protobuf::uint64 lobby_id_;
+  int lobby_match_group_;
+  bool multiqueue_blocked_;
+  bool online_;
+  ::google::protobuf::uint32 client_version_;
+  friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
+
+  void InitAsDefaultInstance();
+  static CSOTFPartyMember_Activity* default_instance_;
+};
+// -------------------------------------------------------------------
+
 class CSOTFPartyMember : public ::google::protobuf::Message {
  public:
   CSOTFPartyMember();
@@ -6483,6 +6538,8 @@ class CSOTFPartyMember : public ::google::protobuf::Message {
 
   // nested types ----------------------------------------------------
 
+  typedef CSOTFPartyMember_Activity Activity;
+
   // accessors -------------------------------------------------------
 
   // optional bool owns_ticket = 2;
@@ -6506,40 +6563,12 @@ class CSOTFPartyMember : public ::google::protobuf::Message {
   inline ::google::protobuf::uint32 badge_level() const;
   inline void set_badge_level(::google::protobuf::uint32 value);
 
-  // optional bool squad_surplus = 5;
-  inline bool has_squad_surplus() const;
-  inline void clear_squad_surplus();
-  static const int kSquadSurplusFieldNumber = 5;
-  inline bool squad_surplus() const;
-  inline void set_squad_surplus(bool value);
-
-  // optional bool is_banned = 8 [default = false];
-  inline bool has_is_banned() const;
-  inline void clear_is_banned();
-  static const int kIsBannedFieldNumber = 8;
-  inline bool is_banned() const;
-  inline void set_is_banned(bool value);
-
   // optional bool competitive_access = 9;
   inline bool has_competitive_access() const;
   inline void clear_competitive_access();
   static const int kCompetitiveAccessFieldNumber = 9;
   inline bool competitive_access() const;
   inline void set_competitive_access(bool value);
-
-  // optional uint32 ladder_rank = 12;
-  inline bool has_ladder_rank() const;
-  inline void clear_ladder_rank();
-  static const int kLadderRankFieldNumber = 12;
-  inline ::google::protobuf::uint32 ladder_rank() const;
-  inline void set_ladder_rank(::google::protobuf::uint32 value);
-
-  // optional bool is_low_priority = 13 [default = false];
-  inline bool has_is_low_priority() const;
-  inline void clear_is_low_priority();
-  static const int kIsLowPriorityFieldNumber = 13;
-  inline bool is_low_priority() const;
-  inline void set_is_low_priority(bool value);
 
   // optional uint32 experience = 14;
   inline bool has_experience() const;
@@ -6548,12 +6577,58 @@ class CSOTFPartyMember : public ::google::protobuf::Message {
   inline ::google::protobuf::uint32 experience() const;
   inline void set_experience(::google::protobuf::uint32 value);
 
-  // optional uint32 skillrating = 15 [default = 10000];
-  inline bool has_skillrating() const;
-  inline void clear_skillrating();
-  static const int kSkillratingFieldNumber = 15;
-  inline ::google::protobuf::uint32 skillrating() const;
-  inline void set_skillrating(::google::protobuf::uint32 value);
+  // optional .CTFPerPlayerMatchCriteriaProto player_criteria = 16;
+  inline bool has_player_criteria() const;
+  inline void clear_player_criteria();
+  static const int kPlayerCriteriaFieldNumber = 16;
+  inline const ::CTFPerPlayerMatchCriteriaProto& player_criteria() const;
+  inline ::CTFPerPlayerMatchCriteriaProto* mutable_player_criteria();
+  inline ::CTFPerPlayerMatchCriteriaProto* release_player_criteria();
+  inline void set_allocated_player_criteria(::CTFPerPlayerMatchCriteriaProto* player_criteria);
+
+  // optional .CSOTFPartyMember.Activity activity = 17;
+  inline bool has_activity() const;
+  inline void clear_activity();
+  static const int kActivityFieldNumber = 17;
+  inline const ::CSOTFPartyMember_Activity& activity() const;
+  inline ::CSOTFPartyMember_Activity* mutable_activity();
+  inline ::CSOTFPartyMember_Activity* release_activity();
+  inline void set_allocated_activity(::CSOTFPartyMember_Activity* activity);
+
+  // optional bool casual_banned = 18;
+  inline bool has_casual_banned() const;
+  inline void clear_casual_banned();
+  static const int kCasualBannedFieldNumber = 18;
+  inline bool casual_banned() const;
+  inline void set_casual_banned(bool value);
+
+  // optional bool ranked_banned = 19;
+  inline bool has_ranked_banned() const;
+  inline void clear_ranked_banned();
+  static const int kRankedBannedFieldNumber = 19;
+  inline bool ranked_banned() const;
+  inline void set_ranked_banned(bool value);
+
+  // optional bool casual_low_priority = 20;
+  inline bool has_casual_low_priority() const;
+  inline void clear_casual_low_priority();
+  static const int kCasualLowPriorityFieldNumber = 20;
+  inline bool casual_low_priority() const;
+  inline void set_casual_low_priority(bool value);
+
+  // optional bool ranked_low_priority = 21;
+  inline bool has_ranked_low_priority() const;
+  inline void clear_ranked_low_priority();
+  static const int kRankedLowPriorityFieldNumber = 21;
+  inline bool ranked_low_priority() const;
+  inline void set_ranked_low_priority(bool value);
+
+  // optional bool lobby_standby = 22;
+  inline bool has_lobby_standby() const;
+  inline void clear_lobby_standby();
+  static const int kLobbyStandbyFieldNumber = 22;
+  inline bool lobby_standby() const;
+  inline void set_lobby_standby(bool value);
 
   // @@protoc_insertion_point(class_scope:CSOTFPartyMember)
  private:
@@ -6563,20 +6638,24 @@ class CSOTFPartyMember : public ::google::protobuf::Message {
   inline void clear_has_completed_missions();
   inline void set_has_badge_level();
   inline void clear_has_badge_level();
-  inline void set_has_squad_surplus();
-  inline void clear_has_squad_surplus();
-  inline void set_has_is_banned();
-  inline void clear_has_is_banned();
   inline void set_has_competitive_access();
   inline void clear_has_competitive_access();
-  inline void set_has_ladder_rank();
-  inline void clear_has_ladder_rank();
-  inline void set_has_is_low_priority();
-  inline void clear_has_is_low_priority();
   inline void set_has_experience();
   inline void clear_has_experience();
-  inline void set_has_skillrating();
-  inline void clear_has_skillrating();
+  inline void set_has_player_criteria();
+  inline void clear_has_player_criteria();
+  inline void set_has_activity();
+  inline void clear_has_activity();
+  inline void set_has_casual_banned();
+  inline void clear_has_casual_banned();
+  inline void set_has_ranked_banned();
+  inline void clear_has_ranked_banned();
+  inline void set_has_casual_low_priority();
+  inline void clear_has_casual_low_priority();
+  inline void set_has_ranked_low_priority();
+  inline void clear_has_ranked_low_priority();
+  inline void set_has_lobby_standby();
+  inline void clear_has_lobby_standby();
 
   ::google::protobuf::UnknownFieldSet _unknown_fields_;
 
@@ -6584,14 +6663,16 @@ class CSOTFPartyMember : public ::google::protobuf::Message {
   mutable int _cached_size_;
   ::google::protobuf::uint32 completed_missions_;
   ::google::protobuf::uint32 badge_level_;
-  bool owns_ticket_;
-  bool squad_surplus_;
-  bool is_banned_;
-  bool competitive_access_;
-  ::google::protobuf::uint32 ladder_rank_;
-  bool is_low_priority_;
   ::google::protobuf::uint32 experience_;
-  ::google::protobuf::uint32 skillrating_;
+  bool owns_ticket_;
+  bool competitive_access_;
+  bool casual_banned_;
+  bool ranked_banned_;
+  ::CTFPerPlayerMatchCriteriaProto* player_criteria_;
+  ::CSOTFPartyMember_Activity* activity_;
+  bool casual_low_priority_;
+  bool ranked_low_priority_;
+  bool lobby_standby_;
   friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
   friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
   friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
@@ -6601,14 +6682,14 @@ class CSOTFPartyMember : public ::google::protobuf::Message {
 };
 // -------------------------------------------------------------------
 
-class CMsgMatchSearchCriteria : public ::google::protobuf::Message {
+class TFPendingPartyMember : public ::google::protobuf::Message {
  public:
-  CMsgMatchSearchCriteria();
-  virtual ~CMsgMatchSearchCriteria();
+  TFPendingPartyMember();
+  virtual ~TFPendingPartyMember();
 
-  CMsgMatchSearchCriteria(const CMsgMatchSearchCriteria& from);
+  TFPendingPartyMember(const TFPendingPartyMember& from);
 
-  inline CMsgMatchSearchCriteria& operator=(const CMsgMatchSearchCriteria& from) {
+  inline TFPendingPartyMember& operator=(const TFPendingPartyMember& from) {
     CopyFrom(from);
     return *this;
   }
@@ -6622,17 +6703,140 @@ class CMsgMatchSearchCriteria : public ::google::protobuf::Message {
   }
 
   static const ::google::protobuf::Descriptor* descriptor();
-  static const CMsgMatchSearchCriteria& default_instance();
+  static const TFPendingPartyMember& default_instance();
 
-  void Swap(CMsgMatchSearchCriteria* other);
+  void Swap(TFPendingPartyMember* other);
 
   // implements Message ----------------------------------------------
 
-  CMsgMatchSearchCriteria* New() const;
+  TFPendingPartyMember* New() const;
   void CopyFrom(const ::google::protobuf::Message& from);
   void MergeFrom(const ::google::protobuf::Message& from);
-  void CopyFrom(const CMsgMatchSearchCriteria& from);
-  void MergeFrom(const CMsgMatchSearchCriteria& from);
+  void CopyFrom(const TFPendingPartyMember& from);
+  void MergeFrom(const TFPendingPartyMember& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  typedef TFPendingPartyMember_EType EType;
+  static const EType Invited = TFPendingPartyMember_EType_Invited;
+  static const EType RequestedToJoin = TFPendingPartyMember_EType_RequestedToJoin;
+  static inline bool EType_IsValid(int value) {
+    return TFPendingPartyMember_EType_IsValid(value);
+  }
+  static const EType EType_MIN =
+    TFPendingPartyMember_EType_EType_MIN;
+  static const EType EType_MAX =
+    TFPendingPartyMember_EType_EType_MAX;
+  static const int EType_ARRAYSIZE =
+    TFPendingPartyMember_EType_EType_ARRAYSIZE;
+  static inline const ::google::protobuf::EnumDescriptor*
+  EType_descriptor() {
+    return TFPendingPartyMember_EType_descriptor();
+  }
+  static inline const ::std::string& EType_Name(EType value) {
+    return TFPendingPartyMember_EType_Name(value);
+  }
+  static inline bool EType_Parse(const ::std::string& name,
+      EType* value) {
+    return TFPendingPartyMember_EType_Parse(name, value);
+  }
+
+  // accessors -------------------------------------------------------
+
+  // optional fixed64 steamid = 1;
+  inline bool has_steamid() const;
+  inline void clear_steamid();
+  static const int kSteamidFieldNumber = 1;
+  inline ::google::protobuf::uint64 steamid() const;
+  inline void set_steamid(::google::protobuf::uint64 value);
+
+  // optional .TFPendingPartyMember.EType type = 2 [default = Invited];
+  inline bool has_type() const;
+  inline void clear_type();
+  static const int kTypeFieldNumber = 2;
+  inline ::TFPendingPartyMember_EType type() const;
+  inline void set_type(::TFPendingPartyMember_EType value);
+
+  // optional fixed64 inviter = 3;
+  inline bool has_inviter() const;
+  inline void clear_inviter();
+  static const int kInviterFieldNumber = 3;
+  inline ::google::protobuf::uint64 inviter() const;
+  inline void set_inviter(::google::protobuf::uint64 value);
+
+  // @@protoc_insertion_point(class_scope:TFPendingPartyMember)
+ private:
+  inline void set_has_steamid();
+  inline void clear_has_steamid();
+  inline void set_has_type();
+  inline void clear_has_type();
+  inline void set_has_inviter();
+  inline void clear_has_inviter();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::google::protobuf::uint64 steamid_;
+  ::google::protobuf::uint64 inviter_;
+  int type_;
+  friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
+
+  void InitAsDefaultInstance();
+  static TFPendingPartyMember* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class TFSyncedMMUIState : public ::google::protobuf::Message {
+ public:
+  TFSyncedMMUIState();
+  virtual ~TFSyncedMMUIState();
+
+  TFSyncedMMUIState(const TFSyncedMMUIState& from);
+
+  inline TFSyncedMMUIState& operator=(const TFSyncedMMUIState& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const TFSyncedMMUIState& default_instance();
+
+  void Swap(TFSyncedMMUIState* other);
+
+  // implements Message ----------------------------------------------
+
+  TFSyncedMMUIState* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const TFSyncedMMUIState& from);
+  void MergeFrom(const TFSyncedMMUIState& from);
   void Clear();
   bool IsInitialized() const;
 
@@ -6654,12 +6858,94 @@ class CMsgMatchSearchCriteria : public ::google::protobuf::Message {
 
   // accessors -------------------------------------------------------
 
-  // optional .TF_MatchmakingMode matchmaking_mode = 7;
-  inline bool has_matchmaking_mode() const;
-  inline void clear_matchmaking_mode();
-  static const int kMatchmakingModeFieldNumber = 7;
-  inline ::TF_MatchmakingMode matchmaking_mode() const;
-  inline void set_matchmaking_mode(::TF_MatchmakingMode value);
+  // optional .ETFSyncedMMMenuStep menu_step = 1 [default = k_eTFSyncedMMMenuStep_None];
+  inline bool has_menu_step() const;
+  inline void clear_menu_step();
+  static const int kMenuStepFieldNumber = 1;
+  inline ::ETFSyncedMMMenuStep menu_step() const;
+  inline void set_menu_step(::ETFSyncedMMMenuStep value);
+
+  // optional .ETFMatchGroup match_group = 2 [default = k_eTFMatchGroup_Invalid];
+  inline bool has_match_group() const;
+  inline void clear_match_group();
+  static const int kMatchGroupFieldNumber = 2;
+  inline ::ETFMatchGroup match_group() const;
+  inline void set_match_group(::ETFMatchGroup value);
+
+  // @@protoc_insertion_point(class_scope:TFSyncedMMUIState)
+ private:
+  inline void set_has_menu_step();
+  inline void clear_has_menu_step();
+  inline void set_has_match_group();
+  inline void clear_has_match_group();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  int menu_step_;
+  int match_group_;
+  friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
+
+  void InitAsDefaultInstance();
+  static TFSyncedMMUIState* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class CTFGroupMatchCriteriaProto : public ::google::protobuf::Message {
+ public:
+  CTFGroupMatchCriteriaProto();
+  virtual ~CTFGroupMatchCriteriaProto();
+
+  CTFGroupMatchCriteriaProto(const CTFGroupMatchCriteriaProto& from);
+
+  inline CTFGroupMatchCriteriaProto& operator=(const CTFGroupMatchCriteriaProto& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const CTFGroupMatchCriteriaProto& default_instance();
+
+  void Swap(CTFGroupMatchCriteriaProto* other);
+
+  // implements Message ----------------------------------------------
+
+  CTFGroupMatchCriteriaProto* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const CTFGroupMatchCriteriaProto& from);
+  void MergeFrom(const CTFGroupMatchCriteriaProto& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
 
   // optional bool late_join_ok = 5;
   inline bool has_late_join_ok() const;
@@ -6687,68 +6973,55 @@ class CMsgMatchSearchCriteria : public ::google::protobuf::Message {
   inline ::std::string* release_mvm_mannup_tour();
   inline void set_allocated_mvm_mannup_tour(::std::string* mvm_mannup_tour);
 
-  // repeated string mvm_missions = 9;
-  inline int mvm_missions_size() const;
-  inline void clear_mvm_missions();
-  static const int kMvmMissionsFieldNumber = 9;
-  inline const ::std::string& mvm_missions(int index) const;
-  inline ::std::string* mutable_mvm_missions(int index);
-  inline void set_mvm_missions(int index, const ::std::string& value);
-  inline void set_mvm_missions(int index, const char* value);
-  inline void set_mvm_missions(int index, const char* value, size_t size);
-  inline ::std::string* add_mvm_missions();
-  inline void add_mvm_missions(const ::std::string& value);
-  inline void add_mvm_missions(const char* value);
-  inline void add_mvm_missions(const char* value, size_t size);
-  inline const ::google::protobuf::RepeatedPtrField< ::std::string>& mvm_missions() const;
-  inline ::google::protobuf::RepeatedPtrField< ::std::string>* mutable_mvm_missions();
+  // repeated string mvm_mannup_missions = 15;
+  inline int mvm_mannup_missions_size() const;
+  inline void clear_mvm_mannup_missions();
+  static const int kMvmMannupMissionsFieldNumber = 15;
+  inline const ::std::string& mvm_mannup_missions(int index) const;
+  inline ::std::string* mutable_mvm_mannup_missions(int index);
+  inline void set_mvm_mannup_missions(int index, const ::std::string& value);
+  inline void set_mvm_mannup_missions(int index, const char* value);
+  inline void set_mvm_mannup_missions(int index, const char* value, size_t size);
+  inline ::std::string* add_mvm_mannup_missions();
+  inline void add_mvm_mannup_missions(const ::std::string& value);
+  inline void add_mvm_mannup_missions(const char* value);
+  inline void add_mvm_mannup_missions(const char* value, size_t size);
+  inline const ::google::protobuf::RepeatedPtrField< ::std::string>& mvm_mannup_missions() const;
+  inline ::google::protobuf::RepeatedPtrField< ::std::string>* mutable_mvm_mannup_missions();
 
-  // optional bool play_for_bragging_rights = 6;
-  inline bool has_play_for_bragging_rights() const;
-  inline void clear_play_for_bragging_rights();
-  static const int kPlayForBraggingRightsFieldNumber = 6;
-  inline bool play_for_bragging_rights() const;
-  inline void set_play_for_bragging_rights(bool value);
+  // repeated string mvm_bootcamp_missions = 16;
+  inline int mvm_bootcamp_missions_size() const;
+  inline void clear_mvm_bootcamp_missions();
+  static const int kMvmBootcampMissionsFieldNumber = 16;
+  inline const ::std::string& mvm_bootcamp_missions(int index) const;
+  inline ::std::string* mutable_mvm_bootcamp_missions(int index);
+  inline void set_mvm_bootcamp_missions(int index, const ::std::string& value);
+  inline void set_mvm_bootcamp_missions(int index, const char* value);
+  inline void set_mvm_bootcamp_missions(int index, const char* value, size_t size);
+  inline ::std::string* add_mvm_bootcamp_missions();
+  inline void add_mvm_bootcamp_missions(const ::std::string& value);
+  inline void add_mvm_bootcamp_missions(const char* value);
+  inline void add_mvm_bootcamp_missions(const char* value, size_t size);
+  inline const ::google::protobuf::RepeatedPtrField< ::std::string>& mvm_bootcamp_missions() const;
+  inline ::google::protobuf::RepeatedPtrField< ::std::string>* mutable_mvm_bootcamp_missions();
 
-  // optional uint32 quickplay_game_type = 8;
-  inline bool has_quickplay_game_type() const;
-  inline void clear_quickplay_game_type();
-  static const int kQuickplayGameTypeFieldNumber = 8;
-  inline ::google::protobuf::uint32 quickplay_game_type() const;
-  inline void set_quickplay_game_type(::google::protobuf::uint32 value);
-
-  // optional uint32 ladder_game_type = 11;
-  inline bool has_ladder_game_type() const;
-  inline void clear_ladder_game_type();
-  static const int kLadderGameTypeFieldNumber = 11;
-  inline ::google::protobuf::uint32 ladder_game_type() const;
-  inline void set_ladder_game_type(::google::protobuf::uint32 value);
-
-  // optional .CMsgCasualMatchmakingSearchCriteria casual_criteria = 12;
+  // optional .CTFCasualMatchCriteria casual_criteria = 12;
   inline bool has_casual_criteria() const;
   inline void clear_casual_criteria();
   static const int kCasualCriteriaFieldNumber = 12;
-  inline const ::CMsgCasualMatchmakingSearchCriteria& casual_criteria() const;
-  inline ::CMsgCasualMatchmakingSearchCriteria* mutable_casual_criteria();
-  inline ::CMsgCasualMatchmakingSearchCriteria* release_casual_criteria();
-  inline void set_allocated_casual_criteria(::CMsgCasualMatchmakingSearchCriteria* casual_criteria);
+  inline const ::CTFCasualMatchCriteria& casual_criteria() const;
+  inline ::CTFCasualMatchCriteria* mutable_casual_criteria();
+  inline ::CTFCasualMatchCriteria* release_casual_criteria();
+  inline void set_allocated_casual_criteria(::CTFCasualMatchCriteria* casual_criteria);
 
-  // @@protoc_insertion_point(class_scope:CMsgMatchSearchCriteria)
+  // @@protoc_insertion_point(class_scope:CTFGroupMatchCriteriaProto)
  private:
-  inline void set_has_matchmaking_mode();
-  inline void clear_has_matchmaking_mode();
   inline void set_has_late_join_ok();
   inline void clear_has_late_join_ok();
   inline void set_has_custom_ping_tolerance();
   inline void clear_has_custom_ping_tolerance();
   inline void set_has_mvm_mannup_tour();
   inline void clear_has_mvm_mannup_tour();
-  inline void set_has_play_for_bragging_rights();
-  inline void clear_has_play_for_bragging_rights();
-  inline void set_has_quickplay_game_type();
-  inline void clear_has_quickplay_game_type();
-  inline void set_has_ladder_game_type();
-  inline void clear_has_ladder_game_type();
   inline void set_has_casual_criteria();
   inline void clear_has_casual_criteria();
 
@@ -6756,32 +7029,29 @@ class CMsgMatchSearchCriteria : public ::google::protobuf::Message {
 
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
-  int matchmaking_mode_;
+  bool late_join_ok_;
   ::google::protobuf::uint32 custom_ping_tolerance_;
   ::std::string* mvm_mannup_tour_;
-  ::google::protobuf::RepeatedPtrField< ::std::string> mvm_missions_;
-  bool late_join_ok_;
-  bool play_for_bragging_rights_;
-  ::google::protobuf::uint32 quickplay_game_type_;
-  ::CMsgCasualMatchmakingSearchCriteria* casual_criteria_;
-  ::google::protobuf::uint32 ladder_game_type_;
+  ::google::protobuf::RepeatedPtrField< ::std::string> mvm_mannup_missions_;
+  ::google::protobuf::RepeatedPtrField< ::std::string> mvm_bootcamp_missions_;
+  ::CTFCasualMatchCriteria* casual_criteria_;
   friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
   friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
   friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
 
   void InitAsDefaultInstance();
-  static CMsgMatchSearchCriteria* default_instance_;
+  static CTFGroupMatchCriteriaProto* default_instance_;
 };
 // -------------------------------------------------------------------
 
-class CMsgCasualMatchmakingSearchCriteria : public ::google::protobuf::Message {
+class CTFCasualMatchCriteria : public ::google::protobuf::Message {
  public:
-  CMsgCasualMatchmakingSearchCriteria();
-  virtual ~CMsgCasualMatchmakingSearchCriteria();
+  CTFCasualMatchCriteria();
+  virtual ~CTFCasualMatchCriteria();
 
-  CMsgCasualMatchmakingSearchCriteria(const CMsgCasualMatchmakingSearchCriteria& from);
+  CTFCasualMatchCriteria(const CTFCasualMatchCriteria& from);
 
-  inline CMsgCasualMatchmakingSearchCriteria& operator=(const CMsgCasualMatchmakingSearchCriteria& from) {
+  inline CTFCasualMatchCriteria& operator=(const CTFCasualMatchCriteria& from) {
     CopyFrom(from);
     return *this;
   }
@@ -6795,17 +7065,17 @@ class CMsgCasualMatchmakingSearchCriteria : public ::google::protobuf::Message {
   }
 
   static const ::google::protobuf::Descriptor* descriptor();
-  static const CMsgCasualMatchmakingSearchCriteria& default_instance();
+  static const CTFCasualMatchCriteria& default_instance();
 
-  void Swap(CMsgCasualMatchmakingSearchCriteria* other);
+  void Swap(CTFCasualMatchCriteria* other);
 
   // implements Message ----------------------------------------------
 
-  CMsgCasualMatchmakingSearchCriteria* New() const;
+  CTFCasualMatchCriteria* New() const;
   void CopyFrom(const ::google::protobuf::Message& from);
   void MergeFrom(const ::google::protobuf::Message& from);
-  void CopyFrom(const CMsgCasualMatchmakingSearchCriteria& from);
-  void MergeFrom(const CMsgCasualMatchmakingSearchCriteria& from);
+  void CopyFrom(const CTFCasualMatchCriteria& from);
+  void MergeFrom(const CTFCasualMatchCriteria& from);
   void Clear();
   bool IsInitialized() const;
 
@@ -6839,7 +7109,7 @@ class CMsgCasualMatchmakingSearchCriteria : public ::google::protobuf::Message {
   inline ::google::protobuf::RepeatedField< ::google::protobuf::uint32 >*
       mutable_selected_maps_bits();
 
-  // @@protoc_insertion_point(class_scope:CMsgCasualMatchmakingSearchCriteria)
+  // @@protoc_insertion_point(class_scope:CTFCasualMatchCriteria)
  private:
 
   ::google::protobuf::UnknownFieldSet _unknown_fields_;
@@ -6852,18 +7122,18 @@ class CMsgCasualMatchmakingSearchCriteria : public ::google::protobuf::Message {
   friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
 
   void InitAsDefaultInstance();
-  static CMsgCasualMatchmakingSearchCriteria* default_instance_;
+  static CTFCasualMatchCriteria* default_instance_;
 };
 // -------------------------------------------------------------------
 
-class CMsgCreateOrUpdateParty : public ::google::protobuf::Message {
+class CTFPerPlayerMatchCriteriaProto : public ::google::protobuf::Message {
  public:
-  CMsgCreateOrUpdateParty();
-  virtual ~CMsgCreateOrUpdateParty();
+  CTFPerPlayerMatchCriteriaProto();
+  virtual ~CTFPerPlayerMatchCriteriaProto();
 
-  CMsgCreateOrUpdateParty(const CMsgCreateOrUpdateParty& from);
+  CTFPerPlayerMatchCriteriaProto(const CTFPerPlayerMatchCriteriaProto& from);
 
-  inline CMsgCreateOrUpdateParty& operator=(const CMsgCreateOrUpdateParty& from) {
+  inline CTFPerPlayerMatchCriteriaProto& operator=(const CTFPerPlayerMatchCriteriaProto& from) {
     CopyFrom(from);
     return *this;
   }
@@ -6877,17 +7147,17 @@ class CMsgCreateOrUpdateParty : public ::google::protobuf::Message {
   }
 
   static const ::google::protobuf::Descriptor* descriptor();
-  static const CMsgCreateOrUpdateParty& default_instance();
+  static const CTFPerPlayerMatchCriteriaProto& default_instance();
 
-  void Swap(CMsgCreateOrUpdateParty* other);
+  void Swap(CTFPerPlayerMatchCriteriaProto* other);
 
   // implements Message ----------------------------------------------
 
-  CMsgCreateOrUpdateParty* New() const;
+  CTFPerPlayerMatchCriteriaProto* New() const;
   void CopyFrom(const ::google::protobuf::Message& from);
   void MergeFrom(const ::google::protobuf::Message& from);
-  void CopyFrom(const CMsgCreateOrUpdateParty& from);
-  void MergeFrom(const CMsgCreateOrUpdateParty& from);
+  void CopyFrom(const CTFPerPlayerMatchCriteriaProto& from);
+  void MergeFrom(const CTFPerPlayerMatchCriteriaProto& from);
   void Clear();
   bool IsInitialized() const;
 
@@ -6909,82 +7179,40 @@ class CMsgCreateOrUpdateParty : public ::google::protobuf::Message {
 
   // accessors -------------------------------------------------------
 
-  // optional .CMsgMatchSearchCriteria search_criteria = 1;
-  inline bool has_search_criteria() const;
-  inline void clear_search_criteria();
-  static const int kSearchCriteriaFieldNumber = 1;
-  inline const ::CMsgMatchSearchCriteria& search_criteria() const;
-  inline ::CMsgMatchSearchCriteria* mutable_search_criteria();
-  inline ::CMsgMatchSearchCriteria* release_search_criteria();
-  inline void set_allocated_search_criteria(::CMsgMatchSearchCriteria* search_criteria);
+  // optional bool mvm_squad_surplus = 1;
+  inline bool has_mvm_squad_surplus() const;
+  inline void clear_mvm_squad_surplus();
+  static const int kMvmSquadSurplusFieldNumber = 1;
+  inline bool mvm_squad_surplus() const;
+  inline void set_mvm_squad_surplus(bool value);
 
-  // optional fixed64 steam_lobby_id = 3;
-  inline bool has_steam_lobby_id() const;
-  inline void clear_steam_lobby_id();
-  static const int kSteamLobbyIdFieldNumber = 3;
-  inline ::google::protobuf::uint64 steam_lobby_id() const;
-  inline void set_steam_lobby_id(::google::protobuf::uint64 value);
-
-  // optional bool squad_surplus = 4;
-  inline bool has_squad_surplus() const;
-  inline void clear_squad_surplus();
-  static const int kSquadSurplusFieldNumber = 4;
-  inline bool squad_surplus() const;
-  inline void set_squad_surplus(bool value);
-
-  // optional .TF_Matchmaking_WizardStep wizard_step = 5;
-  inline bool has_wizard_step() const;
-  inline void clear_wizard_step();
-  static const int kWizardStepFieldNumber = 5;
-  inline ::TF_Matchmaking_WizardStep wizard_step() const;
-  inline void set_wizard_step(::TF_Matchmaking_WizardStep value);
-
-  // optional uint32 client_version = 6 [default = 1225];
-  inline bool has_client_version() const;
-  inline void clear_client_version();
-  static const int kClientVersionFieldNumber = 6;
-  inline ::google::protobuf::uint32 client_version() const;
-  inline void set_client_version(::google::protobuf::uint32 value);
-
-  // @@protoc_insertion_point(class_scope:CMsgCreateOrUpdateParty)
+  // @@protoc_insertion_point(class_scope:CTFPerPlayerMatchCriteriaProto)
  private:
-  inline void set_has_search_criteria();
-  inline void clear_has_search_criteria();
-  inline void set_has_steam_lobby_id();
-  inline void clear_has_steam_lobby_id();
-  inline void set_has_squad_surplus();
-  inline void clear_has_squad_surplus();
-  inline void set_has_wizard_step();
-  inline void clear_has_wizard_step();
-  inline void set_has_client_version();
-  inline void clear_has_client_version();
+  inline void set_has_mvm_squad_surplus();
+  inline void clear_has_mvm_squad_surplus();
 
   ::google::protobuf::UnknownFieldSet _unknown_fields_;
 
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
-  ::CMsgMatchSearchCriteria* search_criteria_;
-  ::google::protobuf::uint64 steam_lobby_id_;
-  bool squad_surplus_;
-  int wizard_step_;
-  ::google::protobuf::uint32 client_version_;
+  bool mvm_squad_surplus_;
   friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
   friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
   friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
 
   void InitAsDefaultInstance();
-  static CMsgCreateOrUpdateParty* default_instance_;
+  static CTFPerPlayerMatchCriteriaProto* default_instance_;
 };
 // -------------------------------------------------------------------
 
-class CMsgCreateOrUpdatePartyReply : public ::google::protobuf::Message {
+class CTFPartyOptions : public ::google::protobuf::Message {
  public:
-  CMsgCreateOrUpdatePartyReply();
-  virtual ~CMsgCreateOrUpdatePartyReply();
+  CTFPartyOptions();
+  virtual ~CTFPartyOptions();
 
-  CMsgCreateOrUpdatePartyReply(const CMsgCreateOrUpdatePartyReply& from);
+  CTFPartyOptions(const CTFPartyOptions& from);
 
-  inline CMsgCreateOrUpdatePartyReply& operator=(const CMsgCreateOrUpdatePartyReply& from) {
+  inline CTFPartyOptions& operator=(const CTFPartyOptions& from) {
     CopyFrom(from);
     return *this;
   }
@@ -6998,17 +7226,17 @@ class CMsgCreateOrUpdatePartyReply : public ::google::protobuf::Message {
   }
 
   static const ::google::protobuf::Descriptor* descriptor();
-  static const CMsgCreateOrUpdatePartyReply& default_instance();
+  static const CTFPartyOptions& default_instance();
 
-  void Swap(CMsgCreateOrUpdatePartyReply* other);
+  void Swap(CTFPartyOptions* other);
 
   // implements Message ----------------------------------------------
 
-  CMsgCreateOrUpdatePartyReply* New() const;
+  CTFPartyOptions* New() const;
   void CopyFrom(const ::google::protobuf::Message& from);
   void MergeFrom(const ::google::protobuf::Message& from);
-  void CopyFrom(const CMsgCreateOrUpdatePartyReply& from);
-  void MergeFrom(const CMsgCreateOrUpdatePartyReply& from);
+  void CopyFrom(const CTFPartyOptions& from);
+  void MergeFrom(const CTFPartyOptions& from);
   void Clear();
   bool IsInitialized() const;
 
@@ -7030,54 +7258,1941 @@ class CMsgCreateOrUpdatePartyReply : public ::google::protobuf::Message {
 
   // accessors -------------------------------------------------------
 
-  // optional uint32 result = 1;
-  inline bool has_result() const;
-  inline void clear_result();
-  static const int kResultFieldNumber = 1;
-  inline ::google::protobuf::uint32 result() const;
-  inline void set_result(::google::protobuf::uint32 value);
+  // optional bool overwrite_existing = 1;
+  inline bool has_overwrite_existing() const;
+  inline void clear_overwrite_existing();
+  static const int kOverwriteExistingFieldNumber = 1;
+  inline bool overwrite_existing() const;
+  inline void set_overwrite_existing(bool value);
 
-  // optional string message = 2;
-  inline bool has_message() const;
-  inline void clear_message();
-  static const int kMessageFieldNumber = 2;
-  inline const ::std::string& message() const;
-  inline void set_message(const ::std::string& value);
-  inline void set_message(const char* value);
-  inline void set_message(const char* value, size_t size);
-  inline ::std::string* mutable_message();
-  inline ::std::string* release_message();
-  inline void set_allocated_message(::std::string* message);
+  // optional .CTFGroupMatchCriteriaProto group_criteria = 2;
+  inline bool has_group_criteria() const;
+  inline void clear_group_criteria();
+  static const int kGroupCriteriaFieldNumber = 2;
+  inline const ::CTFGroupMatchCriteriaProto& group_criteria() const;
+  inline ::CTFGroupMatchCriteriaProto* mutable_group_criteria();
+  inline ::CTFGroupMatchCriteriaProto* release_group_criteria();
+  inline void set_allocated_group_criteria(::CTFGroupMatchCriteriaProto* group_criteria);
 
-  // optional .TF_Matchmaking_WizardStep wizard_step = 3;
-  inline bool has_wizard_step() const;
-  inline void clear_wizard_step();
-  static const int kWizardStepFieldNumber = 3;
-  inline ::TF_Matchmaking_WizardStep wizard_step() const;
-  inline void set_wizard_step(::TF_Matchmaking_WizardStep value);
+  // optional .CTFPerPlayerMatchCriteriaProto player_criteria = 3;
+  inline bool has_player_criteria() const;
+  inline void clear_player_criteria();
+  static const int kPlayerCriteriaFieldNumber = 3;
+  inline const ::CTFPerPlayerMatchCriteriaProto& player_criteria() const;
+  inline ::CTFPerPlayerMatchCriteriaProto* mutable_player_criteria();
+  inline ::CTFPerPlayerMatchCriteriaProto* release_player_criteria();
+  inline void set_allocated_player_criteria(::CTFPerPlayerMatchCriteriaProto* player_criteria);
 
-  // @@protoc_insertion_point(class_scope:CMsgCreateOrUpdatePartyReply)
+  // optional .TFSyncedMMUIState player_uistate = 5;
+  inline bool has_player_uistate() const;
+  inline void clear_player_uistate();
+  static const int kPlayerUistateFieldNumber = 5;
+  inline const ::TFSyncedMMUIState& player_uistate() const;
+  inline ::TFSyncedMMUIState* mutable_player_uistate();
+  inline ::TFSyncedMMUIState* release_player_uistate();
+  inline void set_allocated_player_uistate(::TFSyncedMMUIState* player_uistate);
+
+  // @@protoc_insertion_point(class_scope:CTFPartyOptions)
  private:
-  inline void set_has_result();
-  inline void clear_has_result();
-  inline void set_has_message();
-  inline void clear_has_message();
-  inline void set_has_wizard_step();
-  inline void clear_has_wizard_step();
+  inline void set_has_overwrite_existing();
+  inline void clear_has_overwrite_existing();
+  inline void set_has_group_criteria();
+  inline void clear_has_group_criteria();
+  inline void set_has_player_criteria();
+  inline void clear_has_player_criteria();
+  inline void set_has_player_uistate();
+  inline void clear_has_player_uistate();
 
   ::google::protobuf::UnknownFieldSet _unknown_fields_;
 
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
-  ::std::string* message_;
-  ::google::protobuf::uint32 result_;
-  int wizard_step_;
+  ::CTFGroupMatchCriteriaProto* group_criteria_;
+  ::CTFPerPlayerMatchCriteriaProto* player_criteria_;
+  ::TFSyncedMMUIState* player_uistate_;
+  bool overwrite_existing_;
   friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
   friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
   friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
 
   void InitAsDefaultInstance();
-  static CMsgCreateOrUpdatePartyReply* default_instance_;
+  static CTFPartyOptions* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class CMsgPartySetOptions : public ::google::protobuf::Message {
+ public:
+  CMsgPartySetOptions();
+  virtual ~CMsgPartySetOptions();
+
+  CMsgPartySetOptions(const CMsgPartySetOptions& from);
+
+  inline CMsgPartySetOptions& operator=(const CMsgPartySetOptions& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const CMsgPartySetOptions& default_instance();
+
+  void Swap(CMsgPartySetOptions* other);
+
+  // implements Message ----------------------------------------------
+
+  CMsgPartySetOptions* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const CMsgPartySetOptions& from);
+  void MergeFrom(const CMsgPartySetOptions& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional fixed64 party_id = 1;
+  inline bool has_party_id() const;
+  inline void clear_party_id();
+  static const int kPartyIdFieldNumber = 1;
+  inline ::google::protobuf::uint64 party_id() const;
+  inline void set_party_id(::google::protobuf::uint64 value);
+
+  // optional .CTFPartyOptions options = 2;
+  inline bool has_options() const;
+  inline void clear_options();
+  static const int kOptionsFieldNumber = 2;
+  inline const ::CTFPartyOptions& options() const;
+  inline ::CTFPartyOptions* mutable_options();
+  inline ::CTFPartyOptions* release_options();
+  inline void set_allocated_options(::CTFPartyOptions* options);
+
+  // @@protoc_insertion_point(class_scope:CMsgPartySetOptions)
+ private:
+  inline void set_has_party_id();
+  inline void clear_has_party_id();
+  inline void set_has_options();
+  inline void clear_has_options();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::google::protobuf::uint64 party_id_;
+  ::CTFPartyOptions* options_;
+  friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
+
+  void InitAsDefaultInstance();
+  static CMsgPartySetOptions* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class CMsgPartySetOptionsResponse : public ::google::protobuf::Message {
+ public:
+  CMsgPartySetOptionsResponse();
+  virtual ~CMsgPartySetOptionsResponse();
+
+  CMsgPartySetOptionsResponse(const CMsgPartySetOptionsResponse& from);
+
+  inline CMsgPartySetOptionsResponse& operator=(const CMsgPartySetOptionsResponse& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const CMsgPartySetOptionsResponse& default_instance();
+
+  void Swap(CMsgPartySetOptionsResponse* other);
+
+  // implements Message ----------------------------------------------
+
+  CMsgPartySetOptionsResponse* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const CMsgPartySetOptionsResponse& from);
+  void MergeFrom(const CMsgPartySetOptionsResponse& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // @@protoc_insertion_point(class_scope:CMsgPartySetOptionsResponse)
+ private:
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
+
+  void InitAsDefaultInstance();
+  static CMsgPartySetOptionsResponse* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class CMsgPartyQueueForMatch : public ::google::protobuf::Message {
+ public:
+  CMsgPartyQueueForMatch();
+  virtual ~CMsgPartyQueueForMatch();
+
+  CMsgPartyQueueForMatch(const CMsgPartyQueueForMatch& from);
+
+  inline CMsgPartyQueueForMatch& operator=(const CMsgPartyQueueForMatch& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const CMsgPartyQueueForMatch& default_instance();
+
+  void Swap(CMsgPartyQueueForMatch* other);
+
+  // implements Message ----------------------------------------------
+
+  CMsgPartyQueueForMatch* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const CMsgPartyQueueForMatch& from);
+  void MergeFrom(const CMsgPartyQueueForMatch& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional fixed64 party_id = 1;
+  inline bool has_party_id() const;
+  inline void clear_party_id();
+  static const int kPartyIdFieldNumber = 1;
+  inline ::google::protobuf::uint64 party_id() const;
+  inline void set_party_id(::google::protobuf::uint64 value);
+
+  // optional .CTFPartyOptions final_options = 2;
+  inline bool has_final_options() const;
+  inline void clear_final_options();
+  static const int kFinalOptionsFieldNumber = 2;
+  inline const ::CTFPartyOptions& final_options() const;
+  inline ::CTFPartyOptions* mutable_final_options();
+  inline ::CTFPartyOptions* release_final_options();
+  inline void set_allocated_final_options(::CTFPartyOptions* final_options);
+
+  // optional .ETFMatchGroup match_group = 3;
+  inline bool has_match_group() const;
+  inline void clear_match_group();
+  static const int kMatchGroupFieldNumber = 3;
+  inline ::ETFMatchGroup match_group() const;
+  inline void set_match_group(::ETFMatchGroup value);
+
+  // @@protoc_insertion_point(class_scope:CMsgPartyQueueForMatch)
+ private:
+  inline void set_has_party_id();
+  inline void clear_has_party_id();
+  inline void set_has_final_options();
+  inline void clear_has_final_options();
+  inline void set_has_match_group();
+  inline void clear_has_match_group();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::google::protobuf::uint64 party_id_;
+  ::CTFPartyOptions* final_options_;
+  int match_group_;
+  friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
+
+  void InitAsDefaultInstance();
+  static CMsgPartyQueueForMatch* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class CMsgPartyQueueForMatchResponse : public ::google::protobuf::Message {
+ public:
+  CMsgPartyQueueForMatchResponse();
+  virtual ~CMsgPartyQueueForMatchResponse();
+
+  CMsgPartyQueueForMatchResponse(const CMsgPartyQueueForMatchResponse& from);
+
+  inline CMsgPartyQueueForMatchResponse& operator=(const CMsgPartyQueueForMatchResponse& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const CMsgPartyQueueForMatchResponse& default_instance();
+
+  void Swap(CMsgPartyQueueForMatchResponse* other);
+
+  // implements Message ----------------------------------------------
+
+  CMsgPartyQueueForMatchResponse* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const CMsgPartyQueueForMatchResponse& from);
+  void MergeFrom(const CMsgPartyQueueForMatchResponse& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // @@protoc_insertion_point(class_scope:CMsgPartyQueueForMatchResponse)
+ private:
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
+
+  void InitAsDefaultInstance();
+  static CMsgPartyQueueForMatchResponse* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class CMsgPartyQueueForStandby : public ::google::protobuf::Message {
+ public:
+  CMsgPartyQueueForStandby();
+  virtual ~CMsgPartyQueueForStandby();
+
+  CMsgPartyQueueForStandby(const CMsgPartyQueueForStandby& from);
+
+  inline CMsgPartyQueueForStandby& operator=(const CMsgPartyQueueForStandby& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const CMsgPartyQueueForStandby& default_instance();
+
+  void Swap(CMsgPartyQueueForStandby* other);
+
+  // implements Message ----------------------------------------------
+
+  CMsgPartyQueueForStandby* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const CMsgPartyQueueForStandby& from);
+  void MergeFrom(const CMsgPartyQueueForStandby& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional fixed64 party_id = 1;
+  inline bool has_party_id() const;
+  inline void clear_party_id();
+  static const int kPartyIdFieldNumber = 1;
+  inline ::google::protobuf::uint64 party_id() const;
+  inline void set_party_id(::google::protobuf::uint64 value);
+
+  // optional fixed64 party_lobby_id = 2;
+  inline bool has_party_lobby_id() const;
+  inline void clear_party_lobby_id();
+  static const int kPartyLobbyIdFieldNumber = 2;
+  inline ::google::protobuf::uint64 party_lobby_id() const;
+  inline void set_party_lobby_id(::google::protobuf::uint64 value);
+
+  // @@protoc_insertion_point(class_scope:CMsgPartyQueueForStandby)
+ private:
+  inline void set_has_party_id();
+  inline void clear_has_party_id();
+  inline void set_has_party_lobby_id();
+  inline void clear_has_party_lobby_id();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::google::protobuf::uint64 party_id_;
+  ::google::protobuf::uint64 party_lobby_id_;
+  friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
+
+  void InitAsDefaultInstance();
+  static CMsgPartyQueueForStandby* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class CMsgPartyQueueForStandbyResponse : public ::google::protobuf::Message {
+ public:
+  CMsgPartyQueueForStandbyResponse();
+  virtual ~CMsgPartyQueueForStandbyResponse();
+
+  CMsgPartyQueueForStandbyResponse(const CMsgPartyQueueForStandbyResponse& from);
+
+  inline CMsgPartyQueueForStandbyResponse& operator=(const CMsgPartyQueueForStandbyResponse& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const CMsgPartyQueueForStandbyResponse& default_instance();
+
+  void Swap(CMsgPartyQueueForStandbyResponse* other);
+
+  // implements Message ----------------------------------------------
+
+  CMsgPartyQueueForStandbyResponse* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const CMsgPartyQueueForStandbyResponse& from);
+  void MergeFrom(const CMsgPartyQueueForStandbyResponse& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // @@protoc_insertion_point(class_scope:CMsgPartyQueueForStandbyResponse)
+ private:
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
+
+  void InitAsDefaultInstance();
+  static CMsgPartyQueueForStandbyResponse* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class CMsgPartyRemoveFromQueue : public ::google::protobuf::Message {
+ public:
+  CMsgPartyRemoveFromQueue();
+  virtual ~CMsgPartyRemoveFromQueue();
+
+  CMsgPartyRemoveFromQueue(const CMsgPartyRemoveFromQueue& from);
+
+  inline CMsgPartyRemoveFromQueue& operator=(const CMsgPartyRemoveFromQueue& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const CMsgPartyRemoveFromQueue& default_instance();
+
+  void Swap(CMsgPartyRemoveFromQueue* other);
+
+  // implements Message ----------------------------------------------
+
+  CMsgPartyRemoveFromQueue* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const CMsgPartyRemoveFromQueue& from);
+  void MergeFrom(const CMsgPartyRemoveFromQueue& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional fixed64 party_id = 1;
+  inline bool has_party_id() const;
+  inline void clear_party_id();
+  static const int kPartyIdFieldNumber = 1;
+  inline ::google::protobuf::uint64 party_id() const;
+  inline void set_party_id(::google::protobuf::uint64 value);
+
+  // optional .ETFMatchGroup match_group = 2;
+  inline bool has_match_group() const;
+  inline void clear_match_group();
+  static const int kMatchGroupFieldNumber = 2;
+  inline ::ETFMatchGroup match_group() const;
+  inline void set_match_group(::ETFMatchGroup value);
+
+  // @@protoc_insertion_point(class_scope:CMsgPartyRemoveFromQueue)
+ private:
+  inline void set_has_party_id();
+  inline void clear_has_party_id();
+  inline void set_has_match_group();
+  inline void clear_has_match_group();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::google::protobuf::uint64 party_id_;
+  int match_group_;
+  friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
+
+  void InitAsDefaultInstance();
+  static CMsgPartyRemoveFromQueue* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class CMsgPartyRemoveFromQueueResponse : public ::google::protobuf::Message {
+ public:
+  CMsgPartyRemoveFromQueueResponse();
+  virtual ~CMsgPartyRemoveFromQueueResponse();
+
+  CMsgPartyRemoveFromQueueResponse(const CMsgPartyRemoveFromQueueResponse& from);
+
+  inline CMsgPartyRemoveFromQueueResponse& operator=(const CMsgPartyRemoveFromQueueResponse& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const CMsgPartyRemoveFromQueueResponse& default_instance();
+
+  void Swap(CMsgPartyRemoveFromQueueResponse* other);
+
+  // implements Message ----------------------------------------------
+
+  CMsgPartyRemoveFromQueueResponse* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const CMsgPartyRemoveFromQueueResponse& from);
+  void MergeFrom(const CMsgPartyRemoveFromQueueResponse& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // @@protoc_insertion_point(class_scope:CMsgPartyRemoveFromQueueResponse)
+ private:
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
+
+  void InitAsDefaultInstance();
+  static CMsgPartyRemoveFromQueueResponse* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class CMsgPartyRemoveFromStandbyQueue : public ::google::protobuf::Message {
+ public:
+  CMsgPartyRemoveFromStandbyQueue();
+  virtual ~CMsgPartyRemoveFromStandbyQueue();
+
+  CMsgPartyRemoveFromStandbyQueue(const CMsgPartyRemoveFromStandbyQueue& from);
+
+  inline CMsgPartyRemoveFromStandbyQueue& operator=(const CMsgPartyRemoveFromStandbyQueue& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const CMsgPartyRemoveFromStandbyQueue& default_instance();
+
+  void Swap(CMsgPartyRemoveFromStandbyQueue* other);
+
+  // implements Message ----------------------------------------------
+
+  CMsgPartyRemoveFromStandbyQueue* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const CMsgPartyRemoveFromStandbyQueue& from);
+  void MergeFrom(const CMsgPartyRemoveFromStandbyQueue& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional fixed64 party_id = 1;
+  inline bool has_party_id() const;
+  inline void clear_party_id();
+  static const int kPartyIdFieldNumber = 1;
+  inline ::google::protobuf::uint64 party_id() const;
+  inline void set_party_id(::google::protobuf::uint64 value);
+
+  // @@protoc_insertion_point(class_scope:CMsgPartyRemoveFromStandbyQueue)
+ private:
+  inline void set_has_party_id();
+  inline void clear_has_party_id();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::google::protobuf::uint64 party_id_;
+  friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
+
+  void InitAsDefaultInstance();
+  static CMsgPartyRemoveFromStandbyQueue* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class CMsgPartyRemoveFromStandbyQueueResponse : public ::google::protobuf::Message {
+ public:
+  CMsgPartyRemoveFromStandbyQueueResponse();
+  virtual ~CMsgPartyRemoveFromStandbyQueueResponse();
+
+  CMsgPartyRemoveFromStandbyQueueResponse(const CMsgPartyRemoveFromStandbyQueueResponse& from);
+
+  inline CMsgPartyRemoveFromStandbyQueueResponse& operator=(const CMsgPartyRemoveFromStandbyQueueResponse& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const CMsgPartyRemoveFromStandbyQueueResponse& default_instance();
+
+  void Swap(CMsgPartyRemoveFromStandbyQueueResponse* other);
+
+  // implements Message ----------------------------------------------
+
+  CMsgPartyRemoveFromStandbyQueueResponse* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const CMsgPartyRemoveFromStandbyQueueResponse& from);
+  void MergeFrom(const CMsgPartyRemoveFromStandbyQueueResponse& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // @@protoc_insertion_point(class_scope:CMsgPartyRemoveFromStandbyQueueResponse)
+ private:
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
+
+  void InitAsDefaultInstance();
+  static CMsgPartyRemoveFromStandbyQueueResponse* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class CMsgPartyInvitePlayer : public ::google::protobuf::Message {
+ public:
+  CMsgPartyInvitePlayer();
+  virtual ~CMsgPartyInvitePlayer();
+
+  CMsgPartyInvitePlayer(const CMsgPartyInvitePlayer& from);
+
+  inline CMsgPartyInvitePlayer& operator=(const CMsgPartyInvitePlayer& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const CMsgPartyInvitePlayer& default_instance();
+
+  void Swap(CMsgPartyInvitePlayer* other);
+
+  // implements Message ----------------------------------------------
+
+  CMsgPartyInvitePlayer* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const CMsgPartyInvitePlayer& from);
+  void MergeFrom(const CMsgPartyInvitePlayer& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional fixed64 party_id = 1;
+  inline bool has_party_id() const;
+  inline void clear_party_id();
+  static const int kPartyIdFieldNumber = 1;
+  inline ::google::protobuf::uint64 party_id() const;
+  inline void set_party_id(::google::protobuf::uint64 value);
+
+  // optional fixed64 player_id = 2;
+  inline bool has_player_id() const;
+  inline void clear_player_id();
+  static const int kPlayerIdFieldNumber = 2;
+  inline ::google::protobuf::uint64 player_id() const;
+  inline void set_player_id(::google::protobuf::uint64 value);
+
+  // optional bool expecting_request_to_join = 3;
+  inline bool has_expecting_request_to_join() const;
+  inline void clear_expecting_request_to_join();
+  static const int kExpectingRequestToJoinFieldNumber = 3;
+  inline bool expecting_request_to_join() const;
+  inline void set_expecting_request_to_join(bool value);
+
+  // @@protoc_insertion_point(class_scope:CMsgPartyInvitePlayer)
+ private:
+  inline void set_has_party_id();
+  inline void clear_has_party_id();
+  inline void set_has_player_id();
+  inline void clear_has_player_id();
+  inline void set_has_expecting_request_to_join();
+  inline void clear_has_expecting_request_to_join();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::google::protobuf::uint64 party_id_;
+  ::google::protobuf::uint64 player_id_;
+  bool expecting_request_to_join_;
+  friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
+
+  void InitAsDefaultInstance();
+  static CMsgPartyInvitePlayer* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class CMsgPartyRequestJoinPlayer : public ::google::protobuf::Message {
+ public:
+  CMsgPartyRequestJoinPlayer();
+  virtual ~CMsgPartyRequestJoinPlayer();
+
+  CMsgPartyRequestJoinPlayer(const CMsgPartyRequestJoinPlayer& from);
+
+  inline CMsgPartyRequestJoinPlayer& operator=(const CMsgPartyRequestJoinPlayer& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const CMsgPartyRequestJoinPlayer& default_instance();
+
+  void Swap(CMsgPartyRequestJoinPlayer* other);
+
+  // implements Message ----------------------------------------------
+
+  CMsgPartyRequestJoinPlayer* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const CMsgPartyRequestJoinPlayer& from);
+  void MergeFrom(const CMsgPartyRequestJoinPlayer& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional fixed64 current_party_id = 1;
+  inline bool has_current_party_id() const;
+  inline void clear_current_party_id();
+  static const int kCurrentPartyIdFieldNumber = 1;
+  inline ::google::protobuf::uint64 current_party_id() const;
+  inline void set_current_party_id(::google::protobuf::uint64 value);
+
+  // optional fixed64 join_player_id = 2;
+  inline bool has_join_player_id() const;
+  inline void clear_join_player_id();
+  static const int kJoinPlayerIdFieldNumber = 2;
+  inline ::google::protobuf::uint64 join_player_id() const;
+  inline void set_join_player_id(::google::protobuf::uint64 value);
+
+  // optional fixed64 join_party_id = 3;
+  inline bool has_join_party_id() const;
+  inline void clear_join_party_id();
+  static const int kJoinPartyIdFieldNumber = 3;
+  inline ::google::protobuf::uint64 join_party_id() const;
+  inline void set_join_party_id(::google::protobuf::uint64 value);
+
+  // optional bool expecting_invite = 4;
+  inline bool has_expecting_invite() const;
+  inline void clear_expecting_invite();
+  static const int kExpectingInviteFieldNumber = 4;
+  inline bool expecting_invite() const;
+  inline void set_expecting_invite(bool value);
+
+  // @@protoc_insertion_point(class_scope:CMsgPartyRequestJoinPlayer)
+ private:
+  inline void set_has_current_party_id();
+  inline void clear_has_current_party_id();
+  inline void set_has_join_player_id();
+  inline void clear_has_join_player_id();
+  inline void set_has_join_party_id();
+  inline void clear_has_join_party_id();
+  inline void set_has_expecting_invite();
+  inline void clear_has_expecting_invite();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::google::protobuf::uint64 current_party_id_;
+  ::google::protobuf::uint64 join_player_id_;
+  ::google::protobuf::uint64 join_party_id_;
+  bool expecting_invite_;
+  friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
+
+  void InitAsDefaultInstance();
+  static CMsgPartyRequestJoinPlayer* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class CMsgPartyClearPendingPlayer : public ::google::protobuf::Message {
+ public:
+  CMsgPartyClearPendingPlayer();
+  virtual ~CMsgPartyClearPendingPlayer();
+
+  CMsgPartyClearPendingPlayer(const CMsgPartyClearPendingPlayer& from);
+
+  inline CMsgPartyClearPendingPlayer& operator=(const CMsgPartyClearPendingPlayer& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const CMsgPartyClearPendingPlayer& default_instance();
+
+  void Swap(CMsgPartyClearPendingPlayer* other);
+
+  // implements Message ----------------------------------------------
+
+  CMsgPartyClearPendingPlayer* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const CMsgPartyClearPendingPlayer& from);
+  void MergeFrom(const CMsgPartyClearPendingPlayer& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional fixed64 party_id = 1;
+  inline bool has_party_id() const;
+  inline void clear_party_id();
+  static const int kPartyIdFieldNumber = 1;
+  inline ::google::protobuf::uint64 party_id() const;
+  inline void set_party_id(::google::protobuf::uint64 value);
+
+  // optional fixed64 pending_player_id = 2;
+  inline bool has_pending_player_id() const;
+  inline void clear_pending_player_id();
+  static const int kPendingPlayerIdFieldNumber = 2;
+  inline ::google::protobuf::uint64 pending_player_id() const;
+  inline void set_pending_player_id(::google::protobuf::uint64 value);
+
+  // @@protoc_insertion_point(class_scope:CMsgPartyClearPendingPlayer)
+ private:
+  inline void set_has_party_id();
+  inline void clear_has_party_id();
+  inline void set_has_pending_player_id();
+  inline void clear_has_pending_player_id();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::google::protobuf::uint64 party_id_;
+  ::google::protobuf::uint64 pending_player_id_;
+  friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
+
+  void InitAsDefaultInstance();
+  static CMsgPartyClearPendingPlayer* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class CMsgPartyMMError : public ::google::protobuf::Message {
+ public:
+  CMsgPartyMMError();
+  virtual ~CMsgPartyMMError();
+
+  CMsgPartyMMError(const CMsgPartyMMError& from);
+
+  inline CMsgPartyMMError& operator=(const CMsgPartyMMError& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const CMsgPartyMMError& default_instance();
+
+  void Swap(CMsgPartyMMError* other);
+
+  // implements Message ----------------------------------------------
+
+  CMsgPartyMMError* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const CMsgPartyMMError& from);
+  void MergeFrom(const CMsgPartyMMError& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  typedef CMsgPartyMMError_Type Type;
+  static const Type QUEUE_KICK_NO_PING = CMsgPartyMMError_Type_QUEUE_KICK_NO_PING;
+  static const Type QUEUE_KICK_AUTH = CMsgPartyMMError_Type_QUEUE_KICK_AUTH;
+  static inline bool Type_IsValid(int value) {
+    return CMsgPartyMMError_Type_IsValid(value);
+  }
+  static const Type Type_MIN =
+    CMsgPartyMMError_Type_Type_MIN;
+  static const Type Type_MAX =
+    CMsgPartyMMError_Type_Type_MAX;
+  static const int Type_ARRAYSIZE =
+    CMsgPartyMMError_Type_Type_ARRAYSIZE;
+  static inline const ::google::protobuf::EnumDescriptor*
+  Type_descriptor() {
+    return CMsgPartyMMError_Type_descriptor();
+  }
+  static inline const ::std::string& Type_Name(Type value) {
+    return CMsgPartyMMError_Type_Name(value);
+  }
+  static inline bool Type_Parse(const ::std::string& name,
+      Type* value) {
+    return CMsgPartyMMError_Type_Parse(name, value);
+  }
+
+  // accessors -------------------------------------------------------
+
+  // optional .CMsgPartyMMError.Type type = 1;
+  inline bool has_type() const;
+  inline void clear_type();
+  static const int kTypeFieldNumber = 1;
+  inline ::CMsgPartyMMError_Type type() const;
+  inline void set_type(::CMsgPartyMMError_Type value);
+
+  // @@protoc_insertion_point(class_scope:CMsgPartyMMError)
+ private:
+  inline void set_has_type();
+  inline void clear_has_type();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  int type_;
+  friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
+
+  void InitAsDefaultInstance();
+  static CMsgPartyMMError* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class CMsgPartyClearPendingPlayerResponse : public ::google::protobuf::Message {
+ public:
+  CMsgPartyClearPendingPlayerResponse();
+  virtual ~CMsgPartyClearPendingPlayerResponse();
+
+  CMsgPartyClearPendingPlayerResponse(const CMsgPartyClearPendingPlayerResponse& from);
+
+  inline CMsgPartyClearPendingPlayerResponse& operator=(const CMsgPartyClearPendingPlayerResponse& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const CMsgPartyClearPendingPlayerResponse& default_instance();
+
+  void Swap(CMsgPartyClearPendingPlayerResponse* other);
+
+  // implements Message ----------------------------------------------
+
+  CMsgPartyClearPendingPlayerResponse* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const CMsgPartyClearPendingPlayerResponse& from);
+  void MergeFrom(const CMsgPartyClearPendingPlayerResponse& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // @@protoc_insertion_point(class_scope:CMsgPartyClearPendingPlayerResponse)
+ private:
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
+
+  void InitAsDefaultInstance();
+  static CMsgPartyClearPendingPlayerResponse* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class CMsgPartyClearOtherPartyRequest : public ::google::protobuf::Message {
+ public:
+  CMsgPartyClearOtherPartyRequest();
+  virtual ~CMsgPartyClearOtherPartyRequest();
+
+  CMsgPartyClearOtherPartyRequest(const CMsgPartyClearOtherPartyRequest& from);
+
+  inline CMsgPartyClearOtherPartyRequest& operator=(const CMsgPartyClearOtherPartyRequest& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const CMsgPartyClearOtherPartyRequest& default_instance();
+
+  void Swap(CMsgPartyClearOtherPartyRequest* other);
+
+  // implements Message ----------------------------------------------
+
+  CMsgPartyClearOtherPartyRequest* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const CMsgPartyClearOtherPartyRequest& from);
+  void MergeFrom(const CMsgPartyClearOtherPartyRequest& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional fixed64 other_party_id = 1;
+  inline bool has_other_party_id() const;
+  inline void clear_other_party_id();
+  static const int kOtherPartyIdFieldNumber = 1;
+  inline ::google::protobuf::uint64 other_party_id() const;
+  inline void set_other_party_id(::google::protobuf::uint64 value);
+
+  // @@protoc_insertion_point(class_scope:CMsgPartyClearOtherPartyRequest)
+ private:
+  inline void set_has_other_party_id();
+  inline void clear_has_other_party_id();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::google::protobuf::uint64 other_party_id_;
+  friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
+
+  void InitAsDefaultInstance();
+  static CMsgPartyClearOtherPartyRequest* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class CMsgPartyClearOtherPartyRequestResponse : public ::google::protobuf::Message {
+ public:
+  CMsgPartyClearOtherPartyRequestResponse();
+  virtual ~CMsgPartyClearOtherPartyRequestResponse();
+
+  CMsgPartyClearOtherPartyRequestResponse(const CMsgPartyClearOtherPartyRequestResponse& from);
+
+  inline CMsgPartyClearOtherPartyRequestResponse& operator=(const CMsgPartyClearOtherPartyRequestResponse& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const CMsgPartyClearOtherPartyRequestResponse& default_instance();
+
+  void Swap(CMsgPartyClearOtherPartyRequestResponse* other);
+
+  // implements Message ----------------------------------------------
+
+  CMsgPartyClearOtherPartyRequestResponse* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const CMsgPartyClearOtherPartyRequestResponse& from);
+  void MergeFrom(const CMsgPartyClearOtherPartyRequestResponse& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // @@protoc_insertion_point(class_scope:CMsgPartyClearOtherPartyRequestResponse)
+ private:
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
+
+  void InitAsDefaultInstance();
+  static CMsgPartyClearOtherPartyRequestResponse* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class CMsgPartyPromoteToLeader : public ::google::protobuf::Message {
+ public:
+  CMsgPartyPromoteToLeader();
+  virtual ~CMsgPartyPromoteToLeader();
+
+  CMsgPartyPromoteToLeader(const CMsgPartyPromoteToLeader& from);
+
+  inline CMsgPartyPromoteToLeader& operator=(const CMsgPartyPromoteToLeader& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const CMsgPartyPromoteToLeader& default_instance();
+
+  void Swap(CMsgPartyPromoteToLeader* other);
+
+  // implements Message ----------------------------------------------
+
+  CMsgPartyPromoteToLeader* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const CMsgPartyPromoteToLeader& from);
+  void MergeFrom(const CMsgPartyPromoteToLeader& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional fixed64 party_id = 1;
+  inline bool has_party_id() const;
+  inline void clear_party_id();
+  static const int kPartyIdFieldNumber = 1;
+  inline ::google::protobuf::uint64 party_id() const;
+  inline void set_party_id(::google::protobuf::uint64 value);
+
+  // optional fixed64 new_leader_id = 2;
+  inline bool has_new_leader_id() const;
+  inline void clear_new_leader_id();
+  static const int kNewLeaderIdFieldNumber = 2;
+  inline ::google::protobuf::uint64 new_leader_id() const;
+  inline void set_new_leader_id(::google::protobuf::uint64 value);
+
+  // @@protoc_insertion_point(class_scope:CMsgPartyPromoteToLeader)
+ private:
+  inline void set_has_party_id();
+  inline void clear_has_party_id();
+  inline void set_has_new_leader_id();
+  inline void clear_has_new_leader_id();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::google::protobuf::uint64 party_id_;
+  ::google::protobuf::uint64 new_leader_id_;
+  friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
+
+  void InitAsDefaultInstance();
+  static CMsgPartyPromoteToLeader* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class CMsgPartyKickMember : public ::google::protobuf::Message {
+ public:
+  CMsgPartyKickMember();
+  virtual ~CMsgPartyKickMember();
+
+  CMsgPartyKickMember(const CMsgPartyKickMember& from);
+
+  inline CMsgPartyKickMember& operator=(const CMsgPartyKickMember& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const CMsgPartyKickMember& default_instance();
+
+  void Swap(CMsgPartyKickMember* other);
+
+  // implements Message ----------------------------------------------
+
+  CMsgPartyKickMember* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const CMsgPartyKickMember& from);
+  void MergeFrom(const CMsgPartyKickMember& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional fixed64 party_id = 1;
+  inline bool has_party_id() const;
+  inline void clear_party_id();
+  static const int kPartyIdFieldNumber = 1;
+  inline ::google::protobuf::uint64 party_id() const;
+  inline void set_party_id(::google::protobuf::uint64 value);
+
+  // optional fixed64 target_id = 2;
+  inline bool has_target_id() const;
+  inline void clear_target_id();
+  static const int kTargetIdFieldNumber = 2;
+  inline ::google::protobuf::uint64 target_id() const;
+  inline void set_target_id(::google::protobuf::uint64 value);
+
+  // @@protoc_insertion_point(class_scope:CMsgPartyKickMember)
+ private:
+  inline void set_has_party_id();
+  inline void clear_has_party_id();
+  inline void set_has_target_id();
+  inline void clear_has_target_id();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::google::protobuf::uint64 party_id_;
+  ::google::protobuf::uint64 target_id_;
+  friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
+
+  void InitAsDefaultInstance();
+  static CMsgPartyKickMember* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class CMsgPartySendChat : public ::google::protobuf::Message {
+ public:
+  CMsgPartySendChat();
+  virtual ~CMsgPartySendChat();
+
+  CMsgPartySendChat(const CMsgPartySendChat& from);
+
+  inline CMsgPartySendChat& operator=(const CMsgPartySendChat& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const CMsgPartySendChat& default_instance();
+
+  void Swap(CMsgPartySendChat* other);
+
+  // implements Message ----------------------------------------------
+
+  CMsgPartySendChat* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const CMsgPartySendChat& from);
+  void MergeFrom(const CMsgPartySendChat& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional fixed64 party_id = 1;
+  inline bool has_party_id() const;
+  inline void clear_party_id();
+  static const int kPartyIdFieldNumber = 1;
+  inline ::google::protobuf::uint64 party_id() const;
+  inline void set_party_id(::google::protobuf::uint64 value);
+
+  // optional string msg = 2;
+  inline bool has_msg() const;
+  inline void clear_msg();
+  static const int kMsgFieldNumber = 2;
+  inline const ::std::string& msg() const;
+  inline void set_msg(const ::std::string& value);
+  inline void set_msg(const char* value);
+  inline void set_msg(const char* value, size_t size);
+  inline ::std::string* mutable_msg();
+  inline ::std::string* release_msg();
+  inline void set_allocated_msg(::std::string* msg);
+
+  // @@protoc_insertion_point(class_scope:CMsgPartySendChat)
+ private:
+  inline void set_has_party_id();
+  inline void clear_has_party_id();
+  inline void set_has_msg();
+  inline void clear_has_msg();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::google::protobuf::uint64 party_id_;
+  ::std::string* msg_;
+  friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
+
+  void InitAsDefaultInstance();
+  static CMsgPartySendChat* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class CMsgPartyChatMsg : public ::google::protobuf::Message {
+ public:
+  CMsgPartyChatMsg();
+  virtual ~CMsgPartyChatMsg();
+
+  CMsgPartyChatMsg(const CMsgPartyChatMsg& from);
+
+  inline CMsgPartyChatMsg& operator=(const CMsgPartyChatMsg& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const CMsgPartyChatMsg& default_instance();
+
+  void Swap(CMsgPartyChatMsg* other);
+
+  // implements Message ----------------------------------------------
+
+  CMsgPartyChatMsg* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const CMsgPartyChatMsg& from);
+  void MergeFrom(const CMsgPartyChatMsg& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional .ETFPartyChatType type = 1;
+  inline bool has_type() const;
+  inline void clear_type();
+  static const int kTypeFieldNumber = 1;
+  inline ::ETFPartyChatType type() const;
+  inline void set_type(::ETFPartyChatType value);
+
+  // optional fixed64 actor_id = 2;
+  inline bool has_actor_id() const;
+  inline void clear_actor_id();
+  static const int kActorIdFieldNumber = 2;
+  inline ::google::protobuf::uint64 actor_id() const;
+  inline void set_actor_id(::google::protobuf::uint64 value);
+
+  // optional string msg = 3;
+  inline bool has_msg() const;
+  inline void clear_msg();
+  static const int kMsgFieldNumber = 3;
+  inline const ::std::string& msg() const;
+  inline void set_msg(const ::std::string& value);
+  inline void set_msg(const char* value);
+  inline void set_msg(const char* value, size_t size);
+  inline ::std::string* mutable_msg();
+  inline ::std::string* release_msg();
+  inline void set_allocated_msg(::std::string* msg);
+
+  // @@protoc_insertion_point(class_scope:CMsgPartyChatMsg)
+ private:
+  inline void set_has_type();
+  inline void clear_has_type();
+  inline void set_has_actor_id();
+  inline void clear_has_actor_id();
+  inline void set_has_msg();
+  inline void clear_has_msg();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::google::protobuf::uint64 actor_id_;
+  ::std::string* msg_;
+  int type_;
+  friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
+
+  void InitAsDefaultInstance();
+  static CMsgPartyChatMsg* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class CSOTFParty_QueueEntry : public ::google::protobuf::Message {
+ public:
+  CSOTFParty_QueueEntry();
+  virtual ~CSOTFParty_QueueEntry();
+
+  CSOTFParty_QueueEntry(const CSOTFParty_QueueEntry& from);
+
+  inline CSOTFParty_QueueEntry& operator=(const CSOTFParty_QueueEntry& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const CSOTFParty_QueueEntry& default_instance();
+
+  void Swap(CSOTFParty_QueueEntry* other);
+
+  // implements Message ----------------------------------------------
+
+  CSOTFParty_QueueEntry* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const CSOTFParty_QueueEntry& from);
+  void MergeFrom(const CSOTFParty_QueueEntry& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional .ETFMatchGroup match_group = 1;
+  inline bool has_match_group() const;
+  inline void clear_match_group();
+  static const int kMatchGroupFieldNumber = 1;
+  inline ::ETFMatchGroup match_group() const;
+  inline void set_match_group(::ETFMatchGroup value);
+
+  // optional fixed32 queued_time = 2;
+  inline bool has_queued_time() const;
+  inline void clear_queued_time();
+  static const int kQueuedTimeFieldNumber = 2;
+  inline ::google::protobuf::uint32 queued_time() const;
+  inline void set_queued_time(::google::protobuf::uint32 value);
+
+  // @@protoc_insertion_point(class_scope:CSOTFParty.QueueEntry)
+ private:
+  inline void set_has_match_group();
+  inline void clear_has_match_group();
+  inline void set_has_queued_time();
+  inline void clear_has_queued_time();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  int match_group_;
+  ::google::protobuf::uint32 queued_time_;
+  friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
+
+  void InitAsDefaultInstance();
+  static CSOTFParty_QueueEntry* default_instance_;
 };
 // -------------------------------------------------------------------
 
@@ -7132,31 +9247,7 @@ class CSOTFParty : public ::google::protobuf::Message {
 
   // nested types ----------------------------------------------------
 
-  typedef CSOTFParty_State State;
-  static const State UI = CSOTFParty_State_UI;
-  static const State FINDING_MATCH = CSOTFParty_State_FINDING_MATCH;
-  static const State IN_MATCH = CSOTFParty_State_IN_MATCH;
-  static const State AWAITING_RESERVATION_CONFIRMATION = CSOTFParty_State_AWAITING_RESERVATION_CONFIRMATION;
-  static inline bool State_IsValid(int value) {
-    return CSOTFParty_State_IsValid(value);
-  }
-  static const State State_MIN =
-    CSOTFParty_State_State_MIN;
-  static const State State_MAX =
-    CSOTFParty_State_State_MAX;
-  static const int State_ARRAYSIZE =
-    CSOTFParty_State_State_ARRAYSIZE;
-  static inline const ::google::protobuf::EnumDescriptor*
-  State_descriptor() {
-    return CSOTFParty_State_descriptor();
-  }
-  static inline const ::std::string& State_Name(State value) {
-    return CSOTFParty_State_Name(value);
-  }
-  static inline bool State_Parse(const ::std::string& name,
-      State* value) {
-    return CSOTFParty_State_Parse(name, value);
-  }
+  typedef CSOTFParty_QueueEntry QueueEntry;
 
   // accessors -------------------------------------------------------
 
@@ -7198,18 +9289,6 @@ class CSOTFParty : public ::google::protobuf::Message {
   inline ::google::protobuf::RepeatedPtrField< ::CSOTFPartyMember >*
       mutable_members();
 
-  // repeated fixed64 pending_invites = 5;
-  inline int pending_invites_size() const;
-  inline void clear_pending_invites();
-  static const int kPendingInvitesFieldNumber = 5;
-  inline ::google::protobuf::uint64 pending_invites(int index) const;
-  inline void set_pending_invites(int index, ::google::protobuf::uint64 value);
-  inline void add_pending_invites(::google::protobuf::uint64 value);
-  inline const ::google::protobuf::RepeatedField< ::google::protobuf::uint64 >&
-      pending_invites() const;
-  inline ::google::protobuf::RepeatedField< ::google::protobuf::uint64 >*
-      mutable_pending_invites();
-
   // optional uint64 associated_lobby_id = 35;
   inline bool has_associated_lobby_id() const;
   inline void clear_associated_lobby_id();
@@ -7217,145 +9296,82 @@ class CSOTFParty : public ::google::protobuf::Message {
   inline ::google::protobuf::uint64 associated_lobby_id() const;
   inline void set_associated_lobby_id(::google::protobuf::uint64 value);
 
-  // optional .CSOTFParty.State state = 6;
-  inline bool has_state() const;
-  inline void clear_state();
-  static const int kStateFieldNumber = 6;
-  inline ::CSOTFParty_State state() const;
-  inline void set_state(::CSOTFParty_State value);
+  // optional .ETFMatchGroup associated_lobby_match_group = 40;
+  inline bool has_associated_lobby_match_group() const;
+  inline void clear_associated_lobby_match_group();
+  static const int kAssociatedLobbyMatchGroupFieldNumber = 40;
+  inline ::ETFMatchGroup associated_lobby_match_group() const;
+  inline void set_associated_lobby_match_group(::ETFMatchGroup value);
 
-  // optional .TF_Matchmaking_WizardStep wizard_step = 29;
-  inline bool has_wizard_step() const;
-  inline void clear_wizard_step();
-  static const int kWizardStepFieldNumber = 29;
-  inline ::TF_Matchmaking_WizardStep wizard_step() const;
-  inline void set_wizard_step(::TF_Matchmaking_WizardStep value);
+  // repeated .CSOTFParty.QueueEntry matchmaking_queues = 43;
+  inline int matchmaking_queues_size() const;
+  inline void clear_matchmaking_queues();
+  static const int kMatchmakingQueuesFieldNumber = 43;
+  inline const ::CSOTFParty_QueueEntry& matchmaking_queues(int index) const;
+  inline ::CSOTFParty_QueueEntry* mutable_matchmaking_queues(int index);
+  inline ::CSOTFParty_QueueEntry* add_matchmaking_queues();
+  inline const ::google::protobuf::RepeatedPtrField< ::CSOTFParty_QueueEntry >&
+      matchmaking_queues() const;
+  inline ::google::protobuf::RepeatedPtrField< ::CSOTFParty_QueueEntry >*
+      mutable_matchmaking_queues();
 
-  // optional uint32 started_matchmaking_time = 7;
-  inline bool has_started_matchmaking_time() const;
-  inline void clear_started_matchmaking_time();
-  static const int kStartedMatchmakingTimeFieldNumber = 7;
-  inline ::google::protobuf::uint32 started_matchmaking_time() const;
-  inline void set_started_matchmaking_time(::google::protobuf::uint32 value);
+  // optional .CTFGroupMatchCriteriaProto group_criteria = 37;
+  inline bool has_group_criteria() const;
+  inline void clear_group_criteria();
+  static const int kGroupCriteriaFieldNumber = 37;
+  inline const ::CTFGroupMatchCriteriaProto& group_criteria() const;
+  inline ::CTFGroupMatchCriteriaProto* mutable_group_criteria();
+  inline ::CTFGroupMatchCriteriaProto* release_group_criteria();
+  inline void set_allocated_group_criteria(::CTFGroupMatchCriteriaProto* group_criteria);
 
-  // repeated uint32 searching_players_by_group = 10;
-  inline int searching_players_by_group_size() const;
-  inline void clear_searching_players_by_group();
-  static const int kSearchingPlayersByGroupFieldNumber = 10;
-  inline ::google::protobuf::uint32 searching_players_by_group(int index) const;
-  inline void set_searching_players_by_group(int index, ::google::protobuf::uint32 value);
-  inline void add_searching_players_by_group(::google::protobuf::uint32 value);
-  inline const ::google::protobuf::RepeatedField< ::google::protobuf::uint32 >&
-      searching_players_by_group() const;
-  inline ::google::protobuf::RepeatedField< ::google::protobuf::uint32 >*
-      mutable_searching_players_by_group();
+  // optional uint32 casual_banned_time = 18;
+  inline bool has_casual_banned_time() const;
+  inline void clear_casual_banned_time();
+  static const int kCasualBannedTimeFieldNumber = 18;
+  inline ::google::protobuf::uint32 casual_banned_time() const;
+  inline void set_casual_banned_time(::google::protobuf::uint32 value);
 
-  // optional fixed64 steam_lobby_id = 27;
-  inline bool has_steam_lobby_id() const;
-  inline void clear_steam_lobby_id();
-  static const int kSteamLobbyIdFieldNumber = 27;
-  inline ::google::protobuf::uint64 steam_lobby_id() const;
-  inline void set_steam_lobby_id(::google::protobuf::uint64 value);
+  // optional uint32 casual_low_priority_time = 20;
+  inline bool has_casual_low_priority_time() const;
+  inline void clear_casual_low_priority_time();
+  static const int kCasualLowPriorityTimeFieldNumber = 20;
+  inline ::google::protobuf::uint32 casual_low_priority_time() const;
+  inline void set_casual_low_priority_time(::google::protobuf::uint32 value);
 
-  // optional .TF_MatchmakingMode matchmaking_mode = 30;
-  inline bool has_matchmaking_mode() const;
-  inline void clear_matchmaking_mode();
-  static const int kMatchmakingModeFieldNumber = 30;
-  inline ::TF_MatchmakingMode matchmaking_mode() const;
-  inline void set_matchmaking_mode(::TF_MatchmakingMode value);
+  // optional uint32 ranked_banned_time = 41;
+  inline bool has_ranked_banned_time() const;
+  inline void clear_ranked_banned_time();
+  static const int kRankedBannedTimeFieldNumber = 41;
+  inline ::google::protobuf::uint32 ranked_banned_time() const;
+  inline void set_ranked_banned_time(::google::protobuf::uint32 value);
 
-  // optional bool search_late_join_ok = 23;
-  inline bool has_search_late_join_ok() const;
-  inline void clear_search_late_join_ok();
-  static const int kSearchLateJoinOkFieldNumber = 23;
-  inline bool search_late_join_ok() const;
-  inline void set_search_late_join_ok(bool value);
+  // optional uint32 ranked_low_priority_time = 42;
+  inline bool has_ranked_low_priority_time() const;
+  inline void clear_ranked_low_priority_time();
+  static const int kRankedLowPriorityTimeFieldNumber = 42;
+  inline ::google::protobuf::uint32 ranked_low_priority_time() const;
+  inline void set_ranked_low_priority_time(::google::protobuf::uint32 value);
 
-  // optional string search_mvm_mannup_tour = 32;
-  inline bool has_search_mvm_mannup_tour() const;
-  inline void clear_search_mvm_mannup_tour();
-  static const int kSearchMvmMannupTourFieldNumber = 32;
-  inline const ::std::string& search_mvm_mannup_tour() const;
-  inline void set_search_mvm_mannup_tour(const ::std::string& value);
-  inline void set_search_mvm_mannup_tour(const char* value);
-  inline void set_search_mvm_mannup_tour(const char* value, size_t size);
-  inline ::std::string* mutable_search_mvm_mannup_tour();
-  inline ::std::string* release_search_mvm_mannup_tour();
-  inline void set_allocated_search_mvm_mannup_tour(::std::string* search_mvm_mannup_tour);
+  // optional .TFSyncedMMUIState leader_ui_state = 44;
+  inline bool has_leader_ui_state() const;
+  inline void clear_leader_ui_state();
+  static const int kLeaderUiStateFieldNumber = 44;
+  inline const ::TFSyncedMMUIState& leader_ui_state() const;
+  inline ::TFSyncedMMUIState* mutable_leader_ui_state();
+  inline ::TFSyncedMMUIState* release_leader_ui_state();
+  inline void set_allocated_leader_ui_state(::TFSyncedMMUIState* leader_ui_state);
 
-  // repeated string search_mvm_missions = 31;
-  inline int search_mvm_missions_size() const;
-  inline void clear_search_mvm_missions();
-  static const int kSearchMvmMissionsFieldNumber = 31;
-  inline const ::std::string& search_mvm_missions(int index) const;
-  inline ::std::string* mutable_search_mvm_missions(int index);
-  inline void set_search_mvm_missions(int index, const ::std::string& value);
-  inline void set_search_mvm_missions(int index, const char* value);
-  inline void set_search_mvm_missions(int index, const char* value, size_t size);
-  inline ::std::string* add_search_mvm_missions();
-  inline void add_search_mvm_missions(const ::std::string& value);
-  inline void add_search_mvm_missions(const char* value);
-  inline void add_search_mvm_missions(const char* value, size_t size);
-  inline const ::google::protobuf::RepeatedPtrField< ::std::string>& search_mvm_missions() const;
-  inline ::google::protobuf::RepeatedPtrField< ::std::string>* mutable_search_mvm_missions();
-
-  // optional bool search_play_for_bragging_rights = 26;
-  inline bool has_search_play_for_bragging_rights() const;
-  inline void clear_search_play_for_bragging_rights();
-  static const int kSearchPlayForBraggingRightsFieldNumber = 26;
-  inline bool search_play_for_bragging_rights() const;
-  inline void set_search_play_for_bragging_rights(bool value);
-
-  // optional uint32 search_quickplay_game_type = 28;
-  inline bool has_search_quickplay_game_type() const;
-  inline void clear_search_quickplay_game_type();
-  static const int kSearchQuickplayGameTypeFieldNumber = 28;
-  inline ::google::protobuf::uint32 search_quickplay_game_type() const;
-  inline void set_search_quickplay_game_type(::google::protobuf::uint32 value);
-
-  // optional uint32 search_ladder_game_type = 33;
-  inline bool has_search_ladder_game_type() const;
-  inline void clear_search_ladder_game_type();
-  static const int kSearchLadderGameTypeFieldNumber = 33;
-  inline ::google::protobuf::uint32 search_ladder_game_type() const;
-  inline void set_search_ladder_game_type(::google::protobuf::uint32 value);
-
-  // optional .CMsgCasualMatchmakingSearchCriteria search_casual = 34;
-  inline bool has_search_casual() const;
-  inline void clear_search_casual();
-  static const int kSearchCasualFieldNumber = 34;
-  inline const ::CMsgCasualMatchmakingSearchCriteria& search_casual() const;
-  inline ::CMsgCasualMatchmakingSearchCriteria* mutable_search_casual();
-  inline ::CMsgCasualMatchmakingSearchCriteria* release_search_casual();
-  inline void set_allocated_search_casual(::CMsgCasualMatchmakingSearchCriteria* search_casual);
-
-  // optional uint32 custom_ping_tolerance = 36;
-  inline bool has_custom_ping_tolerance() const;
-  inline void clear_custom_ping_tolerance();
-  static const int kCustomPingToleranceFieldNumber = 36;
-  inline ::google::protobuf::uint32 custom_ping_tolerance() const;
-  inline void set_custom_ping_tolerance(::google::protobuf::uint32 value);
-
-  // optional uint32 matchmaking_ban_time = 18;
-  inline bool has_matchmaking_ban_time() const;
-  inline void clear_matchmaking_ban_time();
-  static const int kMatchmakingBanTimeFieldNumber = 18;
-  inline ::google::protobuf::uint32 matchmaking_ban_time() const;
-  inline void set_matchmaking_ban_time(::google::protobuf::uint32 value);
-
-  // optional uint32 matchmaking_ban_account_id = 19;
-  inline bool has_matchmaking_ban_account_id() const;
-  inline void clear_matchmaking_ban_account_id();
-  static const int kMatchmakingBanAccountIdFieldNumber = 19;
-  inline ::google::protobuf::uint32 matchmaking_ban_account_id() const;
-  inline void set_matchmaking_ban_account_id(::google::protobuf::uint32 value);
-
-  // optional uint32 matchmaking_low_priority_time = 20;
-  inline bool has_matchmaking_low_priority_time() const;
-  inline void clear_matchmaking_low_priority_time();
-  static const int kMatchmakingLowPriorityTimeFieldNumber = 20;
-  inline ::google::protobuf::uint32 matchmaking_low_priority_time() const;
-  inline void set_matchmaking_low_priority_time(::google::protobuf::uint32 value);
+  // repeated .TFPendingPartyMember pending_members = 39;
+  inline int pending_members_size() const;
+  inline void clear_pending_members();
+  static const int kPendingMembersFieldNumber = 39;
+  inline const ::TFPendingPartyMember& pending_members(int index) const;
+  inline ::TFPendingPartyMember* mutable_pending_members(int index);
+  inline ::TFPendingPartyMember* add_pending_members();
+  inline const ::google::protobuf::RepeatedPtrField< ::TFPendingPartyMember >&
+      pending_members() const;
+  inline ::google::protobuf::RepeatedPtrField< ::TFPendingPartyMember >*
+      mutable_pending_members();
 
   // @@protoc_insertion_point(class_scope:CSOTFParty)
  private:
@@ -7365,36 +9381,20 @@ class CSOTFParty : public ::google::protobuf::Message {
   inline void clear_has_leader_id();
   inline void set_has_associated_lobby_id();
   inline void clear_has_associated_lobby_id();
-  inline void set_has_state();
-  inline void clear_has_state();
-  inline void set_has_wizard_step();
-  inline void clear_has_wizard_step();
-  inline void set_has_started_matchmaking_time();
-  inline void clear_has_started_matchmaking_time();
-  inline void set_has_steam_lobby_id();
-  inline void clear_has_steam_lobby_id();
-  inline void set_has_matchmaking_mode();
-  inline void clear_has_matchmaking_mode();
-  inline void set_has_search_late_join_ok();
-  inline void clear_has_search_late_join_ok();
-  inline void set_has_search_mvm_mannup_tour();
-  inline void clear_has_search_mvm_mannup_tour();
-  inline void set_has_search_play_for_bragging_rights();
-  inline void clear_has_search_play_for_bragging_rights();
-  inline void set_has_search_quickplay_game_type();
-  inline void clear_has_search_quickplay_game_type();
-  inline void set_has_search_ladder_game_type();
-  inline void clear_has_search_ladder_game_type();
-  inline void set_has_search_casual();
-  inline void clear_has_search_casual();
-  inline void set_has_custom_ping_tolerance();
-  inline void clear_has_custom_ping_tolerance();
-  inline void set_has_matchmaking_ban_time();
-  inline void clear_has_matchmaking_ban_time();
-  inline void set_has_matchmaking_ban_account_id();
-  inline void clear_has_matchmaking_ban_account_id();
-  inline void set_has_matchmaking_low_priority_time();
-  inline void clear_has_matchmaking_low_priority_time();
+  inline void set_has_associated_lobby_match_group();
+  inline void clear_has_associated_lobby_match_group();
+  inline void set_has_group_criteria();
+  inline void clear_has_group_criteria();
+  inline void set_has_casual_banned_time();
+  inline void clear_has_casual_banned_time();
+  inline void set_has_casual_low_priority_time();
+  inline void clear_has_casual_low_priority_time();
+  inline void set_has_ranked_banned_time();
+  inline void clear_has_ranked_banned_time();
+  inline void set_has_ranked_low_priority_time();
+  inline void clear_has_ranked_low_priority_time();
+  inline void set_has_leader_ui_state();
+  inline void clear_has_leader_ui_state();
 
   ::google::protobuf::UnknownFieldSet _unknown_fields_;
 
@@ -7404,25 +9404,16 @@ class CSOTFParty : public ::google::protobuf::Message {
   ::google::protobuf::uint64 leader_id_;
   ::google::protobuf::RepeatedField< ::google::protobuf::uint64 > member_ids_;
   ::google::protobuf::RepeatedPtrField< ::CSOTFPartyMember > members_;
-  ::google::protobuf::RepeatedField< ::google::protobuf::uint64 > pending_invites_;
   ::google::protobuf::uint64 associated_lobby_id_;
-  int state_;
-  int wizard_step_;
-  ::google::protobuf::RepeatedField< ::google::protobuf::uint32 > searching_players_by_group_;
-  ::google::protobuf::uint32 started_matchmaking_time_;
-  int matchmaking_mode_;
-  ::google::protobuf::uint64 steam_lobby_id_;
-  ::std::string* search_mvm_mannup_tour_;
-  ::google::protobuf::RepeatedPtrField< ::std::string> search_mvm_missions_;
-  bool search_late_join_ok_;
-  bool search_play_for_bragging_rights_;
-  ::google::protobuf::uint32 search_quickplay_game_type_;
-  ::CMsgCasualMatchmakingSearchCriteria* search_casual_;
-  ::google::protobuf::uint32 search_ladder_game_type_;
-  ::google::protobuf::uint32 custom_ping_tolerance_;
-  ::google::protobuf::uint32 matchmaking_ban_time_;
-  ::google::protobuf::uint32 matchmaking_ban_account_id_;
-  ::google::protobuf::uint32 matchmaking_low_priority_time_;
+  ::google::protobuf::RepeatedPtrField< ::CSOTFParty_QueueEntry > matchmaking_queues_;
+  int associated_lobby_match_group_;
+  ::google::protobuf::uint32 casual_banned_time_;
+  ::CTFGroupMatchCriteriaProto* group_criteria_;
+  ::google::protobuf::uint32 casual_low_priority_time_;
+  ::google::protobuf::uint32 ranked_banned_time_;
+  ::TFSyncedMMUIState* leader_ui_state_;
+  ::google::protobuf::RepeatedPtrField< ::TFPendingPartyMember > pending_members_;
+  ::google::protobuf::uint32 ranked_low_priority_time_;
   friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
   friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
   friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
@@ -7485,48 +9476,23 @@ class CSOTFPartyInvite_PartyMember : public ::google::protobuf::Message {
 
   // accessors -------------------------------------------------------
 
-  // optional string name = 1;
-  inline bool has_name() const;
-  inline void clear_name();
-  static const int kNameFieldNumber = 1;
-  inline const ::std::string& name() const;
-  inline void set_name(const ::std::string& value);
-  inline void set_name(const char* value);
-  inline void set_name(const char* value, size_t size);
-  inline ::std::string* mutable_name();
-  inline ::std::string* release_name();
-  inline void set_allocated_name(::std::string* name);
-
-  // optional fixed64 steam_id = 2;
-  inline bool has_steam_id() const;
-  inline void clear_steam_id();
-  static const int kSteamIdFieldNumber = 2;
-  inline ::google::protobuf::uint64 steam_id() const;
-  inline void set_steam_id(::google::protobuf::uint64 value);
-
-  // optional uint32 avatar = 3;
-  inline bool has_avatar() const;
-  inline void clear_avatar();
-  static const int kAvatarFieldNumber = 3;
-  inline ::google::protobuf::uint32 avatar() const;
-  inline void set_avatar(::google::protobuf::uint32 value);
+  // optional fixed64 steamid = 2;
+  inline bool has_steamid() const;
+  inline void clear_steamid();
+  static const int kSteamidFieldNumber = 2;
+  inline ::google::protobuf::uint64 steamid() const;
+  inline void set_steamid(::google::protobuf::uint64 value);
 
   // @@protoc_insertion_point(class_scope:CSOTFPartyInvite.PartyMember)
  private:
-  inline void set_has_name();
-  inline void clear_has_name();
-  inline void set_has_steam_id();
-  inline void clear_has_steam_id();
-  inline void set_has_avatar();
-  inline void clear_has_avatar();
+  inline void set_has_steamid();
+  inline void clear_has_steamid();
 
   ::google::protobuf::UnknownFieldSet _unknown_fields_;
 
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
-  ::std::string* name_;
-  ::google::protobuf::uint64 steam_id_;
-  ::google::protobuf::uint32 avatar_;
+  ::google::protobuf::uint64 steamid_;
   friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
   friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
   friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
@@ -7589,6 +9555,30 @@ class CSOTFPartyInvite : public ::google::protobuf::Message {
 
   typedef CSOTFPartyInvite_PartyMember PartyMember;
 
+  typedef CSOTFPartyInvite_Type Type;
+  static const Type PENDING_INVITE = CSOTFPartyInvite_Type_PENDING_INVITE;
+  static const Type PENDING_JOIN_REQUEST = CSOTFPartyInvite_Type_PENDING_JOIN_REQUEST;
+  static inline bool Type_IsValid(int value) {
+    return CSOTFPartyInvite_Type_IsValid(value);
+  }
+  static const Type Type_MIN =
+    CSOTFPartyInvite_Type_Type_MIN;
+  static const Type Type_MAX =
+    CSOTFPartyInvite_Type_Type_MAX;
+  static const int Type_ARRAYSIZE =
+    CSOTFPartyInvite_Type_Type_ARRAYSIZE;
+  static inline const ::google::protobuf::EnumDescriptor*
+  Type_descriptor() {
+    return CSOTFPartyInvite_Type_descriptor();
+  }
+  static inline const ::std::string& Type_Name(Type value) {
+    return CSOTFPartyInvite_Type_Name(value);
+  }
+  static inline bool Type_Parse(const ::std::string& name,
+      Type* value) {
+    return CSOTFPartyInvite_Type_Parse(name, value);
+  }
+
   // accessors -------------------------------------------------------
 
   // optional uint64 group_id = 1;
@@ -7598,24 +9588,12 @@ class CSOTFPartyInvite : public ::google::protobuf::Message {
   inline ::google::protobuf::uint64 group_id() const;
   inline void set_group_id(::google::protobuf::uint64 value);
 
-  // optional fixed64 sender_id = 2;
-  inline bool has_sender_id() const;
-  inline void clear_sender_id();
-  static const int kSenderIdFieldNumber = 2;
-  inline ::google::protobuf::uint64 sender_id() const;
-  inline void set_sender_id(::google::protobuf::uint64 value);
-
-  // optional string sender_name = 3;
-  inline bool has_sender_name() const;
-  inline void clear_sender_name();
-  static const int kSenderNameFieldNumber = 3;
-  inline const ::std::string& sender_name() const;
-  inline void set_sender_name(const ::std::string& value);
-  inline void set_sender_name(const char* value);
-  inline void set_sender_name(const char* value, size_t size);
-  inline ::std::string* mutable_sender_name();
-  inline ::std::string* release_sender_name();
-  inline void set_allocated_sender_name(::std::string* sender_name);
+  // optional fixed64 inviter = 2;
+  inline bool has_inviter() const;
+  inline void clear_inviter();
+  static const int kInviterFieldNumber = 2;
+  inline ::google::protobuf::uint64 inviter() const;
+  inline void set_inviter(::google::protobuf::uint64 value);
 
   // repeated .CSOTFPartyInvite.PartyMember members = 4;
   inline int members_size() const;
@@ -7629,23 +9607,30 @@ class CSOTFPartyInvite : public ::google::protobuf::Message {
   inline ::google::protobuf::RepeatedPtrField< ::CSOTFPartyInvite_PartyMember >*
       mutable_members();
 
+  // optional .CSOTFPartyInvite.Type type = 5;
+  inline bool has_type() const;
+  inline void clear_type();
+  static const int kTypeFieldNumber = 5;
+  inline ::CSOTFPartyInvite_Type type() const;
+  inline void set_type(::CSOTFPartyInvite_Type value);
+
   // @@protoc_insertion_point(class_scope:CSOTFPartyInvite)
  private:
   inline void set_has_group_id();
   inline void clear_has_group_id();
-  inline void set_has_sender_id();
-  inline void clear_has_sender_id();
-  inline void set_has_sender_name();
-  inline void clear_has_sender_name();
+  inline void set_has_inviter();
+  inline void clear_has_inviter();
+  inline void set_has_type();
+  inline void clear_has_type();
 
   ::google::protobuf::UnknownFieldSet _unknown_fields_;
 
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
   ::google::protobuf::uint64 group_id_;
-  ::google::protobuf::uint64 sender_id_;
-  ::std::string* sender_name_;
+  ::google::protobuf::uint64 inviter_;
   ::google::protobuf::RepeatedPtrField< ::CSOTFPartyInvite_PartyMember > members_;
+  int type_;
   friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
   friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
   friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
@@ -7655,14 +9640,14 @@ class CSOTFPartyInvite : public ::google::protobuf::Message {
 };
 // -------------------------------------------------------------------
 
-class CTFLobbyMember : public ::google::protobuf::Message {
+class CTFLobbyPlayerProto : public ::google::protobuf::Message {
  public:
-  CTFLobbyMember();
-  virtual ~CTFLobbyMember();
+  CTFLobbyPlayerProto();
+  virtual ~CTFLobbyPlayerProto();
 
-  CTFLobbyMember(const CTFLobbyMember& from);
+  CTFLobbyPlayerProto(const CTFLobbyPlayerProto& from);
 
-  inline CTFLobbyMember& operator=(const CTFLobbyMember& from) {
+  inline CTFLobbyPlayerProto& operator=(const CTFLobbyPlayerProto& from) {
     CopyFrom(from);
     return *this;
   }
@@ -7676,17 +9661,17 @@ class CTFLobbyMember : public ::google::protobuf::Message {
   }
 
   static const ::google::protobuf::Descriptor* descriptor();
-  static const CTFLobbyMember& default_instance();
+  static const CTFLobbyPlayerProto& default_instance();
 
-  void Swap(CTFLobbyMember* other);
+  void Swap(CTFLobbyPlayerProto* other);
 
   // implements Message ----------------------------------------------
 
-  CTFLobbyMember* New() const;
+  CTFLobbyPlayerProto* New() const;
   void CopyFrom(const ::google::protobuf::Message& from);
   void MergeFrom(const ::google::protobuf::Message& from);
-  void CopyFrom(const CTFLobbyMember& from);
-  void MergeFrom(const CTFLobbyMember& from);
+  void CopyFrom(const CTFLobbyPlayerProto& from);
+  void MergeFrom(const CTFLobbyPlayerProto& from);
   void Clear();
   bool IsInitialized() const;
 
@@ -7706,31 +9691,57 @@ class CTFLobbyMember : public ::google::protobuf::Message {
 
   // nested types ----------------------------------------------------
 
-  typedef CTFLobbyMember_ConnectState ConnectState;
-  static const ConnectState INVALID = CTFLobbyMember_ConnectState_INVALID;
-  static const ConnectState RESERVATION_PENDING = CTFLobbyMember_ConnectState_RESERVATION_PENDING;
-  static const ConnectState RESERVED = CTFLobbyMember_ConnectState_RESERVED;
-  static const ConnectState CONNECTED = CTFLobbyMember_ConnectState_CONNECTED;
-  static const ConnectState DISCONNECTED = CTFLobbyMember_ConnectState_DISCONNECTED;
+  typedef CTFLobbyPlayerProto_ConnectState ConnectState;
+  static const ConnectState INVALID = CTFLobbyPlayerProto_ConnectState_INVALID;
+  static const ConnectState RESERVATION_PENDING = CTFLobbyPlayerProto_ConnectState_RESERVATION_PENDING;
+  static const ConnectState RESERVED = CTFLobbyPlayerProto_ConnectState_RESERVED;
+  static const ConnectState CONNECTED = CTFLobbyPlayerProto_ConnectState_CONNECTED;
+  static const ConnectState DISCONNECTED = CTFLobbyPlayerProto_ConnectState_DISCONNECTED;
   static inline bool ConnectState_IsValid(int value) {
-    return CTFLobbyMember_ConnectState_IsValid(value);
+    return CTFLobbyPlayerProto_ConnectState_IsValid(value);
   }
   static const ConnectState ConnectState_MIN =
-    CTFLobbyMember_ConnectState_ConnectState_MIN;
+    CTFLobbyPlayerProto_ConnectState_ConnectState_MIN;
   static const ConnectState ConnectState_MAX =
-    CTFLobbyMember_ConnectState_ConnectState_MAX;
+    CTFLobbyPlayerProto_ConnectState_ConnectState_MAX;
   static const int ConnectState_ARRAYSIZE =
-    CTFLobbyMember_ConnectState_ConnectState_ARRAYSIZE;
+    CTFLobbyPlayerProto_ConnectState_ConnectState_ARRAYSIZE;
   static inline const ::google::protobuf::EnumDescriptor*
   ConnectState_descriptor() {
-    return CTFLobbyMember_ConnectState_descriptor();
+    return CTFLobbyPlayerProto_ConnectState_descriptor();
   }
   static inline const ::std::string& ConnectState_Name(ConnectState value) {
-    return CTFLobbyMember_ConnectState_Name(value);
+    return CTFLobbyPlayerProto_ConnectState_Name(value);
   }
   static inline bool ConnectState_Parse(const ::std::string& name,
       ConnectState* value) {
-    return CTFLobbyMember_ConnectState_Parse(name, value);
+    return CTFLobbyPlayerProto_ConnectState_Parse(name, value);
+  }
+
+  typedef CTFLobbyPlayerProto_Type Type;
+  static const Type INVALID_PLAYER = CTFLobbyPlayerProto_Type_INVALID_PLAYER;
+  static const Type MATCH_PLAYER = CTFLobbyPlayerProto_Type_MATCH_PLAYER;
+  static const Type STANDBY_PLAYER = CTFLobbyPlayerProto_Type_STANDBY_PLAYER;
+  static const Type OBSERVING_PLAYER = CTFLobbyPlayerProto_Type_OBSERVING_PLAYER;
+  static inline bool Type_IsValid(int value) {
+    return CTFLobbyPlayerProto_Type_IsValid(value);
+  }
+  static const Type Type_MIN =
+    CTFLobbyPlayerProto_Type_Type_MIN;
+  static const Type Type_MAX =
+    CTFLobbyPlayerProto_Type_Type_MAX;
+  static const int Type_ARRAYSIZE =
+    CTFLobbyPlayerProto_Type_Type_ARRAYSIZE;
+  static inline const ::google::protobuf::EnumDescriptor*
+  Type_descriptor() {
+    return CTFLobbyPlayerProto_Type_descriptor();
+  }
+  static inline const ::std::string& Type_Name(Type value) {
+    return CTFLobbyPlayerProto_Type_Name(value);
+  }
+  static inline bool Type_Parse(const ::std::string& name,
+      Type* value) {
+    return CTFLobbyPlayerProto_Type_Parse(name, value);
   }
 
   // accessors -------------------------------------------------------
@@ -7749,12 +9760,12 @@ class CTFLobbyMember : public ::google::protobuf::Message {
   inline ::TF_GC_TEAM team() const;
   inline void set_team(::TF_GC_TEAM value);
 
-  // optional .CTFLobbyMember.ConnectState connect_state = 13;
+  // optional .CTFLobbyPlayerProto.ConnectState connect_state = 13;
   inline bool has_connect_state() const;
   inline void clear_connect_state();
   static const int kConnectStateFieldNumber = 13;
-  inline ::CTFLobbyMember_ConnectState connect_state() const;
-  inline void set_connect_state(::CTFLobbyMember_ConnectState value);
+  inline ::CTFLobbyPlayerProto_ConnectState connect_state() const;
+  inline void set_connect_state(::CTFLobbyPlayerProto_ConnectState value);
 
   // optional string name = 6;
   inline bool has_name() const;
@@ -7768,19 +9779,12 @@ class CTFLobbyMember : public ::google::protobuf::Message {
   inline ::std::string* release_name();
   inline void set_allocated_name(::std::string* name);
 
-  // optional .TFLobbyReadyState ready_state = 11;
-  inline bool has_ready_state() const;
-  inline void clear_ready_state();
-  static const int kReadyStateFieldNumber = 11;
-  inline ::TFLobbyReadyState ready_state() const;
-  inline void set_ready_state(::TFLobbyReadyState value);
-
-  // optional uint64 party_id = 12;
-  inline bool has_party_id() const;
-  inline void clear_party_id();
-  static const int kPartyIdFieldNumber = 12;
-  inline ::google::protobuf::uint64 party_id() const;
-  inline void set_party_id(::google::protobuf::uint64 value);
+  // optional uint64 original_party_id = 12;
+  inline bool has_original_party_id() const;
+  inline void clear_original_party_id();
+  static const int kOriginalPartyIdFieldNumber = 12;
+  inline ::google::protobuf::uint64 original_party_id() const;
+  inline void set_original_party_id(::google::protobuf::uint64 value);
 
   // optional bool squad_surplus = 14;
   inline bool has_squad_surplus() const;
@@ -7796,13 +9800,6 @@ class CTFLobbyMember : public ::google::protobuf::Message {
   inline ::google::protobuf::uint32 badge_level() const;
   inline void set_badge_level(::google::protobuf::uint32 value);
 
-  // optional uint32 skillrating = 16 [default = 10000];
-  inline bool has_skillrating() const;
-  inline void clear_skillrating();
-  static const int kSkillratingFieldNumber = 16;
-  inline ::google::protobuf::uint32 skillrating() const;
-  inline void set_skillrating(::google::protobuf::uint32 value);
-
   // optional uint32 last_connect_time = 17;
   inline bool has_last_connect_time() const;
   inline void clear_last_connect_time();
@@ -7810,7 +9807,42 @@ class CTFLobbyMember : public ::google::protobuf::Message {
   inline ::google::protobuf::uint32 last_connect_time() const;
   inline void set_last_connect_time(::google::protobuf::uint32 value);
 
-  // @@protoc_insertion_point(class_scope:CTFLobbyMember)
+  // optional .CTFLobbyPlayerProto.Type type = 19;
+  inline bool has_type() const;
+  inline void clear_type();
+  static const int kTypeFieldNumber = 19;
+  inline ::CTFLobbyPlayerProto_Type type() const;
+  inline void set_type(::CTFLobbyPlayerProto_Type value);
+
+  // optional double normalized_rating = 20;
+  inline bool has_normalized_rating() const;
+  inline void clear_normalized_rating();
+  static const int kNormalizedRatingFieldNumber = 20;
+  inline double normalized_rating() const;
+  inline void set_normalized_rating(double value);
+
+  // optional double normalized_uncertainty = 22;
+  inline bool has_normalized_uncertainty() const;
+  inline void clear_normalized_uncertainty();
+  static const int kNormalizedUncertaintyFieldNumber = 22;
+  inline double normalized_uncertainty() const;
+  inline void set_normalized_uncertainty(double value);
+
+  // optional uint32 rank = 21;
+  inline bool has_rank() const;
+  inline void clear_rank();
+  static const int kRankFieldNumber = 21;
+  inline ::google::protobuf::uint32 rank() const;
+  inline void set_rank(::google::protobuf::uint32 value);
+
+  // optional bool chat_suspension = 23;
+  inline bool has_chat_suspension() const;
+  inline void clear_chat_suspension();
+  static const int kChatSuspensionFieldNumber = 23;
+  inline bool chat_suspension() const;
+  inline void set_chat_suspension(bool value);
+
+  // @@protoc_insertion_point(class_scope:CTFLobbyPlayerProto)
  private:
   inline void set_has_id();
   inline void clear_has_id();
@@ -7820,18 +9852,24 @@ class CTFLobbyMember : public ::google::protobuf::Message {
   inline void clear_has_connect_state();
   inline void set_has_name();
   inline void clear_has_name();
-  inline void set_has_ready_state();
-  inline void clear_has_ready_state();
-  inline void set_has_party_id();
-  inline void clear_has_party_id();
+  inline void set_has_original_party_id();
+  inline void clear_has_original_party_id();
   inline void set_has_squad_surplus();
   inline void clear_has_squad_surplus();
   inline void set_has_badge_level();
   inline void clear_has_badge_level();
-  inline void set_has_skillrating();
-  inline void clear_has_skillrating();
   inline void set_has_last_connect_time();
   inline void clear_has_last_connect_time();
+  inline void set_has_type();
+  inline void clear_has_type();
+  inline void set_has_normalized_rating();
+  inline void clear_has_normalized_rating();
+  inline void set_has_normalized_uncertainty();
+  inline void clear_has_normalized_uncertainty();
+  inline void set_has_rank();
+  inline void clear_has_rank();
+  inline void set_has_chat_suspension();
+  inline void clear_has_chat_suspension();
 
   ::google::protobuf::UnknownFieldSet _unknown_fields_;
 
@@ -7841,29 +9879,32 @@ class CTFLobbyMember : public ::google::protobuf::Message {
   int team_;
   int connect_state_;
   ::std::string* name_;
-  ::google::protobuf::uint64 party_id_;
-  int ready_state_;
-  bool squad_surplus_;
+  ::google::protobuf::uint64 original_party_id_;
   ::google::protobuf::uint32 badge_level_;
-  ::google::protobuf::uint32 skillrating_;
   ::google::protobuf::uint32 last_connect_time_;
+  int type_;
+  bool squad_surplus_;
+  bool chat_suspension_;
+  double normalized_rating_;
+  double normalized_uncertainty_;
+  ::google::protobuf::uint32 rank_;
   friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
   friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
   friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
 
   void InitAsDefaultInstance();
-  static CTFLobbyMember* default_instance_;
+  static CTFLobbyPlayerProto* default_instance_;
 };
 // -------------------------------------------------------------------
 
-class CLobbyPendingPlayerReport : public ::google::protobuf::Message {
+class CTFLobbyInviteProto : public ::google::protobuf::Message {
  public:
-  CLobbyPendingPlayerReport();
-  virtual ~CLobbyPendingPlayerReport();
+  CTFLobbyInviteProto();
+  virtual ~CTFLobbyInviteProto();
 
-  CLobbyPendingPlayerReport(const CLobbyPendingPlayerReport& from);
+  CTFLobbyInviteProto(const CTFLobbyInviteProto& from);
 
-  inline CLobbyPendingPlayerReport& operator=(const CLobbyPendingPlayerReport& from) {
+  inline CTFLobbyInviteProto& operator=(const CTFLobbyInviteProto& from) {
     CopyFrom(from);
     return *this;
   }
@@ -7877,17 +9918,17 @@ class CLobbyPendingPlayerReport : public ::google::protobuf::Message {
   }
 
   static const ::google::protobuf::Descriptor* descriptor();
-  static const CLobbyPendingPlayerReport& default_instance();
+  static const CTFLobbyInviteProto& default_instance();
 
-  void Swap(CLobbyPendingPlayerReport* other);
+  void Swap(CTFLobbyInviteProto* other);
 
   // implements Message ----------------------------------------------
 
-  CLobbyPendingPlayerReport* New() const;
+  CTFLobbyInviteProto* New() const;
   void CopyFrom(const ::google::protobuf::Message& from);
   void MergeFrom(const ::google::protobuf::Message& from);
-  void CopyFrom(const CLobbyPendingPlayerReport& from);
-  void MergeFrom(const CLobbyPendingPlayerReport& from);
+  void CopyFrom(const CTFLobbyInviteProto& from);
+  void MergeFrom(const CTFLobbyInviteProto& from);
   void Clear();
   bool IsInitialized() const;
 
@@ -7909,39 +9950,39 @@ class CLobbyPendingPlayerReport : public ::google::protobuf::Message {
 
   // accessors -------------------------------------------------------
 
-  // optional uint32 account_id = 1;
-  inline bool has_account_id() const;
-  inline void clear_account_id();
-  static const int kAccountIdFieldNumber = 1;
-  inline ::google::protobuf::uint32 account_id() const;
-  inline void set_account_id(::google::protobuf::uint32 value);
+  // optional fixed64 lobby_id = 1;
+  inline bool has_lobby_id() const;
+  inline void clear_lobby_id();
+  static const int kLobbyIdFieldNumber = 1;
+  inline ::google::protobuf::uint64 lobby_id() const;
+  inline void set_lobby_id(::google::protobuf::uint64 value);
 
-  // optional fixed32 date = 2;
-  inline bool has_date() const;
-  inline void clear_date();
-  static const int kDateFieldNumber = 2;
-  inline ::google::protobuf::uint32 date() const;
-  inline void set_date(::google::protobuf::uint32 value);
+  // optional .ETFMatchGroup match_group = 2;
+  inline bool has_match_group() const;
+  inline void clear_match_group();
+  static const int kMatchGroupFieldNumber = 2;
+  inline ::ETFMatchGroup match_group() const;
+  inline void set_match_group(::ETFMatchGroup value);
 
-  // @@protoc_insertion_point(class_scope:CLobbyPendingPlayerReport)
+  // @@protoc_insertion_point(class_scope:CTFLobbyInviteProto)
  private:
-  inline void set_has_account_id();
-  inline void clear_has_account_id();
-  inline void set_has_date();
-  inline void clear_has_date();
+  inline void set_has_lobby_id();
+  inline void clear_has_lobby_id();
+  inline void set_has_match_group();
+  inline void clear_has_match_group();
 
   ::google::protobuf::UnknownFieldSet _unknown_fields_;
 
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
-  ::google::protobuf::uint32 account_id_;
-  ::google::protobuf::uint32 date_;
+  ::google::protobuf::uint64 lobby_id_;
+  int match_group_;
   friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
   friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
   friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
 
   void InitAsDefaultInstance();
-  static CLobbyPendingPlayerReport* default_instance_;
+  static CTFLobbyInviteProto* default_instance_;
 };
 // -------------------------------------------------------------------
 
@@ -8021,33 +10062,6 @@ class CSOTFGameServerLobby : public ::google::protobuf::Message {
     return CSOTFGameServerLobby_State_Parse(name, value);
   }
 
-  typedef CSOTFGameServerLobby_LobbyType LobbyType;
-  static const LobbyType INVALID = CSOTFGameServerLobby_LobbyType_INVALID;
-  static const LobbyType MATCH = CSOTFGameServerLobby_LobbyType_MATCH;
-  static const LobbyType PRACTICE = CSOTFGameServerLobby_LobbyType_PRACTICE;
-  static const LobbyType TOURNAMENT = CSOTFGameServerLobby_LobbyType_TOURNAMENT;
-  static const LobbyType TUTORIAL = CSOTFGameServerLobby_LobbyType_TUTORIAL;
-  static inline bool LobbyType_IsValid(int value) {
-    return CSOTFGameServerLobby_LobbyType_IsValid(value);
-  }
-  static const LobbyType LobbyType_MIN =
-    CSOTFGameServerLobby_LobbyType_LobbyType_MIN;
-  static const LobbyType LobbyType_MAX =
-    CSOTFGameServerLobby_LobbyType_LobbyType_MAX;
-  static const int LobbyType_ARRAYSIZE =
-    CSOTFGameServerLobby_LobbyType_LobbyType_ARRAYSIZE;
-  static inline const ::google::protobuf::EnumDescriptor*
-  LobbyType_descriptor() {
-    return CSOTFGameServerLobby_LobbyType_descriptor();
-  }
-  static inline const ::std::string& LobbyType_Name(LobbyType value) {
-    return CSOTFGameServerLobby_LobbyType_Name(value);
-  }
-  static inline bool LobbyType_Parse(const ::std::string& name,
-      LobbyType* value) {
-    return CSOTFGameServerLobby_LobbyType_Parse(name, value);
-  }
-
   typedef CSOTFGameServerLobby_WarMatch WarMatch;
   static const WarMatch NOPE = CSOTFGameServerLobby_WarMatch_NOPE;
   static const WarMatch INVADERS_ARE_PYRO = CSOTFGameServerLobby_WarMatch_INVADERS_ARE_PYRO;
@@ -8082,24 +10096,17 @@ class CSOTFGameServerLobby : public ::google::protobuf::Message {
   inline ::google::protobuf::uint64 lobby_id() const;
   inline void set_lobby_id(::google::protobuf::uint64 value);
 
-  // repeated .CTFLobbyMember members = 2;
+  // repeated .CTFLobbyPlayerProto members = 2;
   inline int members_size() const;
   inline void clear_members();
   static const int kMembersFieldNumber = 2;
-  inline const ::CTFLobbyMember& members(int index) const;
-  inline ::CTFLobbyMember* mutable_members(int index);
-  inline ::CTFLobbyMember* add_members();
-  inline const ::google::protobuf::RepeatedPtrField< ::CTFLobbyMember >&
+  inline const ::CTFLobbyPlayerProto& members(int index) const;
+  inline ::CTFLobbyPlayerProto* mutable_members(int index);
+  inline ::CTFLobbyPlayerProto* add_members();
+  inline const ::google::protobuf::RepeatedPtrField< ::CTFLobbyPlayerProto >&
       members() const;
-  inline ::google::protobuf::RepeatedPtrField< ::CTFLobbyMember >*
+  inline ::google::protobuf::RepeatedPtrField< ::CTFLobbyPlayerProto >*
       mutable_members();
-
-  // optional fixed64 leader_id = 11;
-  inline bool has_leader_id() const;
-  inline void clear_leader_id();
-  static const int kLeaderIdFieldNumber = 11;
-  inline ::google::protobuf::uint64 leader_id() const;
-  inline void set_leader_id(::google::protobuf::uint64 value);
 
   // optional fixed64 server_id = 6 [default = 0];
   inline bool has_server_id() const;
@@ -8107,18 +10114,6 @@ class CSOTFGameServerLobby : public ::google::protobuf::Message {
   static const int kServerIdFieldNumber = 6;
   inline ::google::protobuf::uint64 server_id() const;
   inline void set_server_id(::google::protobuf::uint64 value);
-
-  // repeated fixed64 pending_invites = 10;
-  inline int pending_invites_size() const;
-  inline void clear_pending_invites();
-  static const int kPendingInvitesFieldNumber = 10;
-  inline ::google::protobuf::uint64 pending_invites(int index) const;
-  inline void set_pending_invites(int index, ::google::protobuf::uint64 value);
-  inline void add_pending_invites(::google::protobuf::uint64 value);
-  inline const ::google::protobuf::RepeatedField< ::google::protobuf::uint64 >&
-      pending_invites() const;
-  inline ::google::protobuf::RepeatedField< ::google::protobuf::uint64 >*
-      mutable_pending_invites();
 
   // optional .CSOTFGameServerLobby.State state = 4 [default = UNKNOWN];
   inline bool has_state() const;
@@ -8139,39 +10134,6 @@ class CSOTFGameServerLobby : public ::google::protobuf::Message {
   inline ::std::string* release_connect();
   inline void set_allocated_connect(::std::string* connect);
 
-  // optional .CSOTFGameServerLobby.LobbyType lobby_type = 12;
-  inline bool has_lobby_type() const;
-  inline void clear_lobby_type();
-  static const int kLobbyTypeFieldNumber = 12;
-  inline ::CSOTFGameServerLobby_LobbyType lobby_type() const;
-  inline void set_lobby_type(::CSOTFGameServerLobby_LobbyType value);
-
-  // optional bool allow_cheats = 13;
-  inline bool has_allow_cheats() const;
-  inline void clear_allow_cheats();
-  static const int kAllowCheatsFieldNumber = 13;
-  inline bool allow_cheats() const;
-  inline void set_allow_cheats(bool value);
-
-  // optional string game_name = 16;
-  inline bool has_game_name() const;
-  inline void clear_game_name();
-  static const int kGameNameFieldNumber = 16;
-  inline const ::std::string& game_name() const;
-  inline void set_game_name(const ::std::string& value);
-  inline void set_game_name(const char* value);
-  inline void set_game_name(const char* value, size_t size);
-  inline ::std::string* mutable_game_name();
-  inline ::std::string* release_game_name();
-  inline void set_allocated_game_name(::std::string* game_name);
-
-  // optional uint32 server_region = 21 [default = 0];
-  inline bool has_server_region() const;
-  inline void clear_server_region();
-  static const int kServerRegionFieldNumber = 21;
-  inline ::google::protobuf::uint32 server_region() const;
-  inline void set_server_region(::google::protobuf::uint32 value);
-
   // optional .TF_GC_GameState game_state = 22;
   inline bool has_game_state() const;
   inline void clear_game_state();
@@ -8179,47 +10141,12 @@ class CSOTFGameServerLobby : public ::google::protobuf::Message {
   inline ::TF_GC_GameState game_state() const;
   inline void set_game_state(::TF_GC_GameState value);
 
-  // optional uint32 num_spectators = 23;
-  inline bool has_num_spectators() const;
-  inline void clear_num_spectators();
-  static const int kNumSpectatorsFieldNumber = 23;
-  inline ::google::protobuf::uint32 num_spectators() const;
-  inline void set_num_spectators(::google::protobuf::uint32 value);
-
-  // optional float readyup_remaining_time = 26;
-  inline bool has_readyup_remaining_time() const;
-  inline void clear_readyup_remaining_time();
-  static const int kReadyupRemainingTimeFieldNumber = 26;
-  inline float readyup_remaining_time() const;
-  inline void set_readyup_remaining_time(float value);
-
-  // optional bool allow_spectating = 31 [default = true];
-  inline bool has_allow_spectating() const;
-  inline void clear_allow_spectating();
-  static const int kAllowSpectatingFieldNumber = 31;
-  inline bool allow_spectating() const;
-  inline void set_allow_spectating(bool value);
-
-  // optional uint32 average_rank = 32;
-  inline bool has_average_rank() const;
-  inline void clear_average_rank();
-  static const int kAverageRankFieldNumber = 32;
-  inline ::google::protobuf::uint32 average_rank() const;
-  inline void set_average_rank(::google::protobuf::uint32 value);
-
-  // optional fixed64 load_game_lobby_id = 33;
-  inline bool has_load_game_lobby_id() const;
-  inline void clear_load_game_lobby_id();
-  static const int kLoadGameLobbyIdFieldNumber = 33;
-  inline ::google::protobuf::uint64 load_game_lobby_id() const;
-  inline void set_load_game_lobby_id(::google::protobuf::uint64 value);
-
-  // optional uint32 load_game_save_number = 34;
-  inline bool has_load_game_save_number() const;
-  inline void clear_load_game_save_number();
-  static const int kLoadGameSaveNumberFieldNumber = 34;
-  inline ::google::protobuf::uint32 load_game_save_number() const;
-  inline void set_load_game_save_number(::google::protobuf::uint32 value);
+  // optional double initial_average_mm_rating = 32;
+  inline bool has_initial_average_mm_rating() const;
+  inline void clear_initial_average_mm_rating();
+  static const int kInitialAverageMmRatingFieldNumber = 32;
+  inline double initial_average_mm_rating() const;
+  inline void set_initial_average_mm_rating(double value);
 
   // optional string mannup_tour_name = 42;
   inline bool has_mannup_tour_name() const;
@@ -8270,13 +10197,6 @@ class CSOTFGameServerLobby : public ::google::protobuf::Message {
   static const int kMatchIdFieldNumber = 30;
   inline ::google::protobuf::uint64 match_id() const;
   inline void set_match_id(::google::protobuf::uint64 value);
-
-  // optional fixed32 replay_salt = 35;
-  inline bool has_replay_salt() const;
-  inline void clear_replay_salt();
-  static const int kReplaySaltFieldNumber = 35;
-  inline ::google::protobuf::uint32 replay_salt() const;
-  inline void set_replay_salt(::google::protobuf::uint32 value);
 
   // optional uint32 formed_time = 36;
   inline bool has_formed_time() const;
@@ -8332,40 +10252,32 @@ class CSOTFGameServerLobby : public ::google::protobuf::Message {
   inline ::google::protobuf::uint32 lobby_mm_version() const;
   inline void set_lobby_mm_version(::google::protobuf::uint32 value);
 
+  // repeated .CTFLobbyPlayerProto pending_members = 49;
+  inline int pending_members_size() const;
+  inline void clear_pending_members();
+  static const int kPendingMembersFieldNumber = 49;
+  inline const ::CTFLobbyPlayerProto& pending_members(int index) const;
+  inline ::CTFLobbyPlayerProto* mutable_pending_members(int index);
+  inline ::CTFLobbyPlayerProto* add_pending_members();
+  inline const ::google::protobuf::RepeatedPtrField< ::CTFLobbyPlayerProto >&
+      pending_members() const;
+  inline ::google::protobuf::RepeatedPtrField< ::CTFLobbyPlayerProto >*
+      mutable_pending_members();
+
   // @@protoc_insertion_point(class_scope:CSOTFGameServerLobby)
  private:
   inline void set_has_lobby_id();
   inline void clear_has_lobby_id();
-  inline void set_has_leader_id();
-  inline void clear_has_leader_id();
   inline void set_has_server_id();
   inline void clear_has_server_id();
   inline void set_has_state();
   inline void clear_has_state();
   inline void set_has_connect();
   inline void clear_has_connect();
-  inline void set_has_lobby_type();
-  inline void clear_has_lobby_type();
-  inline void set_has_allow_cheats();
-  inline void clear_has_allow_cheats();
-  inline void set_has_game_name();
-  inline void clear_has_game_name();
-  inline void set_has_server_region();
-  inline void clear_has_server_region();
   inline void set_has_game_state();
   inline void clear_has_game_state();
-  inline void set_has_num_spectators();
-  inline void clear_has_num_spectators();
-  inline void set_has_readyup_remaining_time();
-  inline void clear_has_readyup_remaining_time();
-  inline void set_has_allow_spectating();
-  inline void clear_has_allow_spectating();
-  inline void set_has_average_rank();
-  inline void clear_has_average_rank();
-  inline void set_has_load_game_lobby_id();
-  inline void clear_has_load_game_lobby_id();
-  inline void set_has_load_game_save_number();
-  inline void clear_has_load_game_save_number();
+  inline void set_has_initial_average_mm_rating();
+  inline void clear_has_initial_average_mm_rating();
   inline void set_has_mannup_tour_name();
   inline void clear_has_mannup_tour_name();
   inline void set_has_map_name();
@@ -8376,8 +10288,6 @@ class CSOTFGameServerLobby : public ::google::protobuf::Message {
   inline void clear_has_match_group();
   inline void set_has_match_id();
   inline void clear_has_match_id();
-  inline void set_has_replay_salt();
-  inline void clear_has_replay_salt();
   inline void set_has_formed_time();
   inline void clear_has_formed_time();
   inline void set_has_flags();
@@ -8396,35 +10306,24 @@ class CSOTFGameServerLobby : public ::google::protobuf::Message {
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
   ::google::protobuf::uint64 lobby_id_;
-  ::google::protobuf::RepeatedPtrField< ::CTFLobbyMember > members_;
-  ::google::protobuf::uint64 leader_id_;
+  ::google::protobuf::RepeatedPtrField< ::CTFLobbyPlayerProto > members_;
   ::google::protobuf::uint64 server_id_;
-  ::google::protobuf::RepeatedField< ::google::protobuf::uint64 > pending_invites_;
   ::std::string* connect_;
   int state_;
-  int lobby_type_;
-  ::std::string* game_name_;
-  ::google::protobuf::uint32 server_region_;
   int game_state_;
-  ::google::protobuf::uint32 num_spectators_;
-  float readyup_remaining_time_;
-  ::google::protobuf::uint32 average_rank_;
-  bool allow_cheats_;
-  bool allow_spectating_;
-  bool late_join_eligible_;
-  ::google::protobuf::uint64 load_game_lobby_id_;
+  double initial_average_mm_rating_;
   ::std::string* mannup_tour_name_;
   ::std::string* map_name_;
-  ::google::protobuf::uint32 load_game_save_number_;
-  ::google::protobuf::uint32 match_group_;
   ::std::string* mission_name_;
   ::google::protobuf::uint64 match_id_;
-  ::google::protobuf::uint32 replay_salt_;
+  ::google::protobuf::uint32 match_group_;
   ::google::protobuf::uint32 formed_time_;
   ::google::protobuf::uint32 flags_;
+  bool late_join_eligible_;
   ::google::protobuf::uint32 fixed_match_size_;
-  ::google::protobuf::RepeatedField< ::google::protobuf::uint32 > next_maps_for_vote_;
   int is_war_match_;
+  ::google::protobuf::RepeatedField< ::google::protobuf::uint32 > next_maps_for_vote_;
+  ::google::protobuf::RepeatedPtrField< ::CTFLobbyPlayerProto > pending_members_;
   ::google::protobuf::uint32 lobby_mm_version_;
   friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
   friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
@@ -8534,14 +10433,14 @@ class CMsgExitMatchmaking : public ::google::protobuf::Message {
 };
 // -------------------------------------------------------------------
 
-class CMsgAcceptInvite : public ::google::protobuf::Message {
+class CMsgAcceptLobbyInvite : public ::google::protobuf::Message {
  public:
-  CMsgAcceptInvite();
-  virtual ~CMsgAcceptInvite();
+  CMsgAcceptLobbyInvite();
+  virtual ~CMsgAcceptLobbyInvite();
 
-  CMsgAcceptInvite(const CMsgAcceptInvite& from);
+  CMsgAcceptLobbyInvite(const CMsgAcceptLobbyInvite& from);
 
-  inline CMsgAcceptInvite& operator=(const CMsgAcceptInvite& from) {
+  inline CMsgAcceptLobbyInvite& operator=(const CMsgAcceptLobbyInvite& from) {
     CopyFrom(from);
     return *this;
   }
@@ -8555,17 +10454,17 @@ class CMsgAcceptInvite : public ::google::protobuf::Message {
   }
 
   static const ::google::protobuf::Descriptor* descriptor();
-  static const CMsgAcceptInvite& default_instance();
+  static const CMsgAcceptLobbyInvite& default_instance();
 
-  void Swap(CMsgAcceptInvite* other);
+  void Swap(CMsgAcceptLobbyInvite* other);
 
   // implements Message ----------------------------------------------
 
-  CMsgAcceptInvite* New() const;
+  CMsgAcceptLobbyInvite* New() const;
   void CopyFrom(const ::google::protobuf::Message& from);
   void MergeFrom(const ::google::protobuf::Message& from);
-  void CopyFrom(const CMsgAcceptInvite& from);
-  void MergeFrom(const CMsgAcceptInvite& from);
+  void CopyFrom(const CMsgAcceptLobbyInvite& from);
+  void MergeFrom(const CMsgAcceptLobbyInvite& from);
   void Clear();
   bool IsInitialized() const;
 
@@ -8587,60 +10486,63 @@ class CMsgAcceptInvite : public ::google::protobuf::Message {
 
   // accessors -------------------------------------------------------
 
-  // optional uint64 party_id = 1;
-  inline bool has_party_id() const;
-  inline void clear_party_id();
-  static const int kPartyIdFieldNumber = 1;
-  inline ::google::protobuf::uint64 party_id() const;
-  inline void set_party_id(::google::protobuf::uint64 value);
+  // optional uint64 invited_lobby_id = 1;
+  inline bool has_invited_lobby_id() const;
+  inline void clear_invited_lobby_id();
+  static const int kInvitedLobbyIdFieldNumber = 1;
+  inline ::google::protobuf::uint64 invited_lobby_id() const;
+  inline void set_invited_lobby_id(::google::protobuf::uint64 value);
 
-  // optional fixed64 steamid_lobby = 2;
-  inline bool has_steamid_lobby() const;
-  inline void clear_steamid_lobby();
-  static const int kSteamidLobbyFieldNumber = 2;
-  inline ::google::protobuf::uint64 steamid_lobby() const;
-  inline void set_steamid_lobby(::google::protobuf::uint64 value);
+  // optional uint64 abandoning_match_id = 2;
+  inline bool has_abandoning_match_id() const;
+  inline void clear_abandoning_match_id();
+  static const int kAbandoningMatchIdFieldNumber = 2;
+  inline ::google::protobuf::uint64 abandoning_match_id() const;
+  inline void set_abandoning_match_id(::google::protobuf::uint64 value);
 
-  // optional uint32 client_version = 3 [default = 1225];
-  inline bool has_client_version() const;
-  inline void clear_client_version();
-  static const int kClientVersionFieldNumber = 3;
-  inline ::google::protobuf::uint32 client_version() const;
-  inline void set_client_version(::google::protobuf::uint32 value);
+  // repeated uint64 abandoning_invite_lobby_ids = 3;
+  inline int abandoning_invite_lobby_ids_size() const;
+  inline void clear_abandoning_invite_lobby_ids();
+  static const int kAbandoningInviteLobbyIdsFieldNumber = 3;
+  inline ::google::protobuf::uint64 abandoning_invite_lobby_ids(int index) const;
+  inline void set_abandoning_invite_lobby_ids(int index, ::google::protobuf::uint64 value);
+  inline void add_abandoning_invite_lobby_ids(::google::protobuf::uint64 value);
+  inline const ::google::protobuf::RepeatedField< ::google::protobuf::uint64 >&
+      abandoning_invite_lobby_ids() const;
+  inline ::google::protobuf::RepeatedField< ::google::protobuf::uint64 >*
+      mutable_abandoning_invite_lobby_ids();
 
-  // @@protoc_insertion_point(class_scope:CMsgAcceptInvite)
+  // @@protoc_insertion_point(class_scope:CMsgAcceptLobbyInvite)
  private:
-  inline void set_has_party_id();
-  inline void clear_has_party_id();
-  inline void set_has_steamid_lobby();
-  inline void clear_has_steamid_lobby();
-  inline void set_has_client_version();
-  inline void clear_has_client_version();
+  inline void set_has_invited_lobby_id();
+  inline void clear_has_invited_lobby_id();
+  inline void set_has_abandoning_match_id();
+  inline void clear_has_abandoning_match_id();
 
   ::google::protobuf::UnknownFieldSet _unknown_fields_;
 
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
-  ::google::protobuf::uint64 party_id_;
-  ::google::protobuf::uint64 steamid_lobby_;
-  ::google::protobuf::uint32 client_version_;
+  ::google::protobuf::uint64 invited_lobby_id_;
+  ::google::protobuf::uint64 abandoning_match_id_;
+  ::google::protobuf::RepeatedField< ::google::protobuf::uint64 > abandoning_invite_lobby_ids_;
   friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
   friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
   friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
 
   void InitAsDefaultInstance();
-  static CMsgAcceptInvite* default_instance_;
+  static CMsgAcceptLobbyInvite* default_instance_;
 };
 // -------------------------------------------------------------------
 
-class CMsgAcceptInviteResponse : public ::google::protobuf::Message {
+class CMsgAcceptLobbyInviteReply : public ::google::protobuf::Message {
  public:
-  CMsgAcceptInviteResponse();
-  virtual ~CMsgAcceptInviteResponse();
+  CMsgAcceptLobbyInviteReply();
+  virtual ~CMsgAcceptLobbyInviteReply();
 
-  CMsgAcceptInviteResponse(const CMsgAcceptInviteResponse& from);
+  CMsgAcceptLobbyInviteReply(const CMsgAcceptLobbyInviteReply& from);
 
-  inline CMsgAcceptInviteResponse& operator=(const CMsgAcceptInviteResponse& from) {
+  inline CMsgAcceptLobbyInviteReply& operator=(const CMsgAcceptLobbyInviteReply& from) {
     CopyFrom(from);
     return *this;
   }
@@ -8654,17 +10556,17 @@ class CMsgAcceptInviteResponse : public ::google::protobuf::Message {
   }
 
   static const ::google::protobuf::Descriptor* descriptor();
-  static const CMsgAcceptInviteResponse& default_instance();
+  static const CMsgAcceptLobbyInviteReply& default_instance();
 
-  void Swap(CMsgAcceptInviteResponse* other);
+  void Swap(CMsgAcceptLobbyInviteReply* other);
 
   // implements Message ----------------------------------------------
 
-  CMsgAcceptInviteResponse* New() const;
+  CMsgAcceptLobbyInviteReply* New() const;
   void CopyFrom(const ::google::protobuf::Message& from);
   void MergeFrom(const ::google::protobuf::Message& from);
-  void CopyFrom(const CMsgAcceptInviteResponse& from);
-  void MergeFrom(const CMsgAcceptInviteResponse& from);
+  void CopyFrom(const CMsgAcceptLobbyInviteReply& from);
+  void MergeFrom(const CMsgAcceptLobbyInviteReply& from);
   void Clear();
   bool IsInitialized() const;
 
@@ -8686,108 +10588,19 @@ class CMsgAcceptInviteResponse : public ::google::protobuf::Message {
 
   // accessors -------------------------------------------------------
 
-  // optional int32 result_code = 1;
-  inline bool has_result_code() const;
-  inline void clear_result_code();
-  static const int kResultCodeFieldNumber = 1;
-  inline ::google::protobuf::int32 result_code() const;
-  inline void set_result_code(::google::protobuf::int32 value);
-
-  // @@protoc_insertion_point(class_scope:CMsgAcceptInviteResponse)
+  // @@protoc_insertion_point(class_scope:CMsgAcceptLobbyInviteReply)
  private:
-  inline void set_has_result_code();
-  inline void clear_has_result_code();
 
   ::google::protobuf::UnknownFieldSet _unknown_fields_;
 
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
-  ::google::protobuf::int32 result_code_;
   friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
   friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
   friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
 
   void InitAsDefaultInstance();
-  static CMsgAcceptInviteResponse* default_instance_;
-};
-// -------------------------------------------------------------------
-
-class CMsgReadyUp : public ::google::protobuf::Message {
- public:
-  CMsgReadyUp();
-  virtual ~CMsgReadyUp();
-
-  CMsgReadyUp(const CMsgReadyUp& from);
-
-  inline CMsgReadyUp& operator=(const CMsgReadyUp& from) {
-    CopyFrom(from);
-    return *this;
-  }
-
-  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
-    return _unknown_fields_;
-  }
-
-  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
-    return &_unknown_fields_;
-  }
-
-  static const ::google::protobuf::Descriptor* descriptor();
-  static const CMsgReadyUp& default_instance();
-
-  void Swap(CMsgReadyUp* other);
-
-  // implements Message ----------------------------------------------
-
-  CMsgReadyUp* New() const;
-  void CopyFrom(const ::google::protobuf::Message& from);
-  void MergeFrom(const ::google::protobuf::Message& from);
-  void CopyFrom(const CMsgReadyUp& from);
-  void MergeFrom(const CMsgReadyUp& from);
-  void Clear();
-  bool IsInitialized() const;
-
-  int ByteSize() const;
-  bool MergePartialFromCodedStream(
-      ::google::protobuf::io::CodedInputStream* input);
-  void SerializeWithCachedSizes(
-      ::google::protobuf::io::CodedOutputStream* output) const;
-  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
-  int GetCachedSize() const { return _cached_size_; }
-  private:
-  void SharedCtor();
-  void SharedDtor();
-  void SetCachedSize(int size) const;
-  public:
-  ::google::protobuf::Metadata GetMetadata() const;
-
-  // nested types ----------------------------------------------------
-
-  // accessors -------------------------------------------------------
-
-  // optional .TFLobbyReadyState state = 1;
-  inline bool has_state() const;
-  inline void clear_state();
-  static const int kStateFieldNumber = 1;
-  inline ::TFLobbyReadyState state() const;
-  inline void set_state(::TFLobbyReadyState value);
-
-  // @@protoc_insertion_point(class_scope:CMsgReadyUp)
- private:
-  inline void set_has_state();
-  inline void clear_has_state();
-
-  ::google::protobuf::UnknownFieldSet _unknown_fields_;
-
-  ::google::protobuf::uint32 _has_bits_[1];
-  mutable int _cached_size_;
-  int state_;
-  friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
-  friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
-  friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
-
-  void InitAsDefaultInstance();
-  static CMsgReadyUp* default_instance_;
+  static CMsgAcceptLobbyInviteReply* default_instance_;
 };
 // -------------------------------------------------------------------
 
@@ -9011,1050 +10824,6 @@ class CMsgKickedFromMatchmakingQueue : public ::google::protobuf::Message {
 };
 // -------------------------------------------------------------------
 
-class CMsgTFJoinChatChannel : public ::google::protobuf::Message {
- public:
-  CMsgTFJoinChatChannel();
-  virtual ~CMsgTFJoinChatChannel();
-
-  CMsgTFJoinChatChannel(const CMsgTFJoinChatChannel& from);
-
-  inline CMsgTFJoinChatChannel& operator=(const CMsgTFJoinChatChannel& from) {
-    CopyFrom(from);
-    return *this;
-  }
-
-  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
-    return _unknown_fields_;
-  }
-
-  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
-    return &_unknown_fields_;
-  }
-
-  static const ::google::protobuf::Descriptor* descriptor();
-  static const CMsgTFJoinChatChannel& default_instance();
-
-  void Swap(CMsgTFJoinChatChannel* other);
-
-  // implements Message ----------------------------------------------
-
-  CMsgTFJoinChatChannel* New() const;
-  void CopyFrom(const ::google::protobuf::Message& from);
-  void MergeFrom(const ::google::protobuf::Message& from);
-  void CopyFrom(const CMsgTFJoinChatChannel& from);
-  void MergeFrom(const CMsgTFJoinChatChannel& from);
-  void Clear();
-  bool IsInitialized() const;
-
-  int ByteSize() const;
-  bool MergePartialFromCodedStream(
-      ::google::protobuf::io::CodedInputStream* input);
-  void SerializeWithCachedSizes(
-      ::google::protobuf::io::CodedOutputStream* output) const;
-  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
-  int GetCachedSize() const { return _cached_size_; }
-  private:
-  void SharedCtor();
-  void SharedDtor();
-  void SetCachedSize(int size) const;
-  public:
-  ::google::protobuf::Metadata GetMetadata() const;
-
-  // nested types ----------------------------------------------------
-
-  // accessors -------------------------------------------------------
-
-  // optional string persona_name = 1;
-  inline bool has_persona_name() const;
-  inline void clear_persona_name();
-  static const int kPersonaNameFieldNumber = 1;
-  inline const ::std::string& persona_name() const;
-  inline void set_persona_name(const ::std::string& value);
-  inline void set_persona_name(const char* value);
-  inline void set_persona_name(const char* value, size_t size);
-  inline ::std::string* mutable_persona_name();
-  inline ::std::string* release_persona_name();
-  inline void set_allocated_persona_name(::std::string* persona_name);
-
-  // optional string channel_name = 2;
-  inline bool has_channel_name() const;
-  inline void clear_channel_name();
-  static const int kChannelNameFieldNumber = 2;
-  inline const ::std::string& channel_name() const;
-  inline void set_channel_name(const ::std::string& value);
-  inline void set_channel_name(const char* value);
-  inline void set_channel_name(const char* value, size_t size);
-  inline ::std::string* mutable_channel_name();
-  inline ::std::string* release_channel_name();
-  inline void set_allocated_channel_name(::std::string* channel_name);
-
-  // optional string password = 3;
-  inline bool has_password() const;
-  inline void clear_password();
-  static const int kPasswordFieldNumber = 3;
-  inline const ::std::string& password() const;
-  inline void set_password(const ::std::string& value);
-  inline void set_password(const char* value);
-  inline void set_password(const char* value, size_t size);
-  inline ::std::string* mutable_password();
-  inline ::std::string* release_password();
-  inline void set_allocated_password(::std::string* password);
-
-  // optional .ChatChannelType_t channel_type = 4;
-  inline bool has_channel_type() const;
-  inline void clear_channel_type();
-  static const int kChannelTypeFieldNumber = 4;
-  inline ::ChatChannelType_t channel_type() const;
-  inline void set_channel_type(::ChatChannelType_t value);
-
-  // @@protoc_insertion_point(class_scope:CMsgTFJoinChatChannel)
- private:
-  inline void set_has_persona_name();
-  inline void clear_has_persona_name();
-  inline void set_has_channel_name();
-  inline void clear_has_channel_name();
-  inline void set_has_password();
-  inline void clear_has_password();
-  inline void set_has_channel_type();
-  inline void clear_has_channel_type();
-
-  ::google::protobuf::UnknownFieldSet _unknown_fields_;
-
-  ::google::protobuf::uint32 _has_bits_[1];
-  mutable int _cached_size_;
-  ::std::string* persona_name_;
-  ::std::string* channel_name_;
-  ::std::string* password_;
-  int channel_type_;
-  friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
-  friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
-  friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
-
-  void InitAsDefaultInstance();
-  static CMsgTFJoinChatChannel* default_instance_;
-};
-// -------------------------------------------------------------------
-
-class CMsgTFLeaveChatChannel : public ::google::protobuf::Message {
- public:
-  CMsgTFLeaveChatChannel();
-  virtual ~CMsgTFLeaveChatChannel();
-
-  CMsgTFLeaveChatChannel(const CMsgTFLeaveChatChannel& from);
-
-  inline CMsgTFLeaveChatChannel& operator=(const CMsgTFLeaveChatChannel& from) {
-    CopyFrom(from);
-    return *this;
-  }
-
-  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
-    return _unknown_fields_;
-  }
-
-  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
-    return &_unknown_fields_;
-  }
-
-  static const ::google::protobuf::Descriptor* descriptor();
-  static const CMsgTFLeaveChatChannel& default_instance();
-
-  void Swap(CMsgTFLeaveChatChannel* other);
-
-  // implements Message ----------------------------------------------
-
-  CMsgTFLeaveChatChannel* New() const;
-  void CopyFrom(const ::google::protobuf::Message& from);
-  void MergeFrom(const ::google::protobuf::Message& from);
-  void CopyFrom(const CMsgTFLeaveChatChannel& from);
-  void MergeFrom(const CMsgTFLeaveChatChannel& from);
-  void Clear();
-  bool IsInitialized() const;
-
-  int ByteSize() const;
-  bool MergePartialFromCodedStream(
-      ::google::protobuf::io::CodedInputStream* input);
-  void SerializeWithCachedSizes(
-      ::google::protobuf::io::CodedOutputStream* output) const;
-  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
-  int GetCachedSize() const { return _cached_size_; }
-  private:
-  void SharedCtor();
-  void SharedDtor();
-  void SetCachedSize(int size) const;
-  public:
-  ::google::protobuf::Metadata GetMetadata() const;
-
-  // nested types ----------------------------------------------------
-
-  // accessors -------------------------------------------------------
-
-  // optional string channel_name = 1;
-  inline bool has_channel_name() const;
-  inline void clear_channel_name();
-  static const int kChannelNameFieldNumber = 1;
-  inline const ::std::string& channel_name() const;
-  inline void set_channel_name(const ::std::string& value);
-  inline void set_channel_name(const char* value);
-  inline void set_channel_name(const char* value, size_t size);
-  inline ::std::string* mutable_channel_name();
-  inline ::std::string* release_channel_name();
-  inline void set_allocated_channel_name(::std::string* channel_name);
-
-  // @@protoc_insertion_point(class_scope:CMsgTFLeaveChatChannel)
- private:
-  inline void set_has_channel_name();
-  inline void clear_has_channel_name();
-
-  ::google::protobuf::UnknownFieldSet _unknown_fields_;
-
-  ::google::protobuf::uint32 _has_bits_[1];
-  mutable int _cached_size_;
-  ::std::string* channel_name_;
-  friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
-  friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
-  friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
-
-  void InitAsDefaultInstance();
-  static CMsgTFLeaveChatChannel* default_instance_;
-};
-// -------------------------------------------------------------------
-
-class CMsgTFJoinChatChannelResponse_ChatMember : public ::google::protobuf::Message {
- public:
-  CMsgTFJoinChatChannelResponse_ChatMember();
-  virtual ~CMsgTFJoinChatChannelResponse_ChatMember();
-
-  CMsgTFJoinChatChannelResponse_ChatMember(const CMsgTFJoinChatChannelResponse_ChatMember& from);
-
-  inline CMsgTFJoinChatChannelResponse_ChatMember& operator=(const CMsgTFJoinChatChannelResponse_ChatMember& from) {
-    CopyFrom(from);
-    return *this;
-  }
-
-  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
-    return _unknown_fields_;
-  }
-
-  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
-    return &_unknown_fields_;
-  }
-
-  static const ::google::protobuf::Descriptor* descriptor();
-  static const CMsgTFJoinChatChannelResponse_ChatMember& default_instance();
-
-  void Swap(CMsgTFJoinChatChannelResponse_ChatMember* other);
-
-  // implements Message ----------------------------------------------
-
-  CMsgTFJoinChatChannelResponse_ChatMember* New() const;
-  void CopyFrom(const ::google::protobuf::Message& from);
-  void MergeFrom(const ::google::protobuf::Message& from);
-  void CopyFrom(const CMsgTFJoinChatChannelResponse_ChatMember& from);
-  void MergeFrom(const CMsgTFJoinChatChannelResponse_ChatMember& from);
-  void Clear();
-  bool IsInitialized() const;
-
-  int ByteSize() const;
-  bool MergePartialFromCodedStream(
-      ::google::protobuf::io::CodedInputStream* input);
-  void SerializeWithCachedSizes(
-      ::google::protobuf::io::CodedOutputStream* output) const;
-  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
-  int GetCachedSize() const { return _cached_size_; }
-  private:
-  void SharedCtor();
-  void SharedDtor();
-  void SetCachedSize(int size) const;
-  public:
-  ::google::protobuf::Metadata GetMetadata() const;
-
-  // nested types ----------------------------------------------------
-
-  // accessors -------------------------------------------------------
-
-  // optional fixed64 steam_id = 1;
-  inline bool has_steam_id() const;
-  inline void clear_steam_id();
-  static const int kSteamIdFieldNumber = 1;
-  inline ::google::protobuf::uint64 steam_id() const;
-  inline void set_steam_id(::google::protobuf::uint64 value);
-
-  // optional string persona_name = 2;
-  inline bool has_persona_name() const;
-  inline void clear_persona_name();
-  static const int kPersonaNameFieldNumber = 2;
-  inline const ::std::string& persona_name() const;
-  inline void set_persona_name(const ::std::string& value);
-  inline void set_persona_name(const char* value);
-  inline void set_persona_name(const char* value, size_t size);
-  inline ::std::string* mutable_persona_name();
-  inline ::std::string* release_persona_name();
-  inline void set_allocated_persona_name(::std::string* persona_name);
-
-  // @@protoc_insertion_point(class_scope:CMsgTFJoinChatChannelResponse.ChatMember)
- private:
-  inline void set_has_steam_id();
-  inline void clear_has_steam_id();
-  inline void set_has_persona_name();
-  inline void clear_has_persona_name();
-
-  ::google::protobuf::UnknownFieldSet _unknown_fields_;
-
-  ::google::protobuf::uint32 _has_bits_[1];
-  mutable int _cached_size_;
-  ::google::protobuf::uint64 steam_id_;
-  ::std::string* persona_name_;
-  friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
-  friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
-  friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
-
-  void InitAsDefaultInstance();
-  static CMsgTFJoinChatChannelResponse_ChatMember* default_instance_;
-};
-// -------------------------------------------------------------------
-
-class CMsgTFJoinChatChannelResponse : public ::google::protobuf::Message {
- public:
-  CMsgTFJoinChatChannelResponse();
-  virtual ~CMsgTFJoinChatChannelResponse();
-
-  CMsgTFJoinChatChannelResponse(const CMsgTFJoinChatChannelResponse& from);
-
-  inline CMsgTFJoinChatChannelResponse& operator=(const CMsgTFJoinChatChannelResponse& from) {
-    CopyFrom(from);
-    return *this;
-  }
-
-  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
-    return _unknown_fields_;
-  }
-
-  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
-    return &_unknown_fields_;
-  }
-
-  static const ::google::protobuf::Descriptor* descriptor();
-  static const CMsgTFJoinChatChannelResponse& default_instance();
-
-  void Swap(CMsgTFJoinChatChannelResponse* other);
-
-  // implements Message ----------------------------------------------
-
-  CMsgTFJoinChatChannelResponse* New() const;
-  void CopyFrom(const ::google::protobuf::Message& from);
-  void MergeFrom(const ::google::protobuf::Message& from);
-  void CopyFrom(const CMsgTFJoinChatChannelResponse& from);
-  void MergeFrom(const CMsgTFJoinChatChannelResponse& from);
-  void Clear();
-  bool IsInitialized() const;
-
-  int ByteSize() const;
-  bool MergePartialFromCodedStream(
-      ::google::protobuf::io::CodedInputStream* input);
-  void SerializeWithCachedSizes(
-      ::google::protobuf::io::CodedOutputStream* output) const;
-  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
-  int GetCachedSize() const { return _cached_size_; }
-  private:
-  void SharedCtor();
-  void SharedDtor();
-  void SetCachedSize(int size) const;
-  public:
-  ::google::protobuf::Metadata GetMetadata() const;
-
-  // nested types ----------------------------------------------------
-
-  typedef CMsgTFJoinChatChannelResponse_ChatMember ChatMember;
-
-  // accessors -------------------------------------------------------
-
-  // optional uint32 response = 1;
-  inline bool has_response() const;
-  inline void clear_response();
-  static const int kResponseFieldNumber = 1;
-  inline ::google::protobuf::uint32 response() const;
-  inline void set_response(::google::protobuf::uint32 value);
-
-  // optional string channel_name = 2;
-  inline bool has_channel_name() const;
-  inline void clear_channel_name();
-  static const int kChannelNameFieldNumber = 2;
-  inline const ::std::string& channel_name() const;
-  inline void set_channel_name(const ::std::string& value);
-  inline void set_channel_name(const char* value);
-  inline void set_channel_name(const char* value, size_t size);
-  inline ::std::string* mutable_channel_name();
-  inline ::std::string* release_channel_name();
-  inline void set_allocated_channel_name(::std::string* channel_name);
-
-  // optional fixed64 channel_id = 3;
-  inline bool has_channel_id() const;
-  inline void clear_channel_id();
-  static const int kChannelIdFieldNumber = 3;
-  inline ::google::protobuf::uint64 channel_id() const;
-  inline void set_channel_id(::google::protobuf::uint64 value);
-
-  // optional uint32 max_members = 4;
-  inline bool has_max_members() const;
-  inline void clear_max_members();
-  static const int kMaxMembersFieldNumber = 4;
-  inline ::google::protobuf::uint32 max_members() const;
-  inline void set_max_members(::google::protobuf::uint32 value);
-
-  // repeated .CMsgTFJoinChatChannelResponse.ChatMember members = 5;
-  inline int members_size() const;
-  inline void clear_members();
-  static const int kMembersFieldNumber = 5;
-  inline const ::CMsgTFJoinChatChannelResponse_ChatMember& members(int index) const;
-  inline ::CMsgTFJoinChatChannelResponse_ChatMember* mutable_members(int index);
-  inline ::CMsgTFJoinChatChannelResponse_ChatMember* add_members();
-  inline const ::google::protobuf::RepeatedPtrField< ::CMsgTFJoinChatChannelResponse_ChatMember >&
-      members() const;
-  inline ::google::protobuf::RepeatedPtrField< ::CMsgTFJoinChatChannelResponse_ChatMember >*
-      mutable_members();
-
-  // @@protoc_insertion_point(class_scope:CMsgTFJoinChatChannelResponse)
- private:
-  inline void set_has_response();
-  inline void clear_has_response();
-  inline void set_has_channel_name();
-  inline void clear_has_channel_name();
-  inline void set_has_channel_id();
-  inline void clear_has_channel_id();
-  inline void set_has_max_members();
-  inline void clear_has_max_members();
-
-  ::google::protobuf::UnknownFieldSet _unknown_fields_;
-
-  ::google::protobuf::uint32 _has_bits_[1];
-  mutable int _cached_size_;
-  ::std::string* channel_name_;
-  ::google::protobuf::uint32 response_;
-  ::google::protobuf::uint32 max_members_;
-  ::google::protobuf::uint64 channel_id_;
-  ::google::protobuf::RepeatedPtrField< ::CMsgTFJoinChatChannelResponse_ChatMember > members_;
-  friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
-  friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
-  friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
-
-  void InitAsDefaultInstance();
-  static CMsgTFJoinChatChannelResponse* default_instance_;
-};
-// -------------------------------------------------------------------
-
-class CMsgTFOtherJoinedChatChannel : public ::google::protobuf::Message {
- public:
-  CMsgTFOtherJoinedChatChannel();
-  virtual ~CMsgTFOtherJoinedChatChannel();
-
-  CMsgTFOtherJoinedChatChannel(const CMsgTFOtherJoinedChatChannel& from);
-
-  inline CMsgTFOtherJoinedChatChannel& operator=(const CMsgTFOtherJoinedChatChannel& from) {
-    CopyFrom(from);
-    return *this;
-  }
-
-  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
-    return _unknown_fields_;
-  }
-
-  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
-    return &_unknown_fields_;
-  }
-
-  static const ::google::protobuf::Descriptor* descriptor();
-  static const CMsgTFOtherJoinedChatChannel& default_instance();
-
-  void Swap(CMsgTFOtherJoinedChatChannel* other);
-
-  // implements Message ----------------------------------------------
-
-  CMsgTFOtherJoinedChatChannel* New() const;
-  void CopyFrom(const ::google::protobuf::Message& from);
-  void MergeFrom(const ::google::protobuf::Message& from);
-  void CopyFrom(const CMsgTFOtherJoinedChatChannel& from);
-  void MergeFrom(const CMsgTFOtherJoinedChatChannel& from);
-  void Clear();
-  bool IsInitialized() const;
-
-  int ByteSize() const;
-  bool MergePartialFromCodedStream(
-      ::google::protobuf::io::CodedInputStream* input);
-  void SerializeWithCachedSizes(
-      ::google::protobuf::io::CodedOutputStream* output) const;
-  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
-  int GetCachedSize() const { return _cached_size_; }
-  private:
-  void SharedCtor();
-  void SharedDtor();
-  void SetCachedSize(int size) const;
-  public:
-  ::google::protobuf::Metadata GetMetadata() const;
-
-  // nested types ----------------------------------------------------
-
-  // accessors -------------------------------------------------------
-
-  // optional fixed64 channel_id = 1;
-  inline bool has_channel_id() const;
-  inline void clear_channel_id();
-  static const int kChannelIdFieldNumber = 1;
-  inline ::google::protobuf::uint64 channel_id() const;
-  inline void set_channel_id(::google::protobuf::uint64 value);
-
-  // optional string persona_name = 2;
-  inline bool has_persona_name() const;
-  inline void clear_persona_name();
-  static const int kPersonaNameFieldNumber = 2;
-  inline const ::std::string& persona_name() const;
-  inline void set_persona_name(const ::std::string& value);
-  inline void set_persona_name(const char* value);
-  inline void set_persona_name(const char* value, size_t size);
-  inline ::std::string* mutable_persona_name();
-  inline ::std::string* release_persona_name();
-  inline void set_allocated_persona_name(::std::string* persona_name);
-
-  // optional fixed64 steam_id = 3;
-  inline bool has_steam_id() const;
-  inline void clear_steam_id();
-  static const int kSteamIdFieldNumber = 3;
-  inline ::google::protobuf::uint64 steam_id() const;
-  inline void set_steam_id(::google::protobuf::uint64 value);
-
-  // @@protoc_insertion_point(class_scope:CMsgTFOtherJoinedChatChannel)
- private:
-  inline void set_has_channel_id();
-  inline void clear_has_channel_id();
-  inline void set_has_persona_name();
-  inline void clear_has_persona_name();
-  inline void set_has_steam_id();
-  inline void clear_has_steam_id();
-
-  ::google::protobuf::UnknownFieldSet _unknown_fields_;
-
-  ::google::protobuf::uint32 _has_bits_[1];
-  mutable int _cached_size_;
-  ::google::protobuf::uint64 channel_id_;
-  ::std::string* persona_name_;
-  ::google::protobuf::uint64 steam_id_;
-  friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
-  friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
-  friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
-
-  void InitAsDefaultInstance();
-  static CMsgTFOtherJoinedChatChannel* default_instance_;
-};
-// -------------------------------------------------------------------
-
-class CMsgTFOtherLeftChatChannel : public ::google::protobuf::Message {
- public:
-  CMsgTFOtherLeftChatChannel();
-  virtual ~CMsgTFOtherLeftChatChannel();
-
-  CMsgTFOtherLeftChatChannel(const CMsgTFOtherLeftChatChannel& from);
-
-  inline CMsgTFOtherLeftChatChannel& operator=(const CMsgTFOtherLeftChatChannel& from) {
-    CopyFrom(from);
-    return *this;
-  }
-
-  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
-    return _unknown_fields_;
-  }
-
-  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
-    return &_unknown_fields_;
-  }
-
-  static const ::google::protobuf::Descriptor* descriptor();
-  static const CMsgTFOtherLeftChatChannel& default_instance();
-
-  void Swap(CMsgTFOtherLeftChatChannel* other);
-
-  // implements Message ----------------------------------------------
-
-  CMsgTFOtherLeftChatChannel* New() const;
-  void CopyFrom(const ::google::protobuf::Message& from);
-  void MergeFrom(const ::google::protobuf::Message& from);
-  void CopyFrom(const CMsgTFOtherLeftChatChannel& from);
-  void MergeFrom(const CMsgTFOtherLeftChatChannel& from);
-  void Clear();
-  bool IsInitialized() const;
-
-  int ByteSize() const;
-  bool MergePartialFromCodedStream(
-      ::google::protobuf::io::CodedInputStream* input);
-  void SerializeWithCachedSizes(
-      ::google::protobuf::io::CodedOutputStream* output) const;
-  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
-  int GetCachedSize() const { return _cached_size_; }
-  private:
-  void SharedCtor();
-  void SharedDtor();
-  void SetCachedSize(int size) const;
-  public:
-  ::google::protobuf::Metadata GetMetadata() const;
-
-  // nested types ----------------------------------------------------
-
-  // accessors -------------------------------------------------------
-
-  // optional fixed64 channel_id = 1;
-  inline bool has_channel_id() const;
-  inline void clear_channel_id();
-  static const int kChannelIdFieldNumber = 1;
-  inline ::google::protobuf::uint64 channel_id() const;
-  inline void set_channel_id(::google::protobuf::uint64 value);
-
-  // optional fixed64 steam_id = 2;
-  inline bool has_steam_id() const;
-  inline void clear_steam_id();
-  static const int kSteamIdFieldNumber = 2;
-  inline ::google::protobuf::uint64 steam_id() const;
-  inline void set_steam_id(::google::protobuf::uint64 value);
-
-  // @@protoc_insertion_point(class_scope:CMsgTFOtherLeftChatChannel)
- private:
-  inline void set_has_channel_id();
-  inline void clear_has_channel_id();
-  inline void set_has_steam_id();
-  inline void clear_has_steam_id();
-
-  ::google::protobuf::UnknownFieldSet _unknown_fields_;
-
-  ::google::protobuf::uint32 _has_bits_[1];
-  mutable int _cached_size_;
-  ::google::protobuf::uint64 channel_id_;
-  ::google::protobuf::uint64 steam_id_;
-  friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
-  friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
-  friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
-
-  void InitAsDefaultInstance();
-  static CMsgTFOtherLeftChatChannel* default_instance_;
-};
-// -------------------------------------------------------------------
-
-class CMsgTFRequestDefaultChatChannel : public ::google::protobuf::Message {
- public:
-  CMsgTFRequestDefaultChatChannel();
-  virtual ~CMsgTFRequestDefaultChatChannel();
-
-  CMsgTFRequestDefaultChatChannel(const CMsgTFRequestDefaultChatChannel& from);
-
-  inline CMsgTFRequestDefaultChatChannel& operator=(const CMsgTFRequestDefaultChatChannel& from) {
-    CopyFrom(from);
-    return *this;
-  }
-
-  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
-    return _unknown_fields_;
-  }
-
-  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
-    return &_unknown_fields_;
-  }
-
-  static const ::google::protobuf::Descriptor* descriptor();
-  static const CMsgTFRequestDefaultChatChannel& default_instance();
-
-  void Swap(CMsgTFRequestDefaultChatChannel* other);
-
-  // implements Message ----------------------------------------------
-
-  CMsgTFRequestDefaultChatChannel* New() const;
-  void CopyFrom(const ::google::protobuf::Message& from);
-  void MergeFrom(const ::google::protobuf::Message& from);
-  void CopyFrom(const CMsgTFRequestDefaultChatChannel& from);
-  void MergeFrom(const CMsgTFRequestDefaultChatChannel& from);
-  void Clear();
-  bool IsInitialized() const;
-
-  int ByteSize() const;
-  bool MergePartialFromCodedStream(
-      ::google::protobuf::io::CodedInputStream* input);
-  void SerializeWithCachedSizes(
-      ::google::protobuf::io::CodedOutputStream* output) const;
-  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
-  int GetCachedSize() const { return _cached_size_; }
-  private:
-  void SharedCtor();
-  void SharedDtor();
-  void SetCachedSize(int size) const;
-  public:
-  ::google::protobuf::Metadata GetMetadata() const;
-
-  // nested types ----------------------------------------------------
-
-  // accessors -------------------------------------------------------
-
-  // @@protoc_insertion_point(class_scope:CMsgTFRequestDefaultChatChannel)
- private:
-
-  ::google::protobuf::UnknownFieldSet _unknown_fields_;
-
-  ::google::protobuf::uint32 _has_bits_[1];
-  mutable int _cached_size_;
-  friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
-  friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
-  friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
-
-  void InitAsDefaultInstance();
-  static CMsgTFRequestDefaultChatChannel* default_instance_;
-};
-// -------------------------------------------------------------------
-
-class CMsgTFRequestDefaultChatChannelResponse : public ::google::protobuf::Message {
- public:
-  CMsgTFRequestDefaultChatChannelResponse();
-  virtual ~CMsgTFRequestDefaultChatChannelResponse();
-
-  CMsgTFRequestDefaultChatChannelResponse(const CMsgTFRequestDefaultChatChannelResponse& from);
-
-  inline CMsgTFRequestDefaultChatChannelResponse& operator=(const CMsgTFRequestDefaultChatChannelResponse& from) {
-    CopyFrom(from);
-    return *this;
-  }
-
-  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
-    return _unknown_fields_;
-  }
-
-  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
-    return &_unknown_fields_;
-  }
-
-  static const ::google::protobuf::Descriptor* descriptor();
-  static const CMsgTFRequestDefaultChatChannelResponse& default_instance();
-
-  void Swap(CMsgTFRequestDefaultChatChannelResponse* other);
-
-  // implements Message ----------------------------------------------
-
-  CMsgTFRequestDefaultChatChannelResponse* New() const;
-  void CopyFrom(const ::google::protobuf::Message& from);
-  void MergeFrom(const ::google::protobuf::Message& from);
-  void CopyFrom(const CMsgTFRequestDefaultChatChannelResponse& from);
-  void MergeFrom(const CMsgTFRequestDefaultChatChannelResponse& from);
-  void Clear();
-  bool IsInitialized() const;
-
-  int ByteSize() const;
-  bool MergePartialFromCodedStream(
-      ::google::protobuf::io::CodedInputStream* input);
-  void SerializeWithCachedSizes(
-      ::google::protobuf::io::CodedOutputStream* output) const;
-  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
-  int GetCachedSize() const { return _cached_size_; }
-  private:
-  void SharedCtor();
-  void SharedDtor();
-  void SetCachedSize(int size) const;
-  public:
-  ::google::protobuf::Metadata GetMetadata() const;
-
-  // nested types ----------------------------------------------------
-
-  // accessors -------------------------------------------------------
-
-  // optional string channel_name = 1;
-  inline bool has_channel_name() const;
-  inline void clear_channel_name();
-  static const int kChannelNameFieldNumber = 1;
-  inline const ::std::string& channel_name() const;
-  inline void set_channel_name(const ::std::string& value);
-  inline void set_channel_name(const char* value);
-  inline void set_channel_name(const char* value, size_t size);
-  inline ::std::string* mutable_channel_name();
-  inline ::std::string* release_channel_name();
-  inline void set_allocated_channel_name(::std::string* channel_name);
-
-  // optional fixed64 channel_id = 2;
-  inline bool has_channel_id() const;
-  inline void clear_channel_id();
-  static const int kChannelIdFieldNumber = 2;
-  inline ::google::protobuf::uint64 channel_id() const;
-  inline void set_channel_id(::google::protobuf::uint64 value);
-
-  // @@protoc_insertion_point(class_scope:CMsgTFRequestDefaultChatChannelResponse)
- private:
-  inline void set_has_channel_name();
-  inline void clear_has_channel_name();
-  inline void set_has_channel_id();
-  inline void clear_has_channel_id();
-
-  ::google::protobuf::UnknownFieldSet _unknown_fields_;
-
-  ::google::protobuf::uint32 _has_bits_[1];
-  mutable int _cached_size_;
-  ::std::string* channel_name_;
-  ::google::protobuf::uint64 channel_id_;
-  friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
-  friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
-  friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
-
-  void InitAsDefaultInstance();
-  static CMsgTFRequestDefaultChatChannelResponse* default_instance_;
-};
-// -------------------------------------------------------------------
-
-class CMsgTFRequestChatChannelList : public ::google::protobuf::Message {
- public:
-  CMsgTFRequestChatChannelList();
-  virtual ~CMsgTFRequestChatChannelList();
-
-  CMsgTFRequestChatChannelList(const CMsgTFRequestChatChannelList& from);
-
-  inline CMsgTFRequestChatChannelList& operator=(const CMsgTFRequestChatChannelList& from) {
-    CopyFrom(from);
-    return *this;
-  }
-
-  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
-    return _unknown_fields_;
-  }
-
-  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
-    return &_unknown_fields_;
-  }
-
-  static const ::google::protobuf::Descriptor* descriptor();
-  static const CMsgTFRequestChatChannelList& default_instance();
-
-  void Swap(CMsgTFRequestChatChannelList* other);
-
-  // implements Message ----------------------------------------------
-
-  CMsgTFRequestChatChannelList* New() const;
-  void CopyFrom(const ::google::protobuf::Message& from);
-  void MergeFrom(const ::google::protobuf::Message& from);
-  void CopyFrom(const CMsgTFRequestChatChannelList& from);
-  void MergeFrom(const CMsgTFRequestChatChannelList& from);
-  void Clear();
-  bool IsInitialized() const;
-
-  int ByteSize() const;
-  bool MergePartialFromCodedStream(
-      ::google::protobuf::io::CodedInputStream* input);
-  void SerializeWithCachedSizes(
-      ::google::protobuf::io::CodedOutputStream* output) const;
-  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
-  int GetCachedSize() const { return _cached_size_; }
-  private:
-  void SharedCtor();
-  void SharedDtor();
-  void SetCachedSize(int size) const;
-  public:
-  ::google::protobuf::Metadata GetMetadata() const;
-
-  // nested types ----------------------------------------------------
-
-  // accessors -------------------------------------------------------
-
-  // @@protoc_insertion_point(class_scope:CMsgTFRequestChatChannelList)
- private:
-
-  ::google::protobuf::UnknownFieldSet _unknown_fields_;
-
-  ::google::protobuf::uint32 _has_bits_[1];
-  mutable int _cached_size_;
-  friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
-  friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
-  friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
-
-  void InitAsDefaultInstance();
-  static CMsgTFRequestChatChannelList* default_instance_;
-};
-// -------------------------------------------------------------------
-
-class CMsgTFRequestChatChannelListResponse_ChatChannel : public ::google::protobuf::Message {
- public:
-  CMsgTFRequestChatChannelListResponse_ChatChannel();
-  virtual ~CMsgTFRequestChatChannelListResponse_ChatChannel();
-
-  CMsgTFRequestChatChannelListResponse_ChatChannel(const CMsgTFRequestChatChannelListResponse_ChatChannel& from);
-
-  inline CMsgTFRequestChatChannelListResponse_ChatChannel& operator=(const CMsgTFRequestChatChannelListResponse_ChatChannel& from) {
-    CopyFrom(from);
-    return *this;
-  }
-
-  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
-    return _unknown_fields_;
-  }
-
-  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
-    return &_unknown_fields_;
-  }
-
-  static const ::google::protobuf::Descriptor* descriptor();
-  static const CMsgTFRequestChatChannelListResponse_ChatChannel& default_instance();
-
-  void Swap(CMsgTFRequestChatChannelListResponse_ChatChannel* other);
-
-  // implements Message ----------------------------------------------
-
-  CMsgTFRequestChatChannelListResponse_ChatChannel* New() const;
-  void CopyFrom(const ::google::protobuf::Message& from);
-  void MergeFrom(const ::google::protobuf::Message& from);
-  void CopyFrom(const CMsgTFRequestChatChannelListResponse_ChatChannel& from);
-  void MergeFrom(const CMsgTFRequestChatChannelListResponse_ChatChannel& from);
-  void Clear();
-  bool IsInitialized() const;
-
-  int ByteSize() const;
-  bool MergePartialFromCodedStream(
-      ::google::protobuf::io::CodedInputStream* input);
-  void SerializeWithCachedSizes(
-      ::google::protobuf::io::CodedOutputStream* output) const;
-  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
-  int GetCachedSize() const { return _cached_size_; }
-  private:
-  void SharedCtor();
-  void SharedDtor();
-  void SetCachedSize(int size) const;
-  public:
-  ::google::protobuf::Metadata GetMetadata() const;
-
-  // nested types ----------------------------------------------------
-
-  // accessors -------------------------------------------------------
-
-  // optional string channel_name = 1;
-  inline bool has_channel_name() const;
-  inline void clear_channel_name();
-  static const int kChannelNameFieldNumber = 1;
-  inline const ::std::string& channel_name() const;
-  inline void set_channel_name(const ::std::string& value);
-  inline void set_channel_name(const char* value);
-  inline void set_channel_name(const char* value, size_t size);
-  inline ::std::string* mutable_channel_name();
-  inline ::std::string* release_channel_name();
-  inline void set_allocated_channel_name(::std::string* channel_name);
-
-  // optional uint32 num_members = 2;
-  inline bool has_num_members() const;
-  inline void clear_num_members();
-  static const int kNumMembersFieldNumber = 2;
-  inline ::google::protobuf::uint32 num_members() const;
-  inline void set_num_members(::google::protobuf::uint32 value);
-
-  // optional .ChatChannelType_t channel_type = 3;
-  inline bool has_channel_type() const;
-  inline void clear_channel_type();
-  static const int kChannelTypeFieldNumber = 3;
-  inline ::ChatChannelType_t channel_type() const;
-  inline void set_channel_type(::ChatChannelType_t value);
-
-  // @@protoc_insertion_point(class_scope:CMsgTFRequestChatChannelListResponse.ChatChannel)
- private:
-  inline void set_has_channel_name();
-  inline void clear_has_channel_name();
-  inline void set_has_num_members();
-  inline void clear_has_num_members();
-  inline void set_has_channel_type();
-  inline void clear_has_channel_type();
-
-  ::google::protobuf::UnknownFieldSet _unknown_fields_;
-
-  ::google::protobuf::uint32 _has_bits_[1];
-  mutable int _cached_size_;
-  ::std::string* channel_name_;
-  ::google::protobuf::uint32 num_members_;
-  int channel_type_;
-  friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
-  friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
-  friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
-
-  void InitAsDefaultInstance();
-  static CMsgTFRequestChatChannelListResponse_ChatChannel* default_instance_;
-};
-// -------------------------------------------------------------------
-
-class CMsgTFRequestChatChannelListResponse : public ::google::protobuf::Message {
- public:
-  CMsgTFRequestChatChannelListResponse();
-  virtual ~CMsgTFRequestChatChannelListResponse();
-
-  CMsgTFRequestChatChannelListResponse(const CMsgTFRequestChatChannelListResponse& from);
-
-  inline CMsgTFRequestChatChannelListResponse& operator=(const CMsgTFRequestChatChannelListResponse& from) {
-    CopyFrom(from);
-    return *this;
-  }
-
-  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
-    return _unknown_fields_;
-  }
-
-  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
-    return &_unknown_fields_;
-  }
-
-  static const ::google::protobuf::Descriptor* descriptor();
-  static const CMsgTFRequestChatChannelListResponse& default_instance();
-
-  void Swap(CMsgTFRequestChatChannelListResponse* other);
-
-  // implements Message ----------------------------------------------
-
-  CMsgTFRequestChatChannelListResponse* New() const;
-  void CopyFrom(const ::google::protobuf::Message& from);
-  void MergeFrom(const ::google::protobuf::Message& from);
-  void CopyFrom(const CMsgTFRequestChatChannelListResponse& from);
-  void MergeFrom(const CMsgTFRequestChatChannelListResponse& from);
-  void Clear();
-  bool IsInitialized() const;
-
-  int ByteSize() const;
-  bool MergePartialFromCodedStream(
-      ::google::protobuf::io::CodedInputStream* input);
-  void SerializeWithCachedSizes(
-      ::google::protobuf::io::CodedOutputStream* output) const;
-  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
-  int GetCachedSize() const { return _cached_size_; }
-  private:
-  void SharedCtor();
-  void SharedDtor();
-  void SetCachedSize(int size) const;
-  public:
-  ::google::protobuf::Metadata GetMetadata() const;
-
-  // nested types ----------------------------------------------------
-
-  typedef CMsgTFRequestChatChannelListResponse_ChatChannel ChatChannel;
-
-  // accessors -------------------------------------------------------
-
-  // repeated .CMsgTFRequestChatChannelListResponse.ChatChannel channels = 1;
-  inline int channels_size() const;
-  inline void clear_channels();
-  static const int kChannelsFieldNumber = 1;
-  inline const ::CMsgTFRequestChatChannelListResponse_ChatChannel& channels(int index) const;
-  inline ::CMsgTFRequestChatChannelListResponse_ChatChannel* mutable_channels(int index);
-  inline ::CMsgTFRequestChatChannelListResponse_ChatChannel* add_channels();
-  inline const ::google::protobuf::RepeatedPtrField< ::CMsgTFRequestChatChannelListResponse_ChatChannel >&
-      channels() const;
-  inline ::google::protobuf::RepeatedPtrField< ::CMsgTFRequestChatChannelListResponse_ChatChannel >*
-      mutable_channels();
-
-  // @@protoc_insertion_point(class_scope:CMsgTFRequestChatChannelListResponse)
- private:
-
-  ::google::protobuf::UnknownFieldSet _unknown_fields_;
-
-  ::google::protobuf::uint32 _has_bits_[1];
-  mutable int _cached_size_;
-  ::google::protobuf::RepeatedPtrField< ::CMsgTFRequestChatChannelListResponse_ChatChannel > channels_;
-  friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
-  friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
-  friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
-
-  void InitAsDefaultInstance();
-  static CMsgTFRequestChatChannelListResponse* default_instance_;
-};
-// -------------------------------------------------------------------
-
 class CMsgGameServerMatchmakingStatus_Player : public ::google::protobuf::Message {
  public:
   CMsgGameServerMatchmakingStatus_Player();
@@ -10264,13 +11033,6 @@ class CMsgGameServerMatchmakingStatus : public ::google::protobuf::Message {
   inline ::ServerMatchmakingState matchmaking_state() const;
   inline void set_matchmaking_state(::ServerMatchmakingState value);
 
-  // optional .TF_MatchmakingMode matchmaking_mode = 2;
-  inline bool has_matchmaking_mode() const;
-  inline void clear_matchmaking_mode();
-  static const int kMatchmakingModeFieldNumber = 2;
-  inline ::TF_MatchmakingMode matchmaking_mode() const;
-  inline void set_matchmaking_mode(::TF_MatchmakingMode value);
-
   // optional string map = 3;
   inline bool has_map() const;
   inline void clear_map();
@@ -10358,6 +11120,18 @@ class CMsgGameServerMatchmakingStatus : public ::google::protobuf::Message {
   inline ::google::protobuf::uint32 strict() const;
   inline void set_strict(::google::protobuf::uint32 value);
 
+  // optional string fake_ip = 25;
+  inline bool has_fake_ip() const;
+  inline void clear_fake_ip();
+  static const int kFakeIpFieldNumber = 25;
+  inline const ::std::string& fake_ip() const;
+  inline void set_fake_ip(const ::std::string& value);
+  inline void set_fake_ip(const char* value);
+  inline void set_fake_ip(const char* value, size_t size);
+  inline ::std::string* mutable_fake_ip();
+  inline ::std::string* release_fake_ip();
+  inline void set_allocated_fake_ip(::std::string* fake_ip);
+
   // repeated .CMsgGameServerMatchmakingStatus.Player players = 13;
   inline int players_size() const;
   inline void clear_players();
@@ -10425,8 +11199,6 @@ class CMsgGameServerMatchmakingStatus : public ::google::protobuf::Message {
   inline void clear_has_server_version();
   inline void set_has_matchmaking_state();
   inline void clear_has_matchmaking_state();
-  inline void set_has_matchmaking_mode();
-  inline void clear_has_matchmaking_mode();
   inline void set_has_map();
   inline void clear_has_map();
   inline void set_has_tags();
@@ -10449,6 +11221,8 @@ class CMsgGameServerMatchmakingStatus : public ::google::protobuf::Message {
   inline void clear_has_server_dedicated();
   inline void set_has_strict();
   inline void clear_has_strict();
+  inline void set_has_fake_ip();
+  inline void clear_has_fake_ip();
   inline void set_has_game_state();
   inline void clear_has_game_state();
   inline void set_has_event();
@@ -10471,9 +11245,8 @@ class CMsgGameServerMatchmakingStatus : public ::google::protobuf::Message {
   ::google::protobuf::uint32 server_version_;
   int matchmaking_state_;
   ::std::string* map_;
-  int matchmaking_mode_;
-  ::google::protobuf::uint32 bot_count_;
   ::std::string* tags_;
+  ::google::protobuf::uint32 bot_count_;
   ::google::protobuf::uint32 num_spectators_;
   ::google::protobuf::uint32 max_players_;
   ::google::protobuf::uint32 slots_free_;
@@ -10481,8 +11254,9 @@ class CMsgGameServerMatchmakingStatus : public ::google::protobuf::Message {
   float server_loadavg_;
   bool server_trusted_;
   bool server_dedicated_;
-  ::google::protobuf::RepeatedPtrField< ::CMsgGameServerMatchmakingStatus_Player > players_;
   ::google::protobuf::uint32 strict_;
+  ::std::string* fake_ip_;
+  ::google::protobuf::RepeatedPtrField< ::CMsgGameServerMatchmakingStatus_Player > players_;
   int game_state_;
   int event_;
   ::google::protobuf::uint32 mvm_wave_;
@@ -11831,25 +12605,6 @@ class CMsgGameServerKickingLobby : public ::google::protobuf::Message {
 
   // accessors -------------------------------------------------------
 
-  // repeated fixed64 connected_players = 1;
-  inline int connected_players_size() const;
-  inline void clear_connected_players();
-  static const int kConnectedPlayersFieldNumber = 1;
-  inline ::google::protobuf::uint64 connected_players(int index) const;
-  inline void set_connected_players(int index, ::google::protobuf::uint64 value);
-  inline void add_connected_players(::google::protobuf::uint64 value);
-  inline const ::google::protobuf::RepeatedField< ::google::protobuf::uint64 >&
-      connected_players() const;
-  inline ::google::protobuf::RepeatedField< ::google::protobuf::uint64 >*
-      mutable_connected_players();
-
-  // optional bool create_party = 2 [default = true];
-  inline bool has_create_party() const;
-  inline void clear_create_party();
-  static const int kCreatePartyFieldNumber = 2;
-  inline bool create_party() const;
-  inline void set_create_party(bool value);
-
   // optional uint64 lobby_id = 3;
   inline bool has_lobby_id() const;
   inline void clear_lobby_id();
@@ -11866,8 +12621,6 @@ class CMsgGameServerKickingLobby : public ::google::protobuf::Message {
 
   // @@protoc_insertion_point(class_scope:CMsgGameServerKickingLobby)
  private:
-  inline void set_has_create_party();
-  inline void clear_has_create_party();
   inline void set_has_lobby_id();
   inline void clear_has_lobby_id();
   inline void set_has_match_id();
@@ -11877,10 +12630,8 @@ class CMsgGameServerKickingLobby : public ::google::protobuf::Message {
 
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
-  ::google::protobuf::RepeatedField< ::google::protobuf::uint64 > connected_players_;
   ::google::protobuf::uint64 lobby_id_;
   ::google::protobuf::uint64 match_id_;
-  bool create_party_;
   friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
   friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
   friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
@@ -12239,14 +12990,14 @@ class CMsgPlayerLeftMatchResponse : public ::google::protobuf::Message {
 };
 // -------------------------------------------------------------------
 
-class CMsgPlayerVoteKickedAfterLeavingMatch : public ::google::protobuf::Message {
+class CMsgProcessMatchVoteKick_Vote : public ::google::protobuf::Message {
  public:
-  CMsgPlayerVoteKickedAfterLeavingMatch();
-  virtual ~CMsgPlayerVoteKickedAfterLeavingMatch();
+  CMsgProcessMatchVoteKick_Vote();
+  virtual ~CMsgProcessMatchVoteKick_Vote();
 
-  CMsgPlayerVoteKickedAfterLeavingMatch(const CMsgPlayerVoteKickedAfterLeavingMatch& from);
+  CMsgProcessMatchVoteKick_Vote(const CMsgProcessMatchVoteKick_Vote& from);
 
-  inline CMsgPlayerVoteKickedAfterLeavingMatch& operator=(const CMsgPlayerVoteKickedAfterLeavingMatch& from) {
+  inline CMsgProcessMatchVoteKick_Vote& operator=(const CMsgProcessMatchVoteKick_Vote& from) {
     CopyFrom(from);
     return *this;
   }
@@ -12260,17 +13011,17 @@ class CMsgPlayerVoteKickedAfterLeavingMatch : public ::google::protobuf::Message
   }
 
   static const ::google::protobuf::Descriptor* descriptor();
-  static const CMsgPlayerVoteKickedAfterLeavingMatch& default_instance();
+  static const CMsgProcessMatchVoteKick_Vote& default_instance();
 
-  void Swap(CMsgPlayerVoteKickedAfterLeavingMatch* other);
+  void Swap(CMsgProcessMatchVoteKick_Vote* other);
 
   // implements Message ----------------------------------------------
 
-  CMsgPlayerVoteKickedAfterLeavingMatch* New() const;
+  CMsgProcessMatchVoteKick_Vote* New() const;
   void CopyFrom(const ::google::protobuf::Message& from);
   void MergeFrom(const ::google::protobuf::Message& from);
-  void CopyFrom(const CMsgPlayerVoteKickedAfterLeavingMatch& from);
-  void MergeFrom(const CMsgPlayerVoteKickedAfterLeavingMatch& from);
+  void CopyFrom(const CMsgProcessMatchVoteKick_Vote& from);
+  void MergeFrom(const CMsgProcessMatchVoteKick_Vote& from);
   void Clear();
   bool IsInitialized() const;
 
@@ -12299,53 +13050,43 @@ class CMsgPlayerVoteKickedAfterLeavingMatch : public ::google::protobuf::Message
   inline ::google::protobuf::uint64 steam_id() const;
   inline void set_steam_id(::google::protobuf::uint64 value);
 
-  // optional fixed64 lobby_id = 2;
-  inline bool has_lobby_id() const;
-  inline void clear_lobby_id();
-  static const int kLobbyIdFieldNumber = 2;
-  inline ::google::protobuf::uint64 lobby_id() const;
-  inline void set_lobby_id(::google::protobuf::uint64 value);
+  // optional bool vote_yay = 2;
+  inline bool has_vote_yay() const;
+  inline void clear_vote_yay();
+  static const int kVoteYayFieldNumber = 2;
+  inline bool vote_yay() const;
+  inline void set_vote_yay(bool value);
 
-  // optional fixed64 match_id = 3;
-  inline bool has_match_id() const;
-  inline void clear_match_id();
-  static const int kMatchIdFieldNumber = 3;
-  inline ::google::protobuf::uint64 match_id() const;
-  inline void set_match_id(::google::protobuf::uint64 value);
-
-  // @@protoc_insertion_point(class_scope:CMsgPlayerVoteKickedAfterLeavingMatch)
+  // @@protoc_insertion_point(class_scope:CMsgProcessMatchVoteKick.Vote)
  private:
   inline void set_has_steam_id();
   inline void clear_has_steam_id();
-  inline void set_has_lobby_id();
-  inline void clear_has_lobby_id();
-  inline void set_has_match_id();
-  inline void clear_has_match_id();
+  inline void set_has_vote_yay();
+  inline void clear_has_vote_yay();
 
   ::google::protobuf::UnknownFieldSet _unknown_fields_;
 
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
   ::google::protobuf::uint64 steam_id_;
-  ::google::protobuf::uint64 lobby_id_;
-  ::google::protobuf::uint64 match_id_;
+  bool vote_yay_;
   friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
   friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
   friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
 
   void InitAsDefaultInstance();
-  static CMsgPlayerVoteKickedAfterLeavingMatch* default_instance_;
+  static CMsgProcessMatchVoteKick_Vote* default_instance_;
 };
 // -------------------------------------------------------------------
 
-class CMsgPlayerVoteKickedAfterLeavingMatchResponse : public ::google::protobuf::Message {
+class CMsgProcessMatchVoteKick : public ::google::protobuf::Message {
  public:
-  CMsgPlayerVoteKickedAfterLeavingMatchResponse();
-  virtual ~CMsgPlayerVoteKickedAfterLeavingMatchResponse();
+  CMsgProcessMatchVoteKick();
+  virtual ~CMsgProcessMatchVoteKick();
 
-  CMsgPlayerVoteKickedAfterLeavingMatchResponse(const CMsgPlayerVoteKickedAfterLeavingMatchResponse& from);
+  CMsgProcessMatchVoteKick(const CMsgProcessMatchVoteKick& from);
 
-  inline CMsgPlayerVoteKickedAfterLeavingMatchResponse& operator=(const CMsgPlayerVoteKickedAfterLeavingMatchResponse& from) {
+  inline CMsgProcessMatchVoteKick& operator=(const CMsgProcessMatchVoteKick& from) {
     CopyFrom(from);
     return *this;
   }
@@ -12359,17 +13100,151 @@ class CMsgPlayerVoteKickedAfterLeavingMatchResponse : public ::google::protobuf:
   }
 
   static const ::google::protobuf::Descriptor* descriptor();
-  static const CMsgPlayerVoteKickedAfterLeavingMatchResponse& default_instance();
+  static const CMsgProcessMatchVoteKick& default_instance();
 
-  void Swap(CMsgPlayerVoteKickedAfterLeavingMatchResponse* other);
+  void Swap(CMsgProcessMatchVoteKick* other);
 
   // implements Message ----------------------------------------------
 
-  CMsgPlayerVoteKickedAfterLeavingMatchResponse* New() const;
+  CMsgProcessMatchVoteKick* New() const;
   void CopyFrom(const ::google::protobuf::Message& from);
   void MergeFrom(const ::google::protobuf::Message& from);
-  void CopyFrom(const CMsgPlayerVoteKickedAfterLeavingMatchResponse& from);
-  void MergeFrom(const CMsgPlayerVoteKickedAfterLeavingMatchResponse& from);
+  void CopyFrom(const CMsgProcessMatchVoteKick& from);
+  void MergeFrom(const CMsgProcessMatchVoteKick& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  typedef CMsgProcessMatchVoteKick_Vote Vote;
+
+  // accessors -------------------------------------------------------
+
+  // optional fixed64 match_id = 1;
+  inline bool has_match_id() const;
+  inline void clear_match_id();
+  static const int kMatchIdFieldNumber = 1;
+  inline ::google::protobuf::uint64 match_id() const;
+  inline void set_match_id(::google::protobuf::uint64 value);
+
+  // optional fixed64 initiator_steam_id = 2;
+  inline bool has_initiator_steam_id() const;
+  inline void clear_initiator_steam_id();
+  static const int kInitiatorSteamIdFieldNumber = 2;
+  inline ::google::protobuf::uint64 initiator_steam_id() const;
+  inline void set_initiator_steam_id(::google::protobuf::uint64 value);
+
+  // optional fixed64 target_steam_id = 3;
+  inline bool has_target_steam_id() const;
+  inline void clear_target_steam_id();
+  static const int kTargetSteamIdFieldNumber = 3;
+  inline ::google::protobuf::uint64 target_steam_id() const;
+  inline void set_target_steam_id(::google::protobuf::uint64 value);
+
+  // optional .TFVoteKickReason reason = 4;
+  inline bool has_reason() const;
+  inline void clear_reason();
+  static const int kReasonFieldNumber = 4;
+  inline ::TFVoteKickReason reason() const;
+  inline void set_reason(::TFVoteKickReason value);
+
+  // repeated .CMsgProcessMatchVoteKick.Vote votes = 5;
+  inline int votes_size() const;
+  inline void clear_votes();
+  static const int kVotesFieldNumber = 5;
+  inline const ::CMsgProcessMatchVoteKick_Vote& votes(int index) const;
+  inline ::CMsgProcessMatchVoteKick_Vote* mutable_votes(int index);
+  inline ::CMsgProcessMatchVoteKick_Vote* add_votes();
+  inline const ::google::protobuf::RepeatedPtrField< ::CMsgProcessMatchVoteKick_Vote >&
+      votes() const;
+  inline ::google::protobuf::RepeatedPtrField< ::CMsgProcessMatchVoteKick_Vote >*
+      mutable_votes();
+
+  // optional bool default_pass = 6;
+  inline bool has_default_pass() const;
+  inline void clear_default_pass();
+  static const int kDefaultPassFieldNumber = 6;
+  inline bool default_pass() const;
+  inline void set_default_pass(bool value);
+
+  // @@protoc_insertion_point(class_scope:CMsgProcessMatchVoteKick)
+ private:
+  inline void set_has_match_id();
+  inline void clear_has_match_id();
+  inline void set_has_initiator_steam_id();
+  inline void clear_has_initiator_steam_id();
+  inline void set_has_target_steam_id();
+  inline void clear_has_target_steam_id();
+  inline void set_has_reason();
+  inline void clear_has_reason();
+  inline void set_has_default_pass();
+  inline void clear_has_default_pass();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::google::protobuf::uint64 match_id_;
+  ::google::protobuf::uint64 initiator_steam_id_;
+  ::google::protobuf::uint64 target_steam_id_;
+  ::google::protobuf::RepeatedPtrField< ::CMsgProcessMatchVoteKick_Vote > votes_;
+  int reason_;
+  bool default_pass_;
+  friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
+
+  void InitAsDefaultInstance();
+  static CMsgProcessMatchVoteKick* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class CMsgProcessMatchVoteKickResponse : public ::google::protobuf::Message {
+ public:
+  CMsgProcessMatchVoteKickResponse();
+  virtual ~CMsgProcessMatchVoteKickResponse();
+
+  CMsgProcessMatchVoteKickResponse(const CMsgProcessMatchVoteKickResponse& from);
+
+  inline CMsgProcessMatchVoteKickResponse& operator=(const CMsgProcessMatchVoteKickResponse& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const CMsgProcessMatchVoteKickResponse& default_instance();
+
+  void Swap(CMsgProcessMatchVoteKickResponse* other);
+
+  // implements Message ----------------------------------------------
+
+  CMsgProcessMatchVoteKickResponse* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const CMsgProcessMatchVoteKickResponse& from);
+  void MergeFrom(const CMsgProcessMatchVoteKickResponse& from);
   void Clear();
   bool IsInitialized() const;
 
@@ -12391,19 +13266,29 @@ class CMsgPlayerVoteKickedAfterLeavingMatchResponse : public ::google::protobuf:
 
   // accessors -------------------------------------------------------
 
-  // @@protoc_insertion_point(class_scope:CMsgPlayerVoteKickedAfterLeavingMatchResponse)
+  // optional bool rip = 1;
+  inline bool has_rip() const;
+  inline void clear_rip();
+  static const int kRipFieldNumber = 1;
+  inline bool rip() const;
+  inline void set_rip(bool value);
+
+  // @@protoc_insertion_point(class_scope:CMsgProcessMatchVoteKickResponse)
  private:
+  inline void set_has_rip();
+  inline void clear_has_rip();
 
   ::google::protobuf::UnknownFieldSet _unknown_fields_;
 
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
+  bool rip_;
   friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
   friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
   friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
 
   void InitAsDefaultInstance();
-  static CMsgPlayerVoteKickedAfterLeavingMatchResponse* default_instance_;
+  static CMsgProcessMatchVoteKickResponse* default_instance_;
 };
 // -------------------------------------------------------------------
 
@@ -14787,7 +15672,7 @@ class CMsgTFXPSource : public ::google::protobuf::Message {
   static const XPSourceType SOURCE_COMPETITIVE_WIN = CMsgTFXPSource_XPSourceType_SOURCE_COMPETITIVE_WIN;
   static const XPSourceType SOURCE_COMPETITIVE_LOSS = CMsgTFXPSource_XPSourceType_SOURCE_COMPETITIVE_LOSS;
   static const XPSourceType SOURCE_AUTOBALANCE_BONUS = CMsgTFXPSource_XPSourceType_SOURCE_AUTOBALANCE_BONUS;
-  static const XPSourceType NUM_SOURCE_TYPES = CMsgTFXPSource_XPSourceType_NUM_SOURCE_TYPES;
+  static const XPSourceType SOURCE_PRESTIGE_BONUS = CMsgTFXPSource_XPSourceType_SOURCE_PRESTIGE_BONUS;
   static inline bool XPSourceType_IsValid(int value) {
     return CMsgTFXPSource_XPSourceType_IsValid(value);
   }
@@ -15500,12 +16385,12 @@ class CMsgGC_Match_Result_Player : public ::google::protobuf::Message {
   inline ::google::protobuf::uint64 steam_id() const;
   inline void set_steam_id(::google::protobuf::uint64 value);
 
-  // optional uint64 party_id = 2;
-  inline bool has_party_id() const;
-  inline void clear_party_id();
-  static const int kPartyIdFieldNumber = 2;
-  inline ::google::protobuf::uint64 party_id() const;
-  inline void set_party_id(::google::protobuf::uint64 value);
+  // optional uint64 original_party_id = 2;
+  inline bool has_original_party_id() const;
+  inline void clear_original_party_id();
+  static const int kOriginalPartyIdFieldNumber = 2;
+  inline ::google::protobuf::uint64 original_party_id() const;
+  inline void set_original_party_id(::google::protobuf::uint64 value);
 
   // optional uint32 team = 3;
   inline bool has_team() const;
@@ -15656,8 +16541,8 @@ class CMsgGC_Match_Result_Player : public ::google::protobuf::Message {
  private:
   inline void set_has_steam_id();
   inline void clear_has_steam_id();
-  inline void set_has_party_id();
-  inline void clear_has_party_id();
+  inline void set_has_original_party_id();
+  inline void clear_has_original_party_id();
   inline void set_has_team();
   inline void clear_has_team();
   inline void set_has_score();
@@ -15702,7 +16587,7 @@ class CMsgGC_Match_Result_Player : public ::google::protobuf::Message {
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
   ::google::protobuf::uint64 steam_id_;
-  ::google::protobuf::uint64 party_id_;
+  ::google::protobuf::uint64 original_party_id_;
   ::google::protobuf::uint32 team_;
   ::google::protobuf::uint32 score_;
   ::google::protobuf::uint32 ping_;
@@ -16379,34 +17264,6 @@ class CSOTFLadderPlayerStats : public ::google::protobuf::Message {
   inline ::google::protobuf::uint32 season_id() const;
   inline void set_season_id(::google::protobuf::uint32 value);
 
-  // optional uint32 rank = 6;
-  inline bool has_rank() const;
-  inline void clear_rank();
-  static const int kRankFieldNumber = 6;
-  inline ::google::protobuf::uint32 rank() const;
-  inline void set_rank(::google::protobuf::uint32 value);
-
-  // optional uint32 highest_rank = 7;
-  inline bool has_highest_rank() const;
-  inline void clear_highest_rank();
-  static const int kHighestRankFieldNumber = 7;
-  inline ::google::protobuf::uint32 highest_rank() const;
-  inline void set_highest_rank(::google::protobuf::uint32 value);
-
-  // optional uint32 experience = 8;
-  inline bool has_experience() const;
-  inline void clear_experience();
-  static const int kExperienceFieldNumber = 8;
-  inline ::google::protobuf::uint32 experience() const;
-  inline void set_experience(::google::protobuf::uint32 value);
-
-  // optional uint32 last_ackd_experience = 32;
-  inline bool has_last_ackd_experience() const;
-  inline void clear_last_ackd_experience();
-  static const int kLastAckdExperienceFieldNumber = 32;
-  inline ::google::protobuf::uint32 last_ackd_experience() const;
-  inline void set_last_ackd_experience(::google::protobuf::uint32 value);
-
   // optional uint32 games = 9;
   inline bool has_games() const;
   inline void clear_games();
@@ -16569,14 +17426,6 @@ class CSOTFLadderPlayerStats : public ::google::protobuf::Message {
   inline void clear_has_match_group();
   inline void set_has_season_id();
   inline void clear_has_season_id();
-  inline void set_has_rank();
-  inline void clear_has_rank();
-  inline void set_has_highest_rank();
-  inline void clear_has_highest_rank();
-  inline void set_has_experience();
-  inline void clear_has_experience();
-  inline void set_has_last_ackd_experience();
-  inline void clear_has_last_ackd_experience();
   inline void set_has_games();
   inline void clear_has_games();
   inline void set_has_score();
@@ -16629,10 +17478,6 @@ class CSOTFLadderPlayerStats : public ::google::protobuf::Message {
   ::google::protobuf::uint32 account_id_;
   ::google::protobuf::int32 match_group_;
   ::google::protobuf::uint32 season_id_;
-  ::google::protobuf::uint32 rank_;
-  ::google::protobuf::uint32 highest_rank_;
-  ::google::protobuf::uint32 experience_;
-  ::google::protobuf::uint32 last_ackd_experience_;
   ::google::protobuf::uint32 games_;
   ::google::protobuf::uint32 score_;
   ::google::protobuf::uint32 kills_;
@@ -16836,13 +17681,6 @@ class CMsgGC_TFVoteKickPlayerRequest : public ::google::protobuf::Message {
 
   // accessors -------------------------------------------------------
 
-  // optional uint32 account_id = 1;
-  inline bool has_account_id() const;
-  inline void clear_account_id();
-  static const int kAccountIdFieldNumber = 1;
-  inline ::google::protobuf::uint32 account_id() const;
-  inline void set_account_id(::google::protobuf::uint32 value);
-
   // optional uint64 target_id = 2;
   inline bool has_target_id() const;
   inline void clear_target_id();
@@ -16850,19 +17688,46 @@ class CMsgGC_TFVoteKickPlayerRequest : public ::google::protobuf::Message {
   inline ::google::protobuf::uint64 target_id() const;
   inline void set_target_id(::google::protobuf::uint64 value);
 
+  // optional uint64 voter_id = 3;
+  inline bool has_voter_id() const;
+  inline void clear_voter_id();
+  static const int kVoterIdFieldNumber = 3;
+  inline ::google::protobuf::uint64 voter_id() const;
+  inline void set_voter_id(::google::protobuf::uint64 value);
+
+  // optional .TFVoteKickReason reason = 4;
+  inline bool has_reason() const;
+  inline void clear_reason();
+  static const int kReasonFieldNumber = 4;
+  inline ::TFVoteKickReason reason() const;
+  inline void set_reason(::TFVoteKickReason value);
+
+  // optional uint64 match_id = 5;
+  inline bool has_match_id() const;
+  inline void clear_match_id();
+  static const int kMatchIdFieldNumber = 5;
+  inline ::google::protobuf::uint64 match_id() const;
+  inline void set_match_id(::google::protobuf::uint64 value);
+
   // @@protoc_insertion_point(class_scope:CMsgGC_TFVoteKickPlayerRequest)
  private:
-  inline void set_has_account_id();
-  inline void clear_has_account_id();
   inline void set_has_target_id();
   inline void clear_has_target_id();
+  inline void set_has_voter_id();
+  inline void clear_has_voter_id();
+  inline void set_has_reason();
+  inline void clear_has_reason();
+  inline void set_has_match_id();
+  inline void clear_has_match_id();
 
   ::google::protobuf::UnknownFieldSet _unknown_fields_;
 
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
   ::google::protobuf::uint64 target_id_;
-  ::google::protobuf::uint32 account_id_;
+  ::google::protobuf::uint64 voter_id_;
+  ::google::protobuf::uint64 match_id_;
+  int reason_;
   friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
   friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
   friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
@@ -16932,16 +17797,36 @@ class CMsgGC_VoteKickPlayerRequestResponse : public ::google::protobuf::Message 
   inline bool allowed() const;
   inline void set_allowed(bool value);
 
+  // optional bool voter_inhibit = 3;
+  inline bool has_voter_inhibit() const;
+  inline void clear_voter_inhibit();
+  static const int kVoterInhibitFieldNumber = 3;
+  inline bool voter_inhibit() const;
+  inline void set_voter_inhibit(bool value);
+
+  // optional bool target_inhibit = 4;
+  inline bool has_target_inhibit() const;
+  inline void clear_target_inhibit();
+  static const int kTargetInhibitFieldNumber = 4;
+  inline bool target_inhibit() const;
+  inline void set_target_inhibit(bool value);
+
   // @@protoc_insertion_point(class_scope:CMsgGC_VoteKickPlayerRequestResponse)
  private:
   inline void set_has_allowed();
   inline void clear_has_allowed();
+  inline void set_has_voter_inhibit();
+  inline void clear_has_voter_inhibit();
+  inline void set_has_target_inhibit();
+  inline void clear_has_target_inhibit();
 
   ::google::protobuf::UnknownFieldSet _unknown_fields_;
 
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
   bool allowed_;
+  bool voter_inhibit_;
+  bool target_inhibit_;
   friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
   friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
   friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
@@ -17505,12 +18390,12 @@ class CSOTFMatchResultPlayerStats : public ::google::protobuf::Message {
   inline ::google::protobuf::uint32 status() const;
   inline void set_status(::google::protobuf::uint32 value);
 
-  // optional uint32 party_id = 7;
-  inline bool has_party_id() const;
-  inline void clear_party_id();
-  static const int kPartyIdFieldNumber = 7;
-  inline ::google::protobuf::uint32 party_id() const;
-  inline void set_party_id(::google::protobuf::uint32 value);
+  // optional uint32 original_party_id = 7;
+  inline bool has_original_party_id() const;
+  inline void clear_original_party_id();
+  static const int kOriginalPartyIdFieldNumber = 7;
+  inline ::google::protobuf::uint32 original_party_id() const;
+  inline void set_original_party_id(::google::protobuf::uint32 value);
 
   // optional uint32 team = 8;
   inline bool has_team() const;
@@ -17645,6 +18530,13 @@ class CSOTFMatchResultPlayerStats : public ::google::protobuf::Message {
   inline ::google::protobuf::uint32 map_index() const;
   inline void set_map_index(::google::protobuf::uint32 value);
 
+  // optional uint32 winning_team = 27;
+  inline bool has_winning_team() const;
+  inline void clear_winning_team();
+  static const int kWinningTeamFieldNumber = 27;
+  inline ::google::protobuf::uint32 winning_team() const;
+  inline void set_winning_team(::google::protobuf::uint32 value);
+
   // @@protoc_insertion_point(class_scope:CSOTFMatchResultPlayerStats)
  private:
   inline void set_has_match_id();
@@ -17659,8 +18551,8 @@ class CSOTFMatchResultPlayerStats : public ::google::protobuf::Message {
   inline void clear_has_season_id();
   inline void set_has_status();
   inline void clear_has_status();
-  inline void set_has_party_id();
-  inline void clear_has_party_id();
+  inline void set_has_original_party_id();
+  inline void clear_has_original_party_id();
   inline void set_has_team();
   inline void clear_has_team();
   inline void set_has_score();
@@ -17699,6 +18591,8 @@ class CSOTFMatchResultPlayerStats : public ::google::protobuf::Message {
   inline void clear_has_support_medal();
   inline void set_has_map_index();
   inline void clear_has_map_index();
+  inline void set_has_winning_team();
+  inline void clear_has_winning_team();
 
   ::google::protobuf::UnknownFieldSet _unknown_fields_;
 
@@ -17710,7 +18604,7 @@ class CSOTFMatchResultPlayerStats : public ::google::protobuf::Message {
   ::google::protobuf::uint32 endtime_;
   ::google::protobuf::uint32 season_id_;
   ::google::protobuf::uint32 status_;
-  ::google::protobuf::uint32 party_id_;
+  ::google::protobuf::uint32 original_party_id_;
   ::google::protobuf::uint32 team_;
   ::google::protobuf::uint32 score_;
   ::google::protobuf::uint32 ping_;
@@ -17730,6 +18624,7 @@ class CSOTFMatchResultPlayerStats : public ::google::protobuf::Message {
   ::google::protobuf::uint32 healing_medal_;
   ::google::protobuf::uint32 support_medal_;
   ::google::protobuf::uint32 map_index_;
+  ::google::protobuf::uint32 winning_team_;
   friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
   friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
   friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
@@ -18132,13 +19027,23 @@ class CMsgGCMatchHistoryLoad : public ::google::protobuf::Message {
 
   // accessors -------------------------------------------------------
 
+  // optional .ETFMatchGroup match_group = 1 [default = k_eTFMatchGroup_Invalid];
+  inline bool has_match_group() const;
+  inline void clear_match_group();
+  static const int kMatchGroupFieldNumber = 1;
+  inline ::ETFMatchGroup match_group() const;
+  inline void set_match_group(::ETFMatchGroup value);
+
   // @@protoc_insertion_point(class_scope:CMsgGCMatchHistoryLoad)
  private:
+  inline void set_has_match_group();
+  inline void clear_has_match_group();
 
   ::google::protobuf::UnknownFieldSet _unknown_fields_;
 
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
+  int match_group_;
   friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
   friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
   friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
@@ -18629,6 +19534,769 @@ class CMsgGCSurveyResponse : public ::google::protobuf::Message {
 };
 // -------------------------------------------------------------------
 
+class CSOQuestMapNode : public ::google::protobuf::Message {
+ public:
+  CSOQuestMapNode();
+  virtual ~CSOQuestMapNode();
+
+  CSOQuestMapNode(const CSOQuestMapNode& from);
+
+  inline CSOQuestMapNode& operator=(const CSOQuestMapNode& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const CSOQuestMapNode& default_instance();
+
+  void Swap(CSOQuestMapNode* other);
+
+  // implements Message ----------------------------------------------
+
+  CSOQuestMapNode* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const CSOQuestMapNode& from);
+  void MergeFrom(const CSOQuestMapNode& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional uint32 account_id = 1;
+  inline bool has_account_id() const;
+  inline void clear_account_id();
+  static const int kAccountIdFieldNumber = 1;
+  inline ::google::protobuf::uint32 account_id() const;
+  inline void set_account_id(::google::protobuf::uint32 value);
+
+  // optional uint32 defindex = 3;
+  inline bool has_defindex() const;
+  inline void clear_defindex();
+  static const int kDefindexFieldNumber = 3;
+  inline ::google::protobuf::uint32 defindex() const;
+  inline void set_defindex(::google::protobuf::uint32 value);
+
+  // optional uint32 node_id = 4;
+  inline bool has_node_id() const;
+  inline void clear_node_id();
+  static const int kNodeIdFieldNumber = 4;
+  inline ::google::protobuf::uint32 node_id() const;
+  inline void set_node_id(::google::protobuf::uint32 value);
+
+  // optional bool star_0_earned = 6 [default = false];
+  inline bool has_star_0_earned() const;
+  inline void clear_star_0_earned();
+  static const int kStar0EarnedFieldNumber = 6;
+  inline bool star_0_earned() const;
+  inline void set_star_0_earned(bool value);
+
+  // optional bool star_1_earned = 7 [default = false];
+  inline bool has_star_1_earned() const;
+  inline void clear_star_1_earned();
+  static const int kStar1EarnedFieldNumber = 7;
+  inline bool star_1_earned() const;
+  inline void set_star_1_earned(bool value);
+
+  // optional bool star_2_earned = 8 [default = false];
+  inline bool has_star_2_earned() const;
+  inline void clear_star_2_earned();
+  static const int kStar2EarnedFieldNumber = 8;
+  inline bool star_2_earned() const;
+  inline void set_star_2_earned(bool value);
+
+  // optional bool loot_claimed = 9 [default = false];
+  inline bool has_loot_claimed() const;
+  inline void clear_loot_claimed();
+  static const int kLootClaimedFieldNumber = 9;
+  inline bool loot_claimed() const;
+  inline void set_loot_claimed(bool value);
+
+  // optional uint32 selected_quest_def = 10 [default = 0];
+  inline bool has_selected_quest_def() const;
+  inline void clear_selected_quest_def();
+  static const int kSelectedQuestDefFieldNumber = 10;
+  inline ::google::protobuf::uint32 selected_quest_def() const;
+  inline void set_selected_quest_def(::google::protobuf::uint32 value);
+
+  // optional uint32 map_cycle = 11;
+  inline bool has_map_cycle() const;
+  inline void clear_map_cycle();
+  static const int kMapCycleFieldNumber = 11;
+  inline ::google::protobuf::uint32 map_cycle() const;
+  inline void set_map_cycle(::google::protobuf::uint32 value);
+
+  // @@protoc_insertion_point(class_scope:CSOQuestMapNode)
+ private:
+  inline void set_has_account_id();
+  inline void clear_has_account_id();
+  inline void set_has_defindex();
+  inline void clear_has_defindex();
+  inline void set_has_node_id();
+  inline void clear_has_node_id();
+  inline void set_has_star_0_earned();
+  inline void clear_has_star_0_earned();
+  inline void set_has_star_1_earned();
+  inline void clear_has_star_1_earned();
+  inline void set_has_star_2_earned();
+  inline void clear_has_star_2_earned();
+  inline void set_has_loot_claimed();
+  inline void clear_has_loot_claimed();
+  inline void set_has_selected_quest_def();
+  inline void clear_has_selected_quest_def();
+  inline void set_has_map_cycle();
+  inline void clear_has_map_cycle();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::google::protobuf::uint32 account_id_;
+  ::google::protobuf::uint32 defindex_;
+  ::google::protobuf::uint32 node_id_;
+  bool star_0_earned_;
+  bool star_1_earned_;
+  bool star_2_earned_;
+  bool loot_claimed_;
+  ::google::protobuf::uint32 selected_quest_def_;
+  ::google::protobuf::uint32 map_cycle_;
+  friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
+
+  void InitAsDefaultInstance();
+  static CSOQuestMapNode* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class CSOQuest : public ::google::protobuf::Message {
+ public:
+  CSOQuest();
+  virtual ~CSOQuest();
+
+  CSOQuest(const CSOQuest& from);
+
+  inline CSOQuest& operator=(const CSOQuest& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const CSOQuest& default_instance();
+
+  void Swap(CSOQuest* other);
+
+  // implements Message ----------------------------------------------
+
+  CSOQuest* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const CSOQuest& from);
+  void MergeFrom(const CSOQuest& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional uint32 account_id = 1;
+  inline bool has_account_id() const;
+  inline void clear_account_id();
+  static const int kAccountIdFieldNumber = 1;
+  inline ::google::protobuf::uint32 account_id() const;
+  inline void set_account_id(::google::protobuf::uint32 value);
+
+  // optional uint64 quest_id = 2;
+  inline bool has_quest_id() const;
+  inline void clear_quest_id();
+  static const int kQuestIdFieldNumber = 2;
+  inline ::google::protobuf::uint64 quest_id() const;
+  inline void set_quest_id(::google::protobuf::uint64 value);
+
+  // optional uint32 defindex = 3;
+  inline bool has_defindex() const;
+  inline void clear_defindex();
+  static const int kDefindexFieldNumber = 3;
+  inline ::google::protobuf::uint32 defindex() const;
+  inline void set_defindex(::google::protobuf::uint32 value);
+
+  // optional bool active = 4 [default = false];
+  inline bool has_active() const;
+  inline void clear_active();
+  static const int kActiveFieldNumber = 4;
+  inline bool active() const;
+  inline void set_active(bool value);
+
+  // optional uint32 points_0 = 5;
+  inline bool has_points_0() const;
+  inline void clear_points_0();
+  static const int kPoints0FieldNumber = 5;
+  inline ::google::protobuf::uint32 points_0() const;
+  inline void set_points_0(::google::protobuf::uint32 value);
+
+  // optional uint32 points_1 = 6;
+  inline bool has_points_1() const;
+  inline void clear_points_1();
+  static const int kPoints1FieldNumber = 6;
+  inline ::google::protobuf::uint32 points_1() const;
+  inline void set_points_1(::google::protobuf::uint32 value);
+
+  // optional uint32 points_2 = 7;
+  inline bool has_points_2() const;
+  inline void clear_points_2();
+  static const int kPoints2FieldNumber = 7;
+  inline ::google::protobuf::uint32 points_2() const;
+  inline void set_points_2(::google::protobuf::uint32 value);
+
+  // optional uint32 quest_map_node_source_id = 8;
+  inline bool has_quest_map_node_source_id() const;
+  inline void clear_quest_map_node_source_id();
+  static const int kQuestMapNodeSourceIdFieldNumber = 8;
+  inline ::google::protobuf::uint32 quest_map_node_source_id() const;
+  inline void set_quest_map_node_source_id(::google::protobuf::uint32 value);
+
+  // optional uint32 map_cycle = 9;
+  inline bool has_map_cycle() const;
+  inline void clear_map_cycle();
+  static const int kMapCycleFieldNumber = 9;
+  inline ::google::protobuf::uint32 map_cycle() const;
+  inline void set_map_cycle(::google::protobuf::uint32 value);
+
+  // @@protoc_insertion_point(class_scope:CSOQuest)
+ private:
+  inline void set_has_account_id();
+  inline void clear_has_account_id();
+  inline void set_has_quest_id();
+  inline void clear_has_quest_id();
+  inline void set_has_defindex();
+  inline void clear_has_defindex();
+  inline void set_has_active();
+  inline void clear_has_active();
+  inline void set_has_points_0();
+  inline void clear_has_points_0();
+  inline void set_has_points_1();
+  inline void clear_has_points_1();
+  inline void set_has_points_2();
+  inline void clear_has_points_2();
+  inline void set_has_quest_map_node_source_id();
+  inline void clear_has_quest_map_node_source_id();
+  inline void set_has_map_cycle();
+  inline void clear_has_map_cycle();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::google::protobuf::uint64 quest_id_;
+  ::google::protobuf::uint32 account_id_;
+  ::google::protobuf::uint32 defindex_;
+  bool active_;
+  ::google::protobuf::uint32 points_0_;
+  ::google::protobuf::uint32 points_1_;
+  ::google::protobuf::uint32 points_2_;
+  ::google::protobuf::uint32 quest_map_node_source_id_;
+  ::google::protobuf::uint32 map_cycle_;
+  friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
+
+  void InitAsDefaultInstance();
+  static CSOQuest* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class CSOQuestMapRewardPurchase : public ::google::protobuf::Message {
+ public:
+  CSOQuestMapRewardPurchase();
+  virtual ~CSOQuestMapRewardPurchase();
+
+  CSOQuestMapRewardPurchase(const CSOQuestMapRewardPurchase& from);
+
+  inline CSOQuestMapRewardPurchase& operator=(const CSOQuestMapRewardPurchase& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const CSOQuestMapRewardPurchase& default_instance();
+
+  void Swap(CSOQuestMapRewardPurchase* other);
+
+  // implements Message ----------------------------------------------
+
+  CSOQuestMapRewardPurchase* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const CSOQuestMapRewardPurchase& from);
+  void MergeFrom(const CSOQuestMapRewardPurchase& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional uint32 account_id = 1;
+  inline bool has_account_id() const;
+  inline void clear_account_id();
+  static const int kAccountIdFieldNumber = 1;
+  inline ::google::protobuf::uint32 account_id() const;
+  inline void set_account_id(::google::protobuf::uint32 value);
+
+  // optional uint32 defindex = 2;
+  inline bool has_defindex() const;
+  inline void clear_defindex();
+  static const int kDefindexFieldNumber = 2;
+  inline ::google::protobuf::uint32 defindex() const;
+  inline void set_defindex(::google::protobuf::uint32 value);
+
+  // optional uint32 count = 3;
+  inline bool has_count() const;
+  inline void clear_count();
+  static const int kCountFieldNumber = 3;
+  inline ::google::protobuf::uint32 count() const;
+  inline void set_count(::google::protobuf::uint32 value);
+
+  // optional uint32 map_cycle = 4;
+  inline bool has_map_cycle() const;
+  inline void clear_map_cycle();
+  static const int kMapCycleFieldNumber = 4;
+  inline ::google::protobuf::uint32 map_cycle() const;
+  inline void set_map_cycle(::google::protobuf::uint32 value);
+
+  // optional uint32 purchase_id = 5;
+  inline bool has_purchase_id() const;
+  inline void clear_purchase_id();
+  static const int kPurchaseIdFieldNumber = 5;
+  inline ::google::protobuf::uint32 purchase_id() const;
+  inline void set_purchase_id(::google::protobuf::uint32 value);
+
+  // @@protoc_insertion_point(class_scope:CSOQuestMapRewardPurchase)
+ private:
+  inline void set_has_account_id();
+  inline void clear_has_account_id();
+  inline void set_has_defindex();
+  inline void clear_has_defindex();
+  inline void set_has_count();
+  inline void clear_has_count();
+  inline void set_has_map_cycle();
+  inline void clear_has_map_cycle();
+  inline void set_has_purchase_id();
+  inline void clear_has_purchase_id();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::google::protobuf::uint32 account_id_;
+  ::google::protobuf::uint32 defindex_;
+  ::google::protobuf::uint32 count_;
+  ::google::protobuf::uint32 map_cycle_;
+  ::google::protobuf::uint32 purchase_id_;
+  friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
+
+  void InitAsDefaultInstance();
+  static CSOQuestMapRewardPurchase* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class CMsgGCQuestIdentify : public ::google::protobuf::Message {
+ public:
+  CMsgGCQuestIdentify();
+  virtual ~CMsgGCQuestIdentify();
+
+  CMsgGCQuestIdentify(const CMsgGCQuestIdentify& from);
+
+  inline CMsgGCQuestIdentify& operator=(const CMsgGCQuestIdentify& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const CMsgGCQuestIdentify& default_instance();
+
+  void Swap(CMsgGCQuestIdentify* other);
+
+  // implements Message ----------------------------------------------
+
+  CMsgGCQuestIdentify* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const CMsgGCQuestIdentify& from);
+  void MergeFrom(const CMsgGCQuestIdentify& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional uint64 quest_id = 1;
+  inline bool has_quest_id() const;
+  inline void clear_quest_id();
+  static const int kQuestIdFieldNumber = 1;
+  inline ::google::protobuf::uint64 quest_id() const;
+  inline void set_quest_id(::google::protobuf::uint64 value);
+
+  // @@protoc_insertion_point(class_scope:CMsgGCQuestIdentify)
+ private:
+  inline void set_has_quest_id();
+  inline void clear_has_quest_id();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::google::protobuf::uint64 quest_id_;
+  friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
+
+  void InitAsDefaultInstance();
+  static CMsgGCQuestIdentify* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class CMsgGCQuestDevGive : public ::google::protobuf::Message {
+ public:
+  CMsgGCQuestDevGive();
+  virtual ~CMsgGCQuestDevGive();
+
+  CMsgGCQuestDevGive(const CMsgGCQuestDevGive& from);
+
+  inline CMsgGCQuestDevGive& operator=(const CMsgGCQuestDevGive& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const CMsgGCQuestDevGive& default_instance();
+
+  void Swap(CMsgGCQuestDevGive* other);
+
+  // implements Message ----------------------------------------------
+
+  CMsgGCQuestDevGive* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const CMsgGCQuestDevGive& from);
+  void MergeFrom(const CMsgGCQuestDevGive& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional uint32 quest_def_index = 1;
+  inline bool has_quest_def_index() const;
+  inline void clear_quest_def_index();
+  static const int kQuestDefIndexFieldNumber = 1;
+  inline ::google::protobuf::uint32 quest_def_index() const;
+  inline void set_quest_def_index(::google::protobuf::uint32 value);
+
+  // @@protoc_insertion_point(class_scope:CMsgGCQuestDevGive)
+ private:
+  inline void set_has_quest_def_index();
+  inline void clear_has_quest_def_index();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::google::protobuf::uint32 quest_def_index_;
+  friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
+
+  void InitAsDefaultInstance();
+  static CMsgGCQuestDevGive* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class CMsgGCQuestNodeTurnIn : public ::google::protobuf::Message {
+ public:
+  CMsgGCQuestNodeTurnIn();
+  virtual ~CMsgGCQuestNodeTurnIn();
+
+  CMsgGCQuestNodeTurnIn(const CMsgGCQuestNodeTurnIn& from);
+
+  inline CMsgGCQuestNodeTurnIn& operator=(const CMsgGCQuestNodeTurnIn& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const CMsgGCQuestNodeTurnIn& default_instance();
+
+  void Swap(CMsgGCQuestNodeTurnIn* other);
+
+  // implements Message ----------------------------------------------
+
+  CMsgGCQuestNodeTurnIn* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const CMsgGCQuestNodeTurnIn& from);
+  void MergeFrom(const CMsgGCQuestNodeTurnIn& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional uint32 node_defindex = 1;
+  inline bool has_node_defindex() const;
+  inline void clear_node_defindex();
+  static const int kNodeDefindexFieldNumber = 1;
+  inline ::google::protobuf::uint32 node_defindex() const;
+  inline void set_node_defindex(::google::protobuf::uint32 value);
+
+  // @@protoc_insertion_point(class_scope:CMsgGCQuestNodeTurnIn)
+ private:
+  inline void set_has_node_defindex();
+  inline void clear_has_node_defindex();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::google::protobuf::uint32 node_defindex_;
+  friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
+
+  void InitAsDefaultInstance();
+  static CMsgGCQuestNodeTurnIn* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class CMsgGCQuestMapUnlockNode : public ::google::protobuf::Message {
+ public:
+  CMsgGCQuestMapUnlockNode();
+  virtual ~CMsgGCQuestMapUnlockNode();
+
+  CMsgGCQuestMapUnlockNode(const CMsgGCQuestMapUnlockNode& from);
+
+  inline CMsgGCQuestMapUnlockNode& operator=(const CMsgGCQuestMapUnlockNode& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const CMsgGCQuestMapUnlockNode& default_instance();
+
+  void Swap(CMsgGCQuestMapUnlockNode* other);
+
+  // implements Message ----------------------------------------------
+
+  CMsgGCQuestMapUnlockNode* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const CMsgGCQuestMapUnlockNode& from);
+  void MergeFrom(const CMsgGCQuestMapUnlockNode& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional uint32 node_defindex = 1;
+  inline bool has_node_defindex() const;
+  inline void clear_node_defindex();
+  static const int kNodeDefindexFieldNumber = 1;
+  inline ::google::protobuf::uint32 node_defindex() const;
+  inline void set_node_defindex(::google::protobuf::uint32 value);
+
+  // optional uint32 quest_defindex = 2;
+  inline bool has_quest_defindex() const;
+  inline void clear_quest_defindex();
+  static const int kQuestDefindexFieldNumber = 2;
+  inline ::google::protobuf::uint32 quest_defindex() const;
+  inline void set_quest_defindex(::google::protobuf::uint32 value);
+
+  // @@protoc_insertion_point(class_scope:CMsgGCQuestMapUnlockNode)
+ private:
+  inline void set_has_node_defindex();
+  inline void clear_has_node_defindex();
+  inline void set_has_quest_defindex();
+  inline void clear_has_quest_defindex();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::google::protobuf::uint32 node_defindex_;
+  ::google::protobuf::uint32 quest_defindex_;
+  friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
+
+  void InitAsDefaultInstance();
+  static CMsgGCQuestMapUnlockNode* default_instance_;
+};
+// -------------------------------------------------------------------
+
 class CMsgGCNewMatchForLobbyRequest : public ::google::protobuf::Message {
  public:
   CMsgGCNewMatchForLobbyRequest();
@@ -19077,6 +20745,1228 @@ class CMsgGCChangeMatchPlayerTeamsResponse : public ::google::protobuf::Message 
   void InitAsDefaultInstance();
   static CMsgGCChangeMatchPlayerTeamsResponse* default_instance_;
 };
+// -------------------------------------------------------------------
+
+class CMsgGCQuestComplete_Debug : public ::google::protobuf::Message {
+ public:
+  CMsgGCQuestComplete_Debug();
+  virtual ~CMsgGCQuestComplete_Debug();
+
+  CMsgGCQuestComplete_Debug(const CMsgGCQuestComplete_Debug& from);
+
+  inline CMsgGCQuestComplete_Debug& operator=(const CMsgGCQuestComplete_Debug& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const CMsgGCQuestComplete_Debug& default_instance();
+
+  void Swap(CMsgGCQuestComplete_Debug* other);
+
+  // implements Message ----------------------------------------------
+
+  CMsgGCQuestComplete_Debug* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const CMsgGCQuestComplete_Debug& from);
+  void MergeFrom(const CMsgGCQuestComplete_Debug& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional uint64 quest_id = 1;
+  inline bool has_quest_id() const;
+  inline void clear_quest_id();
+  static const int kQuestIdFieldNumber = 1;
+  inline ::google::protobuf::uint64 quest_id() const;
+  inline void set_quest_id(::google::protobuf::uint64 value);
+
+  // optional uint32 points_type = 2;
+  inline bool has_points_type() const;
+  inline void clear_points_type();
+  static const int kPointsTypeFieldNumber = 2;
+  inline ::google::protobuf::uint32 points_type() const;
+  inline void set_points_type(::google::protobuf::uint32 value);
+
+  // @@protoc_insertion_point(class_scope:CMsgGCQuestComplete_Debug)
+ private:
+  inline void set_has_quest_id();
+  inline void clear_has_quest_id();
+  inline void set_has_points_type();
+  inline void clear_has_points_type();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::google::protobuf::uint64 quest_id_;
+  ::google::protobuf::uint32 points_type_;
+  friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
+
+  void InitAsDefaultInstance();
+  static CMsgGCQuestComplete_Debug* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class CMsgGCQuestMap_Debug : public ::google::protobuf::Message {
+ public:
+  CMsgGCQuestMap_Debug();
+  virtual ~CMsgGCQuestMap_Debug();
+
+  CMsgGCQuestMap_Debug(const CMsgGCQuestMap_Debug& from);
+
+  inline CMsgGCQuestMap_Debug& operator=(const CMsgGCQuestMap_Debug& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const CMsgGCQuestMap_Debug& default_instance();
+
+  void Swap(CMsgGCQuestMap_Debug* other);
+
+  // implements Message ----------------------------------------------
+
+  CMsgGCQuestMap_Debug* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const CMsgGCQuestMap_Debug& from);
+  void MergeFrom(const CMsgGCQuestMap_Debug& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional uint32 reset_operation = 1;
+  inline bool has_reset_operation() const;
+  inline void clear_reset_operation();
+  static const int kResetOperationFieldNumber = 1;
+  inline ::google::protobuf::uint32 reset_operation() const;
+  inline void set_reset_operation(::google::protobuf::uint32 value);
+
+  // optional uint32 give_credit = 2;
+  inline bool has_give_credit() const;
+  inline void clear_give_credit();
+  static const int kGiveCreditFieldNumber = 2;
+  inline ::google::protobuf::uint32 give_credit() const;
+  inline void set_give_credit(::google::protobuf::uint32 value);
+
+  // optional .CMsgGCQuestMapUnlockNode unlock_node = 3;
+  inline bool has_unlock_node() const;
+  inline void clear_unlock_node();
+  static const int kUnlockNodeFieldNumber = 3;
+  inline const ::CMsgGCQuestMapUnlockNode& unlock_node() const;
+  inline ::CMsgGCQuestMapUnlockNode* mutable_unlock_node();
+  inline ::CMsgGCQuestMapUnlockNode* release_unlock_node();
+  inline void set_allocated_unlock_node(::CMsgGCQuestMapUnlockNode* unlock_node);
+
+  // @@protoc_insertion_point(class_scope:CMsgGCQuestMap_Debug)
+ private:
+  inline void set_has_reset_operation();
+  inline void clear_has_reset_operation();
+  inline void set_has_give_credit();
+  inline void clear_has_give_credit();
+  inline void set_has_unlock_node();
+  inline void clear_has_unlock_node();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::google::protobuf::uint32 reset_operation_;
+  ::google::protobuf::uint32 give_credit_;
+  ::CMsgGCQuestMapUnlockNode* unlock_node_;
+  friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
+
+  void InitAsDefaultInstance();
+  static CMsgGCQuestMap_Debug* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class CMsgGCQuestMapPurchaseReward : public ::google::protobuf::Message {
+ public:
+  CMsgGCQuestMapPurchaseReward();
+  virtual ~CMsgGCQuestMapPurchaseReward();
+
+  CMsgGCQuestMapPurchaseReward(const CMsgGCQuestMapPurchaseReward& from);
+
+  inline CMsgGCQuestMapPurchaseReward& operator=(const CMsgGCQuestMapPurchaseReward& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const CMsgGCQuestMapPurchaseReward& default_instance();
+
+  void Swap(CMsgGCQuestMapPurchaseReward* other);
+
+  // implements Message ----------------------------------------------
+
+  CMsgGCQuestMapPurchaseReward* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const CMsgGCQuestMapPurchaseReward& from);
+  void MergeFrom(const CMsgGCQuestMapPurchaseReward& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional uint32 store_item_defindex = 1;
+  inline bool has_store_item_defindex() const;
+  inline void clear_store_item_defindex();
+  static const int kStoreItemDefindexFieldNumber = 1;
+  inline ::google::protobuf::uint32 store_item_defindex() const;
+  inline void set_store_item_defindex(::google::protobuf::uint32 value);
+
+  // @@protoc_insertion_point(class_scope:CMsgGCQuestMapPurchaseReward)
+ private:
+  inline void set_has_store_item_defindex();
+  inline void clear_has_store_item_defindex();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::google::protobuf::uint32 store_item_defindex_;
+  friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
+
+  void InitAsDefaultInstance();
+  static CMsgGCQuestMapPurchaseReward* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class CMsgGCQuestResponse : public ::google::protobuf::Message {
+ public:
+  CMsgGCQuestResponse();
+  virtual ~CMsgGCQuestResponse();
+
+  CMsgGCQuestResponse(const CMsgGCQuestResponse& from);
+
+  inline CMsgGCQuestResponse& operator=(const CMsgGCQuestResponse& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const CMsgGCQuestResponse& default_instance();
+
+  void Swap(CMsgGCQuestResponse* other);
+
+  // implements Message ----------------------------------------------
+
+  CMsgGCQuestResponse* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const CMsgGCQuestResponse& from);
+  void MergeFrom(const CMsgGCQuestResponse& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional bool success = 1 [default = false];
+  inline bool has_success() const;
+  inline void clear_success();
+  static const int kSuccessFieldNumber = 1;
+  inline bool success() const;
+  inline void set_success(bool value);
+
+  // @@protoc_insertion_point(class_scope:CMsgGCQuestResponse)
+ private:
+  inline void set_has_success();
+  inline void clear_has_success();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  bool success_;
+  friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
+
+  void InitAsDefaultInstance();
+  static CMsgGCQuestResponse* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class CMsgGCSetDisablePartyQuestProgress : public ::google::protobuf::Message {
+ public:
+  CMsgGCSetDisablePartyQuestProgress();
+  virtual ~CMsgGCSetDisablePartyQuestProgress();
+
+  CMsgGCSetDisablePartyQuestProgress(const CMsgGCSetDisablePartyQuestProgress& from);
+
+  inline CMsgGCSetDisablePartyQuestProgress& operator=(const CMsgGCSetDisablePartyQuestProgress& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const CMsgGCSetDisablePartyQuestProgress& default_instance();
+
+  void Swap(CMsgGCSetDisablePartyQuestProgress* other);
+
+  // implements Message ----------------------------------------------
+
+  CMsgGCSetDisablePartyQuestProgress* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const CMsgGCSetDisablePartyQuestProgress& from);
+  void MergeFrom(const CMsgGCSetDisablePartyQuestProgress& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional bool state = 1;
+  inline bool has_state() const;
+  inline void clear_state();
+  static const int kStateFieldNumber = 1;
+  inline bool state() const;
+  inline void set_state(bool value);
+
+  // @@protoc_insertion_point(class_scope:CMsgGCSetDisablePartyQuestProgress)
+ private:
+  inline void set_has_state();
+  inline void clear_has_state();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  bool state_;
+  friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
+
+  void InitAsDefaultInstance();
+  static CMsgGCSetDisablePartyQuestProgress* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class CMsgQuestProgressReport : public ::google::protobuf::Message {
+ public:
+  CMsgQuestProgressReport();
+  virtual ~CMsgQuestProgressReport();
+
+  CMsgQuestProgressReport(const CMsgQuestProgressReport& from);
+
+  inline CMsgQuestProgressReport& operator=(const CMsgQuestProgressReport& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const CMsgQuestProgressReport& default_instance();
+
+  void Swap(CMsgQuestProgressReport* other);
+
+  // implements Message ----------------------------------------------
+
+  CMsgQuestProgressReport* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const CMsgQuestProgressReport& from);
+  void MergeFrom(const CMsgQuestProgressReport& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional uint64 quest_id = 1;
+  inline bool has_quest_id() const;
+  inline void clear_quest_id();
+  static const int kQuestIdFieldNumber = 1;
+  inline ::google::protobuf::uint64 quest_id() const;
+  inline void set_quest_id(::google::protobuf::uint64 value);
+
+  // optional bool star_0_earned = 2;
+  inline bool has_star_0_earned() const;
+  inline void clear_star_0_earned();
+  static const int kStar0EarnedFieldNumber = 2;
+  inline bool star_0_earned() const;
+  inline void set_star_0_earned(bool value);
+
+  // optional bool star_1_earned = 3;
+  inline bool has_star_1_earned() const;
+  inline void clear_star_1_earned();
+  static const int kStar1EarnedFieldNumber = 3;
+  inline bool star_1_earned() const;
+  inline void set_star_1_earned(bool value);
+
+  // optional bool star_2_earned = 4;
+  inline bool has_star_2_earned() const;
+  inline void clear_star_2_earned();
+  static const int kStar2EarnedFieldNumber = 4;
+  inline bool star_2_earned() const;
+  inline void set_star_2_earned(bool value);
+
+  // repeated uint64 items_earned = 5;
+  inline int items_earned_size() const;
+  inline void clear_items_earned();
+  static const int kItemsEarnedFieldNumber = 5;
+  inline ::google::protobuf::uint64 items_earned(int index) const;
+  inline void set_items_earned(int index, ::google::protobuf::uint64 value);
+  inline void add_items_earned(::google::protobuf::uint64 value);
+  inline const ::google::protobuf::RepeatedField< ::google::protobuf::uint64 >&
+      items_earned() const;
+  inline ::google::protobuf::RepeatedField< ::google::protobuf::uint64 >*
+      mutable_items_earned();
+
+  // optional uint32 reward_credits_earned = 6;
+  inline bool has_reward_credits_earned() const;
+  inline void clear_reward_credits_earned();
+  static const int kRewardCreditsEarnedFieldNumber = 6;
+  inline ::google::protobuf::uint32 reward_credits_earned() const;
+  inline void set_reward_credits_earned(::google::protobuf::uint32 value);
+
+  // optional bool contract_completed = 7;
+  inline bool has_contract_completed() const;
+  inline void clear_contract_completed();
+  static const int kContractCompletedFieldNumber = 7;
+  inline bool contract_completed() const;
+  inline void set_contract_completed(bool value);
+
+  // @@protoc_insertion_point(class_scope:CMsgQuestProgressReport)
+ private:
+  inline void set_has_quest_id();
+  inline void clear_has_quest_id();
+  inline void set_has_star_0_earned();
+  inline void clear_has_star_0_earned();
+  inline void set_has_star_1_earned();
+  inline void clear_has_star_1_earned();
+  inline void set_has_star_2_earned();
+  inline void clear_has_star_2_earned();
+  inline void set_has_reward_credits_earned();
+  inline void clear_has_reward_credits_earned();
+  inline void set_has_contract_completed();
+  inline void clear_has_contract_completed();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::google::protobuf::uint64 quest_id_;
+  bool star_0_earned_;
+  bool star_1_earned_;
+  bool star_2_earned_;
+  bool contract_completed_;
+  ::google::protobuf::uint32 reward_credits_earned_;
+  ::google::protobuf::RepeatedField< ::google::protobuf::uint64 > items_earned_;
+  friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
+
+  void InitAsDefaultInstance();
+  static CMsgQuestProgressReport* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class CMsgConsumePaintkit : public ::google::protobuf::Message {
+ public:
+  CMsgConsumePaintkit();
+  virtual ~CMsgConsumePaintkit();
+
+  CMsgConsumePaintkit(const CMsgConsumePaintkit& from);
+
+  inline CMsgConsumePaintkit& operator=(const CMsgConsumePaintkit& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const CMsgConsumePaintkit& default_instance();
+
+  void Swap(CMsgConsumePaintkit* other);
+
+  // implements Message ----------------------------------------------
+
+  CMsgConsumePaintkit* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const CMsgConsumePaintkit& from);
+  void MergeFrom(const CMsgConsumePaintkit& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional fixed64 source_id = 1;
+  inline bool has_source_id() const;
+  inline void clear_source_id();
+  static const int kSourceIdFieldNumber = 1;
+  inline ::google::protobuf::uint64 source_id() const;
+  inline void set_source_id(::google::protobuf::uint64 value);
+
+  // optional uint32 target_defindex = 2;
+  inline bool has_target_defindex() const;
+  inline void clear_target_defindex();
+  static const int kTargetDefindexFieldNumber = 2;
+  inline ::google::protobuf::uint32 target_defindex() const;
+  inline void set_target_defindex(::google::protobuf::uint32 value);
+
+  // @@protoc_insertion_point(class_scope:CMsgConsumePaintkit)
+ private:
+  inline void set_has_source_id();
+  inline void clear_has_source_id();
+  inline void set_has_target_defindex();
+  inline void clear_has_target_defindex();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::google::protobuf::uint64 source_id_;
+  ::google::protobuf::uint32 target_defindex_;
+  friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
+
+  void InitAsDefaultInstance();
+  static CMsgConsumePaintkit* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class CMsgPainkitDevGrant : public ::google::protobuf::Message {
+ public:
+  CMsgPainkitDevGrant();
+  virtual ~CMsgPainkitDevGrant();
+
+  CMsgPainkitDevGrant(const CMsgPainkitDevGrant& from);
+
+  inline CMsgPainkitDevGrant& operator=(const CMsgPainkitDevGrant& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const CMsgPainkitDevGrant& default_instance();
+
+  void Swap(CMsgPainkitDevGrant* other);
+
+  // implements Message ----------------------------------------------
+
+  CMsgPainkitDevGrant* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const CMsgPainkitDevGrant& from);
+  void MergeFrom(const CMsgPainkitDevGrant& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional uint32 paintkit_defindex = 1;
+  inline bool has_paintkit_defindex() const;
+  inline void clear_paintkit_defindex();
+  static const int kPaintkitDefindexFieldNumber = 1;
+  inline ::google::protobuf::uint32 paintkit_defindex() const;
+  inline void set_paintkit_defindex(::google::protobuf::uint32 value);
+
+  // optional float wear = 2;
+  inline bool has_wear() const;
+  inline void clear_wear();
+  static const int kWearFieldNumber = 2;
+  inline float wear() const;
+  inline void set_wear(float value);
+
+  // optional uint32 item_defindex = 3;
+  inline bool has_item_defindex() const;
+  inline void clear_item_defindex();
+  static const int kItemDefindexFieldNumber = 3;
+  inline ::google::protobuf::uint32 item_defindex() const;
+  inline void set_item_defindex(::google::protobuf::uint32 value);
+
+  // @@protoc_insertion_point(class_scope:CMsgPainkitDevGrant)
+ private:
+  inline void set_has_paintkit_defindex();
+  inline void clear_has_paintkit_defindex();
+  inline void set_has_wear();
+  inline void clear_has_wear();
+  inline void set_has_item_defindex();
+  inline void clear_has_item_defindex();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::google::protobuf::uint32 paintkit_defindex_;
+  float wear_;
+  ::google::protobuf::uint32 item_defindex_;
+  friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
+
+  void InitAsDefaultInstance();
+  static CMsgPainkitDevGrant* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class GCQuestStrangeEvent : public ::google::protobuf::Message {
+ public:
+  GCQuestStrangeEvent();
+  virtual ~GCQuestStrangeEvent();
+
+  GCQuestStrangeEvent(const GCQuestStrangeEvent& from);
+
+  inline GCQuestStrangeEvent& operator=(const GCQuestStrangeEvent& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const GCQuestStrangeEvent& default_instance();
+
+  void Swap(GCQuestStrangeEvent* other);
+
+  // implements Message ----------------------------------------------
+
+  GCQuestStrangeEvent* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const GCQuestStrangeEvent& from);
+  void MergeFrom(const GCQuestStrangeEvent& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional uint32 owner_account_id = 1;
+  inline bool has_owner_account_id() const;
+  inline void clear_owner_account_id();
+  static const int kOwnerAccountIdFieldNumber = 1;
+  inline ::google::protobuf::uint32 owner_account_id() const;
+  inline void set_owner_account_id(::google::protobuf::uint32 value);
+
+  // optional uint32 scorer_account_id = 2;
+  inline bool has_scorer_account_id() const;
+  inline void clear_scorer_account_id();
+  static const int kScorerAccountIdFieldNumber = 2;
+  inline ::google::protobuf::uint32 scorer_account_id() const;
+  inline void set_scorer_account_id(::google::protobuf::uint32 value);
+
+  // optional uint64 quest_id = 3;
+  inline bool has_quest_id() const;
+  inline void clear_quest_id();
+  static const int kQuestIdFieldNumber = 3;
+  inline ::google::protobuf::uint64 quest_id() const;
+  inline void set_quest_id(::google::protobuf::uint64 value);
+
+  // optional uint32 strange_event_id = 4;
+  inline bool has_strange_event_id() const;
+  inline void clear_strange_event_id();
+  static const int kStrangeEventIdFieldNumber = 4;
+  inline ::google::protobuf::uint32 strange_event_id() const;
+  inline void set_strange_event_id(::google::protobuf::uint32 value);
+
+  // optional uint32 score = 5;
+  inline bool has_score() const;
+  inline void clear_score();
+  static const int kScoreFieldNumber = 5;
+  inline ::google::protobuf::uint32 score() const;
+  inline void set_score(::google::protobuf::uint32 value);
+
+  // @@protoc_insertion_point(class_scope:GCQuestStrangeEvent)
+ private:
+  inline void set_has_owner_account_id();
+  inline void clear_has_owner_account_id();
+  inline void set_has_scorer_account_id();
+  inline void clear_has_scorer_account_id();
+  inline void set_has_quest_id();
+  inline void clear_has_quest_id();
+  inline void set_has_strange_event_id();
+  inline void clear_has_strange_event_id();
+  inline void set_has_score();
+  inline void clear_has_score();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::google::protobuf::uint32 owner_account_id_;
+  ::google::protobuf::uint32 scorer_account_id_;
+  ::google::protobuf::uint64 quest_id_;
+  ::google::protobuf::uint32 strange_event_id_;
+  ::google::protobuf::uint32 score_;
+  friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
+
+  void InitAsDefaultInstance();
+  static GCQuestStrangeEvent* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class CMsgSDRTicket : public ::google::protobuf::Message {
+ public:
+  CMsgSDRTicket();
+  virtual ~CMsgSDRTicket();
+
+  CMsgSDRTicket(const CMsgSDRTicket& from);
+
+  inline CMsgSDRTicket& operator=(const CMsgSDRTicket& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const CMsgSDRTicket& default_instance();
+
+  void Swap(CMsgSDRTicket* other);
+
+  // implements Message ----------------------------------------------
+
+  CMsgSDRTicket* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const CMsgSDRTicket& from);
+  void MergeFrom(const CMsgSDRTicket& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional bytes serialized_ticket = 1;
+  inline bool has_serialized_ticket() const;
+  inline void clear_serialized_ticket();
+  static const int kSerializedTicketFieldNumber = 1;
+  inline const ::std::string& serialized_ticket() const;
+  inline void set_serialized_ticket(const ::std::string& value);
+  inline void set_serialized_ticket(const char* value);
+  inline void set_serialized_ticket(const void* value, size_t size);
+  inline ::std::string* mutable_serialized_ticket();
+  inline ::std::string* release_serialized_ticket();
+  inline void set_allocated_serialized_ticket(::std::string* serialized_ticket);
+
+  // @@protoc_insertion_point(class_scope:CMsgSDRTicket)
+ private:
+  inline void set_has_serialized_ticket();
+  inline void clear_has_serialized_ticket();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::std::string* serialized_ticket_;
+  friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
+
+  void InitAsDefaultInstance();
+  static CMsgSDRTicket* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class CMsgAuthorizeServerItemRetrieval : public ::google::protobuf::Message {
+ public:
+  CMsgAuthorizeServerItemRetrieval();
+  virtual ~CMsgAuthorizeServerItemRetrieval();
+
+  CMsgAuthorizeServerItemRetrieval(const CMsgAuthorizeServerItemRetrieval& from);
+
+  inline CMsgAuthorizeServerItemRetrieval& operator=(const CMsgAuthorizeServerItemRetrieval& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const CMsgAuthorizeServerItemRetrieval& default_instance();
+
+  void Swap(CMsgAuthorizeServerItemRetrieval* other);
+
+  // implements Message ----------------------------------------------
+
+  CMsgAuthorizeServerItemRetrieval* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const CMsgAuthorizeServerItemRetrieval& from);
+  void MergeFrom(const CMsgAuthorizeServerItemRetrieval& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // repeated uint64 item_id = 1;
+  inline int item_id_size() const;
+  inline void clear_item_id();
+  static const int kItemIdFieldNumber = 1;
+  inline ::google::protobuf::uint64 item_id(int index) const;
+  inline void set_item_id(int index, ::google::protobuf::uint64 value);
+  inline void add_item_id(::google::protobuf::uint64 value);
+  inline const ::google::protobuf::RepeatedField< ::google::protobuf::uint64 >&
+      item_id() const;
+  inline ::google::protobuf::RepeatedField< ::google::protobuf::uint64 >*
+      mutable_item_id();
+
+  // @@protoc_insertion_point(class_scope:CMsgAuthorizeServerItemRetrieval)
+ private:
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::google::protobuf::RepeatedField< ::google::protobuf::uint64 > item_id_;
+  friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
+
+  void InitAsDefaultInstance();
+  static CMsgAuthorizeServerItemRetrieval* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class CMsgGCToGCSendAccountBannedNotifications : public ::google::protobuf::Message {
+ public:
+  CMsgGCToGCSendAccountBannedNotifications();
+  virtual ~CMsgGCToGCSendAccountBannedNotifications();
+
+  CMsgGCToGCSendAccountBannedNotifications(const CMsgGCToGCSendAccountBannedNotifications& from);
+
+  inline CMsgGCToGCSendAccountBannedNotifications& operator=(const CMsgGCToGCSendAccountBannedNotifications& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const CMsgGCToGCSendAccountBannedNotifications& default_instance();
+
+  void Swap(CMsgGCToGCSendAccountBannedNotifications* other);
+
+  // implements Message ----------------------------------------------
+
+  CMsgGCToGCSendAccountBannedNotifications* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const CMsgGCToGCSendAccountBannedNotifications& from);
+  void MergeFrom(const CMsgGCToGCSendAccountBannedNotifications& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional uint32 banned_accountid = 1;
+  inline bool has_banned_accountid() const;
+  inline void clear_banned_accountid();
+  static const int kBannedAccountidFieldNumber = 1;
+  inline ::google::protobuf::uint32 banned_accountid() const;
+  inline void set_banned_accountid(::google::protobuf::uint32 value);
+
+  // optional uint32 report_period_begin = 2;
+  inline bool has_report_period_begin() const;
+  inline void clear_report_period_begin();
+  static const int kReportPeriodBeginFieldNumber = 2;
+  inline ::google::protobuf::uint32 report_period_begin() const;
+  inline void set_report_period_begin(::google::protobuf::uint32 value);
+
+  // optional uint32 report_period_end = 3;
+  inline bool has_report_period_end() const;
+  inline void clear_report_period_end();
+  static const int kReportPeriodEndFieldNumber = 3;
+  inline ::google::protobuf::uint32 report_period_end() const;
+  inline void set_report_period_end(::google::protobuf::uint32 value);
+
+  // @@protoc_insertion_point(class_scope:CMsgGCToGCSendAccountBannedNotifications)
+ private:
+  inline void set_has_banned_accountid();
+  inline void clear_has_banned_accountid();
+  inline void set_has_report_period_begin();
+  inline void clear_has_report_period_begin();
+  inline void set_has_report_period_end();
+  inline void clear_has_report_period_end();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::google::protobuf::uint32 banned_accountid_;
+  ::google::protobuf::uint32 report_period_begin_;
+  ::google::protobuf::uint32 report_period_end_;
+  friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
+
+  void InitAsDefaultInstance();
+  static CMsgGCToGCSendAccountBannedNotifications* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class CMsgGCToGCSendNotification : public ::google::protobuf::Message {
+ public:
+  CMsgGCToGCSendNotification();
+  virtual ~CMsgGCToGCSendNotification();
+
+  CMsgGCToGCSendNotification(const CMsgGCToGCSendNotification& from);
+
+  inline CMsgGCToGCSendNotification& operator=(const CMsgGCToGCSendNotification& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const CMsgGCToGCSendNotification& default_instance();
+
+  void Swap(CMsgGCToGCSendNotification* other);
+
+  // implements Message ----------------------------------------------
+
+  CMsgGCToGCSendNotification* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const CMsgGCToGCSendNotification& from);
+  void MergeFrom(const CMsgGCToGCSendNotification& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional .CMsgGCNotification notification = 1;
+  inline bool has_notification() const;
+  inline void clear_notification();
+  static const int kNotificationFieldNumber = 1;
+  inline const ::CMsgGCNotification& notification() const;
+  inline ::CMsgGCNotification* mutable_notification();
+  inline ::CMsgGCNotification* release_notification();
+  inline void set_allocated_notification(::CMsgGCNotification* notification);
+
+  // @@protoc_insertion_point(class_scope:CMsgGCToGCSendNotification)
+ private:
+  inline void set_has_notification();
+  inline void clear_has_notification();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::CMsgGCNotification* notification_;
+  friend void  protobuf_AddDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_AssignDesc_tf_5fgcmessages_2eproto();
+  friend void protobuf_ShutdownFile_tf_5fgcmessages_2eproto();
+
+  void InitAsDefaultInstance();
+  static CMsgGCToGCSendNotification* default_instance_;
+};
 // ===================================================================
 
 
@@ -19468,6 +22358,111 @@ inline void CMsgTFWorldStatus::set_beta_stress_test_event_active(bool value) {
   // @@protoc_insertion_point(field_set:CMsgTFWorldStatus.beta_stress_test_event_active)
 }
 
+// optional .ETFMatchGroup event_match_group = 2 [default = k_eTFMatchGroup_Invalid];
+inline bool CMsgTFWorldStatus::has_event_match_group() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void CMsgTFWorldStatus::set_has_event_match_group() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void CMsgTFWorldStatus::clear_has_event_match_group() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void CMsgTFWorldStatus::clear_event_match_group() {
+  event_match_group_ = -1;
+  clear_has_event_match_group();
+}
+inline ::ETFMatchGroup CMsgTFWorldStatus::event_match_group() const {
+  // @@protoc_insertion_point(field_get:CMsgTFWorldStatus.event_match_group)
+  return static_cast< ::ETFMatchGroup >(event_match_group_);
+}
+inline void CMsgTFWorldStatus::set_event_match_group(::ETFMatchGroup value) {
+  assert(::ETFMatchGroup_IsValid(value));
+  set_has_event_match_group();
+  event_match_group_ = value;
+  // @@protoc_insertion_point(field_set:CMsgTFWorldStatus.event_match_group)
+}
+
+// optional fixed32 event_expire_time = 3 [default = 0];
+inline bool CMsgTFWorldStatus::has_event_expire_time() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
+}
+inline void CMsgTFWorldStatus::set_has_event_expire_time() {
+  _has_bits_[0] |= 0x00000004u;
+}
+inline void CMsgTFWorldStatus::clear_has_event_expire_time() {
+  _has_bits_[0] &= ~0x00000004u;
+}
+inline void CMsgTFWorldStatus::clear_event_expire_time() {
+  event_expire_time_ = 0u;
+  clear_has_event_expire_time();
+}
+inline ::google::protobuf::uint32 CMsgTFWorldStatus::event_expire_time() const {
+  // @@protoc_insertion_point(field_get:CMsgTFWorldStatus.event_expire_time)
+  return event_expire_time_;
+}
+inline void CMsgTFWorldStatus::set_event_expire_time(::google::protobuf::uint32 value) {
+  set_has_event_expire_time();
+  event_expire_time_ = value;
+  // @@protoc_insertion_point(field_set:CMsgTFWorldStatus.event_expire_time)
+}
+
+// optional uint32 active_client_version = 4;
+inline bool CMsgTFWorldStatus::has_active_client_version() const {
+  return (_has_bits_[0] & 0x00000008u) != 0;
+}
+inline void CMsgTFWorldStatus::set_has_active_client_version() {
+  _has_bits_[0] |= 0x00000008u;
+}
+inline void CMsgTFWorldStatus::clear_has_active_client_version() {
+  _has_bits_[0] &= ~0x00000008u;
+}
+inline void CMsgTFWorldStatus::clear_active_client_version() {
+  active_client_version_ = 0u;
+  clear_has_active_client_version();
+}
+inline ::google::protobuf::uint32 CMsgTFWorldStatus::active_client_version() const {
+  // @@protoc_insertion_point(field_get:CMsgTFWorldStatus.active_client_version)
+  return active_client_version_;
+}
+inline void CMsgTFWorldStatus::set_active_client_version(::google::protobuf::uint32 value) {
+  set_has_active_client_version();
+  active_client_version_ = value;
+  // @@protoc_insertion_point(field_set:CMsgTFWorldStatus.active_client_version)
+}
+
+// repeated .ETFMatchGroup disabled_match_groups = 5;
+inline int CMsgTFWorldStatus::disabled_match_groups_size() const {
+  return disabled_match_groups_.size();
+}
+inline void CMsgTFWorldStatus::clear_disabled_match_groups() {
+  disabled_match_groups_.Clear();
+}
+inline ::ETFMatchGroup CMsgTFWorldStatus::disabled_match_groups(int index) const {
+  // @@protoc_insertion_point(field_get:CMsgTFWorldStatus.disabled_match_groups)
+  return static_cast< ::ETFMatchGroup >(disabled_match_groups_.Get(index));
+}
+inline void CMsgTFWorldStatus::set_disabled_match_groups(int index, ::ETFMatchGroup value) {
+  assert(::ETFMatchGroup_IsValid(value));
+  disabled_match_groups_.Set(index, value);
+  // @@protoc_insertion_point(field_set:CMsgTFWorldStatus.disabled_match_groups)
+}
+inline void CMsgTFWorldStatus::add_disabled_match_groups(::ETFMatchGroup value) {
+  assert(::ETFMatchGroup_IsValid(value));
+  disabled_match_groups_.Add(value);
+  // @@protoc_insertion_point(field_add:CMsgTFWorldStatus.disabled_match_groups)
+}
+inline const ::google::protobuf::RepeatedField<int>&
+CMsgTFWorldStatus::disabled_match_groups() const {
+  // @@protoc_insertion_point(field_list:CMsgTFWorldStatus.disabled_match_groups)
+  return disabled_match_groups_;
+}
+inline ::google::protobuf::RepeatedField<int>*
+CMsgTFWorldStatus::mutable_disabled_match_groups() {
+  // @@protoc_insertion_point(field_mutable_list:CMsgTFWorldStatus.disabled_match_groups)
+  return &disabled_match_groups_;
+}
+
 // -------------------------------------------------------------------
 
 // CSOTFDuelSummary
@@ -19690,230 +22685,6 @@ inline void CSOTFMapContribution::set_contribution_level(::google::protobuf::uin
   set_has_contribution_level();
   contribution_level_ = value;
   // @@protoc_insertion_point(field_set:CSOTFMapContribution.contribution_level)
-}
-
-// -------------------------------------------------------------------
-
-// CMsgTFVoteKickBanPlayer
-
-// optional uint32 account_id_subject = 1;
-inline bool CMsgTFVoteKickBanPlayer::has_account_id_subject() const {
-  return (_has_bits_[0] & 0x00000001u) != 0;
-}
-inline void CMsgTFVoteKickBanPlayer::set_has_account_id_subject() {
-  _has_bits_[0] |= 0x00000001u;
-}
-inline void CMsgTFVoteKickBanPlayer::clear_has_account_id_subject() {
-  _has_bits_[0] &= ~0x00000001u;
-}
-inline void CMsgTFVoteKickBanPlayer::clear_account_id_subject() {
-  account_id_subject_ = 0u;
-  clear_has_account_id_subject();
-}
-inline ::google::protobuf::uint32 CMsgTFVoteKickBanPlayer::account_id_subject() const {
-  // @@protoc_insertion_point(field_get:CMsgTFVoteKickBanPlayer.account_id_subject)
-  return account_id_subject_;
-}
-inline void CMsgTFVoteKickBanPlayer::set_account_id_subject(::google::protobuf::uint32 value) {
-  set_has_account_id_subject();
-  account_id_subject_ = value;
-  // @@protoc_insertion_point(field_set:CMsgTFVoteKickBanPlayer.account_id_subject)
-}
-
-// optional uint32 kick_reason = 2;
-inline bool CMsgTFVoteKickBanPlayer::has_kick_reason() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
-}
-inline void CMsgTFVoteKickBanPlayer::set_has_kick_reason() {
-  _has_bits_[0] |= 0x00000002u;
-}
-inline void CMsgTFVoteKickBanPlayer::clear_has_kick_reason() {
-  _has_bits_[0] &= ~0x00000002u;
-}
-inline void CMsgTFVoteKickBanPlayer::clear_kick_reason() {
-  kick_reason_ = 0u;
-  clear_has_kick_reason();
-}
-inline ::google::protobuf::uint32 CMsgTFVoteKickBanPlayer::kick_reason() const {
-  // @@protoc_insertion_point(field_get:CMsgTFVoteKickBanPlayer.kick_reason)
-  return kick_reason_;
-}
-inline void CMsgTFVoteKickBanPlayer::set_kick_reason(::google::protobuf::uint32 value) {
-  set_has_kick_reason();
-  kick_reason_ = value;
-  // @@protoc_insertion_point(field_set:CMsgTFVoteKickBanPlayer.kick_reason)
-}
-
-// -------------------------------------------------------------------
-
-// CMsgTFVoteKickBanPlayerResult
-
-// optional uint32 account_id_initiator = 1;
-inline bool CMsgTFVoteKickBanPlayerResult::has_account_id_initiator() const {
-  return (_has_bits_[0] & 0x00000001u) != 0;
-}
-inline void CMsgTFVoteKickBanPlayerResult::set_has_account_id_initiator() {
-  _has_bits_[0] |= 0x00000001u;
-}
-inline void CMsgTFVoteKickBanPlayerResult::clear_has_account_id_initiator() {
-  _has_bits_[0] &= ~0x00000001u;
-}
-inline void CMsgTFVoteKickBanPlayerResult::clear_account_id_initiator() {
-  account_id_initiator_ = 0u;
-  clear_has_account_id_initiator();
-}
-inline ::google::protobuf::uint32 CMsgTFVoteKickBanPlayerResult::account_id_initiator() const {
-  // @@protoc_insertion_point(field_get:CMsgTFVoteKickBanPlayerResult.account_id_initiator)
-  return account_id_initiator_;
-}
-inline void CMsgTFVoteKickBanPlayerResult::set_account_id_initiator(::google::protobuf::uint32 value) {
-  set_has_account_id_initiator();
-  account_id_initiator_ = value;
-  // @@protoc_insertion_point(field_set:CMsgTFVoteKickBanPlayerResult.account_id_initiator)
-}
-
-// optional uint32 account_id_subject = 2;
-inline bool CMsgTFVoteKickBanPlayerResult::has_account_id_subject() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
-}
-inline void CMsgTFVoteKickBanPlayerResult::set_has_account_id_subject() {
-  _has_bits_[0] |= 0x00000002u;
-}
-inline void CMsgTFVoteKickBanPlayerResult::clear_has_account_id_subject() {
-  _has_bits_[0] &= ~0x00000002u;
-}
-inline void CMsgTFVoteKickBanPlayerResult::clear_account_id_subject() {
-  account_id_subject_ = 0u;
-  clear_has_account_id_subject();
-}
-inline ::google::protobuf::uint32 CMsgTFVoteKickBanPlayerResult::account_id_subject() const {
-  // @@protoc_insertion_point(field_get:CMsgTFVoteKickBanPlayerResult.account_id_subject)
-  return account_id_subject_;
-}
-inline void CMsgTFVoteKickBanPlayerResult::set_account_id_subject(::google::protobuf::uint32 value) {
-  set_has_account_id_subject();
-  account_id_subject_ = value;
-  // @@protoc_insertion_point(field_set:CMsgTFVoteKickBanPlayerResult.account_id_subject)
-}
-
-// optional uint32 kick_reason = 3;
-inline bool CMsgTFVoteKickBanPlayerResult::has_kick_reason() const {
-  return (_has_bits_[0] & 0x00000004u) != 0;
-}
-inline void CMsgTFVoteKickBanPlayerResult::set_has_kick_reason() {
-  _has_bits_[0] |= 0x00000004u;
-}
-inline void CMsgTFVoteKickBanPlayerResult::clear_has_kick_reason() {
-  _has_bits_[0] &= ~0x00000004u;
-}
-inline void CMsgTFVoteKickBanPlayerResult::clear_kick_reason() {
-  kick_reason_ = 0u;
-  clear_has_kick_reason();
-}
-inline ::google::protobuf::uint32 CMsgTFVoteKickBanPlayerResult::kick_reason() const {
-  // @@protoc_insertion_point(field_get:CMsgTFVoteKickBanPlayerResult.kick_reason)
-  return kick_reason_;
-}
-inline void CMsgTFVoteKickBanPlayerResult::set_kick_reason(::google::protobuf::uint32 value) {
-  set_has_kick_reason();
-  kick_reason_ = value;
-  // @@protoc_insertion_point(field_set:CMsgTFVoteKickBanPlayerResult.kick_reason)
-}
-
-// optional bool kick_successful = 4;
-inline bool CMsgTFVoteKickBanPlayerResult::has_kick_successful() const {
-  return (_has_bits_[0] & 0x00000008u) != 0;
-}
-inline void CMsgTFVoteKickBanPlayerResult::set_has_kick_successful() {
-  _has_bits_[0] |= 0x00000008u;
-}
-inline void CMsgTFVoteKickBanPlayerResult::clear_has_kick_successful() {
-  _has_bits_[0] &= ~0x00000008u;
-}
-inline void CMsgTFVoteKickBanPlayerResult::clear_kick_successful() {
-  kick_successful_ = false;
-  clear_has_kick_successful();
-}
-inline bool CMsgTFVoteKickBanPlayerResult::kick_successful() const {
-  // @@protoc_insertion_point(field_get:CMsgTFVoteKickBanPlayerResult.kick_successful)
-  return kick_successful_;
-}
-inline void CMsgTFVoteKickBanPlayerResult::set_kick_successful(bool value) {
-  set_has_kick_successful();
-  kick_successful_ = value;
-  // @@protoc_insertion_point(field_set:CMsgTFVoteKickBanPlayerResult.kick_successful)
-}
-
-// optional uint32 num_yes_votes = 5;
-inline bool CMsgTFVoteKickBanPlayerResult::has_num_yes_votes() const {
-  return (_has_bits_[0] & 0x00000010u) != 0;
-}
-inline void CMsgTFVoteKickBanPlayerResult::set_has_num_yes_votes() {
-  _has_bits_[0] |= 0x00000010u;
-}
-inline void CMsgTFVoteKickBanPlayerResult::clear_has_num_yes_votes() {
-  _has_bits_[0] &= ~0x00000010u;
-}
-inline void CMsgTFVoteKickBanPlayerResult::clear_num_yes_votes() {
-  num_yes_votes_ = 0u;
-  clear_has_num_yes_votes();
-}
-inline ::google::protobuf::uint32 CMsgTFVoteKickBanPlayerResult::num_yes_votes() const {
-  // @@protoc_insertion_point(field_get:CMsgTFVoteKickBanPlayerResult.num_yes_votes)
-  return num_yes_votes_;
-}
-inline void CMsgTFVoteKickBanPlayerResult::set_num_yes_votes(::google::protobuf::uint32 value) {
-  set_has_num_yes_votes();
-  num_yes_votes_ = value;
-  // @@protoc_insertion_point(field_set:CMsgTFVoteKickBanPlayerResult.num_yes_votes)
-}
-
-// optional uint32 num_no_votes = 6;
-inline bool CMsgTFVoteKickBanPlayerResult::has_num_no_votes() const {
-  return (_has_bits_[0] & 0x00000020u) != 0;
-}
-inline void CMsgTFVoteKickBanPlayerResult::set_has_num_no_votes() {
-  _has_bits_[0] |= 0x00000020u;
-}
-inline void CMsgTFVoteKickBanPlayerResult::clear_has_num_no_votes() {
-  _has_bits_[0] &= ~0x00000020u;
-}
-inline void CMsgTFVoteKickBanPlayerResult::clear_num_no_votes() {
-  num_no_votes_ = 0u;
-  clear_has_num_no_votes();
-}
-inline ::google::protobuf::uint32 CMsgTFVoteKickBanPlayerResult::num_no_votes() const {
-  // @@protoc_insertion_point(field_get:CMsgTFVoteKickBanPlayerResult.num_no_votes)
-  return num_no_votes_;
-}
-inline void CMsgTFVoteKickBanPlayerResult::set_num_no_votes(::google::protobuf::uint32 value) {
-  set_has_num_no_votes();
-  num_no_votes_ = value;
-  // @@protoc_insertion_point(field_set:CMsgTFVoteKickBanPlayerResult.num_no_votes)
-}
-
-// optional uint32 num_possible_votes = 7;
-inline bool CMsgTFVoteKickBanPlayerResult::has_num_possible_votes() const {
-  return (_has_bits_[0] & 0x00000040u) != 0;
-}
-inline void CMsgTFVoteKickBanPlayerResult::set_has_num_possible_votes() {
-  _has_bits_[0] |= 0x00000040u;
-}
-inline void CMsgTFVoteKickBanPlayerResult::clear_has_num_possible_votes() {
-  _has_bits_[0] &= ~0x00000040u;
-}
-inline void CMsgTFVoteKickBanPlayerResult::clear_num_possible_votes() {
-  num_possible_votes_ = 0u;
-  clear_has_num_possible_votes();
-}
-inline ::google::protobuf::uint32 CMsgTFVoteKickBanPlayerResult::num_possible_votes() const {
-  // @@protoc_insertion_point(field_get:CMsgTFVoteKickBanPlayerResult.num_possible_votes)
-  return num_possible_votes_;
-}
-inline void CMsgTFVoteKickBanPlayerResult::set_num_possible_votes(::google::protobuf::uint32 value) {
-  set_has_num_possible_votes();
-  num_possible_votes_ = value;
-  // @@protoc_insertion_point(field_set:CMsgTFVoteKickBanPlayerResult.num_possible_votes)
 }
 
 // -------------------------------------------------------------------
@@ -22945,6 +25716,131 @@ inline void CMsgGC_PickupItemEligibility_QueryResponse::set_level_id(::google::p
 
 // -------------------------------------------------------------------
 
+// CSOTFPartyMember_Activity
+
+// optional fixed64 lobby_id = 1;
+inline bool CSOTFPartyMember_Activity::has_lobby_id() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void CSOTFPartyMember_Activity::set_has_lobby_id() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void CSOTFPartyMember_Activity::clear_has_lobby_id() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void CSOTFPartyMember_Activity::clear_lobby_id() {
+  lobby_id_ = GOOGLE_ULONGLONG(0);
+  clear_has_lobby_id();
+}
+inline ::google::protobuf::uint64 CSOTFPartyMember_Activity::lobby_id() const {
+  // @@protoc_insertion_point(field_get:CSOTFPartyMember.Activity.lobby_id)
+  return lobby_id_;
+}
+inline void CSOTFPartyMember_Activity::set_lobby_id(::google::protobuf::uint64 value) {
+  set_has_lobby_id();
+  lobby_id_ = value;
+  // @@protoc_insertion_point(field_set:CSOTFPartyMember.Activity.lobby_id)
+}
+
+// optional .ETFMatchGroup lobby_match_group = 2;
+inline bool CSOTFPartyMember_Activity::has_lobby_match_group() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void CSOTFPartyMember_Activity::set_has_lobby_match_group() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void CSOTFPartyMember_Activity::clear_has_lobby_match_group() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void CSOTFPartyMember_Activity::clear_lobby_match_group() {
+  lobby_match_group_ = -1;
+  clear_has_lobby_match_group();
+}
+inline ::ETFMatchGroup CSOTFPartyMember_Activity::lobby_match_group() const {
+  // @@protoc_insertion_point(field_get:CSOTFPartyMember.Activity.lobby_match_group)
+  return static_cast< ::ETFMatchGroup >(lobby_match_group_);
+}
+inline void CSOTFPartyMember_Activity::set_lobby_match_group(::ETFMatchGroup value) {
+  assert(::ETFMatchGroup_IsValid(value));
+  set_has_lobby_match_group();
+  lobby_match_group_ = value;
+  // @@protoc_insertion_point(field_set:CSOTFPartyMember.Activity.lobby_match_group)
+}
+
+// optional bool multiqueue_blocked = 3;
+inline bool CSOTFPartyMember_Activity::has_multiqueue_blocked() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
+}
+inline void CSOTFPartyMember_Activity::set_has_multiqueue_blocked() {
+  _has_bits_[0] |= 0x00000004u;
+}
+inline void CSOTFPartyMember_Activity::clear_has_multiqueue_blocked() {
+  _has_bits_[0] &= ~0x00000004u;
+}
+inline void CSOTFPartyMember_Activity::clear_multiqueue_blocked() {
+  multiqueue_blocked_ = false;
+  clear_has_multiqueue_blocked();
+}
+inline bool CSOTFPartyMember_Activity::multiqueue_blocked() const {
+  // @@protoc_insertion_point(field_get:CSOTFPartyMember.Activity.multiqueue_blocked)
+  return multiqueue_blocked_;
+}
+inline void CSOTFPartyMember_Activity::set_multiqueue_blocked(bool value) {
+  set_has_multiqueue_blocked();
+  multiqueue_blocked_ = value;
+  // @@protoc_insertion_point(field_set:CSOTFPartyMember.Activity.multiqueue_blocked)
+}
+
+// optional bool online = 4;
+inline bool CSOTFPartyMember_Activity::has_online() const {
+  return (_has_bits_[0] & 0x00000008u) != 0;
+}
+inline void CSOTFPartyMember_Activity::set_has_online() {
+  _has_bits_[0] |= 0x00000008u;
+}
+inline void CSOTFPartyMember_Activity::clear_has_online() {
+  _has_bits_[0] &= ~0x00000008u;
+}
+inline void CSOTFPartyMember_Activity::clear_online() {
+  online_ = false;
+  clear_has_online();
+}
+inline bool CSOTFPartyMember_Activity::online() const {
+  // @@protoc_insertion_point(field_get:CSOTFPartyMember.Activity.online)
+  return online_;
+}
+inline void CSOTFPartyMember_Activity::set_online(bool value) {
+  set_has_online();
+  online_ = value;
+  // @@protoc_insertion_point(field_set:CSOTFPartyMember.Activity.online)
+}
+
+// optional uint32 client_version = 5;
+inline bool CSOTFPartyMember_Activity::has_client_version() const {
+  return (_has_bits_[0] & 0x00000010u) != 0;
+}
+inline void CSOTFPartyMember_Activity::set_has_client_version() {
+  _has_bits_[0] |= 0x00000010u;
+}
+inline void CSOTFPartyMember_Activity::clear_has_client_version() {
+  _has_bits_[0] &= ~0x00000010u;
+}
+inline void CSOTFPartyMember_Activity::clear_client_version() {
+  client_version_ = 0u;
+  clear_has_client_version();
+}
+inline ::google::protobuf::uint32 CSOTFPartyMember_Activity::client_version() const {
+  // @@protoc_insertion_point(field_get:CSOTFPartyMember.Activity.client_version)
+  return client_version_;
+}
+inline void CSOTFPartyMember_Activity::set_client_version(::google::protobuf::uint32 value) {
+  set_has_client_version();
+  client_version_ = value;
+  // @@protoc_insertion_point(field_set:CSOTFPartyMember.Activity.client_version)
+}
+
+// -------------------------------------------------------------------
+
 // CSOTFPartyMember
 
 // optional bool owns_ticket = 2;
@@ -23019,63 +25915,15 @@ inline void CSOTFPartyMember::set_badge_level(::google::protobuf::uint32 value) 
   // @@protoc_insertion_point(field_set:CSOTFPartyMember.badge_level)
 }
 
-// optional bool squad_surplus = 5;
-inline bool CSOTFPartyMember::has_squad_surplus() const {
-  return (_has_bits_[0] & 0x00000008u) != 0;
-}
-inline void CSOTFPartyMember::set_has_squad_surplus() {
-  _has_bits_[0] |= 0x00000008u;
-}
-inline void CSOTFPartyMember::clear_has_squad_surplus() {
-  _has_bits_[0] &= ~0x00000008u;
-}
-inline void CSOTFPartyMember::clear_squad_surplus() {
-  squad_surplus_ = false;
-  clear_has_squad_surplus();
-}
-inline bool CSOTFPartyMember::squad_surplus() const {
-  // @@protoc_insertion_point(field_get:CSOTFPartyMember.squad_surplus)
-  return squad_surplus_;
-}
-inline void CSOTFPartyMember::set_squad_surplus(bool value) {
-  set_has_squad_surplus();
-  squad_surplus_ = value;
-  // @@protoc_insertion_point(field_set:CSOTFPartyMember.squad_surplus)
-}
-
-// optional bool is_banned = 8 [default = false];
-inline bool CSOTFPartyMember::has_is_banned() const {
-  return (_has_bits_[0] & 0x00000010u) != 0;
-}
-inline void CSOTFPartyMember::set_has_is_banned() {
-  _has_bits_[0] |= 0x00000010u;
-}
-inline void CSOTFPartyMember::clear_has_is_banned() {
-  _has_bits_[0] &= ~0x00000010u;
-}
-inline void CSOTFPartyMember::clear_is_banned() {
-  is_banned_ = false;
-  clear_has_is_banned();
-}
-inline bool CSOTFPartyMember::is_banned() const {
-  // @@protoc_insertion_point(field_get:CSOTFPartyMember.is_banned)
-  return is_banned_;
-}
-inline void CSOTFPartyMember::set_is_banned(bool value) {
-  set_has_is_banned();
-  is_banned_ = value;
-  // @@protoc_insertion_point(field_set:CSOTFPartyMember.is_banned)
-}
-
 // optional bool competitive_access = 9;
 inline bool CSOTFPartyMember::has_competitive_access() const {
-  return (_has_bits_[0] & 0x00000020u) != 0;
+  return (_has_bits_[0] & 0x00000008u) != 0;
 }
 inline void CSOTFPartyMember::set_has_competitive_access() {
-  _has_bits_[0] |= 0x00000020u;
+  _has_bits_[0] |= 0x00000008u;
 }
 inline void CSOTFPartyMember::clear_has_competitive_access() {
-  _has_bits_[0] &= ~0x00000020u;
+  _has_bits_[0] &= ~0x00000008u;
 }
 inline void CSOTFPartyMember::clear_competitive_access() {
   competitive_access_ = false;
@@ -23091,63 +25939,15 @@ inline void CSOTFPartyMember::set_competitive_access(bool value) {
   // @@protoc_insertion_point(field_set:CSOTFPartyMember.competitive_access)
 }
 
-// optional uint32 ladder_rank = 12;
-inline bool CSOTFPartyMember::has_ladder_rank() const {
-  return (_has_bits_[0] & 0x00000040u) != 0;
-}
-inline void CSOTFPartyMember::set_has_ladder_rank() {
-  _has_bits_[0] |= 0x00000040u;
-}
-inline void CSOTFPartyMember::clear_has_ladder_rank() {
-  _has_bits_[0] &= ~0x00000040u;
-}
-inline void CSOTFPartyMember::clear_ladder_rank() {
-  ladder_rank_ = 0u;
-  clear_has_ladder_rank();
-}
-inline ::google::protobuf::uint32 CSOTFPartyMember::ladder_rank() const {
-  // @@protoc_insertion_point(field_get:CSOTFPartyMember.ladder_rank)
-  return ladder_rank_;
-}
-inline void CSOTFPartyMember::set_ladder_rank(::google::protobuf::uint32 value) {
-  set_has_ladder_rank();
-  ladder_rank_ = value;
-  // @@protoc_insertion_point(field_set:CSOTFPartyMember.ladder_rank)
-}
-
-// optional bool is_low_priority = 13 [default = false];
-inline bool CSOTFPartyMember::has_is_low_priority() const {
-  return (_has_bits_[0] & 0x00000080u) != 0;
-}
-inline void CSOTFPartyMember::set_has_is_low_priority() {
-  _has_bits_[0] |= 0x00000080u;
-}
-inline void CSOTFPartyMember::clear_has_is_low_priority() {
-  _has_bits_[0] &= ~0x00000080u;
-}
-inline void CSOTFPartyMember::clear_is_low_priority() {
-  is_low_priority_ = false;
-  clear_has_is_low_priority();
-}
-inline bool CSOTFPartyMember::is_low_priority() const {
-  // @@protoc_insertion_point(field_get:CSOTFPartyMember.is_low_priority)
-  return is_low_priority_;
-}
-inline void CSOTFPartyMember::set_is_low_priority(bool value) {
-  set_has_is_low_priority();
-  is_low_priority_ = value;
-  // @@protoc_insertion_point(field_set:CSOTFPartyMember.is_low_priority)
-}
-
 // optional uint32 experience = 14;
 inline bool CSOTFPartyMember::has_experience() const {
-  return (_has_bits_[0] & 0x00000100u) != 0;
+  return (_has_bits_[0] & 0x00000010u) != 0;
 }
 inline void CSOTFPartyMember::set_has_experience() {
-  _has_bits_[0] |= 0x00000100u;
+  _has_bits_[0] |= 0x00000010u;
 }
 inline void CSOTFPartyMember::clear_has_experience() {
-  _has_bits_[0] &= ~0x00000100u;
+  _has_bits_[0] &= ~0x00000010u;
 }
 inline void CSOTFPartyMember::clear_experience() {
   experience_ = 0u;
@@ -23163,160 +25963,444 @@ inline void CSOTFPartyMember::set_experience(::google::protobuf::uint32 value) {
   // @@protoc_insertion_point(field_set:CSOTFPartyMember.experience)
 }
 
-// optional uint32 skillrating = 15 [default = 10000];
-inline bool CSOTFPartyMember::has_skillrating() const {
+// optional .CTFPerPlayerMatchCriteriaProto player_criteria = 16;
+inline bool CSOTFPartyMember::has_player_criteria() const {
+  return (_has_bits_[0] & 0x00000020u) != 0;
+}
+inline void CSOTFPartyMember::set_has_player_criteria() {
+  _has_bits_[0] |= 0x00000020u;
+}
+inline void CSOTFPartyMember::clear_has_player_criteria() {
+  _has_bits_[0] &= ~0x00000020u;
+}
+inline void CSOTFPartyMember::clear_player_criteria() {
+  if (player_criteria_ != NULL) player_criteria_->::CTFPerPlayerMatchCriteriaProto::Clear();
+  clear_has_player_criteria();
+}
+inline const ::CTFPerPlayerMatchCriteriaProto& CSOTFPartyMember::player_criteria() const {
+  // @@protoc_insertion_point(field_get:CSOTFPartyMember.player_criteria)
+  return player_criteria_ != NULL ? *player_criteria_ : *default_instance_->player_criteria_;
+}
+inline ::CTFPerPlayerMatchCriteriaProto* CSOTFPartyMember::mutable_player_criteria() {
+  set_has_player_criteria();
+  if (player_criteria_ == NULL) player_criteria_ = new ::CTFPerPlayerMatchCriteriaProto;
+  // @@protoc_insertion_point(field_mutable:CSOTFPartyMember.player_criteria)
+  return player_criteria_;
+}
+inline ::CTFPerPlayerMatchCriteriaProto* CSOTFPartyMember::release_player_criteria() {
+  clear_has_player_criteria();
+  ::CTFPerPlayerMatchCriteriaProto* temp = player_criteria_;
+  player_criteria_ = NULL;
+  return temp;
+}
+inline void CSOTFPartyMember::set_allocated_player_criteria(::CTFPerPlayerMatchCriteriaProto* player_criteria) {
+  delete player_criteria_;
+  player_criteria_ = player_criteria;
+  if (player_criteria) {
+    set_has_player_criteria();
+  } else {
+    clear_has_player_criteria();
+  }
+  // @@protoc_insertion_point(field_set_allocated:CSOTFPartyMember.player_criteria)
+}
+
+// optional .CSOTFPartyMember.Activity activity = 17;
+inline bool CSOTFPartyMember::has_activity() const {
+  return (_has_bits_[0] & 0x00000040u) != 0;
+}
+inline void CSOTFPartyMember::set_has_activity() {
+  _has_bits_[0] |= 0x00000040u;
+}
+inline void CSOTFPartyMember::clear_has_activity() {
+  _has_bits_[0] &= ~0x00000040u;
+}
+inline void CSOTFPartyMember::clear_activity() {
+  if (activity_ != NULL) activity_->::CSOTFPartyMember_Activity::Clear();
+  clear_has_activity();
+}
+inline const ::CSOTFPartyMember_Activity& CSOTFPartyMember::activity() const {
+  // @@protoc_insertion_point(field_get:CSOTFPartyMember.activity)
+  return activity_ != NULL ? *activity_ : *default_instance_->activity_;
+}
+inline ::CSOTFPartyMember_Activity* CSOTFPartyMember::mutable_activity() {
+  set_has_activity();
+  if (activity_ == NULL) activity_ = new ::CSOTFPartyMember_Activity;
+  // @@protoc_insertion_point(field_mutable:CSOTFPartyMember.activity)
+  return activity_;
+}
+inline ::CSOTFPartyMember_Activity* CSOTFPartyMember::release_activity() {
+  clear_has_activity();
+  ::CSOTFPartyMember_Activity* temp = activity_;
+  activity_ = NULL;
+  return temp;
+}
+inline void CSOTFPartyMember::set_allocated_activity(::CSOTFPartyMember_Activity* activity) {
+  delete activity_;
+  activity_ = activity;
+  if (activity) {
+    set_has_activity();
+  } else {
+    clear_has_activity();
+  }
+  // @@protoc_insertion_point(field_set_allocated:CSOTFPartyMember.activity)
+}
+
+// optional bool casual_banned = 18;
+inline bool CSOTFPartyMember::has_casual_banned() const {
+  return (_has_bits_[0] & 0x00000080u) != 0;
+}
+inline void CSOTFPartyMember::set_has_casual_banned() {
+  _has_bits_[0] |= 0x00000080u;
+}
+inline void CSOTFPartyMember::clear_has_casual_banned() {
+  _has_bits_[0] &= ~0x00000080u;
+}
+inline void CSOTFPartyMember::clear_casual_banned() {
+  casual_banned_ = false;
+  clear_has_casual_banned();
+}
+inline bool CSOTFPartyMember::casual_banned() const {
+  // @@protoc_insertion_point(field_get:CSOTFPartyMember.casual_banned)
+  return casual_banned_;
+}
+inline void CSOTFPartyMember::set_casual_banned(bool value) {
+  set_has_casual_banned();
+  casual_banned_ = value;
+  // @@protoc_insertion_point(field_set:CSOTFPartyMember.casual_banned)
+}
+
+// optional bool ranked_banned = 19;
+inline bool CSOTFPartyMember::has_ranked_banned() const {
+  return (_has_bits_[0] & 0x00000100u) != 0;
+}
+inline void CSOTFPartyMember::set_has_ranked_banned() {
+  _has_bits_[0] |= 0x00000100u;
+}
+inline void CSOTFPartyMember::clear_has_ranked_banned() {
+  _has_bits_[0] &= ~0x00000100u;
+}
+inline void CSOTFPartyMember::clear_ranked_banned() {
+  ranked_banned_ = false;
+  clear_has_ranked_banned();
+}
+inline bool CSOTFPartyMember::ranked_banned() const {
+  // @@protoc_insertion_point(field_get:CSOTFPartyMember.ranked_banned)
+  return ranked_banned_;
+}
+inline void CSOTFPartyMember::set_ranked_banned(bool value) {
+  set_has_ranked_banned();
+  ranked_banned_ = value;
+  // @@protoc_insertion_point(field_set:CSOTFPartyMember.ranked_banned)
+}
+
+// optional bool casual_low_priority = 20;
+inline bool CSOTFPartyMember::has_casual_low_priority() const {
   return (_has_bits_[0] & 0x00000200u) != 0;
 }
-inline void CSOTFPartyMember::set_has_skillrating() {
+inline void CSOTFPartyMember::set_has_casual_low_priority() {
   _has_bits_[0] |= 0x00000200u;
 }
-inline void CSOTFPartyMember::clear_has_skillrating() {
+inline void CSOTFPartyMember::clear_has_casual_low_priority() {
   _has_bits_[0] &= ~0x00000200u;
 }
-inline void CSOTFPartyMember::clear_skillrating() {
-  skillrating_ = 10000u;
-  clear_has_skillrating();
+inline void CSOTFPartyMember::clear_casual_low_priority() {
+  casual_low_priority_ = false;
+  clear_has_casual_low_priority();
 }
-inline ::google::protobuf::uint32 CSOTFPartyMember::skillrating() const {
-  // @@protoc_insertion_point(field_get:CSOTFPartyMember.skillrating)
-  return skillrating_;
+inline bool CSOTFPartyMember::casual_low_priority() const {
+  // @@protoc_insertion_point(field_get:CSOTFPartyMember.casual_low_priority)
+  return casual_low_priority_;
 }
-inline void CSOTFPartyMember::set_skillrating(::google::protobuf::uint32 value) {
-  set_has_skillrating();
-  skillrating_ = value;
-  // @@protoc_insertion_point(field_set:CSOTFPartyMember.skillrating)
+inline void CSOTFPartyMember::set_casual_low_priority(bool value) {
+  set_has_casual_low_priority();
+  casual_low_priority_ = value;
+  // @@protoc_insertion_point(field_set:CSOTFPartyMember.casual_low_priority)
+}
+
+// optional bool ranked_low_priority = 21;
+inline bool CSOTFPartyMember::has_ranked_low_priority() const {
+  return (_has_bits_[0] & 0x00000400u) != 0;
+}
+inline void CSOTFPartyMember::set_has_ranked_low_priority() {
+  _has_bits_[0] |= 0x00000400u;
+}
+inline void CSOTFPartyMember::clear_has_ranked_low_priority() {
+  _has_bits_[0] &= ~0x00000400u;
+}
+inline void CSOTFPartyMember::clear_ranked_low_priority() {
+  ranked_low_priority_ = false;
+  clear_has_ranked_low_priority();
+}
+inline bool CSOTFPartyMember::ranked_low_priority() const {
+  // @@protoc_insertion_point(field_get:CSOTFPartyMember.ranked_low_priority)
+  return ranked_low_priority_;
+}
+inline void CSOTFPartyMember::set_ranked_low_priority(bool value) {
+  set_has_ranked_low_priority();
+  ranked_low_priority_ = value;
+  // @@protoc_insertion_point(field_set:CSOTFPartyMember.ranked_low_priority)
+}
+
+// optional bool lobby_standby = 22;
+inline bool CSOTFPartyMember::has_lobby_standby() const {
+  return (_has_bits_[0] & 0x00000800u) != 0;
+}
+inline void CSOTFPartyMember::set_has_lobby_standby() {
+  _has_bits_[0] |= 0x00000800u;
+}
+inline void CSOTFPartyMember::clear_has_lobby_standby() {
+  _has_bits_[0] &= ~0x00000800u;
+}
+inline void CSOTFPartyMember::clear_lobby_standby() {
+  lobby_standby_ = false;
+  clear_has_lobby_standby();
+}
+inline bool CSOTFPartyMember::lobby_standby() const {
+  // @@protoc_insertion_point(field_get:CSOTFPartyMember.lobby_standby)
+  return lobby_standby_;
+}
+inline void CSOTFPartyMember::set_lobby_standby(bool value) {
+  set_has_lobby_standby();
+  lobby_standby_ = value;
+  // @@protoc_insertion_point(field_set:CSOTFPartyMember.lobby_standby)
 }
 
 // -------------------------------------------------------------------
 
-// CMsgMatchSearchCriteria
+// TFPendingPartyMember
 
-// optional .TF_MatchmakingMode matchmaking_mode = 7;
-inline bool CMsgMatchSearchCriteria::has_matchmaking_mode() const {
+// optional fixed64 steamid = 1;
+inline bool TFPendingPartyMember::has_steamid() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
-inline void CMsgMatchSearchCriteria::set_has_matchmaking_mode() {
+inline void TFPendingPartyMember::set_has_steamid() {
   _has_bits_[0] |= 0x00000001u;
 }
-inline void CMsgMatchSearchCriteria::clear_has_matchmaking_mode() {
+inline void TFPendingPartyMember::clear_has_steamid() {
   _has_bits_[0] &= ~0x00000001u;
 }
-inline void CMsgMatchSearchCriteria::clear_matchmaking_mode() {
-  matchmaking_mode_ = 0;
-  clear_has_matchmaking_mode();
+inline void TFPendingPartyMember::clear_steamid() {
+  steamid_ = GOOGLE_ULONGLONG(0);
+  clear_has_steamid();
 }
-inline ::TF_MatchmakingMode CMsgMatchSearchCriteria::matchmaking_mode() const {
-  // @@protoc_insertion_point(field_get:CMsgMatchSearchCriteria.matchmaking_mode)
-  return static_cast< ::TF_MatchmakingMode >(matchmaking_mode_);
+inline ::google::protobuf::uint64 TFPendingPartyMember::steamid() const {
+  // @@protoc_insertion_point(field_get:TFPendingPartyMember.steamid)
+  return steamid_;
 }
-inline void CMsgMatchSearchCriteria::set_matchmaking_mode(::TF_MatchmakingMode value) {
-  assert(::TF_MatchmakingMode_IsValid(value));
-  set_has_matchmaking_mode();
-  matchmaking_mode_ = value;
-  // @@protoc_insertion_point(field_set:CMsgMatchSearchCriteria.matchmaking_mode)
+inline void TFPendingPartyMember::set_steamid(::google::protobuf::uint64 value) {
+  set_has_steamid();
+  steamid_ = value;
+  // @@protoc_insertion_point(field_set:TFPendingPartyMember.steamid)
 }
 
-// optional bool late_join_ok = 5;
-inline bool CMsgMatchSearchCriteria::has_late_join_ok() const {
+// optional .TFPendingPartyMember.EType type = 2 [default = Invited];
+inline bool TFPendingPartyMember::has_type() const {
   return (_has_bits_[0] & 0x00000002u) != 0;
 }
-inline void CMsgMatchSearchCriteria::set_has_late_join_ok() {
+inline void TFPendingPartyMember::set_has_type() {
   _has_bits_[0] |= 0x00000002u;
 }
-inline void CMsgMatchSearchCriteria::clear_has_late_join_ok() {
+inline void TFPendingPartyMember::clear_has_type() {
   _has_bits_[0] &= ~0x00000002u;
 }
-inline void CMsgMatchSearchCriteria::clear_late_join_ok() {
+inline void TFPendingPartyMember::clear_type() {
+  type_ = 0;
+  clear_has_type();
+}
+inline ::TFPendingPartyMember_EType TFPendingPartyMember::type() const {
+  // @@protoc_insertion_point(field_get:TFPendingPartyMember.type)
+  return static_cast< ::TFPendingPartyMember_EType >(type_);
+}
+inline void TFPendingPartyMember::set_type(::TFPendingPartyMember_EType value) {
+  assert(::TFPendingPartyMember_EType_IsValid(value));
+  set_has_type();
+  type_ = value;
+  // @@protoc_insertion_point(field_set:TFPendingPartyMember.type)
+}
+
+// optional fixed64 inviter = 3;
+inline bool TFPendingPartyMember::has_inviter() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
+}
+inline void TFPendingPartyMember::set_has_inviter() {
+  _has_bits_[0] |= 0x00000004u;
+}
+inline void TFPendingPartyMember::clear_has_inviter() {
+  _has_bits_[0] &= ~0x00000004u;
+}
+inline void TFPendingPartyMember::clear_inviter() {
+  inviter_ = GOOGLE_ULONGLONG(0);
+  clear_has_inviter();
+}
+inline ::google::protobuf::uint64 TFPendingPartyMember::inviter() const {
+  // @@protoc_insertion_point(field_get:TFPendingPartyMember.inviter)
+  return inviter_;
+}
+inline void TFPendingPartyMember::set_inviter(::google::protobuf::uint64 value) {
+  set_has_inviter();
+  inviter_ = value;
+  // @@protoc_insertion_point(field_set:TFPendingPartyMember.inviter)
+}
+
+// -------------------------------------------------------------------
+
+// TFSyncedMMUIState
+
+// optional .ETFSyncedMMMenuStep menu_step = 1 [default = k_eTFSyncedMMMenuStep_None];
+inline bool TFSyncedMMUIState::has_menu_step() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void TFSyncedMMUIState::set_has_menu_step() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void TFSyncedMMUIState::clear_has_menu_step() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void TFSyncedMMUIState::clear_menu_step() {
+  menu_step_ = 0;
+  clear_has_menu_step();
+}
+inline ::ETFSyncedMMMenuStep TFSyncedMMUIState::menu_step() const {
+  // @@protoc_insertion_point(field_get:TFSyncedMMUIState.menu_step)
+  return static_cast< ::ETFSyncedMMMenuStep >(menu_step_);
+}
+inline void TFSyncedMMUIState::set_menu_step(::ETFSyncedMMMenuStep value) {
+  assert(::ETFSyncedMMMenuStep_IsValid(value));
+  set_has_menu_step();
+  menu_step_ = value;
+  // @@protoc_insertion_point(field_set:TFSyncedMMUIState.menu_step)
+}
+
+// optional .ETFMatchGroup match_group = 2 [default = k_eTFMatchGroup_Invalid];
+inline bool TFSyncedMMUIState::has_match_group() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void TFSyncedMMUIState::set_has_match_group() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void TFSyncedMMUIState::clear_has_match_group() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void TFSyncedMMUIState::clear_match_group() {
+  match_group_ = -1;
+  clear_has_match_group();
+}
+inline ::ETFMatchGroup TFSyncedMMUIState::match_group() const {
+  // @@protoc_insertion_point(field_get:TFSyncedMMUIState.match_group)
+  return static_cast< ::ETFMatchGroup >(match_group_);
+}
+inline void TFSyncedMMUIState::set_match_group(::ETFMatchGroup value) {
+  assert(::ETFMatchGroup_IsValid(value));
+  set_has_match_group();
+  match_group_ = value;
+  // @@protoc_insertion_point(field_set:TFSyncedMMUIState.match_group)
+}
+
+// -------------------------------------------------------------------
+
+// CTFGroupMatchCriteriaProto
+
+// optional bool late_join_ok = 5;
+inline bool CTFGroupMatchCriteriaProto::has_late_join_ok() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void CTFGroupMatchCriteriaProto::set_has_late_join_ok() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void CTFGroupMatchCriteriaProto::clear_has_late_join_ok() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void CTFGroupMatchCriteriaProto::clear_late_join_ok() {
   late_join_ok_ = false;
   clear_has_late_join_ok();
 }
-inline bool CMsgMatchSearchCriteria::late_join_ok() const {
-  // @@protoc_insertion_point(field_get:CMsgMatchSearchCriteria.late_join_ok)
+inline bool CTFGroupMatchCriteriaProto::late_join_ok() const {
+  // @@protoc_insertion_point(field_get:CTFGroupMatchCriteriaProto.late_join_ok)
   return late_join_ok_;
 }
-inline void CMsgMatchSearchCriteria::set_late_join_ok(bool value) {
+inline void CTFGroupMatchCriteriaProto::set_late_join_ok(bool value) {
   set_has_late_join_ok();
   late_join_ok_ = value;
-  // @@protoc_insertion_point(field_set:CMsgMatchSearchCriteria.late_join_ok)
+  // @@protoc_insertion_point(field_set:CTFGroupMatchCriteriaProto.late_join_ok)
 }
 
 // optional uint32 custom_ping_tolerance = 13 [default = 0];
-inline bool CMsgMatchSearchCriteria::has_custom_ping_tolerance() const {
-  return (_has_bits_[0] & 0x00000004u) != 0;
+inline bool CTFGroupMatchCriteriaProto::has_custom_ping_tolerance() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
 }
-inline void CMsgMatchSearchCriteria::set_has_custom_ping_tolerance() {
-  _has_bits_[0] |= 0x00000004u;
+inline void CTFGroupMatchCriteriaProto::set_has_custom_ping_tolerance() {
+  _has_bits_[0] |= 0x00000002u;
 }
-inline void CMsgMatchSearchCriteria::clear_has_custom_ping_tolerance() {
-  _has_bits_[0] &= ~0x00000004u;
+inline void CTFGroupMatchCriteriaProto::clear_has_custom_ping_tolerance() {
+  _has_bits_[0] &= ~0x00000002u;
 }
-inline void CMsgMatchSearchCriteria::clear_custom_ping_tolerance() {
+inline void CTFGroupMatchCriteriaProto::clear_custom_ping_tolerance() {
   custom_ping_tolerance_ = 0u;
   clear_has_custom_ping_tolerance();
 }
-inline ::google::protobuf::uint32 CMsgMatchSearchCriteria::custom_ping_tolerance() const {
-  // @@protoc_insertion_point(field_get:CMsgMatchSearchCriteria.custom_ping_tolerance)
+inline ::google::protobuf::uint32 CTFGroupMatchCriteriaProto::custom_ping_tolerance() const {
+  // @@protoc_insertion_point(field_get:CTFGroupMatchCriteriaProto.custom_ping_tolerance)
   return custom_ping_tolerance_;
 }
-inline void CMsgMatchSearchCriteria::set_custom_ping_tolerance(::google::protobuf::uint32 value) {
+inline void CTFGroupMatchCriteriaProto::set_custom_ping_tolerance(::google::protobuf::uint32 value) {
   set_has_custom_ping_tolerance();
   custom_ping_tolerance_ = value;
-  // @@protoc_insertion_point(field_set:CMsgMatchSearchCriteria.custom_ping_tolerance)
+  // @@protoc_insertion_point(field_set:CTFGroupMatchCriteriaProto.custom_ping_tolerance)
 }
 
 // optional string mvm_mannup_tour = 10;
-inline bool CMsgMatchSearchCriteria::has_mvm_mannup_tour() const {
-  return (_has_bits_[0] & 0x00000008u) != 0;
+inline bool CTFGroupMatchCriteriaProto::has_mvm_mannup_tour() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
 }
-inline void CMsgMatchSearchCriteria::set_has_mvm_mannup_tour() {
-  _has_bits_[0] |= 0x00000008u;
+inline void CTFGroupMatchCriteriaProto::set_has_mvm_mannup_tour() {
+  _has_bits_[0] |= 0x00000004u;
 }
-inline void CMsgMatchSearchCriteria::clear_has_mvm_mannup_tour() {
-  _has_bits_[0] &= ~0x00000008u;
+inline void CTFGroupMatchCriteriaProto::clear_has_mvm_mannup_tour() {
+  _has_bits_[0] &= ~0x00000004u;
 }
-inline void CMsgMatchSearchCriteria::clear_mvm_mannup_tour() {
+inline void CTFGroupMatchCriteriaProto::clear_mvm_mannup_tour() {
   if (mvm_mannup_tour_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
     mvm_mannup_tour_->clear();
   }
   clear_has_mvm_mannup_tour();
 }
-inline const ::std::string& CMsgMatchSearchCriteria::mvm_mannup_tour() const {
-  // @@protoc_insertion_point(field_get:CMsgMatchSearchCriteria.mvm_mannup_tour)
+inline const ::std::string& CTFGroupMatchCriteriaProto::mvm_mannup_tour() const {
+  // @@protoc_insertion_point(field_get:CTFGroupMatchCriteriaProto.mvm_mannup_tour)
   return *mvm_mannup_tour_;
 }
-inline void CMsgMatchSearchCriteria::set_mvm_mannup_tour(const ::std::string& value) {
+inline void CTFGroupMatchCriteriaProto::set_mvm_mannup_tour(const ::std::string& value) {
   set_has_mvm_mannup_tour();
   if (mvm_mannup_tour_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
     mvm_mannup_tour_ = new ::std::string;
   }
   mvm_mannup_tour_->assign(value);
-  // @@protoc_insertion_point(field_set:CMsgMatchSearchCriteria.mvm_mannup_tour)
+  // @@protoc_insertion_point(field_set:CTFGroupMatchCriteriaProto.mvm_mannup_tour)
 }
-inline void CMsgMatchSearchCriteria::set_mvm_mannup_tour(const char* value) {
+inline void CTFGroupMatchCriteriaProto::set_mvm_mannup_tour(const char* value) {
   set_has_mvm_mannup_tour();
   if (mvm_mannup_tour_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
     mvm_mannup_tour_ = new ::std::string;
   }
   mvm_mannup_tour_->assign(value);
-  // @@protoc_insertion_point(field_set_char:CMsgMatchSearchCriteria.mvm_mannup_tour)
+  // @@protoc_insertion_point(field_set_char:CTFGroupMatchCriteriaProto.mvm_mannup_tour)
 }
-inline void CMsgMatchSearchCriteria::set_mvm_mannup_tour(const char* value, size_t size) {
+inline void CTFGroupMatchCriteriaProto::set_mvm_mannup_tour(const char* value, size_t size) {
   set_has_mvm_mannup_tour();
   if (mvm_mannup_tour_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
     mvm_mannup_tour_ = new ::std::string;
   }
   mvm_mannup_tour_->assign(reinterpret_cast<const char*>(value), size);
-  // @@protoc_insertion_point(field_set_pointer:CMsgMatchSearchCriteria.mvm_mannup_tour)
+  // @@protoc_insertion_point(field_set_pointer:CTFGroupMatchCriteriaProto.mvm_mannup_tour)
 }
-inline ::std::string* CMsgMatchSearchCriteria::mutable_mvm_mannup_tour() {
+inline ::std::string* CTFGroupMatchCriteriaProto::mutable_mvm_mannup_tour() {
   set_has_mvm_mannup_tour();
   if (mvm_mannup_tour_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
     mvm_mannup_tour_ = new ::std::string;
   }
-  // @@protoc_insertion_point(field_mutable:CMsgMatchSearchCriteria.mvm_mannup_tour)
+  // @@protoc_insertion_point(field_mutable:CTFGroupMatchCriteriaProto.mvm_mannup_tour)
   return mvm_mannup_tour_;
 }
-inline ::std::string* CMsgMatchSearchCriteria::release_mvm_mannup_tour() {
+inline ::std::string* CTFGroupMatchCriteriaProto::release_mvm_mannup_tour() {
   clear_has_mvm_mannup_tour();
   if (mvm_mannup_tour_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
     return NULL;
@@ -23326,7 +26410,7 @@ inline ::std::string* CMsgMatchSearchCriteria::release_mvm_mannup_tour() {
     return temp;
   }
 }
-inline void CMsgMatchSearchCriteria::set_allocated_mvm_mannup_tour(::std::string* mvm_mannup_tour) {
+inline void CTFGroupMatchCriteriaProto::set_allocated_mvm_mannup_tour(::std::string* mvm_mannup_tour) {
   if (mvm_mannup_tour_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
     delete mvm_mannup_tour_;
   }
@@ -23337,166 +26421,148 @@ inline void CMsgMatchSearchCriteria::set_allocated_mvm_mannup_tour(::std::string
     clear_has_mvm_mannup_tour();
     mvm_mannup_tour_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   }
-  // @@protoc_insertion_point(field_set_allocated:CMsgMatchSearchCriteria.mvm_mannup_tour)
+  // @@protoc_insertion_point(field_set_allocated:CTFGroupMatchCriteriaProto.mvm_mannup_tour)
 }
 
-// repeated string mvm_missions = 9;
-inline int CMsgMatchSearchCriteria::mvm_missions_size() const {
-  return mvm_missions_.size();
+// repeated string mvm_mannup_missions = 15;
+inline int CTFGroupMatchCriteriaProto::mvm_mannup_missions_size() const {
+  return mvm_mannup_missions_.size();
 }
-inline void CMsgMatchSearchCriteria::clear_mvm_missions() {
-  mvm_missions_.Clear();
+inline void CTFGroupMatchCriteriaProto::clear_mvm_mannup_missions() {
+  mvm_mannup_missions_.Clear();
 }
-inline const ::std::string& CMsgMatchSearchCriteria::mvm_missions(int index) const {
-  // @@protoc_insertion_point(field_get:CMsgMatchSearchCriteria.mvm_missions)
-  return mvm_missions_.Get(index);
+inline const ::std::string& CTFGroupMatchCriteriaProto::mvm_mannup_missions(int index) const {
+  // @@protoc_insertion_point(field_get:CTFGroupMatchCriteriaProto.mvm_mannup_missions)
+  return mvm_mannup_missions_.Get(index);
 }
-inline ::std::string* CMsgMatchSearchCriteria::mutable_mvm_missions(int index) {
-  // @@protoc_insertion_point(field_mutable:CMsgMatchSearchCriteria.mvm_missions)
-  return mvm_missions_.Mutable(index);
+inline ::std::string* CTFGroupMatchCriteriaProto::mutable_mvm_mannup_missions(int index) {
+  // @@protoc_insertion_point(field_mutable:CTFGroupMatchCriteriaProto.mvm_mannup_missions)
+  return mvm_mannup_missions_.Mutable(index);
 }
-inline void CMsgMatchSearchCriteria::set_mvm_missions(int index, const ::std::string& value) {
-  // @@protoc_insertion_point(field_set:CMsgMatchSearchCriteria.mvm_missions)
-  mvm_missions_.Mutable(index)->assign(value);
+inline void CTFGroupMatchCriteriaProto::set_mvm_mannup_missions(int index, const ::std::string& value) {
+  // @@protoc_insertion_point(field_set:CTFGroupMatchCriteriaProto.mvm_mannup_missions)
+  mvm_mannup_missions_.Mutable(index)->assign(value);
 }
-inline void CMsgMatchSearchCriteria::set_mvm_missions(int index, const char* value) {
-  mvm_missions_.Mutable(index)->assign(value);
-  // @@protoc_insertion_point(field_set_char:CMsgMatchSearchCriteria.mvm_missions)
+inline void CTFGroupMatchCriteriaProto::set_mvm_mannup_missions(int index, const char* value) {
+  mvm_mannup_missions_.Mutable(index)->assign(value);
+  // @@protoc_insertion_point(field_set_char:CTFGroupMatchCriteriaProto.mvm_mannup_missions)
 }
-inline void CMsgMatchSearchCriteria::set_mvm_missions(int index, const char* value, size_t size) {
-  mvm_missions_.Mutable(index)->assign(
+inline void CTFGroupMatchCriteriaProto::set_mvm_mannup_missions(int index, const char* value, size_t size) {
+  mvm_mannup_missions_.Mutable(index)->assign(
     reinterpret_cast<const char*>(value), size);
-  // @@protoc_insertion_point(field_set_pointer:CMsgMatchSearchCriteria.mvm_missions)
+  // @@protoc_insertion_point(field_set_pointer:CTFGroupMatchCriteriaProto.mvm_mannup_missions)
 }
-inline ::std::string* CMsgMatchSearchCriteria::add_mvm_missions() {
-  return mvm_missions_.Add();
+inline ::std::string* CTFGroupMatchCriteriaProto::add_mvm_mannup_missions() {
+  return mvm_mannup_missions_.Add();
 }
-inline void CMsgMatchSearchCriteria::add_mvm_missions(const ::std::string& value) {
-  mvm_missions_.Add()->assign(value);
-  // @@protoc_insertion_point(field_add:CMsgMatchSearchCriteria.mvm_missions)
+inline void CTFGroupMatchCriteriaProto::add_mvm_mannup_missions(const ::std::string& value) {
+  mvm_mannup_missions_.Add()->assign(value);
+  // @@protoc_insertion_point(field_add:CTFGroupMatchCriteriaProto.mvm_mannup_missions)
 }
-inline void CMsgMatchSearchCriteria::add_mvm_missions(const char* value) {
-  mvm_missions_.Add()->assign(value);
-  // @@protoc_insertion_point(field_add_char:CMsgMatchSearchCriteria.mvm_missions)
+inline void CTFGroupMatchCriteriaProto::add_mvm_mannup_missions(const char* value) {
+  mvm_mannup_missions_.Add()->assign(value);
+  // @@protoc_insertion_point(field_add_char:CTFGroupMatchCriteriaProto.mvm_mannup_missions)
 }
-inline void CMsgMatchSearchCriteria::add_mvm_missions(const char* value, size_t size) {
-  mvm_missions_.Add()->assign(reinterpret_cast<const char*>(value), size);
-  // @@protoc_insertion_point(field_add_pointer:CMsgMatchSearchCriteria.mvm_missions)
+inline void CTFGroupMatchCriteriaProto::add_mvm_mannup_missions(const char* value, size_t size) {
+  mvm_mannup_missions_.Add()->assign(reinterpret_cast<const char*>(value), size);
+  // @@protoc_insertion_point(field_add_pointer:CTFGroupMatchCriteriaProto.mvm_mannup_missions)
 }
 inline const ::google::protobuf::RepeatedPtrField< ::std::string>&
-CMsgMatchSearchCriteria::mvm_missions() const {
-  // @@protoc_insertion_point(field_list:CMsgMatchSearchCriteria.mvm_missions)
-  return mvm_missions_;
+CTFGroupMatchCriteriaProto::mvm_mannup_missions() const {
+  // @@protoc_insertion_point(field_list:CTFGroupMatchCriteriaProto.mvm_mannup_missions)
+  return mvm_mannup_missions_;
 }
 inline ::google::protobuf::RepeatedPtrField< ::std::string>*
-CMsgMatchSearchCriteria::mutable_mvm_missions() {
-  // @@protoc_insertion_point(field_mutable_list:CMsgMatchSearchCriteria.mvm_missions)
-  return &mvm_missions_;
+CTFGroupMatchCriteriaProto::mutable_mvm_mannup_missions() {
+  // @@protoc_insertion_point(field_mutable_list:CTFGroupMatchCriteriaProto.mvm_mannup_missions)
+  return &mvm_mannup_missions_;
 }
 
-// optional bool play_for_bragging_rights = 6;
-inline bool CMsgMatchSearchCriteria::has_play_for_bragging_rights() const {
+// repeated string mvm_bootcamp_missions = 16;
+inline int CTFGroupMatchCriteriaProto::mvm_bootcamp_missions_size() const {
+  return mvm_bootcamp_missions_.size();
+}
+inline void CTFGroupMatchCriteriaProto::clear_mvm_bootcamp_missions() {
+  mvm_bootcamp_missions_.Clear();
+}
+inline const ::std::string& CTFGroupMatchCriteriaProto::mvm_bootcamp_missions(int index) const {
+  // @@protoc_insertion_point(field_get:CTFGroupMatchCriteriaProto.mvm_bootcamp_missions)
+  return mvm_bootcamp_missions_.Get(index);
+}
+inline ::std::string* CTFGroupMatchCriteriaProto::mutable_mvm_bootcamp_missions(int index) {
+  // @@protoc_insertion_point(field_mutable:CTFGroupMatchCriteriaProto.mvm_bootcamp_missions)
+  return mvm_bootcamp_missions_.Mutable(index);
+}
+inline void CTFGroupMatchCriteriaProto::set_mvm_bootcamp_missions(int index, const ::std::string& value) {
+  // @@protoc_insertion_point(field_set:CTFGroupMatchCriteriaProto.mvm_bootcamp_missions)
+  mvm_bootcamp_missions_.Mutable(index)->assign(value);
+}
+inline void CTFGroupMatchCriteriaProto::set_mvm_bootcamp_missions(int index, const char* value) {
+  mvm_bootcamp_missions_.Mutable(index)->assign(value);
+  // @@protoc_insertion_point(field_set_char:CTFGroupMatchCriteriaProto.mvm_bootcamp_missions)
+}
+inline void CTFGroupMatchCriteriaProto::set_mvm_bootcamp_missions(int index, const char* value, size_t size) {
+  mvm_bootcamp_missions_.Mutable(index)->assign(
+    reinterpret_cast<const char*>(value), size);
+  // @@protoc_insertion_point(field_set_pointer:CTFGroupMatchCriteriaProto.mvm_bootcamp_missions)
+}
+inline ::std::string* CTFGroupMatchCriteriaProto::add_mvm_bootcamp_missions() {
+  return mvm_bootcamp_missions_.Add();
+}
+inline void CTFGroupMatchCriteriaProto::add_mvm_bootcamp_missions(const ::std::string& value) {
+  mvm_bootcamp_missions_.Add()->assign(value);
+  // @@protoc_insertion_point(field_add:CTFGroupMatchCriteriaProto.mvm_bootcamp_missions)
+}
+inline void CTFGroupMatchCriteriaProto::add_mvm_bootcamp_missions(const char* value) {
+  mvm_bootcamp_missions_.Add()->assign(value);
+  // @@protoc_insertion_point(field_add_char:CTFGroupMatchCriteriaProto.mvm_bootcamp_missions)
+}
+inline void CTFGroupMatchCriteriaProto::add_mvm_bootcamp_missions(const char* value, size_t size) {
+  mvm_bootcamp_missions_.Add()->assign(reinterpret_cast<const char*>(value), size);
+  // @@protoc_insertion_point(field_add_pointer:CTFGroupMatchCriteriaProto.mvm_bootcamp_missions)
+}
+inline const ::google::protobuf::RepeatedPtrField< ::std::string>&
+CTFGroupMatchCriteriaProto::mvm_bootcamp_missions() const {
+  // @@protoc_insertion_point(field_list:CTFGroupMatchCriteriaProto.mvm_bootcamp_missions)
+  return mvm_bootcamp_missions_;
+}
+inline ::google::protobuf::RepeatedPtrField< ::std::string>*
+CTFGroupMatchCriteriaProto::mutable_mvm_bootcamp_missions() {
+  // @@protoc_insertion_point(field_mutable_list:CTFGroupMatchCriteriaProto.mvm_bootcamp_missions)
+  return &mvm_bootcamp_missions_;
+}
+
+// optional .CTFCasualMatchCriteria casual_criteria = 12;
+inline bool CTFGroupMatchCriteriaProto::has_casual_criteria() const {
   return (_has_bits_[0] & 0x00000020u) != 0;
 }
-inline void CMsgMatchSearchCriteria::set_has_play_for_bragging_rights() {
+inline void CTFGroupMatchCriteriaProto::set_has_casual_criteria() {
   _has_bits_[0] |= 0x00000020u;
 }
-inline void CMsgMatchSearchCriteria::clear_has_play_for_bragging_rights() {
+inline void CTFGroupMatchCriteriaProto::clear_has_casual_criteria() {
   _has_bits_[0] &= ~0x00000020u;
 }
-inline void CMsgMatchSearchCriteria::clear_play_for_bragging_rights() {
-  play_for_bragging_rights_ = false;
-  clear_has_play_for_bragging_rights();
-}
-inline bool CMsgMatchSearchCriteria::play_for_bragging_rights() const {
-  // @@protoc_insertion_point(field_get:CMsgMatchSearchCriteria.play_for_bragging_rights)
-  return play_for_bragging_rights_;
-}
-inline void CMsgMatchSearchCriteria::set_play_for_bragging_rights(bool value) {
-  set_has_play_for_bragging_rights();
-  play_for_bragging_rights_ = value;
-  // @@protoc_insertion_point(field_set:CMsgMatchSearchCriteria.play_for_bragging_rights)
-}
-
-// optional uint32 quickplay_game_type = 8;
-inline bool CMsgMatchSearchCriteria::has_quickplay_game_type() const {
-  return (_has_bits_[0] & 0x00000040u) != 0;
-}
-inline void CMsgMatchSearchCriteria::set_has_quickplay_game_type() {
-  _has_bits_[0] |= 0x00000040u;
-}
-inline void CMsgMatchSearchCriteria::clear_has_quickplay_game_type() {
-  _has_bits_[0] &= ~0x00000040u;
-}
-inline void CMsgMatchSearchCriteria::clear_quickplay_game_type() {
-  quickplay_game_type_ = 0u;
-  clear_has_quickplay_game_type();
-}
-inline ::google::protobuf::uint32 CMsgMatchSearchCriteria::quickplay_game_type() const {
-  // @@protoc_insertion_point(field_get:CMsgMatchSearchCriteria.quickplay_game_type)
-  return quickplay_game_type_;
-}
-inline void CMsgMatchSearchCriteria::set_quickplay_game_type(::google::protobuf::uint32 value) {
-  set_has_quickplay_game_type();
-  quickplay_game_type_ = value;
-  // @@protoc_insertion_point(field_set:CMsgMatchSearchCriteria.quickplay_game_type)
-}
-
-// optional uint32 ladder_game_type = 11;
-inline bool CMsgMatchSearchCriteria::has_ladder_game_type() const {
-  return (_has_bits_[0] & 0x00000080u) != 0;
-}
-inline void CMsgMatchSearchCriteria::set_has_ladder_game_type() {
-  _has_bits_[0] |= 0x00000080u;
-}
-inline void CMsgMatchSearchCriteria::clear_has_ladder_game_type() {
-  _has_bits_[0] &= ~0x00000080u;
-}
-inline void CMsgMatchSearchCriteria::clear_ladder_game_type() {
-  ladder_game_type_ = 0u;
-  clear_has_ladder_game_type();
-}
-inline ::google::protobuf::uint32 CMsgMatchSearchCriteria::ladder_game_type() const {
-  // @@protoc_insertion_point(field_get:CMsgMatchSearchCriteria.ladder_game_type)
-  return ladder_game_type_;
-}
-inline void CMsgMatchSearchCriteria::set_ladder_game_type(::google::protobuf::uint32 value) {
-  set_has_ladder_game_type();
-  ladder_game_type_ = value;
-  // @@protoc_insertion_point(field_set:CMsgMatchSearchCriteria.ladder_game_type)
-}
-
-// optional .CMsgCasualMatchmakingSearchCriteria casual_criteria = 12;
-inline bool CMsgMatchSearchCriteria::has_casual_criteria() const {
-  return (_has_bits_[0] & 0x00000100u) != 0;
-}
-inline void CMsgMatchSearchCriteria::set_has_casual_criteria() {
-  _has_bits_[0] |= 0x00000100u;
-}
-inline void CMsgMatchSearchCriteria::clear_has_casual_criteria() {
-  _has_bits_[0] &= ~0x00000100u;
-}
-inline void CMsgMatchSearchCriteria::clear_casual_criteria() {
-  if (casual_criteria_ != NULL) casual_criteria_->::CMsgCasualMatchmakingSearchCriteria::Clear();
+inline void CTFGroupMatchCriteriaProto::clear_casual_criteria() {
+  if (casual_criteria_ != NULL) casual_criteria_->::CTFCasualMatchCriteria::Clear();
   clear_has_casual_criteria();
 }
-inline const ::CMsgCasualMatchmakingSearchCriteria& CMsgMatchSearchCriteria::casual_criteria() const {
-  // @@protoc_insertion_point(field_get:CMsgMatchSearchCriteria.casual_criteria)
+inline const ::CTFCasualMatchCriteria& CTFGroupMatchCriteriaProto::casual_criteria() const {
+  // @@protoc_insertion_point(field_get:CTFGroupMatchCriteriaProto.casual_criteria)
   return casual_criteria_ != NULL ? *casual_criteria_ : *default_instance_->casual_criteria_;
 }
-inline ::CMsgCasualMatchmakingSearchCriteria* CMsgMatchSearchCriteria::mutable_casual_criteria() {
+inline ::CTFCasualMatchCriteria* CTFGroupMatchCriteriaProto::mutable_casual_criteria() {
   set_has_casual_criteria();
-  if (casual_criteria_ == NULL) casual_criteria_ = new ::CMsgCasualMatchmakingSearchCriteria;
-  // @@protoc_insertion_point(field_mutable:CMsgMatchSearchCriteria.casual_criteria)
+  if (casual_criteria_ == NULL) casual_criteria_ = new ::CTFCasualMatchCriteria;
+  // @@protoc_insertion_point(field_mutable:CTFGroupMatchCriteriaProto.casual_criteria)
   return casual_criteria_;
 }
-inline ::CMsgCasualMatchmakingSearchCriteria* CMsgMatchSearchCriteria::release_casual_criteria() {
+inline ::CTFCasualMatchCriteria* CTFGroupMatchCriteriaProto::release_casual_criteria() {
   clear_has_casual_criteria();
-  ::CMsgCasualMatchmakingSearchCriteria* temp = casual_criteria_;
+  ::CTFCasualMatchCriteria* temp = casual_criteria_;
   casual_criteria_ = NULL;
   return temp;
 }
-inline void CMsgMatchSearchCriteria::set_allocated_casual_criteria(::CMsgCasualMatchmakingSearchCriteria* casual_criteria) {
+inline void CTFGroupMatchCriteriaProto::set_allocated_casual_criteria(::CTFCasualMatchCriteria* casual_criteria) {
   delete casual_criteria_;
   casual_criteria_ = casual_criteria;
   if (casual_criteria) {
@@ -23504,312 +26570,1219 @@ inline void CMsgMatchSearchCriteria::set_allocated_casual_criteria(::CMsgCasualM
   } else {
     clear_has_casual_criteria();
   }
-  // @@protoc_insertion_point(field_set_allocated:CMsgMatchSearchCriteria.casual_criteria)
+  // @@protoc_insertion_point(field_set_allocated:CTFGroupMatchCriteriaProto.casual_criteria)
 }
 
 // -------------------------------------------------------------------
 
-// CMsgCasualMatchmakingSearchCriteria
+// CTFCasualMatchCriteria
 
 // repeated fixed32 selected_maps_bits = 3;
-inline int CMsgCasualMatchmakingSearchCriteria::selected_maps_bits_size() const {
+inline int CTFCasualMatchCriteria::selected_maps_bits_size() const {
   return selected_maps_bits_.size();
 }
-inline void CMsgCasualMatchmakingSearchCriteria::clear_selected_maps_bits() {
+inline void CTFCasualMatchCriteria::clear_selected_maps_bits() {
   selected_maps_bits_.Clear();
 }
-inline ::google::protobuf::uint32 CMsgCasualMatchmakingSearchCriteria::selected_maps_bits(int index) const {
-  // @@protoc_insertion_point(field_get:CMsgCasualMatchmakingSearchCriteria.selected_maps_bits)
+inline ::google::protobuf::uint32 CTFCasualMatchCriteria::selected_maps_bits(int index) const {
+  // @@protoc_insertion_point(field_get:CTFCasualMatchCriteria.selected_maps_bits)
   return selected_maps_bits_.Get(index);
 }
-inline void CMsgCasualMatchmakingSearchCriteria::set_selected_maps_bits(int index, ::google::protobuf::uint32 value) {
+inline void CTFCasualMatchCriteria::set_selected_maps_bits(int index, ::google::protobuf::uint32 value) {
   selected_maps_bits_.Set(index, value);
-  // @@protoc_insertion_point(field_set:CMsgCasualMatchmakingSearchCriteria.selected_maps_bits)
+  // @@protoc_insertion_point(field_set:CTFCasualMatchCriteria.selected_maps_bits)
 }
-inline void CMsgCasualMatchmakingSearchCriteria::add_selected_maps_bits(::google::protobuf::uint32 value) {
+inline void CTFCasualMatchCriteria::add_selected_maps_bits(::google::protobuf::uint32 value) {
   selected_maps_bits_.Add(value);
-  // @@protoc_insertion_point(field_add:CMsgCasualMatchmakingSearchCriteria.selected_maps_bits)
+  // @@protoc_insertion_point(field_add:CTFCasualMatchCriteria.selected_maps_bits)
 }
 inline const ::google::protobuf::RepeatedField< ::google::protobuf::uint32 >&
-CMsgCasualMatchmakingSearchCriteria::selected_maps_bits() const {
-  // @@protoc_insertion_point(field_list:CMsgCasualMatchmakingSearchCriteria.selected_maps_bits)
+CTFCasualMatchCriteria::selected_maps_bits() const {
+  // @@protoc_insertion_point(field_list:CTFCasualMatchCriteria.selected_maps_bits)
   return selected_maps_bits_;
 }
 inline ::google::protobuf::RepeatedField< ::google::protobuf::uint32 >*
-CMsgCasualMatchmakingSearchCriteria::mutable_selected_maps_bits() {
-  // @@protoc_insertion_point(field_mutable_list:CMsgCasualMatchmakingSearchCriteria.selected_maps_bits)
+CTFCasualMatchCriteria::mutable_selected_maps_bits() {
+  // @@protoc_insertion_point(field_mutable_list:CTFCasualMatchCriteria.selected_maps_bits)
   return &selected_maps_bits_;
 }
 
 // -------------------------------------------------------------------
 
-// CMsgCreateOrUpdateParty
+// CTFPerPlayerMatchCriteriaProto
 
-// optional .CMsgMatchSearchCriteria search_criteria = 1;
-inline bool CMsgCreateOrUpdateParty::has_search_criteria() const {
+// optional bool mvm_squad_surplus = 1;
+inline bool CTFPerPlayerMatchCriteriaProto::has_mvm_squad_surplus() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
-inline void CMsgCreateOrUpdateParty::set_has_search_criteria() {
+inline void CTFPerPlayerMatchCriteriaProto::set_has_mvm_squad_surplus() {
   _has_bits_[0] |= 0x00000001u;
 }
-inline void CMsgCreateOrUpdateParty::clear_has_search_criteria() {
+inline void CTFPerPlayerMatchCriteriaProto::clear_has_mvm_squad_surplus() {
   _has_bits_[0] &= ~0x00000001u;
 }
-inline void CMsgCreateOrUpdateParty::clear_search_criteria() {
-  if (search_criteria_ != NULL) search_criteria_->::CMsgMatchSearchCriteria::Clear();
-  clear_has_search_criteria();
+inline void CTFPerPlayerMatchCriteriaProto::clear_mvm_squad_surplus() {
+  mvm_squad_surplus_ = false;
+  clear_has_mvm_squad_surplus();
 }
-inline const ::CMsgMatchSearchCriteria& CMsgCreateOrUpdateParty::search_criteria() const {
-  // @@protoc_insertion_point(field_get:CMsgCreateOrUpdateParty.search_criteria)
-  return search_criteria_ != NULL ? *search_criteria_ : *default_instance_->search_criteria_;
+inline bool CTFPerPlayerMatchCriteriaProto::mvm_squad_surplus() const {
+  // @@protoc_insertion_point(field_get:CTFPerPlayerMatchCriteriaProto.mvm_squad_surplus)
+  return mvm_squad_surplus_;
 }
-inline ::CMsgMatchSearchCriteria* CMsgCreateOrUpdateParty::mutable_search_criteria() {
-  set_has_search_criteria();
-  if (search_criteria_ == NULL) search_criteria_ = new ::CMsgMatchSearchCriteria;
-  // @@protoc_insertion_point(field_mutable:CMsgCreateOrUpdateParty.search_criteria)
-  return search_criteria_;
-}
-inline ::CMsgMatchSearchCriteria* CMsgCreateOrUpdateParty::release_search_criteria() {
-  clear_has_search_criteria();
-  ::CMsgMatchSearchCriteria* temp = search_criteria_;
-  search_criteria_ = NULL;
-  return temp;
-}
-inline void CMsgCreateOrUpdateParty::set_allocated_search_criteria(::CMsgMatchSearchCriteria* search_criteria) {
-  delete search_criteria_;
-  search_criteria_ = search_criteria;
-  if (search_criteria) {
-    set_has_search_criteria();
-  } else {
-    clear_has_search_criteria();
-  }
-  // @@protoc_insertion_point(field_set_allocated:CMsgCreateOrUpdateParty.search_criteria)
-}
-
-// optional fixed64 steam_lobby_id = 3;
-inline bool CMsgCreateOrUpdateParty::has_steam_lobby_id() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
-}
-inline void CMsgCreateOrUpdateParty::set_has_steam_lobby_id() {
-  _has_bits_[0] |= 0x00000002u;
-}
-inline void CMsgCreateOrUpdateParty::clear_has_steam_lobby_id() {
-  _has_bits_[0] &= ~0x00000002u;
-}
-inline void CMsgCreateOrUpdateParty::clear_steam_lobby_id() {
-  steam_lobby_id_ = GOOGLE_ULONGLONG(0);
-  clear_has_steam_lobby_id();
-}
-inline ::google::protobuf::uint64 CMsgCreateOrUpdateParty::steam_lobby_id() const {
-  // @@protoc_insertion_point(field_get:CMsgCreateOrUpdateParty.steam_lobby_id)
-  return steam_lobby_id_;
-}
-inline void CMsgCreateOrUpdateParty::set_steam_lobby_id(::google::protobuf::uint64 value) {
-  set_has_steam_lobby_id();
-  steam_lobby_id_ = value;
-  // @@protoc_insertion_point(field_set:CMsgCreateOrUpdateParty.steam_lobby_id)
-}
-
-// optional bool squad_surplus = 4;
-inline bool CMsgCreateOrUpdateParty::has_squad_surplus() const {
-  return (_has_bits_[0] & 0x00000004u) != 0;
-}
-inline void CMsgCreateOrUpdateParty::set_has_squad_surplus() {
-  _has_bits_[0] |= 0x00000004u;
-}
-inline void CMsgCreateOrUpdateParty::clear_has_squad_surplus() {
-  _has_bits_[0] &= ~0x00000004u;
-}
-inline void CMsgCreateOrUpdateParty::clear_squad_surplus() {
-  squad_surplus_ = false;
-  clear_has_squad_surplus();
-}
-inline bool CMsgCreateOrUpdateParty::squad_surplus() const {
-  // @@protoc_insertion_point(field_get:CMsgCreateOrUpdateParty.squad_surplus)
-  return squad_surplus_;
-}
-inline void CMsgCreateOrUpdateParty::set_squad_surplus(bool value) {
-  set_has_squad_surplus();
-  squad_surplus_ = value;
-  // @@protoc_insertion_point(field_set:CMsgCreateOrUpdateParty.squad_surplus)
-}
-
-// optional .TF_Matchmaking_WizardStep wizard_step = 5;
-inline bool CMsgCreateOrUpdateParty::has_wizard_step() const {
-  return (_has_bits_[0] & 0x00000008u) != 0;
-}
-inline void CMsgCreateOrUpdateParty::set_has_wizard_step() {
-  _has_bits_[0] |= 0x00000008u;
-}
-inline void CMsgCreateOrUpdateParty::clear_has_wizard_step() {
-  _has_bits_[0] &= ~0x00000008u;
-}
-inline void CMsgCreateOrUpdateParty::clear_wizard_step() {
-  wizard_step_ = 0;
-  clear_has_wizard_step();
-}
-inline ::TF_Matchmaking_WizardStep CMsgCreateOrUpdateParty::wizard_step() const {
-  // @@protoc_insertion_point(field_get:CMsgCreateOrUpdateParty.wizard_step)
-  return static_cast< ::TF_Matchmaking_WizardStep >(wizard_step_);
-}
-inline void CMsgCreateOrUpdateParty::set_wizard_step(::TF_Matchmaking_WizardStep value) {
-  assert(::TF_Matchmaking_WizardStep_IsValid(value));
-  set_has_wizard_step();
-  wizard_step_ = value;
-  // @@protoc_insertion_point(field_set:CMsgCreateOrUpdateParty.wizard_step)
-}
-
-// optional uint32 client_version = 6 [default = 1225];
-inline bool CMsgCreateOrUpdateParty::has_client_version() const {
-  return (_has_bits_[0] & 0x00000010u) != 0;
-}
-inline void CMsgCreateOrUpdateParty::set_has_client_version() {
-  _has_bits_[0] |= 0x00000010u;
-}
-inline void CMsgCreateOrUpdateParty::clear_has_client_version() {
-  _has_bits_[0] &= ~0x00000010u;
-}
-inline void CMsgCreateOrUpdateParty::clear_client_version() {
-  client_version_ = 1225u;
-  clear_has_client_version();
-}
-inline ::google::protobuf::uint32 CMsgCreateOrUpdateParty::client_version() const {
-  // @@protoc_insertion_point(field_get:CMsgCreateOrUpdateParty.client_version)
-  return client_version_;
-}
-inline void CMsgCreateOrUpdateParty::set_client_version(::google::protobuf::uint32 value) {
-  set_has_client_version();
-  client_version_ = value;
-  // @@protoc_insertion_point(field_set:CMsgCreateOrUpdateParty.client_version)
+inline void CTFPerPlayerMatchCriteriaProto::set_mvm_squad_surplus(bool value) {
+  set_has_mvm_squad_surplus();
+  mvm_squad_surplus_ = value;
+  // @@protoc_insertion_point(field_set:CTFPerPlayerMatchCriteriaProto.mvm_squad_surplus)
 }
 
 // -------------------------------------------------------------------
 
-// CMsgCreateOrUpdatePartyReply
+// CTFPartyOptions
 
-// optional uint32 result = 1;
-inline bool CMsgCreateOrUpdatePartyReply::has_result() const {
+// optional bool overwrite_existing = 1;
+inline bool CTFPartyOptions::has_overwrite_existing() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
-inline void CMsgCreateOrUpdatePartyReply::set_has_result() {
+inline void CTFPartyOptions::set_has_overwrite_existing() {
   _has_bits_[0] |= 0x00000001u;
 }
-inline void CMsgCreateOrUpdatePartyReply::clear_has_result() {
+inline void CTFPartyOptions::clear_has_overwrite_existing() {
   _has_bits_[0] &= ~0x00000001u;
 }
-inline void CMsgCreateOrUpdatePartyReply::clear_result() {
-  result_ = 0u;
-  clear_has_result();
+inline void CTFPartyOptions::clear_overwrite_existing() {
+  overwrite_existing_ = false;
+  clear_has_overwrite_existing();
 }
-inline ::google::protobuf::uint32 CMsgCreateOrUpdatePartyReply::result() const {
-  // @@protoc_insertion_point(field_get:CMsgCreateOrUpdatePartyReply.result)
-  return result_;
+inline bool CTFPartyOptions::overwrite_existing() const {
+  // @@protoc_insertion_point(field_get:CTFPartyOptions.overwrite_existing)
+  return overwrite_existing_;
 }
-inline void CMsgCreateOrUpdatePartyReply::set_result(::google::protobuf::uint32 value) {
-  set_has_result();
-  result_ = value;
-  // @@protoc_insertion_point(field_set:CMsgCreateOrUpdatePartyReply.result)
+inline void CTFPartyOptions::set_overwrite_existing(bool value) {
+  set_has_overwrite_existing();
+  overwrite_existing_ = value;
+  // @@protoc_insertion_point(field_set:CTFPartyOptions.overwrite_existing)
 }
 
-// optional string message = 2;
-inline bool CMsgCreateOrUpdatePartyReply::has_message() const {
+// optional .CTFGroupMatchCriteriaProto group_criteria = 2;
+inline bool CTFPartyOptions::has_group_criteria() const {
   return (_has_bits_[0] & 0x00000002u) != 0;
 }
-inline void CMsgCreateOrUpdatePartyReply::set_has_message() {
+inline void CTFPartyOptions::set_has_group_criteria() {
   _has_bits_[0] |= 0x00000002u;
 }
-inline void CMsgCreateOrUpdatePartyReply::clear_has_message() {
+inline void CTFPartyOptions::clear_has_group_criteria() {
   _has_bits_[0] &= ~0x00000002u;
 }
-inline void CMsgCreateOrUpdatePartyReply::clear_message() {
-  if (message_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    message_->clear();
+inline void CTFPartyOptions::clear_group_criteria() {
+  if (group_criteria_ != NULL) group_criteria_->::CTFGroupMatchCriteriaProto::Clear();
+  clear_has_group_criteria();
+}
+inline const ::CTFGroupMatchCriteriaProto& CTFPartyOptions::group_criteria() const {
+  // @@protoc_insertion_point(field_get:CTFPartyOptions.group_criteria)
+  return group_criteria_ != NULL ? *group_criteria_ : *default_instance_->group_criteria_;
+}
+inline ::CTFGroupMatchCriteriaProto* CTFPartyOptions::mutable_group_criteria() {
+  set_has_group_criteria();
+  if (group_criteria_ == NULL) group_criteria_ = new ::CTFGroupMatchCriteriaProto;
+  // @@protoc_insertion_point(field_mutable:CTFPartyOptions.group_criteria)
+  return group_criteria_;
+}
+inline ::CTFGroupMatchCriteriaProto* CTFPartyOptions::release_group_criteria() {
+  clear_has_group_criteria();
+  ::CTFGroupMatchCriteriaProto* temp = group_criteria_;
+  group_criteria_ = NULL;
+  return temp;
+}
+inline void CTFPartyOptions::set_allocated_group_criteria(::CTFGroupMatchCriteriaProto* group_criteria) {
+  delete group_criteria_;
+  group_criteria_ = group_criteria;
+  if (group_criteria) {
+    set_has_group_criteria();
+  } else {
+    clear_has_group_criteria();
   }
-  clear_has_message();
+  // @@protoc_insertion_point(field_set_allocated:CTFPartyOptions.group_criteria)
 }
-inline const ::std::string& CMsgCreateOrUpdatePartyReply::message() const {
-  // @@protoc_insertion_point(field_get:CMsgCreateOrUpdatePartyReply.message)
-  return *message_;
+
+// optional .CTFPerPlayerMatchCriteriaProto player_criteria = 3;
+inline bool CTFPartyOptions::has_player_criteria() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
 }
-inline void CMsgCreateOrUpdatePartyReply::set_message(const ::std::string& value) {
-  set_has_message();
-  if (message_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    message_ = new ::std::string;
+inline void CTFPartyOptions::set_has_player_criteria() {
+  _has_bits_[0] |= 0x00000004u;
+}
+inline void CTFPartyOptions::clear_has_player_criteria() {
+  _has_bits_[0] &= ~0x00000004u;
+}
+inline void CTFPartyOptions::clear_player_criteria() {
+  if (player_criteria_ != NULL) player_criteria_->::CTFPerPlayerMatchCriteriaProto::Clear();
+  clear_has_player_criteria();
+}
+inline const ::CTFPerPlayerMatchCriteriaProto& CTFPartyOptions::player_criteria() const {
+  // @@protoc_insertion_point(field_get:CTFPartyOptions.player_criteria)
+  return player_criteria_ != NULL ? *player_criteria_ : *default_instance_->player_criteria_;
+}
+inline ::CTFPerPlayerMatchCriteriaProto* CTFPartyOptions::mutable_player_criteria() {
+  set_has_player_criteria();
+  if (player_criteria_ == NULL) player_criteria_ = new ::CTFPerPlayerMatchCriteriaProto;
+  // @@protoc_insertion_point(field_mutable:CTFPartyOptions.player_criteria)
+  return player_criteria_;
+}
+inline ::CTFPerPlayerMatchCriteriaProto* CTFPartyOptions::release_player_criteria() {
+  clear_has_player_criteria();
+  ::CTFPerPlayerMatchCriteriaProto* temp = player_criteria_;
+  player_criteria_ = NULL;
+  return temp;
+}
+inline void CTFPartyOptions::set_allocated_player_criteria(::CTFPerPlayerMatchCriteriaProto* player_criteria) {
+  delete player_criteria_;
+  player_criteria_ = player_criteria;
+  if (player_criteria) {
+    set_has_player_criteria();
+  } else {
+    clear_has_player_criteria();
   }
-  message_->assign(value);
-  // @@protoc_insertion_point(field_set:CMsgCreateOrUpdatePartyReply.message)
+  // @@protoc_insertion_point(field_set_allocated:CTFPartyOptions.player_criteria)
 }
-inline void CMsgCreateOrUpdatePartyReply::set_message(const char* value) {
-  set_has_message();
-  if (message_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    message_ = new ::std::string;
+
+// optional .TFSyncedMMUIState player_uistate = 5;
+inline bool CTFPartyOptions::has_player_uistate() const {
+  return (_has_bits_[0] & 0x00000008u) != 0;
+}
+inline void CTFPartyOptions::set_has_player_uistate() {
+  _has_bits_[0] |= 0x00000008u;
+}
+inline void CTFPartyOptions::clear_has_player_uistate() {
+  _has_bits_[0] &= ~0x00000008u;
+}
+inline void CTFPartyOptions::clear_player_uistate() {
+  if (player_uistate_ != NULL) player_uistate_->::TFSyncedMMUIState::Clear();
+  clear_has_player_uistate();
+}
+inline const ::TFSyncedMMUIState& CTFPartyOptions::player_uistate() const {
+  // @@protoc_insertion_point(field_get:CTFPartyOptions.player_uistate)
+  return player_uistate_ != NULL ? *player_uistate_ : *default_instance_->player_uistate_;
+}
+inline ::TFSyncedMMUIState* CTFPartyOptions::mutable_player_uistate() {
+  set_has_player_uistate();
+  if (player_uistate_ == NULL) player_uistate_ = new ::TFSyncedMMUIState;
+  // @@protoc_insertion_point(field_mutable:CTFPartyOptions.player_uistate)
+  return player_uistate_;
+}
+inline ::TFSyncedMMUIState* CTFPartyOptions::release_player_uistate() {
+  clear_has_player_uistate();
+  ::TFSyncedMMUIState* temp = player_uistate_;
+  player_uistate_ = NULL;
+  return temp;
+}
+inline void CTFPartyOptions::set_allocated_player_uistate(::TFSyncedMMUIState* player_uistate) {
+  delete player_uistate_;
+  player_uistate_ = player_uistate;
+  if (player_uistate) {
+    set_has_player_uistate();
+  } else {
+    clear_has_player_uistate();
   }
-  message_->assign(value);
-  // @@protoc_insertion_point(field_set_char:CMsgCreateOrUpdatePartyReply.message)
+  // @@protoc_insertion_point(field_set_allocated:CTFPartyOptions.player_uistate)
 }
-inline void CMsgCreateOrUpdatePartyReply::set_message(const char* value, size_t size) {
-  set_has_message();
-  if (message_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    message_ = new ::std::string;
+
+// -------------------------------------------------------------------
+
+// CMsgPartySetOptions
+
+// optional fixed64 party_id = 1;
+inline bool CMsgPartySetOptions::has_party_id() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void CMsgPartySetOptions::set_has_party_id() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void CMsgPartySetOptions::clear_has_party_id() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void CMsgPartySetOptions::clear_party_id() {
+  party_id_ = GOOGLE_ULONGLONG(0);
+  clear_has_party_id();
+}
+inline ::google::protobuf::uint64 CMsgPartySetOptions::party_id() const {
+  // @@protoc_insertion_point(field_get:CMsgPartySetOptions.party_id)
+  return party_id_;
+}
+inline void CMsgPartySetOptions::set_party_id(::google::protobuf::uint64 value) {
+  set_has_party_id();
+  party_id_ = value;
+  // @@protoc_insertion_point(field_set:CMsgPartySetOptions.party_id)
+}
+
+// optional .CTFPartyOptions options = 2;
+inline bool CMsgPartySetOptions::has_options() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void CMsgPartySetOptions::set_has_options() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void CMsgPartySetOptions::clear_has_options() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void CMsgPartySetOptions::clear_options() {
+  if (options_ != NULL) options_->::CTFPartyOptions::Clear();
+  clear_has_options();
+}
+inline const ::CTFPartyOptions& CMsgPartySetOptions::options() const {
+  // @@protoc_insertion_point(field_get:CMsgPartySetOptions.options)
+  return options_ != NULL ? *options_ : *default_instance_->options_;
+}
+inline ::CTFPartyOptions* CMsgPartySetOptions::mutable_options() {
+  set_has_options();
+  if (options_ == NULL) options_ = new ::CTFPartyOptions;
+  // @@protoc_insertion_point(field_mutable:CMsgPartySetOptions.options)
+  return options_;
+}
+inline ::CTFPartyOptions* CMsgPartySetOptions::release_options() {
+  clear_has_options();
+  ::CTFPartyOptions* temp = options_;
+  options_ = NULL;
+  return temp;
+}
+inline void CMsgPartySetOptions::set_allocated_options(::CTFPartyOptions* options) {
+  delete options_;
+  options_ = options;
+  if (options) {
+    set_has_options();
+  } else {
+    clear_has_options();
   }
-  message_->assign(reinterpret_cast<const char*>(value), size);
-  // @@protoc_insertion_point(field_set_pointer:CMsgCreateOrUpdatePartyReply.message)
+  // @@protoc_insertion_point(field_set_allocated:CMsgPartySetOptions.options)
 }
-inline ::std::string* CMsgCreateOrUpdatePartyReply::mutable_message() {
-  set_has_message();
-  if (message_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    message_ = new ::std::string;
+
+// -------------------------------------------------------------------
+
+// CMsgPartySetOptionsResponse
+
+// -------------------------------------------------------------------
+
+// CMsgPartyQueueForMatch
+
+// optional fixed64 party_id = 1;
+inline bool CMsgPartyQueueForMatch::has_party_id() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void CMsgPartyQueueForMatch::set_has_party_id() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void CMsgPartyQueueForMatch::clear_has_party_id() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void CMsgPartyQueueForMatch::clear_party_id() {
+  party_id_ = GOOGLE_ULONGLONG(0);
+  clear_has_party_id();
+}
+inline ::google::protobuf::uint64 CMsgPartyQueueForMatch::party_id() const {
+  // @@protoc_insertion_point(field_get:CMsgPartyQueueForMatch.party_id)
+  return party_id_;
+}
+inline void CMsgPartyQueueForMatch::set_party_id(::google::protobuf::uint64 value) {
+  set_has_party_id();
+  party_id_ = value;
+  // @@protoc_insertion_point(field_set:CMsgPartyQueueForMatch.party_id)
+}
+
+// optional .CTFPartyOptions final_options = 2;
+inline bool CMsgPartyQueueForMatch::has_final_options() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void CMsgPartyQueueForMatch::set_has_final_options() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void CMsgPartyQueueForMatch::clear_has_final_options() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void CMsgPartyQueueForMatch::clear_final_options() {
+  if (final_options_ != NULL) final_options_->::CTFPartyOptions::Clear();
+  clear_has_final_options();
+}
+inline const ::CTFPartyOptions& CMsgPartyQueueForMatch::final_options() const {
+  // @@protoc_insertion_point(field_get:CMsgPartyQueueForMatch.final_options)
+  return final_options_ != NULL ? *final_options_ : *default_instance_->final_options_;
+}
+inline ::CTFPartyOptions* CMsgPartyQueueForMatch::mutable_final_options() {
+  set_has_final_options();
+  if (final_options_ == NULL) final_options_ = new ::CTFPartyOptions;
+  // @@protoc_insertion_point(field_mutable:CMsgPartyQueueForMatch.final_options)
+  return final_options_;
+}
+inline ::CTFPartyOptions* CMsgPartyQueueForMatch::release_final_options() {
+  clear_has_final_options();
+  ::CTFPartyOptions* temp = final_options_;
+  final_options_ = NULL;
+  return temp;
+}
+inline void CMsgPartyQueueForMatch::set_allocated_final_options(::CTFPartyOptions* final_options) {
+  delete final_options_;
+  final_options_ = final_options;
+  if (final_options) {
+    set_has_final_options();
+  } else {
+    clear_has_final_options();
   }
-  // @@protoc_insertion_point(field_mutable:CMsgCreateOrUpdatePartyReply.message)
-  return message_;
+  // @@protoc_insertion_point(field_set_allocated:CMsgPartyQueueForMatch.final_options)
 }
-inline ::std::string* CMsgCreateOrUpdatePartyReply::release_message() {
-  clear_has_message();
-  if (message_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+
+// optional .ETFMatchGroup match_group = 3;
+inline bool CMsgPartyQueueForMatch::has_match_group() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
+}
+inline void CMsgPartyQueueForMatch::set_has_match_group() {
+  _has_bits_[0] |= 0x00000004u;
+}
+inline void CMsgPartyQueueForMatch::clear_has_match_group() {
+  _has_bits_[0] &= ~0x00000004u;
+}
+inline void CMsgPartyQueueForMatch::clear_match_group() {
+  match_group_ = -1;
+  clear_has_match_group();
+}
+inline ::ETFMatchGroup CMsgPartyQueueForMatch::match_group() const {
+  // @@protoc_insertion_point(field_get:CMsgPartyQueueForMatch.match_group)
+  return static_cast< ::ETFMatchGroup >(match_group_);
+}
+inline void CMsgPartyQueueForMatch::set_match_group(::ETFMatchGroup value) {
+  assert(::ETFMatchGroup_IsValid(value));
+  set_has_match_group();
+  match_group_ = value;
+  // @@protoc_insertion_point(field_set:CMsgPartyQueueForMatch.match_group)
+}
+
+// -------------------------------------------------------------------
+
+// CMsgPartyQueueForMatchResponse
+
+// -------------------------------------------------------------------
+
+// CMsgPartyQueueForStandby
+
+// optional fixed64 party_id = 1;
+inline bool CMsgPartyQueueForStandby::has_party_id() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void CMsgPartyQueueForStandby::set_has_party_id() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void CMsgPartyQueueForStandby::clear_has_party_id() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void CMsgPartyQueueForStandby::clear_party_id() {
+  party_id_ = GOOGLE_ULONGLONG(0);
+  clear_has_party_id();
+}
+inline ::google::protobuf::uint64 CMsgPartyQueueForStandby::party_id() const {
+  // @@protoc_insertion_point(field_get:CMsgPartyQueueForStandby.party_id)
+  return party_id_;
+}
+inline void CMsgPartyQueueForStandby::set_party_id(::google::protobuf::uint64 value) {
+  set_has_party_id();
+  party_id_ = value;
+  // @@protoc_insertion_point(field_set:CMsgPartyQueueForStandby.party_id)
+}
+
+// optional fixed64 party_lobby_id = 2;
+inline bool CMsgPartyQueueForStandby::has_party_lobby_id() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void CMsgPartyQueueForStandby::set_has_party_lobby_id() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void CMsgPartyQueueForStandby::clear_has_party_lobby_id() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void CMsgPartyQueueForStandby::clear_party_lobby_id() {
+  party_lobby_id_ = GOOGLE_ULONGLONG(0);
+  clear_has_party_lobby_id();
+}
+inline ::google::protobuf::uint64 CMsgPartyQueueForStandby::party_lobby_id() const {
+  // @@protoc_insertion_point(field_get:CMsgPartyQueueForStandby.party_lobby_id)
+  return party_lobby_id_;
+}
+inline void CMsgPartyQueueForStandby::set_party_lobby_id(::google::protobuf::uint64 value) {
+  set_has_party_lobby_id();
+  party_lobby_id_ = value;
+  // @@protoc_insertion_point(field_set:CMsgPartyQueueForStandby.party_lobby_id)
+}
+
+// -------------------------------------------------------------------
+
+// CMsgPartyQueueForStandbyResponse
+
+// -------------------------------------------------------------------
+
+// CMsgPartyRemoveFromQueue
+
+// optional fixed64 party_id = 1;
+inline bool CMsgPartyRemoveFromQueue::has_party_id() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void CMsgPartyRemoveFromQueue::set_has_party_id() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void CMsgPartyRemoveFromQueue::clear_has_party_id() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void CMsgPartyRemoveFromQueue::clear_party_id() {
+  party_id_ = GOOGLE_ULONGLONG(0);
+  clear_has_party_id();
+}
+inline ::google::protobuf::uint64 CMsgPartyRemoveFromQueue::party_id() const {
+  // @@protoc_insertion_point(field_get:CMsgPartyRemoveFromQueue.party_id)
+  return party_id_;
+}
+inline void CMsgPartyRemoveFromQueue::set_party_id(::google::protobuf::uint64 value) {
+  set_has_party_id();
+  party_id_ = value;
+  // @@protoc_insertion_point(field_set:CMsgPartyRemoveFromQueue.party_id)
+}
+
+// optional .ETFMatchGroup match_group = 2;
+inline bool CMsgPartyRemoveFromQueue::has_match_group() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void CMsgPartyRemoveFromQueue::set_has_match_group() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void CMsgPartyRemoveFromQueue::clear_has_match_group() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void CMsgPartyRemoveFromQueue::clear_match_group() {
+  match_group_ = -1;
+  clear_has_match_group();
+}
+inline ::ETFMatchGroup CMsgPartyRemoveFromQueue::match_group() const {
+  // @@protoc_insertion_point(field_get:CMsgPartyRemoveFromQueue.match_group)
+  return static_cast< ::ETFMatchGroup >(match_group_);
+}
+inline void CMsgPartyRemoveFromQueue::set_match_group(::ETFMatchGroup value) {
+  assert(::ETFMatchGroup_IsValid(value));
+  set_has_match_group();
+  match_group_ = value;
+  // @@protoc_insertion_point(field_set:CMsgPartyRemoveFromQueue.match_group)
+}
+
+// -------------------------------------------------------------------
+
+// CMsgPartyRemoveFromQueueResponse
+
+// -------------------------------------------------------------------
+
+// CMsgPartyRemoveFromStandbyQueue
+
+// optional fixed64 party_id = 1;
+inline bool CMsgPartyRemoveFromStandbyQueue::has_party_id() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void CMsgPartyRemoveFromStandbyQueue::set_has_party_id() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void CMsgPartyRemoveFromStandbyQueue::clear_has_party_id() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void CMsgPartyRemoveFromStandbyQueue::clear_party_id() {
+  party_id_ = GOOGLE_ULONGLONG(0);
+  clear_has_party_id();
+}
+inline ::google::protobuf::uint64 CMsgPartyRemoveFromStandbyQueue::party_id() const {
+  // @@protoc_insertion_point(field_get:CMsgPartyRemoveFromStandbyQueue.party_id)
+  return party_id_;
+}
+inline void CMsgPartyRemoveFromStandbyQueue::set_party_id(::google::protobuf::uint64 value) {
+  set_has_party_id();
+  party_id_ = value;
+  // @@protoc_insertion_point(field_set:CMsgPartyRemoveFromStandbyQueue.party_id)
+}
+
+// -------------------------------------------------------------------
+
+// CMsgPartyRemoveFromStandbyQueueResponse
+
+// -------------------------------------------------------------------
+
+// CMsgPartyInvitePlayer
+
+// optional fixed64 party_id = 1;
+inline bool CMsgPartyInvitePlayer::has_party_id() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void CMsgPartyInvitePlayer::set_has_party_id() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void CMsgPartyInvitePlayer::clear_has_party_id() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void CMsgPartyInvitePlayer::clear_party_id() {
+  party_id_ = GOOGLE_ULONGLONG(0);
+  clear_has_party_id();
+}
+inline ::google::protobuf::uint64 CMsgPartyInvitePlayer::party_id() const {
+  // @@protoc_insertion_point(field_get:CMsgPartyInvitePlayer.party_id)
+  return party_id_;
+}
+inline void CMsgPartyInvitePlayer::set_party_id(::google::protobuf::uint64 value) {
+  set_has_party_id();
+  party_id_ = value;
+  // @@protoc_insertion_point(field_set:CMsgPartyInvitePlayer.party_id)
+}
+
+// optional fixed64 player_id = 2;
+inline bool CMsgPartyInvitePlayer::has_player_id() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void CMsgPartyInvitePlayer::set_has_player_id() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void CMsgPartyInvitePlayer::clear_has_player_id() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void CMsgPartyInvitePlayer::clear_player_id() {
+  player_id_ = GOOGLE_ULONGLONG(0);
+  clear_has_player_id();
+}
+inline ::google::protobuf::uint64 CMsgPartyInvitePlayer::player_id() const {
+  // @@protoc_insertion_point(field_get:CMsgPartyInvitePlayer.player_id)
+  return player_id_;
+}
+inline void CMsgPartyInvitePlayer::set_player_id(::google::protobuf::uint64 value) {
+  set_has_player_id();
+  player_id_ = value;
+  // @@protoc_insertion_point(field_set:CMsgPartyInvitePlayer.player_id)
+}
+
+// optional bool expecting_request_to_join = 3;
+inline bool CMsgPartyInvitePlayer::has_expecting_request_to_join() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
+}
+inline void CMsgPartyInvitePlayer::set_has_expecting_request_to_join() {
+  _has_bits_[0] |= 0x00000004u;
+}
+inline void CMsgPartyInvitePlayer::clear_has_expecting_request_to_join() {
+  _has_bits_[0] &= ~0x00000004u;
+}
+inline void CMsgPartyInvitePlayer::clear_expecting_request_to_join() {
+  expecting_request_to_join_ = false;
+  clear_has_expecting_request_to_join();
+}
+inline bool CMsgPartyInvitePlayer::expecting_request_to_join() const {
+  // @@protoc_insertion_point(field_get:CMsgPartyInvitePlayer.expecting_request_to_join)
+  return expecting_request_to_join_;
+}
+inline void CMsgPartyInvitePlayer::set_expecting_request_to_join(bool value) {
+  set_has_expecting_request_to_join();
+  expecting_request_to_join_ = value;
+  // @@protoc_insertion_point(field_set:CMsgPartyInvitePlayer.expecting_request_to_join)
+}
+
+// -------------------------------------------------------------------
+
+// CMsgPartyRequestJoinPlayer
+
+// optional fixed64 current_party_id = 1;
+inline bool CMsgPartyRequestJoinPlayer::has_current_party_id() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void CMsgPartyRequestJoinPlayer::set_has_current_party_id() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void CMsgPartyRequestJoinPlayer::clear_has_current_party_id() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void CMsgPartyRequestJoinPlayer::clear_current_party_id() {
+  current_party_id_ = GOOGLE_ULONGLONG(0);
+  clear_has_current_party_id();
+}
+inline ::google::protobuf::uint64 CMsgPartyRequestJoinPlayer::current_party_id() const {
+  // @@protoc_insertion_point(field_get:CMsgPartyRequestJoinPlayer.current_party_id)
+  return current_party_id_;
+}
+inline void CMsgPartyRequestJoinPlayer::set_current_party_id(::google::protobuf::uint64 value) {
+  set_has_current_party_id();
+  current_party_id_ = value;
+  // @@protoc_insertion_point(field_set:CMsgPartyRequestJoinPlayer.current_party_id)
+}
+
+// optional fixed64 join_player_id = 2;
+inline bool CMsgPartyRequestJoinPlayer::has_join_player_id() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void CMsgPartyRequestJoinPlayer::set_has_join_player_id() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void CMsgPartyRequestJoinPlayer::clear_has_join_player_id() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void CMsgPartyRequestJoinPlayer::clear_join_player_id() {
+  join_player_id_ = GOOGLE_ULONGLONG(0);
+  clear_has_join_player_id();
+}
+inline ::google::protobuf::uint64 CMsgPartyRequestJoinPlayer::join_player_id() const {
+  // @@protoc_insertion_point(field_get:CMsgPartyRequestJoinPlayer.join_player_id)
+  return join_player_id_;
+}
+inline void CMsgPartyRequestJoinPlayer::set_join_player_id(::google::protobuf::uint64 value) {
+  set_has_join_player_id();
+  join_player_id_ = value;
+  // @@protoc_insertion_point(field_set:CMsgPartyRequestJoinPlayer.join_player_id)
+}
+
+// optional fixed64 join_party_id = 3;
+inline bool CMsgPartyRequestJoinPlayer::has_join_party_id() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
+}
+inline void CMsgPartyRequestJoinPlayer::set_has_join_party_id() {
+  _has_bits_[0] |= 0x00000004u;
+}
+inline void CMsgPartyRequestJoinPlayer::clear_has_join_party_id() {
+  _has_bits_[0] &= ~0x00000004u;
+}
+inline void CMsgPartyRequestJoinPlayer::clear_join_party_id() {
+  join_party_id_ = GOOGLE_ULONGLONG(0);
+  clear_has_join_party_id();
+}
+inline ::google::protobuf::uint64 CMsgPartyRequestJoinPlayer::join_party_id() const {
+  // @@protoc_insertion_point(field_get:CMsgPartyRequestJoinPlayer.join_party_id)
+  return join_party_id_;
+}
+inline void CMsgPartyRequestJoinPlayer::set_join_party_id(::google::protobuf::uint64 value) {
+  set_has_join_party_id();
+  join_party_id_ = value;
+  // @@protoc_insertion_point(field_set:CMsgPartyRequestJoinPlayer.join_party_id)
+}
+
+// optional bool expecting_invite = 4;
+inline bool CMsgPartyRequestJoinPlayer::has_expecting_invite() const {
+  return (_has_bits_[0] & 0x00000008u) != 0;
+}
+inline void CMsgPartyRequestJoinPlayer::set_has_expecting_invite() {
+  _has_bits_[0] |= 0x00000008u;
+}
+inline void CMsgPartyRequestJoinPlayer::clear_has_expecting_invite() {
+  _has_bits_[0] &= ~0x00000008u;
+}
+inline void CMsgPartyRequestJoinPlayer::clear_expecting_invite() {
+  expecting_invite_ = false;
+  clear_has_expecting_invite();
+}
+inline bool CMsgPartyRequestJoinPlayer::expecting_invite() const {
+  // @@protoc_insertion_point(field_get:CMsgPartyRequestJoinPlayer.expecting_invite)
+  return expecting_invite_;
+}
+inline void CMsgPartyRequestJoinPlayer::set_expecting_invite(bool value) {
+  set_has_expecting_invite();
+  expecting_invite_ = value;
+  // @@protoc_insertion_point(field_set:CMsgPartyRequestJoinPlayer.expecting_invite)
+}
+
+// -------------------------------------------------------------------
+
+// CMsgPartyClearPendingPlayer
+
+// optional fixed64 party_id = 1;
+inline bool CMsgPartyClearPendingPlayer::has_party_id() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void CMsgPartyClearPendingPlayer::set_has_party_id() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void CMsgPartyClearPendingPlayer::clear_has_party_id() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void CMsgPartyClearPendingPlayer::clear_party_id() {
+  party_id_ = GOOGLE_ULONGLONG(0);
+  clear_has_party_id();
+}
+inline ::google::protobuf::uint64 CMsgPartyClearPendingPlayer::party_id() const {
+  // @@protoc_insertion_point(field_get:CMsgPartyClearPendingPlayer.party_id)
+  return party_id_;
+}
+inline void CMsgPartyClearPendingPlayer::set_party_id(::google::protobuf::uint64 value) {
+  set_has_party_id();
+  party_id_ = value;
+  // @@protoc_insertion_point(field_set:CMsgPartyClearPendingPlayer.party_id)
+}
+
+// optional fixed64 pending_player_id = 2;
+inline bool CMsgPartyClearPendingPlayer::has_pending_player_id() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void CMsgPartyClearPendingPlayer::set_has_pending_player_id() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void CMsgPartyClearPendingPlayer::clear_has_pending_player_id() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void CMsgPartyClearPendingPlayer::clear_pending_player_id() {
+  pending_player_id_ = GOOGLE_ULONGLONG(0);
+  clear_has_pending_player_id();
+}
+inline ::google::protobuf::uint64 CMsgPartyClearPendingPlayer::pending_player_id() const {
+  // @@protoc_insertion_point(field_get:CMsgPartyClearPendingPlayer.pending_player_id)
+  return pending_player_id_;
+}
+inline void CMsgPartyClearPendingPlayer::set_pending_player_id(::google::protobuf::uint64 value) {
+  set_has_pending_player_id();
+  pending_player_id_ = value;
+  // @@protoc_insertion_point(field_set:CMsgPartyClearPendingPlayer.pending_player_id)
+}
+
+// -------------------------------------------------------------------
+
+// CMsgPartyMMError
+
+// optional .CMsgPartyMMError.Type type = 1;
+inline bool CMsgPartyMMError::has_type() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void CMsgPartyMMError::set_has_type() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void CMsgPartyMMError::clear_has_type() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void CMsgPartyMMError::clear_type() {
+  type_ = 1;
+  clear_has_type();
+}
+inline ::CMsgPartyMMError_Type CMsgPartyMMError::type() const {
+  // @@protoc_insertion_point(field_get:CMsgPartyMMError.type)
+  return static_cast< ::CMsgPartyMMError_Type >(type_);
+}
+inline void CMsgPartyMMError::set_type(::CMsgPartyMMError_Type value) {
+  assert(::CMsgPartyMMError_Type_IsValid(value));
+  set_has_type();
+  type_ = value;
+  // @@protoc_insertion_point(field_set:CMsgPartyMMError.type)
+}
+
+// -------------------------------------------------------------------
+
+// CMsgPartyClearPendingPlayerResponse
+
+// -------------------------------------------------------------------
+
+// CMsgPartyClearOtherPartyRequest
+
+// optional fixed64 other_party_id = 1;
+inline bool CMsgPartyClearOtherPartyRequest::has_other_party_id() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void CMsgPartyClearOtherPartyRequest::set_has_other_party_id() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void CMsgPartyClearOtherPartyRequest::clear_has_other_party_id() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void CMsgPartyClearOtherPartyRequest::clear_other_party_id() {
+  other_party_id_ = GOOGLE_ULONGLONG(0);
+  clear_has_other_party_id();
+}
+inline ::google::protobuf::uint64 CMsgPartyClearOtherPartyRequest::other_party_id() const {
+  // @@protoc_insertion_point(field_get:CMsgPartyClearOtherPartyRequest.other_party_id)
+  return other_party_id_;
+}
+inline void CMsgPartyClearOtherPartyRequest::set_other_party_id(::google::protobuf::uint64 value) {
+  set_has_other_party_id();
+  other_party_id_ = value;
+  // @@protoc_insertion_point(field_set:CMsgPartyClearOtherPartyRequest.other_party_id)
+}
+
+// -------------------------------------------------------------------
+
+// CMsgPartyClearOtherPartyRequestResponse
+
+// -------------------------------------------------------------------
+
+// CMsgPartyPromoteToLeader
+
+// optional fixed64 party_id = 1;
+inline bool CMsgPartyPromoteToLeader::has_party_id() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void CMsgPartyPromoteToLeader::set_has_party_id() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void CMsgPartyPromoteToLeader::clear_has_party_id() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void CMsgPartyPromoteToLeader::clear_party_id() {
+  party_id_ = GOOGLE_ULONGLONG(0);
+  clear_has_party_id();
+}
+inline ::google::protobuf::uint64 CMsgPartyPromoteToLeader::party_id() const {
+  // @@protoc_insertion_point(field_get:CMsgPartyPromoteToLeader.party_id)
+  return party_id_;
+}
+inline void CMsgPartyPromoteToLeader::set_party_id(::google::protobuf::uint64 value) {
+  set_has_party_id();
+  party_id_ = value;
+  // @@protoc_insertion_point(field_set:CMsgPartyPromoteToLeader.party_id)
+}
+
+// optional fixed64 new_leader_id = 2;
+inline bool CMsgPartyPromoteToLeader::has_new_leader_id() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void CMsgPartyPromoteToLeader::set_has_new_leader_id() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void CMsgPartyPromoteToLeader::clear_has_new_leader_id() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void CMsgPartyPromoteToLeader::clear_new_leader_id() {
+  new_leader_id_ = GOOGLE_ULONGLONG(0);
+  clear_has_new_leader_id();
+}
+inline ::google::protobuf::uint64 CMsgPartyPromoteToLeader::new_leader_id() const {
+  // @@protoc_insertion_point(field_get:CMsgPartyPromoteToLeader.new_leader_id)
+  return new_leader_id_;
+}
+inline void CMsgPartyPromoteToLeader::set_new_leader_id(::google::protobuf::uint64 value) {
+  set_has_new_leader_id();
+  new_leader_id_ = value;
+  // @@protoc_insertion_point(field_set:CMsgPartyPromoteToLeader.new_leader_id)
+}
+
+// -------------------------------------------------------------------
+
+// CMsgPartyKickMember
+
+// optional fixed64 party_id = 1;
+inline bool CMsgPartyKickMember::has_party_id() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void CMsgPartyKickMember::set_has_party_id() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void CMsgPartyKickMember::clear_has_party_id() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void CMsgPartyKickMember::clear_party_id() {
+  party_id_ = GOOGLE_ULONGLONG(0);
+  clear_has_party_id();
+}
+inline ::google::protobuf::uint64 CMsgPartyKickMember::party_id() const {
+  // @@protoc_insertion_point(field_get:CMsgPartyKickMember.party_id)
+  return party_id_;
+}
+inline void CMsgPartyKickMember::set_party_id(::google::protobuf::uint64 value) {
+  set_has_party_id();
+  party_id_ = value;
+  // @@protoc_insertion_point(field_set:CMsgPartyKickMember.party_id)
+}
+
+// optional fixed64 target_id = 2;
+inline bool CMsgPartyKickMember::has_target_id() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void CMsgPartyKickMember::set_has_target_id() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void CMsgPartyKickMember::clear_has_target_id() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void CMsgPartyKickMember::clear_target_id() {
+  target_id_ = GOOGLE_ULONGLONG(0);
+  clear_has_target_id();
+}
+inline ::google::protobuf::uint64 CMsgPartyKickMember::target_id() const {
+  // @@protoc_insertion_point(field_get:CMsgPartyKickMember.target_id)
+  return target_id_;
+}
+inline void CMsgPartyKickMember::set_target_id(::google::protobuf::uint64 value) {
+  set_has_target_id();
+  target_id_ = value;
+  // @@protoc_insertion_point(field_set:CMsgPartyKickMember.target_id)
+}
+
+// -------------------------------------------------------------------
+
+// CMsgPartySendChat
+
+// optional fixed64 party_id = 1;
+inline bool CMsgPartySendChat::has_party_id() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void CMsgPartySendChat::set_has_party_id() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void CMsgPartySendChat::clear_has_party_id() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void CMsgPartySendChat::clear_party_id() {
+  party_id_ = GOOGLE_ULONGLONG(0);
+  clear_has_party_id();
+}
+inline ::google::protobuf::uint64 CMsgPartySendChat::party_id() const {
+  // @@protoc_insertion_point(field_get:CMsgPartySendChat.party_id)
+  return party_id_;
+}
+inline void CMsgPartySendChat::set_party_id(::google::protobuf::uint64 value) {
+  set_has_party_id();
+  party_id_ = value;
+  // @@protoc_insertion_point(field_set:CMsgPartySendChat.party_id)
+}
+
+// optional string msg = 2;
+inline bool CMsgPartySendChat::has_msg() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void CMsgPartySendChat::set_has_msg() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void CMsgPartySendChat::clear_has_msg() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void CMsgPartySendChat::clear_msg() {
+  if (msg_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    msg_->clear();
+  }
+  clear_has_msg();
+}
+inline const ::std::string& CMsgPartySendChat::msg() const {
+  // @@protoc_insertion_point(field_get:CMsgPartySendChat.msg)
+  return *msg_;
+}
+inline void CMsgPartySendChat::set_msg(const ::std::string& value) {
+  set_has_msg();
+  if (msg_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    msg_ = new ::std::string;
+  }
+  msg_->assign(value);
+  // @@protoc_insertion_point(field_set:CMsgPartySendChat.msg)
+}
+inline void CMsgPartySendChat::set_msg(const char* value) {
+  set_has_msg();
+  if (msg_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    msg_ = new ::std::string;
+  }
+  msg_->assign(value);
+  // @@protoc_insertion_point(field_set_char:CMsgPartySendChat.msg)
+}
+inline void CMsgPartySendChat::set_msg(const char* value, size_t size) {
+  set_has_msg();
+  if (msg_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    msg_ = new ::std::string;
+  }
+  msg_->assign(reinterpret_cast<const char*>(value), size);
+  // @@protoc_insertion_point(field_set_pointer:CMsgPartySendChat.msg)
+}
+inline ::std::string* CMsgPartySendChat::mutable_msg() {
+  set_has_msg();
+  if (msg_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    msg_ = new ::std::string;
+  }
+  // @@protoc_insertion_point(field_mutable:CMsgPartySendChat.msg)
+  return msg_;
+}
+inline ::std::string* CMsgPartySendChat::release_msg() {
+  clear_has_msg();
+  if (msg_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
     return NULL;
   } else {
-    ::std::string* temp = message_;
-    message_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+    ::std::string* temp = msg_;
+    msg_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
     return temp;
   }
 }
-inline void CMsgCreateOrUpdatePartyReply::set_allocated_message(::std::string* message) {
-  if (message_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    delete message_;
+inline void CMsgPartySendChat::set_allocated_msg(::std::string* msg) {
+  if (msg_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    delete msg_;
   }
-  if (message) {
-    set_has_message();
-    message_ = message;
+  if (msg) {
+    set_has_msg();
+    msg_ = msg;
   } else {
-    clear_has_message();
-    message_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+    clear_has_msg();
+    msg_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   }
-  // @@protoc_insertion_point(field_set_allocated:CMsgCreateOrUpdatePartyReply.message)
+  // @@protoc_insertion_point(field_set_allocated:CMsgPartySendChat.msg)
 }
 
-// optional .TF_Matchmaking_WizardStep wizard_step = 3;
-inline bool CMsgCreateOrUpdatePartyReply::has_wizard_step() const {
+// -------------------------------------------------------------------
+
+// CMsgPartyChatMsg
+
+// optional .ETFPartyChatType type = 1;
+inline bool CMsgPartyChatMsg::has_type() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void CMsgPartyChatMsg::set_has_type() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void CMsgPartyChatMsg::clear_has_type() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void CMsgPartyChatMsg::clear_type() {
+  type_ = 0;
+  clear_has_type();
+}
+inline ::ETFPartyChatType CMsgPartyChatMsg::type() const {
+  // @@protoc_insertion_point(field_get:CMsgPartyChatMsg.type)
+  return static_cast< ::ETFPartyChatType >(type_);
+}
+inline void CMsgPartyChatMsg::set_type(::ETFPartyChatType value) {
+  assert(::ETFPartyChatType_IsValid(value));
+  set_has_type();
+  type_ = value;
+  // @@protoc_insertion_point(field_set:CMsgPartyChatMsg.type)
+}
+
+// optional fixed64 actor_id = 2;
+inline bool CMsgPartyChatMsg::has_actor_id() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void CMsgPartyChatMsg::set_has_actor_id() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void CMsgPartyChatMsg::clear_has_actor_id() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void CMsgPartyChatMsg::clear_actor_id() {
+  actor_id_ = GOOGLE_ULONGLONG(0);
+  clear_has_actor_id();
+}
+inline ::google::protobuf::uint64 CMsgPartyChatMsg::actor_id() const {
+  // @@protoc_insertion_point(field_get:CMsgPartyChatMsg.actor_id)
+  return actor_id_;
+}
+inline void CMsgPartyChatMsg::set_actor_id(::google::protobuf::uint64 value) {
+  set_has_actor_id();
+  actor_id_ = value;
+  // @@protoc_insertion_point(field_set:CMsgPartyChatMsg.actor_id)
+}
+
+// optional string msg = 3;
+inline bool CMsgPartyChatMsg::has_msg() const {
   return (_has_bits_[0] & 0x00000004u) != 0;
 }
-inline void CMsgCreateOrUpdatePartyReply::set_has_wizard_step() {
+inline void CMsgPartyChatMsg::set_has_msg() {
   _has_bits_[0] |= 0x00000004u;
 }
-inline void CMsgCreateOrUpdatePartyReply::clear_has_wizard_step() {
+inline void CMsgPartyChatMsg::clear_has_msg() {
   _has_bits_[0] &= ~0x00000004u;
 }
-inline void CMsgCreateOrUpdatePartyReply::clear_wizard_step() {
-  wizard_step_ = 0;
-  clear_has_wizard_step();
+inline void CMsgPartyChatMsg::clear_msg() {
+  if (msg_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    msg_->clear();
+  }
+  clear_has_msg();
 }
-inline ::TF_Matchmaking_WizardStep CMsgCreateOrUpdatePartyReply::wizard_step() const {
-  // @@protoc_insertion_point(field_get:CMsgCreateOrUpdatePartyReply.wizard_step)
-  return static_cast< ::TF_Matchmaking_WizardStep >(wizard_step_);
+inline const ::std::string& CMsgPartyChatMsg::msg() const {
+  // @@protoc_insertion_point(field_get:CMsgPartyChatMsg.msg)
+  return *msg_;
 }
-inline void CMsgCreateOrUpdatePartyReply::set_wizard_step(::TF_Matchmaking_WizardStep value) {
-  assert(::TF_Matchmaking_WizardStep_IsValid(value));
-  set_has_wizard_step();
-  wizard_step_ = value;
-  // @@protoc_insertion_point(field_set:CMsgCreateOrUpdatePartyReply.wizard_step)
+inline void CMsgPartyChatMsg::set_msg(const ::std::string& value) {
+  set_has_msg();
+  if (msg_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    msg_ = new ::std::string;
+  }
+  msg_->assign(value);
+  // @@protoc_insertion_point(field_set:CMsgPartyChatMsg.msg)
+}
+inline void CMsgPartyChatMsg::set_msg(const char* value) {
+  set_has_msg();
+  if (msg_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    msg_ = new ::std::string;
+  }
+  msg_->assign(value);
+  // @@protoc_insertion_point(field_set_char:CMsgPartyChatMsg.msg)
+}
+inline void CMsgPartyChatMsg::set_msg(const char* value, size_t size) {
+  set_has_msg();
+  if (msg_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    msg_ = new ::std::string;
+  }
+  msg_->assign(reinterpret_cast<const char*>(value), size);
+  // @@protoc_insertion_point(field_set_pointer:CMsgPartyChatMsg.msg)
+}
+inline ::std::string* CMsgPartyChatMsg::mutable_msg() {
+  set_has_msg();
+  if (msg_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    msg_ = new ::std::string;
+  }
+  // @@protoc_insertion_point(field_mutable:CMsgPartyChatMsg.msg)
+  return msg_;
+}
+inline ::std::string* CMsgPartyChatMsg::release_msg() {
+  clear_has_msg();
+  if (msg_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    return NULL;
+  } else {
+    ::std::string* temp = msg_;
+    msg_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+    return temp;
+  }
+}
+inline void CMsgPartyChatMsg::set_allocated_msg(::std::string* msg) {
+  if (msg_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    delete msg_;
+  }
+  if (msg) {
+    set_has_msg();
+    msg_ = msg;
+  } else {
+    clear_has_msg();
+    msg_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  }
+  // @@protoc_insertion_point(field_set_allocated:CMsgPartyChatMsg.msg)
+}
+
+// -------------------------------------------------------------------
+
+// CSOTFParty_QueueEntry
+
+// optional .ETFMatchGroup match_group = 1;
+inline bool CSOTFParty_QueueEntry::has_match_group() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void CSOTFParty_QueueEntry::set_has_match_group() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void CSOTFParty_QueueEntry::clear_has_match_group() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void CSOTFParty_QueueEntry::clear_match_group() {
+  match_group_ = -1;
+  clear_has_match_group();
+}
+inline ::ETFMatchGroup CSOTFParty_QueueEntry::match_group() const {
+  // @@protoc_insertion_point(field_get:CSOTFParty.QueueEntry.match_group)
+  return static_cast< ::ETFMatchGroup >(match_group_);
+}
+inline void CSOTFParty_QueueEntry::set_match_group(::ETFMatchGroup value) {
+  assert(::ETFMatchGroup_IsValid(value));
+  set_has_match_group();
+  match_group_ = value;
+  // @@protoc_insertion_point(field_set:CSOTFParty.QueueEntry.match_group)
+}
+
+// optional fixed32 queued_time = 2;
+inline bool CSOTFParty_QueueEntry::has_queued_time() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void CSOTFParty_QueueEntry::set_has_queued_time() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void CSOTFParty_QueueEntry::clear_has_queued_time() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void CSOTFParty_QueueEntry::clear_queued_time() {
+  queued_time_ = 0u;
+  clear_has_queued_time();
+}
+inline ::google::protobuf::uint32 CSOTFParty_QueueEntry::queued_time() const {
+  // @@protoc_insertion_point(field_get:CSOTFParty.QueueEntry.queued_time)
+  return queued_time_;
+}
+inline void CSOTFParty_QueueEntry::set_queued_time(::google::protobuf::uint32 value) {
+  set_has_queued_time();
+  queued_time_ = value;
+  // @@protoc_insertion_point(field_set:CSOTFParty.QueueEntry.queued_time)
 }
 
 // -------------------------------------------------------------------
@@ -23924,45 +27897,15 @@ CSOTFParty::mutable_members() {
   return &members_;
 }
 
-// repeated fixed64 pending_invites = 5;
-inline int CSOTFParty::pending_invites_size() const {
-  return pending_invites_.size();
-}
-inline void CSOTFParty::clear_pending_invites() {
-  pending_invites_.Clear();
-}
-inline ::google::protobuf::uint64 CSOTFParty::pending_invites(int index) const {
-  // @@protoc_insertion_point(field_get:CSOTFParty.pending_invites)
-  return pending_invites_.Get(index);
-}
-inline void CSOTFParty::set_pending_invites(int index, ::google::protobuf::uint64 value) {
-  pending_invites_.Set(index, value);
-  // @@protoc_insertion_point(field_set:CSOTFParty.pending_invites)
-}
-inline void CSOTFParty::add_pending_invites(::google::protobuf::uint64 value) {
-  pending_invites_.Add(value);
-  // @@protoc_insertion_point(field_add:CSOTFParty.pending_invites)
-}
-inline const ::google::protobuf::RepeatedField< ::google::protobuf::uint64 >&
-CSOTFParty::pending_invites() const {
-  // @@protoc_insertion_point(field_list:CSOTFParty.pending_invites)
-  return pending_invites_;
-}
-inline ::google::protobuf::RepeatedField< ::google::protobuf::uint64 >*
-CSOTFParty::mutable_pending_invites() {
-  // @@protoc_insertion_point(field_mutable_list:CSOTFParty.pending_invites)
-  return &pending_invites_;
-}
-
 // optional uint64 associated_lobby_id = 35;
 inline bool CSOTFParty::has_associated_lobby_id() const {
-  return (_has_bits_[0] & 0x00000020u) != 0;
+  return (_has_bits_[0] & 0x00000010u) != 0;
 }
 inline void CSOTFParty::set_has_associated_lobby_id() {
-  _has_bits_[0] |= 0x00000020u;
+  _has_bits_[0] |= 0x00000010u;
 }
 inline void CSOTFParty::clear_has_associated_lobby_id() {
-  _has_bits_[0] &= ~0x00000020u;
+  _has_bits_[0] &= ~0x00000010u;
 }
 inline void CSOTFParty::clear_associated_lobby_id() {
   associated_lobby_id_ = GOOGLE_ULONGLONG(0);
@@ -23978,648 +27921,295 @@ inline void CSOTFParty::set_associated_lobby_id(::google::protobuf::uint64 value
   // @@protoc_insertion_point(field_set:CSOTFParty.associated_lobby_id)
 }
 
-// optional .CSOTFParty.State state = 6;
-inline bool CSOTFParty::has_state() const {
-  return (_has_bits_[0] & 0x00000040u) != 0;
+// optional .ETFMatchGroup associated_lobby_match_group = 40;
+inline bool CSOTFParty::has_associated_lobby_match_group() const {
+  return (_has_bits_[0] & 0x00000020u) != 0;
 }
-inline void CSOTFParty::set_has_state() {
-  _has_bits_[0] |= 0x00000040u;
+inline void CSOTFParty::set_has_associated_lobby_match_group() {
+  _has_bits_[0] |= 0x00000020u;
 }
-inline void CSOTFParty::clear_has_state() {
-  _has_bits_[0] &= ~0x00000040u;
+inline void CSOTFParty::clear_has_associated_lobby_match_group() {
+  _has_bits_[0] &= ~0x00000020u;
 }
-inline void CSOTFParty::clear_state() {
-  state_ = 0;
-  clear_has_state();
+inline void CSOTFParty::clear_associated_lobby_match_group() {
+  associated_lobby_match_group_ = -1;
+  clear_has_associated_lobby_match_group();
 }
-inline ::CSOTFParty_State CSOTFParty::state() const {
-  // @@protoc_insertion_point(field_get:CSOTFParty.state)
-  return static_cast< ::CSOTFParty_State >(state_);
+inline ::ETFMatchGroup CSOTFParty::associated_lobby_match_group() const {
+  // @@protoc_insertion_point(field_get:CSOTFParty.associated_lobby_match_group)
+  return static_cast< ::ETFMatchGroup >(associated_lobby_match_group_);
 }
-inline void CSOTFParty::set_state(::CSOTFParty_State value) {
-  assert(::CSOTFParty_State_IsValid(value));
-  set_has_state();
-  state_ = value;
-  // @@protoc_insertion_point(field_set:CSOTFParty.state)
+inline void CSOTFParty::set_associated_lobby_match_group(::ETFMatchGroup value) {
+  assert(::ETFMatchGroup_IsValid(value));
+  set_has_associated_lobby_match_group();
+  associated_lobby_match_group_ = value;
+  // @@protoc_insertion_point(field_set:CSOTFParty.associated_lobby_match_group)
 }
 
-// optional .TF_Matchmaking_WizardStep wizard_step = 29;
-inline bool CSOTFParty::has_wizard_step() const {
+// repeated .CSOTFParty.QueueEntry matchmaking_queues = 43;
+inline int CSOTFParty::matchmaking_queues_size() const {
+  return matchmaking_queues_.size();
+}
+inline void CSOTFParty::clear_matchmaking_queues() {
+  matchmaking_queues_.Clear();
+}
+inline const ::CSOTFParty_QueueEntry& CSOTFParty::matchmaking_queues(int index) const {
+  // @@protoc_insertion_point(field_get:CSOTFParty.matchmaking_queues)
+  return matchmaking_queues_.Get(index);
+}
+inline ::CSOTFParty_QueueEntry* CSOTFParty::mutable_matchmaking_queues(int index) {
+  // @@protoc_insertion_point(field_mutable:CSOTFParty.matchmaking_queues)
+  return matchmaking_queues_.Mutable(index);
+}
+inline ::CSOTFParty_QueueEntry* CSOTFParty::add_matchmaking_queues() {
+  // @@protoc_insertion_point(field_add:CSOTFParty.matchmaking_queues)
+  return matchmaking_queues_.Add();
+}
+inline const ::google::protobuf::RepeatedPtrField< ::CSOTFParty_QueueEntry >&
+CSOTFParty::matchmaking_queues() const {
+  // @@protoc_insertion_point(field_list:CSOTFParty.matchmaking_queues)
+  return matchmaking_queues_;
+}
+inline ::google::protobuf::RepeatedPtrField< ::CSOTFParty_QueueEntry >*
+CSOTFParty::mutable_matchmaking_queues() {
+  // @@protoc_insertion_point(field_mutable_list:CSOTFParty.matchmaking_queues)
+  return &matchmaking_queues_;
+}
+
+// optional .CTFGroupMatchCriteriaProto group_criteria = 37;
+inline bool CSOTFParty::has_group_criteria() const {
   return (_has_bits_[0] & 0x00000080u) != 0;
 }
-inline void CSOTFParty::set_has_wizard_step() {
+inline void CSOTFParty::set_has_group_criteria() {
   _has_bits_[0] |= 0x00000080u;
 }
-inline void CSOTFParty::clear_has_wizard_step() {
+inline void CSOTFParty::clear_has_group_criteria() {
   _has_bits_[0] &= ~0x00000080u;
 }
-inline void CSOTFParty::clear_wizard_step() {
-  wizard_step_ = 0;
-  clear_has_wizard_step();
-}
-inline ::TF_Matchmaking_WizardStep CSOTFParty::wizard_step() const {
-  // @@protoc_insertion_point(field_get:CSOTFParty.wizard_step)
-  return static_cast< ::TF_Matchmaking_WizardStep >(wizard_step_);
-}
-inline void CSOTFParty::set_wizard_step(::TF_Matchmaking_WizardStep value) {
-  assert(::TF_Matchmaking_WizardStep_IsValid(value));
-  set_has_wizard_step();
-  wizard_step_ = value;
-  // @@protoc_insertion_point(field_set:CSOTFParty.wizard_step)
-}
-
-// optional uint32 started_matchmaking_time = 7;
-inline bool CSOTFParty::has_started_matchmaking_time() const {
-  return (_has_bits_[0] & 0x00000100u) != 0;
-}
-inline void CSOTFParty::set_has_started_matchmaking_time() {
-  _has_bits_[0] |= 0x00000100u;
-}
-inline void CSOTFParty::clear_has_started_matchmaking_time() {
-  _has_bits_[0] &= ~0x00000100u;
-}
-inline void CSOTFParty::clear_started_matchmaking_time() {
-  started_matchmaking_time_ = 0u;
-  clear_has_started_matchmaking_time();
-}
-inline ::google::protobuf::uint32 CSOTFParty::started_matchmaking_time() const {
-  // @@protoc_insertion_point(field_get:CSOTFParty.started_matchmaking_time)
-  return started_matchmaking_time_;
-}
-inline void CSOTFParty::set_started_matchmaking_time(::google::protobuf::uint32 value) {
-  set_has_started_matchmaking_time();
-  started_matchmaking_time_ = value;
-  // @@protoc_insertion_point(field_set:CSOTFParty.started_matchmaking_time)
-}
-
-// repeated uint32 searching_players_by_group = 10;
-inline int CSOTFParty::searching_players_by_group_size() const {
-  return searching_players_by_group_.size();
-}
-inline void CSOTFParty::clear_searching_players_by_group() {
-  searching_players_by_group_.Clear();
-}
-inline ::google::protobuf::uint32 CSOTFParty::searching_players_by_group(int index) const {
-  // @@protoc_insertion_point(field_get:CSOTFParty.searching_players_by_group)
-  return searching_players_by_group_.Get(index);
-}
-inline void CSOTFParty::set_searching_players_by_group(int index, ::google::protobuf::uint32 value) {
-  searching_players_by_group_.Set(index, value);
-  // @@protoc_insertion_point(field_set:CSOTFParty.searching_players_by_group)
-}
-inline void CSOTFParty::add_searching_players_by_group(::google::protobuf::uint32 value) {
-  searching_players_by_group_.Add(value);
-  // @@protoc_insertion_point(field_add:CSOTFParty.searching_players_by_group)
-}
-inline const ::google::protobuf::RepeatedField< ::google::protobuf::uint32 >&
-CSOTFParty::searching_players_by_group() const {
-  // @@protoc_insertion_point(field_list:CSOTFParty.searching_players_by_group)
-  return searching_players_by_group_;
-}
-inline ::google::protobuf::RepeatedField< ::google::protobuf::uint32 >*
-CSOTFParty::mutable_searching_players_by_group() {
-  // @@protoc_insertion_point(field_mutable_list:CSOTFParty.searching_players_by_group)
-  return &searching_players_by_group_;
-}
-
-// optional fixed64 steam_lobby_id = 27;
-inline bool CSOTFParty::has_steam_lobby_id() const {
-  return (_has_bits_[0] & 0x00000400u) != 0;
-}
-inline void CSOTFParty::set_has_steam_lobby_id() {
-  _has_bits_[0] |= 0x00000400u;
-}
-inline void CSOTFParty::clear_has_steam_lobby_id() {
-  _has_bits_[0] &= ~0x00000400u;
-}
-inline void CSOTFParty::clear_steam_lobby_id() {
-  steam_lobby_id_ = GOOGLE_ULONGLONG(0);
-  clear_has_steam_lobby_id();
-}
-inline ::google::protobuf::uint64 CSOTFParty::steam_lobby_id() const {
-  // @@protoc_insertion_point(field_get:CSOTFParty.steam_lobby_id)
-  return steam_lobby_id_;
-}
-inline void CSOTFParty::set_steam_lobby_id(::google::protobuf::uint64 value) {
-  set_has_steam_lobby_id();
-  steam_lobby_id_ = value;
-  // @@protoc_insertion_point(field_set:CSOTFParty.steam_lobby_id)
-}
-
-// optional .TF_MatchmakingMode matchmaking_mode = 30;
-inline bool CSOTFParty::has_matchmaking_mode() const {
-  return (_has_bits_[0] & 0x00000800u) != 0;
-}
-inline void CSOTFParty::set_has_matchmaking_mode() {
-  _has_bits_[0] |= 0x00000800u;
-}
-inline void CSOTFParty::clear_has_matchmaking_mode() {
-  _has_bits_[0] &= ~0x00000800u;
-}
-inline void CSOTFParty::clear_matchmaking_mode() {
-  matchmaking_mode_ = 0;
-  clear_has_matchmaking_mode();
-}
-inline ::TF_MatchmakingMode CSOTFParty::matchmaking_mode() const {
-  // @@protoc_insertion_point(field_get:CSOTFParty.matchmaking_mode)
-  return static_cast< ::TF_MatchmakingMode >(matchmaking_mode_);
-}
-inline void CSOTFParty::set_matchmaking_mode(::TF_MatchmakingMode value) {
-  assert(::TF_MatchmakingMode_IsValid(value));
-  set_has_matchmaking_mode();
-  matchmaking_mode_ = value;
-  // @@protoc_insertion_point(field_set:CSOTFParty.matchmaking_mode)
-}
-
-// optional bool search_late_join_ok = 23;
-inline bool CSOTFParty::has_search_late_join_ok() const {
-  return (_has_bits_[0] & 0x00001000u) != 0;
-}
-inline void CSOTFParty::set_has_search_late_join_ok() {
-  _has_bits_[0] |= 0x00001000u;
-}
-inline void CSOTFParty::clear_has_search_late_join_ok() {
-  _has_bits_[0] &= ~0x00001000u;
-}
-inline void CSOTFParty::clear_search_late_join_ok() {
-  search_late_join_ok_ = false;
-  clear_has_search_late_join_ok();
-}
-inline bool CSOTFParty::search_late_join_ok() const {
-  // @@protoc_insertion_point(field_get:CSOTFParty.search_late_join_ok)
-  return search_late_join_ok_;
-}
-inline void CSOTFParty::set_search_late_join_ok(bool value) {
-  set_has_search_late_join_ok();
-  search_late_join_ok_ = value;
-  // @@protoc_insertion_point(field_set:CSOTFParty.search_late_join_ok)
-}
-
-// optional string search_mvm_mannup_tour = 32;
-inline bool CSOTFParty::has_search_mvm_mannup_tour() const {
-  return (_has_bits_[0] & 0x00002000u) != 0;
-}
-inline void CSOTFParty::set_has_search_mvm_mannup_tour() {
-  _has_bits_[0] |= 0x00002000u;
-}
-inline void CSOTFParty::clear_has_search_mvm_mannup_tour() {
-  _has_bits_[0] &= ~0x00002000u;
-}
-inline void CSOTFParty::clear_search_mvm_mannup_tour() {
-  if (search_mvm_mannup_tour_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    search_mvm_mannup_tour_->clear();
-  }
-  clear_has_search_mvm_mannup_tour();
-}
-inline const ::std::string& CSOTFParty::search_mvm_mannup_tour() const {
-  // @@protoc_insertion_point(field_get:CSOTFParty.search_mvm_mannup_tour)
-  return *search_mvm_mannup_tour_;
-}
-inline void CSOTFParty::set_search_mvm_mannup_tour(const ::std::string& value) {
-  set_has_search_mvm_mannup_tour();
-  if (search_mvm_mannup_tour_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    search_mvm_mannup_tour_ = new ::std::string;
-  }
-  search_mvm_mannup_tour_->assign(value);
-  // @@protoc_insertion_point(field_set:CSOTFParty.search_mvm_mannup_tour)
-}
-inline void CSOTFParty::set_search_mvm_mannup_tour(const char* value) {
-  set_has_search_mvm_mannup_tour();
-  if (search_mvm_mannup_tour_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    search_mvm_mannup_tour_ = new ::std::string;
-  }
-  search_mvm_mannup_tour_->assign(value);
-  // @@protoc_insertion_point(field_set_char:CSOTFParty.search_mvm_mannup_tour)
-}
-inline void CSOTFParty::set_search_mvm_mannup_tour(const char* value, size_t size) {
-  set_has_search_mvm_mannup_tour();
-  if (search_mvm_mannup_tour_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    search_mvm_mannup_tour_ = new ::std::string;
-  }
-  search_mvm_mannup_tour_->assign(reinterpret_cast<const char*>(value), size);
-  // @@protoc_insertion_point(field_set_pointer:CSOTFParty.search_mvm_mannup_tour)
-}
-inline ::std::string* CSOTFParty::mutable_search_mvm_mannup_tour() {
-  set_has_search_mvm_mannup_tour();
-  if (search_mvm_mannup_tour_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    search_mvm_mannup_tour_ = new ::std::string;
-  }
-  // @@protoc_insertion_point(field_mutable:CSOTFParty.search_mvm_mannup_tour)
-  return search_mvm_mannup_tour_;
-}
-inline ::std::string* CSOTFParty::release_search_mvm_mannup_tour() {
-  clear_has_search_mvm_mannup_tour();
-  if (search_mvm_mannup_tour_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    return NULL;
-  } else {
-    ::std::string* temp = search_mvm_mannup_tour_;
-    search_mvm_mannup_tour_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-    return temp;
-  }
-}
-inline void CSOTFParty::set_allocated_search_mvm_mannup_tour(::std::string* search_mvm_mannup_tour) {
-  if (search_mvm_mannup_tour_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    delete search_mvm_mannup_tour_;
-  }
-  if (search_mvm_mannup_tour) {
-    set_has_search_mvm_mannup_tour();
-    search_mvm_mannup_tour_ = search_mvm_mannup_tour;
-  } else {
-    clear_has_search_mvm_mannup_tour();
-    search_mvm_mannup_tour_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  }
-  // @@protoc_insertion_point(field_set_allocated:CSOTFParty.search_mvm_mannup_tour)
-}
-
-// repeated string search_mvm_missions = 31;
-inline int CSOTFParty::search_mvm_missions_size() const {
-  return search_mvm_missions_.size();
-}
-inline void CSOTFParty::clear_search_mvm_missions() {
-  search_mvm_missions_.Clear();
-}
-inline const ::std::string& CSOTFParty::search_mvm_missions(int index) const {
-  // @@protoc_insertion_point(field_get:CSOTFParty.search_mvm_missions)
-  return search_mvm_missions_.Get(index);
-}
-inline ::std::string* CSOTFParty::mutable_search_mvm_missions(int index) {
-  // @@protoc_insertion_point(field_mutable:CSOTFParty.search_mvm_missions)
-  return search_mvm_missions_.Mutable(index);
-}
-inline void CSOTFParty::set_search_mvm_missions(int index, const ::std::string& value) {
-  // @@protoc_insertion_point(field_set:CSOTFParty.search_mvm_missions)
-  search_mvm_missions_.Mutable(index)->assign(value);
-}
-inline void CSOTFParty::set_search_mvm_missions(int index, const char* value) {
-  search_mvm_missions_.Mutable(index)->assign(value);
-  // @@protoc_insertion_point(field_set_char:CSOTFParty.search_mvm_missions)
-}
-inline void CSOTFParty::set_search_mvm_missions(int index, const char* value, size_t size) {
-  search_mvm_missions_.Mutable(index)->assign(
-    reinterpret_cast<const char*>(value), size);
-  // @@protoc_insertion_point(field_set_pointer:CSOTFParty.search_mvm_missions)
-}
-inline ::std::string* CSOTFParty::add_search_mvm_missions() {
-  return search_mvm_missions_.Add();
-}
-inline void CSOTFParty::add_search_mvm_missions(const ::std::string& value) {
-  search_mvm_missions_.Add()->assign(value);
-  // @@protoc_insertion_point(field_add:CSOTFParty.search_mvm_missions)
-}
-inline void CSOTFParty::add_search_mvm_missions(const char* value) {
-  search_mvm_missions_.Add()->assign(value);
-  // @@protoc_insertion_point(field_add_char:CSOTFParty.search_mvm_missions)
-}
-inline void CSOTFParty::add_search_mvm_missions(const char* value, size_t size) {
-  search_mvm_missions_.Add()->assign(reinterpret_cast<const char*>(value), size);
-  // @@protoc_insertion_point(field_add_pointer:CSOTFParty.search_mvm_missions)
-}
-inline const ::google::protobuf::RepeatedPtrField< ::std::string>&
-CSOTFParty::search_mvm_missions() const {
-  // @@protoc_insertion_point(field_list:CSOTFParty.search_mvm_missions)
-  return search_mvm_missions_;
-}
-inline ::google::protobuf::RepeatedPtrField< ::std::string>*
-CSOTFParty::mutable_search_mvm_missions() {
-  // @@protoc_insertion_point(field_mutable_list:CSOTFParty.search_mvm_missions)
-  return &search_mvm_missions_;
-}
-
-// optional bool search_play_for_bragging_rights = 26;
-inline bool CSOTFParty::has_search_play_for_bragging_rights() const {
-  return (_has_bits_[0] & 0x00008000u) != 0;
-}
-inline void CSOTFParty::set_has_search_play_for_bragging_rights() {
-  _has_bits_[0] |= 0x00008000u;
-}
-inline void CSOTFParty::clear_has_search_play_for_bragging_rights() {
-  _has_bits_[0] &= ~0x00008000u;
-}
-inline void CSOTFParty::clear_search_play_for_bragging_rights() {
-  search_play_for_bragging_rights_ = false;
-  clear_has_search_play_for_bragging_rights();
-}
-inline bool CSOTFParty::search_play_for_bragging_rights() const {
-  // @@protoc_insertion_point(field_get:CSOTFParty.search_play_for_bragging_rights)
-  return search_play_for_bragging_rights_;
-}
-inline void CSOTFParty::set_search_play_for_bragging_rights(bool value) {
-  set_has_search_play_for_bragging_rights();
-  search_play_for_bragging_rights_ = value;
-  // @@protoc_insertion_point(field_set:CSOTFParty.search_play_for_bragging_rights)
-}
-
-// optional uint32 search_quickplay_game_type = 28;
-inline bool CSOTFParty::has_search_quickplay_game_type() const {
-  return (_has_bits_[0] & 0x00010000u) != 0;
-}
-inline void CSOTFParty::set_has_search_quickplay_game_type() {
-  _has_bits_[0] |= 0x00010000u;
-}
-inline void CSOTFParty::clear_has_search_quickplay_game_type() {
-  _has_bits_[0] &= ~0x00010000u;
-}
-inline void CSOTFParty::clear_search_quickplay_game_type() {
-  search_quickplay_game_type_ = 0u;
-  clear_has_search_quickplay_game_type();
-}
-inline ::google::protobuf::uint32 CSOTFParty::search_quickplay_game_type() const {
-  // @@protoc_insertion_point(field_get:CSOTFParty.search_quickplay_game_type)
-  return search_quickplay_game_type_;
-}
-inline void CSOTFParty::set_search_quickplay_game_type(::google::protobuf::uint32 value) {
-  set_has_search_quickplay_game_type();
-  search_quickplay_game_type_ = value;
-  // @@protoc_insertion_point(field_set:CSOTFParty.search_quickplay_game_type)
-}
-
-// optional uint32 search_ladder_game_type = 33;
-inline bool CSOTFParty::has_search_ladder_game_type() const {
-  return (_has_bits_[0] & 0x00020000u) != 0;
-}
-inline void CSOTFParty::set_has_search_ladder_game_type() {
-  _has_bits_[0] |= 0x00020000u;
-}
-inline void CSOTFParty::clear_has_search_ladder_game_type() {
-  _has_bits_[0] &= ~0x00020000u;
-}
-inline void CSOTFParty::clear_search_ladder_game_type() {
-  search_ladder_game_type_ = 0u;
-  clear_has_search_ladder_game_type();
-}
-inline ::google::protobuf::uint32 CSOTFParty::search_ladder_game_type() const {
-  // @@protoc_insertion_point(field_get:CSOTFParty.search_ladder_game_type)
-  return search_ladder_game_type_;
-}
-inline void CSOTFParty::set_search_ladder_game_type(::google::protobuf::uint32 value) {
-  set_has_search_ladder_game_type();
-  search_ladder_game_type_ = value;
-  // @@protoc_insertion_point(field_set:CSOTFParty.search_ladder_game_type)
-}
-
-// optional .CMsgCasualMatchmakingSearchCriteria search_casual = 34;
-inline bool CSOTFParty::has_search_casual() const {
-  return (_has_bits_[0] & 0x00040000u) != 0;
-}
-inline void CSOTFParty::set_has_search_casual() {
-  _has_bits_[0] |= 0x00040000u;
-}
-inline void CSOTFParty::clear_has_search_casual() {
-  _has_bits_[0] &= ~0x00040000u;
-}
-inline void CSOTFParty::clear_search_casual() {
-  if (search_casual_ != NULL) search_casual_->::CMsgCasualMatchmakingSearchCriteria::Clear();
-  clear_has_search_casual();
-}
-inline const ::CMsgCasualMatchmakingSearchCriteria& CSOTFParty::search_casual() const {
-  // @@protoc_insertion_point(field_get:CSOTFParty.search_casual)
-  return search_casual_ != NULL ? *search_casual_ : *default_instance_->search_casual_;
-}
-inline ::CMsgCasualMatchmakingSearchCriteria* CSOTFParty::mutable_search_casual() {
-  set_has_search_casual();
-  if (search_casual_ == NULL) search_casual_ = new ::CMsgCasualMatchmakingSearchCriteria;
-  // @@protoc_insertion_point(field_mutable:CSOTFParty.search_casual)
-  return search_casual_;
-}
-inline ::CMsgCasualMatchmakingSearchCriteria* CSOTFParty::release_search_casual() {
-  clear_has_search_casual();
-  ::CMsgCasualMatchmakingSearchCriteria* temp = search_casual_;
-  search_casual_ = NULL;
+inline void CSOTFParty::clear_group_criteria() {
+  if (group_criteria_ != NULL) group_criteria_->::CTFGroupMatchCriteriaProto::Clear();
+  clear_has_group_criteria();
+}
+inline const ::CTFGroupMatchCriteriaProto& CSOTFParty::group_criteria() const {
+  // @@protoc_insertion_point(field_get:CSOTFParty.group_criteria)
+  return group_criteria_ != NULL ? *group_criteria_ : *default_instance_->group_criteria_;
+}
+inline ::CTFGroupMatchCriteriaProto* CSOTFParty::mutable_group_criteria() {
+  set_has_group_criteria();
+  if (group_criteria_ == NULL) group_criteria_ = new ::CTFGroupMatchCriteriaProto;
+  // @@protoc_insertion_point(field_mutable:CSOTFParty.group_criteria)
+  return group_criteria_;
+}
+inline ::CTFGroupMatchCriteriaProto* CSOTFParty::release_group_criteria() {
+  clear_has_group_criteria();
+  ::CTFGroupMatchCriteriaProto* temp = group_criteria_;
+  group_criteria_ = NULL;
   return temp;
 }
-inline void CSOTFParty::set_allocated_search_casual(::CMsgCasualMatchmakingSearchCriteria* search_casual) {
-  delete search_casual_;
-  search_casual_ = search_casual;
-  if (search_casual) {
-    set_has_search_casual();
+inline void CSOTFParty::set_allocated_group_criteria(::CTFGroupMatchCriteriaProto* group_criteria) {
+  delete group_criteria_;
+  group_criteria_ = group_criteria;
+  if (group_criteria) {
+    set_has_group_criteria();
   } else {
-    clear_has_search_casual();
+    clear_has_group_criteria();
   }
-  // @@protoc_insertion_point(field_set_allocated:CSOTFParty.search_casual)
+  // @@protoc_insertion_point(field_set_allocated:CSOTFParty.group_criteria)
 }
 
-// optional uint32 custom_ping_tolerance = 36;
-inline bool CSOTFParty::has_custom_ping_tolerance() const {
-  return (_has_bits_[0] & 0x00080000u) != 0;
+// optional uint32 casual_banned_time = 18;
+inline bool CSOTFParty::has_casual_banned_time() const {
+  return (_has_bits_[0] & 0x00000100u) != 0;
 }
-inline void CSOTFParty::set_has_custom_ping_tolerance() {
-  _has_bits_[0] |= 0x00080000u;
+inline void CSOTFParty::set_has_casual_banned_time() {
+  _has_bits_[0] |= 0x00000100u;
 }
-inline void CSOTFParty::clear_has_custom_ping_tolerance() {
-  _has_bits_[0] &= ~0x00080000u;
+inline void CSOTFParty::clear_has_casual_banned_time() {
+  _has_bits_[0] &= ~0x00000100u;
 }
-inline void CSOTFParty::clear_custom_ping_tolerance() {
-  custom_ping_tolerance_ = 0u;
-  clear_has_custom_ping_tolerance();
+inline void CSOTFParty::clear_casual_banned_time() {
+  casual_banned_time_ = 0u;
+  clear_has_casual_banned_time();
 }
-inline ::google::protobuf::uint32 CSOTFParty::custom_ping_tolerance() const {
-  // @@protoc_insertion_point(field_get:CSOTFParty.custom_ping_tolerance)
-  return custom_ping_tolerance_;
+inline ::google::protobuf::uint32 CSOTFParty::casual_banned_time() const {
+  // @@protoc_insertion_point(field_get:CSOTFParty.casual_banned_time)
+  return casual_banned_time_;
 }
-inline void CSOTFParty::set_custom_ping_tolerance(::google::protobuf::uint32 value) {
-  set_has_custom_ping_tolerance();
-  custom_ping_tolerance_ = value;
-  // @@protoc_insertion_point(field_set:CSOTFParty.custom_ping_tolerance)
-}
-
-// optional uint32 matchmaking_ban_time = 18;
-inline bool CSOTFParty::has_matchmaking_ban_time() const {
-  return (_has_bits_[0] & 0x00100000u) != 0;
-}
-inline void CSOTFParty::set_has_matchmaking_ban_time() {
-  _has_bits_[0] |= 0x00100000u;
-}
-inline void CSOTFParty::clear_has_matchmaking_ban_time() {
-  _has_bits_[0] &= ~0x00100000u;
-}
-inline void CSOTFParty::clear_matchmaking_ban_time() {
-  matchmaking_ban_time_ = 0u;
-  clear_has_matchmaking_ban_time();
-}
-inline ::google::protobuf::uint32 CSOTFParty::matchmaking_ban_time() const {
-  // @@protoc_insertion_point(field_get:CSOTFParty.matchmaking_ban_time)
-  return matchmaking_ban_time_;
-}
-inline void CSOTFParty::set_matchmaking_ban_time(::google::protobuf::uint32 value) {
-  set_has_matchmaking_ban_time();
-  matchmaking_ban_time_ = value;
-  // @@protoc_insertion_point(field_set:CSOTFParty.matchmaking_ban_time)
+inline void CSOTFParty::set_casual_banned_time(::google::protobuf::uint32 value) {
+  set_has_casual_banned_time();
+  casual_banned_time_ = value;
+  // @@protoc_insertion_point(field_set:CSOTFParty.casual_banned_time)
 }
 
-// optional uint32 matchmaking_ban_account_id = 19;
-inline bool CSOTFParty::has_matchmaking_ban_account_id() const {
-  return (_has_bits_[0] & 0x00200000u) != 0;
+// optional uint32 casual_low_priority_time = 20;
+inline bool CSOTFParty::has_casual_low_priority_time() const {
+  return (_has_bits_[0] & 0x00000200u) != 0;
 }
-inline void CSOTFParty::set_has_matchmaking_ban_account_id() {
-  _has_bits_[0] |= 0x00200000u;
+inline void CSOTFParty::set_has_casual_low_priority_time() {
+  _has_bits_[0] |= 0x00000200u;
 }
-inline void CSOTFParty::clear_has_matchmaking_ban_account_id() {
-  _has_bits_[0] &= ~0x00200000u;
+inline void CSOTFParty::clear_has_casual_low_priority_time() {
+  _has_bits_[0] &= ~0x00000200u;
 }
-inline void CSOTFParty::clear_matchmaking_ban_account_id() {
-  matchmaking_ban_account_id_ = 0u;
-  clear_has_matchmaking_ban_account_id();
+inline void CSOTFParty::clear_casual_low_priority_time() {
+  casual_low_priority_time_ = 0u;
+  clear_has_casual_low_priority_time();
 }
-inline ::google::protobuf::uint32 CSOTFParty::matchmaking_ban_account_id() const {
-  // @@protoc_insertion_point(field_get:CSOTFParty.matchmaking_ban_account_id)
-  return matchmaking_ban_account_id_;
+inline ::google::protobuf::uint32 CSOTFParty::casual_low_priority_time() const {
+  // @@protoc_insertion_point(field_get:CSOTFParty.casual_low_priority_time)
+  return casual_low_priority_time_;
 }
-inline void CSOTFParty::set_matchmaking_ban_account_id(::google::protobuf::uint32 value) {
-  set_has_matchmaking_ban_account_id();
-  matchmaking_ban_account_id_ = value;
-  // @@protoc_insertion_point(field_set:CSOTFParty.matchmaking_ban_account_id)
+inline void CSOTFParty::set_casual_low_priority_time(::google::protobuf::uint32 value) {
+  set_has_casual_low_priority_time();
+  casual_low_priority_time_ = value;
+  // @@protoc_insertion_point(field_set:CSOTFParty.casual_low_priority_time)
 }
 
-// optional uint32 matchmaking_low_priority_time = 20;
-inline bool CSOTFParty::has_matchmaking_low_priority_time() const {
-  return (_has_bits_[0] & 0x00400000u) != 0;
+// optional uint32 ranked_banned_time = 41;
+inline bool CSOTFParty::has_ranked_banned_time() const {
+  return (_has_bits_[0] & 0x00000400u) != 0;
 }
-inline void CSOTFParty::set_has_matchmaking_low_priority_time() {
-  _has_bits_[0] |= 0x00400000u;
+inline void CSOTFParty::set_has_ranked_banned_time() {
+  _has_bits_[0] |= 0x00000400u;
 }
-inline void CSOTFParty::clear_has_matchmaking_low_priority_time() {
-  _has_bits_[0] &= ~0x00400000u;
+inline void CSOTFParty::clear_has_ranked_banned_time() {
+  _has_bits_[0] &= ~0x00000400u;
 }
-inline void CSOTFParty::clear_matchmaking_low_priority_time() {
-  matchmaking_low_priority_time_ = 0u;
-  clear_has_matchmaking_low_priority_time();
+inline void CSOTFParty::clear_ranked_banned_time() {
+  ranked_banned_time_ = 0u;
+  clear_has_ranked_banned_time();
 }
-inline ::google::protobuf::uint32 CSOTFParty::matchmaking_low_priority_time() const {
-  // @@protoc_insertion_point(field_get:CSOTFParty.matchmaking_low_priority_time)
-  return matchmaking_low_priority_time_;
+inline ::google::protobuf::uint32 CSOTFParty::ranked_banned_time() const {
+  // @@protoc_insertion_point(field_get:CSOTFParty.ranked_banned_time)
+  return ranked_banned_time_;
 }
-inline void CSOTFParty::set_matchmaking_low_priority_time(::google::protobuf::uint32 value) {
-  set_has_matchmaking_low_priority_time();
-  matchmaking_low_priority_time_ = value;
-  // @@protoc_insertion_point(field_set:CSOTFParty.matchmaking_low_priority_time)
+inline void CSOTFParty::set_ranked_banned_time(::google::protobuf::uint32 value) {
+  set_has_ranked_banned_time();
+  ranked_banned_time_ = value;
+  // @@protoc_insertion_point(field_set:CSOTFParty.ranked_banned_time)
+}
+
+// optional uint32 ranked_low_priority_time = 42;
+inline bool CSOTFParty::has_ranked_low_priority_time() const {
+  return (_has_bits_[0] & 0x00000800u) != 0;
+}
+inline void CSOTFParty::set_has_ranked_low_priority_time() {
+  _has_bits_[0] |= 0x00000800u;
+}
+inline void CSOTFParty::clear_has_ranked_low_priority_time() {
+  _has_bits_[0] &= ~0x00000800u;
+}
+inline void CSOTFParty::clear_ranked_low_priority_time() {
+  ranked_low_priority_time_ = 0u;
+  clear_has_ranked_low_priority_time();
+}
+inline ::google::protobuf::uint32 CSOTFParty::ranked_low_priority_time() const {
+  // @@protoc_insertion_point(field_get:CSOTFParty.ranked_low_priority_time)
+  return ranked_low_priority_time_;
+}
+inline void CSOTFParty::set_ranked_low_priority_time(::google::protobuf::uint32 value) {
+  set_has_ranked_low_priority_time();
+  ranked_low_priority_time_ = value;
+  // @@protoc_insertion_point(field_set:CSOTFParty.ranked_low_priority_time)
+}
+
+// optional .TFSyncedMMUIState leader_ui_state = 44;
+inline bool CSOTFParty::has_leader_ui_state() const {
+  return (_has_bits_[0] & 0x00001000u) != 0;
+}
+inline void CSOTFParty::set_has_leader_ui_state() {
+  _has_bits_[0] |= 0x00001000u;
+}
+inline void CSOTFParty::clear_has_leader_ui_state() {
+  _has_bits_[0] &= ~0x00001000u;
+}
+inline void CSOTFParty::clear_leader_ui_state() {
+  if (leader_ui_state_ != NULL) leader_ui_state_->::TFSyncedMMUIState::Clear();
+  clear_has_leader_ui_state();
+}
+inline const ::TFSyncedMMUIState& CSOTFParty::leader_ui_state() const {
+  // @@protoc_insertion_point(field_get:CSOTFParty.leader_ui_state)
+  return leader_ui_state_ != NULL ? *leader_ui_state_ : *default_instance_->leader_ui_state_;
+}
+inline ::TFSyncedMMUIState* CSOTFParty::mutable_leader_ui_state() {
+  set_has_leader_ui_state();
+  if (leader_ui_state_ == NULL) leader_ui_state_ = new ::TFSyncedMMUIState;
+  // @@protoc_insertion_point(field_mutable:CSOTFParty.leader_ui_state)
+  return leader_ui_state_;
+}
+inline ::TFSyncedMMUIState* CSOTFParty::release_leader_ui_state() {
+  clear_has_leader_ui_state();
+  ::TFSyncedMMUIState* temp = leader_ui_state_;
+  leader_ui_state_ = NULL;
+  return temp;
+}
+inline void CSOTFParty::set_allocated_leader_ui_state(::TFSyncedMMUIState* leader_ui_state) {
+  delete leader_ui_state_;
+  leader_ui_state_ = leader_ui_state;
+  if (leader_ui_state) {
+    set_has_leader_ui_state();
+  } else {
+    clear_has_leader_ui_state();
+  }
+  // @@protoc_insertion_point(field_set_allocated:CSOTFParty.leader_ui_state)
+}
+
+// repeated .TFPendingPartyMember pending_members = 39;
+inline int CSOTFParty::pending_members_size() const {
+  return pending_members_.size();
+}
+inline void CSOTFParty::clear_pending_members() {
+  pending_members_.Clear();
+}
+inline const ::TFPendingPartyMember& CSOTFParty::pending_members(int index) const {
+  // @@protoc_insertion_point(field_get:CSOTFParty.pending_members)
+  return pending_members_.Get(index);
+}
+inline ::TFPendingPartyMember* CSOTFParty::mutable_pending_members(int index) {
+  // @@protoc_insertion_point(field_mutable:CSOTFParty.pending_members)
+  return pending_members_.Mutable(index);
+}
+inline ::TFPendingPartyMember* CSOTFParty::add_pending_members() {
+  // @@protoc_insertion_point(field_add:CSOTFParty.pending_members)
+  return pending_members_.Add();
+}
+inline const ::google::protobuf::RepeatedPtrField< ::TFPendingPartyMember >&
+CSOTFParty::pending_members() const {
+  // @@protoc_insertion_point(field_list:CSOTFParty.pending_members)
+  return pending_members_;
+}
+inline ::google::protobuf::RepeatedPtrField< ::TFPendingPartyMember >*
+CSOTFParty::mutable_pending_members() {
+  // @@protoc_insertion_point(field_mutable_list:CSOTFParty.pending_members)
+  return &pending_members_;
 }
 
 // -------------------------------------------------------------------
 
 // CSOTFPartyInvite_PartyMember
 
-// optional string name = 1;
-inline bool CSOTFPartyInvite_PartyMember::has_name() const {
+// optional fixed64 steamid = 2;
+inline bool CSOTFPartyInvite_PartyMember::has_steamid() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
-inline void CSOTFPartyInvite_PartyMember::set_has_name() {
+inline void CSOTFPartyInvite_PartyMember::set_has_steamid() {
   _has_bits_[0] |= 0x00000001u;
 }
-inline void CSOTFPartyInvite_PartyMember::clear_has_name() {
+inline void CSOTFPartyInvite_PartyMember::clear_has_steamid() {
   _has_bits_[0] &= ~0x00000001u;
 }
-inline void CSOTFPartyInvite_PartyMember::clear_name() {
-  if (name_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    name_->clear();
-  }
-  clear_has_name();
+inline void CSOTFPartyInvite_PartyMember::clear_steamid() {
+  steamid_ = GOOGLE_ULONGLONG(0);
+  clear_has_steamid();
 }
-inline const ::std::string& CSOTFPartyInvite_PartyMember::name() const {
-  // @@protoc_insertion_point(field_get:CSOTFPartyInvite.PartyMember.name)
-  return *name_;
+inline ::google::protobuf::uint64 CSOTFPartyInvite_PartyMember::steamid() const {
+  // @@protoc_insertion_point(field_get:CSOTFPartyInvite.PartyMember.steamid)
+  return steamid_;
 }
-inline void CSOTFPartyInvite_PartyMember::set_name(const ::std::string& value) {
-  set_has_name();
-  if (name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    name_ = new ::std::string;
-  }
-  name_->assign(value);
-  // @@protoc_insertion_point(field_set:CSOTFPartyInvite.PartyMember.name)
-}
-inline void CSOTFPartyInvite_PartyMember::set_name(const char* value) {
-  set_has_name();
-  if (name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    name_ = new ::std::string;
-  }
-  name_->assign(value);
-  // @@protoc_insertion_point(field_set_char:CSOTFPartyInvite.PartyMember.name)
-}
-inline void CSOTFPartyInvite_PartyMember::set_name(const char* value, size_t size) {
-  set_has_name();
-  if (name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    name_ = new ::std::string;
-  }
-  name_->assign(reinterpret_cast<const char*>(value), size);
-  // @@protoc_insertion_point(field_set_pointer:CSOTFPartyInvite.PartyMember.name)
-}
-inline ::std::string* CSOTFPartyInvite_PartyMember::mutable_name() {
-  set_has_name();
-  if (name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    name_ = new ::std::string;
-  }
-  // @@protoc_insertion_point(field_mutable:CSOTFPartyInvite.PartyMember.name)
-  return name_;
-}
-inline ::std::string* CSOTFPartyInvite_PartyMember::release_name() {
-  clear_has_name();
-  if (name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    return NULL;
-  } else {
-    ::std::string* temp = name_;
-    name_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-    return temp;
-  }
-}
-inline void CSOTFPartyInvite_PartyMember::set_allocated_name(::std::string* name) {
-  if (name_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    delete name_;
-  }
-  if (name) {
-    set_has_name();
-    name_ = name;
-  } else {
-    clear_has_name();
-    name_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  }
-  // @@protoc_insertion_point(field_set_allocated:CSOTFPartyInvite.PartyMember.name)
-}
-
-// optional fixed64 steam_id = 2;
-inline bool CSOTFPartyInvite_PartyMember::has_steam_id() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
-}
-inline void CSOTFPartyInvite_PartyMember::set_has_steam_id() {
-  _has_bits_[0] |= 0x00000002u;
-}
-inline void CSOTFPartyInvite_PartyMember::clear_has_steam_id() {
-  _has_bits_[0] &= ~0x00000002u;
-}
-inline void CSOTFPartyInvite_PartyMember::clear_steam_id() {
-  steam_id_ = GOOGLE_ULONGLONG(0);
-  clear_has_steam_id();
-}
-inline ::google::protobuf::uint64 CSOTFPartyInvite_PartyMember::steam_id() const {
-  // @@protoc_insertion_point(field_get:CSOTFPartyInvite.PartyMember.steam_id)
-  return steam_id_;
-}
-inline void CSOTFPartyInvite_PartyMember::set_steam_id(::google::protobuf::uint64 value) {
-  set_has_steam_id();
-  steam_id_ = value;
-  // @@protoc_insertion_point(field_set:CSOTFPartyInvite.PartyMember.steam_id)
-}
-
-// optional uint32 avatar = 3;
-inline bool CSOTFPartyInvite_PartyMember::has_avatar() const {
-  return (_has_bits_[0] & 0x00000004u) != 0;
-}
-inline void CSOTFPartyInvite_PartyMember::set_has_avatar() {
-  _has_bits_[0] |= 0x00000004u;
-}
-inline void CSOTFPartyInvite_PartyMember::clear_has_avatar() {
-  _has_bits_[0] &= ~0x00000004u;
-}
-inline void CSOTFPartyInvite_PartyMember::clear_avatar() {
-  avatar_ = 0u;
-  clear_has_avatar();
-}
-inline ::google::protobuf::uint32 CSOTFPartyInvite_PartyMember::avatar() const {
-  // @@protoc_insertion_point(field_get:CSOTFPartyInvite.PartyMember.avatar)
-  return avatar_;
-}
-inline void CSOTFPartyInvite_PartyMember::set_avatar(::google::protobuf::uint32 value) {
-  set_has_avatar();
-  avatar_ = value;
-  // @@protoc_insertion_point(field_set:CSOTFPartyInvite.PartyMember.avatar)
+inline void CSOTFPartyInvite_PartyMember::set_steamid(::google::protobuf::uint64 value) {
+  set_has_steamid();
+  steamid_ = value;
+  // @@protoc_insertion_point(field_set:CSOTFPartyInvite.PartyMember.steamid)
 }
 
 // -------------------------------------------------------------------
@@ -24650,104 +28240,28 @@ inline void CSOTFPartyInvite::set_group_id(::google::protobuf::uint64 value) {
   // @@protoc_insertion_point(field_set:CSOTFPartyInvite.group_id)
 }
 
-// optional fixed64 sender_id = 2;
-inline bool CSOTFPartyInvite::has_sender_id() const {
+// optional fixed64 inviter = 2;
+inline bool CSOTFPartyInvite::has_inviter() const {
   return (_has_bits_[0] & 0x00000002u) != 0;
 }
-inline void CSOTFPartyInvite::set_has_sender_id() {
+inline void CSOTFPartyInvite::set_has_inviter() {
   _has_bits_[0] |= 0x00000002u;
 }
-inline void CSOTFPartyInvite::clear_has_sender_id() {
+inline void CSOTFPartyInvite::clear_has_inviter() {
   _has_bits_[0] &= ~0x00000002u;
 }
-inline void CSOTFPartyInvite::clear_sender_id() {
-  sender_id_ = GOOGLE_ULONGLONG(0);
-  clear_has_sender_id();
+inline void CSOTFPartyInvite::clear_inviter() {
+  inviter_ = GOOGLE_ULONGLONG(0);
+  clear_has_inviter();
 }
-inline ::google::protobuf::uint64 CSOTFPartyInvite::sender_id() const {
-  // @@protoc_insertion_point(field_get:CSOTFPartyInvite.sender_id)
-  return sender_id_;
+inline ::google::protobuf::uint64 CSOTFPartyInvite::inviter() const {
+  // @@protoc_insertion_point(field_get:CSOTFPartyInvite.inviter)
+  return inviter_;
 }
-inline void CSOTFPartyInvite::set_sender_id(::google::protobuf::uint64 value) {
-  set_has_sender_id();
-  sender_id_ = value;
-  // @@protoc_insertion_point(field_set:CSOTFPartyInvite.sender_id)
-}
-
-// optional string sender_name = 3;
-inline bool CSOTFPartyInvite::has_sender_name() const {
-  return (_has_bits_[0] & 0x00000004u) != 0;
-}
-inline void CSOTFPartyInvite::set_has_sender_name() {
-  _has_bits_[0] |= 0x00000004u;
-}
-inline void CSOTFPartyInvite::clear_has_sender_name() {
-  _has_bits_[0] &= ~0x00000004u;
-}
-inline void CSOTFPartyInvite::clear_sender_name() {
-  if (sender_name_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    sender_name_->clear();
-  }
-  clear_has_sender_name();
-}
-inline const ::std::string& CSOTFPartyInvite::sender_name() const {
-  // @@protoc_insertion_point(field_get:CSOTFPartyInvite.sender_name)
-  return *sender_name_;
-}
-inline void CSOTFPartyInvite::set_sender_name(const ::std::string& value) {
-  set_has_sender_name();
-  if (sender_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    sender_name_ = new ::std::string;
-  }
-  sender_name_->assign(value);
-  // @@protoc_insertion_point(field_set:CSOTFPartyInvite.sender_name)
-}
-inline void CSOTFPartyInvite::set_sender_name(const char* value) {
-  set_has_sender_name();
-  if (sender_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    sender_name_ = new ::std::string;
-  }
-  sender_name_->assign(value);
-  // @@protoc_insertion_point(field_set_char:CSOTFPartyInvite.sender_name)
-}
-inline void CSOTFPartyInvite::set_sender_name(const char* value, size_t size) {
-  set_has_sender_name();
-  if (sender_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    sender_name_ = new ::std::string;
-  }
-  sender_name_->assign(reinterpret_cast<const char*>(value), size);
-  // @@protoc_insertion_point(field_set_pointer:CSOTFPartyInvite.sender_name)
-}
-inline ::std::string* CSOTFPartyInvite::mutable_sender_name() {
-  set_has_sender_name();
-  if (sender_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    sender_name_ = new ::std::string;
-  }
-  // @@protoc_insertion_point(field_mutable:CSOTFPartyInvite.sender_name)
-  return sender_name_;
-}
-inline ::std::string* CSOTFPartyInvite::release_sender_name() {
-  clear_has_sender_name();
-  if (sender_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    return NULL;
-  } else {
-    ::std::string* temp = sender_name_;
-    sender_name_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-    return temp;
-  }
-}
-inline void CSOTFPartyInvite::set_allocated_sender_name(::std::string* sender_name) {
-  if (sender_name_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    delete sender_name_;
-  }
-  if (sender_name) {
-    set_has_sender_name();
-    sender_name_ = sender_name;
-  } else {
-    clear_has_sender_name();
-    sender_name_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  }
-  // @@protoc_insertion_point(field_set_allocated:CSOTFPartyInvite.sender_name)
+inline void CSOTFPartyInvite::set_inviter(::google::protobuf::uint64 value) {
+  set_has_inviter();
+  inviter_ = value;
+  // @@protoc_insertion_point(field_set:CSOTFPartyInvite.inviter)
 }
 
 // repeated .CSOTFPartyInvite.PartyMember members = 4;
@@ -24780,137 +28294,162 @@ CSOTFPartyInvite::mutable_members() {
   return &members_;
 }
 
+// optional .CSOTFPartyInvite.Type type = 5;
+inline bool CSOTFPartyInvite::has_type() const {
+  return (_has_bits_[0] & 0x00000008u) != 0;
+}
+inline void CSOTFPartyInvite::set_has_type() {
+  _has_bits_[0] |= 0x00000008u;
+}
+inline void CSOTFPartyInvite::clear_has_type() {
+  _has_bits_[0] &= ~0x00000008u;
+}
+inline void CSOTFPartyInvite::clear_type() {
+  type_ = 1;
+  clear_has_type();
+}
+inline ::CSOTFPartyInvite_Type CSOTFPartyInvite::type() const {
+  // @@protoc_insertion_point(field_get:CSOTFPartyInvite.type)
+  return static_cast< ::CSOTFPartyInvite_Type >(type_);
+}
+inline void CSOTFPartyInvite::set_type(::CSOTFPartyInvite_Type value) {
+  assert(::CSOTFPartyInvite_Type_IsValid(value));
+  set_has_type();
+  type_ = value;
+  // @@protoc_insertion_point(field_set:CSOTFPartyInvite.type)
+}
+
 // -------------------------------------------------------------------
 
-// CTFLobbyMember
+// CTFLobbyPlayerProto
 
 // optional fixed64 id = 1;
-inline bool CTFLobbyMember::has_id() const {
+inline bool CTFLobbyPlayerProto::has_id() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
-inline void CTFLobbyMember::set_has_id() {
+inline void CTFLobbyPlayerProto::set_has_id() {
   _has_bits_[0] |= 0x00000001u;
 }
-inline void CTFLobbyMember::clear_has_id() {
+inline void CTFLobbyPlayerProto::clear_has_id() {
   _has_bits_[0] &= ~0x00000001u;
 }
-inline void CTFLobbyMember::clear_id() {
+inline void CTFLobbyPlayerProto::clear_id() {
   id_ = GOOGLE_ULONGLONG(0);
   clear_has_id();
 }
-inline ::google::protobuf::uint64 CTFLobbyMember::id() const {
-  // @@protoc_insertion_point(field_get:CTFLobbyMember.id)
+inline ::google::protobuf::uint64 CTFLobbyPlayerProto::id() const {
+  // @@protoc_insertion_point(field_get:CTFLobbyPlayerProto.id)
   return id_;
 }
-inline void CTFLobbyMember::set_id(::google::protobuf::uint64 value) {
+inline void CTFLobbyPlayerProto::set_id(::google::protobuf::uint64 value) {
   set_has_id();
   id_ = value;
-  // @@protoc_insertion_point(field_set:CTFLobbyMember.id)
+  // @@protoc_insertion_point(field_set:CTFLobbyPlayerProto.id)
 }
 
 // optional .TF_GC_TEAM team = 3;
-inline bool CTFLobbyMember::has_team() const {
+inline bool CTFLobbyPlayerProto::has_team() const {
   return (_has_bits_[0] & 0x00000002u) != 0;
 }
-inline void CTFLobbyMember::set_has_team() {
+inline void CTFLobbyPlayerProto::set_has_team() {
   _has_bits_[0] |= 0x00000002u;
 }
-inline void CTFLobbyMember::clear_has_team() {
+inline void CTFLobbyPlayerProto::clear_has_team() {
   _has_bits_[0] &= ~0x00000002u;
 }
-inline void CTFLobbyMember::clear_team() {
+inline void CTFLobbyPlayerProto::clear_team() {
   team_ = 0;
   clear_has_team();
 }
-inline ::TF_GC_TEAM CTFLobbyMember::team() const {
-  // @@protoc_insertion_point(field_get:CTFLobbyMember.team)
+inline ::TF_GC_TEAM CTFLobbyPlayerProto::team() const {
+  // @@protoc_insertion_point(field_get:CTFLobbyPlayerProto.team)
   return static_cast< ::TF_GC_TEAM >(team_);
 }
-inline void CTFLobbyMember::set_team(::TF_GC_TEAM value) {
+inline void CTFLobbyPlayerProto::set_team(::TF_GC_TEAM value) {
   assert(::TF_GC_TEAM_IsValid(value));
   set_has_team();
   team_ = value;
-  // @@protoc_insertion_point(field_set:CTFLobbyMember.team)
+  // @@protoc_insertion_point(field_set:CTFLobbyPlayerProto.team)
 }
 
-// optional .CTFLobbyMember.ConnectState connect_state = 13;
-inline bool CTFLobbyMember::has_connect_state() const {
+// optional .CTFLobbyPlayerProto.ConnectState connect_state = 13;
+inline bool CTFLobbyPlayerProto::has_connect_state() const {
   return (_has_bits_[0] & 0x00000004u) != 0;
 }
-inline void CTFLobbyMember::set_has_connect_state() {
+inline void CTFLobbyPlayerProto::set_has_connect_state() {
   _has_bits_[0] |= 0x00000004u;
 }
-inline void CTFLobbyMember::clear_has_connect_state() {
+inline void CTFLobbyPlayerProto::clear_has_connect_state() {
   _has_bits_[0] &= ~0x00000004u;
 }
-inline void CTFLobbyMember::clear_connect_state() {
+inline void CTFLobbyPlayerProto::clear_connect_state() {
   connect_state_ = 0;
   clear_has_connect_state();
 }
-inline ::CTFLobbyMember_ConnectState CTFLobbyMember::connect_state() const {
-  // @@protoc_insertion_point(field_get:CTFLobbyMember.connect_state)
-  return static_cast< ::CTFLobbyMember_ConnectState >(connect_state_);
+inline ::CTFLobbyPlayerProto_ConnectState CTFLobbyPlayerProto::connect_state() const {
+  // @@protoc_insertion_point(field_get:CTFLobbyPlayerProto.connect_state)
+  return static_cast< ::CTFLobbyPlayerProto_ConnectState >(connect_state_);
 }
-inline void CTFLobbyMember::set_connect_state(::CTFLobbyMember_ConnectState value) {
-  assert(::CTFLobbyMember_ConnectState_IsValid(value));
+inline void CTFLobbyPlayerProto::set_connect_state(::CTFLobbyPlayerProto_ConnectState value) {
+  assert(::CTFLobbyPlayerProto_ConnectState_IsValid(value));
   set_has_connect_state();
   connect_state_ = value;
-  // @@protoc_insertion_point(field_set:CTFLobbyMember.connect_state)
+  // @@protoc_insertion_point(field_set:CTFLobbyPlayerProto.connect_state)
 }
 
 // optional string name = 6;
-inline bool CTFLobbyMember::has_name() const {
+inline bool CTFLobbyPlayerProto::has_name() const {
   return (_has_bits_[0] & 0x00000008u) != 0;
 }
-inline void CTFLobbyMember::set_has_name() {
+inline void CTFLobbyPlayerProto::set_has_name() {
   _has_bits_[0] |= 0x00000008u;
 }
-inline void CTFLobbyMember::clear_has_name() {
+inline void CTFLobbyPlayerProto::clear_has_name() {
   _has_bits_[0] &= ~0x00000008u;
 }
-inline void CTFLobbyMember::clear_name() {
+inline void CTFLobbyPlayerProto::clear_name() {
   if (name_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
     name_->clear();
   }
   clear_has_name();
 }
-inline const ::std::string& CTFLobbyMember::name() const {
-  // @@protoc_insertion_point(field_get:CTFLobbyMember.name)
+inline const ::std::string& CTFLobbyPlayerProto::name() const {
+  // @@protoc_insertion_point(field_get:CTFLobbyPlayerProto.name)
   return *name_;
 }
-inline void CTFLobbyMember::set_name(const ::std::string& value) {
+inline void CTFLobbyPlayerProto::set_name(const ::std::string& value) {
   set_has_name();
   if (name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
     name_ = new ::std::string;
   }
   name_->assign(value);
-  // @@protoc_insertion_point(field_set:CTFLobbyMember.name)
+  // @@protoc_insertion_point(field_set:CTFLobbyPlayerProto.name)
 }
-inline void CTFLobbyMember::set_name(const char* value) {
+inline void CTFLobbyPlayerProto::set_name(const char* value) {
   set_has_name();
   if (name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
     name_ = new ::std::string;
   }
   name_->assign(value);
-  // @@protoc_insertion_point(field_set_char:CTFLobbyMember.name)
+  // @@protoc_insertion_point(field_set_char:CTFLobbyPlayerProto.name)
 }
-inline void CTFLobbyMember::set_name(const char* value, size_t size) {
+inline void CTFLobbyPlayerProto::set_name(const char* value, size_t size) {
   set_has_name();
   if (name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
     name_ = new ::std::string;
   }
   name_->assign(reinterpret_cast<const char*>(value), size);
-  // @@protoc_insertion_point(field_set_pointer:CTFLobbyMember.name)
+  // @@protoc_insertion_point(field_set_pointer:CTFLobbyPlayerProto.name)
 }
-inline ::std::string* CTFLobbyMember::mutable_name() {
+inline ::std::string* CTFLobbyPlayerProto::mutable_name() {
   set_has_name();
   if (name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
     name_ = new ::std::string;
   }
-  // @@protoc_insertion_point(field_mutable:CTFLobbyMember.name)
+  // @@protoc_insertion_point(field_mutable:CTFLobbyPlayerProto.name)
   return name_;
 }
-inline ::std::string* CTFLobbyMember::release_name() {
+inline ::std::string* CTFLobbyPlayerProto::release_name() {
   clear_has_name();
   if (name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
     return NULL;
@@ -24920,7 +28459,7 @@ inline ::std::string* CTFLobbyMember::release_name() {
     return temp;
   }
 }
-inline void CTFLobbyMember::set_allocated_name(::std::string* name) {
+inline void CTFLobbyPlayerProto::set_allocated_name(::std::string* name) {
   if (name_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
     delete name_;
   }
@@ -24931,204 +28470,277 @@ inline void CTFLobbyMember::set_allocated_name(::std::string* name) {
     clear_has_name();
     name_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   }
-  // @@protoc_insertion_point(field_set_allocated:CTFLobbyMember.name)
+  // @@protoc_insertion_point(field_set_allocated:CTFLobbyPlayerProto.name)
 }
 
-// optional .TFLobbyReadyState ready_state = 11;
-inline bool CTFLobbyMember::has_ready_state() const {
+// optional uint64 original_party_id = 12;
+inline bool CTFLobbyPlayerProto::has_original_party_id() const {
   return (_has_bits_[0] & 0x00000010u) != 0;
 }
-inline void CTFLobbyMember::set_has_ready_state() {
+inline void CTFLobbyPlayerProto::set_has_original_party_id() {
   _has_bits_[0] |= 0x00000010u;
 }
-inline void CTFLobbyMember::clear_has_ready_state() {
+inline void CTFLobbyPlayerProto::clear_has_original_party_id() {
   _has_bits_[0] &= ~0x00000010u;
 }
-inline void CTFLobbyMember::clear_ready_state() {
-  ready_state_ = 0;
-  clear_has_ready_state();
+inline void CTFLobbyPlayerProto::clear_original_party_id() {
+  original_party_id_ = GOOGLE_ULONGLONG(0);
+  clear_has_original_party_id();
 }
-inline ::TFLobbyReadyState CTFLobbyMember::ready_state() const {
-  // @@protoc_insertion_point(field_get:CTFLobbyMember.ready_state)
-  return static_cast< ::TFLobbyReadyState >(ready_state_);
+inline ::google::protobuf::uint64 CTFLobbyPlayerProto::original_party_id() const {
+  // @@protoc_insertion_point(field_get:CTFLobbyPlayerProto.original_party_id)
+  return original_party_id_;
 }
-inline void CTFLobbyMember::set_ready_state(::TFLobbyReadyState value) {
-  assert(::TFLobbyReadyState_IsValid(value));
-  set_has_ready_state();
-  ready_state_ = value;
-  // @@protoc_insertion_point(field_set:CTFLobbyMember.ready_state)
-}
-
-// optional uint64 party_id = 12;
-inline bool CTFLobbyMember::has_party_id() const {
-  return (_has_bits_[0] & 0x00000020u) != 0;
-}
-inline void CTFLobbyMember::set_has_party_id() {
-  _has_bits_[0] |= 0x00000020u;
-}
-inline void CTFLobbyMember::clear_has_party_id() {
-  _has_bits_[0] &= ~0x00000020u;
-}
-inline void CTFLobbyMember::clear_party_id() {
-  party_id_ = GOOGLE_ULONGLONG(0);
-  clear_has_party_id();
-}
-inline ::google::protobuf::uint64 CTFLobbyMember::party_id() const {
-  // @@protoc_insertion_point(field_get:CTFLobbyMember.party_id)
-  return party_id_;
-}
-inline void CTFLobbyMember::set_party_id(::google::protobuf::uint64 value) {
-  set_has_party_id();
-  party_id_ = value;
-  // @@protoc_insertion_point(field_set:CTFLobbyMember.party_id)
+inline void CTFLobbyPlayerProto::set_original_party_id(::google::protobuf::uint64 value) {
+  set_has_original_party_id();
+  original_party_id_ = value;
+  // @@protoc_insertion_point(field_set:CTFLobbyPlayerProto.original_party_id)
 }
 
 // optional bool squad_surplus = 14;
-inline bool CTFLobbyMember::has_squad_surplus() const {
-  return (_has_bits_[0] & 0x00000040u) != 0;
+inline bool CTFLobbyPlayerProto::has_squad_surplus() const {
+  return (_has_bits_[0] & 0x00000020u) != 0;
 }
-inline void CTFLobbyMember::set_has_squad_surplus() {
-  _has_bits_[0] |= 0x00000040u;
+inline void CTFLobbyPlayerProto::set_has_squad_surplus() {
+  _has_bits_[0] |= 0x00000020u;
 }
-inline void CTFLobbyMember::clear_has_squad_surplus() {
-  _has_bits_[0] &= ~0x00000040u;
+inline void CTFLobbyPlayerProto::clear_has_squad_surplus() {
+  _has_bits_[0] &= ~0x00000020u;
 }
-inline void CTFLobbyMember::clear_squad_surplus() {
+inline void CTFLobbyPlayerProto::clear_squad_surplus() {
   squad_surplus_ = false;
   clear_has_squad_surplus();
 }
-inline bool CTFLobbyMember::squad_surplus() const {
-  // @@protoc_insertion_point(field_get:CTFLobbyMember.squad_surplus)
+inline bool CTFLobbyPlayerProto::squad_surplus() const {
+  // @@protoc_insertion_point(field_get:CTFLobbyPlayerProto.squad_surplus)
   return squad_surplus_;
 }
-inline void CTFLobbyMember::set_squad_surplus(bool value) {
+inline void CTFLobbyPlayerProto::set_squad_surplus(bool value) {
   set_has_squad_surplus();
   squad_surplus_ = value;
-  // @@protoc_insertion_point(field_set:CTFLobbyMember.squad_surplus)
+  // @@protoc_insertion_point(field_set:CTFLobbyPlayerProto.squad_surplus)
 }
 
 // optional uint32 badge_level = 15;
-inline bool CTFLobbyMember::has_badge_level() const {
-  return (_has_bits_[0] & 0x00000080u) != 0;
+inline bool CTFLobbyPlayerProto::has_badge_level() const {
+  return (_has_bits_[0] & 0x00000040u) != 0;
 }
-inline void CTFLobbyMember::set_has_badge_level() {
-  _has_bits_[0] |= 0x00000080u;
+inline void CTFLobbyPlayerProto::set_has_badge_level() {
+  _has_bits_[0] |= 0x00000040u;
 }
-inline void CTFLobbyMember::clear_has_badge_level() {
-  _has_bits_[0] &= ~0x00000080u;
+inline void CTFLobbyPlayerProto::clear_has_badge_level() {
+  _has_bits_[0] &= ~0x00000040u;
 }
-inline void CTFLobbyMember::clear_badge_level() {
+inline void CTFLobbyPlayerProto::clear_badge_level() {
   badge_level_ = 0u;
   clear_has_badge_level();
 }
-inline ::google::protobuf::uint32 CTFLobbyMember::badge_level() const {
-  // @@protoc_insertion_point(field_get:CTFLobbyMember.badge_level)
+inline ::google::protobuf::uint32 CTFLobbyPlayerProto::badge_level() const {
+  // @@protoc_insertion_point(field_get:CTFLobbyPlayerProto.badge_level)
   return badge_level_;
 }
-inline void CTFLobbyMember::set_badge_level(::google::protobuf::uint32 value) {
+inline void CTFLobbyPlayerProto::set_badge_level(::google::protobuf::uint32 value) {
   set_has_badge_level();
   badge_level_ = value;
-  // @@protoc_insertion_point(field_set:CTFLobbyMember.badge_level)
-}
-
-// optional uint32 skillrating = 16 [default = 10000];
-inline bool CTFLobbyMember::has_skillrating() const {
-  return (_has_bits_[0] & 0x00000100u) != 0;
-}
-inline void CTFLobbyMember::set_has_skillrating() {
-  _has_bits_[0] |= 0x00000100u;
-}
-inline void CTFLobbyMember::clear_has_skillrating() {
-  _has_bits_[0] &= ~0x00000100u;
-}
-inline void CTFLobbyMember::clear_skillrating() {
-  skillrating_ = 10000u;
-  clear_has_skillrating();
-}
-inline ::google::protobuf::uint32 CTFLobbyMember::skillrating() const {
-  // @@protoc_insertion_point(field_get:CTFLobbyMember.skillrating)
-  return skillrating_;
-}
-inline void CTFLobbyMember::set_skillrating(::google::protobuf::uint32 value) {
-  set_has_skillrating();
-  skillrating_ = value;
-  // @@protoc_insertion_point(field_set:CTFLobbyMember.skillrating)
+  // @@protoc_insertion_point(field_set:CTFLobbyPlayerProto.badge_level)
 }
 
 // optional uint32 last_connect_time = 17;
-inline bool CTFLobbyMember::has_last_connect_time() const {
-  return (_has_bits_[0] & 0x00000200u) != 0;
+inline bool CTFLobbyPlayerProto::has_last_connect_time() const {
+  return (_has_bits_[0] & 0x00000080u) != 0;
 }
-inline void CTFLobbyMember::set_has_last_connect_time() {
-  _has_bits_[0] |= 0x00000200u;
+inline void CTFLobbyPlayerProto::set_has_last_connect_time() {
+  _has_bits_[0] |= 0x00000080u;
 }
-inline void CTFLobbyMember::clear_has_last_connect_time() {
-  _has_bits_[0] &= ~0x00000200u;
+inline void CTFLobbyPlayerProto::clear_has_last_connect_time() {
+  _has_bits_[0] &= ~0x00000080u;
 }
-inline void CTFLobbyMember::clear_last_connect_time() {
+inline void CTFLobbyPlayerProto::clear_last_connect_time() {
   last_connect_time_ = 0u;
   clear_has_last_connect_time();
 }
-inline ::google::protobuf::uint32 CTFLobbyMember::last_connect_time() const {
-  // @@protoc_insertion_point(field_get:CTFLobbyMember.last_connect_time)
+inline ::google::protobuf::uint32 CTFLobbyPlayerProto::last_connect_time() const {
+  // @@protoc_insertion_point(field_get:CTFLobbyPlayerProto.last_connect_time)
   return last_connect_time_;
 }
-inline void CTFLobbyMember::set_last_connect_time(::google::protobuf::uint32 value) {
+inline void CTFLobbyPlayerProto::set_last_connect_time(::google::protobuf::uint32 value) {
   set_has_last_connect_time();
   last_connect_time_ = value;
-  // @@protoc_insertion_point(field_set:CTFLobbyMember.last_connect_time)
+  // @@protoc_insertion_point(field_set:CTFLobbyPlayerProto.last_connect_time)
+}
+
+// optional .CTFLobbyPlayerProto.Type type = 19;
+inline bool CTFLobbyPlayerProto::has_type() const {
+  return (_has_bits_[0] & 0x00000100u) != 0;
+}
+inline void CTFLobbyPlayerProto::set_has_type() {
+  _has_bits_[0] |= 0x00000100u;
+}
+inline void CTFLobbyPlayerProto::clear_has_type() {
+  _has_bits_[0] &= ~0x00000100u;
+}
+inline void CTFLobbyPlayerProto::clear_type() {
+  type_ = 0;
+  clear_has_type();
+}
+inline ::CTFLobbyPlayerProto_Type CTFLobbyPlayerProto::type() const {
+  // @@protoc_insertion_point(field_get:CTFLobbyPlayerProto.type)
+  return static_cast< ::CTFLobbyPlayerProto_Type >(type_);
+}
+inline void CTFLobbyPlayerProto::set_type(::CTFLobbyPlayerProto_Type value) {
+  assert(::CTFLobbyPlayerProto_Type_IsValid(value));
+  set_has_type();
+  type_ = value;
+  // @@protoc_insertion_point(field_set:CTFLobbyPlayerProto.type)
+}
+
+// optional double normalized_rating = 20;
+inline bool CTFLobbyPlayerProto::has_normalized_rating() const {
+  return (_has_bits_[0] & 0x00000200u) != 0;
+}
+inline void CTFLobbyPlayerProto::set_has_normalized_rating() {
+  _has_bits_[0] |= 0x00000200u;
+}
+inline void CTFLobbyPlayerProto::clear_has_normalized_rating() {
+  _has_bits_[0] &= ~0x00000200u;
+}
+inline void CTFLobbyPlayerProto::clear_normalized_rating() {
+  normalized_rating_ = 0;
+  clear_has_normalized_rating();
+}
+inline double CTFLobbyPlayerProto::normalized_rating() const {
+  // @@protoc_insertion_point(field_get:CTFLobbyPlayerProto.normalized_rating)
+  return normalized_rating_;
+}
+inline void CTFLobbyPlayerProto::set_normalized_rating(double value) {
+  set_has_normalized_rating();
+  normalized_rating_ = value;
+  // @@protoc_insertion_point(field_set:CTFLobbyPlayerProto.normalized_rating)
+}
+
+// optional double normalized_uncertainty = 22;
+inline bool CTFLobbyPlayerProto::has_normalized_uncertainty() const {
+  return (_has_bits_[0] & 0x00000400u) != 0;
+}
+inline void CTFLobbyPlayerProto::set_has_normalized_uncertainty() {
+  _has_bits_[0] |= 0x00000400u;
+}
+inline void CTFLobbyPlayerProto::clear_has_normalized_uncertainty() {
+  _has_bits_[0] &= ~0x00000400u;
+}
+inline void CTFLobbyPlayerProto::clear_normalized_uncertainty() {
+  normalized_uncertainty_ = 0;
+  clear_has_normalized_uncertainty();
+}
+inline double CTFLobbyPlayerProto::normalized_uncertainty() const {
+  // @@protoc_insertion_point(field_get:CTFLobbyPlayerProto.normalized_uncertainty)
+  return normalized_uncertainty_;
+}
+inline void CTFLobbyPlayerProto::set_normalized_uncertainty(double value) {
+  set_has_normalized_uncertainty();
+  normalized_uncertainty_ = value;
+  // @@protoc_insertion_point(field_set:CTFLobbyPlayerProto.normalized_uncertainty)
+}
+
+// optional uint32 rank = 21;
+inline bool CTFLobbyPlayerProto::has_rank() const {
+  return (_has_bits_[0] & 0x00000800u) != 0;
+}
+inline void CTFLobbyPlayerProto::set_has_rank() {
+  _has_bits_[0] |= 0x00000800u;
+}
+inline void CTFLobbyPlayerProto::clear_has_rank() {
+  _has_bits_[0] &= ~0x00000800u;
+}
+inline void CTFLobbyPlayerProto::clear_rank() {
+  rank_ = 0u;
+  clear_has_rank();
+}
+inline ::google::protobuf::uint32 CTFLobbyPlayerProto::rank() const {
+  // @@protoc_insertion_point(field_get:CTFLobbyPlayerProto.rank)
+  return rank_;
+}
+inline void CTFLobbyPlayerProto::set_rank(::google::protobuf::uint32 value) {
+  set_has_rank();
+  rank_ = value;
+  // @@protoc_insertion_point(field_set:CTFLobbyPlayerProto.rank)
+}
+
+// optional bool chat_suspension = 23;
+inline bool CTFLobbyPlayerProto::has_chat_suspension() const {
+  return (_has_bits_[0] & 0x00001000u) != 0;
+}
+inline void CTFLobbyPlayerProto::set_has_chat_suspension() {
+  _has_bits_[0] |= 0x00001000u;
+}
+inline void CTFLobbyPlayerProto::clear_has_chat_suspension() {
+  _has_bits_[0] &= ~0x00001000u;
+}
+inline void CTFLobbyPlayerProto::clear_chat_suspension() {
+  chat_suspension_ = false;
+  clear_has_chat_suspension();
+}
+inline bool CTFLobbyPlayerProto::chat_suspension() const {
+  // @@protoc_insertion_point(field_get:CTFLobbyPlayerProto.chat_suspension)
+  return chat_suspension_;
+}
+inline void CTFLobbyPlayerProto::set_chat_suspension(bool value) {
+  set_has_chat_suspension();
+  chat_suspension_ = value;
+  // @@protoc_insertion_point(field_set:CTFLobbyPlayerProto.chat_suspension)
 }
 
 // -------------------------------------------------------------------
 
-// CLobbyPendingPlayerReport
+// CTFLobbyInviteProto
 
-// optional uint32 account_id = 1;
-inline bool CLobbyPendingPlayerReport::has_account_id() const {
+// optional fixed64 lobby_id = 1;
+inline bool CTFLobbyInviteProto::has_lobby_id() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
-inline void CLobbyPendingPlayerReport::set_has_account_id() {
+inline void CTFLobbyInviteProto::set_has_lobby_id() {
   _has_bits_[0] |= 0x00000001u;
 }
-inline void CLobbyPendingPlayerReport::clear_has_account_id() {
+inline void CTFLobbyInviteProto::clear_has_lobby_id() {
   _has_bits_[0] &= ~0x00000001u;
 }
-inline void CLobbyPendingPlayerReport::clear_account_id() {
-  account_id_ = 0u;
-  clear_has_account_id();
+inline void CTFLobbyInviteProto::clear_lobby_id() {
+  lobby_id_ = GOOGLE_ULONGLONG(0);
+  clear_has_lobby_id();
 }
-inline ::google::protobuf::uint32 CLobbyPendingPlayerReport::account_id() const {
-  // @@protoc_insertion_point(field_get:CLobbyPendingPlayerReport.account_id)
-  return account_id_;
+inline ::google::protobuf::uint64 CTFLobbyInviteProto::lobby_id() const {
+  // @@protoc_insertion_point(field_get:CTFLobbyInviteProto.lobby_id)
+  return lobby_id_;
 }
-inline void CLobbyPendingPlayerReport::set_account_id(::google::protobuf::uint32 value) {
-  set_has_account_id();
-  account_id_ = value;
-  // @@protoc_insertion_point(field_set:CLobbyPendingPlayerReport.account_id)
+inline void CTFLobbyInviteProto::set_lobby_id(::google::protobuf::uint64 value) {
+  set_has_lobby_id();
+  lobby_id_ = value;
+  // @@protoc_insertion_point(field_set:CTFLobbyInviteProto.lobby_id)
 }
 
-// optional fixed32 date = 2;
-inline bool CLobbyPendingPlayerReport::has_date() const {
+// optional .ETFMatchGroup match_group = 2;
+inline bool CTFLobbyInviteProto::has_match_group() const {
   return (_has_bits_[0] & 0x00000002u) != 0;
 }
-inline void CLobbyPendingPlayerReport::set_has_date() {
+inline void CTFLobbyInviteProto::set_has_match_group() {
   _has_bits_[0] |= 0x00000002u;
 }
-inline void CLobbyPendingPlayerReport::clear_has_date() {
+inline void CTFLobbyInviteProto::clear_has_match_group() {
   _has_bits_[0] &= ~0x00000002u;
 }
-inline void CLobbyPendingPlayerReport::clear_date() {
-  date_ = 0u;
-  clear_has_date();
+inline void CTFLobbyInviteProto::clear_match_group() {
+  match_group_ = -1;
+  clear_has_match_group();
 }
-inline ::google::protobuf::uint32 CLobbyPendingPlayerReport::date() const {
-  // @@protoc_insertion_point(field_get:CLobbyPendingPlayerReport.date)
-  return date_;
+inline ::ETFMatchGroup CTFLobbyInviteProto::match_group() const {
+  // @@protoc_insertion_point(field_get:CTFLobbyInviteProto.match_group)
+  return static_cast< ::ETFMatchGroup >(match_group_);
 }
-inline void CLobbyPendingPlayerReport::set_date(::google::protobuf::uint32 value) {
-  set_has_date();
-  date_ = value;
-  // @@protoc_insertion_point(field_set:CLobbyPendingPlayerReport.date)
+inline void CTFLobbyInviteProto::set_match_group(::ETFMatchGroup value) {
+  assert(::ETFMatchGroup_IsValid(value));
+  set_has_match_group();
+  match_group_ = value;
+  // @@protoc_insertion_point(field_set:CTFLobbyInviteProto.match_group)
 }
 
 // -------------------------------------------------------------------
@@ -25159,69 +28771,45 @@ inline void CSOTFGameServerLobby::set_lobby_id(::google::protobuf::uint64 value)
   // @@protoc_insertion_point(field_set:CSOTFGameServerLobby.lobby_id)
 }
 
-// repeated .CTFLobbyMember members = 2;
+// repeated .CTFLobbyPlayerProto members = 2;
 inline int CSOTFGameServerLobby::members_size() const {
   return members_.size();
 }
 inline void CSOTFGameServerLobby::clear_members() {
   members_.Clear();
 }
-inline const ::CTFLobbyMember& CSOTFGameServerLobby::members(int index) const {
+inline const ::CTFLobbyPlayerProto& CSOTFGameServerLobby::members(int index) const {
   // @@protoc_insertion_point(field_get:CSOTFGameServerLobby.members)
   return members_.Get(index);
 }
-inline ::CTFLobbyMember* CSOTFGameServerLobby::mutable_members(int index) {
+inline ::CTFLobbyPlayerProto* CSOTFGameServerLobby::mutable_members(int index) {
   // @@protoc_insertion_point(field_mutable:CSOTFGameServerLobby.members)
   return members_.Mutable(index);
 }
-inline ::CTFLobbyMember* CSOTFGameServerLobby::add_members() {
+inline ::CTFLobbyPlayerProto* CSOTFGameServerLobby::add_members() {
   // @@protoc_insertion_point(field_add:CSOTFGameServerLobby.members)
   return members_.Add();
 }
-inline const ::google::protobuf::RepeatedPtrField< ::CTFLobbyMember >&
+inline const ::google::protobuf::RepeatedPtrField< ::CTFLobbyPlayerProto >&
 CSOTFGameServerLobby::members() const {
   // @@protoc_insertion_point(field_list:CSOTFGameServerLobby.members)
   return members_;
 }
-inline ::google::protobuf::RepeatedPtrField< ::CTFLobbyMember >*
+inline ::google::protobuf::RepeatedPtrField< ::CTFLobbyPlayerProto >*
 CSOTFGameServerLobby::mutable_members() {
   // @@protoc_insertion_point(field_mutable_list:CSOTFGameServerLobby.members)
   return &members_;
 }
 
-// optional fixed64 leader_id = 11;
-inline bool CSOTFGameServerLobby::has_leader_id() const {
-  return (_has_bits_[0] & 0x00000004u) != 0;
-}
-inline void CSOTFGameServerLobby::set_has_leader_id() {
-  _has_bits_[0] |= 0x00000004u;
-}
-inline void CSOTFGameServerLobby::clear_has_leader_id() {
-  _has_bits_[0] &= ~0x00000004u;
-}
-inline void CSOTFGameServerLobby::clear_leader_id() {
-  leader_id_ = GOOGLE_ULONGLONG(0);
-  clear_has_leader_id();
-}
-inline ::google::protobuf::uint64 CSOTFGameServerLobby::leader_id() const {
-  // @@protoc_insertion_point(field_get:CSOTFGameServerLobby.leader_id)
-  return leader_id_;
-}
-inline void CSOTFGameServerLobby::set_leader_id(::google::protobuf::uint64 value) {
-  set_has_leader_id();
-  leader_id_ = value;
-  // @@protoc_insertion_point(field_set:CSOTFGameServerLobby.leader_id)
-}
-
 // optional fixed64 server_id = 6 [default = 0];
 inline bool CSOTFGameServerLobby::has_server_id() const {
-  return (_has_bits_[0] & 0x00000008u) != 0;
+  return (_has_bits_[0] & 0x00000004u) != 0;
 }
 inline void CSOTFGameServerLobby::set_has_server_id() {
-  _has_bits_[0] |= 0x00000008u;
+  _has_bits_[0] |= 0x00000004u;
 }
 inline void CSOTFGameServerLobby::clear_has_server_id() {
-  _has_bits_[0] &= ~0x00000008u;
+  _has_bits_[0] &= ~0x00000004u;
 }
 inline void CSOTFGameServerLobby::clear_server_id() {
   server_id_ = GOOGLE_ULONGLONG(0);
@@ -25237,45 +28825,15 @@ inline void CSOTFGameServerLobby::set_server_id(::google::protobuf::uint64 value
   // @@protoc_insertion_point(field_set:CSOTFGameServerLobby.server_id)
 }
 
-// repeated fixed64 pending_invites = 10;
-inline int CSOTFGameServerLobby::pending_invites_size() const {
-  return pending_invites_.size();
-}
-inline void CSOTFGameServerLobby::clear_pending_invites() {
-  pending_invites_.Clear();
-}
-inline ::google::protobuf::uint64 CSOTFGameServerLobby::pending_invites(int index) const {
-  // @@protoc_insertion_point(field_get:CSOTFGameServerLobby.pending_invites)
-  return pending_invites_.Get(index);
-}
-inline void CSOTFGameServerLobby::set_pending_invites(int index, ::google::protobuf::uint64 value) {
-  pending_invites_.Set(index, value);
-  // @@protoc_insertion_point(field_set:CSOTFGameServerLobby.pending_invites)
-}
-inline void CSOTFGameServerLobby::add_pending_invites(::google::protobuf::uint64 value) {
-  pending_invites_.Add(value);
-  // @@protoc_insertion_point(field_add:CSOTFGameServerLobby.pending_invites)
-}
-inline const ::google::protobuf::RepeatedField< ::google::protobuf::uint64 >&
-CSOTFGameServerLobby::pending_invites() const {
-  // @@protoc_insertion_point(field_list:CSOTFGameServerLobby.pending_invites)
-  return pending_invites_;
-}
-inline ::google::protobuf::RepeatedField< ::google::protobuf::uint64 >*
-CSOTFGameServerLobby::mutable_pending_invites() {
-  // @@protoc_insertion_point(field_mutable_list:CSOTFGameServerLobby.pending_invites)
-  return &pending_invites_;
-}
-
 // optional .CSOTFGameServerLobby.State state = 4 [default = UNKNOWN];
 inline bool CSOTFGameServerLobby::has_state() const {
-  return (_has_bits_[0] & 0x00000020u) != 0;
+  return (_has_bits_[0] & 0x00000008u) != 0;
 }
 inline void CSOTFGameServerLobby::set_has_state() {
-  _has_bits_[0] |= 0x00000020u;
+  _has_bits_[0] |= 0x00000008u;
 }
 inline void CSOTFGameServerLobby::clear_has_state() {
-  _has_bits_[0] &= ~0x00000020u;
+  _has_bits_[0] &= ~0x00000008u;
 }
 inline void CSOTFGameServerLobby::clear_state() {
   state_ = 0;
@@ -25294,13 +28852,13 @@ inline void CSOTFGameServerLobby::set_state(::CSOTFGameServerLobby_State value) 
 
 // optional string connect = 5;
 inline bool CSOTFGameServerLobby::has_connect() const {
-  return (_has_bits_[0] & 0x00000040u) != 0;
+  return (_has_bits_[0] & 0x00000010u) != 0;
 }
 inline void CSOTFGameServerLobby::set_has_connect() {
-  _has_bits_[0] |= 0x00000040u;
+  _has_bits_[0] |= 0x00000010u;
 }
 inline void CSOTFGameServerLobby::clear_has_connect() {
-  _has_bits_[0] &= ~0x00000040u;
+  _has_bits_[0] &= ~0x00000010u;
 }
 inline void CSOTFGameServerLobby::clear_connect() {
   if (connect_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
@@ -25368,164 +28926,15 @@ inline void CSOTFGameServerLobby::set_allocated_connect(::std::string* connect) 
   // @@protoc_insertion_point(field_set_allocated:CSOTFGameServerLobby.connect)
 }
 
-// optional .CSOTFGameServerLobby.LobbyType lobby_type = 12;
-inline bool CSOTFGameServerLobby::has_lobby_type() const {
-  return (_has_bits_[0] & 0x00000080u) != 0;
-}
-inline void CSOTFGameServerLobby::set_has_lobby_type() {
-  _has_bits_[0] |= 0x00000080u;
-}
-inline void CSOTFGameServerLobby::clear_has_lobby_type() {
-  _has_bits_[0] &= ~0x00000080u;
-}
-inline void CSOTFGameServerLobby::clear_lobby_type() {
-  lobby_type_ = -1;
-  clear_has_lobby_type();
-}
-inline ::CSOTFGameServerLobby_LobbyType CSOTFGameServerLobby::lobby_type() const {
-  // @@protoc_insertion_point(field_get:CSOTFGameServerLobby.lobby_type)
-  return static_cast< ::CSOTFGameServerLobby_LobbyType >(lobby_type_);
-}
-inline void CSOTFGameServerLobby::set_lobby_type(::CSOTFGameServerLobby_LobbyType value) {
-  assert(::CSOTFGameServerLobby_LobbyType_IsValid(value));
-  set_has_lobby_type();
-  lobby_type_ = value;
-  // @@protoc_insertion_point(field_set:CSOTFGameServerLobby.lobby_type)
-}
-
-// optional bool allow_cheats = 13;
-inline bool CSOTFGameServerLobby::has_allow_cheats() const {
-  return (_has_bits_[0] & 0x00000100u) != 0;
-}
-inline void CSOTFGameServerLobby::set_has_allow_cheats() {
-  _has_bits_[0] |= 0x00000100u;
-}
-inline void CSOTFGameServerLobby::clear_has_allow_cheats() {
-  _has_bits_[0] &= ~0x00000100u;
-}
-inline void CSOTFGameServerLobby::clear_allow_cheats() {
-  allow_cheats_ = false;
-  clear_has_allow_cheats();
-}
-inline bool CSOTFGameServerLobby::allow_cheats() const {
-  // @@protoc_insertion_point(field_get:CSOTFGameServerLobby.allow_cheats)
-  return allow_cheats_;
-}
-inline void CSOTFGameServerLobby::set_allow_cheats(bool value) {
-  set_has_allow_cheats();
-  allow_cheats_ = value;
-  // @@protoc_insertion_point(field_set:CSOTFGameServerLobby.allow_cheats)
-}
-
-// optional string game_name = 16;
-inline bool CSOTFGameServerLobby::has_game_name() const {
-  return (_has_bits_[0] & 0x00000200u) != 0;
-}
-inline void CSOTFGameServerLobby::set_has_game_name() {
-  _has_bits_[0] |= 0x00000200u;
-}
-inline void CSOTFGameServerLobby::clear_has_game_name() {
-  _has_bits_[0] &= ~0x00000200u;
-}
-inline void CSOTFGameServerLobby::clear_game_name() {
-  if (game_name_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    game_name_->clear();
-  }
-  clear_has_game_name();
-}
-inline const ::std::string& CSOTFGameServerLobby::game_name() const {
-  // @@protoc_insertion_point(field_get:CSOTFGameServerLobby.game_name)
-  return *game_name_;
-}
-inline void CSOTFGameServerLobby::set_game_name(const ::std::string& value) {
-  set_has_game_name();
-  if (game_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    game_name_ = new ::std::string;
-  }
-  game_name_->assign(value);
-  // @@protoc_insertion_point(field_set:CSOTFGameServerLobby.game_name)
-}
-inline void CSOTFGameServerLobby::set_game_name(const char* value) {
-  set_has_game_name();
-  if (game_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    game_name_ = new ::std::string;
-  }
-  game_name_->assign(value);
-  // @@protoc_insertion_point(field_set_char:CSOTFGameServerLobby.game_name)
-}
-inline void CSOTFGameServerLobby::set_game_name(const char* value, size_t size) {
-  set_has_game_name();
-  if (game_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    game_name_ = new ::std::string;
-  }
-  game_name_->assign(reinterpret_cast<const char*>(value), size);
-  // @@protoc_insertion_point(field_set_pointer:CSOTFGameServerLobby.game_name)
-}
-inline ::std::string* CSOTFGameServerLobby::mutable_game_name() {
-  set_has_game_name();
-  if (game_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    game_name_ = new ::std::string;
-  }
-  // @@protoc_insertion_point(field_mutable:CSOTFGameServerLobby.game_name)
-  return game_name_;
-}
-inline ::std::string* CSOTFGameServerLobby::release_game_name() {
-  clear_has_game_name();
-  if (game_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    return NULL;
-  } else {
-    ::std::string* temp = game_name_;
-    game_name_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-    return temp;
-  }
-}
-inline void CSOTFGameServerLobby::set_allocated_game_name(::std::string* game_name) {
-  if (game_name_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    delete game_name_;
-  }
-  if (game_name) {
-    set_has_game_name();
-    game_name_ = game_name;
-  } else {
-    clear_has_game_name();
-    game_name_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  }
-  // @@protoc_insertion_point(field_set_allocated:CSOTFGameServerLobby.game_name)
-}
-
-// optional uint32 server_region = 21 [default = 0];
-inline bool CSOTFGameServerLobby::has_server_region() const {
-  return (_has_bits_[0] & 0x00000400u) != 0;
-}
-inline void CSOTFGameServerLobby::set_has_server_region() {
-  _has_bits_[0] |= 0x00000400u;
-}
-inline void CSOTFGameServerLobby::clear_has_server_region() {
-  _has_bits_[0] &= ~0x00000400u;
-}
-inline void CSOTFGameServerLobby::clear_server_region() {
-  server_region_ = 0u;
-  clear_has_server_region();
-}
-inline ::google::protobuf::uint32 CSOTFGameServerLobby::server_region() const {
-  // @@protoc_insertion_point(field_get:CSOTFGameServerLobby.server_region)
-  return server_region_;
-}
-inline void CSOTFGameServerLobby::set_server_region(::google::protobuf::uint32 value) {
-  set_has_server_region();
-  server_region_ = value;
-  // @@protoc_insertion_point(field_set:CSOTFGameServerLobby.server_region)
-}
-
 // optional .TF_GC_GameState game_state = 22;
 inline bool CSOTFGameServerLobby::has_game_state() const {
-  return (_has_bits_[0] & 0x00000800u) != 0;
+  return (_has_bits_[0] & 0x00000020u) != 0;
 }
 inline void CSOTFGameServerLobby::set_has_game_state() {
-  _has_bits_[0] |= 0x00000800u;
+  _has_bits_[0] |= 0x00000020u;
 }
 inline void CSOTFGameServerLobby::clear_has_game_state() {
-  _has_bits_[0] &= ~0x00000800u;
+  _has_bits_[0] &= ~0x00000020u;
 }
 inline void CSOTFGameServerLobby::clear_game_state() {
   game_state_ = 0;
@@ -25542,159 +28951,39 @@ inline void CSOTFGameServerLobby::set_game_state(::TF_GC_GameState value) {
   // @@protoc_insertion_point(field_set:CSOTFGameServerLobby.game_state)
 }
 
-// optional uint32 num_spectators = 23;
-inline bool CSOTFGameServerLobby::has_num_spectators() const {
-  return (_has_bits_[0] & 0x00001000u) != 0;
+// optional double initial_average_mm_rating = 32;
+inline bool CSOTFGameServerLobby::has_initial_average_mm_rating() const {
+  return (_has_bits_[0] & 0x00000040u) != 0;
 }
-inline void CSOTFGameServerLobby::set_has_num_spectators() {
-  _has_bits_[0] |= 0x00001000u;
+inline void CSOTFGameServerLobby::set_has_initial_average_mm_rating() {
+  _has_bits_[0] |= 0x00000040u;
 }
-inline void CSOTFGameServerLobby::clear_has_num_spectators() {
-  _has_bits_[0] &= ~0x00001000u;
+inline void CSOTFGameServerLobby::clear_has_initial_average_mm_rating() {
+  _has_bits_[0] &= ~0x00000040u;
 }
-inline void CSOTFGameServerLobby::clear_num_spectators() {
-  num_spectators_ = 0u;
-  clear_has_num_spectators();
+inline void CSOTFGameServerLobby::clear_initial_average_mm_rating() {
+  initial_average_mm_rating_ = 0;
+  clear_has_initial_average_mm_rating();
 }
-inline ::google::protobuf::uint32 CSOTFGameServerLobby::num_spectators() const {
-  // @@protoc_insertion_point(field_get:CSOTFGameServerLobby.num_spectators)
-  return num_spectators_;
+inline double CSOTFGameServerLobby::initial_average_mm_rating() const {
+  // @@protoc_insertion_point(field_get:CSOTFGameServerLobby.initial_average_mm_rating)
+  return initial_average_mm_rating_;
 }
-inline void CSOTFGameServerLobby::set_num_spectators(::google::protobuf::uint32 value) {
-  set_has_num_spectators();
-  num_spectators_ = value;
-  // @@protoc_insertion_point(field_set:CSOTFGameServerLobby.num_spectators)
-}
-
-// optional float readyup_remaining_time = 26;
-inline bool CSOTFGameServerLobby::has_readyup_remaining_time() const {
-  return (_has_bits_[0] & 0x00002000u) != 0;
-}
-inline void CSOTFGameServerLobby::set_has_readyup_remaining_time() {
-  _has_bits_[0] |= 0x00002000u;
-}
-inline void CSOTFGameServerLobby::clear_has_readyup_remaining_time() {
-  _has_bits_[0] &= ~0x00002000u;
-}
-inline void CSOTFGameServerLobby::clear_readyup_remaining_time() {
-  readyup_remaining_time_ = 0;
-  clear_has_readyup_remaining_time();
-}
-inline float CSOTFGameServerLobby::readyup_remaining_time() const {
-  // @@protoc_insertion_point(field_get:CSOTFGameServerLobby.readyup_remaining_time)
-  return readyup_remaining_time_;
-}
-inline void CSOTFGameServerLobby::set_readyup_remaining_time(float value) {
-  set_has_readyup_remaining_time();
-  readyup_remaining_time_ = value;
-  // @@protoc_insertion_point(field_set:CSOTFGameServerLobby.readyup_remaining_time)
-}
-
-// optional bool allow_spectating = 31 [default = true];
-inline bool CSOTFGameServerLobby::has_allow_spectating() const {
-  return (_has_bits_[0] & 0x00004000u) != 0;
-}
-inline void CSOTFGameServerLobby::set_has_allow_spectating() {
-  _has_bits_[0] |= 0x00004000u;
-}
-inline void CSOTFGameServerLobby::clear_has_allow_spectating() {
-  _has_bits_[0] &= ~0x00004000u;
-}
-inline void CSOTFGameServerLobby::clear_allow_spectating() {
-  allow_spectating_ = true;
-  clear_has_allow_spectating();
-}
-inline bool CSOTFGameServerLobby::allow_spectating() const {
-  // @@protoc_insertion_point(field_get:CSOTFGameServerLobby.allow_spectating)
-  return allow_spectating_;
-}
-inline void CSOTFGameServerLobby::set_allow_spectating(bool value) {
-  set_has_allow_spectating();
-  allow_spectating_ = value;
-  // @@protoc_insertion_point(field_set:CSOTFGameServerLobby.allow_spectating)
-}
-
-// optional uint32 average_rank = 32;
-inline bool CSOTFGameServerLobby::has_average_rank() const {
-  return (_has_bits_[0] & 0x00008000u) != 0;
-}
-inline void CSOTFGameServerLobby::set_has_average_rank() {
-  _has_bits_[0] |= 0x00008000u;
-}
-inline void CSOTFGameServerLobby::clear_has_average_rank() {
-  _has_bits_[0] &= ~0x00008000u;
-}
-inline void CSOTFGameServerLobby::clear_average_rank() {
-  average_rank_ = 0u;
-  clear_has_average_rank();
-}
-inline ::google::protobuf::uint32 CSOTFGameServerLobby::average_rank() const {
-  // @@protoc_insertion_point(field_get:CSOTFGameServerLobby.average_rank)
-  return average_rank_;
-}
-inline void CSOTFGameServerLobby::set_average_rank(::google::protobuf::uint32 value) {
-  set_has_average_rank();
-  average_rank_ = value;
-  // @@protoc_insertion_point(field_set:CSOTFGameServerLobby.average_rank)
-}
-
-// optional fixed64 load_game_lobby_id = 33;
-inline bool CSOTFGameServerLobby::has_load_game_lobby_id() const {
-  return (_has_bits_[0] & 0x00010000u) != 0;
-}
-inline void CSOTFGameServerLobby::set_has_load_game_lobby_id() {
-  _has_bits_[0] |= 0x00010000u;
-}
-inline void CSOTFGameServerLobby::clear_has_load_game_lobby_id() {
-  _has_bits_[0] &= ~0x00010000u;
-}
-inline void CSOTFGameServerLobby::clear_load_game_lobby_id() {
-  load_game_lobby_id_ = GOOGLE_ULONGLONG(0);
-  clear_has_load_game_lobby_id();
-}
-inline ::google::protobuf::uint64 CSOTFGameServerLobby::load_game_lobby_id() const {
-  // @@protoc_insertion_point(field_get:CSOTFGameServerLobby.load_game_lobby_id)
-  return load_game_lobby_id_;
-}
-inline void CSOTFGameServerLobby::set_load_game_lobby_id(::google::protobuf::uint64 value) {
-  set_has_load_game_lobby_id();
-  load_game_lobby_id_ = value;
-  // @@protoc_insertion_point(field_set:CSOTFGameServerLobby.load_game_lobby_id)
-}
-
-// optional uint32 load_game_save_number = 34;
-inline bool CSOTFGameServerLobby::has_load_game_save_number() const {
-  return (_has_bits_[0] & 0x00020000u) != 0;
-}
-inline void CSOTFGameServerLobby::set_has_load_game_save_number() {
-  _has_bits_[0] |= 0x00020000u;
-}
-inline void CSOTFGameServerLobby::clear_has_load_game_save_number() {
-  _has_bits_[0] &= ~0x00020000u;
-}
-inline void CSOTFGameServerLobby::clear_load_game_save_number() {
-  load_game_save_number_ = 0u;
-  clear_has_load_game_save_number();
-}
-inline ::google::protobuf::uint32 CSOTFGameServerLobby::load_game_save_number() const {
-  // @@protoc_insertion_point(field_get:CSOTFGameServerLobby.load_game_save_number)
-  return load_game_save_number_;
-}
-inline void CSOTFGameServerLobby::set_load_game_save_number(::google::protobuf::uint32 value) {
-  set_has_load_game_save_number();
-  load_game_save_number_ = value;
-  // @@protoc_insertion_point(field_set:CSOTFGameServerLobby.load_game_save_number)
+inline void CSOTFGameServerLobby::set_initial_average_mm_rating(double value) {
+  set_has_initial_average_mm_rating();
+  initial_average_mm_rating_ = value;
+  // @@protoc_insertion_point(field_set:CSOTFGameServerLobby.initial_average_mm_rating)
 }
 
 // optional string mannup_tour_name = 42;
 inline bool CSOTFGameServerLobby::has_mannup_tour_name() const {
-  return (_has_bits_[0] & 0x00040000u) != 0;
+  return (_has_bits_[0] & 0x00000080u) != 0;
 }
 inline void CSOTFGameServerLobby::set_has_mannup_tour_name() {
-  _has_bits_[0] |= 0x00040000u;
+  _has_bits_[0] |= 0x00000080u;
 }
 inline void CSOTFGameServerLobby::clear_has_mannup_tour_name() {
-  _has_bits_[0] &= ~0x00040000u;
+  _has_bits_[0] &= ~0x00000080u;
 }
 inline void CSOTFGameServerLobby::clear_mannup_tour_name() {
   if (mannup_tour_name_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
@@ -25764,13 +29053,13 @@ inline void CSOTFGameServerLobby::set_allocated_mannup_tour_name(::std::string* 
 
 // optional string map_name = 38;
 inline bool CSOTFGameServerLobby::has_map_name() const {
-  return (_has_bits_[0] & 0x00080000u) != 0;
+  return (_has_bits_[0] & 0x00000100u) != 0;
 }
 inline void CSOTFGameServerLobby::set_has_map_name() {
-  _has_bits_[0] |= 0x00080000u;
+  _has_bits_[0] |= 0x00000100u;
 }
 inline void CSOTFGameServerLobby::clear_has_map_name() {
-  _has_bits_[0] &= ~0x00080000u;
+  _has_bits_[0] &= ~0x00000100u;
 }
 inline void CSOTFGameServerLobby::clear_map_name() {
   if (map_name_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
@@ -25840,13 +29129,13 @@ inline void CSOTFGameServerLobby::set_allocated_map_name(::std::string* map_name
 
 // optional string mission_name = 39;
 inline bool CSOTFGameServerLobby::has_mission_name() const {
-  return (_has_bits_[0] & 0x00100000u) != 0;
+  return (_has_bits_[0] & 0x00000200u) != 0;
 }
 inline void CSOTFGameServerLobby::set_has_mission_name() {
-  _has_bits_[0] |= 0x00100000u;
+  _has_bits_[0] |= 0x00000200u;
 }
 inline void CSOTFGameServerLobby::clear_has_mission_name() {
-  _has_bits_[0] &= ~0x00100000u;
+  _has_bits_[0] &= ~0x00000200u;
 }
 inline void CSOTFGameServerLobby::clear_mission_name() {
   if (mission_name_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
@@ -25916,13 +29205,13 @@ inline void CSOTFGameServerLobby::set_allocated_mission_name(::std::string* miss
 
 // optional uint32 match_group = 41;
 inline bool CSOTFGameServerLobby::has_match_group() const {
-  return (_has_bits_[0] & 0x00200000u) != 0;
+  return (_has_bits_[0] & 0x00000400u) != 0;
 }
 inline void CSOTFGameServerLobby::set_has_match_group() {
-  _has_bits_[0] |= 0x00200000u;
+  _has_bits_[0] |= 0x00000400u;
 }
 inline void CSOTFGameServerLobby::clear_has_match_group() {
-  _has_bits_[0] &= ~0x00200000u;
+  _has_bits_[0] &= ~0x00000400u;
 }
 inline void CSOTFGameServerLobby::clear_match_group() {
   match_group_ = 0u;
@@ -25940,13 +29229,13 @@ inline void CSOTFGameServerLobby::set_match_group(::google::protobuf::uint32 val
 
 // optional uint64 match_id = 30 [default = 0];
 inline bool CSOTFGameServerLobby::has_match_id() const {
-  return (_has_bits_[0] & 0x00400000u) != 0;
+  return (_has_bits_[0] & 0x00000800u) != 0;
 }
 inline void CSOTFGameServerLobby::set_has_match_id() {
-  _has_bits_[0] |= 0x00400000u;
+  _has_bits_[0] |= 0x00000800u;
 }
 inline void CSOTFGameServerLobby::clear_has_match_id() {
-  _has_bits_[0] &= ~0x00400000u;
+  _has_bits_[0] &= ~0x00000800u;
 }
 inline void CSOTFGameServerLobby::clear_match_id() {
   match_id_ = GOOGLE_ULONGLONG(0);
@@ -25962,39 +29251,15 @@ inline void CSOTFGameServerLobby::set_match_id(::google::protobuf::uint64 value)
   // @@protoc_insertion_point(field_set:CSOTFGameServerLobby.match_id)
 }
 
-// optional fixed32 replay_salt = 35;
-inline bool CSOTFGameServerLobby::has_replay_salt() const {
-  return (_has_bits_[0] & 0x00800000u) != 0;
-}
-inline void CSOTFGameServerLobby::set_has_replay_salt() {
-  _has_bits_[0] |= 0x00800000u;
-}
-inline void CSOTFGameServerLobby::clear_has_replay_salt() {
-  _has_bits_[0] &= ~0x00800000u;
-}
-inline void CSOTFGameServerLobby::clear_replay_salt() {
-  replay_salt_ = 0u;
-  clear_has_replay_salt();
-}
-inline ::google::protobuf::uint32 CSOTFGameServerLobby::replay_salt() const {
-  // @@protoc_insertion_point(field_get:CSOTFGameServerLobby.replay_salt)
-  return replay_salt_;
-}
-inline void CSOTFGameServerLobby::set_replay_salt(::google::protobuf::uint32 value) {
-  set_has_replay_salt();
-  replay_salt_ = value;
-  // @@protoc_insertion_point(field_set:CSOTFGameServerLobby.replay_salt)
-}
-
 // optional uint32 formed_time = 36;
 inline bool CSOTFGameServerLobby::has_formed_time() const {
-  return (_has_bits_[0] & 0x01000000u) != 0;
+  return (_has_bits_[0] & 0x00001000u) != 0;
 }
 inline void CSOTFGameServerLobby::set_has_formed_time() {
-  _has_bits_[0] |= 0x01000000u;
+  _has_bits_[0] |= 0x00001000u;
 }
 inline void CSOTFGameServerLobby::clear_has_formed_time() {
-  _has_bits_[0] &= ~0x01000000u;
+  _has_bits_[0] &= ~0x00001000u;
 }
 inline void CSOTFGameServerLobby::clear_formed_time() {
   formed_time_ = 0u;
@@ -26012,13 +29277,13 @@ inline void CSOTFGameServerLobby::set_formed_time(::google::protobuf::uint32 val
 
 // optional uint32 flags = 43;
 inline bool CSOTFGameServerLobby::has_flags() const {
-  return (_has_bits_[0] & 0x02000000u) != 0;
+  return (_has_bits_[0] & 0x00002000u) != 0;
 }
 inline void CSOTFGameServerLobby::set_has_flags() {
-  _has_bits_[0] |= 0x02000000u;
+  _has_bits_[0] |= 0x00002000u;
 }
 inline void CSOTFGameServerLobby::clear_has_flags() {
-  _has_bits_[0] &= ~0x02000000u;
+  _has_bits_[0] &= ~0x00002000u;
 }
 inline void CSOTFGameServerLobby::clear_flags() {
   flags_ = 0u;
@@ -26036,13 +29301,13 @@ inline void CSOTFGameServerLobby::set_flags(::google::protobuf::uint32 value) {
 
 // optional bool late_join_eligible = 44;
 inline bool CSOTFGameServerLobby::has_late_join_eligible() const {
-  return (_has_bits_[0] & 0x04000000u) != 0;
+  return (_has_bits_[0] & 0x00004000u) != 0;
 }
 inline void CSOTFGameServerLobby::set_has_late_join_eligible() {
-  _has_bits_[0] |= 0x04000000u;
+  _has_bits_[0] |= 0x00004000u;
 }
 inline void CSOTFGameServerLobby::clear_has_late_join_eligible() {
-  _has_bits_[0] &= ~0x04000000u;
+  _has_bits_[0] &= ~0x00004000u;
 }
 inline void CSOTFGameServerLobby::clear_late_join_eligible() {
   late_join_eligible_ = false;
@@ -26060,13 +29325,13 @@ inline void CSOTFGameServerLobby::set_late_join_eligible(bool value) {
 
 // optional uint32 fixed_match_size = 45;
 inline bool CSOTFGameServerLobby::has_fixed_match_size() const {
-  return (_has_bits_[0] & 0x08000000u) != 0;
+  return (_has_bits_[0] & 0x00008000u) != 0;
 }
 inline void CSOTFGameServerLobby::set_has_fixed_match_size() {
-  _has_bits_[0] |= 0x08000000u;
+  _has_bits_[0] |= 0x00008000u;
 }
 inline void CSOTFGameServerLobby::clear_has_fixed_match_size() {
-  _has_bits_[0] &= ~0x08000000u;
+  _has_bits_[0] &= ~0x00008000u;
 }
 inline void CSOTFGameServerLobby::clear_fixed_match_size() {
   fixed_match_size_ = 0u;
@@ -26084,13 +29349,13 @@ inline void CSOTFGameServerLobby::set_fixed_match_size(::google::protobuf::uint3
 
 // optional .CSOTFGameServerLobby.WarMatch is_war_match = 46 [default = NOPE];
 inline bool CSOTFGameServerLobby::has_is_war_match() const {
-  return (_has_bits_[0] & 0x10000000u) != 0;
+  return (_has_bits_[0] & 0x00010000u) != 0;
 }
 inline void CSOTFGameServerLobby::set_has_is_war_match() {
-  _has_bits_[0] |= 0x10000000u;
+  _has_bits_[0] |= 0x00010000u;
 }
 inline void CSOTFGameServerLobby::clear_has_is_war_match() {
-  _has_bits_[0] &= ~0x10000000u;
+  _has_bits_[0] &= ~0x00010000u;
 }
 inline void CSOTFGameServerLobby::clear_is_war_match() {
   is_war_match_ = 0;
@@ -26139,13 +29404,13 @@ CSOTFGameServerLobby::mutable_next_maps_for_vote() {
 
 // optional uint32 lobby_mm_version = 48;
 inline bool CSOTFGameServerLobby::has_lobby_mm_version() const {
-  return (_has_bits_[0] & 0x40000000u) != 0;
+  return (_has_bits_[0] & 0x00040000u) != 0;
 }
 inline void CSOTFGameServerLobby::set_has_lobby_mm_version() {
-  _has_bits_[0] |= 0x40000000u;
+  _has_bits_[0] |= 0x00040000u;
 }
 inline void CSOTFGameServerLobby::clear_has_lobby_mm_version() {
-  _has_bits_[0] &= ~0x40000000u;
+  _has_bits_[0] &= ~0x00040000u;
 }
 inline void CSOTFGameServerLobby::clear_lobby_mm_version() {
   lobby_mm_version_ = 0u;
@@ -26159,6 +29424,36 @@ inline void CSOTFGameServerLobby::set_lobby_mm_version(::google::protobuf::uint3
   set_has_lobby_mm_version();
   lobby_mm_version_ = value;
   // @@protoc_insertion_point(field_set:CSOTFGameServerLobby.lobby_mm_version)
+}
+
+// repeated .CTFLobbyPlayerProto pending_members = 49;
+inline int CSOTFGameServerLobby::pending_members_size() const {
+  return pending_members_.size();
+}
+inline void CSOTFGameServerLobby::clear_pending_members() {
+  pending_members_.Clear();
+}
+inline const ::CTFLobbyPlayerProto& CSOTFGameServerLobby::pending_members(int index) const {
+  // @@protoc_insertion_point(field_get:CSOTFGameServerLobby.pending_members)
+  return pending_members_.Get(index);
+}
+inline ::CTFLobbyPlayerProto* CSOTFGameServerLobby::mutable_pending_members(int index) {
+  // @@protoc_insertion_point(field_mutable:CSOTFGameServerLobby.pending_members)
+  return pending_members_.Mutable(index);
+}
+inline ::CTFLobbyPlayerProto* CSOTFGameServerLobby::add_pending_members() {
+  // @@protoc_insertion_point(field_add:CSOTFGameServerLobby.pending_members)
+  return pending_members_.Add();
+}
+inline const ::google::protobuf::RepeatedPtrField< ::CTFLobbyPlayerProto >&
+CSOTFGameServerLobby::pending_members() const {
+  // @@protoc_insertion_point(field_list:CSOTFGameServerLobby.pending_members)
+  return pending_members_;
+}
+inline ::google::protobuf::RepeatedPtrField< ::CTFLobbyPlayerProto >*
+CSOTFGameServerLobby::mutable_pending_members() {
+  // @@protoc_insertion_point(field_mutable_list:CSOTFGameServerLobby.pending_members)
+  return &pending_members_;
 }
 
 // -------------------------------------------------------------------
@@ -26239,136 +29534,89 @@ inline void CMsgExitMatchmaking::set_lobby_id(::google::protobuf::uint64 value) 
 
 // -------------------------------------------------------------------
 
-// CMsgAcceptInvite
+// CMsgAcceptLobbyInvite
 
-// optional uint64 party_id = 1;
-inline bool CMsgAcceptInvite::has_party_id() const {
+// optional uint64 invited_lobby_id = 1;
+inline bool CMsgAcceptLobbyInvite::has_invited_lobby_id() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
-inline void CMsgAcceptInvite::set_has_party_id() {
+inline void CMsgAcceptLobbyInvite::set_has_invited_lobby_id() {
   _has_bits_[0] |= 0x00000001u;
 }
-inline void CMsgAcceptInvite::clear_has_party_id() {
+inline void CMsgAcceptLobbyInvite::clear_has_invited_lobby_id() {
   _has_bits_[0] &= ~0x00000001u;
 }
-inline void CMsgAcceptInvite::clear_party_id() {
-  party_id_ = GOOGLE_ULONGLONG(0);
-  clear_has_party_id();
+inline void CMsgAcceptLobbyInvite::clear_invited_lobby_id() {
+  invited_lobby_id_ = GOOGLE_ULONGLONG(0);
+  clear_has_invited_lobby_id();
 }
-inline ::google::protobuf::uint64 CMsgAcceptInvite::party_id() const {
-  // @@protoc_insertion_point(field_get:CMsgAcceptInvite.party_id)
-  return party_id_;
+inline ::google::protobuf::uint64 CMsgAcceptLobbyInvite::invited_lobby_id() const {
+  // @@protoc_insertion_point(field_get:CMsgAcceptLobbyInvite.invited_lobby_id)
+  return invited_lobby_id_;
 }
-inline void CMsgAcceptInvite::set_party_id(::google::protobuf::uint64 value) {
-  set_has_party_id();
-  party_id_ = value;
-  // @@protoc_insertion_point(field_set:CMsgAcceptInvite.party_id)
+inline void CMsgAcceptLobbyInvite::set_invited_lobby_id(::google::protobuf::uint64 value) {
+  set_has_invited_lobby_id();
+  invited_lobby_id_ = value;
+  // @@protoc_insertion_point(field_set:CMsgAcceptLobbyInvite.invited_lobby_id)
 }
 
-// optional fixed64 steamid_lobby = 2;
-inline bool CMsgAcceptInvite::has_steamid_lobby() const {
+// optional uint64 abandoning_match_id = 2;
+inline bool CMsgAcceptLobbyInvite::has_abandoning_match_id() const {
   return (_has_bits_[0] & 0x00000002u) != 0;
 }
-inline void CMsgAcceptInvite::set_has_steamid_lobby() {
+inline void CMsgAcceptLobbyInvite::set_has_abandoning_match_id() {
   _has_bits_[0] |= 0x00000002u;
 }
-inline void CMsgAcceptInvite::clear_has_steamid_lobby() {
+inline void CMsgAcceptLobbyInvite::clear_has_abandoning_match_id() {
   _has_bits_[0] &= ~0x00000002u;
 }
-inline void CMsgAcceptInvite::clear_steamid_lobby() {
-  steamid_lobby_ = GOOGLE_ULONGLONG(0);
-  clear_has_steamid_lobby();
+inline void CMsgAcceptLobbyInvite::clear_abandoning_match_id() {
+  abandoning_match_id_ = GOOGLE_ULONGLONG(0);
+  clear_has_abandoning_match_id();
 }
-inline ::google::protobuf::uint64 CMsgAcceptInvite::steamid_lobby() const {
-  // @@protoc_insertion_point(field_get:CMsgAcceptInvite.steamid_lobby)
-  return steamid_lobby_;
+inline ::google::protobuf::uint64 CMsgAcceptLobbyInvite::abandoning_match_id() const {
+  // @@protoc_insertion_point(field_get:CMsgAcceptLobbyInvite.abandoning_match_id)
+  return abandoning_match_id_;
 }
-inline void CMsgAcceptInvite::set_steamid_lobby(::google::protobuf::uint64 value) {
-  set_has_steamid_lobby();
-  steamid_lobby_ = value;
-  // @@protoc_insertion_point(field_set:CMsgAcceptInvite.steamid_lobby)
-}
-
-// optional uint32 client_version = 3 [default = 1225];
-inline bool CMsgAcceptInvite::has_client_version() const {
-  return (_has_bits_[0] & 0x00000004u) != 0;
-}
-inline void CMsgAcceptInvite::set_has_client_version() {
-  _has_bits_[0] |= 0x00000004u;
-}
-inline void CMsgAcceptInvite::clear_has_client_version() {
-  _has_bits_[0] &= ~0x00000004u;
-}
-inline void CMsgAcceptInvite::clear_client_version() {
-  client_version_ = 1225u;
-  clear_has_client_version();
-}
-inline ::google::protobuf::uint32 CMsgAcceptInvite::client_version() const {
-  // @@protoc_insertion_point(field_get:CMsgAcceptInvite.client_version)
-  return client_version_;
-}
-inline void CMsgAcceptInvite::set_client_version(::google::protobuf::uint32 value) {
-  set_has_client_version();
-  client_version_ = value;
-  // @@protoc_insertion_point(field_set:CMsgAcceptInvite.client_version)
+inline void CMsgAcceptLobbyInvite::set_abandoning_match_id(::google::protobuf::uint64 value) {
+  set_has_abandoning_match_id();
+  abandoning_match_id_ = value;
+  // @@protoc_insertion_point(field_set:CMsgAcceptLobbyInvite.abandoning_match_id)
 }
 
-// -------------------------------------------------------------------
-
-// CMsgAcceptInviteResponse
-
-// optional int32 result_code = 1;
-inline bool CMsgAcceptInviteResponse::has_result_code() const {
-  return (_has_bits_[0] & 0x00000001u) != 0;
+// repeated uint64 abandoning_invite_lobby_ids = 3;
+inline int CMsgAcceptLobbyInvite::abandoning_invite_lobby_ids_size() const {
+  return abandoning_invite_lobby_ids_.size();
 }
-inline void CMsgAcceptInviteResponse::set_has_result_code() {
-  _has_bits_[0] |= 0x00000001u;
+inline void CMsgAcceptLobbyInvite::clear_abandoning_invite_lobby_ids() {
+  abandoning_invite_lobby_ids_.Clear();
 }
-inline void CMsgAcceptInviteResponse::clear_has_result_code() {
-  _has_bits_[0] &= ~0x00000001u;
+inline ::google::protobuf::uint64 CMsgAcceptLobbyInvite::abandoning_invite_lobby_ids(int index) const {
+  // @@protoc_insertion_point(field_get:CMsgAcceptLobbyInvite.abandoning_invite_lobby_ids)
+  return abandoning_invite_lobby_ids_.Get(index);
 }
-inline void CMsgAcceptInviteResponse::clear_result_code() {
-  result_code_ = 0;
-  clear_has_result_code();
+inline void CMsgAcceptLobbyInvite::set_abandoning_invite_lobby_ids(int index, ::google::protobuf::uint64 value) {
+  abandoning_invite_lobby_ids_.Set(index, value);
+  // @@protoc_insertion_point(field_set:CMsgAcceptLobbyInvite.abandoning_invite_lobby_ids)
 }
-inline ::google::protobuf::int32 CMsgAcceptInviteResponse::result_code() const {
-  // @@protoc_insertion_point(field_get:CMsgAcceptInviteResponse.result_code)
-  return result_code_;
+inline void CMsgAcceptLobbyInvite::add_abandoning_invite_lobby_ids(::google::protobuf::uint64 value) {
+  abandoning_invite_lobby_ids_.Add(value);
+  // @@protoc_insertion_point(field_add:CMsgAcceptLobbyInvite.abandoning_invite_lobby_ids)
 }
-inline void CMsgAcceptInviteResponse::set_result_code(::google::protobuf::int32 value) {
-  set_has_result_code();
-  result_code_ = value;
-  // @@protoc_insertion_point(field_set:CMsgAcceptInviteResponse.result_code)
+inline const ::google::protobuf::RepeatedField< ::google::protobuf::uint64 >&
+CMsgAcceptLobbyInvite::abandoning_invite_lobby_ids() const {
+  // @@protoc_insertion_point(field_list:CMsgAcceptLobbyInvite.abandoning_invite_lobby_ids)
+  return abandoning_invite_lobby_ids_;
+}
+inline ::google::protobuf::RepeatedField< ::google::protobuf::uint64 >*
+CMsgAcceptLobbyInvite::mutable_abandoning_invite_lobby_ids() {
+  // @@protoc_insertion_point(field_mutable_list:CMsgAcceptLobbyInvite.abandoning_invite_lobby_ids)
+  return &abandoning_invite_lobby_ids_;
 }
 
 // -------------------------------------------------------------------
 
-// CMsgReadyUp
-
-// optional .TFLobbyReadyState state = 1;
-inline bool CMsgReadyUp::has_state() const {
-  return (_has_bits_[0] & 0x00000001u) != 0;
-}
-inline void CMsgReadyUp::set_has_state() {
-  _has_bits_[0] |= 0x00000001u;
-}
-inline void CMsgReadyUp::clear_has_state() {
-  _has_bits_[0] &= ~0x00000001u;
-}
-inline void CMsgReadyUp::clear_state() {
-  state_ = 0;
-  clear_has_state();
-}
-inline ::TFLobbyReadyState CMsgReadyUp::state() const {
-  // @@protoc_insertion_point(field_get:CMsgReadyUp.state)
-  return static_cast< ::TFLobbyReadyState >(state_);
-}
-inline void CMsgReadyUp::set_state(::TFLobbyReadyState value) {
-  assert(::TFLobbyReadyState_IsValid(value));
-  set_has_state();
-  state_ = value;
-  // @@protoc_insertion_point(field_set:CMsgReadyUp.state)
-}
+// CMsgAcceptLobbyInviteReply
 
 // -------------------------------------------------------------------
 
@@ -26411,1084 +29659,6 @@ CMsgMatchmakingSearchCountResponse::mutable_searching_players_by_group() {
 // -------------------------------------------------------------------
 
 // CMsgKickedFromMatchmakingQueue
-
-// -------------------------------------------------------------------
-
-// CMsgTFJoinChatChannel
-
-// optional string persona_name = 1;
-inline bool CMsgTFJoinChatChannel::has_persona_name() const {
-  return (_has_bits_[0] & 0x00000001u) != 0;
-}
-inline void CMsgTFJoinChatChannel::set_has_persona_name() {
-  _has_bits_[0] |= 0x00000001u;
-}
-inline void CMsgTFJoinChatChannel::clear_has_persona_name() {
-  _has_bits_[0] &= ~0x00000001u;
-}
-inline void CMsgTFJoinChatChannel::clear_persona_name() {
-  if (persona_name_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    persona_name_->clear();
-  }
-  clear_has_persona_name();
-}
-inline const ::std::string& CMsgTFJoinChatChannel::persona_name() const {
-  // @@protoc_insertion_point(field_get:CMsgTFJoinChatChannel.persona_name)
-  return *persona_name_;
-}
-inline void CMsgTFJoinChatChannel::set_persona_name(const ::std::string& value) {
-  set_has_persona_name();
-  if (persona_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    persona_name_ = new ::std::string;
-  }
-  persona_name_->assign(value);
-  // @@protoc_insertion_point(field_set:CMsgTFJoinChatChannel.persona_name)
-}
-inline void CMsgTFJoinChatChannel::set_persona_name(const char* value) {
-  set_has_persona_name();
-  if (persona_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    persona_name_ = new ::std::string;
-  }
-  persona_name_->assign(value);
-  // @@protoc_insertion_point(field_set_char:CMsgTFJoinChatChannel.persona_name)
-}
-inline void CMsgTFJoinChatChannel::set_persona_name(const char* value, size_t size) {
-  set_has_persona_name();
-  if (persona_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    persona_name_ = new ::std::string;
-  }
-  persona_name_->assign(reinterpret_cast<const char*>(value), size);
-  // @@protoc_insertion_point(field_set_pointer:CMsgTFJoinChatChannel.persona_name)
-}
-inline ::std::string* CMsgTFJoinChatChannel::mutable_persona_name() {
-  set_has_persona_name();
-  if (persona_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    persona_name_ = new ::std::string;
-  }
-  // @@protoc_insertion_point(field_mutable:CMsgTFJoinChatChannel.persona_name)
-  return persona_name_;
-}
-inline ::std::string* CMsgTFJoinChatChannel::release_persona_name() {
-  clear_has_persona_name();
-  if (persona_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    return NULL;
-  } else {
-    ::std::string* temp = persona_name_;
-    persona_name_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-    return temp;
-  }
-}
-inline void CMsgTFJoinChatChannel::set_allocated_persona_name(::std::string* persona_name) {
-  if (persona_name_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    delete persona_name_;
-  }
-  if (persona_name) {
-    set_has_persona_name();
-    persona_name_ = persona_name;
-  } else {
-    clear_has_persona_name();
-    persona_name_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  }
-  // @@protoc_insertion_point(field_set_allocated:CMsgTFJoinChatChannel.persona_name)
-}
-
-// optional string channel_name = 2;
-inline bool CMsgTFJoinChatChannel::has_channel_name() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
-}
-inline void CMsgTFJoinChatChannel::set_has_channel_name() {
-  _has_bits_[0] |= 0x00000002u;
-}
-inline void CMsgTFJoinChatChannel::clear_has_channel_name() {
-  _has_bits_[0] &= ~0x00000002u;
-}
-inline void CMsgTFJoinChatChannel::clear_channel_name() {
-  if (channel_name_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    channel_name_->clear();
-  }
-  clear_has_channel_name();
-}
-inline const ::std::string& CMsgTFJoinChatChannel::channel_name() const {
-  // @@protoc_insertion_point(field_get:CMsgTFJoinChatChannel.channel_name)
-  return *channel_name_;
-}
-inline void CMsgTFJoinChatChannel::set_channel_name(const ::std::string& value) {
-  set_has_channel_name();
-  if (channel_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    channel_name_ = new ::std::string;
-  }
-  channel_name_->assign(value);
-  // @@protoc_insertion_point(field_set:CMsgTFJoinChatChannel.channel_name)
-}
-inline void CMsgTFJoinChatChannel::set_channel_name(const char* value) {
-  set_has_channel_name();
-  if (channel_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    channel_name_ = new ::std::string;
-  }
-  channel_name_->assign(value);
-  // @@protoc_insertion_point(field_set_char:CMsgTFJoinChatChannel.channel_name)
-}
-inline void CMsgTFJoinChatChannel::set_channel_name(const char* value, size_t size) {
-  set_has_channel_name();
-  if (channel_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    channel_name_ = new ::std::string;
-  }
-  channel_name_->assign(reinterpret_cast<const char*>(value), size);
-  // @@protoc_insertion_point(field_set_pointer:CMsgTFJoinChatChannel.channel_name)
-}
-inline ::std::string* CMsgTFJoinChatChannel::mutable_channel_name() {
-  set_has_channel_name();
-  if (channel_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    channel_name_ = new ::std::string;
-  }
-  // @@protoc_insertion_point(field_mutable:CMsgTFJoinChatChannel.channel_name)
-  return channel_name_;
-}
-inline ::std::string* CMsgTFJoinChatChannel::release_channel_name() {
-  clear_has_channel_name();
-  if (channel_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    return NULL;
-  } else {
-    ::std::string* temp = channel_name_;
-    channel_name_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-    return temp;
-  }
-}
-inline void CMsgTFJoinChatChannel::set_allocated_channel_name(::std::string* channel_name) {
-  if (channel_name_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    delete channel_name_;
-  }
-  if (channel_name) {
-    set_has_channel_name();
-    channel_name_ = channel_name;
-  } else {
-    clear_has_channel_name();
-    channel_name_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  }
-  // @@protoc_insertion_point(field_set_allocated:CMsgTFJoinChatChannel.channel_name)
-}
-
-// optional string password = 3;
-inline bool CMsgTFJoinChatChannel::has_password() const {
-  return (_has_bits_[0] & 0x00000004u) != 0;
-}
-inline void CMsgTFJoinChatChannel::set_has_password() {
-  _has_bits_[0] |= 0x00000004u;
-}
-inline void CMsgTFJoinChatChannel::clear_has_password() {
-  _has_bits_[0] &= ~0x00000004u;
-}
-inline void CMsgTFJoinChatChannel::clear_password() {
-  if (password_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    password_->clear();
-  }
-  clear_has_password();
-}
-inline const ::std::string& CMsgTFJoinChatChannel::password() const {
-  // @@protoc_insertion_point(field_get:CMsgTFJoinChatChannel.password)
-  return *password_;
-}
-inline void CMsgTFJoinChatChannel::set_password(const ::std::string& value) {
-  set_has_password();
-  if (password_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    password_ = new ::std::string;
-  }
-  password_->assign(value);
-  // @@protoc_insertion_point(field_set:CMsgTFJoinChatChannel.password)
-}
-inline void CMsgTFJoinChatChannel::set_password(const char* value) {
-  set_has_password();
-  if (password_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    password_ = new ::std::string;
-  }
-  password_->assign(value);
-  // @@protoc_insertion_point(field_set_char:CMsgTFJoinChatChannel.password)
-}
-inline void CMsgTFJoinChatChannel::set_password(const char* value, size_t size) {
-  set_has_password();
-  if (password_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    password_ = new ::std::string;
-  }
-  password_->assign(reinterpret_cast<const char*>(value), size);
-  // @@protoc_insertion_point(field_set_pointer:CMsgTFJoinChatChannel.password)
-}
-inline ::std::string* CMsgTFJoinChatChannel::mutable_password() {
-  set_has_password();
-  if (password_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    password_ = new ::std::string;
-  }
-  // @@protoc_insertion_point(field_mutable:CMsgTFJoinChatChannel.password)
-  return password_;
-}
-inline ::std::string* CMsgTFJoinChatChannel::release_password() {
-  clear_has_password();
-  if (password_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    return NULL;
-  } else {
-    ::std::string* temp = password_;
-    password_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-    return temp;
-  }
-}
-inline void CMsgTFJoinChatChannel::set_allocated_password(::std::string* password) {
-  if (password_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    delete password_;
-  }
-  if (password) {
-    set_has_password();
-    password_ = password;
-  } else {
-    clear_has_password();
-    password_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  }
-  // @@protoc_insertion_point(field_set_allocated:CMsgTFJoinChatChannel.password)
-}
-
-// optional .ChatChannelType_t channel_type = 4;
-inline bool CMsgTFJoinChatChannel::has_channel_type() const {
-  return (_has_bits_[0] & 0x00000008u) != 0;
-}
-inline void CMsgTFJoinChatChannel::set_has_channel_type() {
-  _has_bits_[0] |= 0x00000008u;
-}
-inline void CMsgTFJoinChatChannel::clear_has_channel_type() {
-  _has_bits_[0] &= ~0x00000008u;
-}
-inline void CMsgTFJoinChatChannel::clear_channel_type() {
-  channel_type_ = 0;
-  clear_has_channel_type();
-}
-inline ::ChatChannelType_t CMsgTFJoinChatChannel::channel_type() const {
-  // @@protoc_insertion_point(field_get:CMsgTFJoinChatChannel.channel_type)
-  return static_cast< ::ChatChannelType_t >(channel_type_);
-}
-inline void CMsgTFJoinChatChannel::set_channel_type(::ChatChannelType_t value) {
-  assert(::ChatChannelType_t_IsValid(value));
-  set_has_channel_type();
-  channel_type_ = value;
-  // @@protoc_insertion_point(field_set:CMsgTFJoinChatChannel.channel_type)
-}
-
-// -------------------------------------------------------------------
-
-// CMsgTFLeaveChatChannel
-
-// optional string channel_name = 1;
-inline bool CMsgTFLeaveChatChannel::has_channel_name() const {
-  return (_has_bits_[0] & 0x00000001u) != 0;
-}
-inline void CMsgTFLeaveChatChannel::set_has_channel_name() {
-  _has_bits_[0] |= 0x00000001u;
-}
-inline void CMsgTFLeaveChatChannel::clear_has_channel_name() {
-  _has_bits_[0] &= ~0x00000001u;
-}
-inline void CMsgTFLeaveChatChannel::clear_channel_name() {
-  if (channel_name_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    channel_name_->clear();
-  }
-  clear_has_channel_name();
-}
-inline const ::std::string& CMsgTFLeaveChatChannel::channel_name() const {
-  // @@protoc_insertion_point(field_get:CMsgTFLeaveChatChannel.channel_name)
-  return *channel_name_;
-}
-inline void CMsgTFLeaveChatChannel::set_channel_name(const ::std::string& value) {
-  set_has_channel_name();
-  if (channel_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    channel_name_ = new ::std::string;
-  }
-  channel_name_->assign(value);
-  // @@protoc_insertion_point(field_set:CMsgTFLeaveChatChannel.channel_name)
-}
-inline void CMsgTFLeaveChatChannel::set_channel_name(const char* value) {
-  set_has_channel_name();
-  if (channel_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    channel_name_ = new ::std::string;
-  }
-  channel_name_->assign(value);
-  // @@protoc_insertion_point(field_set_char:CMsgTFLeaveChatChannel.channel_name)
-}
-inline void CMsgTFLeaveChatChannel::set_channel_name(const char* value, size_t size) {
-  set_has_channel_name();
-  if (channel_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    channel_name_ = new ::std::string;
-  }
-  channel_name_->assign(reinterpret_cast<const char*>(value), size);
-  // @@protoc_insertion_point(field_set_pointer:CMsgTFLeaveChatChannel.channel_name)
-}
-inline ::std::string* CMsgTFLeaveChatChannel::mutable_channel_name() {
-  set_has_channel_name();
-  if (channel_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    channel_name_ = new ::std::string;
-  }
-  // @@protoc_insertion_point(field_mutable:CMsgTFLeaveChatChannel.channel_name)
-  return channel_name_;
-}
-inline ::std::string* CMsgTFLeaveChatChannel::release_channel_name() {
-  clear_has_channel_name();
-  if (channel_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    return NULL;
-  } else {
-    ::std::string* temp = channel_name_;
-    channel_name_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-    return temp;
-  }
-}
-inline void CMsgTFLeaveChatChannel::set_allocated_channel_name(::std::string* channel_name) {
-  if (channel_name_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    delete channel_name_;
-  }
-  if (channel_name) {
-    set_has_channel_name();
-    channel_name_ = channel_name;
-  } else {
-    clear_has_channel_name();
-    channel_name_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  }
-  // @@protoc_insertion_point(field_set_allocated:CMsgTFLeaveChatChannel.channel_name)
-}
-
-// -------------------------------------------------------------------
-
-// CMsgTFJoinChatChannelResponse_ChatMember
-
-// optional fixed64 steam_id = 1;
-inline bool CMsgTFJoinChatChannelResponse_ChatMember::has_steam_id() const {
-  return (_has_bits_[0] & 0x00000001u) != 0;
-}
-inline void CMsgTFJoinChatChannelResponse_ChatMember::set_has_steam_id() {
-  _has_bits_[0] |= 0x00000001u;
-}
-inline void CMsgTFJoinChatChannelResponse_ChatMember::clear_has_steam_id() {
-  _has_bits_[0] &= ~0x00000001u;
-}
-inline void CMsgTFJoinChatChannelResponse_ChatMember::clear_steam_id() {
-  steam_id_ = GOOGLE_ULONGLONG(0);
-  clear_has_steam_id();
-}
-inline ::google::protobuf::uint64 CMsgTFJoinChatChannelResponse_ChatMember::steam_id() const {
-  // @@protoc_insertion_point(field_get:CMsgTFJoinChatChannelResponse.ChatMember.steam_id)
-  return steam_id_;
-}
-inline void CMsgTFJoinChatChannelResponse_ChatMember::set_steam_id(::google::protobuf::uint64 value) {
-  set_has_steam_id();
-  steam_id_ = value;
-  // @@protoc_insertion_point(field_set:CMsgTFJoinChatChannelResponse.ChatMember.steam_id)
-}
-
-// optional string persona_name = 2;
-inline bool CMsgTFJoinChatChannelResponse_ChatMember::has_persona_name() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
-}
-inline void CMsgTFJoinChatChannelResponse_ChatMember::set_has_persona_name() {
-  _has_bits_[0] |= 0x00000002u;
-}
-inline void CMsgTFJoinChatChannelResponse_ChatMember::clear_has_persona_name() {
-  _has_bits_[0] &= ~0x00000002u;
-}
-inline void CMsgTFJoinChatChannelResponse_ChatMember::clear_persona_name() {
-  if (persona_name_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    persona_name_->clear();
-  }
-  clear_has_persona_name();
-}
-inline const ::std::string& CMsgTFJoinChatChannelResponse_ChatMember::persona_name() const {
-  // @@protoc_insertion_point(field_get:CMsgTFJoinChatChannelResponse.ChatMember.persona_name)
-  return *persona_name_;
-}
-inline void CMsgTFJoinChatChannelResponse_ChatMember::set_persona_name(const ::std::string& value) {
-  set_has_persona_name();
-  if (persona_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    persona_name_ = new ::std::string;
-  }
-  persona_name_->assign(value);
-  // @@protoc_insertion_point(field_set:CMsgTFJoinChatChannelResponse.ChatMember.persona_name)
-}
-inline void CMsgTFJoinChatChannelResponse_ChatMember::set_persona_name(const char* value) {
-  set_has_persona_name();
-  if (persona_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    persona_name_ = new ::std::string;
-  }
-  persona_name_->assign(value);
-  // @@protoc_insertion_point(field_set_char:CMsgTFJoinChatChannelResponse.ChatMember.persona_name)
-}
-inline void CMsgTFJoinChatChannelResponse_ChatMember::set_persona_name(const char* value, size_t size) {
-  set_has_persona_name();
-  if (persona_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    persona_name_ = new ::std::string;
-  }
-  persona_name_->assign(reinterpret_cast<const char*>(value), size);
-  // @@protoc_insertion_point(field_set_pointer:CMsgTFJoinChatChannelResponse.ChatMember.persona_name)
-}
-inline ::std::string* CMsgTFJoinChatChannelResponse_ChatMember::mutable_persona_name() {
-  set_has_persona_name();
-  if (persona_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    persona_name_ = new ::std::string;
-  }
-  // @@protoc_insertion_point(field_mutable:CMsgTFJoinChatChannelResponse.ChatMember.persona_name)
-  return persona_name_;
-}
-inline ::std::string* CMsgTFJoinChatChannelResponse_ChatMember::release_persona_name() {
-  clear_has_persona_name();
-  if (persona_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    return NULL;
-  } else {
-    ::std::string* temp = persona_name_;
-    persona_name_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-    return temp;
-  }
-}
-inline void CMsgTFJoinChatChannelResponse_ChatMember::set_allocated_persona_name(::std::string* persona_name) {
-  if (persona_name_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    delete persona_name_;
-  }
-  if (persona_name) {
-    set_has_persona_name();
-    persona_name_ = persona_name;
-  } else {
-    clear_has_persona_name();
-    persona_name_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  }
-  // @@protoc_insertion_point(field_set_allocated:CMsgTFJoinChatChannelResponse.ChatMember.persona_name)
-}
-
-// -------------------------------------------------------------------
-
-// CMsgTFJoinChatChannelResponse
-
-// optional uint32 response = 1;
-inline bool CMsgTFJoinChatChannelResponse::has_response() const {
-  return (_has_bits_[0] & 0x00000001u) != 0;
-}
-inline void CMsgTFJoinChatChannelResponse::set_has_response() {
-  _has_bits_[0] |= 0x00000001u;
-}
-inline void CMsgTFJoinChatChannelResponse::clear_has_response() {
-  _has_bits_[0] &= ~0x00000001u;
-}
-inline void CMsgTFJoinChatChannelResponse::clear_response() {
-  response_ = 0u;
-  clear_has_response();
-}
-inline ::google::protobuf::uint32 CMsgTFJoinChatChannelResponse::response() const {
-  // @@protoc_insertion_point(field_get:CMsgTFJoinChatChannelResponse.response)
-  return response_;
-}
-inline void CMsgTFJoinChatChannelResponse::set_response(::google::protobuf::uint32 value) {
-  set_has_response();
-  response_ = value;
-  // @@protoc_insertion_point(field_set:CMsgTFJoinChatChannelResponse.response)
-}
-
-// optional string channel_name = 2;
-inline bool CMsgTFJoinChatChannelResponse::has_channel_name() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
-}
-inline void CMsgTFJoinChatChannelResponse::set_has_channel_name() {
-  _has_bits_[0] |= 0x00000002u;
-}
-inline void CMsgTFJoinChatChannelResponse::clear_has_channel_name() {
-  _has_bits_[0] &= ~0x00000002u;
-}
-inline void CMsgTFJoinChatChannelResponse::clear_channel_name() {
-  if (channel_name_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    channel_name_->clear();
-  }
-  clear_has_channel_name();
-}
-inline const ::std::string& CMsgTFJoinChatChannelResponse::channel_name() const {
-  // @@protoc_insertion_point(field_get:CMsgTFJoinChatChannelResponse.channel_name)
-  return *channel_name_;
-}
-inline void CMsgTFJoinChatChannelResponse::set_channel_name(const ::std::string& value) {
-  set_has_channel_name();
-  if (channel_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    channel_name_ = new ::std::string;
-  }
-  channel_name_->assign(value);
-  // @@protoc_insertion_point(field_set:CMsgTFJoinChatChannelResponse.channel_name)
-}
-inline void CMsgTFJoinChatChannelResponse::set_channel_name(const char* value) {
-  set_has_channel_name();
-  if (channel_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    channel_name_ = new ::std::string;
-  }
-  channel_name_->assign(value);
-  // @@protoc_insertion_point(field_set_char:CMsgTFJoinChatChannelResponse.channel_name)
-}
-inline void CMsgTFJoinChatChannelResponse::set_channel_name(const char* value, size_t size) {
-  set_has_channel_name();
-  if (channel_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    channel_name_ = new ::std::string;
-  }
-  channel_name_->assign(reinterpret_cast<const char*>(value), size);
-  // @@protoc_insertion_point(field_set_pointer:CMsgTFJoinChatChannelResponse.channel_name)
-}
-inline ::std::string* CMsgTFJoinChatChannelResponse::mutable_channel_name() {
-  set_has_channel_name();
-  if (channel_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    channel_name_ = new ::std::string;
-  }
-  // @@protoc_insertion_point(field_mutable:CMsgTFJoinChatChannelResponse.channel_name)
-  return channel_name_;
-}
-inline ::std::string* CMsgTFJoinChatChannelResponse::release_channel_name() {
-  clear_has_channel_name();
-  if (channel_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    return NULL;
-  } else {
-    ::std::string* temp = channel_name_;
-    channel_name_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-    return temp;
-  }
-}
-inline void CMsgTFJoinChatChannelResponse::set_allocated_channel_name(::std::string* channel_name) {
-  if (channel_name_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    delete channel_name_;
-  }
-  if (channel_name) {
-    set_has_channel_name();
-    channel_name_ = channel_name;
-  } else {
-    clear_has_channel_name();
-    channel_name_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  }
-  // @@protoc_insertion_point(field_set_allocated:CMsgTFJoinChatChannelResponse.channel_name)
-}
-
-// optional fixed64 channel_id = 3;
-inline bool CMsgTFJoinChatChannelResponse::has_channel_id() const {
-  return (_has_bits_[0] & 0x00000004u) != 0;
-}
-inline void CMsgTFJoinChatChannelResponse::set_has_channel_id() {
-  _has_bits_[0] |= 0x00000004u;
-}
-inline void CMsgTFJoinChatChannelResponse::clear_has_channel_id() {
-  _has_bits_[0] &= ~0x00000004u;
-}
-inline void CMsgTFJoinChatChannelResponse::clear_channel_id() {
-  channel_id_ = GOOGLE_ULONGLONG(0);
-  clear_has_channel_id();
-}
-inline ::google::protobuf::uint64 CMsgTFJoinChatChannelResponse::channel_id() const {
-  // @@protoc_insertion_point(field_get:CMsgTFJoinChatChannelResponse.channel_id)
-  return channel_id_;
-}
-inline void CMsgTFJoinChatChannelResponse::set_channel_id(::google::protobuf::uint64 value) {
-  set_has_channel_id();
-  channel_id_ = value;
-  // @@protoc_insertion_point(field_set:CMsgTFJoinChatChannelResponse.channel_id)
-}
-
-// optional uint32 max_members = 4;
-inline bool CMsgTFJoinChatChannelResponse::has_max_members() const {
-  return (_has_bits_[0] & 0x00000008u) != 0;
-}
-inline void CMsgTFJoinChatChannelResponse::set_has_max_members() {
-  _has_bits_[0] |= 0x00000008u;
-}
-inline void CMsgTFJoinChatChannelResponse::clear_has_max_members() {
-  _has_bits_[0] &= ~0x00000008u;
-}
-inline void CMsgTFJoinChatChannelResponse::clear_max_members() {
-  max_members_ = 0u;
-  clear_has_max_members();
-}
-inline ::google::protobuf::uint32 CMsgTFJoinChatChannelResponse::max_members() const {
-  // @@protoc_insertion_point(field_get:CMsgTFJoinChatChannelResponse.max_members)
-  return max_members_;
-}
-inline void CMsgTFJoinChatChannelResponse::set_max_members(::google::protobuf::uint32 value) {
-  set_has_max_members();
-  max_members_ = value;
-  // @@protoc_insertion_point(field_set:CMsgTFJoinChatChannelResponse.max_members)
-}
-
-// repeated .CMsgTFJoinChatChannelResponse.ChatMember members = 5;
-inline int CMsgTFJoinChatChannelResponse::members_size() const {
-  return members_.size();
-}
-inline void CMsgTFJoinChatChannelResponse::clear_members() {
-  members_.Clear();
-}
-inline const ::CMsgTFJoinChatChannelResponse_ChatMember& CMsgTFJoinChatChannelResponse::members(int index) const {
-  // @@protoc_insertion_point(field_get:CMsgTFJoinChatChannelResponse.members)
-  return members_.Get(index);
-}
-inline ::CMsgTFJoinChatChannelResponse_ChatMember* CMsgTFJoinChatChannelResponse::mutable_members(int index) {
-  // @@protoc_insertion_point(field_mutable:CMsgTFJoinChatChannelResponse.members)
-  return members_.Mutable(index);
-}
-inline ::CMsgTFJoinChatChannelResponse_ChatMember* CMsgTFJoinChatChannelResponse::add_members() {
-  // @@protoc_insertion_point(field_add:CMsgTFJoinChatChannelResponse.members)
-  return members_.Add();
-}
-inline const ::google::protobuf::RepeatedPtrField< ::CMsgTFJoinChatChannelResponse_ChatMember >&
-CMsgTFJoinChatChannelResponse::members() const {
-  // @@protoc_insertion_point(field_list:CMsgTFJoinChatChannelResponse.members)
-  return members_;
-}
-inline ::google::protobuf::RepeatedPtrField< ::CMsgTFJoinChatChannelResponse_ChatMember >*
-CMsgTFJoinChatChannelResponse::mutable_members() {
-  // @@protoc_insertion_point(field_mutable_list:CMsgTFJoinChatChannelResponse.members)
-  return &members_;
-}
-
-// -------------------------------------------------------------------
-
-// CMsgTFOtherJoinedChatChannel
-
-// optional fixed64 channel_id = 1;
-inline bool CMsgTFOtherJoinedChatChannel::has_channel_id() const {
-  return (_has_bits_[0] & 0x00000001u) != 0;
-}
-inline void CMsgTFOtherJoinedChatChannel::set_has_channel_id() {
-  _has_bits_[0] |= 0x00000001u;
-}
-inline void CMsgTFOtherJoinedChatChannel::clear_has_channel_id() {
-  _has_bits_[0] &= ~0x00000001u;
-}
-inline void CMsgTFOtherJoinedChatChannel::clear_channel_id() {
-  channel_id_ = GOOGLE_ULONGLONG(0);
-  clear_has_channel_id();
-}
-inline ::google::protobuf::uint64 CMsgTFOtherJoinedChatChannel::channel_id() const {
-  // @@protoc_insertion_point(field_get:CMsgTFOtherJoinedChatChannel.channel_id)
-  return channel_id_;
-}
-inline void CMsgTFOtherJoinedChatChannel::set_channel_id(::google::protobuf::uint64 value) {
-  set_has_channel_id();
-  channel_id_ = value;
-  // @@protoc_insertion_point(field_set:CMsgTFOtherJoinedChatChannel.channel_id)
-}
-
-// optional string persona_name = 2;
-inline bool CMsgTFOtherJoinedChatChannel::has_persona_name() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
-}
-inline void CMsgTFOtherJoinedChatChannel::set_has_persona_name() {
-  _has_bits_[0] |= 0x00000002u;
-}
-inline void CMsgTFOtherJoinedChatChannel::clear_has_persona_name() {
-  _has_bits_[0] &= ~0x00000002u;
-}
-inline void CMsgTFOtherJoinedChatChannel::clear_persona_name() {
-  if (persona_name_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    persona_name_->clear();
-  }
-  clear_has_persona_name();
-}
-inline const ::std::string& CMsgTFOtherJoinedChatChannel::persona_name() const {
-  // @@protoc_insertion_point(field_get:CMsgTFOtherJoinedChatChannel.persona_name)
-  return *persona_name_;
-}
-inline void CMsgTFOtherJoinedChatChannel::set_persona_name(const ::std::string& value) {
-  set_has_persona_name();
-  if (persona_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    persona_name_ = new ::std::string;
-  }
-  persona_name_->assign(value);
-  // @@protoc_insertion_point(field_set:CMsgTFOtherJoinedChatChannel.persona_name)
-}
-inline void CMsgTFOtherJoinedChatChannel::set_persona_name(const char* value) {
-  set_has_persona_name();
-  if (persona_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    persona_name_ = new ::std::string;
-  }
-  persona_name_->assign(value);
-  // @@protoc_insertion_point(field_set_char:CMsgTFOtherJoinedChatChannel.persona_name)
-}
-inline void CMsgTFOtherJoinedChatChannel::set_persona_name(const char* value, size_t size) {
-  set_has_persona_name();
-  if (persona_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    persona_name_ = new ::std::string;
-  }
-  persona_name_->assign(reinterpret_cast<const char*>(value), size);
-  // @@protoc_insertion_point(field_set_pointer:CMsgTFOtherJoinedChatChannel.persona_name)
-}
-inline ::std::string* CMsgTFOtherJoinedChatChannel::mutable_persona_name() {
-  set_has_persona_name();
-  if (persona_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    persona_name_ = new ::std::string;
-  }
-  // @@protoc_insertion_point(field_mutable:CMsgTFOtherJoinedChatChannel.persona_name)
-  return persona_name_;
-}
-inline ::std::string* CMsgTFOtherJoinedChatChannel::release_persona_name() {
-  clear_has_persona_name();
-  if (persona_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    return NULL;
-  } else {
-    ::std::string* temp = persona_name_;
-    persona_name_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-    return temp;
-  }
-}
-inline void CMsgTFOtherJoinedChatChannel::set_allocated_persona_name(::std::string* persona_name) {
-  if (persona_name_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    delete persona_name_;
-  }
-  if (persona_name) {
-    set_has_persona_name();
-    persona_name_ = persona_name;
-  } else {
-    clear_has_persona_name();
-    persona_name_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  }
-  // @@protoc_insertion_point(field_set_allocated:CMsgTFOtherJoinedChatChannel.persona_name)
-}
-
-// optional fixed64 steam_id = 3;
-inline bool CMsgTFOtherJoinedChatChannel::has_steam_id() const {
-  return (_has_bits_[0] & 0x00000004u) != 0;
-}
-inline void CMsgTFOtherJoinedChatChannel::set_has_steam_id() {
-  _has_bits_[0] |= 0x00000004u;
-}
-inline void CMsgTFOtherJoinedChatChannel::clear_has_steam_id() {
-  _has_bits_[0] &= ~0x00000004u;
-}
-inline void CMsgTFOtherJoinedChatChannel::clear_steam_id() {
-  steam_id_ = GOOGLE_ULONGLONG(0);
-  clear_has_steam_id();
-}
-inline ::google::protobuf::uint64 CMsgTFOtherJoinedChatChannel::steam_id() const {
-  // @@protoc_insertion_point(field_get:CMsgTFOtherJoinedChatChannel.steam_id)
-  return steam_id_;
-}
-inline void CMsgTFOtherJoinedChatChannel::set_steam_id(::google::protobuf::uint64 value) {
-  set_has_steam_id();
-  steam_id_ = value;
-  // @@protoc_insertion_point(field_set:CMsgTFOtherJoinedChatChannel.steam_id)
-}
-
-// -------------------------------------------------------------------
-
-// CMsgTFOtherLeftChatChannel
-
-// optional fixed64 channel_id = 1;
-inline bool CMsgTFOtherLeftChatChannel::has_channel_id() const {
-  return (_has_bits_[0] & 0x00000001u) != 0;
-}
-inline void CMsgTFOtherLeftChatChannel::set_has_channel_id() {
-  _has_bits_[0] |= 0x00000001u;
-}
-inline void CMsgTFOtherLeftChatChannel::clear_has_channel_id() {
-  _has_bits_[0] &= ~0x00000001u;
-}
-inline void CMsgTFOtherLeftChatChannel::clear_channel_id() {
-  channel_id_ = GOOGLE_ULONGLONG(0);
-  clear_has_channel_id();
-}
-inline ::google::protobuf::uint64 CMsgTFOtherLeftChatChannel::channel_id() const {
-  // @@protoc_insertion_point(field_get:CMsgTFOtherLeftChatChannel.channel_id)
-  return channel_id_;
-}
-inline void CMsgTFOtherLeftChatChannel::set_channel_id(::google::protobuf::uint64 value) {
-  set_has_channel_id();
-  channel_id_ = value;
-  // @@protoc_insertion_point(field_set:CMsgTFOtherLeftChatChannel.channel_id)
-}
-
-// optional fixed64 steam_id = 2;
-inline bool CMsgTFOtherLeftChatChannel::has_steam_id() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
-}
-inline void CMsgTFOtherLeftChatChannel::set_has_steam_id() {
-  _has_bits_[0] |= 0x00000002u;
-}
-inline void CMsgTFOtherLeftChatChannel::clear_has_steam_id() {
-  _has_bits_[0] &= ~0x00000002u;
-}
-inline void CMsgTFOtherLeftChatChannel::clear_steam_id() {
-  steam_id_ = GOOGLE_ULONGLONG(0);
-  clear_has_steam_id();
-}
-inline ::google::protobuf::uint64 CMsgTFOtherLeftChatChannel::steam_id() const {
-  // @@protoc_insertion_point(field_get:CMsgTFOtherLeftChatChannel.steam_id)
-  return steam_id_;
-}
-inline void CMsgTFOtherLeftChatChannel::set_steam_id(::google::protobuf::uint64 value) {
-  set_has_steam_id();
-  steam_id_ = value;
-  // @@protoc_insertion_point(field_set:CMsgTFOtherLeftChatChannel.steam_id)
-}
-
-// -------------------------------------------------------------------
-
-// CMsgTFRequestDefaultChatChannel
-
-// -------------------------------------------------------------------
-
-// CMsgTFRequestDefaultChatChannelResponse
-
-// optional string channel_name = 1;
-inline bool CMsgTFRequestDefaultChatChannelResponse::has_channel_name() const {
-  return (_has_bits_[0] & 0x00000001u) != 0;
-}
-inline void CMsgTFRequestDefaultChatChannelResponse::set_has_channel_name() {
-  _has_bits_[0] |= 0x00000001u;
-}
-inline void CMsgTFRequestDefaultChatChannelResponse::clear_has_channel_name() {
-  _has_bits_[0] &= ~0x00000001u;
-}
-inline void CMsgTFRequestDefaultChatChannelResponse::clear_channel_name() {
-  if (channel_name_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    channel_name_->clear();
-  }
-  clear_has_channel_name();
-}
-inline const ::std::string& CMsgTFRequestDefaultChatChannelResponse::channel_name() const {
-  // @@protoc_insertion_point(field_get:CMsgTFRequestDefaultChatChannelResponse.channel_name)
-  return *channel_name_;
-}
-inline void CMsgTFRequestDefaultChatChannelResponse::set_channel_name(const ::std::string& value) {
-  set_has_channel_name();
-  if (channel_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    channel_name_ = new ::std::string;
-  }
-  channel_name_->assign(value);
-  // @@protoc_insertion_point(field_set:CMsgTFRequestDefaultChatChannelResponse.channel_name)
-}
-inline void CMsgTFRequestDefaultChatChannelResponse::set_channel_name(const char* value) {
-  set_has_channel_name();
-  if (channel_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    channel_name_ = new ::std::string;
-  }
-  channel_name_->assign(value);
-  // @@protoc_insertion_point(field_set_char:CMsgTFRequestDefaultChatChannelResponse.channel_name)
-}
-inline void CMsgTFRequestDefaultChatChannelResponse::set_channel_name(const char* value, size_t size) {
-  set_has_channel_name();
-  if (channel_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    channel_name_ = new ::std::string;
-  }
-  channel_name_->assign(reinterpret_cast<const char*>(value), size);
-  // @@protoc_insertion_point(field_set_pointer:CMsgTFRequestDefaultChatChannelResponse.channel_name)
-}
-inline ::std::string* CMsgTFRequestDefaultChatChannelResponse::mutable_channel_name() {
-  set_has_channel_name();
-  if (channel_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    channel_name_ = new ::std::string;
-  }
-  // @@protoc_insertion_point(field_mutable:CMsgTFRequestDefaultChatChannelResponse.channel_name)
-  return channel_name_;
-}
-inline ::std::string* CMsgTFRequestDefaultChatChannelResponse::release_channel_name() {
-  clear_has_channel_name();
-  if (channel_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    return NULL;
-  } else {
-    ::std::string* temp = channel_name_;
-    channel_name_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-    return temp;
-  }
-}
-inline void CMsgTFRequestDefaultChatChannelResponse::set_allocated_channel_name(::std::string* channel_name) {
-  if (channel_name_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    delete channel_name_;
-  }
-  if (channel_name) {
-    set_has_channel_name();
-    channel_name_ = channel_name;
-  } else {
-    clear_has_channel_name();
-    channel_name_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  }
-  // @@protoc_insertion_point(field_set_allocated:CMsgTFRequestDefaultChatChannelResponse.channel_name)
-}
-
-// optional fixed64 channel_id = 2;
-inline bool CMsgTFRequestDefaultChatChannelResponse::has_channel_id() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
-}
-inline void CMsgTFRequestDefaultChatChannelResponse::set_has_channel_id() {
-  _has_bits_[0] |= 0x00000002u;
-}
-inline void CMsgTFRequestDefaultChatChannelResponse::clear_has_channel_id() {
-  _has_bits_[0] &= ~0x00000002u;
-}
-inline void CMsgTFRequestDefaultChatChannelResponse::clear_channel_id() {
-  channel_id_ = GOOGLE_ULONGLONG(0);
-  clear_has_channel_id();
-}
-inline ::google::protobuf::uint64 CMsgTFRequestDefaultChatChannelResponse::channel_id() const {
-  // @@protoc_insertion_point(field_get:CMsgTFRequestDefaultChatChannelResponse.channel_id)
-  return channel_id_;
-}
-inline void CMsgTFRequestDefaultChatChannelResponse::set_channel_id(::google::protobuf::uint64 value) {
-  set_has_channel_id();
-  channel_id_ = value;
-  // @@protoc_insertion_point(field_set:CMsgTFRequestDefaultChatChannelResponse.channel_id)
-}
-
-// -------------------------------------------------------------------
-
-// CMsgTFRequestChatChannelList
-
-// -------------------------------------------------------------------
-
-// CMsgTFRequestChatChannelListResponse_ChatChannel
-
-// optional string channel_name = 1;
-inline bool CMsgTFRequestChatChannelListResponse_ChatChannel::has_channel_name() const {
-  return (_has_bits_[0] & 0x00000001u) != 0;
-}
-inline void CMsgTFRequestChatChannelListResponse_ChatChannel::set_has_channel_name() {
-  _has_bits_[0] |= 0x00000001u;
-}
-inline void CMsgTFRequestChatChannelListResponse_ChatChannel::clear_has_channel_name() {
-  _has_bits_[0] &= ~0x00000001u;
-}
-inline void CMsgTFRequestChatChannelListResponse_ChatChannel::clear_channel_name() {
-  if (channel_name_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    channel_name_->clear();
-  }
-  clear_has_channel_name();
-}
-inline const ::std::string& CMsgTFRequestChatChannelListResponse_ChatChannel::channel_name() const {
-  // @@protoc_insertion_point(field_get:CMsgTFRequestChatChannelListResponse.ChatChannel.channel_name)
-  return *channel_name_;
-}
-inline void CMsgTFRequestChatChannelListResponse_ChatChannel::set_channel_name(const ::std::string& value) {
-  set_has_channel_name();
-  if (channel_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    channel_name_ = new ::std::string;
-  }
-  channel_name_->assign(value);
-  // @@protoc_insertion_point(field_set:CMsgTFRequestChatChannelListResponse.ChatChannel.channel_name)
-}
-inline void CMsgTFRequestChatChannelListResponse_ChatChannel::set_channel_name(const char* value) {
-  set_has_channel_name();
-  if (channel_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    channel_name_ = new ::std::string;
-  }
-  channel_name_->assign(value);
-  // @@protoc_insertion_point(field_set_char:CMsgTFRequestChatChannelListResponse.ChatChannel.channel_name)
-}
-inline void CMsgTFRequestChatChannelListResponse_ChatChannel::set_channel_name(const char* value, size_t size) {
-  set_has_channel_name();
-  if (channel_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    channel_name_ = new ::std::string;
-  }
-  channel_name_->assign(reinterpret_cast<const char*>(value), size);
-  // @@protoc_insertion_point(field_set_pointer:CMsgTFRequestChatChannelListResponse.ChatChannel.channel_name)
-}
-inline ::std::string* CMsgTFRequestChatChannelListResponse_ChatChannel::mutable_channel_name() {
-  set_has_channel_name();
-  if (channel_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    channel_name_ = new ::std::string;
-  }
-  // @@protoc_insertion_point(field_mutable:CMsgTFRequestChatChannelListResponse.ChatChannel.channel_name)
-  return channel_name_;
-}
-inline ::std::string* CMsgTFRequestChatChannelListResponse_ChatChannel::release_channel_name() {
-  clear_has_channel_name();
-  if (channel_name_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    return NULL;
-  } else {
-    ::std::string* temp = channel_name_;
-    channel_name_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-    return temp;
-  }
-}
-inline void CMsgTFRequestChatChannelListResponse_ChatChannel::set_allocated_channel_name(::std::string* channel_name) {
-  if (channel_name_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-    delete channel_name_;
-  }
-  if (channel_name) {
-    set_has_channel_name();
-    channel_name_ = channel_name;
-  } else {
-    clear_has_channel_name();
-    channel_name_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  }
-  // @@protoc_insertion_point(field_set_allocated:CMsgTFRequestChatChannelListResponse.ChatChannel.channel_name)
-}
-
-// optional uint32 num_members = 2;
-inline bool CMsgTFRequestChatChannelListResponse_ChatChannel::has_num_members() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
-}
-inline void CMsgTFRequestChatChannelListResponse_ChatChannel::set_has_num_members() {
-  _has_bits_[0] |= 0x00000002u;
-}
-inline void CMsgTFRequestChatChannelListResponse_ChatChannel::clear_has_num_members() {
-  _has_bits_[0] &= ~0x00000002u;
-}
-inline void CMsgTFRequestChatChannelListResponse_ChatChannel::clear_num_members() {
-  num_members_ = 0u;
-  clear_has_num_members();
-}
-inline ::google::protobuf::uint32 CMsgTFRequestChatChannelListResponse_ChatChannel::num_members() const {
-  // @@protoc_insertion_point(field_get:CMsgTFRequestChatChannelListResponse.ChatChannel.num_members)
-  return num_members_;
-}
-inline void CMsgTFRequestChatChannelListResponse_ChatChannel::set_num_members(::google::protobuf::uint32 value) {
-  set_has_num_members();
-  num_members_ = value;
-  // @@protoc_insertion_point(field_set:CMsgTFRequestChatChannelListResponse.ChatChannel.num_members)
-}
-
-// optional .ChatChannelType_t channel_type = 3;
-inline bool CMsgTFRequestChatChannelListResponse_ChatChannel::has_channel_type() const {
-  return (_has_bits_[0] & 0x00000004u) != 0;
-}
-inline void CMsgTFRequestChatChannelListResponse_ChatChannel::set_has_channel_type() {
-  _has_bits_[0] |= 0x00000004u;
-}
-inline void CMsgTFRequestChatChannelListResponse_ChatChannel::clear_has_channel_type() {
-  _has_bits_[0] &= ~0x00000004u;
-}
-inline void CMsgTFRequestChatChannelListResponse_ChatChannel::clear_channel_type() {
-  channel_type_ = 0;
-  clear_has_channel_type();
-}
-inline ::ChatChannelType_t CMsgTFRequestChatChannelListResponse_ChatChannel::channel_type() const {
-  // @@protoc_insertion_point(field_get:CMsgTFRequestChatChannelListResponse.ChatChannel.channel_type)
-  return static_cast< ::ChatChannelType_t >(channel_type_);
-}
-inline void CMsgTFRequestChatChannelListResponse_ChatChannel::set_channel_type(::ChatChannelType_t value) {
-  assert(::ChatChannelType_t_IsValid(value));
-  set_has_channel_type();
-  channel_type_ = value;
-  // @@protoc_insertion_point(field_set:CMsgTFRequestChatChannelListResponse.ChatChannel.channel_type)
-}
-
-// -------------------------------------------------------------------
-
-// CMsgTFRequestChatChannelListResponse
-
-// repeated .CMsgTFRequestChatChannelListResponse.ChatChannel channels = 1;
-inline int CMsgTFRequestChatChannelListResponse::channels_size() const {
-  return channels_.size();
-}
-inline void CMsgTFRequestChatChannelListResponse::clear_channels() {
-  channels_.Clear();
-}
-inline const ::CMsgTFRequestChatChannelListResponse_ChatChannel& CMsgTFRequestChatChannelListResponse::channels(int index) const {
-  // @@protoc_insertion_point(field_get:CMsgTFRequestChatChannelListResponse.channels)
-  return channels_.Get(index);
-}
-inline ::CMsgTFRequestChatChannelListResponse_ChatChannel* CMsgTFRequestChatChannelListResponse::mutable_channels(int index) {
-  // @@protoc_insertion_point(field_mutable:CMsgTFRequestChatChannelListResponse.channels)
-  return channels_.Mutable(index);
-}
-inline ::CMsgTFRequestChatChannelListResponse_ChatChannel* CMsgTFRequestChatChannelListResponse::add_channels() {
-  // @@protoc_insertion_point(field_add:CMsgTFRequestChatChannelListResponse.channels)
-  return channels_.Add();
-}
-inline const ::google::protobuf::RepeatedPtrField< ::CMsgTFRequestChatChannelListResponse_ChatChannel >&
-CMsgTFRequestChatChannelListResponse::channels() const {
-  // @@protoc_insertion_point(field_list:CMsgTFRequestChatChannelListResponse.channels)
-  return channels_;
-}
-inline ::google::protobuf::RepeatedPtrField< ::CMsgTFRequestChatChannelListResponse_ChatChannel >*
-CMsgTFRequestChatChannelListResponse::mutable_channels() {
-  // @@protoc_insertion_point(field_mutable_list:CMsgTFRequestChatChannelListResponse.channels)
-  return &channels_;
-}
 
 // -------------------------------------------------------------------
 
@@ -27596,40 +29766,15 @@ inline void CMsgGameServerMatchmakingStatus::set_matchmaking_state(::ServerMatch
   // @@protoc_insertion_point(field_set:CMsgGameServerMatchmakingStatus.matchmaking_state)
 }
 
-// optional .TF_MatchmakingMode matchmaking_mode = 2;
-inline bool CMsgGameServerMatchmakingStatus::has_matchmaking_mode() const {
-  return (_has_bits_[0] & 0x00000004u) != 0;
-}
-inline void CMsgGameServerMatchmakingStatus::set_has_matchmaking_mode() {
-  _has_bits_[0] |= 0x00000004u;
-}
-inline void CMsgGameServerMatchmakingStatus::clear_has_matchmaking_mode() {
-  _has_bits_[0] &= ~0x00000004u;
-}
-inline void CMsgGameServerMatchmakingStatus::clear_matchmaking_mode() {
-  matchmaking_mode_ = 0;
-  clear_has_matchmaking_mode();
-}
-inline ::TF_MatchmakingMode CMsgGameServerMatchmakingStatus::matchmaking_mode() const {
-  // @@protoc_insertion_point(field_get:CMsgGameServerMatchmakingStatus.matchmaking_mode)
-  return static_cast< ::TF_MatchmakingMode >(matchmaking_mode_);
-}
-inline void CMsgGameServerMatchmakingStatus::set_matchmaking_mode(::TF_MatchmakingMode value) {
-  assert(::TF_MatchmakingMode_IsValid(value));
-  set_has_matchmaking_mode();
-  matchmaking_mode_ = value;
-  // @@protoc_insertion_point(field_set:CMsgGameServerMatchmakingStatus.matchmaking_mode)
-}
-
 // optional string map = 3;
 inline bool CMsgGameServerMatchmakingStatus::has_map() const {
-  return (_has_bits_[0] & 0x00000008u) != 0;
+  return (_has_bits_[0] & 0x00000004u) != 0;
 }
 inline void CMsgGameServerMatchmakingStatus::set_has_map() {
-  _has_bits_[0] |= 0x00000008u;
+  _has_bits_[0] |= 0x00000004u;
 }
 inline void CMsgGameServerMatchmakingStatus::clear_has_map() {
-  _has_bits_[0] &= ~0x00000008u;
+  _has_bits_[0] &= ~0x00000004u;
 }
 inline void CMsgGameServerMatchmakingStatus::clear_map() {
   if (map_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
@@ -27699,13 +29844,13 @@ inline void CMsgGameServerMatchmakingStatus::set_allocated_map(::std::string* ma
 
 // optional string tags = 4;
 inline bool CMsgGameServerMatchmakingStatus::has_tags() const {
-  return (_has_bits_[0] & 0x00000010u) != 0;
+  return (_has_bits_[0] & 0x00000008u) != 0;
 }
 inline void CMsgGameServerMatchmakingStatus::set_has_tags() {
-  _has_bits_[0] |= 0x00000010u;
+  _has_bits_[0] |= 0x00000008u;
 }
 inline void CMsgGameServerMatchmakingStatus::clear_has_tags() {
-  _has_bits_[0] &= ~0x00000010u;
+  _has_bits_[0] &= ~0x00000008u;
 }
 inline void CMsgGameServerMatchmakingStatus::clear_tags() {
   if (tags_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
@@ -27775,13 +29920,13 @@ inline void CMsgGameServerMatchmakingStatus::set_allocated_tags(::std::string* t
 
 // optional uint32 bot_count = 5;
 inline bool CMsgGameServerMatchmakingStatus::has_bot_count() const {
-  return (_has_bits_[0] & 0x00000020u) != 0;
+  return (_has_bits_[0] & 0x00000010u) != 0;
 }
 inline void CMsgGameServerMatchmakingStatus::set_has_bot_count() {
-  _has_bits_[0] |= 0x00000020u;
+  _has_bits_[0] |= 0x00000010u;
 }
 inline void CMsgGameServerMatchmakingStatus::clear_has_bot_count() {
-  _has_bits_[0] &= ~0x00000020u;
+  _has_bits_[0] &= ~0x00000010u;
 }
 inline void CMsgGameServerMatchmakingStatus::clear_bot_count() {
   bot_count_ = 0u;
@@ -27799,13 +29944,13 @@ inline void CMsgGameServerMatchmakingStatus::set_bot_count(::google::protobuf::u
 
 // optional uint32 num_spectators = 6;
 inline bool CMsgGameServerMatchmakingStatus::has_num_spectators() const {
-  return (_has_bits_[0] & 0x00000040u) != 0;
+  return (_has_bits_[0] & 0x00000020u) != 0;
 }
 inline void CMsgGameServerMatchmakingStatus::set_has_num_spectators() {
-  _has_bits_[0] |= 0x00000040u;
+  _has_bits_[0] |= 0x00000020u;
 }
 inline void CMsgGameServerMatchmakingStatus::clear_has_num_spectators() {
-  _has_bits_[0] &= ~0x00000040u;
+  _has_bits_[0] &= ~0x00000020u;
 }
 inline void CMsgGameServerMatchmakingStatus::clear_num_spectators() {
   num_spectators_ = 0u;
@@ -27823,13 +29968,13 @@ inline void CMsgGameServerMatchmakingStatus::set_num_spectators(::google::protob
 
 // optional uint32 max_players = 7;
 inline bool CMsgGameServerMatchmakingStatus::has_max_players() const {
-  return (_has_bits_[0] & 0x00000080u) != 0;
+  return (_has_bits_[0] & 0x00000040u) != 0;
 }
 inline void CMsgGameServerMatchmakingStatus::set_has_max_players() {
-  _has_bits_[0] |= 0x00000080u;
+  _has_bits_[0] |= 0x00000040u;
 }
 inline void CMsgGameServerMatchmakingStatus::clear_has_max_players() {
-  _has_bits_[0] &= ~0x00000080u;
+  _has_bits_[0] &= ~0x00000040u;
 }
 inline void CMsgGameServerMatchmakingStatus::clear_max_players() {
   max_players_ = 0u;
@@ -27847,13 +29992,13 @@ inline void CMsgGameServerMatchmakingStatus::set_max_players(::google::protobuf:
 
 // optional uint32 slots_free = 8;
 inline bool CMsgGameServerMatchmakingStatus::has_slots_free() const {
-  return (_has_bits_[0] & 0x00000100u) != 0;
+  return (_has_bits_[0] & 0x00000080u) != 0;
 }
 inline void CMsgGameServerMatchmakingStatus::set_has_slots_free() {
-  _has_bits_[0] |= 0x00000100u;
+  _has_bits_[0] |= 0x00000080u;
 }
 inline void CMsgGameServerMatchmakingStatus::clear_has_slots_free() {
-  _has_bits_[0] &= ~0x00000100u;
+  _has_bits_[0] &= ~0x00000080u;
 }
 inline void CMsgGameServerMatchmakingStatus::clear_slots_free() {
   slots_free_ = 0u;
@@ -27871,13 +30016,13 @@ inline void CMsgGameServerMatchmakingStatus::set_slots_free(::google::protobuf::
 
 // optional uint32 server_region = 9;
 inline bool CMsgGameServerMatchmakingStatus::has_server_region() const {
-  return (_has_bits_[0] & 0x00000200u) != 0;
+  return (_has_bits_[0] & 0x00000100u) != 0;
 }
 inline void CMsgGameServerMatchmakingStatus::set_has_server_region() {
-  _has_bits_[0] |= 0x00000200u;
+  _has_bits_[0] |= 0x00000100u;
 }
 inline void CMsgGameServerMatchmakingStatus::clear_has_server_region() {
-  _has_bits_[0] &= ~0x00000200u;
+  _has_bits_[0] &= ~0x00000100u;
 }
 inline void CMsgGameServerMatchmakingStatus::clear_server_region() {
   server_region_ = 0u;
@@ -27895,13 +30040,13 @@ inline void CMsgGameServerMatchmakingStatus::set_server_region(::google::protobu
 
 // optional float server_loadavg = 10;
 inline bool CMsgGameServerMatchmakingStatus::has_server_loadavg() const {
-  return (_has_bits_[0] & 0x00000400u) != 0;
+  return (_has_bits_[0] & 0x00000200u) != 0;
 }
 inline void CMsgGameServerMatchmakingStatus::set_has_server_loadavg() {
-  _has_bits_[0] |= 0x00000400u;
+  _has_bits_[0] |= 0x00000200u;
 }
 inline void CMsgGameServerMatchmakingStatus::clear_has_server_loadavg() {
-  _has_bits_[0] &= ~0x00000400u;
+  _has_bits_[0] &= ~0x00000200u;
 }
 inline void CMsgGameServerMatchmakingStatus::clear_server_loadavg() {
   server_loadavg_ = 0;
@@ -27919,13 +30064,13 @@ inline void CMsgGameServerMatchmakingStatus::set_server_loadavg(float value) {
 
 // optional bool server_trusted = 11;
 inline bool CMsgGameServerMatchmakingStatus::has_server_trusted() const {
-  return (_has_bits_[0] & 0x00000800u) != 0;
+  return (_has_bits_[0] & 0x00000400u) != 0;
 }
 inline void CMsgGameServerMatchmakingStatus::set_has_server_trusted() {
-  _has_bits_[0] |= 0x00000800u;
+  _has_bits_[0] |= 0x00000400u;
 }
 inline void CMsgGameServerMatchmakingStatus::clear_has_server_trusted() {
-  _has_bits_[0] &= ~0x00000800u;
+  _has_bits_[0] &= ~0x00000400u;
 }
 inline void CMsgGameServerMatchmakingStatus::clear_server_trusted() {
   server_trusted_ = false;
@@ -27943,13 +30088,13 @@ inline void CMsgGameServerMatchmakingStatus::set_server_trusted(bool value) {
 
 // optional bool server_dedicated = 12;
 inline bool CMsgGameServerMatchmakingStatus::has_server_dedicated() const {
-  return (_has_bits_[0] & 0x00001000u) != 0;
+  return (_has_bits_[0] & 0x00000800u) != 0;
 }
 inline void CMsgGameServerMatchmakingStatus::set_has_server_dedicated() {
-  _has_bits_[0] |= 0x00001000u;
+  _has_bits_[0] |= 0x00000800u;
 }
 inline void CMsgGameServerMatchmakingStatus::clear_has_server_dedicated() {
-  _has_bits_[0] &= ~0x00001000u;
+  _has_bits_[0] &= ~0x00000800u;
 }
 inline void CMsgGameServerMatchmakingStatus::clear_server_dedicated() {
   server_dedicated_ = false;
@@ -27967,13 +30112,13 @@ inline void CMsgGameServerMatchmakingStatus::set_server_dedicated(bool value) {
 
 // optional uint32 strict = 17;
 inline bool CMsgGameServerMatchmakingStatus::has_strict() const {
-  return (_has_bits_[0] & 0x00002000u) != 0;
+  return (_has_bits_[0] & 0x00001000u) != 0;
 }
 inline void CMsgGameServerMatchmakingStatus::set_has_strict() {
-  _has_bits_[0] |= 0x00002000u;
+  _has_bits_[0] |= 0x00001000u;
 }
 inline void CMsgGameServerMatchmakingStatus::clear_has_strict() {
-  _has_bits_[0] &= ~0x00002000u;
+  _has_bits_[0] &= ~0x00001000u;
 }
 inline void CMsgGameServerMatchmakingStatus::clear_strict() {
   strict_ = 0u;
@@ -27987,6 +30132,82 @@ inline void CMsgGameServerMatchmakingStatus::set_strict(::google::protobuf::uint
   set_has_strict();
   strict_ = value;
   // @@protoc_insertion_point(field_set:CMsgGameServerMatchmakingStatus.strict)
+}
+
+// optional string fake_ip = 25;
+inline bool CMsgGameServerMatchmakingStatus::has_fake_ip() const {
+  return (_has_bits_[0] & 0x00002000u) != 0;
+}
+inline void CMsgGameServerMatchmakingStatus::set_has_fake_ip() {
+  _has_bits_[0] |= 0x00002000u;
+}
+inline void CMsgGameServerMatchmakingStatus::clear_has_fake_ip() {
+  _has_bits_[0] &= ~0x00002000u;
+}
+inline void CMsgGameServerMatchmakingStatus::clear_fake_ip() {
+  if (fake_ip_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    fake_ip_->clear();
+  }
+  clear_has_fake_ip();
+}
+inline const ::std::string& CMsgGameServerMatchmakingStatus::fake_ip() const {
+  // @@protoc_insertion_point(field_get:CMsgGameServerMatchmakingStatus.fake_ip)
+  return *fake_ip_;
+}
+inline void CMsgGameServerMatchmakingStatus::set_fake_ip(const ::std::string& value) {
+  set_has_fake_ip();
+  if (fake_ip_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    fake_ip_ = new ::std::string;
+  }
+  fake_ip_->assign(value);
+  // @@protoc_insertion_point(field_set:CMsgGameServerMatchmakingStatus.fake_ip)
+}
+inline void CMsgGameServerMatchmakingStatus::set_fake_ip(const char* value) {
+  set_has_fake_ip();
+  if (fake_ip_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    fake_ip_ = new ::std::string;
+  }
+  fake_ip_->assign(value);
+  // @@protoc_insertion_point(field_set_char:CMsgGameServerMatchmakingStatus.fake_ip)
+}
+inline void CMsgGameServerMatchmakingStatus::set_fake_ip(const char* value, size_t size) {
+  set_has_fake_ip();
+  if (fake_ip_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    fake_ip_ = new ::std::string;
+  }
+  fake_ip_->assign(reinterpret_cast<const char*>(value), size);
+  // @@protoc_insertion_point(field_set_pointer:CMsgGameServerMatchmakingStatus.fake_ip)
+}
+inline ::std::string* CMsgGameServerMatchmakingStatus::mutable_fake_ip() {
+  set_has_fake_ip();
+  if (fake_ip_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    fake_ip_ = new ::std::string;
+  }
+  // @@protoc_insertion_point(field_mutable:CMsgGameServerMatchmakingStatus.fake_ip)
+  return fake_ip_;
+}
+inline ::std::string* CMsgGameServerMatchmakingStatus::release_fake_ip() {
+  clear_has_fake_ip();
+  if (fake_ip_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    return NULL;
+  } else {
+    ::std::string* temp = fake_ip_;
+    fake_ip_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+    return temp;
+  }
+}
+inline void CMsgGameServerMatchmakingStatus::set_allocated_fake_ip(::std::string* fake_ip) {
+  if (fake_ip_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    delete fake_ip_;
+  }
+  if (fake_ip) {
+    set_has_fake_ip();
+    fake_ip_ = fake_ip;
+  } else {
+    clear_has_fake_ip();
+    fake_ip_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  }
+  // @@protoc_insertion_point(field_set_allocated:CMsgGameServerMatchmakingStatus.fake_ip)
 }
 
 // repeated .CMsgGameServerMatchmakingStatus.Player players = 13;
@@ -29926,69 +32147,15 @@ inline void CMsgMvMVictory::set_event_time(::google::protobuf::uint32 value) {
 
 // CMsgGameServerKickingLobby
 
-// repeated fixed64 connected_players = 1;
-inline int CMsgGameServerKickingLobby::connected_players_size() const {
-  return connected_players_.size();
-}
-inline void CMsgGameServerKickingLobby::clear_connected_players() {
-  connected_players_.Clear();
-}
-inline ::google::protobuf::uint64 CMsgGameServerKickingLobby::connected_players(int index) const {
-  // @@protoc_insertion_point(field_get:CMsgGameServerKickingLobby.connected_players)
-  return connected_players_.Get(index);
-}
-inline void CMsgGameServerKickingLobby::set_connected_players(int index, ::google::protobuf::uint64 value) {
-  connected_players_.Set(index, value);
-  // @@protoc_insertion_point(field_set:CMsgGameServerKickingLobby.connected_players)
-}
-inline void CMsgGameServerKickingLobby::add_connected_players(::google::protobuf::uint64 value) {
-  connected_players_.Add(value);
-  // @@protoc_insertion_point(field_add:CMsgGameServerKickingLobby.connected_players)
-}
-inline const ::google::protobuf::RepeatedField< ::google::protobuf::uint64 >&
-CMsgGameServerKickingLobby::connected_players() const {
-  // @@protoc_insertion_point(field_list:CMsgGameServerKickingLobby.connected_players)
-  return connected_players_;
-}
-inline ::google::protobuf::RepeatedField< ::google::protobuf::uint64 >*
-CMsgGameServerKickingLobby::mutable_connected_players() {
-  // @@protoc_insertion_point(field_mutable_list:CMsgGameServerKickingLobby.connected_players)
-  return &connected_players_;
-}
-
-// optional bool create_party = 2 [default = true];
-inline bool CMsgGameServerKickingLobby::has_create_party() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
-}
-inline void CMsgGameServerKickingLobby::set_has_create_party() {
-  _has_bits_[0] |= 0x00000002u;
-}
-inline void CMsgGameServerKickingLobby::clear_has_create_party() {
-  _has_bits_[0] &= ~0x00000002u;
-}
-inline void CMsgGameServerKickingLobby::clear_create_party() {
-  create_party_ = true;
-  clear_has_create_party();
-}
-inline bool CMsgGameServerKickingLobby::create_party() const {
-  // @@protoc_insertion_point(field_get:CMsgGameServerKickingLobby.create_party)
-  return create_party_;
-}
-inline void CMsgGameServerKickingLobby::set_create_party(bool value) {
-  set_has_create_party();
-  create_party_ = value;
-  // @@protoc_insertion_point(field_set:CMsgGameServerKickingLobby.create_party)
-}
-
 // optional uint64 lobby_id = 3;
 inline bool CMsgGameServerKickingLobby::has_lobby_id() const {
-  return (_has_bits_[0] & 0x00000004u) != 0;
+  return (_has_bits_[0] & 0x00000001u) != 0;
 }
 inline void CMsgGameServerKickingLobby::set_has_lobby_id() {
-  _has_bits_[0] |= 0x00000004u;
+  _has_bits_[0] |= 0x00000001u;
 }
 inline void CMsgGameServerKickingLobby::clear_has_lobby_id() {
-  _has_bits_[0] &= ~0x00000004u;
+  _has_bits_[0] &= ~0x00000001u;
 }
 inline void CMsgGameServerKickingLobby::clear_lobby_id() {
   lobby_id_ = GOOGLE_ULONGLONG(0);
@@ -30006,13 +32173,13 @@ inline void CMsgGameServerKickingLobby::set_lobby_id(::google::protobuf::uint64 
 
 // optional uint64 match_id = 4;
 inline bool CMsgGameServerKickingLobby::has_match_id() const {
-  return (_has_bits_[0] & 0x00000008u) != 0;
+  return (_has_bits_[0] & 0x00000002u) != 0;
 }
 inline void CMsgGameServerKickingLobby::set_has_match_id() {
-  _has_bits_[0] |= 0x00000008u;
+  _has_bits_[0] |= 0x00000002u;
 }
 inline void CMsgGameServerKickingLobby::clear_has_match_id() {
-  _has_bits_[0] &= ~0x00000008u;
+  _has_bits_[0] &= ~0x00000002u;
 }
 inline void CMsgGameServerKickingLobby::clear_match_id() {
   match_id_ = GOOGLE_ULONGLONG(0);
@@ -30221,83 +32388,238 @@ CMsgPlayerLeftMatch::mutable_xp_breakdown() {
 
 // -------------------------------------------------------------------
 
-// CMsgPlayerVoteKickedAfterLeavingMatch
+// CMsgProcessMatchVoteKick_Vote
 
 // optional fixed64 steam_id = 1;
-inline bool CMsgPlayerVoteKickedAfterLeavingMatch::has_steam_id() const {
+inline bool CMsgProcessMatchVoteKick_Vote::has_steam_id() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
-inline void CMsgPlayerVoteKickedAfterLeavingMatch::set_has_steam_id() {
+inline void CMsgProcessMatchVoteKick_Vote::set_has_steam_id() {
   _has_bits_[0] |= 0x00000001u;
 }
-inline void CMsgPlayerVoteKickedAfterLeavingMatch::clear_has_steam_id() {
+inline void CMsgProcessMatchVoteKick_Vote::clear_has_steam_id() {
   _has_bits_[0] &= ~0x00000001u;
 }
-inline void CMsgPlayerVoteKickedAfterLeavingMatch::clear_steam_id() {
+inline void CMsgProcessMatchVoteKick_Vote::clear_steam_id() {
   steam_id_ = GOOGLE_ULONGLONG(0);
   clear_has_steam_id();
 }
-inline ::google::protobuf::uint64 CMsgPlayerVoteKickedAfterLeavingMatch::steam_id() const {
-  // @@protoc_insertion_point(field_get:CMsgPlayerVoteKickedAfterLeavingMatch.steam_id)
+inline ::google::protobuf::uint64 CMsgProcessMatchVoteKick_Vote::steam_id() const {
+  // @@protoc_insertion_point(field_get:CMsgProcessMatchVoteKick.Vote.steam_id)
   return steam_id_;
 }
-inline void CMsgPlayerVoteKickedAfterLeavingMatch::set_steam_id(::google::protobuf::uint64 value) {
+inline void CMsgProcessMatchVoteKick_Vote::set_steam_id(::google::protobuf::uint64 value) {
   set_has_steam_id();
   steam_id_ = value;
-  // @@protoc_insertion_point(field_set:CMsgPlayerVoteKickedAfterLeavingMatch.steam_id)
+  // @@protoc_insertion_point(field_set:CMsgProcessMatchVoteKick.Vote.steam_id)
 }
 
-// optional fixed64 lobby_id = 2;
-inline bool CMsgPlayerVoteKickedAfterLeavingMatch::has_lobby_id() const {
+// optional bool vote_yay = 2;
+inline bool CMsgProcessMatchVoteKick_Vote::has_vote_yay() const {
   return (_has_bits_[0] & 0x00000002u) != 0;
 }
-inline void CMsgPlayerVoteKickedAfterLeavingMatch::set_has_lobby_id() {
+inline void CMsgProcessMatchVoteKick_Vote::set_has_vote_yay() {
   _has_bits_[0] |= 0x00000002u;
 }
-inline void CMsgPlayerVoteKickedAfterLeavingMatch::clear_has_lobby_id() {
+inline void CMsgProcessMatchVoteKick_Vote::clear_has_vote_yay() {
   _has_bits_[0] &= ~0x00000002u;
 }
-inline void CMsgPlayerVoteKickedAfterLeavingMatch::clear_lobby_id() {
-  lobby_id_ = GOOGLE_ULONGLONG(0);
-  clear_has_lobby_id();
+inline void CMsgProcessMatchVoteKick_Vote::clear_vote_yay() {
+  vote_yay_ = false;
+  clear_has_vote_yay();
 }
-inline ::google::protobuf::uint64 CMsgPlayerVoteKickedAfterLeavingMatch::lobby_id() const {
-  // @@protoc_insertion_point(field_get:CMsgPlayerVoteKickedAfterLeavingMatch.lobby_id)
-  return lobby_id_;
+inline bool CMsgProcessMatchVoteKick_Vote::vote_yay() const {
+  // @@protoc_insertion_point(field_get:CMsgProcessMatchVoteKick.Vote.vote_yay)
+  return vote_yay_;
 }
-inline void CMsgPlayerVoteKickedAfterLeavingMatch::set_lobby_id(::google::protobuf::uint64 value) {
-  set_has_lobby_id();
-  lobby_id_ = value;
-  // @@protoc_insertion_point(field_set:CMsgPlayerVoteKickedAfterLeavingMatch.lobby_id)
-}
-
-// optional fixed64 match_id = 3;
-inline bool CMsgPlayerVoteKickedAfterLeavingMatch::has_match_id() const {
-  return (_has_bits_[0] & 0x00000004u) != 0;
-}
-inline void CMsgPlayerVoteKickedAfterLeavingMatch::set_has_match_id() {
-  _has_bits_[0] |= 0x00000004u;
-}
-inline void CMsgPlayerVoteKickedAfterLeavingMatch::clear_has_match_id() {
-  _has_bits_[0] &= ~0x00000004u;
-}
-inline void CMsgPlayerVoteKickedAfterLeavingMatch::clear_match_id() {
-  match_id_ = GOOGLE_ULONGLONG(0);
-  clear_has_match_id();
-}
-inline ::google::protobuf::uint64 CMsgPlayerVoteKickedAfterLeavingMatch::match_id() const {
-  // @@protoc_insertion_point(field_get:CMsgPlayerVoteKickedAfterLeavingMatch.match_id)
-  return match_id_;
-}
-inline void CMsgPlayerVoteKickedAfterLeavingMatch::set_match_id(::google::protobuf::uint64 value) {
-  set_has_match_id();
-  match_id_ = value;
-  // @@protoc_insertion_point(field_set:CMsgPlayerVoteKickedAfterLeavingMatch.match_id)
+inline void CMsgProcessMatchVoteKick_Vote::set_vote_yay(bool value) {
+  set_has_vote_yay();
+  vote_yay_ = value;
+  // @@protoc_insertion_point(field_set:CMsgProcessMatchVoteKick.Vote.vote_yay)
 }
 
 // -------------------------------------------------------------------
 
-// CMsgPlayerVoteKickedAfterLeavingMatchResponse
+// CMsgProcessMatchVoteKick
+
+// optional fixed64 match_id = 1;
+inline bool CMsgProcessMatchVoteKick::has_match_id() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void CMsgProcessMatchVoteKick::set_has_match_id() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void CMsgProcessMatchVoteKick::clear_has_match_id() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void CMsgProcessMatchVoteKick::clear_match_id() {
+  match_id_ = GOOGLE_ULONGLONG(0);
+  clear_has_match_id();
+}
+inline ::google::protobuf::uint64 CMsgProcessMatchVoteKick::match_id() const {
+  // @@protoc_insertion_point(field_get:CMsgProcessMatchVoteKick.match_id)
+  return match_id_;
+}
+inline void CMsgProcessMatchVoteKick::set_match_id(::google::protobuf::uint64 value) {
+  set_has_match_id();
+  match_id_ = value;
+  // @@protoc_insertion_point(field_set:CMsgProcessMatchVoteKick.match_id)
+}
+
+// optional fixed64 initiator_steam_id = 2;
+inline bool CMsgProcessMatchVoteKick::has_initiator_steam_id() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void CMsgProcessMatchVoteKick::set_has_initiator_steam_id() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void CMsgProcessMatchVoteKick::clear_has_initiator_steam_id() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void CMsgProcessMatchVoteKick::clear_initiator_steam_id() {
+  initiator_steam_id_ = GOOGLE_ULONGLONG(0);
+  clear_has_initiator_steam_id();
+}
+inline ::google::protobuf::uint64 CMsgProcessMatchVoteKick::initiator_steam_id() const {
+  // @@protoc_insertion_point(field_get:CMsgProcessMatchVoteKick.initiator_steam_id)
+  return initiator_steam_id_;
+}
+inline void CMsgProcessMatchVoteKick::set_initiator_steam_id(::google::protobuf::uint64 value) {
+  set_has_initiator_steam_id();
+  initiator_steam_id_ = value;
+  // @@protoc_insertion_point(field_set:CMsgProcessMatchVoteKick.initiator_steam_id)
+}
+
+// optional fixed64 target_steam_id = 3;
+inline bool CMsgProcessMatchVoteKick::has_target_steam_id() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
+}
+inline void CMsgProcessMatchVoteKick::set_has_target_steam_id() {
+  _has_bits_[0] |= 0x00000004u;
+}
+inline void CMsgProcessMatchVoteKick::clear_has_target_steam_id() {
+  _has_bits_[0] &= ~0x00000004u;
+}
+inline void CMsgProcessMatchVoteKick::clear_target_steam_id() {
+  target_steam_id_ = GOOGLE_ULONGLONG(0);
+  clear_has_target_steam_id();
+}
+inline ::google::protobuf::uint64 CMsgProcessMatchVoteKick::target_steam_id() const {
+  // @@protoc_insertion_point(field_get:CMsgProcessMatchVoteKick.target_steam_id)
+  return target_steam_id_;
+}
+inline void CMsgProcessMatchVoteKick::set_target_steam_id(::google::protobuf::uint64 value) {
+  set_has_target_steam_id();
+  target_steam_id_ = value;
+  // @@protoc_insertion_point(field_set:CMsgProcessMatchVoteKick.target_steam_id)
+}
+
+// optional .TFVoteKickReason reason = 4;
+inline bool CMsgProcessMatchVoteKick::has_reason() const {
+  return (_has_bits_[0] & 0x00000008u) != 0;
+}
+inline void CMsgProcessMatchVoteKick::set_has_reason() {
+  _has_bits_[0] |= 0x00000008u;
+}
+inline void CMsgProcessMatchVoteKick::clear_has_reason() {
+  _has_bits_[0] &= ~0x00000008u;
+}
+inline void CMsgProcessMatchVoteKick::clear_reason() {
+  reason_ = -1;
+  clear_has_reason();
+}
+inline ::TFVoteKickReason CMsgProcessMatchVoteKick::reason() const {
+  // @@protoc_insertion_point(field_get:CMsgProcessMatchVoteKick.reason)
+  return static_cast< ::TFVoteKickReason >(reason_);
+}
+inline void CMsgProcessMatchVoteKick::set_reason(::TFVoteKickReason value) {
+  assert(::TFVoteKickReason_IsValid(value));
+  set_has_reason();
+  reason_ = value;
+  // @@protoc_insertion_point(field_set:CMsgProcessMatchVoteKick.reason)
+}
+
+// repeated .CMsgProcessMatchVoteKick.Vote votes = 5;
+inline int CMsgProcessMatchVoteKick::votes_size() const {
+  return votes_.size();
+}
+inline void CMsgProcessMatchVoteKick::clear_votes() {
+  votes_.Clear();
+}
+inline const ::CMsgProcessMatchVoteKick_Vote& CMsgProcessMatchVoteKick::votes(int index) const {
+  // @@protoc_insertion_point(field_get:CMsgProcessMatchVoteKick.votes)
+  return votes_.Get(index);
+}
+inline ::CMsgProcessMatchVoteKick_Vote* CMsgProcessMatchVoteKick::mutable_votes(int index) {
+  // @@protoc_insertion_point(field_mutable:CMsgProcessMatchVoteKick.votes)
+  return votes_.Mutable(index);
+}
+inline ::CMsgProcessMatchVoteKick_Vote* CMsgProcessMatchVoteKick::add_votes() {
+  // @@protoc_insertion_point(field_add:CMsgProcessMatchVoteKick.votes)
+  return votes_.Add();
+}
+inline const ::google::protobuf::RepeatedPtrField< ::CMsgProcessMatchVoteKick_Vote >&
+CMsgProcessMatchVoteKick::votes() const {
+  // @@protoc_insertion_point(field_list:CMsgProcessMatchVoteKick.votes)
+  return votes_;
+}
+inline ::google::protobuf::RepeatedPtrField< ::CMsgProcessMatchVoteKick_Vote >*
+CMsgProcessMatchVoteKick::mutable_votes() {
+  // @@protoc_insertion_point(field_mutable_list:CMsgProcessMatchVoteKick.votes)
+  return &votes_;
+}
+
+// optional bool default_pass = 6;
+inline bool CMsgProcessMatchVoteKick::has_default_pass() const {
+  return (_has_bits_[0] & 0x00000020u) != 0;
+}
+inline void CMsgProcessMatchVoteKick::set_has_default_pass() {
+  _has_bits_[0] |= 0x00000020u;
+}
+inline void CMsgProcessMatchVoteKick::clear_has_default_pass() {
+  _has_bits_[0] &= ~0x00000020u;
+}
+inline void CMsgProcessMatchVoteKick::clear_default_pass() {
+  default_pass_ = false;
+  clear_has_default_pass();
+}
+inline bool CMsgProcessMatchVoteKick::default_pass() const {
+  // @@protoc_insertion_point(field_get:CMsgProcessMatchVoteKick.default_pass)
+  return default_pass_;
+}
+inline void CMsgProcessMatchVoteKick::set_default_pass(bool value) {
+  set_has_default_pass();
+  default_pass_ = value;
+  // @@protoc_insertion_point(field_set:CMsgProcessMatchVoteKick.default_pass)
+}
+
+// -------------------------------------------------------------------
+
+// CMsgProcessMatchVoteKickResponse
+
+// optional bool rip = 1;
+inline bool CMsgProcessMatchVoteKickResponse::has_rip() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void CMsgProcessMatchVoteKickResponse::set_has_rip() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void CMsgProcessMatchVoteKickResponse::clear_has_rip() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void CMsgProcessMatchVoteKickResponse::clear_rip() {
+  rip_ = false;
+  clear_has_rip();
+}
+inline bool CMsgProcessMatchVoteKickResponse::rip() const {
+  // @@protoc_insertion_point(field_get:CMsgProcessMatchVoteKickResponse.rip)
+  return rip_;
+}
+inline void CMsgProcessMatchVoteKickResponse::set_rip(bool value) {
+  set_has_rip();
+  rip_ = value;
+  // @@protoc_insertion_point(field_set:CMsgProcessMatchVoteKickResponse.rip)
+}
 
 // -------------------------------------------------------------------
 
@@ -33533,28 +35855,28 @@ inline void CMsgGC_Match_Result_Player::set_steam_id(::google::protobuf::uint64 
   // @@protoc_insertion_point(field_set:CMsgGC_Match_Result.Player.steam_id)
 }
 
-// optional uint64 party_id = 2;
-inline bool CMsgGC_Match_Result_Player::has_party_id() const {
+// optional uint64 original_party_id = 2;
+inline bool CMsgGC_Match_Result_Player::has_original_party_id() const {
   return (_has_bits_[0] & 0x00000002u) != 0;
 }
-inline void CMsgGC_Match_Result_Player::set_has_party_id() {
+inline void CMsgGC_Match_Result_Player::set_has_original_party_id() {
   _has_bits_[0] |= 0x00000002u;
 }
-inline void CMsgGC_Match_Result_Player::clear_has_party_id() {
+inline void CMsgGC_Match_Result_Player::clear_has_original_party_id() {
   _has_bits_[0] &= ~0x00000002u;
 }
-inline void CMsgGC_Match_Result_Player::clear_party_id() {
-  party_id_ = GOOGLE_ULONGLONG(0);
-  clear_has_party_id();
+inline void CMsgGC_Match_Result_Player::clear_original_party_id() {
+  original_party_id_ = GOOGLE_ULONGLONG(0);
+  clear_has_original_party_id();
 }
-inline ::google::protobuf::uint64 CMsgGC_Match_Result_Player::party_id() const {
-  // @@protoc_insertion_point(field_get:CMsgGC_Match_Result.Player.party_id)
-  return party_id_;
+inline ::google::protobuf::uint64 CMsgGC_Match_Result_Player::original_party_id() const {
+  // @@protoc_insertion_point(field_get:CMsgGC_Match_Result.Player.original_party_id)
+  return original_party_id_;
 }
-inline void CMsgGC_Match_Result_Player::set_party_id(::google::protobuf::uint64 value) {
-  set_has_party_id();
-  party_id_ = value;
-  // @@protoc_insertion_point(field_set:CMsgGC_Match_Result.Player.party_id)
+inline void CMsgGC_Match_Result_Player::set_original_party_id(::google::protobuf::uint64 value) {
+  set_has_original_party_id();
+  original_party_id_ = value;
+  // @@protoc_insertion_point(field_set:CMsgGC_Match_Result.Player.original_party_id)
 }
 
 // optional uint32 team = 3;
@@ -34637,111 +36959,15 @@ inline void CSOTFLadderPlayerStats::set_season_id(::google::protobuf::uint32 val
   // @@protoc_insertion_point(field_set:CSOTFLadderPlayerStats.season_id)
 }
 
-// optional uint32 rank = 6;
-inline bool CSOTFLadderPlayerStats::has_rank() const {
-  return (_has_bits_[0] & 0x00000008u) != 0;
-}
-inline void CSOTFLadderPlayerStats::set_has_rank() {
-  _has_bits_[0] |= 0x00000008u;
-}
-inline void CSOTFLadderPlayerStats::clear_has_rank() {
-  _has_bits_[0] &= ~0x00000008u;
-}
-inline void CSOTFLadderPlayerStats::clear_rank() {
-  rank_ = 0u;
-  clear_has_rank();
-}
-inline ::google::protobuf::uint32 CSOTFLadderPlayerStats::rank() const {
-  // @@protoc_insertion_point(field_get:CSOTFLadderPlayerStats.rank)
-  return rank_;
-}
-inline void CSOTFLadderPlayerStats::set_rank(::google::protobuf::uint32 value) {
-  set_has_rank();
-  rank_ = value;
-  // @@protoc_insertion_point(field_set:CSOTFLadderPlayerStats.rank)
-}
-
-// optional uint32 highest_rank = 7;
-inline bool CSOTFLadderPlayerStats::has_highest_rank() const {
-  return (_has_bits_[0] & 0x00000010u) != 0;
-}
-inline void CSOTFLadderPlayerStats::set_has_highest_rank() {
-  _has_bits_[0] |= 0x00000010u;
-}
-inline void CSOTFLadderPlayerStats::clear_has_highest_rank() {
-  _has_bits_[0] &= ~0x00000010u;
-}
-inline void CSOTFLadderPlayerStats::clear_highest_rank() {
-  highest_rank_ = 0u;
-  clear_has_highest_rank();
-}
-inline ::google::protobuf::uint32 CSOTFLadderPlayerStats::highest_rank() const {
-  // @@protoc_insertion_point(field_get:CSOTFLadderPlayerStats.highest_rank)
-  return highest_rank_;
-}
-inline void CSOTFLadderPlayerStats::set_highest_rank(::google::protobuf::uint32 value) {
-  set_has_highest_rank();
-  highest_rank_ = value;
-  // @@protoc_insertion_point(field_set:CSOTFLadderPlayerStats.highest_rank)
-}
-
-// optional uint32 experience = 8;
-inline bool CSOTFLadderPlayerStats::has_experience() const {
-  return (_has_bits_[0] & 0x00000020u) != 0;
-}
-inline void CSOTFLadderPlayerStats::set_has_experience() {
-  _has_bits_[0] |= 0x00000020u;
-}
-inline void CSOTFLadderPlayerStats::clear_has_experience() {
-  _has_bits_[0] &= ~0x00000020u;
-}
-inline void CSOTFLadderPlayerStats::clear_experience() {
-  experience_ = 0u;
-  clear_has_experience();
-}
-inline ::google::protobuf::uint32 CSOTFLadderPlayerStats::experience() const {
-  // @@protoc_insertion_point(field_get:CSOTFLadderPlayerStats.experience)
-  return experience_;
-}
-inline void CSOTFLadderPlayerStats::set_experience(::google::protobuf::uint32 value) {
-  set_has_experience();
-  experience_ = value;
-  // @@protoc_insertion_point(field_set:CSOTFLadderPlayerStats.experience)
-}
-
-// optional uint32 last_ackd_experience = 32;
-inline bool CSOTFLadderPlayerStats::has_last_ackd_experience() const {
-  return (_has_bits_[0] & 0x00000040u) != 0;
-}
-inline void CSOTFLadderPlayerStats::set_has_last_ackd_experience() {
-  _has_bits_[0] |= 0x00000040u;
-}
-inline void CSOTFLadderPlayerStats::clear_has_last_ackd_experience() {
-  _has_bits_[0] &= ~0x00000040u;
-}
-inline void CSOTFLadderPlayerStats::clear_last_ackd_experience() {
-  last_ackd_experience_ = 0u;
-  clear_has_last_ackd_experience();
-}
-inline ::google::protobuf::uint32 CSOTFLadderPlayerStats::last_ackd_experience() const {
-  // @@protoc_insertion_point(field_get:CSOTFLadderPlayerStats.last_ackd_experience)
-  return last_ackd_experience_;
-}
-inline void CSOTFLadderPlayerStats::set_last_ackd_experience(::google::protobuf::uint32 value) {
-  set_has_last_ackd_experience();
-  last_ackd_experience_ = value;
-  // @@protoc_insertion_point(field_set:CSOTFLadderPlayerStats.last_ackd_experience)
-}
-
 // optional uint32 games = 9;
 inline bool CSOTFLadderPlayerStats::has_games() const {
-  return (_has_bits_[0] & 0x00000080u) != 0;
+  return (_has_bits_[0] & 0x00000008u) != 0;
 }
 inline void CSOTFLadderPlayerStats::set_has_games() {
-  _has_bits_[0] |= 0x00000080u;
+  _has_bits_[0] |= 0x00000008u;
 }
 inline void CSOTFLadderPlayerStats::clear_has_games() {
-  _has_bits_[0] &= ~0x00000080u;
+  _has_bits_[0] &= ~0x00000008u;
 }
 inline void CSOTFLadderPlayerStats::clear_games() {
   games_ = 0u;
@@ -34759,13 +36985,13 @@ inline void CSOTFLadderPlayerStats::set_games(::google::protobuf::uint32 value) 
 
 // optional uint32 score = 10;
 inline bool CSOTFLadderPlayerStats::has_score() const {
-  return (_has_bits_[0] & 0x00000100u) != 0;
+  return (_has_bits_[0] & 0x00000010u) != 0;
 }
 inline void CSOTFLadderPlayerStats::set_has_score() {
-  _has_bits_[0] |= 0x00000100u;
+  _has_bits_[0] |= 0x00000010u;
 }
 inline void CSOTFLadderPlayerStats::clear_has_score() {
-  _has_bits_[0] &= ~0x00000100u;
+  _has_bits_[0] &= ~0x00000010u;
 }
 inline void CSOTFLadderPlayerStats::clear_score() {
   score_ = 0u;
@@ -34783,13 +37009,13 @@ inline void CSOTFLadderPlayerStats::set_score(::google::protobuf::uint32 value) 
 
 // optional uint32 kills = 11;
 inline bool CSOTFLadderPlayerStats::has_kills() const {
-  return (_has_bits_[0] & 0x00000200u) != 0;
+  return (_has_bits_[0] & 0x00000020u) != 0;
 }
 inline void CSOTFLadderPlayerStats::set_has_kills() {
-  _has_bits_[0] |= 0x00000200u;
+  _has_bits_[0] |= 0x00000020u;
 }
 inline void CSOTFLadderPlayerStats::clear_has_kills() {
-  _has_bits_[0] &= ~0x00000200u;
+  _has_bits_[0] &= ~0x00000020u;
 }
 inline void CSOTFLadderPlayerStats::clear_kills() {
   kills_ = 0u;
@@ -34807,13 +37033,13 @@ inline void CSOTFLadderPlayerStats::set_kills(::google::protobuf::uint32 value) 
 
 // optional uint32 deaths = 12;
 inline bool CSOTFLadderPlayerStats::has_deaths() const {
-  return (_has_bits_[0] & 0x00000400u) != 0;
+  return (_has_bits_[0] & 0x00000040u) != 0;
 }
 inline void CSOTFLadderPlayerStats::set_has_deaths() {
-  _has_bits_[0] |= 0x00000400u;
+  _has_bits_[0] |= 0x00000040u;
 }
 inline void CSOTFLadderPlayerStats::clear_has_deaths() {
-  _has_bits_[0] &= ~0x00000400u;
+  _has_bits_[0] &= ~0x00000040u;
 }
 inline void CSOTFLadderPlayerStats::clear_deaths() {
   deaths_ = 0u;
@@ -34831,13 +37057,13 @@ inline void CSOTFLadderPlayerStats::set_deaths(::google::protobuf::uint32 value)
 
 // optional uint32 damage = 13;
 inline bool CSOTFLadderPlayerStats::has_damage() const {
-  return (_has_bits_[0] & 0x00000800u) != 0;
+  return (_has_bits_[0] & 0x00000080u) != 0;
 }
 inline void CSOTFLadderPlayerStats::set_has_damage() {
-  _has_bits_[0] |= 0x00000800u;
+  _has_bits_[0] |= 0x00000080u;
 }
 inline void CSOTFLadderPlayerStats::clear_has_damage() {
-  _has_bits_[0] &= ~0x00000800u;
+  _has_bits_[0] &= ~0x00000080u;
 }
 inline void CSOTFLadderPlayerStats::clear_damage() {
   damage_ = 0u;
@@ -34855,13 +37081,13 @@ inline void CSOTFLadderPlayerStats::set_damage(::google::protobuf::uint32 value)
 
 // optional uint32 healing = 14;
 inline bool CSOTFLadderPlayerStats::has_healing() const {
-  return (_has_bits_[0] & 0x00001000u) != 0;
+  return (_has_bits_[0] & 0x00000100u) != 0;
 }
 inline void CSOTFLadderPlayerStats::set_has_healing() {
-  _has_bits_[0] |= 0x00001000u;
+  _has_bits_[0] |= 0x00000100u;
 }
 inline void CSOTFLadderPlayerStats::clear_has_healing() {
-  _has_bits_[0] &= ~0x00001000u;
+  _has_bits_[0] &= ~0x00000100u;
 }
 inline void CSOTFLadderPlayerStats::clear_healing() {
   healing_ = 0u;
@@ -34879,13 +37105,13 @@ inline void CSOTFLadderPlayerStats::set_healing(::google::protobuf::uint32 value
 
 // optional uint32 support = 15;
 inline bool CSOTFLadderPlayerStats::has_support() const {
-  return (_has_bits_[0] & 0x00002000u) != 0;
+  return (_has_bits_[0] & 0x00000200u) != 0;
 }
 inline void CSOTFLadderPlayerStats::set_has_support() {
-  _has_bits_[0] |= 0x00002000u;
+  _has_bits_[0] |= 0x00000200u;
 }
 inline void CSOTFLadderPlayerStats::clear_has_support() {
-  _has_bits_[0] &= ~0x00002000u;
+  _has_bits_[0] &= ~0x00000200u;
 }
 inline void CSOTFLadderPlayerStats::clear_support() {
   support_ = 0u;
@@ -34903,13 +37129,13 @@ inline void CSOTFLadderPlayerStats::set_support(::google::protobuf::uint32 value
 
 // optional uint32 score_bronze = 16;
 inline bool CSOTFLadderPlayerStats::has_score_bronze() const {
-  return (_has_bits_[0] & 0x00004000u) != 0;
+  return (_has_bits_[0] & 0x00000400u) != 0;
 }
 inline void CSOTFLadderPlayerStats::set_has_score_bronze() {
-  _has_bits_[0] |= 0x00004000u;
+  _has_bits_[0] |= 0x00000400u;
 }
 inline void CSOTFLadderPlayerStats::clear_has_score_bronze() {
-  _has_bits_[0] &= ~0x00004000u;
+  _has_bits_[0] &= ~0x00000400u;
 }
 inline void CSOTFLadderPlayerStats::clear_score_bronze() {
   score_bronze_ = 0u;
@@ -34927,13 +37153,13 @@ inline void CSOTFLadderPlayerStats::set_score_bronze(::google::protobuf::uint32 
 
 // optional uint32 score_silver = 17;
 inline bool CSOTFLadderPlayerStats::has_score_silver() const {
-  return (_has_bits_[0] & 0x00008000u) != 0;
+  return (_has_bits_[0] & 0x00000800u) != 0;
 }
 inline void CSOTFLadderPlayerStats::set_has_score_silver() {
-  _has_bits_[0] |= 0x00008000u;
+  _has_bits_[0] |= 0x00000800u;
 }
 inline void CSOTFLadderPlayerStats::clear_has_score_silver() {
-  _has_bits_[0] &= ~0x00008000u;
+  _has_bits_[0] &= ~0x00000800u;
 }
 inline void CSOTFLadderPlayerStats::clear_score_silver() {
   score_silver_ = 0u;
@@ -34951,13 +37177,13 @@ inline void CSOTFLadderPlayerStats::set_score_silver(::google::protobuf::uint32 
 
 // optional uint32 score_gold = 18;
 inline bool CSOTFLadderPlayerStats::has_score_gold() const {
-  return (_has_bits_[0] & 0x00010000u) != 0;
+  return (_has_bits_[0] & 0x00001000u) != 0;
 }
 inline void CSOTFLadderPlayerStats::set_has_score_gold() {
-  _has_bits_[0] |= 0x00010000u;
+  _has_bits_[0] |= 0x00001000u;
 }
 inline void CSOTFLadderPlayerStats::clear_has_score_gold() {
-  _has_bits_[0] &= ~0x00010000u;
+  _has_bits_[0] &= ~0x00001000u;
 }
 inline void CSOTFLadderPlayerStats::clear_score_gold() {
   score_gold_ = 0u;
@@ -34975,13 +37201,13 @@ inline void CSOTFLadderPlayerStats::set_score_gold(::google::protobuf::uint32 va
 
 // optional uint32 kills_bronze = 19;
 inline bool CSOTFLadderPlayerStats::has_kills_bronze() const {
-  return (_has_bits_[0] & 0x00020000u) != 0;
+  return (_has_bits_[0] & 0x00002000u) != 0;
 }
 inline void CSOTFLadderPlayerStats::set_has_kills_bronze() {
-  _has_bits_[0] |= 0x00020000u;
+  _has_bits_[0] |= 0x00002000u;
 }
 inline void CSOTFLadderPlayerStats::clear_has_kills_bronze() {
-  _has_bits_[0] &= ~0x00020000u;
+  _has_bits_[0] &= ~0x00002000u;
 }
 inline void CSOTFLadderPlayerStats::clear_kills_bronze() {
   kills_bronze_ = 0u;
@@ -34999,13 +37225,13 @@ inline void CSOTFLadderPlayerStats::set_kills_bronze(::google::protobuf::uint32 
 
 // optional uint32 kills_silver = 20;
 inline bool CSOTFLadderPlayerStats::has_kills_silver() const {
-  return (_has_bits_[0] & 0x00040000u) != 0;
+  return (_has_bits_[0] & 0x00004000u) != 0;
 }
 inline void CSOTFLadderPlayerStats::set_has_kills_silver() {
-  _has_bits_[0] |= 0x00040000u;
+  _has_bits_[0] |= 0x00004000u;
 }
 inline void CSOTFLadderPlayerStats::clear_has_kills_silver() {
-  _has_bits_[0] &= ~0x00040000u;
+  _has_bits_[0] &= ~0x00004000u;
 }
 inline void CSOTFLadderPlayerStats::clear_kills_silver() {
   kills_silver_ = 0u;
@@ -35023,13 +37249,13 @@ inline void CSOTFLadderPlayerStats::set_kills_silver(::google::protobuf::uint32 
 
 // optional uint32 kills_gold = 21;
 inline bool CSOTFLadderPlayerStats::has_kills_gold() const {
-  return (_has_bits_[0] & 0x00080000u) != 0;
+  return (_has_bits_[0] & 0x00008000u) != 0;
 }
 inline void CSOTFLadderPlayerStats::set_has_kills_gold() {
-  _has_bits_[0] |= 0x00080000u;
+  _has_bits_[0] |= 0x00008000u;
 }
 inline void CSOTFLadderPlayerStats::clear_has_kills_gold() {
-  _has_bits_[0] &= ~0x00080000u;
+  _has_bits_[0] &= ~0x00008000u;
 }
 inline void CSOTFLadderPlayerStats::clear_kills_gold() {
   kills_gold_ = 0u;
@@ -35047,13 +37273,13 @@ inline void CSOTFLadderPlayerStats::set_kills_gold(::google::protobuf::uint32 va
 
 // optional uint32 damage_bronze = 22;
 inline bool CSOTFLadderPlayerStats::has_damage_bronze() const {
-  return (_has_bits_[0] & 0x00100000u) != 0;
+  return (_has_bits_[0] & 0x00010000u) != 0;
 }
 inline void CSOTFLadderPlayerStats::set_has_damage_bronze() {
-  _has_bits_[0] |= 0x00100000u;
+  _has_bits_[0] |= 0x00010000u;
 }
 inline void CSOTFLadderPlayerStats::clear_has_damage_bronze() {
-  _has_bits_[0] &= ~0x00100000u;
+  _has_bits_[0] &= ~0x00010000u;
 }
 inline void CSOTFLadderPlayerStats::clear_damage_bronze() {
   damage_bronze_ = 0u;
@@ -35071,13 +37297,13 @@ inline void CSOTFLadderPlayerStats::set_damage_bronze(::google::protobuf::uint32
 
 // optional uint32 damage_silver = 23;
 inline bool CSOTFLadderPlayerStats::has_damage_silver() const {
-  return (_has_bits_[0] & 0x00200000u) != 0;
+  return (_has_bits_[0] & 0x00020000u) != 0;
 }
 inline void CSOTFLadderPlayerStats::set_has_damage_silver() {
-  _has_bits_[0] |= 0x00200000u;
+  _has_bits_[0] |= 0x00020000u;
 }
 inline void CSOTFLadderPlayerStats::clear_has_damage_silver() {
-  _has_bits_[0] &= ~0x00200000u;
+  _has_bits_[0] &= ~0x00020000u;
 }
 inline void CSOTFLadderPlayerStats::clear_damage_silver() {
   damage_silver_ = 0u;
@@ -35095,13 +37321,13 @@ inline void CSOTFLadderPlayerStats::set_damage_silver(::google::protobuf::uint32
 
 // optional uint32 damage_gold = 24;
 inline bool CSOTFLadderPlayerStats::has_damage_gold() const {
-  return (_has_bits_[0] & 0x00400000u) != 0;
+  return (_has_bits_[0] & 0x00040000u) != 0;
 }
 inline void CSOTFLadderPlayerStats::set_has_damage_gold() {
-  _has_bits_[0] |= 0x00400000u;
+  _has_bits_[0] |= 0x00040000u;
 }
 inline void CSOTFLadderPlayerStats::clear_has_damage_gold() {
-  _has_bits_[0] &= ~0x00400000u;
+  _has_bits_[0] &= ~0x00040000u;
 }
 inline void CSOTFLadderPlayerStats::clear_damage_gold() {
   damage_gold_ = 0u;
@@ -35119,13 +37345,13 @@ inline void CSOTFLadderPlayerStats::set_damage_gold(::google::protobuf::uint32 v
 
 // optional uint32 healing_bronze = 25;
 inline bool CSOTFLadderPlayerStats::has_healing_bronze() const {
-  return (_has_bits_[0] & 0x00800000u) != 0;
+  return (_has_bits_[0] & 0x00080000u) != 0;
 }
 inline void CSOTFLadderPlayerStats::set_has_healing_bronze() {
-  _has_bits_[0] |= 0x00800000u;
+  _has_bits_[0] |= 0x00080000u;
 }
 inline void CSOTFLadderPlayerStats::clear_has_healing_bronze() {
-  _has_bits_[0] &= ~0x00800000u;
+  _has_bits_[0] &= ~0x00080000u;
 }
 inline void CSOTFLadderPlayerStats::clear_healing_bronze() {
   healing_bronze_ = 0u;
@@ -35143,13 +37369,13 @@ inline void CSOTFLadderPlayerStats::set_healing_bronze(::google::protobuf::uint3
 
 // optional uint32 healing_silver = 26;
 inline bool CSOTFLadderPlayerStats::has_healing_silver() const {
-  return (_has_bits_[0] & 0x01000000u) != 0;
+  return (_has_bits_[0] & 0x00100000u) != 0;
 }
 inline void CSOTFLadderPlayerStats::set_has_healing_silver() {
-  _has_bits_[0] |= 0x01000000u;
+  _has_bits_[0] |= 0x00100000u;
 }
 inline void CSOTFLadderPlayerStats::clear_has_healing_silver() {
-  _has_bits_[0] &= ~0x01000000u;
+  _has_bits_[0] &= ~0x00100000u;
 }
 inline void CSOTFLadderPlayerStats::clear_healing_silver() {
   healing_silver_ = 0u;
@@ -35167,13 +37393,13 @@ inline void CSOTFLadderPlayerStats::set_healing_silver(::google::protobuf::uint3
 
 // optional uint32 healing_gold = 27;
 inline bool CSOTFLadderPlayerStats::has_healing_gold() const {
-  return (_has_bits_[0] & 0x02000000u) != 0;
+  return (_has_bits_[0] & 0x00200000u) != 0;
 }
 inline void CSOTFLadderPlayerStats::set_has_healing_gold() {
-  _has_bits_[0] |= 0x02000000u;
+  _has_bits_[0] |= 0x00200000u;
 }
 inline void CSOTFLadderPlayerStats::clear_has_healing_gold() {
-  _has_bits_[0] &= ~0x02000000u;
+  _has_bits_[0] &= ~0x00200000u;
 }
 inline void CSOTFLadderPlayerStats::clear_healing_gold() {
   healing_gold_ = 0u;
@@ -35191,13 +37417,13 @@ inline void CSOTFLadderPlayerStats::set_healing_gold(::google::protobuf::uint32 
 
 // optional uint32 support_bronze = 28;
 inline bool CSOTFLadderPlayerStats::has_support_bronze() const {
-  return (_has_bits_[0] & 0x04000000u) != 0;
+  return (_has_bits_[0] & 0x00400000u) != 0;
 }
 inline void CSOTFLadderPlayerStats::set_has_support_bronze() {
-  _has_bits_[0] |= 0x04000000u;
+  _has_bits_[0] |= 0x00400000u;
 }
 inline void CSOTFLadderPlayerStats::clear_has_support_bronze() {
-  _has_bits_[0] &= ~0x04000000u;
+  _has_bits_[0] &= ~0x00400000u;
 }
 inline void CSOTFLadderPlayerStats::clear_support_bronze() {
   support_bronze_ = 0u;
@@ -35215,13 +37441,13 @@ inline void CSOTFLadderPlayerStats::set_support_bronze(::google::protobuf::uint3
 
 // optional uint32 support_silver = 29;
 inline bool CSOTFLadderPlayerStats::has_support_silver() const {
-  return (_has_bits_[0] & 0x08000000u) != 0;
+  return (_has_bits_[0] & 0x00800000u) != 0;
 }
 inline void CSOTFLadderPlayerStats::set_has_support_silver() {
-  _has_bits_[0] |= 0x08000000u;
+  _has_bits_[0] |= 0x00800000u;
 }
 inline void CSOTFLadderPlayerStats::clear_has_support_silver() {
-  _has_bits_[0] &= ~0x08000000u;
+  _has_bits_[0] &= ~0x00800000u;
 }
 inline void CSOTFLadderPlayerStats::clear_support_silver() {
   support_silver_ = 0u;
@@ -35239,13 +37465,13 @@ inline void CSOTFLadderPlayerStats::set_support_silver(::google::protobuf::uint3
 
 // optional uint32 support_gold = 30;
 inline bool CSOTFLadderPlayerStats::has_support_gold() const {
-  return (_has_bits_[0] & 0x10000000u) != 0;
+  return (_has_bits_[0] & 0x01000000u) != 0;
 }
 inline void CSOTFLadderPlayerStats::set_has_support_gold() {
-  _has_bits_[0] |= 0x10000000u;
+  _has_bits_[0] |= 0x01000000u;
 }
 inline void CSOTFLadderPlayerStats::clear_has_support_gold() {
-  _has_bits_[0] &= ~0x10000000u;
+  _has_bits_[0] &= ~0x01000000u;
 }
 inline void CSOTFLadderPlayerStats::clear_support_gold() {
   support_gold_ = 0u;
@@ -35389,39 +37615,15 @@ inline void CSOTFRatingData::set_rating_tertiary(::google::protobuf::uint32 valu
 
 // CMsgGC_TFVoteKickPlayerRequest
 
-// optional uint32 account_id = 1;
-inline bool CMsgGC_TFVoteKickPlayerRequest::has_account_id() const {
-  return (_has_bits_[0] & 0x00000001u) != 0;
-}
-inline void CMsgGC_TFVoteKickPlayerRequest::set_has_account_id() {
-  _has_bits_[0] |= 0x00000001u;
-}
-inline void CMsgGC_TFVoteKickPlayerRequest::clear_has_account_id() {
-  _has_bits_[0] &= ~0x00000001u;
-}
-inline void CMsgGC_TFVoteKickPlayerRequest::clear_account_id() {
-  account_id_ = 0u;
-  clear_has_account_id();
-}
-inline ::google::protobuf::uint32 CMsgGC_TFVoteKickPlayerRequest::account_id() const {
-  // @@protoc_insertion_point(field_get:CMsgGC_TFVoteKickPlayerRequest.account_id)
-  return account_id_;
-}
-inline void CMsgGC_TFVoteKickPlayerRequest::set_account_id(::google::protobuf::uint32 value) {
-  set_has_account_id();
-  account_id_ = value;
-  // @@protoc_insertion_point(field_set:CMsgGC_TFVoteKickPlayerRequest.account_id)
-}
-
 // optional uint64 target_id = 2;
 inline bool CMsgGC_TFVoteKickPlayerRequest::has_target_id() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
+  return (_has_bits_[0] & 0x00000001u) != 0;
 }
 inline void CMsgGC_TFVoteKickPlayerRequest::set_has_target_id() {
-  _has_bits_[0] |= 0x00000002u;
+  _has_bits_[0] |= 0x00000001u;
 }
 inline void CMsgGC_TFVoteKickPlayerRequest::clear_has_target_id() {
-  _has_bits_[0] &= ~0x00000002u;
+  _has_bits_[0] &= ~0x00000001u;
 }
 inline void CMsgGC_TFVoteKickPlayerRequest::clear_target_id() {
   target_id_ = GOOGLE_ULONGLONG(0);
@@ -35435,6 +37637,79 @@ inline void CMsgGC_TFVoteKickPlayerRequest::set_target_id(::google::protobuf::ui
   set_has_target_id();
   target_id_ = value;
   // @@protoc_insertion_point(field_set:CMsgGC_TFVoteKickPlayerRequest.target_id)
+}
+
+// optional uint64 voter_id = 3;
+inline bool CMsgGC_TFVoteKickPlayerRequest::has_voter_id() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void CMsgGC_TFVoteKickPlayerRequest::set_has_voter_id() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void CMsgGC_TFVoteKickPlayerRequest::clear_has_voter_id() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void CMsgGC_TFVoteKickPlayerRequest::clear_voter_id() {
+  voter_id_ = GOOGLE_ULONGLONG(0);
+  clear_has_voter_id();
+}
+inline ::google::protobuf::uint64 CMsgGC_TFVoteKickPlayerRequest::voter_id() const {
+  // @@protoc_insertion_point(field_get:CMsgGC_TFVoteKickPlayerRequest.voter_id)
+  return voter_id_;
+}
+inline void CMsgGC_TFVoteKickPlayerRequest::set_voter_id(::google::protobuf::uint64 value) {
+  set_has_voter_id();
+  voter_id_ = value;
+  // @@protoc_insertion_point(field_set:CMsgGC_TFVoteKickPlayerRequest.voter_id)
+}
+
+// optional .TFVoteKickReason reason = 4;
+inline bool CMsgGC_TFVoteKickPlayerRequest::has_reason() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
+}
+inline void CMsgGC_TFVoteKickPlayerRequest::set_has_reason() {
+  _has_bits_[0] |= 0x00000004u;
+}
+inline void CMsgGC_TFVoteKickPlayerRequest::clear_has_reason() {
+  _has_bits_[0] &= ~0x00000004u;
+}
+inline void CMsgGC_TFVoteKickPlayerRequest::clear_reason() {
+  reason_ = -1;
+  clear_has_reason();
+}
+inline ::TFVoteKickReason CMsgGC_TFVoteKickPlayerRequest::reason() const {
+  // @@protoc_insertion_point(field_get:CMsgGC_TFVoteKickPlayerRequest.reason)
+  return static_cast< ::TFVoteKickReason >(reason_);
+}
+inline void CMsgGC_TFVoteKickPlayerRequest::set_reason(::TFVoteKickReason value) {
+  assert(::TFVoteKickReason_IsValid(value));
+  set_has_reason();
+  reason_ = value;
+  // @@protoc_insertion_point(field_set:CMsgGC_TFVoteKickPlayerRequest.reason)
+}
+
+// optional uint64 match_id = 5;
+inline bool CMsgGC_TFVoteKickPlayerRequest::has_match_id() const {
+  return (_has_bits_[0] & 0x00000008u) != 0;
+}
+inline void CMsgGC_TFVoteKickPlayerRequest::set_has_match_id() {
+  _has_bits_[0] |= 0x00000008u;
+}
+inline void CMsgGC_TFVoteKickPlayerRequest::clear_has_match_id() {
+  _has_bits_[0] &= ~0x00000008u;
+}
+inline void CMsgGC_TFVoteKickPlayerRequest::clear_match_id() {
+  match_id_ = GOOGLE_ULONGLONG(0);
+  clear_has_match_id();
+}
+inline ::google::protobuf::uint64 CMsgGC_TFVoteKickPlayerRequest::match_id() const {
+  // @@protoc_insertion_point(field_get:CMsgGC_TFVoteKickPlayerRequest.match_id)
+  return match_id_;
+}
+inline void CMsgGC_TFVoteKickPlayerRequest::set_match_id(::google::protobuf::uint64 value) {
+  set_has_match_id();
+  match_id_ = value;
+  // @@protoc_insertion_point(field_set:CMsgGC_TFVoteKickPlayerRequest.match_id)
 }
 
 // -------------------------------------------------------------------
@@ -35463,6 +37738,54 @@ inline void CMsgGC_VoteKickPlayerRequestResponse::set_allowed(bool value) {
   set_has_allowed();
   allowed_ = value;
   // @@protoc_insertion_point(field_set:CMsgGC_VoteKickPlayerRequestResponse.allowed)
+}
+
+// optional bool voter_inhibit = 3;
+inline bool CMsgGC_VoteKickPlayerRequestResponse::has_voter_inhibit() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void CMsgGC_VoteKickPlayerRequestResponse::set_has_voter_inhibit() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void CMsgGC_VoteKickPlayerRequestResponse::clear_has_voter_inhibit() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void CMsgGC_VoteKickPlayerRequestResponse::clear_voter_inhibit() {
+  voter_inhibit_ = false;
+  clear_has_voter_inhibit();
+}
+inline bool CMsgGC_VoteKickPlayerRequestResponse::voter_inhibit() const {
+  // @@protoc_insertion_point(field_get:CMsgGC_VoteKickPlayerRequestResponse.voter_inhibit)
+  return voter_inhibit_;
+}
+inline void CMsgGC_VoteKickPlayerRequestResponse::set_voter_inhibit(bool value) {
+  set_has_voter_inhibit();
+  voter_inhibit_ = value;
+  // @@protoc_insertion_point(field_set:CMsgGC_VoteKickPlayerRequestResponse.voter_inhibit)
+}
+
+// optional bool target_inhibit = 4;
+inline bool CMsgGC_VoteKickPlayerRequestResponse::has_target_inhibit() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
+}
+inline void CMsgGC_VoteKickPlayerRequestResponse::set_has_target_inhibit() {
+  _has_bits_[0] |= 0x00000004u;
+}
+inline void CMsgGC_VoteKickPlayerRequestResponse::clear_has_target_inhibit() {
+  _has_bits_[0] &= ~0x00000004u;
+}
+inline void CMsgGC_VoteKickPlayerRequestResponse::clear_target_inhibit() {
+  target_inhibit_ = false;
+  clear_has_target_inhibit();
+}
+inline bool CMsgGC_VoteKickPlayerRequestResponse::target_inhibit() const {
+  // @@protoc_insertion_point(field_get:CMsgGC_VoteKickPlayerRequestResponse.target_inhibit)
+  return target_inhibit_;
+}
+inline void CMsgGC_VoteKickPlayerRequestResponse::set_target_inhibit(bool value) {
+  set_has_target_inhibit();
+  target_inhibit_ = value;
+  // @@protoc_insertion_point(field_set:CMsgGC_VoteKickPlayerRequestResponse.target_inhibit)
 }
 
 // -------------------------------------------------------------------
@@ -35996,28 +38319,28 @@ inline void CSOTFMatchResultPlayerStats::set_status(::google::protobuf::uint32 v
   // @@protoc_insertion_point(field_set:CSOTFMatchResultPlayerStats.status)
 }
 
-// optional uint32 party_id = 7;
-inline bool CSOTFMatchResultPlayerStats::has_party_id() const {
+// optional uint32 original_party_id = 7;
+inline bool CSOTFMatchResultPlayerStats::has_original_party_id() const {
   return (_has_bits_[0] & 0x00000040u) != 0;
 }
-inline void CSOTFMatchResultPlayerStats::set_has_party_id() {
+inline void CSOTFMatchResultPlayerStats::set_has_original_party_id() {
   _has_bits_[0] |= 0x00000040u;
 }
-inline void CSOTFMatchResultPlayerStats::clear_has_party_id() {
+inline void CSOTFMatchResultPlayerStats::clear_has_original_party_id() {
   _has_bits_[0] &= ~0x00000040u;
 }
-inline void CSOTFMatchResultPlayerStats::clear_party_id() {
-  party_id_ = 0u;
-  clear_has_party_id();
+inline void CSOTFMatchResultPlayerStats::clear_original_party_id() {
+  original_party_id_ = 0u;
+  clear_has_original_party_id();
 }
-inline ::google::protobuf::uint32 CSOTFMatchResultPlayerStats::party_id() const {
-  // @@protoc_insertion_point(field_get:CSOTFMatchResultPlayerStats.party_id)
-  return party_id_;
+inline ::google::protobuf::uint32 CSOTFMatchResultPlayerStats::original_party_id() const {
+  // @@protoc_insertion_point(field_get:CSOTFMatchResultPlayerStats.original_party_id)
+  return original_party_id_;
 }
-inline void CSOTFMatchResultPlayerStats::set_party_id(::google::protobuf::uint32 value) {
-  set_has_party_id();
-  party_id_ = value;
-  // @@protoc_insertion_point(field_set:CSOTFMatchResultPlayerStats.party_id)
+inline void CSOTFMatchResultPlayerStats::set_original_party_id(::google::protobuf::uint32 value) {
+  set_has_original_party_id();
+  original_party_id_ = value;
+  // @@protoc_insertion_point(field_set:CSOTFMatchResultPlayerStats.original_party_id)
 }
 
 // optional uint32 team = 8;
@@ -36476,6 +38799,30 @@ inline void CSOTFMatchResultPlayerStats::set_map_index(::google::protobuf::uint3
   // @@protoc_insertion_point(field_set:CSOTFMatchResultPlayerStats.map_index)
 }
 
+// optional uint32 winning_team = 27;
+inline bool CSOTFMatchResultPlayerStats::has_winning_team() const {
+  return (_has_bits_[0] & 0x04000000u) != 0;
+}
+inline void CSOTFMatchResultPlayerStats::set_has_winning_team() {
+  _has_bits_[0] |= 0x04000000u;
+}
+inline void CSOTFMatchResultPlayerStats::clear_has_winning_team() {
+  _has_bits_[0] &= ~0x04000000u;
+}
+inline void CSOTFMatchResultPlayerStats::clear_winning_team() {
+  winning_team_ = 0u;
+  clear_has_winning_team();
+}
+inline ::google::protobuf::uint32 CSOTFMatchResultPlayerStats::winning_team() const {
+  // @@protoc_insertion_point(field_get:CSOTFMatchResultPlayerStats.winning_team)
+  return winning_team_;
+}
+inline void CSOTFMatchResultPlayerStats::set_winning_team(::google::protobuf::uint32 value) {
+  set_has_winning_team();
+  winning_team_ = value;
+  // @@protoc_insertion_point(field_set:CSOTFMatchResultPlayerStats.winning_team)
+}
+
 // -------------------------------------------------------------------
 
 // CMsgGCRequestMatchMakerStats
@@ -36685,6 +39032,31 @@ CMsgGCMatchMakerStatsResponse::mutable_matchgroup_data_center_population() {
 // -------------------------------------------------------------------
 
 // CMsgGCMatchHistoryLoad
+
+// optional .ETFMatchGroup match_group = 1 [default = k_eTFMatchGroup_Invalid];
+inline bool CMsgGCMatchHistoryLoad::has_match_group() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void CMsgGCMatchHistoryLoad::set_has_match_group() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void CMsgGCMatchHistoryLoad::clear_has_match_group() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void CMsgGCMatchHistoryLoad::clear_match_group() {
+  match_group_ = -1;
+  clear_has_match_group();
+}
+inline ::ETFMatchGroup CMsgGCMatchHistoryLoad::match_group() const {
+  // @@protoc_insertion_point(field_get:CMsgGCMatchHistoryLoad.match_group)
+  return static_cast< ::ETFMatchGroup >(match_group_);
+}
+inline void CMsgGCMatchHistoryLoad::set_match_group(::ETFMatchGroup value) {
+  assert(::ETFMatchGroup_IsValid(value));
+  set_has_match_group();
+  match_group_ = value;
+  // @@protoc_insertion_point(field_set:CMsgGCMatchHistoryLoad.match_group)
+}
 
 // -------------------------------------------------------------------
 
@@ -37009,6 +39381,706 @@ inline void CMsgGCSurveyResponse::set_response(::google::protobuf::int32 value) 
 
 // -------------------------------------------------------------------
 
+// CSOQuestMapNode
+
+// optional uint32 account_id = 1;
+inline bool CSOQuestMapNode::has_account_id() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void CSOQuestMapNode::set_has_account_id() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void CSOQuestMapNode::clear_has_account_id() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void CSOQuestMapNode::clear_account_id() {
+  account_id_ = 0u;
+  clear_has_account_id();
+}
+inline ::google::protobuf::uint32 CSOQuestMapNode::account_id() const {
+  // @@protoc_insertion_point(field_get:CSOQuestMapNode.account_id)
+  return account_id_;
+}
+inline void CSOQuestMapNode::set_account_id(::google::protobuf::uint32 value) {
+  set_has_account_id();
+  account_id_ = value;
+  // @@protoc_insertion_point(field_set:CSOQuestMapNode.account_id)
+}
+
+// optional uint32 defindex = 3;
+inline bool CSOQuestMapNode::has_defindex() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void CSOQuestMapNode::set_has_defindex() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void CSOQuestMapNode::clear_has_defindex() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void CSOQuestMapNode::clear_defindex() {
+  defindex_ = 0u;
+  clear_has_defindex();
+}
+inline ::google::protobuf::uint32 CSOQuestMapNode::defindex() const {
+  // @@protoc_insertion_point(field_get:CSOQuestMapNode.defindex)
+  return defindex_;
+}
+inline void CSOQuestMapNode::set_defindex(::google::protobuf::uint32 value) {
+  set_has_defindex();
+  defindex_ = value;
+  // @@protoc_insertion_point(field_set:CSOQuestMapNode.defindex)
+}
+
+// optional uint32 node_id = 4;
+inline bool CSOQuestMapNode::has_node_id() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
+}
+inline void CSOQuestMapNode::set_has_node_id() {
+  _has_bits_[0] |= 0x00000004u;
+}
+inline void CSOQuestMapNode::clear_has_node_id() {
+  _has_bits_[0] &= ~0x00000004u;
+}
+inline void CSOQuestMapNode::clear_node_id() {
+  node_id_ = 0u;
+  clear_has_node_id();
+}
+inline ::google::protobuf::uint32 CSOQuestMapNode::node_id() const {
+  // @@protoc_insertion_point(field_get:CSOQuestMapNode.node_id)
+  return node_id_;
+}
+inline void CSOQuestMapNode::set_node_id(::google::protobuf::uint32 value) {
+  set_has_node_id();
+  node_id_ = value;
+  // @@protoc_insertion_point(field_set:CSOQuestMapNode.node_id)
+}
+
+// optional bool star_0_earned = 6 [default = false];
+inline bool CSOQuestMapNode::has_star_0_earned() const {
+  return (_has_bits_[0] & 0x00000008u) != 0;
+}
+inline void CSOQuestMapNode::set_has_star_0_earned() {
+  _has_bits_[0] |= 0x00000008u;
+}
+inline void CSOQuestMapNode::clear_has_star_0_earned() {
+  _has_bits_[0] &= ~0x00000008u;
+}
+inline void CSOQuestMapNode::clear_star_0_earned() {
+  star_0_earned_ = false;
+  clear_has_star_0_earned();
+}
+inline bool CSOQuestMapNode::star_0_earned() const {
+  // @@protoc_insertion_point(field_get:CSOQuestMapNode.star_0_earned)
+  return star_0_earned_;
+}
+inline void CSOQuestMapNode::set_star_0_earned(bool value) {
+  set_has_star_0_earned();
+  star_0_earned_ = value;
+  // @@protoc_insertion_point(field_set:CSOQuestMapNode.star_0_earned)
+}
+
+// optional bool star_1_earned = 7 [default = false];
+inline bool CSOQuestMapNode::has_star_1_earned() const {
+  return (_has_bits_[0] & 0x00000010u) != 0;
+}
+inline void CSOQuestMapNode::set_has_star_1_earned() {
+  _has_bits_[0] |= 0x00000010u;
+}
+inline void CSOQuestMapNode::clear_has_star_1_earned() {
+  _has_bits_[0] &= ~0x00000010u;
+}
+inline void CSOQuestMapNode::clear_star_1_earned() {
+  star_1_earned_ = false;
+  clear_has_star_1_earned();
+}
+inline bool CSOQuestMapNode::star_1_earned() const {
+  // @@protoc_insertion_point(field_get:CSOQuestMapNode.star_1_earned)
+  return star_1_earned_;
+}
+inline void CSOQuestMapNode::set_star_1_earned(bool value) {
+  set_has_star_1_earned();
+  star_1_earned_ = value;
+  // @@protoc_insertion_point(field_set:CSOQuestMapNode.star_1_earned)
+}
+
+// optional bool star_2_earned = 8 [default = false];
+inline bool CSOQuestMapNode::has_star_2_earned() const {
+  return (_has_bits_[0] & 0x00000020u) != 0;
+}
+inline void CSOQuestMapNode::set_has_star_2_earned() {
+  _has_bits_[0] |= 0x00000020u;
+}
+inline void CSOQuestMapNode::clear_has_star_2_earned() {
+  _has_bits_[0] &= ~0x00000020u;
+}
+inline void CSOQuestMapNode::clear_star_2_earned() {
+  star_2_earned_ = false;
+  clear_has_star_2_earned();
+}
+inline bool CSOQuestMapNode::star_2_earned() const {
+  // @@protoc_insertion_point(field_get:CSOQuestMapNode.star_2_earned)
+  return star_2_earned_;
+}
+inline void CSOQuestMapNode::set_star_2_earned(bool value) {
+  set_has_star_2_earned();
+  star_2_earned_ = value;
+  // @@protoc_insertion_point(field_set:CSOQuestMapNode.star_2_earned)
+}
+
+// optional bool loot_claimed = 9 [default = false];
+inline bool CSOQuestMapNode::has_loot_claimed() const {
+  return (_has_bits_[0] & 0x00000040u) != 0;
+}
+inline void CSOQuestMapNode::set_has_loot_claimed() {
+  _has_bits_[0] |= 0x00000040u;
+}
+inline void CSOQuestMapNode::clear_has_loot_claimed() {
+  _has_bits_[0] &= ~0x00000040u;
+}
+inline void CSOQuestMapNode::clear_loot_claimed() {
+  loot_claimed_ = false;
+  clear_has_loot_claimed();
+}
+inline bool CSOQuestMapNode::loot_claimed() const {
+  // @@protoc_insertion_point(field_get:CSOQuestMapNode.loot_claimed)
+  return loot_claimed_;
+}
+inline void CSOQuestMapNode::set_loot_claimed(bool value) {
+  set_has_loot_claimed();
+  loot_claimed_ = value;
+  // @@protoc_insertion_point(field_set:CSOQuestMapNode.loot_claimed)
+}
+
+// optional uint32 selected_quest_def = 10 [default = 0];
+inline bool CSOQuestMapNode::has_selected_quest_def() const {
+  return (_has_bits_[0] & 0x00000080u) != 0;
+}
+inline void CSOQuestMapNode::set_has_selected_quest_def() {
+  _has_bits_[0] |= 0x00000080u;
+}
+inline void CSOQuestMapNode::clear_has_selected_quest_def() {
+  _has_bits_[0] &= ~0x00000080u;
+}
+inline void CSOQuestMapNode::clear_selected_quest_def() {
+  selected_quest_def_ = 0u;
+  clear_has_selected_quest_def();
+}
+inline ::google::protobuf::uint32 CSOQuestMapNode::selected_quest_def() const {
+  // @@protoc_insertion_point(field_get:CSOQuestMapNode.selected_quest_def)
+  return selected_quest_def_;
+}
+inline void CSOQuestMapNode::set_selected_quest_def(::google::protobuf::uint32 value) {
+  set_has_selected_quest_def();
+  selected_quest_def_ = value;
+  // @@protoc_insertion_point(field_set:CSOQuestMapNode.selected_quest_def)
+}
+
+// optional uint32 map_cycle = 11;
+inline bool CSOQuestMapNode::has_map_cycle() const {
+  return (_has_bits_[0] & 0x00000100u) != 0;
+}
+inline void CSOQuestMapNode::set_has_map_cycle() {
+  _has_bits_[0] |= 0x00000100u;
+}
+inline void CSOQuestMapNode::clear_has_map_cycle() {
+  _has_bits_[0] &= ~0x00000100u;
+}
+inline void CSOQuestMapNode::clear_map_cycle() {
+  map_cycle_ = 0u;
+  clear_has_map_cycle();
+}
+inline ::google::protobuf::uint32 CSOQuestMapNode::map_cycle() const {
+  // @@protoc_insertion_point(field_get:CSOQuestMapNode.map_cycle)
+  return map_cycle_;
+}
+inline void CSOQuestMapNode::set_map_cycle(::google::protobuf::uint32 value) {
+  set_has_map_cycle();
+  map_cycle_ = value;
+  // @@protoc_insertion_point(field_set:CSOQuestMapNode.map_cycle)
+}
+
+// -------------------------------------------------------------------
+
+// CSOQuest
+
+// optional uint32 account_id = 1;
+inline bool CSOQuest::has_account_id() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void CSOQuest::set_has_account_id() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void CSOQuest::clear_has_account_id() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void CSOQuest::clear_account_id() {
+  account_id_ = 0u;
+  clear_has_account_id();
+}
+inline ::google::protobuf::uint32 CSOQuest::account_id() const {
+  // @@protoc_insertion_point(field_get:CSOQuest.account_id)
+  return account_id_;
+}
+inline void CSOQuest::set_account_id(::google::protobuf::uint32 value) {
+  set_has_account_id();
+  account_id_ = value;
+  // @@protoc_insertion_point(field_set:CSOQuest.account_id)
+}
+
+// optional uint64 quest_id = 2;
+inline bool CSOQuest::has_quest_id() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void CSOQuest::set_has_quest_id() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void CSOQuest::clear_has_quest_id() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void CSOQuest::clear_quest_id() {
+  quest_id_ = GOOGLE_ULONGLONG(0);
+  clear_has_quest_id();
+}
+inline ::google::protobuf::uint64 CSOQuest::quest_id() const {
+  // @@protoc_insertion_point(field_get:CSOQuest.quest_id)
+  return quest_id_;
+}
+inline void CSOQuest::set_quest_id(::google::protobuf::uint64 value) {
+  set_has_quest_id();
+  quest_id_ = value;
+  // @@protoc_insertion_point(field_set:CSOQuest.quest_id)
+}
+
+// optional uint32 defindex = 3;
+inline bool CSOQuest::has_defindex() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
+}
+inline void CSOQuest::set_has_defindex() {
+  _has_bits_[0] |= 0x00000004u;
+}
+inline void CSOQuest::clear_has_defindex() {
+  _has_bits_[0] &= ~0x00000004u;
+}
+inline void CSOQuest::clear_defindex() {
+  defindex_ = 0u;
+  clear_has_defindex();
+}
+inline ::google::protobuf::uint32 CSOQuest::defindex() const {
+  // @@protoc_insertion_point(field_get:CSOQuest.defindex)
+  return defindex_;
+}
+inline void CSOQuest::set_defindex(::google::protobuf::uint32 value) {
+  set_has_defindex();
+  defindex_ = value;
+  // @@protoc_insertion_point(field_set:CSOQuest.defindex)
+}
+
+// optional bool active = 4 [default = false];
+inline bool CSOQuest::has_active() const {
+  return (_has_bits_[0] & 0x00000008u) != 0;
+}
+inline void CSOQuest::set_has_active() {
+  _has_bits_[0] |= 0x00000008u;
+}
+inline void CSOQuest::clear_has_active() {
+  _has_bits_[0] &= ~0x00000008u;
+}
+inline void CSOQuest::clear_active() {
+  active_ = false;
+  clear_has_active();
+}
+inline bool CSOQuest::active() const {
+  // @@protoc_insertion_point(field_get:CSOQuest.active)
+  return active_;
+}
+inline void CSOQuest::set_active(bool value) {
+  set_has_active();
+  active_ = value;
+  // @@protoc_insertion_point(field_set:CSOQuest.active)
+}
+
+// optional uint32 points_0 = 5;
+inline bool CSOQuest::has_points_0() const {
+  return (_has_bits_[0] & 0x00000010u) != 0;
+}
+inline void CSOQuest::set_has_points_0() {
+  _has_bits_[0] |= 0x00000010u;
+}
+inline void CSOQuest::clear_has_points_0() {
+  _has_bits_[0] &= ~0x00000010u;
+}
+inline void CSOQuest::clear_points_0() {
+  points_0_ = 0u;
+  clear_has_points_0();
+}
+inline ::google::protobuf::uint32 CSOQuest::points_0() const {
+  // @@protoc_insertion_point(field_get:CSOQuest.points_0)
+  return points_0_;
+}
+inline void CSOQuest::set_points_0(::google::protobuf::uint32 value) {
+  set_has_points_0();
+  points_0_ = value;
+  // @@protoc_insertion_point(field_set:CSOQuest.points_0)
+}
+
+// optional uint32 points_1 = 6;
+inline bool CSOQuest::has_points_1() const {
+  return (_has_bits_[0] & 0x00000020u) != 0;
+}
+inline void CSOQuest::set_has_points_1() {
+  _has_bits_[0] |= 0x00000020u;
+}
+inline void CSOQuest::clear_has_points_1() {
+  _has_bits_[0] &= ~0x00000020u;
+}
+inline void CSOQuest::clear_points_1() {
+  points_1_ = 0u;
+  clear_has_points_1();
+}
+inline ::google::protobuf::uint32 CSOQuest::points_1() const {
+  // @@protoc_insertion_point(field_get:CSOQuest.points_1)
+  return points_1_;
+}
+inline void CSOQuest::set_points_1(::google::protobuf::uint32 value) {
+  set_has_points_1();
+  points_1_ = value;
+  // @@protoc_insertion_point(field_set:CSOQuest.points_1)
+}
+
+// optional uint32 points_2 = 7;
+inline bool CSOQuest::has_points_2() const {
+  return (_has_bits_[0] & 0x00000040u) != 0;
+}
+inline void CSOQuest::set_has_points_2() {
+  _has_bits_[0] |= 0x00000040u;
+}
+inline void CSOQuest::clear_has_points_2() {
+  _has_bits_[0] &= ~0x00000040u;
+}
+inline void CSOQuest::clear_points_2() {
+  points_2_ = 0u;
+  clear_has_points_2();
+}
+inline ::google::protobuf::uint32 CSOQuest::points_2() const {
+  // @@protoc_insertion_point(field_get:CSOQuest.points_2)
+  return points_2_;
+}
+inline void CSOQuest::set_points_2(::google::protobuf::uint32 value) {
+  set_has_points_2();
+  points_2_ = value;
+  // @@protoc_insertion_point(field_set:CSOQuest.points_2)
+}
+
+// optional uint32 quest_map_node_source_id = 8;
+inline bool CSOQuest::has_quest_map_node_source_id() const {
+  return (_has_bits_[0] & 0x00000080u) != 0;
+}
+inline void CSOQuest::set_has_quest_map_node_source_id() {
+  _has_bits_[0] |= 0x00000080u;
+}
+inline void CSOQuest::clear_has_quest_map_node_source_id() {
+  _has_bits_[0] &= ~0x00000080u;
+}
+inline void CSOQuest::clear_quest_map_node_source_id() {
+  quest_map_node_source_id_ = 0u;
+  clear_has_quest_map_node_source_id();
+}
+inline ::google::protobuf::uint32 CSOQuest::quest_map_node_source_id() const {
+  // @@protoc_insertion_point(field_get:CSOQuest.quest_map_node_source_id)
+  return quest_map_node_source_id_;
+}
+inline void CSOQuest::set_quest_map_node_source_id(::google::protobuf::uint32 value) {
+  set_has_quest_map_node_source_id();
+  quest_map_node_source_id_ = value;
+  // @@protoc_insertion_point(field_set:CSOQuest.quest_map_node_source_id)
+}
+
+// optional uint32 map_cycle = 9;
+inline bool CSOQuest::has_map_cycle() const {
+  return (_has_bits_[0] & 0x00000100u) != 0;
+}
+inline void CSOQuest::set_has_map_cycle() {
+  _has_bits_[0] |= 0x00000100u;
+}
+inline void CSOQuest::clear_has_map_cycle() {
+  _has_bits_[0] &= ~0x00000100u;
+}
+inline void CSOQuest::clear_map_cycle() {
+  map_cycle_ = 0u;
+  clear_has_map_cycle();
+}
+inline ::google::protobuf::uint32 CSOQuest::map_cycle() const {
+  // @@protoc_insertion_point(field_get:CSOQuest.map_cycle)
+  return map_cycle_;
+}
+inline void CSOQuest::set_map_cycle(::google::protobuf::uint32 value) {
+  set_has_map_cycle();
+  map_cycle_ = value;
+  // @@protoc_insertion_point(field_set:CSOQuest.map_cycle)
+}
+
+// -------------------------------------------------------------------
+
+// CSOQuestMapRewardPurchase
+
+// optional uint32 account_id = 1;
+inline bool CSOQuestMapRewardPurchase::has_account_id() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void CSOQuestMapRewardPurchase::set_has_account_id() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void CSOQuestMapRewardPurchase::clear_has_account_id() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void CSOQuestMapRewardPurchase::clear_account_id() {
+  account_id_ = 0u;
+  clear_has_account_id();
+}
+inline ::google::protobuf::uint32 CSOQuestMapRewardPurchase::account_id() const {
+  // @@protoc_insertion_point(field_get:CSOQuestMapRewardPurchase.account_id)
+  return account_id_;
+}
+inline void CSOQuestMapRewardPurchase::set_account_id(::google::protobuf::uint32 value) {
+  set_has_account_id();
+  account_id_ = value;
+  // @@protoc_insertion_point(field_set:CSOQuestMapRewardPurchase.account_id)
+}
+
+// optional uint32 defindex = 2;
+inline bool CSOQuestMapRewardPurchase::has_defindex() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void CSOQuestMapRewardPurchase::set_has_defindex() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void CSOQuestMapRewardPurchase::clear_has_defindex() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void CSOQuestMapRewardPurchase::clear_defindex() {
+  defindex_ = 0u;
+  clear_has_defindex();
+}
+inline ::google::protobuf::uint32 CSOQuestMapRewardPurchase::defindex() const {
+  // @@protoc_insertion_point(field_get:CSOQuestMapRewardPurchase.defindex)
+  return defindex_;
+}
+inline void CSOQuestMapRewardPurchase::set_defindex(::google::protobuf::uint32 value) {
+  set_has_defindex();
+  defindex_ = value;
+  // @@protoc_insertion_point(field_set:CSOQuestMapRewardPurchase.defindex)
+}
+
+// optional uint32 count = 3;
+inline bool CSOQuestMapRewardPurchase::has_count() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
+}
+inline void CSOQuestMapRewardPurchase::set_has_count() {
+  _has_bits_[0] |= 0x00000004u;
+}
+inline void CSOQuestMapRewardPurchase::clear_has_count() {
+  _has_bits_[0] &= ~0x00000004u;
+}
+inline void CSOQuestMapRewardPurchase::clear_count() {
+  count_ = 0u;
+  clear_has_count();
+}
+inline ::google::protobuf::uint32 CSOQuestMapRewardPurchase::count() const {
+  // @@protoc_insertion_point(field_get:CSOQuestMapRewardPurchase.count)
+  return count_;
+}
+inline void CSOQuestMapRewardPurchase::set_count(::google::protobuf::uint32 value) {
+  set_has_count();
+  count_ = value;
+  // @@protoc_insertion_point(field_set:CSOQuestMapRewardPurchase.count)
+}
+
+// optional uint32 map_cycle = 4;
+inline bool CSOQuestMapRewardPurchase::has_map_cycle() const {
+  return (_has_bits_[0] & 0x00000008u) != 0;
+}
+inline void CSOQuestMapRewardPurchase::set_has_map_cycle() {
+  _has_bits_[0] |= 0x00000008u;
+}
+inline void CSOQuestMapRewardPurchase::clear_has_map_cycle() {
+  _has_bits_[0] &= ~0x00000008u;
+}
+inline void CSOQuestMapRewardPurchase::clear_map_cycle() {
+  map_cycle_ = 0u;
+  clear_has_map_cycle();
+}
+inline ::google::protobuf::uint32 CSOQuestMapRewardPurchase::map_cycle() const {
+  // @@protoc_insertion_point(field_get:CSOQuestMapRewardPurchase.map_cycle)
+  return map_cycle_;
+}
+inline void CSOQuestMapRewardPurchase::set_map_cycle(::google::protobuf::uint32 value) {
+  set_has_map_cycle();
+  map_cycle_ = value;
+  // @@protoc_insertion_point(field_set:CSOQuestMapRewardPurchase.map_cycle)
+}
+
+// optional uint32 purchase_id = 5;
+inline bool CSOQuestMapRewardPurchase::has_purchase_id() const {
+  return (_has_bits_[0] & 0x00000010u) != 0;
+}
+inline void CSOQuestMapRewardPurchase::set_has_purchase_id() {
+  _has_bits_[0] |= 0x00000010u;
+}
+inline void CSOQuestMapRewardPurchase::clear_has_purchase_id() {
+  _has_bits_[0] &= ~0x00000010u;
+}
+inline void CSOQuestMapRewardPurchase::clear_purchase_id() {
+  purchase_id_ = 0u;
+  clear_has_purchase_id();
+}
+inline ::google::protobuf::uint32 CSOQuestMapRewardPurchase::purchase_id() const {
+  // @@protoc_insertion_point(field_get:CSOQuestMapRewardPurchase.purchase_id)
+  return purchase_id_;
+}
+inline void CSOQuestMapRewardPurchase::set_purchase_id(::google::protobuf::uint32 value) {
+  set_has_purchase_id();
+  purchase_id_ = value;
+  // @@protoc_insertion_point(field_set:CSOQuestMapRewardPurchase.purchase_id)
+}
+
+// -------------------------------------------------------------------
+
+// CMsgGCQuestIdentify
+
+// optional uint64 quest_id = 1;
+inline bool CMsgGCQuestIdentify::has_quest_id() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void CMsgGCQuestIdentify::set_has_quest_id() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void CMsgGCQuestIdentify::clear_has_quest_id() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void CMsgGCQuestIdentify::clear_quest_id() {
+  quest_id_ = GOOGLE_ULONGLONG(0);
+  clear_has_quest_id();
+}
+inline ::google::protobuf::uint64 CMsgGCQuestIdentify::quest_id() const {
+  // @@protoc_insertion_point(field_get:CMsgGCQuestIdentify.quest_id)
+  return quest_id_;
+}
+inline void CMsgGCQuestIdentify::set_quest_id(::google::protobuf::uint64 value) {
+  set_has_quest_id();
+  quest_id_ = value;
+  // @@protoc_insertion_point(field_set:CMsgGCQuestIdentify.quest_id)
+}
+
+// -------------------------------------------------------------------
+
+// CMsgGCQuestDevGive
+
+// optional uint32 quest_def_index = 1;
+inline bool CMsgGCQuestDevGive::has_quest_def_index() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void CMsgGCQuestDevGive::set_has_quest_def_index() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void CMsgGCQuestDevGive::clear_has_quest_def_index() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void CMsgGCQuestDevGive::clear_quest_def_index() {
+  quest_def_index_ = 0u;
+  clear_has_quest_def_index();
+}
+inline ::google::protobuf::uint32 CMsgGCQuestDevGive::quest_def_index() const {
+  // @@protoc_insertion_point(field_get:CMsgGCQuestDevGive.quest_def_index)
+  return quest_def_index_;
+}
+inline void CMsgGCQuestDevGive::set_quest_def_index(::google::protobuf::uint32 value) {
+  set_has_quest_def_index();
+  quest_def_index_ = value;
+  // @@protoc_insertion_point(field_set:CMsgGCQuestDevGive.quest_def_index)
+}
+
+// -------------------------------------------------------------------
+
+// CMsgGCQuestNodeTurnIn
+
+// optional uint32 node_defindex = 1;
+inline bool CMsgGCQuestNodeTurnIn::has_node_defindex() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void CMsgGCQuestNodeTurnIn::set_has_node_defindex() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void CMsgGCQuestNodeTurnIn::clear_has_node_defindex() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void CMsgGCQuestNodeTurnIn::clear_node_defindex() {
+  node_defindex_ = 0u;
+  clear_has_node_defindex();
+}
+inline ::google::protobuf::uint32 CMsgGCQuestNodeTurnIn::node_defindex() const {
+  // @@protoc_insertion_point(field_get:CMsgGCQuestNodeTurnIn.node_defindex)
+  return node_defindex_;
+}
+inline void CMsgGCQuestNodeTurnIn::set_node_defindex(::google::protobuf::uint32 value) {
+  set_has_node_defindex();
+  node_defindex_ = value;
+  // @@protoc_insertion_point(field_set:CMsgGCQuestNodeTurnIn.node_defindex)
+}
+
+// -------------------------------------------------------------------
+
+// CMsgGCQuestMapUnlockNode
+
+// optional uint32 node_defindex = 1;
+inline bool CMsgGCQuestMapUnlockNode::has_node_defindex() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void CMsgGCQuestMapUnlockNode::set_has_node_defindex() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void CMsgGCQuestMapUnlockNode::clear_has_node_defindex() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void CMsgGCQuestMapUnlockNode::clear_node_defindex() {
+  node_defindex_ = 0u;
+  clear_has_node_defindex();
+}
+inline ::google::protobuf::uint32 CMsgGCQuestMapUnlockNode::node_defindex() const {
+  // @@protoc_insertion_point(field_get:CMsgGCQuestMapUnlockNode.node_defindex)
+  return node_defindex_;
+}
+inline void CMsgGCQuestMapUnlockNode::set_node_defindex(::google::protobuf::uint32 value) {
+  set_has_node_defindex();
+  node_defindex_ = value;
+  // @@protoc_insertion_point(field_set:CMsgGCQuestMapUnlockNode.node_defindex)
+}
+
+// optional uint32 quest_defindex = 2;
+inline bool CMsgGCQuestMapUnlockNode::has_quest_defindex() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void CMsgGCQuestMapUnlockNode::set_has_quest_defindex() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void CMsgGCQuestMapUnlockNode::clear_has_quest_defindex() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void CMsgGCQuestMapUnlockNode::clear_quest_defindex() {
+  quest_defindex_ = 0u;
+  clear_has_quest_defindex();
+}
+inline ::google::protobuf::uint32 CMsgGCQuestMapUnlockNode::quest_defindex() const {
+  // @@protoc_insertion_point(field_get:CMsgGCQuestMapUnlockNode.quest_defindex)
+  return quest_defindex_;
+}
+inline void CMsgGCQuestMapUnlockNode::set_quest_defindex(::google::protobuf::uint32 value) {
+  set_has_quest_defindex();
+  quest_defindex_ = value;
+  // @@protoc_insertion_point(field_set:CMsgGCQuestMapUnlockNode.quest_defindex)
+}
+
+// -------------------------------------------------------------------
+
 // CMsgGCNewMatchForLobbyRequest
 
 // optional uint64 current_match_id = 1;
@@ -37274,6 +40346,900 @@ inline void CMsgGCChangeMatchPlayerTeamsResponse::set_success(bool value) {
   // @@protoc_insertion_point(field_set:CMsgGCChangeMatchPlayerTeamsResponse.success)
 }
 
+// -------------------------------------------------------------------
+
+// CMsgGCQuestComplete_Debug
+
+// optional uint64 quest_id = 1;
+inline bool CMsgGCQuestComplete_Debug::has_quest_id() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void CMsgGCQuestComplete_Debug::set_has_quest_id() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void CMsgGCQuestComplete_Debug::clear_has_quest_id() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void CMsgGCQuestComplete_Debug::clear_quest_id() {
+  quest_id_ = GOOGLE_ULONGLONG(0);
+  clear_has_quest_id();
+}
+inline ::google::protobuf::uint64 CMsgGCQuestComplete_Debug::quest_id() const {
+  // @@protoc_insertion_point(field_get:CMsgGCQuestComplete_Debug.quest_id)
+  return quest_id_;
+}
+inline void CMsgGCQuestComplete_Debug::set_quest_id(::google::protobuf::uint64 value) {
+  set_has_quest_id();
+  quest_id_ = value;
+  // @@protoc_insertion_point(field_set:CMsgGCQuestComplete_Debug.quest_id)
+}
+
+// optional uint32 points_type = 2;
+inline bool CMsgGCQuestComplete_Debug::has_points_type() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void CMsgGCQuestComplete_Debug::set_has_points_type() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void CMsgGCQuestComplete_Debug::clear_has_points_type() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void CMsgGCQuestComplete_Debug::clear_points_type() {
+  points_type_ = 0u;
+  clear_has_points_type();
+}
+inline ::google::protobuf::uint32 CMsgGCQuestComplete_Debug::points_type() const {
+  // @@protoc_insertion_point(field_get:CMsgGCQuestComplete_Debug.points_type)
+  return points_type_;
+}
+inline void CMsgGCQuestComplete_Debug::set_points_type(::google::protobuf::uint32 value) {
+  set_has_points_type();
+  points_type_ = value;
+  // @@protoc_insertion_point(field_set:CMsgGCQuestComplete_Debug.points_type)
+}
+
+// -------------------------------------------------------------------
+
+// CMsgGCQuestMap_Debug
+
+// optional uint32 reset_operation = 1;
+inline bool CMsgGCQuestMap_Debug::has_reset_operation() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void CMsgGCQuestMap_Debug::set_has_reset_operation() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void CMsgGCQuestMap_Debug::clear_has_reset_operation() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void CMsgGCQuestMap_Debug::clear_reset_operation() {
+  reset_operation_ = 0u;
+  clear_has_reset_operation();
+}
+inline ::google::protobuf::uint32 CMsgGCQuestMap_Debug::reset_operation() const {
+  // @@protoc_insertion_point(field_get:CMsgGCQuestMap_Debug.reset_operation)
+  return reset_operation_;
+}
+inline void CMsgGCQuestMap_Debug::set_reset_operation(::google::protobuf::uint32 value) {
+  set_has_reset_operation();
+  reset_operation_ = value;
+  // @@protoc_insertion_point(field_set:CMsgGCQuestMap_Debug.reset_operation)
+}
+
+// optional uint32 give_credit = 2;
+inline bool CMsgGCQuestMap_Debug::has_give_credit() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void CMsgGCQuestMap_Debug::set_has_give_credit() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void CMsgGCQuestMap_Debug::clear_has_give_credit() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void CMsgGCQuestMap_Debug::clear_give_credit() {
+  give_credit_ = 0u;
+  clear_has_give_credit();
+}
+inline ::google::protobuf::uint32 CMsgGCQuestMap_Debug::give_credit() const {
+  // @@protoc_insertion_point(field_get:CMsgGCQuestMap_Debug.give_credit)
+  return give_credit_;
+}
+inline void CMsgGCQuestMap_Debug::set_give_credit(::google::protobuf::uint32 value) {
+  set_has_give_credit();
+  give_credit_ = value;
+  // @@protoc_insertion_point(field_set:CMsgGCQuestMap_Debug.give_credit)
+}
+
+// optional .CMsgGCQuestMapUnlockNode unlock_node = 3;
+inline bool CMsgGCQuestMap_Debug::has_unlock_node() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
+}
+inline void CMsgGCQuestMap_Debug::set_has_unlock_node() {
+  _has_bits_[0] |= 0x00000004u;
+}
+inline void CMsgGCQuestMap_Debug::clear_has_unlock_node() {
+  _has_bits_[0] &= ~0x00000004u;
+}
+inline void CMsgGCQuestMap_Debug::clear_unlock_node() {
+  if (unlock_node_ != NULL) unlock_node_->::CMsgGCQuestMapUnlockNode::Clear();
+  clear_has_unlock_node();
+}
+inline const ::CMsgGCQuestMapUnlockNode& CMsgGCQuestMap_Debug::unlock_node() const {
+  // @@protoc_insertion_point(field_get:CMsgGCQuestMap_Debug.unlock_node)
+  return unlock_node_ != NULL ? *unlock_node_ : *default_instance_->unlock_node_;
+}
+inline ::CMsgGCQuestMapUnlockNode* CMsgGCQuestMap_Debug::mutable_unlock_node() {
+  set_has_unlock_node();
+  if (unlock_node_ == NULL) unlock_node_ = new ::CMsgGCQuestMapUnlockNode;
+  // @@protoc_insertion_point(field_mutable:CMsgGCQuestMap_Debug.unlock_node)
+  return unlock_node_;
+}
+inline ::CMsgGCQuestMapUnlockNode* CMsgGCQuestMap_Debug::release_unlock_node() {
+  clear_has_unlock_node();
+  ::CMsgGCQuestMapUnlockNode* temp = unlock_node_;
+  unlock_node_ = NULL;
+  return temp;
+}
+inline void CMsgGCQuestMap_Debug::set_allocated_unlock_node(::CMsgGCQuestMapUnlockNode* unlock_node) {
+  delete unlock_node_;
+  unlock_node_ = unlock_node;
+  if (unlock_node) {
+    set_has_unlock_node();
+  } else {
+    clear_has_unlock_node();
+  }
+  // @@protoc_insertion_point(field_set_allocated:CMsgGCQuestMap_Debug.unlock_node)
+}
+
+// -------------------------------------------------------------------
+
+// CMsgGCQuestMapPurchaseReward
+
+// optional uint32 store_item_defindex = 1;
+inline bool CMsgGCQuestMapPurchaseReward::has_store_item_defindex() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void CMsgGCQuestMapPurchaseReward::set_has_store_item_defindex() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void CMsgGCQuestMapPurchaseReward::clear_has_store_item_defindex() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void CMsgGCQuestMapPurchaseReward::clear_store_item_defindex() {
+  store_item_defindex_ = 0u;
+  clear_has_store_item_defindex();
+}
+inline ::google::protobuf::uint32 CMsgGCQuestMapPurchaseReward::store_item_defindex() const {
+  // @@protoc_insertion_point(field_get:CMsgGCQuestMapPurchaseReward.store_item_defindex)
+  return store_item_defindex_;
+}
+inline void CMsgGCQuestMapPurchaseReward::set_store_item_defindex(::google::protobuf::uint32 value) {
+  set_has_store_item_defindex();
+  store_item_defindex_ = value;
+  // @@protoc_insertion_point(field_set:CMsgGCQuestMapPurchaseReward.store_item_defindex)
+}
+
+// -------------------------------------------------------------------
+
+// CMsgGCQuestResponse
+
+// optional bool success = 1 [default = false];
+inline bool CMsgGCQuestResponse::has_success() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void CMsgGCQuestResponse::set_has_success() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void CMsgGCQuestResponse::clear_has_success() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void CMsgGCQuestResponse::clear_success() {
+  success_ = false;
+  clear_has_success();
+}
+inline bool CMsgGCQuestResponse::success() const {
+  // @@protoc_insertion_point(field_get:CMsgGCQuestResponse.success)
+  return success_;
+}
+inline void CMsgGCQuestResponse::set_success(bool value) {
+  set_has_success();
+  success_ = value;
+  // @@protoc_insertion_point(field_set:CMsgGCQuestResponse.success)
+}
+
+// -------------------------------------------------------------------
+
+// CMsgGCSetDisablePartyQuestProgress
+
+// optional bool state = 1;
+inline bool CMsgGCSetDisablePartyQuestProgress::has_state() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void CMsgGCSetDisablePartyQuestProgress::set_has_state() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void CMsgGCSetDisablePartyQuestProgress::clear_has_state() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void CMsgGCSetDisablePartyQuestProgress::clear_state() {
+  state_ = false;
+  clear_has_state();
+}
+inline bool CMsgGCSetDisablePartyQuestProgress::state() const {
+  // @@protoc_insertion_point(field_get:CMsgGCSetDisablePartyQuestProgress.state)
+  return state_;
+}
+inline void CMsgGCSetDisablePartyQuestProgress::set_state(bool value) {
+  set_has_state();
+  state_ = value;
+  // @@protoc_insertion_point(field_set:CMsgGCSetDisablePartyQuestProgress.state)
+}
+
+// -------------------------------------------------------------------
+
+// CMsgQuestProgressReport
+
+// optional uint64 quest_id = 1;
+inline bool CMsgQuestProgressReport::has_quest_id() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void CMsgQuestProgressReport::set_has_quest_id() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void CMsgQuestProgressReport::clear_has_quest_id() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void CMsgQuestProgressReport::clear_quest_id() {
+  quest_id_ = GOOGLE_ULONGLONG(0);
+  clear_has_quest_id();
+}
+inline ::google::protobuf::uint64 CMsgQuestProgressReport::quest_id() const {
+  // @@protoc_insertion_point(field_get:CMsgQuestProgressReport.quest_id)
+  return quest_id_;
+}
+inline void CMsgQuestProgressReport::set_quest_id(::google::protobuf::uint64 value) {
+  set_has_quest_id();
+  quest_id_ = value;
+  // @@protoc_insertion_point(field_set:CMsgQuestProgressReport.quest_id)
+}
+
+// optional bool star_0_earned = 2;
+inline bool CMsgQuestProgressReport::has_star_0_earned() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void CMsgQuestProgressReport::set_has_star_0_earned() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void CMsgQuestProgressReport::clear_has_star_0_earned() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void CMsgQuestProgressReport::clear_star_0_earned() {
+  star_0_earned_ = false;
+  clear_has_star_0_earned();
+}
+inline bool CMsgQuestProgressReport::star_0_earned() const {
+  // @@protoc_insertion_point(field_get:CMsgQuestProgressReport.star_0_earned)
+  return star_0_earned_;
+}
+inline void CMsgQuestProgressReport::set_star_0_earned(bool value) {
+  set_has_star_0_earned();
+  star_0_earned_ = value;
+  // @@protoc_insertion_point(field_set:CMsgQuestProgressReport.star_0_earned)
+}
+
+// optional bool star_1_earned = 3;
+inline bool CMsgQuestProgressReport::has_star_1_earned() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
+}
+inline void CMsgQuestProgressReport::set_has_star_1_earned() {
+  _has_bits_[0] |= 0x00000004u;
+}
+inline void CMsgQuestProgressReport::clear_has_star_1_earned() {
+  _has_bits_[0] &= ~0x00000004u;
+}
+inline void CMsgQuestProgressReport::clear_star_1_earned() {
+  star_1_earned_ = false;
+  clear_has_star_1_earned();
+}
+inline bool CMsgQuestProgressReport::star_1_earned() const {
+  // @@protoc_insertion_point(field_get:CMsgQuestProgressReport.star_1_earned)
+  return star_1_earned_;
+}
+inline void CMsgQuestProgressReport::set_star_1_earned(bool value) {
+  set_has_star_1_earned();
+  star_1_earned_ = value;
+  // @@protoc_insertion_point(field_set:CMsgQuestProgressReport.star_1_earned)
+}
+
+// optional bool star_2_earned = 4;
+inline bool CMsgQuestProgressReport::has_star_2_earned() const {
+  return (_has_bits_[0] & 0x00000008u) != 0;
+}
+inline void CMsgQuestProgressReport::set_has_star_2_earned() {
+  _has_bits_[0] |= 0x00000008u;
+}
+inline void CMsgQuestProgressReport::clear_has_star_2_earned() {
+  _has_bits_[0] &= ~0x00000008u;
+}
+inline void CMsgQuestProgressReport::clear_star_2_earned() {
+  star_2_earned_ = false;
+  clear_has_star_2_earned();
+}
+inline bool CMsgQuestProgressReport::star_2_earned() const {
+  // @@protoc_insertion_point(field_get:CMsgQuestProgressReport.star_2_earned)
+  return star_2_earned_;
+}
+inline void CMsgQuestProgressReport::set_star_2_earned(bool value) {
+  set_has_star_2_earned();
+  star_2_earned_ = value;
+  // @@protoc_insertion_point(field_set:CMsgQuestProgressReport.star_2_earned)
+}
+
+// repeated uint64 items_earned = 5;
+inline int CMsgQuestProgressReport::items_earned_size() const {
+  return items_earned_.size();
+}
+inline void CMsgQuestProgressReport::clear_items_earned() {
+  items_earned_.Clear();
+}
+inline ::google::protobuf::uint64 CMsgQuestProgressReport::items_earned(int index) const {
+  // @@protoc_insertion_point(field_get:CMsgQuestProgressReport.items_earned)
+  return items_earned_.Get(index);
+}
+inline void CMsgQuestProgressReport::set_items_earned(int index, ::google::protobuf::uint64 value) {
+  items_earned_.Set(index, value);
+  // @@protoc_insertion_point(field_set:CMsgQuestProgressReport.items_earned)
+}
+inline void CMsgQuestProgressReport::add_items_earned(::google::protobuf::uint64 value) {
+  items_earned_.Add(value);
+  // @@protoc_insertion_point(field_add:CMsgQuestProgressReport.items_earned)
+}
+inline const ::google::protobuf::RepeatedField< ::google::protobuf::uint64 >&
+CMsgQuestProgressReport::items_earned() const {
+  // @@protoc_insertion_point(field_list:CMsgQuestProgressReport.items_earned)
+  return items_earned_;
+}
+inline ::google::protobuf::RepeatedField< ::google::protobuf::uint64 >*
+CMsgQuestProgressReport::mutable_items_earned() {
+  // @@protoc_insertion_point(field_mutable_list:CMsgQuestProgressReport.items_earned)
+  return &items_earned_;
+}
+
+// optional uint32 reward_credits_earned = 6;
+inline bool CMsgQuestProgressReport::has_reward_credits_earned() const {
+  return (_has_bits_[0] & 0x00000020u) != 0;
+}
+inline void CMsgQuestProgressReport::set_has_reward_credits_earned() {
+  _has_bits_[0] |= 0x00000020u;
+}
+inline void CMsgQuestProgressReport::clear_has_reward_credits_earned() {
+  _has_bits_[0] &= ~0x00000020u;
+}
+inline void CMsgQuestProgressReport::clear_reward_credits_earned() {
+  reward_credits_earned_ = 0u;
+  clear_has_reward_credits_earned();
+}
+inline ::google::protobuf::uint32 CMsgQuestProgressReport::reward_credits_earned() const {
+  // @@protoc_insertion_point(field_get:CMsgQuestProgressReport.reward_credits_earned)
+  return reward_credits_earned_;
+}
+inline void CMsgQuestProgressReport::set_reward_credits_earned(::google::protobuf::uint32 value) {
+  set_has_reward_credits_earned();
+  reward_credits_earned_ = value;
+  // @@protoc_insertion_point(field_set:CMsgQuestProgressReport.reward_credits_earned)
+}
+
+// optional bool contract_completed = 7;
+inline bool CMsgQuestProgressReport::has_contract_completed() const {
+  return (_has_bits_[0] & 0x00000040u) != 0;
+}
+inline void CMsgQuestProgressReport::set_has_contract_completed() {
+  _has_bits_[0] |= 0x00000040u;
+}
+inline void CMsgQuestProgressReport::clear_has_contract_completed() {
+  _has_bits_[0] &= ~0x00000040u;
+}
+inline void CMsgQuestProgressReport::clear_contract_completed() {
+  contract_completed_ = false;
+  clear_has_contract_completed();
+}
+inline bool CMsgQuestProgressReport::contract_completed() const {
+  // @@protoc_insertion_point(field_get:CMsgQuestProgressReport.contract_completed)
+  return contract_completed_;
+}
+inline void CMsgQuestProgressReport::set_contract_completed(bool value) {
+  set_has_contract_completed();
+  contract_completed_ = value;
+  // @@protoc_insertion_point(field_set:CMsgQuestProgressReport.contract_completed)
+}
+
+// -------------------------------------------------------------------
+
+// CMsgConsumePaintkit
+
+// optional fixed64 source_id = 1;
+inline bool CMsgConsumePaintkit::has_source_id() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void CMsgConsumePaintkit::set_has_source_id() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void CMsgConsumePaintkit::clear_has_source_id() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void CMsgConsumePaintkit::clear_source_id() {
+  source_id_ = GOOGLE_ULONGLONG(0);
+  clear_has_source_id();
+}
+inline ::google::protobuf::uint64 CMsgConsumePaintkit::source_id() const {
+  // @@protoc_insertion_point(field_get:CMsgConsumePaintkit.source_id)
+  return source_id_;
+}
+inline void CMsgConsumePaintkit::set_source_id(::google::protobuf::uint64 value) {
+  set_has_source_id();
+  source_id_ = value;
+  // @@protoc_insertion_point(field_set:CMsgConsumePaintkit.source_id)
+}
+
+// optional uint32 target_defindex = 2;
+inline bool CMsgConsumePaintkit::has_target_defindex() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void CMsgConsumePaintkit::set_has_target_defindex() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void CMsgConsumePaintkit::clear_has_target_defindex() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void CMsgConsumePaintkit::clear_target_defindex() {
+  target_defindex_ = 0u;
+  clear_has_target_defindex();
+}
+inline ::google::protobuf::uint32 CMsgConsumePaintkit::target_defindex() const {
+  // @@protoc_insertion_point(field_get:CMsgConsumePaintkit.target_defindex)
+  return target_defindex_;
+}
+inline void CMsgConsumePaintkit::set_target_defindex(::google::protobuf::uint32 value) {
+  set_has_target_defindex();
+  target_defindex_ = value;
+  // @@protoc_insertion_point(field_set:CMsgConsumePaintkit.target_defindex)
+}
+
+// -------------------------------------------------------------------
+
+// CMsgPainkitDevGrant
+
+// optional uint32 paintkit_defindex = 1;
+inline bool CMsgPainkitDevGrant::has_paintkit_defindex() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void CMsgPainkitDevGrant::set_has_paintkit_defindex() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void CMsgPainkitDevGrant::clear_has_paintkit_defindex() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void CMsgPainkitDevGrant::clear_paintkit_defindex() {
+  paintkit_defindex_ = 0u;
+  clear_has_paintkit_defindex();
+}
+inline ::google::protobuf::uint32 CMsgPainkitDevGrant::paintkit_defindex() const {
+  // @@protoc_insertion_point(field_get:CMsgPainkitDevGrant.paintkit_defindex)
+  return paintkit_defindex_;
+}
+inline void CMsgPainkitDevGrant::set_paintkit_defindex(::google::protobuf::uint32 value) {
+  set_has_paintkit_defindex();
+  paintkit_defindex_ = value;
+  // @@protoc_insertion_point(field_set:CMsgPainkitDevGrant.paintkit_defindex)
+}
+
+// optional float wear = 2;
+inline bool CMsgPainkitDevGrant::has_wear() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void CMsgPainkitDevGrant::set_has_wear() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void CMsgPainkitDevGrant::clear_has_wear() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void CMsgPainkitDevGrant::clear_wear() {
+  wear_ = 0;
+  clear_has_wear();
+}
+inline float CMsgPainkitDevGrant::wear() const {
+  // @@protoc_insertion_point(field_get:CMsgPainkitDevGrant.wear)
+  return wear_;
+}
+inline void CMsgPainkitDevGrant::set_wear(float value) {
+  set_has_wear();
+  wear_ = value;
+  // @@protoc_insertion_point(field_set:CMsgPainkitDevGrant.wear)
+}
+
+// optional uint32 item_defindex = 3;
+inline bool CMsgPainkitDevGrant::has_item_defindex() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
+}
+inline void CMsgPainkitDevGrant::set_has_item_defindex() {
+  _has_bits_[0] |= 0x00000004u;
+}
+inline void CMsgPainkitDevGrant::clear_has_item_defindex() {
+  _has_bits_[0] &= ~0x00000004u;
+}
+inline void CMsgPainkitDevGrant::clear_item_defindex() {
+  item_defindex_ = 0u;
+  clear_has_item_defindex();
+}
+inline ::google::protobuf::uint32 CMsgPainkitDevGrant::item_defindex() const {
+  // @@protoc_insertion_point(field_get:CMsgPainkitDevGrant.item_defindex)
+  return item_defindex_;
+}
+inline void CMsgPainkitDevGrant::set_item_defindex(::google::protobuf::uint32 value) {
+  set_has_item_defindex();
+  item_defindex_ = value;
+  // @@protoc_insertion_point(field_set:CMsgPainkitDevGrant.item_defindex)
+}
+
+// -------------------------------------------------------------------
+
+// GCQuestStrangeEvent
+
+// optional uint32 owner_account_id = 1;
+inline bool GCQuestStrangeEvent::has_owner_account_id() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void GCQuestStrangeEvent::set_has_owner_account_id() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void GCQuestStrangeEvent::clear_has_owner_account_id() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void GCQuestStrangeEvent::clear_owner_account_id() {
+  owner_account_id_ = 0u;
+  clear_has_owner_account_id();
+}
+inline ::google::protobuf::uint32 GCQuestStrangeEvent::owner_account_id() const {
+  // @@protoc_insertion_point(field_get:GCQuestStrangeEvent.owner_account_id)
+  return owner_account_id_;
+}
+inline void GCQuestStrangeEvent::set_owner_account_id(::google::protobuf::uint32 value) {
+  set_has_owner_account_id();
+  owner_account_id_ = value;
+  // @@protoc_insertion_point(field_set:GCQuestStrangeEvent.owner_account_id)
+}
+
+// optional uint32 scorer_account_id = 2;
+inline bool GCQuestStrangeEvent::has_scorer_account_id() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void GCQuestStrangeEvent::set_has_scorer_account_id() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void GCQuestStrangeEvent::clear_has_scorer_account_id() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void GCQuestStrangeEvent::clear_scorer_account_id() {
+  scorer_account_id_ = 0u;
+  clear_has_scorer_account_id();
+}
+inline ::google::protobuf::uint32 GCQuestStrangeEvent::scorer_account_id() const {
+  // @@protoc_insertion_point(field_get:GCQuestStrangeEvent.scorer_account_id)
+  return scorer_account_id_;
+}
+inline void GCQuestStrangeEvent::set_scorer_account_id(::google::protobuf::uint32 value) {
+  set_has_scorer_account_id();
+  scorer_account_id_ = value;
+  // @@protoc_insertion_point(field_set:GCQuestStrangeEvent.scorer_account_id)
+}
+
+// optional uint64 quest_id = 3;
+inline bool GCQuestStrangeEvent::has_quest_id() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
+}
+inline void GCQuestStrangeEvent::set_has_quest_id() {
+  _has_bits_[0] |= 0x00000004u;
+}
+inline void GCQuestStrangeEvent::clear_has_quest_id() {
+  _has_bits_[0] &= ~0x00000004u;
+}
+inline void GCQuestStrangeEvent::clear_quest_id() {
+  quest_id_ = GOOGLE_ULONGLONG(0);
+  clear_has_quest_id();
+}
+inline ::google::protobuf::uint64 GCQuestStrangeEvent::quest_id() const {
+  // @@protoc_insertion_point(field_get:GCQuestStrangeEvent.quest_id)
+  return quest_id_;
+}
+inline void GCQuestStrangeEvent::set_quest_id(::google::protobuf::uint64 value) {
+  set_has_quest_id();
+  quest_id_ = value;
+  // @@protoc_insertion_point(field_set:GCQuestStrangeEvent.quest_id)
+}
+
+// optional uint32 strange_event_id = 4;
+inline bool GCQuestStrangeEvent::has_strange_event_id() const {
+  return (_has_bits_[0] & 0x00000008u) != 0;
+}
+inline void GCQuestStrangeEvent::set_has_strange_event_id() {
+  _has_bits_[0] |= 0x00000008u;
+}
+inline void GCQuestStrangeEvent::clear_has_strange_event_id() {
+  _has_bits_[0] &= ~0x00000008u;
+}
+inline void GCQuestStrangeEvent::clear_strange_event_id() {
+  strange_event_id_ = 0u;
+  clear_has_strange_event_id();
+}
+inline ::google::protobuf::uint32 GCQuestStrangeEvent::strange_event_id() const {
+  // @@protoc_insertion_point(field_get:GCQuestStrangeEvent.strange_event_id)
+  return strange_event_id_;
+}
+inline void GCQuestStrangeEvent::set_strange_event_id(::google::protobuf::uint32 value) {
+  set_has_strange_event_id();
+  strange_event_id_ = value;
+  // @@protoc_insertion_point(field_set:GCQuestStrangeEvent.strange_event_id)
+}
+
+// optional uint32 score = 5;
+inline bool GCQuestStrangeEvent::has_score() const {
+  return (_has_bits_[0] & 0x00000010u) != 0;
+}
+inline void GCQuestStrangeEvent::set_has_score() {
+  _has_bits_[0] |= 0x00000010u;
+}
+inline void GCQuestStrangeEvent::clear_has_score() {
+  _has_bits_[0] &= ~0x00000010u;
+}
+inline void GCQuestStrangeEvent::clear_score() {
+  score_ = 0u;
+  clear_has_score();
+}
+inline ::google::protobuf::uint32 GCQuestStrangeEvent::score() const {
+  // @@protoc_insertion_point(field_get:GCQuestStrangeEvent.score)
+  return score_;
+}
+inline void GCQuestStrangeEvent::set_score(::google::protobuf::uint32 value) {
+  set_has_score();
+  score_ = value;
+  // @@protoc_insertion_point(field_set:GCQuestStrangeEvent.score)
+}
+
+// -------------------------------------------------------------------
+
+// CMsgSDRTicket
+
+// optional bytes serialized_ticket = 1;
+inline bool CMsgSDRTicket::has_serialized_ticket() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void CMsgSDRTicket::set_has_serialized_ticket() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void CMsgSDRTicket::clear_has_serialized_ticket() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void CMsgSDRTicket::clear_serialized_ticket() {
+  if (serialized_ticket_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    serialized_ticket_->clear();
+  }
+  clear_has_serialized_ticket();
+}
+inline const ::std::string& CMsgSDRTicket::serialized_ticket() const {
+  // @@protoc_insertion_point(field_get:CMsgSDRTicket.serialized_ticket)
+  return *serialized_ticket_;
+}
+inline void CMsgSDRTicket::set_serialized_ticket(const ::std::string& value) {
+  set_has_serialized_ticket();
+  if (serialized_ticket_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    serialized_ticket_ = new ::std::string;
+  }
+  serialized_ticket_->assign(value);
+  // @@protoc_insertion_point(field_set:CMsgSDRTicket.serialized_ticket)
+}
+inline void CMsgSDRTicket::set_serialized_ticket(const char* value) {
+  set_has_serialized_ticket();
+  if (serialized_ticket_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    serialized_ticket_ = new ::std::string;
+  }
+  serialized_ticket_->assign(value);
+  // @@protoc_insertion_point(field_set_char:CMsgSDRTicket.serialized_ticket)
+}
+inline void CMsgSDRTicket::set_serialized_ticket(const void* value, size_t size) {
+  set_has_serialized_ticket();
+  if (serialized_ticket_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    serialized_ticket_ = new ::std::string;
+  }
+  serialized_ticket_->assign(reinterpret_cast<const char*>(value), size);
+  // @@protoc_insertion_point(field_set_pointer:CMsgSDRTicket.serialized_ticket)
+}
+inline ::std::string* CMsgSDRTicket::mutable_serialized_ticket() {
+  set_has_serialized_ticket();
+  if (serialized_ticket_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    serialized_ticket_ = new ::std::string;
+  }
+  // @@protoc_insertion_point(field_mutable:CMsgSDRTicket.serialized_ticket)
+  return serialized_ticket_;
+}
+inline ::std::string* CMsgSDRTicket::release_serialized_ticket() {
+  clear_has_serialized_ticket();
+  if (serialized_ticket_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    return NULL;
+  } else {
+    ::std::string* temp = serialized_ticket_;
+    serialized_ticket_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+    return temp;
+  }
+}
+inline void CMsgSDRTicket::set_allocated_serialized_ticket(::std::string* serialized_ticket) {
+  if (serialized_ticket_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    delete serialized_ticket_;
+  }
+  if (serialized_ticket) {
+    set_has_serialized_ticket();
+    serialized_ticket_ = serialized_ticket;
+  } else {
+    clear_has_serialized_ticket();
+    serialized_ticket_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  }
+  // @@protoc_insertion_point(field_set_allocated:CMsgSDRTicket.serialized_ticket)
+}
+
+// -------------------------------------------------------------------
+
+// CMsgAuthorizeServerItemRetrieval
+
+// repeated uint64 item_id = 1;
+inline int CMsgAuthorizeServerItemRetrieval::item_id_size() const {
+  return item_id_.size();
+}
+inline void CMsgAuthorizeServerItemRetrieval::clear_item_id() {
+  item_id_.Clear();
+}
+inline ::google::protobuf::uint64 CMsgAuthorizeServerItemRetrieval::item_id(int index) const {
+  // @@protoc_insertion_point(field_get:CMsgAuthorizeServerItemRetrieval.item_id)
+  return item_id_.Get(index);
+}
+inline void CMsgAuthorizeServerItemRetrieval::set_item_id(int index, ::google::protobuf::uint64 value) {
+  item_id_.Set(index, value);
+  // @@protoc_insertion_point(field_set:CMsgAuthorizeServerItemRetrieval.item_id)
+}
+inline void CMsgAuthorizeServerItemRetrieval::add_item_id(::google::protobuf::uint64 value) {
+  item_id_.Add(value);
+  // @@protoc_insertion_point(field_add:CMsgAuthorizeServerItemRetrieval.item_id)
+}
+inline const ::google::protobuf::RepeatedField< ::google::protobuf::uint64 >&
+CMsgAuthorizeServerItemRetrieval::item_id() const {
+  // @@protoc_insertion_point(field_list:CMsgAuthorizeServerItemRetrieval.item_id)
+  return item_id_;
+}
+inline ::google::protobuf::RepeatedField< ::google::protobuf::uint64 >*
+CMsgAuthorizeServerItemRetrieval::mutable_item_id() {
+  // @@protoc_insertion_point(field_mutable_list:CMsgAuthorizeServerItemRetrieval.item_id)
+  return &item_id_;
+}
+
+// -------------------------------------------------------------------
+
+// CMsgGCToGCSendAccountBannedNotifications
+
+// optional uint32 banned_accountid = 1;
+inline bool CMsgGCToGCSendAccountBannedNotifications::has_banned_accountid() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void CMsgGCToGCSendAccountBannedNotifications::set_has_banned_accountid() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void CMsgGCToGCSendAccountBannedNotifications::clear_has_banned_accountid() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void CMsgGCToGCSendAccountBannedNotifications::clear_banned_accountid() {
+  banned_accountid_ = 0u;
+  clear_has_banned_accountid();
+}
+inline ::google::protobuf::uint32 CMsgGCToGCSendAccountBannedNotifications::banned_accountid() const {
+  // @@protoc_insertion_point(field_get:CMsgGCToGCSendAccountBannedNotifications.banned_accountid)
+  return banned_accountid_;
+}
+inline void CMsgGCToGCSendAccountBannedNotifications::set_banned_accountid(::google::protobuf::uint32 value) {
+  set_has_banned_accountid();
+  banned_accountid_ = value;
+  // @@protoc_insertion_point(field_set:CMsgGCToGCSendAccountBannedNotifications.banned_accountid)
+}
+
+// optional uint32 report_period_begin = 2;
+inline bool CMsgGCToGCSendAccountBannedNotifications::has_report_period_begin() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void CMsgGCToGCSendAccountBannedNotifications::set_has_report_period_begin() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void CMsgGCToGCSendAccountBannedNotifications::clear_has_report_period_begin() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void CMsgGCToGCSendAccountBannedNotifications::clear_report_period_begin() {
+  report_period_begin_ = 0u;
+  clear_has_report_period_begin();
+}
+inline ::google::protobuf::uint32 CMsgGCToGCSendAccountBannedNotifications::report_period_begin() const {
+  // @@protoc_insertion_point(field_get:CMsgGCToGCSendAccountBannedNotifications.report_period_begin)
+  return report_period_begin_;
+}
+inline void CMsgGCToGCSendAccountBannedNotifications::set_report_period_begin(::google::protobuf::uint32 value) {
+  set_has_report_period_begin();
+  report_period_begin_ = value;
+  // @@protoc_insertion_point(field_set:CMsgGCToGCSendAccountBannedNotifications.report_period_begin)
+}
+
+// optional uint32 report_period_end = 3;
+inline bool CMsgGCToGCSendAccountBannedNotifications::has_report_period_end() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
+}
+inline void CMsgGCToGCSendAccountBannedNotifications::set_has_report_period_end() {
+  _has_bits_[0] |= 0x00000004u;
+}
+inline void CMsgGCToGCSendAccountBannedNotifications::clear_has_report_period_end() {
+  _has_bits_[0] &= ~0x00000004u;
+}
+inline void CMsgGCToGCSendAccountBannedNotifications::clear_report_period_end() {
+  report_period_end_ = 0u;
+  clear_has_report_period_end();
+}
+inline ::google::protobuf::uint32 CMsgGCToGCSendAccountBannedNotifications::report_period_end() const {
+  // @@protoc_insertion_point(field_get:CMsgGCToGCSendAccountBannedNotifications.report_period_end)
+  return report_period_end_;
+}
+inline void CMsgGCToGCSendAccountBannedNotifications::set_report_period_end(::google::protobuf::uint32 value) {
+  set_has_report_period_end();
+  report_period_end_ = value;
+  // @@protoc_insertion_point(field_set:CMsgGCToGCSendAccountBannedNotifications.report_period_end)
+}
+
+// -------------------------------------------------------------------
+
+// CMsgGCToGCSendNotification
+
+// optional .CMsgGCNotification notification = 1;
+inline bool CMsgGCToGCSendNotification::has_notification() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void CMsgGCToGCSendNotification::set_has_notification() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void CMsgGCToGCSendNotification::clear_has_notification() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void CMsgGCToGCSendNotification::clear_notification() {
+  if (notification_ != NULL) notification_->::CMsgGCNotification::Clear();
+  clear_has_notification();
+}
+inline const ::CMsgGCNotification& CMsgGCToGCSendNotification::notification() const {
+  // @@protoc_insertion_point(field_get:CMsgGCToGCSendNotification.notification)
+  return notification_ != NULL ? *notification_ : *default_instance_->notification_;
+}
+inline ::CMsgGCNotification* CMsgGCToGCSendNotification::mutable_notification() {
+  set_has_notification();
+  if (notification_ == NULL) notification_ = new ::CMsgGCNotification;
+  // @@protoc_insertion_point(field_mutable:CMsgGCToGCSendNotification.notification)
+  return notification_;
+}
+inline ::CMsgGCNotification* CMsgGCToGCSendNotification::release_notification() {
+  clear_has_notification();
+  ::CMsgGCNotification* temp = notification_;
+  notification_ = NULL;
+  return temp;
+}
+inline void CMsgGCToGCSendNotification::set_allocated_notification(::CMsgGCNotification* notification) {
+  delete notification_;
+  notification_ = notification;
+  if (notification) {
+    set_has_notification();
+  } else {
+    clear_has_notification();
+  }
+  // @@protoc_insertion_point(field_set_allocated:CMsgGCToGCSendNotification.notification)
+}
+
 
 // @@protoc_insertion_point(namespace_scope)
 
@@ -37296,25 +41262,35 @@ template <>
 inline const EnumDescriptor* GetEnumDescriptor< ::CMsgGC_GameServer_UseServerModificationItem_Response_EServerModificationItemServerResponse>() {
   return ::CMsgGC_GameServer_UseServerModificationItem_Response_EServerModificationItemServerResponse_descriptor();
 }
-template <> struct is_proto_enum< ::CSOTFParty_State> : ::google::protobuf::internal::true_type {};
+template <> struct is_proto_enum< ::TFPendingPartyMember_EType> : ::google::protobuf::internal::true_type {};
 template <>
-inline const EnumDescriptor* GetEnumDescriptor< ::CSOTFParty_State>() {
-  return ::CSOTFParty_State_descriptor();
+inline const EnumDescriptor* GetEnumDescriptor< ::TFPendingPartyMember_EType>() {
+  return ::TFPendingPartyMember_EType_descriptor();
 }
-template <> struct is_proto_enum< ::CTFLobbyMember_ConnectState> : ::google::protobuf::internal::true_type {};
+template <> struct is_proto_enum< ::CMsgPartyMMError_Type> : ::google::protobuf::internal::true_type {};
 template <>
-inline const EnumDescriptor* GetEnumDescriptor< ::CTFLobbyMember_ConnectState>() {
-  return ::CTFLobbyMember_ConnectState_descriptor();
+inline const EnumDescriptor* GetEnumDescriptor< ::CMsgPartyMMError_Type>() {
+  return ::CMsgPartyMMError_Type_descriptor();
+}
+template <> struct is_proto_enum< ::CSOTFPartyInvite_Type> : ::google::protobuf::internal::true_type {};
+template <>
+inline const EnumDescriptor* GetEnumDescriptor< ::CSOTFPartyInvite_Type>() {
+  return ::CSOTFPartyInvite_Type_descriptor();
+}
+template <> struct is_proto_enum< ::CTFLobbyPlayerProto_ConnectState> : ::google::protobuf::internal::true_type {};
+template <>
+inline const EnumDescriptor* GetEnumDescriptor< ::CTFLobbyPlayerProto_ConnectState>() {
+  return ::CTFLobbyPlayerProto_ConnectState_descriptor();
+}
+template <> struct is_proto_enum< ::CTFLobbyPlayerProto_Type> : ::google::protobuf::internal::true_type {};
+template <>
+inline const EnumDescriptor* GetEnumDescriptor< ::CTFLobbyPlayerProto_Type>() {
+  return ::CTFLobbyPlayerProto_Type_descriptor();
 }
 template <> struct is_proto_enum< ::CSOTFGameServerLobby_State> : ::google::protobuf::internal::true_type {};
 template <>
 inline const EnumDescriptor* GetEnumDescriptor< ::CSOTFGameServerLobby_State>() {
   return ::CSOTFGameServerLobby_State_descriptor();
-}
-template <> struct is_proto_enum< ::CSOTFGameServerLobby_LobbyType> : ::google::protobuf::internal::true_type {};
-template <>
-inline const EnumDescriptor* GetEnumDescriptor< ::CSOTFGameServerLobby_LobbyType>() {
-  return ::CSOTFGameServerLobby_LobbyType_descriptor();
 }
 template <> struct is_proto_enum< ::CSOTFGameServerLobby_WarMatch> : ::google::protobuf::internal::true_type {};
 template <>
@@ -37371,15 +41347,20 @@ template <>
 inline const EnumDescriptor* GetEnumDescriptor< ::EServerModificationItemType>() {
   return ::EServerModificationItemType_descriptor();
 }
-template <> struct is_proto_enum< ::TF_MatchmakingMode> : ::google::protobuf::internal::true_type {};
+template <> struct is_proto_enum< ::ETFSyncedMMMenuStep> : ::google::protobuf::internal::true_type {};
 template <>
-inline const EnumDescriptor* GetEnumDescriptor< ::TF_MatchmakingMode>() {
-  return ::TF_MatchmakingMode_descriptor();
+inline const EnumDescriptor* GetEnumDescriptor< ::ETFSyncedMMMenuStep>() {
+  return ::ETFSyncedMMMenuStep_descriptor();
 }
-template <> struct is_proto_enum< ::TF_Matchmaking_WizardStep> : ::google::protobuf::internal::true_type {};
+template <> struct is_proto_enum< ::ETFMatchGroup> : ::google::protobuf::internal::true_type {};
 template <>
-inline const EnumDescriptor* GetEnumDescriptor< ::TF_Matchmaking_WizardStep>() {
-  return ::TF_Matchmaking_WizardStep_descriptor();
+inline const EnumDescriptor* GetEnumDescriptor< ::ETFMatchGroup>() {
+  return ::ETFMatchGroup_descriptor();
+}
+template <> struct is_proto_enum< ::ETFPartyChatType> : ::google::protobuf::internal::true_type {};
+template <>
+inline const EnumDescriptor* GetEnumDescriptor< ::ETFPartyChatType>() {
+  return ::ETFPartyChatType_descriptor();
 }
 template <> struct is_proto_enum< ::TF_GC_GameState> : ::google::protobuf::internal::true_type {};
 template <>
@@ -37396,15 +41377,10 @@ template <>
 inline const EnumDescriptor* GetEnumDescriptor< ::TFMatchLeaveReason>() {
   return ::TFMatchLeaveReason_descriptor();
 }
-template <> struct is_proto_enum< ::TFLobbyReadyState> : ::google::protobuf::internal::true_type {};
+template <> struct is_proto_enum< ::TFVoteKickReason> : ::google::protobuf::internal::true_type {};
 template <>
-inline const EnumDescriptor* GetEnumDescriptor< ::TFLobbyReadyState>() {
-  return ::TFLobbyReadyState_descriptor();
-}
-template <> struct is_proto_enum< ::ChatChannelType_t> : ::google::protobuf::internal::true_type {};
-template <>
-inline const EnumDescriptor* GetEnumDescriptor< ::ChatChannelType_t>() {
-  return ::ChatChannelType_t_descriptor();
+inline const EnumDescriptor* GetEnumDescriptor< ::TFVoteKickReason>() {
+  return ::TFVoteKickReason_descriptor();
 }
 template <> struct is_proto_enum< ::ServerMatchmakingState> : ::google::protobuf::internal::true_type {};
 template <>

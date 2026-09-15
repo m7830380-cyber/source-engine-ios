@@ -219,7 +219,7 @@ void CTFHudSpectatorExtras::OnTick()
 			{
 				if ( pPlayer->IsPlayerClass( TF_CLASS_SPY ) && pPlayer->m_Shared.InCond( TF_COND_DISGUISED ) && ( nPlayerTeamNumber != nLocalPlayerTeam ) )
 				{
-					pDisguiseTarget = ToTFPlayer( pPlayer->m_Shared.GetDisguiseTarget() );
+					pDisguiseTarget = pPlayer->m_Shared.GetDisguiseTarget();
 				}
 			}
 

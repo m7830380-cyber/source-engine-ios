@@ -9,23 +9,22 @@
 #include "econ_controls.h"
 #include "tf_gc_client.h"
 #include "tf_gamerules.h"
+#include "tf_quest_map_utils.h"
 
 using namespace vgui;
 
-CTFDisconnectConfirmDialog::CTFDisconnectConfirmDialog(	
-	const char *pTitle, 
-	const char *pTextKey, 
+CTFDisconnectConfirmDialog::CTFDisconnectConfirmDialog(
+	const char *pTitle,
+	const char *pTextKey,
 	const char *pConfirmBtnText,
-	const char *pCancelBtnText, 
-	GenericConfirmDialogCallback callback, 
-	vgui::Panel *pParent 
+	const char *pCancelBtnText,
+	GenericConfirmDialogCallback callback,
+	vgui::Panel *pParent
 ) : CTFGenericConfirmDialog( pTitle, pTextKey, pConfirmBtnText, pCancelBtnText, callback, pParent )
 {
 	m_eAbandonStatus = GTFGCClientSystem()->GetCurrentServerAbandonStatus();
 }
 
-//-----------------------------------------------------------------------------
-// Purpose: 
 //-----------------------------------------------------------------------------
 const char *CTFDisconnectConfirmDialog::GetResFile()
 {
@@ -38,7 +37,9 @@ const char *CTFDisconnectConfirmDialog::GetResFile()
 	case k_EAbandonGameStatus_AbandonWithPenalty:
 		return "Resource/UI/econ/ConfirmDialogAbandonPenalty.res";
 	}
-	
+
+	Assert( !"Unhandled enum" );
+	COMPILE_TIME_ASSERT( k_EAbandonGameStatus_Newest == k_EAbandonGameStatus_AbandonWithPenalty );
 	return "Resource/UI/econ/ConfirmDialogOptOut.res";
 }
 
@@ -51,13 +52,17 @@ void CTFDisconnectConfirmDialog::OnCommand( const char *command )
 {
 	if( FStrEq( command, "confirm" ) )
 	{
-		// Check this before disconnecting
-		if ( GTFGCClientSystem()->BExitMatchmakingAfterDisconnect() )
-		{
-			GTFGCClientSystem()->EndMatchmaking( true );
-		}
+		bool bAbandonStatusCurrent = ( GTFGCClientSystem()->GetCurrentServerAbandonStatus() == m_eAbandonStatus );
+		AssertMsg( bAbandonStatusCurrent,
+		           "Abandon status changed while disconnect dialog shown, user may not be agreeing to what they think" );
 
-		engine->DisconnectInternal();
+		// If the abandon status changed from what we were configured for, just disconnect without abandoning, and let
+		// the MM system figure it out (it will throw up a new prompt or otherwise handle them being still wanted in
+		// that match)
+		if ( GTFGCClientSystem()->BConnectedToMatchServer( true ) && bAbandonStatusCurrent )
+			{ GTFGCClientSystem()->AbandonCurrentMatch(); }
+		else
+			{ engine->DisconnectInternal(); }
 
 		int nCount = m_confirmCommands.Count();
 		for( int i=0; i<nCount; ++i )
@@ -94,36 +99,81 @@ void CTFDisconnectConfirmDialog::AddCancelCommand( const char *command )
 // Extern Helper to Build Dialog
 CTFDisconnectConfirmDialog *BuildDisconnectConfirmDialog ()
 {
+	bool bWorkingOnQuests = GetQuestMapHelper().GetActiveQuest() != NULL;
 	EAbandonGameStatus eAbandonStatus = GTFGCClientSystem()->GetCurrentServerAbandonStatus();
-	const char* pszTitle = NULL; 
-	const char* pszBody = NULL; 
+	const char* pszTitle = NULL;
+	const char* pszBody = NULL;
 	const char* pszConfirm = NULL;
 
 	switch ( eAbandonStatus )
 	{
 	case k_EAbandonGameStatus_Safe:
-		pszTitle = "#TF_MM_Disconnect_Title"; 
-		pszBody = "#TF_MM_Disconnect"; 
+		pszTitle = "#TF_MM_Disconnect_Title";
+		pszBody = "#TF_MM_Disconnect";
 		pszConfirm = "#TF_MM_Rejoin_Leave";
 		break;
 	case k_EAbandonGameStatus_AbandonWithoutPenalty:
-		pszTitle = "#TF_MM_Abandon_Title"; 
-		pszBody = "#TF_MM_Abandon_NoPenalty"; 
+		pszTitle = "#TF_MM_Abandon_Title";
+		pszBody = bWorkingOnQuests ? "TF_MM_Abandon_NoPenalty_Quests" : "#TF_MM_Abandon_NoPenalty";
 		pszConfirm = "#TF_MM_Rejoin_Leave";
 		break;
 	case k_EAbandonGameStatus_AbandonWithPenalty:
-		pszTitle = "#TF_MM_Abandon_Title"; 
-		pszBody = ( TFGameRules() && TFGameRules()->IsMannVsMachineMode() ) ? "TF_MM_Abandon_Ban" : "#TF_MM_Abandon";
+		pszTitle = "#TF_MM_Abandon_Title";
+		pszBody = bWorkingOnQuests ? "TF_MM_Abandon_Quests" : "#TF_MM_Abandon";
 		pszConfirm = "#TF_MM_Rejoin_Abandon";
 		break;
 	}
 
-	CTFDisconnectConfirmDialog *pDialog = vgui::SETUP_PANEL( new CTFDisconnectConfirmDialog( 
+	CTFDisconnectConfirmDialog *pDialog = vgui::SETUP_PANEL( new CTFDisconnectConfirmDialog(
 		pszTitle,
 		pszBody,
 		pszConfirm,
 		"#TF_MM_Rejoin_Stay",
 		NULL,
+		NULL ) );
+
+	return pDialog;
+}
+
+CTFRejoinConfirmDialog *BuildRejoinConfirmDialog ()
+{
+	EAbandonGameStatus eAbandonStatus = GTFGCClientSystem()->GetAssignedMatchAbandonStatus();
+	const char* pszTitle = NULL;
+	const char* pszBody = NULL;
+	const char* pszConfirm = NULL;
+
+	switch ( eAbandonStatus )
+	{
+	case k_EAbandonGameStatus_Safe:
+		pszTitle = "#TF_MM_Rejoin_Title";
+		pszBody = "#TF_MM_Abandon_NoPenalty";
+		pszConfirm = "#TF_MM_Rejoin_Leave";
+		break;
+	case k_EAbandonGameStatus_AbandonWithoutPenalty:
+		pszTitle = "#TF_MM_Abandon_Title";
+		pszBody = "#TF_MM_Abandon_NoPenalty";
+		pszConfirm = "#TF_MM_Rejoin_Abandon";
+		break;
+	case k_EAbandonGameStatus_AbandonWithPenalty:
+		pszTitle = "#TF_MM_Abandon_Title";
+		pszBody = "#TF_MM_Abandon";
+		pszConfirm = "#TF_MM_Rejoin_Abandon";
+		break;
+	}
+
+	CTFRejoinConfirmDialog *pDialog = vgui::SETUP_PANEL( new CTFRejoinConfirmDialog(
+		pszTitle,
+		pszBody,
+		pszConfirm,
+		"#TF_PVE_UpgradeCancel",
+		[]( bool bConfirmed, void *pContext )
+		{
+			if ( bConfirmed )
+			{
+				GTFGCClientSystem()->AbandonCurrentMatch();
+				engine->DisconnectInternal();
+			}
+		},
 		NULL ) );
 
 	return pDialog;
@@ -136,7 +186,7 @@ CON_COMMAND( cl_disconnect_prompt, "Prompt about disconnect" )
 																							 "#TF_MM_Abandon",
 																							 "#TF_Coach_Yes",
 																							 "#TF_Coach_No",
-																							 NULL, 
+																							 NULL,
 																							 NULL ) );
 
 	if ( pDialog )
@@ -178,20 +228,18 @@ bool HandleDisconnectAttempt()
 //-----------------------------------------------------------------------------
 // CTFRejoinConfirmDialog
 //-----------------------------------------------------------------------------
-CTFRejoinConfirmDialog::CTFRejoinConfirmDialog(	
-	const char *pTitle, 
-	const char *pTextKey, 
+CTFRejoinConfirmDialog::CTFRejoinConfirmDialog(
+	const char *pTitle,
+	const char *pTextKey,
 	const char *pConfirmBtnText,
-	const char *pCancelBtnText, 
-	GenericConfirmDialogCallback callback, 
-	vgui::Panel *pParent 
+	const char *pCancelBtnText,
+	GenericConfirmDialogCallback callback,
+	vgui::Panel *pParent
 	) : CTFGenericConfirmDialog( pTitle, pTextKey, pConfirmBtnText, pCancelBtnText, callback, pParent )
 {
 	m_eAbandonStatus = GTFGCClientSystem()->GetAssignedMatchAbandonStatus();
 }
 
-//-----------------------------------------------------------------------------
-// Purpose: 
 //-----------------------------------------------------------------------------
 const char *CTFRejoinConfirmDialog::GetResFile()
 {

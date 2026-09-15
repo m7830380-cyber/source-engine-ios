@@ -68,6 +68,10 @@ enum EEconTypeID
 	k_EEConTypeMatchResultPlayerInfo		=40,
 	k_EEconTypeXPSource						=41,
 	k_EEconTypeNotification					=42,
+	k_EEconTypeQuestMap						=43,
+	k_EEconTypeQuestMapNode					=44,
+	k_EEConTypeQuest						=45,
+	k_EEconTypeQuestMapRewardPurchase		=46,
 };
 
 //-----------------------------------------------------------------------------
@@ -197,6 +201,7 @@ enum EItemAction
 	k_EItemActionRemoveItemMakersMark_Remove = 152,				// early versions of this will be in the database as 150
 	k_EItemActionRemoveItemMakersMark_Add	 = 153,				// early versions of this will be in the database as 151 because I am a terrible person
 
+	// Never used on public in TF
 	k_EItemActionCollectItem_CollectedItem			 = 154,
 	k_EItemActionCollectItem_UpdateCollection		 = 155,
 	k_EItemActionCollectItem_RemoveCollection		 = 156,
@@ -229,14 +234,14 @@ enum EItemAction
 	k_EItemActionSupportAddOrModifyAttribute_Remove = 204,
 	k_EItemActionSupportAddOrModifyAttribute_Add	= 205,
 
-	k_EItemActionSpyVsEngyWar_JoinedWar	= 206,
+	k_EItemActionSpyVsEngyWar_JoinedWar	= 206,	// Never used on public
 
 	k_EItemAction_UpdateDuckBadgeLevel_Add			= 207,
 	k_EItemAction_UpdateDuckBadgeLevel_Remove		= 208,
 
 	k_EItemAction_QuestDrop							= 209,
 
-	k_EItemAction_OperationPass_Add					= 210,
+	k_EItemAction_OperationPass_Add					= 210, // Never used on public in TF
 
 	k_EItemActionMarket_Add							= 211,
 	k_EItemActionMarket_Remove						= 212,
@@ -274,15 +279,48 @@ enum EItemAction
 	k_EItemActionSupportDeleteAttribute_Remove		= 233,
 	k_EItemActionSupportDeleteAttribute_Add			= 234,
 
+	k_EItemActionCYOABloodMoneyPurchase				= 235,
+
+	k_EItemActionPaintKitConsume_Remove				= 236,
+	k_EItemActionPaintKitConsume_Add				= 237,
+	k_EItemActionDeletedAccountTerminated			= 238,
+
+	// The "OneOffRefund" asset api, for setting up specific/manual refund offers that may also restore related items to
+	// the user's inventory (e.g. the key/crate used to obtain something)
+	k_EItemActionOneOffRefund_Add					= 239,
+	k_EItemActionOneOffRefund_Remove				= 240,
+
+	// Adding a new action?
+	// Be sure to:
+	//  tf_english.txt:
+	//   - Add ItemHistory_Action strings (shown to users)
+	//  econ_item.cpp:
+	//   - Add an ITEM_ACTION to ENUMSTRINGS_START( EItemAction )
+	//   - Update PchFriendlyNameFromEItemAction (shown to support)
+	//  econ_assetapi_context.cpp:
+	//   - Update CEconContextBackpack::YldUserHistory_GetFriendlyUserHistory, if necessary
+	//   - Update BIsActionConnected
+	//   - Update BIsActionCreative
+	//   - Update BIsActionDestructive
+	//   - Update BIsActionQuantityChange
+	//   - Update BIsActionDestructiveEscrow
+
 	// Let's be consistent with the underscores please.
 	// k_EItemActionYourNewAction, not k_EItemAction_YourNewAction
 	// Yes, it matters. See PchLocalizedNameFromEItemAction for why.
+
+	k_EItemActionMax
 };
+
+// These are stored in the database as uint8
+COMPILE_TIME_ASSERT( k_EItemActionMax < 256 );
+
 extern const char		*PchNameFromEItemAction( EItemAction eAction );
 extern const char		*PchNameFromEItemActionUnsafe( EItemAction eAction );
 
 extern bool BIsActionCreative( EItemAction );
 extern bool BIsActionDestructive( EItemAction );
+extern bool BIsActionDestructiveEscrow( EItemAction eAction );
 
 enum EItemActionMissingBehavior { kEItemAction_FriendlyNameLookup_ReturnNULLIfMissing, kEItemAction_FriendlyNameLookup_ReturnDummyStringIfMissing };
 extern const char		*PchFriendlyNameFromEItemAction( EItemAction eAction, EItemActionMissingBehavior eMissingBehavior );
@@ -380,6 +418,9 @@ enum eEconItemOrigin
 	kEconItemOrigin_QuestLoanerItem,
 	kEconItemOrigin_TradeUp,
 	kEconItemOrigin_ViralCompetitiveBetaPassSpread,
+	kEconItemOrigin_CYOABloodMoneyPurchase,
+	kEconItemOrigin_Paintkit,
+	kEconItemOrigin_UntradableFreeContractReward,
 
 	kEconItemOrigin_Max,
 };
@@ -393,6 +434,7 @@ typedef uint32	attrib_value_t;
 typedef uint32	operation_definition_index_t;
 typedef uint8	war_definition_index_t;
 typedef uint8	war_side_t;
+typedef uint32	ObjectiveConditionDefIndex_t;
 
 // Misc typedefs for clarity.
 typedef uint32	equip_region_mask_t;
@@ -401,6 +443,7 @@ typedef uint8	style_index_t;
 const uint64 INVALID_ITEM_ID							= (itemid_t)-1;
 const item_definition_index_t INVALID_ITEM_DEF_INDEX	= ((item_definition_index_t)-1);
 const attrib_definition_index_t INVALID_ATTRIB_DEF_INDEX= ((attrib_definition_index_t)-1);
+
 const war_definition_index_t INVALID_WAR_DEF_INDEX		= ((war_definition_index_t)-1);
 const war_side_t INVALID_WAR_SIDE						= ((war_side_t)-1);
 // Hard code the pyro/heavy stuff. Must be in sync with the schema.
@@ -408,19 +451,23 @@ const war_definition_index_t PYRO_VS_HEAVY_WAR_DEF_INDEX= ((war_definition_index
 const war_side_t PYRO_VS_HEAVY_WAR_SIDE_HEAVY = ((war_side_t)0);
 const war_side_t PYRO_VS_HEAVY_WAR_SIDE_PYRO = ((war_side_t)1);
 
+const ObjectiveConditionDefIndex_t INVALID_QUEST_OBJECTIVE_CONDITIONS_INDEX = ObjectiveConditionDefIndex_t(-1);
+
+typedef CUtlMap< uint32, const class CQuestDefinition* > QuestDefMap_t;
+
 //-----------------------------------------------------------------------------
 
 // Standard/default backpack size
 #define DEFAULT_NUM_BACKPACK_SLOTS						300
 #define DEFAULT_NUM_BACKPACK_SLOTS_FREE_TRIAL_ACCOUNT	50
-#define MAX_NUM_BACKPACK_SLOTS							2000
+#define MAX_NUM_BACKPACK_SLOTS							4000
 
 // Current item level range
 #define MIN_ITEM_LEVEL					0
 #define MAX_ITEM_LEVEL					100
 
 // Maximum number of attributes allowed on a single item
-#define MAX_ATTRIBUTES_PER_ITEM					15
+#define MAX_ATTRIBUTES_PER_ITEM					20
 // The maximum length of a single attribute's description
 //	divide by locchar_t, so we can ensure 192 bytes, whether that's 128 wchars on client or 256 utf-8 bytes on gc
 #define MAX_ATTRIBUTE_DESCRIPTION_LENGTH		( 256 / sizeof( locchar_t ) )
@@ -466,30 +513,30 @@ enum EEconItemQuality
 {
 	AE_UNDEFINED = -1,
 
-	AE_NORMAL = 0,
-	AE_RARITY1 = 1,			// Genuine
-	AE_RARITY2 = 2,			// Customized (unused)
-	AE_VINTAGE = 3,			// Vintage has to stay at 3 for backwards compatibility
-	AE_RARITY3,				// Artisan
-	AE_UNUSUAL,				// Unusual
-	AE_UNIQUE,
-	AE_COMMUNITY,
-	AE_DEVELOPER,
-	AE_SELFMADE,
-	AE_CUSTOMIZED,			// (unused)
-	AE_STRANGE,
-	AE_COMPLETED,
-	AE_HAUNTED,
-	AE_COLLECTORS,
-	AE_PAINTKITWEAPON,
+	AE_NORMAL           = 0,
+	AE_RARITY1          = 1,  // Genuine
+	AE_RARITY2          = 2,  // Customized (unused)
+	AE_VINTAGE          = 3,  // Vintage has to stay at 3 for backwards compatibility
+	AE_RARITY3          = 4,  // Artisan
+	AE_UNUSUAL          = 5,  // Unusual
+	AE_UNIQUE           = 6,
+	AE_COMMUNITY        = 7,
+	AE_DEVELOPER        = 8,
+	AE_SELFMADE         = 9,
+	AE_CUSTOMIZED       = 10, // (unused)
+	AE_STRANGE          = 11,
+	AE_COMPLETED        = 12,
+	AE_HAUNTED          = 13,
+	AE_COLLECTORS       = 14,
+	AE_PAINTKITWEAPON   = 15,
 
-	AE_RARITY_DEFAULT,
-	AE_RARITY_COMMON,
-	AE_RARITY_UNCOMMON,
-	AE_RARITY_RARE,
-	AE_RARITY_MYTHICAL,
-	AE_RARITY_LEGENDARY,
-	AE_RARITY_ANCIENT,
+	AE_RARITY_DEFAULT   = 16,
+	AE_RARITY_COMMON    = 17,
+	AE_RARITY_UNCOMMON  = 18,
+	AE_RARITY_RARE      = 19,
+	AE_RARITY_MYTHICAL  = 20,
+	AE_RARITY_LEGENDARY = 21,
+	AE_RARITY_ANCIENT   = 22,
 
 	AE_MAX_TYPES,
 	AE_DEPRECATED_UNIQUE = 3,
@@ -575,7 +622,7 @@ enum kill_eater_event_t
 	kKillEaterEvent_Humiliations,			// fish kills!
 	kKillEaterEvent_GiftsGiven,				// number of gifts given
 	kKillEaterEvent_DeathsFeigned,			// number of deaths successfully feigned with the Dead Ringer
-	kKillEaterEvent_ScoutKill,				// (part)
+	kKillEaterEvent_ScoutKill,		// = 10 // (part)
 	kKillEaterEvent_SniperKill,				// (part)
 	kKillEaterEvent_SoldierKill,			// (part)
 	kKillEaterEvent_DemomanKill,			// (part)
@@ -585,7 +632,7 @@ enum kill_eater_event_t
 	kKillEaterEvent_EngineerKill,			// (part)
 	kKillEaterEvent_MedicKill,				// (part)
 	kKillEaterEvent_BuildingDestroyed,		// (part)
-	kKillEaterEvent_ProjectileReflect,		// (part)
+	kKillEaterEvent_ProjectileReflect,	// = 20	// (part)
 	kKillEaterEvent_HeadshotKill,			// (part)
 	kKillEaterEvent_AirborneEnemyKill,		// (part) (enemy is in the air when they die)
 	kKillEaterEvent_GibKill,				// (part)
@@ -595,7 +642,7 @@ enum kill_eater_event_t
 	kKillEaterEvent_PlayerKillDuringFullMoon,				// (part) we killed a player during the full moon holiday event (GC-updated)
 	kKillEaterEvent_PlayerKillStartDomination,				// (part) we killed a player and this kill was enough to start our domination of them
 	kKillEaterEvent_PlayerKillAlreadyDominated,				// (part) we killed a player with this weapon that we were already dominating
-	kKillEaterEvent_PlayerKillRevenge,						// (part) we killed a player with this weapon when that player was dominating us
+	kKillEaterEvent_PlayerKillRevenge,			// = 30		// (part) we killed a player with this weapon when that player was dominating us
 	kKillEaterEvent_PlayerKillPosthumous,					// (part) we killed a player after we were already dead (afterburn, stray rocket, etc.)
 	kKillEaterEvent_BurningAllyExtinguished,				// (part) we used urine/milk/flamethrower/whatever to put out the fire on an ally that was burning
 	kKillEaterEvent_PlayerKillCritical,						// (part) we killed a player with a shot that was a critical
@@ -605,7 +652,7 @@ enum kill_eater_event_t
 	kKillEaterEvent_InvisibleSpiesKilled,					// (part) we killed an invisible spy
 	kKillEaterEvent_MedicsWithFullUberKilled,				// (part) we killed a fully ubered medic
 	kKillEaterEvent_RobotsDestroyed,						// (part) we killed a robot in MvM
-	kKillEaterEvent_MinibossRobotsDestroyed,				// (part) we killed a miniboss robot in MvM
+	kKillEaterEvent_MinibossRobotsDestroyed,	// = 40		// (part) we killed a miniboss robot in MvM
 	kKillEaterEvent_RobotsDestroyedAfterPenetration,		// (part) we killed a robot with a shot that had already penetrated another robot
 	kKillEaterEvent_RobotHeadshotKills,						// (part) like kKillEaterEvent_HeadshotKill, but only for robots
 	kKillEaterEvent_RobotsSlowed,							// (part) we hit some robots with Jarate and now they're slow
@@ -615,7 +662,7 @@ enum kill_eater_event_t
 	kKillEaterEvent_DefenderKill,							// (part) we killed someone carrying the intel, pushing the cart, or capping a point
 	kKillEaterEvent_UnderwaterKill,							// (part) we killed someone who was completely submerged
 	kKillEaterEvent_KillWhileUbercharged,					// (part) we killed someone while we were invulnerable
-	kKillEaterEvent_FoodEaten,								// We ate our food
+	kKillEaterEvent_FoodEaten,					// = 50		// We ate our food
 	kKillEaterEvent_BannersDeployed,						// We deployed a banner buff
 	kKillEaterEvent_NEGATIVE_SniperShotsMissed,				// (part) we shot our sniper rifle and didnt hit anything
 	kKillEaterEvent_NEGATIVE_UbersDropped,					// (part) we died with a full ubercharge
@@ -625,18 +672,17 @@ enum kill_eater_event_t
 	kKillEaterEvent_NEGATIVE_Deaths,						// (part) we died :(
 	kKillEaterEvent_TimeCloaked,							// Time we are cloaked
 	kKillEaterEvent_HealingProvided,						// Health Provided to Allies
-	kKillEaterEvent_TeleportsProvided,						// Teleports Provided to Allies
+	kKillEaterEvent_TeleportsProvided,			// = 60		// Teleports Provided to Allies
 	kKillEaterEvent_TanksDestroyed,							// (part) we dealt the killing blow to a tank in MvM
 	kKillEaterEvent_LongDistanceKill,						// (part) we dealt the killing blow (while alive) from far away
 	kKillEaterEvent_UniqueEvent__KilledAccountWithItem,					// (part) (unique event) how many individual accounts have we killed?
-//	kKillEaterEvent_UniqueEvent__PlayedWithAccountIDWhileWearingItem,	// (part) (unique event) how many individual accounts have we played a round with?
 	kKillEaterEvent_PointsScored,						// How many score points we've accumulated
 	kKillEaterEvent_DoubleDonks,						// Double-Donks scored with the loose cannon
 	kKillEaterEvent_TeammatesWhipped,					// Whipped Teammates with the Disciplinary Action
 	kKillEaterEvent_VictoryTimeKill,					// Kills while in Victory / Bonus Time
 	kKillEaterEvent_RobotScoutKill,				// (part)
 	kKillEaterEvent_RobotSniperKill,			// (part) Not yet shipped
-	kKillEaterEvent_RobotSoldierKill,			// (part) Not yet shipped
+	kKillEaterEvent_RobotSoldierKill,			// = 70 // (part) Not yet shipped
 	kKillEaterEvent_RobotDemomanKill,			// (part) Not yet shipped
 	kKillEaterEvent_RobotHeavyKill,				// (part) Not yet shipped
 	kKillEaterEvent_RobotPyroKill,				// (part) Not yet shipped
@@ -646,7 +692,7 @@ enum kill_eater_event_t
 	kKillEaterEvent_TauntKill,					// Taunt Kills
 	kKillEaterEvent_PlayersWearingUnusualKill,	// (part) we killed someone wearing an unusual hat (!)
 	kKillEaterEvent_BurningEnemyKill,			// (part) we killed someone who was on fire up until they died
-	kKillEaterEvent_KillstreaksEnded,			// (part) we killed someone who was on a killstreak
+	kKillEaterEvent_KillstreaksEnded,			// = 80 // (part) we killed someone who was on a killstreak
 	kKillEaterEvent_KillcamTaunts,				// (cosmetic part) we appeared wearing this item in the killcam taunting
 	kKillEaterEvent_DamageDealt,				// (part) we have dealt this much damage to people
 	kKillEaterEvent_FiresSurvived,				// (cosmetic part) we were lit on fire wearing this item and then the fire went out and we were still alive
@@ -656,7 +702,7 @@ enum kill_eater_event_t
 	kKillEaterEvent_CosmeticKills,				// (cosmetic part) kills
 	kKillEaterEvent_FullHealthKills,			// (part) Kills while at fullhealth
 	kKillEaterEvent_TauntingPlayerKills,		// (part) Taunting Player Kills
-	kKillEaterEvent_Halloween_OverworldKills,
+	kKillEaterEvent_Halloween_OverworldKills, // = 90
 	kKillEaterEvent_Halloween_UnderworldKills,
 	kKillEaterEvent_Halloween_MinigamesWon,
 	kKillEaterEvent_NonCritKills,				// part kills that are not crit or mini crit
@@ -666,7 +712,7 @@ enum kill_eater_event_t
 	kKillEaterEvent_CosmeticOperationKills, // Operation Stat Tracker
 	kKillEaterEvent_CosmeticOperationContractsPoints,
 	kKillEaterEvent_CosmeticOperationBonusPoints,
-	kKillEaterEvent_TauntsPerformed,			// Strange Taunts
+	kKillEaterEvent_TauntsPerformed, // = 100	// Strange Taunts
 	kKillEaterEvent_InvasionKills,				// Kills During Invasion Event.  Locked after Operation
 	kKillEaterEvent_InvasionKillsOnMap01,
 	kKillEaterEvent_InvasionKillsOnMap02,
@@ -676,6 +722,8 @@ enum kill_eater_event_t
 	kKillEaterEvent_HalloweenContractsCompleted,
 	kKillEaterEvent_HalloweenOfferings,
 	kKillEaterEvent_PowerupBottlesUsed,
+	kKillEaterEvent_ContractPointsEarned, // = 110
+	kKillEaterEvent_ContractPointsContributedToFriends,
 
 	// NEW ENTRIES MUST BE ADDED AT THE BOTTOM
 };
@@ -817,12 +865,14 @@ enum unacknowledged_item_inventory_positions_t
 	UNACK_ITEM_FOUND_HOLIDAY_GIFT,
 	UNACK_ITEM_COMMUNITY_MARKET_PURCHASE,
 	UNACK_ITEM_RECIPE_OUTPUT,
-	UNACK_ITEM_HIDDEN_QUEST_ITEM,
+	UNACK_ITEM_HIDDEN_QUEST_ITEM, // DEPRECATED.  Quests are no longer items
 	UNACK_ITEM_QUEST_OUTPUT,
 	UNACK_ITEM_QUEST_LOANER,
 	UNACK_ITEM_TRADE_UP,
 	UNACK_ITEM_QUEST_MERASMISSION_OUTPUT,
 	UNACK_ITEM_VIRAL_COMPETITIVE_BETA_PASS_SPREAD,
+	UNACK_ITEM_CYOA_BLOOD_MONEY_PURCHASE,
+	UNACK_ITEM_PAINTKIT,
 #ifdef ENABLE_STORE_RENTAL_BACKEND
 	UNACK_ITEM_RENTAL_PURCHASE,
 #endif
@@ -927,6 +977,8 @@ enum EHoliday
 	kHoliday_HalloweenOrFullMoon,
 	kHoliday_HalloweenOrFullMoonOrValentines,
 	kHoliday_AprilFools,
+	kHoliday_Soldier,
+	kHoliday_Summer,
 	kHolidayCount,
 };
 

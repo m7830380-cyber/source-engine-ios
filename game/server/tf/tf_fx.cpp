@@ -273,7 +273,6 @@ void TE_TFParticleEffect( IRecipientFilter &filter, float flDelay, const char *p
 		iAttachment = pEntity->GetBaseAnimating()->LookupAttachment( pszAttachmentName );
 		if ( iAttachment <= 0 )
 		{
-			Warning("Model '%s' doesn't have attachment '%s' to attach particle system '%s' to.\n", STRING(pEntity->GetBaseAnimating()->GetModelName()), pszAttachmentName, pszParticleName );
 			return;
 		}
 	}

@@ -24,6 +24,7 @@ LINK_ENTITY_TO_CLASS( tf_taunt_prop, CTFTauntProp );
 // Purpose: 
 //-----------------------------------------------------------------------------
 CTFTauntProp::CTFTauntProp()
+	: m_bAutoRemove( false )
 {
 	UseClientSideAnimation();
 }
@@ -88,7 +89,16 @@ float CTFTauntProp::PlayScene( const char *pszScene, float flDelay /*= 0.0f*/, A
 
 	MDLCACHE_CRITICAL_SECTION();
 
-	return InstancedScriptedScene( this, pszScene, &m_hScene, flDelay, false, response, true, filter );
+	float flDuration = InstancedScriptedScene( this, pszScene, &m_hScene, flDelay, false, response, true, filter );
+
+	// Remove this at the end of the scene if needed
+	if ( m_bAutoRemove )
+	{
+		SetThink( &BaseClass::SUB_Remove );
+		SetNextThink( gpGlobals->curtime + flDuration );
+	}
+
+	return flDuration;
 }
 
 

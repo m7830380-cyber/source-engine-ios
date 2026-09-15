@@ -25,37 +25,28 @@
 #include "tf_match_description.h"
 #include "tf_hud_tournament.h"
 #include "tf_classmenu.h"
-
+#include "tf_rating_data.h"
 
 extern ConVar mp_winlimit;
 extern ConVar mp_tournament_stopwatch;
 
+ConVar tf_use_match_hud( "tf_use_match_hud", "1", FCVAR_ARCHIVE );
+
 using namespace vgui;
 
 void AddSubKeyNamed( KeyValues *pKeys, const char *pszName );
+bool IsTakingAFreezecamScreenshot();
 
 //-----------------------------------------------------------------------------
 // Purpose: Use the new match HUD or the old?  Right now, Comp is the key
 //-----------------------------------------------------------------------------
 bool ShouldUseMatchHUD()
 {
-	const IMatchGroupDescription* pMatchDesc = NULL;
+	if ( TFGameRules() && TFGameRules()->IsMannVsMachineMode() )
+		return false;
 
-	if ( GTFGCClientSystem()->BHaveLiveMatch() )
-	{
-		pMatchDesc = GetMatchGroupDescription( GTFGCClientSystem()->GetLiveMatchGroup() );
-	}
-	else if ( TFGameRules() )
-	{
-		pMatchDesc = GetMatchGroupDescription( TFGameRules()->GetCurrentMatchGroup() );
-	}
+	return tf_use_match_hud.GetBool();
 
-	if ( pMatchDesc )
-	{
-		return pMatchDesc->m_params.m_bUseMatchHud;
-	}
-
-	return false;
 }
 
 const int g_nMaxSupportedRounds = 5;
@@ -279,12 +270,12 @@ CTFHudMatchStatus::CTFHudMatchStatus(const char *pElementName)
 	, BaseClass(NULL, "HudMatchStatus")
 	, m_pTimePanel( NULL )
 	, m_bUseMatchHUD( false )
-	, m_eMatchGroupSettings( k_nMatchGroup_Invalid )
+	, m_eMatchGroupSettings( k_eTFMatchGroup_Invalid )
 {
 	Panel *pParent = g_pClientMode->GetViewport();
 	SetParent(pParent);
 
-	SetHiddenBits( HIDEHUD_MISCSTATUS );
+	SetHiddenBits( HIDEHUD_MISCSTATUS | HIDEHUD_MATCH_STATUS );
 
 	m_pMatchStartModelPanel = new CModelPanel( this, "MatchDoors" );
 
@@ -367,10 +358,10 @@ void CTFHudMatchStatus::ApplySchemeSettings(IScheme *pScheme)
 		pConditions = new KeyValues( "conditions" );
 		AddSubKeyNamed( pConditions, "if_match" );
 
-		const IMatchGroupDescription* pMatchDesc = GetMatchGroupDescription( GTFGCClientSystem()->GetLiveMatchGroup() );
+		const IMatchGroupDescription* pMatchDesc = GetMatchGroupDescription( TFGameRules() ? TFGameRules()->GetCurrentMatchGroup() : GTFGCClientSystem()->GetLiveMatchGroup() );
 		if ( pMatchDesc )
 		{
-			if ( pMatchDesc->m_params.m_pmm_match_group_size->GetInt() > 12 )
+			if ( pMatchDesc->GetMatchSize() > 12 )
 			{
 				AddSubKeyNamed( pConditions, "if_large" );
 			}
@@ -414,6 +405,15 @@ void CTFHudMatchStatus::PerformLayout()
 	SetPanelsVisible();
 }
 
+bool CTFHudMatchStatus::IsVisible( void )
+{
+	// Hide panel for freeze-cam screenshot?
+	if ( IsTakingAFreezecamScreenshot() )
+		return false;
+
+	return BaseClass::IsVisible();
+}
+
 bool CTFHudMatchStatus::ShouldDraw( void )
 {
 	// Force to draw during match summary so the doors show up.  This panel 
@@ -445,7 +445,7 @@ void CTFHudMatchStatus::OnThink()
 		bReload = true;
 	}
 
-	EMatchGroup eCurrentGroup = TFGameRules()->GetCurrentMatchGroup();
+	ETFMatchGroup eCurrentGroup = TFGameRules()->GetCurrentMatchGroup();
 	if ( eCurrentGroup != m_eMatchGroupSettings )
 	{
 		m_eMatchGroupSettings = eCurrentGroup;
@@ -574,19 +574,39 @@ void CTFHudMatchStatus::FireGameEvent( IGameEvent * event )
 		}
 
 		const IMatchGroupDescription* pMatchDesc = GetMatchGroupDescription( TFGameRules()->GetCurrentMatchGroup() );
-		bool bForceDoors = false;
-#ifdef STAGING_ONLY
-		bForceDoors = tf_test_match_summary.GetBool();
-#endif
-		if ( bForceDoors || ( pMatchDesc && pMatchDesc->m_params.m_bShowPostRoundDoors ) )
+
+		if ( pMatchDesc )
 		{
-			if ( TFGameRules() && TFGameRules()->MapHasMatchSummaryStage() && ( bForceDoors || pMatchDesc->m_params.m_bUseMatchSummaryStage ) )
+			// FIX: Refresh versus doors so late-joiners do not see the wrong skin
+			int nSkin = 0;
+			int nSubModel = 0;
+			if ( pMatchDesc->BGetRoundDoorParameters( nSkin, nSubModel ) )
 			{
-				g_pClientMode->GetViewportAnimationController()->StartAnimationSequence( this, "HudMatchStatus_ShowMatchWinDoors", false );
+				if ( m_pMatchStartModelPanel )
+				{
+					// Is VS doors model not initialized yet?
+					if ( m_pMatchStartModelPanel->m_hModel == NULL )
+					{
+						m_pMatchStartModelPanel->UpdateModel();
+					}
+
+					m_pMatchStartModelPanel->SetBodyGroup( "logos", nSubModel );
+					m_pMatchStartModelPanel->UpdateModel();
+					m_pMatchStartModelPanel->SetSkin( nSkin );
+				}
 			}
-			else
+
+			bool bForceDoors = false;
+			if ( bForceDoors || ( pMatchDesc && pMatchDesc->BUsesPostRoundDoors() ) )
 			{
-				g_pClientMode->GetViewportAnimationController()->StartAnimationSequence( this, "HudMatchStatus_ShowMatchWinDoors_NoOpen", false );
+				if ( TFGameRules() && TFGameRules()->MapHasMatchSummaryStage() && ( bForceDoors || pMatchDesc->BUseMatchSummaryStage() ) )
+				{
+					g_pClientMode->GetViewportAnimationController()->StartAnimationSequence( this, "HudMatchStatus_ShowMatchWinDoors", false );
+				}
+				else
+				{
+					g_pClientMode->GetViewportAnimationController()->StartAnimationSequence( this, "HudMatchStatus_ShowMatchWinDoors_NoOpen", false );
+				}
 			}
 		}
 	}
@@ -619,17 +639,13 @@ void CTFHudMatchStatus::HandleCountdown( int nTime )
 	}
 }
 
-#ifdef STAGING_ONLY
-ConVar tf_comp_door_skin_override( "tf_comp_door_skin_override", "-1", 0, "Skin override for the competitive doors.  Set to -1 to not override calculated skin" );
-ConVar tf_comp_door_bodygroup_override( "tf_comp_door_bodygroup_override", "-1", 0, "Bodygroup override for the competitive doors.  Set to -1 to not override calculated skin" );
-#endif
 
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
 void CTFHudMatchStatus::ShowMatchStartDoors()
 {
-	if ( TFGameRules()->GetCurrentMatchGroup() == k_nMatchGroup_Invalid )
+	if ( TFGameRules()->GetCurrentMatchGroup() == k_eTFMatchGroup_Invalid )
 		return;
 
 	const IMatchGroupDescription* pMatchDesc = GetMatchGroupDescription( TFGameRules()->GetCurrentMatchGroup() );
@@ -638,16 +654,6 @@ void CTFHudMatchStatus::ShowMatchStartDoors()
 	int nSubModel = 0;
 	if ( pMatchDesc->BGetRoundDoorParameters( nSkin, nSubModel ) )
 	{
-#ifdef STAGING_ONLY
-		if ( tf_comp_door_skin_override.GetInt() != -1 )
-		{
-			nSkin = tf_comp_door_skin_override.GetInt();
-		}
-		if ( tf_comp_door_bodygroup_override.GetInt() != -1 )
-		{
-			nSubModel = tf_comp_door_bodygroup_override.GetInt();
-		}
-#endif
 		UpdatePlayerList();
 		UpdateTeamInfo();
 
@@ -662,6 +668,46 @@ void CTFHudMatchStatus::ShowMatchStartDoors()
 
 		g_pClientMode->GetViewportAnimationController()->StartAnimationSequence( this, "HudMatchStatus_ShowMatchStartDoors", false );
 
+		bool bUsesStickyRanks = pMatchDesc->BUsesStickyRanks();
+		SetControlVisible( "RankUpLabel", bUsesStickyRanks, true );
+		SetControlVisible( "RankUpShadowLabel", bUsesStickyRanks, true );
+
+		// For competitive games that use sticky ratings, we want to show a "You'll rank up if you win!" message
+		// at the beginning of a match would trigger a rank up if the user wins.
+		if ( bUsesStickyRanks )
+		{
+			auto pRating = CTFRatingData::YieldingGetPlayerRatingDataBySteamID( SteamUser()->GetSteamID(), pMatchDesc->GetCurrentDisplayRating() );
+			auto pRank = CTFRatingData::YieldingGetPlayerRatingDataBySteamID( SteamUser()->GetSteamID(), pMatchDesc->GetCurrentDisplayRank() );
+			bool bInPlacement = pMatchDesc->BLocalPlayerIsInPlacement();
+
+			if ( bInPlacement && pMatchDesc->GetNumPlacementMatchesToGo( steamapicontext->SteamUser()->GetSteamID() ) == 1 )
+			{
+				// For exiting placement, put up a message that indicates so
+				SetDialogVariable( "rank_possibility", g_pVGuiLocalize->Find( "#TF_MM_PlacementMatch" ) );
+				g_pClientMode->GetViewportAnimationController()->StartAnimationSequence( this, "HudMatchStatus_ShowRankMatch", false );
+			}
+			else if ( !bInPlacement && pRank && pRating )
+			{
+				// Make sure their new rank is above their current rating, meaning they're trending
+				// towards a rank-up and not a rank-down
+				uint32 nRankForNewRating = pMatchDesc->m_pProgressionDesc->GetLevelForRating( pRating->GetRatingData().unRatingPrimary ).m_nDisplayLevel;
+				bool bTrendingUp = nRankForNewRating > pRank->GetRatingData().unRatingPrimary;
+
+				// So long as your secondary (games in this rank) is >= 4 (meaning this game will push you into the requisite 5)
+				// and your tertiary (games since rank change) is >= 9 (meaning this game will push you into the requisite 10),
+				// then you're on the threshold of a rank up.  You could have secondary 6 and tertiary 11, meaning you lost a couple
+				// times while on the threshold, but the message is still valid.
+				bool bOnRankUpThreshold = pRank->GetRatingData().unRatingSecondary >= (k_nLadder_MinGamesInThresholdToRank - 1) &&
+					pRank->GetRatingData().unRatingTertiary >= (k_nLadder_MinGamesBetweenRankChanges - 1);
+
+				if ( bTrendingUp && bOnRankUpThreshold )
+				{
+					SetDialogVariable( "rank_possibility", g_pVGuiLocalize->Find( "#TF_MM_RankUpMatch" ) );
+					g_pClientMode->GetViewportAnimationController()->StartAnimationSequence( this, "HudMatchStatus_ShowRankMatch", false );
+				}
+			}
+		}
+
 		// Hide the class selection panel.  It sorts weird with the doors, and we dont have time to figure out why.
 		gViewPortInterface->ShowPanel( PANEL_CLASS_RED, false );
 		gViewPortInterface->ShowPanel( PANEL_CLASS_BLUE, false );
@@ -669,7 +715,7 @@ void CTFHudMatchStatus::ShowMatchStartDoors()
 		C_TFPlayer *pLocalPlayer = C_TFPlayer::GetLocalTFPlayer();
 		if ( pLocalPlayer )
 		{
-			pLocalPlayer->EmitSound( pMatchDesc->m_params.m_pszMatchStartSound );
+			pLocalPlayer->EmitSound( pMatchDesc->GetMatchStartSound() );
 		}
 	}
 }
@@ -679,7 +725,7 @@ void CTFHudMatchStatus::ShowMatchStartDoors()
 //-----------------------------------------------------------------------------
 void CTFHudMatchStatus::ShowRoundSign( int nRoundNumber )
 {
-	if ( TFGameRules()->GetCurrentMatchGroup() == k_nMatchGroup_Invalid )
+	if ( TFGameRules()->GetCurrentMatchGroup() == k_eTFMatchGroup_Invalid )
 		return;
 
 	if ( !m_pRoundSignModel || !m_pRoundSignModel->m_pModelInfo )

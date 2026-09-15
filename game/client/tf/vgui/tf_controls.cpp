@@ -17,6 +17,8 @@
 #include "vgui_controls/PropertyPage.h"
 #include "econ_item_system.h"
 #include "iachievementmgr.h"
+#include "clientmode_tf.h"
+#include <vgui_controls/AnimationController.h>
 #include <vgui_controls/ListPanel.h>
 #include <vgui_controls/PanelListPanel.h>
 #include <vgui_controls/Label.h>
@@ -27,18 +29,320 @@
 #include <vgui_controls/TextEntry.h>
 #include <../common/GameUI/cvarslider.h>
 #include "filesystem.h"
+#include "hud_controlpointicons.h"
 
 using namespace vgui;
 
 wchar_t* LocalizeNumberWithToken( const char* pszLocToken, int nValue )
 {
-	static wchar_t wszOutString[ 128 ];
+	static wchar_t wszOutString[ 256 ];
 	wchar_t wszCount[ 16 ];
 	_snwprintf( wszCount, ARRAYSIZE( wszCount ), L"%d", nValue );
 	const wchar_t *wpszFormat = g_pVGuiLocalize->Find( pszLocToken );
 	g_pVGuiLocalize->ConstructString_safe( wszOutString, wpszFormat, 1, wszCount );
 	
 	return wszOutString;
+}
+
+wchar_t* LocalizeNumberWithToken( const char* pszLocToken, int nValue1, int nValue2 )
+{
+	static wchar_t wszOutString[ 256 ];
+	wchar_t wszCount1[ 16 ];
+	wchar_t wszCount2[ 16 ];
+	_snwprintf( wszCount1, ARRAYSIZE( wszCount1 ), L"%d", nValue1 );
+	_snwprintf( wszCount2, ARRAYSIZE( wszCount2 ), L"%d", nValue2 );
+	const wchar_t *wpszFormat = g_pVGuiLocalize->Find( pszLocToken );
+	g_pVGuiLocalize->ConstructString_safe( wszOutString, wpszFormat, 2, wszCount1, wszCount2 );
+
+	return wszOutString;
+}
+
+void GetPlayerNameForSteamID( wchar_t *wCharPlayerName, int nBufSizeBytes, const CSteamID &steamID )
+{
+	const char *pszName = steamapicontext->SteamFriends()->GetFriendPersonaName( steamID );
+	V_UTF8ToUnicode( pszName, wCharPlayerName, nBufSizeBytes );
+}
+
+bool BGeneralPaintSetup( const Color& color )
+{
+	static int snWhiteTextureID = -1;
+	if ( snWhiteTextureID == -1 )
+	{
+		snWhiteTextureID = vgui::surface()->CreateNewTextureID();
+		vgui::surface()->DrawSetTextureFile( snWhiteTextureID, "vgui/white" , true, false);
+		if (snWhiteTextureID == -1)
+			return false;
+
+	}
+
+	vgui::surface()->DrawSetTexture( snWhiteTextureID );
+	vgui::surface()->DrawSetColor( color );
+
+	return true;
+}
+
+void DrawColoredCircle( float flXPos, float flYPos, float flRadius, const Color& color )
+{
+	if ( !BGeneralPaintSetup( color ) )
+		return;
+
+	// Create a circle by creating verts
+	const int nNumSmallSegments = 20;
+	const int nNumLargeSements = 50;
+	int nNumSegments = RemapValClamped( flRadius, 50.f, 300.f, (float)nNumSmallSegments, (float)nNumLargeSements );
+
+	surface()->DrawOutlinedCircle( flXPos, flYPos, flRadius, nNumSegments );
+}
+
+void DrawFilledColoredCircle( float flXPos, float flYPos, float flRadius, const Color& color )
+{
+	if ( !BGeneralPaintSetup( color ) )
+		return;
+
+	// Create a circle by creating verts
+	const int nNumSmallSegments = 20;
+	const int nNumLargeSements = 50;
+	int nNumSegments = RemapValClamped( flRadius, 50.f, 300.f, (float)nNumSmallSegments, (float)nNumLargeSements );
+
+	vgui::Vertex_t verts[ nNumLargeSements ];
+
+	float invDelta = 2.0f * M_PI / nNumSegments;
+	for ( int i = 0; i < nNumSegments; ++i )
+	{
+		float flRadians = i * invDelta;
+		float ca = cos( flRadians );
+		float sa = sin( flRadians );
+
+		// Rotate it around the circle
+		verts[i].m_Position.x = flXPos + (flRadius * ca);
+		verts[i].m_Position.y = flYPos + (flRadius * sa);
+		verts[i].m_TexCoord.x = 0.5f * (ca + 1.0f);
+		verts[i].m_TexCoord.y = 0.5f * (sa + 1.0f);
+	}
+
+	surface()->DrawTexturedPolygon( nNumSegments, verts, false );
+}
+
+void DrawFilledColoredCircleSegment( float flXPos, float flYPos, float flRadiusOuter, float flRadiusInner, const Color& color, float flStartAngle, float flEndAngle, bool bCW /* = true */ )
+{
+	DrawFilledColoredCircleSegment( flXPos, flYPos, flRadiusOuter, flRadiusInner, color, flStartAngle, flEndAngle, flStartAngle, flEndAngle, bCW );
+}
+
+void DrawFilledColoredCircleSegment( float flXPos, float flYPos, float flRadiusOuter, float flRadiusInner, const Color& color, float flStartAngleOuter, float flEndAngleOuter, float flStartAngleInner, float flEndAngleInner, bool bCW /*= true*/ )
+{
+	if ( !BGeneralPaintSetup( color ) )
+		return;
+
+	if ( flEndAngleOuter < flStartAngleOuter )
+	{
+		flEndAngleOuter += 360.f;
+	}
+
+	if ( flEndAngleInner < flStartAngleInner )
+	{
+		flEndAngleInner += 360.f;
+	}
+
+	// Create a circle by creating verts
+	const int nNumSmallSegments = 20;
+	const int nNumLargeSements = 50;
+	float flAngleDelta[2];
+	flAngleDelta[ 0 ] = flEndAngleOuter - flStartAngleOuter;
+	flAngleDelta[ 1 ] = flEndAngleInner - flStartAngleInner;
+
+	//if ( flAngleDelta > 180.f )
+	//{
+	//	DrawFilledColoredCircleSegment( flXPos, flYPos, flRadiusOuter, flRadiusInner, color, flStartAngle, flStartAngle + 180.f, bCW );
+	//	flStartAngle += 180.f;
+	//	flAngleDelta -= 180.f;
+	//}
+
+	if ( !bCW )
+	{
+		flStartAngleOuter = flStartAngleOuter - flAngleDelta[ 0 ];
+		flEndAngleOuter = flStartAngleOuter + flAngleDelta[ 0 ];
+
+		flStartAngleInner = flStartAngleInner - flAngleDelta[ 1 ];
+		flEndAngleInner = flStartAngleInner + flAngleDelta[ 1 ];
+	}
+
+	int nNumSegments = RemapValClamped( flRadiusOuter, 50.f, 300.f, (float)nNumSmallSegments, (float)nNumLargeSements );
+	nNumSegments = RemapValClamped( Max( flAngleDelta[ 0 ], flAngleDelta[ 1 ] ), 1, 360, 1, nNumSegments );
+
+	float flStartRadAngle[ 2 ];
+	float flDeltaRadAngle[ 2 ];
+
+	flStartRadAngle[ 0 ] = DEG2RAD(flStartAngleOuter);
+	flDeltaRadAngle[ 0 ] = DEG2RAD(flAngleDelta[ 0 ]);
+	flStartRadAngle[ 1 ] = DEG2RAD(flStartAngleInner);
+	flDeltaRadAngle[ 1 ] = DEG2RAD(flAngleDelta[ 1 ]);
+
+	vgui::Vertex_t verts[ 4 ];
+
+	float invDelta[ 2 ] = { flDeltaRadAngle[ 0 ] / nNumSegments, flDeltaRadAngle[ 1 ] / nNumSegments };
+	float fl90 = DEG2RAD( 90 );
+
+	auto lambdaCompVerts = [&]( float flAngOuter, float flAngInner, vgui::Vertex_t& vert0, vgui::Vertex_t& vert1 )
+	{
+		float ca = cos( flAngOuter - fl90 );
+		float sa = sin( flAngOuter - fl90 );
+
+		// Rotate it around the circle
+		vert0.m_Position.x = flXPos + (flRadiusOuter * ca);
+		vert0.m_Position.y = flYPos + (flRadiusOuter * sa);
+		vert0.m_TexCoord.x = 0.5f * (ca + 1.0f);
+		vert0.m_TexCoord.y = 0.5f * (sa + 1.0f);
+
+		ca = cos( flAngInner - fl90 );
+		sa = sin( flAngInner - fl90 );
+
+		vert1.m_Position.x = flXPos + (flRadiusInner * ca);
+		vert1.m_Position.y = flYPos + (flRadiusInner * sa);
+		vert1.m_TexCoord.x = 0.5f * (ca + 1.0f);
+		vert1.m_TexCoord.y = 0.5f * (sa + 1.0f);
+	};
+
+	// Seed 2 and 3 so the loop below works
+	lambdaCompVerts( flStartRadAngle[ 0 ], flStartRadAngle[ 1 ], verts[ 2 ], verts[ 3 ] ); 
+
+	for ( int i = 0; i <= nNumSegments; ++i )
+	{
+		// Use the previous leading-edge verts as the start-edge verts for
+		// the next section.
+		verts[ 0 ] = verts[ 3 ];
+		verts[ 1 ] = verts[ 2 ];
+		// Compute the leading-edge verts
+		lambdaCompVerts( flStartRadAngle[ 0 ] + i * invDelta[ 0 ],
+						 flStartRadAngle[ 1 ] + i * invDelta[ 1 ],
+						 verts[ 2 ], verts[ 3 ] );
+
+		surface()->DrawTexturedPolygon( 4, verts, true );
+	}
+}
+
+void BrigthenColor( Color& color, int nBrigthenAmount )
+{
+	color.SetColor( Min( 255, color.r() + nBrigthenAmount ),
+					Min( 255, color.g() + nBrigthenAmount ),
+					Min( 255, color.b() + nBrigthenAmount ),
+					color.a() );
+};
+
+//-----------------------------------------------------------------------------
+// Purpose: Tests a position for moving a tooltip panel and returns a score.
+//			Returns how many pixels of the mouseover panel are covered by the 
+//			tooltip panel.  A score of 0 is perfect.
+//-----------------------------------------------------------------------------
+int AttemptPositionTooltip( const tooltippos_t eTooltipPosition, 
+							 Panel* pMouseOverPanel,
+							 Panel *pToolTipPanel,
+							 int &iXPos, 
+							 int &iYPos )
+{
+	int iPanelX = pMouseOverPanel->GetXPos();
+	int iPanelY = pMouseOverPanel->GetYPos();
+	pMouseOverPanel->ParentLocalToScreen( iPanelX, iPanelY );
+
+	switch ( eTooltipPosition )
+	{
+		case TTP_LEFT:
+			iXPos = (iPanelX - pToolTipPanel->GetWide() + XRES(18));
+			iYPos = iPanelY - YRES(7);
+			break;
+		case TTP_RIGHT: 
+			iXPos = (iPanelX + pMouseOverPanel->GetWide() - XRES(20));
+			iYPos = iPanelY - YRES(7);
+			break;
+		case TTP_LEFT_CENTERED:
+			iXPos = (iPanelX - pToolTipPanel->GetWide()) - XRES(4);
+			iYPos = (iPanelY - (pToolTipPanel->GetTall() * 0.5));
+			break;
+		case TTP_RIGHT_CENTERED:
+			iXPos = (iPanelX + pMouseOverPanel->GetWide()) + XRES(4);
+			iYPos = (iPanelY - (pToolTipPanel->GetTall() * 0.5));
+			break;
+		case TTP_ABOVE:
+			iXPos = (iPanelX + (pMouseOverPanel->GetWide() * 0.5)) - (pToolTipPanel->GetWide() * 0.5);
+			iYPos = (iPanelY - pToolTipPanel->GetTall() - YRES(4));
+			break;
+		case TTP_BELOW:
+			iXPos = (iPanelX + (pMouseOverPanel->GetWide() * 0.5)) - (pToolTipPanel->GetWide() * 0.5);
+			iYPos = (iPanelY + pMouseOverPanel->GetTall() + YRES(4));
+			break;
+	}
+
+	int iScreenX, iScreenY;
+	surface()->GetScreenSize( iScreenX, iScreenY );
+
+	// Make sure the panel stays on screen
+	iXPos = clamp( iXPos, 0, iScreenX - pToolTipPanel->GetWide() );
+	iYPos = clamp( iYPos, 0, iScreenY - pToolTipPanel->GetTall() );
+
+	// Detect how much overlap we have in X
+	int nXMin = Max( iXPos, pMouseOverPanel->GetXPos() );
+	int nXMax = Min( iXPos + pToolTipPanel->GetWide(), pMouseOverPanel->GetXPos() + pMouseOverPanel->GetWide() );
+	int nXScore = Max( 0, nXMax - nXMin );
+
+	// Detect overlap in Y
+	int nYMin = Max( iYPos, pMouseOverPanel->GetYPos() );
+	int nYMax = Min( iYPos + pToolTipPanel->GetTall(), pMouseOverPanel->GetYPos() + pMouseOverPanel->GetTall() );
+	int nYScore = Max( 0, nYMax - nYMin );
+
+	return nXScore + nYScore;
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: Takes a mouse over panel, a tooltip panel and a preferred position
+//			and tries to move the tooltip into a nice position next to the
+//			mouse over panel.
+//-----------------------------------------------------------------------------
+void PositionTooltip( const tooltippos_t ePreferredTooltipPosition, 
+					  vgui::Panel* pMouseOverPanel,
+					  vgui::Panel *pToolTipPanel )
+{
+	struct PosResult_t
+	{
+		int nScore;
+		int nX;
+		int nY;
+	};
+	PosResult_t arResults[ MAX_POSITIONS ];
+
+	int nBestScore = INT_MAX;
+	tooltippos_t eBestType = MAX_POSITIONS;
+
+	float flAverageScore = 0;
+	// Try all of the positions and score each by how much they overlap.
+	for( int i=0; i < MAX_POSITIONS; ++i )
+	{
+		arResults[ i ].nScore = AttemptPositionTooltip( (tooltippos_t)i,
+														pMouseOverPanel,
+														pToolTipPanel,
+														arResults[ i ].nX,
+														arResults[ i ].nY );
+		
+		flAverageScore += arResults[ i ].nScore;
+		// 0 is a perfect score.
+		if ( arResults[ i ].nScore < nBestScore )
+		{
+			eBestType = (tooltippos_t)i;
+			nBestScore = arResults[ i ].nScore;
+		}
+	}
+
+	flAverageScore /= MAX_POSITIONS;
+
+	Assert( eBestType != MAX_POSITIONS );
+	// Go ahead and use their preferred if it's decent
+	if( arResults[ ePreferredTooltipPosition ].nScore < ( flAverageScore / 2.f ) )
+	{
+		pToolTipPanel->SetPos( arResults[ ePreferredTooltipPosition ].nX,
+							   arResults[ ePreferredTooltipPosition ].nY );
+		return;
+	}
+	
+	// Go with the best we've got
+	pToolTipPanel->SetPos( arResults[ eBestType ].nX, arResults[ eBestType ].nY );
 }
 
 DECLARE_BUILD_FACTORY( CExCheckButton );
@@ -420,7 +724,26 @@ void CTFAdvancedOptionsDialog::OnClose()
 //-----------------------------------------------------------------------------
 void CTFAdvancedOptionsDialog::OnCommand( const char *command )
 {
-	if ( !stricmp( command, "Ok" ) )
+	if ( !stricmp( command, "open_chat_filter_settings" ) )
+	{
+		if ( steamapicontext && steamapicontext->SteamFriends() )
+		{
+			switch ( GetUniverse() )
+			{
+			case k_EUniversePublic:
+				steamapicontext->SteamFriends()->ActivateGameOverlayToWebPage( "https://store.steampowered.com/account/preferences#CommunityContentPreferences" );
+				break;
+			case k_EUniverseBeta:
+				steamapicontext->SteamFriends()->ActivateGameOverlayToWebPage( "https://store.beta.steampowered.com/account/preferences#CommunityContentPreferences" );
+				break;
+			case k_EUniverseDev:
+				steamapicontext->SteamFriends()->ActivateGameOverlayToWebPage( "https://localhost/store/account/preferences#CommunityContentPreferences" );
+				break;
+			}
+		}
+		return;
+	}
+	else if ( !stricmp( command, "Ok" ) )
 	{
 		// OnApplyChanges();
 		SaveValues();
@@ -492,7 +815,7 @@ void CTFAdvancedOptionsDialog::GatherCurrentValues()
 	{
 		pObj = pList->pScrObj;
 
-		if ( pObj->type == O_CATEGORY )
+		if ( pObj->type == O_CATEGORY || pObj->type == O_BUTTON )
 		{
 			pList = pList->next;
 			continue;
@@ -600,6 +923,7 @@ void CTFAdvancedOptionsDialog::CreateControls()
 
 	mpcontrol_t	*pCtrl;
 
+	Button *pButton;
 	CheckButton *pBox;
 	TextEntry *pEdit;
 	ComboBox *pCombo;
@@ -637,7 +961,6 @@ void CTFAdvancedOptionsDialog::CreateControls()
 
 			pBox->InvalidateLayout( true, true );
 
-			// This is utterly fucking retarded.
 			pBox->SetFgColor( tanDark );
 			pBox->SetDefaultColor( tanDark, pBox->GetBgColor() );
 			pBox->SetArmedColor( tanDark, pBox->GetBgColor() );
@@ -685,6 +1008,11 @@ void CTFAdvancedOptionsDialog::CreateControls()
 			pSlider = new CCvarSlider( pCtrl, "DescSlider", "Test", pObj->fMin, pObj->fMax, pObj->cvarname, false );
 			pCtrl->pControl = (Panel *)pSlider;
 			break;
+		case O_BUTTON:
+			pButton = new CExButton( pCtrl, "DescButton", pObj->prompt, this, pObj->defValue );
+			pButton->SetFont( hTextFont );
+			pCtrl->pControl = (Panel *)pButton;
+			break;
 		case O_CATEGORY:
 			pCtrl->SetBorder( pScheme->GetBorder("OptionsCategoryBorder") );
 			break;
@@ -692,7 +1020,7 @@ void CTFAdvancedOptionsDialog::CreateControls()
 			break;
 		}
 
-		if ( pCtrl->type != O_BOOL )
+		if ( pCtrl->type != O_BOOL && pCtrl->type != O_BUTTON )
 		{
 			pCtrl->pPrompt = new vgui::Label( pCtrl, "DescLabel", "" );
 			pCtrl->pPrompt->SetContentAlignment( vgui::Label::a_west );
@@ -721,6 +1049,7 @@ void CTFAdvancedOptionsDialog::CreateControls()
 		case O_STRING:
 		case O_NUMBER:
 		case O_LIST:
+		case O_BUTTON:
 		case O_CATEGORY:
 			pCtrl->SetSize( m_iControlW, m_iControlH );
 			break;
@@ -858,7 +1187,7 @@ void CTFTextToolTip::PerformLayout()
 	_isDirty = false;
 
 	// Resize our text labels to fit.
-	int iW = m_pEmbeddedPanel->GetWide();
+	int iW = 0;
 	int iH = 0;
 	for (int i = 0; i < m_pEmbeddedPanel->GetChildCount(); i++)
 	{
@@ -875,10 +1204,11 @@ void CTFTextToolTip::PerformLayout()
 		int iLX, iLY;
 		pLabel->GetPos( iLX, iLY );
 
-		int iMaxWidth = m_pEmbeddedPanel->GetWide() - (iLX * 2);
-		pLabel->GetTextImage()->ResizeImageToContentMaxWidth( iMaxWidth );
+		int nMaxWide = m_nMaxWide > 0 ? m_nMaxWide : m_pEmbeddedPanel->GetWide() - (iLX * 2);
+		pLabel->GetTextImage()->ResizeImageToContentMaxWidth( nMaxWide  );
 		pLabel->SizeToContents();
-		pLabel->SetWide( iMaxWidth );
+		int nNewWide = Min( nMaxWide, pLabel->GetWide() + (iLX * 2) );
+		pLabel->SetWide( nNewWide );
 		pLabel->InvalidateLayout(true);
 
 		int iX, iY;
@@ -894,7 +1224,7 @@ void CTFTextToolTip::PerformLayout()
 			iH += MAX( iH, pLabel->GetTall() );
 		}
 	}
-	m_pEmbeddedPanel->SetSize( m_pEmbeddedPanel->GetWide(), iH );
+	m_pEmbeddedPanel->SetSize( iW, iH );
 
 	m_pEmbeddedPanel->SetVisible(true);
 
@@ -954,6 +1284,22 @@ void CTFTextToolTip::PositionWindow( Panel *pTipPanel )
 	}	
 }
 
+void CTFTextToolTip::ShowTooltip( Panel *pCurrentPanel )
+{
+	EditablePanel* pEditableCurrentPanel = dynamic_cast< EditablePanel* >( pCurrentPanel );
+	if ( pEditableCurrentPanel )
+	{
+		KeyValues* pKVVariables = pEditableCurrentPanel->GetDialogVariables();
+		const wchar_t *pwszTipText = pKVVariables->GetWString( "tiptext", NULL );
+		if ( pwszTipText && *pwszTipText )
+		{
+			m_pEmbeddedPanel->SetDialogVariable( "tiptext", pwszTipText );
+		}
+	}
+
+	BaseClass::ShowTooltip( pCurrentPanel );
+}
+
 static vgui::DHANDLE<CTFAdvancedOptionsDialog> g_pTFAdvancedOptionsDialog;
 
 //-----------------------------------------------------------------------------
@@ -1002,6 +1348,7 @@ CExScrollingEditablePanel::CExScrollingEditablePanel( Panel *pParent, const char
 	, m_bUseMouseWheelToScroll( true )
 {
 	m_pScrollBar = new CExScrollBar( this, "ScrollBar", true );
+	m_pScrollBar->SetAutoResize( PIN_TOPRIGHT, Panel::AUTORESIZE_DOWN, 0, 0, 0, 0 );
 	m_pScrollBar->AddActionSignalTarget( this );
 }
 
@@ -1074,6 +1421,10 @@ void CExScrollingEditablePanel::PerformLayout()
 		Panel* pChild = GetChild( i );
 	
 		if ( pChild == m_pScrollBar )
+			continue;
+
+		// Skip panels that are pinned.  They'll move when their pin sibling moves
+		if ( pChild->GetPinSibling().Get() != NULL )
 			continue;
 
 		int x,y,wide,tall;
@@ -1221,11 +1572,16 @@ CExpandablePanel::CExpandablePanel( Panel* pParent, const char* pszName )
 //-----------------------------------------------------------------------------
 // Set spcific collapsed state
 //-----------------------------------------------------------------------------
-void CExpandablePanel::SetCollapsed( bool bCollapsed )
+void CExpandablePanel::SetCollapsed( bool bCollapsed, bool bInstant /*= false*/ )
 {
 	if ( bCollapsed == m_bExpanded )
 	{
 		ToggleCollapse();
+
+		if ( bInstant )
+		{
+			m_flAnimEndTime = Plat_FloatTime();
+		}
 	}
 }
 
@@ -1241,6 +1597,28 @@ void CExpandablePanel::ToggleCollapse()
 	m_flAnimEndTime = Plat_FloatTime() + flEndTime;
 
 	OnToggleCollapse( m_bExpanded );
+}
+
+//-----------------------------------------------------------------------------
+// Read in collapse direction
+//-----------------------------------------------------------------------------
+void CExpandablePanel::ApplySettings( KeyValues *inResourceData )
+{
+	BaseClass::ApplySettings( inResourceData );
+
+	CUtlString strExpandDir( inResourceData->GetString( "expand_direction", "down" ) );
+	if ( FStrEq( strExpandDir.Get(), "up" ) )
+		m_eExpandDir = EXPAND_UP;
+	if ( FStrEq( strExpandDir.Get(), "down" ) )
+		m_eExpandDir = EXPAND_DOWN;
+	if ( FStrEq( strExpandDir.Get(), "left" ) )
+		m_eExpandDir = EXPAND_LEFT;
+	if ( FStrEq( strExpandDir.Get(), "right" ) )
+		m_eExpandDir = EXPAND_RIGHT;
+
+	// This defaults to true.  REALLY this panel should be firing an action signal
+	// when it resizes
+	bInvalidateParentOnResize = inResourceData->GetBool( "invalidate_parent_on_resize", true );
 }
 
 //-----------------------------------------------------------------------------
@@ -1271,14 +1649,55 @@ void CExpandablePanel::OnThink()
 	const int& nEndHeight = m_bExpanded ? m_nExpandedHeight : m_nCollapsedHeight;
 	int nCurrentHeight = RemapValClamped( flTimeProgress, 0.f, 1.f, nStartHeight, nEndHeight );
 
-	if ( nCurrentHeight != GetTall() )
+	if ( nCurrentHeight != GetDimension() )
 	{
-		SetTall( nCurrentHeight );
-		Panel* pParent = GetParent();
-		if ( pParent )
+		SetDimension( nCurrentHeight );
+		if ( bInvalidateParentOnResize )
 		{
-			pParent->InvalidateLayout();
+			Panel* pParent = GetParent();
+			if ( pParent )
+			{
+				pParent->InvalidateLayout();
+			}
 		}
+	}
+}
+
+int CExpandablePanel::GetDimension()
+{
+	switch( m_eExpandDir )
+	{
+	default:
+	case EXPAND_UP:
+	case EXPAND_DOWN:
+		return GetTall();
+
+	case EXPAND_LEFT:
+	case EXPAND_RIGHT:
+		return GetWide();
+	}
+}
+
+void CExpandablePanel::SetDimension( int nNewValue )
+{
+	int nX, nY, nWide, nTall;
+	GetBounds( nX, nY, nWide, nTall );
+
+	switch( m_eExpandDir )
+	{
+		default:
+		case EXPAND_UP:
+			SetPos( nX, nY - ( nNewValue - nTall ) );
+			// fall through
+		case EXPAND_DOWN:
+			SetTall( nNewValue );
+			break;
+
+		case EXPAND_LEFT:
+			SetPos( nX - ( nNewValue - nWide ), nY );
+			// fall through
+		case EXPAND_RIGHT:
+			SetWide( nNewValue );
 	}
 }
 
@@ -1290,3 +1709,765 @@ float CExpandablePanel::GetPercentAnimated() const
 	return RemapValClamped( Plat_FloatTime() - ( m_flAnimEndTime - m_flResizeTime ), 0.f, m_flResizeTime, 0.f, 1.f );
 }
 
+float CExpandablePanel::GetPercentExpanded() const
+{
+	return RemapValClamped( (float)const_cast< CExpandablePanel* >(this)->GetTall(), (float)m_nCollapsedHeight, (float)m_nExpandedHeight, 0.f, 1.f );
+}
+
+DECLARE_BUILD_FACTORY( CDraggableScrollingPanel );
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+CDraggableScrollingPanel::CDraggableScrollingPanel( Panel *pParent, const char *pszPanelname )
+	: EditablePanel( pParent, pszPanelname )
+	, m_iDragStartX( 0 )
+	, m_iDragStartY( 0 )
+	, m_iDragTotalDistance( 0 )
+	, m_bDragging( false )
+	, m_flZoom( 1.f )
+{}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+void CDraggableScrollingPanel::ApplySettings( KeyValues *inResourceData )
+{
+	BaseClass::ApplySettings( inResourceData );
+
+	FOR_EACH_VEC_BACK( m_vecChildOriginalData, i )
+	{
+		bool bFound = false;
+		for( int j=0; j < GetChildCount(); ++j )
+		{
+			if ( m_vecChildOriginalData[ i ].m_pChild == GetChild( j ) )
+			{
+				bFound = true;
+				break;
+			}
+		}
+
+		if ( !bFound )
+		{
+			m_vecChildOriginalData.Remove( i );
+		}
+	}
+
+	m_flMinZoom				= inResourceData->GetFloat( "min_zoom", 1.f );
+	m_flMaxZoom				= inResourceData->GetFloat( "max_zoom", 2.f );
+	m_flZoom				= inResourceData->GetFloat( "zoom", 1.f );
+	m_flMouseWheelZoomRate	= inResourceData->GetFloat( "mouse_wheel_zoom_rate", 0.05f );
+
+	m_iOriginalWide = GetWide();
+	m_iOriginalTall = GetTall();
+
+	SetZoomAmount( m_flZoom, GetWide() / 2, GetTall() /  2 );
+
+	KeyValues* pKVPendingChildren = inResourceData->FindKey( "pending_children" );
+	if ( pKVPendingChildren )
+	{
+		FOR_EACH_TRUE_SUBKEY( pKVPendingChildren, pKVChild )
+		{
+			auto& child = m_vecPendingChildren[ m_vecPendingChildren.AddToTail() ];
+			child.m_strName			= pKVChild->GetString( "child_name" );
+			child.m_ePinPosition	= (EPinPosition)pKVChild->GetInt( "pin", PIN_CENTER );
+			child.m_bScaleWithZoom	= pKVChild->GetBool( "scale", true );
+			child.m_bMoveWithDrag	= pKVChild->GetBool( "move", true );
+		}
+
+		if ( !m_vecPendingChildren.IsEmpty() )
+		{
+			vgui::ivgui()->AddTickSignal( GetVPanel(), 100 );
+		}
+	}
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: When a child is removed, remove the original data for that child
+//-----------------------------------------------------------------------------
+void CDraggableScrollingPanel::OnChildRemoved( Panel* pChild )
+{
+	BaseClass::OnChildRemoved( pChild );
+
+	auto idx = m_vecChildOriginalData.FindPredicate( [ & ]( const ChildPositionInfo_t& other )
+	{
+		return other.m_pChild == pChild;
+	} );
+
+	m_vecChildOriginalData.Remove( idx );
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: Check if our pending children are loaded yer
+//-----------------------------------------------------------------------------
+void CDraggableScrollingPanel::OnTick()
+{
+	BaseClass::OnTick();
+
+	if ( BCheckForPendingChildren() )
+	{
+		vgui::ivgui()->RemoveTickSignal( GetVPanel() );
+	}
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: Try to setup our pending children
+//-----------------------------------------------------------------------------
+bool CDraggableScrollingPanel::BCheckForPendingChildren()
+{
+	FOR_EACH_VEC_BACK( m_vecPendingChildren, i )
+	{
+		auto& child = m_vecPendingChildren[ i ];
+		Panel* pChildPanel = FindChildByName( child.m_strName );
+		if ( pChildPanel )
+		{
+			AddOrUpdateChild( pChildPanel, child.m_bScaleWithZoom, child.m_bMoveWithDrag, child.m_ePinPosition );
+			m_vecPendingChildren.Remove( i );
+		}
+	}
+
+	return m_vecPendingChildren.IsEmpty();
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: Remember where we started pressing
+//-----------------------------------------------------------------------------
+void CDraggableScrollingPanel::OnMousePressed( MouseCode code )
+{
+	input()->SetMouseCapture(GetVPanel());
+
+	m_bDragging = true;
+	m_iDragTotalDistance = 0;
+	input()->GetCursorPosition( m_iDragStartX, m_iDragStartY );
+
+	PostActionSignal( new KeyValues("DragStart") );
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: Done dragging
+//-----------------------------------------------------------------------------
+void CDraggableScrollingPanel::OnMouseReleased( MouseCode code )
+{
+	input()->SetMouseCapture( NULL );
+	m_bDragging = false;
+	PostActionSignal( new KeyValues( "DragStop", "dist", m_iDragTotalDistance ) );
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: Move the panel corresponding to mouse deltas
+//-----------------------------------------------------------------------------
+void CDraggableScrollingPanel::InternalCursorMoved( int x, int y )
+{
+	if ( !m_bDragging )
+		return;
+
+	// How far to go
+	int nDeltaX = x - m_iDragStartX;
+	int nDeltaY = y - m_iDragStartY;
+
+	m_iDragTotalDistance += abs( nDeltaX );
+	m_iDragTotalDistance += abs( nDeltaY );
+
+	// Store where the mouse is now, so we can get the next delta
+	m_iDragStartX = x;
+	m_iDragStartY = y;
+
+	int nNewX, nNewY;
+	GetPos( nNewX, nNewY );
+
+	// Move us, but keep us within parents bounds
+	nNewX = clamp( nDeltaX + nNewX, -( GetWide() - GetParent()->GetWide() ), 0 );
+	nNewY = clamp( nDeltaY + nNewY, -( GetTall() - GetParent()->GetTall() ), 0 );
+
+	SetPos( nNewX, nNewY );
+
+	// We moved.  Move children
+	UpdateChildren();
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: Zoom based on how much the wheel was wheeled
+//-----------------------------------------------------------------------------
+void CDraggableScrollingPanel::OnMouseWheeled( int delta )
+{
+	int nXP, pYP;
+	ipanel()->GetAbsPos(GetVParent(), nXP, pYP);
+
+	int nXM, nYM;
+	input()->GetCursorPosition( nXM, nYM );
+
+	SetZoomAmount( m_flZoom + delta * m_flMouseWheelZoomRate, nXM - nXP, nYM - pYP );
+
+	BaseClass::OnMouseWheeled(delta);
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: External slider movement
+//-----------------------------------------------------------------------------
+void CDraggableScrollingPanel::OnSliderMoved( KeyValues *pParams )
+{
+	Slider *pSlider = reinterpret_cast<Slider*>( const_cast<KeyValues*>(pParams)->GetPtr("panel") );
+	if ( pSlider )
+	{
+		int nMin, nMax;
+		pSlider->GetRange( nMin, nMax );
+		SetZoomAmount( RemapVal( (float)pSlider->GetValue(), (float)nMin, (float)nMax, m_flMinZoom, m_flMaxZoom )
+					 , GetParent()->GetWide() / 2.f
+					 , GetParent()->GetTall() / 2.f );
+	}
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: Zoom!  Make our children scale up and move into position.  We use
+//			a zoom focus point that we zoom into so if the user uses the mouse
+//			wheel to zoom in, the point under the cursor will be maintained
+//			as they zoom.
+//-----------------------------------------------------------------------------
+void CDraggableScrollingPanel::SetZoomAmount( float flZoomAmount, int nXZoomFocus, int nYZoomFocus )
+{
+	float flNewZoom = clamp( flZoomAmount, m_flMinZoom, m_flMaxZoom );
+	m_flZoom = flNewZoom;
+
+	// Tell everyone we zoomed
+	KeyValues *pParams = new KeyValues( "ZoomChanged" );
+	pParams->SetFloat( "zoom", RemapVal( m_flZoom, m_flMinZoom, m_flMaxZoom, 0.f, 1.f ) );
+	PostActionSignal( pParams );
+
+	int nXPos, nYPos;
+	GetPos( nXPos, nYPos );
+
+	// Maintain focal point as we zoom in/out
+	float flXZoomFocalPoint = float( nXZoomFocus - nXPos ) / GetWide();
+	float flYZoomFocalPoint = float( nYZoomFocus - nYPos ) / GetTall();
+
+	// Resize ourselves
+	SetWide( m_flZoom * m_iOriginalWide );
+	SetTall( m_flZoom * m_iOriginalTall );
+
+	nXPos = ( flXZoomFocalPoint * GetWide() ) - nXZoomFocus;
+	nYPos = ( flYZoomFocalPoint * GetTall() ) - nYZoomFocus;
+
+	// Make sure we stay within bounds
+	nXPos = clamp( -nXPos, -( GetWide() - GetParent()->GetWide() ), 0 );
+	nYPos = clamp( -nYPos, -( GetTall() - GetParent()->GetTall() ), 0 );
+
+	SetPos( nXPos, nYPos );
+
+	// Update children since we scaled and possibly moved
+	UpdateChildren();
+}
+
+const CDraggableScrollingPanel::ChildPositionInfo_t* CDraggableScrollingPanel::GetChildPositionInfo( const Panel* pChildPanel ) const
+{
+	auto idx =m_vecChildOriginalData.FindPredicate( [ & ]( const ChildPositionInfo_t& other )
+	{
+		return other.m_pChild == pChildPanel;
+	} );
+
+	if ( idx == m_vecChildOriginalData.InvalidIndex() )
+		return NULL;
+
+	return &m_vecChildOriginalData[ idx ];
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: Store the original size and position of children so we know how to
+//			scale them up and down
+//-----------------------------------------------------------------------------
+void CDraggableScrollingPanel::AddOrUpdateChild( Panel* pChild, bool bScaleWithZoom, bool bMoveWithDrag, EPinPosition ePinPosition )
+{
+	// Check if we already have this panel and dont do anything if os
+	auto idx = m_vecChildOriginalData.InvalidIndex();
+	FOR_EACH_VEC( m_vecChildOriginalData, i )
+	{
+		if ( m_vecChildOriginalData[ i ].m_pChild == pChild )
+		{
+			idx = i;
+			break;
+		}
+	}
+
+	if ( idx == m_vecChildOriginalData.InvalidIndex() )
+	{
+		idx = m_vecChildOriginalData.AddToTail();
+	}
+
+	// Setup initial data
+	ChildPositionInfo_t& info = m_vecChildOriginalData[ idx ];
+	info.m_pChild = pChild;
+	info.m_bScaleWithZoom = bScaleWithZoom;
+	info.m_bMoveWithDrag = bMoveWithDrag;
+	info.m_ePinPosition = ePinPosition;
+
+	// Capture their settings now or do we have to wait?
+	if ( pChild->IsLayoutInvalid() )
+	{
+		info.m_bWaitingForSettings = true;
+	}
+	else
+	{
+		CaptureChildSettings( pChild );
+		UpdateChildren();
+	}
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: See if we were waiting for a child to get their settings applied
+//			before we added them as a managed child
+//-----------------------------------------------------------------------------
+void CDraggableScrollingPanel::OnChildSettingsApplied( KeyValues *pInResourceData, Panel *pChild )
+{
+	FOR_EACH_VEC( m_vecChildOriginalData, i )
+	{
+		ChildPositionInfo_t& info = m_vecChildOriginalData[ i ];
+		if ( info.m_pChild == pChild && info.m_bWaitingForSettings )
+		{
+			info.m_bWaitingForSettings = false;
+			CaptureChildSettings( pChild );
+			return;
+		}
+	}
+}
+
+void CDraggableScrollingPanel::CaptureChildSettings( Panel* pChild )
+{
+	float flStartWide = GetWide() / m_flZoom;
+	float flStartTall = GetTall() / m_flZoom;
+
+	FOR_EACH_VEC( m_vecChildOriginalData, i )
+	{
+		if ( m_vecChildOriginalData[ i ].m_pChild == pChild )
+		{
+			ChildPositionInfo_t& info = m_vecChildOriginalData[ i ];
+			switch ( info.m_ePinPosition )
+			{
+				case PIN_CENTER:
+				{
+					info.m_flX = ( pChild->GetXPos() + ( pChild->GetWide() / 2.f ) ) / flStartWide;
+					info.m_flY = ( pChild->GetYPos() + ( pChild->GetTall() / 2.f ) ) / flStartTall;
+				}
+				break;
+
+				case PIN_TOP_LEFT:
+				{
+					info.m_flX = pChild->GetXPos() / flStartWide;
+					info.m_flY = pChild->GetYPos() / flStartTall;
+				}
+				break;
+
+				case PIN_TOP_RIGHT:
+				{
+					info.m_flX = ( pChild->GetXPos() + pChild->GetWide() ) / flStartWide;
+					info.m_flY =   pChild->GetYPos() / flStartTall;
+				}
+				break;
+
+				case PIN_BOTTOM_LEFT:
+				{
+					info.m_flX =   pChild->GetXPos() / flStartWide;
+					info.m_flY = ( pChild->GetYPos() + pChild->GetTall() ) / flStartTall;
+				}
+				break;
+
+				case PIN_BOTTOM_RIGHT:
+				{
+					info.m_flX = ( pChild->GetXPos() + pChild->GetWide() ) / flStartWide;
+					info.m_flY = ( pChild->GetYPos() + pChild->GetTall() ) / flStartTall;
+				}
+				break;
+			}
+			
+			info.m_flWide = pChild->GetWide() / flStartWide;
+			info.m_flTall = pChild->GetTall() / flStartTall;
+			return;
+		}
+	}
+
+	// Should've been captured above
+	Assert( false );
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: Resize and reposition children based on zoom and drag offset
+//-----------------------------------------------------------------------------
+void CDraggableScrollingPanel::UpdateChildren()
+{
+	int nXPos, nYPos;
+	GetPos( nXPos, nYPos );
+
+	FOR_EACH_VEC( m_vecChildOriginalData, i )
+	{
+		ChildPositionInfo_t& child = m_vecChildOriginalData[ i ];
+
+		if ( child.m_bWaitingForSettings )
+		{
+			CaptureChildSettings( child.m_pChild );
+			child.m_bWaitingForSettings = false;
+		}
+
+		if ( child.m_bScaleWithZoom )
+		{
+			child.m_pChild->SetWide( child.m_flWide * GetWide() );
+			child.m_pChild->SetTall( child.m_flTall * GetTall() );
+		}
+
+		if ( child.m_bMoveWithDrag )
+		{
+			switch ( child.m_ePinPosition )
+			{
+				case PIN_CENTER:
+				{
+					child.m_pChild->SetPos( ( child.m_flX * GetWide() ) - ( child.m_pChild->GetWide() / 2.f )
+										  , ( child.m_flY * GetTall() ) - ( child.m_pChild->GetTall() / 2.f ) );
+				}
+				break;
+
+				case PIN_TOP_LEFT:
+				{
+					child.m_pChild->SetPos( child.m_flX * GetWide()
+										  , child.m_flY * GetTall() );
+				}
+				break;
+
+				case PIN_TOP_RIGHT:
+				{
+					child.m_pChild->SetPos( ( child.m_flX * GetWide() ) - child.m_pChild->GetWide()
+										  , ( child.m_flY * GetTall() ) );
+				}
+				break;
+
+				case PIN_BOTTOM_LEFT:
+				{
+					child.m_pChild->SetPos( ( child.m_flX * GetWide() )
+										  , ( child.m_flY * GetTall() ) - child.m_pChild->GetTall() );
+				}
+				break;
+
+				case PIN_BOTTOM_RIGHT:
+				{
+					child.m_pChild->SetPos( ( child.m_flX * GetWide() ) - ( child.m_pChild->GetWide() )
+										  , ( child.m_flY * GetTall() ) - ( child.m_pChild->GetTall() ) );
+				}
+				break;
+			}
+
+			
+		}
+	}
+}
+
+DECLARE_BUILD_FACTORY( CTFLogoPanel );
+CTFLogoPanel::CTFLogoPanel( Panel *pParent, const char *pszPanelname )
+	: BaseClass( pParent, pszPanelname )
+{}
+
+void CTFLogoPanel::PaintTFLogo( float flAngle, const Color& color ) const
+{
+	const float flTotalRadius = YRES( m_flRadius );
+	// I did the math
+	const float flOuterToInnerRatio = 0.35f;
+	const float flInnerRadius = flTotalRadius * flOuterToInnerRatio;
+	constexpr const float flNaturalTiltAngle = 6.7f;
+	constexpr const float fl90 = DEG2RAD( 90 );
+
+	// Vgui....
+	const float flCenterX = const_cast< CTFLogoPanel* >( this )->GetWide() / 2.f;
+	const float flCenterY = const_cast< CTFLogoPanel* >( this )->GetTall() / 2.f;
+
+
+	auto lambdaDrawSegment = [&]( float flStartAngle, float flEndAngle )
+	{
+		// Rotate it around the circle
+		float flX = flCenterX ;
+		float flY = flCenterY ;
+
+		float flMagicOuter = 6.f;
+		float flMagicInner = flMagicOuter * ( 1.f / flOuterToInnerRatio );
+
+		DrawFilledColoredCircleSegment( flX,
+										flY,
+										flTotalRadius,
+										flInnerRadius,
+										color,
+										flStartAngle	+ flMagicOuter,
+										flEndAngle		- flMagicOuter,
+										flStartAngle	+ flMagicInner,
+										flEndAngle		- flMagicInner,
+										true );
+	};
+
+	
+
+	lambdaDrawSegment( flNaturalTiltAngle + flAngle,
+					   flNaturalTiltAngle + flAngle + 90 );
+
+	lambdaDrawSegment( flNaturalTiltAngle + flAngle + 90,
+					   flNaturalTiltAngle + flAngle + 180  );
+
+	lambdaDrawSegment( flNaturalTiltAngle + flAngle + 180,
+					   flNaturalTiltAngle + flAngle + 270 );
+
+	lambdaDrawSegment( flNaturalTiltAngle + flAngle + 270,
+					   flNaturalTiltAngle + flAngle + 360 );
+
+}
+
+void CTFLogoPanel::Paint()
+{
+	m_flOffsetAngle += gpGlobals->frametime * m_flVelocity;
+	m_flOffsetAngle = fmodf( m_flOffsetAngle, 360.f );
+	PaintTFLogo( m_flOffsetAngle, GetFgColor() );
+	BaseClass::Paint();
+}
+
+#include "tf_matchmaking_dashboard_parent_manager.h"
+
+class CScrollingIndicatorPanel : public EditablePanel
+{
+public:
+	DECLARE_CLASS_SIMPLE( CScrollingIndicatorPanel , EditablePanel );
+	CScrollingIndicatorPanel( const wchar* pwszText,
+							  const char* pszSoundName,
+							  float flDelay,
+							  int nXTravel,
+							  int nYTravel,
+							  bool bPositive )
+		: BaseClass( NULL, "Indicator" )
+		, m_strSound( pszSoundName )
+		, m_nXTravel( nXTravel )
+		, m_nYTravel( nYTravel )
+		, m_bPositive( bPositive )
+	{
+		vgui::HScheme scheme = vgui::scheme()->LoadSchemeFromFileEx( enginevgui->GetPanel( PANEL_CLIENTDLL ), "resource/ClientScheme.res", "ClientScheme");
+		SetProportional( true );
+		SetScheme(scheme);
+
+		LoadControlSettings( "resource/ui/XPSourcePanel.res" );
+		GetMMDashboardParentManager()->AddPanel( this );
+		SetMouseInputEnabled( false );
+
+		PostMessage( GetVPanel(), new KeyValues( "Start" ), flDelay );
+		PostMessage( GetVPanel(), new KeyValues( "End" ), flDelay + 3.5f );
+
+		memset( m_wszBuff, 0, sizeof( m_wszBuff ) );
+
+		if( pwszText )
+		{
+			SetText( pwszText );
+		}
+
+		SetAutoDelete( false );
+	}
+
+	virtual ~CScrollingIndicatorPanel()
+	{
+		GetMMDashboardParentManager()->RemovePanel( this );
+	}
+
+	virtual void ApplySchemeSettings( vgui::IScheme *pScheme ) OVERRIDE
+	{
+		BaseClass::ApplySchemeSettings( pScheme );
+
+		
+	}
+
+	virtual void PerformLayout() OVERRIDE
+	{
+		BaseClass::PerformLayout();
+
+		SetDialogVariable( "source", m_wszBuff );
+	}
+
+	MESSAGE_FUNC( Start, "Start" )
+	{
+		SetVisible( true );
+
+		// Do starting stuff
+		if ( g_pClientMode && g_pClientMode->GetViewport() && g_pClientMode->GetViewportAnimationController() )
+		{
+			g_pClientMode->GetViewportAnimationController()->StartAnimationSequence( this, m_bPositive ? "XPSourceShow_Positive" : "XPSourceShow_Negative", false );
+			g_pClientMode->GetViewportAnimationController()->RunAnimationCommand( this, "xpos", GetXPos() + m_nXTravel, 0.f, 3.f, AnimationController::INTERPOLATOR_DEACCEL, 0, true, false );
+			g_pClientMode->GetViewportAnimationController()->RunAnimationCommand( this, "ypos", GetYPos() + m_nYTravel, 0.f, 3.f, AnimationController::INTERPOLATOR_DEACCEL, 0, true, false );
+		}
+
+		if ( !m_strSound.IsEmpty() )
+		{
+			PlaySoundEntry( m_strSound );
+		}
+	}
+
+	MESSAGE_FUNC( End, "End" )
+	{
+		// We're done!  Delete ourselves
+		MarkForDeletion();
+	}
+
+	void SetText( const wchar* pwszText )
+	{
+		_snwprintf( m_wszBuff, ARRAYSIZE( m_wszBuff ), L"%ls", pwszText );
+		InvalidateLayout();
+	}
+
+private:
+
+	wchar m_wszBuff[ 256 ];
+	CUtlString m_strSound;
+	bool m_bPositive;
+	int m_nXTravel = 0;
+	int m_nYTravel = 0;
+};
+
+void CreateScrollingIndicator( int nXPos,
+							   int nYPos,
+							   const wchar* pwszText,
+							   const char* pszSoundName,
+							   float flDelay,
+							   int nXTravel,
+							   int nYTravel, 
+							   bool bPositive )
+{
+	CScrollingIndicatorPanel* pPanel = new CScrollingIndicatorPanel( pwszText,
+																	 pszSoundName,
+																	 flDelay,
+																	 nXTravel,
+																	 nYTravel, 
+																	 bPositive );
+	pPanel->MakeReadyForUse();
+	pPanel->SetPos( nXPos - pPanel->GetWide() / 2, nYPos );
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: A label that can have multiple fonts specified and will try to use
+//			them in order specified, using the first one that fits.
+//-----------------------------------------------------------------------------
+class CAutoFittingLabel : public Label
+{
+	DECLARE_CLASS_SIMPLE( CAutoFittingLabel, Label );
+public:
+
+	CAutoFittingLabel( Panel *parent, const char *name )
+		: Label( parent, name, (const char*)NULL )
+		, m_mapColors( DefLessFunc( int ) )
+	{}
+
+	virtual void ApplySettings( KeyValues *inResourceData )
+	{
+		BaseClass::ApplySettings( inResourceData );
+		vgui::IScheme *pScheme = scheme()->GetIScheme( GetScheme() );
+
+		m_vecFonts.Purge();
+		KeyValues *pFonts = inResourceData->FindKey( "fonts" );
+		if ( pFonts )
+		{
+			//
+			// Get all the fonts
+			//
+			
+			// Old style
+			FOR_EACH_TRUE_SUBKEY( pFonts, pFont )
+			{
+				const HFont& font = pScheme->GetFont( pFont->GetString( "font" ), true );
+				m_vecFonts.AddToTail( font );			
+			}
+
+			// New style
+			FOR_EACH_VALUE( pFonts, pValue )
+			{
+				const HFont& font = pScheme->GetFont( pValue->GetString(), true );
+				m_vecFonts.AddToTail( font );			
+			}
+		}
+		else
+		{
+			m_vecFonts.AddToTail( GetFont() );
+		}
+
+		m_mapColors.Purge();
+		KeyValues* pKVColors = inResourceData->FindKey( "Colors" );
+		if ( pKVColors )
+		{
+			FOR_EACH_VALUE( pKVColors, pKVColor )
+			{
+				m_mapColors.Insert( atoi( pKVColor->GetName() ) ,GetColor( pKVColor->GetString() ) );
+			}
+		}
+	}
+
+	virtual void PerformLayout()
+	{
+		BaseClass::PerformLayout();
+
+		SetFont( m_vecFonts.Head() );
+
+		// Go through all the fonts and try to find one that fits
+		int nIndex = 0;
+		GetTextImage()->ResizeImageToContentMaxWidth( GetWide() );
+		while ( ( GetTextImage()->IsWrapping() || GetTextImage()->GetEllipsesPosition() ) && nIndex < m_vecFonts.Count() )
+		{
+			SetFont( m_vecFonts[ nIndex ] );
+			GetTextImage()->ResizeImageToContentMaxWidth( GetWide() );
+
+			++nIndex;
+		}
+
+		// Go through each character in the buffer and look for color change codes.
+		// When a code is found, add a color change into the text image, where we 
+		// use the color code as an index into the map.
+		const wchar_t* pwszText = GetTextImage()->GetUText();
+		int nTextIndex = 0;
+		GetTextImage()->ClearColorChangeStream();
+		while( pwszText && pwszText[0] )
+		{
+			auto idx = m_mapColors.Find( pwszText[0] );
+			if ( idx != m_mapColors.InvalidIndex() )
+			{
+				GetTextImage()->AddColorChange( m_mapColors[ idx ], nTextIndex );
+			}
+
+			++nTextIndex;
+			++pwszText;
+		}
+	}
+
+private:
+
+	CUtlVector< HFont > m_vecFonts;
+	CUtlMap< int, Color > m_mapColors;
+};
+
+DECLARE_BUILD_FACTORY( CAutoFittingLabel );
+
+class CGenericSwoop : public CControlPointIconSwoop
+{
+	DECLARE_CLASS_SIMPLE( CGenericSwoop, CControlPointIconSwoop );
+	CGenericSwoop( float flSwoopTime, bool bDown )
+		: CControlPointIconSwoop( NULL, "swoop", bDown )
+	{
+		vgui::HScheme scheme = vgui::scheme()->LoadSchemeFromFileEx( enginevgui->GetPanel( PANEL_CLIENTDLL ), "resource/ClientScheme.res", "ClientScheme");
+		SetScheme(scheme);
+		SetProportional( true );
+
+		SetZPos( 50000 );
+		SetRotation( bDown ? ROTATED_UNROTATED : ROTATED_FLIPPED );
+		GetMMDashboardParentManager()->AddPanel( this );
+		PostMessage( this, new KeyValues( "StartSwoop" ), flSwoopTime );
+	}
+
+	virtual ~CGenericSwoop()
+	{
+		GetMMDashboardParentManager()->RemovePanel( this );
+	}
+
+	MESSAGE_FUNC( MsgStartSwoop, "StartSwoop" )
+	{
+		StartSwoop();
+		PostMessage( this, new KeyValues( "Delete" ), STARTCAPANIM_SWOOP_LENGTH );
+	}
+};
+
+void CreateSwoop( int nX, int nY, int nWide, int nTall, float flDelay, bool bDown )
+{
+	CGenericSwoop* pSwoop = new CGenericSwoop( flDelay, bDown );
+	pSwoop->MakeReadyForUse();
+	pSwoop->SetBounds( nX, nY, nWide, nTall );
+}

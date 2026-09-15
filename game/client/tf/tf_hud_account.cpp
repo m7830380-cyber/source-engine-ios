@@ -81,6 +81,9 @@ ConVar hud_combattext_healing( "hud_combattext_healing", "1", FCVAR_USERINFO | F
 ConVar hud_combattext_batching( "hud_combattext_batching", "0", FCVAR_USERINFO | FCVAR_ARCHIVE | FCVAR_ARCHIVE_XBOX, "If set to 1, numbers that are too close together are merged." );
 ConVar hud_combattext_batching_window( "hud_combattext_batching_window", "0.2", FCVAR_ARCHIVE | FCVAR_ARCHIVE_XBOX, "Maximum delay between damage events in order to batch numbers.", true, 0.1, true, 2.0 );
 ConVar hud_combattext_doesnt_block_overhead_text( "hud_combattext_doesnt_block_overhead_text", "1", FCVAR_USERINFO | FCVAR_ARCHIVE, "If set to 1, allow text like \"CRIT\" to still show over a victim's head." );
+ConVar hud_combattext_red( "hud_combattext_red", "255", FCVAR_USERINFO | FCVAR_ARCHIVE | FCVAR_ARCHIVE_XBOX );
+ConVar hud_combattext_green( "hud_combattext_green", "0", FCVAR_USERINFO | FCVAR_ARCHIVE | FCVAR_ARCHIVE_XBOX );
+ConVar hud_combattext_blue( "hud_combattext_blue", "0", FCVAR_USERINFO | FCVAR_ARCHIVE | FCVAR_ARCHIVE_XBOX );
 
 ConVar tf_dingalingaling( "tf_dingalingaling", "0", FCVAR_ARCHIVE, "If set to 1, play a sound everytime you injure an enemy. The sound can be customized by replacing the 'tf/sound/ui/hitsound.wav' file." );
 ConVar tf_dingaling_volume( "tf_dingaling_volume", "0.75", FCVAR_ARCHIVE, "Desired volume of the hit sound.", true, 0.0, true, 1.0 );
@@ -99,6 +102,7 @@ ConVar tf_dingalingaling_repeat_delay( "tf_dingalingaling_repeat_delay", "0.0", 
 ConVar hud_damagemeter( "hud_damagemeter", "0", FCVAR_CHEAT, "Display damage-per-second information in the lower right corner of the screen." );
 ConVar hud_damagemeter_period( "hud_damagemeter_period", "0", FCVAR_NONE, "When set to zero, average damage-per-second across all recent damage events, otherwise average damage across defined period (number of seconds)." );
 ConVar hud_damagemeter_ooctimer( "hud_damagemeter_ooctimer", "1", FCVAR_NONE, "How many seconds after the last damage event before we consider the player out of combat." );
+ConVar hud_damagemeter_report( "hud_damagemeter_report", "1", FCVAR_NONE, "Display end-of-combat DPS result (from first damage even to last before OOC timer hit)." );
 
 struct hitsound_params_t
 {
@@ -194,7 +198,7 @@ public:
 	virtual const char *GetResFileName( void ) { return "resource/UI/HudAccountPanel.res"; }
 
 protected:
-	virtual Color GetColor( const account_delta_t::eAccountDeltaType_t& type );
+	virtual Color GetColor( const account_delta_t::eAccountDeltaType_t &type, const int iDeltaValue = 0 );
 
 	CUtlVector <account_delta_t> m_AccountDeltaItems;
 
@@ -239,7 +243,7 @@ public:
 	{
 		Panel *pParent = g_pClientMode->GetViewport();
 		SetParent( pParent );
-		SetHiddenBits( HIDEHUD_MISCSTATUS );
+		SetHiddenBits( HIDEHUD_MISCSTATUS | HIDEHUD_METAL );
 		ListenForGameEvent( "player_account_changed" );
 	}
 
@@ -303,6 +307,7 @@ public:
 	CHealthAccountPanel( const char *pElementName ) : CHudAccountPanel(pElementName)
 	{
 		ListenForGameEvent( "player_healonhit" );
+		ListenForGameEvent( "building_healed" );
 	}
 
 	virtual const char *GetResFileName( void ) { return "resource/UI/HudHealthAccount.res"; }
@@ -360,6 +365,16 @@ public:
 						pEventPlayer->ParticleProp()->Create( pEffectName, PATTACH_POINT, "head" );
 					}
 				}
+			}
+		}
+		else if ( FStrEq( event->GetName(), "building_healed" ) )
+		{
+			CBaseEntity *pBuilding = ClientEntityList().GetEnt( event->GetInt( "building" ) );
+			if ( pBuilding )
+			{
+				bool bRedParticle = ( pBuilding->GetTeamNumber() == TF_TEAM_RED );
+				const char *pszEffectName = ( bRedParticle ) ? "healthgained_red_large" : "healthgained_blu_large";
+				pBuilding->ParticleProp()->Create( pszEffectName, PATTACH_ABSORIGIN, INVALID_PARTICLE_ATTACHMENT, Vector( 0, 0, 32 ) );
 			}
 		}
 		else
@@ -449,7 +464,7 @@ public:
 		BaseClass::ApplySettings( inResourceData );
 
 		Q_strncpy( m_pszEventName, inResourceData->GetString( "event" ), sizeof( m_pszEventName ) );
-		if ( m_pszEventName )
+		if ( *m_pszEventName )
 		{
 			ListenForGameEvent( m_pszEventName );
 		}
@@ -670,7 +685,15 @@ public:
 			const int iVictim = engine->GetPlayerForUserID( event->GetInt( "userid" ) );
 			C_TFPlayer *pVictim = ToTFPlayer( UTIL_PlayerByIndex( iVictim ) );
 
-			DisplayDamageFeedback( pAttacker, pVictim, iDamage, iHealth, event->GetBool( "crit", 0 ) );
+			EAttackBonusEffects_t eBonusEffect = (EAttackBonusEffects_t)event->GetInt( "bonuseffect", (int)kBonusEffect_None );
+			bool bLargeText = g_BonusEffects[ eBonusEffect ].m_bLargeCombatText;
+			if ( eBonusEffect == kBonusEffect_None )
+			{
+				bLargeText |= event->GetBool( "crit", false );
+				bLargeText |= event->GetBool( "minicrit", false );
+			}
+
+			DisplayDamageFeedback( pAttacker, pVictim, iDamage, iHealth, bLargeText );
 		}
 		else if ( FStrEq( event->GetName(), "npc_hurt" ) )
 		{
@@ -866,8 +889,14 @@ void CDamageAccountPanel::OnTick( void )
 	if ( ShouldDrawDPSMeter() )
 	{
 		// We're out of combat - nuke everything
-		if ( m_flLastDamageEventTime < gpGlobals->curtime - hud_damagemeter_ooctimer.GetFloat() )
+		if ( m_flFirstDamageEventTime != 0.f && m_flLastDamageEventTime < gpGlobals->curtime - hud_damagemeter_ooctimer.GetFloat() )
 		{
+			if ( hud_damagemeter_report.GetBool() )
+			{
+				DevMsg( "-------\n" );
+				DevMsg( "%3.2f DPS over %3.2f seconds\n" , m_flDamagePerSecond, ( m_flLastDamageEventTime - m_flFirstDamageEventTime ) );
+				DevMsg( "-------\n" );
+			}
 			m_DamageHistory.RemoveAll();
 			m_flFirstDamageEventTime = 0.f;
 		}
@@ -901,7 +930,7 @@ void CDamageAccountPanel::OnTick( void )
 			// Event-based calculation (absolute dps)
 			else if ( m_flFirstDamageEventTime > 0.f )
 			{
-				flPeriod = Max( m_flLastDamageEventTime - m_flFirstDamageEventTime, 1.f );
+				flPeriod = Max( m_flLastDamageEventTime - m_flFirstDamageEventTime, 0.01f );
 				m_flDamagePerSecond = m_flDamageMeterTotal / flPeriod;
 			}
 		}
@@ -1001,7 +1030,7 @@ account_delta_t *CAccountPanel::OnAccountValueChanged( int iOldValue, int iNewVa
 		pNewDeltaItem->m_bLargeFont = false;
 		pNewDeltaItem->m_eDataType = type;
 		pNewDeltaItem->m_wzText[0] = NULL;
-		pNewDeltaItem->m_color = GetColor( type ); 
+		pNewDeltaItem->m_color = GetColor( type, iDelta );
 		pNewDeltaItem->m_bShadows = false;
 		return &m_AccountDeltaItems[index];
 	}
@@ -1009,7 +1038,7 @@ account_delta_t *CAccountPanel::OnAccountValueChanged( int iOldValue, int iNewVa
 	return NULL;
 }
 
-Color CAccountPanel::GetColor( const account_delta_t::eAccountDeltaType_t& type )
+Color CAccountPanel::GetColor( const account_delta_t::eAccountDeltaType_t &type, const int iDeltaValue )
 {
 	if ( type == account_delta_t::ACCOUNT_DELTA_BONUS_POINTS )
 	{
@@ -1017,11 +1046,11 @@ Color CAccountPanel::GetColor( const account_delta_t::eAccountDeltaType_t& type 
 	}
 	else if ( type == account_delta_t::ACCOUNT_DELTA_HEALING )
 	{
-		return m_DeltaPositiveColor;
+		return ( iDeltaValue < 0 ) ? m_DeltaNegativeColor : m_DeltaPositiveColor;
 	}
 	else if ( type == account_delta_t::ACCOUNT_DELTA_DAMAGE )
 	{
-		return m_DeltaNegativeColor;
+		return Color( hud_combattext_red.GetInt(), hud_combattext_green.GetInt(), hud_combattext_blue.GetInt() );
 	}
 	else if ( type == account_delta_t::ACCOUNT_DELTA_ROBOT_DESTRUCTION_POINT_BLUE )
 	{
@@ -1154,71 +1183,3 @@ void CAccountPanel::Paint( void )
 	}
 }
 
-#ifdef STAGING_ONLY
-//-----------------------------------------------------------------------------
-// Purpose: 
-//-----------------------------------------------------------------------------
-class CBountyAccountPanel : public CHudAccountPanel
-{
-	DECLARE_CLASS_SIMPLE( CBountyAccountPanel, CHudAccountPanel );
-public:
-	CBountyAccountPanel( const char *pElementName ) : CHudAccountPanel( pElementName )
-	{
-	}
-
-	virtual const char *GetResFileName( void ) { return "resource/UI/HudDamageAccount.res"; }
-
-	//-----------------------------------------------------------------------------
-	// Purpose:
-	//-----------------------------------------------------------------------------
-	void Paint( void )
-	{
-		if ( TFGameRules() && ( !TFGameRules()->IsBountyMode() || TFGameRules()->IsMannVsMachineMode() ) )
-			return;
-
-		C_TFPlayer *pPlayer = C_TFPlayer::GetLocalTFPlayer();
-		if ( !pPlayer )
-			return;
-
-		int iScreenWide, iScreenTall;
-		GetHudSize( iScreenWide, iScreenTall );
-		int nX = iScreenWide * 0.06f;
-		int nY = iScreenTall * 0.97f;
-
-		Color cDPS( 25, 255, 25, 255 );
-		vgui::surface()->DrawSetTextFont( m_hDeltaItemFontBig );
-		vgui::surface()->DrawSetTextColor( cDPS );
-		vgui::surface()->DrawSetTextPos( nX, nY );
-
-		m_nCurrency = pPlayer->GetCurrency();
-		wchar_t wCurrency[20];
-		V_swprintf_safe( wCurrency, L"$%d", m_nCurrency );
-		vgui::surface()->DrawPrintText( wCurrency, wcslen( wCurrency ), FONT_DRAW_NONADDITIVE );
-
-		if ( pPlayer->GetCurrency() != m_nCurrency )
-		{
-			pPlayer->EmitSound( "Credits.Updated" );
-		}
-	}
-
-	//-----------------------------------------------------------------------------
-	// Purpose: 
-	//-----------------------------------------------------------------------------
-	bool ShouldDraw( void )
-	{
-		C_TFPlayer *pPlayer = C_TFPlayer::GetLocalTFPlayer();
-		if ( !pPlayer || !pPlayer->IsAlive() )
-			return false;
-
-		if ( TFGameRules() && ( !TFGameRules()->IsBountyMode() || TFGameRules()->IsMannVsMachineMode() ) )
-			return false;
-
-		return CHudElement::ShouldDraw();
-	}
-private:
-
-	int m_nCurrency;
-};
-
-DECLARE_HUDELEMENT( CBountyAccountPanel );
-#endif // STAGING_ONLY

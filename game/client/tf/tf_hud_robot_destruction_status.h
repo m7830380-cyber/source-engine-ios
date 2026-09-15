@@ -116,6 +116,7 @@ public:
 
 	virtual void FireGameEvent( IGameEvent *pEvent ) OVERRIDE;
 
+	void ReinitializeEverything();
 	
 	void UpdateRobotElements();
 private:

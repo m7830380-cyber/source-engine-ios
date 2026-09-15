@@ -841,6 +841,9 @@ void CTFStatPanel::OnTick()
 //-----------------------------------------------------------------------------
 void CTFStatPanel::Show()
 {
+	// Josh: See comment in tf_hud_freezepanel.cpp - CTFFreezePanel::Show()
+	MakeReadyForUse();
+
 	m_bShouldBeVisible = true;
 
 	HideLowerPriorityHudElementsInGroup( "mid" );

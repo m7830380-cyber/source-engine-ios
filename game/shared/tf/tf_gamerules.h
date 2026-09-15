@@ -31,6 +31,7 @@
 #include "c_tf_player.h"
 #else
 #include "tf_player.h"
+#include "entity_soldier_statue.h"
 #endif
 
 #ifdef CLIENT_DLL
@@ -73,6 +74,11 @@ extern ConVar	tf_arena_change_limit;
 extern ConVar	tf_ctf_bonus_time;
 extern ConVar	tf_mvm_respec_enabled;
 extern ConVar	tf_spawn_glows_duration;
+
+#ifdef GAME_DLL
+extern ConVar mp_tournament_prevent_team_switch_on_readyup;
+#endif
+
 #ifdef TF_RAID_MODE
 
 class CRaidLogic;
@@ -90,7 +96,9 @@ class CMannVsMachineUpgrades;
 //extern ConVar tf_populator_health_multiplier;
 //extern ConVar tf_populator_damage_multiplier;
 
-const int kMVM_DefendersTeamSize = 6;
+extern ConVar tf_mvm_defenders_team_size;
+extern ConVar tf_mvm_max_invaders;
+
 const int kLadder_TeamSize_6v6 = 6;
 const int kLadder_TeamSize_9v9 = 9;
 const int kLadder_TeamSize_12v12 = 12;
@@ -99,6 +107,9 @@ const int kLadder_TeamSize_12v12 = 12;
 #define TF_MVM_FCVAR_CHEAT FCVAR_CHEAT /* Cheats disabled */
 
 extern bool TF_IsHolidayActive( /*EHoliday*/ int eHoliday );
+#ifdef CLIENT_DLL
+bool BInEndOfMatch();
+#endif
 
 //=============================================================================
 // HPE_BEGIN
@@ -207,6 +218,7 @@ private:
 
 
 	bool	m_bOvertimeAllowedForCTF;
+	bool	m_bRopesHolidayLightsAllowed;
 #endif
 
 public: // IGameEventListener Interface
@@ -267,7 +279,7 @@ struct PlayerArenaRoundScore_t
 
 #ifdef CLIENT_DLL
 const char *GetMapType( const char *mapName );
-const char *GetMapDisplayName( const char *mapName );
+const char *GetMapDisplayName( const char *mapName, bool bTitleCase = false );
 #else
 
 class CKothLogic;
@@ -330,6 +342,8 @@ public:
 	virtual bool	ShouldBalanceTeams( void );
 
 	virtual int		GetBonusRoundTime( bool bGameOver = false ) OVERRIDE;
+
+	virtual bool	PointsMayBeCaptured( void ) OVERRIDE;
 
 #ifdef GAME_DLL
 public:
@@ -408,6 +422,7 @@ public:
 	bool			ShouldScorePerRound( void );
 
 	virtual bool	IsValveMap( void );
+	virtual bool 	IsOfficialMap();
 
 	virtual void	PlayTrainCaptureAlert( CTeamControlPoint *pPoint, bool bFinalPointInMap );
 
@@ -418,7 +433,6 @@ public:
 
 	virtual void	GetTaggedConVarList( KeyValues *pCvarTagList );
 
-	virtual bool	PointsMayBeCaptured( void );
 	virtual bool	PointsMayAlwaysBeBlocked(){ return ( GetGameType() == TF_GAMETYPE_ESCORT ); }
 
 	virtual void	PlaySpecialCapSounds( int iCappingTeam, CTeamControlPoint *pPoint );
@@ -456,8 +470,8 @@ public:
 	// Client connection/disconnection
 	virtual bool ClientConnected( edict_t *pEntity, const char *pszName, const char *pszAddress, char *reject, int maxrejectlen );
 
-	virtual bool ShouldSkipAutoScramble( void )
-	{ 
+	virtual bool ShouldSkipAutoScramble( void ) OVERRIDE
+	{
 		return IsPVEModeActive();
 	}
 
@@ -487,7 +501,18 @@ public:
 	void			SetMapForcedTruceDuringBossFight( bool bState ){ m_bMapForcedTruceDuringBossFight = bState; }
 	bool			IsMapForcedTruceDuringBossFight( void ){ return m_bMapForcedTruceDuringBossFight; }
 
+	void			CreateSoldierStatue();
+
+	virtual void	BroadcastSound( int iTeam, const char *sound, int iAdditionalSoundFlags = 0, CBasePlayer *pPlayer = NULL ) override;
+
+	void			RegisterScriptFunctions() override;
+
+	int				GetRoundState() { return (int)State_Get(); }
+
+	bool			InMatchStartCountdown() { return BInMatchStartCountdown(); }
+
 protected:
+
 	virtual void LoadMapCycleFile( void ) OVERRIDE;
 	void TrackWorkshopMapsInMapCycle( void );
 
@@ -586,14 +611,12 @@ bool IsCreepWaveMode( void ) const;
 	bool IsQuickBuildTime( void );
 
 	bool GameModeUsesUpgrades( void );
-	bool GameModeUsesCurrency( void ) { return IsMannVsMachineMode() || IsBountyMode(); }
+	bool GameModeUsesCurrency( void ) { return GameModeUsesUpgrades(); }
 	bool GameModeUsesMiniBosses( void ) { return IsMannVsMachineMode() || IsBountyMode(); }
+	bool GameModeUsesEscortPushLogic( void );
 
 	bool IsPasstimeMode() const { return m_nGameType == TF_GAMETYPE_PASSTIME; }
 
-#ifdef STAGING_ONLY
-	bool GameModeUsesExperience( void ) { return IsBountyMode(); }
-#endif // STAGING_ONLY
 	bool IsMannVsMachineRespecEnabled( void ) { return IsMannVsMachineMode() && tf_mvm_respec_enabled.GetBool(); }
 	bool CanPlayerUseRespec( CTFPlayer *pTFPlayer );
 	bool IsPowerupMode( void ) { return m_bPowerupMode; }
@@ -605,6 +628,7 @@ bool IsCreepWaveMode( void ) const;
 #endif
 
 	// Competitive games
+	bool IsCommunityGameMode( void ) const;
 	bool IsCompetitiveMode( void ) const;			// means we're using competitive/casual matchmaking
 	bool IsMatchTypeCasual( void ) const;
 	bool IsMatchTypeCompetitive( void ) const;
@@ -621,9 +645,10 @@ bool IsCreepWaveMode( void ) const;
 	void EndCompetitiveMatch( void );
 	void ManageCompetitiveMode( void );
 	bool ReportMatchResultsToGC( CMsgGC_Match_Result_Status nCode );
-	bool MatchmakingShouldUseStopwatchMode();
+	bool MatchmakingShouldUseStopwatchMode( void );
+	bool IsAttackDefenseMode( void );
 
-	EMatchGroup GetCurrentMatchGroup() const;
+	ETFMatchGroup GetCurrentMatchGroup() const;
 	bool IsManagedMatchEnded() const;
 
 	bool UsePlayerReadyStatusMode( void );
@@ -688,11 +713,7 @@ bool IsCreepWaveMode( void ) const;
 	int		GetStatsMinimumPlayedTime( void );
 
 	// BountyMode
-#ifdef STAGING_ONLY
-	bool IsBountyMode( void ) { return m_bBountyModeEnabled && !IsMannVsMachineMode() && !IsInTraining(); }
-#else
 	bool IsBountyMode( void ) { return false; }
-#endif
 
 	float GetGravityMultiplier(  void ){ return m_flGravityMultiplier; }
 
@@ -748,18 +769,15 @@ bool IsCreepWaveMode( void ) const;
 	MapDefIndex_t GetNextMapVoteOption( int nIndex ) const { return m_nNextMapVoteOptions.Get( nIndex ); }
 	
 #ifdef GAME_DLL
-	void UpdateNextMapVoteOptionsFromLobby();
 	void KickPlayersNewMatchIDRequestFailed();
 
 	void CheckAndSetPartyLeader( CTFPlayer *pTFPlayer, int iTeam );
 #endif // GAME_DLL
 
-#ifdef STAGING_ONLY
-#ifdef GAME_DLL
-	void SetBountyMode( bool bValue );
-#endif // GAME_DLL
 
-#endif // STAGING_ONLY
+#ifdef GAME_DLL
+	void RequestClientInventory( CSteamID steamID );
+#endif
 
 #ifdef CLIENT_DLL
 
@@ -988,6 +1006,8 @@ public:
 	void SetOvertimeAllowedForCTF( bool bAllowed ){ m_bOvertimeAllowedForCTF = bAllowed; }
 	bool GetOvertimeAllowedForCTF( void ){ return m_bOvertimeAllowedForCTF; }
 
+	void SetRopesHolidayLightsAllowed( bool bAllowed ) { m_bRopesHolidayLightsAllowed = bAllowed; }
+
 	const CUtlVector< CHandle< CBaseEntity > > &GetHealthEntityVector( void );		// return vector of health entities 
 	const CUtlVector< CHandle< CBaseEntity > > &GetAmmoEntityVector( void );		// return vector of ammo entities 
 
@@ -1008,9 +1028,6 @@ public:
 	void DropHalloweenSoulPackToTeam( int nAmount, const Vector& vecPosition, int nTeamNumber, int nSourceTeam );
 	void DropHalloweenSoulPack( int nAmount, const Vector& vecSource, CBaseEntity *pTarget, int nSourceTeam );
 
-#ifdef STAGING_ONLY
-	void MatchSummaryTest( void );
-#endif // STAGING_ONLY
 	void MatchSummaryStart( void );
 	void MatchSummaryEnd( void );
 
@@ -1025,7 +1042,12 @@ private:
 
 	void StopWatchShouldBeTimedWin_Calculate( void );
 	
+	void PowerupTeamImbalance_PlayerChangeTeam( CTFPlayer *pTFPlayer, int nTeam );
+	void PowerupTeamImbalance_SwapPlayers( int nLosingTeam );
+	
 #endif // GAME_DLL
+
+	bool GetRopesHolidayLightsAllowed( void ) { return m_bRopesHolidayLightsAllowed; }
 
 private:
 
@@ -1038,12 +1060,12 @@ private:
 	
 	void CheckHelltowerCartAchievement( int iTeam );
 
-	Vector2D	m_vecPlayerPositions[MAX_PLAYERS];
+	Vector2D	m_vecPlayerPositions[MAX_PLAYERS_ARRAY_SAFE];
 
 	CUtlVector<CHandle<CHealthKit> > m_hDisabledHealthKits;	
 
 
-	char	m_szMostRecentCappers[MAX_PLAYERS+1];	// list of players who made most recent capture.  Stored as string so it can be passed in events.
+	char	m_szMostRecentCappers[MAX_PLAYERS_ARRAY_SAFE];	// list of players who made most recent capture.  Stored as string so it can be passed in events.
 	int		m_iNumCaps[TF_TEAM_COUNT];				// # of captures ever by each team during a round
 
 	int SetCurrentRoundStateBitString();
@@ -1151,7 +1173,7 @@ private:
 	bool	m_bItemTesting_BotTurntable;
 	bool	m_bItemTesting_BotViewScan;
 
-	CNetworkVar( CHandle<CBonusRoundLogic>, m_hBonusLogic );
+	CNetworkHandle( CBonusRoundLogic, m_hBonusLogic );
 
 	CNetworkVar( bool, m_bPlayingKoth );
 	CNetworkVar( bool, m_bPowerupMode );
@@ -1179,6 +1201,8 @@ private:
 	CNetworkVar( bool, m_bTruceActive );
 	CNetworkVar( bool, m_bTeamsSwitched );
 
+	CNetworkVar( bool, m_bRopesHolidayLightsAllowed );
+
 #ifdef GAME_DLL
 	float	m_flNextFlagAlarm;
 	float	m_flNextFlagAlert;
@@ -1188,8 +1212,8 @@ private:
 	CBaseEntity *m_pUpgrades;
 #endif
 
-	CNetworkVar( CHandle<CTeamRoundTimer>, m_hRedKothTimer );
-	CNetworkVar( CHandle<CTeamRoundTimer>, m_hBlueKothTimer );
+	CNetworkHandle( CTeamRoundTimer, m_hRedKothTimer );
+	CNetworkHandle( CTeamRoundTimer, m_hBlueKothTimer );
 
 	CNetworkVar( int, m_nMapHolidayType ); // Used by map authors to indicate this is a holiday map
 
@@ -1202,7 +1226,7 @@ private:
 	// This is called m_ePlayerWantsRematch because we initially had rematches, but now we
 	// let players vote on the next map instead.  Can't rename this variable, so we're just
 	// going to use with the wrong name
-	CNetworkArray( EUserNextMapVote, m_ePlayerWantsRematch, MAX_PLAYERS + 1 );
+	CNetworkArray( EUserNextMapVote, m_ePlayerWantsRematch, MAX_PLAYERS_ARRAY_SAFE );
 	CNetworkVar( ENextMapVotingState, m_eRematchState );
 	CNetworkArray( MapDefIndex_t, m_nNextMapVoteOptions, 3 );
 
@@ -1214,13 +1238,7 @@ public:
 
 	float	GetCapturePointTime( void ) { return m_flCapturePointEnableTime; }
 
-	virtual bool ShouldDrawHeadLabels()
-	{ 
-		if ( IsInTournamentMode() )
-			return false;
-
-		return BaseClass::ShouldDrawHeadLabels();
-	}
+	virtual bool ShouldDrawHeadLabels() override;
 
 	enum HalloweenScenarioType
 	{
@@ -1397,8 +1415,13 @@ public:
 	CUtlVector< Vector > *GetHalloweenSpawnLocations() { return &m_halloweenGiftSpawnLocations; }
 
 	bool BAttemptMapVoteRollingMatch();
-
 	bool BIsManagedMatchEndImminent( void );
+
+	float CheckPowerupModeDominantDisconnect( CSteamID steamID );
+	void PowerupModeDominantDisconnect( CSteamID steamID, float flRemoveDominantConditionTime );
+
+	void ForceEnableUpgrades( int nState ) { m_nForceUpgrades = nState; }
+	void ForceEscortPushLogic( int nState ) { m_nForceEscortPushLogic = nState; }
 
 private:
 	CUtlVector< CHandle< CGhost > > m_ghostVector;
@@ -1417,11 +1440,30 @@ private:
 	float	m_flTimeToRunImbalanceMeasures;
 	float	m_flTimeToStopImbalanceMeasures;
 	bool	m_bPowerupImbalanceMeasuresRunning;
+	int		m_nLastPowerUpImbalanceTeam = TEAM_UNASSIGNED;
+	float	m_flLastPowerUpImbalanceTime = -1.f;
+	int		m_nPowerUpImbalanceVictimTeam = TEAM_UNASSIGNED;
+	float	m_flPowerUpImbalanceVictimTeamTime = -1.f;
+
+	// Every so often we analyze player kills to determine if any players are dominant
+	float	m_flNextPowerupModeKillCountTimer = -1.f;
+
+	void	PowerupModeInitKillCountTimer( void );
+	void	PowerupModeKillCountCompare( void );
+
+	struct PowerupModeDominantDisconnect_t
+	{
+		CSteamID m_steamID;
+		float m_flRemoveDominantConditionTime = -1.f;
+	};
+	CUtlVector< PowerupModeDominantDisconnect_t > m_PowerupModeDominantDisconnect;
 
 	bool	m_bMapCycleNeedsUpdate;
 
 	CUtlVector< Vector > m_halloweenGiftSpawnLocations;		// vector of valid gift spawn locations from the map
 	float	m_flCompModeRespawnPlayersAtMatchStart;
+
+	CHandle< CEntitySoldierStatue > m_hSoldierStatue = nullptr;
 
 #endif // GAME_DLL
 
@@ -1437,6 +1479,9 @@ private:
 	CNetworkVar( float, m_fHalloweenEffectStartTime );
 	CNetworkVar( float, m_fHalloweenEffectDuration );
 	CNetworkVar( HalloweenScenarioType, m_halloweenScenario );
+
+	CNetworkVar( int, m_nForceUpgrades );
+	CNetworkVar( int, m_nForceEscortPushLogic );
 
 // MvM Helpers
 #ifdef GAME_DLL
@@ -1790,6 +1835,8 @@ private:
 	COutputEvent m_onCountdown10SecRemain;
 	COutputEvent m_onCountdown5SecRemain;
 	COutputEvent m_onCountdownEnd;
+
+	int m_nTimerTeam = TF_TEAM_BLUE;
 };
 #endif
 
@@ -1820,7 +1867,7 @@ public:
 private:
 	CUtlSortVector< BONUSPLAYERPTR, CBonusPlayerListLess >	m_aBonusPlayerList;
 	CUtlVector<int>			m_aBonusPlayerRoll;
-	CNetworkVar( CHandle<CTFPlayer>, m_hBonusWinner );
+	CNetworkHandle( CTFPlayer, m_hBonusWinner );
 	CNetworkVar( bool,		m_bAbortedBonusRound );
 	itemid_t			m_iBonusItemID;
 	CNetworkVarEmbedded( CEconItemView,	m_Item );

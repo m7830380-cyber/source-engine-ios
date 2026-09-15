@@ -95,3 +95,8 @@ class CTFAchievementTeleporterTimingKills : public tBaseClass
 extern CAchievementMgr g_AchievementMgrTF;	// global achievement mgr for TF
 
 #endif // CLIENT_DLL
+
+#define ACHIEVEMENT_LIST(className, achievementID, achievementName, iPointValue) \
+	static int className##_YouForgotTheAchievementList;
+#include "achievements_tf_list.inc"
+#undef ACHIEVEMENT_LIST

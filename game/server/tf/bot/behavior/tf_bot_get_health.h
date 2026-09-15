@@ -26,7 +26,7 @@ public:
 
 private:
 	PathFollower m_path;
-	CHandle< CTFPowerup > m_healthKit;
+	CHandle< CBaseEntity > m_healthKit;
 	bool m_isGoalDispenser;
 };
 

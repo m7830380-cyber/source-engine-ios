@@ -130,6 +130,21 @@ void CTFProjectile_Flare::Spawn()
 	{
 		m_bIsFromTaunt = true;
 	}
+
+	CBaseEntity *pOwner = GetOwnerEntity();
+	if ( pOwner )
+	{
+		// If there's anything solid between the flare and the attacker, just fizzle it.
+		// We could change how we spawn flares in CTFWeaponBaseGun::FireFlare(), but it
+		// would change how flares fire.  Maybe that's OK?
+		trace_t trace;
+		CTraceFilterSimple traceFilter( this, COLLISION_GROUP_NONE );
+		UTIL_TraceLine( pOwner->EyePosition(), GetAbsOrigin(), MASK_SOLID_BRUSHONLY, &traceFilter, &trace );
+		if ( trace.fraction < 1.f && ( !trace.m_pEnt || trace.m_pEnt->m_takedamage == DAMAGE_NO ) )
+		{
+			Detonate( true );
+		}
+	}
 }
 
 //-----------------------------------------------------------------------------
@@ -233,8 +248,7 @@ void CTFProjectile_Flare::Explode( trace_t *pTrace, CBaseEntity *pOther )
 
 				bool bIsEnemy = pAttacker && pTFVictim->GetTeamNumber() != pAttacker->GetTeamNumber();
 				
-				// Quick Fix Uber and teammates are immune to the force
-				if ( !pTFVictim->m_Shared.InCond( TF_COND_MEGAHEAL ) && bIsEnemy )
+				if ( !pTFVictim->m_Shared.IsImmuneToPushback() && bIsEnemy )
 				{
 					Vector vecToTarget;
 					vecToTarget = vVelocity;
@@ -248,7 +262,7 @@ void CTFProjectile_Flare::Explode( trace_t *pTrace, CBaseEntity *pOther )
 					}
 					
 					float flForce = bIsBurningVictim ? 400.0f : 100.0f;
-					pTFVictim->ApplyAirBlastImpulse( vecToTarget * flForce );
+					pTFVictim->ApplyGenericPushbackImpulse( vecToTarget * flForce, ToTFPlayer( pAttacker ) );
 				}
 
 				// It loses almost all of its speed and pops into the air
@@ -399,17 +413,9 @@ void CTFProjectile_Flare::Explode_Air( trace_t *pTrace, int bitsDamageType, bool
 		if ( bSelfOnly )
 		{
 			bitsDamageType |= DMG_BLAST;
-			nSound = SPECIAL2;
+			nSound = SPECIAL3;
 		}
 
-#if defined( _DEBUG ) && defined( STAGING_ONLY )
-		// Debug!
-		ConVarRef tf_rocket_show_radius( "tf_rocket_show_radius" );
-		if ( tf_rocket_show_radius.GetBool() )
-		{
-			DrawRadius( flRadius );
-		}
-#endif
 		CTakeDamageInfo info( this, pAttacker, m_hLauncher, vec3_origin, vecOrigin, GetDamage(), bitsDamageType | DMG_HALF_FALLOFF, TF_DMG_CUSTOM_FLARE_EXPLOSION );
 		CTFRadiusDamageInfo radiusinfo( &info, vecOrigin, flRadius, NULL, TF_FLARE_RADIUS_FOR_FJS );
 		TFGameRules()->RadiusDamage( radiusinfo );

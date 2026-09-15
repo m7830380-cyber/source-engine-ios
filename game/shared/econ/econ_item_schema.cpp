@@ -14,7 +14,6 @@
 #include "gcsdk/gcsdk_auto.h"
 #include "rtime.h"
 #include "item_selection_criteria.h"
-#include "crypto.h"
 #include "checksum_sha1.h"
 
 #include <google/protobuf/text_format.h>
@@ -23,6 +22,8 @@
 #include "materialsystem/imaterialsystem.h"
 #include "materialsystem/itexture.h"
 #include "materialsystem/itexturecompositor.h"
+
+#include "econ_paintkit.h"
 
 #if ( defined( _MSC_VER ) && _MSC_VER >= 1900 )
 #define timezone _timezone
@@ -35,6 +36,8 @@
 // Only used for startup testing.
 #include "econ_item_tools.h"
 
+#include "econ_quests.h"
+
 #if defined(CLIENT_DLL) || defined(GAME_DLL)
 	#include "econ_item_system.h"
 	#include "econ_item.h"
@@ -45,10 +48,6 @@
 	#endif
 #endif
 
-#ifdef GC_DLL
-#include "gcgamebase.h"
-#include <memory>					// unique_ptr
-#endif
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
@@ -62,8 +61,6 @@ CEconItemSchema & GEconItemSchema()
 #if defined( EXTERNALTESTS_DLL )
 	static CEconItemSchema g_econItemSchema;
 	return g_econItemSchema;
-#elif defined( GC_DLL )
-	return *GEconManager()->GetItemSchema();
 #else
 	return *ItemSystem()->GetItemSchema();
 #endif
@@ -192,39 +189,6 @@ static void ParseCapability( item_capabilities_t &capsBitfield, KeyValues* pEntr
 	}
 }
 
-#ifdef GC_DLL
-static bool BGetPaymentRule( KeyValues *pKVRule, EPaymentRuleType *out_pePaymentRuleType, double *out_pRevenueShare )
-{
-	Assert( out_pePaymentRuleType );
-	Assert( out_pRevenueShare );
-
-	struct payment_rule_lookup_t
-	{
-		const char *m_pszStr;
-		EPaymentRuleType m_eRuleType;
-	};
-
-	static payment_rule_lookup_t s_Lookup[] =
-	{
-		{ "workshop_revenue_share",		kPaymentRule_SteamWorkshopFileID },
-		{ "partner_revenue_share",		kPaymentRule_PartnerSteamID },
-		{ "bundle_revenue_share",		kPaymentRule_Bundle },
-	};
-
-	for ( int i = 0; i < ARRAYSIZE( s_Lookup ); i++ )
-	{
-		KeyValues *pKVKey = pKVRule->FindKey( s_Lookup[i].m_pszStr );
-		if ( !pKVKey )
-			continue;
-
-		*out_pePaymentRuleType = s_Lookup[i].m_eRuleType;
-		*out_pRevenueShare = atof( pKVKey->GetString() ) * 100.0;				// KeyValues doesn't support parsing a string as a double-precision value, so we do it by hand
-		return true;
-	}
-
-	return false;
-}
-#endif // GC_DLL
 
 //-----------------------------------------------------------------------------
 // Purpose: CEconItemSeriesDefinition
@@ -328,9 +292,6 @@ bool CEconItemQualityDefinition::BInitFromKV( KeyValues *pKVQuality, CUtlVector<
 	m_nValue = pKVQuality->GetInt( "value", -1 );
 	m_strName = pKVQuality->GetName();	
 	m_bCanSupportSet = pKVQuality->GetBool( "canSupportSet" );
-#ifdef GC_DLL
-	m_strHexColor = pKVQuality->GetString( "hexColor" );
-#endif // GC_DLL
 
 	// Check for required fields
 	SCHEMA_INIT_CHECK( 
@@ -376,12 +337,6 @@ bool CEconItemRarityDefinition::BInitFromKV( KeyValues *pKVRarity, KeyValues *pK
 	m_strDropSound = pKVRarity->GetString( "drop_sound" );
 	m_strNextRarity = pKVRarity->GetString( "next_rarity" ); // Not required.
 
-#ifdef GC_DLL
-	if ( pKVRarityWeights )
-	{
-		m_nLootlistWeight = pKVRarityWeights->GetInt( m_strName, 0 );
-	}
-#endif
 	//
 
 	// Check for required fields
@@ -403,19 +358,11 @@ bool CEconColorDefinition::BInitFromKV( KeyValues *pKVColor, CUtlVector<CUtlStri
 {
 	m_strName		= pKVColor->GetName();
 	m_strColorName	= pKVColor->GetString( "color_name" );
-#ifdef GC_DLL
-	m_strHexColor	= pKVColor->GetString( "hex_color" );
-#endif // GC_DLL
 
 	SCHEMA_INIT_CHECK(
 		!m_strColorName.IsEmpty(),
 		"Quality definition %s: missing \"color_name\"", GetName() );
 
-#ifdef GC_DLL
-	SCHEMA_INIT_CHECK(
-		!m_strHexColor.IsEmpty(),
-		"Quality definition %s: missing \"hex_color\"", GetName() );
-#endif // GC_DLL
 
 	return SCHEMA_INIT_SUCCESS();
 }
@@ -424,7 +371,7 @@ bool CEconColorDefinition::BInitFromKV( KeyValues *pKVColor, CUtlVector<CUtlStri
 // 
 //-----------------------------------------------------------------------------
 CEconItemSetDefinition::CEconItemSetDefinition( void )
-	: m_pszName( NULL )
+	: m_strName( NULL )
 	, m_pszLocalizedName( NULL )
 	, m_iBundleItemDef( INVALID_ITEM_DEF_INDEX )
 	, m_bIsHiddenSet( false )
@@ -444,7 +391,7 @@ CEconItemSetDefinition::CEconItemSetDefinition( const CEconItemSetDefinition &th
 //-----------------------------------------------------------------------------
 CEconItemSetDefinition &CEconItemSetDefinition::operator=( const CEconItemSetDefinition &other )
 {
-	m_pszName = other.m_pszName;
+	m_strName = other.m_strName;
 	m_pszLocalizedName = other.m_pszLocalizedName;
 	m_iItemDefs = other.m_iItemDefs;
 	m_iAttributes = other.m_iAttributes;
@@ -459,13 +406,13 @@ CEconItemSetDefinition &CEconItemSetDefinition::operator=( const CEconItemSetDef
 //-----------------------------------------------------------------------------
 bool CEconItemSetDefinition::BInitFromKV( KeyValues *pKVItemSet, CUtlVector<CUtlString> *pVecErrors )
 {
-	m_pszName = pKVItemSet->GetName();
+	m_strName = pKVItemSet->GetName();
 
 	m_iBundleItemDef = INVALID_ITEM_DEF_INDEX;
 	const char *pszBundleName = pKVItemSet->GetString( "store_bundle" );
 	if ( pszBundleName && pszBundleName[0] )
 	{
-		CEconItemDefinition *pDef = GetItemSchema()->GetItemDefinitionByName( pszBundleName );
+		const CEconItemDefinition *pDef = GetItemSchema()->GetItemDefinitionByName( pszBundleName );
 		if ( pDef )
 		{
 			m_iBundleItemDef = pDef->GetDefinitionIndex();
@@ -473,7 +420,7 @@ bool CEconItemSetDefinition::BInitFromKV( KeyValues *pKVItemSet, CUtlVector<CUtl
 
 		SCHEMA_INIT_CHECK( 
 			pDef != NULL,
-			"Item set %s: Bundle definition \"%s\" was not found", m_pszName, pszBundleName );
+			"Item set %s: Bundle definition \"%s\" was not found", m_strName.Get(), pszBundleName );
 	}
 
 	m_pszLocalizedName = pKVItemSet->GetString( "name", NULL );
@@ -490,22 +437,22 @@ bool CEconItemSetDefinition::BInitFromKV( KeyValues *pKVItemSet, CUtlVector<CUtl
 
 			SCHEMA_INIT_CHECK( 
 				pDef != NULL,
-				"Item set %s: Item definition \"%s\" was not found", m_pszName, pszName );
+				"Item set %s: Item definition \"%s\" was not found", m_strName.Get(), pszName );
 
 			const item_definition_index_t unDefIndex = pDef->GetDefinitionIndex();
 
 			SCHEMA_INIT_CHECK(
 				!m_iItemDefs.IsValidIndex( m_iItemDefs.Find( unDefIndex ) ),
-				"Item set %s: item definition \"%s\" appears multiple times", m_pszName, pszName );
+				"Item set %s: item definition \"%s\" appears multiple times", m_strName.Get(), pszName );
 			SCHEMA_INIT_CHECK(
 				!pDef->GetItemSetDefinition(),
-				"Item set %s: item definition \"%s\" specified in multiple item sets", m_pszName, pszName );
+				"Item set %s: item definition \"%s\" specified in multiple item sets", m_strName.Get(), pszName );
 
 			m_iItemDefs.AddToTail( unDefIndex );
 			pDef->SetItemSetDefinition( this );
 
 			// FIXME: hack to work around crafting item criteria
-			pDef->GetRawDefinition()->SetString( "item_set", m_pszName );
+			pDef->GetRawDefinition()->SetString( "item_set", m_strName );
 		}
 	}
 
@@ -519,10 +466,10 @@ bool CEconItemSetDefinition::BInitFromKV( KeyValues *pKVItemSet, CUtlVector<CUtl
 			const CEconItemAttributeDefinition *pAttrDef = GetItemSchema()->GetAttributeDefinitionByName( pszName );
 			SCHEMA_INIT_CHECK( 
 				pAttrDef != NULL,
-				"Item set %s: Attribute definition \"%s\" was not found", m_pszName, pszName );
+				"Item set %s: Attribute definition \"%s\" was not found", m_strName.Get(), pszName );
 			SCHEMA_INIT_CHECK(
 				pAttrDef->BIsSetBonusAttribute(),
-				"Item set %s: Attribute definition \"%s\" is not a set bonus attribute", m_pszName, pszName );
+				"Item set %s: Attribute definition \"%s\" is not a set bonus attribute", m_strName.Get(), pszName );
 
 			int iIndex = m_iAttributes.AddToTail();
 			m_iAttributes[iIndex].m_iAttribDefIndex = pAttrDef->GetDefinitionIndex();
@@ -532,9 +479,9 @@ bool CEconItemSetDefinition::BInitFromKV( KeyValues *pKVItemSet, CUtlVector<CUtl
 
 	// Sanity check.
 	SCHEMA_INIT_CHECK( m_pszLocalizedName != NULL,
-		"Item set %s: Set contains no localized name", m_pszName );
+	                   "Item set %s: Set contains no localized name", m_strName.Get() );
 	SCHEMA_INIT_CHECK( m_iItemDefs.Count() > 0,
-		"Item set %s: Set contains no items", m_pszName );
+	                   "Item set %s: Set contains no items", m_strName.Get() );
 
 	return SCHEMA_INIT_SUCCESS();
 }
@@ -568,7 +515,7 @@ void CEconItemSetDefinition::IterateAttributes( class IEconItemAttributeIterator
 
 //-----------------------------------------------------------------------------
 CEconItemCollectionDefinition::CEconItemCollectionDefinition( void )
-	: m_pszName( NULL )
+	: m_strName( NULL )
 	, m_pszLocalizedName( NULL )
 	, m_pszLocalizedDesc( NULL )
 	, m_iRarityMin( k_unItemRarity_Any )
@@ -595,38 +542,48 @@ static int SortCollectionByRarity( item_definition_index_t const *a, item_defini
 		AssertMsg( 0, "ItemDef Doesn't exist for sorting" );
 		return 1;
 	}
+
+	bool bIsRarityEqual = ( pItemA->GetRarity() == pItemB->GetRarity() );
 	
 	// If same Rarity, leave in current position?
-	if ( pItemA->GetRarity() == pItemB->GetRarity() && pItemA->GetCustomPainkKitDefinition() && pItemB->GetCustomPainkKitDefinition() )
+	uint32 unPaintKitDefIndexA, unPaintKitDefIndexB;
+	if ( bIsRarityEqual && GetPaintKitDefIndex( pItemA, &unPaintKitDefIndexA ) && GetPaintKitDefIndex( pItemB, &unPaintKitDefIndexB ) )
 	{
 #ifdef CLIENT_DLL
 		// Sort by localized name
 		// paintkits sort by paintkit name
-		auto paintkitA = pItemA->GetCustomPainkKitDefinition();
-		auto paintkitB = pItemB->GetCustomPainkKitDefinition();
-		auto paintkitALocName = paintkitA->GetLocalizeName();
-		auto paintkitBLocName = paintkitB->GetLocalizeName();
-		auto pkALocalized = g_pVGuiLocalize->Find( paintkitALocName );
-		auto pkBLocalized = g_pVGuiLocalize->Find( paintkitBLocName );
-		if ( pkALocalized )
+		const CPaintKitDefinition* pPaintKitDefA = assert_cast< const CPaintKitDefinition* >( GetProtoScriptObjDefManager()->GetDefinition( ProtoDefID_t( DEF_TYPE_PAINTKIT_DEFINITION, unPaintKitDefIndexA ) ) );
+		const CPaintKitDefinition* pPaintKitDefB = assert_cast< const CPaintKitDefinition* >( GetProtoScriptObjDefManager()->GetDefinition( ProtoDefID_t( DEF_TYPE_PAINTKIT_DEFINITION, unPaintKitDefIndexB ) ) );
+
+		locchar_t pPaintKitStrA[MAX_ITEM_NAME_LENGTH];
+		locchar_t pPaintKitStrB[MAX_ITEM_NAME_LENGTH];
+
+		const wchar_t *wpszFormatString = g_pVGuiLocalize->Find( "#ToolPaintKit_ItemDescFormat" );
+		if ( !wpszFormatString )
 		{
-			if ( pkBLocalized )
-			{
-				return V_wcscmp( pkALocalized, pkBLocalized );
-			}
-			else
-			{
-				return -1;
-			}
+			wpszFormatString = L"%s1 %s2";
 		}
-		else
-		{
-			return pkBLocalized ? 1 : -1;
-		}
+		g_pVGuiLocalize->ConstructString_safe( pPaintKitStrA,
+				wpszFormatString,
+				2,
+				g_pVGuiLocalize->Find( pPaintKitDefA->GetDescriptionToken() ),
+				g_pVGuiLocalize->Find( pItemA->GetItemBaseName() ) );
+
+		g_pVGuiLocalize->ConstructString_safe( pPaintKitStrB,
+				wpszFormatString,
+				2,
+				g_pVGuiLocalize->Find( pPaintKitDefB->GetDescriptionToken() ),
+				g_pVGuiLocalize->Find( pItemB->GetItemBaseName() ) );
+
+		return V_wcscmp( pPaintKitStrA, pPaintKitStrB );
 #else
 		return 0;
 #endif
 	}
+
+	// If same Rarity, leave in current position?
+	if ( bIsRarityEqual )
+		return 0;
 
 	return ( pItemA->GetRarity() > pItemB->GetRarity() ) ? -1 : 1;
 }
@@ -635,7 +592,7 @@ static int SortCollectionByRarity( item_definition_index_t const *a, item_defini
 //-----------------------------------------------------------------------------
 bool CEconItemCollectionDefinition::BInitFromKV( KeyValues *pKVPItemCollection, CUtlVector<CUtlString> *pVecErrors )
 {
-	m_pszName = pKVPItemCollection->GetName();
+	m_strName = pKVPItemCollection->GetName();
 
 	m_pszLocalizedName = pKVPItemCollection->GetString( "name", NULL );
 	m_pszLocalizedDesc = pKVPItemCollection->GetString( "description", NULL );
@@ -649,7 +606,7 @@ bool CEconItemCollectionDefinition::BInitFromKV( KeyValues *pKVPItemCollection, 
 	bool bIsLootList = false;
 	if ( !m_bIsReferenceCollection )
 	{
-		pCollectionLootList = new KeyValues( m_pszName );
+		pCollectionLootList = new KeyValues( m_strName );
 	}
 
 	if ( pKVItems )
@@ -661,12 +618,12 @@ bool CEconItemCollectionDefinition::BInitFromKV( KeyValues *pKVPItemCollection, 
 			bIsLootList = true;
 			// Get the Rarity Value
 			const CEconItemRarityDefinition *pRarity = GetItemSchema()->GetRarityDefinitionByName( pKVRarity->GetName() );
-			SCHEMA_INIT_CHECK( pRarity != NULL, "Item collection %s: Rarity type \"%s\" was not found", m_pszName, pKVRarity->GetName() );
+			SCHEMA_INIT_CHECK( pRarity != NULL, "Item collection %s: Rarity type \"%s\" was not found", m_strName.Get(), pKVRarity->GetName() );
 			
 			// Create a lootlist
 			if ( !m_bIsReferenceCollection )
 			{
-				CFmtStr lootlistname( "%s_%s", m_pszName, pRarity->GetName() );
+				CFmtStr lootlistname( "%s_%s", m_strName.Get(), pRarity->GetName() );
 				const char *pszName = V_strdup( lootlistname.Get() );
 				pKVRarity->SetInt( "rarity", pRarity->GetDBValue() );
 				SCHEMA_INIT_CHECK( GetItemSchema()->BInsertLootlist( pszName, pKVRarity, pVecErrors ), "Invalid collection lootlist %s", pszName );
@@ -686,13 +643,13 @@ bool CEconItemCollectionDefinition::BInitFromKV( KeyValues *pKVPItemCollection, 
 
 				SCHEMA_INIT_CHECK(
 					pDef != NULL,
-					"Item set %s: Item definition \"%s\" was not found", m_pszName, pszName );
+					"Item set %s: Item definition \"%s\" was not found", m_strName.Get(), pszName );
 
 				const item_definition_index_t unDefIndex = pDef->GetDefinitionIndex();
 
 				SCHEMA_INIT_CHECK(
 					!m_iItemDefs.IsValidIndex( m_iItemDefs.Find( unDefIndex ) ),
-					"Item Collection %s: item definition \"%s\" appears multiple times", m_pszName, pszName );
+					"Item Collection %s: item definition \"%s\" appears multiple times", m_strName.Get(), pszName );
 
 				m_iItemDefs.AddToTail( unDefIndex );
 
@@ -701,7 +658,7 @@ bool CEconItemCollectionDefinition::BInitFromKV( KeyValues *pKVPItemCollection, 
 				{
 					SCHEMA_INIT_CHECK(
 						!pDef->GetItemCollectionDefinition(),
-						"Item Collection %s: item definition \"%s\" specified in multiple item sets", m_pszName, pszName );
+						"Item Collection %s: item definition \"%s\" specified in multiple item sets", m_strName.Get(), pszName );
 					pDef->SetItemCollectionDefinition( this );
 				}
 
@@ -719,13 +676,13 @@ bool CEconItemCollectionDefinition::BInitFromKV( KeyValues *pKVPItemCollection, 
 
 			SCHEMA_INIT_CHECK(
 				pDef != NULL,
-				"Item set %s: Item definition \"%s\" was not found", m_pszName, pszName );
+				"Item set %s: Item definition \"%s\" was not found", m_strName.Get(), pszName );
 
 			const item_definition_index_t unDefIndex = pDef->GetDefinitionIndex();
 
 			SCHEMA_INIT_CHECK(
 				!m_iItemDefs.IsValidIndex( m_iItemDefs.Find( unDefIndex ) ),
-				"Item Collection %s: item definition \"%s\" appears multiple times", m_pszName, pszName );
+				"Item Collection %s: item definition \"%s\" appears multiple times", m_strName.Get(), pszName );
 			
 			m_iItemDefs.AddToTail( unDefIndex );
 
@@ -733,25 +690,39 @@ bool CEconItemCollectionDefinition::BInitFromKV( KeyValues *pKVPItemCollection, 
 			{
 				SCHEMA_INIT_CHECK(
 					!pDef->GetItemCollectionDefinition(),
-					"Item Collection %s: item definition \"%s\" specified in multiple item sets", m_pszName, pszName );
+					"Item Collection %s: item definition \"%s\" specified in multiple item sets", m_strName.Get(), pszName );
 				pDef->SetItemCollectionDefinition( this );
 			}
 		}
-
-		// Sort by Rarity
-		m_iItemDefs.Sort( &SortCollectionByRarity );
 	}
 
 	if ( !m_bIsReferenceCollection && bIsLootList )
 	{
 		// Insert collection lootlist
-		GetItemSchema()->BInsertLootlist( m_pszName, pCollectionLootList, pVecErrors );
+		GetItemSchema()->BInsertLootlist( m_strName, pCollectionLootList, pVecErrors );
 	}
 
 	if ( pCollectionLootList )
 	{
 		pCollectionLootList->deleteThis();
 	}
+
+	// Sanity check.
+	SCHEMA_INIT_CHECK( m_pszLocalizedName != NULL,
+		"Item Collection %s: Collection contains no localized name", m_strName.Get() );
+	SCHEMA_INIT_CHECK( m_pszLocalizedDesc != NULL,
+		"Item Collection %s: Collection contains no localized description", m_strName.Get() );
+	SCHEMA_INIT_CHECK( m_iItemDefs.Count() > 0,
+		"Item Collection %s: Collection contains no items", m_strName.Get() );
+
+	return SCHEMA_INIT_SUCCESS();
+}
+
+//-----------------------------------------------------------------------------
+bool CEconItemCollectionDefinition::BPostSchemaInit( CUtlVector<CUtlString> *pVecErrors )
+{
+	// Sort by Rarity
+	m_iItemDefs.Sort( &SortCollectionByRarity );
 
 	// Sorted high to low
 	m_iRarityMax = GetItemSchema()->GetItemDefinition( m_iItemDefs[ 0 ] )->GetRarity();
@@ -764,111 +735,12 @@ bool CEconItemCollectionDefinition::BInitFromKV( KeyValues *pKVPItemCollection, 
 		FOR_EACH_VEC( m_iItemDefs, i )
 		{
 			int iNextRarity = GetItemSchema()->GetItemDefinition( m_iItemDefs[i] )->GetRarity();
-			SCHEMA_INIT_CHECK( iRarityVerify - iNextRarity <= 1, "Items in Collection %s: Have a gap in rarity tiers", m_pszName );
+			SCHEMA_INIT_CHECK( iRarityVerify - iNextRarity <= 1, "Items in Collection %s: Have a gap in rarity tiers", m_strName.Get() );
 			iRarityVerify = iNextRarity;
 		}
 	}
 
-	// Sanity check.
-	SCHEMA_INIT_CHECK( m_pszLocalizedName != NULL,
-		"Item Collection %s: Collection contains no localized name", m_pszName );
-	SCHEMA_INIT_CHECK( m_pszLocalizedDesc != NULL,
-		"Item Collection %s: Collection contains no localized description", m_pszName );
-	SCHEMA_INIT_CHECK( m_iItemDefs.Count() > 0,
-		"Item Collection %s: Collection contains no items", m_pszName );
-
 	return SCHEMA_INIT_SUCCESS();
-}
-
-//-----------------------------------------------------------------------------
-// CEconItemPaintKitDefinition
-//-----------------------------------------------------------------------------
-CEconItemPaintKitDefinition::CEconItemPaintKitDefinition( void )
-	: m_pszName( NULL )
-{
-}
-
-//-----------------------------------------------------------------------------
-CEconItemPaintKitDefinition::~CEconItemPaintKitDefinition( void )
-{
-	FOR_EACH_VEC( m_vecPaintKitWearKVP, i )
-	{
-		if ( m_vecPaintKitWearKVP[i] )
-		{
-			m_vecPaintKitWearKVP[i]->deleteThis();
-		}
-	}
-
-	m_vecPaintKitWearKVP.Purge();
-}
-
-bool VerifyPaintKitComposite( KeyValues *pKVWearInputItems, const char* pName, int iWearLevel, CUtlVector<CUtlString> *pVecErrors )
-{
-	SCHEMA_INIT_CHECK( pKVWearInputItems != NULL, "Paint Kit %s: Does not contain Wear Level %d", pName, iWearLevel );
-#ifdef CLIENT_DLL
-	int w = 1;
-	int h = 1;
-	int seed = 0;
-	ITextureCompositor* pWeaponSkinBaseCompositor = NULL;
-
-	SafeAssign( &pWeaponSkinBaseCompositor, materials->NewTextureCompositor( w, h, pName, TF_TEAM_RED, seed, pKVWearInputItems, TEX_COMPOSITE_CREATE_FLAGS_VERIFY_SCHEMA_ONLY ) );
-	SCHEMA_INIT_CHECK( pWeaponSkinBaseCompositor != NULL, "Could Not Create Weapon Skin Compositor for [%s][Wear %d][Team Red]", pName, iWearLevel);
-	SafeRelease( &pWeaponSkinBaseCompositor );
-
-	SafeAssign( &pWeaponSkinBaseCompositor, materials->NewTextureCompositor( w, h, pName, TF_TEAM_BLUE, seed, pKVWearInputItems, TEX_COMPOSITE_CREATE_FLAGS_VERIFY_SCHEMA_ONLY ) );
-	SCHEMA_INIT_CHECK( pWeaponSkinBaseCompositor != NULL, "Could Not Create Weapon Skin Compositor for [%s][Wear %d][Team BLUE]", pName, iWearLevel );
-	SafeRelease( &pWeaponSkinBaseCompositor );
-#endif // CLIENT_DLL
-	return SCHEMA_INIT_SUCCESS();
-}
-
-//-----------------------------------------------------------------------------
-bool CEconItemPaintKitDefinition::BInitFromKV( KeyValues *pKVPItemPaintKit, CUtlVector<CUtlString> *pVecErrors )
-{
-	m_pszName = pKVPItemPaintKit->GetName();
-	m_pszLocalizedName = m_pszName;		// localization key is same as paintkit name for ease of generation
-
-	SCHEMA_INIT_CHECK( m_pszLocalizedName != NULL, "Paint Kit %s: PaintKit contains no localized name", m_pszName );
-
-	KeyValues *pKVWearInputItems = NULL;
-
-	pKVWearInputItems = pKVPItemPaintKit->FindKey( "wear_level_1", false );
-	SCHEMA_INIT_CHECK( VerifyPaintKitComposite( pKVWearInputItems, m_pszName, 1, pVecErrors ), "Could Not Create Weapon Skin Compositor for [%s][Wear %d]", m_pszName, 1 );
-	m_vecPaintKitWearKVP.AddToTail( pKVWearInputItems->MakeCopy() );
-	
-	pKVWearInputItems = pKVPItemPaintKit->FindKey( "wear_level_2", false );
-	SCHEMA_INIT_CHECK( VerifyPaintKitComposite( pKVWearInputItems, m_pszName, 2, pVecErrors ), "Could Not Create Weapon Skin Compositor for [%s][Wear %d]", m_pszName, 2 );
-	m_vecPaintKitWearKVP.AddToTail( pKVWearInputItems->MakeCopy() );
-
-	pKVWearInputItems = pKVPItemPaintKit->FindKey( "wear_level_3", false );
-	SCHEMA_INIT_CHECK( VerifyPaintKitComposite( pKVWearInputItems, m_pszName, 3, pVecErrors ), "Could Not Create Weapon Skin Compositor for [%s][Wear %d]", m_pszName, 3 );
-	m_vecPaintKitWearKVP.AddToTail( pKVWearInputItems->MakeCopy() );
-
-	pKVWearInputItems = pKVPItemPaintKit->FindKey( "wear_level_4", false );
-	SCHEMA_INIT_CHECK( VerifyPaintKitComposite( pKVWearInputItems, m_pszName, 4, pVecErrors ), "Could Not Create Weapon Skin Compositor for [%s][Wear %d]", m_pszName, 4 );
-	m_vecPaintKitWearKVP.AddToTail( pKVWearInputItems->MakeCopy() );
-
-	pKVWearInputItems = pKVPItemPaintKit->FindKey( "wear_level_5", false );
-	SCHEMA_INIT_CHECK( VerifyPaintKitComposite( pKVWearInputItems, m_pszName, 5, pVecErrors ), "Could Not Create Weapon Skin Compositor for [%s][Wear %d]", m_pszName, 5 );
-	m_vecPaintKitWearKVP.AddToTail( pKVWearInputItems->MakeCopy() );
-
-	return SCHEMA_INIT_SUCCESS();
-}
-
-KeyValues *CEconItemPaintKitDefinition::GetPaintKitWearKV( int nWear )
-{
-	// Wear is 1-5 but this vec is 0-4
-	int iIndex = nWear - 1;
-
-	if ( !m_vecPaintKitWearKVP.IsValidIndex( iIndex ) )
-	{
-		iIndex = 0;
-		Assert( m_vecPaintKitWearKVP.IsValidIndex( iIndex ) );
-		DevMsg( "Invalid Paint Kit or Paint Kit Wear Entry (%s) Wear (%d).", m_pszName, nWear );
-		return NULL;
-	}
-
-	return m_vecPaintKitWearKVP[iIndex];
 }
 
 //-----------------------------------------------------------------------------
@@ -895,13 +767,13 @@ bool CEconOperationDefinition::BInitFromKV( KeyValues *pKVPOperation, CUtlVector
 	m_unOperationID = V_atoi( pKVPOperation->GetName() );
 
 	m_pszName = pKVPOperation->GetString( "name", NULL );
-	SCHEMA_INIT_CHECK( m_pszName != NULL, "OperationDefinition %s does not have 'name'", m_pszName );
+	SCHEMA_INIT_CHECK( m_pszName != NULL, "OperationDefinition does not have 'name'" );
 
 	// initialize required item def index if we specified one
 	const char *pszRequiredName = pKVPOperation->GetString( "required_item_name", NULL );
 	if ( pszRequiredName )
 	{
-		CEconItemDefinition *pDef = GetItemSchema()->GetItemDefinitionByName( pszRequiredName );
+		const CEconItemDefinition *pDef = GetItemSchema()->GetItemDefinitionByName( pszRequiredName );
 		SCHEMA_INIT_CHECK( pDef != NULL, "OperationDefinition couldn't find item def from required name '%s'", pszRequiredName );
 
 		m_unRequiredItemDefIndex = pDef->GetDefinitionIndex();
@@ -910,7 +782,7 @@ bool CEconOperationDefinition::BInitFromKV( KeyValues *pKVPOperation, CUtlVector
 	const char *pszGatewayItemName = pKVPOperation->GetString( "gateway_item_name", NULL );
 	if ( pszGatewayItemName )
 	{
-		CEconItemDefinition *pDef = GetItemSchema()->GetItemDefinitionByName( pszGatewayItemName );
+		const CEconItemDefinition *pDef = GetItemSchema()->GetItemDefinitionByName( pszGatewayItemName );
 		SCHEMA_INIT_CHECK( pDef != NULL, "OperationDefinition couldn't find item def from gateway name '%s'", pszGatewayItemName );
 
 		m_unGatewayItemDefIndex = pDef->GetDefinitionIndex();
@@ -921,227 +793,74 @@ bool CEconOperationDefinition::BInitFromKV( KeyValues *pKVPOperation, CUtlVector
 		SCHEMA_INIT_CHECK( m_unRequiredItemDefIndex != INVALID_ITEM_DEF_INDEX, "If a gateway item is set, a required item must be set!  Mismatch in %d", m_unOperationID );
 	}
 
-	const char *pszOperationStartDate = pKVPOperation->GetString( "operation_start_date", NULL );
-	SCHEMA_INIT_CHECK( pszOperationStartDate != NULL, "OperationDefinition %s does not have 'operation_start_date'", m_pszName );
-	m_OperationStartDate = ( pszOperationStartDate && pszOperationStartDate[0] )
-							? CRTime::RTime32FromFmtString( "YYYY-MM-DD hh:mm:ss" , pszOperationStartDate )
-							: RTime32(0);
+	auto lambdaGetTime = [ &pKVPOperation, this, &pVecErrors ]( const char* pszKey ) -> RTime32
+	{
+		const char *pszTime = pKVPOperation->GetString( pszKey, NULL );
+		SCHEMA_INIT_CHECK( pszTime != NULL, "OperationDefinition %s does not have '%s'", m_pszName, pszKey );
+		return ( pszTime && pszTime[0] )	? CRTime::RTime32FromFmtString( "YYYY-MM-DD hh:mm:ss" , pszTime )
+											: RTime32(0);
+	};
 
-	const char *pszDropEndDate = pKVPOperation->GetString( "stop_giving_to_player_date", NULL );
-	SCHEMA_INIT_CHECK( pszDropEndDate != NULL, "OperationDefinition %s does not have 'stop_giving_to_player_date'", m_pszName );
-	m_StopGivingToPlayerDate = ( pszDropEndDate && pszDropEndDate[0] )
-							? CRTime::RTime32FromFmtString( "YYYY-MM-DD hh:mm:ss" , pszDropEndDate )
-							: RTime32(0);
-
-	const char *pszOperationEndDate = pKVPOperation->GetString( "stop_adding_to_queue_date", NULL );
-	SCHEMA_INIT_CHECK( pszOperationEndDate != NULL, "OperationDefinition %s does not have 'stop_adding_to_queue_date'", m_pszName );
-	m_StopAddingToQueueDate = ( pszOperationEndDate && pszOperationEndDate[0] )
-							? CRTime::RTime32FromFmtString( "YYYY-MM-DD hh:mm:ss" , pszOperationEndDate )
-							: RTime32(0);
+	m_OperationStartDate		= lambdaGetTime( "operation_start_date" );
+	m_StopGivingToPlayerDate	= lambdaGetTime( "stop_giving_to_player_date" );
+	m_StopAddingToQueueDate		= lambdaGetTime( "stop_adding_to_queue_date" );
+	m_ContractProgressEndDate	= lambdaGetTime( "contracts_end_date" );
 
 	m_pszQuestLogResFile	= pKVPOperation->GetString( "quest_log_res_file", NULL );
 	m_pszQuestListResFile	= pKVPOperation->GetString( "quest_list_res_file", NULL );
 
-	m_pszOperationLootList	= pKVPOperation->GetString( "operation_lootlist" );
-	SCHEMA_INIT_CHECK( m_pszOperationLootList != NULL, "OperationDefinition %s does not have 'operation_lootlist'", m_pszName );
+	m_pszOperationLootList	= pKVPOperation->GetString( "operation_lootlist", NULL );
+	m_bUsesCredits			= pKVPOperation->GetBool( "uses_credits" );
+	m_nKillEaterEventType_Contracts	= pKVPOperation->GetInt( "killeater_event_contracts", -1 );
+	m_nKillEaterEventType_Points = pKVPOperation->GetInt( "killeater_event_points", -1 );
+
+	SCHEMA_INIT_CHECK( ( !!m_pszOperationLootList || m_bUsesCredits ), "Operation %s does not specify a lootlist or that it uses credits.", GetName() );
 
 	m_bIsCampaign			= pKVPOperation->GetBool( "is_campaign" );
 	m_unMaxDropCount		= pKVPOperation->GetInt( "max_drop_count" );
 
-#ifdef GC_DLL
-
-	m_rtQueueFreqMin	= pKVPOperation->GetFloat( "queue_freq_min" ) * k_nSecondsPerHour; // converts specified hours to seconds
-	SCHEMA_INIT_CHECK( m_rtQueueFreqMin != 0.f, "OperationDefinition %s does not have 'queue_freq_min'", m_pszName );
-
-	m_rtQueueFreqMax	= pKVPOperation->GetFloat( "queue_freq_max" ) * k_nSecondsPerHour; // converts specified hours to seconds
-	SCHEMA_INIT_CHECK( m_rtQueueFreqMax != 0.f, "OperationDefinition %s does not have 'queue_freq_max'", m_pszName );
-
-	SCHEMA_INIT_CHECK( m_rtQueueFreqMin <= m_rtQueueFreqMax, "OperationDefinition %s 'queue_freq_min' must be less than 'queue_freq_max'", m_pszName );
-
-	m_rtDropFreqMin		= pKVPOperation->GetFloat( "drop_freq_min" ) * k_nSecondsPerHour; // converts specified hours to seconds
-	SCHEMA_INIT_CHECK( m_rtDropFreqMin != 0.f, "OperationDefinition %s does not have 'drop_freq_min'", m_pszName );
-
-	m_rtDropFreqMax		= pKVPOperation->GetFloat( "drop_freq_max" ) * k_nSecondsPerHour; // converts specified hours to seconds
-	SCHEMA_INIT_CHECK( m_rtDropFreqMax != 0.f, "OperationDefinition %s does not have 'drop_freq_max'", m_pszName );
-
-	SCHEMA_INIT_CHECK( m_rtDropFreqMin <= m_rtDropFreqMax, "OperationDefinition %s 'drop_freq_min' must be less than 'drop_freq_max'", m_pszName );
-	
-	m_unSeed			= pKVPOperation->GetInt( "seed_drops" );
-	m_unMaxHeldDrops	= pKVPOperation->GetInt( "max_held_drops" );
-	m_nMaxQueueCount	= pKVPOperation->GetInt( "max_queue_count" );
-	m_unMaxDropPerThink	= pKVPOperation->GetInt( "max_drop_per_think", 1 );
-
-	m_pszContractRewardLootlist[ REWARD_CASE ]		= pKVPOperation->GetString( "contract_reward_case_lootlist" );
-	m_pszContractRewardLootlist[ REWARD_WEAPON ]	= pKVPOperation->GetString( "contract_reward_weapon_lootlist" );
-
-#endif // GC_DLL
 
 	m_pKVItem = pKVPOperation->MakeCopy();
 
 	return SCHEMA_INIT_SUCCESS();
 }
 
-#ifdef GC_DLL
-#ifdef STAGING_ONLY
-	GCConVar gc_quick_operation_drop_name( "gc_quick_operation_drop_name", "" );
-	GCConVar gc_quick_operation_drop_rate( "gc_quick_operation_drop_rate", "10" );
-#endif // STAGING_ONLY
 
-RTime32	CEconOperationDefinition::GetMinQueueFreq() const
-{ 
-#ifdef STAGING_ONLY
-	if ( Q_stricmp( gc_quick_operation_drop_name.GetString(), m_pszName ) == 0 )
-	{
-		return gc_quick_operation_drop_rate.GetInt();
-	}
-#endif
-
-	return m_rtQueueFreqMin;
-}
-
-RTime32	CEconOperationDefinition::GetMaxQueueFreq() const
-{ 
-#ifdef STAGING_ONLY
-	if ( Q_stricmp( gc_quick_operation_drop_name.GetString(), m_pszName ) == 0 )
-	{
-		return gc_quick_operation_drop_rate.GetInt() + 2;
-	}
-#endif
-
-	return m_rtQueueFreqMax;
-}
-
-RTime32	CEconOperationDefinition::GetMinDropFreq() const 
-{ 
-#ifdef STAGING_ONLY
-	if ( Q_stricmp( gc_quick_operation_drop_name.GetString(), m_pszName ) == 0 )
-	{
-		return gc_quick_operation_drop_rate.GetInt();
-	}
-#endif
-
-	return m_rtDropFreqMin;
-}
-
-RTime32	CEconOperationDefinition::GetMaxDropFreq() const 
-{ 
-#ifdef STAGING_ONLY
-	if ( Q_stricmp( gc_quick_operation_drop_name.GetString(), m_pszName ) == 0 )
-	{
-		return gc_quick_operation_drop_rate.GetInt() + 2;
-	}
-#endif
-
-	return m_rtDropFreqMax;
-}
-
-//-----------------------------------------------------------------------------
-// Purpose:
-//-----------------------------------------------------------------------------
-bool BCommonInitPropertyGeneratorsFromKV( const char *pszContext, CUtlVector<const IEconItemPropertyGenerator *> *out_pvecGenerators, KeyValues *pKV, CUtlVector<CUtlString> *pVecErrors )
+bool BAddLootlistJobFromTemplates( const char *pszContext, CUtlVector<CLootlistJob*> &out_jobs, KeyValues *pLootlistJobKV, const CEconItemSchema *pschema, CUtlVector<CUtlString> *pVecErrors = NULL )
 {
-	// Forward declaration so factory functions can be wherever.
-	IEconItemPropertyGenerator *CreateChangeQualityGenerator( KeyValues *, CUtlVector<CUtlString> * );
-	IEconItemPropertyGenerator *CreateRandomEvenChanceAttrGenerator( KeyValues *, CUtlVector<CUtlString> * );
-	IEconItemPropertyGenerator *CreateUniformLineItemLootListGenerator( KeyValues *, CUtlVector<CUtlString> * );
-	IEconItemPropertyGenerator *CreateDynamicAttrsGenerator( KeyValues *, CUtlVector<CUtlString> * );
-	
-	// "Factory".
-	struct econ_item_property_generator_factory_entry_t
-	{
-		const char *m_pszGeneratorName;
-		IEconItemPropertyGenerator * (* m_funcCreateGeneratorInstance)( KeyValues *, CUtlVector<CUtlString> * );
-	};
-
-	static econ_item_property_generator_factory_entry_t s_Generators[] =
-	{
-		{ "change_quality",					&CreateChangeQualityGenerator },
-		{ "random_even_chance_attr",		&CreateRandomEvenChanceAttrGenerator },
-		{ "uniform_line_item_loot_list",	&CreateUniformLineItemLootListGenerator },
-		{ "dynamic_attrs",					&CreateDynamicAttrsGenerator },
-	};
-
-	Assert( out_pvecGenerators );
-	Assert( pVecErrors );
-
-	// No input data means "we succeeded here".
-	if ( !pKV )
+	if ( !pLootlistJobKV )
 		return true;
 
-	// Handle each generator one at a time. We'll try to initialize the whole set to get as many
-	// errors as possible and then return accumulated errors.
-	FOR_EACH_SUBKEY( pKV, pKVGenerator )
+	FOR_EACH_SUBKEY( pLootlistJobKV, pTemplateKV )
 	{
-		const char *pszGeneratorName = pKVGenerator->GetName();
+		if ( pTemplateKV->GetBool() == false )
+			continue;
 
-		IEconItemPropertyGenerator *pGenerator = NULL;
-		for ( const auto& gen : s_Generators )
-		{
-			if ( Q_stricmp( gen.m_pszGeneratorName, pszGeneratorName ) != 0 )
-				continue;
+		const char *pszJobName = pTemplateKV->GetName();
 
-			pGenerator = (*gen.m_funcCreateGeneratorInstance)( pKVGenerator, pVecErrors );
-			SCHEMA_INIT_CHECK( pGenerator != nullptr, "%s: property generator \"%s\" failed to initialize.\n", pszContext, pszGeneratorName );
-		
-			out_pvecGenerators->AddToTail( pGenerator );
-			break;
-		}
+		// try to find attr by template name
+		CLootlistJob *pJobTemplate = pschema->GetLootlistJobTemplateByName( pszJobName );
+	
+		SCHEMA_INIT_CHECK(
+			NULL != pJobTemplate,
+			"Context %s: Couldn't find CLootlistJob '%s' from lootlist_job_templates", pszContext, pszJobName );
 
-		// Make sure we found a way to create this instance.
-		SCHEMA_INIT_CHECK( pGenerator != nullptr, "%s: unknown type for property generator \"%s\".\n", pszContext, pszGeneratorName );
+		// create a copy of the template and add to the list
+		CLootlistJob *pJob = new CLootlistJob( pszContext );
+		*pJob = *pJobTemplate;
+		out_jobs.AddToTail( pJob );
 	}
 
-	return SCHEMA_INIT_SUCCESS();
+	return true;
 }
-#endif // GC_DLL
 
 //-----------------------------------------------------------------------------
 // Dtor
 //-----------------------------------------------------------------------------
 CEconLootListDefinition::~CEconLootListDefinition( void )
 {
-#ifdef GC_DLL
-	m_RandomAttribs.PurgeAndDeleteElements();
-	m_PropertyGenerators.PurgeAndDeleteElements();
-#endif
 }
 
-#ifdef GC_DLL
-bool CEconLootListDefinition::AddRandomAtrributes( KeyValues *pRandomAttributesKV, CEconItemSchema &pschema, CUtlVector<CUtlString> *pVecErrors /*= NULL*/ )
-{
-	const char *pszAttrName = pRandomAttributesKV->GetName();
-
-	// We've found the random attribute block. Parse it.
-	random_attrib_t *pRandomAttr = pschema.CreateRandomAttribute( m_pszName, pRandomAttributesKV, pVecErrors );
-	
-	SCHEMA_INIT_CHECK(
-		NULL != pRandomAttr,
-		CFmtStr( "Loot List %s: Failed to create random_attrib_t '%s'", m_pszName, pszAttrName ) );
-
-	m_RandomAttribs.AddToTail( pRandomAttr );
-
-	return true;
-}
-
-bool CEconLootListDefinition::AddRandomAttributesFromTemplates( KeyValues *pRandomAttributesKV, CEconItemSchema &pschema, CUtlVector<CUtlString> *pVecErrors /*= NULL*/ )
-{
-	const char *pszAttrName = pRandomAttributesKV->GetName();
-
-	// try to find attr by template name
-	random_attrib_t *pRandomAttrTemplate = pschema.GetRandomAttributeTemplateByName( pszAttrName );
-	
-	SCHEMA_INIT_CHECK(
-		NULL != pRandomAttrTemplate,
-		CFmtStr( "Loot List %s: Couldn't find random_attrib_t '%s' from attribute_templates", m_pszName, pszAttrName ) );
-
-	// craete a copy of the template and add to the list
-	random_attrib_t *pRandomAttr = new random_attrib_t;
-	*pRandomAttr = *pRandomAttrTemplate;
-	m_RandomAttribs.AddToTail( pRandomAttr );
-
-	return true;
-}
-#endif // GC_DLL
 //-----------------------------------------------------------------------------
 // 
 //-----------------------------------------------------------------------------
@@ -1149,15 +868,11 @@ static const char *g_pszDefaultRevolvingLootListHeader = "#Econ_Revolving_Loot_L
 
 bool CEconLootListDefinition::BInitFromKV( KeyValues *pKVLootList, CEconItemSchema &pschema, CUtlVector<CUtlString> *pVecErrors )
 {
-	m_pszName = pKVLootList->GetName();
+	m_strName = pKVLootList->GetName();
 	m_pszLootListHeader = g_pszDefaultRevolvingLootListHeader;
 	m_pszLootListFooter = NULL;
 	m_pszCollectionReference = NULL;
 	m_bPublicListContents = true;
-#ifdef GC_DLL
-	m_iNoDupesIterations = -1;				// disable no-dupes functionality by default
-	m_unRarity = pKVLootList->GetInt( "rarity", k_unItemRarity_Any );
-#endif // GC_DLL
 	bool bCollectionLootList = false;
 
 	FOR_EACH_SUBKEY( pKVLootList, pKVListItem )
@@ -1169,13 +884,13 @@ bool CEconLootListDefinition::BInitFromKV( KeyValues *pKVLootList, CEconItemSche
 			// Make sure we didn't specify multiple entries.
 			SCHEMA_INIT_CHECK(
 				g_pszDefaultRevolvingLootListHeader == m_pszLootListHeader,
-				"Loot list %s: Multiple header descriptions specified", m_pszName );
+				"Loot list %s: Multiple header descriptions specified", m_strName.Get() );
 
 			m_pszLootListHeader = pKVListItem->GetString();
 
 			SCHEMA_INIT_CHECK(
 				NULL != m_pszLootListHeader,
-				"Loot list %s: Invalid header description specified", m_pszName );
+				"Loot list %s: Invalid header description specified", m_strName.Get() );
 
 			continue;
 		}
@@ -1184,13 +899,13 @@ bool CEconLootListDefinition::BInitFromKV( KeyValues *pKVLootList, CEconItemSche
 			// Make sure we didn't specify multiple entries.
 			SCHEMA_INIT_CHECK(
 				NULL == m_pszLootListFooter,
-				"Loot list %s: Multiple footer descriptions specified", m_pszName );
+				"Loot list %s: Multiple footer descriptions specified", m_strName.Get() );
 
 			m_pszLootListFooter = pKVListItem->GetString();
 
 			SCHEMA_INIT_CHECK(
 				NULL != m_pszLootListFooter,
-				"Loot list %s: Invalid header description specified", m_pszName );
+				"Loot list %s: Invalid header description specified", m_strName.Get() );
 
 			continue;
 		}
@@ -1211,102 +926,17 @@ bool CEconLootListDefinition::BInitFromKV( KeyValues *pKVLootList, CEconItemSche
 			// already parsed up top
 			continue;
 		}
-#ifdef GC_DLL
-		else if ( !Q_strcmp( pszName, "random_attributes" ) )
+		else if ( !V_strcmp( pszName, "lootlist_jobs" ) )
 		{
-			AddRandomAtrributes( pKVListItem, pschema, pVecErrors );
+			AddLootlistJob( pKVListItem, pschema, pVecErrors );
 			continue;
 		}
-		else if ( !Q_strcmp( pszName, "attribute_templates" ) )
+		else if ( !V_strcmp( pszName, "lootlist_job_templates" ) )
 		{
-			FOR_EACH_SUBKEY( pKVListItem, pKVAttributeTemplate )
-			{
-				if ( pKVAttributeTemplate->GetInt() == 0 )
-					continue;
-
-				bool bAdded = AddRandomAttributesFromTemplates( pKVAttributeTemplate, pschema, pVecErrors );
-				SCHEMA_INIT_CHECK( bAdded, "Loot list %s: Failed to attribute_templates '%s'", m_pszName, pKVAttributeTemplate->GetName() );
-			}
-
+			CFmtStr strContext( "Lootlist %s", m_strName.Get() );
+			BAddLootlistJobFromTemplates( strContext.Get(), m_jobs, pKVListItem, &pschema, pVecErrors );
 			continue;
 		}
-		else if ( !Q_strcmp( pszName, "public_list_contents" ) )
-		{
-			m_bPublicListContents = pKVListItem->GetBool( nullptr, true );
-			continue;
-		}
-		else if ( !Q_stricmp( pszName, "__no_dupes_iter_count" ) )
-		{
-			m_iNoDupesIterations = pKVListItem->GetInt( nullptr, -1 );
-			continue;
-		}
-		else if ( !Q_strcmp( pszName, "additional_drop" ) )
-		{
-			float		fChance			   = pKVListItem->GetFloat( "chance", 0.0f );
-			bool		bPremiumOnly	   = pKVListItem->GetBool( "premium_only", false );
-			const char *pszLootList		   = pKVListItem->GetString( "loot_list", "" );
-			const char *pszRequiredHoliday = pKVListItem->GetString( "required_holiday", NULL );
-			const char *pszDropPerdiodStartDate = pKVListItem->GetString( "start_date", NULL );
-			const char *pszDropPerdiodEndDate	= pKVListItem->GetString( "end_date", NULL );
-
-			int iRequiredHolidayIndex = pszRequiredHoliday
-									  ? EconHolidays_GetHolidayForString( pszRequiredHoliday )
-									  : kHoliday_None;
-
-			RTime32 dropStartDate = ( pszDropPerdiodStartDate && pszDropPerdiodStartDate[0] )
-							? CRTime::RTime32FromFmtString( "YYYY-MM-DD hh:mm:ss" , pszDropPerdiodStartDate )
-							: RTime32(0);	// Default to the start of time
-
-			// Check that if we convert back to a string, we get the same value
-			char rtimeBuf[k_RTimeRenderBufferSize];
-			SCHEMA_INIT_CHECK(
-				pszDropPerdiodStartDate == NULL || Q_strcmp( CRTime::RTime32ToString( dropStartDate, rtimeBuf ), pszDropPerdiodStartDate ) == 0,
-				"Malformed start drop date \"%s\" for additional_drop in lootlist %s.  Must be of the form \"YYYY-MM-DD hh:mm:ss\"", pszDropPerdiodStartDate, m_pszName );
-
-
-			RTime32 dropEndDate = ( pszDropPerdiodEndDate && pszDropPerdiodEndDate[0] )
-						  ? CRTime::RTime32FromFmtString( "YYYY-MM-DD hh:mm:ss" , pszDropPerdiodEndDate )
-						  : ~RTime32(0);	// Default to the end of time
-
-			// Check that if we convert back to a string, we get the same value
-			SCHEMA_INIT_CHECK(
-				pszDropPerdiodEndDate == NULL || Q_strcmp( CRTime::RTime32ToString( dropEndDate, rtimeBuf ), pszDropPerdiodEndDate ) == 0,
-				"Malformed end drop date \"%s\" for additional_drop in lootlist %s.  Must be of the form \"YYYY-MM-DD hh:mm:ss\"", pszDropPerdiodEndDate, m_pszName );
-
-			SCHEMA_INIT_CHECK(
-				fChance > 0.0f && fChance <= 1.0f,
-				"Loot list %s: Invalid \"additional_drop\" chance %.2f", m_pszName, fChance );
-
-			SCHEMA_INIT_CHECK(
-				pszLootList && pszLootList[0],
-				"Loot list %s: Missing \"additional_drop\" loot list name", m_pszName );
-
-			SCHEMA_INIT_CHECK(
-				(pszRequiredHoliday == NULL) == (iRequiredHolidayIndex == kHoliday_None),
-				"Loot list %s: Unknown or missing holiday \"%s\"", m_pszName, pszRequiredHoliday ? pszRequiredHoliday : "(null)" );
-
-			if ( pszLootList )
-			{
-				const CEconLootListDefinition *pLootListDef = GetItemSchema()->GetLootListByName( pszLootList );
-				SCHEMA_INIT_CHECK(
-					pLootListDef,
-					"Loot list %s: Invalid \"additional_drop\" loot list \"%s\"", m_pszName, pszLootList );
-
-				if ( pLootListDef )
-				{
-					drop_period_t dropPeriod = { dropStartDate, dropEndDate };
-					loot_list_additional_drop_t additionalDrop = { fChance, bPremiumOnly, pszLootList, iRequiredHolidayIndex, dropPeriod };
-					m_AdditionalDrops.AddToTail( additionalDrop );
-				}
-			}
-			continue;
-		}
-		else if ( !Q_strcmp( pszName, "property_generators" ) )
-		{
-			SCHEMA_INIT_SUBSTEP( BCommonInitPropertyGeneratorsFromKV( m_pszName, &m_PropertyGenerators, pKVListItem, pVecErrors ) );
-			continue;
-		}
-#endif // GC_DLL
 
 		int iDef = 0;
 		// First, see if we've got a loot list name, for embedded loot lists
@@ -1334,7 +964,7 @@ bool CEconLootListDefinition::BInitFromKV( KeyValues *pKVLootList, CEconItemSche
 
 				SCHEMA_INIT_CHECK( 
 					pDef != NULL,
-					"Loot list %s: Item definition \"%s\" was not found", m_pszName, pszName );
+					"Loot list %s: Item definition \"%s\" was not found", m_strName.Get(), pszName );
 			}
 		}
 
@@ -1347,7 +977,7 @@ bool CEconLootListDefinition::BInitFromKV( KeyValues *pKVLootList, CEconItemSche
 			const CEconItemDefinition *pItemDef = GetItemSchema()->GetItemDefinition( iDef );
 			SCHEMA_INIT_CHECK( 
 				pItemDef != NULL,
-				"Loot list %s: Item definition index \"%s\" (%d) was not found", m_pszName, pszName, iDef );
+				"Loot list %s: Item definition index \"%s\" (%d) was not found", m_strName.Get(), pszName, iDef );
 
 			static CSchemaAttributeDefHandle pAttribDef_StartDropDate( "start drop date" );
 			static CSchemaAttributeDefHandle pAttribDef_EndDropDate( "end drop date" );
@@ -1380,1172 +1010,45 @@ bool CEconLootListDefinition::BInitFromKV( KeyValues *pKVLootList, CEconItemSche
 					"Malformed end drop date \"%s\" for item %s.  Must be of the form \"YYYY-MM-DD hh:mm:ss\"", pszEndDate, pItemDef->GetDefinitionName() );
 			}
 
-#ifdef GC_DLL
-			if ( pItemDef )
-			{
-				SCHEMA_INIT_CHECK( 
-					true == pItemDef->BEnabled(), 
-					"Loot list %s: Item definition \"%s\" (%d) isn't enabled, not allowed in loot lists", m_pszName, pItemDef->GetDefinitionName(), iDef );
-			}
-#endif // GC_DLL
 		}
 
 		float fItemWeight = 0.f;
-#ifdef GC_DLL
-		fItemWeight = bCollectionLootList ? 1.0f : pKVListItem->GetFloat();
-		SCHEMA_INIT_CHECK( 
-			fItemWeight > 0.0f,
-			"Loot list %s: Item definition index \"%s\" (%d) has invalid weight %.2f", m_pszName, pszName, iDef, fItemWeight );
-#endif // GC_DLL
 
 		// Add this item
 		drop_item_t dropItem = { iDef, fItemWeight, dropPeriod };
 		m_DropList.AddToTail( dropItem );
 	}
 
-#ifdef GC_DLL
-
-	int nNumTimeLimitedItems = 0;
-	FOR_EACH_VEC( m_DropList, i )
-	{
-		// If either the start date or the end date is set, tally it up as a time limited item
-		if( m_DropList[i].m_dropPeriod.m_DropStartDate != RTime32(0) || m_DropList[i].m_dropPeriod.m_DropEndDate != ~RTime32(0) )
-		{
-			++nNumTimeLimitedItems;
-		}
-	}
-
-	// Verify that at least one item in a lootlist does not have a drop period that limits when it can drop.
-	// This guarantees that we will always drop *something*
-	SCHEMA_INIT_CHECK( m_DropList.Count() > nNumTimeLimitedItems, "Lootlist \"%s\" is made up entirely of limited-time items!  At least one must not be time-limited.", m_pszName );
-#endif
 
 	return SCHEMA_INIT_SUCCESS();
 }
 
-#ifdef GC_DLL
 //-----------------------------------------------------------------------------
 // Purpose:
 //-----------------------------------------------------------------------------
-static bool BContainsDuplicateItemDefs( const CUtlVector<CEconLootListDefinition::rolled_item_defs_t>& vecItemDefsA, const CUtlVector<CEconLootListDefinition::rolled_item_defs_t>& vecItemDefsB )
+bool CEconLootListDefinition::BPostInit( CUtlVector<CUtlString> *pVecErrors )
 {
-	CUtlHashtable<const CEconItemDefinition *> hashItemDefs;
 
-	auto BPopulateAndLookForDupes = [&] ( const CUtlVector<CEconLootListDefinition::rolled_item_defs_t>& vecItemDefs )
-	{
-		for ( const auto& rolledItemDef : vecItemDefs )
-		{
-			if ( hashItemDefs.HasElement( rolledItemDef.m_pItemDef ) )
-				return true;
-
-			hashItemDefs.Insert( rolledItemDef.m_pItemDef );
-		}
-
-		return false;
-	};
-
-	return BPopulateAndLookForDupes( vecItemDefsA )
-		|| BPopulateAndLookForDupes( vecItemDefsB );
+	return SCHEMA_INIT_SUCCESS();
 }
 
-//-----------------------------------------------------------------------------
-// Purpose:
-//-----------------------------------------------------------------------------
-bool CEconLootListDefinition::BGenerateSingleRollRandomItems( const CEconGameAccount *pGameAccount, bool bFreeAccount, CUtlVector<CEconItem *> *out_pvecItems, const CUtlVector< item_definition_index_t > *pVecAvoidItemDefs /*= NULL*/ ) const
-{
-	Assert( out_pvecItems );
-
-	// Where is our source of random numbers coming from? If we're a no-dupe list,
-	// we want to have reproducible state so we use our account ID as a unique-ish
-	// seed.
-	//
-	// Wrap the whole thing in a smart pointer so we clean up whenever/however we
-	// leave.
-	std::unique_ptr<IUniformRandomStream> pRandomStream( [=]() -> IUniformRandomStream *
-	{
-		if ( !BIsInternalNoDupesLootList() || !pGameAccount )
-			return new CDefaultUniformRandomStream;
-	
-	
-		CUniformRandomStream *pAccountUniformRandomStream = new CUniformRandomStream;
-		pAccountUniformRandomStream->SetSeed( pGameAccount->Obj().m_unAccountID );
-
-		return pAccountUniformRandomStream;
-	}() );
-
-	// Make however many passes through our loot list code until we've generated the
-	// right number of passing sets. (Most loot lists let anything pass. Some specify
-	// no duplicate definitions allowed.)
-	CUtlVector<rolled_item_defs_t> vecCumulativeItemDefs;			// total list of everything we've generated so far in any number of result sets
-	CUtlVector<rolled_item_defs_t> vecItemDefs;						// current list under evaluation
-	int iNoDupesIterations = 0;
-
-	// This actually isn't guaranteed to converge, and is guaranteed not to converge if
-	// we set up a broken lootlist. We set a really high bar here to catch broken/pathologically
-	// bad cases here without grinding the whole GC to a halt.
-	enum { kUpperBoundIterationSanityCheck = 2000 };
-	int iTotalIterations = 0;
-	
-	while ( true )
-	{
-		// Don't runaway.
-		iTotalIterations++;
-		if ( iTotalIterations >= kUpperBoundIterationSanityCheck )
-			return false;
-
-		// Generate all of our item defs and their lootlists
-		vecItemDefs.Purge();
-		if ( !RollRandomItemsAndAdditionalItems( pRandomStream.get(), bFreeAccount, &vecItemDefs, pVecAvoidItemDefs ) )
-			return false;
-
-		// If we don't care about dupes and we got any results at all we're done.
-		if ( !BIsInternalNoDupesLootList() )
-			break;
-
-		// If we do care about dupes and we have some, ignore this set of items.
-		if ( BContainsDuplicateItemDefs( vecItemDefs, vecCumulativeItemDefs ) )
-			continue;
-
-		// Did we get to the right result set?
-		iNoDupesIterations++;
-		if ( iNoDupesIterations > m_iNoDupesIterations )
-			break;
-		
-		// Store off the list of definition indices we've already used them so they don't get reused
-		// in a later set.
-		vecCumulativeItemDefs.AddVectorToTail( vecItemDefs );
-	}
-	
-	// If we get down to here, we expect that we've rolled at least one item def
-	Assert( vecItemDefs.Count() > 0 );
-	FOR_EACH_VEC( vecItemDefs, i )
-	{
-		const rolled_item_defs_t& rolledDef = vecItemDefs[i];
-		Assert( rolledDef.m_pItemDef );
-		Assert( rolledDef.m_vecAffectingLootLists.Count() > 0 );
-
-		// Create the items
-		CEconItem *pItem = GEconManager()->GetItemFactory().CreateSpecificItem( pGameAccount, rolledDef.m_pItemDef->GetDefinitionIndex() );
-		out_pvecItems->AddToTail( pItem );
-		
-		// Go through and let all the affecting lootlists attach their attributes to the item
-		FOR_EACH_VEC( rolledDef.m_vecAffectingLootLists, j )
-		{
-			const CEconLootListDefinition *pLootList = rolledDef.m_vecAffectingLootLists[j];
-			Assert( pLootList );
-			if ( !pLootList->BAttachLootListAttributes( pGameAccount, pItem ) )
-				return false;
-		}
-	}
-
-	return ( out_pvecItems->Count() > 0 );
-}
-
-class CRollSimulator
-{
-public:
-
-	CRollSimulator()
-		: m_mapRarityCounts( StringLessThan )
-		, m_mapCounts( DefLessFunc( item_definition_index_t ) )
-		, m_mapUnusualHatEffectsCount( DefLessFunc( uint32 ) ) 
-		, m_mapUnusualTauntEffectsCount( DefLessFunc( uint32 ) )
-		, m_nNumIters( 0 )
-	{}
-
-	void RollLootlist( const char* pszLootListName, int nRolls, bool bWipePreviousResults = false )
-	{
-		const CEconLootListDefinition* pLootlist = GetItemSchema()->GetLootListByName( pszLootListName );
-
-		if ( !pLootlist )
-		{
-			EmitInfo( SPEW_CONSOLE, SPEW_ALWAYS, LOG_ALWAYS, "Invalid lootlist \"%s\".\n", pszLootListName );
-			return;
-		}
-
-		// Clear out results first?
-		if ( bWipePreviousResults )
-		{
-			m_mapCounts.Purge();
-			m_mapRarityCounts.Purge();
-			m_DropsMaxes.Clear();
-			m_DropsTotals.Clear();
-		}
-
-		while( nRolls-- )
-		{
-			AutoYield();
-			CUtlVector<CEconItem *> vecItems;
-			pLootlist->BGenerateSingleRollRandomItems( NULL, false, &vecItems );
-
-			// Tally up what we got.
-			for( auto pItem : vecItems )
-			{
-				AutoYield();
-				// Insert item def if we need
-				item_definition_index_t nDefIndex = pItem->GetDefinitionIndex();
-				auto idx = m_mapCounts.Find( nDefIndex );
-				if ( m_mapCounts.InvalidIndex() == idx )
-				{
-					idx = m_mapCounts.Insert( nDefIndex );
-				}
-
-				// Insert rarity if needed
-				const CEconItemRarityDefinition* pItemRarity = GetItemSchema()->GetRarityDefinition( pItem->GetItemDefinition()->GetRarity() );
-				if ( pItemRarity )
-				{
-					const char* pszRarity = GGCGameBase()->LocalizeToken( pItemRarity->GetLocKey() , k_Lang_English );
-					auto rarityIdx = m_mapRarityCounts.Find( pszRarity );
-					if ( m_mapRarityCounts.InvalidIndex() == rarityIdx )
-					{
-						rarityIdx = m_mapRarityCounts.Insert( pszRarity, 0 );
-					}
-
-					m_mapRarityCounts[ rarityIdx ] += 1;
-				}
-
-				// Count
-				DropResult_t& result = m_mapCounts[ idx ];
-				++result.m_nRollCount;
-				++m_DropsTotals.m_nRollCount;
-				m_DropsMaxes.m_nRollCount = Max( m_DropsMaxes.m_nRollCount, result.m_nRollCount );
-
-				// Strange count
-				if ( BIsItemStrange( pItem ) )
-				{
-					++result.m_nStrangeCount;
-					++m_DropsTotals.m_nStrangeCount;
-					m_DropsMaxes.m_nStrangeCount = Max( m_DropsMaxes.m_nStrangeCount, result.m_nStrangeCount );
-				}
-
-				// Unusual count
-				static CSchemaAttributeDefHandle pAttrDef_ParticleEffect( "attach particle effect" );
-				static CSchemaAttributeDefHandle pAttrDef_TauntUnusualAttr( "on taunt attach particle index" );
-				if ( pAttrDef_ParticleEffect && pAttrDef_TauntUnusualAttr )
-				{
-					uint32 nUnusualHatValue = 0;
-					uint32 nUnusualTauntValue = 0;
-					pItem->FindAttribute( pAttrDef_ParticleEffect, &nUnusualHatValue );
-					pItem->FindAttribute( pAttrDef_TauntUnusualAttr, &nUnusualTauntValue );
-					// Cant use quality cause of old legacy items.  Quality is just a quick test
-					if ( nUnusualHatValue != 0 || nUnusualTauntValue != 0 )
-					{
-						++result.m_nUnusualCount;
-						++m_DropsTotals.m_nUnusualCount;
-						m_DropsMaxes.m_nUnusualCount = Max( m_DropsMaxes.m_nUnusualCount, result.m_nUnusualCount );
-					}
-
-					if ( nUnusualHatValue )
-					{
-						nUnusualHatValue = (uint32)((float&)nUnusualHatValue);
-						auto idx = m_mapUnusualHatEffectsCount.Find( nUnusualHatValue );
-						if ( idx == m_mapUnusualHatEffectsCount.InvalidIndex() )
-						{
-							idx = m_mapUnusualHatEffectsCount.Insert( nUnusualHatValue, 0 );
-						}
-
-						++m_mapUnusualHatEffectsCount[ idx ];
-					}
-
-					if ( nUnusualTauntValue )
-					{
-						nUnusualTauntValue = (uint32)((float&)nUnusualTauntValue);
-						auto idx = m_mapUnusualTauntEffectsCount.Find( nUnusualTauntValue );
-						if ( idx == m_mapUnusualTauntEffectsCount.InvalidIndex() )
-						{
-							idx = m_mapUnusualTauntEffectsCount.Insert( nUnusualTauntValue, 0 );
-						}
-
-						++m_mapUnusualTauntEffectsCount[ idx ];
-					}
-				}
-			}
-
-			// Delete what we got
-			vecItems.PurgeAndDeleteElements();
-		}
-	}
-
-	void PrintRarityBreakdwn()
-	{
-		EmitInfo( SPEW_CONSOLE, SPEW_ALWAYS, LOG_ALWAYS, "-- Rarity breakdown:\n" );
-		int nMaxDigits = 0;
-		while( m_mapRarityCounts.Count() )
-		{
-			// Go through and print the most rolled to least rolled rarities
-			auto maxIdx = m_mapRarityCounts.InvalidIndex();
-
-			// Find the most hit
-			FOR_EACH_MAP_FAST( m_mapRarityCounts, i )
-			{
-				AutoYield();
-				if ( maxIdx == m_mapRarityCounts.InvalidIndex() ||  m_mapRarityCounts[ i ] > m_mapRarityCounts[ maxIdx ] )
-				{
-					maxIdx = i;
-				}
-
-				nMaxDigits = Max( nMaxDigits, NumDigits( m_mapRarityCounts[ maxIdx ] ) );
-			}
-
-			EmitInfo( SPEW_CONSOLE, SPEW_ALWAYS, LOG_ALWAYS, "%9s %*d %.3f%%\n",
-					  m_mapRarityCounts.Key( maxIdx ), nMaxDigits, m_mapRarityCounts[ maxIdx ],
-					  100.f * (float)m_mapRarityCounts[ maxIdx ] / m_DropsTotals.m_nRollCount );
-			m_mapRarityCounts.RemoveAt( maxIdx );
-		}
-
-		EmitInfo( SPEW_CONSOLE, SPEW_ALWAYS, LOG_ALWAYS, "%-*s  %*s  %*s\n", 9 + 1 + NumDigits( m_DropsMaxes.m_nRollCount ) + 6,
-				  "-- Item breakdown", NumDigits( m_DropsMaxes.m_nStrangeCount ) + 1, "S", NumDigits( m_DropsMaxes.m_nUnusualCount ), "U"  );
-		
-	}
-
-	void PrintUnusualCounts()
-	{
-		EmitInfo( SPEW_CONSOLE, SPEW_ALWAYS, LOG_ALWAYS, "-- Unusual Hats breakdown:\n" );
-		int nTotal = PrintUnusualsForType( m_mapUnusualHatEffectsCount );
-		EmitInfo( SPEW_CONSOLE, SPEW_ALWAYS, LOG_ALWAYS, "-- %d total unusual hats\n", nTotal );
-		
-		EmitInfo( SPEW_CONSOLE, SPEW_ALWAYS, LOG_ALWAYS, "-- Unusual Taunts breakdown:\n" );
-		nTotal = PrintUnusualsForType( m_mapUnusualTauntEffectsCount );
-		EmitInfo( SPEW_CONSOLE, SPEW_ALWAYS, LOG_ALWAYS, "-- %d total unusual taunts\n", nTotal );
-	}
-
-	void PrintTotals()
-	{
-		while( m_mapCounts.Count() )
-		{
-			// Go through and print the most rolled to least rolled
-			auto maxIdx = m_mapCounts.InvalidIndex();
-
-			// Find the most hit
-			FOR_EACH_MAP_FAST( m_mapCounts, i )
-			{
-				AutoYield();
-				if ( maxIdx == m_mapCounts.InvalidIndex() ||  m_mapCounts[ i ].m_nRollCount > m_mapCounts[ maxIdx ].m_nRollCount )
-				{
-					maxIdx = i;
-				}
-			}
-
-			DropResult_t& result = m_mapCounts[ maxIdx ];
-			CEconItemDefinition *pItemDef = GetItemSchema()->GetItemDefinition( m_mapCounts.Key( maxIdx ) );
-
-			const CEconItemRarityDefinition* pItemRarity = GetItemSchema()->GetRarityDefinition( pItemDef->GetRarity() );
-			const char* pszRarity = pItemRarity ? GGCGameBase()->LocalizeToken( pItemRarity->GetLocKey() , k_Lang_English ) : "";
-			CFmtStr rollString( "%*d %2.3f%%", NumDigits( m_DropsMaxes.m_nRollCount ), result.m_nRollCount,
-								100.f * (float)result.m_nRollCount / m_DropsTotals.m_nRollCount );
-			CFmtStr strangeString( "%*d", NumDigits( m_DropsMaxes.m_nStrangeCount ), result.m_nStrangeCount );
-			CFmtStr unusualString( "%*d", NumDigits( m_DropsMaxes.m_nUnusualCount ), result.m_nUnusualCount );
-			const char* pszItemname = GGCGameBase()->LocalizeToken( pItemDef->GetCustomPainkKitDefinition() ? pItemDef->GetCustomPainkKitDefinition()->GetName() : pItemDef->GetItemBaseName(), k_Lang_English );
-
-			EmitInfo( SPEW_CONSOLE, SPEW_ALWAYS, LOG_ALWAYS, "%9s %s  %s  %s  %s\n", pszRarity, rollString.Get(), strangeString.Get(), unusualString.Get(), pszItemname );
-
-			m_mapCounts.RemoveAt( maxIdx );
-		}
-
-		EmitInfo( SPEW_CONSOLE, SPEW_ALWAYS, LOG_ALWAYS, "-- Total Items: %d Strange: %d (%.3f%%) Unusual: %d (%.3f%%)\n"
-			, m_DropsTotals.m_nRollCount
-			, m_DropsTotals.m_nStrangeCount
-			, ( 100.f * (float)m_DropsTotals.m_nStrangeCount / m_DropsTotals.m_nRollCount )
-			, m_DropsTotals.m_nUnusualCount
-			, ( 100.f * (float)m_DropsTotals.m_nUnusualCount / m_DropsTotals.m_nRollCount ) );
-	}
-
-	struct DropResult_t
-	{
-		DropResult_t() { Clear(); }
-
-		void Clear()
-		{
-			m_nStrangeCount = 0;
-			m_nUnusualCount = 0;
-			m_nRollCount = 0;
-		}
-
-		int m_nStrangeCount;
-		int m_nUnusualCount;
-		int m_nRollCount;
-	};
-
-	const DropResult_t& GetTotalDrops() const { return m_DropsTotals; }
-	const DropResult_t& GetMaxesDrops() const { return m_DropsMaxes; }
-
-private:
-
-	int PrintUnusualsForType( CUtlMap< uint32, int >& mapUnusuals )
-	{
-		int nMaxDigits = 0;
-		int nTotal = 0;
-		FOR_EACH_MAP_FAST( mapUnusuals, i )
-		{
-			nTotal += mapUnusuals[ i ];
-		}
-
-		while( mapUnusuals.Count() )
-		{
-			// Go through and print the most rolled to least rolled unusual effects
-			auto maxIdx = mapUnusuals.InvalidIndex();
-
-			// Find the most hit
-			FOR_EACH_MAP_FAST( mapUnusuals, i )
-			{
-				AutoYield();
-				if ( maxIdx == mapUnusuals.InvalidIndex() ||  mapUnusuals[ i ] > mapUnusuals[ maxIdx ] )
-				{
-					maxIdx = i;
-				}
-
-				nMaxDigits = Max( nMaxDigits, NumDigits( mapUnusuals[ maxIdx ] ) );
-			}
-
-			char particleNameEntry[128];
-			Q_snprintf( particleNameEntry, ARRAYSIZE( particleNameEntry ), "#Attrib_Particle%d", mapUnusuals.Key( maxIdx ) );
-			const char* pszParticleName = GGCGameBase()->LocalizeToken( particleNameEntry, k_Lang_English );
-
-			EmitInfo( SPEW_CONSOLE, SPEW_ALWAYS, LOG_ALWAYS, "%*d %.3f%% %s (%d)\n",
-				nMaxDigits,	  
-				mapUnusuals[ maxIdx ],
-				100.f * (float)mapUnusuals[ maxIdx ] / nTotal,
-				pszParticleName,
-				mapUnusuals.Key( maxIdx ) );
-
-			mapUnusuals.RemoveAt( maxIdx );
-		}
-
-		return nTotal;
-	}
-
-	void AutoYield()
-	{
-		if ( ++m_nNumIters % 100 == 0 )
-		{
-			if ( GJobCur().BYieldIfNeeded() )
-			{
-				// If we re-entered logon surge we should go away for a while
-				while ( GGCGameBase()->BIsInLogonSurge() )
-				{
-					GJobCur().BYieldingWaitOneFrame();
-				}
-			}
-		}
-	};
-
-	int NumDigits( int nNumber )
-	{
-		int digits = 0;
-
-		if ( nNumber <= 0) 
-		{
-			digits = 1; 
-		}
-
-		while ( nNumber ) 
-		{
-			nNumber /= 10;
-			++digits;
-		}
-
-		return digits;
-	}
-
-	
-
-	CUtlMap< item_definition_index_t, DropResult_t > m_mapCounts;
-	CUtlMap< uint32, int > m_mapUnusualHatEffectsCount;
-	CUtlMap< uint32, int > m_mapUnusualTauntEffectsCount;
-	// Rarity name is the key
-	CUtlMap< const char*, int > m_mapRarityCounts;
-	DropResult_t m_DropsTotals;
-	DropResult_t m_DropsMaxes;
-	size_t m_nNumIters;
-};
-
-GC_CON_COMMAND( simulate_lootlist_contents, "<lootlist> <iterations> Check item distribution from a given lootlist n times" )
-{
-	if ( !BCheckArgs( 2, args, simulate_lootlist_contents_command ) )
-		return;
-
-	const char* pszLootListName = args[1];
-	int nRolls = args.ArgC() == 3 ? atoi( args[2] ) : 1000;
-
-	CRollSimulator simulator;
-	simulator.RollLootlist( pszLootListName, nRolls );
-	simulator.PrintRarityBreakdwn();
-	simulator.PrintUnusualCounts();
-	simulator.PrintTotals();
-}
-
-
-#ifdef GC_DLL
-class CItemSourceFinder
-{
-public:
-	CItemSourceFinder( const char* pszItemName )
-		: m_pItemDef( GetItemSchema()->GetItemDefinitionByName( pszItemName ) )
-	{
-		Assert( m_pItemDef );
-		if ( !m_pItemDef )
-		{
-			EG_ERROR( SPEW_CONSOLE, "%s is not a valid item", pszItemName );
-			return;
-		}
-
-		// Find out what series this crate belongs to.
-		static CSchemaAttributeDefHandle pAttr_CrateSeries( "set supply crate series" );
-		if ( !pAttr_CrateSeries )
-			return;
-
-		auto& mapItemDefs = GetItemSchema()->GetItemDefinitionMap();
-		auto& mapRevolvingLootlists = GetItemSchema()->GetRevolvingLootLists();
-
-		CUtlDict< int > dictSeenLootlists;
-
-		// Look through all the item defs and see if any of them statically specify a lootlist that they want to open
-		FOR_EACH_MAP_FAST( mapItemDefs, i )
-		{
-			const CEconItemDefinition* pSourceItemDef = mapItemDefs[ i ];
-			const CEconLootListDefinition* pLootlist = NULL;
-
-			const CEconTool_Gift* pGift = pSourceItemDef->GetTypedEconTool< CEconTool_Gift >();
-			// Self-opening crate?
-			if ( pGift )
-			{
-				pLootlist = GetItemSchema()->GetLootListByName(	pGift->GetLootListName() );
-			}
-			else // Crate with an item series?
-			{
-				int iCrateSeries;
-				{
-					float fCrateSeries;		// crate series ID is stored as a float internally because we hate ourselves
-					if ( !FindAttribute_UnsafeBitwiseCast<attrib_value_t>( pSourceItemDef, pAttr_CrateSeries, &fCrateSeries ) || fCrateSeries == 0.0f )
-						continue;
-
-					iCrateSeries = fCrateSeries;
-				}
-
-				auto idx = mapRevolvingLootlists.Find( iCrateSeries );
-				if ( idx == mapRevolvingLootlists.InvalidIndex() )
-					continue;
-
-				pLootlist = GetItemSchema()->GetLootListByName( mapRevolvingLootlists[ idx ] );
-			}
-
-			if ( !pLootlist )
-				continue;
-
-			// Mark that we've seen this lootlist already
-			dictSeenLootlists.Insert( pLootlist->GetName() );
-
-			DropSource_t& source = m_vecSources[ m_vecSources.AddToTail() ];
-			source.m_pDroppingItem = pSourceItemDef;
-			ChanceForItemFromLootlist( m_pItemDef, pLootlist, source.lootlistSource );
-		}
-
-		CEconItemDefinition* pCrateItemDef = GetItemSchema()->GetItemDefinitionByName( "Supply Crate" );
-		Assert( pCrateItemDef );
-
-		// Go through all the revolving lootlists and see if they have the item.  Assume that
-		// they're from a "Supply Crate".
-		FOR_EACH_MAP_FAST( mapRevolvingLootlists, i )
-		{
-			if ( !pCrateItemDef )
-				continue;
-
-			if ( mapRevolvingLootlists.Key( i ) <= 0 )
-				continue;
-
-			auto pLootlist = GetItemSchema()->GetLootListByName( mapRevolvingLootlists[ i ] );
-			if ( !pLootlist )
-				continue;
-
-			// This lootlist was on a different crate already
-			if ( dictSeenLootlists.Find( pLootlist->GetName() ) != dictSeenLootlists.InvalidIndex() )
-				continue;
-
-			DropSource_t& source = m_vecSources[ m_vecSources.AddToTail() ];
-			source.m_pDroppingItem = pCrateItemDef;
-			ChanceForItemFromLootlist( m_pItemDef, pLootlist, source.lootlistSource );
-		}
-
-		// Not available at all!
-		if ( !m_vecSources.Count() )
-		{
-			EmitInfo( SPEW_CONSOLE, SPEW_ALWAYS, LOG_ALWAYS, "Not available from any sources!\n" );
-			return;
-		}
-
-		// Sort greatest % chance
-		auto lambdaSort = [] ( DropSource_t const *pLHS, DropSource_t const *pRHS ) -> int
-		{
-			return pLHS->lootlistSource.m_flChance < pRHS->lootlistSource.m_flChance;
-		};
-		m_vecSources.Sort( lambdaSort );
-	}
-
-	void PrintSources()
-	{
-		FOR_EACH_VEC( m_vecSources, i )
-		{
-			m_vecSources[ i ].PrintSources();
-		}
-	}
-
-	bool BDropsFromLootlist( const CEconLootListDefinition* pLootlist )
-	{
-		FOR_EACH_VEC( m_vecSources, i )
-		{
-			if ( m_vecSources[ i ].lootlistSource.BDropsFromLootlist( pLootlist ) )
-				return true;
-		}
-
-		return false;
-	}
-
-private:
-
-	struct DropSource_t
-	{
-		void PrintSources()
-		{
-			if ( lootlistSource.m_flChance == 0.f )
-				return;
-
-			bool bSelfOpening = m_pDroppingItem->GetTypedEconTool< CEconTool_Gift >() != NULL;
-
-			// Print the name of the item, and whether it's a self-opening item, or a crate
-			EmitInfo( SPEW_CONSOLE, SPEW_ALWAYS, LOG_ALWAYS, "%3.5f%% %s (%d - %s)\n", 
-				lootlistSource.m_flChance * 100.f,
-				m_pDroppingItem->GetDefinitionName(),
-				m_pDroppingItem->GetDefinitionIndex(),
-				bSelfOpening ? "Self-Opening" : "Crate/Case" );
-
-			// Print all the sources
-			lootlistSource.PrintSources( 1 );
-
-			EmitInfo( SPEW_CONSOLE, SPEW_ALWAYS, LOG_ALWAYS, "\n" );
-		}
-
-		struct LootListSource_t
-		{
-			LootListSource_t()
-				: m_flChance( 0.f )
-			{}
-
-			bool BDropsFromLootlist( const CEconLootListDefinition* pLootlist )
-			{
-				// Skip no-chance entries
-				if ( m_flChance == 0.f )
-					return false;
-
-
-				if ( m_pDroppingLootlist == pLootlist )
-					return true;
-
-				FOR_EACH_VEC( m_vecLootlistSources, i )
-				{
-					if ( m_vecLootlistSources[ i ].BDropsFromLootlist( pLootlist ) )
-						return true;
-				}
-
-				return false;
-			}
-
-			void PrintSources( int nInset )
-			{
-				// Skip no-chance entries
-				if ( m_flChance == 0.f )
-					return;
-
-				auto& mapRevolvingLootlists = GetItemSchema()->GetRevolvingLootLists();
-				int nRevolvingIdx = mapRevolvingLootlists.InvalidIndex();
-
-				// Check if our lootlist is one of the revolving lootlists.  If so, we want
-				// to print out its index within revolving_lootlists, so we can map that to
-				// the attribute value of supply_crate_series (187)
-				FOR_EACH_MAP_FAST( mapRevolvingLootlists, i )
-				{
-					if ( V_stricmp( mapRevolvingLootlists[ i ], m_pDroppingLootlist->GetName() ) == 0 )
-					{
-						nRevolvingIdx = mapRevolvingLootlists.Key( i );
-						break;
-					}
-				}
-			
-				if ( nRevolvingIdx != mapRevolvingLootlists.InvalidIndex() && nRevolvingIdx > 0 )
-				{
-					// It's in revolving_lootlists.  Print its index in there.
-					EmitInfo( SPEW_CONSOLE, SPEW_ALWAYS, LOG_ALWAYS, "%*.5f%% (%d) %s\n",
-							4 * nInset + 5,
-							m_flChance * 100.f,
-							nRevolvingIdx,
-							m_pDroppingLootlist->GetName() );
-				}
-				else 
-				{
-					// Not in the revolving lootlist
-					EmitInfo( SPEW_CONSOLE, SPEW_ALWAYS, LOG_ALWAYS, "%*.5f%% %s\n",
-							4 * nInset + 5,
-							m_flChance * 100.f,
-							m_pDroppingLootlist->GetName() );
-				}
-
-				// Sort greatest % chance
-				auto lambdaSort = [] ( LootListSource_t const *pLHS, LootListSource_t const *pRHS ) -> int
-				{
-					return pLHS->m_flChance < pRHS->m_flChance;
-				};
-
-				m_vecLootlistSources.Sort( lambdaSort );
-
-				// Print out children indented a lil bit
-				FOR_EACH_VEC( m_vecLootlistSources, i )
-				{
-					m_vecLootlistSources[i].PrintSources( nInset + 1 );
-				}
-			}
-
-			float m_flChance;
-			const CEconLootListDefinition* m_pDroppingLootlist;
-
-			CCopyableUtlVector< LootListSource_t > m_vecLootlistSources;
-		};
-
-		const CEconItemDefinition* m_pDroppingItem;
-		LootListSource_t lootlistSource;
-	};
-
-	float ChanceForItemFromLootlist( const CEconItemDefinition* pItemDef, const CEconLootListDefinition* pLootlist, DropSource_t::LootListSource_t& lootlistSource )
-	{
-		auto& vecContents = pLootlist->GetLootListContents();
-		// Accumulate our chance of dropping the specified item
-		lootlistSource.m_flChance = 0.f;
-		lootlistSource.m_pDroppingLootlist = pLootlist;
-
-		// Gather the items in this lootlist that we're able to roll for at this time
-		float flTotalWeight = 0.f;
-		CUtlVector<CEconLootListDefinition::drop_item_t> vecValidContents;
-		FOR_EACH_VEC( vecContents, i )
-		{
-			if( !vecContents[ i ].m_dropPeriod.IsValidForTime( CRTime::RTime32TimeCur() ) )
-				continue;
-
-			flTotalWeight += vecContents[ i ].m_flWeight;
-			vecValidContents.AddToTail( vecContents[ i ] );
-		}
-
-		// Go through valid contents, and see if the specified item is in there
-		FOR_EACH_VEC( vecValidContents, i )
-		{
-			const int iItemDef = vecValidContents[ i ].m_iItemOrLootlistDef;
-			const float flChance = vecValidContents[ i ].m_flWeight / flTotalWeight;
-
-			if ( iItemDef < 0 ) // Lootlist
-			{
-				int iLLIndex = (iItemDef * -1) - 1;
-				auto pSubLootlist = GetItemSchema()->GetLootListByIndex( iLLIndex );
-				
-				// One of our sub-lootlists might drop it.  Add in it's chance within
-				// the sub-lootlist scaled by the chance to roll that sub-lootlist.
-				auto& subSource = lootlistSource.m_vecLootlistSources[ lootlistSource.m_vecLootlistSources.AddToTail() ];
-				lootlistSource.m_flChance += ChanceForItemFromLootlist( pItemDef, pSubLootlist, subSource ) * flChance;
-			}
-			else if ( pItemDef->GetDefinitionIndex() == iItemDef )
-			{
-				// We drop it!  Add the chance
-				lootlistSource.m_flChance += flChance;
-			}
-		}
-
-		// Treat additional drops just the same as nested lootlists.
-		auto& vecAdditionalDrops = pLootlist->GetAdditionalDrops();
-		FOR_EACH_VEC( vecAdditionalDrops, i )
-		{
-			auto& additionalDrop = vecAdditionalDrops[ i ];
-			if ( !additionalDrop.m_dropPeriod.IsValidForTime( CRTime::RTime32TimeCur() ) )
-				continue;
-		
-			auto pSubLootlist = GetItemSchema()->GetLootListByName( additionalDrop.m_pszLootListDefName );
-			auto& subSource = lootlistSource.m_vecLootlistSources[ lootlistSource.m_vecLootlistSources.AddToTail() ];
-			lootlistSource.m_flChance += ChanceForItemFromLootlist( pItemDef, pSubLootlist, subSource ) * additionalDrop.m_fChance;
-		}
-
-		// Return the total chance
-		return lootlistSource.m_flChance;
-	}
-
-	CUtlVector< DropSource_t > m_vecSources;
-	const CEconItemDefinition* m_pItemDef;
-};
-
-GC_CON_COMMAND( item_sources, "Lists the sources for obtaining a list of specific items" )
-{
-	if ( !BCheckArgs( 1, args, item_sources_command ) )
-		return;
-
-	for ( int i=1; i < args.ArgC(); ++i )
-	{
-		const char* pszItemName = args[i];
-		const CEconItemDefinition* pItemDef = GetItemSchema()->GetItemDefinitionByName( pszItemName );
-		if ( pItemDef )
-		{
-			EmitInfo( SPEW_CONSOLE, SPEW_ALWAYS, LOG_ALWAYS, "\nChecking items for lootlists containing (%d) %s...\n", pItemDef->GetDefinitionIndex(), pItemDef->GetDefinitionName() );
-			CItemSourceFinder source( pszItemName );
-			source.PrintSources();
-		}
-		else
-		{
-			EmitInfo( SPEW_CONSOLE, SPEW_ALWAYS, LOG_ALWAYS, "\n\"%s\" is not a valid item name\n", pszItemName );
-		}
-	}
-}
-
-GC_CON_COMMAND( list_keys, "Lists all the keys in the schema" )
-{
-	EmitInfo( SPEW_CONSOLE, SPEW_ALWAYS, LOG_ALWAYS, "Spewing keys...\n" );
-
-	auto& mapItemDefs = GetItemSchema()->GetItemDefinitionMap();
-	FOR_EACH_MAP_FAST( mapItemDefs, i )
-	{
-		const CEconItemDefinition* pItemDef = mapItemDefs[ i ];
-		if ( !pItemDef || !pItemDef->GetEconTool() || ( Q_strcmp( pItemDef->GetEconTool()->GetTypeName(), "decoder_ring" ) != 0 ) )
-		{
-			continue;
-		}
-
-		EmitInfo( SPEW_CONSOLE, SPEW_ALWAYS, LOG_ALWAYS, "%llu - %s\n", pItemDef->GetDefinitionIndex(), pItemDef->GetItemDefinitionName() );
-	}
-}
-
-ConVar case_behavior_rolls_per_lootlist( "case_behavior_rolls_per_lootlist", "1000000", FCVAR_REPLICATED, "How many times to roll a lootlist" );
-class CJobCaseBehaviorCheck : public CGCGameBaseJob
-{
-public:
-	CJobCaseBehaviorCheck()
-		: CGCGameBaseJob( GGCGameBase() )
-	{}
-
-	virtual bool BYieldingRunGCJob()
-	{
-		// Wait until logon surge ends to get going
-		while ( GGCGameBase()->BIsInLogonSurge() )
-		{
-			GJobCur().BYieldingWaitOneFrame();
-		}
-
-		CRollSimulator simulator;
-
-		// Convert the hash to something readable
-		char pchSHAHex[41];
-		memset( pchSHAHex, 0, sizeof( pchSHAHex ) );
-		V_binarytohex( GetItemSchema()->GetSchemaSHA().m_shaDigest, 20, pchSHAHex, 41 );
-
-		RTime32 now = CRTime::RTime32TimeCur();
-		int nNewRecords = 0;
-
-		EmitInfo( SPEW_CONSOLE, SPEW_ALWAYS, LOG_ALWAYS, "Beginning CJobCaseBehaviorCheck\n" );
-
-		auto& lootlists = GetItemSchema()->GetRevolvingLootLists();
-
-		// Go through all of the lootlists
-		FOR_EACH_MAP( lootlists, i )
-		{
-			const CEconLootListDefinition* pEconLootlist = GetItemSchema()->GetLootListByName( lootlists[ i ] );
-			if ( pEconLootlist )
-			{
-				// Check if we have data for this lootlist on this hash already
-				{
-					CSQLAccess sqlReadAccess;
-					CUtlVector< CSchCaseBehavior > vecExistingResult;
-					sqlReadAccess.AddBindParam( pchSHAHex );
-					sqlReadAccess.AddBindParam( i );
-					if ( sqlReadAccess.BYieldingReadRecordsWithWhereClause( &vecExistingResult, "SchemaSHA = ? and Series = ?", CSET_FULL( CSchCaseBehavior ) ) )
-					{
-						// Already got it?  Skip the work
-						if ( vecExistingResult.Count() )
-						{
-							continue;
-						}
-					}
-				}
-
-				// Roll 'em up
-				simulator.RollLootlist( pEconLootlist->GetName(), case_behavior_rolls_per_lootlist.GetInt(), true );
-
-				// Insert record
-				CSchCaseBehavior behavior;
-				behavior.SetVarCharField( behavior.m_VarCharSchemaSHA, pchSHAHex, true, CSchCaseBehavior::k_iField_VarCharSchemaSHA );
-				behavior.m_RTime32Date = now;
-				behavior.m_unSeries = i;
-				behavior.SetVarCharField( behavior.m_VarCharLootListName, pEconLootlist->GetName(), true, CSchCaseBehavior::k_iField_VarCharLootListName );
-				behavior.m_fStrangeChance = 100.f * (float)simulator.GetTotalDrops().m_nStrangeCount / simulator.GetTotalDrops().m_nRollCount;
-				behavior.m_fUnusualChance = 100.f * (float)simulator.GetTotalDrops().m_nUnusualCount / simulator.GetTotalDrops().m_nRollCount;
-
-				CSQLAccess sqlAccess;
-				sqlAccess.BBeginTransaction( "CJobCaseBehaviorCheck" );
-				sqlAccess.BYieldingInsertOrUpdateOnPK( &behavior );
-				sqlAccess.BCommitTransaction( true );
-				++nNewRecords;
-			}
-
-			BYieldIfNeeded();
-		}
-
-		EmitInfo( SPEW_CONSOLE, SPEW_ALWAYS, LOG_ALWAYS, "Completed CJobUnusualChecker.  %d updated records.\n", nNewRecords );
-
-		return true;
-	}
-};
-
-void CEconItemSchema::PerformCaseBehaviorCheck()
-{
-	CJob* pJob = new CJobCaseBehaviorCheck();
-	pJob->StartJobDelayed( NULL );
-}
-#endif
-
-//-----------------------------------------------------------------------------
-// Purpose:
-//-----------------------------------------------------------------------------
-bool CEconLootListDefinition::RollRandomItemsAndAdditionalItems( IUniformRandomStream *pRandomStream, bool bFreeAccount, CUtlVector<rolled_item_defs_t> *out_pVecRolledItems, const CUtlVector< item_definition_index_t > *pVecAvoidItemDefs ) const
-{
-	Assert( out_pVecRolledItems );
-
-	// Roll to see what items we get from this loot list.
-	bool bCreatedItems = RollRandomItemDef( pRandomStream, bFreeAccount, out_pVecRolledItems, pVecAvoidItemDefs );
-	
-	// Do we have additional drops?	
-	FOR_EACH_VEC( m_AdditionalDrops, i )
-	{
-		if ( !bCreatedItems )
-			break;
-
-		// Is this within the period this is allowed to drop?
-		if ( !m_AdditionalDrops[i].m_dropPeriod.IsValidForTime( CRTime::RTime32TimeCur() ) )
-			continue;
-
-		// Does this only apply to premium accounts?
-		if ( m_AdditionalDrops[i].m_bPremiumOnly && bFreeAccount )
-			continue;
-
-		// Does this only apply on certain holidays?
-		if ( m_AdditionalDrops[i].m_iRequiredHolidayIndex != kHoliday_None && !EconHolidays_IsHolidayActive( m_AdditionalDrops[i].m_iRequiredHolidayIndex, CRTime::RTime32TimeCur() ) )
-			continue;
-
-		// Random chance is in the range 0-1 so generate a value in that range to "roll".
-		if ( pRandomStream->RandomFloat( 0.0f, 1.0f ) > m_AdditionalDrops[i].m_fChance )
-			continue;
-
-		// Roll!
-		const char *pszAdditionalDropLootList = m_AdditionalDrops[i].m_pszLootListDefName;
-		const CEconLootListDefinition *pLootListDef = GetItemSchema()->GetLootListByName( pszAdditionalDropLootList );
-		if ( pLootListDef == NULL )
-		{
-			AssertMsg2( false, "Loot list '%s' specifies unknown additional drop '%s'", GetName(), pszAdditionalDropLootList );
-			return false;
-		}
-
-		bCreatedItems &= pLootListDef->RollRandomItemsAndAdditionalItems( pRandomStream, bFreeAccount, out_pVecRolledItems );
-	}
-
-	// If we failed to create some items, we might still have chosen some item defs before those failures. In that case, clear
-	// out any choices we've made so far
-	if ( !bCreatedItems )
-	{
-		out_pVecRolledItems->Purge();
-	}
-
-	Assert( bCreatedItems == (out_pVecRolledItems->Count() > 0) );
-
-	return bCreatedItems;
-}
-
-
-bool CEconLootListDefinition::RollRandomItemDef( IUniformRandomStream *pRandomStream, bool bFreeAccount, CUtlVector<rolled_item_defs_t> *out_pVecRolledItems, const CUtlVector< item_definition_index_t > *pVecAvoidItemDefs ) const
-{
-	Assert( out_pVecRolledItems );
-
-	CUtlVector< rolled_item_defs_t > vecScratchDefs;
-	CUtlVector<const drop_item_t*> vecValidDrops;
-
-	// Gather the items in this lootlist that we're able to roll for at this time
-	float flTotalWeight = 0.f;
-	FOR_EACH_VEC( m_DropList, i )
-	{
-		if( !m_DropList[i].m_dropPeriod.IsValidForTime( CRTime::RTime32TimeCur() ) )
-			continue;
-
-		// Skip any item defs that are in our avoid list (if we have one)
-		if ( pVecAvoidItemDefs )
-		{
-			item_definition_index_t defIndex = m_DropList[i].m_iItemOrLootlistDef;
-			if ( pVecAvoidItemDefs->Find( defIndex ) != pVecAvoidItemDefs->InvalidIndex() )
-				continue;
-		}
-
-		// If this is valid, add it to the list and add its weight to the total
-		vecValidDrops.AddToTail( &m_DropList[i] );
-		flTotalWeight += m_DropList[i].m_flWeight;
-	}
-
-	// Roll to see what item drops.
-	float flRand = pRandomStream->RandomFloat(0.0f, 1.0f) * flTotalWeight;
-
-	float flAccum = 0.0f;
-	FOR_EACH_VEC( vecValidDrops, i )
-	{
-		flAccum += vecValidDrops[i]->m_flWeight;
-		if ( flRand <= flAccum )
-		{
-			const int iItemDef = vecValidDrops[i]->m_iItemOrLootlistDef;	// not item_definition_index because it might also be a negative value to indicate a sub lootlist
-
-			if ( iItemDef >= 0 )
-			{
-				const CEconItemDefinition* pItemDef = GetItemSchema()->GetItemDefinition( iItemDef );
-				if( !pItemDef )
-					return false;
-
-				// Add the item def and the lootlist
-				rolled_item_defs_t& rolledDef = vecScratchDefs[ vecScratchDefs.AddToTail() ];
-				rolledDef.m_pItemDef = pItemDef;
-			}
-			else
-			{
-				// In the case where iItemDef is negative, it's a nested loot list. Ask that list to choose an item.
-				// HACKY: Store loot list indices as negatives, starting from -1, because 0 is a valid item index
-				int iLLIndex = (iItemDef * -1) - 1;
-				const CEconLootListDefinition *pNestedLootList = GetItemSchema()->GetLootListByIndex( iLLIndex );
-				if ( !pNestedLootList )
-					return false;
-
-				if( !pNestedLootList->RollRandomItemsAndAdditionalItems( pRandomStream, bFreeAccount, &vecScratchDefs, pVecAvoidItemDefs ) )
-					return false;
-			}
-
-			// Add ourselves to the list of affecting lootlists, so that we and all nested loot lists will affect this item
-			// We intentionally don't do this in our calling function because we don't want to include additional drops.
-			FOR_EACH_VEC( vecScratchDefs, j )
-			{
-				vecScratchDefs[j].m_vecAffectingLootLists.AddToTail( this );
-			}
-
-			// We want to exit the loop here regardless of whether items were successfully so that we only perform a single
-			// item-generating roll on this list.
-			break;
-		}
-	}
-
-	// Feed item defs, if they exist, back to our caller
-	out_pVecRolledItems->AddVectorToTail( vecScratchDefs ); 
-	
-	// Did we successfully create any items?
-	return ( vecScratchDefs.Count() > 0 );
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: find a list of lootlists with rarity from this lootlist
-//-----------------------------------------------------------------------------
-void CEconLootListDefinition::GetRarityLootLists( CUtlVector< const CEconLootListDefinition* > *out_pVecRarityLootList ) const
-{
-	Assert( out_pVecRarityLootList );
-	if ( m_unRarity != k_unItemRarity_Any )
-	{
-		out_pVecRarityLootList->AddToTail( this );
-	}
-
-	FOR_EACH_VEC( m_DropList, i )
-	{
-		const int iItemDef = m_DropList[i].m_iItemOrLootlistDef;	// not item_definition_index because it might also be a negative value to indicate a sub lootlist
-		if ( iItemDef < 0 )
-		{
-			// In the case where iItemDef is negative, it's a nested loot list. Ask that list to choose an item.
-			// HACKY: Store loot list indices as negatives, starting from -1, because 0 is a valid item index
-			int iLLIndex = (iItemDef * -1) - 1;
-			const CEconLootListDefinition *pNestedLootList = GetItemSchema()->GetLootListByIndex( iLLIndex );
-			if ( !pNestedLootList )
-				return;
-
-			pNestedLootList->GetRarityLootLists( out_pVecRarityLootList );
-		}
-	}
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: get all item defs from this lootlist ( not lootlist item def )
-//-----------------------------------------------------------------------------
-void CEconLootListDefinition::GetItemDefs( CUtlVector< item_definition_index_t > *out_pVecItemDefs ) const
-{
-	Assert( out_pVecItemDefs );
-
-	FOR_EACH_VEC( m_DropList, i )
-	{
-		const int iItemDef = m_DropList[i].m_iItemOrLootlistDef;	// not item_definition_index because it might also be a negative value to indicate a sub lootlist
-		if ( iItemDef >= 0 )
-		{
-			out_pVecItemDefs->AddToTail( (item_definition_index_t)iItemDef );
-		}
-		else
-		{
-			// In the case where iItemDef is negative, it's a nested loot list. Ask that list to choose an item.
-			// HACKY: Store loot list indices as negatives, starting from -1, because 0 is a valid item index
-			int iLLIndex = (iItemDef * -1) - 1;
-			const CEconLootListDefinition *pNestedLootList = GetItemSchema()->GetLootListByIndex( iLLIndex );
-			if ( !pNestedLootList )
-				return;
-
-			pNestedLootList->GetItemDefs( out_pVecItemDefs );
-		}
-	}
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: Given a vector of possible attributes, roll to see which ones are
-//			chosen.  We allocate memory for these new attributes, so it's the
-//			responsibility of the caller to free these attributes when they're
-//			done with them!
-//-----------------------------------------------------------------------------
-void CEconLootListDefinition::RollRandomAttributes( CUtlVector< static_attrib_t >& vecAttributes, const CEconGameAccount *pGameAccount ) const
-{
-	for ( int i=0; i<m_RandomAttribs.Count(); ++i )
-	{
-		const random_attrib_t* rattr = m_RandomAttribs[i];
-		rattr->RollRandomAttributes( vecAttributes, pGameAccount );
-	}
-}
 
 
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-bool CEconLootListDefinition::drop_period_t::IsValidForTime( const RTime32& time ) const
+bool CEconLootListDefinition::AddLootlistJob( KeyValues *pLootlistJobKV, CEconItemSchema &pschema, CUtlVector<CUtlString> *pVecErrors /*= NULL*/ )
 {
-	if( time >= m_DropStartDate && time < m_DropEndDate )
-		return true;
+	const char *pszJobName = pLootlistJobKV->GetName();
 
-	return false;
-}
+	// We've found the lootlist_jobs block. Parse it.
+	CLootlistJob *pJob = pschema.CreateLootlistJob( m_strName, pLootlistJobKV, pVecErrors );
+	
+	SCHEMA_INIT_CHECK(
+		NULL != pJob,
+		"Loot List %s: Failed to create CLootlistJob '%s'", m_strName.Get(), pszJobName );
 
-//-----------------------------------------------------------------------------
-// Purpose: 
-//-----------------------------------------------------------------------------
-bool CEconLootListDefinition::BAttachLootListAttributes( const CEconGameAccount *pGameAccount, CEconItem *pItem ) const
-{
-	//static CSchemaAttributeDefHandle pAttr_ElevateQuality( "elevate quality" );
-
-	// Gather and apply old-style random attributes.
-	CUtlVector< static_attrib_t > vecAttributes;
-	RollRandomAttributes( vecAttributes, pGameAccount );
-
-	FOR_EACH_VEC( vecAttributes, i )
-	{
-		GEconManager()->GetItemFactory().ApplyStaticAttributeToItem( pItem, vecAttributes[i], pGameAccount );
-		vecAttributes[i].GetAttributeDefinition()->GetAttributeType()->UnloadEconAttributeValue( &vecAttributes[i].m_value );
-	}
-
-	// Apply all relevant property generators.
-	for ( auto pGenerator : m_PropertyGenerators )
-	{
-		if ( !pGenerator->BGenerateProperties( pItem ) )
-			return false;
-	}
+	m_jobs.AddToTail( pJob );
 
 	return true;
 }
@@ -2557,60 +1060,154 @@ bool lootlist_attrib_t::BInitFromKV( const char *pszContext, KeyValues *pKVKey, 
 {
 	SCHEMA_INIT_SUBSTEP( m_staticAttrib.BInitFromKV_MultiLine( pszContext, pKVKey, pVecErrors ) );
 
-	SCHEMA_INIT_CHECK(
-		pKVKey->FindKey( "weight" ),
-		"Context '%s': Attribute \"%s\" missing required 'weight' field", pszContext, pKVKey->GetName() );
 
 	m_flWeight = pKVKey->GetFloat( "weight" );
 
 	return SCHEMA_INIT_SUCCESS();
 }
 
-//-----------------------------------------------------------------------------
-// Purpose: returns true if we should stop rolling from this random_attrib_t
-//-----------------------------------------------------------------------------
-bool random_attrib_t::RollRandomAttributes( CUtlVector< static_attrib_t >& vecAttributes, const CEconGameAccount *pGameAccount ) const
-{
-	if ( m_flChanceOfRandomAttribute && RandomFloat() <= m_flChanceOfRandomAttribute )
-	{
-		// We're attaching a random attribute. Determine which attribute.
-		float flRand = 0.0f;
-		if ( !m_bPickAllAttributes )
-		{
-			// Pick one attribute to add
-			// Otherwise we'll pick them all
-			flRand = RandomFloat( 0.f, 1.f ) * m_flTotalAttributeWeight;
-		}
-			
-		float flAccum = 0.f;
-		for ( int iAttrib = 0; iAttrib < m_RandomAttributes.Count(); ++iAttrib )
-		{
-			const lootlist_attrib_t& randomAttrib = m_RandomAttributes[iAttrib];
 
-			flAccum += randomAttrib.m_flWeight;
-			if ( flRand <= flAccum )
-			{
-				// Add the attribute
-				static_attrib_t &staticAttrib = vecAttributes[ vecAttributes.AddToTail( randomAttrib.m_staticAttrib ) ];
-				const CEconItemAttributeDefinition *pAttrDef = staticAttrib.GetAttributeDefinition();
-				const ISchemaAttributeType *pAttrType = pAttrDef->GetAttributeType();
-				// Generate a special value?
-				pAttrType->InitializeNewEconAttributeValue( &staticAttrib.m_value );
-				pAttrDef->GetAttributeType()->GenerateEconAttributeValue( pAttrDef, staticAttrib, pGameAccount, &staticAttrib.m_value );
-					
-				if ( !m_bPickAllAttributes )
-				{
-					// We're only picking one attribute from the list
-					return true;
-				}
-			}
+//-----------------------------------------------------------------------------
+// Purpose: check if an item pass all criterias
+//-----------------------------------------------------------------------------
+bool lootlist_attrib_t::BItemPassAllCriteria( const CEconItemDefinition* pItemDef ) const
+{
+	// we should check HasCriterias before calling this function
+	Assert( m_pVecCriteria );
+	if ( !m_pVecCriteria )
+		return true;
+
+	for ( int iCriteria=0; iCriteria<m_pVecCriteria->Count(); ++iCriteria )
+	{
+		const CItemSelectionCriteria *pCriteria = m_pVecCriteria->Element( iCriteria );
+		if ( !pCriteria->BEvaluate( pItemDef ) )
+		{
+			return false;
 		}
 	}
 
-	return false;
+	return true;
 }
 
-#endif // GC_DLL
+
+CLootlistJob::CLootlistJob( const char *pszOwnerName )
+	: m_pszOwnerName( pszOwnerName )
+{
+}
+
+CLootlistJob::~CLootlistJob()
+{
+	// make sure we clean up custom attributes that are not from templates
+	FOR_EACH_VEC( m_vecAttributes, i )
+	{
+		if ( !m_vecAttributes[i].m_bFromTemplate )
+		{
+			delete m_vecAttributes[i].m_pRandomAttributes;
+			m_vecAttributes[i].m_pRandomAttributes = NULL;
+		}
+	}
+}
+
+bool CLootlistJob::BInitFromKV( const char *pszContext, KeyValues *pKVKey, CEconItemSchema &pschema, CUtlVector<CUtlString> *pVecErrors )
+{
+
+	m_flChanceToRunJob = pKVKey->GetFloat( "chance" );
+
+
+	FOR_EACH_TRUE_SUBKEY( pKVKey, pSubKey )
+	{
+		const char *pszName = pSubKey->GetName();
+
+		if ( !V_strcmp( pszName, "random_attributes" ) )
+		{
+			AddRandomAtrributes( pSubKey, pschema, pVecErrors );
+			continue;
+		}
+		else if ( !V_strcmp( pszName, "attribute_templates" ) )
+		{
+			FOR_EACH_SUBKEY( pSubKey, pKVAttributeTemplate )
+			{
+				if ( pKVAttributeTemplate->GetInt() == 0 )
+					continue;
+
+				bool bAdded = AddRandomAttributesFromTemplates( pKVAttributeTemplate, pschema, pVecErrors );
+				SCHEMA_INIT_CHECK( bAdded, "%s: Failed to attribute_templates '%s'", m_pszOwnerName, pKVAttributeTemplate->GetName() );
+			}
+
+			continue;
+		}
+		else if ( !V_strcmp( pszName, "additional_drop" ) )
+		{
+			bool		bPremiumOnly	   = pSubKey->GetBool( "premium_only", false );
+			const char *pszLootList		   = pSubKey->GetString( "loot_list", "" );
+			const char *pszRequiredHoliday = pSubKey->GetString( "required_holiday", NULL );
+			const char *pszDropPerdiodStartDate = pSubKey->GetString( "start_date", NULL );
+			const char *pszDropPerdiodEndDate	= pSubKey->GetString( "end_date", NULL );
+
+			int iRequiredHolidayIndex = pszRequiredHoliday
+									  ? EconHolidays_GetHolidayForString( pszRequiredHoliday )
+									  : kHoliday_None;
+
+			RTime32 dropStartDate = ( pszDropPerdiodStartDate && pszDropPerdiodStartDate[0] )
+							? CRTime::RTime32FromFmtString( "YYYY-MM-DD hh:mm:ss" , pszDropPerdiodStartDate )
+							: RTime32(0);	// Default to the start of time
+
+			// Check that if we convert back to a string, we get the same value
+			char rtimeBuf[k_RTimeRenderBufferSize];
+			SCHEMA_INIT_CHECK(
+				pszDropPerdiodStartDate == NULL || Q_strcmp( CRTime::RTime32ToString( dropStartDate, rtimeBuf ), pszDropPerdiodStartDate ) == 0,
+				"Malformed start drop date \"%s\" for additional_drop in lootlist %s.  Must be of the form \"YYYY-MM-DD hh:mm:ss\"", pszDropPerdiodStartDate, m_pszOwnerName );
+
+
+			RTime32 dropEndDate = ( pszDropPerdiodEndDate && pszDropPerdiodEndDate[0] )
+						  ? CRTime::RTime32FromFmtString( "YYYY-MM-DD hh:mm:ss" , pszDropPerdiodEndDate )
+						  : ~RTime32(0);	// Default to the end of time
+
+			// Check that if we convert back to a string, we get the same value
+			SCHEMA_INIT_CHECK(
+				pszDropPerdiodEndDate == NULL || Q_strcmp( CRTime::RTime32ToString( dropEndDate, rtimeBuf ), pszDropPerdiodEndDate ) == 0,
+				"Malformed end drop date \"%s\" for additional_drop in lootlist %s.  Must be of the form \"YYYY-MM-DD hh:mm:ss\"", pszDropPerdiodEndDate, m_pszOwnerName );
+
+			SCHEMA_INIT_CHECK(
+				pszLootList && pszLootList[0],
+				"Loot list %s: Missing \"additional_drop\" loot list name", m_pszOwnerName );
+
+			SCHEMA_INIT_CHECK(
+				(pszRequiredHoliday == NULL) == (iRequiredHolidayIndex == kHoliday_None),
+				"Loot list %s: Unknown or missing holiday \"%s\"", m_pszOwnerName, pszRequiredHoliday ? pszRequiredHoliday : "(null)" );
+
+			if ( pszLootList )
+			{
+				// just add it. we'll do validation check on PostInit
+				drop_period_t dropPeriod = { dropStartDate, dropEndDate };
+				loot_list_additional_drop_t additionalDrop = { bPremiumOnly, m_pszOwnerName, pszLootList, iRequiredHolidayIndex, dropPeriod };
+				m_vecAdditionalDrops.AddToTail( additionalDrop );
+			}
+			continue;
+		}
+	}
+
+	return true;
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+bool CLootlistJob::BPostInit( CUtlVector<CUtlString> *pVecErrors )
+{
+	// all lootlists in additional drops must be valid
+	FOR_EACH_VEC( m_vecAdditionalDrops, i )
+	{
+		const char *pszLootList = m_vecAdditionalDrops[i].m_pszLootListDefName;
+		const CEconLootListDefinition *pLootListDef = GetItemSchema()->GetLootListByName( pszLootList );
+		SCHEMA_INIT_CHECK(
+			pLootListDef != NULL,
+			"Loot list %s: Invalid \"additional_drop\" loot list \"%s\"", m_pszOwnerName, pszLootList );
+	}
+
+	return SCHEMA_INIT_SUCCESS();
+}
 
 //-----------------------------------------------------------------------------
 // Purpose:
@@ -2646,6 +1243,162 @@ void CEconLootListDefinition::EnumerateUserFacingPotentialDrops( IEconLootListIt
 }
 
 //-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+bool CLootlistJob::AddRandomAtrributes( KeyValues *pRandomAttributesKV, CEconItemSchema &pschema, CUtlVector<CUtlString> *pVecErrors /*= NULL*/ )
+{
+	const char *pszAttrName = pRandomAttributesKV->GetName();
+
+	// We've found the random attribute block. Parse it.
+	random_attrib_t *pRandomAttr = pschema.CreateRandomAttribute( m_pszOwnerName, pRandomAttributesKV, pVecErrors );
+	
+	SCHEMA_INIT_CHECK(
+		NULL != pRandomAttr,
+		"Loot List %s: Failed to create random_attrib_t '%s'", m_pszOwnerName, pszAttrName );
+
+	m_vecAttributes.AddToTail( RandomAttributeInfo_t{ pRandomAttr, false } );
+
+	return true;
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+bool CLootlistJob::AddRandomAttributesFromTemplates( KeyValues *pRandomAttributesKV, CEconItemSchema &pschema, CUtlVector<CUtlString> *pVecErrors /*= NULL*/ )
+{
+	const char *pszAttrName = pRandomAttributesKV->GetName();
+
+	// try to find attr by template name
+	random_attrib_t *pRandomAttrTemplate = pschema.GetRandomAttributeTemplateByName( pszAttrName );
+	
+	SCHEMA_INIT_CHECK(
+		NULL != pRandomAttrTemplate,
+		"Loot List %s: Couldn't find random_attrib_t '%s' from attribute_templates", m_pszOwnerName, pszAttrName );
+
+	// craete a copy of the template and add to the list
+	random_attrib_t *pRandomAttr = new random_attrib_t;
+	*pRandomAttr = *pRandomAttrTemplate;
+	m_vecAttributes.AddToTail( RandomAttributeInfo_t{ pRandomAttr, true } );
+
+	return true;
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose:
+//-----------------------------------------------------------------------------
+bool GetClientLootListInfo( const CEconLootListDefinition *pLootList, LootListInfo_t &lootListInfo )
+{
+	if ( !pLootList )
+		return true;
+
+	class CLootListItemsIterator : public IEconLootList::IEconLootListIterator
+	{
+	public:
+		virtual void OnIterate( item_definition_index_t unItemDefIndex ) OVERRIDE
+		{
+			if ( m_vecItems.Find( unItemDefIndex ) == m_vecItems.InvalidIndex() )
+			{
+				m_vecItems.AddToTail( unItemDefIndex );
+			}
+		}
+
+		CUtlVector< item_definition_index_t > m_vecItems;
+	};
+
+	CLootListItemsIterator itr;
+	pLootList->EnumerateUserFacingPotentialDrops( &itr );
+
+	// copy items from itr
+	lootListInfo.m_vecItems.AddVectorToTail( itr.m_vecItems );
+
+	const auto& jobs = pLootList->GetLootlistJobs();
+	FOR_EACH_VEC( jobs, iJob )
+	{
+		CLootlistJob *pJob = jobs[iJob];
+
+		const auto& attributes = pJob->GetAttributes();
+		FOR_EACH_VEC( attributes, iAttr )
+		{
+			lootListInfo.m_vecAttributes.AddToTail( attributes[iAttr].m_pRandomAttributes );
+		}
+
+		const auto& additionalDrops = pJob->GetAdditionalDrops();
+		FOR_EACH_VEC( additionalDrops, iDrop )
+		{
+			LootListInfo_t tempAdditionalDrop;
+			const char *pszAdditionalDropLootListName = additionalDrops[iDrop].m_pszLootListDefName;
+			GetClientLootListInfo( pszAdditionalDropLootListName, tempAdditionalDrop );
+			// add all unique item to additional item list
+			FOR_EACH_VEC( tempAdditionalDrop.m_vecItems, iTemp )
+			{
+				item_definition_index_t tempDefIndex = tempAdditionalDrop.m_vecItems[iTemp];
+				if ( lootListInfo.m_vecAdditionalItems.Find( tempDefIndex ) == lootListInfo.m_vecAdditionalItems.InvalidIndex() )
+				{
+					lootListInfo.m_vecAdditionalItems.AddToTail( tempDefIndex );
+				}
+			}
+			FOR_EACH_VEC( tempAdditionalDrop.m_vecAdditionalItems, iTemp )
+			{
+				item_definition_index_t tempDefIndex = tempAdditionalDrop.m_vecAdditionalItems[iTemp];
+				if ( lootListInfo.m_vecAdditionalItems.Find( tempDefIndex ) == lootListInfo.m_vecAdditionalItems.InvalidIndex() )
+				{
+					lootListInfo.m_vecAdditionalItems.AddToTail( tempDefIndex );
+				}
+			}
+		}
+	}
+
+	return true;
+}
+
+//-----------------------------------------------------------------------------
+// Purpose:
+//-----------------------------------------------------------------------------
+bool GetClientLootListInfo( const char *pszLootListName, LootListInfo_t &lootListInfo )
+{
+	const CEconLootListDefinition *pLootList = GetItemSchema()->GetLootListByName( pszLootListName );
+	return GetClientLootListInfo( pLootList, lootListInfo );
+}
+
+//-----------------------------------------------------------------------------
+// Purpose:
+//-----------------------------------------------------------------------------
+bool GetClientLootListInfo( const IEconItemInterface *pEconItem, LootListInfo_t &lootListInfo )
+{
+	// global jobs from item definition
+	const CEconItemDefinition *pEconItemDef = pEconItem->GetItemDefinition();
+	if ( pEconItemDef )
+	{
+		const auto& jobs = pEconItemDef->GetLootlistJobs();
+		FOR_EACH_VEC( jobs, iJob )
+		{
+			CLootlistJob *pJob = jobs[iJob];
+
+			const auto& attributes = pJob->GetAttributes();
+			FOR_EACH_VEC( attributes, iAttr )
+			{
+				lootListInfo.m_vecAttributes.AddToTail( attributes[iAttr].m_pRandomAttributes );
+			}
+
+			// no need to include global additional drops info?
+			/*const auto& additionalDrops = pJob->GetAdditionalDrops();
+			FOR_EACH_VEC( additionalDrops, iDrop )
+			{
+				LootListInfo_t *pAdditionalDrop = lootListInfo.m_vecAdditionalItems.AddToTailGetPtr();
+				const char *pszAdditionalDropLootListName = additionalDrops[iDrop].m_pszLootListDefName;
+				GetClientLootListInfo( pszAdditionalDropLootListName, *pAdditionalDrop );
+			}*/
+		}
+	}
+
+	// copy items from itr
+	CCrateLootListWrapper LootListWrapper( pEconItem );
+	const CEconLootListDefinition *pLootList = dynamic_cast< const CEconLootListDefinition* >( LootListWrapper.GetEconLootList() );
+	return GetClientLootListInfo( pLootList, lootListInfo );
+}
+
+//-----------------------------------------------------------------------------
 // Purpose:
 //-----------------------------------------------------------------------------
 /*static*/ CSchemaAttributeDefHandle CAttributeLineItemLootList::s_pAttrDef_RandomDropLineItems[] =
@@ -2656,10 +1409,6 @@ void CEconLootListDefinition::EnumerateUserFacingPotentialDrops( IEconLootListIt
 	CSchemaAttributeDefHandle( "random drop line item 3" ),
 };
 
-#ifdef GC_DLL
-/*static*/ CSchemaAttributeDefHandle CAttributeLineItemLootList::s_pAttrDef_RandomDropLineItemUnusualChance( "random drop line item unusual chance" );		// "one out of this many"
-/*static*/ CSchemaAttributeDefHandle CAttributeLineItemLootList::s_pAttrDef_RandomDropLineItemUnusualList( "random drop line item unusual list" );	
-#endif // GC_DLL
 CSchemaAttributeDefHandle CAttributeLineItemLootList::s_pAttrDef_RandomDropLineItemFooterDesc( "random drop line item footer desc" );	
 
 //-----------------------------------------------------------------------------
@@ -2712,8 +1461,8 @@ const char *CAttributeLineItemLootList::GetLootListCollectionReference() const
 //-----------------------------------------------------------------------------
 const CEconLootListDefinition* CEconItemSchema::GetLootListByName( const char* pListName, int *out_piIndex ) const
 {
-	auto idx = m_mapLootLists.Find( pListName );
-	if ( !m_mapLootLists.IsValidIndex( idx ) )
+	auto idx = m_dictLootLists.Find( pListName );
+	if ( !m_dictLootLists.IsValidIndex( idx ) )
 		return NULL;
 
 	if ( out_piIndex )
@@ -2721,31 +1470,15 @@ const CEconLootListDefinition* CEconItemSchema::GetLootListByName( const char* p
 		*out_piIndex = idx;
 	}
 
-	return m_mapLootLists[idx];
+	return m_dictLootLists[idx];
 }
 
-//-----------------------------------------------------------------------------
-// Purpose:	
-//-----------------------------------------------------------------------------
-const CQuestObjectiveDefinition* CEconItemSchema::GetQuestObjectiveByDefIndex( int iIdx ) const
-{
-	auto nMapIndex = m_mapQuestObjectives.Find( iIdx );
-	if ( nMapIndex != m_mapQuestObjectives.InvalidIndex() )
-	{
-		return m_mapQuestObjectives[ nMapIndex ];
-	}
-
-	return NULL;
-}
 
 //-----------------------------------------------------------------------------
 // Purpose: Constructor
 //-----------------------------------------------------------------------------
 CEconCraftingRecipeDefinition::CEconCraftingRecipeDefinition( void )
 	: m_nDefIndex( 0 )
-#ifdef GC_DLL
-	, m_bIsCraftableByUnverifiedClient( false )
-#endif // GC_DLL
 {
 }
 
@@ -2782,9 +1515,6 @@ bool CEconCraftingRecipeDefinition::BInitFromKV( KeyValues *pKVRecipe, CUtlVecto
 	m_strDO_B = pKVRecipe->GetString( "do_B" );	 
 	m_strDO_C = pKVRecipe->GetString( "do_C" );	 
 
-#ifdef GC_DLL
-	m_bIsCraftableByUnverifiedClient = pKVRecipe->GetBool( "is_craftable_by_unverified_clients", false );
-#endif // GC_DLL
 	m_bRequiresAllSameClass = pKVRecipe->GetBool( "all_same_class" );
 	m_bRequiresAllSameSlot = pKVRecipe->GetBool( "all_same_slot" );
 	m_iCacheClassUsageForOutputFromItem = pKVRecipe->GetInt( "add_class_usage_to_output", -1 );
@@ -2957,12 +1687,7 @@ int CEconCraftingRecipeDefinition::GetTotalInputItemsRequired( void ) const
 //-----------------------------------------------------------------------------
 // Purpose:
 //-----------------------------------------------------------------------------
-#ifdef GC_DLL
-	#define GC_SCH_REFERENCE( TAttribSchType ) \
-		TAttribSchType, 
-#else
 	#define GC_SCH_REFERENCE( TAttribSchType )
-#endif
 
 //-----------------------------------------------------------------------------
 // Purpose:
@@ -2979,21 +1704,6 @@ unsigned int Internal_GetAttributeTypeUniqueIdentifierNextValue()
 //-----------------------------------------------------------------------------
 // Purpose:
 //-----------------------------------------------------------------------------
-#ifdef GC_DLL
-template < typename TAttribSchType, typename TRecordBaseType >
-static TAttribSchType *GetTypedSch( TRecordBaseType *pRecordBase )
-{
-	Assert( pRecordBase->GetITable() == TAttribSchType::k_iTable );
-
-#if ENABLE_TYPED_ATTRIBUTE_PARANOIA
-	TAttribSchType *pTypedSch = dynamic_cast<TAttribSchType *>( pRecordBase );
-	Assert( pTypedSch );
-	return pTypedSch;
-#else
-	return static_cast<TAttribSchType *>( pRecordBase );
-#endif
-}
-#endif // GC_DLL
 
 //-----------------------------------------------------------------------------
 // Purpose:
@@ -3002,19 +1712,6 @@ template < GC_SCH_REFERENCE( typename TAttribSchType ) typename TAttribInMemoryT
 class CSchemaAttributeTypeBase : public ISchemaAttributeTypeBase<TAttribInMemoryType>
 {
 public:
-#ifdef GC_DLL
-	virtual CColumnSet& GetFullColumnSet() const OVERRIDE
-	{
-		static CColumnSet sFullColumnSet( CColumnSet::Full<TAttribSchType>() );
-
-		return sFullColumnSet;
-	}
-
-	virtual CRecordBase *CreateTypedSchRecord() const OVERRIDE
-	{
-		return new TAttribSchType;
-	}
-#endif // GC_DLL
 };
 
 //-----------------------------------------------------------------------------
@@ -3063,40 +1760,6 @@ public:
 class CSchemaAttributeType_String : public CSchemaAttributeTypeProtobufBase< GC_SCH_REFERENCE( CSchItemAttributeString ) CAttribute_String >
 {
 public:
-#ifdef GC_DLL
-	virtual void ConvertEconAttributeValueToSch( itemid_t unItemId, const CEconItemAttributeDefinition *pAttrDef, const attribute_data_union_t& value, GCSDK::CRecordBase *out_pSchRecord ) const OVERRIDE
-	{
-		Assert( out_pSchRecord );
-		Assert( pAttrDef );
-		Assert( pAttrDef->GetAttributeType() == this );
-
-		CSchItemAttributeString *out_psch = GetTypedSch<CSchItemAttributeString>( out_pSchRecord );
-
-		CAttribute_String typedValue;
-		this->ConvertEconAttributeValueToTypedValue( value, &typedValue );
-
-		// const CAttribute_String& typedValue = GetTypedValueContentsFromEconAttributeValue( value );
-
-		out_psch->m_ulItemID			= unItemId;
-		out_psch->m_unAttrDefIndex		= pAttrDef->GetDefinitionIndex();
-		WRITE_VAR_CHAR_FIELD( (*out_psch), VarCharAttrStrValue, typedValue.value().c_str() );
-	}
-
-	virtual void LoadSchToEconAttributeValue( CEconItem *pTargetItem, const CEconItemAttributeDefinition *pAttrDef, const GCSDK::CRecordBase *pSchRecord ) const OVERRIDE
-	{
-		Assert( pTargetItem );
-		Assert( pAttrDef );
-		Assert( pSchRecord );
-		Assert( pAttrDef->GetAttributeType() == this );
-
-		const CSchItemAttributeString *psch = GetTypedSch<const CSchItemAttributeString>( pSchRecord );
-
-		CAttribute_String typedValue;
-		typedValue.set_value( READ_VAR_CHAR_FIELD( (*psch), m_VarCharAttrStrValue ) );
-
-		pTargetItem->SetDynamicAttributeValue( pAttrDef, typedValue );
-	}
-#endif // GC_DLL
 
 	// We intentionally override the convert-to-/convert-from-string functions for strings so that string literals can be
 	// specified in the schema, etc. without worrying about the protobuf text format.
@@ -3136,135 +1799,6 @@ void CopyStringAttributeValueToCharPointerOutput( const CAttribute_String *pValu
 class CSchemaAttributeType_DynamicRecipeComponentDefinedItem : public CSchemaAttributeTypeProtobufBase< GC_SCH_REFERENCE( CSchItemAttributeDynamicRecipeComponentDefinedItem ) CAttribute_DynamicRecipeComponent >
 {
 public:
-#ifdef GC_DLL
-	virtual void ConvertEconAttributeValueToSch( itemid_t unItemId, const CEconItemAttributeDefinition *pAttrDef, const union attribute_data_union_t& value, GCSDK::CRecordBase *out_pSchRecord ) const OVERRIDE
-	{
-		Assert( out_pSchRecord );
-		Assert( pAttrDef );
-		Assert( pAttrDef->GetAttributeType() == this );
-
-		CSchItemAttributeDynamicRecipeComponentDefinedItem *out_psch = GetTypedSch<CSchItemAttributeDynamicRecipeComponentDefinedItem>( out_pSchRecord );
-
-		CAttribute_DynamicRecipeComponent typedValue;
-		ConvertEconAttributeValueToTypedValue( value, &typedValue );
-
-		out_psch->m_ulItemID			= unItemId;
-		out_psch->m_unAttrDefIndex		= pAttrDef->GetDefinitionIndex();
-		out_psch->m_unItemDef			= typedValue.def_index();
-		out_psch->m_unItemQuality		= typedValue.item_quality();
-		out_psch->m_unFlags				= typedValue.component_flags();
-		out_psch->m_unItemCount			= typedValue.num_required();
-		out_psch->m_unItemsFulfilled	= typedValue.num_fulfilled();
-		WRITE_VAR_CHAR_FIELD( (*out_psch), VarCharAttrStr, typedValue.attributes_string().c_str() );
-	}
-
-	virtual void LoadSchToEconAttributeValue( CEconItem *pTargetItem, const CEconItemAttributeDefinition *pAttrDef, const GCSDK::CRecordBase *pSchRecord ) const OVERRIDE
-	{
-		Assert( pTargetItem );
-		Assert( pAttrDef );
-		Assert( pSchRecord );
-		Assert( pAttrDef->GetAttributeType() == this );
-
-		const CSchItemAttributeDynamicRecipeComponentDefinedItem *psch = GetTypedSch<const CSchItemAttributeDynamicRecipeComponentDefinedItem>( pSchRecord );
-
-		CAttribute_DynamicRecipeComponent typedValue;
-		typedValue.set_def_index( psch->m_unItemDef );
-		typedValue.set_item_quality( psch->m_unItemQuality );
-		typedValue.set_component_flags( psch->m_unFlags );
-		typedValue.set_attributes_string( READ_VAR_CHAR_FIELD( (*psch), m_VarCharAttrStr ) );
-		typedValue.set_num_required( psch->m_unItemCount );
-		typedValue.set_num_fulfilled( psch->m_unItemsFulfilled );
-
-		pTargetItem->SetDynamicAttributeValue( pAttrDef, typedValue );
-	}
-
-	virtual bool BConvertStringToEconAttributeValue( const CEconItemAttributeDefinition *pAttrDef, const char *pszValue, union attribute_data_union_t *out_pValue, bool bEnableTerribleBackwardsCompatibilitySchemaParsingCode ) const OVERRIDE
-	{
-		Assert( pAttrDef );
-		Assert( out_pValue );
-		
-		std::string sValue( pszValue );
-		// What's happened here is we've renamed some fields within CAttribute_DynamicRecipeComponent,
-		// but steam contains the strings of the old format serialized, and keeps sending them to us.
-		// Rather than updating steam, we're going to made a protobuff class that can accept the new
-		// and old formats, and put the corret values into the correct members of the new format.
-
-		
-		CAttribute_DynamicRecipeComponent_COMPAT_NEVER_SERIALIZE_THIS_OUT  typedCompatValue;
-		CAttribute_DynamicRecipeComponent typedActualValue;
-
-#ifdef STAGING_ONLY
-		auto *pActualFields = typedActualValue.descriptor();
-		auto *pCompatFields = typedCompatValue.descriptor();
-		for ( int i=0; i < pActualFields->field_count(); ++i )
-		{
-			const bool bFoundField = pCompatFields->FindFieldByName( pActualFields->field( i )->name() ) != NULL;
-			Assert( bFoundField );
-			if ( !bFoundField )
-			{
-				EmitError( SPEW_GC, "Missing field '%s' in CAttribute_DynamicRecipeComponent_COMPAT_NEVER_SERIALIZE_THIS_OUT\n", pActualFields->field( i )->name() );
-				return false;
-			}
-		}
-#endif // STAGING_ONLY
-
-		if ( !google::protobuf::TextFormat::ParseFromString( sValue, &typedCompatValue ) )
-		{
-			EmitError( SPEW_GC, "Failed to parse recipe component into compatible protobuf\n" );
-			return false;
-		}
-
-		if ( typedCompatValue.has_component_flags() )
-			typedActualValue.set_component_flags( typedCompatValue.component_flags() );
-		else if ( typedCompatValue.has_item_flags() )
-			typedActualValue.set_component_flags( typedCompatValue.item_flags() );
-		else 
-		{
-			EmitError( SPEW_GC, "Failed to parse component_flags.  component_flags: %d, item_flags: %d\n", typedCompatValue.component_flags(), typedCompatValue.item_flags() );
-			return false;
-		}
-
-		if ( typedCompatValue.has_def_index() )
-			typedActualValue.set_def_index( typedCompatValue.def_index() );
-		else if ( typedCompatValue.has_item_def() )
-			typedActualValue.set_def_index( typedCompatValue.item_def() );
-		else if ( typedActualValue.component_flags() & DYNAMIC_RECIPE_FLAG_PARAM_ITEM_DEF_SET )
-		{
-			EmitError( SPEW_GC, "Failed to parse item_def.  def_index: %d, item_def: %d\n", typedCompatValue.def_index(), typedCompatValue.item_def() );
-			return false;
-		}
-
-		typedActualValue.set_item_quality( typedCompatValue.item_quality() );
-
-		
-		
-		typedActualValue.set_attributes_string( typedCompatValue.attributes_string() );
-
-		if( typedCompatValue.has_num_required() )
-			typedActualValue.set_num_required( typedCompatValue.num_required() );
-		else if ( typedCompatValue.has_item_count() )
-			typedActualValue.set_num_required( typedCompatValue.item_count() );
-		else
-		{
-			EmitError( SPEW_GC, "Failed to parse component_flags.  num_required: %d, item_count: %d\n", typedCompatValue.num_required(), typedCompatValue.item_count() );
-			return false;
-		}
-
-		if ( typedCompatValue.has_items_fulfilled() )
-			typedActualValue.set_num_fulfilled( typedCompatValue.items_fulfilled() );
-		else if ( typedCompatValue.has_num_fulfilled() )
-			typedActualValue.set_num_fulfilled( typedCompatValue.num_fulfilled() );
-		else
-		{
-			EmitError( SPEW_GC, "Failed to parse num_fulfilled.  items_fulfilled: %d, num_fulfilled: %d\n", typedCompatValue.items_fulfilled(), typedCompatValue.num_fulfilled() );
-			return false;
-		}
-
-		this->ConvertTypedValueToEconAttributeValue( typedActualValue, out_pValue );
-		return true;
-	}
-
-#endif // GC_DLL
 };
 
 
@@ -3274,26 +1808,6 @@ public:
 class CSchemaAttributeType_ItemSlotCriteria : public CSchemaAttributeTypeProtobufBase< GC_SCH_REFERENCE( CSchItemAttributeItemSlotCriteria ) CAttribute_ItemSlotCriteria >
 {
 public:
-#ifdef GC_DLL
-	virtual void ConvertEconAttributeValueToSch( itemid_t unItemId, const CEconItemAttributeDefinition *pAttrDef, const union attribute_data_union_t& value, GCSDK::CRecordBase *out_pSchRecord ) const OVERRIDE
-	{
-		Assert( out_pSchRecord );
-		Assert( pAttrDef );
-		Assert( pAttrDef->GetAttributeType() == this );
-
-		AssertMsg( 0, "Implement this when we want this attribute to be dynamic" );
-	}
-
-	virtual void LoadSchToEconAttributeValue( CEconItem *pTargetItem, const CEconItemAttributeDefinition *pAttrDef, const GCSDK::CRecordBase *pSchRecord ) const OVERRIDE
-	{
-		Assert( pTargetItem );
-		Assert( pAttrDef );
-		Assert( pSchRecord );
-		Assert( pAttrDef->GetAttributeType() == this );
-		
-		AssertMsg( 0, "Implement this when we want this attribute to be dynamic" );
-	}
-#endif // GC_DLL
 
 	virtual bool BConvertStringToEconAttributeValue( const CEconItemAttributeDefinition *pAttrDef, const char *pszValue, union attribute_data_union_t *out_pValue, bool bEnableTerribleBackwardsCompatibilitySchemaParsingCode ) const OVERRIDE
 	{
@@ -3326,50 +1840,6 @@ public:
 class CSchemaAttributeType_WorldItemPlacement : public CSchemaAttributeTypeProtobufBase < GC_SCH_REFERENCE( CSchItemAttributeWorldItemPlacement ) CAttribute_WorldItemPlacement >
 {
 public:
-#ifdef GC_DLL
-	virtual void ConvertEconAttributeValueToSch( itemid_t unItemId, const CEconItemAttributeDefinition *pAttrDef, const union attribute_data_union_t& value, GCSDK::CRecordBase *out_pSchRecord ) const OVERRIDE
-	{
-		Assert( out_pSchRecord );
-		Assert( pAttrDef );
-		Assert( pAttrDef->GetAttributeType() == this );
-
-		CSchItemAttributeWorldItemPlacement *out_psch = GetTypedSch< CSchItemAttributeWorldItemPlacement >( out_pSchRecord );
-
-		CAttribute_WorldItemPlacement typedValue;
-		ConvertEconAttributeValueToTypedValue( value, &typedValue );
-
-		out_psch->m_ulItemID = unItemId;
-		out_psch->m_unAttrDefIndex = pAttrDef->GetDefinitionIndex();
-		out_psch->m_ulOriginalItemID = typedValue.original_item_id();
-		out_psch->m_fPosX = typedValue.pos_x();
-		out_psch->m_fPosY = typedValue.pos_y();
-		out_psch->m_fPosZ = typedValue.pos_z();
-		out_psch->m_fAngX = typedValue.ang_x();
-		out_psch->m_fAngY = typedValue.ang_y();
-		out_psch->m_fAngZ = typedValue.ang_z();
-	}
-
-	virtual void LoadSchToEconAttributeValue( CEconItem *pTargetItem, const CEconItemAttributeDefinition *pAttrDef, const GCSDK::CRecordBase *pSchRecord ) const OVERRIDE
-	{
-		Assert( pTargetItem );
-		Assert( pAttrDef );
-		Assert( pSchRecord );
-		Assert( pAttrDef->GetAttributeType() == this );
-
-		const CSchItemAttributeWorldItemPlacement *psch = GetTypedSch< const CSchItemAttributeWorldItemPlacement >( pSchRecord );
-
-		CAttribute_WorldItemPlacement typedValue;
-		typedValue.set_original_item_id( psch->m_ulOriginalItemID );
-		typedValue.set_pos_x( psch->m_fPosX );
-		typedValue.set_pos_y( psch->m_fPosY );
-		typedValue.set_pos_x( psch->m_fPosZ );
-		typedValue.set_ang_x( psch->m_fAngX );
-		typedValue.set_ang_y( psch->m_fAngY );
-		typedValue.set_ang_z( psch->m_fAngZ );
-
-		pTargetItem->SetDynamicAttributeValue( pAttrDef, typedValue );
-	}
-#endif // GC_DLL
 
 	virtual bool BConvertStringToEconAttributeValue( const CEconItemAttributeDefinition *pAttrDef, const char *pszValue, union attribute_data_union_t *out_pValue, bool bEnableTerribleBackwardsCompatibilitySchemaParsingCode ) const OVERRIDE
 	{
@@ -3417,33 +1887,6 @@ public:
 class CSchemaAttributeType_Float : public CSchemaAttributeTypeBase< GC_SCH_REFERENCE( CSchItemAttributeFloat ) float >
 {
 public:
-#ifdef GC_DLL
-	virtual void ConvertEconAttributeValueToSch( itemid_t unItemId, const CEconItemAttributeDefinition *pAttrDef, const union attribute_data_union_t& value, GCSDK::CRecordBase *out_pSchRecord ) const OVERRIDE
-	{
-		Assert( out_pSchRecord );
-		Assert( pAttrDef );
-		Assert( pAttrDef->GetAttributeType() == this );
-
-		CSchItemAttributeFloat *out_pschItemAttribute = GetTypedSch<CSchItemAttributeFloat>( out_pSchRecord );
-
-		// @note Tom Bui: we store the value as an unsigned integer in the DB, so just treat the field as a bunch of bits
-		out_pschItemAttribute->m_ulItemID		= unItemId;
-		out_pschItemAttribute->m_unAttrDefIndex = pAttrDef->GetDefinitionIndex();
-		out_pschItemAttribute->m_fValue			= value.asFloat;
-	}
-
-	virtual void LoadSchToEconAttributeValue( CEconItem *pTargetItem, const CEconItemAttributeDefinition *pAttrDef, const GCSDK::CRecordBase *pSchRecord ) const OVERRIDE
-	{
-		Assert( pTargetItem );
-		Assert( pAttrDef );
-		Assert( pSchRecord );
-		Assert( pAttrDef->GetAttributeType() == this );
-
-		const CSchItemAttributeFloat *pschItemAttribute = GetTypedSch<const CSchItemAttributeFloat>( pSchRecord );
-
-		pTargetItem->SetDynamicAttributeValue( pAttrDef, pschItemAttribute->m_fValue );
-	}
-#endif // GC_DLL
 
 	virtual bool BConvertStringToEconAttributeValue( const CEconItemAttributeDefinition *pAttrDef, const char *pszValue, union attribute_data_union_t *out_pValue, bool bEnableTerribleBackwardsCompatibilitySchemaParsingCode ) const OVERRIDE
 	{
@@ -3492,36 +1935,6 @@ public:
 class CSchemaAttributeType_UInt64 : public CSchemaAttributeTypeBase< GC_SCH_REFERENCE( CSchItemAttributeUInt64 ) uint64 >
 {
 public:
-#ifdef GC_DLL
-	virtual void ConvertEconAttributeValueToSch( itemid_t unItemId, const CEconItemAttributeDefinition *pAttrDef, const union attribute_data_union_t& value, GCSDK::CRecordBase *out_pSchRecord ) const OVERRIDE
-	{
-		Assert( out_pSchRecord );
-		Assert( pAttrDef );
-		Assert( pAttrDef->GetAttributeType() == this );
-
-		uint64 ulValue;
-		ConvertEconAttributeValueToTypedValue( value, &ulValue );
-
-		CSchItemAttributeUInt64 *out_pschItemAttribute = GetTypedSch<CSchItemAttributeUInt64>( out_pSchRecord );
-
-		// @note Tom Bui: we store the value as an unsigned integer in the DB, so just treat the field as a bunch of bits
-		out_pschItemAttribute->m_ulItemID		= unItemId;
-		out_pschItemAttribute->m_unAttrDefIndex = pAttrDef->GetDefinitionIndex();
-		out_pschItemAttribute->m_ulValue		= ulValue;
-	}
-
-	virtual void LoadSchToEconAttributeValue( CEconItem *pTargetItem, const CEconItemAttributeDefinition *pAttrDef, const GCSDK::CRecordBase *pSchRecord ) const OVERRIDE
-	{
-		Assert( pTargetItem );
-		Assert( pAttrDef );
-		Assert( pSchRecord );
-		Assert( pAttrDef->GetAttributeType() == this );
-
-		const CSchItemAttributeUInt64 *pschItemAttribute = GetTypedSch<const CSchItemAttributeUInt64>( pSchRecord );
-
-		pTargetItem->SetDynamicAttributeValue( pAttrDef, pschItemAttribute->m_ulValue );
-	}
-#endif // GC_DLL
 
 	virtual bool BConvertStringToEconAttributeValue( const CEconItemAttributeDefinition *pAttrDef, const char *pszValue, union attribute_data_union_t *out_pValue, bool bEnableTerribleBackwardsCompatibilitySchemaParsingCode ) const OVERRIDE
 	{
@@ -3568,88 +1981,6 @@ public:
 class CSchemaAttributeType_Default : public CSchemaAttributeTypeBase< GC_SCH_REFERENCE( CSchItemAttribute ) attrib_value_t >
 {
 public:
-#ifdef GC_DLL
-	virtual bool BAssetClassExportedAttributeValue( const CEconItemAttributeDefinition *pAttrDef, const attribute_data_union_t& value ) const OVERRIDE
-	{
-		Assert( pAttrDef );
-
-		static CSchemaAttributeDefHandle pAttrib_TradableAfter( "tradable after date" );
-
-		// Don't include "tradable after date" if it's in the past
-		// See IEconItemInterface::IsTradable for the specific logic on how this affects tradability
-		if ( pAttrDef == pAttrib_TradableAfter && CRTime::RTime32TimeCur() > value.asUint32 )
-			return false;
-
-		return CSchemaAttributeTypeBase< GC_SCH_REFERENCE( CSchItemAttribute ) attrib_value_t >::BAssetClassExportedAttributeValue( pAttrDef, value );
-	}
-
-	virtual void ConvertEconAttributeValueToSch( itemid_t unItemId, const CEconItemAttributeDefinition *pAttrDef, const union attribute_data_union_t& value, GCSDK::CRecordBase *out_pSchRecord ) const OVERRIDE
-	{
-		Assert( out_pSchRecord );
-		Assert( pAttrDef );
-		Assert( pAttrDef->GetAttributeType() == this );
-
-		CSchItemAttribute *out_pschItemAttribute = GetTypedSch<CSchItemAttribute>( out_pSchRecord );
-
-		// @note Tom Bui: we store the value as an unsigned integer in the DB, so just treat the field as a bunch of bits
-		out_pschItemAttribute->m_ulItemID		= unItemId;
-		out_pschItemAttribute->m_unAttrDefIndex = pAttrDef->GetDefinitionIndex();
-		out_pschItemAttribute->m_unValue		= value.asUint32;
-	}
-
-	virtual void LoadSchToEconAttributeValue( CEconItem *pTargetItem, const CEconItemAttributeDefinition *pAttrDef, const GCSDK::CRecordBase *pSchRecord ) const OVERRIDE
-	{
-		Assert( pTargetItem );
-		Assert( pAttrDef );
-		Assert( pSchRecord );
-		Assert( pAttrDef->GetAttributeType() == this );
-
-		const CSchItemAttribute *pschItemAttribute = GetTypedSch<const CSchItemAttribute>( pSchRecord );
-
-		pTargetItem->SetDynamicAttributeValue( pAttrDef, pschItemAttribute->m_unValue );
-	}
-
-	virtual void LoadOrGenerateEconAttributeValue( CEconItem *pTargetItem, const CEconItemAttributeDefinition *pAttrDef, const static_attrib_t& staticAttrib, const CEconGameAccount *pGameAccount ) const OVERRIDE
-	{
-		Assert( pTargetItem );
-		Assert( pTargetItem->GetItemDefinition() );
-		Assert( pAttrDef );
-
-		// Wear is reassigned by attributes but has a default value from itemdef prefab
-		static CSchemaAttributeDefHandle pAttrDef_PaintkitWear( "set_item_texture_wear" );
-
-		// do not apply an attribute if it already exists.  If the new and the old attribute value is different then we assert (and use the latest value)
-		attrib_value_t unValue = 0;
-		if ( pTargetItem->FindAttribute( pAttrDef, &unValue ) && pAttrDef != pAttrDef_PaintkitWear )
-		{
-			AssertMsg4( unValue == staticAttrib.m_value.asUint32,
-				"Item id %llu (%s) attempting to generate dynamic attribute value for '%s' (%d) when attribute already exists with a different Value! This probably indicates some sort of code flow error calling LoadOrGenerateEconAttributeValue() late.",
-				pTargetItem->GetItemID(), pTargetItem->GetItemDefinition()->GetDefinitionName(), pAttrDef->GetDefinitionName(), pAttrDef->GetDefinitionIndex() );
-
-			if ( unValue == staticAttrib.m_value.asUint32 )
-				return;
-		}
-		
-		// Could be raw integer bits or raw floating-point bits depending on where in the union we stored the value. We copy the
-		// bit pattern indiscriminately.
-		attribute_data_union_t ResultValue;
-		ResultValue = staticAttrib.m_value;
-		GenerateEconAttributeValue( pAttrDef, staticAttrib, pGameAccount, &ResultValue );
-		LoadEconAttributeValue( pTargetItem, pAttrDef, ResultValue );
-	}
-
-	virtual void GenerateEconAttributeValue( const CEconItemAttributeDefinition *pAttrDef, const static_attrib_t& staticAttrib, const CEconGameAccount *pGameAccount, attribute_data_union_t* out_pValue ) const
-	{
-		Assert( pAttrDef );
-		AssertMsg( pGameAccount || !staticAttrib.m_pKVCustomData, "Cannot run custom logic with no game account object! Passing in NULL for pGameAccount is only supported when we know we won't be running custom value generation code!" );
-		Assert( out_pValue );
-
-		if( staticAttrib.m_pKVCustomData )
-		{
-			Internal_RunCustomAttributeValueLogic( staticAttrib, pGameAccount, out_pValue );
-		}
-	}
-#endif // GC_DLL
 
 	virtual bool BConvertStringToEconAttributeValue( const CEconItemAttributeDefinition *pAttrDef, const char *pszValue, union attribute_data_union_t *out_pValue, bool bEnableTerribleBackwardsCompatibilitySchemaParsingCode ) const OVERRIDE
 	{
@@ -3715,10 +2046,6 @@ public:
 	virtual void ConvertByteStreamToTypedValue( const ::std::string& sBytes, attrib_value_t *out_pTypedValue ) const OVERRIDE
 	{
 		Assert( out_pTypedValue );
-#ifdef GC_DLL
-		// The GC is expected to always have internally-consistent information.
-		Assert( sBytes.size() == sizeof( attrib_value_t ) );
-#else
 		// Game clients and servers may have partially out-of-date information, or may have downloaded a new schema
 		// but not know how to parse an attribute of a certain type, etc. In these cases, because we know we
 		// aren't on the GC, temporarily failing to load these values until the client shuts down and updates
@@ -3728,7 +2055,6 @@ public:
 			*out_pTypedValue = attrib_value_t();
 			return;
 		}
-#endif
 
 		*out_pTypedValue = *reinterpret_cast<const attrib_value_t *>( &sBytes[0] );
 	}
@@ -3739,79 +2065,6 @@ public:
 	}
 	
 private:
-#ifdef GC_DLL
-	void Internal_RunCustomAttributeValueLogic( const static_attrib_t& staticAttrib, const CEconGameAccount *pGameAccount, attribute_data_union_t* out_pValue ) const
-	{
-		AssertMsg( pGameAccount, "No game account when running custom attribute value logic!" );
-
-		float flValue = 0;
-
-		const char *pszMethod = staticAttrib.m_pKVCustomData->GetString( "method", NULL );
-
-		if ( Q_stricmp( pszMethod, "employee_number" ) == 0 )
-		{
-			flValue = pGameAccount->Obj().m_rtime32FirstPlayed;
-		}
-		else if ( Q_stricmp( pszMethod, "date" ) == 0 ) // Not used?
-		{
-			flValue = CRTime::RTime32TimeCur();
-		}
-		else if ( Q_stricmp( pszMethod, "year" ) == 0 )
-		{
-			flValue = CRTime( CRTime::RTime32TimeCur() ).GetYear();
-		}
-		else if ( Q_stricmp( pszMethod, "gifts_given_out" ) == 0 )
-		{
-			flValue = pGameAccount->Obj().m_unNumGiftsGiven;
-		}
-		else if ( Q_stricmp( pszMethod, "expiration_period_hours_from_now" ) == 0 )
-		{
-			flValue = CRTime::RTime32DateAdd( CRTime::RTime32TimeCur(), staticAttrib.m_value.asFloat, k_ETimeUnitHour );
-		}
-		else if ( Q_stricmp( pszMethod, "def index from lootlist" ) == 0 )
-		{
-			const char* pszLootlistName = staticAttrib.m_pKVCustomData->GetString( "lootlist" );
-			// Custom data stores the lootlist
-			const CEconLootListDefinition* pLootList = GEconItemSchema().GetLootListByName( pszLootlistName );
-
-			if( !pLootList )
-			{
-				AssertMsg1( 0, "Lootlist '%s' not found when performing custom attribute logic", pszLootlistName );
-				return;
-			}
-
-			CUtlVector<CEconLootListDefinition::rolled_item_defs_t> vecRolledItems;
-			// Roll our item def
-			CDefaultUniformRandomStream RandomStream;
-			if( !pLootList->RollRandomItemsAndAdditionalItems( &RandomStream, false, &vecRolledItems ) )
-			{
-				AssertMsg1( 0, "Error generating item defs from lootlist '%s'", pszLootlistName );
-				return;
-			}
-
-			// Just take the first one's def index
-			flValue = vecRolledItems.Head().m_pItemDef->GetDefinitionIndex();
-		}
-		else
-		{
-			AssertMsg1( false, "Unknown value for 'method': '%s'", pszMethod );
-		}
-
-		// Put the value into the right part of the union
-		if ( staticAttrib.GetAttributeDefinition()->IsStoredAsFloat() )
-		{
-			(*out_pValue).asFloat = flValue;
-		}
-		else if ( staticAttrib.GetAttributeDefinition()->IsStoredAsInteger() )
-		{
-			(*out_pValue).asUint32 = (uint32)flValue;
-		}
-		else
-		{
-			AssertMsg1( 0, "Unknown storage type for CSchemaAttributeType_Default::Internal_RunCustomAttributeValueLogic() for attribute %s", staticAttrib.GetAttributeDefinition()->GetDefinitionName() );
-		}
-	}
-#endif
 };
 
 //-----------------------------------------------------------------------------
@@ -3835,9 +2088,7 @@ CEconItemAttributeDefinition::CEconItemAttributeDefinition( void )
 	m_ItemDefinitionTag( INVALID_ECON_TAG_HANDLE ),
 	m_bCanAffectMarketName( false ),
 	m_bCanAffectRecipeComponentName( false )
-#ifndef GC_DLL
   , m_iszAttributeClass( NULL_STRING )
-#endif
 {
 }
 
@@ -3873,9 +2124,7 @@ CEconItemAttributeDefinition &CEconItemAttributeDefinition::operator=( const CEc
 	m_ItemDefinitionTag = rhs.m_ItemDefinitionTag;
 	m_bCanAffectMarketName = rhs.m_bCanAffectMarketName;
 	m_bCanAffectRecipeComponentName = rhs.m_bCanAffectRecipeComponentName;
-#ifndef GC_DLL
 	m_iszAttributeClass = rhs.m_iszAttributeClass;
-#endif
 
 	m_pKVAttribute = NULL;
 	if ( NULL != rhs.m_pKVAttribute )
@@ -4001,28 +2250,7 @@ bool CEconItemAttributeDefinition::BInitFromKV( KeyValues *pKVAttribute, CUtlVec
 	return SCHEMA_INIT_SUCCESS();
 }
 
-CQuestObjectiveDefinition::CQuestObjectiveDefinition( void )
-	: m_pszDescriptionToken( NULL )
-	, m_nDefIndex( 0 )
-	, m_nPoints( 0 )
-{}
 
-CQuestObjectiveDefinition::~CQuestObjectiveDefinition()
-{}
-
-bool CQuestObjectiveDefinition::BInitFromKV( KeyValues *pKVItem, CUtlVector<CUtlString> *pVecErrors /* = NULL */ )
-{
-	m_nDefIndex = pKVItem->GetInt( "defindex", -1 );
-	m_pszDescriptionToken = pKVItem->GetString( "description_string" );
-	m_bOptional = pKVItem->GetBool( "optional", false );
-	m_bAdvanced = pKVItem->GetBool( "advanced", false );
-	m_nPoints = pKVItem->GetInt( "points", 0 );
-
-	SCHEMA_INIT_CHECK( m_nDefIndex != -1, "Quest objective missing def index" );
-	SCHEMA_INIT_CHECK( m_pszDescriptionToken != NULL, "Quest objective is missing a description" );
-
-	return SCHEMA_INIT_SUCCESS();
-}
 
 //-----------------------------------------------------------------------------
 // Purpose:	Constructor
@@ -4084,7 +2312,6 @@ m_pszDatabaseAuditTable( NULL ),
 m_bImported( false ),
 m_pItemSetDef( NULL ),
 m_pItemCollectionDef( NULL ),
-m_pItemPaintKitDef( NULL ),
 m_pszArmoryRemap( NULL ),
 m_pszStoreRemap( NULL ),
 m_unSetItemRemapDefIndex( INVALID_ITEM_DEF_INDEX ),
@@ -4095,7 +2322,8 @@ m_pszCollectionReference( NULL ),
 m_nItemRarity( k_unItemRarity_Any ),
 m_unItemSeries( 0 ),
 m_bValidForShuffle( false ),
-m_bValidForSelfMade( true )
+m_bValidForSelfMade( true ),
+m_nRemappedDefIndex( INVALID_ITEM_DEF_INDEX )
 {
 	for ( int team = 0; team < TEAM_VISUAL_SECTIONS; team++ )
 	{
@@ -4113,9 +2341,6 @@ CEconItemDefinition::~CEconItemDefinition( void )
 	for ( int i = 0; i < ARRAYSIZE( m_PerTeamVisuals ); i++ )
 		delete m_PerTeamVisuals[i];
 
-#ifdef GC_DLL
-	m_vecPropertyGenerators.PurgeAndDeleteElements();
-#endif // GC_DLL
 
 	if ( m_pKVItem )
 		m_pKVItem->deleteThis();
@@ -4355,6 +2580,24 @@ void CEconItemDefinition::BInitVisualBlockFromKV( KeyValues *pKVItem, CUtlVector
 						pEntry->pszRequiredItem = pKVSubKey->GetString();
 					}
 				}
+				else if ( !Q_stricmp( pszEntry, "player_poseparam" ) )
+				{
+					FOR_EACH_SUBKEY( pKVEntry, pKVSubKey )
+					{
+						poseparamtable_t *pPoseParam = pVisData->m_PlayerPoseParams.AddToTailGetPtr();
+						pPoseParam->strName = pKVSubKey->GetName();
+						pPoseParam->flValue = pKVSubKey->GetFloat();
+					}
+				}
+				else if ( !Q_stricmp( pszEntry, "item_poseparam" ) )
+				{
+					FOR_EACH_SUBKEY( pKVEntry, pKVSubKey )
+					{
+						poseparamtable_t *pPoseParam = pVisData->m_ItemPoseParams.AddToTailGetPtr();
+						pPoseParam->strName = pKVSubKey->GetName();
+						pPoseParam->flValue = pKVSubKey->GetFloat();
+					}
+				}
 				else if ( !Q_stricmp( pszEntry, "player_bodygroups" ) )
 				{
 					FOR_EACH_SUBKEY( pKVEntry, pKVBodygroupKey )
@@ -4460,38 +2703,6 @@ void CEconItemDefinition::BInitVisualBlockFromKV( KeyValues *pKVItem, CUtlVector
 		}
 	}
 }
-
-#ifdef GC_DLL
-//-----------------------------------------------------------------------------
-// Purpose:
-//-----------------------------------------------------------------------------
-template < typename T >
-static void NthPermutation ( T *pData, unsigned int unDataCount, unsigned int unIdx )
-{
-	for ( unsigned int i = 1; i < unDataCount; i++ )
-	{
-		std::swap( pData[ unIdx % (i + 1) ], pData[ i ] );
-		unIdx = unIdx / (i + 1);
-	}
-}
-
-//-----------------------------------------------------------------------------
-// Purpose:
-//-----------------------------------------------------------------------------
-bool CEconItemDefinition::BApplyPropertyGenerators( CEconItem *pItem ) const
-{
-	Assert( pItem );
-
-	for ( const IEconItemPropertyGenerator *pPropertyGenerator : m_vecPropertyGenerators )
-	{
-		if ( !pPropertyGenerator->BGenerateProperties( pItem ) )
-			return false;
-	}
-
-	return true;
-}
-
-#endif // GC_DLL
 
 #if defined(CLIENT_DLL) || defined(GAME_DLL)
 //-----------------------------------------------------------------------------
@@ -4653,6 +2864,7 @@ void CEconStyleInfo::BInitFromKV( KeyValues *pKVStyle, CUtlVector<CUtlString> *p
 	m_pszBasePlayerModel = pKVStyle->GetString( "model_player", NULL );
 	m_bIsSelectable = pKVStyle->GetBool( "selectable", true );
 	m_pszInventoryImage = pKVStyle->GetString( "image_inventory", NULL );
+	m_bUseSmokeParticleEffect = pKVStyle->GetBool( "use_smoke_particle_effect", true );
 
 	KeyValues *pKVBodygroup = pKVStyle->FindKey( "bodygroup" );
 	if ( pKVBodygroup )
@@ -4757,9 +2969,9 @@ void MergeDefinitionPrefab( KeyValues *pKVWriteItem, KeyValues *pKVSourceItem )
 
 KeyValues *CEconItemSchema::FindDefinitionPrefabByName( const char *pszPrefabName ) const
 {
-	int iIndex = m_mapDefinitionPrefabs.Find( pszPrefabName );
-	if ( m_mapDefinitionPrefabs.IsValidIndex( iIndex ) )
-		return m_mapDefinitionPrefabs[iIndex];
+	int iIndex = m_dictDefinitionPrefabs.Find( pszPrefabName );
+	if ( m_dictDefinitionPrefabs.IsValidIndex( iIndex ) )
+		return m_dictDefinitionPrefabs[iIndex];
 
 	return NULL;
 }
@@ -4791,9 +3003,6 @@ const char *CEconItemSchema::FindStringTableEntry( const char *pszTableName, int
 //				the init fails.
 // Output:	True if initialization succeeded, false otherwise
 //-----------------------------------------------------------------------------
-#ifdef GC_DLL
-	GCConVar gc_steam_payment_rules_kv_key( "gc_steam_payment_rules_kv_key", "payment_rules" );
-#endif // GC_DLL
 
 
 #if defined( WITH_STREAMABLE_WEAPONS )
@@ -4803,8 +3012,6 @@ const char *CEconItemSchema::FindStringTableEntry( const char *pszTableName, int
     // The server doesn't load on demand by default because it can crash sometimes when this is set. We need to run that down, but in the meantime 
     // we just have it load on demand.
     ConVar tf_loadondemand_default("sv_loadondemand_default", "0", FCVAR_ARCHIVE | FCVAR_GAMEDLL, "The default value for whether items should be delay loaded (1) or loaded now (0).");
-#elif defined( GC_DLL )
-    GCConVar tf_loadondemand_default("gc_loadondemand_default", "1", FCVAR_ARCHIVE, "The default value for whether items should be delay loaded (1) or loaded now (0).");
 #else
 #error "Need to add support for streamable weapons to this configuration, or disable streamable weapons here."
 #endif
@@ -4868,34 +3075,6 @@ bool CEconItemDefinition::BInitFromKV( KeyValues *pKVItem, CUtlVector<CUtlString
 		"Item definition %s: \"max_ilevel\" must be greater than or equal to 0", GetDefinitionName() );
 
 	// Check for consistency
-#ifdef GC_DLL
-	// We don't do these consistency checks in the game, because it doesn't have the data to do them
-	SCHEMA_INIT_CHECK( 
-		m_unMinItemLevel >= GetItemSchema()->GetMinLevel(), 
-		"Item definition %s: min_ilevel (%d) must be greater or equal to Minimum Item Level (%d)", GetDefinitionName(), m_unMinItemLevel, GetItemSchema()->GetMinLevel() );
-
-	SCHEMA_INIT_CHECK( 
-		m_unMinItemLevel <= m_unMaxItemLevel,
-		"Item definition %s: min_ilevel (%d) must be greater or equal to min_ilevel (%d)", GetDefinitionName(), m_unMaxItemLevel, m_unMinItemLevel );
-
-	SCHEMA_INIT_CHECK( 
-		m_unMaxItemLevel <= GetItemSchema()->GetMaxLevel(),
-		"Item definition %s: max_ilevel (%d) must be less than or equal to Maximum Item Level (%d)", GetDefinitionName(), m_unMaxItemLevel, GetItemSchema()->GetMaxLevel() );
-
-	// Read the item quality
-	if ( m_pKVItem->FindKey( "item_quality" ) )
-	{
-		SCHEMA_INIT_CHECK( 
-			GetItemSchema()->BGetItemQualityFromName( m_pKVItem->GetString( "item_quality" ), &m_nItemQuality ),
-			"Item definition %s: Undefined item_quality \"%s\"", GetDefinitionName(), m_pKVItem->GetString( "item_quality" ) );
-	}
-	if ( m_pKVItem->FindKey( "forced_item_quality" ) )
-	{
-		SCHEMA_INIT_CHECK( 
-			GetItemSchema()->BGetItemQualityFromName( m_pKVItem->GetString( "forced_item_quality" ), &m_nForcedItemQuality ),
-			"Item definition %s: Undefined item_quality \"%s\"", GetDefinitionName(), m_pKVItem->GetString( "forced_item_quality" ) );
-	}
-#endif
 
 	// Rarity
 	// Get Index from this string and save the index
@@ -4935,13 +3114,6 @@ bool CEconItemDefinition::BInitFromKV( KeyValues *pKVItem, CUtlVector<CUtlString
 		{
 			m_rtExpiration = CRTime::RTime32FromFmtString( "YYYY-MM-DD hh:mm:ss" , pchExpiration );
 
-#ifdef GC_DLL
-			// Check that if we convert back to a string, we get the same value
-			char rtimeBuf[k_RTimeRenderBufferSize];
-			SCHEMA_INIT_CHECK(
-				Q_strcmp( CRTime::RTime32ToString( m_rtExpiration, rtimeBuf ), pchExpiration ) == 0,
-				"Malformed expiration_date \"%s\" for expiration_date in item %s.  Must be of the form \"YYYY-MM-DD hh:mm:ss\".  Input: %s Output: %s InputTime: %u LocalTime: %u Timezone: %lu", pchExpiration, m_pszDefinitionName, pchExpiration,  rtimeBuf, m_rtExpiration, CRTime::RTime32TimeCur(), timezone );
-#else
 			// Check that if we convert back to a string, we get the same value.  Emit an error, but don't fail in the game code
 			char rtimeBuf[k_RTimeRenderBufferSize];
 			if ( Q_strcmp( CRTime::RTime32ToString( m_rtExpiration, rtimeBuf ), pchExpiration ) != 0 )
@@ -4953,7 +3125,6 @@ bool CEconItemDefinition::BInitFromKV( KeyValues *pKVItem, CUtlVector<CUtlString
 				Assert( false );
 				Warning( "Malformed expiration_date \"%s\" for expiration_date in item %s.  Must be of the form \"YYYY-MM-DD hh:mm:ss\".  Input: %s Output: %s InputTime: %u LocalTime: %u Timezone: %lu\n", pchExpiration, m_pszDefinitionName, pchExpiration, rtimeBuf, m_rtExpiration, CRTime::RTime32TimeCur(), timezone );
 			}				
-#endif
 		}
 	}
 
@@ -5099,6 +3270,8 @@ bool CEconItemDefinition::BInitFromKV( KeyValues *pKVItem, CUtlVector<CUtlString
 	m_bValidForShuffle = m_pKVItem->GetBool( "valid_for_shuffle", false );
 	m_bValidForSelfMade = m_pKVItem->GetBool( "valid_for_self_made", true );
 
+	m_pszRemappedDefItemName = m_pKVItem->GetString( "remapped_item_def_index", NULL );
+
 	// Init our visuals blocks.
 	BInitVisualBlockFromKV( m_pKVItem, pVecErrors );
 
@@ -5215,87 +3388,30 @@ bool CEconItemDefinition::BInitFromKV( KeyValues *pKVItem, CUtlVector<CUtlString
 		}
 	}
 
-#ifdef GC_DLL
-	SCHEMA_INIT_SUBSTEP( BCommonInitPropertyGeneratorsFromKV( GetDefinitionName(), &m_vecPropertyGenerators, m_pKVItem->FindKey( "property_generators" ), pVecErrors ) );
+	SCHEMA_INIT_SUBSTEP( BAddLootlistJobFromTemplates( m_pszItemBaseName, m_jobs, m_pKVItem->FindKey( "lootlist_job_templates" ), GetItemSchema(), pVecErrors ) );
 
-	// Parse payment rules on the GC if any exist.
-	KeyValues *pKVPaymentRules = m_pKVItem->FindKey( gc_steam_payment_rules_kv_key.GetString() );
-	if ( pKVPaymentRules )
-	{
-		FOR_EACH_TRUE_SUBKEY( pKVPaymentRules, pKVRule ) 
-		{
-			econ_item_payment_rule_t rule;
-
-			const bool bFoundPaymentRule = BGetPaymentRule( pKVRule, &rule.m_eRuleType, &rule.m_RevenueShare );
-			SCHEMA_INIT_CHECK( bFoundPaymentRule, "Item definition '%s': payment rule %s didn't specify a known payment rule type", GetDefinitionName(), pKVRule->GetName() );
-
-			// Allow us to override some of our checks if we want to claim we really know what we're doing.
-			if ( !pKVRule->FindKey( "sanity_check_override" ) )
-			{
-				SCHEMA_INIT_CHECK( rule.m_RevenueShare > 0.0, "Item definition '%s': payment rule %s has invalid revenue share %0.2f", GetDefinitionName(), pKVRule->GetName(), rule.m_RevenueShare );
-
-				// Ordinarily, bundles can only specify the "bundle_revenue_share" payment rule type. However, for backwards compatability
-				// with previous payment rules that pre-date the Workshop and had manual percentages set offline, we allow people who know
-				// what they're doing to specify the "sanity_check_override" key and then use custom rules.
-				SCHEMA_INIT_CHECK( (rule.m_eRuleType == kPaymentRule_Bundle) == IsBundle(), "Item definition '%s': payment rule %s has invalid bundle rules", GetDefinitionName(), pKVRule->GetName() );
-			}
-
-			KeyValues *pPaymentRuleForItemdef = pKVRule->FindKey( "payment_rule_for_itemdef" );
-			SCHEMA_INIT_CHECK( pPaymentRuleForItemdef && ( pPaymentRuleForItemdef->GetInt() == m_nDefIndex ), "Item definition '%s': payment rule %s has invalid payment_rule_for_itemdef", GetDefinitionName(), pKVRule->GetName() );
-
-			KeyValues *pKVMultiTargets = pKVRule->FindKey( "targets" );
-			KeyValues *pKVSingleTarget = pKVRule->FindKey( "target" );
-			SCHEMA_INIT_CHECK( pKVMultiTargets == NULL || pKVSingleTarget == NULL, "Item definition '%s': payment rule %s specifies both single- and multi-targets", GetDefinitionName(), pKVRule->GetName() );
-
-			if ( pKVMultiTargets )
-			{
-				FOR_EACH_SUBKEY( pKVMultiTargets, pKVTarget )
-				{
-					rule.m_vecValues.AddToTail( (uint64)Q_atoi64( pKVTarget->GetName() ) );
-				}
-			}
-
-			if ( pKVSingleTarget )
-			{
-				rule.m_vecValues.AddToTail( pKVSingleTarget->GetUint64() );
-			}
-
-			// We expect bundles to have no associated account data at all -- their payment processing
-			// is done by splitting the total value of the bundle between each of the items in it. All
-			// non-bundle payment rules require at least one data entry.
-			SCHEMA_INIT_CHECK( (rule.m_eRuleType == kPaymentRule_Bundle) == (rule.m_vecValues.Count() == 0), "Item definition '%s': payment rule %s has invalid number of target entries %i", GetDefinitionName(), pKVRule->GetName(), rule.m_vecValues.Count() );
-
-			// It doesn't make any sense to have multiple entries for a bundle. We expect their to be one
-			// rule, and that's "process this like a bundle".
-			if ( rule.m_eRuleType == kPaymentRule_Bundle )
-			{
-				SCHEMA_INIT_CHECK( m_vecPaymentRules.Count() == 0, "Item definition '%s': only the first payment rule can be specified as 'bundle'", GetDefinitionName() );
-
-				// We only allow bundle payment rules to be applied to actual bundles with contents
-				// specified. Without doing this, we would have nowhere to pull the metadata about
-				// which items are contained.
-				SCHEMA_INIT_CHECK( GetBundleInfo() && GetBundleInfo()->vecItemDefs.Count() > 0, "Item definition '%s': payment rule %s is specified as a bundle but outer item definition has no bundle contents.\n", GetDefinitionName(), pKVRule->GetName() );
-
-				// Bundles rely on sub-items for figuring out payment so the revenue share for the
-				// bundle itself is expected to be 100%.
-				SCHEMA_INIT_CHECK( rule.m_RevenueShare == 100.0, "Item definition '%s': payment rule %s has invalid bundle revenue share %0.2f", GetDefinitionName(), pKVRule->GetName(), rule.m_RevenueShare );
-			}
-
-			const bool bWasNumberedCorrectly = (AddPaymentRule( rule ) == atoi( pKVRule->GetName() ));
-			SCHEMA_INIT_CHECK( bWasNumberedCorrectly, "Item definition '%s': misnumbered payment rule %s", GetDefinitionName(), pKVRule->GetName() );
-		}
-	}
-#endif // GC_DLL
 
 	return SCHEMA_INIT_SUCCESS();
 }
 
-#ifdef GC_DLL
-int CEconItemDefinition::AddPaymentRule( const econ_item_payment_rule_t& newRule )
+bool CEconItemDefinition::BPostInit( CUtlVector<CUtlString> *pVecErrors /*= NULL*/ )
 {
-	return m_vecPaymentRules.AddToTail( newRule );
+	const IEconTool *pTool = GetEconTool();
+	if ( pTool && !const_cast<IEconTool *>( pTool )->BFinishInitialization() )
+	{
+	}
+
+	if ( m_pszRemappedDefItemName )
+	{
+		const CEconItemDefinition *pDef = GetItemSchema()->GetItemDefinitionByName( m_pszRemappedDefItemName );
+		SCHEMA_INIT_CHECK( pDef != NULL, "Can't find remapped item %s", m_pszRemappedDefItemName );
+
+		m_nRemappedDefIndex = pDef->GetDefinitionIndex();
+	}
+
+	return SCHEMA_INIT_SUCCESS();
 }
-#endif // GC_DLL
+
 
 bool static_attrib_t::BInitFromKV_MultiLine( const char *pszContext, KeyValues *pKVAttribute, CUtlVector<CUtlString> *pVecErrors )
 {
@@ -5324,27 +3440,6 @@ bool static_attrib_t::BInitFromKV_MultiLine( const char *pszContext, KeyValues *
 		SCHEMA_INIT_CHECK(
 			!pAttrDef->BIsSetBonusAttribute(),
 			"Context '%s': Attribute \"%s\" is a set bonus attribute and not supported here", pszContext, pKVAttribute->GetName() );
-#ifdef GC_DLL
-		bForceGCToGenerate	= pKVAttribute->GetBool( "force_gc_to_generate" );
-
-		KeyValues *pKVLogicData = pKVAttribute->FindKey( "custom_value_logic" );
-		if ( pKVLogicData )
-		{
-			m_pKVCustomData = pKVLogicData->MakeCopy();
-		}
-
-		SCHEMA_INIT_CHECK(
-			m_pKVCustomData == NULL || bForceGCToGenerate,
-			"Context '%s': Attribute \"%s\" is set to have custom logic but is not GC-generated so that logic will never get used!", pszContext, pKVAttribute->GetName() );
-
-		SCHEMA_INIT_CHECK(
-			m_pKVCustomData != NULL || pKVAttribute->FindKey( "value" ),
-			"Context '%s': Attribute \"%s\" has no value set", pszContext, pKVAttribute->GetName() );
-
-		SCHEMA_INIT_CHECK(
-			m_pKVCustomData == NULL || m_pKVCustomData->FindKey( "method" ) != NULL,
-			"Context '%s': Attribute \"%s\" custom logic data is set, but custom logic method is not set!", pszContext, pKVAttribute->GetName() );
-#endif // GC_DLL
 	}
 
 	return SCHEMA_INIT_SUCCESS();
@@ -5378,10 +3473,6 @@ bool static_attrib_t::BInitFromKV_SingleLine( const char *pszContext, KeyValues 
 			!pAttrDef->BIsSetBonusAttribute(),
 			"Context '%s': Attribute \"%s\" is a set bonus attribute and not supported here", pszContext, pKVAttribute->GetName() );
 
-#ifdef GC_DLL
-		bForceGCToGenerate = false;
-		m_pKVCustomData = NULL;
-#endif // GC_DLL
 	}
 
 	return SCHEMA_INIT_SUCCESS();
@@ -5394,7 +3485,7 @@ bool CEconItemDefinition::BInitItemMappings( CUtlVector<CUtlString> *pVecErrors 
 	// Armory remapping
 	if ( m_pszArmoryRemap && m_pszArmoryRemap[0] )
 	{
-		CEconItemDefinition *pDef = GetItemSchema()->GetItemDefinitionByName( m_pszArmoryRemap );
+		const CEconItemDefinition *pDef = GetItemSchema()->GetItemDefinitionByName( m_pszArmoryRemap );
 		if ( pDef )
 		{
 			m_iArmoryRemap = pDef->GetDefinitionIndex();
@@ -5408,7 +3499,7 @@ bool CEconItemDefinition::BInitItemMappings( CUtlVector<CUtlString> *pVecErrors 
 	// Store remapping
 	if ( m_pszStoreRemap && m_pszStoreRemap[0] )
 	{
-		CEconItemDefinition *pDef = GetItemSchema()->GetItemDefinitionByName( m_pszStoreRemap );
+		const CEconItemDefinition *pDef = GetItemSchema()->GetItemDefinitionByName( m_pszStoreRemap );
 		if ( pDef )
 		{
 			m_iStoreRemap = pDef->GetDefinitionIndex();
@@ -5456,13 +3547,6 @@ void CEconItemDefinition::IterateAttributes( IEconItemAttributeIterator *pIterat
 	{
 		const static_attrib_t& staticAttrib = GetStaticAttributes()[i];
 		
-#ifdef GC_DLL
-		// we skip over static attributes that the GC will turn into dynamic attributes because otherwise we'll have
-		// the appearance of iterating over them twice; for clients these attributes won't even make it into the
-		// list
-		if ( staticAttrib.bForceGCToGenerate )
-			continue;
-#endif // GC_DLL
 
 		const CEconItemAttributeDefinition *pAttrDef = GetItemSchema()->GetAttributeDefinition( staticAttrib.iDefIndex );
 		if ( !pAttrDef )
@@ -5552,20 +3636,13 @@ const char *CEconItemDefinition::GetReplacementForActivityOverride( int iTeam, A
 //-----------------------------------------------------------------------------
 
 // DO NOT MERGE THIS CONSOLE VARIABLE TO REL WE SHOULD NOT SHIP THIS OH GOD
-#ifdef STAGING_ONLY
-ConVar item_enable_dynamic_loading( "item_enable_dynamic_loading", "1", FCVAR_REPLICATED, "Enable/disable dynamic streaming of econ content." );
-#endif // STAGING_ONLY
 
 bool CEconItemDefinition::IsContentStreamable() const
 {
 	if ( !BLoadOnDemand() )
 		return false;
 		
-#ifdef STAGING_ONLY
-	return item_enable_dynamic_loading.GetBool();
-#else
 	return true;
-#endif
 }
 #endif // defined(CLIENT_DLL) || defined(GAME_DLL)
 
@@ -5629,7 +3706,7 @@ bool CTimedItemRewardDefinition::BInitFromKV( KeyValues *pKVTimedReward, CUtlVec
 	if ( pszRequiredItem )
 	{
 		// Find the ItemDef
-		CEconItemDefinition *pDef = GetItemSchema()->GetItemDefinitionByName( pszRequiredItem );
+		const CEconItemDefinition *pDef = GetItemSchema()->GetItemDefinitionByName( pszRequiredItem );
 		SCHEMA_INIT_CHECK( pDef != NULL, "Invalid Item Def Required for a for TimedReward Definition");
 		m_iRequiredItemDef = pDef->GetDefinitionIndex();
 	}
@@ -5726,24 +3803,22 @@ CEconItemSchema::CEconItemSchema( )
 ,	m_mapQuestObjectives( DefLessFunc(int) )
 ,	m_mapItemsSorted( DefLessFunc(int) )
 ,	m_mapToolsItems( DefLessFunc(int) )
+,	m_mapPaintKitTools( DefLessFunc(uint32) )
 ,	m_mapBaseItems( DefLessFunc(int) )
 ,	m_unVersion( 0 )
 #if defined(CLIENT_DLL) || defined(GAME_DLL)
 ,	m_pDefaultItemDefinition( NULL )
 #endif
-,	m_mapItemSets( CaselessStringLessThan )
-,	m_mapItemCollections( CaselessStringLessThan )
-,	m_mapItemPaintKits( CaselessStringLessThan )
-,	m_mapOperationDefinitions( CaselessStringLessThan )
-,   m_mapLootLists( CaselessStringLessThan )
+,	m_dictItemSets( k_eDictCompareTypeCaseInsensitive )
+,	m_dictItemCollections( k_eDictCompareTypeCaseInsensitive )
+,	m_dictOperationDefinitions( k_eDictCompareTypeCaseInsensitive )
+,   m_dictLootLists( k_eDictCompareTypeCaseInsensitive )
 ,	m_mapRevolvingLootLists( DefLessFunc(int) )
-,	m_mapDefinitionPrefabs( CaselessStringLessThan )
+,	m_dictDefinitionPrefabs( k_eDictCompareTypeCaseInsensitive )
 ,	m_mapAchievementRewardsByData( DefLessFunc( uint32 ) )
 ,	m_mapAttributeControlledParticleSystems( DefLessFunc(int) )
-,	m_mapDefaultBodygroupState( CaselessStringLessThan )
-#ifdef GC_DLL
-,	m_mapForeignImports( DefLessFunc(AppId_t) )
-#elif defined(CLIENT_DLL) || defined(GAME_DLL)
+,	m_dictDefaultBodygroupState( k_eDictCompareTypeCaseInsensitive )
+#if   defined(CLIENT_DLL) || defined(GAME_DLL)
 ,	m_pDelayedSchemaData( NULL )
 #endif
 ,	m_mapKillEaterScoreTypes( DefLessFunc( unsigned int ) )
@@ -5753,6 +3828,11 @@ CEconItemSchema::CEconItemSchema( )
 #endif
 {
 	Reset();
+}
+
+CQuestObjectiveDefinition *CEconItemSchema::CreateQuestDefinition()
+{
+	return new CQuestObjectiveDefinition; 
 }
 
 //-----------------------------------------------------------------------------
@@ -5825,6 +3905,15 @@ IEconTool *CEconItemSchema::CreateEconToolImpl( const char *pszToolType, const c
 			if ( unCapabilities != ITEM_CAP_NONE )		return NULL;
 
 			return new CEconTool_Gift( pszToolType, pszUseString, pUsageKV );
+		}
+
+		if ( !V_stricmp( pszToolType, "keyless_case" ) )
+		{
+			// Error checking -- make sure we aren't setting properties in the schema that we don't support.
+			if ( pszUsageRestriction )					return NULL;
+			if ( unCapabilities != ITEM_CAP_NONE )		return NULL;
+
+			return new CEconTool_KeylessCase( pszToolType, pszUseString );
 		}
 
 		if ( !V_stricmp( pszToolType, "paint_can" ) )
@@ -5988,62 +4077,83 @@ IEconTool *CEconItemSchema::CreateEconToolImpl( const char *pszToolType, const c
 		{
 			return new CEconTool_Unusualifier( pszToolType, pszUseString, unCapabilities, pUsageKV );
 		}
+
+		if ( !V_stricmp( pszToolType, "paintkit" ) )
+		{
+			return new CEconTool_PaintKit( pszToolType, pszUseString, unCapabilities );
+		}
 	}
 
 	// Default behavior.
 	return new CEconTool_Default( pszToolType, pszUseString, pszUsageRestriction, unCapabilities );
 }
 
-#ifdef GC_DLL
-random_attrib_t	*CEconItemSchema::CreateRandomAttribute( const char *pszContext, KeyValues *pRandomAttributesKV, CUtlVector<CUtlString> *pVecErrors /*= NULL*/ )
+CItemSelectionCriteria *CEconItemSchema::CreateItemCriteria( const char *pszContext, KeyValues *pItemCriteriaKV, CUtlVector<CUtlString> *pVecErrors /*= NULL*/ )
 {
-	// We've found the random attribute block. Parse it.
-	if ( pRandomAttributesKV->FindKey( "chance" ) == NULL )
+	CItemSelectionCriteria *pCriteria = new CItemSelectionCriteria;
+	if ( pCriteria->BInitFromKV( pItemCriteriaKV ) )
 	{
-		CUtlString msg;													\
-		msg.Format( CFmtStr( "Missing required field \"chance\" in the \"random_attributes\" block." ) );	
-		if ( pVecErrors )
-		{
-			pVecErrors->AddToTail( msg );
-		}
-		else
-		{
-			AssertMsg( pRandomAttributesKV->FindKey( "chance" ) != NULL, msg.String() );
-		}
-
-		return NULL;
+		return pCriteria;
 	}
 
-	random_attrib_t randomAttrib;
+	delete pCriteria;
+	return NULL;
+}
 
-	randomAttrib.m_flChanceOfRandomAttribute = pRandomAttributesKV->GetFloat( "chance" );
-	randomAttrib.m_bPickAllAttributes = ( pRandomAttributesKV->GetFloat( "pick_all_attributes" ) != 0 );
-	randomAttrib.m_flTotalAttributeWeight = 0;
+random_attrib_t	*CEconItemSchema::CreateRandomAttribute( const char *pszContext, KeyValues *pRandomAttributesKV, CUtlVector<CUtlString> *pVecErrors /*= NULL*/ )
+{
+	float flTotalAttributeWeight = 0.f;
+	LootListAttributeVec_t randomAttributes;
+	ItemSelectionCriteriaVec_t vecCriteria;
+	bool bAllowDuplicate = pRandomAttributesKV->GetBool( "allow_duplicate", false );
 
 	FOR_EACH_TRUE_SUBKEY( pRandomAttributesKV, pKVAttribute )
 	{
 		const char *pszName = pKVAttribute->GetName();
 
-		if ( !Q_strcmp( pszName, "chance" ) )
-			continue;
-
 		// Quick block list of attrs that have equal weight
-		if ( !Q_strcmp( pszName, "is_even_chance_attr" ) )
+		if ( !V_strcmp( pszName, "item_criteria_templates" ) )
 		{
-			FOR_EACH_VALUE( pKVAttribute, pKVListItem )
+			FOR_EACH_VALUE( pKVAttribute, pKVCriteria )
 			{
-				const CEconItemAttributeDefinition *pDef = GetAttributeDefinitionByName( pKVListItem->GetName() );
-				if ( pDef == NULL )
+				const char *pszCriteriaName = pKVCriteria->GetName();
+				int index = m_dictItemCriteriaTemplates.Find( pszCriteriaName );
+				if ( index == m_dictItemCriteriaTemplates.InvalidIndex() )
 				{
-					CUtlString msg;													\
-					msg.Format( CFmtStr( "Attribute definition \"%s\" was not found", pszName ) );	
+					CUtlString msg;
+					msg.Format( "Failed to find %s from 'item_criteria_templates'", pszCriteriaName );
 					if ( pVecErrors )
 					{
 						pVecErrors->AddToTail( msg );
 					}
 					else
 					{
-						AssertMsg( pDef != NULL, msg.String() );
+						AssertMsg( index != m_dictItemCriteriaTemplates.InvalidIndex(), "%s", msg.String() );
+					}
+
+					return NULL;
+				}
+
+				CItemSelectionCriteria *pCriteria = m_dictItemCriteriaTemplates[index];
+				vecCriteria.AddToTail( pCriteria );
+			}
+		}
+		else if ( !V_strcmp( pszName, "is_even_chance_attr" ) )
+		{
+			FOR_EACH_VALUE( pKVAttribute, pKVListItem )
+			{
+				const CEconItemAttributeDefinition *pDef = GetAttributeDefinitionByName( pKVListItem->GetName() );
+				if ( pDef == NULL )
+				{
+					CUtlString msg;
+					msg.Format( "Attribute definition \"%s\" was not found", pszName );
+					if ( pVecErrors )
+					{
+						pVecErrors->AddToTail( msg );
+					}
+					else
+					{
+						AssertMsg( pDef != NULL, "%s", msg.String() );
 					}
 
 					return NULL;
@@ -6054,14 +4164,41 @@ random_attrib_t	*CEconItemSchema::CreateRandomAttribute( const char *pszContext,
 				{
 					if ( pVecErrors )
 					{
-						pVecErrors->AddToTail( __FUNCTION__ ": error initializing line-item attribute from lootlist definition (possible attr template).\n" );
+						pVecErrors->AddToTail( CFmtStr( " %s: error initializing line-item attribute from lootlist definition (possible attr template).\n", __FUNCTION__ ).Get() );
 					}
 					return NULL;
 				}
-				// Weight is set to 1 for even chance attr
+				// Weight is set to 1 for even chance attr				
 				lootListAttrib.m_flWeight = 1.0f;
-				randomAttrib.m_flTotalAttributeWeight += 1.0f;
-				randomAttrib.m_RandomAttributes.AddToTail( lootListAttrib );
+				flTotalAttributeWeight += 1.0f;
+				randomAttributes.AddToTail( lootListAttrib );
+			}
+		}
+		else if ( !V_strcmp( pszName, "even_chance_templates" ) )
+		{
+			FOR_EACH_VALUE( pKVAttribute, pKVTemplate )
+			{
+				random_attrib_t *pTemplate = GetRandomAttributeTemplateByName( pKVTemplate->GetName() );
+				if ( pTemplate == NULL )
+				{
+					CUtlString msg;
+					msg.Format( "Failed to parse 'templates' blog from '%s'. '%s' attribute template doesn't exist", pRandomAttributesKV->GetName(), pKVTemplate->GetName() );
+					if ( pVecErrors )
+					{
+						pVecErrors->AddToTail( msg );
+					}
+					else
+					{
+						AssertMsg( pTemplate != NULL, "%s", msg.String() );
+					}
+
+					return NULL;
+				}
+
+				// just add template to the list and sum the total weight
+				randomAttributes.AddVectorToTail( pTemplate->m_RandomAttributes );
+				vecCriteria.AddVectorToTail( pTemplate->m_vecCriteria );
+				flTotalAttributeWeight += pTemplate->m_flTotalAttributeWeight;
 			}
 		}
 		else
@@ -6069,15 +4206,15 @@ random_attrib_t	*CEconItemSchema::CreateRandomAttribute( const char *pszContext,
 			const CEconItemAttributeDefinition *pDef = GetAttributeDefinitionByName( pszName );
 			if ( pDef == NULL )
 			{
-				CUtlString msg;													\
-				msg.Format( CFmtStr( "Attribute definition \"%s\" was not found", pszName ) );	
+				CUtlString msg;
+				msg.Format( "Attribute definition \"%s\" was not found", pszName );
 				if ( pVecErrors )
 				{
 					pVecErrors->AddToTail( msg );
 				}
 				else
 				{
-					AssertMsg( pDef != NULL, msg.String() );
+					AssertMsg( pDef != NULL, "%s", msg.String() );
 				}
 
 				return NULL;
@@ -6089,16 +4226,45 @@ random_attrib_t	*CEconItemSchema::CreateRandomAttribute( const char *pszContext,
 				return NULL;
 			}
 
-			randomAttrib.m_flTotalAttributeWeight += lootListAttrib.m_flWeight;
-			randomAttrib.m_RandomAttributes.AddToTail( lootListAttrib );
+			flTotalAttributeWeight += lootListAttrib.m_flWeight;
+			randomAttributes.AddToTail( lootListAttrib );
 		}
 	}
 
+	// make sure bAllowDuplicate flag gets chain to the top of the template stack
+	FOR_EACH_VEC( randomAttributes, i )
+	{
+		randomAttributes[i].m_bAllowDuplicate |= bAllowDuplicate;
+	}
+
 	random_attrib_t *pRandomAttr = new random_attrib_t;
-	*pRandomAttr = randomAttrib;
+	pRandomAttr->m_flTotalAttributeWeight = flTotalAttributeWeight;
+	pRandomAttr->m_RandomAttributes = randomAttributes;
+	if ( vecCriteria.Count() > 0 )
+	{
+		pRandomAttr->m_vecCriteria = vecCriteria;
+
+		// all children should know about parent's criteria
+		FOR_EACH_VEC( pRandomAttr->m_RandomAttributes, i )
+		{
+			pRandomAttr->m_RandomAttributes[i].m_pVecCriteria = &pRandomAttr->m_vecCriteria;
+		}
+	}
+
 	return pRandomAttr;
 }
-#endif // GC_DLL
+
+CLootlistJob *CEconItemSchema::CreateLootlistJob( const char *pszContext, KeyValues *pLootlistJobKV, CUtlVector<CUtlString> *pVecErrors /*= NULL*/ )
+{
+	CLootlistJob *pJob = new CLootlistJob( pszContext );
+	if ( pJob->BInitFromKV( pszContext, pLootlistJobKV, *this, pVecErrors ) )
+	{
+		return pJob;
+	}
+
+	delete pJob;
+	return NULL;
+}
 
 
 //-----------------------------------------------------------------------------
@@ -6131,14 +4297,15 @@ void CEconItemSchema::Reset( void )
 	m_mapQualities.Purge();
 	m_mapItemsSorted.Purge();
 	m_mapToolsItems.Purge();
+	m_mapPaintKitTools.Purge();
 	m_mapBaseItems.Purge();
 	m_mapRecipes.PurgeAndDeleteElements();
 	m_vecTimedRewards.Purge();
-	m_mapItemSets.PurgeAndDeleteElements();
-	m_mapLootLists.PurgeAndDeleteElements();
-#ifdef GC_DLL
+	m_dictItemSets.PurgeAndDeleteElements();
+	m_dictLootLists.PurgeAndDeleteElements();
+	m_dictItemCriteriaTemplates.PurgeAndDeleteElements();
 	m_dictRandomAttributeTemplates.PurgeAndDeleteElements();
-#endif // GC_DLL
+	m_dictLootlistJobTemplates.PurgeAndDeleteElements();
 	m_mapAttributeControlledParticleSystems.Purge();
 	m_vecAttributeControlledParticleSystemsCosmetics.Purge();
 	m_vecAttributeControlledParticleSystemsWeapons.Purge();
@@ -6161,11 +4328,11 @@ void CEconItemSchema::Reset( void )
 		delete m_mapRecipes[i];
 	}
 
-	FOR_EACH_MAP_FAST( m_mapDefinitionPrefabs, i )
+	for ( int idx = m_dictDefinitionPrefabs.First(); m_dictDefinitionPrefabs.IsValidIndex( idx ); idx = m_dictDefinitionPrefabs.Next( idx ) )
 	{
-		m_mapDefinitionPrefabs[i]->deleteThis();
+		m_dictDefinitionPrefabs[idx]->deleteThis();
 	}
-	m_mapDefinitionPrefabs.Purge();
+	m_dictDefinitionPrefabs.Purge();
 
 	m_vecEquipRegionsList.Purge();
 	m_vecItemLevelingData.PurgeAndDeleteElements();
@@ -6185,34 +4352,6 @@ CEconItemSchema &CEconItemSchema::operator=( CEconItemSchema &rhs )
 	return *this;
 }
 
-bool g_bLastSignatureCheck;
-
-bool CheckValveSignature( const void *data, uint32 nDataSize, const void *signature, uint32 nSignatureSize )
-{
-	// Must match the PUBLIC KEY in src\devtools\valve_source_officialcontent.privatekey.vdf
-	static const unsigned char valvePublicKey[] =
-		"\x30\x81\x9D\x30\x0D\x06\x09\x2A\x86\x48\x86\xF7\x0D\x01\x01\x01"
-		"\x05\x00\x03\x81\x8B\x00\x30\x81\x87\x02\x81\x81\x00\xB1\xC0\xF1"
-		"\x1C\xB2\x98\x2F\x29\x25\x95\x07\xA7\x74\xD4\x83\x43\x77\xC5\xB7"
-		"\xA3\x8D\x9A\x4B\x38\x92\xB5\x98\x00\x9F\x16\xAA\x10\x95\x65\xCB"
-		"\x09\xAD\x25\xDE\x0D\x3D\x1A\x08\x9C\x3C\xB6\x8E\x49\x19\x21\xCC"
-		"\x14\x2F\x38\x33\x83\x20\x1D\xE9\x82\x62\xA7\x6E\xD8\xA6\xCC\x78"
-		"\xBC\x51\x68\x5A\x0A\x64\xA6\x17\x2C\x67\x12\x7A\xF2\x3E\x78\x73"
-		"\x1F\x4A\x82\xC2\x01\xD6\x4C\x9A\xB8\x09\x37\x32\x21\x84\xB6\x42"
-		"\x72\x7F\xE1\x42\xD1\x5C\xC0\x45\xF3\x58\x3E\x19\xE3\xE3\xE1\xA9"
-		"\xC5\x0C\x0F\xC8\x41\x13\x57\x3A\x52\x0A\x8F\x73\x23\x02\x01\x11";
-
-	// Put into a global var.  Could help with VAC detection, if this
-	// code gets detoured
-	g_bLastSignatureCheck = CCrypto::RSAVerifySignatureSHA256(
-		(const uint8 *)data, nDataSize, 
-		(const uint8 *)signature, nSignatureSize,
-		valvePublicKey, sizeof(valvePublicKey)
-	);
-
-	return g_bLastSignatureCheck;
-}
-
 //-----------------------------------------------------------------------------
 // Initializes the schema, given KV filename
 //-----------------------------------------------------------------------------
@@ -6228,31 +4367,9 @@ bool CEconItemSchema::BInit( const char *fileName, const char *pathID, CUtlVecto
 	// Do we need to check the signature?
 	#if defined(TF_DLL) || defined(TF_CLIENT_DLL)
 	{
-
-		// Load up the signature
-		CUtlString sSignatureFilename( fileName ); sSignatureFilename.Append( ".sig" );
-		CUtlBuffer bufSignatureBinary;
-		bool bReadSignatureOK = g_pFullFileSystem->ReadFile( sSignatureFilename.String(), pathID, bufSignatureBinary );
-		SCHEMA_INIT_CHECK( bReadSignatureOK, "Cannot load file '%s'", sSignatureFilename.String() );
-
-		// Check it with the Valve public key
-		bool bSignatureValid = CheckValveSignature(
-			bufRawData.Base(), bufRawData.TellPut(), 
-			bufSignatureBinary.Base(), bufSignatureBinary.TellPut()
-		);
-
-		// If they have a signature for a zero-byte file, that's OK, too.
-		// That's the secret code that is checked into P4 internally that
-		// let's us run with any items_game file
-		if ( !bSignatureValid )
-		{
-			bSignatureValid = CheckValveSignature(
-				"", 0, 
-				bufSignatureBinary.Base(), bufSignatureBinary.TellPut()
-			);
-		}
-
-		SCHEMA_INIT_CHECK( bSignatureValid, "'%s' is corrupt.  Please verify your local game files.  (https://support.steampowered.com/kb_article.php?ref=2037-QEUH-3335)", fileName );
+		bool bSignatureValid = TF_CheckSignature(fileName, pathID, bufRawData);
+		SCHEMA_INIT_CHECK(bSignatureValid, "'%s' is corrupt.  Please verify your local game files.  (https://support.steampowered.com/kb_article.php?ref=2037-QEUH-3335)", fileName);
+		
 	}
 	#endif
 
@@ -6352,67 +4469,6 @@ bool CEconItemSchema::DumpItems ( const char *fileName, const char *pathID )
 //-----------------------------------------------------------------------------
 // Called once the price sheet's been loaded
 //-----------------------------------------------------------------------------
-#ifdef GC_DLL
-GCConVar econ_orphaned_sold_items_owned_by_account_id( "econ_orphaned_sold_items_owned_by_account_id", "121416792" );
-
-bool CEconItemSchema::DoPostPriceSheetLoadInit( CEconStorePriceSheet *pPriceSheet )
-{
-	FOR_EACH_MAP_FAST( m_mapItems, iItem )
-	{
-		CEconItemDefinition *pItemDef = m_mapItems[ iItem ];
-
-		// Is this item being sold?
-		const econ_store_entry_t *pStoreEntry = pPriceSheet->GetEntry( pItemDef->GetDefinitionIndex() );
-		if ( pStoreEntry )
-		{
-			// Cache off whether this item is a pack item
-			pItemDef->SetIsPackItem( pStoreEntry->m_bIsPackItem );
-
-			// If an item is being sold and it has no payment rules set up, we can optionally force-create
-			// a dummy payment rule that will redirect that item revenue to a "hey, these are orphan items!"
-			// account.
-			if ( pItemDef->GetPaymentRules().Count() == 0 && econ_orphaned_sold_items_owned_by_account_id.GetInt() )
-			{
-				econ_item_payment_rule_t rule;
-				rule.m_RevenueShare = 1.0;
-				rule.m_eRuleType = kPaymentRule_PartnerSteamID;
-				rule.m_vecValues.AddToTail( econ_orphaned_sold_items_owned_by_account_id.GetInt() );
-
-				DbgVerify( pItemDef->AddPaymentRule( rule ) == 0 );
-			}
-		}
-
-		// Go through the cache of all bundles...
-		FOR_EACH_VEC( m_vecBundles, iBundle )
-		{
-			const CEconItemDefinition *pBundleItemDef = m_vecBundles[ iBundle ];
-			const bundleinfo_t *pBundle = pBundleItemDef->GetBundleInfo();
-			const bool bBundleItemIsForSale = pPriceSheet->BItemExistsInPriceSheet( pBundleItemDef->GetDefinitionIndex() ) != NULL;	// Only add bundles that are actually for sale
-
-			bool bAddToContainingBundleItemDefs = false;
-			if ( pItemDef->IsPackBundle() )
-			{
-				// If the current item is a pack bundle, look for the first pack item in the current bundle (pBundle). We can safely assume that all pack items will be
-				// in pBundle if the first pack item is, since the GC won't startup otherwise. Don't add self as a containing bundle.
-				bAddToContainingBundleItemDefs = pItemDef->GetDefinitionIndex() != pBundleItemDef->GetDefinitionIndex()
-											  && pBundle->vecItemDefs.HasElement( pItemDef->GetBundleInfo()->vecItemDefs[0] );
-			}
-			else
-			{
-				bAddToContainingBundleItemDefs = pBundle->vecItemDefs.HasElement( pItemDef );
-			}
-
-			// Does the current bundle contain the given item?
-			if ( bBundleItemIsForSale && bAddToContainingBundleItemDefs )
-			{
-				pItemDef->m_vecContainingBundleItemDefs.AddToTail( pBundleItemDef );
-			}
-		}
-	}
-
-	return true;
-}
-#endif
 
 
 #if defined(CLIENT_DLL) || defined(GAME_DLL)
@@ -6455,6 +4511,9 @@ bool CEconItemSchema::BInitFromDelayedBuffer()
 	bool bSuccess = m_pDelayedSchemaData->InitializeSchema( this );
 	delete m_pDelayedSchemaData;
 	m_pDelayedSchemaData = NULL;
+	 
+	// We just got a new schema.  We need another PostInit()
+	ItemSystem()->PostInit();
 
 	return bSuccess;
 }
@@ -6565,20 +4624,15 @@ EEquipType_t CEconItemSchema::GetEquipTypeFromClassIndex( int iClass ) const
 //-----------------------------------------------------------------------------
 bool CEconItemSchema::BInitSchema( KeyValues *pKVRawDefinition, CUtlVector<CUtlString> *pVecErrors /* = NULL */ )
 {
+	double flInitSchemaTime = Plat_FloatTime();
+
 	m_unMinLevel = pKVRawDefinition->GetInt( "item_level_min", 0 );
 	m_unMaxLevel = pKVRawDefinition->GetInt( "item_level_max", 0 );
 
-#if !defined( GC_DLL )
 	m_unVersion = CalculateKeyValuesVersion( pKVRawDefinition );
-#endif
 
 
 
-#ifdef GC_DLL
-	// Validate the integrity of the base data.
-	SCHEMA_INIT_CHECK( 0 <= m_unMinLevel, "Minimum Item Level must be at least 0" );
-	SCHEMA_INIT_CHECK( m_unMinLevel <= m_unMaxLevel, "Minimum Item Level must be less than or equal to Maximum Item Level" );
-#endif // GC_DLL
 
 	// Parse the prefabs block first so the prefabs will be populated in case anything else wants
 	// to use them later.
@@ -6645,16 +4699,6 @@ bool CEconItemSchema::BInitSchema( KeyValues *pKVRawDefinition, CUtlVector<CUtlS
 		SCHEMA_INIT_SUBSTEP( BInitAttributes( pKVAttributes, pVecErrors ) );
 	}
 
-#ifdef GC
-	// Initialize the motd block
-	KeyValues *pKVMOTD = pKVRawDefinition->FindKey( "motd_entries" );
-	SCHEMA_INIT_CHECK( NULL != pKVMOTD, "Required key \"motd_entries\" missing.\n" );
-
-	if ( NULL != pKVMOTD )
-	{
-		SCHEMA_INIT_SUBSTEP( GGCGameBase()->GetMOTDManager().BInitMOTDEntries( pKVMOTD, pVecErrors ) );
-	}
-#endif 
 
 	// Initialize the "equip_regions_list" block -- this is an optional block
 	KeyValues *pKVEquipRegions = pKVRawDefinition->FindKey( "equip_regions_list" );
@@ -6672,27 +4716,16 @@ bool CEconItemSchema::BInitSchema( KeyValues *pKVRawDefinition, CUtlVector<CUtlS
 		SCHEMA_INIT_SUBSTEP( BInitEquipRegionConflicts( pKVEquipRegionConflicts, pVecErrors ) );
 	}
 
-	// TF2 Paint Kits
-	// No included in schema file (Too Big).  Loaded Seperately
-	// Load the KV and add it to the pKVRawDefinition
-	KeyValues *pPaintkitKV = new KeyValues( "item_paintkit_definitions" );
-	SCHEMA_INIT_CHECK( pPaintkitKV->LoadFromFile( g_pFullFileSystem, "scripts/items/paintkits_master.txt", "GAME" ), "Unable to Load paintkits_master.txt KV File!" );
-	pKVRawDefinition->AddSubKey( pPaintkitKV );
-
-	// Init Item Paint Kits
-	// Must be BEFORE Item defs
-	KeyValues *pKVItemPaintKits = pKVRawDefinition->FindKey( "item_paintkit_definitions" );
-	if ( NULL != pKVItemPaintKits )
-	{
-		SCHEMA_INIT_SUBSTEP( BInitItemPaintKitDefinitions( pKVItemPaintKits, pVecErrors ) );
-	}
-
-#ifdef GC_DLL
 	// Parse the loot lists block (on the GC)
 	// Must be BEFORE Item defs
+	KeyValues *pKVItemCriteriaTemplates = pKVRawDefinition->FindKey( "item_criteria_templates" );
+	SCHEMA_INIT_SUBSTEP( BInitItemCriteriaTemplates( pKVItemCriteriaTemplates, pVecErrors ) );
+
 	KeyValues *pKVRandomAttributeTemplates = pKVRawDefinition->FindKey( "random_attribute_templates" );
 	SCHEMA_INIT_SUBSTEP( BInitRandomAttributeTemplates( pKVRandomAttributeTemplates, pVecErrors ) );
-#endif // GC_DLL
+
+	KeyValues *pKVLootlistJobTemplates = pKVRawDefinition->FindKey( "lootlist_job_template_definitions" );
+	SCHEMA_INIT_SUBSTEP( BInitLootlistJobTemplates( pKVLootlistJobTemplates, pVecErrors ) );
 
 	// Initialize the items block
 	KeyValues *pKVItems = pKVRawDefinition->FindKey( "items" );
@@ -6720,7 +4753,7 @@ bool CEconItemSchema::BInitSchema( KeyValues *pKVRawDefinition, CUtlVector<CUtlS
 	SCHEMA_INIT_SUBSTEP( BInitRecipes( pKVRecipes, pVecErrors ) );
 
 	// Reset our loot lists.
-	m_mapLootLists.RemoveAll();
+	m_dictLootLists.RemoveAll();
 
 	// Init Item Collections - Must be before lootlists since collections are lootlists themselves and are referenced by lootlists
 	KeyValues *pKVItemCollections = pKVRawDefinition->FindKey( "item_collections" );
@@ -6729,18 +4762,6 @@ bool CEconItemSchema::BInitSchema( KeyValues *pKVRawDefinition, CUtlVector<CUtlS
 		SCHEMA_INIT_SUBSTEP( BInitItemCollections( pKVItemCollections, pVecErrors ) );
 	}
 
-#ifdef GC_DLL
-	// Parse the loot lists block (on the GC)
-	KeyValues *pKVLootLists = pKVRawDefinition->FindKey( "loot_lists" );
-	SCHEMA_INIT_SUBSTEP( BInitLootLists( pKVLootLists, pVecErrors ) );
-
-	// Initialize the periodic score accumulation block (this needs to take place after items)
-	KeyValues *pKVPeriodicScoring = pKVRawDefinition->FindKey( "periodic_score_accumulation" );
-	if ( NULL != pKVPeriodicScoring )
-	{
-		SCHEMA_INIT_SUBSTEP( BInitPeriodicScoring( pKVPeriodicScoring, pVecErrors ) );
-	}
-#endif // GC_DLL
 
 	// Parse the client loot lists block (everywhere)
 	KeyValues *pKVClientLootLists = pKVRawDefinition->FindKey( "client_loot_lists" );
@@ -6760,16 +4781,7 @@ bool CEconItemSchema::BInitSchema( KeyValues *pKVRawDefinition, CUtlVector<CUtlS
 		SCHEMA_INIT_SUBSTEP( BInitOperationDefinitions( pKVGameInfo, pKVOperationDefinitions, pVecErrors ) );
 	}
 
-#if defined( GC_DLL )
-	// Parse any time-based rewards
-	KeyValues *pKVTimeRewards = pKVRawDefinition->FindKey( "time_rewards" );
-	SCHEMA_INIT_SUBSTEP( BInitTimedRewards( pKVTimeRewards, pVecErrors ) );
-
-	KeyValues *pKVExperiments = pKVRawDefinition->FindKey( "experiments" );
-	SCHEMA_INIT_SUBSTEP( BInitExperiements( pKVExperiments, pVecErrors ) );
-
-	SCHEMA_INIT_SUBSTEP( BInitForeignImports( pVecErrors ) );
-#elif defined( CLIENT_DLL ) || defined( GAME_DLL )
+#if   defined( CLIENT_DLL ) || defined( GAME_DLL )
 	KeyValues *pKVArmoryData = pKVRawDefinition->FindKey( "armory_data" );
 	SCHEMA_INIT_SUBSTEP( BInitArmoryData( pKVArmoryData, pVecErrors ) );
 #endif // GC_DLL
@@ -6803,6 +4815,16 @@ bool CEconItemSchema::BInitSchema( KeyValues *pKVRawDefinition, CUtlVector<CUtlS
 	// Initialize the community Market remaps, if present
 	KeyValues *pKVCommunityMarketRemaps = pKVRawDefinition->FindKey( "community_market_item_remaps" );
 	SCHEMA_INIT_SUBSTEP( BInitCommunityMarketRemaps( pKVCommunityMarketRemaps, pVecErrors ) );
+
+	double flTotalTime = Plat_FloatTime() - flInitSchemaTime;
+
+#ifdef GAME_DLL
+	DevMsg( "*********Server InitSchema time = %f\n", flTotalTime );
+#elif CLIENT_DLL
+	DevMsg( "*********Client InitSchema time = %f\n", flTotalTime );
+#else // GC_DLL
+	DevMsg( "*********GC InitSchema time = %f\n", flTotalTime );
+#endif
 
 	return SCHEMA_INIT_SUCCESS();
 }
@@ -6860,128 +4882,11 @@ bool CEconItemSchema::BInitAttributeTypes( CUtlVector<CUtlString> *pVecErrors )
 	// when loading items to map between item IDs and the attributes they own.
 	FOR_EACH_VEC( m_vecAttributeTypes, i )
 	{
-#ifdef GC_DLL
-		const CColumnSet& cs = m_vecAttributeTypes[i].m_pAttrType->GetFullColumnSet();
-
-		SCHEMA_INIT_CHECK( cs.GetColumnCount() >= 2, "BInitAttributeTypes(): '%s' has invalid column count.\n", cs.GetRecordInfo()->GetName() );
-
-		const CColumnInfo& Column0 = cs.GetColumnInfo( 0 );
-		SCHEMA_INIT_CHECK( Column0.GetType() == k_EGCSQLType_int64, "BInitAttributeTypes(): '%s' column 0 has invalid data type %u.\n", cs.GetRecordInfo()->GetName(), Column0.GetType() );
-		SCHEMA_INIT_CHECK( Column0.GetName() && !V_stricmp( Column0.GetName(), "ItemID" ), "BInitAttributeTypes(): '%s' has invalid name '%s'.\n", cs.GetRecordInfo()->GetName(), Column0.GetName() ? Column0.GetName() : "[null]" );
-		SCHEMA_INIT_CHECK( Column0.BIsPrimaryKey(), "BInitAttributeTypes(): '%s' has an item ID column that isn't in the PK.\n", cs.GetRecordInfo()->GetName() );
-
-		const CColumnInfo& Column1 = cs.GetColumnInfo( 1 );
-		SCHEMA_INIT_CHECK( Column1.GetType() == k_EGCSQLType_int16, "BInitAttributeTypes(): '%s' column 1 has invalid data type %u.\n", cs.GetRecordInfo()->GetName(), Column0.GetType() );
-		SCHEMA_INIT_CHECK( Column1.GetName() && !V_stricmp( Column1.GetName(), "AttrDefIndex" ), "BInitAttributeTypes(): '%s' has invalid name '%s'.\n", cs.GetRecordInfo()->GetName(), Column1.GetName() ? Column1.GetName() : "[null]" );
-
-		// Make sure two different attribute types don't point to the same DB table. There's nothing
-		// technically that would prevent this from working, but right now the way we load from the
-		// DB would make this super-inefficient so we'd want to fix that code if we are rolling content
-		// that would hit this error.
-		for ( int j = i + 1; j < m_vecAttributeTypes.Count(); j++ )
-		{
-			SCHEMA_INIT_CHECK( cs.GetRecordInfo() != m_vecAttributeTypes[j].m_pAttrType->GetFullColumnSet().GetRecordInfo(),
-				"BInitAttributeTypes(): multiple attribute types reference the same table '%s'.\n", cs.GetRecordInfo()->GetName() );
-		}
-#endif // GC_DLL
 	}
 
 	return SCHEMA_INIT_SUCCESS();
 }
 
-#ifdef GC_DLL
-//-----------------------------------------------------------------------------
-// Purpose:	Initializes the "periodic_score_accumulation" section of the schema
-//-----------------------------------------------------------------------------
-struct periodic_score_event_lookup_entry_t { const char *m_pszName; eEconPeriodicScoreEvents m_eValue; bool m_bGCUpdateOnly; };
-static const periodic_score_event_lookup_entry_t sPeriodicScoreEvents[] =
-{
-	{ "gifts_distributed",				kPeriodicScoreEvent_GiftsDistributed,		true },
-	{ "duels_won",						kPeriodicScoreEvent_DuelsWon,				true },
-	{ "map_stamps_purchased",			kPeriodicScoreEvent_MapStampsPurchased,		true },
-};
-
-struct periodic_score_duration_lookup_entry_t { const char *m_pszName; uint32 m_unValue; };
-static const periodic_score_duration_lookup_entry_t sPeriodicScoreDurations[] =
-{
-	{ "disabled",						0 },
-	{ "hourly",							60 * 60 },
-	{ "daily",							60 * 60 * 24 },
-	{ "weekly",							60 * 60 * 24 * 7 },
-	{ "monthly",						60 * 60 * 24 * 7 * 4 },			// four weeks, not necessarily a month boundary
-};
-
-template < typename search_entry_type, int search_entry_array_size >
-static bool LookupValueFromString( const search_entry_type(&searchArray)[search_entry_array_size], const char *pszSearch, search_entry_type *out_pResult )
-{
-	Assert( out_pResult );
-
-	for ( int i = 0; i < search_entry_array_size; i++ )
-	{
-		if ( !V_stricmp( pszSearch, searchArray[i].m_pszName ) )
-		{
-			*out_pResult = searchArray[i];
-			return true;
-		}
-	}
-
-	return false;
-}	
-
-bool CEconItemSchema::BInitPeriodicScoring( KeyValues *pKVPeriodicScoring, CUtlVector<CUtlString> *pVecErrors )
-{
-	FOR_EACH_TRUE_SUBKEY( pKVPeriodicScoring, pKVScoreType )
-	{
-		int index = Q_atoi( pKVScoreType->GetName() );
-		SCHEMA_INIT_CHECK( index == m_vecPeriodicScoreTypes.Count(), "Invalid or out-of-order periodic score type '%s'", pKVScoreType->GetName() );
-
-		periodic_score_t PeriodicScore;
-
-		// Reward item definition.
-		const char *pszRewardItemDefName = pKVScoreType->GetString( "reward_item_def_name", NULL );
-		PeriodicScore.m_pRewardItemDefinition = pszRewardItemDefName ? GetItemDefinitionByName( pszRewardItemDefName ) : NULL;
-		SCHEMA_INIT_CHECK( PeriodicScore.m_pRewardItemDefinition, "Periodic score type '%s' missing reward item definition name", pKVScoreType->GetName() );
-
-		// Event type via string lookup.
-		const char *pszEventName = pKVScoreType->GetString( "event", "" );
-		{
-			periodic_score_event_lookup_entry_t EventEntry;
-			SCHEMA_INIT_CHECK( LookupValueFromString( sPeriodicScoreEvents, pszEventName, &EventEntry ),
-							   "Periodic score type '%s' could not find event name '%s'", pKVScoreType->GetName(), pszEventName );
-			PeriodicScore.m_eEventType = EventEntry.m_eValue;
-
-			// Note: other parts of the code assume that the event type is associated with the GC-only updatability flag.)
-			PeriodicScore.m_bGCUpdateOnly = EventEntry.m_bGCUpdateOnly;
-		}
-
-		// Time period via string lookup.
-		{
-			const char *pszTimePeriodName = pKVScoreType->GetString( "time_period", "" );
-			periodic_score_duration_lookup_entry_t DurationEntry;
-			SCHEMA_INIT_CHECK( LookupValueFromString( sPeriodicScoreDurations, pszTimePeriodName, &DurationEntry ),
-							   "Periodic score type '%s' could not find time period name '%s'", pKVScoreType->GetName(), pszEventName );
-			PeriodicScore.m_unTimePeriodLengthInSeconds = DurationEntry.m_unValue;
-		}
-
-		// Alternate time period specified for use in internal Steam?
-		if ( GGCHost()->GetUniverse() != k_EUniversePublic )
-		{
-			const char *pszInternalTimePeriodName = pKVScoreType->GetString( "time_period_internal", NULL );
-			if ( pszInternalTimePeriodName )
-			{
-				periodic_score_duration_lookup_entry_t InternalDurationEntry;
-				SCHEMA_INIT_CHECK( LookupValueFromString( sPeriodicScoreDurations, pszInternalTimePeriodName, &InternalDurationEntry ),
-								   "Periodic score type '%s' could not find internal time period name '%s'", pKVScoreType->GetName(), pszEventName );
-				PeriodicScore.m_unTimePeriodLengthInSeconds = InternalDurationEntry.m_unValue;
-			}
-		}
-
-		m_vecPeriodicScoreTypes.AddToTail( PeriodicScore );
-	}
-
-	return SCHEMA_INIT_SUCCESS();
-}
-#endif // GC_DLL
 
 //-----------------------------------------------------------------------------
 // Purpose:	Initializes the "prefabs" section of the schema
@@ -6992,14 +4897,14 @@ bool CEconItemSchema::BInitDefinitionPrefabs( KeyValues *pKVPrefabs, CUtlVector<
 	{
 		const char *pszPrefabName = pKVPrefab->GetName();
 
-		int nMapIndex = m_mapDefinitionPrefabs.Find( pszPrefabName );
+		int nMapIndex = m_dictDefinitionPrefabs.Find( pszPrefabName );
 
 		// Make sure the item index is correct because we use this index as a reference
 		SCHEMA_INIT_CHECK( 
-			!m_mapDefinitionPrefabs.IsValidIndex( nMapIndex ),
+			!m_dictDefinitionPrefabs.IsValidIndex( nMapIndex ),
 			"Duplicate prefab name (%s)", pszPrefabName );
 
-		m_mapDefinitionPrefabs.Insert( pszPrefabName, pKVPrefab->MakeCopy() );
+		m_dictDefinitionPrefabs.Insert( pszPrefabName, pKVPrefab->MakeCopy() );
 	}
 
 	return SCHEMA_INIT_SUCCESS();
@@ -7193,16 +5098,16 @@ void CEconItemSchema::AssignDefaultBodygroupState( const char *pszBodygroupName,
 	// Make sure that we're constantly reinitializing our default value to the same default value. This is sort
 	// of dumb but it works for everything we've got now. In the event that conflicts start cropping up it would
 	// be easy enough to make a new schema section.
-	int iIndex = m_mapDefaultBodygroupState.Find( pszBodygroupName );
-	if ( (m_mapDefaultBodygroupState.IsValidIndex( iIndex ) && m_mapDefaultBodygroupState[iIndex] != iDefaultValue) ||
+	int iIndex = m_dictDefaultBodygroupState.Find( pszBodygroupName );
+	if ( (m_dictDefaultBodygroupState.IsValidIndex( iIndex ) && m_dictDefaultBodygroupState[iIndex] != iDefaultValue) ||
 		 (iValue < 0 || iValue > 1) )
 	{
 		EmitWarning( SPEW_GC, 4, "Unable to get accurate read on whether bodygroup '%s' is enabled or disabled by default. (The schema is fine, but the code is confused and could stand to be made smarter.)\n", pszBodygroupName );
 	}
 
-	if ( !m_mapDefaultBodygroupState.IsValidIndex( iIndex ) )
+	if ( !m_dictDefaultBodygroupState.IsValidIndex( iIndex ) )
 	{
-		m_mapDefaultBodygroupState.Insert( pszBodygroupName, iDefaultValue );
+		m_dictDefaultBodygroupState.Insert( pszBodygroupName, iDefaultValue );
 	}
 }
 
@@ -7366,10 +5271,10 @@ bool CEconItemSchema::BInitItems( KeyValues *pKVItems, CUtlVector<CUtlString> *p
 	m_mapItems.PurgeAndDeleteElements();
 	m_mapItemsSorted.Purge();
 	m_mapToolsItems.Purge();
+	m_mapPaintKitTools.Purge();
 	m_mapBaseItems.Purge();
 	m_vecBundles.Purge();
 	m_mapQuestObjectives.PurgeAndDeleteElements();
-	m_vecItemCollectionCrates.Purge();
 
 #if defined(CLIENT_DLL) || defined(GAME_DLL)
 	if ( m_pDefaultItemDefinition )
@@ -7419,6 +5324,18 @@ bool CEconItemSchema::BInitItems( KeyValues *pKVItems, CUtlVector<CUtlString> *p
 				if ( pItemDef->IsTool() )
 				{
 					m_mapToolsItems.Insert( nItemIndex, pItemDef );
+
+					// found paintkit tool, add to paintkit map
+					if ( pItemDef->GetEconTool() && !V_strcmp( pItemDef->GetEconTool()->GetTypeName(), "paintkit" ) )
+					{
+						uint32 unPaintKitDefIndex;
+						SCHEMA_INIT_CHECK( GetPaintKitDefIndex( pItemDef, &unPaintKitDefIndex ), "PaintKit Item [%d] is missing paintkit def index attr", pItemDef->GetDefinitionIndex() );
+						int iMapIndex = m_mapPaintKitTools.Find( unPaintKitDefIndex );
+						SCHEMA_INIT_CHECK( iMapIndex == m_mapPaintKitTools.InvalidIndex(), "Duplicate paintkit def index [%d]. Trying to add to item [%d], but item [%d] already has it.",
+											unPaintKitDefIndex, pItemDef->GetDefinitionIndex(), m_mapPaintKitTools[ iMapIndex ]->GetDefinitionIndex() );
+
+						m_mapPaintKitTools.Insert( unPaintKitDefIndex, pItemDef );
+					}
 				}
 
 				if ( pItemDef->IsBaseItem() )
@@ -7443,21 +5360,7 @@ bool CEconItemSchema::BInitItems( KeyValues *pKVItems, CUtlVector<CUtlString> *p
 							pCurItemDef->m_pOwningPackBundle = pItemDef;
 						}
 					}
-				}
-
-				static CSchemaAttributeDefHandle pAttrDef_ContainsCollection( "contains collection" );
-				if ( pAttrDef_ContainsCollection )
-				{
-					FOR_EACH_VEC( pItemDef->GetStaticAttributes(), i )
-					{
-						const static_attrib_t& staticAttrib = pItemDef->GetStaticAttributes()[i];
-						if ( staticAttrib.iDefIndex == pAttrDef_ContainsCollection->GetDefinitionIndex() )
-						{
-							// Add to collection crate list
-							m_vecItemCollectionCrates.AddToTail( pItemDef->GetDefinitionIndex() );
-						}
-					}
-				}				
+				}	
 			}
 		}
 	}
@@ -7557,7 +5460,7 @@ bool CEconItemSchema::DeleteItemDefinition( int iDefIndex )
 //-----------------------------------------------------------------------------
 bool CEconItemSchema::BInitItemSets( KeyValues *pKVItemSets, CUtlVector<CUtlString> *pVecErrors )
 {
-	m_mapItemSets.RemoveAll();
+	m_dictItemSets.RemoveAll();
 
 	if ( NULL != pKVItemSets )
 	{
@@ -7566,10 +5469,10 @@ bool CEconItemSchema::BInitItemSets( KeyValues *pKVItemSets, CUtlVector<CUtlStri
 			const char* setName = pKVItemSet->GetName();
 
 			SCHEMA_INIT_CHECK( setName != NULL, "All itemsets must have names." );
-			SCHEMA_INIT_CHECK( m_mapItemSets.Find( setName ) == m_mapItemSets.InvalidIndex(), "Duplicate itemset name (%s) found!", setName );
+			SCHEMA_INIT_CHECK( m_dictItemSets.Find( setName ) == m_dictItemSets.InvalidIndex(), "Duplicate itemset name (%s) found!", setName );
 
-			int idx = m_mapItemSets.Insert( setName, new CEconItemSetDefinition );
-			SCHEMA_INIT_SUBSTEP( m_mapItemSets[idx]->BInitFromKV( pKVItemSet, pVecErrors ) );
+			int idx = m_dictItemSets.Insert( setName, new CEconItemSetDefinition );
+			SCHEMA_INIT_SUBSTEP( m_dictItemSets[idx]->BInitFromKV( pKVItemSet, pVecErrors ) );
 		}
 
 		// Once we've initialized all of our item sets, loop through all of our item definitions looking
@@ -7622,7 +5525,7 @@ bool CEconItemSchema::BVerifyBaseItemNames( CUtlVector<CUtlString> *pVecErrors )
 //-----------------------------------------------------------------------------
 bool CEconItemSchema::BInitItemCollections( KeyValues *pKVItemCollections, CUtlVector<CUtlString> *pVecErrors )
 {
-	m_mapItemCollections.Purge();
+	m_dictItemCollections.Purge();
 
 	if ( NULL != pKVItemCollections )
 	{
@@ -7631,10 +5534,10 @@ bool CEconItemSchema::BInitItemCollections( KeyValues *pKVItemCollections, CUtlV
 			const char* setName = pKVItemCollection->GetName();
 
 			SCHEMA_INIT_CHECK( setName != NULL, "All item collections must have names." );
-			SCHEMA_INIT_CHECK( m_mapItemCollections.Find( setName ) == m_mapItemCollections.InvalidIndex(), "Duplicate item collection name (%s) found!", setName );
+			SCHEMA_INIT_CHECK( m_dictItemCollections.Find( setName ) == m_dictItemCollections.InvalidIndex(), "Duplicate item collection name (%s) found!", setName );
 
-			int idx = m_mapItemCollections.Insert( setName, new CEconItemCollectionDefinition );
-			SCHEMA_INIT_SUBSTEP( m_mapItemCollections[idx]->BInitFromKV( pKVItemCollection, pVecErrors ) );
+			int idx = m_dictItemCollections.Insert( setName, new CEconItemCollectionDefinition );
+			SCHEMA_INIT_SUBSTEP( m_dictItemCollections[idx]->BInitFromKV( pKVItemCollection, pVecErrors ) );
 		}
 	}
 
@@ -7652,14 +5555,14 @@ bool CEconItemSchema::BInitCollectionReferences( CUtlVector<CUtlString> *pVecErr
 		{
 			// Find the collection
 			bool bFound = false;
-			FOR_EACH_MAP_FAST( m_mapItemCollections, iCollectionIndex )
+			for ( int iCollectionIndex = m_dictItemCollections.First(); m_dictItemCollections.IsValidIndex( iCollectionIndex ); iCollectionIndex = m_dictItemCollections.Next( iCollectionIndex ) )
 			{
-				const char * pszTemp = m_mapItemCollections[iCollectionIndex]->m_pszName;
+				const char * pszTemp = m_dictItemCollections[iCollectionIndex]->m_strName;
 
 				if ( !V_strcmp( pszTemp, pszCollectionName) )
 				{
 					bFound = true;
-					pItemDef->SetItemCollectionDefinition( m_mapItemCollections[iCollectionIndex] );
+					pItemDef->SetItemCollectionDefinition( m_dictItemCollections[iCollectionIndex] );
 					break;
 				}
 			}
@@ -7675,74 +5578,21 @@ const CEconItemCollectionDefinition *CEconItemSchema::GetCollectionByName( const
 	if ( !pCollectionName )
 		return NULL;
 
-	FOR_EACH_MAP_FAST( m_mapItemCollections, iCollectionIndex )
+	for ( int iCollectionIndex = m_dictItemCollections.First(); m_dictItemCollections.IsValidIndex( iCollectionIndex ); iCollectionIndex = m_dictItemCollections.Next( iCollectionIndex ) )
 	{
-		const char * pszTemp = m_mapItemCollections[iCollectionIndex]->m_pszName;
+		const char * pszTemp = m_dictItemCollections[iCollectionIndex]->m_strName;
 		if ( !V_strcmp( pszTemp, pCollectionName ) )
 		{
-			return m_mapItemCollections[iCollectionIndex];
+			return m_dictItemCollections[iCollectionIndex];
 		}
 	}
 	return NULL;
 }
 
-
-
-//-----------------------------------------------------------------------------
-bool CEconItemSchema::BInitItemPaintKitDefinitions( KeyValues *pKVItemPaintKits, CUtlVector<CUtlString> *pVecErrors )
-{
-	m_mapItemPaintKits.Purge();
-
-	const char* cWhitespace = " \r\n\t"; // space, end of line, tab.
-	cWhitespace; // Compiler happiness for GC build
-
-	if ( NULL != pKVItemPaintKits )
-	{
-#ifdef CLIENT_DLL
-		FOR_EACH_TRUE_SUBKEY( pKVItemPaintKits, pKVPaintKit )
-		{
-			const char* keyField = pKVPaintKit->GetName();
-			SCHEMA_INIT_CHECK( keyField != NULL, "All item collections must have names." );
-
-			if ( V_stristr( keyField, "paintkit_template" ) != NULL )
-			{
-				static const int cSkipLen = strlen( "paintkit_template" );
-				keyField += cSkipLen;
-				keyField += strspn( keyField, cWhitespace );
-
-				bool createTmplResult = materials->AddTextureCompositorTemplate( keyField, pKVPaintKit );
-				SCHEMA_INIT_CHECK( createTmplResult, "Could Not Create paintkit_template '%s'", keyField );
-			}
-		}
-
-		// Do post-load validation before moving on to paintkits.
-		SCHEMA_INIT_CHECK( materials->VerifyTextureCompositorTemplates(), "Paintkit template post-init validation failed." );
-#endif
-
-		// Now do all the paintkits
-		FOR_EACH_TRUE_SUBKEY( pKVItemPaintKits, pKVPaintKit )
-		{
-			// We know the keyField is valid, it was checked above.
-			const char* keyField = pKVPaintKit->GetName();
-
-			if ( V_stristr( keyField, "paintkit_template" ) == NULL )
-			{
-				SCHEMA_INIT_CHECK( m_mapItemPaintKits.Find( keyField ) == m_mapItemPaintKits.InvalidIndex(), "Duplicate paint kit definition name (%s) found!", keyField );
-
-				int idx = m_mapItemPaintKits.Insert( keyField, new CEconItemPaintKitDefinition );
-				SCHEMA_INIT_SUBSTEP( m_mapItemPaintKits[ idx ]->BInitFromKV( pKVPaintKit, pVecErrors ) );
-			}
-		}
-	}
-
-
-	return SCHEMA_INIT_SUCCESS();
-}
-
 //-----------------------------------------------------------------------------
 bool CEconItemSchema::BInitOperationDefinitions( KeyValues *pKVGameInfo, KeyValues *pKVOperationDefinitions, CUtlVector<CUtlString> *pVecErrors )
 {
-	m_mapOperationDefinitions.Purge();
+	m_dictOperationDefinitions.Purge();
 
 	if ( NULL != pKVOperationDefinitions )
 	{
@@ -7750,19 +5600,12 @@ bool CEconItemSchema::BInitOperationDefinitions( KeyValues *pKVGameInfo, KeyValu
 		{
 			const char* setName = pKVOperation->GetName();
 			SCHEMA_INIT_CHECK( setName != NULL, "All operations must have names." );
-			SCHEMA_INIT_CHECK( m_mapOperationDefinitions.Find( setName ) == m_mapOperationDefinitions.InvalidIndex(), "Duplicate operation definition name (%s) found!", setName );
+			SCHEMA_INIT_CHECK( m_dictOperationDefinitions.Find( setName ) == m_dictOperationDefinitions.InvalidIndex(), "Duplicate operation definition name (%s) found!", setName );
 
 			CEconOperationDefinition *pNewOperation = new CEconOperationDefinition();
 			SCHEMA_INIT_SUBSTEP( pNewOperation->BInitFromKV( pKVOperation, pVecErrors ) );
 
-			// don't add expired operation to list
-			if ( pNewOperation->IsExpired() )
-			{
-				delete pNewOperation;
-				continue;
-			}
-			
-			m_mapOperationDefinitions.Insert( setName, pNewOperation );
+			m_dictOperationDefinitions.Insert( setName, pNewOperation );
 		}
 	}
 
@@ -7823,9 +5666,9 @@ bool CEconItemSchema::BInitLootLists( KeyValues *pKVLootLists, CUtlVector<CUtlSt
 		}
 	}
 
-	FOR_EACH_MAP_FAST( m_mapLootLists, i )
+	for ( int idx = m_dictLootLists.First(); m_dictLootLists.IsValidIndex( idx ); idx = m_dictLootLists.Next( idx ) )
 	{
-		const CEconLootListDefinition *pLootList = m_mapLootLists[i];
+		const CEconLootListDefinition *pLootList = m_dictLootLists[idx];
 		BVerifyLootListItemDropDates( pLootList, pVecErrors );
 	}
 
@@ -7836,14 +5679,14 @@ bool CEconItemSchema::BInsertLootlist( const char *pListName, KeyValues *pKVLoot
 {
 	SCHEMA_INIT_CHECK( pListName != NULL, "All lootlists must have names." );
 
-	if ( m_mapLootLists.Count() > 0 )
+	if ( m_dictLootLists.Count() > 0 )
 	{
 		SCHEMA_INIT_CHECK( GetLootListByName( pListName ) == NULL, "Duplicate lootlist name (%s) found!", pListName );
 	}
 
 	CEconLootListDefinition *pLootList = new CEconLootListDefinition;
 	SCHEMA_INIT_SUBSTEP( pLootList->BInitFromKV( pKVLootList, *this, pVecErrors ) );
-	m_mapLootLists.Insert( pListName, pLootList );
+	m_dictLootLists.Insert( pListName, pLootList );
 
 	return SCHEMA_INIT_SUCCESS();
 }
@@ -7875,32 +5718,6 @@ bool CEconItemSchema::BInitRevolvingLootLists( KeyValues *pKVLootLists, CUtlVect
 }
 
 //-----------------------------------------------------------------------------
-// Purpose:	Create and return a new quest objective definition.  Verify that
-//			a definition with the same name doesnt alreay exist.
-//-----------------------------------------------------------------------------
-bool CEconItemSchema::AddQuestObjective( const CQuestObjectiveDefinition **ppQuestObjective, KeyValues *pKVObjective, CUtlVector<CUtlString> *pVecErrors )
-{
-	// These need to be unique
-	int nDefIndex = pKVObjective->GetInt( "defindex", -1 );
-	SCHEMA_INIT_CHECK( nDefIndex != -1, "Missing defindex for quest objective" );
-	// Verify defindex is unique
-	auto nMapIndex = m_mapQuestObjectives.Find( nDefIndex );
-	SCHEMA_INIT_CHECK( nMapIndex == m_mapQuestObjectives.InvalidIndex(), "Multiple quest objectives with defindex: %d", nDefIndex );
-	// Create the quest def
-	nMapIndex = m_mapQuestObjectives.Insert( nDefIndex );
-	m_mapQuestObjectives[ nMapIndex ] = CreateQuestDefinition();
-	// Init
-	SCHEMA_INIT_SUBSTEP( m_mapQuestObjectives[nMapIndex]->BInitFromKV( pKVObjective, pVecErrors ) );
-
-	if ( ppQuestObjective )
-	{
-		(*ppQuestObjective) = m_mapQuestObjectives[nMapIndex];
-	}
-
-	return SCHEMA_INIT_SUCCESS();
-}
-
-//-----------------------------------------------------------------------------
 // Purpose:	Verify that the contents of visible lootlist do not have drop dates
 //			associated with them.  The thinking being that we dont want to have
 //			items listed that could potentially not drop, or items disappear/appear
@@ -7924,7 +5741,7 @@ bool CEconItemSchema::BRecurseiveVerifyLootListItemDropDates( const CEconLootLis
 {
 	FOR_EACH_VEC( pLootList->GetLootListContents(), j )
 	{
-		const CEconLootListDefinition::drop_item_t& item = pLootList->GetLootListContents()[j];
+		const drop_item_t& item = pLootList->GetLootListContents()[j];
 		// 0 and greater means item.  Less than 0 means nested lootlist
 		if( item.m_iItemOrLootlistDef >= 0 )
 		{
@@ -8096,11 +5913,7 @@ bool CEconItemSchema::BInitAchievementRewards( KeyValues *pKVAchievementRewards,
 			if( award.m_vecDefIndex.Count() == 0 )
 				continue;
 
-#ifdef GC_DLL
-			award.m_unSourceAppId = GGCBase()->GetAppID();
-#else		
 			award.m_unSourceAppId = k_uAppIdInvalid;
-#endif		
 			if( pKVReward->GetDataType() == KeyValues::TYPE_NONE )
 			{
 				// cross game achievement
@@ -8115,49 +5928,6 @@ bool CEconItemSchema::BInitAchievementRewards( KeyValues *pKVAchievementRewards,
 			}
 
 
-#ifdef GC_DLL
-			// Check to make sure the audit data is valid
-			SCHEMA_INIT_CHECK( 
-				award.m_unSourceAppId >= 0,
-				"Source App ID %d in achievement reward %s must be valid", award.m_unSourceAppId, pKVReward->GetName() );
-			if( award.m_unSourceAppId == k_uAppIdInvalid )
-				continue;
-
-			if( !GGCGameBase()->BYieldingLoadStats( award.m_unSourceAppId ) )
-			{
-				// this will often fail in a dev universe
-				if( GGCHost()->GetUniverse() != k_EUniverseDev )
-				{
-					SCHEMA_INIT_CHECK( 
-						false,
-						"Unable to load stats schema for cross-game achievement %s for app %d", pKVReward->GetName(), award.m_unSourceAppId );
-				}
-				continue;
-			}
-
-			const CGCStatsSchema *pStatsSchema = GGCGameBase()->GetStatsSchema( award.m_unSourceAppId );
-			if( !pStatsSchema )
-			{
-				SCHEMA_INIT_CHECK( 
-					false,
-					"Unable to retrieve stats schema for cross-game achievement %s for app %d", pKVReward->GetName(), award.m_unSourceAppId );
-				continue;
-			}
-
-			if( award.m_unAuditData == 0 )
-			{
-				uint16 usStatID, usBitID;
-				if( !pStatsSchema->BGetAchievementBit( award.m_sNativeName, &usStatID, &usBitID ) )
-				{
-					SCHEMA_INIT_CHECK( 
-						false,
-						"Unable to find achievement %s for app %d", award.m_sNativeName.Get(), award.m_unSourceAppId );
-					continue;
-				}
-
-				award.m_unAuditData = ( usStatID <<16 ) | usBitID;
-			}
-#endif // GC_DLL
 
 
 			AchievementAward_t *pAward = new AchievementAward_t;
@@ -8172,7 +5942,26 @@ bool CEconItemSchema::BInitAchievementRewards( KeyValues *pKVAchievementRewards,
 }
 
 
-#ifdef GC_DLL
+bool CEconItemSchema::BInitItemCriteriaTemplates( KeyValues *pKVItemCriteriaTemplates, CUtlVector<CUtlString> *pVecErrors )
+{
+	m_dictItemCriteriaTemplates.PurgeAndDeleteElements();
+
+	FOR_EACH_TRUE_SUBKEY( pKVItemCriteriaTemplates, pKVItemCriteriaTemplate )
+	{
+		const char *pszCriteriaName = pKVItemCriteriaTemplate->GetName();
+
+		// try to create random attrib from template
+		CItemSelectionCriteria *pCriteria = CreateItemCriteria( __FUNCTION__, pKVItemCriteriaTemplate, pVecErrors );
+		SCHEMA_INIT_CHECK(
+			NULL != pCriteria,
+			"%s: Failed to create CItemSelectionCriteria '%s'", __FUNCTION__, pszCriteriaName );
+
+		m_dictItemCriteriaTemplates.Insert( pszCriteriaName, pCriteria );
+	}
+
+	return true;
+}
+
 bool CEconItemSchema::BInitRandomAttributeTemplates( KeyValues *pKVRandomAttributeTemplates, CUtlVector<CUtlString> *pVecErrors )
 {
 	m_dictRandomAttributeTemplates.PurgeAndDeleteElements();
@@ -8185,14 +5974,33 @@ bool CEconItemSchema::BInitRandomAttributeTemplates( KeyValues *pKVRandomAttribu
 		random_attrib_t *pRandomAttr = CreateRandomAttribute( __FUNCTION__, pKVAttributeTemplate, pVecErrors );
 		SCHEMA_INIT_CHECK(
 			NULL != pRandomAttr,
-			CFmtStr( "%s: Failed to create random_attrib_t '%s'", __FUNCTION__, pszAttrName ) );
+			"%s: Failed to create random_attrib_t '%s'", __FUNCTION__, pszAttrName );
 
 		m_dictRandomAttributeTemplates.Insert( pszAttrName, pRandomAttr );
 	}
 
 	return true;
 }
-#endif // GC_DLL
+
+bool CEconItemSchema::BInitLootlistJobTemplates( KeyValues *pKVLootlistJobTemplates, CUtlVector<CUtlString> *pVecErrors )
+{
+	m_dictLootlistJobTemplates.PurgeAndDeleteElements();
+
+	FOR_EACH_TRUE_SUBKEY( pKVLootlistJobTemplates, pKVJobTemplate )
+	{
+		const char *pszJobName = pKVJobTemplate->GetName();
+
+		// try to create random attrib from template
+		CLootlistJob *pJob = CreateLootlistJob( __FUNCTION__, pKVJobTemplate, pVecErrors );
+		SCHEMA_INIT_CHECK(
+			NULL != pJob,
+			"%s: Failed to create CreateLootlistJob '%s'", __FUNCTION__, pszJobName );
+
+		m_dictLootlistJobTemplates.Insert( pszJobName, pJob );
+	}
+
+	return true;
+}
 
 
 #ifdef TF_CLIENT_DLL
@@ -8333,7 +6141,6 @@ bool CEconItemSchema::BInitAttributeControlledParticleSystems( KeyValues *pKVPar
 				system.fRefireTime = pKVEntry->GetFloat( "refire_time", 0.0f );
 				system.bDrawInViewModel = pKVEntry->GetBool( "draw_in_viewmodel", false );
 				system.bUseSuffixName = pKVEntry->GetBool( "use_suffix_name", false );
-				system.bHasViewModelSpecificEffect = pKVEntry->GetBool( "has_viewmodel_specific_effect", false );
 
 				COMPILE_TIME_ASSERT( ARRAYSIZE( system.pszControlPoints ) == ARRAYSIZE( s_particle_controlpoint_names ) );
 				for ( int i=0; i<ARRAYSIZE( system.pszControlPoints ); ++i )
@@ -8415,11 +6222,6 @@ bool CEconItemSchema::BInitKillEaterScoreTypes( KeyValues *pKVKillEaterScoreType
 			kill_eater_score_type_t ScoreType;
 			ScoreType.m_pszTypeString = pKVScoreType->GetString( "type_name" );
 			ScoreType.m_bAllowBotVictims = pKVScoreType->GetBool( "allow_bot_victims", false );
-#ifdef GC_DLL
-			ScoreType.m_bGCUpdateOnly = pKVScoreType->GetBool( "gc_update_only", false );
-			ScoreType.m_AllowIncrementValues = pKVScoreType->GetBool( "gc_allow_increment_values", false );
-			ScoreType.m_bIsBaseKillType = pKVScoreType->GetBool( "gc_is_base_kill_type", false );
-#endif
 
 			const char *pszLevelBlockName = pKVScoreType->GetString( "level_data", "KillEaterRank" );
 			SCHEMA_INIT_CHECK( GetItemLevelingData( pszLevelBlockName ) != NULL,
@@ -8574,20 +6376,11 @@ const char *CEconItemSchema::GetKillEaterScoreTypeLevelingDataName( uint32 unSco
 		 : NULL;
 }
 
-#if defined(STAGING_ONLY) && ( defined(TF_CLIENT_DLL) || defined(TF_DLL) )
-	ConVar tf_allow_strange_bot_kills( "tf_allow_strange_bot_kills", "0", FCVAR_REPLICATED );
-#endif
 //-----------------------------------------------------------------------------
 // Kill eater score type accessor
 //-----------------------------------------------------------------------------
 bool CEconItemSchema::GetKillEaterScoreTypeAllowsBotVictims( uint32 unScoreType ) const
 {
-#if defined(STAGING_ONLY) && ( defined(TF_CLIENT_DLL) || defined(TF_DLL) )
-	if ( tf_allow_strange_bot_kills.GetBool() )
-	{
-		return true;
-	}
-#endif
 
 	const kill_eater_score_type_t *pScoreType = FindKillEaterScoreType( unScoreType );
 
@@ -8608,41 +6401,6 @@ econ_tag_handle_t CEconItemSchema::GetHandleForTag( const char *pszTagName )
 	return m_dictTags.Insert( pszTagName );
 }
 
-#ifdef GC_DLL
-//-----------------------------------------------------------------------------
-// Kill eater score type accessor
-//-----------------------------------------------------------------------------
-bool CEconItemSchema::GetKillEaterScoreTypeGCOnlyUpdate( uint32 unScoreType ) const
-{
-	const kill_eater_score_type_t *pScoreType = FindKillEaterScoreType( unScoreType );
-
-	return pScoreType
-		 ? pScoreType->m_bGCUpdateOnly
-		 : true;								// default to being more restrictive
-}
-
-//-----------------------------------------------------------------------------
-// Purpose:
-//-----------------------------------------------------------------------------
-bool CEconItemSchema::GetKillEaterScoreTypeAllowsIncrementValues( uint32 unScoreType ) const
-{
-	const kill_eater_score_type_t *pScoreType = FindKillEaterScoreType( unScoreType );
-
-	return pScoreType
-		 ? pScoreType->m_AllowIncrementValues
-		 : true;								// default to being more restrictive
-}
-
-//-----------------------------------------------------------------------------
-// Purpose:
-//-----------------------------------------------------------------------------
-const CEconItemSchema::periodic_score_t& CEconItemSchema::GetPeriodicScoreInfo( int iPeriodicScoreIndex ) const
-{
-	Assert( GetPeriodicScoreTypeList().IsValidIndex( iPeriodicScoreIndex ) );
-
-	return GetPeriodicScoreTypeList()[ iPeriodicScoreIndex ];
-}
-#endif
 
 #if defined(CLIENT_DLL) || defined(GAME_DLL)
 //-----------------------------------------------------------------------------
@@ -8734,43 +6492,6 @@ bool CEconItemSchema::BInitArmoryData( KeyValues *pKVArmoryData, CUtlVector<CUtl
 #endif
 
 
-#ifdef GC_DLL
-//-----------------------------------------------------------------------------
-// Purpose:	Returns the item awarded for an achievement.
-// Input:	pchAchievementName - The achievement that was awarded.
-// Output:	The achievement struct for this reward.
-//-----------------------------------------------------------------------------
-const AchievementAward_t * CEconItemSchema::GetAchievementReward( const char *pchAchievementName, AppId_t unAppID ) const
-{
-	int nRewardIndex = m_dictAchievementRewards.Find( ComputeAchievementName( unAppID, pchAchievementName ) );
-
-	if( m_dictAchievementRewards.IsValidIndex( nRewardIndex ) )
-		return m_dictAchievementRewards[ nRewardIndex ];
-	else
-		return NULL;
-}
-
-
-//-----------------------------------------------------------------------------
-// Purpose:	Returns the achievement award that matches the provided data or NULL
-//			if there is no such award.
-// Input:	unData - The data field that would be stored in ItemAudit
-//-----------------------------------------------------------------------------
-const AchievementAward_t *CEconItemSchema::GetAchievementRewardByData( uint32 unData ) const
-{
-	uint nIndex = m_mapAchievementRewardsByData.Find( unData );
-	if( m_mapAchievementRewardsByData.IsValidIndex( nIndex ) )
-	{
-		return m_mapAchievementRewardsByData[nIndex];
-	}
-	else
-	{
-		return NULL;
-	}
-}
-
-
-#endif // GC_DLL
 
 
 //-----------------------------------------------------------------------------
@@ -9016,7 +6737,6 @@ const CEconItemDefinition *CEconItemSchema::GetItemDefinitionByName( const char 
 }
 
 
-#ifdef GC_DLL
 random_attrib_t *CEconItemSchema::GetRandomAttributeTemplateByName( const char *pszAttrTemplateName ) const
 {
 	int index = m_dictRandomAttributeTemplates.Find( pszAttrTemplateName );
@@ -9027,7 +6747,17 @@ random_attrib_t *CEconItemSchema::GetRandomAttributeTemplateByName( const char *
 
 	return NULL;
 }
-#endif // GC_DLL
+
+CLootlistJob *CEconItemSchema::GetLootlistJobTemplateByName( const char *pszLootlistJobTemplateName ) const
+{
+	int index = m_dictLootlistJobTemplates.Find( pszLootlistJobTemplateName );
+	if ( index != m_dictLootlistJobTemplates.InvalidIndex() )
+	{
+		return m_dictLootlistJobTemplates[index];
+	}
+
+	return NULL;
+}
 
 
 //-----------------------------------------------------------------------------
@@ -9135,6 +6865,22 @@ attachedparticlesystem_t* CEconItemSchema::FindAttributeControlledParticleSystem
 	return NULL;
 }
 
+const CEconOperationDefinition* CEconItemSchema::GetOperationByName( const char* pszName ) const
+{
+	for ( int iOperation = m_dictOperationDefinitions.First(); m_dictOperationDefinitions.IsValidIndex( iOperation ); iOperation = m_dictOperationDefinitions.Next( iOperation ) )
+	{
+		CEconOperationDefinition *pOperation = m_dictOperationDefinitions[iOperation];
+		if ( pOperation )
+		{
+			if ( Q_stricmp( pOperation->GetName(), pszName ) == 0 )
+			{
+				return pOperation;
+			}
+		}
+	}
+
+	return NULL;
+}
 
 #if defined(CLIENT_DLL) || defined(GAME_DLL)
 bool CEconItemSchema::SetupPreviewItemDefinition( KeyValues *pKV )
@@ -9150,61 +6896,6 @@ bool CEconItemSchema::SetupPreviewItemDefinition( KeyValues *pKV )
 }
 #endif // defined(CLIENT_DLL) || defined(GAME_DLL)
 
-#ifdef GC_DLL
-//-----------------------------------------------------------------------------
-// Purpose: Returns all the foreign item imports for an app ID
-//-----------------------------------------------------------------------------
-const CEconItemDefinition *CEconItemSchema::GetAppItemImport( AppId_t unAppID, uint16 usDefIndex ) const
-{
-	int i = m_mapForeignImports.Find( unAppID );
-	if( m_mapForeignImports.IsValidIndex( i ) )
-		return m_mapForeignImports[i]->FindMapping( usDefIndex );
-	else
-		return NULL;
-}
-
-
-//-----------------------------------------------------------------------------
-// Purpose: Returns all the foreign item imports for an app ID
-//-----------------------------------------------------------------------------
-bool CEconItemSchema::BInitForeignImports( CUtlVector<CUtlString> *pVecErrors )
-{
-	FOR_EACH_MAP_FAST( m_mapItems, nItem )
-	{
-		CEconItemDefinition *pDefn = m_mapItems[nItem];
-
-		KeyValues *pkvImport = pDefn->GetDefinitionKey( "import_from" );
-		if( !pkvImport )
-			continue;
-
-		FOR_EACH_VALUE( pkvImport, pkvApp )
-		{
-			CForeignAppImports *pAppImports = FindOrAddAppImports( Q_atoi( pkvApp->GetName() ) );
-			pAppImports->AddMapping( pkvApp->GetInt(), pDefn );
-		}
-	}
-
-	return true;
-}
-
-
-//-----------------------------------------------------------------------------
-// Purpose: Returns all the foreign item imports for an app ID
-//-----------------------------------------------------------------------------
-CForeignAppImports *CEconItemSchema::FindOrAddAppImports( AppId_t unAppID )
-{
-	int i = m_mapForeignImports.Find( unAppID );
-	if( m_mapForeignImports.IsValidIndex( i ) )
-		return m_mapForeignImports[i];
-	else
-	{
-		m_vecForeignApps.AddToTail( unAppID );
-		CForeignAppImports *pApp = new CForeignAppImports();
-		m_mapForeignImports.Insert( unAppID, pApp );
-		return pApp;
-	}
-}
-#endif // GC_DLL
 
 bool CEconItemSchema::BCanStrangeFilterApplyToStrangeSlotInItem( uint32 /*strange_event_restriction_t*/ unRestrictionType, uint32 unRestrictionValue, const IEconItemInterface *pItem, int iStrangeSlot, uint32 *out_pOptionalScoreType ) const
 {
@@ -9314,246 +7005,21 @@ void CEconItemSchema::Validate( CValidator &validator, const char *pchName )
 }
 #endif // DBGFLAG_VALIDATE
 
-#ifdef GC_DLL
 
-//-----------------------------------------------------------------------------
-// Purpose:
-//-----------------------------------------------------------------------------
-bool CEconItemSchema::BInitExperiements( KeyValues *pKVExperiments, CUtlVector<CUtlString> *pVecErrors )
+bool CEconItemSchema::BPostSchemaInit( CUtlVector<CUtlString> *pVecErrors )
 {
-	m_vecExperiments.RemoveAll();
-
-	if ( NULL != pKVExperiments )
+	// We need the protodefs to be initialized
+	if ( !GetProtoScriptObjDefManager()->BDefinitionsLoaded() )
 	{
-		FOR_EACH_TRUE_SUBKEY( pKVExperiments, pKVEntry )
-		{
-			const char *listName = pKVEntry->GetName();
-
-			SCHEMA_INIT_CHECK( listName != NULL, "All experiments must have titles.");
-
-			int idx = m_vecExperiments.AddToTail();
-			SCHEMA_INIT_SUBSTEP( m_vecExperiments[idx].BInitFromKV( pKVEntry, pVecErrors ) );
-		}
+		GetProtoScriptObjDefManager()->BInitDefinitions();
+	}
+	else
+	{
+		// If they were already initialized, do another PostInit as this might
+		// be a new schema
+		GetProtoScriptObjDefManager()->BPostDefinitionsLoaded();
 	}
 
-	return SCHEMA_INIT_SUCCESS();
-}
-
-//-----------------------------------------------------------------------------
-// CExperimentDefinition
-//-----------------------------------------------------------------------------
-CExperimentDefinition::CExperimentDefinition( void )
-	: m_bEnabled( false )
-	, m_unExperimentID( 0 )
-	, m_unNumParticipants( 0 )
-	, m_unMaxParticipants( 0 )
-	, m_pKeyValues( NULL )
-{
-}
-
-CExperimentDefinition::~CExperimentDefinition( void )
-{
-	if ( m_pKeyValues )
-	{
-		m_pKeyValues->deleteThis();
-	}
-}
-
-bool CExperimentDefinition::BInitFromKV( KeyValues *pKVExperiment, CUtlVector<CUtlString> *pVecErrors )
-{
-	m_pKeyValues = pKVExperiment->MakeCopy();
-
-	m_unExperimentID = Q_atoi( m_pKeyValues->GetName() );
-	m_bEnabled = m_pKeyValues->GetBool( "enabled" );
-	m_unNumParticipants = 0;
-	m_unMaxParticipants = 0;
-	
-	KeyValues *pKVGroups = m_pKeyValues->FindKey( "groups" );
-	if ( pKVGroups )
-	{
-		FOR_EACH_TRUE_SUBKEY( pKVGroups, pKVEntry )
-		{
-			int idx = m_vecGroups.AddToTail();
-			experiment_group_t &group = m_vecGroups[idx];
-			group.m_pKeyValues = pKVEntry;
-			group.m_pName = pKVEntry->GetName();
-			group.m_unNumParticipants = 0;
-			group.m_unMaxParticipants = pKVEntry->GetInt( "num_participants", 0 );
-			m_unMaxParticipants += group.m_unMaxParticipants;
-		}
-	}
-
-	return SCHEMA_INIT_SUCCESS();
-}
-
-bool CExperimentDefinition::ChooseGroup( uint32 &unGroup )
-{
-	CUtlVector< uint32 > vecGroupIndices;
-	FOR_EACH_VEC( m_vecGroups, i )
-	{
-		experiment_group_t &group = m_vecGroups[i];
-		if ( group.m_unNumParticipants < group.m_unMaxParticipants )
-		{
-			vecGroupIndices.AddToTail( i );
-		}
-	}
-	if ( vecGroupIndices.Count() == 0 )
-	{
-		return false;
-	}
-
-	uint32 idx = vecGroupIndices[ RandomInt( 0, vecGroupIndices.Count() - 1 ) ];
-	experiment_group_t &group = m_vecGroups[ idx ];
-	++group.m_unNumParticipants;
-	unGroup = idx;
-
-	return true;
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: Give the chance after the schema has been initialized to sanity-check
-//			individual parts or interactions before moving forward.
-//-----------------------------------------------------------------------------
-#ifdef TF_GC_DLL
-static bool BTestToolApplicability( CUtlVector<CUtlString> *pVecErrors )
-{
-	static CSchemaItemDefHandle pItem_TeamPaint				( "Paint Can Team Color" ),			// tools
-								pItem_Paint					( "Paint Can 14" ),
-								pItem_DescriptionTag		( "Description Tag" ),
-								pItem_NameTag				( "Name Tag" ),
-								pItem_Key					( "Decoder Ring" ),
-								pItem_SummerKey				( "Summer Key" ),
-								pItem_GiftWrap				( "Gift Wrap" ),
-								pItem_CustomTextureTool		( "Customize Texture Tool" ),
-								pItem_SupplyCrateGeneric	( "Supply Crate 2" ),				// tool targets
-								pItem_SummerCrate			( "Summer Crate" ),
-								pItem_PaintableItem			( "Summer Hat" ),
-								//pItem_TeamPaintableItem	( "" ),
-								pItem_UnpaintableItem		( "Big Steel Jaw of Summer Fun" ),
-								//pItem_UnnameableWeapon	( "" ),
-								pItem_NameableWeapon		( "The Axtinguisher" ),
-								pItem_GiftWrappableItem		( "Supply Crate 3" ),
-								pItem_NonGiftWrappableItem	( "Wrapped Gift" ),
-								pItem_StampableObject		( "The Conscientious Objector" ),
-								pItem_NonstampableObject	( "Spiral Sallet" );
-
-	struct ToolValidityTest_t
-	{
-		const CEconItemDefinition *m_pTool;
-		const CEconItemDefinition *m_pTarget;
-		bool m_bExpectedValidity;
-	};
-
-	ToolValidityTest_t definitionTests[] =
-	{
-		{ pItem_TeamPaint,					pItem_TeamPaint,				false },
-		{ pItem_TeamPaint,					pItem_PaintableItem,			true },
-		//{ pItem_TeamPaint,				pItem_TeamPaintableItem,		true },
-		{ pItem_TeamPaint,					pItem_UnpaintableItem,			false },
-		{ pItem_Paint,						pItem_PaintableItem,			true },
-		//{ pItem_Paint,					pItem_TeamPaintableItem,		false },
-		{ pItem_Paint,						pItem_UnpaintableItem,			false },
-		{ pItem_Paint,						pItem_SupplyCrateGeneric,		false },
-		{ pItem_Key,						pItem_SupplyCrateGeneric,		true },
-		{ pItem_Key,						pItem_SummerCrate,				false },
-		{ pItem_SummerKey,					pItem_SupplyCrateGeneric,		true },		// summer keys in staging are now regular keys and should...
-		{ pItem_SummerKey,					pItem_SummerCrate,				false },	// ...be able to open regular crates
-		{ pItem_NameTag,					pItem_NameableWeapon,			true },
-		//{ pItem_NameTag,					pItem_UnnameableWeapon,			false },
-		{ pItem_DescriptionTag,				pItem_NameableWeapon,			true },
-		//{ pItem_DescriptionTag,			pItem_UnnameableWeapon,			false },
-		{ pItem_CustomTextureTool,			pItem_StampableObject,			true },
-		{ pItem_CustomTextureTool,			pItem_NonstampableObject,		false },
-	};
-
-	bool bAllSuccess = true;
-	for ( int i = 0; i < ARRAYSIZE( definitionTests ); i++ )
-	{
-		const GameItemDefinition_t *pToolDef   = dynamic_cast<const GameItemDefinition_t *>( definitionTests[i].m_pTool ),
-								   *pTargetDef = dynamic_cast<const GameItemDefinition_t *>( definitionTests[i].m_pTarget );
-
-		if ( !pToolDef )
-		{
-			bAllSuccess = false;
-			pVecErrors->AddToTail( CFmtStr( "Tool validity test %i failed: Tool is NULL.", i ).Access() );
-			continue;
-		}
-
-		if ( !pTargetDef )
-		{
-			bAllSuccess = false;
-			pVecErrors->AddToTail( CFmtStr( "Tool validity test %i failed: Target is NULL.", i ).Access() );
-			continue;
-		}
-
-		if ( CEconSharedToolSupport::ToolCanApplyToDefinition( pToolDef, pTargetDef ) != definitionTests[i].m_bExpectedValidity )
-		{
-			bAllSuccess = false;
-			pVecErrors->AddToTail( CFmtStr( "Tool validity test %i failed: %s %s have been able to apply to %s.",
-											i,
-											pToolDef->GetDefinitionName(),
-											definitionTests[i].m_bExpectedValidity ? "should" : "shouldn't",
-											pTargetDef->GetDefinitionName() ).Access() );
-		}
-	}
-
-	// These tests require actual instances of the item--not just the definitions. 
-	ToolValidityTest_t interfaceTests[] = 
-	{
-		{ pItem_GiftWrap,					pItem_GiftWrappableItem,		true },
-		{ pItem_GiftWrap,					pItem_NonGiftWrappableItem,		false },
-	};
-
-	// Skip if we already have failures.
-	if ( bAllSuccess )
-	{
-		for ( int i = 0; i < ARRAYSIZE( interfaceTests ); i++ )
-		{
-			const GameItemDefinition_t *pToolDef = dynamic_cast< const GameItemDefinition_t * >( interfaceTests[ i ].m_pTool ),
-									   *pTargetDef = dynamic_cast< const GameItemDefinition_t * >( interfaceTests[ i ].m_pTarget );
-
-			if ( !pToolDef )
-			{
-				bAllSuccess = false;
-				pVecErrors->AddToTail( CFmtStr( "Tool validity test %i failed: Tool is NULL.", i ).Access() );
-				continue;
-			}
-
-			if ( !pTargetDef )
-			{
-				bAllSuccess = false;
-				pVecErrors->AddToTail( CFmtStr( "Tool validity test %i failed: Target is NULL.", i ).Access() );
-				continue;
-			}
-
-			CEconItem *pTool = GEconManager()->GetItemFactory().CreateSpecificItem( ( const CEconGameAccount *) NULL, pToolDef->GetDefinitionIndex() );
-			CEconItem *pTarget = GEconManager()->GetItemFactory().CreateSpecificItem( ( const CEconGameAccount *) NULL, pTargetDef->GetDefinitionIndex() );
-
-			if ( CEconSharedToolSupport::ToolCanApplyTo( pTool, pTarget ) != interfaceTests[ i ].m_bExpectedValidity )
-			{
-				bAllSuccess = false;
-				pVecErrors->AddToTail( CFmtStr( "Tool validity test %i failed: %s %s have been able to apply to %s.",
-									   i,
-									   pToolDef->GetDefinitionName(),
-									   interfaceTests[ i ].m_bExpectedValidity ? "should" : "shouldn't",
-									   pTargetDef->GetDefinitionName() ).Access() );
-			}
-			
-			delete pTool;
-			delete pTarget;
-		}
-	}
-
-
-
-
-	return bAllSuccess;
-}
-#endif // TF_GC_DLL
-#endif // defined(GC_DLL)
-
-bool CEconItemSchema::BPostSchemaInit( CUtlVector<CUtlString> *pVecErrors ) const
-{
 	bool bAllSuccess = true;
 
 	// Make sure all of our tools are valid. We have to do this after the whole schema is initialized so
@@ -9561,90 +7027,29 @@ bool CEconItemSchema::BPostSchemaInit( CUtlVector<CUtlString> *pVecErrors ) cons
 	// items, etc.
 	FOR_EACH_MAP_FAST( m_mapItems, i )
 	{
-		const CEconItemDefinition *pItemDef = m_mapItems[i];
-		const IEconTool *pTool = pItemDef->GetEconTool();
-		
-		if ( pTool && !const_cast<IEconTool *>( pTool )->BFinishInitialization() )
+		if ( !m_mapItems[i]->BPostInit( pVecErrors ) )
 		{
-#ifdef GC_DLL
 			bAllSuccess = false;
-			pVecErrors->AddToTail( CFmtStr( "BPostSchemaInit(): tool '%s' is invalid.", pItemDef->GetDefinitionName() ).Get() );
-#endif // GC_DLL
 		}
-#if TF_GC_DLL
-		else
+	}
+
+	for ( int idx = m_dictItemCollections.First(); m_dictItemCollections.IsValidIndex( idx ); idx = m_dictItemCollections.Next( idx ) )
+	{
+		if ( !m_dictItemCollections[idx]->BPostSchemaInit( pVecErrors ) )
 		{
-			// all cosmetic items should have these two attributes from the
-			// cosmetic_killeater_attribs prefab in case we ever try to drop them as Strange
-			static CSchemaAttributeDefHandle pAttribDef_KillEaterScoreType( "kill eater score type" );
-			static CSchemaAttributeDefHandle pAttribDef_KillEaterKillType( "kill eater kill type" );
-
-			const CTFItemDefinition *pTFItemDef = assert_cast< const CTFItemDefinition* >( pItemDef );
-			if ( pTFItemDef )
-			{
-				int nSlot = pTFItemDef->GetLoadoutSlot( 0 ); // 0 gives use the default slot
-				if ( ( nSlot == LOADOUT_POSITION_HEAD ) || ( nSlot == LOADOUT_POSITION_MISC ) || ( nSlot == LOADOUT_POSITION_MISC2 ) )
-				{
-					bool bFoundScore = false;
-					bool bFoundKill = false;
-
-					FOR_EACH_VEC( pTFItemDef->GetStaticAttributes(), iIndex )
-					{
-						const static_attrib_t& staticAttrib = pTFItemDef->GetStaticAttributes()[iIndex];
-						const CEconItemAttributeDefinition *pAttrDef = GetItemSchema()->GetAttributeDefinition( staticAttrib.iDefIndex );
-						if ( pAttrDef == pAttribDef_KillEaterScoreType )
-						{
-							bFoundScore = true;
-						}
-						else if ( pAttrDef == pAttribDef_KillEaterKillType )
-						{
-							bFoundKill = true;
-						}
-					}
-
-					if ( !bFoundScore || !bFoundKill )
-					{
-						bAllSuccess = false;
-						pVecErrors->AddToTail( CFmtStr( "BPostSchemaInit(): '%s' is missing the standard cosmetic killeater attributes.", pItemDef->GetDefinitionName() ).Get() );
-					}
-				}
-			}
+			bAllSuccess = false;
 		}
-#endif // TF_GC_DLL
 	}
 
-#if TF_GC_DLL
-	// Make sure our tool application code validity works correctly.
-	if ( !BTestToolApplicability( pVecErrors ) )
+	// make sure all lootlist are valid
+	for ( int idx = m_dictLootLists.First(); m_dictLootLists.IsValidIndex( idx ); idx = m_dictLootLists.Next( idx ) )
 	{
-		bAllSuccess = false;
-		pVecErrors->AddToTail( "BPostSchemaInit(): error with tool application validity." );
-	}
-
-	const CEconLootListDefinition* pUnusualLootlist = GetItemSchema()->GetLootListByName( "all_particle_hats" );
-	if ( !pUnusualLootlist )
-	{
-		bAllSuccess = false;
-		pVecErrors->AddToTail( "No lootlist \"all_particle_hats\"" );
-	}
-	else
-	{
-		auto& contents = pUnusualLootlist->GetLootListContents();
-		FOR_EACH_VEC( contents, i )
+		if ( !m_dictLootLists[idx]->BPostInit( pVecErrors ) )
 		{
-			if ( contents[ i ].m_iItemOrLootlistDef > 0 )
-			{
-				const CEconItemDefinition* pItemDef = GetItemDefinition( contents[ i ].m_iItemOrLootlistDef );
-				if ( !( pItemDef->GetEquipRegionMask() & GetItemSchema()->GetEquipRegionBitMaskByName( "hat" ) ) 
-				  && !( pItemDef->GetEquipRegionMask() & GetItemSchema()->GetEquipRegionBitMaskByName( "whole_head" ) ) )
-				{
-					bAllSuccess = false;
-					pVecErrors->AddToTail( CFmtStr( "Item \"%s\" is in all_particle_hats, but doesn't have equip region hat or whole_head, meaning it can't become unusual.  REMOVE IT!", pItemDef->GetDefinitionName() ).Get() );
-				}
-			}
+			bAllSuccess = false;
 		}
 	}
-#endif // TF_GC_DLL
+
 
 	return bAllSuccess;
 }
@@ -9697,14 +7102,91 @@ bool CItemLevelingDefinition::BInitFromKV( KeyValues *pKVItemLevel, const char *
 	return SCHEMA_INIT_SUCCESS();
 }
 
-#ifdef GC_DLL
-EUniverse GetUniverse()
+
+static CSchemaAttributeDefHandle s_pAttrDef_Unusual[] =
 {
-	return GGCHost()->GetUniverse();
-}
-#else
-EUniverse GetUniverse()
+	CSchemaAttributeDefHandle( "attach particle effect" ),
+	CSchemaAttributeDefHandle( "hat only unusual effect" ),
+	CSchemaAttributeDefHandle( "taunt only unusual effect" ),
+	CSchemaAttributeDefHandle( "taunt attach particle index" ),
+};
+
+bool IsUnusualAttribute( const CEconItemAttributeDefinition *pAttrDef )
 {
-	return k_EUniversePublic;
+	for ( int i=0; i<ARRAYSIZE( s_pAttrDef_Unusual ); ++i )
+	{
+		if ( pAttrDef == s_pAttrDef_Unusual[i] )
+		{
+			return true;
+		}
+	}
+
+	return false;
 }
-#endif // GC_DLL
+
+bool ItemHasUnusualAttribute( const IEconItemInterface *pItem, const CEconItemAttributeDefinition **pUnusualAttribute /*= NULL*/, uint32 *pUnAttributeValue /*= NULL*/ )
+{
+	for ( int i=0; i<ARRAYSIZE( s_pAttrDef_Unusual ); ++i )
+	{
+		uint32 unVal = 0;
+		if ( pItem->FindAttribute( s_pAttrDef_Unusual[i], &unVal ) )
+		{
+			if ( pUnusualAttribute )
+			{
+				*pUnusualAttribute = s_pAttrDef_Unusual[i];
+			}
+
+			if ( pUnAttributeValue )
+			{
+				*pUnAttributeValue = unVal;
+			}
+
+			return true;
+		}
+	}
+	
+	return false;
+}
+
+bool IsPaintKitTool( const CEconItemDefinition *pItemDef )
+{
+	static CSchemaItemDefHandle pPaintkitToolItemDef( "Paintkit" );
+	return pItemDef->GetRemappedItemDefIndex() == pPaintkitToolItemDef->GetDefinitionIndex();
+}
+
+
+const CEconItemDefinition *CEconItemSchema::GetPaintKitItemDefinition( uint32 unPaintKitDefIndex ) const
+{
+	int iIndex = m_mapPaintKitTools.Find( unPaintKitDefIndex );
+	if ( iIndex != m_mapPaintKitTools.InvalidIndex() )
+	{
+		return m_mapPaintKitTools[ iIndex ];
+	}
+
+	return NULL;
+}
+
+
+const CEconItemCollectionDefinition *CEconItemSchema::GetPaintKitCollectionFromItem( const IEconItemInterface *pItem, uint32 *pUnPaintKitDefIndex /*= NULL*/ ) const
+{
+	Assert( pItem );
+	
+	const CEconItemCollectionDefinition *pCollection = NULL;
+	uint32 unPaintKitDef;
+	if ( GetPaintKitDefIndex( pItem, &unPaintKitDef ) )
+	{
+		const CEconItemDefinition *pPaintKitItemDef = GetPaintKitItemDefinition( unPaintKitDef );
+		if ( pPaintKitItemDef )
+		{
+			pCollection = pPaintKitItemDef->GetItemCollectionDefinition();
+		}
+
+		if ( pUnPaintKitDefIndex )
+		{
+			*pUnPaintKitDefIndex = unPaintKitDef;
+		}
+	}
+
+	return pCollection;
+}
+

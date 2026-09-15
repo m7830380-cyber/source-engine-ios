@@ -9,6 +9,7 @@ $Macro GAMENAME 	"hl2" [!$SOURCESDK]
 $Macro GAMENAME 	"mod_hl2" [$SOURCESDK]
 
 $Include "$SRCDIR\game\client\client_base.vpc"
+$Include "$SRCDIR\game\protobuf_include.vpc"
 
 $Configuration
 {
@@ -94,6 +95,7 @@ $Project "Client (HL2)"
 			$File	"hl2\hl_in_main.cpp"
 			$File	"hl2\hl_prediction.cpp"
 			$File	"hl2\hud_ammo.cpp"
+			$File	"hl2\hud_autoaim.cpp"
 			$File	"hl2\hud_battery.cpp"
 			$File	"hl2\hud_blood.cpp"
 			$File	"hl2\hud_credits.cpp"

@@ -84,6 +84,10 @@ public:
 
 	void			Push( void );
 
+#ifdef CLIENT_DLL
+	virtual bool	ShouldPlayClientReloadSound() { return true; }
+#endif
+
 private:
 	float			m_flPushTime;
 };

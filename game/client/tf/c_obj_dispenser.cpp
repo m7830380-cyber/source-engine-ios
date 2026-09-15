@@ -96,12 +96,6 @@ void C_ObjectDispenser::OnDataChanged( DataUpdateType_t updateType )
 {
 	BaseClass::OnDataChanged( updateType );
 
-#ifdef STAGING_ONLY
-	if ( updateType == DATA_UPDATE_CREATED )
-	{
-		SetNextClientThink( CLIENT_THINK_ALWAYS );
-	}
-#endif // STAGING_ONLY
 
 	if ( m_bUpdateHealingTargets )
 	{
@@ -117,13 +111,6 @@ void C_ObjectDispenser::ClientThink()
 {
 	BaseClass::ClientThink();
 
-#ifdef STAGING_ONLY
-	C_TFPlayer *pTFOwner = GetOwner();
-	if ( pTFOwner && pTFOwner->m_Shared.IsEnteringOrExitingFullyInvisible() )
-	{
-		UpdateEffects();
-	}
-#endif // STAGING_ONLY
 }
 
 //-----------------------------------------------------------------------------
@@ -251,7 +238,7 @@ void C_ObjectDispenser::UpdateEffects( void )
 void C_ObjectDispenser::StopEffects( bool bRemoveAll /* = false */ )
 {
 	// Find all the targets we've stopped healing
-	bool bStillHealing[MAX_DISPENSER_HEALING_TARGETS] = { 0 };
+	bool bStillHealing[MAX_PLAYERS_ARRAY_SAFE] = { 0 };
 	for ( int i = 0; i < m_hHealingTargetEffects.Count(); i++ )
 	{
 		bStillHealing[i] = false;
@@ -377,10 +364,6 @@ bool CDispenserControlPanel::IsVisible( void )
 {
 	if ( m_hDispenser )
 	{
-#ifdef STAGING_ONLY
-		if ( m_hDispenser->IsMiniBuilding() )
-			return false; 
-#endif // STAGING_ONLY
 
 		if ( m_hDispenser->GetInvisibilityLevel() == 1.f )
 			return false;

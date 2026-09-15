@@ -94,6 +94,7 @@ private:
 	{
 	public:
 		WOD_BaseEffect();
+		virtual ~WOD_BaseEffect() {}
 
 		virtual void InitEffect( float flDefaultDuration );
 

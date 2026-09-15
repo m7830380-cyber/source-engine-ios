@@ -29,12 +29,10 @@ class CTFProjectile_Jar;
 enum EThrowableTypes 
 {
 	EThrowableBase				= 0,
-#ifdef STAGING_ONLY
-	EThrowableWaterBalloon,
-#endif
 };
 
 #define JAR_EXPLODE_RADIUS 200		// TF_ROCKET_RADIUS and grenade explosions is 146
+#define TF_WEAPON_PEEJAR_EXPLODE_SOUND	"Jar.Explode"
 
 //=============================================================================
 //
@@ -185,6 +183,8 @@ public:
 	virtual const char* GetImpactEffect() { return "peejar_impact"; }
 	virtual ETFCond		GetEffectCondition( void ) { return TF_COND_URINE; }
 
+	virtual const char* GetExplodeSound() { return TF_WEAPON_PEEJAR_EXPLODE_SOUND; }
+
 protected:
 	Vector		m_vCollisionVelocity;
 	int			m_iProjectileType;
@@ -246,6 +246,7 @@ public:
 	virtual const char* GetImpactEffect() OVERRIDE { return ""; }
 	virtual ETFCond		GetEffectCondition( void ) OVERRIDE { return TF_COND_BLEEDING; }
 	
+	void				RemoveCleaver( void );
 
 private:
 	bool m_bHitPlayer;
@@ -253,6 +254,6 @@ private:
 #endif
 };
 
-void JarExplode( int iEntIndex, CTFPlayer *pAttacker, CBaseEntity *pOriginalWeapon, CBaseEntity *pWeapon, const Vector& vContactPoint, int iTeam, float flRadius, ETFCond cond, float flDuration, const char *pszImpactEffect );
+void JarExplode( int iEntIndex, CTFPlayer *pAttacker, CBaseEntity *pOriginalWeapon, CBaseEntity *pWeapon, const Vector& vContactPoint, int iTeam, float flRadius, ETFCond cond, float flDuration, const char *pszImpactEffect, const char *pszExplodeSound );
 
 #endif // TF_WEAPON_JAR_H

@@ -51,6 +51,10 @@ BEGIN_DATADESC( CTFParticleCannon )
 END_DATADESC()
 #endif
 
+#ifdef GAME_DLL
+const float tf_particle_cannon_afterburn_rate = 6.f;
+#endif // GAME_DLL
+
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
@@ -92,10 +96,16 @@ bool CTFParticleCannon::IsViewModelFlipped( void )
 bool CTFParticleCannon::Holster( CBaseCombatWeapon *pSwitchingTo )
 {
 	CTFPlayer *pPlayer = ToTFPlayer( GetPlayerOwner() );
-	if ( pPlayer && pPlayer->m_Shared.InCond( TF_COND_AIMING ) )
+	if ( pPlayer && pPlayer->m_Shared.InCond( TF_COND_AIMING ) && !pPlayer->IsRegenerating() )
 		return false;
 
 	m_flChargeBeginTime = 0;
+
+	if ( pPlayer )
+	{
+		pPlayer->m_Shared.RemoveCond( TF_COND_AIMING );
+		pPlayer->TeamFortress_SetSpeed();
+	}
 
 #ifdef CLIENT_DLL
 	ParticleProp()->Init( this );
@@ -497,3 +507,14 @@ bool CTFParticleCannon::OwnerCanTaunt( void )
 		return true;
 	}
 }
+
+
+#ifdef GAME_DLL
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+float CTFParticleCannon::GetAfterburnRateOnHit() const
+{
+	return tf_particle_cannon_afterburn_rate;
+}
+#endif // GAME_DLL

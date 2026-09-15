@@ -1500,8 +1500,8 @@ public:
 		if ( pNotifyPanel )
 		{
 			bool bDeleted = msg.Body().deleted();
-			wchar_t szPlayerName[1024];
-			g_pVGuiLocalize->ConvertANSIToUnicode( msg.Body().user_name().c_str(), szPlayerName, sizeof(szPlayerName) );
+			wchar_t szPlayerName[ MAX_PLAYER_NAME_LENGTH ];
+			UTIL_GetFilteredPlayerNameAsWChar( CSteamID(), msg.Body().user_name().c_str(), szPlayerName );
 			wchar_t szWrenchNumber[16]=L"";
 			_snwprintf( szWrenchNumber, ARRAYSIZE( szWrenchNumber ), L"%i", msg.Body().wrench_number() );
 			wchar_t szNotification[1024]=L"";
@@ -1552,7 +1552,7 @@ public:
 		{
 			// Who deleted this?
 			wchar_t wszPlayerName[ MAX_PLAYER_NAME_LENGTH ];
-			g_pVGuiLocalize->ConvertANSIToUnicode( msg.Body().has_user_name() ? msg.Body().user_name().c_str() : NULL, wszPlayerName, sizeof( wszPlayerName ) );
+			UTIL_GetFilteredPlayerNameAsWChar( CSteamID(), msg.Body().has_user_name() ? msg.Body().user_name().c_str() : NULL, wszPlayerName );
 			pNotification->AddStringToken( "owner", wszPlayerName );
 
 			// What category was the Saxxy for?
@@ -1589,7 +1589,7 @@ public:
 
 		// Who deleted this?
 		wchar_t wszPlayerName[ MAX_PLAYER_NAME_LENGTH ];
-		g_pVGuiLocalize->ConvertANSIToUnicode( msg.Body().has_user_name() ? msg.Body().user_name().c_str() : NULL, wszPlayerName, sizeof( wszPlayerName ) );
+		UTIL_GetFilteredPlayerNameAsWChar( CSteamID(), msg.Body().has_user_name() ? msg.Body().user_name().c_str() : NULL, wszPlayerName );
 		pNotification->AddStringToken( "owner", wszPlayerName );
 
 		// What type of item was this?
@@ -1652,7 +1652,10 @@ public:
 			CFmtStr1024 strWinners;
 			for ( int i = 0; i < msg.Body().winner_names_size(); ++i )
 			{
-				strWinners.Append( msg.Body().winner_names( i ).c_str() );
+				char szPlayerName[ MAX_PLAYER_NAME_LENGTH ];
+				V_strcpy_safe( szPlayerName, msg.Body().winner_names( i ).c_str() );
+				UTIL_GetFilteredPlayerName( CSteamID(), szPlayerName );
+				strWinners.Append( szPlayerName );
 				if ( i + 1 < msg.Body().winner_names_size() )
 				{
 					strWinners.Append( "\n" );

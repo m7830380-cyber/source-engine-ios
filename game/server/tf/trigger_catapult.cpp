@@ -45,7 +45,7 @@ BEGIN_DATADESC( CTriggerCatapult )
 	DEFINE_KEYFIELD( m_bDirectionSuppressAirControl, FIELD_BOOLEAN, "DirectionSuppressAirControl" ),
 
 	DEFINE_FIELD( m_hLaunchTarget, FIELD_EHANDLE ),
-	DEFINE_ARRAY( m_flRefireDelay, FIELD_TIME, MAX_PLAYERS + 1 ),
+	DEFINE_ARRAY( m_flRefireDelay, FIELD_TIME, MAX_PLAYERS_ARRAY_SAFE ),
 
 	DEFINE_UTLVECTOR( m_hAbortedLaunchees, FIELD_EHANDLE ),
 
@@ -283,7 +283,7 @@ void CTriggerCatapult::Spawn( void )
 	// Don't let the camera shoot through us!
 	InitTrigger();
 
-	for ( int i = 0; i < MAX_PLAYERS + 1; ++i )
+	for ( int i = 0; i < MAX_PLAYERS_ARRAY_SAFE; ++i )
 	{
 		m_flRefireDelay[i] = 0.0f;
 	}

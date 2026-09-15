@@ -86,12 +86,15 @@ public:
 	MESSAGE_FUNC( DoGetItemFromStore, "Context_GetItemFromStore" );
 	MESSAGE_FUNC( DoOpenDuckLeaderboards, "Context_OpenDuckLeaderboards" );
 	MESSAGE_FUNC( DoInspectModel, "Context_InspectModel" );
+	MESSAGE_FUNC( DoPreviewPaintkitsOnItem, "Context_PreviewPaintkitsOnItem" );
+	MESSAGE_FUNC( DoPreviewItemsWithPaintkit, "Context_PreviewItemsWithPaintkit" );
 	MESSAGE_FUNC( DoBuyKeyAndOpenCrate, "Context_BuyKeyAndOpenCrate" );
 	MESSAGE_FUNC( DoOpenCrateWithKey, "Context_OpenCrateWithKey" );
 	MESSAGE_FUNC( DoStrangeCountTransfer, "Context_OpenStrangeCountTransfer" );
 	MESSAGE_FUNC( DoCraftUpCollection, "Context_CraftUpCollection" );
 	MESSAGE_FUNC( DoHalloweenOffering, "Context_HalloweenOffering" );
 	MESSAGE_FUNC( DoCraftCommonStatClock, "Context_CraftCommonStatClock" );
+	MESSAGE_FUNC( DoOpenConTracker, "Context_OpenConTracker" );
 	void DoEquipForClass( int nClass );
 	void DoPaint( int nPaintItemIndex, bool bUseStore, bool bUseMarket );
 	void DoStrangePart( int nStrangePartIndex, bool bUseMarket );
@@ -252,7 +255,6 @@ protected:
 	DHANDLE<CCollectionCraftingPanel> m_pCollectionCraftPanel;
 	DHANDLE<CHalloweenOfferingPanel> m_pHalloweenOfferingPanel;
 	DHANDLE<CCraftCommonStatClockPanel> m_pMannCoTradePanel;			// Make this Panel Generic
-	CTFItemInspectionPanel *m_pInspectPanel;
 	CTFStorePreviewItemPanel2 *m_pInspectCosmeticPanel;
 	vgui::Menu *m_pContextMenu;
 	CEconItemViewHandle m_hQuickOpenCrate;

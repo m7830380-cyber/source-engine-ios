@@ -780,6 +780,33 @@ void CTFMapsWorkshop::PrintStatusToConsole()
 	Msg( "%u tracked maps\n", m_mapMaps.Count() );
 }
 
+bool CTFMapsWorkshop::GetWorkshopMapDesc( uint32 uIndex, WorkshopMapDesc_t* pDesc )
+{
+	if ( !m_vecSubscribedMaps.IsValidIndex( uIndex ) )
+		return false;
+
+	PublishedFileId_t id = m_vecSubscribedMaps[ uIndex ];
+
+	V_sprintf_safe( pDesc->szMapName, "workshop/%llu", id );
+	pDesc->uTimestamp  = 0;
+	pDesc->bDownloaded = false;
+	
+	auto index = m_mapMaps.Find( id );
+	if ( index != m_mapMaps.InvalidIndex() )
+	{
+		const char* pszOriginalName = m_mapMaps[index]->OriginalName();
+		if ( !pszOriginalName )
+			pszOriginalName = pDesc->szMapName;
+
+		V_strcpy_safe( pDesc->szOriginalMapName, pszOriginalName );
+		V_StripExtension( pDesc->szOriginalMapName, pDesc->szOriginalMapName, sizeof( pDesc->szOriginalMapName ) );
+		pDesc->uTimestamp  = m_mapMaps[ index ]->TimeUpdated();
+		pDesc->bDownloaded = m_mapMaps[ index ]->Downloaded();
+	}
+
+	return true;
+}
+
 //-----------------------------------------------------------------------------
 bool CTFMapsWorkshop::CanonicalNameForMap( PublishedFileId_t fileID, const CUtlString &originalFileName, /* out */ CUtlString &strCanonName )
 {
@@ -1002,11 +1029,4 @@ CON_COMMAND( tf_workshop_map_status, "Print information about workshop maps and 
 	g_TFMapsWorkshop.PrintStatusToConsole();
 }
 
-#else // NO_STEAM or console: keep a symbol so dedicated/listen servers can boot.
-
-CTFMapsWorkshop *TFMapsWorkshop()
-{
-	return NULL;
-}
-
-#endif // !_GAMECONSOLE && !NO_STEAM
+#endif // !_GAMECONSOLE

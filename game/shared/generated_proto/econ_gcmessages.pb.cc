@@ -509,7 +509,7 @@ void protobuf_AssignDesc_econ_5fgcmessages_2eproto() {
       sizeof(CMsgGCShuffleCrateContents));
   CMsgGCQuestObjective_Progress_descriptor_ = file->message_type(21);
   static const int CMsgGCQuestObjective_Progress_offsets_[4] = {
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCQuestObjective_Progress, quest_item_id_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCQuestObjective_Progress, quest_id_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCQuestObjective_Progress, quest_attrib_index_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCQuestObjective_Progress, delta_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCQuestObjective_Progress, owner_steamid_),
@@ -526,12 +526,13 @@ void protobuf_AssignDesc_econ_5fgcmessages_2eproto() {
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(CMsgGCQuestObjective_Progress));
   CMsgGCQuestObjective_PointsChange_descriptor_ = file->message_type(22);
-  static const int CMsgGCQuestObjective_PointsChange_offsets_[5] = {
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCQuestObjective_PointsChange, quest_item_id_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCQuestObjective_PointsChange, standard_points_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCQuestObjective_PointsChange, bonus_points_),
+  static const int CMsgGCQuestObjective_PointsChange_offsets_[6] = {
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCQuestObjective_PointsChange, quest_id_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCQuestObjective_PointsChange, owner_steamid_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCQuestObjective_PointsChange, update_base_points_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCQuestObjective_PointsChange, points_0_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCQuestObjective_PointsChange, points_1_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCQuestObjective_PointsChange, points_2_),
   };
   CMsgGCQuestObjective_PointsChange_reflection_ =
     new ::google::protobuf::internal::GeneratedMessageReflection(
@@ -546,7 +547,7 @@ void protobuf_AssignDesc_econ_5fgcmessages_2eproto() {
       sizeof(CMsgGCQuestObjective_PointsChange));
   CMsgGCQuestComplete_Request_descriptor_ = file->message_type(23);
   static const int CMsgGCQuestComplete_Request_offsets_[1] = {
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCQuestComplete_Request, quest_item_id_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCQuestComplete_Request, quest_id_),
   };
   CMsgGCQuestComplete_Request_reflection_ =
     new ::google::protobuf::internal::GeneratedMessageReflection(
@@ -575,7 +576,7 @@ void protobuf_AssignDesc_econ_5fgcmessages_2eproto() {
       sizeof(CMsgGCQuestCompleted));
   CMsgGCQuestObjective_RequestLoanerItems_descriptor_ = file->message_type(25);
   static const int CMsgGCQuestObjective_RequestLoanerItems_offsets_[1] = {
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCQuestObjective_RequestLoanerItems, quest_item_id_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCQuestObjective_RequestLoanerItems, quest_id_),
   };
   CMsgGCQuestObjective_RequestLoanerItems_reflection_ =
     new ::google::protobuf::internal::GeneratedMessageReflection(
@@ -651,7 +652,7 @@ void protobuf_AssignDesc_econ_5fgcmessages_2eproto() {
       sizeof(CMsgCraftCommonStatClock));
   CMsgGCQuestDiscard_Request_descriptor_ = file->message_type(30);
   static const int CMsgGCQuestDiscard_Request_offsets_[1] = {
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCQuestDiscard_Request, quest_item_id_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCQuestDiscard_Request, quest_id_),
   };
   CMsgGCQuestDiscard_Request_reflection_ =
     new ::google::protobuf::internal::GeneratedMessageReflection(
@@ -876,211 +877,209 @@ void protobuf_AddDesc_econ_5fgcmessages_2eproto() {
     "ByNewUser\022\032\n\022new_user_accountid\030\001 \001(\r\022\036\n"
     "\026thanked_user_accountid\030\002 \001(\r\"M\n\032CMsgGCS"
     "huffleCrateContents\022\025\n\rcrate_item_id\030\001 \001"
-    "(\004\022\030\n\020user_code_string\030\002 \001(\t\"x\n\035CMsgGCQu"
-    "estObjective_Progress\022\025\n\rquest_item_id\030\001"
-    " \001(\004\022\032\n\022quest_attrib_index\030\002 \001(\r\022\r\n\005delt"
-    "a\030\003 \001(\r\022\025\n\rowner_steamid\030\004 \001(\006\"\243\001\n!CMsgG"
-    "CQuestObjective_PointsChange\022\025\n\rquest_it"
-    "em_id\030\001 \001(\004\022\027\n\017standard_points\030\002 \001(\r\022\024\n\014"
-    "bonus_points\030\003 \001(\r\022\025\n\rowner_steamid\030\004 \001("
-    "\006\022!\n\022update_base_points\030\005 \001(\010:\005false\"4\n\033"
-    "CMsgGCQuestComplete_Request\022\025\n\rquest_ite"
-    "m_id\030\001 \001(\004\"\026\n\024CMsgGCQuestCompleted\"@\n\'CM"
-    "sgGCQuestObjective_RequestLoanerItems\022\025\n"
-    "\rquest_item_id\030\001 \001(\004\",\n*CMsgGCQuestObjec"
-    "tive_RequestLoanerResponse\"-\n\032CMsgCraftC"
-    "ollectionUpgrade\022\017\n\007item_id\030\001 \003(\004\">\n\032CMs"
-    "gCraftHalloweenOffering\022\017\n\007tool_id\030\001 \001(\004"
-    "\022\017\n\007item_id\030\002 \003(\004\"<\n\030CMsgCraftCommonStat"
-    "Clock\022\017\n\007tool_id\030\001 \001(\004\022\017\n\007item_id\030\002 \003(\004\""
-    "3\n\032CMsgGCQuestDiscard_Request\022\025\n\rquest_i"
-    "tem_id\030\001 \001(\004*\357/\n\nEGCItemMsg\022\021\n\014k_EMsgGCB"
-    "ase\020\350\007\022\"\n\035k_EMsgGCSetSingleItemPosition\020"
-    "\351\007\022\022\n\rk_EMsgGCCraft\020\352\007\022\032\n\025k_EMsgGCCraftR"
-    "esponse\020\353\007\022\023\n\016k_EMsgGCDelete\020\354\007\022$\n\037k_EMs"
-    "gGCVerifyCacheSubscription\020\355\007\022\025\n\020k_EMsgG"
-    "CNameItem\020\356\007\022\030\n\023k_EMsgGCUnlockCrate\020\357\007\022 "
-    "\n\033k_EMsgGCUnlockCrateResponse\020\360\007\022\026\n\021k_EM"
-    "sgGCPaintItem\020\361\007\022\036\n\031k_EMsgGCPaintItemRes"
-    "ponse\020\362\007\022\"\n\035k_EMsgGCGoldenWrenchBroadcas"
-    "t\020\363\007\022\030\n\023k_EMsgGCMOTDRequest\020\364\007\022 \n\033k_EMsg"
-    "GCMOTDRequestResponse\020\365\007\022\031\n\024k_EMsgGCName"
-    "BaseItem\020\373\007\022!\n\034k_EMsgGCNameBaseItemRespo"
-    "nse\020\374\007\022(\n#k_EMsgGCRemoveSocketItem_DEPRE"
-    "CATED\020\375\007\0220\n+k_EMsgGCRemoveSocketItemResp"
-    "onse_DEPRECATED\020\376\007\022!\n\034k_EMsgGCCustomizeI"
-    "temTexture\020\377\007\022)\n$k_EMsgGCCustomizeItemTe"
-    "xtureResponse\020\200\010\022\033\n\026k_EMsgGCUseItemReque"
-    "st\020\201\010\022\034\n\027k_EMsgGCUseItemResponse\020\202\010\022%\n k"
-    "_EMsgGCRespawnPostLoadoutChange\020\205\010\022\033\n\026k_"
-    "EMsgGCRemoveItemName\020\206\010\022\034\n\027k_EMsgGCRemov"
-    "eItemPaint\020\207\010\022\031\n\024k_EMsgGCGiftWrapItem\020\210\010"
-    "\022!\n\034k_EMsgGCGiftWrapItemResponse\020\211\010\022\030\n\023k"
-    "_EMsgGCDeliverGift\020\212\010\022(\n#k_EMsgGCDeliver"
-    "GiftResponseReceiver\020\214\010\022\036\n\031k_EMsgGCUnwra"
-    "pGiftRequest\020\215\010\022\037\n\032k_EMsgGCUnwrapGiftRes"
-    "ponse\020\216\010\022\031\n\024k_EMsgGCSetItemStyle\020\217\010\022\036\n\031k"
-    "_EMsgGCUsedClaimCodeItem\020\220\010\022\026\n\021k_EMsgGCS"
-    "ortItems\020\221\010\022*\n%k_EMsgGC_RevolvingLootLis"
-    "t_DEPRECATED\020\222\010\022\032\n\025k_EMsgGCLookupAccount"
-    "\020\223\010\022\"\n\035k_EMsgGCLookupAccountResponse\020\224\010\022"
-    "\036\n\031k_EMsgGCLookupAccountName\020\225\010\022&\n!k_EMs"
-    "gGCLookupAccountNameResponse\020\226\010\022\035\n\030k_EMs"
-    "gGCUpdateItemSchema\020\231\010\022$\n\037k_EMsgGCReques"
-    "tInventoryRefresh\020\232\010\022 \n\033k_EMsgGCRemoveCu"
-    "stomTexture\020\233\010\022(\n#k_EMsgGCRemoveCustomTe"
-    "xtureResponse\020\234\010\022\035\n\030k_EMsgGCRemoveMakers"
-    "Mark\020\235\010\022%\n k_EMsgGCRemoveMakersMarkRespo"
-    "nse\020\236\010\022#\n\036k_EMsgGCRemoveUniqueCraftIndex"
-    "\020\237\010\022+\n&k_EMsgGCRemoveUniqueCraftIndexRes"
-    "ponse\020\240\010\022\033\n\026k_EMsgGCSaxxyBroadcast\020\241\010\022!\n"
-    "\034k_EMsgGCBackpackSortFinished\020\242\010\022$\n\037k_EM"
-    "sgGCAdjustItemEquippedState\020\243\010\022\030\n\023k_EMsg"
-    "GCCollectItem\020\245\010\022\035\n\030k_EMsgGCItemAcknowle"
-    "dged\020\246\010\022)\n$k_EMsgGCPresets_SelectPresetF"
-    "orClass\020\247\010\022$\n\037k_EMsgGCPresets_SetItemPos"
-    "ition\020\250\010\022\031\n\024k_EMsgGC_ReportAbuse\020\251\010\022!\n\034k"
-    "_EMsgGC_ReportAbuseResponse\020\252\010\022.\n)k_EMsg"
-    "GCPresets_SelectPresetForClassReply\020\253\010\022!"
-    "\n\034k_EMsgGCNameItemNotification\020\254\010\022&\n!k_E"
-    "MsgGCClientDisplayNotification\020\255\010\022\035\n\030k_E"
-    "MsgGCApplyStrangePart\020\256\010\022)\n$k_EMsgGC_Inc"
-    "rementKillCountAttribute\020\257\010\022(\n#k_EMsgGC_"
-    "IncrementKillCountResponse\020\260\010\022\036\n\031k_EMsgG"
-    "CRemoveStrangePart\020\261\010\022\037\n\032k_EMsgGCResetSt"
-    "rangeScores\020\262\010\022\030\n\023k_EMsgGCGiftedItems\020\263\010"
-    "\022\035\n\030k_EMsgGCApplyUpgradeCard\020\265\010\022\036\n\031k_EMs"
-    "gGCRemoveUpgradeCard\020\266\010\022$\n\037k_EMsgGCApply"
-    "StrangeRestriction\020\267\010\022$\n\037k_EMsgGCClientR"
-    "equestMarketData\020\270\010\022,\n\'k_EMsgGCClientReq"
-    "uestMarketDataResponse\020\271\010\022\030\n\023k_EMsgGCApp"
-    "lyXifier\020\272\010\022 \n\033k_EMsgGCApplyXifierRespon"
-    "se\020\273\010\022(\n#k_EMsgGC_TrackUniquePlayerPairE"
-    "vent\020\274\010\022*\n%k_EMsgGCFulfillDynamicRecipeC"
-    "omponent\020\275\010\0222\n-k_EMsgGCFulfillDynamicRec"
-    "ipeComponentResponse\020\276\010\022(\n#k_EMsgGCSetIt"
-    "emEffectVerticalOffset\020\277\010\022&\n!k_EMsgGCSet"
-    "HatEffectUseHeadOrigin\020\300\010\022\037\n\032k_EMsgGCIte"
-    "mEaterRecharger\020\301\010\022\'\n\"k_EMsgGCItemEaterR"
-    "echargerResponse\020\302\010\022 \n\033k_EMsgGCApplyBase"
-    "ItemXifier\020\303\010\022%\n k_EMsgGCApplyClassTrans"
-    "mogrifier\020\304\010\022(\n#k_EMsgGCApplyHalloweenSp"
-    "ellbookPage\020\305\010\022\035\n\030k_EMsgGCRemoveKillStre"
-    "ak\020\306\010\022%\n k_EMsgGCRemoveKillStreakRespons"
-    "e\020\307\010\022$\n\037k_EMsgGCTFSpecificItemBroadcast\020"
-    "\310\010\0222\n-k_EMsgGC_IncrementKillCountAttribu"
-    "te_Multiple\020\311\010\022%\n k_EMsgGCDeliverGiftRes"
-    "ponseGiver\020\312\010\022\035\n\030k_EMsgGCSetItemPosition"
-    "s\020\314\010\022\'\n\"k_EMsgGCLookupMultipleAccountNam"
-    "es\020\315\010\022/\n*k_EMsgGCLookupMultipleAccountNa"
-    "mesResponse\020\316\010\022\030\n\023k_EMsgGCTradingBase\020\334\013"
-    "\022)\n$k_EMsgGCTrading_InitiateTradeRequest"
-    "\020\335\013\022*\n%k_EMsgGCTrading_InitiateTradeResp"
-    "onse\020\336\013\022!\n\034k_EMsgGCTrading_StartSession\020"
-    "\337\013\022\"\n\035k_EMsgGCTrading_SessionClosed\020\345\013\022\""
-    "\n\035k_EMsgGCTrading_CancelSession\020\346\013\0221\n,k_"
-    "EMsgGCTrading_InitiateTradeRequestRespon"
-    "se\020\352\013\022)\n$k_EMsgGCServerBrowser_FavoriteS"
-    "erver\020\301\014\022*\n%k_EMsgGCServerBrowser_Blackl"
-    "istServer\020\302\014\022\036\n\031k_EMsgGCServerRentalsBas"
-    "e\020\244\r\022#\n\036k_EMsgGCItemPreviewCheckStatus\020\245"
-    "\r\022&\n!k_EMsgGCItemPreviewStatusResponse\020\246"
-    "\r\022\037\n\032k_EMsgGCItemPreviewRequest\020\247\r\022\'\n\"k_"
-    "EMsgGCItemPreviewRequestResponse\020\250\r\022\036\n\031k"
-    "_EMsgGCItemPreviewExpire\020\251\r\022*\n%k_EMsgGCI"
-    "temPreviewExpireNotification\020\252\r\022.\n)k_EMs"
-    "gGCItemPreviewItemBoughtNotification\020\254\r\022"
-    "\037\n\032k_EMsgGCDev_NewItemRequest\020\321\017\022\'\n\"k_EM"
-    "sgGCDev_NewItemRequestResponse\020\322\017\022%\n k_E"
-    "MsgGCDev_DebugRollLootRequest\020\323\017\022\035\n\030k_EM"
-    "sgGCStoreGetUserData\020\304\023\022%\n k_EMsgGCStore"
-    "GetUserDataResponse\020\305\023\022)\n$k_EMsgGCStoreP"
-    "urchaseInit_DEPRECATED\020\306\023\0221\n,k_EMsgGCSto"
-    "rePurchaseInitResponse_DEPRECATED\020\307\023\022\"\n\035"
-    "k_EMsgGCStorePurchaseFinalize\020\320\023\022*\n%k_EM"
-    "sgGCStorePurchaseFinalizeResponse\020\321\023\022 \n\033"
-    "k_EMsgGCStorePurchaseCancel\020\322\023\022(\n#k_EMsg"
-    "GCStorePurchaseCancelResponse\020\323\023\022\"\n\035k_EM"
-    "sgGCStorePurchaseQueryTxn\020\314\023\022*\n%k_EMsgGC"
-    "StorePurchaseQueryTxnResponse\020\315\023\022\036\n\031k_EM"
-    "sgGCStorePurchaseInit\020\316\023\022&\n!k_EMsgGCStor"
-    "ePurchaseInitResponse\020\317\023\022\036\n\031k_EMsgGCToGC"
-    "DirtySDOCache\020\324\023\022&\n!k_EMsgGCToGCDirtyMul"
-    "tipleSDOCache\020\325\023\022\"\n\035k_EMsgGCToGCUpdateSQ"
-    "LKeyValue\020\326\023\022(\n#k_EMsgGCToGCBroadcastCon"
-    "soleCommand\020\331\023\022!\n\034k_EMsgGCServerVersionU"
-    "pdated\020\332\023\022\033\n\026k_EMsgGCApplyAutograph\020\333\023\022%"
-    "\n k_EMsgGCToGCWebAPIAccountChanged\020\334\023\022!\n"
-    "\034k_EMsgGCRequestAnnouncements\020\335\023\022)\n$k_EM"
-    "sgGCRequestAnnouncementsResponse\020\336\023\022%\n k"
-    "_EMsgGCRequestPassportItemGrant\020\337\023\022!\n\034k_"
-    "EMsgGCClientVersionUpdated\020\340\023\022+\n&k_EMsgG"
-    "CItemPurgatory_FinalizePurchase\020\343\023\0223\n.k_"
-    "EMsgGCItemPurgatory_FinalizePurchaseResp"
-    "onse\020\344\023\022)\n$k_EMsgGCItemPurgatory_RefundP"
-    "urchase\020\345\023\0221\n,k_EMsgGCItemPurgatory_Refu"
-    "ndPurchaseResponse\020\346\023\022.\n)k_EMsgGCToGCPla"
-    "yerStrangeCountAdjustments\020\347\023\022\"\n\035k_EMsgG"
-    "CRequestStoreSalesData\020\350\023\022*\n%k_EMsgGCReq"
-    "uestStoreSalesDataResponse\020\351\023\0222\n-k_EMsgG"
-    "CRequestStoreSalesDataUpToDateResponse\020\352"
-    "\023\022\034\n\027k_EMsgGCToGCPingRequest\020\353\023\022\035\n\030k_EMs"
-    "gGCToGCPingResponse\020\354\023\022%\n k_EMsgGCToGCGe"
-    "tUserSessionServer\020\355\023\022-\n(k_EMsgGCToGCGet"
-    "UserSessionServerResponse\020\356\023\022%\n k_EMsgGC"
-    "ToGCGetUserServerMembers\020\357\023\022-\n(k_EMsgGCT"
-    "oGCGetUserServerMembersResponse\020\360\023\022+\n&k_"
-    "EMsgGCToGCGrantSelfMadeItemToAccount\020\373\023\022"
-    "!\n\034k_EMsgGCToGCThankedByNewUser\020\374\023\022!\n\034k_"
-    "EMsgGCShuffleCrateContents\020\375\023\022$\n\037k_EMsgG"
-    "CQuestObjective_Progress\020\376\023\022\033\n\026k_EMsgGCQ"
-    "uestCompleted\020\377\023\022\033\n\026k_EMsgGCApplyDuckTok"
-    "en\020\200\024\022\"\n\035k_EMsgGCQuestComplete_Request\020\201"
-    "\024\022(\n#k_EMsgGCQuestObjective_PointsChange"
-    "\020\202\024\022.\n)k_EMsgGCQuestObjective_RequestLoa"
-    "nerItems\020\204\024\0221\n,k_EMsgGCQuestObjective_Re"
-    "questLoanerResponse\020\205\024\022&\n!k_EMsgGCApplyS"
-    "trangeCountTransfer\020\206\024\022#\n\036k_EMsgGCCraftC"
-    "ollectionUpgrade\020\207\024\022#\n\036k_EMsgGCCraftHall"
-    "oweenOffering\020\210\024\022!\n\034k_EMsgGCQuestDiscard"
-    "_Request\020\211\024\022\033\n\026k_EMsgGCRemoveGiftedBy\020\212\024"
-    "\022#\n\036k_EMsgGCRemoveGiftedByResponse\020\213\024\022\035\n"
-    "\030k_EMsgGCRemoveFestivizer\020\214\024\022%\n k_EMsgGC"
-    "RemoveFestivizerResponse\020\215\024\022!\n\034k_EMsgGCC"
-    "raftCommonStatClock\020\216\024*\233\002\n\016EGCMsgRespons"
-    "e\022\026\n\022k_EGCMsgResponseOK\020\000\022\032\n\026k_EGCMsgRes"
-    "ponseDenied\020\001\022\037\n\033k_EGCMsgResponseServerE"
-    "rror\020\002\022\033\n\027k_EGCMsgResponseTimeout\020\003\022\033\n\027k"
-    "_EGCMsgResponseInvalid\020\004\022\033\n\027k_EGCMsgResp"
-    "onseNoMatch\020\005\022 \n\034k_EGCMsgResponseUnknown"
-    "Error\020\006\022\037\n\033k_EGCMsgResponseNotLoggedOn\020\007"
-    "\022\032\n\026k_EGCMsgFailedToCreate\020\010*\221\002\n\014EUnlock"
-    "Style\022\033\n\027k_UnlockStyle_Succeeded\020\000\022\037\n\033k_"
-    "UnlockStyle_Failed_PreReq\020\001\022#\n\037k_UnlockS"
-    "tyle_Failed_CantAfford\020\002\022#\n\037k_UnlockStyl"
-    "e_Failed_CantCommit\020\003\022&\n\"k_UnlockStyle_F"
-    "ailed_CantLockCache\020\004\022)\n%k_UnlockStyle_F"
-    "ailed_CantAffordAttrib\020\005\022&\n\"k_UnlockStyl"
-    "e_Failed_CantAffordGem\020\006*\363\002\n\037EItemPurgat"
-    "oryResponse_Finalize\022.\n*k_ItemPurgatoryR"
-    "esponse_Finalize_Succeeded\020\000\0226\n2k_ItemPu"
-    "rgatoryResponse_Finalize_Failed_Incomple"
-    "te\020\001\022\?\n;k_ItemPurgatoryResponse_Finalize"
-    "_Failed_ItemsNotInPurgatory\020\002\022=\n9k_ItemP"
-    "urgatoryResponse_Finalize_Failed_CouldNo"
-    "tFindItems\020\003\0225\n1k_ItemPurgatoryResponse_"
-    "Finalize_Failed_NoSOCache\020\004\0221\n-k_ItemPur"
-    "gatoryResponse_Finalize_BackpackFull\020\005*\347"
-    "\002\n\035EItemPurgatoryResponse_Refund\022,\n(k_It"
-    "emPurgatoryResponse_Refund_Succeeded\020\000\022<"
-    "\n8k_ItemPurgatoryResponse_Refund_Failed_"
-    "ItemNotInPurgatory\020\001\022:\n6k_ItemPurgatoryR"
-    "esponse_Refund_Failed_CouldNotFindItem\020\002"
-    "\0223\n/k_ItemPurgatoryResponse_Refund_Faile"
-    "d_NoSOCache\020\003\0222\n.k_ItemPurgatoryResponse"
-    "_Refund_Failed_NoDetail\020\004\0225\n1k_ItemPurga"
-    "toryResponse_Refund_Failed_NexonWebAPI\020\005"
-    "B\005H\001\200\001\000", 9927);
+    "(\004\022\030\n\020user_code_string\030\002 \001(\t\"s\n\035CMsgGCQu"
+    "estObjective_Progress\022\020\n\010quest_id\030\001 \001(\004\022"
+    "\032\n\022quest_attrib_index\030\002 \001(\r\022\r\n\005delta\030\003 \001"
+    "(\r\022\025\n\rowner_steamid\030\004 \001(\006\"\245\001\n!CMsgGCQues"
+    "tObjective_PointsChange\022\020\n\010quest_id\030\001 \001("
+    "\004\022\025\n\rowner_steamid\030\004 \001(\006\022!\n\022update_base_"
+    "points\030\005 \001(\010:\005false\022\020\n\010points_0\030\006 \001(\r\022\020\n"
+    "\010points_1\030\007 \001(\r\022\020\n\010points_2\030\010 \001(\r\"/\n\033CMs"
+    "gGCQuestComplete_Request\022\020\n\010quest_id\030\001 \001"
+    "(\004\"\026\n\024CMsgGCQuestCompleted\";\n\'CMsgGCQues"
+    "tObjective_RequestLoanerItems\022\020\n\010quest_i"
+    "d\030\001 \001(\004\",\n*CMsgGCQuestObjective_RequestL"
+    "oanerResponse\"-\n\032CMsgCraftCollectionUpgr"
+    "ade\022\017\n\007item_id\030\001 \003(\004\">\n\032CMsgCraftHallowe"
+    "enOffering\022\017\n\007tool_id\030\001 \001(\004\022\017\n\007item_id\030\002"
+    " \003(\004\"<\n\030CMsgCraftCommonStatClock\022\017\n\007tool"
+    "_id\030\001 \001(\004\022\017\n\007item_id\030\002 \003(\004\".\n\032CMsgGCQues"
+    "tDiscard_Request\022\020\n\010quest_id\030\001 \001(\004*\313/\n\nE"
+    "GCItemMsg\022\021\n\014k_EMsgGCBase\020\350\007\022\"\n\035k_EMsgGC"
+    "SetSingleItemPosition\020\351\007\022\022\n\rk_EMsgGCCraf"
+    "t\020\352\007\022\032\n\025k_EMsgGCCraftResponse\020\353\007\022\023\n\016k_EM"
+    "sgGCDelete\020\354\007\022$\n\037k_EMsgGCVerifyCacheSubs"
+    "cription\020\355\007\022\025\n\020k_EMsgGCNameItem\020\356\007\022\030\n\023k_"
+    "EMsgGCUnlockCrate\020\357\007\022 \n\033k_EMsgGCUnlockCr"
+    "ateResponse\020\360\007\022\026\n\021k_EMsgGCPaintItem\020\361\007\022\036"
+    "\n\031k_EMsgGCPaintItemResponse\020\362\007\022\"\n\035k_EMsg"
+    "GCGoldenWrenchBroadcast\020\363\007\022\030\n\023k_EMsgGCMO"
+    "TDRequest\020\364\007\022 \n\033k_EMsgGCMOTDRequestRespo"
+    "nse\020\365\007\022\031\n\024k_EMsgGCNameBaseItem\020\373\007\022!\n\034k_E"
+    "MsgGCNameBaseItemResponse\020\374\007\022(\n#k_EMsgGC"
+    "RemoveSocketItem_DEPRECATED\020\375\007\0220\n+k_EMsg"
+    "GCRemoveSocketItemResponse_DEPRECATED\020\376\007"
+    "\022!\n\034k_EMsgGCCustomizeItemTexture\020\377\007\022)\n$k"
+    "_EMsgGCCustomizeItemTextureResponse\020\200\010\022\033"
+    "\n\026k_EMsgGCUseItemRequest\020\201\010\022\034\n\027k_EMsgGCU"
+    "seItemResponse\020\202\010\022%\n k_EMsgGCRespawnPost"
+    "LoadoutChange\020\205\010\022\033\n\026k_EMsgGCRemoveItemNa"
+    "me\020\206\010\022\034\n\027k_EMsgGCRemoveItemPaint\020\207\010\022\031\n\024k"
+    "_EMsgGCGiftWrapItem\020\210\010\022!\n\034k_EMsgGCGiftWr"
+    "apItemResponse\020\211\010\022\030\n\023k_EMsgGCDeliverGift"
+    "\020\212\010\022(\n#k_EMsgGCDeliverGiftResponseReceiv"
+    "er\020\214\010\022\036\n\031k_EMsgGCUnwrapGiftRequest\020\215\010\022\037\n"
+    "\032k_EMsgGCUnwrapGiftResponse\020\216\010\022\031\n\024k_EMsg"
+    "GCSetItemStyle\020\217\010\022\036\n\031k_EMsgGCUsedClaimCo"
+    "deItem\020\220\010\022\026\n\021k_EMsgGCSortItems\020\221\010\022*\n%k_E"
+    "MsgGC_RevolvingLootList_DEPRECATED\020\222\010\022\032\n"
+    "\025k_EMsgGCLookupAccount\020\223\010\022\"\n\035k_EMsgGCLoo"
+    "kupAccountResponse\020\224\010\022\036\n\031k_EMsgGCLookupA"
+    "ccountName\020\225\010\022&\n!k_EMsgGCLookupAccountNa"
+    "meResponse\020\226\010\022\035\n\030k_EMsgGCUpdateItemSchem"
+    "a\020\231\010\022$\n\037k_EMsgGCRequestInventoryRefresh\020"
+    "\232\010\022 \n\033k_EMsgGCRemoveCustomTexture\020\233\010\022(\n#"
+    "k_EMsgGCRemoveCustomTextureResponse\020\234\010\022\035"
+    "\n\030k_EMsgGCRemoveMakersMark\020\235\010\022%\n k_EMsgG"
+    "CRemoveMakersMarkResponse\020\236\010\022#\n\036k_EMsgGC"
+    "RemoveUniqueCraftIndex\020\237\010\022+\n&k_EMsgGCRem"
+    "oveUniqueCraftIndexResponse\020\240\010\022\033\n\026k_EMsg"
+    "GCSaxxyBroadcast\020\241\010\022!\n\034k_EMsgGCBackpackS"
+    "ortFinished\020\242\010\022$\n\037k_EMsgGCAdjustItemEqui"
+    "ppedState\020\243\010\022\030\n\023k_EMsgGCCollectItem\020\245\010\022\035"
+    "\n\030k_EMsgGCItemAcknowledged\020\246\010\022)\n$k_EMsgG"
+    "CPresets_SelectPresetForClass\020\247\010\022$\n\037k_EM"
+    "sgGCPresets_SetItemPosition\020\250\010\022\031\n\024k_EMsg"
+    "GC_ReportAbuse\020\251\010\022!\n\034k_EMsgGC_ReportAbus"
+    "eResponse\020\252\010\022.\n)k_EMsgGCPresets_SelectPr"
+    "esetForClassReply\020\253\010\022!\n\034k_EMsgGCNameItem"
+    "Notification\020\254\010\022&\n!k_EMsgGCClientDisplay"
+    "Notification\020\255\010\022\035\n\030k_EMsgGCApplyStrangeP"
+    "art\020\256\010\022)\n$k_EMsgGC_IncrementKillCountAtt"
+    "ribute\020\257\010\022(\n#k_EMsgGC_IncrementKillCount"
+    "Response\020\260\010\022\036\n\031k_EMsgGCRemoveStrangePart"
+    "\020\261\010\022\037\n\032k_EMsgGCResetStrangeScores\020\262\010\022\030\n\023"
+    "k_EMsgGCGiftedItems\020\263\010\022\035\n\030k_EMsgGCApplyU"
+    "pgradeCard\020\265\010\022\036\n\031k_EMsgGCRemoveUpgradeCa"
+    "rd\020\266\010\022$\n\037k_EMsgGCApplyStrangeRestriction"
+    "\020\267\010\022$\n\037k_EMsgGCClientRequestMarketData\020\270"
+    "\010\022,\n\'k_EMsgGCClientRequestMarketDataResp"
+    "onse\020\271\010\022\030\n\023k_EMsgGCApplyXifier\020\272\010\022 \n\033k_E"
+    "MsgGCApplyXifierResponse\020\273\010\022(\n#k_EMsgGC_"
+    "TrackUniquePlayerPairEvent\020\274\010\022*\n%k_EMsgG"
+    "CFulfillDynamicRecipeComponent\020\275\010\0222\n-k_E"
+    "MsgGCFulfillDynamicRecipeComponentRespon"
+    "se\020\276\010\022(\n#k_EMsgGCSetItemEffectVerticalOf"
+    "fset\020\277\010\022&\n!k_EMsgGCSetHatEffectUseHeadOr"
+    "igin\020\300\010\022\037\n\032k_EMsgGCItemEaterRecharger\020\301\010"
+    "\022\'\n\"k_EMsgGCItemEaterRechargerResponse\020\302"
+    "\010\022 \n\033k_EMsgGCApplyBaseItemXifier\020\303\010\022%\n k"
+    "_EMsgGCApplyClassTransmogrifier\020\304\010\022(\n#k_"
+    "EMsgGCApplyHalloweenSpellbookPage\020\305\010\022\035\n\030"
+    "k_EMsgGCRemoveKillStreak\020\306\010\022%\n k_EMsgGCR"
+    "emoveKillStreakResponse\020\307\010\022$\n\037k_EMsgGCTF"
+    "SpecificItemBroadcast\020\310\010\0222\n-k_EMsgGC_Inc"
+    "rementKillCountAttribute_Multiple\020\311\010\022%\n "
+    "k_EMsgGCDeliverGiftResponseGiver\020\312\010\022\035\n\030k"
+    "_EMsgGCSetItemPositions\020\314\010\022\'\n\"k_EMsgGCLo"
+    "okupMultipleAccountNames\020\315\010\022/\n*k_EMsgGCL"
+    "ookupMultipleAccountNamesResponse\020\316\010\022\030\n\023"
+    "k_EMsgGCTradingBase\020\334\013\022)\n$k_EMsgGCTradin"
+    "g_InitiateTradeRequest\020\335\013\022*\n%k_EMsgGCTra"
+    "ding_InitiateTradeResponse\020\336\013\022!\n\034k_EMsgG"
+    "CTrading_StartSession\020\337\013\022\"\n\035k_EMsgGCTrad"
+    "ing_SessionClosed\020\345\013\022\"\n\035k_EMsgGCTrading_"
+    "CancelSession\020\346\013\0221\n,k_EMsgGCTrading_Init"
+    "iateTradeRequestResponse\020\352\013\022)\n$k_EMsgGCS"
+    "erverBrowser_FavoriteServer\020\301\014\022*\n%k_EMsg"
+    "GCServerBrowser_BlacklistServer\020\302\014\022\036\n\031k_"
+    "EMsgGCServerRentalsBase\020\244\r\022#\n\036k_EMsgGCIt"
+    "emPreviewCheckStatus\020\245\r\022&\n!k_EMsgGCItemP"
+    "reviewStatusResponse\020\246\r\022\037\n\032k_EMsgGCItemP"
+    "reviewRequest\020\247\r\022\'\n\"k_EMsgGCItemPreviewR"
+    "equestResponse\020\250\r\022\036\n\031k_EMsgGCItemPreview"
+    "Expire\020\251\r\022*\n%k_EMsgGCItemPreviewExpireNo"
+    "tification\020\252\r\022.\n)k_EMsgGCItemPreviewItem"
+    "BoughtNotification\020\254\r\022\037\n\032k_EMsgGCDev_New"
+    "ItemRequest\020\321\017\022\'\n\"k_EMsgGCDev_NewItemReq"
+    "uestResponse\020\322\017\022%\n k_EMsgGCDev_DebugRoll"
+    "LootRequest\020\323\017\022\035\n\030k_EMsgGCStoreGetUserDa"
+    "ta\020\304\023\022%\n k_EMsgGCStoreGetUserDataRespons"
+    "e\020\305\023\022)\n$k_EMsgGCStorePurchaseInit_DEPREC"
+    "ATED\020\306\023\0221\n,k_EMsgGCStorePurchaseInitResp"
+    "onse_DEPRECATED\020\307\023\022\"\n\035k_EMsgGCStorePurch"
+    "aseFinalize\020\320\023\022*\n%k_EMsgGCStorePurchaseF"
+    "inalizeResponse\020\321\023\022 \n\033k_EMsgGCStorePurch"
+    "aseCancel\020\322\023\022(\n#k_EMsgGCStorePurchaseCan"
+    "celResponse\020\323\023\022\"\n\035k_EMsgGCStorePurchaseQ"
+    "ueryTxn\020\314\023\022*\n%k_EMsgGCStorePurchaseQuery"
+    "TxnResponse\020\315\023\022\036\n\031k_EMsgGCStorePurchaseI"
+    "nit\020\316\023\022&\n!k_EMsgGCStorePurchaseInitRespo"
+    "nse\020\317\023\022\036\n\031k_EMsgGCToGCDirtySDOCache\020\324\023\022&"
+    "\n!k_EMsgGCToGCDirtyMultipleSDOCache\020\325\023\022\""
+    "\n\035k_EMsgGCToGCUpdateSQLKeyValue\020\326\023\022(\n#k_"
+    "EMsgGCToGCBroadcastConsoleCommand\020\331\023\022!\n\034"
+    "k_EMsgGCServerVersionUpdated\020\332\023\022\033\n\026k_EMs"
+    "gGCApplyAutograph\020\333\023\022%\n k_EMsgGCToGCWebA"
+    "PIAccountChanged\020\334\023\022!\n\034k_EMsgGCRequestAn"
+    "nouncements\020\335\023\022)\n$k_EMsgGCRequestAnnounc"
+    "ementsResponse\020\336\023\022%\n k_EMsgGCRequestPass"
+    "portItemGrant\020\337\023\022!\n\034k_EMsgGCClientVersio"
+    "nUpdated\020\340\023\022+\n&k_EMsgGCItemPurgatory_Fin"
+    "alizePurchase\020\343\023\0223\n.k_EMsgGCItemPurgator"
+    "y_FinalizePurchaseResponse\020\344\023\022)\n$k_EMsgG"
+    "CItemPurgatory_RefundPurchase\020\345\023\0221\n,k_EM"
+    "sgGCItemPurgatory_RefundPurchaseResponse"
+    "\020\346\023\022.\n)k_EMsgGCToGCPlayerStrangeCountAdj"
+    "ustments\020\347\023\022\"\n\035k_EMsgGCRequestStoreSales"
+    "Data\020\350\023\022*\n%k_EMsgGCRequestStoreSalesData"
+    "Response\020\351\023\0222\n-k_EMsgGCRequestStoreSales"
+    "DataUpToDateResponse\020\352\023\022\034\n\027k_EMsgGCToGCP"
+    "ingRequest\020\353\023\022\035\n\030k_EMsgGCToGCPingRespons"
+    "e\020\354\023\022%\n k_EMsgGCToGCGetUserSessionServer"
+    "\020\355\023\022-\n(k_EMsgGCToGCGetUserSessionServerR"
+    "esponse\020\356\023\022%\n k_EMsgGCToGCGetUserServerM"
+    "embers\020\357\023\022-\n(k_EMsgGCToGCGetUserServerMe"
+    "mbersResponse\020\360\023\022+\n&k_EMsgGCToGCGrantSel"
+    "fMadeItemToAccount\020\373\023\022!\n\034k_EMsgGCToGCTha"
+    "nkedByNewUser\020\374\023\022!\n\034k_EMsgGCShuffleCrate"
+    "Contents\020\375\023\022$\n\037k_EMsgGCQuestObjective_Pr"
+    "ogress\020\376\023\022\033\n\026k_EMsgGCQuestCompleted\020\377\023\022\033"
+    "\n\026k_EMsgGCApplyDuckToken\020\200\024\022(\n#k_EMsgGCQ"
+    "uestObjective_PointsChange\020\202\024\022.\n)k_EMsgG"
+    "CQuestObjective_RequestLoanerItems\020\204\024\0221\n"
+    ",k_EMsgGCQuestObjective_RequestLoanerRes"
+    "ponse\020\205\024\022&\n!k_EMsgGCApplyStrangeCountTra"
+    "nsfer\020\206\024\022#\n\036k_EMsgGCCraftCollectionUpgra"
+    "de\020\207\024\022#\n\036k_EMsgGCCraftHalloweenOffering\020"
+    "\210\024\022!\n\034k_EMsgGCQuestDiscard_Request\020\211\024\022\033\n"
+    "\026k_EMsgGCRemoveGiftedBy\020\212\024\022#\n\036k_EMsgGCRe"
+    "moveGiftedByResponse\020\213\024\022\035\n\030k_EMsgGCRemov"
+    "eFestivizer\020\214\024\022%\n k_EMsgGCRemoveFestiviz"
+    "erResponse\020\215\024\022!\n\034k_EMsgGCCraftCommonStat"
+    "Clock\020\216\024*\233\002\n\016EGCMsgResponse\022\026\n\022k_EGCMsgR"
+    "esponseOK\020\000\022\032\n\026k_EGCMsgResponseDenied\020\001\022"
+    "\037\n\033k_EGCMsgResponseServerError\020\002\022\033\n\027k_EG"
+    "CMsgResponseTimeout\020\003\022\033\n\027k_EGCMsgRespons"
+    "eInvalid\020\004\022\033\n\027k_EGCMsgResponseNoMatch\020\005\022"
+    " \n\034k_EGCMsgResponseUnknownError\020\006\022\037\n\033k_E"
+    "GCMsgResponseNotLoggedOn\020\007\022\032\n\026k_EGCMsgFa"
+    "iledToCreate\020\010*\221\002\n\014EUnlockStyle\022\033\n\027k_Unl"
+    "ockStyle_Succeeded\020\000\022\037\n\033k_UnlockStyle_Fa"
+    "iled_PreReq\020\001\022#\n\037k_UnlockStyle_Failed_Ca"
+    "ntAfford\020\002\022#\n\037k_UnlockStyle_Failed_CantC"
+    "ommit\020\003\022&\n\"k_UnlockStyle_Failed_CantLock"
+    "Cache\020\004\022)\n%k_UnlockStyle_Failed_CantAffo"
+    "rdAttrib\020\005\022&\n\"k_UnlockStyle_Failed_CantA"
+    "ffordGem\020\006*\363\002\n\037EItemPurgatoryResponse_Fi"
+    "nalize\022.\n*k_ItemPurgatoryResponse_Finali"
+    "ze_Succeeded\020\000\0226\n2k_ItemPurgatoryRespons"
+    "e_Finalize_Failed_Incomplete\020\001\022\?\n;k_Item"
+    "PurgatoryResponse_Finalize_Failed_ItemsN"
+    "otInPurgatory\020\002\022=\n9k_ItemPurgatoryRespon"
+    "se_Finalize_Failed_CouldNotFindItems\020\003\0225"
+    "\n1k_ItemPurgatoryResponse_Finalize_Faile"
+    "d_NoSOCache\020\004\0221\n-k_ItemPurgatoryResponse"
+    "_Finalize_BackpackFull\020\005*\347\002\n\035EItemPurgat"
+    "oryResponse_Refund\022,\n(k_ItemPurgatoryRes"
+    "ponse_Refund_Succeeded\020\000\022<\n8k_ItemPurgat"
+    "oryResponse_Refund_Failed_ItemNotInPurga"
+    "tory\020\001\022:\n6k_ItemPurgatoryResponse_Refund"
+    "_Failed_CouldNotFindItem\020\002\0223\n/k_ItemPurg"
+    "atoryResponse_Refund_Failed_NoSOCache\020\003\022"
+    "2\n.k_ItemPurgatoryResponse_Refund_Failed"
+    "_NoDetail\020\004\0225\n1k_ItemPurgatoryResponse_R"
+    "efund_Failed_NexonWebAPI\020\005B\005H\001\200\001\000", 9873);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "econ_gcmessages.proto", &protobuf_RegisterTypes);
   CMsgApplyAutograph::default_instance_ = new CMsgApplyAutograph();
@@ -1319,7 +1318,6 @@ bool EGCItemMsg_IsValid(int value) {
     case 2558:
     case 2559:
     case 2560:
-    case 2561:
     case 2562:
     case 2564:
     case 2565:
@@ -7383,7 +7381,7 @@ void CMsgGCShuffleCrateContents::Swap(CMsgGCShuffleCrateContents* other) {
 // ===================================================================
 
 #ifndef _MSC_VER
-const int CMsgGCQuestObjective_Progress::kQuestItemIdFieldNumber;
+const int CMsgGCQuestObjective_Progress::kQuestIdFieldNumber;
 const int CMsgGCQuestObjective_Progress::kQuestAttribIndexFieldNumber;
 const int CMsgGCQuestObjective_Progress::kDeltaFieldNumber;
 const int CMsgGCQuestObjective_Progress::kOwnerSteamidFieldNumber;
@@ -7407,7 +7405,7 @@ CMsgGCQuestObjective_Progress::CMsgGCQuestObjective_Progress(const CMsgGCQuestOb
 
 void CMsgGCQuestObjective_Progress::SharedCtor() {
   _cached_size_ = 0;
-  quest_item_id_ = GOOGLE_ULONGLONG(0);
+  quest_id_ = GOOGLE_ULONGLONG(0);
   quest_attrib_index_ = 0u;
   delta_ = 0u;
   owner_steamid_ = GOOGLE_ULONGLONG(0);
@@ -7456,7 +7454,7 @@ void CMsgGCQuestObjective_Progress::Clear() {
     ::memset(&first, 0, n);                                \
   } while (0)
 
-  ZR_(quest_item_id_, owner_steamid_);
+  ZR_(quest_id_, owner_steamid_);
 
 #undef OFFSET_OF_FIELD_
 #undef ZR_
@@ -7475,13 +7473,13 @@ bool CMsgGCQuestObjective_Progress::MergePartialFromCodedStream(
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // optional uint64 quest_item_id = 1;
+      // optional uint64 quest_id = 1;
       case 1: {
         if (tag == 8) {
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::uint64, ::google::protobuf::internal::WireFormatLite::TYPE_UINT64>(
-                 input, &quest_item_id_)));
-          set_has_quest_item_id();
+                 input, &quest_id_)));
+          set_has_quest_id();
         } else {
           goto handle_unusual;
         }
@@ -7559,9 +7557,9 @@ failure:
 void CMsgGCQuestObjective_Progress::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
   // @@protoc_insertion_point(serialize_start:CMsgGCQuestObjective_Progress)
-  // optional uint64 quest_item_id = 1;
-  if (has_quest_item_id()) {
-    ::google::protobuf::internal::WireFormatLite::WriteUInt64(1, this->quest_item_id(), output);
+  // optional uint64 quest_id = 1;
+  if (has_quest_id()) {
+    ::google::protobuf::internal::WireFormatLite::WriteUInt64(1, this->quest_id(), output);
   }
 
   // optional uint32 quest_attrib_index = 2;
@@ -7589,9 +7587,9 @@ void CMsgGCQuestObjective_Progress::SerializeWithCachedSizes(
 ::google::protobuf::uint8* CMsgGCQuestObjective_Progress::SerializeWithCachedSizesToArray(
     ::google::protobuf::uint8* target) const {
   // @@protoc_insertion_point(serialize_to_array_start:CMsgGCQuestObjective_Progress)
-  // optional uint64 quest_item_id = 1;
-  if (has_quest_item_id()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteUInt64ToArray(1, this->quest_item_id(), target);
+  // optional uint64 quest_id = 1;
+  if (has_quest_id()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteUInt64ToArray(1, this->quest_id(), target);
   }
 
   // optional uint32 quest_attrib_index = 2;
@@ -7621,11 +7619,11 @@ int CMsgGCQuestObjective_Progress::ByteSize() const {
   int total_size = 0;
 
   if (_has_bits_[0 / 32] & (0xffu << (0 % 32))) {
-    // optional uint64 quest_item_id = 1;
-    if (has_quest_item_id()) {
+    // optional uint64 quest_id = 1;
+    if (has_quest_id()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::UInt64Size(
-          this->quest_item_id());
+          this->quest_id());
     }
 
     // optional uint32 quest_attrib_index = 2;
@@ -7674,8 +7672,8 @@ void CMsgGCQuestObjective_Progress::MergeFrom(const ::google::protobuf::Message&
 void CMsgGCQuestObjective_Progress::MergeFrom(const CMsgGCQuestObjective_Progress& from) {
   GOOGLE_CHECK_NE(&from, this);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
-    if (from.has_quest_item_id()) {
-      set_quest_item_id(from.quest_item_id());
+    if (from.has_quest_id()) {
+      set_quest_id(from.quest_id());
     }
     if (from.has_quest_attrib_index()) {
       set_quest_attrib_index(from.quest_attrib_index());
@@ -7709,7 +7707,7 @@ bool CMsgGCQuestObjective_Progress::IsInitialized() const {
 
 void CMsgGCQuestObjective_Progress::Swap(CMsgGCQuestObjective_Progress* other) {
   if (other != this) {
-    std::swap(quest_item_id_, other->quest_item_id_);
+    std::swap(quest_id_, other->quest_id_);
     std::swap(quest_attrib_index_, other->quest_attrib_index_);
     std::swap(delta_, other->delta_);
     std::swap(owner_steamid_, other->owner_steamid_);
@@ -7731,11 +7729,12 @@ void CMsgGCQuestObjective_Progress::Swap(CMsgGCQuestObjective_Progress* other) {
 // ===================================================================
 
 #ifndef _MSC_VER
-const int CMsgGCQuestObjective_PointsChange::kQuestItemIdFieldNumber;
-const int CMsgGCQuestObjective_PointsChange::kStandardPointsFieldNumber;
-const int CMsgGCQuestObjective_PointsChange::kBonusPointsFieldNumber;
+const int CMsgGCQuestObjective_PointsChange::kQuestIdFieldNumber;
 const int CMsgGCQuestObjective_PointsChange::kOwnerSteamidFieldNumber;
 const int CMsgGCQuestObjective_PointsChange::kUpdateBasePointsFieldNumber;
+const int CMsgGCQuestObjective_PointsChange::kPoints0FieldNumber;
+const int CMsgGCQuestObjective_PointsChange::kPoints1FieldNumber;
+const int CMsgGCQuestObjective_PointsChange::kPoints2FieldNumber;
 #endif  // !_MSC_VER
 
 CMsgGCQuestObjective_PointsChange::CMsgGCQuestObjective_PointsChange()
@@ -7756,11 +7755,12 @@ CMsgGCQuestObjective_PointsChange::CMsgGCQuestObjective_PointsChange(const CMsgG
 
 void CMsgGCQuestObjective_PointsChange::SharedCtor() {
   _cached_size_ = 0;
-  quest_item_id_ = GOOGLE_ULONGLONG(0);
-  standard_points_ = 0u;
-  bonus_points_ = 0u;
+  quest_id_ = GOOGLE_ULONGLONG(0);
   owner_steamid_ = GOOGLE_ULONGLONG(0);
   update_base_points_ = false;
+  points_0_ = 0u;
+  points_1_ = 0u;
+  points_2_ = 0u;
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
@@ -7806,8 +7806,8 @@ void CMsgGCQuestObjective_PointsChange::Clear() {
     ::memset(&first, 0, n);                                \
   } while (0)
 
-  if (_has_bits_[0 / 32] & 31) {
-    ZR_(quest_item_id_, update_base_points_);
+  if (_has_bits_[0 / 32] & 63) {
+    ZR_(quest_id_, points_2_);
   }
 
 #undef OFFSET_OF_FIELD_
@@ -7827,43 +7827,13 @@ bool CMsgGCQuestObjective_PointsChange::MergePartialFromCodedStream(
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // optional uint64 quest_item_id = 1;
+      // optional uint64 quest_id = 1;
       case 1: {
         if (tag == 8) {
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::uint64, ::google::protobuf::internal::WireFormatLite::TYPE_UINT64>(
-                 input, &quest_item_id_)));
-          set_has_quest_item_id();
-        } else {
-          goto handle_unusual;
-        }
-        if (input->ExpectTag(16)) goto parse_standard_points;
-        break;
-      }
-
-      // optional uint32 standard_points = 2;
-      case 2: {
-        if (tag == 16) {
-         parse_standard_points:
-          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   ::google::protobuf::uint32, ::google::protobuf::internal::WireFormatLite::TYPE_UINT32>(
-                 input, &standard_points_)));
-          set_has_standard_points();
-        } else {
-          goto handle_unusual;
-        }
-        if (input->ExpectTag(24)) goto parse_bonus_points;
-        break;
-      }
-
-      // optional uint32 bonus_points = 3;
-      case 3: {
-        if (tag == 24) {
-         parse_bonus_points:
-          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   ::google::protobuf::uint32, ::google::protobuf::internal::WireFormatLite::TYPE_UINT32>(
-                 input, &bonus_points_)));
-          set_has_bonus_points();
+                 input, &quest_id_)));
+          set_has_quest_id();
         } else {
           goto handle_unusual;
         }
@@ -7897,6 +7867,51 @@ bool CMsgGCQuestObjective_PointsChange::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
+        if (input->ExpectTag(48)) goto parse_points_0;
+        break;
+      }
+
+      // optional uint32 points_0 = 6;
+      case 6: {
+        if (tag == 48) {
+         parse_points_0:
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::uint32, ::google::protobuf::internal::WireFormatLite::TYPE_UINT32>(
+                 input, &points_0_)));
+          set_has_points_0();
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(56)) goto parse_points_1;
+        break;
+      }
+
+      // optional uint32 points_1 = 7;
+      case 7: {
+        if (tag == 56) {
+         parse_points_1:
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::uint32, ::google::protobuf::internal::WireFormatLite::TYPE_UINT32>(
+                 input, &points_1_)));
+          set_has_points_1();
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(64)) goto parse_points_2;
+        break;
+      }
+
+      // optional uint32 points_2 = 8;
+      case 8: {
+        if (tag == 64) {
+         parse_points_2:
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::uint32, ::google::protobuf::internal::WireFormatLite::TYPE_UINT32>(
+                 input, &points_2_)));
+          set_has_points_2();
+        } else {
+          goto handle_unusual;
+        }
         if (input->ExpectAtEnd()) goto success;
         break;
       }
@@ -7926,19 +7941,9 @@ failure:
 void CMsgGCQuestObjective_PointsChange::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
   // @@protoc_insertion_point(serialize_start:CMsgGCQuestObjective_PointsChange)
-  // optional uint64 quest_item_id = 1;
-  if (has_quest_item_id()) {
-    ::google::protobuf::internal::WireFormatLite::WriteUInt64(1, this->quest_item_id(), output);
-  }
-
-  // optional uint32 standard_points = 2;
-  if (has_standard_points()) {
-    ::google::protobuf::internal::WireFormatLite::WriteUInt32(2, this->standard_points(), output);
-  }
-
-  // optional uint32 bonus_points = 3;
-  if (has_bonus_points()) {
-    ::google::protobuf::internal::WireFormatLite::WriteUInt32(3, this->bonus_points(), output);
+  // optional uint64 quest_id = 1;
+  if (has_quest_id()) {
+    ::google::protobuf::internal::WireFormatLite::WriteUInt64(1, this->quest_id(), output);
   }
 
   // optional fixed64 owner_steamid = 4;
@@ -7951,6 +7956,21 @@ void CMsgGCQuestObjective_PointsChange::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteBool(5, this->update_base_points(), output);
   }
 
+  // optional uint32 points_0 = 6;
+  if (has_points_0()) {
+    ::google::protobuf::internal::WireFormatLite::WriteUInt32(6, this->points_0(), output);
+  }
+
+  // optional uint32 points_1 = 7;
+  if (has_points_1()) {
+    ::google::protobuf::internal::WireFormatLite::WriteUInt32(7, this->points_1(), output);
+  }
+
+  // optional uint32 points_2 = 8;
+  if (has_points_2()) {
+    ::google::protobuf::internal::WireFormatLite::WriteUInt32(8, this->points_2(), output);
+  }
+
   if (!unknown_fields().empty()) {
     ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
         unknown_fields(), output);
@@ -7961,19 +7981,9 @@ void CMsgGCQuestObjective_PointsChange::SerializeWithCachedSizes(
 ::google::protobuf::uint8* CMsgGCQuestObjective_PointsChange::SerializeWithCachedSizesToArray(
     ::google::protobuf::uint8* target) const {
   // @@protoc_insertion_point(serialize_to_array_start:CMsgGCQuestObjective_PointsChange)
-  // optional uint64 quest_item_id = 1;
-  if (has_quest_item_id()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteUInt64ToArray(1, this->quest_item_id(), target);
-  }
-
-  // optional uint32 standard_points = 2;
-  if (has_standard_points()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteUInt32ToArray(2, this->standard_points(), target);
-  }
-
-  // optional uint32 bonus_points = 3;
-  if (has_bonus_points()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteUInt32ToArray(3, this->bonus_points(), target);
+  // optional uint64 quest_id = 1;
+  if (has_quest_id()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteUInt64ToArray(1, this->quest_id(), target);
   }
 
   // optional fixed64 owner_steamid = 4;
@@ -7984,6 +7994,21 @@ void CMsgGCQuestObjective_PointsChange::SerializeWithCachedSizes(
   // optional bool update_base_points = 5 [default = false];
   if (has_update_base_points()) {
     target = ::google::protobuf::internal::WireFormatLite::WriteBoolToArray(5, this->update_base_points(), target);
+  }
+
+  // optional uint32 points_0 = 6;
+  if (has_points_0()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteUInt32ToArray(6, this->points_0(), target);
+  }
+
+  // optional uint32 points_1 = 7;
+  if (has_points_1()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteUInt32ToArray(7, this->points_1(), target);
+  }
+
+  // optional uint32 points_2 = 8;
+  if (has_points_2()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteUInt32ToArray(8, this->points_2(), target);
   }
 
   if (!unknown_fields().empty()) {
@@ -7998,25 +8023,11 @@ int CMsgGCQuestObjective_PointsChange::ByteSize() const {
   int total_size = 0;
 
   if (_has_bits_[0 / 32] & (0xffu << (0 % 32))) {
-    // optional uint64 quest_item_id = 1;
-    if (has_quest_item_id()) {
+    // optional uint64 quest_id = 1;
+    if (has_quest_id()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::UInt64Size(
-          this->quest_item_id());
-    }
-
-    // optional uint32 standard_points = 2;
-    if (has_standard_points()) {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::UInt32Size(
-          this->standard_points());
-    }
-
-    // optional uint32 bonus_points = 3;
-    if (has_bonus_points()) {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::UInt32Size(
-          this->bonus_points());
+          this->quest_id());
     }
 
     // optional fixed64 owner_steamid = 4;
@@ -8027,6 +8038,27 @@ int CMsgGCQuestObjective_PointsChange::ByteSize() const {
     // optional bool update_base_points = 5 [default = false];
     if (has_update_base_points()) {
       total_size += 1 + 1;
+    }
+
+    // optional uint32 points_0 = 6;
+    if (has_points_0()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::UInt32Size(
+          this->points_0());
+    }
+
+    // optional uint32 points_1 = 7;
+    if (has_points_1()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::UInt32Size(
+          this->points_1());
+    }
+
+    // optional uint32 points_2 = 8;
+    if (has_points_2()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::UInt32Size(
+          this->points_2());
     }
 
   }
@@ -8056,20 +8088,23 @@ void CMsgGCQuestObjective_PointsChange::MergeFrom(const ::google::protobuf::Mess
 void CMsgGCQuestObjective_PointsChange::MergeFrom(const CMsgGCQuestObjective_PointsChange& from) {
   GOOGLE_CHECK_NE(&from, this);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
-    if (from.has_quest_item_id()) {
-      set_quest_item_id(from.quest_item_id());
-    }
-    if (from.has_standard_points()) {
-      set_standard_points(from.standard_points());
-    }
-    if (from.has_bonus_points()) {
-      set_bonus_points(from.bonus_points());
+    if (from.has_quest_id()) {
+      set_quest_id(from.quest_id());
     }
     if (from.has_owner_steamid()) {
       set_owner_steamid(from.owner_steamid());
     }
     if (from.has_update_base_points()) {
       set_update_base_points(from.update_base_points());
+    }
+    if (from.has_points_0()) {
+      set_points_0(from.points_0());
+    }
+    if (from.has_points_1()) {
+      set_points_1(from.points_1());
+    }
+    if (from.has_points_2()) {
+      set_points_2(from.points_2());
     }
   }
   mutable_unknown_fields()->MergeFrom(from.unknown_fields());
@@ -8094,11 +8129,12 @@ bool CMsgGCQuestObjective_PointsChange::IsInitialized() const {
 
 void CMsgGCQuestObjective_PointsChange::Swap(CMsgGCQuestObjective_PointsChange* other) {
   if (other != this) {
-    std::swap(quest_item_id_, other->quest_item_id_);
-    std::swap(standard_points_, other->standard_points_);
-    std::swap(bonus_points_, other->bonus_points_);
+    std::swap(quest_id_, other->quest_id_);
     std::swap(owner_steamid_, other->owner_steamid_);
     std::swap(update_base_points_, other->update_base_points_);
+    std::swap(points_0_, other->points_0_);
+    std::swap(points_1_, other->points_1_);
+    std::swap(points_2_, other->points_2_);
     std::swap(_has_bits_[0], other->_has_bits_[0]);
     _unknown_fields_.Swap(&other->_unknown_fields_);
     std::swap(_cached_size_, other->_cached_size_);
@@ -8117,7 +8153,7 @@ void CMsgGCQuestObjective_PointsChange::Swap(CMsgGCQuestObjective_PointsChange* 
 // ===================================================================
 
 #ifndef _MSC_VER
-const int CMsgGCQuestComplete_Request::kQuestItemIdFieldNumber;
+const int CMsgGCQuestComplete_Request::kQuestIdFieldNumber;
 #endif  // !_MSC_VER
 
 CMsgGCQuestComplete_Request::CMsgGCQuestComplete_Request()
@@ -8138,7 +8174,7 @@ CMsgGCQuestComplete_Request::CMsgGCQuestComplete_Request(const CMsgGCQuestComple
 
 void CMsgGCQuestComplete_Request::SharedCtor() {
   _cached_size_ = 0;
-  quest_item_id_ = GOOGLE_ULONGLONG(0);
+  quest_id_ = GOOGLE_ULONGLONG(0);
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
@@ -8174,7 +8210,7 @@ CMsgGCQuestComplete_Request* CMsgGCQuestComplete_Request::New() const {
 }
 
 void CMsgGCQuestComplete_Request::Clear() {
-  quest_item_id_ = GOOGLE_ULONGLONG(0);
+  quest_id_ = GOOGLE_ULONGLONG(0);
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
   mutable_unknown_fields()->Clear();
 }
@@ -8189,13 +8225,13 @@ bool CMsgGCQuestComplete_Request::MergePartialFromCodedStream(
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // optional uint64 quest_item_id = 1;
+      // optional uint64 quest_id = 1;
       case 1: {
         if (tag == 8) {
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::uint64, ::google::protobuf::internal::WireFormatLite::TYPE_UINT64>(
-                 input, &quest_item_id_)));
-          set_has_quest_item_id();
+                 input, &quest_id_)));
+          set_has_quest_id();
         } else {
           goto handle_unusual;
         }
@@ -8228,9 +8264,9 @@ failure:
 void CMsgGCQuestComplete_Request::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
   // @@protoc_insertion_point(serialize_start:CMsgGCQuestComplete_Request)
-  // optional uint64 quest_item_id = 1;
-  if (has_quest_item_id()) {
-    ::google::protobuf::internal::WireFormatLite::WriteUInt64(1, this->quest_item_id(), output);
+  // optional uint64 quest_id = 1;
+  if (has_quest_id()) {
+    ::google::protobuf::internal::WireFormatLite::WriteUInt64(1, this->quest_id(), output);
   }
 
   if (!unknown_fields().empty()) {
@@ -8243,9 +8279,9 @@ void CMsgGCQuestComplete_Request::SerializeWithCachedSizes(
 ::google::protobuf::uint8* CMsgGCQuestComplete_Request::SerializeWithCachedSizesToArray(
     ::google::protobuf::uint8* target) const {
   // @@protoc_insertion_point(serialize_to_array_start:CMsgGCQuestComplete_Request)
-  // optional uint64 quest_item_id = 1;
-  if (has_quest_item_id()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteUInt64ToArray(1, this->quest_item_id(), target);
+  // optional uint64 quest_id = 1;
+  if (has_quest_id()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteUInt64ToArray(1, this->quest_id(), target);
   }
 
   if (!unknown_fields().empty()) {
@@ -8260,11 +8296,11 @@ int CMsgGCQuestComplete_Request::ByteSize() const {
   int total_size = 0;
 
   if (_has_bits_[0 / 32] & (0xffu << (0 % 32))) {
-    // optional uint64 quest_item_id = 1;
-    if (has_quest_item_id()) {
+    // optional uint64 quest_id = 1;
+    if (has_quest_id()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::UInt64Size(
-          this->quest_item_id());
+          this->quest_id());
     }
 
   }
@@ -8294,8 +8330,8 @@ void CMsgGCQuestComplete_Request::MergeFrom(const ::google::protobuf::Message& f
 void CMsgGCQuestComplete_Request::MergeFrom(const CMsgGCQuestComplete_Request& from) {
   GOOGLE_CHECK_NE(&from, this);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
-    if (from.has_quest_item_id()) {
-      set_quest_item_id(from.quest_item_id());
+    if (from.has_quest_id()) {
+      set_quest_id(from.quest_id());
     }
   }
   mutable_unknown_fields()->MergeFrom(from.unknown_fields());
@@ -8320,7 +8356,7 @@ bool CMsgGCQuestComplete_Request::IsInitialized() const {
 
 void CMsgGCQuestComplete_Request::Swap(CMsgGCQuestComplete_Request* other) {
   if (other != this) {
-    std::swap(quest_item_id_, other->quest_item_id_);
+    std::swap(quest_id_, other->quest_id_);
     std::swap(_has_bits_[0], other->_has_bits_[0]);
     _unknown_fields_.Swap(&other->_unknown_fields_);
     std::swap(_cached_size_, other->_cached_size_);
@@ -8513,7 +8549,7 @@ void CMsgGCQuestCompleted::Swap(CMsgGCQuestCompleted* other) {
 // ===================================================================
 
 #ifndef _MSC_VER
-const int CMsgGCQuestObjective_RequestLoanerItems::kQuestItemIdFieldNumber;
+const int CMsgGCQuestObjective_RequestLoanerItems::kQuestIdFieldNumber;
 #endif  // !_MSC_VER
 
 CMsgGCQuestObjective_RequestLoanerItems::CMsgGCQuestObjective_RequestLoanerItems()
@@ -8534,7 +8570,7 @@ CMsgGCQuestObjective_RequestLoanerItems::CMsgGCQuestObjective_RequestLoanerItems
 
 void CMsgGCQuestObjective_RequestLoanerItems::SharedCtor() {
   _cached_size_ = 0;
-  quest_item_id_ = GOOGLE_ULONGLONG(0);
+  quest_id_ = GOOGLE_ULONGLONG(0);
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
@@ -8570,7 +8606,7 @@ CMsgGCQuestObjective_RequestLoanerItems* CMsgGCQuestObjective_RequestLoanerItems
 }
 
 void CMsgGCQuestObjective_RequestLoanerItems::Clear() {
-  quest_item_id_ = GOOGLE_ULONGLONG(0);
+  quest_id_ = GOOGLE_ULONGLONG(0);
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
   mutable_unknown_fields()->Clear();
 }
@@ -8585,13 +8621,13 @@ bool CMsgGCQuestObjective_RequestLoanerItems::MergePartialFromCodedStream(
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // optional uint64 quest_item_id = 1;
+      // optional uint64 quest_id = 1;
       case 1: {
         if (tag == 8) {
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::uint64, ::google::protobuf::internal::WireFormatLite::TYPE_UINT64>(
-                 input, &quest_item_id_)));
-          set_has_quest_item_id();
+                 input, &quest_id_)));
+          set_has_quest_id();
         } else {
           goto handle_unusual;
         }
@@ -8624,9 +8660,9 @@ failure:
 void CMsgGCQuestObjective_RequestLoanerItems::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
   // @@protoc_insertion_point(serialize_start:CMsgGCQuestObjective_RequestLoanerItems)
-  // optional uint64 quest_item_id = 1;
-  if (has_quest_item_id()) {
-    ::google::protobuf::internal::WireFormatLite::WriteUInt64(1, this->quest_item_id(), output);
+  // optional uint64 quest_id = 1;
+  if (has_quest_id()) {
+    ::google::protobuf::internal::WireFormatLite::WriteUInt64(1, this->quest_id(), output);
   }
 
   if (!unknown_fields().empty()) {
@@ -8639,9 +8675,9 @@ void CMsgGCQuestObjective_RequestLoanerItems::SerializeWithCachedSizes(
 ::google::protobuf::uint8* CMsgGCQuestObjective_RequestLoanerItems::SerializeWithCachedSizesToArray(
     ::google::protobuf::uint8* target) const {
   // @@protoc_insertion_point(serialize_to_array_start:CMsgGCQuestObjective_RequestLoanerItems)
-  // optional uint64 quest_item_id = 1;
-  if (has_quest_item_id()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteUInt64ToArray(1, this->quest_item_id(), target);
+  // optional uint64 quest_id = 1;
+  if (has_quest_id()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteUInt64ToArray(1, this->quest_id(), target);
   }
 
   if (!unknown_fields().empty()) {
@@ -8656,11 +8692,11 @@ int CMsgGCQuestObjective_RequestLoanerItems::ByteSize() const {
   int total_size = 0;
 
   if (_has_bits_[0 / 32] & (0xffu << (0 % 32))) {
-    // optional uint64 quest_item_id = 1;
-    if (has_quest_item_id()) {
+    // optional uint64 quest_id = 1;
+    if (has_quest_id()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::UInt64Size(
-          this->quest_item_id());
+          this->quest_id());
     }
 
   }
@@ -8690,8 +8726,8 @@ void CMsgGCQuestObjective_RequestLoanerItems::MergeFrom(const ::google::protobuf
 void CMsgGCQuestObjective_RequestLoanerItems::MergeFrom(const CMsgGCQuestObjective_RequestLoanerItems& from) {
   GOOGLE_CHECK_NE(&from, this);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
-    if (from.has_quest_item_id()) {
-      set_quest_item_id(from.quest_item_id());
+    if (from.has_quest_id()) {
+      set_quest_id(from.quest_id());
     }
   }
   mutable_unknown_fields()->MergeFrom(from.unknown_fields());
@@ -8716,7 +8752,7 @@ bool CMsgGCQuestObjective_RequestLoanerItems::IsInitialized() const {
 
 void CMsgGCQuestObjective_RequestLoanerItems::Swap(CMsgGCQuestObjective_RequestLoanerItems* other) {
   if (other != this) {
-    std::swap(quest_item_id_, other->quest_item_id_);
+    std::swap(quest_id_, other->quest_id_);
     std::swap(_has_bits_[0], other->_has_bits_[0]);
     _unknown_fields_.Swap(&other->_unknown_fields_);
     std::swap(_cached_size_, other->_cached_size_);
@@ -9668,7 +9704,7 @@ void CMsgCraftCommonStatClock::Swap(CMsgCraftCommonStatClock* other) {
 // ===================================================================
 
 #ifndef _MSC_VER
-const int CMsgGCQuestDiscard_Request::kQuestItemIdFieldNumber;
+const int CMsgGCQuestDiscard_Request::kQuestIdFieldNumber;
 #endif  // !_MSC_VER
 
 CMsgGCQuestDiscard_Request::CMsgGCQuestDiscard_Request()
@@ -9689,7 +9725,7 @@ CMsgGCQuestDiscard_Request::CMsgGCQuestDiscard_Request(const CMsgGCQuestDiscard_
 
 void CMsgGCQuestDiscard_Request::SharedCtor() {
   _cached_size_ = 0;
-  quest_item_id_ = GOOGLE_ULONGLONG(0);
+  quest_id_ = GOOGLE_ULONGLONG(0);
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
@@ -9725,7 +9761,7 @@ CMsgGCQuestDiscard_Request* CMsgGCQuestDiscard_Request::New() const {
 }
 
 void CMsgGCQuestDiscard_Request::Clear() {
-  quest_item_id_ = GOOGLE_ULONGLONG(0);
+  quest_id_ = GOOGLE_ULONGLONG(0);
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
   mutable_unknown_fields()->Clear();
 }
@@ -9740,13 +9776,13 @@ bool CMsgGCQuestDiscard_Request::MergePartialFromCodedStream(
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // optional uint64 quest_item_id = 1;
+      // optional uint64 quest_id = 1;
       case 1: {
         if (tag == 8) {
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::uint64, ::google::protobuf::internal::WireFormatLite::TYPE_UINT64>(
-                 input, &quest_item_id_)));
-          set_has_quest_item_id();
+                 input, &quest_id_)));
+          set_has_quest_id();
         } else {
           goto handle_unusual;
         }
@@ -9779,9 +9815,9 @@ failure:
 void CMsgGCQuestDiscard_Request::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
   // @@protoc_insertion_point(serialize_start:CMsgGCQuestDiscard_Request)
-  // optional uint64 quest_item_id = 1;
-  if (has_quest_item_id()) {
-    ::google::protobuf::internal::WireFormatLite::WriteUInt64(1, this->quest_item_id(), output);
+  // optional uint64 quest_id = 1;
+  if (has_quest_id()) {
+    ::google::protobuf::internal::WireFormatLite::WriteUInt64(1, this->quest_id(), output);
   }
 
   if (!unknown_fields().empty()) {
@@ -9794,9 +9830,9 @@ void CMsgGCQuestDiscard_Request::SerializeWithCachedSizes(
 ::google::protobuf::uint8* CMsgGCQuestDiscard_Request::SerializeWithCachedSizesToArray(
     ::google::protobuf::uint8* target) const {
   // @@protoc_insertion_point(serialize_to_array_start:CMsgGCQuestDiscard_Request)
-  // optional uint64 quest_item_id = 1;
-  if (has_quest_item_id()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteUInt64ToArray(1, this->quest_item_id(), target);
+  // optional uint64 quest_id = 1;
+  if (has_quest_id()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteUInt64ToArray(1, this->quest_id(), target);
   }
 
   if (!unknown_fields().empty()) {
@@ -9811,11 +9847,11 @@ int CMsgGCQuestDiscard_Request::ByteSize() const {
   int total_size = 0;
 
   if (_has_bits_[0 / 32] & (0xffu << (0 % 32))) {
-    // optional uint64 quest_item_id = 1;
-    if (has_quest_item_id()) {
+    // optional uint64 quest_id = 1;
+    if (has_quest_id()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::UInt64Size(
-          this->quest_item_id());
+          this->quest_id());
     }
 
   }
@@ -9845,8 +9881,8 @@ void CMsgGCQuestDiscard_Request::MergeFrom(const ::google::protobuf::Message& fr
 void CMsgGCQuestDiscard_Request::MergeFrom(const CMsgGCQuestDiscard_Request& from) {
   GOOGLE_CHECK_NE(&from, this);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
-    if (from.has_quest_item_id()) {
-      set_quest_item_id(from.quest_item_id());
+    if (from.has_quest_id()) {
+      set_quest_id(from.quest_id());
     }
   }
   mutable_unknown_fields()->MergeFrom(from.unknown_fields());
@@ -9871,7 +9907,7 @@ bool CMsgGCQuestDiscard_Request::IsInitialized() const {
 
 void CMsgGCQuestDiscard_Request::Swap(CMsgGCQuestDiscard_Request* other) {
   if (other != this) {
-    std::swap(quest_item_id_, other->quest_item_id_);
+    std::swap(quest_id_, other->quest_id_);
     std::swap(_has_bits_[0], other->_has_bits_[0]);
     _unknown_fields_.Swap(&other->_unknown_fields_);
     std::swap(_cached_size_, other->_cached_size_);

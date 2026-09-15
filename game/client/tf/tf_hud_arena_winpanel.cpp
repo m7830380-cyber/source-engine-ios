@@ -362,7 +362,7 @@ void CTFArenaWinPanel::FireGameEvent( IGameEvent * event )
 			pPlayerHealing->SetText( "" );
 			pPlayerLifetime->SetText( "" );
 			pPlayerKills->SetText( "" );
-			pPlayerAvatar->SetPlayer( (C_BasePlayer *)NULL );
+			pPlayerAvatar->SetPlayer( nullptr );
 
 			char szPlayerIndexVal[64]="", szPlayerDamageVal[64]="", szPlayerHealingVal[64]="", szPlayerTimeAliveVal[64]="", szPlayerKillingBlowsVal[64]="";
 			// get player index and round points from the event

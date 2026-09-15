@@ -6,6 +6,7 @@
 
 
 #include "cbase.h"
+#include "tf_matchmaking_dashboard_popup.h"
 #include "tf_matchmaking_dashboard.h"
 #include "tf_gamerules.h"
 #include "tf_gc_client.h"
@@ -14,25 +15,25 @@
 using namespace vgui;
 using namespace GCSDK;
 
-#ifdef STAGING_ONLY 
-extern ConVar tf_mm_popup_state_override;
-#endif
 
 class CNextMapWinnerDashboardState : public CTFMatchmakingPopup
 {
+	DECLARE_CLASS_SIMPLE( CNextMapWinnerDashboardState, CTFMatchmakingPopup );
 public:
 
-	CNextMapWinnerDashboardState( const char* pszName, const char* pszResFile )
-		: CTFMatchmakingPopup( pszName, pszResFile )
+	CNextMapWinnerDashboardState( const char* pszName )
+		: CTFMatchmakingPopup( pszName )
 	{
+	}
+
+	virtual void ApplySchemeSettings( vgui::IScheme *pScheme ) OVERRIDE
+	{
+		LoadControlSettings( "resource/UI/MatchMakingDashboardPopup_NextMapWinner.res" );
+		BaseClass::ApplySchemeSettings( pScheme );
 	}
 
 	virtual bool ShouldBeActve() const OVERRIDE
 	{
-#ifdef STAGING_ONLY
-		if ( FStrEq( const_cast<CNextMapWinnerDashboardState*>(this)->GetName(), tf_mm_popup_state_override.GetString() ) ) 
-			return true;
-#endif
 
 		int nVotes[ CTFGameRules::EUserNextMapVote::NUM_VOTE_STATES ];
 		CTFGameRules::EUserNextMapVote eWinningVote = TFGameRules()->GetWinningVote( nVotes );
@@ -91,4 +92,4 @@ private:
 	}
 };
 
-REG_MM_POPUP_FACTORY( CNextMapWinnerDashboardState, "NextMapWinner", "resource/UI/MatchMakingDashboardPopup_NextMapWinner.res" )
+REGISTER_FUNC_FOR_DASHBOARD_PANEL_TYPE( []() -> Panel* { return new CNextMapWinnerDashboardState( "NextMapWinner" ); }, k_eNextMapWinnerPopup );

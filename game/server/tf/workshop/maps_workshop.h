@@ -58,6 +58,9 @@ public:
 
 	PublishedFileId_t FileID() const { return m_nFileID; }
 
+	const char* OriginalName() const { return m_strMapName.Length() ? m_strMapName.Get() : NULL; }
+	uint32 TimeUpdated() const { return m_rtimeUpdated; }
+
 private:
 	friend class CTFMapsWorkshop;
 	CTFWorkshopMap( PublishedFileId_t nMapID );
@@ -152,6 +155,8 @@ public:
 
 	// Spews a list of current maps and their status to console
 	void PrintStatusToConsole();
+
+	bool GetWorkshopMapDesc( uint32 uIndex, WorkshopMapDesc_t *pDesc );
 
 private:
 	CCallback<CTFMapsWorkshop, DownloadItemResult_t, false> m_callbackDownloadItem;

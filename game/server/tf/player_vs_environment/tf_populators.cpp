@@ -37,7 +37,7 @@ static void FireEvent( EventInfo *eventInfo, const char *eventName )
 		}
 		else
 		{
-			g_EventQueue.AddEvent( targetEntity, eventInfo->m_action, 0.0f, NULL, NULL );
+			g_EventQueue.AddEvent( targetEntity, eventInfo->m_action, eventInfo->m_param, eventInfo->m_delay, NULL, NULL );
 		}
 	}
 }
@@ -64,6 +64,14 @@ static EventInfo *ParseEvent( KeyValues *values )
 		{
 			eventInfo->m_action.sprintf( "%s", data->GetString() );
 		}
+		else if ( !Q_stricmp( name, "Param" ) )
+        {
+            eventInfo->m_param.SetString( AllocPooledString( data->GetString() ) );
+        }
+        else if ( !Q_stricmp( name, "Delay" ) )
+        {
+            eventInfo->m_delay = data->GetFloat();
+        }
 		else
 		{
 			Warning( "Unknown field '%s' in WaveSpawn event definition.\n", data->GetString() );
@@ -733,7 +741,7 @@ bool CMissionPopulator::UpdateMission( CTFBot::MissionType mission )
 	// are there enough free slots?
 	int currentEnemyCount = GetGlobalTeam( TF_TEAM_PVE_INVADERS )->GetNumPlayers();
 
-	if ( currentEnemyCount + m_desiredCount > CPopulationManager::MVM_INVADERS_TEAM_SIZE )
+	if ( currentEnemyCount + m_desiredCount > tf_mvm_max_invaders.GetInt() )
 	{
 		// not enough slots yet
 		if ( tf_populator_debug.GetBool() ) 
@@ -1148,14 +1156,7 @@ CWaveSpawnPopulator::~CWaveSpawnPopulator()
 //-----------------------------------------------------------------------
 void CWaveSpawnPopulator::ForceFinish()
 {
-	if ( m_state < WAIT_FOR_ALL_DEAD )
-	{
-		SetState( WAIT_FOR_ALL_DEAD );
-	}
-	else if ( m_state != WAIT_FOR_ALL_DEAD )
-	{
-		SetState( DONE );
-	}
+	Finish();
 
 	FOR_EACH_VEC( m_activeVector, i )
 	{
@@ -1172,6 +1173,18 @@ void CWaveSpawnPopulator::ForceFinish()
 	}
 
 	m_activeVector.Purge();
+}
+
+void CWaveSpawnPopulator::Finish(void)
+{
+	if (m_state < WAIT_FOR_ALL_DEAD)
+	{
+		SetState(WAIT_FOR_ALL_DEAD);
+	}
+	else if (m_state != WAIT_FOR_ALL_DEAD)
+	{
+		SetState(DONE);
+	}
 }
 
 
@@ -1300,6 +1313,14 @@ bool CWaveSpawnPopulator::Parse( KeyValues *values )
 		{
 			m_waitForAllDead = data->GetString();
 		}
+        else if ( !Q_stricmp( name, "SpawnUntilAllSpawned" ) )
+		{
+			m_spawnUntilAllSpawned = data->GetString();
+		}
+        else if ( !Q_stricmp( name, "SpawnUntilAllDead" ) )
+		{
+			m_spawnUntilAllDead = data->GetString();
+		}
 		else if ( !Q_stricmp( name, "Support" ) )
 		{
 			m_bLimitedSupport = !Q_stricmp( data->GetString(), "Limited" );
@@ -1403,14 +1424,14 @@ void CWaveSpawnPopulator::OnNonSupportWavesDone( void )
 			SetState( DONE );
 			break;
 		case SPAWNING:
+			SetState(WAIT_FOR_ALL_DEAD);
 		case WAIT_FOR_ALL_DEAD:
+		case DONE:
 			if ( TFGameRules() && ( m_unallocatedCurrency > 0 ) )
 			{
 				TFGameRules()->DistributeCurrencyAmount( m_unallocatedCurrency, NULL, true, true );
 				m_unallocatedCurrency = 0;
 			}
-			SetState( WAIT_FOR_ALL_DEAD );
- 		case DONE:
 			break;
 		}
 	}
@@ -1570,7 +1591,7 @@ void CWaveSpawnPopulator::Update( void )
 
 				int currentEnemyCount = GetGlobalTeam( TF_TEAM_PVE_INVADERS )->GetNumPlayers();
 
-				if ( currentEnemyCount + m_spawnCount + m_reservedPlayerSlotCount > CPopulationManager::MVM_INVADERS_TEAM_SIZE )
+				if ( currentEnemyCount + m_spawnCount + m_reservedPlayerSlotCount > tf_mvm_max_invaders.GetInt() )
 				{
 					// no space right now
 					return;
@@ -1737,6 +1758,7 @@ void CWaveSpawnPopulator::Update( void )
 CWave::CWave( CPopulationManager *manager ) : IPopulator( manager )
 {
 	m_iEnemyCount = 0;
+	m_bHasTanks = false;
 	m_nTanksSpawned = 0;
 	m_nSentryBustersSpawned = 0;
 	m_nNumEngineersTeleportSpawned = 0;
@@ -1771,6 +1793,7 @@ CWave::~CWave()
 bool CWave::Parse( KeyValues *data )
 {
 	m_iEnemyCount = 0;
+	m_bHasTanks = false;
 	m_nWaveClassCounts.RemoveAll();
 	m_totalCurrency = 0;
 
@@ -1793,12 +1816,18 @@ bool CWave::Parse( KeyValues *data )
 				// this is a total of all enemies we have to fight that are NOT support enemies
 				m_iEnemyCount += wavePopulator->m_totalCount;
 			}
+			
 			m_totalCurrency += wavePopulator->m_totalCurrency;
 
 			wavePopulator->SetParent( this );
 
 			if ( wavePopulator->m_spawner )
 			{
+				CTankSpawner* tankSpawner = dynamic_cast<CTankSpawner*>(wavePopulator->m_spawner);
+				if (tankSpawner)
+				{
+					m_bHasTanks = true;
+				}
 				if ( wavePopulator->m_spawner->IsVarious() )
 				{
 					for ( int i = 0; i < wavePopulator->m_totalCount; ++i )
@@ -2047,6 +2076,7 @@ void CWave::ActiveWaveUpdate( void )
 	{
 		CWaveSpawnPopulator *waveSpawnPopulator = m_waveSpawnVector[i];
 		bool bWaiting = false;
+		bool bSpawnUntilDone = true;
 
 		// check if this WaveSpawn is waiting for another WaveSpawn to be done spawning players
 		if ( !waveSpawnPopulator->m_waitForAllSpawned.IsEmpty() )
@@ -2087,9 +2117,50 @@ void CWave::ActiveWaveUpdate( void )
 			}
 		}
 
+		// check if this WaveSpawn is waiting for another WaveSpawn's players to all have spawned
+		if ( !waveSpawnPopulator->m_spawnUntilAllSpawned.IsEmpty() )
+		{
+			const char *name = waveSpawnPopulator->m_spawnUntilAllSpawned.Get();
+			FOR_EACH_VEC( m_waveSpawnVector, j )
+			{
+				CWaveSpawnPopulator *predecessor = m_waveSpawnVector[j];
+				if ( predecessor && !Q_stricmp( predecessor->m_name.Get(), name ) )
+				{
+					if ( !predecessor->IsDoneSpawningBots() )
+					{
+						bSpawnUntilDone = false;
+						break;
+					}
+				}
+			}
+		}
+
+		// check if this WaveSpawn is waiting for another WaveSpawn's players to all have died
+		if ( !waveSpawnPopulator->m_spawnUntilAllDead.IsEmpty() )
+		{
+			const char *name = waveSpawnPopulator->m_spawnUntilAllDead.Get();
+			FOR_EACH_VEC( m_waveSpawnVector, j )
+			{
+				CWaveSpawnPopulator *predecessor = m_waveSpawnVector[j];
+				if ( predecessor && !Q_stricmp( predecessor->m_name.Get(), name ) )
+				{
+					if ( !predecessor->IsDone() )
+					{
+						bSpawnUntilDone = false;
+						break;
+					}
+				}
+			}
+		}
+
 		if ( bWaiting )
 		{
 			continue;
+		}
+
+		if ( !waveSpawnPopulator->IsDone() && bSpawnUntilDone && (!waveSpawnPopulator->m_spawnUntilAllSpawned.IsEmpty() || !waveSpawnPopulator->m_spawnUntilAllDead.IsEmpty()) )
+		{
+			waveSpawnPopulator->Finish();
 		}
 
 		waveSpawnPopulator->Update();
@@ -2163,7 +2234,7 @@ void CWave::WaveCompleteUpdate( void )
 
 		if ( TFGameRules() )
 		{
-			if ( GTFGCClientSystem()->GetMatch() && GTFGCClientSystem()->GetMatch()->m_eMatchGroup == k_nMatchGroup_MvM_MannUp )
+			if ( GTFGCClientSystem()->GetMatch() && GTFGCClientSystem()->GetMatch()->m_eMatchGroup == k_eTFMatchGroup_MvM_MannUp )
 			{
 				TFGameRules()->BroadcastSound( 255, "Announcer.MVM_Manned_Up_Wave_End" );
 			}

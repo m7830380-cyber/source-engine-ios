@@ -242,7 +242,7 @@ void CPhysicsHook::LevelInitPreEntity()
 	physenv->EnableConstraintNotify( true ); // callback when an object gets deleted that is attached to a constraint
 
 	physenv->SetObjectEventHandler( &g_Collisions );
-
+	
 	physenv->SetSimulationTimestep( gpGlobals->interval_per_tick ); // 15 ms per tick
 	// HL Game gravity, not real-world gravity
 	physenv->SetGravity( Vector( 0, 0, -GetCurrentGravity() ) );

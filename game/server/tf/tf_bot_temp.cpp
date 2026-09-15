@@ -32,9 +32,6 @@
 #include "tf_obj.h"
 #include "player.h"
 
-#ifdef STAGING_ONLY
-#include "econ_item_system.h"
-#endif // STAGING_ONLY
 
 void InitBotTrig( void );
 void ClientPutInServer( edict_t *pEdict, const char *playername );
@@ -53,7 +50,6 @@ ConVar bot_forcefireweapon( "bot_forcefireweapon", "", 0, "Force bots with the s
 ConVar bot_forceattack( "bot_forceattack", "0", 0, "When on, all bots fire their guns." );
 ConVar bot_forceattack2( "bot_forceattack2", "0", 0, "When firing, use attack2." );
 ConVar bot_forceattack_down( "bot_forceattack_down", "1", 0, "When firing, don't tap fire, hold it down." );
-ConVar bot_changeclass( "bot_changeclass", "0", 0, "Force all bots to change to the specified class." );
 ConVar bot_dontmove( "bot_dontmove", "0", FCVAR_CHEAT );
 ConVar bot_saveme( "bot_saveme", "0", FCVAR_CHEAT );
 static ConVar bot_mimic_inverse( "bot_mimic_inverse", "0", 0, "Bot uses usercmd of player by index." );
@@ -1420,10 +1416,6 @@ void BotGenerateAndWearItem( CTFPlayer *pBot, const char *itemName )
 	}
 	else
 	{
-#ifdef STAGING_ONLY
-		extern ConVar tf_bot_use_items;
-		if ( !tf_bot_use_items.GetInt() )
-#endif
 		{
 			Msg( "Failed to create an item named %s\n", itemName );
 		}
@@ -1463,6 +1455,7 @@ void BotGenerateAndWearItem( CTFPlayer *pBot, CEconItemView *pItem )
 		BotGenerateAndWearItem( pBot, pItem->GetItemDefinition()->GetDefinitionName() );
 	}
 }
+
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
@@ -1480,9 +1473,6 @@ void BotMirrorPlayerClassAndItems( CTFPlayer *pBot, CTFPlayer *pPlayer )
 
 	int nLastSlot = LOADOUT_POSITION_MISC2;
 
-#ifdef STAGING_ONLY
-	//nLastSlot = LOADOUT_POSITION_MISC10;
-#endif // STAGING_ONLY
 
 	pBot->RemoveAllItems( false );
 
@@ -1493,6 +1483,12 @@ void BotMirrorPlayerClassAndItems( CTFPlayer *pBot, CTFPlayer *pPlayer )
 			continue;
 
 		BotGenerateAndWearItem( pBot, pPlayerItem );
+	}
+
+	TFPlayerClassData_t *pData = pBot->GetPlayerClass()->GetData();
+	if ( pData )
+	{
+		pBot->ManageBuilderWeapons( pData );
 	}
 }
 
@@ -1513,76 +1509,24 @@ CON_COMMAND_F( bot_mirror, "Forces the specified bot to be the same class, and u
 	}
 }
 
-#ifdef STAGING_ONLY
 //------------------------------------------------------------------------------
-// Purpose: Force the specified bot to create & equip an item
+// Purpose:
 //------------------------------------------------------------------------------
-void cc_bot_equip( const CCommand &args )
+CON_COMMAND_F( bot_changeclass, "Forces the specified bot to change class (e.g. bot_changeclass bot01 soldier).", FCVAR_CHEAT )
 {
-	CUtlVector< CTFPlayer* > botVector;
-	GetBotsFromCommand( args, 3, "Usage: bot_equip <bot name> <item name>", &botVector );
-	
-	FOR_EACH_VEC( botVector, i )
-	{
-		BotGenerateAndWearItem( botVector[i], args[2] );
-	}
-}
-static ConCommand bot_equip("bot_equip", cc_bot_equip, "Generate an item and have the bot equip it.\n\tFormat: bot_equip <bot name> <item name>", FCVAR_CHEAT );
-
-//------------------------------------------------------------------------------
-// Purpose: Force the specified bot to disguise themselves. Needed because the disguise command is clientside.
-//------------------------------------------------------------------------------
-void cc_bot_disguise( const CCommand &args )
-{
-	CUtlVector< CTFPlayer* > botVector;
-	GetBotsFromCommand( args, 4, "Usage: bot_disguise <bot name> <team> <class>", &botVector );
-	
-	FOR_EACH_VEC( botVector, i )
-	{
-		if ( botVector[i]->CanDisguise() )
-		{
-			// intercepting the team value and reassigning what gets passed into Disguise()
-			// because the team numbers in the client menu don't match the #define values for the teams
-			botVector[i]->m_Shared.Disguise( Q_atoi( args[2] ), Q_atoi( args[3] ) ); 
-		}
-	}
-}
-static ConCommand bot_disguise("bot_disguise", cc_bot_disguise, "Force the specified bot to disguise themselves.\n\tFormat: bot_disguise <bot name> <team> <class>", FCVAR_CHEAT );
-
-//------------------------------------------------------------------------------
-// Purpose: Force the specified bot to taunt with specific taunt name
-//------------------------------------------------------------------------------
-void cc_bot_taunt( const CCommand &args )
-{
-	CUtlVector< CTFPlayer* > botVector;
-	GetBotsFromCommand( args, 3, "Usage: bot_taunt <bot name> <taunt_name>", &botVector );
-	
-	if ( botVector.IsEmpty() )
+	CTFPlayer *pTFPlayer = ToTFPlayer( UTIL_GetCommandClient() );
+	if ( !pTFPlayer )
 		return;
 
-	const char *pszTauntName = args.ArgS() + V_strlen( args[1] ) + 1;
-
-	CEconItemDefinition *pItemDef = ItemSystem()->GetStaticDataForItemByName( pszTauntName );
-	if ( !pItemDef )
-	{
-		Msg( "bot_taunt: failed to find taunt name <%s>\n", pszTauntName );
-		return;
-	}
-
-	static CEconItemView item;
-	item.SetItemDefIndex( pItemDef->GetDefinitionIndex() );
-	item.SetItemQuality( pItemDef->GetQuality() );
-	item.SetInitialized( true );
-	
+	CUtlVector< CTFPlayer* > botVector;
+	GetBotsFromCommand( args, 2, "", &botVector );
 	FOR_EACH_VEC( botVector, i )
 	{
-		botVector[i]->PlayTauntSceneFromItem( &item );
+		botVector[i]->AllowInstantSpawn();
+		botVector[i]->HandleCommand_JoinClass( args[2] );
 	}
 }
-static ConCommand bot_taunt("bot_taunt", cc_bot_taunt, "Force the specified bot to taunt with specific taunt name.\n\tFormat: bot_taunt <bot name> <taunt_name>", FCVAR_CHEAT );
 
-
-#endif // STAGING_ONLY
 
 //------------------------------------------------------------------------------
 // Purpose: Force the specified bot to select a weapon in the specified slot

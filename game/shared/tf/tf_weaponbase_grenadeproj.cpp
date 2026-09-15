@@ -37,10 +37,6 @@ BEGIN_DATADESC( CTFWeaponBaseGrenadeProj )
 DEFINE_THINKFUNC( DetonateThink ),
 END_DATADESC()
 
-#ifdef STAGING_ONLY
-ConVar tf_grenade_show_radius( "tf_grenade_show_radius", "0", FCVAR_CHEAT, "Render radius of grenades" );
-ConVar tf_grenade_show_radius_time( "tf_grenade_show_radius_time", "5.0", FCVAR_CHEAT, "Time to show grenade radius" );
-#endif // STAGING_ONLY
 
 extern void SendProxy_Origin( const SendProp *pProp, const void *pStruct, const void *pData, DVariant *pOut, int iElement, int objectID );
 extern void SendProxy_Angles( const SendProp *pProp, const void *pStruct, const void *pData, DVariant *pOut, int iElement, int objectID );
@@ -95,8 +91,7 @@ CTFWeaponBaseGrenadeProj::CTFWeaponBaseGrenadeProj()
 // Purpose: Destructor.
 //-----------------------------------------------------------------------------
 CTFWeaponBaseGrenadeProj::~CTFWeaponBaseGrenadeProj()
-{
-}
+{}
 
 //-----------------------------------------------------------------------------
 // Purpose: 
@@ -157,6 +152,7 @@ void CTFWeaponBaseGrenadeProj::Precache( void )
 	PrecacheModel( NOGRENADE_SPRITE );
 	PrecacheParticleSystem( "critical_grenade_blue" );
 	PrecacheParticleSystem( "critical_grenade_red" );
+	PrecacheParticleSystem( "ExplosionCore_Wall_Jumper" );
 #endif
 }
 
@@ -276,7 +272,7 @@ void CTFWeaponBaseGrenadeProj::Spawn( void )
 	AddEffects( EF_NOSHADOW );
 
 	// Set the grenade size here.
-	UTIL_SetSize( this, Vector( -2.0f, -2.0f, -2.0f ), Vector( 2.0f, 2.0f, 2.0f ) );
+	UTIL_SetSize( this, TF_GRENADE_PROJECTILE_MINS, TF_GRENADE_PROJECTILE_MAXS );
 
 	// Set the movement type.
 	SetCollisionGroup( TF_COLLISIONGROUP_GRENADES );
@@ -347,6 +343,13 @@ void CTFWeaponBaseGrenadeProj::Explode( trace_t *pTrace, int bitsDamageType )
 		}
 	}
 
+	int iNoSelfBlastDamage = 0;
+	CALL_ATTRIB_HOOK_INT_ON_OTHER( m_hLauncher, iNoSelfBlastDamage, no_self_blast_dmg );
+	if ( iNoSelfBlastDamage )
+	{
+		iCustomParticleIndex = GetParticleSystemIndex( "ExplosionCore_Wall_Jumper" );
+	}
+
 	int iLargeExplosion = 0;
 	CALL_ATTRIB_HOOK_INT_ON_OTHER( m_hLauncher, iLargeExplosion, use_large_smoke_explosion );
 	if ( iLargeExplosion > 0 )
@@ -385,37 +388,21 @@ void CTFWeaponBaseGrenadeProj::Explode( trace_t *pTrace, int bitsDamageType )
 
 	float flRadius = GetDamageRadius();
 
-#ifdef STAGING_ONLY
-	if ( tf_grenade_show_radius.GetBool() )
-	{
-		DrawRadius( flRadius );
-	}
-#endif
 	CTFRadiusDamageInfo radiusinfo( &info, vecOrigin, flRadius, NULL, TF_GRENADE_JUMP_RADIUS );
 	TFGameRules()->RadiusDamage( radiusinfo );
 
 	// Don't decal players with scorch.
-	if ( pTrace->m_pEnt && !pTrace->m_pEnt->IsPlayer() )
+	if ( pTrace->m_pEnt && !pTrace->m_pEnt->IsPlayer() && ( iNoSelfBlastDamage == 0 ) )
 	{
 		UTIL_DecalTrace( pTrace, "Scorch" );
 	}
 
-	if ( pTrace->m_pEnt && pTrace->m_pEnt->IsPlayer() && GetThrower() )
+	if ( GetEnemy() && GetThrower() )
 	{
 		CTFPlayer *pTarget = ToTFPlayer( GetEnemy() );
 		if ( pTarget )
 		{
-			if ( pTarget->GetTeamNumber() != GetThrower()->GetTeamNumber() )
-			{
-				IGameEvent *event = gameeventmanager->CreateEvent( "projectile_direct_hit" );
-				if ( event )
-				{
-					event->SetInt( "attacker", GetThrower()->entindex() );
-					event->SetInt( "victim", pTarget->entindex() );
-
-					gameeventmanager->FireEvent( event, true );
-				}
-			}
+			RecordEnemyPlayerHit( pTarget, true );
 		}
 	}
 
@@ -807,55 +794,5 @@ void CTFWeaponBaseGrenadeProj::VPhysicsUpdate( IPhysicsObject *pPhysics )
 	}
 }
 
-#ifdef STAGING_ONLY
-void CTFWeaponBaseGrenadeProj::DrawRadius( float flRadius )
-{
-	Vector pos = GetAbsOrigin();
-	int r = 255;
-	int g = 0, b = 0;
-	float flLifetime = tf_grenade_show_radius_time.GetFloat();
-	bool bDepthTest = true;
-
-	Vector edge, lastEdge;
-	NDebugOverlay::Line( pos, pos + Vector( 0, 0, 50 ), r, g, b, !bDepthTest, flLifetime );
-
-	lastEdge = Vector( flRadius + pos.x, pos.y, pos.z );
-	float angle;
-	for( angle=0.0f; angle <= 360.0f; angle += 22.5f )
-	{
-		edge.x = flRadius * cos( DEG2RAD( angle ) ) + pos.x;
-		edge.y = pos.y;
-		edge.z = flRadius * sin( DEG2RAD( angle ) ) + pos.z;
-
-		NDebugOverlay::Line( edge, lastEdge, r, g, b, !bDepthTest, flLifetime );
-
-		lastEdge = edge;
-	}
-
-	lastEdge = Vector( pos.x, flRadius + pos.y, pos.z );
-	for( angle=0.0f; angle <= 360.0f; angle += 22.5f )
-	{
-		edge.x = pos.x;
-		edge.y = flRadius * cos( DEG2RAD( angle ) ) + pos.y;
-		edge.z = flRadius * sin( DEG2RAD( angle ) ) + pos.z;
-
-		NDebugOverlay::Line( edge, lastEdge, r, g, b, !bDepthTest, flLifetime );
-
-		lastEdge = edge;
-	}
-
-	lastEdge = Vector( pos.x, flRadius + pos.y, pos.z );
-	for( angle=0.0f; angle <= 360.0f; angle += 22.5f )
-	{
-		edge.x = flRadius * cos( DEG2RAD( angle ) ) + pos.x;
-		edge.y = flRadius * sin( DEG2RAD( angle ) ) + pos.y;
-		edge.z = pos.z;
-
-		NDebugOverlay::Line( edge, lastEdge, r, g, b, !bDepthTest, flLifetime );
-
-		lastEdge = edge;
-	}
-}
-#endif // STAGING_ONLY
 
 #endif

@@ -46,19 +46,8 @@ const uint32 kWinsPerLevel = 10;
 //---------------------------------------------------------------------------------
 class CTFDuelSummary : public GCSDK::CProtoBufSharedObject< CSOTFDuelSummary, k_EEconTypeDuelSummary >
 {
-#ifdef GC
-	DECLARE_CLASS_MEMPOOL( CTFDuelSummary );
-#endif
 
 public:
-#ifdef GC
-	virtual bool BYieldingAddInsertToTransaction( GCSDK::CSQLAccess & sqlAccess );
-	virtual bool BYieldingAddWriteToTransaction( GCSDK::CSQLAccess & sqlAccess, const CUtlVector< int > &fields );
-	virtual bool BYieldingAddRemoveToTransaction( GCSDK::CSQLAccess & sqlAccess );
-
-	void WriteToRecord( CSchDuelSummary *pDuelSummary ) const;
-	void ReadFromRecord( const CSchDuelSummary & duelSummary );
-#endif
 };
 
 #endif //TFDUELSUMMARY_H

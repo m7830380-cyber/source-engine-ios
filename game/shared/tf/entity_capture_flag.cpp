@@ -53,9 +53,6 @@ ConVar tf_rd_return_max_time( "tf_rd_return_max_time", "90" );
 
 ConVar tf_flag_return_on_touch( "tf_flag_return_on_touch", "0", FCVAR_REPLICATED, "If this is set, your flag must be at base in order to capture the enemy flag. Remote friendly flags return to your base instantly when you touch them" );
 
-#ifdef STAGING_ONLY
-ConVar tf_flag_return_time_override( "tf_flag_return_time_override", "0", FCVAR_CHEAT | FCVAR_REPLICATED, "How long before a dropped flag will return (in seconds).  0 = Use map/default settings.  For internal-use only.", true, 0.f, false, 0.f );
-#endif // STAGING_ONLY
 
 ConVar tf_flag_return_time_credit_factor( "tf_flag_return_time_credit_factor", "1.0", FCVAR_REPLICATED, "Number of seconds the flag's return time will be credited for each second the flag is being carried.", true, 0.f, false, 0.f );
 
@@ -205,10 +202,13 @@ BEGIN_DATADESC( CCaptureFlag )
 	// Outputs.
 	DEFINE_OUTPUT( m_outputOnReturn, "OnReturn" ),
 	DEFINE_OUTPUT( m_outputOnPickUp, "OnPickUp" ),
+	DEFINE_OUTPUT( m_outputOnPickUp1, "OnPickup1" ),
 	DEFINE_OUTPUT( m_outputOnPickUpTeam1, "OnPickupTeam1" ),
 	DEFINE_OUTPUT( m_outputOnPickUpTeam2, "OnPickupTeam2" ),
 	DEFINE_OUTPUT( m_outputOnDrop, "OnDrop" ),
+	DEFINE_OUTPUT( m_outputOnDrop1, "OnDrop1" ),
 	DEFINE_OUTPUT( m_outputOnCapture, "OnCapture" ),
+	DEFINE_OUTPUT( m_outputOnCapture1, "OnCapture1" ),
 	DEFINE_OUTPUT( m_OnCapTeam1, "OnCapTeam1" ),
 	DEFINE_OUTPUT( m_OnCapTeam2, "OnCapTeam2" ),
 	DEFINE_OUTPUT( m_OnTouchSameTeam, "OnTouchSameTeam" ),
@@ -573,13 +573,6 @@ bool CCaptureFlag::ShouldHideGlowEffect( void )
 			// In non-CTF control the flag changes to the team that's carrying it
 			bIsHiddenTeam = ( pLocalPlayer->GetTeamNumber() != TEAM_SPECTATOR && pLocalPlayer->GetTeamNumber() != GetTeamNumber() );
 		}
-
-		if ( pLocalPlayer->m_Shared.IsFullyInvisible() )
-		{
-			C_TFPlayer *pOwner = ToTFPlayer( m_hPrevOwner );
-			if ( pOwner && pOwner != pLocalPlayer )
-				return true;
-		}
 	}
 
 	bool bHide = IsStolen() && bIsHiddenTeam;
@@ -611,14 +604,8 @@ void CCaptureFlag::Spawn( void )
 
 	// Set the flag solid and the size for touching.
 	SetSolid( SOLID_BBOX );
-#ifdef STAGING_ONLY	
-	SetSolidFlags( FSOLID_TRIGGER );
-	SetSize( vec3_origin, vec3_origin );
-	SetCollisionGroup( COLLISION_GROUP_DEBRIS );
-#else
 	SetSolidFlags( FSOLID_NOT_SOLID | FSOLID_TRIGGER );
 	SetSize( vec3_origin, vec3_origin );
-#endif
 
 	// Bloat the box for player pickup
 	CollisionProp()->UseTriggerBounds( true, 24 );
@@ -1403,7 +1390,7 @@ void CCaptureFlag::PickUp( CTFPlayer *pPlayer, bool bInvisible )
 		}
 	}
 	
-	if ( TFGameRules() && TFGameRules()->IsPowerupMode() && m_flTimeToSetPoisonous == 0.f )
+	if ( TFGameRules() && TFGameRules()->IsPowerupMode() && ( m_nType != TF_FLAGTYPE_PLAYER_DESTRUCTION ) && ( m_flTimeToSetPoisonous == 0.f ) )
 	{
 		// replace 90.f with a convar?
 		m_flTimeToSetPoisonous = gpGlobals->curtime + 90.f;
@@ -1443,6 +1430,7 @@ void CCaptureFlag::PickUp( CTFPlayer *pPlayer, bool bInvisible )
 
 	// Output.
 	m_outputOnPickUp.FireOutput( this, this );
+	m_outputOnPickUp1.FireOutput( pPlayer, this );
 
 	switch ( pPlayer->GetTeamNumber() )
 	{
@@ -1564,12 +1552,6 @@ void CCaptureFlag::Capture( CTFPlayer *pPlayer, int nCapturePoint )
 		CTF_GameStats.Event_PlayerCapturedPoint( pPlayer );
 
 		int nAmount = TFGameRules()->CalculateCurrencyAmount_ByType( TF_CURRENCY_CAPTURED_OBJECTIVE );
-#ifdef STAGING_ONLY
-		if ( TFGameRules()->GameModeUsesExperience() )
-		{
-			pPlayer->AddExperiencePoints( nAmount );	
-		}
-#endif // STAGING_ONLY
 		TFGameRules()->DistributeCurrencyAmount( nAmount, pPlayer );
 
 		// if someone else stole the flag, give them credit, too
@@ -1770,6 +1752,7 @@ void CCaptureFlag::Capture( CTFPlayer *pPlayer, int nCapturePoint )
 	
 	// Outputs
 	m_outputOnCapture.FireOutput( this, this );
+	m_outputOnCapture1.FireOutput( pPlayer, this );
 
 	switch ( pPlayer->GetTeamNumber() )
 	{
@@ -2118,6 +2101,7 @@ void CCaptureFlag::Drop( CTFPlayer *pPlayer, bool bVisible,  bool bThrown /*= fa
 
 	// Output.
 	m_outputOnDrop.FireOutput( this, this );
+	m_outputOnDrop1.FireOutput( pPlayer, this );
 
 	if ( !TFGameRules()->IsMannVsMachineMode() || ( GetMaxReturnTime() < 600 ) )
 	{
@@ -2609,20 +2593,6 @@ void CCaptureFlag::Simulate( void )
 	BaseClass::Simulate();
 
 	ManageTrailEffects();
-
-	C_TFPlayer *pLocalPlayer = C_TFPlayer::GetLocalTFPlayer();
-	if ( m_hPrevOwner && m_hPrevOwner->IsPlayer() && pLocalPlayer && pLocalPlayer->m_Shared.IsFullyInvisible() && !IsEffectActive( EF_NODRAW ) )
-	{
-		C_TFPlayer *pTFOwner = ToTFPlayer( m_hPrevOwner );
-		if ( pTFOwner && pTFOwner != pLocalPlayer )
-		{
-			AddEffects( EF_NODRAW );
-		}
-	}
-	else if ( IsEffectActive( EF_NODRAW ) && ( IsStolen() || IsDropped() ) )
-	{
-		RemoveEffects( EF_NODRAW );
-	}
 }
 
 void CCaptureFlag::ManageTrailEffects( void )
@@ -2821,12 +2791,6 @@ int CCaptureFlag::GetMaxReturnTime( void )
 {
     int nReturnTime = m_nReturnTime;
 
-#ifdef STAGING_ONLY
-    if (tf_flag_return_time_override.GetInt() > 0)
-    {
-        nReturnTime = tf_flag_return_time_override.GetInt();
-    }
-#endif // STAGING_ONLY
 
     if ( m_nType == TF_FLAGTYPE_ROBOT_DESTRUCTION )
     {

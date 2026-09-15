@@ -108,9 +108,6 @@ struct EngyBuildingReplacement_t
 };
 
 extern const EngyConstructBuilding_t g_kEngyBuildings[];
-#ifdef STAGING_ONLY
-extern const EngyBuildingReplacement_t s_alternateEngineerBuildings[];
-#endif
 	 
 class CHudMenuEngyBuild : public CHudBaseBuildMenu
 {
@@ -134,7 +131,7 @@ public:
 	static void ReplaceBuildings( EngyConstructBuilding_t (&targetBuildings)[ NUM_ENGY_BUILDINGS ] );
 	static void GetBuildingIDAndModeFromSlot( int iSlot, int &iBuilding, int &iMode, const EngyConstructBuilding_t (&buildings)[ NUM_ENGY_BUILDINGS ] );
 
-	virtual GameActionSet_t GetPreferredActionSet() { return GAME_ACTION_SET_IN_GAME_HUD; }
+	virtual GameActionSet_t GetPreferredActionSet() { return IsActive() ? GAME_ACTION_SET_IN_GAME_HUD : GAME_ACTION_SET_NONE; }
 
 private:
 

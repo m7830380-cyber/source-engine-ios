@@ -22,6 +22,7 @@ extern void SendProxy_Angles( const SendProp *pProp, const void *pStruct, const 
 
 #ifdef CLIENT_DLL
 #include "props_shared.h"
+#include "usermessages.h"
 #endif
 
 //w_rocket_airstrike\w_rocket_airstrike.mdl
@@ -103,8 +104,7 @@ CTFBaseRocket::CTFBaseRocket()
 // Purpose: Destructor.
 //-----------------------------------------------------------------------------
 CTFBaseRocket::~CTFBaseRocket()
-{
-}
+{}
 
 //-----------------------------------------------------------------------------
 // Purpose: 
@@ -113,6 +113,7 @@ void CTFBaseRocket::Precache( void )
 {
 	BaseClass::Precache();
 	PrecacheParticleSystem( "Explosion_ShockWave_01" );
+	PrecacheParticleSystem( "ExplosionCore_Wall_Jumper" );
 	PrecacheModel( MINI_ROCKETS_MODEL );
 }
 
@@ -455,10 +456,17 @@ void CTFBaseRocket::Explode( trace_t *pTrace, CBaseEntity *pOther )
 		}
 	}
 
+	int iNoSelfBlastDamage = 0;
 	CTFWeaponBase *pWeapon = dynamic_cast< CTFWeaponBase * >( GetOriginalLauncher() );
 	if ( pWeapon )
 	{
 		ownerWeaponDefIndex = pWeapon->GetAttributeContainer()->GetItem()->GetItemDefIndex();
+
+		CALL_ATTRIB_HOOK_INT_ON_OTHER( pWeapon, iNoSelfBlastDamage, no_self_blast_dmg );
+		if ( iNoSelfBlastDamage )
+		{
+			iCustomParticleIndex = GetParticleSystemIndex( "ExplosionCore_Wall_Jumper" );
+		}
 	}
 	
 	int iLargeExplosion = 0;
@@ -495,18 +503,7 @@ void CTFBaseRocket::Explode( trace_t *pTrace, CBaseEntity *pOther )
 			// Rocket Specialist
 			CheckForStunOnImpact( pTarget );
 
-			if ( pTarget->GetTeamNumber() != pAttacker->GetTeamNumber() )
-			{
-				IGameEvent *event = gameeventmanager->CreateEvent( "projectile_direct_hit" );
-				if ( event )
-				{
-					event->SetInt( "attacker", pAttacker->entindex() );
-					event->SetInt( "victim", pTarget->entindex() );
-					event->SetInt( "weapon_def_index", ownerWeaponDefIndex );
-
-					gameeventmanager->FireEvent( event, true );
-				}
-			}
+			RecordEnemyPlayerHit( pTarget, true );
 		}
 
 		CTakeDamageInfo info( this, pAttacker, GetOriginalLauncher(), vec3_origin, vecOrigin, GetDamage(), GetDamageType(), GetDamageCustom() );
@@ -514,16 +511,9 @@ void CTFBaseRocket::Explode( trace_t *pTrace, CBaseEntity *pOther )
 		TFGameRules()->RadiusDamage( radiusinfo );
 	}
 
-#if defined( _DEBUG ) && defined( STAGING_ONLY )
-	// Debug!
-	if ( tf_rocket_show_radius.GetBool() )
-	{
-		DrawRadius( flRadius );
-	}
-#endif
 
 	// Don't decal players with scorch.
-	if ( !pOther->IsPlayer() )
+	if ( !pOther->IsPlayer() && ( iNoSelfBlastDamage == 0 ) )
 	{
 		UTIL_DecalTrace( pTrace, "Scorch" );
 	}
@@ -582,59 +572,6 @@ int CTFBaseRocket::GetStunLevel( void )
 	return iRocketSpecialist;
 }
 
-#ifdef STAGING_ONLY
-//-----------------------------------------------------------------------------
-// Purpose:
-//-----------------------------------------------------------------------------
-void CTFBaseRocket::DrawRadius( float flRadius )
-{
-	Vector pos = GetAbsOrigin();
-	int r = 255;
-	int g = 0, b = 0;
-	float flLifetime = 10.0f;
-	bool bDepthTest = true;
-
-	Vector edge, lastEdge;
-	NDebugOverlay::Line( pos, pos + Vector( 0, 0, 50 ), r, g, b, !bDepthTest, flLifetime );
-
-	lastEdge = Vector( flRadius + pos.x, pos.y, pos.z );
-	float angle;
-	for( angle=0.0f; angle <= 360.0f; angle += 22.5f )
-	{
-		edge.x = flRadius * cos( DEG2RAD( angle ) ) + pos.x;
-		edge.y = pos.y;
-		edge.z = flRadius * sin( DEG2RAD( angle ) ) + pos.z;
-
-		NDebugOverlay::Line( edge, lastEdge, r, g, b, !bDepthTest, flLifetime );
-
-		lastEdge = edge;
-	}
-
-	lastEdge = Vector( pos.x, flRadius + pos.y, pos.z );
-	for( angle=0.0f; angle <= 360.0f; angle += 22.5f )
-	{
-		edge.x = pos.x;
-		edge.y = flRadius * cos( DEG2RAD( angle ) ) + pos.y;
-		edge.z = flRadius * sin( DEG2RAD( angle ) ) + pos.z;
-
-		NDebugOverlay::Line( edge, lastEdge, r, g, b, !bDepthTest, flLifetime );
-
-		lastEdge = edge;
-	}
-
-	lastEdge = Vector( pos.x, flRadius + pos.y, pos.z );
-	for( angle=0.0f; angle <= 360.0f; angle += 22.5f )
-	{
-		edge.x = flRadius * cos( DEG2RAD( angle ) ) + pos.x;
-		edge.y = flRadius * sin( DEG2RAD( angle ) ) + pos.y;
-		edge.z = pos.z;
-
-		NDebugOverlay::Line( edge, lastEdge, r, g, b, !bDepthTest, flLifetime );
-
-		lastEdge = edge;
-	}
-}
-#endif
 
 //-----------------------------------------------------------------------------
 // Purpose: 
@@ -703,7 +640,7 @@ CBaseEntity *CTFBaseRocket::GetOwnerPlayer( void ) const
 //-----------------------------------------------------------------------------
 // Receive the BreakModelRocketDud user message
 //-----------------------------------------------------------------------------
-void __MsgFunc_BreakModelRocketDud( bf_read &msg )
+USER_MESSAGE( BreakModelRocketDud )
 {
 	int nModelIndex = (int)msg.ReadShort();
 	CUtlVector<breakmodel_t>	aGibs;

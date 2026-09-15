@@ -75,9 +75,6 @@ private:
 	void UpdateCreditSpend();
 	void UpdatePopFile();
 
-#ifdef STAGING_ONLY
-	void WritePlayerScoreStats( void );
-#endif // STAGING_ONLY
 
 	bool m_bInitialized;
 	char m_popfile[ MAX_PATH ];

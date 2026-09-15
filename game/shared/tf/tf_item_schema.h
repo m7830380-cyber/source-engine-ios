@@ -17,11 +17,14 @@
 #include "tf_shareddefs.h"
 #include "tf_matchmaking_shared.h"
 
-#ifndef GC_DLL
 #include "util_shared.h"
-#endif
 
-const char *UTIL_GetRandomSoundFromEntry( const char *pszSoundEntryName );
+class CQuestMapDefinition;
+class CQuestMapNodeDefinition;
+class CQuest;
+class CQuestThemeDefinition;
+class CQuestObjectiveConditionsDefinition;
+class CQuestDefinition;
 
 const int k_iMvmMissionIndex_Any = -1;
 const int k_iMvmMissionIndex_NotInSchema = -2;
@@ -44,7 +47,7 @@ public:
 	void AddString( const char *pszString, int nChance );
 	const char *GetRandomString() const;
 
-private:
+//private:
 	CUtlVector< std::pair< const char *, int > > m_vecChoices;
 	int			m_unTotalChance;
 };
@@ -117,15 +120,22 @@ public:
 		return m_vecTauntInputRemap[iButtonIndex];
 	}
 
+	int GetTauntPropInputRemapCount() const { return m_vecTauntPropInputRemap.Count(); }
+	const TauntInputRemap_t &GetTauntPropInputRemapScene( int iButtonIndex ) const
+	{
+		return m_vecTauntPropInputRemap[ iButtonIndex ];
+	}
+
 private:
 
-	bool InitTauntInputRemap( KeyValues *pKV, CUtlVector<CUtlString> *pVecErrors );
+	bool InitTauntInputRemap( KeyValues *pKV, CUtlVector<TauntInputRemap_t>( &outputArray ), CUtlVector<CUtlString> *pVecErrors );
 
 	CUtlVector< const char* >	m_vecIntroScenes[LOADOUT_COUNT];
 	CUtlVector< const char* >	m_vecOutroScenes[LOADOUT_COUNT];
 	CUtlVector< const char* >	m_vecPartnerTauntInitiatorScenes[LOADOUT_COUNT];
 	CUtlVector< const char* >	m_vecPartnerTauntReceiverScenes[LOADOUT_COUNT];
 	CUtlVector< TauntInputRemap_t >	m_vecTauntInputRemap;
+	CUtlVector< TauntInputRemap_t >	m_vecTauntPropInputRemap;
 	const char		*m_pszProp[LOADOUT_COUNT];
 	const char		*m_pszPropIntroScene[LOADOUT_COUNT];
 	const char		*m_pszPropOutroScene[LOADOUT_COUNT];
@@ -141,55 +151,7 @@ private:
 	float			m_flCameraDistUp;
 };
 
-class CQuestThemeDefinition
-{
-public:
 
-	CQuestThemeDefinition( void );
-	virtual ~CQuestThemeDefinition( void );
-
-	bool BInitFromKV( KeyValues *pKVItem, CUtlVector<CUtlString> *pVecErrors = NULL );
-
-	const char *GetName() const { return m_pszName; }
-
-	const char *GetNotificationResFile() const { return m_pszNotificationRes; }
-	const char *GetQuestItemResFile() const { return m_pszQuestItemRes; }
-	const char *GetInGameTrackerResFile() const { return m_pszInGameTrackerRes; }
-	unacknowledged_item_inventory_positions_t GetUnackPos() const { return m_eUnackPos; }
-
-#ifndef GC_DLL
-	const char *GetGiveSoundForClass( int iClass ) const { return UTIL_GetRandomSoundFromEntry( m_vecGiveStrings[ iClass ].GetRandomString() ); }
-	const char *GetCompleteSoundForClass( int iClass ) const { return UTIL_GetRandomSoundFromEntry( m_vecCompleteStrings[ iClass ].GetRandomString() ); }
-	const char *GetFullyCompleteSoundForClass( int iClass ) const { return UTIL_GetRandomSoundFromEntry( m_vecFullyCompleteStrings[ iClass ].GetRandomString() ); }
-	const char *GetDiscardSound() const { return UTIL_GetRandomSoundFromEntry( m_pszDiscardString ); }
-	const char *GetRewardSound() const { return UTIL_GetRandomSoundFromEntry( m_pszRewardString ); }
-	const char *GetRevealSound() const { return UTIL_GetRandomSoundFromEntry( m_pszOnRevealText ); }
-#endif
-
-private:
-
-	KeyValues *m_pRawKVs;
-
-	const char *m_pszName;
-
-	// UI
-	const char* m_pszNotificationRes;
-	const char* m_pszQuestItemRes;
-	const char* m_pszInGameTrackerRes;
-	unacknowledged_item_inventory_positions_t m_eUnackPos;
-
-	// Sounds
-	CRandomChanceString m_vecGiveStrings[LOADOUT_COUNT]; // Per class
-	CRandomChanceString m_vecCompleteStrings[LOADOUT_COUNT]; // Per class
-	CRandomChanceString m_vecFullyCompleteStrings[LOADOUT_COUNT]; // Per class
-	const char* m_pszRewardString;
-	const char* m_pszDiscardString;
-	const char* m_pszOnRevealText;
-};
-
-typedef CUtlVector< const class CTFQuestObjectiveDefinition* > QuestObjectiveDefVec_t;
-typedef CUtlVector< const char * > QuestDescriptionVec_t;
-typedef CUtlVector< const char * > QuestNameVec_t;
 
 //-----------------------------------------------------------------------------
 // CTFRequiredQuestItemsSet
@@ -210,57 +172,7 @@ private:
 	item_definition_index_t m_LoanerItemDef;
 };
 
-//-----------------------------------------------------------------------------
-// CQuestDefinition
-//-----------------------------------------------------------------------------
-class CQuestDefinition
-{
-public:
 
-	CQuestDefinition( void );
-
-	bool BInitFromKV( KeyValues *pKVItem, CUtlVector<CUtlString> *pVecErrors = NULL );
-
-	uint32 GetMaxStandardPoints() const { return m_nMaxStandardPoints; }
-	uint32 GetMaxBonusPoints() const { return m_nMaxBonusPoints; }
-	const char *GetRewardLootlistName() const { return m_pszRewardLootlistName; }
-	const char *GetQuickplayMapName() const { return m_pszQuickplayMapName; }
-
-	const char *GetMatchmakingGroupName() const { return m_strMatchmakingGroupName.Get(); }
-	const char *GetMatchmakingCategoryName() const { return m_strMatchmakingCategoryName.Get(); }
-	const char *GetMatchmakingMapName() const { return m_strMatchmakingMapName.Get(); }
-
-	const QuestObjectiveDefVec_t& GetObjectives() const { return m_vecObjectiveDefinitions; }
-	void GetRolledObjectivesForItem( QuestObjectiveDefVec_t& vecRolledObjectives, const CEconItem* pItem ) const;
-	const CQuestThemeDefinition *GetQuestTheme() const;
-	const char *GetRolledDescriptionForItem( const CEconItem* pItem ) const;
-	const char *GetRolledNameForItem( const CEconItem* pItem ) const;
-	const char *GetCorrespondingOperationName() const { return m_pszCorrespondingOperationName; }
-
-	const CUtlVector< CTFRequiredQuestItemsSet >& GetRequiredItemSets() const { return m_vecRequiredItemSets; }
-
-private:
-
-	QuestObjectiveDefVec_t m_vecObjectiveDefinitions;
-	uint32 m_nMaxStandardPoints;
-	uint32 m_nMaxBonusPoints;
-	const char *m_pszRewardLootlistName;
-	uint16 m_nNumObjectivesToRoll;
-	const char *m_pszQuestThemeName;
-	const char *m_pszCorrespondingOperationName;
-	const char *m_pszQuickplayMapName;
-
-	CUtlString m_strMatchmakingGroupName;
-	CUtlString m_strMatchmakingCategoryName;
-	CUtlString m_strMatchmakingMapName;
-
-	QuestDescriptionVec_t m_vecQuestDescriptions;
-	QuestNameVec_t m_vecQuestNames;
-	CEconItemDefinition *m_pOperationBadgeDef;
-
-	// loaner items for this quest
-	CUtlVector< CTFRequiredQuestItemsSet > m_vecRequiredItemSets;
-};
 
 //-----------------------------------------------------------------------------
 // Wars
@@ -306,11 +218,11 @@ private:
 	RTime32 m_rtTimeEnd;
 	war_definition_index_t m_nDefIndex;
 };
-typedef CUtlMap< war_definition_index_t, CWarDefinition* > WarDefinitionMap_t;
+typedef CUtlMap< war_definition_index_t, const CWarDefinition* > WarDefinitionMap_t;
 
 const char *GetPlayerClassName( int iClass );
 const char *GetPlayerClassLocalizationKey( int iClass );
-itemid_t GetAssociatedQuestItemID( const IEconItemInterface *pEconItem );
+itemid_t GetAssociatedQuestID( const IEconItemInterface *pEconItem );
 
 class CTFItemDefinition : public CEconItemDefinition
 {
@@ -342,7 +254,6 @@ public:
 
 	// Class & Slot handling
 	int			GetDefaultLoadoutSlot( void ) const { return m_iDefaultLoadoutSlot; }
-	int			GetAccountLoadoutSlot( void ) const { return m_iDefaultLoadoutSlot; }
 	const CBitVec<LOADOUT_COUNT> *GetClassUsability( void ) const { return &m_vbClassUsability; }
 	void		FilloutSlotUsage( CBitVec<LOADOUT_COUNT> *pBV ) const;
 	bool		CanBeUsedByClass( int iClass ) const { return iClass == GEconItemSchema().GetAccountIndex() ? m_eEquipType == EQUIP_TYPE_ACCOUNT : m_vbClassUsability.IsBitSet( iClass ); }
@@ -353,23 +264,20 @@ public:
 	virtual const char	*GetPlayerDisplayModelAlt( int iClass = 0 ) const	{ Assert( iClass >= 0 && iClass < LOADOUT_COUNT ); return m_pszPlayerDisplayModelAlt[iClass]; }
 
 	int			GetLoadoutSlot( int iLoadoutClass ) const;
-#ifndef GC_DLL
 	bool		IsAWearable() const;
 	bool		IsContentStreamable() const;
 	const char* GetAdTextToken() const { return m_pszAdText; }
 	const char* GetAdResFile() const { return m_pszAdResFile; }
-#endif // !GC_DLL
+	const CUtlVector< uint32 >& GetValidPaintkits() const;
 
 	CTFTauntInfo *GetTauntData() const { return m_pTauntData; }
 
-	const CQuestDefinition *GetQuestDef() const { return m_pQuestData; }
-
-	KeyValues *GetPaintKitWearDefinition( int nWear ) const;
-	const char *GetPaintKitName( ) const;
-
 #ifdef CLIENT_DLL
 	bool		HasDetailedIcon() const { return m_bHasDetailedIcon; }
+	bool		CanBackpackInspect() const { return m_bCanBackpackInspect; }
 #endif // CLIENT_DLL
+
+	bool		IsChanceRestricted() const { return m_bChanceRestricted; }
 
 private:
 	void InternalInitialize();
@@ -381,25 +289,25 @@ private:
 	// taunt item data
 	CTFTauntInfo	*m_pTauntData;
 
-	// Quest data
-	CQuestDefinition *m_pQuestData;
-
 	// The .mdl file used for this item when it's being carried by a player.
 	const char		*m_pszPlayerDisplayModel[LOADOUT_COUNT];
 	const char		*m_pszPlayerDisplayModelAlt[LOADOUT_COUNT];
 
-#ifndef GC_DLL
 	const char* m_pszAdText;
 	const char* m_pszAdResFile;
-#endif
 
 	// Specifies which class can use this item.
 	CBitVec<LOADOUT_COUNT> m_vbClassUsability;
 	int				m_iLoadoutSlots[LOADOUT_COUNT];		// Slot that each class places the item into.
 	EEquipType_t	m_eEquipType;
+	bool			m_bChanceRestricted = false;
+
+	mutable CUtlVector< uint32 > m_vecValidPaintkitDefs;
+	mutable bool m_bValidPaintkitsGenerated;
 
 #ifdef CLIENT_DLL
 	bool			m_bHasDetailedIcon;
+	bool			m_bCanBackpackInspect;
 #endif // CLIENT_DLL
 };
 
@@ -442,59 +350,7 @@ private:
 	bool CheckSubItemListAgainstBackpack( CUtlVector<CEconItem*> *vecCraftingItems, CUtlVector<uint64> *vecChosenItems ) const;
 };
 
-typedef uint32 ObjectiveConditionDefIndex_t;
-const ObjectiveConditionDefIndex_t INVALID_QUEST_OBJECTIVE_CONDITIONS_INDEX = ObjectiveConditionDefIndex_t(-1);
 
-//-----------------------------------------------------------------------------
-// CTFQuestObjectiveConditionsDefinition
-// These contain the actual logic that can be used by multiple objectives.
-//-----------------------------------------------------------------------------
-class CTFQuestObjectiveConditionsDefinition
-{
-public:
-	CTFQuestObjectiveConditionsDefinition( void );
-	virtual ~CTFQuestObjectiveConditionsDefinition( void );
-
-	virtual bool BInitFromKV( KeyValues *pKVItem, CUtlVector<CUtlString> *pVecErrors = NULL );
-	bool BPostInit( CUtlVector<CUtlString> *pVecErrors = NULL );
-
-	ObjectiveConditionDefIndex_t GetDefIndex() const { return m_nDefIndex; }
-#ifndef GC_DLL
-	KeyValues *GetKeyValues() const { return m_pConditionsKey; }
-#endif
-
-	const CUtlVector< CTFRequiredQuestItemsSet >& GetRequiredItemSets() const { return m_vecRequiredItemSets; }
-
-private:
-	ObjectiveConditionDefIndex_t m_nDefIndex;
-#ifndef GC_DLL
-	KeyValues  *m_pConditionsKey;
-#endif
-	
-	CUtlVector< CTFRequiredQuestItemsSet > m_vecRequiredItemSets;
-};
-
-
-//-----------------------------------------------------------------------------
-// CQuestObjectiveDefinition
-//-----------------------------------------------------------------------------
-class CTFQuestObjectiveDefinition : public CQuestObjectiveDefinition
-{
-public:
-
-	CTFQuestObjectiveDefinition( void );
-	virtual ~CTFQuestObjectiveDefinition( void );
-
-	virtual bool BInitFromKV( KeyValues *pKVItem, CUtlVector<CUtlString> *pVecErrors = NULL ) OVERRIDE;
-
-#ifndef GC_DLL
-	KeyValues *GetConditionsKeyValues() const;
-#endif
-	const CTFQuestObjectiveConditionsDefinition* GetConditions() const;
-
-private:
-	ObjectiveConditionDefIndex_t m_nConditionDefIndex;
-};
 
 
 //-----------------------------------------------------------------------------
@@ -552,10 +408,6 @@ struct MvMTour_t
 	CUtlConstString m_sTourNameLocalizationToken; // Localization tag starting with '#', shown to clients
 	CUtlConstString m_sLootImageName;
 	const CEconItemDefinition *m_pBadgeItemDef; // can be NULL if there is no badge reward. Implies all badge slots will be -1. Only really valid for practice tours.
-#ifdef GC
-	const CEconLootListDefinition *m_pMissionCompleteLootList; // can be NULL, but really only makes sense if there is no badge reward.
-	const CEconLootListDefinition *m_pTourCompleteLootList;	// can be NULL, but really only makes sense if there is no badge reward.
-#endif
 	CCopyableUtlVector<MvMTourMission_t> m_vecMissions; // indexes into the schema's challenge list
 	uint32 m_nAllChallengesBits;
 	EMvMChallengeDifficulty m_eDifficulty;
@@ -588,6 +440,8 @@ enum EGameCategory
 	kGameCategory_Competitive_6v6,
 	kGameCategory_Other,
 	kGameCategory_Halloween,
+	kGameCategory_Competitive_12v12,
+	kGameCategory_Christmas,
 
 	// Note: Don't reorder this list.  Only add to the end
 
@@ -613,6 +467,7 @@ enum EMatchmakingGroupType
 	kMatchmakingType_Core,
 	kMatchmakingType_Alternative,
 	kMatchmakingType_Competitive_6v6,
+	kMatchmakingType_Competitive_12v12,
 
 	kMatchmakingTypeCount
 };
@@ -800,7 +655,7 @@ struct SchemaMMGroup_t
 	const char*								m_pszName;
 	const char*								m_pszLocalizedName;
 	int										m_nMaxExcludes;
-	CBitVec<k_nMatchGroup_Count>			m_bitsValidMMGroups;
+	CBitVec<ETFMatchGroup_ARRAYSIZE>		m_bitsValidMMGroups;
 	CUtlVector< const SchemaGameCategory_t* >	m_vecModes;
 };
 typedef CUtlMap< EMatchmakingGroupType, SchemaMMGroup_t* > MMGroupMap_t;
@@ -826,9 +681,7 @@ public:
 		return (CTFCraftingRecipeDefinition *)GetRecipeDefinition( iRecipeIndex );
 	}
 
-	const CQuestThemeDefinition *GetQuestThemeByName( const char *pszDefName ) const;
-	const CUtlMap<const char*, CQuestThemeDefinition*, int >& GetQuestThemes() const { return m_mapQuestThemes; }
-	const CTFQuestObjectiveConditionsDefinition* GetQuestObjectiveConditionByDefIndex( ObjectiveConditionDefIndex_t nDefIndex );
+	const CQuestObjectiveConditionsDefinition* GetQuestObjectiveConditionByDefIndex( ObjectiveConditionDefIndex_t nDefIndex ) const;
 
 	const CWarDefinition *GetWarDefinitionByIndex( war_definition_index_t nDefIndex ) const;
 	const CWarDefinition *GetWarDefinitionByName( const char* pszDefName ) const;
@@ -890,21 +743,21 @@ public:
 	const MMGroupMap_t& GetMMGroupMap() const { return m_mapMMGroups; }
 	const SchemaMMGroup_t* GetMMGroup( EMatchmakingGroupType eCat ) const;
 
+
 public:
 	// CEconItemSchema interface.
 	virtual CEconItemDefinition				*CreateEconItemDefinition()			{ return new CTFItemDefinition; }
 	virtual CEconCraftingRecipeDefinition	*CreateCraftingRecipeDefinition()	{ return new CTFCraftingRecipeDefinition; }
 	virtual CEconStyleInfo					*CreateEconStyleInfo()				{ return new CTFStyleInfo; }
-	virtual CQuestObjectiveDefinition		*CreateQuestDefinition()			{ return new CTFQuestObjectiveDefinition; }
 
 	virtual bool							 BCanStrangeFilterApplyToStrangeSlotInItem( uint32 /*strange_event_restriction_t*/ unRestrictionType, uint32 unRestrictionValue, const IEconItemInterface *pItem, int iStrangeSlot, uint32 *out_pOptionalScoreType ) const;
 
 	virtual IEconTool						*CreateEconToolImpl( const char *pszToolType, const char *pszUseString, const char *pszUsageRestriction, item_capabilities_t unCapabilities, KeyValues *pUsageKV ) OVERRIDE;
 
-	virtual bool BInitSchema( KeyValues *pKVRawDefinition, CUtlVector<CUtlString> *pVecErrors = NULL );
+	virtual bool BInitSchema( KeyValues *pKVRawDefinition, CUtlVector<CUtlString> *pVecErrors = NULL ) OVERRIDE;
+	virtual bool BPostSchemaInit( CUtlVector<CUtlString> *pVecErrors ) OVERRIDE;
 
 	virtual RTime32 GetCustomExpirationDate( const char *pszExpirationDate ) const OVERRIDE;
-
 protected:
 #ifdef TF_CLIENT_DLL
 	virtual int CalculateNumberOfConcreteItems( const CEconItemDefinition *pItemDef );
@@ -918,12 +771,12 @@ private:
 	bool BInitGameModes( KeyValues *pKVMaps, CUtlVector<CUtlString> *pVecErrors );
 	bool BInitMaps( KeyValues *pKVMaps, CUtlVector<CUtlString> *pVecErrors );
 	bool BInitMMCategories( KeyValues *pKVCategories, CUtlVector<CUtlString> *pVecErrors );
-	bool BInitQuestThemes( KeyValues *pKVThemes, CUtlVector<CUtlString> *pVecErrors );
 	bool BInitQuestObjectiveConditions( KeyValues *pKVConditionsBlock, CUtlVector<CUtlString> *pVecErrors );
 	bool BObjectiveConditionsPostInit( CUtlVector<CUtlString> *pVecErrors );
 	bool BInitWarDefs( KeyValues *pKVWarDefs, CUtlVector<CUtlString> *pVecErrors );
 
 	bool BPostInitMaps( CUtlVector<CUtlString> *pVecErrors );
+
 
 	CUtlVector<const char *> m_vecClassUsabilityStrings;
 	CUtlVector<const char *> m_vecClassLoadoutStrings;
@@ -935,14 +788,13 @@ private:
 	CUtlVector<MvMMap_t> m_vecMvMMaps;
 	CUtlVector<MvMMission_t> m_vecMvMMissions;
 	CUtlVector<MvMTour_t> m_vecMvMTours;
-	// Contains the list of the quest themes
-	CUtlMap<const char*, CQuestThemeDefinition*, int > m_mapQuestThemes;
-	CUtlMap< ObjectiveConditionDefIndex_t, CTFQuestObjectiveConditionsDefinition* > m_mapQuestObjectiveConditions;
+	CUtlMap< ObjectiveConditionDefIndex_t, CQuestObjectiveConditionsDefinition* > m_mapQuestObjectiveConditions;
 
 	CUtlVector<MapDef_t*> m_vecMasterListOfMaps;
 	GameCategoryMap_t m_mapGameCategories;
 	MMGroupMap_t m_mapMMGroups;
 	WarDefinitionMap_t m_mapWars;
+
 };
 
 #endif // TFITEMSCHEMA_H

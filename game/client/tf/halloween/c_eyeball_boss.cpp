@@ -11,9 +11,6 @@
 
 #undef NextBot
 
-#ifdef STAGING_ONLY
-static ConVar cl_eyeball_boss_debug( "cl_eyeball_boss_debug", "0" );
-#endif
 
 
 //-----------------------------------------------------------------------------
@@ -174,16 +171,6 @@ void C_EyeballBoss::ClientThink( void )
 	Vector myForward, myRight, myUp;
 	AngleVectors( m_myAngles, &myForward, &myRight, &myUp );
 
-#ifdef STAGING_ONLY
-	if ( cl_eyeball_boss_debug.GetBool() )
-	{
-		QAngle myAbsAngles = GetAbsAngles();
-
-		DevMsg( "%3.2f: EYEBALL BEFORE AIM m_myAngles( %f, %f, %f ), myForward( %f, %f, %f ), GetAbsAngles( %f, %f, %f )\n", 
-				gpGlobals->curtime, m_myAngles.x, m_myAngles.y, m_myAngles.z, myForward.x, myForward.y, myForward.z,
-				myAbsAngles.x, myAbsAngles.y, myAbsAngles.z );
-	}
-#endif
 
 	const float myApproachRate = 3.0f; // 1.0f;
 
@@ -199,16 +186,6 @@ void C_EyeballBoss::ClientThink( void )
 	SetAbsAngles( myNewAngles );
 	m_myAngles = myNewAngles;
 
-#ifdef STAGING_ONLY
-	if ( cl_eyeball_boss_debug.GetBool() )
-	{
-		QAngle myAbsAngles = GetAbsAngles();
-
-		DevMsg( "%3.2f: EYEBALL AFTER AIM m_myAngles( %f, %f, %f ), myForward( %f, %f, %f ), GetAbsAngles( %f, %f, %f )\n", 
-				gpGlobals->curtime, m_myAngles.x, m_myAngles.y, m_myAngles.z, myForward.x, myForward.y, myForward.z,
-				myAbsAngles.x, myAbsAngles.y, myAbsAngles.z );
-	}
-#endif
 
 
 	// set pose parameters to aim pupil directly at target

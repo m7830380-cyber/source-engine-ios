@@ -461,6 +461,14 @@ void CNPC_MetroPolice::NotifyDeadFriend( CBaseEntity* pFriend )
 	m_Sentences.Speak( "METROPOLICE_MAN_DOWN", SENTENCE_PRIORITY_MEDIUM );
 }
 
+
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+CNPC_MetroPolice::CNPC_MetroPolice()
+{
+}
+
+
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
@@ -2975,7 +2983,7 @@ bool CNPC_MetroPolice::HandleInteraction(int interactionType, void *data, CBaseC
 
 	if ( interactionType == g_interactionMetrocopIdleChatter )
 	{
-		m_nIdleChatterType = (intp)data;
+		m_nIdleChatterType = (int)(intp)data;
 		return true;
 	}
 

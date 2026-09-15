@@ -32,6 +32,7 @@ CTFVideoPanel::CTFVideoPanel( vgui::Panel *parent, const char *panelName ) : Vid
 
 	m_flStartAnimDelay = 0.0f;
 	m_flEndAnimDelay = 0.0f;
+	m_bLoop = false;
 }
 
 //-----------------------------------------------------------------------------
@@ -67,6 +68,7 @@ void CTFVideoPanel::ApplySettings( KeyValues *inResourceData )
 	SetExitCommand( inResourceData->GetString( "command", "" ) );
 	m_flStartAnimDelay = inResourceData->GetFloat( "start_delay", 0.0 );
 	m_flEndAnimDelay = inResourceData->GetFloat( "end_delay", 0.0 );
+	m_bLoop = inResourceData->GetBool( "loop", false );
 }
 
 //-----------------------------------------------------------------------------
@@ -109,4 +111,19 @@ void CTFVideoPanel::Shutdown()
 {
 	OnClose();
 	ReleaseVideo();
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+bool CTFVideoPanel::BeginPlayback( const char *pFilename )
+{
+	bool bSuccess = BaseClass::BeginPlayback( pFilename );
+
+	if ( m_VideoMaterial && m_bLoop )
+	{
+		m_VideoMaterial->SetLooping( true );
+	}
+
+	return bSuccess;
 }

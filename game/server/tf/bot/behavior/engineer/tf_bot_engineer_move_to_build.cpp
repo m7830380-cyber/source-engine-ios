@@ -323,20 +323,17 @@ ActionResult< CTFBot >	CTFBotEngineerMoveToBuild::OnStart( CTFBot *me, Action< C
 //---------------------------------------------------------------------------------------------
 ActionResult< CTFBot >	CTFBotEngineerMoveToBuild::Update( CTFBot *me, float interval )
 {
-	if ( me->WasPointJustLost() )
+	if ( m_fallBackTimer.HasStarted() )
 	{
-		if ( m_fallBackTimer.HasStarted() )
+		if ( m_fallBackTimer.IsElapsed() )
 		{
-			if ( m_fallBackTimer.IsElapsed() )
-			{
-				SelectBuildLocation( me );
-				m_fallBackTimer.Invalidate();
-			}
-			else
-			{
-				// wait a moment while we decide where to build near fallback point
-				return Continue();
-			}
+			SelectBuildLocation( me );
+			m_fallBackTimer.Invalidate();
+		}
+		else
+		{
+			// wait a moment while we decide where to build near fallback point
+			return Continue();
 		}
 	}
 
@@ -361,7 +358,8 @@ ActionResult< CTFBot >	CTFBotEngineerMoveToBuild::Update( CTFBot *me, float inte
 	}
 
 	// offensive engineers need to place a forward teleporter
-	if ( TFGameRules()->GetGameType() == TF_GAMETYPE_CP && !TFGameRules()->IsInKothMode() && me->GetTeamNumber() == TF_TEAM_BLUE )
+	if ( ( TFGameRules()->IsAttackDefenseMode() && me->GetTeamNumber() == TF_TEAM_BLUE ) ||
+		 ( TFGameRules()->GetGameType() == TF_GAMETYPE_CP && !TFGameRules()->IsAttackDefenseMode() && !TFGameRules()->IsInKothMode() ) )
 	{
 		CObjectTeleporter *myTeleportExit = (CObjectTeleporter *)me->GetObjectOfType( OBJ_TELEPORTER, MODE_TELEPORTER_EXIT );
 		int myTeam = me->GetTeamNumber();
@@ -496,6 +494,15 @@ EventDesiredResult< CTFBot > CTFBotEngineerMoveToBuild::OnMoveToFailure( CTFBot 
 
 //---------------------------------------------------------------------------------------------
 EventDesiredResult< CTFBot > CTFBotEngineerMoveToBuild::OnTerritoryLost( CTFBot *me, int territoryID )
+{
+	// we have to wait a moment until contested point changes to select a new build spot
+	m_fallBackTimer.Start( 0.2f );
+
+	return TryContinue();
+}
+
+//---------------------------------------------------------------------------------------------
+EventDesiredResult< CTFBot > CTFBotEngineerMoveToBuild::OnTerritoryCaptured( CTFBot *me, int territoryID )
 {
 	// we have to wait a moment until contested point changes to select a new build spot
 	m_fallBackTimer.Start( 0.2f );

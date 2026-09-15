@@ -101,9 +101,9 @@ bool CRestartGameIssue::IsEnabled( void )
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-bool CRestartGameIssue::CanCallVote( int iEntIndex, const char *pszDetails, vote_create_failed_t &nFailCode, int &nTime )
+bool CRestartGameIssue::RequestCallVote( int iEntIndex, const char *pszDetails, vote_create_failed_t &nFailCode, int &nTime )
 {
-	if( !CBaseTFIssue::CanCallVote( iEntIndex, pszDetails, nFailCode, nTime ) )
+	if( !CBaseTFIssue::RequestCallVote( iEntIndex, pszDetails, nFailCode, nTime ) )
 		return false;
 
 	if( !IsEnabled() )
@@ -146,14 +146,13 @@ void CRestartGameIssue::ListIssueDetails( CBasePlayer *pForWhom )
 //-----------------------------------------------------------------------------
 // Purpose: Kick Player Issue
 //-----------------------------------------------------------------------------
-ConVar sv_vote_issue_kick_allowed( "sv_vote_issue_kick_allowed", "0", FCVAR_NONE, "Can players call votes to kick players from the server?" );
+ConVar sv_vote_issue_kick_allowed( "sv_vote_issue_kick_allowed", "0", FCVAR_REPLICATED, "Can players call votes to kick players from the server?" );
 ConVar sv_vote_issue_kick_allowed_mvm( "sv_vote_issue_kick_allowed_mvm", "1", FCVAR_NONE, "Can players call votes to kick players from the server in MvM?" );
 ConVar sv_vote_kick_ban_duration( "sv_vote_kick_ban_duration", "20", FCVAR_NONE, "The number of minutes a vote ban should last. (0 = Disabled)" );
 ConVar sv_vote_issue_kick_min_connect_time_mvm( "sv_vote_issue_kick_min_connect_time_mvm", "300", FCVAR_NONE, "How long a player must be connected before they can be kicked (in seconds)." );
 ConVar sv_vote_issue_kick_spectators_mvm( "sv_vote_issue_kick_spectators_mvm", "1", FCVAR_NONE, "Allow players to kick spectators in MvM." );
 ConVar sv_vote_issue_kick_namelock_duration( "sv_vote_issue_kick_namelock_duration", "120", FCVAR_NONE, "How long to prevent kick targets from changing their name (in seconds)." );
 ConVar sv_vote_issue_kick_limit_mvm( "sv_vote_issue_kick_limit_mvm", "0", FCVAR_HIDDEN, "The maximum number of kick votes a player can call during an MvM mission started by matchmaking. (0 = disabled)" );
-ConVar sv_vote_issue_kick_limit_gc( "sv_vote_issue_kick_limit_gc", "0", FCVAR_HIDDEN, "Ask the GC if a kick vote can be called by this player.  Official servers only." );
 
 //-----------------------------------------------------------------------------
 // Purpose: 
@@ -162,9 +161,10 @@ void CKickIssue::Init( void )
 {
 	m_szTargetPlayerName[0] = 0;
 	m_hPlayerTarget = NULL;
-	m_unKickReason = kVoteKickBanPlayerReason_Other;
+	m_eKickReason = TFVoteKickReason_Other;
 	m_steamIDVoteCaller.Clear();
 	m_steamIDVoteTarget.Clear();
+	m_bSubmittedToMatchSystem = false;
 }
 
 //-----------------------------------------------------------------------------
@@ -174,9 +174,10 @@ void CKickIssue::ExecuteCommand( void )
 {
 	PrintLogData();
 
+	// If we submitted this kick to the match system in ProcessResults, it may have already gone ahead and removed them,
+	// but if we're a mixed mode with ad-hoc players present we want to catch weird cases like the match player left and
+	// rejoined as ad-hoc while it was going on.
 	engine->ServerCommand( CFmtStr( "kickid \"%s\" %s\n", m_steamIDVoteTarget.Render(), g_pszVoteKickString ) );
-
-	GTFGCClientSystem()->MatchPlayerVoteKicked( m_steamIDVoteTarget );
 
 	if ( tf_mm_strict.GetInt() == 1 )
 	{
@@ -195,7 +196,7 @@ void CKickIssue::ExecuteCommand( void )
 	//           if they come back.
 	//
 	// XXX(JohnS): We think the original cause behind this was fixed (connecting-but-not-active race condition)
-	g_voteController->AddPlayerToKickWatchList( m_steamIDVoteTarget, ( sv_vote_kick_ban_duration.GetFloat() * 60.f ) );
+	CVoteController::AddPlayerToKickWatchList( m_steamIDVoteTarget, ( sv_vote_kick_ban_duration.GetFloat() * 60.f ) );
 
 	NotifyGCAdHocKick( true );
 }
@@ -217,29 +218,21 @@ bool CKickIssue::IsEnabled( void )
 //-----------------------------------------------------------------------------
 // Purpose: This gets calle first.  If true, moves on to OnVoteStarted()
 //-----------------------------------------------------------------------------
-bool CKickIssue::CanCallVote( int iEntIndex, const char *pszDetails, vote_create_failed_t &nFailCode, int &nTime )
+bool CKickIssue::RequestCallVote( int iEntIndex, const char *pszDetails, vote_create_failed_t &nFailCode, int &nTime )
 {
-	if ( !CBaseTFIssue::CanCallVote( iEntIndex, pszDetails, nFailCode, nTime ) )
+	if ( !CBaseTFIssue::RequestCallVote( iEntIndex, pszDetails, nFailCode, nTime ) )
 		return false;
 
-	// We were waiting for an answer.  Return it.
-	if ( m_bGCNotified && m_bGCResponded )
-	{
-		if ( !m_bGCApproved )
-		{
-			nFailCode = VOTE_FAILED_KICK_DENIED_BY_GC;
-		}
-
-		bool bReturn = m_bGCApproved;
-
-		m_bGCApproved = false;
-		m_bGCNotified = false;
-		m_bGCResponded = false;
-
-		return bReturn;
-	}
-
 	Init();
+
+	// Lookup caller steamID
+	CTFPlayer *pTFVoteCaller = ToTFPlayer( UTIL_EntityByIndex( iEntIndex ) );
+	if ( !pTFVoteCaller )
+		{ return false; }
+
+	pTFVoteCaller->GetSteamID( &m_steamIDVoteCaller );
+	if ( !m_steamIDVoteCaller.IsValid() || !m_steamIDVoteCaller.BIndividualAccount() )
+		{ return false; }
 
 	if ( !IsEnabled() )
 	{
@@ -268,15 +261,6 @@ bool CKickIssue::CanCallVote( int iEntIndex, const char *pszDetails, vote_create
 		return false;
 	}
 
-	// Store caller steamID
-	CTFPlayer *pTFVoteCaller = ToTFPlayer( UTIL_EntityByIndex( iEntIndex ) );
-	if ( !pTFVoteCaller )
-		return false;
-
-	pTFVoteCaller->GetSteamID( &m_steamIDVoteCaller );
-	if ( !m_steamIDVoteCaller.IsValid() || !m_steamIDVoteCaller.BIndividualAccount() )
-		return false;
-
 	// Store target steamID - if they're not a bot
 	bool bFakeClient = m_hPlayerTarget->IsFakeClient() || m_hPlayerTarget->IsBot();
 	if ( !bFakeClient )
@@ -284,6 +268,32 @@ bool CKickIssue::CanCallVote( int iEntIndex, const char *pszDetails, vote_create
 		m_hPlayerTarget->GetSteamID( &m_steamIDVoteTarget );
 		if ( !m_steamIDVoteTarget.IsValid() || !m_steamIDVoteTarget.BIndividualAccount() )
 			return false;
+	}
+
+	// If we have a match, the match system does special handling of votekicks.
+	if ( GTFGCClientSystem()->GetLiveMatch() )
+	{
+		CTFGCServerSystem::EVoteKickRequest eKickRequest;
+		eKickRequest = GTFGCClientSystem()->PlayerRequestVoteKick( m_steamIDVoteCaller, m_steamIDVoteTarget, m_eKickReason );
+		switch ( eKickRequest )
+		{
+			case CTFGCServerSystem::eVoteKick_Allow:
+			{
+				break; // Continue
+			}
+			case CTFGCServerSystem::eVoteKick_Deny:
+			{
+				nFailCode = VOTE_FAILED_KICK_DENIED_BY_GC;
+				return false;
+			}
+			case CTFGCServerSystem::eVoteKick_Handled:
+			{
+				// Special fail code that tells the vote system we'll handle this -- the match system will start a vote
+				// if allowed later.
+				nFailCode = VOTE_FAILED_REQUEST_HANDLED_BY_ISSUE;
+				return false;
+			}
+		}
 	}
 
 	// MvM
@@ -316,6 +326,7 @@ bool CKickIssue::CanCallVote( int iEntIndex, const char *pszDetails, vote_create
 					// Use this time instead (prevents disconnect avoidance)
 					flTimeConnected = CRTime::RTime32TimeCur() - pMatchPlayerTarget->rtJoinedMatch;
 
+					// TODO Now that we have this piped through the GC maybe it should just be doing this
 					if ( sv_vote_issue_kick_limit_mvm.GetInt() )
 					{
 						if ( pMatchPlayerCaller && pMatchPlayerCaller->nVoteKickAttempts > (uint32)sv_vote_issue_kick_limit_mvm.GetInt() )
@@ -340,9 +351,14 @@ bool CKickIssue::CanCallVote( int iEntIndex, const char *pszDetails, vote_create
 				return true;
 	}
 	
+#ifndef _DEBUG
 	// Don't kick players on other teams
-	if ( pTFVoteCaller->GetTeamNumber() != m_hPlayerTarget->GetTeamNumber() )
+	if ( g_pPlayerResource->GetTeam( pTFVoteCaller->entindex() ) != g_pPlayerResource->GetTeam( m_hPlayerTarget->entindex() ) )
+	{
+		nFailCode = VOTE_FAILED_TEAM_CANT_CALL;
 		return false;
+	}
+#endif // !_DEBUG
 
 	return true;
 }
@@ -353,9 +369,6 @@ bool CKickIssue::CanCallVote( int iEntIndex, const char *pszDetails, vote_create
 void CKickIssue::OnVoteFailed( int iEntityHoldingVote )
 {
 	CBaseTFIssue::OnVoteFailed( iEntityHoldingVote );
-	m_bGCNotified = false;
-	m_bGCApproved = false;
-	m_bGCResponded = false;
 
 	PrintLogData();
 	NotifyGCAdHocKick( false );
@@ -366,10 +379,6 @@ void CKickIssue::OnVoteFailed( int iEntityHoldingVote )
 //-----------------------------------------------------------------------------
  void CKickIssue::OnVoteStarted( void )
  {
-	 m_bGCNotified = false;
-	 m_bGCApproved = false;
-	 m_bGCResponded = false;
-
 	// CanCallVote() should have initialized this
 	if ( !m_hPlayerTarget )
 	{
@@ -388,7 +397,7 @@ void CKickIssue::OnVoteFailed( int iEntityHoldingVote )
 		// Configured to block name changing when targeted for a kick?
 		if ( sv_vote_issue_kick_namelock_duration.GetFloat() > 0 )
 		{
-			g_voteController->AddPlayerToNameLockedList( m_steamIDVoteTarget, sv_vote_issue_kick_namelock_duration.GetFloat(), m_hPlayerTarget->GetUserID() );
+			CVoteController::AddPlayerToNameLockedList( m_steamIDVoteTarget, sv_vote_issue_kick_namelock_duration.GetFloat(), m_hPlayerTarget->GetUserID() );
 		}
 
 		if ( TFGameRules() && TFGameRules()->IsMannVsMachineMode() )
@@ -405,7 +414,9 @@ void CKickIssue::OnVoteFailed( int iEntityHoldingVote )
 	CTFPlayer *pTFVoteTarget = ToTFPlayer( m_hPlayerTarget );
 	if ( pTFVoteTarget && !pTFVoteTarget->IsAwayFromKeyboard() && ( pTFVoteTarget->GetTeamNumber() != TEAM_SPECTATOR ) )
 	{
-		g_voteController->TryCastVote( pTFVoteTarget->entindex(), "Option2" );
+		CVoteController *pVoteController = pTFVoteTarget->GetTeamVoteController();
+		if ( pVoteController )
+			pVoteController->TryCastVote( pTFVoteTarget->entindex(), "Option2" );
 	}
  }
 
@@ -414,12 +425,12 @@ void CKickIssue::OnVoteFailed( int iEntityHoldingVote )
 //-----------------------------------------------------------------------------
 const char *CKickIssue::GetDisplayString( void )
 {
-	switch ( m_unKickReason )
+	switch ( m_eKickReason )
 	{
-	case kVoteKickBanPlayerReason_Other:	return "#TF_vote_kick_player_other";
-	case kVoteKickBanPlayerReason_Cheating:	return "#TF_vote_kick_player_cheating";
-	case kVoteKickBanPlayerReason_Idle:		return "#TF_vote_kick_player_idle";
-	case kVoteKickBanPlayerReason_Scamming:	return "#TF_vote_kick_player_scamming";
+	case TFVoteKickReason_Other:	return "#TF_vote_kick_player_other";
+	case TFVoteKickReason_Cheating:	return "#TF_vote_kick_player_cheating";
+	case TFVoteKickReason_Idle:		return "#TF_vote_kick_player_idle";
+	case TFVoteKickReason_Scamming:	return "#TF_vote_kick_player_scamming";
 	}
 	return "#TF_vote_kick_player_other";
 }
@@ -453,30 +464,64 @@ const char *CKickIssue::GetDetailsString( void )
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: 
+// Purpose: Custom process results -- in match mode, let match system handle
+//          vote kick results
 //-----------------------------------------------------------------------------
-bool CKickIssue::NeedsPermissionFromGC( void )
+CBaseIssue::EVoteAction CKickIssue::ProcessResults( const CUtlVector <const char*> &vecOptions,
+                                                    const int arVoteCountByOption[],
+                                                    const CUtlMap<CSteamID, int> &mapVotesBySteamID,
+                                                    int nHighestCountOption,
+                                                    int nTotalVotes, int nPotentialVoters )
 {
-	if ( sv_vote_issue_kick_limit_gc.GetBool() )
+	//
+	// In match mode, we submit the results to the match system which then records it has a votekick pending.  We then
+	// return eVoteAction_Wait until it has done something with it, and just return pass/fail on this vote based on if
+	// the match system decided to kick them.  In that mode, we just don't do anything in Execute() (it owns the vote
+	// from thereon)
+	//
+	CMatchInfo *pLiveMatch = GTFGCClientSystem()->GetLiveMatch();
+
+	// If they were ever present in the match we want to submit this to the match system, even if they are now dropped,
+	// so it can determine if they should be penalized anyway.  For ad-hoc players, even in match mode, we'll just kick
+	// them ourselves, the match system doesn't need to care.
+	bool bTargetInMatch = pLiveMatch && pLiveMatch->GetMatchDataForPlayer( m_steamIDVoteTarget );
+
+	if ( m_bSubmittedToMatchSystem )
 	{
-		// Ask the GC if this is allowed (unless we've already asked, or the player is AFK - which makes it "free")
-		if ( GTFGCClientSystem()->GetLiveMatch() && !m_bGCNotified )
+		// Submitted to match system and returned wait, see if match system finished handling it
+		if ( GTFGCClientSystem()->BVoteKickPending( m_steamIDVoteTarget ) )
 		{
-			CTFPlayer *pTFVoteTarget = ToTFPlayer( m_hPlayerTarget );
-			if ( !pTFVoteTarget || pTFVoteTarget->IsAwayFromKeyboard() )
-				return false;
-
-			GCSDK::CProtoBufMsg< CMsgGC_TFVoteKickPlayerRequest > msgRequestVote( k_EMsgGCVoteKickPlayerRequest );
-			msgRequestVote.Body().set_account_id( m_steamIDVoteCaller.GetAccountID() );
-			msgRequestVote.Body().set_target_id( pTFVoteTarget->GetSteamIDAsUInt64() );
-			GCClientSystem()->BSendMessage( msgRequestVote );
-
-			m_bGCNotified = true;
-			return true;
+			return eVoteAction_Wait;
+		}
+		else
+		{
+			// No longer a pending vote kick at the match level, see if this guy was kicked or not and pass/fail the
+			// vote based on that.
+			bool bKicked = GTFGCClientSystem()->BPlayerWasVoteKicked( m_steamIDVoteTarget );
+			return bKicked ? eVoteAction_Pass : eVoteAction_Fail;
 		}
 	}
+	else if ( bTargetInMatch )
+	{
+		// See what the default result would be
+		EVoteAction eDefault = CBaseIssue::ProcessResults( vecOptions, arVoteCountByOption, mapVotesBySteamID,
+		                                                   nHighestCountOption, nTotalVotes, nPotentialVoters );
+		bool bWouldPass = ( eDefault == eVoteAction_Pass );
 
-	return false;
+		// Match, but haven't submitted this (first time called, since no other options stall)
+		GTFGCClientSystem()->SubmitVoteKickResults( m_steamIDVoteCaller, m_steamIDVoteTarget,
+		                                            m_eKickReason, mapVotesBySteamID, bWouldPass );
+		m_bSubmittedToMatchSystem = true;
+		// Wait and check back
+		return eVoteAction_Wait;
+	}
+	else
+	{
+		// Non-match player, including possibly an ad-hoc player in a mixed match mode like bootcamp, do the normal
+		// thing
+		return CBaseIssue::ProcessResults( vecOptions, arVoteCountByOption, mapVotesBySteamID, nHighestCountOption,
+		                                   nTotalVotes, nPotentialVoters );
+	}
 }
 
 //-----------------------------------------------------------------------------
@@ -484,6 +529,7 @@ bool CKickIssue::NeedsPermissionFromGC( void )
 //-----------------------------------------------------------------------------
 void CKickIssue::NotifyGCAdHocKick( bool bKickedSuccessfully )
 {
+#if 0 // No longer being collected, see GC job comment
 	if ( m_steamIDVoteCaller.IsValid() && m_steamIDVoteTarget.IsValid() && m_steamIDVoteTarget.BIndividualAccount() )
 	{
 		GCSDK::CProtoBufMsg<CMsgTFVoteKickBanPlayerResult> msg( k_EMsgGCVoteKickBanPlayerResult );
@@ -496,6 +542,7 @@ void CKickIssue::NotifyGCAdHocKick( bool bKickedSuccessfully )
 		msg.Body().set_num_possible_votes( m_iNumPotentialVotes );
 		GCClientSystem()->BSendMessage( msg );
 	}
+#endif // 0 // Disabled
 }
 
 //-----------------------------------------------------------------------------
@@ -515,6 +562,42 @@ void CKickIssue::PrintLogData( void )
 }
 
 //-----------------------------------------------------------------------------
+TFVoteKickReason CKickIssue::ParseKickReason( const char *pszReason )
+{
+	// Look for TFVoteKickReason_foo
+	CFmtStr strEnum( "%s_%s", TFVoteKickReason_descriptor()->name().c_str(), pszReason );
+
+	// TFVoteKickReason_Parse is case sensitive, so search ourselves
+	for ( int idxReason = 0; idxReason < TFVoteKickReason_descriptor()->value_count(); idxReason++ )
+	{
+		const google::protobuf::EnumValueDescriptor *reasonDesc;
+		reasonDesc = TFVoteKickReason_descriptor()->value( idxReason );
+
+		if ( V_stricmp( strEnum.Get(), reasonDesc->name().c_str() ) == 0 )
+		{
+			return (TFVoteKickReason)(reasonDesc->number());
+		}
+	}
+
+	return TFVoteKickReason_Other;
+}
+
+//-----------------------------------------------------------------------------
+const char* CKickIssue::KickReasonString( TFVoteKickReason eReason )
+{
+	// Strip enum_ prefix if relevant
+	CFmtStr strPrefix( "%s_", TFVoteKickReason_descriptor()->name().c_str() );
+	const char *pszName = TFVoteKickReason_Name( eReason ).c_str();
+
+	if ( V_strncmp( pszName, strPrefix.Get(), strPrefix.Length() ) == 0 )
+	{
+		return pszName + strPrefix.Length();
+	}
+
+	return pszName;
+}
+
+//-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
 bool CKickIssue::CreateVoteDataFromDetails( const char *pszDetails )
@@ -527,7 +610,7 @@ bool CKickIssue::CreateVoteDataFromDetails( const char *pszDetails )
 		CUtlString userID;
 		userID.SetDirect( pszDetails, pReasonString - pszDetails );
 		iUserID = atoi( userID );
-		m_unKickReason = GetKickBanPlayerReason( pReasonString );
+		m_eKickReason = ParseKickReason( pReasonString );
 	}
 	else
 	{
@@ -548,7 +631,7 @@ bool CKickIssue::CreateVoteDataFromDetails( const char *pszDetails )
 			return true;
 		}
 	}
-	
+
 	// Otherwise rely on userID
 	if ( iUserID )
 	{
@@ -563,12 +646,61 @@ bool CKickIssue::CreateVoteDataFromDetails( const char *pszDetails )
 //-----------------------------------------------------------------------------
 void CKickIssue::ListIssueDetails( CBasePlayer *pForWhom )
 {
-	if( !sv_vote_issue_kick_allowed.GetBool() )
+	if( !IsEnabled() )
 		return;
 
 	char szBuffer[MAX_COMMAND_LENGTH];
 	Q_snprintf( szBuffer, MAX_COMMAND_LENGTH, "callvote %s <userID>\n", GetTypeString() );
 	ClientPrint( pForWhom, HUD_PRINTCONSOLE, szBuffer );
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+void CKickIssue::OnPlayerDisconnected( CBasePlayer *pPlayer )
+{
+	if ( !pPlayer )
+		return;
+
+	if ( !m_pVoteController )
+		return;
+
+	if ( !IsEnabled() )
+		return;
+
+	if ( !m_pVoteController->IsVoteActive() )
+		return;
+
+	CBaseIssue *pIssue = m_pVoteController->GetCurrentVote();
+	if ( !pIssue || ( pIssue != this ) )
+		return;
+
+	if ( pPlayer != m_hPlayerTarget.Get() )
+	{
+		// remove their vote if they're leaving the server
+		CSteamID steamid;
+		pPlayer->GetSteamID( &steamid );
+		if ( steamid.IsValid() && m_pVoteController->HasPlayerVotedOnCurrentIssue( steamid ) )
+		{
+			m_pVoteController->RemovePlayerVote( steamid );
+		}
+	}
+	else
+	{
+		for ( int iIndex = 1; iIndex <= gpGlobals->maxClients; iIndex++ )
+		{
+			CBasePlayer *pVoter = UTIL_PlayerByIndex( iIndex );
+			if ( pVoter && m_pVoteController->CanTeamCastVote( pVoter->GetTeamNumber() ) && ( pVoter != m_hPlayerTarget.Get() ) && !pVoter->IsFakeClient() )
+			{
+				CSteamID steamidVoter;
+				pVoter->GetSteamID( &steamidVoter );
+				if ( steamidVoter.IsValid() && !m_pVoteController->HasPlayerVotedOnCurrentIssue( steamidVoter ) )
+				{
+					m_pVoteController->TryCastVote( pVoter->entindex(), "Option1" );
+				}
+			}
+		}
+	}
 }
 
 
@@ -611,9 +743,9 @@ bool CChangeLevelIssue::IsEnabled( void )
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-bool CChangeLevelIssue::CanCallVote( int iEntIndex, const char *pszDetails, vote_create_failed_t &nFailCode, int &nTime )
+bool CChangeLevelIssue::RequestCallVote( int iEntIndex, const char *pszDetails, vote_create_failed_t &nFailCode, int &nTime )
 {
-	if( !CBaseTFIssue::CanCallVote( iEntIndex, pszDetails, nFailCode, nTime ) )
+	if( !CBaseTFIssue::RequestCallVote( iEntIndex, pszDetails, nFailCode, nTime ) )
 		return false;
 
 	if( !IsEnabled() )
@@ -799,9 +931,9 @@ bool CNextLevelIssue::IsEnabled( void )
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-bool CNextLevelIssue::CanCallVote( int iEntIndex, const char *pszDetails, vote_create_failed_t &nFailCode, int &nTime )
+bool CNextLevelIssue::RequestCallVote( int iEntIndex, const char *pszDetails, vote_create_failed_t &nFailCode, int &nTime )
 {
-	if( !CBaseTFIssue::CanCallVote( iEntIndex, pszDetails, nFailCode, nTime ) )
+	if( !CBaseTFIssue::RequestCallVote( iEntIndex, pszDetails, nFailCode, nTime ) )
 		return false;
 
 	// TFGameRules created vote
@@ -1002,9 +1134,9 @@ bool CExtendLevelIssue::IsEnabled( void )
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-bool CExtendLevelIssue::CanCallVote( int iEntIndex, const char *pszDetails, vote_create_failed_t &nFailCode, int &nTime )
+bool CExtendLevelIssue::RequestCallVote( int iEntIndex, const char *pszDetails, vote_create_failed_t &nFailCode, int &nTime )
 {
-	if ( !CBaseTFIssue::CanCallVote( iEntIndex, pszDetails, nFailCode, nTime ) )
+	if ( !CBaseTFIssue::RequestCallVote( iEntIndex, pszDetails, nFailCode, nTime ) )
 		return false;
 
 	if ( !IsEnabled() )
@@ -1089,9 +1221,9 @@ bool CScrambleTeams::IsEnabled( void )
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-bool CScrambleTeams::CanCallVote( int iEntIndex, const char *pszDetails, vote_create_failed_t &nFailCode, int &nTime )
+bool CScrambleTeams::RequestCallVote( int iEntIndex, const char *pszDetails, vote_create_failed_t &nFailCode, int &nTime )
 {
-	if( !CBaseTFIssue::CanCallVote( iEntIndex, pszDetails, nFailCode, nTime ) )
+	if( !CBaseTFIssue::RequestCallVote( iEntIndex, pszDetails, nFailCode, nTime ) )
 		return false;
 
 	if( !IsEnabled() )
@@ -1175,7 +1307,7 @@ bool CMannVsMachineChangeChallengeIssue::IsEnabled( void )
 
 	// But prevent on MannUp (Valve) servers
 	CMatchInfo *pMatch = GTFGCClientSystem()->GetMatch();
-	if ( pMatch && pMatch->m_eMatchGroup == k_nMatchGroup_MvM_MannUp )
+	if ( pMatch && pMatch->m_eMatchGroup == k_eTFMatchGroup_MvM_MannUp )
 	{
 		return false;
 	}
@@ -1186,12 +1318,12 @@ bool CMannVsMachineChangeChallengeIssue::IsEnabled( void )
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-bool CMannVsMachineChangeChallengeIssue::CanCallVote( int iEntIndex, const char *pszDetails, vote_create_failed_t &nFailCode, int &nTime )
+bool CMannVsMachineChangeChallengeIssue::RequestCallVote( int iEntIndex, const char *pszDetails, vote_create_failed_t &nFailCode, int &nTime )
 {
-	if( !CBaseTFIssue::CanCallVote( iEntIndex, pszDetails, nFailCode, nTime ) )
+	if ( !CBaseTFIssue::RequestCallVote( iEntIndex, pszDetails, nFailCode, nTime ) )
 		return false;
 
-	if( !IsEnabled() )
+	if ( !IsEnabled() )
 	{
 		nFailCode = VOTE_FAILED_ISSUE_DISABLED;
 		return false;
@@ -1204,12 +1336,15 @@ bool CMannVsMachineChangeChallengeIssue::CanCallVote( int iEntIndex, const char 
 	}
 	else
 	{
-		// Make sure it's a valid pop
-		/*if ( !HaveExactMap( pszDetails ) )
+		CUtlString fullPath;
+		if ( !g_pPopulationManager->FindPopulationFileByShortName( pszDetails, fullPath ) ||
+			 // did we fall back to something other than what we asked for?
+			 ( !FStrEq( pszDetails, "normal" ) && !Q_stristr( fullPath, pszDetails ) ) ||
+			 !g_pPopulationManager->IsValidPopfile( fullPath ) )
 		{
-			nFailCode = VOTE_FAILED_MAP_NOT_FOUND;
+			nFailCode = VOTE_FAILED_INVALID_ARGUMENT;
 			return false;
-		}*/
+		}
 	}
 
 	return true;
@@ -1272,16 +1407,14 @@ int CMannVsMachineChangeChallengeIssue::GetNumberVoteOptions( void )
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-bool CEnableTemporaryHalloweenIssue::CanCallVote( int iEntIndex, const char *pszDetails, vote_create_failed_t &nFailCode, int &nTime )
+bool CEnableTemporaryHalloweenIssue::RequestCallVote( int iEntIndex, const char *pszDetails, vote_create_failed_t &nFailCode, int &nTime )
 {
-	if( !CBaseTFIssue::CanCallVote( iEntIndex, pszDetails, nFailCode, nTime ) )
+	if( !CBaseTFIssue::RequestCallVote( iEntIndex, pszDetails, nFailCode, nTime ) )
 		return false;
 
-#ifndef STAGING_ONLY
 	// Prevent concommand calling of this vote
 	if ( iEntIndex != DEDICATED_SERVER )
 		return false;
-#endif // !STAGING_ONLY
 
 	if( TFGameRules()->IsHolidayActive( kHoliday_HalloweenOrFullMoon ) )
 	{
@@ -1394,9 +1527,9 @@ bool CTeamAutoBalanceIssue::IsEnabled( void )
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-bool CTeamAutoBalanceIssue::CanCallVote( int iEntIndex, const char *pszDetails, vote_create_failed_t &nFailCode, int &nTime )
+bool CTeamAutoBalanceIssue::RequestCallVote( int iEntIndex, const char *pszDetails, vote_create_failed_t &nFailCode, int &nTime )
 {
-	if ( !CBaseTFIssue::CanCallVote( iEntIndex, pszDetails, nFailCode, nTime ) )
+	if ( !CBaseTFIssue::RequestCallVote( iEntIndex, pszDetails, nFailCode, nTime ) )
 		return false;
 
 	if ( !IsEnabled() )
@@ -1463,11 +1596,7 @@ float CTeamAutoBalanceIssue::GetQuorumRatio( void )
 //-----------------------------------------------------------------------------
 // Purpose: Enable/Disable tf_classlimit
 //-----------------------------------------------------------------------------
-#ifdef STAGING_ONLY
-ConVar sv_vote_issue_classlimits_allowed( "sv_vote_issue_classlimits_allowed", "1", FCVAR_NONE, "Can players call votes to enable or disable per-class limits?" );
-#else
 ConVar sv_vote_issue_classlimits_allowed( "sv_vote_issue_classlimits_allowed", "0", FCVAR_NONE, "Can players call votes to enable or disable per-class limits?" );
-#endif
 ConVar sv_vote_issue_classlimits_allowed_mvm( "sv_vote_issue_classlimits_allowed_mvm", "0", FCVAR_NONE, "Can players call votes in Mann-Vs-Machine to enable or disable per-class limits?" );
 ConVar sv_vote_issue_classlimits_max( "sv_vote_issue_classlimits_max", "4", FCVAR_NONE, "Maximum number of players (per-team) that can be any one class.", true, 1.f, false, 16.f );
 ConVar sv_vote_issue_classlimits_max_mvm( "sv_vote_issue_classlimits_max_mvm", "2", FCVAR_NONE, "Maximum number of players (per-team) that can be any one class.", true, 1.f, false, 16.f );
@@ -1535,9 +1664,9 @@ bool CClassLimitsIssue::IsEnabled( void )
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-bool CClassLimitsIssue::CanCallVote( int iEntIndex, const char *pszDetails, vote_create_failed_t &nFailCode, int &nTime )
+bool CClassLimitsIssue::RequestCallVote( int iEntIndex, const char *pszDetails, vote_create_failed_t &nFailCode, int &nTime )
 {
-	if ( !CBaseTFIssue::CanCallVote( iEntIndex, pszDetails, nFailCode, nTime ) )
+	if ( !CBaseTFIssue::RequestCallVote( iEntIndex, pszDetails, nFailCode, nTime ) )
 		return false;
 
 	if ( !IsEnabled() )
@@ -1634,9 +1763,9 @@ bool CPauseGameIssue::IsEnabled( void )
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-bool CPauseGameIssue::CanCallVote( int iEntIndex, const char *pszDetails, vote_create_failed_t &nFailCode, int &nTime )
+bool CPauseGameIssue::RequestCallVote( int iEntIndex, const char *pszDetails, vote_create_failed_t &nFailCode, int &nTime )
 {
-	if ( !CBaseTFIssue::CanCallVote( iEntIndex, pszDetails, nFailCode, nTime ) )
+	if ( !CBaseTFIssue::RequestCallVote( iEntIndex, pszDetails, nFailCode, nTime ) )
 		return false;
 
 	if ( !IsEnabled() )
@@ -1683,3 +1812,4 @@ const char *CPauseGameIssue::GetDetailsString( void )
 	m_sRetString = CFmtStr( "%i", sv_vote_issue_pause_game_timer.GetInt() );
 	return (m_sRetString.String());
 }
+

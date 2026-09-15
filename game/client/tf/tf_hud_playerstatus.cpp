@@ -38,9 +38,6 @@ using namespace vgui;
 
 ConVar cl_hud_playerclass_use_playermodel( "cl_hud_playerclass_use_playermodel", "1", FCVAR_ARCHIVE, "Use player model in player class HUD." );
 
-#ifdef STAGING_ONLY
-ConVar cl_hud_playerclass_playermodel_lod( "cl_hud_playerclass_playermodel_lod", "0", FCVAR_ARCHIVE, "Adjust lod on player model in the player class HUD." );
-#endif // STAGING_ONLY
 
 ConVar cl_hud_playerclass_playermodel_showed_confirm_dialog( "cl_hud_playerclass_playermodel_showed_confirm_dialog", "0", FCVAR_ARCHIVE | FCVAR_HIDDEN );
 
@@ -109,9 +106,7 @@ CTFHudPlayerClass::CTFHudPlayerClass( Panel *parent, const char *name ) : Editab
 	m_hDisguiseWeapon = NULL;
 	m_flNextThink = 0.0f;
 	m_nKillStreak = 0;
-#ifdef STAGING_ONLY
-	m_nLOD = -1;
-#endif // STAGING_ONLY
+	m_nVisionFilterFlags = 0;
 
 	m_bUsePlayerModel = cl_hud_playerclass_use_playermodel.GetBool();
 
@@ -164,6 +159,7 @@ void CTFHudPlayerClass::ApplySchemeSettings( IScheme *pScheme )
 	m_flNextThink = 0.0f;
 	m_nCloakLevel = 0;
 	m_nLoadoutPosition = LOADOUT_POSITION_PRIMARY;
+	m_nVisionFilterFlags = GetLocalPlayerVisionFilterFlags( true );
 
 	m_pClassImage = FindControl<CTFClassImage>( "PlayerStatusClassImage", false );
 	m_pClassImageBG = FindControl<CTFImagePanel>( "PlayerStatusClassImageBG", false );
@@ -184,6 +180,15 @@ void CTFHudPlayerClass::ApplySchemeSettings( IScheme *pScheme )
 	BaseClass::ApplySchemeSettings( pScheme );
 }
 
+static bool IsMvMRobotDisguise( C_TFPlayer *pPlayer )
+{
+	return pPlayer &&
+		   TFGameRules() && TFGameRules()->IsMannVsMachineMode() &&
+		   pPlayer->GetTeamNumber() == TF_TEAM_PVE_DEFENDERS &&
+		   pPlayer->m_Shared.InCond( TF_COND_DISGUISED ) &&
+		   pPlayer->m_Shared.GetDisguiseTeam() != pPlayer->GetTeamNumber();
+}
+
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
@@ -196,6 +201,18 @@ void CTFHudPlayerClass::OnThink()
 	C_TFPlayer *pPlayer = C_TFPlayer::GetLocalTFPlayer();
 	if ( !pPlayer )
 		return;
+
+	// Hold the playerhud update for a brief moment so that the weapon can properly update before potentially changing classes
+	// Without a brief stall, past weapon will briefly persist with new disguise
+	CTFWeaponBase *pDisguiseWeapon = pPlayer->m_Shared.GetDisguiseWeapon();
+	bool bDisguiseIdentityChanged = m_nDisguiseClass != pPlayer->m_Shared.GetDisguiseClass() || m_nDisguiseTeam != pPlayer->m_Shared.GetDisguiseTeam();
+	bool bWaitingForDisguiseWeapon = pPlayer->m_Shared.InCond( TF_COND_DISGUISED ) &&
+		( !pDisguiseWeapon || ( bDisguiseIdentityChanged && m_hDisguiseWeapon.Get() == pDisguiseWeapon ) );
+	if ( bWaitingForDisguiseWeapon )
+	{
+		m_flNextThink = gpGlobals->curtime + 0.05f;
+		return;
+	}
 
 	bool bTeamChange = false;
 	// set our background colors
@@ -239,17 +256,17 @@ void CTFHudPlayerClass::OnThink()
 		bPlayerClassModeChange = true;
 	}
 
-#ifdef STAGING_ONLY
-	if ( m_nLOD != cl_hud_playerclass_playermodel_lod.GetInt() && m_pPlayerModelPanel )
+	bool bVisionFilterChange = false;
+	int nVisionFilterFlags = GetLocalPlayerVisionFilterFlags( true );
+	if ( m_nVisionFilterFlags != nVisionFilterFlags )
 	{
-		m_nLOD = cl_hud_playerclass_playermodel_lod.GetInt();
-		m_pPlayerModelPanel->SetLOD( m_nLOD );
+		m_nVisionFilterFlags = nVisionFilterFlags;
+		bVisionFilterChange = true;
 	}
-#endif // STAGING_ONLY
 
 	bool bForceEyeUpdate = false;
 	// set our class image
-	if (	m_nClass != pPlayer->GetPlayerClass()->GetClassIndex() || bTeamChange || bCloakChange || bLoadoutPositionChange || bPlayerClassModeChange ||
+	if (	m_nClass != pPlayer->GetPlayerClass()->GetClassIndex() || bTeamChange || bCloakChange || bLoadoutPositionChange || bPlayerClassModeChange || bVisionFilterChange ||
 			(
 				m_nClass == TF_CLASS_SPY &&
 				(
@@ -462,14 +479,27 @@ void CTFHudPlayerClass::UpdateModelPanel()
 		CEconItemView *pWeapon = NULL;
 
 		bool bDisguised = pPlayer->m_Shared.InCond( TF_COND_DISGUISED );
+		bool bRobotDisguise = IsMvMRobotDisguise( pPlayer );	// Are we disguised as a robot?
+		CTFWeaponBase *pDisguiseWeapon = pPlayer->m_Shared.GetDisguiseWeapon();
+		bool bDisguiseIdentityChanged = m_nDisguiseClass != pPlayer->m_Shared.GetDisguiseClass() || m_nDisguiseTeam != pPlayer->m_Shared.GetDisguiseTeam();
+
+		// Hold the playerhud update for a brief moment so that the weapon can properly update before potentially changing classes
+		// Without a brief stall, past weapon will briefly persist with new disguise
+		if ( bDisguised &&
+			 ( !pDisguiseWeapon || ( bDisguiseIdentityChanged && m_hDisguiseWeapon.Get() == pDisguiseWeapon ) ) )
+		{
+			m_flNextThink = gpGlobals->curtime + 0.05f;
+			return;
+		}
+
 		if ( bDisguised )
 		{
 			nClass = pPlayer->m_Shared.GetDisguiseClass();
 			nTeam = pPlayer->m_Shared.GetDisguiseTeam();
 
-			if ( pPlayer->m_Shared.GetDisguiseWeapon() )
+			if ( pDisguiseWeapon )
 			{
-				CAttributeContainer *pCont = pPlayer->m_Shared.GetDisguiseWeapon()->GetAttributeContainer();
+				CAttributeContainer *pCont = pDisguiseWeapon->GetAttributeContainer();
 				pWeapon = pCont ? pCont->GetItem() : NULL;
 				if ( pWeapon )
 				{
@@ -489,13 +519,8 @@ void CTFHudPlayerClass::UpdateModelPanel()
 			}
 		}
 
-		bool bIsRobot = false;
-		int iRobot = 0;
-		CALL_ATTRIB_HOOK_INT_ON_OTHER( pPlayer, iRobot, appear_as_mvm_robot );
-		bIsRobot = iRobot ? true : false;
-
 		m_pPlayerModelPanel->ClearCarriedItems();
-		m_pPlayerModelPanel->SetToPlayerClass( nClass, bIsRobot );
+		m_pPlayerModelPanel->SetToPlayerClass( nClass, false, bRobotDisguise ? g_szBotModels[nClass] : NULL, bRobotDisguise );
 		m_pPlayerModelPanel->SetTeam( nTeam );
 
 		if ( pWeapon )
@@ -507,6 +532,9 @@ void CTFHudPlayerClass::UpdateModelPanel()
 		{
 			C_TFWearable *pItem = dynamic_cast<C_TFWearable*>( pPlayer->GetWearable( wbl ) );
 			if ( !pItem )
+				continue;
+
+			if ( pItem->ShouldHideForVisionFilterFlags() )
 				continue;
 
 			if ( pItem->IsViewModelWearable() )
@@ -527,7 +555,7 @@ void CTFHudPlayerClass::UpdateModelPanel()
 			}
 		}
 
-		m_pPlayerModelPanel->HoldItemInSlot( nItemSlot );
+		m_pPlayerModelPanel->HoldItemInSlot( nItemSlot, bRobotDisguise );
 	}
 }
 
@@ -665,6 +693,8 @@ CTFHudPlayerHealth::CTFHudPlayerHealth( Panel *parent, const char *name ) : Edit
 	m_pMarkedForDeathImage = new ImagePanel( this, "PlayerStatusMarkedForDeathImage" );
 	m_pMarkedForDeathImageSilent = new ImagePanel( this, "PlayerStatusMarkedForDeathSilentImage" );
 	m_pMilkImage = new ImagePanel( this, "PlayerStatusMilkImage" );
+	m_pGasImage = new ImagePanel( this, "PlayerStatusGasImage" );
+	m_pSlowedImage = new ImagePanel( this, "PlayerStatusSlowed" );
 
 	m_pWheelOfDoomImage = new ImagePanel( this, "PlayerStatus_WheelOfDoom" );
 
@@ -699,13 +729,9 @@ CTFHudPlayerHealth::CTFHudPlayerHealth( Panel *parent, const char *name ) : Edit
 	m_vecBuffInfo.AddToTail( new CTFBuffInfo( TF_COND_RUNE_KING, RUNE_CLASS_KING, new ImagePanel( this, "PlayerStatus_RuneKing" ), "../Effects/powerup_king_hud", "../Effects/powerup_king_hud" ) );
 	m_vecBuffInfo.AddToTail( new CTFBuffInfo( TF_COND_RUNE_PLAGUE, RUNE_CLASS_PLAGUE, new ImagePanel( this, "PlayerStatus_RunePlague" ), "../Effects/powerup_plague_hud", "../Effects/powerup_plague_hud" ) );
 	m_vecBuffInfo.AddToTail( new CTFBuffInfo( TF_COND_RUNE_SUPERNOVA, RUNE_CLASS_SUPERNOVA, new ImagePanel( this, "PlayerStatus_RuneSupernova" ), "../Effects/powerup_supernova_hud", "../Effects/powerup_supernova_hud" ) );
-#ifdef STAGING_ONLY
-	// Spy Mark
-	m_vecBuffInfo.AddToTail( new CTFBuffInfo( TF_COND_TRANQ_MARKED, DEBUFF_CLASS_SPY_MARKED, new ImagePanel( this, "PlayerStatus_SpyMarked" ), "../Effects/tranq_debuff", "../Effects/tranq_debuff" ) );
-#endif // STAGING_ONLY
 
 	// Parachute
-	m_vecBuffInfo.AddToTail( new CTFBuffInfo( TF_COND_PARACHUTE_DEPLOYED, BUFF_CLASS_PARACHUTE, new ImagePanel( this, "PlayerStatus_Parachute" ), "../HUD/hud_parachute_active", "../HUD/hud_parachute_active" ) );
+	m_vecBuffInfo.AddToTail( new CTFBuffInfo( TF_COND_PARACHUTE_ACTIVE, BUFF_CLASS_PARACHUTE, new ImagePanel( this, "PlayerStatus_Parachute" ), "../HUD/hud_parachute_active", "../HUD/hud_parachute_active" ) );
 
 	m_iAnimState = HUD_HEALTH_NO_ANIM;
 	m_bAnimate = true;
@@ -867,10 +893,20 @@ void CTFHudPlayerHealth::SetHealth( int iNewHealth, int iMaxHealth, int	iMaxBuff
 	if ( m_nHealth > 0 )
 	{
 		SetDialogVariable( "Health", m_nHealth );
+
+		if ( m_nMaxHealth - m_nHealth >= 5 )
+		{
+			SetDialogVariable( "MaxHealth", m_nMaxHealth );
+		}
+		else
+		{
+			SetDialogVariable( "MaxHealth", "" );
+		}
 	}
 	else
 	{
 		SetDialogVariable( "Health", "" );
+		SetDialogVariable( "MaxHealth", "" );
 	}	
 }
 
@@ -996,8 +1032,10 @@ void CTFHudPlayerHealth::OnThink()
 			m_pBleedImage->SetVisible( false );
 			m_pHookBleedImage->SetVisible( false );
 			m_pMilkImage->SetVisible( false );
+			m_pGasImage->SetVisible( false );
 			m_pMarkedForDeathImage->SetVisible( false );
 			m_pMarkedForDeathImageSilent->SetVisible( false );
+			m_pSlowedImage->SetVisible( false );
 			
 			// Old method for goofy color manipulation
 			int nBloodX = nXOffset;
@@ -1007,6 +1045,8 @@ void CTFHudPlayerHealth::OnThink()
 			SetPlayerHealthImagePanelVisibility( pPlayer, TF_COND_MARKEDFORDEATH,			m_pMarkedForDeathImage,			nXOffset,	Color( 255 - color_fade, 245 - color_fade, 245 - color_fade, 255 ) );
 			SetPlayerHealthImagePanelVisibility( pPlayer, TF_COND_MARKEDFORDEATH_SILENT,	m_pMarkedForDeathImageSilent,	nXOffset,	Color( 125 - color_fade, 255 - color_fade, 255 - color_fade, 255 ) );
 			SetPlayerHealthImagePanelVisibility( pPlayer, TF_COND_PASSTIME_PENALTY_DEBUFF,	m_pMarkedForDeathImageSilent,	nXOffset,	Color( 125 - color_fade, 255 - color_fade, 255 - color_fade, 255 ) );
+			SetPlayerHealthImagePanelVisibility( pPlayer, TF_COND_STUNNED,					m_pSlowedImage,					nXOffset,	Color( color_fade, color_fade, 0, 255 ) );
+			SetPlayerHealthImagePanelVisibility( pPlayer, TF_COND_GAS,						m_pGasImage,					nXOffset,	Color( color_fade, color_fade, color_fade, 255 ) );
 			
 			UpdateHalloweenStatus();
 		}

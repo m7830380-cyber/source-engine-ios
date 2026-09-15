@@ -40,12 +40,6 @@
 #include "KeyValues.h"
 
 ConVar tf_time_loading_item_panels( "tf_time_loading_item_panels", "0.0005", FCVAR_ARCHIVE, "The time to spend per frame loading data for item panels" );
-#ifdef STAGING_ONLY
-ConVar tf_paint_kit_show_unique_icon( "tf_paint_kit_show_unique_icon", "1" );
-ConVar tf_test_loading_panels( "tf_test_loading_panels", "0" );
-ConVar tf_force_highres_item_image( "tf_force_highres_item_image", "0" );
-ConVar tf_unique_icon_perf_debug( "tf_unique_icon_perf_debug", "0" );
-#endif
 
 const char* g_ItemModelPanelRenderTargetNames[] =
 {
@@ -192,9 +186,6 @@ CEmbeddedItemModelPanel::CEmbeddedItemModelPanel( vgui::Panel *pParent, const ch
 
 	m_pItemParticle = NULL;
 
-#ifdef STAGING_ONLY
-	m_flStartUpdateTime = 0.0;
-#endif // STAGING_ONLY
 }
 
 
@@ -290,9 +281,6 @@ void CEmbeddedItemModelPanel::SetItem( CEconItemView *pItem )
 
 	const char* pszInventoryImage = m_pItem->IsValid() ? m_pItem->GetInventoryImage() : NULL;
 	if ( ( pszInventoryImage && pszInventoryImage[0] && !g_pMaterialSystem->IsMaterialLoaded( pszInventoryImage ) )
-#ifdef STAGING_ONLY
-		|| tf_test_loading_panels.GetBool()
-#endif
 		)
 	{
 		m_bImageNotLoaded = true;
@@ -314,47 +302,45 @@ void CEmbeddedItemModelPanel::SetItem( CEconItemView *pItem )
 		m_pszToolTargetItemImage = NULL;
 	}
    
-#ifdef STAGING_ONLY
-	if ( tf_paint_kit_show_unique_icon.GetBool() )
-#endif // STAGING_ONLY
+	float flInspect = 0;
+	static CSchemaAttributeDefHandle pAttrib_WeaponAllowInspect( "weapon_allow_inspect" );
+	if ( FindAttribute_UnsafeBitwiseCast<attrib_value_t>( m_pItem, pAttrib_WeaponAllowInspect, &flInspect )
+		)
 	{
-		float flInspect = 0;
-		static CSchemaAttributeDefHandle pAttrib_WeaponAllowInspect( "weapon_allow_inspect" );
-		if ( FindAttribute_UnsafeBitwiseCast<attrib_value_t>( m_pItem, pAttrib_WeaponAllowInspect, &flInspect ) )
-		{
-			m_bWeaponAllowInspect = flInspect != 0;
+		m_bWeaponAllowInspect = flInspect != 0;
 
-#ifdef STAGING_ONLY
-			if ( m_flStartUpdateTime == 0 )
-				m_flStartUpdateTime = Plat_FloatTime();
-#endif // STAGING_ONLY
-		}
-		else
-		{
-			m_bWeaponAllowInspect = false;
-			
-#ifdef STAGING_ONLY
-			m_flStartUpdateTime = 0.0;
-#endif // STAGING_ONLY
-		}
-	}
-
-	float flUseCacheIcon = 0.f;
-	static CSchemaAttributeDefHandle pAttrib_UseModelCacheIcon( "use_model_cache_icon" );
-	if ( FindAttribute_UnsafeBitwiseCast<attrib_value_t>( m_pItem, pAttrib_UseModelCacheIcon, &flUseCacheIcon ) && flUseCacheIcon != 0.f )
-	{
-		m_bUseRenderTargetAsIcon = true;
 	}
 	else
 	{
-		m_bUseRenderTargetAsIcon = false;
+		m_bWeaponAllowInspect = false;
+			
 	}
+
+	static CSchemaAttributeDefHandle pAttr_is_festivized( "is_festivized" );
+	m_bIsFestivized = pAttr_is_festivized && m_pItem->FindAttribute( pAttr_is_festivized );
+
+	m_bIsPaintKitItem = GetPaintKitDefIndex( m_pItem );
+
+	m_bUseRenderTargetAsIcon = ShouldUseRenderTargetAsIcon();
 
 	if ( !m_bModelIsHidden )
 	{
 		if ( !m_pItem->GetInventoryImage() || IsForcingModelUsage() || m_bWeaponAllowInspect || UseRenderTargetAsIcon() )
 		{
-			const char *pszModelName = m_pItem->GetPlayerDisplayModel( 0, 0 );
+			int nClass = 0;
+			if ( m_pItem->GetItemDefinition() && m_pItem->GetItemDefinition()->GetClassUsability() )
+			{
+				for ( int i = 0; i < m_pItem->GetItemDefinition()->GetClassUsability()->GetNumBits(); i++ )
+				{
+					if ( m_pItem->GetItemDefinition()->GetClassUsability()->IsBitSet( i ) )
+					{
+						nClass = i;
+						break;
+					}
+				}
+			}
+
+			const char *pszModelName = m_pItem->GetPlayerDisplayModel( nClass, 0 );
 			if ( pszModelName )
 			{
 				CMDL *pMDL = NULL;
@@ -437,8 +423,7 @@ void CEmbeddedItemModelPanel::SetItem( CEconItemView *pItem )
 					}
 
 					// Festive
-					static CSchemaAttributeDefHandle pAttr_is_festivized( "is_festivized" );
-					if ( pAttr_is_festivized && m_pItem->FindAttribute( pAttr_is_festivized ) )
+					if ( m_bIsFestivized )
 					{
 						const int iNumAttachedModels = m_pItem->GetItemDefinition()->GetNumAttachedModelsFestivized( iTeam );
 						for ( int i = 0; i < iNumAttachedModels; ++i )
@@ -451,12 +436,11 @@ void CEmbeddedItemModelPanel::SetItem( CEconItemView *pItem )
 
 				// Stattrak
 				CAttribute_String attrModule;
-				static CSchemaAttributeDefHandle pAttr_module( "weapon_uses_stattrak_module" );
-				if ( m_pItem->FindAttribute( pAttr_module, &attrModule ) && attrModule.has_value() )
+				if ( GetStattrak( m_pItem, &attrModule ) )
 				{
 					// Allow for already strange items
 					bool bIsStrange = false;
-					if ( m_pItem->GetQuality() == AE_STRANGE )
+					if ( m_pItem->GetQuality() == AE_STRANGE || m_pItem->GetItemQuality() == AE_STRANGE )
 					{
 						bIsStrange = true;
 					}
@@ -485,7 +469,7 @@ void CEmbeddedItemModelPanel::SetItem( CEconItemView *pItem )
 							m_flStatTrackScale = (float&)unFloatAsUint32;
 						}
 
-						MDLHandle_t hStatTrackMDL = mdlcache->FindMDL( "models/weapons/c_models/stattrack.mdl" );
+						MDLHandle_t hStatTrackMDL = mdlcache->FindMDL( attrModule.value().c_str() );
 						if ( mdlcache->IsErrorModel( hStatTrackMDL ) )
 						{
 							hStatTrackMDL = MDLHANDLE_INVALID;
@@ -572,7 +556,7 @@ bool CEmbeddedItemModelPanel::IsLoadingWeaponSkin( void ) const
 
 	if ( m_pItem && m_pItem->IsValid() )
 	{
-		if ( m_bWeaponAllowInspect && m_pItem->GetCustomPainkKitDefinition() )
+		if ( m_bWeaponAllowInspect && m_bIsPaintKitItem )
 		{
 			return m_pItem->GetWeaponSkinBaseCompositor() != NULL || !m_pCachedWeaponIcon || !m_pCachedWeaponIcon->GetTexture();
 		}
@@ -606,12 +590,6 @@ IMaterial* GetMaterialForImage( CEmbeddedItemModelPanel::InventoryImageType_t eI
 	if ( !pszBaseName )
 		return NULL;
 
-#ifdef STAGING_ONLY
-	if ( eImageType == CEmbeddedItemModelPanel::IMAGETYPE_SMALL && tf_force_highres_item_image.GetBool() )
-	{
-		eImageType = CEmbeddedItemModelPanel::IMAGETYPE_LARGE;
-	}
-#endif // STAGING_ONLY
 
 	switch ( eImageType )
 	{
@@ -676,11 +654,6 @@ void CEmbeddedItemModelPanel::PerformLayout( void )
 	}
 }
 
-#ifdef STAGING_ONLY
-static double s_min_time = FLT_MAX;
-static double s_max_time = 0.f;
-static double s_total_time = 0.f;
-#endif // STAGING_ONLY
 
 //-----------------------------------------------------------------------------
 // Purpose: 
@@ -770,17 +743,6 @@ void CEmbeddedItemModelPanel::Paint( void )
 				flTexH = (float)iHeight / iMappingHeight;
 			}
 
-#ifdef STAGING_ONLY
-			if ( tf_unique_icon_perf_debug.GetBool() && m_flStartUpdateTime != 0 )
-			{
-				double flTimeTaken = Plat_FloatTime() - m_flStartUpdateTime;
-				m_flStartUpdateTime = 0.0;
-				s_min_time = MIN( s_min_time, flTimeTaken );
-				s_max_time = MAX( s_max_time, flTimeTaken );
-				s_total_time += flTimeTaken;
-				DevMsg( "took %.3f with min %.3f max %.3f with total %.3f\n", flTimeTaken, s_min_time, s_max_time, s_total_time );
-			}
-#endif // STAGING_ONLY
 		}
 		else if ( pszInventoryImage )
 		{
@@ -809,9 +771,6 @@ void CEmbeddedItemModelPanel::Paint( void )
 			else
 			{
 				bool bForceHighRes = false;
-#ifdef STAGING_ONLY
-				bForceHighRes = tf_force_highres_item_image.GetBool();
-#endif // STAGING_ONLY
 				if ( m_iInventoryImageType != IMAGETYPE_SMALL || bForceHighRes )
 				{
 					// Normal is 128*128, large is 512x512
@@ -1013,11 +972,32 @@ void CEmbeddedItemModelPanel::Paint( void )
 
 	m_bRenderToTexture = bRenderToTexture;
 
-	// copy the rendered weapon skin from the render target
-	if ( !m_bForceUseModel && ( UseRenderTargetAsIcon() || bDrawWeaponWithSkin ) && !m_pCachedWeaponIcon )
+	// check if we should cache rt from this frame to a texture
+	bool bShouldCacheToTexture = !m_pCachedWeaponIcon && !m_bForceUseModel;
+	if ( m_bIsPaintKitItem )
 	{
+		bShouldCacheToTexture &= bDrawWeaponWithSkin;
+	}
+	else
+	{
+		bShouldCacheToTexture &= UseRenderTargetAsIcon();
+	}
+
+	// copy the rendered weapon skin from the render target
+	if ( bShouldCacheToTexture )
+	{
+		uint64 nPaintKitDef = 0; m_pItem->GetID();
+
+		// Include our paintkit defindex, incase we don't have a SO-backed item (meaning GetID() will
+		// return the same thing for all instances).
+		attrib_value_t val;
+		if ( GetPaintKitDefIndex( m_pItem, &val ) )
+		{
+			nPaintKitDef = val;
+		}
+
 		char buffer[_MAX_PATH];
-		V_sprintf_safe( buffer, "proc/icon/item%d_id%lld_w%d_h%d", m_pItem->GetItemDefIndex(), m_pItem->GetID(), iWidth, iHeight );
+		V_sprintf_safe( buffer, "proc/icon/item%d_id%lld%lld_w%d_h%d", m_pItem->GetItemDefIndex(), m_pItem->GetID(), nPaintKitDef, iWidth, iHeight );
 		SafeAssign( &m_pCachedWeaponIcon, new CIconRenderReceiver() );
 
 		// If the icon still exists in the material system, don't bother regenerating it.
@@ -1063,8 +1043,26 @@ void CEmbeddedItemModelPanel::Paint( void )
 // Purpose:
 //-----------------------------------------------------------------------------
 ITexture *CEmbeddedItemModelPanel::GetCachedGeneratedIcon() 
-{ 
+{
+	if ( m_iCachedTextureID == -1 )
+		return NULL;
 	return m_pCachedWeaponIcon ? m_pCachedWeaponIcon->GetTexture() : NULL;
+}
+
+
+bool CEmbeddedItemModelPanel::ShouldUseRenderTargetAsIcon() const
+{
+	if ( m_bIsFestivized )
+		return true;
+
+	float flUseCacheIcon = 0.f;
+	static CSchemaAttributeDefHandle pAttrib_UseModelCacheIcon( "use_model_cache_icon" );
+	if ( FindAttribute_UnsafeBitwiseCast<attrib_value_t>( m_pItem, pAttrib_UseModelCacheIcon, &flUseCacheIcon ) && flUseCacheIcon != 0.f )
+	{
+		return true;
+	}
+
+	return false;
 }
 
 
@@ -1511,7 +1509,21 @@ void CItemModelPanel::ApplySettings( KeyValues *inResourceData )
 void CItemModelPanel::LoadResFileForCurrentItem( bool bForceLoad )
 {
 	tmZone( TELEMETRY_LEVEL0, TMZF_NONE, "%s", __FUNCTION__ );
-	bool bCollectionMouseover = ( m_bIsMouseOverPanel && GetItem() && GetItem()->GetItemDefinition()->GetItemCollectionDefinition() );
+	const CEconItemView *pItem = GetItem();
+
+	bool bCollectionMouseover = false;
+	if ( m_bIsMouseOverPanel && pItem )
+	{
+		const CEconItemCollectionDefinition *pCollection = pItem->GetItemDefinition()->GetItemCollectionDefinition();
+		if ( !pCollection )
+		{
+			// see if this is part of paintkit collection
+			pCollection = GetItemSchema()->GetPaintKitCollectionFromItem( pItem );
+		}
+
+		bCollectionMouseover = pCollection != NULL;
+	}
+
 	if ( bCollectionMouseover )
 	{
 		float flInspect = 0;
@@ -1678,6 +1690,21 @@ void CItemModelPanel::LoadResFileForCurrentItem( bool bForceLoad )
 	}
 
 	m_pContainedItemPanel = dynamic_cast<CItemModelPanel*>( FindChildByName( "contained_item_panel", true ) );
+
+	// Josh: Avoid infinitely creating contained item panels whenever layout
+	// gets invalidated.
+	if ( m_pContainedItemPanel )
+	{
+		m_pContainedItemPanel->m_bInitializedAsContainedItem = true;
+
+		// If we are initialized a contained item, kill our child.
+		// SetContainedItem doesn't happen until later (when it is chosen to be shown)
+		if ( m_bInitializedAsContainedItem )
+		{
+			m_pContainedItemPanel->MarkForDeletion();
+			m_pContainedItemPanel = NULL;
+		}
+	}
 
 	// Dont eat mouse input
 	if ( m_pMainContentContainer )
@@ -1867,9 +1894,16 @@ void CItemModelPanel::PerformLayout( void )
 
 		if ( m_bResizeToText )
 		{
-			if ( m_bIsMouseOverPanel && GetItem() && GetItem()->GetItemDefinition()->GetItemCollectionDefinition() && !m_bHideCollectionPanel )
+			const CEconItemView *pItem = GetItem();
+			if ( m_bIsMouseOverPanel && pItem && !m_bHideCollectionPanel )
 			{
-				if ( m_pItemCollectionListLabel && m_pItemCollectionNameLabel && m_pItemCollectionHighlight )
+				const CEconItemCollectionDefinition *pCollection = pItem->GetItemDefinition()->GetItemCollectionDefinition();
+				if ( !pCollection )
+				{
+					pCollection = GetItemSchema()->GetPaintKitCollectionFromItem( pItem );
+				}
+
+				if ( pCollection && m_pItemCollectionListLabel && m_pItemCollectionNameLabel && m_pItemCollectionHighlight )
 				{
 					m_pItemCollectionListLabel->SizeToContents();
 					m_pItemCollectionNameLabel->SizeToContents();
@@ -2091,7 +2125,18 @@ void CItemModelPanel::ResizeLabels( void )
 	else
 	{
 		m_pItemNameLabel->SetFont( m_pFontNameLarge );
-		m_pItemNameLabel->SetCenterWrap( false );
+
+		bool bCenterWrap = false;
+		if ( m_ItemData.IsValid() )
+		{
+			static CSchemaAttributeDefHandle pAttrDef_ForceCenterWrap( "force center wrap" );
+			if ( m_ItemData.FindAttribute( pAttrDef_ForceCenterWrap ) )
+			{
+				bCenterWrap = true;
+			}
+		}
+
+		m_pItemNameLabel->SetCenterWrap( bCenterWrap );
 		m_pItemNameLabel->SizeToContents();
 		m_pItemAttribLabel->SetFont( m_pFontAttribLarge );
 		m_pItemAttribLabel->SizeToContents();
@@ -2173,7 +2218,14 @@ void CItemModelPanel::SetItem( const CEconItemView *pItem )
 
 	if ( pItem && pItem->IsValid() )
 	{
-		if ( m_ItemData.IsValid() )
+		// Items with kill eater attributes never match the previous version of themselves. This stops
+		// the code from otherwise being intelligent and preventing the complicated update of the item
+		// description, but in this case our kill count is part of that description and we want it to
+		// get updated.
+		static CSchemaFieldHandle<CEconItemAttributeDefinition> pAttrib_KillEater( "kill eater" );
+		const bool bCanMatch = !pItem->FindAttribute( pAttrib_KillEater );
+
+		if ( bCanMatch && m_ItemData.IsValid() )
 		{
 			if ( m_ItemData.GetItemID() != INVALID_ITEM_ID )
 			{
@@ -2211,42 +2263,6 @@ void CItemModelPanel::SetItem( const CEconItemView *pItem )
 						  ( m_ItemData.GetSOCData() == pItem->GetSOCData() );
 			}
 		}
-
-		// if we match item so far, check for strange
-		if ( bMatch )
-		{
-			// Are we tracking alternate stats as well?
-			for ( int i = 0; i < GetKillEaterAttrCount(); i++ )
-			{
-				const CEconItemAttributeDefinition *pKillEaterAltAttrDef = GetKillEaterAttr_Score( i ),
-					*pKillEaterAltScoreTypeAttrDef = GetKillEaterAttr_Type( i );
-				if ( !pKillEaterAltAttrDef || !pKillEaterAltScoreTypeAttrDef )
-					continue;
-
-				uint32 unNewScore = 0;
-				uint32 unOldScore = 0;
-				bool bNewFoundAttr = pItem->FindAttribute( pKillEaterAltAttrDef, &unNewScore );
-				bool bOldFoundAttr = m_ItemData.FindAttribute( pKillEaterAltAttrDef, &unOldScore );
-				if ( bNewFoundAttr != bOldFoundAttr || unNewScore != unOldScore )
-				{
-					// different score
-					bMatch = false;
-					break;
-				}
-
-				float flNewType = 0.f;
-				float flOldType = 0.f;
-				bNewFoundAttr = FindAttribute_UnsafeBitwiseCast<attrib_value_t>( pItem, pKillEaterAltScoreTypeAttrDef, &flNewType );
-				bOldFoundAttr = FindAttribute_UnsafeBitwiseCast<attrib_value_t>( &m_ItemData, pKillEaterAltScoreTypeAttrDef, &flOldType );
-				if ( bNewFoundAttr != bOldFoundAttr || flNewType != flOldType )
-				{
-					// different score
-					bMatch = false;
-					break;
-				}
-			}
-		}
-
 		if ( !bMatch )
 		{
 			// cancel weapon skin composition for old item
@@ -2564,7 +2580,7 @@ bool CItemModelPanel::CheckRecipeMatches()
 	return bStillWorking;
 }
 
-void CItemModelPanel::UpdateDescription()
+void CItemModelPanel::UpdateDescription( bool bIsToolTip /* = false */ )
 {
 	if ( !m_bDescriptionDirty )
 		return;
@@ -2583,7 +2599,7 @@ void CItemModelPanel::UpdateDescription()
 
 	if ( !m_bNameOnly )
 	{
-		const CEconItemDescription *pDescription = m_ItemData.GetDescription();
+		const CEconItemDescription *pDescription = m_ItemData.GetDescription( bIsToolTip );
 		if ( pDescription )
 		{
 			unsigned int unWrittenLines = 0;
@@ -2591,6 +2607,14 @@ void CItemModelPanel::UpdateDescription()
 			for ( unsigned int i = 0; i < pDescription->GetLineCount(); i++ )
 			{
 				const econ_item_description_line_t& line = pDescription->GetLine(i);
+
+				// skip the bonus content for mouse over panel
+				if ( m_bIsMouseOverPanel && line.unMetaType & kDescLineFlag_CaseBonusContent )
+					continue;
+
+				// skip mouse over panel only line
+				if ( !m_bIsMouseOverPanel && line.unMetaType & kDescLineFlag_MouseOverPanel )
+					continue;
 
 				// m_bSpecialAttributesOnly, only show purple and orange text, ignore rest
 				if ( m_bSpecialAttributesOnly )
@@ -2636,12 +2660,15 @@ void CItemModelPanel::UpdateDescription()
 
 	if ( m_pItemNameLabel )
 	{
+		uint8 nRarity = m_ItemData.GetRarity();
+		const char* pszRarityColor = GetItemSchema()->GetRarityColor( nRarity );
+
 		// Set the name to the quality color
 		// Rarity Econ Colorization
 		EEconItemQuality eQuality = (EEconItemQuality)m_ItemData.GetItemQuality();
-		if ( GetItemSchema()->GetRarityColor( m_ItemData.GetItemDefinition()->GetRarity() ) && eQuality != AE_SELFMADE )
+		if ( pszRarityColor && ( eQuality != AE_SELFMADE ) && ( eQuality != AE_UNUSUAL ) )
 		{
-			m_pItemNameLabel->SetColorStr( GetItemSchema()->GetRarityColor( m_ItemData.GetItemDefinition()->GetRarity() ) );
+			m_pItemNameLabel->SetColorStr( pszRarityColor );
 		}
 		else 
 		{
@@ -2713,11 +2740,17 @@ void CItemModelPanel::UpdateDescription()
 		{
 			const econ_item_description_line_t& line = pDescription->GetLine(i);
 
+			// skip the bonus content for mouse over panel
+			if ( m_bIsMouseOverPanel && line.unMetaType & kDescLineFlag_CaseBonusContent )
+				continue;
+
+			// skip mouse over panel only line
+			if ( !m_bIsMouseOverPanel && line.unMetaType & kDescLineFlag_MouseOverPanel )
+				continue;
+
 			// Ignore the name line, it was added above
 			if ( ( line.unMetaType & kDescLineFlag_Name ) != 0 )
-			{
 				continue;
-			}
 
 			// collection
 			int fontHeight = surface()->GetFontTall( m_pFontAttribSmall );
@@ -3264,7 +3297,6 @@ void CItemModelPanel::UpdatePanels( void )
 	}
 
 	// Strange Icon
-	static CSchemaAttributeDefHandle pAttrDef_StatTrakModule( "weapon_uses_stattrak_module" );
 	if ( m_pIsStrangeImage )
 	{
 		m_pIsStrangeImage->SetVisible( false );
@@ -3292,14 +3324,13 @@ void CItemModelPanel::UpdatePanels( void )
 			}
 			if ( bIsStrange )
 			{
-				if ( pAttrDef_StatTrakModule && m_ItemData.FindAttribute( pAttrDef_StatTrakModule ) )
+				if ( GetStattrak( &m_ItemData ) )
 				{
 					m_pIsStrangeImage->SetImage( "viewmode_statclock" );
 				}
 				else
 				{
 					m_pIsStrangeImage->SetImage( "viewmode_strange" );
-				
 				}
 				m_pIsStrangeImage->SetVisible( true );
 			}
@@ -3312,7 +3343,7 @@ void CItemModelPanel::UpdatePanels( void )
 		m_pIsUnusualImage->SetVisible( false );
 	
 		static CSchemaAttributeDefHandle pAttrDef_ParticleEffect( "attach particle effect" );
-		static CSchemaAttributeDefHandle pAttrDef_TauntParticle( "on taunt attach particle index" );
+		static CSchemaAttributeDefHandle pAttrDef_TauntParticle( "taunt attach particle index" );
 		if ( pAttrDef_ParticleEffect && pAttrDef_TauntParticle && !m_bIsMouseOverPanel )
 		{
 			// Cant use quality cause of old legacy items.  Quality is just a quick test
@@ -3327,7 +3358,7 @@ void CItemModelPanel::UpdatePanels( void )
 	if ( m_pIsLoanerImage )
 	{
 		m_pIsLoanerImage->SetVisible( false );
-		if ( !m_bIsMouseOverPanel && GetAssociatedQuestItemID( &m_ItemData ) != INVALID_ITEM_ID )
+		if ( !m_bIsMouseOverPanel && GetAssociatedQuestID( &m_ItemData ) != INVALID_ITEM_ID )
 		{
 			m_pIsLoanerImage->SetImage( "viewmode_loaner" );
 			m_pIsLoanerImage->SetVisible( true );
@@ -3857,7 +3888,7 @@ void CItemModelPanelToolTip::PerformLayout()
 			m_pMouseOverItemPanel->SetGreyedOut( pItemPanel->GetGreyedOutReason() );
 			m_pMouseOverItemPanel->SetItem( pItem );
 			m_pMouseOverItemPanel->DirtyDescription(); // Force rebuilding the description when we first display
-			m_pMouseOverItemPanel->UpdateDescription();
+			m_pMouseOverItemPanel->UpdateDescription( true );
 			m_pMouseOverItemPanel->HideContainedItemPanel();
 			m_pMouseOverItemPanel->InvalidateLayout(true);
 

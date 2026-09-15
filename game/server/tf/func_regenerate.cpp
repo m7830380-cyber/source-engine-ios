@@ -125,12 +125,6 @@ void CRegenerateZone::Touch( CBaseEntity *pOther )
 
 			Regenerate( pPlayer );
 
-#ifdef STAGING_ONLY
-			if ( TFGameRules() && TFGameRules()->IsBountyMode() )
-			{
-				pPlayer->m_Shared.SetInUpgradeZone( true );
-			}
-#endif // STAGING_ONLY
 		}
 	}
 }

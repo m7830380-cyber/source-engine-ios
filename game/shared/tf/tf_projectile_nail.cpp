@@ -31,10 +31,6 @@
 LINK_ENTITY_TO_CLASS( tf_projectile_syringe, CTFProjectile_Syringe );
 PRECACHE_REGISTER( tf_projectile_syringe );
 
-#ifdef STAGING_ONLY
-LINK_ENTITY_TO_CLASS( tf_projectile_tranq, CTFProjectile_Tranq );
-PRECACHE_REGISTER( tf_projectile_tranq );
-#endif // STAGING_ONLY
 
 short g_sModelIndexSyringe;
 void PrecacheSyringe(void *pUser)
@@ -76,111 +72,6 @@ float CTFProjectile_Syringe::GetGravity( void )
 	return SYRINGE_GRAVITY;
 }
 
-#ifdef STAGING_ONLY
-//-----------------------------------------------------------------------------
-// CTFProjectile_Tranq
-#define TRANQ_GRAVITY	0.1f
-#define TRANQ_VELOCITY	2000.0f
-#define TRANQ_STUN		0.50f
-#define TRANQ_DURATION	1.5f
-
-//-----------------------------------------------------------------------------
-// Purpose:
-//-----------------------------------------------------------------------------
-CTFBaseProjectile *CTFProjectile_Tranq::Create(
-	const Vector &vecOrigin,
-	const QAngle &vecAngles,
-	CTFWeaponBaseGun *pLauncher /*= NULL*/,
-	CBaseEntity *pOwner /*= NULL*/,
-	CBaseEntity *pScorer /*= NULL*/,
-	bool bCritical /*= false */
-) {
-	return CTFBaseProjectile::Create( "tf_projectile_tranq", vecOrigin, vecAngles, pOwner, TRANQ_VELOCITY, g_sModelIndexSyringe, SYRINGE_DISPATCH_EFFECT, pScorer, bCritical );
-}
-
-//-----------------------------------------------------------------------------
-float CTFProjectile_Tranq::GetGravity( void )
-{
-	return TRANQ_GRAVITY;
-}
-
-#ifdef GAME_DLL
-//-----------------------------------------------------------------------------
-void CTFProjectile_Tranq::ProjectileTouch( CBaseEntity *pOther )
-{
-	// Verify a correct "other."
-	Assert( pOther );
-	if ( !pOther->IsSolid() || pOther->IsSolidFlagSet( FSOLID_VOLUME_CONTENTS ) )
-		return;
-
-	// Handle hitting skybox (disappear).
-	const trace_t *pTrace = &CBaseEntity::GetTouchTrace();
-	trace_t *pNewTrace = const_cast<trace_t*>( pTrace );
-
-	if( pTrace->surface.flags & SURF_SKY )
-	{
-		UTIL_Remove( this );
-		return;
-	}
-
-	// pass through ladders
-	if( pTrace->surface.flags & CONTENTS_LADDER )
-		return;
-
-	if ( TFGameRules() && TFGameRules()->GameModeUsesUpgrades() )
-	{
-		// Projectile shields
-		if ( InSameTeam( pOther ) && pOther->IsCombatItem() )
-			return;
-	}
-
-	if ( pOther->IsWorld() )
-	{
-		SetAbsVelocity( vec3_origin	);
-		AddSolidFlags( FSOLID_NOT_SOLID );
-
-		// Remove immediately. Clientside projectiles will stick in the wall for a bit.
-		UTIL_Remove( this );
-		return;
-	}
-
-	// determine the inflictor, which is the weapon which fired this projectile
-	CBaseEntity *pInflictor = GetLauncher();
-
-	CTakeDamageInfo info;
-	info.SetAttacker( GetOwnerEntity() );		// the player who operated the thing that emitted nails
-	info.SetInflictor( pInflictor );	// the weapon that emitted this projectile
-	info.SetWeapon( pInflictor );
-	info.SetDamage( GetDamage() );
-	info.SetDamageForce( GetDamageForce() );
-	info.SetDamagePosition( GetAbsOrigin() );
-	info.SetDamageType( GetDamageType() );
-
-	Vector dir;
-	AngleVectors( GetAbsAngles(), &dir );
-
-	pOther->DispatchTraceAttack( info, dir, pNewTrace );
-	ApplyMultiDamage();
-
-	CTFPlayer *pTFVictim = ToTFPlayer( pOther );
-	CTFPlayer *pTFOwner = ToTFPlayer( GetOwnerEntity() );
-
-	if ( pTFVictim && pTFOwner && !InSameTeam( pTFVictim ) )
-	{
-		// Apply Slow Condition
-		pTFVictim->m_Shared.StunPlayer( TRANQ_DURATION, TRANQ_STUN, TF_STUN_MOVEMENT, pTFOwner );
-		pTFVictim->m_Shared.AddCond( TF_COND_TRANQ_MARKED, PERMANENT_CONDITION, pTFOwner );	// Tranq marked until you die
-		pTFVictim->ApplyPunchImpulseX( -2.0f );		// Apply a flinch
-
-		// Apply a boost to the attacker
-		//pTFOwner->m_Shared.AddCond( TF_COND_SPEED_BOOST, 3.0f );
-		pTFOwner->m_Shared.AddCond( TF_COND_TRANQ_SPY_BOOST, 3.0f );
-	}
-
-	UTIL_Remove( this );
-}
-#endif // GAME_DLL
-#endif // STAGING_ONLY
 
 #ifdef CLIENT_DLL
 

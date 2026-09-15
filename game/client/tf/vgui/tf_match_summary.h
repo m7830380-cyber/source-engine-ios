@@ -20,7 +20,6 @@
 #include "tf_particlepanel.h"
 #include "tf_matchmaking_shared.h"
 #include "tf_gamerules.h"
-#include "tf_match_join_handlers.h"
 
 using namespace vgui;
 
@@ -99,7 +98,7 @@ public:
 	virtual void LevelInit( void ) OVERRIDE;
 	virtual void LevelShutdown( void ) OVERRIDE;
 
-	virtual GameActionSet_t GetPreferredActionSet() OVERRIDE { return GAME_ACTION_SET_IN_GAME_HUD; }
+	virtual GameActionSet_t GetPreferredActionSet() OVERRIDE { return IsActive() ? GAME_ACTION_SET_MENUCONTROLS : GAME_ACTION_SET_NONE; }
 	virtual void FireGameEvent( IGameEvent *event ) OVERRIDE;
 
 	bool ShowPerformanceMedals( void );
@@ -207,15 +206,13 @@ private:
 
 	struct MatchDataUpdate_t
 	{
-		uint32 unRating;
-		int nDelta;
 		int nScoreRank;
 		int nKillsRank;
 		int nDamageRank;
 		int nHealingRank;
 		int nSupportRank;
 	};
-	MatchDataUpdate_t m_SkillRatings[MAX_PLAYERS + 1];
+	MatchDataUpdate_t m_SkillRatings[MAX_PLAYERS_ARRAY_SAFE];
 
 	int m_iCurrentState;
 	float m_flNextActionTime;

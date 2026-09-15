@@ -58,3 +58,12 @@ bool C_TFTauntProp::ClearSceneEvent( CSceneEventInfo *info, bool fastKill, bool 
 		return BaseClass::ClearSceneEvent( info, fastKill, canceled );
 	}
 }
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+void C_TFTauntProp::UpdateOnRemove()
+{
+	ParticleProp()->StopEmissionAndDestroyImmediately();
+	BaseClass::UpdateOnRemove();
+}

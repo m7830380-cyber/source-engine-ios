@@ -108,8 +108,6 @@ public:
 	virtual bool CanHolster( void ) const;
 	virtual bool Holster( CBaseCombatWeapon *pSwitchingTo );
 
-	virtual bool OwnerCanJump( void ) OVERRIDE;
-
 	virtual void HandleZooms( void );
 	virtual void ItemPostFrame( void );
 	virtual bool Lower( void );
@@ -119,7 +117,7 @@ public:
 
 	virtual void WeaponReset( void );
 
-	virtual bool CanFireCriticalShot( bool bIsHeadshot = false );
+	virtual bool CanFireCriticalShot( bool bIsHeadshot = false, CBaseEntity *pTarget = NULL ) OVERRIDE;
 
 	virtual void PlayWeaponShootSound( void );
 	virtual bool MustBeZoomedToFire( void );
@@ -197,13 +195,17 @@ protected:
 	bool m_bPlayedBell;
 #endif
 
-	// Handles rezooming after the post-fire unzoom
-	float m_flUnzoomTime;
-	float m_flRezoomTime;
 	bool m_bRezoomAfterShot;
 
 	float m_flChargePerSec;
 	bool m_bWasAimedAtEnemy;
+
+	void SetInternalUnzoomTime( float flUnzoomTime );
+
+private:
+	// Handles rezooming after the post-fire unzoom
+	float m_flUnzoomTime;
+	float m_flRezoomTime;
 
 	CTFSniperRifle( const CTFSniperRifle & );
 };
@@ -270,36 +272,5 @@ private:
 #endif
 };
 
-#ifdef STAGING_ONLY
-//=============================================================================
-//
-// Projectile Based Sniper Rifle
-//
-class CTFSniperRifleRevolver : public CTFSniperRifleClassic
-{
-public:
-
-	DECLARE_CLASS( CTFSniperRifleRevolver, CTFSniperRifleClassic );
-	DECLARE_NETWORKCLASS();
-	DECLARE_PREDICTABLE();
-
-	virtual int		GetWeaponID( void ) const			{ return TF_WEAPON_SNIPERRIFLE_REVOLVER; }
-
-	// Fire the sniper shot.
-	virtual void	PrimaryAttack() OVERRIDE;
-
-	virtual float	GetProjectileDamage() OVERRIDE;
-	virtual void	ZoomIn( void ) OVERRIDE;
-	virtual void	ZoomOut( void ) OVERRIDE;
-	virtual bool	Reload( void ) OVERRIDE;
-	virtual void	ItemPostFrame( void ) OVERRIDE;
-
-	virtual bool CanFireCriticalShot( bool bIsHeadshot = false ) OVERRIDE;
-
-	virtual float GetProjectileSpeed( void ) OVERRIDE;
-	virtual float GetProjectileGravity( void ) OVERRIDE;
-
-};
-#endif // STAGING_ONLY
 
 #endif // TF_WEAPON_SNIPERRIFLE_H

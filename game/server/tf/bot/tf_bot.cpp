@@ -22,9 +22,10 @@
 #include "vgui/ILocalize.h"
 #include "econ_item_system.h"
 #include "bot/behavior/tf_bot_use_item.h"
-#include "tf_wearable_item_demoshield.h"
+#include "tf_wearable_weapons.h"
 #include "tf_weapon_buff_item.h"
 #include "tf_weapon_lunchbox.h"
+#include "tf_weapon_medigun.h"
 #include "func_respawnroom.h"
 #include "soundenvelope.h"
 
@@ -60,6 +61,8 @@ ConVar tf_bot_suspect_spy_touch_interval( "tf_bot_suspect_spy_touch_interval", "
 ConVar tf_bot_suspect_spy_forget_cooldown( "tf_bot_suspect_spy_forget_cooldown", "5", FCVAR_CHEAT, "How long to consider a suspicious spy as suspicious" );
 
 ConVar tf_bot_debug_tags( "tf_bot_debug_tags", "0", FCVAR_CHEAT, "ent_text will only show tags on bots" );
+
+ConVar tf_bot_spawn_use_preset_roster( "tf_bot_spawn_use_preset_roster", "1", FCVAR_CHEAT, "Bot will choose class from a preset class table." );
 
 extern ConVar tf_bot_sniper_spot_max_count;
 extern ConVar tf_bot_fire_weapon_min_time;
@@ -232,17 +235,6 @@ const char *GetRandomBotName( void )
 		"Kill Me",
 		"Glorified Toaster with Legs",
 
-#ifdef STAGING_ONLY
-		"John Spartan",
-		"Leeloo Dallas Multipass",
-		"Sho'nuff",
-		"Bruce Leroy",
-		"CAN YOUUUUUUUUU DIG IT?!?!?!?!",
-		"Big Gulp, Huh?",
-		"Stupid Hot Dog",
-		"I'm your huckleberry",
-		"The Crocketeer",
-#endif
 		NULL
 	};
 	static int nameCount = 0;
@@ -622,6 +614,104 @@ IMPLEMENT_INTENTION_INTERFACE( CTFBot, CTFBotMainAction );
 //-----------------------------------------------------------------------------------------------------
 LINK_ENTITY_TO_CLASS( tf_bot, CTFBot );
 
+//-----------------------------------------------------------------------------------------------------
+BEGIN_ENT_SCRIPTDESC( CTFBot, CTFPlayer, "Beep boop beep boop :3" )
+DEFINE_SCRIPTFUNC_NAMED( SetAttribute, "AddBotAttribute", "Sets attribute flags on this TFBot" )
+DEFINE_SCRIPTFUNC_NAMED( ClearAttribute, "RemoveBotAttribute", "Removes attribute flags on this TFBot" )
+DEFINE_SCRIPTFUNC_NAMED( ClearAllAttributes, "ClearAllBotAttributes", "Clears all attribute flags on this TFBot" )
+DEFINE_SCRIPTFUNC_NAMED( HasAttribute, "HasBotAttribute", "Checks if this TFBot has the given attributes" )
+
+DEFINE_SCRIPTFUNC_NAMED( AddTag, "AddBotTag", "Adds a bot tag" )
+DEFINE_SCRIPTFUNC_NAMED( RemoveTag, "RemoveBotTag", "Removes a bot tag" )
+DEFINE_SCRIPTFUNC_NAMED( ClearTags, "ClearAllBotTags", "Clears bot tags" )
+DEFINE_SCRIPTFUNC_NAMED( HasTag, "HasBotTag", "Checks if this TFBot has the given bot tag" )
+
+DEFINE_SCRIPTFUNC_NAMED( SetWeaponRestriction, "AddWeaponRestriction", "Adds weapon restriction flags" )
+DEFINE_SCRIPTFUNC_NAMED( RemoveWeaponRestriction, "RemoveWeaponRestriction", "Removes weapon restriction flags" )
+DEFINE_SCRIPTFUNC_NAMED( ClearWeaponRestrictions, "ClearAllWeaponRestrictions", "Removes all weapon restriction flags" )
+DEFINE_SCRIPTFUNC_NAMED( HasWeaponRestriction, "HasWeaponRestriction", "Checks if this TFBot has the given weapon restriction flags" )
+
+DEFINE_SCRIPTFUNC_WRAPPED( IsWeaponRestricted, "Checks if the given weapon is restricted for use on the bot" )
+
+DEFINE_SCRIPTFUNC_WRAPPED( GetDifficulty, "Returns the bot's difficulty level" )
+DEFINE_SCRIPTFUNC_WRAPPED( SetDifficulty, "Sets the bots difficulty level" )
+DEFINE_SCRIPTFUNC_WRAPPED( IsDifficulty, "Returns true/false if the bot's difficulty level matches." )
+
+DEFINE_SCRIPTFUNC_WRAPPED( GetHomeArea, "Sets the home nav area of the bot" )
+DEFINE_SCRIPTFUNC_WRAPPED( SetHomeArea, "Returns the home nav area of the bot -- may be nil." )
+
+DEFINE_SCRIPTFUNC_WRAPPED( DelayedThreatNotice, "" )
+DEFINE_SCRIPTFUNC( UpdateDelayedThreatNotices, "" )
+
+DEFINE_SCRIPTFUNC( SetMaxVisionRangeOverride, "Sets max vision range override for the bot" )
+DEFINE_SCRIPTFUNC( GetMaxVisionRangeOverride, "Gets the max vision range override for the bot" )
+
+DEFINE_SCRIPTFUNC( SetScaleOverride, "Sets the scale override for the bot" )
+
+DEFINE_SCRIPTFUNC( SetAutoJump, "Sets if the bot should automatically jump" )
+DEFINE_SCRIPTFUNC( ShouldAutoJump, "Returns if the bot should automatically jump" )
+
+DEFINE_SCRIPTFUNC( ShouldQuickBuild, "Returns if the bot should build instantly" )
+DEFINE_SCRIPTFUNC( SetShouldQuickBuild, "Sets if the bot should build instantly" )
+
+DEFINE_SCRIPTFUNC_WRAPPED( GetNearestKnownSappableTarget, "Gets the nearest known sappable target" )
+DEFINE_SCRIPTFUNC_WRAPPED( GenerateAndWearItem, "Give me an item!" )
+
+DEFINE_SCRIPTFUNC( IsInASquad, "Checks if we are in a squad" )
+DEFINE_SCRIPTFUNC( LeaveSquad, "Makes us leave the current squad (if any)" )
+DEFINE_SCRIPTFUNC( GetSquadFormationError, "Gets our formation error coefficient." )
+DEFINE_SCRIPTFUNC( SetSquadFormationError, "Sets our formation error coefficient." )
+DEFINE_SCRIPTFUNC_WRAPPED( DisbandCurrentSquad, "Forces the current squad to be entirely disbanded by everyone" )
+DEFINE_SCRIPTFUNC_WRAPPED( FindVantagePoint, "Get the nav area of the closest vantage point (within distance)" )
+
+DEFINE_SCRIPTFUNC_WRAPPED( SetAttentionFocus, "Sets our current attention focus to this entity" )
+DEFINE_SCRIPTFUNC_WRAPPED( IsAttentionFocusedOn, "Is our attention focused on this entity" )
+DEFINE_SCRIPTFUNC( ClearAttentionFocus, "Clear current focus" )
+DEFINE_SCRIPTFUNC( IsAttentionFocused, "Is our attention focused right now?" )
+
+DEFINE_SCRIPTFUNC( IsAmmoLow, "" )
+DEFINE_SCRIPTFUNC( IsAmmoFull, "" )
+
+DEFINE_SCRIPTFUNC_WRAPPED( GetSpawnArea, "Return the nav area of where we spawned" )
+
+DEFINE_SCRIPTFUNC( PressFireButton, "" )
+DEFINE_SCRIPTFUNC( PressAltFireButton, "" )
+DEFINE_SCRIPTFUNC( PressSpecialFireButton, "" )
+
+DEFINE_SCRIPTFUNC( GetBotId, "Get this bot's id" )
+DEFINE_SCRIPTFUNC( FlagForUpdate, "Flag this bot for update" )
+DEFINE_SCRIPTFUNC( IsFlaggedForUpdate, "Is this bot flagged for update" )
+DEFINE_SCRIPTFUNC( GetTickLastUpdate, "Get last update tick" )
+DEFINE_SCRIPTFUNC_WRAPPED( GetLocomotionInterface, "Get this bot's locomotion interface" )
+DEFINE_SCRIPTFUNC_WRAPPED( GetBodyInterface, "Get this bot's body interface" )
+DEFINE_SCRIPTFUNC_WRAPPED( GetIntentionInterface, "Get this bot's intention interface" )
+DEFINE_SCRIPTFUNC_WRAPPED( GetVisionInterface, "Get this bot's vision interface" )
+DEFINE_SCRIPTFUNC_WRAPPED( IsEnemy, "Return true if given entity is our enemy" )
+DEFINE_SCRIPTFUNC_WRAPPED( IsFriend, "Return true if given entity is our friend" )
+DEFINE_SCRIPTFUNC( IsImmobile, "Return true if we haven't moved in awhile" )
+DEFINE_SCRIPTFUNC( GetImmobileDuration, "How long have we been immobile" )
+DEFINE_SCRIPTFUNC( ClearImmobileStatus, "Clear immobile status" )
+DEFINE_SCRIPTFUNC( GetImmobileSpeedThreshold, "Return units/second below which this actor is considered immobile" )
+
+DEFINE_SCRIPTFUNC_NAMED( ScriptGetAllTags, "GetAllBotTags", "Get all bot tags" )
+
+DEFINE_SCRIPTFUNC_WRAPPED( SetMission, "Set this bot's current mission to the given mission" )
+DEFINE_SCRIPTFUNC_WRAPPED( SetPrevMission, "Set this bot's previous mission to the given mission" )
+DEFINE_SCRIPTFUNC_WRAPPED( GetMission, "Get this bot's current mission" )
+DEFINE_SCRIPTFUNC_WRAPPED( GetPrevMission, "Get this bot's previous mission" )
+DEFINE_SCRIPTFUNC_WRAPPED( HasMission, "Return true if the given mission is this bot's current mission" )
+DEFINE_SCRIPTFUNC( IsOnAnyMission, "Return true if this bot has a current mission" )
+DEFINE_SCRIPTFUNC_WRAPPED( SetMissionTarget, "Set this bot's mission target to the given entity" )
+DEFINE_SCRIPTFUNC_WRAPPED( GetMissionTarget, "Get this bot's current mission target" )
+
+DEFINE_SCRIPTFUNC_WRAPPED( SetBehaviorFlag, "Set the given behavior flag(s) for this bot" )
+DEFINE_SCRIPTFUNC_WRAPPED( ClearBehaviorFlag, "Clear the given behavior flag(s) for this bot" )
+DEFINE_SCRIPTFUNC_WRAPPED( IsBehaviorFlagSet, "Return true if the given behavior flag(s) are set for this bot" )
+
+DEFINE_SCRIPTFUNC_WRAPPED( SetActionPoint, "Set the given action point for this bot" )
+DEFINE_SCRIPTFUNC_WRAPPED( GetActionPoint, "Get the given action point for this bot" )
+
+END_SCRIPTDESC();
 
 //-----------------------------------------------------------------------------------------------------
 /**
@@ -718,23 +808,29 @@ public:
 
 
 //-----------------------------------------------------------------------------------------------------
-/**
- * NOTE: Assumes bot's difficulty has been set, and the bot is on a team.
- */
-const char *CTFBot::GetNextSpawnClassname( void ) const
+bool CTFBot::GetWeightDesiredClassToSpawn( CUtlVector< ETFClass > &vecClassToSpawn ) const
 {
+	// make sure there's nothing in the output
+	vecClassToSpawn.RemoveAll();
+
+	if ( !CanChangeClass() )
+	{
+		vecClassToSpawn.AddToTail( (ETFClass)GetPlayerClass()->GetClassIndex() );
+		return false;
+	}
+
 	struct ClassSelectionInfo
 	{
-		int m_class;
+		ETFClass m_class;
 		int m_minTeamSizeToSelect;					// team must have this many members to choose this class
 		int m_countPerTeamSize;						// must have 1 Medic for each 4 team members, for example
 		int m_minLimit;								// minimum that must be present (once other constraints are met)
-		int m_maxLimit[ NUM_DIFFICULTY_LEVELS ];	// maximum that can be present (-1 for infinite)
+		int m_maxLimit[NUM_DIFFICULTY_LEVELS];	// maximum that can be present (-1 for infinite)
 	};
 
 	const int NoLimit = -1;
 
-	static ClassSelectionInfo defenseRoster[] = 
+	static ClassSelectionInfo defenseRoster[] =
 	{
 		{ TF_CLASS_ENGINEER,		0, 4, 1, { 1, 2, 3, 3 } },
 		{ TF_CLASS_SOLDIER,			0, 0, 0, { NoLimit, NoLimit, NoLimit, NoLimit } },
@@ -748,7 +844,7 @@ const char *CTFBot::GetNextSpawnClassname( void ) const
 		{ TF_CLASS_UNDEFINED,		0, -1 },
 	};
 
-	static ClassSelectionInfo offenseRoster[] = 
+	static ClassSelectionInfo offenseRoster[] =
 	{
 		{ TF_CLASS_SCOUT,			0, 0, 1, { 3, 3, 3, 3 } },
 		{ TF_CLASS_SOLDIER,			0, 0, 0, { NoLimit, NoLimit, NoLimit, NoLimit } },
@@ -778,23 +874,13 @@ const char *CTFBot::GetNextSpawnClassname( void ) const
 		{ TF_CLASS_UNDEFINED,		0, -1 },
 	};
 
-	// if we are an engineer with an active sentry or teleporters, don't switch
-	if ( IsPlayerClass( TF_CLASS_ENGINEER ) )
-	{
-		if ( const_cast< CTFBot * >( this )->GetObjectOfType( OBJ_SENTRYGUN ) ||
-			 const_cast< CTFBot * >( this )->GetObjectOfType( OBJ_TELEPORTER, MODE_TELEPORTER_EXIT ) )
-		{
-			return "engineer";
-		}
-	}
-
 	// count classes in use by my team, not including me
 	CCountClassMembers currentRoster( this, GetTeamNumber() );
 	ForEachPlayer( currentRoster );
 
 	// assume offense
 	ClassSelectionInfo *desiredRoster = offenseRoster;
-	
+
 	if ( TFGameRules()->IsMatchTypeCompetitive() )
 	{
 		desiredRoster = compRoster;
@@ -838,10 +924,12 @@ const char *CTFBot::GetNextSpawnClassname( void ) const
 	}
 
 	// build vector of classes we can pick from
-	CUtlVector< int > desiredClassVector;
-	CUtlVector< int > allowedClassForBotRosterVector;
+	CUtlVector< ETFClass > desiredClassVector;
+	CUtlVector< ETFClass > allowedClassForBotRosterVector;
 
-	for( int i=0; desiredRoster[ i ].m_class != TF_CLASS_UNDEFINED; ++i )
+	bool bHasRequiredClass = false;
+	int nCurrentMinRequiredClass = INT_MAX;
+	for ( int i = 0; desiredRoster[i].m_class != TF_CLASS_UNDEFINED; ++i )
 	{
 		ClassSelectionInfo *desiredClassInfo = &desiredRoster[ i ];
 
@@ -859,17 +947,28 @@ const char *CTFBot::GetNextSpawnClassname( void ) const
 			continue;
 		}
 
+		if ( bHasRequiredClass && currentRoster.m_count[ desiredClassInfo->m_class ] > nCurrentMinRequiredClass )
+		{
+			// looking for required class, anything over the min count should be ignored
+			continue;
+		}
+
 		// check limits
 		if ( currentRoster.m_count[ desiredClassInfo->m_class ] < desiredClassInfo->m_minLimit )
 		{
 			// below required limit - choose only this class
-			desiredClassVector.RemoveAll();
+			if ( currentRoster.m_count[ desiredClassInfo->m_class ] < nCurrentMinRequiredClass )
+			{
+				nCurrentMinRequiredClass = currentRoster.m_count[ desiredClassInfo->m_class ];
+				desiredClassVector.RemoveAll();
+			}
 			desiredClassVector.AddToTail( desiredClassInfo->m_class );
-			break;
+
+			bHasRequiredClass = true;
+			continue;
 		}
 
 		int maxLimit = desiredClassInfo->m_maxLimit[ (int)clamp( GetDifficulty(), CTFBot::EASY, CTFBot::EXPERT ) ];
-
 		if ( maxLimit > NoLimit && currentRoster.m_count[ desiredClassInfo->m_class ] >= maxLimit )
 		{
 			// at or above limit for this class
@@ -883,62 +982,264 @@ const char *CTFBot::GetNextSpawnClassname( void ) const
 			if ( currentRoster.m_count[ desiredClassInfo->m_class ] - desiredClassInfo->m_minTeamSizeToSelect < maxCountPer )
 			{
 				// below required limit - choose only this class
-				desiredClassVector.RemoveAll();
+				if ( currentRoster.m_count[ desiredClassInfo->m_class ] < nCurrentMinRequiredClass )
+				{
+					nCurrentMinRequiredClass = currentRoster.m_count[ desiredClassInfo->m_class ];
+					desiredClassVector.RemoveAll();
+				}
 				desiredClassVector.AddToTail( desiredClassInfo->m_class );
-				break;
+				
+				bHasRequiredClass = true;
+				continue;
 			}
 		}
 
 		// valid class to choose
-		desiredClassVector.AddToTail( desiredClassInfo->m_class );
+		if ( !bHasRequiredClass )
+		{
+			desiredClassVector.AddToTail( desiredClassInfo->m_class );
+		}
 	}
 
+	// copy to output
 	if ( desiredClassVector.Count() == 0 )
 	{
-		if ( allowedClassForBotRosterVector.Count() == 0 )
+		vecClassToSpawn = allowedClassForBotRosterVector;
+	}
+	else
+	{
+		vecClassToSpawn = desiredClassVector;
+	}
+
+	return bHasRequiredClass;
+}
+
+
+//-----------------------------------------------------------------------------------------------------
+ETFClass CTFBot::GetPresetClassToSpawn() const
+{
+	if ( !CanChangeClass() )
+	{
+		return (ETFClass)GetPlayerClass()->GetClassIndex();
+	}
+
+	static ETFClass offenseRoster[] =
+	{
+		TF_CLASS_MEDIC,
+		TF_CLASS_ENGINEER,
+		TF_CLASS_SOLDIER,
+		TF_CLASS_HEAVYWEAPONS,
+		TF_CLASS_DEMOMAN,
+		TF_CLASS_SCOUT,
+
+		TF_CLASS_PYRO,
+		TF_CLASS_SOLDIER,
+		TF_CLASS_DEMOMAN,
+		TF_CLASS_SNIPER,
+		TF_CLASS_MEDIC,
+		TF_CLASS_SPY,
+	};
+
+	static ETFClass defenseRoster[] =
+	{
+		TF_CLASS_MEDIC,
+		TF_CLASS_ENGINEER,
+		TF_CLASS_SOLDIER,
+		TF_CLASS_DEMOMAN,
+		TF_CLASS_SCOUT,
+		TF_CLASS_HEAVYWEAPONS,
+
+		TF_CLASS_SNIPER,
+		TF_CLASS_ENGINEER,
+		TF_CLASS_SOLDIER,
+		TF_CLASS_MEDIC,
+		TF_CLASS_PYRO,
+		TF_CLASS_SPY,
+	};
+
+	static ETFClass compRoster[] =
+	{
+		TF_CLASS_MEDIC,
+		TF_CLASS_SCOUT,
+		TF_CLASS_SOLDIER,
+		TF_CLASS_DEMOMAN,
+		TF_CLASS_SCOUT,
+		TF_CLASS_SOLDIER,
+
+		TF_CLASS_HEAVYWEAPONS,
+		TF_CLASS_PYRO,
+		TF_CLASS_MEDIC,
+		TF_CLASS_ENGINEER,
+		TF_CLASS_SNIPER,
+		TF_CLASS_SPY,
+	};
+
+	// make sure we have completed list of rolls per team
+	COMPILE_TIME_ASSERT( ARRAYSIZE( offenseRoster ) == 12 );
+	COMPILE_TIME_ASSERT( ARRAYSIZE( defenseRoster ) == 12 );
+	COMPILE_TIME_ASSERT( ARRAYSIZE( compRoster ) == 12 );
+
+	// assume offense
+	ETFClass *desiredRoster = offenseRoster;
+
+	if ( TFGameRules()->IsMatchTypeCompetitive() )
+	{
+		desiredRoster = compRoster;
+	}
+	else if ( TFGameRules()->IsInKothMode() )
+	{
+		CTeamControlPoint *point = GetMyControlPoint();
+		if ( point )
+		{
+			if ( GetTeamNumber() == ObjectiveResource()->GetOwningTeam( point->GetPointIndex() ) )
+			{
+				// defend our point
+				desiredRoster = defenseRoster;
+			}
+		}
+	}
+	else if ( TFGameRules()->GetGameType() == TF_GAMETYPE_CP )
+	{
+		CUtlVector< CTeamControlPoint * > captureVector;
+		TFGameRules()->CollectCapturePoints( const_cast< CTFBot * >( this ), &captureVector );
+
+		CUtlVector< CTeamControlPoint * > defendVector;
+		TFGameRules()->CollectDefendPoints( const_cast< CTFBot * >( this ), &defendVector );
+
+		// if we have any points we can capture, try to do so
+		if ( captureVector.Count() > 0 || defendVector.Count() == 0 )
+		{
+			desiredRoster = offenseRoster;
+		}
+		else
+		{
+			desiredRoster = defenseRoster;
+		}
+	}
+	else if ( TFGameRules()->GetGameType() == TF_GAMETYPE_ESCORT )
+	{
+		if ( GetTeamNumber() == TF_TEAM_RED )
+		{
+			desiredRoster = defenseRoster;
+		}
+	}
+
+	// count classes in use by my team, not including me
+	CCountClassMembers currentRoster( this, GetTeamNumber() );
+	ForEachPlayer( currentRoster );
+
+	int classCount[TF_LAST_NORMAL_CLASS];
+	V_memset( classCount, 0, sizeof( classCount ) );
+	for ( int i=0; i<12; ++i )
+	{
+		ETFClass iClass = desiredRoster[i];
+
+		if ( currentRoster.m_count[ iClass ] > classCount[ iClass ] )
+		{
+			// if we have enough of this class, skip it
+			classCount[ iClass ]++;
+		}
+		else
+		{
+			return iClass;
+		}
+	}
+
+	AssertMsg( 0, "This return shouldn't happen." );
+	return TF_CLASS_UNDEFINED;
+}
+
+
+bool CTFBot::CanChangeClass() const
+{
+	// if we are an engineer with an active sentry or teleporters, don't switch
+	if ( IsPlayerClass( TF_CLASS_ENGINEER ) )
+	{
+		if ( const_cast< CTFBot * >( this )->GetObjectOfType( OBJ_SENTRYGUN ) ||
+			const_cast< CTFBot * >( this )->GetObjectOfType( OBJ_TELEPORTER, MODE_TELEPORTER_EXIT ) )
+		{
+			return false;
+		}
+	}
+	// if a medic has 25% uber charge or more, don't allow to change class
+	else if ( IsPlayerClass( TF_CLASS_MEDIC ) )
+	{
+		CWeaponMedigun *medigun = dynamic_cast< CWeaponMedigun * >( m_Shared.GetActiveTFWeapon() );
+		if ( medigun && medigun->GetChargeLevel() > 0.25f )
+		{
+			return false;
+		}
+	}
+
+	return true;
+}
+
+
+//-----------------------------------------------------------------------------------------------------
+/**
+ * NOTE: Assumes bot's difficulty has been set, and the bot is on a team.
+ */
+const char *CTFBot::GetNextSpawnClassname( void ) const
+{
+	ETFClass iNextClass = TF_CLASS_UNDEFINED;
+
+	const char *pszForceClass = tf_bot_force_class.GetString();
+	if ( !FStrEq( pszForceClass, "" ) )
+	{
+		iNextClass = (ETFClass)GetClassIndexFromString( pszForceClass );
+	}
+
+	if ( iNextClass == TF_CLASS_UNDEFINED && tf_bot_spawn_use_preset_roster.GetBool() && ( !TFGameRules() || !TFGameRules()->IsInTraining() ))
+	{
+		iNextClass = GetPresetClassToSpawn();
+	}
+	else if ( iNextClass == TF_CLASS_UNDEFINED )
+	{
+		CUtlVector< ETFClass > desiredClassVector;
+		GetWeightDesiredClassToSpawn( desiredClassVector );
+		if ( desiredClassVector.Count() == 0 )
 		{
 			// nothing available
 			Warning( "TFBot unable to choose a class, defaulting to 'auto'\n" );
 			return "auto";
 		}
-		else
-		{
-			desiredClassVector = allowedClassForBotRosterVector;
-		}
-	}
 
-	int which = RandomInt( 0, desiredClassVector.Count()-1 );
+		int which = RandomInt( 0, desiredClassVector.Count() - 1 );
 
-	// if we need to destroy a sentry, pick a class that can do so
-	if ( GetEnemySentry() ) 
-	{
-		// best sentry demolitions
-		int demoman = desiredClassVector.Find( TF_CLASS_DEMOMAN );
-		if ( demoman >= 0 )
+		// if we need to destroy a sentry, pick a class that can do so
+		if ( GetEnemySentry() )
 		{
-			which = demoman;
-		}
-		else
-		{
-			// next best sentry demolitions
-			int spy = desiredClassVector.Find( TF_CLASS_SPY );
-			if ( spy >= 0 )
+			// best sentry demolitions
+			int demoman = desiredClassVector.Find( TF_CLASS_DEMOMAN );
+			if ( demoman >= 0 )
 			{
-				which = spy;
+				which = demoman;
 			}
 			else
 			{
-				// good sentry demolitions
-				int soldier = desiredClassVector.Find( TF_CLASS_SOLDIER );
-				if ( soldier >= 0 )
+				// next best sentry demolitions
+				int spy = desiredClassVector.Find( TF_CLASS_SPY );
+				if ( spy >= 0 )
 				{
-					which = soldier;
+					which = spy;
+				}
+				else
+				{
+					// good sentry demolitions
+					int soldier = desiredClassVector.Find( TF_CLASS_SOLDIER );
+					if ( soldier >= 0 )
+					{
+						which = soldier;
+					}
 				}
 			}
 		}
+
+		iNextClass = desiredClassVector[ which ];
 	}
 
-	TFPlayerClassData_t *classData = GetPlayerClassData( desiredClassVector[ which ] );
+	Assert( iNextClass != TF_CLASS_UNDEFINED );
+	TFPlayerClassData_t *classData = GetPlayerClassData( iNextClass );
 	if ( classData )
 	{
 		return classData->m_szClassName;
@@ -1077,6 +1378,25 @@ void CTFBot::SetMission( MissionType mission, bool resetBehaviorSystem )
 	}
 }
 
+//-----------------------------------------------------------------------------------------------------
+bool CTFBot::ShouldReEvaluateCurrentClass( void ) const
+{
+	ETFClass iCurrentClass = ( ETFClass )GetPlayerClass()->GetClassIndex();
+	Assert( iCurrentClass != TF_CLASS_UNDEFINED );
+	TFPlayerClassData_t *classData = GetPlayerClassData( iCurrentClass );
+	Assert( classData );
+	return classData && !FStrEq( classData->m_szClassName, GetNextSpawnClassname() );
+}
+
+// UGLY HACK TO FIX BOTS NOT RE-EVALUATING THEIR CLASS WHEN THEY SWITCH TEAM
+// NEED TO REVISIT THIS AND UNDERSTAND THE COMMENT BELOW ABOUT DOING IT OUTSIDE THE BEHAVIOR SYSTEM
+//-----------------------------------------------------------------------------------------------------
+void CTFBot::ReEvaluateCurrentClass( void )
+{
+	// having the bot die will trigger them to
+	// re-evaluate their class in PhysicsSimulate() below
+	CommitSuicide( false, true );
+}
 
 //-----------------------------------------------------------------------------------------------------
 void CTFBot::PhysicsSimulate( void )
@@ -1114,9 +1434,7 @@ void CTFBot::PhysicsSimulate( void )
 		if ( TFGameRules() && TFGameRules()->IsMannVsMachineMode() )
 			return;
 
-		const char *classname = FStrEq( tf_bot_force_class.GetString(), "" ) ? GetNextSpawnClassname() : tf_bot_force_class.GetString();
-
-		HandleCommand_JoinClass( classname );
+		HandleCommand_JoinClass( GetNextSpawnClassname() );
 
 		m_didReselectClass = true;
 	}
@@ -1333,7 +1651,8 @@ void CTFBot::ModifyMaxHealth( int nNewMaxHealth, bool bSetCurrentHealth /*= true
 
 	if ( bAllowModelScaling && IsMiniBoss() )
 	{
-		SetModelScale( m_fModelScaleOverride > 0.0f ? m_fModelScaleOverride : tf_mvm_miniboss_scale.GetFloat() );		
+		SetModelScale( m_fModelScaleOverride > 0.0f ? m_fModelScaleOverride : tf_mvm_miniboss_scale.GetFloat() );
+		SetViewOffset( GetClassEyeHeight() );
 	}
 }
 
@@ -1564,9 +1883,6 @@ CTeamControlPoint *CTFBot::SelectPointToCapture( CUtlVector< CTeamControlPoint *
 	{
 		bool alwaysUseClosest = false;
 
-#ifdef STAGING_ONLY
-		alwaysUseClosest = TFGameRules() && TFGameRules()->IsBountyMode();
-#endif // STAGING_ONLY
 
 		if ( IsPointBeingCaptured( closestPoint ) || alwaysUseClosest )
 		{
@@ -1667,9 +1983,11 @@ CTeamControlPoint *CTFBot::GetMyControlPoint( void ) const
 	CUtlVector< CTeamControlPoint * > defendVector;
 	TFGameRules()->CollectDefendPoints( const_cast< CTFBot * >( this ), &defendVector );
 
-	if ( IsPlayerClass( TF_CLASS_ENGINEER ) || IsPlayerClass( TF_CLASS_SNIPER ) || HasAttribute( CTFBot::PRIORITIZE_DEFENSE ) )
+	bool bOnOffense = ( TFGameRules()->IsAttackDefenseMode() && GetTeamNumber() == TF_TEAM_BLUE );
+	
+	// Some attributes and classes prioritize defense (unless we're on the attacking team)
+	if ( ( ( IsPlayerClass( TF_CLASS_ENGINEER ) || IsPlayerClass( TF_CLASS_SNIPER ) ) && !bOnOffense ) || HasAttribute( CTFBot::PRIORITIZE_DEFENSE ) )
 	{
-		// engineers always try to defend first
 		if ( defendVector.Count() > 0 )
 		{
 			m_myControlPoint = SelectPointToDefend( &defendVector );
@@ -2030,7 +2348,14 @@ void CTFBot::SetupSniperSpotAccumulation( void )
 	{
 		// the cart is owned by the invaders
 		isDefendingPoint = ( goalEntity->GetTeamNumber() != myTeam );
-		goalEntityArea = (CTFNavArea *)TheTFNavMesh()->GetNearestNavArea( goalEntity->WorldSpaceCenter(), GETNAVAREA_CHECK_GROUND, 500.0f );
+
+		// Note(misyl): This GETNAVAREA_CHECK_GROUND (raw flag) was wrong, and is mapped to a bool of 'anyZ'.
+		//   -> goalEntityArea = (CTFNavArea *)TheTFNavMesh()->GetNearestNavArea( goalEntity->WorldSpaceCenter(), GETNAVAREA_CHECK_GROUND, 500.0f );
+		// Changed to fix, but maintaining the "anyZ" for compat.
+		const bool bAnyZ = true; // compat.
+		const bool bCheckLOS = false;
+		const bool bCheckGround = true;
+		goalEntityArea = (CTFNavArea *)TheTFNavMesh()->GetNearestNavArea( goalEntity->WorldSpaceCenter(), bAnyZ, 500.0f, bCheckLOS, bCheckGround );
 	}
 	else
 	{
@@ -3728,6 +4053,18 @@ bool CTFBot::IsWeaponRestricted( CTFWeaponBase *weapon ) const
 	return false;
 }
 
+bool CTFBot::ScriptIsWeaponRestricted( HSCRIPT script ) const
+{
+	CBaseEntity *pEntity = ToEnt( script );
+	if ( !pEntity )
+		return true;
+
+	CTFWeaponBase *pWeapon = dynamic_cast< CTFWeaponBase * >( pEntity );
+	if ( !pWeapon )
+		return true;
+
+	return IsWeaponRestricted( pWeapon );
+}
 
 //---------------------------------------------------------------------------------------------
 //
@@ -4135,6 +4472,16 @@ bool CTFBot::HasTag( const char *tag )
 
 
 //---------------------------------------------------------------------------------------------
+void CTFBot::ScriptGetAllTags( HSCRIPT hTable )
+{
+	for ( int i = 0; i < m_tags.Count(); i++ )
+	{
+		g_pScriptVM->SetValue( hTable, CFmtStr( "%d", i ), m_tags[ i ] );
+	}
+}
+
+
+//---------------------------------------------------------------------------------------------
 CBaseObject *CTFBot::GetNearestKnownSappableTarget( void )
 {
 	CUtlVector< CKnownEntity > knownVector;
@@ -4195,7 +4542,7 @@ Action< CTFBot > *CTFBot::OpportunisticallyUseWeaponAbilities( void )
 		float flHealthPercent = (float)GetHealth() / GetMaxHealth();
 		const float flHealthThreshold = 0.5f;
 		// should I activate parachute?
-		if ( !m_Shared.InCond( TF_COND_PARACHUTE_DEPLOYED ) )
+		if ( !m_Shared.InCond( TF_COND_PARACHUTE_ACTIVE ) )
 		{
 			float flMinParachuteGroundDistance = 300.f;
 			// check if I'm falling, high enough off the ground to deploy parachute, and not burning
@@ -4250,15 +4597,15 @@ Action< CTFBot > *CTFBot::OpportunisticallyUseWeaponAbilities( void )
 				}
 			}
 		}
-		else if ( weapon->GetWeaponID() == TF_WEAPON_BAT_WOOD )
+		else if ( ( weapon->GetWeaponID() == TF_WEAPON_BAT_WOOD ) || ( weapon->GetWeaponID() == TF_WEAPON_BAT_GIFTWRAP ) )
 		{
-			// sandman
+			// sandman or wrap assassin
 			if ( GetAmmoCount( TF_AMMO_GRENADES1 ) > 0 )
 			{
 				const CKnownEntity *threat = GetVisionInterface()->GetPrimaryKnownThreat();
 				if ( threat && threat->IsVisibleInFOVNow() )
 				{
-					// hit a stunball
+					// hit a stunball or bauble
 					PressAltFireButton();			
 				}
 			}
@@ -4553,9 +4900,16 @@ void CTFBot::AddItem( const char* pszItemName )
 	criteria.SetQuality( AE_USE_SCRIPT_VALUE );
 	criteria.BAddCondition( "name", k_EOperator_String_EQ, pszItemName, true );
 
-	CBaseEntity *pItem = ItemGeneration()->GenerateRandomItem( &criteria, WorldSpaceCenter(), vec3_angle );
+	int classNum = GetPlayerClass()->GetClassIndex();
+	CBaseEntity *pItem = ItemGeneration()->GenerateRandomItem( &criteria, WorldSpaceCenter(), vec3_angle, NULL, classNum);
 	if ( pItem )
 	{
+		CTFWeaponBuilder *pBuilder = dynamic_cast<CTFWeaponBuilder *>( pItem );
+		if ( pBuilder )
+		{
+			pBuilder->SetSubType( GetPlayerClass()->GetData()->m_aBuildable[0] );
+		}
+
 		CEconItemView *pScriptItem = static_cast< CBaseCombatWeapon * >( pItem )->GetAttributeContainer()->GetItem();
 
 		// If we already have an item in that slot, remove it

@@ -26,8 +26,6 @@
 
 using namespace vgui;
 
-const char *GetMapDisplayName( const char *mapName );
-
 //-----------------------------------------------------------------------------
 // Purpose: Constructor
 //-----------------------------------------------------------------------------
@@ -491,7 +489,15 @@ void CTFMapInfoMenu::LoadMapPage()
 
 			if( !g_pVGuiLocalize->Find( mapInfoKey ) )
 			{
-				if ( TFGameRules() )
+				if ( MapHasPrefix( m_szMapName, "vsh_" ) )
+				{
+					pszDescription = "#default_vsh_description";
+				}
+				else if ( MapHasPrefix( m_szMapName, "zi_" ) )
+				{
+					pszDescription = "#default_zi_description";
+				}
+				else if ( TFGameRules() )
 				{
 					if ( TFGameRules()->IsMannVsMachineMode() )
 					{

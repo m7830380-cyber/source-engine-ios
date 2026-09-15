@@ -13,24 +13,29 @@
 #include "econ_wearable.h"
 #include "props_shared.h"
 #include "GameEventListener.h"
-
+#include "ihasgenericmeter.h"
 
 #if defined( CLIENT_DLL )
 #define CTFWearable C_TFWearable
 #define CTFWearableVM C_TFWearableVM
+class C_TFPlayer;
+#define CTFPlayer C_TFPlayer
+#else
+class CTFPlayer;
 #endif
 
 
 #if defined( CLIENT_DLL )
-class CTFWearable : public CEconWearable, public CGameEventListener
+class CTFWearable : public CEconWearable, public CGameEventListener, public IHasGenericMeter
 #else
-class CTFWearable : public CEconWearable
+class CTFWearable : public CEconWearable, public IHasGenericMeter
 #endif
 {
 	DECLARE_CLASS( CTFWearable, CEconWearable );
 public:
 	DECLARE_NETWORKCLASS();
 	DECLARE_DATADESC();
+	DECLARE_PREDICTABLE();
 
 	CTFWearable();
 
@@ -74,6 +79,7 @@ protected:
 	virtual void		InternalSetPlayerDisplayModel( void );
 
 private:
+	void				UpdateDisguiseBodygroups( CTFPlayer *pTFOwner, CTFPlayer *pDisguiseTarget, CEconItemView *pItem, int iTeam, int iState );
 	CNetworkVar( bool, m_bDisguiseWearable );
 	CNetworkHandle( CBaseEntity, m_hWeaponAssociatedWith );
 

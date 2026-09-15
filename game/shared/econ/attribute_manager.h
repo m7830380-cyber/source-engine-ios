@@ -290,6 +290,25 @@ private:
 };
 #endif
 
+class CEconGetAttributeIterator : public CEconItemSpecificAttributeIterator
+{
+public:
+	CEconGetAttributeIterator( attrib_definition_index_t nDefIndex, float flDefaultValue )
+		: m_nDefIndex( nDefIndex ), m_flValue( flDefaultValue ) {}
+
+	bool OnIterateAttributeValue( const CEconItemAttributeDefinition *pAttrDef, attrib_value_t value ) override
+	{
+		if ( pAttrDef->GetDefinitionIndex() == m_nDefIndex )
+		{
+			m_flValue = *reinterpret_cast<float *>( &value );
+		}
+		return true;
+	}
+
+	float m_flValue;
+	attrib_definition_index_t m_nDefIndex;
+};
+
 #ifdef CLIENT_DLL
 EXTERN_RECV_TABLE( DT_AttributeManager );
 EXTERN_RECV_TABLE( DT_AttributeContainer );

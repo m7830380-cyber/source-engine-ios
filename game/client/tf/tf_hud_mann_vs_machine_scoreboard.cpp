@@ -12,9 +12,6 @@
 
 using namespace vgui;
 
-#ifdef STAGING_ONLY
-ConVar cl_mvm_log_playerstats( "cl_mvm_log_playerstats", "0", FCVAR_ARCHIVE, "Internal dump of verbose player stats from mvm missions." );
-#endif // STAGING_ONLY
 
 extern ConVar tf_mvm_respec_credit_goal;
 extern ConVar tf_mvm_respec_limit;
@@ -151,13 +148,6 @@ void CTFHudMannVsMachineScoreboard::FireGameEvent( IGameEvent * event )
 		if ( !g_TF_PR )
 			return;
 
-#ifdef STAGING_ONLY
-		// Write our current state to a log file if we're configured to
-		if ( cl_mvm_log_playerstats.GetBool() )
-		{
-			WritePlayerScoreStats();
-		}
-#endif // STAGING_ONLY		
 
 		// Adds current stats to "prev" containers (i.e. current wave's stats added to total of all previous wave stats)
 		g_TF_PR->UpdatePlayerScoreStats();
@@ -387,11 +377,14 @@ void CTFHudMannVsMachineScoreboard::UpdatePlayerList ()
 			{
 				int nTourNo = 0;
 				int bSurplusEnabled = false;
-				const CTFLobbyMember *pMember = pLobby->GetMemberDetails( GetSteamIDForPlayerIndex( playerIndex ) );
-				if ( pMember )
+				int idxMember = pLobby->GetMemberIndexBySteamID( GetSteamIDForPlayerIndex( playerIndex ) );
+				if ( idxMember >= 0 )
 				{
-					bSurplusEnabled = pMember->squad_surplus();	
-					nTourNo = pMember->badge_level();
+					ConstTFLobbyPlayer member = pLobby->GetMemberDetails( idxMember );
+					// I guess they could be on standby to join the match while being themselves ad-hoc or something
+					// bizarre?
+					bSurplusEnabled = member.BMatchPlayer() && member.GetSquadSurplus();
+					nTourNo = member.GetBadgeLevel();
 				}
 
 				if ( bSurplusEnabled )
@@ -680,61 +673,3 @@ void CTFHudMannVsMachineScoreboard::UpdatePopFile( void )
 	}
 }
 
-#ifdef STAGING_ONLY
-//-----------------------------------------------------------------------------
-void CTFHudMannVsMachineScoreboard::WritePlayerScoreStats( void )
-{
-	if ( g_TF_PR )
-	{
-		FileHandle_t hFile = g_pFullFileSystem->Open( "mvm_mission_stats.txt", "a" );
-		if ( hFile != FILESYSTEM_INVALID_HANDLE )
-		{
-			CUtlBuffer buf( 0, 0, CUtlBuffer::TEXT_BUFFER );
-
-			tm newtime;
-			VCRHook_LocalTime( &newtime );
-
-			buf.Printf( "%s - Wave %d - %s", TFObjectiveResource()->GetMvMPopFileName(), TFObjectiveResource()->GetMannVsMachineWaveCount(), asctime( &newtime ) );
-			buf.Printf( "----\n" );
-
-			// Player stats
-			for ( int i = 1; i <= MAX_PLAYERS; i++ )
-			{
-				C_TFPlayer *pPlayer = ToTFPlayer( UTIL_PlayerByIndex( i ) );
-				if ( !pPlayer )
-					continue;
-
-				if ( pPlayer->GetTeamNumber() != TF_TEAM_PVE_DEFENDERS )
-					continue;
-
-				const char *pszClassName = GetPlayerClassName( g_TF_PR->GetPlayerClass( i ) );
-
-				buf.Printf( "%10.10s %8.8s\tScore: %-6d Damage: %-6d DmgAssist: %-6d Tank: %-6d Healing: %-6d HealAssist: %-6d Blocked: %-6d Money: %-6d Bonus: %-6d\n", 
-					pPlayer->GetPlayerName(),
-					pszClassName ? pszClassName : "Unknown",
-					g_TF_PR->GetTotalScore( i ),
-					g_TF_PR->GetDamage( i ),
-					g_TF_PR->GetDamageAssist( i ),
-					g_TF_PR->GetDamageBoss( i ),
-					g_TF_PR->GetHealing( i ),
-					g_TF_PR->GetHealingAssist( i ),
-					g_TF_PR->GetDamageBlocked( i ),
-					g_TF_PR->GetCurrencyCollected( i ),
-					// Bonus points come from special events and helping teammates, such as:
-					// Resetting the bomb, killing a fully charged medic, shooting down projectiles
-					// extinguishing a teammate, pushing enemy giants away with airblast, 
-					// removing a sapper from someone else's building, dispensers giving ammo to the team,
-					// someone gaining health from your sandvich, bow headshots, stunning enemies with baseballs,
-					// scouts killing medics that were actively healing
-					g_TF_PR->GetBonusPoints( i ) );
-			}
-
-			buf.Printf( "----\n\n" );
-			g_pFullFileSystem->Write( buf.String(), buf.TellPut(), hFile );
-			buf.Clear();
-
-			g_pFullFileSystem->Close( hFile );
-		}
-	}
-}
-#endif // STAGING_ONLY

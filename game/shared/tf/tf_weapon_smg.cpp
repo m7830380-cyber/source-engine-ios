@@ -80,9 +80,9 @@ int	CTFSMG::GetDamageType( void ) const
 //-----------------------------------------------------------------------------
 // Purpose:
 //-----------------------------------------------------------------------------
-bool CTFSMG::CanFireCriticalShot( bool bIsHeadshot )
+bool CTFSMG::CanFireCriticalShot( bool bIsHeadshot, CBaseEntity *pTarget /*= NULL*/ )
 {
-	if ( !BaseClass::CanFireCriticalShot( bIsHeadshot ) )
+	if ( !BaseClass::CanFireCriticalShot( bIsHeadshot, pTarget ) )
 		return false;
 
 	CTFPlayer *pPlayer = GetTFPlayerOwner();

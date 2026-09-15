@@ -11,8 +11,11 @@
 #pragma once
 #endif
 
+#if 0
+
 #include "econ_item_inventory.h"
 #include "tf_controls.h"
+#include "econ_quests.h"
 
 using namespace vgui;
 
@@ -120,7 +123,7 @@ public:
 
 	DECLARE_CLASS_SIMPLE( CQuestItemPanel, EditablePanel );
 
-	CQuestItemPanel( Panel *parent, const char *pszPanelName, CEconItemView* pQuestItem, CScrollableQuestList* pQuestList );
+	CQuestItemPanel( Panel *parent, const char *pszPanelName, CQuest* pQuestItem, CScrollableQuestList* pQuestList );
 	virtual ~CQuestItemPanel();
 
 	virtual void ApplySchemeSettings( IScheme *pScheme ) OVERRIDE;
@@ -132,8 +135,8 @@ public:
 	virtual void OnSizeChanged(int wide, int tall) OVERRIDE {}
 	virtual void OnMouseReleased(MouseCode code) OVERRIDE;
 
-	const CEconItemView* GetItem() { return m_hQuestItem; }
-	void SetItem( CEconItemView* pItem );
+	const CQuest* GetItem() { return m_pLiveQuest; }
+	void SetItem( CQuest* pItem );
 	void QuestCompletedResponse();
 	EItemPanelState_t GetState() const { return m_eState; }
 	void SetSelected( bool bSelected, bool bImmediate );
@@ -153,16 +156,15 @@ protected:
 	bool HasAllControls() const { return m_bHasAllControls; }
 
 	void LoadResFileForCurrentItem();
-	void OnIdentify();
 	void SetupObjectivesPanels( bool bRecreate );
-	bool IsUnacknowledged();
 	void SetState( EItemPanelState_t eState );
 	void CaptureAndEncodeStrings();
 	const wchar_t* GetDecodedString( const char* pszKeyName, float flPercentDecoded );
 	void UpdateInvalidReasons();
 
 	EItemPanelState_t m_eState;
-	CEconItemViewHandle m_hQuestItem;
+	CQuest m_quest;
+	CQuest* m_pLiveQuest;
 
 	EditablePanel	*m_pQuestPaperContainer;
 	EditablePanel	*m_pFrontFolderContainer;
@@ -199,6 +201,7 @@ protected:
 	CItemModelPanel						*m_pLoanerItemModelPanel[2];
 
 	CExButton							*m_pDiscardButton;
+	CExButton							*m_pCompleteButton;
 
 
 	int									m_nPaperXPos;
@@ -207,7 +210,6 @@ protected:
 	int									m_nPaperYShakePos;
 	bool								m_bHasAllControls;
 	CUtlString							m_strItemTrackerResFile;
-	CUtlString							m_strQuickPlayMap;
 	
 	CUtlString							m_strMatchmakingGroupName;
 	CUtlString							m_strMatchmakingCategoryName;
@@ -228,7 +230,7 @@ protected:
 	CUtlString							m_strHighlightOn;
 	CUtlString							m_strHighlightOff;
 
-	class CItemTrackerPanel *m_pItemTrackerPanel;
+	class CQuestProgressTrackerPanel *m_pItemTrackerPanel;
 
 	CScrollableQuestList *m_pQuestList;
 
@@ -263,3 +265,5 @@ protected:
 };
 
 #endif // QUEST_ITEM_PANEL_H
+
+#endif

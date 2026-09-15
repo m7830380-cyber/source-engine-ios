@@ -354,8 +354,6 @@ CStoreViewCartPanel *GetStoreViewCartPanel( void )
 	return g_StoreViewCartPanel.Get();
 }
 
-
-
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
@@ -384,4 +382,12 @@ void CCartViewItemEntry::SetEntry( cart_item_t *pEntry, int iEntryIndex )
 		pRemoveButton->SetCommand( VarArgs("remove%d",iEntryIndex) );
 		pRemoveButton->AddActionSignalTarget( GetStoreViewCartPanel() );
 	}
+
+	wchar_t *pwzPreviewItem = L"";
+	if ( pEntry->bPreviewItem )
+	{
+		pwzPreviewItem = g_pVGuiLocalize->Find( "#Econ_Store_PurchaseType_PreviewItem" );
+	}
+
+	SetDialogVariable( "preview_item", pwzPreviewItem ? pwzPreviewItem : L"" );
 }

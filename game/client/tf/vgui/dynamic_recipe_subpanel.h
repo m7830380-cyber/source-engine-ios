@@ -101,10 +101,6 @@ class CDynamicRecipePanel : public CBackpackPanel
 	DECLARE_CLASS_SIMPLE( CDynamicRecipePanel, CBackpackPanel );
 public:
 
-#ifdef STAGING_ONLY
-	void Debug_GiveRequiredInputs() const;
-	CExButton *m_pDevGiveInputsButton;
-#endif
 
 	CDynamicRecipePanel( vgui::Panel *parent, const char *panelName, CEconItemView* pRecipeItem );
 	~CDynamicRecipePanel( void );

@@ -80,6 +80,8 @@ private:
 	float m_flEffectBarRegenTime;
 	float m_flNextPrimaryAttack;
 	float m_flNextSecondaryAttack;
+	bool m_bBroken;
+	float m_flMeter;
 #endif // GAME_DLL
 
 #ifdef CLIENT_DLL

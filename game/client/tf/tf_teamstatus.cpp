@@ -17,6 +17,7 @@
 #include "tf_teamstatus.h"
 #include "tf_matchmaking_shared.h"
 #include "tf_match_description.h"
+#include "tf_hud_match_status.h"
 
 using namespace vgui;
 
@@ -80,6 +81,7 @@ bool CTFTeamStatusPlayerPanel::Update( void )
 		Assert( TF_CLASS_UNDEFINED == 0 );
 		int iClass = -1;
 		bool bAlive = false;
+		bool bFeigned = false;
 		int iHealth = -1;
 		bool bIsLocalPlayer = false;
 		if ( m_iPlayerIndex > 0 )
@@ -92,6 +94,30 @@ bool CTFTeamStatusPlayerPanel::Update( void )
 			{
 				bAlive = g_TF_PR->IsAlive( m_iPlayerIndex );
 			}
+
+			C_TFPlayer* pTFPlayer = ToTFPlayer( UTIL_PlayerByIndex( m_iPlayerIndex ) );
+
+			// Josh: Not sure if this halloween logic can ever trigger, but it was missing
+			// replication from the scoreboard either way.
+			if ( TFGameRules() && TFGameRules()->IsHolidayActive( kHoliday_Halloween ) && TFGameRules()->ArePlayersInHell() )
+			{
+				if ( pTFPlayer && pTFPlayer->m_Shared.InCond( TF_COND_HALLOWEEN_GHOST_MODE ) )
+				{
+					bAlive = false;
+					bFeigned = true;
+				}
+			}
+
+			// Josh: Are they a Spy that's feigning death? Mark them as dead on the status UI.
+			if ( g_TF_PR->GetPlayerClass( m_iPlayerIndex ) == TF_CLASS_SPY )
+			{
+				if ( pTFPlayer && pTFPlayer->m_Shared.InCond( TF_COND_FEIGN_DEATH ) )
+				{
+					bAlive = false;
+					bFeigned = true;
+				}
+			}
+
 			if ( bAlive )
 			{
 				iHealth = g_TF_PR->GetHealth( m_iPlayerIndex );
@@ -177,7 +203,7 @@ bool CTFTeamStatusPlayerPanel::Update( void )
 				}
 				else if ( iClass == TF_CLASS_UNDEFINED )
 				{
-					int iDeadClass = g_TF_PR->GetPlayerClassWhenKilled( m_iPlayerIndex );
+					int iDeadClass = bFeigned ? g_TF_PR->GetPlayerClass( m_iPlayerIndex ) : g_TF_PR->GetPlayerClassWhenKilled( m_iPlayerIndex );
 					if ( !bAlive && !bSameTeamAsLocalPlayer && ( m_iTeam >= FIRST_GAME_TEAM ) && ( iDeadClass > TF_CLASS_UNDEFINED ) )
 					{
 						m_pClassImage->SetImage( VarArgs( "%s_alpha", ( m_iTeam == TF_TEAM_RED ) ? g_pszItemClassImagesRed[iDeadClass + 9] : g_pszItemClassImagesBlue[iDeadClass + 9] ) );
@@ -498,7 +524,7 @@ bool CTFTeamStatus::ShouldDraw( void )
 	if ( TFGameRules() )
 	{
 		const IMatchGroupDescription* pMatchDesc = GetMatchGroupDescription( TFGameRules()->GetCurrentMatchGroup() );
-		if ( !pMatchDesc || !pMatchDesc->m_params.m_bUseMatchHud )
+		if ( ( pMatchDesc && !pMatchDesc->BUsesMatchHUD() ) || !ShouldUseMatchHUD() )
 			return false;
 
 		if ( TFGameRules()->ShowMatchSummary() )

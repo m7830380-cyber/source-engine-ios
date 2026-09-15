@@ -91,9 +91,19 @@ void CRequestNameDialog::ApplySchemeSettings( vgui::IScheme *pScheme )
 		{
 			CEconItem *pSOCData = m_pSubjectModelPanel->GetItem()->GetSOCData();
 			if ( pSOCData && pSOCData->GetCustomDesc() )
+			{
 				m_pOldName->SetText( pSOCData->GetCustomDesc() );
+			}
 			else
-				m_pOldName->SetText( m_pSubjectModelPanel->GetItem()->GetStaticData()->GetItemDesc() );
+			{
+				const char *pszItemDesc = m_pSubjectModelPanel->GetItem()->GetStaticData()->GetItemDesc();
+				if ( pszItemDesc && ( pszItemDesc[0] == '#' ) )
+				{
+					// don't show localization strings for item descriptions
+					pszItemDesc = "";
+				}
+				m_pOldName->SetText( pszItemDesc );
+			}
 		}
 		else
 		{

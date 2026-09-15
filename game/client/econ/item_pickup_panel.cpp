@@ -29,7 +29,7 @@
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-CItemPickupPanel::CItemPickupPanel( Panel *parent ) : Frame( parent, "item_pickup" )
+CItemPickupPanel::CItemPickupPanel( Panel *parent, bool bPopup ) : Frame( parent, "item_pickup", bPopup )
 {
 	vgui::VPANEL gameuiPanel = enginevgui->GetPanel( PANEL_GAMEUIDLL );
 	SetParent( gameuiPanel );
@@ -198,6 +198,12 @@ void CItemPickupPanel::ShowPanel(bool bShow)
 		}
 
 		m_aItems.Purge();
+
+		auto pEvent = gameeventmanager->CreateEvent( "items_acknowledged" );
+		if ( pEvent )
+		{
+			gameeventmanager->FireEventClientSide( pEvent );
+		}
 	}
 
 	SetMouseInputEnabled( bShow );
@@ -424,11 +430,6 @@ void CItemPickupPanel::AcknowledgeItems( void )
 	// Check to make sure the player has room for all his items. If not, bring up the discard panel. Otherwise, go away.
 	if ( !InventoryManager()->CheckForRoomAndForceDiscard(  ) )
 	{
-#ifdef TF_CLIENT_DLL
-		// If the quest log is up, we just go back to that
-		if ( GetQuestLog() && GetQuestLog()->IsVisible() )
-			return;
-#endif
 		// If we're connected to a game server, we also close the game UI.
 		if ( m_bReturnToGame && engine->IsInGame() )
 		{
@@ -472,6 +473,7 @@ void	CItemPickupPanel::OnKeyCodePressed( vgui::KeyCode code )
 	else if ( nButtonCode == KEY_XBUTTON_RIGHT || 
 			  nButtonCode == KEY_XSTICK1_RIGHT ||
 			  nButtonCode == KEY_XSTICK2_RIGHT || 
+			  nButtonCode == STEAMCONTROLLER_DPAD_RIGHT ||
 			  nButtonCode == KEY_RIGHT )
 	{
 		OnCommand( "nextitem" );
@@ -479,6 +481,7 @@ void	CItemPickupPanel::OnKeyCodePressed( vgui::KeyCode code )
 	else if ( nButtonCode == KEY_XBUTTON_LEFT || 
 			  nButtonCode == KEY_XSTICK1_LEFT ||
 			  nButtonCode == KEY_XSTICK2_LEFT || 
+			  nButtonCode == STEAMCONTROLLER_DPAD_LEFT ||
 			  nButtonCode == KEY_LEFT )
 	{
 		OnCommand( "previtem" );
@@ -595,7 +598,7 @@ CItemPickupPanel *GetItemPickupPanel( void )
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-CItemDiscardPanel::CItemDiscardPanel( Panel *parent ) : Frame( parent, "item_discard" )
+CItemDiscardPanel::CItemDiscardPanel( Panel *parent, bool bPopup ) : Frame( parent, "item_discard", bPopup )
 {
 	vgui::VPANEL gameuiPanel = enginevgui->GetPanel( PANEL_GAMEUIDLL );
 	SetParent( gameuiPanel );
@@ -847,7 +850,7 @@ void	CItemDiscardPanel::OnKeyCodePressed( vgui::KeyCode code )
 {	
 	ButtonCode_t nButtonCode = GetBaseButtonCode( code );
 
-	if( nButtonCode == KEY_XBUTTON_B )
+	if( nButtonCode == KEY_XBUTTON_B || nButtonCode == STEAMCONTROLLER_B )
 	{
 		OnCommand( "vguicancel" );
 	}

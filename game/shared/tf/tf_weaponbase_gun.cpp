@@ -204,13 +204,6 @@ void CTFWeaponBaseGun::PrimaryAttack( void )
 		m_iReloadMode.Set( TF_RELOAD_START );
 	}
 
-#ifdef STAGING_ONLY
-	// Remove Cond if I attack
-	if ( pPlayer->m_Shared.InCond( TF_COND_NO_COMBAT_SPEED_BOOST ) )
-	{
-		pPlayer->m_Shared.RemoveCond( TF_COND_NO_COMBAT_SPEED_BOOST );
-	}
-#endif
 
 	m_flLastPrimaryAttackTime = gpGlobals->curtime;
 
@@ -218,8 +211,13 @@ void CTFWeaponBaseGun::PrimaryAttack( void )
 	{
 		pPlayer->RemoveDisguise();
 	}
+
+	pPlayer->m_Shared.OnAttack();
 }	
 
+//-----------------------------------------------------------------------------
+// Purpose:
+//-----------------------------------------------------------------------------
 bool CTFWeaponBaseGun::ShouldRemoveDisguiseOnPrimaryAttack() const
 {
 	int iAttr = 0;
@@ -229,6 +227,7 @@ bool CTFWeaponBaseGun::ShouldRemoveDisguiseOnPrimaryAttack() const
 
 	return true;
 }
+
 //-----------------------------------------------------------------------------
 // Purpose:
 //-----------------------------------------------------------------------------
@@ -247,17 +246,13 @@ void CTFWeaponBaseGun::SecondaryAttack( void )
 
 	m_bInAttack2 = true;
 
-#ifdef STAGING_ONLY
-	// Remove Cond if I attack
-	if ( pPlayer->m_Shared.InCond( TF_COND_NO_COMBAT_SPEED_BOOST ) )
-	{
-		pPlayer->m_Shared.RemoveCond( TF_COND_NO_COMBAT_SPEED_BOOST );
-	}
-#endif
 
 	m_flNextSecondaryAttack = gpGlobals->curtime + 0.5;
 }
 
+//-----------------------------------------------------------------------------
+// Purpose:
+//-----------------------------------------------------------------------------
 CBaseEntity *CTFWeaponBaseGun::FireProjectile( CTFPlayer *pPlayer )
 {
 	// New behavior: allow weapons to have attributes to specify what sort of
@@ -279,7 +274,7 @@ CBaseEntity *CTFWeaponBaseGun::FireProjectile( CTFPlayer *pPlayer )
 	{
 	case TF_PROJECTILE_BULLET:
 		FireBullet( pPlayer );
-		//pPlayer->DoAnimationEvent( PLAYERANIMEVENT_ATTACK_PRIMARY );
+		pPlayer->DoAnimationEvent( PLAYERANIMEVENT_ATTACK_PRIMARY );
 		break;
 
 	case TF_PROJECTILE_ROCKET:
@@ -288,9 +283,6 @@ CBaseEntity *CTFWeaponBaseGun::FireProjectile( CTFPlayer *pPlayer )
 		break;
 
 	case TF_PROJECTILE_SYRINGE:
-#ifdef STAGING_ONLY
-	case TF_PROJECTILE_TRANQ:
-#endif // STAGING_ONLY
 		pProjectile = FireNail( pPlayer, iProjectile );
 		pPlayer->DoAnimationEvent( PLAYERANIMEVENT_ATTACK_PRIMARY );
 		break;
@@ -315,6 +307,7 @@ CBaseEntity *CTFWeaponBaseGun::FireProjectile( CTFPlayer *pPlayer )
 	case TF_PROJECTILE_FESTIVE_JAR:
 	case TF_PROJECTILE_BREADMONSTER_JARATE:
 	case TF_PROJECTILE_BREADMONSTER_MADMILK:
+	case TF_PROJECTILE_JAR_GAS:
 		pProjectile = FireJar( pPlayer );
 		pPlayer->DoAnimationEvent( PLAYERANIMEVENT_ATTACK_PRIMARY );
 		break;
@@ -323,10 +316,6 @@ CBaseEntity *CTFWeaponBaseGun::FireProjectile( CTFPlayer *pPlayer )
 	case TF_PROJECTILE_BUILDING_REPAIR_BOLT:
 	case TF_PROJECTILE_FESTIVE_ARROW:
 	case TF_PROJECTILE_FESTIVE_HEALING_BOLT:
-#ifdef STAGING_ONLY
-	case TF_PROJECTILE_SNIPERBULLET:
-	case TF_PROJECTILE_MILK_BOLT:
-#endif
 	case TF_PROJECTILE_GRAPPLINGHOOK:
 		pProjectile = FireArrow( pPlayer, ProjectileType_t( iProjectile ) );
 		pPlayer->DoAnimationEvent( PLAYERANIMEVENT_ATTACK_PRIMARY );
@@ -363,6 +352,7 @@ CBaseEntity *CTFWeaponBaseGun::FireProjectile( CTFPlayer *pPlayer )
 	RemoveProjectileAmmo( pPlayer );
 
 	m_flLastFireTime = gpGlobals->curtime;
+	m_iConsecutiveShots++;
 
 	DoFireEffects();
 
@@ -380,6 +370,8 @@ CBaseEntity *CTFWeaponBaseGun::FireProjectile( CTFPlayer *pPlayer )
 	return pProjectile;
 }
 
+//-----------------------------------------------------------------------------
+// Purpose:
 //-----------------------------------------------------------------------------
 void CTFWeaponBaseGun::RemoveProjectileAmmo( CTFPlayer *pPlayer )
 {
@@ -632,15 +624,6 @@ CBaseEntity *CTFWeaponBaseGun::FireNail( CTFPlayer *pPlayer, int iSpecificNail )
 			pProjectile = CTFProjectile_Syringe::Create( vecSrc, angForward, this, pPlayer, pPlayer, IsCurrentAttackACrit() );
 		}
 		break;
-#ifdef STAGING_ONLY
-	case TF_PROJECTILE_TRANQ:
-		{
-			Vector vecOffset( 16, 6, 0 );
-			GetProjectileFireSetup( pPlayer, vecOffset, &vecSrc, &angForward );
-			pProjectile = CTFProjectile_Tranq::Create( vecSrc, angForward, this, pPlayer, pPlayer, IsCurrentAttackACrit() );
-		}
-		break;
-#endif // STAGING_ONLY
 	default:
 		Assert(0);
 	}
@@ -734,8 +717,11 @@ CBaseEntity *CTFWeaponBaseGun::FirePipeBomb( CTFPlayer *pPlayer, int iPipeBombTy
 		if ( attrCustomModelName.has_value() )
 		{
 			pProjectile->SetModel( attrCustomModelName.value().c_str() );
+			
+			// Set the grenade size again. It was previously set in CTFWeaponBaseGrenadeProj::Spawn() 
+			// during CTFGrenadePipebombProjectile::Create() above, but SetModel() resets it to the model's bounds.
+			UTIL_SetSize( pProjectile, TF_GRENADE_PROJECTILE_MINS, TF_GRENADE_PROJECTILE_MAXS );
 		}
-
 	}
 
 	return pProjectile;
@@ -796,20 +782,6 @@ CBaseEntity *CTFWeaponBaseGun::FireArrow( CTFPlayer *pPlayer, ProjectileType_t p
 	Vector vecSrc;
 	QAngle angForward;
 	Vector vecOffset( 23.5f, -8.0f, -3.0f );
-#ifdef STAGING_ONLY
-	if ( projectileType == TF_PROJECTILE_SNIPERBULLET )
-	{
-		// Center the bullet while zoomed, otherwise flip the arrow cause arrows are dumb
-		if ( pPlayer->m_Shared.InCond( TF_COND_ZOOMED ) )
-		{
-			vecOffset = Vector( 32, 0, -2.0f );
-		}
-		else
-		{
-			vecOffset.y = 8.0f;
-		}
-	}
-#endif // STAGING_ONLY
 
 	GetProjectileFireSetup( pPlayer, vecOffset, &vecSrc, &angForward, false );
 
@@ -898,6 +870,16 @@ float CTFWeaponBaseGun::GetWeaponSpread( void )
 			flReducedHealthBonus = RemapValClamped( pPlayer->HealthFraction(), 0.2f, 0.9f, flReducedHealthBonus, 1.0f );
 			fSpread *= flReducedHealthBonus;
 		}
+		
+		float flScaler = 0.f;
+		CALL_ATTRIB_HOOK_FLOAT( flScaler, mult_spread_scales_consecutive );
+		if ( flScaler != 0.f && m_iConsecutiveShots )
+		{
+			// We enter this on what is going to be the second shot, due to how/when m_iConsecutiveShots increments
+			flScaler = RemapValClamped( (float)m_iConsecutiveShots, 1.f, 5.f, 1.125f, 1.5f );
+			fSpread *= flScaler;
+			//DevMsg( "Shot: %i  Scalar: %3.2f  Spread: %3.2f\n", m_iConsecutiveShots.Get(), flScaler, fSpread );
+		}
 	}
 
 	return fSpread;
@@ -976,12 +958,12 @@ float CTFWeaponBaseGun::GetProjectileDamage( void )
 	{
 		float flScaleDamage = 1.f;
 		CALL_ATTRIB_HOOK_FLOAT( flScaleDamage, accuracy_scales_damage );
-		if ( flScaleDamage > 1.f )
+		if ( flScaleDamage > 1.f && m_iProjectilesFiredInTime )
 		{
 			// Bullets fired vs hit ratio over last x.x second(s)
 			if ( gpGlobals->curtime < GetLastHitTime() + 0.7f )
 			{
-				float flRatio = (float)m_iHitsInTime / (float)m_iFiredInTime;
+				float flRatio = (float)m_iHitsInTime / (float)m_iProjectilesFiredInTime;
 				float flDmgMod = RemapValClamped( flRatio, 0.f, 1.f, 1.f, flScaleDamage );
 
 // 				DevMsg( "A: %f - D: %f\n", flRatio, flDmgMod );
@@ -991,8 +973,8 @@ float CTFWeaponBaseGun::GetProjectileDamage( void )
 			}
 			else
 			{
-				m_iHitsInTime = 1;
-				m_iFiredInTime = 1;
+				m_iHitsInTime = 0;
+				m_iConsecutiveShots = 0;
 			}
 		}
 	}

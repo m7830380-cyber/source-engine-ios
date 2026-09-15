@@ -1434,12 +1434,7 @@ void CItemSoda::CanThink ( void )
 
 	SetSolid( SOLID_BBOX );
 	AddSolidFlags( FSOLID_TRIGGER );
-
-#ifdef HL1_DLL
-	UTIL_SetSize(this, Vector(-16, -16, 0), Vector(16, 16, 16));
-#else
 	UTIL_SetSize ( this, Vector ( -8, -8, 0 ), Vector ( 8, 8, 8 ) );
-#endif
 
 	SetThink ( NULL );
 	SetTouch ( &CItemSoda::CanTouch );
@@ -1496,7 +1491,7 @@ BEGIN_DATADESC( CPrecipitation )
 	DEFINE_KEYFIELD( m_nPrecipType, FIELD_INTEGER, "preciptype" ),
 END_DATADESC()
 
-// Just send the normal entity crap
+// Just send the normal entity stuff
 IMPLEMENT_SERVERCLASS_ST( CPrecipitation, DT_Precipitation)
 	SendPropInt( SENDINFO( m_nPrecipType ), Q_log2( NUM_PRECIPITATION_TYPES ) + 1, SPROP_UNSIGNED )
 END_SEND_TABLE()
@@ -1544,11 +1539,11 @@ public:
 	DECLARE_SERVERCLASS();
 
 private:
-//#ifdef POSIX
+#ifdef POSIX
 	CEnvWindShared m_EnvWindShared; // FIXME - fails to compile as networked var due to operator= problem
-//#else
-//	CNetworkVarEmbedded( CEnvWindShared, m_EnvWindShared );
-//#endif
+#else
+	CNetworkVarEmbedded( CEnvWindShared, m_EnvWindShared );
+#endif
 };
 
 LINK_ENTITY_TO_CLASS( env_wind, CEnvWind );
@@ -2312,6 +2307,13 @@ void EffectsPrecache( void *pUser )
 	{
 		CBaseEntity::PrecacheScriptSound( "HudChat.Message" );
 	}
+
+#ifdef TF_DLL
+	// For tempfx.
+	CBaseEntity::PrecacheModel( "models/weapons/shells/shell_cigarrette.mdl" );
+	CBaseEntity::PrecacheModel( "models/player/gibs/soldiergib007.mdl" );
+	CBaseEntity::PrecacheModel( "models/player/gibs/soldiergib008.mdl" );
+#endif
 }
 
 PRECACHE_REGISTER_FN( EffectsPrecache );

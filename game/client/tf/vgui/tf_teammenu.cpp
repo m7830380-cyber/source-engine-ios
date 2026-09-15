@@ -354,7 +354,7 @@ void CTFTeamMenu::ShowPanel( bool bShow )
 		if ( C_TFPlayer::GetLocalTFPlayer()->GetTeamNumber() >= FIRST_GAME_TEAM )
 		{
 			const IMatchGroupDescription* pMatchDesc = GetMatchGroupDescription( TFGameRules()->GetCurrentMatchGroup() );
-			if ( pMatchDesc && !pMatchDesc->m_params.m_bAllowTeamChange )
+			if ( pMatchDesc && !pMatchDesc->BAllowTeamChange() )
 			{
 				bDisallowChange = true;
 			}
@@ -814,7 +814,7 @@ void CTFTeamMenu::OnTick()
 	if ( ( bUnbalanced && iHeavyTeam == TF_TEAM_RED ) || 
 		 ( pRules->WouldChangeUnbalanceTeams( TF_TEAM_RED, iCurrentTeam ) ) ||
 		 ( bHighlander && GetGlobalTeam( TF_TEAM_RED )->GetNumPlayers() >= TF_LAST_NORMAL_CLASS - 1 ) ||
-		 ( pRules->IsMannVsMachineMode() && ( GetGlobalTeam( TF_TEAM_RED )->GetNumPlayers() >= kMVM_DefendersTeamSize ) )	 )
+		 ( pRules->IsMannVsMachineMode() && ( GetGlobalTeam( TF_TEAM_RED )->GetNumPlayers() >= tf_mvm_defenders_team_size.GetInt() ) )	 )
 	{
 		m_bRedDisabled = true;
 	}

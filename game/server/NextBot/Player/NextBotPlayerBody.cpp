@@ -349,6 +349,14 @@ CBaseEntity *PlayerBody::GetEntity( void )
 	return m_player;
 }
 
+
+//-----------------------------------------------------------------------------------------------
+CBaseEntity *PlayerBody::GetLookAtSubject( void ) const
+{
+	return m_lookAtSubject.Get();
+}
+
+
 //-----------------------------------------------------------------------------------------------
 /**
  * Return the view unit direction vector in world coordinates

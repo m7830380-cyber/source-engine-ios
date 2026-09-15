@@ -39,7 +39,7 @@ public:
 	virtual int		GetWeaponID( void ) const			{ return TF_WEAPON_REVOLVER; }
 	virtual int		GetDamageType( void ) const;
 
-	virtual bool	CanFireCriticalShot( bool bIsHeadshot );
+	virtual bool	CanFireCriticalShot( bool bIsHeadshot, CBaseEntity *pTarget = NULL ) OVERRIDE;
 
 	virtual void	PrimaryAttack( void );
 	virtual	float	GetWeaponSpread( void );

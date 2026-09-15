@@ -59,9 +59,9 @@ bool CBaseAdPanel::CheckForRequiredSteamComponents( const char* pszSteamRequried
 //-----------------------------------------------------------------------------
 CItemAdPanel::CItemAdPanel( Panel *parent, const char *panelName, item_definition_index_t itemDefIndex )
 	: BaseClass( parent, panelName )
-	, m_ItemDefIndex( itemDefIndex )
 	, m_bShowMarketButton( true )
 {
+	m_item.Init( itemDefIndex, AE_UNIQUE, 1, 1 );
 	SetDialogVariable( "price", "..." );
 }
 
@@ -72,7 +72,9 @@ void CItemAdPanel::ApplySchemeSettings( IScheme *pScheme )
 {
 	BaseClass::ApplySchemeSettings( pScheme );
 
+	m_bLoadingControls = true;
 	LoadControlSettings( GetItemDef()->GetAdResFile() );
+	m_bLoadingControls = false;
 }
 
 //-----------------------------------------------------------------------------
@@ -82,31 +84,18 @@ void CItemAdPanel::ApplySettings( KeyValues *inResourceData )
 {
 	BaseClass::ApplySettings( inResourceData );
 
-	m_bShowMarketButton = inResourceData->GetBool( "show_market", true ); // Default to showing market
+	if ( !m_bLoadingControls )
+	{
+		m_bShowItemName = inResourceData->GetBool( "show_name", true );
+		m_bShowAdText = inResourceData->GetBool( "show_ad_text", true );
+		m_bShowBackground = inResourceData->GetBool( "show_background", true );
+		m_bShowMarketButton = inResourceData->GetBool( "show_market", true ); // Default to showing market
+	}
 
 	if ( !m_bShowMarketButton )
 	{
 		// Tick every second as we try to get our price from the store
 		vgui::ivgui()->AddTickSignal( GetVPanel(), 1000 );
-	}
-
-	const CTFItemDefinition* pItemDef = GetItemDef();
-	CItemModelPanel* pItemImage = FindControl< CItemModelPanel >( "ItemIcon" );
-	if ( pItemImage )
-	{
-		CEconItemView adItem;
-		adItem.Init( pItemDef->GetDefinitionIndex(), AE_UNIQUE, 1, 1 );
-		pItemImage->InvalidateLayout( true, true );
-		pItemImage->SetItem( &adItem );
-
-		KeyValuesAD modelpanelKV( "modelpanel_kv" );
-		KeyValues *itemKV = new KeyValues( "itemmodelpanel" );
-		itemKV->SetBool( "inventory_image_type", true );
-		itemKV->SetBool( "use_item_rendertarget", false );
-		itemKV->SetBool( "allow_rot", false );
-
-		modelpanelKV->AddSubKey( itemKV );
-		pItemImage->ApplySettings( modelpanelKV );
 	}
 }
 
@@ -120,7 +109,7 @@ void CItemAdPanel::PerformLayout()
 	const CTFItemDefinition* pItemDef = GetItemDef();
 
 	// Get the ad text for the item.  If it's not there, juse use the description text.
-	SetDialogVariable( "item_name", g_pVGuiLocalize->Find( pItemDef->GetItemBaseName() ) );
+	SetDialogVariable( "item_name", m_item.GetItemName() );
 	const char* pszAdtext = pItemDef->GetAdTextToken() ? pItemDef->GetAdTextToken() : pItemDef->GetItemDesc();
 	CExScrollingEditablePanel* pScrollableItemText = FindControl< CExScrollingEditablePanel >( "ScrollableItemText", true );
 	if ( pszAdtext && pScrollableItemText )
@@ -131,6 +120,7 @@ void CItemAdPanel::PerformLayout()
 		if ( pAdLabel )
 		{
 			int nWide, nTall;
+			pAdLabel->InvalidateLayout( true );
 			pAdLabel->GetContentSize( nWide, nTall );
 			pAdLabel->SetTall( nTall );
 		}
@@ -145,6 +135,58 @@ void CItemAdPanel::PerformLayout()
 		
 		pBuyButton->SetVisible( !m_bShowMarketButton );
 		pMarketButton->SetVisible( m_bShowMarketButton );
+	}
+
+	CExLabel* pNameLabel = FindControl< CExLabel >( "ItemName", true );
+	int nNameLabelTall = 0;
+	if ( pNameLabel )
+	{
+		// Set the name to the quality color
+		// Rarity Econ Colorization
+		const char* pszRarityColor = GetItemSchema()->GetRarityColor( m_item.GetRarity() );
+		EEconItemQuality eQuality = (EEconItemQuality)m_item.GetItemQuality();
+		if ( pszRarityColor && eQuality != AE_SELFMADE )
+		{
+			pNameLabel->SetColorStr( pszRarityColor );
+		}
+
+		pNameLabel->SizeToContents();
+		nNameLabelTall = pNameLabel->GetTall();
+		pNameLabel->SetTall( nNameLabelTall + YRES( 2 ) );
+	}
+
+	if ( pScrollableItemText && pNameLabel )
+	{
+		pScrollableItemText->SetPos( pScrollableItemText->GetXPos(), pNameLabel->GetYPos() + nNameLabelTall );
+	}
+
+	SetControlVisible( "ItemName", m_bShowItemName );
+	SetControlVisible( "ScrollableItemText", m_bShowAdText );
+	SetControlVisible( "Background", m_bShowBackground );
+
+	SetupItemPanel();
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+void CItemAdPanel::SetupItemPanel()
+{
+	CItemModelPanel* pItemImage = FindControl< CItemModelPanel >( "ItemIcon" );
+	if ( pItemImage )
+	{
+
+		pItemImage->InvalidateLayout( true, true );
+		pItemImage->SetItem( &m_item );
+
+		KeyValuesAD modelpanelKV( "modelpanel_kv" );
+		KeyValues *itemKV = new KeyValues( "itemmodelpanel" );
+		itemKV->SetBool( "inventory_image_type", true );
+		itemKV->SetBool( "use_item_rendertarget", false );
+		itemKV->SetBool( "allow_rot", false );
+
+		modelpanelKV->AddSubKey( itemKV );
+		pItemImage->ApplySettings( modelpanelKV );
 	}
 }
 
@@ -179,7 +221,19 @@ void CItemAdPanel::OnTick()
 //-----------------------------------------------------------------------------
 const CTFItemDefinition* CItemAdPanel::GetItemDef() const
 {
-	return (CTFItemDefinition*)ItemSystem()->GetItemSchema()->GetItemDefinition( m_ItemDefIndex );
+	return (CTFItemDefinition*)m_item.GetItemDefinition();
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+void CItemAdPanel::SetItemTooltip( CItemModelPanelToolTip* pItemToolTip )
+{
+	CItemModelPanel* pItemImage = FindControl< CItemModelPanel >( "ItemIcon" );
+	if ( pItemImage )
+	{
+		pItemImage->SetTooltip( pItemToolTip, NULL );
+	}
 }
 
 //-----------------------------------------------------------------------------
@@ -287,7 +341,7 @@ void CCyclingAdContainerPanel::ApplySettings( KeyValues *inResourceData )
 	KeyValues* pKVItems = inResourceData->FindKey( "items" );
 	if ( pKVItems )
 	{
-		SetItemKVs( pKVItems );
+		BSetItemKVs( pKVItems );
 	}
 }
 
@@ -299,7 +353,13 @@ void CCyclingAdContainerPanel::CreatePanels()
 	if ( ItemSystem()->GetItemSchema()->GetVersion() == 0 )
 		return;
 
+	FOR_EACH_VEC( m_vecPossibleAds, i )
+	{
+		m_vecPossibleAds[ i ].m_pAdPanel->MarkForDeletion();
+	}
+
 	m_vecPossibleAds.Purge();
+	m_nCurrentIndex = 0;
 
 	FOR_EACH_TRUE_SUBKEY( m_pKVItems, pKVItem )
 	{
@@ -318,6 +378,12 @@ void CCyclingAdContainerPanel::CreatePanels()
 		{
 			AssertMsg( 0, "Invalid item def '%s'!", pszItemName );
 		}
+	}
+
+	// Queue up a transition
+	if ( m_vecPossibleAds.Count() )
+	{
+		m_ShowTimer.Start( m_vecPossibleAds[ m_nCurrentIndex ].m_pAdPanel->GetPresentTime() );
 	}
 
 	m_bNeedsToCreatePanels = false;
@@ -365,8 +431,36 @@ void CCyclingAdContainerPanel::OnThink()
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-void CCyclingAdContainerPanel::SetItemKVs( KeyValues* pKVItems )
+bool CCyclingAdContainerPanel::BSetItemKVs( KeyValues* pKVItems )
 {
+	// Go through all of our panels and see if there's any changes.  Making item model panels
+	// is *very* expensive so let's not if possible.
+	bool bAllFound = true;
+	FOR_EACH_TRUE_SUBKEY( pKVItems, pKVItem )
+	{
+		bool bItemFound = false;
+		const char* pszItemName = pKVItem->GetString( "item" );
+		const CEconItemDefinition *pDef = ItemSystem()->GetItemSchema()->GetItemDefinitionByName( pszItemName );
+		if ( pDef )
+		{
+			FOR_EACH_VEC( m_vecPossibleAds, i )
+			{
+				CItemAdPanel* pAdPanel = assert_cast< CItemAdPanel* >( m_vecPossibleAds[ i ].m_pAdPanel );
+				if ( pAdPanel && pAdPanel->GetItemDef() == pDef )
+				{
+					bItemFound = true;
+				}
+			}
+		}
+
+		if ( !bItemFound )
+			bAllFound = false;
+	}
+
+	// We've already got all these items.  Bail.
+	if ( bAllFound )
+		return false;
+
 	if ( pKVItems )
 	{
 		if ( m_pKVItems )
@@ -378,6 +472,7 @@ void CCyclingAdContainerPanel::SetItemKVs( KeyValues* pKVItems )
 	}
 
 	m_bNeedsToCreatePanels = true;
+	return true;
 }
 
 //-----------------------------------------------------------------------------
@@ -406,7 +501,7 @@ void CCyclingAdContainerPanel::PresentIndex( int nIndex )
 	if ( m_nCurrentIndex == nIndex )
 		return;
 
-	// Figure out which way we want to ransition
+	// Figure out which way we want to transition
 	m_bTransitionRight = nIndex > m_nCurrentIndex;
 
 	// Wrap if needed
@@ -426,7 +521,7 @@ void CCyclingAdContainerPanel::PresentIndex( int nIndex )
 	if ( !IsTransitioningOut() )
 	{
 		m_nTransitionStartOffsetX = m_nXPos;
-		float flTransitionTime = 1.f;
+		float flTransitionTime = 0.6f;
 		m_TransitionTimer.Start( flTransitionTime );
 
 		m_ShowTimer.Start( flTransitionTime + m_vecPossibleAds[ m_nCurrentIndex ].m_pAdPanel->GetPresentTime() );

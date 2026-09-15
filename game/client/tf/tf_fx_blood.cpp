@@ -149,7 +149,7 @@ C_TETFBlood::C_TETFBlood( void )
 {
 	m_vecOrigin.Init();
 	m_vecNormal.Init();
-	m_hEntity = INVALID_EHANDLE_INDEX;
+	m_hEntity = INVALID_EHANDLE;
 }
 
 //-----------------------------------------------------------------------------
@@ -165,7 +165,7 @@ void C_TETFBlood::PostDataUpdate( DataUpdateType_t updateType )
 static void RecvProxy_BloodEntIndex( const CRecvProxyData *pData, void *pStruct, void *pOut )
 {
 	int nEntIndex = pData->m_Value.m_Int;
-	((C_TETFBlood*)pStruct)->m_hEntity = (nEntIndex < 0) ? INVALID_EHANDLE_INDEX : ClientEntityList().EntIndexToHandle( nEntIndex );
+	((C_TETFBlood*)pStruct)->m_hEntity = (nEntIndex < 0) ? INVALID_EHANDLE : ClientEntityList().EntIndexToHandle( nEntIndex );
 }
 
 IMPLEMENT_CLIENTCLASS_EVENT_DT(C_TETFBlood, DT_TETFBlood, CTETFBlood)

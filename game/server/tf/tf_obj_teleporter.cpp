@@ -111,11 +111,11 @@ void CObjectTeleporter::TeleporterSend( CTFPlayer *pPlayer )
 	{
 	case TF_TEAM_RED:
 		TE_TFParticleEffect( filter, 0.0, "teleported_red", origin, vec3_angle );
-		TE_TFParticleEffect( filter, 0.0, "player_sparkles_red", origin, vec3_angle, pPlayer, PATTACH_POINT );
+		TE_TFParticleEffect( filter, 0.0, "player_sparkles_red", origin, vec3_angle, pPlayer, PATTACH_ABSORIGIN );
 		break;
 	case TF_TEAM_BLUE:
 		TE_TFParticleEffect( filter, 0.0, "teleported_blue", origin, vec3_angle );
-		TE_TFParticleEffect( filter, 0.0, "player_sparkles_blue", origin, vec3_angle, pPlayer, PATTACH_POINT );
+		TE_TFParticleEffect( filter, 0.0, "player_sparkles_blue", origin, vec3_angle, pPlayer, PATTACH_ABSORIGIN );
 		break;
 	default:
 		break;
@@ -293,30 +293,6 @@ void CObjectTeleporter::FirstSpawn()
 //-----------------------------------------------------------------------------
 void CObjectTeleporter::SetObjectMode( int iVal )
 {
-#ifdef STAGING_ONLY
-	int iSpeedPad = 0;
-	if ( GetBuilder() )
-	{
-		CALL_ATTRIB_HOOK_INT_ON_OTHER( GetBuilder(), iSpeedPad, teleporter_is_speedpad );
-		if ( iSpeedPad )
-		{
-			SetTeleporterType( TTYPE_SPEEDPAD );
-		}
-	}
-
-	if ( !iSpeedPad )
-	{
-		switch ( iVal )
-		{
-		case MODE_TELEPORTER_ENTRANCE:
-			SetTeleporterType( TTYPE_ENTRANCE );
-			break;
-		case MODE_TELEPORTER_EXIT:
-			SetTeleporterType( TTYPE_EXIT );
-			break;
-		}
-	}
-#else
 	if ( iVal == MODE_TELEPORTER_ENTRANCE )
 	{
 		SetTeleporterType( TTYPE_ENTRANCE );
@@ -325,7 +301,6 @@ void CObjectTeleporter::SetObjectMode( int iVal )
 	{
 		SetTeleporterType( TTYPE_EXIT );
 	}
-#endif
 
 	BaseClass::SetObjectMode( iVal );
 }
@@ -333,15 +308,6 @@ void CObjectTeleporter::SetObjectMode( int iVal )
 //-----------------------------------------------------------------------------
 int CObjectTeleporter::GetUpgradeMetalRequired()
 {
-#ifdef STAGING_ONLY
-	// STAGING_ENGY
-	int iSpeedPad = 0;
-	CALL_ATTRIB_HOOK_INT_ON_OTHER( GetBuilder(), iSpeedPad, teleporter_is_speedpad )
-	if ( iSpeedPad )
-	{
-		return 100;
-	}
-#endif
 
 	int nCost = GetObjectInfo( GetType() )->m_UpgradeCost;
 
@@ -384,10 +350,6 @@ void CObjectTeleporter::InitializeMapPlacedObject( void )
 	
 	SetObjectMode( IsEntrance() ? MODE_TELEPORTER_ENTRANCE : MODE_TELEPORTER_EXIT );
 
-#ifdef STAGING_ONLY
-	if ( GetTeleporterType() == TTYPE_SPEEDPAD )
-		return;
-#endif
 
 	m_hMatchingTeleporter = dynamic_cast<CObjectTeleporter*>( gEntList.FindEntityByName( NULL, m_iszMatchingMapPlacedTeleporter.ToCStr() ) );
 
@@ -543,11 +505,6 @@ void CObjectTeleporter::Precache()
 	PrecacheParticleSystem( "teleporter_arms_circle_red_blink" );
 	PrecacheParticleSystem( "teleporter_arms_circle_blue_blink" );
 
-#ifdef STAGING_ONLY
-	// STAGING ENGY
-	PrecacheScriptSound( "Building_Speedpad.BoostStart" );
-	PrecacheScriptSound( "Building_Speedpad.BoostStop" );
-#endif
 }
 
 //-----------------------------------------------------------------------------
@@ -650,15 +607,6 @@ void CObjectTeleporter::TeleporterTouch( CBaseEntity *pOther )
 		return;
 	}
 
-#ifdef STAGING_ONLY
-	// STAGING_ENGY
-	// For Speed Teleporters
-	if ( IsSpeedPad() )
-	{
-		ApplySpeedBoost( pPlayer );
-		return;
-	}
-#endif
 
 	int iBiDirectional = 0;
 	if ( GetOwner() )
@@ -713,100 +661,41 @@ void CObjectTeleporter::TeleporterTouch( CBaseEntity *pOther )
 	}
 }
 
-#ifdef STAGING_ONLY
-//STAGING_ENGY
-//-----------------------------------------------------------------------------
-void CObjectTeleporter::ApplySpeedBoost( CTFPlayer *pPlayer )
-{
-	if ( m_iState != TELEPORTER_STATE_READY )
-		return;
-	
-	Vector origin = GetAbsOrigin();
-	CPVSFilter filter( origin );
-	int iTeam = pPlayer->GetTeamNumber();
-	if ( pPlayer->IsPlayerClass( TF_CLASS_SPY ) && pPlayer->m_Shared.InCond( TF_COND_DISGUISED ) )
-	{
-		if ( GetBuilder() && iTeam != GetBuilder()->GetTeamNumber() )
-		{
-			iTeam = GetBuilder()->GetTeamNumber();
-		}
-	}
-
-	switch ( iTeam )
-	{
-	case TF_TEAM_RED:
-		TE_TFParticleEffect( filter, 0.0, "teleported_red", origin, vec3_angle );
-		TE_TFParticleEffect( filter, 0.0, "player_sparkles_red", origin, vec3_angle, pPlayer, PATTACH_POINT );
-		break;
-	case TF_TEAM_BLUE:
-		TE_TFParticleEffect( filter, 0.0, "teleported_blue", origin, vec3_angle );
-		TE_TFParticleEffect( filter, 0.0, "player_sparkles_blue", origin, vec3_angle, pPlayer, PATTACH_POINT );
-		break;
-	default:
-		break;
-	}
-
-	float flUpgrade = (float)GetUpgradeLevel();
-	pPlayer->m_Shared.AddCond( TF_COND_NO_COMBAT_SPEED_BOOST, 3.0f + flUpgrade );
-
-	SetState( TELEPORTER_STATE_RECHARGING );
-
-	EmitSound( "Building_Speedpad.BoostStart" );
-
-	m_flCurrentRechargeDuration = 2.0f - ( flUpgrade / 3.0f );
-	m_flRechargeTime = gpGlobals->curtime + ( BUILD_TELEPORTER_FADEOUT_TIME + BUILD_TELEPORTER_FADEIN_TIME + m_flCurrentRechargeDuration );
-	m_flMyNextThink = gpGlobals->curtime + m_flCurrentRechargeDuration;
-}
-#endif
 
 //-----------------------------------------------------------------------------
 // Purpose:
 //-----------------------------------------------------------------------------
-bool CObjectTeleporter::Command_Repair( CTFPlayer *pActivator, float flRepairMod )
+int CObjectTeleporter::Command_Repair( CTFPlayer *pActivator, float flAmount, float flRepairMod, float flRepairToMetalRatio /*= 3.f*/, bool bSendEvent /*= false*/ )
 {
-	float flTargetHeal = 100.0f * flRepairMod;
-	int iAmountToHeal = MIN( flTargetHeal, GetMaxHealth() - GetHealth() );
-		
-	// repair the building
-	int iRepairCost = ceil( (float)( iAmountToHeal ) * 0.2f );
+	// Teleporter-specific: 5 health costs 1 metal
+	flRepairToMetalRatio = 5.f;
 
-	TRACE_OBJECT( UTIL_VarArgs( "%0.2f CObjectTeleporter::Command_Repair ( %f / %d ) - cost = %d\n", gpGlobals->curtime, 
-		GetHealth(),
-		GetMaxHealth(),
-		iRepairCost ) );
-
-	if ( iRepairCost > 0 )
+	int iRepairAmount = BaseClass::Command_Repair( pActivator, flAmount, flRepairMod, flRepairToMetalRatio, bSendEvent );
+	if ( iRepairAmount > 0 )
 	{
-		if ( iRepairCost > pActivator->GetBuildResources() )
-		{
-			iRepairCost = pActivator->GetBuildResources();
-		}
-
-		pActivator->RemoveBuildResources( iRepairCost );
-
-		int nHealthToAdd = iRepairCost * 5;
-		float flNewHealth = MIN( GetMaxHealth(), GetHealth() + nHealthToAdd );
-		SetHealth( flNewHealth );	  
-
 		// add the same amount of health to our match
 		CObjectTeleporter *pMatch = GetMatchingTeleporter();
 		if ( pMatch )
 		{
-			pMatch->AddHealth( nHealthToAdd );
+			pMatch->AddHealth( iRepairAmount );
 		}
 
-		return ( iRepairCost > 0 );
+		return iRepairAmount;
 	}
+	// Nothing repaired - see if our matching teleporter needs repair
 	else
 	{
-		// see if our match needs repairing
 		CObjectTeleporter *pMatch = GetMatchingTeleporter();
 		if ( pMatch && !pMatch->IsBuilding() )
 		{
-			iAmountToHeal = MIN( flTargetHeal, pMatch->GetMaxHealth() - pMatch->GetHealth() );
-
-			// repair the building
-			iRepairCost = ceil( (float)( iAmountToHeal ) * 0.2f );
+			float flRepairAmountMax = flAmount * flRepairMod;
+			int iRepairAmount = Min( flRepairAmountMax, pMatch->GetMaxHealth() - pMatch->GetHealth() );
+			int iRepairCost = ceil( (float)iRepairAmount / flRepairToMetalRatio );
+			if ( iRepairCost > pActivator->GetBuildResources() )
+			{
+				// What can we afford?
+				iRepairCost = pActivator->GetBuildResources();
+			}
 
 			TRACE_OBJECT( UTIL_VarArgs( "%0.2f CObjectTeleporter::Command_Repair ( %f / %d ) - cost = %d\n", gpGlobals->curtime, 
 				pMatch->GetHealth(),
@@ -815,23 +704,16 @@ bool CObjectTeleporter::Command_Repair( CTFPlayer *pActivator, float flRepairMod
 
 			if ( iRepairCost > 0 )
 			{
-				if ( iRepairCost > pActivator->GetBuildResources() )
-				{
-					iRepairCost = pActivator->GetBuildResources();
-				}
-
+				iRepairAmount = iRepairCost * flRepairToMetalRatio;
 				pActivator->RemoveBuildResources( iRepairCost );
+				pMatch->SetHealth( pMatch->GetHealth() + iRepairAmount );
 
-				int nHealthToAdd = iRepairCost * 5;
-				float flNewHealth = MIN( pMatch->GetMaxHealth(), pMatch->GetHealth() + nHealthToAdd );
-				pMatch->SetHealth( flNewHealth );	  
-
-				return ( iRepairCost > 0 );
+				return iRepairAmount;
 			}
 		}
 	}
 				
-	return false;
+	return 0;
 }
 
 
@@ -840,11 +722,7 @@ bool CObjectTeleporter::Command_Repair( CTFPlayer *pActivator, float flRepairMod
 //-----------------------------------------------------------------------------
 bool CObjectTeleporter::IsReady( void )
 {
-#ifdef STAGING_ONLY
-	if ( !IsMatchingTeleporterReady() && !IsSpeedPad() )
-#else
 	if ( !IsMatchingTeleporterReady() )
-#endif
 		return false;
 
 	return GetState() != TELEPORTER_STATE_BUILDING && !IsUpgrading() && !IsDisabled();
@@ -922,10 +800,6 @@ void CObjectTeleporter::CopyUpgradeStateToMatch( CObjectTeleporter *pMatch, bool
 //-----------------------------------------------------------------------------
 CObjectTeleporter *CObjectTeleporter::GetMatchingTeleporter( void )
 {
-#ifdef STAGING_ONLY
-	if ( GetTeleporterType() == TTYPE_SPEEDPAD )
-		return NULL;
-#endif
 	return m_hMatchingTeleporter.Get();
 }
 
@@ -1175,11 +1049,7 @@ void CObjectTeleporter::TeleporterThink( void )
 	SetContextThink( &CObjectTeleporter::TeleporterThink, gpGlobals->curtime + BUILD_TELEPORTER_NEXT_THINK, TELEPORTER_THINK_CONTEXT );
 
 	// At any point, if our match is not ready, revert to IDLE
-#ifdef STAGING_ONLY	
-	if ( IsDisabled() || ( IsMatchingTeleporterReady() == false && !IsSpeedPad() ))
-#else
 	if ( IsDisabled() || IsMatchingTeleporterReady() == false )
-#endif
 	{
 		if ( GetState() != TELEPORTER_STATE_IDLE && GetState() != TELEPORTER_STATE_UPGRADING )
 		{
@@ -1193,18 +1063,7 @@ void CObjectTeleporter::TeleporterThink( void )
 		return;
 
 	// pMatch is not NULL and is not building
-#ifdef STAGING_ONLY		
-	CObjectTeleporter *pMatch = NULL;
-
-	if ( !IsSpeedPad() )
-	{
-		pMatch = GetMatchingTeleporter();
-		Assert( pMatch );
-		Assert( pMatch->m_iState != TELEPORTER_STATE_BUILDING );
-	}
-#else
 	CObjectTeleporter *pMatch = GetMatchingTeleporter();
-#endif
 
 	int iBiDirectional = 0;
 
@@ -1224,11 +1083,7 @@ void CObjectTeleporter::TeleporterThink( void )
 	default:
 	case TELEPORTER_STATE_IDLE:
 		// Do we have a match that is active?
-#ifdef STAGING_ONLY			
-		if ( IsMatchingTeleporterReady() || IsSpeedPad() )
-#else
 		if ( IsMatchingTeleporterReady() )
-#endif
 		{
 			SetState( TELEPORTER_STATE_READY );
 			EmitSound( "Building_Teleporter.Ready" );
@@ -1311,6 +1166,12 @@ void CObjectTeleporter::TeleporterThink( void )
 			SetState( TELEPORTER_STATE_RECHARGING );
 
 			m_flCurrentRechargeDuration = (float)g_iTeleporterRechargeTimes[GetUpgradeLevel()];
+			if ( !m_bWasMapPlaced )
+			{
+				CALL_ATTRIB_HOOK_FLOAT_ON_OTHER( GetBuilder(), m_flCurrentRechargeDuration, mult_teleporter_recharge_rate );
+			}
+
+			m_flRechargeTime = gpGlobals->curtime + m_flCurrentRechargeDuration;
 			m_flMyNextThink = gpGlobals->curtime + m_flCurrentRechargeDuration;
 		}
 		break;

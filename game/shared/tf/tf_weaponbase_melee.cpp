@@ -145,12 +145,14 @@ bool CTFWeaponBaseMelee::Holster( CBaseCombatWeapon *pSwitchingTo )
 		GetPlayerOwner()->m_flNextAttack = gpGlobals->curtime + 0.5;
 	}
 
-	int iSelfMark = 0;
-	CALL_ATTRIB_HOOK_INT( iSelfMark, self_mark_for_death );
-	if ( iSelfMark )
+	CTFPlayer *pPlayer = GetTFPlayerOwner();
+	if ( pPlayer )
 	{
-		CTFPlayer *pPlayer = GetTFPlayerOwner();
-		if ( pPlayer )
+		pPlayer->m_Shared.SetNextMeleeCrit( MELEE_NOCRIT );
+	
+		int iSelfMark = 0;
+		CALL_ATTRIB_HOOK_INT( iSelfMark, self_mark_for_death );
+		if ( iSelfMark )
 		{
 			pPlayer->m_Shared.AddCond( TF_COND_MARKEDFORDEATH_SILENT, iSelfMark );
 		}
@@ -212,13 +214,6 @@ void CTFWeaponBaseMelee::PrimaryAttack()
 		m_bMiniCrit = false;
 	}
 
-#ifdef STAGING_ONLY
-	// Remove Cond if I attack
-	if ( pPlayer->m_Shared.InCond( TF_COND_NO_COMBAT_SPEED_BOOST ) )
-	{
-		pPlayer->m_Shared.RemoveCond( TF_COND_NO_COMBAT_SPEED_BOOST );
-	}
-#endif
 
 #if !defined( CLIENT_DLL ) 
 	pPlayer->SpeakWeaponFire();
@@ -229,6 +224,8 @@ void CTFWeaponBaseMelee::PrimaryAttack()
 		pPlayer->RemoveInvisibility();
 	}
 #endif
+
+	pPlayer->m_Shared.OnAttack();
 }
 
 // -----------------------------------------------------------------------------
@@ -236,8 +233,7 @@ void CTFWeaponBaseMelee::PrimaryAttack()
 // -----------------------------------------------------------------------------
 void CTFWeaponBaseMelee::SecondaryAttack()
 {
-	// semi-auto behaviour
-	if ( m_bInAttack2 )
+	if ( !CanAttack() )
 		return;
 
 	// Get the current player.
@@ -249,15 +245,24 @@ void CTFWeaponBaseMelee::SecondaryAttack()
 
 	m_bInAttack2 = true;
 
-#ifdef STAGING_ONLY
-	// Remove Cond if I attack
-	if ( pPlayer->m_Shared.InCond( TF_COND_NO_COMBAT_SPEED_BOOST ) )
-	{
-		pPlayer->m_Shared.RemoveCond( TF_COND_NO_COMBAT_SPEED_BOOST );
-	}
-#endif
 
-	m_flNextSecondaryAttack = gpGlobals->curtime + 0.5;
+	m_flNextSecondaryAttack = gpGlobals->curtime + GetNextSecondaryAttackDelay(); // default: 0.5f
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+// Input  : *pPlayer - 
+//-----------------------------------------------------------------------------
+void CTFWeaponBaseMelee::PlaySwingSound( void )
+{
+	if ( IsCurrentAttackACrit() )
+	{
+		WeaponSound( BURST );
+	}
+	else
+	{
+		WeaponSound( MELEE_MISS );
+	}
 }
 
 //-----------------------------------------------------------------------------
@@ -288,15 +293,8 @@ void CTFWeaponBaseMelee::Swing( CTFPlayer *pPlayer )
 	pPlayer->m_Shared.SetNextStealthTime( m_flNextSecondaryAttack );
 
 	SetWeaponIdleTime( m_flNextPrimaryAttack + m_pWeaponInfo->GetWeaponData( m_iWeaponMode ).m_flTimeIdleEmpty );
-	
-	if ( IsCurrentAttackACrit() )
-	{
-		WeaponSound( BURST );
-	}
-	else
-	{
-		WeaponSound( MELEE_MISS );
-	}
+
+	PlaySwingSound();
 
 #ifdef GAME_DLL
 	// Remember if there are potential targets when we start our swing.
@@ -321,7 +319,7 @@ void CTFWeaponBaseMelee::Swing( CTFPlayer *pPlayer )
 	}
 #endif
 
-	m_flSmackTime = gpGlobals->curtime + m_pWeaponInfo->GetWeaponData( m_iWeaponMode ).m_flSmackDelay;
+	m_flSmackTime = GetSmackTime( m_iWeaponMode );
 }
 
 //-----------------------------------------------------------------------------
@@ -378,8 +376,8 @@ void CTFWeaponBaseMelee::ItemPostFrame()
 	// Check for smack.
 	if ( m_flSmackTime > 0.0f && gpGlobals->curtime > m_flSmackTime )
 	{
-		Smack();
 		m_flSmackTime = -1.0f;
+		Smack();
 		CTFPlayer *pPlayer = GetTFPlayerOwner();
 		if ( pPlayer )
 		{
@@ -674,6 +672,15 @@ bool CTFWeaponBaseMelee::OnSwingHit( trace_t &trace )
 				}
 			}
 		}
+		else
+		{
+			float flSpeedBoostOnHitEnemy = 0.f;
+			CALL_ATTRIB_HOOK_FLOAT( flSpeedBoostOnHitEnemy, speed_boost_on_hit_enemy );
+			if ( flSpeedBoostOnHitEnemy > 0 && trace.m_pEnt )
+			{
+				pPlayer->m_Shared.AddCond( TF_COND_SPEED_BOOST, flSpeedBoostOnHitEnemy );
+			}
+		}
 #endif
 	}
 	else
@@ -782,6 +789,11 @@ void CTFWeaponBaseMelee::Smack( void )
 #endif
 }
 
+float CTFWeaponBaseMelee::GetSmackTime( int iWeaponMode )
+{
+	return gpGlobals->curtime + m_pWeaponInfo->GetWeaponData( iWeaponMode ).m_flSmackDelay;
+}
+
 void CTFWeaponBaseMelee::DoMeleeDamage( CBaseEntity* ent, trace_t& trace )
 {
 	DoMeleeDamage( ent, trace, 1.f );
@@ -829,10 +841,11 @@ void CTFWeaponBaseMelee::DoMeleeDamage( CBaseEntity* ent, trace_t& trace, float 
 		{
 			if ( pPlayer && pPlayer->m_Shared.GetCarryingRuneType() == RUNE_KNOCKOUT )
 			{
-				flDamage *= 1.9f;
+				flDamage *= ( pPlayer->m_Shared.InCond( TF_COND_POWERUPMODE_DOMINANT ) ? 1.4f : 1.9f );
 			}
-			// Strength powerup multiplies damage later and we only want double regular damage. Shields are a source of increased melee damage (charge crit) so they don't need a base boost
-			else if ( pPlayer && pPlayer->m_Shared.GetCarryingRuneType() != RUNE_STRENGTH && !pPlayer->m_Shared.IsShieldEquipped() ) 
+			// Strength powerup multiplies damage later and we only want double regular damage
+			// Shields are a source of increased melee damage (charge crit) so they don't need a base boost
+			else if ( pPlayer && pPlayer->m_Shared.GetCarryingRuneType() != RUNE_STRENGTH && !pPlayer->m_Shared.IsShieldEquipped() )
 			{
 				flDamage *= 1.3f;
 			}
@@ -938,7 +951,7 @@ void CTFWeaponBaseMelee::DoMeleeDamage( CBaseEntity* ent, trace_t& trace, float 
 				}
 			}
 			EmitSound( filter, entindex(), "Powerup.Knockout_Melee_Hit" );
-			pVictimPlayer->ApplyAirBlastImpulse( vecDir * 400.0f );
+			pVictimPlayer->ApplyGenericPushbackImpulse( vecDir * 400.0f, pPlayer );
 		}
 	}
 

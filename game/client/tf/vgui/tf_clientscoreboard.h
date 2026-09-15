@@ -52,7 +52,8 @@ public:
 	MESSAGE_FUNC_PTR( OnItemContextMenu, "ItemContextMenu", panel );
 	void OnScoreBoardMouseRightRelease( void );
 
-	MESSAGE_FUNC_PARAMS( OnReportPlayer, "ReportPlayer", pData );
+
+	MESSAGE_FUNC_PARAMS( OnVoteKickPlayer, "VoteKickPlayer", pData );
 
 protected:
 	virtual void PerformLayout();
@@ -151,6 +152,7 @@ private:
 	CPanelAnimationVarAliasType( int, m_iSpacerWidth, "spacer", "5", "proportional_int" );
 	CPanelAnimationVarAliasType( int, m_iNemesisWidth, "nemesis_width", "20", "proportional_int" );
 	CPanelAnimationVarAliasType( int, m_iMedalWidth, "medal_width", "15", "proportional_int" );
+	CPanelAnimationVarAliasType( int, m_iMedalColumnWidth, "medal_column_width", "15", "proportional_int" );
 	CPanelAnimationVarAliasType( int, m_iKillstreakWidth, "killstreak_width", "20", "proportional_int" );
 	CPanelAnimationVarAliasType( int, m_iKillstreakImageWidth, "killstreak_image_width", "20", "proportional_int" );
 

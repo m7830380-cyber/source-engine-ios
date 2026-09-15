@@ -18,6 +18,7 @@
 #include "tf_gamerules.h"
 #include "econ_wearable.h"
 #include "achievements_tf.h"
+#include "usermessages.h"
 
 // NVNT include for tf2 damage
 #include "haptics/haptic_utils.h"
@@ -394,8 +395,8 @@ class CAchievementTFPlayGameFriendsOnly : public CBaseTFAchievementSimple
 	{
 		if ( 0 == Q_strcmp( event->GetName(), "teamplay_round_win" ) )
 		{
-			// Are there at least 7 friends in the game?  (at least 8 players total)
-			if ( CalcPlayersOnFriendsList( 7 ) )
+			// Are there at least 5 friends in the game?  (at least 8 players total)
+			if ( CalcPlayersOnFriendsList( 5 ) )
 			{
 				IncrementCount();
 			}
@@ -666,7 +667,7 @@ bool GameRulesAllowsAchievements( void )
 
 //----------------------------------------------------------------------------------------------------------------
 // Receive the PlayerIgnitedInv user message and send out a clientside event for achievements to hook.
-void __MsgFunc_PlayerIgnitedInv( bf_read &msg )
+USER_MESSAGE( PlayerIgnitedInv )
 {
 	int iPyroEntIndex = (int) msg.ReadByte();
 	int iVictimEntIndex = (int) msg.ReadByte();
@@ -683,7 +684,7 @@ void __MsgFunc_PlayerIgnitedInv( bf_read &msg )
 }
 
 // Receive the PlayerIgnited user message and send out a clientside event for achievements to hook.
-void __MsgFunc_PlayerIgnited( bf_read &msg )
+USER_MESSAGE( PlayerIgnited )
 {
 	int iPyroEntIndex = (int) msg.ReadByte();
 	int iVictimEntIndex = (int) msg.ReadByte();
@@ -700,7 +701,7 @@ void __MsgFunc_PlayerIgnited( bf_read &msg )
 }
 
 // Receive the Damage user message and send out a clientside event for achievements to hook.
-void __MsgFunc_Damage( bf_read &msg )
+USER_MESSAGE( Damage )
 {
 	int iDamage = msg.ReadShort();
 	int iDmgBits = msg.ReadLong();
@@ -747,7 +748,7 @@ void __MsgFunc_Damage( bf_read &msg )
 }
 
 // Receive the UpdateAchievement user message and send out a clientside event for achievements to hook.
-void __MsgFunc_UpdateAchievement( bf_read &msg )
+USER_MESSAGE( UpdateAchievement )
 {
 	int iIndex = (int) msg.ReadShort();
 	int nData = (int) msg.ReadShort();
@@ -756,7 +757,7 @@ void __MsgFunc_UpdateAchievement( bf_read &msg )
 }
 
 // Receive the PlayerJarated user message and send out a clientside event for achievements to hook.
-void __MsgFunc_PlayerJarated( bf_read &msg )
+USER_MESSAGE( PlayerJarated )
 {
 	int iThrowerEntIndex = (int) msg.ReadByte();
 	int iVictimEntIndex = (int) msg.ReadByte();
@@ -770,7 +771,7 @@ void __MsgFunc_PlayerJarated( bf_read &msg )
 	}
 }
 
-void __MsgFunc_PlayerJaratedFade( bf_read &msg )
+USER_MESSAGE( PlayerJaratedFade )
 {
 	int iThrowerEntIndex = (int) msg.ReadByte();
 	int iVictimEntIndex = (int) msg.ReadByte();
@@ -785,7 +786,7 @@ void __MsgFunc_PlayerJaratedFade( bf_read &msg )
 	}
 }
 //This is so dumb.
-void __MsgFunc_PlayerShieldBlocked( bf_read &msg )
+USER_MESSAGE( PlayerShieldBlocked )
 {
 	int iAttacker = (int) msg.ReadByte();
 	int iBlocker = (int) msg.ReadByte();
@@ -801,7 +802,7 @@ void __MsgFunc_PlayerShieldBlocked( bf_read &msg )
 }
 
 // Receive the PlayerExtinguished user message and send out a clientside event for achievements to hook.
-void __MsgFunc_PlayerExtinguished( bf_read &msg )
+USER_MESSAGE( PlayerExtinguished )
 {
 	int iMedicEntIndex = (int) msg.ReadByte();
 	int iVictimEntIndex = (int) msg.ReadByte();
@@ -954,6 +955,7 @@ class CAchievementTF_KillBalloonicornOwners : public CBaseTFAchievement
 		CSchemaItemDefHandle pItemDef_BalloonicornPromo( "Pet Balloonicorn Promo" );
 		CSchemaItemDefHandle pItemDef_BalloonicornPlushPromo( "Pet Balloonicorn Plush Promo" );
 		CSchemaItemDefHandle pItemDef_Reindoonicorn( "Pet Reindoonicorn" );
+		CSchemaItemDefHandle pItemDef_Balloonicorpse( "Balloonicorpse" );
 
 		C_TFPlayer *pLocalPlayer = ToTFPlayer( C_BasePlayer::GetLocalPlayer() );
 		if ( pLocalPlayer )
@@ -980,7 +982,8 @@ class CAchievementTF_KillBalloonicornOwners : public CBaseTFAchievement
 								if ( pItem->GetItemDefinition() == pItemDef_Balloonicorn ||
 									 pItem->GetItemDefinition() == pItemDef_BalloonicornPromo ||
 									 pItem->GetItemDefinition() == pItemDef_BalloonicornPlushPromo ||
-									 pItem->GetItemDefinition() == pItemDef_Reindoonicorn )
+									 pItem->GetItemDefinition() == pItemDef_Reindoonicorn ||
+									 pItem->GetItemDefinition() == pItemDef_Balloonicorpse )
 								{
 									IncrementCount();
 								}
@@ -1212,7 +1215,7 @@ public:
 		CTFPlayer *pTFVictim = ToTFPlayer( pVictim );
 		if ( pTFVictim && ( pAttacker == C_TFPlayer::GetLocalTFPlayer() ) )
 		{
-			if ( pTFVictim->m_Shared.InCond( TF_COND_PARACHUTE_DEPLOYED ) )
+			if ( pTFVictim->m_Shared.InCond( TF_COND_PARACHUTE_ACTIVE ) )
 			{
 				IncrementCount();
 			}

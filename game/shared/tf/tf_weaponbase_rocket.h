@@ -107,9 +107,6 @@ public:
 	virtual int		GetDamageType() { return g_aWeaponDamageTypes[ GetWeaponID() ]; }
 	virtual int		GetDamageCustom() { return TF_DMG_CUSTOM_NONE; }
 	virtual void	SetDamage(float flDamage) { m_flDamage = flDamage; }
-#ifdef STAGING_ONLY
-	void			DrawRadius( float flRadius );
-#endif
 	virtual float	GetRadius();
 
 	virtual void	SetDamageForceScale( float flScale ) {  m_flDamageForceScale = flScale; }
@@ -126,7 +123,7 @@ public:
 	virtual void	SetLauncher( CBaseEntity *pLauncher ) OVERRIDE { m_hLauncher = pLauncher; BaseClass::SetLauncher( pLauncher ); }
 	CBaseEntity		*GetLauncher( void ) { return m_hLauncher; }
 
-	virtual bool	IsDestroyable( void ){ return gpGlobals->curtime > m_flDestroyableTime; }
+	virtual bool	IsDestroyable( bool bOrbAttack = false ) OVERRIDE { return ( !bOrbAttack ? ( gpGlobals->curtime > m_flDestroyableTime ) : true ); }
 
 	CBaseEntity		*GetOwnerPlayer( void ) const;
 

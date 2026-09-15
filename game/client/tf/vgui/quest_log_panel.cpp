@@ -4,6 +4,7 @@
 //
 //=============================================================================//
 
+
 #include "cbase.h"
 #include "quest_log_panel.h"
 #include "ienginevgui.h"
@@ -22,6 +23,8 @@
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include <tier0/memdbgon.h>
+
+#if 0
 															 
 void AddSubKeyNamed( KeyValues *pKeys, const char *pszName );
 
@@ -249,36 +252,6 @@ void CScrollableQuestList::SetSelected( CQuestItemPanel *pItem, bool bImmediatel
 	PositionQuestItemPanels();
 }
 
-bool DoesLootlistDropQuests( const CEconLootListDefinition* pLootList )
-{
-	FOR_EACH_VEC( pLootList->GetLootListContents(), j )
-	{
-		const CEconLootListDefinition::drop_item_t& item = pLootList->GetLootListContents()[j];
-		// 0 and greater means item.  Less than 0 means nested lootlist
-		if( item.m_iItemOrLootlistDef >= 0 )
-		{
-			const GameItemDefinition_t* pItemDef = assert_cast<const GameItemDefinition_t *>( GetItemSchema()->GetItemDefinition( item.m_iItemOrLootlistDef ) );
-			if( pItemDef )
-			{
-				return pItemDef->GetQuestDef();
-			}
-		}
-		else
-		{
-			// Get the nested lootlist
-			int iLLIndex = (item.m_iItemOrLootlistDef * -1) - 1;
-			const CEconLootListDefinition *pNestedLootList = GetItemSchema()->GetLootListByIndex( iLLIndex );
-			Assert( pNestedLootList );
-			if ( !pNestedLootList )
-				continue;
-
-			// Dig through all of this lootlist's entries
-			return DoesLootlistDropQuests( pNestedLootList );
-		}
-	}
-
-	return false;
-}
 
 //-----------------------------------------------------------------------------
 // Purpose: Update what message we show when we have no quests
@@ -311,7 +284,7 @@ void CScrollableQuestList::UpdateEmptyMessage()
 		CEconOperationDefinition *pOperation = mapOperations[ iOperation ];
 		const CSchemaLootListDefHandle pOperationLootlist( pOperation->GetOperationLootlist() );
 		// Must still be dropping, and be dropping quests
-		if ( CRTime::RTime32TimeCur() < pOperation->GetStopGivingToPlayerDate() && pOperationLootlist && DoesLootlistDropQuests( pOperationLootlist ) )
+		if ( CRTime::RTime32TimeCur() < pOperation->GetStopGivingToPlayerDate() && pOperationLootlist )
 		{
 			// If there's a required item and a gateway item
 			if ( pOperation->GetRequiredItemDefIndex() != INVALID_ITEM_DEF_INDEX && pOperation->GetGatewayItemDefIndex() != INVALID_ITEM_DEF_INDEX )
@@ -370,8 +343,25 @@ void CScrollableQuestList::PopulateQuestLists()
 
 	DirtyQuestLayout();
 
-	CUtlVector< CEconItemView * > vecQuestItems;
-	TFInventoryManager()->GetAllQuestItems( &vecQuestItems );
+	if ( !steamapicontext || !steamapicontext->SteamUser() )
+	{
+		return;
+	}
+	
+	GCSDK::CGCClientSharedObjectCache *pSOCache = GCClientSystem()->GetSOCache( steamapicontext->SteamUser()->GetSteamID() );
+	
+	if ( !pSOCache )
+		return;
+
+	auto pQuestCache = pSOCache->FindTypeCache( CQuest::k_nTypeID );
+	if ( !pQuestCache )
+		return;
+
+	CUtlVector< CQuest* > vecUntrackedQuests;
+	for( uint32 i=0; i < pQuestCache->GetCount(); ++i )
+	{
+		vecUntrackedQuests.AddToTail( (CQuest*) pQuestCache->GetObject( i ) );
+	}
 
 	CUtlVector< CQuestItemPanel* > vecAvailablePanels;
 
@@ -380,14 +370,15 @@ void CScrollableQuestList::PopulateQuestLists()
 		bool bFound = false;
 		if ( m_vecQuestItemPanels[ i ]->GetItem() )
 		{
-			FOR_EACH_VEC_BACK( vecQuestItems, j )
+			FOR_EACH_VEC_BACK( vecUntrackedQuests, j )
 			{
+				CQuest* pQuest = vecUntrackedQuests[ j ];
 				// See if the item in the panel is still in the list of items we own
-				if ( m_vecQuestItemPanels[ i ]->GetItem()->GetOriginalID() == vecQuestItems[ j ]->GetOriginalID() )
+				if ( m_vecQuestItemPanels[ i ]->GetItem()->GetID() == pQuest->GetID() )
 				{
 					// Refresh it
 					m_vecQuestItemPanels[ i ]->InvalidateLayout();
-					vecQuestItems.Remove( j );
+					vecUntrackedQuests.Remove( j );
 					bFound = true;
 					break;
 				}
@@ -411,9 +402,9 @@ void CScrollableQuestList::PopulateQuestLists()
 		}
 	}
 
-	for ( int i = 0 ; i < vecQuestItems.Count(); ++i )
+	for ( int i = 0 ; i < vecUntrackedQuests.Count(); ++i )
 	{
-		CEconItemView *pItem = vecQuestItems[i];
+		CQuest *pItem = vecUntrackedQuests[i];
 
 		if ( i < vecAvailablePanels.Count() )
 		{
@@ -487,7 +478,7 @@ CQuestLogPanel::CQuestLogPanel( IViewPort *pViewPort )
 
 	ListenForGameEvent( "inventory_updated" );
 	ListenForGameEvent( "gameui_hidden" );
-	ListenForGameEvent( "gc_connected" );
+	ListenForGameEvent( "econ_inventory_connected" );
 
 	// Create the item model panel tooltip
 	m_pMouseOverItemPanel = new CItemModelPanel( this, "mouseoveritempanel" );
@@ -694,7 +685,7 @@ void CQuestLogPanel::OnCommand( const char *pCommand )
 
 			Menu *pContextMenu = new Menu( this, "ContextMenu" );
 			pContextMenu->SetBorder( scheme()->GetIScheme( GetScheme() )->GetBorder( pszContextMenuBorder ) );
-			pContextMenu->SetFont( scheme()->GetIScheme( GetScheme() )->GetFont( pszContextMenuFont ) );
+			pContextMenu->SetFont( scheme()->GetIScheme( GetScheme() )->GetFont( pszContextMenuFont, IsProportional() ) );
 		
 
 			MenuBuilder contextMenuBuilder( pContextMenu, this );
@@ -784,37 +775,27 @@ void CQuestLogPanel::OnCommand( const char *pCommand )
 				return;
 			}
 
-			const char* pszItemToGive = pCommand + 4;
-			Msg( "Sending request to generate '%s' for Local Player (%llu)\n", pszItemToGive, steamIDForPlayer.ConvertToUint64() );
-
-			CItemSelectionCriteria criteria;
-
-			GCSDK::CProtoBufMsg<CMsgDevNewItemRequest> msg( k_EMsgGCDev_NewItemRequest );
-			msg.Body().set_receiver( steamIDForPlayer.ConvertToUint64() );
-
-			criteria.SetIgnoreEnabledFlag( true );
-			if ( !criteria.BAddCondition( "name", k_EOperator_String_EQ, pszItemToGive, true ) ||
-				!criteria.BSerializeToMsg( *msg.Body().mutable_criteria() ) )
+			quest_def_index_t nDefIndex = atoi( pCommand + 4 );
+			const CQuestDefinition* pQuestDef = GetItemSchema()->GetQuestDefinitionByDefIndex( nDefIndex );
+			if ( !pQuestDef )
 			{
-				Msg( "Failed to add condition and/or serialize item grant request. This is probably caused by having a string that's too long.\n" );
+				Msg( "Failed to find quest def index %d.\n", nDefIndex );
 				return;
 			}
+
+			Msg( "Sending request to generate '%s' for Local Player (%llu)\n", pQuestDef->GetName(), steamIDForPlayer.ConvertToUint64() );
+
+			GCSDK::CProtoBufMsg<CMsgGCQuestDevGive> msg( k_EMsgGC_QuestDevGive );
+			msg.Body().set_quest_def_index( nDefIndex );
+			
 			GCClientSystem()->BSendMessage( msg );
 		}
 	}
 }
 
-//-----------------------------------------------------------------------------
-// Purpose: 
-//-----------------------------------------------------------------------------
-void CQuestLogPanel::FireGameEvent( IGameEvent *event )
+void CQuestLogPanel::SOEvent( const GCSDK::CSharedObject *pObject )
 {
-	tmZone( TELEMETRY_LEVEL0, TMZF_NONE, "%s", __FUNCTION__ );
-	// Listen for inventory updates in case our item gets changed while the user
-	// is looking at us.  We want to re-do our entire layout since a quest might
-	// have been equipped / destroyed / completed and we need to re-categorize
-	// all the user's quests.
-	if ( FStrEq( event->GetName(), "inventory_updated" ) && !m_bWaitingForComplete )
+	if ( pObject->GetTypeID() == CQuest::k_nTypeID )
 	{
 		m_bInventoryDirty = true;
 
@@ -829,12 +810,24 @@ void CQuestLogPanel::FireGameEvent( IGameEvent *event )
 			UpdateQuestsItemPanels();
 		}
 	}
-	else if ( FStrEq( event->GetName(), "gameui_hidden" ) )
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+void CQuestLogPanel::FireGameEvent( IGameEvent *event )
+{
+	tmZone( TELEMETRY_LEVEL0, TMZF_NONE, "%s", __FUNCTION__ );
+	// Listen for inventory updates in case our item gets changed while the user
+	// is looking at us.  We want to re-do our entire layout since a quest might
+	// have been equipped / destroyed / completed and we need to re-categorize
+	// all the user's quests.
+	if ( FStrEq( event->GetName(), "gameui_hidden" ) )
 	{
 		ShowPanel( false );
 		return;
 	}
-	else if ( FStrEq( event->GetName(), "gc_connected" ) )
+	else if ( FStrEq( event->GetName(), "econ_inventory_connected" ) )
 	{
 		m_bInventoryDirty = true;
 		InvalidateLayout( false, true );
@@ -1167,16 +1160,5 @@ public:
 GC_REG_JOB( GCSDK::CGCClient, CGCCompleteQuestCompleteResponse, "CGCCompleteQuestCompleteResponse", k_EMsgGCQuestCompleted, GCSDK::k_EServerTypeGCClient );
 
 
-#ifdef STAGING_ONLY
-static void cc_tf_quest_log_reload()
-{
-	CQuestLogPanel *pQuestLog = GetQuestLog();
-	if ( pQuestLog )
-	{
-		pQuestLog->MarkQuestsDirty();
-		pQuestLog->InvalidateLayout( true, true );
-		gViewPortInterface->ShowPanel( pQuestLog, true );
-	}
-}
-ConCommand tf_quest_log_reload( "tf_quest_log_reload", cc_tf_quest_log_reload );
+
 #endif

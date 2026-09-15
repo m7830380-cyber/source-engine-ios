@@ -545,10 +545,9 @@ void CTFStorePreviewItemPanelBase::UpdateModelPanel()
 	if ( m_pPlayerModelPanel )
 	{
 		m_iCurrentHeldItem = 0;
-		m_pPlayerModelPanel->SetToPlayerClass( m_iCurrentClass, false );
 		m_pPlayerModelPanel->ClearCarriedItems();
+		m_pPlayerModelPanel->SetToPlayerClass( m_iCurrentClass );
 
-		
 		if ( m_item.IsValid() )
 		{
 			CTFItemDefinition *pItemDef = m_item.GetStaticData();
@@ -627,7 +626,7 @@ void CTFStorePreviewItemPanelBase::UpdateCustomizeMenu( void )
 	const char *pszContextMenuBorder = "NotificationDefault";
 	const char *pszContextMenuFont = "HudFontMediumSecondary";
 	m_pCustomizeMenu->SetBorder( scheme()->GetIScheme( GetScheme() )->GetBorder( pszContextMenuBorder ) );
-	m_pCustomizeMenu->SetFont( scheme()->GetIScheme( GetScheme() )->GetFont( pszContextMenuFont ) );
+	m_pCustomizeMenu->SetFont( scheme()->GetIScheme( GetScheme() )->GetFont( pszContextMenuFont, IsProportional() ) );
 
 	// Add paint options sub menu
 	{
@@ -643,7 +642,7 @@ void CTFStorePreviewItemPanelBase::UpdateCustomizeMenu( void )
 			{
 				pPaintSubMenu = new Menu( this, "PaintSubMenu" );
 				pPaintSubMenu->SetBorder( scheme()->GetIScheme( GetScheme() )->GetBorder( pszContextMenuBorder ) );
-				pPaintSubMenu->SetFont( scheme()->GetIScheme( GetScheme() )->GetFont( pszContextMenuFont ) );
+				pPaintSubMenu->SetFont( scheme()->GetIScheme( GetScheme() )->GetFont( pszContextMenuFont, IsProportional() ) );
 				contextMenuBuilder.AddCascadingMenuItem( "#Context_Paint", pPaintSubMenu, "customization" );
 			}
 
@@ -677,10 +676,14 @@ void CTFStorePreviewItemPanelBase::UpdateCustomizeMenu( void )
 				}
 			}
 
+			vgui::HFont hFont = scheme()->GetIScheme( GetScheme() )->GetFont( pszContextMenuFont, IsProportional() );
+			int nWidth, nHeight;
+			vgui::surface()->GetTextSize( hFont, L"blah", nWidth, nHeight );
+
 			CItemMaterialCustomizationIconPanel *pCustomPanel = new CItemMaterialCustomizationIconPanel( pMenuItem, "paint" );
 			pCustomPanel->SetZPos( -100 );
-			pCustomPanel->SetTall( 30 );
-			pCustomPanel->SetWide( 30 );
+			pCustomPanel->SetTall( nHeight );
+			pCustomPanel->SetWide( nHeight );
 			pCustomPanel->m_colPaintColors.AddToTail( Color( clamp( (unPaintRGB0 & 0xFF0000) >> 16, 0, 255 ), clamp( (unPaintRGB0 & 0xFF00) >> 8, 0, 255 ), clamp( (unPaintRGB0 & 0xFF), 0, 255 ), 255 ) );
 			pCustomPanel->m_colPaintColors.AddToTail( Color( clamp( (unPaintRGB1 & 0xFF0000) >> 16, 0, 255 ), clamp( (unPaintRGB1 & 0xFF00) >> 8, 0, 255 ), clamp( (unPaintRGB1 & 0xFF), 0, 255 ), 255 ) );
 		}
@@ -704,7 +707,7 @@ void CTFStorePreviewItemPanelBase::UpdateCustomizeMenu( void )
 				{
 					pStyleSubMenu = new Menu( this, "StyleSubMenu" );
 					pStyleSubMenu->SetBorder( scheme()->GetIScheme( GetScheme() )->GetBorder( pszContextMenuBorder ) );
-					pStyleSubMenu->SetFont( scheme()->GetIScheme( GetScheme() )->GetFont( pszContextMenuFont ) );
+					pStyleSubMenu->SetFont( scheme()->GetIScheme( GetScheme() )->GetFont( pszContextMenuFont, IsProportional() ) );
 					contextMenuBuilder.AddCascadingMenuItem( "#Context_Style", pStyleSubMenu, "customization" );
 				}
 				
@@ -728,7 +731,7 @@ void CTFStorePreviewItemPanelBase::UpdateCustomizeMenu( void )
 				{
 					pUnusualSubMenu = new Menu( this, "UnusualSubMenu" );
 					pUnusualSubMenu->SetBorder( scheme()->GetIScheme( GetScheme() )->GetBorder( pszContextMenuBorder ) );
-					pUnusualSubMenu->SetFont( scheme()->GetIScheme( GetScheme() )->GetFont( pszContextMenuFont ) );
+					pUnusualSubMenu->SetFont( scheme()->GetIScheme( GetScheme() )->GetFont( pszContextMenuFont, IsProportional() ) );
 					contextMenuBuilder.AddCascadingMenuItem( "#Context_Unusual", pUnusualSubMenu, "customization" );
 				}
 
@@ -1064,7 +1067,7 @@ void CTFStorePreviewItemPanelBase::SetUnusual( uint32 iUnusualIndex )
 		return;
 
 	static CSchemaAttributeDefHandle pAttrDef_AttachParticleEffect( "attach particle effect" );
-	static CSchemaAttributeDefHandle pAttrDef_OnTauntAttachParticleIndex( "on taunt attach particle index" );
+	static CSchemaAttributeDefHandle pAttrDef_TauntAttachParticleIndex( "taunt attach particle index" );
 	const CUtlVector<CEconItemView*> &vecItems = m_pPlayerModelPanel->GetCarriedItems();
 
 	FOR_EACH_VEC( vecItems, i )
@@ -1073,7 +1076,7 @@ void CTFStorePreviewItemPanelBase::SetUnusual( uint32 iUnusualIndex )
 		if ( pItem->GetStaticData()->GetTauntData() )
 		{
 			const float& value_as_float = (float&)iUnusualIndex;
-			pItem->GetAttributeList()->SetRuntimeAttributeValue( pAttrDef_OnTauntAttachParticleIndex, value_as_float );
+			pItem->GetAttributeList()->SetRuntimeAttributeValue( pAttrDef_TauntAttachParticleIndex, value_as_float );
 		}
 		else
 		{

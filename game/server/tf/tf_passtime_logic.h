@@ -143,7 +143,7 @@ private:
 	CNetworkVar( float, m_flMaxPassRange );
 	CNetworkVar( int, m_iBallPower );
 	CNetworkVar( float, m_flPackSpeed );
-	CNetworkArray( int, m_bPlayerIsPackMember, MAX_PLAYERS + 1 ); // +1 for easy entity index
+	CNetworkArray( int, m_bPlayerIsPackMember, MAX_PLAYERS_ARRAY_SAFE ); // +1 for easy entity index
 };
 
 //-----------------------------------------------------------------------------

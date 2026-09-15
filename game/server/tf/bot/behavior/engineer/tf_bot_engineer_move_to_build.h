@@ -22,6 +22,7 @@ public:
 	virtual EventDesiredResult< CTFBot > OnMoveToFailure( CTFBot *me, const Path *path, MoveToFailureType reason );
 
 	virtual EventDesiredResult< CTFBot > OnTerritoryLost( CTFBot *me, int territoryID );
+	virtual EventDesiredResult< CTFBot > OnTerritoryCaptured( CTFBot *me, int territoryID );
 
 	virtual const char *GetName( void ) const	{ return "EngineerMoveToBuild"; };
 

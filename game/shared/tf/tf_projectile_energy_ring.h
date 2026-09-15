@@ -71,7 +71,7 @@ private:
 	Vector			m_vecPrevPos;
 
 #ifdef GAME_DLL
-	CUtlVector<EHANDLE>	m_vecHitEnemies;
+	float m_flLastHitTime;
 	void PlayImpactEffects( const Vector& vecPos, bool bHitFlesh );
 #endif
 

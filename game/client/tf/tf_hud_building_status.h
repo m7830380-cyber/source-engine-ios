@@ -299,35 +299,6 @@ private:
 	vgui::ContinuousProgressBar *m_pUpgradeProgress;
 };
 
-#ifdef STAGING_ONLY
-//-----------------------------------------------------------------------------
-class CBuildingStatusItem_TeleporterSpeed : public CBuildingStatusItem
-{
-	DECLARE_CLASS_SIMPLE( CBuildingStatusItem_TeleporterSpeed, CBuildingStatusItem );
-
-public:
-	CBuildingStatusItem_TeleporterSpeed( Panel *parent, int ETeleporterMode );
-	virtual void OnTick( void );
-	virtual void PerformLayout( void );
-
-private:
-
-	// 2 subpanels
-	vgui::EditablePanel *m_pChargingPanel;
-	vgui::EditablePanel *m_pFullyChargedPanel;
-
-	// children of m_pChargingPanel
-	vgui::ContinuousProgressBar *m_pRechargeTimer;
-
-	// local state
-	int m_iTeleporterState;
-	int m_iTimesUsed;
-
-	CIconPanel *m_pUpgradeIcon;
-
-	vgui::ContinuousProgressBar *m_pUpgradeProgress;
-};
-#endif
 
 //-----------------------------------------------------------------------------
 // Purpose: 

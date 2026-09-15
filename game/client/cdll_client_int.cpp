@@ -117,6 +117,7 @@
 #include "tf_hud_disconnect_prompt.h"
 #include "../engine/audio/public/sound.h"
 #include "tf_shared_content_manager.h"
+#include "tf_gamerules.h"
 #endif
 #include "clientsteamcontext.h"
 #include "renamed_recvtable_compat.h"
@@ -124,6 +125,10 @@
 #include "sourcevr/isourcevirtualreality.h"
 #include "client_virtualreality.h"
 #include "mumble.h"
+#include "steamshare.h"
+#include "vgui_controls/BuildGroup.h"
+
+#include "secure_command_line.h"
 
 // NVNT includes
 #include "hud_macros.h"
@@ -132,6 +137,7 @@
 #include "haptics/haptic_msgs.h"
 
 #if defined( TF_CLIENT_DLL )
+#include "tf_gc_client.h"
 #include "abuse_report.h"
 #endif
 
@@ -141,13 +147,9 @@
 
 #if defined( TF_CLIENT_DLL )
 #include "econ/tool_items/custom_texture_cache.h"
+
 #endif
 
-#ifdef WORKSHOP_IMPORT_ENABLED
-#include "fbxsystem/fbxsystem.h"
-#endif
-
-#include "touch.h"
 
 extern vgui::IInputInternal *g_InputInternal;
 
@@ -305,7 +307,7 @@ C_BaseEntityClassList::~C_BaseEntityClassList()
 class CDataChangedEvent
 {
 public:
-	CDataChangedEvent() = default;
+	CDataChangedEvent() {}
 	CDataChangedEvent( IClientNetworkable *ent, DataUpdateType_t updateType, int *pStoredEvent )
 	{
 		m_pEntity = ent;
@@ -337,11 +339,12 @@ static ConVar s_cl_class("cl_class", "default", FCVAR_USERINFO|FCVAR_ARCHIVE, "D
 static ConVar s_cl_load_hl1_content("cl_load_hl1_content", "0", FCVAR_ARCHIVE, "Mount the content from Half-Life: Source if possible");
 #endif
 
+ConVar r_lightmap_bicubic_set( "r_lightmap_bicubic_set", "0", FCVAR_ARCHIVE | FCVAR_HIDDEN, "Hack to get this convar to be re-set on first launch." );
 
 // Physics system
 bool g_bLevelInitialized;
 bool g_bTextMode = false;
-class IClientPurchaseInterfaceV2 *g_pClientPurchaseInterface = (class IClientPurchaseInterfaceV2 *)(&g_bTextMode + 156);
+
 
 static ConVar *g_pcv_ThreadMode = NULL;
 
@@ -431,6 +434,11 @@ public:
 	const char *GetHolidayString()
 	{
 		return UTIL_GetActiveHolidayString();
+	}
+
+	const char *GetOperationString()
+	{
+		return UTIL_GetActiveOperationString();
 	}
 };
 
@@ -570,7 +578,8 @@ void DisplayBoneSetupEnts()
 		if ( pEnt->m_Count >= 3 )
 		{
 			printInfo.color[0] = 1;
-			printInfo.color[1] = printInfo.color[2] = 0;
+			printInfo.color[1] = 0;
+			printInfo.color[2] = 0;
 		}
 		else if ( pEnt->m_Count == 2 )
 		{
@@ -580,7 +589,9 @@ void DisplayBoneSetupEnts()
 		}
 		else
 		{
-			printInfo.color[0] = printInfo.color[0] = printInfo.color[0] = 1;
+			printInfo.color[0] = 1;
+			printInfo.color[1] = 1;
+			printInfo.color[2] = 1;
 		}
 		engine->Con_NXPrintf( &printInfo, "%25s / %3d / %3d", pEnt->m_ModelName, pEnt->m_Count, pEnt->m_Index );
 		printInfo.index++;
@@ -729,7 +740,10 @@ public:
 	void PrecacheMaterial( const char *pMaterialName );
 
 	virtual bool IsConnectedUserInfoChangeAllowed( IConVar *pCvar );
-	virtual void IN_TouchEvent( int type, int fingerId, int x, int y );
+
+	virtual bool BHaveChatSuspensionInCurrentMatch();
+
+	virtual void DisplayVoiceUnavailableMessage();
 
 private:
 	void UncacheAllMaterials( );
@@ -873,6 +887,13 @@ int CHLClient::Init( CreateInterfaceFn appSystemFactory, CreateInterfaceFn physi
 	ConnectTier2Libraries( &appSystemFactory, 1 );
 	ConnectTier3Libraries( &appSystemFactory, 1 );
 
+	// Client needs to protect from writing files into random locations to avoid becoming a remote-code
+	// execution platform.
+	if ( g_pFullFileSystem )
+	{
+		g_pFullFileSystem->SetWriteProtectionEnable( true );
+	}
+
 #ifndef NO_STEAM
 	ClientSteamContext().Activate();
 #endif
@@ -901,7 +922,7 @@ int CHLClient::Init( CreateInterfaceFn appSystemFactory, CreateInterfaceFn physi
 		return false;
 	if ( (networkstringtable = (INetworkStringTableContainer *)appSystemFactory(INTERFACENAME_NETWORKSTRINGTABLECLIENT,NULL)) == NULL )
 		return false;
-	if ( (partition = (ISpatialPartition *)appSystemFactory(INTERFACEVERSION_SPATIALPARTITION, NULL)) == NULL )
+	if ( (::partition = (ISpatialPartition *)appSystemFactory(INTERFACEVERSION_SPATIALPARTITION, NULL)) == NULL )
 		return false;
 	if ( (shadowmgr = (IShadowMgr *)appSystemFactory(ENGINE_SHADOWMGR_INTERFACE_VERSION, NULL)) == NULL )
 		return false;
@@ -942,16 +963,10 @@ int CHLClient::Init( CreateInterfaceFn appSystemFactory, CreateInterfaceFn physi
 	if (!g_pMatSystemSurface)
 		return false;
 
-#ifdef WORKSHOP_IMPORT_ENABLED
-	if ( !ConnectDataModel( appSystemFactory ) )
-		return false;
-	if ( InitDataModel() != INIT_OK )
-		return false;
-	InitFbx();
-#endif
 
 	// it's ok if this is NULL. That just means the sourcevr.dll wasn't found
-	g_pSourceVR = (ISourceVirtualReality *)appSystemFactory(SOURCE_VIRTUAL_REALITY_INTERFACE_VERSION, NULL);
+	if ( CommandLine()->CheckParm( "-vr" ) )
+		g_pSourceVR = (ISourceVirtualReality *)appSystemFactory(SOURCE_VIRTUAL_REALITY_INTERFACE_VERSION, NULL);
 
 	factorylist_t factories;
 	factories.appSystemFactory = appSystemFactory;
@@ -1012,7 +1027,8 @@ int CHLClient::Init( CreateInterfaceFn appSystemFactory, CreateInterfaceFn physi
 	IGameSystem::Add( ClientSoundscapeSystem() );
 	IGameSystem::Add( PerfVisualBenchmark() );
 	IGameSystem::Add( MumbleSystem() );
-	
+	IGameSystem::Add( SteamShareSystem() );
+
 	#if defined( TF_CLIENT_DLL )
 	IGameSystem::Add( CustomTextureToolCacheGameSystem() );
 	IGameSystem::Add( TFSharedContentManager() );
@@ -1034,7 +1050,6 @@ int CHLClient::Init( CreateInterfaceFn appSystemFactory, CreateInterfaceFn physi
 	g_pClientMode->InitViewport();
 
 	gHUD.Init();
-	gTouch.Init();
 
 	g_pClientMode->Init();
 
@@ -1088,6 +1103,18 @@ int CHLClient::Init( CreateInterfaceFn appSystemFactory, CreateInterfaceFn physi
 #ifndef _X360
 	HookHapticMessages(); // Always hook the messages
 #endif
+
+	FnUnsafeCmdLineProcessor *pfnUnsafeCmdLineProcessor =
+#ifndef TF_CLIENT_DLL
+		&UnsafeCmdLineProcessor;
+#else
+		&TFUnsafeCmdLineProcessor;
+#endif
+
+	if ( pfnUnsafeCmdLineProcessor )
+	{
+		RegisterSecureLaunchProcessFunc( pfnUnsafeCmdLineProcessor );
+	}
 
 	return true;
 }
@@ -1156,6 +1183,16 @@ void CHLClient::PostInit()
 		}
 	}
 #endif
+
+	if ( !r_lightmap_bicubic_set.GetBool() && materials )
+	{
+		MaterialAdapterInfo_t info{};
+		materials->GetDisplayAdapterInfo( materials->GetCurrentAdapter(), info );
+
+		ConVarRef r_lightmap_bicubic( "r_lightmap_bicubic" );
+		r_lightmap_bicubic.SetValue( info.m_nMaxDXSupportLevel >= 95 || ( info.m_nMaxDXSupportLevel >= 90 && IsLinux() ) );
+		r_lightmap_bicubic_set.SetValue( true );
+	}
 }
 
 //-----------------------------------------------------------------------------
@@ -1199,21 +1236,15 @@ void CHLClient::Shutdown( void )
 	
 	gHUD.Shutdown();
 	VGui_Shutdown();
-	gTouch.Shutdown();
-
+	
 	ParticleMgr()->Term();
 	
-	ClearKeyValuesCache();
+	vgui::BuildGroup::ClearResFileCache();
 
 #ifndef NO_STEAM
 	ClientSteamContext().Shutdown();
 #endif
 
-#ifdef WORKSHOP_IMPORT_ENABLED
-	ShutdownDataModel();
-	DisconnectDataModel();
-	ShutdownFbx();
-#endif
 	
 	// This call disconnects the VGui libraries which we rely on later in the shutdown path, so don't do it
 //	DisconnectTier3Libraries( );
@@ -1239,6 +1270,7 @@ void CHLClient::Shutdown( void )
 //-----------------------------------------------------------------------------
 int CHLClient::HudVidInit( void )
 {
+	
 	gHUD.VidInit();
 
 	GetClientVoiceMgr()->VidInit();
@@ -1572,6 +1604,8 @@ void CHLClient::View_Fade( ScreenFade_t *pSF )
 //-----------------------------------------------------------------------------
 void CHLClient::LevelInitPreEntity( char const* pMapName )
 {
+	ReloadParticleEffects();
+
 	// HACK: Bogus, but the logic is too complicated in the engine
 	if (g_bLevelInitialized)
 		return;
@@ -1631,7 +1665,6 @@ void CHLClient::LevelInitPreEntity( char const* pMapName )
 	g_RagdollLVManager.SetLowViolence( pMapName );
 
 	gHUD.LevelInit();
-	gTouch.LevelInit();
 
 #if defined( REPLAY_ENABLED )
 	// Initialize replay ragdoll recorder
@@ -1751,10 +1784,10 @@ void CHLClient::LevelShutdown( void )
 //-----------------------------------------------------------------------------
 void CHLClient::SetCrosshairAngle( const QAngle& angle )
 {
-	CHudCrosshair *crosshair = GET_HUDELEMENT( CHudCrosshair );
-	if ( crosshair )
+	CHudCrosshair *pCrosshair = GET_HUDELEMENT( CHudCrosshair );
+	if ( pCrosshair )
 	{
-		crosshair->SetCrosshairAngle( angle );
+		pCrosshair->SetCrosshairAngle( angle );
 	}
 }
 
@@ -2111,10 +2144,11 @@ void OnRenderStart()
 	g_pPortalRender->UpdatePortalPixelVisibility(); //updating this one or two lines before querying again just isn't cutting it. Update as soon as it's cheap to do so.
 #endif
 
-	partition->SuppressLists( PARTITION_ALL_CLIENT_EDICTS, true );
+	::partition->SuppressLists( PARTITION_ALL_CLIENT_EDICTS, true );
 	C_BaseEntity::SetAbsQueriesValid( false );
 
 	Rope_ResetCounters();
+	UpdateLocalPlayerVisionFlags();
 
 	// Interpolate server entities and move aiments.
 	{
@@ -2154,7 +2188,7 @@ void OnRenderStart()
 	// This will place all entities in the correct position in world space and in the KD-tree
 	C_BaseAnimating::UpdateClientSideAnimations();
 
-	partition->SuppressLists( PARTITION_ALL_CLIENT_EDICTS, false );
+	::partition->SuppressLists( PARTITION_ALL_CLIENT_EDICTS, false );
 
 	// Process OnDataChanged events.
 	ProcessOnDataChangedEvents();
@@ -2267,7 +2301,7 @@ void CHLClient::FrameStageNotify( ClientFrameStage_t curStage )
 			C_BaseEntity::EnableAbsRecomputations( false );
 			C_BaseEntity::SetAbsQueriesValid( false );
 			Interpolation_SetLastPacketTimeStamp( engine->GetLastTimeStamp() );
-			partition->SuppressLists( PARTITION_ALL_CLIENT_EDICTS, true );
+			::partition->SuppressLists( PARTITION_ALL_CLIENT_EDICTS, true );
 
 			PREDICTION_STARTTRACKVALUE( "netupdate" );
 		}
@@ -2279,7 +2313,7 @@ void CHLClient::FrameStageNotify( ClientFrameStage_t curStage )
 			// reenable abs recomputation since now all entities have been updated
 			C_BaseEntity::EnableAbsRecomputations( true );
 			C_BaseEntity::SetAbsQueriesValid( true );
-			partition->SuppressLists( PARTITION_ALL_CLIENT_EDICTS, false );
+			::partition->SuppressLists( PARTITION_ALL_CLIENT_EDICTS, false );
 
 			PREDICTION_ENDTRACKVALUE();
 		}
@@ -2441,10 +2475,18 @@ bool CHLClient::CanRecordDemo( char *errorMsg, int length ) const
 
 void CHLClient::OnDemoRecordStart( char const* pDemoBaseName )
 {
+	if ( GetClientModeNormal() )
+	{
+		return GetClientModeNormal()->OnDemoRecordStart( pDemoBaseName );
+	}
 }
 
 void CHLClient::OnDemoRecordStop()
 {
+	if ( GetClientModeNormal() )
+	{
+		return GetClientModeNormal()->OnDemoRecordStop();
+	}
 }
 
 void CHLClient::OnDemoPlaybackStart( char const* pDemoBaseName )
@@ -2503,7 +2545,6 @@ void ReloadSoundEntriesInList( IFileList *pFilesToReload );
 //-----------------------------------------------------------------------------
 void CHLClient::ReloadFilesInList( IFileList *pFilesToReload )
 {
-	ReloadParticleEffectsInList( pFilesToReload );
 	ReloadSoundEntriesInList( pFilesToReload );
 }
 
@@ -2557,40 +2598,11 @@ void CHLClient::ClientAdjustStartSoundParams( StartSoundParams_t& params )
 	CBaseEntity *pEntity = ClientEntityList().GetEnt( params.soundsource );
 
 	// A player speaking
-	if ( params.entchannel == CHAN_VOICE && GameRules() && pEntity && pEntity->IsPlayer() )
+	if ( ( params.entchannel == CHAN_VOICE ) && pEntity && pEntity->IsPlayer() )
 	{
-		// Use high-pitched voices for other players if the local player has an item that allows them to hear it (Pyro Goggles)
-		if ( !GameRules()->IsLocalPlayer( params.soundsource ) && IsLocalPlayerUsingVisionFilterFlags( TF_VISION_FILTER_PYRO ) )
-		{
-			params.pitch *= 1.3f;
-		}
-		// Halloween voice futzery?
-		else
-		{
-			float flHeadScale = 1.f;
-			CALL_ATTRIB_HOOK_FLOAT_ON_OTHER( pEntity, flHeadScale, head_scale );
-
-			int iHalloweenVoiceSpell = 0;
-			CALL_ATTRIB_HOOK_INT_ON_OTHER( pEntity, iHalloweenVoiceSpell, halloween_voice_modulation );
-			if ( iHalloweenVoiceSpell > 0 )
-			{
-				params.pitch *= 0.8f;
-			}
-			else if( flHeadScale != 1.f )
-			{
-				// Big head, deep voice
-				if( flHeadScale > 1.f )
-				{
-					params.pitch *= 0.8f;
-				}
-				else	// Small head, high voice
-				{
-					params.pitch *= 1.3f;
-				}
-			}
-		}
+		pEntity->ClientAdjustStartSoundParams( params );
 	}
-#endif
+#endif // TF_CLIENT_DLL
 }
 
 const char* CHLClient::TranslateEffectForVisionFilter( const char *pchEffectType, const char *pchEffectName )
@@ -2617,6 +2629,31 @@ bool CHLClient::IsConnectedUserInfoChangeAllowed( IConVar *pCvar )
 	return GameRules() ? GameRules()->IsConnectedUserInfoChangeAllowed( NULL ) : true;
 }
 
+bool CHLClient::BHaveChatSuspensionInCurrentMatch()
+{
+#if defined( TF_CLIENT_DLL )
+	if ( GTFGCClientSystem() )
+	{
+		return GTFGCClientSystem()->BHaveChatSuspensionInCurrentMatch();
+	}
+#endif // TF_CLIENT_DLL 
+
+	return false;
+}
+
+void CHLClient::DisplayVoiceUnavailableMessage()
+{
+#if defined( TF_CLIENT_DLL )
+	CBaseHudChat *pHUDChat = ( CBaseHudChat * ) GET_HUDELEMENT( CHudChat );
+	if ( pHUDChat )
+	{
+		char szLocalized[100];
+		g_pVGuiLocalize->ConvertUnicodeToANSI( g_pVGuiLocalize->Find( "#TF_Voice_Unavailable" ), szLocalized, sizeof( szLocalized ) );
+		pHUDChat->ChatPrintf( 0, CHAT_FILTER_NONE, "%s ", szLocalized );
+	}
+#endif // TF_CLIENT_DLL 
+}
+
 #ifndef NO_STEAM
 
 CSteamID GetSteamIDForPlayerIndex( int iPlayerIndex )
@@ -2628,37 +2665,11 @@ CSteamID GetSteamIDForPlayerIndex( int iPlayerIndex )
 		{
 			if ( pi.friendsID )
 			{
-				return CSteamID( pi.friendsID, 1, steamapicontext->SteamUtils()->GetConnectedUniverse(), k_EAccountTypeIndividual );
+				return CSteamID( pi.friendsID, 1, GetUniverse(), k_EAccountTypeIndividual );
 			}
 		}
 	}
 	return CSteamID();
 }
 
-#else
-
-CSteamID GetSteamIDForPlayerIndex( int iPlayerIndex )
-{
-	return CSteamID();
-}
-
 #endif
-
- 
-void CHLClient::IN_TouchEvent( int type, int fingerId, int x, int y )
-{
-	if( enginevgui->IsGameUIVisible() )
-		return;
-
-	touch_event_t ev;
-
-	ev.type = type;
-	ev.fingerid = fingerId;
-	memcpy( &ev.x, &x, sizeof(ev.x) );
-	memcpy( &ev.y, &y, sizeof(ev.y) );
-
-	if( type == IE_FingerMotion )
-		inputsystem->GetTouchAccumulators( fingerId, ev.dx, ev.dy );
-
-	gTouch.ProcessEvent( &ev );
-}

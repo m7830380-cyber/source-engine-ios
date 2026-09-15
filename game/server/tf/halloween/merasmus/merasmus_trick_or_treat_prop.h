@@ -20,6 +20,7 @@ public:
 	virtual void	Event_Killed( const CTakeDamageInfo &info );
 	virtual int		OnTakeDamage( const CTakeDamageInfo &info );
 	virtual void	Touch( CBaseEntity *pOther );
+	virtual bool	IsProjectileCollisionTarget( void ) const OVERRIDE { return true; }
 
 	static CTFMerasmusTrickOrTreatProp* Create( const Vector& vPosition, const QAngle& qAngles );
 

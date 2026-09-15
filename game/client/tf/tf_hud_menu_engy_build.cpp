@@ -93,55 +93,6 @@ static int flagSlots[NUM_ENGY_BUILDINGS] =
 };
 
 
-#ifdef STAGING_ONLY
-const EngyBuildingReplacement_t s_alternateEngineerBuildings[] =
-{
-	// Catapult
-	EngyBuildingReplacement_t(
-		OBJ_CATAPULT,
-		0,
-		"catapult_active.res",
-		"catapult_already_built.res",
-		"catapult_cant_afford.res",
-		"catapult_unavailable.res",
-		"catapult_active.res",
-		"catapult_inactive.res",
-		"catapult_inactive.res",
-		flagSlots[2],
-		flagSlots[3]
-	),
-	// Speed 1
-	EngyBuildingReplacement_t(
-		OBJ_TELEPORTER,
-		MODE_TELEPORTER_SPEED,
-		"speedpad_active.res",
-		"speedpad_already_built.res",
-		"speedpad_cant_afford.res",
-		"speedpad_unavailable.res",
-		"speedpad_active.res",
-		"speedpad_inactive.res",
-		"speedpad_inactive.res",
-		flagSlots[2],
-		0
-	),
-	// Speed 2
-	EngyBuildingReplacement_t(
-		OBJ_TELEPORTER,
-		MODE_TELEPORTER_SPEED2,
-		"speedpad_active.res",
-		"speedpad_already_built.res",
-		"speedpad_cant_afford.res",
-		"speedpad_unavailable.res",
-		"speedpad_active.res",
-		"speedpad_inactive.res",
-		"speedpad_inactive.res",
-		flagSlots[3],
-		0
-	),
-
-	// Add more objects here
-};
-#endif
 
 //======================================
 DECLARE_HUDELEMENT_DEPTH( CHudMenuEngyBuild, 40 );	// in front of engy building status
@@ -817,24 +768,6 @@ void CHudMenuEngyBuild::ReplaceBuildings( EngyConstructBuilding_t (&targetBuildi
 
 	CUtlVector< const EngyBuildingReplacement_t* > vecReplacements;
 
-#ifdef STAGING_ONLY
-
-	int iOverrideType = -1;
-	CALL_ATTRIB_HOOK_INT_ON_OTHER( pLocalPlayer, iOverrideType, override_engineer_object_type );
-	if ( iOverrideType >= 0 && iOverrideType < ARRAYSIZE( s_alternateEngineerBuildings ) )
-	{
-		vecReplacements.AddToTail( &s_alternateEngineerBuildings[iOverrideType] );
-	}
-	
-	iOverrideType = -1;
-	CALL_ATTRIB_HOOK_INT_ON_OTHER( pLocalPlayer, iOverrideType, override_engineer_object_type_2 );
-	if ( iOverrideType >= 0 && iOverrideType < ARRAYSIZE( s_alternateEngineerBuildings ) )
-	{
-		vecReplacements.AddToTail( &s_alternateEngineerBuildings[iOverrideType] );
-	}
-	// add more replacement attributes here
-
-#endif
 
 	// verify the override data to make sure that they don't conflict with each other
 	int iReplacedSlots = 0;

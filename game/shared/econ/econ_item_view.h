@@ -28,9 +28,6 @@
 #define CEconItemView C_EconItemView
 #endif
 
-#if defined(GC_DLL)
-#error "econ_item_view.h is not intended to be built on the GC!"
-#endif
 
 #if defined(TF_DLL) || defined(TF_CLIENT_DLL)
 	#define ENABLE_ATTRIBUTE_CURRENCY_TRACKING	1
@@ -222,6 +219,8 @@ public:
 	void					InvalidateColor() { m_bColorInit = false; }
 	void					InvalidateOverrideColor() { m_bPaintOverrideInit = false; }
 
+	bool					IsUndefined() const { return !IsValid() || m_iItemDefinitionIndex == INVALID_ITEM_DEF_INDEX; }
+
 	// Initialize from the specified data
 	// client will load SO cache as needed
 	void					Init( int iDefIndex, int iQuality, int iLevel, uint32 iAccountID = 0 );
@@ -332,7 +331,6 @@ public:
 	const CAttributeList	 *GetAttributeList() const { return &m_AttributeList; }
 	
 public:
-	virtual CEconItemPaintKitDefinition *GetCustomPainkKitDefinition( void ) const { return GetItemDefinition()->GetCustomPainkKitDefinition(); }
 
 #ifdef CLIENT_DLL
 	void						SetWeaponSkinBase( ITexture* pBaseTex );
@@ -422,11 +420,12 @@ public:
 	const wchar_t			*GetItemName( void ) const;
 
 	// Return the full structure with all of our description lines.
-	const class CEconItemDescription *GetDescription() const { EnsureDescriptionIsBuilt(); return m_pDescription; }
+	const class CEconItemDescription *GetDescription( bool bIsToolTip = false ) const { m_bIsToolTip = bIsToolTip; EnsureDescriptionIsBuilt(); return m_pDescription; }
 
 private:
 	mutable class CEconItemDescription	*m_pDescription;
 	mutable char *m_pszGrayedOutReason;
+	mutable bool m_bIsToolTip = false;
 
 	// IClientRenderable
 	virtual const Vector&	GetRenderOrigin( void ) { return vec3_origin; }

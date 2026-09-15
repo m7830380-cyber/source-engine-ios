@@ -22,9 +22,6 @@
 
 ConVar tf_max_active_zombie( "tf_max_active_zombie", "30", FCVAR_CHEAT );
 
-#ifdef STAGING_ONLY
-ConVar tf_halloween_skeleton_test_hat( "tf_halloween_skeleton_test_hat", "-1", FCVAR_CHEAT );
-#endif // STAGING_ONLY
 
 //-----------------------------------------------------------------------------------------------------
 // NPC Zombie versions of the players
@@ -46,6 +43,10 @@ static const char *s_skeletonHatModels[] =
 	"models/player/items/heavy/heavy_big_chief.mdl",
 };
 
+BEGIN_DATADESC( CZombie )
+	DEFINE_OUTPUT( m_OnDeath, "OnDeath" ),
+END_DATADESC()
+
 
 //-----------------------------------------------------------------------------------------------------
 CZombie::CZombie()
@@ -63,6 +64,7 @@ CZombie::CZombie()
 
 	m_bSpy = false;
 	m_bForceSuicide = false;
+	m_bDeathOutputFired = false;
 }
 
 
@@ -245,6 +247,23 @@ int CZombie::OnTakeDamage_Alive( const CTakeDamageInfo &info )
 		pszEffectName = GetTeamNumber() == TF_TEAM_RED ? "spell_pumpkin_mirv_goop_red" : "spell_pumpkin_mirv_goop_blue";
 	}
 
+	if (info.GetAttacker() && info.GetAttacker()->IsPlayer())
+	{
+		int idx = m_vecRecentDamagers.FindPredicate([&info]( const RecentDamager_t& recent)
+		{
+			return recent.m_hEnt == info.GetAttacker();
+		} );
+
+		if (idx == m_vecRecentDamagers.InvalidIndex())
+		{
+			idx = m_vecRecentDamagers.AddToTail();
+		}
+
+		RecentDamager_t& recentDamager = m_vecRecentDamagers[ idx ];
+		recentDamager.m_flDamageTime = gpGlobals->curtime;
+		recentDamager.m_hEnt = info.GetAttacker();
+	}
+
 	DispatchParticleEffect( pszEffectName, info.GetDamagePosition(), GetAbsAngles() );
 
 	return BaseClass::OnTakeDamage_Alive( info );
@@ -256,25 +275,44 @@ void CZombie::Event_Killed( const CTakeDamageInfo &info )
 {
 	EmitSound( "Halloween.skeleton_break" );
 
-	if ( TFGameRules() && TFGameRules()->IsHalloweenScenario( CTFGameRules::HALLOWEEN_SCENARIO_HIGHTOWER ) )
-	{
-		CTFPlayer *pPlayerAttacker = NULL;
-		if ( info.GetAttacker() && info.GetAttacker()->IsPlayer() )
-		{
-			pPlayerAttacker = ToTFPlayer( info.GetAttacker() );
-			if ( pPlayerAttacker )
-			{
-				pPlayerAttacker->AwardAchievement( ACHIEVEMENT_TF_HALLOWEEN_HELLTOWER_SKELETON_GRIND );
 
-				IGameEvent *pEvent = gameeventmanager->CreateEvent( "halloween_skeleton_killed" );
-				if ( pEvent )
+	if (info.GetAttacker() && info.GetAttacker()->IsPlayer())
+	{
+		CTFPlayer *pPlayerAttacker = ToTFPlayer(info.GetAttacker());
+		if (pPlayerAttacker)
+		{
+			if (TFGameRules() && TFGameRules()->IsHalloweenScenario(CTFGameRules::HALLOWEEN_SCENARIO_HIGHTOWER))
+			{
+				pPlayerAttacker->AwardAchievement(ACHIEVEMENT_TF_HALLOWEEN_HELLTOWER_SKELETON_GRIND);
+
+				IGameEvent *pEvent = gameeventmanager->CreateEvent("halloween_skeleton_killed");
+				if (pEvent)
 				{
-					pEvent->SetInt( "player", pPlayerAttacker->GetUserID() );
-					gameeventmanager->FireEvent( pEvent, true );
+					pEvent->SetInt("player", pPlayerAttacker->GetUserID());
+					gameeventmanager->FireEvent(pEvent, true);
 				}
 			}
 		}
 	}
+
+	for (const RecentDamager_t& recent : m_vecRecentDamagers)
+	{
+		if ( gpGlobals->curtime - recent.m_flDamageTime > TF_TIME_ASSIST_KILL)
+			continue;
+
+		CTFPlayer* pPlayerAttacker = ToTFPlayer(recent.m_hEnt);
+
+		IGameEvent *pEvent = gameeventmanager->CreateEvent(GetSkeletonType() == SKELETON_KING ? "skeleton_king_killed_quest" : "skeleton_killed_quest");
+		if (pEvent)
+		{
+			pEvent->SetInt("player", pPlayerAttacker->GetUserID());
+			gameeventmanager->FireEvent(pEvent, true);
+		}
+	}
+
+	m_vecRecentDamagers.Purge();
+
+	FireDeathOutput( info.GetInflictor() );
 	
 	BaseClass::Event_Killed( info );
 }
@@ -294,6 +332,18 @@ void CZombie::UpdateOnRemove()
 	UTIL_Remove( m_hHat );
 
 	BaseClass::UpdateOnRemove();
+}
+
+
+//-----------------------------------------------------------------------------------------------------
+void CZombie::FireDeathOutput( CBaseEntity *pCulprit )
+{
+	// only fire this once
+	if ( m_bDeathOutputFired )
+		return;
+	
+	m_bDeathOutputFired = true;
+	m_OnDeath.FireOutput( pCulprit, this );
 }
 
 
@@ -364,9 +414,6 @@ void CZombie::SetSkeletonType( SkeletonType_t nType )
 		if( TFGameRules()->GetHalloweenScenario() == CTFGameRules::HALLOWEEN_SCENARIO_DOOMSDAY )
 		{
 			int iModelIndex = RandomInt( 0, ARRAYSIZE( s_skeletonHatModels ) - 1 );
-#ifdef STAGING_ONLY
-			iModelIndex = tf_halloween_skeleton_test_hat.GetInt() > 0 ? tf_halloween_skeleton_test_hat.GetInt() : iModelIndex;
-#endif // STAGING_ONLY
 			const char *pszHat = s_skeletonHatModels[ iModelIndex ];
 			AddHat( pszHat );
 		}
@@ -420,7 +467,14 @@ public:
 
 	virtual ActionResult< CZombie >	Update( CZombie *me, float interval )
 	{
-		if ( !me->IsAlive() || me->ShouldSuicide() )
+		bool bDead = !me->IsAlive();
+		if ( !bDead && me->ShouldSuicide() )
+		{
+			me->FireDeathOutput( me );
+			bDead = true;
+		}
+
+		if ( bDead )
 		{
 			UTIL_Remove( me );
 			return Done();

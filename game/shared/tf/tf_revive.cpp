@@ -28,20 +28,6 @@ static const int REVIVE_EASY_LIMIT = 4;
 static const int REVIVE_MEDIUM_LIMIT = 8;
 
 #ifdef GAME_DLL
-#ifdef STAGING_ONLY
-CON_COMMAND_F ( tf_test_revive_spawnmarker, "Crude way to spawn a marker for testing", FCVAR_CHEAT )
-{
-	CBasePlayer *pLocalPlayer = UTIL_PlayerByIndex( 1 );
-	if ( !pLocalPlayer )
-		return;
-
-	CTFPlayer *pPlayer = ToTFPlayer( pLocalPlayer );
-	if ( !pPlayer )
-		return;
-
-	CTFReviveMarker::Create( pPlayer );
-}
-#endif // STAGING_ONLY
 extern void HandleRageGain( CTFPlayer *pPlayer, unsigned int iRequiredBuffFlags, float flDamage, float fInverseRageGainScale );
 #else
 extern void AddMedicCaller( C_BaseEntity *pEntity, float flDuration, Vector &vecOffset, bool bAutoCaller = false );
@@ -394,7 +380,7 @@ bool CTFReviveMarker::ReviveOwner( void )
 	// See if their marker is clear
 	Vector vecTeleportPos = GetAbsOrigin();			
 	trace_t tr;
-	CTraceFilterIgnoreTeammatesAndTeamObjects filter( m_hOwner, COLLISION_GROUP_NONE, m_hOwner->GetTeamNumber() );
+	CTraceFilterSimple filter( m_hOwner, COLLISION_GROUP_NONE );
 	UTIL_TraceHull( vecTeleportPos, vecTeleportPos, VEC_HULL_MIN_SCALED( m_hOwner ), VEC_HULL_MAX_SCALED( m_hOwner ), ( MASK_SOLID | CONTENTS_PLAYERCLIP ), &filter, &tr );
 		
 	// If not, try the medic's location

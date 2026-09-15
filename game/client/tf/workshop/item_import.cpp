@@ -88,6 +88,7 @@ static const char *kBodygroupArray[] =
 	"headphones",
 	"shoes",
 	"shoes_socks",
+	"bullets"
 };
 
 extern IFileSystem *g_pFullFileSystem;
@@ -102,9 +103,6 @@ static ConVar tf_steam_workshop_import_icon_path( "tf_steam_workshop_import_icon
 static ConVar tf_steam_workshop_import_model_path( "tf_steam_workshop_import_model_path", "", FCVAR_CLIENTDLL | FCVAR_ARCHIVE, "Default location to load models from" );
 static ConVar tf_steam_workshop_import_material_path( "tf_steam_workshop_import_material_path", "", FCVAR_CLIENTDLL | FCVAR_ARCHIVE, "Default location to load materials from" );
 
-#ifdef STAGING_ONLY
-static ConVar tf_steam_workshop_max_taunt_duration( "tf_steam_workshop_max_taunt_duration", "-1" );
-#endif // STAGING_ONLY
 
 // Item data tokens
 static const char *kItemName = "name";
@@ -303,12 +301,6 @@ static const char *kEnvmapMaskVarName = "envmapmask_varname";
 
 static float GetMaxTauntDuration()
 {
-#ifdef STAGING_ONLY
-	if ( tf_steam_workshop_max_taunt_duration.GetFloat() > 0 )
-	{
-		return tf_steam_workshop_max_taunt_duration.GetFloat();
-	}
-#endif // STAGING_ONLY
 	return MAX_TAUNT_DURATION;
 }
 
@@ -2879,7 +2871,10 @@ CTFFileImportDialog::CTFFileImportDialog( vgui::Panel *parent )
 	if ( sv_cheats.IsValid() )
 	{
 		m_bWasCheatOn = sv_cheats.GetBool();
-		sv_cheats.SetValue( true );
+		if ( !m_bWasCheatOn )
+		{
+			engine->ClientCmd_Unrestricted( "sv_cheats 1\n" );
+		}
 	}
 }
 
@@ -2896,11 +2891,9 @@ CTFFileImportDialog::~CTFFileImportDialog()
 		m_pPreviewSchema->deleteThis();
 	}
 
-	// restore sv_cheats value before coming into the tool
-	static ConVarRef sv_cheats("sv_cheats");
-	if ( sv_cheats.IsValid() )
+	if ( !m_bWasCheatOn )
 	{
-		sv_cheats.SetValue( m_bWasCheatOn );
+		engine->ClientCmd_Unrestricted( "sv_cheats 0\n" );
 	}
 }
 
@@ -2931,7 +2924,7 @@ void CTFFileImportDialog::ApplySchemeSettings( vgui::IScheme *pScheme )
 
 		// Add all the public prefabs
 		const CEconItemSchema::PrefabMap_t &prefabMap = ItemSystem()->GetItemSchema()->GetPrefabMap();
-		for ( int i = prefabMap.FirstInorder(); i != prefabMap.InvalidIndex(); i = prefabMap.NextInorder( i ) )
+		FOR_EACH_DICT( prefabMap, i )
 		{
 			KeyValues *pPrefabKeyValues = prefabMap [ i ];
 			if ( pPrefabKeyValues->GetBool( "public_prefab" ) )
@@ -4542,7 +4535,7 @@ int CTFFileImportDialog::GetCustomBones( int selectedClass, const char* pszFileN
 
 	if ( pItemStudioHdr )
 	{
-		m_pPlayerModelPanel->SetToPlayerClass( selectedClass, false );
+		m_pPlayerModelPanel->SetToPlayerClass( selectedClass );
 		const studiohdr_t* pClassStudioHdr = m_pPlayerModelPanel->GetStudioHdr();
 		for ( int iItemBone=0; iItemBone<pItemStudioHdr->numbones; ++iItemBone )
 		{
@@ -4621,9 +4614,12 @@ CTFFileImportDialog::LOAD_RESULT CTFFileImportDialog::SetLOD( int selectedClass,
 		int nTriCount = asset.GetTargetDMX( 0 )->GetTriangleCount();
 		if ( nTriCount > nMaxTris )
 		{
-			pKV->SetInt( "count", nTriCount );
-			pKV->SetInt( "limit", nMaxTris );
-			SetMessageFileVariable( pKV, pszFilePath );
+			if ( pKV )
+			{
+				pKV->SetInt( "count", nTriCount );
+				pKV->SetInt( "limit", nMaxTris );
+				SetMessageFileVariable( pKV, pszFilePath );
+			}
 
 			return LOAD_FAILED_COMPLEXMODEL;
 		}
@@ -4666,10 +4662,14 @@ CTFFileImportDialog::LOAD_RESULT CTFFileImportDialog::SetLOD( int selectedClass,
 				{
 					strCustomBones += CFmtStr( ", %s", strBoneList[i] );
 				}
-				pKV->SetInt( "count", nCustomBones );
-				pKV->SetInt( "limit", nCustomBoneLimit );
-				pKV->SetString( "custom_bones", strCustomBones.String() );
-				SetMessageFileVariable( pKV, pszFilePath );
+
+				if ( pKV )
+				{
+					pKV->SetInt( "count", nCustomBones );
+					pKV->SetInt( "limit", nCustomBoneLimit );
+					pKV->SetString( "custom_bones", strCustomBones.String() );
+					SetMessageFileVariable( pKV, pszFilePath );
+				}
 
 				return LOAD_FAILED_TOOMANYBONES;
 			}
@@ -4678,9 +4678,12 @@ CTFFileImportDialog::LOAD_RESULT CTFFileImportDialog::SetLOD( int selectedClass,
 		int nMaterialCount = asset.GetTargetVMTCount();
 		if ( nMaterialCount > NUM_IMPORT_MATERIALS_PER_TEAM )
 		{
-			pKV->SetInt( "count", nMaterialCount );
-			pKV->SetInt( "limit", NUM_IMPORT_MATERIALS_PER_TEAM );
-			SetMessageFileVariable( pKV, pszFilePath );
+			if ( pKV )
+			{
+				pKV->SetInt( "count", nMaterialCount );
+				pKV->SetInt( "limit", NUM_IMPORT_MATERIALS_PER_TEAM );
+				SetMessageFileVariable( pKV, pszFilePath );
+			}
 			return LOAD_FAILED_TOOMANYMATERIALS;
 		}
 
@@ -4694,7 +4697,10 @@ CTFFileImportDialog::LOAD_RESULT CTFFileImportDialog::SetLOD( int selectedClass,
 				int nHigherLODMaterialCount = pKey->GetInt( "materialCount" );
 				if ( nHigherLODMaterialCount < nMaterialCount )
 				{
-					SetMessageFileVariable( pKV, pszFilePath );
+					if ( pKV )
+					{
+						SetMessageFileVariable( pKV, pszFilePath );
+					}
 					return LOAD_FAILED_MATERIALCOUNTMISMATCH;
 				}
 			}
@@ -5515,7 +5521,7 @@ void CTFFileImportDialog::UpdateBodygroupsDisplay()
 
 			if ( m_nSelectedClass != TF_CLASS_UNDEFINED )
 			{
-				m_pPlayerModelPanel->SetToPlayerClass( m_nSelectedClass, false );
+				m_pPlayerModelPanel->SetToPlayerClass( m_nSelectedClass );
 				const studiohdr_t* pMDL = m_pPlayerModelPanel->GetStudioHdr();
 
 				bool bEnabled = false;
@@ -6993,6 +6999,9 @@ CTFFileImportDialog::LOAD_RESULT CTFFileImportDialog::LoadTxt( const char *pszFi
 			}
 		}
 
+		char szFileBase[ MAX_PATH ];
+		V_FileBase( pszSourceFile, szFileBase, sizeof( szFileBase ) );
+
 		LOAD_RESULT result = SetAnimationSource( nClassIndex, pszSourceFile );
 		if ( result != LOAD_OKAY )
 		{
@@ -7007,6 +7016,23 @@ CTFFileImportDialog::LOAD_RESULT CTFFileImportDialog::LoadTxt( const char *pszFi
 			{
 				V_ComposeFileName( pszBasePath, pszVCDFile, pszLoadPath, sizeof(pszLoadPath) );
 				pszVCDFile = pszLoadPath;
+			}
+
+			if ( !g_pFullFileSystem->FileExists( pszVCDFile, "MOD" ) )
+			{
+				const char *pszTempVCDFile = pszVCDFile;
+
+				// If the file isn't found using the path in the manifest, let's look where we think it should be on disk. 
+				// We're sometimes seeing absolute paths for the creator's hard drive in the manifest for the vcd_file.
+				char szFallbackTest[ MAX_PATH ];
+				V_sprintf_safe( szFallbackTest, "%sgame\\scenes\\%s\\player\\%s\\low\\%s.vcd", pszBasePath, GetWorkshopFolder(), kClassFolders[ nClassIndex ], szFileBase );
+				pszVCDFile = szFallbackTest;
+
+				if ( !g_pFullFileSystem->FileExists( pszVCDFile, "MOD" ) )
+				{
+					// Set it back to the original value and let it fail below.
+					pszVCDFile = pszTempVCDFile;
+				}
 			}
 		}
 

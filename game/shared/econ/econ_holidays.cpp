@@ -109,15 +109,6 @@ public:
 		end_time_tm.tm_mday += days_offset + 7 * m_iExtraWeeks;
 		time_t end_time = mktime( &end_time_tm );
 
-#ifdef GC_DLL
-		char rgchDateStartBuf[ 128 ];
-		BGetLocalFormattedDate( start_time, rgchDateStartBuf, sizeof( rgchDateStartBuf) );
-
-		char rgchDateEndBuf[ 128 ];
-		BGetLocalFormattedDate( end_time, rgchDateEndBuf, sizeof( rgchDateEndBuf ) );
-
-		EmitInfo( GCSDK::SPEW_GC, 4, LOG_ALWAYS, "Holiday - '%s' event starts on '%s' and ends on '%s'.\n", GetHolidayName(), rgchDateStartBuf, rgchDateEndBuf );
-#endif // GC_DLL
 
 		m_timeStart = start_time;
 		m_timeEnd = end_time;
@@ -293,6 +284,11 @@ public:
 		return ( ( timeCurrent >= m_rtCachedStartTime ) && ( timeCurrent <= m_rtCachedEndTime ) );
 	}
 
+	RTime32 GetEndRTime() const
+	{
+		return m_rtCachedEndTime.GetRTime32();
+	}
+
 private:
 	const char *m_pszStartTime;
 	const char *m_pszEndTime;
@@ -310,25 +306,32 @@ static CNoHoliday			g_Holiday_NoHoliday;
 
 static CDateBasedHolidayNoSpecificYear	g_Holiday_TF2Birthday	( "birthday",	"08-23", "08-25" );
 
-static CDateBasedHoliday	g_Holiday_Halloween					( "halloween",	"2016-10-19", "2016-11-18" );
+static CDateBasedHolidayNoSpecificYear	g_Holiday_Halloween		( "halloween",	"10-01", "11-08" );
 
-static CDateBasedHoliday	g_Holiday_Christmas					( "christmas", "2016-11-28", "2017-01-12" );
+static CDateBasedHolidayNoSpecificYear	g_Holiday_ChristmasPart1( "christmas1", "12-01", "12-31 23:59:59" );
+static CDateBasedHolidayNoSpecificYear	g_Holiday_ChristmasPart2( "christmas2", "01-01", "01-08" );
+static COrHoliday	g_Holiday_Christmas		( "christmas", &g_Holiday_ChristmasPart1, &g_Holiday_ChristmasPart2 );
 
 static CDateBasedHolidayNoSpecificYear	g_Holiday_ValentinesDay	( "valentines",	"02-13", "02-15" );
 
 static CDateBasedHoliday	g_Holiday_MeetThePyro				( "meet_the_pyro",	"2012-06-26", "2012-07-05" );
 														   /*					starting date		cycle length in days	bonus time in days on both sides */
-static CCyclicalHoliday		g_Holiday_FullMoon					( "fullmoon",		5, 21, 2016,		29.53f,					1.0f );
+static CCyclicalHoliday		g_Holiday_FullMoon					( "fullmoon",		10, 06, 2025,		29.53f,					1.0f );
 																								 // note: the cycle length is 29.5 instead of 29.53 so that the time calculations always start at noon based on the way CCyclicalHoliday works
 static COrHoliday			g_Holiday_HalloweenOrFullMoon		( "halloween_or_fullmoon",	&g_Holiday_Halloween,	&g_Holiday_FullMoon );
 
 static COrHoliday			g_Holiday_HalloweenOrFullMoonOrValentines	( "halloween_or_fullmoon_or_valentines",	&g_Holiday_HalloweenOrFullMoon,	&g_Holiday_ValentinesDay );
 
-static CDateBasedHolidayNoSpecificYear			g_Holiday_AprilFools	( "april_fools",	"03-31", "04-02" );
+static CDateBasedHolidayNoSpecificYear	g_Holiday_AprilFools	( "april_fools",	"03-31", "04-02" );
 
 static CDateBasedHoliday	g_Holiday_EndOfTheLine				( "eotl_launch",	"2014-12-03", "2015-01-05" );
 
 static CDateBasedHoliday	g_Holiday_CommunityUpdate			( "community_update", "2015-09-01", "2015-11-05" );
+
+static CDateBasedHolidayNoSpecificYear	g_Holiday_Soldier		( "soldier", "04-12", "04-14" );
+
+// only setup for 2025 right now...need to figure out how we want future events to run and maybe remove the year
+static CDateBasedHoliday	g_Holiday_Summer( "summer", "2025-07-16", "2025-09-16" );
 
 // ORDER NEEDS TO MATCH enum EHoliday
 static IIsHolidayActive *s_HolidayChecks[] =
@@ -345,6 +348,8 @@ static IIsHolidayActive *s_HolidayChecks[] =
 	&g_Holiday_HalloweenOrFullMoon,					// kHoliday_HalloweenOrFullMoon
 	&g_Holiday_HalloweenOrFullMoonOrValentines,		// kHoliday_HalloweenOrFullMoonOrValentines
 	&g_Holiday_AprilFools,							// kHoliday_AprilFools
+	&g_Holiday_Soldier,								// kHoliday_Soldier
+	&g_Holiday_Summer,								// kHoliday_Summer
 };
 
 COMPILE_TIME_ASSERT( ARRAYSIZE( s_HolidayChecks ) == kHolidayCount );

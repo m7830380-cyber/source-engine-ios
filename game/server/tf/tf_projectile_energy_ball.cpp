@@ -315,22 +315,7 @@ void CTFProjectile_EnergyBall::Explode( trace_t *pTrace, CBaseEntity *pOther )
 
 			if ( pTarget->GetTeamNumber() != pAttacker->GetTeamNumber() )
 			{
-				IGameEvent *event = gameeventmanager->CreateEvent( "projectile_direct_hit" );
-				if ( event )
-				{
-					event->SetInt( "attacker", pAttacker->entindex() );
-					event->SetInt( "victim", pTarget->entindex() );
-
-					item_definition_index_t ownerWeaponDefIndex = INVALID_ITEM_DEF_INDEX;
-					CTFWeaponBase *pWeapon = dynamic_cast< CTFWeaponBase * >( GetOriginalLauncher() );
-					if ( pWeapon )
-					{
-						ownerWeaponDefIndex = pWeapon->GetAttributeContainer()->GetItem()->GetItemDefIndex();
-					}
-					event->SetInt( "weapon_def_index", ownerWeaponDefIndex );
-
-					gameeventmanager->FireEvent( event, true );
-				}
+				RecordEnemyPlayerHit( pTarget, true );
 			}
 		}
 
@@ -387,6 +372,10 @@ int	CTFProjectile_EnergyBall::GetDamageType()
 	else
 	{
 		iDamageType = DMG_BLAST | DMG_HALF_FALLOFF | DMG_USEDISTANCEMOD;
+		if ( m_bCritical )
+		{
+			iDamageType |= DMG_CRITICAL;
+		}
 	}
 
 	return iDamageType;

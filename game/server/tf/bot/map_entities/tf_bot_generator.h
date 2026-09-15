@@ -6,9 +6,6 @@
 #ifndef TF_BOT_GENERATOR_H
 #define TF_BOT_GENERATOR_H
 
-#include "bot/tf_bot.h"
-
-
 class CTFBotGenerator : public CPointEntity
 {
 public:
@@ -96,5 +93,10 @@ public:
 
 	COutputEvent m_onReachedActionPoint;
 };
+
+inline HSCRIPT ToHScript( CTFBotActionPoint *pPoint )
+{
+	return ( pPoint ) ? pPoint->GetScriptInstance() : NULL;
+}
 
 #endif // TF_BOT_GENERATOR_H

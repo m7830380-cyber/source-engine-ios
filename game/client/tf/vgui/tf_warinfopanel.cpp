@@ -14,21 +14,9 @@
 #include <vgui_controls/AnimationController.h>
 #include "vgui/ISystem.h"
 
-#ifdef STAGING_ONLY
-ConVar tf_war_override_active_state( "tf_war_override_active_state", "-1" );
-#endif
 
 bool IsWarActive( war_definition_index_t nDefIndex )
 {
-#ifdef STAGING_ONLY
-	if ( tf_war_override_active_state.GetInt() != -1 )
-	{
-		if ( tf_war_override_active_state.GetInt() == 0 )
-			return false;
-
-		return true;
-	}
-#endif
 
 	const CWarDefinition* pWarDef = GetItemSchema()->GetWarDefinitionByIndex( nDefIndex );
 	Assert( pWarDef );
@@ -149,7 +137,7 @@ void CWarStandingPanel::PerformLayout()
 
 	FOR_EACH_MAP_FAST( pWarDef->GetSides(), i )
 	{
-		uint64 nScore = nScore = GetWarData().GetGlobalSideScore( pWarDef->GetDefIndex(), pWarDef->GetSide( i )->m_nSideIndex );
+		uint64 nScore = GetWarData().GetGlobalSideScore( pWarDef->GetDefIndex(), pWarDef->GetSide( i )->m_nSideIndex );
 				
 		m_Scores[ i ].m_nLastScore = m_Scores[ i ].m_nNewScore;
 		m_Scores[ i ].m_nNewScore = nScore;
@@ -318,21 +306,11 @@ void CWarLandingPanel::OnThink()
 	}
 }
 
-#ifdef STAGING_ONLY
-// 12345?  Yea, well, we probably will never have 12,345 sides to a war
-ConVar tf_fake_war_side( "tf_fake_war_side", "12345" );
-#endif
 
 void CWarLandingPanel::PerformLayout()
 {
 	BaseClass::PerformLayout();
 
-#ifdef STAGING_ONLY
-	if ( tf_fake_war_side.GetInt() != 12345 )
-	{
-		m_nLastKnownSide = tf_fake_war_side.GetInt();
-	}
-#endif
 
 	UpdateUIState();
 }
@@ -505,28 +483,3 @@ void CWarLandingPanel::UpdateUIState()
 	pJoiningPopup->SetControlVisible( "FailedToJoinContainer", m_eJoiningState == FAILED_RESPONSE_RECIEVED_WAITING_FOR_USER_CONFIRMATION, true );
 }
 
-#if defined( STAGING_ONLY )
-CON_COMMAND( tf_war_join_side, "Join a specified war on a specified side" )
-{
-	if ( args.ArgC() < 2 )
-		return;
-
-	war_definition_index_t nWar = atoi( args[1] );
-	const CWarDefinition* pWarDef = GetItemSchema()->GetWarDefinitionByIndex( nWar );
-	if ( pWarDef == NULL)
-		return;
-
-	war_side_t nSide = atoi( args[2] );
-	// Allow INVALID_WAR_SIDE for testing purposes
-	if ( pWarDef->GetSide( nSide ) == NULL && nSide != INVALID_WAR_SIDE )
-		return;
-
-	// Join the war!
-	GCSDK::CProtoBufMsg< CGCMsgGC_War_JoinWar > msg( k_EMsgGC_War_JoinWar );
-
-	msg.Body().set_war_id( nWar );
-	msg.Body().set_affiliation( nSide );
-
-	GCClientSystem()->BSendMessage( msg );
-}
-#endif

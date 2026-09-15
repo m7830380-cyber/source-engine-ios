@@ -679,7 +679,22 @@ void CTFMinigun::ActivatePushBackAttackMode( void )
 	pOwner->m_Shared.StartRageDrain();
 	EmitSound( "Heavy.Battlecry03" );
 }
-#endif
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+float CTFMinigun::GetInitialAfterburnDuration() const
+{
+	int nRingOfFireWhileAiming = 0;
+	CALL_ATTRIB_HOOK_INT( nRingOfFireWhileAiming, ring_of_fire_while_aiming );
+	if ( nRingOfFireWhileAiming != 0 )
+	{
+		return 8.f;
+	}
+
+	return BaseClass::GetInitialAfterburnDuration();
+}
+#endif // GAME_DLL
 
 //-----------------------------------------------------------------------------
 // Purpose: UI Progress (same as GetProgress() without the division by 100.0f)
@@ -780,11 +795,6 @@ bool CTFMinigun::CanHolster( void ) const
 		if ( pPlayer->m_Shared.InCond( TF_COND_MELEE_ONLY ) )
 			return true;
 	}
-
-#ifdef STAGING_ONLY
-	// Agility powerup allows holstering while spinning
-	bCanHolster |= ( pPlayer && pPlayer->m_Shared.GetCarryingRuneType() == RUNE_AGILITY );
-#endif //STAGING_ONLY
 
 	if ( bCanHolster )
 	{
@@ -987,11 +997,17 @@ float CTFMinigun::GetProjectileDamage( void )
 {
 	float flDamage = BaseClass::GetProjectileDamage();
 
-	if ( GetFiringDuration() < TF_MINIGUN_PENALTY_PERIOD )
+	// How long have we been spun up - sans the min period required to fire
+	float flPreFireWindUp = GetWindUpDuration() - TF_MINIGUN_SPINUP_TIME;
+	float flSpinTime = Max( flPreFireWindUp, GetFiringDuration() );
+	// DevMsg( "PreFireTime: %.2f\n", flPreFireWindUp );
+
+	if ( flSpinTime < TF_MINIGUN_PENALTY_PERIOD )
 	{
 		float flMod = 1.f;
-		flMod = RemapValClamped( GetFiringDuration(), 0.2f, TF_MINIGUN_PENALTY_PERIOD, 0.5f, 1.f );
+		flMod = RemapValClamped( flSpinTime, 0.2f, TF_MINIGUN_PENALTY_PERIOD, 0.5f, 1.f );
 		flDamage *= flMod;
+		//DevMsg( "DmgMod: %.2f\n", flMod );
 	}
 	
 	return flDamage;
@@ -1006,15 +1022,14 @@ float CTFMinigun::GetWeaponSpread( void )
 
 	// How long have we been spun up - sans the min period required to fire
 	float flPreFireWindUp = GetWindUpDuration() - TF_MINIGUN_SPINUP_TIME;
-	// DevMsg( "PreFireTime: %.2f\n", flPreFireWindUp );
+	float flSpinTime = Max( flPreFireWindUp, GetFiringDuration() );
+	//DevMsg( "PreFireTime: %.2f\n", flPreFireWindUp );
 
-	if ( GetFiringDuration() < TF_MINIGUN_PENALTY_PERIOD && flPreFireWindUp < 1.f )
+	if ( flSpinTime < TF_MINIGUN_PENALTY_PERIOD )
 	{
-		// If we've spun up - prior to pressing fire - reduce accuracy penalty
-		float flSpinTime = Max( flPreFireWindUp, GetFiringDuration() );
 		const float flMaxSpread = 1.5f;
 		float flMod = RemapValClamped( flSpinTime, 0.f, TF_MINIGUN_PENALTY_PERIOD, flMaxSpread, 1.f );
-		// DevMsg( "SpreadMod: %.2f\n", flMod );
+		//DevMsg( "SpreadMod: %.2f\n", flMod );
 
 		flSpread *= flMod;
 	}
@@ -1080,6 +1095,11 @@ void CTFMinigun::StandardBlendingRules( CStudioHdr *hdr, Vector pos[], Quaternio
 //-----------------------------------------------------------------------------
 void CTFMinigun::UpdateBarrelMovement()
 {
+	if ( prediction->InPrediction() && !prediction->IsFirstTimePredicted() )
+	{
+		return;
+	}
+
 	if ( m_flBarrelCurrentVelocity != m_flBarrelTargetVelocity )
 	{
 		float flBarrelAcceleration = CanHolsterWhileSpinning() ? 0.5f : 0.1f;

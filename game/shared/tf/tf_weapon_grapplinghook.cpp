@@ -179,7 +179,7 @@ poseparamtable_t s_grapplinghook_engineer_poseparamtable[] =
 	{ "r_handposes_engineer", 1 },
 };
 
-poseparamtable_t *CTFGrapplingHook::PoseParamList( int &iPoseParamCount )
+poseparamtable_t *CTFGrapplingHook::GetPlayerPoseParamList( int &iPoseParamCount )
 {
 	CTFPlayer *pOwner = GetTFPlayerOwner();
 	if ( pOwner )
@@ -196,7 +196,7 @@ poseparamtable_t *CTFGrapplingHook::PoseParamList( int &iPoseParamCount )
 		}
 	}
 
-	return BaseClass::PoseParamList( iPoseParamCount );
+	return BaseClass::GetPlayerPoseParamList( iPoseParamCount );
 }
 
 
@@ -835,8 +835,6 @@ void CEquipGrapplingHookNotification::Accept()
 	TFInventoryManager()->EquipItemInLoadout( pLocalPlayer->GetPlayerClass()->GetClassIndex(), LOADOUT_POSITION_ACTION, iItemId );
 	
 	// Tell the GC to tell server that we should respawn if we're in a respawn room
-	GCSDK::CGCMsg< GCSDK::MsgGCEmpty_t > msg( k_EMsgGCRespawnPostLoadoutChange );
-	GCClientSystem()->BSendMessage( msg );
 
 	MarkForDeletion();
 }

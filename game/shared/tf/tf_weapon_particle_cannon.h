@@ -92,6 +92,11 @@ public:
 
 	virtual bool	OwnerCanTaunt( void );
 
+#ifdef GAME_DLL
+	virtual float	GetAfterburnRateOnHit() const OVERRIDE;
+	virtual float	GetInitialAfterburnDuration() const OVERRIDE { return 0.f; }
+#endif // GAME_DLL
+
 private:
 	CNetworkVar( float, m_flChargeBeginTime );
 	CNetworkVar( int, m_iChargeEffect );

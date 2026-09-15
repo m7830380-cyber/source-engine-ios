@@ -70,7 +70,7 @@ CTFHudObjectiveStatus::CTFHudObjectiveStatus( const char *pElementName )
 	m_pEscortPanel = new CTFHudEscort( this, "ObjectiveStatusEscort" );
 	m_pMultipleEscortPanel = new CTFHudMultipleEscort( this, "ObjectiveStatusMultipleEscort" );
 	m_pTrainingPanel = new CTFHudTraining(this, "ObjectiveStatusTraining" );
-	m_pRobotDestructionPanel = new CTFHUDRobotDestruction( this, "ObjectiveStatusRobotDestruction" );
+	m_pRobotDestructionPanel = NULL;
 	m_pHudPasstime = new CTFHudPasstime( this );
 
 	SetHiddenBits( 0 );
@@ -84,6 +84,13 @@ CTFHudObjectiveStatus::CTFHudObjectiveStatus( const char *pElementName )
 //-----------------------------------------------------------------------------
 void CTFHudObjectiveStatus::ApplySchemeSettings( IScheme *pScheme )
 {
+	if ( m_pRobotDestructionPanel )
+	{
+		m_pRobotDestructionPanel->MarkForDeletion();
+		m_pRobotDestructionPanel = NULL;
+	}
+	m_pRobotDestructionPanel = new CTFHUDRobotDestruction( this, "ObjectiveStatusRobotDestruction" );
+
 	// load control settings...
 	LoadControlSettings( "resource/UI/HudObjectiveStatus.res" );
 

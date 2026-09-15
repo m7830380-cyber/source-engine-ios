@@ -458,7 +458,12 @@ ConVar cl_overview_chat_time( "cl_overview_chat_time", "2.0", FCVAR_ARCHIVE );
 //-----------------------------------------------------------------------------
 void CTFMapOverview::PlayerChat( int index )
 {
-	m_flPlayerChatTime[index-1] = gpGlobals->curtime + cl_overview_chat_time.GetFloat();
+	index = index-1;
+
+	if ( !IsIndexIntoPlayerArrayValid(index) )
+		return;
+		
+	m_flPlayerChatTime[index] = gpGlobals->curtime + cl_overview_chat_time.GetFloat();
 }
 
 //-----------------------------------------------------------------------------

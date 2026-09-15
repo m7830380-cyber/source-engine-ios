@@ -157,22 +157,6 @@ int g_SlotsToLoadoutSlotsPerClass[TF_LAST_NORMAL_CLASS][MAX_QUICKSWITCH_SLOTS] =
 		LOADOUT_POSITION_INVALID,
 	},
 
-#ifdef STAGING_ONLY
-	// TF_CLASS_SPY,
-	{
-		LOADOUT_POSITION_INVALID,
-		LOADOUT_POSITION_SECONDARY,
-		LOADOUT_POSITION_INVALID,
-		LOADOUT_POSITION_MELEE,
-		LOADOUT_POSITION_PDA,
-		LOADOUT_POSITION_PDA2,
-		LOADOUT_POSITION_PDA3,
-		LOADOUT_POSITION_HEAD,
-		LOADOUT_POSITION_MISC,
-		LOADOUT_POSITION_ACTION,
-		LOADOUT_POSITION_INVALID,
-	},
-#else
 	// TF_CLASS_SPY,
 	{
 		LOADOUT_POSITION_INVALID,
@@ -187,7 +171,6 @@ int g_SlotsToLoadoutSlotsPerClass[TF_LAST_NORMAL_CLASS][MAX_QUICKSWITCH_SLOTS] =
 		LOADOUT_POSITION_INVALID,
 		LOADOUT_POSITION_INVALID,
 	},
-#endif
 
 	// TF_CLASS_ENGINEER,		
 	{
@@ -447,8 +430,6 @@ void CItemQuickSwitchPanel::CloseQS( void )
 		if ( tf_respawn_on_loadoutchanges.GetBool() )
 		{
 			// Tell the GC to tell server that we should respawn if we're in a respawn room
-			GCSDK::CGCMsg< GCSDK::MsgGCEmpty_t > msg( k_EMsgGCRespawnPostLoadoutChange );
-			GCClientSystem()->BSendMessage( msg );
 		}
 
 		// Send the preset panel a msg so it can save the change

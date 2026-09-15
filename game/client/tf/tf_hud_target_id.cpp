@@ -30,6 +30,7 @@
 
 #include "tf_dropped_weapon.h"
 #include "econ/econ_item_description.h"
+#include "inputsystem/iinputsystem.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
@@ -59,14 +60,20 @@ void SpectatorTargetLocationCallback( IConVar *var, const char *oldString, float
 	}
 }
 ConVar tf_spectator_target_location( "tf_spectator_target_location", "0", FCVAR_ARCHIVE, "Determines the location of the spectator targetID panel.", true, 0, true, 3, SpectatorTargetLocationCallback );
-ConVar tf_hud_target_id_disable_floating_health( "tf_hud_target_id_disable_floating_health", "0", FCVAR_ARCHIVE, "Set to disable floating health bar" );
+
+void DisableFloatingHealthCallback( IConVar *var, const char *oldString, float oldFloat )
+{
+	CMainTargetID *pTargetID = (CMainTargetID *)GET_HUDELEMENT( CMainTargetID );
+	if ( pTargetID )
+	{
+		pTargetID->InvalidateLayout();
+	}
+}
+ConVar tf_hud_target_id_disable_floating_health( "tf_hud_target_id_disable_floating_health", "0", FCVAR_ARCHIVE, "Set to disable floating health bar", DisableFloatingHealthCallback );
 ConVar tf_hud_target_id_alpha( "tf_hud_target_id_alpha", "100", FCVAR_ARCHIVE, "Alpha value of target id background, default 100" );
 ConVar tf_hud_target_id_offset( "tf_hud_target_id_offset", "0", FCVAR_ARCHIVE, "RES file Y offset for target id" );
 ConVar tf_hud_target_id_show_avatars( "tf_hud_target_id_show_avatars", "2", FCVAR_ARCHIVE, "Display Steam avatars on TargetID when using floating health icons.  1 = everyone, 2 = friends only." );
 
-#ifdef STAGING_ONLY
-ConVar tf_bountymode_showhealth( "tf_bountymode_showhealth", "0", FCVAR_ARCHIVE, "Show floating health icon over enemy players.  1 = show health, 2 = show health and level", true, 0, true, 2 );
-#endif // STAGING_ONLY
 
 bool ShouldHealthBarBeVisible( CBaseEntity *pTarget, CTFPlayer *pLocalPlayer )
 {
@@ -82,6 +89,11 @@ bool ShouldHealthBarBeVisible( CBaseEntity *pTarget, CTFPlayer *pLocalPlayer )
 	if ( !pTarget->IsPlayer() )
 		return false;
 
+	int iHideEnemyHealth = 0;
+	CALL_ATTRIB_HOOK_FLOAT_ON_OTHER( pLocalPlayer, iHideEnemyHealth, hide_enemy_health );
+	if ( ( iHideEnemyHealth > 0 ) && !pLocalPlayer->InSameTeam( pTarget ) )
+		return false;
+
 	if ( pLocalPlayer->IsPlayerClass( TF_CLASS_SPY ) )
 		return true;
 
@@ -90,8 +102,6 @@ bool ShouldHealthBarBeVisible( CBaseEntity *pTarget, CTFPlayer *pLocalPlayer )
 
 	if ( pLocalPlayer->InSameDisguisedTeam( pTarget ) )
 		return true;
-
-	
 
 	int iSeeEnemyHealth = 0;
 	CALL_ATTRIB_HOOK_FLOAT_ON_OTHER( pLocalPlayer, iSeeEnemyHealth, see_enemy_health )
@@ -116,7 +126,7 @@ CTargetID::CTargetID( const char *pElementName ) :
 	m_nOriginalY = 0;
 	m_bArenaPanelVisible = false;
 
-	SetHiddenBits( HIDEHUD_MISCSTATUS );
+	SetHiddenBits( HIDEHUD_MISCSTATUS | HIDEHUD_TARGET_ID );
 
 	m_pTargetNameLabel = NULL;
 	m_pTargetDataLabel = NULL;
@@ -235,7 +245,7 @@ C_TFPlayer *CTargetID::GetTargetForSteamAvatar( C_TFPlayer *pTFPlayer )
 
 	if ( pTFPlayer->IsPlayerClass( TF_CLASS_SPY ) && pTFPlayer->m_Shared.InCond( TF_COND_DISGUISED ) )
 	{
-		C_TFPlayer *pDisguiseTarget = ToTFPlayer( pTFPlayer->m_Shared.GetDisguiseTarget() );
+		C_TFPlayer *pDisguiseTarget = pTFPlayer->m_Shared.GetDisguiseTarget();
 		if ( pDisguiseTarget && ( pTFLocalPlayer->InSameTeam( pDisguiseTarget ) || pDisguiseTarget == pTFLocalPlayer ) )
 		{
 			// Bots don't (currently) have avatars.
@@ -336,10 +346,6 @@ bool CTargetID::IsValidIDTarget( int nEntIndex, float flOldTargetRetainFOV, floa
 	if ( !pLocalTFPlayer )
 		return false;
 
-#ifdef STAGING_ONLY
-	if ( pLocalTFPlayer->m_Shared.InCond( TF_COND_STEALTHED_PHASE ) )
-		return false;
-#endif // STAGING_ONLY
 
 	if ( nEntIndex )
 	{
@@ -424,9 +430,6 @@ bool CTargetID::IsValidIDTarget( int nEntIndex, float flOldTargetRetainFOV, floa
 					bool bEnemyPlayer = pPlayer->GetTeamNumber() != pLocalTFPlayer->GetTeamNumber();
 					bool bEnemyMiniBoss = pPlayer->IsMiniBoss() && bEnemyPlayer;
 					bShow = bEnemyMiniBoss;
-#ifdef STAGING_ONLY
-					bShow |= TFGameRules() && TFGameRules()->IsBountyMode() && tf_bountymode_showhealth.GetInt() && bEnemyPlayer;
-#endif // STAGING_ONLY
 
 					if ( bShow )
 					{
@@ -768,7 +771,7 @@ void CTargetID::UpdateID( void )
 				!pPlayer->m_Shared.IsStealthed() ) // they're not cloaked
 			{
 				bDisguisedTarget = true;
-				pDisguiseTarget = ToTFPlayer( pPlayer->m_Shared.GetDisguiseTarget() );
+				pDisguiseTarget = pPlayer->m_Shared.GetDisguiseTarget();
 
 				if ( pLocalTFPlayer->InSameTeam( pEnt ) == false )
 				{
@@ -1015,7 +1018,21 @@ void CTargetID::UpdateID( void )
 
 			if ( m_pMoveableSubPanel->IsVisible() )
 			{
-				const char *pBoundKey = engine->Key_LookupBinding( pszActionCommand );
+				const char *pBoundKey = nullptr;
+				if ( pszActionCommand && ::input->IsSteamControllerActive() )
+				{
+					auto origin = g_pInputSystem->GetSteamControllerActionOrigin( *pszActionCommand == '+' ? pszActionCommand + 1 : pszActionCommand, GAME_ACTION_SET_FPSCONTROLS );
+					if ( origin != k_EControllerActionOrigin_None )
+					{
+						auto pSteamController = g_pInputSystem->SteamControllerInterface();
+						pBoundKey = pSteamController ? pSteamController->GetStringForActionOrigin( origin ) : "";
+					}
+
+				}
+				if ( !pBoundKey )
+				{
+					pBoundKey = engine->Key_LookupBinding( pszActionCommand );
+				}
 				m_pMoveableSubPanel->SetDialogVariable( "movekey", pBoundKey );
 			}
 
@@ -1475,23 +1492,6 @@ void CFloatingHealthIcon::OnTick( void )
 		m_flPrevHealth = flHealth;
 	}
 
-#ifdef STAGING_ONLY
-	if ( TFGameRules() && TFGameRules()->IsBountyMode() && tf_bountymode_showhealth.GetInt() == 2 )
-	{
-		if ( m_hEntity->IsPlayer() )
-		{
-			if ( !pTargetPlayer || pTargetPlayer->IsMiniBoss() )
-				return;
-
-			int nPlayerLevel = pTargetPlayer->GetExperienceLevel();
-			if ( nPlayerLevel != m_nPrevLevel )
-			{
-				m_pTargetHealth->SetLevel( nPlayerLevel );
-				m_nPrevLevel = nPlayerLevel;
-			}
-		}
-	}
-#endif // STAGING_ONLY
 }
 
 //-----------------------------------------------------------------------------

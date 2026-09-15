@@ -57,6 +57,8 @@ void CMannVsMachineLogic::SetupOnRoundStart( void )
 	if ( !TFGameRules() || !TFGameRules()->IsMannVsMachineMode() )
 		return;
 
+	TFGameRules()->SetNextMvMPopfile( "" );
+
 	if ( m_populationManager )
 	{
 		m_populationManager->SetupOnRoundStart();
@@ -154,7 +156,7 @@ void CMannVsMachineLogic::InitPopulationManager( void )
 		g_pPopulationManager->FindDefaultPopulationFileShortNames( defaultPopFileList );
 		if ( defaultPopFileList.Count() )
 		{
-			if ( g_pPopulationManager->FindPopulationFileByShortName( defaultPopFileList[0], defaultPopFileName ) )
+			if ( g_pPopulationManager->FindPopulationFileByShortName( defaultPopFileList[0], defaultPopFileName ) && g_pPopulationManager->IsValidPopfile( defaultPopFileName ) )
 			{
 				V_strncpy( szFileName, defaultPopFileName, sizeof( szFileName ) );
 				bFound = true;
@@ -180,7 +182,4 @@ void CMannVsMachineLogic::InitPopulationManager( void )
 		m_populationManager = (CPopulationManager *)CreateEntityByName( "info_populator" );
 		m_populationManager->SetPopulationFilename( szFileName );
 	}
-
-	// Clear the Value since its now loaded
-	TFGameRules()->SetNextMvMPopfile( "" );
 }

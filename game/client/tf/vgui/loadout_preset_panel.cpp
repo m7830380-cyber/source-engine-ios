@@ -39,6 +39,8 @@ CLoadoutPresetPanel::CLoadoutPresetPanel( vgui::Panel *pParent, const char *pNam
 		wchar_t *pwszPresetName = g_pVGuiLocalize->Find( fmtTokenName.Access() );
 		m_pPresetButtons[i] = new CExButton( this, fmtButtonName.Access(), pwszPresetName, this );
 	}
+
+	m_pClassLoadoutPanel = NULL;
 }
 
 //-----------------------------------------------------------------------------
@@ -149,6 +151,11 @@ void CLoadoutPresetPanel::EnableVerticalDisplay( bool bVertical )
 void CLoadoutPresetPanel::LoadPreset( int iPresetIndex )
 {
 	TFInventoryManager()->LoadPreset( m_iClass, iPresetIndex );
+
+	if (m_pClassLoadoutPanel)
+	{
+		m_pClassLoadoutPanel->UpdateModelPanels();
+	}
 }
 
 //-----------------------------------------------------------------------------
@@ -227,7 +234,13 @@ equipped_preset_t CLoadoutPresetPanel::GetSelectedPresetID() const
 //-----------------------------------------------------------------------------
 void CLoadoutPresetPanel::UpdatePresetButtonStates()
 {
-	const equipped_preset_t unEquippedPresetID = GetSelectedPresetID();
+	equipped_preset_t unEquippedPresetID = GetSelectedPresetID();
+
+	CSteamID localSteamID = steamapicontext->SteamUser()->GetSteamID();
+	CTFPlayerInventory *pInv = TFInventoryManager()->GetInventoryForPlayer(localSteamID);
+	if (pInv) {
+		unEquippedPresetID = pInv->GetActiveLocalPreset(m_iClass);
+	}
 
 	for ( int i = 0; i < MAX_PRESETS; ++i )
 	{

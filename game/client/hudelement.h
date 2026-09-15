@@ -14,7 +14,6 @@
 #include "hud_element_helper.h"
 #include "networkvar.h"
 #include "GameEventListener.h"
-#include "inputsystem/InputEnums.h"
 #include "tier0/memdbgon.h"
 #undef new
 
@@ -56,7 +55,7 @@ public:
 	virtual bool				IsActive( void ) { return m_bActive; };
 	virtual void				SetActive( bool bActive );
 
-	virtual GameActionSet_t		GetPreferredActionSet() { return GAME_ACTION_SET_NONE; }
+	virtual GameActionSet_t GetPreferredActionSet() { return GAME_ACTION_SET_NONE; }
 
 	// Hidden bits. 
 	// HIDEHUD_ flags that note when this element should be hidden in the HUD

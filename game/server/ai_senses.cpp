@@ -49,8 +49,9 @@ struct AISightIterVal_t
 	char  array;
 	short iNext;
 	char  SeenArray;
+
 #ifdef PLATFORM_64BITS
-    uint32 unused;
+	uint32 unused;
 #endif
 };
 
@@ -584,7 +585,7 @@ CSound* CAI_Senses::GetNextHeardSound( AISoundIter_t *pIter )
 	if ( !*pIter )
 		return NULL;
 
-	intp iCurrent = (intp)*pIter;
+	int iCurrent = size_cast<int>( (intp)*pIter );
 	
 	Assert( iCurrent != SOUNDLIST_EMPTY );
 	if ( iCurrent == SOUNDLIST_EMPTY )
@@ -600,7 +601,7 @@ CSound* CAI_Senses::GetNextHeardSound( AISoundIter_t *pIter )
 		return NULL;
 	}
 	
-	*pIter = (AISoundIter_t)iCurrent;
+	*pIter = (AISoundIter_t)(intp)iCurrent;
 	return CSoundEnt::SoundPointerForIndex( iCurrent );
 }
 

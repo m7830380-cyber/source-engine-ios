@@ -114,6 +114,7 @@ public:
 	int					GetDamageEventHistoryCount( void ) { return aDamageEvents.Count(); }
 	bool				IsEntityInDamageEventHistory( CBaseEntity *pEntity, float flTimeWindow );
 	int					GetAmountForDamagerInEventHistory( CBaseEntity *pEntity, float flTimeWindow );
+	float				GetFirstEntryTimeForDamagerInHistory( CBaseEntity *pEntity );
 
 	void				AddTargetToHistory( EHANDLE hTarget );
 	bool				IsTargetInHistory( CBaseEntity *pTarget, float flTimeWindow );

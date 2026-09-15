@@ -223,15 +223,3 @@ void CClientNotification::OnDialogAcknowledged()
 	MarkForDeletion();
 }
 
-
-//-----------------------------------------------------------------------------
-// CAutobalanceVolunteerNotification 
-//-----------------------------------------------------------------------------
-void CAutobalanceVolunteerNotification::SendResponse( bool bResponse )
-{
-	KeyValues *kv = new KeyValues( "AutoBalanceVolunteerReply" );
-	kv->SetBool( "response", bResponse );
-	engine->ServerCmdKeyValues( kv );
-
-	MarkForDeletion();
-}

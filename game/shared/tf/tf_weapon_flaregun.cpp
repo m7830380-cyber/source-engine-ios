@@ -61,6 +61,10 @@ END_PREDICTION_DATA()
 LINK_ENTITY_TO_CLASS( tf_weapon_flaregun_revenge, CTFFlareGun_Revenge );
 PRECACHE_WEAPON_REGISTER( tf_weapon_flaregun_revenge );
 
+#ifdef GAME_DLL
+const float tf_flaregun_afterburn_rate = 7.5f;
+#endif // GAME_DLL
+
 
 //=============================================================================
 //
@@ -194,7 +198,16 @@ void CTFFlareGun::DeathNotice( CBaseEntity *pVictim )
 
 	m_iFlareCount = m_Flares.Count();
 }
-#endif
+
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+float CTFFlareGun::GetAfterburnRateOnHit() const
+{
+	return tf_flaregun_afterburn_rate;
+}
+#endif // GAME_DLL
 
 bool CTFFlareGun::Holster( CBaseCombatWeapon *pSwitchingTo )
 {

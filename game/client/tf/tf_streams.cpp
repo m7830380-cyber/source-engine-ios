@@ -36,9 +36,8 @@
 //extern CMsgGCCStrike15_v2_MatchmakingGC2ClientHello g_GC2ClientHello;
 
 ConVar cl_streams_request_url( "cl_streams_request_url",
-	"https://api.twitch.tv/kraken/streams?game=Team%20Fortress%202&limit=5"
+	"https://api.twitch.tv/helix/streams?game_id=16676&first=5"
 	, FCVAR_DEVELOPMENTONLY, "Number of streams requested for display" );
-ConVar cl_streams_request_accept( "cl_streams_request_accept", "application/vnd.twitchtv.v3+json", FCVAR_DEVELOPMENTONLY, "Header for api request" );
 ConVar cl_streams_image_sfurl( "cl_streams_image_sfurl",
 	"img://loadjpeg:(320x200):"
 	, FCVAR_DEVELOPMENTONLY, "Format of Scaleform image representing the stream" );
@@ -313,7 +312,6 @@ void CTFStreamManager::RequestTopStreams()
 			// Create HTTP download job
 			//
 			m_hHTTPRequestHandle = steamapicontext->SteamHTTP()->CreateHTTPRequest( k_EHTTPMethodGET, cl_streams_request_url.GetString() );
-			steamapicontext->SteamHTTP()->SetHTTPRequestHeaderValue( m_hHTTPRequestHandle, "Accept", cl_streams_request_accept.GetString() );
 			steamapicontext->SteamHTTP()->SetHTTPRequestHeaderValue( m_hHTTPRequestHandle, "Client-ID", "b7816vx0i8sng8bwy9es0dirdcsy3im" );
 			DevMsg( "Requesting twitch.tv streams update...\n" );
 
@@ -373,7 +371,7 @@ void CTFStreamManager::Steam_OnHTTPRequestCompletedStreams( HTTPRequestCompleted
 			GCSDK::CWebAPIValues *pValues = GCSDK::CWebAPIValues::ParseJSON( bufFile );
 			if ( pValues )
 			{
-				if ( GCSDK::CWebAPIValues *pvStreams = pValues->FindChild( "streams" ) )
+				if ( GCSDK::CWebAPIValues *pvStreams = pValues->FindChild( "data" ) )
 				{
 					for ( GCSDK::CWebAPIValues *pvStream = pvStreams->GetFirstChild(); pvStream; pvStream = pvStream->GetNextChild() )
 					{
@@ -394,32 +392,24 @@ void CTFStreamManager::Steam_OnHTTPRequestCompletedStreams( HTTPRequestCompleted
 #endif
 
 						CStreamInfo info;
-						info.m_numViewers = pvStream->GetChildUInt32Value( "viewers" );
-						if ( GCSDK::CWebAPIValues *pChannel = pvStream->FindChild( "channel" ) )
-						{
-							pChannel->GetChildStringValue( info.m_sGlobalName, "name", "" );
-							pChannel->GetChildStringValue( info.m_sDisplayName, "display_name", "" );
-							pChannel->GetChildStringValue( info.m_sTextDescription, "status", "" );
-							pChannel->GetChildStringValue( info.m_sLanguage, "language", "" );		// MISSING
-							Helper_ConvertLanguageToCountryCode( info.m_sLanguage );
-							info.m_sCountry = info.m_sLanguage;			// MISSING
-							pChannel->GetChildStringValue( info.m_sUpdatedAtStamp, "updated_at", "" );
-							if ( GCSDK::CWebAPIValues *pPreview = pvStream->FindChild( "preview" ) )
-							{
-								if ( pPreview->GetType() == GCSDK::k_EWebAPIValueType_String )
-									pPreview->GetStringValue( info.m_sPreviewImage );
-								else
-									pPreview->GetChildStringValue( info.m_sPreviewImage, "medium", "" );
-							}
-							pChannel->GetChildStringValue( info.m_sVideoFeedUrl, "url", "" );
-						}
+						info.m_numViewers = pvStream->GetChildUInt32Value( "viewer_count" );
+						pvStream->GetChildStringValue( info.m_sGlobalName, "user_name", "" );
+						pvStream->GetChildStringValue( info.m_sTextDescription, "title", "" );
+						pvStream->GetChildStringValue( info.m_sUpdatedAtStamp, "started_at", "" );
+
+						// grab the template url and replace the values for the "medium" image we used to request with v3
+						pvStream->GetChildStringValue( info.m_sPreviewImage, "thumbnail_url", "" );
+						static char pTempURL[512];
+						V_StrSubst( info.m_sPreviewImage.Get(), "{width}", "320", pTempURL, 512 );
+						info.m_sPreviewImage.Set( pTempURL );
+						V_StrSubst( info.m_sPreviewImage.Get(), "{height}", "180", pTempURL, 512 );
+						info.m_sPreviewImage.Set( pTempURL );
+
 						if ( ( info.m_numViewers > 0 ) &&
 							!info.m_sGlobalName.IsEmpty() &&
-							!info.m_sDisplayName.IsEmpty() &&
-							!info.m_sTextDescription.IsEmpty() &&
-							!info.m_sVideoFeedUrl.IsEmpty() )
+							!info.m_sTextDescription.IsEmpty() )
 						{
-							//DevMsg( 2, "Channel: %s (%s, %u viewers) -- %s [[%s]]\n", info.m_sGlobalName.Get(), info.m_sDisplayName.Get(), info.m_numViewers, info.m_sTextDescription.Get(), info.m_sVideoFeedUrl.Get() );
+							//DevMsg( 2, "Channel: %s (%u viewers) -- %s [[%s]]\n", info.m_sGlobalName.Get(), info.m_numViewers, info.m_sTextDescription.Get(), info.m_sVideoFeedUrl.Get() );
 
 							arrStreamInfos.AddToTail( info );
 						}
@@ -539,8 +529,10 @@ void CTFStreamManager::UpdateTwitchTvAccounts()
 	//
 	// Create HTTP download job
 	//
-	m_hHTTPRequestHandleTwitchTv = steamapicontext->SteamHTTP()->CreateHTTPRequest( k_EHTTPMethodGET, CFmtStr( "http://api.twitch.tv/api/steam/%llu", m_pLoadingAccount->m_uiSteamID ) );
-	steamapicontext->SteamHTTP()->SetHTTPRequestHeaderValue( m_hHTTPRequestHandleTwitchTv, "Accept", cl_streams_request_accept.GetString() );
+	// If we ever end up using this we'll need to update to the most recent API. v3 of the API (which we were using for this)
+	// is being shut down. It's not currently being used so I'm just going to comment it out for now.
+	//m_hHTTPRequestHandleTwitchTv = steamapicontext->SteamHTTP()->CreateHTTPRequest( k_EHTTPMethodGET, CFmtStr( "http://api.twitch.tv/api/steam/%llu", m_pLoadingAccount->m_uiSteamID ) );
+	//steamapicontext->SteamHTTP()->SetHTTPRequestHeaderValue( m_hHTTPRequestHandleTwitchTv, "Accept", cl_streams_request_accept.GetString() );
 	DevMsg( "Requesting twitch.tv account link...\n" );
 
 	SteamAPICall_t hCall = NULL;
@@ -648,7 +640,7 @@ void CTFStreamPanel::OnCommand( const char *command )
 		CStreamInfo *pInfo = GetStreamInfo();
 		if ( pInfo )
 		{
-			vgui::system()->ShellExecute( "open", CFmtStr( "%s%s", cl_streams_mytwitchtv_channel.GetString(), pInfo->m_sDisplayName.Get() ) );
+			vgui::system()->ShellExecute( "open", CFmtStr( "%s%s", cl_streams_mytwitchtv_channel.GetString(), pInfo->m_sGlobalName.Get() ) );
 		}
 	}
 	else
@@ -670,7 +662,7 @@ void CTFStreamPanel::UpdatePanels()
 	CStreamInfo *pInfo = GetStreamInfo();
 	if ( pInfo )
 	{
-		SetDialogVariable( "display_name", pInfo->m_sDisplayName.Get() );
+		SetDialogVariable( "display_name", pInfo->m_sGlobalName.Get() );
 		SetDialogVariable( "viewer_count", CFmtStr( "%d viewers", pInfo->m_numViewers ) );
 		SetDialogVariable( "text_description", pInfo->m_sTextDescription.Get() );
 
@@ -751,6 +743,10 @@ void CTFStreamPanel::SetPreviewImage( const char *pszPreviewImageFile )
 
 CTFStreamListPanel::CTFStreamListPanel( Panel *parent, const char *panelName ) : EditablePanel( parent, panelName )
 {
+	vgui::HScheme scheme = vgui::scheme()->LoadSchemeFromFileEx( enginevgui->GetPanel( PANEL_CLIENTDLL ), "resource/ClientScheme.res", "ClientScheme");
+	SetScheme(scheme);
+	SetProportional( true );
+
 	for ( int i=0; i<ARRAYSIZE( m_arrStreamPanels ); ++i )
 	{
 		m_arrStreamPanels[i] = new CTFStreamPanel( this, CFmtStr( "Stream%d", i + 1 ) );

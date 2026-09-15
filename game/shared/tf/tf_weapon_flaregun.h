@@ -65,7 +65,8 @@ public:
 #ifdef GAME_DLL
 	void			AddFlare( CTFProjectile_Flare *pFlare );
 	void			DeathNotice( CBaseEntity *pVictim );
-	void			DetonateFlare( void );
+
+	virtual float	GetAfterburnRateOnHit() const OVERRIDE;
 #endif
 
 	virtual void StartCharge( void );

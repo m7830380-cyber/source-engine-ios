@@ -798,7 +798,7 @@ void CTFGrenadePipebombProjectile::PipebombTouch( CBaseEntity *pOther )
 						VectorNormalize( vecToTarget );
 						vecToTarget *= 400;
 						vecToTarget.z += 350;	// Mimic Flamethrower AirBlast
-						pVictim->ApplyAirBlastImpulse( vecToTarget );
+						pVictim->ApplyGenericPushbackImpulse( vecToTarget, ToTFPlayer( pAttacker ) );
 					}
 
 					m_penetratedEntities.AddToTail( pOther );
@@ -989,6 +989,11 @@ int CTFGrenadePipebombProjectile::OnTakeDamage( const CTakeDamageInfo &info )
 			}
 			else if ( info.GetDamageType() & DMG_BLAST )
 			{
+				// if we're also supposed to ignite then just destroy the sticky bomb (Cow Mangler alt-fire)
+				if ( info.GetDamageType() & DMG_IGNITE )
+				{
+					bBreakPipes = true;
+				}
 				vecForce *= tf_grenade_forcefrom_blast.GetFloat();
 			}
 
@@ -1229,7 +1234,7 @@ void CTFGrenadePipebombProjectile::Deflected( CBaseEntity *pDeflectedBy, Vector&
 												 1.0f,
 												 2.0f );
 		}
-		Vector vecForce = vecDir * flForceMultiplier * -CTFWeaponBase::DeflectionForce( WorldAlignSize(), 90, 12.0f );
+		Vector vecForce = vecDir * flForceMultiplier * CTFWeaponBase::DeflectionForce( WorldAlignSize(), 90, 12.0f );
 		
 		pOldOwner = ToTFPlayer( GetThrower() );
 		info.SetAttacker( pDeflectedBy );
@@ -1379,6 +1384,33 @@ float CTFGrenadePipebombProjectile::GetDamageScaleOnWorldContact()
 	}
 	return flGrenadeDamageScaleOnWorldContact;
 }
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+int CTFGrenadePipebombProjectile::UpdateTransmitState()
+{
+	if ( m_bDefensiveBomb )
+	{
+		return SetTransmitState( FL_EDICT_ALWAYS );
+	}
+
+	return BaseClass::UpdateTransmitState();
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+int CTFGrenadePipebombProjectile::ShouldTransmit( const CCheckTransmitInfo *pInfo )
+{
+	if ( m_bDefensiveBomb )
+	{
+		return FL_EDICT_ALWAYS;
+	}
+
+	return BaseClass::ShouldTransmit( pInfo );
+}
+
 #endif
 
 //-----------------------------------------------------------------------------

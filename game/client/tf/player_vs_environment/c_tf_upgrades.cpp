@@ -1319,7 +1319,7 @@ void CHudUpgradePanel::UpdateJoystickControls( void )
 
 		if ( bAccept )
 		{
-			if ( m_pActiveUpgradeBuyPanel && m_pActiveUpgradeBuyPanel->m_pIncrementButton->IsEnabled() && m_pActiveUpgradeBuyPanel->m_pIncrementButton->IsVisible() )
+			if ( m_pActiveUpgradeBuyPanel && m_pActiveUpgradeBuyPanel->m_pIncrementButton && m_pActiveUpgradeBuyPanel->m_pIncrementButton->IsEnabled() && m_pActiveUpgradeBuyPanel->m_pIncrementButton->IsVisible() )
 			{
 				OnCommand( VarArgs( "mvm_upgrade%03d_%i", m_pActiveUpgradeBuyPanel->m_nUpgradeIndex, m_pActiveUpgradeBuyPanel->m_nPrice ) );
 			}
@@ -1330,7 +1330,7 @@ void CHudUpgradePanel::UpdateJoystickControls( void )
 		}
 		else if ( bBack )
 		{
-			if ( m_pActiveUpgradeBuyPanel && m_pActiveUpgradeBuyPanel->m_pDecrementButton->IsEnabled() && m_pActiveUpgradeBuyPanel->m_pDecrementButton->IsVisible() )
+			if ( m_pActiveUpgradeBuyPanel && m_pActiveUpgradeBuyPanel->m_pDecrementButton && m_pActiveUpgradeBuyPanel->m_pDecrementButton->IsEnabled() && m_pActiveUpgradeBuyPanel->m_pDecrementButton->IsVisible() )
 			{
 				OnCommand( VarArgs( "mvm_downgrade%03d_%i", m_pActiveUpgradeBuyPanel->m_nUpgradeIndex, m_pActiveUpgradeBuyPanel->m_nPrice ) );
 			}
@@ -1962,8 +1962,6 @@ bool CHudUpgradePanel::QuickEquipBottle( void )
 	TFInventoryManager()->EquipItemInLoadout( nClass, LOADOUT_POSITION_ACTION, iItemId );
 
 	// Tell the GC to tell server that we should respawn if we're in a respawn room
-	GCSDK::CGCMsg< GCSDK::MsgGCEmpty_t > msg( k_EMsgGCRespawnPostLoadoutChange );
-	GCClientSystem()->BSendMessage( msg );
 
 	return true;
 }

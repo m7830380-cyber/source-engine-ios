@@ -270,7 +270,7 @@ public:
 	 * doesn't reach all the way to the goal.
 	 */
 	template< typename CostFunctor >
-	bool Compute( INextBot *bot, const Vector &goal, CostFunctor &costFunc, float maxPathLength = 0.0f, bool includeGoalIfPathFails = true )
+	bool Compute( INextBot *bot, const Vector &goal, CostFunctor &costFunc, float maxPathLength = 0.0f, bool includeGoalIfPathFails = true, bool requireGoalArea = false )
 	{
 		VPROF_BUDGET( "Path::Compute(goal)", "NextBotSpiky" );
 
@@ -288,6 +288,13 @@ public:
 		// check line-of-sight to the goal position when finding it's nav area
 		const float maxDistanceToArea = 200.0f;
 		CNavArea *goalArea = TheNavMesh->GetNearestNavArea( goal, true, maxDistanceToArea, true );
+
+		if ( requireGoalArea && !goalArea )
+		{
+			Invalidate();
+			OnPathChanged( bot, NO_PATH );
+			return false;
+		}
 
 		// if we are already in the goal area, build trivial path
 		if ( startArea == goalArea )

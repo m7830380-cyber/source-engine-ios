@@ -183,13 +183,15 @@ struct MsgGCItemPreviewExpireNotification_t
 // k_EMsgGCUseItemResponse
 enum EGCMsgUseItemResponse
 {
-	k_EGCMsgUseItemResponse_ItemUsed				 = 0,
-	k_EGCMsgUseItemResponse_GiftNoOtherPlayers		 = 1,
-	k_EGCMsgUseItemResponse_ServerError				 = 2,
-	k_EGCMsgUseItemResponse_MiniGameAlreadyStarted	 = 3,
-	k_EGCMsgUseItemResponse_ItemUsed_ItemsGranted	 = 4,
-	k_EGCMsgUseItemResponse_CannotBeUsedByAccount	 = 5,
-	k_EGCMsgUseItemResponse_ForceSizeInt			 = 0x7FFFFFFF
+	k_EGCMsgUseItemResponse_ItemUsed					= 0,
+	k_EGCMsgUseItemResponse_GiftNoOtherPlayers			= 1,
+	k_EGCMsgUseItemResponse_ServerError					= 2,
+	k_EGCMsgUseItemResponse_MiniGameAlreadyStarted		= 3,
+	k_EGCMsgUseItemResponse_ItemUsed_ItemsGranted		= 4,
+	k_EGCMsgUseItemResponse_CannotBeUsedByAccount		= 5,
+	k_EGCMsgUseItemResponse_CannotUseWhileUntradable	= 6,
+	k_EGCMsgUseItemResponse_RecipientCannotRecieve		= 7,
+	k_EGCMsgUseItemResponse_ForceSizeInt				= 0x7FFFFFFF
 };
 
 // k_EMsgGCUseItemResponse

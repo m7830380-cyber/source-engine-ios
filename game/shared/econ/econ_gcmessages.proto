@@ -341,7 +341,7 @@ enum EGCItemMsg
 
 	k_EMsgGCApplyDuckToken							= 2560; // client => GC
 
-	k_EMsgGCQuestComplete_Request =					2561;	// client -> GC
+//	k_EMsgGCQuestComplete_Request =					2561;	// client -> GC
 	k_EMsgGCQuestObjective_PointsChange =			2562;	// server -> GC
 	k_EMsgGCQuestObjective_RequestLoanerItems =		2564;	// client -> GC
 	k_EMsgGCQuestObjective_RequestLoanerResponse =	2565;	// GC -> client
@@ -576,7 +576,7 @@ message CMsgGCShuffleCrateContents
 // k_EMsgGCQuestObjective_Progress
 message CMsgGCQuestObjective_Progress
 {
-	optional uint64 quest_item_id = 1;
+	optional uint64 quest_id = 1;
 	optional uint32 quest_attrib_index = 2;
 	optional uint32 delta = 3;
 	optional fixed64 owner_steamid = 4;
@@ -585,17 +585,18 @@ message CMsgGCQuestObjective_Progress
 // CMsgGCQuestObjective_PointsChange
 message CMsgGCQuestObjective_PointsChange
 {
-	optional uint64 quest_item_id = 1;
-	optional uint32 standard_points = 2;
-	optional uint32 bonus_points = 3;
+	optional uint64 quest_id = 1;
 	optional fixed64 owner_steamid = 4;
 	optional bool update_base_points = 5 [default = false];
+	optional uint32 points_0 = 6;
+	optional uint32 points_1 = 7;
+	optional uint32 points_2 = 8;
 }
 
 // k_EMsgGCQuestComplete_Request
 message CMsgGCQuestComplete_Request
 {
-	optional uint64 quest_item_id = 1;
+	optional uint64 quest_id = 1;
 }
 
 // k_EMsgGCQuestCompleted
@@ -606,7 +607,7 @@ message CMsgGCQuestCompleted
 // k_EMsgGCQuestObjective_RequestLoanerItems
 message CMsgGCQuestObjective_RequestLoanerItems
 {
-	optional uint64 quest_item_id = 1;
+	optional uint64 quest_id = 1;
 }
 
 // k_EMsgGCQuestObjective_RequestLoanerResponse
@@ -637,7 +638,7 @@ message CMsgCraftCommonStatClock
 // k_EMsgGCQuestDiscard_Request
 message CMsgGCQuestDiscard_Request
 {
-	optional uint64 quest_item_id = 1;
+	optional uint64 quest_id = 1;
 }
 
 // Do not remove this comment due to a bug on the Mac OS X protobuf compiler - lol

@@ -6,6 +6,7 @@
 
 
 #include "cbase.h"
+#include "tf_matchmaking_dashboard_popup.h"
 #include "tf_matchmaking_dashboard.h"
 #include "tf_gamerules.h"
 #include "tf_gc_client.h"
@@ -18,28 +19,14 @@ using namespace GCSDK;
 
 extern ConVar tf_mm_next_map_vote_time;
 
-#ifdef STAGING_ONLY 
-extern ConVar tf_mm_popup_state_override;
-#endif
 
-#ifdef STAGING_ONLY
-CON_COMMAND( test_next_map_vote, "Fakes a player voting" )
-{
-	IGameEvent *event = gameeventmanager->CreateEvent( "player_next_map_vote_change" );
-	if ( event )
-	{
-		event->SetInt( "map_index", RandomInt( 0, 2 ) );
-		// Client-side once it's actually happened
-		gameeventmanager->FireEventClientSide( event );
-	}
-}
-#endif
 
 class CNextMapVotingDashboardState : public CTFMatchmakingPopup
 {
+	DECLARE_CLASS_SIMPLE( CNextMapVotingDashboardState, CTFMatchmakingPopup );
 public:
-	CNextMapVotingDashboardState( const char* pszName, const char* pszResFile )
-		: CTFMatchmakingPopup( pszName, pszResFile )
+	CNextMapVotingDashboardState( const char* pszName )
+		: CTFMatchmakingPopup( pszName )
 		, m_pTimerProgressBar( NULL )
 	{
 		memset( m_arMapPanels, 0, sizeof( m_arMapPanels ) );
@@ -49,6 +36,9 @@ public:
 
 	virtual void ApplySchemeSettings( IScheme *pScheme )
 	{
+		SetHidden( false );
+		LoadControlSettings( "resource/UI/MatchMakingDashboardPopup_NextMapVoting.res" );
+
 		CTFMatchmakingPopup::ApplySchemeSettings( pScheme );
 
 		m_pTimerProgressBar = FindControl< CircularProgressBar >( "TimeRemainingProgressBar", true );
@@ -66,6 +56,8 @@ public:
 				pMapChoice->LoadControlSettings( "resource/UI/MatchMakingDashboardPopup_MapVotePanel.res" );
 			}
 		}
+
+		m_nOriginalExpandedHeight = GetExpandedHeight();
 	}
 
 	virtual void PerformLayout() OVERRIDE
@@ -97,12 +89,9 @@ public:
 
 	virtual bool ShouldBeActve() const OVERRIDE
 	{
-#ifdef STAGING_ONLY
-		if ( FStrEq( const_cast<CNextMapVotingDashboardState*>(this)->GetName(), tf_mm_popup_state_override.GetString() ) ) 
-			return true;
-#endif
 
-		if ( BInEndOfMatch() &&
+		if ( engine->IsInGame() &&
+			 BInEndOfMatch() &&
 			 TFGameRules() &&
 			 TFGameRules()->GetCurrentNextMapVotingState() == CTFGameRules::NEXT_MAP_VOTE_STATE_WAITING_FOR_USERS_TO_VOTE &&
 			 GTFGCClientSystem()->BConnectedToMatchServer( false ) )
@@ -124,6 +113,10 @@ public:
 				return;
 
 			engine->ClientCmd( CFmtStr( "next_map_vote %d", nIndex ) );
+		}
+		else if ( FStrEq( pszCommand, "toggle_hide" ) ) 
+		{
+			SetHidden( !m_bHidden );
 		}
 	}
 
@@ -149,10 +142,21 @@ public:
 		// To get the voting options setup how they're supposed to be
 		InvalidateLayout( true, false);
 
+		SetHidden( false );
+
 		CTFMatchmakingPopup::OnEnter();
 	}
 
 private:
+
+	void SetHidden( bool bSetHidden )
+	{
+		m_bHidden = bSetHidden;
+		SetExpandedHeight( m_bHidden ? YRES( 20 ) : m_nOriginalExpandedHeight );
+		SetControlVisible( "ShowButton", m_bHidden, true );
+		SetControlVisible( "HideButton", !m_bHidden, true );
+
+	}
 
 	void SetMapChoiceSettings()
 	{
@@ -288,6 +292,9 @@ private:
 		Button*				pChooseButton;
 	};
 	MapChoice_t	m_arMapPanels[3];
+
+	int m_nOriginalExpandedHeight;
+	bool m_bHidden = false;
 };
 
-REG_MM_POPUP_FACTORY( CNextMapVotingDashboardState, "NextMapVoting", "resource/UI/MatchMakingDashboardPopup_NextMapVoting.res" )
+REGISTER_FUNC_FOR_DASHBOARD_PANEL_TYPE( []() -> Panel* { return new CNextMapVotingDashboardState( "NextMapVoting" ); }, k_eNextMapVotePopup );

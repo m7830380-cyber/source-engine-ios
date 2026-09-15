@@ -47,6 +47,7 @@ IMPLEMENT_CLIENTCLASS_DT( C_TF_PlayerResource, DT_TFPlayerResource, CTFPlayerRes
 	RecvPropInt( RECVINFO( m_iEventTeamStatus ) ),
 	RecvPropArray3( RECVINFO_ARRAY( m_iPlayerClassWhenKilled ), RecvPropInt( RECVINFO( m_iPlayerClassWhenKilled[0] ) ) ),
 	RecvPropArray3( RECVINFO_ARRAY( m_iConnectionState ), RecvPropInt( RECVINFO( m_iConnectionState[0] ) ) ),
+	RecvPropArray3( RECVINFO_ARRAY( m_flConnectTime ), RecvPropTime( RECVINFO( m_flConnectTime[0] ) ) ),
 END_RECV_TABLE()
 
 

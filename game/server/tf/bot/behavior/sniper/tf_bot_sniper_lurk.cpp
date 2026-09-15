@@ -30,11 +30,8 @@ ConVar tf_bot_sniper_patience_duration( "tf_bot_sniper_patience_duration", "10",
 ConVar tf_bot_sniper_target_linger_duration( "tf_bot_sniper_target_linger_duration", "2", FCVAR_CHEAT, "How long a Sniper bot will keep toward at a target it just lost sight of" );
 ConVar tf_bot_sniper_allow_opportunistic( "tf_bot_sniper_allow_opportunistic", "1", FCVAR_NONE, "If set, Snipers will stop on their way to their preferred lurking spot to snipe at opportunistic targets" );
 
-ConVar tf_mvm_bot_sniper_target_by_dps( "tf_mvm_bot_sniper_target_by_dps", "1", FCVAR_CHEAT | FCVAR_DEVELOPMENTONLY, "If set, Snipers in MvM mode target the victim that has the highest DPS" );
+ConVar tf_mvm_bot_sniper_target_by_dps( "tf_mvm_bot_sniper_target_by_dps", "1", FCVAR_CHEAT, "If set, Snipers in MvM mode target the victim that has the highest DPS" );
 
-#ifdef STAGING_ONLY
-extern ConVar tf_bot_use_items;
-#endif
 
 //---------------------------------------------------------------------------------------------
 ActionResult< CTFBot >	CTFBotSniperLurk::OnStart( CTFBot *me, Action< CTFBot > *priorAction )
@@ -74,16 +71,6 @@ ActionResult< CTFBot >	CTFBotSniperLurk::OnStart( CTFBot *me, Action< CTFBot > *
 		me->SetMission( CTFBot::MISSION_SNIPER, MISSION_DOESNT_RESET_BEHAVIOR_SYSTEM );
 	}
 
-#ifdef STAGING_ONLY
-	if ( tf_bot_use_items.GetInt() && ( RandomInt(0, 100) <= tf_bot_use_items.GetInt() ) )
-	{
-		CBaseCombatWeapon *myGun = me->Weapon_GetSlot( TF_WPN_TYPE_PRIMARY );
-		me->Weapon_Detach( myGun );
-		UTIL_Remove( myGun );
-
-		BotGenerateAndWearItem( me, "The Huntsman" );
-	}
-#endif // STAGING_ONLY
 
 	return Continue();
 }

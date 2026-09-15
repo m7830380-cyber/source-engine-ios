@@ -56,21 +56,17 @@ enum EBonusEffectFilter_t
 
 struct BonusEffect_t
 {
-	BonusEffect_t( const char* pszSoundName, const char* pszParticleName, EBonusEffectFilter_t eParticleFilter, EBonusEffectFilter_t eSoundFilter, bool bPlaySoundInAttackersEars )
-		: m_pszSoundName( pszSoundName )
-		, m_pszParticleName( pszParticleName )
-		, m_eParticleFilter( eParticleFilter )
-		, m_eSoundFilter( eSoundFilter )
-		, m_bPlaySoundInAttackersEars( bPlaySoundInAttackersEars )
-
-	{}
-
 	const char* m_pszSoundName;
-	const char* m_pszParticleName;
+	const char* m_pszParticle;
+	ParticleAttachment_t m_eAttachment;
+	const char* m_pszAttachmentName;
 	EBonusEffectFilter_t m_eParticleFilter;
 	EBonusEffectFilter_t m_eSoundFilter;
 	bool m_bPlaySoundInAttackersEars;
+	bool m_bLargeCombatText;
 };
+
+extern BonusEffect_t g_BonusEffects[ kBonusEffect_Count ];
 
 //-----------------------------------------------------------------------------
 // Purpose: 
@@ -115,18 +111,23 @@ public:
 
 	void    StopViewModelParticles( C_BaseEntity *pParticleEnt );
 
+	virtual void PreThink( void );
 	virtual void ClientThink();
+
+	void	UpdateTimers();
 
 	// Deal with recording
 	virtual void GetToolRecordingState( KeyValues *msg );
 
 	CTFWeaponBase *GetActiveTFWeapon( void ) const;
+	int GetPassiveWeapons( CUtlVector<CTFWeaponBase*>& vecOut );
 	bool IsActiveTFWeapon( CEconItemDefinition *weaponHandle ) const;
 	bool IsActiveTFWeapon( const CSchemaItemDefHandle &weaponHandle ) const;
 
 	virtual void Simulate( void );
 	virtual void FireEvent( const Vector& origin, const QAngle& angles, int event, const char *options ) OVERRIDE;
 	virtual void UpdateStepSound( surfacedata_t *psurface, const Vector &vecOrigin, const Vector &vecVelocity ) OVERRIDE;
+	virtual void PlayStepSound( Vector &vecOrigin, surfacedata_t *psurface, float fvol, bool force );
 
 	CNewParticleEffect *SpawnHalloweenSpellFootsteps( ParticleAttachment_t eParticleAttachment, int iHalloweenFootstepType );
 
@@ -135,6 +136,8 @@ public:
 	void ImpactWaterTrace( trace_t &trace, const Vector &vecStart );
 
 	bool CanAttack( int iCanAttackFlags = 0 );
+	bool CanJump() const;
+	bool CanDuck() const;
 
 	const C_TFPlayerClass *GetPlayerClass( void ) const	{ return &m_PlayerClass; }
 	C_TFPlayerClass *GetPlayerClass( void )				{ return &m_PlayerClass; }
@@ -173,6 +176,10 @@ public:
 	void GetTeamColor( Color &color );
 	bool InSameDisguisedTeam( CBaseEntity *pEnt );
 
+	void ForceTempForceDraw( bool bThirdPerson );
+
+	void FlushAllPlayerVisibilityState();
+
 	virtual void ComputeFxBlend( void );
 
 	// Taunts/VCDs
@@ -186,6 +193,9 @@ public:
 	void			TurnOffTauntCam( void );
 	void			TurnOffTauntCam_Finish( void );
 	bool			IsTaunting( void ) const { return m_Shared.InCond( TF_COND_TAUNTING ); }
+
+	bool			IsViewingCYOAPDA( void ) const { return m_bViewingCYOAPDA; }
+	bool			IsRegenerating( void ) const { return m_bRegenerating; }
 
 	virtual void	InitPhonemeMappings();
 
@@ -274,10 +284,6 @@ public:
 	void			ShowDuelingIcon( bool bShow );
 	void			ShowIconForIT( bool bShow );
 
-#ifdef STAGING_ONLY
-	void			UpdateTranqMark( bool bShow, bool bForceStop = false );
-	void			UpdateSpyClassStealParticle( bool bShow );
-#endif // STAGING_ONLY
 	void			ShowBirthdayEffect( bool bShow );
 
 	CUtlVector<EHANDLE>		*GetSpawnedGibs( void ) { return &m_hSpawnedGibs; }
@@ -324,9 +330,9 @@ public:
 
 	virtual const Vector&	GetRenderOrigin( void );
 
-	RTime32			GetSpottedInPVSTime() const { return m_rtSpottedInPVSTime; }
-	RTime32			GetJoinedSpectatorTeamTime() const { return m_rtJoinedSpectatorTeam; }
-	RTime32			GetJoinedNormalTeamTime() const { return m_rtJoinedNormalTeam; }
+//	RTime32			GetSpottedInPVSTime() const { return m_rtSpottedInPVSTime; }
+//	RTime32			GetJoinedSpectatorTeamTime() const { return m_rtJoinedSpectatorTeam; }
+//	RTime32			GetJoinedNormalTeamTime() const { return m_rtJoinedNormalTeam; }
 
 	// IHasAttributes
 	CAttributeManager		*GetAttributeManager( void ) { return &m_AttributeManager; }
@@ -369,7 +375,7 @@ public:
 
 	virtual int GetSkin();
 
-	float GetLastDamageTime( void ) const { return m_flLastDamageTime; }
+	float GetLastDamageTimeMvMOnly( void ) const { return m_flMvMLastDamageTime; }
 
 	virtual bool		Weapon_CanSwitchTo( CBaseCombatWeapon *pWeapon );
 
@@ -377,9 +383,11 @@ public:
 	virtual	bool		Weapon_Switch( C_BaseCombatWeapon *pWeapon, int viewmodelindex = 0 ) OVERRIDE;
 	virtual void 		SelectItem( const char *pstr, int iSubType = 0 ) OVERRIDE;
 
+	void				Weapon_PoseParamOverride( CTFWeaponBase *pOldWeapon, CTFWeaponBase *pNewWeapon );
+
 	virtual void		UpdateWearables() OVERRIDE;
 	CTFWearable			*GetEquippedWearableForLoadoutSlot( int iLoadoutSlot );
-	CBaseEntity			*GetEntityForLoadoutSlot( int iLoadoutSlot );			//Gets whatever entity is associated with the loadout slot (wearable or weapon)
+	CBaseEntity			*GetEntityForLoadoutSlot( int iLoadoutSlot, bool bForceCheckWearable = false );			//Gets whatever entity is associated with the loadout slot (wearable or weapon)
 
 	CTFWeaponBase		*Weapon_OwnsThisID( int iWeaponID ) const;
 	CTFWeaponBase		*Weapon_GetWeaponByType( int iType );
@@ -625,6 +633,8 @@ public:
 
 	bool							GetPredictable( void ) const;
 
+	const QAngle& GetNetworkEyeAngles() const { return m_angEyeAngles; }
+
 	// Halloween
 	void CreateBombonomiconHint();
 	void DestroyBombonomiconHint();
@@ -632,7 +642,6 @@ public:
 	void CleanUpAnimationOnSpawn();
 	CTFPlayerAnimState *m_PlayerAnimState;
 
-	QAngle	m_angEyeAngles;
 	CInterpolatedVar< QAngle >	m_iv_angEyeAngles;
 
 	CNetworkHandle( C_TFItem, m_hItem );
@@ -653,12 +662,11 @@ public:
 
 	RuneTypes_t		m_eDisplayingRuneIcon;
 
-	float			m_flLastDamageTime;
-
-	bool			m_bInPowerPlay;
-
+	float			m_flMvMLastDamageTime;
 	int				m_iSpawnCounter;
 	bool			m_bArenaSpectator;
+
+	bool			m_bFlipViewModels;
 
 	bool			m_bIsMiniBoss;
 	bool			m_bIsABot;
@@ -670,7 +678,9 @@ public:
 
 private:
 	void			UpdateTauntItem();
-	void			ParseSharedTauntDataFromEconItemView( CEconItemView *pEconItemView );
+	void			ParseSharedTauntDataFromEconItemView( const CEconItemView *pEconItemView );
+
+	QAngle			m_angEyeAngles;
 
 	bool			m_bAllowMoveDuringTaunt;
 	bool			m_bTauntForceMoveForward;
@@ -721,6 +731,9 @@ public:
 	// Milk
 	HPARTICLEFFECT		m_pMilkEffect;
 
+	// Gas
+	HPARTICLEFFECT		m_pGasEffect;
+
 	// Soldier Buff
 	HPARTICLEFFECT		m_pSoldierOffensiveBuffEffect;
 	HPARTICLEFFECT		m_pSoldierDefensiveBuffEffect;
@@ -762,10 +775,6 @@ public:
 	HPARTICLEFFECT m_pMVMBotRadiowave;
 
 	HPARTICLEFFECT m_pRuneChargeReadyEffect;
-
-#ifdef STAGING_ONLY
-	HPARTICLEFFECT m_pRocketPackEffect;
-#endif // STAGING_ONLY
 
 	enum EKartParticles
 	{
@@ -843,9 +852,9 @@ private:
 	float			m_flChangeClassTime;
 
 	float m_flWaterImpactTime;
-	RTime32 m_rtSpottedInPVSTime;
-	RTime32 m_rtJoinedSpectatorTeam;
-	RTime32 m_rtJoinedNormalTeam;
+//	RTime32 m_rtSpottedInPVSTime;
+//	RTime32 m_rtJoinedSpectatorTeam;
+//	RTime32 m_rtJoinedNormalTeam;
 
 	// Gibs.
 	CUtlVector< int > m_aSillyGibs;
@@ -875,6 +884,9 @@ private:
 	// Blast jump whistle
 	CSoundPatch		*m_pBlastJumpLoop;
 	float			m_flBlastJumpLaunchTime;
+
+	// falling sound that plays when player reaches fall speed that will apply fall damage
+	CSoundPatch		*m_pFallingSoundLoop;
 
 	CNetworkVar( float, m_flHeadScale );
 	CNetworkVar( float, m_flTorsoScale );
@@ -921,6 +933,9 @@ public:
 	bool IsInspecting() const;
 	void HandleInspectHint();
 
+	void SetHelpmeButtonPressedTime( float flPressTime ) { m_flHelpmeButtonPressTime = flPressTime; }
+	bool IsHelpmeButtonPressed() const;
+
 	bool AddOverheadEffect( const char *pszEffectName );
 	void RemoveOverheadEffect( const char *pszEffectName, bool bRemoveInstantly );
 	void UpdateOverheadEffects();
@@ -928,12 +943,21 @@ public:
 
 	int GetSkinOverride() const { return m_iPlayerSkinOverride; }
 
+	virtual void ClientAdjustStartSoundParams( EmitSound_t &params ) override;
+	virtual void ClientAdjustStartSoundParams( StartSoundParams_t& params ) override;
+
+private:
+	void ClientAdjustVOPitch( int& pitch );
+
 private:
 	CNetworkHandle( CBaseEntity, m_hGrapplingHookTarget );
 	CNetworkHandle( CBaseCombatWeapon, m_hSecondaryLastWeapon );
 	CNetworkVar( bool, m_bUsingActionSlot );
 	CNetworkVar( int, m_iCampaignMedals );
 	CNetworkVar( float, m_flInspectTime );
+	CNetworkVar( float, m_flHelpmeButtonPressTime );
+	CNetworkVar( bool, m_bViewingCYOAPDA );
+	CNetworkVar( bool, m_bRegenerating );
 
 	bool m_bNotifiedWeaponInspectThisLife;
 
@@ -942,6 +966,10 @@ private:
 
 	CUtlMap< const char *, HPARTICLEFFECT > m_mapOverheadEffects;
 	float m_flOverheadEffectStartTime;
+
+	int m_nTempForceDrawViewModelSequence = -1;
+	int m_nTempForceDrawViewModelSkin = 0;
+	float m_flTempForceDrawViewModelCycle  = 0.0f;
 
 	CNetworkVar( int, m_iPlayerSkinOverride );
 };
@@ -992,5 +1020,120 @@ protected:
 	CMaterialReference	m_InvulnerableMaterial;
 };
 extern C_TFPlayerPreviewEffect g_PlayerPreviewEffect;
+
+class C_TFRagdoll : public C_BaseFlex
+{
+public:
+
+	DECLARE_CLASS( C_TFRagdoll, C_BaseFlex );
+	DECLARE_CLIENTCLASS();
+
+	C_TFRagdoll();
+	~C_TFRagdoll();
+
+	virtual void OnDataChanged( DataUpdateType_t type );
+
+	IRagdoll* GetIRagdoll() const;
+
+	void ImpactTrace( trace_t *pTrace, int iDamageType, const char *pCustomImpactName );
+
+	void ClientThink( void );
+
+	// Deal with recording
+	virtual void GetToolRecordingState( KeyValues *msg );
+
+	void StartFadeOut( float fDelay );
+	void EndFadeOut();
+	void DissolveEntity( CBaseEntity* pEnt );
+
+	C_TFPlayer *GetPlayer( void ) const { return m_hPlayer; }
+
+	bool IsRagdollVisible();
+	float GetBurnStartTime() { return m_flBurnEffectStartTime; }
+
+	virtual void BuildTransformations( CStudioHdr *hdr, Vector *pos, Quaternion q[], const matrix3x4_t& cameraTransform, int boneMask, CBoneBitList &boneComputed );
+
+	virtual void SetupWeights( const matrix3x4_t *pBoneToWorld, int nFlexWeightCount, float *pFlexWeights, float *pFlexDelayedWeights );
+
+	bool IsDeathAnim() { return m_bDeathAnim; }
+
+	int GetDamageCustom() { return m_iDamageCustom; }
+
+	virtual bool GetAttachment( int iAttachment, matrix3x4_t &attachmentToWorld );
+
+	int GetClass() { return m_iClass; }
+
+	float GetPercentInvisible( void ) { return m_flPercentInvisible; }
+	bool IsCloaked( void ) { return m_bCloaked; }
+
+	int GetRagdollTeam( void ) { return m_iTeam; }
+
+	float GetHeadScale() const { return m_flHeadScale; }
+	float GetTorsoScale() const { return m_flTorsoScale; }
+	float GetHandScale() const { return m_flHandScale; }
+
+private:
+
+	C_TFRagdoll( const C_TFRagdoll & ) {}
+
+	void Interp_Copy( C_BaseAnimatingOverlay *pSourceEntity );
+
+	void CreateTFRagdoll();
+	void CreateTFGibs( bool bDestroyRagdoll = true, bool bCurrentPosition = false );
+	void CreateWearableGibs( bool bDisguiseWearables );
+	void CreateTFHeadGib();
+
+	virtual float FrameAdvance( float flInterval );
+
+	bool IsDecapitation();
+	bool IsHeadSmash();
+
+	virtual int	InternalDrawModel( int flags );
+
+private:
+
+	CNetworkVector( m_vecRagdollVelocity );
+	CNetworkVector( m_vecRagdollOrigin );
+	CNetworkHandle( CTFPlayer, m_hPlayer );
+	float m_fDeathTime;
+	bool  m_bFadingOut;
+	bool  m_bGib;
+	bool  m_bBurning;
+	bool  m_bElectrocuted;
+	bool  m_bBatted;
+	bool  m_bDissolving;
+	bool  m_bFeignDeath;
+	bool  m_bWasDisguised;
+	bool  m_bCloaked;
+	bool  m_bBecomeAsh;
+	int	  m_iDamageCustom;
+	bool  m_bGoldRagdoll;
+	bool  m_bIceRagdoll;
+	CountdownTimer m_freezeTimer;
+	CountdownTimer m_frozenTimer;
+	int	  m_iTeam;
+	int	  m_iClass;
+	float m_flBurnEffectStartTime;	// start time of burning, or 0 if not burning
+	bool  m_bRagdollOn;
+	bool  m_bDeathAnim;
+	bool  m_bOnGround;
+	bool  m_bFixedConstraints;
+	matrix3x4_t m_mHeadAttachment;
+	bool  m_bBaseTransform;
+	float m_flPercentInvisible;
+	float m_flTimeToDissolve;
+	bool  m_bCritOnHardHit;	// plays the red mist particle effect
+	float m_flHeadScale;
+	float m_flTorsoScale;
+	float m_flHandScale;
+
+	CMaterialReference		m_MaterialOverride;
+
+	CUtlVector<CHandle<CEconWearable > > m_hRagWearables;		// These look like they are no longer used?
+
+	CUtlVector< CHandle< CEconWearable > > m_hClientWearables;	// wearables on the ragdoll that are "following" it
+
+	bool  m_bCreatedWhilePlaybackSkipping;
+};
 
 #endif // C_TF_PLAYER_H

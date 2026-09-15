@@ -20,64 +20,73 @@
 #include "vgui_controls/MenuItem.h"
 #include "tf_gc_client.h"
 #include "tf_xp_source.h"
+#include "tf_item_inventory.h"
+#include "tf_particlepanel.h"
+#include "tf_rating_data.h"
+#include "tf_gamerules.h"
 
 using namespace vgui;
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include <tier0/memdbgon.h>
 
-#ifdef STAGING_ONLY
-	extern ConVar tf_test_pvp_rank_xp_change;
-#endif
 
 ConVar tf_xp_breakdown_interval( "tf_xp_breakdown_interval", "1.85", FCVAR_DEVELOPMENTONLY );
 ConVar tf_xp_breakdown_lifetime( "tf_xp_breakdown_lifetime", "3.5", FCVAR_DEVELOPMENTONLY );
 
 extern const char *s_pszMatchGroups[];
 
-CPvPRankPanel::XPState_t::XPState_t( EMatchGroup eMatchGroup )
-	: m_nStartXP( 0u )
-	, m_nTargetXP( 0u )
-	, m_nActualXP( 0u )
+CPvPRankPanel::RatingState_t::RatingState_t( ETFMatchGroup eMatchGroup )
+	: m_nStartRating( 0u )
+	, m_nTargetRating( 0u )
+	, m_nActualRating( 0u )
 	, m_bCurrentDeltaViewed( true )
 	, m_eMatchGroup( eMatchGroup )
+	, m_bInitialized( false )
 {
-	Assert( m_eMatchGroup != k_nMatchGroup_Invalid );
+	Assert( m_eMatchGroup != k_eTFMatchGroup_Invalid );
 
 	// Default to level 1's starting XP value
 	const IMatchGroupDescription* pMatchDesc = GetMatchGroupDescription( m_eMatchGroup );
 	if ( pMatchDesc && pMatchDesc->m_pProgressionDesc )
 	{
 		auto level = pMatchDesc->m_pProgressionDesc->GetLevelByNumber( 1 );
-		m_nStartXP = level.m_nStartXP;
-		m_nActualXP = m_nStartXP;
-		m_nTargetXP = m_nStartXP;
+		m_nStartRating = level.m_nStartXP;
+		m_nActualRating = m_nStartRating;
+		m_nTargetRating = m_nStartRating;
 	}
 
 	ListenForGameEvent( "experience_changed" );
 	ListenForGameEvent( "server_spawn" );
 }
 
-void CPvPRankPanel::XPState_t::FireGameEvent( IGameEvent *pEvent )
+void CPvPRankPanel::RatingState_t::FireGameEvent( IGameEvent *pEvent )
 {
 	if ( FStrEq( pEvent->GetName(), "experience_changed" ) ) // For changing tf_progression_set_xp_to_level
 	{
-		UpdateXP( false );
+		UpdateRating( false );
 	}
 	else if ( FStrEq( pEvent->GetName(), "server_spawn" ) && GTFGCClientSystem()->BHaveLiveMatch()
 		&& GTFGCClientSystem()->GetLiveMatchGroup() == m_eMatchGroup )
 	{
-		UpdateXP( false );
-		// Acknowledge any outstanding XP sources when we start a match.  It looks really weird when
+		UpdateRating( false );
+		// Acknowledge any outstanding rating sources when we start a match.  It looks really weird when
 		// you see old match xp sources at the end of a match.
-		GTFGCClientSystem()->AcknowledgePendingXPSources( m_eMatchGroup );
+		GTFGCClientSystem()->AcknowledgePendingRatingAndSources( m_eMatchGroup );
 	}
 }
 
-void CPvPRankPanel::XPState_t::UpdateXP( bool bInitial )
+void CPvPRankPanel::RatingState_t::UpdateRating( bool bInitial )
 {
-	uint32 nStartXP = 0u;
-	uint32 nNewXP = 0u;
+	if ( !steamapicontext || !steamapicontext->SteamUser() )
+		return;
+
+	// Update the starting rating if we've already lerped to show the progression
+	if ( m_bCurrentDeltaViewed && GetCurrentRating() == m_nTargetRating )
+		m_nStartRating = m_nTargetRating;
+
+	uint32 nStartRating = 0u;
+	uint32 nNewRating = 0u;
 
 	const IMatchGroupDescription* pMatchDesc = GetMatchGroupDescription( m_eMatchGroup );
 	// Should only be creating this object for matches that have progressions
@@ -86,34 +95,48 @@ void CPvPRankPanel::XPState_t::UpdateXP( bool bInitial )
 	{
 		// Default to level 1's lowest XP value
 		auto level = pMatchDesc->m_pProgressionDesc->GetLevelByNumber( 1 );
-		nNewXP = level.m_nStartXP;
-		nStartXP = level.m_nStartXP;
+		nNewRating = level.m_nStartXP;
+		nStartRating = level.m_nStartXP;
 
-		if ( steamapicontext && steamapicontext->SteamUser() )
-		{
-			nStartXP = pMatchDesc->m_pProgressionDesc->GetLocalPlayerLastAckdExperience();
-			// Get the actual user's XP
-			nNewXP = pMatchDesc->m_pProgressionDesc->GetPlayerExperienceBySteamID( steamapicontext->SteamUser()->GetSteamID() );
-		}
+	
+		// Starting rating
+		CTFRatingData *pRating = CTFRatingData::YieldingGetPlayerRatingDataBySteamID( steamapicontext->SteamUser()->GetSteamID(),
+																						pMatchDesc->GetLastAckdDisplayRating() );
+		nStartRating = pRating ? pRating->Obj().rating_primary() : 0u;
+
+		// Actual, new rating
+		pRating = CTFRatingData::YieldingGetPlayerRatingDataBySteamID( steamapicontext->SteamUser()->GetSteamID(),
+																						pMatchDesc->GetCurrentDisplayRating() );
+		nNewRating = pRating ? pRating->Obj().rating_primary() : 0u; 
+		
 	}
 
 	// If there's no change, don't do anything
-	if ( nNewXP != m_nActualXP || bInitial )
+	if ( nNewRating != m_nActualRating || bInitial )
 	{
-		m_nActualXP = nNewXP;
-		m_nStartXP = nStartXP;
+		m_nActualRating = nNewRating;
+		if ( bInitial )
+		{
+			m_nStartRating = nStartRating;
+		}
+		else
+		{
+			m_nStartRating = Min( m_nStartRating, nStartRating );
+		}
 		m_bCurrentDeltaViewed = false;
+		m_progressTimer.Invalidate();
 	}
 
 	if ( bInitial )
 	{
 		m_progressTimer.Start( 1.f );
 		m_bCurrentDeltaViewed = true;
-		m_nTargetXP = m_nStartXP;
+		m_nTargetRating = m_nStartRating;
+		m_bInitialized = true;
 	}
 }
 
-uint32 CPvPRankPanel::XPState_t::GetCurrentXP() const
+uint32 CPvPRankPanel::RatingState_t::GetCurrentRating() const
 {
 	float flTimeProgress = 0.f;
 	if ( m_progressTimer.HasStarted() )
@@ -122,16 +145,16 @@ uint32 CPvPRankPanel::XPState_t::GetCurrentXP() const
 		flTimeProgress = Gain( flTimeProgress / m_progressTimer.GetCountdownDuration(), 0.9f );
 	}
 
-	return RemapValClamped( flTimeProgress, 0.f, 1.f, m_nStartXP, m_nTargetXP );
+	return RemapValClamped( flTimeProgress, 0.f, 1.f, m_nStartRating, m_nTargetRating );
 }
 
-bool CPvPRankPanel::XPState_t::BeginXPDeltaLerp()
+bool CPvPRankPanel::RatingState_t::BeginRatingDeltaLerp()
 {
 	if ( !m_bCurrentDeltaViewed )
 	{
 		m_bCurrentDeltaViewed = true;
 		// Change our target
-		m_nTargetXP = m_nActualXP;
+		m_nTargetRating = m_nActualRating;
 		m_progressTimer.Start( 5.f );
 
 		return true;
@@ -140,18 +163,19 @@ bool CPvPRankPanel::XPState_t::BeginXPDeltaLerp()
 	return false;
 }
 
-void CPvPRankPanel::XPState_t::SOCreated( const CSteamID & steamIDOwner, const CSharedObject *pObject, ESOCacheEvent eEvent ) 
+void CPvPRankPanel::RatingState_t::SOCreated( const CSteamID & steamIDOwner, const CSharedObject *pObject, ESOCacheEvent eEvent ) 
 {
 	if ( pObject->GetTypeID() == CSOTFLadderData::k_nTypeID )
 	{
 		CSOTFLadderData* pLadderObject = (CSOTFLadderData*)pObject;
-		if( (EMatchGroup)pLadderObject->Obj().match_group() != m_eMatchGroup )
+		if( (ETFMatchGroup)pLadderObject->Obj().match_group() != m_eMatchGroup )
 			return;
 
 		// We'll get a eSOCacheEvent_Incremental when we're actually creating the 
 		// first CSOTFLadderData object.  We dont want that to come through as
 		// "initializing" because it'll skip the leveling effects
-		UpdateXP( eEvent == eSOCacheEvent_ListenerAdded );
+		UpdateRating( eEvent == eSOCacheEvent_ListenerAdded );
+		m_bInitialized = true;
 	}
 
 	if ( pObject->GetTypeID() == CXPSource::k_nTypeID )
@@ -159,23 +183,36 @@ void CPvPRankPanel::XPState_t::SOCreated( const CSteamID & steamIDOwner, const C
 		CXPSource *pXPSource = (CXPSource*)pObject;
 		if ( pXPSource->Obj().match_group() == m_eMatchGroup )
 		{
-			UpdateXP( false );
+			UpdateRating( false );
+			m_bInitialized = true;
 		}
 	}
 }
 
-void CPvPRankPanel::XPState_t::SOUpdated( const CSteamID & steamIDOwner, const CSharedObject *pObject, ESOCacheEvent eEvent )
+void CPvPRankPanel::RatingState_t::SOUpdated( const CSteamID & steamIDOwner, const CSharedObject *pObject, ESOCacheEvent eEvent )
 {
 	if ( pObject->GetTypeID() == CSOTFLadderData::k_nTypeID )
 	{
 		CSOTFLadderData* pLadderObject = (CSOTFLadderData*)pObject;
-		if( (EMatchGroup)pLadderObject->Obj().match_group() != m_eMatchGroup )
+		if( (ETFMatchGroup)pLadderObject->Obj().match_group() != m_eMatchGroup )
 			return;
 
 		// If the GC comes on after we've already subscribed to the cache,
 		// eSOCacheEvent_Subscribed when the object is created.  This one
 		// we want to skip the effects.
-		UpdateXP( eEvent == eSOCacheEvent_Subscribed );
+		UpdateRating( eEvent == eSOCacheEvent_Subscribed );
+	}
+
+	if ( pObject->GetTypeID() == CTFRatingData::k_nTypeID )
+	{
+		auto pMatchDesc = GetMatchGroupDescription( m_eMatchGroup );
+		if ( !pMatchDesc )
+			return;
+
+		CTFRatingData* pRatingObject = (CTFRatingData*)pObject;
+		if ( pRatingObject->Obj().rating_type() == pMatchDesc->GetLastAckdDisplayRating() ||
+			 pRatingObject->Obj().rating_type() == pMatchDesc->GetCurrentDisplayRating() )
+			UpdateRating( eEvent == eSOCacheEvent_Subscribed );
 	}
 
 	if ( pObject->GetTypeID() == CXPSource::k_nTypeID )
@@ -183,7 +220,7 @@ void CPvPRankPanel::XPState_t::SOUpdated( const CSteamID & steamIDOwner, const C
 		CXPSource *pXPSource = (CXPSource*)pObject;
 		if ( pXPSource->Obj().match_group() == m_eMatchGroup )
 		{
-			UpdateXP( false );
+			UpdateRating( false );
 		}
 	}
 }
@@ -204,106 +241,38 @@ private:
 	}
 };
 
-class CXPSourcePanel : public vgui::EditablePanel
-{
-public:
-	DECLARE_CLASS_SIMPLE( CXPSourcePanel , vgui::EditablePanel);
-	CXPSourcePanel( Panel *pParent, const char* panelName, const CMsgTFXPSource& source )
-		: BaseClass( pParent, panelName )
-		, m_source( source )
-	{}
-
-	virtual void ApplySchemeSettings( vgui::IScheme *pScheme ) OVERRIDE
-	{
-		BaseClass::ApplySchemeSettings( pScheme );
-
-		LoadControlSettings( "resource/ui/XPSourcePanel.res" );
-	}
-
-	virtual void PerformLayout() OVERRIDE
-	{
-		BaseClass::PerformLayout();
-
-		static wchar_t wszOutString[ 128 ];
-		wchar_t wszCount[ 16 ];
-		_snwprintf( wszCount, ARRAYSIZE( wszCount ), L"%d", m_source.amount() );
-		const wchar_t *wpszFormat = g_pVGuiLocalize->Find( g_XPSourceDefs[ m_source.type() ].m_pszFormattingLocToken );
-		g_pVGuiLocalize->ConstructString_safe( wszOutString, wpszFormat, 2, g_pVGuiLocalize->Find( g_XPSourceDefs[ m_source.type() ].m_pszTypeLocToken ), wszCount );
-
-		SetDialogVariable( "source", wszOutString );
-	}
-
-protected:
-	CMsgTFXPSource m_source;
-};
-
-class CScrollingXPSourcePanel : public CXPSourcePanel
-{
-public:
-	DECLARE_CLASS_SIMPLE( CScrollingXPSourcePanel , CXPSourcePanel );
-	CScrollingXPSourcePanel( Panel *pParent, const char* panelName, const CMsgTFXPSource& source, float flStartTime )
-		: BaseClass( pParent, panelName, source )
-		, m_flStartTime( flStartTime )
-		, m_bStarted( false )
-	{
-		vgui::ivgui()->AddTickSignal( GetVPanel() );
-
-		SetAutoDelete( false );
-	}
-
-	virtual ~CScrollingXPSourcePanel()
-	{
-	}
-
-	virtual void OnTick() OVERRIDE
-	{
-		BaseClass::OnTick();
-
-		if ( Plat_FloatTime() > m_flStartTime && !m_bStarted )
-		{
-			m_bStarted = true;
-			SetVisible( true );
-
-			// Do starting stuff
-			g_pClientMode->GetViewportAnimationController()->StartAnimationSequence( this, m_source.amount() >= 0 ? "XPSourceShow_Positive" : "XPSourceShow_Negative", false );
-
-			if ( g_XPSourceDefs[ m_source.type() ].m_pszSoundName )
-			{
-				PlaySoundEntry( g_XPSourceDefs[ m_source.type() ].m_pszSoundName );
-			}
-		}
-
-		SetVisible( m_bStarted );
-
-		if ( Plat_FloatTime() > ( m_flStartTime + tf_xp_breakdown_lifetime.GetFloat() ) )
-		{
-			// We're done!  Delete ourselves
-			MarkForDeletion();
-		}
-	}
-
-private:
-
-	float m_flStartTime;
-	bool m_bStarted;
-};
 
 DECLARE_BUILD_FACTORY( CMiniPvPRankPanel );
 DECLARE_BUILD_FACTORY( CPvPRankPanel );
 
+struct RankRevealState_t
+{
+	bool m_bNeedsRankReveal = false;
+	bool m_bLastSeenInPlacement = true;
+	bool m_bInitialized = false;
+};
+
+static RankRevealState_t s_rankReavealState[ ETFMatchGroup_ARRAYSIZE ];
+
 CPvPRankPanel::CPvPRankPanel( Panel *parent, const char *panelName )
 	: BaseClass( parent, panelName )
-	, m_eMatchGroup( k_nMatchGroup_Invalid )
+	, m_eMatchGroup( k_eTFMatchGroup_Invalid )
 	, m_pProgressionDesc( NULL )
 	, m_pContinuousProgressBar( NULL )
 	, m_pModelPanel( NULL )
 	, m_pXPBar( NULL )
 	, m_pBGPanel( NULL )
-	, m_nLastLerpXP( 0 )
+	, m_nLastLerpRating( 0 )
 	, m_nLastSeenLevel( 0 )
-	, m_bClicked( false )
+	, m_bInitializedBaseState( false )
 {
+	m_pModelContainer = new EditablePanel( this, "ModelContainer" );
+	m_pModelPanel = new CBaseModelPanel( m_pModelContainer, "RankModel" );
+	m_pModelPanel->AddActionSignalTarget( this );
+
 	ListenForGameEvent( "begin_xp_lerp" );
+	ListenForGameEvent( "gc_new_session" );
+	ListenForGameEvent( "mainmenu_stabilized" );
 }
 
 void CPvPRankPanel::ApplySchemeSettings( vgui::IScheme *pScheme )
@@ -323,36 +292,36 @@ void CPvPRankPanel::ApplySchemeSettings( vgui::IScheme *pScheme )
 	m_pBGPanel = FindControl< EditablePanel >( "BGPanel", true );
 	m_pContinuousProgressBar = FindControl< ContinuousProgressBar >( "ContinuousProgressBar", true );
 	m_pXPBar = FindControl< EditablePanel >( "XPBar", true );
-	m_pModelPanel = FindControl< CBaseModelPanel >( "RankModel", true );
-	m_pModelPanel->AddActionSignalTarget( this );
 
-	m_pModelButton = FindChildByName( "MedalButton", true );
 
-#ifdef STAGING_ONLY
-	if ( m_pBGPanel )
+	m_pModelButton = FindControl< Button >( "MedalButton", true );
+	if ( m_pModelButton )
 	{
-		Panel* pDebugButton = m_pBGPanel->FindChildByName( "TestLevelDownButton", true );
-		if ( pDebugButton ) { pDebugButton->SetVisible( true ); }
-		pDebugButton = m_pBGPanel->FindChildByName( "LevelDebugButton", true );
-		if ( pDebugButton ) { pDebugButton->SetVisible( true ); }
-		pDebugButton = m_pBGPanel->FindChildByName( "TestLevelUpButton", true );
-		if ( pDebugButton ) { pDebugButton->SetVisible( true ); }
+		m_pModelButton->AddActionSignalTarget( this );
+		m_pModelButton->SetButtonActivationType( Button::ACTIVATE_ONPRESSED );
 	}
-#endif
+
 }
 
 void CPvPRankPanel::ApplySettings(KeyValues *inResourceData)
 {
 	BaseClass::ApplySettings( inResourceData );
 
-	SetMatchGroup( (EMatchGroup)StringFieldToInt( inResourceData->GetString( "matchgroup" ), s_pszMatchGroups, (int)k_nMatchGroup_Count, false ) );
+	SetMatchGroup( (ETFMatchGroup)StringFieldToInt( inResourceData->GetString( "matchgroup" ), s_pszMatchGroups, (int)ETFMatchGroup_ARRAYSIZE, false ) );
 }
 
 void CPvPRankPanel::PerformLayout()
 {
 	BaseClass::PerformLayout();
 
-	if ( !m_pProgressionDesc )
+	m_bRevealingRank = s_rankReavealState[ m_eMatchGroup ].m_bNeedsRankReveal;
+
+	SetControlVisible( "BGPanel", m_bShowProgress, true );
+	SetControlVisible( "ModelContainer", m_bShowModel, true );
+	m_pBGPanel->SetControlVisible( "NameLabel", m_bShowName, true );
+	SetControlVisible( "StatsContainer", !BIsInPlacement() && !m_bRevealingRank, true );
+
+	if ( !m_pProgressionDesc || !m_pMatchDesc )
 		return;
 
 	EditablePanel* pStatsContainer = FindControl< EditablePanel >( "Stats", true );
@@ -370,123 +339,204 @@ void CPvPRankPanel::PerformLayout()
 		return;
 
 	if ( !m_pContinuousProgressBar )
-		return;
+		return;	
 
 	// Chop up the progress bar into 10th's and use it as a mask overtop
-	pProgressBar->SetSegmentInfo( ( pProgressBar->GetWide() / 10 ) - ( ( 9 * 4 ) / 10 ) , 4 );
-
-	const XPState_t& xpstate = GetXPState();
-	uint32 nCurrentXP = xpstate.GetCurrentXP();
-	const LevelInfo_t& levelCur = m_pProgressionDesc->GetLevelForExperience( nCurrentXP );
-	m_pProgressionDesc->SetupBadgePanel( m_pModelPanel, levelCur );
+	pProgressBar->SetSegmentInfo( ( pProgressBar->GetWide() / 10 ) - ( ( 9 * 2 ) / 10 ) , 2 );
+	
+	const LevelInfo_t& levelCur = GetLevel( m_bInstantlyUpdate );
+	m_pMatchDesc->SetupBadgePanel( m_pModelPanel, levelCur, ClientSteamContext().GetLocalPlayerSteamID(), BIsInPlacement() || m_bRevealingRank );
 
 	// Update labels
-	UpdateControls( xpstate.GetStartXP(), nCurrentXP, levelCur );
+	if ( m_bShowRating )
+	{
+		const RatingState_t& ratingState = GetRatingState();
+		uint32 nCurrentRating = ratingState.GetCurrentRating();
+		UpdateRatingControls( ratingState.GetStartRating(), nCurrentRating, levelCur );
+	}
+	UpdateRankControls( levelCur );
 
 	SetMatchStats();
 }
 
-void CPvPRankPanel::OnThink()
+const LevelInfo_t& CPvPRankPanel::GetLevel( bool bCurrent ) const
 {
-	 BaseClass::OnThink();
-
-	 if ( m_pContinuousProgressBar && m_pXPBar && m_pModelPanel && m_pProgressionDesc && m_pBGPanel )
-	 {
-
-		// SUPER HACKS.  I dont have time to figure out popups
-		if ( m_pModelButton && vgui::input()->IsMouseDown( MOUSE_LEFT ) )
-		{
-			int nMouseX, nMouseY; 
-			input()->GetCursorPos( nMouseX, nMouseY );
-			if ( !m_bClicked && m_pModelButton->IsWithin( nMouseX, nMouseY ) )
-			{
-				OnCommand( "medal_clicked" );
-			}
-
-			m_bClicked = true;
-		}
-		else
-		{
-			m_bClicked = false;
-		}
-
-		const XPState_t& xpstate = GetXPState();
-		uint32 nCurrentXP = xpstate.GetCurrentXP();
-
-		// Check if the last XP we lerp'd to isn't the current XP.  If it's not, then we want to animate over to it.
-		if ( m_nLastLerpXP != nCurrentXP )
-		{
-			uint32 nPrevXP = xpstate.GetStartXP();
-			const LevelInfo_t& levelCur = m_pProgressionDesc->GetLevelForExperience( nCurrentXP );
-
-			UpdateControls( nPrevXP, nCurrentXP, levelCur );
-
-			// We only want to do level up effects if we are thinking (visible) when the current XP passes the level boundary
-			if ( m_nLastLerpXP != xpstate.GetStartXP() )
-			{
-				const LevelInfo_t& levelPrevThink = m_pProgressionDesc->GetLevelForExperience( m_nLastLerpXP );
-				if ( levelCur.m_nLevelNum > levelPrevThink.m_nLevelNum ) // Level up :)
-				{
-					PlayLevelUpEffects( levelCur );
-				}
-				else if ( levelCur.m_nLevelNum < levelPrevThink.m_nLevelNum ) // Level down :(
-				{
-					PlayLevelDownEffects( levelCur );
-				}
-			}
-
-			m_nLastLerpXP = nCurrentXP;
-		}
-		else 
-		{
-			// Our last lerp XP is caught up with current XP, but our last seen level is not up to date with what
-			// our current level actually is.  This can happen if we haven't been thinking, but we did level up somewhere
-			// else.  In this case, we need to update our badge.
-			const LevelInfo_t& levelCur = m_pProgressionDesc->GetLevelForExperience( nCurrentXP );
-
-			if ( m_nLastSeenLevel != levelCur.m_nLevelNum )
-			{
-				m_nLastSeenLevel = levelCur.m_nLevelNum;
-				m_pProgressionDesc->SetupBadgePanel( m_pModelPanel, levelCur );
-			}
-		}
-	 }
+	// Sticky ranks just use the ranks in our rating data
+	if ( m_pMatchDesc->BUsesStickyRanks() )
+	{
+		EMMRating eRating = bCurrent ? m_pMatchDesc->GetCurrentDisplayRank() 
+									 : m_pMatchDesc->GetLastAckdDisplayRank();
+		CTFRatingData* pRatingData = SteamUser() ? CTFRatingData::YieldingGetPlayerRatingDataBySteamID( SteamUser()->GetSteamID(), eRating )
+												 : NULL;
+		uint32 nCurrentRank = pRatingData ? pRatingData->GetRatingData().unRatingPrimary : 0;
+		return m_pProgressionDesc->GetLevelByNumber( nCurrentRank );
+	}
+	else
+	{
+		// Non-sticky ranks we want to show the level based on what visually lines up with our displayed rating
+		uint32 nCurrentRating = bCurrent ? GetRatingState().GetTargetRating() : GetRatingState().GetCurrentRating();
+		return m_pProgressionDesc->GetLevelForRating( nCurrentRating );
+	}
 }
 
-
-void CPvPRankPanel::UpdateControls( uint32 nPreviousXP, uint32 nCurrentXP, const LevelInfo_t& levelCurrent )
+void CPvPRankPanel::OnThink()
 {
-	if ( m_pContinuousProgressBar )
+	BaseClass::OnThink();
+
+	if ( !m_pMatchDesc )
+		return;
+
+	if ( TFGameRules() && TFGameRules()->GetCurrentMatchGroup() != m_pMatchDesc->m_eMatchGroup )
+		return;
+
+	if ( !m_bShowRating )
+		return;
+
+	if ( !m_pContinuousProgressBar || !m_pXPBar || !m_pModelPanel || !m_pProgressionDesc || !m_pBGPanel )
+		return;
+
+	const RatingState_t& ratingState = GetRatingState();
+	if ( !ratingState.IsInitialized() )
+		return;	
+
+	if ( !m_bInitializedBaseState )
+	{
+		UpdateBaseState();
+		m_bInitializedBaseState = true;
+	}
+
+	uint32 nCurrentRating = ratingState.GetCurrentRating();
+
+	// Check if the last XP we lerp'd to isn't the current XP.  If it's not, then we want to animate over to it.
+	if ( ratingState.GetTargetRating() != m_nLastLerpRating )
+	{
+		uint32 nPrevXP = ratingState.GetStartRating();
+		const LevelInfo_t& levelCur = m_pMatchDesc->BUsesStickyRanks() ? GetLevel( true ) 
+																	   : m_pProgressionDesc->GetLevelForRating( nCurrentRating );
+
+		UpdateRatingControls( nPrevXP, nCurrentRating, levelCur );
+		UpdateRankControls( levelCur );
+
+		// We only want to do level up effects if we are thinking (visible) when the current XP passes the level boundary
+		if ( m_nLastLerpRating != ratingState.GetStartRating() && !m_pMatchDesc->BLocalPlayerIsInPlacement() )
+		{
+			const LevelInfo_t& levelPrevThink = m_pMatchDesc->BUsesStickyRanks() ? GetLevel( false )
+																				 : m_pProgressionDesc->GetLevelForRating( m_nLastLerpRating );
+			if ( levelCur.m_nLevelNum > levelPrevThink.m_nLevelNum ) // Level up :)
+			{
+				PlayLevelUpEffects( levelCur );
+			}
+			else if ( levelCur.m_nLevelNum < levelPrevThink.m_nLevelNum ) // Level down :(
+			{
+				PlayLevelDownEffects( levelCur );
+			}
+		}
+
+		m_nLastLerpRating = nCurrentRating;
+	}
+	else if ( !m_pMatchDesc->BUsesStickyRanks() )
+	{
+		// Our last lerp XP is caught up with current XP, but our last seen level is not up to date with what
+		// our current level actually is.  This can happen if we haven't been thinking, but we did level up somewhere
+		// else.  In this case, we need to update our badge.
+		const LevelInfo_t& levelCur = GetLevel( true );
+		if ( m_nLastSeenLevel != levelCur.m_nLevelNum )
+		{
+			m_nLastSeenLevel = levelCur.m_nLevelNum;
+			m_pMatchDesc->SetupBadgePanel( m_pModelPanel, levelCur, ClientSteamContext().GetLocalPlayerSteamID(), BIsInPlacement()  );
+		}
+	}
+}
+
+void CPvPRankPanel::UpdateRatingControls( uint32 nPreviousRating, uint32 nCurrentRating, const LevelInfo_t& levelCurrent )
+{
+	if ( m_bShowRating && m_pContinuousProgressBar )
 	{
 		// Calculate progress bar percentages.  PrevBarProgress is the bar that shows where you started.
 		// CurrentBarProgress is the bar that lerps from the start to your actual, current XP
-		float flPrevBarProgress		= RemapValClamped( (float)nPreviousXP,	  (float)levelCurrent.m_nStartXP, (float)levelCurrent.m_nEndXP, 0.f, 1.f );
-		float flCurrentBarProgress	= RemapValClamped( (float)nCurrentXP, (float)levelCurrent.m_nStartXP, (float)levelCurrent.m_nEndXP, 0.f, 1.f );
+		float flPrevBarProgress		= RemapValClamped( (float)nPreviousRating,	  (float)levelCurrent.m_nStartXP, (float)levelCurrent.m_nEndXP, 0.f, 1.f );
+		float flCurrentBarProgress	= RemapValClamped( (float)nCurrentRating, (float)levelCurrent.m_nStartXP, (float)levelCurrent.m_nEndXP, 0.f, 1.f );
 
 		m_pContinuousProgressBar->SetPrevProgress( flPrevBarProgress );
 		m_pContinuousProgressBar->SetProgress( flCurrentBarProgress );
 	}
 
-	if ( m_pXPBar )
+	if ( !m_pXPBar )
+		return;
+
+	// We only set these up if we're actually showing rating
+	if ( m_bShowRating )
 	{
-		m_pXPBar->SetDialogVariable( "current_xp", LocalizeNumberWithToken( "TF_Competitive_XP_Current", nCurrentXP ) );
+		wchar_t wszRating[ 128 ];
+		auto lambdaRatingString = [ this, &wszRating ]( const char* pszToken, int nRating )
+		{
+			V_swprintf_safe( wszRating, L"%d %ls", nRating, g_pVGuiLocalize->Find( m_pProgressionDesc->GetRankUnitsLocToken() ) );
+			return wszRating;
+		};
+
+		m_pXPBar->SetDialogVariable( "current_xp", lambdaRatingString( "TF_Competitive_Rating_Current", nCurrentRating ) );
 
 		if ( levelCurrent.m_nLevelNum < m_pProgressionDesc->GetNumLevels() )
 		{
-			m_pXPBar->SetDialogVariable( "next_level_xp", LocalizeNumberWithToken( "TF_Competitive_XP", levelCurrent.m_nEndXP ) );
+			m_pXPBar->SetDialogVariable( "next_level_xp", lambdaRatingString( "TF_Competitive_Rating", levelCurrent.m_nEndXP ) );
 		}
 		else // Hide the next level XP value at max level
 		{
 			m_pXPBar->SetDialogVariable( "next_level_xp", "" );
 		}
+	}
+}
 
-		static wchar_t wszOutString[ 128 ];
-		wchar_t wszCount[ 16 ];
-		_snwprintf( wszCount, ARRAYSIZE( wszCount ), L"%d", levelCurrent.m_nLevelNum );
-		const wchar_t *wpszFormat = g_pVGuiLocalize->Find( m_pProgressionDesc->m_pszLevelToken );
-		g_pVGuiLocalize->ConstructString_safe( wszOutString, wpszFormat, 2, wszCount, g_pVGuiLocalize->Find( levelCurrent.m_pszLevelTitle ) );
+void CPvPRankPanel::UpdateRankControls( const LevelInfo_t& levelCurrent )
+{
+	if ( !m_pXPBar )
+		return;
 
-		m_pXPBar->SetDialogVariable( "level", wszOutString );
+
+	
+	if ( m_pBGPanel )
+	{
+		const char* pszLevelVar = m_bShowType ? "desc2" : "desc1";
+		const char* pszTypeVar = m_bShowType ? "desc1" : NULL;
+
+		m_pBGPanel->SetDialogVariable( pszTypeVar, g_pVGuiLocalize->Find( m_pMatchDesc->GetNameLocToken() ) );
+
+		if ( BIsInPlacement() )
+		{
+			CSteamID steamID = steamapicontext->SteamUser() ? steamapicontext->SteamUser()->GetSteamID()
+															: CSteamID();
+			// If in placement, then cook up our "Win X more matches to earn a rank!" string
+			int nPlacementsToGo = m_pMatchDesc->GetNumPlacementMatchesToGo( steamID );
+
+			static wchar_t wszOutString[ 256 ];
+			const wchar_t *wpszFormat = g_pVGuiLocalize->Find( nPlacementsToGo == 1 ? "#TF_Competitive_Placements_Singular" 
+																				: "#TF_Competitive_Placements_Multiple" );
+			g_pVGuiLocalize->ConstructString_safe( wszOutString,
+													wpszFormat,
+													1,
+													CStrAutoEncode( CFmtStr( "%d", nPlacementsToGo ) ).ToWString());
+
+			m_pBGPanel->SetDialogVariable( pszLevelVar, wszOutString );
+		}
+		else
+		{
+			// Get their rank title's string
+			wchar_t wszLevelString[ 128 ];
+			m_pProgressionDesc->GetLocalizedLevelTitle( levelCurrent, wszLevelString, 128 );
+			m_pBGPanel->SetDialogVariable( pszLevelVar, wszLevelString );
+		}
+
+		m_pBGPanel->SetControlVisible( "DescLine1", true ); // Gets used by level or type
+		m_pBGPanel->SetControlVisible( "DescLine2", m_bShowType ); // Possibly used by level if type is enabled
+	}
+
+	if ( m_bRevealingRank )
+	{
+		if ( m_pBGPanel )
+		{
+			m_pBGPanel->SetAlpha( 0 );
+			g_pClientMode->GetViewportAnimationController()->RunAnimationCommand( m_pBGPanel, "alpha", 255, 2.f, 1.f, AnimationController::INTERPOLATOR_LINEAR, 0.f, true, false ); 
+		}
 	}
 }
 
@@ -494,33 +544,64 @@ void CPvPRankPanel::OnCommand( const char *command )
 {
 	if ( FStrEq( "medal_clicked", command ) )
 	{
-		// Default effects
-		const char *pszSeqName = "click_A";
-		const char *pszSoundName = "ui/mm_medal_click.wav";
+		int nMouseX, nMouseY;
+		g_pVGuiInput->GetCursorPosition( nMouseX, nMouseY );
 
-		// Roll for a crit
-		int nRandomRoll = RandomInt( 0, 9 );
-		if ( nRandomRoll == 0 )
+		// Detect if they actually clicked in the circle of the medal
+		if ( m_pModelButton )
 		{
-			// CRIT!
-			pszSeqName = "click_B";
-			pszSoundName = "MatchMaking.MedalClickRare";
+			int nX,nY,nWide,nTall;
+			m_pModelButton->GetBounds( nX, nY, nWide, nTall ); 
+			m_pModelButton->GetParent()->LocalToScreen( nX, nY );
+
+			Vector2D vCenter( nX + ( nWide * 0.5f ), nY + ( nTall * 0.5f ) );
+			Vector2D vMouse( nMouseX, nMouseY );
+			float flLengthSq = ( vMouse - vCenter ).LengthSqr();
+			float flRadiusSq = ( nWide * 0.5f ) * ( nWide * 0.5f );
+			if ( flLengthSq > ( flRadiusSq ) )
+				return;
+		}
+
+		// Default effects
+		bool bCrit = RandomInt( 0, 9 ) == 0;
+		const char *pszSeqName = bCrit ? "click_B" : "click_A";
+		const char *pszSoundName = NULL;
+		
+		// Placement gets its own sounds
+		if ( BIsInPlacement() )
+		{
+			pszSoundName = bCrit ? "MatchMaking.MedalClickRankUnknownRare" : "MatchMaking.MedalClickRankUnknown";
+		}
+		else
+		{
+			pszSoundName = "ui/mm_medal_click.wav";
+
+			if ( bCrit )
+			{
+				int nLogoValue = 0;
+				// This could be better...
+// 				CTFPlayerInventory *pInv = TFInventoryManager()->GetLocalTFInventory();
+// 				static CSchemaItemDefHandle pItemDef_ActivatedCampaign3Pass( "Activated Campaign 3 Pass" );
+// 				if ( pInv && pInv->GetFirstItemOfItemDef( pItemDef_ActivatedCampaign3Pass->GetDefinitionIndex() ) != NULL  )
+// 				{
+// 					nLogoValue = 1;
+// 				}
+
+				// CRIT!
+				pszSoundName = nLogoValue == 1 ? "MatchMaking.MedalClickRareYeti" : "MatchMaking.MedalClickRare";
+			}
 		}
 	
 		m_pModelPanel->PlaySequence( pszSeqName );
 		PlaySoundEntry( pszSoundName );
 
-		EditablePanel* pModelContainer = FindControl< EditablePanel >( "ModelContainer" );
-		if ( pModelContainer )
-		{
-			g_pClientMode->GetViewportAnimationController()->StartAnimationSequence( pModelContainer, "PvPRankModelClicked", false);
-		}
-
+		g_pClientMode->GetViewportAnimationController()->StartAnimationSequence( m_pModelContainer, "PvPRankModelClicked", false);
+		
 		return;
 	}
 	else if ( FStrEq( "begin_xp_lerp", command ) )
 	{
-		BeginXPLerp();
+		BeginRatingLerp();
 		return;
 	}
 	else if ( FStrEq( "update_base_state", command ) )
@@ -534,9 +615,18 @@ void CPvPRankPanel::OnCommand( const char *command )
 void CPvPRankPanel::FireGameEvent( IGameEvent *pEvent )
 {
 	// This is really only for tf_test_pvp_rank_xp_change
-	if ( FStrEq( pEvent->GetName(), "begin_xp_lerp" ) )
+	if ( FStrEq( pEvent->GetName(), "begin_xp_lerp" ) || 
+		 FStrEq( pEvent->GetName(), "gc_new_session" ) ||
+		 FStrEq( pEvent->GetName(), "mainmenu_stabilized" ) )
 	{
-		BeginXPLerp();
+		if ( !m_bInitializedBaseState )
+		{
+			UpdateBaseState();
+		}
+		else
+		{
+			BeginRatingLerp();
+		}
 	}
 }
 
@@ -550,68 +640,169 @@ void CPvPRankPanel::SetVisible( bool bVisible )
 	 BaseClass::SetVisible( bVisible );
 }
 
-int SortXPSources( CXPSource* const* pLeft, CXPSource* const* pRight )
+void UpdateRevealState( ETFMatchGroup eMatchGroup, bool bInitial = false )
 {
-	return (*pLeft)->Obj().type() - (*pRight)->Obj().type();
-}
+	auto& revealState = s_rankReavealState[ eMatchGroup ];
 
-void CPvPRankPanel::BeginXPLerp()
-{
-	XPState_t& xpstate = GetXPState();
-	if ( xpstate.BeginXPDeltaLerp() )
+	// Don't do anything until we get our initialize
+	if ( !revealState.m_bInitialized && !bInitial )
+		return;
+
+	bool bCurrentlyInPlacement = false;
+
+	auto pMatchGroup = GetMatchGroupDescription( eMatchGroup );
+	if ( pMatchGroup )
 	{
-		// Play sounds if this is a change
-		if ( xpstate.GetTargetXP() > xpstate.GetStartXP() )
-		{
-			PlaySoundEntry( "MatchMaking.RankProgressTickUp" );
-		}
-		else if ( xpstate.GetTargetXP() < xpstate.GetStartXP() )
-		{
-			PlaySoundEntry( "MatchMaking.RankProgressTickDown" );
-		}
+		bCurrentlyInPlacement = pMatchGroup->BLocalPlayerIsInPlacement();
 	}
 
-	if ( steamapicontext && steamapicontext->SteamUser() )
+	// Initialize if we haven't yet
+	if ( !revealState.m_bInitialized )
 	{
-		GCSDK::CGCClientSharedObjectCache *pSOCache = GCClientSystem()->GetSOCache( steamapicontext->SteamUser()->GetSteamID() );
+		revealState.m_bInitialized = true;
+		revealState.m_bNeedsRankReveal = false;
+		revealState.m_bLastSeenInPlacement = bCurrentlyInPlacement;
+	}
 
-		if ( pSOCache )
+	// If we were in placement, but aren't now then we need to reveal our rank
+	if ( !bCurrentlyInPlacement && revealState.m_bLastSeenInPlacement )
+	{
+		revealState.m_bNeedsRankReveal = true;
+	}
+
+	revealState.m_bLastSeenInPlacement = bCurrentlyInPlacement;
+}
+
+
+void CPvPRankPanel::BeginRatingLerp()
+{
+	if ( !m_pMatchDesc )
+		return;
+
+	if ( !IsVisible() && !m_bShowSourcesWhenHidden )
+	{
+		LevelInfo_t levelCur = GetLevel( true );
+
+		m_pMatchDesc->SetupBadgePanel( m_pModelPanel, levelCur, ClientSteamContext().GetLocalPlayerSteamID(), BIsInPlacement() || m_bRevealingRank );
+
+		// Update progress bars and labels
+		if ( m_bShowRating )
 		{
-			GCSDK::CGCClientSharedObjectTypeCache *pTypeCache = pSOCache->FindTypeCache( CXPSource::k_nTypeID );
+			m_nLastLerpRating = GetRatingState().GetCurrentRating();
+			UpdateRatingControls( GetRatingState().GetStartRating(), m_nLastLerpRating, levelCur );
+		}
+		UpdateRankControls( levelCur );
 
-			if ( pTypeCache )
+		return;
+	}
+
+	if ( m_bShowRating )
+	{
+		RatingState_t& xpstate = GetRatingState();
+		if ( xpstate.BeginRatingDeltaLerp() && !BIsInPlacement() )
+		{
+			// Play sounds if this is a change
+			if ( xpstate.GetTargetRating() > xpstate.GetStartRating() )
 			{
-				CUtlVector< CXPSource* > vecSources;
+				PlaySoundEntry( "MatchMaking.RankProgressTickUp" );
+			}
+			else if ( xpstate.GetTargetRating() < xpstate.GetStartRating() )
+			{
+				PlaySoundEntry( "MatchMaking.RankProgressTickDown" );
+			}
+		}
 
-				// Grab all the XP sources we want to show
-				for ( uint32 i = 0; i < pTypeCache->GetCount(); ++i )
+		if ( !steamapicontext || !steamapicontext->SteamUser() )
+			return;
+	
+		GCSDK::CGCClientSharedObjectCache *pSOCache = GCClientSystem()->GetSOCache( steamapicontext->SteamUser()->GetSteamID() );
+		if ( !pSOCache )
+			return;
+
+		GCSDK::CGCClientSharedObjectTypeCache *pTypeCache = pSOCache->FindTypeCache( CXPSource::k_nTypeID );
+		if ( pTypeCache && !BIsInPlacement() )
+		{
+			CUtlVector< CXPSource* > vecSources;
+
+			// Grab all the XP sources we want to show
+			for ( uint32 i = 0; i < pTypeCache->GetCount(); ++i )
+			{
+				CXPSource *pXPSource = (CXPSource*)pTypeCache->GetObject( i );
+
+				if ( pXPSource->Obj().match_group() == m_eMatchGroup )
 				{
-					CXPSource *pXPSource = (CXPSource*)pTypeCache->GetObject( i );
-
-					if ( pXPSource->Obj().match_group() == m_eMatchGroup )
-					{
-						vecSources.AddToTail( pXPSource );
-					}
+					vecSources.AddToTail( pXPSource );
 				}
+			}
 					
-				// Sort them so users get a consistent experience
-				vecSources.Sort( &SortXPSources );
+			// Sort them so users get a consistent experience
+			vecSources.SortPredicate( []( const CXPSource* pLeft, const CXPSource* pRight )
+			{
+				return pLeft->Obj().type() < pRight->Obj().type();
+			} );
 					
-				// Show the sources
-				FOR_EACH_VEC( vecSources, i )
-				{
-					CXPSource *pXPSource = vecSources[ i ];
-					CScrollingXPSourcePanel* pSourcePanel = new CScrollingXPSourcePanel( this, "XPSourcePanel", pXPSource->Obj(), Plat_FloatTime() + ( i * tf_xp_breakdown_interval.GetFloat() ) );
-					pSourcePanel->MakeReadyForUse();
+			// Show the sources
+			FOR_EACH_VEC( vecSources, i )
+			{
+				CXPSource* pSource = vecSources[ i ];
+				auto& source = pSource->Obj();
 
-					// Offset from the BGPanel.
-					pSourcePanel->SetPos( m_pBGPanel->GetXPos() + m_iXPSourceNotificationCenterX - ( pSourcePanel->GetWide() * 0.5f ), m_pBGPanel->GetYPos() + m_pXPBar->GetYPos() + YRES( 22 ) - pSourcePanel->GetTall() );
-				}
+				static wchar_t wszOutString[ 128 ];
+				wchar_t wszCount[ 16 ];
+				_snwprintf( wszCount, ARRAYSIZE( wszCount ), L"%d", source.amount() );
+				const wchar_t *wpszFormat = g_pVGuiLocalize->Find( g_XPSourceDefs[ source.type() ].m_pszFormattingLocToken );
+				g_pVGuiLocalize->ConstructString_safe( wszOutString,
+													   wpszFormat,
+													   3,
+													   g_pVGuiLocalize->Find( g_XPSourceDefs[ source.type() ].m_pszTypeLocToken ),
+													   wszCount,
+													   g_pVGuiLocalize->Find( m_pProgressionDesc->GetRankUnitsLocToken() ) );
+
+				int nX, nY;
+				m_pXPBar->GetPos( nX, nY );
+				nX += m_pXPBar->GetWide() / 2; // Center it
+				nY -= YRES( 10 ); // Up a bit so it's not ON the bar
+				m_pXPBar->ParentLocalToScreen( nX, nY );
+
+				CreateScrollingIndicator( nX,
+										  nY,
+										  wszOutString,
+										  g_XPSourceDefs[ source.type() ].m_pszSoundName,
+										  i * tf_xp_breakdown_interval.GetFloat(),
+										  0,
+										  m_pMatchDesc->BUsesStickyRanks() ? 0 : -25,
+										  source.amount() >= 0 );
+
 			}
 		}
 	}
 
-	GTFGCClientSystem()->AcknowledgePendingXPSources( m_eMatchGroup );
+	// Sticky ranks just do their effects right away since they dont lerp anything meaningful for ranks
+	if ( m_pMatchDesc->BUsesStickyRanks() )
+	{
+		const LevelInfo_t& oldLevel = GetLevel( false );
+		const LevelInfo_t& newLevel = GetLevel( true );
+
+		if ( m_bShowModel )
+		{
+			if ( ( !BIsInPlacement() && newLevel.m_nLevelNum > oldLevel.m_nLevelNum ) || m_bRevealingRank ) // Level up :)
+			{
+				PlayLevelUpEffects( newLevel );
+				s_rankReavealState[ m_eMatchGroup ].m_bNeedsRankReveal = false;
+			}
+			else if ( !BIsInPlacement() && newLevel.m_nLevelNum < oldLevel.m_nLevelNum ) // Level down :(
+			{
+				PlayLevelDownEffects( newLevel );
+			}
+		}
+
+		UpdateRankControls( newLevel );
+	}
+
+	
+	UpdateRevealState( m_eMatchGroup );
+	m_bRevealingRank = false;
+	GTFGCClientSystem()->AcknowledgePendingRatingAndSources( m_eMatchGroup );
 }
 
 void CPvPRankPanel::UpdateBaseState()
@@ -619,15 +810,25 @@ void CPvPRankPanel::UpdateBaseState()
 	if ( !m_pProgressionDesc || m_pModelPanel == NULL )
 		return;
 
+	// Make sure our reveal state is initialized
+	if ( !s_rankReavealState[ m_eMatchGroup ].m_bInitialized )
+	{
+		UpdateRevealState( m_eMatchGroup );
+	}
+
 	// Set our "last seen" variables so things dont try to interpolate
-	m_nLastLerpXP = GetXPState().GetCurrentXP();
-	LevelInfo_t levelCur = m_pProgressionDesc->GetLevelForExperience( m_nLastLerpXP );
+	LevelInfo_t levelCur = GetLevel( false );
 	m_nLastSeenLevel = levelCur.m_nLevelNum;
 
-	m_pProgressionDesc->SetupBadgePanel( m_pModelPanel, levelCur );
+	m_pMatchDesc->SetupBadgePanel( m_pModelPanel, levelCur, ClientSteamContext().GetLocalPlayerSteamID(), BIsInPlacement() || m_bRevealingRank );
 
 	// Update progress bars and labels
-	UpdateControls( GetXPState().GetStartXP(), m_nLastLerpXP, levelCur );
+	if ( m_bShowRating )
+	{
+		m_nLastLerpRating = GetRatingState().GetCurrentRating();
+		UpdateRatingControls( GetRatingState().GetStartRating(), m_nLastLerpRating, levelCur );
+	}
+	UpdateRankControls( levelCur );
 }
 
 void CPvPRankPanel::OnAnimEvent( KeyValues *pParams )
@@ -637,49 +838,72 @@ void CPvPRankPanel::OnAnimEvent( KeyValues *pParams )
 	// a flashy maneuver to mask the bodygroup change pop
 	if ( FStrEq( pParams->GetString( "name" ), "AE_CL_BODYGROUP_SET_VALUE" ) && m_pProgressionDesc )
 	{
-		const LevelInfo_t& levelCur = m_pProgressionDesc->GetLevelForExperience( m_nLastLerpXP );
-		m_pProgressionDesc->SetupBadgePanel( m_pModelPanel, levelCur );
+		const RatingState_t& ratingState = GetRatingState();
+		const LevelInfo_t& levelCur = m_pMatchDesc->BUsesStickyRanks() ? GetLevel( true ) 
+									: m_pProgressionDesc->GetLevelForRating( ratingState.GetCurrentRating() );
+		m_pMatchDesc->SetupBadgePanel( m_pModelPanel, levelCur, ClientSteamContext().GetLocalPlayerSteamID(), BIsInPlacement() );
 	}
 }
 
 void CPvPRankPanel::PlayLevelUpEffects( const LevelInfo_t& level ) const
 {
-	m_pModelPanel->PlaySequence( "level_up" );
-	PlaySoundEntry( level.m_pszLevelUpSound );
-	g_pClientMode->GetViewportAnimationController()->StartAnimationSequence( m_pXPBar, "PvPRankLevelUpXPBar", false);
-	
-	EditablePanel* pModelContainer = const_cast< CPvPRankPanel* >( this )->FindControl< EditablePanel >( "ModelContainer" );
-	if ( pModelContainer )
+	if ( m_bShowModel )
 	{
-		g_pClientMode->GetViewportAnimationController()->StartAnimationSequence( pModelContainer, "PvPRankLevelUpModel", false );
+		m_pModelPanel->PlaySequence( "level_up" );
+		PlaySoundEntry( level.m_pszLevelUpSound );
+		EditablePanel* pModelContainer = const_cast< CPvPRankPanel* >( this )->FindControl< EditablePanel >( "ModelContainer" );
+		if ( pModelContainer )
+		{
+			g_pClientMode->GetViewportAnimationController()->StartAnimationSequence( pModelContainer, "PvPRankLevelUpModel", false );
+		}
+	}
+
+	g_pClientMode->GetViewportAnimationController()->StartAnimationSequence( m_pXPBar, "PvPRankLevelUpXPBar", false);
+
+	wchar_t wszOutString[ 128 ];
+	m_pProgressionDesc->GetLocalizedLevelTitle( level, wszOutString, 128 );
+	if ( m_pBGPanel )
+	{
+		m_pBGPanel->SetDialogVariable( "level", wszOutString );
 	}
 }
 
 void CPvPRankPanel::PlayLevelDownEffects( const LevelInfo_t& level ) const
 {
-	g_pClientMode->GetViewportAnimationController()->StartAnimationSequence( m_pXPBar, "PvPRankLevelDownXPBar", false);
-	m_pModelPanel->PlaySequence( "level_down" );
-
-	EditablePanel* pModelContainer = const_cast< CPvPRankPanel* >( this )->FindControl< EditablePanel >( "ModelContainer" );
-	if ( pModelContainer )
+	if ( m_bShowModel )
 	{
-		g_pClientMode->GetViewportAnimationController()->StartAnimationSequence( pModelContainer, "PvPRankLevelDownModel", false );
+		g_pClientMode->GetViewportAnimationController()->StartAnimationSequence( m_pXPBar, "PvPRankLevelDownXPBar", false);
+		m_pModelPanel->PlaySequence( "level_down" );
+		EditablePanel* pModelContainer = const_cast< CPvPRankPanel* >( this )->FindControl< EditablePanel >( "ModelContainer" );
+		if ( pModelContainer )
+		{
+			g_pClientMode->GetViewportAnimationController()->StartAnimationSequence( pModelContainer, "PvPRankLevelDownModel", false );
+		}
+	}
+
+	wchar_t wszOutString[ 128 ];
+	m_pProgressionDesc->GetLocalizedLevelTitle( level, wszOutString, 128 );
+	if ( m_pBGPanel )
+	{
+		m_pBGPanel->SetDialogVariable( "level", wszOutString );
 	}
 }
 
-void CPvPRankPanel::SetMatchGroup( EMatchGroup eMatchGroup )
+void CPvPRankPanel::SetMatchGroup( ETFMatchGroup eMatchGroup )
 {
 	if ( m_eMatchGroup != eMatchGroup )
 	{
 		m_eMatchGroup = eMatchGroup;
 		m_pProgressionDesc = NULL;
 
-		const IMatchGroupDescription* pMatchDesc = GetMatchGroupDescription( m_eMatchGroup );
-		if ( pMatchDesc && pMatchDesc->m_pProgressionDesc )
+		m_pMatchDesc = GetMatchGroupDescription( m_eMatchGroup );
+		if ( m_pMatchDesc )
 		{
 			// Snag the progression desc.  We use it often
-			m_pProgressionDesc = pMatchDesc->m_pProgressionDesc;
-			UpdateBaseState();
+			m_pProgressionDesc = m_pMatchDesc->m_pProgressionDesc;
+
+			// Only show rating if displaying rating is not invalid
+			m_bShowRating = m_pMatchDesc->GetCurrentDisplayRating() != k_nMMRating_Invalid;
 		}
 
 		Assert( m_pProgressionDesc );
@@ -692,18 +916,37 @@ void CPvPRankPanel::SetMatchGroup( EMatchGroup eMatchGroup )
 
 void CPvPRankPanel::SOCreated( const CSteamID & steamIDOwner, const CSharedObject *pObject, ESOCacheEvent eEvent )
 {
-	if ( pObject->GetTypeID() != CSOTFLadderData::k_nTypeID )
-		return;
+	if ( pObject->GetTypeID() == CTFRatingData::k_nTypeID )
+	{
+		UpdateBaseState();
+		SetMatchStats();
 
-	SetMatchStats();
+		for( int eMatchGroup = k_eTFMatchGroup_First; eMatchGroup < ETFMatchGroup_ARRAYSIZE; ++eMatchGroup )
+		{
+			UpdateRevealState( (ETFMatchGroup)eMatchGroup, eEvent == eSOCacheEvent_Subscribed 
+											|| eEvent == eSOCacheEvent_ListenerAdded );
+		}
+		m_bRevealingRank = s_rankReavealState[ m_eMatchGroup ].m_bNeedsRankReveal;
+	}
 }
 
 void CPvPRankPanel::SOUpdated( const CSteamID & steamIDOwner, const CSharedObject *pObject, ESOCacheEvent eEvent )
 {
-	if ( pObject->GetTypeID() != CSOTFLadderData::k_nTypeID )
-		return;
+	if ( pObject->GetTypeID() == CTFRatingData::k_nTypeID )
+	{
+		UpdateBaseState();
+		SetMatchStats();
 
-	SetMatchStats();
+		for( int eMatchGroup = k_eTFMatchGroup_First; eMatchGroup < ETFMatchGroup_ARRAYSIZE; ++eMatchGroup )
+		{
+			UpdateRevealState( (ETFMatchGroup)eMatchGroup, eEvent == eSOCacheEvent_Subscribed 
+							   || eEvent == eSOCacheEvent_ListenerAdded );
+		}
+		m_bRevealingRank = s_rankReavealState[ m_eMatchGroup ].m_bNeedsRankReveal;
+
+		if ( m_bInstantlyUpdate )
+			InvalidateLayout();
+	}
 }
 
 void CPvPRankPanel::SetMatchStats( void )
@@ -712,9 +955,9 @@ void CPvPRankPanel::SetMatchStats( void )
 	if ( !pStatsContainer )
 		return;
 
-	CSOTFLadderData *pData = GetLocalPlayerLadderData( m_eMatchGroup );
+	const CSOTFLadderData *pData = GetLocalPlayerLadderData( m_eMatchGroup );
 
-	// Update all stats.  Default to 0 incase we dont have ladder data
+	// Update all stats.  Default to 0 in case we don't have ladder data
 	int nGames = 0, nKills = 0, nDeaths = 0, nDamage = 0, nHealing = 0, nSupport = 0, nScore = 0;
 
 	if ( pData )
@@ -728,6 +971,15 @@ void CPvPRankPanel::SetMatchStats( void )
 		nScore = pData->Obj().score();
 	}
 
+	if ( steamapicontext && steamapicontext->SteamFriends() )
+	{
+		m_pBGPanel->SetDialogVariable( "name", steamapicontext->SteamFriends()->GetPersonaName() );
+	}
+	else
+	{
+		m_pBGPanel->SetDialogVariable( "name", "" );
+	}
+
 	pStatsContainer->SetDialogVariable( "stat_games", LocalizeNumberWithToken( "TF_Competitive_Games", nGames ) );
 	pStatsContainer->SetDialogVariable( "stat_kills", LocalizeNumberWithToken( "TF_Competitive_Kills", nKills ) );
 	pStatsContainer->SetDialogVariable( "stat_deaths", LocalizeNumberWithToken( "TF_Competitive_Deaths", nDeaths ) );
@@ -737,18 +989,20 @@ void CPvPRankPanel::SetMatchStats( void )
 	pStatsContainer->SetDialogVariable( "stat_score", LocalizeNumberWithToken( "TF_Competitive_Score", nScore ) );
 }
 
-CPvPRankPanel::XPState_t& CPvPRankPanel::GetXPState() const
+CPvPRankPanel::RatingState_t& CPvPRankPanel::GetRatingState() const
 {
-	// Singletons for each XPState_t
-	static CUtlMap< EMatchGroup, CPvPRankPanel::XPState_t* > s_mapXPStates( DefLessFunc( EMatchGroup ) );
+	Assert( m_bShowRating );
 
-	auto idx = s_mapXPStates.Find( m_eMatchGroup );
-	if ( idx == s_mapXPStates.InvalidIndex() )
+	// Singletons for each RatingState_t
+	static CUtlMap< ETFMatchGroup, CPvPRankPanel::RatingState_t* > s_mapRatingStates( DefLessFunc( ETFMatchGroup ) );
+
+	auto idx = s_mapRatingStates.Find( m_eMatchGroup );
+	if ( idx == s_mapRatingStates.InvalidIndex() )
 	{
-		idx = s_mapXPStates.Insert( m_eMatchGroup, new CPvPRankPanel::XPState_t( m_eMatchGroup ) );
+		idx = s_mapRatingStates.Insert( m_eMatchGroup, new CPvPRankPanel::RatingState_t( m_eMatchGroup ) );
 	}
 
-	return *s_mapXPStates[ idx ];
+	return *s_mapRatingStates[ idx ];
 }
 
 const char* CPvPRankPanel::GetResFile() const
@@ -759,4 +1013,11 @@ const char* CPvPRankPanel::GetResFile() const
 KeyValues* CPvPRankPanel::GetConditions() const
 {
 	return NULL;
+}
+
+bool CPvPRankPanel::BIsInPlacement() const
+{
+	return m_pMatchDesc &&
+		   m_pMatchDesc->BUsesPlacementMatches() &&
+		   s_rankReavealState[ m_eMatchGroup ].m_bLastSeenInPlacement;
 }

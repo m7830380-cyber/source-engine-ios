@@ -38,7 +38,11 @@
 #define CTFWeaponBaseGrenadeProj C_TFWeaponBaseGrenadeProj
 #include "tf_fx_muzzleflash.h"
 #include "GameEventListener.h"
-#endif
+#endif // CLIENT_DLL
+
+#ifdef GAME_DLL
+#include "ihasgenericmeter.h"
+#endif // GAME_DLL
 
 #define MAX_TRACER_NAME		128
 
@@ -201,6 +205,52 @@ public:
 	bool m_bCallerIsProjectile;
 };
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+class CTraceFilterCollisionArrows : public CTraceFilterEntitiesOnly
+{
+public:
+	DECLARE_CLASS_NOBASE( CTraceFilterCollisionArrows );
+
+	CTraceFilterCollisionArrows( const IHandleEntity *passentity, const IHandleEntity *passentity2 )
+		: m_pPassEnt( passentity ), m_pPassEnt2( passentity2 )
+	{
+	}
+
+	virtual bool ShouldHitEntity( IHandleEntity *pHandleEntity, int contentsMask )
+	{
+		if ( !PassServerEntityFilter( pHandleEntity, m_pPassEnt ) )
+			return false;
+		CBaseEntity *pEntity = EntityFromEntityHandle( pHandleEntity );
+		if ( pEntity )
+		{
+			if ( pEntity == m_pPassEnt2 )
+				return false;
+			if ( pEntity->GetCollisionGroup() == TF_COLLISIONGROUP_GRENADES )
+				return false;
+			if ( pEntity->GetCollisionGroup() == TFCOLLISION_GROUP_ROCKETS )
+				return false;
+			if ( pEntity->GetCollisionGroup() == TFCOLLISION_GROUP_ROCKET_BUT_NOT_WITH_OTHER_ROCKETS )
+				return false;
+			if ( pEntity->GetCollisionGroup() == COLLISION_GROUP_DEBRIS )
+				return false;
+			if ( pEntity->GetCollisionGroup() == TFCOLLISION_GROUP_RESPAWNROOMS )
+				return false;
+			if ( pEntity->GetCollisionGroup() == COLLISION_GROUP_NONE )
+				return false;
+
+			return true;
+		}
+
+		return true;
+	}
+
+protected:
+	const IHandleEntity *m_pPassEnt;
+	const IHandleEntity *m_pPassEnt2;
+};
+
 #define ENERGY_WEAPON_MAX_CHARGE		20
 
 #define TF_PARTICLE_WEAPON_BLUE_1	Vector( 0.345, 0.52, 0.635 )
@@ -213,9 +263,9 @@ public:
 // Base TF Weapon Class
 //
 #if defined( CLIENT_DLL )
-class CTFWeaponBase : public CBaseCombatWeapon, public IHasOwner, public CGameEventListener
+class CTFWeaponBase : public CBaseCombatWeapon, public IHasOwner, public IHasGenericMeter, public CGameEventListener
 #else
-class CTFWeaponBase : public CBaseCombatWeapon, public IHasOwner
+class CTFWeaponBase : public CBaseCombatWeapon, public IHasOwner, public IHasGenericMeter
 #endif
 {
 	DECLARE_CLASS( CTFWeaponBase, CBaseCombatWeapon );
@@ -223,6 +273,7 @@ class CTFWeaponBase : public CBaseCombatWeapon, public IHasOwner
 	DECLARE_PREDICTABLE();
 #if !defined ( CLIENT_DLL )
 	DECLARE_DATADESC();
+	DECLARE_ENT_SCRIPTDESC();
 #endif
 
 	// Setup.
@@ -231,6 +282,7 @@ class CTFWeaponBase : public CBaseCombatWeapon, public IHasOwner
 
 	virtual void Spawn();
 	virtual void Activate( void );
+	virtual void GiveDefaultAmmo( void );
 	virtual void Precache();
 	virtual bool IsPredicted() const			{ return true; }
 	virtual void FallInit( void );
@@ -255,6 +307,11 @@ class CTFWeaponBase : public CBaseCombatWeapon, public IHasOwner
 	virtual const char *GetViewModel( int iViewModel = 0 ) const;
 	virtual const char *GetWorldModel( void ) const;
 
+	virtual Activity ActivityOverride( Activity baseAct, bool *pRequired ) OVERRIDE;
+	
+	virtual poseparamtable_t* GetPlayerPoseParamList( int &iPoseParamCount );
+	virtual poseparamtable_t* GetItemPoseParamList( int &iPoseParamCount );
+
 	virtual bool SendWeaponAnim( int iActivity ) OVERRIDE;
 
 	virtual CBaseEntity	*GetOwnerViaInterface( void ) { return GetOwner(); }
@@ -263,18 +320,28 @@ class CTFWeaponBase : public CBaseCombatWeapon, public IHasOwner
 	virtual void Drop( const Vector &vecVelocity );
 	virtual void UpdateOnRemove( void );
 	virtual bool CanHolster( void ) const;
+	virtual void StartHolsterAnim( void );
 	virtual bool Holster( CBaseCombatWeapon *pSwitchingTo = NULL );
 	virtual bool Deploy( void );
 	virtual bool ForceWeaponSwitch() const OVERRIDE;
 	virtual void Detach( void );
 	virtual void OnActiveStateChanged( int iOldState );
-	virtual bool OwnerCanJump( void ) { return true; }
 	virtual bool VisibleInWeaponSelection( void );
 	virtual void UpdateHands( void );
 
+	void EnableAttack();
+	void DisableAttack();
+	void EnableJump();
+	void DisableJump();
+	void EnableDuck();
+	void DisableDuck();
+
+	virtual bool OwnerCanJump( void ) { return true; }
 	virtual bool OwnerCanTaunt( void ) { return true; }
 	virtual bool CanBeCritBoosted( void );
 	bool CanHaveRevengeCrits( void );
+
+	virtual const CEconItemView *GetTauntItem() const;
 
 	// Extra wearables.
 #ifdef GAME_DLL
@@ -311,6 +378,7 @@ class CTFWeaponBase : public CBaseCombatWeapon, public IHasOwner
 	virtual bool DefaultReload( int iClipSize1, int iClipSize2, int iActivity );
 	void SendReloadEvents();
 	virtual bool IsReloading() const;			// is the weapon reloading right now?
+	virtual float GetReloadSpeedScale() const { return 1.f; }
 
 	virtual bool AutoFiresFullClip( void ) const OVERRIDE;
 	bool AutoFiresFullClipAllAtOnce( void ) const;
@@ -321,7 +389,7 @@ class CTFWeaponBase : public CBaseCombatWeapon, public IHasOwner
 	virtual bool AllowTaunts( void ) { return true; }
 
 	// Fire Rate
-	float ApplyFireDelay( float flDelay ) const;
+	virtual float ApplyFireDelay( float flDelay ) const;
 
 	// Sound.
 	bool PlayEmptySound();
@@ -351,12 +419,12 @@ class CTFWeaponBase : public CBaseCombatWeapon, public IHasOwner
 	virtual void	Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value );
 
 	virtual bool	DeflectProjectiles();
-	virtual bool	DeflectPlayer( CTFPlayer *pTarget, CTFPlayer *pOwner, Vector &vecForward, Vector &vecCenter, Vector &vecSize );
-	virtual bool	DeflectEntity( CBaseEntity *pTarget, CTFPlayer *pOwner, Vector &vecForward, Vector &vecCenter, Vector &vecSize );
+	virtual bool	DeflectPlayer( CTFPlayer *pTarget, CTFPlayer *pOwner, Vector &vecForward );
+	virtual bool	DeflectEntity( CBaseEntity *pTarget, CTFPlayer *pOwner, Vector &vecForward );
 	static void		SendObjectDeflectedEvent( CTFPlayer *pNewOwner, CTFPlayer *pPrevOwner, int iWeaponID, CBaseAnimating *pObject );
 	static float	DeflectionForce( const Vector &size, float damage, float scale );
 	virtual void	PlayDeflectionSound( bool bPlayer ) {}
-	virtual Vector	GetDeflectionSize() { return Vector( 128, 128, 64 ); }
+	virtual float	GetDeflectionRadius() const { return 128.f; }
 
 	virtual float	GetJarateTime() { return 0.f; }
 
@@ -409,7 +477,7 @@ class CTFWeaponBase : public CBaseCombatWeapon, public IHasOwner
 	virtual void		ReapplyProvision( void );
 	virtual float		GetSpeedMod( void ) { return 1.f; };
 
-	virtual bool		CanFireCriticalShot( bool bIsHeadshot = false );
+	virtual bool		CanFireCriticalShot( bool bIsHeadshot = false, CBaseEntity *pTarget = NULL );
 	virtual bool		CanFireRandomCriticalShot( float flCritChance );
 
 	virtual char const	*GetShootSound( int iIndex ) const;
@@ -424,6 +492,8 @@ class CTFWeaponBase : public CBaseCombatWeapon, public IHasOwner
 	virtual int			GetMaxHealthMod() { return 0; }
 
 	virtual float		GetLastDeployTime( void ) { return m_flLastDeployTime; }
+
+	bool				IsPassiveWeapon( void ) const;
 
 	// Energy Weapons
 	virtual bool		IsEnergyWeapon( void ) const { return false; }
@@ -447,6 +517,9 @@ class CTFWeaponBase : public CBaseCombatWeapon, public IHasOwner
 	virtual bool		HasLastShotCritical( void ) { return false; }
 
 	virtual bool		UseServerRandomSeed( void ) const { return true; }
+
+	virtual bool		IsBroken( void ) const { return false; }
+	virtual void		SetBroken( bool bBroken ) {}
 
 // Server specific.
 #if !defined( CLIENT_DLL )
@@ -480,6 +553,10 @@ class CTFWeaponBase : public CBaseCombatWeapon, public IHasOwner
 
 	float			GetClipScale () const { return m_flClipScale; }
 	void			SetClipScale ( float flScale ) { m_flClipScale = flScale; }
+
+	virtual float	GetInitialAfterburnDuration() const { return 0.f; }
+	virtual float	GetAfterburnRateOnHit() const { return 0.f; }
+
 // Client specific.
 #else
 
@@ -493,9 +570,11 @@ class CTFWeaponBase : public CBaseCombatWeapon, public IHasOwner
 	virtual void	ProcessMuzzleFlashEvent( void );
 	virtual void	DispatchMuzzleFlash( const char* effectName, C_BaseEntity* pAttachEnt );
 	virtual int		InternalDrawModel( int flags );
+	virtual bool	OnInternalDrawModel( ClientModelRenderInfo_t *pInfo ) OVERRIDE;
 
 	virtual bool	ShouldPredict();
 	virtual void	PostDataUpdate( DataUpdateType_t updateType );
+	void			UpdateModelIndex();
 	virtual void	OnDataChanged( DataUpdateType_t type );
 	virtual void	OnPreDataChanged( DataUpdateType_t updateType );
 	virtual int		GetWorldModelIndex( void );
@@ -507,6 +586,7 @@ class CTFWeaponBase : public CBaseCombatWeapon, public IHasOwner
 	virtual	float	CalcViewmodelBob( void );
 	BobState_t		*GetBobState();
 	virtual bool	AttachmentModelsShouldBeVisible( void ) OVERRIDE { return (m_iState == WEAPON_IS_ACTIVE) && !IsBeingRepurposedForTaunt(); }
+	virtual void	UpdateAttachmentModels( void ) OVERRIDE;
 
 	virtual bool ShouldEjectBrass() { return true; }
 
@@ -637,27 +717,6 @@ protected:
 	int				m_iAmmoToAdd;
 	float			m_flLastPrimaryAttackTime;
 
-#ifdef GAME_DLL
-	// Stores the number of kills we've made since we last shot & didn't hit a player.
-	// Only hooked up to bullet firing right now, so you'll need to do plumbing if you want it for other weaponry.
-	int				m_iConsecutiveKills;
-
-	// Accuracy tracking
-	float			m_flLastHitTime;
-	int				m_iHitsInTime;
-	int				m_iFiredInTime;
-
-	// Used to generate active-weapon-only regen
-	float			m_flRegenTime;
-
-	// for penetrating weapons with drain - only drain each victim once
-	CHandle< CTFPlayer > m_hLastDrainVictim;
-	CountdownTimer m_lastDrainVictimTimer;
-
-	int				m_iKillStreak;
-	float			m_flClipScale;
-#endif
-
 #ifdef CLIENT_DLL
 	bool m_bOldResetParity;
 	int m_iCachedModelIndex;
@@ -670,6 +729,28 @@ protected:
 	CNetworkVar( float, m_flEnergy );
 
 public:
+#ifdef GAME_DLL
+	// Stores the number of kills we've made since we last shot & didn't hit a player.
+	// Only hooked up to bullet firing right now, so you'll need to do plumbing if you want it for other weaponry.
+	int				m_iConsecutiveKills;
+
+	// Accuracy tracking
+	float			m_flLastHitTime;
+	int				m_iHitsInTime;
+	int				m_iProjectilesFiredInTime;
+
+	// Used to generate active-weapon-only regen
+	float			m_flRegenTime;
+
+	// for penetrating weapons with drain - only drain each victim once
+	CHandle< CTFPlayer > m_hLastDrainVictim;
+	CountdownTimer m_lastDrainVictimTimer;
+
+	int				m_iKillStreak;
+	float			m_flClipScale;
+#endif
+	CNetworkVar( int, m_iConsecutiveShots );
+
 	CNetworkVar(	bool, m_bDisguiseWeapon );
 
 	CNetworkVar(	float, m_flLastFireTime );
@@ -679,8 +760,12 @@ public:
 
 	CNetworkVar( float, m_flObservedCritChance );
 
-	virtual bool CanInspect() const;
+	virtual bool CanInspect() const { return true; }
 	void HandleInspect();
+	
+	virtual void HookAttributes( void ) {};
+	virtual void OnUpgraded( void ) { HookAttributes(); }
+	virtual float GetNextSecondaryAttackDelay( void ) OVERRIDE;
 
 	enum TFWeaponInspectStage
 	{
@@ -692,7 +777,9 @@ public:
 		INSPECT_STAGE_COUNT
 	};
 	TFWeaponInspectStage GetInspectStage() const { return (TFWeaponInspectStage)m_nInspectStage.Get(); }
-	float GetInspectAnimTime() const { return m_flInspectAnimTime; }
+	float GetInspectAnimEndTime() const { return m_flInspectAnimEndTime; }
+
+	virtual bool UsesCenterFireProjectile( void ) const OVERRIDE;
 
 private:
 	CTFWeaponBase( const CTFWeaponBase & );
@@ -702,9 +789,9 @@ private:
 	CNetworkVar( int,	m_nKillComboClass );
 	CNetworkVar( int,	m_nKillComboCount );
 	
-	int GetInspectActivity( TFWeaponInspectStage inspectStage );
+	Activity GetInspectActivity( TFWeaponInspectStage inspectStage );
 	bool IsInspectActivity( int iActivity );
-	CNetworkVar( float, m_flInspectAnimTime );
+	CNetworkVar( float, m_flInspectAnimEndTime );
 	CNetworkVar( int, m_nInspectStage );
 	bool m_bInspecting;
 

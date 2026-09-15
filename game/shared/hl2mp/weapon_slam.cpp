@@ -179,6 +179,26 @@ bool CWeapon_SLAM::Holster( CBaseCombatWeapon *pSwitchingTo )
 	return BaseClass::Holster(pSwitchingTo);
 }
 
+#ifdef GAME_DLL
+const CUtlVector< CBaseEntity* > &CWeapon_SLAM::GetSatchelVector()
+{
+	m_SatchelVector.RemoveAll();
+
+	CBaseEntity* pEntity = NULL;
+
+	while ( ( pEntity = gEntList.FindEntityByClassname( pEntity, "npc_satchel" ) ) != NULL )
+	{
+		CSatchelCharge* pSatchel = dynamic_cast< CSatchelCharge* >( pEntity );
+		if ( pSatchel->m_bIsLive && pSatchel->GetThrower() && GetOwner() && pSatchel->GetThrower() == GetOwner() )
+		{
+			m_SatchelVector.AddToTail( pSatchel );
+		}
+	}
+
+	return m_SatchelVector;
+}
+#endif
+
 //-----------------------------------------------------------------------------
 // Purpose: SLAM has no reload, but must call weapon idle to update state
 // Input  :
@@ -303,9 +323,9 @@ bool CWeapon_SLAM::AnyUndetonatedCharges(void)
 void CWeapon_SLAM::StartSatchelDetonate()
 {
 
-	if ( GetActivity() != ACT_SLAM_DETONATOR_IDLE && GetActivity() != ACT_SLAM_THROW_IDLE && !m_bDetonatorArmed )
+	if ( GetActivity() != ACT_SLAM_DETONATOR_IDLE && GetActivity() != ACT_SLAM_THROW_IDLE )
 		 return;
-
+	
 	// -----------------------------------------
 	//  Play detonate animation
 	// -----------------------------------------
@@ -313,7 +333,7 @@ void CWeapon_SLAM::StartSatchelDetonate()
 	{
 		SendWeaponAnim(ACT_SLAM_DETONATOR_DETONATE);
 	}
-	else if (m_tSlamState == SLAM_SATCHEL_ATTACH || m_tSlamState == SLAM_TRIPMINE_READY)
+	else if (m_tSlamState == SLAM_SATCHEL_ATTACH)
 	{
 		SendWeaponAnim(ACT_SLAM_STICKWALL_DETONATE);
 	}

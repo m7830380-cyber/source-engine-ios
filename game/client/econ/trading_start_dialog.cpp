@@ -320,10 +320,6 @@ bool CTradingStartDialog::ExtractSteamIDFromURL( char *inputURL )
 					inputURL[iLen-1] = '\0';
 				}
 
-				GCSDK::CGCMsg<MsgGCLookupAccount_t> msg( k_EMsgGCLookupAccount );
-				msg.Body().m_uiFindType = GCSDK::k_EFindAccountTypeURL;
-				msg.AddStrData( &inputURL[iIDPrependLen] );
-				GCClientSystem()->BSendMessage( msg );
 
 				// For now, return true and wait.
 				if ( m_pURLSearchingLabel )

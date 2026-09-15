@@ -320,7 +320,7 @@ void CTFFreezePanel::FireGameEvent( IGameEvent * event )
 		if ( !g_TF_PR )
 		{
 			if ( m_pNemesisSubPanel )
-				m_pNemesisSubPanel->SetDialogVariable( "nemesisname", (const char *)NULL );
+				m_pNemesisSubPanel->SetDialogVariable( "nemesisname", (const char *)nullptr );
 			return;
 		}
 
@@ -463,19 +463,23 @@ void CTFFreezePanel::FireGameEvent( IGameEvent * event )
 					if ( bShowItem )
 					{
 						Label* pItemLabel = m_pItemPanel->FindControl<Label>( "ItemLabel" );
+						CEconItemView *pItemToShow = pWeapon->GetAttributeContainer()->GetItem();
 
-						if ( pItemLabel )
+						if ( pItemToShow && !pItemToShow->IsUndefined() )
 						{
-							// Change the label text depending on if they're holding someone else's item
-							CBasePlayer *pOriginalOwner = GetPlayerByAccountID( pWeapon->GetAttributeContainer()->GetItem()->GetAccountID() );
-							bool bOriginalOwner = pOriginalOwner == pKiller;
-							pItemLabel->SetText( bOriginalOwner ? "#FreezePanel_Item" : "#FreezePanel_ItemOtherOwner" );
-							m_pItemPanel->SetDialogVariable( "ownername", bOriginalOwner ? g_PR->GetPlayerName( pOriginalOwner->entindex() ) : "" );
-						}
+							if ( pItemLabel )
+							{
+								// Change the label text depending on if they're holding someone else's item
+								CBasePlayer *pOriginalOwner = GetPlayerByAccountID( pItemToShow->GetAccountID() );
+								bool bOriginalOwner = !pOriginalOwner || pOriginalOwner == pKiller;
+								pItemLabel->SetText( bOriginalOwner ? "#FreezePanel_Item" : "#FreezePanel_ItemOtherOwner" );
+								m_pItemPanel->SetDialogVariable( "ownername", pOriginalOwner ? g_PR->GetPlayerName( pOriginalOwner->entindex() ) : "" );
+							}
 
-						m_pItemPanel->SetDialogVariable( "killername", g_PR->GetPlayerName( m_iKillerIndex ) );
-						m_pItemPanel->SetItem( pWeapon->GetAttributeContainer()->GetItem() );
-						m_pItemPanel->SetVisible( true );
+							m_pItemPanel->SetDialogVariable( "killername", g_PR->GetPlayerName( m_iKillerIndex ) );
+							m_pItemPanel->SetItem( pItemToShow );
+							m_pItemPanel->SetVisible( true );
+						}
 					}
 				}
 				if ( m_pItemPanel && m_pItemPanel->IsVisible() )
@@ -858,6 +862,12 @@ void CTFFreezePanel::UpdateCallout( void )
 //-----------------------------------------------------------------------------
 void CTFFreezePanel::Show()
 {
+	// Josh:
+	// When the freeze panel is first shown( after we have done all the setup of setting strings, dialog vars, etc ),
+	// due to some jank modern TF does with HUD setup, it ends up re - creating all the elements and calling ApplySchemeSettings
+	// which calls LoadControlSettings and such again, which invalidates all of our previous setup!
+	MakeReadyForUse();
+
 	m_flShowCalloutsAt = 0;
 	SetVisible( true );
 }

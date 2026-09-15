@@ -25,9 +25,6 @@ class CHudEurekaEffectTeleportMenu;
 class CHudMenuTauntSelection;
 class CHudInspectPanel;
 class CHudUpgradePanel;
-#ifdef STAGING_ONLY
-class CHudMenuSpyBuild;
-#endif // STAGING_ONLY
 #if defined( _X360 )
 class CTFClientScoreBoardDialog;
 #endif
@@ -96,10 +93,29 @@ public:
 	bool IsUpgradePanelVisible() const;
 	bool IsTauntSelectPanelVisible() const;
 
+	void UpdateSteamRichPresence() const;
+	// Given a client state, match group loc token and pretty map name, build a localized status line.
+	// These are equivalent to 'state', 'matchgrouploc' and 'currentmap' rich presence keys from a player.
+	static bool BuildRichPresenceStatusDirect( wchar_t *pwzOutStatus, size_t uOutSizeBytes,
+	                                           const char *pszState,
+	                                           const char *pszMatchGroupLocToken, const char *pszPrettyMapName );
+	// Safe version
+	template < size_t maxLenInChars >
+	static inline bool BuildRichPresenceStatus( OUT_Z_ARRAY wchar_t (&pwzOutStatus)[maxLenInChars],
+	                                            const char *pszState,
+	                                            const char *pszMatchGroupLocToken, const char *pszPrettyMapName )
+	{
+		return BuildRichPresenceStatusDirect( pwzOutStatus, maxLenInChars, pszState,
+		                                      pszMatchGroupLocToken, pszPrettyMapName );
+	}
+
 	virtual void OnDemoRecordStart( char const* pDemoBaseName ) OVERRIDE;
 	virtual void OnDemoRecordStop() OVERRIDE;
-	
+
+	bool BIsFriendOrPartyMember( C_TFPlayer *pPlayer );
+
 private:
+	virtual bool BCanSendPartyChatMessages() const OVERRIDE;
 	//	void	UpdateSpectatorMode( void );
 
 private:
@@ -108,9 +124,6 @@ private:
 	CHudMenuSpyDisguise 	*m_pMenuSpyDisguise;
 	CHudMenuTauntSelection	*m_pMenuTauntSelection;
 	CHudUpgradePanel		*m_pMenuUpgradePanel;
-#ifdef STAGING_ONLY
-	CHudMenuSpyBuild		*m_pMenuSpyBuild;
-#endif // STAGING_ONLY
 	CHudSpellMenu			*m_pMenuSpell;
 	CHudEurekaEffectTeleportMenu *m_pEurekaTeleportMenu;
 	CHudTeamGoalTournament	*m_pTeamGoalTournament;
@@ -126,12 +139,26 @@ private:
 	int						m_lastServerPort;
 	uint32					m_lastServerConnectTime;
 
+	enum EConnectState {
+		k_eConnectState_Disconnected,
+		k_eConnectState_Connecting,
+		k_eConnectState_Connected,
+	};
+	EConnectState			m_eConnectState           = k_eConnectState_Disconnected;
+	// Valid only when m_eConnectState >= k_eConnectState_Connected
+	// This is the base name of a map, and doesn't include workshop decorations/path/etc.
+	char					m_szMapBaseName[MAX_MAP_NAME] = { 0 };
+
 	float					m_flNextAllowedHighFiveHintTime;
 
+	// When game events should trigger updates, we want to let all other systems think first (e.g. partyclient) as their
+	// state is looked at by the update loop.  Setting this triggers an update on next think.
+	bool					m_bPendingRichPresenceUpdate = false;
 	bool					m_bInfoPanelShown;
 	bool					m_bRestrictInfoPanel;
 
 	void					AskFavoriteOrBlacklist() const;
+	void					RemoveFilesInPath( const char *pszPath ) const;
 
 #if defined( _X360 )
 	CTFClientScoreBoardDialog	*m_pScoreboard;

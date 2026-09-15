@@ -15,7 +15,7 @@
 #include "spectatorgui.h"
 #include "engine/IEngineSound.h"
 #include "c_tf_mvm_boss_progress_user.h"
-#include "hud_macros.h"
+#include "usermessages.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
@@ -54,7 +54,7 @@ ConVar cl_mvm_wave_status_visible_during_wave( "cl_mvm_wave_status_visible_durin
 //-----------------------------------------------------------------------------
 // Purpose: Restore Checkpoint status message
 //-----------------------------------------------------------------------------
-void __MsgFunc_MVMWaveFailed( bf_read &msg )
+USER_MESSAGE( MVMWaveFailed )
 {
 	CTFHudMannVsMachineStatus *pMannVsMachineStatus = GET_HUDELEMENT( CTFHudMannVsMachineStatus );
 	if ( pMannVsMachineStatus )
@@ -66,7 +66,7 @@ void __MsgFunc_MVMWaveFailed( bf_read &msg )
 //-----------------------------------------------------------------------------
 // Purpose: Announce a MVM message on the HUD
 //-----------------------------------------------------------------------------
-void __MsgFunc_MVMAnnouncement( bf_read &msg )
+USER_MESSAGE( MVMAnnouncement )
 {
 	CTFHudMannVsMachineStatus *pMannVsMachineStatus = GET_HUDELEMENT( CTFHudMannVsMachineStatus );
 	if ( pMannVsMachineStatus )
@@ -88,7 +88,7 @@ void __MsgFunc_MVMAnnouncement( bf_read &msg )
 //-----------------------------------------------------------------------------
 // Purpose: Players have won the MvM Pop File
 //-----------------------------------------------------------------------------
-void __MsgFunc_MVMVictory( bf_read &msg )
+USER_MESSAGE( MVMVictory )
 {
 	CTFHudMannVsMachineStatus *pMannVsMachineStatus = GET_HUDELEMENT( CTFHudMannVsMachineStatus );
 	if ( !pMannVsMachineStatus )
@@ -102,7 +102,7 @@ void __MsgFunc_MVMVictory( bf_read &msg )
 //-----------------------------------------------------------------------------
 // Update the time to disconnect / kick
 //-----------------------------------------------------------------------------
-void __MsgFunc_MVMServerKickTimeUpdate( bf_read &msg )
+USER_MESSAGE( MVMServerKickTimeUpdate )
 {
 	CTFHudMannVsMachineStatus *pMannVsMachineStatus = GET_HUDELEMENT( CTFHudMannVsMachineStatus );
 	if ( !pMannVsMachineStatus )
@@ -851,7 +851,14 @@ void CWaveStatusPanel::UpdateEnemyCounts( void )
 
 				if ( pPanel->m_pEnemyCountImageBG  )
 				{
-					pPanel->m_pEnemyCountImageBG->SetBgColor( m_clrNormal );
+					if ( support[i].iFlags & MVM_CLASS_FLAG_MINIBOSS )
+					{
+						pPanel->m_pEnemyCountImageBG->SetBgColor( m_clrMiniBoss );
+					}
+					else
+					{
+						pPanel->m_pEnemyCountImageBG->SetBgColor( m_clrNormal );
+					}
 				}
 
 				if ( pPanel->m_pEnemyCountCritBG )
@@ -911,7 +918,14 @@ void CWaveStatusPanel::UpdateEnemyCounts( void )
 				{
 					if ( pPanel->m_pEnemyCountImageBG )
 					{
-						pPanel->m_pEnemyCountImageBG->SetBgColor( m_clrNormal );
+						if ( mission[i].iFlags & MVM_CLASS_FLAG_MINIBOSS )
+						{
+							pPanel->m_pEnemyCountImageBG->SetBgColor( m_clrMiniBoss );
+						}
+						else
+						{
+							pPanel->m_pEnemyCountImageBG->SetBgColor( m_clrNormal );
+						}
 					}
 					if ( pPanel->m_pEnemyCountCritBG )
 					{
@@ -950,13 +964,20 @@ void CWaveStatusPanel::UpdateEnemyCounts( void )
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-DECLARE_BUILD_FACTORY( CCurrencyStatusPanel );
+DECLARE_HUDELEMENT_DEPTH( CCurrencyStatusPanel, 49 );
 
-CCurrencyStatusPanel::CCurrencyStatusPanel( Panel *parent, const char *name ) : vgui::EditablePanel( parent, name )
+CCurrencyStatusPanel::CCurrencyStatusPanel( const char *pElementName )
+	: CHudElement( pElementName )
+	, vgui::EditablePanel( NULL, "CurrencyStatusPanel" )
 {
+	Panel *pParent = g_pClientMode->GetViewport();
+	SetParent( pParent );
+
+	SetHiddenBits( HIDEHUD_MISCSTATUS );
+
 	m_nCurrency = 0;
 	m_nTargetCurrency = 0;
-	SetDialogVariable( "currency", "" );
+	SetDialogVariable( "currency", "$0" );
 
 	vgui::ivgui()->AddTickSignal( GetVPanel(), 50 );
 }
@@ -966,32 +987,53 @@ void CCurrencyStatusPanel::OnTick( void )
 {
 	BaseClass::OnTick();
 
-	if ( !TFGameRules() || !TFGameRules()->IsMannVsMachineMode() )
+	if ( !IsVisible() )
 		return;
 
 	C_TFPlayer *pLocalPlayer = C_TFPlayer::GetLocalTFPlayer();
-	if ( !pLocalPlayer || 
-		 ( pLocalPlayer->GetTeamNumber() != TF_TEAM_PVE_DEFENDERS ) || 
-		 ( pLocalPlayer->GetPlayerClass()->GetClassIndex() == TF_CLASS_UNDEFINED ) )
+	if ( pLocalPlayer )
 	{
-		if ( IsVisible() )
+		m_nTargetCurrency = pLocalPlayer->GetCurrency();
+
+		if ( UpdateHUD() )
 		{
-			SetVisible( false );
+			pLocalPlayer->EmitSound( "Credits.Updated" );
 		}
-		return;
 	}
+}
 
-	if ( !IsVisible() )
+//-----------------------------------------------------------------------------
+bool CCurrencyStatusPanel::ShouldDraw( void )
+{
+	C_TFPlayer *pLocalPlayer = C_TFPlayer::GetLocalTFPlayer();
+	if ( !pLocalPlayer || pLocalPlayer->GetObserverMode() == OBS_MODE_FREEZECAM || !TFGameRules() || !TFGameRules()->GameModeUsesCurrency() )
 	{
-		SetVisible( true );
+		return false;
 	}
 
-	m_nTargetCurrency = pLocalPlayer->GetCurrency();
-
-	if ( UpdateHUD() )
+	if ( TFGameRules()->IsPVEModeActive() )
 	{
-		pLocalPlayer->EmitSound( "Credits.Updated" );
+		// Josh: Seems like an intentional design decision that
+		// in MvM the money panel stays up when you are dead.
+		// So I am not mirroring the IsAlive change for the non-MvM stuff.
+		if ( pLocalPlayer->GetTeamNumber() != TF_TEAM_PVE_DEFENDERS || 
+			 pLocalPlayer->GetPlayerClass()->GetClassIndex() == TF_CLASS_UNDEFINED )
+		{
+			return false;
+		}
 	}
+	else
+	{
+		if ( !pLocalPlayer->IsAlive() ||
+			 pLocalPlayer->GetTeamNumber() == TEAM_UNASSIGNED ||
+			 pLocalPlayer->GetTeamNumber() == TEAM_SPECTATOR ||
+			 pLocalPlayer->GetPlayerClass()->GetClassIndex() == TF_CLASS_UNDEFINED )
+		{
+			return false;
+		}
+	}
+
+	return CHudElement::ShouldDraw();
 }
 
 //-----------------------------------------------------------------------------
@@ -1582,7 +1624,7 @@ void CMvMBombCarrierProgress::ApplySchemeSettings( IScheme *pScheme )
 //-----------------------------------------------------------------------------
 // CTFHudMannVsMachineStatus 
 //-----------------------------------------------------------------------------
-DECLARE_HUDELEMENT( CTFHudMannVsMachineStatus );
+DECLARE_HUDELEMENT_DEPTH( CTFHudMannVsMachineStatus, 48 );
 
 CTFHudMannVsMachineStatus::CTFHudMannVsMachineStatus( const char *pElementName ) :
 CHudElement( pElementName ), BaseClass( NULL, "HudMannVsMachineStatus" )
@@ -1622,11 +1664,6 @@ CHudElement( pElementName ), BaseClass( NULL, "HudMannVsMachineStatus" )
 	ListenForGameEvent( "mvm_begin_wave" );
 
 	vgui::ivgui()->AddTickSignal( GetVPanel(), 100 );
-
-	HOOK_MESSAGE( MVMWaveFailed );
-	HOOK_MESSAGE( MVMAnnouncement );
-	HOOK_MESSAGE( MVMVictory );
-	HOOK_MESSAGE( MVMServerKickTimeUpdate );
 }
 
 //-----------------------------------------------------------------------------
@@ -1952,7 +1989,20 @@ void CTFHudMannVsMachineStatus::ReopenVictoryPanel( void )
 //-----------------------------------------------------------------------------
 void CTFHudMannVsMachineStatus::UpdateBombCarrierProgress ( void )
 {
-	m_pUpgradeLevelContainer->SetVisible( TFGameRules()->State_Get() == GR_STATE_RND_RUNNING );
+	bool bEnabledFlags = false;
+
+	for ( int i=0; i<ICaptureFlagAutoList::AutoList().Count(); ++i )
+	{
+		CCaptureFlag *pFlag = static_cast<CCaptureFlag *>( ICaptureFlagAutoList::AutoList()[i] );
+
+		if ( pFlag && !pFlag->IsDisabled() )
+		{
+			bEnabledFlags = true;
+			break;
+		}
+	}
+
+	m_pUpgradeLevelContainer->SetVisible( bEnabledFlags && ( TFGameRules()->State_Get() == GR_STATE_RND_RUNNING ) );
 
 	if ( !m_pUpgradeLevel1 || !m_pUpgradeLevel2 || !m_pUpgradeLevel3 || !m_pUpgradeLevelBoss )
 		return;

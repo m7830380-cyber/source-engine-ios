@@ -44,8 +44,9 @@ enum ETFGCMsg
 {
 	k_EMsgGCReportWarKill =						5001; //War kill tracking. No longer in use
 
-	k_EMsgGCVoteKickBanPlayer =					5018; // client => GC
-	k_EMsgGCVoteKickBanPlayerResult =			5019; // game server => GC
+	// Used to record non-match votekicks, disabled in GDPR sweep but could be made compliant and returned.
+//	k_EMsgGCVoteKickBanPlayer =					5018; // client => GC
+//	k_EMsgGCVoteKickBanPlayerResult =			5019; // game server => GC
 
 	k_EMsgGCKickPlayer_DEPRECATED =				5020; // GC => game server & client
 
@@ -158,7 +159,8 @@ enum ETFGCMsg
 	//k_EMsgGCChatMessage =						6212;
 	//k_EMsgGCOtherJoinedChannel =				6213;
 	//k_EMsgGCOtherLeftChannel =				6214;
-	k_EMsgGCCreateOrUpdateParty =				6233; // sent from party leader to GC to create party, and/or start/stop the search
+	// Removed, more fine-grained messages used now
+	//k_EMsgGCCreateOrUpdateParty =				6233; // sent from party leader to GC to create party, and/or start/stop the search
 	//k_EMsgGCConnectedPlayers =				6234;
 	k_EMsgGCAbandonCurrentGame =				6235;
 	//k_EMsgGCStopFindingMatch =				6236;
@@ -173,12 +175,14 @@ enum ETFGCMsg
 	// k_EMsgGCPlayerFailedToConnect =				6288; // Response message added later as 6520 below
 	k_EMsgGCExitMatchmaking =					6289;
 	//k_EMsgGCAdjustMatchSearchCriteria =		6290;
-	k_EMsgGCAcceptInvite =						6291;
-	k_EMsgGCAcceptInviteResponse =				6292;
+	// Not in use
+	//k_EMsgGCAcceptInvite =					6291;
+	//k_EMsgGCAcceptInviteResponse =			6292;
 	k_EMsgGCMatchmakingProgress =				6293;
 	k_EMsgGCMvMVictoryInfo =					6294;
 	k_EMsgGCGameServerMatchmakingStatus =		6295;
-	k_EMsgGCCreateOrUpdatePartyReply =			6296; // GC -> client, to acknowledge party change request
+	// Removed, more fine-grained messages used now
+	// k_EMsgGCCreateOrUpdatePartyReply =	    6296; // GC -> client, to acknowledge party change request
 
 	k_EMsgGCMvMVictory  =						6297; // game server -> GC, report MvM Victory
 	k_EMsgGCMvMVictoryReply  =					6298; // GC -> game server, acknowledge of recieving MvM Victory
@@ -234,6 +238,7 @@ enum ETFGCMsg
 	k_EMsgGCMatchHistoryLoad					=	6526; // Client -> GC.
 
 	k_EMsgGC_AcknowledgeXP						=	6527; // Client -> GC. Acknowledge pending XP
+
 	k_EMsgGCDataCenterPing_Update				=	6528; // client -> GC.
 
 	k_EMsgGC_NotificationAcknowledge			=	6529; // Client -> GC.  Acknowledge notifications
@@ -258,12 +263,83 @@ enum ETFGCMsg
 	k_EMsgGC_ChangeMatchPlayerTeamsRequest					=	6539; // Game server -> GC.
 	k_EMsgGC_ChangeMatchPlayerTeamsResponse					=	6540; // GC -> Game server
 
-	k_EMsgGCPlayerVoteKickedAfterLeavingMatch	=	6551; // game server -> GC, a player was votekicked after they left a match
-	k_EMsgGCPlayerVoteKickedAfterLeavingMatchResponse	=	6552; // GC -> game server. Response message for above
 
+	k_EMsgGC_QuestIdentify						=	6541; // Client -> GC. Identify a quest
+	k_EMsgGC_QuestDevGive						=	6542; // Client -> GC. Request a quest
+
+	k_EMsgGCQuestComplete_Debug					=	6544; // Client -> GC.  Make progress on, and complete a quest
+
+	k_EMsgGC_QuestMapDebug						=	6545; // Client -> GC.  Debug commands from the client
+	k_EMsgGC_QuestMapUnlockNode					=	6547; // Client -> GC.  Activates a node.  Does the unlock if necessary.
+	k_EMsgGC_QuestMapPurchaseReward				=	6549; // Client -> GC.	Purchase a reward item using CYOA Cash
+	k_EMsgGC_SetDisablePartyQuestProgress		=	6550; // Client -> GC.	Set whether the user would like to allow party members to make progress.  Flips a bit on their account.
+
+	// Removed by reworked votekick system (see ProcessMatchVoteKick)
+//	k_EMsgGCPlayerVoteKickedAfterLeavingMatch	=	6551; // game server -> GC, a player was votekicked after they left a match
+//	k_EMsgGCPlayerVoteKickedAfterLeavingMatchResponse	=	6552; // GC -> game server. Response message for above
+
+	k_EMsgGCQuestProgressReport				=	6553; // GC -> Client.  Tell a client what great stuff just happened with their quest
+
+	// Upgraded party system messages, replacing CreateOrUpdateParty. Reliable.
+	//
+	k_EMsgGCParty_SetOptions					= 6554; // Client -> GC.  Update a party's criteria/settings. Reliable.
+	k_EMsgGCParty_SetOptionsResponse			= 6555; // GC -> Client.  Reliable message response.
+	k_EMsgGCParty_QueueForMatch					= 6556; // Client -> GC.  Request a party enter queue for MM. Reliable.
+	k_EMsgGCParty_QueueForMatchResponse			= 6557; // GC -> Client.  Reliable message response.
+
+	k_EMsgGCParty_RemoveFromQueue				= 6558; // Client -> GC.  Request a party leave queue for MM. Reliable.
+	k_EMsgGCParty_RemoveFromQueueResponse		= 6559; // GC -> Client.  Reliable message response.
+
+	// These are not reliable -- we are not going to predict someone as invited, and having the invite 'take' many
+	// seconds later would not be expected.  Better to no-op in case of connectivity issues.
+	k_EMsgGCParty_InvitePlayer					= 6560; // Client -> GC.  Invite a player to our party
+	k_EMsgGCParty_RequestJoinPlayer				= 6561; // Client -> GC.  Request to join a player's current party
+
+	k_EMsgGCParty_SendChat						= 6562; // Client -> GC.  Send a party chat message.
+	k_EMsgGCParty_ChatMsg						= 6563; // GC -> Client.  Got a party chat message.
+
+	k_EMsgGCQuestNodeTurnIn						= 6564; // Client -> GC.  Turn in a quest node and redeem loot.
+
+	k_EMsgGCConsumePaintKit						= 6565; // Client -> GC.  Consume a paintkit and get a painted item
+	k_EMsgGC_Painkit_DevGrant					= 6566; // Clinet -> GC.  Dev only.  Give ALL supported items of a specified paintkit.
+
+	k_EMsgGCParty_QueueForStandby				= 6567; // Client -> GC.  Request to be queued to join your party's lobby
+	k_EMsgGCParty_QueueForStandbyResponse		= 6568; // GC -> Client.  Reliable message response.
+
+	k_EMsgGCParty_RemoveFromStandbyQueue		= 6569; // Client -> GC.  Request to cancel standby queue
+	k_EMsgGCParty_RemoveFromStandbyQueueResponse = 6570; // GC -> Client.  Reliable message response.
+
+	k_EMsgGCParty_ClearPendingPlayer			= 6571; // Client -> GC.  Leader -- revoke/reject a invite/join request on the party
+	k_EMsgGCParty_ClearPendingPlayerResponse	= 6572; // GC -> Client.  Reliable message response.
+
+	k_EMsgGCParty_ClearOtherPartyRequest		= 6573; // Client -> GC.  Invitee -- Clear or reject an outgoing join request/incoming invite
+	k_EMsgGCParty_ClearOtherPartyRequestResponse = 6574; // GC -> Client.  Reliable message response.
+
+	k_EMsgGCParty_PromoteToLeader				= 6575; // Client -> GC.  Make another group member the leader
+	k_EMsgGCParty_KickMember					= 6576; // Client -> GC.  Make another group member be not here
+
+	k_EMsgGCQuestStrangeEvent					= 6577; // game server -> GC.  Record quest strange event
+
+	k_EMsgGC_AcceptLobbyInvite					= 6578; // Client -> GC.  Accepts a lobby invite, joining the lobby
+	k_EMsgGC_AcceptLobbyInviteReply				= 6579; // GC -> Client.  Reliable message response.
+
+	k_EMsgGC_SDRTicket							= 6580; // GC -> Client.  Hey, here's an SDR ticket.  You're probably about to need it
+
+	k_EMsgGC_ProcessMatchVoteKick				= 6581; // game server -> GC, players voted to kick someone
+	k_EMsgGC_ProcessMatchVoteKickResponse		= 6582; // GC -> game server. Response message for above
+
+    // never sent directly to gc, only via webapi
+    //k_EMsgGC_AuthorizeServerItemRetrieval     = 6583; // client -> gs -> webapi: authorize the server to retrieve particular items
+
+	k_EMsgGCToGC_SendAccountBannedNotifications	= 6584; // GC->GC, via SQL message queue, send notifications to reporters that a user they reported was banned
+	k_EMsgGCToGC_SendNotification				= 6585; // GC->GC, via SQL message queue, send a notification.  Used for queuing multiple notifications transactionally without locking everyone involved.
+
+	k_EMsgGCParty_MMError						= 6586; // GC -> client, feedback for when an MM error ends your queue/match/etc
 
 	// Development only messages
 	k_EMsgGCDev_GrantWarKill =					10001; //War kill tracking. No longer in use
+
+	// Max message = 15000 (for tf_gcmessages_interserver)
 };
 
 
@@ -300,8 +376,8 @@ message CMsgGCTFSpecificItemBroadcast
 //
 // k_EMsgGC_WorldStatusBroadcast
 //
-// This is the global heartbeat the GC sends to clients periodically. It should only contain live data that clients need
-// to always be aware of, such as used on the global menu or to control global client state.
+// This is the global status the GC sends to clients on connect, and when it changes thereafter. It should only contain
+// live data that clients need to always be aware of, such as used on the global menu or to control global client state.
 //
 // I am obliged to mention, due to a certain email thread, that once TF is making better use of its WebAPI, this would
 // be better served as a GetWorldStatus call clients can scrape, to take full advantage of caching and so on.
@@ -310,8 +386,14 @@ message CMsgGCTFSpecificItemBroadcast
 // !! Consider updating ITFGlobalStatus::GetWorldStatus when you change this
 message CMsgTFWorldStatus
 {
-	optional	bool		beta_stress_test_event_active = 1 [ default = false ];
+	optional bool          beta_stress_test_event_active = 1 [ default = false ];
+	optional ETFMatchGroup event_match_group             = 2 [ default = k_eTFMatchGroup_Invalid ];
+	optional fixed32       event_expire_time             = 3 [ default = 0 ];
+	optional uint32        active_client_version         = 4;
+	// Repeated list of match groups that are currently inactive
+	repeated ETFMatchGroup disabled_match_groups         = 5;
 };
+
 
 
 //
@@ -341,26 +423,28 @@ message CSOTFMapContribution
 //
 // CMsgTFVoteKickBanPlayer
 //
-message CMsgTFVoteKickBanPlayer
-{
-	optional	uint32		account_id_subject = 1;
-	optional	uint32		kick_reason = 2;
-};
+// Disabled, see comment in message enum above
+//  message CMsgTFVoteKickBanPlayer
+//  {
+//  	optional	uint32		account_id_subject = 1;
+//  	optional	uint32		kick_reason = 2;
+//  };
 
 
 //
 // CMsgTFVoteKickBanPlayerResult
 //
-message CMsgTFVoteKickBanPlayerResult
-{
-	optional	uint32		account_id_initiator = 1;			
-	optional	uint32		account_id_subject = 2;
-	optional	uint32		kick_reason = 3;
-	optional	bool		kick_successful = 4;
-	optional	uint32		num_yes_votes = 5;
-	optional	uint32		num_no_votes = 6;
-	optional	uint32		num_possible_votes = 7;
-};
+// Disabled, see comment in message enum above
+//  message CMsgTFVoteKickBanPlayerResult
+//  {
+//  	optional	uint32		account_id_initiator = 1;
+//  	optional	uint32		account_id_subject = 2;
+//  	optional	uint32		kick_reason = 3;
+//  	optional	bool		kick_successful = 4;
+//  	optional	uint32		num_yes_votes = 5;
+//  	optional	uint32		num_no_votes = 6;
+//  	optional	uint32		num_possible_votes = 7;
+//  };
 
 
 //
@@ -802,100 +886,428 @@ message CMsgGC_PickupItemEligibility_QueryResponse
 //
 message CSOTFPartyMember
 {
-//	optional	fixed64	steamid = 1;		// SteamID of player
-	optional	bool	owns_ticket = 2;		// Do they have a ticket in their inventory?
-	optional	uint32	completed_missions = 3;		// Which missions have they completed (of the currently selected tour)
-	optional	uint32	badge_level = 4;		// Level of their badge
-	optional	bool	squad_surplus = 5;		// Presenting voucher for the team to get "surplus"
+	message Activity
+	{
+		// The lobby state of the member.  May not be in the associated party lobby.
+		optional fixed64       lobby_id           = 1;
+		// Match group of said lobby
+		optional ETFMatchGroup lobby_match_group  = 2;
+		// If the party member is currently involved in some match/invite that prevents multi-queuing
+		optional bool          multiqueue_blocked = 3;
+		// Is this player online
+		optional bool          online             = 4;
+		// Player's reported version
+		optional uint32        client_version     = 5;
+	}
 
-//	optional    float latitude = 6;	// approxmimate world location of this player
-//	optional    float longitude = 7;
+//	optional fixed64                        steamid             = 1;  // SteamID of player
+	optional bool                           owns_ticket         = 2;  // Do they have a ticket in their inventory?
+	optional uint32                         completed_missions  = 3;  // Which missions have they completed (of the
+	                                                                  // currently selected tour)
+	optional uint32                         badge_level         = 4;  // Level of their badge
+	// Deprecated, now part of per player criteria
+//	optional bool                           squad_surplus       = 5;  // Presenting voucher for the team to get
+	// "surplus"
 
-	optional	bool	is_banned = 8 [ default = false ]; // mark the player as banned for abandoning MannUp mode
-	optional	bool	competitive_access = 9;	// access to ranked ladder mode
+	// approxmimate world location of this player
+//	optional    float                       latitude            = 6;
+//	optional    float                       longitude           = 7;
+
+	optional bool                           competitive_access  = 9;  // access to ranked ladder mode
 
 	// These two no longer shared with clients in favor of competitive_beta_access flag
-//	optional	bool	phone_verified = 10 [ default = false ];	// account is phone verified on Steam
-//	optional	bool	two_factor_enabled = 11 [ default = false ];	// two-factor auth
-	optional	uint32	ladder_rank = 12;
-	optional	bool	is_low_priority = 13 [ default = false ];
-	optional	uint32	experience = 14;
-	optional	uint32	skillrating = 15 [ default = 10000 ];
+//	optional bool                           phone_verified      = 10; // account is phone verified on Steam
+//	optional bool                           two_factor_enabled  = 11; // two-factor auth
+	optional uint32                         experience          = 14;
+	optional CTFPerPlayerMatchCriteriaProto player_criteria     = 16;
+	optional Activity                       activity            = 17;
+
+	optional bool                           casual_banned       = 18;
+	optional bool                           ranked_banned       = 19;
+	optional bool                           casual_low_priority = 20;
+	optional bool                           ranked_low_priority = 21;
+	// Is this member requesting standby to join their party's lobby
+	optional bool                           lobby_standby       = 22;
+
+	// Deprecated - with multi-queuing this is ambiguous, and nothing was actually using it that couldn't get the data
+	// elsewhere.
+//	optional double                         normalized_rating   = 24;
+//	optional uint32                         rank                = 25; // For the client to display
 };
 
-enum TF_MatchmakingMode
+//
+// TFPendingPartyMember
+//   Invited or requested to join this party
+message TFPendingPartyMember
 {
-	TF_Matchmaking_INVALID = 0; // dummy sentinel value
-	TF_Matchmaking_MVM = 1;
-	TF_Matchmaking_LADDER = 2;
-	TF_Matchmaking_CASUAL = 3;
-};
-
-enum TF_Matchmaking_WizardStep
-{
-	TF_Matchmaking_WizardStep_INVALID = 0;
-	TF_Matchmaking_WizardStep_MVM_PLAY_FOR_BRAGGING_RIGHTS = 1;
-	TF_Matchmaking_WizardStep_MVM_TOUR_OF_DUTY = 2;
-	TF_Matchmaking_WizardStep_MVM_CHALLENGE = 3;
-	TF_Matchmaking_WizardStep_SEARCHING = 4;
-	TF_Matchmaking_WizardStep_LADDER = 5;
-	TF_Matchmaking_WizardStep_CASUAL = 6;
+	enum EType {
+		Invited         = 0;
+		RequestedToJoin = 1;
+	}
+	optional fixed64 steamid = 1;
+	optional EType   type    = 2 [ default = Invited ];
+	optional fixed64 inviter = 3; // User who invited us
 }
+
+// This is used for party members to sync with what the leader is looking at in the UI
+//
+// Values should only be here if they are not captured by search criteria, which is also sync'd between members.
+enum ETFSyncedMMMenuStep
+{
+	k_eTFSyncedMMMenuStep_Invalid                = -1;
+	// Not looking at MM UI/synced
+	k_eTFSyncedMMMenuStep_None                   = 0;
+	// Configuring currently selected match group.
+	k_eTFSyncedMMMenuStep_Configuring_Mode       = 1;
+	// Selecting between possible MvM match groups/modes
+	k_eTFSyncedMMMenuStep_MvM_Selecting_Mode     = 2;
+	// Choosing a MvM tour
+	k_eTFSyncedMMMenuStep_MvM_Selecting_Tour     = 3;
+	// Choosing specific MvM missions (within selected tour, in match groups that use tours)
+	k_eTFSyncedMMMenuStep_MvM_Selecting_Missions = 4;
+}
+
+message TFSyncedMMUIState
+{
+	optional ETFSyncedMMMenuStep menu_step   = 1 [ default = k_eTFSyncedMMMenuStep_None ];
+	optional ETFMatchGroup       match_group = 2 [ default = k_eTFMatchGroup_Invalid ];
+}
+
+// Master list of matchgroups
+//
+//   Database/networked values, do not re-order/re-use.
+//
+//   When adding a new matchgroup, add case handling to:
+//     GetMatchSizeForMatchGroup(), GetMatchGroupName(), GetMatchGroupLocalizationName(), GetServerPoolName(),
+//     GetMaxLobbySizeForMatchGroup(), YldWebAPIServersByDataCenter()
+enum ETFMatchGroup
+{
+	option allow_alias = true;
+	// Aliases should be after the thing they refer to so protobuf designates the actual one as the canonical
+	// name. (e.g. ETFMatchGroup_Name(0) should be _MvM_Practice not _First)
+
+	k_eTFMatchGroup_Invalid        = -1;
+
+	// MvM
+	k_eTFMatchGroup_MvM_Practice   = 0;
+	k_eTFMatchGroup_MvM_MannUp     = 1;
+
+	k_eTFMatchGroup_First          = 0; // First valid group.
+	k_eTFMatchGroup_MvM_Default    = 0; // Default = Practice
+	k_eTFMatchGroup_MvM_First      = 0;
+	k_eTFMatchGroup_MvM_Last       = 1;
+
+	// Ladder
+	k_eTFMatchGroup_Ladder_6v6     = 2;
+	k_eTFMatchGroup_Ladder_9v9     = 3;
+	k_eTFMatchGroup_Ladder_12v12   = 4;
+
+	k_eTFMatchGroup_Ladder_Default = 2; // Default = 6v6
+	k_eTFMatchGroup_Ladder_First   = 2;
+	k_eTFMatchGroup_Ladder_Last    = 4;
+
+	// Casual
+	k_eTFMatchGroup_Casual_6v6     = 5;
+	k_eTFMatchGroup_Casual_9v9     = 6;
+	k_eTFMatchGroup_Casual_12v12   = 7;
+
+	k_eTFMatchGroup_Casual_Default = 7; // Default = 12v12
+	k_eTFMatchGroup_Casual_First   = 5;
+	k_eTFMatchGroup_Casual_Last    = 7;
+
+	// Event
+	k_eTFMatchGroup_Event_Placeholder	 = 8;
+
+	k_eTFMatchGroup_Event_Default  = 8; // Default = Competitive 12v12
+	k_eTFMatchGroup_Event_First    = 8;
+	k_eTFMatchGroup_Event_Last     = 8;
+};
 
 //
 // Search criteria
 //
-message CMsgMatchSearchCriteria
+
+message CTFGroupMatchCriteriaProto
 {
-	optional	TF_MatchmakingMode	matchmaking_mode = 7;
-	optional	bool	late_join_ok = 5;	// Is my party willing to join late?
-	optional	uint32	custom_ping_tolerance = 13 [ default = 0 ]; // 0 == no custom tolerance
+	// Deprecated in favor of match_group
+	// optional TF_MatchmakingMode     matchmaking_mode         = 7;
+	optional    bool                   late_join_ok             = 5; // Is my party willing to join late?
+	optional    uint32                 custom_ping_tolerance    = 13 [ default = 0 ]; // 0 == no custom tolerance
+
+	// Deprecated - with multi-queue, you are no longer locked to one match group, and criteria is universal (not one
+	// per match-group)
+//	optional    ETFMatchGroup          match_group              = 14;
 
 	// MvM options
-	//LEGACY: optional	string	challenge = 4;		// Requested pop file (empty string for "any")
-	optional	string	mvm_mannup_tour = 10;		// Selected Mann Up tour.  (Mann UP only)
-	repeated	string	mvm_missions = 9;		// Pop files we are willing to play.  NOTE: An empty list means "no change", it doesn't mean "none".  We pass "invalid" to indicate an empty list
-	optional	bool	play_for_bragging_rights = 6;	// Are we going to play for bragging rights?  If false, we are just playing for fun
+	// Deprecated:
+	// optional string                 challenge                = 4; // Requested pop file (empty string for "any")
+	optional    string                 mvm_mannup_tour          = 10; // Selected Mann Up tour.  (Mann UP only)
+	repeated    string                 mvm_mannup_missions      = 15; // Pop files we are willing to play in Mann Up.  NOTE: An empty list means "no change", it doesn't mean "none".  We pass "invalid" to indicate an empty list
+	repeated    string                 mvm_bootcamp_missions    = 16; // Pop files we are willing to play in Boot Camp.  NOTE: An empty list means "no change", it doesn't mean "none".  We pass "invalid" to indicate an empty list
 
-	// Quickplay options
-	optional	uint32	quickplay_game_type = 8;		// eQuickplayGameType
-
-	// Ladder
-	optional	uint32	ladder_game_type = 11;			// 
+	// Pre-universal-parties fields that were deprecated
+	// optional bool                   play_for_bragging_rights = 6; // Are we going to play for bragging rights?  If false, we are just playing for fun
+	// optional uint32                 quickplay_game_type      = 8; // eQuickplayGameType
+	// optional uint32                 ladder_game_type         = 11;
 
 	// Casual
-	optional	CMsgCasualMatchmakingSearchCriteria casual_criteria = 12;	// Search criteria for casual games
+	optional    CTFCasualMatchCriteria casual_criteria          = 12; // Search criteria for casual games
 };
 
-//
-// CMsgCasualMatchmakingSearchCriteria
-//
-message CMsgCasualMatchmakingSearchCriteria
+// CCasualMatchCriteria
+//   Subset of search criteria
+message CTFCasualMatchCriteria
 {
 	repeated fixed32 selected_maps_bits = 3; // Bitfield of selected maps from the "master_maps_list" in _maps.txt
 }
 
-//
-// Message used for these purposes:
-// - Create a party to start matchmaking
-// - Update match search criteria or party properties
-// - Leave the queue, but keep the party intact
-// - Adjust whether a particular player in the lobby wants to cash in their squad surplus voucher
-message CMsgCreateOrUpdateParty
+// PerPlayerMatchCriteria
+//   Subset of criteria that is per member of a given searching group
+message CTFPerPlayerMatchCriteriaProto
 {
-	optional	CMsgMatchSearchCriteria	search_criteria = 1;
-	//optional	bool	search_active = 2;
-	optional	fixed64	steam_lobby_id = 3;
-	optional	bool	squad_surplus = 4;
-	optional	TF_Matchmaking_WizardStep	wizard_step = 5;
-	optional	uint32	client_version = 6 [ default = 1225 ];
+	optional bool mvm_squad_surplus = 1; // Presenting voucher for the team to get "surplus"
+}
+
+message CTFPartyOptions
+{
+	// Anti-race, GC may remove us from parties while we are sending this -- okay to send messages for parties you are
+	// removed from, message is dropped (client handles queuing a new message when they notice)
+	// Should the included fields of this criteria be merged with previously sent, or replace all existing.
+	optional bool                            overwrite_existing = 1; // Overwrite or merge with existing
+	optional CTFGroupMatchCriteriaProto      group_criteria     = 2;
+	optional CTFPerPlayerMatchCriteriaProto  player_criteria    = 3;
+	// Deprecated: Changed format
+//	optional ETFMatchmakingSyncedUIState     player_uistate     = 4;
+	// Local players current ui state, only sent up if relevant (e.g. player is leader)
+	optional TFSyncedMMUIState               player_uistate     = 5;
+}
+
+//
+//  k_EMsgGCParty_SetOptions
+//   Sets client-configurable settings for this party.  Setting criteria prior to queuing is used to allow other party
+//   members to see the criteria in UI state.  Setting criteria while queued does not take effect immediately, however,
+//   it is valid to send repeated QueueForMatchmaking messages to update your queue state/re-queue as necessary.
+message CMsgPartySetOptions
+{
+	optional fixed64         party_id         = 1;
+	optional CTFPartyOptions options          = 2;
 };
 
-message CMsgCreateOrUpdatePartyReply
+//  k_EMsgGCParty_SetOptionsResponse
+message CMsgPartySetOptionsResponse
+{}
+
+//
+// k_EMsgGCParty_QueueForMatch
+//
+
+message CMsgPartyQueueForMatch
 {
-	optional	uint32	result = 1; // EResult code
-	optional	string message = 2; // Diagnostic
-	optional	TF_Matchmaking_WizardStep	wizard_step = 3; // current wizard step
+	optional fixed64         party_id         = 1;
+	optional CTFPartyOptions final_options    = 2;
+	optional ETFMatchGroup   match_group      = 3;
+}
+
+// k_EMsgGCParty_QueueForMatchResponse
+message CMsgPartyQueueForMatchResponse
+{}
+
+//
+// k_EMsgGCParty_QueueForStandby
+//   Put self in line to be added to party's existing lobby/match
+//
+
+message CMsgPartyQueueForStandby
+{
+	// Expected current party (anti-race)
+	optional fixed64 party_id       = 1;
+	// Expected party lobby ID (anti-race)
+	optional fixed64 party_lobby_id = 2;
+}
+
+// k_EMsgGCParty_QueueForStandbyResponse
+message CMsgPartyQueueForStandbyResponse
+{}
+
+//
+// k_EMsgGCParty_RemoveFromQueue
+//   Removes party from match queue
+//
+
+message CMsgPartyRemoveFromQueue
+{
+	optional fixed64       party_id    = 1;
+	optional ETFMatchGroup match_group = 2;
+}
+
+// k_EMsgGCParty_RemoveFromQueueResponse
+message CMsgPartyRemoveFromQueueResponse
+{}
+
+//
+// k_EMsgGCParty_RemoveFromStandbyQueue
+//   Removes player from the standby queue
+//
+
+message CMsgPartyRemoveFromStandbyQueue
+{
+	optional fixed64 party_id = 1;
+}
+
+// k_EMsgGCParty_RemoveFromStandbyQueueResponse
+message CMsgPartyRemoveFromStandbyQueueResponse
+{}
+
+
+//
+// Party invites
+//   Once a join request and an invite are paired up, the player is added to the party
+//
+
+// k_EMsgGCParty_InvitePlayer
+//   Invite a player to our party.
+message CMsgPartyInvitePlayer
+{
+	// If currently in a party, passed here -- otherwise assumed race.  If zero a party is transparently instantiated
+	// (clients always behave as if they are in a party-of-one)
+	optional fixed64 party_id                  = 1;
+	// Player to invite
+	optional fixed64 player_id                 = 2;
+	// If we're expecting there to already be a request to join our party.
+	//
+	// If true when this message arrives on the GC but there's not request to join there, then this message will be
+	// ignored
+	optional bool    expecting_request_to_join = 3;
+}
+
+//
+//
+// k_EMsgGCParty_RequestJoinPlayer
+//   Request to join the given player's current party
+
+message CMsgPartyRequestJoinPlayer
+{
+	// If currently in a party, passed here -- otherwise assumed race (joining another party drops your current party)
+	optional fixed64 current_party_id = 1;
+
+	// Only one of these should be passed
+
+	// Player we are requesting to join
+	optional fixed64 join_player_id   = 2;
+	// Party we are requesting to join
+	optional fixed64 join_party_id    = 3;
+
+	// If we're expecting there to already be an invite to join this party.
+	//
+	// If true when this message arrives on the GC but there's not request to join there, then this message will be
+	// ignored
+	optional bool    expecting_invite = 4;
+
+}
+
+//
+//
+// k_EMsgGCParty_ClearPendingPlayer
+//   Clear requests on the controlled party - outgoing invite or incoming join request, direction irrelevant
+message CMsgPartyClearPendingPlayer
+{
+	optional fixed64 party_id          = 1;
+	optional fixed64 pending_player_id = 2;
+}
+
+//
+//
+// k_EMsgGCParty_MMError
+//   GC -> client, informs client of an out-of-flow GC problem such as being nuked from queue or a match
+message CMsgPartyMMError
+{
+	enum Type
+	{
+		QUEUE_KICK_NO_PING = 1;
+		QUEUE_KICK_AUTH    = 2;
+	}
+	optional Type type = 1;
+}
+
+//
+//
+// k_EMsgGCParty_ClearPendingPlayerResponse
+//   Clear/reject an invite or clear/cancel a request to join other parties (that is, CTFPartyInvites on this player)
+message CMsgPartyClearPendingPlayerResponse
+{}
+
+// k_EMsgGCParty_ClearOtherPartyRequest
+message CMsgPartyClearOtherPartyRequest
+{
+	optional fixed64 other_party_id = 1;
+}
+
+// k_EMsgGCParty_ClearOtherPartyRequestResponse
+message CMsgPartyClearOtherPartyRequestResponse
+{}
+
+//
+//
+// k_EMsgGCParty_PromoteToLeader
+message CMsgPartyPromoteToLeader
+{
+	optional fixed64 party_id      = 1;
+	optional fixed64 new_leader_id = 2;
+}
+
+//
+//
+// k_EMsgGCParty_KickMember
+
+message CMsgPartyKickMember
+{
+	optional fixed64 party_id  = 1;
+	optional fixed64 target_id = 2;
+}
+
+
+//
+// Party chat
+//   Not to be confused with the more involved GC Chat system TF doesn't presently use.  If we do begin using it, these
+//   should probably go away in favor, but for now this is a very very simple subset of what that system does.
+//
+
+enum ETFPartyChatType
+{
+	k_eTFPartyChatType_Invalid                    = 0;
+	k_eTFPartyChatType_MemberChat                 = 1;
+	// TODO(Universal Parties): So-and-so invited so-and-so message
+	// Synthetic messages -- these shouldn't actually be on the wire, but are generated clientside (it knows of these
+	// state changes)
+	k_eTFPartyChatType_Synthetic_MemberJoin       = 1000;
+	k_eTFPartyChatType_Synthetic_MemberLeave      = 1001;
+	k_eTFPartyChatType_Synthetic_SendFailed       = 1002;
+	k_eTFPartyChatType_Synthetic_MemberOnline     = 1003;
+	k_eTFPartyChatType_Synthetic_MemberOffline    = 1004;
+}
+
+//
+// k_EMsgGCParty_SendChat
+//
+
+// Client sending a chat message
+message CMsgPartySendChat
+{
+	optional fixed64 party_id = 1;
+	optional string  msg      = 2;
+}
+
+//
+// k_EMsgGCParty_ChatMsg
+//
+
+// Receiving a chat message
+message CMsgPartyChatMsg
+{
+	// System messages will usually not have an actor
+	optional ETFPartyChatType type     = 1;
+	optional fixed64          actor_id = 2; // foo
+	optional string           msg      = 3; // foo
 }
 
 //
@@ -903,49 +1315,78 @@ message CMsgCreateOrUpdatePartyReply
 //
 message CSOTFParty
 {
-	optional	uint64		party_id = 1 [ (key_field) = true ];
-	optional	fixed64		leader_id = 2;
-	repeated	fixed64		member_ids = 3;
-	repeated	CSOTFPartyMember members = 13;
-//	optional	uint32		game_mode = 4;
-	repeated	fixed64		pending_invites = 5;
-	optional	uint64		associated_lobby_id = 35;
+	optional uint64                      party_id                        = 1 [ (key_field) = true ];
+	optional fixed64                     leader_id                       = 2;
+	repeated fixed64                     member_ids                      = 3;
+	repeated CSOTFPartyMember            members                         = 13;
+//	optional uint32                      game_mode                       = 4;
+	// Superceded by pending_members below
+//	repeated fixed64                     pending_invites                 = 5;
+	optional uint64                      associated_lobby_id             = 35;
+	optional ETFMatchGroup               associated_lobby_match_group    = 40;
 
-	enum State
+	// State, Deprecated -- can now be queued for multiple groups, in-match state captured by associated_lobby
+//	enum State
+//	{
+//		UI                                = 0;
+//		FINDING_MATCH                     = 1;
+//		IN_MATCH                          = 2;
+//		AWAITING_RESERVATION_CONFIRMATION = 3;
+//	}
+//	optional State                       state                           = 6;
+
+	//
+	// Matchmaking Queue requests
+	//
+	message QueueEntry
 	{
-		UI = 0;
-		FINDING_MATCH = 1;
-		IN_MATCH = 2;
-		AWAITING_RESERVATION_CONFIRMATION = 3;
+		optional ETFMatchGroup match_group = 1;
+		optional fixed32       queued_time = 2;
 	}
-	optional	State		state = 6;
-	optional	TF_Matchmaking_WizardStep	wizard_step = 29;
-	optional	uint32		started_matchmaking_time = 7;
-//	optional	uint32		searching_players = 8;				// how many players are currently searching in the matchmaking system
-	repeated 	uint32		searching_players_by_group = 10;	// how many players are currently searching in the matchmaking system
-	optional	fixed64		steam_lobby_id = 27; // Steam lobby associated with this party
+	repeated QueueEntry                  matchmaking_queues              = 43;
+
+	optional CTFGroupMatchCriteriaProto  group_criteria                  = 37;
+
+	// Deprecated
+//	optional TF_Matchmaking_WizardStep   wizard_step                     = 29;
+//	optional uint32                      searching_players               = 8; // how many players are currently searching in the matchmaking system
+//	optional string                      search_key                      = 9 [ (hidden) = true ]; // key used to find servers, optional
+//	repeated uint32                      searching_players_by_group      = 10; // how many players are currently searching in the matchmaking system
+//	optional fixed64                     steam_lobby_id                  = 27; // Steam lobby associated with this party
+
+	// Deprecated -- now is per-queue in matchmaking_queues
+//	optional uint32                      started_matchmaking_time        = 7;
 
 	//
-	// Search criteria
+	// Deprecated Search criteria, now part of nested messages
 	//
-	optional	TF_MatchmakingMode	matchmaking_mode = 30; // high level search mode.
-	optional	bool		search_late_join_ok = 23;			// Is my party willing to join late?
-	optional	string		search_mvm_mannup_tour = 32;		// Selected Mann Up tour.  (Mann UP only)
-	repeated	string		search_mvm_missions = 31;		// MvM: Pop files we are willing to play.  list must not be empty, if we are in MvM mode!
-	optional	bool		search_play_for_bragging_rights = 26;	 // Do we want to play for loot?
-	optional	uint32		search_quickplay_game_type = 28; // eQuickplayGameType
-	optional	uint32		search_ladder_game_type = 33;	 // 
-	optional	CMsgCasualMatchmakingSearchCriteria search_casual = 34;
-	optional	uint32		custom_ping_tolerance = 36;
+//	optional TF_MatchmakingMode          matchmaking_mode                = 30; // high level search mode.
+//	optional bool                        search_late_join_ok             = 23; // Is my party willing to join late?
+//	optional string                      search_mvm_mannup_tour          = 32; // Selected Mann Up tour.  (Mann UP only)
+//	repeated string                      search_mvm_missions             = 31; // MvM: Pop files we are willing to play.  list must not be empty, if we are in MvM mode!
+//	optional bool                        search_play_for_bragging_rights = 26; // Do we want to play for loot?
+//	optional uint32                      search_quickplay_game_type      = 28; // eQuickplayGameType
+//	optional uint32                      search_ladder_game_type         = 33;
+//	optional uint32                      custom_ping_tolerance           = 36;
+//	optional CMsgCasualMatchmakingSearchCriteria search_casual           = 34;
 
 	//
 	// Search status
 	//
-//	optional	uint32		matching_players = 14;				// how many players are currently matching us
-//	optional	float		search_fraction = 15;				// fraction of search range (expands over time)
-	optional	uint32		matchmaking_ban_time = 18;			// party can't matchmake until this time
-	optional	uint32		matchmaking_ban_account_id = 19;		// accountID of the player preventing matchmaking
-	optional	uint32		matchmaking_low_priority_time = 20;	// if set, any official matchmaking mode will treat this party as low priority (superceded by prevent_match_until_date)
+
+	// Deprecated
+//	optional uint32                      matching_players                = 14; // how many players are currently matching us
+//	optional float                       search_fraction                 = 15; // fraction of search range (expands over time)
+	optional uint32                      casual_banned_time				= 18; // party can't matchmake until this time
+	optional uint32                      casual_low_priority_time		= 20; // if set, any official matchmaking mode will treat this party as low priority (superceded by prevent_match_until_date)
+	optional uint32                      ranked_banned_time				= 41; // party can't matchmake until this time
+	optional uint32                      ranked_low_priority_time		= 42; // if set, any official matchmaking mode will treat this party as low priority (superceded by prevent_match_until_date)
+
+	// Deprecated: Changed format
+	// optional ETFMatchmakingSyncedUIState leader_ui_state              = 38;
+	// The leader's current UI action, for party members to watch him do things
+	optional TFSyncedMMUIState           leader_ui_state                 = 44;
+	repeated TFPendingPartyMember        pending_members                 = 39;
 };
 
 
@@ -956,14 +1397,26 @@ message CSOTFPartyInvite
 {
 	message PartyMember
 	{
-		optional	string	name = 1;
-		optional	fixed64	steam_id = 2;
-		optional	uint32	avatar = 3;
+		// Deprecated -- available on client via steam now
+//		optional  string name    = 1;
+		optional fixed64 steamid = 2;
+		// Deprecated -- available on client via steam now
+//		optional  uint32 avatar  = 3;
 	};
-	optional	uint64	group_id = 1 [ (key_field) = true ];
-	optional	fixed64	sender_id = 2;
-	optional	string	sender_name = 3;
-	repeated	PartyMember members = 4;
+
+	// CTFPlayer::EPendingType
+	enum Type
+	{
+		PENDING_INVITE       = 1;
+		PENDING_JOIN_REQUEST = 2;
+	};
+
+	optional uint64      group_id    = 1 [ (key_field) = true ];
+	optional fixed64     inviter     = 2;
+	// Deprecated -- available on the client via steam now
+//	optional string      sender_name = 3;
+	repeated PartyMember members     = 4;
+	optional Type        type        = 5;
 };
 
 enum TF_GC_GameState
@@ -1007,12 +1460,22 @@ enum TFMatchLeaveReason
 	TFMatchLeaveReason_GC_REMOVED  = 6; // Dropped via GC (e.g. refused to rejoin, removed themselves from the lobby, but wasn't clear to leave)
 };
 
-enum TFLobbyReadyState
+// Stored in DB
+enum TFVoteKickReason
 {
-	TFLobbyReadyState_UNDECLARED = 0;
-	TFLobbyReadyState_ACCEPTED = 1;
-	TFLobbyReadyState_DECLINED = 2;
-}
+	TFVoteKickReason_Invalid  = -1;
+	TFVoteKickReason_Other    = 0;
+	TFVoteKickReason_Cheating = 1;
+	TFVoteKickReason_Idle     = 2;
+	TFVoteKickReason_Scamming = 3;
+};
+
+//enum TFLobbyReadyState
+//{
+//	TFLobbyReadyState_UNDECLARED = 0;
+//	TFLobbyReadyState_ACCEPTED = 1;
+//	TFLobbyReadyState_DECLINED = 2;
+//}
 
 //enum TFBotDifficulty
 //{
@@ -1029,37 +1492,59 @@ enum TFLobbyReadyState
 //};
 
 //
-// CTFLobbyMember
+// CTFLobbyPlayerProto
 //
-message CTFLobbyMember
+message CTFLobbyPlayerProto
 {
 	enum ConnectState
 	{
-		INVALID = 0; // Dummy / sentinel value used for debugging
+		INVALID             = 0; // Dummy / sentinel value used for debugging
 		RESERVATION_PENDING = 1; // GC is telling gameserver it wants to add a player, and is asking gameserver to acknowledge
-		RESERVED = 2; // Gameserver has acknowledged reservation
-		CONNECTED = 3; // Is currently connected (and joined through matchmaking)
-		//CONNECTED_AD_HOC = 4; // Connected ad-hoc.
-		DISCONNECTED = 5; // Connected at somepoint via match making but is no longer connected
+		RESERVED            = 2; // Gameserver has acknowledged reservation
+		CONNECTED           = 3; // Is currently connected (and joined through matchmaking)
+		//CONNECTED_AD_HOC  = 4; // Connected ad-hoc.
+		DISCONNECTED        = 5; // Connected at somepoint via match making but is no longer connected
 	};
 
-	optional	fixed64		id = 1 [ (key_field) = true ];
-	optional	TF_GC_TEAM	team = 3;
-//	optional	bool		connected_to_game_server = 4;
-	optional	ConnectState		connect_state = 13;
-	optional	string		name = 6;
+	enum Type {
+		INVALID_PLAYER   = 0; // Shouldn't happen
+		MATCH_PLAYER     = 1; // Member of the match
+		STANDBY_PLAYER   = 2; // On standby to join the match
+		OBSERVING_PLAYER = 3; // Observing the match, not a part of it
+	};
+
+	optional fixed64           id                          = 1 [ (key_field) = true ];
+	optional TF_GC_TEAM        team                        = 3;
+//	optional bool              connected_to_game_server    = 4;
+	optional ConnectState      connect_state               = 13;
+	optional string            name                        = 6;
 	// Deprecated, not used by clients or servers, moved to memcache object
-//	optional    float 		latitude = 8;	// approxmimate world location of this player
-//	optional    float 		longitude = 9;
-//	optional	bool		ready = 10; // Is this player ready
-	optional	TFLobbyReadyState	ready_state = 11;
-	optional 	uint64		party_id = 12;
-	optional	bool		squad_surplus = 14;
-	optional	uint32		badge_level = 15;
-	optional	uint32		skillrating = 16 [ default = 10000 ];
-	optional	uint32		last_connect_time = 17; // last time player was online
+//	optional    float          latitude                    = 8;  // approxmimate world location of this player
+//	optional    float          longitude                   = 9;
+//	optional bool              ready                       = 10; // Is this player ready
+	// Not in use
+//	optional TFLobbyReadyState ready_state                 = 11;
+	// Renamed from party_id to reflect that it is the party they matched in with, and does not change
+	optional  uint64           original_party_id           = 12;
+	optional bool              squad_surplus               = 14;
+	optional uint32            badge_level                 = 15;
+	optional uint32            last_connect_time           = 17; // last time player was online or their state changed.
+	optional Type              type                        = 19;
+	optional double            normalized_rating           = 20;
+	optional double            normalized_uncertainty      = 22;
+	optional uint32            rank                        = 21;
+
 	// Deprecated, abandons are handled by the gameserver match management logic now
-	// optional	bool		quitting_results_in_penalty = 18; // If true, then if the player quits, it wil result in a penalty of some sort.
+//	optional bool              quitting_results_in_penalty = 18; // If true, then if the player quits, it wil result in a penalty of some sort.
+
+	optional bool              chat_suspension             = 23; // If this player has a chat/interaction suspension in
+	                                                             // effect.
+};
+
+message CTFLobbyInviteProto
+{
+	optional fixed64       lobby_id    = 1 [ (key_field) = true ];
+	optional ETFMatchGroup match_group = 2;
 };
 
 //
@@ -1082,11 +1567,11 @@ message CTFLobbyMember
 //}
 
 // pending player report that is waiting for a matchID
-message CLobbyPendingPlayerReport
-{
-	optional	uint32				account_id = 1;
-	optional	fixed32				date = 2;
-}
+//message CLobbyPendingPlayerReport
+//{
+//	optional	uint32				account_id = 1;
+//	optional	fixed32				date = 2;
+//}
 
 //
 // Match sign out message (deprecated)
@@ -1150,90 +1635,132 @@ message CLobbyPendingPlayerReport
 //
 message CSOTFGameServerLobby
 {
-	optional	uint64				lobby_id = 1 [ (key_field) = true ];
-	repeated	CTFLobbyMember	members = 2;							// members assigned to this lobby
-	// Moved to GC-only CTFMemcachedLobby
-	// repeated	CTFLobbyMember	left_members = 7;						// members who purposefully quit the lobby (declined the rejoin request or clicked the 'finish game' button at game end)
-	optional	fixed64				leader_id = 11;
-	optional	fixed64				server_id = 6 [default = 0 ];							// game server assigned to this lobby
-	//optional	uint32				game_mode = 3;
-	repeated	fixed64				pending_invites = 10;
+	optional	uint64                    lobby_id               = 1 [ (key_field) = true ];
+	repeated	CTFLobbyPlayerProto       members                = 2;  // members assigned to this lobby
+	// Members who purposefully quit the lobby (declined the rejoin request or clicked the 'finish game' button at game
+	// end).  Moved to GC-only CTFMemcachedLobby.
+//	repeated	CTFLobbyPlayerProto       left_members           = 7;
+	// Doesn't really have much meaning, but part of playergroups API.  Not storing for now - API just returns
+	// k_steamIDNil
+//	optional	fixed64                   leader_id              = 11;
+	// game server assigned to this lobby
+	optional	fixed64                   server_id              = 6 [ default = 0 ];
+//	optional	uint32                    game_mode              = 3;
+//	repeated	fixed64                   pending_invites        = 10; // Replaced by pending_members, different type
 	enum State
 	{
-		UNKNOWN = 0;      // Broken/bad lobby state. Lobbies can be in this state if we go down and restore from
+		UNKNOWN      = 0; // Broken/bad lobby state. Lobbies can be in this state if we go down and restore from
 		                  // memcache during their setup, for instance
-		SERVERSETUP = 1;  // selecting a server and getting it ready
-		RUN = 2;          // server is ready, connect to it and play!
-//		POSTGAME = 3;     // game is over, server is uploading stats, will signal when its free
-//		READYUP = 4;      // waiting for all players to ready up
-//		NOTREADY = 5;     // lobby wasn't ready
+		SERVERSETUP  = 1; // selecting a server and getting it ready
+		RUN          = 2; // server is ready, connect to it and play!
+//		POSTGAME     = 3; // game is over, server is uploading stats, will signal when its free
+//		READYUP      = 4; // waiting for all players to ready up
+//		NOTREADY     = 5; // lobby wasn't ready
 //		SERVERASSIGN = 6; // selecting a server for a MATCH lobby, occurs before ready up
 	}
-	optional	State		state = 4 [ default = UNKNOWN ];
-	optional	string		connect = 5; // connect string usually something like "ip:port", only valid during state RUN
-//REMOVED	optional	string		search_key = 8 [ (hidden) = true ]; // key used to find servers, optional
-//	optional	CTFLobbyGCPrivate gc_private = 9 [ (hidden) = true ]; // private lobby data on the GC not sent to clients or servers
-	enum LobbyType
-	{
-		INVALID = -1;
-		MATCH = 0;					// lobby was created by the matchmaking system
-		PRACTICE = 1;				// practice lobby with members chosen by the players
-		TOURNAMENT = 2;				// special type of practice lobby where we record stats and only allow tournament flagged players in
-		TUTORIAL = 3;
-	}
-	optional	LobbyType			lobby_type = 12;
-	optional	bool				allow_cheats = 13;
-	//optional	bool				fill_with_bots = 14;
-	//optional	bool				intro_mode = 15;
-	optional	string				game_name = 16;			// practice/tournament lobbies can have custom game names (shown in the Watch tab, etc.)
-	//repeated	CLobbyTeamDetails	team_details = 17;		// cosmetic details for radiant/dire
-	//optional	uint32				tutorial_lesson = 18;	// tutorial lobbies set the lesson to start on
-	//optional	uint32				tournament_id = 19;		// If this is a tournament game, which tournament
-	//optional	uint32				tournament_game_id = 20;// If this is a tournament game, which game in the tournament
-	optional	uint32				server_region = 21 [ default = 0 ];		// region to use for the server, 0 means automatic using geo location avg distance
-	optional	TF_GC_GameState		game_state = 22; 	// This isn't set by the lobby, but is networked up from the gameserver when it changes
-																			// hidden since we don't need to network to clients, they get it via packet entities
-	optional	uint32				num_spectators = 23; // sent up from the game server
-	//optional	uint32				tower_state = 24;	 // bitfield describing destroyed state of the towers in the map
-	//optional	uint32				matchgroup = 25;	 // DEPRECATED.  No longer used.  Use match_group below instead.
-	optional	float				readyup_remaining_time = 26;  // remaining time left in READYUP in seconds
+	optional	State                     state                  = 4 [ default = UNKNOWN ];
+	optional	string                    connect                = 5; // connect string usually something like
+	                                                                  // "ip:port", only valid during state RUN
+	// key used to find servers, optional, Not in use
+//	optional	string                    search_key             = 8 [ (hidden) = true ];
+	// private lobby data on the GC not sent to clients or servers
+//	optional	CTFLobbyGCPrivate         gc_private             = 9 [ (hidden) = true ];
+//	enum LobbyType
+//	{
+//		INVALID    = -1;
+//		MATCH      = 0;	// lobby was created by the matchmaking system
+//		PRACTICE   = 1;	// practice lobby with members chosen by the players
+//		TOURNAMENT = 2;	// special type of practice lobby where we record stats and only allow tournament flagged
+//	                    // players in
+//		TUTORIAL   = 3;
+//	}
+//	optional	LobbyType                 lobby_type             = 12; // Not in use, TF uses match groups generally
+//	optional	bool                      allow_cheats           = 13;
+//	optional	bool                      fill_with_bots         = 14;
+//	optional	bool                      intro_mode             = 15;
+//	optional	string                    game_name              = 16; // practice/tournament lobbies can have custom
+	                                                                   // game names (shown in the Watch tab, etc.)
+//	repeated	CLobbyTeamDetails         team_details           = 17; // cosmetic details for radiant/dire
+//	optional	uint32                    tutorial_lesson        = 18; // tutorial lobbies set the lesson to start on
+//	optional	uint32                    tournament_id          = 19; // If this is a tournament game, which tournament
+//	optional	uint32                    tournament_game_id     = 20; // If this is a tournament game, which game in
+	                                                                   // the tournament
+	// region to use for the server, 0 means automatic using geo location avg distance.  Not in use - TF regions are
+	// always automatic by ping, and the server IP is enough for the GC to know what region it belongs to.
+//	optional	uint32                    server_region          = 21 [ default = 0 ];
+	optional	TF_GC_GameState           game_state             = 22; // This isn't set by the lobby, but is networked
+	                                                                   // up from the gameserver when it changes hidden
+	                                                                   // since we don't need to network to clients,
+	                                                                   // they get it via packet entities
+//	optional	uint32                    num_spectators         = 23; // sent up from the game server.  Not in use -
+	                                                                   // ambiugous since standby players can spectate,
+	                                                                   // and we don't have TFTV currently.
+//	optional	uint32                    tower_state            = 24; // bitfield describing destroyed state of the
+	                                                                   // towers in the map
+//	optional	uint32                    matchgroup             = 25; // DEPRECATED.  No longer used.  Use match_group
+	                                                                   // below instead.
+//	optional	float                     readyup_remaining_time = 26; // remaining time left in READYUP in seconds.
+	                                                                   // READYUP state not in use.
 	// DEPRECATED, handled by gameserver management logic now
-	// optional	bool				leaver_detected = 27;			// if set, a player has been detected as a leaver. other players can safely abandon without getting a leaver count
-	//optional	TF_CM_PICK		cm_pick = 28 [ default = TF_CM_RANDOM ]; // which team gets to pick first in CM mode
-//	repeated	CLobbyPendingPlayerReport	pending_player_reports = 29 [ (hidden) = true ];		// player feedback reports that are waiting for this lobby's matchID (assigned on match signout)
-	optional	bool				allow_spectating = 31 [ default = true ];	// option for practice games to allow them to show up on the spectator list
-	optional	uint32				average_rank = 32;		// average rank of the players (skillrating in TF)
-	optional 	fixed64 			load_game_lobby_id = 33; // if set, the server will try to load a match lobby/save number
-	optional	uint32				load_game_save_number = 34;
-	//optional	TFBotDifficulty	bot_difficulty = 36 [ default = BOT_DIFFICULTY_MEDIUM ];
-	//optional	TFGameVersion		game_version = 37 [ default = GAME_VERSION_CURRENT ];
-	optional	string				mannup_tour_name = 42;	 // MvM tour we're playing for bragging rights.  (Should not be set if not playing for bragging rights.)
-	optional	string				map_name = 38;	 // Map we're currently playing
-	optional	string				mission_name = 39;	 // Challenge we're currently playing
-	optional	uint32				match_group = 41;
-	optional	uint64				match_id = 30 [ default = 0 ];		// if this lobby has signed out, this is its matchID
-	optional	fixed32				replay_salt = 35;		// if this lobby has signed out, this is its replay salt
-	optional	uint32				formed_time = 36;		// timestamp of when we created this lobby
-	optional	uint32				flags = 43;				// general bitfield (see tf_matchmaking_shared.h for flags, e.g. LOBBY_FLAG_LOWPRIORITY)
-	optional	bool				late_join_eligible = 44; // If this lobby is entered into the late join system
+//	optional	bool                      leaver_detected        = 27; // if set, a player has been detected as a
+	                                                                   // leaver. other players can safely abandon
+	                                                                   // without getting a leaver count
+	// which team gets to pick first in CM mode
+//	optional	TF_CM_PICK                cm_pick                = 28 [ default = TF_CM_RANDOM ];
+	// player feedback reports that are waiting for this lobby's matchID (assigned on match signout)
+//	repeated	CLobbyPendingPlayerReport pending_player_reports = 29 [ (hidden) = true ];
+	// option for practice games to allow them to show up on the spectator list.  Deprecated - now somewhat ambiguous
+	// since we let standby players spectate, but this was not for that.
+//	optional	bool                      allow_spectating       = 31 [ default = true ];
+
+	// The average normalized rating (of the primary MM backend for this match group) of players at the start of the
+	// match.  Does not update if late-joins occur, including replacement players during the ready-up phase for
+	// competitive matches.  This field is used for "high skill match" determination, which is set in stone at server
+	// launch time.
+	//
+	// Note: renamed from average_rank, retained id & type
+	optional	double                    initial_average_mm_rating = 32;
+//	optional 	fixed64                   load_game_lobby_id     = 33; // if set, the server will try to load a match
+	                                                                   // lobby/save number
+//	optional	uint32                    load_game_save_number  = 34;
+//	optional	TFBotDifficulty           bot_difficulty         = 36 [ default = BOT_DIFFICULTY_MEDIUM ];
+//	optional	TFGameVersion             game_version           = 37 [ default = GAME_VERSION_CURRENT ];
+	optional	string                    mannup_tour_name       = 42; // MvM tour we're playing for bragging rights.
+	                                                                   // (Should not be set if not playing for bragging
+	                                                                   // rights.)
+	optional	string                    map_name               = 38; // Map we're currently playing
+	optional	string                    mission_name           = 39; // Challenge we're currently playing
+	optional	uint32                    match_group            = 41;
+	optional	uint64                    match_id               = 30 [ default = 0 ];
+//	optional	fixed32                   replay_salt            = 35; // if this lobby has signed out, this is its
+	                                                                   // replay salt
+	optional	uint32                    formed_time            = 36; // timestamp of when we created this lobby
+	optional	uint32                    flags                  = 43; // general bitfield (see tf_matchmaking_shared.h
+	                                                                   // for flags, e.g. LOBBY_FLAG_LOWPRIORITY)
+	optional	bool                      late_join_eligible     = 44; // If this lobby is entered into the late join
+	                                                                   // system
 	// What the proper-size of this match should be, passed from the GC so it doesn't need to be hard-coded on clients
-	// per match group.
-	// Should be set at match creation time if applicable, but may not be present.
-	optional	uint32				fixed_match_size = 45;
+	// per match group.  Should be set at match creation time if applicable, but may not be present.
+	optional	uint32                    fixed_match_size       = 45;
+
+	// Disabled for now - war not in progress, would need to be slightly tweaked for new MM world, but all code is
+	// intact
 	enum WarMatch
 	{
 		NOPE = 0;
 		INVADERS_ARE_PYRO = 1;
 		INVADERS_ARE_HEAVY = 2;
 	};
-	optional	WarMatch			is_war_match = 46 [ default = NOPE ];
-	repeated	uint32				next_maps_for_vote = 47;
+	optional	WarMatch                  is_war_match           = 46 [ default = NOPE ];
+	repeated	uint32                    next_maps_for_vote     = 47;
 	// When certain actions are taken on the lobby, this is incremented, to determine if server heartbeats are aware of
 	// the most recent version.
-	optional	uint32				lobby_mm_version = 48;
+	optional	uint32                    lobby_mm_version       = 48;
+	// Invited/non-confirmed members
+	repeated	CTFLobbyPlayerProto       pending_members        = 49;
 };
 
-
+// TODO(Universal Parties): Murder
 message CMsgExitMatchmaking
 {
 	// This parameter guards a race condition where we ask to leave in parallel with a match being assigned.
@@ -1243,25 +1770,42 @@ message CMsgExitMatchmaking
 	optional uint64 lobby_id = 3;
 };
 
-message CMsgAcceptInvite
+//
+// CMsgAcceptLobbyInvite
+//
+//   Sent to accept a lobby invite, finalizing player into the match and potentially causing them to exit other matches
+//   and reject other incompatible invites.
+//
+//   Reliable
+//
+//   k_EMsgGC_AcceptLobbyInvite
+message CMsgAcceptLobbyInvite
 {
-	optional uint64 party_id = 1;
-	optional fixed64 steamid_lobby = 2;
-	optional uint32 client_version = 3 [ default = 1225 ];
-};
+	// ID of the lobby we want to accept
+	optional uint64 invited_lobby_id            = 1;
+	// ID of the *match* we believe we are in, and would thus be abandoned by accepting an invite.  Prevents races
+	// between invite acceptance causing us to join and accidentally abandon a match lobby.
+	//
+	// If we are in a match, and it does not match this one, message is rejected.  If client is not in a match, we
+	// ignore stale values here, as clients may not be positive they have left a match yet.  (The important thing is we
+	// don't abandon a match the client didn't know about when sending this)
+	optional uint64 abandoning_match_id         = 2;
+	// Any other invites we have upon accepting one should be rejected, so we'll pack up all other invites we've shown
+	// to the user, and have their accept of one implicitly reject the rest.
+	repeated uint64 abandoning_invite_lobby_ids = 3;
+}
 
-message CMsgAcceptInviteResponse
-{
-	optional int32 result_code = 1;
-};
+// Reliable message reply
+message CMsgAcceptLobbyInviteReply
+{}
 
 //
 // CMsgReadyUp - sent to acknowledge lobby readiness
-//
-message CMsgReadyUp
-{
-	optional TFLobbyReadyState state = 1;
-};
+//   Lobby ready state not in use
+//message CMsgReadyUp
+//{
+//	optional TFLobbyReadyState state = 1;
+//};
 
 // request how many people are searching in each matchgroup
 message CMsgMatchmakingSearchCountRequest
@@ -1300,81 +1844,83 @@ message CMsgKickedFromMatchmakingQueue
 //	optional	uint32	result = 1;
 //};
 
+//
 // GC Chat
+//   NOT IN USE - but preserving
 
 // for identifying special channel types
-enum ChatChannelType_t
-{
-	ChatChannelType_Regional = 0;
-	ChatChannelType_Custom = 1;
-	ChatChannelType_Party = 2;
-	ChatChannelType_Lobby = 3;
-};
+//enum ChatChannelType_t
+//{
+//	ChatChannelType_Regional = 0;
+//	ChatChannelType_Custom = 1;
+//	ChatChannelType_Party = 2;
+//	ChatChannelType_Lobby = 3;
+//};
 
-message CMsgTFJoinChatChannel
-{
-	optional	string	persona_name = 1;
-	optional	string	channel_name = 2;
-	optional	string	password = 3;
-	optional	ChatChannelType_t	channel_type = 4;
-};
+//message CMsgTFJoinChatChannel
+//{
+//	optional	string	persona_name = 1;
+//	optional	string	channel_name = 2;
+//	optional	string	password = 3;
+//	optional	ChatChannelType_t	channel_type = 4;
+//};
 
-message CMsgTFLeaveChatChannel
-{
-	optional	string	channel_name = 1;
-};
+//message CMsgTFLeaveChatChannel
+//{
+//	optional	string	channel_name = 1;
+//};
 
-message CMsgTFJoinChatChannelResponse
-{
-	message ChatMember
-	{
-		optional	fixed64	steam_id = 1;
-		optional	string	persona_name = 2;
-	};
-	optional	uint32	response = 1;
-	optional	string channel_name = 2;
-	optional	fixed64	channel_id = 3;
-	optional	uint32	max_members = 4;
-	repeated	ChatMember	members = 5;
-};
+//message CMsgTFJoinChatChannelResponse
+//{
+//	message ChatMember
+//	{
+//		optional	fixed64	steam_id = 1;
+//		optional	string	persona_name = 2;
+//	};
+//	optional	uint32	response = 1;
+//	optional	string channel_name = 2;
+//	optional	fixed64	channel_id = 3;
+//	optional	uint32	max_members = 4;
+//	repeated	ChatMember	members = 5;
+//};
 
-message CMsgTFOtherJoinedChatChannel
-{
-	optional	fixed64	channel_id = 1;
-	optional	string	persona_name = 2;
-	optional	fixed64	steam_id = 3;
-};
+//message CMsgTFOtherJoinedChatChannel
+//{
+//	optional	fixed64	channel_id = 1;
+//	optional	string	persona_name = 2;
+//	optional	fixed64	steam_id = 3;
+//};
 
-message CMsgTFOtherLeftChatChannel
-{
-	optional	fixed64	channel_id = 1;
-	optional	fixed64	steam_id = 2;
-};
+//message CMsgTFOtherLeftChatChannel
+//{
+//	optional	fixed64	channel_id = 1;
+//	optional	fixed64	steam_id = 2;
+//};
 
-message CMsgTFRequestDefaultChatChannel
-{	
-};
+//message CMsgTFRequestDefaultChatChannel
+//{
+//};
 
-message CMsgTFRequestDefaultChatChannelResponse
-{	
-	optional	string	channel_name = 1;
-	optional	fixed64	channel_id = 2;
-};
+//message CMsgTFRequestDefaultChatChannelResponse
+//{
+//	optional	string	channel_name = 1;
+//	optional	fixed64	channel_id = 2;
+//};
 
-message CMsgTFRequestChatChannelList
-{	
-};
+//message CMsgTFRequestChatChannelList
+//{
+//};
 
-message CMsgTFRequestChatChannelListResponse
-{	
-	message ChatChannel
-	{
-		optional	string	channel_name = 1;
-		optional	uint32	num_members = 2;
-		optional	ChatChannelType_t	channel_type = 3;
-	}
-	repeated	ChatChannel	channels = 1;
-};
+//message CMsgTFRequestChatChannelListResponse
+//{
+//	message ChatChannel
+//	{
+//		optional	string	channel_name = 1;
+//		optional	uint32	num_members = 2;
+//		optional	ChatChannelType_t	channel_type = 3;
+//	}
+//	repeated	ChatChannel	channels = 1;
+//};
 
 enum ServerMatchmakingState
 {
@@ -1395,7 +1941,8 @@ message CMsgGameServerMatchmakingStatus
 
 	optional	uint32 server_version = 16 [ default = 1225 ];
 	optional	ServerMatchmakingState matchmaking_state = 1 [ default = ServerMatchmakingState_INVALID ];
-	optional	TF_MatchmakingMode matchmaking_mode = 2; // Which pool do we want to be in?
+	// Deprecated
+	// optional	TF_MatchmakingMode matchmaking_mode = 2; // Which pool do we want to be in?
 	optional	string map = 3; // Current map
 	optional	string tags = 4; // Current tags
 	optional	uint32 bot_count = 5; // Number of bots
@@ -1407,6 +1954,7 @@ message CMsgGameServerMatchmakingStatus
 	optional	bool server_trusted = 11; // server requests to be put into the trusted pool
 	optional	bool server_dedicated = 12; // Is this a dedicated server?  (As opposed to a listen server)
 	optional	uint32 strict = 17; // Current value of tf_mm_strict
+	optional	string fake_ip = 25; // If we have a FakeIP, what is it?
 
 	enum PlayerConnectState
 	{
@@ -1617,8 +2165,9 @@ message CMsgMvMMannUpVictoryReply
 //
 message CMsgGameServerKickingLobby
 {
-	repeated	fixed64	connected_players = 1; // list of players that are still connected
-	optional	bool	create_party = 2 [ default = true ];
+	// Deprecated -- this makes less sense in the new party system
+//	repeated	fixed64	connected_players = 1; // list of players that are still connected
+//	optional	bool	create_party = 2 [ default = true ];
 	optional uint64 lobby_id = 3;
 	optional uint64 match_id = 4;
 };
@@ -1657,18 +2206,45 @@ message CMsgPlayerLeftMatchResponse
 //
 // Server -> GC : Telling the GC this player was vote-kicked after leaving a match, e.g. they left before it passed
 //
-message CMsgPlayerVoteKickedAfterLeavingMatch
-{
-	optional fixed64 steam_id = 1;
-	optional fixed64 lobby_id = 2;
-	optional fixed64 match_id = 3;
-};
-
+// Deprecated: Reworked vote-kicks with ProcessMatchVoteKick means we no longer need this in the flow
+//   message CMsgPlayerVoteKickedAfterLeavingMatch
+//   {
+//   	optional fixed64 steam_id = 1;
+//   	optional fixed64 lobby_id = 2;
+//   	optional fixed64 match_id = 3;
+//   };
 //
 // GC -> Server - empty confirmation of reliable message
 //
-message CMsgPlayerVoteKickedAfterLeavingMatchResponse
-{};
+// Deprecated: see above
+//   message CMsgPlayerVoteKickedAfterLeavingMatchResponse
+//   {};
+
+// Server -> GC : Inform GC of a vote-kick and request a decision
+//   k_EMsgGC_ProcessMatchVoteKick
+message CMsgProcessMatchVoteKick
+{
+	message Vote
+	{
+		optional fixed64 steam_id = 1;
+		optional bool    vote_yay = 2; // Kick em?
+	};
+
+	optional fixed64          match_id           = 1;
+	optional fixed64          initiator_steam_id = 2;
+	optional fixed64          target_steam_id    = 3;
+	optional TFVoteKickReason reason             = 4;
+	repeated Vote             votes              = 5; // All votes
+	optional bool             default_pass       = 6; // Would the vote system normally pass this vote
+};
+
+//
+// GC -> Server - result of processing vote kick + decision
+//   k_EMsgGC_ProcessMatchVoteKickResponse
+message CMsgProcessMatchVoteKickResponse
+{
+	optional bool rip = 1; // Do they go away
+};
 
 //
 // Server -> GC : Telling the GC that players in this lobby are safe to leave
@@ -1904,9 +2480,7 @@ message CMsgTFXPSource
 		SOURCE_COMPETITIVE_WIN = 4;
 		SOURCE_COMPETITIVE_LOSS = 5;
 		SOURCE_AUTOBALANCE_BONUS = 6;
-
-		// Make sure this is at the end!
-		NUM_SOURCE_TYPES = 7;
+		SOURCE_PRESTIGE_BONUS = 7;
 	};
 
 	optional XPSourceType type = 1 [ (key_field) = true ];
@@ -1921,7 +2495,6 @@ message CMsgTFXPSourceBreakdown
 	repeated CMsgTFXPSource sources = 1;
 }
 
-//
 // Client send this in response to client welcome This is separate from hello, which is only sent if we don't have a
 // session and haven't heard from the GC, as keep-alive.
 message CMsgTFClientInit
@@ -2006,14 +2579,12 @@ message CMsgGC_Match_Result
 	message Player
 	{
 		optional	fixed64            steam_id             = 1;
-		optional 	uint64             party_id             = 2;
+		// Renamed from party_id to reflect that it does not change
+		optional 	uint64             original_party_id    = 2;
 		optional	uint32             team                 = 3;
 		optional	uint32             score                = 4;
 		optional	uint32             ping                 = 5;
 		optional	uint32             flags                = 6;
-		// Deprectated - ratings are now computed GC side, no need to send this up.
-		// optional	uint32             rating               = 7;
-		// optional	int32              rating_change        = 8;
 		optional	uint32             rank                 = 9;
 		optional	uint32             classes_played       = 10; // bit field
 		optional	uint32             kills                = 11;
@@ -2091,10 +2662,6 @@ message CSOTFLadderPlayerStats
 	// optional uint32 rating = 4;
 	// optional uint32 last_ackd_rating = 31;
 	// optional int32 last_rating_change = 5;
-	optional	uint32 rank = 6;
-	optional	uint32 highest_rank = 7;
-	optional	uint32 experience = 8;	// Used to determine season level, which is different from (skill) rank
-	optional	uint32 last_ackd_experience = 32;
 	// Stats - season total
 	optional	uint32 games = 9;
 	optional	uint32 score = 10;
@@ -2140,8 +2707,12 @@ message CSOTFRatingData
 //
 message CMsgGC_TFVoteKickPlayerRequest
 {
-	optional	uint32		account_id = 1;
-	optional	uint64		target_id = 2;
+	// Replaced by voter id for sanity
+//	optional uint32 account_id = 1;
+	optional uint64           target_id = 2;
+	optional uint64           voter_id  = 3;
+	optional TFVoteKickReason reason    = 4;
+	optional uint64           match_id  = 5;
 };
 
 //
@@ -2149,7 +2720,11 @@ message CMsgGC_TFVoteKickPlayerRequest
 //
 message CMsgGC_VoteKickPlayerRequestResponse
 {
-	optional	bool		allowed = 1;
+	optional	bool   allowed        = 1;
+	// Client no longer told if they have a specific cooldown
+//	optional	uint32 cooldown       = 2;
+	optional	bool   voter_inhibit  = 3; // This voter should not be allowed to try any more
+	optional	bool   target_inhibit = 4; // This target cannot be targeted
 };
 
 //
@@ -2213,7 +2788,8 @@ message CSOTFMatchResultPlayerStats
 	optional uint32 endtime               = 4;
 	optional uint32 season_id             = 5;
 	optional uint32 status                = 6;
-	optional uint32 party_id              = 7;
+	// Renamed from party_id to reflect that it is the party that matched in, not at match end
+	optional uint32 original_party_id     = 7;
 	optional uint32 team                  = 8;
 	optional uint32 score                 = 9;
 	optional uint32 ping                  = 10;
@@ -2233,6 +2809,7 @@ message CSOTFMatchResultPlayerStats
 	optional uint32 healing_medal         = 24;
 	optional uint32 support_medal         = 25;
 	optional uint32 map_index             = 26;
+	optional uint32 winning_team		  = 27;
 };
 
 
@@ -2268,6 +2845,7 @@ message CMsgGCMatchMakerStatsResponse
 //
 message CMsgGCMatchHistoryLoad
 {
+	optional ETFMatchGroup match_group = 1 [ default = k_eTFMatchGroup_Invalid ];
 };
 
 //
@@ -2280,7 +2858,9 @@ message CMsgGCDataCenterPing_Update
 		Invalid          = 0;
 		Normal           = 1;
 		Unreachable      = 2; // Value is stale or not provided, DC is unreachable
-		FallbackToDCPing = 3; // Couldn't ping router directly, this is a less-accurate DC ping value
+		FallbackToDCPing = 3; // Deprecated: Couldn't ping router directly, this is a less-accurate DC ping value.
+		                      // Now that TF2 is routed via SDR, this isn't reported/used, as the pings the client
+		                      // reports are the same path they would use to connect.
 	};
 	message PingEntry
 	{
@@ -2333,6 +2913,7 @@ enum SurveyQuestionType
 	QUESTION_MAP_QUALITY = 1;
 	QUESTION_COMP_INQUIRY = 2;
 	QUESTION_CASUAL_INQUIRY = 3;
+	QUESTION_RANDOM_CRIT = 4;
 }
 
 //
@@ -2354,6 +2935,74 @@ message CMsgGCSurveyResponse
 	optional int32 response = 3;
 }
 
+message CSOQuestMapNode
+{
+	optional	uint32	account_id			= 1 [ (key_field) = true ];	// Account of who owns this map
+	optional	uint32	defindex			= 3 [ (key_field) = true ];	// Defindex that defines this node's properties
+	optional	uint32	node_id				= 4;						// Unique ID of this node
+	optional	bool	star_0_earned		= 6 [ default = false ];
+	optional	bool	star_1_earned		= 7 [ default = false ];
+	optional	bool	star_2_earned		= 8 [ default = false ];
+	optional	bool	loot_claimed		= 9 [ default = false ];	// Has the user claimed the loot for this node yet?
+	optional	uint32	selected_quest_def	= 10 [ default = 0 ];		// The quest the user has selected for this node.  0 == not selected yet.
+	optional	uint32	map_cycle			= 11; // Which cycle of the map this uses.  0 is the current.  Buying additional maps will put the current set at the highest MapCycle the users owns + 1, and the new set at 0
+}
+
+message CSOQuest
+{
+	optional uint32	account_id					= 1;
+	optional uint64	quest_id					= 2 [ (key_field) = true ];
+	optional uint32 defindex					= 3;
+	optional bool	active						= 4 [ default = false ];
+	optional uint32	points_0					= 5;
+	optional uint32 points_1					= 6;
+	optional uint32 points_2					= 7;
+	optional uint32 quest_map_node_source_id	= 8; // The quest map node that we came from, and that'll we'll credit when turned in
+	optional uint32	map_cycle					= 9; // Which cycle of the map this uses.  0 is the current.  Buying additional maps will put the current set at the highest MapCycle the users owns + 1, and the new set at 0
+}
+
+message CSOQuestMapRewardPurchase
+{
+	optional uint32	account_id					= 1;
+	optional uint32	defindex					= 2 [ (key_field) = true ]; // *Reward* defindex.  Not item defindex
+	optional uint32 count						= 3;
+	optional uint32 map_cycle					= 4; // Which cycle of the map this uses.  0 is the current.  Buying additional maps will put the current set at the highest MapCycle the users owns + 1, and the new set at 0
+	optional uint32 purchase_id					= 5; // Unique ID
+}
+
+//
+// k_EMsgGC_QuestIdentify
+//
+message CMsgGCQuestIdentify
+{
+	optional uint64	quest_id = 1;
+}
+
+//
+// k_EMsgGC_QuestDevGive
+//
+message CMsgGCQuestDevGive
+{
+	optional uint32 quest_def_index = 1;
+}
+
+//
+// k_EMsgGCQuestNodeTurnIn
+//
+message CMsgGCQuestNodeTurnIn
+{
+	optional uint32 node_defindex = 1;
+}
+
+//
+// k_EMsgGC_QuestMapUnlockNode
+//
+message CMsgGCQuestMapUnlockNode
+{
+	optional uint32 node_defindex = 1;
+	optional uint32 quest_defindex = 2;
+}
+
 //
 // k_EMsgGC_NewMatchForLobbyRequest
 //
@@ -2371,7 +3020,6 @@ message CMsgGCNewMatchForLobbyResponse
 {
 	optional bool success = 1;
 }
-
 //
 // k_EMsgGC_ChangeMatchPlayerTeamsRequest
 //
@@ -2394,6 +3042,112 @@ message CMsgGCChangeMatchPlayerTeamsRequest
 message CMsgGCChangeMatchPlayerTeamsResponse
 {
 	optional bool success = 1;
+}
+
+//
+// k_EMsgGCQuestComplete_Debug
+//
+message CMsgGCQuestComplete_Debug
+{
+	optional uint64 quest_id = 1;
+	optional uint32 points_type = 2;
+}
+
+//
+// k_EMsgGC_QuestMapDebug
+//
+message CMsgGCQuestMap_Debug
+{
+	optional uint32 reset_operation = 1;
+	optional uint32 give_credit = 2;
+	optional CMsgGCQuestMapUnlockNode unlock_node = 3;
+}
+
+//
+// k_EMsgGC_QuestMapPurchaseReward
+//
+message CMsgGCQuestMapPurchaseReward
+{
+	optional uint32 store_item_defindex = 1; // CMsgQuestMapStoreItem defindex
+}
+
+message CMsgGCQuestResponse
+{
+	optional bool success = 1 [ default = false ];
+}
+
+
+// k_EMsgGC_SetDisablePartyQuestProgress
+message CMsgGCSetDisablePartyQuestProgress
+{
+	optional bool state = 1;
+}
+
+// k_EMsgGCQuestProgressReport
+message CMsgQuestProgressReport
+{
+	optional uint64		quest_id			= 1;
+	optional bool		star_0_earned		= 2;
+	optional bool		star_1_earned		= 3;
+	optional bool		star_2_earned		= 4;
+	repeated uint64		items_earned		= 5;
+	optional uint32		reward_credits_earned = 6;
+	optional bool		contract_completed	= 7;
+}
+
+// k_EMsgGCConsumePaintKit
+message CMsgConsumePaintkit
+{
+	optional fixed64	source_id		= 1;
+	optional uint32		target_defindex = 2;
+}
+
+// k_EMsgGC_Painkit_DevGrant
+message CMsgPainkitDevGrant
+{
+	optional uint32		paintkit_defindex	= 1; // Paintkit
+	optional float		wear				= 2;
+	optional uint32		item_defindex		= 3; // Which item to put the Paintkit on.  If not set, give everything
+}
+
+//
+//
+// k_EMsgGCQuestStrangeEvent
+
+message GCQuestStrangeEvent
+{
+	optional uint32		owner_account_id	= 1;
+	optional uint32		scorer_account_id	= 2;
+	optional uint64		quest_id			= 3;
+	optional uint32		strange_event_id	= 4;
+	optional uint32		score				= 5;
+}
+
+// k_EMsgGC_SDRTicket
+message CMsgSDRTicket
+{
+	optional bytes	serialized_ticket = 1;
+}
+
+// k_EMsgGC_AuthorizeServerItemRetrieval
+message CMsgAuthorizeServerItemRetrieval
+{
+    repeated uint64 item_id = 1;
+}
+
+// k_EMsgGCToGCSendAccountBannedNotifications
+message CMsgGCToGCSendAccountBannedNotifications
+{
+	optional uint32 banned_accountid    = 1; // who got banned
+	optional uint32 report_period_begin = 2; // beginning of time period to check for reports
+	optional uint32 report_period_end   = 3; // end of time period to check for reports
+}
+
+// k_EMsgGCToGCSendNotification
+message CMsgGCToGCSendNotification
+{
+	// The notification to deliver, (notification ID unfilled)
+	optional CMsgGCNotification notification = 1;
 }
 
 // End of File

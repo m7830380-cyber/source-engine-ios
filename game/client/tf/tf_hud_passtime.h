@@ -146,7 +146,7 @@ private:
 	vgui::ImagePanel *m_pGoalIconsRed[NumGoalIcons];
 	CHandle<C_FuncPasstimeGoal> m_hGoalsBlue[NumGoalIcons];
 	CHandle<C_FuncPasstimeGoal> m_hGoalsRed[NumGoalIcons];
-	vgui::ImagePanel *m_pPlayerIcons[MAX_PLAYERS];
+	vgui::ImagePanel *m_pPlayerIcons[MAX_PLAYERS_ARRAY_SAFE];
 	vgui::ImagePanel *m_pProgressBall;
 	vgui::Label *m_pProgressBallCarrierName;
 	vgui::Panel *m_pProgressLevelBar;
@@ -192,7 +192,7 @@ private:
 	CTFHudTeamScore *m_pTeamScore;
 	CTFHudPasstimeOffscreenArrow *m_pBallOffscreenArrow;
 	CTFHudPasstimePassNotify *m_pPassNotify;
-	CTFHudPasstimePlayerOffscreenArrow *m_pPlayerArrows[MAX_PLAYERS];
+	CTFHudPasstimePlayerOffscreenArrow *m_pPlayerArrows[MAX_PLAYERS_ARRAY_SAFE];
 };
 
 #endif // TF_HUD_PASSTIME_H  

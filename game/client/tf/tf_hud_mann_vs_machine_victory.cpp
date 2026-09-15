@@ -50,9 +50,6 @@ extern const ConVar *sv_cheats;
 #define RATING_SCORE_STR			"ratingscore"
 
 
-#ifdef STAGING_ONLY
-ConVar tf_mvm_fake_loot( "tf_mvm_fake_loot", "0" );
-#endif
 
 extern const char *g_szItemBorders[AE_MAX_TYPES][5];
 extern int g_iLegacyClassSelectWeaponSlots[TF_LAST_NORMAL_CLASS];
@@ -647,23 +644,18 @@ void CMvMVictoryMannUpEntry::UpdatePlayerData()
 
 	CheckBadgeLevel( m_playerData );
 
-	// Check Squad Surplus for this player
 	CTFGSLobby *pLobby = GTFGCClientSystem()->GetLobby();
 	if ( pLobby )
 	{
-		const CTFLobbyMember *pMember = pLobby->GetMemberDetails( steamID );
-		if ( pMember )
+		int idxMember = pLobby->GetMemberIndexBySteamID( steamID );
+		if ( idxMember >= 0 )
 		{
-			m_pSquadSurplus->SetVisible( pMember->squad_surplus() );
+			ConstTFLobbyPlayer member = pLobby->GetMemberDetails( idxMember );
+			Assert( member.BMatchPlayer() );
+			m_pSquadSurplus->SetVisible( member.GetSquadSurplus() );
 		}
 	}
 
-#ifdef STAGING_ONLY
-	if ( tf_mvm_fake_loot.GetBool() )
-	{
-		m_pSquadSurplus->SetVisible( true );
-	}
-#endif
 
 	// Loot
 	ClearEconItems();
@@ -672,28 +664,6 @@ void CMvMVictoryMannUpEntry::UpdatePlayerData()
 		m_vecLootPanels[ m_vecLootPanels.AddToTail() ] = new CMvMLootItem( this, VarArgs( "modelpanel%d", i ) );
 	}
 
-#ifdef STAGING_ONLY
-	if ( tf_mvm_fake_loot.GetBool() )
-	{
-		CPlayerInventory *pInventory = InventoryManager()->GetLocalInventory();
-		if ( !pInventory )
-			return;
-
-		int nRandom = RandomInt(5,10);
-		for( int i = 0; i < nRandom; ++i )
-		{
-			m_vecLootPanels[ m_vecLootPanels.AddToTail() ] = new CMvMLootItem( this, VarArgs( "modelpanel%d", i ) );
-			CMvMLootItem* pLootItem = m_vecLootPanels.Tail();
-			pLootItem->m_eReason = (CMsgMvMVictoryInfo_GrantReason)RandomInt(1,3);
-
-			CEconItemView *pItemView = pInventory->GetItem(i);
-			CEconItem* econItem = new CEconItem();
-			econItem = pItemView->GetSOCData();
-
-			pLootItem->SetEconItem( econItem );
-		}
-	}
-#endif
 
 	for ( int iItem = 0; iItem < m_playerData.items_size(); ++iItem )
 	{
@@ -1035,13 +1005,6 @@ bool CMvMVictoryMannUpEntry::AnimateLoot_Internal( CTFParticlePanel *pParticlePa
 	Assert( nRarity >= 0 && nRarity <= 2 );
 	nRarity = clamp( nRarity, 0, 2 );
 
-#ifdef STAGING_ONLY
-	if ( tf_mvm_fake_loot.GetBool() )
-	{
-		int randomInt = pLootPanel->GetItem()->GetID() % 10;
-		nRarity = randomInt % 7 == 0 ? 2 : ( randomInt % 3 == 0 ? 1 : 0 );
-	}
-#endif
 
 	int nPanelXPos, nPanelYPos;
 	pLootPanel->GetPos( nPanelXPos, nPanelYPos );
@@ -1050,10 +1013,12 @@ bool CMvMVictoryMannUpEntry::AnimateLoot_Internal( CTFParticlePanel *pParticlePa
 	int nPanelCenterY = nPanelYPos + (pLootPanel->GetTall() / 2);
 
 	int iItemAbsX, iItemAbsY;
+
 	vgui::ipanel()->GetAbsPos( pLootPanel->GetParent()->GetVPanel(), iItemAbsX, iItemAbsY );
 
 	int x = iItemAbsX + nPanelCenterX;
-	int y = iItemAbsY + nPanelCenterY;
+	int y = iItemAbsY - nPanelCenterY;
+
 
 	C_BasePlayer *pLocalPlayer = C_BasePlayer::GetLocalPlayer();
 
@@ -1362,13 +1327,8 @@ bool CMvMVictoryMannUpEntry::SetModelPanelInfo( C_TFPlayer* pPlayer )
 	int nLoadoutSlot = g_iLegacyClassSelectWeaponSlots[nClass];	// We want to mirror the class select panel
 	CEconItemView *pWeapon = TFInventoryManager()->GetItemInLoadoutForClass( nClass, nLoadoutSlot, &steamID );
 
-	bool bIsRobot = false;
-	int iRobot = 0;
-	CALL_ATTRIB_HOOK_INT_ON_OTHER( pPlayer, iRobot, appear_as_mvm_robot );
-	bIsRobot = iRobot ? true : false;
-
 	m_pPlayerModelPanel->ClearCarriedItems();
-	m_pPlayerModelPanel->SetToPlayerClass( nClass, bIsRobot, true );
+	m_pPlayerModelPanel->SetToPlayerClass( nClass, true );
 	m_pPlayerModelPanel->SetTeam( nTeam );
 
 	for ( int wbl = pPlayer->GetNumWearables()-1; wbl >= 0; wbl-- )
@@ -1675,9 +1635,6 @@ void CMvMVictoryMannUpPanel::UpdateHighlight()
 
 	// If we're still animating, fake the that they're not highlighting anything
 	if ( !m_bAnimationComplete
-#if defined STAGING_ONLY
-		&& !tf_mvm_fake_loot.GetBool()
-#endif
 		)
 	{
 		pMouseOverPanel = NULL;
@@ -1962,17 +1919,9 @@ void CMvMVictoryPanelContainer::ShowVictoryPanel( bool bIsReopening )
 	// popfile name
 	m_pVictoryPanelNormal->SetMapAndPopFile();
 
-#ifdef STAGING_ONLY
-	if ( tf_mvm_fake_loot.GetBool() )
-	{
-		m_pVictoryPanelMannUp->ShowVictoryPanel();
-		return;
-	}
-#endif
 
 	// Which Panel to show
-	CTFGSLobby *pLobby = GTFGCClientSystem()->GetLobby();
-	if ( pLobby && IsMannUpGroup( pLobby->GetMatchGroup() ) )
+	if ( TFGameRules() && TFGameRules()->GetCurrentMatchGroup() == k_eTFMatchGroup_MvM_MannUp )
 	{
 		m_pVictoryPanelMannUp->ShowVictoryPanel();
 
@@ -1987,63 +1936,3 @@ void CMvMVictoryPanelContainer::ShowVictoryPanel( bool bIsReopening )
 	}
 }
 
-#ifdef STAGING_ONLY
-#include "tf_hud_mann_vs_machine_status.h"
-
-static void fake_mvm_victory_f()
-{
-	tf_mvm_fake_loot.SetValue( 1 );
-
-#ifdef USE_MVM_TOUR
-	const MvMTour_t &tour = GetItemSchema()->GetMvmTours()[ 0 ];
-#endif // USE_MVM_TOUR
-	const MvMMission_t &chal = GetItemSchema()->GetMvmMissions()[ 0 ];
-	// We'll send everybody the same summary message describing what everybody got
-	CMsgMvMVictoryInfo msgVictoryInfo;
-#ifdef USE_MVM_TOUR
-	msgVictoryInfo.set_tour_name( tour.m_sTourInternalName.Get() );
-#endif // USE_MVM_TOUR
-	msgVictoryInfo.set_mission_name( chal.m_sPop.Get() );
-	CSteamID steamID;
-
-	int nCount = 0;
-	for ( int i = 1 ; i <= gpGlobals->maxClients ; i++ )
-	{
-		CBasePlayer *pPlayer = UTIL_PlayerByIndex( i );
-		
-		if ( pPlayer && pPlayer->GetTeamNumber() == TF_TEAM_RED && pPlayer->GetSteamID( &steamID ) )
-		{
-			CMsgMvMVictoryInfo_Player *pVictoryMsgPlayer = msgVictoryInfo.add_players();
-			pVictoryMsgPlayer->set_steam_id( steamID.ConvertToUint64() );
-			pVictoryMsgPlayer->set_badge_leveled( true );
-			pVictoryMsgPlayer->set_badge_progress_updated( true );
-			pVictoryMsgPlayer->set_badge_level( RandomInt(0,5) );
-			pVictoryMsgPlayer->set_badge_progress_bits( RandomInt(1,4) );
-			++nCount;
-		}
-	}
-
-	if ( C_BasePlayer::GetLocalPlayer()->GetSteamID( &steamID ) )
-	{
-		for ( nCount; nCount < 6; ++nCount )
-		{
-			CMsgMvMVictoryInfo_Player *pVictoryMsgPlayer = msgVictoryInfo.add_players();
-			pVictoryMsgPlayer->set_steam_id(steamID.ConvertToUint64());
-			pVictoryMsgPlayer->set_badge_leveled(true);
-			pVictoryMsgPlayer->set_badge_progress_updated(true);
-			pVictoryMsgPlayer->set_badge_level(RandomInt(0, 5));
-			pVictoryMsgPlayer->set_badge_progress_bits(RandomInt(1, 4));
-		}
-	}
-
-	CTFHudMannVsMachineStatus *pMannVsMachineStatus = GET_HUDELEMENT( CTFHudMannVsMachineStatus );
-	if ( pMannVsMachineStatus )
-	{
-		pMannVsMachineStatus->ForceVictoryRefresh();
-		pMannVsMachineStatus->MVMVictory( false, 9999 );
-		pMannVsMachineStatus->MVMVictoryGCResponse( msgVictoryInfo );
-	}
-}
-
-ConCommand fake_mvm_victory( "fake_mvm_victory", fake_mvm_victory_f );
-#endif

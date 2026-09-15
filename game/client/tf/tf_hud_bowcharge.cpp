@@ -56,7 +56,7 @@ CHudBowChargeMeter::CHudBowChargeMeter( const char *pElementName ) : CHudElement
 
 	m_pChargeMeter = new ContinuousProgressBar( this, "ChargeMeter" );
 
-	SetHiddenBits( HIDEHUD_MISCSTATUS );
+	SetHiddenBits( HIDEHUD_MISCSTATUS | HIDEHUD_PIPES_AND_CHARGE );
 
 	vgui::ivgui()->AddTickSignal( GetVPanel() );
 
@@ -133,9 +133,6 @@ void CHudBowChargeMeter::FireGameEvent( IGameEvent *event )
 			pszModelName = g_pszArrowModels[MODEL_FESTIVE_ARROW_REGULAR];
 			break;
 		case TF_PROJECTILE_HEALING_BOLT:
-#ifdef STAGING_ONLY
-		case TF_PROJECTILE_MILK_BOLT:
-#endif
 			{
 				pszModelName = g_pszArrowModels[MODEL_SYRINGE];
 				// pull the syringe back slightly
@@ -172,22 +169,6 @@ void CHudBowChargeMeter::FireGameEvent( IGameEvent *event )
 				}
 				break;
 			}
-#ifdef STAGING_ONLY
-		case TF_PROJECTILE_THROWING_KNIFE:
-			{
-				pszModelName = g_pszArrowModels[MODEL_THROWING_KNIFE];
-				// pull the syringe back slightly
-				Vector vForward;
-				AngleVectors( boneAngles, &vForward );
-				//bonePosition = bonePosition + ( vForward * 5.0f );
-				//bonePosition = ( vForward * -7.0f ) + Vector(0, 0, 2);
-				//flScale = 5.0f;
-				break;
-			}
-		case TF_PROJECTILE_SNIPERBULLET:
-			pszModelName = g_pszArrowModels[MODEL_SYRINGE];
-			break;
-#endif // STAGING_ONLY
 		default:
 			Warning( " Unsupported Projectile type on event arrow_impact - %d", type );
 			return;

@@ -33,6 +33,10 @@ void VerifySequenceIndex( CStudioHdr *pstudiohdr );
 
 extern ISoundEmitterSystemBase *soundemitterbase;
 
+CModelSoundsCache::CModelSoundsCache()
+{
+}
+
 CModelSoundsCache::CModelSoundsCache( const CModelSoundsCache& src )
 {
 	sounds = src.sounds;
@@ -64,7 +68,7 @@ void CModelSoundsCache::Restore( CUtlBuffer& buf  )
 	{
 		char soundname[ 512 ];
 
-		buf.GetString( soundname, sizeof( soundname ) );
+		buf.GetString( soundname );
 
 		int idx = soundemitterbase->GetSoundIndex( soundname );
 		if ( idx != -1 )
@@ -147,7 +151,7 @@ void CModelSoundsCache::BuildAnimationEventSoundList( CStudioHdr *hdr, CUtlVecto
 				{
 					if ( pEvent->type & AE_TYPE_NEWEVENTSYSTEM )
 					{
-						if ( pEvent->event == AE_SV_PLAYSOUND )
+						if ( pEvent->event == AE_SV_PLAYSOUND || pEvent->event == AE_SV_EXCLUDE_PLAYER_SOUND )
 						{
 							FindOrAddScriptSound( sounds, pEvent->pszOptions() );
 						}
@@ -181,6 +185,7 @@ void CModelSoundsCache::BuildAnimationEventSoundList( CStudioHdr *hdr, CUtlVecto
 				}
 				break;
 			case AE_CL_PLAYSOUND:
+			case AE_CL_EXCLUDE_PLAYER_SOUND:
 				{
 					if ( !( pEvent->type & AE_TYPE_CLIENT ) )
 						break;

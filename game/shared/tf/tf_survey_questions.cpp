@@ -30,12 +30,12 @@
 //-----------------------------------------------------------------------------
 bool CompetitiveInquiry( const CMsgGC_Match_Result& msgMatchResult, uint32 nPlayerIndex )
 {
-	const IMatchGroupDescription* pMatchDesc = GetMatchGroupDescription( (EMatchGroup) msgMatchResult.match_group() );
+	const IMatchGroupDescription* pMatchDesc = GetMatchGroupDescription( (ETFMatchGroup) msgMatchResult.match_group() );
 	
 	if ( pMatchDesc )
 	{
 		// Only show this in Casual 12v12
-		return pMatchDesc->m_eMatchGroup == k_nMatchGroup_Casual_12v12;
+		return pMatchDesc->m_eMatchGroup == k_eTFMatchGroup_Casual_12v12;
 	}
 
 	return false;
@@ -47,12 +47,12 @@ bool CompetitiveInquiry( const CMsgGC_Match_Result& msgMatchResult, uint32 nPlay
 //-----------------------------------------------------------------------------
 bool CasualInquiry( const CMsgGC_Match_Result& msgMatchResult, uint32 nPlayerIndex )
 {
-	const IMatchGroupDescription* pMatchDesc = GetMatchGroupDescription( ( EMatchGroup )msgMatchResult.match_group() );
+	const IMatchGroupDescription* pMatchDesc = GetMatchGroupDescription( ( ETFMatchGroup )msgMatchResult.match_group() );
 
 	if ( pMatchDesc )
 	{
 		// Only show this in Competitive 6v6
-		return pMatchDesc->m_eMatchGroup == k_nMatchGroup_Ladder_6v6;
+		return pMatchDesc->m_eMatchGroup == k_eTFMatchGroup_Ladder_6v6;
 	}
 
 	return false;
@@ -65,7 +65,8 @@ bool CasualInquiry( const CMsgGC_Match_Result& msgMatchResult, uint32 nPlayerInd
 const SurveyQuestion_t g_SurveyQuestions[SurveyQuestionType_ARRAYSIZE] =  { { QUESTION_MATCH_QUALITY,	"MatchQuality",			1.f,	NULL,					true },
 																			{ QUESTION_MAP_QUALITY,		"MapQuality",			1.f,	NULL,					true },
 																			{ QUESTION_COMP_INQUIRY,	"CompetitiveInquiry",	1.f,	&CompetitiveInquiry,	true },
-																			{ QUESTION_CASUAL_INQUIRY,	"CasualInquiry",		1.f,	&CasualInquiry,			true } };
+																			{ QUESTION_CASUAL_INQUIRY,	"CasualInquiry",		1.f,	&CasualInquiry,			true }, 
+																			{ QUESTION_RANDOM_CRIT,		"RandomCritInquiry",	1.f,	NULL,					true } };
 
 #ifdef CLIENT_DLL
 
@@ -90,6 +91,9 @@ CSurveyQuestionPanel* CreateSurveyQuestionPanel( Panel* pParent, const CMsgGCSur
 		break;
 	case QUESTION_CASUAL_INQUIRY:
 		pSurveyPanel = new CCasualInquirySurvey( pParent, msgSurveyQuestion );
+		break;
+	case QUESTION_RANDOM_CRIT:
+		pSurveyPanel = new CRandomCritSurvey( pParent, msgSurveyQuestion );
 		break;
 	default:
 		Assert( !"Unhandled survey question type!" );
@@ -257,24 +261,5 @@ void CMapQualitySurvey::PerformLayout()
 	}
 }
 
-#ifdef STAGING_ONLY
-CON_COMMAND( test_survey, "Creates a test survey" )
-{
-	if( args.ArgC() < 2 )
-		return;
-
-	int nDefIndex = atoi( args[1] );
-	if ( nDefIndex < 0 || nDefIndex >= SurveyQuestionType_ARRAYSIZE )
-		return;
-
-	CMsgGCSurveyRequest msgSurvey;
-	msgSurvey.set_match_id( 0 );
-	msgSurvey.set_question_type( (SurveyQuestionType)nDefIndex );
-	
-	Panel* pSurvey =  CreateSurveyQuestionPanel( NULL, msgSurvey );
-	IViewPortPanel *pMMOverride = ( gViewPortInterface->FindPanelByName( PANEL_MAINMENUOVERRIDE ) );
-	pSurvey->SetParent( (CHudMainMenuOverride*)pMMOverride );
-}
-#endif
 
 #endif

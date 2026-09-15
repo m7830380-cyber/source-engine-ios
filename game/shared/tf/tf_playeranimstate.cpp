@@ -389,6 +389,33 @@ void CTFPlayerAnimState::Update( float eyeYaw, float eyePitch )
 
 	if ( SetupPoseParameters( pStudioHdr ) )
 	{
+		// check if new item affect player pose params
+		CTFWeaponBase *pWeapon = static_cast< CTFWeaponBase* >( m_pPlayer->GetActiveWeapon() );
+		if ( m_hActiveWeapon != pWeapon )
+		{
+			m_hActiveWeapon = pWeapon;
+
+			m_PlayerPoseParams.RemoveAll();
+			if ( pWeapon )
+			{
+				int nPoseParams = 0;
+				poseparamtable_t *pPoseParamList = pWeapon->GetPlayerPoseParamList( nPoseParams );
+				if ( pPoseParamList )
+				{
+					m_PlayerPoseParams.EnsureCount( nPoseParams );
+					for ( int i=0; i<nPoseParams; ++i )
+					{
+						m_PlayerPoseParams[i] = CachedPoseParam_t( GetBasePlayer()->LookupPoseParameter( pStudioHdr, pPoseParamList[i].strName ), pPoseParamList[i].flValue );
+					}
+				}
+			}
+		}
+
+		for ( int i=0; i<m_PlayerPoseParams.Count(); ++i )
+		{
+			m_pTFPlayer->SetPoseParameter( pStudioHdr, m_PlayerPoseParams[i].first, m_PlayerPoseParams[i].second );
+		}
+
 		if ( !bIsImmobilized )
 		{
 			// Pose parameter - what direction are the player's legs running in.
@@ -526,12 +553,7 @@ void CTFPlayerAnimState::CheckPasstimeThrowAnimation()
 	}
 	else // not charging
 	{
-		 if ( pPlayer->m_Shared.m_iPasstimeThrowAnimState == PASSTIME_THROW_ANIM_CANCEL )
-		 {
-			 pPlayer->DoAnimationEvent( PLAYERANIMEVENT_PASSTIME_THROW_CANCEL );
-			 pPlayer->m_Shared.m_iPasstimeThrowAnimState = PASSTIME_THROW_ANIM_NONE;
-		 }
-		 else if ( pPlayer->m_Shared.m_iPasstimeThrowAnimState == PASSTIME_THROW_ANIM_LOOP )
+		 if ( pPlayer->m_Shared.m_iPasstimeThrowAnimState == PASSTIME_THROW_ANIM_LOOP )
 		 {
 			 pPlayer->DoAnimationEvent( PLAYERANIMEVENT_PASSTIME_THROW_END );
 			 int iSeq = pPlayer->SelectWeightedSequence( ACT_MP_PASSTIME_THROW_END );
@@ -545,6 +567,92 @@ void CTFPlayerAnimState::CheckPasstimeThrowAnimation()
 				 pPlayer->m_Shared.m_iPasstimeThrowAnimState = PASSTIME_THROW_ANIM_NONE;
 			 }
 		 }
+	}
+}
+
+
+
+extern bool IsInPrediction();
+
+//-----------------------------------------------------------------------------
+// Purpose: Updates animation state if player's looking at CYOAPDA
+//-----------------------------------------------------------------------------
+void CTFPlayerAnimState::CheckCYOAPDAAnimtion()
+{
+	CTFPlayer *pPlayer = GetTFPlayer();
+	if ( !pPlayer )
+		return;
+
+	if ( IsInPrediction() )
+		return;
+
+	// do not play anims if in kart
+	if ( pPlayer->m_Shared.InCond( TF_COND_HALLOWEEN_KART ) )
+		return;
+
+	if ( pPlayer->IsTaunting() )
+		return;
+
+	bool isViewingCYOAPDA = pPlayer->IsViewingCYOAPDA();
+
+	CEconItemView *pItem = NULL;
+
+#ifdef GAME_DLL
+	if ( pPlayer->Inventory() )
+	{
+		pItem = pPlayer->GetEquippedItemForLoadoutSlot( LOADOUT_POSITION_ACTION );
+	}
+#else
+	CSteamID steamID;
+	if ( pPlayer->GetSteamID( &steamID ) )
+	{
+		pItem = TFInventoryManager()->GetItemInLoadoutForClass( pPlayer->GetPlayerClass()->GetClassIndex(), LOADOUT_POSITION_ACTION, &steamID );
+	}
+#endif
+	item_definition_index_t contractTrackerDefIndex = 5869;
+	if ( pItem && pItem->GetItemDefIndex() != contractTrackerDefIndex )
+	{
+		// If we don't have the contracker equipped, we can't be looking at it.
+		// We may have been looking at it and only just now removed it,
+		// so we still need to check the animation state and maybe animate out.
+		//
+		// Old code used to return here which would cause the client to stay
+		// locked in the look sequence, but also able to move and shoot.
+		isViewingCYOAPDA = false;
+	}
+
+	TFCYOAPDAAnimState_t state = pPlayer->m_Shared.m_iCYOAPDAAnimState;
+	if ( isViewingCYOAPDA
+		 )
+	{
+		if ( state == CYOA_PDA_ANIM_NONE )
+		{
+			int iSeq = pPlayer->SelectWeightedSequence( ACT_MP_CYOA_PDA_INTRO );
+			pPlayer->m_Shared.m_flCYOAPDAAnimStateTime = gpGlobals->curtime + pPlayer->SequenceDuration( iSeq );
+			pPlayer->DoAnimationEvent( PLAYERANIMEVENT_CYOAPDA_BEGIN );
+			pPlayer->m_Shared.m_iCYOAPDAAnimState = CYOA_PDA_ANIM_IDLE;
+		}
+		else if ( state == CYOA_PDA_ANIM_IDLE && gpGlobals->curtime > pPlayer->m_Shared.m_flCYOAPDAAnimStateTime )
+		{
+			int iSeq = pPlayer->SelectWeightedSequence( ACT_MP_CYOA_PDA_IDLE );
+			pPlayer->m_Shared.m_flCYOAPDAAnimStateTime = gpGlobals->curtime + pPlayer->SequenceDuration( iSeq );
+			pPlayer->DoAnimationEvent( PLAYERANIMEVENT_CYOAPDA_MIDDLE );
+			pPlayer->m_Shared.m_iCYOAPDAAnimState = CYOA_PDA_ANIM_IDLE;
+		}
+	}
+	else
+	{
+		if ( state == CYOA_PDA_ANIM_IDLE && gpGlobals->curtime > pPlayer->m_Shared.m_flCYOAPDAAnimStateTime )
+		{
+			int iSeq = pPlayer->SelectWeightedSequence( ACT_MP_CYOA_PDA_OUTRO );
+			pPlayer->m_Shared.m_flCYOAPDAAnimStateTime = gpGlobals->curtime + pPlayer->SequenceDuration( iSeq );
+			pPlayer->DoAnimationEvent( PLAYERANIMEVENT_CYOAPDA_END );
+			pPlayer->m_Shared.m_iCYOAPDAAnimState = CYOA_PDA_ANIM_OUTRO;
+		}
+		else if ( state == CYOA_PDA_ANIM_OUTRO && gpGlobals->curtime > pPlayer->m_Shared.m_flCYOAPDAAnimStateTime )
+		{
+			pPlayer->m_Shared.m_iCYOAPDAAnimState = CYOA_PDA_ANIM_NONE;
+		}
 	}
 }
 
@@ -615,6 +723,7 @@ Activity CTFPlayerAnimState::CalcMainActivity()
 {
 	CheckStunAnimation();
 	CheckPasstimeThrowAnimation();
+	CheckCYOAPDAAnimtion();
 
 #ifdef CLIENT_DLL
 	bool bIsAiming = m_pTFPlayer->m_Shared.IsAiming();
@@ -848,24 +957,8 @@ void CTFPlayerAnimState::Vehicle_LeanAccel( float flInAccel )
 //-----------------------------------------------------------------------------
 void CTFPlayerAnimState::RestartGesture( int iGestureSlot, Activity iGestureActivity, bool bAutoKill )
 {
-	Activity translatedActivity = iGestureActivity;
-
-	CTFPlayer *pPlayer = GetTFPlayer();
-	if ( pPlayer )
-	{
-		// Allow the weapon to override the activity.
-		CTFWeaponBase *pWeapon = pPlayer->GetActiveTFWeapon();
-
-		if ( pWeapon )
-		{
-			CEconItemView *pWeaponEconItemView = pWeapon->GetAttributeContainer()->GetItem();
-			if ( pWeaponEconItemView )
-			{
-				translatedActivity = pWeaponEconItemView->GetStaticData()->GetActivityOverride( pPlayer->GetTeamNumber(), translatedActivity );
-			}
-		}
-	}
-
+	Activity translatedActivity = TranslateActivity( iGestureActivity );
+	
 	BaseClass::RestartGesture( iGestureSlot, translatedActivity, bAutoKill );
 }
 
@@ -1136,8 +1229,14 @@ void CTFPlayerAnimState::DoAnimationEvent( PlayerAnimEvent_t event, int nData )
 	case PLAYERANIMEVENT_PASSTIME_THROW_END:
 		RestartGesture( GESTURE_SLOT_CUSTOM, ACT_MP_PASSTIME_THROW_END );
 		break;
-	case PLAYERANIMEVENT_PASSTIME_THROW_CANCEL:
-		RestartGesture( GESTURE_SLOT_CUSTOM, ACT_MP_PASSTIME_THROW_CANCEL );
+	case PLAYERANIMEVENT_CYOAPDA_BEGIN:
+		RestartGesture( GESTURE_SLOT_CUSTOM, ACT_MP_CYOA_PDA_INTRO, false );
+		break;
+	case PLAYERANIMEVENT_CYOAPDA_MIDDLE:
+		RestartGesture( GESTURE_SLOT_CUSTOM, ACT_MP_CYOA_PDA_IDLE, false );
+		break;
+	case PLAYERANIMEVENT_CYOAPDA_END:
+		RestartGesture( GESTURE_SLOT_CUSTOM, ACT_MP_CYOA_PDA_OUTRO );
 		break;
 	default:
 		{
@@ -1362,7 +1461,14 @@ bool CTFPlayerAnimState::HandleJumping( Activity &idealActivity )
 		else if ( ( GetBasePlayer()->GetFlags() & FL_ONGROUND ) == 0 )
 		{
 			// In an air walk.
-			idealActivity = ACT_MP_AIRWALK;
+			if ( m_pTFPlayer->m_Local.m_flFallVelocity > PLAYER_MAX_SAFE_FALL_SPEED && m_pTFPlayer->m_Shared.CanFallStomp() )
+			{
+				idealActivity = ACT_MP_FALLING_STOMP;
+			}
+			else
+			{
+				idealActivity = ACT_MP_AIRWALK;
+			}
 			m_bInAirWalk = true;
 		}
 	}

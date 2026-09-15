@@ -45,6 +45,7 @@ public:
 	DECLARE_DATADESC();
 
 	virtual void	Event_Killed( const CTakeDamageInfo &info );
+	virtual bool	IsProjectileCollisionTarget( void ) const OVERRIDE { return true; }
 #endif
 
 private:
@@ -64,6 +65,7 @@ private:
 	string_t		m_strHitParticleName;
 	string_t		m_strExplodeSoundName;
 	EWhoToDamage	m_eWhoToDamage;
+	bool			m_bPassActivator;
 };
 
 #endif	//TF_GENERIC_BOMB_H

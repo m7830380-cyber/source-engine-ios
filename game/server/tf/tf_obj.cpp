@@ -56,6 +56,42 @@
 #define ROPE_HANG_DIST	150
 #define UPGRADE_LEVEL_HEALTH_MULTIPLIER 1.2f
 
+#ifdef _DEBUG
+//------------------------------------------------------------------------------
+// Damage the player's buildings the specified amount
+//------------------------------------------------------------------------------
+void CC_HurtBuilding_f( const CCommand &args )
+{
+	if ( !sv_cheats->GetBool() )
+		return;
+
+	CBasePlayer *pPlayer = ToBasePlayer( UTIL_GetCommandClient() );
+	if ( !pPlayer )
+		return;
+
+	int iDamage = 10;
+	if ( args.ArgC() >= 2 )
+	{
+		iDamage = atoi( args[ 1 ] );
+	}
+
+	CTFPlayer *pTFPlayer = ToTFPlayer( pPlayer );
+	if ( pTFPlayer )
+	{
+		for ( int i = pTFPlayer->GetObjectCount() - 1; i >= 0; i-- )
+		{
+			CBaseObject *obj = pTFPlayer->GetObject( i );
+			Assert( obj );
+
+			if ( obj )
+			{
+				obj->TakeDamage( CTakeDamageInfo( NULL, NULL, iDamage, DMG_GENERIC ) );
+			}
+		}
+	}
+}
+static ConCommand hurtbuilding( "hurtbuilding", CC_HurtBuilding_f, "Hurt the player's buildings.\n\tArguments: <health to lose>", FCVAR_CHEAT );
+#endif // _DEBUG
 
 ConVar tf_obj_gib_velocity_min( "tf_obj_gib_velocity_min", "100", FCVAR_CHEAT | FCVAR_DEVELOPMENTONLY );
 ConVar tf_obj_gib_velocity_max( "tf_obj_gib_velocity_max", "450", FCVAR_CHEAT | FCVAR_DEVELOPMENTONLY );
@@ -717,7 +753,7 @@ void CBaseObject::DeterminePlaybackRate( void )
 	{
 		float fRelativeCycle = ( ( flReverseBuildingConstructionSpeed > 0.0f ) ? ( 1.0f - GetCycle() ) : ( GetCycle() ) );
 
-		float flUpgradeTime = ( ShouldQuickBuild() ? 0 : GetObjectInfo( ObjectType() )->m_flUpgradeDuration );
+		float flUpgradeTime = GetUpgradeDuration();
 		flUpgradeTime /= ( ( flReverseBuildingConstructionSpeed < 0.0f ) ? ( flReverseBuildingConstructionSpeed * -1.0 ) : 1.0f );
 		m_flUpgradeCompleteTime = gpGlobals->curtime + flUpgradeTime * fRelativeCycle;
 		m_flTotalConstructionTime = m_flConstructionTimeLeft = GetTotalTime();
@@ -822,22 +858,17 @@ float CBaseObject::GetTotalTime( void )
 {
 	float flBuildTime = GetObjectInfo( ObjectType() )->m_flBuildTime;
 
-	CTFPlayer *pTFBuilder= GetBuilder();
+	CTFPlayer *pTFBuilder = GetBuilder();
 	if ( pTFBuilder )
 	{
 		CALL_ATTRIB_HOOK_FLOAT_ON_OTHER( pTFBuilder, flBuildTime, mod_build_rate );
 	}
 
 	if ( tf_fastbuild.GetInt() )
-	{
-		flBuildTime = MIN( 2.f, flBuildTime );
-	}
+		return Min( flBuildTime, 2.f );
 
-	// quick builds for engineers in Mann Vs Machine mode during setup time
 	if ( TFGameRules()->IsQuickBuildTime() )
-	{
-		flBuildTime = MIN( 1.0f, flBuildTime );
-	}
+		return Min( flBuildTime, 1.f );
 
 	return flBuildTime;
 }
@@ -918,7 +949,7 @@ bool CBaseObject::FindNearestBuildPoint( CBaseEntity *pEntity, CBasePlayer *pBui
 				float flDist = (vecBPOrigin - pBuilder->GetAbsOrigin()).Length();
 
 				// if this is closer, or is the first one in our view, check it out
-				if ( bIgnoreChecks || ( flDist < MIN(flNearestPoint, pBPInterface->GetMaxSnapDistance( i )) ) )
+				if ( bIgnoreChecks || ( flDist < Min( flNearestPoint, pBPInterface->GetMaxSnapDistance( i ) ) ) )
 				{
 					flNearestPoint = flDist;
 					vecNearestBuildPoint = vecBPOrigin;
@@ -1299,7 +1330,7 @@ bool CBaseObject::StartBuilding( CBaseEntity *pBuilder )
 				if ( !iAmountPlayerPaidForMe )
 				{
 					// Player couldn't afford to pay for me, so abort
-					ClientPrint( (CBasePlayer*)pBuilder, HUD_PRINTCENTER, "Not enough resources.\n" );
+					ClientPrint( (CBasePlayer*)pBuilder, HUD_PRINTCENTER, "#TF_Not_Enough_Resources" );
 					StopPlacement();
 					return false;
 				}
@@ -1397,6 +1428,11 @@ bool CBaseObject::StartBuilding( CBaseEntity *pBuilder )
 	m_flTotalConstructionTime = m_flConstructionTimeLeft = GetTotalTime();
 	m_flConstructionStartTime = gpGlobals->curtime;
 
+	if ( TFGameRules() && TFGameRules()->IsPowerupMode() && m_bCarryDeploy )
+	{
+		m_flTotalConstructionTime = 1.0f;
+	}
+
 	if ( pBuilder && pBuilder->IsPlayer() )
 	{
 		CTFPlayer *pTFBuilder = ToTFPlayer( pBuilder );
@@ -1409,6 +1445,14 @@ bool CBaseObject::StartBuilding( CBaseEntity *pBuilder )
 			event->SetInt( "index", entindex() );	// object entity index
 			gameeventmanager->FireEvent( event, true );	// don't send to clients
 		}
+
+		CSingleUserRecipientFilter user( pTFBuilder );
+		user.MakeReliable();
+		UserMessageBegin( user, "BuiltObject" );
+			WRITE_BYTE( ObjectType() );
+			WRITE_BYTE( GetObjectMode() );
+			WRITE_BYTE( entindex() );
+		MessageEnd();
 	}
 
 	m_vecBuildOrigin = GetAbsOrigin();
@@ -1839,7 +1883,7 @@ int CBaseObject::OnTakeDamage( const CTakeDamageInfo &info )
 	}
 
 	m_AchievementData.AddDamagerToHistory( info.GetAttacker() );
-	if ( info.GetAttacker()->IsPlayer() )
+	if ( info.GetAttacker() && info.GetAttacker()->IsPlayer() )
 	{
 		ToTFPlayer( info.GetAttacker() )->m_AchievementData.AddTargetToHistory( this );
 	}
@@ -1878,18 +1922,6 @@ int CBaseObject::OnTakeDamage( const CTakeDamageInfo &info )
 	CTFWeaponBase *pWeapon = dynamic_cast<CTFWeaponBase *>(info.GetWeapon());
 	if ( pWeapon )
 	{
-#ifdef STAGING_ONLY		
-		// Attacker has building disabling properties
-		float flDisablingAttack = 0.0f;
-		CALL_ATTRIB_HOOK_FLOAT_ON_OTHER( pWeapon, flDisablingAttack, disable_buildings_on_hit );
-		if ( flDisablingAttack )
-		{
-			// do not override if existing time is longer
-			m_flPlasmaDisableTime = Max( gpGlobals->curtime + flDisablingAttack, m_flPlasmaDisableTime );
-			m_bPlasmaDisable = true;
-			UpdateDisabledState();
-		}
-#endif // STAGING_ONLY
 
 		// Apply attributes that increase damage vs buildings
 		CALL_ATTRIB_HOOK_FLOAT_ON_OTHER( pWeapon, flDamage, mult_dmg_vs_buildings );
@@ -1978,7 +2010,7 @@ int CBaseObject::OnTakeDamage( const CTakeDamageInfo &info )
 
 	if ( flDamage )
 	{
-		m_iLifetimeDamage += floor( MIN( flDamage, m_flHealth ) );
+		m_iLifetimeDamage += floor( Min( flDamage, m_flHealth ) );
 		if ( m_iLifetimeDamage > tf_obj_damage_tank_achievement_amount.GetInt() && GetBuilder() )
 		{
 			GetBuilder()->AwardAchievement( ACHIEVEMENT_TF_ENGINEER_TANK_DAMAGE );
@@ -2004,7 +2036,6 @@ int CBaseObject::OnTakeDamage( const CTakeDamageInfo &info )
 		}
 
 		m_lifeState = LIFE_DEAD;
-		m_OnDestroyed.FireOutput( info.GetAttacker(), this);
 		Killed( info );
 
 		// Tell our builder to speak about it
@@ -2090,7 +2121,7 @@ bool CBaseObject::Construct( float flHealth )
 		// Minibuildings build health at a reduced rate
 		// Staging_engy
 		{
-			SetHealth( MIN( GetMaxHealth(), m_flHealth + (IsMiniBuilding() ? (flHealth * 0.5f) : flHealth) ) );
+			SetHealth( Min( (float)GetMaxHealth(), m_flHealth + (IsMiniBuilding() ? (flHealth * 0.5f) : flHealth) ) );
 		}
 
 		// Return true if we're constructed now
@@ -2107,7 +2138,7 @@ bool CBaseObject::Construct( float flHealth )
 			return true;
 
 		// Increase health.
-		SetHealth( MIN( GetMaxHealth(), MAX( 1, m_flHealth + flHealth ) ) );
+		SetHealth( Min( (float)GetMaxHealth(), Max( 1.f, m_flHealth + flHealth ) ) );
 
 		m_OnRepaired.FireOutput( this, this);
 
@@ -2293,7 +2324,7 @@ CTFAmmoPack* CBaseObject::CreateAmmoPack( const char *pchModel, int nMetal )
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: Object has been blown up. Drop resource chunks upto the value of my max health.
+// Purpose: Object has been blown up. Drop resource chunks up to the value of my max health.
 //-----------------------------------------------------------------------------
 void CBaseObject::Killed( const CTakeDamageInfo &info )
 {
@@ -2305,7 +2336,7 @@ void CBaseObject::Killed( const CTakeDamageInfo &info )
 	CTFPlayer *pScorer = ToTFPlayer( TFGameRules()->GetDeathScorer( pKiller, pInflictor, this ) );
 	CTFPlayer *pAssister = NULL;
 
-	// If we are being carried, 
+	m_OnDestroyed.FireOutput( pKiller, this );
 
 	// if this object has a sapper on it, and was not killed by the sapper (killed by damage other than crush, since sapper does crushing damage),
 	// award an assist to the owner of the sapper since it probably contributed to destroying this object
@@ -2384,7 +2415,7 @@ void CBaseObject::Killed( const CTakeDamageInfo &info )
 			event->SetInt( "objecttype", GetType() );
 			event->SetInt( "index", entindex() );	// object entity index
 			event->SetBool( "was_building", m_bBuilding );
-
+			event->SetInt( "team", GetTeamNumber() );
 			gameeventmanager->FireEvent( event );
 		}
 
@@ -2467,10 +2498,20 @@ void CBaseObject::Killed( const CTakeDamageInfo &info )
 	}
 
 	// Stats tracking for strange items.
-	EconEntity_OnOwnerKillEaterEvent( dynamic_cast<CEconEntity *>( info.GetWeapon() ),
-									  pScorer,
-									  GetOwner(),
-									  kKillEaterEvent_BuildingDestroyed );
+	if ( info.GetWeapon() )
+	{
+		EconEntity_OnOwnerKillEaterEvent( dynamic_cast<CEconEntity *>( info.GetWeapon() ),
+										  pScorer,
+										  GetOwner(),
+										  kKillEaterEvent_BuildingDestroyed );
+	}
+	else if ( pScorer && GetOwner() )
+	{
+		//  we still want strange cosmetics to count buildings destroyed
+		HatAndMiscEconEntities_OnOwnerKillEaterEvent( pScorer,
+													  GetOwner(),
+													  kKillEaterEvent_BuildingDestroyed );
+	}
 
 	UTIL_Remove( this );
 }
@@ -2630,7 +2671,7 @@ void CBaseObject::InputSetHealth( inputdata_t &inputdata )
 void CBaseObject::InputAddHealth( inputdata_t &inputdata )
 {
 	int iHealth = inputdata.value.Int();
-	SetHealth( MIN( GetMaxHealth(), m_flHealth + iHealth ) );
+	SetHealth( Min( (float)GetMaxHealth(), m_flHealth + iHealth ) );
 }
 
 //-----------------------------------------------------------------------------
@@ -2644,7 +2685,6 @@ void CBaseObject::InputRemoveHealth( inputdata_t &inputdata )
 	if ( GetHealth() <= 0 )
 	{
 		m_lifeState = LIFE_DEAD;
-		m_OnDestroyed.FireOutput(this, this);
 
 		CTakeDamageInfo info( inputdata.pCaller, inputdata.pActivator, vec3_origin, GetAbsOrigin(), iDamage, DMG_GENERIC );
 		Killed( info );
@@ -2769,7 +2809,7 @@ bool CBaseObject::OnWrenchHit( CTFPlayer *pPlayer, CTFWrench *pWrench, Vector hi
 	bool bRepairHit = false;
 	bool bUpgradeHit = false;
 
-	bRepairHit = Command_Repair( pPlayer, pWrench->GetRepairValue() );
+	bRepairHit = ( Command_Repair( pPlayer, pWrench->GetRepairAmount(), 1.f ) > 0 );
 
 	if ( !bRepairHit )
 	{
@@ -2814,13 +2854,9 @@ bool CBaseObject::CheckUpgradeOnHit( CTFPlayer *pPlayer )
 	if ( CanBeUpgraded( pPlayer ) )
 	{
 		int iPlayerMetal = pPlayer->GetAmmoCount( TF_AMMO_METAL );
-		int nMaxToAdd = tf_obj_upgrade_per_hit.GetInt();
-		if ( TFGameRules() && TFGameRules()->IsPowerupMode() )
-		{
-			nMaxToAdd *= 2;
-		}		
+		int nMaxToAdd = GetUpgradeAmountPerHit();
 		CALL_ATTRIB_HOOK_INT_ON_OTHER( pPlayer, nMaxToAdd, upgrade_rate_mod );
-		int iAmountToAdd = MIN( nMaxToAdd, iPlayerMetal );
+		int iAmountToAdd = Min( nMaxToAdd, iPlayerMetal );
 
 		if ( iAmountToAdd > ( m_iUpgradeMetalRequired - m_iUpgradeMetal ) )
 			iAmountToAdd = ( m_iUpgradeMetalRequired - m_iUpgradeMetal );
@@ -2903,17 +2939,19 @@ bool CBaseObject::CanBeUpgraded( CTFPlayer *pPlayer )
 //-----------------------------------------------------------------------------
 // Purpose: Separated so it can be triggered by wrench hit or by vgui screen
 //-----------------------------------------------------------------------------
-bool CBaseObject::Command_Repair( CTFPlayer *pActivator, float flRepairMod )
+int CBaseObject::Command_Repair( CTFPlayer *pActivator, float flAmount, float flRepairMod, float flRepairToMetalRatio /*= 3.f*/, bool bSendEvent /*= false*/ )
 {
 	if ( !CanBeRepaired() )
 		return false;
-
-	const float flRepairToMetalRatio = 3.0f;		// Amount Repaired per metal
-	float flTargetHeal = 100.0f * flRepairMod;
-	int iAmountToHeal = MIN( flTargetHeal, GetMaxHealth() - RoundFloatToInt( GetHealth() ) );
-
-	// repair the building
-	int iRepairCost = ceil( (float)( iAmountToHeal ) / flRepairToMetalRatio );
+	
+	float flRepairAmountMax = flAmount * flRepairMod;
+	int iRepairAmount = Min( RoundFloatToInt( flRepairAmountMax ), GetMaxHealth() - RoundFloatToInt( GetHealth() ) );
+	int iRepairCost = ceil( (float)( iRepairAmount ) / flRepairToMetalRatio );
+	if ( iRepairCost > pActivator->GetBuildResources() )
+	{
+		// What can we afford?
+		iRepairCost = pActivator->GetBuildResources();
+	}
 
 	TRACE_OBJECT( UTIL_VarArgs( "%0.2f CBaseObject::Command_Repair ( %f / %d ) - cost = %d\n", gpGlobals->curtime, 
 		GetHealth(),
@@ -2922,27 +2960,48 @@ bool CBaseObject::Command_Repair( CTFPlayer *pActivator, float flRepairMod )
 
 	if ( iRepairCost > 0 )
 	{
-		if ( iRepairCost > pActivator->GetBuildResources() )
+		iRepairAmount = iRepairCost * flRepairToMetalRatio;
+		float flNewHealth = Min( (float)GetMaxHealth(), m_flHealth + iRepairAmount );
+		if ( m_bCarryDeploy && ( flNewHealth > m_iHealthOnPickup ) )
 		{
-			iRepairCost = pActivator->GetBuildResources();
+			// If we are re-deploying after being carried we shouldn't gain more health than we had
+			// on pickup until the deploy process is finished.
+			flNewHealth = m_iHealthOnPickup;
+			iRepairAmount = 0;
 		}
-
-		pActivator->RemoveBuildResources( iRepairCost );
-
-		float flNewHealth = MIN( GetMaxHealth(), m_flHealth + ( iRepairCost * flRepairToMetalRatio ) );
-
-		if ( pActivator != GetBuilder() )
+		else
 		{
-			float flAmountRepaired = flNewHealth - m_flHealth;
-			pActivator->AwardAchievement( ACHIEVEMENT_TF_ENGINEER_REPAIR_TEAM_GRIND, floor( flAmountRepaired ) );
+			// remove the repair cost
+			pActivator->RemoveBuildResources( iRepairCost );
 		}
-
 		SetHealth( flNewHealth );
 
-		return ( iRepairCost > 0 );
+		if ( iRepairAmount > 0 )
+		{
+			if ( pActivator != GetBuilder() )
+			{
+				pActivator->AwardAchievement( ACHIEVEMENT_TF_ENGINEER_REPAIR_TEAM_GRIND, iRepairAmount );
+			}
+
+			// This will spawn a large "+" particle over the object
+			if ( bSendEvent )
+			{
+				IGameEvent * pEvent = gameeventmanager->CreateEvent( "building_healed" );
+				if ( pEvent )
+				{
+					pEvent->SetInt( "priority", 1 ); // HLTV event priority, not transmitted
+					pEvent->SetInt( "building", entindex() );
+					pEvent->SetInt( "healer", pActivator->entindex() );
+					pEvent->SetInt( "amount", iRepairAmount );
+					gameeventmanager->FireEvent( pEvent );
+				}
+			}
+		}
+
+		return iRepairAmount;
 	}
 
-	return false;
+	return 0;
 }
 
 //-----------------------------------------------------------------------------
@@ -2952,6 +3011,12 @@ void CBaseObject::StartUpgrading( void )
 {
 	// Increase level
 	m_iUpgradeLevel++;
+
+	//In Powerup mode, carried level 3 sentries skip the second level when deploying in order to get it done quicker
+	if ( m_bCarryDeploy && TFGameRules() && TFGameRules()->IsPowerupMode() )
+	{
+		m_iUpgradeLevel = GetHighestUpgradeLevel();
+	}
 
 	if ( GetHighestUpgradeLevel() < m_iUpgradeLevel )
 	{
@@ -3623,34 +3688,38 @@ bool CBaseObject::ShouldQuickBuild( void )
 		if ( GetType() == OBJ_ATTACHMENT_SAPPER )
 			return false;
 
-#ifdef STAGING_ONLY
-		if ( GetType() == OBJ_SPY_TRAP )
-			return false;
-#endif
 
 		if ( TFGameRules()->IsQuickBuildTime() )
-		{
 			return true;
-		}
 
 		if ( TFGameRules()->IsMannVsMachineMode() )
 		{
 			if ( GetTeamNumber() == TF_TEAM_PVE_INVADERS )
-			{
 				// Engineer bots in MvM deploy pre-built sentries that build up at the normal rate
 				return m_bForceQuickBuild;
-			}
 
 			if ( m_bCarryDeploy || TFGameRules()->State_Get() == GR_STATE_BETWEEN_RNDS )
-			{
 				return true;
-			}
 		}
 	}
 
 	return m_bForceQuickBuild;
 }
 
+//-----------------------------------------------------------------------------
+// 
+//-----------------------------------------------------------------------------
+float CBaseObject::GetUpgradeDuration( void )
+{
+	if ( ShouldQuickBuild() )
+		return 1.f;
+
+	return GetObjectInfo( ObjectType() )->m_flUpgradeDuration;
+}
+
+//-----------------------------------------------------------------------------
+// 
+//-----------------------------------------------------------------------------
 void CBaseObject::DoReverseBuild( void )
 {
 	m_iHighestUpgradeLevel = m_iUpgradeLevel;
@@ -3679,6 +3748,9 @@ void CBaseObject::DoReverseBuild( void )
 	}
 }
 
+//-----------------------------------------------------------------------------
+// 
+//-----------------------------------------------------------------------------
 float CBaseObject::GetReversesBuildingConstructionSpeed( void )
 {
 	CObjectSapper *pSapper = GetSapper();
@@ -3686,6 +3758,21 @@ float CBaseObject::GetReversesBuildingConstructionSpeed( void )
 		return 0.0f;
 
 	return pSapper->GetReversesBuildingConstructionSpeed();
+}
+
+//-----------------------------------------------------------------------------
+// 
+//-----------------------------------------------------------------------------
+int	CBaseObject::GetUpgradeAmountPerHit( void )
+{
+	int nAmount = tf_obj_upgrade_per_hit.GetInt();
+
+	if ( TFGameRules()->InSetup() || TFGameRules()->IsPowerupMode() )
+	{
+		nAmount *= 2;
+	}
+
+	return nAmount;
 }
 
 //-----------------------------------------------------------------------------

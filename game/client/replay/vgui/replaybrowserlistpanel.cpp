@@ -27,7 +27,7 @@
 
 extern IClientReplayContext *g_pClientReplayContext;
 extern IReplayMovieManager *g_pReplayMovieManager;
-extern const char *GetMapDisplayName( const char *mapName );
+extern const char *GetMapDisplayName( const char *mapName, bool bTitleCase = false );
 
 //-----------------------------------------------------------------------------
 
@@ -379,7 +379,7 @@ CReplayBrowserThumbnail *CReplayListPanel::FindThumbnailAtCursor( int x, int y )
 
 #if defined( WIN32 )
 	#define Q_wcstok( text, delimiters, context ) wcstok( text, delimiters ); context;
-#elif defined( APPLE ) || defined( LINUX )
+#elif defined( OSX ) || defined( LINUX )
 	#define Q_wcstok( text, delimiters, context ) wcstok( text, delimiters, context )
 #endif
 

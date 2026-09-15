@@ -129,6 +129,10 @@ void CTFGrenadeLauncher::Spawn( void )
 //-----------------------------------------------------------------------------
 bool CTFGrenadeLauncher::Holster( CBaseCombatWeapon *pSwitchingTo )
 {
+#ifdef CLIENT_DLL
+	StopSound( TF_WEAPON_CANNON_CHARGE_SOUND );
+#endif // CLIENT_DLL
+
 	ResetDetonateTime();
 	return BaseClass::Holster( pSwitchingTo );
 }

@@ -11,26 +11,5 @@
 #pragma once
 #endif
 
-#ifdef GC
-#include "gcsdk/schemasharedobject.h"
-
-//---------------------------------------------------------------------------------
-// Purpose: 
-//---------------------------------------------------------------------------------
-class CTFCoachRating : public GCSDK::CSchemaSharedObject< CSchCoachRating, k_EEconTypeCoachRating >
-{
-#ifdef GC_DLL
-	DECLARE_CLASS_MEMPOOL( CTFCoachRating );
-#endif
-
-public:
-	CTFCoachRating() {}
-	CTFCoachRating( uint32 unAccountID ) 
-	{
-		Obj().m_unAccountIDCoach = unAccountID;
-	}
-};
-
-#endif // GC
 
 #endif // TF_COACH_RATING_H

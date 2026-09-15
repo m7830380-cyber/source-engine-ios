@@ -186,6 +186,7 @@ const char** CTFHLTVDirector::GetModEvents()
 		"player_death",
 		"player_chat",
 		"player_spawn",
+		"player_hurt",
 		"round_start",
 		"round_end",
 		"server_cvar",

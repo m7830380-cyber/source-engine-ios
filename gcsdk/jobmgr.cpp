@@ -176,7 +176,7 @@ void CJobMgr::AccumulateStatsofJob( CJob &job )
 	uint32 eBucket = 0;
 	// the pointer to the name is a pointer to a constant string
 	// so use this dirty trick to make lookups fast
-	eBucket = (uint32)job.GetName();
+	eBucket = (uint32)(uintp)job.GetName();
 	int iBucket = m_mapStatsBucket.Find( eBucket );
 	if ( iBucket == m_mapStatsBucket.InvalidIndex() )
 	{
@@ -1152,7 +1152,7 @@ int CJobMgr::DumpJobSummary()
 
 		// the pointer to the name is a pointer to a constant string
 		// so use this dirty trick to make lookups fast
-		uint32 eBucket = (uint32)job.GetName();
+		uint32 eBucket = (uint32)(uintp)job.GetName();
 		int iBucket = mapStatsBucket.Find( eBucket );
 		if ( iBucket == mapStatsBucket.InvalidIndex() )
 		{

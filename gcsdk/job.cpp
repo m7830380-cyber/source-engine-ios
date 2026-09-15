@@ -173,7 +173,7 @@ const char *CJob::GetPauseReasonDescription()  const
 		{
 			case k_EJobPauseReasonWaitingForLock:
 			{
-				Q_snprintf( srgchPauseReason, k_cSmallBuff, "WOL: 0x%x (%s)", (unsigned int)m_pWaitingOnLock, m_pWaitingOnLock ? m_pWaitingOnLock->GetName() : "null" );
+				Q_snprintf( srgchPauseReason, k_cSmallBuff, "WOL: %p (%s)", m_pWaitingOnLock, m_pWaitingOnLock ? m_pWaitingOnLock->GetName() : "null" );
 				return srgchPauseReason;
 			}
 

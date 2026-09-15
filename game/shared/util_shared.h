@@ -576,10 +576,18 @@ public:
 		return (m_timestamp > 0.0f) ? m_duration : 0.0f;
 	}
 
-private:
+protected:
 	float m_duration;
 	float m_timestamp;
-	float Now( void ) const;		// work-around since client header doesn't like inlined gpGlobals->curtime
+	virtual float Now( void ) const;		// work-around since client header doesn't like inlined gpGlobals->curtime
+};
+
+class RealTimeCountdownTimer : public CountdownTimer
+{
+	virtual float Now( void ) const OVERRIDE
+	{
+		return Plat_FloatTime();
+	}
 };
 
 char* ReadAndAllocStringValue( KeyValues *pSub, const char *pName, const char *pFilename = NULL );

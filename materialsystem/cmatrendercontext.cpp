@@ -154,6 +154,7 @@ CMatRenderContextBase::CMatRenderContextBase() :
 	m_bEnableClipping = true;
 	m_bFlashlightEnable = false;
 	m_bFullFrameDepthIsValid = false;
+	m_bFogRadial = false;
 
 	for ( i = 0; i < NUM_MATRIX_MODES; i++ )
 	{

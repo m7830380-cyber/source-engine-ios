@@ -803,6 +803,16 @@ public:
 		AssertMsg( 0, "CMatNullRenderContext only provides base features, not a stub (right now)" );
 	}
 
+	virtual void FogRadial( bool bRadial )
+	{
+		CMatRenderContextBase::FogRadial( bRadial );
+	}
+
+	virtual bool GetFogRadial()
+	{
+		return CMatRenderContextBase::GetFogRadial();
+	}
+
 	virtual void EnableColorCorrection( bool bEnable ) {}
 	virtual ColorCorrectionHandle_t AddLookup( const char *pName ) { return 0; }
 	virtual bool RemoveLookup( ColorCorrectionHandle_t handle ) { return true; }

@@ -105,7 +105,8 @@ public:
 		m_flFogStart( 0 ),
 		m_flFogEnd( 0 ),
 		m_flFogZ( 0 ),
-		m_flFogMaxDensity( 1.0 )
+		m_flFogMaxDensity( 1.0 ),
+		m_bFogRadialQueued( false )
 	{
 		memset( &m_FogColor, 0, sizeof(m_FogColor) );
 	}
@@ -196,6 +197,8 @@ public:
 	MaterialFogMode_t						GetFogMode( void );
 	void									GetFogDistances( float *fStart, float *fEnd, float *fFogZ );
 	void									FogMaxDensity( float flMaxDensity );
+	void									FogRadial( bool bRadial );
+	bool									GetFogRadial();
 
 	void									FogColor3f( float r, float g, float b );
 	void									FogColor3fv( float const* rgb );
@@ -617,6 +620,7 @@ private:
 	float m_flFogEnd;
 	float m_flFogZ;
 	float m_flFogMaxDensity;
+	bool m_bFogRadialQueued;
 	color24 m_FogColor;
 
 	CMemoryStack m_Vertices;

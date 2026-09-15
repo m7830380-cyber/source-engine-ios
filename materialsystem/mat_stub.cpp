@@ -1318,6 +1318,15 @@ public:
 	{
 	}
 
+	virtual void				FogRadial( bool bRadial )
+	{
+	}
+
+	virtual bool				GetFogRadial()
+	{
+		return false;
+	}
+
 	virtual void				SetFogZ( float fogZ )
 	{
 	}
@@ -2260,6 +2269,15 @@ public:
 	virtual void AsyncCreateTextureFromRenderTarget( ITexture* pSrcRt, const char* pDstName, ImageFormat dstFmt, bool bGenMips, int nAdditionalCreationFlags, IAsyncTextureOperationReceiver* pRecipient, void* pExtraArgs )
 	{
 
+	}
+
+	virtual void FogRadial( bool bRadial )
+	{
+	}
+
+	virtual bool GetFogRadial()
+	{
+		return false;
 	}
 	
 	virtual ITexture*			CreateNamedTextureFromBitsEx( const char* pName, const char *pTextureGroupName, int w, int h, int mips, ImageFormat fmt, int srcBufferSize, byte* srcBits, int nFlags )

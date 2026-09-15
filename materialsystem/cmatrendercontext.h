@@ -155,6 +155,9 @@ public:
 	virtual void							Printf( PRINTF_FORMAT_STRING const char *fmt, ... );
 	virtual	float							Knob( char *knobname, float *setvalue = NULL );
 
+	virtual void							FogRadial( bool bRadial ) { m_bFogRadial = bRadial; }
+	virtual bool							GetFogRadial() { return m_bFogRadial; }
+
 protected:
 	void									OnAsyncCreateTextureFromRenderTarget( ITexture* pSrcRt, const char** pDstName, IAsyncTextureOperationReceiver* pRecipient );
 	void									OnAsyncMap( ITextureInternal* pTexToMap, IAsyncTextureOperationReceiver* pRecipient, void* pExtraArgs );
@@ -255,6 +258,7 @@ protected:
 	bool								m_bDirtyViewProjState : 1;
 	bool								m_bEnableClipping : 1;
 	bool								m_bFullFrameDepthIsValid : 1;
+	bool								m_bFogRadial : 1;
 };
 
 //-----------------------------------------------------------------------------

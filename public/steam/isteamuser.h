@@ -127,6 +127,9 @@ public:
 	// pcbTicket retrieves the length of the actual ticket.
 	virtual HAuthTicket GetAuthSessionTicket( void *pTicket, int cbMaxTicket, uint32 *pcbTicket ) = 0;
 
+	// Official SDK webapi ticket; unused on iOS/NO_STEAM.
+	virtual HAuthTicket GetAuthTicketForWebApi( const char *pchIdentity ) { return 0; }
+
 	// Authenticate ticket from entity steamID to be sure it is valid and isnt reused
 	// Registers for callbacks if the entity goes offline or cancels the ticket ( see ValidateAuthTicketResponse_t callback and EAuthSessionResponse )
 	virtual EBeginAuthSessionResult BeginAuthSession( const void *pAuthTicket, int cbAuthTicket, CSteamID steamID ) = 0;
@@ -373,7 +376,18 @@ struct StoreAuthURLResponse_t
 	char m_szURL[512];
 };
 
-
+//-----------------------------------------------------------------------------
+// callback for GetTicketForWebApi
+//-----------------------------------------------------------------------------
+struct GetTicketForWebApiResponse_t
+{
+	enum { k_iCallback = k_iSteamUserCallbacks + 68 };
+	HAuthTicket m_hAuthTicket;
+	EResult m_eResult;
+	int m_cubTicket;
+	static const int k_nCubTicketMaxLength = 2560;
+	uint8 m_rgubTicket[k_nCubTicketMaxLength];
+};
 
 #pragma pack( pop )
 

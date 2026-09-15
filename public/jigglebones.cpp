@@ -57,7 +57,7 @@ JiggleData * CJiggleBones::GetJiggleData( int bone, float currenttime, const Vec
  * Do spring physics calculations and update "jiggle bone" matrix
  * (Michael Booth, Turtle Rock Studios)
  */
-void CJiggleBones::BuildJiggleTransformations( int boneIndex, float currenttime, const mstudiojigglebone_t *jiggleInfo, const matrix3x4_t &goalMX, matrix3x4_t &boneMX )
+void CJiggleBones::BuildJiggleTransformations( int boneIndex, float currenttime, const mstudiojigglebone_t *jiggleInfo, const matrix3x4_t &goalMX, matrix3x4_t &boneMX, bool coordSystemIsFlipped )
 {
 	Vector goalBasePosition;
 	MatrixPosition( goalMX, goalBasePosition );
@@ -442,8 +442,20 @@ void CJiggleBones::BuildJiggleTransformations( int boneIndex, float currenttime,
 		//
 		// Build bone matrix to align along current tip direction
 		//
-		Vector left = CrossProduct( goalUp, forward );
-		left.NormalizeInPlace();
+		Vector left, up;
+		if ( coordSystemIsFlipped )
+		{
+			// If the coordinate system is flipped, use left handed rules.
+			left = CrossProduct( forward, goalUp );
+			left.NormalizeInPlace();
+			up = CrossProduct( left, forward );
+		}
+		else
+		{
+			left = CrossProduct( goalUp, forward );
+			left.NormalizeInPlace();
+			up = CrossProduct( forward, left );
+		}
 
 		if ( DotProduct( left, data->lastLeft ) < 0.0f )
 		{
@@ -464,7 +476,7 @@ void CJiggleBones::BuildJiggleTransformations( int boneIndex, float currenttime,
 		}
 #endif
 
-		Vector up = CrossProduct( forward, left );
+		up = CrossProduct( forward, left );
 
 		boneMX[0][0] = left.x;
 		boneMX[1][0] = left.y;

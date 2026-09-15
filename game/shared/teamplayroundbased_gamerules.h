@@ -12,6 +12,7 @@
 
 #include "teamplay_gamerules.h"
 #include "teamplay_round_timer.h"
+#include "GameEventListener.h"
 
 #ifdef GAME_DLL
 #include "team_control_point.h"
@@ -157,7 +158,7 @@ public:
 //-----------------------------------------------------------------------------
 // Purpose: Teamplay game rules that manage a round based structure for you
 //-----------------------------------------------------------------------------
-class CTeamplayRoundBasedRules : public CTeamplayRules
+class CTeamplayRoundBasedRules : public CTeamplayRules, public CGameEventListener
 {
 	DECLARE_CLASS( CTeamplayRoundBasedRules, CTeamplayRules );
 public:
@@ -227,7 +228,7 @@ public:
 	virtual void HandleTeamScoreModify( int iTeam, int iScore) {  };
 
 
-	float GetRoundRestartTime( void ) { return m_flRestartRoundTime; }
+	float GetRoundRestartTime( void ) const { return m_flRestartRoundTime; }
 
 	//Arena Mode
 	virtual bool	IsInArenaMode( void ) const { return false; }
@@ -244,6 +245,9 @@ public:
 
 	virtual int		GetBonusRoundTime( bool bGameOver = false );
 	int				GetRoundsPlayed( void ) { return m_nRoundsPlayed; }
+
+public: // IGameEventListener Interface
+	virtual void FireGameEvent( IGameEvent * event );
 
 #if defined(TF_CLIENT_DLL) || defined(TF_DLL)
 

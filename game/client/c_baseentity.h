@@ -998,6 +998,7 @@ public:
 	virtual IHasAttributes			*GetHasAttributesInterfacePtr() const { return m_pAttributes; }
 	virtual IMaterial				*GetEconWeaponMaterialOverride( int iTeam ) { return NULL; }
 	virtual bool					IsHealthBarVisible( void ) const { return false; }
+	virtual float					GetHealthBarHeightOffset() const { return 0.f; }
 	IHasAttributes					*m_pAttributes;
 
 	bool							IsInWorld( void ) { return true; }

@@ -234,6 +234,9 @@ extern ISaveRestoreOps *eventFuncs;
 #define FTYPEDESC_VIEW_OWN_TEAM			0x4000		// Only show this data if the player is on the same team as the local player
 #define FTYPEDESC_VIEW_NEVER			0x8000		// Never show this field to anyone, even the local player (unusual)
 
+// Define shared with others, this is pred only, and FTYPEDESC_VIEW_OTHER_PLAYER is not used for pred.
+#define FTYPEDESC_ONLY_ERROR_IF_ABOVE_ZERO_TO_ZERO_OR_BELOW_ETC		0x2000	// misyl: Only throw a prediction error if this changes from > 0 -> <= 0
+
 #define TD_MSECTOLERANCE		0.001f		// This is a FIELD_FLOAT and should only be checked to be within 0.001 of the networked info
 
 struct typedescription_t;

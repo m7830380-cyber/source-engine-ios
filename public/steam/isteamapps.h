@@ -149,6 +149,11 @@ struct NewLaunchQueryParameters_t
 	enum { k_iCallback = k_iSteamAppsCallbacks + 14 };
 };
 
+struct NewUrlLaunchParameters_t
+{
+	enum { k_iCallback = k_iSteamAppsCallbacks + 14 };
+};
+
 
 #pragma pack( pop )
 #endif // ISTEAMAPPS_H

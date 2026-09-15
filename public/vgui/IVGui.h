@@ -23,16 +23,13 @@ namespace vgui
 {
 
 // safe handle to a panel - can be converted to and from a VPANEL
-typedef unsigned long HPanel;
-typedef int HContext;
+typedef uint32 HPanel;
+typedef uint32 HContext;
 
 enum
 {
 	DEFAULT_VGUI_CONTEXT = ((vgui::HContext)~0)
 };
-
-// safe handle to a panel - can be converted to and from a VPANEL
-typedef unsigned long HPanel;
 
 //-----------------------------------------------------------------------------
 // Purpose: Interface to core vgui components

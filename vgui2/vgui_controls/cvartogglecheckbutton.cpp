@@ -6,6 +6,7 @@
 //=============================================================================//
 
 #include "tier1/KeyValues.h"
+#include "tier1/convar.h"
 
 #include <vgui/ISurface.h>
 #include <vgui/IScheme.h>
@@ -18,8 +19,8 @@ using namespace vgui;
 
 vgui::Panel *Create_CvarToggleCheckButton()
 {
-	return new CvarToggleCheckButton< ConVarRef >( NULL, NULL );
+	return new CvarToggleCheckButton< UIConVarRef >( NULL, NULL );
 }
 
-DECLARE_BUILD_FACTORY_CUSTOM_ALIAS( CvarToggleCheckButton<ConVarRef>, CvarToggleCheckButton, Create_CvarToggleCheckButton );
+DECLARE_BUILD_FACTORY_CUSTOM_ALIAS( CvarToggleCheckButton<UIConVarRef>, CvarToggleCheckButton, Create_CvarToggleCheckButton );
 

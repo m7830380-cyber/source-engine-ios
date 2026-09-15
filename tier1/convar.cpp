@@ -19,6 +19,8 @@
 #include "icvar.h"
 #include "tier0/dbg.h"
 #include "Color.h"
+#include "cdll_int.h"
+#include "Color.h"
 #if defined( _X360 )
 #include "xbox/xbox_console.h"
 #endif
@@ -1209,6 +1211,62 @@ ConVarRef::ConVarRef( IConVar *pConVar )
 bool ConVarRef::IsValid() const
 {
 	return m_pConVar != &s_EmptyConVar;
+}
+
+UIConVarRef::UIConVarRef( IVEngineClient *pEngine, const char *pName, bool bIgnoreMissing )
+	: ConVarRef( pName, bIgnoreMissing )
+	, m_pEngine( pEngine )
+{
+}
+
+void UIConVarRef::Init( IVEngineClient *pEngine, const char *pName, bool bIgnoreMissing )
+{
+	ConVarRef::Init( pName, bIgnoreMissing );
+	m_pEngine = pEngine;
+}
+
+void UIConVarRef::SetValue( float flValue )
+{
+	if ( !IsValid() )
+		return;
+
+	if ( m_pEngine )
+	{
+		char szEngineCommand[ 256 ];
+		V_sprintf_safe( szEngineCommand, "%s %f\n", GetName(), flValue );
+		m_pEngine->ExecuteClientCmd( szEngineCommand );
+	}
+	else if ( CanSetWithoutEngine() )
+	{
+		ConVarRef::SetValue( flValue );
+	}
+}
+
+void UIConVarRef::SetValue( int nValue )
+{
+	if ( !IsValid() )
+		return;
+
+	if ( m_pEngine )
+	{
+		char szEngineCommand[256];
+		V_sprintf_safe( szEngineCommand, "%s %d\n", GetName(), nValue );
+		m_pEngine->ExecuteClientCmd( szEngineCommand );
+	}
+	else if ( CanSetWithoutEngine() )
+	{
+		ConVarRef::SetValue( nValue );
+	}
+}
+
+void UIConVarRef::SetValue( bool bValue )
+{
+	SetValue( bValue ? 1 : 0 );
+}
+
+bool UIConVarRef::CanSetWithoutEngine()
+{
+	return !IsFlagSet( FCVAR_UNREGISTERED | FCVAR_DEVELOPMENTONLY | FCVAR_REPLICATED | FCVAR_CHEAT | FCVAR_SPONLY );
 }
 
 

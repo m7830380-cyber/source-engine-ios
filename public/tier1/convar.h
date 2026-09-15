@@ -609,6 +609,27 @@ FORCEINLINE_CVAR const char *ConVarRef::GetDefault() const
 	return m_pConVarState->m_pszDefaultValue;
 }
 
+class IVEngineClient;
+
+class UIConVarRef : public ConVarRef
+{
+public:
+	UIConVarRef( IVEngineClient *pEngine, const char *pName, bool bIgnoreMissing = false );
+
+	void Init( const char *pName, bool bIgnoreMissing ) = delete;
+	void Init( IVEngineClient *pEngine, const char *pName, bool bIgnoreMissing );
+	IConVar *GetLinkedConVar() = delete;
+
+	void SetValue( const char *pValue ) = delete;
+	void SetValue( float flValue );
+	void SetValue( int nValue );
+	void SetValue( bool bValue );
+
+private:
+	bool CanSetWithoutEngine();
+
+	IVEngineClient *m_pEngine;
+};
 
 //-----------------------------------------------------------------------------
 // Called by the framework to register ConCommands with the ICVar

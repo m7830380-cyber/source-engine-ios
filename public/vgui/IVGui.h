@@ -18,6 +18,7 @@
 #include "appframework/IAppSystem.h"
 
 class KeyValues;
+class IVEngineClient;
 
 namespace vgui
 {
@@ -99,6 +100,8 @@ public:
 
 	// add a tick signal like above, but to the head of the list of tick signals
 	virtual void AddTickSignalToHead( VPANEL panel, int intervalMilliseconds = 0 ) = 0;
+
+	virtual IVEngineClient *GetVGUIEngine() = 0;
 };
 
 #define VGUI_IVGUI_INTERFACE_VERSION "VGUI_ivgui008"

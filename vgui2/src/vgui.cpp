@@ -49,6 +49,8 @@
 
 #undef GetCursorPos // protected_things.h defines this, and it makes it so we can't access g_pInput->GetCursorPos.
 
+#include "cdll_int.h"
+
 // memdbgon must be the last include file in a .cpp file!!!
 #include <tier0/memdbgon.h>
 
@@ -187,6 +189,11 @@ public:
 		return m_bVRMode;
 	}
 
+	virtual IVEngineClient *GetVGUIEngine() OVERRIDE
+	{
+		return m_pVGuiEngine;
+	}
+
 	bool IsDispatchingMessages( void )
 	{
 		return m_InDispatcher;
@@ -234,6 +241,7 @@ private:
 	bool m_bDebugMessages : 1;
 	bool m_bVRMode : 1;
 	bool m_bCanRemoveTickSignal : 1;
+	IVEngineClient *m_pVGuiEngine;
 	int m_nReentrancyCount;
 
 	CUtlVector< Tick_t * > m_TickSignalVec;
@@ -279,6 +287,7 @@ CVGui::CVGui() : m_DelayedMessageQueue(0, 4, PriorityQueueComp)
 	m_bDebugMessages = false;
 	m_bDoSleep = true;
 	m_bVRMode = false;
+	m_pVGuiEngine = NULL;
 	m_bCanRemoveTickSignal = true;
 	m_nReentrancyCount = 0;
 	m_hContext = DEFAULT_VGUI_CONTEXT;
@@ -1142,6 +1151,8 @@ bool CVGui::Connect( CreateInterfaceFn factory )
 		Warning( "IVGui unable to connect to required interfaces!\n" );
 		return false;
 	}
+
+	m_pVGuiEngine = (IVEngineClient *)factory( VENGINE_CLIENT_INTERFACE_VERSION, NULL );
 
 	return VGui_InternalLoadInterfaces( &factory, 1 );
 }

@@ -49,9 +49,6 @@ public:
 	// Get the state of a file
 	virtual P4FileState_t GetFileState();
 
-	// Changes the file to the specified filetype.
-	virtual bool SetFileType( const CUtlString& desiredFileType );
-
 protected:
 	// The filename that this class instance represents
 	CUtlString m_sFilename;

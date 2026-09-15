@@ -163,12 +163,8 @@ void TrackBoneSetupEnt( C_BaseAnimating *pEnt );
 
 bool IsEngineThreaded();
 
-#ifndef NO_STEAM
-
 /// Returns Steam ID, given player index.   Returns an invalid SteamID upon
 /// failure
 extern CSteamID GetSteamIDForPlayerIndex( int iPlayerIndex );
-
-#endif
 
 #endif // CDLL_CLIENT_INT_H

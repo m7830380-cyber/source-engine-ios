@@ -2654,8 +2654,6 @@ void CHLClient::DisplayVoiceUnavailableMessage()
 #endif // TF_CLIENT_DLL 
 }
 
-#ifndef NO_STEAM
-
 CSteamID GetSteamIDForPlayerIndex( int iPlayerIndex )
 {
 	player_info_t pi;
@@ -2671,5 +2669,3 @@ CSteamID GetSteamIDForPlayerIndex( int iPlayerIndex )
 	}
 	return CSteamID();
 }
-
-#endif

@@ -563,6 +563,7 @@ public:
 	virtual void	DisconnectInternal();
 
 	virtual int		GetInstancesRunningCount( );
+	virtual void	SetRichPresenceConnect( const char *pszOverride );
 
 	virtual float	GetPausedExpireTime( void ) OVERRIDE;
 
@@ -2067,6 +2068,19 @@ void CEngineClient::FlashWindow()
 int CEngineClient::GetInstancesRunningCount( )
 {
 	return CheckOtherInstancesRunning( );
+}
+
+void CEngineClient::SetRichPresenceConnect( const char *pszOverride )
+{
+#if !defined( NO_STEAM )
+	ISteamFriends *pFriends = Steam3Client().SteamFriends();
+	if ( !pFriends )
+		return;
+
+	pFriends->SetRichPresence( "connect", pszOverride );
+#else
+	(void)pszOverride;
+#endif
 }
 
 //-----------------------------------------------------------------------------

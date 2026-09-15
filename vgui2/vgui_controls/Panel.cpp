@@ -662,6 +662,8 @@ void Panel::Init( int x, int y, int wide, int tall )
 	_tooltipText = NULL;
 	_pinToSibling = NULL;
 	m_hMouseEventHandler = NULL;
+	m_bMouseHandlerAlsoThis = false;
+	m_bMouseHandlerMovementEvents = false;
 	_pinCornerToSibling = PIN_TOPLEFT;
 	_pinToSiblingCorner = PIN_TOPLEFT;
 
@@ -1972,6 +1974,10 @@ void Panel::InternalMousePressed(int code)
 	if ( pMouseHandler )
 	{
 		pMouseHandler->OnMousePressed( (MouseCode)code );
+		if ( m_bMouseHandlerAlsoThis )
+		{
+			OnMousePressed( (MouseCode)code );
+		}
 	}
 	else
 	{
@@ -5447,9 +5453,11 @@ void Panel::SetSilentMode( bool bSilent )
 //-----------------------------------------------------------------------------
 // Purpose: mouse events will be send to handler panel instead of this panel
 //-----------------------------------------------------------------------------
-void Panel::InstallMouseHandler( Panel *pHandler )
+void Panel::InstallMouseHandler( Panel *pHandler, bool bThisHandlesAsWell, bool bMovementEvents )
 {
 	m_hMouseEventHandler = pHandler;
+	m_bMouseHandlerAlsoThis = bThisHandlesAsWell;
+	m_bMouseHandlerMovementEvents = bMovementEvents;
 }
 
 //-----------------------------------------------------------------------------

@@ -255,7 +255,8 @@ public:
 	virtual void SetSilentMode( bool bSilent );						//change the panel's silent mode; if silent, the panel will not post any action signals
 
 	// install a mouse handler
-	virtual void InstallMouseHandler( Panel *pHandler );	// mouse events will be send to handler panel instead of this panel
+	// install a mouse handler
+	virtual void InstallMouseHandler( Panel *pHandler, bool bThisHandlesAsWell = false, bool bMovementEvents = false );
 
 	// drawing state
 	virtual void   SetEnabled(bool state);
@@ -350,6 +351,7 @@ public:
 	virtual void SetScheme(HScheme scheme);
 	virtual Color GetSchemeColor(const char *keyName,IScheme *pScheme);
 	virtual Color GetSchemeColor(const char *keyName, Color defaultColor,IScheme *pScheme);
+	Color GetColor( const char* pszColorName ) { return GetSchemeColor( pszColorName, vgui::scheme()->GetIScheme( GetScheme() ) ); }
 
 	// called when scheme settings need to be applied; called the first time before the panel is painted
 	virtual void ApplySchemeSettings(IScheme *pScheme);
@@ -915,6 +917,8 @@ private:
 	char			*_tooltipText;		// Tool tip text for panels that share tooltip panels with other panels
 
 	PHandle			m_hMouseEventHandler;
+	bool			m_bMouseHandlerAlsoThis;
+	bool			m_bMouseHandlerMovementEvents;
 
 	bool			m_bWorldPositionCurrentFrame;		// if set, Panel gets PerformLayout called after the camera and the renderer's m_matrixWorldToScreen has been setup, so panels can be correctly attached to entities in the world
 

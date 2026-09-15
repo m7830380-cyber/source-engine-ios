@@ -892,7 +892,7 @@ const char * UTIL_SafeName( const char *oldName )
 //			input buffer is assumed, or you can pass the size of the input buffer if
 //			not NULL-terminated.
 //-----------------------------------------------------------------------------
-void UTIL_ReplaceKeyBindings( const wchar_t *inbuf, int inbufsizebytes, OUT_Z_BYTECAP(outbufsizebytes) wchar_t *outbuf, int outbufsizebytes )
+void UTIL_ReplaceKeyBindings( const wchar_t *inbuf, int inbufsizebytes, OUT_Z_BYTECAP(outbufsizebytes) wchar_t *outbuf, int outbufsizebytes, GameActionSet_t actionset )
 {
 	Assert( outbufsizebytes >= sizeof(outbuf[0]) );
 	// copy to a new buf if there are vars

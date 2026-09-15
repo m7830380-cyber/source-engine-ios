@@ -1802,7 +1802,7 @@ private:
 	
 public:
 	// Accessors for above
-	static int						GetPredictionRandomSeed( void );
+	static int						GetPredictionRandomSeed( bool bUseUnSyncedServerPlatTime = false );
 	static void						SetPredictionRandomSeed( const CUserCmd *cmd );
 	static CBasePlayer				*GetPredictionPlayer( void );
 	static void						SetPredictionPlayer( CBasePlayer *player );

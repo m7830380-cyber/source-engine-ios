@@ -119,7 +119,7 @@ inline CBaseEntity	*CBaseEntity::GetEffectEntity() const
 	return m_hEffectEntity.Get();
 }
 
-inline int CBaseEntity::GetPredictionRandomSeed( void )
+inline int CBaseEntity::GetPredictionRandomSeed( bool bUseUnSyncedServerPlatTime )
 {
 	return m_nPredictionRandomSeed;
 }

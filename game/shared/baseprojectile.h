@@ -43,6 +43,7 @@ public:
 
 	virtual bool IsDestroyable( void ) { return false; }
 	virtual void Destroy( bool bBlinkOut = true, bool bBreakRocket = false ) {}
+	virtual void SetLauncher( CBaseEntity *pLauncher ) {}
 
 protected:
 #ifdef GAME_DLL

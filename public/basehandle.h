@@ -50,6 +50,7 @@ public:
 	int GetSerialNumber() const;
 
 	int ToInt() const;
+	static CBaseHandle UnsafeFromIndex( int index );
 	bool operator !=( const CBaseHandle &other ) const;
 	bool operator ==( const CBaseHandle &other ) const;
 	bool operator ==( const IHandleEntity* pEnt ) const;
@@ -132,6 +133,13 @@ inline int CBaseHandle::GetSerialNumber() const
 inline int CBaseHandle::ToInt() const
 {
 	return (int)m_Index;
+}
+
+inline CBaseHandle CBaseHandle::UnsafeFromIndex( int index )
+{
+	CBaseHandle ret;
+	ret.m_Index = (uintp)(unsigned int)index;
+	return ret;
 }
 
 inline bool CBaseHandle::operator !=( const CBaseHandle &other ) const

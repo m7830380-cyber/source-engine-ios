@@ -63,6 +63,8 @@ public:
 	void		ParseSurfaceTablePacked( CUtlVector<char> &out );
 	void		ParseVehicle( vehicleparams_t *pVehicle, IVPhysicsKeyHandler *unknownKeyHandler );
 	void		ParseCustom( void *pCustom, IVPhysicsKeyHandler *unknownKeyHandler );
+	void		ParseCollisionRules( ragdollcollisionrules_t *pRules, IVPhysicsKeyHandler *unknownKeyHandler );
+	void		ParseRagdollAnimatedFriction( ragdollanimatedfriction_t *pFriction, IVPhysicsKeyHandler *unknownKeyHandler );
 	void		SkipBlock( void ) { ParseCustom(NULL, NULL); }
 
 private:
@@ -137,6 +139,10 @@ void CVPhysicsParse::ParseSolid( solid_t *pSolid, IVPhysicsKeyHandler *unknownKe
 	
 	// disable these until the ragdoll is created
 	pSolid->params.enableCollisions = false;
+	if ( !pSolid->contents )
+	{
+		pSolid->contents = CONTENTS_SOLID;
+	}
 
 	while ( m_pText )
 	{
@@ -150,6 +156,10 @@ void CVPhysicsParse::ParseSolid( solid_t *pSolid, IVPhysicsKeyHandler *unknownKe
 		if ( !Q_stricmp( key, "index" ) )
 		{
 			pSolid->index = atoi(value);
+		}
+		else if ( !Q_stricmp( key, "contents" ) )
+		{
+			pSolid->contents = atoi(value);
 		}
 		else if ( !Q_stricmp( key, "name" ) )
 		{
@@ -849,6 +859,94 @@ void CVPhysicsParse::ParseVehicle( vehicleparams_t *pVehicle, IVPhysicsKeyHandle
 			pVehicle->wheelsPerAxle = atoi( value );
 		}
 	}
+}
+
+// "collisionrules" block of a ragdoll: selfcollisions / collisionpair keys.
+// Moved from game code (ragdoll_shared.cpp) into vphysics in CS:GO.
+class CRagdollCollisionRulesHandler : public IVPhysicsKeyHandler
+{
+public:
+	CRagdollCollisionRulesHandler( IVPhysicsKeyHandler *pUnknown ) : m_pUnknown( pUnknown ) {}
+
+	virtual void ParseKeyValue( void *pData, const char *pKey, const char *pValue )
+	{
+		ragdollcollisionrules_t *pRules = (ragdollcollisionrules_t *)pData;
+		if ( !Q_stricmp( pKey, "selfcollisions" ) )
+		{
+			// keys disabled by default
+			Assert( atoi(pValue) == 0 );
+			pRules->bSelfCollisions = false;
+		}
+		else if ( !Q_stricmp( pKey, "collisionpair" ) )
+		{
+			if ( pRules->bSelfCollisions && pRules->pCollisionSet )
+			{
+				int index0 = 0, index1 = 0;
+				sscanf( pValue, "%d,%d", &index0, &index1 );
+				pRules->pCollisionSet->EnableCollisions( index0, index1 );
+			}
+		}
+		else if ( m_pUnknown )
+		{
+			m_pUnknown->ParseKeyValue( pData, pKey, pValue );
+		}
+	}
+	virtual void SetDefaults( void *pData ) {}
+
+private:
+	IVPhysicsKeyHandler *m_pUnknown;
+};
+
+class CRagdollAnimatedFrictionHandler : public IVPhysicsKeyHandler
+{
+public:
+	CRagdollAnimatedFrictionHandler( IVPhysicsKeyHandler *pUnknown ) : m_pUnknown( pUnknown ) {}
+
+	virtual void ParseKeyValue( void *pData, const char *pKey, const char *pValue )
+	{
+		ragdollanimatedfriction_t *pFriction = (ragdollanimatedfriction_t *)pData;
+		if ( !Q_stricmp( pKey, "animfrictionmin" ) )
+		{
+			pFriction->minFriction = atof( pValue );
+		}
+		else if ( !Q_stricmp( pKey, "animfrictionmax" ) )
+		{
+			pFriction->maxFriction = atof( pValue );
+		}
+		else if ( !Q_stricmp( pKey, "animfrictiontimein" ) )
+		{
+			pFriction->timeIn = atof( pValue );
+		}
+		else if ( !Q_stricmp( pKey, "animfrictiontimeout" ) )
+		{
+			pFriction->timeOut = atof( pValue );
+		}
+		else if ( !Q_stricmp( pKey, "animfrictiontimehold" ) )
+		{
+			pFriction->timeHold = atof( pValue );
+		}
+		else if ( m_pUnknown )
+		{
+			m_pUnknown->ParseKeyValue( pData, pKey, pValue );
+		}
+	}
+	virtual void SetDefaults( void *pData ) {}
+
+private:
+	IVPhysicsKeyHandler *m_pUnknown;
+};
+
+void CVPhysicsParse::ParseCollisionRules( ragdollcollisionrules_t *pRules, IVPhysicsKeyHandler *unknownKeyHandler )
+{
+	CRagdollCollisionRulesHandler handler( unknownKeyHandler );
+	ParseCustom( pRules, &handler );
+}
+
+void CVPhysicsParse::ParseRagdollAnimatedFriction( ragdollanimatedfriction_t *pFriction, IVPhysicsKeyHandler *unknownKeyHandler )
+{
+	memset( pFriction, 0, sizeof(*pFriction) );
+	CRagdollAnimatedFrictionHandler handler( unknownKeyHandler );
+	ParseCustom( pFriction, &handler );
 }
 
 void CVPhysicsParse::ParseCustom( void *pCustom, IVPhysicsKeyHandler *unknownKeyHandler )

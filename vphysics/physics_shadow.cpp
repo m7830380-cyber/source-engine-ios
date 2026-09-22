@@ -211,6 +211,29 @@ public:
 	virtual float GetPushMassLimit() { return m_pushableMassLimit; }
 	virtual float GetPushSpeedLimit() { return m_pushableSpeedLimit; }
 
+	// PLAYER_CONTACT_PHYSICS if touching any movable physics object,
+	// PLAYER_CONTACT_GAMEOBJECT if one of them has any of nGameFlags set
+	virtual uint32 GetContactState( uint16 nGameFlags )
+	{
+		uint32 state = 0;
+		IPhysicsFrictionSnapshot *pSnapshot = m_pObject->CreateFrictionSnapshot();
+		while ( pSnapshot->IsValid() )
+		{
+			IPhysicsObject *pOther = pSnapshot->GetObject( 1 );
+			if ( pOther && pOther->IsMoveable() )
+			{
+				state |= PLAYER_CONTACT_PHYSICS;
+				if ( pOther->GetGameFlags() & nGameFlags )
+				{
+					state |= PLAYER_CONTACT_GAMEOBJECT;
+				}
+			}
+			pSnapshot->NextFrictionData();
+		}
+		m_pObject->DestroyFrictionSnapshot( pSnapshot );
+		return state;
+	}
+
 	// Object listener
 	virtual void event_object_deleted( IVP_Event_Object *pEvent)
 	{

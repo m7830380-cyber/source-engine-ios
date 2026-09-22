@@ -13,6 +13,7 @@
 #include "utlsymbol.h"
 #include "tier1/strtools.h" 
 #include "vcollide_parse_private.h"
+#include "isaverestore.h"
 #include "ctype.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
@@ -135,6 +136,7 @@ public:
 	}
 	bool IsReservedMaterialIndex( int materialIndex ) const;
 	virtual const char *GetReservedMaterialName( int materialIndex ) const;
+	virtual ISaveRestoreOps *GetMaterialIndexDataOps() const;
 	int	GetReservedFallBack( int materialIndex ) const;
 
 	int GetReservedSurfaceIndex( const char *pPropertyName ) const;
@@ -322,6 +324,52 @@ surfacedata_t *CPhysicsSurfaceProps::GetSurfaceData( int materialIndex )
 
 	Assert ( pSurface );
 	return &pSurface->data;
+}
+
+// Saves a surface property index by name so it survives a different
+// surfaceproperties load order on restore.
+class CMaterialIndexOps : public CDefSaveRestoreOps
+{
+public:
+	virtual void Save( const SaveRestoreFieldInfo_t &fieldInfo, ISave *pSave )
+	{
+		int *pMaterialIndex = (int *)fieldInfo.pField;
+		const char *pName = physprops->GetPropName( *pMaterialIndex );
+		pSave->WriteString( pName ? pName : "" );
+	}
+
+	virtual void Restore( const SaveRestoreFieldInfo_t &fieldInfo, IRestore *pRestore )
+	{
+		int *pMaterialIndex = (int *)fieldInfo.pField;
+		char name[256];
+		pRestore->ReadString( name, sizeof(name), 0 );
+		int index = physprops->GetSurfaceIndex( name );
+		*pMaterialIndex = index >= 0 ? index : physprops->GetSurfaceIndex( "default" );
+	}
+
+	virtual bool IsEmpty( const SaveRestoreFieldInfo_t &fieldInfo )
+	{
+		return *(int *)fieldInfo.pField == 0;
+	}
+
+	virtual void MakeEmpty( const SaveRestoreFieldInfo_t &fieldInfo )
+	{
+		*(int *)fieldInfo.pField = 0;
+	}
+
+	virtual bool Parse( const SaveRestoreFieldInfo_t &fieldInfo, char const *szValue )
+	{
+		int index = physprops->GetSurfaceIndex( szValue );
+		*(int *)fieldInfo.pField = index >= 0 ? index : 0;
+		return index >= 0;
+	}
+};
+
+static CMaterialIndexOps g_MaterialIndexDataOps;
+
+ISaveRestoreOps *CPhysicsSurfaceProps::GetMaterialIndexDataOps() const
+{
+	return &g_MaterialIndexDataOps;
 }
 
 const char *CPhysicsSurfaceProps::GetString( unsigned short stringTableIndex ) const

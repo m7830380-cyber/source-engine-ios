@@ -45,3 +45,5 @@ build/ios/Payload/
 generated_proto/
 # iOS deps prefix built by scripts/ios/build-deps.sh
 /lib/
+# protobuf autotools helpers (caught by build*/ above)
+!thirdparty/protobuf-2.5.0/gtest/build-aux/

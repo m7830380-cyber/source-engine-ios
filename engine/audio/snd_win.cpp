@@ -17,6 +17,10 @@ ConVar snd_audioqueue( "snd_audioqueue", "1" );
 
 #endif
 
+#if defined( SRC_PHASE_AUDIO )
+#include "snd_dev_ios_phase.h"
+#endif
+
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
 
@@ -68,6 +72,19 @@ IAudioDevice *IAudioDevice::AutoDetectInit( bool waveOnly )
 
 	if ( IsPC() )
 	{
+#if defined( SRC_PHASE_AUDIO )
+		// Preferred on iOS when compiled in. Falls through to the SDL
+		// device below if the session or engine fails to start, so a
+		// failure here is never fatal.
+		if ( !CommandLine()->CheckParm( "-nophaseaudio" ) )
+		{
+			DevMsg( "Trying AVAudioEngine Interface\n" );
+			pDevice = Audio_CreateIOSPhaseDevice();
+		}
+		if ( pDevice )
+			return pDevice;
+#endif
+
 #if defined( WIN32 ) && !defined( USE_SDL )
 		if ( waveOnly )
 		{

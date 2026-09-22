@@ -213,6 +213,10 @@ def build(bld):
 		if bld.env.DEST_OS != "darwin" or bld.env.IOS:
 			source += ['audio/snd_dev_sdl.cpp']
 
+	# AVAudioEngine/PHASE output device (opt-in via --phase-audio, iOS only).
+	if bld.env.PHASE_AUDIO:
+		source += ['audio/snd_dev_ios_phase.mm']
+
 	source_win = [
 		'audio/snd_dev_direct.cpp',
 		'audio/snd_dev_wave.cpp',
@@ -361,6 +365,9 @@ def build(bld):
 
 	if bld.env.DEST_OS == 'android':
 		libs += ['SSL', 'CRYPTO'] # android curl was built with openssl
+
+	if bld.env.PHASE_AUDIO:
+		libs += ['AVFOUNDATION']
 	elif bld.env.DEST_OS == 'win32':
 		libs += ['USER32', 'WINMM', 'WININET', 'DSOUND', 'DXGUID', 'GDI32', 'bzip2']
 	elif bld.env.DEST_OS == 'darwin' and not bld.env.DEDICATED:

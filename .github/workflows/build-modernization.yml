@@ -1,0 +1,146 @@
+name: Build HL2 iOS IPA (modernization)
+
+# Built on 53a3c9d2, which carries the three iOS rendering fixes that
+# fad97b30 (my first base) did not have:
+#
+#   b3f6f020  Fix iPad M2 abort on DXT uploads - ANGLE Metal advertises
+#             S3TC on Apple GPUs but setPixelFormat dies, so DXT is
+#             decompressed to RGBA8 on iOS instead.
+#   8250133d  Fix present: use RGBA8 for X8R8G8B8 instead of invalid RGB8.
+#   53a3c9d2  Fix DXT1: decompress to RGBA8, not RGB24 uploaded as RGBA.
+#             The RGB24 path wrote 3 bytes/pixel and was uploaded as
+#             GL_RGBA (stride 4), which is the garbled green/blue tiling.
+#
+# Basing on fad97b30 shipped an IPA with all of that broken. The build was
+# green because those are runtime bugs, not compile errors - a reminder
+# that "CI passes" is not "the game renders".
+#
+# Job 1 (baseline) builds HL2 with every flag OFF and must stay green - it
+# proves the changes are inert when not enabled.
+# Job 2 builds HL2 with all flags ON.
+# The per-feature matrix stays behind workflow_dispatch so a normal push
+# does not queue several scarce macOS runners at once.
+
+on:
+  push:
+    branches: [ modernization-hl2-v2 ]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      full_matrix:
+        description: 'Build each feature flag separately (slow)'
+        type: boolean
+        default: false
+
+jobs:
+  baseline:
+    runs-on: macos-14
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Build HL2 (no modernization flags)
+        env:
+          IOS_GAME: hl2
+          IOS_BUNDLE_ID: com.sourceengine.port
+          IOS_DISPLAY_NAME: source-engine
+          IOS_APP_BUNDLE: hl2.app
+          IOS_IPA_NAME: hl2-baseline-ios-arm64.ipa
+        run: |
+          chmod +x scripts/build-ios-arm64.sh scripts/ios/*.sh
+          ./scripts/build-ios-arm64.sh
+
+      - name: Upload baseline IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: hl2-baseline-ios-arm64
+          path: artifacts/hl2-baseline-ios-arm64.ipa
+          if-no-files-found: error
+
+  all-features:
+    runs-on: macos-14
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Fetch mimalloc
+        run: |
+          chmod +x scripts/ios/fetch-mimalloc.sh
+          ./scripts/ios/fetch-mimalloc.sh
+
+      - name: Build HL2 with all modernization flags
+        env:
+          IOS_GAME: hl2
+          IOS_BUNDLE_ID: com.sourceengine.port
+          IOS_DISPLAY_NAME: source-engine
+          IOS_APP_BUNDLE: hl2.app
+          IOS_IPA_NAME: hl2-all-features-ios-arm64.ipa
+        run: |
+          chmod +x scripts/build-ios-arm64.sh scripts/ios/*.sh
+          ./scripts/build-ios-arm64.sh \
+            --mimalloc --modern-threads --haptics --phase-audio \
+            --precompiled-shaders --no-legacy-consoles
+
+      - name: Upload all-features IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: hl2-all-features-ios-arm64
+          path: artifacts/hl2-all-features-ios-arm64.ipa
+          if-no-files-found: error
+
+  feature:
+    if: github.event_name == 'workflow_dispatch' && inputs.full_matrix
+    runs-on: macos-14
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: mimalloc
+            flags: "--mimalloc"
+          - name: modern-threads
+            flags: "--modern-threads"
+          - name: haptics
+            flags: "--haptics"
+          - name: phase-audio
+            flags: "--phase-audio"
+          - name: precompiled-shaders
+            flags: "--precompiled-shaders"
+          - name: no-legacy-consoles
+            flags: "--no-legacy-consoles"
+          - name: metal
+            flags: "--metal"
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Fetch mimalloc
+        if: contains(matrix.flags, '--mimalloc')
+        run: |
+          chmod +x scripts/ios/fetch-mimalloc.sh
+          ./scripts/ios/fetch-mimalloc.sh
+
+      - name: Build ${{ matrix.name }}
+        env:
+          IOS_GAME: hl2
+          IOS_BUNDLE_ID: com.sourceengine.port
+          IOS_DISPLAY_NAME: source-engine
+          IOS_APP_BUNDLE: hl2.app
+          IOS_IPA_NAME: hl2-${{ matrix.name }}.ipa
+          EXTRA_WAF_FLAGS: ${{ matrix.flags }}
+        run: |
+          chmod +x scripts/build-ios-arm64.sh scripts/ios/*.sh
+          ./scripts/build-ios-arm64.sh $EXTRA_WAF_FLAGS
+
+      - name: Upload ${{ matrix.name }} IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: hl2-feature-${{ matrix.name }}
+          path: artifacts/hl2-${{ matrix.name }}.ipa
+          if-no-files-found: warn

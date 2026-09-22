@@ -1,16 +1,11 @@
 #include <stdio.h>
 
-#if !defined(OSX) && !defined (LINUX)
+// Lua is compiled as C (vscript.vpc CompileAs Default) on every platform
 extern "C"
 {
-#endif
-
 #include "lua.h"
 #include "lauxlib.h"
-
-#if !defined(OSX) && !defined (LINUX)
 }
-#endif
 
 #include "vec3.h"
 

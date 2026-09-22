@@ -110,6 +110,8 @@ PROJECT_EXTRA_SOURCES = {
 	'engine': ['ios/engine/steamdatagram_null.cpp', 'ios/engine/phonon_null.cpp'],
 	# CSteamID::Render; Valve's engine compiles this in, matchmaking needs it too
 	'matchmaking': ['common/steamid.cpp'],
+	'client': ['common/steamid.cpp'],
+	'server': ['common/steamid.cpp'],
 }
 
 # VPC link dependencies whose source is not part of the leak. Code that
@@ -476,6 +478,7 @@ def build_custom_projects(bld):
 		source   = ['ios/fontconfig/fontconfig_ios.c'],
 		target   = 'fontconfig',
 		name     = 'fontconfig',
+		install_path = None, # static; linked into the modules
 		use      = ['FT2'],
 	)
 
@@ -490,6 +493,7 @@ def build_custom_projects(bld):
 		source   = ['gcsdk/gcsdk_ios.cpp', 'gcsdk/generated_proto/steammessages.pb.cc'],
 		target   = 'gcsdk',
 		name     = 'gcsdk',
+		install_path = None, # static; linked into the modules
 		includes = ['gcsdk/generated_proto', 'thirdparty/protobuf-2.5.0/src', 'gcsdk',
 			'gcsdk/steamextra', 'common', 'public', 'public/tier0', 'public/tier1', 'public/gcsdk'],
 		defines  = ['PROTOBUF'],
@@ -504,6 +508,7 @@ def build_custom_projects(bld):
 		source   = [CRYPTOPP_DIR + '/' + f for f in sources],
 		target   = 'cryptopp',
 		name     = 'cryptopp',
+		install_path = None, # static; linked into the modules
 		includes = [CRYPTOPP_DIR],
 		export_includes = [CRYPTOPP_DIR],
 		defines  = ['CRYPTOPP_DISABLE_ASM', 'CRYPTOPP_DISABLE_SSE2'],

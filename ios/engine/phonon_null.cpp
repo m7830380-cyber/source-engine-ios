@@ -8,6 +8,7 @@
 //
 //===========================================================================//
 
+#include <stddef.h> // phonon_common.h uses size_t without including it
 #include "phonon/phonon_3d.h"
 
 IPLerror iplCreate3DContext( IPLGlobalContext globalContext, IPLDspParams dspParams, IPLbyte *hrtfData, IPLhandle *context )

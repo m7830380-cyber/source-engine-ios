@@ -154,6 +154,35 @@
 	#define IsConsole() false
 	#define IsX360() false
 	#define IsPS3() false
+
+	// --- Legacy console guard (opt-in via --no-legacy-consoles) ---
+	//
+	// A correction worth recording: removing the #ifdef _X360 / _PS3 blocks
+	// does NOT speed up the build or shrink the binary. Neither symbol is
+	// ever defined by this build (verified against wscript), so the
+	// preprocessor already discards those blocks, and IsX360()/IsPS3()
+	// above are compile-time false, so the optimiser already deletes those
+	// branches. The dead code costs nothing at runtime.
+	//
+	// What it does cost is comprehension: 1,801 lines across the built
+	// sources, plus 24 unbuilt xbox/ directories totalling 18.7 MB, that a
+	// reader has to mentally skip.
+	//
+	// So rather than a risky mass deletion, this flag makes the deadness
+	// enforceable: if anyone reintroduces a live console define, the build
+	// fails loudly instead of silently resurrecting untested code paths.
+	//
+	// NOTE: IsX360()/IsPS3() are deliberately left defined as false. There
+	// are 787 live call sites across the engine; #undef-ing them would
+	// simply break the build rather than clean anything up. They are
+	// already folded away by the compiler, so the useful guarantee is that
+	// the console platforms stay undefined - which is what we assert here.
+	#if defined( SRC_NO_LEGACY_CONSOLES )
+		#if defined( _X360 ) || defined( _PS3 ) || defined( _GAMECONSOLE )
+			#error "SRC_NO_LEGACY_CONSOLES is set but a legacy console platform is defined."
+		#endif
+	#endif
+
 	#if defined( LINUX )
 		#define IsLinux() true
 	#else

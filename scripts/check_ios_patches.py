@@ -73,6 +73,53 @@ def main():
 
     print(f"checked {checked} .mm files")
 
+    # --- second check: wscript if/elif chains ---
+    # Inserting `if bld.env.MY_FLAG:` immediately above an existing `elif`
+    # silently steals that chain. This happened once already: it dropped
+    # CFNetwork from the engine link on darwin and failed with undefined
+    # _CFNetworkCopyProxiesForURL. Flag any if-block whose condition tests
+    # one of our feature flags but is followed by an elif.
+    FEATURE_FLAGS = ("METAL", "MODERN_THREADS", "MIMALLOC", "HAPTICS",
+                     "PHASE_AUDIO", "PRECOMPILED_SHADERS", "NO_LEGACY_CONSOLES")
+    chain_problems = []
+
+    for dirpath, dirnames, filenames in os.walk(ROOT):
+        dirnames[:] = [d for d in dirnames if d not in (".git", "thirdparty", "build")]
+        if "wscript" not in filenames:
+            continue
+        path = os.path.join(dirpath, "wscript")
+        rel = os.path.relpath(path, ROOT)
+        lines = open(path, errors="ignore").read().splitlines()
+
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            if not stripped.startswith("if "):
+                continue
+            if not any(f"env.{f}" in stripped for f in FEATURE_FLAGS):
+                continue
+            # Look ahead past the body for an elif at the same indent.
+            indent = len(line) - len(line.lstrip())
+            for j in range(i + 1, min(i + 12, len(lines))):
+                nxt = lines[j]
+                if not nxt.strip():
+                    continue
+                nxt_indent = len(nxt) - len(nxt.lstrip())
+                if nxt_indent < indent:
+                    break
+                if nxt_indent == indent:
+                    if nxt.strip().startswith("elif ") or nxt.strip().startswith("else:"):
+                        chain_problems.append((rel, i + 1, stripped))
+                    break
+
+    if chain_problems:
+        print("\nFAIL: feature-flag `if` hijacks an existing if/elif chain.")
+        print("The following branches swallow the platform cases below them:\n")
+        for rel, ln, txt in chain_problems:
+            print(f"  {rel}:{ln}  {txt}")
+        print("\nFix: make the feature check a separate, additive `if` placed")
+        print("after the platform chain, not spliced into it.")
+        return 1
+
     if problems:
         print("\nFAIL: Objective-C translation units including Valve headers.")
         print("Valve defines BOOL as int; ObjC defines it as bool. Both in one")

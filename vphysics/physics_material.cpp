@@ -477,6 +477,14 @@ int CPhysicsSurfaceProps::ParseSurfaceData( const char *pFileName, const char *p
 				{
 					prop.data.game.climbable = atoi(value);
 				}
+				else if ( !strcmpi( key, "penetrationmodifier" ) )
+				{
+					prop.data.game.penetrationModifier = atof(value);
+				}
+				else if ( !strcmpi( key, "damagemodifier" ) )
+				{
+					prop.data.game.damageModifier = atof(value);
+				}
 				// audio parameters
 				else if ( !strcmpi( key, "audioReflectivity" ) )
 				{
@@ -502,14 +510,31 @@ int CPhysicsSurfaceProps::ParseSurfaceData( const char *pFileName, const char *p
 				{
 					prop.data.audio.hardThreshold = atof(value);
 				}
-				// sound names
+				// sound names. "stepleft"/"stepright" set both walk and run
+				// steps; the explicit walk/run keys override them.
 				else if ( !strcmpi( key, "stepleft" ) )
 				{
-					prop.data.sounds.stepleft = m_strings.AddString( value );
+					prop.data.sounds.walkStepLeft = prop.data.sounds.runStepLeft = m_strings.AddString( value );
 				}
 				else if ( !strcmpi( key, "stepright" ) )
 				{
-					prop.data.sounds.stepright = m_strings.AddString( value );
+					prop.data.sounds.walkStepRight = prop.data.sounds.runStepRight = m_strings.AddString( value );
+				}
+				else if ( !strcmpi( key, "walkstepleft" ) )
+				{
+					prop.data.sounds.walkStepLeft = m_strings.AddString( value );
+				}
+				else if ( !strcmpi( key, "walkstepright" ) )
+				{
+					prop.data.sounds.walkStepRight = m_strings.AddString( value );
+				}
+				else if ( !strcmpi( key, "runstepleft" ) )
+				{
+					prop.data.sounds.runStepLeft = m_strings.AddString( value );
+				}
+				else if ( !strcmpi( key, "runstepright" ) )
+				{
+					prop.data.sounds.runStepRight = m_strings.AddString( value );
 				}
 				else if ( !strcmpi( key, "impactsoft" ) )
 				{

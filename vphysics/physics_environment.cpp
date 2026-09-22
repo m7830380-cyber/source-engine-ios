@@ -1112,6 +1112,8 @@ CPhysicsEnvironment::CPhysicsEnvironment( void )
 	m_inSimulation = false;
 	m_fixedTimestep = true;	// try to simulate using fixed timesteps
 	m_enableConstraintNotify = false;
+	m_alternateGravity.Init();
+	m_predictionCommandNum = 0;
 
     // build a default environment
     IVP_Environment_Manager *env_manager;
@@ -1269,6 +1271,75 @@ void CPhysicsEnvironment::GetGravity( Vector *pGravityVector ) const
     const IVP_U_Point *gravity = m_pPhysEnv->get_gravity();
 
 	ConvertPositionToHL( *gravity, *pGravityVector );
+}
+
+// IVP integrates a single global gravity, so objects flagged with
+// SetUseAlternateGravity (CS:GO ragdolls, cl_ragdoll_gravity) fall with the
+// normal gravity. The value is kept so the game can read it back.
+void CPhysicsEnvironment::SetAlternateGravity( const Vector &gravityVector )
+{
+	m_alternateGravity = gravityVector;
+}
+
+void CPhysicsEnvironment::GetAlternateGravity( Vector *pGravityVector ) const
+{
+	*pGravityVector = m_alternateGravity;
+}
+
+// longest frame that still simulates at most maxTicks fixed timesteps
+float CPhysicsEnvironment::GetDeltaFrameTime( int maxTicks ) const
+{
+	float untilNextTick = GetNextFrameTime() - GetSimulationTime();
+	return untilNextTick + GetSimulationTimestep() * ( maxTicks - 1 );
+}
+
+void CPhysicsEnvironment::ForceObjectsToSleep( IPhysicsObject **pList, int listCount )
+{
+	for ( int i = 0; i < listCount; i++ )
+	{
+		if ( pList[i] )
+		{
+			pList[i]->Sleep();
+		}
+	}
+}
+
+// Predicted client physics (cl_predictphysics, off by default in CS:GO) is
+// not supported: the environment always simulates forward.
+void CPhysicsEnvironment::SetPredicted( bool bPredicted )
+{
+	if ( bPredicted )
+	{
+		Warning( "vphysics: predicted physics environments are not supported\n" );
+	}
+}
+
+bool CPhysicsEnvironment::IsPredicted( void )
+{
+	return false;
+}
+
+void CPhysicsEnvironment::SetPredictionCommandNum( int iCommandNum )
+{
+	m_predictionCommandNum = iCommandNum;
+}
+
+int CPhysicsEnvironment::GetPredictionCommandNum( void )
+{
+	return m_predictionCommandNum;
+}
+
+void CPhysicsEnvironment::DoneReferencingPreviousCommands( int iCommandNum )
+{
+}
+
+void CPhysicsEnvironment::RestorePredictedSimulation( void )
+{
+}
+
+void CPhysicsEnvironment::DestroyCollideOnDeadObjectFlush( CPhysCollide *pCollide )
+{
+	m_collidesToDestroy.AddToTail( pCollide );
 }
 
 
@@ -1710,6 +1781,12 @@ void CPhysicsEnvironment::ClearDeadObjects( void )
 	}
 	m_deadObjects.Purge();
 	m_pDeleteQueue->DeleteAll();
+
+	for ( int i = 0; i < m_collidesToDestroy.Count(); i++ )
+	{
+		physcollision->DestroyCollide( m_collidesToDestroy[i] );
+	}
+	m_collidesToDestroy.Purge();
 }
 
 void CPhysicsEnvironment::AddPlayerController( IPhysicsPlayerController *pController )

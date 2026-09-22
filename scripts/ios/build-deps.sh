@@ -109,6 +109,11 @@ build_protobuf() {
 	mkdir -p "$hdir" "$idir" "$ROOT/build/host"
 	cp -R "$src/"* "$hdir/"
 	cp -R "$src/"* "$idir/"
+	# committed from Windows: autotools scripts lost their executable bit
+	for d in "$hdir" "$idir"; do
+		chmod +x "$d"/configure "$d"/config.guess "$d"/config.sub \
+			"$d"/install-sh "$d"/missing "$d"/depcomp "$d"/ltmain.sh
+	done
 
 	(
 		cd "$hdir"

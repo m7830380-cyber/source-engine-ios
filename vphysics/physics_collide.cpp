@@ -103,6 +103,7 @@ public:
 	// begins parsing a vcollide.  NOTE: This keeps pointers to the text
 	// If you delete the text and call members of IVPhysicsKeyParser, it will crash
 	virtual IVPhysicsKeyParser	*VPhysicsKeyParserCreate( const char *pKeyData );
+	virtual IVPhysicsKeyParser	*VPhysicsKeyParserCreate( vcollide_t *pVCollide );
 	// Free the parser created by VPhysicsKeyParserCreate
 	virtual void			VPhysicsKeyParserDestroy( IVPhysicsKeyParser *pParser );
 
@@ -131,6 +132,12 @@ public:
 
 	virtual CPhysCollide	*UnserializeCollide( char *pBuffer, int size, int index );
 	virtual void			CollideSetOrthographicAreas( CPhysCollide *pCollide, const Vector &areas );
+
+	virtual float			CollideGetRadius( const CPhysCollide *pCollide );
+	virtual void			*VCollideAllocUserData( vcollide_t *pVCollide, size_t userDataSize );
+	virtual void			VCollideFreeUserData( vcollide_t *pVCollide );
+	virtual void			VCollideCheck( vcollide_t *pVCollide, const char *pName );
+	virtual bool			TraceBoxAA( const Ray_t &ray, const CPhysCollide *pCollide, trace_t *ptr );
 
 private:
 	void InitBBoxCache();
@@ -1684,6 +1691,7 @@ void CPhysicsCollision::VCollideUnload( vcollide_t *pVCollide )
 	}
 	delete[] pVCollide->solids;
 	delete[] pVCollide->pKeyValues;
+	VCollideFreeUserData( pVCollide );
 	memset( pVCollide, 0, sizeof(*pVCollide) );
 }
 
@@ -1692,6 +1700,49 @@ void CPhysicsCollision::VCollideUnload( vcollide_t *pVCollide )
 IVPhysicsKeyParser *CPhysicsCollision::VPhysicsKeyParserCreate( const char *pKeyData )
 {
 	return CreateVPhysicsKeyParser( pKeyData );
+}
+
+IVPhysicsKeyParser *CPhysicsCollision::VPhysicsKeyParserCreate( vcollide_t *pVCollide )
+{
+	return CreateVPhysicsKeyParser( pVCollide->pKeyValues );
+}
+
+float CPhysicsCollision::CollideGetRadius( const CPhysCollide *pCollide )
+{
+	Vector mins, maxs;
+	CollideGetAABB( &mins, &maxs, pCollide, vec3_origin, vec3_angle );
+	return MAX( mins.Length(), maxs.Length() );
+}
+
+// game code keeps per-vcollide data (e.g. ragdoll caches) with the vcollide
+void *CPhysicsCollision::VCollideAllocUserData( vcollide_t *pVCollide, size_t userDataSize )
+{
+	VCollideFreeUserData( pVCollide );
+	if ( userDataSize )
+	{
+		pVCollide->pUserData = calloc( 1, userDataSize );
+	}
+	return pVCollide->pUserData;
+}
+
+void CPhysicsCollision::VCollideFreeUserData( vcollide_t *pVCollide )
+{
+	if ( pVCollide->pUserData )
+	{
+		free( pVCollide->pUserData );
+		pVCollide->pUserData = NULL;
+	}
+}
+
+// debug validation hook in Valve's vphysics; nothing to check here
+void CPhysicsCollision::VCollideCheck( vcollide_t *pVCollide, const char *pName )
+{
+}
+
+bool CPhysicsCollision::TraceBoxAA( const Ray_t &ray, const CPhysCollide *pCollide, trace_t *ptr )
+{
+	TraceBox( ray, pCollide, vec3_origin, vec3_angle, ptr );
+	return ptr->DidHit();
 }
 
 // Free the parser created by VPhysicsKeyParserCreate

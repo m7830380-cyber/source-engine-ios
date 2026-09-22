@@ -93,6 +93,8 @@ CPhysicsObject::CPhysicsObject( void )
 	// HACKHACK: init this as a sphere until someone attaches a surfacemanager
 	m_collideType = COLLIDE_BALL;
 	m_contentsMask = CONTENTS_SOLID;
+	m_collisionHints = 0;
+	m_useAlternateGravity = false;
 	m_hasTouchedDynamic = 0;
 }
 
@@ -324,7 +326,7 @@ void CPhysicsObject::RecheckCollisionFilter()
 	m_callbacks &= ~CALLBACK_ENABLING_COLLISION;
 }
 
-void CPhysicsObject::RecheckContactPoints()
+void CPhysicsObject::RecheckContactPoints( bool bSearchForNewContacts )
 {
 	IVP_Environment *pEnv = m_pObject->get_environment();
 	IVP_Collision_Filter *coll_filter = pEnv->get_collision_filter();
@@ -340,6 +342,11 @@ void CPhysicsObject::RecheckContactPoints()
 	}
 	pSnapshot->DeleteAllMarkedContacts( true );
 	DestroyFrictionSnapshot( pSnapshot );
+
+	if ( bSearchForNewContacts )
+	{
+		RecheckCollisionFilter();
+	}
 }
 
 CPhysicsEnvironment	*CPhysicsObject::GetVPhysicsEnvironment()
@@ -1277,6 +1284,28 @@ float CPhysicsObject::GetSphereRadius() const
 		return 0;
 
 	return ConvertDistanceToHL( m_pObject->to_ball()->get_radius() );
+}
+
+void CPhysicsObject::SetSphereRadius( float radius )
+{
+	if ( m_collideType != COLLIDE_BALL )
+		return;
+
+	m_pObject->set_extra_radius( ConvertDistanceToIVP( radius ) );
+	RecheckContactPoints( true );
+}
+
+// copy the simulated state of another object (portal shadow clones)
+void CPhysicsObject::SyncWith( IPhysicsObject *pOther )
+{
+	matrix3x4_t xform;
+	pOther->GetPositionMatrix( &xform );
+	SetPositionMatrix( xform, true );
+
+	Vector velocity;
+	AngularImpulse angVelocity;
+	pOther->GetVelocity( &velocity, &angVelocity );
+	SetVelocityInstantaneous( &velocity, &angVelocity );
 }
 
 float CPhysicsObject::CalculateLinearDrag( const Vector &unitDirection ) const

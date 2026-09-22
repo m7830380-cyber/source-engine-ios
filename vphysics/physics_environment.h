@@ -95,6 +95,17 @@ public:
 	virtual void TraceBox( trace_t *ptr, const Vector &mins, const Vector &maxs, const Vector &start, const Vector &end );
 	virtual void SetCollisionSolver( IPhysicsCollisionSolver *pCollisionSolver );
 	virtual void GetGravity( Vector *pGravityVector ) const;
+	virtual void SetAlternateGravity( const Vector &gravityVector );
+	virtual void GetAlternateGravity( Vector *pGravityVector ) const;
+	virtual float GetDeltaFrameTime( int maxTicks ) const;
+	virtual void ForceObjectsToSleep( IPhysicsObject **pList, int listCount );
+	virtual void SetPredicted( bool bPredicted );
+	virtual bool IsPredicted( void );
+	virtual void SetPredictionCommandNum( int iCommandNum );
+	virtual int GetPredictionCommandNum( void );
+	virtual void DoneReferencingPreviousCommands( int iCommandNum );
+	virtual void RestorePredictedSimulation( void );
+	virtual void DestroyCollideOnDeadObjectFlush( CPhysCollide *pCollide );
 	virtual int	 GetActiveObjectCount() const;
 	virtual void GetActiveObjects( IPhysicsObject **pOutputObjectList ) const;
 	virtual const IPhysicsObject **GetObjectList( int *pOutputObjectCount ) const;
@@ -158,6 +169,9 @@ private:
 	CCollisionSolver				*m_pCollisionSolver;
 	CPhysicsListenerConstraint		*m_pConstraintListener;
 	CDeleteQueue					*m_pDeleteQueue;
+	CUtlVector<CPhysCollide *>		m_collidesToDestroy;
+	Vector							m_alternateGravity;
+	int								m_predictionCommandNum;
 	int								m_lastObjectThisTick;
 	bool							m_deleteQuick;
 	bool							m_inSimulation;

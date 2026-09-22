@@ -115,7 +115,7 @@ public:
 	void			WakeNow();
 	void			Sleep();
 	void			RecheckCollisionFilter();
-	void			RecheckContactPoints();
+	void			RecheckContactPoints( bool bSearchForNewContacts = false );
 
 	void			SetMass( float mass );
 	float			GetMass( void ) const;
@@ -136,6 +136,7 @@ public:
 	void			SetContents( unsigned int contents );
 
 	float			GetSphereRadius() const;
+	void			SetSphereRadius( float radius );
 	Vector			GetMassCenterLocalSpace() const;
 	float			GetEnergy() const;
 
@@ -186,6 +187,12 @@ public:
 	void			DestroyFrictionSnapshot( IPhysicsFrictionSnapshot *pSnapshot );
 
 	void			OutputDebugInfo() const;
+
+	void			SetUseAlternateGravity( bool bSet ) { m_useAlternateGravity = bSet; }
+	void			SetCollisionHints( uint32 collisionHints ) { m_collisionHints = collisionHints; }
+	uint32			GetCollisionHints() const { return m_collisionHints; }
+	IPredictedPhysicsObject *GetPredictedInterface( void ) const { return NULL; }
+	void			SyncWith( IPhysicsObject *pOther );
 
 	// local functions
 	inline	IVP_Real_Object *GetObject( void ) const { return m_pObject; }
@@ -257,6 +264,8 @@ private:
 	unsigned short	m_callbacks;
 	unsigned short	m_gameFlags;
 	unsigned int	m_contentsMask;
+	uint32			m_collisionHints;
+	bool			m_useAlternateGravity;
 	
 	float			m_volume;
 	float			m_buoyancyRatio;

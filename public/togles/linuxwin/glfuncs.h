@@ -86,6 +86,15 @@ GL_FUNC(OpenGL,true,GLint,glGetUniformLocation,(GLuint a,const GLchar *b),(a,b))
 GL_FUNC(OpenGL,true,GLboolean,glIsEnabled,(GLenum a),(a))
 GL_FUNC(OpenGL,true,GLboolean,glIsTexture,(GLuint a),(a))
 GL_FUNC_VOID(OpenGL,true,glLinkProgram,(GLuint a),(a))
+
+// Program binary cache (GLES 3.0 core / GL_OES_get_program_binary).
+// Declared optional (req=false) so a driver without them simply reports
+// the pointers as null and the cache disables itself at runtime.
+GL_FUNC_VOID(OpenGL,false,glGetProgramBinary,(GLuint a,GLsizei b,GLsizei *c,GLenum *d,void *e),(a,b,c,d,e))
+GL_FUNC_VOID(OpenGL,false,glProgramBinary,(GLuint a,GLenum b,const void *c,GLsizei d),(a,b,c,d))
+// Needed to hint the driver, before linking, that we intend to read the
+// binary back. Without it glGetProgramBinary may legitimately return nothing.
+GL_FUNC_VOID(OpenGL,false,glProgramParameteri,(GLuint a,GLenum b,GLint c),(a,b,c))
 //GL_FUNC_VOID(OpenGL,true,glOrtho,(GLdouble a,GLdouble b,GLdouble c,GLdouble d,GLdouble e,GLdouble f),(a,b,c,d,e,f))
 GL_FUNC_VOID(OpenGL,true,glPixelStorei,(GLenum a,GLint b),(a,b))
 //GL_FUNC_VOID(OpenGL,true,glPolygonMode,(GLenum a,GLenum b),(a,b))

@@ -133,6 +133,45 @@ def main():
         print("engine/audio/snd_dev_ios_phase_backend.h for the pattern).")
         return 1
 
+    # --- third check: duplicated extern declarations that drift apart ---
+    # togles declares some functions with `extern` in several .cpp files
+    # instead of a shared header. Changing the signature in one place and
+    # not the others compiles fine and then fails at link with an
+    # undefined symbol. That cost a full CI round trip on convert_texture.
+    WATCHED = ("convert_texture",)
+    decl_problems = []
+
+    for fname in WATCHED:
+        sigs = {}
+        for dirpath, dirnames, filenames in os.walk(ROOT):
+            dirnames[:] = [d for d in dirnames if d not in (".git", "thirdparty", "build")]
+            for fn in filenames:
+                if not fn.endswith((".cpp", ".h", ".c")):
+                    continue
+                path = os.path.join(dirpath, fn)
+                try:
+                    text = open(path, errors="ignore").read()
+                except OSError:
+                    continue
+                for m in re.finditer(r'extern\s+\w[\w\s:*&]*\b' + fname + r'\s*\(([^)]*)\)', text):
+                    sig = re.sub(r'\s+', ' ', m.group(1)).strip()
+                    sigs.setdefault(sig, []).append(os.path.relpath(path, ROOT))
+        if len(sigs) > 1:
+            decl_problems.append((fname, sigs))
+
+    if decl_problems:
+        print("\nFAIL: duplicated extern declarations have drifted apart.")
+        print("These compile cleanly and then fail at link time.\n")
+        for fname, sigs in decl_problems:
+            print(f"  {fname}:")
+            for sig, files in sigs.items():
+                print(f"    ({sig})")
+                for f in files:
+                    print(f"        {f}")
+        return 1
+
+    print("ok: watched extern declarations agree across files")
+
     print("ok: no .mm file mixes Objective-C imports with Valve headers")
     return 0
 

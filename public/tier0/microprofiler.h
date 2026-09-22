@@ -30,7 +30,11 @@ PLATFORM_INTERFACE int64 GetHardwareClockReliably();
 #if defined(_LINUX) || defined( OSX )
 inline unsigned long long GetTimebaseRegister( void )
 {
-#ifdef PLATFORM_64BITS
+#if defined( __aarch64__ )
+    unsigned long long Val;
+    __asm__ __volatile__ ( "mrs %0, cntvct_el0" : "=r" (Val) );
+    return Val;
+#elif defined( PLATFORM_64BITS )
     unsigned long long Low, High;
     __asm__ __volatile__ ( "rdtsc" : "=a" (Low), "=d" (High) );
     return ( High << 32 ) | ( Low & 0xffffffff );

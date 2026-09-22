@@ -801,7 +801,7 @@ double CSystem::GetTimeSinceLastUse()
 //-----------------------------------------------------------------------------
 int CSystem::GetAvailableDrives(char *buf, int bufLen)
 {
-#if ( defined( _GAMECONSOLE ) || defined ( OSX ) )
+#if ( defined( _GAMECONSOLE ) || (defined(OSX) && !defined(IOS)) )
 	return 0;
 #else // Windows
 	return GetLogicalDriveStrings(bufLen, buf);

@@ -32,7 +32,7 @@
 #include "inputsystem/iinputstacksystem.h"
 #include "vgui/ILocalize.h"
 
-#ifdef LINUX
+#if (defined(LINUX) || defined(IOS))
 #include <ft2build.h>
 #include FT_FREETYPE_H
 #endif
@@ -631,7 +631,7 @@ private:
 
 	CUtlRBTree< ContextAbsPos_t > m_ContextAbsPos;
 
-#ifdef LINUX
+#if (defined(LINUX) || defined(IOS))
 	struct font_entry
 	{
 		void *data;

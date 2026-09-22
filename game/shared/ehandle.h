@@ -113,7 +113,7 @@ template<class T>
 inline CHandle<T> CHandle<T>::UnsafeFromBaseHandle( const CBaseHandle &handle )
 {
 	CHandle<T> ret;
-	ret.m_Index = handle.m_Index;
+	ret.m_Index = (uint32)handle.ToInt();
 	return ret;
 }
 

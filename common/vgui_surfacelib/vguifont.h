@@ -26,10 +26,10 @@ typedef CWin32Font font_t;
 #elif defined(_PS3)
 #include "ps3font.h"
 typedef CPS3Font font_t;
-#elif defined(OSX)
+#elif (defined(OSX) && !defined(IOS))
 #include "osxfont.h"
 typedef COSXFont font_t;
-#elif defined(LINUX)
+#elif (defined(LINUX) || defined(IOS))
 #include "linuxfont.h"
 typedef CLinuxFont font_t;
 #else

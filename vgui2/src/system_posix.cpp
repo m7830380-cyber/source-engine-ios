@@ -28,9 +28,9 @@
 #include "vgui_key_translation.h"
 #include "filesystem.h"
 
-#ifdef OSX
+#if (defined(OSX) && !defined(IOS))
 #include <Carbon/Carbon.h>
-#elif defined(LINUX)
+#elif (defined(LINUX) || defined(IOS))
 #include <sys/vfs.h>
 #endif
 
@@ -133,7 +133,7 @@ private:
 	bool m_bRegistryDirty;
 	
 	char m_szRegistryPath[ MAX_PATH ];
-#ifdef OSX
+#if (defined(OSX) && !defined(IOS))
 	PasteboardRef m_PasteBoardRef;
 #endif
 	
@@ -161,7 +161,7 @@ CSystem::CSystem()
 	m_flRegistrySaveTime = 0.0;
 	m_bRegistryDirty = false;
 	m_pUserConfigData = NULL;
-#ifdef OSX
+#if (defined(OSX) && !defined(IOS))
 	PasteboardCreate( kPasteboardClipboard, &m_PasteBoardRef );
 #endif
 	
@@ -178,7 +178,7 @@ CSystem::CSystem()
 CSystem::~CSystem()
 {
 	SaveRegistryToFile( true );
-#ifdef OSX
+#if (defined(OSX) && !defined(IOS))
 	CFRelease( m_PasteBoardRef );
 #endif
 }
@@ -271,7 +271,7 @@ long CSystem::GetTimeMillis()
 //-----------------------------------------------------------------------------
 void CSystem::ShellExecute(const char *command, const char *file)
 {
-#ifdef OSX
+#if (defined(OSX) && !defined(IOS))
 	command = "open ";
 	char const *szSuffix = "";
 #else
@@ -307,7 +307,7 @@ void CSystem::SetClipboardText(const char *text, int textLen)
 			free( ClipText );
 		}
 	}
-#elif defined( OSX )
+#elif (defined(OSX) && !defined(IOS))
 	PasteboardSynchronize( m_PasteBoardRef );
 	PasteboardClear( m_PasteBoardRef );
 	CFDataRef theData = CFDataCreate( kCFAllocatorDefault, (const UInt8*)text, textLen );
@@ -334,7 +334,7 @@ void CSystem::SetClipboardText(const wchar_t *text, int textLen)
 
 #if defined( USE_SDL )
 	SetClipboardText( charStr, Q_strlen( charStr ) );
-#elif defined( OSX )
+#elif (defined(OSX) && !defined(IOS))
 	PasteboardSynchronize( m_PasteBoardRef );
 	PasteboardClear( m_PasteBoardRef );
 
@@ -364,7 +364,7 @@ int CSystem::GetClipboardTextCount()
 	}
 
 	return Count;
-#elif defined( OSX )
+#elif (defined(OSX) && !defined(IOS))
 	ItemCount count;
 	PasteboardSynchronize( m_PasteBoardRef );
 	
@@ -412,7 +412,7 @@ int CSystem::GetClipboardText(int offset, char *buf, int bufLen)
 	}
 
 	return 0;
-#elif defined( OSX )
+#elif (defined(OSX) && !defined(IOS))
 	ItemCount count;
 	PasteboardSynchronize( m_PasteBoardRef );
 	

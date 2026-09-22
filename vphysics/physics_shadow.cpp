@@ -1246,7 +1246,7 @@ void CShadowController::MaxSpeed( float maxSpeed, float maxAngularSpeed )
 		float availableSpeed = ConvertDistanceToIVP( maxSpeed );
 		float currentSpeed = pCore->speed.real_length();
 
-		m_shadow.maxDampSpeed = min(currentSpeed, availableSpeed);
+		m_shadow.maxDampSpeed = MIN(currentSpeed, availableSpeed);
 		m_shadow.maxSpeed = availableSpeed - m_shadow.maxDampSpeed;
 	}
 
@@ -1254,7 +1254,7 @@ void CShadowController::MaxSpeed( float maxSpeed, float maxAngularSpeed )
 		// limit additional velocity to that which is not amplifying the current velocity
 		float availableAngularSpeed = ConvertAngleToIVP( maxAngularSpeed );
 		float currentAngularSpeed = pCore->rot_speed.real_length();
-		m_shadow.maxDampAngular = min(currentAngularSpeed, availableAngularSpeed);
+		m_shadow.maxDampAngular = MIN(currentAngularSpeed, availableAngularSpeed);
 		m_shadow.maxAngular = availableAngularSpeed - m_shadow.maxDampAngular;
 	}
 #else

@@ -23,7 +23,9 @@ Context.Context.line_just = 55
 
 # VPC conditionals for the iOS target. iOS rides on CS:GO's OSX64
 # configuration (Darwin, clang, libc++, togl GL backend); IOS marks the places
-# that need UIKit/GLES instead of AppKit/desktop GL.
+# that need UIKit/GLES instead of AppKit/desktop GL. NO_STEAM is deliberately
+# not set: CS:GO's client/server never built without Steam headers, so they
+# link stub_steam, which reports Steam as not running.
 VPC_CONDITIONALS = {
 	'POSIX': 1,
 	'OSXALL': 1,
@@ -31,7 +33,6 @@ VPC_CONDITIONALS = {
 	'GL': 1,
 	'SDL': 1,
 	'CSGO': 1,
-	'NO_STEAM': 1,
 	'NO_CEG': 1,
 	'IOS': 1,
 }
@@ -115,8 +116,10 @@ MISSING_LIBS = set([
 ])
 
 # Defines from the VPC scripts that must not reach the iOS build.
+# INCLUDE_SCALEFORM stays: the game calls IScaleformUI in many unguarded places,
+# so iOS loads scaleformui/null instead (Scaleform GFx itself is a prebuilt
+# x86 library).
 DROP_DEFINES = set([
-	'INCLUDE_SCALEFORM',     # Scaleform GFx is a prebuilt x86 library
 	'USE_BREAKPAD_HANDLER',
 	'VERSION_SAFE_STEAM_API_INTERFACES',
 ])
@@ -131,10 +134,10 @@ PLATFORM_DEFINES = [
 ]
 
 IOS_DEFINES = [
+	'APPLE=1', '_APPLE=1', # expected by togl (the port's GLES togles)
 	'IOS=1',
 	'_IOS=1',
 	'PLATFORM_IOS=1',
-	'NO_STEAM=1',
 	'NO_CEG=1',
 	'TOGLES=1', # togl is the source-engine port's GLES backend
 ]
@@ -413,6 +416,32 @@ CRYPTOPP_EXCLUDE = set(['bench.cpp', 'bench2.cpp', 'test.cpp', 'validat1.cpp',
 	'fipsalgt.cpp', 'dlltest.cpp'])
 
 def build_custom_projects(bld):
+	# loaded by the launcher as scaleformui.dylib
+	env = bld.env.derive()
+	env.cxxshlib_PATTERN = '%s.dylib'
+	bld(
+		features = 'cxx cxxshlib',
+		source   = ['scaleformui/null/nullscaleformui.cpp', 'public/tier0/memoverride.cpp'],
+		target   = 'scaleformui',
+		name     = 'scaleformui',
+		includes = ['common', 'public', 'public/tier0', 'public/tier1'],
+		defines  = ['INCLUDE_SCALEFORM', 'MEMOVERRIDE_MODULE=scaleformui'],
+		use      = ['tier1', 'interfaces', 'tier0', 'vstdlib'],
+		env      = env,
+		install_path = bld.env.LIBDIR,
+	)
+
+	env = bld.env.derive()
+	env.cxxshlib_PATTERN = 'lib%s.dylib'
+	bld(
+		features = 'cxx cxxshlib',
+		source   = ['stub_steam/steam_api.cpp'],
+		target   = 'steam_api',
+		name     = 'steam_api',
+		env      = env,
+		install_path = bld.env.LIBDIR,
+	)
+
 	sources = sorted(f for f in os.listdir(CRYPTOPP_DIR)
 		if f.endswith('.cpp') and f not in CRYPTOPP_EXCLUDE)
 	env = bld.env.derive()

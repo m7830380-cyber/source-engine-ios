@@ -29,7 +29,7 @@ typedef void* HANDLE;
 
 #define XUSER_MAX_COUNT 2
 
-#if defined( _OSX )
+#if (defined(_OSX) && !defined(IOS))
 // [will] Added Xbox button constants for MacOSX
 typedef enum
 {

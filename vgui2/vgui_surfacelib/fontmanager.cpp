@@ -44,7 +44,7 @@ CFontManager::CFontManager()
 	m_FontAmalgams.AddToTail();
 	m_Win32Fonts.EnsureCapacity( MAX_INITIAL_FONTS );
 
-#ifdef LINUX
+#if (defined(LINUX) || defined(IOS))
         FT_Error error = FT_Init_FreeType( &library ); 
         if ( error )
                 Error( "Unable to initalize freetype library, is it installed?" );
@@ -83,7 +83,7 @@ const char *CFontManager::GetLanguage()
 CFontManager::~CFontManager()
 {
 	ClearAllFonts();
-#ifdef LINUX
+#if (defined(LINUX) || defined(IOS))
         FT_Done_FreeType( library );
 #endif
 }
@@ -356,7 +356,7 @@ font_t *CFontManager::CreateOrFindWin32Font(const char *windowsFontName, int tal
 		MEM_ALLOC_CREDIT();
 
 		i = m_Win32Fonts.AddToTail();
-#ifdef LINUX
+#if (defined(LINUX) || defined(IOS))
 		int memSize = 0;
 		void *pchFontData = pFontDataHelper( windowsFontName, memSize );
 		if ( pchFontData )
@@ -391,7 +391,7 @@ font_t *CFontManager::CreateOrFindWin32Font(const char *windowsFontName, int tal
 			m_Win32Fonts.Remove(i);
 			return NULL;
 		}
-#ifdef LINUX
+#if (defined(LINUX) || defined(IOS))
 		}
 #endif
 	}

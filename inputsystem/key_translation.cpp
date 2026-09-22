@@ -18,7 +18,7 @@
 #include <cell/keyboard.h>
 #endif // WIN32
 
-#if defined( _OSX )
+#if (defined(_OSX) && !defined(IOS))
 #include "posix_stubs.h"
 #endif
 
@@ -34,7 +34,7 @@ static ButtonCode_t s_pVirtualKeyToButtonCode[256];
 
 static ButtonCode_t s_pSKeytoButtonCode[SK_MAX_KEYS];
 
-#if defined( PLATFORM_WINDOWS ) || defined( _GAMECONSOLE ) || defined( _OSX )
+#if defined( PLATFORM_WINDOWS ) || defined( _GAMECONSOLE ) || (defined(_OSX) && !defined(IOS))
 static ButtonCode_t s_pXKeyTrans[XK_MAX_KEYS];
 #endif
 
@@ -441,7 +441,7 @@ static const char *s_pButtonCodeName[ ] =
 	"RALT",			// KEY_RALT,
 	"CTRL",			// KEY_LCONTROL,
 	"RCTRL",		// KEY_RCONTROL,
-#if defined(OSX)
+#if (defined(OSX) && !defined(IOS))
     "COMMAND",      // KEY_LWIN
     "COMMAND",      // KEY_RWIN
 #else
@@ -958,7 +958,7 @@ void ButtonCode_InitKeyTranslationTable()
 #endif
 
 	// init the xkey translation table
-#if !defined( PLATFORM_POSIX ) || defined( _GAMECONSOLE ) || defined( _OSX )
+#if !defined( PLATFORM_POSIX ) || defined( _GAMECONSOLE ) || (defined(_OSX) && !defined(IOS))
 	s_pXKeyTrans[XK_NULL]					= KEY_NONE;
 	s_pXKeyTrans[XK_BUTTON_UP]				= KEY_XBUTTON_UP;
 	s_pXKeyTrans[XK_BUTTON_DOWN]			= KEY_XBUTTON_DOWN;
@@ -1054,7 +1054,7 @@ int ButtonCode_ButtonCodeToVirtualKey( ButtonCode_t code )
 
 ButtonCode_t ButtonCode_XKeyToButtonCode( int nPort, int keyCode )
 {
-#if !defined( PLATFORM_POSIX ) || defined( _GAMECONSOLE ) || defined( _OSX )
+#if !defined( PLATFORM_POSIX ) || defined( _GAMECONSOLE ) || (defined(_OSX) && !defined(IOS))
 	if ( keyCode < 0 || keyCode >= sizeof( s_pXKeyTrans ) / sizeof( s_pXKeyTrans[0] ) )
 	{
 		Assert( false );
@@ -1173,7 +1173,7 @@ ButtonCode_t ButtonCode_StringToButtonCode( const char *pString, bool bXControll
 		return BUTTON_CODE_INVALID;
 	}
 
-#if defined(OSX)
+#if (defined(OSX) && !defined(IOS))
   // map "l_win" to the LWIN key on OSX (it appears in the table as "command" )
   if ( !Q_stricmp( pString, "lwin" ) )
 #else

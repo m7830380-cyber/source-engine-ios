@@ -30,7 +30,7 @@
 #endif
 
 #if defined(PLATFORM_POSIX) && !defined(_PS3)
-#ifdef PLATFORM_OSX
+#if (defined(PLATFORM_OSX) && !defined(IOS))
 #define DWORD DWORD
 #define CARBON_WORKAROUND
 
@@ -159,7 +159,7 @@ public:
 
 #ifdef PLATFORM_WINDOWS
 	LRESULT WindowProc( HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam );
-#elif defined(PLATFORM_OSX)
+#elif (defined(PLATFORM_OSX) && !defined(IOS))
 	// helper function for callbacks
 	struct JoystickInfo_t;
 	void HIDAddElement(CFTypeRef refElement, JoystickInfo_t &info );
@@ -220,7 +220,7 @@ private:
 	};
 
 public:
-#if defined(PLATFORM_OSX)
+#if (defined(PLATFORM_OSX) && !defined(IOS))
 	struct OSXInputValue_t
 	{
 		bool m_bSet;
@@ -239,7 +239,7 @@ public:
 	{
 #if defined(PLATFORM_WINDOWS) || defined(_GAMECONSOLE)
 		JOYINFOEX m_JoyInfoEx;
-#elif defined(PLATFORM_OSX)
+#elif (defined(PLATFORM_OSX) && !defined(IOS))
 		FFDeviceObjectReference m_FFInterface;
 		IOHIDDeviceInterface **m_Interface;
 		long usage;  // from IOUSBHID Parser.h
@@ -255,7 +255,7 @@ public:
 		OSXInputValue_t m_vaxis;
 		OSXInputValue_t m_POV;
 		OSXInputValue_t m_Buttons[MAX_JOYSTICK_BUTTONS];
-#elif defined(LINUX)
+#elif (defined(LINUX) || defined(IOS))
 		void *m_pDevice;  // Really an SDL_GameController*, NULL if not present.
 		void *m_pHaptic;  // Really an SDL_Haptic*
 		float m_fCurrentRumble;
@@ -380,7 +380,7 @@ public:
 	// Sets rumble values for an Xbox controller
 	void SetXDeviceRumble( float fLeftMotor, float fRightMotor, int userId );
 
-#if !defined( _CERT ) && !defined(LINUX)
+#if !defined( _CERT ) && !(defined(LINUX) || defined(IOS))
 	CON_COMMAND_MEMBER_F( CInputSystem, "press_x360_button", PressX360Button, "Press the specified Xbox 360 controller button (lt, rt, st[art], ba[ck], lb, rb, a, b, x, y, l[eft], r[right], u[p], d[own])", 0 );
 	void PollPressX360Button( void );
 	uint32 m_press_x360_buttons[ 2 ];
@@ -431,9 +431,9 @@ public:
 private:
 
 	// Purpose: Get raw joystick sample along axis
-#if defined(LINUX)
+#if (defined(LINUX) || defined(IOS))
 	void AxisAnalogButtonEvent( ButtonCode_t buttonCode, bool state, int nLastSampleTick );
-#elif defined(OSX)
+#elif (defined(OSX) && !defined(IOS))
 	unsigned int AxisValue( JoystickAxis_t axis, JoystickInfo_t &info );
 #else
 	unsigned int AxisValue( JoystickAxis_t axis, JOYINFOEX& ji );
@@ -497,7 +497,7 @@ private:
 	void PollInputState_Windows();
 #endif
 	// Poll input state for different OSes.
-#if defined( PLATFORM_OSX )
+#if (defined(PLATFORM_OSX) && !defined(IOS))
 	void PollInputState_OSX();
 	void HIDGetElementInfo( CFTypeRef refElement, OSXInputValue_t &input );
 	bool HIDBuildDevice( io_object_t ioHIDDeviceObject, JoystickInfo_t &info );
@@ -510,7 +510,7 @@ private:
 	int HIDScaledCalibratedValue( JoystickInfo_t &info, OSXInputValue_t &value );
 	void HIDSortJoystickButtons( JoystickInfo_t &info );
 
-#elif defined(LINUX)
+#elif (defined(LINUX) || defined(IOS))
 public:
 	void PollInputState_Linux();
 	void JoystickHotplugAdded( int joystickIndex );
@@ -523,7 +523,7 @@ public:
 
 private:
 
-#if defined( USE_SDL ) || defined( OSX )
+#if defined( USE_SDL ) || (defined(OSX) && !defined(IOS))
 	ILauncherMgr *m_pLauncherMgr;
 #endif
 

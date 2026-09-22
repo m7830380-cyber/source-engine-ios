@@ -187,7 +187,7 @@ public:
 	virtual void Log( const LoggingContext_t *pContext, const tchar *pMessage )
 	{
 #if !defined( _CERT ) && !defined( _PS3 )
-#if defined ( WIN32 ) || defined( LINUX )
+#if defined ( WIN32 ) || defined( LINUX ) || defined( IOS )
 		if ( pContext->m_Severity == LS_WARNING && pContext->m_ChannelID == LOG_EngineInitialization )
 		{
 			::MessageBox( NULL, pMessage, "Warning!", MB_OK | MB_SYSTEMMODAL | MB_ICONERROR );
@@ -1025,7 +1025,7 @@ const char *CSourceAppSystemGroup::DetermineDefaultGame()
 //-----------------------------------------------------------------------------
 // MessageBox for OSX
 //-----------------------------------------------------------------------------
-#if defined(OSX)
+#if defined(OSX) && !defined(IOS)
 #include "CoreFoundation/CoreFoundation.h"
 
 int MessageBox( HWND hWnd, const char *message, const char *header, unsigned uType )
@@ -1062,7 +1062,7 @@ int MessageBox( HWND hWnd, const char *message, const char *header, unsigned uTy
 
 }
 
-#elif defined( LINUX )
+#elif defined( LINUX ) || defined( IOS )
 
 int MessageBox( HWND hWnd, const char *message, const char *header, unsigned uType )
 {

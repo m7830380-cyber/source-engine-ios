@@ -183,3 +183,35 @@ S_API void SteamGameServer_RunCallbacks() {
 
 S_API void SteamGameServer_Shutdown() {
 }
+
+// Additional exports declared by CS:GO's Steamworks headers. Everything
+// reports "Steam not running": inits fail, interfaces are NULL.
+
+S_API bool SteamInternal_Init() {
+	return false;
+}
+
+S_API bool SteamInternal_GameServer_Init() {
+	return false;
+}
+
+S_API void *SteamGameServerInternal_CreateInterface() {
+	return NULL;
+}
+
+S_API bool SteamGameServer_BSecure() {
+	return false;
+}
+
+S_API unsigned long long SteamGameServer_GetSteamID() {
+	return 0;
+}
+
+// The headers call accessors on the returned context, so it has to be real
+// (zeroed) storage: CSteamGameServerAPIContext then hands out NULL interfaces.
+S_API void *SteamInternal_GlobalContextGameServerPtr( unsigned int size ) {
+	static unsigned long long s_context[256];
+	if ( size > sizeof( s_context ) )
+		return NULL;
+	return s_context;
+}

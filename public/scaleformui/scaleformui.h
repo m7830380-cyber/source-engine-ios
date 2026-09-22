@@ -758,8 +758,8 @@ public:
 		XStick2Down = 0x8B,
 
 
-		MWHEEL_UP,
-		MWHEEL_DOWN,
+		MouseWheelUp,	// not MWHEEL_UP: basecombatweapon_shared.h #defines that
+		MouseWheelDown,
 
 		NumLock = 144, // Toggle
 		ScrollLock = 145, // Toggle

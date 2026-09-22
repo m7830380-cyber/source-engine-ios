@@ -1781,9 +1781,9 @@ IHTML *CWin32Surface::CreateHTMLWindow(vgui::IHTMLEvents *events, VPANEL context
 	void *pWindowHandle;
 #ifdef WIN32
 	pWindowHandle = PLAT(parent)->hwnd;
-#elif defined(OSX)
+#elif (defined(OSX) && !defined(IOS))
 	pWindowHandle = ((VPanel *)parent)->Plat()->m_hWindow;
-#elif defined(LINUX)
+#elif (defined(LINUX) || defined(IOS))
 	pWindowHandle = ((VPanel *)parent)->Plat()->m_hWindow;
 #endif
 	return NULL;

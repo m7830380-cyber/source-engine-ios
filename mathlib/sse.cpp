@@ -451,7 +451,7 @@ float FastCos( float x )
 		movss   x,    xmm0
 		
 	}
-#elif defined( _WIN64 )
+#elif defined( _WIN64 ) || defined( __aarch64__ ) // no MMX on arm64
 	return cosf( x );
 #elif POSIX
 	

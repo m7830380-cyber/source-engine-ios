@@ -459,7 +459,7 @@ void CVGui::RunFrame()
 
 	}
 
-#if !defined( LINUX )
+#if !(defined(LINUX) || defined(IOS))
 	if ( !bIsReentrant )
 	{
 		VPROF( "input()->RunFrame()" );
@@ -495,7 +495,7 @@ void CVGui::RunFrame()
 		}
 	}
 
-#ifdef LINUX
+#if (defined(LINUX) || defined(IOS))
     // On Linux we want to run the input frame here instead of before
     // DispatchMessages() because the way mouse positioning is handled we won't
     // get an accurate position until after DispatchMessages() is called and

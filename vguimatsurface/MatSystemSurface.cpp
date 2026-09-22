@@ -14,14 +14,14 @@
 #if defined( WIN32) && !defined( _X360 )
 #include <windows.h>
 #endif
-#ifdef OSX
+#if (defined(OSX) && !defined(IOS))
 #include <Carbon/Carbon.h>
 #endif
-#ifdef LINUX
+#if (defined(LINUX) || defined(IOS))
 #include <fontconfig/fontconfig.h>
 #endif
 
-#if defined( USE_SDL ) || defined(OSX) 
+#if defined( USE_SDL ) || (defined(OSX) && !defined(IOS)) 
 #include <appframework/ilaunchermgr.h>
 ILauncherMgr *g_pLauncherMgr = NULL;
 #endif
@@ -163,7 +163,7 @@ EXPOSE_SINGLE_INTERFACE_GLOBALVAR( CMatSystemSurface, ISurface,
 EXPOSE_SINGLE_INTERFACE_GLOBALVAR( CMatSystemSurface, ISchemeSurface, 
 						SCHEME_SURFACE_INTERFACE_VERSION, g_MatSystemSurface );
 
-#ifdef LINUX
+#if (defined(LINUX) || defined(IOS))
 CUtlDict< CMatSystemSurface::font_entry, unsigned short > CMatSystemSurface::m_FontData;
 #endif
 
@@ -286,7 +286,7 @@ bool CMatSystemSurface::Connect( CreateInterfaceFn factory )
 
 #if defined( USE_SDL )
     g_pLauncherMgr = (ILauncherMgr *)factory(  SDLMGR_INTERFACE_VERSION, NULL );
-#elif defined( OSX )
+#elif (defined(OSX) && !defined(IOS))
     g_pLauncherMgr = (ILauncherMgr *)factory(  COCOAMGR_INTERFACE_VERSION, NULL );
 #endif
 
@@ -449,7 +449,7 @@ InitReturnVal_t CMatSystemSurface::Init( void )
 		{    
 #ifdef PLATFORM_WINDOWS
           bValid = system()->GetRegistryString( "HKEY_CURRENT_USER\\Software\\Valve\\Steam\\Language", language, sizeof(language)-1 );
-#elif defined(OSX)
+#elif (defined(OSX) && !defined(IOS))
           static ConVarRef cl_language("cl_language");
           Q_strncpy( language, cl_language.GetString(), sizeof( language ) );
           bValid = true;
@@ -470,7 +470,7 @@ InitReturnVal_t CMatSystemSurface::Init( void )
 	{
 		FontManager().SetLanguage( "english" );
 	}
-#ifdef LINUX
+#if (defined(LINUX) || defined(IOS))
 	FontManager().SetFontDataHelper( &CMatSystemSurface::FontDataHelper );
 #endif
 
@@ -889,7 +889,7 @@ void CMatSystemSurface::FinishDrawing( void )
 //-----------------------------------------------------------------------------
 void CMatSystemSurface::RunFrame()
 {
-#ifdef OSX
+#if (defined(OSX) && !defined(IOS))
 	void CursorRunFrame();
 	CursorRunFrame();
 #endif
@@ -2383,7 +2383,7 @@ bool CMatSystemSurface::AddCustomFontFile( const char *fontFileName )
 #endif // X360
 #elif defined( _PS3 )
 	return true;
-#elif defined( OSX )
+#elif (defined(OSX) && !defined(IOS))
 	// Just load the font data, decrypt in memory and register for this process
 	CUtlBuffer buf;
 	if ( !g_pFullFileSystem->ReadFile( fontFileName, NULL, buf ) )
@@ -2430,7 +2430,7 @@ bool CMatSystemSurface::AddCustomFontFile( const char *fontFileName )
   }
 #endif
 	return err == noErr;
-#elif defined(LINUX)
+#elif (defined(LINUX) || defined(IOS))
 	// Just load the font data, decrypt in memory and register for this process
 	CUtlBuffer buf;
 	if ( !g_pFullFileSystem->ReadFile( fontFileName, NULL, buf ) )
@@ -2473,7 +2473,7 @@ bool CMatSystemSurface::AddCustomFontFile( const char *fontFileName )
 #endif
 }
 
-#ifdef LINUX
+#if (defined(LINUX) || defined(IOS))
 void *CMatSystemSurface::FontDataHelper( const char *pchFontName, int &size )
 {
 	int iIndex = m_FontData.Find( pchFontName );

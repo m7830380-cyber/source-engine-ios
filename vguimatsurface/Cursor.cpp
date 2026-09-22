@@ -18,7 +18,7 @@
 #include "vguimatsurface.h"
 #include "filesystem.h"
 
-#if defined( PLATFORM_OSX )
+#if (defined(PLATFORM_OSX) && !defined(IOS))
 #include <Carbon/Carbon.h>
 #endif
 
@@ -181,7 +181,7 @@ void Cursor_ClearUserCursors()
 {
 }
 
-#ifdef OSX
+#if (defined(OSX) && !defined(IOS))
 static HCursor s_hCursor = dc_arrow;
 
 #if defined( PLATFORM_64BITS )
@@ -298,7 +298,7 @@ void CursorSelect( InputContextHandle_t hContext, HCursor hCursor )
 	ActivateCurrentCursor( hContext );
 
 	g_pInputSystem->SetMouseCursorVisible( s_bCursorVisible );
-#elif defined( PLATFORM_OSX )
+#elif (defined(PLATFORM_OSX) && !defined(IOS))
 	// @wge: Copied from window's section above
 	// [jason] When the console window is raised, keep the cursor active even if the mouse focus is not on the console window.
 	//	This makes it easier track where the cursor is on-screen when the user moves off of the console.
@@ -399,7 +399,7 @@ void CursorSelect( InputContextHandle_t hContext, HCursor hCursor )
 	
 	g_pInputSystem->SetMouseCursorVisible( s_bCursorVisible );
 #elif defined( _PS3 )
-#elif defined( LINUX )
+#elif (defined(LINUX) || defined(IOS))
 #error
 #else
 #error
@@ -424,7 +424,7 @@ void ActivateCurrentCursor( InputContextHandle_t hContext )
 
 #elif defined( WIN32 )
 		g_pInputStackSystem->SetCursorIcon( hContext, s_hCurrentCursor );
-#elif defined( OSX )
+#elif (defined(OSX) && !defined(IOS))
 		if ( !CGCursorIsVisible() && !CommandLine()->FindParm("-keepmousehooked") )
 		{
 			CGDisplayShowCursor(kCGDirectMainDisplay);
@@ -444,7 +444,7 @@ void ActivateCurrentCursor( InputContextHandle_t hContext )
 		}
 #elif defined( WIN32 )
 		g_pInputStackSystem->SetCursorIcon( hContext, INPUT_CURSOR_HANDLE_INVALID );
-#elif defined( OSX )
+#elif (defined(OSX) && !defined(IOS))
 		if ( CGCursorIsVisible() && !CommandLine()->FindParm("-keepmousehooked") )
 		{
 			CGDisplayHideCursor(kCGDirectMainDisplay);
@@ -496,7 +496,7 @@ void CursorGetPos( InputContextHandle_t hContext, int &x, int &y )
 }
 
 
-#ifdef OSX
+#if (defined(OSX) && !defined(IOS))
 void CursorRunFrame()
 {
 	static HCursor hCursorLast = dc_none;

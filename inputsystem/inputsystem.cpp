@@ -17,7 +17,7 @@
 #include <vjobs_interface.h>
 #endif
 
-#ifdef PLATFORM_OSX
+#if (defined(PLATFORM_OSX) && !defined(IOS))
 #include <Carbon/Carbon.h>
 #include "materialsystem/imaterialsystem.h"
 #endif
@@ -117,7 +117,7 @@ CInputSystem::CInputSystem()
 	// This is B.S., must be a compile-time assert with valid expression:
 	// Assert( (MAX_JOYSTICKS + 7) >> 3 << sizeof(unsigned short) ); 
 
-#if !defined( _CERT ) && !defined(LINUX)
+#if !defined( _CERT ) && !(defined(LINUX) || defined(IOS))
 	V_memset( m_press_x360_buttons, 0, sizeof( m_press_x360_buttons ) );
 #endif
 
@@ -236,7 +236,7 @@ InitReturnVal_t CInputSystem::Init()
 
 	m_bRawInputSupported = false;
 
-#if defined( LINUX )
+#if (defined(LINUX) || defined(IOS))
 
 	m_bRawInputSupported = true;
 	
@@ -277,7 +277,7 @@ bool CInputSystem::Connect( CreateInterfaceFn factory )
 
 #if defined( USE_SDL )
 	m_pLauncherMgr = (ILauncherMgr *)factory(  SDLMGR_INTERFACE_VERSION, NULL );
-#elif defined( OSX )
+#elif (defined(OSX) && !defined(IOS))
 	m_pLauncherMgr = (ILauncherMgr *)factory(  COCOAMGR_INTERFACE_VERSION, NULL );
 #endif
 
@@ -329,7 +329,7 @@ void CInputSystem::Shutdown()
 //-----------------------------------------------------------------------------
 void CInputSystem::SleepUntilInput( int nMaxSleepTimeMS )
 {
-#if defined( USE_SDL ) || defined( OSX )
+#if defined( USE_SDL ) || (defined(OSX) && !defined(IOS))
 	m_pLauncherMgr->WaitUntilUserInput( nMaxSleepTimeMS );
 #elif defined( _WIN32 ) 
 	if ( nMaxSleepTimeMS < 0 )
@@ -393,7 +393,7 @@ void CInputSystem::AttachToWindow( void* hWnd )
 	}
 
 #if defined ( USE_SDL )
-#elif defined( PLATFORM_OSX )
+#elif (defined(PLATFORM_OSX) && !defined(IOS))
 #elif defined( PLATFORM_WINDOWS )
 #if defined( PLATFORM_X360 ) //GetWindowLongPtrW/SetWindowLongPtrW don't exist on the 360
 	m_ChainedWndProc = (WNDPROC)GetWindowLongPtr( (HWND)hWnd, GWLP_WNDPROC );
@@ -726,7 +726,7 @@ void CInputSystem::PollInputState_Windows()
 
 
 
-#if defined(OSX) || defined( USE_SDL )
+#if (defined(OSX) && !defined(IOS)) || defined( USE_SDL )
 
 #if defined( USE_SDL )
 static BYTE        scantokey[SDL_NUM_SCANCODES];
@@ -793,7 +793,7 @@ static void initKeymap(void)
     scantokey[SDL_SCANCODE_RGUI] = KEY_RWIN;
 }
 
-#elif defined(OSX)
+#elif (defined(OSX) && !defined(IOS))
 static BYTE        scantokey[128] = 
 { 
 	KEY_A, KEY_S, KEY_D, KEY_F, KEY_H, KEY_G, KEY_Z, KEY_X,
@@ -824,7 +824,7 @@ bool MapCocoaVirtualKeyToButtonCode( int nCocoaVirtualKeyCode, ButtonCode_t *pOu
 		*pOut = (ButtonCode_t)(-1 * nCocoaVirtualKeyCode);
 	else 
 	{
-#ifdef OSX
+#if (defined(OSX) && !defined(IOS))
 		int modified = nCocoaVirtualKeyCode & 255;
 	
 		if ( modified > 127)
@@ -843,9 +843,9 @@ bool MapCocoaVirtualKeyToButtonCode( int nCocoaVirtualKeyCode, ButtonCode_t *pOu
 
 
 
-#ifdef LINUX
+#if (defined(LINUX) || defined(IOS))
 void CInputSystem::PollInputState_Linux()
-#elif defined( OSX )
+#elif (defined(OSX) && !defined(IOS))
 void CInputSystem::PollInputState_OSX()
 #elif defined( _WIN32 )
 void CInputSystem::PollInputState_Windows()
@@ -880,7 +880,7 @@ void CInputSystem::PollInputState_Windows()
 					{
 						ButtonCode_t scanCode = virtualCode;
 
-#ifdef LINUX
+#if (defined(LINUX) || defined(IOS))
 						if( scanCode != BUTTON_CODE_NONE )
 #endif
 						{
@@ -899,7 +899,7 @@ void CInputSystem::PollInputState_Windows()
 						event.m_nData = scanCode;
 						g_pInputSystem->PostUserEvent( event );
 						
-#if defined( LINUX ) || (defined( OSX ) && defined( USE_SDL ) )
+#if (defined(LINUX) || defined(IOS)) || ((defined(OSX) && !defined(IOS)) && defined( USE_SDL ) )
 						if ( scanCode == KEY_BACKSPACE )
 						{
 							// On Linux (and OS X, when using SDL), we need to fire this event to have backspace keypresses picked up by scaleform.
@@ -1008,7 +1008,7 @@ void CInputSystem::PollInputState_Windows()
 					PostEvent( IE_ButtonPressed, m_nLastSampleTick, code, code );
 					PostEvent( IE_ButtonReleased, m_nLastSampleTick, code, code );
 					
-#ifdef LINUX
+#if (defined(LINUX) || defined(IOS))
 					state.m_pAnalogDelta[ MOUSE_WHEEL ] = pEvent->m_MousePos[1];
 #else
 					state.m_pAnalogDelta[ MOUSE_WHEEL ] = ( (short)pEvent->m_MousePos[1] ) / 10;
@@ -1046,7 +1046,7 @@ void CInputSystem::PollInputState_Windows()
 //-----------------------------------------------------------------------------
 void CInputSystem::PollInputState( bool bIsInGame )
 {
-#if !defined( _CERT ) && !defined(LINUX)
+#if !defined( _CERT ) && !(defined(LINUX) || defined(IOS))
 	PollPressX360Button();
 #endif
 
@@ -1068,9 +1068,9 @@ void CInputSystem::PollInputState( bool bIsInGame )
 	// the LastPollTick not updated (not 100% sure though)
 	m_nLastPollTick = m_nLastSampleTick;
 
-#if defined( PLATFORM_OSX )
+#if (defined(PLATFORM_OSX) && !defined(IOS))
 	PollInputState_OSX();
-#elif defined( LINUX )
+#elif (defined(LINUX) || defined(IOS))
 	PollInputState_Linux();
 #elif defined( WIN32 )
 	PollInputState_Windows();
@@ -1146,7 +1146,7 @@ void CInputSystem::SampleDevices( void )
 //-----------------------------------------------------------------------------
 void CInputSystem::SetRumble( float fLeftMotor, float fRightMotor, int userId )
 {
-#ifndef LINUX
+#if !(defined(LINUX) || defined(IOS))
 	// TODO: send force feedback to rumble-enabled joysticks
 	SetXDeviceRumble( fLeftMotor, fRightMotor, userId );
 #endif
@@ -1190,7 +1190,7 @@ void CInputSystem::StopRumble( int userId )
 	}
 	else
 	{
-#ifndef LINUX
+#if !(defined(LINUX) || defined(IOS))
 		SetXDeviceRumble( 0, 0, userId );
 #endif
 	}
@@ -1289,7 +1289,7 @@ uint64 CInputSystem::GetMotionControllerDeviceStatusFlags( ) const
 	return m_nMotionControllerStatusFlags;
 }
 
-#if defined( _OSX ) || defined (LINUX)
+#if (defined(_OSX) && !defined(IOS)) || (defined(LINUX) || defined(IOS))
 // this is defined in xcontroller.cpp, but that file isn't included
 // in posix builds
 void CInputSystem::SetMotionControllerCalibrationInvalid( void )
@@ -1456,7 +1456,7 @@ void CInputSystem::SetCursorPosition( int x, int y )
 
 #if defined( USE_SDL )
 	m_pLauncherMgr->SetCursorPosition( x, y );
-#elif defined( OSX )
+#elif (defined(OSX) && !defined(IOS))
 	m_pLauncherMgr->SetCursorPosition( x, y );
 #elif defined( WIN32 ) 
 	POINT pt;
@@ -1505,7 +1505,7 @@ void CInputSystem::GetCursorPosition( int *pX, int *pY )
 #if defined( USE_SDL )
 	*pX = m_InputState[INPUT_STATE_CURRENT].m_pAnalogValue[MOUSE_X];
 	*pY = m_InputState[INPUT_STATE_CURRENT].m_pAnalogValue[MOUSE_Y];
-#elif defined( PLATFORM_OSX )
+#elif (defined(PLATFORM_OSX) && !defined(IOS))
 	if ( m_bCursorVisible )
 	{
 		CGEventRef event = CGEventCreate( NULL );
@@ -2235,9 +2235,9 @@ void  CInputSystem::InitPlatfromInputDeviceInfo( void )
 
 #if defined( PLATFORM_WINDOWS_PC )
 	m_currentlyConnectedInputDevices = INPUT_DEVICE_KEYBOARD_MOUSE;
-#elif defined( PLATFORM_OSX )
+#elif (defined(PLATFORM_OSX) && !defined(IOS))
 	m_currentlyConnectedInputDevices = INPUT_DEVICE_KEYBOARD_MOUSE;
-#elif defined( PLATFORM_LINUX )
+#elif (defined(PLATFORM_LINUX) || defined(IOS))
 	m_currentlyConnectedInputDevices = INPUT_DEVICE_KEYBOARD_MOUSE;
 #elif defined( PLATFORM_X360 )
 	m_currentlyConnectedInputDevices = INPUT_DEVICE_GAMEPAD;
@@ -2263,9 +2263,9 @@ void CInputSystem::ResetCurrentInputDevice( void )
 
 #if defined( PLATFORM_WINDOWS_PC )
 	m_currentInputDevice = INPUT_DEVICE_KEYBOARD_MOUSE;
-#elif defined( PLATFORM_OSX )
+#elif (defined(PLATFORM_OSX) && !defined(IOS))
 	m_currentInputDevice = INPUT_DEVICE_KEYBOARD_MOUSE;
-#elif defined( PLATFORM_LINUX )
+#elif (defined(PLATFORM_LINUX) || defined(IOS))
 	m_currentInputDevice = INPUT_DEVICE_KEYBOARD_MOUSE;
 #elif defined( PLATFORM_X360 )
 	m_currentInputDevice = INPUT_DEVICE_GAMEPAD;
@@ -2403,7 +2403,7 @@ bool CInputSystem::IsSamplingForCurrentDevice( void )
 }
 
 
-#ifndef LINUX
+#if !(defined(LINUX) || defined(IOS))
 
 #if !defined( _CERT )
 // [mhansen] Add support for pressing Xbox 360 controller buttons (should work on PS3 too)

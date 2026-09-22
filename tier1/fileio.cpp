@@ -14,7 +14,9 @@
 #include <sys/stat.h>
 
 #if defined(OSX)
+#if !defined(IOS)
 #include <CoreServices/CoreServices.h>
+#endif
 #include <sys/types.h>
 #include <dirent.h>
 #include <sys/time.h>
@@ -1234,7 +1236,7 @@ CDirWatcher::~CDirWatcher()
 		// close the handle
 		::CloseHandle( m_hFile );
 	}
-#elif defined(OSX)
+#elif defined(OSX) && !defined(IOS) // FSEvents is macOS-only
 	if ( m_WatcherStream )
 	{
 		FSEventStreamStop( (FSEventStreamRef)m_WatcherStream );
@@ -1299,7 +1301,7 @@ public:
 		pDirWatcherOverlapped->m_pDirWatcher->PostDirWatch();
 	}
 };
-#elif defined(OSX)
+#elif defined(OSX) && !defined(IOS) // FSEvents is macOS-only
 void CheckDirectoryForChanges( const char *path_buff, CDirWatcher *pDirWatch, bool bRecurse )
 {
 	DIR *dir = opendir(path_buff);
@@ -1394,7 +1396,7 @@ void CDirWatcher::SetDirToWatch( const char *pchDir )
 
 	// post a watch
 	PostDirWatch();
-#elif defined(OSX)
+#elif defined(OSX) && !defined(IOS) // FSEvents is macOS-only
 	CFStringRef mypath = CFStringCreateWithCString( NULL, strPath.GetUTF8Path(), kCFStringEncodingMacRoman );
 	if ( !mypath )
 	{

@@ -37,6 +37,9 @@
 #include "ivp_range_manager.hxx"
 #include "ivp_clustering_visualizer.hxx"
 
+// defined in physics_collide.cpp
+extern IPhysicsCollision *physcollision;
+
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
 

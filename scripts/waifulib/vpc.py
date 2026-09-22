@@ -18,7 +18,7 @@ _TOKEN_RE = re.compile(r'''
 	(?P<lbrace>\{) |
 	(?P<rbrace>\}) |
 	(?P<cond>\[[^\]\n]*\]) |
-	(?P<str>"(?:[^"\\\n]|\\.)*"?) |
+	(?P<str>"[^"\n]*"?) |   # no escapes in VPC: "..\" is a path ending in a backslash
 	(?P<word>[^\s{}\[\]"]+)
 ''', re.X)
 

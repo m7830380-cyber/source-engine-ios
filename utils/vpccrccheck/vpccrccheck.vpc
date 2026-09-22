@@ -4,12 +4,10 @@
 //	Project Script
 //-----------------------------------------------------------------------------
 
-$MacroRequired "PLATSUBDIR"
-
 $Macro SRCDIR		"..\.."
 $Macro OUTBINDIR	"$SRCDIR\devtools\bin"
 
-$Include "$SRCDIR\vpc_scripts\source_exe_con_base.vpc"
+$Include "$SRCDIR\vpc_scripts\source_exe_con_win32_base.vpc"
 
 $Configuration
 {
@@ -28,10 +26,8 @@ $Project "vpccrccheck"
 		$File	"$SRCDIR\tier1\checksum_crc.cpp"
 	}
 	
-	$Folder "Link Libraries" [$WIN32]
+	$Folder "Link Libraries"
 	{
-		$Lib tier0
-		$Lib tier1
-		$ImpLib vstdlib
+		-$Implib	"$LIBPUBLIC\vstdlib"
 	}
 }

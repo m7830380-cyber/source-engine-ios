@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2005, Valve Corporation, All rights reserved. =======//
 //
 // Purpose: 
 //
@@ -8,7 +8,7 @@
 
 #include "dme_controls/AttributeSoundPickerPanel.h"
 #include "dme_controls/soundpicker.h"
-#include "tier1/KeyValues.h"
+#include "tier1/keyvalues.h"
 #include "dme_controls/AttributeTextEntry.h"
 #include "datamodel/dmelement.h"
 
@@ -52,7 +52,8 @@ void CAttributeSoundPickerPanel::ShowPickerDialog()
 		}
 	}
 
-	const char *pCurrentSound = GetAttributeValue<CUtlString>().Get();
+	CUtlSymbolLarge symbol = GetAttributeValue<CUtlSymbolLarge>();
+	const char *pCurrentSound = symbol.String();
 	CSoundPickerFrame *pSoundPickerDialog = new CSoundPickerFrame( this, "Select sound", pickType );
 	pSoundPickerDialog->AddActionSignalTarget( this );
 

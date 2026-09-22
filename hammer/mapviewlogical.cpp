@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: Rendering and mouse handling in the logical view.
 //
@@ -215,7 +215,7 @@ void CMapViewLogical::AddToRenderLists( CMapClass *pObject )
 	const CMapObjectList *pChildren = pObject->GetChildren();
 	FOR_EACH_OBJ( *pChildren, pos )
 	{
-		AddToRenderLists( pChildren->Element(pos) );
+		AddToRenderLists( (CUtlReference< CMapClass >)pChildren->Element(pos) );
 	}
 }
 
@@ -254,6 +254,9 @@ void CMapViewLogical::PopulateConnectionList( )
 						for ( j = 0; j < nInputCount; ++j )
 						{
 							CMapEntity *pEntity = pEntityList->Element(j);
+							if ( !pEntity )
+								continue;
+
 							if ( m_RenderDict.Find( pEntity ) != m_RenderDict.InvalidIndex() )
 							{ 
 								m_ConnectionList.AddToTail( pObject );
@@ -271,7 +274,7 @@ void CMapViewLogical::PopulateConnectionList( )
 		const CMapObjectList *pChildren = pObject->GetChildren();
 		FOR_EACH_OBJ( *pChildren, pos )
 		{
-			m_ConnectionUpdate.Push( pChildren->Element(pos) );
+			m_ConnectionUpdate.Push( (CUtlReference< CMapClass >)pChildren->Element(pos) );
 		}
 	}
 }
@@ -522,16 +525,17 @@ void CMapViewLogical::RenderConnections(const bool bDrawSelected, const bool bAn
 					float my = y + ( nInputCount / 2 ) * LOGICAL_CONN_VERT_SPACING/2;
 
 					Vector vecStart( x + LOGICAL_CONN_MULTI_CIRCLE_RADIUS, y, 0.0f );
+					Vector vecDelta;
 					for ( int k = 0; k < nInputCount; ++k )
 					{ 
 						// bBadInput = false; // This should be based on whether downstream entity has the specificied named input
 						bInputSelected = ( pEntityList->Element( k )->GetSelectionState() != SELECT_NONE );
-						color32 col = GetWireColor( pConn->GetOutputName(), 
+						color32 c = GetWireColor( pConn->GetOutputName(), 
 												  bEntitySelected || bInputSelected,
 												  bBadInput,
 												  bAnySelected );
 
-						pRender->SetDrawColor( col.r, col.g, col.b );
+						pRender->SetDrawColor( c.r, c.g, c.b );
 
 						Vector vecEnd( mx, my, 0.0f );
 						Vector vecDelta;
@@ -565,7 +569,7 @@ void CMapViewLogical::Render()
 	CMapDoc *pDoc = GetMapDoc();
 	CMapWorld *pWorld = pDoc->GetMapWorld();
 
-	GetRender()->StartRenderFrame();
+	GetRender()->StartRenderFrame( false );
 	
 	// Draw grid if enabled.
 	if ( pDoc->m_bShowLogicalGrid )

@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2008, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -19,26 +19,15 @@ void CStudioRenderContext::GetTriangles( const DrawModelInfo_t& info, matrix3x4_
 
 	out.m_MaterialBatches.RemoveAll(); // clear out data.
 
-	if( !info.m_pStudioHdr || !info.m_pHardwareData || 
-		!info.m_pHardwareData->m_NumLODs || !info.m_pHardwareData->m_pLODs )
-	{
+	if( !info.m_pStudioHdr || !info.m_pHardwareData || !info.m_pHardwareData->m_NumLODs || !info.m_pHardwareData->m_pLODs )
 		return;
-	} 
 
 	int lod = info.m_Lod;
 	int lastlod = info.m_pHardwareData->m_NumLODs - 1;
-
-	if ( lod == USESHADOWLOD )
-	{
-		lod = lastlod;
-	} 
-	else
-	{
-		lod = clamp( lod, 0, lastlod );
-	}
+	lod = lod == USESHADOWLOD ? lastlod : clamp( lod, 0, lastlod );
 
 	// clamp to root lod
-	if ( lod < info.m_pHardwareData->m_RootLOD)
+	if ( lod < info.m_pHardwareData->m_RootLOD )
 	{
 		lod = info.m_pHardwareData->m_RootLOD;
 	}
@@ -58,7 +47,7 @@ void CStudioRenderContext::GetTriangles( const DrawModelInfo_t& info, matrix3x4_
 	ComputePoseToWorld( out.m_PoseToWorld, info.m_pStudioHdr, boneMask, m_RC.m_ViewOrigin, pBoneToWorld );
 
 	int i;
-	for (i=0 ; i < info.m_pStudioHdr->numbodyparts ; i++) 
+	for ( i=0 ; i < info.m_pStudioHdr->numbodyparts ; i++ ) 
 	{
 		mstudiomodel_t *pModel = NULL;
 		R_StudioSetupModel( i, info.m_Body, &pModel, info.m_pStudioHdr );
@@ -137,27 +126,15 @@ void CStudioRenderContext::GetTriangles( const DrawModelInfo_t& info, matrix3x4_
 //						OptimizedModel::BoneStateChangeHeader_t *pBoneStateChange = pStripData->pBoneStateChange( boneID );
 //						hardwareBoneToGlobalBone[pBoneStateChange->hardwareID] = pBoneStateChange->newBoneID;
 //					}
-					if ( pStripData->flags & OptimizedModel::STRIP_IS_TRILIST )
+
+					// JasonM TODO: check for case where pStripData->flags & OptimizedModel::STRIP_IS_QUADLIST
+
+					for ( int i = 0; i < pStripData->numIndices; i += 3 )
 					{
-						for ( int i = 0; i < pStripData->numIndices; i += 3 )
-						{
-							int idx = pStripData->indexOffset + i;
-							materialBatch.m_TriListIndices.AddToTail( pMeshGroup->MeshIndex( idx ) );
-							materialBatch.m_TriListIndices.AddToTail( pMeshGroup->MeshIndex( idx + 1 ) );
-							materialBatch.m_TriListIndices.AddToTail( pMeshGroup->MeshIndex( idx + 2 ) );
-						}
-					}
-					else
-					{
-						Assert( pStripData->flags & OptimizedModel::STRIP_IS_TRISTRIP );
-						for (int i = 0; i < pStripData->numIndices - 2; ++i)
-						{
-							int idx = pStripData->indexOffset + i;
-							bool ccw = (i & 0x1) == 0;
-							materialBatch.m_TriListIndices.AddToTail( pMeshGroup->MeshIndex( idx ) );
-							materialBatch.m_TriListIndices.AddToTail( pMeshGroup->MeshIndex( idx + 1 + ccw ) );
-							materialBatch.m_TriListIndices.AddToTail( pMeshGroup->MeshIndex( idx + 2 - ccw ) );
-						}
+						int idx = pStripData->indexOffset + i;
+						materialBatch.m_TriListIndices.AddToTail( pMeshGroup->MeshIndex( idx ) );
+						materialBatch.m_TriListIndices.AddToTail( pMeshGroup->MeshIndex( idx + 1 ) );
+						materialBatch.m_TriListIndices.AddToTail( pMeshGroup->MeshIndex( idx + 2 ) );
 					}
 				}
 			}

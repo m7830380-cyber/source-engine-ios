@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright (c) 19o96-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -15,14 +15,33 @@
 
 #include "vgui_internal.h"
 #include "VPanel.h"
-
-#include "tier0/minidump.h"
+#include "dmxloader/dmxelement.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
 
 using namespace vgui;
 
+// DMX serializer fields.
+BEGIN_DMXELEMENT_UNPACK_NAMESPACE_SIMPLE_NO_BASE( vgui, VPanel )
+DMXELEMENT_UNPACK_SHORT( "xpos", "0", _pos[0] )
+DMXELEMENT_UNPACK_SHORT( "ypos", "0", _pos[1] )
+DMXELEMENT_UNPACK_SHORT( "width", "64", _size[0] )
+DMXELEMENT_UNPACK_SHORT( "height", "24", _size[1] )
+DMXELEMENT_UNPACK_SHORT( "min width", "0", _minimumSize[0] )
+DMXELEMENT_UNPACK_SHORT( "min height", "0", _minimumSize[1] )
+DMXELEMENT_UNPACK_SHORT( "left inset", "0", _inset[0] )
+DMXELEMENT_UNPACK_SHORT( "top inset", "0", _inset[1] )
+DMXELEMENT_UNPACK_SHORT( "right inset", "0", _inset[2] )
+DMXELEMENT_UNPACK_SHORT( "bottom inset", "0", _inset[3] )
+DMXELEMENT_UNPACK_BITFIELD( "visible", "1", BITFIELD_TYPE_BOOL, _visible )
+DMXELEMENT_UNPACK_BITFIELD( "enabled", "1", BITFIELD_TYPE_BOOL, _enabled )
+DMXELEMENT_UNPACK_BITFIELD( "popup", "0", BITFIELD_TYPE_BOOL, _popup )
+DMXELEMENT_UNPACK_BITFIELD( "is topmost popup", "0", BITFIELD_TYPE_BOOL, _isTopmostPopup )
+DMXELEMENT_UNPACK_BITFIELD( "mouse input", "1", BITFIELD_TYPE_BOOL, _mouseInput )
+DMXELEMENT_UNPACK_BITFIELD( "keyboard input", "1", BITFIELD_TYPE_BOOL, _kbInput )
+DMXELEMENT_UNPACK_SHORT( "zpos", "0", _zpos )
+END_DMXELEMENT_UNPACK_NAMESPACE( vgui, VPanel, s_pUnpackParams )
 
 // Lame copy from Panel
 enum PinCorner_e 
@@ -53,7 +72,6 @@ float PinDeltas[NUM_PIN_POINTS][2] =
 	{ 0, 0.5 },	// PIN_CENTER_LEFT,
 };
 
-
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
@@ -83,12 +101,10 @@ VPanel::VPanel()
 	_mouseInput = true; // by default you want mouse and kb input to this panel
 	_kbInput = true;
 
+	m_nMessageContextId = -1;
 	_pinsibling = NULL;
 	_pinsibling_my_corner = PIN_TOPLEFT;
 	_pinsibling_their_corner = PIN_TOPLEFT;
-
-	m_nThinkTraverseLevel = 0;
-	_clientPanelHandle = vgui::INVALID_PANEL;
 }
 
 //-----------------------------------------------------------------------------
@@ -96,59 +112,6 @@ VPanel::VPanel()
 //-----------------------------------------------------------------------------
 VPanel::~VPanel()
 {
-	// Someone just deleted their parent Panel while it was being used in InternalSolveTraverse().
-	// This will cause a difficult to debug crash, so we spew out the panel name here in hopes
-	//  it will help track down the offender.
-	if ( m_nThinkTraverseLevel != 0 )
-	{
-		Warning( "Deleting in-use vpanel: %s/%s %p.\n", GetName(), GetClassName(), this );
-#ifdef STAGING_ONLY
-		DebuggerBreak();
-#endif
-	}
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: 
-//-----------------------------------------------------------------------------
-void VPanel::TraverseLevel( int val )
-{
-	// Bump up our traverse level.
-	m_nThinkTraverseLevel += m_nThinkTraverseLevel;
-
-	// Bump up our client panel traverse level.
-	if ( Client() )
-	{
-		VPANEL vp = g_pVGui->HandleToPanel( _clientPanelHandle );
-		if ( vp == vgui::INVALID_PANEL )
-		{
-			// This is really bad - we have a Client() pointer that is invalid.
-			Warning( "Panel '%s/%s' has invalid client: %p.\n", GetName(), GetClassName(), Client() );
-#ifdef STAGING_ONLY
-			DebuggerBreak();
-#endif
-		}
-
-		if ( Client()->GetVPanel() )
-		{
-			VPanel *vpanel = (VPanel *)Client()->GetVPanel();
-			vpanel->m_nThinkTraverseLevel += vpanel->m_nThinkTraverseLevel;
-		}
-	}
-
-	// This doesn't work. It appears we add all kinds of children to various panels in the
-	//  InternalThinkTraverse functions, and that means the refcount is 0 when added, and
-	//  then drops to -1 when we decrement the traverse level.
-#if 0
-	// Bump up our children traverse levels.
-	CUtlVector< VPanel * > &children = GetChildren();
-	for ( int i = 0; i < children.Count(); ++i )
-	{
-		VPanel *child = children[ i ];
-		if ( child )
-			child->m_nThinkTraverseLevel = Max( child->m_nThinkTraverseLevel + val, 0 );
-	}
-#endif
 }
 
 //-----------------------------------------------------------------------------
@@ -156,8 +119,8 @@ void VPanel::TraverseLevel( int val )
 //-----------------------------------------------------------------------------
 void VPanel::Init(IClientPanel *attachedClientPanel)
 {
+	AssertAlignedConsole(attachedClientPanel);
 	_clientPanel = attachedClientPanel;
-	_clientPanelHandle = g_pVGui->PanelToHandle( attachedClientPanel ? attachedClientPanel->GetVPanel() : 0 );
 }
 
 //-----------------------------------------------------------------------------
@@ -187,8 +150,6 @@ void VPanel::Solve()
 
 	if ( _pinsibling )
 	{
-		_pinsibling->Solve();
-
 		int sibPos[2];
 		int sibSize[2];
 		_pinsibling->GetInternalAbsPos( sibPos[0], sibPos[1] );
@@ -289,12 +250,20 @@ void VPanel::Solve()
 }
 
 
-
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
 void VPanel::SetPos(int x, int y)
 {
+	// This is a hack to get popups to position relative to their "split screen" context parent panel
+	if ( m_nMessageContextId != -1 && IsPopup() )
+	{
+		int px, py;
+		g_pSurface->GetAbsPosForContext( m_nMessageContextId, px, py );
+		x += px;
+		y += py;
+	}
+
 	_pos[0] = x;
 	_pos[1] = y;
 }
@@ -448,6 +417,9 @@ void VPanel::GetClipRect(int &x0, int &y0, int &x1, int &y1)
 	y0 = _clipRect[1];
 	x1 = _clipRect[2];
 	y1 = _clipRect[3];
+
+	g_pSurface->OffsetAbsPos( x0, y0 );
+	g_pSurface->OffsetAbsPos( x1, y1 );
 }
 
 //-----------------------------------------------------------------------------
@@ -477,16 +449,18 @@ void VPanel::GetInset(int &left, int &top, int &right, int &bottom)
 //-----------------------------------------------------------------------------
 void VPanel::SetParent(VPanel *newParent)
 {
+	AssertAlignedConsole(newParent);
+
 	if (this == newParent)
 		return;
 
 	if (_parent == newParent)
 		return;
-
+	
 	if (_parent != NULL)
 	{
 		_parent->_childDar.RemoveElement(this);
-		_parent = null;
+		_parent = 0;
 	}
 
 	if (newParent != NULL)
@@ -514,11 +488,13 @@ int VPanel::GetChildCount()
 //-----------------------------------------------------------------------------
 VPanel *VPanel::GetChild(int index)
 {
+	AssertAlignedConsole(&_childDar);
 	return _childDar[index];
 }
 
 CUtlVector< VPanel *> &VPanel::GetChildren()
 {
+	AssertAlignedConsole(&_childDar);
 	return _childDar;
 }
 
@@ -527,6 +503,7 @@ CUtlVector< VPanel *> &VPanel::GetChildren()
 //-----------------------------------------------------------------------------
 VPanel *VPanel::GetParent()
 {
+	AssertAlignedConsole(_parent);
 	return _parent;
 }
 
@@ -680,11 +657,13 @@ bool VPanel::HasParent(VPanel *potentialParent)
 
 SurfacePlat *VPanel::Plat()
 {
+	AssertAlignedConsole(_plat);
 	return _plat;
 }
 
 void VPanel::SetPlat(SurfacePlat *Plat)
 {
+	AssertAlignedConsole(Plat);
 	_plat = Plat;
 }
 
@@ -771,7 +750,16 @@ bool VPanel::IsMouseInputEnabled()
 	return _mouseInput;
 }
 
-//-----------------------------------------------------------------------------
+void VPanel::SetMessageContextId( int nContextId )
+{
+	m_nMessageContextId = nContextId;
+}
+
+int VPanel::GetMessageContextId()
+{
+	return m_nMessageContextId;
+}
+
 // Purpose: sibling pins
 //-----------------------------------------------------------------------------
 void VPanel::SetSiblingPin(VPanel *newSibling, byte iMyCornerToPin, byte iSiblingCornerToPinTo )
@@ -780,3 +768,15 @@ void VPanel::SetSiblingPin(VPanel *newSibling, byte iMyCornerToPin, byte iSiblin
 	_pinsibling_my_corner = iMyCornerToPin;
 	_pinsibling_their_corner = iSiblingCornerToPinTo;
 }
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+void VPanel::OnUnserialized( CDmxElement *pElement )
+{
+}
+
+
+
+
+

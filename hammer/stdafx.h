@@ -1,14 +1,10 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===================== Copyright (c) Valve Corporation. All Rights Reserved. ======================
 //
-// Purpose: 
+// Include file for standard system include files,
+// or project specific include files that are used frequently, but
+// are changed infrequently
 //
-// $NoKeywords: $
-//
-//=============================================================================//
-// stdafx.h : include file for standard system include files,
-//  or project specific include files that are used frequently, but
-//      are changed infrequently
-//
+//==================================================================================================
 
 #if !defined(AFX_STDAFX_H__2871A74F_7D2F_4026_9DB0_DBACAFB3B7F5__INCLUDED_)
 #define AFX_STDAFX_H__2871A74F_7D2F_4026_9DB0_DBACAFB3B7F5__INCLUDED_
@@ -57,6 +53,12 @@
 #endif // _AFX_NO_AFXCMN_SUPPORT
 
 #include "tier0/platform.h"
+#include <afxdlgs.h>
+
+// Winuser.h defines GetClassName and VPanel.h undefines it, which can cause pandemonium.
+#ifdef GetClassName
+#undef GetClassName
+#endif
 
 // Some VS header files provoke this warning
 #pragma warning(disable : 4201) // warning C4201: nonstandard extension used : nameless struct/union
@@ -65,7 +67,3 @@
 // Microsoft Visual C++ will insert additional declarations immediately before the previous line.
 
 #endif // !defined(AFX_STDAFX_H__2871A74F_7D2F_4026_9DB0_DBACAFB3B7F5__INCLUDED_)
-
-
-
-

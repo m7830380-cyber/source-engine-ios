@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2005, Valve Corporation, All rights reserved. =======
 //
 // Purpose: Core Movie Maker UI API
 //
@@ -7,7 +7,7 @@
 #include "toolutils/recentfilelist.h"
 #include "vgui_controls/menu.h"
 #include "iregistry.h"
-#include "tier1/KeyValues.h"
+#include "tier1/keyvalues.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
@@ -17,7 +17,7 @@
 //-----------------------------------------------------------------------------
 // Adds a file to the list of recent files
 //-----------------------------------------------------------------------------
-void CRecentFileList::Add( const char *pFileName, const char *pFileFormat )
+void CToolsRecentFileList::Add( const char *pFileName, const char *pFileFormat )
 {
 	RecentFileInfo_t info;
 	info.m_pFileName = pFileName;
@@ -43,7 +43,7 @@ void CRecentFileList::Add( const char *pFileName, const char *pFileFormat )
 //-----------------------------------------------------------------------------
 // Removes all files from the list
 //-----------------------------------------------------------------------------
-void CRecentFileList::Clear()
+void CToolsRecentFileList::Clear()
 {
 	m_RecentFiles.RemoveAll();
 }
@@ -52,7 +52,7 @@ void CRecentFileList::Clear()
 //-----------------------------------------------------------------------------
 // Returns true if there's no files in the file list
 //-----------------------------------------------------------------------------
-bool CRecentFileList::IsEmpty() const
+bool CToolsRecentFileList::IsEmpty() const
 {
 	return m_RecentFiles.Count() == 0;
 }
@@ -61,7 +61,7 @@ bool CRecentFileList::IsEmpty() const
 //-----------------------------------------------------------------------------
 // Gets the file in a particular slot
 //-----------------------------------------------------------------------------
-const char *CRecentFileList::GetFile( int slot ) const
+const char *CToolsRecentFileList::GetFile( int slot ) const
 {
 	if ( slot < 0 || slot >= m_RecentFiles.Count() )
 		return NULL;
@@ -73,7 +73,7 @@ const char *CRecentFileList::GetFile( int slot ) const
 //-----------------------------------------------------------------------------
 // Gets the file in a particular slot
 //-----------------------------------------------------------------------------
-const char *CRecentFileList::GetFileFormat( int slot ) const
+const char *CToolsRecentFileList::GetFileFormat( int slot ) const
 {
 	if ( slot < 0 || slot >= m_RecentFiles.Count() )
 		return NULL;
@@ -85,7 +85,7 @@ const char *CRecentFileList::GetFileFormat( int slot ) const
 //-----------------------------------------------------------------------------
 // Loads the file list from the registry 
 //-----------------------------------------------------------------------------
-void CRecentFileList::LoadFromRegistry( const char *pToolKeyName )
+void CToolsRecentFileList::LoadFromRegistry( const char *pToolKeyName )
 {
 	Clear();
 
@@ -113,7 +113,7 @@ void CRecentFileList::LoadFromRegistry( const char *pToolKeyName )
 //-----------------------------------------------------------------------------
 // Saves file list into the registry 
 //-----------------------------------------------------------------------------
-void CRecentFileList::SaveToRegistry( const char *pToolKeyName ) const
+void CToolsRecentFileList::SaveToRegistry( const char *pToolKeyName ) const
 {
 	char sz[ 128 ];
 
@@ -143,7 +143,7 @@ void CRecentFileList::SaveToRegistry( const char *pToolKeyName ) const
 //-----------------------------------------------------------------------------
 // Adds the list of files to a particular menu 
 //-----------------------------------------------------------------------------
-void CRecentFileList::AddToMenu( vgui::Menu *menu, vgui::Panel *pActionTarget, const char *pCommandName ) const
+void CToolsRecentFileList::AddToMenu( vgui::Menu *menu, vgui::Panel *pActionTarget, const char *pCommandName ) const
 {
 	int i, c;
 	c = m_RecentFiles.Count();
@@ -154,4 +154,6 @@ void CRecentFileList::AddToMenu( vgui::Menu *menu, vgui::Panel *pActionTarget, c
 		char const *fn = m_RecentFiles[i].m_pFileName;
 		menu->AddMenuItem( fn, new KeyValues( "Command", "command", sz ), pActionTarget );
 	}
+	menu->AddSeparator();
+	menu->AddMenuItem( "clearrecent", "#ToolFileClearRecent", new KeyValues ( "OnClearRecent" ), pActionTarget );
 }

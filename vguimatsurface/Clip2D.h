@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Contains 2D clipping routines
 //
@@ -9,10 +9,7 @@
 #ifndef CLIP2D_H
 #define CLIP2D_H
 
-namespace vgui
-{
-	struct Vertex_t;
-}
+#include "vgui/ISurface.h"
 
 //-----------------------------------------------------------------------------
 // Enable/disable scissoring...

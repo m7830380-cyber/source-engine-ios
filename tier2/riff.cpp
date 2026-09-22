@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -24,29 +24,29 @@
 class StdIOReadBinary : public IFileReadBinary
 {
 public:
-	intp open( const char *pFileName )
+	int open( const char *pFileName )
 	{
-		return (intp)fopen( pFileName, "rb" );
+		return (int)fopen( pFileName, "rb" );
 	}
 
-	int read( void *pOutput, int size, intp file )
+	int read( void *pOutput, int size, int file )
 	{
 		FILE *fp = (FILE *)file;
 
 		return fread( pOutput, size, 1, fp );
 	}
 
-	void seek( intp file, int pos )
+	void seek( int file, int pos )
 	{
 		fseek( (FILE *)file, pos, SEEK_SET );
 	}
 
-	unsigned int tell( intp file )
+	unsigned int tell( int file )
 	{
 		return ftell( (FILE *)file );
 	}
 
-	unsigned int size( intp file )
+	unsigned int size( int file )
 	{
 		FILE *fp = (FILE *)file;
 		if ( !fp )
@@ -60,7 +60,7 @@ public:
 		return size;
 	}
 
-	void close( intp file )
+	void close( int file )
 	{
 		FILE *fp = (FILE *)file;
 
@@ -87,9 +87,11 @@ InFileRIFF::InFileRIFF( const char *pFileName, IFileReadBinary &io ) : m_io(io)
 	{
 		m_riffSize = 0;
 		m_riffName = 0;
+		m_nFileSize = 0;
 		return;
 	}
 
+	m_nFileSize = m_io.size( m_file );
 	riff = ReadInt();
 	if ( riff != RIFF_ID )
 	{
@@ -106,7 +108,7 @@ InFileRIFF::InFileRIFF( const char *pFileName, IFileReadBinary &io ) : m_io(io)
 		// HACKHACK: LWV files don't obey the RIFF format!!!
 		// Do this or miss the linguistic chunks at the end. Lame!
 		// subtract off 12 bytes for (RIFF, size, WAVE)
-		m_riffSize = m_io.size( m_file ) - 12;
+		m_riffSize = m_nFileSize - 12;
 	}
 }
 

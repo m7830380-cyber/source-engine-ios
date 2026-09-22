@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright  1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -43,6 +43,10 @@ struct DecalClipState_t;
 class CStudioRender;
 struct StudioRenderContext_t;
 struct FlexWeights_t;
+struct MeshRenderData_t;
+struct MeshRenderData2_t;
+struct BaseMeshRenderData_t;
+struct ShadowMeshRenderData_t;
 
 namespace OptimizedModel
 {
@@ -72,6 +76,7 @@ extern CStudioRender g_StudioRender;
 //-----------------------------------------------------------------------------
 #define MAXLOCALLIGHTS 4
 #define MAXLIGHTCOMPUTE 16
+#define MAX_MAT_OVERRIDES 4
 
 enum StudioModelLighting_t
 {
@@ -86,7 +91,7 @@ struct lightpos_t
 	float	falloff;	// light distance falloff
 	float	dot;		// light direction * delta;
 
-	lightpos_t() = default;
+	lightpos_t() {}
 
 private:
 	// Copy constructors are not allowed
@@ -106,7 +111,7 @@ struct eyeballstate_t
 	
 	Vector	cornea;		// world center of cornea
 
-	eyeballstate_t() = default;
+	eyeballstate_t() {}
 
 private:
 	// Copy constructors are not allowed
@@ -120,13 +125,13 @@ private:
 #pragma pack(1)
 struct DecalVertex_t
 {
-	mstudiomesh_t *GetMesh( studiohdr_t *pHdr )
+	mstudiomesh_t *GetMesh( studiohdr_t *pHdr ) const
 	{
 		if ((m_Body == 0xFFFF) || (m_Model == 0xFFFF) || (m_Mesh == 0xFFFF))
 			return NULL;
 
-		mstudiobodyparts_t *pBody = pHdr->pBodypart( m_Body );
-		mstudiomodel_t *pModel = pBody->pModel( m_Model );
+		mstudiobodyparts_t * RESTRICT pBody = pHdr->pBodypart( m_Body );
+		mstudiomodel_t * RESTRICT pModel = pBody->pModel( m_Model );
 		return pModel->pMesh( m_Mesh );
 	}
 
@@ -170,7 +175,7 @@ struct DecalVertex_t
 	unsigned short	m_Group;
 #endif
 
-	DecalVertex_t() = default;
+	DecalVertex_t() {}
 	DecalVertex_t( const DecalVertex_t& src )
 	{
 		m_Position = src.m_Position;
@@ -219,18 +224,22 @@ public:
 	InitReturnVal_t Init();
 	void Shutdown( void );
 
-	void EnableScissor( FlashlightState_t *state );
-	void DisableScissor();
+	void BeginFrame( void );
+	void EndFrame( void );
+
+	void PushScissor( FlashlightState_t *state );
+	void PopScissor( FlashlightState_t *state );
 
 	void DrawModel( const DrawModelInfo_t& info, const StudioRenderContext_t& rc, matrix3x4_t *pBoneToWorld, const FlexWeights_t& flex, int flags = STUDIORENDER_DRAW_ENTIRE_MODEL );
-	void DrawModelArray( const DrawModelInfo_t &drawInfo, const StudioRenderContext_t &rc, int arrayCount, model_array_instance_t *pInstanceData, int instanceStride, int flags = STUDIORENDER_DRAW_ENTIRE_MODEL );
+	void DrawModelArray( const StudioModelArrayInfo_t &drawInfo, const StudioRenderContext_t &rc, int arrayCount, StudioArrayInstanceData_t *pInstanceData, int instanceStride, int flags = STUDIORENDER_DRAW_ENTIRE_MODEL );
+	void DrawModelArray2( const StudioModelArrayInfo2_t &info, const StudioRenderContext_t &rc, int nCount, StudioArrayData_t *pArrayData, int nInstanceStride, int flags = STUDIORENDER_DRAW_ENTIRE_MODEL );
+	void DrawModelShadowArray( const StudioRenderContext_t &rc, int nCount, StudioArrayData_t *pShadowData, int nInstanceStride, int flags );
 
 	// Static-prop related draw methods
 	void DrawModelStaticProp( const DrawModelInfo_t& info, const StudioRenderContext_t &rc, const matrix3x4_t &modelToWorld, int flags = STUDIORENDER_DRAW_ENTIRE_MODEL );
+	void DrawModelArrayStaticProp( const DrawModelInfo_t& info, const StudioRenderContext_t &rc, int nInstanceCount, const MeshInstanceData_t *pInstanceData, ColorMeshInfo_t **pColorMeshes );
 	void DrawStaticPropShadows( const DrawModelInfo_t &drawInfo, const StudioRenderContext_t &rc, const matrix3x4_t &modelToWorld, int flags );
 	void DrawStaticPropDecals( const DrawModelInfo_t &drawInfo, const StudioRenderContext_t &rc, const matrix3x4_t &modelToWorld );
-
-	void ModelStats( const DrawModelInfo_t& info, const StudioRenderContext_t &rc, matrix3x4_t *pBoneToWorld, const FlexWeights_t &flex, int flags );
 
 	// Create, destroy list of decals for a particular model
 	StudioDecalHandle_t CreateDecalList( studiohwdata_t *pHardwareData );
@@ -239,7 +248,7 @@ public:
 	// Add decals to a decal list by doing a planar projection along the ray
 	void AddDecal( StudioDecalHandle_t handle, const StudioRenderContext_t& rc, matrix3x4_t *pBoneToWorld, studiohdr_t *pStudioHdr, 
 			const Ray_t & ray, const Vector& decalUp, IMaterial* pDecalMaterial, 
-			float radius, int body, bool noPokethru, int maxLODToDecal = ADDDECAL_TO_ALL_LODS );
+			float radius, int body, bool noPokethru, int maxLODToDecal = ADDDECAL_TO_ALL_LODS, void *pvProxyUserData = NULL, int nAdditionalDecalFlags = 0 );
 
 	// Shadow state (affects the models as they are rendered)
 	void AddShadow( IMaterial* pMaterial, void* pProxyData, FlashlightState_t *pFlashlightState, VMatrix *pWorldToTexture, ITexture *pFlashlightDepthTexture );
@@ -262,6 +271,15 @@ public:
 	void R_MouthLighting( __m128 fIllum, const FourVectors& normal, const FourVectors& forward, FourVectors& light );
 #endif
 
+#ifndef _CERT
+	void GatherRenderedFaceInfo( IStudioRender::FaceInfoCallbackFunc_t pFunc );
+	
+	// Spew per-model-per-frame 'faces rendered' counters:
+	void UpdateModelFaceCounts( int nNumToSpew = 0, bool bClearHistory = 0 );
+#endif // _CERT
+
+	int GetForcedMaterialOverrideIndex( int nMaterialIndex );
+
 private:
 	enum
 	{
@@ -277,7 +295,6 @@ private:
 		int m_VertexCount;
 		float m_FadeStartTime;
 		float m_FadeDuration;
-		int	m_Flags;
 	};
 
 	struct DecalHistory_t
@@ -300,6 +317,7 @@ private:
 		DecalIndexList_t	m_Indices;
 		DecalVertexList_t	m_Vertices;
 		DecalList_t			m_Decals;
+		void *m_pvProxyUserData;
 	};
 
 	struct DecalLod_t
@@ -313,6 +331,15 @@ private:
 		studiohwdata_t* m_pHardwareData;
 		DecalLod_t* m_pLod;
 		int m_nLods; // need to retain because hardware data could be flushed
+	};
+
+	// Render data for decals
+	struct DecalRenderData_t
+	{
+		DecalMaterial_t *m_pDecalMaterial;
+		StudioArrayInstanceData_t *m_pInstance;
+		IMaterial *m_pRenderMaterial;
+		bool m_bIsVertexLit;
 	};
 
 	// A temporary structure used to figure out new decal verts
@@ -347,6 +374,8 @@ private:
 		int								m_nGlobalMeshIndex;
 		DecalBuildVertexInfo_t			*m_pVertexBuffer;
 		float							m_Radius;
+		float							m_flMaxDepth;
+		float							m_flFrontFacingCosineCheck;
 		DecalBuildVertexInfo_t			*m_pVertexInfo;
 		int								m_Body;
 		int								m_Model;
@@ -356,6 +385,8 @@ private:
 		unsigned short					m_VertexCount;
 		bool							m_UseClipVert;
 		bool							m_NoPokeThru;
+		bool							m_AllowBehindPointOfImpact;
+		bool							m_bEnforceProjectionRadiusZ;
 	};
 
 	struct ShadowState_t
@@ -384,6 +415,7 @@ private:
 	{
 		StudioDecalHandle_t m_hDecalHandle;
 		DecalId_t m_nDecalId;
+		int	m_nFlags;
 	};
 
 	typedef CUtlFixedLinkedList< DecalLRU_t >::IndexType_t DecalLRUListIndex_t;
@@ -421,14 +453,14 @@ private:
 	// Various inner-loop methods
 	void R_StudioSoftwareProcessMesh( mstudiomesh_t* pmesh, CMeshBuilder& meshBuilder, 
 			int numVertices, unsigned short* pGroupToMesh, StudioModelLighting_t lighting, bool doFlex, float r_blend,
-			bool bNeedsTangentSpace, bool bDX8Vertex, IMaterial *pMaterial );
+			bool bNeedsTangentSpace, IMaterial *pMaterial );
+	
+	void R_StudioSoftwareProcessMesh_NormalsBatched( IMatRenderContext *pRenderContext, mstudiomesh_t* pmesh, studiomeshgroup_t* pGroup,
+		StudioModelLighting_t lighting, bool doFlex, float r_blend, bool bShowNormals, bool bShowTangent );
 
-	void R_StudioSoftwareProcessMesh_Normals( mstudiomesh_t* pmesh, CMeshBuilder& meshBuilder, 
+	void R_StudioSoftwareProcessMesh_Normals( mstudiomesh_t* pmesh, CMeshBuilder& meshBuilder, int firstVertex,
 			int numVertices, unsigned short* pGroupToMesh, StudioModelLighting_t lighting, bool doFlex, float r_blend,
-			bool bShowNormals, bool bShowTangentFrame );
-
-	template< class T >
-	void ComputeFlexedVertex_StreamOffset( mstudioflex_t *pflex, T *pvanim, int vertCount, float w1, float w2, float w3, float w4 );
+			bool bShowNormals, bool bShowTangentS, bool bShowTangentT );
 
 	void R_StudioProcessFlexedMesh_StreamOffset( mstudiomesh_t* pmesh, int lod );
 
@@ -463,7 +495,7 @@ private:
 	void R_MouthSetupVertexShader( IMaterial* pMaterial );
 
 	// Computes a vertex format to use
-	VertexFormat_t ComputeSWSkinVertexFormat( IMaterial *pMaterial ) const;
+	VertexFormat_t ComputeSWSkinVertexFormat( ) const;
 
 	inline bool R_TeethAreVisible( void )
 	{
@@ -477,9 +509,9 @@ private:
 	}
 
 	inline StudioModelLighting_t R_StudioComputeLighting( IMaterial *pMaterial, int materialFlags, ColorMeshInfo_t *pColorMeshes );
-	inline void R_StudioTransform( Vector& in1, mstudioboneweight_t *pboneweight, Vector& out1 );
-	inline void R_StudioRotate( Vector& in1, mstudioboneweight_t *pboneweight, Vector& out1 );
-	inline void R_StudioRotate( Vector4D& in1, mstudioboneweight_t *pboneweight, Vector4D& out1 );
+	inline void R_StudioTransform( Vector& in1, mstudioboneweight_t *pboneweight, matrix3x4_t *pPoseToWorld, Vector& out1 );
+	inline void R_StudioRotate( Vector& in1, mstudioboneweight_t *pboneweight, matrix3x4_t *pPoseToWorld, Vector& out1 );
+	inline void R_StudioRotate( Vector4D& in1, mstudioboneweight_t *pboneweight, matrix3x4_t *pPoseToWorld, Vector4D& out1 );
 	inline void R_StudioEyeballNormal( mstudioeyeball_t const* peyeball, Vector& org, 
 									Vector& pos, Vector& normal );
 	void MaterialPlanerProjection( const matrix3x4_t& mat, int count, const Vector *psrcverts, Vector2D *pdesttexcoords );
@@ -489,7 +521,7 @@ private:
 	int R_LightGlintPosition( int index, const Vector& org, Vector& delta, Vector& intensity );
 	void R_LightEffectsWorld( const lightpos_t *light, const Vector& normal, const Vector &src, Vector &dest );
 
-	void R_GatherStats( studiomeshgroup_t *pGroup, CMeshBuilder &MeshBuilder, IMesh *pMesh, IMaterial *pMaterial );
+	bool BTryToRetireDecal( StudioDecalHandle_t hDecal, DecalHistoryList_t *pHistoryList, bool bCanRetirePlayerSpray );
 
 public:
 	// NJS: Messy, but needed for an externally optimized routine to set up the lighting.
@@ -512,7 +544,8 @@ private:
 	// Helper methods for decal projection, projects pose space vertex data
 	bool			TransformToDecalSpace( DecalBuildInfo_t& build, const Vector& pos, mstudioboneweight_t *pboneweight, Vector2D& uv );
 	bool			ProjectDecalOntoMesh( DecalBuildInfo_t& build, DecalBuildVertexInfo_t* pVertexInfo, mstudiomesh_t *pMesh );
-	bool			IsFrontFacing( const Vector * norm, const mstudioboneweight_t *pboneweight );
+	bool			IsFrontFacing( DecalBuildInfo_t& build, const Vector * norm, const mstudioboneweight_t *pboneweight );
+	bool			IsDecalStartPointWithinZLimit( DecalBuildInfo_t& build, const Vector * ppos, const mstudioboneweight_t *pboneweight );
 	int				ComputeClipFlags( DecalBuildVertexInfo_t* pVertexInfo, int i );
 	void			ConvertMeshVertexToDecalVertex( DecalBuildInfo_t& build, int meshIndex, DecalVertex_t& decalVertex, int nGroupIndex = 0xFFFF );
 	unsigned short	AddVertexToDecal( DecalBuildInfo_t& build, int meshIndex, int nGroupIndex = 0xFFFF );
@@ -521,7 +554,7 @@ private:
 	bool			ClipDecal( DecalBuildInfo_t& build, int i1, int i2, int i3, int *pClipFlags );
 	void			AddTriangleToDecal( DecalBuildInfo_t& build, int i1, int i2, int i3, int gi1, int gi2, int gi3 );
 	void			AddDecalToMesh( DecalBuildInfo_t& build );
-	int				GetDecalMaterial( DecalLod_t& decalLod, IMaterial* pDecalMaterial );
+	int				GetDecalMaterial( DecalLod_t& decalLod, IMaterial* pDecalMaterial, void *pvProxyUserData );
 	int				AddDecalToMaterialList( DecalMaterial_t* pMaterial );
 
 	// Total number of meshes we have to deal with
@@ -536,8 +569,15 @@ private:
 	// Removes a decal and associated vertices + indices from the history list
 	void RetireDecal( DecalModelList_t &list, DecalId_t nDecalID, int iLOD, int iMaxLOD );
 
+	// Same as above, but doesn't repeat a walk through the LRU list.
+	void RetireDecalAtAddress( DecalModelList_t &list, DecalLRUListIndex_t lruAddress, int iLOD, int iMaxLOD );
+
+
+	// Cleans up immediate mode decals.
+	void CleanupDecals();
+
 	// Helper methods related to drawing decals
-	void DrawSingleBoneDecals( CMeshBuilder& meshBuilder, DecalMaterial_t& decalMaterial );
+	void DrawSingleBoneDecals( CMeshBuilder& meshBuilder, const DecalMaterial_t& decalMaterial );
 	bool DrawMultiBoneDecals( CMeshBuilder& meshBuilder, DecalMaterial_t& decalMaterial, studiohdr_t *pStudioHdr );
 	void DrawSingleBoneFlexedDecals( IMatRenderContext *pRenderContext, CMeshBuilder& meshBuilder, DecalMaterial_t& decalMaterial );
 	bool DrawMultiBoneFlexedDecals( IMatRenderContext *pRenderContext, CMeshBuilder& meshBuilder, DecalMaterial_t& decalMaterial, studiohdr_t *pStudioHdr, studioloddata_t *pStudioLOD );
@@ -558,7 +598,7 @@ private:
 	void RemoveDecalListFromLRU( StudioDecalHandle_t h );
 
 	// Helper methods related to flexing vertices
-	void R_StudioFlexVerts( mstudiomesh_t *pmesh, int lod );
+	void R_StudioFlexVerts( mstudiomesh_t *pmesh, int lod, bool bQuadList );
 
 	// Flex stats
 	void GetFlexStats( );
@@ -571,6 +611,57 @@ private:
 
 	// Computes eyeball state
 	void ComputeEyeballState( mstudiomodel_t *pSubModel );
+
+	// Implementational methods of model array rendering
+	void DrawModelSubArray( IMatRenderContext* pRenderContext, const StudioModelArrayInfo_t &drawInfo, const StudioRenderContext_t &rc, 
+		int nCount, StudioArrayInstanceData_t *pInstanceData, int nInstanceStride, int nFlags );
+
+	// Implementation details for fast model rendering
+	int CountMeshesToDraw( const StudioModelArrayInfo_t &drawInfo, int nCount, StudioArrayInstanceData_t *pInstanceData, int nInstanceStride, int nTimesRendered );
+	int CountMeshesToDraw( const StudioModelArrayInfo2_t &drawInfo, int nCount, StudioArrayData_t *pArrayData, int nInstanceStride, int nTimesRendered );
+
+	static bool SortLessFunc( const MeshRenderData_t &left, const MeshRenderData_t &right );
+	static bool SortLessFunc2( const MeshRenderData2_t &left, const MeshRenderData2_t &right );
+
+	int BuildSortedRenderList( MeshRenderData_t *pRenderData, int *pTotalStripCount, const StudioModelArrayInfo_t &drawInfo, 
+		int nCount, StudioArrayInstanceData_t *pInstanceData, int nInstanceStride, int nFlags );
+	int BuildSortedRenderList( MeshRenderData2_t *pRenderData, int *pTotalStripCount, const StudioModelArrayInfo2_t &drawInfo, 
+		int nCount, StudioArrayData_t *pArrayData, int nInstanceStride, int nFlags );
+	void BuildForcedMaterialRenderList( MeshRenderData_t *pRenderData, int *pTotalStripCount, const StudioModelArrayInfo_t &drawInfo, const StudioRenderContext_t &rc, 
+		int nCount, StudioArrayInstanceData_t *pInstanceData, int nInstanceStride );
+	void BuildForcedMaterialRenderList( MeshRenderData2_t *pRenderData, 
+		int *pTotalStripCount, const StudioModelArrayInfo2_t &drawInfo, const StudioRenderContext_t &rc, int nCount, StudioArrayData_t *pArrayData, int nInstanceStride );
+	void RestoreMeshes( int nCount, BaseMeshRenderData_t *pRenderData, int nStride );
+	void DrawMeshRenderData( IMatRenderContext *pRenderContext, const StudioModelArrayInfo_t &drawInfo, int nCount, MeshRenderData_t *pRenderData, int nTotalStripCount, int nFlashlightMask );
+	void DrawMeshRenderData( IMatRenderContext *pRenderContext, const StudioModelArrayInfo2_t &drawInfo, int nCount, MeshRenderData2_t *pRenderData, int nTotalStripCount, int nFlashlightMask );
+	void DrawModelArrayFlashlight( IMatRenderContext *pRenderContext, const StudioModelArrayInfo_t &drawInfo, int nCount, MeshRenderData_t *pRenderData, int nTotalStripCount );
+	void DrawModelArrayFlashlight( IMatRenderContext *pRenderContext, const StudioModelArrayInfo2_t &drawInfo, int nCount, MeshRenderData2_t *pRenderData, int nTotalStripCount );
+	void BuildDecalIndices( CMeshBuilder &meshBuilder, const DecalMaterial_t& decalMaterial );
+	int CountDecalMeshesToDraw( int nCount, StudioArrayInstanceData_t *pInstanceData, int nInstanceStride );
+	static bool SortDecalsLessFunc( const DecalRenderData_t &left, const DecalRenderData_t &right );
+	int BuildSortedDecalRenderList( DecalRenderData_t *pDecalRenderData, int nCount, StudioArrayInstanceData_t *pInstanceData, int nInstanceStride );
+	void DrawInstancedMultiBoneDecals( CMeshBuilder& meshBuilder, const DecalMaterial_t& decalMaterial, studiohdr_t *pStudioHdr, matrix3x4_t *pPoseToWorld );
+	void DrawInstancedSingleBoneDecals( CMeshBuilder& meshBuilder, const DecalMaterial_t& decalMaterial, studiohdr_t *pStudioHdr, matrix3x4_t *pPoseToWorld );
+	void DrawModelArrayDecals( IMatRenderContext *pRenderContext, studiohdr_t *pStudioHdr, int nCount, DecalRenderData_t *pRenderData, int nFlashlightMask );
+	void DrawModelArrayFlashlightDecals( IMatRenderContext *pRenderContext, studiohdr_t *pStudioHdr, int nFlashlightCount, FlashlightInstance_t *pFlashlights, int nCount, DecalRenderData_t *pRenderData );
+
+	// Implementation details w/ respect to shadow depth rendering
+	int CountMeshesToDraw( int nCount, StudioArrayData_t *pShadowData, int nInstanceStride );
+	int BuildShadowRenderList( ShadowMeshRenderData_t *pRenderData, int *pTotalStripCount, 
+		int nCount, StudioArrayData_t *pShadowData, int nInstanceStride, int flags );
+	void DrawShadowMeshRenderData( IMatRenderContext *pRenderContext, 
+		int nCount, ShadowMeshRenderData_t *pRenderData, int nTotalStripCount );
+	void GetDepthWriteMaterial( IMaterial** ppDepthMaterial, bool *pIsAlphaTested, bool *pUsesTreeSway, IMaterial *pSrcMaterial, bool IsTranslucentUnderModulation, bool bIsSSAODepthWrite = false );
+	void SetupAlphaTestedDepthWrite( IMaterial* pDepthMaterial, IMaterial *pSrcMaterial );
+	void SetupTreeSwayDepthWrite( IMaterial* pDepthMaterial, IMaterial *pSrcMaterial );
+	static bool ShadowSortLessFunc( const ShadowMeshRenderData_t &left, const ShadowMeshRenderData_t &right );
+
+	void ComputeDiffuseModulation( Vector4D *pDiffuseModulation );
+
+	// Subdivision surface rendering methods
+	void SkinSubDCage( mstudiovertex_t *pVertices, int nNumVertices, matrix3x4_t *pPoseToWorld, CCachedRenderData &vertexCache, unsigned short* pGroupToMesh, fltx4 *vOutput, bool bDoFlex );
+	void GenerateBicubicPatches( mstudiomesh_t* pmesh, studiomeshgroup_t* pGroup, bool bDoFlex );
+	void SoftwareProcessQuadMesh( mstudiomesh_t* pmesh, CMeshBuilder& meshBuilder, int numFaces, unsigned short* pGroupToMesh, unsigned short *pIndices, bool bTangentSpace, bool bDoFlex );
 
 	// Avoid some warnings...
 	CStudioRender( CStudioRender const& );
@@ -603,12 +694,12 @@ private:
 	studiohdr_t *m_pStudioHdr;
 	mstudiomodel_t *m_pSubModel;
 	studiomeshdata_t *m_pStudioMeshes;
+	studiohwdata_t *m_pStudioHWData;
 
 	eyeballstate_t m_pEyeballState[16]; // MAXSTUDIOEYEBALLS
 
 	// debug materials
-	IMaterial		*m_pMaterialMRMWireframe;
-	IMaterial		*m_pMaterialMRMWireframeZBuffer;
+	IMaterial		*m_pMaterialWireframe[2][2]; // Four flavors: (ZBuffer, DisplacementMapped)
 	IMaterial		*m_pMaterialMRMNormals;
 	IMaterial		*m_pMaterialTangentFrame;
 	IMaterial		*m_pMaterialTranslucentModelHulls;
@@ -617,10 +708,11 @@ private:
 	IMaterial		*m_pMaterialModelBones;
 	IMaterial		*m_pMaterialWorldWireframe;
 	IMaterial		*m_pMaterialModelEnvCubemap;
+	IMaterial		*m_pMaterialSolidBackfacePrepass;
 
 	// Depth override material
-	IMaterial		*m_pDepthWrite[2][2];
-	IMaterial		*m_pSSAODepthWrite[2][2];
+	IMaterial		*m_pDepthWrite[ 2 ][ 2 ][ 2 ];
+	IMaterial		*m_pSSAODepthWrite[ 2 ][ 2 ][ 2 ];
 
 	// GLINT data
 	ITexture* m_pGlintTexture;
@@ -639,6 +731,17 @@ private:
 	DecalId_t	m_nDecalId;
 	CUtlFixedLinkedList< DecalLRU_t > m_DecalLRU;
 
+	FlashlightState_t *m_pCurrentFlashlight;
+#if !defined( LINUX )
+	// Vectors of Vector4D's for CPU-side subdivision surface processing
+	CUtlVector< fltx4, CUtlMemoryAligned<fltx4, 16> > m_vSkinnedSubDVertices;
+#endif
+
+#ifndef _CERT
+	// Each model counts how many rendered faces it accounts for each frame:
+	CUtlHash< studiohwdata_t * > m_ModelFaceCountHash;
+#endif // !_CERT
+
 	friend class CGlintTextureRegenerator;
 	friend struct mstudiomodel_t;
 	friend class CStudioRenderContext;
@@ -654,7 +757,7 @@ private:
 R_StudioTransform
 ================
 */
-inline void CStudioRender::R_StudioTransform( Vector& in1, mstudioboneweight_t *pboneweight, Vector& out1 )
+inline void CStudioRender::R_StudioTransform( Vector& in1, mstudioboneweight_t *pboneweight, matrix3x4_t *pPoseToWorld, Vector& out1 )
 {
 //	MEASURECODE( "R_StudioTransform" );
 
@@ -662,22 +765,22 @@ inline void CStudioRender::R_StudioTransform( Vector& in1, mstudioboneweight_t *
 	switch( pboneweight->numbones )
 	{
 	case 1:
-		VectorTransform( in1, m_PoseToWorld[(unsigned)pboneweight->bone[0]], out1 );
+		VectorTransform( in1, pPoseToWorld[pboneweight->bone[0]], out1 );
 		break;
 /*
 	case 2:
-		VectorTransform( in1, m_PoseToWorld[pboneweight->bone[0]], out1 );
+		VectorTransform( in1, pPoseToWorld[pboneweight->bone[0]], out1 );
 		out1 *= pboneweight->weight[0];
-		VectorTransform( in1, m_PoseToWorld[pboneweight->bone[1]], out2 );
+		VectorTransform( in1, pPoseToWorld[pboneweight->bone[1]], out2 );
 		VectorMA( out1, pboneweight->weight[1], out2, out1 );
 		break;
 
 	case 3:
-		VectorTransform( in1, m_PoseToWorld[pboneweight->bone[0]], out1 );
+		VectorTransform( in1, pPoseToWorld[pboneweight->bone[0]], out1 );
 		out1 *= pboneweight->weight[0];
-		VectorTransform( in1, m_PoseToWorld[pboneweight->bone[1]], out2 );
+		VectorTransform( in1, pPoseToWorld[pboneweight->bone[1]], out2 );
 		VectorMA( out1, pboneweight->weight[1], out2, out1 );
-		VectorTransform( in1, m_PoseToWorld[pboneweight->bone[2]], out2 );
+		VectorTransform( in1, pPoseToWorld[pboneweight->bone[2]], out2 );
 		VectorMA( out1, pboneweight->weight[2], out2, out1 );
 		break;
 */
@@ -685,7 +788,7 @@ inline void CStudioRender::R_StudioTransform( Vector& in1, mstudioboneweight_t *
 		VectorFill( out1, 0 );
 		for (int i = 0; i < pboneweight->numbones; i++)
 		{
-			VectorTransform( in1, m_PoseToWorld[(unsigned)pboneweight->bone[i]], out2 );
+			VectorTransform( in1, pPoseToWorld[pboneweight->bone[i]], out2 );
 			VectorMA( out1, pboneweight->weight[i], out2, out1 );
 		}
 		break;
@@ -698,7 +801,7 @@ inline void CStudioRender::R_StudioTransform( Vector& in1, mstudioboneweight_t *
 R_StudioRotate
 ================
 */
-inline void CStudioRender::R_StudioRotate( Vector& in1, mstudioboneweight_t *pboneweight, Vector& out1 )
+inline void CStudioRender::R_StudioRotate( Vector& in1, mstudioboneweight_t *pboneweight, matrix3x4_t *pPoseToWorld, Vector& out1 )
 {
 	// NOTE: This only works to rotate normals if there's no scale in the
 	// pose to world transforms. If we ever add scale, we'll need to
@@ -706,7 +809,7 @@ inline void CStudioRender::R_StudioRotate( Vector& in1, mstudioboneweight_t *pbo
 
 	if (pboneweight->numbones == 1)
 	{
-		VectorRotate( in1, m_PoseToWorld[(unsigned)pboneweight->bone[0]], out1 );
+		VectorRotate( in1, pPoseToWorld[pboneweight->bone[0]], out1 );
 	}
 	else
 	{
@@ -716,21 +819,21 @@ inline void CStudioRender::R_StudioRotate( Vector& in1, mstudioboneweight_t *pbo
 
 		for (int i = 0; i < pboneweight->numbones; i++)
 		{
-			VectorRotate( in1, m_PoseToWorld[(unsigned)pboneweight->bone[i]], out2 );
+			VectorRotate( in1, pPoseToWorld[pboneweight->bone[i]], out2 );
 			VectorMA( out1, pboneweight->weight[i], out2, out1 );
 		}
 		VectorNormalize( out1 );
 	}
 }
 
-inline void CStudioRender::R_StudioRotate( Vector4D& realIn1, mstudioboneweight_t *pboneweight, Vector4D& realOut1 )
+inline void CStudioRender::R_StudioRotate( Vector4D& realIn1, mstudioboneweight_t *pboneweight, matrix3x4_t *pPoseToWorld, Vector4D& realOut1 )
 {
 	// garymcthack - god this sucks.
 	Vector in1( realIn1[0], realIn1[1], realIn1[2] );
 	Vector out1;
 	if (pboneweight->numbones == 1)
 	{
-		VectorRotate( in1, m_PoseToWorld[(unsigned)pboneweight->bone[0]], out1 );
+		VectorRotate( in1, pPoseToWorld[pboneweight->bone[0]], out1 );
 	}
 	else
 	{
@@ -740,7 +843,7 @@ inline void CStudioRender::R_StudioRotate( Vector4D& realIn1, mstudioboneweight_
 
 		for (int i = 0; i < pboneweight->numbones; i++)
 		{
-			VectorRotate( in1, m_PoseToWorld[(unsigned)pboneweight->bone[i]], out2 );
+			VectorRotate( in1, pPoseToWorld[pboneweight->bone[i]], out2 );
 			VectorMA( out1, pboneweight->weight[i], out2, out1 );
 		}
 		VectorNormalize( out1 );
@@ -826,6 +929,10 @@ public:
 
 			NO_DEFAULT;
 		} 
+#ifdef _PS3
+		Assert( false ); // PS3 doesn't have true __assume (used in NO_DEFAULT), so a return value is expected
+		return 0.0f;
+#endif
 	}
 };
 
@@ -872,6 +979,10 @@ public:
 
 			NO_DEFAULT;
 		} 
+#ifdef _PS3
+		Assert( false ); // PS3 doesn't have true __assume (used in NO_DEFAULT), so a return value is expected
+		return 0.0f;
+#endif
 	}
 };
 
@@ -885,6 +996,10 @@ inline float CStudioRender::R_WorldLightAngle( const LightDesc_t *wl, const Vect
 		case MATERIAL_LIGHT_SPOT:			return CWorldLightAngleWrapper<MATERIAL_LIGHT_SPOT>::WorldLightAngle( wl, lnormal, snormal, delta );
 		NO_DEFAULT;
 	}
+#ifdef _PS3
+	Assert( false ); // PS3 doesn't have true __assume (used in NO_DEFAULT), so a return value is expected
+	return 0.0f;
+#endif
 }
 
 
@@ -926,6 +1041,8 @@ inline int ComputeModelLODAndMetric( studiohwdata_t *pHardwareData, float flUnit
 	return pHardwareData->GetLODForMetric( flMetric );
 }
 
+// Helper to determine which material type to use depending on what strip header flags are set.
+MaterialPrimitiveType_t GetPrimitiveTypeForStripHeaderFlags( unsigned char Flags );
 
 
 #endif // CSTUDIORENDER_H

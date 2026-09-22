@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright � 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -21,16 +21,14 @@
 #include "tier0/memalloc.h"
 #include "tier0/memdbgon.h"
 
-#ifdef _WIN32
 #pragma warning (disable:4100)
 #pragma warning (disable:4514)
-#endif
 
 //-----------------------------------------------------------------------------
 
 #ifdef UTBLOCKLMEMORY_TRACK
-#define UTLBLOCKMEMORY_TRACK_ALLOC()		MemAlloc_RegisterAllocation( "Sum of all UtlBlockMemory", 0, NumAllocated() * sizeof(T), NumAllocated() * sizeof(T), 0 )
-#define UTLBLOCKMEMORY_TRACK_FREE()		if ( !m_pMemory ) ; else MemAlloc_RegisterDeallocation( "Sum of all UtlBlockMemory", 0, NumAllocated() * sizeof(T), NumAllocated() * sizeof(T), 0 )
+#define UTLBLOCKMEMORY_TRACK_ALLOC()		MemAlloc_RegisterAllocation( "||Sum of all UtlBlockMemory||", 0, NumAllocated() * sizeof(T), NumAllocated() * sizeof(T), 0 )
+#define UTLBLOCKMEMORY_TRACK_FREE()		if ( !m_pMemory ) ; else MemAlloc_RegisterDeallocation( "||Sum of all UtlBlockMemory||", 0, NumAllocated() * sizeof(T), NumAllocated() * sizeof(T), 0 )
 #else
 #define UTLBLOCKMEMORY_TRACK_ALLOC()		((void)0)
 #define UTLBLOCKMEMORY_TRACK_FREE()		((void)0)
@@ -109,8 +107,8 @@ protected:
 
 	T** m_pMemory;
 	int m_nBlocks;
-	int m_nIndexMask;
-	int m_nIndexShift;
+	int m_nIndexMask : 27;
+	int m_nIndexShift : 5;
 };
 
 //-----------------------------------------------------------------------------
@@ -129,6 +127,7 @@ CUtlBlockMemory<T,I>::~CUtlBlockMemory()
 {
 	Purge();
 }
+
 
 //-----------------------------------------------------------------------------
 // Fast swap
@@ -248,16 +247,15 @@ void CUtlBlockMemory<T,I>::ChangeSize( int nBlocks )
 
 	UTLBLOCKMEMORY_TRACK_ALLOC(); // this must stay after the recalculation of m_nBlocks, since it implicitly uses the new value
 
+	// free old blocks if shrinking
+	for ( int i = m_nBlocks; i < nBlocksOld; ++i )
+	{
+		UTLBLOCKMEMORY_TRACK_FREE();
+		free( (void*)m_pMemory[ i ] );
+	}
+
 	if ( m_pMemory )
 	{
-		// free old blocks if shrinking
-		// Only possible if m_pMemory is non-NULL (and avoids PVS-Studio warning)
-		for ( int i = m_nBlocks; i < nBlocksOld; ++i )
-		{
-			UTLBLOCKMEMORY_TRACK_FREE();
-			free( (void*)m_pMemory[ i ] );
-		}
-
 		MEM_ALLOC_CREDIT_CLASS();
 		m_pMemory = (T**)realloc( m_pMemory, m_nBlocks * sizeof(T*) );
 		Assert( m_pMemory );

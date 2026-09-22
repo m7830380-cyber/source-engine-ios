@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ========//
 //
 // Purpose: 
 //
@@ -11,12 +11,12 @@
 #include <assert.h>
 #include <eh.h>
 #include "isys.h"
-#include "console/conproc.h"
+#include "conproc.h"
 #include "dedicated.h"
 #include "engine_hlds_api.h"
 #include "checksum_md5.h"
-#include "tier0/vcrmode.h"
 #include "tier0/dbg.h"
+#include "tier0/stacktools.h"
 #include "tier1/strtools.h"
 #include "tier0/icommandline.h"
 #include "inputsystem/iinputsystem.h"
@@ -33,8 +33,8 @@
 #include "datacache/imdlcache.h"
 #include "vphysics_interface.h"
 #include "filesystem.h"
+#include "vscript/ivscript.h"
 #include "steam/steam_api.h"
-#include "filesystem/IQueuedLoader.h"
 
 extern CTextConsoleWin32 console;
 extern bool g_bVGui;
@@ -63,8 +63,8 @@ public:
 	void		DestroyConsoleWindow( void );
 
 	void		ConsoleOutput ( char *string );
-	char		*ConsoleInput ( int index, char *buf, int buflen );
-	void		Printf( PRINTF_FORMAT_STRING const char *fmt, ... );
+	char		*ConsoleInput (void);
+	void		Printf(const char *fmt, ...);
 };
 
 static CSys g_Sys;
@@ -84,10 +84,7 @@ CSys::~CSys()
 //-----------------------------------------------------------------------------
 void CSys::Sleep( int msec )
 {
-	// Call ThreadSleep because it has the necessary magic to set the system
-	// timer resolution so that Sleep( 1 ) will sleep for one millisecond
-	// instead of for 10-16 ms.
-	ThreadSleep( msec );
+	::Sleep( msec );
 }
 
 //-----------------------------------------------------------------------------
@@ -98,6 +95,10 @@ void CSys::Sleep( int msec )
 long CSys::LoadLibrary( char *lib )
 {
 	void *hDll = ::LoadLibrary( lib );
+
+	if ( hDll )
+		StackToolsNotify_LoadedLibrary( lib );
+
 	return (long)hDll;
 }
 
@@ -198,7 +199,7 @@ void CSys::ConsoleOutput (char *string)
 // Input  : *fmt - 
 //			... - 
 //-----------------------------------------------------------------------------
-void CSys::Printf( PRINTF_FORMAT_STRING const char *fmt, ... )
+void CSys::Printf(const char *fmt, ...)
 {
 	// Dump text to debugging console.
 	va_list argptr;
@@ -216,9 +217,9 @@ void CSys::Printf( PRINTF_FORMAT_STRING const char *fmt, ... )
 // Purpose: 
 // Output : char *
 //-----------------------------------------------------------------------------
-char *CSys::ConsoleInput ( int index, char *buf, int buflen )
+char *CSys::ConsoleInput (void)
 {
-	return console.GetLine( index, buf, buflen );
+	return console.GetLine();
 }
 
 //-----------------------------------------------------------------------------
@@ -265,7 +266,9 @@ bool CSys::LoadModules( CDedicatedAppSystemGroup *pAppSystemGroup )
 	AppSystemInfo_t appSystems[] = 
 	{
 		{ "engine.dll",				CVAR_QUERY_INTERFACE_VERSION },	// NOTE: This one must be first!!
+		{ "soundemittersystem.dll",	SOUNDEMITTERSYSTEM_INTERFACE_VERSION },
 		{ "inputsystem.dll",		INPUTSYSTEM_INTERFACE_VERSION },
+		{ "inputsystem.dll",		INPUTSTACKSYSTEM_INTERFACE_VERSION },
 		{ "materialsystem.dll",		MATERIAL_SYSTEM_INTERFACE_VERSION },
 		{ "studiorender.dll",		STUDIO_RENDER_INTERFACE_VERSION },
 		{ "vphysics.dll",			VPHYSICS_INTERFACE_VERSION },
@@ -273,8 +276,10 @@ bool CSys::LoadModules( CDedicatedAppSystemGroup *pAppSystemGroup )
 		{ "datacache.dll",			MDLCACHE_INTERFACE_VERSION },
 		{ "datacache.dll",			STUDIO_DATA_CACHE_INTERFACE_VERSION },
 		{ "vgui2.dll",				VGUI_IVGUI_INTERFACE_VERSION },
+#ifndef DOTA_DLL
+		{ "vscript.dll",			VSCRIPT_INTERFACE_VERSION },
+#endif
 		{ "engine.dll",				VENGINE_HLDS_API_VERSION },
-		{ "dedicated.dll",			QUEUEDLOADER_INTERFACE_VERSION },
 		{ "", "" }	// Required to terminate the list
 	};
 
@@ -336,7 +341,7 @@ static char *GetBaseDir( const char *pszBuffer )
 	int j;
 	char *pBuffer = NULL;
 
-	V_strcpy_safe( szBuffer, pszBuffer );
+	strcpy( szBuffer, pszBuffer );
 
 	pBuffer = strrchr( szBuffer,'\\' );
 	if ( pBuffer )
@@ -380,15 +385,12 @@ extern "C" __declspec(dllexport) int DedicatedMain( HINSTANCE hInstance, HINSTAN
 
 	int argc, iret = -1;
 	LPWSTR * argv= CommandLineToArgvW(GetCommandLineW(),&argc);
-	CommandLine()->CreateCmdLine( VCRHook_GetCommandLine() );
+	CommandLine()->CreateCmdLine( GetCommandLine() );
 
 	if ( !Plat_IsInDebugSession() && !CommandLine()->FindParm( "-nominidumps") )
 	{
-		// This warning only applies if you want to catch structured exceptions (crashes)
-		// using C++ exceptions. We do not want to do that so we can build with C++ exceptions
-		// completely disabled, and just suppress this warning.
-		// warning C4535: calling _set_se_translator() requires /EHa
-		#pragma warning( suppress : 4535 )
+		// This warning is not actually true in this context.
+#pragma warning( suppress : 4535 ) // warning C4535: calling _set_se_translator() requires /EHa
 		_set_se_translator( MiniDumpFunction );
 
 		try  // this try block allows the SE translator to work

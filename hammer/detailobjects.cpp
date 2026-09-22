@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Places "detail" objects which are client-only renderable things
 //
@@ -13,17 +13,18 @@
 #include "interface.h"
 
 #include "KeyValues.h"
-#include "utlsymbol.h"
-#include "utlvector.h"
+#include "UtlSymbol.h"
+#include "UtlVector.h"
 #include "utilmatlib.h"
 #include "mathlib/VMatrix.h"
 #include "vstdlib/random.h"
 #include "builddisp.h"
-#include "tier1/utlbuffer.h"
+#include "UtlBuffer.h"
 #include "IEditorTexture.h"
-#include "materialsystem/imaterialvar.h"
-#include "materialsystem/imaterial.h"
+#include "materialsystem/IMaterialVar.h"
+#include "materialsystem/IMaterial.h"
 #include "mapface.h"
+#include "MapDoc.h"	// TERROR
 #include "camera.h"
 #include "options.h"
 
@@ -74,16 +75,16 @@ void DetailObjects::ParseDetailGroup( int detailId, KeyValues* pGroupKeyValues )
 	// Sort the group by alpha
 	float alpha = pGroupKeyValues->GetFloat( "alpha", 1.0f );
 	
-	int iGroup = s_DetailObjectDict[detailId].m_Groups.Count();
-	while ( --iGroup >= 0 )
+	int i = s_DetailObjectDict[detailId].m_Groups.Count();
+	while ( --i >= 0 )
 	{
-		if (alpha > s_DetailObjectDict[detailId].m_Groups[iGroup].m_Alpha)
+		if (alpha > s_DetailObjectDict[detailId].m_Groups[i].m_Alpha)
 			break;
 	}
 
 	// Insert after the first guy who's more transparent that we are!
-	iGroup = s_DetailObjectDict[detailId].m_Groups.InsertAfter( iGroup );
-	DetailObjectGroup_t& group = s_DetailObjectDict[detailId].m_Groups[iGroup];
+	i = s_DetailObjectDict[detailId].m_Groups.InsertAfter(i);
+	DetailObjectGroup_t& group = s_DetailObjectDict[detailId].m_Groups[i];
 
 	group.m_Alpha = alpha;
 
@@ -136,7 +137,7 @@ void DetailObjects::ParseDetailGroup( int detailId, KeyValues* pGroupKeyValues )
 					int nValid = sscanf( pSpriteData, "%f %f %f %f %f", &x, &y, &flWidth, &flHeight, &flTextureSize ); 
 					if ( (nValid != 5) || (flTextureSize == 0) )
 					{
-						Error( "Invalid arguments to \"sprite\" in detail.vbsp (model %s)!\n", model.m_ModelName.String() );
+						Error( "Invalid arguments to \"sprite\" in detail.vbsp (model %s)!\n", model.m_ModelName );
 					}
 
 					model.m_Tex[0].x = ( x + 0.5f ) / flTextureSize;
@@ -206,7 +207,7 @@ void DetailObjects::ParseDetailGroup( int detailId, KeyValues* pGroupKeyValues )
 	// renormalize the amount if the total > 1
 	if (totalAmount > 1.0f)
 	{
-		for (int i = 0; i < group.m_Models.Count(); ++i)
+		for (i = 0; i < group.m_Models.Count(); ++i)
 		{
 			group.m_Models[i].m_Amount /= totalAmount;
 		}
@@ -314,12 +315,12 @@ int DetailObjects::SelectGroup( const DetailObject_t& detail, float alpha )
 	}
 
 	// Pick a number, any number...
-	float flR = rand() / (float)VALVE_RAND_MAX;
+	float r = rand() / (float)VALVE_RAND_MAX;
 
 	// When dist == 0, we *always* want start.
 	// When dist == 1, we *always* want end
 	// That's why this logic looks a little reversed
-	return (flR > dist) ? start : end;
+	return (r > dist) ? start : end;
 }
 
 
@@ -329,12 +330,12 @@ int DetailObjects::SelectGroup( const DetailObject_t& detail, float alpha )
 int DetailObjects::SelectDetail( DetailObjectGroup_t const& group )
 {
 	// Pick a number, any number...
-	float flR = rand() / (float)VALVE_RAND_MAX;
+	float r = rand() / (float)VALVE_RAND_MAX;
 
 	// Look through the list of models + pick the one associated with this number
 	for ( int i = 0; i < group.m_Models.Count(); ++i )
 	{
-		if ( flR <= group.m_Models[i].m_Amount)
+		if (r <= group.m_Models[i].m_Amount)
 			return i;
 	}
 
@@ -481,6 +482,11 @@ void DetailObjects::EmitDetailObjectsOnFace( CMapFace *pMapFace, DetailObject_t&
 	if (nPoints < 3)
 		return;
 
+	// TERROR:
+	CMapDoc *pDoc = CMapDoc::GetActiveMapDoc();
+	CMapEntityList detailBlockers;
+	pDoc->FindEntitiesByClassName( detailBlockers, "func_detail_blocker", false );
+
 	// Get the first point of the face
 	Vector	p0;
 	pMapFace->GetPoint(p0,0);
@@ -508,7 +514,7 @@ void DetailObjects::EmitDetailObjectsOnFace( CMapFace *pMapFace, DetailObject_t&
 		int numSamples = clamp( area * detail.m_Density * 0.000001, 0, MAX_DETAIL_SPRITES_PER_FACE );
 		
 		// For each possible sample, attempt to randomly place a detail object there
-		for (int j = 0; j < numSamples; ++j )
+		for (int i = 0; i < numSamples; ++i )
 		{
 			// Create a random sample location...
 			float u = rand() / (float)VALVE_RAND_MAX;
@@ -539,6 +545,20 @@ void DetailObjects::EmitDetailObjectsOnFace( CMapFace *pMapFace, DetailObject_t&
 			VectorMA( p0, u, e1, pt );
 			VectorMA( pt, v, e2, pt );
 			VectorDivide( areaVec, -normalLength, normal );
+
+			bool blocked = false;
+			for ( int b=0; b<detailBlockers.Count(); ++b )
+			{
+				CMapEntity *blocker = detailBlockers[b];
+				if ( blocker->ContainsPoint( pt ) )
+				{
+					blocked = true;
+					break;
+				}
+			}
+
+			if ( blocked )
+				continue;
 
 			PlaceDetail( detail.m_Groups[group].m_Models[model], pt, normal );
 		}
@@ -580,6 +600,11 @@ void DetailObjects::EmitDetailObjectsOnDisplacementFace( CMapFace *pMapFace,
 {
 	assert(pMapFace->GetPointCount() == 4);
 
+	// TERROR:
+	CMapDoc *pDoc = CMapDoc::GetActiveMapDoc();
+	CMapEntityList detailBlockers;
+	pDoc->FindEntitiesByClassName( detailBlockers, "func_detail_blocker", false );
+
 	// We're going to pick a bunch of random points, and then probabilistically
 	// decide whether or not to plant a detail object there.
 
@@ -605,6 +630,20 @@ void DetailObjects::EmitDetailObjectsOnDisplacementFace( CMapFace *pMapFace,
 		Vector pt, normal;
 		pCoreDispInfo->GetPositionOnSurface( u, v, pt, &normal, &alpha );
 		alpha /= 255.0f;
+
+		bool blocked = false;
+		for ( int b=0; b<detailBlockers.Count(); ++b )
+		{
+			CMapEntity *blocker = detailBlockers[b];
+			if ( blocker->ContainsPoint( pt ) )
+			{
+				blocked = true;
+				break;
+			}
+		}
+
+		if ( blocked )
+			continue;
 
 		// Select a group based on the alpha value
 		int group = SelectGroup( detail, alpha );
@@ -750,7 +789,7 @@ void	DetailObjects::Render3D(CRender3D *pRender)
 				Maxs[j] += fDetailDistance;
 			}
 			if ( IsPointInBox( viewPoint, Mins, Maxs ) )
-				pModel->DrawModel3D( pRender, 1, false  );
+				pModel->DrawModel3D( pRender, Color(255, 255, 255, 255), 1, false  );
 		}
 		pRender->PopRenderMode();
 

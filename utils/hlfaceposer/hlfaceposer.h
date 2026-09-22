@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -14,26 +14,27 @@
 #include <float.h>
 #include <windows.h>
 #include "SoundEmitterSystem/isoundemittersystembase.h"
+#include "color.h"
 
-#define CONSOLE_COLOR RGB( 82, 173, 216 )
+#define CONSOLE_COLOR Color( 82, 173, 216 )
 
-#define ERROR_COLOR RGB( 255, 50, 20 )
+#define ERROR_COLOR Color( 255, 50, 20 )
 
-#define FILE_COLOR RGB( 0, 63, 200 )
+#define FILE_COLOR Color( 0, 63, 200 )
 
 #define MAX_FP_MODELS 16
 
 #define SCRUBBER_HANDLE_WIDTH		40
 #define SCRUBBER_HANDLE_HEIGHT		10
 
-char *va( PRINTF_FORMAT_STRING const char *fmt, ... );
+char *va( const char *fmt, ... );
 
 char const *GetGameDirectory(); // e.g. u:\main\game\ep2
 char const *GetGameDirectorySimple();  // e.g.  ep2
 
-void Con_Printf( PRINTF_FORMAT_STRING const char *fmt, ... );
-void Con_ColorPrintf( COLORREF clr, PRINTF_FORMAT_STRING const char *fmt, ... );
-void Con_ErrorPrintf( PRINTF_FORMAT_STRING const char *fmt, ... );
+void Con_Printf( const char *fmt, ... );
+void Con_ColorPrintf( const Color& clr, const char *fmt, ... );
+void Con_ErrorPrintf( const char *fmt, ... );
 
 bool FPFullpathFileExists( const char *filename );
 void MakeFileWriteable( const char *filename );
@@ -47,9 +48,7 @@ void FacePoser_SaveWindowPositions( char const *name, bool visible, int x, int y
 void FacePoser_AddWindowStyle( mxWindow *w, int addbits );
 void FacePoser_AddWindowExStyle( mxWindow *w, int addbits );
 void FacePoser_RemoveWindowStyle( mxWindow *w, int removebits );
-void FacePoser_RemoveWindowExStyle( mxWindow *w, int removebits );
 bool FacePoser_HasWindowStyle( mxWindow *w, int bits );
-bool FacePoser_HasWindowExStyle( mxWindow *w, int bits );
 
 void FacePoser_EnsurePhonemesLoaded( void );
 void FacePoser_SetPhonemeRootDir( char const *pchRootDir );
@@ -79,5 +78,16 @@ int					GetCloseCaptionLanguageId();
 
 bool FacePoser_ShowOpenFileNameDialog( char *relative, size_t bufsize, char const *subdir, char const *wildcard );
 bool FacePoser_ShowSaveFileNameDialog( char *relative, size_t bufsize, char const *subdir, char const *wildcard );
+
+// Helper for porting from windows to vgui tool framework
+inline COLORREF ColorToRGB( const Color &clr )
+{
+	return RGB( clr.r(), clr.g(), clr.b() );
+}
+
+inline Color RGBToColor( const COLORREF &clr )
+{
+	return Color( GetRValue( clr ), GetGValue( clr ), GetBValue( clr ) );
+}
 
 #endif // HLFACEPOSER_H

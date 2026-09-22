@@ -44,7 +44,6 @@ $Configuration "Release"
 		$SuppressStartupBanner				"Yes (/nologo)"
 		$WarningLevel						"Level 4 (/W4)"
 		$TreatWarningsAsErrors				"No"
-		$UseUNICODEResponseFiles			"No"
 
 		// Optimization
 		$Optimization						"Full Optimization (/Ox)"
@@ -56,7 +55,9 @@ $Configuration "Release"
 
 		// Preprocessor
 		$PreprocessorDefinitions			"_X360;NDEBUG;_WIN32;WIN32;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE;__VMX128_SUPPORTED"
-		$PreprocessorDefinitions			"$BASE;_CERT" [$CERT]
+		$PreprocessorDefinitions			"$BASE;_CERT"	[$CERT]
+		$PreprocessorDefinitions			"$BASE;PROFILE"	[$PROFILE]
+		
 		$IgnoreStandardIncludePath
 		$GeneratePreprocessedFile
 		$KeepComments						"No"
@@ -92,7 +93,7 @@ $Configuration "Release"
 		$AssemblerOutput					"No Listing"
 		$ASMListLocation					"$(IntDir)/"
 		$ObjectFileName						"$(IntDir)/"
-		$ProgramDatabaseFileName			"$(IntDir)/"
+		$ProgramDatabaseFileName			"$(IntDir)/vc90.pdb"
 
 		// Browse Information
 		$EnableBrowseInformation			"None"
@@ -114,11 +115,12 @@ $Configuration "Release"
 		$PreschedulingOptimization
 		$InlineAssemblyOptimization
 		$Stalls
-		$CallAttributedProfiling
+		$CallAttributedProfiling			"Call profiler within function calls. (/callcap)"			[$CALLCAP]
+		$CallAttributedProfiling			"Call profiler around function calls. (/fastcap)"			[$FASTCAP]
 
 		// Command Line
-		$AdditionalOptions					"/QVMX128"
-		$AdditionalOptions					"$BASE /DPROFILE"	[$PROFILE]
+		$AdditionalOptions					"$BASE /QVMX128"
+		$AdditionalOptions					"$BASE /Oy-"		[$NOFPO]
 	}
 
 	$Linker
@@ -133,10 +135,9 @@ $Configuration "Release"
 		$AdditionalLibraryDirectories
 		$LinkLibraryDependencies
 		$UseLibraryDependencyInputs
-		$UseUNICODEResponseFiles			"No"
 
 		// Input
-		$AdditionalDependencies				"d3d9.lib xapilib.lib xboxkrnl.lib libpmcpb.lib"				[!$PROFILE]
+		$AdditionalDependencies				"d3d9.lib xapilib.lib xboxkrnl.lib libpmcpb.lib"				[!$PROFILE && !$CERT]
 		$AdditionalDependencies				"d3d9i.lib xapilibi.lib xboxkrnl.lib libpmcpb.lib xbdm.lib"		[$PROFILE]
 		$AdditionalDependencies				"d3d9.lib xapilib.lib xboxkrnl.lib"								[$CERT]
 		$IgnoreAllDefaultLibraries
@@ -149,12 +150,13 @@ $Configuration "Release"
 		$GenerateDebugInfo					"Yes (/DEBUG)"
 		$GenerateProgramDatabaseFile		"$(IntDir)/$(TargetName).pdb"
 		$StripPrivateSymbols
-		$GenerateMapFile					"No"
+		$GenerateMapFile					"Yes (/MAP)"
 		$MapFileName						"$(IntDir)/$(TargetName).map"
 		$MapExports							"No"
 
 		// System
-		$StackCommitSize					"262144"
+		$StackReserveSize					"327680"
+		$StackCommitSize					"327680"
 
 		// Optimization
 		$References							"Eliminate Unreferenced Data (/OPT:REF)"
@@ -168,7 +170,6 @@ $Configuration "Release"
 		$NoEntryPoint
 		$SetChecksum						"Yes (/RELEASE)"
 		$BaseAddress						"$LOADADDRESS_DEVELOPMENT"
-		$BaseAddress						"$LOADADDRESS_RETAIL" [$RETAIL]
 		$FixedBaseAddress					"Image must be loaded at a fixed address (/FIXED)"
 		$ImportLibrary
 		$MergeSections
@@ -186,7 +187,7 @@ $Configuration "Release"
 		$SuppressStartupBanner				"Yes (/NOLOGO)"
 		$BaseAddress
 		$HeapSize
-		$WorkspaceSize
+		$WorkspaceSize						"0xA0000"
 		$AdditionalSections
 		$ExportByName
 
@@ -242,7 +243,7 @@ $Configuration "Release"
 	{
 		// Common Settings
 		$DeploymentType						"Copy to Hard Drive"
-		$DeploymentFiles					"$(RemoteRoot)=$(TargetPath);"
+		$DeploymentFiles					"$(RemoteRoot)=$(ImagePath);"
 
 		// Copy to Hard Drive
 		$ExcludedFromBuild					"Yes"

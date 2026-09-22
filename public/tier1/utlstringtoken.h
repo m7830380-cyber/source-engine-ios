@@ -58,37 +58,16 @@ public:
     CUtlStringToken( char const *pString )					// generate one from a dynamic string 
 	{
 		m_nHashCode = MurmurHash2LowerCase( pString, STRINGTOKEN_MURMURHASH_SEED );
-#if DEBUG_STRINGTOKENS
-		m_pDebugName = NULL;
-#endif
 	}
 #endif
 
-	CUtlStringToken()
-	{
-		m_nHashCode = 0;
-#if DEBUG_STRINGTOKENS
-		m_pDebugName = NULL;
-#endif
-	}
-
-	bool IsValid() const
-	{
-		return m_nHashCode != 0;
-	}
+	CUtlStringToken() { m_nHashCode = 0; }
 };
 
 FORCEINLINE CUtlStringToken MakeStringToken( char const *pString )
 {
 	CUtlStringToken ret;
 	ret.m_nHashCode = MurmurHash2LowerCase( pString, STRINGTOKEN_MURMURHASH_SEED );
-	return ret;
-}
-
-FORCEINLINE CUtlStringToken MakeStringToken( const char *pString, const char *pStringEnd )
-{
-	CUtlStringToken ret;
-	ret.m_nHashCode = MurmurHash2LowerCase( pString, ( int )( pStringEnd - pString ), STRINGTOKEN_MURMURHASH_SEED );
 	return ret;
 }
 

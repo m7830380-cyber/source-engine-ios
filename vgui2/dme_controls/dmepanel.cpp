@@ -1,11 +1,11 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2005, Valve Corporation, All rights reserved. =======
 //
 // Purpose: 
 //
 //=============================================================================
 
 #include "dme_controls/dmepanel.h"
-#include "tier1/KeyValues.h"
+#include "tier1/keyvalues.h"
 #include "dme_controls/dmecontrols.h"
 #include "vgui_controls/combobox.h"
 #include "datamodel/dmelement.h"

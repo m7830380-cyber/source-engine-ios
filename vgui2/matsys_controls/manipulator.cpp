@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2001, Valve LLC, All rights reserved. ============
 //
 // Purpose: 
 //
@@ -19,6 +19,10 @@
 #include "mathlib/mathlib.h"
 
 #include <float.h>
+
+// NOTE: This has to be the last file included!
+#include "tier0/memdbgon.h"
+
 
 using namespace vgui;
 
@@ -142,7 +146,7 @@ void CPotteryWheelManip::OnCursorMoved( int x, int y )
 	{
 		m_azimuth  += 0.002f * ( x - m_lastx );
 		m_altitude -= 0.002f * ( y - m_lasty );
-		m_altitude = max( (float)-M_PI/2, min( (float)M_PI/2, m_altitude ) );
+		m_altitude = MAX( -M_PI/2, MIN( M_PI/2, m_altitude ) );
 	}
 	m_lastx = x;
 	m_lasty = y;

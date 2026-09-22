@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright (c) 1996-2008, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -19,7 +19,7 @@
 #include "tier1/callqueue.h"
 #include "cmodel.h"
 #include "tier0/vprof.h"
-#include "tier1/memhelpers.h"
+#include <vjobs/ibmarkup_shared.h>
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
@@ -27,6 +27,9 @@
 
 // garymcthack - this should go elsewhere
 #define MAX_NUM_BONE_INDICES 4
+
+// number of topology_indices attributes before one-ring starts
+#define NUM_TOPOLOGY_INDICES_ATTRIBUTES 14 
 
 
 //-----------------------------------------------------------------------------
@@ -39,8 +42,100 @@ void StudioChangeCallback( IConVar *var, const char *pOldValue, float flOldValue
 	g_pMaterialSystem->Unlock( hLock );
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: build a texture path from a path and filename and copy the results
+// into the given buffer.
+//
+// This code also fixes the following issues:
+//   o remove slashes from the beginning of the path to avoid //models/blah.vmt
+//   o remove slashes from the beginning of the texture name to avoid models//blah.vmt
+//   o remove slashes from the end of the path to avoid models//blah.vmt
+//-----------------------------------------------------------------------------
+void BuildTexturePath( const char *pTexturePath, const char *pTextureName, char *pDest, int destSizeInBytes )
+{
+	Assert( pTexturePath != NULL );
+	Assert( pTextureName != NULL );
+	Assert( pDest != NULL );
+	Assert( destSizeInBytes > 0 );
+	if ( pTexturePath == NULL ||
+		 pTextureName == NULL ||
+		 pDest == NULL ||
+		 destSizeInBytes <= 0 )
+	{
+		return;
+	}
+
+	char texturePath[MAX_PATH];
+	texturePath[0] = '\0';
+	V_strncpy( texturePath, pTexturePath, sizeof( texturePath ) );
+	char *pPath = texturePath;
+
+	// Strip off slashes at the beginning of the path.
+	if ( *pPath == CORRECT_PATH_SEPARATOR || *pPath == INCORRECT_PATH_SEPARATOR )
+	{
+		++pPath;
+	}
+
+	// Strip off slashes at the beginning of the texture name.
+	if ( *pTextureName == CORRECT_PATH_SEPARATOR || *pTextureName == INCORRECT_PATH_SEPARATOR )
+	{
+		++pTextureName;
+	}
+
+	// Strip off any trailing slashes in the path.
+	int pathLen = V_strlen( pPath );
+	while ( pathLen > 0 )
+	{
+		char *pSlash = &pPath[pathLen - 1];
+		if ( *pSlash == CORRECT_PATH_SEPARATOR || *pSlash == INCORRECT_PATH_SEPARATOR )
+		{
+			*pSlash = '\0';
+			pathLen = V_strlen( pPath );
+		}
+		else
+		{
+			break;
+		}
+	}
+
+	pDest[0] = '\0';
+	V_ComposeFileName( pPath, pTextureName, pDest, destSizeInBytes );
+}
+
 static ConVar studio_queue_mode( "studio_queue_mode", "1", 0, "", StudioChangeCallback );
 
+//-----------------------------------------------------------------------------
+// Queue helper
+//-----------------------------------------------------------------------------
+class CRenderDataFunctorAllocator
+{
+public:
+	CRenderDataFunctorAllocator() : m_pRenderContext( NULL ) {}
+
+	void BeginFrame( IMatRenderContext *pRenderContext )
+	{
+		m_pRenderContext = pRenderContext;
+	}
+
+	void EndFrame()
+	{
+		m_pRenderContext = NULL;
+	}
+
+	void *Alloc( size_t bytes )
+	{
+		void *p = m_pRenderContext->LockRenderData( bytes );
+		m_pRenderContext->UnlockRenderData( p ); // Unlock is fine, always queued mode
+		return p;
+	}
+
+private:
+	IMatRenderContext *m_pRenderContext;
+};
+
+CRenderDataFunctorAllocator g_RenderDataAllocator;
+CCustomizedFunctorFactory<CRenderDataFunctorAllocator, CRefCounted1<CFunctor, CRefCountServiceDestruct< CRefST > > > g_StudioRenderFunctorFactory;
+#define StudioRenderFunctor(...) g_StudioRenderFunctorFactory.CreateFunctor( __VA_ARGS__ )
 
 //-----------------------------------------------------------------------------
 // Globals
@@ -63,7 +158,12 @@ EXPOSE_SINGLE_INTERFACE_GLOBALVAR( CStudioRenderContext, IStudioRender,
 CStudioRenderContext::CStudioRenderContext()
 {
 	// Initialize render context
-	m_RC.m_pForcedMaterial = NULL;
+	for ( int i = 0; i < MAX_MAT_OVERRIDES; i++ )
+	{
+		m_RC.m_pForcedMaterial[ i ] = NULL;
+		m_RC.m_nForcedMaterialIndex[ i ] = -1;
+	}
+	m_RC.m_nForcedMaterialIndexCount = 0;
 	m_RC.m_nForcedMaterialType = OVERRIDE_NORMAL;
 	m_RC.m_ColorMod[0] = m_RC.m_ColorMod[1] = m_RC.m_ColorMod[2] = 1.0f;
 	m_RC.m_AlphaMod = 1.0f;
@@ -71,8 +171,7 @@ CStudioRenderContext::CStudioRenderContext()
 	m_RC.m_ViewRight.Init();
 	m_RC.m_ViewUp.Init();
 	m_RC.m_ViewPlaneNormal.Init();
-	m_RC.m_Config.m_bEnableHWMorph = true;
-	m_RC.m_Config.m_bStatsMode = false;
+	m_RC.m_Config.m_bEnableHWMorph = false;
 
 	m_RC.m_NumLocalLights = 0;
 	for ( int i = 0; i < 6; ++i )
@@ -99,6 +198,9 @@ bool CStudioRenderContext::Connect( CreateInterfaceFn factory )
 	{
 		Msg("StudioRender failed to connect to a required system\n" );
 	}
+
+	g_StudioRenderFunctorFactory.SetAllocator( &g_RenderDataAllocator );
+
 	return ( g_pMaterialSystem && g_pMaterialSystemHardwareConfig && g_pStudioDataCache );
 }
 
@@ -157,7 +259,7 @@ void CStudioRenderContext::Mat_Stub( IMaterialSystem *pMatSys )
 //-----------------------------------------------------------------------------
 // Determines material flags
 //-----------------------------------------------------------------------------
-void CStudioRenderContext::ComputeMaterialFlags( studiohdr_t *phdr, studioloddata_t &lodData, IMaterial *pMaterial )
+void CStudioRenderContext::ComputeMaterialFlags( studiohdr_t *phdr, IMaterial *pMaterial )
 {
 	// requesting info forces the initial material precache (and its build out)
 	if ( pMaterial->UsesEnvCubemap() )
@@ -181,9 +283,21 @@ void CStudioRenderContext::ComputeMaterialFlags( studiohdr_t *phdr, studioloddat
 	// Make sure material is treated as bump mapped if phong is set
 	static unsigned int phongVarCache = 0;
 	IMaterialVar *pPhongMatVar = pMaterial->FindVarFast( "$phong", &phongVarCache );
+
+	static ConVarRef r_staticlight_streams( "r_staticlight_streams" );
+	static ConVarRef r_staticlight_streams_indirect_only( "r_staticlight_streams_indirect_only" );
 	if ( pPhongMatVar && pPhongMatVar->IsDefined() && ( pPhongMatVar->GetIntValue() != 0 ) )
 	{
 		phdr->flags |= STUDIOHDR_FLAGS_USES_BUMPMAPPING;
+
+		// supress this flag for old maps (for now)
+		if ( r_staticlight_streams.GetInt() == 3 )
+			phdr->flags |= STUDIOHDR_BAKED_VERTEX_LIGHTING_IS_INDIRECT_ONLY;
+	}
+
+	if ( r_staticlight_streams_indirect_only.GetBool() )
+	{
+		phdr->flags |= STUDIOHDR_BAKED_VERTEX_LIGHTING_IS_INDIRECT_ONLY;
 	}
 }
 
@@ -257,59 +371,73 @@ void CStudioRenderContext::LoadMaterials( studiohdr_t *phdr,
 	for ( i = 0; i < phdr->numtextures; i++ )
 	{
 		char szPath[MAX_PATH];
+		szPath[0] = '\0';
+
 		IMaterial *pMaterial = NULL;
+		bool		bNeedRefCount = true;
 
-		// search through all specified directories until a valid material is found
-		for ( j = 0; j < phdr->numcdtextures && IsErrorMaterial( pMaterial ); j++ )
+		const char *pszTextureName = GetTextureName( phdr, pVtxHeader, lodID, i );
+		Assert( pszTextureName );
+
+		// Combined models can have combined textures, their names start with '!'
+		if ( ( phdr->flags & STUDIOHDR_FLAGS_COMBINED ) == 0 && pszTextureName[ 0 ] != '!' )
 		{
-			// If we don't do this, we get filenames like "materials\\blah.vmt".
-			const char *textureName = GetTextureName( phdr, pVtxHeader, lodID, i );
-			if ( textureName[0] == CORRECT_PATH_SEPARATOR || textureName[0] == INCORRECT_PATH_SEPARATOR )
-				++textureName;
-
-			// This prevents filenames like /models/blah.vmt.
-			const char *pCdTexture = phdr->pCdtexture( j );
-			if ( pCdTexture[0] == CORRECT_PATH_SEPARATOR || pCdTexture[0] == INCORRECT_PATH_SEPARATOR )
-				++pCdTexture;
-
-			V_ComposeFileName( pCdTexture, textureName, szPath, sizeof( szPath ) );
-
-			if ( phdr->flags & STUDIOHDR_FLAGS_OBSOLETE )
+			// search through all specified directories until a valid material is found
+			for ( j = 0; j < phdr->numcdtextures && IsErrorMaterial( pMaterial ); j++ )
 			{
-				pMaterial = g_pMaterialSystem->FindMaterial( "models/obsolete/obsolete", TEXTURE_GROUP_MODEL, false );
-				if ( IsErrorMaterial( pMaterial ) )
+				const char *cdTexture = phdr->pCdtexture( j );
+				BuildTexturePath( cdTexture, pszTextureName, szPath, sizeof( szPath ) );
+
+				if ( phdr->flags & STUDIOHDR_FLAGS_OBSOLETE )
 				{
-					Warning( "StudioRender: OBSOLETE material missing: \"models/obsolete/obsolete\"\n" );
+					pMaterial = g_pMaterialSystem->FindMaterial( "models/obsolete/obsolete", ( phdr->flags & STUDIOHDR_FLAGS_STATIC_PROP ) ? TEXTURE_GROUP_STATIC_PROP : TEXTURE_GROUP_MODEL, false );
+					if ( IsErrorMaterial( pMaterial ) )
+					{
+						Warning( "StudioRender: OBSOLETE material missing: \"models/obsolete/obsolete\"\n" );
+					}
+				}
+				else
+				{
+					pMaterial = g_pMaterialSystem->FindMaterial( szPath, ( phdr->flags & STUDIOHDR_FLAGS_STATIC_PROP ) ? TEXTURE_GROUP_STATIC_PROP : TEXTURE_GROUP_MODEL, false );
 				}
 			}
-			else
+			if ( IsErrorMaterial( pMaterial ) )
 			{
-				pMaterial = g_pMaterialSystem->FindMaterial( szPath, TEXTURE_GROUP_MODEL, false );
+				// hack - if it isn't found, go through the motions of looking for it again
+				// so that the materialsystem will give an error.
+				char szPrefix[256];
+				Q_strncpy( szPrefix, phdr->pszName(), sizeof( szPrefix ) );
+				Q_strncat( szPrefix, " : ", sizeof( szPrefix ), COPY_ALL_CHARACTERS );
+				for ( j = 0; j < phdr->numcdtextures; j++ )
+				{
+					Q_strncpy( szPath, phdr->pCdtexture( j ), sizeof( szPath ) );
+					const char *textureName = GetTextureName( phdr, pVtxHeader, lodID, i );
+					Q_strncat( szPath, textureName, sizeof( szPath ), COPY_ALL_CHARACTERS );
+					Q_FixSlashes( szPath, CORRECT_PATH_SEPARATOR );
+					g_pMaterialSystem->FindMaterial( szPath, ( phdr->flags & STUDIOHDR_FLAGS_STATIC_PROP ) ? TEXTURE_GROUP_STATIC_PROP : TEXTURE_GROUP_MODEL, true, szPrefix );
+				}
 			}
 		}
-		if ( IsErrorMaterial( pMaterial ) )
+		else
 		{
-			// hack - if it isn't found, go through the motions of looking for it again
-			// so that the materialsystem will give an error.
-			char szPrefix[256];
-			Q_strncpy( szPrefix, phdr->pszName(), sizeof( szPrefix ) );
-			Q_strncat( szPrefix, " : ", sizeof( szPrefix ), COPY_ALL_CHARACTERS );
-			for ( j = 0; j < phdr->numcdtextures; j++ )
+			// combined materials are not available on disk, they'll be retreived from MDLCache if not already in the system
+			pMaterial = g_pMaterialSystem->FindProceduralMaterial( pszTextureName, TEXTURE_GROUP_COMBINED, NULL );
+			if ( pMaterial == NULL )
 			{
-				Q_strncpy( szPath, phdr->pCdtexture( j ), sizeof( szPath ) );
-				const char *textureName = GetTextureName( phdr, pVtxHeader, lodID, i );
-				Q_strncat( szPath, textureName, sizeof( szPath ), COPY_ALL_CHARACTERS );
-				Q_FixSlashes( szPath, CORRECT_PATH_SEPARATOR );
-				g_pMaterialSystem->FindMaterial( szPath, TEXTURE_GROUP_MODEL, true, szPrefix );
+				KeyValues		*pKV = ( KeyValues * )g_pMDLCache->GetCombinedInternalAsset( COMBINED_ASSET_MATERIAL, pszTextureName );
+				pMaterial = g_pMaterialSystem->CreateMaterial( pszTextureName, pKV );
+				bNeedRefCount = false;
 			}
 		}
 
 		lodData.ppMaterials[i] = pMaterial;
 		if ( pMaterial )
 		{
-			// Increment the reference count for the material.
-			pMaterial->IncrementReferenceCount();
-			ComputeMaterialFlags( phdr, lodData, pMaterial );
+			if ( bNeedRefCount )
+			{	// Increment the reference count for the material.
+				pMaterial->IncrementReferenceCount();
+			}
+			ComputeMaterialFlags( phdr, pMaterial );
 			lodData.pMaterialFlags[i] = UsesMouthShader( pMaterial ) ? 1 : 0;
 		}
 	}
@@ -382,7 +510,7 @@ int CStudioRenderContext::CountFlexedVertices( mstudiomesh_t* pMesh, OptimizedMo
 		return 0;
 
 	// an inverse mapping from mesh index to strip group index
-	unsigned short *pMeshIndexToGroupIndex = (unsigned short*)_alloca( pMesh->pModel()->numvertices * sizeof(unsigned short) );
+	unsigned short *pMeshIndexToGroupIndex = (unsigned short*)stackalloc( pMesh->pModel()->numvertices * sizeof(unsigned short) );
 	memset( pMeshIndexToGroupIndex, 0xFF, pMesh->pModel()->numvertices * sizeof(unsigned short) );
 	for ( int i = 0; i < pStripGroup->numVerts; ++i )
 	{
@@ -460,7 +588,7 @@ void CStudioRenderContext::DetermineHWMorphing( mstudiomodel_t *pModel, Optimize
 
 	// FIXME: We should do this at studiomdl time?
 	// Certainly counting the # of flexed vertices can be done at studiomdl time.
-	int *pVertexCount = (int*)_alloca( nFlexedStripGroup * sizeof(int) );
+	int *pVertexCount = (int*)stackalloc( nFlexedStripGroup * sizeof(int) );
 	int nCount = 0;
 	for ( int k = 0; k < pModel->nummeshes; ++k )
 	{
@@ -477,7 +605,7 @@ void CStudioRenderContext::DetermineHWMorphing( mstudiomodel_t *pModel, Optimize
 		}
 	}
 
-	int *pSortedVertexIndices = (int*)_alloca( nFlexedStripGroup * sizeof(int) );
+	int *pSortedVertexIndices = (int*)stackalloc( nFlexedStripGroup * sizeof(int) );
 	for ( int i = 0; i < nFlexedStripGroup; ++i )
 	{
 		pSortedVertexIndices[i] = i;
@@ -485,7 +613,7 @@ void CStudioRenderContext::DetermineHWMorphing( mstudiomodel_t *pModel, Optimize
 	s_pVertexCount = pVertexCount;
 	qsort( pSortedVertexIndices, nCount, sizeof(int), SortVertCount );
 
-	bool *pSuppressHWMorph = (bool*)_alloca( nFlexedStripGroup * sizeof(bool) ); 
+	bool *pSuppressHWMorph = (bool*)stackalloc( nFlexedStripGroup * sizeof(bool) ); 
 	memset(	pSuppressHWMorph, 1, nFlexedStripGroup * sizeof(bool) );
 	for ( int i = 0; i < nMaxHWMorphBatchCount; ++i )
 	{
@@ -514,11 +642,22 @@ void CStudioRenderContext::DetermineHWMorphing( mstudiomodel_t *pModel, Optimize
 }
 
 
+static float* GetTexcoord1(const mstudio_meshvertexdata_t * vertData, int idx)
+{
+	void* pExtraData = vertData->modelvertexdata->ExtraData(STUDIO_EXTRA_ATTRIBUTE_TEXCOORD1);
+	if (pExtraData)
+	{
+		int modelVertexIndex = vertData->GetModelVertexIndex(idx);
+		return (float *)pExtraData + vertData->modelvertexdata->GetGlobalVertexIndex(modelVertexIndex) * 2;
+	}
+	return NULL;
+}
+
 //-----------------------------------------------------------------------------
 // Adds a vertex to the meshbuilder.  Returns false if boneweights did not sum to 1.0
 //-----------------------------------------------------------------------------
 template <VertexCompressionType_t T> bool CStudioRenderContext::R_AddVertexToMesh( const char *pModelName, bool bNeedsTangentSpace, CMeshBuilder& meshBuilder, 
-	OptimizedModel::Vertex_t* pVertex, mstudiomesh_t* pMesh, const mstudio_meshvertexdata_t *vertData, bool hwSkin )
+	OptimizedModel::Vertex_t* pVertex, mstudiomesh_t* pMesh, const mstudio_meshvertexdata_t *vertData, bool hwSkin, bool bExtraUV )
 {
 	bool bOK = true;
 	int idx = pVertex->origMeshVertID;
@@ -543,7 +682,12 @@ template <VertexCompressionType_t T> bool CStudioRenderContext::R_AddVertexToMes
 	}
 	}
 	*/
-	meshBuilder.TexCoord2fv( 0, vert.m_vecTexCoord.Base() );
+ 	meshBuilder.TexCoord2fv( 0, vert.m_vecTexCoord.Base() );
+
+	if (bExtraUV)
+	{
+		meshBuilder.TexCoord2fv(1, GetTexcoord1(vertData,idx));
+	}
 
 	if (vertData->HasTangentData())
 	{
@@ -596,8 +740,25 @@ template <VertexCompressionType_t T> bool CStudioRenderContext::R_AddVertexToMes
 		}
 		*/
 
+		// Checking for a lousy tangent space and generating a tangentS that is non-degenerate.  This is a workaround for bad model data for L4D.  We really shouldn't export this lousy data from our model pipeline.  DON'T MERGE TO MAIN, OR AT LEAST ifdef OUT!!!
+		Vector4D vecTangentS = *vertData->TangentS( idx );
+		bool bBadTangentSpace = ( CrossProduct( vert.m_vecNormal, vecTangentS.AsVector3D() ).Length() < 0.1f );
+
+		if ( bBadTangentSpace )
+		{
+			// tangent space sucks, make a new one, any one.
+			if ( fabs( vert.m_vecNormal.x ) > 0.7f )
+			{
+				vecTangentS.AsVector3D() = CrossProduct( vert.m_vecNormal, Vector( 0.0f, 1.0f, 0.0f ) );
+			}
+			else
+			{
+				vecTangentS.AsVector3D() = CrossProduct( vert.m_vecNormal, Vector( 1.0f, 0.0f, 0.0f ) );
+			}
+			vecTangentS.AsVector3D().NormalizeInPlace();
+		}
 		// send down tangent S as a 4D userdata vect.
-		meshBuilder.CompressedUserData<T>( (*vertData->TangentS( idx )).Base() );
+		meshBuilder.CompressedUserData<T>( vecTangentS.Base() );
 	}
 
 	// Just in case we get hooked to a material that wants per-vertex color
@@ -644,7 +805,7 @@ template <VertexCompressionType_t T> bool CStudioRenderContext::R_AddVertexToMes
 		// are set correctly, even though the last bone weight is computed in a shader program
 		for (i = 0; i < pVertex->numBones; ++i)
 		{
-			if ( pVertex->boneID[i] == -1 )
+			if ( pVertex->boneID[i] == 255 )
 			{
 				boneWeights[ i ] = 0.0f;
 				meshBuilder.BoneMatrix( i, BONE_MATRIX_INDEX_INVALID );
@@ -698,7 +859,7 @@ inline const mstudio_meshvertexdata_t * GetFatVertexData( mstudiomesh_t * pMesh,
 	{
 		static unsigned int warnCount = 0;
 		if ( warnCount++ < 20 )
-			Warning( "ERROR: model verts have been compressed, cannot render! (use \"-no_compressed_vvds\")" );
+			Warning( "ERROR: model verts have been compressed or you don't have them in memory on a console, cannot render! (use \"-no_compressed_vvds\")" );
 	}
 	return pVertData;
 }
@@ -706,28 +867,40 @@ inline const mstudio_meshvertexdata_t * GetFatVertexData( mstudiomesh_t * pMesh,
 //-----------------------------------------------------------------------------
 // Builds the group
 //-----------------------------------------------------------------------------
-void CStudioRenderContext::R_StudioBuildMeshGroup( const char *pModelName, bool bNeedsTangentSpace, studiomeshgroup_t* pMeshGroup,
-										   OptimizedModel::StripGroupHeader_t *pStripGroup, mstudiomesh_t* pMesh,
-										   studiohdr_t *pStudioHdr, VertexFormat_t vertexFormat )
+void CStudioRenderContext::R_StudioBuildMeshGroup(	const char *pModelName, bool bNeedsTangentSpace, studioloddata_t *pStudioLodData,
+										   studiomeshgroup_t* pMeshGroup, OptimizedModel::StripGroupHeader_t *pStripGroup, mstudiomesh_t* pMesh,
+										   studiohdr_t *pStudioHdr, VertexFormat_t vertexFormat, VertexStreamSpec_t *pStreamSpec )
 {
 	CMatRenderContextPtr pRenderContext( g_pMaterialSystem );
 
 	// We have to do this here because of skinning; there may be any number of
 	// materials that are applied to this mesh.
 	// Copy over all the vertices + indices in this strip group
-	pMeshGroup->m_pMesh = pRenderContext->CreateStaticMesh( vertexFormat, TEXTURE_GROUP_STATIC_VERTEX_BUFFER_MODELS );
+	pMeshGroup->m_pMesh = pRenderContext->CreateStaticMesh( vertexFormat, TEXTURE_GROUP_STATIC_VERTEX_BUFFER_MODELS, NULL, pStreamSpec );
 
 	VertexCompressionType_t compressionType = CompressionType( vertexFormat );
 
 	pMeshGroup->m_ColorMeshID = -1;
 
 	bool hwSkin = (pMeshGroup->m_Flags & MESHGROUP_IS_HWSKINNED) != 0;
+	bool bExtraUVs = (TexCoordSize(1, vertexFormat) > 0);
 
-	// This mesh could have tristrips or trilists in it
+	MeshBuffersAllocationSettings_t *pMeshAllocationSettings = 0;
+#ifdef _PS3
+	if ( pStudioHdr->flags & STUDIOHDR_FLAGS_PS3_EDGE_FORMAT )
+	{
+		Error("Edge lib disabled");
+// used to be...
+// 		pMeshAllocationSettings = ( MeshBuffersAllocationSettings_t * ) stackalloc( sizeof( MeshBuffersAllocationSettings_t ) );
+// 		V_memset( pMeshAllocationSettings, 0, sizeof( *pMeshAllocationSettings ) );
+// 		pMeshAllocationSettings->m_uiIbUsageFlags = D3DUSAGE_EDGE_DMA_INPUT;
+	}
+#endif
+
+	// This mesh could have trilists or quadlists in it
 	CMeshBuilder meshBuilder;
 	meshBuilder.SetCompressionType( compressionType );
-	meshBuilder.Begin( pMeshGroup->m_pMesh, MATERIAL_HETEROGENOUS, 
-		hwSkin ? pStripGroup->numVerts : 0, pStripGroup->numIndices );
+	meshBuilder.Begin( pMeshGroup->m_pMesh, MATERIAL_HETEROGENOUS, hwSkin ? pStripGroup->numVerts : 0, pStripGroup->numIndices, pMeshAllocationSettings );
 
 	int i;
 	bool bBadBoneWeights = false;
@@ -736,17 +909,50 @@ void CStudioRenderContext::R_StudioBuildMeshGroup( const char *pModelName, bool 
 		const mstudio_meshvertexdata_t *vertData = GetFatVertexData( pMesh, pStudioHdr );
 		Assert( vertData );
 
+#ifdef _PS3
+		vertexFileHeader_t *pVVDcache = g_pStudioDataCache->CacheVertexData( pStudioHdr );
+		if( pVVDcache )
+		{
+			// <sergiy> adding a check here because this is the site of one of the now-rare crashes-on-quit during loading a map.
+			const byte *pbEdgeDmaInputData = pVVDcache->GetPs3EdgeDmaInput(); // Compiled at tool-time data for Edge Dma Input
+			if ( ( pStudioHdr->flags & STUDIOHDR_FLAGS_PS3_EDGE_FORMAT ) &&
+				pbEdgeDmaInputData &&
+				( pStripGroup->numStrips > 0 ) )
+			{
+				Error("Edge Lib Disabled");
+						
+// 				// First strip in its index buffer will have strip group's offset
+// 				const OptimizedModel::OptimizedIndexBufferMarkupPs3_t *pMarkup = ( OptimizedModel::OptimizedIndexBufferMarkupPs3_t * ) pStripGroup->pIndex( 0 );
+// 				if ( pMarkup->m_uiHeaderCookie != pMarkup->kHeaderCookie )
+// 					Error( "<vitaliy> R_StudioBuildMeshGroup encountered invalid PS3 mesh markup!\n" );
+// 				pbEdgeDmaInputData += pMarkup->m_nEdgeDmaInputOffsetPerStripGroup;
+// 
+// 				// How long is the Edge Dma Input buffer
+// 				uint32 numEdgeDmaInputBytesForEntireStripGroup = pMarkup->m_nEdgeDmaInputSizePerStripGroup;
+// 				
+// 				// Lock the data
+// 				void *pbDataVB = pMeshGroup->m_pMesh->AccessRawHardwareDataStream( 0, numEdgeDmaInputBytesForEntireStripGroup, D3DUSAGE_EDGE_DMA_INPUT, NULL );
+// 
+// 				// Copy the data
+// 				V_memcpy( pbDataVB, pbEdgeDmaInputData, numEdgeDmaInputBytesForEntireStripGroup );
+// 
+// 				// Unlock the data
+// 				pMeshGroup->m_pMesh->AccessRawHardwareDataStream( 0, 0, D3DUSAGE_EDGE_DMA_INPUT, pbDataVB );
+			}
+		}
+#endif
+
 		for ( i = 0; i < pStripGroup->numVerts; ++i )
 		{
 			bool success;
 			switch ( compressionType )
 			{
 			case VERTEX_COMPRESSION_ON:
-				success = R_AddVertexToMesh<VERTEX_COMPRESSION_ON>( pModelName, bNeedsTangentSpace, meshBuilder, pStripGroup->pVertex(i), pMesh, vertData, hwSkin );
+				success = R_AddVertexToMesh<VERTEX_COMPRESSION_ON>(pModelName, bNeedsTangentSpace, meshBuilder, pStripGroup->pVertex(i), pMesh, vertData, hwSkin, bExtraUVs);
 				break;
 			case VERTEX_COMPRESSION_NONE:
 			default:
-				success = R_AddVertexToMesh<VERTEX_COMPRESSION_NONE>( pModelName, bNeedsTangentSpace, meshBuilder, pStripGroup->pVertex(i), pMesh, vertData, hwSkin );
+				success = R_AddVertexToMesh<VERTEX_COMPRESSION_NONE>(pModelName, bNeedsTangentSpace, meshBuilder, pStripGroup->pVertex(i), pMesh, vertData, hwSkin, bExtraUVs);
 				break;
 			}
 			if ( !success )
@@ -758,51 +964,51 @@ void CStudioRenderContext::R_StudioBuildMeshGroup( const char *pModelName, bool 
 
 	if ( bBadBoneWeights )
 	{
-		mstudiomodel_t* pModel = pMesh->pModel();
+		mstudiomodel_t* pModel; pModel = pMesh->pModel();
 		ConMsg( "Bad data found in model \"%s\" (bad bone weights)\n", pModel->pszName() );
 	}
 
-	for (i = 0; i < pStripGroup->numIndices; ++i)
+	bool bSubDQuads = ( pStripGroup->pStrip(0)->flags & OptimizedModel::STRIP_IS_QUADLIST_EXTRA ) ||
+					  ( pStripGroup->pStrip(0)->flags & OptimizedModel::STRIP_IS_QUADLIST_REG ) != 0;
+	for ( i = 0; i < pStripGroup->numIndices; ++i )
 	{
-		unsigned short index;
-		memcpy( &index, pStripGroup->pIndex(i), sizeof(index) );
-		meshBuilder.Index( index );
+		meshBuilder.Index( bSubDQuads ? i : *pStripGroup->pIndex(i) ); // SubD Quads just get ordinal indices
 		meshBuilder.AdvanceIndex();
 	}
 
 	meshBuilder.End();
 
-	// Copy over the strip indices. We need access to the indices for decals
-	pMeshGroup->m_pIndices = new unsigned short[ pStripGroup->numIndices ];
-	memcpy( pMeshGroup->m_pIndices, pStripGroup->pIndex(0), 
-		pStripGroup->numIndices * sizeof(unsigned short) );
-
-	// Compute the number of non-degenerate trianges in each strip group
-	// for statistics gathering
-	pMeshGroup->m_pUniqueTris = new int[ pStripGroup->numStrips ];
-	for (i = 0; i < pStripGroup->numStrips; ++i )
 	{
-		int numUnique = 0;
-		if (pStripGroup->pStrip(i)->flags & OptimizedModel::STRIP_IS_TRISTRIP) 
+		// Copy over the strip indices. We need access to the indices for decals
+		MEM_ALLOC_CREDIT_( "Models:Index data" );
+		pMeshGroup->m_pIndices = new unsigned short[ pStripGroup->numIndices ];
+		memcpy( pMeshGroup->m_pIndices, pStripGroup->pIndex(0), pStripGroup->numIndices * sizeof(unsigned short) );
+
+		// Also copy topology indices, if any
+		pMeshGroup->m_pTopologyIndices = NULL;
+		if ( pStripGroup->numTopologyIndices > 0 )
 		{
-			int last[2] = {-1, -1};
-			int curr = pStripGroup->pStrip(i)->indexOffset;
-			int end = curr + pStripGroup->pStrip(i)->numIndices;
-			while (curr != end)
-			{
-				int idx = *pStripGroup->pIndex(curr);
-				if (idx != last[0] && idx != last[1] && last[0] != last[1] && last[0] != -1)
-					++numUnique;
-				last[0] = last[1];
-				last[1] = idx;
-				++curr;
-			}
+			pMeshGroup->m_pTopologyIndices = new unsigned short[ pStripGroup->numTopologyIndices ];
+			memcpy( pMeshGroup->m_pTopologyIndices, pStripGroup->pTopologyIndex(0), pStripGroup->numTopologyIndices * sizeof(unsigned short) );
+		}
+	}
+
+	// Compute the number of non-degenerate faces in each strip group for statistics gathering
+	pMeshGroup->m_pUniqueFaces = new int[ pStripGroup->numStrips ];
+	for ( i = 0; i < pStripGroup->numStrips; ++i )
+	{
+		if ( pStripGroup->pStrip(i)->flags & OptimizedModel::STRIP_IS_QUADLIST_EXTRA ||
+			 pStripGroup->pStrip(i)->flags & OptimizedModel::STRIP_IS_QUADLIST_REG )	// Quads have to scan indices to count faces
+		{
+			pMeshGroup->m_pUniqueFaces[i] = pStripGroup->pStrip(i)->numIndices / 4;
 		}
 		else
 		{
-			numUnique = pStripGroup->pStrip(i)->numIndices / 3;
+			pMeshGroup->m_pUniqueFaces[i] = pStripGroup->pStrip(i)->numIndices / 3;
 		}
-		pMeshGroup->m_pUniqueTris[i] = numUnique;
+#ifndef _CERT
+		pStudioLodData->m_NumFaces += pMeshGroup->m_pUniqueFaces[i];
+#endif // !_CERT
 	}
 }
 
@@ -822,7 +1028,7 @@ void CStudioRenderContext::R_StudioBuildMorph( studiohdr_t *pStudioHdr,
 	}
 
 	// Build an inverse mapping from mesh index to strip group index
-	unsigned short *pMeshIndexToGroupIndex = (unsigned short*)_alloca( pMesh->pModel()->numvertices * sizeof(unsigned short) );
+	unsigned short *pMeshIndexToGroupIndex = (unsigned short*)stackalloc( pMesh->pModel()->numvertices * sizeof(unsigned short) );
 	memset( pMeshIndexToGroupIndex, 0xFF, pMesh->pModel()->numvertices * sizeof(unsigned short) );
 	for ( int i = 0; i < pStripGroup->numVerts; ++i )
 	{
@@ -842,7 +1048,7 @@ void CStudioRenderContext::R_StudioBuildMorph( studiohdr_t *pStudioHdr,
 	}
 
 	char pTemp[256];
-	Q_snprintf( pTemp, sizeof(pTemp), "%s [%p]", pStudioHdr->pszName(), pMeshGroup );
+	Q_snprintf( pTemp, sizeof(pTemp), "%s [%p]", pStudioHdr->name, pMeshGroup );
 	pMeshGroup->m_pMorph = pRenderContext->CreateMorph( morphType, pTemp );
 
 	const float flVertAnimFixedPointScale = pStudioHdr->VertAnimFixedPointScale();
@@ -897,13 +1103,9 @@ void CStudioRenderContext::R_StudioBuildMeshStrips( studiomeshgroup_t* pMeshGrou
 	// Compute the amount of memory we need to store the strip data
 	int i;
 	int stripDataSize = 0;
-
-	size_t stripHdrSize = (pStripGroup->flags & OptimizedModel::STRIPGROUP_IS_MDL49)
-		? sizeof(OptimizedModel::StripHeader_v49_t) : sizeof(OptimizedModel::StripHeader_t);
-
 	for( i = 0; i < pStripGroup->numStrips; ++i )
 	{
-		stripDataSize += stripHdrSize;
+		stripDataSize += sizeof(OptimizedModel::StripHeader_t);
 		stripDataSize += pStripGroup->pStrip(i)->numBoneStateChanges *
 			sizeof(OptimizedModel::BoneStateChangeHeader_t);
 	}
@@ -911,14 +1113,15 @@ void CStudioRenderContext::R_StudioBuildMeshStrips( studiomeshgroup_t* pMeshGrou
 	pMeshGroup->m_pStripData = (OptimizedModel::StripHeader_t*)malloc(stripDataSize);
 
 	// Copy over the strip info
-	int boneStateChangeOffset = pStripGroup->numStrips * stripHdrSize;
+	int boneStateChangeOffset = pStripGroup->numStrips * sizeof(OptimizedModel::StripHeader_t);
 	for( i = 0; i < pStripGroup->numStrips; ++i )
 	{
-		memcpy( &pMeshGroup->m_pStripData[i], pStripGroup->pStrip(i), stripHdrSize);
+		memcpy( &pMeshGroup->m_pStripData[i], pStripGroup->pStrip(i),
+			sizeof( OptimizedModel::StripHeader_t ) );
 
 		// Fixup the bone state change offset, since we have it right after the strip data
 		pMeshGroup->m_pStripData[i].boneStateChangeOffset = boneStateChangeOffset -
-			i * stripHdrSize;
+			i * sizeof(OptimizedModel::StripHeader_t);
 
 		// copy over bone state changes
 		int boneWeightSize = pMeshGroup->m_pStripData[i].numBoneStateChanges * 
@@ -946,7 +1149,7 @@ int CStudioRenderContext::GetNumBoneWeights( const OptimizedModel::StripGroupHea
 	for (int i = 0;i < pGroup->numStrips; i++)
 	{
 		OptimizedModel::StripHeader_t * pStrip = pGroup->pStrip( i );
-		nBoneWeightsMax = max( nBoneWeightsMax, (int)pStrip->numBones );
+		nBoneWeightsMax = MAX( nBoneWeightsMax, pStrip->numBones );
 	}
 
 	return nBoneWeightsMax;
@@ -954,135 +1157,143 @@ int CStudioRenderContext::GetNumBoneWeights( const OptimizedModel::StripGroupHea
 
 //-----------------------------------------------------------------------------
 // Determine an actual model vertex format for a mesh based on its material usage.
-// Bypasses the homegenous model vertex format in favor of the actual format.
+// Bypasses the homogeneous model vertex format in favor of the actual format.
 // Ideally matches 1:1 the shader's data requirements without any bloat.
 //-----------------------------------------------------------------------------
 VertexFormat_t CStudioRenderContext::CalculateVertexFormat( const studiohdr_t *pStudioHdr, const studioloddata_t *pStudioLodData,
-													 const mstudiomesh_t* pMesh, OptimizedModel::StripGroupHeader_t *pGroup, bool bIsHwSkinned )
+															const mstudiomesh_t* pMesh, OptimizedModel::StripGroupHeader_t *pGroup, bool bIsHwSkinned )
 {
 	bool bSkinnedMesh = ( pStudioHdr->numbones > 1 );
 	int  nBoneWeights = GetNumBoneWeights( pGroup );
 
-	bool bIsDX7 = !g_pMaterialSystemHardwareConfig->SupportsVertexAndPixelShaders();
-	bool bIsDX8 = ( g_pMaterialSystemHardwareConfig->GetDXSupportLevel() < 90 );
-	if ( bIsDX7 )
+	// DX9+ path (supports vertex compression)
+
+	// iterate each skin table
+	// determine aggregate vertex format for specified mesh's material
+	VertexFormat_t newVertexFormat = 0;
+	//bool bBumpmapping = false;
+	short *pSkinref	= pStudioHdr->pSkinref( 0 );
+	for ( int i = 0; i < pStudioHdr->numskinfamilies; i++ )
 	{
-		// FIXME: this is untested (as of June '07, the engine currently doesn't work with "-dxlevel 70")
-		if ( bSkinnedMesh )
-			return MATERIAL_VERTEX_FORMAT_MODEL_SKINNED_DX7;
-		else
-			return MATERIAL_VERTEX_FORMAT_MODEL_DX7;
-	}
-	else if ( bIsDX8 )
-	{
-		if ( bSkinnedMesh )
-			return MATERIAL_VERTEX_FORMAT_MODEL_SKINNED;
-		else
-			return MATERIAL_VERTEX_FORMAT_MODEL;
-	}
-	else
-	{
-		// DX9+ path (supports vertex compression)
+		// FIXME: ### MATERIAL VERTEX FORMATS ARE UNRELIABLE! ###
+		//
+		//	IMaterial* pMaterial = pStudioLodData->ppMaterials[ pSkinref[ pMesh->material ] ];
+		//	Assert( pMaterial );
+		//	VertexFormat_t vertexFormat = pMaterial->GetVertexFormat();
+		//	newVertexFormat &= ~VERTEX_FORMAT_COMPRESSED; // Decide whether to compress below
+		//
+		// FIXME: ### MATERIAL VERTEX FORMATS ARE UNRELIABLE! ###
+		//        we need to go through all the shader CPP code and make sure that the correct vertex format
+		//        is being specified for every single shader combo! We don't have time to fix that before
+		//        shipping Ep2, but should fix it ASAP afterwards. To make catching such errors easier, we
+		//        should Assert in draw calls that the vertex decl matches vertex shader inputs (note that D3D
+		//        debug DLLs will do that on PC, though it's not as informative as if we do it ourselves).
+		//        So, in the absence of reliable material vertex formats, use the old 'standard' elements
+		//        (we can still omit skinning data - and COLOR for DX8+, where it should come from the
+		//        second static lighting stream):
+		VertexFormat_t vertexFormat = MATERIAL_VERTEX_FORMAT_MODEL;
 
-		// iterate each skin table
-		// determine aggregate vertex format for specified mesh's material
-		VertexFormat_t newVertexFormat = 0;
-		//bool bBumpmapping = false;
-		short *pSkinref	= pStudioHdr->pSkinref( 0 );
-		for ( int i = 0; i < pStudioHdr->numskinfamilies; i++ )
+		// aggregate single bit settings
+		newVertexFormat |= vertexFormat & ( ( 1 << VERTEX_LAST_BIT ) - 1 );
+		
+		int nUserDataSize = UserDataSize( vertexFormat );
+		if ( nUserDataSize > UserDataSize( newVertexFormat ) )
 		{
-			// FIXME: ### MATERIAL VERTEX FORMATS ARE UNRELIABLE! ###
-			//
-			//	IMaterial* pMaterial = pStudioLodData->ppMaterials[ pSkinref[ pMesh->material ] ];
-			//	Assert( pMaterial );
-			//	VertexFormat_t vertexFormat = pMaterial->GetVertexFormat();
-			//	newVertexFormat &= ~VERTEX_FORMAT_COMPRESSED; // Decide whether to compress below
-			//
-			// FIXME: ### MATERIAL VERTEX FORMATS ARE UNRELIABLE! ###
-			//        we need to go through all the shader CPP code and make sure that the correct vertex format
-			//        is being specified for every single shader combo! We don't have time to fix that before
-			//        shipping Ep2, but should fix it ASAP afterwards. To make catching such errors easier, we
-			//        should Assert in draw calls that the vertexdecl matches vertex shader inputs (note that D3D
-			//        debug DLLs will do that on PC, though it's not as informative as if we do it ourselves).
-			//        So, in the absence of reliable material vertex formats, use the old 'standard' elements
-			//        (we can still omit skinning data - and COLOR for DX8+, where it should come from the
-			//        second static lighting stream):
-			VertexFormat_t vertexFormat = bIsDX7 ? MATERIAL_VERTEX_FORMAT_MODEL_DX7 : ( MATERIAL_VERTEX_FORMAT_MODEL & ~VERTEX_COLOR );
-
-			// aggregate single bit settings
-			newVertexFormat |= vertexFormat & ( ( 1 << VERTEX_LAST_BIT ) - 1 );
-			
-			int nUserDataSize = UserDataSize( vertexFormat );
-			if ( nUserDataSize > UserDataSize( newVertexFormat ) )
-			{
-				newVertexFormat &= ~USER_DATA_SIZE_MASK;
-				newVertexFormat |= VERTEX_USERDATA_SIZE( nUserDataSize );
-			}
-
-			for (int j = 0; j < VERTEX_MAX_TEXTURE_COORDINATES; ++j)
-			{
-				int nSize = TexCoordSize( j, vertexFormat );
-				if ( nSize > TexCoordSize( j, newVertexFormat ) )
-				{
-					newVertexFormat &= ~VERTEX_TEXCOORD_SIZE( j, 0x7 );
-					newVertexFormat |= VERTEX_TEXCOORD_SIZE( j, nSize );
-				}
-			}
-
-			// FIXME: re-enable this test, fix it to work and see how much memory we save (Q: why is this different to CStudioRenderContext::MeshNeedsTangentSpace ?)
-			/*if ( !bBumpmapping && pMaterial->NeedsTangentSpace() )
-			{
-				bool bFound = false;
-				IMaterialVar *pEnvmapMatVar = pMaterial->FindVar( "$envmap", &bFound, false );
-				if ( bFound && pEnvmapMatVar->IsDefined() )
-				{
-					IMaterialVar *pBumpMatVar = pMaterial->FindVar( "$bumpmap", &bFound, false );
-					if ( bFound && pBumpMatVar->IsDefined() )
-					{
-						bBumpmapping = true;
-					}
-				}
-			} */
-
-			pSkinref += pStudioHdr->numskinref;
-		}
-
-		// Add skinning elements for non-rigid models (with more than one bone weight)
-		if ( bSkinnedMesh )
-		{
-			if ( nBoneWeights > 0 )
-			{
-				// Always exactly zero or two weights
-				newVertexFormat |= VERTEX_BONEWEIGHT( 2 );
-			}
-			newVertexFormat |= VERTEX_BONE_INDEX;
-		}
-
-
-		// FIXME: re-enable this (see above)
-		/*if ( !bBumpmapping )
-		{
-			// no bumpmapping, user data not needed
 			newVertexFormat &= ~USER_DATA_SIZE_MASK;
-		}*/
-
-		// materials on models should never have tangent space as they use userdata
-		Assert( !(newVertexFormat & VERTEX_TANGENT_SPACE) );
-
-		// Don't compress the mesh unless it is HW-skinned (we only want to compress static
-		// VBs, not dynamic ones - that would slow down the MeshBuilder in dynamic use cases).
-		// Also inspect the vertex data to see if it's appropriate for the vertex element
-		// compression techniques that we do (e.g. look at UV ranges).
-		if ( //IsX360() && // Disabled until the craziness is banished
-			 bIsHwSkinned &&
-			( g_pMaterialSystemHardwareConfig->SupportsCompressedVertices() == VERTEX_COMPRESSION_ON ) )
-		{
-			// this mesh is appropriate for vertex compression
-			newVertexFormat |= VERTEX_FORMAT_COMPRESSED;
+			newVertexFormat |= VERTEX_USERDATA_SIZE( nUserDataSize );
 		}
 
-		return newVertexFormat;
+		for (int j = 0; j < VERTEX_MAX_TEXTURE_COORDINATES; ++j)
+		{
+			int nSize = TexCoordSize( j, vertexFormat );
+			if ((j==1)&&(pStudioHdr->flags & STUDIOHDR_FLAGS_EXTRA_VERTEX_DATA))
+			{
+				// If model includes extra vertex data, assume it contains an additional UV channel
+				nSize = 2;
+			}
+			if ( nSize > TexCoordSize( j, newVertexFormat ) )
+			{
+				newVertexFormat &= ~VERTEX_TEXCOORD_SIZE( j, 0x7 );
+				newVertexFormat |= VERTEX_TEXCOORD_SIZE( j, nSize );
+			}
+		}
+
+		// FIXME: re-enable this test, fix it to work and see how much memory we save (Q: why is this different to CStudioRenderContext::MeshNeedsTangentSpace ?)
+		/*if ( !bBumpmapping && pMaterial->NeedsTangentSpace() )
+		{
+			bool bFound = false;
+			IMaterialVar *pEnvmapMatVar = pMaterial->FindVar( "$envmap", &bFound, false );
+			if ( bFound && pEnvmapMatVar->IsDefined() )
+			{
+				IMaterialVar *pBumpMatVar = pMaterial->FindVar( "$bumpmap", &bFound, false );
+				if ( bFound && pBumpMatVar->IsDefined() )
+				{
+					bBumpmapping = true;
+				}
+			}
+		} */
+
+		pSkinref += pStudioHdr->numskinref;
 	}
+
+	// Add skinning elements for non-rigid models (with more than one bone weight)
+	if ( bSkinnedMesh )
+	{
+		if ( nBoneWeights > 0 )
+		{
+			// Always exactly zero or two weights
+			newVertexFormat |= VERTEX_BONEWEIGHT( 2 );
+		}
+		newVertexFormat |= VERTEX_BONE_INDEX;
+	}
+
+
+	// FIXME: re-enable this (see above)
+	/*if ( !bBumpmapping )
+	{
+		// no bumpmapping, user data not needed
+		newVertexFormat &= ~USER_DATA_SIZE_MASK;
+	}*/
+
+	// materials on models should never have tangent space as they use userdata
+	Assert( !(newVertexFormat & VERTEX_TANGENT_SPACE) );
+
+	// Don't compress the mesh unless it is HW-skinned (we only want to compress static
+	// VBs, not dynamic ones - that would slow down the MeshBuilder in dynamic use cases).
+	// Also inspect the vertex data to see if it's appropriate for the vertex element
+	// compression techniques that we do (e.g. look at UV ranges).
+	if ( bIsHwSkinned &&
+		( g_pMaterialSystemHardwareConfig->SupportsCompressedVertices() == VERTEX_COMPRESSION_ON ) )
+	{
+		// this mesh is appropriate for vertex compression
+		newVertexFormat |= VERTEX_FORMAT_COMPRESSED;
+	}
+
+	return newVertexFormat;
+}
+
+//-----------------------------------------------------------------------------
+// Determine whether a mesh needs additional non-standard streams
+//-----------------------------------------------------------------------------
+VertexStreamSpec_t *CStudioRenderContext::CalculateStreamSpec(	const studiohdr_t *pStudioHdr, const studioloddata_t *pStudioLodData,
+															  const mstudiomesh_t* pMesh, OptimizedModel::StripGroupHeader_t *pGroup, bool bIsHwSkinned, VertexFormat_t *pVertexFormat )
+{
+	// TODO: this code needs to test whether (a) this mesh requires an extra UV coord (e.g. this is a static prop with a lightmap)
+	//                                   and (b) the mesh's base vertex format already contains TEXCOORD1
+	/*if ( TexCoordSize( 1, *pVertexFormat ) != 2 )
+	{
+	// Force usage of TexCoord1 unique stream
+	static VertexStreamSpec_t specTexCoord1[] =
+	{
+	{ ( VertexFormatFlags_t ) VERTEX_TEXCOORD_SIZE( 1, 2 ), VertexStreamSpec_t::STREAM_UNIQUE_A },
+	{ VERTEX_FORMAT_UNKNOWN, VertexStreamSpec_t::STREAM_DEFAULT }
+	};
+	// FIXME:  Vitaliy, this can't work because it'll make the system think the texcoord is on stream 0 which is not true
+	// *pVertexFormat |= VERTEX_TEXCOORD_SIZE( 1, 2 );
+	return specTexCoord1;
+	}*/
+
+	return NULL;
 }
 
 bool CStudioRenderContext::MeshNeedsTangentSpace( studiohdr_t *pStudioHdr, studioloddata_t *pStudioLodData, mstudiomesh_t* pMesh )
@@ -1138,11 +1349,6 @@ void CStudioRenderContext::R_StudioCreateSingleMesh( studiohdr_t *pStudioHdr, st
 
 		// Set the flags...
 		pMeshGroup->m_Flags = 0;
-		if (pStripGroup->flags & OptimizedModel::STRIPGROUP_IS_FLEXED)
-		{
-			pMeshGroup->m_Flags |= MESHGROUP_IS_FLEXED;
-		}
-
 		if (pStripGroup->flags & OptimizedModel::STRIPGROUP_IS_DELTA_FLEXED)
 		{
 			pMeshGroup->m_Flags |= MESHGROUP_IS_DELTA_FLEXED;
@@ -1156,9 +1362,10 @@ void CStudioRenderContext::R_StudioCreateSingleMesh( studiohdr_t *pStudioHdr, st
 
 		// get the minimal vertex format for this mesh
 		VertexFormat_t vertexFormat = CalculateVertexFormat( pStudioHdr, pStudioLodData, pMesh, pStripGroup, bIsHwSkinned );
+		VertexStreamSpec_t *pStreamSpec = CalculateStreamSpec( pStudioHdr, pStudioLodData, pMesh, pStripGroup, bIsHwSkinned, &vertexFormat );
 
 		// Build the vertex + index buffers
-		R_StudioBuildMeshGroup( pStudioHdr->pszName(), bNeedsTangentSpace, pMeshGroup, pStripGroup, pMesh, pStudioHdr, vertexFormat );
+		R_StudioBuildMeshGroup( pStudioHdr->pszName(), bNeedsTangentSpace, pStudioLodData, pMeshGroup, pStripGroup, pMesh, pStudioHdr, vertexFormat, pStreamSpec );
 
 		// Copy over the tristrip and triangle list data
 		R_StudioBuildMeshStrips( pMeshGroup, pStripGroup );
@@ -1166,9 +1373,12 @@ void CStudioRenderContext::R_StudioCreateSingleMesh( studiohdr_t *pStudioHdr, st
 		// Builds morph targets
 		R_StudioBuildMorph( pStudioHdr, pMeshGroup, pMesh, pStripGroup );
 
-		// Build the mapping from strip group vertex idx to actual mesh idx
-		pMeshGroup->m_pGroupIndexToMeshIndex = new unsigned short[pStripGroup->numVerts + PREFETCH_VERT_COUNT];
-		pMeshGroup->m_NumVertices = pStripGroup->numVerts;
+		{
+			// Build the mapping from strip group vertex idx to actual mesh idx
+			MEM_ALLOC_CREDIT_( "Models:Index data" );
+			pMeshGroup->m_pGroupIndexToMeshIndex = new unsigned short[pStripGroup->numVerts + PREFETCH_VERT_COUNT];
+			pMeshGroup->m_NumVertices = pStripGroup->numVerts;
+		}
 
 		int j;
 		for ( j = 0; j < pStripGroup->numVerts; ++j )
@@ -1217,7 +1427,7 @@ void CStudioRenderContext::R_StudioCreateStaticMeshes( studiohdr_t *pStudioHdr,
 			DetermineHWMorphing( pModel, pVtxLOD );
 
 			// Support tracking of VB allocations
-			// FIXME: categorise studiomodel allocs more precisely
+			// FIXME: categorize studiomodel allocs more precisely
 			if ( g_VBAllocTracker )
 			{
 				if ( ( pStudioHdr->numbones > 8 ) || ( pStudioHdr->numflexdesc > 0 ) )
@@ -1274,47 +1484,53 @@ void CStudioRenderContext::R_StudioDestroyStaticMeshes( int numStudioMeshes, stu
 	{
 		studiomeshdata_t* pMesh = &((*ppStudioMeshes)[i]);
 
-		for (int j = 0; j < pMesh->m_NumGroup; ++j)
+		for ( int j = 0; j < pMesh->m_NumGroup; ++j )
 		{
 			studiomeshgroup_t* pGroup = &pMesh->m_pMeshGroup[j];
-			if (pGroup->m_pGroupIndexToMeshIndex)
+			if ( pGroup->m_pGroupIndexToMeshIndex )
 			{
 				delete[] pGroup->m_pGroupIndexToMeshIndex;
 				pGroup->m_pGroupIndexToMeshIndex = 0;
 			}
 
-			if (pGroup->m_pUniqueTris)
+			if ( pGroup->m_pUniqueFaces )
 			{
-				delete [] pGroup->m_pUniqueTris;
-				pGroup->m_pUniqueTris = 0;
+				delete [] pGroup->m_pUniqueFaces;
+				pGroup->m_pUniqueFaces = 0;
 			}
 
-			if (pGroup->m_pIndices)
+			if ( pGroup->m_pIndices )
 			{
 				delete [] pGroup->m_pIndices;
 				pGroup->m_pIndices = 0;
 			}
 
-			if (pGroup->m_pMesh)
+			if ( pGroup->m_pTopologyIndices )
+			{
+				delete [] pGroup->m_pTopologyIndices;
+				pGroup->m_pTopologyIndices = 0;
+			}
+
+			if ( pGroup->m_pMesh )
 			{
 				pRenderContext->DestroyStaticMesh( pGroup->m_pMesh );
 				pGroup->m_pMesh = 0;
 			}
 
-			if (pGroup->m_pMorph)
+			if ( pGroup->m_pMorph )
 			{
 				pRenderContext->DestroyMorph( pGroup->m_pMorph );
 				pGroup->m_pMorph = 0;
 			}
 
-			if (pGroup->m_pStripData)
+			if ( pGroup->m_pStripData )
 			{
 				free( pGroup->m_pStripData );
 				pGroup->m_pStripData = 0;
 			}
 		}
 
-		if (pMesh->m_pMeshGroup)
+		if ( pMesh->m_pMeshGroup )
 		{
 			delete[] pMesh->m_pMeshGroup;
 			pMesh->m_pMeshGroup = 0;
@@ -1323,7 +1539,7 @@ void CStudioRenderContext::R_StudioDestroyStaticMeshes( int numStudioMeshes, stu
 
 	if ( *ppStudioMeshes )
 	{
-		delete[] *ppStudioMeshes;
+		delete 	*ppStudioMeshes;
 		*ppStudioMeshes = 0;
 	}
 }
@@ -1346,10 +1562,10 @@ void CStudioRenderContext::BuildDecalBoneMap( studiohdr_t *pStudioHdr, int *pUse
 			if ( boneWeight.weight[j] == 0.0f )
 				continue;
 
-			if ( pBoneRemap[ (unsigned)boneWeight.bone[j] ] >= 0 )
+			if ( pBoneRemap[ boneWeight.bone[j] ] >= 0 )
 				continue;
 
-			pBoneRemap[ (unsigned)boneWeight.bone[j] ] = *pUsedBones;
+			pBoneRemap[ boneWeight.bone[j] ] = *pUsedBones;
 			*pUsedBones = *pUsedBones + 1;
 		}
 	}
@@ -1378,7 +1594,7 @@ void CStudioRenderContext::ComputeHWMorphDecalBoneRemap( studiohdr_t *pStudioHdr
 	// Remaps sw bones to hw bones during decal rendering
 	// NOTE: Only bones affecting vertices which have hw flexes will be add to this map.
 	int nBufSize = pStudioHdr->numbones * sizeof(int);
-	int *pBoneRemap = (int*)_alloca( nBufSize );
+	int *pBoneRemap = (int*)stackalloc( nBufSize );
 	memset( pBoneRemap, 0xFF, nBufSize );
 	int nMaxBoneCount = 0;
 
@@ -1480,7 +1696,7 @@ bool CStudioRenderContext::LoadModel( studiohdr_t *pStudioHdr, void *pVtxBuffer,
 
 	// Create static meshes
 	Assert( pVertexHdr->numLODs );
-	pStudioHWData->m_RootLOD = min( (int)pStudioHdr->rootLOD, pVertexHdr->numLODs-1 );
+	pStudioHWData->m_RootLOD = MIN( pStudioHdr->rootLOD, pVertexHdr->numLODs-1 );
 	pStudioHWData->m_NumLODs = pVertexHdr->numLODs;
 	pStudioHWData->m_pLODs   = new studioloddata_t[pVertexHdr->numLODs];
 	memset( pStudioHWData->m_pLODs, 0, pVertexHdr->numLODs * sizeof( studioloddata_t ));
@@ -1551,6 +1767,16 @@ void CStudioRenderContext::UnloadModel( studiohwdata_t *pHardwareData )
 	}
 	delete[] pHardwareData->m_pLODs;
 	pHardwareData->m_pLODs = NULL;
+
+#ifndef _CERT
+	// Unloading models invalidates our face count history:
+	CMatRenderContextPtr pRenderContext( g_pMaterialSystem );
+	ICallQueue *pCallQueue = pRenderContext->GetCallQueue();
+	if ( !pCallQueue || studio_queue_mode.GetInt() == 0 )
+		g_pStudioRenderImp->UpdateModelFaceCounts( 0, true );
+	else
+		pCallQueue->QueueCall( g_pStudioRenderImp, &CStudioRender::UpdateModelFaceCounts, 0, true );
+#endif // !_CERT
 }
 
 
@@ -1623,10 +1849,7 @@ void CStudioRenderContext::SetLODSwitchValue( studiohwdata_t &hardwareData, int 
 //-----------------------------------------------------------------------------
 int CStudioRenderContext::GetMaterialList( studiohdr_t *pStudioHdr, int count, IMaterial** ppMaterials )
 {
-	AssertMsg( pStudioHdr, "Don't ignore this assert! CStudioRenderContext::GetMaterialList() has null pStudioHdr." );
-
-	if ( !pStudioHdr )
-		return 0;
+	Assert( pStudioHdr );
 
 	if ( pStudioHdr->textureindex == 0 )
 		return 0;
@@ -1640,14 +1863,16 @@ int CStudioRenderContext::GetMaterialList( studiohdr_t *pStudioHdr, int count, I
 		char szPath[MAX_PATH];
 		IMaterial *pMaterial = NULL;
 
+		// If we don't do this, we get filenames like "materials\\blah.vmt".
+		const char *textureName = pStudioHdr->pTexture( i )->pszName();
+		if ( textureName[0] == CORRECT_PATH_SEPARATOR || textureName[0] == INCORRECT_PATH_SEPARATOR )
+		{
+			++textureName;
+		}
+
 		// iterate quietly through all specified directories until a valid material is found
 		for ( j = 0; j < pStudioHdr->numcdtextures && IsErrorMaterial( pMaterial ); j++ )
 		{
-			// If we don't do this, we get filenames like "materials\\blah.vmt".
-			const char *textureName = pStudioHdr->pTexture( i )->pszName();
-			if ( textureName[0] == CORRECT_PATH_SEPARATOR || textureName[0] == INCORRECT_PATH_SEPARATOR )
-				++textureName;
-
 			// This prevents filenames like /models/blah.vmt.
 			const char *pCdTexture = pStudioHdr->pCdtexture( j );
 			if ( pCdTexture[0] == CORRECT_PATH_SEPARATOR || pCdTexture[0] == INCORRECT_PATH_SEPARATOR )
@@ -1657,11 +1882,11 @@ int CStudioRenderContext::GetMaterialList( studiohdr_t *pStudioHdr, int count, I
 
 			if ( pStudioHdr->flags & STUDIOHDR_FLAGS_OBSOLETE )
 			{
-				pMaterial = g_pMaterialSystem->FindMaterialEx( "models/obsolete/obsolete", TEXTURE_GROUP_MODEL, MATERIAL_FINDCONTEXT_ISONAMODEL, false );
+				pMaterial = g_pMaterialSystem->FindMaterial( "models/obsolete/obsolete", ( pStudioHdr->flags & STUDIOHDR_FLAGS_STATIC_PROP ) ? TEXTURE_GROUP_STATIC_PROP : TEXTURE_GROUP_MODEL, false );
 			}
 			else
 			{
-				pMaterial = g_pMaterialSystem->FindMaterialEx( szPath, TEXTURE_GROUP_MODEL, MATERIAL_FINDCONTEXT_ISONAMODEL, false );
+				pMaterial = g_pMaterialSystem->FindMaterial( szPath, ( pStudioHdr->flags & STUDIOHDR_FLAGS_STATIC_PROP ) ? TEXTURE_GROUP_STATIC_PROP : TEXTURE_GROUP_MODEL, false );
 			}
 		}
 
@@ -1816,7 +2041,7 @@ void CStudioRenderContext::GetPerfStats( DrawModelResults_t *pResults, const Dra
 			{
 				pSpewBuf->Printf( "    material: %s\n", pMaterial->GetName() );
 			}
-			int numPasses = m_RC.m_pForcedMaterial ? m_RC.m_pForcedMaterial->GetNumPasses() : pMaterial->GetNumPasses();
+			int numPasses = m_RC.m_pForcedMaterial[ 0 ] ? m_RC.m_pForcedMaterial[ 0 ]->GetNumPasses() : pMaterial->GetNumPasses();
 			if( pSpewBuf )
 			{
 				pSpewBuf->Printf( "        numPasses:%d\n", numPasses );
@@ -1833,7 +2058,7 @@ void CStudioRenderContext::GetPerfStats( DrawModelResults_t *pResults, const Dra
 			for( stripGroupID = 0; stripGroupID < pMeshData->m_NumGroup; stripGroupID++ )
 			{
 				studiomeshgroup_t *pMeshGroup = &pMeshData->m_pMeshGroup[stripGroupID];
-				bool bIsFlexed = ( pMeshGroup->m_Flags & MESHGROUP_IS_FLEXED ) != 0;
+				bool bIsFlexed = ( pMeshGroup->m_Flags & MESHGROUP_IS_DELTA_FLEXED ) != 0;
 				bool bIsHWSkinned = ( pMeshGroup->m_Flags & MESHGROUP_IS_HWSKINNED ) != 0;
 
 				if( pSpewBuf )
@@ -1861,28 +2086,24 @@ void CStudioRenderContext::GetPerfStats( DrawModelResults_t *pResults, const Dra
 						}
 					}
 
-					if( pStripData->flags & OptimizedModel::STRIP_IS_TRILIST )
+					int nNumVerts = ( pStripData->flags & OptimizedModel::STRIP_IS_QUADLIST_EXTRA ) || ( pStripData->flags & OptimizedModel::STRIP_IS_QUADLIST_REG ) ? 4 : 3;
+
+					// TODO: need to factor in bIsFlexed and bIsHWSkinned
+					int numPrims = pStripData->numIndices / nNumVerts;
+					if( pSpewBuf )
 					{
-						// TODO: need to factor in bIsFlexed and bIsHWSkinned
-						int numTris = pStripData->numIndices / 3;
-						if( pSpewBuf )
-						{
-							pSpewBuf->Printf( "            %s%s", bIsFlexed ? "flexed " : "nonflexed ",
-								bIsHWSkinned ? "hwskinned " : "swskinned " );
-							pSpewBuf->Printf( "tris: %d ", numTris );
-							pSpewBuf->Printf( "bone changes: %d bones/strip: %d\n", pStripData->numBoneStateChanges,
-								( int )pStripData->numBones );
-						}
-						pResults->m_ActualTriCount += numTris * numPasses;
+						pSpewBuf->Printf( "            %s%s", bIsFlexed ? "flexed " : "nonflexed ",
+							bIsHWSkinned ? "hwskinned " : "swskinned " );
+
+						if ( nNumVerts == 3 )
+							pSpewBuf->Printf( "tris: %d ", numPrims );
+						else
+							pSpewBuf->Printf( "quads: %d ", numPrims );
+
+						pSpewBuf->Printf( "bone changes: %d bones/strip: %d\n", pStripData->numBoneStateChanges,
+							( int )pStripData->numBones );
 					}
-					else if( pStripData->flags & OptimizedModel::STRIP_IS_TRISTRIP )
-					{
-						Assert( 0 ); // FIXME: fill this in when we start using strips again.
-					}
-					else
-					{
-						Assert( 0 );
-					}
+					pResults->m_ActualTriCount += numPrims * numPasses;
 				}
 			}
 		}
@@ -1907,14 +2128,17 @@ void CStudioRenderContext::GetPerfStats( DrawModelResults_t *pResults, const Dra
 //-----------------------------------------------------------------------------
 // Begin/end frame
 //-----------------------------------------------------------------------------
-static ConVar r_hwmorph( "r_hwmorph", "1", FCVAR_CHEAT );
+
+// NOTE: L4d doesn't use hw morph, which is why it defaults to 0
+// HW morphing is now disabled on all platforms, because we've slammed the MORPH dynamic combo to [0..0] in CS:GO to save memory and get GL SM3 mode working (and it doesn't seem to get enabled with mat_queue_mode disabled, which is what we care about anyway).
+static ConVar r_hwmorph( "r_hwmorph", "0", FCVAR_CHEAT, "", true, 0, true, 0, NULL );
 
 void CStudioRenderContext::BeginFrame( void )
 {
 	// Cache a few values here so I don't have to in software inner loops:
 	Assert( g_pMaterialSystemHardwareConfig );
-	m_RC.m_Config.m_bSupportsVertexAndPixelShaders = g_pMaterialSystemHardwareConfig->SupportsVertexAndPixelShaders();
-	m_RC.m_Config.m_bSupportsOverbright = g_pMaterialSystemHardwareConfig->SupportsOverbright();
+	m_RC.m_Config.m_bSupportsVertexAndPixelShaders = true;
+	m_RC.m_Config.m_bSupportsOverbright = true;
 	m_RC.m_Config.m_bEnableHWMorph = r_hwmorph.GetInt() != 0;
 
 	// Haven't implemented the hw morph with threading yet
@@ -1923,13 +2147,30 @@ void CStudioRenderContext::BeginFrame( void )
 		m_RC.m_Config.m_bEnableHWMorph = false;
 	}
 
-	m_RC.m_Config.m_bStatsMode = false;
-
-	g_pStudioRenderImp->PrecacheGlint();
+	// Tell CStudioRender we're beginning a new frame:
+	CMatRenderContextPtr pRenderContext( g_pMaterialSystem );
+	ICallQueue *pCallQueue = pRenderContext->GetCallQueue();
+	if ( !pCallQueue || studio_queue_mode.GetInt() == 0 )
+		g_pStudioRenderImp->BeginFrame();
+	else
+	{
+		g_RenderDataAllocator.BeginFrame( pRenderContext );
+		pCallQueue->QueueCall( g_pStudioRenderImp, &CStudioRender::BeginFrame );
+	}
 }
 
 void CStudioRenderContext::EndFrame( void )
 {
+	// Tell CStudioRender the frame is done:
+	CMatRenderContextPtr pRenderContext( g_pMaterialSystem );
+	ICallQueue *pCallQueue = pRenderContext->GetCallQueue();
+	if ( !pCallQueue || studio_queue_mode.GetInt() == 0 )
+		g_pStudioRenderImp->EndFrame();
+	else
+	{
+		pCallQueue->QueueCall( g_pStudioRenderImp, &CStudioRender::EndFrame );
+		g_RenderDataAllocator.EndFrame();
+	}
 }
 
 
@@ -1950,21 +2191,36 @@ void CStudioRenderContext::GetCurrentConfig( StudioRenderConfig_t& config )
 //-----------------------------------------------------------------------------
 // Material overrides
 //-----------------------------------------------------------------------------
-void CStudioRenderContext::ForcedMaterialOverride( IMaterial *newMaterial, OverrideType_t nOverrideType )
+void CStudioRenderContext::ForcedMaterialOverride( IMaterial *newMaterial, OverrideType_t nOverrideType, int nMaterialIndex )
 {
-	m_RC.m_pForcedMaterial = newMaterial;
-	m_RC.m_nForcedMaterialType = nOverrideType;
+	if ( nOverrideType == OVERRIDE_SELECTIVE )
+	{
+		if ( m_RC.m_nForcedMaterialIndexCount < MAX_MAT_OVERRIDES )
+		{
+			m_RC.m_nForcedMaterialType = nOverrideType;
+			m_RC.m_pForcedMaterial[ m_RC.m_nForcedMaterialIndexCount ] = newMaterial;
+			m_RC.m_nForcedMaterialIndex[ m_RC.m_nForcedMaterialIndexCount ] = nMaterialIndex;
+			m_RC.m_nForcedMaterialIndexCount++;
+		}
+		else
+		{
+			DevMsg( "Exceeded max material overrides! (%s, %d)\n", newMaterial ? newMaterial->GetName() : "NULL", nMaterialIndex );
+		}
+	}
+	else
+	{
+		m_RC.m_nForcedMaterialType = nOverrideType;
+		m_RC.m_pForcedMaterial[ 0 ] = newMaterial;
+		m_RC.m_nForcedMaterialIndex[ 0 ] = -1;
+		m_RC.m_nForcedMaterialIndexCount = 0;
+	}
 }
 
-//-----------------------------------------------------------------------------
-// Return the material overrides
-//-----------------------------------------------------------------------------
-void CStudioRenderContext::GetMaterialOverride( IMaterial** ppOutForcedMaterial, OverrideType_t* pOutOverrideType )
+bool CStudioRenderContext::IsForcedMaterialOverride()
 {
-	Assert( ppOutForcedMaterial != NULL && pOutOverrideType != NULL );
-	*ppOutForcedMaterial = m_RC.m_pForcedMaterial;
-	*pOutOverrideType = m_RC.m_nForcedMaterialType;
+	return ( m_RC.m_pForcedMaterial[ 0 ] || ( m_RC.m_nForcedMaterialType == OVERRIDE_DEPTH_WRITE ) || ( m_RC.m_nForcedMaterialType == OVERRIDE_SSAO_DEPTH_WRITE ) );
 }
+
 
 //-----------------------------------------------------------------------------
 // Sets the view state
@@ -1998,7 +2254,7 @@ void CStudioRenderContext::SetAmbientLightColors( const Vector *pColors )
 
 void CStudioRenderContext::SetAmbientLightColors( const Vector4D *pColors )
 {
-	memutils::copy( &m_RC.m_LightBoxColors[0], pColors, 6 );
+	memcpy( m_RC.m_LightBoxColors, pColors, 6 * sizeof(Vector4D) );
 
 	// FIXME: Would like to get this into the render thread, but there's systemic confusion
 	// about whether to set lighting state here or in the material system
@@ -2013,25 +2269,13 @@ void CStudioRenderContext::SetLocalLights( int nLightCount, const LightDesc_t *p
 	// FIXME: Would like to get this into the render thread, but there's systemic confusion
 	// about whether to set lighting state here or in the material system
 	CMatRenderContextPtr pRenderContext( g_pMaterialSystem );
-	if ( m_RC.m_Config.bSoftwareLighting || m_RC.m_NumLocalLights == 0 )
+	if ( m_RC.m_Config.bSoftwareLighting )
 	{
 		pRenderContext->DisableAllLocalLights();
 	}
 	else
 	{
-		int i;
-		int nMaxLightCount = g_pMaterialSystemHardwareConfig->MaxNumLights();
-		int nLightCount = min( m_RC.m_NumLocalLights, nMaxLightCount );
-		for( i = 0; i < nLightCount; i++ )
-		{
-			pRenderContext->SetLight( i, m_RC.m_LocalLights[i] );
-		}
-		for( ; i < nMaxLightCount; i++ )
-		{
-			LightDesc_t desc;
-			desc.m_Type = MATERIAL_LIGHT_DISABLE;
-			pRenderContext->SetLight( i, desc );
-		}
+		pRenderContext->SetLights( m_RC.m_NumLocalLights, m_RC.m_LocalLights );
 	}
 }
 
@@ -2047,58 +2291,6 @@ void CStudioRenderContext::SetColorModulation( const float* pColor )
 void CStudioRenderContext::SetAlphaModulation( float alpha )
 {
 	m_RC.m_AlphaMod = alpha;
-}
-
-
-//-----------------------------------------------------------------------------
-// Used to set bone-to-world transforms.
-// FIXME: Should this be a lock/unlock pattern so we can't read after unlock?
-//-----------------------------------------------------------------------------
-matrix3x4_t* CStudioRenderContext::LockBoneMatrices( int nCount )
-{
-	MEM_ALLOC_CREDIT_( "CStudioRenderContext::m_BoneToWorldMatrices" );
-
-	CMatRenderContextPtr pRenderContext( g_pMaterialSystem );
-
-	CMatRenderData<matrix3x4_t> rdMatrix( pRenderContext );
-	matrix3x4_t *pDest = rdMatrix.Lock( nCount );
-	return pDest;
-}
-
-void CStudioRenderContext::UnlockBoneMatrices()
-{
-}
-
-
-//-----------------------------------------------------------------------------
-// Allocates flex weights
-//-----------------------------------------------------------------------------
-void CStudioRenderContext::LockFlexWeights( int nWeightCount, float **ppFlexWeights, float **ppFlexDelayedWeights )
-{
-	MEM_ALLOC_CREDIT_( "CStudioRenderContext::m_FlexWeights" );
-
-	CMatRenderContextPtr pRenderContext( g_pMaterialSystem );
-	CMatRenderData<float> rdFlex( pRenderContext );
-	CMatRenderData<float> rdFlexDelayed( pRenderContext );
-	float *pFlexOut = rdFlex.Lock( nWeightCount ); 
-	for ( int i = 0; i < nWeightCount; i++ )
-	{
-		pFlexOut[i] = 0.0f;
-	}
-	*ppFlexWeights = pFlexOut;
-	if ( ppFlexDelayedWeights )
-	{
-		pFlexOut = rdFlexDelayed.Lock( nWeightCount );
-		for ( int i = 0; i < nWeightCount; i++ )
-		{
-			pFlexOut[i] = 0.0f;
-		}
-		*ppFlexDelayedWeights = pFlexOut;
-	}
-}
-
-void CStudioRenderContext::UnlockFlexWeights()
-{
 }
 
 
@@ -2122,7 +2314,7 @@ void CStudioRenderContext::GenerateRandomFlexWeights( int nWeightCount, float* p
 		nRandomFlex = nWeightCount;
 	}
 
-	int *pIndices = (int*)_alloca( nWeightCount * sizeof(int) );
+	int *pIndices = (int*)stackalloc( nWeightCount * sizeof(int) );
 	for ( int i = 0; i < nWeightCount; ++i )
 	{
 		pIndices[i] = i;
@@ -2192,13 +2384,15 @@ int CStudioRenderContext::ComputeRenderLOD( IMatRenderContext *pRenderContext,
 // It has the effect of ensuring the material vars are in the correct state
 // since material var sets generated by the proxy bind are queued.
 //-----------------------------------------------------------------------------
-void CStudioRenderContext::InvokeBindProxies( const DrawModelInfo_t &info )
+void CStudioRenderContext::InvokeBindProxies( IMatRenderContext *pRenderContext, ICallQueue *pCallQueue, const DrawModelInfo_t &info )
 {
-	if ( m_RC.m_pForcedMaterial )
+	bool bSelectiveOverride = ( m_RC.m_nForcedMaterialType == OVERRIDE_SELECTIVE );
+
+	if ( m_RC.m_pForcedMaterial[ 0 ] && !bSelectiveOverride )
 	{
-		if ( m_RC.m_nForcedMaterialType == OVERRIDE_NORMAL && m_RC.m_pForcedMaterial->HasProxy() )
+		if ( m_RC.m_nForcedMaterialType == OVERRIDE_NORMAL && m_RC.m_pForcedMaterial[ 0 ]->HasProxy() )
 		{
-			m_RC.m_pForcedMaterial->CallBindProxy( info.m_pClientEntity );
+			m_RC.m_pForcedMaterial[ 0 ]->CallBindProxy( info.m_pClientEntity, pCallQueue );
 		}
 		return;
 	}
@@ -2228,10 +2422,30 @@ void CStudioRenderContext::InvokeBindProxies( const DrawModelInfo_t &info )
 			if ( pProxyCalled[ nMaterialIndex ] )
 				continue;
 			pProxyCalled[ nMaterialIndex ] = true;
-			IMaterial* pMaterial = ppMaterials[ nMaterialIndex ]; 
+
+			int nOverrideIndex = -1;
+			for ( int i = 0; i < m_RC.m_nForcedMaterialIndexCount; i++ )
+			{
+				if ( m_RC.m_nForcedMaterialIndex[ i ] == nMaterialIndex )
+				{
+					nOverrideIndex = i;
+					break;
+				}
+			}
+
+			IMaterial* pMaterial = NULL;
+			if ( bSelectiveOverride && nOverrideIndex != -1 )
+			{
+				pMaterial = m_RC.m_pForcedMaterial[ nOverrideIndex ];
+			}
+			else
+			{
+				pMaterial = ppMaterials[ nMaterialIndex ]; 
+			}
+
 			if ( pMaterial && pMaterial->HasProxy() )
 			{
-				pMaterial->CallBindProxy( info.m_pClientEntity );
+				pMaterial->CallBindProxy( info.m_pClientEntity, pCallQueue );
 			}
 		}
 	}
@@ -2298,7 +2512,7 @@ void CStudioRenderContext::DrawModel( DrawModelResults_t *pResults, const DrawMo
 		CMatRenderData<float> rdFlex( pRenderContext );
 		CMatRenderData<float> rdFlexDelayed( pRenderContext );
 
-		InvokeBindProxies( info );
+		InvokeBindProxies( pRenderContext, pCallQueue, info );
 		pBoneToWorld = rdMatrix.Base();
 		if ( info.m_pStudioHdr->numflexdesc != 0 )
 		{
@@ -2314,7 +2528,7 @@ void CStudioRenderContext::DrawModel( DrawModelResults_t *pResults, const DrawMo
 				flex.m_pFlexDelayedWeights = rdFlexDelayed.Base();
 			}
 		}
-		pCallQueue->QueueCall( g_pStudioRenderImp, &CStudioRender::DrawModel, info, m_RC, pBoneToWorld, flex, flags );
+		pCallQueue->QueueFunctor( StudioRenderFunctor( g_pStudioRenderImp, &CStudioRender::DrawModel, info, m_RC, pBoneToWorld, flex, flags ) );
 	}
 
 	if( flags & STUDIORENDER_DRAW_ACCURATETIME )
@@ -2338,11 +2552,148 @@ void CStudioRenderContext::DrawModel( DrawModelResults_t *pResults, const DrawMo
 }
 
 
-void CStudioRenderContext::DrawModelArray( const DrawModelInfo_t &drawInfo, int arrayCount, model_array_instance_t *pInstanceData, int instanceStride, int flags )
+//-----------------------------------------------------------------------------
+// Draws a model array
+//-----------------------------------------------------------------------------
+void CStudioRenderContext::DrawModelArray( const StudioModelArrayInfo_t &drawInfo,
+	int nCount, StudioArrayInstanceData_t *pInstanceData, int nInstanceStride, int nFlags )
 {
-	// UNDONE: Support queue mode?
-	g_pStudioRenderImp->DrawModelArray( drawInfo, m_RC, arrayCount, pInstanceData, instanceStride, flags );
+	CMatRenderContextPtr pRenderContext( g_pMaterialSystem );
+
+#ifdef _DEBUG
+	// NOTE: It would be nice to instantiate a different implementation of
+	// IStudioRender when running with -dev which validates the incoming data
+	// even in release builds.. may do it at some point
+
+	Assert( pRenderContext->IsRenderData( drawInfo.m_pFlashlights ) );
+
+	StudioArrayInstanceData_t *pTest = pInstanceData;
+	for ( int i = 0; i < nCount; ++i, pTest = (StudioArrayInstanceData_t*)( (unsigned char*)pTest + nInstanceStride ) )
+	{
+		Assert( pRenderContext->IsRenderData( pTest->m_pPoseToWorld ) );
+		Assert( pRenderContext->IsRenderData( pTest->m_pFlexWeights ) );
+		Assert( pRenderContext->IsRenderData( pTest->m_pDelayedFlexWeights ) );
+		Assert( pRenderContext->IsRenderData( pTest->m_pLightingState ) );
+	}
+#endif
+
+	// FIXME: Do I need to fixup flex weights when I start dealing with them?
+//	flex.m_pFlexWeights = pFlexWeights ? pFlexWeights : s_pZeroFlexWeights;
+//	flex.m_pFlexDelayedWeights = pFlexDelayedWeights ? pFlexDelayedWeights : flex.m_pFlexWeights;
+
+	ICallQueue *pCallQueue = pRenderContext->GetCallQueue();
+	if ( !pCallQueue || studio_queue_mode.GetInt() == 0 )
+	{
+		g_pStudioRenderImp->DrawModelArray( drawInfo, m_RC, nCount, pInstanceData, nInstanceStride, nFlags );
+	}
+	else
+	{
+		if ( !pRenderContext->IsRenderData( pInstanceData ) )
+		{
+			CMatRenderData< StudioArrayInstanceData_t > renderData( pRenderContext, nCount );
+			StudioArrayInstanceData_t *pQueuedInstanceData = renderData.Base();
+			StudioArrayInstanceData_t *pCurrInstanceData = pQueuedInstanceData;
+			for ( int i = 0; i < nCount; ++i )
+			{
+				memcpy( pCurrInstanceData, pInstanceData, sizeof(StudioArrayInstanceData_t) );
+				pInstanceData = (StudioArrayInstanceData_t*)( (unsigned char*)pInstanceData + nInstanceStride );
+				++pCurrInstanceData;
+			}
+			pCallQueue->QueueFunctor( StudioRenderFunctor( g_pStudioRenderImp, &CStudioRender::DrawModelArray, drawInfo, m_RC, nCount, pQueuedInstanceData, sizeof(StudioArrayInstanceData_t), nFlags ) );
+		}
+		else
+		{
+			pCallQueue->QueueFunctor( StudioRenderFunctor( g_pStudioRenderImp, &CStudioRender::DrawModelArray, drawInfo, m_RC, nCount, pInstanceData, nInstanceStride, nFlags ) );
+		}
+	}
 }
+
+void CStudioRenderContext::DrawModelArray( const StudioModelArrayInfo2_t &drawInfo, int nCount, StudioArrayData_t *pArrayData, int nInstanceStride, int nFlags )
+{
+	CMatRenderContextPtr pRenderContext( g_pMaterialSystem );
+
+#ifdef _DEBUG
+	// NOTE: It would be nice to instantiate a different implementation of
+	// IStudioRender when running with -dev which validates the incoming data
+	// even in release builds.. may do it at some point
+	Assert( pRenderContext->IsRenderData( drawInfo.m_pFlashlights ) );
+
+	for ( int i = 0; i < nCount; ++i )
+	{
+		StudioArrayData_t &arrayData = pArrayData[i];
+		Assert( pRenderContext->IsRenderData( arrayData.m_pInstanceData ) );
+		for ( int j = 0; j < arrayData.m_nCount; ++j )
+		{
+			int nOffset = j * nInstanceStride;
+			StudioArrayInstanceData_t *pTest = ( StudioArrayInstanceData_t* )( (uint8*)arrayData.m_pInstanceData + nOffset );
+			Assert( pRenderContext->IsRenderData( pTest->m_pPoseToWorld ) );
+			Assert( pRenderContext->IsRenderData( pTest->m_pFlexWeights ) );
+			Assert( pRenderContext->IsRenderData( pTest->m_pDelayedFlexWeights ) );
+			Assert( pRenderContext->IsRenderData( pTest->m_pLightingState ) );
+		}
+	}
+#endif
+
+	// FIXME: Do I need to fixup flex weights when I start dealing with them?
+	//	flex.m_pFlexWeights = pFlexWeights ? pFlexWeights : s_pZeroFlexWeights;
+	//	flex.m_pFlexDelayedWeights = pFlexDelayedWeights ? pFlexDelayedWeights : flex.m_pFlexWeights;
+
+	ICallQueue *pCallQueue = pRenderContext->GetCallQueue();
+	if ( !pCallQueue || studio_queue_mode.GetInt() == 0 )
+	{
+		g_pStudioRenderImp->DrawModelArray2( drawInfo, m_RC, nCount, pArrayData, nInstanceStride, nFlags );
+	}
+	else
+	{
+		CMatRenderData< StudioArrayData_t > arrayRenderData( pRenderContext, nCount, pArrayData ); 
+		pArrayData = arrayRenderData.Base();
+		pCallQueue->QueueFunctor( StudioRenderFunctor( g_pStudioRenderImp, &CStudioRender::DrawModelArray2, drawInfo, m_RC, nCount, pArrayData, nInstanceStride, nFlags ) );
+	}
+}
+
+void CStudioRenderContext::DrawModelShadowArray( int nCount, StudioArrayData_t *pShadowData, int nInstanceStride, int nFlags )
+{
+	CMatRenderContextPtr pRenderContext( g_pMaterialSystem );
+
+#ifdef _DEBUG
+	// NOTE: It would be nice to instantiate a different implementation of
+	// IStudioRender when running with -dev which validates the incoming data
+	// even in release builds.. may do it at some point
+
+	// These are the only supported flags in this path
+	Assert( ( nFlags & ~( STUDIORENDER_SHADOWDEPTHTEXTURE | STUDIORENDER_DRAW_OPAQUE_ONLY | STUDIORENDER_SHADOWDEPTHTEXTURE_INCLUDE_TRANSLUCENT_MATERIALS ) ) == 0 );
+
+	for ( int i = 0; i < nCount; ++i )
+	{
+		StudioArrayData_t &shadow = pShadowData[i];
+		Assert( pRenderContext->IsRenderData( shadow.m_pInstanceData ) );
+		for ( int j = 0; j < shadow.m_nCount; ++j )
+		{
+			StudioShadowArrayInstanceData_t *pTest = ( StudioShadowArrayInstanceData_t* )((uint8*)shadow.m_pInstanceData + ( nInstanceStride * j ) );
+			Assert( pRenderContext->IsRenderData( pTest->m_pPoseToWorld ) );
+			Assert( pRenderContext->IsRenderData( pTest->m_pFlexWeights ) );
+			Assert( pRenderContext->IsRenderData( pTest->m_pDelayedFlexWeights ) );
+		}
+	}
+#endif
+
+	// FIXME: Do I need to fixup flex weights when I start dealing with them?
+	//	flex.m_pFlexWeights = pFlexWeights ? pFlexWeights : s_pZeroFlexWeights;
+	//	flex.m_pFlexDelayedWeights = pFlexDelayedWeights ? pFlexDelayedWeights : flex.m_pFlexWeights;
+
+	ICallQueue *pCallQueue = pRenderContext->GetCallQueue();
+	if ( !pCallQueue || studio_queue_mode.GetInt() == 0 )
+	{
+		g_pStudioRenderImp->DrawModelShadowArray( m_RC, nCount, pShadowData, nInstanceStride, nFlags );
+	}
+	else
+	{
+		CMatRenderData< StudioArrayData_t > renderData( pRenderContext, nCount, pShadowData ); 
+		pShadowData = renderData.Base();
+		pCallQueue->QueueFunctor( StudioRenderFunctor( g_pStudioRenderImp, &CStudioRender::DrawModelShadowArray, m_RC, nCount, pShadowData, nInstanceStride, nFlags ) );
+	}
+}
+
 
 //-----------------------------------------------------------------------------
 // Methods related to rendering static props
@@ -2362,8 +2713,41 @@ void CStudioRenderContext::DrawModelStaticProp( const DrawModelInfo_t& info, con
 	}
 	else
 	{
-		InvokeBindProxies( info );
-		pCallQueue->QueueCall( g_pStudioRenderImp, &CStudioRender::DrawModelStaticProp, info, m_RC, modelToWorld, flags );
+		InvokeBindProxies( pRenderContext, pCallQueue, info );
+		pCallQueue->QueueFunctor( StudioRenderFunctor( g_pStudioRenderImp, &CStudioRender::DrawModelStaticProp, info, m_RC, modelToWorld, flags ) );
+	}
+}
+
+void CStudioRenderContext::DrawModelArrayStaticProp( const DrawModelInfo_t& info, int nInstanceCount, const MeshInstanceData_t *pInstanceData, ColorMeshInfo_t **pColorMeshes )
+{
+	if ( info.m_Lod < info.m_pHardwareData->m_RootLOD )
+	{
+		const_cast< DrawModelInfo_t* >( &info )->m_Lod = info.m_pHardwareData->m_RootLOD;
+	}
+
+	CMatRenderContextPtr pRenderContext( g_pMaterialSystem );
+	ICallQueue *pCallQueue = pRenderContext->GetCallQueue();
+	if ( !pCallQueue || studio_queue_mode.GetInt() == 0 )
+	{
+		g_pStudioRenderImp->DrawModelArrayStaticProp( info, m_RC, nInstanceCount, pInstanceData, pColorMeshes );
+	}
+	else
+	{
+		// FIXME: This pretty much can never work to do this as multiple props
+		// may be using the same materials, but needing to pass in different proxy data
+		InvokeBindProxies( pRenderContext, pCallQueue, info );
+
+		CMatRenderData< MeshInstanceData_t > renderData( pRenderContext, nInstanceCount, pInstanceData );
+		MeshInstanceData_t *pQueuedInstanceData = renderData.Base();
+
+		if ( pColorMeshes )
+		{
+			pCallQueue->QueueFunctor( StudioRenderFunctor( g_pStudioRenderImp, &CStudioRender::DrawModelArrayStaticProp, info, m_RC, nInstanceCount, pQueuedInstanceData, CUtlEnvelope<ColorMeshInfo_t *>(pColorMeshes, nInstanceCount) ) );
+		}
+		else
+		{
+			pCallQueue->QueueFunctor( StudioRenderFunctor( g_pStudioRenderImp, &CStudioRender::DrawModelArrayStaticProp, info, m_RC, nInstanceCount, pQueuedInstanceData, pColorMeshes ) );
+		}
 	}
 }
 
@@ -2377,6 +2761,12 @@ void CStudioRenderContext::DrawStaticPropShadows( const DrawModelInfo_t &info, c
 	QUEUE_STUDIORENDER_CALL( DrawStaticPropShadows, CStudioRender, g_pStudioRenderImp, info, m_RC, modelToWorld, flags );
 }
 
+#ifndef _CERT
+void CStudioRenderContext::GatherRenderedFaceInfo( IStudioRender::FaceInfoCallbackFunc_t pFunc )
+{
+	QUEUE_STUDIORENDER_CALL( GatherRenderedFaceInfo, CStudioRender, g_pStudioRenderImp, pFunc );
+}
+#endif // _CERT
 
 //-----------------------------------------------------------------------------
 // Methods related to shadows
@@ -2404,8 +2794,8 @@ void CStudioRenderContext::AddShadow( IMaterial* pMaterial, void* pProxyData,
 
 		CMatRenderData< FlashlightState_t > rdFlashlight( pRenderContext, 1, pFlashlightState );
 		CMatRenderData< VMatrix > rdMatrix( pRenderContext, 1, pWorldToTexture );
-		pCallQueue->QueueCall( g_pStudioRenderImp, &CStudioRender::AddShadow, pMaterial, 
-			(void*)NULL, rdFlashlight.Base(), rdMatrix.Base(), pFlashlightDepthTexture );
+		pCallQueue->QueueFunctor( StudioRenderFunctor( g_pStudioRenderImp, &CStudioRender::AddShadow, pMaterial, 
+			(void*)NULL, rdFlashlight.Base(), rdMatrix.Base(), pFlashlightDepthTexture ) );
 	}
 }
 
@@ -2425,36 +2815,12 @@ void CStudioRenderContext::DestroyDecalList( StudioDecalHandle_t handle )
 
 void CStudioRenderContext::AddDecal( StudioDecalHandle_t handle, studiohdr_t *pStudioHdr, 
 	matrix3x4_t *pBoneToWorld, const Ray_t& ray, const Vector& decalUp, 
-	IMaterial* pDecalMaterial, float radius, int body, bool noPokethru, int maxLODToDecal )
+	IMaterial* pDecalMaterial, float radius, int body, bool noPokethru, int maxLODToDecal, void *pvProxyUserData, int nAdditionalDecalFlags )
 {
-	// This substition always has to be done in the main thread, so do it here.
-	pDecalMaterial = GetModelSpecificDecalMaterial( pDecalMaterial );
-
 	CMatRenderContextPtr pRenderContext( g_pMaterialSystem );
 	Assert( pRenderContext->IsRenderData( pBoneToWorld ) );
 	QUEUE_STUDIORENDER_CALL_RC( AddDecal, CStudioRender, g_pStudioRenderImp, pRenderContext, 
 		handle, m_RC, pBoneToWorld, pStudioHdr, ray, decalUp, pDecalMaterial, radius, 
-		body, noPokethru, maxLODToDecal );
+		body, noPokethru, maxLODToDecal, pvProxyUserData, nAdditionalDecalFlags );
 }
-
-// Function to do replacement because we always need to do this from the main thread.
-IMaterial* GetModelSpecificDecalMaterial( IMaterial* pDecalMaterial )
-{
-	Assert( ThreadInMainThread() );
-	// Since we're adding this to a studio model, check the decal to see if 
-	// there's an alternate form used for static props...
-	bool found;
-	IMaterialVar* pModelMaterialVar = pDecalMaterial->FindVar( "$modelmaterial", &found, false );
-	if ( found )
-	{
-		IMaterial* pModelMaterial = g_pMaterialSystem->FindMaterial( pModelMaterialVar->GetStringValue(), TEXTURE_GROUP_DECAL, false );
-		if ( !IsErrorMaterial( pModelMaterial ) )
-		{
-			return pModelMaterial;
-		}
-	}
-
-	return pDecalMaterial;
-}
-
 

@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -12,29 +12,47 @@
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
-#ifdef APPLE
-#include <malloc/malloc.h>
-#else
 #include <malloc.h>
-#endif
 #include <tier0/dbg.h>
 #include <vgui/ISurface.h>
 #include <utlbuffer.h>
-#if HAVE_FC
 #include <fontconfig/fontconfig.h>
-#endif
-#include <freetype/ftbitmap.h>
 #include "materialsystem/imaterialsystem.h"
 
-#include "vgui_surfacelib/FontManager.h"
+#include "vgui_surfacelib/fontmanager.h"
 #include "FontEffects.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
 
-#define FT_LOAD_FLAGS	0 //$ (FT_LOAD_TARGET_LIGHT)
-
 namespace {
+
+//Due to different font rendering approaches on different platforms, we have
+//to apply custom tweaks to fonts on Linux to make them render as desired.
+struct MetricsTweaks_t
+{
+	const char *m_windowsFontName;
+	int m_tallAdjust;
+};
+
+MetricsTweaks_t GetFontMetricsTweaks(const char* windowsFontName)
+{
+	static const MetricsTweaks_t FontMetricTweaks[] =
+	{
+		{ "Stubble bold", -5 },
+	};
+
+	for( int i = 0; i != Q_ARRAYSIZE( FontMetricTweaks ); ++i )
+	{
+		if ( !Q_stricmp( windowsFontName, FontMetricTweaks[i].m_windowsFontName ) )
+		{
+			return FontMetricTweaks[i];
+		}
+	}
+
+	static const MetricsTweaks_t DefaultMetricTweaks = { NULL, 0 };
+	return DefaultMetricTweaks;
+}
 
 // Freetype uses a lot of fixed float values that are 26.6 splits of a 32 bit word.
 // to make it an int, shift down the 6 bits and round up if the high bit of the 6
@@ -51,21 +69,17 @@ CUtlRBTree< CLinuxFont::font_name_entry > CLinuxFont::m_FriendlyNameCache;
 //-----------------------------------------------------------------------------
 // Purpose: Constructor
 //-----------------------------------------------------------------------------
-CLinuxFont::CLinuxFont() :
-	m_ExtendedABCWidthsCache(256, 0, &ExtendedABCWidthsCacheLessFunc),
-	m_ExtendedKernedABCWidthsCache( 256, 0, &ExtendedKernedABCWidthsCacheLessFunc )
+CLinuxFont::CLinuxFont() : m_ExtendedABCWidthsCache(256, 0, &ExtendedABCWidthsCacheLessFunc),
+m_ExtendedKernedABCWidthsCache( 256, 0, &ExtendedKernedABCWidthsCacheLessFunc )
 {
-	m_face = NULL;
-	m_faceValid = false;
 	m_iTall = 0;
-	m_iHeight = 0;
-	m_iHeightRequested = 0;
 	m_iWeight = 0;
 	m_iFlags = 0;
 	m_iMaxCharWidth = 0;
 	m_bAntiAliased = false;
 	m_bUnderlined = false;
 	m_iBlur = 0;
+	m_pGaussianDistribution = NULL;
 	m_iScanLines = 0;
 	m_bRotary = false;
 	m_bAdditive = false;
@@ -81,12 +95,6 @@ CLinuxFont::CLinuxFont() :
 //-----------------------------------------------------------------------------
 CLinuxFont::~CLinuxFont()
 {
-	if( m_faceValid )
-	{
-		FT_Done_Face( m_face );
-		m_face = NULL;
-		m_faceValid = false;
-	}
 }
 
 
@@ -98,8 +106,7 @@ void CLinuxFont::CreateFontList()
 	if ( m_FriendlyNameCache.Count() > 0 ) 
 		return;
 
-#if HAVE_FC
-	if(!FcInit())
+	if(!FcInit()) 
 		return;
     FcConfig *config;
     FcPattern *pat;
@@ -110,6 +117,7 @@ void CLinuxFont::CreateFontList()
 	const char *name;
 
     config = FcConfigGetCurrent();
+	FcConfigAppFontAddDir(config, "platform/vgui/fonts");
     pat = FcPatternCreate();
     os = FcObjectSetCreate();
     FcObjectSetAdd(os, FC_FILE);
@@ -125,6 +133,7 @@ void CLinuxFont::CreateFontList()
 
         if ( FcPatternGetBool(fontset->fonts[i], FC_SCALABLE, 0, &scalable) == FcResultMatch && !scalable )
             continue;
+
 
         if ( FcPatternGetString(fontset->fonts[i], FC_FAMILY, 0, (FcChar8**)&name) != FcResultMatch )
 			continue;
@@ -167,490 +176,247 @@ void CLinuxFont::CreateFontList()
     FcFontSetDestroy(fontset);
     FcObjectSetDestroy(os);
     FcPatternDestroy(pat);
-
-#endif
 }
 
-#if HAVE_FC
-static FcPattern* FontMatch(const char* type, ...)
+static FcPattern* FontMatch(const char* type, FcType vtype, const void* value,
+                            ...)
 {
-    FcValue fcvalue;
     va_list ap;
-    va_start(ap, type);
+    va_start(ap, value);
 
     FcPattern* pattern = FcPatternCreate();
 
     for (;;) {
-        // FcType is promoted to int when passed through ...
-        fcvalue.type = static_cast<FcType>(va_arg(ap, int));
-        switch (fcvalue.type) {
+        FcValue fcvalue;
+        fcvalue.type = vtype;
+        switch (vtype) {
             case FcTypeString:
-                fcvalue.u.s = va_arg(ap, const FcChar8 *);
+                fcvalue.u.s = (FcChar8*) value;
                 break;
             case FcTypeInteger:
-                fcvalue.u.i = va_arg(ap, int);
+                fcvalue.u.i = (int) value;
                 break;
             default:
                 Assert(!"FontMatch unhandled type");
         }
-        FcPatternAdd(pattern, type, fcvalue, FcFalse);
+        FcPatternAdd(pattern, type, fcvalue, 0);
 
         type = va_arg(ap, const char *);
         if (!type)
             break;
+        // FcType is promoted to int when passed through ...
+        vtype = static_cast<FcType>(va_arg(ap, int));
+        value = va_arg(ap, const void *);
     };
     va_end(ap);
 
-    FcConfigSubstitute(NULL, pattern, FcMatchPattern);
+    FcConfigSubstitute(0, pattern, FcMatchPattern);
     FcDefaultSubstitute(pattern);
 
     FcResult result;
-    FcPattern* match = FcFontMatch(NULL, pattern, &result);
+    FcPattern* match = FcFontMatch(0, pattern, &result);
     FcPatternDestroy(pattern);
 
     return match;
 }
-#endif
 
-bool CLinuxFont::CreateFromMemory(const char *windowsFontName, void *data, int datasize, int tall, int weight, int blur, int scanlines, int flags)
+bool CLinuxFont::CreateFromMemory(const char *windowsFontName, void *data, int size, int tall, int weight, int blur, int scanlines, int flags)
 {
 	// setup font properties
 	m_szName = windowsFontName;
 	m_iTall = tall;
 	m_iWeight = weight;
 	m_iFlags = flags;
-	m_bAntiAliased = flags & vgui::ISurface::FONTFLAG_ANTIALIAS;
-	m_bUnderlined = flags & vgui::ISurface::FONTFLAG_UNDERLINE;
-	m_iDropShadowOffset = (flags & vgui::ISurface::FONTFLAG_DROPSHADOW) ? 1 : 0;
-	m_iOutlineSize = (flags & vgui::ISurface::FONTFLAG_OUTLINE) ? 1 : 0;
+	m_bAntiAliased = flags & FONTFLAG_ANTIALIAS;
+	m_bUnderlined = flags & FONTFLAG_UNDERLINE;
+	m_iDropShadowOffset = (flags & FONTFLAG_DROPSHADOW) ? 1 : 0;
+	m_iOutlineSize = (flags & FONTFLAG_OUTLINE) ? 1 : 0;
 	m_iBlur = blur;
 	m_iScanLines = scanlines;
-	m_bRotary = flags & vgui::ISurface::FONTFLAG_ROTARY;
-	m_bAdditive = flags & vgui::ISurface::FONTFLAG_ADDITIVE;
+	m_bRotary = flags & FONTFLAG_ROTARY;
+	m_bAdditive = flags & FONTFLAG_ADDITIVE;
 
-	if ( !HushAsserts() )
+	FT_Error error = FT_New_Memory_Face( FontManager().GetFontLibraryHandle(), (FT_Byte *)data, size, 0, &face );
+	if ( error == FT_Err_Unknown_File_Format ) 
 	{
-		// These flags are NYI in Linux right now.
-		Assert( !m_bAntiAliased );
-		Assert( !m_bUnderlined );
-		Assert( !m_bAdditive );
-	}
-
-	Assert( !m_faceValid );
-	FT_Error error = FT_New_Memory_Face( FontManager().GetFontLibraryHandle(), (FT_Byte *)data, datasize, 0, &m_face );
-	if ( error ) 
-	{
-		// FT_Err_Unknown_File_Format?
-		Msg( "FT_New_Memory_Face failed. font:%s error:%d\n", windowsFontName, error );
+		return false;
+	} 
+	else if ( error ) 
+	{ 
 		return false;
 	} 
 
-	if ( m_face->charmap == NULL )
-	{
-		FT_Error error = FT_Select_Charmap( m_face, FT_ENCODING_APPLE_ROMAN );
-		if ( error )
-		{
-			FT_Done_Face( m_face );
-			m_face = NULL;
-
-			Msg( "Font %s has no valid charmap\n", windowsFontName );
-			return false;
-		}
-	}
-
-	m_iHeightRequested = m_iTall;
-
-	// Loop through until we get a height that is less than or equal to the requested height.
-	//  We tried using the BBOX ascender / descender, but it was overly large compared to Windows.
-	//  We also tried using the size metrics, but the ascender wasn't high enough and accents were cut off.
-	//  Descender from size metrics was too low for fonts with no lower case characters.
-	// Compromise: Use ascent from O' and descent from bbox. Diffs on textures indicate this is best choice.
-	//  Used these command lines vars and convars to help beyond compare linux and windows:
-	//    -precachefontintlchars / -enable_font_bounding_boxes / vgui_spew_fonts / mat_texture_save_fonts
-
-	bool bFirstTimeThrough = true;
-	int IncAmount = -1;
-
-	for ( ;; )
-	{
-		bool SetPixelSizesFailed = false;
-
-		FT_Error error = FT_Set_Pixel_Sizes( m_face, 0, m_iHeightRequested );
-		if ( error )
-		{
-			SetPixelSizesFailed = true;
-
-			// If FT_Set_Pixel_Sizes fails, it should be because we've got a fixed-size font.
-			Assert( m_face->face_flags & FT_FACE_FLAG_FIXED_SIZES );
-			Assert( !( m_face->face_flags & FT_FACE_FLAG_SCALABLE ) );
-
-			if ( m_face->num_fixed_sizes )
-			{
-				// Pick width/height of first size.
-				int width = m_face->available_sizes[ 0 ].width;
-				m_iHeightRequested = m_face->available_sizes[ 0 ].height;
-
-				// Loop through all the other available sizes and find the closest match.
-				for ( int i = 1; i < m_face->num_fixed_sizes; i++ )
-				{
-					if ( ( m_face->available_sizes[ i ].height <= m_iTall ) && 
-						( m_face->available_sizes[ i ].height > m_iHeightRequested ) )
-					{
-						width = m_face->available_sizes[ i ].width;
-						m_iHeightRequested = m_face->available_sizes[ i ].height;
-					}
-				}
-
-				FT_Size_RequestRec req;
-
-				Q_memset( &req, 0, sizeof( req ) );
-				req.type           = FT_SIZE_REQUEST_TYPE_REAL_DIM;
-				req.width          = INT_2FIXED6( width );
-				req.height         = INT_2FIXED6( m_iHeightRequested );
-				req.horiResolution = 0;
-				req.vertResolution = 0;
-
-				error = FT_Request_Size( m_face, &req );
-				if ( error )
-				{
-					Msg( "FT_Request_Size failed on %s / %s\n",
-						 m_face->family_name ? m_face->family_name : "??",
-						 m_face->style_name ? m_face->style_name : "??" );
-				}
-			}
-		}
-
-		FT_Pos ascender, descender;
-
-		if( SetPixelSizesFailed )
-		{
-			// If SetPixelSizesFailed failed, then we've hopefully got a fixed size
-			//	font, and we can just use the metrics.
-			ascender = m_face->size->metrics.ascender;
-			descender = m_face->size->metrics.descender;
-		}
-		else
-		{
-			// Full bounding box ascent and descent:
-			//   ( a * b ) / 0x10000. y_scale is 16.16.
-			//$ ascender = FT_MulFix( m_face->bbox.yMax, m_face->size->metrics.y_scale );
-			descender = FT_MulFix( m_face->bbox.yMin, m_face->size->metrics.y_scale );
-
-			// Metrics ascent and descent
-			ascender = m_face->size->metrics.ascender;
-			//$ descender = m_face->size->metrics.descender;
-
-			// While running with Spanish, the m_face->size->metrics.ascender is less
-			// than the bitmap_top for the character.  This makes GetCharRGBA() chop off
-			// the top of the O and the accent is skipped.  Complete hack here, but we
-			// check for the tallest character we know about (O') and bump up the ascender
-			// value if it is greater than what we've currently got.
-			wchar_t ch = 0xd3;
-			error = FT_Load_Char( m_face, ch, FT_LOAD_RENDER | FT_LOAD_TARGET_NORMAL); 
-			if ( !error )
-			{
-				int glyph_index = FT_Get_Char_Index( m_face, ch );
-				error = FT_Load_Glyph( m_face, glyph_index, FT_LOAD_RENDER );
-				if ( !error )
-				{
-					FT_GlyphSlot slot = m_face->glyph;
-					FT_Pos ascenderTop = INT_2FIXED6( slot->bitmap_top );
-
-					if( ascenderTop > ascender )
-					{
-						ascender = ascenderTop;
-					}
-					else if ( !slot->bitmap.rows || !slot->bitmap.width )
-					{
-						// We didn't find an O' character in this font: use the full BBox.
-						ascender = FT_MulFix( m_face->bbox.yMax, m_face->size->metrics.y_scale );
-					}
-				}
-			}
-		}
-
-		m_iAscent = FIXED6_2INT( ascender );
-
-		m_iMaxCharWidth = FIXED6_2INT( m_face->size->metrics.max_advance );
-
-		const int fxpHeight = ascender + -descender + INT_2FIXED6( m_iDropShadowOffset + 2 * m_iOutlineSize );
-		m_iHeight = FIXED6_2INT( fxpHeight );
-
-		// If we're exact or we got too small, bail.
-		if ( SetPixelSizesFailed || ( m_iHeight == m_iTall ) || ( m_iHeight < 7 ) || ( m_iHeightRequested <= 1 ) )
-			break;
-
-		if( bFirstTimeThrough )
-		{
-			bFirstTimeThrough = false;
-
-			// If we're smaller than requested, start searching up.
-			if ( m_iHeight < m_iTall )
-				IncAmount = +1;
-		}
-		else if( IncAmount > 0 )
-		{
-			// If we're searching up and went too far, drop IncAmount and run down.
-			if( m_iHeight > m_iTall )
-				IncAmount = -1;
-		}
-		else if ( m_iHeight <= m_iTall )
-		{
-			// If the height is less than tall, we're done.
-			break;
-		}
-
-		m_iHeightRequested += IncAmount;
-	}
-
-	m_faceValid = true;
+	InitMetrics();
 	return true;
 }
 
-#include "tier1/convar.h"
-ConVar cl_language( "cl_language", "english", FCVAR_USERINFO, "Language (from HKCU\\Software\\Valve\\Steam\\Language)" );
-
-#if !HAVE_FC
-char *TryFindFont(const char *winFontName, bool bBold, int italic)
-{
-	static char fontFile[MAX_PATH];
-
-	const char *fontName, *fontNamePost = NULL;
-
-#ifdef ANDROID
-	const char *lang = cl_language.GetString();
-
-	if( strcmp( winFontName, "Courier New") == 0 )
-	{
-		fontName = "LiberationMono-Regular.ttf";
-		snprintf( fontFile, sizeof fontFile, "%s/files/%s", getenv("APP_DATA_PATH"), fontName);
-		return fontFile;
-	}
-
-	if( strcmp(lang, "japanese") == 0 ||
-		strcmp(lang, "koreana") == 0 ||
-		strcmp(lang, "korean") == 0 ||
-		strcmp(lang, "tchinese") == 0 ||
-		strcmp(lang, "schinese") == 0 )
-	{
-		fontName = "DroidSansFallback.ttf"; // for chinese/japanese/korean
-		snprintf( fontFile, sizeof fontFile, "%s/files/%s", getenv("APP_DATA_PATH"), fontName);
-		return fontFile;
-	}
-	else if( strcmp(lang, "thai") == 0 )
-	{
-		fontName = "Itim-Regular.otf";
-		snprintf( fontFile, sizeof fontFile, "%s/files/%s", getenv("APP_DATA_PATH"), fontName);
-		return fontFile;
-	}
-
-	fontName = "dejavusans";
-
-	if( bBold )
-	{
-		if( italic )
-			fontNamePost = "boldoblique";
-		else
-			fontNamePost = "bold";
-	}
-	else if( italic )
-		fontNamePost = "oblique";
-
-	if( fontNamePost )
-		snprintf(fontFile, sizeof fontFile, "%s/files/%s-%s.ttf", getenv("APP_DATA_PATH"), fontName, fontNamePost);
-	else
-		snprintf(fontFile, sizeof fontFile, "%s/files/%s.ttf", getenv("APP_DATA_PATH"), fontName);
-
-
-	return fontFile;
-#else
-	bool bRegularPostfix = false;
-	fontName = "dejavusans";
-
-	if( strcmp( winFontName, "Courier New") == 0 )
-	{
-		strncpy(fontFile, "platform/resource/linux_fonts/liberationmono-regular.ttf", sizeof(fontFile));
-		return fontFile;
-	}
-
-	if( bBold )
-	{
-		if( italic )
-			fontNamePost = "boldoblique";
-		else
-			fontNamePost = "bold";
-	}
-	else if( italic )
-		fontNamePost = "oblique";
-	else
-		fontNamePost = NULL;
-
-	if( fontNamePost )
-		snprintf(fontFile, sizeof fontFile, "platform/resource/linux_fonts/%s-%s.ttf", fontName, fontNamePost);
-	else
-		snprintf(fontFile, sizeof fontFile, "platform/resource/linux_fonts/%s.ttf", fontName );
-
-	return fontFile;
-#endif
-}
-#endif
-
 //-----------------------------------------------------------------------------
-// Purpose: Given a font name from windows, match it to the filename and return that.
+// Purpose: creates the font from windows.  returns false if font does not exist in the OS.
 //-----------------------------------------------------------------------------
-char *CLinuxFont::GetFontFileName( const char *windowsFontName, int flags )
+bool CLinuxFont::Create(const char *windowsFontName, int tall, int weight, int blur, int scanlines, int flags)
 {
-	bool bBold = false;
+	// setup font properties
+	m_szName = windowsFontName;
+	m_iTall = tall;
+	m_iWeight = weight;
+	m_iFlags = flags;
+	m_bAntiAliased = flags & FONTFLAG_ANTIALIAS;
+	m_bUnderlined = flags & FONTFLAG_UNDERLINE;
+	m_iDropShadowOffset = (flags & FONTFLAG_DROPSHADOW) ? 1 : 0;
+	m_iOutlineSize = (flags & FONTFLAG_OUTLINE) ? 1 : 0;
+	m_iBlur = blur;
+	m_iScanLines = scanlines;
+	m_bRotary = flags & FONTFLAG_ROTARY;
+	m_bAdditive = flags & FONTFLAG_ADDITIVE;
+
+	CreateFontList();
+
 	const char *pchFontName = windowsFontName;
-
 	if ( !Q_stricmp( pchFontName, "Tahoma" ) )
 		pchFontName = "Bitstream Vera Sans";
-	else if ( !Q_stricmp( pchFontName, "Arial Black" ) || Q_stristr( pchFontName, "bold" ) )
-		bBold = true;
+    const int italic = flags & FONTFLAG_ITALIC ? FC_SLANT_ITALIC : FC_SLANT_ROMAN;
+    FcPattern* match = FontMatch(FC_FAMILY, FcTypeString, pchFontName,
+                                 FC_WEIGHT, FcTypeInteger, FC_WEIGHT_NORMAL,
+                                 FC_SLANT, FcTypeInteger, italic,
+                                 NULL);
 
-#if !HAVE_FC
-	char *filename = TryFindFont( windowsFontName, bBold, flags & vgui::ISurface::FONTFLAG_ITALIC );
-	if( !filename ) return NULL;
-	Msg("Found font: %s\n", filename);
-	return strdup( filename );
-#else
-	const int italic = ( flags & vgui::ISurface::FONTFLAG_ITALIC ) ? FC_SLANT_ITALIC : FC_SLANT_ROMAN;
-
-	const int nFcWeight = bBold ? FC_WEIGHT_BOLD : FC_WEIGHT_NORMAL;
-	FcPattern *match = FontMatch( FC_FAMILY, FcTypeString, pchFontName,
-								  FC_WEIGHT, FcTypeInteger, nFcWeight,
-								  FC_SLANT, FcTypeInteger, italic,
-								  NULL);
- 	if ( !match )
-	{
+ 	if (!match)
+    {
 		AssertMsg1( false, "Unable to find font named %s\n", windowsFontName );
-		return NULL;
-	}
+        m_szName = "";
+        return false;
+    }
 	else
 	{
-		char *filenameret = NULL;
-		FcChar8* filename = NULL;
-
+		FcChar8* filename;
 		if ( FcPatternGetString(match, FC_FILE, 0, &filename) != FcResultMatch )
 		{
 			AssertMsg1( false, "Unable to find font named %s\n", windowsFontName );
+		    m_szName = "";
+		    FcPatternDestroy(match);
+		    return false;
 		}
-		else
+	
+		FT_Error error = FT_New_Face( FontManager().GetFontLibraryHandle(), (const char *)filename, 0, &face );
+
+		// Only destroy the pattern at this point so that "filename" is pointing
+		// to valid memory
+		FcPatternDestroy(match);
+
+		if ( error == FT_Err_Unknown_File_Format )
 		{
-			filenameret = strdup( ( char * )filename );
+			return false;
+		} 
+		else if ( error ) 
+		{ 
+			return false;
+		} 
+
+		if ( face->charmap == nullptr )
+		{
+			FT_Error error = FT_Select_Charmap( face, FT_ENCODING_APPLE_ROMAN );
+			if ( error )
+			{
+				FT_Done_Face( face );
+				face = NULL;
+	
+				Msg( "Font %s has no valid charmap\n", windowsFontName );
+				return false;
+			}
 		}
-
-		FcPatternDestroy( match );
-		Msg("font fc: %s - %s\n", windowsFontName, filenameret);
-
-		return filenameret;
 	}
-#endif
+
+	InitMetrics();
+	return true;
+}
+
+void CLinuxFont::InitMetrics()
+{
+	const MetricsTweaks_t metricTweaks = GetFontMetricsTweaks( m_szName );
+	
+	FT_Set_Pixel_Sizes( face, 0, m_iTall + metricTweaks.m_tallAdjust );
+
+	m_iAscent = FIXED6_2INT( face->size->metrics.ascender );
+	m_iMaxCharWidth = FIXED6_2INT( face->size->metrics.max_advance );
+
+	const int fxpHeight = face->size->metrics.height + INT_2FIXED6( m_iDropShadowOffset + 2 * m_iOutlineSize );
+	m_iHeight = FIXED6_2INT( fxpHeight );
+
+	// calculate our gaussian distribution for if we're blurred
+	if (m_iBlur > 1)
+	{
+		m_pGaussianDistribution = new float[m_iBlur * 2 + 1];
+		double sigma = 0.683 * m_iBlur;
+		for (int x = 0; x <= (m_iBlur * 2); x++)
+		{
+			int val = x - m_iBlur;
+			m_pGaussianDistribution[x] = (float)(1.0f / sqrt(2 * 3.14 * sigma * sigma)) * pow(2.7, -1 * (val * val) / (2 * sigma * sigma));
+
+			// brightening factor
+			m_pGaussianDistribution[x] *= 1;
+		}
+	}
 }
 
 //-----------------------------------------------------------------------------
 // Purpose: writes the char into the specified 32bpp texture
 //-----------------------------------------------------------------------------
-void CLinuxFont::GetCharRGBA( wchar_t ch, int rgbaWide, int rgbaTall, unsigned char *prgba )
+void CLinuxFont::GetCharRGBA(wchar_t ch, int rgbaWide, int rgbaTall, unsigned char *prgba )
 {
 	bool bShouldAntialias = m_bAntiAliased;
-
 	// filter out 
-	if ( ( ch > 0x00FF ) && !( m_iFlags & vgui::ISurface::FONTFLAG_CUSTOM ) )
+	if ( ch > 0x00FF && !(m_iFlags & FONTFLAG_CUSTOM) )
 	{
 		bShouldAntialias = false;
 	}
 	
-	FT_Error error = FT_Load_Char( m_face, ch, FT_LOAD_RENDER | FT_LOAD_TARGET_NORMAL ); 
+	FT_Error error = FT_Load_Char( face,ch, FT_LOAD_RENDER | FT_LOAD_TARGET_NORMAL); 
+	if ( error )
+		return;
+
+	int glyph_index = FT_Get_Char_Index( face, ch );
+	error = FT_Load_Glyph( face, glyph_index, FT_LOAD_RENDER );
 	if ( error )
 	{
-		Msg( "Error in FT_Load_Char: ch:%x error:%x\n", (int)ch, error );
+		fprintf( stderr, "Error in FL_Load_Glyph: %x\n", error );
 		return;
 	}
 
-	int glyph_index = FT_Get_Char_Index( m_face, ch );
-	error = FT_Load_Glyph( m_face, glyph_index, FT_LOAD_RENDER | FT_LOAD_FLAGS );
-	if ( error )
-	{
-		Msg( "Error in FL_Load_Glyph: glyph_index:%d error:%x\n", glyph_index, error );
+	FT_GlyphSlot slot = face->glyph;
+	uint32 nSkipRows = ( m_iAscent - slot->bitmap_top );
+	if ( nSkipRows )
+       nSkipRows--;
+	if ( nSkipRows > rgbaTall )
 		return;
-	}
 
-	int yBitmapStart = 0;
-	FT_GlyphSlot slot = m_face->glyph;
-	int nSkipRows = ( m_iAscent - slot->bitmap_top );
+	unsigned char *rgba = prgba + ( nSkipRows * rgbaWide * 4 );
+	FT_Bitmap bitmap = face->glyph->bitmap;
 
-	if( nSkipRows < 0 )
-	{
-		yBitmapStart = -nSkipRows;
-		nSkipRows = 0;
-	}
-	if ( nSkipRows >= rgbaTall )
-	{
-		Msg( "nSkipRows(%d) > rgbaTall(%d) ch:%d\n", nSkipRows, rgbaTall, (int)ch );
+	Assert( bitmap.rows <= rgbaTall );
+	Assert( rgbaWide >= bitmap.width + m_iBlur );
+	if ( bitmap.width == 0 )
 		return;
-	}
 
-	if ( m_face->glyph->bitmap.width == 0 )
+	/* now draw to our target surface */
+	for ( int y = 0; y < MIN( bitmap.rows, rgbaTall ); y++ )
 	{
-		Msg( "m_face->glyph->bitmap.width is 0 for ch:%d %s\n", (int)ch, m_face->family_name ? m_face->family_name : "??" );
-		return;
-	}
-
-	FT_Bitmap bitmap;
-	FT_Library ftLibrary = FontManager().GetFontLibraryHandle();
-
-	FT_Bitmap_New( &bitmap );
-
-	error = FT_Bitmap_Convert( ftLibrary, &m_face->glyph->bitmap, &bitmap, 1 );
-	if( error == 0 )
-	{
-		uint32 alpha_scale = 1;
-		int Width = MIN( rgbaWide, bitmap.width );
-		unsigned char *rgba = prgba + ( nSkipRows * rgbaWide * 4 );
-
-		switch( m_face->glyph->bitmap.pixel_mode )
+		for ( int x = 0; x < bitmap.width; x++ )
 		{
-		case FT_PIXEL_MODE_MONO: // 8-bit per pixel bitmap
-			alpha_scale *= 256;
-			break;
-		case FT_PIXEL_MODE_GRAY2: // 2-bit per pixel bitmap
-			alpha_scale *= 64;
-			break;
-		case FT_PIXEL_MODE_GRAY4: // 4-bit per pixel bitmap
-			alpha_scale *= 16;
-			break;
+			int rgbaOffset = 4*(x + m_iBlur); // +(rgbaTall-y-1)*rgbaWide*4
+			rgba[ rgbaOffset]   =  255;
+			rgba[ rgbaOffset+1] =  255;
+			rgba[ rgbaOffset+2] =  255;
+			rgba[ rgbaOffset+3] =  bitmap.buffer[ x + y*bitmap.width ];
 		}
-
-		/* now draw to our target surface */
-		for ( int y = yBitmapStart; y < MIN( bitmap.rows, rgbaTall - nSkipRows ); y++ )
-		{
-			for ( int x = 0; x < Width; x++ )
-			{
-				int rgbaOffset = 4 * ( x + m_iBlur ); // +(rgbaTall-y-1)*rgbaWide*4
-				uint32 alpha = Min( 255U, alpha_scale * bitmap.buffer[ x + y * bitmap.pitch ] );
-
-				rgba[ rgbaOffset + 0 ] =  255;
-				rgba[ rgbaOffset + 1 ] =  255;
-				rgba[ rgbaOffset + 2 ] =  255;
-				rgba[ rgbaOffset + 3 ] =  alpha;
-			}
-			rgba += ( rgbaWide * 4 );
-		}
-
-		// apply requested effects in specified order
-		ApplyDropShadowToTexture( rgbaWide, rgbaTall, prgba, m_iDropShadowOffset );
-		ApplyOutlineToTexture( rgbaWide, rgbaTall, prgba, m_iOutlineSize );
-		ApplyGaussianBlurToTexture( rgbaWide, rgbaTall, prgba, m_iBlur );
-		ApplyScanlineEffectToTexture( rgbaWide, rgbaTall, prgba, m_iScanLines );
-		ApplyRotaryEffectToTexture( rgbaWide, rgbaTall, prgba, m_bRotary );
-	}
-	else
-	{
-		Msg( "FT_Bitmap_Convert failed: %d on %s\n", error, m_face->family_name ? m_face->family_name : "??" );
+		rgba += ( rgbaWide*4 );
 	}
 
-	FT_Bitmap_Done( ftLibrary, &bitmap );
+	// apply requested effects in specified order
+	ApplyDropShadowToTexture( rgbaWide, rgbaTall, prgba, m_iDropShadowOffset );
+	ApplyOutlineToTexture( rgbaWide, rgbaTall, prgba, m_iOutlineSize );
+	ApplyGaussianBlurToTexture( rgbaWide, rgbaTall, prgba, m_iBlur );
+	ApplyScanlineEffectToTexture( rgbaWide, rgbaTall, prgba, m_iScanLines );
+	ApplyRotaryEffectToTexture( rgbaWide, rgbaTall, prgba, m_bRotary );
 }
 
 void CLinuxFont::GetKernedCharWidth( wchar_t ch, wchar_t chBefore, wchar_t chAfter, float &wide, float &abcA, float &abcC )
@@ -676,37 +442,37 @@ void CLinuxFont::GetKernedCharWidth( wchar_t ch, wchar_t chBefore, wchar_t chAft
 	 
 	iFxpPenX = 0;
 	wide = 0;
-
-	use_kerning = FT_HAS_KERNING( m_face );
+	
+	use_kerning = FT_HAS_KERNING( face );
 	previous    = chBefore;
 	
 	/* convert character code to glyph index */
-	glyph_index = FT_Get_Char_Index( m_face, ch );
+	glyph_index = FT_Get_Char_Index( face, ch );
 	
 	/* retrieve kerning distance and move pen position */
 	if ( use_kerning && previous && glyph_index )
 	{
 		FT_Vector  delta;
 		 
-		FT_Get_Kerning( m_face, previous, glyph_index,
+		FT_Get_Kerning( face, previous, glyph_index,
 						FT_KERNING_DEFAULT, &delta );
 		 
 		iFxpPenX += delta.x;
 	}
 	 
 	/* load glyph image into the slot (erase previous one) */
-	int error = FT_Load_Glyph( m_face, glyph_index, FT_LOAD_DEFAULT | FT_LOAD_FLAGS );
+	int error = FT_Load_Glyph( face, glyph_index, FT_LOAD_DEFAULT );
 	if ( error )
 	{
-		Error( "Error in FL_Load_Glyph: glyph_index:%d ch:%x error:%x\n", glyph_index, (int)ch, error );
+		fprintf( stderr, "Error in FL_Load_Glyph: %x\n", error );
 	}
 	 
-	FT_GlyphSlot slot = m_face->glyph;
+	FT_GlyphSlot slot = face->glyph;
 	iFxpPenX += slot->advance.x;
 	 
 	if ( FIXED6_2INT(iFxpPenX) > wide )
 		wide = FIXED6_2INT(iFxpPenX);
-	
+		
 	//$ NYI: finder.abc.abcA = abcA;
 	//$ NYI: finder.abc.abcC = abcC;
 	finder.abc.wide = wide;
@@ -734,29 +500,23 @@ void CLinuxFont::GetCharABCWidths(int ch, int &a, int &b, int &c)
 
 	a = b = c = 0;
 
-	FT_Error error = FT_Load_Char( m_face, ch, 0 ); 
+	FT_Error error = FT_Load_Char( face,ch, 0 ); 
 	if ( error )
-	{
-		Msg( "Error in FT_Load_Char: ch:%x error:%x\n", ch, error );
 		return;
-	}
 
-	// width: The glyph's width.
-	// horiBearingX: Left side bearing for horizontal layout.
-	// horiAdvance: Advance width for horizontal layout.
-	FT_Glyph_Metrics metrics = m_face->glyph->metrics;
+	FT_Glyph_Metrics metrics = face->glyph->metrics;
 
-	finder.abc.a = metrics.horiBearingX / 64 - m_iBlur - m_iOutlineSize;
-	finder.abc.b = metrics.width / 64 + ( ( m_iBlur + m_iOutlineSize ) * 2 ) + m_iDropShadowOffset;
-	finder.abc.c = ( metrics.horiAdvance  - metrics.horiBearingX - metrics.width ) / 64 - m_iBlur - m_iDropShadowOffset - m_iOutlineSize;
+	finder.abc.a = metrics.horiBearingX/64 - m_iBlur - m_iOutlineSize;
+	finder.abc.b = metrics.width/64 + ((m_iBlur + m_iOutlineSize) * 2) + m_iDropShadowOffset;
+	finder.abc.c = (metrics.horiAdvance-metrics.horiBearingX-metrics.width)/64 - m_iBlur - m_iDropShadowOffset - m_iOutlineSize;
 
-	m_ExtendedABCWidthsCache.Insert( finder );
+	m_ExtendedABCWidthsCache.Insert(finder);
 
 	a = finder.abc.a;
 	b = finder.abc.b;
-	c = finder.abc.c;
+	c = finder.abc.c;	
 }
-
+							   
 
 //-----------------------------------------------------------------------------
 // Purpose: returns true if the font is equivalent to that specified
@@ -792,15 +552,6 @@ int CLinuxFont::GetHeight()
 {
 	assert(IsValid());
 	return m_iHeight;
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: returns the requested height of the font
-//-----------------------------------------------------------------------------
-int CLinuxFont::GetHeightRequested()
-{
-	assert(IsValid());
-	return m_iHeightRequested;
 }
 
 //-----------------------------------------------------------------------------
@@ -842,23 +593,14 @@ bool CLinuxFont::ExtendedABCWidthsCacheLessFunc(const abc_cache_t &lhs, const ab
 //-----------------------------------------------------------------------------
 bool CLinuxFont::ExtendedKernedABCWidthsCacheLessFunc(const kerned_abc_cache_t &lhs, const kerned_abc_cache_t &rhs)
 {
-	return ( lhs.wch < rhs.wch ) ||
-			( lhs.wch == rhs.wch && lhs.wchBefore < rhs.wchBefore ) ||
-			( lhs.wch == rhs.wch && lhs.wchBefore == rhs.wchBefore && lhs.wchAfter < rhs.wchAfter );
+	return lhs.wch < rhs.wch || ( lhs.wch == rhs.wch && lhs.wchBefore < rhs.wchBefore ) 
+	|| ( lhs.wch == rhs.wch && lhs.wchBefore == rhs.wchBefore && lhs.wchAfter < rhs.wchAfter );
 }
 
 void *CLinuxFont::SetAsActiveFont( void *cglContext )
 {
 	Assert( false );
 	return NULL;
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: returns true if this font has a glyph for the code point.
-//-----------------------------------------------------------------------------
-bool CLinuxFont::HasChar(wchar_t wch)
-{
-    return FT_Get_Char_Index( m_face, wch ) != 0;
 }
 
 
@@ -875,6 +617,7 @@ void CLinuxFont::Validate( CValidator &validator, const char *pchName )
 
 	m_ExtendedABCWidthsCache.Validate( validator, "m_ExtendedABCWidthsCache" );
 	m_ExtendedKernedABCWidthsCache.Validate( validator, "m_ExtendedKernedABCWidthsCache" );
+	validator.ClaimMemory( m_pGaussianDistribution );
 
 	validator.Pop();
 }

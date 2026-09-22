@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright c 1996-2007, Valve Corporation, All rights reserved. =======//
 //
 // Purpose: 
 //
@@ -19,6 +19,8 @@
 #include "tier1/utlbuffer.h"
 
 #include "cfgprocessor.h"
+
+extern bool g_bIsPS3;
 
 // Type conversions should be controlled by programmer explicitly - shadercompile makes use of 64-bit integer arithmetics
 #pragma warning( error : 4244 )
@@ -76,7 +78,8 @@ void OutputF( FILE *f, char const *szFmt, ... )
 //
 //////////////////////////////////////////////////////////////////////////
 
-#include <unordered_map>
+#define _SILENCE_STDEXT_HASH_DEPRECATION_WARNINGS
+#include <hash_map>
 #include <map>
 #include <set>
 #include <vector>
@@ -142,7 +145,7 @@ V const & QuickMap< K, V >::GetLessOrEq( K &k, V const &v ) const
 	return it->second;
 }
 
-class QuickStrIdx : private std::unordered_map < std::string, int >
+class QuickStrIdx : private stdext::hash_map < std::string, int >
 {
 public:
 	void Append( char const *szName, int idx ) { insert( value_type( szName, idx ) ); };
@@ -355,7 +358,7 @@ protected:
 	IExpression *m_pDefTrue, *m_pDefFalse;
 };
 
-void CComplexExpression::Parse( char const *szExpression )
+void CComplexExpression::Parse( char const *szExpressionIn )
 {
 	Clear();
 
@@ -364,10 +367,12 @@ void CComplexExpression::Parse( char const *szExpression )
 
 	m_pRoot = m_pDefFalse;
 
-	if (szExpression)
+	if ( szExpressionIn )
 	{
-		QuickString qs( szExpression );
-		char *szExpression = qs.Get(), *szExpectEnd = szExpression + qs.Size(), *szParse = szExpression;
+		QuickString qs( szExpressionIn );
+		char *szExpression = qs.Get(); 
+		char *szExpectEnd = szExpression + qs.Size();
+		char *szParse = szExpression;
 		m_pRoot = ParseTopLevel( szParse );
 
 		if ( szParse != szExpectEnd )
@@ -712,7 +717,14 @@ next_combo_iteration:
 		{
 			// ------- OnCombo( nCurrentCombo ); ----------
 			OutputF( stderr, "%s ", g_comboEmission.m_sPrefix.data() );
-			OutputF( stderr, "/DSHADERCOMBO=%d ", nCurrentCombo );
+			if ( g_bIsPS3 )
+			{
+				OutputF( stderr, "-DSHADERCOMBO=%d ", nCurrentCombo );
+			}
+			else
+			{
+				OutputF( stderr, "/DSHADERCOMBO=%d ", nCurrentCombo );
+			}
 
 			for ( pSetValues = pnValues, pSetDef = pDefVars;
 				pSetValues < pnValuesEnd;
@@ -915,14 +927,30 @@ have_combo_iteration:
 			sprintf( pchBuffer, "%s ", m_pEntry->m_sPrefix.data() );
 			pchBuffer += strlen( pchBuffer );
 
-			sprintf( pchBuffer, "/DSHADERCOMBO=%llu ", m_iComboNumber );
+			if ( g_bIsPS3 )
+			{
+				sprintf( pchBuffer, "-DSHADERCOMBO=%I64d ", m_iComboNumber );
+			}
+			else
+			{
+				sprintf( pchBuffer, "/DSHADERCOMBO=%I64d ", m_iComboNumber );
+			}
+			
 			pchBuffer += strlen( pchBuffer );
 
 			for ( pSetValues = pnValues, pSetDef = pDefVars;
 				  pSetValues < pnValuesEnd;
 				  ++ pSetValues, ++ pSetDef )
 			{
-				sprintf( pchBuffer, "/D%s=%d ", pSetDef->Name(), *pSetValues );
+				if ( g_bIsPS3 )
+				{
+					sprintf( pchBuffer, "-D%s=%d ", pSetDef->Name(), *pSetValues );
+				}
+				else
+				{
+					sprintf( pchBuffer, "/D%s=%d ", pSetDef->Name(), *pSetValues );
+				}
+				
 				pchBuffer += strlen( pchBuffer );
 			}
 
@@ -1157,7 +1185,7 @@ have_combo_iteration:
 
 			// We also establish mapping by either splitting the
 			// combos into 500 intervals or stepping by every 1000 combos.
-			int iPartStep = ( int ) max( 1000, (int)( chi.m_numCombos / 500 ) );
+			int iPartStep = ( int ) MAX( 1000, ( chi.m_numCombos / 500 ) );
 			for ( uint64 iRecord = nCurrentCommand + iPartStep;
 				  iRecord < nCurrentCommand + chi.m_numCombos;
 				  iRecord += iPartStep )

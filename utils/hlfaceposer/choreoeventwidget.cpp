@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -64,7 +64,7 @@ const char *CChoreoEventWidget::GetLabelText( void )
 	}
 	else
 	{
-		V_strcpy_safe( label, GetEvent()->GetParameters() );
+		strcpy( label, GetEvent()->GetParameters() );
 	}
 
 	return label;
@@ -114,7 +114,7 @@ void CChoreoEventWidget::DrawRelativeTags( CChoreoWidgetDrawHelper& drawHelper, 
 		rcMark.left = left - 3;
 		rcMark.right = left + 3;
 
-		drawHelper.DrawTriangleMarker( rcMark, RGB( 0, 100, 250 ) );
+		drawHelper.DrawTriangleMarker( rcMark, Color( 0, 100, 250 ) );
 
 		RECT rcText;
 		rcText = rcMark;
@@ -126,7 +126,7 @@ void CChoreoEventWidget::DrawRelativeTags( CChoreoWidgetDrawHelper& drawHelper, 
 
 		rcText.bottom = rcText.top + 10;
 
-		drawHelper.DrawColoredText( "Arial", 9, FW_NORMAL, RGB( 0, 100, 200 ), rcText, tag->GetName() );
+		drawHelper.DrawColoredText( "Arial", 9, FW_NORMAL, Color( 0, 100, 200 ), rcText, tag->GetName() );
 	}
 }
 
@@ -154,7 +154,7 @@ void CChoreoEventWidget::DrawAbsoluteTags( CChoreoWidgetDrawHelper& drawHelper, 
 		rcMark.left = left - 3;
 		rcMark.right = left + 3;
 
-		drawHelper.DrawTriangleMarker( rcMark, RGB( 0, 100, 250 ) );
+		drawHelper.DrawTriangleMarker( rcMark, Color( 0, 100, 250 ) );
 
 		RECT rcText;
 		rcText = rcMark;
@@ -166,7 +166,7 @@ void CChoreoEventWidget::DrawAbsoluteTags( CChoreoWidgetDrawHelper& drawHelper, 
 
 		rcText.bottom = rcText.top + 10;
 
-		drawHelper.DrawColoredText( "Arial", 9, FW_NORMAL, RGB( 0, 100, 200 ), rcText, tag->GetName() );
+		drawHelper.DrawColoredText( "Arial", 9, FW_NORMAL, Color( 0, 100, 200 ), rcText, tag->GetName() );
 	}
 }
 
@@ -260,7 +260,7 @@ void CChoreoEventWidget::redrawStatus( CChoreoWidgetDrawHelper& drawHelper, RECT
 
 }
 
-COLORREF CChoreoEventWidget::GrayOutColor( COLORREF clr )
+Color CChoreoEventWidget::GrayOutColor( Color clr )
 {
 	CChoreoEvent *event = GetEvent();
 	if ( !event )
@@ -269,13 +269,13 @@ COLORREF CChoreoEventWidget::GrayOutColor( COLORREF clr )
 		return clr;
 
 	int r, g, b;
-	r =  GetRValue( clr );
-	g = GetGValue( clr );
-	b = GetBValue( clr );
+	r =  clr.r();
+	g = clr.g();
+	b = clr.b();
 	int val = ( r + g + b ) / 3;
 	val += ( 255 - val ) * 0.25f;
 
-	clr = RGB( val, val, val );
+	clr = Color( val, val, val );
 	return clr;
 }
 
@@ -292,8 +292,8 @@ void CChoreoEventWidget::DrawSpeakEvent(  CChoreoWidgetDrawHelper& drawHelper, R
 
 	HDC dc = drawHelper.GrabDC();
 
-	HBRUSH brEvent = CreateSolidBrush( GrayOutColor( COLOR_CHOREO_EVENT ) );
-	HBRUSH brBackground = CreateSolidBrush( GrayOutColor( COLOR_CHOREO_DARKBACKGROUND ) );
+	HBRUSH brEvent = CreateSolidBrush( ColorToRGB( GrayOutColor( COLOR_CHOREO_EVENT ) ) );
+	HBRUSH brBackground = CreateSolidBrush( ColorToRGB( GrayOutColor( COLOR_CHOREO_DARKBACKGROUND ) ) );
 
 	if ( !ramponly )
 	{
@@ -347,14 +347,14 @@ void CChoreoEventWidget::DrawGestureEvent(  CChoreoWidgetDrawHelper& drawHelper,
 
 	bool nullevent = false;
 
-	COLORREF clrEvent = GrayOutColor( IsSelected() ? COLOR_CHOREO_EVENT_SELECTED : COLOR_CHOREO_EVENT );
+	Color clrEvent = GrayOutColor( IsSelected() ? COLOR_CHOREO_EVENT_SELECTED : COLOR_CHOREO_EVENT );
 	if ( !Q_stricmp( event->GetName(), "NULL" ) )
 	{
-		clrEvent = GrayOutColor( RGB( 50, 50, 120 ) );
+		clrEvent = GrayOutColor( Color( 50, 50, 120 ) );
 		nullevent = true;
 	}
 
-	HBRUSH brEvent = CreateSolidBrush( clrEvent );
+	HBRUSH brEvent = CreateSolidBrush( ColorToRGB( clrEvent ) );
 
 	if ( !ramponly )
 	{
@@ -365,25 +365,25 @@ void CChoreoEventWidget::DrawGestureEvent(  CChoreoWidgetDrawHelper& drawHelper,
 
 	if ( ramponly && IsSelected() )
 	{
-		drawHelper.DrawOutlinedRect( GrayOutColor( RGB( 150, 180, 250 ) ), PS_SOLID, 1,
+		drawHelper.DrawOutlinedRect( GrayOutColor( Color( 150, 180, 250 ) ), PS_SOLID, 1,
 			rcEventLine2 );
 	}
 	else
 	{
-		drawHelper.DrawColoredLine( GrayOutColor( RGB( 127, 127, 127 ) ), PS_SOLID, 1, rcEventLine2.left, rcEventLine2.bottom,
+		drawHelper.DrawColoredLine( GrayOutColor( Color( 127, 127, 127 ) ), PS_SOLID, 1, rcEventLine2.left, rcEventLine2.bottom,
 			rcEventLine2.left, rcEventLine2.top );
-		drawHelper.DrawColoredLine( GrayOutColor( RGB( 127, 127, 127 ) ), PS_SOLID, 1, rcEventLine2.left, rcEventLine2.top,
+		drawHelper.DrawColoredLine( GrayOutColor( Color( 127, 127, 127 ) ), PS_SOLID, 1, rcEventLine2.left, rcEventLine2.top,
 			rcEventLine2.right, rcEventLine2.top );
-		drawHelper.DrawColoredLine( GrayOutColor( RGB( 31, 31, 31 ) ), PS_SOLID, 1, rcEventLine2.right, rcEventLine2.top,
+		drawHelper.DrawColoredLine( GrayOutColor( Color( 31, 31, 31 ) ), PS_SOLID, 1, rcEventLine2.right, rcEventLine2.top,
 			rcEventLine2.right, rcEventLine2.bottom );
-		drawHelper.DrawColoredLine( GrayOutColor( RGB( 0, 0, 0 ) ), PS_SOLID, 1, rcEventLine2.right, rcEventLine2.bottom,
+		drawHelper.DrawColoredLine( GrayOutColor( Color( 0, 0, 0 ) ), PS_SOLID, 1, rcEventLine2.right, rcEventLine2.bottom,
 			rcEventLine2.left, rcEventLine2.bottom );
 	}
 
 	int rampstart = m_pView->GetPixelForTimeValue( event->GetStartTime( ) );
 	int rampend = m_pView->GetPixelForTimeValue( event->GetEndTime( ) );
 
-//	COLORREF clrBottom = RGB( 180, 180, 180 );
+//	Color clrBottom = Color( 180, 180, 180 );
 
 //	drawHelper.DrawColoredLine( clrBottom, PS_SOLID, 1, rampstart, rcEventLine2.bottom,
 //		rcEventLine2.left, rcEventLine2.bottom );
@@ -408,7 +408,7 @@ void CChoreoEventWidget::DrawGestureEvent(  CChoreoWidgetDrawHelper& drawHelper,
 			1.0f );
 	}
 
-	g_pRampTool->DrawSamplesSimple( drawHelper, event, false, GrayOutColor( RGB( 63, 63, 63 ) ), rcEventLine );
+	g_pRampTool->DrawSamplesSimple( drawHelper, event, false, GrayOutColor( Color( 63, 63, 63 ) ), rcEventLine );
 
 	DrawRelativeTags( drawHelper, rcEventLine, event->GetDuration(), event );
 	DrawAbsoluteTags( drawHelper, rcEventLine, event->GetDuration(), event );
@@ -423,13 +423,13 @@ void CChoreoEventWidget::DrawGenericEvent( CChoreoWidgetDrawHelper& drawHelper, 
 
 	HDC dc = drawHelper.GrabDC();
 
-	COLORREF clrEvent = GrayOutColor( IsSelected() ? COLOR_CHOREO_EVENT_SELECTED : COLOR_CHOREO_EVENT );
+	Color clrEvent = GrayOutColor( IsSelected() ? COLOR_CHOREO_EVENT_SELECTED : COLOR_CHOREO_EVENT );
 	if ( event->GetType() == CChoreoEvent::SUBSCENE )
 	{
-		clrEvent = GrayOutColor( RGB( 200, 180, 200 ) );
+		clrEvent = GrayOutColor( Color( 200, 180, 200 ) );
 	}
 
-	HBRUSH brEvent = CreateSolidBrush( clrEvent );
+	HBRUSH brEvent = CreateSolidBrush( ColorToRGB( clrEvent ) );
 
 	if ( !ramponly )
 	{
@@ -440,22 +440,22 @@ void CChoreoEventWidget::DrawGenericEvent( CChoreoWidgetDrawHelper& drawHelper, 
 
 	if ( ramponly && IsSelected() )
 	{
-		drawHelper.DrawOutlinedRect( GrayOutColor( RGB( 150, 180, 250 ) ), PS_SOLID, 1,
+		drawHelper.DrawOutlinedRect( GrayOutColor( Color( 150, 180, 250 ) ), PS_SOLID, 1,
 			rcEventLine );
 	}
 	else
 	{
-		drawHelper.DrawColoredLine( GrayOutColor( RGB( 127, 127, 127 ) ), PS_SOLID, 1, rcEventLine.left, rcEventLine.bottom,
+		drawHelper.DrawColoredLine( GrayOutColor( Color( 127, 127, 127 ) ), PS_SOLID, 1, rcEventLine.left, rcEventLine.bottom,
 			rcEventLine.left, rcEventLine.top );
-		drawHelper.DrawColoredLine( GrayOutColor( RGB( 127, 127, 127 ) ), PS_SOLID, 1, rcEventLine.left, rcEventLine.top,
+		drawHelper.DrawColoredLine( GrayOutColor( Color( 127, 127, 127 ) ), PS_SOLID, 1, rcEventLine.left, rcEventLine.top,
 			rcEventLine.right, rcEventLine.top );
-		drawHelper.DrawColoredLine( GrayOutColor( RGB( 31, 31, 31 ) ), PS_SOLID, 1, rcEventLine.right, rcEventLine.top,
+		drawHelper.DrawColoredLine( GrayOutColor( Color( 31, 31, 31 ) ), PS_SOLID, 1, rcEventLine.right, rcEventLine.top,
 			rcEventLine.right, rcEventLine.bottom );
-		drawHelper.DrawColoredLine( GrayOutColor( RGB( 0, 0, 0 ) ), PS_SOLID, 1, rcEventLine.right, rcEventLine.bottom,
+		drawHelper.DrawColoredLine( GrayOutColor( Color( 0, 0, 0 ) ), PS_SOLID, 1, rcEventLine.right, rcEventLine.bottom,
 			rcEventLine.left, rcEventLine.bottom );
 	}
 
-	g_pRampTool->DrawSamplesSimple( drawHelper, event, false, GrayOutColor( RGB( 63, 63, 63 ) ), rcEventLine );
+	g_pRampTool->DrawSamplesSimple( drawHelper, event, false, GrayOutColor( Color( 63, 63, 63 ) ), rcEventLine );
 
 	DrawRelativeTags( drawHelper, rcEventLine, event->GetDuration(), event );
 	DrawAbsoluteTags( drawHelper, rcEventLine, event->GetDuration(), event );
@@ -502,11 +502,11 @@ void CChoreoEventWidget::redraw( CChoreoWidgetDrawHelper& drawHelper )
 		rcFrame.bottom = rcFrame.top + 17;
 		rcBorder.bottom = rcFrame.top + 17;
 
-		COLORREF clrSelection = GrayOutColor( RGB( 0, 63, 63 ) );
-		COLORREF clrBorder = GrayOutColor( RGB( 100, 200, 255 ) );
+		Color clrSelection = GrayOutColor( Color( 0, 63, 63 ) );
+		Color clrBorder = GrayOutColor( Color( 100, 200, 255 ) );
 
-		HBRUSH brBorder = CreateSolidBrush( clrBorder );
-		HBRUSH brSelected = CreateHatchBrush( HS_FDIAGONAL, clrSelection );
+		HBRUSH brBorder = CreateSolidBrush( ColorToRGB( clrBorder  ));
+		HBRUSH brSelected = CreateHatchBrush( HS_FDIAGONAL, ColorToRGB( clrSelection ) );
 		for ( int i = 0; i < 2; i++ )
 		{
 			FrameRect( dc, &rcFrame, brSelected );
@@ -580,9 +580,9 @@ void CChoreoEventWidget::redraw( CChoreoWidgetDrawHelper& drawHelper )
 		rcTagName.top += 3;
 		rcTagName.bottom = rcTagName.top + 10;
 		
-		drawHelper.DrawColoredText( "Arial", 9, FW_NORMAL, GrayOutColor( RGB( 0, 100, 200 ) ), rcTagName, event->GetRelativeTagName() );
+		drawHelper.DrawColoredText( "Arial", 9, FW_NORMAL, GrayOutColor( Color( 0, 100, 200 ) ), rcTagName, event->GetRelativeTagName() );
 
-		drawHelper.DrawFilledRect( GrayOutColor( RGB( 0, 100, 250 ) ), rcTagName.right-1, rcTagName.top-2,
+		drawHelper.DrawFilledRect( GrayOutColor( Color( 0, 100, 250 ) ), rcTagName.right-1, rcTagName.top-2,
 			rcTagName.right+2, rcTagName.bottom + 2 );
 
 	}
@@ -643,7 +643,7 @@ void CChoreoEventWidget::redraw( CChoreoWidgetDrawHelper& drawHelper )
 	int len = drawHelper.CalcTextWidth( "Arial", fontsize, FW_NORMAL, event->GetName() );
 
 	rcEventLabel.right = rcEventLabel.left + len + 2;
-	drawHelper.DrawColoredText( "Arial", fontsize, FW_NORMAL, GrayOutColor( RGB( 0, 0, 120 ) ), 
+	drawHelper.DrawColoredText( "Arial", fontsize, FW_NORMAL, GrayOutColor( Color( 0, 0, 120 ) ), 
 		rcEventLabel, event->GetName() );
 }
 
@@ -720,6 +720,8 @@ void CChoreoEventWidget::LoadImages( void )
 	LoadBitmapFromFile( "gfx/hlfaceposer/ev_stoppoint.bmp", m_Bitmaps[ CChoreoEvent::STOPPOINT ] );
 	LoadBitmapFromFile( "gfx/hlfaceposer/ev_permit_response.bmp", m_Bitmaps[ CChoreoEvent::PERMIT_RESPONSES ] );
 	LoadBitmapFromFile( "gfx/hlfaceposer/ev_generic.bmp", m_Bitmaps[ CChoreoEvent::GENERIC ] );
+
+	LoadBitmapFromFile( "gfx/hlfaceposer/ev_generic.bmp", m_Bitmaps[ CChoreoEvent::CAMERA ] );
 
 	LoadBitmapFromFile( "gfx/hlfaceposer/lock.bmp", m_LockBodyFacingBitmap );
 }

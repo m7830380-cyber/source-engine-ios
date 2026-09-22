@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2005, Valve Corporation, All rights reserved. =======
 //
 // Purpose: P.E.T. (Particle Editing Tool); main UI smarts class
 //
@@ -37,6 +37,7 @@ class CPetDoc;
 class CParticleSystemPropertiesContainer;
 class CParticleSystemDefinitionBrowser;
 class CParticleSystemPreviewPanel;
+class CSheetEditorPanel;
 class CDmeParticleSystemDefinition;
 enum ParticleFunctionType_t;
 
@@ -45,6 +46,11 @@ namespace vgui
 	class Panel;
 }
 
+
+enum
+{
+	NOTIFY_FLAG_PARTICLESYS_ADDED_OR_REMOVED = (1<<NOTIFY_FLAG_FIRST_APPLICATION_BIT)
+};
 
 //-----------------------------------------------------------------------------
 // Allows the doc to call back into the CommEdit editor tool
@@ -84,7 +90,7 @@ public:
 	virtual const char *GetToolName() { return "Particle Editor"; }
 	virtual bool	Init( );
 	virtual void	Shutdown();
-	virtual bool	CanQuit();
+	virtual bool	CanQuit( const char *pExitMsg );
 	virtual void	OnToolActivate();
 	virtual void	OnToolDeactivate();
 	virtual void	Think( bool finalTick );
@@ -109,6 +115,8 @@ public:
 	MESSAGE_FUNC( Save, "OnSave" );
 	void SaveAndTest();
 
+	void PreOperatorsPaste();
+
 public:
 	MESSAGE_FUNC( OnRestartLevel, "RestartLevel" );
 	MESSAGE_FUNC( OnNew, "OnNew" );
@@ -118,8 +126,10 @@ public:
 	MESSAGE_FUNC( OnCloseNoSave, "OnCloseNoSave" );
 	MESSAGE_FUNC( OnMarkNotDirty, "OnMarkNotDirty" );
 	MESSAGE_FUNC( OnExit, "OnExit" );
-	MESSAGE_FUNC( OnCopy, "OnCopy" );
+	MESSAGE_FUNC( OnCopySystems, "OnCopySystems" );
+	MESSAGE_FUNC( OnCopyFunctions, "OnCopyFunctions" );
 	MESSAGE_FUNC( OnPaste, "OnPaste" );
+	MESSAGE_FUNC( OnRequestPaste, "RequestPaste" );
 
 	// Commands related to the edit menu
 	void		OnDescribeUndo();
@@ -128,12 +138,12 @@ public:
 	MESSAGE_FUNC( OnToggleProperties, "OnToggleProperties" );
 	MESSAGE_FUNC( OnToggleParticleSystemBrowser, "OnToggleParticleSystemBrowser" );
 	MESSAGE_FUNC( OnToggleParticlePreview, "OnToggleParticlePreview" );
+//	MESSAGE_FUNC( OnToggleSheetEditor, "OnToggleSheetEditor" );
 	MESSAGE_FUNC( OnDefaultLayout, "OnDefaultLayout" );
 
 	// Keybindings
 	KEYBINDING_FUNC( undo, KEY_Z, vgui::MODIFIER_CONTROL, OnUndo, "#undo_help", 0 );
 	KEYBINDING_FUNC( redo, KEY_Z, vgui::MODIFIER_CONTROL | vgui::MODIFIER_SHIFT, OnRedo, "#redo_help", 0 );
-	KEYBINDING_FUNC_NODECLARE( edit_copy, KEY_C, vgui::MODIFIER_CONTROL, OnCopy, "#edit_copy_help", 0 );
 	KEYBINDING_FUNC_NODECLARE( edit_paste, KEY_V, vgui::MODIFIER_CONTROL, OnPaste, "#edit_paste_help", 0 );
 
 	void		PerformNew();
@@ -151,6 +161,7 @@ public:
 	CParticleSystemPropertiesContainer *GetProperties();
 	CParticleSystemDefinitionBrowser *GetParticleSystemDefinitionBrowser();
 	CParticleSystemPreviewPanel *GetParticlePreview();
+//	CSheetEditorPanel *GetSheetEditor();
 
 	void SetCurrentParticleSystem( CDmeParticleSystemDefinition *pParticleSystem, bool bForceBrowserSelection = true );
 	CDmeParticleSystemDefinition* GetCurrentParticleSystem( void );
@@ -196,6 +207,9 @@ private:
 
 	// Particle preview window
 	vgui::DHANDLE< CParticleSystemPreviewPanel > m_hParticlePreview;
+
+	// Sheet editor
+//	vgui::DHANDLE< CSheetEditorPanel > m_hSheetEditorPanel;
 
 	// The currently viewed entity
 	CDmeHandle< CDmeParticleSystemDefinition > m_hCurrentParticleSystem;

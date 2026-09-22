@@ -1,17 +1,26 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright  1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Defines a group of app systems that all have the same lifetime
 // that need to be connected/initialized, etc. in a well-defined order
 //
 // $Revision: $
 // $NoKeywords: $
-//=============================================================================//
+//===========================================================================//
 
+#include "tier0/platform.h"
+
+#include "appframework/ilaunchermgr.h"
+#if defined( PLATFORM_PS3)
+#include "ps3/ps3_helpers.h"
+#endif
+
+#include "tier0/platwindow.h"
 #include "appframework/IAppSystemGroup.h"
-#include "appframework/IAppSystem.h"
+#include "appframework/iappsystem.h"
 #include "interface.h"
 #include "filesystem.h"
 #include "filesystem_init.h"
+#include <algorithm>
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
@@ -20,7 +29,7 @@
 //-----------------------------------------------------------------------------
 // constructor, destructor
 //-----------------------------------------------------------------------------
-//extern ILoggingListener *g_pDefaultLoggingListener;
+extern ILoggingListener *g_pDefaultLoggingListener;
 
 
 //-----------------------------------------------------------------------------
@@ -64,7 +73,11 @@ AppModule_t CAppSystemGroup::LoadModule( const char *pDLLName )
 	CSysModule *pSysModule = LoadModuleDLL( pDLLName );
 	if (!pSysModule)
 	{
+#ifdef _X360
+		Warning("AppFramework : Unable to load module %s! (err #%d)\n", pDLLName, GetLastError() );
+#else
 		Warning("AppFramework : Unable to load module %s!\n", pDLLName );
+#endif
 		return APP_MODULE_INVALID;
 	}
 
@@ -76,6 +89,68 @@ AppModule_t CAppSystemGroup::LoadModule( const char *pDLLName )
 
 	return nIndex;
 }
+
+
+int CAppSystemGroup::ReloadModule( const char * pDLLName )
+{
+	// Remove the extension when creating the name.
+	int nLen = Q_strlen( pDLLName ) + 1;
+	char *pModuleName = (char*)stackalloc( nLen );
+	Q_StripExtension( pDLLName, pModuleName, nLen );
+
+	// See if we already loaded it...
+	for ( int i = m_Modules.Count(); --i >= 0; ) 
+	{
+		Module_t &module = m_Modules[i];
+		if ( module.m_pModuleName && !Q_stricmp( pModuleName, module.m_pModuleName ) )
+		{
+			// found the module, reload
+			Msg("Unloading module %s, dll %s\n", pModuleName, pDLLName );
+			Sys_UnloadModule( m_Modules[i].m_pModule );
+			Msg("Module %s unloaded, reloading\n", pModuleName );
+			CSysModule *pSysModule = NULL;
+			CreateInterfaceFn fnFactory = NULL;
+			while( !pSysModule )	   
+			{
+				pSysModule = LoadModuleDLL( pDLLName );
+				if( !pSysModule )
+				{
+					Warning("Cannot load, retrying in 5 seconds..\n");
+					ThreadSleep( 5000 );
+				}
+				fnFactory = Sys_GetFactory( pSysModule ) ;
+				if( !fnFactory )
+				{
+					Error( "Could not get factory from %s\n", pModuleName );
+				}
+				( *fnFactory )( "Reload Interface", NULL ); // let the CreateInterface function work and do after-reload stuff
+			}
+			
+			Msg( "Reload complete, module %p->%p, factory %llx->%llx\n", module.m_pModule, pSysModule, (uint64)(uintp)module.m_Factory, (uint64)(uintp)fnFactory );
+			module.m_pModule = pSysModule;
+			if( module.m_Factory )
+			{ // don't reload factory pointer unless it was initialized to non-NULL
+				module.m_Factory = fnFactory;
+			}
+			
+			return 0; // no error
+		}
+	}
+	
+	Warning( "No such module: '%s' in appsystem @%p. Dumping available modules:\n", pModuleName, this );
+	for ( int i = 0; i < m_Modules.Count(); ++i ) 
+	{
+		Module_t &module = m_Modules[i];
+		#ifdef _PS3
+		Msg( "%25s %llx %p %6d %6d bytes\n", module.m_pModuleName, (uint64)module.m_Factory, module.m_pModule, ( ( PS3_PrxLoadParametersBase_t *)module.m_pModule )->sysPrxId, ( ( PS3_PrxLoadParametersBase_t *)module.m_pModule )->cbSize );
+		#else
+		Msg("%25s %p %p\n", module.m_pModuleName, (void*)module.m_Factory, module.m_pModule );
+		#endif
+	}
+	
+	return m_pParentAppSystem ? m_pParentAppSystem->ReloadModule( pDLLName ) : -1;
+}
+
 
 AppModule_t CAppSystemGroup::LoadModule( CreateInterfaceFn factory )
 {
@@ -129,6 +204,13 @@ IAppSystem *CAppSystemGroup::AddSystem( AppModule_t module, const char *pInterfa
 	if (module == APP_MODULE_INVALID)
 		return NULL;
 
+	int nFoundIndex = m_SystemDict.Find( pInterfaceName );
+	if ( nFoundIndex != m_SystemDict.InvalidIndex() )
+	{
+		Warning("AppFramework : Attempted to add two systems with the same interface name %s!\n", pInterfaceName );
+		return m_Systems[ m_SystemDict[nFoundIndex] ];
+	}
+
 	Assert( (module >= 0) && (module < m_Modules.Count()) );
 	CreateInterfaceFn pFactory = m_Modules[module].m_pModule ? Sys_GetFactory( m_Modules[module].m_pModule ) : m_Modules[module].m_Factory;
 
@@ -150,28 +232,33 @@ IAppSystem *CAppSystemGroup::AddSystem( AppModule_t module, const char *pInterfa
 	return pAppSystem;
 }
 
-static char const *g_StageLookup[] = 
+static const char *g_StageLookup[] = 
 {
 	"CREATION",
+	"LOADING DEPENDENCIES",
 	"CONNECTION",
 	"PREINITIALIZATION",
 	"INITIALIZATION",
+	"POSTINITIALIZATION",
+	"RUNNING",
+	"PRESHUTDOWN",
 	"SHUTDOWN",
 	"POSTSHUTDOWN",
 	"DISCONNECTION",
 	"DESTRUCTION",
-	"NONE",
 };
 
 void CAppSystemGroup::ReportStartupFailure( int nErrorStage, int nSysIndex )
 {
-	char const *pszStageDesc = "Unknown";
-	if ( nErrorStage >= 0 && nErrorStage < ARRAYSIZE( g_StageLookup ) )
+	COMPILE_TIME_ASSERT( APPSYSTEM_GROUP_STAGE_COUNT == ARRAYSIZE( g_StageLookup ) );
+
+	const char *pszStageDesc = "Unknown";
+	if ( nErrorStage >= 0 && nErrorStage < ( int )ARRAYSIZE( g_StageLookup ) )
 	{
 		pszStageDesc = g_StageLookup[ nErrorStage ];
 	}
 
-	char const *pszSystemName = "(Unknown)";
+	const char *pszSystemName = "(Unknown)";
 	for ( int i = m_SystemDict.First(); i != m_SystemDict.InvalidIndex(); i = m_SystemDict.Next( i ) )
 	{
 		if ( m_SystemDict[ i ] != nSysIndex )
@@ -219,7 +306,7 @@ bool CAppSystemGroup::AddSystems( AppSystemInfo_t *pSystemList )
 		IAppSystem *pSystem = AddSystem( module, pSystemList->m_pInterfaceName );
 		if ( !pSystem )
 		{
-			Warning( "Unable to load interface %s from %s\n", pSystemList->m_pInterfaceName, pSystemList->m_pModuleName );
+			Warning( "Unable to load interface %s from %s, requested from EXE.\n", pSystemList->m_pInterfaceName, pSystemList->m_pModuleName );
 			return false;
 		}
 		++pSystemList;
@@ -251,6 +338,14 @@ void *CAppSystemGroup::FindSystem( const char *pSystemName )
 			return pInterface;
 	}
 
+	int nExternalCount = m_NonAppSystemFactories.Count();
+	for ( i = 0; i < nExternalCount; ++i )
+	{
+		void *pInterface = m_NonAppSystemFactories[i]( pSystemName, NULL );
+		if (pInterface)
+			return pInterface;
+	}
+
 	if ( m_pParentAppSystem )
 	{
 		void* pInterface = m_pParentAppSystem->FindSystem( pSystemName );
@@ -264,6 +359,39 @@ void *CAppSystemGroup::FindSystem( const char *pSystemName )
 
 
 //-----------------------------------------------------------------------------
+// Adds a factory to the system so other stuff can query it. Triggers a connect systems
+//-----------------------------------------------------------------------------
+void CAppSystemGroup::AddNonAppSystemFactory( CreateInterfaceFn fn )
+{
+	m_NonAppSystemFactories.AddToTail( fn );
+}
+
+
+//-----------------------------------------------------------------------------
+// Removes a factory, triggers a disconnect call if it succeeds
+//-----------------------------------------------------------------------------
+void CAppSystemGroup::RemoveNonAppSystemFactory( CreateInterfaceFn fn )
+{
+	m_NonAppSystemFactories.FindAndRemove( fn );
+}
+
+
+//-----------------------------------------------------------------------------
+// Causes the systems to reconnect to an interface
+//-----------------------------------------------------------------------------
+void CAppSystemGroup::ReconnectSystems( const char *pInterfaceName )
+{
+	// Let the libraries regrab the specified interface
+	for (int i = 0; i < m_Systems.Count(); ++i )
+	{
+		IAppSystem *pSystem = m_Systems[i];
+		pSystem->Reconnect( GetFactory(), pInterfaceName );
+	}
+}
+
+
+
+//-----------------------------------------------------------------------------
 // Gets at the parent appsystem group
 //-----------------------------------------------------------------------------
 CAppSystemGroup *CAppSystemGroup::GetParent()
@@ -273,20 +401,225 @@ CAppSystemGroup *CAppSystemGroup::GetParent()
 
 	
 //-----------------------------------------------------------------------------
+// Deals with sorting dependencies and finding circular dependencies
+//-----------------------------------------------------------------------------
+void CAppSystemGroup::ComputeDependencies( LibraryDependencies_t &depend )
+{
+	bool bDone = false;
+	while ( !bDone )
+	{
+		bDone = true;
+
+		// If i depends on j, then i depends on what j depends on
+		// Add secondary dependencies to i. We stop when no dependencies are added
+		int nCount = depend.GetNumStrings();
+		for ( int i = 0; i < nCount; ++i )
+		{
+			int nDependentCount = depend[i].GetNumStrings();
+			for ( int j = 0; j < nDependentCount; ++j )
+			{
+				int nIndex = depend.Find( depend[i].String( j ) );
+				if ( nIndex == UTL_INVAL_SYMBOL )
+					continue;
+
+				int nSecondaryDepCount = depend[nIndex].GetNumStrings();
+				for ( int k = 0; k < nSecondaryDepCount; ++k )
+				{
+					// Don't bother if we already contain the secondary dependency
+					const char *pSecondaryDependency = depend[nIndex].String( k );
+					if ( depend[i].Find( pSecondaryDependency ) != UTL_INVAL_SYMBOL )
+						continue;
+
+					// Check for circular dependency
+					if ( !Q_stricmp( pSecondaryDependency, depend.String( i ) ) )
+					{
+						Warning( "Encountered a circular dependency with library %s!\n", pSecondaryDependency );
+						continue;
+					}
+
+					bDone = false;
+					depend[i].AddString( pSecondaryDependency );
+					nDependentCount = depend[i].GetNumStrings();
+				}
+			}
+		}
+	}
+}
+
+
+//-----------------------------------------------------------------------------
+// Sorts dependencies
+//-----------------------------------------------------------------------------
+CAppSystemGroup::LibraryDependencies_t *CAppSystemGroup::sm_pSortDependencies;
+bool CAppSystemGroup::SortLessFunc( const int &left, const int &right )
+{
+	const char *pLeftInterface = sm_pSortDependencies->String( left );
+	const char *pRightInterface = sm_pSortDependencies->String( right );
+	bool bRightDependsOnLeft = ( (*sm_pSortDependencies)[pRightInterface].Find( pLeftInterface ) != UTL_INVAL_SYMBOL );
+	return ( bRightDependsOnLeft );
+}
+
+void CAppSystemGroup::SortDependentLibraries( LibraryDependencies_t &depend )
+{
+	int nCount = depend.GetNumStrings();
+
+	int *pIndices = (int*)stackalloc( depend.GetNumStrings() * sizeof(int) );
+	for ( int i = 0; i < nCount; ++i )
+	{
+		pIndices[i] = i;
+	}
+
+	// Sort by dependency. Can't use fancy stl algorithms here because the sort func isn't strongly transitive.
+	// Using lame bubble sort instead. We could speed this up using a proper depth-first graph walk, but it's not worth the effort.
+	sm_pSortDependencies = &depend;
+	bool bChanged = true;
+	while ( bChanged )
+	{
+		bChanged = false;
+		for ( int i = 1; i < nCount; i++ )
+		{
+			for ( int j = 0; j < i; j++ )
+			{
+				if ( SortLessFunc( pIndices[i], pIndices[j] ) )
+				{
+					int nTmp = pIndices[i];
+					pIndices[i] = pIndices[j];
+					pIndices[j] = nTmp;
+					bChanged = true;
+				}
+			}
+		}
+	}
+	sm_pSortDependencies = NULL;
+
+
+	// This logic will make it so it respects the specified initialization order
+	// in the face of no dependencies telling the system otherwise. 
+	// Doing this just for safety to reduce the amount of changed code
+	bool bDone = false;
+	while ( !bDone )
+	{
+		bDone = true;
+		for ( int i = 1; i < nCount; ++i )
+		{
+			int nLeft = pIndices[i-1];
+			int nRight = pIndices[i];
+			if ( nRight > nLeft )
+				continue;
+
+			const char *pLeftInterface = depend.String( nLeft );
+			const char *pRightInterface = depend.String( nRight );
+			bool bRightDependsOnLeft = ( depend[pRightInterface].Find( pLeftInterface ) != UTL_INVAL_SYMBOL );
+			if ( bRightDependsOnLeft )
+				continue;
+			Assert ( UTL_INVAL_SYMBOL == depend[pRightInterface].Find( pLeftInterface ) );
+			V_swap( pIndices[i], pIndices[i-1] );
+			bDone = false;
+		}
+	}
+
+	// Reorder appsystem list + dictionary indexing
+	Assert( m_Systems.Count() == nCount );
+	int nTempSize = nCount * sizeof(IAppSystem*);
+	IAppSystem **pTemp = (IAppSystem**)stackalloc( nTempSize );
+	memcpy( pTemp, m_Systems.Base(), nTempSize );
+	for ( int i = 0; i < nCount; ++i )
+	{
+		m_Systems[i] = pTemp[ pIndices[i] ];
+	}
+								    
+	// Remap system indices
+	for ( uint16 i = m_SystemDict.First(); i != m_SystemDict.InvalidIndex(); i = m_SystemDict.Next( i ) )
+	{
+		int j = 0;
+		for ( ; j < nCount; ++j )
+		{
+			if ( pIndices[j] == m_SystemDict[i] )
+			{
+				m_SystemDict[i] = j;
+				break;
+			}
+		}
+		Assert( j != nCount );
+	}
+
+	( void )stackfree( pTemp );
+	( void )stackfree( pIndices );
+}
+
+
+//-----------------------------------------------------------------------------
+// Finds appsystem names
+//-----------------------------------------------------------------------------
+const char *CAppSystemGroup::FindSystemName( int nIndex )
+{
+	for ( uint16 i = m_SystemDict.First(); i != m_SystemDict.InvalidIndex(); i = m_SystemDict.Next( i ) )
+	{
+		if ( m_SystemDict[i] == nIndex )
+			return m_SystemDict.GetElementName( i );
+	}
+	return NULL;
+}
+
+
+//-----------------------------------------------------------------------------
+// Method to load all dependent systems
+//-----------------------------------------------------------------------------
+bool CAppSystemGroup::LoadDependentSystems()
+{
+	LibraryDependencies_t dependencies;
+
+	// First, load dependencies.
+	for ( int i = 0; i < m_Systems.Count(); ++i )
+	{
+		IAppSystem *pSystem = m_Systems[i];
+		const char *pInterfaceName = FindSystemName( i );
+		dependencies.AddString( pInterfaceName );
+
+		const AppSystemInfo_t *pDependencies = pSystem->GetDependencies();
+		if ( !pDependencies )
+			continue;
+
+		for ( ; pDependencies->m_pInterfaceName && pDependencies->m_pInterfaceName[0]; ++pDependencies )
+		{
+			dependencies[ pInterfaceName ].AddString( pDependencies->m_pInterfaceName );
+
+			CreateInterfaceFn factory = GetFactory();
+			if ( factory( pDependencies->m_pInterfaceName, NULL ) ) 
+				continue;
+
+			AppModule_t module = LoadModule( pDependencies->m_pModuleName );
+			IAppSystem *pSystem = AddSystem( module, pDependencies->m_pInterfaceName );
+			if ( !pSystem )
+			{
+				Warning( "Unable to load interface %s from %s (Dependency of %s)\n", pDependencies->m_pInterfaceName, pDependencies->m_pModuleName, pInterfaceName );
+				return false;
+			}
+		}
+	}
+
+	ComputeDependencies( dependencies );
+	SortDependentLibraries( dependencies );
+	return true;
+}
+
+
+//-----------------------------------------------------------------------------
 // Method to connect/disconnect all systems
 //-----------------------------------------------------------------------------
 bool CAppSystemGroup::ConnectSystems()
 {
+	// Let the libraries grab any other interfaces they may need
 	for (int i = 0; i < m_Systems.Count(); ++i )
 	{
-		IAppSystem *sys = m_Systems[i];
-
-		if (!sys->Connect( GetFactory() ))
+		IAppSystem *pSystem = m_Systems[i];
+		if ( !pSystem->Connect( GetFactory() ) )
 		{
 			ReportStartupFailure( CONNECTION, i );
 			return false;
 		}
 	}
+
 	return true;
 }
 
@@ -305,12 +638,17 @@ void CAppSystemGroup::DisconnectSystems()
 //-----------------------------------------------------------------------------
 InitReturnVal_t CAppSystemGroup::InitSystems()
 {
-	for (int i = 0; i < m_Systems.Count(); ++i )
+	for (int nSystemsInitialized = 0; nSystemsInitialized < m_Systems.Count(); ++nSystemsInitialized )
 	{
-		InitReturnVal_t nRetVal = m_Systems[i]->Init();
+		InitReturnVal_t nRetVal = m_Systems[nSystemsInitialized]->Init();
 		if ( nRetVal != INIT_OK )
 		{
-			ReportStartupFailure( INITIALIZATION, i );
+			for( int nSystemsRewind = nSystemsInitialized; nSystemsRewind-->0; )
+			{
+				m_Systems[nSystemsRewind]->Shutdown();
+			}
+		
+			ReportStartupFailure( INITIALIZATION, nSystemsInitialized );
 			return nRetVal;
 		}
 	}
@@ -328,11 +666,64 @@ void CAppSystemGroup::ShutdownSystems()
 
 
 //-----------------------------------------------------------------------------
+// Window management
+//-----------------------------------------------------------------------------
+void* CAppSystemGroup::CreateAppWindow( void *hInstance, const char *pTitle, bool bWindowed, int w, int h, bool bResizing )
+{
+#if defined( PLATFORM_WINDOWS ) || defined( PLATFORM_OSX )
+	int nFlags = 0;
+	if ( !bWindowed )
+	{
+		nFlags |= WINDOW_CREATE_FULLSCREEN;
+	}
+	if ( bResizing )
+	{
+		nFlags |= WINDOW_CREATE_RESIZING;
+	}
+
+	PlatWindow_t hWnd = Plat_CreateWindow( hInstance, pTitle, w, h, nFlags );
+	if ( hWnd == PLAT_WINDOW_INVALID )
+		return NULL;
+
+	int CenterX, CenterY;
+	Plat_GetDesktopResolution( &CenterX, &CenterY );
+	CenterX = ( CenterX - w ) / 2;
+	CenterY = ( CenterY - h ) / 2;
+	CenterX = (CenterX < 0) ? 0: CenterX;
+	CenterY = (CenterY < 0) ? 0: CenterY;
+
+	// In VCR modes, keep it in the upper left so mouse coordinates are always relative to the window.
+	Plat_SetWindowPos( hWnd, CenterX, CenterY );
+
+	return hWnd;
+#elif defined( PLATFORM_OSX )
+	extern ICocoaMgr *g_pCocoaMgr;
+	g_pCocoaMgr->CreateGameWindow( pTitle, bWindowed, w, h );
+	return (void*)Sys_GetFactoryThis();	// Other stuff will query for ICocoaBridge out of this.
+#elif defined( PLATFORM_LINUX )
+#ifndef DEDICATED
+
+// PBTODO
+// 	extern IGLXMgr *g_pGLXMgr;
+// 	g_pGLXMgr->CreateWindow( pTitle, bWindowed, w, h );
+	return (void*)Sys_GetFactoryThis();	// Other stuff will query for ICocoaBridge out of this.
+#endif
+#endif
+	return NULL;
+}
+
+void CAppSystemGroup::SetAppWindowTitle( void* hWnd, const char *pTitle )
+{
+	Plat_SetWindowTitle( (PlatWindow_t)hWnd, pTitle );
+}
+
+
+//-----------------------------------------------------------------------------
 // Returns the stage at which the app system group ran into an error
 //-----------------------------------------------------------------------------
-CAppSystemGroup::AppSystemGroupStage_t CAppSystemGroup::GetErrorStage() const
+CAppSystemGroup::AppSystemGroupStage_t CAppSystemGroup::GetCurrentStage() const
 {
-	return m_nErrorStage;
+	return m_nCurrentStage;
 }
 
 
@@ -369,15 +760,20 @@ int CAppSystemGroup::Run()
 {	
 	// The factory now uses this app system group
 	s_pCurrentAppSystem	= this;
-
+	
 	// Load, connect, init
 	int nRetVal = OnStartup();
- 	if ( m_nErrorStage != NONE )
-		return nRetVal;
 
-	// Main loop implemented by the application
-	// FIXME: HACK workaround to avoid vgui porting
-	nRetVal = Main();
+	// NOTE: In case of OnStartup Failure
+	// On PS/3, not unloading the PRXes in order will cause crashes on quit, which is a TRC failure
+	// We probably should, but don't have to do this on all platforms, since it's not required to clean-up crash-free.
+
+ 	if ( m_nCurrentStage == RUNNING )
+	{
+		// Main loop implemented by the application
+		// FIXME: HACK workaround to avoid vgui porting
+		nRetVal = Main();
+	}
 
 	// Shutdown, disconnect, unload
 	OnShutdown();
@@ -412,37 +808,37 @@ int CAppSystemGroup::OnStartup()
 	// The factory now uses this app system group
 	s_pCurrentAppSystem	= this;
 
- 	m_nErrorStage = NONE;
-
 	// Call an installed application creation function
+	m_nCurrentStage = CREATION;
 	if ( !Create() )
-	{
-		m_nErrorStage = CREATION;
 		return -1;
-	}
+
+	// Load dependent libraries
+	m_nCurrentStage = DEPENDENCIES;
+	if ( !LoadDependentSystems() )
+		return -1;
 
 	// Let all systems know about each other
+	m_nCurrentStage = CONNECTION;
 	if ( !ConnectSystems() )
-	{
-		m_nErrorStage = CONNECTION;
 		return -1;
-	}
 
 	// Allow the application to do some work before init
+	m_nCurrentStage = PREINITIALIZATION;
 	if ( !PreInit() )
-	{
-		m_nErrorStage = PREINITIALIZATION;
 		return -1;
-	}
 
 	// Call Init on all App Systems
+	m_nCurrentStage = INITIALIZATION;
 	int nRetVal = InitSystems();
 	if ( nRetVal != INIT_OK )
-	{
-		m_nErrorStage = INITIALIZATION;
 		return -1;
-	}
 
+	m_nCurrentStage = POSTINITIALIZATION;
+	if ( !PostInit() )
+		return -1;
+
+	m_nCurrentStage = RUNNING;
 	return nRetVal;
 }
 
@@ -451,9 +847,10 @@ void CAppSystemGroup::OnShutdown()
 	// The factory now uses this app system group
 	s_pCurrentAppSystem	= this;
 
-	switch( m_nErrorStage )
+	switch( m_nCurrentStage )
 	{
-	case NONE:
+	case RUNNING:
+	case POSTINITIALIZATION:
 		break;
 
 	case PREINITIALIZATION:
@@ -461,29 +858,41 @@ void CAppSystemGroup::OnShutdown()
 		goto disconnect;
 	
 	case CREATION:
+	case DEPENDENCIES:
 	case CONNECTION:
 		goto destroy;
+
+	default:
+		break;
 	}
 
+	// Allow the application to do some work before shutdown
+	m_nCurrentStage = PRESHUTDOWN;
+	PreShutdown();
+
 	// Cal Shutdown on all App Systems
+	m_nCurrentStage = SHUTDOWN;
 	ShutdownSystems();
 
 	// Allow the application to do some work after shutdown
+	m_nCurrentStage = POSTSHUTDOWN;
 	PostShutdown();
 
 disconnect:
 	// Systems should disconnect from each other
+	m_nCurrentStage = DISCONNECTION;
 	DisconnectSystems();
 
 destroy:
 	// Unload all DLLs loaded in the AppCreate block
+	m_nCurrentStage = DESTRUCTION;
 	RemoveAllSystems();
 
 	// Have to do this because the logging listeners & response policies may live in modules which are being unloaded
 	// @TODO: this seems like a bad legacy practice... app systems should unload their spew handlers gracefully.
-//	LoggingSystem_ResetCurrentLoggingState();
-//	Assert( g_pDefaultLoggingListener != NULL );
-//	LoggingSystem_RegisterLoggingListener( g_pDefaultLoggingListener );
+	LoggingSystem_ResetCurrentLoggingState();
+	Assert( g_pDefaultLoggingListener != NULL );
+	LoggingSystem_RegisterLoggingListener( g_pDefaultLoggingListener );
 
 	UnloadAllModules();
 

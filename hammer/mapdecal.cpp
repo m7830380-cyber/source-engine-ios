@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Implements a decal helper. The decal attaches itself to nearby
 //			solids, dynamically creating decal faces as necessary.
@@ -97,8 +97,8 @@ void CMapDecal::CalcBounds(BOOL bFullUpdate)
 
 	if (m_Faces.Count() > 0)
 	{
-		Vector MinsFace;
-		Vector MaxsFace;
+		Vector Mins;
+		Vector Maxs;
 
 		FOR_EACH_OBJ( m_Faces, pos )
 		{
@@ -106,9 +106,9 @@ void CMapDecal::CalcBounds(BOOL bFullUpdate)
 
 			if ((pDecalFace != NULL) && (pDecalFace->pFace != NULL))
 			{
-				pDecalFace->pFace->GetFaceBounds( MinsFace, MaxsFace );
+				pDecalFace->pFace->GetFaceBounds(Mins, Maxs);
 
-				m_CullBox.UpdateBounds( MinsFace, MaxsFace );
+				m_CullBox.UpdateBounds(Mins, Maxs);
 			}
 		}
 
@@ -346,7 +346,8 @@ void CMapDecal::OnParentKeyChanged(const char* szKey, const char* szValue)
 			//
 			FOR_EACH_OBJ( m_Solids, pos )
 			{
-				CMapSolid *pSolid = (CMapSolid *)m_Solids.Element(pos);
+				CMapClass *pMapClass = (CUtlReference< CMapClass >)m_Solids.Element(pos);
+				CMapSolid *pSolid = (CMapSolid *)pMapClass;
 				if (pSolid != NULL)
 				{
 					OnNotifyDependent(pSolid, Notify_Changed);
@@ -435,7 +436,7 @@ void CMapDecal::OnNotifyDependent(CMapClass *pObject, Notify_Dependent_t eNotify
 		int index = m_Solids.Find(pSolid);
 		if (index != -1)
 		{
-			m_Solids.Remove(index);
+			m_Solids.FastRemove(index);
 			UpdateDependency(pSolid, NULL);
 		}
 	}
@@ -605,7 +606,8 @@ void CMapDecal::OnRemoveFromWorld(CMapWorld *pWorld, bool bNotifyChildren)
 	//
 	FOR_EACH_OBJ( m_Solids, pos )
 	{
-		CMapSolid *pSolid = (CMapSolid *)m_Solids.Element(pos);
+		CMapClass *pMapClass = (CUtlReference< CMapClass >)m_Solids.Element(pos);
+		CMapSolid *pSolid = (CMapSolid *)pMapClass;
 		UpdateDependency(pSolid, NULL);
 	}
 

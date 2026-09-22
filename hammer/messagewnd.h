@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ====
 //
 // Purpose: 
 //
@@ -68,6 +68,7 @@ protected:
 	CFont Font;
 	int iCharWidth;	// calculated in first paint
 	int iNumMsgs;
+	bool bDestroyed;
 
 	// Generated message map functions
 	//{{AFX_MSG(CMessageWnd)
@@ -77,6 +78,7 @@ protected:
 	afx_msg void OnSize(UINT nType, int cx, int cy);
 	afx_msg void OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags);
 	afx_msg void OnClose();
+	afx_msg void OnDestroy();
 	//}}AFX_MSG
 	DECLARE_MESSAGE_MAP()
 };

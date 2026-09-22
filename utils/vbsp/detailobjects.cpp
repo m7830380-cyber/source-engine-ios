@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Places "detail" objects which are client-only renderable things
 //
@@ -6,12 +6,11 @@
 // $NoKeywords: $
 //=============================================================================//
 
-#include <windows.h>
 #include "vbsp.h"
 #include "bsplib.h"
 #include "KeyValues.h"
-#include "utlsymbol.h"
-#include "utlvector.h"
+#include "UtlSymbol.h"
+#include "UtlVector.h"
 #include <io.h>
 #include "bspfile.h"
 #include "utilmatlib.h"
@@ -73,6 +72,7 @@ struct DetailObject_t
 };
 
 static CUtlVector<DetailObject_t>	s_DetailObjectDict;
+static CUtlVector<entity_t *> g_BlockerList;
 
 
 //-----------------------------------------------------------------------------
@@ -170,7 +170,7 @@ static void ParseDetailGroup( int detailId, KeyValues* pGroupKeyValues )
 					int nValid = sscanf( pSpriteData, "%f %f %f %f %f", &x, &y, &flWidth, &flHeight, &flTextureSize ); 
 					if ( (nValid != 5) || (flTextureSize == 0) )
 					{
-						Error( "Invalid arguments to \"sprite\" in detail.vbsp (model %s)!\n", model.m_ModelName.String() );
+						Error( "Invalid arguments to \"sprite\" in detail.vbsp (model %s)!\n", model.m_ModelName );
 					}
 
 					model.m_Tex[0].x = ( x + 0.5f ) / flTextureSize;
@@ -493,6 +493,9 @@ static void AddDetailToLump( const char* pModelName, const Vector& pt, const QAn
 //-----------------------------------------------------------------------------
 // Add a detail sprite to the lump.
 //-----------------------------------------------------------------------------
+
+#define MAX_DETAIL_SPRITES 65535 * 32
+
 static void AddDetailSpriteToLump( const Vector &vecOrigin, const QAngle &vecAngles, int nOrientation,
 								  const Vector2D *pPos, const Vector2D *pTex, float flScale, int iType,
 									int iShapeAngle = 0, int iShapeSize = 0, int iSwayAmount = 0 )
@@ -500,9 +503,9 @@ static void AddDetailSpriteToLump( const Vector &vecOrigin, const QAngle &vecAng
 	// Insert an element into the object dictionary if it aint there...
 	int i = s_DetailObjectLump.AddToTail( );
 
-	if (i >= 65535)
+	if (i >= MAX_DETAIL_SPRITES)
 	{
-		Error( "Error! Too many detail props emitted on this map! (64K max!)n" );
+		Error( "Error! Too many detail props emitted on this map!\n" );
 	}
 
 	DetailObjectLump_t& objectLump = s_DetailObjectLump[i];
@@ -602,6 +605,23 @@ static void PlaceDetail( DetailModel_t const& model, const Vector& pt, const Vec
 	}
 
 	// FIXME: We may also want a purely random rotation too
+
+	// TERROR:
+	for( int i = 0; i < g_BlockerList.Count(); ++i )
+	{
+		entity_t *ent = g_BlockerList[i];
+		{
+			for ( int j = 0; j < ent->numbrushes; ++j )
+			{
+				int brushnum = ent->firstbrush + j;
+				mapbrush_t *brush = &g_MainMap->mapbrushes[ brushnum ];
+				if ( IsPointInBox( pt, brush->mins, brush->maxs ) )
+				{
+					return;
+				}
+			}
+		}
+	}
 
 	// Insert an element into the object dictionary if it aint there...
 	switch ( model.m_Type )
@@ -832,12 +852,26 @@ static void SetLumpData( )
 //-----------------------------------------------------------------------------
 // Places Detail Objects in the level
 //-----------------------------------------------------------------------------
+
 void EmitDetailModels()
 {
 	StartPacifier("Placing detail props : ");
 
+	// build detail blocker list
+	g_BlockerList.RemoveAll();
+	for( int i = 0; i < num_entities; ++i )
+	{
+		entity_t *ent = &entities[i];
+		char* classname = ValueForKey( ent, "classname" );
+		if ( !strcmp( classname, "func_detail_blocker" ) )
+		{
+			g_BlockerList.AddToTail(ent);
+		}
+	}
+
 	// Place stuff on each face
 	dface_t* pFace = dfaces;
+
 	for (int j = 0; j < numfaces; ++j)
 	{
 		UpdatePacifier( (float)j / (float)numfaces );
@@ -896,7 +930,6 @@ void EmitDetailModels()
 			EmitDetailObjectsOnDisplacementFace( &pFace[j], detail, coreDispInfo );
 		}
 	}
-
 	// Emit specifically specified detail props
 	Vector origin;
 	QAngle angles;

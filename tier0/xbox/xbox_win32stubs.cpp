@@ -1,10 +1,10 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: XBox win32 replacements - Mocks trivial windows flow
 //
 //=============================================================================//
 
-#include "pch_tier0.h"
+#include "../pch_tier0.h"
 #include "xbox/xbox_win32stubs.h"
 #include "tier0/memdbgon.h"
 
@@ -103,7 +103,6 @@ LONG_PTR GetWindowLongPtrW(HWND hWnd, int nIndex)
 	return GetWindowLongPtr( hWnd, nIndex );
 }
 
-
 LONG SetWindowLong(HWND hWnd, int nIndex, LONG dwNewLong)
 {
 	LONG	oldLong;
@@ -161,7 +160,7 @@ HWND CreateWindow(LPCTSTR lpClassName, LPCTSTR lpWindowName, DWORD dwStyle, int 
 	xWndClass_t* pWndClass = g_pWndClasses;
 	while ( pWndClass )
 	{
-		if ( !stricmp( lpClassName, pWndClass->pClassName ) )
+		if ( !V_tier0_stricmp( lpClassName, pWndClass->pClassName ) )
 			break;
 		pWndClass = pWndClass->pNext;
 	}
@@ -294,6 +293,13 @@ LRESULT CallWindowProc(WNDPROC lpPrevWndFunc, HWND hWnd, UINT Msg, WPARAM wParam
 {
 	return (lpPrevWndFunc(hWnd, Msg, wParam, lParam));
 }
+
+LRESULT CallWindowProcW(WNDPROC lpPrevWndFunc, HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam)
+{
+	AssertMsg( false, "CallWindowProcW does not exist on Xbox 360." );
+	return CallWindowProc( lpPrevWndFunc, hWnd, Msg, wParam, lParam );
+}
+
 
 int GetSystemMetrics(int nIndex)
 {
@@ -467,45 +473,28 @@ BOOL SetWindowPos( HWND hWnd, HWND hWndInsertAfter, int x, int y, int cx, int cy
 int XBX_unlink( const char* filename )
 {	
 	bool bSuccess = DeleteFile( filename ) != 0;
-	if ( !bSuccess )
+	if ( !bSuccess && GetLastError() == ERROR_FILE_NOT_FOUND )
 	{
-		if ( GetLastError() == ERROR_FILE_NOT_FOUND )
-		{
-			// not a real failure
-			return 0;
-		}
+		// not a real error
+		bSuccess = true;
 	}
 	// 0 = sucess, -1 = failure
 	return bSuccess ? 0 : -1;
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: Xbox low level replacement for _mkdir().
+// Expects to be driven by a higher level path iterator.
+//-----------------------------------------------------------------------------
 int XBX_mkdir( const char *pszDir )
 {
-	char			dirPath[MAX_PATH];
-	char*			ptr;
-	BOOL			bSuccess;
-
-	// prime and skip to first seperator after the drive path
-	// must create directory one path at a time
-	bSuccess = false;
-	strcpy( dirPath, pszDir );
-	ptr = strchr( dirPath, '\\' );
-	while ( ptr )
-	{		
-		ptr = strchr( ptr+1, '\\' );
-		if ( ptr )
-		{
-			*ptr = '\0';
-			bSuccess = CreateDirectory( dirPath, XBOX_DONTCARE );
-			if ( !bSuccess && GetLastError() == ERROR_ALREADY_EXISTS )
-			{
-				// not a real error
-				bSuccess = true;
-			}
-			*ptr = '\\';
-		}
+	bool bSuccess = CreateDirectory( pszDir, XBOX_DONTCARE ) != 0;
+	if ( !bSuccess && GetLastError() == ERROR_ALREADY_EXISTS )
+	{
+		// not a real error
+		bSuccess = true;
 	}
-
+	// 0 = sucess, -1 = failure
 	return ( bSuccess ? 0 : -1 );
 }
 

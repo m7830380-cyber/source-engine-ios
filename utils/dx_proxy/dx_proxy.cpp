@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2006, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Proxy for D3DX routines
 //
@@ -33,11 +33,7 @@ const char * WINAPI GetDllVersion( void );
 #define DX_PROXY_INC_CONFIG
 #pragma message ( "Compiling DX_PROXY for DX9_V00_PC" )
 
-#if _MSC_VER >= 1900
-#pragma comment ( lib, "../../lib/common/win32/2015/release/d3dx9" )
-#else
 #pragma comment ( lib, "../../dx9sdk/lib/d3dx9" )
-#endif
 #include "../../dx9sdk/include/d3dx9shader.h"
 
 #endif // #ifdef DX9_V00_PC
@@ -61,21 +57,7 @@ const char * WINAPI GetDllVersion( void );
 #define _NO_XBOXMATH
 #define __D3DX9MATH_INL__
 
-/*#ifdef _DEBUG
-#pragma comment ( lib, "../../x360xdk/lib/win32/vs2005/d3d9d" )
-#pragma comment ( lib, "../../x360xdk/lib/win32/vs2005/d3dx9d" )
-#pragma comment ( lib, "../../x360xdk/lib/win32/vs2005/xgraphicsd" )
-#else*/
-#if _MSC_VER >= 1900
-#pragma comment ( lib, "../../x360xdk/lib/win32/vs2005/d3d9" )
-#pragma comment ( lib, "../../lib/common/win32/2015/release/d3dx9" )
-#else
-#pragma comment ( lib, "../../x360xdk/lib/win32/vs2005/d3d9" )
-#pragma comment ( lib, "../../x360xdk/lib/win32/vs2005/d3dx9" )
-#pragma comment ( lib, "../../x360xdk/lib/win32/vs2005/xgraphics" )
-#endif
-
-#include "../../x360xdk/include/win32/vs2005/d3dx9shader.h"
+#include "d3dx9shader.h"
 
 #endif // #ifdef DX9_V00_X360
 
@@ -333,6 +315,7 @@ char s_dummyBuffer[ 512 ];
 
 
 // Proxied routines
+//__declspec(dllexport) - undef this to figure out the new decorated name in case you update the direct3d headers
 HRESULT WINAPI
 Proxy_D3DXCompileShaderFromFile(
 								LPCSTR                          pSrcFile,
@@ -367,7 +350,7 @@ Proxy_D3DXCompileShaderFromFile(
 #endif
 
 #if defined( DX10_V00_PC )
-	#pragma comment(linker, "/EXPORT:Proxy_D3DXCompileShaderFromFile=?Proxy_D3DXCompileShaderFromFile@@YGJPBDPBU_D3D10_SHADER_MACRO@@PAUID3D10Include@@00KPAPAUID3D10Blob@@3PAPAX@Z")
+	#pragma comment(linker, "/EXPORT:Proxy_D3DXCompileShaderFromFile=?Proxy_D3DXCompileShaderFromFile@@YGJPBDPBU_D3D_SHADER_MACRO@@PAUID3DInclude@@00KPAPAUID3D10Blob@@3PAPAX@Z")
 	hr = D3DX10CompileFromMemory( pShaderData, numBytes, pSrcFile, pDefines, pInclude, pFunctionName, pProfile, Flags, 0, NULL, ppShader, ppErrorMsgs, NULL );
 #endif
 

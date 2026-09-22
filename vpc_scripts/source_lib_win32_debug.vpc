@@ -12,11 +12,6 @@ $MacroRequired				"OUTLIBDIR"
 $MacroRequired				"LIBPUBLIC"
 $MacroRequired				"LIBCOMMON"
 $MacroRequired				"PLATSUBDIR"
-$MacroRequiredAllowEmpty	"GAMENAME"
-$MacroRequiredAllowEmpty	"INTERMEDIATESUBDIR"
-$MacroRequiredAllowEmpty	"_UNITYSUBDIR"
-$MacroRequiredAllowEmpty	"_STATICSUBDIR"
-$Macro						"_SUBDIRSUFFIX"		"$INTERMEDIATESUBDIR$_STATICSUBDIR$GAMENAME$PLATSUBDIR$_UNITYSUBDIR"
 
 $Configuration "Debug"
 {
@@ -24,7 +19,7 @@ $Configuration "Debug"
 	{
 		// General
 		$OutputDirectory					"$OUTLIBDIR"
-		$IntermediateDirectory				".\Debug$_SUBDIRSUFFIX"
+		$IntermediateDirectory				".\Debug$PLATSUBDIR"
 		$ExtensionsToDeleteOnClean
 		$BuildLogFile
 		$InheritedProjectPropertySheets
@@ -62,6 +57,7 @@ $Configuration "Debug"
 		$WarningLevel						"Level 4 (/W4)"
 		$Detect64bitPortabilityIssues		"Yes (/Wp64)"
 		$TreatWarningsAsErrors
+		$MultiProcessorCompilation			"Yes (/MP)"
 		$UseUNICODEResponseFiles			"No"
 
 		// Optimization
@@ -74,25 +70,20 @@ $Configuration "Debug"
 		$WholeProgramOptimization
 
 		// Preprocessor
-		$PreprocessorDefinitions			"$BASE;WIN32;_WIN32;_DEBUG;DEBUG;_LIB;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE;_SCL_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)"
-		$PreprocessorDefinitions			"$BASE;_HAS_ITERATOR_DEBUGGING=0;_ALLOW_RUNTIME_LIBRARY_MISMATCH;_ALLOW_ITERATOR_DEBUG_LEVEL_MISMATCH;_ALLOW_MSC_VER_MISMATCH;" [!$WIN64&&!$VS2015]
+		$PreprocessorDefinitions			"$BASE;_HAS_ITERATOR_DEBUGGING=0;WIN32;_WIN32;_DEBUG;DEBUG;_LIB;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE;_ALLOW_RUNTIME_LIBRARY_MISMATCH;_ALLOW_ITERATOR_DEBUG_LEVEL_MISMATCH;_ALLOW_MSC_VER_MISMATCH;%(PreprocessorDefinitions)"
 		$IgnoreStandardIncludePath
 		$GeneratePreprocessedFile
 		$KeepComments
 
 		// Code Generation
 		$EnableStringPooling				"Yes (/GF)"
-		// EnableMinimalRebuild is incompatible with /MP (multi-processor builds)
-		// and it also makes it hard to iterate on warnings because the compiler
-		// detects that there is no reason to recompile when you request it.
-		// It should always be off? It should definitely be off for /analyze builds.
-		//$EnableMinimalRebuild				"Yes (/Gm)" [!$ANALYZE]
+		$EnableMinimalRebuild				"No"
 		$EnableC++Exceptions				"No"
 		$SmallerTypeCheck
 		$BasicRuntimeChecks					"Default"
 		$RuntimeLibrary						"Multi-threaded Debug (/MTd)"
 		$StructMemberAlignment
-		$BufferSecurityCheck				"Yes"
+		$BufferSecurityCheck				"No" [$WINDOWS]
 		$EnableFunctionLevelLinking
 		$EnableEnhancedInstructionSet
 		$FloatingPointModel					"Fast (/fp:fast)"
@@ -133,9 +124,12 @@ $Configuration "Debug"
 		$ShowIncludes
 		$UndefinePreprocessorDefinitions
 		$UndefineAllPreprocessorDefinitions
-		$UseFullPaths						"Yes (/FC)"
+		$UseFullPaths
 		$OmitDefaultLibraryNames
 		$ErrorReporting						"Prompt Immediately (/errorReport:prompt)"
+
+		// Command Line
+		$AdditionalOptions					
 	}
 
 	$Librarian

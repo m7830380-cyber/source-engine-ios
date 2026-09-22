@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Methods associated with the cursor
 //
@@ -16,6 +16,9 @@
 #include "VGuiMatSurface/IMatSystemSurface.h"
 #include <vgui/Cursor.h>
 
+FORWARD_DECLARE_HANDLE( InputContextHandle_t );
+
+
 //-----------------------------------------------------------------------------
 // Initializes cursors
 //-----------------------------------------------------------------------------
@@ -25,33 +28,26 @@ void InitCursors();
 //-----------------------------------------------------------------------------
 // Selects a cursor
 //-----------------------------------------------------------------------------
-void CursorSelect(vgui::HCursor hCursor);
+void CursorSelect( InputContextHandle_t hContext, vgui::HCursor hCursor );
 
 
 //-----------------------------------------------------------------------------
 // Activates the current cursor
 //-----------------------------------------------------------------------------
-void ActivateCurrentCursor();
+void ActivateCurrentCursor( InputContextHandle_t hContext );
 
-
-//-----------------------------------------------------------------------------
-// Handles software cursors
-//-----------------------------------------------------------------------------
-void EnableSoftwareCursor( bool bEnable );
-bool ShouldDrawSoftwareCursor();
-int  GetSoftwareCursorTexture( float *px, float *py );
 
 //-----------------------------------------------------------------------------
 // handles mouse movement
 //-----------------------------------------------------------------------------
-void CursorSetPos(void *hwnd, int x, int y);
-void CursorGetPos(void *hwnd, int &x, int &y);
+void CursorSetPos( InputContextHandle_t hContext, int x, int y );
+void CursorGetPos( InputContextHandle_t hContext, int &x, int &y );
 
 
 //-----------------------------------------------------------------------------
 // Purpose: prevents vgui from changing the cursor
 //-----------------------------------------------------------------------------
-void LockCursor( bool bEnable );
+void LockCursor( InputContextHandle_t hContext, bool bEnable );
 
 
 //-----------------------------------------------------------------------------

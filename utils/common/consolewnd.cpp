@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -160,10 +160,7 @@ void CConsoleWnd::PrintToConsole( const char *pMsg )
 	{
 		// Clear the edit control otherwise it'll stop outputting anything.
 		m_nCurrentChars = 0;
-
-		int nLen = (int)SendMessage( m_hEditControl, EM_GETLIMITTEXT, 0, 0 );
-		SendMessage( m_hEditControl, EM_SETSEL, 0, nLen );
-		SendMessage( m_hEditControl, EM_REPLACESEL, FALSE, (LPARAM)"" );
+		ClearEditControl( m_hEditControl );
 	}		
 
 	FormatAndSendToEditControl( m_hEditControl, pMsg );
@@ -272,6 +269,15 @@ void CConsoleWnd::SetDeleteOnClose( bool bDelete )
 // ------------------------------------------------------------------------------------ //
 // Module interface.
 // ------------------------------------------------------------------------------------ //
+
+void ClearEditControl( void *hWnd )
+{
+	HWND hEditControl = (HWND)hWnd;
+
+	int nLen = (int)SendMessage( hEditControl, EM_GETLIMITTEXT, 0, 0 );
+	SendMessage( hEditControl, EM_SETSEL, 0, nLen );
+	SendMessage( hEditControl, EM_REPLACESEL, FALSE, (LPARAM)"" );
+}
 
 void SendToEditControl( HWND hEditControl, const char *pText )
 {

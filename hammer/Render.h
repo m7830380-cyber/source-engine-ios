@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -13,6 +13,7 @@
 #include "utlstack.h"
 #include "hammer_mathlib.h"
 #include "MaterialSystem\imesh.h"
+#include "shaderapi/ishaderapi.h"
 
 class IMaterial;
 struct DrawModelInfo_t;
@@ -116,7 +117,7 @@ typedef struct SInstanceState
 } TInstanceState;
 
 
-#define STENCIL_AS_CALLS	1
+//#define STENCIL_AS_CALLS	1
 
 
 class CRender
@@ -155,7 +156,7 @@ public:
 	bool		IsActiveView();
 
 	// begin/end single render frame, sets up camera etc
-	virtual void StartRenderFrame();
+	virtual void StartRenderFrame( bool bRenderingOverEngine );
     virtual void EndRenderFrame();
 	int  GetRenderFrame() { return m_nFrameCount; }
 
@@ -204,8 +205,11 @@ public:
 			void DrawArrow( Vector const &vStart, Vector const &vEnd );
 			void DrawPlane( const Vector &p0, const Vector &p1, const Vector &p2, const Vector &p3, bool bFill = false );
 
+	// client space helper functions:
+			void DrawFilledRect( Vector2D& pt1, Vector2D& pt2, unsigned char *pColor, bool bBorder );
+
 	// drawing complex objects
-			void DrawModel( DrawModelInfo_t* pInfo, matrix3x4_t *pBoneToWorld, const Vector &vOrigin, float fAlpha = 1, bool bWireframe = false );
+			void DrawModel( DrawModelInfo_t* pInfo, matrix3x4_t *pBoneToWorld, const Vector &vOrigin, float fAlpha = 1, bool bWireframe = false, const Color &color = Color( 255, 255, 255, 255 ) );
 			void DrawDisplacement( CCoreDispInfo *pDisp );
 			void DrawCollisionModel( MDLHandle_t mdlHandle, const VMatrix &mViewMatrix );
 
@@ -243,7 +247,6 @@ protected:
 	bool GetRequiredMaterial( const char *pName, IMaterial* &pMaterial );
 	void UpdateStudioRenderConfig( bool bFlat, bool bWireframe );
 	// client space helper functions:
-	void DrawFilledRect( Vector2D& pt1, Vector2D& pt2, unsigned char *pColor, bool bBorder );
 	void DrawCross( Vector2D& pt1, Vector2D& pt2, unsigned char *pColor );
 	void DrawCircle( Vector2D &vCenter, float fRadius, int nSegments, unsigned char *pColor );
 	void DrawRect( Vector2D& pt1, Vector2D& pt2, unsigned char *pColor );
@@ -257,7 +260,9 @@ protected:
 	CUtlVector< VMatrix >	m_LocalMatrix;
 
 	VMatrix			m_OrthoMatrix;	
-		
+
+	// Are we rendering on top of the engine's view? If so, we avoid certain view setup things and we avoid drawing world geometry.
+	bool			m_bRenderingOverEngine;
 
 	// Meshbuilder used for drawing
 	IMesh* m_pMesh;

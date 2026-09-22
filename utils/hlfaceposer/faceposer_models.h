@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -13,9 +13,10 @@
 
 class StudioModel;
 
+#include "tier0/platform.h"
 #include "mxbitmaptools.h"
 
-typedef unsigned int CRC32_t;
+typedef uint32 CRC32_t;
 
 class IFaceposerModels
 {

@@ -5,7 +5,7 @@
 //-----------------------------------------------------------------------------
 
 $Macro SRCDIR		"..\.."
-$Macro OUTBINDIR	"$LIBPUBLIC"
+$Macro OUTBINDIR	"$SRCDIR\..\game\bin"
 
 $Include "$SRCDIR\vpc_scripts\source_dll_base.vpc"
 
@@ -19,7 +19,8 @@ $Configuration
 
 	$Linker
 	{
-		$SystemLibraries				"iconv" [$OSXALL]
+		$AdditionalLibraryDirectories		"$BASE;$(XEDK)\lib\win32\vs2010"
+		$SystemLibraries					"iconv" [$OSXALL]
 	}
 
 }
@@ -28,8 +29,8 @@ $Configuration	"Debug"
 {
 	$General
 	{
-		$OutputDirectory			".\Debug_dll" [$WINDOWS]
-		$IntermediateDirectory		".\Debug_dll" [$WINDOWS]
+		$OutputDirectory			".\Debug_dll"			[$WIN32]
+		$IntermediateDirectory		".\Debug_dll"			[$WIN32]
 	}
 }
 
@@ -37,8 +38,8 @@ $Configuration	"Release"
 {
 	$General
 	{
-		$OutputDirectory			".\Release_dll" [$WINDOWS]
-		$IntermediateDirectory		".\Release_dll" [$WINDOWS]
+		$OutputDirectory			".\Release_dll"			[$WIN32]
+		$IntermediateDirectory		".\Release_dll"			[$WIN32]
 	}
 }
 
@@ -46,6 +47,7 @@ $Project "Vtex_dll"
 {
 	$Folder	"Source Files"
 	{
+		$File	"$SRCDIR\public\materialobjects\materialobjects.cpp"
 		$File	"..\common\cmdlib.cpp"
 		$File	"$SRCDIR\public\filesystem_helpers.cpp"
 		$File	"$SRCDIR\public\filesystem_init.cpp"
@@ -58,11 +60,18 @@ $Project "Vtex_dll"
 		$File	"$SRCDIR\public\ivtex.h"
 	}
 
-	$Folder	"Link Libraries"
+	$Folder	"Link Libraries" 
 	{
-		$Lib	bitmap
-		$Lib	mathlib
-		$Lib	tier2
-		$Lib	vtf
+		$Lib bitmap
+		$Lib mathlib
+		$Lib tier2
+		$Lib vtf
+		$Lib	"$LIBPUBLIC\resourcefile"
+		$Lib	"$LIBPUBLIC\tier3"
+		$Lib	"$LIBPUBLIC\datamodel"
+		$Lib	"$LIBPUBLIC\dmserializers"
+		$Lib	"$LIBPUBLIC\materialobjects"
 	}
+	
+
 }

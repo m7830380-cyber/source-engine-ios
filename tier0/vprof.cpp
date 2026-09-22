@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: Real-Time Hierarchical Profiling
 //
@@ -20,27 +20,31 @@
 #ifdef _WIN32
 #pragma warning(disable:4073)
 #pragma init_seg( lib )
+#endif
+
 #pragma warning(push, 1)
 #pragma warning(disable:4786)
 #pragma warning(disable:4530)
-#endif
-
 #include <map>
 #include <vector>
 #include <algorithm>
-#ifdef _WIN32
 #pragma warning(pop)
-#endif
 
 #include "tier0/valve_on.h"
 #include "tier0/vprof.h"
 #include "tier0/l2cache.h"
 #include "tier0/tslist.h"
+#include "tier0/icommandline.h"
 #include "tier0/dynfunction.h"
+#include "strtools.h"
+
 
 #ifdef _X360
 
 #include "xbox/xbox_console.h"
+
+#elif defined(_PS3)
+#include "ps3/ps3_console.h"
 
 #else // NOT _X360:
 
@@ -70,6 +74,8 @@ bool g_VProfSignalSpike;
 CVProfile g_VProfCurrentProfile;
 
 int CVProfNode::s_iCurrentUniqueNodeID = 0;
+
+
 
 CVProfNode::~CVProfNode()
 {
@@ -103,6 +109,7 @@ CVProfNode *CVProfNode::GetSubNode( const tchar *pszName, int detailLevel, const
 {
 	return GetSubNode( pszName, detailLevel, pBudgetGroupName, BUDGETFLAG_OTHER );
 }
+
 
 //-------------------------------------
 
@@ -447,7 +454,7 @@ void CVProfNode::Validate( CValidator &validator, tchar *pchName )
 struct TimeSums_t
 {
 	const tchar *pszProfileScope;
-	int			calls;
+	unsigned	calls;
 	double 		time;
 	double 		timeLessChildren;
 	double		peak;
@@ -495,7 +502,7 @@ static bool PeakOverAverageCompare( const TimeSums_t &lhs, const TimeSums_t &rhs
 
 map<CVProfNode *, double> 	g_TimesLessChildren;
 int							g_TotalFrames;
-map<const tchar *, size_t> g_TimeSumsMap;
+map<const tchar *, uintp>	g_TimeSumsMap;
 vector<TimeSums_t> 			g_TimeSums;
 CVProfNode *				g_pStartNode;
 const tchar *				g_pszSumNode;
@@ -524,11 +531,11 @@ void CVProfile::SumTimes( CVProfNode *pNode, int budgetGroupID )
 			
 			g_TimesLessChildren.insert( make_pair( pNode, timeLessChildren ) );
 			
-			map<const tchar *, size_t>::iterator iter;
+			map<const tchar *, uintp>::iterator iter;
 			iter = g_TimeSumsMap.find( pNode->GetName() ); // intenionally using address of string rather than string compare (toml 01-27-03)
 			if ( iter == g_TimeSumsMap.end() )
 			{
-				TimeSums_t timeSums = { pNode->GetName(), pNode->GetTotalCalls(), pNode->GetTotalTime(), timeLessChildren, pNode->GetPeakTime() };
+				TimeSums_t timeSums = { pNode->GetName(), static_cast<unsigned int>(pNode->GetTotalCalls()), pNode->GetTotalTime(), timeLessChildren, pNode->GetPeakTime() };
 				g_TimeSumsMap.insert( make_pair( pNode->GetName(), g_TimeSums.size() ) );
 				g_TimeSums.push_back( timeSums );
 			}
@@ -813,32 +820,6 @@ void CVProfile::SumTimes( const tchar *pszStartNode, int budgetGroupID )
 
 //-------------------------------------
 
-// This array lets us generate the commonly used indent levels
-// without looping. That then lets us print our vprof nodes
-// in a single call, which is more efficient and works better
-// with output streams like ETW where each call represents a
-// 'line' of text. Indent levels beyond what is represented
-// in this array are, regretfully, clamped, however the highest
-// indent level seen in testing was 10.
-static const char* s_indentText[] =
-{
-	"",											// 0
-	"",											// 1
-	"|  ",										// 2
-	"|  |  ",									// 3
-	"|  |  |  ",								// 4
-	"|  |  |  |  ",								// 5
-	"|  |  |  |  |  ",							// 6
-	"|  |  |  |  |  |  ",						// 7
-	"|  |  |  |  |  |  |  ",					// 8
-	"|  |  |  |  |  |  |  |  ",					// 9
-	"|  |  |  |  |  |  |  |  |  ",				// 10
-	"|  |  |  |  |  |  |  |  |  |  ",			// 11
-	"|  |  |  |  |  |  |  |  |  |  |  ",		// 12
-	"|  |  |  |  |  |  |  |  |  |  |  |  ",		// 13
-	"|  |  |  |  |  |  |  |  |  |  |  |  |  ",	// 14
-};
-
 void CVProfile::DumpNodes( CVProfNode *pNode, int indent, bool bAverageAndCountOnly )
 {
 	if ( !pNode )
@@ -850,15 +831,15 @@ void CVProfile::DumpNodes( CVProfNode *pNode, int indent, bool bAverageAndCountO
 	{
 		if( bAverageAndCountOnly )
 		{
-			m_pOutputStream( _T(" Avg Time/Frame (ms)\n") );
-			m_pOutputStream( _T("[ func+child   func ]     Count\n") );
-			m_pOutputStream( _T("  ---------- ------      ------\n") );
+			Msg( _T(" Avg Time/Frame (ms)\n") );
+			Msg( _T("[ func+child      func ]       Count\n") );
+			Msg( _T("  ---------- ---------      --------\n") );
 		}
 		else
 		{
-			m_pOutputStream( _T("       Sum (ms)         Avg Time/Frame (ms)     Avg Time/Call (ms)\n") );
-			m_pOutputStream( _T("[ func+child   func ]  [ func+child   func ]  [ func+child   func ]  Count   Peak\n") );
-			m_pOutputStream( _T("  ---------- ------      ---------- ------      ---------- ------   ------ ------\n") );
+			Msg( _T("       Sum (ms)            Avg Time/Frame (ms)     Avg Time/Call (ms)\n") );
+			Msg( _T("[ func+child      func ]  [ func+child   func ]  [ func+child   func ]    Count   Peak\n") );
+			Msg( _T("  ---------- ---------      ---------- ------      ---------- ------   -------- ------\n") );
 		}
 	}
 
@@ -866,30 +847,35 @@ void CVProfile::DumpNodes( CVProfNode *pNode, int indent, bool bAverageAndCountO
 	{
 		map<CVProfNode *, double>::iterator iterTimeLessChildren = g_TimesLessChildren.find( pNode );
 		
-		indent = Max( indent, 0 );
-		indent = Min( indent, (int)ARRAYSIZE( s_indentText ) - 1 );
-		const char* indentText = s_indentText[ indent ];
 		double dNodeTime = 0;
 		if(iterTimeLessChildren != g_TimesLessChildren.end())
 			dNodeTime = iterTimeLessChildren->second;
 
 		if( bAverageAndCountOnly )
 		{
-			m_pOutputStream( _T("  %10.3f %6.2f      %6d  %s%s\n"), 
+			Msg( _T("  %10.3f %9.2f      %8d"), 
 						 ( pNode->GetTotalCalls() > 0 ) ? pNode->GetTotalTime() / (double)NumFramesSampled() : 0, 
 						 ( pNode->GetTotalCalls() > 0 ) ? dNodeTime / (double)NumFramesSampled() : 0, 
-						 pNode->GetTotalCalls(), indentText, pNode->GetName() );
+						 pNode->GetTotalCalls()  );
 		}
 		else
 		{
-			m_pOutputStream( _T("  %10.3f %6.2f      %10.3f %6.2f      %10.3f %6.2f   %6d %6.2f  %s%s\n"), 
+			Msg( _T("  %10.3f %9.2f      %10.3f %6.2f      %10.3f %6.2f   %8d %6.2f"), 
 						 pNode->GetTotalTime(), dNodeTime,
 						 ( pNode->GetTotalCalls() > 0 ) ? pNode->GetTotalTime() / (double)NumFramesSampled() : 0, 
 						 ( pNode->GetTotalCalls() > 0 ) ? dNodeTime / (double)NumFramesSampled() : 0, 
 						 ( pNode->GetTotalCalls() > 0 ) ? pNode->GetTotalTime() / (double)pNode->GetTotalCalls() : 0, 
 						 ( pNode->GetTotalCalls() > 0 ) ? dNodeTime / (double)pNode->GetTotalCalls() : 0, 
-						 pNode->GetTotalCalls(), pNode->GetPeakTime(), indentText, pNode->GetName() );
+						 pNode->GetTotalCalls(), pNode->GetPeakTime()  );
 		}
+		
+		Msg( _T("  ") );
+		for ( int i = 1; i < indent; i++ )
+		{
+			Msg( _T("|  ") );
+		}
+
+		Msg( _T("%s\n"), pNode->GetName() );
 	}
 
 	if( pNode->GetChild() )
@@ -905,7 +891,7 @@ void CVProfile::DumpNodes( CVProfNode *pNode, int indent, bool bAverageAndCountO
 
 //-------------------------------------
 
-#if defined( _X360 )
+#if defined( VPROF_VXCONSOLE_EXISTS )
 static void CalcBudgetGroupTimes_Recursive( CVProfNode *pNode, unsigned int *groupTimes, int numGroups, float flScale )
 {
 	int			groupID;
@@ -1002,7 +988,7 @@ void CVProfile::VXConsoleReportScale( VXConsoleReportMode_t mode, float flScale 
 void CVProfile::VXProfileStart()
 {
 	const char		*names[XBX_MAX_PROFILE_COUNTERS];
-	unsigned int	colors[XBX_MAX_PROFILE_COUNTERS];
+	COLORREF		colors[XBX_MAX_PROFILE_COUNTERS];
 	int				numGroups;
 	int				counterGroup;
 	const char		*pGroupName;
@@ -1045,11 +1031,11 @@ void CVProfile::VXProfileStart()
 			{	
 				// strip undesired prefix
 				pGroupName = g_VProfCurrentProfile.GetCounterName( i );
-				if ( !strnicmp( pGroupName, "texgroup_frame_", 15 ) )
+				if ( !stricmp( pGroupName, "texgroup_frame_" ) )
 				{
 					pGroupName += 15;
 				}
-				else if ( !strnicmp( pGroupName, "texgroup_global_", 16 ) )
+				else if ( !stricmp( pGroupName, "texgroup_global_" ) )
 				{
 					pGroupName += 16;
 				}
@@ -1212,22 +1198,22 @@ void CVProfile::VXSendNodes( void )
 #endif
 
 //-------------------------------------
-static void DumpSorted( CVProfile::StreamOut_t outputStream, const tchar *pszHeading, double totalTime, bool (*pfnSort)( const TimeSums_t &, const TimeSums_t & ), int maxLen = 999999 )
+static void DumpSorted( const tchar *pszHeading, double totalTime, bool (*pfnSort)( const TimeSums_t &, const TimeSums_t & ), int maxLen = 999999 )
 {
 	unsigned i;
 	vector<TimeSums_t> sortedSums;
 	sortedSums = g_TimeSums;
 	sort( sortedSums.begin(), sortedSums.end(), pfnSort );
-
-	outputStream( _T("%s\n"), pszHeading);
-    outputStream( _T("  Scope                                                      Calls Calls/Frame  Time+Child    Pct        Time    Pct   Avg/Frame    Avg/Call Avg-NoChild        Peak\n"));
-    outputStream( _T("  ---------------------------------------------------- ----------- ----------- ----------- ------ ----------- ------ ----------- ----------- ----------- -----------\n"));
+	
+	Msg( _T("%s\n"), pszHeading);
+    Msg( _T("  Scope                                                      Calls Calls/Frame  Time+Child    Pct        Time    Pct   Avg/Frame    Avg/Call Avg-NoChild        Peak\n"));
+    Msg( _T("  ---------------------------------------------------- ----------- ----------- ----------- ------ ----------- ------ ----------- ----------- ----------- -----------\n"));
     for ( i = 0; i < sortedSums.size() && i < (unsigned)maxLen; i++ )
     {
 		double avg = ( sortedSums[i].calls ) ? sortedSums[i].time / (double)sortedSums[i].calls : 0.0;
 		double avgLessChildren = ( sortedSums[i].calls ) ? sortedSums[i].timeLessChildren / (double)sortedSums[i].calls : 0.0;
 		
-        outputStream( _T("  %52.52s%12d%12.3f%12.3f%7.2f%12.3f%7.2f%12.3f%12.3f%12.3f%12.3f\n"), 
+        Msg( _T("  %52.52s%12d%12.3f%12.3f%7.2f%12.3f%7.2f%12.3f%12.3f%12.3f%12.3f\n"), 
              sortedSums[i].pszProfileScope,
              sortedSums[i].calls,
 			 (float)sortedSums[i].calls / (float)g_TotalFrames,
@@ -1242,7 +1228,7 @@ static void DumpSorted( CVProfile::StreamOut_t outputStream, const tchar *pszHea
 	}
 }
 
-#if _X360
+#if defined( _X360 )
 // Dump information on all nodes with PMC recording
 static void DumpPMC( CVProfNode *pNode, bool &bPrintHeader, uint64 L2thresh = 1, uint64 LHSthresh = 1 )
 {
@@ -1284,41 +1270,31 @@ static void DumpPMC( CVProfNode *pNode, bool &bPrintHeader, uint64 L2thresh = 1,
 
 //-------------------------------------
 
-void CVProfile::SetOutputStream( StreamOut_t outputStream )
-{
-	if ( outputStream != NULL )
-		m_pOutputStream = outputStream;
-	else
-		m_pOutputStream = Msg;
-}
-
-//-------------------------------------
-
 void CVProfile::OutputReport( int type, const tchar *pszStartNode, int budgetGroupID )
 {
-	m_pOutputStream( _T("******** BEGIN VPROF REPORT ********\n"));
+	Msg( _T("******** BEGIN VPROF REPORT ********\n"));
 #ifdef _MSC_VER
 #if (_MSC_VER < 1300)
-	m_pOutputStream( _T("  (note: this report exceeds the output capacity of MSVC debug window. Use console window or console log.) \n"));
+	Msg( _T("  (note: this report exceeds the output capacity of MSVC debug window. Use console window or console log.) \n"));
 #endif
 #endif
 
 	g_TotalFrames = max( NumFramesSampled() - 1, 1 );
 	
 	if ( NumFramesSampled() == 0 || GetTotalTimeSampled() == 0)
-		m_pOutputStream( _T("No samples\n") );
+		Msg( _T("No samples\n") );
 	else
 	{
 		if ( type & VPRT_SUMMARY )
 		{
-			m_pOutputStream( _T("-- Summary --\n") );
-			m_pOutputStream( _T("%d frames sampled for %.2f seconds\n"), g_TotalFrames, GetTotalTimeSampled() / 1000.0 );
-			m_pOutputStream( _T("Average %.2f fps, %.2f ms per frame\n"), 1000.0 / ( GetTotalTimeSampled() / g_TotalFrames ), GetTotalTimeSampled() / g_TotalFrames );
-			m_pOutputStream( _T("Peak %.2f ms frame\n"), GetPeakFrameTime() );
+			Msg( _T("-- Summary --\n") );
+			Msg( _T("%d frames sampled for %.2f seconds\n"), g_TotalFrames, GetTotalTimeSampled() / 1000.0 );
+			Msg( _T("Average %.2f fps, %.2f ms per frame\n"), 1000.0 / ( GetTotalTimeSampled() / g_TotalFrames ), GetTotalTimeSampled() / g_TotalFrames );
+			Msg( _T("Peak %.2f ms frame\n"), GetPeakFrameTime() );
 			
 			double timeAccountedFor = 100.0 - ( m_Root.GetTotalTimeLessChildren() / m_Root.GetTotalTime() );
-			m_pOutputStream( _T("%.0f pct of time accounted for\n"), min( 100.0, timeAccountedFor ) );
-			m_pOutputStream( _T("\n") );
+			Msg( _T("%.0f pct of time accounted for\n"), min( 100.0, timeAccountedFor ) );
+			Msg( _T("\n") );
 		}
 
 		if ( pszStartNode == NULL )
@@ -1331,59 +1307,59 @@ void CVProfile::OutputReport( int type, const tchar *pszStartNode, int budgetGro
 		// Dump the hierarchy
 		if ( type & VPRT_HIERARCHY )
 		{
-			m_pOutputStream( _T("-- Hierarchical Call Graph --\n"));
+			Msg( _T("-- Hierarchical Call Graph --\n"));
 			if ( pszStartNode == NULL )
 				g_pStartNode = NULL;
 			else
 				g_pStartNode = FindNode( GetRoot(), pszStartNode );
 
 			DumpNodes( (!g_pStartNode) ? GetRoot() : g_pStartNode, 0, false );
-			m_pOutputStream( _T("\n") );
+			Msg( _T("\n") );
 		}
 		
 		if ( type & VPRT_HIERARCHY_TIME_PER_FRAME_AND_COUNT_ONLY )
 		{
-			m_pOutputStream( _T("-- Hierarchical Call Graph --\n"));
+			Msg( _T("-- Hierarchical Call Graph --\n"));
 			if ( pszStartNode == NULL )
 				g_pStartNode = NULL;
 			else
 				g_pStartNode = FindNode( GetRoot(), pszStartNode );
 
 			DumpNodes( (!g_pStartNode) ? GetRoot() : g_pStartNode, 0, true );
-			m_pOutputStream( _T("\n") );
+			Msg( _T("\n") );
 		}
 
 		int maxLen = ( type & VPRT_LIST_TOP_ITEMS_ONLY ) ? 25 : 999999;
 
 		if ( type & VPRT_LIST_BY_TIME )
 		{
-			DumpSorted( m_pOutputStream, _T("-- Profile scopes sorted by time (including children) --"), GetTotalTimeSampled(), TimeCompare, maxLen );
-			m_pOutputStream( _T("\n") );
+			DumpSorted( _T("-- Profile scopes sorted by time (including children) --"), GetTotalTimeSampled(), TimeCompare, maxLen );
+			Msg( _T("\n") );
 		}
 		if ( type & VPRT_LIST_BY_TIME_LESS_CHILDREN )
 		{
-			DumpSorted( m_pOutputStream, _T("-- Profile scopes sorted by time (without children) --"), GetTotalTimeSampled(), TimeLessChildrenCompare, maxLen );
-			m_pOutputStream( _T("\n") );
+			DumpSorted( _T("-- Profile scopes sorted by time (without children) --"), GetTotalTimeSampled(), TimeLessChildrenCompare, maxLen );
+			Msg( _T("\n") );
 		}
 		if ( type & VPRT_LIST_BY_AVG_TIME )
 		{
-			DumpSorted( m_pOutputStream, _T("-- Profile scopes sorted by average time (including children) --"), GetTotalTimeSampled(), AverageTimeCompare, maxLen );
-			m_pOutputStream( _T("\n") );
+			DumpSorted( _T("-- Profile scopes sorted by average time (including children) --"), GetTotalTimeSampled(), AverageTimeCompare, maxLen );
+			Msg( _T("\n") );
 		}
 		if ( type & VPRT_LIST_BY_AVG_TIME_LESS_CHILDREN )
 		{
-			DumpSorted( m_pOutputStream, _T("-- Profile scopes sorted by average time (without children) --"), GetTotalTimeSampled(), AverageTimeLessChildrenCompare, maxLen );
-			m_pOutputStream( _T("\n") );
+			DumpSorted( _T("-- Profile scopes sorted by average time (without children) --"), GetTotalTimeSampled(), AverageTimeLessChildrenCompare, maxLen );
+			Msg( _T("\n") );
 		}
 		if ( type & VPRT_LIST_BY_PEAK_TIME )
 		{
-			DumpSorted( m_pOutputStream, _T("-- Profile scopes sorted by peak --"), GetTotalTimeSampled(), PeakCompare, maxLen);
-			m_pOutputStream( _T("\n") );
+			DumpSorted( _T("-- Profile scopes sorted by peak --"), GetTotalTimeSampled(), PeakCompare, maxLen);
+			Msg( _T("\n") );
 		}
 		if ( type & VPRT_LIST_BY_PEAK_OVER_AVERAGE )
 		{
-			DumpSorted( m_pOutputStream, _T("-- Profile scopes sorted by peak over average (including children) --"), GetTotalTimeSampled(), PeakOverAverageCompare, maxLen );
-			m_pOutputStream( _T("\n") );
+			DumpSorted( _T("-- Profile scopes sorted by peak over average (including children) --"), GetTotalTimeSampled(), PeakOverAverageCompare, maxLen );
+			Msg( _T("\n") );
 		}
 		
 		// TODO: Functions by time less children
@@ -1400,7 +1376,7 @@ void CVProfile::OutputReport( int type, const tchar *pszStartNode, int budgetGro
 #endif
 
 	}
-	m_pOutputStream( _T("******** END VPROF REPORT ********\n"));
+	Msg( _T("******** END VPROF REPORT ********\n"));
 
 }
 
@@ -1410,11 +1386,11 @@ CVProfile::CVProfile()
  :	m_Root( _T("Root"), 0, NULL, VPROF_BUDGETGROUP_OTHER_UNACCOUNTED, 0 ),
 	m_pCurNode( &m_Root ), 
  	m_nFrames( 0 ),
- 	m_enabled( 0 ),
+ 	m_enabled( 0 ),  // don't change this. if m_enabled is anything but zero coming out of this constructor, vprof will break.
  	m_pausedEnabledDepth( 0 ),
-	m_fAtRoot( true ),
-	m_pOutputStream( Msg )
+	m_fAtRoot( true )
 {
+
 #ifdef VPROF_VTUNE_GROUP
 	m_GroupIDStackDepth = 1;
 	m_GroupIDStack[0] = 0; // VPROF_BUDGETGROUP_OTHER_UNACCOUNTED
@@ -1466,9 +1442,7 @@ CVProfile::CVProfile()
 	m_bPMEInit = false;
 	m_bPMEEnabled = false;
 
-#ifdef _X360
-	m_UpdateMode = 0;
-	m_iCPUTraceEnabled = kDisabled;
+#ifdef VPROF_VXCONSOLE_EXISTS
 	m_bTraceCompleteEvent = false;
 	m_iSuccessiveTraceIndex = 0;
 	m_ReportMode = VXCONSOLE_REPORT_TIME;
@@ -1479,6 +1453,10 @@ CVProfile::CVProfile()
 	m_nFramesRemaining = 1;
 	m_WorstCycles = 0;
 	m_WorstTraceFilename[ 0 ] = 0;
+	m_UpdateMode = 0;
+#endif
+#ifdef _X360
+	m_iCPUTraceEnabled = kDisabled;
 #endif
 }
 
@@ -1516,7 +1494,7 @@ void CVProfile::Term()
 	{
 		delete [] m_pBudgetGroups[i].m_pName;
 	}
-	delete[] m_pBudgetGroups;
+	delete m_pBudgetGroups;
 	m_nBudgetGroupNames = m_nBudgetGroupNamesAllocated = 0;
 	m_pBudgetGroups = NULL;
 
@@ -1603,7 +1581,7 @@ int CVProfile::AddBudgetGroupName( const tchar *pBudgetGroupName, int budgetFlag
 		(*m_pNumBudgetGroupsChangedCallBack)();
 	}
 
-#if defined( _X360 )
+#if defined( VPROF_VXCONSOLE_EXISTS )
 	// re-start with all the known budgets
 	VXProfileStart();
 #endif
@@ -1732,7 +1710,7 @@ void CVProfile::LatchMultiFrame( int64 cycles )
 void CVProfile::SpewWorstMultiFrame()
 {
 	CCycleCount cc( m_WorstCycles );
-	m_pOutputStream( "%s == %.3f msec\n", m_WorstTraceFilename, cc.GetMillisecondsF() );
+	Msg( "%s == %.3f msec\n", m_WorstTraceFilename, cc.GetMillisecondsF() );
 }
 #endif
 
@@ -1771,12 +1749,20 @@ void CVProfile::Validate( CValidator &validator, tchar *pchName )
 
 	validator.Pop( );
 }
-
 #endif // DBGFLAG_VALIDATE
 
 #endif // VPROF_ENABLED
 
+
 #ifdef RAD_TELEMETRY_ENABLED
+
+#ifdef POSIX
+extern "C" char *
+__realpath_chk (const char *buf, char *resolved, size_t resolvedlen)
+{
+    return realpath (buf, resolved);
+}
+#endif
 
 TelemetryData g_Telemetry;
 static HTELEMETRY g_tmContext;
@@ -1785,8 +1771,6 @@ static bool g_TelemetryLoaded = false;
 
 static unsigned int g_TelemetryFrameCount = 0;
 static bool g_fTelemetryLevelChanged = false;
-
-static const TmU32 TELEMETRY_ARENA_SIZE = 8 * 1024 * 1024; // How much memory we want Telemetry to use.
 
 struct ThreadNameInfo_t
 {
@@ -1798,7 +1782,7 @@ static CTSSimpleList< ThreadNameInfo_t > g_ThreadNamesList;
 
 static bool g_bThreadNameArrayChanged = false;
 static int g_ThreadNameArrayCount = 0;
-static ThreadNameInfo_t *g_ThreadNameArray[64];
+static ThreadNameInfo_t g_ThreadNameArray[32];
 
 void TelemetryThreadSetDebugName( ThreadId_t id, const char *pszName )
 {
@@ -1817,44 +1801,14 @@ void TelemetryThreadSetDebugName( ThreadId_t id, const char *pszName )
 	g_bThreadNameArrayChanged = true;
 }
 
-static void UpdateTelemetryThreadNames()
-{
-	if( g_bThreadNameArrayChanged )
-	{
-		// Go through and add any new thread names we got in our thread safe list to our thread names array.
-		for( ThreadNameInfo_t *pThreadNameInfo = g_ThreadNamesList.Pop();
-			  pThreadNameInfo;
-			  pThreadNameInfo = g_ThreadNamesList.Pop() )
-		{
-			if( g_ThreadNameArrayCount < ARRAYSIZE( g_ThreadNameArray ) )
-			{
-				g_ThreadNameArray[ g_ThreadNameArrayCount ] = pThreadNameInfo;
-				g_ThreadNameArrayCount++;
-			}
-			else
-			{
-				delete pThreadNameInfo;
-			}
-		}
-
-		tmThreadName( g_tmContext, ThreadGetCurrentId(), "MainThrd" );
-
-		for( int i = 0; i < g_ThreadNameArrayCount; i++ )
-		{
-			tmThreadName( g_tmContext, g_ThreadNameArray[i]->ThreadID, g_ThreadNameArray[i]->szName );
-		}
-
-		g_bThreadNameArrayChanged = false;
-	}
-}
+const int TELEMETRY_ARENA_SIZE = 32 * 1024 * 1024; // How much memory we want Telemetry to use.
 
 static bool TelemetryInitialize()
 {
 	if( g_tmContext )
 	{
-		//TmConnectionStatus status = tmGetConnectionStatus( g_tmContext );
-		TmConnectionStatus status = TmConnectionStatus::TMCS_DISCONNECTED;
-		
+		TmConnectionStatus status = TM_GET_CONNECTION_STATUS( g_tmContext );
+
 		if( status == TMCS_CONNECTED || status == TMCS_CONNECTING )
 			return true;
 	}
@@ -1866,11 +1820,9 @@ static bool TelemetryInitialize()
 		// Pass in 0 if you want to use the release mode DLL or 1 if you want to
 		// use the checked DLL.  The checked DLL is compiled with optimizations but
 		// does extra run time checks and reporting.
-		//int nLoadTelemetry = tmLoadTelemetry( 0 );
-		int nLoadTelemetry = 0;
+		int nLoadTelemetry = TM_LOAD_TELEMETRY( 0 );
 
-		//retVal = tmStartup();
-		retVal = 0;
+		retVal = TM_STARTUP();
 		if ( retVal != TM_OK )
 		{
 			Warning( "TelemetryInit() failed: tmStartup() returned %d, tmLoadTelemetry() returned %d.\n", retVal, nLoadTelemetry );
@@ -1882,8 +1834,7 @@ static bool TelemetryInitialize()
 			g_pTmMemoryArena = new TmU8[ TELEMETRY_ARENA_SIZE ];
 		}
 
-		//retVal = tmInitializeContext( &g_tmContext, g_pTmMemoryArena, TELEMETRY_ARENA_SIZE );
-		retVal = 0;
+		retVal = TM_INITIALIZE_CONTEXT( &g_tmContext, g_pTmMemoryArena, TELEMETRY_ARENA_SIZE );
 		if ( retVal != TM_OK )
 		{
 			delete [] g_pTmMemoryArena;
@@ -1896,7 +1847,7 @@ static bool TelemetryInitialize()
 		g_TelemetryLoaded = true;
 	}
 
-	const char *pGameName = "tf2";
+	char *pGameName = "csgo";
 
 #if defined( IS_WINDOWS_PC )
 	char baseExeFilename[512];
@@ -1918,20 +1869,20 @@ static bool TelemetryInitialize()
 #endif
 
 	const char *pServerAddress = g_Telemetry.ServerAddress[0] ? g_Telemetry.ServerAddress : "localhost";
-	TmConnectionType tmType = !V_tier0_stricmp( pServerAddress, "FILE" ) ? TMCT_FILE : TMCT_TCP;
+	TmConnectionType tmType = TMCT_TCP; // !V_tier0_stricmp( pServerAddress, "FILE" ) ? TMCT_FILE : TMCT_TCP;
 
 	Msg( "TELEMETRY: Calling tmOpen( %s )...\n", pServerAddress );
 
 	char szBuildInfo[ 2048 ];
-	_snprintf( szBuildInfo, ARRAYSIZE( szBuildInfo ), "%s: %s", __DATE__ __TIME__, Plat_GetCommandLineA() );
+	_snprintf( szBuildInfo, ARRAYSIZE( szBuildInfo ), "%s: %s", __DATE__ __TIME__, Plat_GetCommandLine() );
 	szBuildInfo[ ARRAYSIZE( szBuildInfo ) - 1 ] = 0;
+
 
 	TmU32 TmOpenFlags = TMOF_DEFAULT | TMOF_MINIMAL_CONTEXT_SWITCHES;
 	/* TmOpenFlags |= TMOF_DISABLE_CONTEXT_SWITCHES | TMOF_INIT_NETWORKING*/
 
-	//retVal = tmOpen( g_tmContext, pGameName, szBuildInfo, pServerAddress, tmType,
-	//	TELEMETRY_DEFAULT_PORT, TmOpenFlags, 1000 );
-	retVal = 0;
+	retVal = TM_OPEN( g_tmContext, pGameName, szBuildInfo, pServerAddress, tmType,
+		TELEMETRY_DEFAULT_PORT, TmOpenFlags, 1000 );
 	if ( retVal != TM_OK )
 	{
 		Warning( "TelemetryInitialize() failed: tmOpen returned %d.\n", retVal );
@@ -1939,13 +1890,59 @@ static bool TelemetryInitialize()
 	}
 
 	Msg( "Telemetry initialized at level %u.\n", g_Telemetry.Level );
+#ifdef LINUX
+	printf( "Telemetry initialized at level %u.\n", g_Telemetry.Level );
+#endif
 
-    // Make sure we set all the thread names.
-	g_bThreadNameArrayChanged = true;
-	UpdateTelemetryThreadNames();
+	if( g_bThreadNameArrayChanged )
+	{
+		// Go through and add any new thread names we got in our thread safe list to our thread names array.
+		for( ThreadNameInfo_t *pThreadNameInfo = g_ThreadNamesList.Pop();
+			pThreadNameInfo;
+			pThreadNameInfo = g_ThreadNamesList.Pop() )
+		{
+			if( g_ThreadNameArrayCount < ARRAYSIZE( g_ThreadNameArray ) )
+			{
+				g_ThreadNameArray[ g_ThreadNameArrayCount ] = *pThreadNameInfo;
+				g_ThreadNameArrayCount++;
+			}
+
+			delete pThreadNameInfo;
+		}
+
+		for( int i = 0; i < g_ThreadNameArrayCount; i++ )
+		{
+			tmThreadName( g_tmContext, g_ThreadNameArray[i].ThreadID, g_ThreadNameArray[i].szName );
+		}
+
+		g_bThreadNameArrayChanged = false;
+	}
+
+	// Default Zone Filter value to .5ms if they haven't set it already.
+	if( !g_Telemetry.ZoneFilterVal )
+		g_Telemetry.ZoneFilterVal = 500;
+
+	// Init plot data
+	for( int i = 0; i < TELEMETRY_ZONE_PLOT_SLOT_MAX; ++i )
+	{
+		g_Telemetry.m_ZonePlot[i].m_Name			= NULL;
+		g_Telemetry.m_ZonePlot[i].m_CurrFrameTime	= 0;
+	}
 
 	return true;
 }
+
+#if 0
+
+//an instance of TM_API_STRUCT that points to stubbed out functions
+class CTM_API_STRUCT_Stub : public TM_API_STRUCT
+{
+public:
+	inline CTM_API_STRUCT_Stub( void ) {}; //this empty default constructor works around warning C4701 "potentially uninitialized local variable * used" in code below. We initialize it and use it in 2 different scopes that use the same boolean
+	const CTM_API_STRUCT_Stub &operator=( const TM_API_STRUCT &Existing );
+	void LinkToStubs( void ); //replaces all known function pointers with stubbed versions
+};
+#endif
 
 static void TelemetryShutdown( bool InDtor = false )
 {
@@ -1957,18 +1954,50 @@ static void TelemetryShutdown( bool InDtor = false )
 			Msg( "Shutting down telemetry.\n" );
 		}
 
-		//TmConnectionStatus status = tmGetConnectionStatus( g_tmContext );
-		TmConnectionStatus status = 0;
+		TmConnectionStatus status = TM_GET_CONNECTION_STATUS( g_tmContext );
 		if( status == TMCS_CONNECTED || status == TMCS_CONNECTING )
-			tmClose( g_tmContext );
+			TM_CLOSE( g_tmContext );
 
-		// Discontinue new usage of the context before shutting it down (multithreading).
+#if 0
+		CTM_API_STRUCT_Stub stubbedApiStruct;
+
+		//Tm__Zone usage saves off a copy of g_tmContext and will attempt to use that pointer when leaving scope.
+		//This include threads that we're not especially great at shutting down yet.
+		//If we happen to own the memory that the context points at, we'll just stub out the pointers instead of completely deleting the memory
+		const bool bUseLazyShutdownStubs = IsPlatformWindowsPC() && 			
+			( ( g_tmContext >= ( HTELEMETRY ) g_pTmMemoryArena ) && ( g_tmContext < ( HTELEMETRY )( g_pTmMemoryArena + TELEMETRY_ARENA_SIZE ) ) ); //we completely own the memory that the context points at
+
+		if ( bUseLazyShutdownStubs )
+		{
+			if( !InDtor )
+			{
+				Msg( "Using lazy telemetry shutdown stub functions\n\tArena: %p, Context: %p\n", g_pTmMemoryArena, g_tmContext ); //previous testing has shown that the context is at the start of the arena
+			}
+			stubbedApiStruct = *(TM_API_STRUCT *)g_tmContext; // a bit of future proofing to ensure that we'll use whatever was in the old struct if we fail to initialize a particular stub
+			stubbedApiStruct.LinkToStubs();
+		}
+#endif
+
+		//discontinue new usage of the context before shutting it down (multithreading)
 		memset( g_Telemetry.tmContext, 0, sizeof( g_Telemetry.tmContext ) );
 		HTELEMETRY hShutdown = g_tmContext;
 		g_tmContext = NULL;
 
-		//tmShutdownContext( hShutdown ); 
-		//tmShutdown();
+		TM_SHUTDOWN_CONTEXT( hShutdown ); 
+#if 0
+		if ( bUseLazyShutdownStubs )
+		{
+			//there's a window where this context will be in an unknown state
+			memcpy( hShutdown, &stubbedApiStruct, sizeof( TM_API_STRUCT ) );
+		}
+		else
+#endif
+            if ( !IsPlatformWindowsPC() ) //actual test should be "do we probably have outstanding threads"
+		{
+			delete [] g_pTmMemoryArena;
+			g_pTmMemoryArena = NULL;
+		}
+		TM_SHUTDOWN();
 		g_TelemetryLoaded = false;
 	}
 }
@@ -1983,22 +2012,37 @@ public:
 
 PLATFORM_INTERFACE void TelemetrySetLevel( unsigned int Level )
 {
+	DevMsg( "TelemetrySetLevel changed from 0x%x to 0x%x (ZoneFilterVal:%d)\n", g_Telemetry.Level, Level, g_Telemetry.ZoneFilterVal );
+
 	if( Level != g_Telemetry.Level )
 	{
-		DevMsg( "TelemetrySetLevel changed from 0x%x to 0x%x\n", g_Telemetry.Level, Level );
-
 		g_Telemetry.Level = Level;
 		g_TelemetryFrameCount = g_Telemetry.FrameCount;
 		g_fTelemetryLevelChanged = true;
 	}
 }
 
+#if defined( IS_WINDOWS_PC )
+
+#include <psapi.h>
+
+typedef BOOL ( WINAPI *GetProcessMemoryInfo_t )( HANDLE Process, PPROCESS_MEMORY_COUNTERS ppsmemCounters, DWORD cb );
+static CDynamicFunction< GetProcessMemoryInfo_t > DynGetProcessMemoryInfo( "psapi.dll", "GetProcessMemoryInfo" );
+
+#endif
+
 static void TelemetryPlots()
 {
 	if( g_Telemetry.playbacktick )
 	{
-		tmPlotU32( TELEMETRY_LEVEL1, TMPT_INTEGER, 0, g_Telemetry.playbacktick, "game/PlaybackTick" );
+		TM_PLOT_U32( TELEMETRY_LEVEL1, TMPT_INTEGER, 0, g_Telemetry.playbacktick, "game/PlaybackTick" );
 		g_Telemetry.playbacktick = 0;
+	}
+
+	if( g_Telemetry.dotatime )
+	{
+		TM_PLOT_F32( TELEMETRY_LEVEL1, TMPT_NONE, 0, g_Telemetry.dotatime, "game/DotaTime" );
+		g_Telemetry.dotatime = 0.0f;
 	}
 
 	for( int i = 0; i < g_VProfCurrentProfile.GetNumCounters(); i++ )
@@ -2008,18 +2052,41 @@ static void TelemetryPlots()
 			int val;
 			const char *name = g_VProfCurrentProfile.GetCounterNameAndValue( i, val );
 
-			tmPlotI32( TELEMETRY_LEVEL1, TMPT_INTEGER, 0, val, name );
+			TM_PLOT_I32( TELEMETRY_LEVEL1, TMPT_INTEGER, 0, val, name );
 		}
 	}
 
 	g_VProfCurrentProfile.ResetCounters( COUNTER_GROUP_TELEMETRY );
+
+	// Send plot value collected using TM_ZONE_PLOT macro
+	// Data sent as a percentage of a 16ms frame (so that Telemetry display the data nicely in the Timeline view)
+	for( int i = 0; i < TELEMETRY_ZONE_PLOT_SLOT_MAX; ++i )
+	{
+		TelemetryZonePlotData* pData = &g_Telemetry.m_ZonePlot[i];
+		if (pData->m_Name)
+		{
+			TM_PLOT_F32(
+				TELEMETRY_LEVEL1,
+				TMPT_TIME_MS, 
+				TMPF_NONE, 
+				(pData->m_CurrFrameTime * g_Telemetry.flRDTSCToMilliSeconds),
+				"(frametimes)%s(ms)", pData->m_Name );
+		}
+
+		pData->m_Name			= NULL;
+		pData->m_CurrFrameTime	= 0;
+	}
+
+	TM_PLOT_F32(
+		TELEMETRY_LEVEL1,
+		TMPT_TIME_MS, 
+		TMPF_NONE,
+		16.666f,
+		"(frametimes)%s(ms)", "Ref 16ms" );
 }
 
 PLATFORM_INTERFACE void TelemetryTick()
 {
-	static double s_d0 = Plat_FloatTime();
-	static TmU64 s_t0 = tmFastTime();
-
 	if( !g_Telemetry.Level && g_Telemetry.DemoTickStart && ( (uint32)g_Telemetry.playbacktick > g_Telemetry.DemoTickStart ) )
 	{
 		TelemetrySetLevel( 2 );
@@ -2031,35 +2098,48 @@ PLATFORM_INTERFACE void TelemetryTick()
 		g_Telemetry.DemoTickEnd = ( uint32 )-1;
 	}
 
+	if ( ( g_tmContext ) && ( g_Telemetry.Level > 0 ) )
+	{
+		TelemetryPlots();
+	}
+
+	static double s_d0 = Plat_FloatTime();
+	static TmU64 s_t0 = TM_FAST_TIME();
+
 	// People can NIL out contexts in the TelemetryData structure to control
 	//	the level and what sections to log. We always need to do ticks though,
-	//	so use master context for this.
+	//	so use the master context for this.
 	if( g_tmContext )
 	{
-		// Update any new thread names.
-		UpdateTelemetryThreadNames();
+		TM_TICK( g_tmContext );
+	}
 
-		if ( g_Telemetry.Level > 0 )
-			TelemetryPlots();
+	if( g_tmContext )
+	{
+		static uint32 s_ZoneFilterValLast = 0;
 
-		// Do a Telemetry Tick.
-		tmTick( g_tmContext );
+		if( s_ZoneFilterValLast != g_Telemetry.ZoneFilterVal )
+		{
+			g_fTelemetryLevelChanged = true;
+			s_ZoneFilterValLast = g_Telemetry.ZoneFilterVal;
+		}
 
-		// Update flRDTSCToMilliSeconds.
-		TmU64 s_t1 = tmFastTime();
+		TmU64 s_t1 = TM_FAST_TIME();
 		double s_d1 = Plat_FloatTime();
 
 		g_Telemetry.flRDTSCToMilliSeconds = 1000.0f / ( ( s_t1 - s_t0 ) / ( s_d1 - s_d0 ) );
+		// Msg( "g_Telemetry.flRDTSCToMilliSeconds: %f time:%f\n", g_Telemetry.flRDTSCToMilliSeconds, ( s_t1 - s_t0 ) * g_Telemetry.flRDTSCToMilliSeconds );
 
 		s_d0 = s_d1;
 		s_t0 = s_t1;
 
-		// Check if we're only supposed to run X amount of frames.
-		if( g_TelemetryFrameCount && !tmIsPaused( g_tmContext ) )
+		if( g_TelemetryFrameCount && !TM_IS_PAUSED( g_tmContext ) )
 		{
 			g_TelemetryFrameCount--;
 			if( !g_TelemetryFrameCount )
+			{
 				TelemetrySetLevel( 0 );
+			}
 		}
 	}
 
@@ -2068,10 +2148,19 @@ PLATFORM_INTERFACE void TelemetryTick()
 		g_fTelemetryLevelChanged = false;
 		memset( g_Telemetry.tmContext, 0, sizeof( g_Telemetry.tmContext ) );
 
-		if( g_Telemetry.Level == 0 )
+		// Mask of all zeros just enables level 0.
+		if( g_Telemetry.Level == 0x80000000 )
+			g_Telemetry.Level = 1;
+
+		unsigned int Level = g_Telemetry.Level;
+		bool IsMask = ( Level & 0x80000000 ) ? true : false;
+
+		Level &= ~0x80000000;
+
+		if( Level == 0 )
 		{
-			// Calling shutdown here invalidates all the telemetry context handles.
-			// Background threads in the middle of Tm__Zone'd calls may crash...
+			// Calling shutdown here invalidates all the telemetry context handles, and background
+			//  threads in the middle of Tm__Zone'd calls will crash. So pause things for now.
 			TelemetryShutdown();
 		}
 		else
@@ -2082,12 +2171,25 @@ PLATFORM_INTERFACE void TelemetryTick()
 			}
 			else
 			{
-				tmPause( g_tmContext, 0 );
+				TM_PAUSE( g_tmContext, 0 );
 
-				uint32 Level = MIN( g_Telemetry.Level, ARRAYSIZE( g_Telemetry.tmContext ) );
-				for( uint32 i = 0; i < Level; i++ )
+				if( IsMask )
 				{
-					g_Telemetry.tmContext[i] = g_tmContext;
+					for( unsigned int i = 0; i < ARRAYSIZE( g_Telemetry.tmContext ); i++)
+					{
+						if( (1 << i) & Level)
+						{
+							g_Telemetry.tmContext[ i ] = g_tmContext;
+						}
+					}
+				}
+				else
+				{
+					Level = MIN( Level, ARRAYSIZE( g_Telemetry.tmContext ) );
+					for( unsigned int i = 0; i < Level; i++ )
+					{
+						g_Telemetry.tmContext[i] = g_tmContext;
+					}
 				}
 			}
 		}
@@ -2098,5 +2200,220 @@ PLATFORM_INTERFACE void TelemetryTick()
 		//	TM_ENABLE( g_tmContext, TMO_SUPPORT_PLOT, 0 );
 	}
 }
+
+#if 0
+
+const CTM_API_STRUCT_Stub &CTM_API_STRUCT_Stub::operator=( const TM_API_STRUCT &Existing )
+{
+	memcpy( this, &Existing, sizeof( TM_API_STRUCT ) );
+	return *this;
+}
+
+#undef TM_API
+
+typedef char const * tmStubCSTR;
+#define tmStubRETURN_TmErrorCode			return TM_OK;
+#define tmStubRETURN_TmU32					return 0;
+#define tmStubRETURN_void					return;
+#define tmStubRETURN_TmConnectionStatus		return TMCS_DISCONNECTED;
+#define tmStubRETURN_TmU64					return 0;
+#define tmStubRETURN_int					return 0;
+#define tmStubRETURN_char					return 0;
+#define tmStubRETURN_TmI32					return 0;
+#define tmStubRETURN_tmStubCSTR				return "";
+#define TM_API( ret, name, params ) inline ret RADEXPLINK name##Stub params { tmStubRETURN_##ret }
+
+#if defined TM_PPU
+#define TM_NUM_SPUS 6
+TM_API( TmErrorCode, tmPPUCoreGetListener, ( HTELEMETRY cx, int const kNdx, TmU32 *pListener ) );
+TM_API( TmErrorCode, tmPPUCoreRegisterSPUProgram, ( HTELEMETRY cx, TmU64 const kGuid, void const *imagebase, unsigned int const kImageSize, int const kRdOnlyOffset ) );
+#endif
+
+#if defined TM_IPC_HOST && defined __RADWIN__
+TM_API( TmErrorCode, tmWin32CoreListenSHAREDMEM, ( HTELEMETRY cx, char const *name ) );
+#endif
+
+#if defined TM_SPU
+TM_API( TmErrorCode, tmSPUCoreBindContextToListener, ( HTELEMETRY *pcx, void * mem, TmU32 kPPUListener, char const *imagename, ...) );
+TM_API( TmErrorCode, tmSPUCoreUpdateTime, ( HTELEMETRY cx ) );
+TM_API( TmErrorCode, tmSPUCoreFlushImage, ( HTELEMETRY cx ) );
+#endif
+
+TM_API( TmU32, tmCoreGetVersion, ( void ) );
+TM_API( TmErrorCode, tmCoreCheckVersion, ( HTELEMETRY cx, TmU32 const major, TmU32 const minor, TmU32 const build, TmU32 const cust ) );
+TM_API( TmErrorCode, tmCoreGetPlatformInformation, ( void* obj, TmPlatformInformation const kInfo, void* dst, TmU32 const kDstSize ) );
+TM_API( TmErrorCode, tmCoreGetLastError, ( HTELEMETRY cx ) );
+#ifndef TM_SPU
+TM_API( TmErrorCode, tmCoreStartup, ( void ) );
+TM_API( TmErrorCode, tmCoreInitializeContext, ( EXPOUT HTELEMETRY * pcx, void * pArena, TmU32 const kArenaSize ) );
+TM_API( void, tmCoreShutdownContext, ( HTELEMETRY cx ) );
+TM_API( void, tmCoreShutdown, ( void ) ); 
+#endif
+TM_API( TmErrorCode, tmCoreGetSessionName, ( HTELEMETRY cx, char *dst, int const kDstSize ) );
+
+TM_API( TmConnectionStatus, tmCoreGetConnectionStatus, ( HTELEMETRY cx ) );
+#ifndef TM_SPU
+TM_API( TmErrorCode, tmCoreOpen, ( HTELEMETRY cx, char const * kpAppName,  
+	char const * kpBuildInfo,
+	char const * kpServerAddress, 
+	TmConnectionType const kConnection,
+	TmU16 const kServerPort,
+	TmU32 const kFlags,
+	int const kTimeoutMS ) );
+#endif
+
+TM_API( void, tmCoreClose, ( HTELEMETRY cx ) );
+
+TM_API( void , tmCoreSetDebugZoneLevel, ( HTELEMETRY cx, int const v ) );
+TM_API( void , tmCoreCheckDebugZoneLevel, ( HTELEMETRY cx, int const v ) );
+TM_API( void , tmCoreUnwindToDebugZoneLevel, ( HTELEMETRY cx, int const v ) );
+
+TM_API( tmStubCSTR, tmCoreDynamicString, ( HTELEMETRY cx, char const * s ) );
+TM_API( void, tmCoreClearStaticString, ( HTELEMETRY cx, char const * s ) );
+
+TM_API( void, tmCoreSetVariable, ( HTELEMETRY cx, char const *kpKey, TmU32* pFormatCode, char const *kpValueFmt, ... ) );
+TM_API( void, tmCoreSetTimelineSectionName, ( HTELEMETRY cx, TmU32 *pFormatCode, char const * kpFmt, ... ) );
+TM_API( void, tmCoreThreadName, ( HTELEMETRY cx, TmU32 const kThreadID, TmU32 *pFormatCode, char const * kpFmt, ... ) ); 
+TM_API( void, tmCoreGetFormatCode, ( TmU32* pCode, char const * kpFmt ) );
+
+TM_API( void, tmCoreEnable, ( HTELEMETRY cx, TmOption const kOption, int const kValue ) );
+TM_API( int , tmCoreIsEnabled, ( HTELEMETRY cx, TmOption const kOption ) );
+
+TM_API( void, tmCoreSetParameter, ( HTELEMETRY cx, TmParameter const kParam, void const *kpValue ) );
+
+TM_API( void, tmCoreTick, ( HTELEMETRY cx ) );
+TM_API( void, tmCoreFlush, ( HTELEMETRY cx ) );
+TM_API( void, tmCorePause, ( HTELEMETRY cx, int const kPause ) );
+TM_API( int, tmCoreIsPaused, ( HTELEMETRY cx ) );
+TM_API( void, tmCoreEnter, (HTELEMETRY cx, TmU64 *matchid, TmU32 const kThreadId, TmU64 const kThreshold, TmU32 const kFlags, char const *kpLocation, TmU32 const kLine, TmU32* pFmtCode, char const *kpFmt, ... ) );
+TM_API( void, tmCoreLeave, ( HTELEMETRY cx, TmU64 const kMatchID, TmU32 const kThreadId, char const *kpLocation, int const kLine ) ); 
+
+TM_API( void,  tmCoreEmitAccumulationZone, ( HTELEMETRY cx, TmU64 * pAccum, TmU64 const kZoneTotal, TmU32 const kCount, TmU32 const kZoneFlags, char const *kpLocation, TmU32 const kLine, TmU32 *pFmtCode, char const * kpFmt, ... ) );
+
+TM_API( TmU64, tmCoreGetLastContextSwitchTime, (HTELEMETRY cx) );
+
+TM_API( void, tmCoreLockName, ( HTELEMETRY cx, void const *kpPtr, TmU32* pFmtCode, char const * kpFmt, ... ) );
+TM_API( void, tmCoreSetLockState, ( HTELEMETRY cx, void const *kpPtr, TmLockState const kState, char const * kLocation, TmU32 const kLine, TmU32 *pFormatCode, char const *kpFmt, ... ) );
+TM_API( int, tmCoreSetLockStateMinTime, ( HTELEMETRY cx, void* buf, void const *kpPtr, TmLockState const kState, char const * kLocation, TmU32 const kLine, TmU32 *pFormatCode, char const *kpFmt, ... ) );
+
+TM_API( void, tmCoreBeginTimeSpan, ( HTELEMETRY cx, TmU64 const kId, TmU32 const kFlags, TmU64 const kTime, char const *kpLocation, TmU32 const kLine, TmU32 *pFmtCode, char const *kpFmt, ... ) );
+TM_API( void, tmCoreEndTimeSpan, ( HTELEMETRY cx, TmU64 const kId, TmU32 const kFlags, TmU64 const kTime, char const *kpLocation, TmU32 const kLine, TmU32 *pFmtCode, char const *kpFmt, ... ) );
+
+TM_API( void, tmCoreSignalLockCount, ( HTELEMETRY cx, char const *kpLocation, TmU32 const kLine, void const * kPtr, TmU32 const kCount, TmU32* pFmtCode, char const *kpName, ... ) );
+TM_API( void, tmCoreTryLock,   ( HTELEMETRY cx, TmU64 *matchid, TmU64 const kThreshold, char const *kpLocation, TmU32 const kLine, void const * kPtr, TmU32* pFmtCode, char const *kpFmt, ... ) );
+TM_API( void, tmCoreEndTryLock, ( HTELEMETRY cx, TmU64 const kMatchId, char const *kpLocation, int const kLine, TmU32* pFmt, void const * kPtr, TmLockResult const kResult ) );
+
+TM_API( TmI32, tmCoreGetStati, ( HTELEMETRY cx, TmStat const kStat ) );
+
+TM_API( void, tmCoreMessage, ( HTELEMETRY cx, TmU32 const kFlags, TmU32* pFmtCode, char const * kpFmt, ... ) );
+
+TM_API( void, tmCoreAlloc, ( HTELEMETRY cx, void const * kPtr, TmU64 const kSize, char const *kpLocation, TmU32 const kLine, TmU32 *pFmtCode, char const *kpFmt, ... ) );
+TM_API( void, tmCoreFree, ( HTELEMETRY cx, void const * kpPtr, char const *kpLocation, int const kLine, TmU32 *pFmtCode ) );
+
+TM_API( void, tmCorePlot, ( HTELEMETRY cx, TmPlotType const kType, TmU32 const kFlags, float const kValue,  TmU32 *pFmtCode, char const * kpFmt, ... ) );
+TM_API( void, tmCorePlotI32, ( HTELEMETRY cx, TmPlotType const kType, TmU32 const kFlags, TmI32 const kValue,  TmU32 *pFmtCode, char const * kpFmt, ... ) );
+TM_API( void, tmCorePlotU32, ( HTELEMETRY cx, TmPlotType const kType, TmU32 const kFlags, TmU32 const kValue,  TmU32 *pFmtCode, char const * kpFmt, ... ) );
+TM_API( void, tmCorePlotI64, ( HTELEMETRY cx, TmPlotType const kType, TmU32 const kFlags, TmI64 const kValue,  TmU32 *pFmtCode, char const * kpFmt, ... ) );
+TM_API( void, tmCorePlotU64, ( HTELEMETRY cx, TmPlotType const kType, TmU32 const kFlags, TmU64 const kValue,  TmU32 *pFmtCode, char const * kpFmt, ... ) );
+TM_API( void, tmCorePlotF64, ( HTELEMETRY cx, TmPlotType const kType, TmU32 const kFlags, double const kValue,  TmU32 *pFmtCode, char const * kpFmt, ... ) );
+
+TM_API( void, tmCoreBlob, ( HTELEMETRY cx,   void const * kpData, int const kDataSize, char const *kpPluginIdentifier, TmU32* pFmtCode, char const * kpFmt, ... ) );
+TM_API( void, tmCoreDisjointBlob, ( HTELEMETRY cx, int const kNumPieces, void const ** kpData, int const *kDataSize, char const *kpPluginIdentifier, TmU32* pFmtCode, char const * kpFmt, ... ) );
+
+TM_API( void, tmCoreUpdateSymbolData, ( HTELEMETRY cx ) );
+
+TM_API( int, tmCoreSendCallStack, ( HTELEMETRY cx, TmCallStack const * kpCallStack, int const kSkip ) );
+TM_API( int, tmCoreGetCallStack, ( HTELEMETRY cx, TmCallStack * pCallStack ) );
+
+#undef TM_API
+
+void CTM_API_STRUCT_Stub::LinkToStubs( void )
+{
+#if defined( TM_API_S )
+#undef TM_API_S
+#endif
+
+	//#define TM_API_S(name) name = GenerateStubFunction( TM_FUNCTION_TYPE(name)(NULL) );
+#define TM_API_S(name) name = name##Stub;
+
+#if ( TelemetryBuildNumber != 31 )
+#error This section needs to get updated with the latest TM_API_STRUCT definitions whenever we update to a new telemetry sdk.
+#endif
+
+	//======================================================================================================================
+	// Copy/paste the TM_API_S(*) contents of TM_API_STRUCT (from Rad's telemetry.h) here to stub out each of the functions
+	//======================================================================================================================
+	TM_API_S( tmCoreCheckVersion );
+	TM_API_S( tmCoreUpdateSymbolData );
+	TM_API_S( tmCoreGetLastContextSwitchTime );    
+#ifndef __RADSPU__
+	TM_API_S( tmCoreTick );
+#endif
+	TM_API_S( tmCoreFlush );
+	TM_API_S( tmCoreDynamicString );
+	TM_API_S( tmCoreClearStaticString );
+	TM_API_S( tmCoreSetVariable );
+	TM_API_S( tmCoreGetFormatCode );
+	TM_API_S( tmCoreGetSessionName );
+	TM_API_S( tmCoreGetLastError );
+	TM_API_S( tmCoreShutdownContext );
+	TM_API_S( tmCoreGetConnectionStatus );
+	TM_API_S( tmCoreSetTimelineSectionName );
+	TM_API_S( tmCoreEnable );
+	TM_API_S( tmCoreIsEnabled );
+#ifndef __RADSPU__
+	TM_API_S( tmCoreOpen );
+#endif
+	TM_API_S( tmCoreClose );
+	TM_API_S( tmCorePause );
+	TM_API_S( tmCoreIsPaused );
+	TM_API_S( tmCoreEnter );
+	TM_API_S( tmCoreLeave );
+
+	TM_API_S( tmCoreThreadName );
+	TM_API_S( tmCoreLockName );
+	TM_API_S( tmCoreTryLock );
+	TM_API_S( tmCoreEndTryLock );
+	TM_API_S( tmCoreSignalLockCount );
+	TM_API_S( tmCoreSetLockState );
+
+	TM_API_S( tmCoreAlloc );
+	TM_API_S( tmCoreFree );
+	TM_API_S( tmCoreGetStati );
+
+	TM_API_S( tmCoreBeginTimeSpan );
+	TM_API_S( tmCoreEndTimeSpan );
+
+	TM_API_S( tmCorePlot );
+	TM_API_S( tmCorePlotI32 );
+	TM_API_S( tmCorePlotU32 );
+	TM_API_S( tmCorePlotI64 );
+	TM_API_S( tmCorePlotU64 );
+	TM_API_S( tmCorePlotF64 );
+
+	TM_API_S( tmCoreBlob );
+	TM_API_S( tmCoreDisjointBlob );
+	TM_API_S( tmCoreMessage );
+
+	TM_API_S( tmCoreSendCallStack );
+	TM_API_S( tmCoreGetCallStack );
+
+	TM_API_S( tmCoreSetDebugZoneLevel );
+	TM_API_S( tmCoreCheckDebugZoneLevel );
+	TM_API_S( tmCoreUnwindToDebugZoneLevel );
+
+	TM_API_S( tmCoreEmitAccumulationZone );
+
+	TM_API_S( tmCoreSetLockStateMinTime );
+	TM_API_S( tmCoreSetParameter );
+
+#if defined __RADPS3__ && !defined TM_API_STATIC
+	TM_API_S( tmPPUCoreGetListener );
+	TM_API_S( tmPPUCoreRegisterSPUProgram );
+#endif
+
+#undef TM_API_S
+}
+#endif
 
 #endif // RAD_TELEMETRY_ENABLED

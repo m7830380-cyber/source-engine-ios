@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2005, Valve Corporation, All rights reserved. =======
 //
 // Purpose: 
 //
@@ -7,7 +7,7 @@
 #include "dme_controls/AssetBuilder.h"
 #include "dme_controls/DmePanel.h"
 #include "dme_controls/dmecontrols_utils.h"
-#include "tier1/KeyValues.h"
+#include "tier1/keyvalues.h"
 #include "vgui_controls/ListPanel.h"
 #include "vgui_controls/MenuButton.h"
 #include "vgui_controls/TextEntry.h"
@@ -19,8 +19,8 @@
 #include "vgui_controls/PropertySheet.h"
 #include "vgui_controls/PropertyPage.h"
 #include "vgui/ischeme.h"
-#include "vgui/IVGui.h"
-#include "vgui/ISurface.h"
+#include "vgui/ivgui.h"
+#include "vgui/isurface.h"
 #include "tier1/tier1.h"
 #include "movieobjects/dmemakefile.h"
 #include "matsys_controls/picker.h"
@@ -83,9 +83,9 @@ CCompileStatusBar::CCompileStatusBar( vgui::Panel *pParent, const char *pPanelNa
 	m_CompilingId = vgui::surface()->DrawGetTextureId( "vgui/progressbar" );
 	if ( m_CompilingId == -1 ) // we didn't find it, so create a new one
 	{
-		m_CompilingId = vgui::surface()->CreateNewTextureID();
-		vgui::surface()->DrawSetTextureFile( m_CompilingId, "vgui/progressbar", true, false );
+		m_CompilingId = vgui::surface()->CreateNewTextureID();	
 	}
+	vgui::surface()->DrawSetTextureFile( m_CompilingId, "vgui/progressbar", true, false );
 }
 
 CCompileStatusBar::~CCompileStatusBar()
@@ -176,7 +176,7 @@ void BuildAssetTypeList( )
 	{
 		// Add all DmeElements that inherit from DmeMakefile 
 		const char *pFactoryName = g_pDataModel->GetFactoryName( hFactory );
-		CDmElement *pElement = GetElement< CDmElement >( g_pDataModel->CreateElement( pFactoryName, "temp" ) );
+		CDmElement *pElement = GetElement< CDmElement >( g_pDataModel->CreateElement( pFactoryName, "temp", DMFILEID_INVALID ) );
 		CDmeMakefile *pMakeFile = CastElement<CDmeMakefile>( pElement );
 		if ( pMakeFile && pMakeFile->GetMakefileType() )
 		{
@@ -207,7 +207,7 @@ static PickerList_t &BuildAssetSubTypeList( const char **ppSubTypes, PickerList_
 	for ( int i = 0; i < nCount; ++i )
 	{
 		// Add all DmeElements that inherit from DmeMakefile 
-		CDmElement *pElement = GetElement< CDmElement >( g_pDataModel->CreateElement( s_AssetTypes[i].m_pChoiceValue, "temp" ) );
+		CDmElement *pElement = GetElement< CDmElement >( g_pDataModel->CreateElement( s_AssetTypes[i].m_pChoiceValue, "temp", DMFILEID_INVALID ) );
 		CDmeMakefile *pMakeFile = CastElement< CDmeMakefile >( pElement );
 
 		for ( int j = 0; ppSubTypes[j]; ++j )
@@ -669,7 +669,7 @@ void CAssetBuilder::OnPicked( KeyValues *kv )
 	}
 
 	CDisableUndoScopeGuard guard;
-	CDmeMakefile *pMakeFile = GetElement< CDmeMakefile >( g_pDataModel->CreateElement( pValue, "unnamed" ) );
+	CDmeMakefile *pMakeFile = GetElement< CDmeMakefile >( g_pDataModel->CreateElement( pValue, "unnamed", DMFILEID_INVALID ) );
 	if ( !pMakeFile )
 		return;
 
@@ -686,7 +686,6 @@ void CAssetBuilder::OnPicked( KeyValues *kv )
 	FileOpenDialog *pDialog = new FileOpenDialog( this, "Select Asset Builder File Name", false, pDialogKeys );
 	pDialog->SetStartDirectoryContext( pContext, pStartingDir );
 	pDialog->AddFilter( pType->m_pFileFilter, pType->m_pFileFilterString, true );
-	pDialog->SetDeleteSelfOnClose( true );
 	pDialog->AddActionSignalTarget( this );
 	pDialog->DoModal( false );
 	DestroyElement( pMakeFile );
@@ -973,7 +972,6 @@ void CAssetBuilder::ShowSourceFileBrowser( const char *pTitle, DmeMakefileType_t
 	FileOpenDialog *pDialog = new FileOpenDialog( this, pTitle, true, pDialogKeys );
 	pDialog->SetStartDirectoryContext( pContext, pStartingDir );
 	pDialog->AddFilter( pSourceType->m_pFileFilter, pSourceType->m_pFileFilterString, true );
-	pDialog->SetDeleteSelfOnClose( true );
 	pDialog->AddActionSignalTarget( this );
 	pDialog->DoModal( false );
 }
@@ -1505,7 +1503,7 @@ void CAssetBuilderFrame::UpdateFileName( )
 	}
 	else
 	{
-		Q_snprintf( pBuf, sizeof(pBuf), "%s - %s%s", pMakefileType->m_pHumanReadableName, pFileName, pMakeFile->IsDirty() ? " *" : "" );
+		Q_snprintf( pBuf, sizeof(pBuf), "%s - s%s", pMakefileType->m_pHumanReadableName, pFileName, pMakeFile->IsDirty() ? " *" : "" );
 	}
 	SetTitle( pBuf, true );
 }
@@ -1597,7 +1595,7 @@ void CAssetBuilderFrame::OnPicked( KeyValues *kv )
 	const char *pValue = kv->GetString( "choice" );
 
 	CDisableUndoScopeGuard guard;
-	CDmeMakefile *pMakeFile = GetElement< CDmeMakefile >( g_pDataModel->CreateElement( pValue, "unnamed" ) );
+	CDmeMakefile *pMakeFile = GetElement< CDmeMakefile >( g_pDataModel->CreateElement( pValue, "unnamed", DMFILEID_INVALID ) );
 	if ( !pMakeFile )
 		return;
 
@@ -1617,7 +1615,6 @@ void CAssetBuilderFrame::OnPicked( KeyValues *kv )
 	FileOpenDialog *pDialog = new FileOpenDialog( this, pTitle, false, pDialogKeys );
 	pDialog->SetStartDirectoryContext( pContext, pStartingDir );
 	pDialog->AddFilter( pType->m_pFileFilter, pType->m_pFileFilterString, true );
-	pDialog->SetDeleteSelfOnClose( true );
 	pDialog->AddActionSignalTarget( this );
 	pDialog->DoModal( false );
 	DestroyElement( pMakeFile );

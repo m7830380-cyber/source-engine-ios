@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Defines a connection (output-to-input) between two entities.
 //
@@ -17,6 +17,7 @@
 #include "stdafx.h"
 #include "EntityConnection.h"
 #include "MapEntity.h"
+#include "hammer.h"
 #include "MapDoc.h"
 #include "MapWorld.h"
 
@@ -159,7 +160,15 @@ void CEntityConnection::LinkTargetEntities()
 	FOR_EACH_OBJ( *m_pTargetEntityList, pos )
 	{
 		CMapEntity *pEntity = m_pTargetEntityList->Element( pos );
-		pEntity->Upstream_Remove( this );
+
+		// If you hit this assert it means that an entity was deleted but not removed
+		// from this entity's list of targets.
+		ASSERT( pEntity != NULL );
+
+		if ( pEntity )
+		{
+			pEntity->Upstream_Remove( this );
+		}
 	}
 
 	// Empty out the existing entity list
@@ -199,7 +208,11 @@ bool CEntityConnection::AreAnyTargetEntitiesVisible()
 	CMapEntityList *pList = GetTargetEntityList();
 	for ( int iTarget=0; iTarget < pList->Count(); iTarget++ )
 	{
-		if ( pList->Element( iTarget )->IsVisible() )
+		CMapEntity *pEntity = pList->Element( iTarget );
+		if ( !pEntity )
+			continue;
+	
+		if ( pEntity->IsVisible() )
 			return true;
 	}
 
@@ -210,7 +223,7 @@ bool CEntityConnection::AreAnyTargetEntitiesVisible()
 //------------------------------------------------------------------------------
 // Purpose: Returns true if output string is valid for all this entity
 //------------------------------------------------------------------------------
-bool CEntityConnection::ValidateOutput(CMapEntity *pEntity, const char* pszOutput)
+bool CEntityConnection::ValidateOutput(const CMapEntity *pEntity, const char* pszOutput)
 {
 	if (!pEntity)
 	{
@@ -243,8 +256,9 @@ bool CEntityConnection::ValidateOutput(const CMapEntityList *pEntityList, const 
 
 	FOR_EACH_OBJ( *pEntityList, pos )
 	{
-		CMapEntity*	pEntity = pEntityList->Element(pos);
-		if (!ValidateOutput(pEntity,pszOutput))
+		const CMapEntity*	pEntity = pEntityList->Element(pos).GetObject();
+		
+		if ( !pEntity || !ValidateOutput(pEntity,pszOutput) )
 		{
 			return false;
 		}
@@ -268,8 +282,9 @@ bool CEntityConnection::ValidateTarget( const CMapEntityList *pEntityList, bool 
 
 	FOR_EACH_OBJ( *pEntityList, pos )
 	{
-		CMapEntity *pEntity = pEntityList->Element(pos);
-		if ( bVisibilityCheck && !pEntity->IsVisible() )
+		const CMapEntity *pEntity = pEntityList->Element(pos).GetObject();
+
+		if ( !pEntity || ( bVisibilityCheck && !pEntity->IsVisible() ) )
 			continue;
 
 		if (pEntity->NameMatches(pszTarget))
@@ -284,7 +299,7 @@ bool CEntityConnection::ValidateTarget( const CMapEntityList *pEntityList, bool 
 // Purpose: Returns true if all entities with the given target name
 //			have an input of the given input name
 //------------------------------------------------------------------------------
-bool CEntityConnection::ValidateInput(const char* pszTarget, const char *pszInput, bool bVisiblesOnly)
+bool CEntityConnection::ValidateInput( const char *pszTarget, const char *pszInput, bool bVisiblesOnly, CMapDoc *pDoc )
 {
 	// Allow any input into !activator and !player.
 	// dvs: TODO: pass in the entity to resolve !self and check input list
@@ -293,7 +308,10 @@ bool CEntityConnection::ValidateInput(const char* pszTarget, const char *pszInpu
 		return true;
 	}
 
-	CMapDoc *pDoc = CMapDoc::GetActiveMapDoc();
+	if ( pDoc == NULL )
+	{
+		pDoc = CMapDoc::GetActiveMapDoc();
+	}
 	CMapEntityList EntityList;
 	pDoc->FindEntitiesByName(EntityList, pszTarget, bVisiblesOnly);
 
@@ -321,7 +339,7 @@ bool CEntityConnection::ValidateInput(const char* pszTarget, const char *pszInpu
 //
 // Input  : pEntity - The entity to check for bad connections.
 //-----------------------------------------------------------------------------
-void CEntityConnection::FindBadConnections(CMapEntity *pEntity, bool bVisibilityCheck, CUtlVector<CEntityConnection *> &BadConnectionList, bool bIgnoreHiddenTargets)
+void CEntityConnection::FindBadConnections( CMapEntity *pEntity, bool bVisibilityCheck, CUtlVector<CEntityConnection *> &BadConnectionList, bool bIgnoreHiddenTargets, bool CheckAllDocuments )
 {
 	BadConnectionList.RemoveAll();
 
@@ -354,21 +372,55 @@ void CEntityConnection::FindBadConnections(CMapEntity *pEntity, bool bVisibility
 				if ( pConnection->GetTargetEntityList()->Count() > 0 && !pConnection->AreAnyTargetEntitiesVisible() )
 					continue;
 			}
-			
+
 			// Check validity of output for this entity
 			if (!CEntityConnection::ValidateOutput(pEntity, pConnection->GetOutputName()))
 			{
 				BadConnectionList.AddToTail(pConnection);
 			}
-			// Check validity of target entity (is it in the map?)
-			else if (!CEntityConnection::ValidateTarget(pAllWorldEntities, bVisibilityCheck, pConnection->GetTargetName()))
+			else
 			{
-				BadConnectionList.AddToTail(pConnection);
-			}
-			// Check validity of input
-			else if (!CEntityConnection::ValidateInput(pConnection->GetTargetName(), pConnection->GetInputName(), true))
-			{
-				BadConnectionList.AddToTail(pConnection);
+				bool	bBadConnection = true;
+
+				if ( CheckAllDocuments == false )
+				{
+					// Check validity of target entity (is it in the map?)
+					if ( CEntityConnection::ValidateTarget(pAllWorldEntities, bVisibilityCheck, pConnection->GetTargetName() ) == true )
+					{
+						if ( CEntityConnection::ValidateInput(pConnection->GetTargetName(), pConnection->GetInputName(), true ) == true )
+						{
+							bBadConnection = false;
+						}
+					}
+				}
+				else
+				{
+					POSITION	pos = APP()->pMapDocTemplate->GetFirstDocPosition();
+					while( pos != NULL )
+					{
+						CDocument *pDoc = APP()->pMapDocTemplate->GetNextDoc( pos );
+						CMapDoc *pMapDoc = dynamic_cast< CMapDoc * >( pDoc );
+
+						if ( pMapDoc )
+						{
+							// Check validity of target entity (is it in the map?)
+							if ( CEntityConnection::ValidateTarget( pMapDoc->GetMapWorld()->EntityList_GetList(), bVisibilityCheck, pConnection->GetTargetName() ) == true )
+							{
+								// Check validity of input
+								if ( CEntityConnection::ValidateInput( pConnection->GetTargetName(), pConnection->GetInputName(), true, pMapDoc ) == true )
+								{
+									bBadConnection = false;
+									break;
+								}
+							}
+						}
+					}
+				}
+
+				if ( bBadConnection == true )
+				{
+					BadConnectionList.AddToTail(pConnection);
+				}
 			}
 		}
 	}
@@ -381,7 +433,7 @@ void CEntityConnection::FindBadConnections(CMapEntity *pEntity, bool bVisibility
 //				OUTPUTS_GOOD	if all entity outputs are good
 //				OUTPUTS_BAD		if any entity output is bad
 //------------------------------------------------------------------------------
-int CEntityConnection::ValidateOutputConnections(CMapEntity *pEntity, bool bVisibilityCheck, bool bIgnoreHiddenTargets)
+int CEntityConnection::ValidateOutputConnections( CMapEntity *pEntity, bool bVisibilityCheck, bool bIgnoreHiddenTargets, bool CheckAllDocuments )
 {
 	if (!pEntity)
 	{
@@ -394,7 +446,7 @@ int CEntityConnection::ValidateOutputConnections(CMapEntity *pEntity, bool bVisi
 	}
 
 	CUtlVector<CEntityConnection *> BadConnectionList;
-	FindBadConnections(pEntity, bVisibilityCheck, BadConnectionList, bIgnoreHiddenTargets);
+	FindBadConnections( pEntity, bVisibilityCheck, BadConnectionList, bIgnoreHiddenTargets, CheckAllDocuments );
 
 	if (BadConnectionList.Count() > 0)
 	{
@@ -429,8 +481,16 @@ void CEntityConnection::FixBadConnections(CMapEntity *pEntity, bool bVisibilityC
 		{
 			FOR_EACH_OBJ( *pTargetList, pos )
 			{
-				pEntity = pTargetList->Element( pos );
-				pEntity->Upstream_Remove( pConnection );
+				CMapEntity *pEntity = pTargetList->Element( pos );
+
+				// If you hit this assert it means that an entity was deleted but not removed
+				// from this entity's list of targets.
+				ASSERT( pEntity != NULL );
+
+				if ( pEntity )
+				{
+					pEntity->Upstream_Remove( pConnection );
+				}
 			}
 		}
 				
@@ -482,7 +542,8 @@ int CEntityConnection::ValidateInputConnections(CMapEntity *pEntity, bool bVisib
 	bool bHaveConnection = false;
 	FOR_EACH_OBJ( *pAllWorldEntities, pos )
 	{
-		CMapEntity *pTestEntity = pAllWorldEntities->Element(pos);
+		const CMapEntity *pTestEntity = pAllWorldEntities->Element(pos).GetObject();
+		
 		if (pTestEntity == NULL)
 			continue;
 

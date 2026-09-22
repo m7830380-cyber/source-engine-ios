@@ -1,12 +1,17 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2005, Valve Corporation, All rights reserved. =======
 //
 // Purpose: 
 //
 //=============================================================================
 #include "movieobjects/dmeanimationset.h"
-#include "movieobjects/dmebookmark.h"
+#include "movieobjects/dmeclip.h"
 #include "movieobjects/dmegamemodel.h"
 #include "movieobjects/dmecombinationoperator.h"
+#include "movieobjects/dmetransformcontrol.h"
+#include "movieobjects/dmechannel.h"
+#include "movieobjects/dmerighandle.h"
+#include "movieobjects/dmerigconstraintoperators.h"
+#include "movieobjects/dmerig.h"
 #include "datamodel/dmelementfactoryhelper.h"
 #include "datamodel/dmehandle.h"
 #include "phonemeconverter.h"
@@ -16,16 +21,19 @@
 #include "studio.h"
 #include "tier3/tier3.h"
 #include "tier1/utlbuffer.h"
+#include "tier1/fmtstr.h"
+
+// memdbgon must be the last include file in a .cpp file!!!
+#include "tier0/memdbgon.h"
 
 //-----------------------------------------------------------------------------
-// CDmePresetGroup - container for animation set info
+// CDmePreset - container for preset control values
 //-----------------------------------------------------------------------------
 IMPLEMENT_ELEMENT_FACTORY( DmePreset, CDmePreset );
 
 void CDmePreset::OnConstruction()
 {
 	m_ControlValues.Init( this, "controlValues" );
-	m_nProceduralType.InitAndSet( this, "procedural", PROCEDURAL_PRESET_NOT );
 }
 
 void CDmePreset::OnDestruction()
@@ -101,6 +109,10 @@ bool CDmePreset::IsReadOnly()
 	return false;
 }
 
+bool CDmePreset::IsAnimated()
+{
+	return GetValue< bool >( "animated", false );
+}
 
 //-----------------------------------------------------------------------------
 // Copies control values
@@ -118,21 +130,6 @@ void CDmePreset::CopyControlValuesFrom( CDmePreset *pSource )
 	}
 }
 
-void CDmePreset::SetProceduralPresetType( int nType )
-{
-	Assert( nType >= 0 && nType < NUM_PROCEDURAL_PRESET_TYPES );
-	m_nProceduralType = nType;
-}
-
-bool CDmePreset::IsProcedural() const
-{
-	return m_nProceduralType != PROCEDURAL_PRESET_NOT;
-}
-
-int CDmePreset::GetProceduralPresetType() const
-{
-	return m_nProceduralType;
-}
 
 IMPLEMENT_ELEMENT_FACTORY( DmeProceduralPresetSettings, CDmeProceduralPresetSettings );
 
@@ -143,76 +140,50 @@ void CDmeProceduralPresetSettings::OnConstruction()
 	m_flSharpenScale.InitAndSet( this, "sharpenscale", 1.0f );
 	m_flSoftenScale.InitAndSet( this, "softenscale", 1.0f );
 
+	m_flJitterScaleVector.InitAndSet( this, "jitterscale_vector", 2.5f );
+	m_flSmoothScaleVector.InitAndSet( this, "smoothscale_vector", 2.5f );
+	m_flSharpenScaleVector.InitAndSet( this, "sharpenscale_vector", 2.5f );
+	m_flSoftenScaleVector.InitAndSet( this, "softenscale_vector", 2.5f );
+
 	m_nJitterIterations.InitAndSet( this, "jitteriterations", 5 );
 	m_nSmoothIterations.InitAndSet( this, "smoothiterations", 5 );
 	m_nSharpenIterations.InitAndSet( this, "sharpeniterations", 1 );
 	m_nSoftenIterations.InitAndSet( this, "softeniterations", 1 );
 
 	// 1/12 second now ( 833 ten thousandths )
-	m_nStaggerInterval.InitAndSet( this, "staggerinterval", 10000 / 12 );
+	m_staggerInterval.InitAndSet( this, "staggerinterval", DmeTime_t( 1.0f / 12.0f ) );
 }
 
 void CDmeProceduralPresetSettings::OnDestruction()
 {
 }
 
-//-----------------------------------------------------------------------------
-// CDmePresetRemap - copies presets from one group to another
-//-----------------------------------------------------------------------------
-IMPLEMENT_ELEMENT_FACTORY( DmePresetRemap, CDmePresetRemap );
-
-void CDmePresetRemap::OnConstruction()
+float CDmeProceduralPresetSettings::GetJitterScale( DmAttributeType_t attType ) const
 {
-	m_SourcePresetGroup.Init( this, "sourcePresetGroup" );
-	m_SrcPresets.Init( this, "srcPresets" );
-	m_DestPresets.Init( this, "destPresets" );
+	if ( attType == AT_VECTOR3 )
+		return m_flJitterScaleVector;
+	return m_flJitterScale;
 }
 
-void CDmePresetRemap::OnDestruction()
+float CDmeProceduralPresetSettings::GetSmoothScale( DmAttributeType_t attType ) const
 {
+	if ( attType == AT_VECTOR3 )
+		return m_flSmoothScaleVector;
+	return m_flSmoothScale;
 }
 
-
-const char *CDmePresetRemap::FindSourcePreset( const char *pDestPresetName )
+float CDmeProceduralPresetSettings::GetSharpenScale( DmAttributeType_t attType ) const
 {
-	int nCount = m_DestPresets.Count();
-	for ( int i = 0; i < nCount; ++i )
-	{
-		if ( !Q_stricmp( pDestPresetName, m_DestPresets[i] ) )
-			return m_SrcPresets[i];
-	}
-	return NULL;
+	if ( attType == AT_VECTOR3 )
+		return m_flSharpenScaleVector;
+	return m_flSharpenScale;
 }
 
-void CDmePresetRemap::AddRemap( const char *pSourcePresetName, const char *pDestPresetName )
+float CDmeProceduralPresetSettings::GetSoftenScale( DmAttributeType_t attType ) const
 {
-	m_SrcPresets.AddToTail( pSourcePresetName );
-	m_DestPresets.AddToTail( pDestPresetName );
-}
-
-void CDmePresetRemap::RemoveAll()
-{
-	m_SrcPresets.RemoveAll();
-	m_DestPresets.RemoveAll();
-}
-
-
-//-----------------------------------------------------------------------------
-// Iteration
-//-----------------------------------------------------------------------------
-int CDmePresetRemap::GetRemapCount()
-{
-	return m_SrcPresets.Count();
-}
-
-const char *CDmePresetRemap::GetRemapSource( int i )
-{
-	return m_SrcPresets[i];
-}
-
-const char *CDmePresetRemap::GetRemapDest( int i )
-{
-	return m_DestPresets[i];
+	if ( attType == AT_VECTOR3 )
+		return m_flSoftenScaleVector;
+	return m_flSoftenScale;
 }
 
 
@@ -257,6 +228,18 @@ int CDmePresetGroup::FindPresetIndex( CDmePreset *pPreset )
 	return -1; 
 }
 
+int CDmePresetGroup::FindPresetIndex( const char *pPresetName )
+{
+	int c = m_Presets.Count();
+	for ( int i = 0; i < c; ++i )
+	{
+		CDmePreset *e = m_Presets.Get( i );
+		if ( !Q_stricmp( e->GetName(), pPresetName ) )
+			return i;
+	}
+	return -1; 
+}
+
 
 CDmePreset *CDmePresetGroup::FindPreset( const char *pPresetName )
 {
@@ -271,14 +254,13 @@ CDmePreset *CDmePresetGroup::FindPreset( const char *pPresetName )
 	return NULL;
 }
 
-CDmePreset *CDmePresetGroup::FindOrAddPreset( const char *pPresetName, int nType /*=PROCEDURAL_PRESET_NOT*/ )
+CDmePreset *CDmePresetGroup::FindOrAddPreset( const char *pPresetName )
 {
 	CDmePreset *pPreset = FindPreset( pPresetName );
 	if ( !pPreset )
 	{
 		// Create the default groups in order
 		pPreset = CreateElement< CDmePreset >( pPresetName, GetFileId() );
-		pPreset->SetProceduralPresetType( nType );
 		m_Presets.AddToTail( pPreset );
 	}
 	return pPreset;
@@ -295,22 +277,15 @@ bool CDmePresetGroup::RemovePreset( CDmePreset *pPreset )
 	return false;
 }
 
-void CDmePresetGroup::MovePresetUp( CDmePreset *pPreset )
+bool CDmePresetGroup::RemovePreset( const char *pPresetName )
 {
-	int i = FindPresetIndex( pPreset );
-	if ( i >= 1 )
+	int i = FindPresetIndex( pPresetName );
+	if ( i >= 0 )
 	{
-		m_Presets.Swap( i, i-1 );
+		m_Presets.Remove( i );
+		return true;
 	}
-}
-
-void CDmePresetGroup::MovePresetDown( CDmePreset *pPreset )
-{
-	int i = FindPresetIndex( pPreset );
-	if ( i >= 0 && i < m_Presets.Count() - 1 )
-	{
-		m_Presets.Swap( i, i+1 );
-	}
+	return false;
 }
 
 
@@ -335,34 +310,12 @@ void CDmePresetGroup::MovePresetInFrontOf( CDmePreset *pPreset, CDmePreset *pInF
 
 
 //-----------------------------------------------------------------------------
-// The preset remap
-//-----------------------------------------------------------------------------
-CDmePresetRemap *CDmePresetGroup::GetPresetRemap()
-{
-	return GetValueElement< CDmePresetRemap >( "presetRemap" );
-}
-
-CDmePresetRemap *CDmePresetGroup::GetOrAddPresetRemap()
-{
-	CDmePresetRemap *pPresetRemap = GetPresetRemap();
-	if ( !pPresetRemap )
-	{
-		pPresetRemap = CreateElement< CDmePresetRemap >( "PresetRemap", GetFileId() );
-		SetValue( "presetRemap", pPresetRemap );
-	}
-	return pPresetRemap;
-}
-
-
-
-//-----------------------------------------------------------------------------
 // Finds a control index
 //-----------------------------------------------------------------------------
 struct ExportedControl_t
 {
 	CUtlString m_Name;
 	bool m_bIsStereo;
-	bool m_bIsMulti;
 	int m_nFirstIndex;
 };
 
@@ -390,25 +343,33 @@ static int BuildExportedControlList( CDmeAnimationSet *pAnimationSet, const CDme
 	int nGlobalIndex = 0;
 	const CDmrElementArrayConst< CDmePreset > &presets = pPresetGroup->GetPresets();
 	int nPresetCount = presets.Count();
-	for ( int iPreset = 0; iPreset < nPresetCount; ++iPreset )
+	for ( int i = 0; i < nPresetCount; ++i )
 	{
-		CDmePreset *pPreset = presets[iPreset];
+		CDmePreset *pPreset = presets[i];
+		Assert( !pPreset->IsAnimated() ); // deal with this after GDC
+		if ( pPreset->IsAnimated() )
+			continue;
+
 		const CDmrElementArray< CDmElement > &controls = pPreset->GetControlValues();
 
 		int nControlCount = controls.Count();
 		for ( int i = 0; i < nControlCount; ++i )
 		{
-			const char *pControlName = controls[i]->GetName();
+			CDmElement *pControlValue = controls[ i ];
+			if ( !pControlValue )
+				continue;
+
+			const char *pControlName = pControlValue->GetName();
 			int nIndex = FindExportedControlIndex( pControlName, uniqueControls );
 			if ( nIndex >= 0 )
 				continue;
-			CDmAttribute *pValueAttribute = controls[i]->GetAttribute( "value" );
+
+			CDmAttribute *pValueAttribute = pControlValue->GetAttribute( "value" );
 			if ( !pValueAttribute || pValueAttribute->GetType() != AT_FLOAT )
 				continue;
 
 			if ( pAnimationSet )
 			{
-
 				CDmElement *pControl = pAnimationSet->FindControl( pControlName );
 				if ( !pControl )
 					continue;
@@ -416,10 +377,9 @@ static int BuildExportedControlList( CDmeAnimationSet *pAnimationSet, const CDme
 				int j = uniqueControls.AddToTail();
 				ExportedControl_t &control = uniqueControls[j];
 				control.m_Name = pControlName;
-				control.m_bIsStereo = pControl->GetValue<bool>( "combo" );
-				control.m_bIsMulti = pControl->GetValue<bool>( "multi" );
+				control.m_bIsStereo = IsStereoControl( pControl );
 				control.m_nFirstIndex = nGlobalIndex;
-				nGlobalIndex += 1 + control.m_bIsStereo + control.m_bIsMulti;
+				nGlobalIndex += 1 + control.m_bIsStereo;
 			}
 			else
 			{
@@ -427,10 +387,9 @@ static int BuildExportedControlList( CDmeAnimationSet *pAnimationSet, const CDme
 				ExportedControl_t &control = uniqueControls[j];
 				control.m_Name = pControlName;
 				// this isn't quite as reliable as querying the animation set but if we don't have one...
-				control.m_bIsStereo = controls[ i ]->GetAttribute( "balance" ) ? true : false;
-				control.m_bIsMulti = controls[ i ]->GetAttribute( "multilevel" ) ? true : false;
+				control.m_bIsStereo = pControlValue->HasAttribute( "leftValue" );
 				control.m_nFirstIndex = nGlobalIndex;
-				nGlobalIndex += 1 + control.m_bIsStereo + control.m_bIsMulti;
+				nGlobalIndex += 1 + control.m_bIsStereo;
 			}
 		}
 	}
@@ -463,19 +422,13 @@ bool CDmePresetGroup::ExportToTXT( const char *pFileName, CDmeAnimationSet *pAni
 		ExportedControl_t &control = exportedControls[i];
 		if ( !control.m_bIsStereo )
 		{
-			buf.Printf("%s ", control.m_Name.Get() );
+			buf.Printf("%s ", control.m_Name.String() );
 		}
 		else
 		{
-			Q_snprintf( pTempBuf, sizeof(pTempBuf), "right_%s", control.m_Name.Get() );
+			V_sprintf_safe( pTempBuf, "right_%s", control.m_Name.String() );
 			buf.Printf("%s ", pTempBuf );
-			Q_snprintf( pTempBuf, sizeof(pTempBuf), "left_%s", control.m_Name.Get() );
-			buf.Printf("%s ", pTempBuf );
-		}
-
-		if ( control.m_bIsMulti )
-		{
-			Q_snprintf( pTempBuf, sizeof(pTempBuf), "multi_%s", control.m_Name.Get() );
+			V_sprintf_safe( pTempBuf, "left_%s", control.m_Name.String() );
 			buf.Printf("%s ", pTempBuf );
 		}
 	}
@@ -486,9 +439,13 @@ bool CDmePresetGroup::ExportToTXT( const char *pFileName, CDmeAnimationSet *pAni
 	// Output all presets
 	const CDmrElementArrayConst< CDmePreset > &presets = pPresetGroup->GetPresets();
 	int nPresetCount = presets.Count();
-	for ( int iPreset = 0; iPreset < nPresetCount; ++iPreset )
+	for ( int i = 0; i < nPresetCount; ++i )
 	{
-		CDmePreset *pPreset = presets[iPreset];
+		CDmePreset *pPreset = presets[i];
+		Assert( !pPreset->IsAnimated() ); // deal with this after GDC
+		if ( pPreset->IsAnimated() )
+			continue;
+
 		const char *pPresetName = pPreset->GetName();
 
 		// Hack for 'silence' and for p_ naming scheme
@@ -523,17 +480,15 @@ bool CDmePresetGroup::ExportToTXT( const char *pFileName, CDmeAnimationSet *pAni
 				CDmElement *pControl = pAnimationSet ? pAnimationSet->FindControl( control.m_Name ) : NULL;
 				if ( !pControl )
 				{
-					const ControlIndex_t nIndex = pComboOp ? pComboOp->FindControlIndex( control.m_Name ) : -1;
+					bool bIsMulti;
+					const ControlIndex_t nIndex = FindComboOpControlIndexForAnimSetControl( pComboOp, control.m_Name, &bIsMulti );
 					if ( nIndex >= 0 )
 					{
-						buf.Printf( "%.5f\t0.000\t", pComboOp->GetControlDefaultValue( nIndex ) );
+						float flDefaultValue = bIsMulti ? 0.5f : pComboOp->GetControlDefaultValue( nIndex );
+						buf.Printf( "%.5f\t0.000\t", flDefaultValue );
 						if ( control.m_bIsStereo )
 						{
-							buf.Printf( "%.5f\t0.000\t", pComboOp->GetControlDefaultValue( nIndex ) );
-						}
-						if ( control.m_bIsMulti )
-						{
-							buf.Printf( "%.5f\t0.000\t", pComboOp->GetControlDefaultValue( nIndex ) );
+							buf.Printf( "%.5f\t0.000\t", flDefaultValue );
 						}
 					}
 					else
@@ -543,33 +498,22 @@ bool CDmePresetGroup::ExportToTXT( const char *pFileName, CDmeAnimationSet *pAni
 						{
 							buf.Printf( "0.000\t0.000\t" );
 						}
-						if ( control.m_bIsMulti )
-						{
-							buf.Printf( "0.000\t0.000\t" );
-						}
 					}
 
 					continue;
 				}
 
+				float flDefaultValue = pControl->GetValue< float >( "defaultValue" );
 				if ( !control.m_bIsStereo )
 				{
-					buf.Printf( "%.5f\t1.000\t", pControl->GetValue<float>( "defaultValue" ) );
+					buf.Printf( "%.5f\t1.000\t", flDefaultValue );
 				}
 				else
 				{
-					float flValue, flBalance, flLeft, flRight;
-					flValue = pControl->GetValue<float>( "defaultValue", 0.0f );
-					flBalance = pControl->GetValue<float>( "defaultBalance", 0.5f );
-					ValueBalanceToLeftRight( &flLeft, &flRight, flValue, flBalance );
-					buf.Printf( "%.5f\t1.000\t", flRight );
-					buf.Printf( "%.5f\t1.000\t", flLeft );
+					buf.Printf( "%.5f\t1.000\t", flDefaultValue );
+					buf.Printf( "%.5f\t1.000\t", flDefaultValue );
 				}
 
-				if ( control.m_bIsMulti )
-				{
-					buf.Printf( "%.5f\t1.000\t", pControl->GetValue<float>( "defaultMultilevel" ) );
-				}
 				continue;
 			}
 
@@ -579,18 +523,10 @@ bool CDmePresetGroup::ExportToTXT( const char *pFileName, CDmeAnimationSet *pAni
 			}
 			else
 			{
-				float flValue, flBalance, flLeft, flRight;
-				flValue = pControlValue->GetValue<float>( "value" );
-				flBalance = pControlValue->GetValue<float>( "balance" );
-				ValueBalanceToLeftRight( &flLeft, &flRight, flValue, flBalance );
-				buf.Printf( "%.5f\t1.000\t", flRight );
-				buf.Printf( "%.5f\t1.000\t", flLeft );
+				buf.Printf( "%.5f\t1.000\t", pControlValue->GetValue<float>( "rightValue" ) );
+				buf.Printf( "%.5f\t1.000\t", pControlValue->GetValue<float>( "leftValue" ) );
 			}
 
-			if ( control.m_bIsMulti )
-			{
-				buf.Printf( "%.5f\t1.000\t", pControlValue->GetValue<float>( "multilevel" ) );
-			}
 		}
 		const char *pDesc = DescForPhonemeByIndex( nPhonemeIndex );
 		buf.Printf( "\"%s\"\n", pDesc ? pDesc : pPresetName );
@@ -599,9 +535,8 @@ bool CDmePresetGroup::ExportToTXT( const char *pFileName, CDmeAnimationSet *pAni
 	return g_pFullFileSystem->WriteFile( pFileName, NULL, buf );
 }
 
-#ifdef ALIGN4
+
 #undef ALIGN4
-#endif // #ifdef ALIGN4
 #define ALIGN4( a ) a = (byte *)((int)((byte *)a + 3) & ~ 3)
 
 
@@ -646,6 +581,9 @@ bool CDmePresetGroup::ExportToVFE( const char *pFileName, CDmeAnimationSet *pAni
 	{
 		CDmePreset *pPreset = presets[i];
 		Assert( pPreset );
+		Assert( !pPreset->IsAnimated() ); // deal with this after GDC
+		if ( pPreset->IsAnimated() )
+			continue;
 
 		pSetting[i].index = i;
 		pSetting[i].settingindex = pData - (byte *)(&pSetting[i]);
@@ -658,40 +596,28 @@ bool CDmePresetGroup::ExportToVFE( const char *pFileName, CDmeAnimationSet *pAni
 			CDmElement *pControlValue = pPreset->FindControlValue( control.m_Name );
 			if ( !pControlValue )
 			{
-				const ControlIndex_t nIndex = pComboOp ? pComboOp->FindControlIndex( control.m_Name ) : -1;
+				bool bIsMulti;
+				const ControlIndex_t nIndex = FindComboOpControlIndexForAnimSetControl( pComboOp, control.m_Name, &bIsMulti );
 				if ( nIndex >= 0 )
 				{
+					float flDefaultValue = bIsMulti ? 0.5f : pComboOp->GetControlDefaultValue( nIndex );
 					if ( !control.m_bIsStereo )
 					{
 						pSetting[i].numsettings++;
 						pFlexWeights->key = control.m_nFirstIndex;
-						pFlexWeights->weight = pComboOp->GetControlDefaultValue( nIndex );
+						pFlexWeights->weight = flDefaultValue;
 						pFlexWeights->influence = 1.0f;
 						pFlexWeights++;
 					}
 					else
 					{
-						float flValue, flBalance, flLeft, flRight;
-						flValue = pComboOp->GetControlDefaultValue( nIndex );
-						flBalance = 0.5;
-						ValueBalanceToLeftRight( &flLeft, &flRight, flValue, flBalance );
-
 						pSetting[i].numsettings += 2;
 						pFlexWeights->key = control.m_nFirstIndex;
-						pFlexWeights->weight = flRight;
+						pFlexWeights->weight = flDefaultValue;
 						pFlexWeights->influence = 1.0f;
 						pFlexWeights++;
 						pFlexWeights->key = control.m_nFirstIndex + 1;
-						pFlexWeights->weight = flLeft;
-						pFlexWeights->influence = 1.0f;
-						pFlexWeights++;
-					}
-
-					if ( control.m_bIsMulti )
-					{
-						pSetting[i].numsettings++;
-						pFlexWeights->key = control.m_nFirstIndex + 1 + control.m_bIsStereo;
-						pFlexWeights->weight = 0.5f;
+						pFlexWeights->weight = flDefaultValue;
 						pFlexWeights->influence = 1.0f;
 						pFlexWeights++;
 					}
@@ -700,7 +626,7 @@ bool CDmePresetGroup::ExportToVFE( const char *pFileName, CDmeAnimationSet *pAni
 				{
 					pSetting[i].numsettings++;
 					pFlexWeights->key = control.m_nFirstIndex;
-					pFlexWeights->weight = 0.0f;
+					pFlexWeights->weight = bIsMulti ? 0.5f : 0.0f;
 					pFlexWeights->influence = 0.0f;
 					pFlexWeights++;
 
@@ -709,15 +635,6 @@ bool CDmePresetGroup::ExportToVFE( const char *pFileName, CDmeAnimationSet *pAni
 						pSetting[i].numsettings++;
 						pFlexWeights->key = control.m_nFirstIndex + 1;
 						pFlexWeights->weight = 0.0f;
-						pFlexWeights->influence = 0.0f;
-						pFlexWeights++;
-					}
-
-					if ( control.m_bIsMulti )
-					{
-						pSetting[i].numsettings++;
-						pFlexWeights->key = control.m_nFirstIndex + 1 + control.m_bIsStereo;
-						pFlexWeights->weight = 0.5f;
 						pFlexWeights->influence = 0.0f;
 						pFlexWeights++;
 					}
@@ -736,27 +653,13 @@ bool CDmePresetGroup::ExportToVFE( const char *pFileName, CDmeAnimationSet *pAni
 			}
 			else
 			{
-				float flValue, flBalance, flLeft, flRight;
-				flValue = pControlValue->GetValue<float>( "value" );
-				flBalance = pControlValue->GetValue<float>( "balance" );
-				ValueBalanceToLeftRight( &flLeft, &flRight, flValue, flBalance );
-
 				pSetting[i].numsettings += 2;
 				pFlexWeights->key = control.m_nFirstIndex;
-				pFlexWeights->weight = flRight;
+				pFlexWeights->weight = pControlValue->GetValue<float>( "rightValue" );
 				pFlexWeights->influence = 1.0f;
 				pFlexWeights++;
 				pFlexWeights->key = control.m_nFirstIndex + 1;
-				pFlexWeights->weight = flLeft;
-				pFlexWeights->influence = 1.0f;
-				pFlexWeights++;
-			}
-
-			if ( control.m_bIsMulti )
-			{
-				pSetting[i].numsettings++;
-				pFlexWeights->key = control.m_nFirstIndex + 1 + control.m_bIsStereo;
-				pFlexWeights->weight = pControlValue->GetValue<float>( "multilevel" );
+				pFlexWeights->weight = pControlValue->GetValue<float>( "leftValue" );
 				pFlexWeights->influence = 1.0f;
 				pFlexWeights++;
 			}
@@ -832,20 +735,12 @@ bool CDmePresetGroup::ExportToVFE( const char *pFileName, CDmeAnimationSet *pAni
 		else
 		{
 			pKeynames[j++] = (char *)(pData - pDataStart);
-			Q_snprintf( pTempBuf, sizeof(pTempBuf), "right_%s", control.m_Name.Get() );
+			V_sprintf_safe( pTempBuf, "right_%s", control.m_Name.String() );
 			strcpy( (char *)pData, pTempBuf );
 			pData += Q_strlen( pTempBuf ) + 1;
 
 			pKeynames[j++] = (char *)(pData - pDataStart);
-			Q_snprintf( pTempBuf, sizeof(pTempBuf), "left_%s", control.m_Name.Get() );
-			strcpy( (char *)pData, pTempBuf );
-			pData += Q_strlen( pTempBuf ) + 1;
-		}
-
-		if ( control.m_bIsMulti )
-		{
-			pKeynames[j++] = (char *)(pData - pDataStart);
-			Q_snprintf( pTempBuf, sizeof(pTempBuf), "multi_%s", control.m_Name.Get() );
+			V_sprintf_safe( pTempBuf, "left_%s", control.m_Name.String() );
 			strcpy( (char *)pData, pTempBuf );
 			pData += Q_strlen( pTempBuf ) + 1;
 		}
@@ -868,7 +763,7 @@ bool CDmePresetGroup::ExportToVFE( const char *pFileName, CDmeAnimationSet *pAni
 	FileHandle_t fh = g_pFullFileSystem->Open( pFileName, "wb" );
 	if ( !fh )
 	{
-		ConWarning( "Unable to write to %s (read-only?)\n", pFileName );
+		Warning( "Unable to write to %s (read-only?)\n", pFileName );
 		free( pDataStart );
 		return false;
 	}
@@ -891,16 +786,50 @@ IMPLEMENT_ELEMENT_FACTORY( DmeAnimationSet, CDmeAnimationSet );
 
 void CDmeAnimationSet::OnConstruction()
 {
-	m_Controls.Init( this, "controls" );
+	m_Controls.Init( this, "controls", FATTRIB_HAS_CALLBACK );
 	m_PresetGroups.Init( this, "presetGroups" );
-	m_SelectionGroups.Init( this, "selectionGroups" );
 	m_PhonemeMap.Init( this, "phonememap" );
 	m_Operators.Init( this, "operators" );
-	m_Bookmarks.Init( this, "bookmarks" );
+	m_RootControlGroup.InitAndCreate( this, "rootControlGroup" );
 }
 
 void CDmeAnimationSet::OnDestruction()
 {
+	m_ControlNameMap.RemoveAll();
+}
+
+void CDmeAnimationSet::OnAttributeArrayElementAdded( CDmAttribute *pAttribute, int nFirstElem, int nLastElem )
+{
+	if ( pAttribute != m_Controls.GetAttribute() )
+		return;
+
+	for ( int i = nFirstElem; i <= nLastElem; ++i )
+	{
+		CDmElement *pControl = m_Controls[ i ];
+		if ( !pControl )
+			continue;
+
+		int slot = m_ControlNameMap.Find( pControl->GetName() );
+		if ( slot == m_ControlNameMap.InvalidIndex() )
+		{
+			m_ControlNameMap.Insert( pControl->GetName(), pControl->GetHandle() );
+		}
+	}
+}
+
+void CDmeAnimationSet::OnAttributeArrayElementRemoved( CDmAttribute *pAttribute, int nFirstElem, int nLastElem )
+{
+	if ( pAttribute != m_Controls.GetAttribute() )
+		return;
+
+	for ( int i = nFirstElem; i <= nLastElem; ++i )
+	{
+		CDmElement *pControl = m_Controls[ i ];
+		if ( !pControl )
+			continue;
+
+		m_ControlNameMap.Remove( pControl->GetName() );
+	}
 }
 
 CDmaElementArray< CDmElement > &CDmeAnimationSet::GetControls()
@@ -943,13 +872,18 @@ void CDmeAnimationSet::OnElementUnserialized()
 {
 	BaseClass::OnElementUnserialized();
 
-	CDmeGameModel *pGameModel = GetValueElement< CDmeGameModel >( "gameModel" );
-	if ( pGameModel )
+	// Build control dictionary
+	for ( int i = 0; i < m_Controls.Count(); ++i )
 	{
-		// NOTE: The model preset manager can't possibly have the right
-		// file id at this point; it's up to the preset group manager to queue
-		// application requests until it gets one
-		g_pModelPresetGroupMgr->ApplyModelPresets( pGameModel->GetModelName(), this );
+		CDmElement *pControl = m_Controls[ i ];
+		if ( !pControl )
+			return;
+
+		int slot = m_ControlNameMap.Find( pControl->GetName() );
+		if ( slot == m_ControlNameMap.InvalidIndex() )
+		{
+			m_ControlNameMap.Insert( pControl->GetName(), pControl->GetHandle() );
+		}
 	}
 }
 
@@ -1009,6 +943,10 @@ CDmePresetGroup *CDmeAnimationSet::FindOrAddPresetGroup( const char *pGroupName 
 	return pPresetGroup;
 }
 
+void CDmeAnimationSet::AddPresetGroup( CDmePresetGroup *pPresetGroup )
+{
+	m_PresetGroups.AddToTail( pPresetGroup );
+}
 
 //-----------------------------------------------------------------------------
 // Remove preset group
@@ -1024,28 +962,16 @@ bool CDmeAnimationSet::RemovePresetGroup( CDmePresetGroup *pPresetGroup )
 	return false;
 }
 
-
-//-----------------------------------------------------------------------------
-// Move preset group up/down in the list
-//-----------------------------------------------------------------------------
-void CDmeAnimationSet::MovePresetGroupUp( CDmePresetGroup *pPresetGroup )
+bool CDmeAnimationSet::RemovePresetGroup( const char *pPresetGroupName )
 {
-	int i = FindPresetGroupIndex( pPresetGroup );
-	if ( i >= 1 )
+	int i = FindPresetGroupIndex( pPresetGroupName );
+	if ( i >= 0 )
 	{
-		m_PresetGroups.Swap( i, i-1 );
+		m_PresetGroups.Remove( i );
+		return true;
 	}
+	return false;
 }
-
-void CDmeAnimationSet::MovePresetGroupDown( CDmePresetGroup *pPresetGroup )
-{
-	int i = FindPresetGroupIndex( pPresetGroup );
-	if ( i >= 0 && i < m_PresetGroups.Count() - 1 )
-	{
-		m_PresetGroups.Swap( i, i+1 );
-	}
-}
-
 
 //-----------------------------------------------------------------------------
 // Reorder preset groups
@@ -1055,7 +981,7 @@ void CDmeAnimationSet::MovePresetGroupInFrontOf( CDmePresetGroup *pPresetGroup, 
 	if ( pPresetGroup == pInFrontOf )
 		return;
 
-#ifdef DBGFLAG_ASSERT
+#ifdef _DEBUG
 	int nStart = FindPresetGroupIndex( pPresetGroup );
 #endif
 
@@ -1071,10 +997,21 @@ void CDmeAnimationSet::MovePresetGroupInFrontOf( CDmePresetGroup *pPresetGroup, 
 }
 
 
-CDmePreset *CDmeAnimationSet::FindOrAddPreset( const char *pGroupName, const char *pPresetName, int nType /*=PROCEDURAL_PRESET_NOT*/ )
+CDmePreset *CDmeAnimationSet::FindOrAddPreset( const char *pGroupName, const char *pPresetName )
 {
 	CDmePresetGroup *pPresetGroup = FindOrAddPresetGroup( pGroupName );
-	return pPresetGroup->FindOrAddPreset( pPresetName, nType );
+	return pPresetGroup->FindOrAddPreset( pPresetName );
+}
+
+bool CDmeAnimationSet::RemovePreset( const char *pPresetName )
+{
+	int c = m_PresetGroups.Count();
+	for ( int i = 0; i < c; ++i )
+	{
+		if ( m_PresetGroups[i]->RemovePreset( pPresetName ) )
+			return true;
+	}
+	return false;
 }
 
 bool CDmeAnimationSet::RemovePreset( CDmePreset *pPreset )
@@ -1086,23 +1023,6 @@ bool CDmeAnimationSet::RemovePreset( CDmePreset *pPreset )
 			return true;
 	}
 	return false;
-}
-
-
-const CDmaElementArray< CDmeBookmark > &CDmeAnimationSet::GetBookmarks() const
-{
-	return m_Bookmarks;
-}
-
-CDmaElementArray< CDmeBookmark > &CDmeAnimationSet::GetBookmarks()
-{
-	return m_Bookmarks;
-}
-
-
-CDmaElementArray< CDmElement > &CDmeAnimationSet::GetSelectionGroups()
-{
-	return m_SelectionGroups;
 }
 
 CDmaElementArray< CDmePhonemeMapping > &CDmeAnimationSet::GetPhonemeMap()
@@ -1152,63 +1072,232 @@ CDmePhonemeMapping *CDmeAnimationSet::FindMapping( const char *pRawPhoneme )
 	return NULL;
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: Add the specified control to the animation set's list of controls
+//-----------------------------------------------------------------------------
+void CDmeAnimationSet::AddControl( CDmElement *pControl )
+{
+	m_Controls.AddToTail( pControl );
+	if ( pControl )
+	{
+		int slot = m_ControlNameMap.Find( pControl->GetName() );
+		if ( slot == m_ControlNameMap.InvalidIndex() )
+		{
+			m_ControlNameMap.Insert( pControl->GetName(), pControl->GetHandle() );
+		}
+	}
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: Remove the specified control from the animation set's list of 
+// controls and remove any selection elements referring to the control.
+//-----------------------------------------------------------------------------
+void CDmeAnimationSet::RemoveControl( CDmElement *pControl )
+{	
+
+	// Search the for the control in the list and remove
+	// the corresponding element from the list if found.
+	int index = m_Controls.Find( pControl );
+	if ( index != m_Controls.InvalidIndex() )
+	{
+		// Remove the control from any selection groups it may be in.
+		RemoveControlFromGroups( pControl->GetName(), true );
+
+		// Remove the control from the list
+		m_Controls.Remove( index );
+
+		// Remove from name mapping
+		m_ControlNameMap.Remove( pControl->GetName() );
+	}
+}
 
 //-----------------------------------------------------------------------------
 // Finds a control 
 //-----------------------------------------------------------------------------
-CDmElement *CDmeAnimationSet::FindControl( const char *pControlName )
+CDmElement *CDmeAnimationSet::FindControl( const char *pControlName ) const
 {
-	int c = m_Controls.Count();
-	for ( int i = 0; i < c; ++i )
-	{
-		CDmElement *e = m_Controls.Get( i );
-		if ( !Q_stricmp( e->GetName(), pControlName ) )
-			return e;
-	}
-	return NULL;
+	int idx = m_ControlNameMap.Find( pControlName );
+	if ( idx == m_ControlNameMap.InvalidIndex() )
+		return NULL;
+	return g_pDataModel->GetElement( m_ControlNameMap[ idx ] );
 }
-
 
 //-----------------------------------------------------------------------------
 // Finds or adds a control 
 //-----------------------------------------------------------------------------
-CDmElement *CDmeAnimationSet::FindOrAddControl( const char *pControlName )
+CDmElement *CDmeAnimationSet::FindOrAddControl( const char *pControlName, bool transformControl, bool bMustBeNew )
 {
 	CDmElement *pControl = FindControl( pControlName );
+
+	if ( bMustBeNew && ( pControl != NULL ) )
+		return NULL;
+
 	if ( !pControl )
 	{
 		// If not, then create one
-		pControl = CreateElement< CDmElement >( pControlName, GetFileId() );
-		m_Controls.AddToTail( pControl );
+		if ( transformControl )
+		{
+			pControl = CreateElement< CDmeTransformControl >( pControlName, GetFileId() );
+		}
+		else
+		{
+			pControl = CreateElement< CDmElement >( pControlName, GetFileId() );
+		}
+		AddControl( pControl );		
 	}
+
 	return pControl;
 }
 
 
-CDmElement *CDmeAnimationSet::FindSelectionGroup( const char *pSelectionGroupName )
+//-----------------------------------------------------------------------------
+// Create a new control with the specified name, if a control with the 
+// specified name already exists returns NULL.
+//-----------------------------------------------------------------------------
+CDmElement *CDmeAnimationSet::CreateNewControl( const char *pControlName, bool bTransformControl )
 {
-	int c = m_SelectionGroups.Count();
-	for ( int i = 0; i < c; ++i )
-	{
-		CDmElement *e = m_SelectionGroups.Get( i );
-		if ( !Q_stricmp( e->GetName(), pSelectionGroupName ) )
-			return e;
-	}
-	return NULL;
+	return FindOrAddControl( pControlName, bTransformControl, true );
 }
 
-CDmElement *CDmeAnimationSet::FindOrAddSelectionGroup( const char *pSelectionGroupName )
+
+//-----------------------------------------------------------------------------
+// Purpose: Get the root control group
+//-----------------------------------------------------------------------------
+CDmeControlGroup *CDmeAnimationSet::GetRootControlGroup() const
 {
-	CDmElement *pSelectionGroup = FindSelectionGroup( pSelectionGroupName );
-	if ( !pSelectionGroup )
-	{
-		// Create the default groups in order
-		pSelectionGroup = CreateElement< CDmElement >( pSelectionGroupName, GetFileId() );
-		pSelectionGroup->AddAttribute( "selectedControls", AT_STRING_ARRAY );
-		m_SelectionGroups.AddToTail( pSelectionGroup );
-	}
-	return pSelectionGroup;
+	return m_RootControlGroup;
 }
+
+
+//-----------------------------------------------------------------------------
+// Purpose: Find the control group with the specified name.
+//-----------------------------------------------------------------------------
+CDmeControlGroup *CDmeAnimationSet::FindControlGroup( const char *pControlGroupName ) const
+{
+	return m_RootControlGroup->FindChildByName( pControlGroupName, true );
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: Find the control group with the specified name or add it if does
+// not exist.
+//-----------------------------------------------------------------------------
+CDmeControlGroup *CDmeAnimationSet::FindOrAddControlGroup( CDmeControlGroup *pParentGroup, const char *pControlGroupName )
+{
+	CDmeControlGroup *pRootGroup = ( pParentGroup != NULL ) ? pParentGroup : m_RootControlGroup;
+
+	// Search for the group to see if it already exists.
+	CDmeControlGroup *pControlGroup = pRootGroup->FindChildByName( pControlGroupName, true );
+	
+	// If the selection group was not found, create it.
+	if ( pControlGroup == NULL )
+	{
+		pControlGroup = pRootGroup->CreateControlGroup( pControlGroupName );
+	}
+
+	return pControlGroup;
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: Find the control with the specified name, remove it from the group 
+// it belongs to and destroy it
+//-----------------------------------------------------------------------------
+void CDmeAnimationSet::RemoveControlFromGroups( char const *pchControlName, bool bRemoveEmpty )
+{
+	CDmeControlGroup *pGroup = NULL;
+	CDmElement *pControl = m_RootControlGroup->FindControlByName( pchControlName, true, &pGroup );
+
+	if ( pGroup )
+	{
+		// Remove the control from the group
+		pGroup->RemoveControl( pControl );
+
+		// If the flag is set to remove empty groups and the group is empty, remove it.
+		if ( bRemoveEmpty && pGroup->IsEmpty() && ( pGroup != m_RootControlGroup ) )
+		{
+			CDmeControlGroup::DestroyGroup( pGroup, NULL, false );
+		}
+	}
+}
+
+
+
+//-----------------------------------------------------------------------------
+// Build a list of the root dag nodes of the animation set
+//-----------------------------------------------------------------------------
+void CDmeAnimationSet::FindRootDagNodes( CUtlVector< CDmeDag* > &rootDagNodeList ) const
+{
+	rootDagNodeList.EnsureCapacity( rootDagNodeList.Count() + 4 );
+
+	int nControls = m_Controls.Count();
+	for ( int iControl = 0; iControl < nControls; ++iControl )
+	{
+		// Check to see if the control is a transform control
+		CDmeTransformControl *pTransformControl = CastElement< CDmeTransformControl >( m_Controls[ iControl ] );
+		if ( pTransformControl == NULL )
+			continue;
+
+		// Get the dag node associated with the transform control
+		CDmeDag *pDagNode = pTransformControl->GetDag();
+		if ( pDagNode == NULL )
+			continue;
+
+		// Check to see if the parent of the dag is also in the animation set.
+		CDmeDag *pParent = pDagNode->GetParent();
+		if ( pParent )
+		{
+			CDmeTransformControl *pTransformControl = pParent->FindTransformControl();
+			if ( pTransformControl )
+			{
+				if ( FindReferringElement< CDmeAnimationSet >( pTransformControl, "controls" ) == this )
+					continue;
+			}
+		}
+		
+		// If the dag node has no parent or the parent is not in the
+		// animation set add the dag node to the list of root nodes.
+		if ( rootDagNodeList.Find( pDagNode ) == rootDagNodeList.InvalidIndex() )
+		{
+			rootDagNodeList.AddToTail( pDagNode );
+		}
+	}
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: Find all of the dag nodes within the animation set.
+//-----------------------------------------------------------------------------
+void CDmeAnimationSet::CollectDagNodes( CUtlVector< CDmeDag* > &dagNodeList ) const
+{	
+	// Reserve space for the maximum number of dag nodes that may be added to the list.
+	int nControls = m_Controls.Count();
+	dagNodeList.EnsureCapacity( dagNodeList.Count() + nControls );
+
+	// Iterate through all of the controls in the animation set. For the 
+	// controls which are transform controls get the associated dag node and 
+	// add it to the dag node list if it is not already in the dag node list.
+	for ( int iControl = 0; iControl < nControls; ++iControl )
+	{
+		// Check to see if the control is a transform control
+		CDmeTransformControl *pTransformControl = CastElement< CDmeTransformControl >( m_Controls[ iControl ] );
+		if ( pTransformControl )
+		{
+			// Get the dag node associated with the transform control
+			CDmeDag *pDagNode = pTransformControl->GetDag();
+			if ( pDagNode )
+			{
+				// Check to see if the dag node is already in the list, if not add it.
+				if ( dagNodeList.Find( pDagNode ) == dagNodeList.InvalidIndex() )
+				{
+					dagNodeList.AddToTail( pDagNode );
+				}
+			}
+		}
+	}
+}
+
 
 void CDmeAnimationSet::CollectOperators( CUtlVector< DmElementHandle_t > &operators )
 {
@@ -1223,128 +1312,341 @@ void CDmeAnimationSet::CollectOperators( CUtlVector< DmElementHandle_t > &operat
 	}
 }
 
-struct PPType_t
-{
-	int type;
-	char const *name;
-};
 
-static PPType_t g_PresetNames[ NUM_PROCEDURAL_PRESET_TYPES ] =
-{
-	{ PROCEDURAL_PRESET_NOT, "NotProcedural!!!" },
-	{ PROCEDURAL_PRESET_IN_CROSSFADE, "In" },
-	{ PROCEDURAL_PRESET_OUT_CROSSFADE, "Out" },
-	{ PROCEDURAL_PRESET_REVEAL, "Reveal" },
-	{ PROCEDURAL_PRESET_PASTE, "Paste" },
-	{ PROCEDURAL_PRESET_JITTER, "Jitter" },
-	{ PROCEDURAL_PRESET_SMOOTH, "Smooth" },
-	{ PROCEDURAL_PRESET_SHARPEN, "Sharpen" },
-	{ PROCEDURAL_PRESET_SOFTEN, "Soften" },
-	{ PROCEDURAL_PRESET_STAGGER, "Stagger" },
-};
+//-----------------------------------------------------------------------------
+// Purpose: Make sure all of the transform controls of the animation set have
+// an appropriate default attribute.
+//-----------------------------------------------------------------------------
+void CDmeAnimationSet::UpdateTransformDefaults() const
+{	
+	// Get the game model associated with the animation set, this will be used to determine the default 
+	// values for each of the controls, if it is not specified then the defaults cannot be set.
+	CDmeGameModel *pGameModel = GetValueElement< CDmeGameModel >( "gameModel" );
+	if ( pGameModel == NULL )
+		return;
 
-void CDmeAnimationSet::EnsureProceduralPresets()
-{
-	// Note:  Starts at index 1 to skip the PROCEDURAL_PRESET_NOT case
-	for ( int i = 1; i < NUM_PROCEDURAL_PRESET_TYPES; ++i )
+	// Iterate through each of the controls in the animation set, if it is a transform control see if 
+	// it has a default value, if it does not have a default value, find the bone associated with the
+	// transform and get the default position or rotation for that bone from the model.
+	int nControls = m_Controls.Count();
+
+	for ( int iControl = 0; iControl < nControls; ++iControl )
 	{
-		FindOrAddPreset( "Procedural", g_PresetNames[ i ].name, g_PresetNames[ i ].type );
-	}
-}
+		CDmElement *pControl = m_Controls[ iControl ];
+		if ( pControl == NULL )
+			continue;
 
-//-----------------------------------------------------------------------------
-// A cache of preset groups to be associated with specific models
-//-----------------------------------------------------------------------------
-class CModelPresetGroupManager : public IModelPresetGroupManager
-{
-public:
-	CModelPresetGroupManager();
-	virtual void AssociatePresetsWithFile( DmFileId_t fileId );
-	virtual void ApplyModelPresets( const char *pModelName, CDmeAnimationSet *pAnimationSet );
+		// Determine if the control is a transform control and if it has a default value.
+		CDmeTransformControl *pTransformControl = CastElement< CDmeTransformControl >( pControl );
+		if ( pTransformControl == NULL )
+			continue;
 
-private:
-	struct QueuedPresetRequest_t
-	{
-		CUtlString m_ModelName;
-		CDmeHandle< CDmeAnimationSet > m_hAnimationSet;
-	};
-
-	typedef CUtlVector< CDmeHandle< CDmePresetGroup, true > > PresetGroupList_t;
-	
-	// Loads model presets from .pre files matching the model name
-	void LoadModelPresets( const char *pModelName, PresetGroupList_t &list );
-
-	CUtlStringMap< PresetGroupList_t > m_Lookup;
-	DmFileId_t m_FileId;
-	CUtlVector< QueuedPresetRequest_t > m_QueuedPresetRequest;
-};
-
-
-//-----------------------------------------------------------------------------
-// Singleton
-//-----------------------------------------------------------------------------
-static CModelPresetGroupManager s_ModelPresetGroupManager;
-IModelPresetGroupManager *g_pModelPresetGroupMgr = &s_ModelPresetGroupManager;
-
-
-//-----------------------------------------------------------------------------
-// Constructor
-//-----------------------------------------------------------------------------
-CModelPresetGroupManager::CModelPresetGroupManager()
-{
-	m_FileId = DMFILEID_INVALID;
-}
-
-
-//-----------------------------------------------------------------------------
-// Associates presets in the cache with a particular file
-//-----------------------------------------------------------------------------
-void CModelPresetGroupManager::AssociatePresetsWithFile( DmFileId_t fileId )
-{
-	m_FileId = fileId;
-	m_Lookup.Clear();
-	if ( m_FileId != DMFILEID_INVALID )
-	{
-		int nCount = m_QueuedPresetRequest.Count();
-		for ( int i = 0; i < nCount; ++i )
+		CDmeTransform *pTransform = pTransformControl->GetTransform();
+		if ( pTransform == NULL )
+			continue;
+		
+		// Find the bone associated with the transform and get the default position of the bone.			
+		if ( !pTransformControl->HasDefaultPosition() )
 		{
-			QueuedPresetRequest_t &request = m_QueuedPresetRequest[i];
-			if ( request.m_hAnimationSet.Get() )
-			{
-				ApplyModelPresets( request.m_ModelName, request.m_hAnimationSet.Get() );
+			Vector position = vec3_origin;
+			int boneIndex = pGameModel->FindBone( pTransform );
+			if ( pGameModel->GetBoneDefaultPosition( boneIndex, position ) )
+			{			
+				pTransformControl->SetDefaultPosition( position );
 			}
 		}
-		m_QueuedPresetRequest.Purge();
+
+		// Find the bone associated with the transform and get the default rotation of the bone.
+		if ( !pTransformControl->HasDefaultOrientation() )
+		{			
+			Quaternion orientation;
+			int boneIndex = pGameModel->FindBone( pTransform );
+			if ( pGameModel->GetBoneDefaultOrientation( boneIndex, orientation) )
+			{
+				pTransformControl->SetDefaultOrientation( orientation );
+			}				
+		}
 	}
 }
 
 
 //-----------------------------------------------------------------------------
-// Loads model presets from .pre files matching the model name
+// Find the animation set to which the dag belongs, if any. This function 
+// operates by checking to see of the dag node is referenced by an animation 
+// set either directly or by a control. If the specified dag node is not 
+// immediately referenced by an animation set the function checks the 
+// hierarchical ancestors of the dag node to see if they are referenced by 
+// an animation set. If the node is somehow referenced by multiple animation
+// sets this function will simply return the first one it encounters as the 
+// assumption is that a dag node will only be referenced by one animation set.
 //-----------------------------------------------------------------------------
-void CModelPresetGroupManager::LoadModelPresets( const char *pModelName, PresetGroupList_t &list )
+CDmeAnimationSet *FindAnimationSetForDag( CDmeDag *pDagNode )
+{	
+	while ( pDagNode )
+	{
+		// Check to see if an animation set directly references this dag node
+		CDmeAnimationSet *pAnimationSet = FindAncestorReferencingElement< CDmeAnimationSet >( pDagNode );
+		if ( pAnimationSet != NULL )
+			return pAnimationSet;
+
+		// Check to see if an animation set references the dag node through a control 
+		CDmeTransformControl *pTransformControl = pDagNode->FindTransformControl();
+		if ( pTransformControl )
+		{
+			CDmeAnimationSet *pAnimationSet = FindAncestorReferencingElement< CDmeAnimationSet >( pTransformControl );
+			if ( pAnimationSet != NULL )
+				return pAnimationSet;
+		}
+	
+		// Failed to find the animation set, go on to the parent of the dag node and
+		// try again, repeat until an animation set is found or the root is reached.
+		pDagNode = pDagNode->GetParent();
+	}
+
+	return NULL;
+}
+
+
+
+//-----------------------------------------------------------------------------
+//
+// CAnimSetControlDependencyMpa implementation, a utility class for finding the
+// dependencies of a control with in the animation set.
+//
+//-----------------------------------------------------------------------------
+
+
+//-----------------------------------------------------------------------------
+// Add the controls of the specified animation set to the dependency map
+//-----------------------------------------------------------------------------
+void CAnimSetControlDependencyMap::AddAnimationSet( const CDmeAnimationSet* pAnimSet )
 {
-	list.RemoveAll();
+	if ( pAnimSet == NULL )
+		return;
 
-	char pPresetPath[MAX_PATH];
-	Q_ExtractFilePath( pModelName, pPresetPath, sizeof(pPresetPath) );
+	CDmeGameModel *pGameModel = pAnimSet->GetValueElement< CDmeGameModel >( "gameModel" );
+	if ( pGameModel == NULL )
+		return;
 
-	char pPresetNameBuf[MAX_PATH];
-	Q_StripExtension( pModelName, pPresetNameBuf, sizeof(pPresetNameBuf) );
-	int nLen = Q_strlen( pPresetNameBuf );
-	Q_snprintf( &pPresetNameBuf[nLen], MAX_PATH - nLen, "*.pre" );
+	// Construct a table which maps the global flex controllers to the control elements that are driving them.
+	int numFlexControllers = pGameModel->NumGlobalFlexControllers();
+	CUtlVector< CDmElement* > controlMap;
+	controlMap.EnsureCount( numFlexControllers );
 
-	CDisableUndoScopeGuard sg;
+	for ( int iFlex = 0; iFlex < numFlexControllers; ++iFlex )
+	{
+		controlMap[ iFlex ] = NULL;
+
+		CDmeGlobalFlexControllerOperator* pFlexOp = pGameModel->GetGlobalFlexController( iFlex );
+		if ( pFlexOp )
+		{
+			CUtlVector< CDmeChannel* > channels( 0, 4 );
+			FindAncestorsReferencingElement( pFlexOp, channels );
+
+			int nChannels = channels.Count();
+			for ( int iChannel = 0; iChannel < nChannels; ++iChannel )
+			{
+				CDmeChannel *pChannel = channels[ iChannel ];
+				if ( pChannel && pChannel->GetToElement() == pFlexOp )
+				{
+					CDmElement* pElement = pChannel->GetFromElement();	 
+					controlMap[ iFlex ] = pElement;
+					break;
+				}
+			}
+		}
+	}
+
+
+	// Get a list of the flex controllers that each flex controller is dependent on.
+	CUtlVector < CUtlVector< int > > flexDependencyList;
+	pGameModel->FindFlexControllerDependencies( flexDependencyList );
+	int nLists = flexDependencyList.Count();
+
+	for ( int iList = 0; iList < nLists; ++iList )
+	{
+		CUtlVector< int > &dependencyList = flexDependencyList[ iList ];
+		int listCount = dependencyList.Count();
+
+		if ( listCount > 0 )
+		{
+			// Construct the control dependency list from the flex controller dependency 
+			// list. The first element in flex controller list is the dependent element, 
+			// the following elements are the dependencies.
+			CDmElement *pElement = controlMap[ dependencyList[ 0 ] ];
+			if ( pElement )
+			{
+				DependencyList_t *pDependencySet = FindDependencyList( pElement );
+
+				if ( pDependencySet == NULL)
+				{
+					int arrayIndex = m_DependencyData.AddToTail();
+					pDependencySet = &m_DependencyData[ arrayIndex ];
+					pDependencySet->m_pElement = pElement;
+					pDependencySet->m_Dependencies.EnsureCapacity( listCount );
+				}
+
+				for ( int iDep = 1; iDep < listCount; ++iDep )
+				{
+					CDmElement* pDependency = controlMap[ dependencyList[ iDep ] ];
+					if ( pDependency != pElement )
+					{
+						if ( pDependencySet->m_Dependencies.Find( pDependency ) == pDependencySet->m_Dependencies.InvalidIndex() )
+						{
+							pDependencySet->m_Dependencies.AddToTail( pDependency );
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+
+//-----------------------------------------------------------------------------
+// Get the list of controls which the specified control is dependent on.
+//-----------------------------------------------------------------------------
+const CUtlVector< const CDmElement * > *CAnimSetControlDependencyMap::GetControlDepndencies( const CDmElement *pControl ) const
+{
+	if ( pControl == NULL )
+		return NULL;
+
+	const DependencyList_t *pDependencyList = NULL;
+	int nSets = m_DependencyData.Count();
+	for ( int i = 0; i < nSets; ++i )
+	{
+		if ( m_DependencyData[ i ].m_pElement == pControl )
+		{
+			pDependencyList = &m_DependencyData[ i ];
+			break;
+		}
+	}
+
+	if ( pDependencyList == NULL )
+		return NULL;
+
+	if ( pDependencyList->m_pElement != pControl )
+	{
+		// If this assert is hit, something has gone wrong with the control look up.
+		Assert( pDependencyList->m_pElement == pControl );
+		return NULL;
+	}
+	
+	return &pDependencyList->m_Dependencies;
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: Find the dependency list for the specified control
+//-----------------------------------------------------------------------------
+CAnimSetControlDependencyMap::DependencyList_t *CAnimSetControlDependencyMap::FindDependencyList( const CDmElement* pControl )
+{
+	DependencyList_t *pDependencyList = NULL;
+	int nSets = m_DependencyData.Count();
+	for ( int i = 0; i < nSets; ++i )
+	{
+		if ( m_DependencyData[ i ].m_pElement == pControl )
+		{
+			pDependencyList = &m_DependencyData[ i ];
+			break;
+		}
+	}
+
+	return pDependencyList;
+}
+
+
+//-----------------------------------------------------------------------------
+// CDmePresetGroupInfo - container for shared preset groups
+//-----------------------------------------------------------------------------
+
+IMPLEMENT_ELEMENT_FACTORY( DmePresetGroupInfo, CDmePresetGroupInfo );
+
+void CDmePresetGroupInfo::OnConstruction()
+{
+	m_filenameBase.Init( this, "filenameBase" );
+	m_presetGroups.Init( this, "presetGroups" );
+}
+
+void CDmePresetGroupInfo::OnDestruction()
+{
+}
+
+//-----------------------------------------------------------------------------
+// Loads model presets from .pre files matching the filename base
+//-----------------------------------------------------------------------------
+void CDmePresetGroupInfo::LoadPresetGroups()
+{
+	LoadPresetGroups( m_filenameBase, m_presetGroups );
+}
+
+void CDmePresetGroupInfo::FilenameBaseForModelName( const char *pModelName, char *pFileNameBase, int nFileNameBaseLen )
+{
+	V_FixupPathName( pFileNameBase, nFileNameBaseLen, pModelName );
+	V_StripExtension( pFileNameBase, pFileNameBase, nFileNameBaseLen );
+}
+
+CDmePresetGroupInfo *CDmePresetGroupInfo::FindPresetGroupInfo( const char *pFilenameBase, CDmrElementArray< CDmePresetGroupInfo > &presetGroupInfos )
+{
+	// find an existing CDmePresetGroupInfo
+	int nPresetGroupInfos = presetGroupInfos.Count();
+	for ( int i = 0; i < nPresetGroupInfos; ++i )
+	{
+		CDmePresetGroupInfo *pPresetGroupInfo = presetGroupInfos[ i ];
+		if ( !pPresetGroupInfo )
+			continue;
+
+		if ( V_stricmp( pFilenameBase, pPresetGroupInfo->GetFilenameBase() ) == 0 )
+			return pPresetGroupInfo;
+	}
+
+	return NULL;
+}
+
+CDmePresetGroupInfo *CDmePresetGroupInfo::FindOrCreatePresetGroupInfo( const char *pFilenameBase, CDmrElementArray< CDmePresetGroupInfo > &presetGroupInfos )
+{
+	// find or create an CDmePresetGroupInfo
+	CDmePresetGroupInfo *pPresetGroupInfo = CDmePresetGroupInfo::FindPresetGroupInfo( pFilenameBase, presetGroupInfos );
+	if ( !pPresetGroupInfo )
+	{
+		pPresetGroupInfo = CreatePresetGroupInfo( pFilenameBase, presetGroupInfos.GetOwner()->GetFileId() );
+		presetGroupInfos.AddToTail( pPresetGroupInfo );
+	}
+	return pPresetGroupInfo;
+}
+
+CDmePresetGroupInfo *CDmePresetGroupInfo::CreatePresetGroupInfo( const char *pFilenameBase, DmFileId_t fileid )
+{
+	char presetGroupInfoName[ MAX_PATH ];
+	V_FileBase( pFilenameBase, presetGroupInfoName, sizeof( presetGroupInfoName ) );
+
+	CDmePresetGroupInfo *pPresetGroupInfo = CreateElement< CDmePresetGroupInfo >( presetGroupInfoName, fileid );
+	pPresetGroupInfo->SetFilenameBase( pFilenameBase );
+	pPresetGroupInfo->LoadPresetGroups();
+	return pPresetGroupInfo;
+}
+
+void CDmePresetGroupInfo::LoadPresetGroups( const char *pFilenameBase, CDmaElementArray< CDmePresetGroup > &presetGroups )
+{
+	char presetPath[MAX_PATH];
+	Q_ExtractFilePath( pFilenameBase, presetPath, sizeof( presetPath ) );
+
+	char presetNameFilter[MAX_PATH];
+	V_strncpy( presetNameFilter, pFilenameBase, sizeof( presetNameFilter ) );
+	int nLen = Q_strlen( presetNameFilter );
+	Q_snprintf( &presetNameFilter[ nLen ], MAX_PATH - nLen, "*.pre" );
+
+	DmFileId_t parentFileId = presetGroups.GetOwner()->GetFileId();
 
 	FileFindHandle_t fh;
-	const char *pFileName = g_pFullFileSystem->FindFirstEx( pPresetNameBuf, "GAME", &fh );
+	const char *pFileName = g_pFullFileSystem->FindFirstEx( presetNameFilter, "GAME", &fh );
 	for ( ; pFileName; pFileName = g_pFullFileSystem->FindNext( fh ) )
 	{
-		char pRelativePresetPath[MAX_PATH];
-		Q_ComposeFileName(pPresetPath,  pFileName, pRelativePresetPath, sizeof(pRelativePresetPath) );
+		char relativePresetPath[MAX_PATH];
+		Q_ComposeFileName( presetPath, pFileName, relativePresetPath, sizeof( relativePresetPath ) );
 
 		CDmElement* pRoot = NULL;
-		DmFileId_t fileid = g_pDataModel->RestoreFromFile( pRelativePresetPath, "GAME", NULL, &pRoot, CR_FORCE_COPY );
+		DmFileId_t fileid = g_pDataModel->RestoreFromFile( relativePresetPath, "GAME", NULL, &pRoot, CR_FORCE_COPY ); // TODO - change this to CR_DELETE_OLD, since we'll want the loaded presets to replace the existing ones
 		if ( fileid == DMFILEID_INVALID || !pRoot )
 			continue;
 
@@ -1358,50 +1660,62 @@ void CModelPresetGroupManager::LoadModelPresets( const char *pModelName, PresetG
 			continue;
 		}
 
-		pPresetGroup->SetFileId( m_FileId, TD_DEEP );
+		pPresetGroup->SetFileId( parentFileId, TD_DEEP );
 
 		// Presets used through the model preset manager must be read only + shared
 		pPresetGroup->m_bIsReadOnly = true;
 		pPresetGroup->SetShared( true );
 
-		int i = list.AddToTail();
-		list[i] = pPresetGroup;
+		presetGroups.AddToTail( pPresetGroup );
 	}
+
 	g_pFullFileSystem->FindClose( fh );
 }
 
 
-//-----------------------------------------------------------------------------
-// Applies model presets associated with a particular model to an animation set
-//-----------------------------------------------------------------------------
-void CModelPresetGroupManager::ApplyModelPresets( const char *pModelName, CDmeAnimationSet *pAnimationSet )
+ControlIndex_t FindComboOpControlIndexForAnimSetControl( CDmeCombinationOperator *pComboOp, const char *pControlName, bool *pIsMulti /*= NULL*/ )
 {
-	if ( m_FileId == DMFILEID_INVALID )
+	const char *pMultiControlBaseName = pControlName ? StringAfterPrefix( pControlName, "multi_" ) : NULL;
+	if ( pIsMulti )
 	{
-		int i = m_QueuedPresetRequest.AddToTail();
-		m_QueuedPresetRequest[i].m_ModelName = pModelName;
-		m_QueuedPresetRequest[i].m_hAnimationSet = pAnimationSet;
-		return;
+		*pIsMulti = pMultiControlBaseName != NULL;
 	}
 
-	if ( !m_Lookup.Defined( pModelName ) )
-	{
-		LoadModelPresets( pModelName, m_Lookup[pModelName] );
-	}
+	if ( !pComboOp || !pControlName )
+		return -1;
 
-	PresetGroupList_t &list = m_Lookup[pModelName];
-	int nCount = list.Count();
-	for ( int i = 0; i < nCount; ++i )
+	ControlIndex_t index = pComboOp->FindControlIndex( pControlName );
+	if ( index >= 0 )
+		return index;
+
+	if ( !pMultiControlBaseName )
+		return -1;
+
+	index = pComboOp->FindControlIndex( pMultiControlBaseName );
+	if ( index < 0 )
+		return -1;
+
+	Assert( pComboOp->IsMultiControl( index ) );
+
+	return index;
+}
+
+
+//-----------------------------------------------------------------------------
+// Utility class to migrate from traversing all animationsets within an animationsetgroup to a filmclip
+//-----------------------------------------------------------------------------
+
+bool CAnimSetGroupAnimSetTraversal::IsValid()
+{
+	return m_pFilmClip && m_nIndex < m_pFilmClip->GetAnimationSets().Count();
+}
+
+CDmeAnimationSet *CAnimSetGroupAnimSetTraversal::Next()
+{
+	CDmeAnimationSet *pAnimSet = NULL;
+	while ( pAnimSet == NULL && IsValid() )
 	{
-		CDmePresetGroup *pPresetGroup = list[i];
-		int nIndex = pAnimationSet->FindPresetGroupIndex( pPresetGroup->GetName() );
-		if ( nIndex >= 0 )
-		{
-			pAnimationSet->GetPresetGroups().Set( nIndex, pPresetGroup );
-		}
-		else
-		{
-			pAnimationSet->GetPresetGroups().AddToTail( pPresetGroup );
-		}
+		pAnimSet = m_pFilmClip->GetAnimationSets()[ m_nIndex++ ];
 	}
+	return pAnimSet;
 }

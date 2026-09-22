@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -520,13 +520,17 @@ int Box3D::GetVisibleHandles( Vector *handles, CMapView *pView, int nMode )
 					Vector vHandle; HandleToWorld( vHandle, Vector(x,y,z) );
 					Vector vDelta = vHandle - vViewPoint; 
 					float fDistance = VectorLength( vDelta );
-					int nFace;
+
+					// Avoid divide by zero.
+					if ( !fDistance )
+						continue;
 
 					vDelta /= fDistance; // normalize
 
 					if ( DotProduct(vDelta,vViewAxis) < 0 )
 						continue; 
 
+					int nFace;
 					float fIntersection = IntersectionLineAABBox( bmins, bmaxs, vViewPoint, vViewPoint+vDelta*99999, nFace );
 
  					if ( fIntersection >= 0 && fIntersection*1.01 < fDistance )

@@ -12,19 +12,14 @@ $MacroRequired				"OUTBINDIR"
 $MacroRequired				"LIBPUBLIC"
 $MacroRequired				"LIBCOMMON"
 $MacroRequired				"PLATSUBDIR"
-$MacroRequiredAllowEmpty	"GAMENAME"
-$MacroRequiredAllowEmpty	"INTERMEDIATESUBDIR"
-$MacroRequiredAllowEmpty	"_UNITYSUBDIR"
-$MacroRequiredAllowEmpty	"_STATICSUBDIR"
-$Macro						"_SUBDIRSUFFIX"		"$INTERMEDIATESUBDIR$_STATICSUBDIR$GAMENAME$PLATSUBDIR$_UNITYSUBDIR"
 
 $Configuration "Debug"
 {
 	$General	
 	{
 		// General
-		$OutputDirectory					".\Debug$_SUBDIRSUFFIX"
-		$IntermediateDirectory				".\Debug$_SUBDIRSUFFIX"
+		$OutputDirectory					".\Debug$PLATSUBDIR"
+		$IntermediateDirectory				".\Debug$PLATSUBDIR"
 		$ExtensionsToDeleteOnClean
 		$BuildLogFile
 		$InheritedProjectPropertySheets
@@ -61,7 +56,9 @@ $Configuration "Debug"
 		$DebugInformationFormat					"Program Database (/Zi)" [$WIN64]
 		$SuppressStartupBanner		
 		$WarningLevel							"Level 4 (/W4)"
+		$Detect64bitPortabilityIssues			"Yes (/Wp64)"
 		$TreatWarningsAsErrors					"No"
+		$MultiProcessorCompilation				"Yes (/MP)"
 		$UseUNICODEResponseFiles				"No"
 
 		// Optimization
@@ -74,25 +71,20 @@ $Configuration "Debug"
 		$WholeProgramOptimization
 
 		// Preprocessor
-		$PreprocessorDefinitions			"$BASE;WIN32;_WIN32;_DEBUG;DEBUG;_WINDOWS;_LIB;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE;_SCL_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)"
-		$PreprocessorDefinitions			"$BASE;_HAS_ITERATOR_DEBUGGING=0;_ALLOW_RUNTIME_LIBRARY_MISMATCH;_ALLOW_ITERATOR_DEBUG_LEVEL_MISMATCH;_ALLOW_MSC_VER_MISMATCH;" [!$WIN64&&!$VS2015]
+		$PreprocessorDefinitions				"$BASE;_HAS_ITERATOR_DEBUGGING=0;WIN32;_WIN32;_DEBUG;DEBUG;_WINDOWS;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE;_ALLOW_RUNTIME_LIBRARY_MISMATCH;_ALLOW_ITERATOR_DEBUG_LEVEL_MISMATCH;_ALLOW_MSC_VER_MISMATCH;%(PreprocessorDefinitions)"
 		$IgnoreStandardIncludePath
 		$GeneratePreprocessedFile
 		$KeepComments
 
 		// Code Generation
 		$EnableStringPooling					"Yes (/GF)"
-		// EnableMinimalRebuild is incompatible with /MP (multi-processor builds)
-		// and it also makes it hard to iterate on warnings because the compiler
-		// detects that there is no reason to recompile when you request it.
-		// It should always be off? It should definitely be off for /analyze builds.
-		//$EnableMinimalRebuild				"Yes (/Gm)" [!$ANALYZE]
+		$EnableMinimalRebuild					"No"
 		$EnableC++Exceptions					"No"
 		$SmallerTypeCheck
 		$BasicRuntimeChecks						"Default"
 		$RuntimeLibrary							"Multi-threaded Debug (/MTd)"
 		$StructMemberAlignment
-		$BufferSecurityCheck					"Yes"
+		$BufferSecurityCheck					"No" [$WINDOWS]
 		$EnableFunctionLevelLinking
 		$EnableEnhancedInstructionSet
 		$FloatingPointModel						"Fast (/fp:fast)"
@@ -133,12 +125,12 @@ $Configuration "Debug"
 		$ShowIncludes
 		$UndefinePreprocessorDefinitions
 		$UndefineAllPreprocessorDefinitions
-		$UseFullPaths							"Yes (/FC)"
+		$UseFullPaths
 		$OmitDefaultLibraryNames
 		$ErrorReporting							"Prompt Immediately (/errorReport:prompt)"
 
 		// Command Line
-		$AdditionalOptions
+		$AdditionalOptions						
 	}
 
 	$Linker
@@ -159,7 +151,7 @@ $Configuration "Debug"
 		// Input
 		$AdditionalDependencies
 		$IgnoreAllDefaultLibraries
-		$IgnoreSpecificLibrary					"libc;libcd;libcmt;libcpmt;libcpmt1"
+		$IgnoreSpecificLibrary					"libc;libcd;libcmt"
 		$ModuleDefinitionFile
 		$AddModuleToAssembly
 		$EmbedManagedResourceFile
@@ -172,7 +164,6 @@ $Configuration "Debug"
 		$ManifestFile
 		$AdditionalManifestDependencies
 		$AllowIsolation
-		$UACExecutionLevel
 
 		// Debugging
 		$GenerateDebugInfo						"Yes (/DEBUG)"
@@ -192,9 +183,6 @@ $Configuration "Debug"
 		$SwapRunFromCD
 		$SwapRunFromNetwork
 		$Driver
-
-		// DYNAMICBASE/ASLR in debug builds is annoying and not helpful.
-		$RandomizedBaseAddress				"false"
 
 		// Optimization
 		$References
@@ -290,7 +278,7 @@ $Configuration "Debug"
 	$Resources
 	{
 		// General
-		$PreprocessorDefinitions				"_DEBUG;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE;%(PreprocessorDefinitions)"
+		$PreprocessorDefinitions				"$BASE;_DEBUG;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE;%(PreprocessorDefinitions)"
 		$Culture								"English (United States) (0x409)"
 		$AdditionalIncludeDirectories
 		$IgnoreStandardIncludePath

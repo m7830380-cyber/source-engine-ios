@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -45,7 +45,7 @@ CChoreoChannelWidget::CChoreoChannelWidget( CChoreoActorWidget *parent )
 //-----------------------------------------------------------------------------
 CChoreoChannelWidget::~CChoreoChannelWidget( void )
 {
-	for ( int i = 0 ; i < m_Events.Size(); i++ )
+	for ( int i = 0 ; i < m_Events.Count(); i++ )
 	{
 		CChoreoEventWidget *e = m_Events[ i ];
 		delete e;
@@ -159,7 +159,7 @@ int CChoreoChannelWidget::GetVerticalStackingCount( bool layout, RECT *rc )
 
 	int i;
 	// Sort items
-	int c = m_Events.Size();
+	int c = m_Events.Count();
 	for ( i = 0; i < c; i++ )
 	{
 		sorted.Insert( m_Events[ i ] );
@@ -244,7 +244,7 @@ bool CChoreoChannelWidget::CheckHasAudio()
 {
 	m_bHasAudio = false;
 	// Create objects for children
-	for ( int i = 0; i < m_Events.Size(); i++ )
+	for ( int i = 0; i < m_Events.Count(); i++ )
 	{
 		CChoreoEventWidget *event = m_Events[ i ];
 		if ( event->GetEvent()->GetType() == CChoreoEvent::SPEAK )
@@ -318,14 +318,14 @@ void CChoreoChannelWidget::redraw( CChoreoWidgetDrawHelper& drawHelper )
 		RECT rcBg = rcText;
 		InflateRect( &rcBg, -5, -5 );
 
-		drawHelper.DrawFilledRect( RGB( 210, 210, 210 ), rcBg );
+		drawHelper.DrawFilledRect( Color( 210, 210, 210 ), rcBg );
 	}
 
 	RECT rcName = rcText;
 
 	rcName.left += 20;
 	char n[ 512 ];
-	V_strcpy_safe( n, channel->GetName() );
+	strcpy( n, channel->GetName() );
 
 	drawHelper.DrawColoredText( "Arial", 
 		m_pView->GetFontSize() + 2, 
@@ -387,7 +387,7 @@ void CChoreoChannelWidget::redraw( CChoreoWidgetDrawHelper& drawHelper )
 void CChoreoChannelWidget::RenderCloseCaptionInfo( CChoreoWidgetDrawHelper& drawHelper, RECT& rcEventArea )
 {
 	wchar_t wstr[ 1024 ];
-	COLORREF barColor = RGB( 100, 200, 255 );
+	Color barColor = Color( 100, 200, 255 );
 
 	{
 		RECT rcText = rcEventArea;
@@ -420,12 +420,12 @@ void CChoreoChannelWidget::RenderCloseCaptionInfo( CChoreoWidgetDrawHelper& draw
 			showState = true;
 			if ( e->GetNumSlaves() >= 1 )
 			{
-				barColor = RGB( 100, 200, 255 );
+				barColor = Color( 100, 200, 255 );
 				label = e->GetCloseCaptionToken();
 			}
 			else
 			{
-				barColor = RGB( 100, 150, 100 );
+				barColor = Color( 100, 150, 100 );
 				label = e->GetParameters();
 			}
 
@@ -437,7 +437,7 @@ void CChoreoChannelWidget::RenderCloseCaptionInfo( CChoreoWidgetDrawHelper& draw
 		}
 		else
 		{
-			barColor = RGB( 150, 150, 150 );
+			barColor = Color( 150, 150, 150 );
 			label = "-disabled-";
 		}
 
@@ -479,7 +479,7 @@ void CChoreoChannelWidget::RenderCloseCaptionInfo( CChoreoWidgetDrawHelper& draw
 			rcState.right = rcState.left + stateMarkWidth;
 			rcText.left += stateMarkWidth;
 
-			COLORREF symColor = stateValid ? RGB( 40, 100, 40 ) : RGB( 200, 40, 40 );
+			Color symColor = stateValid ? Color( 40, 100, 40 ) : Color( 200, 40, 40 );
 
 			drawHelper.DrawColoredTextCharset( 
 				"Marlett", 
@@ -495,13 +495,13 @@ void CChoreoChannelWidget::RenderCloseCaptionInfo( CChoreoWidgetDrawHelper& draw
 		if ( e->IsSuppressingCaptionAttenuation() )
 		{
 			drawHelper.DrawColoredText( "Arial", m_pView->GetFontSize() - 2, 500,
-				RGB( 80, 80, 100 ), rcText, "%s [no attenuate]", label );
+				Color( 80, 80, 100 ), rcText, "%s [no attenuate]", label );
 
 		}
 		else
 		{
 			drawHelper.DrawColoredText( "Arial", m_pView->GetFontSize() - 2, 500,
-				RGB( 80, 80, 100 ), rcText, label );
+				Color( 80, 80, 100 ), rcText, label );
 		}
 			
 
@@ -581,7 +581,7 @@ void CChoreoChannelWidget::RenderCloseCaptions( CChoreoWidgetDrawHelper& drawHel
 		rcEvent.bottom = rcEvent.top + 12;
 		rcEvent.left += 5;
 
-		COLORREF textColor = valid ? RGB( 80, 80, 100 ) : RGB( 225, 40, 40 );
+		Color textColor = valid ? Color( 80, 80, 100 ) : Color( 225, 40, 40 );
 
 		drawHelper.DrawColoredTextW( STREAM_FONT, m_pView->GetFontSize() - 2, 500,
 				textColor, rcEvent, wstr );
@@ -641,7 +641,7 @@ CChoreoEventWidget *CChoreoChannelWidget::GetEvent( int num )
 //-----------------------------------------------------------------------------
 int CChoreoChannelWidget::GetNumEvents( void )
 {
-	return m_Events.Size();
+	return m_Events.Count();
 }
 
 //-----------------------------------------------------------------------------
@@ -830,7 +830,7 @@ void CChoreoChannelWidget::RenderCloseCaptionSelectors( CChoreoWidgetDrawHelper&
 			CChoreoEvent *event = e->GetEvent();
 
 			bool upArrow = !event->IsUsingCombinedFile();
-			COLORREF clr = RGB( 63, 63, 63 ); // upArrow ? RGB( 255, 0, 0 ) : RGB( 0, 0, 255 );
+			Color clr = Color( 63, 63, 63 ); // upArrow ? Color( 255, 0, 0 ) : Color( 0, 0, 255 );
 
 			RECT rc = check.rcSelector;
 
@@ -927,7 +927,7 @@ void CChoreoChannelWidget::RenderCloseCaptionExpandCollapseRect( CChoreoWidgetDr
 	RECT rcCCArea;
 	GetCloseCaptionExpandCollapseRect( rcCCArea );
 
-	COLORREF symColor = RGB( 100, 100, 100 );
+	Color symColor = Color( 100, 100, 100 );
 
 	drawHelper.DrawColoredTextCharset( 
 		"Marlett", 
@@ -1030,7 +1030,7 @@ void CChoreoChannelWidget::redrawStatus( CChoreoWidgetDrawHelper& drawHelper, RE
 	bool stateValid = false;
 
 	wchar_t wstr[ 1024 ];
-	COLORREF labelColor = COLOR_INFO_TEXT;
+	Color labelColor = COLOR_INFO_TEXT;
 
 	if ( e->GetCloseCaptionType() == CChoreoEvent::CC_MASTER )
 	{
@@ -1072,7 +1072,7 @@ void CChoreoChannelWidget::redrawStatus( CChoreoWidgetDrawHelper& drawHelper, RE
 		rcState.right = rcState.left + stateMarkWidth;
 		rcText.left += stateMarkWidth;
 
-		COLORREF symColor = stateValid ? RGB( 40, 100, 40 ) : RGB( 200, 40, 40 );
+		Color symColor = stateValid ? Color( 40, 100, 40 ) : Color( 200, 40, 40 );
 
 		drawHelper.DrawColoredTextCharset( 
 			"Marlett", 
@@ -1090,7 +1090,7 @@ void CChoreoChannelWidget::redrawStatus( CChoreoWidgetDrawHelper& drawHelper, RE
 
 	RECT saveText = rcText;
 
-	COLORREF statusClr = RGB( 20, 150, 20 );
+	Color statusClr = Color( 20, 150, 20 );
 
 	if ( e->GetCloseCaptionType() != CChoreoEvent::CC_DISABLED )
 	{
@@ -1122,7 +1122,7 @@ void CChoreoChannelWidget::redrawStatus( CChoreoWidgetDrawHelper& drawHelper, RE
 
 				if ( !valid[ 0 ] || !valid[ 1 ] )
 				{
-					statusClr = RGB( 255, 0, 0 );
+					statusClr = Color( 255, 0, 0 );
 				}
 
 				Q_snprintf( exist, sizeof( exist ), "%s", valid ? "exist" : "missing!" );
@@ -1132,7 +1132,7 @@ void CChoreoChannelWidget::redrawStatus( CChoreoWidgetDrawHelper& drawHelper, RE
 				bool valid = filesystem->FileExists( cf );
 				if ( !valid )
 				{
-					statusClr = RGB( 255, 0, 0 );
+					statusClr = Color( 255, 0, 0 );
 				}
 
 				Q_snprintf( exist, sizeof( exist ), "%s", valid ? "exists" : "missing!" );
@@ -1160,7 +1160,7 @@ void CChoreoChannelWidget::redrawStatus( CChoreoWidgetDrawHelper& drawHelper, RE
 			len = drawHelper.CalcTextWidth( "Arial", fontsize, 500, sz );
 
 			drawHelper.DrawColoredText( "Arial", fontsize, 500,
-				combinedValid ? RGB( 20, 150, 20 ) : RGB( 255, 0, 0 ), 
+				combinedValid ? Color( 20, 150, 20 ) : Color( 255, 0, 0 ), 
 				rcPartial, sz  );
 
 			rcPartial.left += len;
@@ -1201,7 +1201,7 @@ void CChoreoChannelWidget::redrawStatus( CChoreoWidgetDrawHelper& drawHelper, RE
 		else
 		{
 			drawHelper.DrawColoredText( "Arial", fontsize, 500,
-				RGB( 255, 0, 0 ), rcText, "sound not in game_sounds script files!" );
+				Color( 255, 0, 0 ), rcText, "sound not in game_sounds script files!" );
 		}
 	}
 }

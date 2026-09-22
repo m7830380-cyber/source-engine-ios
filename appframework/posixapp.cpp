@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright  1996-2005, Valve Corporation, All rights reserved. =======//
 //
 // Purpose: Pieces of the application framework, shared between POSIX systems (Mac OS X, Linux, etc)
 //
@@ -14,10 +14,7 @@
 #include "filesystem_init.h"
 #include "tier1/convar.h"
 #include "vstdlib/cvar.h"
-
-#ifndef DEDICATED
 #include "togl/rendermechanism.h"
-#endif
 
 // NOTE: This has to be the last file included! (turned off below, since this is included like a header)
 #include "tier0/memdbgon.h"
@@ -27,10 +24,8 @@
 //-----------------------------------------------------------------------------
 HINSTANCE s_HInstance;
 
-//#if !defined(LINUX)
-//static CSimpleLoggingListener s_SimpleLoggingListener;
-//ILoggingListener *g_pDefaultLoggingListener = &s_SimpleLoggingListener;
-//#endif
+static CSimpleLoggingListener s_SimpleLoggingListener;
+ILoggingListener *g_pDefaultLoggingListener = &s_SimpleLoggingListener;
 
 //-----------------------------------------------------------------------------
 // HACK: Since I don't want to refit vgui yet...
@@ -60,9 +55,7 @@ int AppMain( void* hInstance, void* hPrevInstance, const char* lpCmdLine, int nC
 	return -1;
 }
 
-//#if !defined(LINUX)
-//static CNonFatalLoggingResponsePolicy s_NonFatalLoggingResponsePolicy;
-//#endif
+static CNonFatalLoggingResponsePolicy s_NonFatalLoggingResponsePolicy;
 
 //-----------------------------------------------------------------------------
 // Version of AppMain used by console applications
@@ -71,9 +64,7 @@ int AppMain( int argc, char **argv, CAppSystemGroup *pAppSystemGroup )
 {
 	Assert( pAppSystemGroup );
 
-	//#if !defined(LINUX)
-	//	LoggingSystem_SetLoggingResponsePolicy( &s_NonFatalLoggingResponsePolicy );
-	//#endif
+	LoggingSystem_SetLoggingResponsePolicy( &s_NonFatalLoggingResponsePolicy );
 	s_HInstance = NULL;
 	CommandLine()->CreateCmdLine( argc, argv );
 
@@ -125,6 +116,10 @@ bool CSteamApplication::Create( )
 	return true;
 }
 
+bool CSteamApplication::GetFileSystemDLLName( char *pOut, int nMaxBytes, bool &bIsSteam )
+{
+	return FileSystem_GetFileSystemDLLName( pOut, nMaxBytes, bIsSteam ) == FS_OK;
+}
 
 //-----------------------------------------------------------------------------
 // The file system pointer is invalid at this point
@@ -162,7 +157,7 @@ int CSteamApplication::Main( )
 int CSteamApplication::Startup()
 {
 	int nRetVal = BaseClass::Startup();
-	if ( GetErrorStage() != NONE )
+	if ( GetCurrentStage() != NONE )
 		return nRetVal;
 	
 	if ( FileSystem_SetBasePaths( m_pFileSystem ) != FS_OK )

@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -17,19 +17,17 @@
 #include "vgui_controls/Controls.h"
 #include "vgui_controls/PanelListPanel.h"
 
-#include "KeyValues.h"
+#include "keyvalues.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
 
 using namespace vgui;
 
-DECLARE_BUILD_FACTORY( PanelListPanel );
-
 //-----------------------------------------------------------------------------
 // Purpose: Constructor
 //-----------------------------------------------------------------------------
-PanelListPanel::PanelListPanel( vgui::Panel *parent, char const *panelName ) : EditablePanel( parent, panelName )
+PanelListPanel::PanelListPanel( vgui::Panel *parent, char const *panelName ) : Panel( parent, panelName )
 {
 	SetBounds( 0, 0, 100, 100 );
 
@@ -44,6 +42,9 @@ PanelListPanel::PanelListPanel( vgui::Panel *parent, char const *panelName ) : E
 
 	m_iFirstColumnWidth = 100; // default width
 	m_iNumColumns = 1; // 1 column by default
+	m_bShowScrollBar = true;
+	m_bAllowMouseWheel = true;
+	m_bOverrideChildPanelWidth = true;
 
 	if ( IsProportional() )
 	{
@@ -86,11 +87,9 @@ int	PanelListPanel::ComputeVPixelsNeeded()
 		Panel *panel = m_DataItems[ m_SortedItems[i] ].panel;
 		if ( !panel )
 			continue;
-
-		if ( panel->IsLayoutInvalid() )
-		{
-			panel->InvalidateLayout( true );
-		}
+		// Skip hidden items
+		if ( !panel->IsVisible() )
+			continue;
 
 		int iCurrentColumn = iCurrentItem % m_iNumColumns;
 
@@ -137,7 +136,7 @@ Panel *PanelListPanel::GetCellRenderer( int row )
 //			data->GetName() is used to uniquely identify an item
 //			data sub items are matched against column header name to be used in the table
 //-----------------------------------------------------------------------------
-int PanelListPanel::AddItem( Panel *labelPanel, Panel *panel )
+int PanelListPanel::AddItem( Panel *labelPanel, Panel *panel)
 {
 	Assert(panel);
 
@@ -147,6 +146,7 @@ int PanelListPanel::AddItem( Panel *labelPanel, Panel *panel )
 	}
 
 	panel->SetParent( m_pPanelEmbedded );
+	panel->SetVisible( true );
 
 	int itemID = m_DataItems.AddToTail();
 	DATAITEM &newitem = m_DataItems[itemID];
@@ -171,6 +171,21 @@ int PanelListPanel::GetItemIDFromRow( int nRow ) const
 	if ( nRow < 0 || nRow >= GetItemCount() )
 		return m_DataItems.InvalidIndex();
 	return m_SortedItems[ nRow ];
+}
+
+//-----------------------------------------------------------------------------
+// Purpose:  Returns the number of visible item panels
+//-----------------------------------------------------------------------------
+int PanelListPanel::GetVisibleItemCount()
+{
+	int iTotal = 0;
+	for ( int i = 0 ; i < GetItemCount() ; ++i )
+	{
+		Panel *panel = GetItemPanel( i );
+		if (panel && panel->IsVisible())
+			iTotal++;
+	}
+	return iTotal;
 }
 
 
@@ -248,8 +263,7 @@ void PanelListPanel::DeleteAllItems()
 	{
 		if ( m_DataItems[i].panel )
 		{
-			m_DataItems[i].panel->MarkForDeletion();
-			m_DataItems[i].panel = NULL;
+			delete m_DataItems[i].panel;
 		}
 	}
 
@@ -292,6 +306,7 @@ void PanelListPanel::PerformLayout()
 
 	int vpixels = ComputeVPixelsNeeded();
 
+	m_vbar->SetVisible( GetShowScrollbar() );
 	m_vbar->SetRange( 0, vpixels );
 	m_vbar->SetRangeWindow( tall );
 	m_vbar->SetButtonPressedScrollValue( tall / 4 ); // standard height of labels/buttons etc.
@@ -301,16 +316,10 @@ void PanelListPanel::PerformLayout()
 
 	int top = m_vbar->GetValue();
 
-	m_pPanelEmbedded->SetPos( 0, -top );
-	m_pPanelEmbedded->SetSize( wide - m_vbar->GetWide(), vpixels );	// scrollbar will sit on top (zpos set explicitly)
+	m_pPanelEmbedded->SetPos( 1, -top );
+	m_pPanelEmbedded->SetSize( wide - m_vbar->GetWide() - 2, vpixels );
 
-	bool bScrollbarVisible = true;
-	// If we're supposed to automatically hide the scrollbar when unnecessary, check it now
-	if ( m_bAutoHideScrollbar )
-	{
-		bScrollbarVisible = (m_pPanelEmbedded->GetTall() > tall);
-	}
-	m_vbar->SetVisible( bScrollbarVisible );
+	int sliderPos = m_vbar->GetValue();
 	
 	// Now lay out the controls on the embedded panel
 	int y = 0;
@@ -322,23 +331,28 @@ void PanelListPanel::PerformLayout()
 	
 	for ( int i = 0; i < m_SortedItems.Count(); i++ )
 	{
+		DATAITEM &item = m_DataItems[ m_SortedItems[i] ];
+		if ( !item.panel || !item.panel->IsVisible() )
+			continue;
+
 		int iCurrentColumn = i % m_iNumColumns;
 
 		// add in a little buffer between panels
 		if ( iCurrentColumn == 0 )
 			y += m_iPanelBuffer;
 
-		DATAITEM &item = m_DataItems[ m_SortedItems[i] ];
-
 		if ( h < item.panel->GetTall() )
 			h = item.panel->GetTall();
 
-		if ( item.labelPanel )
+		if (totalh >= sliderPos)
 		{
-			item.labelPanel->SetBounds( 0, y, m_iFirstColumnWidth, item.panel->GetTall() );
+			if ( item.labelPanel )
+			{
+				item.labelPanel->SetBounds( 0, y, m_iFirstColumnWidth, item.panel->GetTall() );
+			}
+			item.panel->SetBounds(xpos + iCurrentColumn * iColumnWidth, y,
+									m_bOverrideChildPanelWidth ? iColumnWidth : item.panel->GetWide(), item.panel->GetTall() );
 		}
-
-		item.panel->SetBounds( xpos + iCurrentColumn * iColumnWidth, y, iColumnWidth, item.panel->GetTall() );
 
 		if ( iCurrentColumn >= m_iNumColumns - 1 )
 		{
@@ -409,6 +423,9 @@ int PanelListPanel::GetNumColumns( void )
 //-----------------------------------------------------------------------------
 void PanelListPanel::OnMouseWheeled(int delta)
 {
+	if (!m_bAllowMouseWheel)
+		return;
+
 	int val = m_vbar->GetValue();
 	val -= (delta * DEFAULT_HEIGHT);
 	m_vbar->SetValue(val);	
@@ -473,4 +490,84 @@ void PanelListPanel::ScrollToItem( int itemNumber )
 	InvalidateLayout();
 }
 
+void PanelListPanel::ApplySettings( KeyValues *inResourceData )
+{
+	BaseClass::ApplySettings( inResourceData );
 
+	SetShowScrollBar(inResourceData->GetBool("showScrollBar", true));
+	AllowMouseWheel(inResourceData->GetBool("allowMouseWheel", true));
+	OverrideChildPanelWidth(inResourceData->GetBool("setChildPanelWidth", true));
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+void PanelListPanel::GetSettings( KeyValues *outResourceData )
+{
+	BaseClass::GetSettings( outResourceData );
+	outResourceData->SetBool("showScrollBar", m_bShowScrollBar);
+	outResourceData->SetBool("allowMouseWheel", m_bShowScrollBar);
+	outResourceData->SetBool("overrideChildPanelWidth", m_bOverrideChildPanelWidth);
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+const char *PanelListPanel::GetDescription()
+{
+	static char buf[1024];
+	Q_snprintf(buf, sizeof(buf), "%s, bool showScrollBar, bool allowMouseWheel, bool overrideChildPanelWidth", BaseClass::GetDescription());
+	return buf;
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+void PanelListPanel::SetShowScrollBar( bool bShow )
+{
+	m_bShowScrollBar = bShow;
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+void PanelListPanel::AllowMouseWheel( bool bAllow )
+{
+	m_bAllowMouseWheel = bAllow;
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+void PanelListPanel::OverrideChildPanelWidth( bool bOverride )
+{
+	m_bOverrideChildPanelWidth = bOverride;
+}
+
+void PanelListPanel::SetItemVisible( int nItemID, bool bVisible )
+{
+	if ( !m_DataItems.IsValidIndex(nItemID) )
+		return;
+
+	m_DataItems[nItemID].panel->SetVisible( bVisible );
+	InvalidateLayout();
+}
+
+bool PanelListPanel::IsItemVisible( int nItemID ) const
+{
+	if ( !m_DataItems.IsValidIndex(nItemID) )
+		return false;
+	return m_DataItems[nItemID].panel->IsVisible();
+}
+
+void PanelListPanel::HideAllItems()
+{
+	FOR_EACH_LL( m_DataItems, i )
+	{
+		if ( m_DataItems[i].panel )
+		{
+			  m_DataItems[i].panel->SetVisible( false );
+		}
+	}
+	InvalidateLayout();
+}

@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 2005-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: perform initialization needed in most command line programs
 //
@@ -11,6 +11,9 @@
 #include "tier0/memalloc.h"
 #include "tier0/progressbar.h"
 #include "tier1/strtools.h"
+
+// NOTE: This has to be the last file included!
+#include "tier0/memdbgon.h"
 
 
 static void PrintFReportHandler(char const *job_name, int total_units_to_do, int n_units_completed)
@@ -36,15 +39,17 @@ static void PrintFReportHandler(char const *job_name, int total_units_to_do, int
 	}
 }
 
-void InitCommandLineProgram( int argc, char **argv )
+void InitCommandLineProgram( int &argc, char ** &argv )
 {
 	MathLib_Init( 1,1,1,0,false,true,true,true);
 	CommandLine()->CreateCmdLine( argc, argv );
 	InitDefaultFileSystem();
 	InstallProgressReportHandler( PrintFReportHandler );
+	// handle -allowdebug transparently
+	if ( ( argc > 1 ) && ( !strcmp( argv[1], "-allowdebug" ) ) )
+	{
+		argv++;												// messes up argv[0]
+		argc--;
+	}
 
-	// By default, command line programs should not use the new assert dialog,
-	// and any asserts should be fatal, unless we are being debugged
-	if ( !Plat_IsInDebugSession() )
-		SpewOutputFunc( DefaultSpewFuncAbortOnAsserts );
 }

@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2005, Valve Corporation, All rights reserved. =======//
 //
 // Purpose: 
 //
@@ -11,7 +11,7 @@
 #include "vgui_controls/Button.h"
 #include "dme_controls/AttributeTextEntry.h"
 #include "matsys_controls/colorpickerpanel.h"
-#include "tier1/KeyValues.h"
+#include "tier1/keyvalues.h"
 #include "dme_controls/inotifyui.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
@@ -52,6 +52,7 @@ void CAttributeColorPickerPanel::OnCommand( char const *cmd )
 void CAttributeColorPickerPanel::UpdateButtonColor()
 {
 	Color clr = GetAttributeValue<Color>();
+	clr.SetColor( clr.r(), clr.g(), clr.b(), 255 );
 	m_pOpen->SetDefaultColor( clr, clr );
 	m_pOpen->SetArmedColor( clr, clr );
 	m_pOpen->SetDepressedColor( clr, clr );
@@ -155,16 +156,8 @@ void CAttributeColorPickerPanel::PerformLayout()
 {
 	BaseClass::PerformLayout();
 
-	int x, y, w, h;
-	m_pType->GetBounds( x, y, w, h );
+	int pickerX, pickerY, pickerW, pickerH;
+	GetPickerBounds( &pickerX, &pickerY, &pickerW, &pickerH );
 
-	int inset = 25;
-	m_pType->SetWide( w - inset );
-
-	x += w;
-	x -= inset;
-
-	h -= 2;
-
-	m_pOpen->SetBounds( x, y, inset, h );
+	m_pOpen->SetBounds( pickerX, pickerY, pickerW, pickerH  );
 }

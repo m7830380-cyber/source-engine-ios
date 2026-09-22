@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -15,11 +15,14 @@
 #include "Render3D.h"
 #include "ViewerSettings.h"
 #include "hammer.h"
-#include "materialsystem/imesh.h"
+#include "materialsystem/IMesh.h"
 #include "TextureSystem.h"
 #include "Material.h"
 #include "Options.h"
 #include "camera.h"
+#include "fadedlg.h"
+#include "mapdoc.h"
+#include "mapworld.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include <tier0/memdbgon.h>
@@ -222,23 +225,21 @@ CMapClass *CMapStudioModel::CopyFrom(CMapClass *pObject, bool bUpdateDependencie
 
 	CMapClass::CopyFrom(pObject, bUpdateDependencies);
 
-	m_pStudioModel = pFrom->m_pStudioModel;
-	if (m_pStudioModel != NULL)
-	{
-		CStudioModelCache::AddRef(m_pStudioModel);
-	}
+	// Create a new model instance (otherwise all models animate in the same way!)
+	m_pStudioModel = CStudioModelCache::CreateModel( pFrom->GetModelName() );
 
 	m_Angles = pFrom->m_Angles;
 	m_Skin = pFrom->m_Skin;
+	m_BodyGroup = pFrom->m_BodyGroup;
 	m_bOrientedBounds = pFrom->m_bOrientedBounds;
 	m_bReversePitch = pFrom->m_bReversePitch;
 	m_bPitchSet = pFrom->m_bPitchSet;
 	m_flPitch = pFrom->m_flPitch;
 
-	m_bScreenSpaceFade = pFrom->m_bScreenSpaceFade;
 	m_flFadeScale = pFrom->m_flFadeScale;
 	m_flFadeMinDist = pFrom->m_flFadeMinDist;
 	m_flFadeMaxDist = pFrom->m_flFadeMaxDist;
+	m_ModelRenderColor = pFrom->m_ModelRenderColor;
 	m_iSolid = pFrom->m_iSolid;
 
 	return(this);
@@ -294,8 +295,9 @@ void CMapStudioModel::Initialize(void)
 	m_bReversePitch = false;
 	m_pStudioModel = NULL;
 	m_Skin = 0;
+	m_BodyGroup = 0;
+	m_ModelRenderColor.SetColor( 255, 255, 255, 255 );
 
-	m_bScreenSpaceFade = false;
 	m_flFadeScale = 1.0f;
 	m_flFadeMinDist = 0.0f;
 	m_flFadeMaxDist = 0.0f;
@@ -327,6 +329,11 @@ void CMapStudioModel::OnParentKeyChanged(const char* szKey, const char* szValue)
 		m_Skin = atoi(szValue);
 		PostUpdate(Notify_Changed);
 	}
+	else if (!stricmp(szKey, "body"))
+	{
+		m_BodyGroup = atoi(szValue);
+		PostUpdate(Notify_Changed);
+	}
 	else if (!stricmp(szKey, "fademindist"))
 	{
 		m_flFadeMinDist = atoi(szValue);
@@ -335,13 +342,23 @@ void CMapStudioModel::OnParentKeyChanged(const char* szKey, const char* szValue)
 	{
 		m_flFadeMaxDist = atoi(szValue);
 	}
-	else if (!stricmp(szKey, "screenspacefade"))
-	{
-		m_bScreenSpaceFade = (atoi(szValue) != 0);
-	}
 	else if (!stricmp(szKey, "fadescale"))
 	{
 		m_flFadeScale = atof(szValue);
+	}
+	else if (!stricmp(szKey, "rendercolor"))
+	{
+		int r, g, b;
+		sscanf(szValue, "%d %d %d", &r, &g, &b);
+		m_ModelRenderColor.SetColor( r, g, b, 255 );
+	}
+	else if (!stricmp(szKey, "defaultanim"))
+	{
+		int nSequence = GetSequenceIndex( szValue );
+		if ( nSequence != -1 )
+		{
+			m_pStudioModel->SetSequence( nSequence );
+		}
 	}
 	else if ( !stricmp( szKey, "solid") )
 	{
@@ -481,8 +498,9 @@ void CMapStudioModel::Render2D(CRender2D *pRender)
 		m_pStudioModel->SetAngles(vecAngles);
 		m_pStudioModel->SetOrigin(m_Origin[0], m_Origin[1], m_Origin[2]);
 		m_pStudioModel->SetSkin(m_Skin);
+		m_pStudioModel->SetBodygroups( m_BodyGroup );
 
-		if ( GetSelectionState() == SELECT_NORMAL || ( pRender->IsInLocalTransformMode() && pRender->GetInstanceRendering() == false ) )
+		if ( GetSelectionState()==SELECT_NORMAL || pRender->IsInLocalTransformMode() )
 		{
  			// draw textured model half translucent
 			m_pStudioModel->DrawModel2D(pRender, 0.6 , false );
@@ -511,7 +529,7 @@ void CMapStudioModel::Render2D(CRender2D *pRender)
 
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
-inline float CMapStudioModel::ComputeDistanceFade( CRender3D *pRender ) const
+float CMapStudioModel::ComputeDistanceFade( CRender3D *pRender )
 {
 	Vector vecViewPos;
 	pRender->GetCamera()->GetViewPoint( vecViewPos );
@@ -524,13 +542,17 @@ inline float CMapStudioModel::ComputeDistanceFade( CRender3D *pRender ) const
 
 	if (flMin < 0)
 	{
-		flMin = 0;
+		flMin = flMax + flMin;
+		if( flMin < 0 )
+		{
+			flMin = 0;
+		}
 	}
 
 	float alpha = 1.0f;
 	if (flMax > 0)
 	{
-		float flDist = vecDelta.Length();
+		float flDist = vecDelta.Length() * g_aFadeData[Options.view3d.nFadeMode].m_flFadeDistScale;
 		if ( flDist > flMax )
 		{
 			alpha = 0.0f;
@@ -544,30 +566,136 @@ inline float CMapStudioModel::ComputeDistanceFade( CRender3D *pRender ) const
 	return alpha;
 }
 
+//-----------------------------------------------------------------------------
+// Computes fade from screen-space fading
+//-----------------------------------------------------------------------------
+float CMapStudioModel::ComputeScreenFadeInternal( CRender3D *pRender, float flMinSize, float flMaxSize )
+{
+	float flRadius = GetBoundingRadius();
+	float flPixelWidth = pRender->ComputePixelWidthOfSphere( m_Origin, flRadius );
+
+	float flAlpha = 0.0f;
+	if ( flPixelWidth > flMinSize )
+	{
+		if ( ( flMaxSize >= 0 ) && ( flPixelWidth < flMaxSize ) )
+		{
+			if ( flMaxSize != flMinSize )
+			{
+				flAlpha = ( flPixelWidth - flMinSize ) / ( flMaxSize - flMinSize );
+				flAlpha = clamp( flAlpha, 0.0f, 1.0f );
+			}
+			else
+			{
+				flAlpha = 0.0f;
+			}
+		}
+		else
+		{
+			flAlpha = 1.0f;
+		}
+	}
+
+	return flAlpha;
+}
 
 //-----------------------------------------------------------------------------
 // Computes fade alpha based on distance fade + screen fade
 //-----------------------------------------------------------------------------
-inline float CMapStudioModel::ComputeScreenFade( CRender3D *pRender ) const
+float CMapStudioModel::ComputeScreenFade( CRender3D *pRender )
 {
 	return 1.0;
 }
 
-
 //-----------------------------------------------------------------------------
+// Computes fade alpha based on distance fade + screen fade
 //-----------------------------------------------------------------------------
-inline float CMapStudioModel::ComputeFade( CRender3D *pRender ) const
+float CMapStudioModel::ComputeScreenFade( CRender3D *pRender, float flMinSize, float flMaxSize )
 {
-	if ( m_bScreenSpaceFade )
-	{
-		return ComputeScreenFade( pRender );
-	}
-	else
-	{
-		return ComputeDistanceFade( pRender );
-	}
+	CCamera *pCamera = pRender->GetCamera();
+	if ( !pCamera )
+		return 1.0f;
+
+	int nWidth, nHeight;
+	pCamera->GetViewPort( nWidth, nHeight );
+
+	float flScale = static_cast<float>( nWidth ) / g_aFadeData[Options.view3d.nFadeMode].m_flWidth;
+	float flMin = flMinSize * flScale;
+	float flMax = flMaxSize * flScale;
+
+	return ComputeScreenFadeInternal( pRender, flMin, flMax );
 }
 
+//-----------------------------------------------------------------------------
+// Purpose:
+//-----------------------------------------------------------------------------
+float CMapStudioModel::ComputeLevelFade( CRender3D *pRender )
+{
+	float flAlpha = 1.0f;
+	CMapDoc *pDoc = CMapDoc::GetActiveMapDoc();
+	if ( pDoc )
+	{
+		CMapWorld *pWorld = pDoc->GetMapWorld(); 
+		if ( pWorld )	
+		{
+			// Note this isn't a bug here - look at the fgd.cfg!
+			const char *pszValueMin = pWorld->GetKeyValue( "maxpropscreenwidth" );
+			const char *pszValueMax = pWorld->GetKeyValue( "minpropscreenwidth" );
+			if ( pszValueMin && pszValueMax )
+			{
+				float flMin = atof( pszValueMin );
+				float flMax = atof( pszValueMax );
+				flAlpha = ComputeScreenFade( pRender, flMin, flMax );
+			}
+		}
+	}
+
+	return flAlpha;
+}
+
+//-----------------------------------------------------------------------------
+// Purpose:
+//-----------------------------------------------------------------------------
+float CMapStudioModel::ComputeFade( CRender3D *pRender )
+{
+	// Don't fade no matter what!
+	if ( m_flFadeScale == 0.0f )
+		return 1.0f;
+
+	// Are we forcing a low or medium level fade?
+	bool bForceFade = ( Options.view3d.nFadeMode == FADE_MODE_LOW || Options.view3d.nFadeMode == FADE_MODE_MED ||
+		Options.view3d.nFadeMode == FADE_MODE_360 || Options.view3d.nFadeMode == FADE_MODE_LEVEL );
+
+	// Do we have any distance fade parameters?
+	bool bCanFade = ( m_flFadeMaxDist != 0.0f );
+
+	// Do we need to fade?
+	if ( !bForceFade && !bCanFade )
+		return 1.0f;
+
+	// Calculate the screen or distance fade.
+	float flAlpha = 1.0f;
+	if ( bCanFade )
+	{
+		flAlpha = ComputeDistanceFade( pRender );
+	}
+
+	// Calculate the medium/low fades.
+	float flForceAlpha = 1.0f;
+	if ( bForceFade )
+	{
+		float flLevelAlpha = ComputeLevelFade( pRender );
+		flForceAlpha = ComputeScreenFade( pRender, g_aFadeData[Options.view3d.nFadeMode].m_flPixelMin, g_aFadeData[Options.view3d.nFadeMode].m_flPixelMax ); 
+		if ( flLevelAlpha < flForceAlpha )
+		{
+			flForceAlpha = flLevelAlpha;
+		}
+	}
+
+	if ( flAlpha < flForceAlpha )
+		return flAlpha;
+	else
+		return flForceAlpha;
+}
 
 //-----------------------------------------------------------------------------
 // Purpose: Renders the studio model in the 3D views.
@@ -645,6 +773,7 @@ void CMapStudioModel::Render3D(CRender3D *pRender)
 			m_pStudioModel->SetAngles(vecAngles);
 			m_pStudioModel->SetOrigin(m_Origin[0], m_Origin[1], m_Origin[2]);
 			m_pStudioModel->SetSkin(m_Skin);
+			m_pStudioModel->SetBodygroups( m_BodyGroup );
 
 			float flAlpha = 1.0;
 			if ( Options.view3d.bPreviewModelFade )
@@ -658,7 +787,7 @@ void CMapStudioModel::Render3D(CRender3D *pRender)
 				bWireframe = true;
 
 			pRender->BeginRenderHitTarget(this);
-			m_pStudioModel->DrawModel3D(pRender, flAlpha, bWireframe );
+			m_pStudioModel->DrawModel3D(pRender, m_ModelRenderColor, flAlpha, bWireframe );
 			pRender->EndRenderHitTarget();
 
 			if (IsSelected())
@@ -821,14 +950,21 @@ int CMapStudioModel::GetFrame(void)
 	return 0;
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+int CMapStudioModel::GetMaxFrame(void)
+{
+	return m_pStudioModel->GetMaxFrame();
+}
 
 //-----------------------------------------------------------------------------
 // Purpose: 
 // Input  : nFrame - 
 //-----------------------------------------------------------------------------
-void CMapStudioModel::SetFrame(int nFrame)
+void CMapStudioModel::SetFrame( int nFrame )
 {
-	// TODO:
+	m_pStudioModel->SetFrame( nFrame );
 }
 
 
@@ -901,4 +1037,25 @@ int CMapStudioModel::GetSequenceIndex( const char *pSequenceName ) const
 	}
 
 	return -1;
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: Calculate the bounding radius of the studio model.
+//-----------------------------------------------------------------------------
+float CMapStudioModel::GetBoundingRadius( void )
+{
+	Vector vecMin, vecMax;
+	GetCullBox( vecMin, vecMax );
+	return ( vecMin.DistTo( vecMax ) * 0.5f );
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+const char *CMapStudioModel::GetModelName( void )
+{
+	if ( m_pStudioModel == NULL )
+		return NULL;
+
+	return m_pStudioModel->GetModelName();
 }

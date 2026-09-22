@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -31,7 +31,7 @@
 #define IDC_AB_RENAMEGROUPSTART				1400
 #define IDC_AB_RENAMEGROUPEND				1499
 
-#define COLOR_TRAYBACKGROUND		RGB( 240, 240, 220 )
+#define COLOR_TRAYBACKGROUND		Color( 240, 240, 220 )
 
 #include "faceposertoolwindow.h"
 #include "StudioModel.h"
@@ -122,7 +122,7 @@ private: // Methods
 	void				DrawThumbNail( int sequence, CChoreoWidgetDrawHelper& helper, 
 							int rcx, int rcy, int rcw, int rch );
 
-	void				DrawSequenceFocusRect( CChoreoWidgetDrawHelper& helper, int x, int y, int w, int h, COLORREF clr );
+	void				DrawSequenceFocusRect( CChoreoWidgetDrawHelper& helper, int x, int y, int w, int h, const Color& clr );
 	void				DrawSequenceDescription( CChoreoWidgetDrawHelper& helper, int x, int y, int w, int h, int sequence, mstudioseqdesc_t &seqdesc );
 
 	void				DrawFocusRect( void );

@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright (c), Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -21,135 +21,16 @@
 
 #ifdef IS_WINDOWS_PC
 #include <windows.h>
-#else
-#include <sys/stat.h>
-#include <dirent.h>
-#include <unistd.h>
 #endif
+#include "keyvalues.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
 
 
-static bool PackedStoreStatFile( const char *pszPath, int64 *pSize )
-{
-#ifdef IS_WINDOWS_PC
-	WIN32_FILE_ATTRIBUTE_DATA fad;
-	if ( !GetFileAttributesEx( pszPath, GetFileExInfoStandard, &fad ) )
-		return false;
-	if ( fad.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY )
-		return false;
-	if ( pSize )
-	{
-		*pSize = ( ( (int64)fad.nFileSizeHigh ) << 32 ) | fad.nFileSizeLow;
-	}
-	return true;
-#else
-	struct stat st;
-	if ( stat( pszPath, &st ) != 0 )
-		return false;
-	if ( !S_ISREG( st.st_mode ) )
-		return false;
-	if ( pSize )
-		*pSize = st.st_size;
-	return true;
-#endif
-}
-
-#ifndef IS_WINDOWS_PC
-static bool PackedStoreFindCaseInsensitive( const char *pszPath, char *pszOut, int nOut )
-{
-	int64 nSize = 0;
-	if ( PackedStoreStatFile( pszPath, &nSize ) )
-	{
-		V_strncpy( pszOut, pszPath, nOut );
-		return true;
-	}
-
-	char szDir[MAX_PATH];
-	V_ExtractFilePath( pszPath, szDir, sizeof( szDir ) );
-	const char *pszName = V_UnqualifiedFileName( pszPath );
-	if ( !pszName || !pszName[0] )
-		return false;
-
-	DIR *pDir = opendir( szDir[0] ? szDir : "." );
-	if ( !pDir )
-		return false;
-
-	bool bFound = false;
-	struct dirent *pEnt;
-	while ( ( pEnt = readdir( pDir ) ) != NULL )
-	{
-		if ( V_stricmp( pEnt->d_name, pszName ) != 0 )
-			continue;
-		V_ComposeFileName( szDir, pEnt->d_name, pszOut, nOut );
-		bFound = PackedStoreStatFile( pszOut, &nSize );
-		break;
-	}
-	closedir( pDir );
-	return bFound;
-}
-#endif
-
-static void PackedStoreCloseNativeHandle( PackDataFileHandle_t h )
-{
-	if ( h == PACKEDSTORE_INVALID_HANDLE )
-		return;
-#ifdef IS_WINDOWS_PC
-	CloseHandle( h );
-#else
-	fclose( h );
-#endif
-}
-
-static PackDataFileHandle_t PackedStoreOpenNativeHandle( const char *pszPath )
-{
-#ifdef IS_WINDOWS_PC
-	return CreateFile( pszPath, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL );
-#else
-	return fopen( pszPath, "rb" );
-#endif
-}
-
-static int PackedStoreNativeRead( PackDataFileHandle_t h, void *pOut, int nBytes )
-{
-#ifdef IS_WINDOWS_PC
-	DWORD nRead = 0;
-	ReadFile( h, pOut, nBytes, &nRead, NULL );
-	return (int)nRead;
-#else
-	return (int)fread( pOut, 1, nBytes, h );
-#endif
-}
-
-static void PackedStoreNativeSeek( PackDataFileHandle_t h, int nPos )
-{
-#ifdef IS_WINDOWS_PC
-	SetFilePointer( h, nPos, NULL, FILE_BEGIN );
-#else
-	fseek( h, nPos, SEEK_SET );
-#endif
-}
-
-static unsigned int PackedStoreNativeSize( PackDataFileHandle_t h )
-{
-#ifdef IS_WINDOWS_PC
-	return GetFileSize( h, NULL );
-#else
-	long nCur = ftell( h );
-	fseek( h, 0, SEEK_END );
-	long nEnd = ftell( h );
-	fseek( h, nCur, SEEK_SET );
-	if ( nEnd < 0 )
-		return 0;
-	return (unsigned int)nEnd;
-#endif
-}
-
-
 typedef uint16 PackFileIndex_t;
 #define PACKFILEINDEX_END 0xffff
-const uint16 packedfileindex_end = 0xffff;
+
 
 #pragma pack(1)
 struct CFilePartDescr
@@ -240,12 +121,9 @@ static int SkipFile( char const * &pData )					// returns highest file index
 	int nHighestChunkIndex = -1;
 	pData += 1 + V_strlen( pData );
 	pData += sizeof( uint32 );
-
-	uint16 nMetaDataSize;
-	Q_memcpy( &nMetaDataSize, pData, sizeof( uint16 ) );
-
+	int nMetaDataSize = *(reinterpret_cast<uint16 const *>( pData ) );
 	pData += sizeof( uint16 );
-	while ( Q_memcmp( pData, &packedfileindex_end, sizeof( packedfileindex_end ) ) != 0 )
+	while ( *( ( PackFileIndex_t const *) pData ) != PACKFILEINDEX_END )
 	{
 		int nIdx = reinterpret_cast<CFilePartDescr const *>(pData)->m_nFileNumber;
 
@@ -331,15 +209,12 @@ CFilePartDescr const *CFileHeaderFixedData::FileData( int nPart ) const
 void CPackedStore::Init( void )
 {
 	m_nHighestChunkFileIndex = -1;
-	m_nMissingChunkFileCount = 0;
 	m_bUseDirFile = false;
 	m_pszFileBaseName[0] = 0;
 	m_pszFullPathName[0] = 0;
 	memset( m_pExtensionData, 0, sizeof( m_pExtensionData ) );
 	m_nDirectoryDataSize = 0;
 	m_nWriteChunkSize = k_nVPKDefaultChunkSize;
-	m_bChunkFileMissing.RemoveAll();
-	m_ResolvedChunkFileNames.RemoveAll();
 
 	m_nSizeOfSignedData = 0;
 	m_Signature.Purge();
@@ -375,85 +250,6 @@ void CPackedStore::BuildHashTables( void )
 		}
 		// step past \0
 		pData++;
-	}
-	ValidateChunkFiles();
-}
-
-void CPackedStore::BuildDefaultDataFileName( char *pchFileNameOut, int cchFileNameOut, int nFileNumber ) const
-{
-	if ( nFileNumber == VPKFILENUMBER_EMBEDDED_IN_DIR_FILE )
-	{
-		if ( m_bUseDirFile )
-		{
-			V_snprintf( pchFileNameOut, cchFileNameOut, "%s_dir.vpk", m_pszFileBaseName );
-		}
-		else
-		{
-			V_snprintf( pchFileNameOut, cchFileNameOut, "%s.vpk", m_pszFileBaseName );
-		}
-	}
-	else
-	{
-		V_snprintf( pchFileNameOut, cchFileNameOut, "%s_%03d.vpk", m_pszFileBaseName, nFileNumber );
-	}
-}
-
-bool CPackedStore::IsChunkFileMissing( int nFileNumber ) const
-{
-	if ( nFileNumber == VPKFILENUMBER_EMBEDDED_IN_DIR_FILE )
-		return false;
-	if ( nFileNumber < 0 || nFileNumber >= m_bChunkFileMissing.Count() )
-		return false;
-	return m_bChunkFileMissing[nFileNumber] != 0;
-}
-
-void CPackedStore::ValidateChunkFiles( void )
-{
-	m_nMissingChunkFileCount = 0;
-	m_bChunkFileMissing.RemoveAll();
-	m_ResolvedChunkFileNames.RemoveAll();
-	if ( m_nHighestChunkFileIndex < 0 )
-		return;
-
-	m_bChunkFileMissing.SetCount( m_nHighestChunkFileIndex + 1 );
-	m_ResolvedChunkFileNames.SetCount( m_nHighestChunkFileIndex + 1 );
-	memset( m_bChunkFileMissing.Base(), 0, m_bChunkFileMissing.Count() * sizeof( uint8 ) );
-
-	for ( int i = 0; i <= m_nHighestChunkFileIndex; i++ )
-	{
-		char szName[MAX_PATH];
-		char szResolved[MAX_PATH];
-		BuildDefaultDataFileName( szName, sizeof( szName ), i );
-
-		int64 nSize = 0;
-		bool bOk = false;
-#ifdef IS_WINDOWS_PC
-		bOk = PackedStoreStatFile( szName, &nSize );
-		if ( bOk )
-			V_strncpy( szResolved, szName, sizeof( szResolved ) );
-#else
-		bOk = PackedStoreFindCaseInsensitive( szName, szResolved, sizeof( szResolved ) );
-		if ( bOk )
-			PackedStoreStatFile( szResolved, &nSize );
-#endif
-		if ( !bOk || nSize <= 0 )
-		{
-			m_bChunkFileMissing[i] = 1;
-			m_nMissingChunkFileCount++;
-			Warning( "VPK: missing or empty chunk file %s (needed by %s_dir.vpk). Maps may still load; materials/models stored in this chunk will be error textures.\n",
-				szName, m_pszFileBaseName );
-		}
-		else
-		{
-			m_ResolvedChunkFileNames[i] = szResolved;
-		}
-	}
-
-	if ( m_nMissingChunkFileCount > 0 )
-	{
-		Warning( "VPK: %s is incomplete (%d/%d chunk files missing). Copy every workshop_000.vpk / workshop_001.vpk / ... next to the dir file.\n",
-			m_pszFullPathName[0] ? m_pszFullPathName : m_pszFileBaseName,
-			m_nMissingChunkFileCount, m_nHighestChunkFileIndex + 1 );
 	}
 }
 
@@ -543,6 +339,9 @@ CPackedStore::CPackedStore( char const *pFileBasename, char *pszFName, IBaseFile
 			uint32 nSizeOfHeader = dirFile.Tell();
 			int nSize = dirHeader.m_nDirectorySize;
 			m_nDirectoryDataSize = dirHeader.m_nDirectorySize;
+			// Flush out the existing allocation so that we allocate exactly the right size.
+			// This saves about 3 MB of address space currently (5.1 MB was rounded up to 8 MB).
+			m_DirectoryData.Purge();
 			m_DirectoryData.SetCount( nSize );
 			dirFile.MustRead( DirectoryData(), nSize );
 			// now, if we are opening for write, read the entire contents of the embedded data chunk in the dir into ram
@@ -604,7 +403,7 @@ CPackedStore::CPackedStore( char const *pFileBasename, char *pszFName, IBaseFile
 			if ( dirHeader.m_nSignatureSize != 0 )
 			{
 
-				// Everything immediately proceeding it should have been signed.
+				// Everything immediately proceeeding it should have been signed.
 				m_nSizeOfSignedData = dirFile.Tell();
 				uint32 nExpectedSignedSize = nSizeOfHeader + dirHeader.ComputeSizeofSignedDataAfterHeader();
 				if ( m_nSizeOfSignedData != nExpectedSignedSize )
@@ -636,16 +435,22 @@ CPackedStore::CPackedStore( char const *pFileBasename, char *pszFName, IBaseFile
 
 void CPackedStore::GetDataFileName( char *pchFileNameOut, int cchFileNameOut, int nFileNumber ) const
 {
-	if ( nFileNumber != VPKFILENUMBER_EMBEDDED_IN_DIR_FILE &&
-		 nFileNumber >= 0 &&
-		 nFileNumber < m_ResolvedChunkFileNames.Count() &&
-		 !m_ResolvedChunkFileNames[nFileNumber].IsEmpty() )
+	if ( nFileNumber == VPKFILENUMBER_EMBEDDED_IN_DIR_FILE )
 	{
-		V_strncpy( pchFileNameOut, m_ResolvedChunkFileNames[nFileNumber].Get(), cchFileNameOut );
-		return;
+		if ( m_bUseDirFile )
+		{
+			V_snprintf( pchFileNameOut, cchFileNameOut, "%s_dir.vpk", m_pszFileBaseName );
+		}
+		else
+		{
+			V_snprintf( pchFileNameOut, cchFileNameOut, "%s.vpk", m_pszFileBaseName );
+		}
+	}
+	else
+	{
+		V_snprintf( pchFileNameOut, cchFileNameOut, "%s_%03d.vpk", m_pszFileBaseName, nFileNumber );
 	}
 
-	BuildDefaultDataFileName( pchFileNameOut, cchFileNameOut, nFileNumber );
 }
 
 CPackedStore::~CPackedStore( void )
@@ -659,18 +464,21 @@ CPackedStore::~CPackedStore( void )
 	{
 		if ( m_FileHandles[i].m_nFileNumber != -1 )
 		{
-			PackedStoreCloseNativeHandle( m_FileHandles[i].m_hFileHandle );
-			m_FileHandles[i].m_hFileHandle = PACKEDSTORE_INVALID_HANDLE;
-			m_FileHandles[i].m_nFileNumber = -1;
+#ifdef IS_WINDOWS_PC
+			CloseHandle( m_FileHandles[i].m_hFileHandle );
+#else
+			m_pFileSystem->Close( m_FileHandles[i].m_hFileHandle );
+#endif
+
 		}
 	}
 
 	// Free the FindFirst cache data
-	m_directoryList.PurgeAndDeleteElementsArray();
+	m_directoryList.PurgeAndDeleteElements();
 
 	FOR_EACH_MAP( m_dirContents, i )
 	{
-		m_dirContents[i]->PurgeAndDeleteElementsArray();
+		m_dirContents[i]->PurgeAndDeleteElements();
 		delete m_dirContents[i];
 	}
 }
@@ -695,7 +503,7 @@ void SplitFileComponents( char const *pFileName, char *pDirOut, char *pBaseOut, 
 
 	if ( !pDirOut[0] )
 		strcpy( pDirOut, " " );								// blank dir name
-	V_strncpy( pBaseOut, V_UnqualifiedFileName( pFileName ), MAX_PATH );
+	V_strcpy( pBaseOut, V_UnqualifiedFileName( pFileName ) );
 	char *pDot = strrchr( pBaseOut, '.' );
 	if ( pDot )
 	{
@@ -778,18 +586,7 @@ CPackedStoreFileHandle CPackedStore::OpenFile( char const *pFileName )
 	
 	if ( pHeader )
 	{
-		int nChunk = pHeader->m_PartDescriptors[0].m_nFileNumber;
-		uint32 nChunkDataSize = pHeader->m_PartDescriptors[0].m_nFileDataSize;
-		// Catalog entry exists even if the chunk payload is missing. Refuse files whose
-		// body lives in a missing chunk so FileExists/Open can fall through to another path
-		// instead of returning a truncated VTF that becomes an error texture.
-		if ( nChunkDataSize > 0 && IsChunkFileMissing( nChunk ) )
-		{
-			ret.m_nFileNumber = -1;
-			ret.m_pOwner = NULL;
-			return ret;
-		}
-		ret.m_nFileNumber = nChunk;
+		ret.m_nFileNumber = pHeader->m_PartDescriptors[0].m_nFileNumber;
 		ret.m_nFileOffset = pHeader->m_PartDescriptors[0].m_nFileDataOffset;
 		ret.m_nFileSize = pHeader->m_PartDescriptors[0].m_nFileDataSize + pHeader->m_nMetaDataSize;
 		ret.m_nCurrentFileOffset = 0;
@@ -838,10 +635,13 @@ void CPackedStore::Write( void )
 
 	// Do we plan on signing this thing and writing a signature?
 	m_Signature.Purge();
+	#ifdef VPK_ENABLE_SIGNING
+		uint32 nExpectedSignatureSize = 0;
+	#endif
 	if ( m_SignaturePrivateKey.Count() > 0 && m_SignaturePublicKey.Count() > 0 )
 	{
 		#ifdef VPK_ENABLE_SIGNING
-			uint32 nExpectedSignatureSize = k_cubRSASignature;
+			nExpectedSignatureSize = k_cubRSASignature;
 			headerOut.m_nSignatureSize = sizeof(uint32) + m_SignaturePublicKey.Count() + sizeof(uint32) + nExpectedSignatureSize;
 		#else
 			Error( "VPK signing not implemented" );
@@ -1035,12 +835,16 @@ CPackedStoreReadCache::CPackedStoreReadCache( IBaseFileSystem *pFS ):m_treeCache
 	m_cFileErrors = 0;
 	m_cFileErrorsCorrected = 0;
 	m_cFileResultsDifferent = 0;
-	m_pFileTracker = NULL;
 }
 
 // check if the read request can be satisfied from the read cache we have in 1MB chunks
 bool CPackedStoreReadCache::BCanSatisfyFromReadCache( uint8 *pOutData, CPackedStoreFileHandle &handle, FileHandleTracker_t &fHandle, int nDesiredPos, int nNumBytes, int &nRead )
 {
+#ifdef DEDICATED
+	// Never use the read cache on dedicated servers. This saves memory. We rely
+	// on the OS disk cache which will be shared by all server processes.
+	return false;
+#else
 	nRead = 0;
 	int nFileFraction = nDesiredPos & k_nCacheBufferMask;
 	int nOffset = nDesiredPos - nFileFraction;
@@ -1067,61 +871,54 @@ bool CPackedStoreReadCache::BCanSatisfyFromReadCache( uint8 *pOutData, CPackedSt
 			cubReadChunk = k_cubCacheBufferSize;
 	}
 	return true;
+#endif
 }
 
 
 // read a single line into the cache
-bool CPackedStoreReadCache::ReadCacheLine( FileHandleTracker_t &fHandle, CachedVPKRead_t &cachedVPKRead )
+bool CPackedStoreReadCache::ReadCacheLine( FileHandleTracker_t &fHandle, CachedVPKRead_t &cachedVPKRead, int &nRead )
 {
-	cachedVPKRead.m_cubBuffer = 0;
-	if ( !fHandle.IsValid() )
-		return false;
+#ifdef IS_WINDOWS_PC
 	if ( cachedVPKRead.m_nFileFraction != fHandle.m_nCurOfs )
-		PackedStoreNativeSeek( fHandle.m_hFileHandle, cachedVPKRead.m_nFileFraction );
-	cachedVPKRead.m_cubBuffer = PackedStoreNativeRead( fHandle.m_hFileHandle, cachedVPKRead.m_pubBuffer, k_cubCacheBufferSize );
-	PackedStoreNativeSeek( fHandle.m_hFileHandle, fHandle.m_nCurOfs );
-	Assert( cachedVPKRead.m_hMD5RequestHandle == 0 );
-	if ( m_pFileTracker ) // file tracker doesn't exist in the VPK command line tool
-	{
-		cachedVPKRead.m_hMD5RequestHandle = m_pFileTracker->SubmitThreadedMD5Request( cachedVPKRead.m_pubBuffer, cachedVPKRead.m_cubBuffer, m_pPackedStore->m_PackFileID, cachedVPKRead.m_nPackFileNumber, cachedVPKRead.m_nFileFraction );
-	}
-	return cachedVPKRead.m_cubBuffer > 0;
+		SetFilePointer ( fHandle.m_hFileHandle, cachedVPKRead.m_nFileFraction, NULL,  FILE_BEGIN); 
+	ReadFile( fHandle.m_hFileHandle, cachedVPKRead.m_pubBuffer, k_cubCacheBufferSize, (LPDWORD) &nRead, NULL );
+	SetFilePointer ( fHandle.m_hFileHandle, fHandle.m_nCurOfs, NULL,  FILE_BEGIN); 
+#else
+	m_pFileSystem->Seek( fHandle.m_hFileHandle, cachedVPKRead.m_nFileFraction, FILESYSTEM_SEEK_HEAD );
+	nRead = m_pFileSystem->Read( cachedVPKRead.m_pubBuffer, 1024*1024, fHandle.m_hFileHandle );
+	m_pFileSystem->Seek( fHandle.m_hFileHandle, fHandle.m_nCurOfs, FILESYSTEM_SEEK_HEAD );
+#endif
+	cachedVPKRead.m_cubBuffer = nRead;
+	cachedVPKRead.m_hMD5RequestHandle = m_pFileTracker->SubmitThreadedMD5Request( cachedVPKRead.m_pubBuffer, cachedVPKRead.m_cubBuffer, m_pPackedStore->m_PackFileID, cachedVPKRead.m_nPackFileNumber, cachedVPKRead.m_nFileFraction );
+	return true;
 }
 
 
 // check if the MD5 matches
-bool CPackedStoreReadCache::CheckMd5Result( CachedVPKRead_t &cachedVPKRead )
+bool CPackedStoreReadCache::CheckMd5Result( CachedVPKRead_t &cachedVPKRead, MD5Value_t &md5Value )
 {
 	ChunkHashFraction_t chunkHashFraction;
 	if ( !m_pPackedStore->FindFileHashFraction( cachedVPKRead.m_nPackFileNumber, cachedVPKRead.m_nFileFraction, chunkHashFraction ) )
 		return true;
 
-	if ( Q_memcmp( &cachedVPKRead.m_md5Value, &chunkHashFraction.m_md5contents, sizeof( MD5Value_t ) ) != 0	)
+	if ( cachedVPKRead.m_cFailedHashes > 0 )
 	{
-		char szFilename[ 512 ];
-		m_pPackedStore->GetDataFileName( szFilename, sizeof(szFilename), cachedVPKRead.m_nPackFileNumber );
+		if ( Q_memcmp( &md5Value, &cachedVPKRead.m_md5Value, sizeof( MD5Value_t ) ) != 0 )
+			m_cFileResultsDifferent++;
+	}
+	if ( cachedVPKRead.m_cFailedHashes == 0 )
+		Q_memcpy( &cachedVPKRead.m_md5Value, &md5Value, sizeof( MD5Value_t ) );
+	else
+		Q_memcpy( &cachedVPKRead.m_md5ValueRetry, &md5Value, sizeof( MD5Value_t ) );
 
-		char szCalculated[ MD5_DIGEST_LENGTH*2 + 4 ];
-		char szExpected[ MD5_DIGEST_LENGTH*2 + 4 ];
-		V_binarytohex( cachedVPKRead.m_md5Value.bits, MD5_DIGEST_LENGTH, szCalculated, sizeof(szCalculated) );
-		V_binarytohex( chunkHashFraction.m_md5contents.bits, MD5_DIGEST_LENGTH, szExpected, sizeof(szExpected) );
-
-		Warning(
-			"Corruption detected in %s\n"
-			"\n"
-			"Try verifying the integrity of your game cache.\n"
-			"https://support.steampowered.com/kb_article.php?ref=2037-QEUH-3335"
-			"\n"
-			"Offset %d, expected %s, got %s\n",
-			szFilename,
-			cachedVPKRead.m_nFileFraction, szExpected, szCalculated
-		);
-
+	if ( Q_memcmp( &md5Value, &chunkHashFraction.m_md5contents, sizeof( MD5Value_t ) ) != 0	)
+	{
 		// we got an error reading this chunk, record the error
 		m_cFileErrors++;
 		cachedVPKRead.m_cFailedHashes++;
-		// give a copy to the fail whale
-		//m_queueCachedVPKReadsRetry.PushItem( cachedVPKRead );
+		// give a copy to the fail whale - ONLY the first time, we only want to retry once
+		if ( cachedVPKRead.m_cFailedHashes == 1 )
+			m_queueCachedVPKReadsRetry.PushItem( cachedVPKRead );
 		return false;
 	}
 	if ( cachedVPKRead.m_cFailedHashes > 0 )
@@ -1151,12 +948,13 @@ int CPackedStoreReadCache::FindBufferToUse()
 		if ( m_treeCachedVPKRead[idxCurrent].m_hMD5RequestHandle )
 		{
 			CachedVPKRead_t &cachedVPKRead = m_treeCachedVPKRead[idxCurrent];
-			if ( m_pFileTracker->IsMD5RequestComplete( cachedVPKRead.m_hMD5RequestHandle, &cachedVPKRead.m_md5Value ) )
+			MD5Value_t md5Value;
+			if ( m_pFileTracker->IsMD5RequestComplete( cachedVPKRead.m_hMD5RequestHandle, &md5Value ) )
 			{
 				// if it is done, check the results
 				cachedVPKRead.m_hMD5RequestHandle = 0;
 				// if we got bad data - stop looking, just use this one
-				if ( !CheckMd5Result( cachedVPKRead ) )
+				if ( !CheckMd5Result( cachedVPKRead, md5Value ) )
 					return i;
 			}
 		}
@@ -1166,10 +964,11 @@ int CPackedStoreReadCache::FindBufferToUse()
 	if ( m_treeCachedVPKRead[idxToRemove].m_hMD5RequestHandle )
 	{
 		CachedVPKRead_t &cachedVPKRead = m_treeCachedVPKRead[idxToRemove];
-		m_pFileTracker->BlockUntilMD5RequestComplete( cachedVPKRead.m_hMD5RequestHandle, &cachedVPKRead.m_md5Value );
+		MD5Value_t md5Value;
+		m_pFileTracker->BlockUntilMD5RequestComplete( cachedVPKRead.m_hMD5RequestHandle, &md5Value );
 		m_treeCachedVPKRead[idxToRemove].m_hMD5RequestHandle = 0;
 		// make sure it matches what it is supposed to match
-		CheckMd5Result( cachedVPKRead );
+		CheckMd5Result( cachedVPKRead, md5Value );
 	}
 	return idxLRU;
 }
@@ -1178,101 +977,79 @@ int CPackedStoreReadCache::FindBufferToUse()
 // manage the cache
 bool CPackedStoreReadCache::BCanSatisfyFromReadCacheInternal( uint8 *pOutData, CPackedStoreFileHandle &handle, FileHandleTracker_t &fHandle, int nDesiredPos, int nNumBytes, int &nRead )
 {
+	bool bSuccess = false;
 	m_rwlock.LockForRead();
 	bool bLockedForWrite = false;
 
-	CachedVPKRead_t key;
-	key.m_nPackFileNumber = handle.m_nFileNumber;
-	key.m_nFileFraction = nDesiredPos & k_nCacheBufferMask;
-	int idxTrackedVPKFile = m_treeCachedVPKRead.Find( key );
-	if ( idxTrackedVPKFile == m_treeCachedVPKRead.InvalidIndex() || m_treeCachedVPKRead[idxTrackedVPKFile].m_pubBuffer == NULL )
+	CachedVPKRead_t cachedVPKRead;
+	cachedVPKRead.m_nPackFileNumber = handle.m_nFileNumber;
+	cachedVPKRead.m_nFileFraction = nDesiredPos & k_nCacheBufferMask;
+	int idxTrackedVPKFile = m_treeCachedVPKRead.Find( cachedVPKRead );
+	if ( idxTrackedVPKFile == m_treeCachedVPKRead.InvalidIndex() )
 	{
 		m_rwlock.UnlockRead();
 		m_rwlock.LockForWrite();
 		bLockedForWrite = true;
 		// if we didnt find it, we had to grab the write lock, it may have been added while we waited
-		idxTrackedVPKFile = m_treeCachedVPKRead.Find( key );
+		idxTrackedVPKFile = m_treeCachedVPKRead.Find( cachedVPKRead );
 	}
 	if ( idxTrackedVPKFile == m_treeCachedVPKRead.InvalidIndex() )
 	{
-		idxTrackedVPKFile = m_treeCachedVPKRead.Insert( key );
-	}
-
-	CachedVPKRead_t &cachedVPKRead = m_treeCachedVPKRead[idxTrackedVPKFile];
-
-	// Cache hit?
-	if ( cachedVPKRead.m_pubBuffer == NULL )
-	{
-
-		// We need to have it locked for write, because we're about to muck with these structures.
-		if ( !bLockedForWrite )
-		{
-			Assert( bLockedForWrite );
-			return false;
-		}
-
-		Assert( cachedVPKRead.m_idxLRU < 0 );
-
-		// Can we add another line to the cache, or should we reuse an existing one?
+		// if we are over our limit, remove one and reuse the buffer
+		cachedVPKRead.m_pubBuffer = NULL;
 		int idxLRU = -1;
+
 		if ( m_cItemsInCache >= k_nCacheBuffersToKeep )
 		{
-			// Need to kick out the LRU.
 			idxLRU = FindBufferToUse();
 			int idxToRemove = m_rgCurrentCacheIndex[idxLRU];
-			Assert( m_treeCachedVPKRead[idxToRemove].m_idxLRU == idxLRU );
-			Assert( m_treeCachedVPKRead[idxToRemove].m_pubBuffer != NULL );
 
-			// Transfer ownership of the buffer
 			cachedVPKRead.m_pubBuffer = m_treeCachedVPKRead[idxToRemove].m_pubBuffer;
 			m_treeCachedVPKRead[idxToRemove].m_pubBuffer = NULL;
-			m_treeCachedVPKRead[idxToRemove].m_cubBuffer = 0;
-			m_treeCachedVPKRead[idxToRemove].m_idxLRU = -1;
 			m_cDiscardsFromCache++;
 		}
 		else
 		{
-
-			// We can add a new one
 			idxLRU = m_cItemsInCache;
 			m_cItemsInCache++;
-			Assert( cachedVPKRead.m_pubBuffer == NULL );
 		}
-		m_rgCurrentCacheIndex[idxLRU] = idxTrackedVPKFile;
-		cachedVPKRead.m_idxLRU = idxLRU;
-
 		if ( cachedVPKRead.m_pubBuffer == NULL )
 		{
 			cachedVPKRead.m_pubBuffer = (uint8 *)malloc( k_cubCacheBufferSize );
-			if ( cachedVPKRead.m_pubBuffer == NULL )
-				Error( "Out of memory" );
 		}
-		ReadCacheLine( fHandle, cachedVPKRead );
+		cachedVPKRead.m_idxLRU = idxLRU;
+		ReadCacheLine( fHandle, cachedVPKRead, nRead );
+		idxTrackedVPKFile = m_treeCachedVPKRead.Insert( cachedVPKRead );
 		m_cAddedToCache++;
+
+		// this item is in the cache
+		m_rgCurrentCacheIndex[idxLRU] = idxTrackedVPKFile;
+		m_rgLastUsedTime[idxLRU] = Plat_MSTime();
 	}
 	else
 	{
-		Assert( cachedVPKRead.m_idxLRU >= 0 );
-		Assert( m_rgCurrentCacheIndex[cachedVPKRead.m_idxLRU] == idxTrackedVPKFile );
+		cachedVPKRead = m_treeCachedVPKRead[idxTrackedVPKFile];
+		if ( cachedVPKRead.m_pubBuffer == NULL )
+		{
+			// this chunk has been read, MD5ed, and then LRUd away
+			// we will not read it again, we fall back to normal file I/O
+			m_cCacheMiss ++;
+			m_cubCacheMiss += nNumBytes;
+			bSuccess = false;
+		}
+		else
+		{
+			m_cubReadFromCache += nNumBytes;
+			m_cReadFromCache ++;
+			m_rgLastUsedTime[m_treeCachedVPKRead[idxTrackedVPKFile].m_idxLRU] = Plat_MSTime();
+		}
 	}
-
-	// Assume no bytes will be satisfied from cache
-	bool bSuccess = false;
-	nRead = 0;
-
-	// Can we read at least one byte?
-	Assert( cachedVPKRead.m_nFileFraction <= nDesiredPos );
-	int nBufferEnd = cachedVPKRead.m_cubBuffer + cachedVPKRead.m_nFileFraction;
-	if ( cachedVPKRead.m_pubBuffer != NULL && nBufferEnd > nDesiredPos )
+	if ( cachedVPKRead.m_pubBuffer != NULL && cachedVPKRead.m_cubBuffer + cachedVPKRead.m_nFileFraction >= nDesiredPos+nNumBytes )
 	{
-		nRead = Min( nBufferEnd - nDesiredPos, nNumBytes );
 		int nOffset = nDesiredPos - cachedVPKRead.m_nFileFraction;
-		Assert( nOffset >= 0 );
-		memcpy( pOutData, (uint8 *)&cachedVPKRead.m_pubBuffer[nOffset], nRead );
-		m_cubReadFromCache += nRead;
-		m_cReadFromCache ++;
+		memcpy( pOutData, (uint8 *)&cachedVPKRead.m_pubBuffer[nOffset], nNumBytes );
+		nRead = nNumBytes;
 		bSuccess = true;
-		m_rgLastUsedTime[m_treeCachedVPKRead[idxTrackedVPKFile].m_idxLRU] = Plat_MSTime();
 	}
 	if ( bLockedForWrite )
 		m_rwlock.UnlockWrite();
@@ -1282,41 +1059,48 @@ bool CPackedStoreReadCache::BCanSatisfyFromReadCacheInternal( uint8 *pOutData, C
 	return bSuccess;
 }
 
-
-void CPackedStoreReadCache::RetryBadCacheLine( CachedVPKRead_t &cachedVPKRead )
+// Reread the bad cache line - takes the fHandle lock
+void CPackedStoreReadCache::RereadBadCacheLine( CachedVPKRead_t &cachedVPKRead )
 {
-	ChunkHashFraction_t chunkHashFraction;
-	m_pPackedStore->FindFileHashFraction( cachedVPKRead.m_nPackFileNumber, cachedVPKRead.m_nFileFraction, chunkHashFraction );
-
+	int nRead = cachedVPKRead.m_cubBuffer;
 	cachedVPKRead.m_pubBuffer = (uint8 *)malloc( k_cubCacheBufferSize );
 	FileHandleTracker_t &fHandle = m_pPackedStore->GetFileHandle( cachedVPKRead.m_nPackFileNumber );
 	fHandle.m_Mutex.Lock();
-	ReadCacheLine( fHandle, cachedVPKRead );
+	ReadCacheLine( fHandle, cachedVPKRead, nRead );
 	fHandle.m_Mutex.Unlock();
-	m_pFileTracker->BlockUntilMD5RequestComplete( cachedVPKRead.m_hMD5RequestHandle, &cachedVPKRead.m_md5Value );
-	cachedVPKRead.m_hMD5RequestHandle = 0;
-	CheckMd5Result( cachedVPKRead );
-	cachedVPKRead.m_pubBuffer = NULL;
 }
 
+// Recheck the MD5 of the cache line - takes the cache lock
+void CPackedStoreReadCache::RecheckBadCacheLine( CachedVPKRead_t &cachedVPKRead )
+{
+	m_rwlock.LockForWrite();
+	ChunkHashFraction_t chunkHashFraction;
+	m_pPackedStore->FindFileHashFraction( cachedVPKRead.m_nPackFileNumber, cachedVPKRead.m_nFileFraction, chunkHashFraction );
+
+	MD5Value_t md5ValueSecondTry;
+	m_pFileTracker->BlockUntilMD5RequestComplete( cachedVPKRead.m_hMD5RequestHandle, &md5ValueSecondTry );
+	cachedVPKRead.m_hMD5RequestHandle = 0;
+	CheckMd5Result( cachedVPKRead, md5ValueSecondTry );
+	cachedVPKRead.m_pubBuffer = NULL;
+	// m_listCachedVPKReadsFailed contains all the data about failed reads - for error or OGS reporting
+	m_listCachedVPKReadsFailed.AddToTail( cachedVPKRead );
+	m_rwlock.UnlockWrite();
+}
 
 // try reloading anything that failed its md5 check
 // this is currently only for gathering information, doesnt do anything to repair the cache
 void CPackedStoreReadCache::RetryAllBadCacheLines()
 {
-//	while( m_queueCachedVPKReadsRetry.Count() )
-//	{
-//		CachedVPKRead_t cachedVPKRead;
-//		m_rwlock.LockForWrite();
-//		if ( m_queueCachedVPKReadsRetry.PopItem( &cachedVPKRead ) )
-//		{
-//			// retry anything that didnt match one time
-//			RetryBadCacheLine( cachedVPKRead );
-//			m_listCachedVPKReadsFailed.AddToTail( cachedVPKRead );
-//			// m_listCachedVPKReadsFailed contains all the data about failed reads - for error or OGS reporting
-//		}
-//		m_rwlock.UnlockWrite();
-//	}
+	while( m_queueCachedVPKReadsRetry.Count() )
+	{
+		CachedVPKRead_t cachedVPKRead;
+		if ( m_queueCachedVPKReadsRetry.PopItem( &cachedVPKRead ) )
+		{
+			// retry anything that didnt match one time
+			RereadBadCacheLine( cachedVPKRead );
+			RecheckBadCacheLine( cachedVPKRead );
+		}
+	}
 }
 
 void CPackedStore::GetPackFileLoadErrorSummary( CUtlString &sErrors )
@@ -1338,21 +1122,62 @@ void CPackedStore::GetPackFileLoadErrorSummary( CUtlString &sErrors )
 		sErrors += sTemp ;
 		
 		char hex[sizeof(MD5Value_t)*2 + 1 ];
-		Q_binarytohex( m_PackedStoreReadCache.m_listCachedVPKReadsFailed[i].m_md5Value.bits, 
+		Q_binarytohex( static_cast< byte* >( m_PackedStoreReadCache.m_listCachedVPKReadsFailed[i].m_md5Value.bits ), 
 					sizeof(MD5Value_t),	hex, sizeof( hex ) );
 
 		ChunkHashFraction_t chunkHashFraction;
 		FindFileHashFraction( m_PackedStoreReadCache.m_listCachedVPKReadsFailed[i].m_nPackFileNumber, m_PackedStoreReadCache.m_listCachedVPKReadsFailed[i].m_nFileFraction, chunkHashFraction );
 
 		char hex2[sizeof(MD5Value_t)*2 + 1 ];
-		Q_binarytohex( chunkHashFraction.m_md5contents.bits, 
+		Q_binarytohex( static_cast< byte* >( chunkHashFraction.m_md5contents.bits ), 
 			sizeof(MD5Value_t),	hex2, sizeof( hex2 ) );
 		sTemp.Format( "Last Md5 Value %s Should be %s \n", hex, hex2 );
 
 		sErrors += sTemp ;
 	}
-
 }
+
+void CPackedStore::GetPackFileLoadErrorSummaryKV( KeyValues *pKV )
+{
+	pKV->SetInt( "BytesReadFromCache" ,		m_PackedStoreReadCache.m_cubReadFromCache );
+	pKV->SetInt( "ItemsReadFromCache" ,		m_PackedStoreReadCache.m_cReadFromCache );
+	pKV->SetInt( "DiscardsFromCache" ,		m_PackedStoreReadCache.m_cDiscardsFromCache );
+	pKV->SetInt( "AddedToCache" ,			m_PackedStoreReadCache.m_cAddedToCache );
+	pKV->SetInt( "CacheMisses" ,			m_PackedStoreReadCache.m_cCacheMiss );
+	pKV->SetInt( "FileErrorCount" ,			m_PackedStoreReadCache.m_cFileErrors );
+	pKV->SetInt( "FileErrorsCorrected" ,	m_PackedStoreReadCache.m_cFileErrorsCorrected );
+	pKV->SetInt( "FileResultsDifferent" ,	m_PackedStoreReadCache.m_cFileResultsDifferent );
+
+	FOR_EACH_LL( m_PackedStoreReadCache.m_listCachedVPKReadsFailed, i )
+	{
+		char szDataFileName[MAX_PATH];
+		CPackedStoreFileHandle fhandle = GetHandleForHashingFiles();
+		fhandle.m_nFileNumber = m_PackedStoreReadCache.m_listCachedVPKReadsFailed[i].m_nPackFileNumber;
+		fhandle.GetPackFileName( szDataFileName, sizeof(szDataFileName) );
+
+		KeyValues *pKV1 = pKV->CreateNewKey();
+		pKV1->SetInt( "PackFileID", m_PackFileID );
+		pKV1->SetInt( "PackFileNumber", m_PackedStoreReadCache.m_listCachedVPKReadsFailed[i].m_nPackFileNumber );
+		pKV1->SetInt( "FileFraction", m_PackedStoreReadCache.m_listCachedVPKReadsFailed[i].m_nFileFraction );
+
+		char hex[sizeof(MD5Value_t)*2 + 1 ];
+		Q_binarytohex( m_PackedStoreReadCache.m_listCachedVPKReadsFailed[i].m_md5Value.bits, sizeof(MD5Value_t), hex, sizeof( hex ) );
+
+		ChunkHashFraction_t chunkHashFraction;
+		FindFileHashFraction( m_PackedStoreReadCache.m_listCachedVPKReadsFailed[i].m_nPackFileNumber, m_PackedStoreReadCache.m_listCachedVPKReadsFailed[i].m_nFileFraction, chunkHashFraction );
+
+		char hex2[sizeof(MD5Value_t)*2 + 1 ];
+		Q_binarytohex( chunkHashFraction.m_md5contents.bits, sizeof(MD5Value_t), hex2, sizeof( hex2 ) );
+
+		char hex3[sizeof(MD5Value_t)*2 + 1 ];
+		Q_binarytohex( m_PackedStoreReadCache.m_listCachedVPKReadsFailed[i].m_md5ValueRetry.bits, sizeof(MD5Value_t), hex3, sizeof( hex3 ) );
+
+		pKV1->SetString( "ChunkMd5Master", hex2 );
+		pKV1->SetString( "ChunkMd5First", hex );
+		pKV1->SetString( "ChunkMd5Second", hex3 );
+	}
+}
+
 
 int CPackedStore::ReadData( CPackedStoreFileHandle &handle, void *pOutData, int nNumBytes )
 {
@@ -1378,20 +1203,12 @@ int CPackedStore::ReadData( CPackedStoreFileHandle &handle, void *pOutData, int 
 		{
 			FileHandleTracker_t &fHandle = GetFileHandle( handle.m_nFileNumber );
 			int nDesiredPos = handle.m_nFileOffset + handle.m_nCurrentFileOffset - handle.m_nMetaDataSize;
-			int nRead = 0;
+			int nRead;
 			fHandle.m_Mutex.Lock();
 			if ( handle.m_nFileNumber == VPKFILENUMBER_EMBEDDED_IN_DIR_FILE )
 			{
 				// for file data in the directory header, all offsets are relative to the size of the dir header.
 				nDesiredPos += m_nDirectoryDataSize + sizeof( VPKDirHeader_t );
-			}
-
-			if ( !fHandle.IsValid() )
-			{
-				fHandle.m_Mutex.Unlock();
-				Warning( "VPK: failed to read %d bytes from missing chunk %d of %s\n",
-					nNumBytes, handle.m_nFileNumber, m_pszFileBaseName );
-				return nRet;
 			}
 
 			if ( m_PackedStoreReadCache.BCanSatisfyFromReadCache( (uint8 *)pOutData, handle, fHandle, nDesiredPos, nNumBytes, nRead ) )
@@ -1400,16 +1217,16 @@ int CPackedStore::ReadData( CPackedStoreFileHandle &handle, void *pOutData, int 
 			}
 			else
 			{
+#ifdef IS_WINDOWS_PC
 				if ( nDesiredPos != fHandle.m_nCurOfs )
-					PackedStoreNativeSeek( fHandle.m_hFileHandle, nDesiredPos );
-				nRead = PackedStoreNativeRead( fHandle.m_hFileHandle, pOutData, nNumBytes );
+					SetFilePointer ( fHandle.m_hFileHandle, nDesiredPos, NULL,  FILE_BEGIN); 
+				ReadFile( fHandle.m_hFileHandle, pOutData, nNumBytes, (LPDWORD) &nRead, NULL );
+#else
+				m_pFileSystem->Seek( fHandle.m_hFileHandle, nDesiredPos, FILESYSTEM_SEEK_HEAD );
+				nRead = m_pFileSystem->Read( pOutData, nNumBytes, fHandle.m_hFileHandle );
+#endif
 				handle.m_nCurrentFileOffset += nRead;
 				fHandle.m_nCurOfs = nRead + nDesiredPos;
-			}
-			if ( nRead != nNumBytes )
-			{
-				Warning( "VPK: short read from chunk %d of %s (%d/%d bytes) -- pack file may be incomplete or not fully copied\n",
-					handle.m_nFileNumber, m_pszFileBaseName, nRead, nNumBytes );
 			}
 			Assert( nRead == nNumBytes );
 			nRet += nRead;
@@ -1432,22 +1249,25 @@ bool CPackedStore::HashEntirePackFile( CPackedStoreFileHandle &handle, int64 &nF
 
 	FileHandleTracker_t &fHandle = GetFileHandle( handle.m_nFileNumber );
 	fHandle.m_Mutex.Lock();
-	if ( !fHandle.IsValid() )
-	{
-		fHandle.m_Mutex.Unlock();
-		nFileSize = 0;
-		return false;
-	}
-
-	unsigned int fileLength = PackedStoreNativeSize( fHandle.m_hFileHandle );
+	
+#ifdef IS_WINDOWS_PC
+	unsigned int fileSizeHigh;
+	unsigned int fileLength = GetFileSize( fHandle.m_hFileHandle, (LPDWORD) &fileSizeHigh );
+#else
+	unsigned int fileLength = m_pFileSystem->Size( fHandle.m_hFileHandle );
+#endif
 	nFileSize = fileLength;
 	MD5Context_t ctx;
 	memset(&ctx, 0, sizeof(MD5Context_t));
 	MD5Init(&ctx);
 
 	int nDesiredPos = nFileFraction;
+#ifdef IS_WINDOWS_PC
 	if ( nDesiredPos != fHandle.m_nCurOfs )
-		PackedStoreNativeSeek( fHandle.m_hFileHandle, nDesiredPos );
+		SetFilePointer ( fHandle.m_hFileHandle, nDesiredPos, NULL,  FILE_BEGIN); 
+#else
+	m_pFileSystem->Seek( fHandle.m_hFileHandle, nDesiredPos, FILESYSTEM_SEEK_HEAD );
+#endif
 
 	int nFractionLength = ( fileLength - nFileFraction );
 	if ( nFractionLength > nFractionSize )
@@ -1461,7 +1281,12 @@ bool CPackedStore::HashEntirePackFile( CPackedStoreFileHandle &handle, int64 &nF
 		if ( chunkLen == 0 )
 			break;
 
-		int nRead = PackedStoreNativeRead( fHandle.m_hFileHandle, tempBuf, chunkLen );
+		int nRead;
+#ifdef IS_WINDOWS_PC
+		ReadFile( fHandle.m_hFileHandle, tempBuf, chunkLen, (LPDWORD) &nRead, NULL );
+#else
+		nRead = m_pFileSystem->Read( tempBuf, chunkLen, fHandle.m_hFileHandle );
+#endif
 		MD5Update(&ctx, tempBuf, nRead);
 
 		curStartByte += CRC_CHUNK_SIZE;
@@ -1474,7 +1299,11 @@ bool CPackedStore::HashEntirePackFile( CPackedStoreFileHandle &handle, int64 &nF
 	fileHash.m_PackFileID = handle.m_pOwner->m_PackFileID;
 
 	// seek back to where it was
-	PackedStoreNativeSeek( fHandle.m_hFileHandle, fHandle.m_nCurOfs );
+#ifdef IS_WINDOWS_PC
+	SetFilePointer ( fHandle.m_hFileHandle, fHandle.m_nCurOfs, NULL,  FILE_BEGIN); 
+#else
+	m_pFileSystem->Seek( fHandle.m_hFileHandle, fHandle.m_nCurOfs, FILESYSTEM_SEEK_HEAD );
+#endif
 	fHandle.m_Mutex.Unlock();
 
 #ifdef COMPUTE_HASH_TIMES
@@ -1502,9 +1331,7 @@ void CPackedStore::HashChunkFile( int iChunkFileIndex )
 {
 	AUTO_LOCK( m_Mutex );
 	static const int k_nFileFractionSize = 0x00100000; // 1 MB
-
-	if ( IsChunkFileMissing( iChunkFileIndex ) )
-		return;
+	static const int k_nFileFractionMask = 0xFFF00000; // 1 MB
 
 	// Purge any hashes we already have for this chunk.
 	DiscardChunkHashes( iChunkFileIndex );
@@ -1636,63 +1463,39 @@ FileHandleTracker_t & CPackedStore::GetFileHandle( int nFileNumber )
 	else if ( m_FileHandles[nFileHandleIdx].m_nFileNumber == -1 )
 	{
 		// no luck finding the handle - need a new one
-		m_FileHandles[nFileHandleIdx].m_nCurOfs = 0;
-		m_FileHandles[nFileHandleIdx].m_hFileHandle = PACKEDSTORE_INVALID_HANDLE;
-
-		if ( IsChunkFileMissing( nFileNumber ) )
-		{
-			return m_FileHandles[nFileHandleIdx];
-		}
-
 		char pszDataFileName[MAX_PATH];
 		GetDataFileName( pszDataFileName, sizeof(pszDataFileName), nFileNumber );
-		PackDataFileHandle_t hFile = PackedStoreOpenNativeHandle( pszDataFileName );
-#ifndef IS_WINDOWS_PC
-		if ( hFile == PACKEDSTORE_INVALID_HANDLE )
-		{
-			char szResolved[MAX_PATH];
-			if ( PackedStoreFindCaseInsensitive( pszDataFileName, szResolved, sizeof( szResolved ) ) )
-			{
-				hFile = PackedStoreOpenNativeHandle( szResolved );
-				if ( hFile != PACKEDSTORE_INVALID_HANDLE &&
-					 nFileNumber != VPKFILENUMBER_EMBEDDED_IN_DIR_FILE &&
-					 nFileNumber >= 0 )
-				{
-					if ( nFileNumber >= m_ResolvedChunkFileNames.Count() )
-						m_ResolvedChunkFileNames.SetCount( nFileNumber + 1 );
-					m_ResolvedChunkFileNames[nFileNumber] = szResolved;
-				}
-			}
-		}
-#endif
-		m_FileHandles[nFileHandleIdx].m_hFileHandle = hFile;
-		if ( hFile != PACKEDSTORE_INVALID_HANDLE )
+		m_FileHandles[nFileHandleIdx].m_nCurOfs = 0;
+#ifdef IS_WINDOWS_PC
+		m_FileHandles[nFileHandleIdx].m_hFileHandle = 
+			CreateFile( pszDataFileName,               // file to open
+						GENERIC_READ,          // open for reading
+						FILE_SHARE_READ,       // share for reading
+						NULL,                  // default security
+						OPEN_EXISTING,         // existing file only
+						FILE_ATTRIBUTE_NORMAL, // normal file
+						NULL);                 // no attr. template
+			
+		if ( m_FileHandles[nFileHandleIdx].m_hFileHandle != INVALID_HANDLE_VALUE )
 		{
 			m_FileHandles[nFileHandleIdx].m_nFileNumber = nFileNumber;
 		}
-		else
+#else
+		m_FileHandles[nFileHandleIdx].m_hFileHandle = m_pFileSystem->Open( pszDataFileName, "rb" );
+		if ( m_FileHandles[nFileHandleIdx].m_hFileHandle != FILESYSTEM_INVALID_HANDLE )
 		{
-			Warning( "VPK: could not open chunk file %s (from %s_dir.vpk)\n", pszDataFileName, m_pszFileBaseName );
-			if ( nFileNumber != VPKFILENUMBER_EMBEDDED_IN_DIR_FILE && nFileNumber >= 0 )
-			{
-				if ( nFileNumber >= m_bChunkFileMissing.Count() )
-				{
-					int nOld = m_bChunkFileMissing.Count();
-					m_bChunkFileMissing.SetCount( nFileNumber + 1 );
-					memset( m_bChunkFileMissing.Base() + nOld, 0, ( nFileNumber + 1 - nOld ) * sizeof( uint8 ) );
-				}
-				if ( !m_bChunkFileMissing[nFileNumber] )
-				{
-					m_bChunkFileMissing[nFileNumber] = 1;
-					m_nMissingChunkFileCount++;
-				}
-			}
+			m_FileHandles[nFileHandleIdx].m_nFileNumber = nFileNumber;
 		}
+#endif
 		return m_FileHandles[nFileHandleIdx];
 	}
 	Error( "Exceeded limit of number of vpk files supported (%d)!\n", MAX_ARCHIVE_FILES_TO_KEEP_OPEN_AT_ONCE );
 	static FileHandleTracker_t invalid;
-	invalid.m_hFileHandle = PACKEDSTORE_INVALID_HANDLE;
+#ifdef IS_WINDOWS_PC
+	invalid.m_hFileHandle = INVALID_HANDLE_VALUE;
+#else
+	invalid.m_hFileHandle = FILESYSTEM_INVALID_HANDLE;
+#endif
 	return invalid;
 }
 
@@ -2240,7 +2043,7 @@ int CPackedStore::GetFileAndDirLists( const char *pWildCard, CUtlStringList &out
 				CUtlStringList &filesInDirectory = *(m_dirContents.Element( i ));
 
 				// Use the cached list of files in this directory
-				FOR_EACH_VEC( filesInDirectory, iFile )
+				FOR_EACH_VEC( filesInDirectory, i )
 				{
 					bool matches = true;
 
@@ -2249,8 +2052,8 @@ int CPackedStore::GetFileAndDirLists( const char *pWildCard, CUtlStringList &out
 					char szFNameOutBase[64];
 					char szFNameOutExt[20];
 
-					V_FileBase( filesInDirectory[iFile], szFNameOutBase, sizeof( szFNameOutBase ) );
-					V_ExtractFileExtension( filesInDirectory[iFile], szFNameOutExt, sizeof( szFNameOutExt ) );
+					V_FileBase( filesInDirectory[i], szFNameOutBase, sizeof( szFNameOutBase ) );
+					V_ExtractFileExtension( filesInDirectory[i], szFNameOutExt, sizeof( szFNameOutExt ) );
 
 					// Since we have a sorted list we can optimize using the return code of the compare
 					int c = V_strnicmp( szWildCardBase, szFNameOutBase, nLenWildcardBase );
@@ -2267,7 +2070,7 @@ int CPackedStore::GetFileAndDirLists( const char *pWildCard, CUtlStringList &out
 
 						FOR_EACH_VEC( outFilenames, j )
 						{
-							if ( !V_strncmp( outFilenames[j], filesInDirectory[iFile], V_strlen( filesInDirectory[iFile] ) ) )
+							if ( !V_strncmp( outFilenames[j], filesInDirectory[i], V_strlen( filesInDirectory[i] ) ) )
 							{
 								bFound = true;
 								break;
@@ -2276,7 +2079,7 @@ int CPackedStore::GetFileAndDirLists( const char *pWildCard, CUtlStringList &out
 
 						if ( !bFound )
 						{
-							outFilenames.CopyAndAddToTail( filesInDirectory[iFile] );
+							outFilenames.CopyAndAddToTail( filesInDirectory[i] );
 						}
 					}
 				}

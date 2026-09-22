@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Implements the Undo/Redo system.
 //
@@ -63,9 +63,9 @@ CHistory::~CHistory()
 // Input  : bUndo - 
 //			pOpposite - 
 //-----------------------------------------------------------------------------
-void CHistory::SetOpposite(BOOL bUndo_, CHistory *pOpposite)
+void CHistory::SetOpposite(BOOL bUndo, CHistory *pOpposite)
 {
-	this->bUndo = bUndo_;
+	this->bUndo = bUndo;
 	Opposite = pOpposite;
 }
 
@@ -257,7 +257,7 @@ void CHistory::Keep(const CMapObjectList *pList)
 {
 	FOR_EACH_OBJ( *pList, pos )
 	{
-		CMapClass *pObject = pList->Element(pos);
+		CMapClass *pObject = (CUtlReference< CMapClass >)pList->Element(pos);
 		Keep(pObject);
 	}
 }
@@ -315,7 +315,7 @@ void CHistory::KeepNew( const CMapObjectList *pList, bool bKeepChildren)
 {
 	FOR_EACH_OBJ( *pList, pos )
 	{
-		CMapClass *pObject = pList->Element(pos);
+		CMapClass *pObject = (CUtlReference< CMapClass >)pList->Element(pos);
 		KeepNew(pObject, bKeepChildren);
 	}
 }

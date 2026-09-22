@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -28,7 +28,7 @@ using namespace vgui;
 MemoryBitmap::MemoryBitmap(unsigned char *texture,int wide, int tall)
 {
 	_texture=texture;
-	_id = 0;
+	_id = (HTexture)-1;
 	_uploaded = false;
 	_color = Color(255, 255, 255, 255);
 	_pos[0] = _pos[1] = 0;
@@ -43,6 +43,12 @@ MemoryBitmap::MemoryBitmap(unsigned char *texture,int wide, int tall)
 //-----------------------------------------------------------------------------
 MemoryBitmap::~MemoryBitmap()
 {
+	// Try not to leave crap lying around
+	if ( g_pSurface && ( _id != -1 ) )
+	{
+		g_pSurface->DestroyTextureID(_id);
+		_id = (HTexture)-1;
+	}
 }
 
 //-----------------------------------------------------------------------------
@@ -111,7 +117,7 @@ void MemoryBitmap::Paint()
 		return;
 
 	// if we don't have an _id then lets make one
-	if (!_id)
+	if ( _id == (HTexture)-1 )
 	{
 		_id = g_pSurface->CreateNewTextureID( true );
 	}
@@ -150,13 +156,13 @@ void MemoryBitmap::ForceUpload(unsigned char *texture,int wide, int tall)
 	if(_w==0 || _h==0)
 		return;
 	
-	if (!_id)
+	if ( _id == (HTexture)-1 )
 	{
 		_id = g_pSurface->CreateNewTextureID( true );
 	}
 /*	drawSetTextureRGBA(IE->textureID,static_cast<const char *>(lpvBits), w, h);
 */
-	g_pSurface->DrawSetTextureRGBA(_id, _texture, _w, _h, false, true);
+	g_pSurface->DrawSetTextureRGBA(_id, _texture, _w, _h );
 	_uploaded = true;
 
 	_valid = g_pSurface->IsTextureIDValid(_id);

@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright � 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -6,16 +6,20 @@
 
 #pragma warning( disable : 4244 ) // conversion from 'double' to 'float', possible loss of data
 
+#define SUPPORT_CUSTOM_FONT_FORMAT
+
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
+#if !defined( _PS3 )
 #include <malloc.h>
+#endif // ! _PS3
 #include "vgui_surfacelib/Win32Font.h"
-#include <tier0/dbg.h>
-#include <vgui/ISurface.h>
-#include <tier0/mem.h>
-#include <utlbuffer.h>
+#include "tier0/dbg.h"
+#include "vgui_surfacelib/IFontSurface.h"
+#include "tier0/mem.h"
+#include "utlbuffer.h"
 #include "FontEffects.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
@@ -47,10 +51,6 @@ CWin32Font::CWin32Font() : m_ExtendedABCWidthsCache(256, 0, &ExtendedABCWidthsCa
 	m_bRotary = false;
 	m_bAdditive = false;
 	m_rgiBitmapSize[ 0 ] = m_rgiBitmapSize[ 1 ] = 0;
-
-#if defined( _X360 )
-	Q_memset( m_ABCWidthsCache, 0, sizeof( m_ABCWidthsCache ) );
-#endif
 
 	m_ExtendedABCWidthsCache.EnsureCapacity( 128 );
 
@@ -86,6 +86,7 @@ CWin32Font::~CWin32Font()
 		::DeleteObject( m_hDIB );
 }
 
+#ifndef SUPPORT_CUSTOM_FONT_FORMAT
 //-----------------------------------------------------------------------------
 // Purpose: Font iteration callback function
 //			used to determine whether or not a font exists on the system
@@ -100,6 +101,7 @@ int CALLBACK FontEnumProc(
 	g_bFontFound = true;
 	return 0;
 }
+#endif // SUPPORT_CUSTOM_FONT_FORMAT
 
 //-----------------------------------------------------------------------------
 // Purpose: creates the font from windows.  returns false if font does not exist in the OS.
@@ -111,16 +113,16 @@ bool CWin32Font::Create(const char *windowsFontName, int tall, int weight, int b
 	m_iTall = tall;
 	m_iWeight = weight;
 	m_iFlags = flags;
-	m_bAntiAliased = (flags & vgui::ISurface::FONTFLAG_ANTIALIAS) ? 1 : 0;
-	m_bUnderlined = flags & vgui::ISurface::FONTFLAG_UNDERLINE;
-	m_iDropShadowOffset = (flags & vgui::ISurface::FONTFLAG_DROPSHADOW) ? 1 : 0;
-	m_iOutlineSize = (flags & vgui::ISurface::FONTFLAG_OUTLINE) ? 1 : 0;
+	m_bAntiAliased = (flags & FONTFLAG_ANTIALIAS) ? 1 : 0;
+	m_bUnderlined = (flags & FONTFLAG_UNDERLINE) ? 1 : 0;
+	m_iDropShadowOffset = (flags & FONTFLAG_DROPSHADOW) ? 1 : 0;
+	m_iOutlineSize = (flags & FONTFLAG_OUTLINE) ? 1 : 0;
 	m_iBlur = blur;
 	m_iScanLines = scanlines;
-	m_bRotary = (flags & vgui::ISurface::FONTFLAG_ROTARY) ? 1 : 0;
-	m_bAdditive = (flags & vgui::ISurface::FONTFLAG_ADDITIVE) ? 1 : 0;
+	m_bRotary = (flags & FONTFLAG_ROTARY) ? 1 : 0;
+	m_bAdditive = (flags & FONTFLAG_ADDITIVE) ? 1 : 0;
 
-	int charset = (flags & vgui::ISurface::FONTFLAG_SYMBOL) ? SYMBOL_CHARSET : ANSI_CHARSET;
+	int charset = (flags & FONTFLAG_SYMBOL) ? SYMBOL_CHARSET : ANSI_CHARSET;
 
 	// hack for japanese win98 support
 	if ( !stricmp( windowsFontName, "win98japanese" ) )
@@ -134,25 +136,32 @@ bool CWin32Font::Create(const char *windowsFontName, int tall, int weight, int b
 	m_hDC = ::CreateCompatibleDC(NULL);
 	Assert( m_hDC );
 
-	// see if the font exists on the system
-	LOGFONT logfont;
-	logfont.lfCharSet = DEFAULT_CHARSET;
-	logfont.lfPitchAndFamily = 0;
-	strcpy(logfont.lfFaceName, m_szName.String());
-	g_bFontFound = false;
-	::EnumFontFamiliesEx(m_hDC, &logfont, &FontEnumProc, 0, 0);
-	if (!g_bFontFound)
+#ifndef SUPPORT_CUSTOM_FONT_FORMAT
+	// Vitaliy: fonts registered using custom font format are
+	// not enumerated. Font creation will fail below for a font that
+	// cannot be instantiated.
 	{
-		// needs to go to a fallback
-		m_szName = UTL_INVAL_SYMBOL;
-		return false;
+		// see if the font exists on the system
+		LOGFONT logfont;
+		logfont.lfCharSet = DEFAULT_CHARSET;
+		logfont.lfPitchAndFamily = 0;
+		strcpy(logfont.lfFaceName, m_szName.String());
+		g_bFontFound = false;
+		::EnumFontFamiliesEx(m_hDC, &logfont, &FontEnumProc, 0, 0);
+		if (!g_bFontFound)
+		{
+			// needs to go to a fallback
+			m_szName = UTL_INVAL_SYMBOL;
+			return false;
+		}
 	}
+#endif
 
 	m_hFont = ::CreateFontA(tall, 0, 0, 0, 
 								m_iWeight, 
-								flags & vgui::ISurface::FONTFLAG_ITALIC, 
-								flags & vgui::ISurface::FONTFLAG_UNDERLINE, 
-								flags & vgui::ISurface::FONTFLAG_STRIKEOUT, 
+								flags & FONTFLAG_ITALIC, 
+								flags & FONTFLAG_UNDERLINE, 
+								flags & FONTFLAG_STRIKEOUT, 
 								charset, 
 								OUT_DEFAULT_PRECIS, 
 								CLIP_DEFAULT_PRECIS, 
@@ -200,50 +209,6 @@ bool CWin32Font::Create(const char *windowsFontName, int tall, int weight, int b
 	m_hDIB = ::CreateDIBSection(m_hDC, (BITMAPINFO*)&header, DIB_RGB_COLORS, (void**)(&m_pBuf), NULL, 0);
 	::SelectObject(m_hDC, m_hDIB);
 
-#if defined( _X360 )
-	// get char spacing
-	// a is space before character (can be negative)
-	// b is the width of the character
-	// c is the space after the character
-	memset(m_ABCWidthsCache, 0, sizeof(m_ABCWidthsCache));
-	ABC abc[ABCWIDTHS_CACHE_SIZE];
-	Assert(ABCWIDTHS_CACHE_SIZE <= 256);
-	if (::GetCharABCWidthsW(m_hDC, 0, ABCWIDTHS_CACHE_SIZE - 1, &abc[0]) || ::GetCharABCWidthsA(m_hDC, 0, ABCWIDTHS_CACHE_SIZE - 1, &abc[0]))
-	{	
-		// copy out into our formated structure
-		for (int i = 0; i < ABCWIDTHS_CACHE_SIZE; i++)
-		{
-			m_ABCWidthsCache[i].a = abc[i].abcA - m_iBlur - m_iOutlineSize;
-			m_ABCWidthsCache[i].b = abc[i].abcB + ((m_iBlur + m_iOutlineSize) * 2) + m_iDropShadowOffset;
-			m_ABCWidthsCache[i].c = abc[i].abcC - m_iBlur - m_iDropShadowOffset - m_iOutlineSize;
-		}
-	}
-	else
-	{
-		Warning("GetCharABCWidths() failed for windows font '%s'\n", windowsFontName);
-
-		// since that failed, it must be fixed width, zero everything so a and c will be zeros, then
-		// fill b with the value from TEXTMETRIC
-		for (int i = 0; i < ABCWIDTHS_CACHE_SIZE; i++)
-		{
-			// fallback to old method, no underhangs/overhangs (a/c)
-			SIZE size;
-			char mbcs[6] = { 0 };
-			wchar_t wch = (wchar_t)i;
-			::WideCharToMultiByte(CP_ACP, 0, &wch, 1, mbcs, sizeof(mbcs), NULL, NULL);
-			if (::GetTextExtentPoint32(m_hDC, mbcs, strlen(mbcs), &size))
-			{
-				m_ABCWidthsCache[i].b = size.cx;
-			}
-			else
-			{
-				// failed to get width, just use the average width
-				m_ABCWidthsCache[i].b = (char)tm.tmAveCharWidth;
-			}
-		}
-	}
-#endif
-
 	return true;
 }
 
@@ -272,7 +237,7 @@ void CWin32Font::GetCharRGBA(wchar_t ch, int rgbaWide, int rgbaTall, unsigned ch
 
 	bool bShouldAntialias = m_bAntiAliased;
 	// filter out 
-	if ( ch > 0x00FF && !(m_iFlags & vgui::ISurface::FONTFLAG_CUSTOM) )
+	if ( ch > 0x00FF && !(m_iFlags & FONTFLAG_CUSTOM) )
 	{
 		bShouldAntialias = false;
 	}
@@ -512,64 +477,52 @@ void CWin32Font::SetAsActiveFont(HDC hdc)
 void CWin32Font::GetCharABCWidths(int ch, int &a, int &b, int &c)
 {
 	Assert( IsValid() );
-#if defined( _X360 )
-	if (ch < ABCWIDTHS_CACHE_SIZE)
+
+	// look for it in the cache
+	abc_cache_t finder = { (wchar_t)ch };
+
+	unsigned short i = m_ExtendedABCWidthsCache.Find(finder);
+	if (m_ExtendedABCWidthsCache.IsValidIndex(i))
 	{
-		// use the cache entry
-		a = m_ABCWidthsCache[ch].a;
-		b = m_ABCWidthsCache[ch].b;
-		c = m_ABCWidthsCache[ch].c;
+		a = m_ExtendedABCWidthsCache[i].abc.a;
+		b = m_ExtendedABCWidthsCache[i].abc.b;
+		c = m_ExtendedABCWidthsCache[i].abc.c;
+		return;
+	}
+
+	// not in the cache, get from windows (this call is a little slow)
+	ABC abc;
+	if (::GetCharABCWidthsW(m_hDC, ch, ch, &abc) || ::GetCharABCWidthsA(m_hDC, ch, ch, &abc))
+	{
+		a = abc.abcA;
+		b = abc.abcB;
+		c = abc.abcC;
 	}
 	else
-#endif
 	{
-
-		// look for it in the cache
-		abc_cache_t finder = { (wchar_t)ch };
-
-		unsigned short i = m_ExtendedABCWidthsCache.Find(finder);
-		if (m_ExtendedABCWidthsCache.IsValidIndex(i))
+		// wide character version failed, try the old api function
+		SIZE size;
+		char mbcs[6] = { 0 };
+		wchar_t wch = ch;
+		::WideCharToMultiByte(CP_ACP, 0, &wch, 1, mbcs, sizeof(mbcs), NULL, NULL);
+		if (::GetTextExtentPoint32(m_hDC, mbcs, strlen(mbcs), &size))
 		{
-			a = m_ExtendedABCWidthsCache[i].abc.a;
-			b = m_ExtendedABCWidthsCache[i].abc.b;
-			c = m_ExtendedABCWidthsCache[i].abc.c;
-			return;
-		}
-
-		// not in the cache, get from windows (this call is a little slow)
-		ABC abc;
-		if (::GetCharABCWidthsW(m_hDC, ch, ch, &abc) || ::GetCharABCWidthsA(m_hDC, ch, ch, &abc))
-		{
-			a = abc.abcA;
-			b = abc.abcB;
-			c = abc.abcC;
+			a = c = 0;
+			b = size.cx;
 		}
 		else
 		{
-			// wide character version failed, try the old api function
-			SIZE size;
-			char mbcs[6] = { 0 };
-			wchar_t wch = ch;
-			::WideCharToMultiByte(CP_ACP, 0, &wch, 1, mbcs, sizeof(mbcs), NULL, NULL);
-			if (::GetTextExtentPoint32(m_hDC, mbcs, strlen(mbcs), &size))
-			{
-				a = c = 0;
-				b = size.cx;
-			}
-			else
-			{
-				// failed to get width, just use the max width
-				a = c = 0;
-				b = m_iMaxCharWidth;
-			}
+			// failed to get width, just use the max width
+			a = c = 0;
+			b = m_iMaxCharWidth;
 		}
-
-		// add to the cache
-		finder.abc.a = a - m_iBlur - m_iOutlineSize;
-		finder.abc.b = b + ((m_iBlur + m_iOutlineSize) * 2) + m_iDropShadowOffset;
-		finder.abc.c = c - m_iBlur - m_iDropShadowOffset - m_iOutlineSize;
-		m_ExtendedABCWidthsCache.Insert(finder);
 	}
+
+	// add to the cache
+	finder.abc.a = a - m_iBlur - m_iOutlineSize;
+	finder.abc.b = b + ((m_iBlur + m_iOutlineSize) * 2) + m_iDropShadowOffset;
+	finder.abc.c = c - m_iBlur - m_iDropShadowOffset - m_iOutlineSize;
+	m_ExtendedABCWidthsCache.Insert(finder);
 }
 
 //-----------------------------------------------------------------------------
@@ -579,15 +532,6 @@ int CWin32Font::GetHeight()
 {
 	Assert( IsValid() );
 	return m_iHeight;
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: returns the requested height of the font
-//-----------------------------------------------------------------------------
-int CWin32Font::GetHeightRequested()
-{
-	assert(IsValid());
-	return m_iTall;
 }
 
 //-----------------------------------------------------------------------------
@@ -627,12 +571,13 @@ bool CWin32Font::ExtendedABCWidthsCacheLessFunc(const abc_cache_t &lhs, const ab
 //-----------------------------------------------------------------------------
 // Purpose: Get the kerned size of a char, for win32 just pass thru for now
 //-----------------------------------------------------------------------------
-void CWin32Font::GetKernedCharWidth( wchar_t ch, wchar_t chBefore, wchar_t chAfter, float &wide, float &abcA )
+void CWin32Font::GetKernedCharWidth( wchar_t ch, wchar_t chBefore, wchar_t chAfter, float &wide, float &abcA, float &abcC )
 {
 	int a,b,c;
 	GetCharABCWidths(ch, a, b, c );
 	wide = ( a + b + c);
 	abcA = a;
+	abcC = c;
 }
 
 

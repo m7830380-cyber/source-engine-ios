@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -207,7 +207,7 @@ static BOOL IsValidFilename(LPCTSTR pszString)
 	{
 		BYTE ch = BYTE(p[0]);
 		++p;
-		if(ch > 127 || isalpha(ch) || isdigit(ch) || 
+		if(ch > 127 || V_isalpha(ch) || V_isdigit(ch) || 
 			strchr(" $%`-_@~'!(){}^#&", ch))
 			continue;
 		// not one of those chars - not correct

@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ====
 //
 // Purpose: 
 //
@@ -39,10 +39,10 @@ class CEditGameClass
 		CEditGameClass(void);
 		~CEditGameClass(void);
 
-		inline bool IsClass(const char *pszClass = NULL);
-		inline GDclass *GetClass(void) { return(m_pClass); }
+		inline bool IsClass(const char *pszClass = NULL) const;
+		inline GDclass *GetClass(void) const { return(m_pClass); }
 		inline void SetClass(GDclass *pClass) { m_pClass = pClass; }
-		inline const char* GetClassName(void) { return(m_szClass); }
+		inline const char* GetClassName(void) const { return(m_szClass); }
 		inline bool IsKeyFrameClass(void) { return((m_pClass != NULL) && (m_pClass->IsKeyFrameClass())); }
 		inline bool IsMoveClass(void) { return((m_pClass != NULL) && (m_pClass->IsMoveClass())); }
 		inline bool IsPointClass(void) { return((m_pClass != NULL) && (m_pClass->IsPointClass())); }
@@ -60,9 +60,9 @@ class CEditGameClass
 
 		inline void RemoveKey(int nIndex) { m_KeyValues.RemoveKeyAt(nIndex); }
 		inline void SetKeyValue(LPCTSTR pszKey, int iValue) { m_KeyValues.SetValue(pszKey, iValue); }
-		inline LPCTSTR GetKey(int nIndex) { return(m_KeyValues.GetKey(nIndex)); }
-		inline LPCTSTR GetKeyValue(int nIndex) { return(m_KeyValues.GetValue(nIndex)); }
-		inline LPCTSTR GetKeyValue(LPCTSTR pszKey, int *piIndex = NULL) { return(m_KeyValues.GetValue(pszKey, piIndex)); }
+		inline LPCTSTR GetKey(int nIndex) const { return(m_KeyValues.GetKey(nIndex)); }
+		inline LPCTSTR GetKeyValue(int nIndex) const { return(m_KeyValues.GetValue(nIndex)); }
+		inline LPCTSTR GetKeyValue(LPCTSTR pszKey, int *piIndex = NULL) const { return(m_KeyValues.GetValue(pszKey, piIndex)); }
 		
 		// Iterate the list of keyvalues.
 		inline int GetFirstKeyValue() const			{ return m_KeyValues.GetFirst(); }
@@ -81,8 +81,8 @@ class CEditGameClass
 		// Interface to entity connections.
 		//
 		void Connections_Add(CEntityConnection *pConnection);
-		inline int Connections_GetCount(void);
-		inline CEntityConnection *Connections_Get(int nIndex);
+		inline int Connections_GetCount(void) const;
+		inline CEntityConnection *Connections_Get(int nIndex) const;
 		bool Connections_Remove(CEntityConnection *pConnection);
 		void Connections_RemoveAll(void);
 		void Connections_FixBad(bool bRelink = true);
@@ -141,7 +141,7 @@ class CEditGameClass
 //-----------------------------------------------------------------------------
 // Purpose: Returns the number of input/output connections that this object has.
 //-----------------------------------------------------------------------------
-int CEditGameClass::Connections_GetCount(void)
+int CEditGameClass::Connections_GetCount(void) const
 {
 	return m_Connections.Count();
 }
@@ -150,7 +150,7 @@ int CEditGameClass::Connections_GetCount(void)
 //-----------------------------------------------------------------------------
 // Purpose: Returns the number of input/output connections that this object has.
 //-----------------------------------------------------------------------------
-CEntityConnection *CEditGameClass::Connections_Get(int nIndex)
+CEntityConnection *CEditGameClass::Connections_Get(int nIndex) const
 {
 	return m_Connections.Element(nIndex);
 }
@@ -193,7 +193,7 @@ const char *CEditGameClass::GetComments(void)
 // Input  : NULL - 
 // Output : inline bool
 //-----------------------------------------------------------------------------
-inline bool CEditGameClass::IsClass(const char *pszClass)
+inline bool CEditGameClass::IsClass(const char *pszClass) const
 {
 	if (pszClass == NULL)
 	{

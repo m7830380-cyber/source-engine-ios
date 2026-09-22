@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Manages the set of application configuration options.
 //
@@ -575,11 +575,6 @@ bool COptions::GetShowHelpers(void)
 	return (general.bShowHelpers == TRUE);
 }
 
-bool COptions::IsVGUIModelBrowserEnabled()
-{
-	return (general.bUseVGUIModelBrowser == TRUE);
-}
-
 
 //-----------------------------------------------------------------------------
 // Purpose: Sets whether helpers should be hidden or shown.
@@ -644,6 +639,7 @@ bool COptions::Read(void)
 	general.eTextureAlignment = (TextureAlignment_t)APP()->GetProfileInt(pszGeneral, "Texture Alignment", TEXTURE_ALIGN_WORLD);
 	general.bLoadwinpos = APP()->GetProfileInt(pszGeneral, "Load Default Positions", TRUE);
 	general.bIndependentwin = APP()->GetProfileInt(pszGeneral, "Independent Windows", FALSE);
+	general.bEnablePerforceIntegration = APP()->GetProfileInt( pszGeneral, "Perforce Integration", TRUE );
 	general.bGroupWhileIgnore = APP()->GetProfileInt(pszGeneral, "GroupWhileIgnore", FALSE);
 	general.bStretchArches = APP()->GetProfileInt(pszGeneral, "StretchArches", TRUE);
 	general.bShowHelpers = APP()->GetProfileInt(pszGeneral, "Show Helpers", TRUE);
@@ -653,13 +649,12 @@ bool COptions::Read(void)
 	general.iMaxAutosavesPerMap = APP()->GetProfileInt(pszGeneral, "Max Saves Per Map", 5);
 	general.bEnableAutosave = APP()->GetProfileInt(pszGeneral, "Autosaves Enabled", 1);
 	general.bClosedCorrectly = APP()->GetProfileInt(pszGeneral, "Closed Correctly", TRUE);
-	general.bUseVGUIModelBrowser = APP()->GetProfileInt(pszGeneral, "VGUI Model Browser", TRUE);	
 	general.bShowHiddenTargetsAsBroken = APP()->GetProfileInt(pszGeneral, "Show Hidden Targets As Broken", TRUE);	
 	general.bRadiusCulling = APP()->GetProfileInt(pszGeneral, "Use Radius Culling", FALSE);
 
 	char szDefaultAutosavePath[MAX_PATH];
-	V_strcpy_safe( szDefaultAutosavePath, APP()->GetProfileString( pszGeneral, "Directory", "C:" ) );
-	V_strcpy_safe( szDefaultAutosavePath, "\\HammerAutosave\\" );
+	strcpy( szDefaultAutosavePath, APP()->GetProfileString(pszGeneral, "Directory", "C:"));
+	strcat( szDefaultAutosavePath, "\\HammerAutosave\\" );
 	strcpy( general.szAutosaveDir, APP()->GetProfileString("General", "Autosave Dir", szDefaultAutosavePath));
 	if ( Q_strlen( general.szAutosaveDir ) == 0 )
 	{
@@ -704,7 +699,7 @@ bool COptions::Read(void)
 	view3d.bFilterTextures = APP()->GetProfileInt(pszView3D, "FilterTextures", TRUE);
 	view3d.bReverseSelection = APP()->GetProfileInt(pszView3D, "ReverseSelection", FALSE);
 	view3d.fFOV = 90;
-	view3d.fLightConeLength = 10;
+	view3d.iViewInstancesMode = APP()->GetProfileInt(pszView3D, "ViewInstancesMode", 1);
 		
 	ReadColorSettings();
 
@@ -874,6 +869,7 @@ void COptions::Write( BOOL fOverwrite, BOOL fSaveConfigs )
 	APP()->WriteProfileInt(pszGeneral, "Scale Locking Textures", general.bScaleLockingTextures);
 	APP()->WriteProfileInt(pszGeneral, "Texture Alignment", general.eTextureAlignment);
 	APP()->WriteProfileInt(pszGeneral, "Independent Windows", general.bIndependentwin);
+	APP()->WriteProfileInt( pszGeneral, "Perforce Integration", general.bEnablePerforceIntegration );
 	APP()->WriteProfileInt(pszGeneral, "Load Default Positions", general.bLoadwinpos);
 	APP()->WriteProfileInt(pszGeneral, "GroupWhileIgnore", general.bGroupWhileIgnore);
 	APP()->WriteProfileInt(pszGeneral, "StretchArches", general.bStretchArches);
@@ -886,7 +882,6 @@ void COptions::Write( BOOL fOverwrite, BOOL fSaveConfigs )
 	APP()->WriteProfileInt(pszGeneral, "Closed Correctly", general.bClosedCorrectly);
 	APP()->WriteProfileString(pszGeneral, "Autosave Dir", general.szAutosaveDir);
 	APP()->SetDirectory( DIR_AUTOSAVE, general.szAutosaveDir );
-	APP()->WriteProfileInt(pszGeneral, "VGUI Model Browser", general.bUseVGUIModelBrowser );
 	APP()->WriteProfileInt(pszGeneral, "Show Hidden Targets As Broken", general.bShowHiddenTargetsAsBroken);
 	APP()->WriteProfileInt(pszGeneral, "Use Radius Culling", general.bRadiusCulling);
 
@@ -928,6 +923,7 @@ void COptions::Write( BOOL fOverwrite, BOOL fSaveConfigs )
 	APP()->WriteProfileInt(pszView3D, "TimeToMaxSpeed", view3d.nTimeToMaxSpeed);
 	APP()->WriteProfileInt(pszView3D, "FilterTextures", view3d.bFilterTextures);
 	APP()->WriteProfileInt(pszView3D, "ReverseSelection", view3d.bReverseSelection);
+	APP()->WriteProfileInt(pszView3D, "ViewInstancesMode", view3d.iViewInstancesMode);
 
 	//
 	// We don't write custom color settings because there is no GUI for them yet.
@@ -972,6 +968,7 @@ void COptions::SetDefaults(void)
 
 	// general
 	general.bIndependentwin = FALSE;
+	general.bEnablePerforceIntegration = TRUE;
 	general.bLoadwinpos = TRUE;
 	general.iUndoLevels = 50;
 	general.nMaxCameras = 100;
@@ -985,7 +982,6 @@ void COptions::SetDefaults(void)
 	general.iMaxAutosavesPerMap = 5;
 	general.bEnableAutosave = TRUE;
 	general.bClosedCorrectly = TRUE;
-	general.bUseVGUIModelBrowser = TRUE;
 	general.bShowCollisionModels = FALSE;
 	general.bShowDetailObjects = TRUE;
 	general.bShowNoDrawBrushes = TRUE;
@@ -1027,6 +1023,7 @@ void COptions::SetDefaults(void)
 	view3d.bFilterTextures = TRUE;
 	view3d.bReverseSelection = FALSE;
 	view3d.bPreviewModelFade = false;
+	view3d.iViewInstancesMode = 1;
 
 	if ( bWrite )
 	{

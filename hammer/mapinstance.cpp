@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -22,12 +22,15 @@
 #include "hammer.h"
 #include "Texture.h"
 #include "TextureSystem.h"
-#include "materialsystem/imesh.h"
+#include "materialsystem/IMesh.h"
 #include "Material.h"
 #include "Options.h"
 #include "camera.h"
 #include "MapWorld.h"
 #include "mapview.h"
+#include "p4lib/ip4.h"
+#define	__IN_HAMMER	1
+#include "instancing_helper.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include <tier0/memdbgon.h>
@@ -53,7 +56,7 @@ CMapClass *CMapInstance::Create( CHelperInfo *pHelperInfo, CMapEntity *pParent )
 
 	if ( FileNameKey )
 	{
-		V_strcpy_safe( FileName, pParent->GetKeyValue( "file" ) );
+		strcpy( FileName, pParent->GetKeyValue( "file" ) );
 	}
 	else
 	{
@@ -67,8 +70,9 @@ CMapClass *CMapInstance::Create( CHelperInfo *pHelperInfo, CMapEntity *pParent )
 
 
 //-----------------------------------------------------------------------------
-// Purpose: this function will set a secondary lookup path for instances.
-// Input  : pszInstancePath - the secondary lookup path
+// Purpose: 
+// Input  : 
+// Output : 
 //-----------------------------------------------------------------------------
 void CMapInstance::SetInstancePath( const char *pszInstancePath )
 {
@@ -79,69 +83,32 @@ void CMapInstance::SetInstancePath( const char *pszInstancePath )
 
 
 //-----------------------------------------------------------------------------
-// Purpose: This function will attempt to find a full path given the base and relative names.
-// Input  : pszBaseFileName - the base file that referenced this instance
-//			pszInstanceFileName - the relative file name of this instance
-// Output : Returns true if it was able to locate the file
-//			pszOutFileName - the full path to the file name if located
+// Purpose: 
+// Input  : 
+// Output : 
 //-----------------------------------------------------------------------------
-bool CMapInstance::DeterminePath( const char *pszBaseFileName, const char *pszInstanceFileName, char *pszOutFileName )
+bool CMapInstance::IsMapInVersionControl( const char *pszFileName )
 {
-	char		szInstanceFileNameFixed[ MAX_PATH ];
-	const char *pszMapPath = "\\maps\\";
-
-	strcpy( szInstanceFileNameFixed, pszInstanceFileName );
-	V_SetExtension( szInstanceFileNameFixed, ".vmf", sizeof( szInstanceFileNameFixed ) );
-	V_FixSlashes( szInstanceFileNameFixed );
-
-	// first, try to find a relative location based upon the Base file name
-	strcpy( pszOutFileName, pszBaseFileName );
-	V_StripFilename( pszOutFileName );
-
-	strcat( pszOutFileName, "\\" );
-	strcat( pszOutFileName, szInstanceFileNameFixed );
-
-	if ( g_pFullFileSystem->FileExists( pszOutFileName ) )
+	if ( p4 != NULL && Options.general.bEnablePerforceIntegration == TRUE )
 	{
-		return true;
-	}
-
-	// second, try to find the master 'maps' directory and make it relative from that
-	strcpy( pszOutFileName, pszBaseFileName );
-	V_StripFilename( pszOutFileName );
-	V_RemoveDotSlashes( pszOutFileName );
-	V_FixDoubleSlashes( pszOutFileName );
-	V_strlower( pszOutFileName );
-	strcat( pszOutFileName, "\\" );
-
-	char *pos = strstr( pszOutFileName, pszMapPath );
-	if ( pos )
-	{
-		pos += strlen( pszMapPath );
-		*pos = 0;
-		strcat( pszOutFileName, szInstanceFileNameFixed );
-
-		if ( g_pFullFileSystem->FileExists( pszOutFileName ) )
+		if ( p4->IsFileInPerforce( pszFileName ) == true )
 		{
-			return true;
+			char szMessage[ MAX_PATH + MAX_PATH+ 256 ];
+			sprintf( szMessage, "This instance is not local but exists in perforce.  Would you like to sync to get the file?\n\n%s", pszFileName );
+			if ( AfxMessageBox( szMessage, MB_ICONHAND | MB_YESNO ) == IDYES )
+			{
+				if ( p4->SyncFile( pszFileName ) == true )
+				{
+					if ( g_pFullFileSystem->FileExists( pszFileName ) )
+					{
+						return true;
+					}
+				}
+
+				AfxMessageBox( "Sync operation was NOT successful!", MB_OK ) ;
+			}
 		}
 	}
-
-	if ( m_InstancePath[ 0 ] != 0 )
-	{
-		sprintf( szInstanceFileNameFixed, "%s%s", m_InstancePath, pszInstanceFileName );
-
-		if ( g_pFullFileSystem->FileExists( szInstanceFileNameFixed, "GAME" ) )
-		{
-			char FullPath[ MAX_PATH ];
-			g_pFullFileSystem->RelativePathToFullPath( szInstanceFileNameFixed, "GAME", FullPath, sizeof( FullPath ) );
-			strcpy( pszOutFileName, FullPath );
-
-			return true;
-		}
-	}
-
-	pszOutFileName[ 0 ] = 0;
 
 	return false;
 }
@@ -166,13 +133,14 @@ CMapInstance::CMapInstance( const char *pszBaseFileName, const char *pszInstance
 {
 	Initialize();
 
-	if ( pszInstanceFileName[ 0 ] && DeterminePath( pszBaseFileName, pszInstanceFileName, m_FileName ) )
+	if ( pszInstanceFileName[ 0 ] && CInstancingHelper::ResolveInstancePath( g_pFullFileSystem, pszBaseFileName, pszInstanceFileName, m_InstancePath, m_FileName, MAX_PATH ) )
 	{
 		bool	bSaveVisible = CHammer::IsNewDocumentVisible();
 		CMapDoc	*activeDoc = CMapDoc::GetActiveMapDoc();
 
 		CHammer::SetIsNewDocumentVisible( false );
-		m_pInstancedMap = ( CMapDoc * )APP()->OpenDocumentFile( m_FileName );
+
+		m_pInstancedMap = ( CMapDoc * )APP()->OpenDocumentOrInstanceFile( m_FileName );
 		if ( m_pInstancedMap )
 		{
 			m_pInstancedMap->AddReference();
@@ -254,9 +222,10 @@ void CMapInstance::FindTargetNames( CUtlVector< const char * > &Names )
 		{
 			GDIV_TYPE	FieldType = GetFieldType( pInstanceValue );
 
-			if ( FieldType == ivTargetDest ||
-				FieldType == ivTargetNameOrClass ||
-				FieldType == ivTargetSrc )
+			if ( FieldType == ivStringInstanced || 
+				 FieldType == ivTargetDest ||
+				 FieldType == ivTargetNameOrClass ||
+				 FieldType == ivTargetSrc )
 			{
 				const char *pszInstancePos = strchr( pInstanceValue, ' ' );
 
@@ -334,14 +303,15 @@ bool CMapInstance::OnApply( void )
 	}
 	if ( ent && ent->GetKeyValue( "file" ) )
 	{
-		DeterminePath( MapFileName, ent->GetKeyValue( "file" ), FileName );
+		CInstancingHelper::ResolveInstancePath( g_pFullFileSystem, MapFileName, ent->GetKeyValue( "file" ), m_InstancePath, FileName, MAX_PATH );
 		if ( strcmpi( FileName, m_FileName ) != 0 ) 
 		{
 			bool	bSaveVisible = CHammer::IsNewDocumentVisible();
 
 			CHammer::SetIsNewDocumentVisible( false );
 			strcpy( m_FileName, FileName );
-			m_pInstancedMap = ( CMapDoc * )APP()->OpenDocumentFile( m_FileName );
+
+			m_pInstancedMap = ( CMapDoc * )APP()->OpenDocumentOrInstanceFile( m_FileName );
 
 			CHammer::SetIsNewDocumentVisible( bSaveVisible );
 		}
@@ -394,6 +364,7 @@ void CMapInstance::CalcBounds(BOOL bFullUpdate)
 
 #if 0
 		m_pInstancedMap->GetMapWorld()->GetCullBox( vecMins, vecMaxs );
+		m_pInstancedMap->GetMapWorld()->GetBoundingBox( vecMins, vecMaxs );
 		TransformAABB( Instance3x4Matrix, vecMins, vecMaxs, vecExpandedMins, vecExpandedMaxs );
 		m_CullBox.UpdateBounds( vecExpandedMins, vecExpandedMaxs );
 #endif
@@ -459,7 +430,8 @@ CMapEntity *CMapInstance::FindChildByKeyValue( const char* key, const char* valu
 			{
 				VMatrix	LocalInstanceMatrix, Result;
 
-				LocalInstanceMatrix.SetupMatrixOrgAngles( m_Origin, m_Angles );
+				LocalInstanceMatrix.Identity();
+				AngleMatrix( m_Angles, m_Origin, LocalInstanceMatrix.As3x4() );
 				Result = ( *InstanceMatrix ) * LocalInstanceMatrix;
 				*InstanceMatrix = Result;
 			}
@@ -825,14 +797,14 @@ bool CMapInstance::IsInstanceVisible( void )
 {
 	if ( IsInstance() )
 	{
-		if ( CMapDoc::GetActiveMapDoc()  && CMapDoc::GetActiveMapDoc()->GetShowInstance() == INSTANCES_HIDE )
+		if ( CMapDoc::GetActiveMapDoc() && CMapDoc::GetActiveMapDoc()->GetShowInstance() == INSTANCES_HIDE )
 		{
 			return false;
 		}
 	}
 	else
 	{
-		if ( GetManifestMap()  && GetManifestMap()->m_bVisible == false )
+		if ( GetManifestMap() && GetManifestMap()->m_bVisible == false )
 		{
 			return false;
 		}

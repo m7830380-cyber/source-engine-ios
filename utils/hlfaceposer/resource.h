@@ -1,4 +1,3 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
 //{{NO_DEPENDENCIES}}
 // Microsoft Visual C++ generated include file.
 // Used by hlfaceposer.rc
@@ -49,6 +48,9 @@
 #define IDD_EVENTPROPERTIES_PERMITRESPONSES 133
 #define IDD_EVENTPROPERTIES_GENERIC     134
 #define IDD_PROGRESS                    135
+#define IDD_INPUTDIALOG1                136
+#define IDD_MESSAGEBOX_WITHCHECKBOX     136
+#define IDD_EVENTPROPERTIES_CAMERA      137
 #define IDC_ACTORNAME                   1000
 #define IDC_EXPRESSIONDESC              1001
 #define IDC_STATIC_PROMPT               1003
@@ -60,6 +62,7 @@
 #define IDC_EVENTCHOICES2               1010
 #define IDC_FILENAME                    1011
 #define IDC_TYPENAME2                   1011
+#define IDC_EVENTCHOICES4               1011
 #define IDC_EVENTNAME                   1012
 #define IDC_ACTORCHOICE                 1013
 #define IDC_CHOICES2PROMPT              1013
@@ -125,6 +128,7 @@
 #define IDC_RIGHT_RESET                 1084
 #define IDC_CHECK1                      1086
 #define IDC_HOLD_OUT                    1086
+#define IDC_MESSAGEBOX_CHECKBOX         1086
 #define IDC_CHECK_FORCESHORTMOVEMENT    1087
 #define IDC_CHECK_SYNCTOFOLLOWINGGESTURE 1088
 #define IDC_CHECK_DISABLED              1090
@@ -134,7 +138,6 @@
 #define IDC_FP_PROGRESS_TEXT            1094
 #define IDC_FP_PROGRESS_CANCEL          1095
 #define IDC_FP_PROGRESS_PERCENT         1095
-#define IDC_FP_PROGRESS_PERCENT2        1096
 #define IDC_FP_PROGRESS_ETA             1096
 
 // Next default values for new objects

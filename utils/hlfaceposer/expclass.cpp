@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -10,12 +10,12 @@
 #include "expclass.h"
 #include "hlfaceposer.h"
 #include "StudioModel.h"
-#include "filesystem.h"
+#include "FileSystem.h"
 #include "FlexPanel.h"
 #include "ControlPanel.h"
 #include "mxExpressionTray.h"
 #include "UtlBuffer.h"
-#include "filesystem.h"
+#include "FileSystem.h"
 #include "ExpressionTool.h"
 #include "faceposer_models.h"
 #include "mdlviewer.h"
@@ -26,8 +26,8 @@
 #include "tier1/utlvector.h"
 
 
-#undef ALIGN4
 #undef ALIGN16
+#undef ALIGN4
 #define ALIGN4( a ) a = (byte *)((int)((byte *)a + 3) & ~ 3)
 #define ALIGN16( a ) a = (byte *)((int)((byte *)a + 15) & ~ 15)
 
@@ -502,7 +502,7 @@ CExpression *CExpClass::AddExpression( const char *name, const char *description
 //-----------------------------------------------------------------------------
 CExpression *CExpClass::FindExpression( const char *name )
 {
-	for ( int i = 0 ; i < m_Expressions.Size(); i++ )
+	for ( int i = 0 ; i < m_Expressions.Count(); i++ )
 	{
 		CExpression *exp = &m_Expressions[ i ];
 		if ( !stricmp( exp->name, name ) )
@@ -521,7 +521,7 @@ CExpression *CExpClass::FindExpression( const char *name )
 void CExpClass::DeleteExpression( const char *name )
 {
 
-	for ( int i = 0 ; i < m_Expressions.Size(); i++ )
+	for ( int i = 0 ; i < m_Expressions.Count(); i++ )
 	{
 		CExpression *exp = &m_Expressions[ i ];
 		if ( !stricmp( exp->name, name ) )
@@ -540,7 +540,7 @@ void CExpClass::DeleteExpression( const char *name )
 //-----------------------------------------------------------------------------
 int CExpClass::GetNumExpressions( void )
 {
-	return m_Expressions.Size();
+	return m_Expressions.Count();
 }
 
 //-----------------------------------------------------------------------------
@@ -550,7 +550,7 @@ int CExpClass::GetNumExpressions( void )
 //-----------------------------------------------------------------------------
 CExpression *CExpClass::GetExpression( int num )
 {
-	if ( num < 0 || num >= m_Expressions.Size() )
+	if ( num < 0 || num >= m_Expressions.Count() )
 	{
 		return NULL;
 	}
@@ -640,7 +640,7 @@ void CExpClass::SwapExpressionOrder( int exp1, int exp2 )
 
 void CExpClass::BuildValidChecksums( CUtlRBTree< CRC32_t > &tree )
 {
-	for ( int i = 0; i < m_Expressions.Size(); i++ )
+	for ( int i = 0; i < m_Expressions.Count(); i++ )
 	{
 		CExpression *exp = &m_Expressions[ i ];
 		if ( !exp )

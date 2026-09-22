@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2005, Valve Corporation, All rights reserved. =======
 //
 // Purpose: 
 //
@@ -39,14 +39,14 @@ void CDmeTrack::OnConstruction()
 	m_hOwner = DMELEMENT_HANDLE_INVALID;
 
 	m_Flags.ClearAllFlags();
-	m_Clips.Init( this, "children" );
+	m_Clips.Init( this, "children", FATTRIB_HAS_CALLBACK );
 	m_Collapsed.InitAndSet( this, "collapsed", true );
 	m_Mute.InitAndSet( this, "mute", false );
 	m_Synched.InitAndSet( this, "synched", true );
-	m_ClipType.InitAndSet( this, "clipType", DMECLIP_UNKNOWN, FATTRIB_HAS_CALLBACK | FATTRIB_HAS_PRE_CALLBACK );
+	m_ClipType.InitAndSet( this, "clipType", DMECLIP_UNKNOWN, FATTRIB_HAS_CALLBACK );
 
 	m_Volume.InitAndSet( this, "volume", 1.0 );
-
+	m_flDisplayScale.InitAndSet( this, "displayScale", 1.0f );
 }
 
 void CDmeTrack::OnDestruction()
@@ -208,7 +208,7 @@ CDmeTrack *CDmeTrack::GetSoloTrack( DmeClipType_t clipType )
 
 void CDmeTrack::SetSoloTrack( DmeClipType_t clipType, CDmeTrack *pTrack )
 {
-	m_hSoloTrack[ clipType ] = pTrack->GetHandle();
+	m_hSoloTrack[ clipType ] = pTrack ? pTrack->GetHandle() : DMELEMENT_HANDLE_INVALID;
 }
 
 bool CDmeTrack::IsSoloTrack() const
@@ -392,14 +392,17 @@ void CDmeTrack::ShiftAllClipsBefore( DmeTime_t endTime, DmeTime_t dt, bool bTest
 //-----------------------------------------------------------------------------
 // A version that works only on film clips
 //-----------------------------------------------------------------------------
-void CDmeTrack::ShiftAllFilmClipsAfter( CDmeClip *pClip, DmeTime_t dt, bool bShiftClip )
+void CDmeTrack::ShiftAllFilmClipsAfter( CDmeClip *pClip, DmeTime_t dt, bool bShiftClip /*=false*/, bool bSortClips /*=true*/ )
 {
 	Assert( IsFilmTrack() );
 	if ( !IsFilmTrack() || ( m_Clips.Count() == 0 ) || ( dt == DmeTime_t( 0 ) ) )
 		return;
 
 	// This algorithm requires sorted clips
-	SortClipsByStartTime();
+	if ( bSortClips )
+	{
+		SortClipsByStartTime();
+	}
 
 	int c = GetClipCount();
 	for ( int i = c; --i >= 0; )
@@ -420,14 +423,17 @@ void CDmeTrack::ShiftAllFilmClipsAfter( CDmeClip *pClip, DmeTime_t dt, bool bShi
 	Assert( 0 );
 }
 
-void CDmeTrack::ShiftAllFilmClipsBefore( CDmeClip *pClip, DmeTime_t dt, bool bShiftClip )
+void CDmeTrack::ShiftAllFilmClipsBefore( CDmeClip *pClip, DmeTime_t dt, bool bShiftClip /*=false*/, bool bSortClips /*=true*/ )
 {
 	Assert( IsFilmTrack() );
 	if ( !IsFilmTrack() || ( m_Clips.Count() == 0 ) || ( dt == DmeTime_t( 0 ) ) )
 		return;
 	 
 	// This algorithm requires sorted clips
-	SortClipsByStartTime();
+	if ( bSortClips )
+	{
+		SortClipsByStartTime();
+	}
 
 	int c = GetClipCount();
 	for ( int i = 0; i < c; ++i )

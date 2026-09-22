@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -15,7 +15,7 @@
 #include "Axes2.h"
 #include "MapView.h"
 #include "MapClass.h"		// For CMapObjectList
-#include "utlvector.h"
+#include "UtlVector.h"
 #include "VGuiWnd.h"
 #include "color.h"
 

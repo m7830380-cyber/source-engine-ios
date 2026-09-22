@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -47,7 +47,7 @@ void mxStatusWindow::redraw()
 	if ( !m_pScrollbar )
 		return;
 
-	CChoreoWidgetDrawHelper helper( this, RGB( 0, 0, 0 ) );
+	CChoreoWidgetDrawHelper helper( this, Color( 0, 0, 0 ) );
 	HandleToolRedraw( helper );
 
 	RECT rc;
@@ -97,7 +97,7 @@ void mxStatusWindow::redraw()
 
 		rcTime.left = rcTime.right - len - 5;
 
-		helper.DrawColoredText( "Arial", STATUS_FONT_SIZE, FW_NORMAL, RGB( 255, 255, 150 ), rcTime, sz );
+		helper.DrawColoredText( "Arial", STATUS_FONT_SIZE, FW_NORMAL, Color( 255, 255, 150 ), rcTime, sz );
 
 		rcTime = rcText;
 		rcTime.left += 50;
@@ -120,7 +120,7 @@ bool mxStatusWindow::PaintBackground( void )
 	return false;
 }
 
-void mxStatusWindow::StatusPrint( COLORREF clr, bool overwrite, const char *text )
+void mxStatusWindow::StatusPrint( const Color& clr, bool overwrite, const char *text )
 {
 	float curtime = (float)Plat_FloatTime();
 
@@ -140,7 +140,7 @@ void mxStatusWindow::StatusPrint( COLORREF clr, bool overwrite, const char *text
 	{
 		if ( *in == '\n' || *in == '\r' )
 		{
-			in++;
+			*in++;
 		}
 		else
 		{
@@ -182,7 +182,7 @@ void mxStatusWindow::PositionSliders( int sboffset )
 {
 	int lineheight = ( STATUS_FONT_SIZE + 2 );
 
-	int linesused = min( (int)MAX_TEXT_LINES, m_nCurrentLine );
+	int linesused = min( MAX_TEXT_LINES, m_nCurrentLine );
 	linesused = max( linesused, 1 );
 
 	int trueh = h2() - GetCaptionHeight();
@@ -294,11 +294,11 @@ void mxStatusWindow::DrawActiveTool()
 
 	int len = CChoreoWidgetDrawHelper::CalcTextWidth( "Courier New", 10, FW_NORMAL, sz );
 
-	CChoreoWidgetDrawHelper helper( this, rcTool, RGB( 32, 0, 0 ) );
+	CChoreoWidgetDrawHelper helper( this, rcTool, Color( 32, 0, 0 ) );
 
 	rcTool.left = rcTool.right - len - 15;
 
-	helper.DrawColoredText( "Courier New", 10, FW_NORMAL, RGB( 255, 255, 200 ), rcTool, sz );
+	helper.DrawColoredText( "Courier New", 10, FW_NORMAL, Color( 255, 255, 200 ), rcTool, sz );
 }
 
 //-----------------------------------------------------------------------------

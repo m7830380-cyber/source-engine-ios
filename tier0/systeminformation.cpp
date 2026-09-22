@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright c 1996-2007, Valve Corporation, All rights reserved. =======//
 //
 // Purpose: 
 //
@@ -7,12 +7,22 @@
 //=============================================================================//
 
 #include "pch_tier0.h"
+
+#ifdef PLATFORM_WINDOWS_PC
+#include "tier0/valve_off.h"
+#include <windows.h>
+#include <tchar.h>
+#include "tier0/valve_on.h"
+#endif
+
 #include "tier0/platform.h"
 #include "tier0/systeminformation.h"
 
-#ifdef IS_WINDOWS_PC 
-#include <windows.h>
-#include <tchar.h>
+// NOTE: This has to be the last file included!
+#include "tier0/memdbgon.h"
+
+
+#ifdef PLATFORM_WINDOWS_PC 
 
 #ifdef __cplusplus
 extern "C" {
@@ -132,6 +142,7 @@ CSysCallCacheEntry::CSysCallCacheEntry() :
 	m_bInitialized( false ),
 	m_bFreeModule( false )
 {
+	NULL;
 }
 
 CSysCallCacheEntry::~CSysCallCacheEntry()
@@ -215,7 +226,7 @@ FN CSysCallCacheEntry::GetFunction() const
 //	Plat_GetMemPageSize
 //		Returns the size of a memory page in bytes.
 //
-unsigned long Plat_GetMemPageSize()
+uint32 Plat_GetMemPageSize()
 {
 	return 4;	// On 32-bit systems memory page size is 4 Kb
 }
@@ -269,7 +280,7 @@ SYSTEM_CALL_RESULT_t Plat_GetPagedPoolInfo( PAGED_POOL_INFO_t *pPPI )
 	}
 
 	// Invoke proc
-	PrivateType( SYSTEM_PERFORMANCE_INFORMATION ) spi = {};
+	PrivateType( SYSTEM_PERFORMANCE_INFORMATION ) spi;
 	ULONG ulLength = sizeof( spi );
 	PrivateType( NTSTATUS ) lResult =
 		( qsi.GetFunction< PrivateType( NtQuerySystemInformation ) >() )
@@ -291,7 +302,7 @@ SYSTEM_CALL_RESULT_t Plat_GetPagedPoolInfo( PAGED_POOL_INFO_t *pPPI )
 //	Plat_GetMemPageSize
 //		Returns the size of a memory page in bytes.
 //
-unsigned long Plat_GetMemPageSize()
+uint32 Plat_GetMemPageSize()
 {
 	return 4;	// Assume unknown page size is 4 Kb
 }
@@ -308,3 +319,4 @@ SYSTEM_CALL_RESULT_t Plat_GetPagedPoolInfo( PAGED_POOL_INFO_t *pPPI )
 
 
 #endif
+

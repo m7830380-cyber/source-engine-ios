@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright c 1996-2007, Valve Corporation, All rights reserved. =======//
 //
 // Purpose: 
 //
@@ -13,6 +13,10 @@
 #ifdef PLATFORM_WINDOWS_PC
 #include <Windows.h>
 #endif // PLATFORM_WINDOWS_PC
+
+// NOTE: This has to be the last file included!
+#include "tier0/memdbgon.h"
+
 
 //////////////////////////////////////////////////////////////////////////
 //
@@ -69,30 +73,6 @@ bool CP4File::Add( void )
 	return p4->OpenFileForAdd( m_sFilename.String() );
 }
 
-bool CP4File::Revert( void )
-{
-	if ( !p4 )
-		return true;
-
-	return p4->RevertFile( m_sFilename.String() );
-}
-
-bool CP4File::Delete( void )
-{
-	if ( !p4 )
-		return true;
-
-	return p4->OpenFileForDelete( m_sFilename.String() );
-}
-
-P4FileState_t CP4File::GetFileState()
-{
-	if ( !p4 )
-		return P4FILE_UNOPENED;
-
-	return p4->GetFileState( m_sFilename.String() );
-}
-
 // Is the file in perforce?
 bool CP4File::IsFileInPerforce()
 {
@@ -102,22 +82,21 @@ bool CP4File::IsFileInPerforce()
 	return p4->IsFileInPerforce( m_sFilename.String() );
 }
 
-bool CP4File::SetFileType(const CUtlString& desiredFileType)
-{
-	/*if ( !p4 )
-		return false;
-
-	return p4->SetFileType( m_sFilename.String(), desiredFileType.String() );*/
-	Error("CP4File::SetFileType is unimplemented");
-	return false;
-}
-
 
 //////////////////////////////////////////////////////////////////////////
 //
 // CP4Factory implementation
 //
 //////////////////////////////////////////////////////////////////////////
+
+
+CP4Factory::CP4Factory()
+{
+}
+
+CP4Factory::~CP4Factory()
+{
+}
 
 bool CP4Factory::SetDummyMode( bool bDummyMode )
 {

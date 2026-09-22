@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright (c) 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -11,6 +11,12 @@
 // SRC only
 #define PROTECTED_THINGS_DISABLE
 
+#define SUPPORT_CUSTOM_FONT_FORMAT
+
+#ifdef SUPPORT_CUSTOM_FONT_FORMAT
+	#define _WIN32_WINNT 0x0500
+#endif
+
 #include <windows.h>
 #include <imm.h>
 #include <zmouse.h>
@@ -22,7 +28,7 @@
 #include <stdio.h>
 #include <basetypes.h>
 
-#include <vgui/VGUI.h>
+#include <vgui/vgui.h>
 #include <vgui/Dar.h>
 #include <vgui/IClientPanel.h>
 #include <vgui/ISurface.h>
@@ -37,23 +43,26 @@
 
 #include <vgui/Cursor.h>
 #include <vgui/KeyCode.h>
-#include <KeyValues.h>
+#include <keyvalues.h>
 #include <vgui/MouseCode.h>
 
 #include "vgui_internal.h"
 #include "bitmap.h"
 #include "VPanel.h"
 
+#include "utlbuffer.h"
 #include "utlvector.h"
 #include "utlsymbol.h"
-#include "tier1/utldict.h"
+#include "tier1/UtlDict.h"
 
 #include "filesystem.h"
 #include "SteamBootStrapper.h"
 
 #include "vgui_surfacelib/Win32Font.h"
-#include "vgui_surfacelib/FontManager.h"
+#include "vgui_surfacelib/fontmanager.h"
 #include "vgui_key_translation.h"
+
+#include "valvefont.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
@@ -116,8 +125,10 @@ public:
 // Purpose: Implementation of ISurface for use running under windows, renders using GDI
 //			This is not used in the game, EngineSurface is used instead
 //-----------------------------------------------------------------------------
-class CWin32Surface : public ISurface
+class CWin32Surface : public CBaseAppSystem< ISurface >, public ISchemeSurface, public ILocalizeTextQuery 
 {
+	typedef CBaseAppSystem< ISurface > BaseClass;
+
 public:
 	friend class CIconImage;
 
@@ -142,6 +153,8 @@ public:
 	virtual void DrawOutlinedRect(int x0, int y0, int x1, int y1);
 	virtual void DrawLine(int x0, int y0, int x1, int y1);
 	virtual void DrawPolyLine(int *px, int *py, int numPoints);
+	virtual void DrawSetApparentDepth( float depth ) {} 
+	virtual void DrawClearApparentDepth() {} 
 	virtual void DrawSetTextFont(HFont font);
 	virtual void DrawSetTextColor(int r, int g, int b, int a);
 	virtual void DrawSetTextColor(Color col);
@@ -156,7 +169,7 @@ public:
 	virtual int	 DrawGetTextureId( char const *filename );
 	virtual void DrawSetTextureFile(int id, const char *filename, int hardwareFilter, bool forceReload = false);
 	virtual void DrawSetTexture(int id);	
-	virtual void DrawSetTextureRGBA(int id, const unsigned char *rgba, int wide, int tall, int hardwareFilter, bool forceReload = false);
+	virtual void DrawSetTextureRGBA(int id, const unsigned char *rgba, int wide, int tall );
 	virtual void DrawSetTextureRGBAEx(int id, const unsigned char *rgba, int wide, int tall, ImageFormat imageFormat );
 	virtual void DrawGetTextureSize(int id, int &wide, int &tall);
 	virtual IVguiMatInfo *DrawGetTextureMatInfoFactory( int id ) { return NULL; }
@@ -185,7 +198,8 @@ public:
 	virtual void FlashWindow(VPANEL panel, bool state);
 	virtual void SetTitle(VPANEL panel, const wchar_t *title);
 	virtual void SetAsToolBar(VPANEL panel, bool state);
-	virtual bool SupportsFeature(SurfaceFeature_e feature);
+	virtual bool SupportsFontFeature( FontFeature_t feature );
+	virtual bool SupportsFeature( SurfaceFeature_t feature );
 	virtual void SetTopLevelFocus(VPANEL panel);
 
 	virtual int GetPopupCount();
@@ -201,7 +215,6 @@ public:
 	virtual void SwapBuffers(VPANEL panel);
 	virtual void Invalidate(VPANEL panel);
 	virtual void SetCursor(HCursor cursor);
-	virtual void SetCursorAlwaysVisible( bool visible ) {}
 	virtual void ApplyChanges();
 	virtual bool IsWithin(int x, int y);
 	virtual bool HasFocus();
@@ -210,7 +223,7 @@ public:
 	virtual void PaintTraverse(VPANEL panel);
 
 
-	virtual void RestrictPaintToSinglePanel(VPANEL panel);
+	virtual void RestrictPaintToSinglePanel(VPANEL panel, bool bForceAllowNonModalSurface = false);
 	virtual void SetModalPanel(VPANEL );
 	virtual VPANEL GetModalPanel();
 	virtual void UnlockCursor();
@@ -226,21 +239,19 @@ public:
 	virtual HFont CreateFont();
 	virtual bool SetFontGlyphSet(HFont font, const char *windowsFontName, int tall, int weight, int blur, int scanlines, int flags, int nRangeMin = 0, int nRangeMax = 0);
 	virtual int GetFontTall(HFont font);
-	virtual int GetFontTallRequested(HFont font);
 	virtual int GetFontAscent(HFont font, wchar_t wch);
 	virtual void GetCharABCwide(HFont font, int ch, int &a, int &b, int &c);
 	virtual int GetCharacterWidth(HFont font, int ch);
 	virtual void GetTextSize(HFont font, const wchar_t *text, int &wide, int &tall);
-	virtual bool AddCustomFontFile(const char *fontName, const char *fontFileName);
+	virtual bool AddCustomFontFile(const char *fontFileName);
 	virtual bool AddBitmapFontFile(const char *fontFileName);
 	virtual void SetBitmapFontName( const char *pName, const char *pFontFilename );
 	virtual const char *GetBitmapFontName( const char *pName );
 	virtual bool SetBitmapFontGlyphSet(HFont font, const char *windowsFontName, float scalex, float scaley, int flags);
 	virtual bool IsFontAdditive(HFont font);
-	virtual void PrecacheFontCharacters(HFont font, const wchar_t *pCharacters);
+	virtual void PrecacheFontCharacters(HFont font, wchar_t *pCharacters);
 	virtual void ClearTemporaryFontCache( void );
 	virtual const char *GetFontName( HFont font );
-	virtual const char *GetFontFamilyName( HFont font );
 
 	virtual bool IsCursorVisible() { return true; }
 	
@@ -271,9 +282,13 @@ public:
 	virtual void LockCursor( bool state );
 	virtual bool IsCursorLocked( void ) const;
 	virtual void SetWorkspaceInsets( int left, int top, int right, int bottom );
+
+	virtual void DrawWordBubble( int x0, int y0, int x1, int y1, int nBorderThickness, Color rgbaBackground, Color rgbaBorder, 
+								 bool bPointer = false, int nPointerX = 0, int nPointerY = 0, int nPointerBaseThickness = 16 );
+
 	// Lower level char drawing code, call DrawGet then pass in info to DrawRender (NOT SUPPORTED BY DEFAULT SURFACE )!!!
-	virtual bool DrawGetUnicodeCharRenderInfo( wchar_t ch, CharRenderInfo& info );
-	virtual void DrawRenderCharFromInfo( const CharRenderInfo& info );
+	virtual bool DrawGetUnicodeCharRenderInfo( wchar_t ch, FontCharRenderInfo& info );
+	virtual void DrawRenderCharFromInfo( const FontCharRenderInfo& info );
 
 	// alpha multipliers not yet implemented
 	virtual void DrawSetAlphaMultiplier( float alpha /* [0..1] */ ) {}
@@ -290,6 +305,10 @@ public:
 	// Init, shutdown
 	virtual InitReturnVal_t Init();
 	//virtual void Shutdown();
+
+	virtual const AppSystemInfo_t* GetDependencies() { return BaseClass::GetDependencies(); }
+	virtual AppSystemTier_t GetTier() { return BaseClass::GetTier(); }
+	virtual void Reconnect( CreateInterfaceFn factory, const char *pInterfaceName ) { BaseClass::Reconnect( factory, pInterfaceName ); }
 
 	// screen size changing
 	void OnScreenSizeChanged( int nOldWidth, int nOldHeight )
@@ -315,38 +334,48 @@ public:
 
 	virtual IImage *GetIconImageForFullPath( char const *pFullPath );
 
-	virtual const char *GetResolutionKey( void ) const
-	{
-		Assert( 0 );
-		return NULL;
-	}
-
 	virtual bool ForceScreenSizeOverride( bool bState, int wide, int tall );
 	// LocalToScreen, ParentLocalToScreen fixups for explicit PaintTraverse calls on Panels not at 0, 0 position
 	virtual bool ForceScreenPosOffset( bool bState, int x, int y );
 
 	virtual void OffsetAbsPos( int &x, int &y );
 
-	virtual bool IsScreenSizeOverrideActive( void );
-	virtual bool IsScreenPosOverrideActive( void );
-
-	void GetKernedCharWidth( HFont font, wchar_t ch, wchar_t chBefore, wchar_t chAfter, float &wide, float &flabcA )
-	{
-		Assert( 0 );
-		wide = 0.0f;
-		flabcA = 0.0f;
-	}
+	virtual void SetAbsPosForContext( int id, int x, int y );
+	virtual void GetAbsPosForContext( int id, int &x, int& y );
 
 	// split screen state changed, etc.
 	void ResetFontCaches()
 	{
 	}
 
-	virtual void DestroyTextureID( int id );
+	virtual bool IsScreenSizeOverrideActive( void );
+	virtual bool IsScreenPosOverrideActive( void );
 
 	virtual int GetTextureNumFrames( int id );
 	virtual void DrawSetTextureFrame( int id, int nFrame, unsigned int *pFrameCache );
 
+	virtual void GetClipRect( int &x0, int &y0, int &x1, int &y1 );
+	virtual void SetClipRect( int x0, int y0, int x1, int y1 );
+
+	virtual void SetLanguage( const char *pLanguage );
+	virtual const char *GetLanguage();
+
+	virtual void DrawTexturedRectEx( DrawTexturedRectParms_t *pDrawParms );
+
+	// Methods of ILocalizeTextQuery
+public:
+	virtual int ComputeTextWidth( const wchar_t *pString );
+
+
+	void GetKernedCharWidth( HFont font, wchar_t ch, wchar_t chBefore, wchar_t chAfter, float &wide, float &flabcA, float &flabcC )
+	{
+		Assert( 0 );
+		wide = 0.0f;
+		flabcA = 0.0f;
+		flabcC = 0.0f;
+	}
+
+	virtual void DestroyTextureID( int id );
 
 	virtual void DrawUpdateRegionTextureRGBA( int nTextureID, int x, int y, const unsigned char *pchData, int wide, int tall, ImageFormat imageFormat ) 
 	{
@@ -356,39 +385,17 @@ public:
 		return false;
 	}
 
-
 	virtual const char *GetWebkitHTMLUserAgentString();
 
-	virtual void *Deprecated_AccessChromeHTMLController() { return NULL; }
+	virtual void *Deprecated_AccessChromeHTMLController() OVERRIDE { return NULL; }
 
-	virtual void SetFullscreenViewport( int x, int y, int w, int h ) OVERRIDE 
-	{
-		m_nFullscreenViewportX = x; 
-		m_nFullscreenViewportY = y; 
-		m_nFullscreenViewportWidth = w; 
-		m_nFullscreenViewportHeight = h; 
-		m_pFullscreenRenderTarget = NULL; 
-	}
-
-	virtual void GetFullscreenViewport( int & x, int & y, int & w, int & h ) OVERRIDE 
-	{ 
-		x = m_nFullscreenViewportX; 
-		y = m_nFullscreenViewportY; 
-		w = m_nFullscreenViewportWidth; 
-		h = m_nFullscreenViewportHeight;  
-	}
-	virtual void PushFullscreenViewport();
-	virtual void PopFullscreenViewport();
-
-	// software cursors aren't available in tools
-	virtual void SetSoftwareCursor( bool bUseSoftwareCursor ) OVERRIDE {}
-	virtual void PaintSoftwareCursor()  OVERRIDE {}
+	virtual void DrawSetTextureRGBALinear(int id, const unsigned char *rgba, int wide, int tall );
 
 private:
 
 	CUtlDict< IImage *, unsigned short >	m_FileTypeImages;
 
-	enum { BASE_HEIGHT = 600, BASE_WIDTH = 800 };
+	enum { BASE_HEIGHT = 480, BASE_WIDTH = 640 };
 
 	bool LoadTGA(Texture *texture, const char *filename);
 	bool LoadBMP(Texture *texture, const char *filename);
@@ -414,6 +421,8 @@ private:
 	bool m_bSupportsUnicode;
 	CUtlVector<CUtlSymbol> m_CustomFontFileNames;
 
+	bool LoadChromeHTML();
+
 	// current font info
 	HFont m_hCurrentFont;
 	CWin32Font *m_pActiveFont;
@@ -431,6 +440,7 @@ private:
 	int GetNumTextures();
 
 	CUtlRBTree<Texture, int> m_VGuiSurfaceTextures;
+	bool m_bAllowJavaScript;
 
 	struct ScreenOverride_t
 	{
@@ -445,18 +455,27 @@ private:
 	ScreenOverride_t m_ScreenSizeOverride;
 	ScreenOverride_t m_ScreenPosOverride;
 
-	bool m_bAllowJavaScript;
+	struct ContextAbsPos_t
+	{
+		ContextAbsPos_t() : id( -1 )
+		{
+			m_nPos[ 0 ] = m_nPos[ 1 ] = 0;
+		}
 
-	int m_nFullscreenViewportX;
-	int m_nFullscreenViewportY;
-	int m_nFullscreenViewportWidth;
-	int m_nFullscreenViewportHeight;
-	ITexture *m_pFullscreenRenderTarget; 
+		static bool Less( const ContextAbsPos_t &lhs, const ContextAbsPos_t &rhs )
+		{
+			return lhs.id < rhs.id;
+		}
+		int id;
+		int m_nPos[ 2 ];
+	};
 
+	CUtlRBTree< ContextAbsPos_t > m_ContextAbsPos;
 };
 
 CWin32Surface g_Surface;
-EXPOSE_SINGLE_INTERFACE_GLOBALVAR(CWin32Surface, ISurface, VGUI_SURFACE_INTERFACE_VERSION, g_Surface);
+EXPOSE_SINGLE_INTERFACE_GLOBALVAR(CWin32Surface, ISurface, VGUI_SURFACE_INTERFACE_VERSION, g_Surface );
+EXPOSE_SINGLE_INTERFACE_GLOBALVAR( CWin32Surface, ISchemeSurface, SCHEME_SURFACE_INTERFACE_VERSION, g_Surface );
 
 //!! these defines duplicated in Surface_Win32.cpp
 #define WM_MY_TRAY_NOTIFICATION (WM_USER+1)
@@ -750,7 +769,7 @@ static void staticGenerateIconForTexture(Texture *texture, HDC hdc)
 //-----------------------------------------------------------------------------
 // Purpose: Constructor, basic variable initialization
 //-----------------------------------------------------------------------------
-CWin32Surface::CWin32Surface() : m_VGuiSurfaceTextures(0, 128, TextureLessFunc)
+CWin32Surface::CWin32Surface() : m_VGuiSurfaceTextures(0, 128, TextureLessFunc), m_ContextAbsPos( 0, 0, ContextAbsPos_t::Less )
 {
 	_currentCursor = NULL;
 	m_pCurrentTexture = NULL;
@@ -788,10 +807,6 @@ CWin32Surface::CWin32Surface() : m_VGuiSurfaceTextures(0, 128, TextureLessFunc)
 	}
 
 	m_TextPos[0] = m_TextPos[1] = 0;
-
-	m_nFullscreenViewportX = m_nFullscreenViewportY = 0;
-	m_nFullscreenViewportWidth = m_nFullscreenViewportHeight = 0;
-	m_pFullscreenRenderTarget = NULL;
 }
 
 //-----------------------------------------------------------------------------
@@ -874,23 +889,23 @@ VPANEL CWin32Surface::GetEmbeddedPanel()
 	return _embeddedPanel;
 }
 
-	// SRC specific interfaces
- void CWin32Surface::DrawTexturedLine( const Vertex_t &a, const Vertex_t &b )
- {
+// SRC specific interfaces
+void CWin32Surface::DrawTexturedLine( const Vertex_t &a, const Vertex_t &b )
+{
 
- }
- void CWin32Surface::DrawOutlinedCircle(int x, int y, int radius, int segments) 
- {
+}
+void CWin32Surface::DrawOutlinedCircle(int x, int y, int radius, int segments) 
+{
 
- }
- void CWin32Surface::DrawTexturedPolyLine( const Vertex_t *p,int n )
- {
- }
- void CWin32Surface::DrawTexturedSubRect( int x0, int y0, int x1, int y1, float texs0, float text0, float texs1, float text1 )
- {
- }
- void CWin32Surface::DrawTexturedPolygon(int n, Vertex_t *pVertices, bool bClipVertices /*= true*/)
- {
+}
+void CWin32Surface::DrawTexturedPolyLine( const Vertex_t *p,int n )
+{
+}
+void CWin32Surface::DrawTexturedSubRect( int x0, int y0, int x1, int y1, float texs0, float text0, float texs1, float text1 )
+{
+}
+void CWin32Surface::DrawTexturedPolygon(int n, Vertex_t *pVertices, bool bClipVertices /*= true*/)
+{
 	NOTE_UNUSED( bClipVertices );
 
 	POINT *pt;
@@ -924,28 +939,200 @@ VPANEL CWin32Surface::GetEmbeddedPanel()
 		//restore pen colour 
 		DrawSetTextColor(GetRValue(pencolor),GetGValue(pencolor),GetBValue(pencolor),255);
 	}
- }
+}
 
- const wchar_t *CWin32Surface::GetTitle(VPANEL panel)
- {
+const wchar_t *CWin32Surface::GetTitle(VPANEL panel)
+{
 	return L"";
- }
- void CWin32Surface::LockCursor( bool state )
- {
- }
- bool CWin32Surface::IsCursorLocked( void ) const
- {
-	 return false;
- }
- void CWin32Surface::SetWorkspaceInsets( int left, int top, int right, int bottom )
- {
- }
- //-----------------------------------------------------------------------------
+}
+void CWin32Surface::LockCursor( bool state )
+{
+}
+bool CWin32Surface::IsCursorLocked( void ) const
+{
+	return false;
+}
+void CWin32Surface::SetWorkspaceInsets( int left, int top, int right, int bottom )
+{
+}
+
+void CWin32Surface::DrawWordBubble( int x0, int y0, int x1, int y1, int nBorderThickness, Color rgbaBackground, Color rgbaBorder, bool bPointer, int nPointerX, int nPointerY, int nPointerBaseThickness )
+{
+	int nOldClipX0, nOldClipY0, nOldClipX1, nOldClipY1;
+	GetClipRect( nOldClipX0, nOldClipY0, nOldClipX1, nOldClipY1 );
+	SetClipRect( INT16_MIN, INT16_MIN, INT16_MAX, INT16_MAX );
+
+	int nBackgroundWide = x1 - x0;
+	int nBackgroundTall = y1 - y0;
+
+	DrawSetColor( rgbaBackground );
+	DrawFilledRect( x0, y0, x1, y1 );
+
+	DrawSetTexture( -1 );
+	Vector2D vecZero = Vector2D( 0.0f, 0.0f );
+
+	// Figure out the relative position of the thing we're pointing at
+	if ( nPointerY >= y0 && nPointerY < y0 + nBackgroundTall )
+	{
+		// Pointer is pointing inside the bubble!
+		bPointer = false;
+	}
+
+	int nHalfPointerBaseTopWide, nHalfPointerBaseBottomWide;
+
+	if ( bPointer )
+	{
+		if ( nPointerY < y0 )
+		{
+			// Pointing at something above bubble!
+			nHalfPointerBaseTopWide = nPointerBaseThickness / 2;
+			nHalfPointerBaseBottomWide = nPointerBaseThickness;
+
+			// Draw the up pointer from polygons
+			vgui::Vertex_t pointerVerts[ 3 ] = 
+			{
+				vgui::Vertex_t( Vector2D( x0 + nHalfPointerBaseTopWide, y0 ), vecZero ),
+				vgui::Vertex_t( Vector2D( nPointerX, nPointerY ), vecZero ),
+				vgui::Vertex_t( Vector2D( x0 + nPointerBaseThickness, y0 ), vecZero )
+			};
+			DrawTexturedPolygon( 3, pointerVerts );
+		}
+		else
+		{
+			// Pointing at something below bubble!
+			nHalfPointerBaseTopWide = nPointerBaseThickness;
+			nHalfPointerBaseBottomWide = nPointerBaseThickness / 2;
+
+			// Draw the down pointer from polygons
+			vgui::Vertex_t pointerVerts[ 3 ] = 
+			{
+				vgui::Vertex_t( Vector2D( x0 + nPointerBaseThickness, y0 + nBackgroundTall ), vecZero ),
+				vgui::Vertex_t( Vector2D( nPointerX, nPointerY ), vecZero ),
+				vgui::Vertex_t( Vector2D( x0 + nHalfPointerBaseBottomWide, y0 + nBackgroundTall ), vecZero )
+			};
+			DrawTexturedPolygon( 3, pointerVerts );
+		}
+	}
+	else
+	{
+		// No pointer so the top and bottom separations are both closed
+		nHalfPointerBaseTopWide = nPointerBaseThickness;
+		nHalfPointerBaseBottomWide = nPointerBaseThickness;
+	}
+
+	// Build a border out of polygons!
+	DrawSetColor( rgbaBorder );
+
+	DrawFilledRect( x0, y0 - nBorderThickness, x0 + nHalfPointerBaseTopWide, y0 );
+	DrawFilledRect( x0 + nPointerBaseThickness, y0 - nBorderThickness, x0 + nBackgroundWide, y0 );
+	DrawFilledRect( x0 - nBorderThickness, y0, x0, y0 + nBackgroundTall );
+	DrawFilledRect( x0 + nBackgroundWide, y0, x0 + nBackgroundWide + nBorderThickness, y0 + nBackgroundTall );
+	DrawFilledRect( x0, y0 + nBackgroundTall, x0 + nHalfPointerBaseBottomWide, y0 + nBackgroundTall + nBorderThickness );
+	DrawFilledRect( x0 + nPointerBaseThickness, y0 + nBackgroundTall, x0 + nBackgroundWide, y0 + nBackgroundTall + nBorderThickness );
+
+	const int nNumCornerTris = 4;
+	vgui::Vertex_t cornerVerts[ nNumCornerTris * 3 ] = 
+	{
+		// Corner TL
+		vgui::Vertex_t( Vector2D( x0, y0 - nBorderThickness ), vecZero ),
+		vgui::Vertex_t( Vector2D( x0, y0 ), vecZero ),
+		vgui::Vertex_t( Vector2D( x0 - nBorderThickness, y0 ), vecZero ),
+
+		// Corner TR
+		vgui::Vertex_t( Vector2D( x0 + nBackgroundWide, y0 - nBorderThickness ), vecZero ),
+		vgui::Vertex_t( Vector2D( x0 + nBackgroundWide + nBorderThickness, y0 ), vecZero ),
+		vgui::Vertex_t( Vector2D( x0 + nBackgroundWide, y0 ), vecZero ),
+
+		// Corner BL
+		vgui::Vertex_t( Vector2D( x0 - nBorderThickness, y0 + nBackgroundTall ), vecZero ),
+		vgui::Vertex_t( Vector2D( x0, y0 + nBackgroundTall ), vecZero ),
+		vgui::Vertex_t( Vector2D( x0, y0 + nBackgroundTall + nBorderThickness ), vecZero ),
+
+		// Corner BR
+		vgui::Vertex_t( Vector2D( x0 + nBackgroundWide, y0 + nBackgroundTall ), vecZero ),
+		vgui::Vertex_t( Vector2D( x0 + nBackgroundWide + nBorderThickness, y0 + nBackgroundTall ), vecZero ),
+		vgui::Vertex_t( Vector2D( x0 + nBackgroundWide, y0 + nBackgroundTall + nBorderThickness ), vecZero )
+	};
+
+	for ( int nTri = 0; nTri < nNumCornerTris; ++nTri )
+	{
+		DrawTexturedPolygon( 3, cornerVerts + nTri * 3 );
+	}
+
+	if ( bPointer )
+	{
+		if ( nPointerY < y0 )
+		{
+			// Draw the up pointer border from polygons
+			const int nNumPointerQuads = 3;
+			vgui::Vertex_t pointerVerts[ nNumPointerQuads * 4 ] = 
+			{
+				// Pointer left
+				vgui::Vertex_t( Vector2D( x0 + nHalfPointerBaseTopWide, y0 ), vecZero ),
+				vgui::Vertex_t( Vector2D( x0 + nHalfPointerBaseTopWide, y0 - nBorderThickness ), vecZero ),
+				vgui::Vertex_t( Vector2D( nPointerX - nBorderThickness, nPointerY - nBorderThickness ), vecZero ),
+				vgui::Vertex_t( Vector2D( nPointerX, nPointerY ), vecZero ),
+
+				// Pointer right
+				vgui::Vertex_t( Vector2D( x0 + nPointerBaseThickness, y0 - nBorderThickness ), vecZero ),
+				vgui::Vertex_t( Vector2D( x0 + nPointerBaseThickness, y0 ), vecZero ),
+				vgui::Vertex_t( Vector2D( nPointerX, nPointerY ), vecZero ),
+				vgui::Vertex_t( Vector2D( nPointerX + nBorderThickness, nPointerY - nBorderThickness ), vecZero ),
+
+				// Pointer bottom
+				vgui::Vertex_t( Vector2D( nPointerX, nPointerY - nBorderThickness * 2 ), vecZero ),
+				vgui::Vertex_t( Vector2D( nPointerX + nBorderThickness, nPointerY - nBorderThickness ), vecZero ),
+				vgui::Vertex_t( Vector2D( nPointerX, nPointerY ), vecZero ),
+				vgui::Vertex_t( Vector2D( nPointerX - nBorderThickness, nPointerY - nBorderThickness ), vecZero )
+			};
+
+			for ( int nQuad = 0; nQuad < nNumPointerQuads; ++nQuad )
+			{
+				DrawTexturedPolygon( 4, pointerVerts + nQuad * 4 );
+			}
+		}
+		else
+		{
+			// Draw the down pointer from polygons
+			const int nNumPointerQuads = 3;
+			vgui::Vertex_t pointerVerts[ nNumPointerQuads * 4 ] = 
+			{
+				// Pointer left
+				vgui::Vertex_t( Vector2D( x0 + nHalfPointerBaseBottomWide, y0 + nBackgroundTall + nBorderThickness ), vecZero ),
+				vgui::Vertex_t( Vector2D( x0 + nHalfPointerBaseBottomWide, y0 + nBackgroundTall ), vecZero ),
+				vgui::Vertex_t( Vector2D( nPointerX, nPointerY ), vecZero ),
+				vgui::Vertex_t( Vector2D( nPointerX - nBorderThickness, nPointerY + nBorderThickness ), vecZero ),
+
+				// Pointer right
+				vgui::Vertex_t( Vector2D( x0 + nPointerBaseThickness, y0 + nBackgroundTall + nBorderThickness ), vecZero ),
+				vgui::Vertex_t( Vector2D( x0 + nPointerBaseThickness, y0 + nBackgroundTall ), vecZero ),
+				vgui::Vertex_t( Vector2D( nPointerX + nBorderThickness, nPointerY + nBorderThickness ), vecZero ),
+				vgui::Vertex_t( Vector2D( nPointerX, nPointerY ), vecZero ),
+
+				// Pointer bottom
+				vgui::Vertex_t( Vector2D( nPointerX, nPointerY ), vecZero ),
+				vgui::Vertex_t( Vector2D( nPointerX + nBorderThickness, nPointerY + nBorderThickness ), vecZero ),
+				vgui::Vertex_t( Vector2D( nPointerX, nPointerY + nBorderThickness * 2 ), vecZero ),
+				vgui::Vertex_t( Vector2D( nPointerX - nBorderThickness, nPointerY + nBorderThickness ), vecZero )
+			};
+
+			for ( int nQuad = 0; nQuad < nNumPointerQuads; ++nQuad )
+			{
+				DrawTexturedPolygon( 4, pointerVerts + nQuad * 4 );
+			}
+		}
+	}
+
+	SetClipRect( nOldClipX0, nOldClipY0, nOldClipX1, nOldClipY1 );
+}
+
+
+//-----------------------------------------------------------------------------
 // Connect, disconnect...
 //-----------------------------------------------------------------------------
 bool CWin32Surface::Connect( CreateInterfaceFn factory )
 {	
-return true;
+	return true;
 }
 
 void CWin32Surface::Disconnect()
@@ -958,6 +1145,10 @@ void CWin32Surface::Disconnect()
 //-----------------------------------------------------------------------------
 void *CWin32Surface::QueryInterface( const char *pInterfaceName )
 {
+	if (!Q_strncmp(	pInterfaceName, VGUI_SURFACE_INTERFACE_VERSION, Q_strlen(VGUI_SURFACE_INTERFACE_VERSION) + 1))
+		return (vgui::ISurface*)this;
+	if (!Q_strncmp(	pInterfaceName, SCHEME_SURFACE_INTERFACE_VERSION, Q_strlen(SCHEME_SURFACE_INTERFACE_VERSION) + 1))
+		return (ISchemeSurface*)this;
 	return NULL;
 }
 
@@ -990,7 +1181,7 @@ void CWin32Surface::SetEmbeddedPanel( VPANEL panel )
 
 	// fonts initialization
 	char language[64];
-	if (g_pSystem->GetRegistryString("HKEY_CURRENT_USER\\Software\\Valve\\Source\\Language", language, sizeof(language)-1))
+	if (g_pSystem->GetRegistryString("HKEY_CURRENT_USER\\Software\\Valve\\Steam\\Language", language, sizeof(language)-1))
 	{
 		FontManager().SetLanguage(language);
 	}
@@ -1001,7 +1192,7 @@ void CWin32Surface::SetEmbeddedPanel( VPANEL panel )
 }
 
 // Lower level char drawing code, call DrawGet then pass in info to DrawRender
-bool CWin32Surface::DrawGetUnicodeCharRenderInfo( wchar_t ch, CharRenderInfo& info )
+bool CWin32Surface::DrawGetUnicodeCharRenderInfo( wchar_t ch, FontCharRenderInfo& info )
 {
 	// Only supported in engine renderer!
 	Assert( 0 );
@@ -1009,7 +1200,7 @@ bool CWin32Surface::DrawGetUnicodeCharRenderInfo( wchar_t ch, CharRenderInfo& in
 	return false;
 }
 
-void CWin32Surface::DrawRenderCharFromInfo( const CharRenderInfo& info )
+void CWin32Surface::DrawRenderCharFromInfo( const FontCharRenderInfo& info )
 {
 	Assert( 0 );
 }
@@ -1086,12 +1277,12 @@ void CWin32Surface::PushMakeCurrent(VPANEL panel, bool useInsets)
 	if ( _currentContextPanel == panel )
 	{
 		// this panel has it's own window, so use screen space
-		::SetViewportOrgEx(PLAT(_currentContextPanel)->hdc,0+inset[0],0+inset[1],null);
+		::SetViewportOrgEx(PLAT(_currentContextPanel)->hdc,0+inset[0],0+inset[1],0);
 	}
 	else
 	{
 		// child window, so set win32 up so all subsequent drawing calls are done in local space
-		::SetViewportOrgEx(PLAT(_currentContextPanel)->hdc,(absPanel[0]+inset[0])-absThis[0],(absPanel[1]+inset[1])-absThis[1],null);
+		::SetViewportOrgEx(PLAT(_currentContextPanel)->hdc,(absPanel[0]+inset[0])-absThis[0],(absPanel[1]+inset[1])-absThis[1],0);
 	}
 
 	// setup clipping
@@ -1192,6 +1383,20 @@ void CWin32Surface::DrawSetTextureFrame( int id, int nFrame, unsigned int *pFram
 	// not implemented
 }
 
+void CWin32Surface::DrawTexturedRectEx( DrawTexturedRectParms_t *pDrawParms )
+{
+	// not implemented
+}
+
+void CWin32Surface::GetClipRect( int &x0, int &y0, int &x1, int &y1 )
+{
+	((VPanel *)_currentContextPanel)->Client()->GetClipRect(x0,y0,x1,y1);
+}
+
+void CWin32Surface::SetClipRect( int x0, int y0, int x1, int y1 )
+{
+	::SetRectRgn( PLAT(_currentContextPanel)->clipRgn,x0,y0,x1,y1);
+}
 
 //-----------------------------------------------------------------------------
 // Purpose: 
@@ -1303,7 +1508,7 @@ void CWin32Surface::DrawSetColor(Color col)
 
 void CWin32Surface::DrawSetTextPos(int x, int y)
 {
-	MoveToEx(PLAT(_currentContextPanel)->hdc,x,y,null);	
+	MoveToEx(PLAT(_currentContextPanel)->hdc,x,y,0);	
 	m_TextPos[0] = x;
 	m_TextPos[1] = y;
 }
@@ -1501,10 +1706,10 @@ void CWin32Surface::FreeTextureData( vgui::Texture *pTexture )
 		::DeleteObject( pTexture->_bitmap );
 	}
 
-//	if ( pTexture->m_bitmapScaled )
-//	{
-//		::DeleteObject( pTexture->m_bitmapScaled );
-//	}
+	//	if ( pTexture->m_bitmapScaled )
+	//	{
+	//		::DeleteObject( pTexture->m_bitmapScaled );
+	//	}
 
 	if ( pTexture->_maskBitmap )
 	{
@@ -1516,8 +1721,8 @@ void CWin32Surface::FreeTextureData( vgui::Texture *pTexture )
 		::DestroyIcon( pTexture->_icon );
 	}
 
-//	if ( pTexture->rgba )
-//		delete[] pTexture->rgba;
+	//	if ( pTexture->rgba )
+	//		delete[] pTexture->rgba;
 }
 
 //-----------------------------------------------------------------------------
@@ -1543,7 +1748,6 @@ bool CWin32Surface::DeleteTextureByID(int id)
 	return false;
 }
 
-
 //-----------------------------------------------------------------------------
 // Purpose: does nothing, since we don't need this optimization in win32
 //-----------------------------------------------------------------------------
@@ -1551,13 +1755,37 @@ void CWin32Surface::DrawFlushText()
 {
 }
 
-
+//-----------------------------------------------------------------------------
+// Purpose: Load the chrome dll an init the interface if needed
+//-----------------------------------------------------------------------------
+bool CWin32Surface::LoadChromeHTML()
+{
+	return false;
+}
 
 //-----------------------------------------------------------------------------
 // Purpose: create a html helper object
 //-----------------------------------------------------------------------------
 IHTML *CWin32Surface::CreateHTMLWindow(vgui::IHTMLEvents *events, VPANEL context )
 {
+	if ( !LoadChromeHTML() )
+	{
+		return NULL;
+	}
+
+	// setup the _currentContextPanel 
+	VPANEL parent = GetContextPanelForChildPanel(context);
+	if (!parent)
+		return NULL;
+
+	void *pWindowHandle;
+#ifdef WIN32
+	pWindowHandle = PLAT(parent)->hwnd;
+#elif defined(OSX)
+	pWindowHandle = ((VPanel *)parent)->Plat()->m_hWindow;
+#elif defined(LINUX)
+	pWindowHandle = ((VPanel *)parent)->Plat()->m_hWindow;
+#endif
 	return NULL;
 }
 
@@ -1569,7 +1797,6 @@ void CWin32Surface::DeleteHTMLWindow(IHTML *htmlwin)
 {
 }
 
-
 //-----------------------------------------------------------------------------
 // Purpose: tell a html window to update its backing texture
 //-----------------------------------------------------------------------------
@@ -1577,10 +1804,13 @@ void CWin32Surface::PaintHTMLWindow(IHTML *htmlwin)
 {
 }
 
-
 //-----------------------------------------------------------------------------
 void CWin32Surface::SetAllowHTMLJavaScript( bool state ) 
-{ 
+{   																										   
+	if ( !LoadChromeHTML() )
+	{
+		return;
+	}
 }
 
 //-----------------------------------------------------------------------------
@@ -1593,10 +1823,11 @@ void CWin32Surface::DrawSetTexture(int id)
 }
 
 HBITMAP staticCreateBitmapHandle(int wide, int tall, HDC hdc, int bpp, void **dib);
+
 //-----------------------------------------------------------------------------
 // Purpose: maps a texture from memory to an id, and uploads it into the engine
 //-----------------------------------------------------------------------------
-void CWin32Surface::DrawSetTextureRGBA(int id,const unsigned char* rgba,int wide,int tall, int hardwareFilter, bool forceReload)
+void CWin32Surface::DrawSetTextureRGBA( int id, const unsigned char* rgba, int wide, int tall )
 {
 	DrawSetTextureRGBAEx( id, rgba, wide, tall, IMAGE_FORMAT_RGBA8888 );
 }
@@ -1604,7 +1835,15 @@ void CWin32Surface::DrawSetTextureRGBA(int id,const unsigned char* rgba,int wide
 //-----------------------------------------------------------------------------
 // Purpose: maps a texture from memory to an id, and uploads it into the engine
 //-----------------------------------------------------------------------------
-void CWin32Surface::DrawSetTextureRGBAEx(int id,const unsigned char* rgba,int wide,int tall, ImageFormat imageFormat )
+void CWin32Surface::DrawSetTextureRGBALinear( int id, const unsigned char* rgba, int wide, int tall )
+{
+	DrawSetTextureRGBAEx( id, rgba, wide, tall, IMAGE_FORMAT_RGBA8888 );
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: maps a texture from memory to an id, and uploads it into the engine
+//-----------------------------------------------------------------------------
+void CWin32Surface::DrawSetTextureRGBAEx( int id, const unsigned char* rgba, int wide, int tall, ImageFormat imageFormat )
 {
 	Texture *texture = GetTextureById(id);
 
@@ -1738,12 +1977,12 @@ void CWin32Surface::DrawSetTextureFile(int id, const char *filename, int hardwar
 //-----------------------------------------------------------------------------
 void CWin32Surface::DrawTexturedRect(int x0,int y0,int x1,int y1)
 {
-	if (m_pCurrentTexture == null)
+	if (m_pCurrentTexture == 0)
 	{
 		return;
 	}
 
-	if (PLAT(_currentContextPanel)->textureDC == null)
+	if (PLAT(_currentContextPanel)->textureDC == 0)
 	{
 		return;
 	}
@@ -1831,8 +2070,13 @@ bool CWin32Surface::LoadBMP(Texture *texture, const char *filename)
 	// try load the tga
 	char buf[1024];
 	_snprintf(buf, sizeof(buf), "%s.bmp", filename);
+	// look in the skins directory first
+	FileHandle_t file = g_pFullFileSystem->Open(buf, "rb", "SKIN");
+	if (!file)
+	{
+		file = g_pFullFileSystem->Open(buf, "rb", NULL);
+	}
 
-	FileHandle_t file = g_pFullFileSystem->Open(buf, "rb", NULL);
 	if (!file)
 		return false;
 
@@ -1918,7 +2162,13 @@ bool CWin32Surface::LoadTGA(Texture *texture, const char *filename)
 	char buf[1024];
 	_snprintf(buf, sizeof(buf), "%s.tga", filename);
 
-	FileHandle_t file = g_pFullFileSystem->Open(buf, "rb", NULL);
+	// look in the skins directory first
+	FileHandle_t file = g_pFullFileSystem->Open(buf, "rb", "SKIN");
+	if (!file)
+	{
+		file = g_pFullFileSystem->Open(buf, "rb", NULL);
+	}
+
 	if (!file)
 	{
 		return LoadBMP( texture, filename );
@@ -2347,7 +2597,7 @@ bool CWin32Surface::IsMinimized(VPANEL panel)
 {
 	if (PLAT(panel)->hwnd)
 	{
-		return ::IsIconic(PLAT(panel)->hwnd);
+		return ::IsIconic(PLAT(panel)->hwnd) ? true : false;
 	}
 	return false;
 }
@@ -2483,7 +2733,7 @@ void CWin32Surface::CreatePopup(VPANEL panel, bool minimised, bool showTaskbarIc
 	plat->clipRgn = CreateRectRgn(0,0,64,64);
 	plat->hdc = CreateCompatibleDC(NULL);
 	plat->hwndDC = NULL;
-	plat->bitmap = null;
+	plat->bitmap = 0;
 	plat->bitmapSize[0] = 0;
 	plat->bitmapSize[1] = 0;
 	plat->isFullscreen = false;
@@ -2493,7 +2743,7 @@ void CWin32Surface::CreatePopup(VPANEL panel, bool minimised, bool showTaskbarIc
 	plat->textureDC = NULL;
 
 	::SetBkMode(plat->hdc, TRANSPARENT);
-	::SetWindowLongPtr(plat->hwnd, GWLP_USERDATA, (LONG_PTR)g_pIVgui->PanelToHandle(panel));
+	::SetWindowLongPtr(plat->hwnd, GWLP_USERDATA, (LONG)g_pIVgui->PanelToHandle(panel));
 	::SetTextAlign(plat->hdc, TA_LEFT | TA_TOP | TA_UPDATECP);
 	
 	if (!((VPanel *)panel)->IsVisible() || panel == _embeddedPanel)
@@ -2514,7 +2764,7 @@ void CWin32Surface::CreatePopup(VPANEL panel, bool minimised, bool showTaskbarIc
 	else
 	{
 		// somehow getting added twice, fundamental problem
-		Assert(0);
+		DebuggerBreak();
 	}
 
 	// hack, force a windows sound to be played
@@ -2571,7 +2821,7 @@ void CWin32Surface::ReleasePanel(VPANEL panel)
 		SetPanelVisible(panel, false);
 
 		// free all the windows/bitmap/DC handles we are using
-		::SetWindowLongPtr(plat->hwnd, GWLP_USERDATA, (LONG_PTR)-1);
+		::SetWindowLongPtr(plat->hwnd, GWLP_USERDATA, (LONG)-1);
 		::SetWindowPos(plat->hwnd, HWND_BOTTOM, 0, 0, 1, 1, SWP_NOREDRAW|SWP_HIDEWINDOW);
 
 		// free the window context
@@ -2621,7 +2871,7 @@ bool CWin32Surface::RecreateContext(VPANEL panel)
 			|| (wide < (plat->bitmapSize[0] - 200)) 
 			|| (tall < (plat->bitmapSize[1] - 200)))
 		{
-			if (plat->bitmap != null)
+			if (plat->bitmap != 0)
 			{
 				::DeleteObject(plat->bitmap);
 			}
@@ -2747,7 +2997,7 @@ void CWin32Surface::ApplyChanges()
 		// if they are not the same, then adjust the win32 window so it is
 		if ((x != sx) || (y != sy) || (wide != swide) || (tall != stall))
 		{
-			::SetWindowPos(Plat->hwnd, null, x, y, wide, tall, SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOCOPYBITS);
+			::SetWindowPos(Plat->hwnd, 0, x, y, wide, tall, SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOCOPYBITS);
 			if ( sx > 0 || sy > 0 ) // only message for moves that are on the screen
 			{
 				g_pIVgui->PostMessage(panel, new KeyValues("Move"), NULL ); 
@@ -2869,7 +3119,7 @@ void CWin32Surface::PaintTraverse(VPANEL panel)
 }
 
 // FIXME: write these functions!
-void CWin32Surface::RestrictPaintToSinglePanel(VPANEL panel)
+void CWin32Surface::RestrictPaintToSinglePanel( VPANEL panel, bool bForceAllowNonModalSurface )
 {
 }
 
@@ -3198,14 +3448,6 @@ int CWin32Surface::GetFontTall(HFont font)
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: returns the requested height of a font
-//-----------------------------------------------------------------------------
-int CWin32Surface::GetFontTallRequested(HFont font)
-{
-	return FontManager().GetFontTallRequested(font);
-}
-
-//-----------------------------------------------------------------------------
 // Purpose: returns the max height of a font
 //-----------------------------------------------------------------------------
 int CWin32Surface::GetFontAscent(HFont font, wchar_t wch)
@@ -3248,14 +3490,41 @@ void CWin32Surface::GetTextSize(HFont font, const wchar_t *text, int &wide, int 
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: adds a custom font file (only supports true type font files (.ttf) for now)
+// Used by the localization library
 //-----------------------------------------------------------------------------
-bool CWin32Surface::AddCustomFontFile(const char *fontName, const char *fontFileName)
+int CWin32Surface::ComputeTextWidth( const wchar_t *pString )
 {
+	int nWide, nTall;
+	GetTextSize( 1, pString, nWide, nTall );
+	return nWide;
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: adds a custom font file
+//			load the .vfont file
+//-----------------------------------------------------------------------------
+bool CWin32Surface::AddCustomFontFile(const char *fontFileName)
+{
+#ifdef SUPPORT_CUSTOM_FONT_FORMAT
+	CUtlBuffer buf;
+	if ( !g_pFullFileSystem->ReadFile( fontFileName, NULL, buf ) )
+		return false;
+
+	if ( !ValveFont::DecodeFont( buf ) )
+		return false;
+
+	DWORD dwNumFontsRegistered = 0;
+	HANDLE hRegistered = NULL;
+	hRegistered = ::AddFontMemResourceEx( buf.Base(), buf.TellPut(), NULL, &dwNumFontsRegistered );
+
+	return hRegistered != NULL;
+#else
 	char fullPath[ MAX_PATH ];
 	g_pFullFileSystem->GetLocalPath(fontFileName, fullPath, sizeof( fullPath ));
 	m_CustomFontFileNames.AddToTail(fontFileName);
 	return (::AddFontResource(fullPath) > 0);
+#endif
 }
 
 //-----------------------------------------------------------------------------
@@ -3281,7 +3550,7 @@ bool CWin32Surface::SetBitmapFontGlyphSet(HFont font, const char *windowsFontNam
 	return false;
 }
 
-void CWin32Surface::PrecacheFontCharacters(HFont font, const wchar_t *pCharacters)
+void CWin32Surface::PrecacheFontCharacters(HFont font, wchar_t *pCharacters)
 {
 	Assert( 0 );
 }
@@ -3294,11 +3563,6 @@ void CWin32Surface::ClearTemporaryFontCache( void )
 const char *CWin32Surface::GetFontName( HFont font )
 {
 	return FontManager().GetFontName( font );
-}
-
-const char *CWin32Surface::GetFontFamilyName( HFont font )
-{
-	return FontManager().GetFontFamilyName( font );
 }
 
 void CWin32Surface::DrawSetTextScale(float sx, float sy)
@@ -3357,6 +3621,38 @@ void CWin32Surface::PlaySound(const char *fileName)
 
 	g_pFullFileSystem->GetLocalCopy(localPath);
 	::PlaySoundA(localPath, NULL, SND_FILENAME | SND_ASYNC | SND_NODEFAULT | SND_NOSTOP | SND_NOWAIT);
+}
+
+void CWin32Surface::SetAbsPosForContext( int id, int x, int y )
+{
+	ContextAbsPos_t search;
+	search.id = id;
+
+	int idx = m_ContextAbsPos.Find( search );
+	if ( idx == m_ContextAbsPos.InvalidIndex() )
+	{
+		idx = m_ContextAbsPos.Insert( search );
+	}
+
+	ContextAbsPos_t &entry = m_ContextAbsPos[ idx ];
+	entry.m_nPos[ 0 ] = x;
+	entry.m_nPos[ 1 ] = y;
+}
+
+void CWin32Surface::GetAbsPosForContext( int id, int &x, int& y )
+{
+	ContextAbsPos_t search;
+	search.id = id;
+
+	int idx = m_ContextAbsPos.Find( search );
+	if ( idx == m_ContextAbsPos.InvalidIndex() )
+	{
+		x = y = 0;
+		return;
+	}
+	const ContextAbsPos_t &entry = m_ContextAbsPos[ idx ];
+	x = entry.m_nPos[ 0 ];
+	y = entry.m_nPos[ 1 ];
 }
 
 bool GetIconSize( ICONINFO& iconInfo, int& w, int& h )
@@ -3480,12 +3776,21 @@ private:
 	SIZE		m_Size;
 };
 
+static char const *g_pUniqueExtensions[]=
+{
+	"exe",
+	"cur",
+	"ani",
+};
+
 static bool ShouldMakeUnique( char const *extension )
 {
-	if ( !Q_stricmp( extension, "cur" ) )
-		return true;
-	if ( !Q_stricmp( extension, "ani" ) )
-		return true;
+	for ( int i = 0; i < ARRAYSIZE( g_pUniqueExtensions ); ++i )
+	{
+		if ( !Q_stricmp( extension, g_pUniqueExtensions[ i ] ) )
+			return true;
+	}
+
 	return false;
 }
 
@@ -3565,19 +3870,37 @@ void CWin32Surface::RunFrame()
 //-----------------------------------------------------------------------------
 // Purpose: cap bits
 //-----------------------------------------------------------------------------
-bool CWin32Surface::SupportsFeature(SurfaceFeature_e feature)
+bool CWin32Surface::SupportsFontFeature( FontFeature_t feature )
 {
-	switch (feature)
+	switch ( feature )
+	{
+	case FONT_FEATURE_ANTIALIASED_FONTS:
+		return true;
+
+	case FONT_FEATURE_DROPSHADOW_FONTS:
+	case FONT_FEATURE_OUTLINE_FONTS:
+	default:
+		return false;
+	};
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: cap bits
+//-----------------------------------------------------------------------------
+bool CWin32Surface::SupportsFeature( SurfaceFeature_t feature )
+{
+	switch ( feature )
 	{
 	case ISurface::ESCAPE_KEY:
-	case ISurface::ANTIALIASED_FONTS:
 	case ISurface::OPENING_NEW_HTML_WINDOWS:
 	case ISurface::FRAME_MINIMIZE_MAXIMIZE:
 	case ISurface::DIRECT_HWND_RENDER:
 		return true;
 
+	case ISurface::ANTIALIASED_FONTS:
 	case ISurface::DROPSHADOW_FONTS:
 	case ISurface::OUTLINE_FONTS:
+		return SupportsFontFeature( ( FontFeature_t )feature );
 	default:
 		return false;
 	};
@@ -3591,20 +3914,20 @@ void CWin32Surface::initStaticData()
 {
 	//load up all default cursors, this gets called everytime a Surface is created, but
 	//who cares
-	staticDefaultCursor[dc_none]     =null;
-	staticDefaultCursor[dc_arrow]    =(HICON)LoadCursor(null,(LPCTSTR)OCR_NORMAL);
-	staticDefaultCursor[dc_ibeam]    =(HICON)LoadCursor(null,(LPCTSTR)OCR_IBEAM);
-	staticDefaultCursor[dc_hourglass]=(HICON)LoadCursor(null,(LPCTSTR)OCR_WAIT);
-	staticDefaultCursor[dc_waitarrow]=(HICON)LoadCursor(null,(LPCTSTR)OCR_APPSTARTING);
-	staticDefaultCursor[dc_crosshair]=(HICON)LoadCursor(null,(LPCTSTR)OCR_CROSS);
-	staticDefaultCursor[dc_up]       =(HICON)LoadCursor(null,(LPCTSTR)OCR_UP);
-	staticDefaultCursor[dc_sizenwse] =(HICON)LoadCursor(null,(LPCTSTR)OCR_SIZENWSE);
-	staticDefaultCursor[dc_sizenesw] =(HICON)LoadCursor(null,(LPCTSTR)OCR_SIZENESW);
-	staticDefaultCursor[dc_sizewe]   =(HICON)LoadCursor(null,(LPCTSTR)OCR_SIZEWE);
-	staticDefaultCursor[dc_sizens]   =(HICON)LoadCursor(null,(LPCTSTR)OCR_SIZENS);
-	staticDefaultCursor[dc_sizeall]  =(HICON)LoadCursor(null,(LPCTSTR)OCR_SIZEALL);
-	staticDefaultCursor[dc_no]       =(HICON)LoadCursor(null,(LPCTSTR)OCR_NO);
-	staticDefaultCursor[dc_hand]     =(HICON)LoadCursor(null,(LPCTSTR)32649);
+	staticDefaultCursor[dc_none]     =0;
+	staticDefaultCursor[dc_arrow]    =(HICON)LoadCursor(0,(LPCTSTR)OCR_NORMAL);
+	staticDefaultCursor[dc_ibeam]    =(HICON)LoadCursor(0,(LPCTSTR)OCR_IBEAM);
+	staticDefaultCursor[dc_hourglass]=(HICON)LoadCursor(0,(LPCTSTR)OCR_WAIT);
+	staticDefaultCursor[dc_waitarrow]=(HICON)LoadCursor(0,(LPCTSTR)OCR_APPSTARTING);
+	staticDefaultCursor[dc_crosshair]=(HICON)LoadCursor(0,(LPCTSTR)OCR_CROSS);
+	staticDefaultCursor[dc_up]       =(HICON)LoadCursor(0,(LPCTSTR)OCR_UP);
+	staticDefaultCursor[dc_sizenwse] =(HICON)LoadCursor(0,(LPCTSTR)OCR_SIZENWSE);
+	staticDefaultCursor[dc_sizenesw] =(HICON)LoadCursor(0,(LPCTSTR)OCR_SIZENESW);
+	staticDefaultCursor[dc_sizewe]   =(HICON)LoadCursor(0,(LPCTSTR)OCR_SIZEWE);
+	staticDefaultCursor[dc_sizens]   =(HICON)LoadCursor(0,(LPCTSTR)OCR_SIZENS);
+	staticDefaultCursor[dc_sizeall]  =(HICON)LoadCursor(0,(LPCTSTR)OCR_SIZEALL);
+	staticDefaultCursor[dc_no]       =(HICON)LoadCursor(0,(LPCTSTR)OCR_NO);
+	staticDefaultCursor[dc_hand]     =(HICON)LoadCursor(0,(LPCTSTR)32649);
 
 	// make and register a very simple Window Class
 	memset( &staticWndclass,0,sizeof(staticWndclass) );
@@ -3633,27 +3956,28 @@ void CWin32Surface::initStaticData()
 }
 
 //-----------------------------------------------------------------------------
+//
+//-----------------------------------------------------------------------------
+void CWin32Surface::SetLanguage( const char *pLanguage )
+{ 
+	FontManager().SetLanguage( pLanguage );
+}
+
+//-----------------------------------------------------------------------------
+//
+//-----------------------------------------------------------------------------
+const char *CWin32Surface::GetLanguage()
+{ 
+	return FontManager().GetLanguage();
+}
+
+//-----------------------------------------------------------------------------
 // Purpose: our basic user agent string when doing http requests from the client for webkit
 //-----------------------------------------------------------------------------
 const char *CWin32Surface::GetWebkitHTMLUserAgentString()
 {
 	return  "Valve Client";
 }
-
-
-//-----------------------------------------------------------------------------
-// Purpose: Handle switching in and out of "render to fullscreen" mode. We don't
-//			actually support this mode in tools.
-//-----------------------------------------------------------------------------
-void CWin32Surface::PushFullscreenViewport()
-{
-	AssertMsg( false, "Fullscreen viewport mode is unimplemented in CWin32Surface" );
-}
-
-void CWin32Surface::PopFullscreenViewport()
-{
-}
-
 
 //-----------------------------------------------------------------------------
 // Purpose: Handles windows messages sent to the notify tray icon
@@ -3721,7 +4045,7 @@ static LRESULT CALLBACK staticProc(HWND hwnd,UINT msg,WPARAM wparam,LPARAM lpara
 
 	if (staticSurfaceAvailable)
 	{
-		panel = g_pIVgui->HandleToPanel((LONG)::GetWindowLongPtr(hwnd, GWLP_USERDATA));
+		panel = g_pIVgui->HandleToPanel(::GetWindowLongPtr(hwnd, GWLP_USERDATA));
 
 		if (panel)
 		{
@@ -3838,9 +4162,9 @@ static LRESULT CALLBACK staticProc(HWND hwnd,UINT msg,WPARAM wparam,LPARAM lpara
 			
 			// This code catches the case when a WM_LBUTTONUP is lost
 
-			bool bLMButtonDown = wparam & MK_LBUTTON;
-			bool bRMButtonDown = wparam & MK_RBUTTON;
-			bool bMMButtonDown = wparam & MK_MBUTTON;
+			bool bLMButtonDown = ( wparam & MK_LBUTTON ) ? true : false;
+			bool bRMButtonDown = ( wparam & MK_RBUTTON ) ? true : false;
+			bool bMMButtonDown = ( wparam & MK_MBUTTON ) ? true : false;
 			if ( !bLMButtonDown && g_pInput->IsMouseDown( MOUSE_LEFT ) )
 			{
 				g_pInput->SetMouseCodeState( MOUSE_LEFT, BUTTON_RELEASED );
@@ -4080,3 +4404,5 @@ static LRESULT CALLBACK staticProc(HWND hwnd,UINT msg,WPARAM wparam,LPARAM lpara
 	}
 	return TRUE;
 }
+
+

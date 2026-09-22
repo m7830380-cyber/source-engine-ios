@@ -15,14 +15,19 @@ $Configuration
 	{
 			$SystemLibraries                                                        "iconv" [$OSXALL]
 	}
+
 	$Compiler
 	{
 		$PreprocessorDefinitions	"$BASE;STUDIORENDER_EXPORTS;PROTECTED_THINGS_ENABLE"
-		$PreprocessorDefinitions	"$BASE;fopen=dont_use_fopen" [$WIN32]
+	}
+	
+	$Compiler [$PS3]
+	{
+		$AdditionalOptions		"$BASE --pending_instantiations=256"
 	}
 }
 
-$Project "StudioRender"
+$Project "studiorender"
 {
 	$Folder	"Source Files"
 	{
@@ -34,14 +39,16 @@ $Project "StudioRender"
 		$File	"r_studiodraw.cpp"
 		$File	"r_studiodraw_computeflexedvertex.cpp"
 		$File	"r_studioflex.cpp"
+		$File	"r_studiosubd.cpp"
+		$File	"r_studiosubd_patches.cpp"
 		$File	"r_studiogettriangles.cpp"
 		$File	"r_studiolight.cpp"
-		$File	"r_studiostats.cpp"
 	}
 
 	$Folder	"Header Files"
 	{
 		$File	"r_studiolight.h"
+		$File	"r_studiosubd_patches.h"
 		$File	"studiorender.h"
 		$File	"studiorendercontext.h"
 		$File	"flexrenderdata.h"
@@ -49,20 +56,18 @@ $Project "StudioRender"
 
 	$Folder	"Public Header Files"
 	{
-		$File	"$SRCDIR\public\mathlib\amd3dx.h"
 		$File	"$SRCDIR\public\basehandle.h"
 		$File	"$SRCDIR\public\tier0\basetypes.h"
 		$File	"$SRCDIR\public\bspflags.h"
 		$File	"$SRCDIR\public\clientstats.h"
 		$File	"$SRCDIR\public\cmodel.h"
-		$File	"$SRCDIR\public\tier0\commonmacros.h"
 		$File	"$SRCDIR\public\mathlib\compressed_vector.h"
 		$File	"$SRCDIR\public\const.h"
 		$File	"$SRCDIR\public\tier1\convar.h"
 		$File	"$SRCDIR\public\tier0\dbg.h"
 		$File	"$SRCDIR\public\tier0\fasttimer.h"
 		$File	"$SRCDIR\public\gametrace.h"
-		$File	"$SRCDIR\public\appframework\IAppSystem.h"
+		$File	"$SRCDIR\public\appframework\iappsystem.h"
 		$File	"$SRCDIR\public\tier0\icommandline.h"
 		$File	"$SRCDIR\public\ihandleentity.h"
 		$File	"$SRCDIR\public\materialsystem\imaterial.h"
@@ -83,7 +88,6 @@ $Project "StudioRender"
 		$File	"$SRCDIR\public\optimize.h"
 		$File	"$SRCDIR\public\pixelwriter.h"
 		$File	"$SRCDIR\public\tier0\platform.h"
-		$File	"$SRCDIR\public\tier0\protected_things.h"
 		$File	"$SRCDIR\public\string_t.h"
 		$File	"$SRCDIR\public\tier1\strtools.h"
 		$File	"$SRCDIR\public\studio.h"
@@ -105,10 +109,10 @@ $Project "StudioRender"
 
 	$folder "Link Libraries"
 	{
-		$Lib	bitmap
-		$Lib	mathlib
-		$Lib	tier2
-		$Lib	tier3
+		$Implib		"$LIBPUBLIC\vstdlib"
+		$Lib		bitmap
+		$Lib		mathlib
+		$Lib		tier2
+		$Lib		tier3
 	}
-
 }

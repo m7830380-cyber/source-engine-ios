@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -27,7 +27,7 @@ enum ScriptPathMode_t
 #define	MAXTOKEN	1024
 
 extern	char	token[MAXTOKEN];
-extern	char	*scriptbuffer,*script_p,*scriptend_p;
+//extern	char	*scriptbuffer,*script_p,*scriptend_p;
 extern	int		grabbed;
 extern	int		scriptline;
 extern	qboolean	endofscript;
@@ -44,7 +44,6 @@ qboolean GetExprToken (qboolean crossline);
 void UnGetToken (void);
 qboolean TokenAvailable (void);
 qboolean GetTokenizerStatus( char **pFilename, int *pLine );
-bool SetCheckSingleCharTokens( bool bCheck );
 
 // SCRIPT_LOADED_CALLBACK:
 //	Is called after the contents of a file is loaded.
@@ -60,8 +59,6 @@ SCRIPT_LOADED_CALLBACK SetScriptLoadedCallback( SCRIPT_LOADED_CALLBACK pfnNewScr
 
 #include "tier1/utlstring.h"
 #include "tier1/utlvector.h"
-
-CUtlString SetSingleCharTokenList( const char *pszSingleCharTokenList );
 
 class CUtlBuffer;
 
@@ -91,6 +88,7 @@ public:
 };
 
 extern IScriptLib *scriptlib;
+extern IScriptLib *g_pScriptLib;
 
 
 #endif // SCRIPLIB_H

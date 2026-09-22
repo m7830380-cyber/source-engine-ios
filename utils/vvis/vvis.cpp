@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -212,7 +212,7 @@ void ClusterMerge (int clusternum)
 	{
 		p = leaf->portals[i];
 		if (p->status != stat_done)
-			Error ("portal not done %d %p %p\n", i, p, portals);
+			Error ("portal not done %d %d %d\n", i, p, portals);
 		for (j=0 ; j<portallongs ; j++)
 			((long *)portalvector)[j] |= ((long *)p->portalvis)[j];
 		pnum = p - portals;
@@ -360,7 +360,7 @@ void CalcVis (void)
 	}
 
 		
-	Msg ("Optimized: %d visible clusters (%.2f%%)\n", count, count*100.0/totalvis);
+	Msg ("Optimized: %d visible clusters (%.2f%%)\n", count, totalvis, count*100/totalvis);
 	Msg ("Total clusters visible: %i\n", totalvis);
 	Msg ("Average clusters visible: %i\n", totalvis / portalclusters);
 }
@@ -980,6 +980,10 @@ int ParseCommandLine( int argc, char **argv )
 			if ( i == argc - 1 )
 				break;
 		}
+		else if ( !Q_stricmp( argv[i], "-tempcontent" ) )
+		{
+			// ... Do nothing, just let this pass to the filesystem
+		}
 		else if (argv[i][0] == '-')
 		{
 			Warning("VBSP: Unknown option \"%s\"\n\n", argv[i]);
@@ -1072,7 +1076,6 @@ int RunVVis( int argc, char **argv )
 {
 	char	portalfile[1024];
 	char		source[1024];
-	char		mapFile[1024];
 	double		start, end;
 
 
@@ -1080,31 +1083,23 @@ int RunVVis( int argc, char **argv )
 
 	verbose = false;
 
+	Q_StripExtension( argv[ argc - 1 ], source, sizeof( source ) );
+	CmdLib_InitFileSystem( argv[ argc - 1 ] );
+
+	Q_FileBase( source, source, sizeof( source ) );
+
 	LoadCmdLineFromFile( argc, argv, source, "vvis" );
 	int i = ParseCommandLine( argc, argv );
 
-	CmdLib_InitFileSystem( argv[ argc - 1 ] );
-
-	// The ExpandPath is just for VMPI. VMPI's file system needs the basedir in front of all filenames,
+	// This part is just for VMPI. VMPI's file system needs the basedir in front of all filenames,
 	// so we prepend qdir here.
-
-	// XXX(johns): Somewhat preserving legacy behavior here to avoid changing tool behavior, there's no specific rhyme
-	//             or reason to this. We get just the base name we were passed, discarding any directory or extension
-	//             information. We then ExpandPath() it (see VMPI comment above), and tack on .bsp for the file access
-	//             parts.
-	V_FileBase( argv[ argc - 1 ], mapFile, sizeof( mapFile ) );
-	V_strncpy( mapFile, ExpandPath( mapFile ), sizeof( mapFile ) );
-	V_strncat( mapFile, ".bsp", sizeof( mapFile ) );
-
-	// Source is just the mapfile without an extension at this point...
-	V_strncpy( source, mapFile, sizeof( mapFile ) );
-	V_StripExtension( source, source, sizeof( source ) );
+	strcpy( source, ExpandPath( source ) );
 
 	if (i != argc - 1)
 	{
 		PrintUsage( argc, argv );
 		DeleteCmdLine( argc, argv );
-		CmdLib_Exit( 1 );
+		Plat_ExitProcess( 0 );
 	}
 
 	start = Plat_FloatTime();
@@ -1115,7 +1110,7 @@ int RunVVis( int argc, char **argv )
 		// Setup the logfile.
 		char logFile[512];
 		_snprintf( logFile, sizeof(logFile), "%s.log", source );
-		SetSpewFunctionLogFile( logFile );
+		g_CmdLibFileLoggingListener.Open( logFile );
 	}
 
 	// Run in the background?
@@ -1123,11 +1118,13 @@ int RunVVis( int argc, char **argv )
 	{
 		SetLowPriority();
 	}
-
+	
 	ThreadSetDefault ();
 
-	Msg ("reading %s\n", mapFile);
-	LoadBSPFile (mapFile);
+	char	targetPath[1024];
+	GetPlatformMapPath( source, targetPath, 0, 1024 );
+	Msg ("reading %s\n", targetPath);
+	LoadBSPFile (targetPath);
 	if (numnodes == 0 || numfaces == 0)
 		Error ("Empty map");
 	ParseEntities ();
@@ -1158,7 +1155,7 @@ int RunVVis( int argc, char **argv )
 		Q_StripExtension( portalfile, portalfile, sizeof( portalfile ) );
 	}
 	strcat (portalfile, ".prt");
-
+	
 	Msg ("reading %s\n", portalfile);
 	LoadPortals (portalfile);
 
@@ -1169,17 +1166,17 @@ int RunVVis( int argc, char **argv )
 		CalcPAS ();
 
 		// We need a mapping from cluster to leaves, since the PVS
-		// deals with clusters for both CalcVisibleFogVolumes and
+		// deals with clusters for both CalcVisibleFogVolumes and 
 		BuildClusterTable();
 
 		CalcVisibleFogVolumes();
 		CalcDistanceFromLeavesToWater();
 
-		visdatasize = vismap_p - dvisdata;
+		visdatasize = vismap_p - dvisdata;	
 		Msg ("visdatasize:%i  compressed from %i\n", visdatasize, originalvismapsize*2);
 
-		Msg ("writing %s\n", mapFile);
-		WriteBSPFile (mapFile);
+		Msg ("writing %s\n", targetPath);
+		WriteBSPFile (targetPath);	
 	}
 	else
 	{
@@ -1194,9 +1191,9 @@ int RunVVis( int argc, char **argv )
 		CalcVisTrace ();
 		WritePortalTrace(source);
 	}
-
+	
 	end = Plat_FloatTime();
-
+	
 	char str[512];
 	GetHourMinuteSecondsString( (int)( end - start ), str, sizeof( str ) );
 	Msg( "%s elapsed\n", str );
@@ -1217,7 +1214,7 @@ int main (int argc, char **argv)
 {
 	CommandLine()->CreateCmdLine( argc, argv );
 
-	MathLib_Init( 2.2f, 2.2f, 0.0f, 1.0f, false, false, false, false );
+	MathLib_Init( 2.2f, 2.2f, 0.0f, 2.0f, false, false, false, false );
 	InstallAllocationFunctions();
 	InstallSpewFunction();
 

@@ -1,12 +1,16 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
 // $NoKeywords: $
 //
 //=============================================================================//
+
 #include <quantize.h>
-#include <minmax.h>
+
+// NOTE: This has to be the last file included!
+#include "tier0/memdbgon.h"
+
 
 #define N_EXTRAVALUES 1
 #define N_DIMENSIONS (3+N_EXTRAVALUES)
@@ -46,7 +50,7 @@ void ColorQuantize(uint8 const *Image,
 					val1+=PIXEL(x,y,c)*ExtraValueXForms[i*3+c];
 				val1>>=8;
 				NthSample(s,y*Width+x,N_DIMENSIONS)->Value[c]=(uint8)
-					(min(255,max(0,val1)));
+					(MIN(255,MAX(0,val1)));
 			}
 		}
 	struct QuantizedValue *q=Quantize(s,Width*Height,N_DIMENSIONS,
@@ -57,7 +61,7 @@ void ColorQuantize(uint8 const *Image,
 	{
 		struct QuantizedValue *v=FindQNode(q,p);
 		if (v)
-			for(c=0;c<3;c++)
+			for(int c=0;c<3;c++)
 				out_palette[p*3+c]=v->Mean[c];
 	}
 	memset(Error,0,sizeof(Error));
@@ -76,7 +80,7 @@ void ColorQuantize(uint8 const *Image,
 					tryc+=Error[x][c][ErrorUse];
 					Error[x][c][ErrorUse]=0;
 				}
-				samp[c]=(uint8) min(255,max(0,tryc));
+				samp[c]=(uint8) MIN(255,MAX(0,tryc));
 			}
 			struct QuantizedValue *f=FindMatch(samp,3,Weights,q);
 			out_pixels[Width*y+x]=(uint8) (f->value);

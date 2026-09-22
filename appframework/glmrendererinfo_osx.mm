@@ -24,7 +24,7 @@
 #include "tier1/utllinkedlist.h"
 #include "togl/rendermechanism.h"
 #include "appframework/ilaunchermgr.h"	// gets pulled in from glmgr.h
-#include "appframework/IAppSystemGroup.h"
+#include "appframework/iappsystemgroup.h"
 #include "inputsystem/ButtonCode.h"
 
 
@@ -206,7 +206,7 @@ GLMRendererInfo::GLMRendererInfo( GLMRendererInfoFields *info )
 		kCGLPFADoubleBuffer, kCGLPFANoRecovery, kCGLPFAAccelerated,
 		kCGLPFADepthSize, 0,
 		kCGLPFAColorSize, 32,
-		kCGLPFARendererID, (unsigned int)info->m_rendererID,
+		kCGLPFARendererID, info->m_rendererID,
 		0
 	};
 
@@ -300,11 +300,11 @@ GLMRendererInfo::GLMRendererInfo( GLMRendererInfoFields *info )
 
 	// known bad combinations get turned off here..
 	
-	// any ATI hardware...
+	// any ATI hardware...(or Intel - sm3 path for CSGO is falling back to SW on some HDX000 HW otherwise)
 	// TURNED OFF OS CHECK if (m_info.m_osComboVersion <= 0x000A0603)
 	// still believe to be broken in 10.6.4
 	{
-		if (m_info.m_ati)
+		if (m_info.m_ati || m_info.m_intel)
 		{
 			m_info.m_hasNativeClipVertexMode = false;
 		}
@@ -859,7 +859,7 @@ void	GLMDisplayDB::PopulateRenderers( void )
 					{
 						// grab the OS version
 
-                        SInt32 vMajor = 0;	SInt32 vMinor = 0;	SInt32 vMinorMinor = 0;
+						SInt32 vMajor = 0;	SInt32 vMinor = 0;	SInt32 vMinorMinor = 0;
 						
 						OSStatus gestalt_err = 0;
 						gestalt_err = Gestalt(gestaltSystemVersionMajor, &vMajor);
@@ -1574,7 +1574,7 @@ void	GLMDisplayInfo::PopulateModes( void )
 
 void	GLMDisplayInfo::Dump( int which )
 {
-	GLMPRINTF(("\n         #%d: GLMDisplayInfo @ %08x, cg-id=%08x  display-mask=%08x  pixwidth=%d  pixheight=%d", which, (int)(intp)this, m_info.m_cgDisplayID, m_info.m_glDisplayMask, m_info.m_displayPixelWidth,  m_info.m_displayPixelHeight ));
+	GLMPRINTF(("\n         #%d: GLMDisplayInfo @ %p, cg-id=%08x  display-mask=%08x  pixwidth=%d  pixheight=%d", which, this, m_info.m_cgDisplayID, m_info.m_glDisplayMask, m_info.m_displayPixelWidth,  m_info.m_displayPixelHeight ));
 
 	FOR_EACH_VEC( *m_modes, i )
 	{

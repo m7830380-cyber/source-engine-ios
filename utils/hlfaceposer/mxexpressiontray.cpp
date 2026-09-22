@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -25,7 +25,7 @@
 #include "ExpressionTool.h"
 #include "faceposer_models.h"
 #include "tier0/icommandline.h"
-#include "filesystem.h"
+#include "FileSystem.h"
 
 #define MAX_THUMBNAILSIZE 256
 #define MIN_THUMBNAILSIZE 64
@@ -309,7 +309,7 @@ void mxExpressionTray::DrawButton( CChoreoWidgetDrawHelper& helper, int cell, mx
 	HDC dc = helper.GrabDC();
 
 	DrawBitmapToDC( dc, x, y, w, h, *btn->m_pImage );
-	helper.DrawOutlinedRect( RGB( 170, 170, 170 ), PS_SOLID, 1, x, y, x + w, y + h );
+	helper.DrawOutlinedRect( Color( 170, 170, 170 ), PS_SOLID, 1, x, y, x + w, y + h );
 }
 
 //-----------------------------------------------------------------------------
@@ -377,7 +377,7 @@ bool mxExpressionTray::ComputeRect( int cell, int& rcx, int& rcy, int& rcw, int&
 	return true;
 }
 
-void mxExpressionTray::DrawExpressionFocusRect( CChoreoWidgetDrawHelper& helper, int x, int y, int w, int h, COLORREF clr )
+void mxExpressionTray::DrawExpressionFocusRect( CChoreoWidgetDrawHelper& helper, int x, int y, int w, int h, const Color& clr )
 {
 	helper.DrawOutlinedRect( clr, PS_SOLID, 4, x, y, x + w, y + h );
 }
@@ -392,13 +392,13 @@ void mxExpressionTray::DrawExpressionDescription( CChoreoWidgetDrawHelper& helpe
 	textRect.right = x + w - 10;
 	textRect.bottom = y + h - 12;
 
-	helper.DrawColoredText( "Arial", 9, FW_NORMAL, RGB( 0, 0, 0 ), textRect, "%s", expressionname );
+	helper.DrawColoredText( "Arial", 9, FW_NORMAL, Color( 0, 0, 0 ), textRect, "%s", expressionname );
 
 //	DrawText( hdc, expressionname, strlen( expressionname ), &textRect, DT_NOPREFIX | DT_SINGLELINE | DT_LEFT | DT_VCENTER | DT_WORD_ELLIPSIS );
 
 	OffsetRect( &textRect, 0, textheight );
 
-	helper.DrawColoredText( "Arial", 9, FW_NORMAL, RGB( 63, 63, 63 ), textRect, "%s", description );
+	helper.DrawColoredText( "Arial", 9, FW_NORMAL, Color( 63, 63, 63 ), textRect, "%s", description );
 
 //	DrawText( hdc, description, strlen( description ), &textRect, DT_NOPREFIX | DT_SINGLELINE | DT_LEFT | DT_VCENTER | DT_WORD_ELLIPSIS );
 }
@@ -426,7 +426,7 @@ void mxExpressionTray::DrawDirtyFlag( CChoreoWidgetDrawHelper& helper, CExpressi
 	textRect.top = rcy + 5;
 	textRect.bottom = textRect.top + fontsize + 2;
 
-	helper.DrawColoredText( "Arial", fontsize, FW_NORMAL, RGB( 100, 240, 255 ), textRect, "*" );
+	helper.DrawColoredText( "Arial", fontsize, FW_NORMAL, Color( 100, 240, 255 ), textRect, "*" );
 }
 
 bool mxExpressionTray::PaintBackground( void )
@@ -442,12 +442,12 @@ void mxExpressionTray::DrawThumbNail( CExpClass *active, CExpression *current, C
 
 	HDC dc = helper.GrabDC();
 
-	helper.DrawFilledRect( GetSysColor( COLOR_BTNFACE ), rcx, rcy, rcw + rcx, rch + rcy );
+	helper.DrawFilledRect( RGBToColor( GetSysColor( COLOR_BTNFACE ) ), rcx, rcy, rcw + rcx, rch + rcy );
 
 	if ( current->m_Bitmap[ models->GetActiveModelIndex() ].valid )
 	{
 		DrawBitmapToDC( dc, rcx, rcy, rcw, rch - m_nDescriptionHeight, current->m_Bitmap[ models->GetActiveModelIndex() ] );
-		helper.DrawOutlinedRect( RGB( 127, 127, 127 ), PS_SOLID, 1, rcx, rcy, rcx + rcw, rcy + rch - m_nDescriptionHeight );
+		helper.DrawOutlinedRect( Color( 127, 127, 127 ), PS_SOLID, 1, rcx, rcy, rcx + rcw, rcy + rch - m_nDescriptionHeight );
 	}
 
 	DrawDirtyFlag( helper, current, rcx, rcy, rcw, rch );
@@ -456,7 +456,7 @@ void mxExpressionTray::DrawThumbNail( CExpClass *active, CExpression *current, C
 
 	if ( c == selected )
 	{
-		DrawExpressionFocusRect( helper, rcx, rcy, rcw, rch - m_nDescriptionHeight, RGB( 255, 100, 63 ) );
+		DrawExpressionFocusRect( helper, rcx, rcy, rcw, rch - m_nDescriptionHeight, Color( 255, 100, 63 ) );
 
 		if ( updateselection )
 		{
@@ -482,7 +482,7 @@ void mxExpressionTray::DrawThumbNail( CExpClass *active, CExpression *current, C
 			rc.right = rc.left + 2 * ( m_nButtonSquare + 4 );
 			rc.bottom = rc.top + 15;
 
-			helper.DrawColoredText( "Arial", 9, FW_NORMAL, RGB( 200, 200, 200 ), rc, 
+			helper.DrawColoredText( "Arial", 9, FW_NORMAL, Color( 200, 200, 200 ), rc, 
 				"%i/%i", current->UndoCurrent(), current->UndoLevels() );
 		}
 
@@ -491,7 +491,7 @@ void mxExpressionTray::DrawThumbNail( CExpClass *active, CExpression *current, C
 	{
 		if ( current->GetSelected() )
 		{
-			DrawExpressionFocusRect( helper, rcx, rcy, rcw, rch - m_nDescriptionHeight, RGB( 127, 127, 220 ) );
+			DrawExpressionFocusRect( helper, rcx, rcy, rcw, rch - m_nDescriptionHeight, Color( 127, 127, 220 ) );
 		}
 	}
 }
@@ -512,7 +512,7 @@ void mxExpressionTray::redraw()
 		m_nPreviousExpressionCount = active->GetNumExpressions();
 	}
 
-	CChoreoWidgetDrawHelper helper( this, GetSysColor( COLOR_BTNFACE ) );
+	CChoreoWidgetDrawHelper helper( this, RGBToColor( GetSysColor( COLOR_BTNFACE ) ) );
 	HandleToolRedraw( helper );
 
 	int w, h;
@@ -583,11 +583,8 @@ void mxExpressionTray::redraw()
 		rcText.left = rc.left + ( fullw - textlen ) / 2;
 		rcText.right = rcText.left + textlen;
 
-		helper.DrawColoredText( "Arial", pointsize, FW_NORMAL,  RGB( 80, 80, 80 ), rcText, sz );
+		helper.DrawColoredText( "Arial", pointsize, FW_NORMAL,  Color( 80, 80, 80 ), rcText, sz );
 	}
-
-
-// 	ValidateRect( (HWND)getHandle(), &rc );
 }
 
 int mxExpressionTray::GetCellUnderPosition( int x, int y )

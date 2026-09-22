@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2001, Valve LLC, All rights reserved. ============
 //
 // Purpose: 
 //
@@ -20,6 +20,10 @@ CLanGames::CLanGames(vgui::Panel *parent, bool bAutoRefresh, const char *pCustom
 	m_iServerRefreshCount = 0;
 	m_bRequesting = false;
 	m_bAutoRefresh = bAutoRefresh;
+
+	m_pGameList->AddColumnHeader(10, "Tags", "#ServerBrowser_Tags", 200);
+	m_pGameList->SetSortFunc(10, TagsCompare);
+	m_pGameList->SetSortColumn(9);
 }
 
 //-----------------------------------------------------------------------------
@@ -127,7 +131,7 @@ void CLanGames::ServerFailedToRespond( HServerListRequest hReq, int iServer )
 //-----------------------------------------------------------------------------
 // Purpose: called when the current refresh list is complete
 //-----------------------------------------------------------------------------
-void CLanGames::RefreshComplete( NServerResponse response )
+void CLanGames::RefreshComplete( HServerListRequest hReq, EMatchMakingServerResponse response )
 {
 	SetRefreshing( false );
 	m_pGameList->SortList();
@@ -135,7 +139,7 @@ void CLanGames::RefreshComplete( NServerResponse response )
 	m_pGameList->SetEmptyListText("#ServerBrowser_NoLanServers");
 	SetEmptyListText();
 
-	BaseClass::RefreshComplete( response );
+	BaseClass::RefreshComplete( hReq, response );
 }
 
 void CLanGames::SetEmptyListText()

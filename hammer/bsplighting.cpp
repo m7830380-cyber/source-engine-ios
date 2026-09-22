@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -129,10 +129,8 @@ bool CBSPLighting::Load( char const *pFilename )
 	{
 		usedFaces[iCountFace] = 0;
 
-		// Was checking m_LightmapTextureSizeInLuxels[0] twice. Fixing but then
-		// commenting out the second check to avoid changing the behavior.
-		if( file.dfaces[iCountFace].m_LightmapTextureSizeInLuxels[0] != 0 /*|| 
-			file.dfaces[iCountFace].m_LightmapTextureSizeInLuxels[1] != 0*/ )
+		if( file.dfaces[iCountFace].m_LightmapTextureSizeInLuxels[0] != 0 || 
+			file.dfaces[iCountFace].m_LightmapTextureSizeInLuxels[0] != 0 )
 		{
 			texinfo_t *pTexInfo = &file.texinfo[ file.dfaces[iCountFace].texinfo ];
 
@@ -267,7 +265,7 @@ bool CBSPLighting::Load( char const *pFilename )
 
 
 	// Set lightmap texture coordinates.
-	for( int iFace=0; iFace < faces.Size(); iFace++ )
+	for( int iFace=0; iFace < faces.Count(); iFace++ )
 	{
 		CFace *pFace = &faces[iFace];
 		CStoredFace *pStoredFace = &m_StoredFaces[iFace];

@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Platform level security functions.
 //
@@ -14,7 +14,6 @@
 #endif
 
 #include "tier0/platform.h"
-#include "tier0/vcrmode.h"
 #include "tier0/memalloc.h"
 
 #ifdef REQUIRE_HARDWARE_KEY
@@ -23,12 +22,16 @@
 	#define VALVE_DESKEY_ID "u$"	// Identity Password, Uniquely identifies HL2 keys
 
 	// Include the key's API:
-	#include "DESKey/algo.h"
-	#include "DESKey/dk2win32.h"
+	#include "deskey/algo.h"
+	#include "deskey/dk2win32.h"
 	
 	#pragma comment(lib, "DESKey/algo32.lib" )
 	#pragma comment(lib, "DESKey/dk2win32.lib" )
 #endif
+
+// memdbgon must be the last include file in a .cpp file!!!
+#include "tier0/memdbgon.h"
+
 
 bool Plat_VerifyHardwareKey()
 {

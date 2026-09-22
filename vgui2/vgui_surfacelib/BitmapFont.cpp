@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: XBox Compiled Bitmap Fonts
 //
@@ -10,19 +10,20 @@
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
-#ifdef APPLE
-#include <malloc/malloc.h>
-#else
+#if !defined( _PS3 )
 #include <malloc.h>
-#endif
+#endif // ! _PS3
 #include "vgui_surfacelib/BitmapFont.h"
-#include "vgui_surfacelib/FontManager.h"
-#include <tier0/dbg.h>
-#include <vgui/ISurface.h>
-#include <tier0/mem.h>
-#include <utlbuffer.h>
+#include "vgui_surfacelib/fontmanager.h"
+#include "tier0/dbg.h"
+#include "vgui_surfacelib/ifontsurface.h"
+#include "tier0/mem.h"
+#include "utlbuffer.h"
 #include "filesystem.h"
 #include "materialsystem/itexture.h"
+#include "rendersystem/irenderdevice.h"
+#include "resourcesystem/stronghandle.h"
+
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
@@ -41,6 +42,7 @@ struct BitmapFontTable_t
 	BitmapFont_t	*m_pBitmapFont;
 	BitmapGlyph_t	*m_pBitmapGlyphs;
 	ITexture		*m_pTexture;
+	HRenderTextureStrong m_pTexture2;
 };
 
 static CUtlVector< BitmapFontTable_t > g_BitmapFontTable( 1, 4 );
@@ -111,7 +113,7 @@ bool CBitmapFont::Create( const char *pFontFilename, float scalex, float scaley,
 			return false;
 		}
 
-		if ( IsX360() )
+		if ( IsGameConsole() )
 		{
 			CByteswap swap;
 			swap.ActivateByteSwapping( true );
@@ -136,19 +138,32 @@ bool CBitmapFont::Create( const char *pFontFilename, float scalex, float scaley,
 		// load the art resources
 		char textureName[MAX_PATH];
 		Q_snprintf( textureName, MAX_PATH, "vgui/fonts/%s", fontName );
-		pFontTable->m_pTexture = FontManager().MaterialSystem()->FindTexture( textureName, TEXTURE_GROUP_VGUI );
-
-#if defined( _DEBUG ) && !defined( DX_TO_GL_ABSTRACTION )
-		if ( pFontTable->m_pBitmapFont->m_PageWidth != pFontTable->m_pTexture->GetActualWidth() ||
-			pFontTable->m_pBitmapFont->m_PageHeight != pFontTable->m_pTexture->GetActualHeight() )
+		if ( g_pMaterialSystem )
 		{
-			// font is out of sync with its art
-			Assert( 0 );
-			return false;
-		}
+			pFontTable->m_pTexture = FontManager().MaterialSystem()->FindTexture( textureName, TEXTURE_GROUP_VGUI );
+
+#if defined( DEVELOPMENT_ONLY ) || defined( ALLOW_TEXT_MODE )
+			static bool s_bTextMode = CommandLine()->HasParm( "-textmode" );
+#else
+			const bool s_bTextMode = false;
 #endif
-		// the font texture lives forever, ensure it doesn't get purged
-		pFontTable->m_pTexture->IncrementReferenceCount();
+
+#if defined( _DEBUG ) && !defined( POSIX )
+			if ( ( pFontTable->m_pBitmapFont->m_PageWidth != pFontTable->m_pTexture->GetActualWidth() ||
+				pFontTable->m_pBitmapFont->m_PageHeight != pFontTable->m_pTexture->GetActualHeight() ) && !s_bTextMode )
+			{
+				// font is out of sync with its art
+				Assert( 0 );
+				return false;
+			}		
+#endif
+			// the font texture lives forever, ensure it doesn't get purged
+			pFontTable->m_pTexture->IncrementReferenceCount();
+		}		
+		else
+		{
+			Assert(0); // TODO add support for materialsystem2
+		}
 	}
 
 	// setup font properties
@@ -156,22 +171,22 @@ bool CBitmapFont::Create( const char *pFontFilename, float scalex, float scaley,
 	m_scaley = scaley;
 
 	// flags are derived from the baked font
-	m_iFlags = vgui::ISurface::FONTFLAG_BITMAP;
+	m_iFlags = FONTFLAG_BITMAP;
 	int bitmapFlags = pFontTable->m_pBitmapFont->m_Flags;
 
 	if ( bitmapFlags & BF_ANTIALIASED )
 	{
-		m_iFlags |= vgui::ISurface::FONTFLAG_ANTIALIAS;
+		m_iFlags |= FONTFLAG_ANTIALIAS;
 	}
 
 	if ( bitmapFlags & BF_ITALIC )
 	{
-		m_iFlags |= vgui::ISurface::FONTFLAG_ITALIC;
+		m_iFlags |= FONTFLAG_ITALIC;
 	}
 
 	if ( bitmapFlags & BF_BLURRED )
 	{
-		m_iFlags |= vgui::ISurface::FONTFLAG_GAUSSIANBLUR;
+		m_iFlags |= FONTFLAG_GAUSSIANBLUR;
 		m_iBlur = 1;
 	}
 
@@ -182,20 +197,20 @@ bool CBitmapFont::Create( const char *pFontFilename, float scalex, float scaley,
 
 	if ( bitmapFlags & BF_OUTLINED )
 	{
-		m_iFlags |= vgui::ISurface::FONTFLAG_OUTLINE;
+		m_iFlags |= FONTFLAG_OUTLINE;
 		m_iOutlineSize = 1;
 	}
 
 	if ( bitmapFlags & BF_DROPSHADOW )
 	{
-		m_iFlags |= vgui::ISurface::FONTFLAG_DROPSHADOW;
+		m_iFlags |= FONTFLAG_DROPSHADOW;
 		m_iDropShadowOffset = 1;
 	}
 
-	if ( flags & vgui::ISurface::FONTFLAG_ADDITIVE )
+	if ( flags & FONTFLAG_ADDITIVE )
 	{
 		m_bAdditive = true;
-		m_iFlags |= vgui::ISurface::FONTFLAG_ADDITIVE;
+		m_iFlags |= FONTFLAG_ADDITIVE;
 	}
 
 	m_iMaxCharWidth = (float)pFontTable->m_pBitmapFont->m_MaxCharWidth * m_scalex;
@@ -221,7 +236,7 @@ bool CBitmapFont::IsEqualTo( const char *windowsFontName, float scalex, float sc
 		m_scaley == scaley  )
 	{
 		int commonFlags = m_iFlags & flags;
-		if ( commonFlags & vgui::ISurface::FONTFLAG_ADDITIVE )
+		if ( commonFlags & FONTFLAG_ADDITIVE )
 		{
 			// an exact match
 			return true;
@@ -255,28 +270,19 @@ void CBitmapFont::GetCharABCWidths( int ch, int &a, int &b, int &c )
 	c = (float)pFont->m_pBitmapGlyphs[ch].c * m_scalex;
 }
 
-void CBitmapFont::GetCharRGBA( wchar_t ch, int rgbaWide, int rgbaTall, unsigned char *prgba )
-{
-	// CBitmapFont derives off CLinuxFont, etc. But you should never call GetCharRGBA on a bitmap font.
-	// If we let this fall into the CLinuxFont code, we'd have a difficult to track down bug - so crash
-	//	hard here...
-	Error( "GetCharRGBA called on CBitmapFont." );
-}
 
+//-----------------------------------------------------------------------------
+// Purpose: gets the abc widths for a character
+//-----------------------------------------------------------------------------
 void CBitmapFont::GetKernedCharWidth( wchar_t ch, wchar_t chBefore, wchar_t chAfter, float &wide, float &abcA, float &abcC )
 {
-	Assert( IsValid() && ch >= 0 && ch <= 255 );
-
-	float abcB;
-	BitmapFontTable_t *pFont = &g_BitmapFontTable[m_bitmapFontHandle];
-
-	ch = pFont->m_pBitmapFont->m_TranslateTable[ch];
-	abcA = (float)pFont->m_pBitmapGlyphs[ch].a * m_scalex;
-	abcB = (float)pFont->m_pBitmapGlyphs[ch].b * m_scalex;
-	abcC = (float)pFont->m_pBitmapGlyphs[ch].c * m_scalex;
-
-	wide = ( abcA + abcB + abcC );
+	int a, b, c;
+	GetCharABCWidths( ch, a, b, c );
+	wide = a+b+c;
+	abcA = a;
+	abcC = c;
 }
+
 
 //-----------------------------------------------------------------------------
 // Purpose: gets the texcoords for a character
@@ -299,9 +305,15 @@ void CBitmapFont::GetCharCoords( int ch, float *left, float *top, float *right, 
 //-----------------------------------------------------------------------------
 ITexture *CBitmapFont::GetTexturePage()
 {
-	Assert( IsValid() );
-
-	return g_BitmapFontTable[m_bitmapFontHandle].m_pTexture;
+	if ( g_pMaterialSystem )
+	{
+		Assert( IsValid() );
+		return g_BitmapFontTable[m_bitmapFontHandle].m_pTexture;
+	}
+	else
+	{
+		return NULL;
+	}
 }
 
 BEGIN_BYTESWAP_DATADESC( BitmapGlyph_t )

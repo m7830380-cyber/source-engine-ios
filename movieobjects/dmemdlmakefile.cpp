@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2008, Valve Corporation, All rights reserved. =======
 //
 // Describes an asset: something that is compiled from sources, 
 // in potentially multiple steps, to a compiled resource
@@ -31,6 +31,7 @@ void CDmeSourceSkin::OnConstruction()
 {
 	m_SkinName.Init( this, "skinName" );
 	m_bFlipTriangles.Init( this, "flipTriangles" );
+	m_bQuadSubd.Init( this, "quadSubd" );
 	m_flScale.InitAndSet( this, "scale", 1.0f );
 }
 
@@ -130,7 +131,7 @@ IMPLEMENT_ELEMENT_FACTORY( DmeMDLMakefile, CDmeMDLMakefile );
 //-----------------------------------------------------------------------------
 void CDmeMDLMakefile::OnConstruction()
 {
-	m_hMDL = CreateElement< CDmeMDL >( "MDLMakefile Preview" );
+	m_hMDL = CreateElement< CDmeMDL >( "MDLMakefile Preview", DMFILEID_INVALID );
 	m_bFlushMDL = false;
 }
 

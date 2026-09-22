@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2003, Valve Corporation, All rights reserved. =======
 //
 // Purpose: 
 //
@@ -15,9 +15,19 @@ CHistoryGames::CHistoryGames(vgui::Panel *parent) :
 	CBaseGamesPage(parent, "HistoryGames", eHistoryServer )
 {
 	m_bRefreshOnListReload = false;
-	m_pGameList->AddColumnHeader(10, "LastPlayed", "#ServerBrowser_LastPlayed", 100);
-	m_pGameList->SetSortFunc(10, LastPlayedCompare);
-	m_pGameList->SetSortColumn(10);
+	m_pGameList->AddColumnHeader(9, "LastPlayed", "#ServerBrowser_LastPlayed", 100);
+	m_pGameList->SetSortFunc(9, LastPlayedCompare);
+	m_pGameList->SetSortColumn(9);
+
+	if ( !IsSteamGameServerBrowsingEnabled() )
+	{
+		m_pGameList->SetEmptyListText("#ServerBrowser_OfflineMode");
+		m_pConnect->SetEnabled( false );
+		m_pRefreshAll->SetEnabled( false );
+		m_pRefreshQuick->SetEnabled( false );
+		m_pAddServer->SetEnabled( false );
+		m_pFilter->SetEnabled( false );
+	}
 }
 
 //-----------------------------------------------------------------------------
@@ -32,6 +42,12 @@ CHistoryGames::~CHistoryGames()
 //-----------------------------------------------------------------------------
 void CHistoryGames::LoadHistoryList()
 {
+	if ( IsSteamGameServerBrowsingEnabled() )
+	{
+		// set empty message
+		m_pGameList->SetEmptyListText("#ServerBrowser_NoServersPlayed");
+	}
+
 	if ( m_bRefreshOnListReload )
 	{
 		m_bRefreshOnListReload = false;
@@ -61,13 +77,13 @@ bool CHistoryGames::SupportsItem(InterfaceItem_e item)
 //-----------------------------------------------------------------------------
 // Purpose: called when the current refresh list is complete
 //-----------------------------------------------------------------------------
-void CHistoryGames::RefreshComplete( NServerResponse response )
+void CHistoryGames::RefreshComplete( HServerListRequest hReq, EMatchMakingServerResponse response )
 {
 	SetRefreshing(false);
 	m_pGameList->SetEmptyListText("#ServerBrowser_NoServersPlayed");
 	m_pGameList->SortList();
 
-	BaseClass::RefreshComplete( response );
+	BaseClass::RefreshComplete( hReq, response );
 }
 
 //-----------------------------------------------------------------------------

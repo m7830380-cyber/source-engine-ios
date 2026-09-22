@@ -391,6 +391,11 @@
 			"type"	"string"
 		}
 		
+		"$ForcedUsingFiles"
+		{
+			"type"	"string"
+		}
+		
 		"$GenerateDebugInformation"
 		{
 			"type"	"bool"
@@ -479,11 +484,7 @@
 		
 		"$UnrollLoops"
 		{
-			"ordinals"
-			{
-				"No Loop Unrolling (=0)"	"0"
-				"Unroll Larger Loops (=30)"	"30"
-			}
+			"type"	"integer"
 		}
 		
 		"$AssumeAlignedPointers"

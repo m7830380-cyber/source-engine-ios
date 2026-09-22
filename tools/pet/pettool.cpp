@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2005, Valve Corporation, All rights reserved. =======
 //
 // Purpose: Core Movie Maker UI API
 //
@@ -15,22 +15,281 @@
 #include "dme_controls/elementpropertiestree.h"
 #include "tier0/icommandline.h"
 #include "materialsystem/imaterialsystem.h"
-#include "VGuiMatSurface/IMatSystemSurface.h"
+#include "vguimatsurface/imatsystemsurface.h"
 #include "petdoc.h"
 #include "particlesystemdefinitionbrowser.h"
 #include "particlesystempropertiescontainer.h"
 #include "dme_controls/AttributeStringChoicePanel.h"
 #include "dme_controls/ParticleSystemPanel.h"
+#include "dme_controls/sheeteditorpanel.h"
 #include "datamodel/dmelementfactoryhelper.h"
 #include "matsys_controls/picker.h"
 #include "tier2/fileutils.h"
 #include "tier3/tier3.h"
+#include "tier3/mdlutils.h"
 #include "particles/particles.h"
 #include "dmserializers/idmserializers.h"
 #include "dme_controls/dmepanel.h"
 #include "vgui/ivgui.h"
+#include "engine/IVDebugOverlay.h"
 
 using namespace vgui;
+
+
+//-----------------------------------------------------------------------------
+// Interface to allow the particle system to call back into the game code
+//-----------------------------------------------------------------------------
+class CPetParticleSystemQuery : public CBaseAppSystem< IParticleSystemQuery >
+{
+public:
+	CPetParticleSystemQuery() : m_pQuery( NULL ) {}
+
+	virtual void LevelShutdown( ) { }
+
+	virtual bool IsEditor( ) { return true; }
+
+	// Inherited from IParticleSystemQuery
+	virtual void GetLightingAtPoint( const Vector& vecOrigin, Color &cTint )
+	{
+		cTint.SetColor( 255, 255, 255, 255 );
+	}
+
+	virtual void TraceLine( const Vector& vecAbsStart,
+							const Vector& vecAbsEnd, unsigned int mask, 
+							const IHandleEntity *ignore,
+							int collisionGroup, CBaseTrace *ptr )
+	{
+		ptr->startpos = vecAbsStart;
+		ptr->endpos = vecAbsEnd;
+		ptr->fraction = 1.0f;
+		ptr->allsolid = ptr->startsolid = false;
+	}
+
+	virtual bool IsPointInSolid( const Vector& vecPos, const int nContentsMask )
+	{
+		return false;
+	}
+
+	virtual bool MovePointInsideControllingObject( CParticleCollection *pParticles, void *pObject, Vector *pPnt )
+	{
+		return true;
+	}
+
+	virtual void GetRandomPointsOnControllingObjectHitBox( CParticleCollection *pParticles,
+															int nControlPointNumber, 
+															int nNumPtsOut,
+															float flBBoxScale,
+															int nNumTrysToGetAPointInsideTheModel,
+															Vector *pPntsOut,
+															Vector vecDirectionalBias,
+															Vector *pHitBoxRelativeCoordOut,
+															int *pHitBoxIndexOut,
+															int nDesiredHitbox, 
+															const char *pszHitboxSetName )
+	{
+		for ( int i=0; i < nNumPtsOut; i++ )
+		{
+			pPntsOut[i] = pParticles->GetControlPointAtCurrentTime(nControlPointNumber); // fallback if anything goes wrong
+
+			if ( pHitBoxIndexOut )
+				pHitBoxIndexOut[i] = 0;
+
+			if ( pHitBoxRelativeCoordOut )
+				pHitBoxRelativeCoordOut[i].Init();
+		}
+	}
+
+	virtual void GetClosestControllingObjectHitBox( CParticleCollection *pParticles,
+		int nControlPointNumber, 
+		int nNumPtsIn,
+		float flBBoxScale,
+		Vector *pPntsIn,
+		Vector *pHitBoxRelativeCoordOut,
+		int *pHitBoxIndexOut,
+		int nDesiredHitbox, 
+		const char *pszHitboxSetName )
+	{
+		for ( int i=0; i < nNumPtsIn; i++ )
+		{
+			if ( pHitBoxIndexOut )
+				pHitBoxIndexOut[i] = 0;
+
+			if ( pHitBoxRelativeCoordOut )
+				pHitBoxRelativeCoordOut[i].Init();
+		}
+	}
+
+	virtual void TraceAgainstRayTraceEnv( 
+		int envnumber,  
+		const FourRays &rays, fltx4 TMin, fltx4 TMax,
+		RayTracingResult *rslt_out, int32 skip_id ) const
+	{
+		rslt_out->HitDistance = Four_Ones;
+		rslt_out->surface_normal.DuplicateVector( vec3_origin );
+	}
+
+	virtual int GetRayTraceEnvironmentFromName( const char *pszRtEnvName )
+	{
+		if ( !m_pQuery )
+			return 0;
+		return m_pQuery->GetRayTraceEnvironmentFromName( pszRtEnvName );
+	}
+
+	virtual int GetCollisionGroupFromName( const char *pszCollisionGroupName )
+	{
+		if ( !m_pQuery )
+			return 0;
+		return m_pQuery->GetCollisionGroupFromName( pszCollisionGroupName );
+	}
+
+	virtual int GetControllingObjectHitBoxInfo( CParticleCollection *pParticles,
+												int nControlPointNumber,
+												int nBufSize, // # of output slots available
+												ModelHitBoxInfo_t *pHitBoxOutputBuffer, 
+												const char *pszHitboxSetName )
+	{
+		return 0;
+	}
+
+	virtual void GetControllingObjectOBBox( CParticleCollection *pParticles,
+		int nControlPointNumber,
+		Vector vecMin, Vector vecMax )
+	{
+		vecMin = vecMax = vec3_origin;
+	}
+
+	virtual Vector GetLocalPlayerPos()
+	{
+		return vec3_origin;
+	}
+
+	virtual Vector GetCurrentViewOrigin()
+	{
+		//FIXME : This should get the petool's window location.
+		return vec3_origin;
+	}
+
+	//Not Yet Implemented
+	virtual int GetActivityCount() { return 0; }
+	virtual const char *GetActivityNameFromIndex( int nActivityIndex ) { return 0; }
+	virtual int GetActivityNumber( void *pModel, const char *m_pszActivityName ); 
+
+	virtual float GetPixelVisibility( int *pQueryHandle, const Vector &vecOrigin, float flScale )
+	{
+		return 1.0f;
+	}
+
+	void SetChainQuery( IParticleSystemQuery *pQuery ) { m_pQuery = pQuery; }
+
+	virtual void PreSimulate( ) { }
+
+	virtual void PostSimulate( ) { }
+
+	void DebugDrawLine( const Vector &origin, const Vector &target, int r, int g, int b, bool noDepthTest, float duration )
+	{
+		debugoverlay->AddLineOverlay( origin, target, r, g, b, noDepthTest, duration );
+	}
+
+	virtual void *GetModel( char const *pMdlName );
+
+	virtual void DrawModel( void *pModel, const matrix3x4_t &DrawMatrix, CParticleCollection *pParticles, int nParticleNumber, int nBodyPart, int nSubModel,
+		int nSkin, int nAnimationSequence = 0, float flAnimationRate = 30.0f, float r = 1.0f, float g = 1.0f, float b = 1.0f, float a = 1.0f );
+
+	virtual void UpdateProjectedTexture( const int nParticleID, IMaterial *pMaterial, Vector &vOrigin, float flRadius, float flRotation, float r, float g, float b, float a, void *&pUserVar ) { }
+
+private:
+	IParticleSystemQuery *m_pQuery;
+};
+
+
+static CPetParticleSystemQuery s_PetParticleSystemQuery;
+IParticleSystemQuery *g_pPetParticleSystemQuery = &s_PetParticleSystemQuery;
+
+ 
+static void SetBodygroup( studiohdr_t *pstudiohdr, int &body, int iGroup, int iValue )
+{
+	if ( !pstudiohdr )
+	{
+		return;
+	}
+
+	if (iGroup >= pstudiohdr->numbodyparts)
+	{
+		return;
+	}
+
+	mstudiobodyparts_t *pbodypart = pstudiohdr->pBodypart( iGroup );
+
+	if ( iValue >= pbodypart->nummodels )
+	{
+		return;
+	}
+
+	int iCurrent = ( body / pbodypart->base ) % pbodypart->nummodels;
+
+	body = ( body - ( iCurrent * pbodypart->base ) + ( iValue * pbodypart->base ) );
+}
+
+
+
+void CPetParticleSystemQuery::DrawModel( void *pModel, const matrix3x4_t &DrawMatrix, CParticleCollection *pParticles, int nParticleNumber, int nBodyPart, int nSubModel, 
+										 int nSkin, int nAnimationSequence, float flAnimationRate, float r, float g, float b, float a )
+{
+	MDLHandle_t hMdl = ( MDLHandle_t ) pModel;
+	CMDL myModel;
+	myModel.SetMDL( hMdl );
+	CMatRenderContextPtr pRenderContext( materials );
+	// flashlights can't work in the model panel under queued mode (the state isn't ready yet, so causes a crash)
+	pRenderContext->SetFlashlightMode( false );
+	CStudioHdr studioHdr( g_pMDLCache->GetStudioHdr( hMdl ), g_pMDLCache );
+
+	CMatRenderData< matrix3x4_t > rdBoneToWorld( pRenderContext, studioHdr.numbones() );
+
+	myModel.m_Color = Color( FastFToC( r ), FastFToC( g ), FastFToC( b ), FastFToC( a ) );
+
+	SetBodygroup( myModel.GetStudioHdr(), myModel.m_nBody, nBodyPart, nSubModel );
+	
+	myModel.m_nSkin = nSkin;
+	myModel.m_nSequence = nAnimationSequence;
+	myModel.m_flPlaybackRate = flAnimationRate;
+	myModel.m_flTime = pParticles->m_flCurTime;
+
+ 	myModel.SetUpBones( DrawMatrix, studioHdr.numbones(), rdBoneToWorld.Base() );
+	myModel.Draw( DrawMatrix, rdBoneToWorld.Base(), STUDIORENDER_DRAW_NO_SHADOWS );
+
+	//debugging
+	//Vector vecFwd, vecRight, vecUp, vecOrigin;
+	//MatrixVectors( DrawMatrix, &vecFwd, &vecRight, &vecUp );
+	//vecOrigin = Vector ( DrawMatrix[0][3], DrawMatrix[1][3], DrawMatrix[2][3] );
+	//debugoverlay->AddLineOverlay( vecOrigin, vecOrigin + 36 * vecFwd, 255, 0, 0, true, 0.1 );
+	//debugoverlay->AddLineOverlay( vecOrigin, vecOrigin + 36 * vecUp, 0, 0, 255, true, 0.1 );
+	//debugoverlay->AddLineOverlay( vecOrigin, vecOrigin + 36 * vecRight, 0, 255, 0, true, 0.1 );
+}
+
+
+void *CPetParticleSystemQuery::GetModel( char const *pMdlName )
+{
+	CUtlString	ModelName = "models/";
+	
+	ModelName += pMdlName;
+
+	MDLHandle_t mdlHandle = g_pMDLCache->FindMDL( ModelName );
+
+	return ( void * ) mdlHandle;
+}
+
+int CPetParticleSystemQuery::GetActivityNumber( void *pModel, const char *m_pszActivityName )
+{
+	/*MDLHandle_t hMdl = ( MDLHandle_t ) pModel;
+	CStudioHdr *pStudioHdr = new CStudioHdr( g_pMDLCache->GetStudioHdr( hMdl ), g_pMDLCache );
+	if ( pStudioHdr->IsValid() )
+	{
+		int nActivityNum = LookupActivity( pStudioHdr, m_pszActivityName );
+		int nAnimationNum = pStudioHdr->SelectWeightedSequence( nActivityNum, -1 );
+		return nAnimationNum;
+	}*/
+	return -1;
+}
 
 
 //-----------------------------------------------------------------------------
@@ -64,6 +323,7 @@ void DisconnectTools( )
 // Singleton
 //-----------------------------------------------------------------------------
 CPetTool	*g_pPetTool = NULL;
+
 
 void CreateTools()
 {
@@ -99,7 +359,9 @@ bool CPetTool::Init( )
 	CreateInterfaceFn factory;
 	enginetools->GetClientFactory( factory );
 	IParticleSystemQuery *pQuery = (IParticleSystemQuery*)factory( PARTICLE_SYSTEM_QUERY_INTERFACE_VERSION, NULL );
-	g_pParticleSystemMgr->Init( pQuery );
+	s_PetParticleSystemQuery.SetChainQuery( pQuery );
+
+	g_pParticleSystemMgr->Init( g_pPetParticleSystemQuery, true );
 	// tell particle mgr to add the default simulation + rendering ops
 	g_pParticleSystemMgr->AddBuiltinSimulationOperators();
 	g_pParticleSystemMgr->AddBuiltinRenderingOperators();
@@ -119,6 +381,12 @@ void CPetTool::Shutdown()
 	BaseClass::Shutdown();
 }
 
+
+//-----------------------------------------------------------------------------
+bool UTIL_IsDedicatedServer( void )
+{
+	return false;
+}
 
 //-----------------------------------------------------------------------------
 // returns the document
@@ -195,6 +463,7 @@ CPetViewMenuButton::CPetViewMenuButton( CPetTool *parent, const char *panelName,
 	AddCheckableMenuItem( "properties", "#PetProperties", new KeyValues( "OnToggleProperties" ), pActionSignalTarget );
 	AddCheckableMenuItem( "browser", "#PetParticleSystemBrowser", new KeyValues( "OnToggleParticleSystemBrowser" ), pActionSignalTarget );
 	AddCheckableMenuItem( "particlepreview", "#PetParticlePreview", new KeyValues( "OnToggleParticlePreview" ), pActionSignalTarget );
+	// AddCheckableMenuItem( "sheeteditor", "#PetSheetEditor", new KeyValues( "OnToggleSheetEditor" ), pActionSignalTarget );
 
 	AddSeparator();
 
@@ -202,6 +471,7 @@ CPetViewMenuButton::CPetViewMenuButton( CPetTool *parent, const char *panelName,
 
 	SetMenu(m_pMenu);
 }
+
 
 void CPetViewMenuButton::OnShowMenu(vgui::Menu *menu)
 {
@@ -234,6 +504,15 @@ void CPetViewMenuButton::OnShowMenu(vgui::Menu *menu)
 		p = m_pTool->GetParticlePreview();
 		Assert( p );
 		m_pMenu->SetMenuItemChecked( id, ( p && p->GetParent() ) ? true : false );
+
+		/*
+		id = m_Items.Find( "sheeteditor" );
+		m_pMenu->SetItemEnabled( id, true );
+
+		p = m_pTool->GetSheetEditor();
+		Assert( p );
+		m_pMenu->SetMenuItemChecked( id, ( p && p->GetParent() ) ? true : false );
+		*/
 	}
 	else
 	{
@@ -243,6 +522,10 @@ void CPetViewMenuButton::OnShowMenu(vgui::Menu *menu)
 		m_pMenu->SetItemEnabled( id, false );
 		id = m_Items.Find( "particlepreview" );
 		m_pMenu->SetItemEnabled( id, false );
+		/*
+		id = m_Items.Find( "sheeteditor" );
+		m_pMenu->SetItemEnabled( id, false );
+		*/
 	}
 }
 
@@ -297,11 +580,13 @@ vgui::MenuBar *CPetTool::CreateMenuBar( CBaseToolSystem *pParent )
 	CPetViewMenuButton *pViewButton = new CPetViewMenuButton( this, "View", "&View", GetActionTarget() );
 	CToolMenuButton *pSwitchButton = CreateToolSwitchMenuButton( m_pMenuBar, "Switcher", "&Tools", GetActionTarget() );
 
-	pEditButton->AddMenuItem( "copy", "#BxEditCopy", new KeyValues( "OnCopy" ), GetActionTarget(), NULL, "edit_copy" );
+	pEditButton->AddMenuItem( "copySystem", "Copy Systems", new KeyValues( "OnCopySystems" ), GetActionTarget(), NULL );
+	pEditButton->AddMenuItem( "copyFunctions", "Copy Functions", new KeyValues( "OnCopyFunctions" ), GetActionTarget() );
 	pEditButton->AddMenuItem( "paste", "#BxEditPaste", new KeyValues( "OnPaste" ), GetActionTarget(), NULL, "edit_paste" );
 
 	pEditButton->MoveMenuItem( pEditButton->FindMenuItem( "paste" ), pEditButton->FindMenuItem( "editkeybindings" ) );
-	pEditButton->MoveMenuItem( pEditButton->FindMenuItem( "copy" ), pEditButton->FindMenuItem( "paste" ) );
+	pEditButton->MoveMenuItem( pEditButton->FindMenuItem( "copySystem" ), pEditButton->FindMenuItem( "paste" ) );
+	pEditButton->MoveMenuItem( pEditButton->FindMenuItem( "copyFunctions" ), pEditButton->FindMenuItem( "paste" ) );
 	pEditButton->AddSeparatorAfterItem( "paste" );
 
 	m_pMenuBar->AddButton( pFileButton );
@@ -363,13 +648,34 @@ CParticleSystemPreviewPanel *CPetTool::GetParticlePreview()
 	return m_hParticlePreview.Get();
 }
 
+/*
+CSheetEditorPanel *CPetTool::GetSheetEditor()
+{
+	return m_hSheetEditorPanel.Get();
+}
+*/
 
 //-----------------------------------------------------------------------------
-// Copy/paste
+// paste
 //-----------------------------------------------------------------------------
-void CPetTool::OnCopy()
+void CPetTool::OnCopySystems()
 {
-	GetParticleSystemDefinitionBrowser()->CopyToClipboard();
+	Panel *pDefBrowser = FindChildByName( "ParticleSystemDefinitionBrowser", true );
+
+	if ( pDefBrowser )
+	{
+		vgui::ipanel()->SendMessage( pDefBrowser->GetVPanel(), new KeyValues( "OnCopy" ), GetVPanel() );
+	}
+}
+
+void CPetTool::OnCopyFunctions()
+{
+	Panel *pFuncBrowser = FindChildByName( "FunctionBrowser", true );
+
+	if ( pFuncBrowser )
+	{
+		vgui::ipanel()->SendMessage( pFuncBrowser->GetVPanel(), new KeyValues( "OnCopy" ), GetVPanel() );
+	}
 }
 
 void CPetTool::OnPaste()
@@ -377,6 +683,10 @@ void CPetTool::OnPaste()
 	GetParticleSystemDefinitionBrowser()->PasteFromClipboard();
 }
 
+void CPetTool::OnRequestPaste()
+{
+	OnPaste();
+}
 
 //-----------------------------------------------------------------------------
 // Sets/gets the current particle system
@@ -386,23 +696,29 @@ void CPetTool::SetCurrentParticleSystem( CDmeParticleSystemDefinition *pParticle
 	if ( !m_pDoc )
 		return;
 
-	if ( m_hCurrentParticleSystem.Get() == pParticleSystem )
+	if ( pParticleSystem && m_hCurrentParticleSystem.Get() == pParticleSystem )
 		return;
 
 	m_hCurrentParticleSystem = pParticleSystem;
 	if ( bForceBrowserSelection && m_hParticleSystemDefinitionBrowser.Get() )
 	{
-		m_hParticleSystemDefinitionBrowser->UpdateParticleSystemList();
+		m_hParticleSystemDefinitionBrowser->UpdateParticleSystemList( false );
 		m_hParticleSystemDefinitionBrowser->SelectParticleSystem( pParticleSystem );
 	}
 	if ( m_hParticlePreview.Get() )
 	{
-		m_hParticlePreview->SetParticleSystem( pParticleSystem );
+		m_hParticlePreview->SetParticleSystem( pParticleSystem, bForceBrowserSelection );
 	}
 	if ( m_hProperties.Get() )
 	{
 		m_hProperties->SetParticleSystem( m_hCurrentParticleSystem );
 	}
+	/*
+	if ( m_hSheetEditorPanel.Get() )
+	{
+		m_hSheetEditorPanel->SetParticleSystem( m_hCurrentParticleSystem );
+	}
+	*/
 }
 
 CDmeParticleSystemDefinition* CPetTool::GetCurrentParticleSystem( void )
@@ -442,11 +758,14 @@ void CPetTool::OnDefaultLayout()
 	CParticleSystemPropertiesContainer *pProperties = GetProperties();
 	CParticleSystemDefinitionBrowser *pParticleSystemBrowser = GetParticleSystemDefinitionBrowser();
 	CParticleSystemPreviewPanel *pPreviewer = GetParticlePreview();
+	//CSheetEditorPanel *pSheetEditor = GetSheetEditor();
 
 	// Need three containers
 	ToolWindow *pPropertyWindow = m_ToolWindowFactory.InstanceToolWindow( GetClientArea(), false, pProperties, "#PetProperties", false );
 	ToolWindow *pBrowserWindow = m_ToolWindowFactory.InstanceToolWindow( GetClientArea(), false, pParticleSystemBrowser, "#PetParticleSystemBrowser", false );
 	ToolWindow *pPreviewWindow = m_ToolWindowFactory.InstanceToolWindow( GetClientArea(), false, pPreviewer, "#PetPreviewer", false );
+
+	//pPropertyWindow->AddPage( pSheetEditor, "#PetSheetEditor", false );
 
 	int halfScreen = usew / 2;
 	int bottom = useh - y;
@@ -481,6 +800,15 @@ void CPetTool::OnToggleParticlePreview()
 	}
 }
 
+/*
+void CPetTool::OnToggleSheetEditor()
+{
+	if ( m_hSheetEditorPanel.Get() )
+	{ 
+		ToggleToolWindow( m_hSheetEditorPanel.Get(), "#PetSheetEditor" );
+	}
+}
+*/
 
 //-----------------------------------------------------------------------------
 // Creates
@@ -490,6 +818,7 @@ void CPetTool::CreateTools( CPetDoc *doc )
 	if ( !m_hProperties.Get() )
 	{
 		m_hProperties = new CParticleSystemPropertiesContainer( m_pDoc, this );
+		m_hProperties->AddActionSignalTarget(this);
 	}
 
 	if ( !m_hParticleSystemDefinitionBrowser.Get() )
@@ -501,9 +830,18 @@ void CPetTool::CreateTools( CPetDoc *doc )
 	{
 		m_hParticlePreview = new CParticleSystemPreviewPanel( NULL, "Particle System Preview" );
 	}
+
+	/*
+	if ( !m_hSheetEditorPanel.Get() )
+	{
+		m_hSheetEditorPanel = new CSheetEditorPanel( NULL, "Sheet Editor" );
+	}
+	*/
+
 	RegisterToolWindow( m_hProperties );
 	RegisterToolWindow( m_hParticleSystemDefinitionBrowser );
 	RegisterToolWindow( m_hParticlePreview );
+	// RegisterToolWindow( m_hSheetEditorPanel );
 }
 
 
@@ -517,6 +855,7 @@ void CPetTool::InitTools()
 	windowposmgr->RegisterPanel( "properties", m_hProperties, false );
 	windowposmgr->RegisterPanel( "particlesystemdefinitionbrowser", m_hParticleSystemDefinitionBrowser, false );
 	windowposmgr->RegisterPanel( "previewpanel", m_hParticlePreview, false );
+	// windowposmgr->RegisterPanel( "sheeteditor", m_hSheetEditorPanel, false );
 
 	if ( !windowposmgr->LoadPositions( "cfg/pet.txt", this, &m_ToolWindowFactory, "Pet" ) )
 	{
@@ -526,7 +865,12 @@ void CPetTool::InitTools()
 
 
 void CPetTool::DestroyTools()
-{
+{	
+	if ( m_hParticlePreview.Get() )
+	{
+		m_hParticlePreview->ClearParticleSystemLock();
+	}
+
 	SetCurrentParticleSystem( NULL );
 
 	int c = ToolWindow::GetToolWindowCount();
@@ -558,6 +902,15 @@ void CPetTool::DestroyTools()
 		delete m_hParticlePreview.Get();
 		m_hParticlePreview = NULL;
 	}
+
+	/*
+	if ( m_hSheetEditorPanel.Get() )
+	{
+		windowposmgr->UnregisterPanel( m_hSheetEditorPanel.Get() );
+		delete m_hSheetEditorPanel.Get();
+		m_hSheetEditorPanel = NULL;
+	}
+	*/
 }
 
 
@@ -611,7 +964,7 @@ int	CPetTool::GetFileMenuItemsEnabled( )
 	int nFlags = FILE_ALL;
 	if ( m_RecentFiles.IsEmpty() )
 	{
-		nFlags &= ~(FILE_RECENT | FILE_CLEAR_RECENT);
+		nFlags &= ~FILE_RECENT;
 	}
 	return nFlags;
 }
@@ -899,6 +1252,13 @@ void CPetTool::OnFileOperationCompleted( const char *pFileType, bool bWroteFile,
 		return;
 	}
 
+	if ( !Q_stricmp( pContextKeyValues->GetName(), "OnUnload" ) )
+	{
+		enginetools->Command( "toolunload pet -nosave\n" );
+		return;
+	}
+
+
 	if ( !Q_stricmp( pContextKeyValues->GetName(), "RestartLevel" ) )
 	{
 		OnRestartLevel();
@@ -926,13 +1286,12 @@ void CPetTool::SetupFileOpenDialog( vgui::FileOpenDialog *pDialog, bool bOpenFil
 //-----------------------------------------------------------------------------
 // Can we quit?
 //-----------------------------------------------------------------------------
-bool CPetTool::CanQuit()
+bool CPetTool::CanQuit( const char *pExitMsg )
 {
 	if ( m_pDoc && m_pDoc->IsDirty() )
 	{
 		// Show Save changes Yes/No/Cancel and re-quit if hit yes/no
-		SaveFile( m_pDoc->GetFileName(), PET_FILE_FORMAT, FOSM_SHOW_PERFORCE_DIALOGS | FOSM_SHOW_SAVE_QUERY, 
-			new KeyValues( "OnQuit" ) );
+		SaveFile( m_pDoc->GetFileName(), PET_FILE_FORMAT, FOSM_SHOW_PERFORCE_DIALOGS | FOSM_SHOW_SAVE_QUERY, new KeyValues( pExitMsg ) );
 		return false;
 	}
 
@@ -989,6 +1348,13 @@ const char *CPetTool::GetLogoTextureName()
 //-----------------------------------------------------------------------------
 void CPetTool::OnDocChanged( const char *pReason, int nNotifySource, int nNotifyFlags )
 {
+	if ( nNotifyFlags & NOTIFY_CHANGE_MASK )
+	{
+		// force a resolve so the local particle manager stays in sync
+		g_pDmElementFramework->Operate( true );
+		g_pDmElementFramework->BeginEdit();
+	}
+
 	CDmeParticleSystemDefinition *pParticleSystem = GetCurrentParticleSystem();
 	if ( m_pDoc && GetParticlePreview() && pParticleSystem )
 	{
@@ -999,7 +1365,10 @@ void CPetTool::OnDocChanged( const char *pReason, int nNotifySource, int nNotify
 	{
 		if ( GetParticleSystemDefinitionBrowser() )
 		{
-			GetParticleSystemDefinitionBrowser()->UpdateParticleSystemList();
+			// only retain selection if we didn't create/delete a system
+			bool bRetainSelection = !(nNotifyFlags & NOTIFY_FLAG_PARTICLESYS_ADDED_OR_REMOVED);
+
+			GetParticleSystemDefinitionBrowser()->UpdateParticleSystemList( bRetainSelection );
 		}
 	}
 
@@ -1075,4 +1444,10 @@ bool CPetTool::LoadDocument( const char *pDocName )
 	return true;
 }
 
-
+void CPetTool::PreOperatorsPaste()
+{
+	if ( m_hProperties.Get() )
+	{
+		m_hProperties->DeleteSelectedFunctions( );
+	}
+}

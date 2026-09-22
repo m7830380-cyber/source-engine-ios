@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: The application object.
 //
@@ -43,22 +43,33 @@
 #include "IHammer.h"
 #include "op_entity.h"
 #include "tier0/dbg.h"
-#include "tier0/minidump.h"
 #include "materialsystem/imaterialsystemhardwareconfig.h"
 #include "istudiorender.h"
-#include "filesystem.h"
+#include "FileSystem.h"
 #include "engine_launcher_api.h"
 #include "filesystem_init.h"
 #include "utlmap.h"
+#include "utlvector.h"
 #include "progdlg.h"
 #include "MapWorld.h"
 #include "HammerVGui.h"
 #include "vgui_controls/Controls.h"
 #include "lpreview_thread.h"
+#include "SteamWriteMiniDump.h"
 #include "inputsystem/iinputsystem.h"
 #include "datacache/idatacache.h"
 #include "steam/steam_api.h"
+#include "toolframework/ienginetool.h"
+#include "toolutils/enginetools_int.h"
+#include "objectproperties.h"
+#include "particles/particles.h"
 #include "p4lib/ip4.h"
+#include "syncfiledialog.h"
+#include "vstdlib/jobthread.h"
+#include "gridnav.h"
+#include "tablet.h"
+#include "dialogwithcheckbox.h"
+#include "configmanager.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include <tier0/memdbgon.h>
@@ -140,31 +151,23 @@ bool IsRunningInEngine()
 	return g_pEngineAPI != NULL;
 }
 
-struct MinidumpWrapperHelper_t
-{
-	int (*m_pfn)(void *pParam);
-	void *m_pParam;
-	int m_iRetVal;
-};
 
-static void MinidumpWrapperHelper( void *arg )
-{
-	MinidumpWrapperHelper_t *info = (MinidumpWrapperHelper_t *)arg;
-	info->m_iRetVal = info->m_pfn( info->m_pParam );
-}
-
-static int WrapFunctionWithMinidumpHandler( int (*pfn)(void *pParam), void *pParam )
+int WrapFunctionWithMinidumpHandler( int (*pfn)(void *pParam), void *pParam, int errorRetVal )
 {
 	int nRetVal;
 
 	if ( !Plat_IsInDebugSession() && !CommandLine()->FindParm( "-nominidumps") )
 	{
-		MinidumpWrapperHelper_t info;
-		info.m_pfn = pfn;
-		info.m_pParam = pParam;
-		info.m_iRetVal = 0;
-		CatchAndWriteMiniDumpForVoidPtrFn( MinidumpWrapperHelper, &info, true );
-		nRetVal = info.m_iRetVal;
+		_set_se_translator( SteamWriteMiniDumpUsingExceptionInfo );
+
+		try  // this try block allows the SE translator to work
+		{
+			nRetVal = pfn( pParam );
+		}
+		catch( ... )
+		{
+			return errorRetVal;
+		}
 	}
 	else
 	{
@@ -174,13 +177,32 @@ static int WrapFunctionWithMinidumpHandler( int (*pfn)(void *pParam), void *pPar
 	return nRetVal;
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: Logging listener so that Hammer can capture warning and error
+// output to write to the message window.
+//-----------------------------------------------------------------------------
+class CHammerMessageLoggingListener : public ILoggingListener
+{
+public:
+	virtual void Log( const LoggingContext_t *pContext, const tchar *pMessage )
+	{
+		if ( pContext->m_Severity == LS_ERROR )
+		{
+			Msg( mwError, pMessage );
+		}
+		else if ( pContext->m_Severity == LS_WARNING )
+		{
+			Msg( mwWarning, pMessage );
+		}
+	}
+};
 
 //-----------------------------------------------------------------------------
 // Purpose: Outputs a formatted debug string.
 // Input  : fmt - format specifier.
 //			... - arguments to format.
 //-----------------------------------------------------------------------------
-void DBG(const char *fmt, ...)
+void DBG(char *fmt, ...)
 {
     char ach[128];
     va_list va;
@@ -232,6 +254,9 @@ void Msg(int type, const char *fmt, ...)
 	} while (len > 0);
 }
 
+//
+// Post-init and pre-shutdown routines management
+//
 
 //-----------------------------------------------------------------------------
 // Purpose: this routine calls the default doc template's OpenDocumentFile() but
@@ -341,6 +366,50 @@ void CHammerDocTemplate::UpdateInstanceMap( CMapDoc *pInstanceMapDoc )
 }
 
 
+template < typename T, int Instance >
+static T& ReliableStaticStorage()
+{
+	Instance;
+	static T storage;
+	return storage;
+}
+
+enum Storage_t
+{
+	APP_FN_POST_INIT,
+	APP_FN_PRE_SHUTDOWN,
+	APP_FN_MESSAGE_LOOP,
+	APP_FN_MESSAGE_PRETRANSLATE
+};
+
+#define s_appRegisteredPostInitFns		ReliableStaticStorage< CUtlVector< void (*)() >, APP_FN_POST_INIT >()
+#define s_appRegisteredPreShutdownFns	ReliableStaticStorage< CUtlVector< void (*)() >, APP_FN_PRE_SHUTDOWN >()
+#define s_appRegisteredMessageLoop		ReliableStaticStorage< CUtlVector< void (*)() >, APP_FN_MESSAGE_LOOP >()
+#define s_appRegisteredMessagePreTrans	ReliableStaticStorage< CUtlVector< void (*)( MSG * ) >, APP_FN_MESSAGE_PRETRANSLATE >()
+
+void AppRegisterPostInitFn( void (*fn)() )
+{
+	s_appRegisteredPostInitFns.AddToTail( fn );
+}
+
+void AppRegisterMessageLoopFn( void (*fn)() )
+{
+	s_appRegisteredMessageLoop.AddToTail( fn );
+}
+
+void AppRegisterMessagePretranslateFn( void (*fn)( MSG * ) )
+{
+	s_appRegisteredMessagePreTrans.AddToTail( fn );
+}
+
+void AppRegisterPreShutdownFn( void (*fn)() )
+{
+	s_appRegisteredPreShutdownFns.AddToTail( fn );
+}
+
+
+
+
 class CHammerCmdLine : public CCommandLineInfo
 {
 	public:
@@ -426,6 +495,8 @@ CHammer::CHammer(void)
 	m_SuppressVideoAllocation = false;
 	m_bForceRenderNextFrame = false;
 	m_bClosing = false;
+	m_bFoundryMode = false;
+	m_CustomAcceleratorWindow = NULL;
 }
 
 
@@ -457,6 +528,8 @@ bool CHammer::Connect( CreateInterfaceFn factory )
 	if ( !g_pMDLCache || !g_pFileSystem || !g_pFullFileSystem || !materials || !g_pMaterialSystemHardwareConfig || !g_pStudioRender )
 		return false;
 
+	WinTab_Init();
+
 	// ensure we're in the same directory as the .EXE
 	char *p;
 	GetModuleFileName(NULL, m_szAppDir, MAX_PATH);
@@ -482,10 +555,9 @@ bool CHammer::Connect( CreateInterfaceFn factory )
 	Options.configs.m_strConfigDir = szGameConfigDir;
 	CHammerCmdLine cmdInfo;
 	ParseCommandLine(cmdInfo);
-	
+
 	// Set up SteamApp() interface (for checking app ownership)
 	SteamAPI_InitSafe();
-	SteamAPI_SetTryCatchCallbacks( false ); // We don't use exceptions, so tell steam not to use try/catch in callback handlers
 	g_SteamAPIContext.Init();
 
 	// Load the options
@@ -493,6 +565,16 @@ bool CHammer::Connect( CreateInterfaceFn factory )
 	// NOTE: SetRegistryKey will cause hammer to look into the registry for its values
 	SetRegistryKey("Valve");
 	Options.Init();
+
+	if ( g_pThreadPool )
+	{
+		ThreadPoolStartParams_t startParams;
+		// this will set ideal processor on each thread
+		startParams.fDistribute = TRS_TRUE;
+
+		g_pThreadPool->Start( startParams );
+	}
+
 	return true;
 }
 
@@ -516,6 +598,61 @@ void *CHammer::QueryInterface( const char *pInterfaceName )
 }
 
 
+void CHammer::InitFoundryMode( CreateInterfaceFn factory, void *hGameWnd, const char *szGameDir )
+{
+	m_bFoundryMode = true;
+
+	if ( !CommandLine()->FindParm( "-foundrymode" ) )
+		Error( "Running in Foundry requires -FoundryMode on the command line." );
+
+	if ( !Connect( factory ) )
+		Error( "CHammer::Connect failed" );
+
+	if  ( !InitSessionGameConfig( szGameDir ) )
+		Error( "InitSessionGameConfig failed." );
+
+	if ( HammerInternalInit() != INIT_OK )
+		Error( "HammerInternalInit failed" );
+}
+
+
+void CHammer::NoteEngineGotFocus()
+{
+	// Release focus on all our vgui stuff so the engine can own it.
+	HammerVGui()->SetFocus( NULL );
+	
+	// Deactivate all CMapViews.
+	CMapDoc::NoteEngineGotFocus();
+}
+
+
+bool CHammer::IsHammerVisible()
+{
+	CWnd *pWnd = GetMainWnd();
+	if ( !pWnd )
+		return false;
+
+	return pWnd->IsWindowVisible() ? true : false;
+}
+
+
+void CHammer::ToggleHammerVisible()
+{
+	CWnd *pWnd = GetMainWnd();
+	if ( !pWnd )
+		return;
+
+	if ( pWnd->IsWindowVisible() )
+	{
+		pWnd->ShowWindow( SW_HIDE );
+	}
+	else
+	{
+		pWnd->ShowWindow( SW_SHOW );
+	}
+}
+
+
 //-----------------------------------------------------------------------------
 // Methods related to message pumping
 //-----------------------------------------------------------------------------
@@ -534,10 +671,23 @@ bool CHammer::HammerPreTranslateMessage(MSG * pMsg)
 	return (/*pMsg->message == WM_KICKIDLE ||*/ PreTranslateMessage(pMsg) != FALSE);
 }
 
-bool CHammer::HammerIsIdleMessage(MSG * pMsg)
+
+//-----------------------------------------------------------------------------
+// Return true if the message just dispatched should cause OnIdle to run.
+//
+// Return false for messages which do not usually affect the state of the user
+// interface and happen very often.
+//-----------------------------------------------------------------------------
+bool CHammer::HammerIsIdleMessage(MSG *pMsg)
 {
 	AFX_MANAGE_STATE(AfxGetStaticModuleState());
-	return IsIdleMessage(pMsg) != FALSE;
+
+	// We generate lots of WM_TIMER messages and shouldn't call OnIdle because of them.
+	// This fixes tool tips not popping up when a map is open.
+	if ( pMsg->message == WM_TIMER )
+		return false;
+
+	return ( IsIdleMessage(pMsg) == TRUE );
 }
 
 // return TRUE if more idle processing
@@ -614,17 +764,25 @@ void CHammer::GetDirectory(DirIndex_t dir, char *p)
 
 		case DIR_PREFABS:
 		{
-			strcpy(p, m_szAppDir);
-			EnsureTrailingBackslash(p);
-			strcat(p, "Prefabs");
+			strcpy(p, g_pGameConfig->m_szPrefabDir);
+
+			if (*p == '\0')
+			{
+				// The prefab folder has not been set up so quietly set it to the app directory + "/Prefabs"
+				strcpy(p, m_szAppDir);
+				EnsureTrailingBackslash(p);
+				strcat(p, "Prefabs");
+				strcpy( g_pGameConfig->m_szPrefabDir, p );
+			}
 
 			//
-			// Make sure the prefabs directory exists.
+			// Make sure the prefabs folder exists.  If not, create it
 			//
 			if ((_access( p, 0 )) == -1)
 			{
 				CreateDirectory(p, NULL);
 			}
+
 			break;
 		}
 
@@ -804,29 +962,8 @@ void CHammer::Help(const char *pszTopic)
 	*/
 }
 
-
-static SpewRetval_t HammerDbgOutput( SpewType_t spewType, char const *pMsg )
-{
-	// FIXME: The messages we're getting from the material system
-	// are ones that we really don't care much about.
-	// I'm disabling this for now, we need to decide about what to do with this
-
-	switch( spewType )
-	{
-	case SPEW_ERROR:
-		MessageBox( NULL, (LPCTSTR)pMsg, "Fatal Error", MB_OK | MB_ICONINFORMATION );
-#ifdef _DEBUG
-		return SPEW_DEBUGGER;
-#else
-		TerminateProcess( GetCurrentProcess(), 1 );
-		return SPEW_ABORT;
-#endif
-
-	default:
-		OutputDebugString( pMsg );
-		return (spewType == SPEW_ASSERT) ? SPEW_DEBUGGER : SPEW_CONTINUE; 
-	}
-}
+static CSimpleWindowsLoggingListener s_SimpleWindowsLoggingListener;
+static CHammerMessageLoggingListener s_HammerMessageLoggingListener;
 
 //-----------------------------------------------------------------------------
 // Purpose: 
@@ -1006,7 +1143,7 @@ bool CHammer::Check16BitColor()
 //-----------------------------------------------------------------------------
 InitReturnVal_t CHammer::Init()
 {
-	return (InitReturnVal_t)WrapFunctionWithMinidumpHandler( &CHammer::StaticHammerInternalInit, this );
+	return (InitReturnVal_t)WrapFunctionWithMinidumpHandler( &CHammer::StaticHammerInternalInit, this, INIT_FAILED );
 }
 
 
@@ -1015,11 +1152,31 @@ int CHammer::StaticHammerInternalInit( void *pParam )
 	return (int)((CHammer*)pParam)->HammerInternalInit();
 }
 
+void HammerFileSystem_ReportSearchPath( const char *szPathID )
+{
+	char szSearchPath[ 4096 ];
+	g_pFullFileSystem->GetSearchPath( szPathID, true, szSearchPath, sizeof( szSearchPath ) );
+
+	Msg( mwStatus, "------------------------------------------------------------------" );
+
+	char *pszOnePath = strtok( szSearchPath, ";" );
+	while ( pszOnePath )
+	{
+		Msg( mwStatus, "Search Path (%s): %s", szPathID, pszOnePath );
+		pszOnePath = strtok( NULL, ";" );
+	}
+}
 
 InitReturnVal_t CHammer::HammerInternalInit()
 {
-	SpewOutputFunc( HammerDbgOutput );
-	MathLib_Init( 2.2f, 2.2f, 0.0f, 2.0f, false, false, false, false );
+	if ( !IsFoundryMode() )
+	{
+		LoggingSystem_PushLoggingState();
+		LoggingSystem_RegisterLoggingListener( &s_SimpleWindowsLoggingListener );
+		LoggingSystem_RegisterLoggingListener( &s_HammerMessageLoggingListener );
+		MathLib_Init( 2.2f, 2.2f, 0.0f, 2.0f, false, false, false, false );
+	}
+
 	InitReturnVal_t nRetVal = BaseClass::Init();
 	if ( nRetVal != INIT_OK )
 		return nRetVal;
@@ -1075,8 +1232,15 @@ InitReturnVal_t CHammer::HammerInternalInit()
 	//
 	CSplashWnd::EnableSplashScreen(cmdInfo.m_bShowLogo);
 
-	LoadSequences();	// load cmd sequences - different from options because
-						//  users might want to share (darn registry)
+	//
+	// load cmd sequences - different from options because
+	//  users might want to share (darn registry)
+	//
+	if ( !LoadSequences( "CmdSeq.wc" ) )
+	{
+		// Try to load the default sequences if there are no user-defined ones.
+		LoadSequences( "CmdSeqDefault.wc" );
+	}
 
 	// other init:
 	randomize();
@@ -1109,8 +1273,8 @@ InitReturnVal_t CHammer::HammerInternalInit()
 	pManifestDocTemplate->m_hMenuShared = ::LoadMenu( hInst, MAKEINTRESOURCE( IDR_MAPDOC ) );
 	hInst = AfxFindResourceHandle( MAKEINTRESOURCE( IDR_MAPDOC ), RT_ACCELERATOR );
 	pManifestDocTemplate->m_hAccelTable = ::LoadAccelerators( hInst, MAKEINTRESOURCE( IDR_MAPDOC ) );
-	AddDocTemplate(pManifestDocTemplate);
 
+	AddDocTemplate(pManifestDocTemplate);
 
 	// register shell file types
 	RegisterShellFileTypes();
@@ -1129,22 +1293,77 @@ InitReturnVal_t CHammer::HammerInternalInit()
 
 	m_pMainWnd = pMainFrame;
 
-	CSplashWnd::ShowSplashScreen(pMainFrame);
-
-
 	// try to init VGUI
 	HammerVGui()->Init( m_pMainWnd->GetSafeHwnd() );
 
 	// The main window has been initialized, so show and update it.
-	//
-	m_nCmdShow = SW_SHOWMAXIMIZED;
-	pMainFrame->ShowWindow(m_nCmdShow);
+	if ( IsFoundryMode() )
+	{
+		m_nCmdShow = SW_SHOW;
+
+		CRect rcDesktop;
+		GetWindowRect( GetDesktopWindow(), &rcDesktop );
+
+		CRect rcEngineWnd;
+		HWND hEngineWnd = (HWND)enginetools->GetEngineHwnd();
+		GetWindowRect( hEngineWnd, &rcEngineWnd );
+
+		// Move the engine to the right side of the screen.
+		int nEngineWndX = rcDesktop.Width() - rcEngineWnd.Width();
+		SetWindowPos( hEngineWnd, NULL, nEngineWndX, 0, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_SHOWWINDOW );
+		
+		// Move Hammer to the left and make it square.
+		int nHammerWndWidth = nEngineWndX;
+		int nHammerWndHeight = min( nHammerWndWidth, rcDesktop.Height() - 100 );
+		pMainFrame->SetWindowPos( NULL, 0, 0, nHammerWndWidth, nHammerWndHeight, SWP_NOZORDER | SWP_SHOWWINDOW );
+
+		// Move the properties dialog below the engine window.
+		pMainFrame->pObjectProperties->SetWindowPos( NULL, nEngineWndX, rcEngineWnd.Height(), 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_SHOWWINDOW );
+	}
+	else
+	{
+		m_nCmdShow = SW_SHOWMAXIMIZED;
+		pMainFrame->ShowWindow(m_nCmdShow);
+	}
+
 	pMainFrame->UpdateWindow();
+
+
+	if ( !IsFoundryMode() )
+	{
+		//
+		// Init the game and mod dirs in the file system.
+		// This needs to happen before calling Init on the material system.
+		//
+		CFSSearchPathsInit initInfo;
+		initInfo.m_pFileSystem = g_pFullFileSystem;
+		initInfo.m_pDirectoryName = g_pGameConfig->m_szModDir;
+		if ( !initInfo.m_pDirectoryName[0] )
+		{
+			static char pTempBuf[MAX_PATH];
+			APP()->GetDirectory(DIR_PROGRAM, pTempBuf);
+			strcat( pTempBuf, "..\\hl2" );
+			initInfo.m_pDirectoryName = pTempBuf;
+		}
+
+		CSplashWnd::ShowSplashScreen(pMainFrame);
+
+		if ( FileSystem_LoadSearchPaths( initInfo ) != FS_OK )
+		{
+			Error( "Unable to load search paths!\n" );
+		}
+
+		// Report this for the user's sake
+		HammerFileSystem_ReportSearchPath( "GAME" );
+	}
 
 	// Now that we've initialized the file system, we can parse this config's gameinfo.txt for the additional settings there.
 	g_pGameConfig->ParseGameInfo();
 
-	materials->ModInit();
+	if ( !IsFoundryMode() )
+	{
+		materials->ModInit();
+	}
 
 	//
 	// Initialize the texture manager and load all textures.
@@ -1163,6 +1382,13 @@ InitReturnVal_t CHammer::HammerInternalInit()
 		g_Textures.LoadAllGraphicsFiles();
 		g_Textures.SetActiveConfig(g_pGameConfig);
 	}
+
+	//
+	// Initialize the particle system manager
+	//
+	g_pParticleSystemMgr->Init( NULL, true );
+	g_pParticleSystemMgr->AddBuiltinSimulationOperators();
+	g_pParticleSystemMgr->AddBuiltinRenderingOperators();
 	
 	// Watch for changes to models.
 	InitStudioFileChangeWatcher();
@@ -1196,7 +1422,7 @@ InitReturnVal_t CHammer::HammerInternalInit()
 		}
 	}
 
-	if ( Options.general.bClosedCorrectly == FALSE )
+	if ( !IsFoundryMode() && Options.general.bClosedCorrectly == FALSE )
 	{
 		CString strLastGoodSave = APP()->GetProfileString("General", "Last Good Save", "");
         
@@ -1214,7 +1440,16 @@ InitReturnVal_t CHammer::HammerInternalInit()
 #ifdef VPROF_HAMMER
 	g_VProfCurrentProfile.Start();
 #endif
+
+	// Execute the post-init registered callbacks
+	for ( int iFn = 0; iFn < s_appRegisteredPostInitFns.Count(); ++ iFn )
+	{
+		void (*fn)() = s_appRegisteredPostInitFns[ iFn ];
+		(*fn)();
+	}
 	
+	WinTab_Open( m_pMainWnd->m_hWnd );
+
 	CSplashWnd::HideSplashScreen();
 
 	// create the lighting preview thread
@@ -1225,7 +1460,7 @@ InitReturnVal_t CHammer::HammerInternalInit()
 
 int CHammer::MainLoop()
 {
-	return WrapFunctionWithMinidumpHandler( StaticInternalMainLoop, this );
+	return WrapFunctionWithMinidumpHandler( StaticInternalMainLoop, this, -1 );
 }
 
 
@@ -1253,9 +1488,23 @@ int CHammer::InternalMainLoop()
 	{
 		RunFrame();
 
+		// Do idle processing at most once per frame, incrementing the counter until we get an
+		// idle message. The counter is used as a general indication of how idle the application is,
+		// so critical idle processing is done for lower values of lIdleCount, and less important
+		// stuff is done as lIdleCount increases.
+		//
+		// When there's no more idle work to do, OnIdle returns false and we stop doing idle
+		// processing until another idle message is processed by the message loop.
 		if ( bIdle && !HammerOnIdle(lIdleCount++) )
 		{
-			bIdle = false;
+			bIdle = false; // done with idle work for now
+		}
+
+		// Execute the message loop registered callbacks
+		for ( int iFn = 0; iFn < s_appRegisteredMessageLoop.Count(); ++ iFn )
+		{
+			void (*fn)() = s_appRegisteredMessageLoop[ iFn ];
+			(*fn)();
 		}
 
 		//
@@ -1266,6 +1515,14 @@ int CHammer::InternalMainLoop()
 			if ( msg.message == WM_QUIT )
 				return 1;
 
+			// Pump the message through a custom message
+			// pre-translation chain
+			for ( int iFn = 0; iFn < s_appRegisteredMessagePreTrans.Count(); ++ iFn )
+			{
+				void (*fn)( MSG * ) = s_appRegisteredMessagePreTrans[ iFn ];
+				(*fn)( &msg );
+			}
+ 
 			if ( !HammerPreTranslateMessage(&msg) )
 			{
 				::TranslateMessage(&msg);
@@ -1295,6 +1552,13 @@ void CHammer::Shutdown()
 		g_HammerToLPreviewMsgQueue.QueueMessage( StopMsg );
 		ThreadJoin( g_LPreviewThread );
 		g_LPreviewThread = 0;
+	}
+
+	// Execute the pre-shutdown registered callbacks
+	for ( int iFn = s_appRegisteredPreShutdownFns.Count(); iFn --> 0 ; )
+	{
+		void (*fn)() = s_appRegisteredPreShutdownFns[ iFn ];
+		(*fn)();
 	}
 
 #ifdef VPROF_HAMMER
@@ -1388,9 +1652,9 @@ int CHammer::ExitInstance()
 
 	UpdatePrefabs_Shutdown();
 
-	if ( GetSpewOutputFunc() == HammerDbgOutput )
+	if ( !IsFoundryMode() )
 	{
-		SpewOutputFunc( NULL );
+		LoggingSystem_PopLoggingState();
 	}
 
 	SaveStdProfileSettings();
@@ -1417,6 +1681,19 @@ void CHammer::SetIsNewDocumentVisible( bool bIsVisible )
 bool CHammer::IsNewDocumentVisible( void )
 {
 	return CHammer::m_bIsNewDocumentVisible;
+}
+
+
+void CHammer::SetCustomAccelerator( HWND hWnd, WORD nID )
+{
+	m_CustomAcceleratorWindow = hWnd;
+	m_CustomAccelerator = ::LoadAccelerators( AfxGetInstanceHandle(), MAKEINTRESOURCE( nID ) );
+}
+
+
+void CHammer::ClearCustomAccelerator( )
+{
+	m_CustomAcceleratorWindow = NULL;
 }
 
 
@@ -1627,35 +1904,52 @@ void CHammer::OnFileNew(void)
 //-----------------------------------------------------------------------------
 void CHammer::OnFileOpen(void)
 {
+	// if there is no initial directory use the one specified in the game configuration
 	static char szInitialDir[MAX_PATH] = "";
 	if (szInitialDir[0] == '\0')
 	{
 		strcpy(szInitialDir, g_pGameConfig->szMapDir);
 	}
 
-	// TODO: need to prevent (or handle) opening VMF files when using old map file formats
-	CFileDialog dlg(TRUE, NULL, NULL, OFN_LONGNAMES | OFN_HIDEREADONLY | OFN_NOCHANGEDIR, "Valve Map Files (*.vmf;*.vmm)|*.vmf;*.vmm|Valve Map Files Autosave (*.vmf_autosave)|*.vmf_autosave|Worldcraft RMFs (*.rmf)|*.rmf|Worldcraft Maps (*.map)|*.map||");
-	dlg.m_ofn.lpstrInitialDir = szInitialDir;
-	int iRvl = dlg.DoModal();
+	OPENFILENAME ofn;
+	
+	//memory buffer to contain the file name
+	char szFileNameBuffer[MAX_PATH];
 
-	if (iRvl == IDCANCEL)
+	ZeroMemory( &ofn , sizeof( ofn));
+	ofn.lStructSize = sizeof ( ofn );
+	ofn.hwndOwner = AfxGetMainWnd()->GetSafeHwnd();
+	ofn.lpstrFile = szFileNameBuffer;
+	ofn.lpstrFile[0] = '\0';
+	ofn.nMaxFile = sizeof( szFileNameBuffer );
+	ofn.lpstrFilter = "Valve Map Files (*.vmf;*.vmm)\0*.vmf;*.vmm\0Valve Map Files Autosave (*.vmf_autosave)\0*.vmf_autosave\0Worldcraft RMFs (*.rmf)\0*.rmf\0Worldcraft Maps (*.map)\0*.map\0All\0*.*\0";
+	ofn.nFilterIndex =1;
+	ofn.lpstrFileTitle = NULL ;
+	ofn.nMaxFileTitle = 0 ;
+	ofn.lpstrInitialDir=szInitialDir;
+	ofn.Flags = OFN_LONGNAMES | OFN_HIDEREADONLY | OFN_NOCHANGEDIR;
+
+	// if the user cancels or closes the Open dialog box or an error occurs, the return value is zero.
+	if (!GetOpenFileName( &ofn ) )
 	{
 		return;
 	}
-
+	
 	//
 	// Get the directory they browsed to for next time.
 	//
-	CString str = dlg.GetPathName();
+	CString str = ofn.lpstrFile;
 	int nSlash = str.ReverseFind('\\');
 	if (nSlash != -1)
 	{
 		strcpy(szInitialDir, str.Left(nSlash));
 	}
 
+
+// add the appropriate extension (based on filter type) if it was unspecified by the user
 	if (str.Find('.') == -1)
 	{
-		switch (dlg.m_ofn.nFilterIndex)
+		switch (ofn.nFilterIndex)
 		{
 			case 1:
 			{
@@ -1688,30 +1982,47 @@ void CHammer::OnFileOpen(void)
 
 
 //-----------------------------------------------------------------------------
-// Purpose: 
-// Input  : lpszFileName - 
-// Output : CDocument*
+// This is the generic file open function that is called by the framework.
 //-----------------------------------------------------------------------------
-CDocument* CHammer::OpenDocumentFile(LPCTSTR lpszFileName) 
+CDocument *CHammer::OpenDocumentFile(LPCTSTR lpszFileName) 
 {
-	if(GetFileAttributes(lpszFileName) == 0xFFFFFFFF)
+	CDocument *pDoc = OpenDocumentOrInstanceFile( lpszFileName );
+
+	// Do work that needs to happen after opening all instances here.
+	// NOTE: Make sure this work doesn't need to happen per instance!!!
+
+	return pDoc;
+}
+
+
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+CDocument *CHammer::OpenDocumentOrInstanceFile(LPCTSTR lpszFileName) 
+{
+	// CWinApp::OnOpenRecentFile may get its file history cycled through by instances being opened, thus the pointer becomes invalid
+	CString		SaveFileName = lpszFileName;	
+
+	if(GetFileAttributes( SaveFileName ) == 0xFFFFFFFF)
 	{
 		CString		Message;
 
-		Message = "The file " + CString( lpszFileName ) + " does not exist.";
+		Message = "The file " + SaveFileName + " does not exist.";
 		AfxMessageBox( Message );
 
 		return NULL;
 	}
 
-	CDocument	*pDoc = m_pDocManager->OpenDocumentFile( lpszFileName );
+	CheckForFileSync( SaveFileName, CHammer::m_bIsNewDocumentVisible );
+
+	CDocument	*pDoc = m_pDocManager->OpenDocumentFile( SaveFileName );
 	CMapDoc		*pMapDoc = dynamic_cast< CMapDoc * >( pDoc );
 
 	if ( pMapDoc )
 	{
 		CMapDoc::SetActiveMapDoc( pMapDoc );
-
+		pMapDoc->CheckFileStatus();
 	}
+
 	if( pDoc && Options.general.bLoadwinpos && Options.general.bIndependentwin)
 	{
 		::GetMainWnd()->LoadWindowStates();
@@ -1731,12 +2042,49 @@ CDocument* CHammer::OpenDocumentFile(LPCTSTR lpszFileName)
 		char szRenameMessage[MAX_PATH+MAX_PATH+256];
 		CString newMapPath = *((CMapDoc *)pDoc)->AutosavedFrom();
 
-		sprintf( szRenameMessage, "This map was loaded from an autosave file.\nWould you like to rename it from \"%s\" to \"%s\"?\nNOTE: This will not save the file with the new name; it will only rename it.", lpszFileName, (const char*)newMapPath );
+		sprintf( szRenameMessage, "This map was loaded from an autosave file.\nWould you like to rename it from \"%s\" to \"%s\"?\nNOTE: This will not save the file with the new name; it will only rename it.", SaveFileName, newMapPath );
 
-		if ( AfxMessageBox( szRenameMessage, MB_YESNO ) == IDYES )
+		if ( AfxMessageBox( szRenameMessage, MB_ICONHAND | MB_YESNO ) == IDYES )
 		{			
 			((CMapDoc *)pDoc)->SetPathName( newMapPath );		
 		}			
+	}
+	else
+	{
+		if ( CHammer::m_bIsNewDocumentVisible == true )
+		{
+			pMapDoc->CheckFileStatus();
+			if ( pMapDoc->IsReadOnly() == true && pMapDoc->IsCheckedOut() == false )
+			{
+				if ( pMapDoc->IsVersionControlled() )
+				{
+					CUtlString dialogText;
+					dialogText.Format("This map is not checked out.  Would you like to check it out?\n\n%s", SaveFileName );
+					
+					CDialogWithCheckbox	Dialog( "Checkout File", dialogText,"Check out BSP.", false, !pMapDoc->BspOkToCheckOut() );
+
+					if( Dialog.DoModal() == IDOK )
+					{
+						pMapDoc->CheckOut();
+						if ( pMapDoc->IsReadOnly() )
+						{
+							AfxMessageBox( "Checkout was NOT successful!", MB_OK ) ;
+						}
+					}
+
+					if ( Dialog.IsCheckboxChecked() )
+					{
+						pMapDoc->CheckOutBsp();
+					}
+				}
+				else
+				{
+					char szMessage[ MAX_PATH + MAX_PATH+ 256 ];
+					sprintf( szMessage, "This map is marked as READ ONLY.  You will not be able to save this file.\n\n%s", SaveFileName );
+					AfxMessageBox( szMessage );
+				}
+			}
+		}
 	}
 
 	return pDoc;
@@ -1760,7 +2108,7 @@ inline bool IsKeyStrokeMessage( MSG *pMsg )
 
 	return true;
 }
-
+  
 
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
@@ -1770,10 +2118,6 @@ BOOL CHammer::PreTranslateMessage(MSG* pMsg)
 	if (CSplashWnd::PreTranslateAppMessage(pMsg))
 		return TRUE;
 
-	// This is for raw input, these shouldn't be translated so skip that here.
-	if ( pMsg->message == WM_INPUT )
-		return TRUE;
-
 	// Suppress the accelerator table for edit controls so that users can type
 	// uppercase characters without invoking Hammer tools.	
 	if ( IsKeyStrokeMessage( pMsg ) )
@@ -1781,11 +2125,20 @@ BOOL CHammer::PreTranslateMessage(MSG* pMsg)
 		char className[80];
 		::GetClassNameA( pMsg->hwnd, className, sizeof( className ) );
 
-		// The classname of dialog window in the VGUI model browser and particle browser is AfxWnd100sd in Debug and AfxWnd100s in Release
-		if ( !V_stricmp( className, "edit" ) || V_stristr( className, "AfxWnd" ) )
+		// The classname of dialog window in the VGUI model browser and particle browser is AfxWnd80sd in Debug and AfxWnd80s in Release
+		// For later versions of visual studio, it is afxwnd100s and afxwnd100sd.  So for future proofing this we're just gonig to check on afxwnd
+		if ( !V_stricmp( className, "edit" ) || !V_strnicmp( className, "afxwnd", strlen( "afxwnd" ) ) )
 		{
 			// Typing in an edit control. Don't pretranslate, just translate/dispatch.
 			return FALSE;
+		}
+
+		if ( m_CustomAcceleratorWindow != NULL )
+		{
+			if ( TranslateAccelerator( m_CustomAcceleratorWindow, m_CustomAccelerator, pMsg ) != 0 )
+			{
+				return TRUE;
+			}
 		}
 	}
 
@@ -1796,16 +2149,18 @@ BOOL CHammer::PreTranslateMessage(MSG* pMsg)
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-void CHammer::LoadSequences(void)
+bool  CHammer::LoadSequences( const char *szSeqFileName )
 {
 	char szRootDir[MAX_PATH];
 	char szFullPath[MAX_PATH];
 	APP()->GetDirectory(DIR_PROGRAM, szRootDir);
-	Q_MakeAbsolutePath( szFullPath, MAX_PATH, "CmdSeq.wc", szRootDir ); 
+	Q_MakeAbsolutePath( szFullPath, MAX_PATH, szSeqFileName, szRootDir ); 
 	std::ifstream file(szFullPath, std::ios::in | std::ios::binary);
 	
-	if(!file.is_open())
-		return;	// none to load
+	if( !file.is_open() )
+	{
+		return false;	// none to load
+	}
 
 	// skip past header & version
 	float fThisVersion;
@@ -1845,6 +2200,8 @@ void CHammer::LoadSequences(void)
 
 		m_CmdSequences.Add(pSeq);
 	}
+
+	return true;
 }
 
 
@@ -2006,14 +2363,33 @@ void CHammer::RunFrame(void)
 		 CMapDoc::GetActiveMapDoc()->HasInitialUpdate() )
 		 
 	{
+		CMapDoc *pMapDoc = CMapDoc::GetActiveMapDoc();
+		
 		// get the time
-		CMapDoc::GetActiveMapDoc()->UpdateCurrentTime();
+		pMapDoc->UpdateCurrentTime();
 
 		// run any animation
-		CMapDoc::GetActiveMapDoc()->UpdateAnimation();
+		pMapDoc->UpdateAnimation();
 
 		// redraw the 3d views
-		CMapDoc::GetActiveMapDoc()->RenderAllViews();
+		pMapDoc->RenderAllViews();
+
+		// update the grid nav
+		CGridNav *pGridNav = pMapDoc->GetGridNav();
+		if ( pGridNav && pGridNav->IsEnabled() && pGridNav->IsPreviewActive() )
+		{
+			CMapView3D *pView = pMapDoc->GetFirst3DView();
+			if ( pView )
+			{
+				CCamera *pCam = pView->GetCamera();
+				Assert( pCam );
+
+				Vector vViewPos, vViewDir;
+				pCam->GetViewPoint( vViewPos );
+				pCam->GetViewForward( vViewDir );
+				pGridNav->Update( pMapDoc, vViewPos, vViewDir );
+			}
+		}
 	}
 
 	// No matter what, we want to keep caching in materials...
@@ -2023,13 +2399,11 @@ void CHammer::RunFrame(void)
 	}
 
 	m_bForceRenderNextFrame = false;
-
-
 }
 
 
 //-----------------------------------------------------------------------------
-// Purpose: Overloaded Run so that we can control the frameratefor realtime
+// Purpose: Overloaded Run so that we can control the framerate for realtime
 //			rendering in the 3D view.
 // Output : As MFC CWinApp::Run.
 //-----------------------------------------------------------------------------
@@ -2064,8 +2438,6 @@ void CHammer::OnActivateApp(bool bActive)
 //		DBG("OFF %d\n", nCount);
 //	nCount++;
 	m_bActiveApp = bActive;
-
-
 }
 
 //-----------------------------------------------------------------------------
@@ -2246,7 +2618,10 @@ void CHammer::Autosave( void )
 		CString strAutosaveDirectory( szRootDir );
 
 		//expand the path if $SteamUserDir etc are used for SDK users
-		EditorUtil_ConvertPath(strAutosaveDirectory, true);
+		if ( CGameConfigManager::IsSDKDeployment() )
+		{
+			EditorUtil_ConvertPath(strAutosaveDirectory, true);
+		}
 		
 		CString strExtension  = ".vmf";
 		//this will hold the name of the map w/o leading directory info or file extension
@@ -2342,6 +2717,7 @@ bool CHammer::VerifyAutosaveDirectory( char *szAutosaveDirectory ) const
 		return false;
 	}
 	CString strAutosaveDirectory( szRootDir );	
+	if ( CGameConfigManager::IsSDKDeployment() )
 	{
 		EditorUtil_ConvertPath(strAutosaveDirectory, true);
 		if ( ( strAutosaveDirectory[1] != ':' ) || ( strAutosaveDirectory[2] != '\\' ) )
@@ -2350,6 +2726,15 @@ bool CHammer::VerifyAutosaveDirectory( char *szAutosaveDirectory ) const
 			return false;
 		}
 	}
+	else
+	{
+		if ( ( szRootDir[1] != ':' ) || ( szRootDir[2] != '\\' ) )
+		{
+			AfxMessageBox( "The current autosave directory does not have an absolute path.\nThe autosave feature will be disabled until a new directory is entered.", MB_OK );
+			return false;
+		}
+	}
+
 
 	hDir = CreateFile (
 		strAutosaveDirectory,
@@ -2364,7 +2749,7 @@ bool CHammer::VerifyAutosaveDirectory( char *szAutosaveDirectory ) const
 	if ( hDir == INVALID_HANDLE_VALUE )
 	{
 
-		bool bDirResult = CreateDirectory( strAutosaveDirectory, NULL );
+		bool bDirResult = CreateDirectory( strAutosaveDirectory, NULL ) ? true : false;
 		if ( !bDirResult )
 		{
 			AfxMessageBox( "The current autosave directory does not exist and could not be created.  \nThe autosave feature will be disabled until a new directory is entered.", MB_OK );
@@ -2448,7 +2833,7 @@ void CHammer::LoadLastGoodSave( void )
 			CString newMapPath( szMapDir );
 			newMapPath.Append( "\\" );
 			newMapPath.Append( pszFileName );
-			sprintf( szRenameMessage, "The last saved map was found in the autosave directory.\nWould you like to rename it from \"%s\" to \"%s\"?\nNOTE: This will not save the file with the new name; it will only rename it.", szLastSaveCopy, (const char*)newMapPath );
+			sprintf( szRenameMessage, "The last saved map was found in the autosave directory.\nWould you like to rename it from \"%s\" to \"%s\"?\nNOTE: This will not save the file with the new name; it will only rename it.", szLastSaveCopy, newMapPath );
 
 			if ( AfxMessageBox( szRenameMessage, MB_YESNO ) == IDYES )
 			{			
@@ -2472,3 +2857,10 @@ void CHammer::ResetAutosaveTimer()
 		pMainWnd->ResetAutosaveTimer();
 	}
 }
+
+//-----------------------------------------------------------------------------
+bool UTIL_IsDedicatedServer( void )
+{
+	return false;
+}
+

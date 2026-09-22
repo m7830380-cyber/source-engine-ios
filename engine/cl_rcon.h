@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -20,12 +20,53 @@
 #include "netadr.h"
 #include "sv_remoteaccess.h"
 #include "sv_rcon.h"
-#include "socketcreator.h"
+#include "tier2/socketcreator.h"
 #include "igameserverdata.h"
 #include "ivprofexport.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
+
+abstract_class IVProfData
+{
+public:
+	virtual void OnRemoteGroupData( const void *data, int len ) = 0;
+	virtual void OnRemoteData( const void *data, int len ) = 0;
+};
+
+
+//-----------------------------------------------------------------------------
+// Used to display client perf data in showbudget
+//-----------------------------------------------------------------------------
+class CRConVProfExport : public IVProfExport, public IVProfData
+{
+	// Inherited from IVProfExport
+public:
+	virtual void AddListener();
+	virtual void RemoveListener();
+	virtual void PauseProfile();
+	virtual void ResumeProfile();
+	virtual void SetBudgetFlagsFilter( int filter );
+	virtual int GetNumBudgetGroups();
+	virtual void GetBudgetGroupInfos( CExportedBudgetGroupInfo *pInfos );
+	virtual void GetBudgetGroupTimes( float times[MAX_BUDGETGROUP_TIMES] );
+
+	// Inherited from IVProfData
+public:
+	virtual void OnRemoteGroupData( const void *data, int len );
+	virtual void OnRemoteData( const void *data, int len );
+
+	// Other public methods
+public:
+	CRConVProfExport();
+
+private:
+	void CleanupGroupData();
+
+	CUtlVector< CExportedBudgetGroupInfo > m_Info;
+	CUtlVector<float> m_Times;	// Times from the most recent snapshot.
+};
+
 
 class CRConClient : public ISocketCreatorListener
 {
@@ -48,8 +89,14 @@ public:
 	bool IsConnected() const;
 	bool IsAuthenticated() const { return m_bAuthenticated; }
 
+	void RegisterVProfDataCallback( IVProfData *callback );
+	void StopVProfData();
+	void StartVProfData();
+
 	void TakeScreenshot();
 	void GrabConsoleLog();
+
+	void SendBugRequest();
 
 	void SetPassword( const char *pPassword );
 
@@ -71,6 +118,7 @@ private:
 	void SaveRemoteScreenshot( const void* pBuffer, int nBufLen );
 	void SaveRemoteConsoleLog( const void* pBuffer, int nBufLen );
 
+	CRConVProfExport m_VProfExport;
 	CSocketCreator	m_Socket;
 	netadr_t		m_Address;
 	int				m_iAuthRequestID;

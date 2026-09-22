@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -8,7 +8,7 @@
 
 #include "vbsp.h"
 #include "disp_vbsp.h"
-#include "utlvector.h"
+#include "UtlVector.h"
 #include "faces.h"
 #include "builddisp.h"
 #include "tier1/strtools.h"
@@ -406,6 +406,55 @@ int FindOrCreateOrigFace( face_t *f )
     return index;
 }
 
+// dumb linear search.  Hopefully this is not too slow
+uint16 BrushIndexFromSide( side_t *pSide )
+{
+	if ( pSide->original )
+	{
+		pSide = pSide->original;
+	}
+	for ( int i = 0; i < g_MainMap->nummapbrushes; i++ )
+	{
+		mapbrush_t *pBrush = &g_MainMap->mapbrushes[i];
+		const side_t *pFirstSide = pBrush->original_sides;
+		const side_t *pLastSide = pFirstSide + pBrush->numsides;
+		if ( pSide >= pFirstSide && pSide < pLastSide )
+		{
+			return uint16(i);
+		}
+	}
+	return uint16(-1);
+}
+
+
+void BuildBrushListForFace( CUtlVectorFixedGrowable<int, 64> &brushList, face_t *pFace )
+{
+	int nFaceBrush = BrushIndexFromSide( pFace->originalface );
+	brushList.AddToTail( nFaceBrush );
+	if ( pFace->pMergedList )
+	{
+		for ( int i = 0; i < pFace->pMergedList->Count(); i++ )
+		{
+			int nAddBrush = BrushIndexFromSide( pFace->pMergedList->Element(i) );
+			if ( nAddBrush == uint16(-1) )
+				continue;
+
+			bool bFound = false;
+			for ( int j = 0; j < brushList.Count(); j++ )
+			{
+				if ( nAddBrush == brushList[j] )
+				{
+					bFound = true;
+					break;
+				}
+			}
+			if ( !bFound )
+			{
+				brushList.AddToTail( nAddBrush );
+			}
+		}
+	}
+}
 /*
 ==================
 EmitFace
@@ -454,8 +503,29 @@ void EmitFace( face_t *f, qboolean onNode )
 	dfaceids.AddToTail();
 	dfaceids[numfaces].hammerfaceid = f->originalface->id;
 
-	numfaces++;
+	// save the brush this face came from
+	int nOut = dfacebrushlists.AddToTail();
+	Assert( nOut == numfaces );
+	CUtlVectorFixedGrowable<int, 64> brushList;
+	BuildBrushListForFace( brushList, f );
+	if ( brushList.Count() == 1 )
+	{
+		dfacebrushlists[nOut].m_nFaceBrushCount = 1;
+		dfacebrushlists[nOut].m_nFaceBrushStart = brushList[0];
+	}
+	else
+	{
+		dfacebrushlists[nOut].m_nFaceBrushCount = brushList.Count();
+		int nStart = dfacebrushes.Count();
+		dfacebrushlists[nOut].m_nFaceBrushStart = nStart;
+		dfacebrushes.AddMultipleToTail( brushList.Count() );
+		for ( int i = 0; i < brushList.Count(); i++ )
+		{
+			dfacebrushes[nStart+i] = brushList[i];
+		}
+	}
 
+	numfaces++;
     //
 	// plane info - planenum is used by qlight, but not quake
     //
@@ -747,6 +817,11 @@ void CompactTexdataArray( texdatamap_t *pMap )
 	numtexdata = 0;
 	for ( int i = 0; i < oldTexData.Count(); i++ )
 	{
+		const char *pString = &oldStringData[oldStringTable[oldTexData[i].nameStringTableID]];
+
+		if ( !pMap[i].refCount && V_stristr( pString, "tools/tools" ) )
+			pMap[i].refCount = 1; // special case for tools textures, artificially bump refcount
+
 		// unreferenced, note in map and skip
 		if ( !pMap[i].refCount )
 		{
@@ -756,7 +831,6 @@ void CompactTexdataArray( texdatamap_t *pMap )
 		pMap[i].outputIndex = numtexdata;
 
 		// get old string and re-add to table
-		const char *pString = &oldStringData[oldStringTable[oldTexData[i].nameStringTableID]];
 		int nameIndex = TexDataStringTable_AddOrFindString( pString );
 		// copy old texdata and fixup with new name in compacted table
 		dtexdata[numtexdata] = oldTexData[i];
@@ -1076,13 +1150,15 @@ void EmitBrushes (void)
 				cp->texinfo = g_MainMap->g_ClipTexinfo;
 			}
 			cp->bevel = b->original_sides[j].bevel;
+			cp->thin = b->original_sides[j].thin;
 		}
 
 		// add any axis planes not contained in the brush to bevel off corners
 		for (x=0 ; x<3 ; x++)
+		{
 			for (s=-1 ; s<=1 ; s+=2)
 			{
-			// add the plane
+				// add the plane
 				VectorCopy (vec3_origin, normal);
 				normal[x] = s;
 				if (s == -1)
@@ -1091,8 +1167,11 @@ void EmitBrushes (void)
 					dist = b->maxs[x];
 				planenum = g_MainMap->FindFloatPlane (normal, dist);
 				for (i=0 ; i<b->numsides ; i++)
+				{
 					if (b->original_sides[i].planenum == planenum)
 						break;
+				}
+
 				if (i == b->numsides)
 				{
 					if (numbrushsides >= MAX_MAP_BRUSHSIDES)
@@ -1105,6 +1184,7 @@ void EmitBrushes (void)
 					db->numsides++;
 				}
 			}
+		}
 	}
 }
 
@@ -1271,24 +1351,23 @@ void EndBSPFile (void)
 
 	// Compute bounds after creating disp info because we need to reference it
 	ComputeBoundsNoSkybox();
-
+	
 	// Make sure that we have a water lod control eneity if we have water in the map.
 	EnsurePresenceOfWaterLODControlEntity();
 
 	// Doing this here because stuff about may filter out entities
 	UnparseEntities ();
-
+	
 	// remove unused texinfos
 	CompactTexinfos();
 
 	// Figure out which faces want macro textures.
 	DiscoverMacroTextures();
-
-	char fileName[1024];
-	V_strncpy( fileName, source, sizeof( fileName ) );
-	V_DefaultExtension( fileName, ".bsp", sizeof( fileName ) );
-	Msg ("Writing %s\n", fileName);
-	WriteBSPFile (fileName);
+	
+	char	targetPath[1024];
+	GetPlatformMapPath( source, targetPath, 0, 1024 );
+	Msg ("Writing %s\n", targetPath);
+	WriteBSPFile (targetPath);
 }
 
 
@@ -1528,6 +1607,11 @@ void AddDispsToBounds( int nHeadNode, CUtlVector<int>& skipAreas, Vector &vecMin
 //-----------------------------------------------------------------------------
 void ComputeBoundsNoSkybox( )
 {
+	// Check to make sure we actually have anything in the tree. otherwise we'll
+	// recurse indefinitely
+	if ( numnodes == 0 )
+		return;
+
 	// Iterate over all world leaves, skip those which are part of skybox
 	Vector mins, maxs;
 	ClearBounds (mins, maxs);
@@ -1540,7 +1624,7 @@ void ComputeBoundsNoSkybox( )
 		char* pEntity = ValueForKey(&entities[i], "classname");
 		if (!strcmp(pEntity, "worldspawn"))
 		{
-			char	string[32];
+			char	string[ 128 ];
 			sprintf (string, "%i %i %i", (int)mins[0], (int)mins[1], (int)mins[2]);
 			SetKeyValue (&entities[i], "world_mins", string);
 			sprintf (string, "%i %i %i", (int)maxs[0], (int)maxs[1], (int)maxs[2]);

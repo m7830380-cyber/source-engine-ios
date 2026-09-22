@@ -1,10 +1,10 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
 // $NoKeywords: $
 //
-//=============================================================================//
+//===========================================================================//
 // FileSystemOpenDlg.cpp : implementation file
 //
 
@@ -13,7 +13,9 @@
 #include "jpeglib/jpeglib.h"
 #include "utldict.h"
 #include "resource.h"
+#include "tier2/tier2.h"
 #include "ifilesystemopendialog.h"
+#include "smartptr.h"
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -184,14 +186,13 @@ void CFileSystemOpenDlg::OnOK()
 		if ( m_bFilterMdlAndJpgFiles )
 		{
 			char tempFilename[MAX_PATH];
-			V_strcpy_safe( tempFilename, fullFilename );
+			Q_strncpy( tempFilename, fullFilename, sizeof( tempFilename ) );
 			char *pPos = strrchr( tempFilename, '.' );
 			if ( pPos )
 			{
 				if ( Q_stricmp( pPos, ".jpeg" ) == 0 || Q_stricmp( pPos, ".jpg" ) == 0 )
 				{
-					pPos[0] = 0;
-					V_strcat_safe( tempFilename, ".mdl" );
+					Q_strncpy( pPos, ".mdl", 5 );
 					m_Filename = tempFilename;
 				}
 			}
@@ -335,7 +336,7 @@ public:
 
 	static void imp_skip_input_data(j_decompress_ptr cinfo, long num_bytes)
 	{
-		AssertOnce( false ); // They should never need to call these functions since we give them all the data up front.
+		Assert( false ); // They should never need to call these functions since we give them all the data up front.
 	}
 
 	static boolean imp_resync_to_restart(j_decompress_ptr cinfo, int desired)
@@ -348,22 +349,13 @@ public:
 	{
 	}
 
-	static void error_exit( j_common_ptr cptr )
-	{
-		CJpegSourceMgr *pInstance = (CJpegSourceMgr*)cptr->client_data;
-		longjmp( pInstance->m_JmpBuf, 1 );
-	}
-
 public:
-	jmp_buf m_JmpBuf;
 	CUtlVector<char> m_Data;
 };
 
 
 bool ReadJpeg( IFileSystem *pFileSystem, const char *pFilename, CUtlVector<unsigned char> &buf, int &width, int &height, const char *pPathID )
 {
-	width = height = 0;
-
 	// Read the data.
 	FileHandle_t fp = pFileSystem->Open( pFilename, "rb", pPathID );
 	if ( fp == FILESYSTEM_INVALID_HANDLE )
@@ -383,17 +375,9 @@ bool ReadJpeg( IFileSystem *pFileSystem, const char *pFilename, CUtlVector<unsig
 	struct jpeg_error_mgr jerr;
 
 	memset( &jpegInfo, 0, sizeof( jpegInfo ) );
-	jpegInfo.client_data = &sourceMgr;
 	jpegInfo.err = jpeg_std_error(&jerr);
-	jerr.error_exit = &CJpegSourceMgr::error_exit;
 	jpeg_create_decompress(&jpegInfo);
 	jpegInfo.src = &sourceMgr;
-
-	if ( setjmp( sourceMgr.m_JmpBuf ) == 1 )
-	{
-		jpeg_destroy_decompress(&jpegInfo);
-		return false;
-	}
 
 	if (jpeg_read_header(&jpegInfo, TRUE) != JPEG_HEADER_OK)
 	{
@@ -782,11 +766,11 @@ void CFileSystemOpenDlg::OnDblclkFileList(NMHDR* pNMHDR, LRESULT* pResult)
 void CFileSystemOpenDlg::OnUpButton() 
 {
 	char str[MAX_PATH];
-	V_strcpy_safe( str, m_CurrentDir );
+	Q_strncpy( str, m_CurrentDir, sizeof( str ) );
 	Q_StripLastDir( str, sizeof( str ) );
 
 	if ( str[0] == 0 )
-		V_strcpy_safe( str, "." );
+		Q_strncpy( str, ".", sizeof( str ) );
 	
 	if ( str[strlen(str)-1] == '\\' || str[strlen(str)-1] == '/' )
 		str[strlen(str)-1] = 0;
@@ -840,6 +824,13 @@ public:
 	{
 		m_pDialog = 0;
 		m_bLastModalWasWindowsDialog = false;
+		m_bAllowMultiSelect = false;
+		m_RelativeFilename = NULL;
+	}
+
+	~CFileSystemOpenDialogWrapper()
+	{
+		delete m_RelativeFilename;
 	}
 
 	virtual void Release()
@@ -887,12 +878,20 @@ public:
 		
 		if ( m_bLastModalWasWindowsDialog )
 		{
-			Q_strncpy( pOut, m_RelativeFilename, outLen );
+			Q_strncpy( pOut, m_RelativeFilename ? m_RelativeFilename : "", outLen );
 		}
 		else
 		{
 			Q_strncpy( pOut, m_pDialog->GetFilename(), outLen );
 		}
+	}
+
+	virtual int GetFilenameBufferSize() const
+	{
+		if ( m_bLastModalWasWindowsDialog )
+			return m_RelativeFilename ? strlen( m_RelativeFilename ) + 1 : 1;
+		else
+			return m_pDialog->GetFilename().GetLength() + 1;
 	}
 
 	virtual bool DoModal()
@@ -919,18 +918,18 @@ public:
 			CString ext = m_pDialog->m_FileMasks[m_pDialog->m_FileMasks.Count()-1].Right( 4 );
 			const char *pStr = ext;
 			if ( pStr[0] == '.' )
-				V_strcpy_safe( defExt, pStr+1 );
+				Q_strncpy( defExt, pStr+1, sizeof( defExt ) );
 		}
 
 		char pFileNameBuf[MAX_PATH];
 		const char *pFileName = m_pDialog->m_pFileSystem->RelativePathToFullPath( m_pDialog->m_CurrentDir, m_pDialog->m_PathIDString, pFileNameBuf, MAX_PATH );
-		V_strcat_safe( pFileNameBuf, "\\" );
+		Q_strcat( pFileNameBuf, "\\", sizeof(pFileNameBuf) );
 	
 		// Build the list of file filters.
 		char filters[1024];
 		if ( m_pDialog->m_FileMasks.Count() == 0 )
 		{
-			V_strcpy_safe( filters, "All Files (*.*)|*.*||" );
+			Q_strncpy( filters, "All Files (*.*)|*.*||", sizeof( filters ) );
 		}
 		else
 		{
@@ -938,59 +937,127 @@ public:
 			for ( int i=0; i < m_pDialog->m_FileMasks.Count(); i++ )
 			{
 				if ( i > 0 )
-					V_strcat_safe( filters, "|" );
+					Q_strncat( filters, "|", sizeof( filters ), COPY_ALL_CHARACTERS );
 
-				V_strcat_safe( filters, m_pDialog->m_FileMasks[i] );
-				V_strcat_safe( filters, "|" );
-				V_strcat_safe( filters, m_pDialog->m_FileMasks[i] );
+				Q_strncat( filters, m_pDialog->m_FileMasks[i], sizeof( filters ), COPY_ALL_CHARACTERS );
+				Q_strncat( filters, "|", sizeof( filters ), COPY_ALL_CHARACTERS );
+				Q_strncat( filters, m_pDialog->m_FileMasks[i], sizeof( filters ), COPY_ALL_CHARACTERS );
 				if ( pFileName )
 				{
-					V_strcat_safe( pFileNameBuf, m_pDialog->m_FileMasks[i] );
-					V_strcat_safe( pFileNameBuf, ";" );
+					Q_strncat( pFileNameBuf, m_pDialog->m_FileMasks[i], sizeof( filters ), COPY_ALL_CHARACTERS );
+					Q_strcat( pFileNameBuf, ";", sizeof(pFileNameBuf) );
 				}
 
 			}
-			V_strcat_safe( filters, "||" );
+			Q_strncat( filters, "||", sizeof( filters ), COPY_ALL_CHARACTERS );
+		}
+
+		DWORD dwDlgFlags = OFN_ENABLESIZING;
+		if ( m_bAllowMultiSelect )
+		{
+			dwDlgFlags |= OFN_ALLOWMULTISELECT;
 		}
 
 		CFileDialog dlg( 
 			true,								// open dialog?
 			defExt[0]==0 ? NULL : defExt,		// default file extension
 			pFileName,							// initial filename
-			OFN_ENABLESIZING,					// flags
+			dwDlgFlags,							// flags
 			filters,
 			CWnd::FromHandle( m_hParentWnd ) );
 
+		CArrayAutoPtr< char > spMultiSelectBuffer;
+		if ( m_bAllowMultiSelect )
+		{
+			dlg.m_ofn.nMaxFile = 128 * 1024;
+			spMultiSelectBuffer.Attach( new char[ dlg.m_ofn.nMaxFile ] );
+			memset( spMultiSelectBuffer.Get(), 0, dlg.m_ofn.nMaxFile );
+			dlg.m_ofn.lpstrFile = spMultiSelectBuffer.Get();
+		}
+
 		while ( dlg.DoModal() == IDOK )
 		{
-			// Make sure we can make this into a relative path.
-			if ( m_pDialog->m_pFileSystem->FullPathToRelativePath( dlg.GetPathName(), m_RelativeFilename, sizeof( m_RelativeFilename ) ) )
+			CStringList strPathList;
+			int numCharsTotal = MAX_PATH;
+
+			if ( m_bAllowMultiSelect )
 			{
-				// Replace .jpg or .jpeg extension with .mdl?
-				char *pEnd = m_RelativeFilename;
-				while ( Q_stristr( pEnd+1, ".jpeg" ) || Q_stristr( pEnd+1, ".jpg" ) )
-					pEnd = max( Q_stristr( pEnd, ".jpeg" ), Q_stristr( pEnd, ".jpg" ) );
-
-				if ( pEnd && pEnd != m_RelativeFilename )
-					Q_strncpy( pEnd, ".mdl", sizeof( m_RelativeFilename ) - (pEnd - m_RelativeFilename) );
-
-				return true;
+				for ( POSITION pos = dlg.GetStartPosition(); pos; )
+				{
+					strPathList.AddTail( dlg.GetNextPathName( pos ) );
+					numCharsTotal += strPathList.GetTail().GetLength();
+				}
 			}
 			else
 			{
-				AfxMessageBox( IDS_NO_RELATIVE_PATH );
+				strPathList.AddTail( dlg.GetPathName() );
+				numCharsTotal += strPathList.GetTail().GetLength();
 			}
+			numCharsTotal += 2 * strPathList.GetCount();
+
+			if ( strPathList.IsEmpty() )
+			{
+				AfxMessageBox( IDS_NO_RELATIVE_PATH );
+				continue;
+			}
+
+			// Allocate the buffer
+			delete m_RelativeFilename;
+			m_RelativeFilename = new char[ numCharsTotal ];
+
+			char *pchFill = m_RelativeFilename;
+			char chBuffer[ MAX_PATH ];
+
+			bool bFailed = false;
+			for ( POSITION pos = strPathList.GetHeadPosition(); pos; )
+			{
+				CString const &strPath = strPathList.GetNext( pos );
+
+				if ( pchFill != m_RelativeFilename )
+					*( pchFill ++ ) = ' ';
+
+				// Make sure we can make this into a relative path.
+				if ( m_pDialog->m_pFileSystem->FullPathToRelativePath( strPath,
+					chBuffer, sizeof( chBuffer ) ) )
+				{
+					// Replace .jpg or .jpeg extension with .mdl?
+					char *pEnd = chBuffer;
+					while ( Q_stristr( pEnd+1, ".jpeg" ) || Q_stristr( pEnd+1, ".jpg" ) )
+						pEnd = max( Q_stristr( pEnd, ".jpeg" ), Q_stristr( pEnd, ".jpg" ) );
+
+					if ( pEnd && pEnd != chBuffer )
+						Q_strncpy( pEnd, ".mdl", sizeof( chBuffer ) - (pEnd - chBuffer) );
+
+					strcpy( pchFill, chBuffer );
+					pchFill += strlen( pchFill );
+				}
+				else
+				{
+					AfxMessageBox( IDS_NO_RELATIVE_PATH );
+					bFailed = true;
+					break;
+				}
+			}
+
+			if ( !bFailed )
+				return true;
 		}
 
 		return false;
+	}
+
+	virtual void AllowMultiSelect( bool bAllow )
+	{
+		m_bAllowMultiSelect = bAllow;
 	}
 
 private:
 	CFileSystemOpenDlg *m_pDialog;
 	HWND m_hParentWnd;
 
-	char m_RelativeFilename[MAX_PATH];
+	char *m_RelativeFilename;
 	bool m_bLastModalWasWindowsDialog;
+	bool m_bAllowMultiSelect;
 };
 
 EXPOSE_INTERFACE( CFileSystemOpenDialogWrapper, IFileSystemOpenDialog, FILESYSTEMOPENDIALOG_VERSION );

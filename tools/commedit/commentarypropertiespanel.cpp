@@ -1,11 +1,11 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: Singleton dialog that generates and presents the entity report.
 //
 //===========================================================================//
 
 #include "CommentaryPropertiesPanel.h"
-#include "tier1/KeyValues.h"
+#include "tier1/keyvalues.h"
 #include "tier1/utlbuffer.h"
 #include "iregistry.h"
 #include "vgui/ivgui.h"
@@ -117,13 +117,32 @@ CCommentaryPropertiesPanel::CCommentaryPropertiesPanel( CCommEditDoc *pDoc, vgui
 
 	m_pInfoTarget->LoadControlSettings( "resource/commentarypropertiessubpanel_target.res" );
 
+	m_pInfoRemarkable = new vgui::EditablePanel( (vgui::Panel*)NULL, "InfoRemarkable" );
+
+	m_pInfoRemarkableName = new vgui::TextEntry( m_pInfoRemarkable, "RemarkableName" );
+	m_pInfoRemarkableName->AddActionSignalTarget( this );
+
+	m_pRemarkablePosition[0] = new vgui::TextEntry( m_pInfoRemarkable, "PositionX" );
+	m_pRemarkablePosition[0]->AddActionSignalTarget( this );
+	m_pRemarkablePosition[1] = new vgui::TextEntry( m_pInfoRemarkable, "PositionY" );
+	m_pRemarkablePosition[1]->AddActionSignalTarget( this );
+	m_pRemarkablePosition[2] = new vgui::TextEntry( m_pInfoRemarkable, "PositionZ" );
+	m_pRemarkablePosition[2]->AddActionSignalTarget( this );
+
+	m_pInfoRemarkableSubject = new vgui::TextEntry( m_pInfoRemarkable, "RemarkableSubject" );
+	m_pInfoRemarkableSubject->AddActionSignalTarget( this );
+
+	m_pInfoRemarkable->LoadControlSettings( "resource/commentarypropertiessubpanel_remarkable.res" );
+
 	m_pCommentaryNodeScroll = new vgui::ScrollableEditablePanel( this, m_pCommentaryNode, "CommentaryNodeScroll" );
 	m_pInfoTargetScroll = new vgui::ScrollableEditablePanel( this, m_pInfoTarget, "InfoTargetScroll" );
+	m_pInfoRemarkableScroll = new vgui::ScrollableEditablePanel( this, m_pInfoRemarkable, "InfoRemarkableScroll" );
 
 	LoadControlSettings( "resource/commentarypropertiespanel.res" );
 
 	m_pCommentaryNodeScroll->SetVisible( false );
 	m_pInfoTargetScroll->SetVisible( false );
+	m_pInfoRemarkableScroll->SetVisible( false );
 }
 
 
@@ -140,13 +159,15 @@ void CCommentaryPropertiesPanel::TextEntryToAttribute( vgui::TextEntry *pEntry, 
 
 void CCommentaryPropertiesPanel::TextEntriesToVector( vgui::TextEntry *pEntry[3], const char *pAttributeName )
 {
+	CUtlVectorFixedGrowable< char, 256 > buf;
+
 	Vector vec;
 	for ( int i = 0; i < 3; ++i )
 	{
 		int nLen = pEntry[i]->GetTextLength();
-		char *pBuf = (char*)_alloca( nLen+1 );
-		pEntry[i]->GetText( pBuf, nLen+1 );
-		vec[i] = atof( pBuf );
+		buf.EnsureCount( nLen + 1 );
+		pEntry[i]->GetText( buf.Base(), nLen+1 );
+		vec[i] = atof( buf.Base() );
 	}
 	m_hEntity->SetValue( pAttributeName, vec );
 	clienttools->MarkClientRenderableDirty( m_hEntity );
@@ -188,6 +209,17 @@ void CCommentaryPropertiesPanel::UpdateInfoTarget()
 	m_hEntity->MarkDirty();
 }
 
+void CCommentaryPropertiesPanel::UpdateInfoRemarkable()
+{
+	if ( !m_hEntity.Get() )
+		return;
+
+	CAppUndoScopeGuard guard( NOTIFY_SETDIRTYFLAG, "Info Remarkable Change", "Info Remarkable Change" );
+	TextEntryToAttribute( m_pInfoRemarkableName, "targetname" );
+	TextEntryToAttribute( m_pInfoRemarkableSubject, "contextsubject" );
+	TextEntriesToVector( m_pRemarkablePosition, "origin" );
+	m_hEntity->MarkDirty();
+}
 
 //-----------------------------------------------------------------------------
 // Populates the commentary node fields
@@ -248,6 +280,32 @@ void CCommentaryPropertiesPanel::PopulateInfoTargetFields()
 }
 
 
+
+
+//-----------------------------------------------------------------------------
+// Populates the info_target fields
+//-----------------------------------------------------------------------------
+void CCommentaryPropertiesPanel::PopulateInfoRemarkableFields()
+{
+	if ( !m_hEntity.Get() )
+		return;
+
+	m_pInfoRemarkableName->SetText( m_hEntity->GetTargetName() );
+
+	Vector vecPosition = m_hEntity->GetRenderOrigin();
+	QAngle vecAngles = m_hEntity->GetRenderAngles();
+
+	for ( int i = 0; i < 3; ++i )
+	{
+		char pTemp[512];
+		Q_snprintf( pTemp, sizeof(pTemp), "%.2f", vecPosition[i] );
+		m_pRemarkablePosition[i]->SetText( pTemp );
+	}
+
+	m_pInfoRemarkableSubject->SetText( m_hEntity->GetValueString( "contextsubject" ) );
+}
+
+
 //-----------------------------------------------------------------------------
 // Sets the object to look at
 //-----------------------------------------------------------------------------
@@ -256,6 +314,7 @@ void CCommentaryPropertiesPanel::SetObject( CDmeCommentaryNodeEntity *pEntity )
 	m_hEntity = pEntity;
 	m_pCommentaryNodeScroll->SetVisible( false );
 	m_pInfoTargetScroll->SetVisible( false );
+	m_pInfoRemarkableScroll->SetVisible( false );
 
 	if ( pEntity )
 	{
@@ -264,6 +323,14 @@ void CCommentaryPropertiesPanel::SetObject( CDmeCommentaryNodeEntity *pEntity )
 			PopulateInfoTargetFields();
 			m_pInfoTargetScroll->SetVisible( true );
 			m_pTargetName->RequestFocus();
+			return;
+		}
+
+		if ( !Q_stricmp( pEntity->GetClassName(), "info_remarkable" ) )
+		{
+			PopulateInfoRemarkableFields();
+			m_pInfoRemarkableScroll->SetVisible( true );
+			m_pInfoRemarkableName->RequestFocus();
 			return;
 		}
 
@@ -293,6 +360,12 @@ void CCommentaryPropertiesPanel::OnTextChanged( KeyValues *pParams )
 	if ( pPanel->GetParent() == m_pInfoTarget )
 	{
 		UpdateInfoTarget();
+		return;
+	}
+
+	if ( pPanel->GetParent() == m_pInfoRemarkable )
+	{
+		UpdateInfoRemarkable();
 		return;
 	}
 }
@@ -411,7 +484,6 @@ void CCommentaryPropertiesPanel::RecordSound( )
 	pDialog->SetTitle( "Enter New Audio File", true );
 	pDialog->SetStartDirectoryContext( "commedit_audio_record", pStartingDir );
 	pDialog->AddFilter( "*.wav", "Audio File (*.wav)", true );
-	pDialog->SetDeleteSelfOnClose( true );
 	pDialog->AddActionSignalTarget( this );
 	pDialog->DoModal( true );
 }

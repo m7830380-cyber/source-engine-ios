@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -26,7 +26,7 @@ public:
 	COP_Model();
 	~COP_Model();
 
-	virtual bool SaveData(void);
+	virtual bool SaveData( SaveData_Reason_t reason );
 	virtual void UpdateData( int Mode, PVOID pData, bool bCanEdit );
 	void UpdateForClass(LPCTSTR pszClass);
 
@@ -60,7 +60,8 @@ private:
 protected:
 
 	CMapStudioModel *GetModelHelper(void);
-	void UpdateFrameText(float flFrame);
+	void UpdateFrameText(int nFrame);
+	void InitScrollRange( void );
 
 	// Generated message map functions
 	//{{AFX_MSG(COP_Model)
@@ -72,7 +73,8 @@ protected:
 
 	DECLARE_MESSAGE_MAP()
 
-	BOOL m_bOldAnimatedModels;
+	BOOL	m_bOldAnimatedModels;
+	int		m_nOldSequence;
 };
 
 #endif // OP_MODEL_H

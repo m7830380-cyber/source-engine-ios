@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Memory allocation!
 //
@@ -15,6 +15,10 @@
 #include "tier0/dbg.h"
 #include "tier0/memalloc.h"
 #include "mem_helpers.h"
+
+// NOTE: This has to be the last file included!
+#include "tier0/memdbgon.h"
+
 
 extern IMemAlloc *g_pActualAlloc;
 
@@ -66,7 +70,7 @@ public:
 	virtual int heapchk();
 
 	virtual void DumpStats() {}
-	virtual void DumpStatsFileBase( char const *pchFileBase ) {}
+	virtual void DumpStatsFileBase( char const *pchFileBase, DumpStatsFormat_t nFormat = FORMAT_TEXT ) OVERRIDE {}
 
 	virtual bool IsDebugHeap()
 	{
@@ -102,8 +106,8 @@ private:
 	void GetActualDbgInfo( const char *&pFileName, int &nLine );
 
 	// Updates stats
-	void RegisterAllocation( const char *pFileName, int nLine, size_t nLogicalSize, size_t nActualSize, unsigned nTime );
-	void RegisterDeallocation( const char *pFileName, int nLine, size_t nLogicalSize, size_t nActualSize, unsigned nTime );
+	void RegisterAllocation( const char *pFileName, int nLine, int nLogicalSize, int nActualSize, unsigned nTime );
+	void RegisterDeallocation( const char *pFileName, int nLine, int nLogicalSize, int nActualSize, unsigned nTime );
 
 	HeapSuffix_t *Suffix( HeapPrefix_t *pPrefix );
 	void *AllocationStart( HeapPrefix_t *pBase );
@@ -130,7 +134,16 @@ private:
 // Singleton...
 //-----------------------------------------------------------------------------
 static CValidateAlloc s_ValidateAlloc;
+
+#ifdef _PS3
+
+IMemAlloc *g_pMemAllocInternalPS3 = &s_ValidateAlloc;
+
+#else // !_PS3
+
 IMemAlloc *g_pMemAlloc = &s_ValidateAlloc;
+
+#endif // _PS3
 
 
 //-----------------------------------------------------------------------------
@@ -460,12 +473,12 @@ void CValidateAlloc::GetActualDbgInfo( const char *&pFileName, int &nLine )
 }
 
 // Updates stats
-void CValidateAlloc::RegisterAllocation( const char *pFileName, int nLine, size_t nLogicalSize, size_t nActualSize, unsigned nTime )
+void CValidateAlloc::RegisterAllocation( const char *pFileName, int nLine, int nLogicalSize, int nActualSize, unsigned nTime )
 {
 	g_pActualAlloc->RegisterAllocation( pFileName, nLine, nLogicalSize, nActualSize, nTime );
 }
 
-void CValidateAlloc::RegisterDeallocation( const char *pFileName, int nLine, size_t nLogicalSize, size_t nActualSize, unsigned nTime )
+void CValidateAlloc::RegisterDeallocation( const char *pFileName, int nLine, int nLogicalSize, int nActualSize, unsigned nTime )
 {
 	g_pActualAlloc->RegisterDeallocation( pFileName, nLine, nLogicalSize, nActualSize, nTime );
 }

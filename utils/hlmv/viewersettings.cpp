@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -29,6 +29,7 @@
 #include <string.h>
 #include "windows.h"
 
+CUtlVector< qcpathrecord_t > g_QCPathRecords;
 
 ViewerSettings g_viewerSettings;
 
@@ -47,7 +48,16 @@ void InitViewerSettings ( const char *subkey )
 	// Some values should survive.  This is a crappy way to do settings in general.  Sigh.
 	{
 		g_viewerSettings.faceposerToolsDriveMouth = save.faceposerToolsDriveMouth;
+
+		g_viewerSettings.showHidden = save.showHidden;
+		g_viewerSettings.showActivities = save.showActivities;
+		g_viewerSettings.showSequenceIndices = save.showSequenceIndices;
+		g_viewerSettings.sortSequences = save.sortSequences;
+		g_viewerSettings.dotaMode = save.dotaMode;	
 	}
+
+	g_viewerSettings.showOrbitCircle = false;
+	g_viewerSettings.allowOrbitYaw = false;
 
 	strcpy( g_viewerSettings.registrysubkey, subkey );
 
@@ -56,7 +66,8 @@ void InitViewerSettings ( const char *subkey )
 
 	g_viewerSettings.renderMode = RM_TEXTURED;
 	g_viewerSettings.fov = 65.0f;
-	g_viewerSettings.enableNormalMapping = true;
+	g_viewerSettings.enableNormalMapping = false;
+	g_viewerSettings.enableDisplacementMapping = true;
 	g_viewerSettings.enableParallaxMapping = false;
 	g_viewerSettings.showNormals = false;
 	g_viewerSettings.showTangentFrame = false;
@@ -106,6 +117,10 @@ void InitViewerSettings ( const char *subkey )
 	g_viewerSettings.height = 700;
 
 	g_viewerSettings.originAxisLength = 10.0f;
+
+	g_viewerSettings.hitboxEditMode = HITBOX_EDIT_ROTATION;
+
+	g_viewerSettings.showBoneNames = false;
 }
 
 
@@ -581,6 +596,7 @@ bool LoadViewerSettings (const char *filename, StudioModel *pModel )
 	RegReadBool( hModelKey, "showshadow", &g_viewerSettings.showShadow );
 	RegReadBool( hModelKey, "showillumpos", &g_viewerSettings.showIllumPosition );
 	RegReadBool( hModelKey, "enablenormalmapping", &g_viewerSettings.enableNormalMapping );
+	RegReadBool( hModelKey, "enabledisplacementmapping", &g_viewerSettings.enableDisplacementMapping );
 	RegReadBool( hModelKey, "playsounds", &g_viewerSettings.playSounds );
 	RegReadBool( hModelKey, "showoriginaxis", &g_viewerSettings.showOriginAxis );
 	RegReadFloat( hModelKey, "originaxislength", &g_viewerSettings.originAxisLength );
@@ -616,6 +632,13 @@ bool LoadViewerRootSettings( void )
 	RegReadInt( hRootKey, "renderheight", &g_viewerSettings.height );
 
 	RegReadBool( hRootKey, "faceposerToolsDriveMouth", &g_viewerSettings.faceposerToolsDriveMouth );
+
+	RegReadBool( hRootKey, "showHidden", &g_viewerSettings.showHidden );
+	RegReadBool( hRootKey, "showActivities", &g_viewerSettings.showActivities );
+	RegReadBool( hRootKey, "showSequenceIndices", &g_viewerSettings.showSequenceIndices );
+	RegReadBool( hRootKey, "sortSequences", &g_viewerSettings.sortSequences );
+
+	RegReadBool( hRootKey, "dotaMode", &g_viewerSettings.dotaMode );
 
 	return true;
 }
@@ -668,6 +691,7 @@ bool SaveViewerSettings (const char *filename, StudioModel *pModel )
 	RegWriteInt( hModelKey, "showshadow", g_viewerSettings.showShadow );
 	RegWriteInt( hModelKey, "showillumpos", g_viewerSettings.showIllumPosition );
 	RegWriteInt( hModelKey, "enablenormalmapping", g_viewerSettings.enableNormalMapping );
+	RegWriteInt( hModelKey, "enabledisplacementmapping", g_viewerSettings.enableDisplacementMapping );
 	RegWriteInt( hModelKey, "playsounds", g_viewerSettings.playSounds );
 	RegWriteInt( hModelKey, "showoriginaxis", g_viewerSettings.showOriginAxis );
 	RegWriteFloat( hModelKey, "originaxislength", g_viewerSettings.originAxisLength );
@@ -699,6 +723,78 @@ bool SaveViewerRootSettings( void )
 	RegWriteInt( hRootKey, "renderheight", g_viewerSettings.height );
 
 	RegWriteInt( hRootKey, "faceposerToolsDriveMouth", g_viewerSettings.faceposerToolsDriveMouth ? 1 : 0 );
+
+	RegWriteInt( hRootKey, "showHidden", g_viewerSettings.showHidden ? 1 : 0 );
+	RegWriteInt( hRootKey, "showActivities", g_viewerSettings.showActivities ? 1 : 0 );
+	RegWriteInt( hRootKey, "showSequenceIndices", g_viewerSettings.showSequenceIndices ? 1 : 0 );
+	RegWriteInt( hRootKey, "sortSequences", g_viewerSettings.sortSequences ? 1 : 0 );
+
+	RegWriteInt( hRootKey, "dotaMode", g_viewerSettings.dotaMode ? 1 : 0 );
+
+	return true;
+}
+
+bool SaveCompileQCPathSettings( void )
+{
+	LONG lResult;           // Registry function result code
+	DWORD dwDisposition;    // Type of key opening event
+	
+	HKEY hQCPathsKey;
+	lResult = RegViewerSettingsKey( "qc_path_records", &hQCPathsKey, &dwDisposition);
+	
+	if (lResult != ERROR_SUCCESS)  // Failure
+		return false;
+		
+	char szKeyName[MAX_PATH];
+
+	for ( int i=0; i<MAX_NUM_QCPATH_RECORDS; i++ )
+	{
+		V_sprintf_safe( szKeyName, "qcpath%i", i);
+
+		if ( i < g_QCPathRecords.Count() )
+		{
+			RegWriteString( hQCPathsKey, szKeyName, g_QCPathRecords[i].szAbsPath );
+		}
+		else
+		{
+			RegDeleteValue( hQCPathsKey, szKeyName );
+		}		
+	}
+
+	return true;
+}
+
+bool LoadCompileQCPathSettings( void )
+{
+	LONG lResult;           // Registry function result code
+	DWORD dwDisposition;    // Type of key opening event
+
+	HKEY hQCPathsKey;
+
+	lResult = RegViewerSettingsKey( "qc_path_records", &hQCPathsKey, &dwDisposition);
+	
+	if (lResult != ERROR_SUCCESS)  // Failure
+		return false;
+
+	// First time, just set to Valve default
+	if (dwDisposition == REG_CREATED_NEW_KEY)
+	{
+		return false;
+	}
+
+	g_QCPathRecords.RemoveAll();
+
+	char szKeyName[MAX_PATH];
+	char szKeyValue[MAX_PATH];
+	for ( int i=0; i<MAX_NUM_QCPATH_RECORDS; i++ )
+	{
+		V_sprintf_safe( szKeyName, "qcpath%i", i);	
+
+		if ( RegReadString( hQCPathsKey, szKeyName, szKeyValue, sizeof(szKeyValue) ) )
+		{
+			g_QCPathRecords[g_QCPathRecords.AddToTail()].InitFromAbsPath( szKeyValue );
+		}
+	}
 
 	return true;
 }

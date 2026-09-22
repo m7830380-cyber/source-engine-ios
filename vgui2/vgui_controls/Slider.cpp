@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -9,7 +9,7 @@
 #define PROTECTED_THINGS_DISABLE
 
 #include <vgui/MouseCode.h>
-#include <KeyValues.h>
+#include <keyvalues.h>
 #include <vgui/IBorder.h>
 #include <vgui/IInput.h>
 #include <vgui/ISystem.h>
@@ -47,15 +47,15 @@ Slider::Slider(Panel *parent, const char *panelName ) : BaseClass(parent, panelN
 	_leftCaption = NULL;
 	_rightCaption = NULL;
 
-	_subrange[ 0 ] = 0;
-	_subrange[ 1 ] = 0;
-	m_bUseSubRange = false;
-	m_bInverted = false;
-
 	SetThumbWidth( 8 );
 	RecomputeNobPosFromValue();
 	AddActionSignalTarget(this);
 	SetBlockDragChaining( true );
+
+	_subrange[ 0 ] = 0;
+	_subrange[ 1 ] = 0;
+	m_bUseSubRange = false;
+	m_bInverted = false;
 }
 
 // This allows the slider to behave like it's larger than what's actually being drawn
@@ -230,6 +230,7 @@ void Slider::SetInverted( bool bInverted )
 	m_bInverted = bInverted;
 }
 
+
 //-----------------------------------------------------------------------------
 // Purpose: Send a message to interested parties when the slider moves
 //-----------------------------------------------------------------------------
@@ -278,7 +279,7 @@ void Slider::ApplySchemeSettings(IScheme *pScheme)
 	m_TickColor = pScheme->GetColor( "Slider.TextColor", GetFgColor() );
 	m_TrackColor = pScheme->GetColor( "Slider.TrackColor", GetFgColor() );
 
-#ifdef _X360
+#ifdef _GAMECONSOLE
 	m_DepressedBgColor = GetSchemeColor("Slider.NobFocusColor", pScheme);
 #endif
 
@@ -337,33 +338,6 @@ void Slider::ApplySettings(KeyValues *inResourceData)
 	}
 
 	SetTickCaptions(left, right);
-
-	int nNumTicks = inResourceData->GetInt( "numTicks", -1 );
-	if ( nNumTicks >= 0 )
-	{
-		SetNumTicks( nNumTicks );
-	}
-
-	int nCurrentRange[2];
-	GetRange( nCurrentRange[0], nCurrentRange[1] );
-	KeyValues *pRangeMin = inResourceData->FindKey( "rangeMin", false );
-	KeyValues *pRangeMax = inResourceData->FindKey( "rangeMax", false );
-	bool bDoClamp = false;
-	if ( pRangeMin )
-	{
-		_range[0] = inResourceData->GetInt( "rangeMin" );
-		bDoClamp = true;
-	}
-	if ( pRangeMax )
-	{
-		_range[1] = inResourceData->GetInt( "rangeMax" );
-		bDoClamp = true;
-	}
-
-	if ( bDoClamp )
-	{
-		ClampRange();
-	}
 }
 
 //-----------------------------------------------------------------------------
@@ -385,9 +359,9 @@ void Slider::GetTrackRect( int& x, int& y, int& w, int& h )
 	GetPaintSize( wide, tall );
 
 	x = 0;
-	y = IsProportional() ? scheme()->GetProportionalScaledValue( 8.f ) : 8;;
+	y = 8;
 	w = wide - (int)_nobSize;
-	h = IsProportional() ? scheme()->GetProportionalScaledValue( 4.f ) : 4;
+	h = 4;
 }
 
 //-----------------------------------------------------------------------------
@@ -515,7 +489,7 @@ void Slider::DrawNob()
 	int wide,tall;
 	GetTrackRect( x, y, wide, tall );
 	Color col = GetFgColor();
-#ifdef _X360
+#ifdef _GAMECONSOLE
 	if(HasFocus())
 	{
 		col = m_DepressedBgColor;
@@ -523,7 +497,7 @@ void Slider::DrawNob()
 #endif
 	surface()->DrawSetColor(col);
 
-	int nobheight = IsProportional() ? scheme()->GetProportionalScaledValue( 16.f ) : 16.f;
+	int nobheight = 16;
 
 	surface()->DrawFilledRect(
 		_nobPos[0], 
@@ -629,34 +603,26 @@ void Slider::SetRange(int min,int max)
 	_range[0]=min;
 	_range[1]=max;
 
-	ClampRange();
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: Sanity check and clamp the range if necessary.
-//-----------------------------------------------------------------------------
-void Slider::ClampRange()
-{
 	if ( _range[0] < _range[1] )
 	{
 		if(_value<_range[0])
 		{
-			SetValue( _range[0], false );
+			SetValue( _range[0] );
 		}
 		else if( _value>_range[1])
 		{
-			SetValue( _range[1], false );
+			SetValue( _range[1] );
 		}
 	}
 	else
 	{
 		if(_value<_range[1])
 		{
-			SetValue( _range[1], false );
+			SetValue( _range[1] );
 		}
 		else if( _value>_range[0])
 		{
-			SetValue( _range[0], false );
+			SetValue( _range[0] );
 		}
 	}
 }
@@ -820,7 +786,7 @@ void Slider::OnMouseDoublePressed(MouseCode code)
 //-----------------------------------------------------------------------------
 // Purpose:
 //-----------------------------------------------------------------------------
-#ifdef _X360
+#ifdef _GAMECONSOLE
 void Slider::OnKeyCodePressed(KeyCode code)
 {
 	switch ( GetBaseButtonCode( code ) )
@@ -912,11 +878,7 @@ void Slider::OnMouseReleased(MouseCode code)
 	if ( _dragging )
 	{
 		_dragging=false;
-		input()->SetMouseCapture(null);
-	}
-
-	if ( IsEnabled() )
-	{
+		input()->SetMouseCapture(0);
 		SendSliderDragEndMessage();
 	}
 }
@@ -940,7 +902,7 @@ void Slider::SetButtonOffset(int buttonOffset)
 
 void Slider::SetThumbWidth( int width )
 {
-	_nobSize = IsProportional() ? scheme()->GetProportionalScaledValue( (float)width) : (float)width;
+	_nobSize = (float)width;
 }
 
 

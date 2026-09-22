@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -13,6 +13,7 @@
 #include "cmdlib.h"
 #include "studiomdl.h"
 #include "perfstats.h"
+#include "tier1/tier1_logging.h"
 
 extern void MdlError( char const *pMsg, ... );
 
@@ -73,6 +74,7 @@ static void UpdateStudioRenderConfig( void )
 	s_StudioRenderConfig.bFlex = true;
 	s_StudioRenderConfig.bEyes = true;
 	s_StudioRenderConfig.bWireframe = false;
+	s_StudioRenderConfig.bDrawZBufferedWireframe = false;
 	s_StudioRenderConfig.bDrawNormals = false;
 	s_StudioRenderConfig.skin = 0;
 	s_StudioRenderConfig.maxDecalsPerModel = 0;
@@ -83,28 +85,7 @@ static void UpdateStudioRenderConfig( void )
 	g_pStudioRender->UpdateConfig( s_StudioRenderConfig );
 }
 
-static SpewOutputFunc_t				s_pSavedSpewFunc;
-
-SpewRetval_t NullSpewOutputFunc( SpewType_t spewType, const tchar *pMsg )
-{
-	switch( spewType )
-	{
-	case SPEW_WARNING:
-		return SPEW_CONTINUE;
-	case SPEW_MESSAGE:
-	case SPEW_ASSERT:
-	case SPEW_ERROR:
-	case SPEW_LOG:
-		Assert( s_pSavedSpewFunc );
-		if( s_pSavedSpewFunc )
-		{
-			return s_pSavedSpewFunc( spewType, pMsg );
-		}
-		break;
-	}
-	Assert( 0 );
-	return SPEW_CONTINUE;
-}
+static CBufferedLoggingListener s_BufferedLoggingListener;
 
 void SpewPerfStats( studiohdr_t *pStudioHdr, const char *pFilename, unsigned int flags )
 {
@@ -114,12 +95,16 @@ void SpewPerfStats( studiohdr_t *pStudioHdr, const char *pFilename, unsigned int
 	OptimizedModel::FileHeader_t	*pVtxHdr = 0;
 	studiohwdata_t					studioHWData;
 	int								vvdSize = 0;
-	const char						*prefix[] = {".dx80.vtx", ".dx90.vtx", ".sw.vtx"};
-	s_pSavedSpewFunc				= NULL;
+	
+	const char						*prefix[] = { ".dx90.vtx", ".dx80.vtx", ".sw.vtx" };
+	const int						numVtxFiles = ( g_gameinfo.bSupportsDX8 && !g_bFastBuild ) ? ARRAYSIZE( prefix ) : 1;
+	bool							bExtraData = (pStudioHdr->flags & STUDIOHDR_FLAGS_EXTRA_VERTEX_DATA) != 0;
+
+
 	if( !( flags & SPEWPERFSTATS_SHOWSTUDIORENDERWARNINGS ) )
 	{
-		s_pSavedSpewFunc = GetSpewOutputFunc();
-		SpewOutputFunc( NullSpewOutputFunc );
+		LoggingSystem_PushLoggingState();
+		LoggingSystem_RegisterLoggingListener( &s_BufferedLoggingListener );
 	}
 
 	// no stats on these
@@ -166,7 +151,7 @@ void SpewPerfStats( studiohdr_t *pStudioHdr, const char *pFilename, unsigned int
 			MdlError( "Error allocating %d bytes for Vertex File '%s'\n", vvdSize, fileName );
 		}
 
-		Studio_LoadVertexes( pVvdHdr, pNewVvdHdr, 0, true );
+		Studio_LoadVertexes( pVvdHdr, pNewVvdHdr, 0, true, bExtraData );
 
 		// discard original
 		free( pVvdHdr );
@@ -175,7 +160,7 @@ void SpewPerfStats( studiohdr_t *pStudioHdr, const char *pFilename, unsigned int
 	}
 	
 	// iterate all ???.vtx files
-	for (int j=0; j<sizeof(prefix)/sizeof(prefix[0]); j++)
+	for (int j = 0; j< numVtxFiles; j++)
 	{
 		// make vtx filename
 		Q_StripExtension( pFilename, fileName, sizeof( fileName ) );
@@ -202,8 +187,8 @@ void SpewPerfStats( studiohdr_t *pStudioHdr, const char *pFilename, unsigned int
 		}
 
 		// studio render will request these through cache interface
-		pStudioHdr->pVertexBase = (void *)pVvdHdr;
-		pStudioHdr->pIndexBase  = (void *)pVtxHdr;
+		pStudioHdr->SetVertexBase( (void *)pVvdHdr );
+		pStudioHdr->SetIndexBase( (void *)pVtxHdr );
 
 		g_pStudioRender->LoadModel( pStudioHdr, pVtxHdr, &studioHWData );
 
@@ -268,7 +253,8 @@ void SpewPerfStats( studiohdr_t *pStudioHdr, const char *pFilename, unsigned int
 
 	if( !( flags & SPEWPERFSTATS_SHOWSTUDIORENDERWARNINGS ) )
 	{
-		SpewOutputFunc( s_pSavedSpewFunc );
+		LoggingSystem_PopLoggingState();
+		s_BufferedLoggingListener.EmitBufferedSpew();
 	}
 }
 

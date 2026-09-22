@@ -1,12 +1,12 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
 // $NoKeywords: $
 //=============================================================================//
 
-#include <vgui/VGUI.h>
-#include <Color.h>
+#include <vgui/vgui.h>
+#include <color.h>
 
 #include <vgui_controls/ImageList.h>
 

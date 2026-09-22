@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -736,17 +736,17 @@ void TimelineItem::Draw( CChoreoWidgetDrawHelper& drawHelper )
 	CountSelected();
 	int scount = GetNumSelected();
 
-	COLORREF bgColor = RGB( 230, 230, 200 );
+	Color bgColor = Color( 230, 230, 200 );
 	if ( IsCollapsed() && active )
 	{
-		bgColor = RGB( 200, 230, 200 );
+		bgColor = Color( 200, 230, 200 );
 	}
 
 	RECT rcClient = m_rcBounds;
 
 	drawHelper.DrawFilledRect( bgColor, rcClient );
 
-	COLORREF gray = RGB( 200, 200, 200 );
+	Color gray = Color( 200, 200, 200 );
 
 	DrawEventEnd( drawHelper );
 
@@ -757,12 +757,12 @@ void TimelineItem::Draw( CChoreoWidgetDrawHelper& drawHelper )
 		{
 			float zero = track->GetZeroValue( m_nEditType, true );
 
-			drawHelper.DrawColoredLine( RGB( 180, 200, 220 ), PS_SOLID, 1, 
+			drawHelper.DrawColoredLine( Color( 180, 200, 220 ), PS_SOLID, 1, 
 				rcClient.left, ( rcClient.top * zero + rcClient.bottom * (1 - zero)) ,
 				rcClient.right, ( rcClient.top * zero + rcClient.bottom  * (1 - zero)) );
 		}
 
-		drawHelper.DrawOutlinedRect( RGB( 100, 150, 200 ), PS_SOLID, 1, rcClient );
+		drawHelper.DrawOutlinedRect( Color( 100, 150, 200 ), PS_SOLID, 1, rcClient );
 
 		// Draw grow handle into background...
 		if ( CanHaveGrowHandle() )
@@ -775,10 +775,10 @@ void TimelineItem::Draw( CChoreoWidgetDrawHelper& drawHelper )
 		// Draw left/right underneath amount so go backbard
 		for ( int type = ( track->IsComboType() ? 1 : 0 ); type >= 0; type-- )
 		{
-			COLORREF lineColor = ( type == m_nEditType ) ? RGB( 0, 0, 255 ) : gray;
-			COLORREF shadowColor = ( type == m_nEditType ) ? RGB( 150, 150, 250 ) : gray;
-			COLORREF dotColor = ( type == m_nEditType ) ? RGB( 0, 0, 255 ) : gray;
-			COLORREF dotColorSelected = ( type == m_nEditType ) ? RGB( 240, 80, 20 ) : gray;
+			Color lineColor = ( type == m_nEditType ) ? Color( 0, 0, 255 ) : gray;
+			Color shadowColor = ( type == m_nEditType ) ? Color( 150, 150, 250 ) : gray;
+			Color dotColor = ( type == m_nEditType ) ? Color( 0, 0, 255 ) : gray;
+			Color dotColorSelected = ( type == m_nEditType ) ? Color( 240, 80, 20 ) : gray;
 
 			int height = rcClient.bottom - rcClient.top;
 			int bottom = rcClient.bottom;
@@ -923,8 +923,8 @@ void TimelineItem::Draw( CChoreoWidgetDrawHelper& drawHelper )
 				int dotsize = 6;
 				int dotSizeSelected = 6;
 
-				COLORREF clr = dotColor;
-				COLORREF clrSelected = dotColorSelected;
+				Color clr = dotColor;
+				Color clrSelected = dotColorSelected;
 
 				drawHelper.DrawCircle( 
 					start->selected ? clrSelected : clr, 
@@ -966,14 +966,14 @@ void TimelineItem::Draw( CChoreoWidgetDrawHelper& drawHelper )
 		{
 			sprintf( sz, "left" );
 
-			drawHelper.DrawColoredText( "Arial", 9, 500, RGB( 0, 0, 255 ), title, sz );
+			drawHelper.DrawColoredText( "Arial", 9, 500, Color( 0, 0, 255 ), title, sz );
 
 			sprintf( sz, "right" );
 
 			title.top = rcClient.bottom - 22;
 			title.bottom = rcClient.bottom;
 
-			drawHelper.DrawColoredText( "Arial", 9, 500, RGB( 0, 0, 255 ), title, sz );
+			drawHelper.DrawColoredText( "Arial", 9, 500, Color( 0, 0, 255 ), title, sz );
 		}
 
 		int mid = ( rcClient.top + rcClient.bottom ) / 2;
@@ -983,7 +983,7 @@ void TimelineItem::Draw( CChoreoWidgetDrawHelper& drawHelper )
 
 		sprintf( sz, "editmode:  <%s>", m_nEditType == 0 ? "amount" : "left/right" );
 
-		drawHelper.DrawColoredText( "Arial", 9, 500, RGB( 0, 0, 255 ), title, sz );
+		drawHelper.DrawColoredText( "Arial", 9, 500, Color( 0, 0, 255 ), title, sz );
 	}
 
 	if ( track )
@@ -1002,7 +1002,7 @@ void TimelineItem::Draw( CChoreoWidgetDrawHelper& drawHelper )
 
 			int len = drawHelper.CalcTextWidth( "Arial", 9, 500, sz );
 			drawHelper.DrawColoredText( "Arial", 9, 500, 
-				RGB( 120, 120, 0 ), title, sz );
+				Color( 120, 120, 0 ), title, sz );
 
 			title.left += len + 2;
 		}
@@ -1012,7 +1012,7 @@ void TimelineItem::Draw( CChoreoWidgetDrawHelper& drawHelper )
 		int len = drawHelper.CalcTextWidth( "Arial", 9, 500, sz );
 
 		drawHelper.DrawColoredText( "Arial", 9, 500, 
-			active ? RGB( 0, 150, 100 ) : RGB( 100, 100, 100 ), 
+			active ? Color( 0, 150, 100 ) : Color( 100, 100, 100 ), 
 			title, sz );
 
 		sprintf( sz, "%s", IsActive() ? "enabled" : "disabled" );
@@ -1021,7 +1021,7 @@ void TimelineItem::Draw( CChoreoWidgetDrawHelper& drawHelper )
 
 		len = drawHelper.CalcTextWidth( "Arial", 9, 500, sz );
 		drawHelper.DrawColoredText( "Arial", 9, 500, 
-			active ? RGB( 0, 150, 100 ) : RGB( 100, 100, 100 ), 
+			active ? Color( 0, 150, 100 ) : Color( 100, 100, 100 ), 
 			title, sz );
 
 		if ( active )
@@ -1031,7 +1031,7 @@ void TimelineItem::Draw( CChoreoWidgetDrawHelper& drawHelper )
 			sprintf( sz, " <%i>", track->GetNumSamples( 0 ) );
 
 			len = drawHelper.CalcTextWidth( "Arial", 9, 500, sz );
-			drawHelper.DrawColoredText( "Arial", 9, 500, RGB( 220, 0, 00 ), title, sz );
+			drawHelper.DrawColoredText( "Arial", 9, 500, Color( 220, 0, 00 ), title, sz );
 		}
 	}
 }
@@ -1053,9 +1053,9 @@ void TimelineItem::DrawAutoHighlight( mxEvent *event )
 	// Draw left/right underneath amount so go backbard
 	int type = m_nEditType;
 
-	COLORREF dotColor = RGB( 0, 0, 255 );
-	COLORREF dotColorSelected = RGB( 240, 80, 20 );
-	COLORREF clrHighlighted = RGB( 0, 200, 0 );
+	Color dotColor = Color( 0, 0, 255 );
+	Color dotColorSelected = Color( 240, 80, 20 );
+	Color clrHighlighted = Color( 0, 200, 0 );
 
 	int height = rcClient.bottom - rcClient.top;
 	int bottom = rcClient.bottom;
@@ -1064,9 +1064,9 @@ void TimelineItem::DrawAutoHighlight( mxEvent *event )
 	int dotSizeSelected = 6;
 	int dotSizeHighlighted = 6;
 
-	COLORREF clr = dotColor;
-	COLORREF clrSelected = dotColorSelected;
-	COLORREF bgColor = RGB( 230, 230, 200 );
+	Color clr = dotColor;
+	Color clrSelected = dotColorSelected;
+	Color bgColor = Color( 230, 230, 200 );
 
 	// Fixme, could look at 1st derivative and do more sampling at high rate of change?
 	// or near actual sample points!
@@ -1167,7 +1167,7 @@ void TimelineItem::DrawRelativeTags( CChoreoWidgetDrawHelper& drawHelper )
 					if ( clipped )
 						continue;
 
-					drawHelper.DrawColoredLine( RGB( 180, 180, 220 ), PS_SOLID, 1, tagx, rcClient.top, tagx, rcClient.bottom );
+					drawHelper.DrawColoredLine( Color( 180, 180, 220 ), PS_SOLID, 1, tagx, rcClient.top, tagx, rcClient.bottom );
 				}
 			}
 		}
@@ -1185,7 +1185,7 @@ void TimelineItem::DrawRelativeTags( CChoreoWidgetDrawHelper& drawHelper )
 			continue;
 		
 		// Draw relative tag marker
-		drawHelper.DrawColoredLine( RGB( 220, 180, 180 ), PS_SOLID, 1, tagx, rcClient.top, tagx, rcClient.bottom );
+		drawHelper.DrawColoredLine( Color( 220, 180, 180 ), PS_SOLID, 1, tagx, rcClient.top, tagx, rcClient.bottom );
 	}
 }
 
@@ -1199,7 +1199,7 @@ void TimelineItem::SetExpressionInfo( CFlexAnimationTrack *track, int flexnum )
 	m_szTrackName[ 0 ] = 0;
 	if ( track )
 	{
-		V_strcpy_safe( m_szTrackName, track->GetFlexControllerName() );
+		strcpy( m_szTrackName, track->GetFlexControllerName() );
 		SetActive( track->IsTrackActive() );
 	}
 
@@ -1660,8 +1660,8 @@ void TimelineItem::DrawGrowHandle( CChoreoWidgetDrawHelper& helper, RECT& handle
 
 	int oldPF = SetPolyFillMode( dc, ALTERNATE );
 	
-	HBRUSH brBg = CreateSolidBrush( RGB( 150, 150, 150 ) );
-	HBRUSH brBorder = CreateSolidBrush( RGB( 200, 200, 200 ) );
+	HBRUSH brBg = CreateSolidBrush( ColorToRGB( Color( 150, 150, 150 ) ) );
+	HBRUSH brBorder = CreateSolidBrush( ColorToRGB( Color( 200, 200, 200 ) ) );
 
 	FillRgn( dc, rgn, brBg );
 	FrameRgn( dc, rgn, brBorder, 1, 1 );
@@ -1677,7 +1677,7 @@ void TimelineItem::DrawGrowHandle( CChoreoWidgetDrawHelper& helper, RECT& handle
 	int midy = ( handleRect.bottom + handleRect.top ) * 0.5f;
 	int lineinset = GROW_HANDLE_INSETPIXELS *1.5;
 
-	helper.DrawColoredLine( RGB( 63, 63, 63 ), PS_SOLID, 1, 
+	helper.DrawColoredLine( Color( 63, 63, 63 ), PS_SOLID, 1, 
 		handleRect.left + lineinset, midy,
 		handleRect.right - lineinset, midy );
 }

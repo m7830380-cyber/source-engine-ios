@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -38,7 +38,7 @@
 #include "tier0/icommandline.h"
 #include "filesystem.h"
 #include "ifilesystemopendialog.h"
-#include "appframework/appframework.h"
+#include "appframework/tier3app.h"
 #include "istudiorender.h"
 #include "materialsystem/imaterialsystem.h"
 #include "vphysics_interface.h"
@@ -48,10 +48,18 @@
 #include "materialsystem/imaterialsystemhardwareconfig.h"
 #include "SoundEmitterSystem/isoundemittersystembase.h"
 #include "soundsystem/isoundsystem.h"
-#include "tier1/tier1.h"
+#include "tier2/tier2.h"
+#include "tier3/tier3.h"
+#include "p4lib/ip4.h"
+#include "tier2/p4helpers.h"
+#include "datamodel/idatamodel.h"
+#include "dmserializers/idmserializers.h"
+#include "utlvector.h"
+#include "utlbuffer.h"
 #include "valve_ipc_win32.h"
 #include "threadtools.h"
-#include "vstdlib/IKeyValuesSystem.h"
+#include "ConfigManager.h"
+#include "materialsystem/imaterialvar.h"
 
 bool g_bOldFileDialogs = false;
 
@@ -65,22 +73,17 @@ bool g_bInError = false;
 //-----------------------------------------------------------------------------
 // Singleton interfaces
 //-----------------------------------------------------------------------------
-IStudioRender *g_pStudioRender;
-IMDLCache *g_pMDLCache;
 IPhysicsSurfaceProps *physprop;
 IPhysicsCollision *physcollision;
 IFileSystem *g_pFileSystem;
-IMaterialSystem *g_pMaterialSystem;
-IMaterialSystemHardwareConfig *g_pMaterialSystemHardwareConfig;
 IStudioDataCache *g_pStudioDataCache;
-IDataCache *g_pDataCache;
 ISoundEmitterSystemBase *g_pSoundEmitterBase;
-ISoundSystem *g_pSoundSystem;
 CreateInterfaceFn g_Factory;
 
 // Filesystem dialog module wrappers.
 CSysModule *g_pFSDialogModule = 0;
 CreateInterfaceFn g_FSDialogFactory = 0;
+
 
 
 class CHlmvIpcServer : public CValveIpcServerUtl
@@ -107,6 +110,7 @@ g_HlmvIpcServer;
 CValveIpcClientUtl g_HlmvIpcClient( "HLMV_IPC_SERVER" );
 bool g_bHlmvMaster = false;	// This hlmv is controlling a controlled hlmv instance
 bool g_bHlmvControlled = false;	// This hlmv is being controlled by a master hlmv instance
+
 
 void LoadFileSystemDialogModule()
 {
@@ -199,31 +203,32 @@ struct AccelTableEntry_t
 	unsigned char  flags;
 };
 
-AccelTableEntry_t accelTable[] =					{{VK_F1, IDC_FLUSH_SHADERS,		mx::ACCEL_VIRTKEY},
-													{VK_F5, IDC_FILE_REFRESH,		mx::ACCEL_VIRTKEY},
-													{'u', IDC_FILE_UNLOADALLMERGEDMODELS, mx::ACCEL_CONTROL | mx::ACCEL_VIRTKEY},
-													{'U', IDC_FILE_UNLOADALLMERGEDMODELS, mx::ACCEL_CONTROL | mx::ACCEL_VIRTKEY},
-													{'w', IDC_ACCEL_WIREFRAME,		mx::ACCEL_CONTROL | mx::ACCEL_VIRTKEY},
-													{'W', IDC_ACCEL_WIREFRAME,		mx::ACCEL_CONTROL | mx::ACCEL_VIRTKEY},
-													{'a', IDC_ACCEL_ATTACHMENTS,	mx::ACCEL_CONTROL | mx::ACCEL_VIRTKEY},
-													{'A', IDC_ACCEL_ATTACHMENTS,	mx::ACCEL_CONTROL | mx::ACCEL_VIRTKEY},
-													{'g', IDC_ACCEL_GROUND,			mx::ACCEL_CONTROL | mx::ACCEL_VIRTKEY},
-													{'G', IDC_ACCEL_GROUND,			mx::ACCEL_CONTROL | mx::ACCEL_VIRTKEY},
-													{'h', IDC_ACCEL_HITBOXES,		mx::ACCEL_CONTROL | mx::ACCEL_VIRTKEY},
-													{'H', IDC_ACCEL_HITBOXES,		mx::ACCEL_CONTROL | mx::ACCEL_VIRTKEY},
-													{'o', IDC_ACCEL_BONES,			mx::ACCEL_CONTROL | mx::ACCEL_VIRTKEY},
-													{'O', IDC_ACCEL_BONES,			mx::ACCEL_CONTROL | mx::ACCEL_VIRTKEY},
-													{'b', IDC_ACCEL_BACKGROUND,		mx::ACCEL_CONTROL | mx::ACCEL_VIRTKEY},
-													{'B', IDC_ACCEL_BACKGROUND,		mx::ACCEL_CONTROL | mx::ACCEL_VIRTKEY},
-													{'m', IDC_ACCEL_MOVEMENT,		mx::ACCEL_CONTROL | mx::ACCEL_VIRTKEY},
-													{'M', IDC_ACCEL_MOVEMENT,		mx::ACCEL_CONTROL | mx::ACCEL_VIRTKEY},
-													{'n', IDC_ACCEL_NORMALS,		mx::ACCEL_CONTROL | mx::ACCEL_VIRTKEY},
-													{'N', IDC_ACCEL_NORMALS,		mx::ACCEL_CONTROL | mx::ACCEL_VIRTKEY},
-													{'t', IDC_ACCEL_TANGENTS,		mx::ACCEL_CONTROL | mx::ACCEL_VIRTKEY},
-													{'T', IDC_ACCEL_TANGENTS,		mx::ACCEL_CONTROL | mx::ACCEL_VIRTKEY},
-													{'s', IDC_ACCEL_SHADOW,			mx::ACCEL_CONTROL | mx::ACCEL_VIRTKEY},
-													{'S', IDC_ACCEL_SHADOW,			mx::ACCEL_CONTROL | mx::ACCEL_VIRTKEY}};
-#define NUM_ACCELERATORS ARRAYSIZE( accelTable )
+#define NUM_ACCELERATORS 25
+AccelTableEntry_t accelTable[NUM_ACCELERATORS] = {	{VK_F5,		IDC_FILE_REFRESH,				mx::ACCEL_VIRTKEY },
+													{VK_UP,		IDC_ACCEL_TESSELLATION_INC,		mx::ACCEL_CONTROL | mx::ACCEL_VIRTKEY},
+													{VK_DOWN,	IDC_ACCEL_TESSELLATION_DEC,		mx::ACCEL_CONTROL | mx::ACCEL_VIRTKEY},
+													{'w', 		IDC_ACCEL_WIREFRAME,			mx::ACCEL_CONTROL | mx::ACCEL_VIRTKEY},
+													{'W', 		IDC_ACCEL_WIREFRAME,			mx::ACCEL_CONTROL | mx::ACCEL_VIRTKEY},
+													{'a', 		IDC_ACCEL_ATTACHMENTS,			mx::ACCEL_CONTROL | mx::ACCEL_VIRTKEY},
+													{'A', 		IDC_ACCEL_ATTACHMENTS,			mx::ACCEL_CONTROL | mx::ACCEL_VIRTKEY},
+													{'g', 		IDC_ACCEL_GROUND,				mx::ACCEL_CONTROL | mx::ACCEL_VIRTKEY},
+													{'G', 		IDC_ACCEL_GROUND,				mx::ACCEL_CONTROL | mx::ACCEL_VIRTKEY},
+													{'h', 		IDC_ACCEL_HITBOXES,				mx::ACCEL_CONTROL | mx::ACCEL_VIRTKEY},
+													{'H', 		IDC_ACCEL_HITBOXES,				mx::ACCEL_CONTROL | mx::ACCEL_VIRTKEY},
+													{'o', 		IDC_ACCEL_BONES,				mx::ACCEL_CONTROL | mx::ACCEL_VIRTKEY},
+													{'O', 		IDC_ACCEL_BONES,				mx::ACCEL_CONTROL | mx::ACCEL_VIRTKEY},
+													{'b', 		IDC_ACCEL_BACKGROUND,			mx::ACCEL_CONTROL | mx::ACCEL_VIRTKEY},
+													{'B', 		IDC_ACCEL_BACKGROUND,			mx::ACCEL_CONTROL | mx::ACCEL_VIRTKEY},
+													{'m', 		IDC_ACCEL_MOVEMENT,				mx::ACCEL_CONTROL | mx::ACCEL_VIRTKEY},
+													{'M', 		IDC_ACCEL_MOVEMENT,				mx::ACCEL_CONTROL | mx::ACCEL_VIRTKEY},
+													{'n', 		IDC_ACCEL_NORMALS,				mx::ACCEL_CONTROL | mx::ACCEL_VIRTKEY},
+													{'N', 		IDC_ACCEL_NORMALS,				mx::ACCEL_CONTROL | mx::ACCEL_VIRTKEY},
+													{'d', 		IDC_ACCEL_DISPLACEMENT,			mx::ACCEL_CONTROL | mx::ACCEL_VIRTKEY},
+													{'D', 		IDC_ACCEL_DISPLACEMENT,			mx::ACCEL_CONTROL | mx::ACCEL_VIRTKEY},
+													{'t', 		IDC_ACCEL_TANGENTS,				mx::ACCEL_CONTROL | mx::ACCEL_VIRTKEY},
+													{'T', 		IDC_ACCEL_TANGENTS,				mx::ACCEL_CONTROL | mx::ACCEL_VIRTKEY},
+													{'s', 		IDC_ACCEL_SHADOW,				mx::ACCEL_CONTROL | mx::ACCEL_VIRTKEY},
+													{'S', 		IDC_ACCEL_SHADOW,				mx::ACCEL_CONTROL | mx::ACCEL_VIRTKEY}};
 
 
 MDLViewer::MDLViewer ()
@@ -267,36 +272,13 @@ MDLViewer::MDLViewer ()
 	menuFile->add( "Refresh (F5)", IDC_FILE_REFRESH );
 	menuFile->addSeparator ();
 	
-	if ( g_bOldFileDialogs )
-	{
-		menuFile->add ("Load Weapon...", IDC_FILE_LOADMERGEDMODEL);
-		menuFile->add ("(Steam) Load Weapon...", IDC_FILE_LOADMERGEDMODEL_STEAM);
-	}
-	else
-	{
-		menuFile->add ("Load Weapon...", IDC_FILE_LOADMERGEDMODEL_STEAM);
-	}
-
-	mxMenu *menuUnloadWeapon = new mxMenu ();
-	menuUnloadWeapon->add ("Unload All Merged Models (Ctrl-U)", IDC_FILE_UNLOADALLMERGEDMODELS);
-	menuUnloadWeapon->add ("(empty)", IDC_FILE_UNLOADMERGEDMODEL1);
-	menuUnloadWeapon->add ("(empty)", IDC_FILE_UNLOADMERGEDMODEL2);
-	menuUnloadWeapon->add ("(empty)", IDC_FILE_UNLOADMERGEDMODEL3);
-	menuUnloadWeapon->add ("(empty)", IDC_FILE_UNLOADMERGEDMODEL4);
-	menuUnloadWeapon->add ("(empty)", IDC_FILE_UNLOADMERGEDMODEL5);
-	menuUnloadWeapon->add ("(empty)", IDC_FILE_UNLOADMERGEDMODEL6);
-	menuUnloadWeapon->add ("(empty)", IDC_FILE_UNLOADMERGEDMODEL7);
-	menuUnloadWeapon->add ("(empty)", IDC_FILE_UNLOADMERGEDMODEL8);
-	menuUnloadWeapon->add ("(empty)", IDC_FILE_UNLOADMERGEDMODEL9);
-	menuUnloadWeapon->add ("(empty)", IDC_FILE_UNLOADMERGEDMODEL10);
-	menuUnloadWeapon->add ("(empty)", IDC_FILE_UNLOADMERGEDMODEL11);
-	menuUnloadWeapon->add ("(empty)", IDC_FILE_UNLOADMERGEDMODEL12);
-	for ( int i = IDC_FILE_UNLOADMERGEDMODEL1; i <= IDC_FILE_UNLOADMERGEDMODEL12; i++ )
-	{
-		menuUnloadWeapon->setEnabled( i, false );
-	}
-	menuFile->addMenu ("Unload Weapon", menuUnloadWeapon);
+	menuFile->add( "Recompile", IDC_FILE_RECOMPILE );
 	
+	
+	menuFile->addSeparator ();
+	menuFile->add ("Run .mvscript...", IDC_OPTIONS_RUNMVSCRIPT );
+	menuFile->add ("Save session as .mvscript...", IDC_OPTIONS_SAVEMVSCRIPT );
+
 	menuFile->addSeparator ();
 	menuFile->add ("Load Background Texture...", IDC_FILE_LOADBACKGROUNDTEX);
 	menuFile->add ("Load Ground Texture...", IDC_FILE_LOADGROUNDTEX);
@@ -315,8 +297,10 @@ MDLViewer::MDLViewer ()
 	menuOptions->add ("Ground Color...", IDC_OPTIONS_COLORGROUND);
 	menuOptions->add ("Light Color...", IDC_OPTIONS_COLORLIGHT);
 	menuOptions->add ("Ambient Color...", IDC_OPTIONS_COLORAMBIENT);
+	menuOptions->add ("Secondary Lights", IDC_OPTIONS_SECONDARYLIGHTS );
 	menuOptions->addSeparator ();
 	menuOptions->add ("Center View", IDC_OPTIONS_CENTERVIEW);
+	menuOptions->add ("Center Verts", IDC_OPTIONS_CENTERVERTS);
 	menuOptions->add ("Viewmodel Mode", IDC_OPTIONS_VIEWMODEL);
 #ifdef WIN32
 	menuOptions->addSeparator ();
@@ -330,6 +314,19 @@ MDLViewer::MDLViewer ()
 	menuView->addSeparator ();
 	menuView->add ("Show Activities", IDC_VIEW_ACTIVITIES);
 	menuView->add ("Show hidden", IDC_VIEW_HIDDEN );
+	menuView->add( "Show sequence numbers", IDC_VIEW_SEQUENCE_INDICES );
+	menuView->add( "Sort sequences", IDC_VIEW_SORT_SEQUENCES );
+	menuView->add ("Show orbit circle", IDC_VIEW_ORBIT_CIRCLE );
+	menuView->setChecked( IDC_VIEW_ORBIT_CIRCLE, false );
+	menuView->add ("Enable orbit yaw", IDC_VIEW_ORBIT_YAW );
+	menuView->setChecked( IDC_VIEW_ORBIT_YAW, false );
+
+	// Don't show Dota mode in the SDK
+	if ( CGameConfigManager::IsSDKDeployment() == false )
+	{
+		menuView->addSeparator ();
+		menuView->add ("DotA View Mode", IDC_VIEW_DOTA);
+	}
 
 #ifdef WIN32
 	menuHelp->add ("Goto Homepage...", IDC_HELP_GOTOHOMEPAGE);
@@ -340,7 +337,7 @@ MDLViewer::MDLViewer ()
 
 	d_MatSysWindow = new MatSysWindow (this, 0, 0, 100, 100, "", mxWindow::Normal);
 #ifdef WIN32
-	// SetWindowLong ((HWND) d_MatSysWindow->getHandle (), GWL_EXSTYLE, WS_EX_CLIENTEDGE);
+	SetWindowLong ((HWND) d_MatSysWindow->getHandle (), GWL_EXSTYLE, WS_EX_ACCEPTFILES );
 #endif
 
 	d_cpl = new ControlPanel (this);
@@ -354,6 +351,9 @@ MDLViewer::MDLViewer ()
 
 	LoadViewerRootSettings( );
 
+	LoadCompileQCPathSettings();
+	g_ControlPanel->UpdateQCPathPanel();
+
 	// FIXME: where do I actually find the domain size of the viewport, especially for multi-monitor
 	// try to catch weird initialization error
 	if (g_viewerSettings.xpos < -16384)
@@ -363,6 +363,16 @@ MDLViewer::MDLViewer ()
 	g_viewerSettings.ypos  = max( 0, g_viewerSettings.ypos );
 	g_viewerSettings.width = max( 640, g_viewerSettings.width );
 	g_viewerSettings.height = max( 700, g_viewerSettings.height );
+
+	menuView->setChecked( IDC_VIEW_ACTIVITIES, g_viewerSettings.showActivities );
+	menuView->setChecked( IDC_VIEW_HIDDEN, g_viewerSettings.showHidden );
+	menuView->setChecked( IDC_VIEW_SEQUENCE_INDICES, g_viewerSettings.showSequenceIndices );
+	menuView->setChecked( IDC_VIEW_SORT_SEQUENCES, g_viewerSettings.sortSequences );
+
+	if ( CGameConfigManager::IsSDKDeployment() == false )
+	{
+		menuView->setChecked( IDC_VIEW_DOTA, g_viewerSettings.dotaMode );
+	}
 
 	setBounds( g_viewerSettings.xpos, g_viewerSettings.ypos, g_viewerSettings.width, g_viewerSettings.height );
 	setVisible (true);
@@ -415,17 +425,23 @@ MDLViewer::~MDLViewer ()
 //-----------------------------------------------------------------------------
 void MDLViewer::Refresh( void )
 {
-	KeyValuesSystem()->InvalidateCache();
+	g_pStudioModel->ReleaseStudioModel( );
+	g_pMDLCache->Flush( );
 
-	g_pStudioModel->ReleaseStudioModel();
-	g_pMDLCache->Flush();
+	delete g_pWidgetControl;
+	g_pWidgetControl = NULL;
+
 	if ( recentFiles[0][0] != '\0' )
 	{
 		char szFile[MAX_PATH];
-		strcpy( szFile, recentFiles[0] );
-		g_pMaterialSystem->ReloadMaterials();
+		strcpy( szFile, recentFiles[0] ); 
+		g_pMaterialSystem->ReloadMaterials( );
 		d_cpl->loadModel( szFile );
 	}
+
+	// Also reload shaders (will only work if dynamic shader compile is enabled)
+	static ConVarRef mat_flushshaders_async( "mat_flushshaders_async" );
+	mat_flushshaders_async.SetValue( true );
 }
 
 
@@ -488,13 +504,286 @@ void MDLViewer::LoadModelFile( const char *pszFile, int slot )
 
 		setLabel( "%s", filename );
 	}
-	else
-	{	
-		mb->modify (IDC_FILE_UNLOADMERGEDMODEL1 + slot, IDC_FILE_UNLOADMERGEDMODEL1 + slot, pszFile);
-		mb->setEnabled (IDC_FILE_UNLOADMERGEDMODEL1 + slot, true);
-	}
+
+	// Init the dota view if we have that checked
+	if ( g_viewerSettings.dotaMode )
+		d_cpl->dotaView();
+
+
+	d_cpl->UpdateSubmodelWindow();
+
 }
 
+static ConVar mat_tessellationlevel( "mat_tessellationlevel", "12", FCVAR_CHEAT );
+
+//-----------------------------------------------------------------------------
+// Purpose: Opens a script file and runs commands in sequence. Useful for batching automatic screenshots, etc
+// Input  : p_szScriptPath - script to parse and execute.
+//-----------------------------------------------------------------------------
+void MDLViewer::ExecuteMVScript( const char* p_szScriptPath )
+{
+	KeyValues *pMvScriptKeyValues = new KeyValues("ModelViewerScript");
+	KeyValues::AutoDelete autodelete_pMvScriptKeyValues(pMvScriptKeyValues);
+
+	if (pMvScriptKeyValues->LoadFromFile(g_pFullFileSystem, p_szScriptPath))
+	{
+		Msg("Executing mvscript: %s\n", p_szScriptPath);
+
+		for (KeyValues *kvSub = pMvScriptKeyValues->GetFirstSubKey(); kvSub; kvSub = kvSub->GetNextKey())
+		{
+
+			// parse and execute each command in order
+
+			if (!Q_stricmp(kvSub->GetName(), "LoadModel"))
+			{
+
+				char const *szVal = kvSub->GetString();
+				Msg("mvscript command: LoadModel %s\n", szVal);
+
+				if ( Q_stristr( szVal, "models" ) )
+					szVal = Q_stristr( szVal, "models" );
+
+				g_MDLViewer->LoadModelFile(szVal);
+
+			}
+			else if (!Q_stricmp(kvSub->GetName(), "SetAppWindowSize"))
+			{
+
+				char const *szVal = kvSub->GetString();
+				Msg("mvscript command: SetAppWindowSize %s\n", szVal);
+
+				int nWidth = g_viewerSettings.width;
+				int nHeight = g_viewerSettings.height;
+				sscanf(szVal, "%i %i", &nWidth, &nHeight);
+
+				g_MDLViewer->setBounds(g_viewerSettings.xpos, g_viewerSettings.ypos, max(128, nWidth), max(128, nHeight));
+
+			}
+			else if (!Q_stricmp(kvSub->GetName(), "SetCameraOrigin"))
+			{
+
+				char const *szVal = kvSub->GetString();
+				Msg("mvscript command: SetCameraOrigin %s\n", szVal);
+
+				float flX = 0.0f;
+				float flY = 0.0f;
+				float flZ = 0.0f;
+				sscanf(szVal, "%f %f %f", &flX, &flY, &flZ);
+
+				d_cpl->setCameraOrigin(flX, flY, flZ);
+
+			}
+			else if (!Q_stricmp(kvSub->GetName(), "SetCameraAngles"))
+			{
+
+				char const *szVal = kvSub->GetString();
+				Msg("mvscript command: SetCameraAngles %s\n", szVal);
+
+				float flX = 0.0f;
+				float flY = 0.0f;
+				float flZ = 0.0f;
+				sscanf(szVal, "%f %f %f", &flX, &flY, &flZ);
+
+				d_cpl->setCameraAngles(flX, flY, flZ);
+
+			}
+			else if (!Q_stricmp(kvSub->GetName(), "SetLightAngles"))
+			{
+
+				char const *szVal = kvSub->GetString();
+				Msg("mvscript command: SetLightAngles %s\n", szVal);
+
+				float flX = 0.0f;
+				float flY = 0.0f;
+				float flZ = 0.0f;
+				sscanf(szVal, "%f %f %f", &flX, &flY, &flZ);
+
+				d_cpl->setLightAngles(flX, flY, flZ);
+
+			}
+			else if (!Q_stricmp(kvSub->GetName(), "SetBGColor"))
+			{
+
+				char const *szVal = kvSub->GetString();
+				Msg("mvscript command: SetBGColor %s\n", szVal);
+
+				float flR = 63.0f;
+				float flG = 63.0f;
+				float flB = 63.0f;
+				sscanf(szVal, "%f %f %f", &flR, &flG, &flB);
+
+				g_viewerSettings.bgColor[0] = flR / 255.0f;
+				g_viewerSettings.bgColor[1] = flG / 255.0f;
+				g_viewerSettings.bgColor[2] = flB / 255.0f;
+
+				d_cpl->redrawMatSysWin();
+
+			}
+			else if (!Q_stricmp(kvSub->GetName(), "SetLightColor"))
+			{
+
+				char const *szVal = kvSub->GetString();
+				Msg("mvscript command: SetLightColor %s\n", szVal);
+
+				float flR = 63.0f;
+				float flG = 63.0f;
+				float flB = 63.0f;
+				sscanf(szVal, "%f %f %f", &flR, &flG, &flB);
+
+				g_viewerSettings.lColor[0] = flR / 255.0f;
+				g_viewerSettings.lColor[1] = flG / 255.0f;
+				g_viewerSettings.lColor[2] = flB / 255.0f;
+
+				d_cpl->redrawMatSysWin();
+
+			}
+			else if (!Q_stricmp(kvSub->GetName(), "SetAmbientColor"))
+			{
+
+				char const *szVal = kvSub->GetString();
+				Msg("mvscript command: SetAmbientColor %s\n", szVal);
+
+				float flR = 63.0f;
+				float flG = 63.0f;
+				float flB = 63.0f;
+				sscanf(szVal, "%f %f %f", &flR, &flG, &flB);
+
+				g_viewerSettings.aColor[0] = flR / 255.0f;
+				g_viewerSettings.aColor[1] = flG / 255.0f;
+				g_viewerSettings.aColor[2] = flB / 255.0f;
+
+				d_cpl->redrawMatSysWin();
+
+			}
+			else if (!Q_stricmp(kvSub->GetName(), "Screenshot"))
+			{
+
+				char const *szVal = kvSub->GetString();
+				Msg("mvscript command: Screenshot %s\n", szVal);				
+				d_MatSysWindow->dumpViewport( szVal );
+
+			}
+			else if (!Q_stricmp(kvSub->GetName(), "SetMatVars"))
+			{
+				for (KeyValues *kvSubMatParamChanges = kvSub->GetFirstSubKey(); kvSubMatParamChanges; kvSubMatParamChanges = kvSubMatParamChanges->GetNextKey())
+				{
+					char const *szParam = kvSubMatParamChanges->GetName();
+					char const *szVal = kvSubMatParamChanges->GetString();
+
+					Msg("mvscript command: SetMatVar %s to %s\n", szParam, szVal);
+
+					d_cpl->setMaterialVar( szParam, szVal );
+				}			
+			}
+			else if (!Q_stricmp(kvSub->GetName(), "RunExternalCmd"))
+			{
+
+				char const *szVal = kvSub->GetString();
+				Msg("mvscript command: RunExternalCmd %s\n", szVal);
+
+				char absPath[MAX_PATH];
+				Q_MakeAbsolutePath(absPath, sizeof(absPath), szVal);
+
+				system( absPath );
+
+			}
+			else if (!Q_stricmp(kvSub->GetName(), "LoadMergeModel"))
+			{
+
+				char const *szVal = kvSub->GetString();
+				Msg("mvscript command: LoadMergeModel %s\n", szVal);
+
+				int iChosenSlot = 0;
+				for (int i = 0; i < HLMV_MAX_MERGED_MODELS; i++)
+				{
+					if (g_viewerSettings.mergeModelFile[i][0] == 0)
+					{
+						iChosenSlot = i;
+						break;
+					}
+				}
+				strcpy(g_viewerSettings.mergeModelFile[iChosenSlot], szVal);
+				LoadModelFile(szVal, iChosenSlot);
+
+			}
+			else if (!Q_stricmp(kvSub->GetName(), "ReplaceMaterials"))
+			{
+
+				studiohdr_t* pStudioR = g_pStudioModel->GetStudioRenderHdr();
+				if (!pStudioR)
+					continue;
+
+				for (KeyValues *kvSubReplaceMats = kvSub->GetFirstSubKey(); kvSubReplaceMats; kvSubReplaceMats = kvSubReplaceMats->GetNextKey())
+				{
+					char const *szParam = kvSubReplaceMats->GetName();
+					char const *szVal = kvSubReplaceMats->GetString();
+
+					if ( Q_stristr( szVal, "materials" ) )
+						szVal = Q_stristr( szVal, "materials" );
+
+					IMaterial *pMaterials[128];
+					int nNumMaterials = g_pStudioRender->GetMaterialList(pStudioR, ARRAYSIZE(pMaterials), &pMaterials[0]);
+
+					for ( int i=0; i<nNumMaterials; i++ )
+					{
+						IMaterial *pSelectedMaterial = pMaterials[i];
+
+						if ( pSelectedMaterial->IsErrorMaterial() )
+							continue;
+
+						Msg("Material name: %s\n", V_GetFileName(pSelectedMaterial->GetName()));
+
+						if ( !Q_stricmp( V_GetFileName(pSelectedMaterial->GetName()), szParam ) )
+						{
+
+							Msg("mvscript command: ReplaceMaterial %s to %s\n", szParam, szVal);
+
+							KeyValues *kvLoadedFromFile = new KeyValues(pSelectedMaterial->GetShaderName());
+
+							if (kvLoadedFromFile->LoadFromFile(g_pFullFileSystem, szVal))
+							{
+								KeyValues *kv = new KeyValues(pSelectedMaterial->GetShaderName());
+								IMaterialVar **pMatVars = pSelectedMaterial->GetShaderParams();
+								for (int n = 0; n < pSelectedMaterial->ShaderParamCount(); n++)
+								{
+									IMaterialVar *pThisVar = pMatVars[n];
+									if (pThisVar->IsDefined())
+										kv->SetString(pThisVar->GetName(), pThisVar->GetStringValue());
+								}
+
+								kv->MergeFrom(kvLoadedFromFile, KeyValues::MERGE_KV_UPDATE);
+
+								pSelectedMaterial->SetShaderAndParams(kv);
+								pSelectedMaterial->Refresh();
+
+								if (kv)
+									delete kv;
+							}
+
+							if (kvLoadedFromFile)
+								delete kvLoadedFromFile;
+
+						}
+					}
+				}
+			}
+			else if (!Q_stricmp(kvSub->GetName(), "NormalMapping"))
+			{
+				g_viewerSettings.enableNormalMapping = kvSub->GetBool();
+				Msg("mvscript command: NormalMapping %s\n", g_viewerSettings.enableNormalMapping ? "enabled" : "disabled" );
+			}
+			else if (!Q_stricmp(kvSub->GetName(), "Close"))
+			{
+				Msg("mvscript command: Quit\n");
+				redraw();
+				mx::quit();
+			}
+
+		}
+	}
+
+	autodelete_pMvScriptKeyValues.Detach();
+}
 
 //-----------------------------------------------------------------------------
 // Purpose: Takes a TGA screenshot of the given filename and exits.
@@ -511,30 +800,110 @@ void MDLViewer::SaveScreenShot( const char *pszFile )
 	//
 	if ( eLoaded == LoadModel_Success )
 	{
-		g_viewerSettings.bgColor[0] = 117.0f / 255.0f;
-		g_viewerSettings.bgColor[1] = 196.0f / 255.0f;
-		g_viewerSettings.bgColor[2] = 219.0f / 255.0f;
+
+		//unload all merged models
+		for (int i=0; i<HLMV_MAX_MERGED_MODELS; i++)
+		{
+			if (g_pStudioExtraModel[i])
+			{
+				strcpy( g_viewerSettings.mergeModelFile[i], "" );
+				g_pStudioExtraModel[i]->FreeModel( false );
+				delete g_pStudioExtraModel[i];
+				g_pStudioExtraModel[i] = NULL;				
+			}
+		}
+
+		g_viewerSettings.bgColor[0] = 0.2353f; //117.0f / 255.0f;
+		g_viewerSettings.bgColor[1] = 0.2353f; //196.0f / 255.0f;
+		g_viewerSettings.bgColor[2] = 0.2353f; //219.0f / 255.0f;
 
 		// Build the name of the TGA to write.
-		char szScreenShot[256];
-		strcpy(szScreenShot, filename);
-		char *pchDot = strrchr(szScreenShot, '.');
-		if (pchDot)
+		char szScreenShot[1024];
+		V_ExtractFilePath( filename, szScreenShot, sizeof(szScreenShot) );
+		strcat(szScreenShot, "screenshots\\" );
+
+		if ( CreateDirectory(szScreenShot, NULL) || ERROR_ALREADY_EXISTS == GetLastError() )
 		{
-			strcpy(pchDot, ".tga");
-		}
-		else
-		{
-			strcat(szScreenShot, ".tga");
+			strcat(szScreenShot, V_GetFileName(filename) );
+			char *pchDot = strrchr(szScreenShot, '.');
+			if (pchDot)
+			{
+				strcpy(pchDot, ".bmp");
+			}
+			else
+			{
+				strcat(szScreenShot, ".bmp");
+			}
+
+			d_cpl->setSequence( 0 );
+			g_pStudioModel->ClearAnimationLayers();
+			d_cpl->centerView();
+
+			d_cpl->cs_gunsidemodelView();
+			d_cpl->cs_gunsidemodelView();
+
+			bool bFoundPaintNameParam = false;
+			bool bFoundPaintStyleParam = false;
+			char szPaintName[256];
+
+			studiohdr_t* pStudioR = g_pStudioModel->GetStudioRenderHdr();
+			if ( pStudioR )
+			{
+				IMaterial *pMaterials[128];
+				int nMaterials = g_pStudioRender->GetMaterialList( pStudioR, ARRAYSIZE( pMaterials ), &pMaterials[0] );
+
+				for ( int i=0; i<nMaterials; i++ )
+				{
+					if ( !pMaterials[i]->IsErrorMaterial() )
+					{
+						
+						IMaterialVar *pThisVar = pMaterials[i]->FindVar( "$paintname", &bFoundPaintNameParam, false );
+
+						if (bFoundPaintNameParam)
+						{
+							V_strcpy( szPaintName, pThisVar->GetStringValue() );
+							break;
+						}
+						else
+						{
+							pMaterials[i]->FindVar( "$paintstyle", &bFoundPaintStyleParam, false );
+						}
+
+					}
+				}
+			}
+
+			if ( bFoundPaintNameParam )
+			{
+				//create a version of the paint name with underscores
+				char szPaintNameWithUnderscores[256];
+				V_StrSubst( szPaintName, " ", "_", szPaintNameWithUnderscores, sizeof(szPaintNameWithUnderscores) );
+				strcat(szPaintNameWithUnderscores, ".bmp");
+
+				//update the output path
+				char szNewOputputPath[1024];
+				V_StrSubst( szScreenShot, ".bmp", szPaintNameWithUnderscores, szNewOputputPath, sizeof(szNewOputputPath) );
+				
+				d_MatSysWindow->dumpViewportWithLabel( szNewOputputPath, szPaintName );
+			}
+			else
+			{
+				if (bFoundPaintStyleParam)
+					mxMessageBox (this, "WARNING: Paint has no $paintname set, can't stamp unknown paint name on screenshot.", g_appTitle, MX_MB_ERROR | MX_MB_OK);
+				else
+					d_MatSysWindow->dumpViewport( szScreenShot );
+			}
+			
 		}
 
-		// Center the view and write the TGA.
-		d_cpl->centerView();
-		d_MatSysWindow->dumpViewport(szScreenShot);
+		// Shut down.
+		mx::quit();
+	}
+	else
+	{
+		mxMessageBox (this, "Error loading model for commandline screenshot.", g_appTitle, MX_MB_ERROR | MX_MB_OK);
 	}
 
-	// Shut down.
-	mx::quit();
 	return;
 }
 
@@ -610,6 +979,8 @@ MDLViewer::handleEvent (mxEvent *event)
 	{
 	case mxEvent::Action:
 	{
+
+		Msg("%2.2f %2.2f %2.2f\n", g_pStudioModel->m_angles[0], g_pStudioModel->m_angles[1], g_pStudioModel->m_angles[2]);
 		switch (event->action)
 		{
 		case IDC_FILE_LOADMODEL:
@@ -632,80 +1003,7 @@ MDLViewer::handleEvent (mxEvent *event)
 		}
 		break;
 
-		case IDC_FILE_LOADMERGEDMODEL:
-		{
-			const char *ptr = mxGetOpenFileName (this, 0, "*.mdl");
-			if (ptr)
-			{
-				// find the first free slot
-				int iChosenSlot = 0;
-				for ( int i = 0; i < HLMV_MAX_MERGED_MODELS; i++ )
-				{
-					if ( g_viewerSettings.mergeModelFile[i][0] == 0 )
-					{
-						iChosenSlot = i;
-						break;
-					}
-				}
-				strcpy( g_viewerSettings.mergeModelFile[iChosenSlot], ptr );
-				LoadModelFile( ptr, iChosenSlot );
-			}
-		}
-		break;
 
-		case IDC_FILE_LOADMERGEDMODEL_STEAM:
-		{
-			const char *pFilename = SteamGetOpenFilename();
-			if ( pFilename )
-			{
-				// find the first free slot
-				int iChosenSlot = 0;
-				for ( int i = 0; i < HLMV_MAX_MERGED_MODELS; i++ )
-				{
-					if ( g_viewerSettings.mergeModelFile[i][0] == 0 )
-					{
-						iChosenSlot = i;
-						break;
-					}
-				}
-				strcpy( g_viewerSettings.mergeModelFile[iChosenSlot], pFilename );
-				LoadModelFile( pFilename, iChosenSlot );
-			}
-		}
-		break;
-
-
-		case IDC_FILE_UNLOADMERGEDMODEL1:
-		case IDC_FILE_UNLOADMERGEDMODEL2:
-		case IDC_FILE_UNLOADMERGEDMODEL3:
-		case IDC_FILE_UNLOADMERGEDMODEL4:
-		case IDC_FILE_UNLOADMERGEDMODEL5:
-		case IDC_FILE_UNLOADMERGEDMODEL6:
-		case IDC_FILE_UNLOADMERGEDMODEL7:
-		case IDC_FILE_UNLOADMERGEDMODEL8:
-		case IDC_FILE_UNLOADMERGEDMODEL9:
-		case IDC_FILE_UNLOADMERGEDMODEL10:
-		case IDC_FILE_UNLOADMERGEDMODEL11:
-		case IDC_FILE_UNLOADMERGEDMODEL12:
-		{
-			int i = event->action - IDC_FILE_UNLOADMERGEDMODEL1;
-			// FIXME: move to d_cpl
-			if (g_pStudioExtraModel[i])
-			{
-				V_strcpy_safe( g_viewerSettings.mergeModelFile[i], "" );
-				g_pStudioExtraModel[i]->FreeModel( false );
-				delete g_pStudioExtraModel[i];
-				g_pStudioExtraModel[i] = NULL;
-
-				mb->modify (IDC_FILE_UNLOADMERGEDMODEL1 + i, IDC_FILE_UNLOADMERGEDMODEL1 + i, "(empty)");
-				mb->setEnabled (IDC_FILE_UNLOADMERGEDMODEL1 + i, false);					
-			}
-		}
-		break;
-
-		case IDC_FILE_UNLOADALLMERGEDMODELS:
-			d_cpl->UnloadAllMergedModels();
-			break;
 
 		case IDC_FILE_REFRESH:
 		{
@@ -713,25 +1011,33 @@ MDLViewer::handleEvent (mxEvent *event)
 			break;
 		}
 
-		case IDC_FLUSH_SHADERS:
+		case IDC_FILE_RECOMPILE:
 		{
-			CCommand args;
-			args.Tokenize( "mat_flushshaders" );
-
-			ConCommandBase *pCommandBase = g_pCVar->FindCommandBase( args[0] );
-			if ( !pCommandBase )
+			//g_pStudioModel->Key
+			CStudioHdr *pStudioHdr = g_pStudioModel->GetStudioHdr();
+			if ( pStudioHdr )
 			{
-				ConWarning( "Unknown command or convar '%s'!\n", args[0] );
-				break;
-			}
+				studiohdr_t* pStudioR = g_pStudioModel->GetStudioRenderHdr();
+				
+				KeyValues *tempKeyValues = new KeyValues("qc_path");
+				if ( tempKeyValues->LoadFromBuffer( NULL, pStudioR->KeyValueText() ) )
+				{
+					KeyValues *qc_path = tempKeyValues->FindKey( "qc_path", false );
+					if (qc_path)
+					{
+						char szQCPath[1024];
+						V_sprintf_safe( szQCPath, "%s\\%s\\%s", getenv("VCONTENT"), getenv("VMOD"), qc_path->GetFirstValue()->GetString() );
+						g_ControlPanel->AddQCRecordPath( szQCPath, true );
 
-			if ( pCommandBase->IsCommand() )
-			{
-				ConCommand *pCommand = static_cast<ConCommand*>( pCommandBase );
-				pCommand->Dispatch( args );
+					}
+					else
+					{
+						mxMessageBox (this, "MDL has no qc_path defined, and needs to be compiled once manually to learn where its QC is. Then HLMV will be able to recompile it from that point on.", g_appTitle, MX_MB_OK | MX_MB_ERROR);
+					}
+				}
 			}
+			break;
 		}
-		break;
 
 		case IDC_FILE_LOADBACKGROUNDTEX:
 		case IDC_FILE_LOADGROUNDTEX:
@@ -800,7 +1106,15 @@ MDLViewer::handleEvent (mxEvent *event)
 		}
 		break;
 
+		case IDC_OPTIONS_SECONDARYLIGHTS:
+			g_viewerSettings.secondaryLights = !g_viewerSettings.secondaryLights;
+			menuOptions->setChecked( IDC_OPTIONS_SECONDARYLIGHTS, g_viewerSettings.secondaryLights );
+			break;
+
 		case IDC_OPTIONS_CENTERVIEW:
+			if ( g_viewerSettings.dotaMode ) 
+				break;
+
 			d_cpl->centerView ();
 			if ( g_bHlmvMaster )
 			{
@@ -808,7 +1122,10 @@ MDLViewer::handleEvent (mxEvent *event)
 			}
 			break;
 		case IDC_OPTIONS_CENTERVERTS:
-			//d_cpl->centerVerts( );
+			if ( g_viewerSettings.dotaMode ) 
+				break;
+
+			d_cpl->centerVerts( );
 			if ( g_bHlmvMaster )
 			{
 				SendModelTransformToLinkedHlmv();
@@ -816,7 +1133,26 @@ MDLViewer::handleEvent (mxEvent *event)
 			break;
 		case IDC_OPTIONS_VIEWMODEL:
 		{
+			if ( g_viewerSettings.dotaMode ) 
+				break;
+
 			d_cpl->viewmodelView();
+			if ( g_bHlmvMaster )
+			{
+				SendModelTransformToLinkedHlmv();
+			}
+		}
+		break;
+		case IDC_VIEW_DOTA:
+		{
+			g_viewerSettings.dotaMode = !g_viewerSettings.dotaMode;
+			menuView->setChecked( IDC_VIEW_DOTA, g_viewerSettings.dotaMode );
+
+			if ( g_viewerSettings.dotaMode )
+			{
+				d_cpl->dotaView();
+			}
+
 			if ( g_bHlmvMaster )
 			{
 				SendModelTransformToLinkedHlmv();
@@ -826,12 +1162,71 @@ MDLViewer::handleEvent (mxEvent *event)
 
 		case IDC_OPTIONS_MAKESCREENSHOT:
 		{
-			char *ptr = (char *) mxGetSaveFileName (this, "", "*.tga");
+			char *ptr = (char *) mxGetSaveFileName (this, "", "*.bmp");
 			if (ptr)
 			{
-				if (!strstr (ptr, ".tga"))
-					strcat (ptr, ".tga");
+				if (!strstr (ptr, ".bmp"))
+					strcat (ptr, ".bmp");
 				d_MatSysWindow->dumpViewport (ptr);
+			}
+		}
+		break;
+
+		case IDC_OPTIONS_RUNMVSCRIPT:
+		{
+			char *ptr = (char *)mxGetOpenFileName(this, "", "*.mvscript");
+			if (ptr)
+			{
+				if (!strstr(ptr, ".mvscript"))
+					strcat(ptr, ".mvscript");
+				g_MDLViewer->ExecuteMVScript(ptr);
+			}
+		}
+		break;
+
+		case IDC_OPTIONS_SAVEMVSCRIPT:
+		{
+			if ( !g_pStudioModel->GetStudioRenderHdr() )
+			{
+				mxMessageBox (this, "No model loaded!", g_appTitle, MX_MB_OK | MX_MB_ERROR);
+				break;
+			}
+
+			//save a mvscript with the current model, camera orientation and light positions
+			char *ptr = (char *)mxGetSaveFileName(this, "", "*.mvscript");
+			if (ptr)
+			{
+				if (!strstr(ptr, ".mvscript"))
+					strcat(ptr, ".mvscript");
+
+				KeyValues *kv = new KeyValues( "ModelViewerScript" );
+
+				const char *szModelPath = g_pStudioModel->GetFileName();
+				if ( Q_stristr( szModelPath, "models" ) )
+					szModelPath = Q_stristr( szModelPath, "models" );
+				
+				kv->SetString( "LoadModel", szModelPath );
+
+				char szTemp[64]; 
+				V_snprintf( szTemp, 64, "%i %i", g_viewerSettings.width, g_viewerSettings.height );
+				kv->SetString( "SetAppWindowSize", szTemp );
+
+				V_snprintf( szTemp, 64, "%f %f %f", g_pStudioModel->m_origin[0], g_pStudioModel->m_origin[1], g_pStudioModel->m_origin[2] );
+				kv->SetString( "SetCameraOrigin", szTemp );
+
+				V_snprintf(szTemp, 64, "%f %f %f", g_pStudioModel->m_angles[0], g_pStudioModel->m_angles[1], g_pStudioModel->m_angles[2]);
+				kv->SetString("SetCameraAngles", szTemp);
+				
+				V_snprintf(szTemp, 64, "%f %f %f", g_viewerSettings.lightrot[YAW], g_viewerSettings.lightrot[PITCH], g_viewerSettings.lightrot[ROLL]);
+				kv->SetString("SetLightAngles", szTemp);
+
+				if ( !kv->SaveToFile( g_pFullFileSystem, ptr ) )
+				{
+					mxMessageBox (this, "Error saving script file.", g_appTitle, MX_MB_OK | MX_MB_ERROR);
+				}
+
+				if ( kv )
+					delete kv;
 			}
 		}
 		break;
@@ -861,9 +1256,6 @@ MDLViewer::handleEvent (mxEvent *event)
 				}
 
 				g_HlmvIpcClient.Disconnect();
-
-				SendModelTransformToLinkedHlmv();
-				SendLightRotToLinkedHlmv();
 
 				menuOptions->setChecked( IDC_OPTIONS_LINKHLMV, true );
 				menuOptions->setEnabled( IDC_OPTIONS_LINKHLMV, false );
@@ -903,17 +1295,49 @@ MDLViewer::handleEvent (mxEvent *event)
 			break;
 
 		case IDC_VIEW_ACTIVITIES:
+			d_cpl->SaveSelectedSequences();
 			g_viewerSettings.showActivities = !g_viewerSettings.showActivities;
 			menuView->setChecked( event->action, g_viewerSettings.showActivities );
 			d_cpl->initSequenceChoices();
 			d_cpl->resetControlPanel();
+			d_cpl->RestoreSelectedSequences();
 			break;
 
 		case IDC_VIEW_HIDDEN:
+			d_cpl->SaveSelectedSequences();
 			g_viewerSettings.showHidden = !g_viewerSettings.showHidden;
 			menuView->setChecked( event->action, g_viewerSettings.showHidden );
 			d_cpl->initSequenceChoices();
 			d_cpl->resetControlPanel();
+			d_cpl->RestoreSelectedSequences();
+			break;
+
+		case IDC_VIEW_SEQUENCE_INDICES:
+			d_cpl->SaveSelectedSequences();
+			g_viewerSettings.showSequenceIndices = !g_viewerSettings.showSequenceIndices;
+			menuView->setChecked( event->action, g_viewerSettings.showSequenceIndices );
+			d_cpl->initSequenceChoices();
+			d_cpl->resetControlPanel();
+			d_cpl->RestoreSelectedSequences();
+			break;
+
+		case IDC_VIEW_SORT_SEQUENCES:
+			d_cpl->SaveSelectedSequences();
+			g_viewerSettings.sortSequences = !g_viewerSettings.sortSequences;
+			menuView->setChecked( event->action, g_viewerSettings.sortSequences );
+			d_cpl->initSequenceChoices();
+			d_cpl->resetControlPanel();
+			d_cpl->RestoreSelectedSequences();
+			break;
+
+		case IDC_VIEW_ORBIT_CIRCLE:
+			g_viewerSettings.showOrbitCircle = !g_viewerSettings.showOrbitCircle;
+			menuView->setChecked( event->action, g_viewerSettings.showOrbitCircle );
+			break;
+
+		case IDC_VIEW_ORBIT_YAW:
+			g_viewerSettings.allowOrbitYaw = !g_viewerSettings.allowOrbitYaw;
+			menuView->setChecked( event->action, g_viewerSettings.allowOrbitYaw );
 			break;
 
 #ifdef WIN32
@@ -968,6 +1392,18 @@ MDLViewer::handleEvent (mxEvent *event)
 
 		case IDC_ACCEL_NORMALS:
 			d_cpl->setShowNormals( !g_viewerSettings.showNormals );
+			break;
+
+		case IDC_ACCEL_DISPLACEMENT:
+			d_cpl->setDisplacementMapping( !g_viewerSettings.enableDisplacementMapping );
+			break;
+
+		case IDC_ACCEL_TESSELLATION_INC:
+			mat_tessellationlevel.SetValue( mat_tessellationlevel.GetInt() + 1 );
+			break;
+
+		case IDC_ACCEL_TESSELLATION_DEC:
+			mat_tessellationlevel.SetValue( mat_tessellationlevel.GetInt() - 1 );
 			break;
 
 		case IDC_ACCEL_TANGENTS:
@@ -1084,8 +1520,13 @@ MDLViewer::handleEvent (mxEvent *event)
 				setTimer( 500 );
 			}
 		}
+
+		g_ControlPanel->CompileTimerUpdate();
+
+		g_ControlPanel->UpdateBoneWeightInspect();
 	}
 	break;
+
 	} // event->event
 
 	return 1;
@@ -1103,7 +1544,8 @@ void TranslateMayaToHLMVCoordinates( const Vector &vMayaPos, const QAngle &vMaya
 }
 
 
-void MDLViewer::handleIpcCommand( char *szCommand )
+void
+MDLViewer::handleIpcCommand( char *szCommand )
 {
 	MDLCACHE_CRITICAL_SECTION_( g_pMDLCache );
 
@@ -1196,14 +1638,6 @@ void MDLViewer::handleIpcCommand( char *szCommand )
 		// Redraw.
 		d_MatSysWindow->redraw();
 	}
-	else if ( StringHasPrefixCaseSensitive( szCommand, "hlmvLightRot" ) )
-	{
-		sscanf( szCommand, "%*s %f %f %f",
-			&g_viewerSettings.lightrot[0], &g_viewerSettings.lightrot[1], &g_viewerSettings.lightrot[2] );
-
-		// Redraw.
-		d_MatSysWindow->redraw();
-	}
 	else if ( StringHasPrefixCaseSensitive( szCommand, "hlmvForceFrame" ) )
 	{
 		float flFrame = 0.0f;
@@ -1267,7 +1701,7 @@ int MDLViewer::GetCurrentHitboxSet( void )
 //-----------------------------------------------------------------------------
 void MDLViewer::SendModelTransformToLinkedHlmv()
 {
-	if ( g_bHlmvMaster && g_HlmvIpcClient.Connect() )
+	if ( g_HlmvIpcClient.Connect() )
 	{
 		matrix3x4_t m;
 		g_pStudioModel->GetModelTransform( m );
@@ -1288,54 +1722,15 @@ void MDLViewer::SendModelTransformToLinkedHlmv()
 }
 
 
-//-----------------------------------------------------------------------------
-// Sends the light rotation to the controlled hlmv instance
-//-----------------------------------------------------------------------------
-void MDLViewer::SendLightRotToLinkedHlmv()
-{
-	if ( g_bHlmvMaster && g_HlmvIpcClient.Connect() )
-	{
-		CUtlBuffer cmdLightRot;
-		CUtlBuffer resLightRot;
-
-		cmdLightRot.Printf( "%s %f %f %f",
-			"hlmvLightRot",
-			g_viewerSettings.lightrot[0], g_viewerSettings.lightrot[1], g_viewerSettings.lightrot[2] );
-
-		g_HlmvIpcClient.ExecuteCommand( cmdLightRot, resLightRot );
-
-		g_HlmvIpcClient.Disconnect();
-	}
-}
-
-
-SpewRetval_t HLMVSpewFunc( SpewType_t spewType, char const *pMsg )
-{
-	g_bInError = true;
-	switch (spewType)
-	{
-	case SPEW_ERROR:
-		MessageBox(NULL, pMsg, "FATAL ERROR", MB_OK);
-		g_bInError = false;
-		return SPEW_ABORT;
-
-	default:
-		OutputDebugString(pMsg);
-		g_bInError = false;
-#ifdef _DEBUG
-		return spewType == SPEW_ASSERT ? SPEW_DEBUGGER : SPEW_CONTINUE;
-#else
-		return SPEW_CONTINUE;
-#endif
-	}
-}
-
+static CSimpleWindowsLoggingListener s_SimpleWindowsLoggingListener;
 
 //-----------------------------------------------------------------------------
 // The application object
 //-----------------------------------------------------------------------------
-class CHLModelViewerApp : public CSteamAppSystemGroup
+class CHLModelViewerApp : public CTier3DmSteamApp
 {
+	typedef CTier3DmSteamApp BaseClass;
+
 public:
 	// Methods of IApplication
 	virtual bool Create();
@@ -1351,7 +1746,8 @@ public:
 //-----------------------------------------------------------------------------
 bool CHLModelViewerApp::Create()
 {
-	SpewOutputFunc( HLMVSpewFunc );
+	LoggingSystem_PushLoggingState();
+	LoggingSystem_RegisterLoggingListener( &s_SimpleWindowsLoggingListener );
 
 	g_dxlevel = CommandLine()->ParmValue( "-dx", 0 );
 	g_bOldFileDialogs = ( CommandLine()->FindParm( "-olddialogs" ) != 0 );
@@ -1373,21 +1769,29 @@ bool CHLModelViewerApp::Create()
 	if ( !AddSystems( appSystems ) ) 
 		return false;
 
+	AddSystem( g_pDataModel, VDATAMODEL_INTERFACE_VERSION );
+	AddSystem( g_pDmSerializers, DMSERIALIZERS_INTERFACE_VERSION );
+
+	// Add the P4 module separately so that if it is absent 
+	// (say in the SDK) then the other system will initialize properly
+	if ( CGameConfigManager::IsSDKDeployment() == false )
+	{
+		AppModule_t p4Module = LoadModule( "p4lib.dll" );
+		AddSystem( p4Module, P4_INTERFACE_VERSION );
+	}
+
 	g_pFileSystem = (IFileSystem*)FindSystem( FILESYSTEM_INTERFACE_VERSION );
-	g_pMaterialSystem = (IMaterialSystem*)FindSystem( MATERIAL_SYSTEM_INTERFACE_VERSION );
-	g_pMaterialSystemHardwareConfig = (IMaterialSystemHardwareConfig*)FindSystem( MATERIALSYSTEM_HARDWARECONFIG_INTERFACE_VERSION );
-	g_pStudioRender = (IStudioRender*)FindSystem( STUDIO_RENDER_INTERFACE_VERSION );
-	g_pDataCache = (IDataCache*)FindSystem( DATACACHE_INTERFACE_VERSION );
-	g_pMDLCache = (IMDLCache*)FindSystem( MDLCACHE_INTERFACE_VERSION );
 	g_pStudioDataCache = (IStudioDataCache*)FindSystem( STUDIO_DATA_CACHE_INTERFACE_VERSION ); 
 	physcollision = (IPhysicsCollision *)FindSystem( VPHYSICS_COLLISION_INTERFACE_VERSION );
 	physprop = (IPhysicsSurfaceProps *)FindSystem( VPHYSICS_SURFACEPROPS_INTERFACE_VERSION );
 	g_pSoundEmitterBase = (ISoundEmitterSystemBase *)FindSystem( SOUNDEMITTERSYSTEM_INTERFACE_VERSION );
 	g_pSoundSystem = (ISoundSystem *)FindSystem( SOUNDSYSTEM_INTERFACE_VERSION );
 
-	if ( !g_pFileSystem || !physprop || !physcollision || !g_pMaterialSystem || !g_pStudioRender || !g_pMDLCache || !g_pDataCache )
+	IMaterialSystem *pMaterialSystem = (IMaterialSystem*)FindSystem( MATERIAL_SYSTEM_INTERFACE_VERSION );
+	if ( !pMaterialSystem )
 	{
-		Error("Unable to load required library interface!\n");
+		Error( "Unable to connect to necessary interface!\n" );
+		return false;
 	}
 
 	const char *pShaderDLL = CommandLine()->ParmValue("-shaderdll");
@@ -1402,7 +1806,7 @@ bool CHLModelViewerApp::Create()
 		pShaderDLL = "shaderapidx9.dll";
 	}
 
-	g_pMaterialSystem->SetShaderAPI( pShaderDLL );
+	pMaterialSystem->SetShaderAPI( pShaderDLL );
 
 	g_Factory = GetFactory();
 
@@ -1412,12 +1816,8 @@ bool CHLModelViewerApp::Create()
 
 void CHLModelViewerApp::Destroy()
 {
+	LoggingSystem_PopLoggingState();
 	g_pFileSystem = NULL;
-	g_pMaterialSystem = NULL;
-	g_pMaterialSystemHardwareConfig = NULL;
-	g_pStudioRender = NULL;
-	g_pDataCache = NULL;
-	g_pMDLCache = NULL;
 	g_pStudioDataCache = NULL;
 	physcollision = NULL;
 	physprop = NULL;
@@ -1429,9 +1829,14 @@ void CHLModelViewerApp::Destroy()
 //-----------------------------------------------------------------------------
 bool CHLModelViewerApp::PreInit( )
 {
-	CreateInterfaceFn factory = GetFactory();
-	ConnectTier1Libraries( &factory, 1 );
-	ConVar_Register( 0 );
+	if ( !BaseClass::PreInit() )
+		return false;
+
+	if ( !g_pFileSystem || !physprop || !physcollision || !g_pMaterialSystem ||
+		 !g_pStudioRender || !g_pMDLCache || !g_pDataCache )
+	{
+		Error("Unable to load required library interface!\n");
+	}
 
 	MathLib_Init( 2.2f, 2.2f, 0.0f, 2.0f, false, false, false, false );
 
@@ -1455,10 +1860,11 @@ bool CHLModelViewerApp::PreInit( )
 
 	g_pMaterialSystem->SetAdapter( nAdapter, nAdapterFlags );
 
-	g_bOldFileDialogs = true;
-	if ( CommandLine()->FindParm( "-NoSteamdDialog" ) )
-		g_bOldFileDialogs = false;
-	
+	if ( !CGameConfigManager::IsSDKDeployment() || CommandLine()->FindParm( "-OldDialogs" ) )
+	{
+		g_bOldFileDialogs = true;
+	}
+
 	LoadFileSystemDialogModule();
 
 	return true; 
@@ -1467,7 +1873,8 @@ bool CHLModelViewerApp::PreInit( )
 void CHLModelViewerApp::PostShutdown()
 {
 	UnloadFileSystemDialogModule();
-	DisconnectTier1Libraries();
+
+	BaseClass::PostShutdown();
 }
 
 
@@ -1477,17 +1884,27 @@ void CHLModelViewerApp::PostShutdown()
 int CHLModelViewerApp::Main()
 {
 	g_pMaterialSystem->ModInit();
-	g_pSoundEmitterBase->ModInit();
 
 	g_pDataCache->SetSize( 64 * 1024 * 1024 );
 
+	// No p4 mode if specified on the command line or no p4lib.dll found
+	const bool bP4DLLExists = g_pFullFileSystem->FileExists( "p4lib.dll", "EXECUTABLE_PATH" );
+	if ( ( CommandLine()->FindParm( "-nop4" ) ) || ( !bP4DLLExists ) || CGameConfigManager::IsSDKDeployment() )
+	{
+		g_p4factory->SetDummyMode( true );
+	}
+
+	// Set the named changelist
+	g_p4factory->SetOpenFileChangeList( "HLMV Auto Checkout" );
+
 	//mx::setDisplayMode (0, 0, 0);
-	g_MDLViewer = new MDLViewer ();
+	g_MDLViewer = new MDLViewer();
 	g_MDLViewer->setMenuBar (g_MDLViewer->getMenuBar ());
 
 	g_pStudioModel->Init();
 	g_pStudioModel->ModelInit();
 	g_pStudioModel->ClearLookTargets( );
+	g_pDataModel->SetUndoEnabled( false );
 
 	// Load up the initial model
 	const char *pMdlName = NULL;
@@ -1514,6 +1931,19 @@ int CHLModelViewerApp::Main()
 		{
 			g_MDLViewer->LoadModelFile( absPath );
 		}
+	}
+
+	if ( pMdlName && Q_stristr( pMdlName, ".mvscript" ) )
+	{
+		char absPath[MAX_PATH];
+		Q_MakeAbsolutePath(absPath, sizeof(absPath), pMdlName);
+
+#ifdef DEBUG
+		Q_StripExtension( absPath, absPath, sizeof(absPath) );
+		Q_strcat(absPath, ".mvscript", sizeof(absPath) );
+		//mxMessageBox (NULL, absPath, g_appTitle, MX_MB_OK | MX_MB_ERROR);
+#endif
+		g_MDLViewer->ExecuteMVScript(absPath);
 	}
 
 	int nRetVal = mx::run ();
@@ -1567,6 +1997,9 @@ int main (int argc, char *argv[])
 	CSteamApplication steamApplication( &hlmodelviewerApp );
 	return steamApplication.Run();
 }
+
+
+
 //
 // Implementation of IPC server
 //
@@ -1583,25 +2016,25 @@ CHlmvIpcServer::~CHlmvIpcServer()
 
 bool CHlmvIpcServer::HasCommands()
 {
-	AUTO_LOCK( m_mtx );
+	AUTO_LOCK_FM( m_mtx );
 	return m_lstCommands.Count() > 0;
 }
 
 void CHlmvIpcServer::AppendCommand( char *pszCommand )
 {
-	AUTO_LOCK( m_mtx );
+	AUTO_LOCK_FM( m_mtx );
 	m_lstCommands.AddToTail( pszCommand );
 }
 
 char * CHlmvIpcServer::GetCommand()
 {
-	AUTO_LOCK( m_mtx );
+	AUTO_LOCK_FM( m_mtx );
 	return m_lstCommands.Count() ? m_lstCommands[0] : "";
 }
 
 void CHlmvIpcServer::PopCommand()
 {
-	AUTO_LOCK( m_mtx );
+	AUTO_LOCK_FM( m_mtx );
 	if ( m_lstCommands.Count() )
 	{
 		delete [] m_lstCommands[0];

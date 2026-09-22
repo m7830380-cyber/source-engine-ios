@@ -1,4 +1,3 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
 #include "vbsp.h"
 #include "map_shared.h"
 #include "fgdlib/fgdlib.h"
@@ -304,7 +303,7 @@ bool CManifest::LoadSubMaps( CMapFile *pMapFile, const char *pszFileName )
 
 	for( int i = 0; i < m_Maps.Count(); i++ )
 	{
-		//		if ( m_Maps[ i ]->m_bTopLevelMap == false )
+//		if ( m_Maps[ i ]->m_bTopLevelMap == false )
 		{
 			char		FileName[ MAX_PATH ];
 
@@ -385,7 +384,7 @@ bool CManifest::LoadVMFManifestUserPrefs( const char *pszFileName )
 		CChunkHandlerMap Handlers;
 		Handlers.AddHandler( "cordoning", ( ChunkHandler_t )CManifest::LoadManifestCordoningPrefsCallback, this );
 
-		//		Handlers.SetErrorHandler( ( ChunkErrorHandler_t )CMapDoc::HandleLoadError, this);
+//		Handlers.SetErrorHandler( ( ChunkErrorHandler_t )CMapDoc::HandleLoadError, this);
 
 		File.PushHandlers(&Handlers);
 
@@ -528,7 +527,7 @@ void CManifest::CordonWorld( )
 			}
 
 			bool bRemove = true;
-
+			
 			for( int nCordon = 0; nCordon < m_Cordons.Count(); nCordon++ )
 			{
 				if ( m_Cordons[ nCordon ].m_bActive == false )

@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -17,7 +17,7 @@ typedef unsigned char byte;
 
 #include "hammer_mathlib.h"
 #include "studio.h"
-#include "utlvector.h"
+#include "UtlVector.h"
 #include "datacache/imdlcache.h"
 #include "FileChangeWatcher.h"
 
@@ -35,6 +35,7 @@ struct ModelCache_t
 	int nRefCount;
 };
 
+#define MAX_STUDIOMODELCACHE 2048
 
 //-----------------------------------------------------------------------------
 // Purpose: Defines an interface to a cache of studio models.
@@ -45,6 +46,8 @@ class CStudioModelCache
 
 		static StudioModel *FindModel(const char *pszModelPath);
 		static StudioModel *CreateModel(const char *pszModelPath);
+		static void ReloadModel( const char *pszModelPath );
+
 		static void AddRef(StudioModel *pModel);
 		static void Release(StudioModel *pModel);
 		static void AdvanceAnimation(float flInterval);
@@ -54,7 +57,7 @@ class CStudioModelCache
 		static BOOL AddModel(StudioModel *pModel, const char *pszModelPath);
 		static void RemoveModel(StudioModel *pModel);
 
-		static ModelCache_t m_Cache[1024];
+		static ModelCache_t m_Cache[MAX_STUDIOMODELCACHE];
 		static int m_nItems;
 };
 
@@ -78,7 +81,7 @@ public:
 	void					FreeModel ();
 	bool					LoadModel( const char *modelname );
 	bool					PostLoadModel ( const char *modelname );
-	void					DrawModel3D( CRender3D *pRender, float flAlpha, bool bWireframe);
+	void					DrawModel3D( CRender3D *pRender, const Color &color, float flAlpha, bool bWireframe);
 	void					DrawModel2D( CRender2D *pRender, float flAlpha, bool bWireFrame);
 	void					AdvanceFrame( float dt );
 
@@ -87,13 +90,17 @@ public:
 	void					ExtractMovementBbox( Vector &mins, Vector &maxs );
 	void					RotateBbox( Vector &Mins, Vector &Maxs, const QAngle &Angles );
 
+	void					SetFrame( int nFrame );
+	int						GetMaxFrame( void );
+
 	int						SetSequence( int iSequence );
 	int						GetSequence( void );
 	int						GetSequenceCount( void );
 	void					GetSequenceName( int nIndex, char *szName );
 	void					GetSequenceInfo( float *pflFrameRate, float *pflGroundSpeed );
-
+	const char				*GetModelName( void );
 	int						SetBodygroup( int iGroup, int iValue );
+	int						SetBodygroups( int iValue );
 	int						SetSkin( int iValue );
 	void					SetOrigin( float x, float y, float z );
 	void					GetOrigin( float &x, float &y, float &z );
@@ -120,14 +127,14 @@ private:
 	byte					m_mouth;			// mouth position
 	char*					m_pModelName;		// model file name
 
-	Vector					*m_pPosePos;
-	Quaternion				*m_pPoseAng;
+	Vector			        *m_pPosePos;
+	QuaternionAligned		*m_pPoseAng;
 
 	// internal data
 	MDLHandle_t				m_MDLHandle;
 	mstudiomodel_t			*m_pModel;	
 
-	void					SetUpBones ( bool bUpdatePose, matrix3x4_t*	pBoneToWorld );
+	void					SetUpBones ( bool bUpdatePose, matrix3x4a_t*	pBoneToWorld );
 	void					SetupModel ( int bodypart );
 
 	void					LoadStudioRender( void );

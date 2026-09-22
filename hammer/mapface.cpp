@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ====
 //
 // Purpose: 
 //
@@ -18,9 +18,9 @@
 #include "SaveInfo.h"
 #include "TextureSystem.h"
 #include "MapDoc.h"
-#include "materialsystem/imesh.h"
+#include "materialsystem/IMesh.h"
 #include "Material.h"
-#include "utlrbtree.h"
+#include "UtlRBTree.h"
 #include "mathlib/vector.h"
 #include "camera.h"
 #include "options.h"
@@ -182,6 +182,7 @@ void CMapFace::GetTextureName(char *pszName) const
 }
 
 static char *InvisToolTextures[]={
+	"playerclip",
 	"occluder",
 	"areaportal",
 	"invisible",
@@ -659,13 +660,13 @@ void CMapFace::NormalizeTextureShifts(void)
 	//
 	for (int nDim = 0; nDim < 4; nDim++)
 	{
-		int nValue = V_rint(texture.UAxis[nDim]);
+		int nValue = rint(texture.UAxis[nDim]);
 		if (fabs(texture.UAxis[nDim] - nValue) < TEXTURE_AXIS_ROUND_EPSILON)
 		{
 			texture.UAxis[nDim] = nValue;
 		}
 
-		nValue = V_rint(texture.VAxis[nDim]);
+		nValue = rint(texture.VAxis[nDim]);
 		if (fabs(texture.VAxis[nDim] - nValue) < TEXTURE_AXIS_ROUND_EPSILON)
 		{
 			texture.VAxis[nDim] = nValue;
@@ -677,14 +678,14 @@ void CMapFace::NormalizeTextureShifts(void)
 		return;
 	}
 
-	if (m_pTexture->GetWidth() != 0)
+	if (m_pTexture->GetMappingWidth() != 0)
 	{
-		texture.UAxis[3] = fmod(texture.UAxis[3], m_pTexture->GetWidth());
+		texture.UAxis[3] = fmod(texture.UAxis[3], m_pTexture->GetMappingWidth());
 	}
 
-	if (m_pTexture->GetHeight() != 0)
+	if (m_pTexture->GetMappingHeight() != 0)
 	{
-		texture.VAxis[3] = fmod(texture.VAxis[3], m_pTexture->GetHeight());
+		texture.VAxis[3] = fmod(texture.VAxis[3], m_pTexture->GetMappingHeight());
 	}
 }
 
@@ -986,7 +987,7 @@ void CMapFace::JustifyTextureUsingExtents(TextureJustification_t eJustification,
 		// Align the top left corner of the texture with the top left corner of the face.
 		case TEXTURE_JUSTIFY_BOTTOM:
 		{
-			texture.VAxis[3] = -BottomRight[1] + m_pTexture->GetHeight();
+			texture.VAxis[3] = -BottomRight[1] + m_pTexture->GetMappingHeight();
 			break;
 		}
 
@@ -1000,15 +1001,15 @@ void CMapFace::JustifyTextureUsingExtents(TextureJustification_t eJustification,
 		// Align the right side of the texture with the right side of the face.
 		case TEXTURE_JUSTIFY_RIGHT:
 		{
-			texture.UAxis[3] = -BottomRight[0] + m_pTexture->GetWidth();
+			texture.UAxis[3] = -BottomRight[0] + m_pTexture->GetMappingWidth();
 			break;
 		}
 
 		// Center the texture on the face.
 		case TEXTURE_JUSTIFY_CENTER:
 		{
-			texture.UAxis[3] = -Center[0] + (m_pTexture->GetWidth() / 2);
-			texture.VAxis[3] = -Center[1] + (m_pTexture->GetHeight() / 2);
+			texture.UAxis[3] = -Center[0] + (m_pTexture->GetMappingWidth() / 2);
+			texture.VAxis[3] = -Center[1] + (m_pTexture->GetMappingHeight() / 2);
 			break;
 		}
 
@@ -1016,10 +1017,10 @@ void CMapFace::JustifyTextureUsingExtents(TextureJustification_t eJustification,
 		case TEXTURE_JUSTIFY_FIT:
 		{
 			// Calculate the appropriate scale.
-			if (m_pTexture && m_pTexture->GetWidth() && m_pTexture->GetHeight())
+			if (m_pTexture && m_pTexture->GetMappingWidth() && m_pTexture->GetMappingHeight())
 			{
-				texture.scale[0] = (BottomRight[0] - TopLeft[0]) / m_pTexture->GetWidth();
-				texture.scale[1] = (BottomRight[1] - TopLeft[1]) / m_pTexture->GetHeight();
+				texture.scale[0] = (BottomRight[0] - TopLeft[0]) / m_pTexture->GetMappingWidth();
+				texture.scale[1] = (BottomRight[1] - TopLeft[1]) / m_pTexture->GetMappingHeight();
 			}
 			else
 			{
@@ -1315,8 +1316,8 @@ void CMapFace::SetTexture(IEditorTexture *pTexture, bool bRescaleTextureCoordina
 	SignalUpdate( EVTYPE_FACE_CHANGED );
 	if ( m_pTexture && pTexture && bRescaleTextureCoordinates )
 	{
-		float flXFactor = (float)m_pTexture->GetWidth() / pTexture->GetWidth();
-		float flYFactor = (float)m_pTexture->GetHeight() / pTexture->GetHeight();
+		float flXFactor = (float)m_pTexture->GetMappingWidth() / pTexture->GetMappingWidth();
+		float flYFactor = (float)m_pTexture->GetMappingHeight() / pTexture->GetMappingHeight();
 
 		texture.scale[0] *= flXFactor;
 		texture.scale[1] *= flYFactor;
@@ -1339,10 +1340,10 @@ void CMapFace::SetTexture(IEditorTexture *pTexture, bool bRescaleTextureCoordina
 		m_pTexture->Load();
 
 		bTexValid = !(
-			m_pTexture->GetWidth() == 0 || 
-			m_pTexture->GetHeight() == 0 ||
-			m_pTexture->GetImageWidth() == 0 ||
-			m_pTexture->GetImageHeight() == 0 || 
+			m_pTexture->GetPreviewImageWidth() == 0 || 
+			m_pTexture->GetPreviewImageHeight() == 0 ||
+			m_pTexture->GetMappingWidth() == 0 ||
+			m_pTexture->GetMappingHeight() == 0 || 
 			!m_pTexture->HasData()
 		);
 	}
@@ -1385,13 +1386,13 @@ void CMapFace::CalcTextureCoordAtPoint( const Vector& pt, Vector2D &texCoord )
 	//
 	// "normalize" the texture coordinates
 	//
-	if (m_pTexture->GetWidth())
-		texCoord[0] = s / ( float )m_pTexture->GetWidth();
+	if ( m_pTexture->GetMappingWidth() )
+		texCoord[0] = s / ( float )m_pTexture->GetMappingWidth();
 	else
 		texCoord[0] = 0.0;
 	
-	if (m_pTexture->GetHeight())
-		texCoord[1] = t / ( float )m_pTexture->GetHeight();
+	if ( m_pTexture->GetMappingHeight() )
+		texCoord[1] = t / ( float )m_pTexture->GetMappingHeight();
 	else
 		texCoord[1] = 0.0;
 }
@@ -1443,13 +1444,13 @@ void CMapFace::CalcTextureCoords(void)
 		s = DotProduct(texture.UAxis.AsVector3D(), Points[i]) / texture.scale[0] + texture.UAxis[3];
 		t = DotProduct(texture.VAxis.AsVector3D(), Points[i]) / texture.scale[1] + texture.VAxis[3];
 
-		if (m_pTexture->GetWidth())
-			m_pTextureCoords[i][0] = s / (float)m_pTexture->GetWidth();
+		if (m_pTexture->GetMappingWidth())
+			m_pTextureCoords[i][0] = s / (float)m_pTexture->GetMappingWidth();
 		else
 			m_pTextureCoords[i][0] = 0.0f;
 
-		if (m_pTexture->GetHeight())
-			m_pTextureCoords[i][1] = t / (float)m_pTexture->GetHeight();
+		if (m_pTexture->GetMappingHeight())
+			m_pTextureCoords[i][1] = t / (float)m_pTexture->GetMappingHeight();
  		else
 			m_pTextureCoords[i][1] = 0.0f;
 
@@ -2985,7 +2986,10 @@ bool CMapFace::TraceLine(Vector &HitPos, Vector &HitNormal, Vector const &Start,
 	// Find the point of intersection of the ray with the given plane.
 	//
 	float t = Start.Dot(plane.normal) - plane.dist;
-	t = t / -(End - Start).Dot(plane.normal);
+	float d = -(End - Start).Dot(plane.normal);
+	if ( d == 0.0f )
+		return false;
+	t = t / d;
 	
 	HitPos = Start + (t * (End - Start));
 	HitNormal = plane.normal;

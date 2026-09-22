@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2004, Valve Corporation, All rights reserved. =======
 //
 // Dme version of a game model (MDL)
 //
@@ -6,9 +6,12 @@
 #include "movieobjects/dmegamemodel.h"
 #include "movieobjects_interfaces.h"
 #include "datamodel/dmelementfactoryhelper.h"
-#include "datacache/imdlcache.h"
 #include "studio.h"
 #include "tier3/tier3.h"
+#include "tier1/fmtstr.h"
+#include "bone_setup.h"
+
+#include "movieobjects/dmeoverlay.h"		// FIXME: Why do I have to explicitly include dmeoverlay.h here?
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
@@ -25,7 +28,7 @@ IMPLEMENT_ELEMENT_FACTORY( DmeGlobalFlexControllerOperator, CDmeGlobalFlexContro
 void CDmeGlobalFlexControllerOperator::OnConstruction()
 {
 	m_flexWeight.Init( this, "flexWeight" );
-	m_gameModel.Init( this, "gameModel", FATTRIB_HAS_CALLBACK );
+	m_gameModel.Init( this, "gameModel", FATTRIB_HAS_CALLBACK | FATTRIB_NEVERCOPY );
 
 	m_ToAttributeHandle = DMATTRIBUTE_HANDLE_INVALID;
 
@@ -41,6 +44,10 @@ void CDmeGlobalFlexControllerOperator::Resolve()
 	if ( m_nFlexControllerIndex < 0 )
 	{
 		m_nFlexControllerIndex = FindGlobalFlexControllerIndex();
+	}
+	if ( m_ToAttributeHandle == DMATTRIBUTE_HANDLE_INVALID )
+	{
+		SetupToAttribute();
 	}
 }
 
@@ -144,9 +151,7 @@ void CDmeGlobalFlexControllerOperator::SetupToAttribute()
 int CDmeGlobalFlexControllerOperator::FindGlobalFlexControllerIndex() const
 {
 	int nGlobalFlexControllerIndex = -1;
-
-	const char *pModelName = m_gameModel->GetModelName();
-	MDLHandle_t h = pModelName && pModelName[0] ? g_pMDLCache->FindMDL( pModelName ) : MDLHANDLE_INVALID;
+	MDLHandle_t h = m_gameModel->GetModelHandle();
 	if ( h != MDLHANDLE_INVALID )
 	{
 		studiohdr_t *hdr = g_pMDLCache->GetStudioHdr( h );
@@ -157,7 +162,7 @@ int CDmeGlobalFlexControllerOperator::FindGlobalFlexControllerIndex() const
 			for ( LocalFlexController_t i = LocalFlexController_t(0) ; i < fc; ++i )
 			{
 				mstudioflexcontroller_t *flex = hdr->pFlexcontroller( i );
-				if ( flex->localToGlobal == -1 )
+				if ( flex->localToGlobal == -1 && g_pGlobalFlexController )
 				{
 					flex->localToGlobal = g_pGlobalFlexController->FindGlobalFlexController( flex->pszName() );
 				}
@@ -175,7 +180,6 @@ int CDmeGlobalFlexControllerOperator::FindGlobalFlexControllerIndex() const
 			}
 		}
 
-		g_pMDLCache->Release( h );
 	}
 
 	return nGlobalFlexControllerIndex;
@@ -194,7 +198,6 @@ IMPLEMENT_ELEMENT_FACTORY( DmeGameModel, CDmeGameModel );
 void CDmeGameModel::OnConstruction()
 {
 	m_flexWeights.Init( this, "flexWeights" );
-	m_viewTarget.Init( this, "viewTarget" );
 	m_modelName.Init( this, "modelName", FATTRIB_HAS_CALLBACK );
 	m_skin.Init( this, "skin" );
 	m_body.Init( this, "body" );
@@ -203,10 +206,27 @@ void CDmeGameModel::OnConstruction()
 	m_bones.Init( this, "bones" );
 	m_globalFlexControllers.Init( this, "globalFlexControllers" );
 	m_bComputeBounds.Init( this, "computeBounds" );
+	m_bEvaluateProceduralBones.InitAndSet( this, "evaluateProceduralBones", true );
+
+	m_hMDL = MDLHANDLE_INVALID;
+	m_bHMDLDirty = true;
 }
 
 void CDmeGameModel::OnDestruction()
 {
+	if ( m_hMDL != MDLHANDLE_INVALID )
+	{
+		g_pMDLCache->Release( m_hMDL );
+		m_hMDL = MDLHANDLE_INVALID;
+	}
+}
+
+void CDmeGameModel::OnAttributeChanged( CDmAttribute *pAttribute )
+{
+	if ( pAttribute == m_modelName.GetAttribute() )
+	{
+		m_bHMDLDirty = true;
+	}
 }
 
 CDmeGlobalFlexControllerOperator *CDmeGameModel::AddGlobalFlexController( const char *controllerName, int globalIndex )
@@ -301,6 +321,49 @@ bool CDmeGameModel::GetSrcBoneTransforms( matrix3x4_t *pPreTransform, matrix3x4_
 	return false;
 }
 
+
+//-----------------------------------------------------------------------------
+// Purpose: Get the default position of the specified bone.
+//-----------------------------------------------------------------------------
+bool CDmeGameModel::GetBoneDefaultPosition( int nBoneIndex, Vector &position ) const
+{
+	studiohdr_t *pStudioHdr = GetStudioHdr();
+	if ( !pStudioHdr )
+		return false;
+
+	if ( ( nBoneIndex < 0 ) || ( nBoneIndex >= pStudioHdr->numbones ) )
+		return false;
+		
+	const mstudiobone_t *pBone = pStudioHdr->pBone( nBoneIndex );
+	if ( pBone == NULL )
+		return false;
+
+	position = pBone->pos;
+	return true;
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: Get the default orientation of the specified bone.
+//-----------------------------------------------------------------------------
+bool CDmeGameModel::GetBoneDefaultOrientation( int nBoneIndex, Quaternion &orientation ) const
+{
+	studiohdr_t *pStudioHdr = GetStudioHdr();
+	if ( !pStudioHdr )
+		return false;
+
+	if ( ( nBoneIndex < 0 ) || ( nBoneIndex >= pStudioHdr->numbones ) )
+		return false;
+
+	const mstudiobone_t *pBone = pStudioHdr->pBone( nBoneIndex );
+	if ( pBone == NULL )
+		return false;
+
+	orientation = pBone->quat;
+	return true;
+}
+
+
 bool CDmeGameModel::IsRootTransform( int nBoneIndex ) const
 {
 	studiohdr_t *pStudioHdr = GetStudioHdr();
@@ -310,7 +373,7 @@ bool CDmeGameModel::IsRootTransform( int nBoneIndex ) const
 	if ( pStudioHdr->numbones <= nBoneIndex )
 		return true;
 
-	mstudiobone_t *pBone = pStudioHdr->pBone( nBoneIndex );
+	const mstudiobone_t *pBone = pStudioHdr->pBone( nBoneIndex );
 	return pBone->parent == -1;
 }
 
@@ -350,6 +413,141 @@ void CDmeGameModel::AppendGlobalFlexControllerOperators( CUtlVector< IDmeOperato
 	}
 }
 
+
+//-----------------------------------------------------------------------------
+// Purpose: Find the dependencies of each flex controller on the other flex 
+// controllers
+//-----------------------------------------------------------------------------
+void CDmeGameModel::FindFlexControllerDependencies( CUtlVector< CUtlVector< int > > &dependencyList ) const
+{
+	studiohdr_t *hdr = GetStudioHdr();
+	if ( hdr == NULL )
+		return;
+
+	
+	// Build a table to reference the controller operators by the
+	// global index of the flex control they are associated with.
+	int controllerTable[ MAXSTUDIOFLEXDESC ];
+	memset( controllerTable, -1, sizeof( controllerTable ) );
+
+	int nControllers = m_globalFlexControllers.Count();
+	if ( nControllers > MAXSTUDIOFLEXDESC )
+	{
+		Assert( nControllers < MAXSTUDIOFLEXDESC );
+		return;
+	}
+
+	for ( int iCtrl = 0; iCtrl < nControllers; ++iCtrl )
+	{
+		CDmeGlobalFlexControllerOperator *pCtrlOp = m_globalFlexControllers[ iCtrl ];
+		if ( pCtrlOp )
+		{
+			int globalIndex = pCtrlOp->GetGlobalIndex();
+			if ( ( globalIndex < MAXSTUDIOFLEXDESC ) && ( globalIndex >= 0 ) )
+			{
+				controllerTable[ globalIndex ] = iCtrl;
+			}
+		}
+	}
+
+
+	// Determine which rules each of the controllers contribute to
+	CStudioHdr studioHdr( hdr );
+
+	CUtlVector< int > controllerRuleTable[ MAXSTUDIOFLEXDESC ]; // Table of rules each controller contributes to
+	CUtlVector< int > ruleDepTable[ MAXSTUDIOFLEXDESC ];		// Table of controllers contributing to each rule
+	
+	int nFlexRules = studioHdr.numflexrules();
+
+	for ( int iRule = 0; iRule < nFlexRules; ++iRule )
+	{
+		mstudioflexrule_t *pRule = studioHdr.pFlexRule( iRule );
+
+		if ( pRule == NULL )
+			return;
+
+		for ( int iOp = 0; iOp < pRule->numops; ++iOp )
+		{
+			mstudioflexop_t *pOp = pRule->iFlexOp( iOp );
+
+			switch ( pOp->op )
+			{
+				case STUDIO_FETCH1:
+				case STUDIO_2WAY_0:
+				case STUDIO_2WAY_1:
+				case STUDIO_NWAY:
+				case STUDIO_DME_LOWER_EYELID:
+				case STUDIO_DME_UPPER_EYELID:
+					{
+						int globalIndex = studioHdr.pFlexcontroller( (LocalFlexController_t)pOp->d.index )->localToGlobal;
+						if ( ( globalIndex < MAXSTUDIOFLEXDESC ) && ( pRule->flex < MAXSTUDIOFLEXDESC ) && ( globalIndex >= 0 ) )
+						{						
+							int controllerIndex = controllerTable[ globalIndex ];
+							if ( controllerIndex >= 0 )
+							{								
+								if ( controllerRuleTable[ controllerIndex ].Find( pRule->flex ) == CUtlVector< int >::InvalidIndex() )
+								{
+									controllerRuleTable[ controllerIndex ].AddToTail( pRule->flex );
+									ruleDepTable[ pRule->flex ].AddToTail( controllerIndex );
+								}
+							}
+						}
+					}
+					break;
+				default:
+					break;
+			}
+		}
+	}
+
+	
+	// For each controller, find the other controllers that contribute to the same rules. 
+	bool dependencyTable[ MAXSTUDIOFLEXDESC ];
+	memset( dependencyTable, 0, sizeof( dependencyTable ) );
+	for ( int iCtrl = 0; iCtrl < nControllers; ++iCtrl )
+	{
+		memset( dependencyTable, 0, sizeof( bool ) * nControllers );
+
+		// Get the list of rules that controller contributes to
+		CUtlVector< int > &ruleList = controllerRuleTable[ iCtrl ];
+		int nRules = ruleList.Count();
+		int nDependencies = 0;
+		
+		for ( int iRule = 0; iRule < nRules; ++iRule )
+		{
+			int ruleIndex = ruleList[ iRule ];
+			CUtlVector< int > &ruleControllerList = ruleDepTable[ ruleIndex ];
+			int nRuleDep = ruleControllerList.Count();
+
+			for ( int iDep = 0; iDep < nRuleDep; ++iDep )
+			{
+				int controllerIndex = ruleControllerList[ iDep ];
+				if ( ( controllerIndex != iCtrl ) && ( dependencyTable[ controllerIndex ] == false ) )
+				{
+					dependencyTable[ controllerIndex ] = true;
+					++nDependencies;
+				}
+			}
+		}
+		if ( nDependencies > 0 )
+		{
+			dependencyList.AddToTail();
+			CUtlVector< int > &dependencies = dependencyList.Tail();
+			dependencies.EnsureCapacity( nDependencies + 1 );
+			dependencies.AddToTail( iCtrl );
+			for ( int iDepCtrl = 0; iDepCtrl < nControllers; ++iDepCtrl )
+			{
+				if ( dependencyTable[ iDepCtrl ] == true )
+				{
+					dependencies.AddToTail( iDepCtrl );
+					--nDependencies;
+				}
+			}
+			Assert( nDependencies == 0 );
+		}
+	}	
+}
+
 //-----------------------------------------------------------------------------
 // accessors
 //-----------------------------------------------------------------------------
@@ -357,7 +555,6 @@ void CDmeGameModel::AddBone( CDmeTransform* pTransform )
 {
 	m_bones.AddToTail( pTransform );
 }
-
 
 //-----------------------------------------------------------------------------
 // Is this dag under the game model?
@@ -372,7 +569,7 @@ static bool IsDagUnderGameModel( CDmeDag *pDag, CDmeGameModel *pGameModel )
 	{
 		CDmAttribute *pAttribute = g_pDataModel->GetAttribute( i );
 		CDmElement *pDmeParent = pAttribute->GetOwner();
-		const static UtlSymId_t symChildren = g_pDataModel->GetSymbol( "children" );
+		const static CUtlSymbolLarge symChildren = g_pDataModel->GetSymbol( "children" );
 		if ( pDmeParent && pAttribute->GetNameSymbol() == symChildren )
 		{
 			CDmeDag *pParent = CastElement< CDmeDag >( pDmeParent );
@@ -387,34 +584,6 @@ static bool IsDagUnderGameModel( CDmeDag *pDag, CDmeGameModel *pGameModel )
 
 	return false;
 }
-
-
-//-----------------------------------------------------------------------------
-// Is this dag under the game model?
-//-----------------------------------------------------------------------------
-static CDmeDag* GetDagForTransform( CDmeTransform *pTransform, CDmeGameModel *pGameModel )
-{
-	DmAttributeReferenceIterator_t i = g_pDataModel->FirstAttributeReferencingElement( pTransform->GetHandle() );
-	while ( i != DMATTRIBUTE_REFERENCE_ITERATOR_INVALID )
-	{
-		CDmAttribute *pAttribute = g_pDataModel->GetAttribute( i );
-		CDmElement *pDmeParent = pAttribute->GetOwner();
-		const static UtlSymId_t symTransform = g_pDataModel->GetSymbol( "transform" );
-		if ( pDmeParent && pAttribute->GetNameSymbol() == symTransform )
-		{
-			CDmeDag *pParent = CastElement< CDmeDag >( pDmeParent );
-			if ( pParent && ( pParent->GetFileId() == pTransform->GetFileId() ) )
-			{
-				if ( IsDagUnderGameModel( pParent, pGameModel ) )
-					return pParent;
-			}
-		}
-		i = g_pDataModel->NextAttributeReferencingElement( i );
-	}
-
-	return NULL;
-}
-
 
 //-----------------------------------------------------------------------------
 // Finds existing dags
@@ -432,7 +601,7 @@ void CDmeGameModel::PopulateExistingDagList( CDmeDag** pDags, int nCount )
 
 		CDmeTransform *pTransform = GetBone( i );
 		Assert( pTransform );
-		pDags[ i ] = pTransform ? GetDagForTransform( pTransform, this ) : NULL;
+		pDags[ i ] = pTransform ? pTransform->GetDag() : NULL;
 	}
 }
 
@@ -440,7 +609,7 @@ void CDmeGameModel::PopulateExistingDagList( CDmeDag** pDags, int nCount )
 //-----------------------------------------------------------------------------
 // Adds bones to the game model
 //-----------------------------------------------------------------------------
-void CDmeGameModel::AddBones( studiohdr_t *pStudioHdr, const char *pBaseName, int nFirstBone, int nCount )
+void CDmeGameModel::AddBones( studiohdr_t *pStudioHdr, int nFirstBone, int nCount )
 {
 	if ( nFirstBone + nCount > pStudioHdr->numbones )
 	{
@@ -460,13 +629,13 @@ void CDmeGameModel::AddBones( studiohdr_t *pStudioHdr, const char *pBaseName, in
 		int bi = i + nFirstBone;
 
 		// get parent
-		mstudiobone_t *pBone = pStudioHdr->pBone( bi );
+		const mstudiobone_t *pBone = pStudioHdr->pBone( bi );
 		int parentIndex = pBone->parent;
 		Assert( parentIndex < nDagCount );
 
 		// build dag hierarchy to match bone hierarchy
 		CDmeDag *pParent = ( parentIndex < 0 ) ? this : pDags[ parentIndex ];
-		Q_snprintf( name, sizeof( name ), "%s_bone %d (%s)", pBaseName, bi, pBone->pszName() );
+		Q_snprintf( name, sizeof( name ), "bone %d (%s)", bi, pBone->pszName() );
 		CDmeDag *pDag = CreateElement< CDmeDag >( name, GetFileId() );
 		pDags[nDagCount++] = pDag;
 		pParent->AddChild( pDag );
@@ -478,7 +647,6 @@ void CDmeGameModel::AddBones( studiohdr_t *pStudioHdr, const char *pBaseName, in
 		AddBone( pTransform );
 	}
 }
-
 
 void CDmeGameModel::SetBone( uint index, const Vector& pos, const Quaternion& rot )
 {
@@ -539,16 +707,6 @@ void CDmeGameModel::SetFlexWeights( uint nFlexWeights, const float* flexWeights 
 	m_flexWeights.CopyArray( flexWeights, nFlexWeights );
 }
 
-const Vector& CDmeGameModel::GetViewTarget() const
-{
-	return m_viewTarget.Get();
-}
-
-void CDmeGameModel::SetViewTarget( const Vector &viewTarget )
-{
-	m_viewTarget = viewTarget;
-}
-
 void CDmeGameModel::SetFlags( int nFlags )
 {
 	m_flags = nFlags;
@@ -584,9 +742,139 @@ int CDmeGameModel::GetSequence() const
 	return m_sequence;
 }
 
+int CDmeGameModel::GetFlags() const
+{
+	return m_flags;
+}
+
 const char *CDmeGameModel::GetModelName() const
 {
 	return m_modelName.Get();
+}
+
+MDLHandle_t CDmeGameModel::GetModelHandle()
+{
+	if ( m_bHMDLDirty )
+	{
+		UpdateHMDL();
+	}
+	return m_hMDL;
+}
+
+void CDmeGameModel::UpdateHMDL()
+{
+	// Yes, we're intentionally referencing before we unref
+	MDLHandle_t h = MDLHANDLE_INVALID;
+	const char *pModelName = m_modelName.Get();
+	if ( pModelName && *pModelName )
+	{
+		h = g_pMDLCache->FindMDL( pModelName );
+	}
+
+	if ( m_hMDL != MDLHANDLE_INVALID )
+	{
+		g_pMDLCache->Release( m_hMDL );
+	}
+
+	m_hMDL = h;
+	m_bHMDLDirty = false;
+}
+
+
+int CDmeGameModel::FindAttachment( const char *pchAttachmentName ) const
+{
+	if ( studiohdr_t *pStudioHdr = GetStudioHdr() )
+	{
+		CStudioHdr studioHdr( pStudioHdr );
+		return Studio_FindAttachment( &studioHdr, pchAttachmentName ) + 1;
+	}
+	return 0;
+}
+
+
+//-----------------------------------------------------------------------------
+// Compute the world space position of the specified attachment.
+//-----------------------------------------------------------------------------
+Vector CDmeGameModel::ComputeAttachmentPosition( const char *pchAttachmentName ) const
+{
+	studiohdr_t *pStudioHdr = GetStudioHdr();
+	if ( pStudioHdr == NULL )
+		return vec3_origin;
+
+	// Find the index of the attachment by its name and verify 
+	// that the attachment was found and that the index is valid.
+	CStudioHdr studioHdr( pStudioHdr );
+	int attachmentIndex = Studio_FindAttachment( &studioHdr, pchAttachmentName );
+	if ( ( attachmentIndex < 0 ) || ( attachmentIndex > studioHdr.GetNumAttachments() ) )
+		return vec3_origin;
+
+	// Get the bone to which in attachment position is defined
+	// and then find the dag node using the bone transform.
+	int boneIndex = studioHdr.GetAttachmentBone( attachmentIndex );
+	CDmeTransform *pBoneTranform = GetBone( boneIndex );
+	CDmeDag *pBoneDag = pBoneTranform->GetDag();
+	if ( pBoneDag  == NULL )
+		return vec3_origin;
+
+	// Get the local offset position of the attachment and then transform 
+	// it into world space using the transform of the associated dag node.
+	const mstudioattachment_t &attachment = studioHdr.pAttachment( attachmentIndex );
+	
+	matrix3x4_t wsTransform;
+	Vector localPosition;
+	Vector worldPosition;
+	pBoneDag->GetAbsTransform( wsTransform );
+	MatrixPosition( attachment.local, localPosition );
+	VectorTransform( localPosition, wsTransform, worldPosition );
+	
+	return worldPosition;
+}
+
+
+//-----------------------------------------------------------------------------
+// Create a dag node for the specified attachment and make it a child of the
+// the bone it is local to.
+//-----------------------------------------------------------------------------
+CDmeDag *CDmeGameModel::CreateDagForAttachment( const char *pchAttachmentName ) const
+{
+	studiohdr_t *pStudioHdr = GetStudioHdr();
+	if ( pStudioHdr == NULL )
+		return NULL;
+
+	// Find the index of the attachment by its name and verify 
+	// that the attachment was found and that the index is valid.
+	CStudioHdr studioHdr( pStudioHdr );
+	int attachmentIndex = Studio_FindAttachment( &studioHdr, pchAttachmentName );
+	if ( ( attachmentIndex < 0 ) || ( attachmentIndex > studioHdr.GetNumAttachments() ) )
+		return NULL;
+
+	// Get the bone in which the attachment position is defined
+	// and then find the dag node using the bone transform.
+	int boneIndex = studioHdr.GetAttachmentBone( attachmentIndex );
+	CDmeTransform *pBoneTranform = GetBone( boneIndex );
+	CDmeDag *pBoneDag = pBoneTranform->GetDag();
+	if ( pBoneDag == NULL )
+		return NULL;
+	
+	CDmeDag *pDagNode = CreateElement< CDmeDag >( CFmtStr( "attach_%s", pchAttachmentName ), GetFileId() );
+
+	if ( pDagNode )
+	{
+		// Position the node based on the attachment position
+		const mstudioattachment_t &attachment = studioHdr.pAttachment( attachmentIndex );
+		CDmeTransform *pTransform = pDagNode->GetTransform();
+		if ( pTransform )
+		{
+			Vector vAttachmentPos;
+			MatrixPosition( attachment.local, vAttachmentPos );
+			pTransform->SetPosition( vAttachmentPos );
+		}
+
+		// Make the attachment dag node a child of bone it is associated with
+		pBoneDag->AddChild( pDagNode );
+	}
+
+	return pDagNode;
 }
 
 
@@ -684,11 +972,15 @@ void CDmeGamePortal::OnConstruction()
 	m_flStaticAmount	.Init( this, "staticAmount" );
 	m_flSecondaryStaticAmount	.Init( this, "secondaryStaticAmount" );
 	m_flOpenAmount		.Init( this, "openAmount" );
+	m_flHalfWidth		.Init( this, "halfWidth" );
+	m_flHalfHeight		.Init( this, "halfHeight" );
 	m_nPortalId			.Init( this, "portalId" );
 	m_nLinkedPortalId	.Init( this, "linkedPortalId" );
 	m_bIsPortal2		.Init( this, "isPortal2" );
+	m_PortalType		.Init( this, "portalType" );
 }
 
 void CDmeGamePortal::OnDestruction()
 {
 }
+

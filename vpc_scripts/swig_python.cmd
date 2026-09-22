@@ -1,112 +1,102 @@
+:: //========== Copyright (c) Valve Corporation, All rights reserved. ========
 :: //
-:: // Batch file to build .py & .cpp modules from swig.i source files
+:: // Script to run swig
 :: //
-:: // SYNTAX:  swig_python.cmd file srcdir outdir pythonver
+:: // SYNTAX: swig_python.cmd <PYVER> <OUTBINDIR> <SWIGFILE> [AUTOSWIG]
 :: //
-:: // EXAMPLE: swig_python.cmd base.i ..\..\.. d:\dev\main\game\sdktools\python\site-packages\vs pythonver 2.5
-:: //
+:: //=========================================================================
+
 
 @echo off
-
 setlocal
 
-:: // Make sure we have 4 args
+:: // Make sure we have enough arguments
+if .%1. == .. goto Usage
+if .%2. == .. goto Usage
+if .%3. == .. goto Usage
 
-if .%1.==.. (
-	goto Usage
-)
+set AUTOSWIG=
+if not .%4. == .. set AUTOSWIG=1
 
-if .%2.==.. (
-	goto Usage
-)
+set PREFIX=[%~n0]
+set SRCDIR=%~d0%~p0..
+set PYVER=%1
+set OUTBINDIR=%2
+set SWIGFILE=%3
+set SWIGOUTDIR=swig_python%PYVER%
+set SWIGC=%SWIGFILE%_wrap_python%PYVER%.cpp
+set SWIG=%SRCDIR%\devtools\swigwin-1.3.40\swig.exe
+set AUTOSWIGSCRIPT=%~d0%~p0swig_auto_dme.pl
+set PERL=%~d0
 
-if .%3.==.. (
-	goto Usage
-)
+if NOT EXIST %SWIG% GOTO ErrorNoSwig
 
-if .%4.==.. (
-	goto Usage
-)
+if EXIST %SWIGOUTDIR% GOTO SwigOutDirOk
+MKDIR %SWIGOUTDIR%
+if ERRORLEVEL 1 GOTO ErrorSwigOutDir
 
-:Main
+:SwigOutDirOk
 
-set SWIGFILE=%1%
-set SRCDIR=%2%
-set OUTDIR=%3%
-set PYTHONVER=%4%
-set SWIG=%SRCDIR%\devtools\swigwin-1.3.34\swig.exe
-set SWIGDIR=swig_python%PYTHONVER%
-set SWIGC=%SWIGFILE%_wrap_python%PYTHONVER%.cpp
-set DIFF=%SRCDIR%\devtools\bin\diff.exe -q
-set P4EDIT=%SRCDIR%\vpc_scripts\valve_p4_edit.cmd
+if NOT DEFINED AUTOSWIG GOTO AutoSwigOk
 
-:: // Check to see if things don't exist and issue inteligible error messages
-if NOT EXIST %SWIG% goto NoSwig
+set FOUNDPERL=
+for %%P in ( wperl.exe ) do ( set FOUNDPERL=%%~$PATH:P)
+if NOT DEFINED FOUNDPERL goto ErrorNoPerl
 
-if NOT EXIST %DIFF% goto NoDiff
+echo %PREFIX% Perl produces swigfile, swig_auto_dme.pl produces %SWIGOUTDIR%\auto_%SWIGFILE%.i
+echo %PREFIX% "%FOUNDPERL%" "%AUTOSWIGSCRIPT%" "%SWIGOUTDIR%" "%SWIGFILE%"
+"%FOUNDPERL%" "%AUTOSWIGSCRIPT%" "%SWIGOUTDIR%" "%SWIGFILE%"
 
-:: // Make the output directory if necessary
-if NOT EXIST %SWIGDIR% mkdir %SWIGDIR%
+:AutoSwigOk
 
-if NOT EXIST %SWIGDIR% goto NoSwigDir
+if EXIST %OUTBINDIR% GOTO OutBinDirOk
+MKDIR %OUTBINDIR%
+if ERRORLEVEL 1 GOTO ErrorOutBinDir
 
-if EXIST %SWIGC% attrib -R %SWIGC%
+:OutBinDirOk
 
-echo *** [swig_python] %SWIG% -small -Fmicrosoft -ignoremissing -c++ -Iswig_python%PYTHONVER% -I%SRCDIR%\public -o "%SWIGC%" -outdir "%SWIGDIR%" -python "%SWIGFILE%.i" ***
-call %SWIG% -small -Fmicrosoft -ignoremissing -c++ -Iswig_python%PYTHONVER% -I%SRCDIR%\public -o "%SWIGC%" -outdir "%SWIGDIR%" -python "%SWIGFILE%.i"
-if ERRORLEVEL 1 goto SwigFailed
+if EXIST %SWIGOUTDIR%\%SWIGC% DEL %SWIGOUTDIR%\%SWIGC%
 
-if EXIST %SWIGC% attrib -R %SWIGC%
+echo %PREFIX% %SWIG% -Fmicrosoft -small -ignoremissing -w312 -w325 -w383 -w503 -w509 -c++ -Iswig_python%PYVER% -I%SRCDIR%/public -outdir %SWIGOUTDIR% -o %SWIGOUTDIR%/%SWIGC% -python %SWIGFILE%.i"
+%SWIG% -small -Fmicrosoft -ignoremissing -w312 -w325 -w383 -w503 -w509 -w401 -c++ -Iswig_python%PYVER% -I%SRCDIR%/public -outdir %SWIGOUTDIR% -o %SWIGOUTDIR%/%SWIGC% -python %SWIGFILE%.i"
 
-if NOT EXIST "%SWIGDIR%\%SWIGFILE%.py" echo "Can't Find diff SRC %SWIGDIR%\%SWIGFILE%.py"
-if NOT EXIST "%OUTDIR%\%SWIGFILE%.py" echo "Can't Find diff DST %OUTDIR%\%SWIGFILE%.py"
-echo *** [swig_python] %DIFF% "%SWIGDIR%\%SWIGFILE%.py" "%OUTDIR%\%SWIGFILE%.py" ***
-call %DIFF% "%SWIGDIR%\%SWIGFILE%.py" "%OUTDIR%\%SWIGFILE%.py" > NUL:
-if ERRORLEVEL 1 goto CopyPy
-goto EndOk
-
-:CopyPy
-echo *** [swig_python] %P4EDIT% %OUTDIR%\%SWIGFILE%.py %SRCDIR% ***
-call %P4EDIT% %OUTDIR%\%SWIGFILE%.py %SRCDIR%
-if ERRORLEVEL 1 goto P4Failed
-
-echo *** [swig_python] "%SWIGDIR%\%SWIGFILE%.py" "%OUTDIR%\%SWIGFILE%.py" ***
-call copy "%SWIGDIR%\%SWIGFILE%.py" "%OUTDIR%\%SWIGFILE%.py" > NUL:
-if ERRORLEVEL 1 goto CopyFailed
+if ERRORLEVEL 1 goto ErrorSwig
 
 :EndOk
-echo *** [swig_python] Swig Complete!
 endlocal
 exit /b 0
 
 :Usage
-echo  *** [swig_python] Error calling command! No file specified for swig! Usage: swig_python.cmd file srcdir outdir pythonver
-endlocal
-exit 1
-
-:SwigFailed
-echo  *** [swig_python] swig command failed
+echo.
+echo NAME
+echo     %~n0
+echo.
+echo SYNOPSIS
+echo     %0 ^<SRCDIR^> ^<PYVER^> ^<SWIGFILE^> ^<SWIGBINDIR^>
+echo.
+echo DESCRIPTION
+echo     Runs swig on the specified swig file for the specified python version
+echo.
 goto EndError
 
-:P4Failed
-echo *** [swig_python] ERROR: %P4EDIT% %OUTDIR%\%SWIGFILE%.py %SRCDIR%
+:ErrorNoSwig
+echo %PREFIX% Error! No swig executable found here: %SWIG%
 goto EndError
 
-:CopyFailed
-echo *** [swig_python] ERROR: copy "%SWIGDIR%\%SWIGFILE%.py" "%OUTDIR%\%SWIGFILE%.py"
+:ErrorSwigOutDir
+echo %PREFIX% Error! Swig Output Dir doesn't exist and could not be created: %SWIGOUTDIR%
 goto EndError
 
-:NoSwig
-echo *** [swig_python] ERROR: Can't Find SWIG executable "%SWIG%", ensure src/devtools is synced
+:ErrorOutBinDir
+echo %PREFIX% Error! Swig Output Bin Dir doesn't exist and could not be created: %OUTBINDIR%
 goto EndError
 
-:NoDiff
-echo *** [swig_python] ERROR: Can't Find DIFF executable "%DIFF%", ensure src/devtools is synced
+:ErrorSwig
+echo %PREFIX% Error! Swig filed"
 goto EndError
 
-:NoSwigDir
-echo *** [swig_python] ERROR: Can't Find Or Create Swig Intermediate Directory "%SWIGDIR%"
-goto EndError
+:ErrorNoPerl
+echo %PREFIX% Error! No perl.exe executable found in PATH"
 
 :EndError
 endlocal

@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -19,8 +19,8 @@
 #include "SSolid.h"
 #include "MapStudioModel.h"
 #include "Material.h"
-#include "materialsystem/imaterialsystem.h"
-#include "materialsystem/imesh.h"
+#include "materialsystem/IMaterialSystem.h"
+#include "materialsystem/IMesh.h"
 #include "TextureSystem.h"
 #include "ToolInterface.h"
 #include "StudioModel.h"
@@ -34,12 +34,18 @@
 #include "materialsystem/itexture.h"
 #include "maplightcone.h"
 #include "map_utils.h"
-#include "bitmap/float_bm.h"
+#include "bitmap/floatbitmap.h"
 #include "lpreview_thread.h"
 #include "hammer.h"
 #include "mainfrm.h"
 #include "mathlib/halton.h"
 #include "Manifest.h"
+#include "toolutils/enginetools_int.h"
+#include "toolframework/ienginetool.h"
+#include "..\FoW\FoW.h"
+#include "..\fow\fow_trisoup.h"
+#include "..\fow\fow_lineoccluder.h"
+#include "gridnav.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include <tier0/memdbgon.h>
@@ -387,23 +393,24 @@ void CRender3D::RenderFrustum( )
 	IMesh* pMesh = pRenderContext->GetDynamicMesh();
 
 	int numIndices = sizeof(indices) / sizeof(int);
-	CMeshBuilder meshBuilder3D;
-	meshBuilder3D.Begin( pMesh, MATERIAL_LINES, 8, numIndices );
+	CMeshBuilder meshBuilder;
+	meshBuilder.Begin( pMesh, MATERIAL_LINES, 8, numIndices );
 
-	for ( int i = 0; i < 8; ++i )
+	int i;
+	for ( i = 0; i < 8; ++i )
 	{
-		meshBuilder3D.Position3fv( m_FrustumRenderPoint[i].Base() );
-		meshBuilder3D.Color4ub( 255, 255, 255, 255 );
-		meshBuilder3D.AdvanceVertex();
+		meshBuilder.Position3fv( m_FrustumRenderPoint[i].Base() );
+		meshBuilder.Color4ub( 255, 255, 255, 255 );
+		meshBuilder.AdvanceVertex();
 	}
 
-	for ( int i = 0; i < numIndices; ++i )
+	for ( i = 0; i < numIndices; ++i )
 	{
-		meshBuilder3D.Index( indices[i] );
-		meshBuilder3D.AdvanceIndex();
+		meshBuilder.Index( indices[i] );
+		meshBuilder.AdvanceIndex();
 	}
 
-	meshBuilder3D.End();
+	meshBuilder.End();
 	pMesh->Draw();
 
 	PopRenderMode(); 
@@ -444,14 +451,13 @@ bool CRender3D::SetView( CMapView *pView )
 	Assert(hwnd != NULL);
 	Assert(pDoc != NULL);
 	Assert(pDoc->GetMapWorld() != NULL);
-	  
+
 	if (!MaterialSystemInterface()->AddView( hwnd ))
 	{
 		return false;
 	}
 
 	MaterialSystemInterface()->SetView( hwnd );
-
 	m_WinData.hWnd = hwnd;
 
 	if ((m_WinData.hDC = GetDCEx(m_WinData.hWnd, NULL, DCX_CACHE | DCX_CLIPSIBLINGS)) == NULL)
@@ -631,7 +637,7 @@ int CRender3D::ObjectsAt( float x, float y, float fWidth, float fHeight, HitInfo
 	bool bOldLightPreview = IsInLightingPreview();
 	SetInLightingPreview( false );
 
-	Render();
+	Render( false );
 
 	SetDefaultRenderMode( eOldMode );
 	SetInLightingPreview( bOldLightPreview );
@@ -655,9 +661,9 @@ static ITexture *SetRenderTargetNamed(int nWhichTarget, char const *pRtName)
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-void CRender3D::StartRenderFrame(void)
+void CRender3D::StartRenderFrame( bool bRenderingOverEngine )
 {
-	CRender::StartRenderFrame();
+	CRender::StartRenderFrame( bRenderingOverEngine );
 
 	CCamera *pCamera = GetCamera();
 
@@ -678,64 +684,68 @@ void CRender3D::StartRenderFrame(void)
 	//
 	CMapStudioModel::AdvanceAnimation( GetElapsedTime() );
 
-	// We're drawing to this view now
-	MaterialSystemInterface()->SetView( m_WinData.hWnd );
-
 	// view materialsystem viewport
 	CMatRenderContextPtr pRenderContext( MaterialSystemInterface() );
-	int width, height;
-	pCamera->GetViewPort( width, height );
-	if (
-		(m_eCurrentRenderMode == RENDER_MODE_LIGHT_PREVIEW2) ||
-		(m_eCurrentRenderMode == RENDER_MODE_LIGHT_PREVIEW_RAYTRACED)
-		)
+
+	// We're drawing to this view now
+	if ( !m_bRenderingOverEngine )
 	{
-		AllocateLightingPreviewtextures();
+		MaterialSystemInterface()->SetView( m_WinData.hWnd );
 
-		ITexture *first_rt=SetRenderTargetNamed(0,"_rt_albedo");
-		SetRenderTargetNamed(1,"_rt_normal");
-		SetRenderTargetNamed(2,"_rt_position");
-		SetRenderTargetNamed(3,"_rt_flags");
-		int nTargetWidth = min( width, first_rt->GetActualWidth() );
-		int nTargetHeight = min( height, first_rt->GetActualHeight() );
-		pRenderContext->
-			Viewport(0, 0, nTargetWidth, nTargetHeight );
-		pRenderContext->ClearColor3ub(0,1,0);
-		pRenderContext->ClearBuffers( true, true );
-	}
-	else
-		pRenderContext->Viewport(0, 0, width, height);
+		int width, height;
+		pCamera->GetViewPort( width, height );
+		if (
+			(m_eCurrentRenderMode == RENDER_MODE_LIGHT_PREVIEW2) ||
+			(m_eCurrentRenderMode == RENDER_MODE_LIGHT_PREVIEW_RAYTRACED)
+			)
+		{
+			AllocateLightingPreviewtextures();
 
-	//
-	// Setup the camera position, orientation, and FOV.
-	//
-	//
-	// Set up our perspective transformation.
-	//
+			ITexture *first_rt=SetRenderTargetNamed(0,"_rt_albedo");
+			SetRenderTargetNamed(1,"_rt_normal");
+			SetRenderTargetNamed(2,"_rt_position");
+			int nTargetWidth = max( 32, min( width, first_rt->GetActualWidth() ) );
+			int nTargetHeight = max( 32, min( height, first_rt->GetActualHeight() ) );
+			pRenderContext->
+				Viewport(0, 0, nTargetWidth, nTargetHeight );
+			pRenderContext->ClearColor3ub(0,1,0);
+			pRenderContext->ClearBuffers( true, true );
+		}
+		else
+			pRenderContext->Viewport(0, 0, width, height);
 
-	// if picking, setup extra perspective matrix
-	if ( m_Pick.bPicking )
-	{
-		pRenderContext->MatrixMode(MATERIAL_PROJECTION);
-		pRenderContext->LoadIdentity();
-
-		pRenderContext->PickMatrix(m_Pick.fX, m_Pick.fY, m_Pick.fWidth, m_Pick.fHeight);
-		pRenderContext->SelectionBuffer(m_Pick.uSelectionBuffer, sizeof(m_Pick.uSelectionBuffer));
-		pRenderContext->SelectionMode(true);
-		pRenderContext->ClearSelectionNames();
-
-		float aspect = (float)width / (float)height; 
-
-		pRenderContext->PerspectiveX( pCamera->GetFOV(), 
-			aspect, pCamera->GetNearClip(), pCamera->GetFarClip() );
-	}
-	else
-	{
 		//
-		// Clear the frame buffer and Z buffer.
+		// Setup the camera position, orientation, and FOV.
 		//
-		pRenderContext->ClearColor3ub( 0,0,0 );
-		pRenderContext->ClearBuffers( true, true, true );
+		//
+		// Set up our perspective transformation.
+		//
+
+		// if picking, setup extra perspective matrix
+		if ( m_Pick.bPicking )
+		{
+			pRenderContext->MatrixMode(MATERIAL_PROJECTION);
+			pRenderContext->LoadIdentity();
+
+			pRenderContext->PickMatrix(m_Pick.fX, m_Pick.fY, m_Pick.fWidth, m_Pick.fHeight);
+			pRenderContext->SelectionBuffer(m_Pick.uSelectionBuffer, ARRAYSIZE(m_Pick.uSelectionBuffer));
+			pRenderContext->SelectionMode(true);
+			pRenderContext->ClearSelectionNames();
+
+			float aspect = (float)width / (float)height; 
+
+			pRenderContext->PerspectiveX( pCamera->GetFOV(), 
+				aspect, pCamera->GetNearClip(), pCamera->GetFarClip() );
+		}
+		else
+		{
+			//
+			// Clear the frame buffer and Z buffer.
+			//
+			
+			pRenderContext->ClearColor3ub( 0,0,0 );
+			pRenderContext->ClearBuffers( true, true, true );
+		}
 	}
 
 	//
@@ -792,19 +802,13 @@ static void SetNamedMaterialVar(IMaterial *pMat, char const *pVName, float fValu
 	pVar->SetFloatValue( fValue );
 }
 
-class CLightPreview_Light
-{
-public:
-	LightDesc_t m_Light;
-	float m_flDistanceToEye;
-};
 
 bool CompareLightPreview_Lights(CLightPreview_Light const &a, CLightPreview_Light const &b)
 {
 	return (a.m_flDistanceToEye > b.m_flDistanceToEye);
 }
 
-#define MAX_PREVIEW_LIGHTS 10								// max # of lights to process.
+#define MAX_PREVIEW_LIGHTS 20								// max # of lights to process.
 
 
 void CRender3D::SendShadowTriangles( void )
@@ -1039,9 +1043,11 @@ static bool ParseLightGeneric( CMapEntity *e, CLightingPreviewLightDescription &
 static bool s_bAddedLightEnvironmentAlready;
 
 
+
+
 static void AddEntityLightToLightList( 
 	CMapEntity *e,
-	CUtlVector<CLightingPreviewLightDescription> &listout )
+	CUtlIntrusiveList<CLightingPreviewLightDescription> &listout )
 {
 	char const *pszClassName=e->GetClassName();
 	if (pszClassName)
@@ -1054,13 +1060,19 @@ static void AddEntityLightToLightList(
 		if ( (! s_bAddedLightEnvironmentAlready ) &&
 			 (! stricmp( pszClassName, "light_environment" ) ))
 		{
+			const int N_FAKE_LIGHTS_FOR_AMBIENT = 100.0;
+			const float AMBIENT_LIGHT_DISTANCE = 100000;
+			const float AMBIENT_LIGHT_JITTER = 2.0 *
+				sqrt( AMBIENT_LIGHT_DISTANCE * AMBIENT_LIGHT_DISTANCE * 2 * M_PI / N_FAKE_LIGHTS_FOR_AMBIENT );
 			// lets add the sun to the list!
 			new_l.m_Type = MATERIAL_LIGHT_DIRECTIONAL;
 			if ( ParseLightGeneric(e,new_l) )
 			{
-				new_l.m_Position = new_l.m_Direction * 100000;
+				new_l.m_Position = new_l.m_Direction * AMBIENT_LIGHT_DISTANCE;
 				new_l.RecalculateDerivedValues();
-				listout.AddToTail( new_l );
+				CLightingPreviewLightDescription *pNew = new CLightingPreviewLightDescription;
+			    *pNew = new_l;
+				listout.AddToHead( pNew );
 				s_bAddedLightEnvironmentAlready = true;
 			}
 			// now, add the ambient sphere. We will approximate as "N" directional lights
@@ -1068,16 +1080,23 @@ static void AddEntityLightToLightList(
 			{
 				DirectionalSampler_t sampler;
 				Vector color = new_l.m_Color;
-				for( int i = 0; i < 160; i++)
+				for( int i = 0; i < N_FAKE_LIGHTS_FOR_AMBIENT; i++)
 				{
 					new_l.Init( 0x80000000 | i );			// special id for ambient
 					new_l.m_Type = MATERIAL_LIGHT_DIRECTIONAL;
 					Vector dir = sampler.NextValue();
+					if ( dir.z < 0 )
+					{
+						continue;
+					}
 					new_l.m_Direction = dir;
-					new_l.m_Position = new_l.m_Direction * 100000;
-					new_l.m_Color = color * ( 1.0 / 160.0 );
+					new_l.m_Position = new_l.m_Direction * AMBIENT_LIGHT_DISTANCE;
+					new_l.m_flJitterAmount = AMBIENT_LIGHT_JITTER;
+					new_l.m_Color = color * ( 1.0 / N_FAKE_LIGHTS_FOR_AMBIENT );
 					new_l.RecalculateDerivedValues();
-					listout.AddToTail( new_l );
+					CLightingPreviewLightDescription *pNew = new CLightingPreviewLightDescription;
+					*pNew = new_l;
+					listout.AddToHead( pNew );
 				}
 			}
 		}
@@ -1088,7 +1107,9 @@ static void AddEntityLightToLightList(
 			if ( ParseLightGeneric(e,new_l) )
 			{
 				new_l.RecalculateDerivedValues();
-				listout.AddToTail( new_l );
+				CLightingPreviewLightDescription *pNew = new CLightingPreviewLightDescription;
+				*pNew = new_l;
+				listout.AddToHead( pNew );
 			}
 		}
 		else if ( (! stricmp( pszClassName, "light_spot" ) ))
@@ -1098,32 +1119,36 @@ static void AddEntityLightToLightList(
 			if ( ParseLightGeneric(e,new_l) )
 			{
 				new_l.RecalculateDerivedValues();
-				listout.AddToTail( new_l );
+				CLightingPreviewLightDescription *pNew = new CLightingPreviewLightDescription;
+				*pNew = new_l;
+				listout.AddToHead( pNew );
 			}
 		}
-
 	}
 }
 
 
-void CRender3D::BuildLightList( CUtlVector<CLightingPreviewLightDescription> *pList ) const
+CUtlIntrusiveList<CLightingPreviewLightDescription> CRender3D::BuildLightList( void  ) const
 {
+	CUtlIntrusiveList<CLightingPreviewLightDescription> pRet;
 	CMapDoc *pDoc = m_pView->GetMapDoc();
 	CMapWorld *pWorld = pDoc->GetMapWorld();
 	
-	if ( !pWorld )
-		return;
-	
-	EnumChildrenPos_t pos;
-	CMapClass *pChild = pWorld->GetFirstDescendent( pos );
-	while ( pChild )
+	if ( pWorld )
 	{
-		CMapEntity *pLightEntity=dynamic_cast<CMapEntity*>( pChild );
-		if (pLightEntity && (pLightEntity->m_EntityTypeFlags & ENTITY_FLAG_IS_LIGHT ) &&
-			(pLightEntity->IsVisible()) )
-			AddEntityLightToLightList( pLightEntity, *pList );
-		pChild = pWorld->GetNextDescendent( pos );
+	
+		EnumChildrenPos_t pos;
+		CMapClass *pChild = pWorld->GetFirstDescendent( pos );
+		while ( pChild )
+		{
+			CMapEntity *pLightEntity=dynamic_cast<CMapEntity*>( pChild );
+			if (pLightEntity && (pLightEntity->m_EntityTypeFlags & ENTITY_FLAG_IS_LIGHT ) &&
+				(pLightEntity->IsVisible()) )
+				AddEntityLightToLightList( pLightEntity, pRet );
+			pChild = pWorld->GetNextDescendent( pos );
+		}
 	}
+	return pRet;
 }
 
 void CRender3D::SendLightList( void )
@@ -1139,15 +1164,393 @@ void CRender3D::SendLightList( void )
 			delete g_pLPreviewOutputBitmap;
 		g_pLPreviewOutputBitmap = NULL;
 		// now, get list of lights
-		CUtlVector<CLightingPreviewLightDescription> *pList=new CUtlVector<CLightingPreviewLightDescription>;
-		BuildLightList( pList );
+		CUtlIntrusiveList<CLightingPreviewLightDescription> pList = BuildLightList( );
 		MessageToLPreview Msg( LPREVIEW_MSG_LIGHT_DATA );
-		Msg.m_pLightList = pList;								// thread deletes
+		Msg.m_LightList = pList;								// thread deletes
 		CCamera *pCamera = GetCamera();
 		pCamera->GetViewPoint( Msg.m_EyePosition );
 	
 		g_HammerToLPreviewMsgQueue.QueueMessage( Msg );
 	}
+}
+
+void DrawScreenSpaceLightRectangle(
+	CMeshBuilder &meshBuilder,
+	int nDestX, int nDestY, int nWidth, int nHeight,	// Rect to draw into in screen space
+	float flSrcTextureX0, float flSrcTextureY0,		// which texel you want to appear at destx/y
+	float flSrcTextureX1, float flSrcTextureY1,		// which texel you want to appear at destx+width-1, desty+height-1
+	int nSrcTextureWidth, int nSrcTextureHeight,		// needed for fixup
+	LightDesc_t const &light,
+	CMatRenderContextPtr &pRenderContext )
+{
+	int nScreenWidth, nScreenHeight;
+	pRenderContext->GetRenderTargetDimensions( nScreenWidth, nScreenHeight );
+	float flLeftX = nDestX - 0.5f;
+	float flRightX = nDestX + nWidth - 0.5f;
+
+	float flTopY = nDestY - 0.5f;
+	float flBottomY = nDestY + nHeight - 0.5f;
+
+	float flSubrectWidth = flSrcTextureX1 - flSrcTextureX0;
+	float flSubrectHeight = flSrcTextureY1 - flSrcTextureY0;
+
+	float flTexelsPerPixelX = ( nWidth > 1 ) ? flSubrectWidth / ( nWidth - 1 ) : 0.0f;
+	float flTexelsPerPixelY = ( nHeight > 1 ) ? flSubrectHeight / ( nHeight - 1 ) : 0.0f;
+
+	float flLeftU = flSrcTextureX0 + 0.5f - ( 0.5f * flTexelsPerPixelX );
+	float flRightU = flSrcTextureX1 + 0.5f + ( 0.5f * flTexelsPerPixelX );
+	float flTopV = flSrcTextureY0 + 0.5f - ( 0.5f * flTexelsPerPixelY );
+	float flBottomV = flSrcTextureY1 + 0.5f + ( 0.5f * flTexelsPerPixelY );
+
+	float flOOTexWidth = 1.0f / nSrcTextureWidth;
+	float flOOTexHeight = 1.0f / nSrcTextureHeight;
+	flLeftU *= flOOTexWidth;
+	flRightU *= flOOTexWidth;
+	flTopV *= flOOTexHeight;
+	flBottomV *= flOOTexHeight;
+
+	// Get the current viewport size
+	int vx, vy, vw, vh;
+	pRenderContext->GetViewport( vx, vy, vw, vh );
+
+	// map from screen pixel coords to -1..1
+	flRightX = FLerp( -1, 1, 0, vw, flRightX );
+	flLeftX = FLerp( -1, 1, 0, vw, flLeftX );
+	flTopY = FLerp( 1, -1, 0, vh ,flTopY );
+	flBottomY = FLerp( 1, -1, 0, vh, flBottomY );
+
+	Vector color_intens = light.m_Color;
+	Vector spot_dir = light.m_Direction;
+	for ( int corner = 0; corner < 4; corner++ )
+	{
+		bool bLeft = (corner==0) || (corner==3);
+		meshBuilder.Position3f( (bLeft) ? flLeftX : flRightX, (corner & 2) ? flBottomY : flTopY, 0.0f );
+		meshBuilder.TexCoord2f( 0, (bLeft) ? flLeftU : flRightU, (corner & 2) ? flBottomV : flTopV );
+		float pdot = light.m_PhiDot;
+		float tdot = light.m_ThetaDot;
+		if ( light.m_Type == MATERIAL_LIGHT_POINT )
+		{
+			// model point light as a spot with infinite inner radius
+			pdot = 1.0e10;
+			tdot = 0.5;
+		}
+		meshBuilder.TexCoord4f( 1, color_intens.x, color_intens.y, color_intens.z, tdot );
+		meshBuilder.TexCoord4f( 2, spot_dir.x, spot_dir.y, spot_dir.z, pdot );
+		meshBuilder.TexCoord3fv( 3, light.m_Position.Base() );
+		meshBuilder.TexCoord4f( 4, light.m_Attenuation2, light.m_Attenuation1, light.m_Attenuation0, 1.0 );
+		meshBuilder.AdvanceVertex();
+	}
+	
+}
+
+#define APPLYSIGN( posneg, incr ) ( ( posneg ) ? ( incr ) : ( - ( incr ) ) )
+
+static int s_CubeIndices[]={
+	5, 4, 6,												// front
+	6, 7, 5,
+	4, 0, 2,												// rside
+	2, 6, 4,
+	2, 0, 1,												// back
+	1, 3, 2,
+	1, 0, 4,												// top
+	4, 5, 1,
+	6, 2, 3,												// bot
+	3, 7, 6,
+	5, 7, 3,												// lside
+	3, 1, 5
+};
+
+int DrawWorldSpaceLightCube(
+	CMeshBuilder &meshBuilder,
+	CMatRenderContextPtr &pRenderContext,
+	LightDesc_t const &light,
+	int nIndex )
+{
+	Vector color_intens = light.m_Color;
+	Vector spot_dir = light.m_Direction;
+	float rad = light.DistanceAtWhichBrightnessIsLessThan( 1.0/ 255 );
+
+	Vector vecProjectionPlane0 = CrossProduct( spot_dir, Vector( 0, 1, 0 ) ) + CrossProduct( spot_dir, Vector( 1, 0, 0 ) );
+	vecProjectionPlane0.NormalizeInPlace();
+	Vector vecProjectionPlane1 = CrossProduct( spot_dir, vecProjectionPlane0 );
+	Assert( fabs( DotProduct( spot_dir, vecProjectionPlane0 ) ) < 0.01 );
+	Assert( fabs( DotProduct( spot_dir, vecProjectionPlane1 ) ) < 0.01 );
+	Assert( fabs( DotProduct( vecProjectionPlane0, vecProjectionPlane1 ) ) < 0.01 );
+
+	for ( int corner = 0; corner < 8; corner++ )
+	{
+		Vector vecPnt = light.m_Position;
+		vecPnt.x += APPLYSIGN( corner & 1, rad );
+		vecPnt.y += APPLYSIGN( corner & 2, rad );
+		vecPnt.z += APPLYSIGN( corner & 4, rad );
+
+		meshBuilder.Position3fv( vecPnt.Base() );
+		//meshBuilder.TexCoord2f( 0, (bLeft) ? flLeftU : flRightU, (corner & 2) ? flBottomV : flTopV );
+		float pdot = light.m_PhiDot;
+		float tdot = light.m_ThetaDot;
+		if ( light.m_Type == MATERIAL_LIGHT_POINT )
+		{
+			// model point light as a spot with infinite inner radius
+			pdot = 1.0e10;
+			tdot = 0.5;
+		}
+		meshBuilder.TexCoord4f( 1, color_intens.x, color_intens.y, color_intens.z, tdot );
+		meshBuilder.TexCoord4f( 2, spot_dir.x, spot_dir.y, spot_dir.z, pdot );
+		meshBuilder.TexCoord3fv( 3, light.m_Position.Base() );
+		meshBuilder.TexCoord4f( 4, light.m_Attenuation2, light.m_Attenuation1, light.m_Attenuation0, 1.0 );
+		meshBuilder.AdvanceVertex();
+	}
+	// now, output indices
+	for( int i = 0; i < ARRAYSIZE( s_CubeIndices ); i++ )
+	{
+		meshBuilder.FastIndex( s_CubeIndices[i] + nIndex );
+	}
+	return 8;
+
+}
+
+int DrawWorldSpaceLightPyramid(
+	CMeshBuilder &meshBuilder,
+	CMatRenderContextPtr &pRenderContext,
+	LightDesc_t const &light,
+	int nIndex )
+{
+	if ( light.m_PhiDot < 0.0001 )
+		return DrawWorldSpaceLightCube( meshBuilder, pRenderContext, light, nIndex );
+	Vector color_intens = light.m_Color;
+	Vector spot_dir = light.m_Direction;
+	// now, we need to find two vectors perpendicular to each other and the ray direction
+	Vector vecProjectionPlane0 = CrossProduct( spot_dir, Vector( 0, 1, 0 ) ) + CrossProduct( spot_dir, Vector( 1, 0, 0 ) );
+	vecProjectionPlane0.NormalizeInPlace();
+	Vector vecProjectionPlane1 = CrossProduct( spot_dir, vecProjectionPlane0 );
+	Assert( fabs( DotProduct( spot_dir, vecProjectionPlane0 ) ) < 0.01 );
+	Assert( fabs( DotProduct( spot_dir, vecProjectionPlane1 ) ) < 0.01 );
+	Assert( fabs( DotProduct( vecProjectionPlane0, vecProjectionPlane1 ) ) < 0.01 );
+
+
+	float dist = light.DistanceAtWhichBrightnessIsLessThan( 1.0/ 255 );
+
+	float flSpreadPerDistance = sqrt( 1.0 / ( light.m_PhiDot * light.m_PhiDot ) -1 );
+
+	float flEndRad = 2.0 * dist * flSpreadPerDistance;
+
+	for ( int corner = 0; corner < 5; corner++ )
+	{
+		Vector vecPnt = light.m_Position;
+		Vector Color(1,1,1);
+		switch( corner )
+		{
+			case 0:
+				vecPnt += dist * spot_dir - flEndRad * vecProjectionPlane0 + flEndRad * vecProjectionPlane1;
+				Color.Init( 1, 0, 0 );
+				break;
+
+			case 1:
+				vecPnt += dist * spot_dir + flEndRad * vecProjectionPlane0 + flEndRad * vecProjectionPlane1;
+				Color.Init( 0, 1, 0 );
+				break;
+
+			case 2:
+				vecPnt += dist * spot_dir - flEndRad * vecProjectionPlane0 - flEndRad * vecProjectionPlane1;
+				Color.Init( 0, 0, 1 );
+				break;
+
+			case 3:
+				vecPnt += dist * spot_dir + flEndRad * vecProjectionPlane0 - flEndRad * vecProjectionPlane1;
+				Color.Init( 1, 0, 1 );
+				break;
+		}
+		meshBuilder.TexCoord3fv( 5, Color.Base() );
+		meshBuilder.Position3fv( vecPnt.Base() );
+		//meshBuilder.TexCoord2f( 0, (bLeft) ? flLeftU : flRightU, (corner & 2) ? flBottomV : flTopV );
+		float pdot = light.m_PhiDot;
+		float tdot = light.m_ThetaDot;
+		if ( light.m_Type == MATERIAL_LIGHT_POINT )
+		{
+			// model point light as a spot with infinite inner radius
+			pdot = 1.0e10;
+			tdot = 0.5;
+		}
+		meshBuilder.TexCoord4f( 1, color_intens.x, color_intens.y, color_intens.z, tdot );
+		meshBuilder.TexCoord4f( 2, spot_dir.x, spot_dir.y, spot_dir.z, pdot );
+		meshBuilder.TexCoord3fv( 3, light.m_Position.Base() );
+		meshBuilder.TexCoord4f( 4, light.m_Attenuation2, light.m_Attenuation1, light.m_Attenuation0, 1.0 );
+		meshBuilder.AdvanceVertex();
+	}
+	meshBuilder.FastIndex( nIndex + 1 );					// top
+	meshBuilder.FastIndex( nIndex + 0 );
+	meshBuilder.FastIndex( nIndex + 4 );
+
+	meshBuilder.FastIndex( nIndex + 2 );					// bottom
+	meshBuilder.FastIndex( nIndex + 3 );
+	meshBuilder.FastIndex( nIndex + 4 );
+
+	meshBuilder.FastIndex( nIndex + 3 );					// right
+	meshBuilder.FastIndex( nIndex + 1 );
+	meshBuilder.FastIndex( nIndex + 4 );
+
+	meshBuilder.FastIndex( nIndex + 0 );					// right
+	meshBuilder.FastIndex( nIndex + 2 );
+	meshBuilder.FastIndex( nIndex + 4 );
+
+
+	meshBuilder.FastIndex( nIndex + 0 );					// end cap
+	meshBuilder.FastIndex( nIndex + 1 );
+	meshBuilder.FastIndex( nIndex + 3 );
+	meshBuilder.FastIndex( nIndex + 3 );
+	meshBuilder.FastIndex( nIndex + 2 );
+	meshBuilder.FastIndex( nIndex + 0 );
+
+	return 5;
+
+}
+
+static Vector s_pCornerPoints[4]={
+	Vector( -1, -1, 0 ),
+	Vector( 1, -1, 0 ),
+	Vector( 1, 1, 0 ),
+	Vector( -1, 1, 0 )
+};
+
+int DrawWorldSpaceLightFullScreenQuad(
+	int nWidth, int nHeight,
+	CMeshBuilder &meshBuilder,
+	CMatRenderContextPtr &pRenderContext,
+	LightDesc_t const &light,
+	int nIndex )
+{
+	Vector color_intens = light.m_Color;
+	Vector spot_dir = light.m_Direction;
+	for ( int corner = 0; corner < 4; corner++ )
+	{
+		Vector vecPnt = s_pCornerPoints[corner];
+		meshBuilder.Position3fv( vecPnt.Base() );
+		float pdot = light.m_PhiDot;
+		float tdot = light.m_ThetaDot;
+		if ( light.m_Type == MATERIAL_LIGHT_POINT )
+		{
+			// model point light as a spot with infinite inner radius
+			pdot = 1.0e10;
+			tdot = 0.5;
+		}
+		meshBuilder.TexCoord4f( 1, color_intens.x, color_intens.y, color_intens.z, tdot );
+		meshBuilder.TexCoord4f( 2, spot_dir.x, spot_dir.y, spot_dir.z, pdot );
+		meshBuilder.TexCoord3fv( 3, light.m_Position.Base() );
+		meshBuilder.TexCoord4f( 4, light.m_Attenuation2, light.m_Attenuation1, light.m_Attenuation0, 1.0 );
+		meshBuilder.AdvanceVertex();
+	}
+	// now, output indices
+	meshBuilder.FastIndex( 2 + nIndex );
+	meshBuilder.FastIndex( 1 + nIndex );
+	meshBuilder.FastIndex( 0 + nIndex );
+
+	meshBuilder.FastIndex( 0 + nIndex );
+	meshBuilder.FastIndex( 3 + nIndex );
+	meshBuilder.FastIndex( 2 + nIndex );
+	return 4;
+}
+
+void CRender3D::AccumulateLights( CUtlPriorityQueue<CLightPreview_Light> &light_queue,
+								  CMatRenderContextPtr &pRenderContext,
+								  int nTargetWidth, int nTargetHeight,
+								  ITexture *dest_rt )
+{
+
+	IMaterial *add_0_to_1=materials->FindMaterial( "editor/addlight0",
+												   TEXTURE_GROUP_OTHER,true);
+				
+	ITexture *dest_rt_current=materials->FindTexture( "_rt_accbuf", TEXTURE_GROUP_RENDER_TARGET );
+
+	pRenderContext->SetRenderTarget( dest_rt_current );
+
+	pRenderContext->ClearColor3ub( 0, 0, 0);
+	pRenderContext->ClearBuffers( true, true );
+//	pRenderContext->Viewport(0, 0, nTargetWidth, nTargetHeight );
+
+
+	pRenderContext->Bind( add_0_to_1 );
+
+	int nlights = min( MAX_PREVIEW_LIGHTS, light_queue.Count() );
+
+	// now, lets build up a vertex buffer of lights
+	CMeshBuilder meshBuilder;
+	IMesh* pMesh = pRenderContext->GetDynamicMesh( true );
+	meshBuilder.Begin( pMesh, MATERIAL_TRIANGLES, 8 * nlights, 6 * 3 * 2 * nlights );
+	
+	int nIndex = 0;
+	for(int i=0; i < nlights ; i++)
+	{
+		LightDesc_t light = light_queue.ElementAtHead().m_Light;
+		light.RecalculateDerivedValues();
+		light_queue.RemoveAtHead();
+
+		nIndex += DrawWorldSpaceLightFullScreenQuad( nTargetWidth, nTargetHeight,
+													 meshBuilder, pRenderContext, light, nIndex );
+// 		if ( light.m_Type == MATERIAL_LIGHT_SPOT )
+// 			nIndex += DrawWorldSpaceLightPyramid( meshBuilder, pRenderContext, light, nIndex );
+// 		else
+// 			nIndex += DrawWorldSpaceLightCube( meshBuilder, pRenderContext, light, nIndex );
+// 		DrawScreenSpaceLightRectangle(
+// 			meshBuilder,
+// 			0, 0, nTargetWidth, nTargetHeight,
+// 			0,0,
+// 			nTargetWidth - 1, nTargetHeight -1,
+// 			dest_rt->GetActualWidth(),
+// 			dest_rt->GetActualHeight(),
+// 			light,
+// 			pRenderContext
+// 			);
+	}
+	meshBuilder.End();
+	pMesh->Draw();
+
+	pRenderContext->SetRenderTarget( NULL );
+				
+}
+
+void CRender3D::SendGBuffersToLightingThread( int nTargetWidth, int nTargetHeight )
+{
+	static bool did_dump=false;
+	CMatRenderContextPtr pRenderContext( MaterialSystemInterface() );
+	static char const *rts_to_transmit[]={"_rt_albedo","_rt_normal","_rt_position",
+										  "_rt_flags" };
+	MessageToLPreview Msg(LPREVIEW_MSG_G_BUFFERS);
+	for(int i=0; i < NELEMS( rts_to_transmit ); i++)
+	{
+		SetRenderTargetNamed(0,rts_to_transmit[i]);
+		FloatBitMap_t *fbm = new FloatBitMap_t( nTargetWidth, nTargetHeight );
+		Msg.m_pDefferedRenderingBMs[i]=fbm;
+							
+		if ( i != 3 )
+		{
+			// we have to reformat the data for the planar mode used by floatbm now
+			float *pTmpData = new float[ nTargetWidth * nTargetHeight * 4 ];
+			pRenderContext->ReadPixels( 0, 0, nTargetWidth, nTargetHeight, (uint8 *) pTmpData, 
+										IMAGE_FORMAT_RGBA32323232F );
+							
+			// reformat data
+			for( int nY = 0 ; nY < nTargetHeight; nY++ )
+				for( int nX = 0; nX < nTargetWidth; nX++ )	
+					for( int nComp = 0 ; nComp < 4; nComp++ )
+						fbm->Pixel( nX, nY, 0, nComp ) = pTmpData[ nComp + 4 * ( nX + nTargetWidth * nY ) ];
+			delete[] pTmpData;
+		}
+		if ( ( i == 0 ) && ( ! did_dump ) )
+		{
+			fbm->RaiseToPower( 1.0/ 2.2 );
+			fbm->WriteTGAFile("albedo.tga");
+			fbm->RaiseToPower( 2.2 );
+		}
+		if ( ( i == 1 ) && ( ! did_dump ) )
+		{
+			fbm->WriteTGAFile("normal.tga");
+		}
+	}
+	did_dump = true;
+	n_gbufs_queued++;
+	GetCamera()->GetViewPoint( Msg.m_EyePosition );
+	Msg.m_nBitmapGenerationCounter = g_nBitmapGenerationCounter;
+	g_HammerToLPreviewMsgQueue.QueueMessage( Msg );
 }
 
 //-----------------------------------------------------------------------------
@@ -1205,7 +1608,7 @@ void CRender3D::EndRenderFrame(void)
 			pRenderContext->SetRenderTargetEx( 3,NULL );
 
 
-			ITexture *pRT = SetRenderTargetNamed(0,"_rt_accbuf_0");
+			ITexture *pRT = SetRenderTargetNamed(0,"_rt_accbuf");
 			pRenderContext->ClearColor3ub(0,0,0);
 			pRenderContext->ClearBuffers( true, true );
 
@@ -1232,7 +1635,6 @@ void CRender3D::EndRenderFrame(void)
 			if (m_pView->m_bUpdateView && (m_eCurrentRenderMode == RENDER_MODE_LIGHT_PREVIEW_RAYTRACED))
 			{
 
-				static bool did_dump=false;
 				static float Last_SendTime=0;
 				// now, lets create floatbms with the deferred rendering data, so we can pass it to the lpreview thread
 				float newtime=Plat_FloatTime();
@@ -1256,31 +1658,9 @@ void CRender3D::EndRenderFrame(void)
 						if (g_pLPreviewOutputBitmap)
 							delete g_pLPreviewOutputBitmap;
 						g_pLPreviewOutputBitmap = NULL;
-						static char const *rts_to_transmit[]={"_rt_albedo","_rt_normal","_rt_position",
-															  "_rt_flags" };
-						MessageToLPreview Msg(LPREVIEW_MSG_G_BUFFERS);
-						for(int i=0; i < NELEMS( rts_to_transmit ); i++)
-						{
-							SetRenderTargetNamed(0,rts_to_transmit[i]);
-							FloatBitMap_t *fbm = new FloatBitMap_t( nTargetWidth, nTargetHeight );
-							Msg.m_pDefferedRenderingBMs[i]=fbm;
-							pRenderContext->ReadPixels(0, 0, nTargetWidth, nTargetHeight, (uint8 *) &(fbm->Pixel(0,0,0)),
-												  IMAGE_FORMAT_RGBA32323232F);
-							if ( (i==0) && (! did_dump) )
-							{
-								fbm->WriteTGAFile("albedo.tga");
-							}
-							if ( (i==1) && (! did_dump) )
-							{
-								fbm->WriteTGAFile("normal.tga");
-							}
-						}
+						SendGBuffersToLightingThread( nTargetWidth, nTargetHeight );
+
 						pRenderContext->SetRenderTarget( NULL );
-						did_dump = true;
-						n_gbufs_queued++;
-						pCamera->GetViewPoint( Msg.m_EyePosition );
-						Msg.m_nBitmapGenerationCounter=g_nBitmapGenerationCounter;
-						g_HammerToLPreviewMsgQueue.QueueMessage( Msg );
 					}
 				}
 			}			
@@ -1289,8 +1669,8 @@ void CRender3D::EndRenderFrame(void)
 			if (m_pView->m_bUpdateView || (m_eCurrentRenderMode != RENDER_MODE_LIGHT_PREVIEW_RAYTRACED) || 
 				(! g_pLPreviewOutputBitmap) )
 			{
-				SetRenderTargetNamed(0,"_rt_accbuf_0");
-				pRenderContext->ClearColor3ub(0,0,0);
+				SetRenderTargetNamed(0,"_rt_accbuf");
+				pRenderContext->ClearColor3ub( 0, 0, 0 );
 				MaterialSystemInterface()->ClearBuffers( true, true );
 
 				
@@ -1309,17 +1689,15 @@ void CRender3D::EndRenderFrame(void)
 					return;
 			
 				// now, get list of lights
-				CUtlVector<CLightingPreviewLightDescription> lightList;
-				BuildLightList( &lightList );
+				CUtlIntrusiveList<CLightingPreviewLightDescription> lightList = BuildLightList();
 
 				CUtlPriorityQueue<CLightPreview_Light> light_queue( 0, 0, CompareLightPreview_Lights);
 
 				Vector eye_pnt;
 				pCamera->GetViewPoint(eye_pnt);
 				// now, add lights in priority order
-				for( int i = 0; i < lightList.Count(); i++ )
+				for( CLightingPreviewLightDescription *pLight = lightList.Head(); pLight; pLight = pLight->m_pNext )
 				{
-					LightDesc_t *pLight = &lightList[i];
 					if (
 						( pLight->m_Type == MATERIAL_LIGHT_SPOT ) ||
 						( pLight->m_Type == MATERIAL_LIGHT_POINT ) )
@@ -1347,83 +1725,21 @@ void CRender3D::EndRenderFrame(void)
 				}
 				// because of no blend support on ati, we have to ping pong. This needs an nvidia-specifc
 				// path for perf
-				IMaterial *add_0_to_1=materials->FindMaterial("editor/addlight0",
-															  TEXTURE_GROUP_OTHER,true);
-				IMaterial *add_1_to_0=materials->FindMaterial("editor/addlight1",
-															  TEXTURE_GROUP_OTHER,true);
-				
-				IMaterial *sample_last=materials->FindMaterial("editor/sample_result_0",
+				AccumulateLights( light_queue, pRenderContext, nTargetWidth, nTargetHeight, dest_rt );
+				IMaterial *sample_last=materials->FindMaterial("editor/sample_result_1",
 															   TEXTURE_GROUP_OTHER,true);
-				IMaterial *sample_other=materials->FindMaterial("editor/sample_result_1",
-																TEXTURE_GROUP_OTHER,true);
-
-				ITexture *dest_rt_current=materials->FindTexture("_rt_accbuf_1", TEXTURE_GROUP_RENDER_TARGET );
-				ITexture *dest_rt_other=materials->FindTexture("_rt_accbuf_0", TEXTURE_GROUP_RENDER_TARGET );
-				pRenderContext->SetRenderTarget(dest_rt_other);
-				pRenderContext->ClearColor3ub(0,0,0);
-				pRenderContext->ClearBuffers( true, true );
-				int nlights=min(MAX_PREVIEW_LIGHTS,light_queue.Count());
-				for(int i=0;i<nlights;i++)
-				{
-					IMaterial *src_mat=add_0_to_1;
-					LightDesc_t light = light_queue.ElementAtHead().m_Light;
-					light.RecalculateDerivedValues();
-					light_queue.RemoveAtHead();
-					Vector lpnt = light.m_Position;
-					SetNamedMaterialVar(src_mat,"$C0_X", lpnt.x);
-					SetNamedMaterialVar(src_mat,"$C0_Y", lpnt.y );
-					SetNamedMaterialVar(src_mat,"$C0_Z", lpnt.z );
-					// now, get the facing direction.
-					Vector spot_dir = light.m_Direction;
-					SetNamedMaterialVar(src_mat,"$C1_X", spot_dir.x );
-					SetNamedMaterialVar(src_mat,"$C1_Y", spot_dir.y );
-					SetNamedMaterialVar(src_mat,"$C1_Z", spot_dir.z );
-					
-					// now, handle cone angle
-					if ( light.m_Type == MATERIAL_LIGHT_POINT )
-					{
-						// model point as a spot with infinite inner radius
-						SetNamedMaterialVar(src_mat, "$C0_W", 0.5 );
-						SetNamedMaterialVar(src_mat, "$C1_W", 1.0e10 );
-					}
-					else
-					{
-						SetNamedMaterialVar(src_mat, "$C0_W", light.m_ThetaDot );
-						SetNamedMaterialVar(src_mat, "$C1_W", light.m_PhiDot );
-					}
-
-					SetNamedMaterialVar( src_mat, "$C2_X", light.m_Attenuation2 );
-					SetNamedMaterialVar( src_mat, "$C2_Y", light.m_Attenuation1 );
-					SetNamedMaterialVar( src_mat, "$C2_Z", light.m_Attenuation0 );
-					SetNamedMaterialVar( src_mat, "$C2_W", 1.0 );
-				
-					Vector color_intens = light.m_Color;
-					SetNamedMaterialVar(src_mat, "$C3_X", color_intens.x);
-					SetNamedMaterialVar(src_mat, "$C3_Y", color_intens.y);
-					SetNamedMaterialVar(src_mat, "$C3_Z", color_intens.z);
-				
-					pRenderContext->SetRenderTarget(dest_rt_current);
-					pRenderContext->DrawScreenSpaceRectangle(
-						src_mat, 0, 0, nTargetWidth, nTargetHeight,
-						0,0,
-						nTargetWidth - 1, nTargetHeight -1,
-						dest_rt->GetActualWidth(),
-						dest_rt->GetActualHeight());
-					V_swap(dest_rt_current,dest_rt_other);
-					V_swap(sample_last,sample_other);
-					V_swap(add_0_to_1,add_1_to_0);
-				}
-				pRenderContext->SetRenderTarget(NULL);
 				pRenderContext->DrawScreenSpaceRectangle(
 					sample_last, xl, yl, dest_width, dest_height,
 					0,0,
 					nTargetWidth, nTargetHeight,
 					dest_rt->GetActualWidth(),
 					dest_rt->GetActualHeight());
-			
 			}
 		}
-		MaterialSystemInterface()->SwapBuffers();
+		if ( !m_bRenderingOverEngine )
+		{
+			MaterialSystemInterface()->SwapBuffers();
+		}
 
 		if ( (m_eCurrentRenderMode == RENDER_MODE_LIGHT_PREVIEW_RAYTRACED) &&
 			 g_pLPreviewOutputBitmap )
@@ -1447,7 +1763,7 @@ void CRender3D::EndRenderFrame(void)
 			pCamera->GetViewPort( width, height );
 // 			StretchDIBits(
 // 				m_WinData.hDC,0,0,width,height,
-// 				0,0,g_pLPreviewOutputBitmap->m_nWidth, g_pLPreviewOutputBitmap->m_nHeight,
+// 				0,0,g_pLPreviewOutputBitmap->Width(), g_pLPreviewOutputBitmap->Height(),
 // 				g_pLPreviewOutputBitmap->m_pBits, (BITMAPINFO *) &mybmh,
 // 				DIB_RGB_COLORS, SRCCOPY);
 
@@ -1490,6 +1806,9 @@ void CRender3D::EndRenderFrame(void)
 			TextOut(m_WinData.hDC, 2, 18, szText, nLen);
 		}
 	}
+
+	if ( enginetools )
+		MaterialSystemInterface()->SetView( enginetools->GetEngineHwnd() );
 }
 
 
@@ -1521,36 +1840,36 @@ void CRender3D::RenderWorldAxes()
 	// Render the world axes.
 	PushRenderMode( RENDER_MODE_WIREFRAME );
 
-	CMeshBuilder meshBuilder3D;
+	CMeshBuilder meshBuilder;
 	CMatRenderContextPtr pRenderContext( MaterialSystemInterface() );
 	IMesh* pMesh = pRenderContext->GetDynamicMesh( );
-	meshBuilder3D.Begin( pMesh, MATERIAL_LINES, 3 );
+	meshBuilder.Begin( pMesh, MATERIAL_LINES, 3 );
 
-	meshBuilder3D.Color3ub(255, 0, 0);
-	meshBuilder3D.Position3f(0, 0, 0);
-	meshBuilder3D.AdvanceVertex();
+	meshBuilder.Color3ub(255, 0, 0);
+	meshBuilder.Position3f(0, 0, 0);
+	meshBuilder.AdvanceVertex();
 
-	meshBuilder3D.Color3ub(255, 0, 0);
-	meshBuilder3D.Position3f(100, 0, 0);
-	meshBuilder3D.AdvanceVertex();
+	meshBuilder.Color3ub(255, 0, 0);
+	meshBuilder.Position3f(100, 0, 0);
+	meshBuilder.AdvanceVertex();
 
-	meshBuilder3D.Color3ub(0, 255, 0);
-	meshBuilder3D.Position3f(0, 0, 0);
-	meshBuilder3D.AdvanceVertex();
+	meshBuilder.Color3ub(0, 255, 0);
+	meshBuilder.Position3f(0, 0, 0);
+	meshBuilder.AdvanceVertex();
 
-	meshBuilder3D.Color3ub(0, 255, 0);
-	meshBuilder3D.Position3f(0, 100, 0);
-	meshBuilder3D.AdvanceVertex();
+	meshBuilder.Color3ub(0, 255, 0);
+	meshBuilder.Position3f(0, 100, 0);
+	meshBuilder.AdvanceVertex();
 	
-	meshBuilder3D.Color3ub(0, 0, 255);
-	meshBuilder3D.Position3f(0, 0, 0);
-	meshBuilder3D.AdvanceVertex();
+	meshBuilder.Color3ub(0, 0, 255);
+	meshBuilder.Position3f(0, 0, 0);
+	meshBuilder.AdvanceVertex();
 
-	meshBuilder3D.Color3ub(0, 0, 255);
-	meshBuilder3D.Position3f(0, 0, 100);
-	meshBuilder3D.AdvanceVertex();
+	meshBuilder.Color3ub(0, 0, 255);
+	meshBuilder.Position3f(0, 0, 100);
+	meshBuilder.AdvanceVertex();
 
-	meshBuilder3D.End();
+	meshBuilder.End();
 	pMesh->Draw();
 
 	PopRenderMode();
@@ -1628,11 +1947,78 @@ void CRender3D::RenderTranslucentObjects( void )
 	m_CurrentInstanceState = SaveInstanceState;
 }
 
+#define MAX_SLICE_COLORS	5
+
+static unsigned char nVerticalColors[ MAX_SLICE_COLORS ][ 3 ] =
+{
+	{ 127, 127, 127 },
+	{ 255, 255, 255 },
+	{ 255, 0, 0 },
+	{ 0, 255, 0 },
+	{ 255, 255, 0 }
+};
+
+//-----------------------------------------------------------------------------
+// Purpose: horribly inefficient rendering mechanism for FoW.  Demonstration purposes only!
+//-----------------------------------------------------------------------------
+void CRender3D::RenderFoW( void )
+{
+	CFoW	*pFoW = m_pView->GetMapDoc()->GetFoW();
+
+	PushRenderMode( RENDER_MODE_FLAT_NOZ );
+
+	for( int i = 0; i < pFoW->GetNumTriSoups(); i++ )
+	{
+		CFoW_TriSoupCollection	*pSoup = pFoW->GetTriSoup( i );
+		if ( pSoup == NULL )
+		{
+			continue;
+		}
+		for( int j = 0; j < pSoup->GetNumOccluders(); j++ )
+		{
+			CFoW_LineOccluder	*pOccluder = pSoup->GetOccluder( j );
+
+			if ( pOccluder )
+			{
+				float		flZPos;
+				Vector2D	vStart, vEnd;
+				int			nSliceNum = pOccluder->GetSliceNum();
+
+				flZPos = pFoW->GetSliceZPosition( nSliceNum ) + 16.0f;
+
+				if ( nSliceNum != 1 && 0 )
+				{
+					continue;
+				}
+
+				if ( nSliceNum < MAX_SLICE_COLORS )
+				{
+					SetDrawColor( nVerticalColors[ nSliceNum ][ 0 ], nVerticalColors[ nSliceNum ][ 1 ], nVerticalColors[ nSliceNum ][ 2 ] );
+				}
+				else
+				{
+					SetDrawColor( 255, 255, 255 );
+				}
+				
+				vStart = pOccluder->GetStart();
+				vEnd = pOccluder->GetEnd();
+
+				Vector	vRealStart( vStart.x, vStart.y, flZPos );
+				Vector	vRealEnd( vEnd.x, vEnd.y, flZPos );
+
+				DrawLine( vRealStart, vRealEnd );
+			}
+		}
+	}
+
+	PopRenderMode();
+}
+
 
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-void CRender3D::Render(void)
+void CRender3D::Render( bool bRenderingOverEngine )
 {
 	CMapDoc		*pDoc = m_pView->GetMapDoc();
 	CMapWorld	*pMapWorld = pDoc->GetMapWorld();
@@ -1651,7 +2037,6 @@ void CRender3D::Render(void)
 		SendLightList();									// nop if nothing changed
 		SendShadowTriangles();								// nop if nothing changed
 	}
-
 	if ( (pCamera->GetYaw() != m_fLastLPreviewAngles[0] ) ||
 		 (pCamera->GetPitch() != m_fLastLPreviewAngles[1] ) ||
 		 (pCamera->GetRoll() != m_fLastLPreviewAngles[2] ) ||
@@ -1679,10 +2064,11 @@ void CRender3D::Render(void)
 		RECT wrect;
 		memset(&wrect,0,sizeof(wrect));
   
+		int width, height;
 		pCamera->GetViewPort( width, height );
 // 		StretchDIBits(
 // 			m_WinData.hDC,0,0,width,height,
-// 			0,0,g_pLPreviewOutputBitmap->m_nWidth, g_pLPreviewOutputBitmap->m_nHeight,
+// 			0,0,g_pLPreviewOutputBitmap->Width(), g_pLPreviewOutputBitmap->Height(),
 // 			g_pLPreviewOutputBitmap->m_pBits, (BITMAPINFO *) &mybmh,
 // 			DIB_RGB_COLORS, SRCCOPY);
 		m_pView->m_nLastRaytracedBitmapRenderTimeStamp = 
@@ -1690,7 +2076,7 @@ void CRender3D::Render(void)
 //		return;
 	}
 
-	StartRenderFrame();
+	StartRenderFrame( bRenderingOverEngine );
 	
 	if (
 		( m_eCurrentRenderMode != RENDER_MODE_LIGHT_PREVIEW2 ) &&
@@ -1753,6 +2139,19 @@ void CRender3D::Render(void)
 	RenderTranslucentObjects();
 
 	DrawInstanceStencil();
+
+	if ( pDoc->GetFoW() )
+	{
+		RenderFoW();
+	}
+
+	CGridNav *pGridNav = pDoc->GetGridNav();
+	if ( pGridNav && pGridNav->IsEnabled() && pGridNav->IsPreviewActive() )
+	{
+		Vector vViewForward;
+		pCamera->GetViewForward( vViewForward );
+		pGridNav->Render( this, new_vp, vViewForward );
+	}
 
 	m_TranslucentSortRendering = false;
 	pDoc->RenderDocument( this );
@@ -1945,10 +2344,10 @@ void CRender3D::RenderBox(const Vector &Mins, const Vector &Maxs,
 			//
 			bool wireframe = (eRenderModeThisPass == RENDER_MODE_WIREFRAME);
 
-			CMeshBuilder meshBuilder3D;
+			CMeshBuilder meshBuilder;
 			CMatRenderContextPtr pRenderContext( MaterialSystemInterface() );
 			IMesh* pMesh = pRenderContext->GetDynamicMesh();
-			meshBuilder3D.DrawQuad( pMesh, FacePoints[nP1].Base(), FacePoints[nP2].Base(),
+			meshBuilder.DrawQuad( pMesh, FacePoints[nP1].Base(), FacePoints[nP2].Base(), 
 								  FacePoints[nP3].Base(), FacePoints[nP4].Base(), color, wireframe );
 		}
 
@@ -2112,10 +2511,10 @@ void CRender3D::RenderSphere(Vector const &vCenter, float flRadius, int nTheta, 
 	CMatRenderContextPtr pRenderContext( MaterialSystemInterface() );
 	pRenderContext->Bind( m_pVertexColor[0] );
 
-	CMeshBuilder meshBuilder3D;
+	CMeshBuilder meshBuilder;
 	IMesh* pMesh = pRenderContext->GetDynamicMesh();
 
-	meshBuilder3D.Begin( pMesh, MATERIAL_TRIANGLE_STRIP, nTriangles, nIndices );
+	meshBuilder.Begin( pMesh, MATERIAL_TRIANGLE_STRIP, nTriangles, nIndices );
 
 	//
 	// Build the index buffer.
@@ -2146,9 +2545,9 @@ void CRender3D::RenderSphere(Vector const &vCenter, float flRadius, int nTheta, 
 
 			vecPos += vCenter;
 
-			meshBuilder3D.Position3f( vecPos.x, vecPos.y, vecPos.z );
-			meshBuilder3D.Color3ub( red, green, blue );
-			meshBuilder3D.AdvanceVertex();
+			meshBuilder.Position3f( vecPos.x, vecPos.y, vecPos.z );
+			meshBuilder.Color3ub( red, green, blue );
+			meshBuilder.AdvanceVertex();
 		}
 	}
 
@@ -2162,11 +2561,11 @@ void CRender3D::RenderSphere(Vector const &vCenter, float flRadius, int nTheta, 
 		{
 			idx = nTheta * i + j;
 
-			meshBuilder3D.Index( idx + nTheta );
-			meshBuilder3D.AdvanceIndex();
+			meshBuilder.Index( idx + nTheta );
+			meshBuilder.AdvanceIndex();
 
-			meshBuilder3D.Index( idx );
-			meshBuilder3D.AdvanceIndex();
+			meshBuilder.Index( idx );
+			meshBuilder.AdvanceIndex();
 		}
 
 		//
@@ -2175,15 +2574,15 @@ void CRender3D::RenderSphere(Vector const &vCenter, float flRadius, int nTheta, 
 		//
 		if ( i < nPhi - 2 )
 		{
-			meshBuilder3D.Index( idx );
-			meshBuilder3D.AdvanceIndex();
+			meshBuilder.Index( idx );
+			meshBuilder.AdvanceIndex();
 
-			meshBuilder3D.Index( idx + nTheta + 1 );
-			meshBuilder3D.AdvanceIndex();
+			meshBuilder.Index( idx + nTheta + 1 );
+			meshBuilder.AdvanceIndex();
 		}
 	}
 
-	meshBuilder3D.End();
+	meshBuilder.End();
 	pMesh->Draw();
 	
 	PopRenderMode();
@@ -2204,49 +2603,51 @@ void CRender3D::RenderWireframeSphere(Vector const &vCenter, float flRadius, int
 	int nVertices = nPhi * nTheta; 
 	int nIndices = ( nTheta - 1 ) * 4 * ( nPhi - 1 );
 
-	CMeshBuilder meshBuilder3D;
+	CMeshBuilder meshBuilder;
 	CMatRenderContextPtr pRenderContext( MaterialSystemInterface() );
 	IMesh* pMesh = pRenderContext->GetDynamicMesh();
 
-	meshBuilder3D.Begin( pMesh, MATERIAL_LINES, nVertices, nIndices );
+	meshBuilder.Begin( pMesh, MATERIAL_LINES, nVertices, nIndices );
 
-	for ( int i = 0; i < nPhi; ++i )
+	int i, j;
+	for ( i = 0; i < nPhi; ++i )
 	{
-		for ( int j = 0; j < nTheta; ++j )
+		for ( j = 0; j < nTheta; ++j )
 		{
 			float u = j / ( float )( nTheta - 1 );
 			float v = i / ( float )( nPhi - 1 );
 			float theta = 2.0f * M_PI * u;
 			float phi = M_PI * v;
-			meshBuilder3D.Position3f( vCenter.x + ( flRadius * sin(phi) * cos(theta) ),
+
+			meshBuilder.Position3f( vCenter.x + ( flRadius * sin(phi) * cos(theta) ),
 				                    vCenter.y + ( flRadius * sin(phi) * sin(theta) ), 
 									vCenter.z + ( flRadius * cos(phi) ) );
-			meshBuilder3D.Color3ub( chRed, chGreen, chBlue );
-			meshBuilder3D.AdvanceVertex();
+			meshBuilder.Color3ub( chRed, chGreen, chBlue );
+			meshBuilder.AdvanceVertex();
 		}
 	}
 
-	for ( int i = 0; i < nPhi - 1; ++i )
+	for ( i = 0; i < nPhi - 1; ++i )
 	{
-		for ( int j = 0; j < nTheta - 1; ++j )
+		for ( j = 0; j < nTheta - 1; ++j )
 		{
 			int idx = nTheta * i + j;
 
-			meshBuilder3D.Index( idx );
-			meshBuilder3D.AdvanceIndex();
+			meshBuilder.Index( idx );
+			meshBuilder.AdvanceIndex();
 
-			meshBuilder3D.Index( idx + nTheta );
-			meshBuilder3D.AdvanceIndex();
+			meshBuilder.Index( idx + nTheta );
+			meshBuilder.AdvanceIndex();
 
-			meshBuilder3D.Index( idx );
-			meshBuilder3D.AdvanceIndex();
+			meshBuilder.Index( idx );
+			meshBuilder.AdvanceIndex();
 
-			meshBuilder3D.Index( idx + 1 );
-			meshBuilder3D.AdvanceIndex();
+			meshBuilder.Index( idx + 1 );
+			meshBuilder.AdvanceIndex();
 		}
 	}
 
-	meshBuilder3D.End();
+	meshBuilder.End();
 	pMesh->Draw();
 
 	PopRenderMode();
@@ -2266,19 +2667,19 @@ void CRender3D::RenderPointsAndPortals(void)
 
 		int nPFPoints = pDoc->m_PFPoints.Count();
 		Vector* pPFPoints = pDoc->m_PFPoints.Base();
-		CMeshBuilder meshBuilder3D;
+		CMeshBuilder meshBuilder;
 		CMatRenderContextPtr pRenderContext( MaterialSystemInterface() );
 		IMesh* pMesh = pRenderContext->GetDynamicMesh( );
-		meshBuilder3D.Begin( pMesh, MATERIAL_LINE_STRIP, nPFPoints - 1 );
+		meshBuilder.Begin( pMesh, MATERIAL_LINE_STRIP, nPFPoints - 1 );
 
 		for (int i = 0; i < nPFPoints; i++)
 		{
-			meshBuilder3D.Position3f(pPFPoints[i][0], pPFPoints[i][1], pPFPoints[i][2]);
-			meshBuilder3D.Color3ub(255, 0, 0);
-			meshBuilder3D.AdvanceVertex();
+			meshBuilder.Position3f(pPFPoints[i][0], pPFPoints[i][1], pPFPoints[i][2]);
+			meshBuilder.Color3ub(255, 0, 0);
+			meshBuilder.AdvanceVertex();
 		}
 
-		meshBuilder3D.End();
+		meshBuilder.End();
 		pMesh->Draw();
 		PopRenderMode();
 	}
@@ -2310,8 +2711,8 @@ void CRender3D::RenderPointsAndPortals(void)
 			{
 				quadLimit = nMaxIndices / 6;
 			}
-			CMeshBuilder meshBuilder3D;
-			meshBuilder3D.Begin( pMesh, MATERIAL_QUADS, quadLimit );
+			CMeshBuilder meshBuilder;
+			meshBuilder.Begin( pMesh, MATERIAL_QUADS, quadLimit );
 
 			const float edgeWidth = 2.0f;
 			for (; portalIndex < pDoc->m_pPortalFile->vertCount.Count(); portalIndex++)
@@ -2332,27 +2733,27 @@ void CRender3D::RenderPointsAndPortals(void)
 					int v1 = baseVert + ((j+1) % vertCount);
 					// compute the direction in the plane of the face to extrude the edge toward the
 					// face interior, use that to make a wide line with a quad
-					e0 = pDoc->m_pPortalFile->verts[v1] - pDoc->m_pPortalFile->verts[v0];
+					Vector e0 = pDoc->m_pPortalFile->verts[v1] - pDoc->m_pPortalFile->verts[v0];
 					Vector dir = CrossProduct( e0, normal );
 					VectorNormalize(dir);
 					dir *= edgeWidth;
-					meshBuilder3D.Position3fv( pDoc->m_pPortalFile->verts[v0].Base() );
-					meshBuilder3D.Color3ub(0, 0, 255);
-					meshBuilder3D.AdvanceVertex();
-					meshBuilder3D.Position3fv( pDoc->m_pPortalFile->verts[v1].Base() );
-					meshBuilder3D.Color3ub(0, 0, 255);
-					meshBuilder3D.AdvanceVertex();
-					meshBuilder3D.Position3fv( (pDoc->m_pPortalFile->verts[v1] + dir).Base() );
-					meshBuilder3D.Color3ub(0, 0, 255);
-					meshBuilder3D.AdvanceVertex();
-					meshBuilder3D.Position3fv( (pDoc->m_pPortalFile->verts[v0] + dir).Base() );
-					meshBuilder3D.Color3ub(0, 0, 255);
-					meshBuilder3D.AdvanceVertex();
+					meshBuilder.Position3fv( pDoc->m_pPortalFile->verts[v0].Base() );
+					meshBuilder.Color3ub(0, 0, 255);
+					meshBuilder.AdvanceVertex();
+					meshBuilder.Position3fv( pDoc->m_pPortalFile->verts[v1].Base() );
+					meshBuilder.Color3ub(0, 0, 255);
+					meshBuilder.AdvanceVertex();
+					meshBuilder.Position3fv( (pDoc->m_pPortalFile->verts[v1] + dir).Base() );
+					meshBuilder.Color3ub(0, 0, 255);
+					meshBuilder.AdvanceVertex();
+					meshBuilder.Position3fv( (pDoc->m_pPortalFile->verts[v0] + dir).Base() );
+					meshBuilder.Color3ub(0, 0, 255);
+					meshBuilder.AdvanceVertex();
 				}
 				baseVert += vertCount;
 			}
 
-			meshBuilder3D.End();
+			meshBuilder.End();
 			pMesh->Draw();
 			totalQuads -= quadOut;
 		}
@@ -2407,11 +2808,20 @@ void CRender3D::RenderMapClass(CMapClass *pMapClass)
 
 			bool should_appear=true;
 			if (m_eCurrentRenderMode == RENDER_MODE_LIGHT_PREVIEW2)
+			{
 				should_appear &= pMapClass->ShouldAppearInLightingPreview();
+			}
 
 			if (m_eCurrentRenderMode == RENDER_MODE_LIGHT_PREVIEW_RAYTRACED)
+			{
 				should_appear &= pMapClass->ShouldAppearInLightingPreview();
 //				should_appear &= pMapClass->ShouldAppearInRaytracedLightingPreview();
+			}
+			
+			if ( m_bRenderingOverEngine )
+			{
+				should_appear &= pMapClass->ShouldAppearOverEngine();
+			}
 
 			if ( should_appear == true && m_Pick.bPicking == true && ( m_Pick.m_nFlags & FLAG_OBJECTS_AT_ONLY_SOLIDS ) != 0 )
 			{
@@ -2420,7 +2830,6 @@ void CRender3D::RenderMapClass(CMapClass *pMapClass)
 					should_appear = false;
 				}
 			}
-
 
 			if ( should_appear )
 			{
@@ -2451,7 +2860,7 @@ void CRender3D::RenderMapClass(CMapClass *pMapClass)
 			{
 				Vector vecMins,vecMaxs;
 				
-				CMapClass *pChild = pChildren->Element(pos);
+				CMapClass *pChild = (CUtlReference< CMapClass >)pChildren->Element(pos);
 
 				pChild->GetCullBox(vecMins, vecMaxs);
 
@@ -2525,9 +2934,8 @@ void CRender3D::RenderInstanceMapClass_r(CMapClass *pMapClass)
 			{
 				Vector vecMins, vecMaxs, vecExpandedMins, vecExpandedMaxs;
 				pMapClass->GetCullBox( vecMins, vecMaxs );
-				TransformInstanceAABB( vecMins, vecMaxs, vecExpandedMins, vecExpandedMaxs );
 
-				RenderWireframeBox( vecExpandedMins, vecExpandedMaxs, 255, 0, 0 );
+				RenderWireframeBox( vecMins, vecMaxs, 255, 0, 0 );
 			}
 
 			bool should_appear=true;
@@ -2567,7 +2975,7 @@ void CRender3D::RenderInstanceMapClass_r(CMapClass *pMapClass)
 			{
 				Vector vecMins, vecMaxs, vecExpandedMins, vecExpandedMaxs;
 
-				CMapClass *pChild = pChildren->Element( pos );
+				CMapClass *pChild = (CUtlReference< CMapClass >)pChildren->Element( pos );
 
 				pChild->GetCullBox( vecMins, vecMaxs );
 				TransformInstanceAABB( vecMins, vecMaxs, vecExpandedMins, vecExpandedMaxs );
@@ -2603,7 +3011,7 @@ void CRender3D::Preload(CMapClass *pParent)
 		const CMapObjectList *pChildren = pParent->GetChildren();
 		FOR_EACH_OBJ( *pChildren, pos )
 		{
-			pChildren->Element(pos)->RenderPreload(this, true);
+			((CUtlReference< CMapClass >)pChildren->Element(pos))->RenderPreload(this, true);
 		}
 	}
 }
@@ -2729,7 +3137,7 @@ void CRender3D::RenderOverlayElements(void)
 {
 	bool bPopMode = BeginClientSpace();
 
-	if (m_RenderState.bCenterCrosshair)
+	if (m_RenderState.bCenterCrosshair && !m_bRenderingOverEngine)
 		RenderCrossHair();
 
 	if ( bPopMode )
@@ -2948,3 +3356,62 @@ void CRender3D::DebugHook2(void *pData)
 	g_bRenderCullBoxes = !g_bRenderCullBoxes;
 }
 
+//-----------------------------------------------------------------------------
+// Purpose:
+//-----------------------------------------------------------------------------
+float CRender3D::ComputePixelWidthOfSphere( const Vector &vecOrigin, float flRadius )
+{
+	return ComputePixelDiameterOfSphere( vecOrigin, flRadius ) * 2.0f;
+}
+
+//-----------------------------------------------------------------------------
+// This returns the diameter of the sphere in pixels based on 
+// the current model, view, + projection matrices and viewport.
+//-----------------------------------------------------------------------------
+float CRender3D::ComputePixelDiameterOfSphere( const Vector &vecOrigin, float flRadius )
+{
+	// Get the current camera.
+	CCamera *pCamera = GetCamera();
+	if ( !pCamera )
+		return 0.0f;
+
+	// Get the up vector.
+	Vector vecViewUp;
+	pCamera->GetViewUp( vecViewUp );
+
+	Vector4D testPoint1, testPoint2;
+	VectorMA( vecOrigin, flRadius, vecViewUp, testPoint1.AsVector3D() );
+	VectorMA( vecOrigin, -flRadius, vecViewUp, testPoint2.AsVector3D() );
+	testPoint1.w = testPoint2.w = 1.0f;
+
+	// Get the projection matrix.
+	VMatrix matProj;
+	pCamera->GetViewProjMatrix( matProj );
+
+	Vector4D clipPos1, clipPos2;
+	Vector4DMultiply( matProj, testPoint1, clipPos1 );
+	Vector4DMultiply( matProj, testPoint2, clipPos2 );
+	if (clipPos1.w >= 0.001f)
+	{
+		clipPos1.y /= clipPos1.w;
+	}
+	else
+	{
+		clipPos1.y *= 1000;
+	}
+	if (clipPos2.w >= 0.001f)
+	{
+		clipPos2.y /= clipPos2.w;
+	}
+	else
+	{
+		clipPos2.y *= 1000;
+	}
+
+	// Scale by viewport.
+	int nWidth, nHeight;
+	pCamera->GetViewPort( nWidth, nHeight );
+
+	// The divide-by-two here is because y goes from -1 to 1 in projection space
+	return nHeight * fabs( clipPos2.y - clipPos1.y ) / 2.0f;
+}

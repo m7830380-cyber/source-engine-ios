@@ -1,4 +1,3 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
 // ManifestDialog.cpp : implementation file
 //
 

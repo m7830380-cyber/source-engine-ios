@@ -1,4 +1,3 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
 // MapDiffDlg.cpp : implementation file
 //
 #include "stdafx.h"
@@ -133,7 +132,7 @@ void CMapDiffDlg::OnOK()
 	{
 		FOR_EACH_OBJ( *pChildren, pos )
 		{
-			CMapClass *pChild = pChildren->Element(pos)	;
+			CMapClass *pChild = (CUtlReference< CMapClass >)pChildren->Element(pos)	;
 			int ID = pChild->GetID();
 			if ( IDList.Find( ID ) != -1 )
 			{	

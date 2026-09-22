@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2005, Valve Corporation, All rights reserved. =======//
 //
 // Purpose: 
 //
@@ -7,7 +7,7 @@
 //=============================================================================//
 
 #include "dme_controls/AttributeBasePickerPanel.h"
-#include "filesystem.h"
+#include "FileSystem.h"
 #include "vgui_controls/Button.h"
 #include "vgui_controls/FileOpenDialog.h"
 #include "dme_controls/AttributeTextEntry.h"
@@ -26,6 +26,11 @@ CAttributeBasePickerPanel::CAttributeBasePickerPanel( vgui::Panel *parent, const
 	BaseClass( parent, info )
 {
 	m_pOpen = new vgui::Button( this, "Open", "...", this, "open" );
+	
+	// m_pOpen->SetImage( vgui::scheme()->GetImage( "tools/ifm/icon_properties_linkarrow" , false), 0 );
+	// m_pOpen->SetPaintBorderEnabled( false );
+	// m_pOpen->SetContentAlignment( vgui::Label::a_center );
+
 }
 
 void CAttributeBasePickerPanel::OnCommand( char const *cmd )
@@ -44,16 +49,19 @@ void CAttributeBasePickerPanel::PerformLayout()
 {
 	BaseClass::PerformLayout();
 
-	int x, y, w, h;
-	m_pType->GetBounds( x, y, w, h );
+	int viewWidth, viewHeight;
+	GetSize( viewWidth, viewHeight );
 
-	int inset = 25;
-	m_pType->SetWide( w - inset );
-
-	x += w;
-	x -= inset;
-
-	h -= 2;
-
-	m_pOpen->SetBounds( x, y, inset, h );
+	IImage *arrowImage = vgui::scheme()->GetImage( "tools/ifm/icon_properties_linkarrow" , false);
+	if( arrowImage )
+	{
+		m_pOpen->SetImage( arrowImage , 0 );
+		m_pOpen->SetPaintBorderEnabled( false );
+		m_pOpen->SetContentAlignment( vgui::Label::a_center );
+		m_pOpen->SetBounds( (FirstColumnWidth - ColumnBorderWidth - 16) * 0.5 , ( viewHeight - 16 )* 0.5 , 16, 16 );
+	}
+	else
+	{
+		m_pOpen->SetBounds( 0, 0, 50, 20 );
+	}
 }

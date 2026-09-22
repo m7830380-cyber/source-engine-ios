@@ -1,11 +1,11 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
 // $NoKeywords: $
 //=============================================================================//
 
-#include <Color.h>
+#include <color.h>
 #include <vgui/IPanel.h>
 #include <vgui/ISurface.h>
 
@@ -280,3 +280,12 @@ HTexture Image::GetID()
 	return 0;
 }
 
+int Image::GetTall()
+{
+	return _size[1];
+}
+
+int Image::GetWide()
+{
+	return _size[0];
+}

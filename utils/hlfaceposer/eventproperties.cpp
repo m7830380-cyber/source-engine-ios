@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -15,7 +15,7 @@
 #include "mathlib/mathlib.h"
 #include "choreochannel.h"
 #include "choreoactor.h"
-#include "filesystem.h"
+#include "FileSystem.h"
 #include "scriplib.h"
 
 #include "eventproperties_expression.h"
@@ -31,6 +31,7 @@
 #include "eventproperties_sequence.h"
 #include "eventproperties_speak.h"
 #include "eventproperties_subscene.h"
+#include "eventproperties_camera.h"
 
 void CBaseEventPropertiesDialog::PopulateTagList( CEventParams *params )
 {
@@ -81,7 +82,7 @@ void CBaseEventPropertiesDialog::PopulateTagList( CEventParams *params )
 }
 
 #include "mapentities.h"
-#include "utldict.h"
+#include "UtlDict.h"
 
 struct CMapEntityData
 {
@@ -177,16 +178,16 @@ void CMapEntities::CheckUpdateMap( char const *mapname )
 	if ( hfile == FILESYSTEM_INVALID_HANDLE )
 		return;
 
-	dheader_t header;
+	BSPHeader_t header;
 	filesystem->Read( &header, sizeof( header ), hfile );
 
 	// Check the header
 	if ( header.ident != IDBSPHEADER ||
-		 header.version < MINBSPVERSION || header.version > BSPVERSION )
+		 header.m_nVersion < MINBSPVERSION || header.m_nVersion > BSPVERSION )
 	{
 		Con_ErrorPrintf( "BSP file %s is wrong version (%i), expected (%i)\n",
 			mapname,
-			header.version, 
+			header.m_nVersion, 
 			BSPVERSION );
 
 		filesystem->Close( hfile );
@@ -651,6 +652,8 @@ int EventProperties( CEventParams *params )
 		return EventProperties_PermitResponses( params );
 	case CChoreoEvent::GENERIC:
 		return EventProperties_Generic( params );
+	case CChoreoEvent::CAMERA:
+		return EventProperties_Camera( params );
 	}
 
 	return iret;

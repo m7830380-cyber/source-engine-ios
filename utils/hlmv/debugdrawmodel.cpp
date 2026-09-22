@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -11,8 +11,8 @@
 #include "matsyswin.h"
 #include "viewersettings.h"
 #include "materialsystem/imaterialvar.h"
-
-extern IMaterialSystem *g_pMaterialSystem;
+#include "tier1/UtlSortVector.h"
+#include "tier2/tier2.h"
 
 #define NORMAL_LENGTH .5f
 #define NORMAL_OFFSET_FROM_MESH 0.1f
@@ -40,49 +40,56 @@ int DebugDrawModel( IStudioRender *pStudioRender, DrawModelInfo_t& info,
 
 		pRenderContext->Bind( materialBatch.m_pMaterial );
 		IMesh *pBuildMesh = pRenderContext->GetDynamicMesh( false );
-		meshBuilder.Begin( pBuildMesh, MATERIAL_TRIANGLES, materialBatch.m_Verts.Count(), 
-			materialBatch.m_TriListIndices.Count() );
-
-		int vertID;
-		// Send the vertices down to the hardware.
-		for( vertID = 0; vertID < materialBatch.m_Verts.Count(); vertID++ )
+		int indexStart;
+		for (indexStart = 0; indexStart < materialBatch.m_TriListIndices.Count(); )
 		{
-			GetTriangles_Vertex_t &vert = materialBatch.m_Verts[vertID];
-			const Vector &pos = vert.m_Position;
-			const Vector &normal = vert.m_Normal;
-			const Vector4D &tangentS = vert.m_TangentS;
-			Vector skinnedPos( 0.0f, 0.0f, 0.0f );
-			Vector skinnedNormal( 0.0f, 0.0f, 0.0f );
-			Vector4D skinnedTangentS( 0.0f, 0.0f, 0.0f, vert.m_TangentS[3] );
-			int k;
-			for( k = 0; k < vert.m_NumBones; k++ )
+			// FIXME: this shouldn't be needed, models shouldn't be built that can't fit
+			int nClampedIndices = MIN( materialBatch.m_TriListIndices.Count(), 32766 );
+			meshBuilder.Begin( pBuildMesh, MATERIAL_TRIANGLES, materialBatch.m_Verts.Count(), nClampedIndices );
+
+			int vertID;
+			// Send the vertices down to the hardware.
+			for( vertID = 0; vertID < materialBatch.m_Verts.Count(); vertID++ )
 			{
-				const matrix3x4_t &poseToWorld = tris.m_PoseToWorld[ vert.m_BoneIndex[k] ];
-				Vector tmp;
-				VectorTransform( pos, poseToWorld, tmp );
-				skinnedPos += vert.m_BoneWeight[k] * tmp;
-				VectorRotate( normal, poseToWorld, tmp );
-				skinnedNormal += vert.m_BoneWeight[k] * tmp;
-				VectorRotate( tangentS.AsVector3D(), poseToWorld, tmp );
-				skinnedTangentS.AsVector3D() += vert.m_BoneWeight[k] * tmp;
+				GetTriangles_Vertex_t &vert = materialBatch.m_Verts[vertID];
+				const Vector &pos = vert.m_Position;
+				const Vector &normal = vert.m_Normal;
+				const Vector4D &tangentS = vert.m_TangentS;
+				Vector skinnedPos( 0.0f, 0.0f, 0.0f );
+				Vector skinnedNormal( 0.0f, 0.0f, 0.0f );
+				Vector4D skinnedTangentS( 0.0f, 0.0f, 0.0f, vert.m_TangentS[3] );
+				int k;
+				for( k = 0; k < vert.m_NumBones; k++ )
+				{
+					const matrix3x4_t &poseToWorld = tris.m_PoseToWorld[ vert.m_BoneIndex[k] ];
+					Vector tmp;
+					VectorTransform( pos, poseToWorld, tmp );
+					skinnedPos += vert.m_BoneWeight[k] * tmp;
+					VectorRotate( normal, poseToWorld, tmp );
+					skinnedNormal += vert.m_BoneWeight[k] * tmp;
+					VectorRotate( tangentS.AsVector3D(), poseToWorld, tmp );
+					skinnedTangentS.AsVector3D() += vert.m_BoneWeight[k] * tmp;
+				}
+
+				meshBuilder.Position3fv( &skinnedPos.x );
+				meshBuilder.Normal3fv( &skinnedNormal.x );
+				meshBuilder.TexCoord2fv( 0, &vert.m_TexCoord.x );
+				meshBuilder.UserData( &skinnedTangentS.x );
+				meshBuilder.AdvanceVertex();
 			}
 
-			meshBuilder.Position3fv( &skinnedPos.x );
-			meshBuilder.Normal3fv( &skinnedNormal.x );
-			meshBuilder.TexCoord2fv( 0, &vert.m_TexCoord.x );
-			meshBuilder.UserData( &skinnedTangentS.x );
-			meshBuilder.AdvanceVertex();
-		}
+			int i;
+			// Set the indices down to the hardware.
+			// Each triplet of indices is a triangle.
+			for( i = indexStart; i < indexStart + nClampedIndices; i++ )
+			{
+				meshBuilder.FastIndex( materialBatch.m_TriListIndices[i] );
+			}
+			meshBuilder.End();
+			pBuildMesh->Draw();
 
-		int i;
-		// Set the indices down to the hardware.
-		// Each triplet of indices is a triangle.
-		for( i = 0; i < materialBatch.m_TriListIndices.Count(); i++ )
-		{
-			meshBuilder.FastIndex( materialBatch.m_TriListIndices[i] );
+			indexStart += nClampedIndices;
 		}
-		meshBuilder.End();
-		pBuildMesh->Draw();
 	}
 	pRenderContext->MatrixMode( MATERIAL_MODEL );
 	pRenderContext->PopMatrix();
@@ -112,41 +119,47 @@ int DebugDrawModelNormals( IStudioRender *pStudioRender, DrawModelInfo_t& info,
 		CMeshBuilder meshBuilder;
 		pRenderContext->Bind( g_materialVertexColor );
 		IMesh *pBuildMesh = pRenderContext->GetDynamicMesh();
-		meshBuilder.Begin( pBuildMesh, MATERIAL_LINES, materialBatch.m_Verts.Count() );
 
 		int vertID;
-		// Send the vertices down to the hardware.
-		for( vertID = 0; vertID < materialBatch.m_Verts.Count(); vertID++ )
+		for( vertID = 0; vertID < materialBatch.m_Verts.Count(); )
 		{
-			GetTriangles_Vertex_t &vert = materialBatch.m_Verts[vertID];
-			const Vector &pos = vert.m_Position;
-			const Vector &normal = vert.m_Normal;
-			Vector skinnedPos( 0.0f, 0.0f, 0.0f );
-			Vector skinnedNormal( 0.0f, 0.0f, 0.0f );
-			int k;
-			for( k = 0; k < vert.m_NumBones; k++ )
+			int nClamped = MIN( materialBatch.m_Verts.Count() - vertID, 32768 / 2 );
+
+			meshBuilder.Begin( pBuildMesh, MATERIAL_LINES, nClamped );
+
+			// Send the vertices down to the hardware.
+			for( ; nClamped > 0; vertID++, nClamped-- )
 			{
-				const matrix3x4_t &poseToWorld = tris.m_PoseToWorld[ vert.m_BoneIndex[k] ];
-				Vector tmp;
-				VectorTransform( pos, poseToWorld, tmp );
-				skinnedPos += vert.m_BoneWeight[k] * tmp;
-				VectorRotate( normal, poseToWorld, tmp );
-				skinnedNormal += vert.m_BoneWeight[k] * tmp;
+				GetTriangles_Vertex_t &vert = materialBatch.m_Verts[vertID];
+				const Vector &pos = vert.m_Position;
+				const Vector &normal = vert.m_Normal;
+				Vector skinnedPos( 0.0f, 0.0f, 0.0f );
+				Vector skinnedNormal( 0.0f, 0.0f, 0.0f );
+				int k;
+				for( k = 0; k < vert.m_NumBones; k++ )
+				{
+					const matrix3x4_t &poseToWorld = tris.m_PoseToWorld[ vert.m_BoneIndex[k] ];
+					Vector tmp;
+					VectorTransform( pos, poseToWorld, tmp );
+					skinnedPos += vert.m_BoneWeight[k] * tmp;
+					VectorRotate( normal, poseToWorld, tmp );
+					skinnedNormal += vert.m_BoneWeight[k] * tmp;
+				}
+
+	//			skinnedPos += skinnedNormal * NORMAL_OFFSET_FROM_MESH;
+				meshBuilder.Position3fv( &skinnedPos.x );
+				meshBuilder.Color3f( 0.0f, 0.0f, 1.0f );
+				meshBuilder.AdvanceVertex();
+
+				skinnedPos += skinnedNormal * NORMAL_LENGTH;
+				meshBuilder.Position3fv( &skinnedPos.x );
+				meshBuilder.Color3f( 0.0f, 0.0f, 1.0f );
+				meshBuilder.AdvanceVertex();
 			}
 
-//			skinnedPos += skinnedNormal * NORMAL_OFFSET_FROM_MESH;
-			meshBuilder.Position3fv( &skinnedPos.x );
-			meshBuilder.Color3f( 0.0f, 0.0f, 1.0f );
-			meshBuilder.AdvanceVertex();
-
-			skinnedPos += skinnedNormal * NORMAL_LENGTH;
-			meshBuilder.Position3fv( &skinnedPos.x );
-			meshBuilder.Color3f( 0.0f, 0.0f, 1.0f );
-			meshBuilder.AdvanceVertex();
+			meshBuilder.End();
+			pBuildMesh->Draw();
 		}
-
-		meshBuilder.End();
-		pBuildMesh->Draw();
 	}
 	pRenderContext->MatrixMode( MATERIAL_MODEL );
 	pRenderContext->PopMatrix();
@@ -315,76 +328,83 @@ int DebugDrawModelBadVerts( IStudioRender *pStudioRender, DrawModelInfo_t& info,
 
 		pRenderContext->Bind( g_materialVertexColor );
 		IMesh *pBuildMesh = pRenderContext->GetDynamicMesh( false );
-		meshBuilder.Begin( pBuildMesh, MATERIAL_TRIANGLES, materialBatch.m_Verts.Count(), 
-			materialBatch.m_TriListIndices.Count() );
-
-		int vertID;
-		// Send the vertices down to the hardware.
-		for( vertID = 0; vertID < materialBatch.m_Verts.Count(); vertID++ )
+		int indexStart;
+		for (indexStart = 0; indexStart < materialBatch.m_TriListIndices.Count(); )
 		{
-			GetTriangles_Vertex_t &vert = materialBatch.m_Verts[vertID];
-			const Vector &pos = vert.m_Position;
-			const Vector &normal = vert.m_Normal;
-			const Vector4D &tangentS = vert.m_TangentS;
-			Vector skinnedPos( 0.0f, 0.0f, 0.0f );
-			Vector skinnedNormal( 0.0f, 0.0f, 0.0f );
-			Vector4D skinnedTangentS( 0.0f, 0.0f, 0.0f, vert.m_TangentS[3] );
-			int k;
-			for( k = 0; k < vert.m_NumBones; k++ )
+			// FIXME: this shouldn't be needed, models shouldn't be built that can't fit
+			int nClampedIndices = MIN( materialBatch.m_TriListIndices.Count(), 32766 );
+			meshBuilder.Begin( pBuildMesh, MATERIAL_TRIANGLES, materialBatch.m_Verts.Count(), nClampedIndices );
+
+			int vertID;
+			// Send the vertices down to the hardware.
+			for( vertID = 0; vertID < materialBatch.m_Verts.Count(); vertID++ )
 			{
-				const matrix3x4_t &poseToWorld = tris.m_PoseToWorld[ vert.m_BoneIndex[k] ];
-				Vector tmp;
-				VectorTransform( pos, poseToWorld, tmp );
-				skinnedPos += vert.m_BoneWeight[k] * tmp;
-				VectorRotate( normal, poseToWorld, tmp );
-				skinnedNormal += vert.m_BoneWeight[k] * tmp;
-				VectorRotate( tangentS.AsVector3D(), poseToWorld, tmp );
-				skinnedTangentS.AsVector3D() += vert.m_BoneWeight[k] * tmp;
+				GetTriangles_Vertex_t &vert = materialBatch.m_Verts[vertID];
+				const Vector &pos = vert.m_Position;
+				const Vector &normal = vert.m_Normal;
+				const Vector4D &tangentS = vert.m_TangentS;
+				Vector skinnedPos( 0.0f, 0.0f, 0.0f );
+				Vector skinnedNormal( 0.0f, 0.0f, 0.0f );
+				Vector4D skinnedTangentS( 0.0f, 0.0f, 0.0f, vert.m_TangentS[3] );
+				int k;
+				for( k = 0; k < vert.m_NumBones; k++ )
+				{
+					const matrix3x4_t &poseToWorld = tris.m_PoseToWorld[ vert.m_BoneIndex[k] ];
+					Vector tmp;
+					VectorTransform( pos, poseToWorld, tmp );
+					skinnedPos += vert.m_BoneWeight[k] * tmp;
+					VectorRotate( normal, poseToWorld, tmp );
+					skinnedNormal += vert.m_BoneWeight[k] * tmp;
+					VectorRotate( tangentS.AsVector3D(), poseToWorld, tmp );
+					skinnedTangentS.AsVector3D() += vert.m_BoneWeight[k] * tmp;
+				}
+
+				meshBuilder.Position3fv( &skinnedPos.x );
+				meshBuilder.Normal3fv( &skinnedNormal.x );
+				meshBuilder.TexCoord2fv( 0, &vert.m_TexCoord.x );
+				meshBuilder.UserData( &skinnedTangentS.x );
+
+				Vector color( 0.0f, 0.0f, 0.0f );	
+				float len;
+
+				// check the length of the tangent S vector.
+				len = tangentS.AsVector3D().Length();
+				if( len < .9f || len > 1.1f )
+				{
+					color.Init( 1.0f, 0.0f, 0.0f );
+				}
+
+				// check the length of the normal.
+				len = normal.Length();
+				if( len < .9f || len > 1.1f )
+				{
+					color.Init( 1.0f, 0.0f, 0.0f );
+				}
+
+				// check the dot of tangent s and normal
+				float dot = DotProduct( tangentS.AsVector3D(), normal );
+				if( dot > .95 || dot < -.95 )
+				{
+					color.Init( 1.0f, 0.0f, 0.0f );
+				}
+
+				meshBuilder.Color3fv( color.Base() );
+
+				meshBuilder.AdvanceVertex();
 			}
 
-			meshBuilder.Position3fv( &skinnedPos.x );
-			meshBuilder.Normal3fv( &skinnedNormal.x );
-			meshBuilder.TexCoord2fv( 0, &vert.m_TexCoord.x );
-			meshBuilder.UserData( &skinnedTangentS.x );
-
-			Vector color( 0.0f, 0.0f, 0.0f );	
-			float len;
-
-			// check the length of the tangent S vector.
-			len = tangentS.AsVector3D().Length();
-			if( len < .9f || len > 1.1f )
+			int i;
+			// Set the indices down to the hardware.
+			// Each triplet of indices is a triangle.
+			for( i = indexStart; i < indexStart + nClampedIndices; i++ )
 			{
-				color.Init( 1.0f, 0.0f, 0.0f );
+				meshBuilder.FastIndex( materialBatch.m_TriListIndices[i] );
 			}
+			meshBuilder.End();
+			pBuildMesh->Draw();
 
-			// check the length of the normal.
-			len = normal.Length();
-			if( len < .9f || len > 1.1f )
-			{
-				color.Init( 1.0f, 0.0f, 0.0f );
-			}
-
-			// check the dot of tangent s and normal
-			float dot = DotProduct( tangentS.AsVector3D(), normal );
-			if( dot > .95 || dot < -.95 )
-			{
-				color.Init( 1.0f, 0.0f, 0.0f );
-			}
-
-			meshBuilder.Color3fv( color.Base() );
-
-			meshBuilder.AdvanceVertex();
+			indexStart += nClampedIndices;
 		}
-
-		int i;
-		// Set the indices down to the hardware.
-		// Each triplet of indices is a triangle.
-		for( i = 0; i < materialBatch.m_TriListIndices.Count(); i++ )
-		{
-			meshBuilder.FastIndex( materialBatch.m_TriListIndices[i] );
-		}
-		meshBuilder.End();
-		pBuildMesh->Draw();
 	}
 	pRenderContext->MatrixMode( MATERIAL_MODEL );
 	pRenderContext->PopMatrix();
@@ -415,56 +435,109 @@ int DebugDrawModelWireframe( IStudioRender *pStudioRender, DrawModelInfo_t& info
 
 		pRenderContext->Bind( g_materialWireframeVertexColor );
 		IMesh *pBuildMesh = pRenderContext->GetDynamicMesh( false );
-		meshBuilder.Begin( pBuildMesh, MATERIAL_TRIANGLES, materialBatch.m_Verts.Count(), 
-			materialBatch.m_TriListIndices.Count() );
 
-		int vertID;
-		// Send the vertices down to the hardware.
-		for( vertID = 0; vertID < materialBatch.m_Verts.Count(); vertID++ )
+		int indexStart;
+		for (indexStart = 0; indexStart < materialBatch.m_TriListIndices.Count(); )
 		{
-			GetTriangles_Vertex_t &vert = materialBatch.m_Verts[vertID];
-			const Vector &pos = vert.m_Position;
-			const Vector &normal = vert.m_Normal;
-			const Vector4D &tangentS = vert.m_TangentS;
-			Vector skinnedPos( 0.0f, 0.0f, 0.0f );
-			Vector skinnedNormal( 0.0f, 0.0f, 0.0f );
-			Vector4D skinnedTangentS( 0.0f, 0.0f, 0.0f, vert.m_TangentS[3] );
-			int k;
-			for( k = 0; k < vert.m_NumBones; k++ )
+			// FIXME: this shouldn't be needed, models shouldn't be built that can't fit
+			int nClampedIndices = MIN( materialBatch.m_TriListIndices.Count() - indexStart, 32766 );
+			meshBuilder.Begin( pBuildMesh, MATERIAL_TRIANGLES, materialBatch.m_Verts.Count(), nClampedIndices );
+
+			int vertID;
+			// Send the vertices down to the hardware.
+			for( vertID = 0; vertID < materialBatch.m_Verts.Count(); vertID++ )
 			{
-				const matrix3x4_t &poseToWorld = tris.m_PoseToWorld[ vert.m_BoneIndex[k] ];
-				Vector tmp;
-				VectorTransform( pos, poseToWorld, tmp );
-				skinnedPos += vert.m_BoneWeight[k] * tmp;
-				VectorRotate( normal, poseToWorld, tmp );
-				skinnedNormal += vert.m_BoneWeight[k] * tmp;
-				VectorRotate( tangentS.AsVector3D(), poseToWorld, tmp );
-				skinnedTangentS.AsVector3D() += vert.m_BoneWeight[k] * tmp;
+				GetTriangles_Vertex_t &vert = materialBatch.m_Verts[vertID];
+				const Vector &pos = vert.m_Position;
+				const Vector &normal = vert.m_Normal;
+				const Vector4D &tangentS = vert.m_TangentS;
+				Vector skinnedPos( 0.0f, 0.0f, 0.0f );
+				Vector skinnedNormal( 0.0f, 0.0f, 0.0f );
+				Vector4D skinnedTangentS( 0.0f, 0.0f, 0.0f, vert.m_TangentS[3] );
+				int k;
+				for( k = 0; k < vert.m_NumBones; k++ )
+				{
+					const matrix3x4_t &poseToWorld = tris.m_PoseToWorld[ vert.m_BoneIndex[k] ];
+					Vector tmp;
+					VectorTransform( pos, poseToWorld, tmp );
+					skinnedPos += vert.m_BoneWeight[k] * tmp;
+					VectorRotate( normal, poseToWorld, tmp );
+					skinnedNormal += vert.m_BoneWeight[k] * tmp;
+					VectorRotate( tangentS.AsVector3D(), poseToWorld, tmp );
+					skinnedTangentS.AsVector3D() += vert.m_BoneWeight[k] * tmp;
+				}
+
+				meshBuilder.Position3fv( &skinnedPos.x );
+				meshBuilder.Normal3fv( &skinnedNormal.x );
+				meshBuilder.TexCoord2fv( 0, &vert.m_TexCoord.x );
+				meshBuilder.UserData( &skinnedTangentS.x );
+				meshBuilder.Color3fv( color.Base() );
+				meshBuilder.AdvanceVertex();
 			}
 
-			meshBuilder.Position3fv( &skinnedPos.x );
-			meshBuilder.Normal3fv( &skinnedNormal.x );
-			meshBuilder.TexCoord2fv( 0, &vert.m_TexCoord.x );
-			meshBuilder.UserData( &skinnedTangentS.x );
-			meshBuilder.Color3fv( color.Base() );
-			meshBuilder.AdvanceVertex();
+			int i;
+			// Set the indices down to the hardware.
+			// Each triplet of indices is a triangle.
+			for( i = indexStart; i < indexStart + nClampedIndices; i++ )
+			{
+				meshBuilder.FastIndex( materialBatch.m_TriListIndices[i] );
+			}
+			meshBuilder.End();
+			pBuildMesh->Draw();
+		
+			indexStart += nClampedIndices;
 		}
-
-		int i;
-		// Set the indices down to the hardware.
-		// Each triplet of indices is a triangle.
-		for( i = 0; i < materialBatch.m_TriListIndices.Count(); i++ )
-		{
-			meshBuilder.FastIndex( materialBatch.m_TriListIndices[i] );
-		}
-		meshBuilder.End();
-		pBuildMesh->Draw();
 	}
 	pRenderContext->MatrixMode( MATERIAL_MODEL );
 	pRenderContext->PopMatrix();
 
 	return 0;
 }
+
+void drawWeightIdentifier( matrix3x4_t& m, float flLength )
+{
+	CMatRenderContextPtr pRenderContext( g_pMaterialSystem );
+	IMesh* pMesh = pRenderContext->GetDynamicMesh( );
+	CMeshBuilder meshBuilder;
+
+	const unsigned char white[3] = { 255, 255, 255 };
+	const unsigned char black[3] = { 0, 0, 0 };
+	
+	Vector vecPoint;
+	MatrixPosition( m, vecPoint );
+
+	meshBuilder.Begin( pMesh, MATERIAL_TRIANGLES, 2 );
+
+	meshBuilder.Color3ubv( black );
+	meshBuilder.Position3f( vecPoint.x, vecPoint.y, vecPoint.z );
+	meshBuilder.AdvanceVertex();
+
+	meshBuilder.Color3ubv( black );
+	meshBuilder.Position3f( vecPoint.x + flLength * 0.9f, vecPoint.y - flLength * 0.2f, vecPoint.z + flLength );
+	meshBuilder.AdvanceVertex();
+
+	meshBuilder.Color3ubv( black );
+	meshBuilder.Position3f( vecPoint.x + flLength * 0.9f, vecPoint.y + flLength * 0.2f, vecPoint.z + flLength );
+	meshBuilder.AdvanceVertex();
+	
+	meshBuilder.Color3ubv( white );
+	meshBuilder.Position3f( vecPoint.x, vecPoint.y, vecPoint.z );
+	meshBuilder.AdvanceVertex();
+
+	meshBuilder.Color3ubv( white );
+	meshBuilder.Position3f( vecPoint.x + flLength, vecPoint.y - flLength * 0.1f, vecPoint.z + flLength * 0.9f );
+	meshBuilder.AdvanceVertex();
+
+	meshBuilder.Color3ubv( white );
+	meshBuilder.Position3f( vecPoint.x + flLength, vecPoint.y + flLength * 0.1f, vecPoint.z + flLength * 0.9f );
+	meshBuilder.AdvanceVertex();
+
+	meshBuilder.End();
+	pMesh->Draw();
+}
+
+int g_BoneWeightInspectVert;
+debug_vert_weight_t g_BoneWeightInspectResults[3];
 
 int DebugDrawModelBoneWeights( IStudioRender *pStudioRender, DrawModelInfo_t& info, 
 	matrix3x4_t *pBoneToWorld, const Vector &modelOrigin, int flags )
@@ -482,6 +555,9 @@ int DebugDrawModelBoneWeights( IStudioRender *pStudioRender, DrawModelInfo_t& in
 
 	CMeshBuilder meshBuilder;
 
+	Vector vecDebugPos;
+	vecDebugPos.Init();
+
 	int batchID;
 	for( batchID = 0; batchID < tris.m_MaterialBatches.Count(); batchID++ )
 	{
@@ -489,84 +565,289 @@ int DebugDrawModelBoneWeights( IStudioRender *pStudioRender, DrawModelInfo_t& in
 
 		pRenderContext->Bind( g_materialVertexColor );
 		IMesh *pBuildMesh = pRenderContext->GetDynamicMesh( false );
-		meshBuilder.Begin( pBuildMesh, MATERIAL_TRIANGLES, materialBatch.m_Verts.Count(), 
-			materialBatch.m_TriListIndices.Count() );
 
-		int vertID;
-		// Send the vertices down to the hardware.
-		for( vertID = 0; vertID < materialBatch.m_Verts.Count(); vertID++ )
+		int indexStart;
+		for (indexStart = 0; indexStart < materialBatch.m_TriListIndices.Count(); )
 		{
-			GetTriangles_Vertex_t &vert = materialBatch.m_Verts[vertID];
-			const Vector &pos = vert.m_Position;
-			const Vector &normal = vert.m_Normal;
-			const Vector4D &tangentS = vert.m_TangentS;
-			Vector skinnedPos( 0.0f, 0.0f, 0.0f );
-			Vector skinnedNormal( 0.0f, 0.0f, 0.0f );
-			Vector4D skinnedTangentS( 0.0f, 0.0f, 0.0f, vert.m_TangentS[3] );
-			int k;
-			for( k = 0; k < vert.m_NumBones; k++ )
-			{
-				const matrix3x4_t &poseToWorld = tris.m_PoseToWorld[ vert.m_BoneIndex[k] ];
-				Vector tmp;
-				VectorTransform( pos, poseToWorld, tmp );
-				skinnedPos += vert.m_BoneWeight[k] * tmp;
-				VectorRotate( normal, poseToWorld, tmp );
-				skinnedNormal += vert.m_BoneWeight[k] * tmp;
-				VectorRotate( tangentS.AsVector3D(), poseToWorld, tmp );
-				skinnedTangentS.AsVector3D() += vert.m_BoneWeight[k] * tmp;
-			}
+			// FIXME: this shouldn't be needed, models shouldn't be built that can't fit
+			int nClampedIndices = MIN( materialBatch.m_TriListIndices.Count(), 32766 );
+			meshBuilder.Begin( pBuildMesh, MATERIAL_TRIANGLES, materialBatch.m_Verts.Count(), nClampedIndices );
 
-			meshBuilder.Position3fv( &skinnedPos.x );
-			meshBuilder.Normal3fv( &skinnedNormal.x );
-			meshBuilder.TexCoord2fv( 0, &vert.m_TexCoord.x );
-			meshBuilder.UserData( &skinnedTangentS.x );
-
-			if (g_viewerSettings.highlightBone >= 0)
+			int vertID;
+			// Send the vertices down to the hardware.
+			for( vertID = 0; vertID < materialBatch.m_Verts.Count(); vertID++ )
 			{
-				float v = 0.0;
+				GetTriangles_Vertex_t &vert = materialBatch.m_Verts[vertID];
+				const Vector &pos = vert.m_Position;
+				const Vector &normal = vert.m_Normal;
+				const Vector4D &tangentS = vert.m_TangentS;
+				Vector skinnedPos( 0.0f, 0.0f, 0.0f );
+				Vector skinnedNormal( 0.0f, 0.0f, 0.0f );
+				Vector4D skinnedTangentS( 0.0f, 0.0f, 0.0f, vert.m_TangentS[3] );
+
+				if ( vertID == g_BoneWeightInspectVert )
+				{
+					g_BoneWeightInspectResults[0].index = 0;
+					g_BoneWeightInspectResults[0].flweight = 0;
+					g_BoneWeightInspectResults[1].index = 0;
+					g_BoneWeightInspectResults[1].flweight = 0;
+					g_BoneWeightInspectResults[2].index = 0;
+					g_BoneWeightInspectResults[2].flweight = 0;
+				}
+
+				int k;
 				for( k = 0; k < vert.m_NumBones; k++ )
 				{
-					if (vert.m_BoneIndex[k] == g_viewerSettings.highlightBone)
+					const matrix3x4_t &poseToWorld = tris.m_PoseToWorld[ vert.m_BoneIndex[k] ];
+					Vector tmp;
+					VectorTransform( pos, poseToWorld, tmp );
+					skinnedPos += vert.m_BoneWeight[k] * tmp;
+					VectorRotate( normal, poseToWorld, tmp );
+					skinnedNormal += vert.m_BoneWeight[k] * tmp;
+					VectorRotate( tangentS.AsVector3D(), poseToWorld, tmp );
+					skinnedTangentS.AsVector3D() += vert.m_BoneWeight[k] * tmp;
+
+					if ( vertID == g_BoneWeightInspectVert && k < 3 )
 					{
-						v = vert.m_BoneWeight[k];
+						g_BoneWeightInspectResults[k].index = vert.m_BoneIndex[k];
+						g_BoneWeightInspectResults[k].flweight = vert.m_BoneWeight[k];
+					}
+
+				}
+
+				if ( vertID == g_BoneWeightInspectVert )
+				{
+					VectorCopy( skinnedPos, vecDebugPos );
+				}
+
+				meshBuilder.Position3fv( &skinnedPos.x );
+				meshBuilder.Normal3fv( &skinnedNormal.x );
+				meshBuilder.TexCoord2fv( 0, &vert.m_TexCoord.x );
+				meshBuilder.UserData( &skinnedTangentS.x );
+
+				if (g_viewerSettings.highlightBone >= 0)
+				{
+					float v = 0.0;
+					for( k = 0; k < vert.m_NumBones; k++ )
+					{
+						if (vert.m_BoneIndex[k] == g_viewerSettings.highlightBone)
+						{
+							v = vert.m_BoneWeight[k];
+						}
+					}
+					v = clamp( v, 0.0f, 1.0f );
+					meshBuilder.Color4f( 1.0f - v, 1.0f, 1.0f - v, 0.5 );
+				}
+				else
+				{
+					switch( vert.m_NumBones )
+					{
+					case 0:
+						meshBuilder.Color3f( 0.0f, 0.0f, 0.0f );
+						break;
+					case 1:
+						meshBuilder.Color3f( 0.0f, 1.0f, 0.0f );
+						break;
+					case 2:
+						meshBuilder.Color3f( 1.0f, 1.0f, 0.0f );
+						break;
+					case 3:
+						meshBuilder.Color3f( 1.0f, 0.0f, 0.0f );
+						break;
+					default:
+						meshBuilder.Color3f( 1.0f, 1.0f, 1.0f );
+						break;
 					}
 				}
-				v = clamp( v, 0.0f, 1.0f );
-				meshBuilder.Color4f( 1.0f - v, 1.0f, 1.0f - v, 0.5 );
+				meshBuilder.AdvanceVertex();
 			}
-			else
+
+			int i;
+			// Set the indices down to the hardware.
+			// Each triplet of indices is a triangle.
+			for( i = indexStart; i < indexStart + nClampedIndices; i++ )
 			{
-				switch( vert.m_NumBones )
+				meshBuilder.FastIndex( materialBatch.m_TriListIndices[i] );
+			}
+			meshBuilder.End();
+			pBuildMesh->Draw();
+
+			indexStart += nClampedIndices;
+		}
+	}
+	pRenderContext->MatrixMode( MATERIAL_MODEL );
+	pRenderContext->PopMatrix();
+	
+	matrix3x4_t temp;
+	temp.SetToIdentity();
+	PositionMatrix( vecDebugPos, temp );
+	drawWeightIdentifier( temp, 8 );
+
+	return 0;
+}
+
+
+class CMatchedVert
+{
+public:
+	CMatchedVert( const GetTriangles_Vertex_t &vert ) 
+	{ 
+		m_pos = vert.m_Position; 
+		m_bones = (vert.m_BoneIndex[0]) 
+			+ ((vert.m_BoneIndex[1] > 0 ? vert.m_BoneIndex[1] : 0 )<< 8) 
+			+ ((vert.m_BoneIndex[2] > 0 ? vert.m_BoneIndex[1] : 0 )<< 16);
+		m_count = 1;
+	}
+
+	class CMatchedVertLessFunc
+	{
+	public:
+		bool Less( CMatchedVert const & lhs, CMatchedVert const & rhs, void *pContext )
+		{
+			float i1 = lhs.m_pos.x + lhs.m_pos.y + lhs.m_pos.z + lhs.m_bones;
+			float i2 = rhs.m_pos.x + rhs.m_pos.y + rhs.m_pos.z + rhs.m_bones;
+
+			return (i1 < i2);
+		}
+	};
+
+	Vector m_pos;
+	int m_bones;
+	int m_count;
+};
+
+
+int DebugDrawModelVertColocation( IStudioRender *pStudioRender, DrawModelInfo_t& info, 
+	matrix3x4_t *pBoneToWorld, const Vector &modelOrigin, int flags )
+{
+	// Make static so that we aren't reallocating everything all the time.
+	// TODO: make sure that this actually keeps us from reallocating inside of GetTriangles.
+	static GetTriangles_Output_t tris;
+	pStudioRender->GetTriangles( info, pBoneToWorld, tris );
+
+	static DrawModelInfo_t cached_info;
+	static CUtlSortVector< CMatchedVert, CMatchedVert::CMatchedVertLessFunc > sortedVector;
+
+	if ( memcmp( &info, &cached_info, sizeof( DrawModelInfo_t ) ) )
+	{
+		sortedVector.RemoveAll( );
+		cached_info = info;
+
+		int batchID;
+		for( batchID = 0; batchID < tris.m_MaterialBatches.Count(); batchID++ )
+		{
+			GetTriangles_MaterialBatch_t &materialBatch = tris.m_MaterialBatches[batchID];
+
+			int vertID;
+			// Send the vertices down to the hardware.
+			for( vertID = 0; vertID < materialBatch.m_Verts.Count(); vertID++ )
+			{
+				GetTriangles_Vertex_t &vert = materialBatch.m_Verts[vertID];
+
+				CMatchedVert mv( vert );
+
+				int i = sortedVector.Find( mv );
+				if (i == -1)
+				{
+					sortedVector.Insert( mv );
+				}
+				else
+				{
+					sortedVector[i].m_count++;
+				}
+			}
+		}
+	}
+
+	CMatRenderContextPtr pRenderContext( g_pMaterialSystem );
+	pRenderContext->MatrixMode( MATERIAL_MODEL );
+	pRenderContext->PushMatrix();
+	pRenderContext->LoadIdentity();
+
+	CMeshBuilder meshBuilder;
+
+	// pRenderContext->DrawScreenSpaceRectangle( g_materialVertexColor, 0, 0, 64, 64, 0, 0, 1, 1, 1, 1 );
+
+	int batchID;
+	for( batchID = 0; batchID < tris.m_MaterialBatches.Count(); batchID++ )
+	{
+		GetTriangles_MaterialBatch_t &materialBatch = tris.m_MaterialBatches[batchID];
+
+		pRenderContext->Bind( g_materialVertexColor );
+		IMesh *pBuildMesh = pRenderContext->GetDynamicMesh( false );
+
+		int indexStart;
+		for (indexStart = 0; indexStart < materialBatch.m_TriListIndices.Count(); )
+		{
+			// FIXME: this shouldn't be needed, models shouldn't be built that can't fit
+			int nClampedIndices = MIN( materialBatch.m_TriListIndices.Count() - indexStart, 32766 );
+			meshBuilder.Begin( pBuildMesh, MATERIAL_TRIANGLES, materialBatch.m_Verts.Count(), nClampedIndices );
+
+			int vertID;
+			// Send the vertices down to the hardware.
+			for( vertID = 0; vertID < materialBatch.m_Verts.Count(); vertID++ )
+			{
+				GetTriangles_Vertex_t &vert = materialBatch.m_Verts[vertID];
+				CMatchedVert mv( vert );
+
+				const Vector &pos = vert.m_Position;
+				const Vector &normal = vert.m_Normal;
+				const Vector4D &tangentS = vert.m_TangentS;
+				Vector skinnedPos( 0.0f, 0.0f, 0.0f );
+				Vector skinnedNormal( 0.0f, 0.0f, 0.0f );
+				Vector4D skinnedTangentS( 0.0f, 0.0f, 0.0f, vert.m_TangentS[3] );
+				int k;
+				for( k = 0; k < vert.m_NumBones; k++ )
+				{
+					const matrix3x4_t &poseToWorld = tris.m_PoseToWorld[ vert.m_BoneIndex[k] ];
+					Vector tmp;
+					VectorTransform( pos, poseToWorld, tmp );
+					skinnedPos += vert.m_BoneWeight[k] * tmp;
+					VectorRotate( normal, poseToWorld, tmp );
+					skinnedNormal += vert.m_BoneWeight[k] * tmp;
+					VectorRotate( tangentS.AsVector3D(), poseToWorld, tmp );
+					skinnedTangentS.AsVector3D() += vert.m_BoneWeight[k] * tmp;
+				}
+
+				meshBuilder.Position3fv( &skinnedPos.x );
+				meshBuilder.Normal3fv( &skinnedNormal.x );
+				meshBuilder.TexCoord2fv( 0, &vert.m_TexCoord.x );
+				meshBuilder.UserData( &skinnedTangentS.x );
+
+				int i = sortedVector.Find( mv );
+				switch( i >= 0 ? sortedVector[i].m_count : 0 )
 				{
 				case 0:
 					meshBuilder.Color3f( 0.0f, 0.0f, 0.0f );
 					break;
 				case 1:
-					meshBuilder.Color3f( 0.0f, 1.0f, 0.0f );
+					meshBuilder.Color3f( 0.0f, 0.0f, 1.0f );
 					break;
 				case 2:
-					meshBuilder.Color3f( 1.0f, 1.0f, 0.0f );
+					meshBuilder.Color3f( 0.0f, 1.0f, 0.0f );
 					break;
 				case 3:
-					meshBuilder.Color3f( 1.0f, 0.0f, 0.0f );
+					meshBuilder.Color3f( 1.0f, 1.0f, 0.0f );
 					break;
 				default:
-					meshBuilder.Color3f( 1.0f, 1.0f, 1.0f );
+					meshBuilder.Color3f( 1.0f, 0.0f, 0.0f );
 					break;
 				}
+				meshBuilder.AdvanceVertex();
 			}
-			meshBuilder.AdvanceVertex();
-		}
 
-		int i;
-		// Set the indices down to the hardware.
-		// Each triplet of indices is a triangle.
-		for( i = 0; i < materialBatch.m_TriListIndices.Count(); i++ )
-		{
-			meshBuilder.FastIndex( materialBatch.m_TriListIndices[i] );
+			int i;
+			// Set the indices down to the hardware.
+			// Each triplet of indices is a triangle.
+			for( i = indexStart; i < indexStart + nClampedIndices; i++ )
+			{
+				meshBuilder.FastIndex( materialBatch.m_TriListIndices[i] );
+			}
+			meshBuilder.End();
+			pBuildMesh->Draw();
+
+			indexStart += nClampedIndices;
 		}
-		meshBuilder.End();
-		pBuildMesh->Draw();
 	}
 	pRenderContext->MatrixMode( MATERIAL_MODEL );
 	pRenderContext->PopMatrix();
@@ -669,8 +950,9 @@ int DebugDrawModelTexCoord( IStudioRender *pStudioRender, const char *pMaterialN
 		//pRenderContext->Bind( g_materialWireframeVertexColorNoCull );
 		pRenderContext->Bind( g_materialVertexColorAdditive );
 		IMesh *pBuildMesh = pRenderContext->GetDynamicMesh( false );
-		meshBuilder.Begin( pBuildMesh, MATERIAL_TRIANGLES, materialBatch.m_Verts.Count(), 
-			materialBatch.m_TriListIndices.Count() );
+		// FIXME: this shouldn't be needed, models shouldn't be built that can't fit
+		int nClampedIndices = MIN( materialBatch.m_TriListIndices.Count(), 32766 );
+		meshBuilder.Begin( pBuildMesh, MATERIAL_TRIANGLES, materialBatch.m_Verts.Count(), nClampedIndices );
 
 		int vertID;
 		// Send the vertices down to the hardware.
@@ -697,7 +979,7 @@ int DebugDrawModelTexCoord( IStudioRender *pStudioRender, const char *pMaterialN
 		int i;
 		// Set the indices down to the hardware.
 		// Each triplet of indices is a triangle.
-		for( i = 0; i < materialBatch.m_TriListIndices.Count(); i++ )
+		for( i = 0; i < nClampedIndices; i++ )
 		{
 			meshBuilder.FastIndex( materialBatch.m_TriListIndices[i] );
 		}
@@ -714,11 +996,13 @@ int DebugDrawModelTexCoord( IStudioRender *pStudioRender, const char *pMaterialN
 
 		pRenderContext->Bind( g_materialWireframeVertexColorNoCull );
 		IMesh *pBuildMesh = pRenderContext->GetDynamicMesh( false );
-		meshBuilder.Begin( pBuildMesh, MATERIAL_TRIANGLES, materialBatch.m_Verts.Count(), 
-			materialBatch.m_TriListIndices.Count() );
+		// FIXME: this shouldn't be needed, models shouldn't be built that can't fit
+		int nClampedIndices = MIN( materialBatch.m_TriListIndices.Count(), 32766 );
+		meshBuilder.Begin( pBuildMesh, MATERIAL_TRIANGLES, materialBatch.m_Verts.Count(), nClampedIndices );
 
+		int vertID;
 		// Send the vertices down to the hardware.
-		for( int vertID = 0; vertID < materialBatch.m_Verts.Count(); vertID++ )
+		for( vertID = 0; vertID < materialBatch.m_Verts.Count(); vertID++ )
 		{
 			GetTriangles_Vertex_t &vert = materialBatch.m_Verts[vertID];
 			const Vector &normal = vert.m_Normal;
@@ -740,7 +1024,7 @@ int DebugDrawModelTexCoord( IStudioRender *pStudioRender, const char *pMaterialN
 
 		// Set the indices down to the hardware.
 		// Each triplet of indices is a triangle.
-		for( int j = 0; j < materialBatch.m_TriListIndices.Count(); j++ )
+		for(int j = 0; j < nClampedIndices; j++ )
 		{
 			meshBuilder.FastIndex( materialBatch.m_TriListIndices[j] );
 		}
@@ -759,3 +1043,44 @@ int DebugDrawModelTexCoord( IStudioRender *pStudioRender, const char *pMaterialN
 	return 0;
 }
 
+
+
+int DebugModelVertExtents( IStudioRender *pStudioRender, DrawModelInfo_t& info, matrix3x4_t *pBoneToWorld, Vector &vecMin, Vector &vecMax )
+{
+	// Make static so that we aren't reallocating everything all the time.
+	// TODO: make sure that this actually keeps us from reallocating inside of GetTriangles.
+	static GetTriangles_Output_t tris;
+
+	vecMin.Init( 999999,999999,999999);
+	vecMax.Init( -999999,-999999,-999999);
+
+	pStudioRender->GetTriangles( info, pBoneToWorld, tris );
+
+	int batchID;
+	for( batchID = 0; batchID < tris.m_MaterialBatches.Count(); batchID++ )
+	{
+		GetTriangles_MaterialBatch_t &materialBatch = tris.m_MaterialBatches[batchID];
+
+		int vertID;
+		// Send the vertices down to the hardware.
+		for( vertID = 0; vertID < materialBatch.m_Verts.Count(); vertID++ )
+		{
+			GetTriangles_Vertex_t &vert = materialBatch.m_Verts[vertID];
+			const Vector &pos = vert.m_Position;
+			Vector skinnedPos( 0.0f, 0.0f, 0.0f );
+			int k;
+			for( k = 0; k < vert.m_NumBones; k++ )
+			{
+				const matrix3x4_t &poseToWorld = tris.m_PoseToWorld[ vert.m_BoneIndex[k] ];
+				Vector tmp;
+				VectorTransform( pos, poseToWorld, tmp );
+				skinnedPos += vert.m_BoneWeight[k] * tmp;
+			}
+
+			VectorMin( skinnedPos, vecMin, vecMin );
+			VectorMax( skinnedPos, vecMax, vecMax );
+		}
+	}
+
+	return 0;
+}

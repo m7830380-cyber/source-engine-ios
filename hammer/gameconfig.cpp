@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ====
 //
 // Purpose: 
 //
@@ -21,6 +21,7 @@
 #include "filesystem_tools.h"
 #include "TextureSystem.h"
 #include "tier1/strtools.h"
+#include "gridnav.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
@@ -70,6 +71,8 @@ void CGameConfig::SetActiveGame(CGameConfig *pGame)
 			g_MAX_MAP_COORD = pGD->GetMaxMapCoord();
 			g_MIN_MAP_COORD = pGD->GetMinMapCoord();
 		}
+
+		CGridNav::Init( pGD->IsGridNavActive(), pGD->GetGridNavEdgeSize(), pGD->GetGridNavOffsetX(), pGD->GetGridNavOffsetY(), pGD->GetTraceHeight() );
 	}
 	else
 	{
@@ -78,7 +81,14 @@ void CGameConfig::SetActiveGame(CGameConfig *pGame)
 
 		g_MAX_MAP_COORD = 4096;
 		g_MIN_MAP_COORD = -4096;
+
+		CGridNav::Init( false );
 	}
+
+	// Moved out of here for single config running, since we set the active
+	// game BEFORE initializing the file system and the texture system now.
+	//FileSystem_SetGame(g_pGameConfig->m_szModDir);
+	//g_Textures.SetActiveConfig(g_pGameConfig);
 }
 
 
@@ -104,6 +114,7 @@ CGameConfig::CGameConfig(void)
 	memset(szMapDir, 0, sizeof(szMapDir));
 	memset(m_szGameExeDir, 0, sizeof(m_szGameExeDir));
 	memset(szBSPDir, 0, sizeof(szBSPDir));
+	memset(m_szPrefabDir, 0, sizeof(m_szPrefabDir));
 	memset(m_szModDir, 0, sizeof(m_szModDir));
 	strcpy(m_szCordonTexture, "BLACK");
 
@@ -250,6 +261,7 @@ bool CGameConfig::Load(KeyValues *pkv)
 	Q_strncpy(m_szGameExeDir, pkvHammer->GetString("GameExeDir"), sizeof(m_szGameExeDir));
 	Q_strncpy(szMapDir, pkvHammer->GetString("MapDir"), sizeof(szMapDir));
 	Q_strncpy(szBSPDir, pkvHammer->GetString("BSPDir"), sizeof(szBSPDir));
+	Q_strncpy(m_szPrefabDir, pkvHammer->GetString("PrefabDir"), sizeof(m_szPrefabDir));
 
 	SetCordonTexture( pkvHammer->GetString("CordonTexture", "BLACK") );
 
@@ -319,6 +331,7 @@ bool CGameConfig::Save(KeyValues *pkv)
 	pkvHammer->SetString("GameExeDir", m_szGameExeDir);
 	pkvHammer->SetString("MapDir", szMapDir);
 	pkvHammer->SetString("BSPDir", szBSPDir);
+	pkvHammer->SetString("PrefabDir", m_szPrefabDir);
 
 	pkvHammer->SetString("CordonTexture", m_szCordonTexture);
 
@@ -414,9 +427,9 @@ void CGameConfig::CopyFrom(CGameConfig *pConfig)
 //			pGD - 
 // Output : Returns TRUE to keep enumerating.
 //-----------------------------------------------------------------------------
-static BOOL UpdateClassPointer(CMapEntity *pEntity, GameData *pGDIn)
+static BOOL UpdateClassPointer(CMapEntity *pEntity, GameData *pGD)
 {
-	GDclass *pClass = pGDIn->ClassForName(pEntity->GetClassName());
+	GDclass *pClass = pGD->ClassForName(pEntity->GetClassName());
 	pEntity->SetClass(pClass);
 	return(TRUE);
 }
@@ -559,7 +572,7 @@ void CGameConfig::ParseGameInfo()
 	KeyValues *pKey = pkv->FindKey("FileSystem");
 	if (pKey)
 	{
-		V_strcpy_safe( m_szSteamAppID, pKey->GetString( "SteamAppId", "" ) );
+		strcpy(m_szSteamAppID, pKey->GetString("SteamAppId", ""));
 	}
 
 	const char *InstancePath = pkv->GetString( "InstancePath", NULL );

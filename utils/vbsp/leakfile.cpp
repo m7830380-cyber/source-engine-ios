@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -18,6 +18,7 @@ Save out name.line for qe3 to read
 ==============================================================================
 */
 
+DEFINE_LOGGING_CHANNEL_NO_TAGS( LOG_GENERAL, "General" );
 
 /*
 =============
@@ -88,8 +89,7 @@ void LeakFile (tree_t *tree)
 
 	// Emit a leak warning.
 	const char *cl = ValueForKey (node->occupant, "classname");
-	Color red(255,0,0,255);
-	ColorSpewMessage( SPEW_MESSAGE, &red, "Entity %s (%.2f %.2f %.2f) leaked!\n", cl, origin[0], origin[1], origin[2] );
+	Log_Msg( LOG_GENERAL, Color( 255, 0, 0, 255 ), "Entity %s (%.2f %.2f %.2f) leaked!\n", cl, origin[0], origin[1], origin[2] );
 }
 
 void AreaportalLeakFile( tree_t *tree, portal_t *pStartPortal, portal_t *pEndPortal, node_t *pStart )
@@ -163,6 +163,5 @@ void AreaportalLeakFile( tree_t *tree, portal_t *pStartPortal, portal_t *pEndPor
 
 	fclose (linefile);
 	Warning( "Wrote %s\n", filename );
-	Color red(255,0,0,255);
-	ColorSpewMessage( SPEW_MESSAGE, &red, "Areaportal leak ! File: %s ", filename );
+	Log_Msg( LOG_GENERAL, Color( 255, 0, 0, 255 ), "Areaportal leak ! File: %s ", filename );
 }

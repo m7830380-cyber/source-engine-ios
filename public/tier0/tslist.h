@@ -123,21 +123,21 @@ union TSLIST_HEAD_ALIGN TSLHead_t
 		//          but it could perhaps (?) lead to problems with store forwarding. I don't know 'cause I didn't 
 		//          performance-test or design original code, I'm just making it work on PowerPC.
 #ifdef VALVE_BIG_ENDIAN
-		uint16	Sequence;
-		uint16   Depth;
+		int16	Sequence;
+		int16   Depth;
 #else
-		uint16   Depth;
-		uint16	Sequence;
+		int16   Depth;
+		int16	Sequence;
 #endif
 #ifdef PLATFORM_64BITS
-		uint32   Padding;
+		int32   Padding;
 #endif
 	} value;
 
 	struct Value32_t
 	{
 		TSLNodeBase_t *Next_do_not_use_me;
-		uint32   DepthAndSequence;
+		int32   DepthAndSequence;
 	} value32;
 
 #ifdef PLATFORM_64BITS
@@ -254,8 +254,7 @@ public:
 #endif
 	}
 
-	// TODO(nillerusr): fix asan issue later
-	NO_ASAN TSLNodeBase_t *Pop()
+	TSLNodeBase_t *Pop()
 	{
 #ifdef USE_NATIVE_SLIST
 #ifdef _X360
@@ -434,7 +433,7 @@ class TSLIST_HEAD_ALIGN CTSList : public CTSListBase
 public:
 	struct TSLIST_NODE_ALIGN Node_t : public TSLNodeBase_t
 	{
-		Node_t() = default;
+		Node_t() {}
 		Node_t( const T &init ) : elem( init ) {}
 		T elem;
 
@@ -525,7 +524,7 @@ class TSLIST_HEAD_ALIGN CTSListWithFreeList : public CTSListBase
 public:
 	struct TSLIST_NODE_ALIGN Node_t : public TSLNodeBase_t
 	{
-		Node_t() = default;
+		Node_t() {}
 		Node_t( const T &init ) : elem( init ) {}
 
 		T elem;
@@ -693,7 +692,7 @@ public:
 			MemAlloc_FreeAligned( p );
 		}
 
-		Node_t() = default;
+		Node_t() {}
 		Node_t( const T &init ) : elem( init ) {}
 
 		Node_t *pNext;

@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Implements a class that encapsulates much of the functionality
 //			of entities. CMapWorld and CMapEntity are both derived from this
@@ -113,7 +113,15 @@ void CEditGameClass::Connections_RemoveAll()
 			FOR_EACH_OBJ( *pTargetList, pos )
 			{
 				CMapEntity *pEntity = pTargetList->Element( pos );
-				pEntity->Upstream_Remove( pConnection );
+
+				// If you hit this assert it means that an entity was deleted but not removed
+				// from this entity's list of targets.
+				ASSERT( pEntity != NULL );
+
+				if ( pEntity )
+				{
+					pEntity->Upstream_Remove( pConnection );
+				}
 			}
 		}
 #endif 
@@ -140,11 +148,21 @@ void CEditGameClass::Connections_FixBad(bool bRelink)
 		for ( int nEntities = 0; nEntities < nEntityCount; nEntities++ )
 		{
 			CMapEntity *pEntity = pTargetEntities->Element(nEntities);
-			pEntity->Upstream_Remove( pConnection );
+
+			// If you hit this assert it means that an entity was deleted but not removed
+			// from this entity's list of targets.
+			ASSERT( pEntity != NULL );
+			
+			if ( pEntity )
+			{
+				pEntity->Upstream_Remove( pConnection );
+			}
 		}
 
 		if ( bRelink )
+		{
 			pConnection->LinkTargetEntities();
+		}
 	}
 }
 
@@ -520,7 +538,10 @@ ChunkFileResult_t CEditGameClass::SaveVMF(CChunkFile *pFile, CSaveInfo *pSaveInf
 				{
 					char szTemp[512];
 
-					sprintf(szTemp, "%s,%s,%s,%g,%d", pConnection->GetTargetName(), pConnection->GetInputName(), pConnection->GetParam(), pConnection->GetDelay(), pConnection->GetTimesToFire());
+					sprintf(szTemp, "%s%c%s%c%s%c%g%c%d", pConnection->GetTargetName(), VMF_IOPARAM_STRING_DELIMITER,
+						pConnection->GetInputName(), VMF_IOPARAM_STRING_DELIMITER, pConnection->GetParam(), VMF_IOPARAM_STRING_DELIMITER,
+						pConnection->GetDelay(), VMF_IOPARAM_STRING_DELIMITER, pConnection->GetTimesToFire());
+						
 					eResult = pFile->WriteKeyValue(pConnection->GetOutputName(), szTemp);
 
 					if (eResult != ChunkFile_Ok)
@@ -536,6 +557,58 @@ ChunkFileResult_t CEditGameClass::SaveVMF(CChunkFile *pFile, CSaveInfo *pSaveInf
 
 	return(eResult);
 }
+
+
+//-----------------------------------------------------------------------------
+// Purpose: Slightly modified strtok. Does not modify the input string. Does
+//			not skip over more than one separator at a time. This allows parsing
+//			strings where tokens between separators may or may not be present:
+//
+//			Door01,,,0 would be parsed as "Door01"  ""  ""  "0"
+//			Door01,Open,,0 would be parsed as "Door01"  "Open"  ""  "0"
+//
+// Input  : token - Returns with a token, or zero length if the token was missing.
+//			str - String to parse.
+//			sep - Character to use as separator. UNDONE: allow multiple separator chars
+// Output : Returns a pointer to the next token to be parsed.
+//-----------------------------------------------------------------------------
+static const char *nexttoken_gameclass(char *token, const char *str, char sep)
+{
+	if (*str == '\0')
+	{
+		return(NULL);
+	}
+
+	//
+	// Find the first separator.
+	//
+	const char *ret = str;
+	while ((*str != sep) && (*str != '\0'))
+	{
+		str++;
+	}
+
+	//
+	// Copy everything up to the first separator into the return buffer.
+	// Do not include separators in the return buffer.
+	//
+	while (ret < str)
+	{
+		*token++ = *ret++;
+	}
+	*token = '\0';
+
+	//
+	// Advance the pointer unless we hit the end of the input string.
+	//
+	if (*str == '\0')
+	{
+		return(str);
+	}
+
+	return(++str);
+}
+
 
 //-----------------------------------------------------------------------------
 // Purpose: Builds a connection from a keyvalue pair.
@@ -554,12 +627,20 @@ ChunkFileResult_t CEditGameClass::LoadKeyCallback(const char *szKey, const char 
 	// Set the "output" from the passed in parameter
 	pConnection->SetOutputName(szKey);
 
+	// Figure out what delimiter to use. We switched from commas to the nonprintable
+	// character 0x07 when we added the ability to execute vscript code in an input.
+	char chDelim = VMF_IOPARAM_STRING_DELIMITER;
+	if (strchr(szValue, VMF_IOPARAM_STRING_DELIMITER) == NULL)
+	{
+		chDelim = ',';
+	}
+
 	char szToken[MAX_PATH];
 
 	//
 	// Parse the target name.
 	//
-	const char *psz = nexttoken(szToken, szValue, ',');
+	const char *psz = nexttoken_gameclass(szToken, szValue, chDelim);
 	if (szToken[0] != '\0')
 	{
 		pConnection->SetTargetName(szToken);
@@ -568,7 +649,7 @@ ChunkFileResult_t CEditGameClass::LoadKeyCallback(const char *szKey, const char 
 	//
 	// Parse the input name.
 	//
-	psz = nexttoken(szToken, psz, ',');
+	psz = nexttoken_gameclass(szToken, psz, chDelim);
 	if (szToken[0] != '\0')
 	{
 		pConnection->SetInputName(szToken);
@@ -577,7 +658,7 @@ ChunkFileResult_t CEditGameClass::LoadKeyCallback(const char *szKey, const char 
 	//
 	// Parse the parameter override.
 	//
-	psz = nexttoken(szToken, psz, ',');
+	psz = nexttoken_gameclass(szToken, psz, chDelim);
 	if (szToken[0] != '\0')
 	{
 		pConnection->SetParam(szToken);
@@ -586,7 +667,7 @@ ChunkFileResult_t CEditGameClass::LoadKeyCallback(const char *szKey, const char 
 	//
 	// Parse the delay.
 	//
-	psz = nexttoken(szToken, psz, ',');
+	psz = nexttoken_gameclass(szToken, psz, chDelim);
 	if (szToken[0] != '\0')
 	{
 		pConnection->SetDelay((float)atof(szToken));
@@ -595,7 +676,7 @@ ChunkFileResult_t CEditGameClass::LoadKeyCallback(const char *szKey, const char 
 	//
 	// Parse the number of times to fire the output.
 	//
-	nexttoken(szToken, psz, ',');
+	nexttoken_gameclass(szToken, psz, chDelim);
 	if (szToken[0] != '\0')
 	{
 		pConnection->SetTimesToFire(atoi(szToken));

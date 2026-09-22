@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -15,17 +15,17 @@
 #endif
 #include <wchar.h>
 
-#include "filesystem.h"
+#include "FileSystem.h"
 
 #include "vgui_internal.h"
 #include "vgui/ILocalize.h"
 #include "vgui/ISystem.h"
 #include "vgui/ISurface.h"
 
-#include "tier1/utlvector.h"
-#include "tier1/utlrbtree.h"
-#include "tier1/utlsymbol.h"
-#include "tier1/utlstring.h"
+#include "tier1/UtlVector.h"
+#include "tier1/UtlRBTree.h"
+#include "tier1/UtlSymbol.h"
+#include "tier1/UtlString.h"
 #include "UnicodeFileHelpers.h"
 #include "tier0/icommandline.h"
 #include "byteswap.h"
@@ -218,11 +218,6 @@ bool CLocalizedStringTable::AddFile( const char *szFileName, const char *pPathID
 
 	Q_strncpy( fileName, szFileName, sizeof( fileName ) );
 
-	// Lowercase the *relative* portion of the filename,
-	// in case people look for "Resource/file.txt" etc.  We always
-	// use lowercase filenames for files in the game filesystem.
-	V_strlower( fileName );
-
 	const char *langptr = strstr(szFileName, LANGUAGE_STRING);
 	if (langptr)
 	{
@@ -251,7 +246,7 @@ bool CLocalizedStringTable::AddFile( const char *szFileName, const char *pPathID
 		bool bValid;
 		if ( IsPC() )
 		{
-			bValid = vgui::g_pSystem->GetRegistryString( "HKEY_CURRENT_USER\\Software\\Valve\\Source\\Language", language, sizeof(language)-1 );
+			bValid = vgui::g_pSystem->GetRegistryString( "HKEY_CURRENT_USER\\Software\\Valve\\Steam\\Language", language, sizeof(language)-1 );
 		}
 		else
 		{
@@ -304,9 +299,8 @@ bool CLocalizedStringTable::AddFile( const char *szFileName, const char *pPathID
 	// This will give us a list of paths from highest to lowest precedence: e.g.:
 	// for "GAME" when running -game episodic, it'll show:
 	// "basedir/episodic/;basedir/hl2"
-	// We do this manually instead of just asking for the first match to support bIncludeFallbackSearchPaths
-	char searchPaths[ MAX_PATH*50 ] = { 0 }; // allow for 50 search paths
-
+	// HACK HACK - why do this? Why not let the filesystem be smart?
+	char searchPaths[ MAX_PATH*50 ]; // allow for 50 search paths 
 	Verify( g_pFullFileSystem->GetSearchPath( pPathID, true, searchPaths, sizeof( searchPaths ) ) < sizeof(searchPaths) );
 
 	CUtlSymbolTable				pathStrings;
@@ -328,27 +322,16 @@ bool CLocalizedStringTable::AddFile( const char *szFileName, const char *pPathID
 			{
 				// only want zip paths
 				continue;
-			}
+			} 
 
 			char fullpath[MAX_PATH];
-			V_strcpy_safe( fullpath, path );
-			V_AppendSlash( fullpath, sizeof(fullpath) );
-			V_strcat_safe( fullpath, fileName );
+			Q_snprintf( fullpath, sizeof( fullpath ), "%s%s", path, fileName );
 			Q_FixSlashes( fullpath );
-			//Q_strlower( fullpath ); // NO! This screws up Linux
+			Q_strlower( fullpath );
 
 			CUtlSymbol sym = pathStrings.AddString( fullpath );
-			// With bIncludeFallbackSearchPaths we iterate overriding as we go, so push them in reverse order so the
-			// highest precendence search paths have the highest precendence. Otherwise push them in order, as we'll
-			// only process the first one.
-			if ( !bIncludeFallbackSearchPaths )
-			{
-				searchList.AddToTail( sym );
-			}
-			else
-			{
-				searchList.AddToHead( sym );
-			}
+			// Push them on head so we can walk them in reverse order
+			searchList.AddToHead( sym );
 		}
 	}
 

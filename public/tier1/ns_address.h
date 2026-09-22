@@ -25,22 +25,30 @@ enum PeerToPeerAddressType_t
 	P2P_STEAMID,
 };
 
-const int STEAM_P2P_CHANNEL_DEFAULT = 0;
-const int STEAM_P2P_CHANNEL_HLTV = 3;
+// Build int subchannel types
+// FIXME - these really are game specific.  I wish we could standardize!
+enum SteamPeerToPeerChannel_t
+{
+	STEAM_P2P_GAME_CLIENT = 0,
+	STEAM_P2P_GAME_SERVER = 1,
+	STEAM_P2P_LOBBY = 2,
+	STEAM_P2P_HLTV = 3,
+	STEAM_P2P_HLTV1 = 4,
+};
 	
 class CPeerToPeerAddress
 {
 public:
 	CPeerToPeerAddress ( void )
 	: m_AddrType( P2P_STEAMID )
-	, m_steamChannel( STEAM_P2P_CHANNEL_DEFAULT )
+	, m_steamChannel( STEAM_P2P_GAME_CLIENT )
 	{}
 
 	void Clear ( void )
 	{
 		m_AddrType = P2P_STEAMID;
 		m_steamID.Clear();
-		m_steamChannel = STEAM_P2P_CHANNEL_DEFAULT;
+		m_steamChannel = STEAM_P2P_GAME_CLIENT;
 	}
 
 	void SetSteamChannel( int nChannel )
@@ -429,13 +437,16 @@ struct ns_address
 			if ( !tempSteamID.IsValid() )
 				return false;
 
-			if ( !bProxied )
-				m_AddrType = NSAT_P2P;
-			else if ( tempSteamID.BGameServerAccount() )
+			if ( bProxied && tempSteamID.BGameServerAccount() )
+			{
 				m_AddrType = NSAT_PROXIED_GAMESERVER;
+				m_steamID.SetFromSteamID( tempSteamID, STEAM_P2P_GAME_SERVER );
+			}
 			else
-				m_AddrType = NSAT_PROXIED_CLIENT;
-			m_steamID.SetFromSteamID( tempSteamID, STEAM_P2P_CHANNEL_DEFAULT );
+			{
+				m_AddrType = bProxied ? NSAT_PROXIED_CLIENT : NSAT_P2P;
+				m_steamID.SetFromSteamID( tempSteamID, STEAM_P2P_GAME_CLIENT );
+			}
 			s = strchr( s, ']' );
 			int nChannel = -1;
 			if ( s && s[1] == ':' && sscanf( s+2, "%d", &nChannel ) == 1 && nChannel >= 0 )

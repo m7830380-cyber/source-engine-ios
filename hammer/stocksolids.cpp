@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ====
 //
 // Purpose: 
 //
@@ -17,7 +17,7 @@
 
 #pragma warning(disable:4244)
 
-//Vector pmPoints[64];
+Vector pmPoints[64];
 
 StockSolid::StockSolid(int nFields)
 {
@@ -36,11 +36,11 @@ StockSolid::~StockSolid()
 }
 
 
-void StockSolid::AllocateDataFields(int nFields_)
+void StockSolid::AllocateDataFields(int nFields)
 {
-	pFields = new STSDATAFIELD[nFields_];
+	pFields = new STSDATAFIELD[nFields];
 	Assert(pFields);
-	iMaxFields = nFields_;
+	iMaxFields = nFields;
 	this->nFields = 0;	// none yet
 }
 
@@ -421,7 +421,7 @@ void StockCylinder::CreateMapSolid(CMapSolid *pSolid, TextureAlignment_t eTextur
 	int nSides = GetFieldData(fieldSideCount);
 
 	Vector pmPoints[64];
-	polyMake(origin[0] - fWidth, origin[1] - fDepth, origin[0] + fWidth, origin[1] + fDepth, nSides, 0, pmPoints );
+	polyMake(origin[0] - fWidth, origin[1] - fDepth, origin[0] + fWidth, origin[1] + fDepth, nSides, 0, pmPoints);
 
 	// face 0 - top face
 	for(int i = 0; i < nSides+1; i++)
@@ -429,7 +429,7 @@ void StockCylinder::CreateMapSolid(CMapSolid *pSolid, TextureAlignment_t eTextur
 		pmPoints[i][2] = origin[2] - fHeight;
 	}
 
-	Face.CreateFace( pmPoints, -nSides);
+	Face.CreateFace(pmPoints, -nSides);
 	pSolid->AddFace(&Face);
 
 	// bottom face
@@ -438,7 +438,7 @@ void StockCylinder::CreateMapSolid(CMapSolid *pSolid, TextureAlignment_t eTextur
 		pmPoints[i][2] = origin[2] + fHeight;
 	}
 
-	Face.CreateFace( pmPoints, nSides);
+	Face.CreateFace(pmPoints, nSides);
 	pSolid->AddFace(&Face);
 
 	// other sides
@@ -516,7 +516,7 @@ void StockSpike::CreateMapSolid(CMapSolid *pSolid, TextureAlignment_t eTextureAl
 	for(int i = 0; i < nSides+1; i++)
 	{
 		// YWB rounding???
-		pmPoints[i][2] = V_rint(origin[2] - fHeight);
+		pmPoints[i][2] = rint(origin[2] - fHeight);
 	}
 
 	NewFace.CreateFace(pmPoints, -nSides);
@@ -529,7 +529,7 @@ void StockSpike::CreateMapSolid(CMapSolid *pSolid, TextureAlignment_t eTextureAl
 	Points[0][0] = origin[0];
 	Points[0][1] = origin[1];
 	// YWB rounding???
-	Points[0][2] = V_rint(origin[2] + fHeight);
+	Points[0][2] = rint(origin[2] + fHeight);
 
 	for(int i = 0; i < nSides; i++)
 	{

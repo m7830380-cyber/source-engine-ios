@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2004, Valve Corporation, All rights reserved. =======
 //
 // Purpose: 
 //
@@ -8,6 +8,8 @@
 #include "datamodel/dmelementfactoryhelper.h"
 #include "mathlib/vector.h"
 #include "mathlib/mathlib.h"
+#include "datamodel/dmattributevar.h"
+#include "movieobjects/dmedag.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
@@ -24,18 +26,21 @@ IMPLEMENT_ELEMENT_FACTORY( DmeTransform, CDmeTransform );
 //-----------------------------------------------------------------------------
 void CDmeTransform::OnConstruction()
 {
-	m_Position.Init( this, "position" );
-	m_Orientation.Init( this, "orientation" );
+	m_Position.Init( this, TRANSFORM_POSITION, FATTRIB_HAS_CALLBACK );
+	m_Orientation.Init( this, TRANSFORM_ORIENTATION, FATTRIB_HAS_CALLBACK );
 }
 
 void CDmeTransform::OnDestruction()
 {
 }
 
+void CDmeTransform::OnAttributeChanged( CDmAttribute *pAttribute )
+{
+	BaseClass::OnAttributeChanged( pAttribute );
 
-//-----------------------------------------------------------------------------
-// FIXME: Replace this with actual methods to do editing
-//-----------------------------------------------------------------------------
+	InvokeOnAttributeChangedOnReferrers( GetHandle(), pAttribute );
+}
+
 void CDmeTransform::SetTransform( const matrix3x4_t &transform )
 {
 	Vector origin;
@@ -79,4 +84,11 @@ CDmAttribute *CDmeTransform::GetPositionAttribute()
 CDmAttribute *CDmeTransform::GetOrientationAttribute()
 {
 	return m_Orientation.GetAttribute();
+}
+
+CDmeDag *CDmeTransform::GetDag()
+{
+	static CUtlSymbolLarge symTransform = g_pDataModel->GetSymbol( "transform" );
+	CDmeDag *pDag = FindReferringElement< CDmeDag >( this, symTransform );
+	return pDag;
 }

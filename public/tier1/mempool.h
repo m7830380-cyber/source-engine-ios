@@ -99,13 +99,6 @@ protected:
 	static MemoryPoolReportFunc_t g_ReportFunc;
 };
 
-// TF/GC SDK still use the old Valve names.
-#ifndef UTLMEMORYPOOL_GROW_NONE
-#define UTLMEMORYPOOL_GROW_NONE	CUtlMemoryPool::GROW_NONE
-#define UTLMEMORYPOOL_GROW_FAST	CUtlMemoryPool::GROW_FAST
-#define UTLMEMORYPOOL_GROW_SLOW	CUtlMemoryPool::GROW_SLOW
-#endif
-
 
 //-----------------------------------------------------------------------------
 // Multi-thread/Thread Safe Memory Class
@@ -439,7 +432,7 @@ inline void CClassMemoryPool<T>::Clear()
 		static   CUtlMemoryPool   s_Allocator
     
 #define DEFINE_FIXEDSIZE_ALLOCATOR( _class, _initsize, _grow )					\
-	CUtlMemoryPool   _class::s_Allocator(sizeof(_class), _initsize, _grow, #_class " pool", alignof(_class))
+	CUtlMemoryPool   _class::s_Allocator(sizeof(_class), _initsize, _grow, #_class " pool")
 
 #define DEFINE_FIXEDSIZE_ALLOCATOR_ALIGNED( _class, _initsize, _grow, _alignment )		\
 	CUtlMemoryPool   _class::s_Allocator(sizeof(_class), _initsize, _grow, #_class " pool", _alignment )
@@ -454,7 +447,7 @@ inline void CClassMemoryPool<T>::Clear()
 		static   CMemoryPoolMT   s_Allocator
 
 #define DEFINE_FIXEDSIZE_ALLOCATOR_MT( _class, _initsize, _grow )					\
-	CMemoryPoolMT   _class::s_Allocator(sizeof(_class), _initsize, _grow, #_class " pool", alignof(_class))
+	CMemoryPoolMT   _class::s_Allocator(sizeof(_class), _initsize, _grow, #_class " pool")
 
 //-----------------------------------------------------------------------------
 // Macros that make it simple to make a class use a fixed-size allocator
@@ -562,7 +555,7 @@ inline void CAlignedMemPool<ITEM_SIZE, ALIGNMENT, CHUNK_SIZE, CAllocator, GROWMO
 template <int ITEM_SIZE, int ALIGNMENT, int CHUNK_SIZE, class CAllocator, bool GROWMODE, int COMPACT_THRESHOLD >
 inline int __cdecl CAlignedMemPool<ITEM_SIZE, ALIGNMENT, CHUNK_SIZE, CAllocator, GROWMODE, COMPACT_THRESHOLD>::CompareChunk( void * const *ppLeft, void * const *ppRight )
 {
-	return static_cast<int>( (intp)*ppLeft - (intp)*ppRight );
+	return size_cast<int>( (intp)*ppLeft - (intp)*ppRight );
 }
 
 template <int ITEM_SIZE, int ALIGNMENT, int CHUNK_SIZE, class CAllocator, bool GROWMODE, int COMPACT_THRESHOLD >

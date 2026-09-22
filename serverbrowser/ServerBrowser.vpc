@@ -13,12 +13,13 @@ $Configuration
 {
 	$Compiler
 	{
-		$PreprocessorDefinitions			"$BASE;VERSION_SAFE_STEAM_API_INTERFACES;SERVERBROWSER_EXPORTS;GAME_SRC;_USE_32BIT_TIME_T"
+		$PreprocessorDefinitions			"$BASE;VERSION_SAFE_STEAM_API_INTERFACES;SERVERBROWSER_EXPORTS;GAME_SRC"
+		$PreprocessorDefinitions			"$BASE;_USE_32BIT_TIME_T"	[!$WIN64]
 	}
 
 	$Linker
 	{
-		$AdditionalDependencies				"$BASE Advapi32.lib wsock32.lib Ws2_32.lib User32.lib" [$WIN32]
+		$AdditionalDependencies				"$BASE Advapi32.lib wsock32.lib Ws2_32.lib User32.lib" [$WINDOWS]
 		$AdditionalDependencies				"$BASE Xonline.lib" [$X360]
 		$SystemLibraries                                                        "iconv" [$OSXALL]
 	}
@@ -29,7 +30,7 @@ $Project "ServerBrowser"
 	$Folder	"Source Files"
 	{
 		$File	"BaseGamesPage.cpp"
-		$File	"BlacklistedServers.cpp"
+		$File	"blacklistedservers.cpp"
 		$File	"CustomGames.cpp"
 		$File	"DialogAddServer.cpp"
 		$File	"DialogGameInfo.cpp"
@@ -48,7 +49,7 @@ $Project "ServerBrowser"
 		$File	"VACBannedConnRefusedDialog.cpp"
 		$File	"VACBannedConnRefusedDialog.h"
 
-		$File	"QuickListPanel.cpp"
+		$File	"quicklistpanel.cpp"
 	
 		$File	"$SRCDIR\public\vgui_controls\vgui_controls.cpp"
 		{
@@ -59,14 +60,12 @@ $Project "ServerBrowser"
 				}
 			}
 		}
-
-		$File	"$SRCDIR\common\ServerBrowser\blacklisted_server_manager.cpp"
 	}
 
 	$Folder	"Header Files"
 	{
 		$File	"BaseGamesPage.h"
-		$File	"BlacklistedServers.h"
+		$File	"blacklistedservers.h"
 		$File	"CustomGames.h"
 		$File	"DialogAddServer.h"
 		$File	"DialogGameInfo.h"
@@ -82,9 +81,7 @@ $Project "ServerBrowser"
 		$File	"ServerContextMenu.h"
 		$File	"ServerListCompare.h"
 		$File	"SpectateGames.h"
-		$File	"QuickListPanel.h"
-
-		$File	"$SRCDIR\common\ServerBrowser\blacklisted_server_manager.h"
+		$File	"quicklistpanel.h"
 	}
 
 	$Folder	"Resource Files"
@@ -97,10 +94,13 @@ $Project "ServerBrowser"
 
 	$Folder "Link Libraries"
 	{
-		$ImpLib steam_api
-		$Lib	tier2
-		$Lib	tier3
-		$Lib	vgui_controls
-		$Lib	mathlib
+		$ImplibExternal	steam_api						[ ( $WIN32 || $POSIX || $PS3 ) && !$NO_STEAM ]
+		$ImplibExternal	steam_api64						[ $WIN64 && !$NO_STEAM ]
+		$Lib tier2
+		$Lib tier3
+		$Lib vgui_controls
+		$Lib mathlib [$WINDOWS||$POSIX]
+		$Lib dmxloader [$WINDOWS||$POSIX]
 	}
+
 }

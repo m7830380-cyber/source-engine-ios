@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -91,7 +91,7 @@ ChunkFileResult_t CVisGroup::LoadKeyCallback(const char *szKey, const char *szVa
 	else if (!stricmp(szKey, "visible"))
 	{
 		// This is a pre-hierarchical visgroups map -- mark this visgroup as hidden.
-		// We'll skip the code in CMapDoc::PostLoad that recalculates visibility.
+		// We'll skip the code in CMapDoc::PostLoadDocument that recalculates visibility.
 		pGroup->SetVisible((atoi(szValue) == 1) ? VISGROUP_SHOWN : VISGROUP_HIDDEN);
 		s_bIsConvertingOldVisGroups = true;
  	}

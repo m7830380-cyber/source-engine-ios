@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -27,6 +27,7 @@ public:
 	//{{AFX_DATA(COPTConfigs)
 	enum { IDD = IDD_OPTIONS_CONFIGS };
 	CEdit	m_cMapDir;
+	CEdit	m_cPrefabDir;
 	CEdit	m_cGameExeDir;
 	CEdit	m_cModDir;
 	CEdit	m_cCordonTexture;
@@ -61,6 +62,7 @@ protected:
 	afx_msg void OnSelchangeConfigurations();
 	afx_msg void OnConfigureExes();
 	afx_msg void OnBrowsemapdir();
+	afx_msg void OnBrowsePrefabDir();
 	afx_msg void OnBrowseGameExeDir(void);
 	afx_msg void OnBrowseModDir(void);
 	afx_msg void OnBrowseCordonTexture(void);

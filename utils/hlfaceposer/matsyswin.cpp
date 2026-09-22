@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -21,14 +21,14 @@
 #include "ViewerSettings.h"
 #include "materialsystem/imaterialsystem.h"
 #include "materialsystem/imaterialproxyfactory.h"
-#include "filesystem.h"
-#include <keyvalues.h>
-#include "materialsystem/imesh.h"
+#include "FileSystem.h"
+#include <KeyValues.h>
+#include "materialsystem/IMesh.h"
 #include "expressions.h"
 #include "hlfaceposer.h"
 #include "ifaceposersound.h"
 #include "materialsystem/IMaterialSystemHardwareConfig.h"
-#include "materialsystem/itexture.h"
+#include "materialsystem/ITexture.h"
 #include "materialsystem/MaterialSystem_Config.h"
 #include "istudiorender.h"
 #include "choreowidgetdrawhelper.h"
@@ -48,11 +48,12 @@ class DummyMaterialProxyFactory : public IMaterialProxyFactory
 public:
 	virtual IMaterialProxy *CreateProxy( const char *proxyName )	{return NULL;}
 	virtual void DeleteProxy( IMaterialProxy *pProxy )				{}
+	virtual CreateInterfaceFn GetFactory()							{return NULL;}
 };
 DummyMaterialProxyFactory	g_DummyMaterialProxyFactory;
 
 
-static void ReleaseMaterialSystemObjects()
+static void ReleaseMaterialSystemObjects( int nChangeFlags )
 {
 	StudioModel::ReleaseStudioModel();
 	models->ReleaseModels();
@@ -83,6 +84,9 @@ IMaterial *g_materialLines = NULL;
 IMaterial *g_materialFloor = NULL;
 IMaterial *g_materialVertexColor = NULL;
 IMaterial *g_materialShadow = NULL;
+IMaterial *g_materialArcActive = NULL;
+IMaterial *g_materialArcInActive = NULL;
+IMaterial *g_materialDebugText = NULL;
 
 MatSysWindow		*g_pMatSysWindow = 0;
 
@@ -175,7 +179,15 @@ MatSysWindow::~MatSysWindow ()
 
 void MatSysWindow::redraw()
 {
-	BaseClass::redraw();
+	// this gets called recursivly when an Assert dialogue pops up!
+	static bool bInRedraw;
+	if (!bInRedraw)
+	{
+		bInRedraw = true;
+		BaseClass::redraw();
+		bInRedraw = false;
+	}
+
 return;
 	if ( IsLocked() )
 	{
@@ -364,7 +376,7 @@ int MatSysWindow::handleEvent (mxEvent *event)
 			else if (event->buttons & mxEvent::MouseRightButton)
 			{
 				pModel->m_origin[0] = oldtx + (float) ((short)event->y - oldy) * 0.1;
-				pModel->m_origin[0] = clamp( pModel->m_origin[0], 8.0f, 1024.0f );
+				pModel->m_origin[0] = clamp( pModel->m_origin[0], 8.0f, 2048.0f );
 			}
 			redraw ();
 
@@ -514,6 +526,9 @@ void MatSysWindow::SuppressBufferSwap( bool bSuppress )
 
 void MatSysWindow::draw ()
 {
+	if ( CommandLine()->FindParm( "-noshaderapi" ) )
+		return;
+
 	int i;
 
 	g_pMaterialSystem->BeginFrame( 0 );
@@ -790,10 +805,10 @@ MatSysWindow::TakeScreenShot (const char *filename)
 		{
 			for (int x = 0; x < w; x++)
 			{
-				COLORREF cref = GetPixel (hdc, x, y);
-				data[i++] = (byte) ((cref >> 0)& 0xff);
-				data[i++] = (byte) ((cref >> 8) & 0xff);
-				data[i++] = (byte) ((cref >> 16) & 0xff);
+				Color cref = RGBToColor( GetPixel (hdc, x, y) );
+				data[i++] = (byte)cref.r();
+				data[i++] = (byte)cref.g();
+				data[i++] = (byte)cref.b();
 			}
 		}
 		ReleaseDC ((HWND) getHandle (), hdc);

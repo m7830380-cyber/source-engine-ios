@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright � 1996-2001, Valve LLC, All rights reserved. ============
 //
 // Purpose: 
 //
@@ -7,15 +7,13 @@
 
 #include "pch_serverbrowser.h"
 
-bool IsReplayServer( newgameserver_t &server );
-
 //-----------------------------------------------------------------------------
 // Purpose: List password column sort function
 //-----------------------------------------------------------------------------
 int __cdecl PasswordCompare(ListPanel *pPanel, const ListPanelItem &p1, const ListPanelItem &p2)
 {
-	newgameserver_t *s1 = ServerBrowserDialog().GetServer(p1.userData);
-	newgameserver_t *s2 = ServerBrowserDialog().GetServer(p2.userData);
+	gameserveritem_t *s1 = ServerBrowserDialog().GetServer(p1.userData);
+	gameserveritem_t *s2 = ServerBrowserDialog().GetServer(p2.userData);
 
 	if ( !s1 && s2 ) 
 		return -1;
@@ -37,8 +35,8 @@ int __cdecl PasswordCompare(ListPanel *pPanel, const ListPanelItem &p1, const Li
 //-----------------------------------------------------------------------------
 int __cdecl BotsCompare(ListPanel *pPanel, const ListPanelItem &p1, const ListPanelItem &p2)
 {
-	newgameserver_t *s1 = ServerBrowserDialog().GetServer(p1.userData);
-	newgameserver_t *s2 = ServerBrowserDialog().GetServer(p2.userData);
+	gameserveritem_t *s1 = ServerBrowserDialog().GetServer(p1.userData);
+	gameserveritem_t *s2 = ServerBrowserDialog().GetServer(p2.userData);
 
 	if ( !s1 && s2 ) 
 		return -1;
@@ -60,6 +58,93 @@ int __cdecl BotsCompare(ListPanel *pPanel, const ListPanelItem &p1, const ListPa
 //-----------------------------------------------------------------------------
 int __cdecl SecureCompare(ListPanel *pPanel, const ListPanelItem &p1, const ListPanelItem &p2)
 {
+	gameserveritem_t *s1 = ServerBrowserDialog().GetServer(p1.userData);
+	gameserveritem_t *s2 = ServerBrowserDialog().GetServer(p2.userData);
+
+	if ( !s1 && s2 ) 
+		return -1;
+	if ( !s2 && s1 )
+		return 1;
+	if ( !s1 && !s2 )
+		return 0;
+
+	if ( s1->m_bSecure < s2->m_bSecure )
+		return 1;
+	else if ( s1->m_bSecure > s2->m_bSecure )
+		return -1;
+
+	return 0;
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: list column sort function
+//-----------------------------------------------------------------------------
+extern CUtlVector< gametypes_t > g_GameTypes;
+int __cdecl ModeCompare( ListPanel *pPanel, const ListPanelItem &p1, const ListPanelItem &p2 )
+{
+	gameserveritem_t *s1 = ServerBrowserDialog().GetServer( p1.userData );
+	gameserveritem_t *s2 = ServerBrowserDialog().GetServer( p2.userData );
+
+	if ( !s1 && s2 )
+		return -1;
+	if ( !s2 && s1 )
+		return 1;
+	if ( !s1 && !s2 )
+		return 0;
+
+	// HACK: If we start looking at things other than prefix to determine mode (eg tags) this will break... 
+	// should make a 'GetModeForServerItem' shared func in that case...
+	// ALSOHACK: Compare icons, not prefixes. Some game modes have alternate names (ba_ and jb_ are both jailbreak).
+	const char* szIcon1 = NULL;
+	const char* szIcon2 = NULL;
+	FOR_EACH_VEC( g_GameTypes, i )
+	{
+		const gametypes_t& type = g_GameTypes[ i ];
+
+		if ( StringHasPrefix( V_UnqualifiedFileName( s1->m_szMap ), type.m_szPrefix ) )
+			szIcon1 = V_UnqualifiedFileName( type.m_szGametypeIcon );
+
+		if ( StringHasPrefix( V_UnqualifiedFileName( s2->m_szMap ), type.m_szPrefix ) )
+			szIcon2 = V_UnqualifiedFileName( type.m_szGametypeIcon );
+	}
+
+	if ( !szIcon1 && szIcon2 )
+		return 1;
+	if ( !szIcon2 && szIcon1 )
+		return -1;
+	if ( !szIcon1 && !szIcon2 )
+		return 0;
+
+	return V_stricmp( szIcon1, szIcon2 );
+
+}
+
+extern uint64 GetMapIDFromMapPath( const char *pMapPath );
+//-----------------------------------------------------------------------------
+// Purpose: list column sort function
+//-----------------------------------------------------------------------------
+int __cdecl WorkshopCompare( ListPanel *pPanel, const ListPanelItem &p1, const ListPanelItem &p2 )
+{
+	gameserveritem_t *s1 = ServerBrowserDialog().GetServer( p1.userData );
+	gameserveritem_t *s2 = ServerBrowserDialog().GetServer( p2.userData );
+
+	if ( !s1 && s2 )
+		return -1;
+	if ( !s2 && s1 )
+		return 1;
+	if ( !s1 && !s2 )
+		return 0;
+
+	uint64 wsid1 = GetMapIDFromMapPath( s1->m_szMap );
+	uint64 wsid2 = GetMapIDFromMapPath( s2->m_szMap );
+
+	// No need to actually sort by id number... we really just want to group them. It does have the effect of sorting by age though... 
+	if ( wsid1 > wsid2 )
+		return 1;
+	else if ( wsid2 > wsid1 )
+		return -1;
+
 	return 0;
 }
 
@@ -68,8 +153,8 @@ int __cdecl SecureCompare(ListPanel *pPanel, const ListPanelItem &p1, const List
 //-----------------------------------------------------------------------------
 int __cdecl IPAddressCompare(ListPanel *pPanel, const ListPanelItem &p1, const ListPanelItem &p2)
 {
-	newgameserver_t *s1 = ServerBrowserDialog().GetServer(p1.userData);
-	newgameserver_t *s2 = ServerBrowserDialog().GetServer(p2.userData);
+	gameserveritem_t *s1 = ServerBrowserDialog().GetServer(p1.userData);
+	gameserveritem_t *s2 = ServerBrowserDialog().GetServer(p2.userData);
 
 	if ( !s1 && s2 ) 
 		return -1;
@@ -91,8 +176,8 @@ int __cdecl IPAddressCompare(ListPanel *pPanel, const ListPanelItem &p1, const L
 //-----------------------------------------------------------------------------
 int __cdecl PingCompare(ListPanel *pPanel, const ListPanelItem &p1, const ListPanelItem &p2)
 {
-	newgameserver_t *s1 = ServerBrowserDialog().GetServer(p1.userData);
-	newgameserver_t *s2 = ServerBrowserDialog().GetServer(p2.userData);
+	gameserveritem_t *s1 = ServerBrowserDialog().GetServer(p1.userData);
+	gameserveritem_t *s2 = ServerBrowserDialog().GetServer(p2.userData);
 
 	if ( !s1 && s2 ) 
 		return -1;
@@ -117,8 +202,8 @@ int __cdecl PingCompare(ListPanel *pPanel, const ListPanelItem &p1, const ListPa
 //-----------------------------------------------------------------------------
 int __cdecl MapCompare(ListPanel *pPanel, const ListPanelItem &p1, const ListPanelItem &p2)
 {
-	newgameserver_t *s1 = ServerBrowserDialog().GetServer(p1.userData);
-	newgameserver_t *s2 = ServerBrowserDialog().GetServer(p2.userData);
+	gameserveritem_t *s1 = ServerBrowserDialog().GetServer(p1.userData);
+	gameserveritem_t *s2 = ServerBrowserDialog().GetServer(p2.userData);
 
 	if ( !s1 && s2 ) 
 		return -1;
@@ -127,7 +212,7 @@ int __cdecl MapCompare(ListPanel *pPanel, const ListPanelItem &p1, const ListPan
 	if ( !s1 && !s2 )
 		return 0;
 
-	return Q_stricmp( s1->m_szMap, s2->m_szMap );
+	return Q_stricmp( V_UnqualifiedFileName( s1->m_szMap ), V_UnqualifiedFileName( s2->m_szMap ) );
 }
 
 //-----------------------------------------------------------------------------
@@ -135,8 +220,8 @@ int __cdecl MapCompare(ListPanel *pPanel, const ListPanelItem &p1, const ListPan
 //-----------------------------------------------------------------------------
 int __cdecl GameCompare(ListPanel *pPanel, const ListPanelItem &p1, const ListPanelItem &p2)
 {
-	newgameserver_t *s1 = ServerBrowserDialog().GetServer(p1.userData);
-	newgameserver_t *s2 = ServerBrowserDialog().GetServer(p2.userData);
+	gameserveritem_t *s1 = ServerBrowserDialog().GetServer(p1.userData);
+	gameserveritem_t *s2 = ServerBrowserDialog().GetServer(p2.userData);
 
 	if ( !s1 && s2 ) 
 		return -1;
@@ -156,8 +241,8 @@ int __cdecl GameCompare(ListPanel *pPanel, const ListPanelItem &p1, const ListPa
 //-----------------------------------------------------------------------------
 int __cdecl ServerNameCompare(ListPanel *pPanel, const ListPanelItem &p1, const ListPanelItem &p2)
 {
-	newgameserver_t *s1 = ServerBrowserDialog().GetServer(p1.userData);
-	newgameserver_t *s2 = ServerBrowserDialog().GetServer(p2.userData);
+	gameserveritem_t *s1 = ServerBrowserDialog().GetServer(p1.userData);
+	gameserveritem_t *s2 = ServerBrowserDialog().GetServer(p2.userData);
 
 	if ( !s1 && s2 ) 
 		return -1;
@@ -166,7 +251,7 @@ int __cdecl ServerNameCompare(ListPanel *pPanel, const ListPanelItem &p1, const 
 	if ( !s1 && !s2 )
 		return 0;
 
-	return Q_stricmp( s1->m_szServerName, s2->m_szServerName );
+	return Q_stricmp( s1->GetName(), s2->GetName() );
 }
 
 //-----------------------------------------------------------------------------
@@ -174,8 +259,8 @@ int __cdecl ServerNameCompare(ListPanel *pPanel, const ListPanelItem &p1, const 
 //-----------------------------------------------------------------------------
 int __cdecl PlayersCompare(ListPanel *pPanel, const ListPanelItem &p1, const ListPanelItem &p2)
 {
-	newgameserver_t *s1 = ServerBrowserDialog().GetServer(p1.userData);
-	newgameserver_t *s2 = ServerBrowserDialog().GetServer(p2.userData);
+	gameserveritem_t *s1 = ServerBrowserDialog().GetServer(p1.userData);
+	gameserveritem_t *s2 = ServerBrowserDialog().GetServer(p2.userData);
 
 	if ( !s1 && s2 ) 
 		return -1;
@@ -184,10 +269,10 @@ int __cdecl PlayersCompare(ListPanel *pPanel, const ListPanelItem &p1, const Lis
 	if ( !s1 && !s2 )
 		return 0;
 
-	int s1p = max( 0, s1->m_nPlayers - s1->m_nBotPlayers );
-	int s1m = max( 0, s1->m_nMaxPlayers - s1->m_nBotPlayers );
-	int s2p = max( 0, s2->m_nPlayers - s2->m_nBotPlayers );
-	int s2m = max( 0, s2->m_nMaxPlayers - s2->m_nBotPlayers );
+	int s1p = MAX( 0, s1->m_nPlayers - s1->m_nBotPlayers );
+	int s1m = MAX( 0, s1->m_nMaxPlayers - s1->m_nBotPlayers );
+	int s2p = MAX( 0, s2->m_nPlayers - s2->m_nBotPlayers );
+	int s2m = MAX( 0, s2->m_nMaxPlayers - s2->m_nBotPlayers );
 
 	// compare number of players
 	if ( s1p > s2p )
@@ -209,6 +294,22 @@ int __cdecl PlayersCompare(ListPanel *pPanel, const ListPanelItem &p1, const Lis
 //-----------------------------------------------------------------------------
 int __cdecl LastPlayedCompare(ListPanel *pPanel, const ListPanelItem &p1, const ListPanelItem &p2)
 {
+	gameserveritem_t *s1 = ServerBrowserDialog().GetServer( p1.userData );
+	gameserveritem_t *s2 = ServerBrowserDialog().GetServer( p2.userData );
+
+	if ( !s1 && s2 ) 
+		return -1;
+	if ( !s2 && s1 )
+		return 1;
+	if ( !s1 && !s2 )
+		return 0;
+
+	// compare number of players
+	if ( s1->m_ulTimeLastPlayed > s2->m_ulTimeLastPlayed )
+		return -1;
+	if ( s1->m_ulTimeLastPlayed < s2->m_ulTimeLastPlayed )
+		return 1;
+
 	return 0;
 }
 
@@ -217,8 +318,8 @@ int __cdecl LastPlayedCompare(ListPanel *pPanel, const ListPanelItem &p1, const 
 //-----------------------------------------------------------------------------
 int __cdecl TagsCompare(ListPanel *pPanel, const ListPanelItem &p1, const ListPanelItem &p2)
 {
-	newgameserver_t *s1 = ServerBrowserDialog().GetServer(p1.userData);
-	newgameserver_t *s2 = ServerBrowserDialog().GetServer(p2.userData);
+	gameserveritem_t *s1 = ServerBrowserDialog().GetServer(p1.userData);
+	gameserveritem_t *s2 = ServerBrowserDialog().GetServer(p2.userData);
 
 	if ( !s1 && s2 ) 
 		return -1;
@@ -228,31 +329,5 @@ int __cdecl TagsCompare(ListPanel *pPanel, const ListPanelItem &p1, const ListPa
 		return 0;
 
 	return Q_stricmp( s1->m_szGameTags, s2->m_szGameTags );
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: Replay comparison function
-//-----------------------------------------------------------------------------
-int __cdecl ReplayCompare(ListPanel *pPanel, const ListPanelItem &p1, const ListPanelItem &p2)
-{
-	newgameserver_t *s1 = ServerBrowserDialog().GetServer(p1.userData);
-	newgameserver_t *s2 = ServerBrowserDialog().GetServer(p2.userData);
-
-	if ( !s1 && s2 ) 
-		return -1;
-	if ( !s2 && s1 )
-		return 1;
-	if ( !s1 && !s2 )
-		return 0;
-
-	bool s1_is_replay = IsReplayServer( *s1 );
-	bool s2_is_replay = IsReplayServer( *s2 );
-
-	if ( s1_is_replay < s2_is_replay )
-		return 1;
-	else if ( s1_is_replay > s2_is_replay )
-		return -1;
-
-	return 0;
 }
 

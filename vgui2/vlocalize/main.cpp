@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -6,17 +6,15 @@
 //
 //===========================================================================//
 
+#include "windows.h"
 #include "vgui_controls/Panel.h"
 #include "vgui/IScheme.h"
 #include "vgui/ISurface.h"
 #include "vgui/IVGui.h"
-#include "filesystem.h"
+#include "FileSystem.h"
 #include "tier0/icommandline.h"
 #include "inputsystem/iinputsystem.h"
 #include "appframework/tier3app.h"
-#include <windows.h>
-
-//#include "..\..\tracker\common\winlite.h"
 
 #include "LocalizationDialog.h"
 
@@ -74,7 +72,6 @@ bool CVLocalizeApp::PreInit()
 	g_pFullFileSystem->AddSearchPath("../game/platform", "PLATFORM");
 	return true;
 }
-
 
 //-----------------------------------------------------------------------------
 // Purpose: Entry point

@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: A dialog for adding, deleting, and renaming visgroups.
 //
@@ -16,7 +16,7 @@
 // memdbgon must be the last include file in a .cpp file!!!
 #include <tier0/memdbgon.h>
 
-static const unsigned int g_uSelChangeMsg = ::RegisterWindowMessage(GROUPLIST_MSG_SEL_CHANGE);
+static const unsigned int g_uSelChangeMsg = ::RegisterWindowMessage(TREELIST_MSG_SEL_CHANGE);
 
 
 BEGIN_MESSAGE_MAP(CEditGroups, CDialog)
@@ -122,7 +122,7 @@ void CEditGroups::OnNew(void)
 	CVisGroup *pGroup = pDoc->VisGroups_AddGroup("new group");
 	pGroup->SetVisible(VISGROUP_SHOWN);
 	UpdateGroupList();
-	m_cGroupList.SelectVisGroup(pGroup);
+	m_cGroupList.SelectItem(pGroup);
 	m_cName.EnableWindow(TRUE);
 	m_cName.SetActiveWindow();
 }
@@ -215,7 +215,7 @@ BOOL CEditGroups::OnInitDialog(void)
 	if (m_cGroupList.GetVisGroupCount())
 	{
 		CVisGroup *pVisGroup = m_cGroupList.GetVisGroup(0);
-		m_cGroupList.SelectVisGroup(pVisGroup);
+		m_cGroupList.SelectItem(pVisGroup);
 		UpdateControlsForVisGroup(pVisGroup);
 	}
 	else

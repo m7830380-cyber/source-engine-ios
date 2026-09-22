@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2005, Valve Corporation, All rights reserved. =======
 //
 // Purpose: CommEdit tool; main UI smarts class
 //
@@ -83,7 +83,7 @@ public:
 	virtual const char *GetToolName() { return "Commentary Editor"; }
 	virtual bool	Init( );
 	virtual void	Shutdown();
-	virtual bool	CanQuit();
+	virtual bool	CanQuit( const char *pExitMsg );
 	virtual void	OnToolActivate();
 	virtual void	OnToolDeactivate();
 	virtual const char* GetEntityData( const char *pActualEntityData );
@@ -200,6 +200,15 @@ private:
 	void BringConsoleToFront();
 
 private:
+	enum DropNodeMode_t
+	{
+		DROP_MODE_COMMENTARY = 0,
+		DROP_MODE_TARGET,
+		DROP_MODE_REMARKABLE,
+
+		DROP_MODE_COUNT,
+	};
+
 	// Document
 	CCommEditDoc *m_pDoc;
 
@@ -220,9 +229,8 @@ private:
 
 	// Separate undo context for the act busy tool
 	bool m_bInNodeDropMode;
-	bool m_bDroppingCommentaryNodes;
-	CDmeHandle< CDmeCommentaryNodeEntity > m_hPreviewNode;
-	CDmeHandle< CDmeCommentaryNodeEntity > m_hPreviewTarget;
+	DropNodeMode_t m_nDropMode;
+	CDmeHandle< CDmeCommentaryNodeEntity > m_hPreviewEntity[DROP_MODE_COUNT];
 	CToolWindowFactory< ToolWindow > m_ToolWindowFactory;
 };
 

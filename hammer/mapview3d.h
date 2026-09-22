@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -15,6 +15,7 @@
 #include "MapView.h"
 #include "Render3D.h"
 #include "camera.h"
+#include "mapface.h"
 
 namespace vgui
 {
@@ -55,6 +56,7 @@ public:
 	// CMapView interface:
 	//
 	void RenderView();
+
 	bool ShouldRender();
 	void ActivateView(bool bActivate);
 	void UpdateView(int nFlags);
@@ -99,6 +101,8 @@ public:
 	// Release all video memory
 	void ReleaseVideoMemory();
 
+	void Foundry_OnLButtonDown( int x, int y );
+
 	// ClassWizard generated virtual function overrides
 	//{{AFX_VIRTUAL(CMapView3D)
 public:
@@ -116,9 +120,11 @@ public:
 	virtual void Dump(CDumpContext& dc) const;
 #endif
 
+	void RenderView2( bool bRenderingOverEngine );
+
 private:
 
-	void Render();
+	void Render( bool bRenderingOverEngine );
 
 	void EnableCrosshair(bool bEnable);
 		

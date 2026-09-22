@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -15,7 +15,7 @@
 
 #include "vgui_internal.h"
 #include "ImageBorder.h"
-#include "KeyValues.h"
+#include "keyvalues.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
@@ -39,12 +39,6 @@ ImageBorder::ImageBorder()
 //-----------------------------------------------------------------------------
 ImageBorder::~ImageBorder()
 {
-	if ( vgui::surface() && m_iTextureID != -1 )
-	{
-		vgui::surface()->DestroyTextureID( m_iTextureID );
-		m_iTextureID = -1;
-	}
-
 	delete [] _name;
 	if ( m_pszImageName )
 	{
@@ -180,12 +174,12 @@ void ImageBorder::Paint(VPANEL panel)
 void ImageBorder::ApplySchemeSettings(IScheme *pScheme, KeyValues *inResourceData)
 {
 	m_eBackgroundType = (backgroundtype_e)inResourceData->GetInt("backgroundtype");
-	m_bTiled = inResourceData->GetInt( "tiled" );
+	m_bTiled = inResourceData->GetBool( "tiled" );
 
 	const char *imageName = inResourceData->GetString("image", "");
 	SetImage( imageName );
 
-	m_bPaintFirst = inResourceData->GetInt("paintfirst", true );
+	m_bPaintFirst = inResourceData->GetBool("paintfirst", true );
 }
 
 //-----------------------------------------------------------------------------

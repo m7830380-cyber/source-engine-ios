@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -52,7 +52,7 @@ class CMapLine : public CMapHelper
 		int SerializeMAP(std::fstream &File, BOOL bRMF);
 
 		bool IsVisualElement(void) { return(true); }
-		bool IsCulledByCordon(const Vector &vecMins, const Vector &vecMaxs) { return false; } // We don't hide unless our parent hides.
+		virtual bool CanBeCulledByCordon() const { return false; } // We don't hide unless our parent hides.
 
 		virtual CMapClass *PrepareSelection(SelectMode_t eSelectMode);
 		

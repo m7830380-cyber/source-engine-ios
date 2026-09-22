@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -34,8 +34,11 @@ public:
 
 	// MANIPULATORS
 	void dumpViewport (const char *filename);
+	void dumpViewportWithLabel (const char *filename, const char *label);
 	virtual int handleEvent( mxEvent *event );
 	virtual void draw( );
+
+	Color getViewportPixelColor( int x, int y );
 
     void			*m_hWnd;
 	// void			*m_hDC;
@@ -59,6 +62,9 @@ extern IMaterial *g_materialLines;
 extern IMaterial *g_materialFloor;
 extern IMaterial *g_materialVertexColor;
 extern IMaterial *g_materialShadow;
+extern IMaterial *g_materialArcActive;
+extern IMaterial *g_materialArcInActive;
+extern IMaterial *g_materialDebugText;
 
 #if 0
 
@@ -101,7 +107,7 @@ public:
 	bool			FindParameter(const char *s);
 	const char*		FindParameterArg(const char *s);
 
-	void			SetTitleText(PRINTF_FORMAT_STRING const char *fmt, ...);
+	void			SetTitleText(const char *fmt, ...);
 
 
 private:
@@ -158,10 +164,10 @@ public:
 // ---------------------------------------------------------------------------------------- //
 
 // Show an error dialog and quit.
-bool Sys_Error(PRINTF_FORMAT_STRING const char *pMsg, ...);
+bool Sys_Error(const char *pMsg, ...);
 
 // Print to the trace window.
-void con_Printf(PRINTF_FORMAT_STRING const char *pMsg, ...);
+void con_Printf(const char *pMsg, ...);
 
 // Returns true if the key is down.
 bool IsKeyDown(char key);

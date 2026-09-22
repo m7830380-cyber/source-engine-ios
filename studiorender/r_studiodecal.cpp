@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright  1996-2008, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -15,9 +15,9 @@
 #include "cmodel.h"
 #include "materialsystem/imaterialvar.h"
 #include "convar.h"
+#include "engine/decal_flags.h"
 
 #include "tier0/vprof.h"
-#include "tier0/minidump.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
@@ -35,6 +35,26 @@ enum
 	DECAL_CLIP_PLUSU	= 0x4,
 	DECAL_CLIP_PLUSV	= 0x8,
 };
+
+enum DECAL_FLAGS
+{
+	DECAL_PLAYERSPRAY		= 0x1,
+	DECAL_IMMEDIATECLEANUP	= 0x2,
+	DECAL_HASDRAWN			= 0x4,
+};
+
+static inline int ConvertToPrivateDecalFlags( int nPublicDecalFlags )
+{
+	int nPrivateFlags = 0;
+	if ( ( nPublicDecalFlags & EDF_PLAYERSPRAY ) != 0 )			{ nPublicDecalFlags &= ~EDF_PLAYERSPRAY;		nPrivateFlags |= DECAL_PLAYERSPRAY; }
+	if ( ( nPublicDecalFlags & EDF_IMMEDIATECLEANUP ) != 0 )	{ nPublicDecalFlags &= ~EDF_IMMEDIATECLEANUP;	nPrivateFlags |= DECAL_IMMEDIATECLEANUP; }
+
+	// If this hits, we are missing conversion here. 
+	Assert( nPublicDecalFlags == 0 );
+
+	return nPrivateFlags;
+}
+
 
 
 #define MAX_DECAL_INDICES_PER_MODEL 2048
@@ -61,7 +81,7 @@ struct DecalClipState_t
 	// Union of the decal triangle clip flags above for each vert
 	int m_ClipFlags[16];
 
-	DecalClipState_t() = default;
+	DecalClipState_t() {}
 
 private:
 	// Copy constructors are not allowed
@@ -115,7 +135,7 @@ StudioDecalHandle_t CStudioRender::CreateDecalList( studiohwdata_t *pHardwareDat
 
 	// NOTE: This function is called directly without queueing 
 	m_DecalMutex.Lock();
-	intp handle = m_DecalList.AddToTail();
+	auto handle = m_DecalList.AddToTail();
 	m_DecalMutex.Unlock();
 
 	m_DecalList[handle].m_pHardwareData = pHardwareData;
@@ -168,9 +188,7 @@ void CStudioRender::DestroyDecalList( StudioDecalHandle_t hDecal )
 //-----------------------------------------------------------------------------
 // Transformation/Rotation for decals
 //-----------------------------------------------------------------------------
-#define FRONTFACING_EPS	0.1f
-
-inline bool CStudioRender::IsFrontFacing( const Vector * pnorm, const mstudioboneweight_t * pboneweight )
+inline bool CStudioRender::IsFrontFacing( DecalBuildInfo_t& build, const Vector * pnorm, const mstudioboneweight_t * pboneweight )
 {
 	// NOTE: This only works to rotate normals if there's no scale in the
 	// pose to world transforms. If we ever add scale, we'll need to
@@ -179,7 +197,7 @@ inline bool CStudioRender::IsFrontFacing( const Vector * pnorm, const mstudiobon
 	float z;
 	if (pboneweight->numbones == 1)
 	{
-		z = DotProduct( pnorm->Base(), m_PoseToDecal[(unsigned)pboneweight->bone[0]][2] );
+		z = DotProduct( pnorm->Base(), m_PoseToDecal[pboneweight->bone[0]][2] );
 	}
 	else
 	{
@@ -188,12 +206,50 @@ inline bool CStudioRender::IsFrontFacing( const Vector * pnorm, const mstudiobon
 		z = 0;
 		for (int i = 0; i < pboneweight->numbones; i++)
 		{
-			zbone = DotProduct( pnorm->Base(), m_PoseToDecal[(unsigned)pboneweight->bone[i]][2] );
+			zbone = DotProduct( pnorm->Base(), m_PoseToDecal[pboneweight->bone[i]][2] );
 			z += zbone * pboneweight->weight[i];
 		}
 	}
 
-	return ( z >= FRONTFACING_EPS );
+	return ( z >= build.m_flFrontFacingCosineCheck );
+}
+
+
+inline bool CStudioRender::IsDecalStartPointWithinZLimit( DecalBuildInfo_t& build, const Vector * ppos, const mstudioboneweight_t * pboneweight )
+{
+	if ( build.m_AllowBehindPointOfImpact && !build.m_bEnforceProjectionRadiusZ )
+		return true; // caller doesn't care about Z-projection
+
+	// NOTE: This only works to rotate positions if there's no scale in the
+	// pose to world transforms. If we ever add scale, we'll need to
+	// multiply by the inverse transpose of the pose to decal
+	float z = 0.0f;
+	
+	if ( pboneweight->numbones == 1 )
+	{
+		z = DotProduct( ppos->Base(), m_PoseToDecal[pboneweight->bone[0]][2] ) +
+				m_PoseToDecal[pboneweight->bone[0]][2][3];
+	}
+	else
+	{
+		for (int i = 0; i < pboneweight->numbones; i++)
+		{
+			float zbone = DotProduct( ppos->Base(), m_PoseToDecal[pboneweight->bone[i]][2] ) + 
+				m_PoseToDecal[pboneweight->bone[i]][2][3];
+			z += zbone * pboneweight->weight[i];
+		}
+	}
+	
+	if ( !build.m_AllowBehindPointOfImpact &&
+		( z > 0.0f ) )	// behind impact not allowed, but z is behind: prevent
+		return false;
+
+	if ( build.m_bEnforceProjectionRadiusZ &&	// enforcing Z, but too far from the origin of hit
+		( ( z < -build.m_Radius ) || ( z > build.m_Radius/2 ) ) )
+		return false;
+
+	// Z-checks passed
+	return true;
 }
 
 inline bool CStudioRender::TransformToDecalSpace( DecalBuildInfo_t& build, const Vector& pos, 
@@ -205,10 +261,10 @@ inline bool CStudioRender::TransformToDecalSpace( DecalBuildInfo_t& build, const
 
 	if (pboneweight->numbones == 1)
 	{
-		uv.x = DotProduct( pos.Base(), m_PoseToDecal[(unsigned)pboneweight->bone[0]][0] ) + 
-			m_PoseToDecal[(unsigned)pboneweight->bone[0]][0][3];
-		uv.y = DotProduct( pos.Base(), m_PoseToDecal[(unsigned)pboneweight->bone[0]][1] ) + 
-			m_PoseToDecal[(unsigned)pboneweight->bone[0]][1][3];
+		uv.x = DotProduct( pos.Base(), m_PoseToDecal[pboneweight->bone[0]][0] ) + 
+			m_PoseToDecal[pboneweight->bone[0]][0][3];
+		uv.y = DotProduct( pos.Base(), m_PoseToDecal[pboneweight->bone[0]][1] ) + 
+			m_PoseToDecal[pboneweight->bone[0]][1][3];
 	}
 	else
 	{
@@ -216,10 +272,10 @@ inline bool CStudioRender::TransformToDecalSpace( DecalBuildInfo_t& build, const
 		float ubone, vbone;
 		for (int i = 0; i < pboneweight->numbones; i++)
 		{
-			ubone = DotProduct( pos.Base(), m_PoseToDecal[(unsigned)pboneweight->bone[i]][0] ) + 
-				m_PoseToDecal[(unsigned)pboneweight->bone[i]][0][3];
-			vbone = DotProduct( pos.Base(), m_PoseToDecal[(unsigned)pboneweight->bone[i]][1] ) + 
-				m_PoseToDecal[(unsigned)pboneweight->bone[i]][1][3];
+			ubone = DotProduct( pos.Base(), m_PoseToDecal[pboneweight->bone[i]][0] ) + 
+				m_PoseToDecal[pboneweight->bone[i]][0][3];
+			vbone = DotProduct( pos.Base(), m_PoseToDecal[pboneweight->bone[i]][1] ) + 
+				m_PoseToDecal[pboneweight->bone[i]][1][3];
 
 			uv.x += ubone * pboneweight->weight[i];
 			uv.y += vbone * pboneweight->weight[i];
@@ -233,8 +289,8 @@ inline bool CStudioRender::TransformToDecalSpace( DecalBuildInfo_t& build, const
 	float z;
 	if (pboneweight->numbones == 1)
 	{
-		z = DotProduct( pos.Base(), m_PoseToDecal[(unsigned)pboneweight->bone[0]][2] ) + 
-			m_PoseToDecal[(unsigned)pboneweight->bone[0]][2][3];
+		z = DotProduct( pos.Base(), m_PoseToDecal[pboneweight->bone[0]][2] ) + 
+			m_PoseToDecal[pboneweight->bone[0]][2][3];
 	}
 	else
 	{
@@ -242,13 +298,13 @@ inline bool CStudioRender::TransformToDecalSpace( DecalBuildInfo_t& build, const
 		float zbone;
 		for (int i = 0; i < pboneweight->numbones; i++)
 		{
-			zbone = DotProduct( pos.Base(), m_PoseToDecal[(unsigned)pboneweight->bone[i]][2] ) + 
-				m_PoseToDecal[(unsigned)pboneweight->bone[i]][2][3];
+			zbone = DotProduct( pos.Base(), m_PoseToDecal[pboneweight->bone[i]][2] ) + 
+				m_PoseToDecal[pboneweight->bone[i]][2][3];
 			z += zbone * pboneweight->weight[i];
 		}
 	}
 
-	return (fabs(z) < build.m_Radius );
+	return (fabs(z) < build.m_flMaxDepth );
 }
 
 
@@ -305,7 +361,12 @@ bool CStudioRender::ProjectDecalOntoMesh( DecalBuildInfo_t& build, DecalBuildVer
 
 		// We need to know if the normal is pointing in the negative direction
 		// if so, blow off all triangles connected to that vertex.
-		if ( !IsFrontFacing( vecNormal, boneWeights ) )
+		if ( !IsFrontFacing( build, vecNormal, boneWeights ) )
+			continue;
+
+		// We also need to check to make sure the source of the decal is not past this vertex.
+		// This is for blood splatters that start from a player that is inside a large prop.
+		if ( !IsDecalStartPointWithinZLimit( build, vecPosition, boneWeights ) )
 			continue;
 
 		pVertexInfo[j].m_Flags |= DecalBuildVertexInfo_t::FRONT_FACING;
@@ -744,24 +805,10 @@ void CStudioRender::AddDecalToMesh( DecalBuildInfo_t& build )
 		for (int k = 0; k < pGroup->m_NumStrips; ++k)
 		{
 			OptimizedModel::StripHeader_t* pStrip = &pGroup->m_pStripData[k];
-			if (pStrip->flags & OptimizedModel::STRIP_IS_TRISTRIP)
-			{
-				for (int i = 0; i < pStrip->numIndices - 2; ++i)
-				{
-					bool ccw = (i & 0x1) == 0;
-					int ti1 = pStrip->indexOffset + i;
-					int ti2 = ti1+1+ccw;
-					int ti3	= ti1+2-ccw;
-					int i1 = pGroup->MeshIndex(ti1);
-					int i2 = pGroup->MeshIndex(ti2);
-					int i3 = pGroup->MeshIndex(ti3);
 
-					AddTriangleToDecal( build, i1, i2, i3, pGroup->m_pIndices[ti1], pGroup->m_pIndices[ti2], pGroup->m_pIndices[ti3] );
-				}
-			}
-			else
+			// JasonM TODO - handle quads/subds (just skip them for now)
+			if ( pStrip->flags & OptimizedModel::STRIP_IS_TRILIST )
 			{
-				Assert( pStrip->flags & OptimizedModel::STRIP_IS_TRILIST );
 				for (int i = 0; i < pStrip->numIndices; i += 3)
 				{
 					int idx = pStrip->indexOffset + i;
@@ -836,7 +883,7 @@ bool CStudioRender::ComputePoseToDecal( const Ray_t& ray, const Vector& up )
 			return false;
 	}
 
-	CrossProduct( decalN, decalU, decalV );
+	CrossProduct( decalU, decalN, decalV );
 
 	// Since I want world-to-decal, I gotta take the inverse of the decal
 	// to world. Assuming post-multiplying column vectors, the decal to world = 
@@ -866,13 +913,14 @@ bool CStudioRender::ComputePoseToDecal( const Ray_t& ray, const Vector& up )
 // Gets the list of triangles for a particular material and lod
 //-----------------------------------------------------------------------------
 
-int CStudioRender::GetDecalMaterial( DecalLod_t& decalLod, IMaterial* pDecalMaterial )
+int CStudioRender::GetDecalMaterial( DecalLod_t& decalLod, IMaterial* pDecalMaterial, void *pvProxyUserData )
 {
 	// Grab the material for this lod...
 	unsigned short j;
 	for ( j = decalLod.m_FirstMaterial; j != m_DecalMaterial.InvalidIndex(); j = m_DecalMaterial.Next(j) )
 	{
-		if (m_DecalMaterial[j].m_pMaterial == pDecalMaterial)
+		if ( (m_DecalMaterial[j].m_pMaterial == pDecalMaterial)
+			&& ( m_DecalMaterial[j].m_pvProxyUserData == pvProxyUserData ) )
 		{
 			return j;
 		}
@@ -887,6 +935,7 @@ int CStudioRender::GetDecalMaterial( DecalLod_t& decalLod, IMaterial* pDecalMate
 	decalLod.m_FirstMaterial = j;
 
 	m_DecalMaterial[j].m_pMaterial = pDecalMaterial;
+	m_DecalMaterial[j].m_pvProxyUserData = pvProxyUserData;
 
 	return j;
 }
@@ -896,17 +945,27 @@ int CStudioRender::GetDecalMaterial( DecalLod_t& decalLod, IMaterial* pDecalMate
 //-----------------------------------------------------------------------------
 void CStudioRender::RetireDecal( DecalModelList_t &list, DecalId_t nRetireID, int iLOD, int iMaxLOD )
 {
-	// Remove it from the global LRU...
-	DecalLRUListIndex_t i;
-	for ( i = m_DecalLRU.Head(); i != m_DecalLRU.InvalidIndex(); i = m_DecalLRU.Next( i ) )
 	{
-		if ( nRetireID == m_DecalLRU[i].m_nDecalId )
+		for ( DecalLRUListIndex_t i = m_DecalLRU.Head(); i != m_DecalLRU.InvalidIndex(); i = m_DecalLRU.Next( i ) )
 		{
-			m_DecalLRU.Remove( i );
-			break;
+			if ( nRetireID == m_DecalLRU[ i ].m_nDecalId )
+			{
+				RetireDecalAtAddress( list, i, iLOD, iMaxLOD );
+				return;
+			}
 		}
 	}
-	Assert( i != m_DecalLRU.InvalidIndex() );
+
+	Assert( !"CStudioRender::RetireDecal - Never should get here." );
+}
+
+void CStudioRender::RetireDecalAtAddress( DecalModelList_t &list, DecalLRUListIndex_t lruAddress, int iLOD, int iMaxLOD )
+{
+	// Remove it from the global LRU...
+	Assert( m_DecalLRU.IsValidIndex( lruAddress ) );
+
+	DecalId_t nRetireID = m_DecalLRU[ lruAddress ].m_nDecalId;
+	m_DecalLRU.Remove( lruAddress );
 
 	// Find the id to retire and retire all the decals with this id across all LODs.
 	DecalHistoryList_t *pHistoryList = &list.m_pLod[iLOD].m_DecalHistory;
@@ -1077,7 +1136,7 @@ int CStudioRender::ComputeVertexAllocation( int iMaxLOD, int body, studiohwdata_
 					}
 				}
 
-				if ( pMaterial->GetMaterialVarFlag( MATERIAL_VAR_SUPPRESS_DECALS ) )
+				if ( pMaterial->GetMaterialVarFlag( MATERIAL_VAR_SUPPRESS_DECALS ) || pMesh->numvertices == 0 )
 				{
 					pMeshVertices[nCurrMesh].m_nIndex = -1;
 					continue;
@@ -1116,21 +1175,64 @@ void CStudioRender::ProjectDecalsOntoMeshes( DecalBuildInfo_t& build, int nMeshC
 }
 
 
+//-----------------------------------------------------------------------------
+// Tries to retire a decal and returns true if successfully retired one
+//-----------------------------------------------------------------------------
+bool CStudioRender::BTryToRetireDecal( StudioDecalHandle_t hDecal, DecalHistoryList_t *pHistoryList, bool bCanRetirePlayerSpray )
+{
+	intp h = ( intp ) hDecal;
+	DecalModelList_t& list = m_DecalList[ h ];
+
+	int nRootLOD = list.m_pHardwareData->m_RootLOD;
+	int nFinalLOD = list.m_pHardwareData->m_NumLODs;
+
+	for ( unsigned short iList = pHistoryList->Head();
+		iList != pHistoryList->InvalidIndex();
+		iList = pHistoryList->Next( iList ) )
+	{
+		DecalHistory_t *pDecalHistory = &pHistoryList->Element( iList );
+		if ( !pDecalHistory )
+			continue;
+
+		DecalLRUListIndex_t i = m_DecalLRU.Head();
+		for ( ; i != m_DecalLRU.InvalidIndex(); i = m_DecalLRU.Next( i ) )
+		{
+			if ( pDecalHistory->m_nId == m_DecalLRU[ i ].m_nDecalId )
+			{
+				if ( !bCanRetirePlayerSpray && ( ( m_DecalLRU[ i ].m_nFlags & DECAL_PLAYERSPRAY ) != 0 ) )
+					break;	// the history entry is a player spray, do not retire it
+				
+				RetireDecalAtAddress( list, i, nRootLOD, nFinalLOD );
+				return true;
+			}
+		}
+
+		// Assert that we found and inspected that model decal
+		Assert( i != m_DecalLRU.InvalidIndex() );
+	}
+
+	return false;
+}
+
 	
 //-----------------------------------------------------------------------------
 // Add decals to a decal list by doing a planar projection along the ray
 //-----------------------------------------------------------------------------
+static unsigned int s_DecalScaleVarCache = 0;
 void CStudioRender::AddDecal( StudioDecalHandle_t hDecal, const StudioRenderContext_t& rc, matrix3x4_t *pBoneToWorld, 
 	studiohdr_t *pStudioHdr, const Ray_t& ray, const Vector& decalUp, IMaterial* pDecalMaterial, 
-	float radius, int body, bool noPokethru, int maxLODToDecal )
+	float radius, int body, bool noPokethru, int maxLODToDecal, void *pvProxyUserData, int nAdditionalDecalFlags )
 {
 	VPROF( "CStudioRender::AddDecal" );
+
+	if ( IsPS3() ) // FIXME: <vitaliy> disabling decals on models since on PS3 vertex data is packed for EDGE!
+		return;
 
 	if ( hDecal == STUDIORENDER_DECAL_INVALID )
 		return;
 
 	// For each lod, build the decal list
-    intp h = (intp)hDecal;
+	intp h = (intp)hDecal;
 	DecalModelList_t& list = m_DecalList[h];
 
 	if ( list.m_pHardwareData->m_NumStudioMeshes == 0 )
@@ -1153,19 +1255,55 @@ void CStudioRender::AddDecal( StudioDecalHandle_t hDecal, const StudioRenderCont
 		return;
 	}
 
+	// Since we're adding this to a studio model, check the decal to see if 
+	// there's an alternate form used for static props...
+	bool found;
+	IMaterialVar* pModelMaterialVar = pDecalMaterial->FindVar( "$modelmaterial", &found, false );
+	if (found)
+	{
+		IMaterial* pModelMaterial = g_pMaterialSystem->FindMaterial( pModelMaterialVar->GetStringValue(), TEXTURE_GROUP_DECAL, false );
+		if ( !IsErrorMaterial( pModelMaterial ) )
+		{
+			pDecalMaterial = pModelMaterial;
+
+			float scale = 1.0f;
+			// Compute scale of surface
+			IMaterialVar *pDecalScaleVar = pDecalMaterial->FindVarFast( "$decalScaleForModelMaterial", &s_DecalScaleVarCache );
+			if ( pDecalScaleVar )
+			{
+				scale = pDecalScaleVar->GetFloatValue();
+				radius *= scale;
+			}
+		}
+	}
+
+	// If this is a splatter decal, then we don't allow splattering on the faces in front of the source of the decal.
+	// This is mainly for large props where the player my splatter blood from inside a prop.
+	bool isPlayerSpray = ( EDF_PLAYERSPRAY & nAdditionalDecalFlags );
+	bool isSplatterDecal = false;
+	IMaterialVar* pSplatterVar = pDecalMaterial->FindVar( "$splatter", &found, false );
+	if (found)
+	{
+		isSplatterDecal = (pSplatterVar->GetIntValue() > 0);
+	}
+	
+
 	// Get dynamic information from the material (fade start, fade time)
 	float fadeStartTime	= 0.0f;
 	float fadeDuration = 0.0f;
-	int flags = 0;
 
 	// This sucker is state needed only when building decals
 	DecalBuildInfo_t buildInfo;
 	buildInfo.m_Radius = radius;
+	buildInfo.m_flMaxDepth = MAX( radius, 8 );
+	buildInfo.m_flFrontFacingCosineCheck = isPlayerSpray ? 0.25f /*75deg*/ : 0.1f /*86deg*/;
 	buildInfo.m_NoPokeThru = noPokethru;
 	buildInfo.m_pStudioHdr = pStudioHdr;
  	buildInfo.m_UseClipVert = ( m_pStudioHdr->numbones <= 1 ) && ( m_pStudioHdr->numflexdesc == 0 );
 	buildInfo.m_nGlobalMeshIndex = 0;
 	buildInfo.m_pMeshVertexData = NULL;
+	buildInfo.m_AllowBehindPointOfImpact = !isSplatterDecal;
+	buildInfo.m_bEnforceProjectionRadiusZ = isPlayerSpray;	// <vitaliy> not sure why we don't always enforce Z depth restriction when projecting?
 
 	// Find out which LODs we're defacing
 	int iMaxLOD;
@@ -1175,7 +1313,7 @@ void CStudioRender::AddDecal( StudioDecalHandle_t hDecal, const StudioRenderCont
 	}
 	else 
 	{
-		iMaxLOD = min( list.m_pHardwareData->m_NumLODs, maxLODToDecal );
+		iMaxLOD = MIN( list.m_pHardwareData->m_NumLODs, maxLODToDecal );
 	}
 
 	// Allocate space for all projected mesh vertices. We do this to prevent
@@ -1192,7 +1330,7 @@ void CStudioRender::AddDecal( StudioDecalHandle_t hDecal, const StudioRenderCont
 		return;
 	}
 
-	if ( !IsX360() )
+	if ( !IsGameConsole() )
 	{
 		buildInfo.m_pMeshVertices = (MeshVertexInfo_t*)stackalloc( nMeshCount * sizeof(MeshVertexInfo_t) );	
 		int nVertexCount = ComputeVertexAllocation( iMaxLOD, body, list.m_pHardwareData, buildInfo.m_pMeshVertices );
@@ -1209,7 +1347,7 @@ void CStudioRender::AddDecal( StudioDecalHandle_t hDecal, const StudioRenderCont
 	// Project all mesh vertices
 	ProjectDecalsOntoMeshes( buildInfo, nMeshCount );
 
-	if ( IsX360() )
+	if ( IsGameConsole() )
 	{
 		while ( g_nTotalDecalVerts * sizeof(DecalVertex_t) > 256*1024 && m_DecalLRU.Head() != m_DecalLRU.InvalidIndex() )
 		{
@@ -1220,40 +1358,44 @@ void CStudioRender::AddDecal( StudioDecalHandle_t hDecal, const StudioRenderCont
 		}
 	}
 
-	// Check to see if we have too many decals on this model
-	// This assumes that every decal is applied to the root lod at least 
-	int nRootLOD = list.m_pHardwareData->m_RootLOD;
-	int nFinalLOD = list.m_pHardwareData->m_NumLODs;
-	DecalHistoryList_t *pHistoryList = &list.m_pLod[list.m_pHardwareData->m_RootLOD].m_DecalHistory;
-	if ( m_DecalLRU.Count() >= m_pRC->m_Config.maxDecalsPerModel * 1.5 )
+	// Global list of decals trimming
+	if ( m_DecalLRU.Count() >= MAX( m_pRC->m_Config.maxDecalsPerModel * 10, 150 ) )
 	{
-		DecalId_t nRetireID = m_DecalLRU[ m_DecalLRU.Head() ].m_nDecalId;
-		StudioDecalHandle_t hRetire = m_DecalLRU[ m_DecalLRU.Head() ].m_hDecalHandle;
-		DecalModelList_t &modelList = m_DecalList[(intp)hRetire];
-		RetireDecal( modelList, nRetireID, modelList.m_pHardwareData->m_RootLOD, modelList.m_pHardwareData->m_NumLODs );
+		for ( DecalLRUListIndex_t i = m_DecalLRU.Head(); i != m_DecalLRU.InvalidIndex(); i = m_DecalLRU.Next( i ) )
+		{
+			if ( ( m_DecalLRU[ i ].m_nFlags & DECAL_PLAYERSPRAY ) != 0 )
+				continue; // do not retire player sprays globally
+
+			StudioDecalHandle_t hRetire = m_DecalLRU[ i ].m_hDecalHandle;
+			DecalModelList_t &modelList = m_DecalList[ ( intp ) hRetire ];
+			RetireDecalAtAddress( modelList, i, modelList.m_pHardwareData->m_RootLOD, modelList.m_pHardwareData->m_NumLODs );
+			break;
+		}
 	}
 
+	// Check to see if we have too many decals on this model
+	// This assumes that every decal is applied to the root lod at least 
+	DecalHistoryList_t *pHistoryList = &list.m_pLod[list.m_pHardwareData->m_RootLOD].m_DecalHistory;
 	if ( pHistoryList->Count() >= m_pRC->m_Config.maxDecalsPerModel )
 	{
-		DecalHistory_t *pDecalHistory = &pHistoryList->Element( pHistoryList->Head() );
-		DecalId_t nRetireID = pDecalHistory->m_nId;
-		StudioDecalHandle_t hRetire = hDecal;
-		RetireDecal( m_DecalList[(intp)hRetire], nRetireID, nRootLOD, nFinalLOD );
+		( void ) ( BTryToRetireDecal( hDecal, pHistoryList, false ) ||
+			BTryToRetireDecal( hDecal, pHistoryList, true ) );
 	}
 
 	// Search all LODs for an overflow condition and retire those also
 	for ( int i = iMaxLOD-1; i >= list.m_pHardwareData->m_RootLOD; i-- )
 	{
 		// Grab the list of all decals using the same material for this lod...
-		int materialIdx = GetDecalMaterial( list.m_pLod[i], pDecalMaterial );
+		int materialIdx = GetDecalMaterial( list.m_pLod[i], pDecalMaterial, pvProxyUserData );
 
 		// Check to see if we should retire the decal
 		DecalMaterial_t *pDecalMaterial = &m_DecalMaterial[materialIdx];
 		while ( pDecalMaterial->m_Indices.Count() > MAX_DECAL_INDICES_PER_MODEL )
 		{
 			DecalHistoryList_t *pHistoryList = &list.m_pLod[i].m_DecalHistory;
-			DecalHistory_t *pDecalHistory = &pHistoryList->Element( pHistoryList->Head() );
-			RetireDecal( list, pDecalHistory->m_nId, nRootLOD, nFinalLOD );
+			if ( !( BTryToRetireDecal( hDecal, pHistoryList, false ) ||
+				BTryToRetireDecal( hDecal, pHistoryList, true ) ) )
+				break; // cannot retire any more!
 		}
 	}	
 
@@ -1262,7 +1404,7 @@ void CStudioRender::AddDecal( StudioDecalHandle_t hDecal, const StudioRenderCont
 	for ( int i = iMaxLOD-1; i >= list.m_pHardwareData->m_RootLOD; i-- )
 	{
 		// Grab the list of all decals using the same material for this lod...
-		int materialIdx = GetDecalMaterial( list.m_pLod[i], pDecalMaterial );
+		int materialIdx = GetDecalMaterial( list.m_pLod[i], pDecalMaterial, pvProxyUserData );
 		buildInfo.m_pDecalMaterial = &m_DecalMaterial[materialIdx];
 
 		// Grab the meshes for this lod
@@ -1292,28 +1434,71 @@ void CStudioRender::AddDecal( StudioDecalHandle_t hDecal, const StudioRenderCont
 		if ( k != m_pStudioHdr->numbodyparts )
 			continue;
 
+		int nDecalIndexCount = buildInfo.m_pDecalMaterial->m_Indices.Count() - prevIndexCount;
 		// Add this to the list of decals in this material
-		if ( buildInfo.m_VertexCount )
+		// Since vertices can be shared it is possible to have a decal with only indices (to verts already in the buffer)
+		if ( buildInfo.m_VertexCount || nDecalIndexCount )
 		{
-			bAddedDecals = true;
+			if ( nDecalIndexCount > 16384 )
+			{
+				// don't add this decal
+				Warning( "Decal has more than 16384 indices! (%d) Not adding to %s.\n", nDecalIndexCount, m_pStudioHdr->pszName() );
 
-			int decalIndexCount = buildInfo.m_pDecalMaterial->m_Indices.Count() - prevIndexCount;
-			Assert(decalIndexCount > 0);
+				// remove thiss decal from the decal materal
+				DecalMaterial_t *pMaterial = buildInfo.m_pDecalMaterial;
+				if ( pMaterial )
+				{
+					// the decal we just added is at the head of the lists, so we can just remove the proper count from the head of the lists to clean it up
+					DecalVertexList_t &vertices = pMaterial->m_Vertices;
+				
+					// Now clear out the vertices referenced by the indices....
+					DecalVertexList_t::IndexType_t next; 
+					DecalVertexList_t::IndexType_t vert = vertices.Head();
+					Assert( vertices.Count() >= buildInfo.m_VertexCount );
+					int vertsToRemove = buildInfo.m_VertexCount;
+					while ( vertsToRemove > 0 )
+					{
+						// blat out the vertices
+						next = vertices.Next( vert );
+						vertices.Remove( vert );
+						vert = next;
+						g_nTotalDecalVerts--;
+					
+						--vertsToRemove;
+					}
+					if ( vertices.Count() == 0 )
+					{
+						vertices.Purge();
+					}
+				
+					// FIXME: This does a memmove. How expensive is it?
+					pMaterial->m_Indices.RemoveMultiple( 0, nDecalIndexCount );
+					if ( pMaterial->m_Indices.Count() == 0)
+					{
+						pMaterial->m_Indices.Purge();
+					}
+				}				
+			}
+			else
+			{
+				bAddedDecals = true;
 
-			int decalIndex = AddDecalToMaterialList( buildInfo.m_pDecalMaterial );
-			Decal_t& decal = buildInfo.m_pDecalMaterial->m_Decals[decalIndex];
-			decal.m_VertexCount = buildInfo.m_VertexCount;
-			decal.m_IndexCount = decalIndexCount;
-			decal.m_FadeStartTime = fadeStartTime;
-			decal.m_FadeDuration = fadeDuration; 
-			decal.m_Flags = flags;
+				Assert(nDecalIndexCount > 0);
 
-			// Add this decal to the history...
-			int h = list.m_pLod[i].m_DecalHistory.AddToTail();
-			list.m_pLod[i].m_DecalHistory[h].m_Material = materialIdx;
-			list.m_pLod[i].m_DecalHistory[h].m_Decal = decalIndex;
-			list.m_pLod[i].m_DecalHistory[h].m_nId = m_nDecalId;
-			list.m_pLod[i].m_DecalHistory[h].m_nPad = 0;
+				int decalIndex = AddDecalToMaterialList( buildInfo.m_pDecalMaterial );
+				Decal_t& decal = buildInfo.m_pDecalMaterial->m_Decals[decalIndex];
+				decal.m_VertexCount = buildInfo.m_VertexCount;
+				decal.m_IndexCount = nDecalIndexCount;
+				decal.m_FadeStartTime = fadeStartTime;
+				decal.m_FadeDuration = fadeDuration; 
+
+				// Add this decal to the history...
+				int h = list.m_pLod[i].m_DecalHistory.AddToTail();
+				list.m_pLod[i].m_DecalHistory[h].m_Material = materialIdx;
+				list.m_pLod[i].m_DecalHistory[h].m_Decal = decalIndex;
+				list.m_pLod[i].m_DecalHistory[h].m_nId = m_nDecalId;
+				list.m_pLod[i].m_DecalHistory[h].m_nPad = 0;
+			}
 		}
 	}
 
@@ -1323,12 +1508,13 @@ void CStudioRender::AddDecal( StudioDecalHandle_t hDecal, const StudioRenderCont
 		DecalLRUListIndex_t h = m_DecalLRU.AddToTail();
 		m_DecalLRU[h].m_nDecalId = m_nDecalId;
 		m_DecalLRU[h].m_hDecalHandle = hDecal;
+		m_DecalLRU[h].m_nFlags = ConvertToPrivateDecalFlags( nAdditionalDecalFlags );
 
 		// Increment count.
 		++m_nDecalId;
 	}
 
-	if ( IsX360() )
+	if ( IsGameConsole() )
 	{
 		free( buildInfo.m_pMeshVertices );
 		free( buildInfo.m_pVertexBuffer );
@@ -1350,15 +1536,15 @@ void CStudioRender::AddDecal( StudioDecalHandle_t hDecal, const StudioRenderCont
 // Inner loop for rendering decals that have a single bone
 //-----------------------------------------------------------------------------
 
-void CStudioRender::DrawSingleBoneDecals( CMeshBuilder& meshBuilder, DecalMaterial_t& decalMaterial )
+void CStudioRender::DrawSingleBoneDecals( CMeshBuilder& meshBuilder, const DecalMaterial_t& decalMaterial )
 {
 	// We don't got no bones, so yummy yummy yum, just copy the data out
 	// Static props should go though this code path
 
-	DecalVertexList_t& verts = decalMaterial.m_Vertices; 
+	const DecalVertexList_t& verts = decalMaterial.m_Vertices; 
 	for ( DecalVertexList_t::IndexLocalType_t i = verts.Head(); i != verts.InvalidIndex(); i = verts.Next(i) )
 	{
-		DecalVertex_t& vertex = verts[i];
+		const DecalVertex_t& vertex = verts[i];
 		
 		meshBuilder.Position3fv( vertex.m_Position.Base() );
 		meshBuilder.Normal3fv( GetVecNormal( vertex.m_Normal ).Base() );
@@ -1383,20 +1569,19 @@ void CStudioRender::DrawSingleBoneDecals( CMeshBuilder& meshBuilder, DecalMateri
 		}
 		meshBuilder.Color4ub( 255, 255, 255, 255 );
 
-		if ( meshBuilder.NumBoneWeights() > 0 )	// bone weight of 0 will not write anything, so these calls would be wasted
-		{	
-			meshBuilder.BoneWeight( 0, 1.0f );
-			meshBuilder.BoneWeight( 1, 0.0f );
-			meshBuilder.BoneWeight( 2, 0.0f );
-			meshBuilder.BoneWeight( 3, 0.0f );
-		}
-
+		// In this case, we use the model matrix to send down the single transform, 
+		// so we don't have to send down any bone info per vertex.
+		Assert( meshBuilder.m_NumBoneWeights == 0 );
+/*
+		meshBuilder.BoneWeight( 0, 1.0f );
+		meshBuilder.BoneWeight( 1, 0.0f );
 		meshBuilder.BoneMatrix( 0, 0 );
 		meshBuilder.BoneMatrix( 1, 0 );
 		meshBuilder.BoneMatrix( 2, 0 );
 		meshBuilder.BoneMatrix( 3, 0 );
+*/
 
-		meshBuilder.AdvanceVertex();
+		meshBuilder.AdvanceVertexF<VTX_HAVEPOS | VTX_HAVENORMAL | VTX_HAVECOLOR, 1>();
 	}
 }
 
@@ -1410,8 +1595,6 @@ void CStudioRender::DrawSingleBoneFlexedDecals( IMatRenderContext *pRenderContex
 		DecalVertex_t& vertex = verts[i];
 
 		// Clipped verts shouldn't come through here, only static props should use clipped
-		Assert ( vertex.m_MeshVertexIndex >= 0 );
-
 		m_VertexCache.SetBodyModelMesh( vertex.m_Body, vertex.m_Model, vertex.m_Mesh );
 		if (m_VertexCache.IsVertexFlexed( vertex.m_MeshVertexIndex ))
 		{
@@ -1447,20 +1630,11 @@ void CStudioRender::DrawSingleBoneFlexedDecals( IMatRenderContext *pRenderContex
 
 		meshBuilder.Color4ub( 255, 255, 255, 255 );
 
-		if ( meshBuilder.NumBoneWeights() > 0 )	// bone weight of 0 will not write anything, so these calls would be wasted
-		{	
-			meshBuilder.BoneWeight( 0, 1.0f );
-			meshBuilder.BoneWeight( 1, 0.0f );
-			meshBuilder.BoneWeight( 2, 0.0f );
-			meshBuilder.BoneWeight( 3, 0.0f );
-		}
-		
-		meshBuilder.BoneMatrix( 0, 0 );
-		meshBuilder.BoneMatrix( 1, 0 );
-		meshBuilder.BoneMatrix( 2, 0 );
-		meshBuilder.BoneMatrix( 3, 0 );
+		// In this case, we use the model matrix to send down the single transform, 
+		// so we don't have to send down any bone info per vertex.
+		Assert( meshBuilder.m_NumBoneWeights == 0 );
 
-		meshBuilder.AdvanceVertex();
+		meshBuilder.AdvanceVertexF<VTX_HAVEPOS | VTX_HAVENORMAL | VTX_HAVECOLOR, 1>();
 	}
 }
 
@@ -1513,8 +1687,8 @@ bool CStudioRender::DrawMultiBoneDecals( CMeshBuilder& meshBuilder, DecalMateria
 			{
 				mstudioboneweight_t* pBoneWeights = vertData->BoneWeights( n );
 				// FIXME: could be faster to blend the matrices and then transform the pos+norm by the same matrix
-				R_StudioTransform( *vertData->Position( n ), pBoneWeights, pCachedVert->m_Position.AsVector3D() );
-				R_StudioRotate( *vertData->Normal( n ), pBoneWeights, pCachedVert->m_Normal.AsVector3D() );
+				R_StudioTransform( *vertData->Position( n ), pBoneWeights, m_PoseToWorld, pCachedVert->m_Position.AsVector3D() );
+				R_StudioRotate( *vertData->Normal( n ), pBoneWeights, m_PoseToWorld, pCachedVert->m_Normal.AsVector3D() );
 			}
 			else if ( thinVertData )
 			{
@@ -1525,8 +1699,8 @@ bool CStudioRender::DrawMultiBoneDecals( CMeshBuilder& meshBuilder, DecalMateria
 				thinVertData->GetMeshBoneWeights( pMesh, n, &boneWeights );
 				thinVertData->GetMeshPosition( pMesh, n, &position );
 				thinVertData->GetMeshNormal( pMesh, n, &normal );
-				R_StudioTransform( position, &boneWeights, pCachedVert->m_Position.AsVector3D() );
-				R_StudioRotate( normal, &boneWeights, pCachedVert->m_Normal.AsVector3D() );
+				R_StudioTransform( position, &boneWeights, m_PoseToWorld, pCachedVert->m_Position.AsVector3D() );
+				R_StudioRotate( normal, &boneWeights, m_PoseToWorld, pCachedVert->m_Normal.AsVector3D() );
 			}
 			else
 			{
@@ -1563,20 +1737,21 @@ bool CStudioRender::DrawMultiBoneDecals( CMeshBuilder& meshBuilder, DecalMateria
 
 		meshBuilder.Color4ub( 255, 255, 255, 255 );
 
-		if ( meshBuilder.NumBoneWeights() > 0 )	// bone weight of 0 will not write anything, so these calls would be wasted
-		{	
-			meshBuilder.BoneWeight( 0, 1.0f );
-			meshBuilder.BoneWeight( 1, 0.0f );
-			meshBuilder.BoneWeight( 2, 0.0f );
-			meshBuilder.BoneWeight( 3, 0.0f );
-		}
-		
+		// In this case, we use the model matrix to send down the single transform, 
+		// so we don't have to send down any bone info per vertex.
+		Assert( meshBuilder.m_NumBoneWeights == 0 );
+/*
+		meshBuilder.BoneWeight( 0, 1.0f );
+		meshBuilder.BoneWeight( 1, 0.0f );
+		meshBuilder.BoneWeight( 2, 0.0f );
+		meshBuilder.BoneWeight( 3, 0.0f );
 		meshBuilder.BoneMatrix( 0, 0 );
 		meshBuilder.BoneMatrix( 1, 0 );
 		meshBuilder.BoneMatrix( 2, 0 );
 		meshBuilder.BoneMatrix( 3, 0 );
+*/
 
-		meshBuilder.AdvanceVertex();
+		meshBuilder.AdvanceVertexF<VTX_HAVEPOS | VTX_HAVENORMAL | VTX_HAVECOLOR, 1>();
 	}
 	return true;
 }
@@ -1644,21 +1819,21 @@ bool CStudioRender::DrawMultiBoneFlexedDecals( IMatRenderContext *pRenderContext
 					Vector vecPosition, vecNormal;
 					VectorAdd( *vertData->Position( n ), pFlexedVertex->m_Position.AsVector3D(), vecPosition );
 					VectorAdd( *vertData->Normal( n ), pFlexedVertex->m_Normal.AsVector3D(), vecNormal );
-					R_StudioTransform( vecPosition, pBoneWeights, pCachedVert->m_Position.AsVector3D() );
-					R_StudioRotate( vecNormal, pBoneWeights, pCachedVert->m_Normal.AsVector3D() );
+					R_StudioTransform( vecPosition, pBoneWeights, m_PoseToWorld, pCachedVert->m_Position.AsVector3D() );
+					R_StudioRotate( vecNormal, pBoneWeights, m_PoseToWorld, pCachedVert->m_Normal.AsVector3D() );
 					VectorNormalize( pCachedVert->m_Normal.AsVector3D() );
 				}
 				else if (m_VertexCache.IsVertexFlexed( n ))
 				{
 					CachedPosNormTan_t* pFlexedVertex = m_VertexCache.GetFlexVertex( n );
-					R_StudioTransform( pFlexedVertex->m_Position, pBoneWeights, pCachedVert->m_Position.AsVector3D() );
-					R_StudioRotate( pFlexedVertex->m_Normal, pBoneWeights, pCachedVert->m_Normal.AsVector3D() );
+					R_StudioTransform( pFlexedVertex->m_Position.AsVector3D(), pBoneWeights, m_PoseToWorld, pCachedVert->m_Position.AsVector3D() );
+					R_StudioRotate( pFlexedVertex->m_Normal.AsVector3D(), pBoneWeights, m_PoseToWorld, pCachedVert->m_Normal.AsVector3D() );
 				}
 				else
 				{
 					Assert( pMesh );
-					R_StudioTransform( *vertData->Position( n ), pBoneWeights, pCachedVert->m_Position.AsVector3D() );
-					R_StudioRotate( *vertData->Normal( n ), pBoneWeights, pCachedVert->m_Normal.AsVector3D() );
+					R_StudioTransform( *vertData->Position( n ), pBoneWeights, m_PoseToWorld, pCachedVert->m_Position.AsVector3D() );
+					R_StudioRotate( *vertData->Normal( n ), pBoneWeights, m_PoseToWorld, pCachedVert->m_Normal.AsVector3D() );
 				}
 
 				// Add a little extra offset for hardware skinning; in that case
@@ -1673,22 +1848,24 @@ bool CStudioRender::DrawMultiBoneFlexedDecals( IMatRenderContext *pRenderContext
 			meshBuilder.TexCoord2fv( 0, GetVecTexCoord( vertex.m_TexCoord ).Base() );
 			meshBuilder.TexCoord3f( 2, 0.0f, 0.0f, 0.0f );
 
+			// In this case, we use the model matrix to send down the single transform, 
+			// so we don't have to send down any bone info per vertex.
+			Assert( meshBuilder.m_NumBoneWeights == 0 );
 			// NOTE: Even if HW morphing is active, since we're using bone 0, it will multiply by identity in the shader
-			if ( meshBuilder.NumBoneWeights() > 0 )	// bone weight of 0 will not write anything, so these calls would be wasted
-			{	
-				meshBuilder.BoneWeight( 0, 1.0f );	
-				meshBuilder.BoneWeight( 1, 0.0f );
-				meshBuilder.BoneWeight( 2, 0.0f );
-				meshBuilder.BoneWeight( 3, 0.0f );
-			}
-			
+/*
+			meshBuilder.BoneWeight( 0, 1.0f );	
+			meshBuilder.BoneWeight( 1, 0.0f );
+			meshBuilder.BoneWeight( 2, 0.0f );
+			meshBuilder.BoneWeight( 3, 0.0f );
 			meshBuilder.BoneMatrix( 0, 0 );
 			meshBuilder.BoneMatrix( 1, 0 );
 			meshBuilder.BoneMatrix( 2, 0 );
 			meshBuilder.BoneMatrix( 3, 0 );
+*/
 		}
 		else
 		{
+			// HARDWARE MORPH CASE!
 			meshBuilder.Position3fv( vertData->Position( n )->Base() );
 			meshBuilder.Normal3fv( vertData->Normal( n )->Base() );
 			meshBuilder.Color4ub( 255, 255, 255, 255 );
@@ -1698,20 +1875,314 @@ bool CStudioRender::DrawMultiBoneFlexedDecals( IMatRenderContext *pRenderContext
 			// NOTE: We should be renormalizing bone weights here like R_AddVertexToMesh does.. 
 			// It's too expensive. Tough noogies.
 			mstudioboneweight_t* pBoneWeights = vertData->BoneWeights( n );
+			Assert( meshBuilder.m_NumBoneWeights > 0 );
 			Assert( pBoneWeights->numbones <= 3 );
 			meshBuilder.BoneWeight( 0, pBoneWeights->weight[ 0 ] );	
 			meshBuilder.BoneWeight( 1, pBoneWeights->weight[ 1 ] );
 			meshBuilder.BoneWeight( 2, 1.0f - pBoneWeights->weight[ 1 ] - pBoneWeights->weight[ 0 ] );
 			meshBuilder.BoneWeight( 3, 0.0f );
-			meshBuilder.BoneMatrix( 0, pBoneRemap[ (unsigned)pBoneWeights->bone[0] ] );
-			meshBuilder.BoneMatrix( 1, pBoneRemap[ (unsigned)pBoneWeights->bone[1] ] );
-			meshBuilder.BoneMatrix( 2, pBoneRemap[ (unsigned)pBoneWeights->bone[2] ] );
+			meshBuilder.BoneMatrix( 0, pBoneRemap[ pBoneWeights->bone[0] ] );
+			meshBuilder.BoneMatrix( 1, pBoneRemap[ pBoneWeights->bone[1] ] );
+			meshBuilder.BoneMatrix( 2, pBoneRemap[ pBoneWeights->bone[2] ] );
 			meshBuilder.BoneMatrix( 3, BONE_MATRIX_INDEX_INVALID );
 		}
 
-		meshBuilder.AdvanceVertex();
+		meshBuilder.AdvanceVertexF<VTX_HAVEPOS | VTX_HAVENORMAL | VTX_HAVECOLOR, 3>();
 	}
 	return true;
+}
+
+
+//-----------------------------------------------------------------------------
+// Draws all the decals using a particular material
+//-----------------------------------------------------------------------------
+void CStudioRender::BuildDecalIndices( CMeshBuilder &meshBuilder, const DecalMaterial_t& decalMaterial )
+{
+	// Set the indices
+	// This is a little tricky. Because we can retire decals, the indices
+	// for each decal start at 0. We output all the vertices in order of
+	// each decal, and then fix up the indices based on how many vertices
+	// we wrote out for the decals
+	int indexCount = decalMaterial.m_Indices.Count();
+	unsigned short h = decalMaterial.m_Decals.Head();
+	const Decal_t& decal = decalMaterial.m_Decals[ h ];
+	int indicesRemaining = decal.m_IndexCount;
+	int nVertexCount = decal.m_VertexCount;
+	int vertexOffset = 0;
+	for ( int i = 0; i < indexCount; ++i)
+	{
+		meshBuilder.FastIndex( decalMaterial.m_Indices[i] + vertexOffset ); 
+		if (--indicesRemaining > 0)
+			continue;
+
+		vertexOffset += nVertexCount;
+		h = decalMaterial.m_Decals.Next( h ); 
+		if (h != decalMaterial.m_Decals.InvalidIndex())
+		{
+			const Decal_t& decalNext = decalMaterial.m_Decals[ h ];
+			indicesRemaining = decalNext.m_IndexCount;
+			nVertexCount = decalNext.m_VertexCount;
+		}
+#ifdef _DEBUG
+		else
+		{
+			Assert( i + 1 == indexCount );
+		}
+#endif
+	}
+}
+
+
+
+//-----------------------------------------------------------------------------
+// Inner loop for rendering instanced decals that have multiple bones
+//-----------------------------------------------------------------------------
+enum
+{
+	DECAL_BATCH_SIZE = 64
+};
+
+void ComputeSkinMatrixToMemorySSE( mstudioboneweight_t &boneweights, matrix3x4_t *pPoseToWorld, matrix3x4_t &result );
+
+void CStudioRender::DrawInstancedMultiBoneDecals( CMeshBuilder& meshBuilder, const DecalMaterial_t& decalMaterial, studiohdr_t *pStudioHdr, matrix3x4_t *pPoseToWorld )
+{
+	ALIGN16 matrix3x4_t skinMatrix[ DECAL_BATCH_SIZE ] ALIGN16_POST;
+	Vector4DAligned vecPosition[ DECAL_BATCH_SIZE ];
+	Vector4DAligned vecNormal[ DECAL_BATCH_SIZE ];
+	Vector2D vecTexcoord[ DECAL_BATCH_SIZE ];
+	Vector4DAligned vecWorldPosition[ DECAL_BATCH_SIZE ];
+	Vector4DAligned vecWorldNormal[ DECAL_BATCH_SIZE ];
+
+	const thinModelVertices_t		*thinVertData	= NULL;
+	const mstudio_meshvertexdata_t	*vertData		= NULL;
+	mstudiomesh_t					*pLastMesh		= NULL;
+	mstudioboneweight_t				boneWeights;
+
+	const DecalVertexList_t& verts = decalMaterial.m_Vertices; 
+	DecalVertexList_t::IndexLocalType_t i = verts.Head();
+	do 
+	{	
+		// This loop snacks up the vertices to skin + computes the skin matrices
+		int nCount = 0;
+		for ( ; i != verts.InvalidIndex(); i = verts.Next(i), ++nCount )
+		{
+			if ( nCount	== DECAL_BATCH_SIZE )
+				break;
+
+			const DecalVertex_t& vertex = verts[i];
+			// prefetch the next one into L2
+			{
+				DecalVertexList_t::IndexLocalType_t j = verts.Next(i);
+				if ( j != verts.InvalidIndex() )
+				{
+					const DecalVertex_t& nextVertex = verts[j];
+#ifdef _X360
+					PREFETCH360( &nextVertex, 0 );
+#elif _SSE1
+					_mm_prefetch( reinterpret_cast<const char *>(&nextVertex) , _MM_HINT_T0 );
+#endif
+				}
+			}
+
+
+			int n = vertex.m_MeshVertexIndex;
+
+			Assert( n < MAXSTUDIOVERTS );
+
+			mstudiomesh_t * RESTRICT pMesh = vertex.GetMesh( pStudioHdr );
+			Assert( pMesh );
+
+			if ( pLastMesh != pMesh )
+			{
+				// only if the mesh changes
+				pLastMesh = pMesh;
+				vertData  = pMesh->GetVertexData( pStudioHdr );
+				if ( !vertData )
+				{
+					thinVertData = pMesh->GetThinVertexData( pStudioHdr );
+				}
+			}
+
+			vecTexcoord[nCount] = GetVecTexCoord( vertex.m_TexCoord );
+			if ( vertData )
+			{
+				mstudioboneweight_t*  RESTRICT pBoneWeights = vertData->BoneWeights( n );
+				vecPosition[nCount].Init( *vertData->Position( n ) ); 
+				vecNormal[nCount].Init( *vertData->Normal( n ) );
+				ComputeSkinMatrixToMemorySSE( *pBoneWeights, pPoseToWorld, skinMatrix[nCount] );
+			}
+			else if ( thinVertData )
+			{
+				thinVertData->GetMeshBoneWeights( pMesh, n, &boneWeights );
+				thinVertData->GetMeshPosition( pMesh, n, &( vecPosition[nCount].AsVector3D() ) );
+				thinVertData->GetMeshNormal( pMesh, n, &( vecNormal[nCount].AsVector3D() ) );
+				ComputeSkinMatrixToMemorySSE( boneWeights, pPoseToWorld, skinMatrix[nCount] );
+			}
+		}
+
+		if ( nCount == 0 )
+			break;
+
+		// This loop transforms all the vertices
+		fltx4 col0, col1, col2, col3, p, n, x, y, z, r, offset;
+		for ( int vertIndex = 0; vertIndex < nCount; ++vertIndex )
+		{
+			const matrix3x4_t& mat = skinMatrix[vertIndex];
+
+			// Prepare the skin matrix
+			col0 = LoadAlignedSIMD( mat[0] );
+			col1 = LoadAlignedSIMD( mat[1] );
+			col2 = LoadAlignedSIMD( mat[2] );
+			col3 = Four_Origin;
+			TransposeSIMD( col0, col1, col2, col3 );
+
+			// Deal with position
+			p = LoadAlignedSIMD( vecPosition[vertIndex].Base() );
+			x = SplatXSIMD( p );
+			y = SplatYSIMD( p );
+			z = SplatZSIMD( p );
+
+			x = MulSIMD( x, col0 );
+			y = MulSIMD( y, col1 ); 
+			z = MulSIMD( z, col2 );
+			r = AddSIMD( x, col3 );
+			y = AddSIMD( y, z );
+			p = AddSIMD( r, y );
+
+			// Deal with normal
+			n = LoadAlignedSIMD( vecNormal[vertIndex].Base() );
+			x = SplatXSIMD( n );
+			y = SplatYSIMD( n );
+			z = SplatZSIMD( n );
+
+			r = MulSIMD( x, col0 );
+			y = MulSIMD( y, col1 ); 
+			z = MulSIMD( z, col2 );
+			offset = ReplicateX4( 0.1f );
+			r = AddSIMD( y, r );
+			r = AddSIMD( z, r );
+			StoreAlignedSIMD( vecWorldNormal[vertIndex].Base(), r );
+
+			// Add a little extra offset for hardware skinning; in that case
+			// we're doing software skinning for decals and it might not be quite right
+			p = MaddSIMD( r, offset, p );
+			StoreAlignedSIMD( vecWorldPosition[vertIndex].Base(), p );
+		}
+
+		// Add to meshbuilder
+		for ( int vertIndex = 0; vertIndex < nCount; ++vertIndex )
+		{
+			meshBuilder.Position3fv( vecWorldPosition[vertIndex].Base() );
+			meshBuilder.Normal3fv( vecWorldNormal[vertIndex].Base() );
+			meshBuilder.Color4ub( 255, 255, 255, 255 );
+			meshBuilder.TexCoord2fv( 0, vecTexcoord[vertIndex].Base() );
+			meshBuilder.AdvanceVertexF<VTX_HAVEPOS | VTX_HAVENORMAL | VTX_HAVECOLOR, 1>();
+		}
+
+	} while ( i != verts.InvalidIndex() );
+}
+
+
+//-----------------------------------------------------------------------------
+// Draws decals
+//-----------------------------------------------------------------------------
+void CStudioRender::DrawModelArrayDecals( IMatRenderContext *pRenderContext, 
+	studiohdr_t *pStudioHdr, int nCount, DecalRenderData_t *pRenderData, int nFlashlightMask )
+{
+	VPROF( "CStudioRender::DrawModelArrayDecals" );
+
+	// FIXME: Is there a more optimal method? It's unclear since dynamic vbs are used
+	// NOTE: I *think* I can, assuming the same material is used. I can probably
+	// early-out needing to run the shader, and only run the per-instance state instead!
+
+	// NOTE: Flexing is not supported here yet
+	// FIXME: This is a problem. . . boomer has flexes and goes through this path, which doesn't apply flexes.
+	// Can you quickly tell if there are active flexes and make the model go through the slow path instead?
+	Assert ( pStudioHdr->numflexdesc == 0 );
+
+	pRenderContext->SetNumBoneWeights( 0 );
+	pRenderContext->MatrixMode( MATERIAL_MODEL );
+
+	bool bSingleBone = ( pStudioHdr->numbones <= 1 );
+	if ( bSingleBone )
+	{
+		for ( int i = 0; i < nCount; ++i )
+		{
+			DecalRenderData_t &data = pRenderData[i];
+			StudioArrayInstanceData_t *pCurrInstance = data.m_pInstance;
+			const DecalMaterial_t &decalMaterial = *data.m_pDecalMaterial;
+
+			// Don't draw stuff that doesn't need to re-light or isn't affected by this flashlight
+			if ( nFlashlightMask )
+			{
+				if ( !data.m_bIsVertexLit || ( ( pCurrInstance->m_nFlashlightUsage & nFlashlightMask ) == 0 ) )
+					continue;
+			}
+
+			pRenderContext->Bind( data.m_pRenderMaterial, decalMaterial.m_pvProxyUserData );
+			pRenderContext->LoadMatrix( pCurrInstance->m_pPoseToWorld[0] );
+			if ( data.m_bIsVertexLit )
+			{
+				MaterialLightingState_t *pLightingState = pCurrInstance->m_pDecalLightingState ? 
+					pCurrInstance->m_pDecalLightingState : pCurrInstance->m_pLightingState;
+				if ( pLightingState )
+				{
+					pRenderContext->SetLightingState( *pLightingState );
+				}
+			}
+
+			int nVertexCount = decalMaterial.m_Vertices.Count();
+			int nIndexCount = decalMaterial.m_Indices.Count();
+
+			CMeshBuilder meshBuilder;
+			IMesh* pMesh = pRenderContext->GetDynamicMesh();
+			meshBuilder.Begin( pMesh, MATERIAL_TRIANGLES, nVertexCount, nIndexCount );
+			DrawSingleBoneDecals( meshBuilder, decalMaterial );
+			BuildDecalIndices( meshBuilder, decalMaterial );
+			meshBuilder.End();
+			pMesh->Draw();
+		}
+	}
+	else
+	{
+		pRenderContext->LoadIdentity( );
+		for ( int i = 0; i < nCount; ++i )
+		{
+			DecalRenderData_t &data = pRenderData[i];
+			StudioArrayInstanceData_t *pCurrInstance = data.m_pInstance;
+			const DecalMaterial_t &decalMaterial = *data.m_pDecalMaterial;
+
+			// Don't draw stuff that doesn't need to re-light or isn't affected by this flashlight
+			if ( nFlashlightMask )
+			{
+				if ( !data.m_bIsVertexLit || ( ( pCurrInstance->m_nFlashlightUsage & nFlashlightMask ) == 0 ) )
+					continue;
+			}
+
+			pRenderContext->Bind( data.m_pRenderMaterial, decalMaterial.m_pvProxyUserData );
+
+			if ( data.m_bIsVertexLit )
+			{
+				MaterialLightingState_t *pLightingState = pCurrInstance->m_pDecalLightingState ? 
+					pCurrInstance->m_pDecalLightingState : pCurrInstance->m_pLightingState;
+				if ( pLightingState )
+				{
+					pRenderContext->SetLightingState( *pLightingState );
+				}
+			}
+
+			int nVertexCount = decalMaterial.m_Vertices.Count();
+			int nIndexCount = decalMaterial.m_Indices.Count();
+
+			CMeshBuilder meshBuilder;
+			IMesh* pMesh = pRenderContext->GetDynamicMesh();
+			meshBuilder.Begin( pMesh, MATERIAL_TRIANGLES, nVertexCount, nIndexCount );
+			DrawInstancedMultiBoneDecals( meshBuilder, decalMaterial, pStudioHdr, pCurrInstance->m_pPoseToWorld );
+			BuildDecalIndices( meshBuilder, decalMaterial );
+			meshBuilder.End();
+			pMesh->Draw();
+		}
+	}
 }
 
 //-----------------------------------------------------------------------------
@@ -1720,8 +2191,8 @@ bool CStudioRender::DrawMultiBoneFlexedDecals( IMatRenderContext *pRenderContext
 void CStudioRender::DrawDecalMaterial( IMatRenderContext *pRenderContext, DecalMaterial_t& decalMaterial, studiohdr_t *pStudioHdr, studioloddata_t *pStudioLOD )
 {
 	// Performance analysis.
-//	VPROF_BUDGET( "Decals", "Decals" );
-	VPROF( "DecalsDrawStudio" );
+	//	VPROF_BUDGET( "Decals", "Decals" );
+	VPROF( "CStudioRender::DrawDecalMaterial" );
 
 	// It's possible for the index count to become zero due to decal retirement
 	int indexCount = decalMaterial.m_Indices.Count();
@@ -1746,7 +2217,7 @@ void CStudioRender::DrawDecalMaterial( IMatRenderContext *pRenderContext, DecalM
 	}
 	else
 	{
-		pRenderContext->Bind( m_pMaterialMRMWireframe );
+		pRenderContext->Bind( m_pMaterialWireframe[0][0] ); // TODO: support displacement mapping
 	}
 
 	// Use a dynamic mesh...
@@ -1793,34 +2264,7 @@ void CStudioRender::DrawDecalMaterial( IMatRenderContext *pRenderContext, DecalM
 	}
 
 	// Set the indices
-	// This is a little tricky. Because we can retire decals, the indices
-	// for each decal start at 0. We output all the vertices in order of
-	// each decal, and then fix up the indices based on how many vertices
-	// we wrote out for the decals
-	unsigned short decal = decalMaterial.m_Decals.Head();
-	int indicesRemaining = decalMaterial.m_Decals[decal].m_IndexCount;
-	int vertexOffset = 0;
-	for ( int i = 0; i < indexCount; ++i)
-	{
-		meshBuilder.Index( decalMaterial.m_Indices[i] + vertexOffset ); 
-		meshBuilder.AdvanceIndex();
-		if (--indicesRemaining <= 0)
-		{
-			vertexOffset += decalMaterial.m_Decals[decal].m_VertexCount;
-			decal = decalMaterial.m_Decals.Next(decal); 
-			if (decal != decalMaterial.m_Decals.InvalidIndex())
-			{
-				indicesRemaining = decalMaterial.m_Decals[decal].m_IndexCount;
-			}
-#ifdef _DEBUG
-			else
-			{
-				Assert( i + 1 == indexCount );
-			}
-#endif
-		}
-	}
-
+	BuildDecalIndices( meshBuilder, decalMaterial );
 	meshBuilder.End();
 	if ( bDraw )
 	{
@@ -1866,9 +2310,9 @@ bool CStudioRender::PreDrawDecal( IMatRenderContext *pRenderContext, const DrawM
 	}
 	else
 	{
-		pAmbient = drawInfo.m_vecAmbientCube;
+		pAmbient = drawInfo.m_LightingState.m_vecAmbientCube;
 		m_pRC->m_NumLocalLights = CopyLocalLightingState( MAXLOCALLIGHTS, m_pRC->m_LocalLights,
-			drawInfo.m_nLocalLightCount, drawInfo.m_LocalLightDescs );
+			drawInfo.m_LightingState.m_nLocalLightCount, drawInfo.m_LightingState.m_pLocalLightDesc );
 	}
 
 	for( int i = 0; i < 6; i++ )
@@ -1907,9 +2351,11 @@ void CStudioRender::DrawDecal( const DrawModelInfo_t &drawInfo, int lod, int bod
 
 	// Add this fix after I fix the other problem.
 	studioloddata_t *pStudioLOD = NULL;
+	Assert( m_pStudioHdr->numbones != 0 );
 	if ( m_pStudioHdr->numbones <= 1 )
 	{
-		pRenderContext->SetNumBoneWeights( m_pStudioHdr->numbones );
+		// Use the model matrix to skin if we only have one bone.
+		pRenderContext->SetNumBoneWeights( 0 );
 		pRenderContext->MatrixMode( MATERIAL_MODEL );
 		pRenderContext->LoadMatrix( m_PoseToWorld[0] );
 	}
@@ -1918,12 +2364,16 @@ void CStudioRender::DrawDecal( const DrawModelInfo_t &drawInfo, int lod, int bod
 		pStudioLOD = &drawInfo.m_pHardwareData->m_pLODs[lod];
 		if ( !m_pRC->m_Config.m_bEnableHWMorph || !pStudioLOD->m_pHWMorphDecalBoneRemap )
 		{
+			// If we are multi-bone for this model and we aren't morphing, don't use
+			// hardware skinning at all and don't bother sending any bone weights down.
 			pRenderContext->SetNumBoneWeights( 0 );
 			pRenderContext->MatrixMode( MATERIAL_MODEL );
 			pRenderContext->LoadIdentity( );
 		}
 		else
 		{
+			// If we are using hardware morphing, go ahead and use the hardware skinning
+			// instead of doing it on the CPU.
 			// Set up skinning for decal rendering with hw morphs
 			pRenderContext->SetNumBoneWeights( pStudioLOD->m_nDecalBoneCount );
 
@@ -1976,6 +2426,8 @@ void CStudioRender::DrawStaticPropDecals( const DrawModelInfo_t &drawInfo, const
 	pRenderContext->LoadMatrix( modelToWorld );
 
 	const DecalModelList_t& list = m_DecalList[(intp)handle];
+	m_pStudioHdr = drawInfo.m_pStudioHdr;
+
 	// Gotta do this for all LODs
 	// Draw each set of decals using a particular material
 	unsigned short mat = list.m_pLod[drawInfo.m_Lod].m_FirstMaterial;
@@ -1987,4 +2439,22 @@ void CStudioRender::DrawStaticPropDecals( const DrawModelInfo_t &drawInfo, const
 
 	m_pRC = NULL;
 }
+
+void CStudioRender::CleanupDecals()
+{
+	for( auto it = m_DecalLRU.Head(); it != m_DecalLRU.InvalidIndex(); )
+	{
+		auto itNext = m_DecalLRU.Next( it );
+
+		if ( ( m_DecalLRU[ it ].m_nFlags & DECAL_IMMEDIATECLEANUP ) != 0 )
+		{
+			StudioDecalHandle_t hRetire = m_DecalLRU[ it ].m_hDecalHandle;
+			DecalModelList_t &modelList = m_DecalList[ ( intp ) hRetire ];
+			RetireDecalAtAddress( modelList, it, modelList.m_pHardwareData->m_RootLOD, modelList.m_pHardwareData->m_NumLODs );
+		}
+
+		it = itNext;
+	}
+}
+
 

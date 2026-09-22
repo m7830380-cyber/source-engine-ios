@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ====
 //
 // Purpose: Implements an owner-draw combo box containing the names and thumbnail
 //			images of textures. The textures are gotten from the global texture
@@ -390,6 +390,39 @@ void CTextureBox::LoadGraphicList(void)
 		}
 	}
 
+	SetRedraw(TRUE);
+	Invalidate();
+}
+
+
+void CTextureBox::BeginCustomGraphicList( )
+{
+	SetRedraw( FALSE );
+	ResetContent();
+	InitStorage( g_Textures.GetActiveTextureCount() + 32, sizeof( PVOID ) );
+}
+
+
+void CTextureBox::AddTexture( IEditorTexture *pTex )
+{
+	if ( pTex == NULL )
+	{
+		return;
+	}
+
+	char szStr[ MAX_PATH ];
+
+	pTex->GetShortName( szStr );
+	int err = AddString( szStr );
+	Assert( ( err != CB_ERR ) && ( err != CB_ERRSPACE ) );
+
+	SetItemDataPtr( err, (void *)pTex );
+}
+
+
+void CTextureBox::EndCustomGraphicList( )
+{
+	SetCurSel(0);
 	SetRedraw(TRUE);
 	Invalidate();
 }

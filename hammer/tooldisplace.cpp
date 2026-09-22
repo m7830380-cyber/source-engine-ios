@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -166,7 +166,7 @@ bool CToolDisplace::OnLMouseDown3D( CMapView3D *pView, UINT nFlags, const Vector
 	}
 
 	// Tagging.
-	if ( m_uiTool == DISPTOOL_TAG_WALKABLE || m_uiTool == DISPTOOL_TAG_BUILDABLE || m_uiTool == DISPTOOL_TAG_REMOVE )
+	if ( m_uiTool == DISPTOOL_TAG_WALKABLE || m_uiTool == DISPTOOL_TAG_BUILDABLE )
 	{
 		// Do tagging.
 		HandleTagging( pView, vPoint );
@@ -222,10 +222,10 @@ bool CToolDisplace::OnLMouseDown3D( CMapView3D *pView, UINT nFlags, const Vector
 			int nDispCount = pDispMgr->SelectCount();
 			for ( int iDisp = 0; iDisp < nDispCount; iDisp++ )
 			{
-				CMapDisp *pDispSelect = pDispMgr->GetFromSelect( iDisp );
-				if ( pDispSelect )
+				CMapDisp *pDisp = pDispMgr->GetFromSelect( iDisp );
+				if ( pDisp )
 				{
-					pDispSelect->Paint_Init( DISPPAINT_CHANNEL_POSITION );
+					pDisp->Paint_Init( DISPPAINT_CHANNEL_POSITION );
 				}
 			}
 
@@ -311,7 +311,7 @@ bool CToolDisplace::OnRMouseDown3D( CMapView3D *pView, UINT nFlags, const Vector
 	}
 
 	// Tagging.
-	if ( m_uiTool == DISPTOOL_TAG_WALKABLE || m_uiTool == DISPTOOL_TAG_BUILDABLE || m_uiTool == DISPTOOL_TAG_REMOVE )
+	if ( m_uiTool == DISPTOOL_TAG_WALKABLE || m_uiTool == DISPTOOL_TAG_BUILDABLE )
 	{
 		// Do tagging.
 		HandleTaggingReset( pView, vPoint );
@@ -343,10 +343,10 @@ bool CToolDisplace::OnRMouseDown3D( CMapView3D *pView, UINT nFlags, const Vector
 			int nDispCount = pDispMgr->SelectCount();
 			for ( int iDisp = 0; iDisp < nDispCount; iDisp++ )
 			{
-				CMapDisp *pDispSelect = pDispMgr->GetFromSelect( iDisp );
-				if ( pDispSelect )
+				CMapDisp *pDisp = pDispMgr->GetFromSelect( iDisp );
+				if ( pDisp )
 				{
-					pDispSelect->Paint_Init( DISPPAINT_CHANNEL_POSITION );
+					pDisp->Paint_Init( DISPPAINT_CHANNEL_POSITION );
 				}
 			}
 
@@ -971,26 +971,11 @@ void CToolDisplace::HandleTagging( CMapView3D *pView, const Vector2D &vPoint )
 
 						pDisp->UpdateBuildable();
 					}
-					else if ( m_uiTool == DISPTOOL_TAG_REMOVE )
-					{
-						HandleTaggingRemove( pDisp, iTri );
-					}
 				}
 			}
 		}
 	}
 }
-
-
-//-----------------------------------------------------------------------------
-// Purpose:
-//-----------------------------------------------------------------------------
-void CToolDisplace::HandleTaggingRemove( CMapDisp *pDisp, int nTriIndex )
-{
-	pDisp->ToggleTriTag( nTriIndex, COREDISPTRI_TAG_FORCE_REMOVE_BIT );
-	pDisp->UpdateTriRemove();
-}
-
 
 //-----------------------------------------------------------------------------
 // Purpose: Handle the overriding of displacement triangle tag.
@@ -1028,11 +1013,6 @@ void CToolDisplace::HandleTaggingReset( CMapView3D *pView, const Vector2D &vPoin
 					else if ( m_uiTool == DISPTOOL_TAG_BUILDABLE )
 					{
 						pDisp->ResetTriTag( iTri, COREDISPTRI_TAG_FORCE_BUILDABLE_BIT );
-						pDisp->UpdateBuildable();
-					}
-					else if ( m_uiTool == DISPTOOL_TAG_REMOVE )
-					{
-						pDisp->ResetTriTag( iTri, COREDISPTRI_TAG_FORCE_REMOVE_BIT );
 						pDisp->UpdateBuildable();
 					}
 				}

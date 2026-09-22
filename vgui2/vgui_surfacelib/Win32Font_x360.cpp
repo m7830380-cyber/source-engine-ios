@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright � 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Xbox 360 support for TrueType Fonts. The only cuurent solution is to use XUI
 // to mount the TTF, and rasterize glyph into a render target. XUI does not support
@@ -17,7 +17,7 @@
 #include "filesystem.h"
 #include "materialsystem/imaterialsystem.h"
 #include "FontEffects.h"
-#include "vgui_surfacelib/Win32Font.h"
+#include "vgui_surfacelib/vguifont.h"
 #include "vgui_surfacelib/FontManager.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
@@ -32,9 +32,9 @@ int GetStyleFromParameters( int iFlags, int iWeight )
 {
 	// Available xbox TTF styles are very restricted.
 	int style = XUI_FONT_STYLE_NORMAL;
-	if ( iFlags & vgui::ISurface::FONTFLAG_ITALIC )
+	if ( iFlags & FONTFLAG_ITALIC )
 		style |= XUI_FONT_STYLE_ITALIC;
-	if ( iFlags & vgui::ISurface::FONTFLAG_UNDERLINE )
+	if ( iFlags & FONTFLAG_UNDERLINE )
 		style |= XUI_FONT_STYLE_UNDERLINE;
 	if ( iWeight > 400 )
 		style |= XUI_FONT_STYLE_BOLD;
@@ -44,7 +44,7 @@ int GetStyleFromParameters( int iFlags, int iWeight )
 //-----------------------------------------------------------------------------
 // Purpose: Constructor
 //-----------------------------------------------------------------------------
-CWin32Font::CWin32Font()
+CWin32Font::CWin32Font() : m_ExtendedABCWidthsCache( 256, 0, &ExtendedABCWidthsCacheLessFunc )
 {
 	m_szName = UTL_INVAL_SYMBOL;
 	m_iTall = 0;
@@ -56,12 +56,15 @@ CWin32Font::CWin32Font()
 	m_hFont = NULL;
 	m_hDC = NULL;
 	m_bAntiAliased = false;
+	m_bUnderlined = false;
 	m_iBlur = 0;
 	m_iScanLines = 0;
 	m_bRotary = false;
 	m_bAdditive = false;
 	m_rgiBitmapSize[0] = 0;
 	m_rgiBitmapSize[1] = 0;
+
+	s_bSupportsUnicode = true;
 
 	Q_memset( m_ABCWidthsCache, 0, sizeof( m_ABCWidthsCache ) );
 }
@@ -83,13 +86,14 @@ bool CWin32Font::Create( const char *windowsFontName, int tall, int weight, int 
 	m_iTall = tall;
 	m_iWeight = weight;
 	m_iFlags = flags;
-	m_bAntiAliased = (flags & vgui::ISurface::FONTFLAG_ANTIALIAS) ? 1 : 0;
-	m_iDropShadowOffset = (flags & vgui::ISurface::FONTFLAG_DROPSHADOW) ? 1 : 0;
-	m_iOutlineSize = (flags & vgui::ISurface::FONTFLAG_OUTLINE) ? 1 : 0;
+	m_bAntiAliased = (flags & FONTFLAG_ANTIALIAS) ? 1 : 0;
+	m_bUnderlined = (flags & FONTFLAG_UNDERLINE) ? 1 : 0;
+	m_iDropShadowOffset = (flags & FONTFLAG_DROPSHADOW) ? 1 : 0;
+	m_iOutlineSize = (flags & FONTFLAG_OUTLINE) ? 1 : 0;
 	m_iBlur = blur;
 	m_iScanLines = scanlines;
-	m_bRotary = (flags & vgui::ISurface::FONTFLAG_ROTARY) ? 1 : 0;
-	m_bAdditive = (flags & vgui::ISurface::FONTFLAG_ADDITIVE) ? 1 : 0;
+	m_bRotary = (flags & FONTFLAG_ROTARY) ? 1 : 0;
+	m_bAdditive = (flags & FONTFLAG_ADDITIVE) ? 1 : 0;
 
 	int style = GetStyleFromParameters( flags, weight );
 
@@ -109,8 +113,10 @@ bool CWin32Font::Create( const char *windowsFontName, int tall, int weight, int 
 			return false;
 		}
 
+		// get the predominant font metrics now [1-255], the extended set [256-65535] is on-demand
+		FontManager().MaterialSystem()->GetTrueTypeFontMetrics( m_hFont, 1, 255, &fontMetrics, &charMetrics[1] );
+
 		// getting the metrics is an expensive i/o operation, cache results
-		FontManager().MaterialSystem()->GetTrueTypeFontMetrics( m_hFont, &fontMetrics, charMetrics );
 		FontManager().SetCachedXUIMetrics( windowsFontName, tall, style, &fontMetrics, charMetrics );
 	}
 
@@ -223,11 +229,11 @@ bool CWin32Font::IsEqualTo(const char *windowsFontName, int tall, int weight, in
 		m_iScanLines == scanlines )
 	{
 		// only these flags affect the font glyphs
-		int validFlags = vgui::ISurface::FONTFLAG_DROPSHADOW | 
-						vgui::ISurface::FONTFLAG_OUTLINE | 
-						vgui::ISurface::FONTFLAG_ROTARY |
-						vgui::ISurface::FONTFLAG_ITALIC |
-						vgui::ISurface::FONTFLAG_UNDERLINE;
+		int validFlags = FONTFLAG_DROPSHADOW | 
+						FONTFLAG_OUTLINE | 
+						FONTFLAG_ROTARY |
+						FONTFLAG_ITALIC |
+						FONTFLAG_UNDERLINE;
 		if ( ( m_iFlags & validFlags ) == ( flags & validFlags ) )
 		{
 			if ( GetStyleFromParameters( m_iFlags, m_iWeight ) == GetStyleFromParameters( flags, weight ) )
@@ -275,13 +281,54 @@ void CWin32Font::GetCharABCWidths( int ch, int &a, int &b, int &c )
 	}
 	else
 	{
-		// cannot support getting character metrics outside of the font initialization
-		DevMsg( "CWin32Font: Cannot resolve character %d in font %s\n", ch, m_szName.String() );
-		Assert( 0 );
+		// look for it in the extended cache
+		abc_cache_t finder = { (wchar_t)ch };
+		unsigned short i = m_ExtendedABCWidthsCache.Find( finder );
+		if ( m_ExtendedABCWidthsCache.IsValidIndex( i ) )
+		{
+			a = m_ExtendedABCWidthsCache[i].abc.a;
+			b = m_ExtendedABCWidthsCache[i].abc.b;
+			c = m_ExtendedABCWidthsCache[i].abc.c;
+			return;
+		}
 
-		a = 0;
-		b = 0;
-		c = 0;
+		// not in the cache, get from system
+		// getting the metrics is an expensive i/o operation
+		if ( !m_hFont )
+		{
+			// demand request for font metrics, re-open font
+			int style = GetStyleFromParameters( m_iFlags, m_iWeight );
+			m_hFont = FontManager().MaterialSystem()->OpenTrueTypeFont( GetName(), m_iTall, style );
+		}
+
+		if ( m_hFont )
+		{
+			XUIFontMetrics fontMetrics;
+			XUICharMetrics charMetrics;
+			FontManager().MaterialSystem()->GetTrueTypeFontMetrics( m_hFont, ch, ch, &fontMetrics, &charMetrics );
+
+			// Determine real a,b,c mapping from XUI Character Metrics
+			a = charMetrics.fMinX - 1; // Add one column of padding to make up for font rendering blurring into left column (and adjust in b)
+			b = charMetrics.fMaxX - charMetrics.fMinX + 1;
+			c = charMetrics.fAdvance - charMetrics.fMaxX; // NOTE: We probably should add a column here, but it's rarely needed in our current fonts so we're opting to save memory instead
+
+			// Widen for blur, outline, and shadow. Need to widen b and reduce a and c.
+			a = a - m_iBlur - m_iOutlineSize;
+			b = b + ( ( m_iBlur + m_iOutlineSize ) * 2 ) + m_iDropShadowOffset;
+			c = c - m_iBlur - m_iDropShadowOffset - m_iOutlineSize;
+		}
+		else
+		{
+			a = 0;
+			b = 0;
+			c = 0;
+		}
+
+		// add to the cache
+		finder.abc.a = a;
+		finder.abc.b = b;
+		finder.abc.c = c;
+		m_ExtendedABCWidthsCache.Insert( finder );
 	}
 }
 
@@ -335,12 +382,23 @@ void CWin32Font::CloseResource()
 }
 
 //-----------------------------------------------------------------------------
+// Purpose: Comparison function for abc widths storage
+//-----------------------------------------------------------------------------
+bool CWin32Font::ExtendedABCWidthsCacheLessFunc( const abc_cache_t &lhs, const abc_cache_t &rhs )
+{
+	return lhs.wch < rhs.wch;
+}
+
+//-----------------------------------------------------------------------------
 // Purpose: Get the kerned size of a char, for win32 just pass thru for now
 //-----------------------------------------------------------------------------
-void CWin32Font::GetKernedCharWidth( wchar_t ch, wchar_t chBefore, wchar_t chAfter, float &wide, float &abcA )
+void CWin32Font::GetKernedCharWidth( wchar_t ch, wchar_t chBefore, wchar_t chAfter, float &wide, float &abcA, float &abcC )
 {
 	int a,b,c;
 	GetCharABCWidths(ch, a, b, c );
 	wide = ( a + b + c);
 	abcA = a;
+	abcC = c;
 }
+
+

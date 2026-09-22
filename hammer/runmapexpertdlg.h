@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -31,7 +31,6 @@ public:
 // Dialog Data
 	//{{AFX_DATA(CRunMapExpertDlg)
 	enum { IDD = IDD_RUNMAPEXPERT };
-	CButton	m_cUseProcessWnd;
 	CComboBox	m_cCmdSequences;
 	CButton	m_cMoveUp;
 	CButton	m_cMoveDown;
@@ -40,6 +39,7 @@ public:
 	CButton	m_cLongFilenames;
 	CEdit	m_cParameters;
 	CEdit	m_cCommand;
+	BOOL m_bWaitForKeypress;
 	//}}AFX_DATA
 
 	BOOL m_bSwitchMode;
@@ -88,7 +88,6 @@ protected:
 	virtual void OnOK();
 	afx_msg void OnSelchangeConfigurations();
 	afx_msg void OnEditconfigs();
-	afx_msg void OnUseprocesswnd();
 	virtual void OnCancel();
 	//}}AFX_MSG
 

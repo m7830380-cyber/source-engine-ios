@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -29,9 +29,6 @@ class IDedicatedServerAPI;
 // Singleton interfaces 
 //-----------------------------------------------------------------------------
 extern IDedicatedServerAPI *engine;
-
-
-extern char g_szEXEName[ MAX_PATH ];
 
 
 //-----------------------------------------------------------------------------
@@ -74,5 +71,18 @@ public:
 };
 
 
+// main server entry point after init
+void RunServer( bool bSupressStdIOBecauseWeAreAForkedChild );
+
+#ifdef _LINUX
+void RunServerSubProcesses( int nNumChildInstances );
+#endif
+
+// modify the command line, replacing all occurrences of ## with nIndex
+void PerformCommandLineSubstitutions( int nIndex );
+
+
+// forked subprocess index. 0 for master or not forked mode
+extern int g_nSubProcessId;
 
 #endif // DEDICATED_H

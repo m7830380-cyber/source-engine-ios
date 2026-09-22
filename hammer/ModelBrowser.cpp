@@ -1,10 +1,10 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
 // ModelBrowser.cpp : implementation file
 //
 
 #include "stdafx.h"
 #include "ModelBrowser.h"
 #include "matsys_controls/mdlpicker.h"
+#include "matsys_controls/baseassetpicker.h"
 #include "matsys_controls/matsyscontrols.h"
 #include "vgui_controls/TextEntry.h"
 #include "vgui_controls/Splitter.h"
@@ -12,6 +12,7 @@
 #include "KeyValues.h"
 #include "vgui/KeyCode.h"
 #include "texturesystem.h"
+#include "HammerVGui.h"
 
 static LPCTSTR pszIniSection = "Model Browser";
 
@@ -21,8 +22,8 @@ static LPCTSTR pszIniSection = "Model Browser";
 class CModelBrowserPanel : public vgui::EditablePanel
 {
 public:
-	CModelBrowserPanel( CModelBrowser *pBrowser, const char *panelName ) : 
-	  vgui::EditablePanel( NULL, panelName )
+	CModelBrowserPanel( CModelBrowser *pBrowser, const char *panelName, vgui::HScheme hScheme ) : 
+	  vgui::EditablePanel( NULL, panelName, hScheme )
 	{
 		m_pBrowser = pBrowser;
 	}
@@ -67,6 +68,10 @@ public:
 		{
 			m_pBrowser->UpdateStatusLine();
 		}
+		else if ( Q_stricmp( params->GetName(), "AssetPickerFind" ) == 0 )
+		{
+			m_pBrowser->EndDialog( ID_FIND_ASSET );
+		}
 	}
 
 	CModelBrowser *m_pBrowser;
@@ -85,6 +90,15 @@ CModelBrowser::CModelBrowser(CWnd* pParent /*=NULL*/)
 
 CModelBrowser::~CModelBrowser()
 {
+	delete m_pPicker;
+	delete m_pStatusLine;
+	delete m_pButtonOK;
+	delete m_pButtonCancel;
+}
+
+void CModelBrowser::SetUsedModelList( CUtlVector<AssetUsageInfo_t> &usedModels )
+{
+	m_pPicker->SetUsedAssetList( usedModels );
 }
 
 void CModelBrowser::SetModelName( const char *pModelName )
@@ -157,16 +171,7 @@ void CModelBrowser::SaveLoadSettings( bool bSave )
 		if (!str.IsEmpty())
 		{
 			sscanf(str, "%d %d %d %d", &rect.left, &rect.top, &rect.right, &rect.bottom);
-
-			if (rect.left < 0)
-			{
-				ShowWindow(SW_SHOWMAXIMIZED);
-			}
-			else
-			{
-				MoveWindow(rect.left, rect.top, rect.right-rect.left, rect.bottom-rect.top, FALSE);
-			}
-
+			MoveWindow(rect.left, rect.top, rect.right-rect.left, rect.bottom-rect.top, FALSE);
 			Resize();
 		}
 
@@ -217,6 +222,7 @@ void CModelBrowser::OnSize(UINT nType, int cx, int cy)
 BEGIN_MESSAGE_MAP(CModelBrowser, CDialog)
 	ON_WM_SIZE()
 	ON_WM_DESTROY()
+	ON_WM_ERASEBKGND()
 END_MESSAGE_MAP()
 
 BOOL CModelBrowser::PreTranslateMessage( MSG* pMsg )
@@ -231,14 +237,13 @@ BOOL CModelBrowser::OnInitDialog()
 
 	m_VGuiWindow.Create( NULL, _T("ModelViewer"), WS_VISIBLE|WS_CHILD, CRect(0,0,100,100), this, 1001);
 
-	vgui::EditablePanel *pMainPanel = new CModelBrowserPanel( this, "ModelBrowerPanel" );
+	vgui::EditablePanel *pMainPanel = new CModelBrowserPanel( this, "ModelBrowerPanel", HammerVGui()->GetHammerScheme() );
 	
 	m_VGuiWindow.SetParentWindow( &m_VGuiWindow );
 	m_VGuiWindow.SetMainPanel( pMainPanel );
 	pMainPanel->MakePopup( false, false );
     m_VGuiWindow.SetRepaintInterval( 75 );
 	
-
 	m_pPicker->SetParent( pMainPanel );
 	m_pPicker->AddActionSignalTarget( pMainPanel );	
 
@@ -264,7 +269,7 @@ void CModelBrowser::OnDestroy()
 {
 	SaveLoadSettings( true ); // save
 
-	// model browser destoys our defualt cube map, reload it
+	// model browser destoys our default cube map, reload it
 	g_Textures.RebindDefaultCubeMap();
 
 	CDialog::OnDestroy();
@@ -297,4 +302,9 @@ void CModelBrowser::Hide()
 
 	if (m_pButtonCancel)
 		m_pButtonCancel->SetVisible( false );
+}
+
+BOOL CModelBrowser::OnEraseBkgnd(CDC* pDC)
+{
+	return TRUE;
 }

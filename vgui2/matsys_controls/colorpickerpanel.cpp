@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -15,8 +15,12 @@
 #include "vgui_controls/TextEntry.h"
 #include "vgui_controls/RadioButton.h"
 #include "vgui/IInput.h"
-#include "tier1/KeyValues.h"
+#include "tier1/keyvalues.h"
 #include "bitmap/imageformat.h"
+
+// NOTE: This has to be the last file included!
+#include "tier0/memdbgon.h"
+
 
 using namespace vgui;
 
@@ -377,7 +381,7 @@ void CColorXYPreview::OnMouseReleased( vgui::MouseCode code )
 		if ( m_bDraggingMouse )
 		{
 			m_bDraggingMouse = false;
-			input()->SetMouseCapture( (VPANEL)0 );
+			input()->SetMouseCapture( NULL );
 		}
 	}
 }
@@ -643,7 +647,7 @@ void CColorZPreview::OnMouseReleased( vgui::MouseCode code )
 		if ( m_bDraggingMouse )
 		{
 			m_bDraggingMouse = false;
-			input()->SetMouseCapture( (VPANEL)0 );
+			input()->SetMouseCapture( NULL );
 		}
 	}
 }

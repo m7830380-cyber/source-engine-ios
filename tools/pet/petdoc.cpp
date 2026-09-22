@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2005, Valve Corporation, All rights reserved. =======//
 //
 // Purpose: 
 //
@@ -7,7 +7,7 @@
 //=============================================================================//
 
 #include "petdoc.h"
-#include "tier1/KeyValues.h"
+#include "tier1/keyvalues.h"
 #include "tier1/utlbuffer.h"
 #include "toolutils/enginetools_int.h"
 #include "filesystem.h"
@@ -21,6 +21,7 @@
 #include "particles/particles.h"
 #include "particlesystempropertiescontainer.h"
 #include "dme_controls/particlesystempanel.h"
+#include "dme_controls/sheeteditorpanel.h"
 #include "dme_controls/dmecontrols.h"
 
 
@@ -101,6 +102,40 @@ bool CPetDoc::GetIntChoiceList( const char *pChoiceListType, CDmElement *pElemen
 				continue;
 
 			const char *pName = g_pParticleSystemMgr->GetParticleFieldName( i );
+			if ( pName )
+			{
+				int j = list.AddToTail();
+				list[j].m_nValue = i;
+				list[j].m_pChoiceString = pName;
+			}
+		}
+		return true;
+	}
+
+	if ( !Q_stricmp( pChoiceListType, "particlefield_rotation" ) )
+	{
+		for ( int i = 0; i < MAX_PARTICLE_ATTRIBUTES; ++i )
+		{
+			if ( ( ATTRIBUTES_WHICH_ARE_ROTATION & ( 1 << i ) ) == 0 )
+				continue;
+
+			const char *pName = g_pParticleSystemMgr->GetParticleFieldName( i );
+			if ( pName )
+			{
+				int j = list.AddToTail();
+				list[j].m_nValue = i;
+				list[j].m_pChoiceString = pName;
+			}
+		}
+		return true;
+	}
+
+
+	if ( !Q_stricmp( pChoiceListType, "particlefield_activity" ) )
+	{
+		for ( int i = 0; i < g_pParticleSystemMgr->Query()->GetActivityCount(); ++i )
+		{
+			const char *pName = g_pParticleSystemMgr->Query()->GetActivityNameFromIndex( i );
 			if ( pName )
 			{
 				int j = list.AddToTail();
@@ -199,6 +234,10 @@ bool CPetDoc::LoadFromFile( const char *pFileName )
 	if ( !pFileName[0] )
 		return false;
 
+	const char *pGame = Q_stristr( pFileName, "\\game\\" );
+	if ( !pGame )
+		return false;
+
 	Q_strncpy( m_pFileName, pFileName, sizeof( m_pFileName ) );
 
 	CDmElement *pRoot = NULL;
@@ -212,6 +251,16 @@ bool CPetDoc::LoadFromFile( const char *pFileName )
 
 	m_hRoot = pRoot;
 
+	// remove any null functions (eg. if a child has a bad id)
+
+	CDmrParticleSystemList defArray( m_hRoot, "particleSystemDefinitions" );
+
+	int nSystems = defArray.Count();
+	for ( int i = 0; i < nSystems; ++i )
+	{
+		defArray[i]->RemoveInvalidFunctions();
+	}
+
 	SetDirty( false );
 	return true;
 }
@@ -220,13 +269,27 @@ void CPetDoc::SaveToFile( )
 {
 	if ( m_hRoot.Get() && m_pFileName && m_pFileName[0] )
 	{
-		g_pDataModel->SaveToFile( m_pFileName, NULL, "binary", PET_FILE_FORMAT, m_hRoot );
+		CDisableUndoScopeGuard guard;
+
+		// make a copy of the definition tree
+		CDmElement* pRootCopy = m_hRoot->Copy( TD_ALL );
+		CDmrParticleSystemList defCopyArray( pRootCopy, "particleSystemDefinitions" );
+
+		// compact the copied definitions
+		int nSystems = defCopyArray.Count();
+		for ( int i = 0; i < nSystems; ++i )
+		{
+			defCopyArray[i]->Compact();
+		}
+
+		// save the copy, and kill it
+		g_pDataModel->SaveToFile( m_pFileName, NULL, "binary", PET_FILE_FORMAT, pRootCopy );
+		DestroyElement( pRootCopy, TD_ALL );
 	}
 
 	SetDirty( false );
 }
 
-	
 //-----------------------------------------------------------------------------
 // Returns the root object
 //-----------------------------------------------------------------------------
@@ -254,18 +317,33 @@ CDmAttribute *CPetDoc::GetParticleSystemDefinitionList()
 	return array.GetAttribute();
 }
 
+int CPetDoc::GetParticleSystemCount( )
+{
+	CDmrElementArray<> array( m_hRoot, "particleSystemDefinitions" );
+	return array.Count();
+}
+
+CDmeParticleSystemDefinition *CPetDoc::GetParticleSystem( int nIndex )
+{
+	CDmrParticleSystemList array( m_hRoot, "particleSystemDefinitions" );
+
+	if( array.IsValid() && nIndex >= 0 && nIndex < array.Count() )
+	{
+		return array[nIndex];
+	}
+	else
+	{
+		return NULL;
+	}
+}
 
 void CPetDoc::AddNewParticleSystemDefinition( CDmeParticleSystemDefinition *pNew, CUndoScopeGuard &Guard )
 {
 	CDmrParticleSystemList particleSystemList( GetParticleSystemDefinitionList() );
 
 	particleSystemList.AddToTail( pNew );
+
 	Guard.Release();
-
-	// Force a resolve to get the particle created
-	g_pDmElementFramework->Operate( true );
-	g_pDmElementFramework->BeginEdit();
-
 	UpdateParticleDefinition( pNew );
 }
 
@@ -279,13 +357,15 @@ CDmeParticleSystemDefinition* CPetDoc::AddNewParticleSystemDefinition( const cha
 		pName = "New Particle System";
 	}
 
+
 	CDmeParticleSystemDefinition *pParticleSystem;
 	{
-		CAppUndoScopeGuard guard( NOTIFY_SETDIRTYFLAG, "Add Particle System", "Add Particle System" );
+		CAppUndoScopeGuard guard( NOTIFY_SETDIRTYFLAG|NOTIFY_FLAG_PARTICLESYS_ADDED_OR_REMOVED, "Add Particle System", "Add Particle System" );
 
 		pParticleSystem = CreateElement<CDmeParticleSystemDefinition>( pName, GetFileId() );
 		AddNewParticleSystemDefinition( pParticleSystem, guard );
 	}
+
 
 	return pParticleSystem;
 }
@@ -323,7 +403,7 @@ void CPetDoc::DeleteParticleSystemDefinition( CDmeParticleSystemDefinition *pPar
 	{
 		if ( pParticleSystem == particleSystemList[i] )
 		{
-			CAppUndoScopeGuard guard( NOTIFY_SETDIRTYFLAG, "Delete Particle System", "Delete Particle System" );
+			CAppUndoScopeGuard guard( NOTIFY_SETDIRTYFLAG|NOTIFY_FLAG_PARTICLESYS_ADDED_OR_REMOVED, "Delete Particle System", "Delete Particle System" );
 			particleSystemList.FastRemove( i );
 			break;
 		}
@@ -363,7 +443,7 @@ CDmeParticleSystemDefinition *CPetDoc::FindParticleSystemDefinition( const char 
 
 
 //-----------------------------------------------------------------------------
-// Deletes a particle system definition
+// Replaces a particle system definition
 //-----------------------------------------------------------------------------
 void CPetDoc::ReplaceParticleSystemDefinition( CDmeParticleSystemDefinition *pParticleSystem )
 {

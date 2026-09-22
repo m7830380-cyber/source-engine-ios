@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Renders a cone for spotlight entities. Only renders when the parent
 //			entity is selected.
@@ -13,7 +13,7 @@
 #include "MapFrustum.h"
 #include "Render3D.h"
 #include "Material.h"
-#include "materialsystem/imaterialsystem.h"
+#include "materialsystem/IMaterialSystem.h"
 #include "TextureSystem.h"
 #include "hammer.h"
 

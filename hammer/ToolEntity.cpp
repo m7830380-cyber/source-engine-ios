@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Implements the entity/prefab placement tool.
 //
@@ -13,7 +13,7 @@
 #include "MapView2D.h"
 #include "MapView3D.h"
 #include "Material.h"
-#include "materialsystem/imesh.h"
+#include "materialsystem/IMesh.h"
 #include "Render2D.h"
 #include "Render3D.h"
 #include "StatusBarIDs.h"
@@ -532,7 +532,7 @@ bool CToolEntity::OnLMouseDown3D(CMapView3D *pView, UINT nFlags, const Vector2D 
 			vFinalHitNormal = LocalMatrix.ApplyRotation( HitNormal );
 			CMapClass *pNewObject = NULL;
 
-			if (GetMainWnd()->m_ObjectBar.IsEntityToolCreatingPrefab())
+ 			if (GetMainWnd()->m_ObjectBar.IsEntityToolCreatingPrefab())
 			{
 				//
 				// Prefab creation.
@@ -577,7 +577,7 @@ bool CToolEntity::OnLMouseDown3D(CMapView3D *pView, UINT nFlags, const Vector2D 
 
 				pNewObject = pEntity;
 			}
-
+			
 			if ( pNewObject )
 			{
 				if ( GetMainWnd()->m_ObjectBar.UseRandomYawOnEntityPlacement() )
@@ -586,14 +586,14 @@ bool CToolEntity::OnLMouseDown3D(CMapView3D *pView, UINT nFlags, const Vector2D 
 					VMatrix vmRotate, vmT1, vmT2;
 					Vector vOrigin;
 					QAngle angRandom( 0, RandomInt( -180, 180 ), 0 );
-
+					
 					pNewObject->GetOrigin( vOrigin );
-
+					
 					// Setup a matrix that translates them to the origin, rotates it, then translates back.
 					MatrixFromAngles( angRandom, vmRotate );
 					MatrixBuildTranslation( vmT1, -vOrigin );
 					MatrixBuildTranslation( vmT2, vOrigin );
-
+					
 					// Transform the object.
 					pNewObject->Transform( vmT2 * vmRotate * vmT1 );
 				}

@@ -1,9 +1,10 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
 // $NoKeywords: $
 //===========================================================================//
+#include "tier0/platform.h"
 #include "cbase.h"
 #include "sentence.h"
 #include "wavefile.h"
@@ -22,57 +23,57 @@ bool SceneManager_LoadSentenceFromWavFileUsingIO( char const *wavfile, CSentence
 class ThreadIOReadBinary : public IFileReadBinary
 {
 public:
-	int open( const char *pFileName )
+	FileHandle_t open( const char *pFileName )
 	{
 		char filename[ 512 ];
 		// POSSIBLE BUG:  THIS MIGHT NOT BE THREAD SAFE!!!
 		filesystem->RelativePathToFullPath( pFileName, "GAME", filename, sizeof( filename ) );
-		return (int)_open( filename, _O_BINARY | _O_RDONLY );
+		return (FileHandle_t)_open( filename, _O_BINARY | _O_RDONLY );
 	}
 
-	int read( void *pOutput, int size, int file )
+	int read( void *pOutput, int size, FileHandle_t file )
 	{
 		if ( !file )
 			return 0;
 
-		return _read( file, pOutput, size );
+		return _read( (int)(intp)file, pOutput, size );
 	}
 
-	void seek( int file, int pos )
+	void seek( FileHandle_t file, int pos )
 	{
 		if ( !file )
 			return;
 
-		_lseek( file, pos, SEEK_SET );
+		_lseek( (int)(intp)file, pos, SEEK_SET );
 	}
 
-	unsigned int tell( int file )
+	unsigned int tell( FileHandle_t file )
 	{
 		if ( !file )
 			return 0;
 
-		return _tell( file );
+		return _tell( (int)(intp)file );
 	}
 
-	unsigned int size( int file )
+	unsigned int size( FileHandle_t file )
 	{
 		if ( !file )
 			return 0;
 
-		long curpos = tell( file );
-		_lseek( file, 0, SEEK_END );
-		int s = tell( file );
-		_lseek( file, curpos, SEEK_SET );
+		long curpos = this->tell( file );
+		_lseek( (int)(intp)file, 0, SEEK_END );
+		int s = this->tell( file );
+		_lseek( (int)(intp)file, curpos, SEEK_SET );
 
 		return s;
 	}
 
-	void close( int file )
+	void close( FileHandle_t file )
 	{
 		if ( !file )
 			return;
 
-		_close( file );
+		_close( (int)(intp)file );
 	}
 };
 
@@ -106,11 +107,6 @@ public:
 	// Sockets add/remove themselves via their constructor
 	virtual void			AddWaveFilesToThread( CUtlVector< CWaveFile * >& wavefiles );
 
-	// Lock changes to wavefile list, etc.
-	virtual void			Lock( void );
-	// Unlock wavefile list, etc.
-	virtual void			Unlock( void );
-
 	// Retrieve handle to shutdown event
 	virtual HANDLE			GetShutdownHandle( void );
 
@@ -124,8 +120,7 @@ public:
 	virtual int				GetPendingLoadCount();
 private:
 	// Critical section used for synchronizing access to wavefile list
-	CRITICAL_SECTION		cs;
-	CRITICAL_SECTION		m_CountCS;
+	CThreadFastMutex		m_Mutex;
 
 	// List of wavefiles we are listening on
 	CUtlVector< SentenceRequest	* > m_FileList;
@@ -140,12 +135,12 @@ private:
 	HANDLE					m_hShutdown;
 
 	ThreadIOReadBinary		m_ThreadIO;
-	bool					m_bLocked;
 
 	int						m_nTotalAdds;
-	int						m_nTotalPending;
-	int						m_nTotalProcessed;
 	int						m_nTotalCompleted;
+
+	CInterlockedInt			m_nTotalPending;
+	CInterlockedInt			m_nTotalProcessed;
 
 	HANDLE					m_hNewItems;
 };
@@ -164,21 +159,20 @@ int CFileLoaderThread::DoThreadWork()
 	}
 
 	// No changes to list right now
-	Lock();
-	// Move new items to work list
-	int newItems = m_FileList.Count();
-	for ( i = 0; i < newItems; i++ )
 	{
-		// Move to pending and issue async i/o calls
-		m_Pending.AddToHead( m_FileList[ i ] );
+		AUTO_LOCK_FM( m_Mutex );
+		// Move new items to work list
+		int newItems = m_FileList.Count();
+		for ( i = 0; i < newItems; i++ )
+		{
+			// Move to pending and issue async i/o calls
+			m_Pending.AddToHead( m_FileList[ i ] );
 
-		EnterCriticalSection( &m_CountCS );
-		m_nTotalPending++;
-		LeaveCriticalSection( &m_CountCS );
+			m_nTotalPending++;
+		}
+		m_FileList.RemoveAll();
+		// Done adding new work items
 	}
-	m_FileList.RemoveAll();
-	// Done adding new work items
-	Unlock();
 
 	int remaining = m_Pending.Count();
 	if ( !remaining )
@@ -196,13 +190,13 @@ int CFileLoaderThread::DoThreadWork()
 		transfer.AddToTail( r );
 		
 		// Do the work
-		EnterCriticalSection( &m_CountCS );
 		m_nTotalProcessed++;
-		LeaveCriticalSection( &m_CountCS );
 
-		Lock();
-		bool load = !r->wavefile->HasLoadedSentenceInfo();
-		Unlock();
+		bool load = false;
+		{
+			AUTO_LOCK_FM( m_Mutex );
+			load = !r->wavefile->HasLoadedSentenceInfo();
+		}
 		
 		if ( load )
 		{
@@ -221,32 +215,33 @@ int CFileLoaderThread::DoThreadWork()
 	}
 
 	// Now move to completed list
-	Lock();
-	int c = transfer.Count();
-
-	for ( i = 0; i < c; ++i )
 	{
-		SentenceRequest *r = transfer[ i ];
-		if ( r->valid )
-		{
-		
-			m_nTotalCompleted++;
-			
+		AUTO_LOCK_FM( m_Mutex );
+		int c = transfer.Count();
 
-			m_Completed.AddToTail( r );
-		}
-		else
+		for ( i = 0; i < c; ++i )
 		{
-			delete r;
+			SentenceRequest *r = transfer[ i ];
+			if ( r->valid )
+			{
+			
+				m_nTotalCompleted++;
+				
+
+				m_Completed.AddToTail( r );
+			}
+			else
+			{
+				delete r;
+			}
 		}
 	}
-	Unlock();
 	return 1;
 }
 
 int CFileLoaderThread::ProcessCompleted()
 {
-	Lock();
+	AUTO_LOCK_FM( m_Mutex );
 	int c = m_Completed.Count();
 	for ( int i = c - 1; i >= 0 ; i-- )
 	{
@@ -260,7 +255,6 @@ int CFileLoaderThread::ProcessCompleted()
 		delete r;
 	}
 	m_Completed.RemoveAll();
-	Unlock();
 	return c;
 }
 
@@ -305,11 +299,6 @@ CFileLoaderThread::CFileLoaderThread( void )
 	m_nTotalCompleted = 0;
 	m_nTotalPending = 0;
 
-	m_bLocked = false;
-
-	InitializeCriticalSection( &cs );
-	InitializeCriticalSection( &m_CountCS );
-
 	m_hShutdown	= CreateEvent( NULL, TRUE, FALSE, NULL );
 	Assert( m_hShutdown );
 
@@ -334,13 +323,12 @@ void CFileLoaderThread::Start()
 //-----------------------------------------------------------------------------
 CFileLoaderThread::~CFileLoaderThread( void )
 {
-	Lock();
 	{
+		AUTO_LOCK_FM( m_Mutex );
 		SetEvent( m_hShutdown );
 		Sleep( 2 );
 		TerminateThread( m_hThread, 0 );
 	}
-	Unlock();
 
 	// Kill the wavefile
 //!! need to validate this line
@@ -349,9 +337,6 @@ CFileLoaderThread::~CFileLoaderThread( void )
 	CloseHandle( m_hThread );
 
 	CloseHandle( m_hShutdown );
-
-	DeleteCriticalSection( &cs );
-	DeleteCriticalSection( &m_CountCS );
 
 	CloseHandle( m_hNewItems );
 }
@@ -371,7 +356,7 @@ HANDLE CFileLoaderThread::GetShutdownHandle( void )
 //-----------------------------------------------------------------------------
 void CFileLoaderThread::AddWaveFilesToThread( CUtlVector< CWaveFile * >& wavefiles )
 {
-	Lock();
+	AUTO_LOCK_FM( m_Mutex );
 	int c = wavefiles.Count();
 	for ( int i = 0; i < c; i++ )
 	{
@@ -385,38 +370,9 @@ void CFileLoaderThread::AddWaveFilesToThread( CUtlVector< CWaveFile * >& wavefil
 	}
 
 	SetEvent( m_hNewItems );
-	Unlock();
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: 
-//-----------------------------------------------------------------------------
-void CFileLoaderThread::Lock( void )
-{
-	EnterCriticalSection( &cs );
-	Assert( !m_bLocked );
-	m_bLocked = true;
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: 
-//-----------------------------------------------------------------------------
-void CFileLoaderThread::Unlock( void )
-{
-	Assert( m_bLocked );
-	m_bLocked = false;
-	LeaveCriticalSection( &cs );
 }
 
 int CFileLoaderThread::GetPendingLoadCount()
 {
-	int iret = 0;
-
-	EnterCriticalSection( &m_CountCS );
-
-	iret = m_nTotalPending - m_nTotalProcessed;
-
-	LeaveCriticalSection( &m_CountCS );
-
-	return iret;
+	return m_nTotalPending - m_nTotalProcessed;
 }

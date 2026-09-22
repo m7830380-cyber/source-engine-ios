@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -180,7 +180,7 @@ int Load_OBJ( s_source_t *psource )
 	pSourceAnim->numframes = 1;
 	pSourceAnim->startframe = 0;
 	pSourceAnim->endframe = 0;
-	pSourceAnim->rawanim[0] = (s_bone_t *)kalloc( 1, sizeof( s_bone_t ) );
+	pSourceAnim->rawanim[0] = (s_bone_t *)calloc( 1, sizeof( s_bone_t ) );
 	pSourceAnim->rawanim[0][0].pos.Init();
 	pSourceAnim->rawanim[0][0].rot.Init();
 	Build_Reference( psource, "BindPose" );
@@ -212,15 +212,15 @@ int Load_OBJ( s_source_t *psource )
 		
 		if (strncmp( g_szLine, "vt ", 3 ) == 0)
 		{
-			i = g_numtexcoords++;
-			sscanf( g_szLine, "vt %f %f", &g_texcoord[i].x, &g_texcoord[i].y );
-			g_texcoord[i].y = 1.0 - g_texcoord[i].y;
+			i = g_numtexcoords[0]++;
+			sscanf( g_szLine, "vt %f %f", &g_texcoord[0][i].x, &g_texcoord[0][i].y );
+			g_texcoord[0][i].y = 1.0 - g_texcoord[0][i].y;
 			continue;
 		}
 		
 		if ( !Q_strncmp( g_szLine, "mtllib ", 7 ) )
 		{
-			sscanf( g_szLine, "mtllib %s", &cmd[0] );
+			sscanf( g_szLine, "mtllib %s", &cmd );
 			CUtlBuffer buf( 0, 0, CUtlBuffer::TEXT_BUFFER );
 
 			char pFullMtlLibPath[MAX_PATH];
@@ -234,7 +234,7 @@ int Load_OBJ( s_source_t *psource )
 
 		if (strncmp( g_szLine, "usemtl ", 7 ) == 0)
 		{
-			sscanf( g_szLine, "usemtl %s", &cmd[0] );
+			sscanf( g_szLine, "usemtl %s", &cmd );
 
 			const char *pTexture = FindMtlEntry( cmd );
 			int texture = LookupTexture( pTexture );
@@ -266,20 +266,20 @@ int Load_OBJ( s_source_t *psource )
 
 			ParseVertex( bufParse, breakSet, v0, t0, n0 );
 			ParseVertex( bufParse, breakSet, v1, t1, n1 );
-			Assert( v0 <= g_numverts && t0 <= g_numtexcoords && n0 <= g_numnormals );
-			Assert( v1 <= g_numverts && t1 <= g_numtexcoords && n1 <= g_numnormals );
+			Assert( v0 <= g_numverts && t0 <= g_numtexcoords[0] && n0 <= g_numnormals );
+			Assert( v1 <= g_numverts && t1 <= g_numtexcoords[0] && n1 <= g_numnormals );
 			while ( bufParse.IsValid() )
 			{
 				if ( !ParseVertex( bufParse, breakSet, v2, t2, n2 ) )
 					break;
 
-				Assert( v2 <= g_numverts && t2 <= g_numtexcoords && n2 <= g_numnormals );
+				Assert( v2 <= g_numverts && t2 <= g_numtexcoords[0] && n2 <= g_numnormals );
 	
 				i = g_numfaces++;
 				f.material = material;
-				f.a = v0 - 1; f.na = (n0 > 0) ? n0 - 1 : 0, f.ta = (t0 > 0) ? t0 - 1 : 0;
-				f.b = v2 - 1; f.nb = (n2 > 0) ? n2 - 1 : 0, f.tb = (t2 > 0) ? t2 - 1 : 0;
-				f.c = v1 - 1; f.nc = (n1 > 0) ? n1 - 1 : 0, f.tc = (t1 > 0) ? t1 - 1 : 0;
+				f.a = v0 - 1; f.na = (n0 > 0) ? n0 - 1 : 0, f.ta[0] = (t0 > 0) ? t0 - 1 : 0;
+				f.b = v2 - 1; f.nb = (n2 > 0) ? n2 - 1 : 0, f.tb[0] = (t2 > 0) ? t2 - 1 : 0;
+				f.c = v1 - 1; f.nc = (n1 > 0) ? n1 - 1 : 0, f.tc[0] = (t1 > 0) ? t1 - 1 : 0;
 				g_face[i] = f;
 
 				v1 = v2; t1 = t2; n1 = n2;
@@ -320,7 +320,7 @@ int AppendVTAtoOBJ( s_source_t *psource, char *filename, int frame )
 
 	g_iLinecount = 0;
 
-	g_numverts = g_numnormals = g_numtexcoords = g_numfaces = 0;
+	g_numverts = g_numnormals = g_numtexcoords[0] = g_numfaces = 0;
 
 	while ( GetLineInput() ) 
 	{
@@ -347,12 +347,12 @@ int AppendVTAtoOBJ( s_source_t *psource, char *filename, int frame )
 		}
 		else if (strncmp( g_szLine, "vt ", 3 ) == 0)
 		{
-			i = g_numtexcoords++;
-			sscanf( g_szLine, "vt %f %f", &g_texcoord[i].x, &g_texcoord[i].y );
+			i = g_numtexcoords[0]++;
+			sscanf( g_szLine, "vt %f %f", &g_texcoord[0][i].x, &g_texcoord[0][i].y );
 		}
 		else if (strncmp( g_szLine, "usemtl ", 7 ) == 0)
 		{
-			sscanf( g_szLine, "usemtl %s", &cmd[0] );
+			sscanf( g_szLine, "usemtl %s", &cmd );
 
 			int texture = LookupTexture( cmd );
 			psource->texmap[texture] = texture;	// hack, make it 1:1
@@ -372,9 +372,9 @@ int AppendVTAtoOBJ( s_source_t *psource, char *filename, int frame )
 			j = sscanf( g_szLine, "f %d/%d/%d %d/%d/%d %d/%d/%d %d/%d/%d", &v0, &t0, &n0, &v1, &t1, &n1, &v2, &t2, &n2, &v3, &t3, &n3 );
 
 			f.material = material;
-			f.a = v0 - 1; f.na = n0 - 1, f.ta = 0;
-			f.b = v2 - 1; f.nb = n2 - 1, f.tb = 0;
-			f.c = v1 - 1; f.nc = n1 - 1, f.tc = 0;
+			f.a = v0 - 1; f.na = n0 - 1, f.ta[0] = 0;
+			f.b = v2 - 1; f.nb = n2 - 1, f.tb[0] = 0;
+			f.c = v1 - 1; f.nc = n1 - 1, f.tc[0] = 0;
 
 			Assert( v0 <= g_numverts && v1 <= g_numverts && v2 <= g_numverts );
 			Assert( n0 <= g_numnormals && n1 <= g_numnormals && n2 <= g_numnormals );
@@ -384,9 +384,9 @@ int AppendVTAtoOBJ( s_source_t *psource, char *filename, int frame )
 			if (j == 12)
 			{
 				i = g_numfaces++;
-				f.a = v0 - 1; f.na = n0 - 1, f.ta = 0;
-				f.b = v3 - 1; f.nb = n3 - 1, f.tb = 0;
-				f.c = v2 - 1; f.nc = n2 - 1, f.tc = 0;
+				f.a = v0 - 1; f.na = n0 - 1, f.ta[0] = 0;
+				f.b = v3 - 1; f.nb = n3 - 1, f.tb[0] = 0;
+				f.c = v2 - 1; f.nc = n2 - 1, f.tc[0] = 0;
 				g_face[i] = f;
 			}
 		}
@@ -404,7 +404,7 @@ int AppendVTAtoOBJ( s_source_t *psource, char *filename, int frame )
 		pSourceAnim->numframes = 1;
 		pSourceAnim->startframe = 0;
 		pSourceAnim->endframe = 0;
-		pSourceAnim->rawanim[0] = (s_bone_t *)kalloc( 1, sizeof( s_bone_t ) );
+		pSourceAnim->rawanim[0] = (s_bone_t *)calloc( 1, sizeof( s_bone_t ) );
 		pSourceAnim->rawanim[0][0].pos.Init();
 		pSourceAnim->rawanim[0][0].rot = RadianEuler( 1.570796, 0.0, 0.0 );
 		Build_Reference( psource, "BindPose" );
@@ -415,10 +415,10 @@ int AppendVTAtoOBJ( s_source_t *psource, char *filename, int frame )
 	// printf("%d %d : %d\n", g_numverts, g_numnormals, numvlist );
 
 	int t = frame;
-	int count = numvlist;
+	int count = g_numvlist;
 
 	pSourceAnim->numvanims[t] = count;
-	pSourceAnim->vanim[t] = (s_vertanim_t *)kalloc( count, sizeof( s_vertanim_t ) );
+	pSourceAnim->vanim[t] = (s_vertanim_t *)calloc( count, sizeof( s_vertanim_t ) );
 	for (i = 0; i < count; i++)
 	{
 		pSourceAnim->vanim[t][i].vertex = i;

@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2005, Valve Corporation, All rights reserved. =======//
 //
 // Purpose: 
 //
@@ -11,6 +11,7 @@
 #include "tier1/KeyValues.h"
 #include "movieobjects/dmeeditortypedictionary.h"
 #include "dme_controls/AttributeTextEntry.h"
+#include "dme_controls/AttributeBooleanPanel.h"
 #include "dme_controls/AttributeFilePickerPanel.h"
 #include "dme_controls/AttributeBoolChoicePanel.h"
 #include "dme_controls/AttributeIntChoicePanel.h"
@@ -26,6 +27,7 @@
 #include "dme_controls/AttributeDetailTypePickerPanel.h"
 #include "dme_controls/AttributeColorPickerPanel.h"
 #include "dme_controls/AttributeInterpolatorChoicePanel.h"
+#include "dme_controls/attributesheetsequencepickerpanel.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
@@ -116,6 +118,9 @@ public:
 // An Attribute Widget Factory for: text entry
 static CAttributeWidgetFactory<CAttributeTextPanel> g_AttributeTextWidgetFactory( "text" );
 
+// An Attribute Widget Factory for: boolean entry
+static CAttributeWidgetFactory<CAttributeBooleanPanel> g_AttributeBooleanWidgetFactory( "boolean" );
+
 // An Attribute Widget Factory for: picking files
 static CAttributeWidgetFactory<CAttributeDmeFilePickerPanel> g_AttributeFilePickerWidgetFactory( "filepicker" );
 
@@ -153,7 +158,7 @@ static CAttributeWidgetFactory<CAttributeVmtPickerPanel> g_AttributeVmtPickerWid
 static CAttributeWidgetFactory<CAttributeVtfPickerPanel> g_AttributeVtfPickerWidgetFactory( "vtfpicker" );
 
 // An Attribute Widget Factory for: picking tgas
-static CAttributeWidgetFactory<CAttributeTgaFilePickerPanel> g_AttributeTgaPickerWidgetFactory( "tgapicker" );
+static CAttributeWidgetFactory<CAttributeTgaPickerPanel> g_AttributeTgaPickerWidgetFactory( "tgapicker" );
 
 // An Attribute Widget Factory for: picking shaders
 static CAttributeWidgetFactory<CAttributeShaderPickerPanel> g_AttributeShaderPickerWidgetFactory( "shaderpicker" );
@@ -179,6 +184,12 @@ static CAttributeWidgetFactory<CAttributeRawFilePickerPanel> g_AttributeRawPicke
 // An Attribute Widget Factory for: choosing interpolator types (left and right)
 static CAttributeWidgetFactory<CAttributeInterpolatorChoicePanel> g_AttributeInterpolatorChoiceWidgetFactory( "interpolatorchoice" );
 
+// An Attribute Widget Factory for: selecting sheet sequences
+static CAttributeWidgetFactory<CAttributeSheetSequencePickerPanel> g_AttributeSheetSequencePickerWidgetFactory( "sheetsequencepicker" );
+
+// Special-case for the second sequence in a double-sequence material
+static CAttributeWidgetFactory<CAttributeSheetSequencePickerPanel> g_AttributeSheetSequencePickerWidgetFactorySecond( "sheetsequencepicker_second" );
+
 
 //-----------------------------------------------------------------------------
 // Name-based widget factories
@@ -203,10 +214,10 @@ static DefaultAttributeFactoryEntry_t g_AttributeWidgetFactories[] =
 	{ AT_ELEMENT,		&g_AttributeElementWidgetFactory },
 	{ AT_INT,			&g_AttributeTextWidgetFactory },
 	{ AT_FLOAT,			&g_AttributeTextWidgetFactory },
-	{ AT_BOOL,			&g_AttributeTextWidgetFactory },
+	{ AT_BOOL,			&g_AttributeBooleanWidgetFactory },
 	{ AT_STRING,		&g_AttributeTextWidgetFactory },
 	{ AT_VOID,			&g_AttributeTextWidgetFactory },
-	{ AT_OBJECTID,		&g_AttributeTextWidgetFactory },
+	{ AT_TIME,			&g_AttributeTextWidgetFactory },
 	{ AT_COLOR,			&g_AttributeColorPickerWidgetFactory },
 	{ AT_VECTOR2,		&g_AttributeTextWidgetFactory },
 	{ AT_VECTOR3,		&g_AttributeTextWidgetFactory },
@@ -221,9 +232,8 @@ static DefaultAttributeFactoryEntry_t g_AttributeWidgetFactories[] =
 	{ AT_BOOL_ARRAY,		&g_AttributeTextWidgetFactory },
 	{ AT_STRING_ARRAY,		&g_AttributeTextWidgetFactory },
 	{ AT_VOID_ARRAY,		&g_AttributeTextWidgetFactory },
-	{ AT_ELEMENT_ARRAY,		&g_AttributeTextWidgetFactory },
-	{ AT_OBJECTID_ARRAY,	&g_AttributeTextWidgetFactory },
-	{ AT_COLOR_ARRAY,		&g_AttributeColorPickerWidgetFactory },
+	{ AT_TIME_ARRAY,		&g_AttributeTextWidgetFactory },
+	{ AT_COLOR_ARRAY,		&g_AttributeTextWidgetFactory },
 	{ AT_VECTOR2_ARRAY,		&g_AttributeTextWidgetFactory },
 	{ AT_VECTOR3_ARRAY,		&g_AttributeTextWidgetFactory },
 	{ AT_VECTOR4_ARRAY,		&g_AttributeTextWidgetFactory },

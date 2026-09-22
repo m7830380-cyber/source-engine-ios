@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -17,11 +17,11 @@
 #include "dedicated.h"
 #include "engine_hlds_api.h"
 #include "filesystem.h"
-#include "tier0/vcrmode.h"
 #include "tier0/dbg.h"
 #include "tier1/strtools.h"
 #include "tier0/icommandline.h"
 #include "idedicatedexports.h"
+#include "mathlib/expressioncalculator.h"
 #include "vgui/vguihelpers.h"
 
 static long		hDLLThirdParty	= 0L;
@@ -36,6 +36,10 @@ CSysModule *s_hSoundEmitterModule = NULL;
 CreateInterfaceFn s_MaterialSystemFactory;
 CreateInterfaceFn s_EngineFactory;
 CreateInterfaceFn s_SoundEmitterFactory;
+
+#ifdef _WIN32
+extern bool g_bVGui;
+#endif
 
 /*
 ==============
@@ -96,29 +100,29 @@ ProcessConsoleInput
 
 ==============
 */
-int ProcessConsoleInput(void)
+void ProcessConsoleInput( void )
 {
 	char *s;
-	int count = 0;
 
-	if ( engine )
+	if ( !engine )
+		return;
+
+	do
 	{
-		do
+		s = sys->ConsoleInput();
+		if (s)
 		{
 			char szBuf[ 256 ];
-			s = sys->ConsoleInput( count++, szBuf, sizeof( szBuf ) );
-			if (s && s[0] )
-			{
-				V_strcat_safe( szBuf, "\n" );
-				engine->AddConsoleText ( szBuf );
-			}
-		} while (s);
-	}
-
-	return count;
+			Q_snprintf( szBuf, sizeof( szBuf ), "%s\n", s );
+			engine->AddConsoleText ( szBuf );
+		}
+	} while (s);
 }
 
-void RunServer( void );
+
+#ifdef _WIN32
+extern bool g_bVGui;
+#endif
 
 class CDedicatedExports : public CBaseAppSystem<IDedicatedExports>
 {
@@ -131,90 +135,88 @@ public:
 		}
 	}
 
-	virtual void RunServer()
-	{
-		void RunServer( void );
-		::RunServer();
-	}
+	virtual void RunServer( void );
+	virtual bool IsGuiDedicatedServer();
 };
 
-EXPOSE_SINGLE_INTERFACE( CDedicatedExports, IDedicatedExports, VENGINE_DEDICATEDEXPORTS_API_VERSION );
 
-static const char *get_consolelog_filename()
+
+void PerformCommandLineSubstitutions( int nIndex )
 {
-	static bool s_bInited = false;
-	static char s_consolelog[ MAX_PATH ];
-
-	if ( !s_bInited )
+	// modify the command line, replacing all occurrences of ## with nIndex
+	for( int i = 0; i < CommandLine()->ParmCount(); i++ )
 	{
-		s_bInited = true;
-
-		// Don't do the -consolelog thing if -consoledebug is present.
-		//  CTextConsoleUnix::Print() looks for -consoledebug.
-		const char *filename = NULL;
-		if ( !CommandLine()->FindParm( "-consoledebug" ) &&
-			  CommandLine()->CheckParm( "-consolelog", &filename ) &&
-			  filename )
+		char newBuf[2048];
+		char const *ppParm = CommandLine()->GetParm( i );
+		V_strncpy( newBuf, ppParm, sizeof( newBuf ) );
+		bool bDidReplace = false;
+		bool bWasExpression = false;
+		for(;;)
 		{
-			V_strcpy_safe( s_consolelog, filename );
-		}
-	}
+			char *pReplace = V_strstr( newBuf, "##" );
+			if (! pReplace )
+				break;
 
-	return s_consolelog;
-}
-
-SpewRetval_t DedicatedSpewOutputFunc( SpewType_t spewType, char const *pMsg )
-{
-	if ( sys )
-	{
-		sys->Printf( "%s", pMsg );
-
-		// If they have specified -consolelog, log this message there. Otherwise these
-		//	wind up being lost because Sys_InitGame hasn't been called yet, and 
-		//  Sys_SpewFunc is the thing that logs stuff to -consolelog, etc.
-		const char *filename = get_consolelog_filename();
-		if ( filename[ 0 ] && pMsg[ 0 ] )
-		{
-			FileHandle_t fh = g_pFullFileSystem->Open( filename, "a" );
-			if ( fh != FILESYSTEM_INVALID_HANDLE )
+			pReplace[0] = '0' + ( nIndex / 10 );
+			pReplace[1] = '0' + ( nIndex % 10 );
+			bDidReplace = true;
+			if ( ( pReplace != newBuf ) &&
+				 ( strchr( "+-/*", pReplace[-1] ) ) )		// is this an expression involving "##"?
 			{
-				g_pFullFileSystem->Write( pMsg, V_strlen( pMsg ), fh );
-				g_pFullFileSystem->Close( fh );
+				bWasExpression = true;
 			}
+
+		}
+		if ( bDidReplace )
+		{
+			if ( bWasExpression )
+			{
+				sprintf( newBuf, "%d", ( int ) ( EvaluateExpression( newBuf, -1 ) ) );
+			}
+			printf("setparm %d %s\n", i, newBuf );
+			CommandLine()->SetParm( i, newBuf );
+		}
+
+	}
+}
+
+#ifdef _LINUX												// linux uses the implementation in sys_subproc
+void CDedicatedExports::RunServer( void )
+{
+	// check for forking
+	char const *pForkParam = CommandLine()->ParmValue( "-fork" );
+	if ( pForkParam )
+	{
+		int nNumChildInstances = atoi( pForkParam );
+		if ( nNumChildInstances >= 1 )
+		{
+			RunServerSubProcesses( nNumChildInstances );
 		}
 	}
-#ifdef _WIN32
-	Plat_DebugString( pMsg );
+	else
+	{
+		::RunServer( false );
+	}
+}
+
+#else
+void CDedicatedExports::RunServer( void )
+{
+	PerformCommandLineSubstitutions( 0 );
+	::RunServer( false );
+}
 #endif
 
-	if (spewType == SPEW_ERROR)
-	{
-		// In Windows vgui mode, make a message box or they won't ever see the error.
-#ifdef _WIN32
-		extern bool g_bVGui;
-		if ( g_bVGui )
-		{
-			MessageBox( NULL, pMsg, "Error", MB_OK | MB_TASKMODAL );
-		}
-		TerminateProcess( GetCurrentProcess(), 1 );
-#elif POSIX
-		fflush(stdout);
-		_exit(1);
+bool CDedicatedExports::IsGuiDedicatedServer()
+{
+#ifndef _WIN32
+	return false;
 #else
-#error "Implement me"
+	return g_bVGui;
 #endif
-		
-		return SPEW_ABORT;
-	}
-	if (spewType == SPEW_ASSERT)
-	{
-		if ( CommandLine()->FindParm( "-noassert" ) == 0 )
-			return SPEW_DEBUGGER;
-		else
-			return SPEW_CONTINUE;
-	}
-	return SPEW_CONTINUE;
 }
+
+EXPOSE_SINGLE_INTERFACE( CDedicatedExports, IDedicatedExports, VENGINE_DEDICATEDEXPORTS_API_VERSION );
 
 int Sys_GetExecutableName( char *out )
 {
@@ -224,6 +226,7 @@ int Sys_GetExecutableName( char *out )
 		return 0;
 	}
 #else
+	extern char g_szEXEName[ 256 ];
 	strcpy( out, g_szEXEName );
 #endif
 	return 1;

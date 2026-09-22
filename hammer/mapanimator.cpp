@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -378,6 +378,7 @@ void CMapAnimator::UpdateAnimation( float animTime )
 	VMatrix mat, tmpMat;
 	Vector ourOrigin;
 	GetOrigin( ourOrigin );
+	mat.Identity();
 
 	// build us a matrix
 	// T(newOrigin)R(angle)T(-ourOrigin)
@@ -390,8 +391,7 @@ void CMapAnimator::UpdateAnimation( float animTime )
 	}
 	
 	// Apply interpolated Rotation
-	mat.Identity();
-	QuaternionMatrix( newAngles, const_cast< matrix3x4_t & > ( mat.As3x4() ) );
+	QuaternionMatrix( newAngles, mat.As3x4() );
 	m_CoordFrame = m_CoordFrame * mat;
 	
 	// transform back to our new position

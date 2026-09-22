@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2008, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -127,7 +127,8 @@ struct VertexInfo_t
 {
 	Vector			m_Position;
 	Vector			m_Normal;
-	Vector2D		m_TexCoord;
+	int				m_numTexCoords;
+	Vector2D		m_TexCoord[MAXSTUDIOTEXCOORDS];
 	Vector4D		m_TangentS;
 	s_boneweight_t	m_BoneWeight;
 	int				m_nLodFlag;
@@ -256,10 +257,15 @@ int CVertexDictionary::AddVertexFromSource( const s_source_t *pSrc, int nVertexI
 	const s_vertexinfo_t &srcVertex = pSrc->m_GlobalVertices[nVertexIndex];
 	vertex.m_Position   = srcVertex.position;
 	vertex.m_Normal     = srcVertex.normal;
-	vertex.m_TexCoord   = srcVertex.texcoord;
 	vertex.m_TangentS   = srcVertex.tangentS;
 	vertex.m_BoneWeight = srcVertex.boneweight;
 	vertex.m_nLodFlag	= 1 << nLod;
+
+	for (int i = 0; i < MAXSTUDIOTEXCOORDS; ++i)
+	{
+		vertex.m_TexCoord[i] = srcVertex.texcoord[i];
+	}
+	vertex.m_numTexCoords = srcVertex.numTexcoord;
 
 	ValidateBoneWeight( vertex.m_BoneWeight );
 	SortBoneWeightByIndex( vertex.m_BoneWeight );
@@ -317,11 +323,12 @@ s_source_t* GetModelLODSource( const char *pModelName,
 //-----------------------------------------------------------------------------
 // Tolerances for all fields of the vertex
 //-----------------------------------------------------------------------------
-#define POSITION_EPSILON	0.01f	// Was 0.05f
+#define POSITION_EPSILON	0.05f
 #define TEXCOORD_EPSILON	0.01f
 #define NORMAL_EPSILON		10.0f	// in degrees
 #define TANGENT_EPSILON		10.0f	// in degrees
 #define BONEWEIGHT_EPSILON	0.05f
+#define EXTRADATA_EPSILON	0.01f
 
 #define UNMATCHED_BONE_WEIGHT 1.0f
 
@@ -385,15 +392,21 @@ bool CompareTangentSFuzzy( const Vector4D &n1, const Vector4D &n2, float &flErro
 //-----------------------------------------------------------------------------
 // Computes error between two texcoords; returns false if the error is too great
 //-----------------------------------------------------------------------------
-bool CompareTexCoordsFuzzy( const Vector2D &t1, const Vector2D &t2, float &flError )
+bool CompareTexCoordsFuzzy( const Vector2D *t1, const Vector2D *t2, float &flError )
 {
 	Vector2D vecError;
-	vecError[0] = fabs( t2[0] - t1[0] );
-	vecError[1] = fabs( t2[1] - t1[1] );
-	flError = vecError.LengthSqr();
+
+	flError = 0.0f;
+
+	for (int i = 0; i < MAXSTUDIOTEXCOORDS; ++i)
+	{
+		vecError[0] = fabs(t2[i][0] - t1[i][0]);
+		vecError[1] = fabs(t2[i][1] - t1[i][1]);
+		flError += vecError.LengthSqr();
+	}
+
 	return ( flError <= (TEXCOORD_EPSILON * TEXCOORD_EPSILON) );
 }
-
 
 //-----------------------------------------------------------------------------
 // Computes the error between two bone weights, returns false if they are too far
@@ -480,7 +493,7 @@ int FindMaterialByName( const char *pMaterialName )
 
 	for( i = 0; i < g_numtextures; i++ )
 	{
-		if( stricmp( pBaseName, g_texture[i].name ) == 0 )
+		if( stricmp( pMaterialName, g_texture[i].name ) == 0 )
 		{
 			return i;
 		}
@@ -555,6 +568,7 @@ static void CopyFaces( const s_source_t *pSrc, const s_mesh_t *pSrcMesh, CUtlVec
 		pDstFace->a = pSrcFace->a;
 		pDstFace->b = pSrcFace->b;
 		pDstFace->c = pSrcFace->c;
+		pDstFace->d = pSrcFace->d;
 		pDstMesh->numfaces++;
 	}
 }
@@ -614,7 +628,7 @@ static int FindVertexWithinVertexDictionary( const VertexInfo_t &find,
 		flTangentSError    = 0;
 	}
 
-	for ( int nVertexIndex = nStartVert; nVertexIndex < nEndVert; ++nVertexIndex )
+	for (int nVertexIndex = nStartVert; nVertexIndex < nEndVert; ++nVertexIndex)
 	{
 		// see if the position is reasonable
 		if ( !(fIgnore & IGNORE_POSITION) && !ComparePositionFuzzy( find.m_Position, vertexDict.Vertex(nVertexIndex).m_Position, flPositionError ) )
@@ -843,8 +857,9 @@ static void CalculateBoneWeightFromRootLod( const VertexInfo_t &searchVertex, CV
 	// Look through the part of the vertex dictionary associated with the root LODs for a match
 	// bone weights are not defined properly in SMDs for lower LODs, so don't consider
 	// we can only accept the boneweight from the root LOD
+	int nFlags = g_bSkinnedLODs ? IGNORE_TANGENTS : IGNORE_BONEWEIGHT|IGNORE_TANGENTS;
 	int nVertexDictID = FindVertexWithinVertexDictionary( searchVertex, vertexDict, 
-		vertexDict.RootLODVertexStart(), vertexDict.RootLODVertexEnd(), IGNORE_BONEWEIGHT|IGNORE_TANGENTS ); 
+		vertexDict.RootLODVertexStart(), vertexDict.RootLODVertexEnd(), nFlags ); 
 	if ( nVertexDictID != -1 )
 	{
 		Assert( nVertexDictID >= vertexDict.RootLODVertexStart() && nVertexDictID < vertexDict.RootLODVertexEnd() );
@@ -852,8 +867,12 @@ static void CalculateBoneWeightFromRootLod( const VertexInfo_t &searchVertex, CV
 
 		// found vertex in dictionary
 #ifdef UNIQUE_VERTEXES_FOR_LOD
-		// keep entry vertex and fill in the missing bone weight attribute
-		idealVertex.m_BoneWeight = vertexDict.Vertex( nVertexDictID ).m_BoneWeight;
+		if ( !g_bSkinnedLODs )
+		{
+			// keep entry vertex and fill in the missing bone weight attribute
+			idealVertex.m_BoneWeight = vertexDict.Vertex( nVertexDictID ).m_BoneWeight;
+		}
+		else
 #else
 		// discard entry vertex in favor of best match
 		// this ensures all the attributes, including bone weight are correct for that vertex
@@ -865,7 +884,10 @@ static void CalculateBoneWeightFromRootLod( const VertexInfo_t &searchVertex, CV
 
 	// In this case, we didn't find anything within the tolerance, so we need to
 	// do a *positional check only* to give us a bone weight to assign to this vertex.
-	FindBoneWeightWithinModel( searchVertex, pRootLODSrc, idealVertex.m_BoneWeight, IGNORE_BONEWEIGHT|IGNORE_TANGENTS );
+	if ( !g_bSkinnedLODs )
+	{
+		FindBoneWeightWithinModel( searchVertex, pRootLODSrc, idealVertex.m_BoneWeight, IGNORE_BONEWEIGHT|IGNORE_TANGENTS );
+	}
 }
 
 //-----------------------------------------------------------------------------
@@ -968,8 +990,6 @@ static bool AreBoneWeightsEqual( const s_boneweight_t &b1, const s_boneweight_t 
 	return true;
 }
 
-
-
 //-----------------------------------------------------------------------------
 // Finds an *exact* requested vertex in the dictionary
 //-----------------------------------------------------------------------------
@@ -983,7 +1003,16 @@ static int FindVertexInDictionaryExact( CVertexDictionary &vertexDict, int nStar
 		if ( !AreBoneWeightsEqual( vertexDict.Vertex( nVertID ).m_BoneWeight, vertex.m_BoneWeight ) )
 			continue;
 
-		if ( vertexDict.Vertex( nVertID ).m_TexCoord != vertex.m_TexCoord )
+		bool bMatch = true;
+		for (int i = 0; i < MAXSTUDIOTEXCOORDS; ++i)
+		{
+			if (vertexDict.Vertex(nVertID).m_TexCoord[i] != vertex.m_TexCoord[i])
+			{
+				bMatch = false;
+				break;
+			}
+		}
+		if (!bMatch)
 			continue;
 
 		if ( vertexDict.Vertex( nVertID ).m_Normal != vertex.m_Normal )
@@ -1027,7 +1056,7 @@ static void PrintBonesUsedInLOD( s_source_t *pSrc )
 	{
 		Vector &pos = pSrc->m_GlobalVertices[i].position;
 		Vector &norm = pSrc->m_GlobalVertices[i].normal;
-		Vector2D &texcoord = pSrc->m_GlobalVertices[i].texcoord;
+		Vector2D &texcoord = pSrc->m_GlobalVertices[i].texcoord[0];
 		printf( "pos: %f %f %f norm: %f %f %f texcoord: %f %f\n",
 			pos[0], pos[1], pos[2], norm[0], norm[1], norm[2], texcoord[0], texcoord[1] );
 		s_boneweight_t *pBoneWeight = &pSrc->m_GlobalVertices[i].boneweight;
@@ -1104,12 +1133,25 @@ static void CreateLODVertsInDictionary( int nLodID, const s_source_t *pRootLODSr
 		VertexInfo_t vertex;
 		vertex.m_Position   = srcVertex.position; 
 		vertex.m_Normal     = srcVertex.normal;
-		vertex.m_TexCoord   = srcVertex.texcoord;
 		vertex.m_TangentS   = srcVertex.tangentS;
 
+		for (int i = 0; i < MAXSTUDIOTEXCOORDS; ++i)
+		{
+			vertex.m_TexCoord[i] = srcVertex.texcoord[i];
+		}
+		vertex.m_numTexCoords = srcVertex.numTexcoord;
+
+		if ( g_bSkinnedLODs )
+		{
+			vertex.m_BoneWeight   = srcVertex.boneweight;
+		}
+		else
+		{
 #ifdef _DEBUG
-		memset( &vertex.m_BoneWeight, 0xDD, sizeof( s_boneweight_t ) );
+			memset( &vertex.m_BoneWeight, 0xDD, sizeof( s_boneweight_t ) );
 #endif
+		}
+
 		// determine the best bone weight for the desired vertex within the root lod only
 		// the root lod contains no bone remappings
 		// this ensures we get a vertex with its matched proper boneweight assignment
@@ -1140,7 +1182,7 @@ static void CreateLODVertsInDictionary( int nLodID, const s_source_t *pRootLODSr
 	}
 
 	int nNewVertsCreated = vertexDict.VertexCount() - nNumCurrentVerts;
-	if (!g_quiet && nNewVertsCreated)
+	if ( !g_quiet && nNewVertsCreated )
 	{
 		printf( "Lod %d: vertexes: %d (%d new)\n", nLodID, vertexDict.VertexCount(), nNewVertsCreated);
 	}
@@ -1184,9 +1226,9 @@ static void SetProcessedWithDictionary( s_model_t* pSrcModel, CVertexDictionary 
 
 	int nVertexCount = vertexDict.VertexCount();
 
-	pLodData->vertex = (s_lodvertexinfo_t *)kalloc( nVertexCount, sizeof( s_lodvertexinfo_t ) );
+	pLodData->vertex = (s_lodvertexinfo_t *)calloc( nVertexCount, sizeof( s_lodvertexinfo_t ) );
 	pLodData->numvertices = nVertexCount;
-	pLodData->face = (s_face_t *)kalloc( faces.Count(), sizeof( s_face_t ));
+	pLodData->face = (s_face_t *)calloc( faces.Count(), sizeof( s_face_t ));
 	pLodData->numfaces = faces.Count();
 	
 	for ( i = 0; i < nVertexCount; ++i )
@@ -1198,9 +1240,14 @@ static void SetProcessedWithDictionary( s_model_t* pSrcModel, CVertexDictionary 
 		Assert( dstVertex.boneweight.numbones <= 4 );
 		dstVertex.position	= srcVertex.m_Position;
 		dstVertex.normal	= srcVertex.m_Normal;
-		dstVertex.texcoord	= srcVertex.m_TexCoord;
 		dstVertex.tangentS	= srcVertex.m_TangentS;
 		dstVertex.lodFlag	= srcVertex.m_nLodFlag;
+
+		for (int j = 0; j < MAXSTUDIOTEXCOORDS; ++j)
+		{
+			dstVertex.texcoord[j] = srcVertex.m_TexCoord[j];
+		}
+		dstVertex.numTexcoord = srcVertex.m_numTexCoords;
 	}
 
 	memcpy( pLodData->face, faces.Base(), faces.Count() * sizeof( s_face_t ) );
@@ -1221,7 +1268,7 @@ static void BuildBoneLODMapping( CUtlVector<int> &boneMap, int lodID )
 {
 	boneMap.AddMultipleToTail( g_numbones );
 
-	Assert( lodID < g_ScriptLODs.Size() );
+	Assert( lodID < g_ScriptLODs.Count() );
 	LodScriptData_t& scriptLOD = g_ScriptLODs[lodID];
 
 	// First, create a direct mapping where no bones are collapsed
@@ -1231,7 +1278,7 @@ static void BuildBoneLODMapping( CUtlVector<int> &boneMap, int lodID )
 		boneMap[i] = i;
 	}
 
-	for( i = 0; i < scriptLOD.boneReplacements.Size(); i++ )
+	for( i = 0; i < scriptLOD.boneReplacements.Count(); i++ )
 	{
 		const char *src, *dst;
 		src = scriptLOD.boneReplacements[i].GetSrcName();
@@ -1338,6 +1385,11 @@ static void UnifyModelLODs( s_model_t *pSrcModel )
 
 		// lookup the material used by this mesh
 		int nMaterialID = pLOD0Source->meshindex[nMeshID];
+		const char *pName = g_texture[nMaterialID].name;
+		if ( !g_quiet )
+		{
+			printf( "Processing LOD for material: %s\n", pName );
+		}
 		s_mesh_t *pLOD0Mesh = FindMeshByMaterial( pLOD0Source, nMaterialID );
 		if ( !pLOD0Mesh )
 			continue;
@@ -1427,8 +1479,18 @@ static void SpewBoneInfo( int globalBoneID, int depth )
 			g_NumBonesInLOD[i]++;
 		}
 	}
+
 	if( g_bPrintBones )
 	{
+		if( pBone->flags & BONE_USED_BY_HITBOX )
+			printf( "hitbox " );
+
+		if( pBone->flags & BONE_USED_BY_ATTACHMENT )
+			printf( "attachment " );
+
+		if( pBone->flags & BONE_USED_BY_BONE_MERGE )
+			printf( "merge " );
+
 		printf( "\n" );	
 	}
 	
@@ -1562,11 +1624,11 @@ static void ConvertSingleBoneTreeCollapseToReplaceBones( CLodScriptReplacement_t
 void ConvertBoneTreeCollapsesToReplaceBones( void )
 {
 	int i;
-	for( i = 0; i < g_ScriptLODs.Size(); i++ )
+	for( i = 0; i < g_ScriptLODs.Count(); i++ )
 	{
 		LodScriptData_t& lod = g_ScriptLODs[i];
 		int j;
-		for( j = 0; j < lod.boneTreeCollapses.Size(); j++ )
+		for( j = 0; j < lod.boneTreeCollapses.Count(); j++ )
 		{
 			ConvertSingleBoneTreeCollapseToReplaceBones( lod.boneTreeCollapses[j], 
 				lod.boneReplacements );
@@ -1624,7 +1686,7 @@ void FixupReplacedBonesForLOD( LodScriptData_t &lod )
 void FixupReplacedBones( void )
 {
 	int i;
-	for( i = 0; i < g_ScriptLODs.Size(); i++ )
+	for( i = 0; i < g_ScriptLODs.Count(); i++ )
 	{
 		FixupReplacedBonesForLOD( g_ScriptLODs[i] );
 	}

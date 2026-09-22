@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2008, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -202,16 +202,21 @@ CachedPosNorm_t* CCachedRenderData::CreateThinFlexVertex( int vertex )
 // Re-normalize the surface normals and tangents of the flexed vertices
 // No thin ones since they're intended to be deltas, not unit vectors
 //-----------------------------------------------------------------------------
-void CCachedRenderData::RenormalizeFlexVertices( bool bHasTangentData )
+void CCachedRenderData::RenormalizeFlexVertices( bool bHasTangentData, bool bQuadList )
 {
-	int i;
-
-	for (i = 0; i < m_FlexVertexCount; i++)
+	for ( int i = 0; i < m_FlexVertexCount; i++ )
 	{
-		m_pFlexVerts[ i ].m_Normal.NormalizeInPlace();
-		if (bHasTangentData)
+		m_pFlexVerts[i].m_Normal.AsVector3D().NormalizeInPlace();
+		if ( bHasTangentData )
 		{
-			m_pFlexVerts[ i ].m_TangentS.AsVector3D().NormalizeInPlace();
+			m_pFlexVerts[i].m_TangentS.AsVector3D().NormalizeInPlace();
+
+			if ( bQuadList )
+			{
+				float flClampedWrinkle = MAX( MIN( m_pFlexVerts[i].m_Position.w, 1 ), -1 );	// -1 to 1
+				float fl1to3Wrinkle = flClampedWrinkle + 2;									//  1 to 3
+				m_pFlexVerts[i].m_Position.w = m_pFlexVerts[i].m_TangentS.w * fl1to3Wrinkle;// Sign is tangent flip
+			}
 		}
 	}
 }

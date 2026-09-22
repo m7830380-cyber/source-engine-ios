@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -30,8 +30,7 @@ class CMapView3D;
 #define DISPTOOL_SELECT_DISP_FACE	3
 #define DISPTOOL_TAG_WALKABLE		4
 #define DISPTOOL_TAG_BUILDABLE		5
-#define DISPTOOL_TAG_REMOVE			6
-#define DISPTOOL_PAINT_SCULPT		7
+#define DISPTOOL_PAINT_SCULPT			6
 
 #define DISPPAINT_EFFECT_RAISELOWER	0
 #define DISPPAINT_EFFECT_RAISETO	1
@@ -105,6 +104,8 @@ public:
 	inline void			SetSculptPainter( CSculptTool *Painter ) { m_SculptTool = Painter; }
 	inline CSculptTool	*GetSculptPainter( void ) { return m_SculptTool; }
 
+	int GetSelectedDisps( void );
+
 	// flags
 	inline bool GetAutoSew( void );
 	inline void ToggleAutoSew( void );
@@ -147,7 +148,6 @@ protected:
 	inline CMapDisp *GetEditDisp( void );
 
 	void HandleTagging( CMapView3D *pView, const Vector2D &vPoint );
-	void HandleTaggingRemove( CMapDisp *pDisp, int nTriIndex );
 	void HandleTaggingReset( CMapView3D *pView, const Vector2D &vPoint );
 		
 private:
@@ -156,7 +156,6 @@ private:
 	bool LoadFilters( const char *filename );
 	static ChunkFileResult_t LoadFiltersCallback( CChunkFile *pFile, CToolDisplace *pDisplaceTool );
 
-	int GetSelectedDisps( void );
 	EditDispHandle_t CollideWithSelectedDisps( const Vector &rayStart, const Vector &rayEnd );
 	bool RayAABBTest( CMapDisp *pDisp, const Vector &rayStart, const Vector &rayEnd );
 	void BuildParallelepiped( const Vector &boxMin, const Vector &boxMax, PLANE planes[6] );

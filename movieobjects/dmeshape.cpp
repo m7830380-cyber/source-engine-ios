@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2004, Valve Corporation, All rights reserved. =======
 //
 // Purpose: 
 //
@@ -56,7 +56,7 @@ int CDmeShape::GetParentCount() const
 	{
 		CDmAttribute *pAttribute = g_pDataModel->GetAttribute( i );
 		CDmeDag *pDag = CastElement< CDmeDag >( pAttribute->GetOwner() );
-		const static UtlSymId_t symShape = g_pDataModel->GetSymbol( "shape" );
+		const static CUtlSymbolLarge symShape = g_pDataModel->GetSymbol( "shape" );
 		if ( pDag && pAttribute->GetNameSymbol() == symShape && pDag->GetFileId() == GetFileId()  )
 		{
 			++nReferringDags;
@@ -81,7 +81,7 @@ CDmeDag *CDmeShape::GetParent( int nParentIndex /*= 0 */ ) const
 	{
 		CDmAttribute *pAttribute = g_pDataModel->GetAttribute( i );
 		CDmeDag *pDag = CastElement< CDmeDag >( pAttribute->GetOwner() );
-		const static UtlSymId_t symShape = g_pDataModel->GetSymbol( "shape" );
+		const static CUtlSymbolLarge symShape = g_pDataModel->GetSymbol( "shape" );
 		if ( pDag && pAttribute->GetNameSymbol() == symShape && pDag->GetFileId() == GetFileId()  )
 		{
 			if ( nReferringDags == nParentIndex )

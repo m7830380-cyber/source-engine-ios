@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -14,10 +14,12 @@
 #pragma once
 #endif
 
+#include "interfaces/interfaces.h"
+
 #define MATERIAL_NOT_FOUND NULL
 	
 class IMaterialSystem;
-extern IMaterialSystem *g_pMaterialSystem;
+DECLARE_TIER2_INTERFACE( IMaterialSystem, g_pMaterialSystem );
 
 typedef void *MaterialSystemMaterial_t;
 

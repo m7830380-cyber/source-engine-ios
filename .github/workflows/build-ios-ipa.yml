@@ -9,38 +9,55 @@ on:
 jobs:
   build-ios-ipa:
     runs-on: macos-14
-    timeout-minutes: 180
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - game: csgo
-            bundle_id: com.sourceengine.csgo
-            display_name: csgo-source
-            app_bundle: csgo.app
-            artifact: source-engine-csgo-ios-arm64
+    timeout-minutes: 300
+    env:
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_MAXSIZE: 4G
+      CCACHE_SLOPPINESS: time_macros,include_file_mtime,include_file_ctime
 
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
 
+      - name: Install ccache
+        run: brew install ccache
+
+      - name: Restore compiler cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .ccache
+          key: ccache-csgo-ios-${{ github.sha }}
+          restore-keys: ccache-csgo-ios-
+
       - name: Build unsigned IPA
         env:
-          IOS_GAME: ${{ matrix.game }}
-          IOS_BUNDLE_ID: ${{ matrix.bundle_id }}
-          IOS_DISPLAY_NAME: ${{ matrix.display_name }}
-          IOS_APP_BUNDLE: ${{ matrix.app_bundle }}
-          IOS_IPA_NAME: ${{ matrix.artifact }}.ipa
+          IOS_BUNDLE_ID: com.sourceengine.csgo
+          IOS_DISPLAY_NAME: csgo-source
+          IOS_APP_BUNDLE: csgo.app
+          IOS_IPA_NAME: source-engine-csgo-ios-arm64.ipa
           # keep going after errors so each run reports every failing file
           WAF_BUILD_FLAGS: -k
         run: |
           chmod +x scripts/build-ios-arm64.sh scripts/ios/*.sh
-          ./scripts/build-ios-arm64.sh
+          ./scripts/build-ios-arm64.sh --use-ccache
+
+      - name: Compiler cache stats
+        if: always()
+        run: ccache -s || true
+
+      # saved even when the build fails, so the next iteration only
+      # recompiles what changed
+      - name: Save compiler cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .ccache
+          key: ccache-csgo-ios-${{ github.sha }}
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact }}
-          path: artifacts/${{ matrix.artifact }}.ipa
+          name: source-engine-csgo-ios-arm64
+          path: artifacts/source-engine-csgo-ios-arm64.ipa
           if-no-files-found: error

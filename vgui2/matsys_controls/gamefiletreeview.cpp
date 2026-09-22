@@ -1,17 +1,17 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright 1996-2005, Valve Corporation, All rights reserved. =======
 //
 // Purpose: 
 //
 //=============================================================================
 
-#if defined(WIN32) && !defined( _X360 )
+#if defined(WIN32) && !defined( _GAMECONSOLE )
 #include <windows.h>
 #endif
 #undef PropertySheet
 
 #include "matsys_controls/gamefiletreeview.h"
 #include "filesystem.h"
-#include "tier1/KeyValues.h"
+#include "tier1/keyvalues.h"
 #include "vgui/ISurface.h"
 #include "vgui/Cursor.h"
 

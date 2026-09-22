@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Contains 2D clipping routines
 //
@@ -10,7 +10,7 @@
 #include "Clip2D.h"
 #include "tier0/dbg.h"
 #include "utlvector.h"
-#if defined( _X360 )
+#if defined( _GAMECONSOLE )
 #include "materialsystem/imaterialsystem.h"
 #endif
 
@@ -70,7 +70,7 @@ void SetScissorRect( int left, int top, int right, int bottom )
 	g_ScissorRect.right  = right;
 	g_ScissorRect.bottom = bottom;
 
-#if defined( _X360 )
+#if defined( _GAMECONSOLE )
 	// no reason to waste cpu on full screen scissor, gpu does it
 	CMatRenderContextPtr pRenderContext( g_pMaterialSystem );
 	int vx, vy, vw, vh;
@@ -384,7 +384,7 @@ bool ClipRect( const vgui::Vertex_t &inUL, const vgui::Vertex_t &inLR,
 //	Assert( inUL.m_Position.x <= inLR.m_Position.x );
 //	Assert( inUL.m_Position.y <= inLR.m_Position.y );
  
-	if ( IsX360() && ( !g_bScissor || g_bFullScreenScissor || 
+	if ( IsGameConsole() && ( !g_bScissor || g_bFullScreenScissor || 
 		( inUL.m_Position.x >= g_ScissorRect.left && inLR.m_Position.x <= g_ScissorRect.right && inUL.m_Position.y >= g_ScissorRect.top && inLR.m_Position.y <= g_ScissorRect.bottom ) ) )
 	{
 		// clipping is not needed

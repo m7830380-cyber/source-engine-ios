@@ -5,22 +5,24 @@
 //-----------------------------------------------------------------------------
 
 $Macro SRCDIR		"..\.."
-$Macro OUTBINDIR	"$LIBPUBLIC"
+$Macro OUTBINDIR	"$SRCDIR\..\game\bin"
 $Macro OUTBINNAME	"vrad"
 
-$Include "$SRCDIR\vpc_scripts\source_exe_con_base.vpc"
+$Include "$SRCDIR\vpc_scripts\source_exe_con_win32_base.vpc"
 
 $Configuration
 {
 	$Compiler
 	{
 		$Create/UsePrecompiledHeader		"Use Precompiled Header (/Yu)"
-		$PrecompiledHeaderFile				"$(IntDir)/vrad_launcher.pch"
 	}
+}
 
-	$Linker [$WIN32]
+$Configuration
+{
+	$Linker
 	{
-		$EnableLargeAddresses				"Support Addresses Larger Than 2 Gigabytes (/LARGEADDRESSAWARE)"
+		$EnableLargeAddresses		"Support Addresses Larger Than 2 Gigabytes (/LARGEADDRESSAWARE)"
 	}
 }
 
@@ -32,7 +34,7 @@ $Project "Vrad_launcher"
 		
 		$File	"vrad_launcher.cpp"
 		
-		$File	"StdAfx.cpp"
+		$File	"stdafx.cpp"
 		{
 			$Configuration
 			{
@@ -49,6 +51,6 @@ $Project "Vrad_launcher"
 	{
 		$File	"$SRCDIR\public\tier1\interface.h"
 		$File	"$SRCDIR\public\ivraddll.h"
-		$File	"StdAfx.h"
+		$File	"stdafx.h"
 	}
 }

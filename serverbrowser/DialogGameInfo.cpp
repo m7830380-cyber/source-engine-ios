@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2001, Valve LLC, All rights reserved. ============
 //
 // Purpose: 
 //
@@ -41,10 +41,9 @@ bool QueryLessFunc( const struct challenge_s &item1, const struct challenge_s &i
 //-----------------------------------------------------------------------------
 // Purpose: Constructor
 //-----------------------------------------------------------------------------
-CDialogGameInfo::CDialogGameInfo( vgui::Panel *parent, int serverIP, int queryPort, unsigned short connectionPort, const char *pszConnectCode ) : 
+CDialogGameInfo::CDialogGameInfo( vgui::Panel *browser, vgui::Panel *parent, int serverIP, int queryPort, unsigned short connectionPort ) : 
 	Frame(parent, "DialogGameInfo"),
-	m_CallbackPersonaStateChange( this, &CDialogGameInfo::OnPersonaStateChange ),
-	m_sConnectCode( pszConnectCode )
+	m_CallbackPersonaStateChange( this, &CDialogGameInfo::OnPersonaStateChange )
 {
 	SetBounds(0, 0, 512, 512);
 	SetMinimumSize(416, 340);
@@ -60,6 +59,8 @@ CDialogGameInfo::CDialogGameInfo( vgui::Panel *parent, int serverIP, int queryPo
 	m_bPlayerListUpdatePending = false;
 
 	m_szPassword[0] = 0;
+
+	m_pBrowser = browser;
 
 	m_pConnectButton = new Button(this, "Connect", "#ServerBrowser_JoinGame");
 	m_pCloseButton = new Button(this, "Close", "#ServerBrowser_Close");
@@ -105,6 +106,8 @@ CDialogGameInfo::CDialogGameInfo( vgui::Panel *parent, int serverIP, int queryPo
 	RegisterControlSettingsFile( "Servers/DialogGameInfo_SinglePlayer.res" );
 	RegisterControlSettingsFile( "Servers/DialogGameInfo_AutoRetry.res" );
 	MoveToCenterOfScreen();
+
+	m_szJoinType = NULL;
 }
 
 //-----------------------------------------------------------------------------
@@ -293,10 +296,7 @@ void CDialogGameInfo::PerformLayout()
 	}
 	SetControlString("PlayersText", buf);
 
-	SetControlString("ServerIPText", m_Server.m_NetAdr.GetConnectionAddressString() );
-	m_pConnectButton->SetEnabled(true);
-
-/*	if ( m_Server.m_NetAdr.GetIP() && m_Server.m_NetAdr.GetQueryPort() )
+	if ( m_Server.m_NetAdr.GetIP() && m_Server.m_NetAdr.GetQueryPort() )
 	{
 		SetControlString("ServerIPText", m_Server.m_NetAdr.GetConnectionAddressString() );
 		m_pConnectButton->SetEnabled(true);
@@ -315,7 +315,7 @@ void CDialogGameInfo::PerformLayout()
 	{
 		SetControlString("ServerIPText", "");
 		m_pConnectButton->SetEnabled(false);
-	}*/
+	}
 
 	if ( m_Server.m_bHadSuccessfulResponse )
 	{
@@ -372,33 +372,23 @@ void CDialogGameInfo::PerformLayout()
 	Repaint();
 }
 
-void CDialogGameInfo::OnKeyCodePressed( vgui::KeyCode code )
-{
-	if ( code == KEY_XBUTTON_B || code == KEY_XBUTTON_A || code == STEAMCONTROLLER_A || code == STEAMCONTROLLER_B )
-	{
-		m_pCloseButton->DoClick();
-	}
-	else
-	{
-		BaseClass::OnKeyCodePressed(code);
-	}
-}
-
 //-----------------------------------------------------------------------------
 // Purpose: Forces the game info dialog to try and connect
 //-----------------------------------------------------------------------------
-void CDialogGameInfo::Connect()
+void CDialogGameInfo::Connect( const char* szJoinType )
 {
+	m_szJoinType = szJoinType;
 	OnConnect();
 }
 
 //-----------------------------------------------------------------------------
 // Purpose: Connects the user to this game
 //-----------------------------------------------------------------------------
-void CDialogGameInfo::OnConnect()
+void CDialogGameInfo::OnConnect( void )
 {
 	// flag that we are attempting connection
 	m_bConnecting = true;
+
 
 	// reset state
 	m_bServerFull = false;
@@ -408,11 +398,7 @@ void CDialogGameInfo::OnConnect()
 
 	// need to refresh server before attempting to connect, to make sure there is enough room on the server
 	m_iRequestRetry = 0;
-
-	ConnectToServer();
-
-	//TODO(nillerusr): restore this later
-	//RequestInfo();
+	RequestInfo();
 }
 
 //-----------------------------------------------------------------------------
@@ -523,27 +509,12 @@ void CDialogGameInfo::OnTick()
 //-----------------------------------------------------------------------------
 void CDialogGameInfo::ServerResponded( gameserveritem_t &server )
 {
-	if( m_Server.m_NetAdr.GetQueryPort() &&
-		m_Server.m_NetAdr.GetQueryPort() != server.m_NetAdr.GetQueryPort() )
-	{
+	if( m_Server.m_NetAdr.GetConnectionPort() && 
+		m_Server.m_NetAdr.GetConnectionPort() != server.m_NetAdr.GetConnectionPort() )
 		return; // this is not the guy we talked about
-	}
-
-	uint16 connectionPort = m_Server.m_NetAdr.GetConnectionPort();
-
-	// FIXME(johns): This is a workaround for a steam bug, where it inproperly reads signed bytes out of the
-	//               message. Once the upstream fix makes it into our SteamSDK, this block can be removed.
-	server.m_nPlayers    = (uint8)(int8)server.m_nPlayers;
-	server.m_nBotPlayers = (uint8)(int8)server.m_nBotPlayers;
-	server.m_nMaxPlayers = (uint8)(int8)server.m_nMaxPlayers;
 
 	m_hPingQuery = HSERVERQUERY_INVALID;
 	m_Server = server;
-
-	// Preserve our connection port, since we may be querying the sourceTV port but getting a response for the real
-	// server. This is a limitation of the steam Matchmaking API where it doesn't properly send us a sourcetv response
-	// but instead the main server's response (unless we're connecting to a proxy, THEN we get the sourcetv response!)
-	m_Server.m_NetAdr.SetConnectionPort( connectionPort );
 
 	if ( m_bConnecting )
 	{
@@ -613,7 +584,7 @@ void CDialogGameInfo::ApplyConnectCommand( const gameserveritem_t &server )
 		g_pRunGameEngine->AddTextCommand( command );
 	}
 	// send engine command to change servers
-	Q_snprintf( command, Q_ARRAYSIZE( command ), "connect %s %s\n", server.m_NetAdr.GetConnectionAddressString(), m_sConnectCode.String() );
+	Q_snprintf( command, Q_ARRAYSIZE( command ), "connect %s -%s\n", server.m_NetAdr.GetConnectionAddressString(), m_szJoinType ? m_szJoinType : "ServerBrowserUnknownJoinType" );
 	g_pRunGameEngine->AddTextCommand( command );
 }
 
@@ -640,6 +611,17 @@ void CDialogGameInfo::ConnectToServer()
 {
 	m_bConnecting = false;
 
+	// check VAC status
+	if ( m_Server.m_bSecure && ServerBrowser().IsVACBannedFromGame( m_Server.m_nAppID ) )
+	{
+		// refuse the user
+		CVACBannedConnRefusedDialog *pDlg = new CVACBannedConnRefusedDialog( GetVParent(), "VACBannedConnRefusedDialog" );
+		pDlg->Activate();
+		Close();
+		return;
+	}
+
+
 	// check to see if we need a password
 	if ( m_Server.m_bPassword && !m_szPassword[0] )
 	{
@@ -650,9 +632,7 @@ void CDialogGameInfo::ConnectToServer()
 	}
 
 	// check the player count
-
-	// nillerusr
-	/*if ( m_Server.m_nPlayers >= m_Server.m_nMaxPlayers )
+	if ( m_Server.m_nPlayers >= m_Server.m_nMaxPlayers )
 	{
 		// mark why we cannot connect
 		m_bServerFull = true;
@@ -660,7 +640,7 @@ void CDialogGameInfo::ConnectToServer()
 		m_bShowAutoRetryToggle = true;
 		InvalidateLayout();
 		return;
-	}*/
+	}
 
 	// tell the engine to connect
 	const char *gameDir = m_Server.m_szGameDir;
@@ -709,7 +689,9 @@ void CDialogGameInfo::ConnectToServer()
 	}
 
 	// close this dialog
-	PostMessage(this, new KeyValues("Close"));
+	PostMessage( this, new KeyValues( "Close" ) );
+
+	PostMessage( m_pBrowser, new KeyValues( "Close" ) );
 }
 
 //-----------------------------------------------------------------------------

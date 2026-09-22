@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -22,6 +22,7 @@
 #include "Worldsize.h"
 #include "MapOverlay.h"
 #include "Manifest.h"
+#include "..\fow\fow.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include <tier0/memdbgon.h>
@@ -132,18 +133,9 @@ bool BoxesIntersect(Vector const &mins1, Vector const &maxs1, Vector const &mins
 
 
 //-----------------------------------------------------------------------------
-// Purpose: Constructor. Initializes data members.
+// Called from constructors to initialize data members.
 //-----------------------------------------------------------------------------
-CMapWorld::CMapWorld( void )
-{
-
-}
-
-
-//-----------------------------------------------------------------------------
-// Purpose: Constructor. Initializes data members.
-//-----------------------------------------------------------------------------
-CMapWorld::CMapWorld( CMapDoc *pOwningDocument )
+void CMapWorld::Init()
 {
 	//
 	// Make sure subsequent UpdateBounds() will be effective.
@@ -159,7 +151,22 @@ CMapWorld::CMapWorld( CMapDoc *pOwningDocument )
 
 	// create the world displacement manager
 	m_pWorldDispMgr = CreateWorldEditDispMgr();
+}
 
+
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+CMapWorld::CMapWorld( void )
+{
+	Init();
+}
+
+
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+CMapWorld::CMapWorld( CMapDoc *pOwningDocument )
+{
+	Init();
 	m_pOwningDocument = pOwningDocument;
 }
 
@@ -180,6 +187,19 @@ CMapWorld::~CMapWorld(void)
 	// destroy the world displacement manager
 	DestroyWorldEditDispMgr( &m_pWorldDispMgr );
 }
+
+
+//-----------------------------------------------------------------------------
+// Called by the undo system when this object is restored by undo or redo.
+//-----------------------------------------------------------------------------
+void CMapWorld::OnUndoRedo()
+{
+	BaseClass::OnUndoRedo();
+
+	// The cull tree doesn't get kept by the undo system so we need to rebuild it.
+	CullTree_Build();
+}
+
 
 
 //-----------------------------------------------------------------------------
@@ -397,7 +417,7 @@ void CMapWorld::EntityList_Add(CMapClass *pObject)
 	CMapClass *pChild = pObject->GetFirstDescendent(pos);
 	while (pChild != NULL)
 	{
-		pEntity = dynamic_cast<CMapEntity *>(pChild);
+		CMapEntity *pEntity = dynamic_cast<CMapEntity *>(pChild);
 		if ((pEntity != NULL) && (m_EntityList.Find(pEntity) == -1))
 		{
 			AddEntity(pEntity);
@@ -447,10 +467,10 @@ void CMapWorld::EntityList_Remove(CMapClass *pObject, bool bRemoveChildren)
 		CMapClass *pChild = pObject->GetFirstDescendent(pos);
 		while (pChild != NULL)
 		{
-			pEntity = dynamic_cast<CMapEntity *>(pChild);
+			CMapEntity *pEntity = dynamic_cast<CMapEntity *>(pChild);
 			if (pEntity != NULL)
 			{
-				m_EntityList.FindAndRemove(pEntity);
+				m_EntityList.FindAndFastRemove( CUtlReference<CMapEntity>(pEntity) );
 			}
 			pChild = pObject->GetNextDescendent(pos);
 		}
@@ -598,11 +618,9 @@ void CMapWorld::GetUsedTextures(CUsedTextureList &List)
 //-----------------------------------------------------------------------------
 void CMapWorld::CullTree_FreeNode(CCullTreeNode *pNode)
 {
-	if ( pNode == NULL )
-	{
-		Assert(pNode != NULL);
+	Assert(pNode != NULL);
+	if ( !pNode )
 		return;
-	}
 
 	int nChildCount = pNode->GetChildCount();
 	if (nChildCount != 0)
@@ -985,6 +1003,40 @@ ChunkFileResult_t CMapWorld::LoadVMF(CChunkFile *pFile)
 	ChunkFileResult_t eResult = pFile->ReadChunk((KeyHandler_t)LoadKeyCallback, this);
 	pFile->PopHandlers();
 
+	const char *pszValue = GetKeyValue( "fow" );
+	if ( pszValue != NULL )
+	{
+		CFoW	*pFoW = CMapDoc::GetActiveMapDoc()->GetFoW();
+
+		if ( pFoW != NULL )
+		{
+			Vector	vWorldMins, vWorldMaxs;
+			int		nHorizontalGridSize, nVerticalGridSize;
+
+			sscanf( GetKeyValue( "m_vWorldMins" ), "%g %g %g", &vWorldMins.x, &vWorldMins.y, &vWorldMins.z );
+			sscanf( GetKeyValue( "m_vWorldMaxs" ), "%g %g %g", &vWorldMaxs.x, &vWorldMaxs.y, &vWorldMaxs.z );
+			nHorizontalGridSize = atoi( GetKeyValue( "m_nHorizontalGridSize" ) );
+			nVerticalGridSize = atoi( GetKeyValue( "m_nVerticalGridSize" ) );
+
+			pFoW->SetSize( vWorldMins, vWorldMaxs, nHorizontalGridSize, nVerticalGridSize );
+
+			if ( nVerticalGridSize == -1 )
+			{	
+				int		nGridZUnits = atoi( GetKeyValue( "m_nGridZUnits" ) );
+				float32	*flHeights = ( float * )stackalloc( sizeof( float32 ) * nGridZUnits );
+				for( int i = 0; i < nGridZUnits; i++ )
+				{
+					char	temp[ 128 ];
+
+					sprintf( temp, "m_pVerticalLevels_%d", i );
+					flHeights[ i ] = atof( GetKeyValue( temp ) );
+				}
+
+				pFoW->SetCustomVerticalLevels( flHeights, nGridZUnits );
+			}
+		}
+	}
+
 	return(eResult);
 }
 
@@ -1005,7 +1057,10 @@ ChunkFileResult_t CMapWorld::LoadSolidCallback(CChunkFile *pFile, CMapWorld *pWo
 	if ((eResult == ChunkFile_Ok) && (bValid))
 	{
 		const char *pszValue = pSolid->GetEditorKeyValue("cordonsolid");
-		if (pszValue == NULL)
+
+		// HAMMER CONSOLE TODO:
+		bool g_bDebugLoadCordonBrushes = false;
+		if ( (pszValue == NULL) || g_bDebugLoadCordonBrushes )
 		{
 			pWorld->AddChild(pSolid);
 		}
@@ -1051,6 +1106,37 @@ ChunkFileResult_t CMapWorld::SaveSolids(CChunkFile *pFile, CSaveInfo *pSaveInfo,
 
 
 //-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+int SortFuncCompareSaveOrder( const CUtlReference<CMapClass> *pClass1, const CUtlReference<CMapClass> *pClass2 )
+{
+	const CMapClass *pObject1 = pClass1->GetObject();
+	const CMapClass *pObject2 = pClass2->GetObject();
+
+	// For all objects that were loaded from the VMF, preserve the load order on save.
+	int nLoadID1 = pObject1->GetLoadID();
+	int nLoadID2 = pObject2->GetLoadID();
+
+	if ( nLoadID1 > nLoadID2 )
+		return 1;
+
+	if ( nLoadID1 < nLoadID2 )
+		return -1;
+
+	// Load IDs are equal. Sort by unique object ID.
+	int nID1 = pObject1->GetID();
+	int nID2 = pObject2->GetID();
+
+	if ( nID1 > nID2 )
+		return 1;
+
+	if ( nID1 < nID2 )
+		return -1;
+
+	return 0;
+}
+
+
+//-----------------------------------------------------------------------------
 // Purpose: Saves all solids, entities, and groups in the world to a VMF file.
 // Input  : pFile - File object to use for saving.
 //			pSaveInfo - Holds rules for which objects to save.
@@ -1065,6 +1151,14 @@ ChunkFileResult_t CMapWorld::SaveVMF(CChunkFile *pFile, CSaveInfo *pSaveInfo, in
 	//
 	SaveLists_t SaveLists;
 	EnumChildrenRecurseGroupsOnly((ENUMMAPCHILDRENPROC)BuildSaveListsCallback, (DWORD)&SaveLists);
+
+	// IMPORTANT:
+	// Because UtlReferenceVectors don't preserve order, sort the lists by object ID so that the save
+	// order is the same every time. This makes it possible to get meaningful diffs between versions!
+	//
+	SaveLists.Entities.InPlaceQuickSort( SortFuncCompareSaveOrder );
+	SaveLists.Groups.InPlaceQuickSort( SortFuncCompareSaveOrder );
+	SaveLists.Solids.InPlaceQuickSort( SortFuncCompareSaveOrder );
 
 	//
 	// Begin the world chunk.
@@ -1146,7 +1240,7 @@ ChunkFileResult_t CMapWorld::SaveObjectListVMF(CChunkFile *pFile, CSaveInfo *pSa
 {
 	FOR_EACH_OBJ( *pList, pos )
 	{
-		CMapClass *pObject = pList->Element(pos);
+		CMapClass *pObject = (CUtlReference< CMapClass >)pList->Element(pos);
 
 		// Only save lights if that's what they want.
 		if( saveFlags & SAVEFLAGS_LIGHTSONLY )
@@ -1696,7 +1790,8 @@ void CMapWorld::PostloadVisGroups()
 	const CMapEntityList *pEntities = EntityList_GetList();
 	FOR_EACH_OBJ( *pEntities, pos )
 	{
-		CMapEntity *pEntity = dynamic_cast< CMapEntity *>( (*pEntities)[pos] );
+		CMapEntity *pEntity = (CUtlReference<CMapEntity>)pEntities->Element(pos);
+
 #if	defined(_DEBUG) && 0
 		LPCTSTR	pszTargetName = pEntity->GetKeyValue("targetname");
 		if ( pszTargetName && !strcmp(pszTargetName, "relay_cancelVCDs") )
@@ -1705,7 +1800,7 @@ void CMapWorld::PostloadVisGroups()
 			int foo = 0;
 		}
 #endif
-		int nConnections = pEntity->Connections_GetCount();
+		int nConnections = pEntity ? pEntity->Connections_GetCount() : 0;
 		for ( int pos2 = 0; pos2 < nConnections; pos2++ )
 		{
 			CEntityConnection	*pEntityConnection = pEntity->Connections_Get(pos2);
@@ -1737,6 +1832,13 @@ CMapEntity *CMapWorld::FindEntityByName( const char *pszName, bool bVisiblesOnly
 	for ( int i = 0; i < nCount; i++ )
 	{
 		CMapEntity *pEntity = pList->Element( i );
+
+		// If you hit this assert it means that an entity was deleted
+		// but not removed from the world's entity list.
+		Assert( pEntity != NULL );
+		
+		if ( !pEntity )
+			continue;
 		
 		if ( pEntity->IsVisible() || !bVisiblesOnly )
 		{
@@ -1746,14 +1848,15 @@ CMapEntity *CMapWorld::FindEntityByName( const char *pszName, bool bVisiblesOnly
 			}
 		}
 	}
-	
+
 	if ( bSearchInstanceParms == true )
 	{
 		const CMapEntityList *pEntities = EntityList_GetList();
 		FOR_EACH_OBJ( *pEntities, pos )
 		{
-			CMapEntity *pEntity = dynamic_cast< CMapEntity *>( (*pEntities)[pos] );
-			if ( pEntity->ClassNameMatches( "func_instance" ) == true )
+			CMapEntity *pEntity = (CUtlReference<CMapEntity>)pEntities->Element(pos);
+
+			if ( pEntity && pEntity->ClassNameMatches( "func_instance" ) ) 
 			{
 				for ( int j = pEntity->GetFirstKeyValue(); j != pEntity->GetInvalidKeyValue(); j = pEntity->GetNextKeyValue( j ) )
 				{
@@ -1870,7 +1973,7 @@ bool CMapWorld::FindEntitiesByName( CMapEntityList &Found, const char *pszName, 
 	{
 		CMapEntity *pEntity = pList->Element( i );
 		
-		if ( pEntity->IsVisible() || !bVisiblesOnly )
+		if ( pEntity && ( pEntity->IsVisible() || !bVisiblesOnly ) )
 		{
 			if ( pEntity->NameMatches( pszName ) )
 			{

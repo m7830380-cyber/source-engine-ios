@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -211,7 +211,8 @@ void CMapAnimationDlg::OnCreateKeyFrame( void )
 	
 	for (int i = 0; i < pSelection->Count(); i++)
 	{
-		CMapEntity *ent = dynamic_cast<CMapEntity*>( pSelection->Element( i ) );
+		CMapClass *pMapClass = (CUtlReference< CMapClass >)pSelection->Element( i );
+		CMapEntity *ent = dynamic_cast<CMapEntity*>( pMapClass );
 
 		if ( ent && ent->IsAnimationController() )
 		{
@@ -302,7 +303,8 @@ void CMapAnimationDlg::SelectionChanged( CMapObjectList &selection )
 	
 	FOR_EACH_OBJ( selection, pos )
 	{
-		ent = dynamic_cast<CMapEntity*>( selection.Element(pos) );
+		CMapClass *pMapClass = (CUtlReference< CMapClass >)selection.Element(pos);
+		ent = dynamic_cast<CMapEntity*>( pMapClass );
 
 		if ( ent )
 		{

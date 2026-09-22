@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2001, Valve LLC, All rights reserved. ============
 //
 // Purpose: 
 //
@@ -20,10 +20,10 @@
 #include "vgui_controls/ListPanel.h"
 #include "vgui_controls/Image.h"
 #include "vgui_controls/TextImage.h"
-#include "vgui/ISurface.h"
+#include "vgui/isurface.h"
 #include "vgui/ischeme.h"
 #include "vgui/iinput.h"
-#include "vgui/IVGui.h"
+#include "vgui/ivgui.h"
 #include "vgui/cursor.h"
 #include "movieobjects/dmemakefile.h"
 #include "movieobjects/dmemdlmakefile.h"
@@ -33,10 +33,12 @@
 #include "movieobjects/dmeanimationlist.h"
 #include "movieobjects/dmecombinationoperator.h"
 #include "movieobjects/dmeanimationset.h"
+#include "movieobjects/dmeflexrules.h"
 
-#include "tier1/KeyValues.h"
+#include "tier1/keyvalues.h"
 #include "materialsystem/imesh.h"
 #include "dme_controls/BaseAnimationSetEditor.h"
+#include "dme_controls/BaseAnimationSetEditorController.h"
 #include "dme_controls/BaseAnimSetAttributeSliderPanel.h"
 //-----------------------------------------------------------------------------
 //
@@ -167,11 +169,40 @@ void CDmeAnimationListPanel::OnItemDeselected( )
 	PostActionSignal( new KeyValues( "AnimationDeselected" ) );
 }
 
+
+class CCombinationOperatorControl : public CBaseAnimationSetControl
+{
+public:
+	CCombinationOperatorControl() {}
+
+	virtual void ChangeAnimationSetClip( CDmeFilmClip *pFilmClip )
+	{
+		RebuildControlList( m_FullControlList, pFilmClip );
+		CBaseAnimationSetControl::ChangeAnimationSetClip( pFilmClip );
+	}
+	virtual void OnControlsAddedOrRemoved()
+	{
+		RemoveNullControls( m_FullControlList );
+		AddMissingControls( m_FullControlList, m_hFilmClip );
+		CBaseAnimationSetControl::OnControlsAddedOrRemoved();
+	}
+
+protected:
+	virtual SelectionInfo_t *FindSelectionInfoForControl( const CDmElement *pControl )
+	{
+		return ::FindSelectionInfoForControl( m_FullControlList, pControl );
+	}
+
+	CUtlVector< SelectionInfo_t* > m_FullControlList;
+};
+
+
+
 class CDmeCombinationOperatorPanel : public CBaseAnimationSetEditor
 {	
 	DECLARE_CLASS_SIMPLE( CDmeCombinationOperatorPanel, CBaseAnimationSetEditor );
 public:
-	CDmeCombinationOperatorPanel( vgui::Panel *parent, const char *panelName );
+	CDmeCombinationOperatorPanel( vgui::Panel *parent, const char *panelName, CBaseAnimationSetControl *pAnimationSetController );
 	virtual ~CDmeCombinationOperatorPanel();
 
 	virtual void OnTick();
@@ -189,42 +220,33 @@ private:
 	// Removes a controls from all presets
 	void RemoveAnimationControlFromPresets( const char *pControlName );
 
-	// Removes a controls from all presets
-	void RemoveAnimationControlFromSelectionGroups( const char *pControlName );
-
 	// Removes controls from the animation set that aren't used
 	void RemoveUnusedAnimationSetControls();
 
-	// Modify controls in the presets which have had stereo or multilevel settings changed
+	// Modify controls in the presets which have had stereo settings changed
 	void ModifyExistingAnimationSetControls();
 
-	// Modify controls in the presets which have had stereo or multilevel settings changed
+	// Modify controls in the presets which have had stereo settings changed
 	void ModifyExistingAnimationSetPresets( CDmElement *pControlElement );
 
-	// Modify controls which have had stereo or multilevel settings changed
+	// Modify controls which have had stereo settings changed
 	void ModifyExistingAnimationSetControl( CDmElement *pControlElement );
-
-	// Creates the procedural presets
-	void ComputeProceduralPresets();
 
 	void RefreshAnimationSet();
 
 	// Sort control names to match the combination controls
 	void SortAnimationSetControls();
 
-	// Sets preset values
-	void GenerateProceduralPresetValues( CDmElement *pPreset, CDmElement *pControl, bool bIdentity, float flForceValue );
-	void GenerateProceduralPresetValues( CDmElement *pPreset, const CDmrElementArray< CDmElement > &controls, bool bIdentity, float flForceValue = -1.0f );
-
 	CDmeHandle< CDmeCombinationOperator > m_hCombinationOperator;
+	CUtlVector< IDmeOperator * > m_operatorList;
 };
 
 
 //-----------------------------------------------------------------------------
 // Constructor/destructor
 //-----------------------------------------------------------------------------
-CDmeCombinationOperatorPanel::CDmeCombinationOperatorPanel( vgui::Panel *parent, const char *panelName ) :
-	BaseClass( parent, panelName, false )
+CDmeCombinationOperatorPanel::CDmeCombinationOperatorPanel( vgui::Panel *parent, const char *panelName, CBaseAnimationSetControl *pAnimationSetController ) :
+	BaseClass( parent, panelName, pAnimationSetController )
 {
 	CreateFakeAnimationSet();
 	vgui::ivgui()->AddTickSignal( GetVPanel(), 0 );
@@ -239,16 +261,19 @@ CDmeCombinationOperatorPanel::~CDmeCombinationOperatorPanel()
 //-----------------------------------------------------------------------------
 // Create, destroy fake animation sets
 //-----------------------------------------------------------------------------
-void CDmeCombinationOperatorPanel::CreateFakeAnimationSet( )
+void CDmeCombinationOperatorPanel::CreateFakeAnimationSet()
 {
-	m_AnimSet = CreateElement< CDmeAnimationSet >( "fakeSet", DMFILEID_INVALID );
-	m_AnimSet->SetValue( "gameModel", DMELEMENT_HANDLE_INVALID );
-	g_pDataModel->DontAutoDelete( m_AnimSet->GetHandle() );
+	CDmeFilmClip *pFilmClip = CreateElement< CDmeFilmClip >( "fakeFilmClip", DMFILEID_INVALID );
+	CDmeAnimationSet *pAnimSet = CreateElement< CDmeAnimationSet >( "fakeAnimSet", DMFILEID_INVALID );
+	pAnimSet->SetValue( "gameModel", DMELEMENT_HANDLE_INVALID );
+	pFilmClip->GetAnimationSets().AddToTail( pAnimSet );
+	g_pDataModel->DontAutoDelete( pFilmClip->GetHandle() );
+	ChangeAnimationSetClip( pFilmClip );
 }
 
 void CDmeCombinationOperatorPanel::DestroyFakeAnimationSet( )
 {
-	DestroyElement( m_AnimSet, TD_DEEP );
+	DestroyElement( m_pController->GetAnimationSetClip(), TD_DEEP );
 }
 
 
@@ -262,67 +287,32 @@ void CDmeCombinationOperatorPanel::SetCombinationOperator( CDmeCombinationOperat
 	DestroyFakeAnimationSet();
 	CreateFakeAnimationSet();
 
+	m_operatorList.RemoveAll();
+
 	if ( pOp != m_hCombinationOperator.Get() )
 	{
 		m_hCombinationOperator = pOp;
+
+		m_operatorList.AddToTail( m_hCombinationOperator );
+
+		for ( int i = 0; i < pOp->GetOperationTargetCount(); ++i )
+		{
+			CDmeFlexRules *pDmeFlexRules = CastElement< CDmeFlexRules >( pOp->GetOperationTarget( i ) );
+			if ( !pDmeFlexRules )
+				continue;
+
+			m_operatorList.AddToTail( pDmeFlexRules );
+			for ( int j = 0; j < pDmeFlexRules->GetRuleCount(); ++j )
+			{
+				CDmeFlexRuleBase *pDmeFlexRule = pDmeFlexRules->GetRule( j );
+				if ( !pDmeFlexRule )
+					continue;
+
+				m_operatorList.AddToTail( pDmeFlexRule );
+			}
+		}
+
 		RefreshCombinationOperator();
-	}
-}
-
-
-//-----------------------------------------------------------------------------
-// Sets preset values
-//-----------------------------------------------------------------------------
-void CDmeCombinationOperatorPanel::GenerateProceduralPresetValues( CDmElement *pPreset, CDmElement *ctrl, bool bForceValue, float flForceValue )
-{
-	bool combo = ctrl->GetValue< bool >( "combo" );
-	bool multi = ctrl->GetValue< bool >( "multi" );
-
-	float flValue, flBalance, flMultilevel;
-	if ( !bForceValue )
-	{
-		flValue = RandomFloat( 0.0f, 1.0f );
-		flBalance = RandomFloat( 0.25f, 0.75f );
-		flMultilevel = RandomFloat( 0.0f, 1.0f );
-	}
-	else
-	{
-		flValue = flBalance = flMultilevel = flForceValue;
-	}
-
-	pPreset->SetValue< float >( "value", flValue );
-	if ( combo )
-	{
-		pPreset->SetValue< float >( "balance", flBalance );
-	}
-	else
-	{
-		pPreset->RemoveAttribute( "balance" );
-	}
-
-	if ( multi )
-	{
-		pPreset->SetValue< float >( "multilevel", flMultilevel );
-	}
-	else
-	{
-		pPreset->RemoveAttribute( "multilevel" );
-	}
-}
-
-
-void CDmeCombinationOperatorPanel::GenerateProceduralPresetValues( CDmElement *pPreset, const CDmrElementArray< CDmElement > &controls, bool bIdentity, float flForceValue /*= -1.0f*/ )
-{
-	CDmrElementArray<> values( pPreset, "controlValues" );
-	Assert( values.IsValid() );
-	values.RemoveAll();
-	int c = controls.Count();
-	for ( int i = 0; i < c ; ++i )
-	{
-		CDmElement *pControl = controls[ i ];
-		CDmElement *pControlValue = CreateElement< CDmElement >( pControl->GetName(), pPreset->GetFileId() );
-		GenerateProceduralPresetValues( pControlValue, pControl, bIdentity, flForceValue );
-		values.AddToTail( pControlValue );
 	}
 }
 
@@ -332,7 +322,11 @@ void CDmeCombinationOperatorPanel::GenerateProceduralPresetValues( CDmElement *p
 //-----------------------------------------------------------------------------
 void CDmeCombinationOperatorPanel::RemoveAnimationControlFromPresets( const char *pControlName )
 {
-	CDmeAnimationSet *pAnimationSet = m_AnimSet.Get();
+	// TODO - we should be storing which animationset an item is associated with
+	CAnimSetGroupAnimSetTraversal traversal( m_pController->GetAnimationSetClip() );
+	CDmeAnimationSet *pAnimationSet = traversal.Next();
+	Assert( !traversal.IsValid() );
+
 	CDmrElementArray< CDmePresetGroup > presetGroupList = pAnimationSet->GetPresetGroups();
 
 	int nPresetGroupCount = presetGroupList.Count();
@@ -361,39 +355,16 @@ void CDmeCombinationOperatorPanel::RemoveAnimationControlFromPresets( const char
 	}
 }
 
-
-//-----------------------------------------------------------------------------
-// Removes a controls from all presets
-//-----------------------------------------------------------------------------
-void CDmeCombinationOperatorPanel::RemoveAnimationControlFromSelectionGroups( const char *pControlName )
-{
-	CDmeAnimationSet *pAnimationSet = m_AnimSet.Get();
-	CDmrElementArray< > selectionGroupList = pAnimationSet->GetSelectionGroups();
-
-	int nGroupCount = selectionGroupList.Count();
-	for ( int i = 0; i < nGroupCount; ++i )
-	{
-		CDmElement *pSelectionGroup = selectionGroupList[ i ];
-		CDmrStringArray selectedControls( pSelectionGroup, "selectedControls" );
-		int nControlCount = selectedControls.Count();
-		for ( int j = 0; j < nControlCount; ++j )
-		{
-			if ( !Q_stricmp( selectedControls[ j ], pControlName ) )
-			{
-				selectedControls.FastRemove( j );
-				break;
-			}
-		}
-	}
-}
-
-
 //-----------------------------------------------------------------------------
 // Removes controls from the animation set that aren't used
 //-----------------------------------------------------------------------------
 void CDmeCombinationOperatorPanel::RemoveUnusedAnimationSetControls()
 {
-	CDmeAnimationSet *pAnimationSet = m_AnimSet.Get();
+	// TODO - we should be storing which animationset an item is associated with
+	CAnimSetGroupAnimSetTraversal traversal( m_pController->GetAnimationSetClip() );
+	CDmeAnimationSet *pAnimationSet = traversal.Next();
+	Assert( !traversal.IsValid() );
+
 	CDmrElementArray< > controls = pAnimationSet->GetControls();
 
 	// Remove all controls in the animation set and in presets that don't exist in the combination system
@@ -405,80 +376,84 @@ void CDmeCombinationOperatorPanel::RemoveUnusedAnimationSetControls()
 			continue;
 
 		// Don't do any of this work for transforms
-		if ( pControlElement->GetValue< bool >( "transform" ) )
+		if ( IsTransformControl( pControlElement ) )
 			continue;
 
 		const char *pControlName = pControlElement->GetName();
 
 		// Look for a match
-		if ( m_hCombinationOperator.Get() && m_hCombinationOperator->FindControlIndex( pControlName ) >= 0 )
+		if ( FindComboOpControlIndexForAnimSetControl( m_hCombinationOperator, pControlName ) >= 0 )
 			continue;
 	
 		// No match, blow the control away.
 		RemoveAnimationControlFromPresets( pControlName );
-		RemoveAnimationControlFromSelectionGroups( pControlName );
+		pAnimationSet->RemoveControlFromGroups( pControlName );
 		controls.FastRemove( i );
 	}
 }
 
 
 //-----------------------------------------------------------------------------
-// Modify controls in the presets which have had stereo or multilevel settings changed
+// Modify controls in the presets which have had stereo settings changed
 //-----------------------------------------------------------------------------
 void CDmeCombinationOperatorPanel::ModifyExistingAnimationSetControl( CDmElement *pControlElement )
 {
 	const char *pControlName = pControlElement->GetName();
 
 	// Look for a match
-	int nControlIndex = m_hCombinationOperator->FindControlIndex( pControlName );
+	bool bIsMultiControl;
+	ControlIndex_t nControlIndex = FindComboOpControlIndexForAnimSetControl( m_hCombinationOperator, pControlName, &bIsMultiControl );
 	Assert( nControlIndex >= 0 );
 
-	bool bIsStereoControl = m_hCombinationOperator->IsStereoControl( nControlIndex );
-	bool bIsAnimControlStereo = pControlElement->GetValue< bool >( "combo" );
-	if ( bIsAnimControlStereo != bIsStereoControl )
-	{
-		pControlElement->SetValue< bool >( "combo", bIsStereoControl );
-		if ( !bIsStereoControl )
-		{
-			pControlElement->RemoveAttribute( "balance" );
-		}
-		else
-		{
-			const Vector2D &value = m_hCombinationOperator->GetStereoControlValue( nControlIndex );
-			pControlElement->SetValue< float >( "balance", value.y );
-		}
-	}
+	float flDefaultValue = m_hCombinationOperator->GetControlDefaultValue( nControlIndex );
 
-	bool bIsMultiControl = m_hCombinationOperator->IsMultiControl( nControlIndex );
-	bool bIsAnimMultiControl = pControlElement->GetValue< bool >( "multi" );
-	if ( bIsAnimMultiControl != bIsMultiControl )
+	if ( bIsMultiControl )
 	{
-		pControlElement->SetValue< bool >( "multi", bIsMultiControl );
-		if ( !bIsMultiControl )
-		{
-			pControlElement->RemoveAttribute( "multilevel" );
-		}
-		else
-		{
-			pControlElement->SetValue< float >( "multilevel", m_hCombinationOperator->GetMultiControlLevel( nControlIndex ) );
-		}
+		// multi control can't (currently) be stereo, and so it either exists or it doesn't...
+		pControlElement->SetValue< float >( "value", m_hCombinationOperator->GetMultiControlLevel( nControlIndex ) );
+		pControlElement->SetValue( "defaultValue", 0.5f );
 	}
+	else
+	{
+		bool bIsStereoControl = m_hCombinationOperator->IsStereoControl( nControlIndex );
+		bool bIsAnimControlStereo = IsStereoControl( pControlElement );
+		if ( bIsAnimControlStereo != bIsStereoControl )
+		{
+			if ( !bIsStereoControl )
+			{
+				float flValue = m_hCombinationOperator->GetControlValue( nControlIndex );
+				pControlElement->SetValue< float >( "value", flValue );
 
-	float flDefaultValue = m_hCombinationOperator->GetRawControlCount( nControlIndex ) == 2 ? 0.5f : 0.0f;
-	pControlElement->SetValue( "defaultValue", flDefaultValue );
-	pControlElement->SetValue( "defaultBalance", 0.5f );
-	pControlElement->SetValue( "defaultMultilevel", 0.5f );
+				pControlElement->RemoveAttribute( "leftValue" );
+				pControlElement->RemoveAttribute( "rightValue" );
+			}
+			else
+			{
+				const Vector2D &value = m_hCombinationOperator->GetStereoControlValue( nControlIndex );
+				pControlElement->SetValue< float >( "leftValue", value.x );
+				pControlElement->SetValue< float >( "rightValue", value.y );
+
+				pControlElement->RemoveAttribute( "value" );
+			}
+		}
+
+		pControlElement->SetValue( "defaultValue", flDefaultValue );
+	}
 }
 
 
 //-----------------------------------------------------------------------------
-// Modify controls in the presets which have had stereo or multilevel settings changed
+// Modify controls in the presets which have had stereo settings changed
 //-----------------------------------------------------------------------------
 void CDmeCombinationOperatorPanel::ModifyExistingAnimationSetPresets( CDmElement *pControlElement )
 {
 	const char *pControlName = pControlElement->GetName();
 
-	CDmeAnimationSet *pAnimationSet = m_AnimSet.Get();
+	// TODO - we should be storing which animationset an item is associated with
+	CAnimSetGroupAnimSetTraversal traversal( m_pController->GetAnimationSetClip() );
+	CDmeAnimationSet *pAnimationSet = traversal.Next();
+	Assert( !traversal.IsValid() );
+
 	const CDmrElementArray< CDmePresetGroup > &presetGroupList = pAnimationSet->GetPresetGroups();
 
 	int nPresetGroupCount = presetGroupList.Count();
@@ -491,6 +466,10 @@ void CDmeCombinationOperatorPanel::ModifyExistingAnimationSetPresets( CDmElement
 		for ( int i = 0; i < nPresetCount; ++i )
 		{
 			CDmePreset *pPreset = presetList[ i ];
+			Assert( !pPreset->IsAnimated() ); // deal with this after GDC
+			if ( pPreset->IsAnimated() )
+				continue;
+
 			const CDmrElementArray< CDmElement > &controlValues = pPreset->GetControlValues( );
 
 			int nControlCount = controlValues.Count();
@@ -500,30 +479,21 @@ void CDmeCombinationOperatorPanel::ModifyExistingAnimationSetPresets( CDmElement
 				if ( Q_stricmp( v->GetName(), pControlName ) )
 					continue;
 
-				bool bIsAnimControlStereo = pControlElement->GetValue< bool >( "combo" );
+				bool bIsAnimControlStereo = IsStereoControl( pControlElement );
 				if ( bIsAnimControlStereo )
 				{
-					if ( !v->HasAttribute( "balance" ) )
-					{
-						v->SetValue( "balance", 0.5f );
-					}
+					float flValue = v->GetValue< float >( "value" );
+					v->RemoveAttribute( "value" );
+					v->InitValue( "leftValue", flValue );
+					v->InitValue( "rightValue", flValue );
 				}
 				else
 				{
-					v->RemoveAttribute( "balance" );
-				}
-
-				bool bIsAnimMultiControl = pControlElement->GetValue< bool >( "multi" );
-				if ( bIsAnimMultiControl )
-				{
-					if ( !v->HasAttribute( "multilevel" ) )
-					{
-						v->SetValue( "multilevel", 0.5f );
-					}
-				}
-				else
-				{
-					v->RemoveAttribute( "multilevel" );
+					float flLeftValue = v->GetValue< float >( "leftValue" );
+					float flRightValue = v->GetValue< float >( "rightValue" );
+					v->RemoveAttribute( "leftValue" );
+					v->RemoveAttribute( "rightValue" );
+					v->InitValue( "value", MAX( flLeftValue, flRightValue ) ); // TODO - should this be max or average?
 				}
 			}
 		}
@@ -532,11 +502,15 @@ void CDmeCombinationOperatorPanel::ModifyExistingAnimationSetPresets( CDmElement
 
 
 //-----------------------------------------------------------------------------
-// Modify controls which have had stereo or multilevel settings changed
+// Modify controls which have had stereo settings changed
 //-----------------------------------------------------------------------------
 void CDmeCombinationOperatorPanel::ModifyExistingAnimationSetControls()
 {
-	CDmeAnimationSet *pAnimationSet = m_AnimSet.Get();
+	// TODO - we should be storing which animationset an item is associated with
+	CAnimSetGroupAnimSetTraversal traversal( m_pController->GetAnimationSetClip() );
+	CDmeAnimationSet *pAnimationSet = traversal.Next();
+	Assert( !traversal.IsValid() );
+
 	const CDmrElementArray< CDmElement > &controls = pAnimationSet->GetControls();
 
 	// Update the main controls; update defaults and add or remove combo + multi data
@@ -548,7 +522,7 @@ void CDmeCombinationOperatorPanel::ModifyExistingAnimationSetControls()
 			continue;
 
 		// Don't do any of this work for transforms
-		if ( pControlElement->GetValue< bool >( "transform" ) )
+		if ( IsTransformControl( pControlElement ) )
 			continue;
 
 		ModifyExistingAnimationSetControl( pControlElement );
@@ -565,50 +539,60 @@ void CDmeCombinationOperatorPanel::AddNewAnimationSetControls()
 	if ( !m_hCombinationOperator.Get() )
 		return;
 
-	CDmeAnimationSet *pAnimationSet = m_AnimSet.Get();
+	// TODO - we should be storing which animationset an item is associated with
+	CAnimSetGroupAnimSetTraversal traversal( m_pController->GetAnimationSetClip() );
+	CDmeAnimationSet *pAnimationSet = traversal.Next();
+	Assert( !traversal.IsValid() );
+
 	CDmaElementArray< > &controls = pAnimationSet->GetControls();
 
 	// Remove all controls in the animation set and in presets that don't exist in the combination system
 	int nFirstControl = controls.Count();
 	int nCombinationControlCount = m_hCombinationOperator->GetControlCount();
-	for ( int i = 0; i < nCombinationControlCount; ++i )
+	int iCurrentAnimSetControl = 0;
+	for ( int i = 0; i < nCombinationControlCount; ++i, ++iCurrentAnimSetControl )
 	{
 		const char *pControlName = m_hCombinationOperator->GetControlName( i );
-		if ( pAnimationSet->FindControl( pControlName ) )
-			continue;
-
-		bool bIsStereoControl = m_hCombinationOperator->IsStereoControl(i);
-		bool bIsMultiControl = m_hCombinationOperator->IsMultiControl(i);
-		float flDefaultValue = m_hCombinationOperator->GetRawControlCount(i) == 2 ? 0.5f : 0.0f;
-
-		// Add the control to the controls group
-		CDmElement *pControl = CreateElement< CDmElement >( pControlName, pAnimationSet->GetFileId() );
-		Assert( pControl );
-		controls.InsertBefore( i, pControl );
-
-		pControl->SetValue( "combo", bIsStereoControl );
-		pControl->SetValue( "multi", bIsMultiControl );
-
-		if ( bIsStereoControl )
-		{ 
-			const Vector2D &value = m_hCombinationOperator->GetStereoControlValue(i);
-
-			pControl->SetValue( "value", value.x );
-			pControl->SetValue( "balance", value.y );
-		}
-		else
+		if ( !pAnimationSet->FindControl( pControlName ) )
 		{
-			pControl->SetValue( "value", m_hCombinationOperator->GetControlValue(i) );
+			bool bIsStereoControl = m_hCombinationOperator->IsStereoControl( i );
+			float flDefaultValue = m_hCombinationOperator->GetControlDefaultValue( i );
+
+			// Add the control to the controls group
+			CDmElement *pControl = CreateElement< CDmElement >( pControlName, pAnimationSet->GetFileId() );
+			Assert( pControl );
+			controls.InsertBefore( iCurrentAnimSetControl, pControl );
+
+			if ( bIsStereoControl )
+			{ 
+				const Vector2D &value = m_hCombinationOperator->GetStereoControlValue(i);
+				pControl->SetValue( "leftValue", value.x );
+				pControl->SetValue( "rightValue", value.y );
+			}
+			else
+			{
+				pControl->SetValue( "value", m_hCombinationOperator->GetControlValue(i) );
+			}
+			pControl->SetValue( "defaultValue", flDefaultValue );
 		}
 
+		bool bIsMultiControl = m_hCombinationOperator->IsMultiControl( i );
 		if ( bIsMultiControl )
 		{
-			pControl->SetValue( "multilevel", m_hCombinationOperator->GetMultiControlLevel(i) );
-		}
+			++iCurrentAnimSetControl;
 
-		pControl->SetValue( "defaultValue", flDefaultValue );
-		pControl->SetValue( "defaultBalance", 0.5f );
-		pControl->SetValue( "defaultMultilevel", 0.5f );
+			char pMultiControlName[ 256 ];
+			V_snprintf( pMultiControlName, sizeof( pMultiControlName ), MULTI_CONTROL_FORMAT_STRING, pControlName );
+			if ( !pAnimationSet->FindControl( pMultiControlName ) )
+			{
+				CDmElement *pMultiControl = CreateElement< CDmElement >( pMultiControlName, pAnimationSet->GetFileId() );
+				Assert( pMultiControl );
+				controls.InsertBefore( iCurrentAnimSetControl, pMultiControl );
+
+				pMultiControl->SetValue( "value", m_hCombinationOperator->GetMultiControlLevel( i ) );
+				pMultiControl->SetValue( "defaultValue", 0.5f );
+			}
+		}
 	}
 
 	int nLastControl = controls.Count();
@@ -616,44 +600,14 @@ void CDmeCombinationOperatorPanel::AddNewAnimationSetControls()
 		return;
 
 	// Add new controls to the root group
-	CDmElement *pGroup = pAnimationSet->FindOrAddSelectionGroup( "Root" );
+	CDmElement *pGroup = pAnimationSet->FindOrAddControlGroup( NULL, "Root" );
 
 	// Fill in members
-	CDmrStringArray groups( pGroup, "selectedControls" );
+	CDmrElementArray<> groups( pGroup, "controls" );
 	for ( int i = nFirstControl; i < nLastControl; ++i )
 	{
-		groups.AddToTail( controls[ i ]->GetName() );
+		groups.AddToTail( controls[ i ] );
 	}
-}
-
-
-//-----------------------------------------------------------------------------
-// Creates the procedural presets
-//-----------------------------------------------------------------------------
-void CDmeCombinationOperatorPanel::ComputeProceduralPresets()
-{
-	CDmeAnimationSet *pAnimationSet = m_AnimSet.Get();
-
-	// Now create some presets
-	CDmePresetGroup* pPresetGroup = pAnimationSet->FindOrAddPresetGroup( "procedural" );
-	pPresetGroup->m_bIsReadOnly = true;
-
-	// NOTE: Default needs no values set into it since it's the default
-	CDmElement *pPreset = pPresetGroup->FindOrAddPreset( "Default" );
-
-	pPreset = pPresetGroup->FindOrAddPreset( "Zero" );
-	GenerateProceduralPresetValues( pPreset, pAnimationSet->GetControls(), true, 0.0f );
-
-	pPreset = pPresetGroup->FindOrAddPreset( "Half" );
-	GenerateProceduralPresetValues( pPreset, pAnimationSet->GetControls(), true, 0.5f );
-
-	pPreset = pPresetGroup->FindOrAddPreset( "One" );
-	GenerateProceduralPresetValues( pPreset, pAnimationSet->GetControls(), true, 1.0f );
-
-	pPreset = pPresetGroup->FindOrAddPreset( "Random" );
-	GenerateProceduralPresetValues( pPreset, pAnimationSet->GetControls(), false );
-
-	pAnimationSet->EnsureProceduralPresets();
 }
 
 
@@ -662,32 +616,40 @@ void CDmeCombinationOperatorPanel::ComputeProceduralPresets()
 //-----------------------------------------------------------------------------
 void CDmeCombinationOperatorPanel::SortAnimationSetControls()
 {
-	CDmaElementArray<> &controls = m_AnimSet->GetControls();
+	// TODO - we should be storing which animationset an item is associated with
+	CAnimSetGroupAnimSetTraversal traversal( m_pController->GetAnimationSetClip() );
+	CDmeAnimationSet *pAnimSet = traversal.Next();
+	Assert( !traversal.IsValid() );
+
+	// TODO: Figure out why this isn't called on load
+	pAnimSet->OnElementUnserialized();
+
+	CDmaElementArray<> &controls = pAnimSet->GetControls();
 	int nControlCount = controls.Count();
 	if ( nControlCount == 0 )
 		return;
 
 	int nCombinationControlCount = m_hCombinationOperator->GetControlCount();
-	Assert( nControlCount == nCombinationControlCount );
-
 	DmElementHandle_t *pElements = (DmElementHandle_t*)_alloca( nControlCount * sizeof(DmElementHandle_t) );
+	int iCurrentControlIndex = 0;
 	for ( int i = 0; i < nCombinationControlCount; ++i )
 	{
 		const char *pControlName = m_hCombinationOperator->GetControlName( i );
-		CDmElement *pControl = m_AnimSet->FindControl( pControlName );
-		pElements[i] = pControl->GetHandle();
+		CDmElement *pControl = pAnimSet->FindControl( pControlName );
+		pElements[iCurrentControlIndex++] = pControl->GetHandle();
+
+		if ( m_hCombinationOperator->IsMultiControl( i ) )
+		{
+			char pMultiControlName[ 256 ];
+			V_snprintf( pMultiControlName, sizeof( pMultiControlName ), MULTI_CONTROL_FORMAT_STRING, pControlName );
+			CDmElement *pMultiControl = pAnimSet->FindControl( pMultiControlName );
+			pElements[iCurrentControlIndex++] = pMultiControl->GetHandle();
+		}
 	}
+
+	Assert( nControlCount == iCurrentControlIndex );
 
 	controls.SetMultiple( 0, nControlCount, pElements );
-
-#ifdef _DEBUG
-	for ( int i = 0; i < nCombinationControlCount; ++i )
-	{
-		const char *pControlName = controls[i]->GetName();
-		const char *pComboName = m_hCombinationOperator->GetControlName( i );
-		Assert( !Q_stricmp( pControlName, pComboName ) );
-	}
-#endif
 }
 
 
@@ -696,7 +658,7 @@ void CDmeCombinationOperatorPanel::SortAnimationSetControls()
 //-----------------------------------------------------------------------------
 void CDmeCombinationOperatorPanel::RefreshAnimationSet()
 {
-	if ( !m_AnimSet.Get() )
+	if ( !m_pController->GetAnimationSetClip() )
 		return;
 
 	CDisableUndoScopeGuard sg;
@@ -704,25 +666,21 @@ void CDmeCombinationOperatorPanel::RefreshAnimationSet()
 	// Remove all controls in the animation set and in presets that don't exist in the combination system
 	RemoveUnusedAnimationSetControls();
 
-	// Modify controls in the presets which have had stereo or multilevel settings changed
+	// Modify controls in the presets which have had stereo settings changed
 	ModifyExistingAnimationSetControls();
 	
 	// Add all controls not in the animation set but which do exist in the combination system
 	AddNewAnimationSetControls();
 
-	// Resets the procedural presets
-	ComputeProceduralPresets();
 
 	// Sort control names to match the combination controls
 	SortAnimationSetControls();
-
-	// Set that as the current set
-	BaseClass::ChangeAnimationSet( m_AnimSet );
 }
 
 void CDmeCombinationOperatorPanel::RefreshCombinationOperator()
 {
 	RefreshAnimationSet();
+	ChangeAnimationSetClip( m_pController->GetAnimationSetClip() );
 }
 
 
@@ -738,38 +696,52 @@ void CDmeCombinationOperatorPanel::OnTick()
 		{
 			CDisableUndoScopeGuard sg;
 
-			int c = m_hCombinationOperator->GetControlCount();
-			for ( int i = 0; i < c; ++i )
+			int nCombinationControlCount = m_hCombinationOperator->GetControlCount();
+			int iCurrentControlIndex = 0;
+			for ( int i = 0; i < nCombinationControlCount; ++i )
 			{
 				AttributeValue_t value;
-
-				bool bVisible = GetAttributeSlider()->GetSliderValues( &value, i );
-				if ( !bVisible )
-					continue;
-
-				if ( m_hCombinationOperator->IsStereoControl( i ) )
+				if ( GetAttributeSlider()->GetSliderValues( &value, iCurrentControlIndex++ ) )
 				{
-					m_hCombinationOperator->SetControlValue( i, value.m_pValue[ANIM_CONTROL_VALUE], value.m_pValue[ANIM_CONTROL_BALANCE] );
+					if ( m_hCombinationOperator->IsStereoControl( i ) )
+					{
+						m_hCombinationOperator->SetControlValue( i, value.m_pValue[ANIM_CONTROL_VALUE_LEFT], value.m_pValue[ANIM_CONTROL_VALUE_RIGHT] );
+					}
+					else
+					{
+						m_hCombinationOperator->SetControlValue( i, value.m_pValue[ANIM_CONTROL_VALUE] );
+					}
+
 				}
-				else
-				{
-					m_hCombinationOperator->SetControlValue( i, value.m_pValue[ANIM_CONTROL_VALUE] );
-				}
+
 				if ( m_hCombinationOperator->IsMultiControl( i ) )
 				{
-					m_hCombinationOperator->SetMultiControlLevel( i, value.m_pValue[ANIM_CONTROL_MULTILEVEL] ); 
+					AttributeValue_t multiValue;
+					if ( GetAttributeSlider()->GetSliderValues( &multiValue, iCurrentControlIndex++ ) )
+					{
+						m_hCombinationOperator->SetMultiControlLevel( i, multiValue.m_pValue[ANIM_CONTROL_VALUE] ); 
+					}
 				}
 			}
 		}
-    
-		// FIXME: Shouldn't this happen at the application level?
-		// run the machinery - apply, resolve, dependencies, operate, resolve
-		CUtlVector< IDmeOperator* > operators;
-		operators.AddToTail( m_hCombinationOperator );
 
-		CDisableUndoScopeGuard guard;
-		g_pDmElementFramework->SetOperators( operators );
-		g_pDmElementFramework->Operate( true );
+		if ( m_operatorList.Count() )
+		{
+			CDisableUndoScopeGuard guard;
+			g_pDmElementFramework->SetOperators( m_operatorList );
+			g_pDmElementFramework->Operate( true );
+		}
+		else
+		{
+			// FIXME: Shouldn't this happen at the application level?
+			// run the machinery - apply, resolve, dependencies, operate, resolve
+			CUtlVector< IDmeOperator* > operators;
+			operators.AddToTail( m_hCombinationOperator );
+
+			CDisableUndoScopeGuard guard;
+			g_pDmElementFramework->SetOperators( operators );
+			g_pDmElementFramework->Operate( true );
+		}
 	}
 
 	// allow elements and attributes to be edited again
@@ -794,7 +766,8 @@ CDmeDagEditPanel::CDmeDagEditPanel( vgui::Panel *pParent, const char *pName ) : 
 	m_pCombinationPage = new vgui::PropertyPage( m_pEditorSheet, "AnimationSetEditor" );
 	m_pVertexAnimationPage = new vgui::PropertyPage( m_pEditorSheet, "VertexAnimationPage" );
 
-	m_pCombinationPanel = new CDmeCombinationOperatorPanel( m_pCombinationPage, "AnimationSetEditorPanel" );
+	CCombinationOperatorControl *pAnimationSetController = new CCombinationOperatorControl();
+	m_pCombinationPanel = new CDmeCombinationOperatorPanel( m_pCombinationPage, "AnimationSetEditorPanel", pAnimationSetController );
 	m_pCombinationPanel->CreateToolsSubPanels();
 
 	m_pAnimationListPanel = new CDmeAnimationListPanel( m_pAnimationPage, "AnimationListPanel" );
@@ -814,7 +787,7 @@ CDmeDagEditPanel::CDmeDagEditPanel( vgui::Panel *pParent, const char *pName ) : 
 	m_pEditorSheet->AddPage( m_pAnimationPage, "Animation" );
 	m_pEditorSheet->AddPage( m_pCombinationPage, "Combination" );
 	m_pEditorSheet->AddPage( m_pVertexAnimationPage, "Vertex Animation" );
-
+	m_pEditorSheet->SetActivePage( m_pCombinationPage );
 }
 
 CDmeDagEditPanel::~CDmeDagEditPanel()

@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -8,8 +8,8 @@
 #include "tier1/strtools.h"
 #include "materialsystem/IMaterialProxy.h"
 #include "materialsystem/IMaterialProxyFactory.h"
-#include "materialsystem/imaterialvar.h"
-#include "materialsystem/imaterial.h"
+#include "materialsystem/IMaterialVar.h"
+#include "materialsystem/IMaterial.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include <tier0/memdbgon.h>
@@ -24,6 +24,7 @@ class CMaterialProxyFactory : public IMaterialProxyFactory
 public:
 	IMaterialProxy *CreateProxy( const char *proxyName );
 	void DeleteProxy( IMaterialProxy *pProxy );
+	CreateInterfaceFn GetFactory();
 };
 CMaterialProxyFactory g_MaterialProxyFactory;
 
@@ -47,6 +48,10 @@ void CMaterialProxyFactory::DeleteProxy( IMaterialProxy *pProxy )
 	}
 }
 
+CreateInterfaceFn CMaterialProxyFactory::GetFactory()
+{
+	return Sys_GetFactoryThis();
+}
 
 IMaterialProxyFactory* GetHammerMaterialProxyFactory()
 {

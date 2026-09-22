@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -66,8 +66,8 @@ void CChoreoGlobalEventWidget::redraw( CChoreoWidgetDrawHelper& drawHelper )
 	rcTab = getBounds();
 
 	bool isLoop = false;
-	COLORREF pointColor = COLOR_CHOREO_SEGMENTDIVIDER;
-	COLORREF clr = COLOR_CHOREO_SEGMENTDIVIDER_BG;
+	Color pointColor = COLOR_CHOREO_SEGMENTDIVIDER;
+	Color clr = COLOR_CHOREO_SEGMENTDIVIDER_BG;
 	switch ( event->GetType() )
 	{
 	default:
@@ -95,7 +95,7 @@ void CChoreoGlobalEventWidget::redraw( CChoreoWidgetDrawHelper& drawHelper )
 
 		InflateRect( &rcTab, -2, -2 );
 
-		drawHelper.DrawTriangleMarker( rcTab, RGB( 240, 240, 220 ) );
+		drawHelper.DrawTriangleMarker( rcTab, Color( 240, 240, 220 ) );
 
 	}
 	else
@@ -136,7 +136,7 @@ void CChoreoGlobalEventWidget::redraw( CChoreoWidgetDrawHelper& drawHelper )
 	if ( !isLoop )
 		return;
 
-	COLORREF labelText = COLOR_INFO_TEXT;
+	Color labelText = COLOR_INFO_TEXT;
 	DrawLabel( drawHelper, labelText, rcLine.left, rcLine.top + 2, false );
 
 	// Figure out loop spot
@@ -157,7 +157,7 @@ void CChoreoGlobalEventWidget::redraw( CChoreoWidgetDrawHelper& drawHelper )
 	DrawLabel( drawHelper, labelText, rcLine.left, rcLine.top + 2, true );
 }
 
-void CChoreoGlobalEventWidget::DrawLabel( CChoreoWidgetDrawHelper& drawHelper, COLORREF clr, int x, int y, bool right )
+void CChoreoGlobalEventWidget::DrawLabel( CChoreoWidgetDrawHelper& drawHelper, const Color& clr, int x, int y, bool right )
 {
 	CChoreoEvent *event = GetEvent();
 	if ( !event )

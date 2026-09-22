@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -27,9 +27,12 @@
 #include "materialsystem/IMaterialSystemHardwareConfig.h"
 #include "MDLViewer.h"
 #include "optimize.h"
+#include "mathlib/softbodyenvironment.h"
+#include "mathlib/femodeldesc.h"
 
 extern char g_appTitle[];
 Vector *StudioModel::m_AmbientLightColors;
+CSoftbodyEnvironment g_SoftbodyEnvironment;
 
 #pragma warning( disable : 4244 ) // double to float
 
@@ -40,11 +43,95 @@ static StudioModel *g_pActiveModel;
 // Expose it to the rest of the app
 StudioModel *g_pStudioModel = &g_studioModel;
 StudioModel *g_pStudioExtraModel[HLMV_MAX_MERGED_MODELS];
+mergemodelbonepair_t g_MergeModelBonePairs[ HLMV_MAX_MERGED_MODELS ];
+WidgetControl *g_pWidgetControl;
+
+WidgetControl::WidgetControl( void )
+{
+	m_WidgetType = WIDGET_ROTATE;
+	m_WidgetState = WIDGET_STATE_NONE;
+	
+	m_vecValue.Init();
+	m_vecWidgetMouseDownCoord.Init();
+	m_vecWidgetDeltaCoord.Init();
+
+	const char *szWidgetModelPaths[WIDGET_NUM_WIDGET_TYPES] = {
+		"models/tools/rotate_widget.mdl",
+		"models/tools/translate_widget.mdl"
+	};
+
+	for ( int i=0; i<WIDGET_NUM_WIDGET_TYPES; i++ )
+	{
+		m_pWidgetModel[i] = new StudioModel;
+		if ( m_pWidgetModel[i]->LoadModel( szWidgetModelPaths[i] ) )
+			m_pWidgetModel[i]->PostLoadModel( szWidgetModelPaths[i] );
+
+	}
+}
+
+WidgetControl::~WidgetControl( void )
+{
+	for ( int i=0; i<WIDGET_NUM_WIDGET_TYPES; i++ )
+	{
+		if ( m_pWidgetModel[i] )
+		{
+			m_pWidgetModel[i]->ReleaseStudioModel();
+		}
+	}
+}
+
+void WidgetControl::SetStateUsingInputColor( Color inputColor )
+{
+	m_WidgetState = WIDGET_STATE_NONE;
+
+	if ( inputColor.r() > 250 && inputColor.g() < 5 && inputColor.b() < 5 )
+	{
+		m_WidgetState = WIDGET_CHANGE_X;
+	}
+	else if ( inputColor.r() < 5 && inputColor.g() > 250 && inputColor.b() < 5 )
+	{
+		m_WidgetState = WIDGET_CHANGE_Y;
+	}
+	else if ( inputColor.r() < 5 && inputColor.g() < 5 && inputColor.b() > 250 )
+	{
+		m_WidgetState = WIDGET_CHANGE_Z;
+	}
+}
+
+void WidgetControl::WidgetMouseDown( int x, int y )
+{
+	m_WidgetState = WIDGET_STATE_NONE;
+	m_vecWidgetMouseDownCoord.x = x;
+	m_vecWidgetMouseDownCoord.y = y;
+	m_vecWidgetDeltaCoord.Init();
+}
+
+void WidgetControl::WidgetMouseDrag( int x, int y )
+{
+	m_vecWidgetDeltaCoord.x = x - m_vecWidgetMouseDownCoord.x;
+	m_vecWidgetDeltaCoord.y = y - m_vecWidgetMouseDownCoord.y;
+}
+
+bool WidgetControl::HasStoredValue( void )
+{
+	return ( m_WidgetState == WIDGET_STATE_NONE && m_vecValue.Length() > 0 );
+}
+
+StudioModel *WidgetControl::GetWidgetModel( void )
+{
+	return m_pWidgetModel[m_WidgetType];
+}
 
 StudioModel::StudioModel()
 {
 	m_MDLHandle = MDLHANDLE_INVALID;
 	ClearLookTargets();
+	m_pBoneToWorld = (matrix3x4a_t *)MemAlloc_AllocAligned( sizeof( matrix3x4_t ) * MAXSTUDIOBONES, 16 );
+}
+
+StudioModel::~StudioModel()
+{
+	MemAlloc_FreeAligned( m_pBoneToWorld );
 }
 
 void StudioModel::Init()
@@ -85,7 +172,6 @@ void StudioModel::RestoreStudioModel()
 }
 
 
-
 //-----------------------------------------------------------------------------
 // Purpose: Frees the model data and releases textures from OpenGL.
 //-----------------------------------------------------------------------------
@@ -93,6 +179,7 @@ void StudioModel::FreeModel( bool bReleasing )
 {
 	if ( m_pStudioHdr )
 	{
+		m_pStudioHdr->FreeSoftbody();
 		delete m_pStudioHdr;
 		m_pStudioHdr = NULL;
 	}
@@ -122,37 +209,31 @@ void *StudioModel::operator new( size_t stAllocateBlock )
 {
 	// call into engine to get memory
 	Assert( stAllocateBlock != 0 );
-	return calloc( 1, stAllocateBlock );
+
+	void *pMem = MemAlloc_AllocAligned( stAllocateBlock, __alignof( StudioModel ) );
+	memset( pMem, 0x00, stAllocateBlock );
+	return pMem;
 }
 
 void StudioModel::operator delete( void *pMem )
 {
-#ifdef _DEBUG
-	// set the memory to a known value
-	int size = _msize( pMem );
-	memset( pMem, 0xcd, size );
-#endif
-
 	// get the engine to free the memory
-	free( pMem );
+	MemAlloc_FreeAligned( pMem );
 }
 
-void *StudioModel::operator new( size_t stAllocateBlock, int nBlockUse, const char *pFileName, int nLine )
+void* StudioModel::operator new( size_t stAllocateBlock, int nBlockUse, const char *pFileName, int nLine )
 {
 	// call into engine to get memory
 	Assert( stAllocateBlock != 0 );
-	return calloc( 1, stAllocateBlock );
+	void *pMem = MemAlloc_AllocAlignedFileLine( stAllocateBlock, __alignof( StudioModel ), pFileName, nLine );
+	memset( pMem, 0x00, stAllocateBlock );
+	return pMem;
 }
 
-void StudioModel::operator delete( void *pMem, int nBlockUse, const char *pFileName, int nLine )
+void StudioModel::operator delete( void* pMem, int nBlockUse, const char *pFileName, int nLine )
 {
-#ifdef _DEBUG
-	// set the memory to a known value
-	int size = _msize( pMem );
-	memset( pMem, 0xcd, size );
-#endif
 	// get the engine to free the memory
-	free( pMem );
+	MemAlloc_FreeAligned( pMem );
 }
 
 bool StudioModel::LoadModel( const char *pModelName )
@@ -179,9 +260,11 @@ bool StudioModel::LoadModel( const char *pModelName )
 	// allocate a pool for a studiohdr cache
 	if (m_pStudioHdr != NULL)
 	{
+		m_pStudioHdr->FreeSoftbody();
 		delete m_pStudioHdr;
 	}
 	m_pStudioHdr = new CStudioHdr( g_pMDLCache->GetStudioHdr( m_MDLHandle ), g_pMDLCache );
+	m_pStudioHdr->InitSoftbody( &g_SoftbodyEnvironment);
 
 	// manadatory to access correct verts
 	SetCurrentModel();
@@ -221,7 +304,7 @@ bool StudioModel::LoadModel( const char *pModelName )
 	// Copy over all of the surface props; we may change them...
 	for ( i = 0; i < pStudioHdr->numbones(); ++i )
 	{
-		mstudiobone_t* pBone = pStudioHdr->pBone(i);
+		const mstudiobone_t* pBone = pStudioHdr->pBone(i);
 
 		CUtlSymbol prop( pBone->pszSurfaceProp() );
 		m_SurfaceProps.AddToTail( prop );
@@ -267,6 +350,20 @@ bool StudioModel::LoadModel( const char *pModelName )
 
 
 
+
+void StudioModel::SetSoftbodyOrientation( )
+{
+	if ( m_pStudioHdr )
+	{
+		CSoftbody *pSoftbody = m_pStudioHdr->GetSoftbody();
+		if ( pSoftbody )
+		{
+			pSoftbody->SetAbsOrigin( g_pStudioModel->m_origin, true );
+			pSoftbody->SetAbsAngles( g_pStudioModel->m_angles, true );
+		}
+	}
+}
+
 bool StudioModel::PostLoadModel( const char *modelname )
 {
 	MDLCACHE_CRITICAL_SECTION_( g_pMDLCache );
@@ -274,6 +371,8 @@ bool StudioModel::PostLoadModel( const char *modelname )
 	CStudioHdr *pStudioHdr = GetStudioHdr();
 	if (pStudioHdr == NULL)
 		return false;
+
+	pStudioHdr->InitSoftbody( &g_SoftbodyEnvironment);
 
 	SetSequence (0);
 	SetController (0, 0.0f);
@@ -302,14 +401,27 @@ bool StudioModel::PostLoadModel( const char *modelname )
 
 
 //------------------------------------------------------------------------------
-// Returns true if the model has at least one body part with model data, false if not.
+// Returns true if the model was loaded
 //------------------------------------------------------------------------------
 bool StudioModel::HasModel()
 {
 	CStudioHdr *pStudioHdr = GetStudioHdr();
 	if ( !pStudioHdr )
 		return false;
-		
+	
+	return true;
+}
+
+
+//------------------------------------------------------------------------------
+// Returns true if the model has at least one body part with model data, false if not.
+//------------------------------------------------------------------------------
+bool StudioModel::HasMesh()
+{
+	CStudioHdr *pStudioHdr = GetStudioHdr();
+	if ( !pStudioHdr )
+		return false;
+	
 	for ( int i = 0; i < pStudioHdr->numbodyparts(); i++ )
 	{
 		if ( pStudioHdr->pBodypart(i)->nummodels )
@@ -320,7 +432,6 @@ bool StudioModel::HasModel()
 
 	return false;
 }
-
 
 ////////////////////////////////////////////////////////////////////////
 
@@ -399,17 +510,14 @@ int StudioModel::SetOverlaySequence( int iLayer, int iSequence, float flWeight )
 	if ( !pStudioHdr )
 		return 0;
 
-	if (iSequence < 0)
-		return 0;
-
 	if (iLayer < 0 || iLayer >= MAXSTUDIOANIMLAYERS)
 	{
 		Assert(0);
 		return 0;
 	}
 
-	if (iSequence > pStudioHdr->GetNumSeq())
-		return m_Layer[iLayer].m_sequence;
+	if (iSequence < 0 || iSequence >= pStudioHdr->GetNumSeq())
+		iSequence = 0;
 
 	m_Layer[iLayer].m_sequence = iSequence;
 	m_Layer[iLayer].m_weight = flWeight;
@@ -463,20 +571,11 @@ float StudioModel::GetOverlaySequenceWeight( int iLayer )
 
 int StudioModel::LookupSequence( const char *szSequence )
 {
-	int i;
-
 	CStudioHdr *pStudioHdr = GetStudioHdr();
 	if ( !pStudioHdr )
 		return -1;
 
-	for (i = 0; i < pStudioHdr->GetNumSeq(); i++)
-	{
-		if (!stricmp( szSequence, pStudioHdr->pSeqdesc( i ).pszLabel() ))
-		{
-			return i;
-		}
-	}
-	return -1;
+	return pStudioHdr->LookupSequence( szSequence );
 }
 
 int StudioModel::LookupActivity( const char *szActivity )
@@ -900,7 +999,7 @@ void StudioModel::GetSeqAnims( mstudioanimdesc_t *panim[4], float *weight )
 float StudioModel::SetController( int iController, float flValue )
 {
 	CStudioHdr *pStudioHdr = GetStudioHdr();
-	if (!pStudioHdr)
+	if (!pStudioHdr || iController < 0)
 		return 0.0f;
 
 	return Studio_SetController( pStudioHdr, iController, flValue, m_controller[iController] );
@@ -932,7 +1031,7 @@ float StudioModel::SetPoseParameter( char const *szName, float flValue )
 float StudioModel::SetPoseParameter( int iParameter, float flValue )
 {
 	CStudioHdr *pStudioHdr = GetStudioHdr();
-	if (!pStudioHdr)
+	if (!pStudioHdr || iParameter < 0)
 		return 0.0f;
 
 	return Studio_SetPoseParameter( pStudioHdr, iParameter, flValue, m_poseparameter[iParameter] );
@@ -951,7 +1050,7 @@ float* StudioModel::GetPoseParameters()
 float StudioModel::GetPoseParameter( int iParameter )
 {
 	CStudioHdr *pStudioHdr = GetStudioHdr();
-	if (!pStudioHdr)
+	if (!pStudioHdr || iParameter < 0)
 		return 0.0f;
 
 	return Studio_GetPoseParameter( pStudioHdr, iParameter, m_poseparameter[iParameter] );
@@ -995,7 +1094,57 @@ int StudioModel::LookupAttachment( char const *szName )
 
 
 
-int StudioModel::SetBodygroup( int iGroup, int iValue /*= -1*/ )
+int StudioModel::GetBodygroup( int iGroup )
+{
+	CStudioHdr *pstudiohdr = GetStudioHdr();
+	if (! pstudiohdr)
+		return 0;
+
+	if (iGroup >= pstudiohdr->numbodyparts())
+		return 0;
+
+	mstudiobodyparts_t *pbodypart = pstudiohdr->pBodypart( iGroup );
+
+	if (pbodypart->nummodels <= 1)
+		return 0;
+
+	int iCurrent = (m_bodynum / pbodypart->base) % pbodypart->nummodels;
+
+	return iCurrent;
+}
+
+void StudioModel::SetBodygroupPreset( char const *szName )
+{
+	CStudioHdr *pStudioHdr = GetStudioHdr();
+	if (!pStudioHdr)
+		return;
+
+	for ( int i=0; i<pStudioHdr->GetNumBodyGroupPresets(); i++ )
+	{
+		const mstudiobodygrouppreset_t *pBodygroupPreset = pStudioHdr->GetBodyGroupPreset( i );
+		if ( !V_strcmp( szName, pBodygroupPreset->pszName() ) )
+		{
+
+			for ( int j=0; j<pStudioHdr->numbodyparts(); j++ )
+			{
+				mstudiobodyparts_t *pbodypart = pStudioHdr->pBodypart( j );
+
+				int iMask = (pBodygroupPreset->iMask / pbodypart->base) % pbodypart->nummodels;
+				if ( iMask == 1 )
+				{
+					int iCurrent = (m_bodynum / pbodypart->base) % pbodypart->nummodels;
+					int iValCurrent = (pBodygroupPreset->iValue / pbodypart->base) % pbodypart->nummodels;
+
+					m_bodynum = (m_bodynum - (iCurrent * pbodypart->base) + (iValCurrent * pbodypart->base));
+				}
+
+			}
+			break;
+		}
+	}
+}
+
+int StudioModel::SetBodygroup( int iGroup, int iValue )
 {
 	CStudioHdr *pStudioHdr = GetStudioHdr();
 	if (!pStudioHdr)
@@ -1008,8 +1157,7 @@ int StudioModel::SetBodygroup( int iGroup, int iValue /*= -1*/ )
 
 	int iCurrent = (m_bodynum / pbodypart->base) % pbodypart->nummodels;
 
-	// if the submodel index is not specified or out of range, just use the current value
-	if ( iValue < 0 || iValue >= pbodypart->nummodels )
+	if (iValue >= pbodypart->nummodels)
 		return iCurrent;
 
 	m_bodynum = (m_bodynum - (iCurrent * pbodypart->base) + (iValue * pbodypart->base));
@@ -1106,7 +1254,7 @@ void StudioModel::scaleBones (float scale)
 	if (!pStudioHdr)
 		return;
 
-	mstudiobone_t *pbones = pStudioHdr->pBone( 0 );
+	mstudiobone_t *pbones = (mstudiobone_t *)pStudioHdr->pBone( 0 );
 	for (int i = 0; i < pStudioHdr->numbones(); i++)
 	{
 		pbones[i].pos *= scale;
@@ -1205,20 +1353,25 @@ const studiohdr_t *studiohdr_t::FindModel( void **cache, char const *pModelName 
 
 virtualmodel_t *studiohdr_t::GetVirtualModel( void ) const
 {
-	return g_pMDLCache->GetVirtualModel( (MDLHandle_t)virtualModel );
+	return g_pMDLCache->GetVirtualModel( VoidPtrToMDLHandle( VirtualModel() ) );
 }
 
-byte *studiohdr_t::GetAnimBlock( int i ) const
+byte *studiohdr_t::GetAnimBlock( int i, bool preloadIfMissing ) const
 {
-	return g_pMDLCache->GetAnimBlock( (MDLHandle_t)virtualModel, i );
+	return g_pMDLCache->GetAnimBlock( VoidPtrToMDLHandle( VirtualModel() ), i, preloadIfMissing );
+}
+
+bool studiohdr_t::hasAnimBlockBeenPreloaded( int i ) const
+{
+	return g_pMDLCache->HasAnimBlockBeenPreloaded( VoidPtrToMDLHandle( VirtualModel() ), i );
 }
 
 int studiohdr_t::GetAutoplayList( unsigned short **pOut ) const
 {
-	return g_pMDLCache->GetAutoplayList( (MDLHandle_t)virtualModel, pOut );
+	return g_pMDLCache->GetAutoplayList( VoidPtrToMDLHandle( VirtualModel() ), pOut );
 }
 
 const studiohdr_t *virtualgroup_t::GetStudioHdr( void ) const
 {
-	return g_pMDLCache->GetStudioHdr( (MDLHandle_t)cache );
+	return g_pMDLCache->GetStudioHdr( VoidPtrToMDLHandle( cache ) );
 }

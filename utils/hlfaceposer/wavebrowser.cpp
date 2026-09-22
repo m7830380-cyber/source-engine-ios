@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -29,78 +29,78 @@ CWaveBrowser	*g_pWaveBrowser = NULL;
 class StdIOReadBinary : public IFileReadBinary
 {
 public:
-	int open( const char *pFileName )
+	FileHandle_t open( const char *pFileName )
 	{
-		return (int)filesystem->Open( pFileName, "rb" );
+		return filesystem->Open( pFileName, "rb" );
 	}
 
-	int read( void *pOutput, int size, int file )
+	int read( void *pOutput, int size, FileHandle_t file )
 	{
 		if ( !file )
 			return 0;
 
-		return filesystem->Read( pOutput, size, (FileHandle_t)file );
+		return filesystem->Read( pOutput, size, file );
 	}
 
-	void seek( int file, int pos )
+	void seek( FileHandle_t file, int pos )
 	{
 		if ( !file )
 			return;
 
-		filesystem->Seek( (FileHandle_t)file, pos, FILESYSTEM_SEEK_HEAD );
+		filesystem->Seek( file, pos, FILESYSTEM_SEEK_HEAD );
 	}
 
-	unsigned int tell( int file )
+	unsigned int tell( FileHandle_t file )
 	{
 		if ( !file )
 			return 0;
 
-		return filesystem->Tell( (FileHandle_t)file );
+		return filesystem->Tell( file );
 	}
 
-	unsigned int size( int file )
+	unsigned int size( FileHandle_t file )
 	{
 		if ( !file )
 			return 0;
 
-		return filesystem->Size( (FileHandle_t)file );
+		return filesystem->Size( file );
 	}
 
-	void close( int file )
+	void close( FileHandle_t file )
 	{
 		if ( !file )
 			return;
 
-		filesystem->Close( (FileHandle_t)file );
+		filesystem->Close( file );
 	}
 };
 
 class StdIOWriteBinary : public IFileWriteBinary
 {
 public:
-	int create( const char *pFileName )
+	FileHandle_t create( const char *pFileName )
 	{
-		return (int)filesystem->Open( pFileName, "wb" );
+		return filesystem->Open( pFileName, "wb" );
 	}
 
-	int write( void *pData, int size, int file )
+	int write( void *pData, int size, FileHandle_t file )
 	{
-		return filesystem->Write( pData, size, (FileHandle_t)file );
+		return filesystem->Write( pData, size, file );
 	}
 
-	void close( int file )
+	void close( FileHandle_t file )
 	{
-		filesystem->Close( (FileHandle_t)file );
+		filesystem->Close( file );
 	}
 
-	void seek( int file, int pos )
+	void seek( FileHandle_t file, int pos )
 	{
-		filesystem->Seek( (FileHandle_t)file, pos, FILESYSTEM_SEEK_HEAD );
+		filesystem->Seek( file, pos, FILESYSTEM_SEEK_HEAD );
 	}
 
-	unsigned int tell( int file )
+	unsigned int tell( FileHandle_t file )
 	{
-		return filesystem->Tell( (FileHandle_t)file );
+		return filesystem->Tell( file );
 	}
 };
 
@@ -358,7 +358,7 @@ public:
 	
 	virtual void redraw()
 	{
-		CChoreoWidgetDrawHelper drawHelper( this, GetSysColor( COLOR_BTNFACE ) );
+		CChoreoWidgetDrawHelper drawHelper( this, RGBToColor( GetSysColor( COLOR_BTNFACE ) ) );
 	}
 	virtual int handleEvent( mxEvent *event )
 	{
@@ -515,7 +515,7 @@ HIMAGELIST CWaveBrowser::CreateImageList()
     // Load the icon resources, and add the icons to the image list. 
     HICON hicon;
 	int slot;
-#if defined( DBGFLAG_ASSERT )
+#if defined( _DEBUG )
 	int c = 0;
 #endif
 

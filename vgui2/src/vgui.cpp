@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: Core implementation of vgui
 //
@@ -6,13 +6,13 @@
 //===========================================================================//
 
 
-#if defined( WIN32 ) && !defined( _X360 )
+#if defined( WIN32 ) && !defined( _GAMECONSOLE )
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #endif
 
 #include "VGuiMatSurface/IMatSystemSurface.h"
-#include <vgui/VGUI.h>
+#include <vgui/vgui.h>
 #include <vgui/Dar.h>
 #include <vgui/IInputInternal.h>
 #include <vgui/IPanel.h>
@@ -21,16 +21,14 @@
 #include <vgui/IVGui.h>
 #include <vgui/IClientPanel.h>
 #include <vgui/IScheme.h>
-#include <KeyValues.h>
+#include <keyvalues.h>
 #include <string.h>
 #include <assert.h>
 #include <stdio.h>
 #include <stdarg.h>
-#ifdef APPLE
-#include <malloc/malloc.h>
-#else
+#ifndef _PS3
 #include <malloc.h>
-#endif
+#endif // _PS3
 #include <tier0/dbg.h>
 #include <tier1/utlhandletable.h>
 #include "vgui_internal.h"
@@ -42,14 +40,15 @@
 #include "utlvector.h"
 #include "tier0/vprof.h"
 #include "tier0/icommandline.h"
+#include "vgui/ILocalize.h"
+#include "matchmaking/imatchframework.h"
+#include "tier2/tier2.h"
 
 #if defined( _X360 )
 #include "xbox/xbox_win32stubs.h"
 #endif
 
 #undef GetCursorPos // protected_things.h defines this, and it makes it so we can't access g_pInput->GetCursorPos.
-
-#include "cdll_int.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include <tier0/memdbgon.h>
@@ -64,6 +63,8 @@ static const int WARN_PANEL_NUMBER = 32768; // in DEBUG if more panels than this
 //-----------------------------------------------------------------------------
 struct MessageItem_t
 {
+	MessageItem_t() : _params( 0 ), _arrivalTime( -1.0f ), _messageID( -1 ) {}
+
 	KeyValues *_params; // message data
 						// _params->GetName() is the message name
 
@@ -112,6 +113,9 @@ public:
 	virtual bool Connect( CreateInterfaceFn factory );
 	virtual void Disconnect();
 
+	// Return library dependencies
+	virtual const AppSystemInfo_t* GetDependencies();
+
 	// Here's where systems can access other interfaces implemented by this object
 	// Returns NULL if it doesn't implement the requested interface
 	virtual void *QueryInterface( const char *pInterfaceName );
@@ -152,7 +156,6 @@ public:
 	virtual void MarkPanelForDeletion(VPANEL panel);
 
 	virtual void AddTickSignal(VPANEL panel, int intervalMilliseconds = 0);
-	virtual void AddTickSignalToHead( VPANEL panel, int intervalMilliseconds = 0 ) OVERRIDE;
 	virtual void RemoveTickSignal(VPANEL panel );
 
 
@@ -179,26 +182,15 @@ public:
 	// to get the one normally used by VGUI
 	virtual void ActivateContext( HContext context );
 
-	// enables VR mode
-	virtual void SetVRMode( bool bVRMode ) OVERRIDE
-	{
-		m_bVRMode = bVRMode;
-	}
-	virtual bool GetVRMode() OVERRIDE
-	{
-		return m_bVRMode;
-	}
-
-	virtual IVEngineClient *GetVGUIEngine() OVERRIDE
-	{
-		return m_pVGuiEngine;
-	}
-
 	bool IsDispatchingMessages( void )
 	{
 		return m_InDispatcher;
 	}
 
+
+	// Resets a particular input context, use DEFAULT_VGUI_CONTEXT
+	// to get the one normally used by VGUI
+	virtual void ResetContext( HContext context );
 private:
 	// VGUI contexts
 	struct Context_t
@@ -211,12 +203,9 @@ private:
 		VPanel	*panel;
 		int		interval;
 		int		nexttick;
-		bool	bMarkDeleted;
 		// Debugging
 		char	panelname[ 64 ];
 	};
-
-	Tick_t* CreateNewTick( VPANEL panel, int intervalMilliseconds );
 
 	// Returns the current context
 	Context_t *GetContext( HContext context );
@@ -239,9 +228,6 @@ private:
 	bool m_bDoSleep : 1;
 	bool m_InDispatcher : 1;
 	bool m_bDebugMessages : 1;
-	bool m_bVRMode : 1;
-	bool m_bCanRemoveTickSignal : 1;
-	IVEngineClient *m_pVGuiEngine;
 	int m_nReentrancyCount;
 
 	CUtlVector< Tick_t * > m_TickSignalVec;
@@ -286,9 +272,6 @@ CVGui::CVGui() : m_DelayedMessageQueue(0, 4, PriorityQueueComp)
 	m_InDispatcher = false;
 	m_bDebugMessages = false;
 	m_bDoSleep = true;
-	m_bVRMode = false;
-	m_pVGuiEngine = NULL;
-	m_bCanRemoveTickSignal = true;
 	m_nReentrancyCount = 0;
 	m_hContext = DEFAULT_VGUI_CONTEXT;
 	m_DefaultContext.m_hInputContext = DEFAULT_INPUT_CONTEXT;
@@ -329,7 +312,8 @@ void CVGui::SpewAllActivePanelNames()
 		UtlHandle_t h = m_HandleTable.GetHandleFromIndex( i );
 		if ( m_HandleTable.IsHandleValid( h ) )
 		{
-			VPanel *pPanel = m_HandleTable.GetHandle( h );
+			VPanel *pPanel;
+			pPanel = m_HandleTable.GetHandle( h );
 			Msg("\tpanel '%s' of type '%s' leaked\n", g_pIPanel->GetName( (VPANEL)pPanel ), ((VPanel *)pPanel)->GetClassName());
 		}
 	}
@@ -421,6 +405,18 @@ void CVGui::ActivateContext( HContext context )
 	}
 }
 
+
+//-----------------------------------------------------------------------------
+// Resets a particular context, use DEFAULT_VGUI_CONTEXT
+// to get the one normally used by VGUI
+//-----------------------------------------------------------------------------
+void CVGui::ResetContext( HContext context )
+{
+	Assert( (context == DEFAULT_VGUI_CONTEXT) || m_Contexts.IsValidIndex(context) );
+
+	g_pInput->ResetInputContext( GetContext( context )->m_hInputContext ); 
+}
+
 //-----------------------------------------------------------------------------
 // Purpose: Runs a single vgui frame, pumping all message to panels
 //-----------------------------------------------------------------------------
@@ -463,11 +459,13 @@ void CVGui::RunFrame()
 
 	}
 
+#if !defined( LINUX )
 	if ( !bIsReentrant )
 	{
 		VPROF( "input()->RunFrame()" );
 		g_pInput->RunFrame();
 	}
+#endif
 
 	// messenging
 	if ( !bIsReentrant )
@@ -481,17 +479,11 @@ void CVGui::RunFrame()
 		//  until next frame
 		int time = g_pSystem->GetTimeMillis();
 
-		m_bCanRemoveTickSignal = false;
-
-		tmZone( TELEMETRY_LEVEL0, TMZF_NONE, "%s - Ticks", __FUNCTION__ );
 		// directly invoke tick all who asked to be ticked
 		int count = m_TickSignalVec.Count();
 		for (int i = count - 1; i >= 0; i-- )
 		{
 			Tick_t *t = m_TickSignalVec[i];
-			if ( t->bMarkDeleted )
-				continue;
-
 			if ( t->interval != 0 )
 			{
 				if ( time < t->nexttick )
@@ -499,27 +491,21 @@ void CVGui::RunFrame()
 
 				t->nexttick = time + t->interval;
 			}
-			
 			t->panel->Client()->OnTick();
-			tmZone( TELEMETRY_LEVEL0, TMZF_NONE, "%s - Ticks: %s", __FUNCTION__, t->panel->Client()->GetName() );
-		}
-
-		m_bCanRemoveTickSignal = true;
-
-		// get count again. panels could be added to tick vector in OnTick
-		count = m_TickSignalVec.Count();
-
-		// Remove all panels that tried to remove tick in OnTick
-		for (int i = count - 1; i >= 0; i-- )
-		{
-			Tick_t *t = m_TickSignalVec[i];
-			if ( t->bMarkDeleted )
-			{
-				m_TickSignalVec.Remove( i );
-				delete t;
-			}
 		}
 	}
+
+#ifdef LINUX
+    // On Linux we want to run the input frame here instead of before
+    // DispatchMessages() because the way mouse positioning is handled we won't
+    // get an accurate position until after DispatchMessages() is called and
+    // if we RunFrame() before DispatchMessages(), we'll lag focus by a frame.
+    if ( !bIsReentrant )
+    {
+        VPROF( "input()->RunFrame()" );
+        g_pInput->RunFrame();
+    }
+#endif
 
 	{
 		VPROF( "SolveTraverse" );
@@ -527,7 +513,7 @@ void CVGui::RunFrame()
 		g_pSurface->SolveTraverse(g_pSurface->GetEmbeddedPanel());
 		g_pSurface->ApplyChanges();
 #ifdef WIN32
-		Assert( IsX360() || ( IsPC() && _heapchk() == _HEAPOK ) );
+		Assert( IsGameConsole() || ( IsPC() && _heapchk() == _HEAPOK ) );
 #endif
 	}
 
@@ -663,10 +649,11 @@ void CVGui::PanelDeleted(VPanel *focus)
 	RemoveTickSignal( (VPANEL)focus );
 }
 
+
 //-----------------------------------------------------------------------------
-// Purpose: Creates or updates a tick signal for a panel.  Returns NULL if already ticking.
+// Purpose: Adds the panel to a tick signal list, so the panel receives a message every frame
 //-----------------------------------------------------------------------------
-CVGui::Tick_t* CVGui::CreateNewTick( VPANEL panel, int intervalMilliseconds )
+void CVGui::AddTickSignal(VPANEL panel, int intervalMilliseconds /*=0*/ )
 {
 	Tick_t *t;
 	// See if it's already in list
@@ -679,10 +666,7 @@ CVGui::Tick_t* CVGui::CreateNewTick( VPANEL panel, int intervalMilliseconds )
 			// Go ahead and update intervals
 			t->interval = intervalMilliseconds;
 			t->nexttick = g_pSystem->GetTimeMillis() + t->interval;
-
-			// Somebody added this panel back to the tick list, don't delete it
-			t->bMarkDeleted = false;
-			return NULL;
+			return;
 		}
 	}
 
@@ -692,7 +676,6 @@ CVGui::Tick_t* CVGui::CreateNewTick( VPANEL panel, int intervalMilliseconds )
 	t->panel = (VPanel *)panel;
 	t->interval = intervalMilliseconds;
 	t->nexttick = g_pSystem->GetTimeMillis() + t->interval;
-	t->bMarkDeleted = false;
 
 	if ( strlen( ((VPanel *)panel)->Client()->GetName() ) > 0 )
 	{
@@ -703,39 +686,10 @@ CVGui::Tick_t* CVGui::CreateNewTick( VPANEL panel, int intervalMilliseconds )
 		strncpy( t->panelname, ((VPanel *)panel)->Client()->GetClassName(), sizeof( t->panelname ) );
 	}
 
-	return t;
+	// simply add the element to the list 
+	m_TickSignalVec.AddToTail( t );
+	// panel is removed from list when deleted
 }
-
-//-----------------------------------------------------------------------------
-// Purpose: Adds the panel to the tail of a tick signal list, so the panel receives a message every frame
-//-----------------------------------------------------------------------------
-void CVGui::AddTickSignal(VPANEL panel, int intervalMilliseconds /*=0*/ )
-{
-	Tick_t* t = CreateNewTick( panel, intervalMilliseconds );
-
-	if ( t )
-	{
-		// add the element to the end list 
-		m_TickSignalVec.AddToTail( t );
-		// panel is removed from list when deleted
-	}
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: Adds the panel to the head of a tick signal list, so the panel receives a message every frame
-//-----------------------------------------------------------------------------
-void CVGui::AddTickSignalToHead(VPANEL panel, int intervalMilliseconds /*=0*/ )
-{
-	Tick_t* t = CreateNewTick( panel, intervalMilliseconds );
-
-	if ( t )
-	{
-		// simply add the element to the head list 
-		m_TickSignalVec.AddToHead( t );
-		// panel is removed from list when deleted
-	}
-}
-
 
 //-----------------------------------------------------------------------------
 // Purpose: 
@@ -752,16 +706,8 @@ void CVGui::RemoveTickSignal( VPANEL panel )
 		Tick_t *tick = m_TickSignalVec[i];
 		if ( tick->panel == search )
 		{
-			if ( m_bCanRemoveTickSignal )
-			{
-				m_TickSignalVec.Remove( i );
-				delete tick;
-			}
-			else
-			{
-				tick->bMarkDeleted = true;
-			}
-			
+			m_TickSignalVec.Remove( i );
+			delete tick;
 			return;
 		}
 	}
@@ -857,8 +803,26 @@ bool CVGui::DispatchMessages()
 					int nYPos = params->GetInt( "ypos", 0 );
 					g_pInput->UpdateCursorPosInternal( nXPos, nYPos );
 				}
+
+				//=============================================================================
+				// HPE_BEGIN
+				// [dwenger] Handle gamepad joystick movement.
+				//=============================================================================
+				else if ( !Q_stricmp( params->GetName(), "SetJoystickXPosInternal" ) )
+				{
+					int nXPos = params->GetInt( "pos", 0);
+					g_pInput->UpdateJoystickXPosInternal( nXPos );
+				}
+				else if ( !Q_stricmp( params->GetName(), "SetJoystickYPosInternal" ) )
+				{
+					int nYPos = params->GetInt( "pos", 0);
+					g_pInput->UpdateJoystickYPosInternal( nYPos );
+				}
+				//=============================================================================
+				// HPE_END
+				//=============================================================================
 			}
-#ifdef _X360
+#ifdef _GAMECONSOLE
 			else if ( messageItem->_messageTo == 0xFFFFFFFE ) // special tag to always give message to the active key focus
 			{
 				VPanel *vto = (VPanel *) g_pInput->GetCalculatedFocus();
@@ -952,7 +916,7 @@ void CVGui::PostMessage(VPANEL target, KeyValues *params, VPANEL from, float del
 
 	MessageItem_t messageItem;
 	 
-#ifdef _X360
+#ifdef _GAMECONSOLE
 	// Special coded target that will always send the message to the key focus
 	// this is needed since we might send two messages on a tice, and the first
 	// could change the focus.
@@ -970,7 +934,7 @@ void CVGui::PostMessage(VPANEL target, KeyValues *params, VPANEL from, float del
 	messageItem._from = g_pIVgui->PanelToHandle(from);
 	messageItem._arrivalTime = 0;
 	messageItem._messageID = m_iCurrentMessageID++;
-
+	
 	/* message debug code
 	//if ( stricmp(messageItem._params->GetName(),"CursorMoved") && stricmp(messageItem._params->GetName(),"KeyFocusTicked"))
 	{
@@ -1094,11 +1058,7 @@ void CVGui::DPrintf(const char* format,...)
 	Q_vsnprintf(buf,sizeof( buf ), format,argList);
 	va_end(argList);
 
-#ifdef WIN32
-	::OutputDebugString(buf);
-#else
-	Msg( "%s", buf );
-#endif
+	Plat_DebugString(buf);
 }
 
 void CVGui::DPrintf2(const char* format,...)
@@ -1113,18 +1073,14 @@ void CVGui::DPrintf2(const char* format,...)
 	Q_vsnprintf(buf+strlen(buf),sizeof( buf )-strlen(buf),format,argList);
 	va_end(argList);
 
-#ifdef WIN32
-	::OutputDebugString(buf);
-#else
-	Msg( "%s", buf );
-#endif
+	Plat_DebugString(buf);
 }
 
 void vgui::vgui_strcpy(char* dst,int dstLen,const char* src)
 {
-	Assert(dst!=null);
+	Assert(dst!=0);
 	Assert(dstLen>=0);
-	Assert(src!=null);
+	Assert(src!=0);
 
 	int srcLen=strlen(src)+1;
 	if(srcLen>dstLen)
@@ -1141,6 +1097,21 @@ void vgui::vgui_strcpy(char* dst,int dstLen,const char* src)
 //-----------------------------------------------------------------------------
 // Here's where the app systems get to learn about each other 
 //-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+// Get dependencies
+//-----------------------------------------------------------------------------
+static AppSystemInfo_t s_Dependencies[] =
+{
+	{ "localize" DLL_EXT_STRING,	LOCALIZE_INTERFACE_VERSION },
+	{ "vgui2" DLL_EXT_STRING,		VGUI_SURFACE_INTERFACE_VERSION },
+	{ NULL, NULL }
+};
+
+const AppSystemInfo_t* CVGui::GetDependencies()
+{
+	return s_Dependencies;
+}
+
 bool CVGui::Connect( CreateInterfaceFn factory )
 {
 	if ( !BaseClass::Connect( factory ) )
@@ -1152,13 +1123,31 @@ bool CVGui::Connect( CreateInterfaceFn factory )
 		return false;
 	}
 
-	m_pVGuiEngine = (IVEngineClient *)factory( VENGINE_CLIENT_INTERFACE_VERSION, NULL );
+	// Match framework benefits from having localize interface extension
+	if ( g_pMatchFramework )
+	{
+		IMatchExtensions *pExtensions = g_pMatchFramework->GetMatchExtensions();
+		if ( pExtensions )
+		{
+			pExtensions->RegisterExtensionInterface( LOCALIZE_INTERFACE_VERSION, g_pVGuiLocalize );
+		}
+	}
 
 	return VGui_InternalLoadInterfaces( &factory, 1 );
 }
 
 void CVGui::Disconnect()
 {
+	// Match framework need to unregister interface extension
+	if ( g_pMatchFramework )
+	{
+		IMatchExtensions *pExtensions = g_pMatchFramework->GetMatchExtensions();
+		if ( pExtensions )
+		{
+			pExtensions->UnregisterExtensionInterface( LOCALIZE_INTERFACE_VERSION, g_pVGuiLocalize );
+		}
+	}
+
 	// FIXME: Blat out interface pointers
 	BaseClass::Disconnect();
 }

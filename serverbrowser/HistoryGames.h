@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2003, Valve Corporation, All rights reserved. =======
 //
 // Purpose: 
 //
@@ -30,7 +30,7 @@ public:
 	virtual bool SupportsItem(InterfaceItem_e item);
 
 	// called when the current refresh list is complete
-	virtual void RefreshComplete( NServerResponse response );
+	virtual void RefreshComplete( HServerListRequest hReq, EMatchMakingServerResponse response );
 
 	void SetRefreshOnReload() { m_bRefreshOnListReload = true; }
 

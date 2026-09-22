@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: Base rendering utilities for all views
 //
@@ -30,8 +30,8 @@
 #include "VGuiWnd.h"
 #include "Box3D.h"
 #include "MapInstance.h"
-
-extern IMatSystemSurface *g_pMatSystemSurface;
+#include "foundrytool.h"
+#include "tier3/tier3.h"
 
 static float s_fOneUnitLength = 1;
 
@@ -93,7 +93,10 @@ CRender::CRender(void)
 
 	PushInstanceData( NULL, Vector( 0.0f, 0.0f, 0.0f ), QAngle( 0.0f, 0.0f, 0.0f ) ); // always add a default state
 
-	UpdateStudioRenderConfig( false, false );
+	if ( !APP()->IsFoundryMode() )
+	{
+		UpdateStudioRenderConfig( false, false );
+	}
 }
 
 CRender::~CRender(void)
@@ -118,7 +121,36 @@ void CRender::PushInstanceData( CMapInstance *pInstanceClass, Vector &InstanceOr
 	InstanceState.m_pInstanceClass = pInstanceClass;
 	InstanceState.m_pTopInstanceClass = NULL;
 
-	AngleMatrix( InstanceState.m_InstanceAngles, InstanceState.m_InstanceOrigin, Instance3x4Matrix );
+	matrix3x4_t		TransMatrix;
+	matrix3x4_t		RotMatrix;
+	matrix3x4_t		TransRotMatrix;
+
+	AngleMatrix( InstanceState.m_InstanceAngles, RotMatrix );
+	SetIdentityMatrix( TransMatrix );
+	PositionMatrix( InstanceState.m_InstanceOrigin, TransMatrix );
+
+	MatrixMultiply( TransMatrix, RotMatrix, TransRotMatrix );
+
+	Vector vLocalOrigin = vec3_origin;
+	if ( pInstanceClass != NULL && pInstanceClass->GetInstancedMap() != NULL )
+	{
+		CMapEntityList	entityList;
+
+		pInstanceClass->GetInstancedMap()->FindEntitiesByClassName( entityList, "func_instance_origin", false );
+		if ( entityList.Count() == 1 )
+		{
+			entityList.Element( 0 )->GetOrigin( vLocalOrigin );
+		}
+	}
+
+	matrix3x4_t		LocalTransRotMatrix;
+	Vector			vOut;
+	VectorRotate( -vLocalOrigin, RotMatrix, vOut ); 
+	SetIdentityMatrix( TransMatrix );
+	PositionMatrix( vOut, TransMatrix );
+
+	MatrixMultiply( TransMatrix, TransRotMatrix, Instance3x4Matrix );
+
 	InstanceState.m_InstanceMatrix.Init( Instance3x4Matrix );
 
 	Vector		vecTransformedOrigin;
@@ -205,7 +237,7 @@ void CRender::PopInstanceData( void )
 
 	EndLocalTransfrom();
 
-	//	m_CurrentInstanceState.m_InstanceRenderMatrix = m_LocalMatrix.Head();
+//	m_CurrentInstanceState.m_InstanceRenderMatrix = m_LocalMatrix.Head();
 }
 
 
@@ -293,6 +325,7 @@ void CRender::DrawInstanceStencil( void )
 	pRenderContext->SetStencilState( m_ShaderStencilState );
 #endif // STENCIL_AS_CALLS
 }
+
 
 //-----------------------------------------------------------------------------
 // Purpose: this function will push all of the instance data
@@ -394,12 +427,12 @@ void CRender::DrawText( const char *text, int x, int y, int nFlags )
 {
 	wchar_t unicode[ 128 ];
 
-	mbstowcs( unicode, text, ARRAYSIZE(unicode) );
+	mbstowcs( unicode, text, sizeof(unicode) );
 
 	int len = min( 127, Q_strlen( text ) );
 
 	Assert( m_DefaultFont != vgui::INVALID_FONT );
-	bool bJustifyText = nFlags & ( TEXT_JUSTIFY_LEFT | TEXT_JUSTIFY_TOP | TEXT_JUSTIFY_HORZ_CENTER | TEXT_JUSTIFY_VERT_CENTER );
+	bool bJustifyText = ( nFlags & ( TEXT_JUSTIFY_LEFT | TEXT_JUSTIFY_TOP | TEXT_JUSTIFY_HORZ_CENTER | TEXT_JUSTIFY_VERT_CENTER ) ) ? true : false;
 	if ( bJustifyText && m_DefaultFont != vgui::INVALID_FONT )
 	{
 		int wide,tall;
@@ -496,13 +529,14 @@ void CRender::UpdateStudioRenderConfig( bool bFlat, bool bWireframe )
 	g_pStudioRender->UpdateConfig( config );
 }
 
-void CRender::StartRenderFrame()
+void CRender::StartRenderFrame( bool bRenderingOverEngine )
 {
 	Assert( !m_bIsRendering );
+	m_bRenderingOverEngine = bRenderingOverEngine;
 
 	m_nNumInstancesRendered = 0;
 
-	m_bIsRenderingIntoVGUI = dynamic_cast<CVGuiWnd*>( GetView() );
+	m_bIsRenderingIntoVGUI = dynamic_cast<CVGuiWnd*>( GetView() ) ? true : false;
 	if ( m_bIsRenderingIntoVGUI )
 	{
 		g_pMatSystemSurface->DrawSetTextFont( m_DefaultFont );
@@ -510,43 +544,44 @@ void CRender::StartRenderFrame()
 		g_pMatSystemSurface->DrawSetColor( m_DrawColor );
 	}
 
-	int width, height;
-	VMatrix matrix;	
 	CCamera *pCamera = GetCamera();
 
 	CMatRenderContextPtr pRenderContext( MaterialSystemInterface() );
 
 	// build ortho matrix for client space mode
-	pCamera->GetViewPort( width, height );
-	pRenderContext->MatrixMode(MATERIAL_PROJECTION);
-	pRenderContext->LoadIdentity();
-	pRenderContext->Scale( 1, -1, 1 );
-	pRenderContext->Ortho(0, 0, width, height, -99999, 99999 );
-	pRenderContext->GetMatrix( MATERIAL_PROJECTION, &m_OrthoMatrix );
-	
-	// setup world camera
-	pCamera->GetProjMatrix(matrix);
-	pRenderContext->MatrixMode( MATERIAL_PROJECTION );
-	pRenderContext->LoadMatrix( matrix );
+	if ( !bRenderingOverEngine )
+	{
+		int width, height;
+		VMatrix matrix;
+		pCamera->GetViewPort( width, height );
+		pRenderContext->MatrixMode(MATERIAL_PROJECTION);
+		pRenderContext->LoadIdentity();
+		pRenderContext->Scale( 1, -1, 1 );
+		pRenderContext->Ortho(0, 0, width, height, -99999, 99999 );
+		pRenderContext->GetMatrix( MATERIAL_PROJECTION, &m_OrthoMatrix );
+		
+		// setup world camera
+		pCamera->GetProjMatrix(matrix);
+		pRenderContext->MatrixMode( MATERIAL_PROJECTION );
+		pRenderContext->LoadMatrix( matrix );
 
-	pCamera->GetViewMatrix(matrix);
-	pRenderContext->MatrixMode( MATERIAL_VIEW );
-	pRenderContext->LoadMatrix( matrix );
+		pCamera->GetViewMatrix(matrix);
+		pRenderContext->MatrixMode( MATERIAL_VIEW );
+		pRenderContext->LoadMatrix( matrix );
 
-	pRenderContext->MatrixMode(MATERIAL_MODEL);
-	pRenderContext->LoadIdentity();
+		pRenderContext->MatrixMode(MATERIAL_MODEL);
+		pRenderContext->LoadIdentity();
 
-	pRenderContext->SetAmbientLight( 1.0, 1.0, 1.0 );
+		// specular is turned off in the multiblend shader though for the editor
+		Vector vLightDir( 0.0f, 0.0f, -1.0f );
+		pRenderContext->SetVectorRenderingParameter( VECTOR_RENDERPARM_GLOBAL_LIGHT_DIRECTION, vLightDir );
+		pRenderContext->SetFloatRenderingParameter( FLOAT_RENDERPARM_SPECULAR_POWER, 8.0f );
+	}
 
 	pCamera->GetViewMatrix( m_CurrentMatrix );
 
 	// Disable all the lights..
-	for( int i = 0; i < MaterialSystemHardwareConfig()->MaxNumLights(); ++i)
-	{
-		LightDesc_t desc;
-		desc.m_Type = MATERIAL_LIGHT_DISABLE;
-		pRenderContext->SetLight( i, desc );
-	}
+	pRenderContext->DisableAllLocalLights();
 
 	m_bIsClientSpace = false;
 
@@ -562,7 +597,7 @@ void CRender::StartRenderFrame()
     s_fOneUnitLength = 1/pCamera->GetZoom();
 
 	// tell studiorender that we've updated the camera.
-	if( g_pStudioRender )
+	if( !bRenderingOverEngine && g_pStudioRender )
 	{
 		g_pStudioRender->BeginFrame();
 
@@ -703,7 +738,12 @@ bool CRender::BeginClientSpace(void)
 
 	pRenderContext->MatrixMode(MATERIAL_VIEW);
 	pRenderContext->PushMatrix();
+	// For DX9, we need to offset vertex positions by 1/2 pixel, so that pixel and texel centers fall on the same spot.
+	// If we don't do this, we are at relying on undefined behavior in the various GPUs' texture units, and e.g. the 4800 series
+	// will render garbage text because of it. If Hammer ever needs to run on top of GL or D3D10/11, this translate has to
+	// become conditional based on the API we're using.
 	pRenderContext->LoadIdentity();
+	pRenderContext->Translate( -.5f, .5f, 0.0f );
 
 	if ( m_bIsLocalTransform )
 	{
@@ -1037,7 +1077,7 @@ bool CRender::SetView( CMapView * pView )
 	m_pFlatNoZ[1] = m_pFlatNoZ[0];
 	m_pFlatNoCull[1] = m_pFlatNoCull[0];
 	m_pWireframe[1] = m_pWireframe[0];
-	m_pDotted[1] = m_pDotted[0];
+	m_pWireframe[1] = m_pDotted[0];
 	m_pSelectionOverlay[1] = m_pSelectionOverlay[0];
 	
 	return true;
@@ -1146,23 +1186,60 @@ void CRender::DrawDisplacement( CCoreDispInfo *pMapDisp )
 	m_pMesh->Draw();
 }
 
-void CRender::DrawModel( DrawModelInfo_t* pInfo, matrix3x4_t *pBoneToWorld, const Vector &vOrigin, float fAlpha, bool bWireFrame )
+void CRender::DrawModel( DrawModelInfo_t* pInfo, matrix3x4_t *pBoneToWorld, const Vector &vOrigin, float fAlpha, bool bWireFrame, const Color &color )
 {
+	if ( m_bRenderingOverEngine && g_pFoundryTool && !g_pFoundryTool->ShouldRender3DModels() )
+		return;
+
+	// In Foundry mode, the engine owns the studiorender config, so we must restore it after we draw a model.
+	StudioRenderConfig_t oldConfig;
+	if ( APP()->IsFoundryMode() )
+	{
+		g_pStudioRender->GetCurrentConfig( oldConfig );
+	}
 	UpdateStudioRenderConfig( true, bWireFrame );
 		
 	g_pStudioRender->SetAlphaModulation( fAlpha );
+
+	float col[3];
+	col[0] = color.r() / 255.0f;
+	col[1] = color.g() / 255.0f;
+	col[2] = color.b() / 255.0f;
+	g_pStudioRender->SetColorModulation( col );
 
 	Vector viewOrigin;
 	GetCamera()->GetViewPoint( viewOrigin );
 
 	g_pStudioRender->SetEyeViewTarget( pInfo->m_pStudioHdr, pInfo->m_Body, viewOrigin );
 
-	g_pStudioRender->DrawModel( NULL, *pInfo, pBoneToWorld, NULL, NULL, vOrigin, STUDIORENDER_DRAW_ENTIRE_MODEL );
+	if ( m_bRenderingOverEngine )
+	{
+		IMaterial *pMat = MaterialSystemInterface()->FindMaterial( "models/editor/white_model_outline", TEXTURE_GROUP_OTHER );
+		g_pStudioRender->ForcedMaterialOverride( pMat, OVERRIDE_NORMAL );
+		g_pStudioRender->SetAlphaModulation( 0.3f );
+
+		g_pStudioRender->DrawModel( NULL, *pInfo, pBoneToWorld, NULL, NULL, vOrigin, STUDIORENDER_DRAW_ENTIRE_MODEL );
+
+		g_pStudioRender->SetAlphaModulation( 1 );
+		g_pStudioRender->ForcedMaterialOverride( NULL, OVERRIDE_NORMAL );
+	}
+	else
+	{
+		g_pStudioRender->DrawModel( NULL, *pInfo, pBoneToWorld, NULL, NULL, vOrigin, STUDIORENDER_DRAW_ENTIRE_MODEL );
+	}
 
 	g_pStudioRender->SetAlphaModulation( 1.0f );
+	col[0] = col[1] = col[2] = 1.0f;
+	g_pStudioRender->SetColorModulation( col );
 
 	// force rendermode reset
 	SetRenderMode( RENDER_MODE_CURRENT, true );
+	
+	// Restore the studiorender config.
+	if ( APP()->IsFoundryMode() )
+	{
+		g_pStudioRender->UpdateConfig( oldConfig );
+	}
 }
 
 void CRender::DrawCollisionModel( MDLHandle_t mdlHandle, const VMatrix &mViewMatrix )

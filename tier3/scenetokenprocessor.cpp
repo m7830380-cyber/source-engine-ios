@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2005, Valve Corporation, All rights reserved. =======
 //
 // Purpose: 
 //
@@ -10,6 +10,9 @@
 #include "../game/shared/choreoevent.h"
 #include "../game/shared/iscenetokenprocessor.h"
 #include "characterset.h"
+
+// NOTE: This has to be the last file included!
+#include "tier0/memdbgon.h"
 
 
 //-----------------------------------------------------------------------------
@@ -131,7 +134,7 @@ bool CSceneTokenProcessor::GetToken( bool crossline )
 {
 	// NOTE: crossline is ignored here, may need to implement if needed
 	m_pBuffer = ParseNextToken( m_pBuffer );
-	if ( m_szToken[0] )
+	if ( Q_strlen( m_szToken ) >= 0 )
 		return true;
 	return false;
 }

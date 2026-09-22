@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2005, Valve Corporation, All rights reserved. =======
 //
 // Purpose: 
 //
@@ -9,17 +9,19 @@
 
 #include "filesystem.h"
 #include "dme_controls/soundpicker.h"
-#include "tier1/KeyValues.h"
+#include "tier1/keyvalues.h"
 #include "vgui_controls/ListPanel.h"
 #include "vgui_controls/Button.h"
 #include "vgui_controls/PropertySheet.h"
 #include "vgui_controls/PropertyPage.h"
 #include "dme_controls/filtercombobox.h"
-#include "vgui/ISurface.h"
+#include "vgui/isurface.h"
 #include "vgui/iinput.h"
 #include "dme_controls/dmecontrols.h"
 #include "soundemittersystem/isoundemittersystembase.h"
 #include "mathlib/mathlib.h"
+#include "soundchars.h"
+#include "tier1/fmtstr.h"
 
 // FIXME: Move sound code out of the engine + into a library!
 #include "toolframework/ienginetool.h"
@@ -110,16 +112,6 @@ CSoundPicker::CSoundPicker( vgui::Panel *pParent, int nFlags ) :
 	LoadControlSettings( "resource/soundpicker.res" );
 }
 
-
-//-----------------------------------------------------------------------------
-// Purpose: Destructor
-//-----------------------------------------------------------------------------
-CSoundPicker::~CSoundPicker()
-{
-	StopSoundPreview();
-}
-
-
 //-----------------------------------------------------------------------------
 // Purpose: called to open
 //-----------------------------------------------------------------------------
@@ -158,20 +150,20 @@ void CSoundPicker::SetSelectedSound( PickType_t type, const char *pSoundName )
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-void CSoundPicker::OnKeyCodePressed( KeyCode code )
+void CSoundPicker::OnKeyCodeTyped( KeyCode code )
 {
 	if ( m_pGameSoundPage && ( m_pViewsSheet->GetActivePage() == m_pGameSoundPage ) )
 	{
 		if (( code == KEY_UP ) || ( code == KEY_DOWN ) || ( code == KEY_PAGEUP ) || ( code == KEY_PAGEDOWN ))
 		{
-			KeyValues *pMsg = new KeyValues( "KeyCodePressed", "code", code );
+			KeyValues *pMsg = new KeyValues( "KeyCodeTyped", "code", code );
 			vgui::ipanel()->SendMessage( m_pGameSoundList->GetVPanel(), pMsg, GetVPanel() );
 			pMsg->deleteThis();
 			return;
 		}
 	}
 
-	BaseClass::OnKeyCodePressed( code );
+	BaseClass::OnKeyCodeTyped( code );
 }
 
 
@@ -289,7 +281,7 @@ void CSoundPicker::OnGameSoundFilterTextChanged( )
 	m_GameSoundFilter.SetLength( nLength );
 	if ( nLength > 0 )
 	{
-		m_pGameSoundFilter->GetText( m_GameSoundFilter.GetForModify(), nLength+1 );
+		m_pGameSoundFilter->GetText( m_GameSoundFilter.Get(), nLength+1 );
 	}
 	RefreshGameSoundList();
 }
@@ -374,8 +366,14 @@ void CSoundPicker::PlayGameSound( const char *pSoundName )
 void CSoundPicker::PlayWavSound( const char *pSoundName )
 {
 	StopSoundPreview();
-	m_nPlayingSound = EngineTool()->StartSound( 0, true, -1, CHAN_STATIC, pSoundName, 
-		VOL_NORM, SNDLVL_NONE, vec3_origin, vec3_origin, 0, PITCH_NORM, false, 0 );
+
+	if ( pSoundName[ 0 ] )
+	{
+		EngineTool()->ValidateSoundCache( CFmtStr( "sound\\%s", PSkipSoundChars( pSoundName ) ) );
+
+		m_nPlayingSound = EngineTool()->StartSound( 0, true, -1, CHAN_STATIC, pSoundName, 
+			VOL_NORM, SNDLVL_NONE, vec3_origin, vec3_origin, 0, PITCH_NORM, false, 0 );
+	}
 }
 
 
@@ -515,6 +513,13 @@ CSoundPickerFrame::~CSoundPickerFrame()
 {
 }
 
+void CSoundPickerFrame::OnClose()
+{
+	CSoundPicker *pPicker = static_cast <CSoundPicker*>( GetAssetPicker() );
+	pPicker->StopSoundPreview();
+
+	BaseClass::OnClose();
+}
 
 //-----------------------------------------------------------------------------
 // Purpose: Activate the dialog
@@ -543,6 +548,11 @@ void CSoundPickerFrame::OnCommand( const char *pCommand )
 		if (( type == CSoundPicker::PICK_GAMESOUNDS ) || ( type == CSoundPicker::PICK_WAVFILES ))
 		{
 			const char *pSoundName = pPicker->GetSelectedSoundName();
+			if ( !pSoundName )
+			{
+				CloseModal();
+				return;
+			}
 
 			int len = V_strlen( pSoundName );
 			char *soundname = ( char* )stackalloc( len + 2 );
@@ -578,15 +588,14 @@ void CSoundPickerFrame::OnCommand( const char *pCommand )
 				{
 					char pBuf[32];
 					Q_snprintf( pBuf, sizeof(pBuf), "%d", i );
-					pSoundName = pPicker->GetSelectedSoundName( i );
+					const char *pSoundName = pPicker->GetSelectedSoundName( i );
 
-					len = V_strlen( pSoundName );
-					soundname = ( char* )malloc( len + 2 );
+					int len = V_strlen( pSoundName );
+					char *soundname = ( char* )stackalloc( len + 2 );
 					soundname[ 0 ] = '#'; // mark sound to bypass the dsp
 					V_strncpy( soundname + 1, pSoundName, len + 1 );
 
 					pSoundList->SetString( pBuf, soundname );
-					free( soundname );
 				}
 			}
 
@@ -598,5 +607,3 @@ void CSoundPickerFrame::OnCommand( const char *pCommand )
 
 	BaseClass::OnCommand( pCommand );
 }
-
-	

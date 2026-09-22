@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: Rendering and mouse handling in the 2D view.
 //
@@ -21,6 +21,7 @@
 #include "Manifest.h"
 #include "MapInstance.h"
 #include "Options.h"
+#include "..\FoW\FoW.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include <tier0/memdbgon.h>
@@ -213,8 +214,70 @@ void CMapView2D::AddToRenderLists(CMapClass *pObject)
 	const CMapObjectList *pChildren = pObject->GetChildren();
 	FOR_EACH_OBJ( *pChildren, pos )
 	{
-		AddToRenderLists(pChildren->Element(pos));
+		AddToRenderLists((CUtlReference< CMapClass >)pChildren->Element(pos));
 	}
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: horribly inefficient rendering mechanism for FoW.  Demonstration purposes only!
+//-----------------------------------------------------------------------------
+void CMapView2D::RenderFoW( void )
+{
+	CRender2D	*pRender = GetRender();
+	CFoW		*pFoW = GetMapDoc()->GetFoW();
+	Vector		MinCoord, MaxCoord, MinDrawCoord, MaxDrawCoord;
+	Vector2D	DrawMins, DrawMaxs;
+	int			GridSize = pFoW->GetHorizontalGridSize();
+	int			MidPoint = GridSize / 2;
+	Color		color;
+
+	pFoW->GetSize( MinCoord, MaxCoord );
+
+	MinDrawCoord.z = MaxDrawCoord.z = 0;
+//	pFoW->SnapCoordsToGrid( m_ViewMin, MinCoord, true );
+//	pFoW->SnapCoordsToGrid( m_ViewMax, MaxCoord, false );
+
+	pRender->PushRenderMode( RENDER_MODE_FLAT_NOZ );
+	bool bPopMode = pRender->BeginClientSpace();
+
+	for( int x = MinCoord.x; x < MaxCoord.x; x += GridSize )
+	{
+		MinDrawCoord.x = x;
+		MaxDrawCoord.x = x + GridSize - 1;
+
+		for( int y = MinCoord.y; y < MaxCoord.y; y += GridSize )
+		{
+			float Degree = pFoW->LookupVisibilityDegree( x + MidPoint, y + MidPoint, 0 );
+			Degree = ( ( Degree * 0.25f ) + 0.0f ) * 255;
+
+			if ( Degree >= 0.95f )
+			{
+				continue;
+			}
+
+			color.SetColor( 255, 0, 255, Degree );
+
+			pRender->SetDrawColor( color );
+
+			MaxDrawCoord.y = y;
+			MinDrawCoord.y = y + GridSize - 1;
+
+			pRender->TransformPoint( DrawMins, MinDrawCoord );
+			pRender->TransformPoint( DrawMaxs, MaxDrawCoord );
+
+			pRender->DrawFilledRect( DrawMins, DrawMaxs, ( byte * )&color, false );
+		}
+	}
+
+	color.SetColor( 255, 255, 255, 255 );
+	pRender->SetDrawColor( color );
+
+	if ( bPopMode )
+	{
+		pRender->EndClientSpace();
+	}
+	pRender->PopRenderMode();
 }
 
 
@@ -224,17 +287,22 @@ void CMapView2D::AddToRenderLists(CMapClass *pObject)
 //-----------------------------------------------------------------------------
 void CMapView2D::Render()
 {
-
+	// When in Foundry mode, the engine's vgui loop can cause Hammer's vgui windows to want to be drawn and we don't want that.
+	// In any case, don't draw unless we're inside CVGuiWnd::DrawVGuiPanel or else windows and viewports will be all wrong.
+	if ( !m_bIsDrawing )
+		return;
+	
 	CMapDoc		*pDoc = GetMapDoc();
 	CMapWorld	*pWorld = pDoc->GetMapWorld();
 	CManifest	*pManifest = pDoc->GetManifest();
+
+	GetRender()->StartRenderFrame( false );
 
 	if ( pManifest )
 	{
 		pWorld = pManifest->GetManifestWorld();
 	}
 
-	GetRender()->StartRenderFrame();
 	
 	if ( Options.general.bRadiusCulling )
 	{
@@ -309,6 +377,11 @@ void CMapView2D::Render()
 	}
 
 	GetRender()->DrawInstanceStencil();
+
+	if ( pDoc->GetFoW() && m_eDrawType == VIEW2D_XY )
+	{	// only render the fog of war on the 2d top down view
+		RenderFoW();
+	}
 
 	//
 	// Draw pointfile if enabled.
@@ -385,7 +458,7 @@ void CMapView2D::RenderInstanceMapClass_r( CMapClass *pObject )
 			return;
 		}
 
-		Vector vecMins, vecMaxs, vecExpandedMins, vecExpandedMaxs;
+		Vector vecMins, vecMaxs, vecExpandedMins, vecExpandedMaxs, vecOrigin;
 		pObject->GetCullBox( vecMins, vecMaxs );
 		GetRender()->TransformInstanceAABB( vecMins, vecMaxs, vecExpandedMins, vecExpandedMaxs );
 
@@ -394,7 +467,7 @@ void CMapView2D::RenderInstanceMapClass_r( CMapClass *pObject )
 			// Make sure the object is in the update region.
 			if ( !IsInClientView( vecExpandedMins, vecExpandedMaxs ) )
 			{
-				return; 
+       			return; 
 			}
 		}
 
@@ -405,7 +478,7 @@ void CMapView2D::RenderInstanceMapClass_r( CMapClass *pObject )
 	const CMapObjectList *pChildren = pObject->GetChildren();
 	FOR_EACH_OBJ( *pChildren, pos )
 	{
-		RenderInstanceMapClass_r(pChildren->Element(pos));
+		RenderInstanceMapClass_r((CUtlReference< CMapClass >)pChildren->Element(pos));
 	}
 }
 
@@ -427,7 +500,7 @@ void CMapView2D::SetDrawType(DrawType_t drawType)
 	if ( pDoc && !pDoc->GetSelection()->IsEmpty() )
 	{
 		Vector vCenter;
-		GetMapDoc()->GetSelection()->GetBoundsCenter( vCenter );
+		pDoc->GetSelection()->GetBoundsCenter( vCenter );
 		vOldView[axThird] = vCenter[axThird];
 	}
 	else
@@ -563,7 +636,7 @@ BOOL CMapView2D::OnToolsAlign(UINT nID)
 
 	for (int i = 0; i < pSelList->Count(); i++)
 	{
-		CMapClass *pObject = pSelList->Element(i);
+		CMapClass *pObject = (CUtlReference< CMapClass >)pSelList->Element(i);
 
 		Vector vecMins;
 		Vector vecMaxs;
@@ -632,7 +705,7 @@ BOOL CMapView2D::OnFlip(UINT nID)
 	// do flip
 	for (int i = 0; i < pSelList->Count(); i++)
 	{
-		CMapClass *pObject = pSelList->Element(i);
+		CMapClass *pObject = (CUtlReference< CMapClass >)pSelList->Element(i);
 		pObject->TransScale(ptRef,vScale);
 	}
 

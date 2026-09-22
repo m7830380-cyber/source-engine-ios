@@ -1,11 +1,11 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: Singleton dialog that generates and presents the entity report.
 //
 //===========================================================================//
 
 #include "particlesystemdefinitionbrowser.h"
-#include "tier1/KeyValues.h"
+#include "tier1/keyvalues.h"
 #include "tier1/utlbuffer.h"
 #include "iregistry.h"
 #include "vgui/ivgui.h"
@@ -18,13 +18,10 @@
 #include "vgui/keycode.h"
 #include "dme_controls/dmecontrols_utils.h"
 #include "dme_controls/particlesystempanel.h"
-#include "filesystem.h"
-#include "vgui_controls/FileOpenDialog.h"
+#include "matsys_controls/particlepicker.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include <tier0/memdbgon.h>
-
-
 
 using namespace vgui;
 
@@ -48,16 +45,41 @@ CParticleSystemDefinitionBrowser::CParticleSystemDefinitionBrowser( CPetDoc *pDo
 {
 	SetKeyBoardInputEnabled( true );
 	SetPaintBackgroundEnabled( true );
+	m_pSystemGrid = new CParticleSnapshotGrid( this, "SnapshotGrid" );
+	m_pSystemGrid->AddActionSignalTarget(this);
 
-	m_pParticleSystemsDefinitions = new vgui::ListPanel( this, "ParticleSystems" );
-	m_pParticleSystemsDefinitions->AddColumnHeader( 0, "name", "Name", 52, ListPanel::COLUMN_RESIZEWITHWINDOW );
-	m_pParticleSystemsDefinitions->SetColumnSortable( 0, true );
-	m_pParticleSystemsDefinitions->SetEmptyListText( "No Particle System Definitions" );
- 	m_pParticleSystemsDefinitions->AddActionSignalTarget( this );
-	m_pParticleSystemsDefinitions->SetSortFunc( 0, ParticleSystemNameSortFunc );
-	m_pParticleSystemsDefinitions->SetSortColumn( 0 );
+	CBoxSizer *pBaseSizer = new CBoxSizer( ESLD_HORIZONTAL );
 
-	LoadControlSettingsAndUserConfig( "resource/particlesystemdefinitionbrowser.res" );
+	{
+		CBoxSizer *pDefinitionSizer = new CBoxSizer( ESLD_VERTICAL );
+		pDefinitionSizer->AddPanel( new Label( this, "ParticleSystemsLabel", "Particle System Definitions:" ), SizerAddArgs_t() );
+		pDefinitionSizer->AddPanel( m_pSystemGrid, SizerAddArgs_t().Expand( 1.0f ) );
+		{
+			CBoxSizer *pBottomRowSizer = new CBoxSizer( ESLD_HORIZONTAL );
+			pBottomRowSizer->AddPanel( new Button( this, "SaveButton", "Save", this, "save" ), SizerAddArgs_t() );
+			pBottomRowSizer->AddPanel( new Button( this, "SaveAndTestButton", "Save and Test", this, "SaveAndTest" ), SizerAddArgs_t() );
+			pDefinitionSizer->AddSizer( pBottomRowSizer, SizerAddArgs_t() );
+		}
+		pBaseSizer->AddSizer( pDefinitionSizer, SizerAddArgs_t().Expand( 1.0f ) );
+	}
+
+	{
+		CBoxSizer *pButtonColSizer = new CBoxSizer( ESLD_VERTICAL );
+		m_pCreateButton = new Button( this, "CreateButton", "Create", this, "Create" );
+		pButtonColSizer->AddPanel( m_pCreateButton, SizerAddArgs_t() );
+
+		m_pDeleteButton = new Button( this, "DeleteButton", "Delete", this, "Delete" );
+		m_pDeleteButton->SetEnabled(false);
+		pButtonColSizer->AddPanel( m_pDeleteButton, SizerAddArgs_t() );
+
+		m_pCopyButton = new Button( this, "CopyButton", "Duplicate", this, "Copy" );
+		m_pCopyButton->SetEnabled(false);
+		pButtonColSizer->AddPanel( m_pCopyButton, SizerAddArgs_t() );
+
+		pBaseSizer->AddSizer( pButtonColSizer, SizerAddArgs_t() );
+	}
+
+	SetSizer( pBaseSizer );
 
 	UpdateParticleSystemList();
 }
@@ -73,9 +95,11 @@ CParticleSystemDefinitionBrowser::~CParticleSystemDefinitionBrowser()
 //-----------------------------------------------------------------------------
 CDmeParticleSystemDefinition* CParticleSystemDefinitionBrowser::GetSelectedParticleSystem( int i )
 {
-	int iSel = m_pParticleSystemsDefinitions->GetSelectedItem( i );
-	KeyValues *kv = m_pParticleSystemsDefinitions->GetItem( iSel );
-	return GetElementKeyValue< CDmeParticleSystemDefinition >( kv, "particleSystem" );
+	if ( i < 0 || i >= m_pSystemGrid->GetSelectedSystemCount() )
+		return NULL;
+
+	int iSel = m_pSystemGrid->GetSelectedSystemId(i);
+	return m_pDoc->GetParticleSystem(iSel);
 }
 
 
@@ -83,18 +107,16 @@ CDmeParticleSystemDefinition* CParticleSystemDefinitionBrowser::GetSelectedParti
 // Purpose: Deletes the marked objects.
 //-----------------------------------------------------------------------------
 void CParticleSystemDefinitionBrowser::DeleteParticleSystems()
-{		
-	int iSel = m_pParticleSystemsDefinitions->GetSelectedItem( 0 );
-	int nRow = m_pParticleSystemsDefinitions->GetItemCurrentRow( iSel ) - 1;
+{
 	{
 		// This is undoable
-		CAppUndoScopeGuard guard( NOTIFY_SETDIRTYFLAG, "Delete Particle Systems", "Delete Particle Systems" );
+		CAppUndoScopeGuard guard( NOTIFY_SETDIRTYFLAG|NOTIFY_FLAG_PARTICLESYS_ADDED_OR_REMOVED, "Delete Particle Systems", "Delete Particle Systems" );
 
 		//
 		// Build a list of objects to delete.
 		//
 		CUtlVector< CDmeParticleSystemDefinition* > itemsToDelete;
-		int nCount = m_pParticleSystemsDefinitions->GetSelectedItemsCount();
+		int nCount = m_pSystemGrid->GetSelectedSystemCount();
 		for (int i = 0; i < nCount; i++)
 		{
 			CDmeParticleSystemDefinition *pParticleSystem = GetSelectedParticleSystem( i );
@@ -104,191 +126,19 @@ void CParticleSystemDefinitionBrowser::DeleteParticleSystems()
 			}
 		}
 
+		m_pSystemGrid->DeselectAll();
+
 		nCount = itemsToDelete.Count();
 		for ( int i = 0; i < nCount; ++i )
 		{
 			m_pDoc->DeleteParticleSystemDefinition( itemsToDelete[i] );
 		}
-	}
 
-	// Update the list box selection.
-	if ( m_pParticleSystemsDefinitions->GetItemCount() > 0 )
-	{
-		if ( nRow < 0 )
-		{
-			nRow = 0;
-		}
-		else if ( nRow >= m_pParticleSystemsDefinitions->GetItemCount() ) 
-		{
-			nRow = m_pParticleSystemsDefinitions->GetItemCount() - 1;
-		}
-
-		iSel = m_pParticleSystemsDefinitions->GetItemIDFromRow( nRow );
-		m_pParticleSystemsDefinitions->SetSingleSelectedItem( iSel );
-	}
-	else
-	{
-		m_pParticleSystemsDefinitions->ClearSelectedItems();
+		g_pPetTool->SetCurrentParticleSystem( NULL, true );
 	}
 }
 
-//-----------------------------------------------------------------------------
-void CParticleSystemDefinitionBrowser::LoadKVSection( CDmeParticleSystemDefinition *pNew, KeyValues *pOverridesKv, ParticleFunctionType_t eType )
-{
-	// Operator KV
-	KeyValues *pOperator = pOverridesKv->FindKey( GetParticleFunctionTypeName(eType), NULL );
-	if ( !pOperator )
-		return;
 
-	// Function
-	FOR_EACH_TRUE_SUBKEY( pOperator, pFunctionBlock )
-	{
-		int iFunction = pNew->FindFunction( eType, pFunctionBlock->GetName() );
-		if ( iFunction >= 0 )
-		{
-			CDmeParticleFunction *pDmeFunction = pNew->GetParticleFunction( eType, iFunction );
-			// Elements
-			FOR_EACH_SUBKEY( pFunctionBlock, pAttributeItem )
-			{
-				CDmAttribute *pAttribute = pDmeFunction->GetAttribute( pAttributeItem->GetName() );
-				if ( !pAttribute )
-				{
-					Warning( "Unable to Find Attribute [%s] in Function [%s] in Operator [%s] for Definition [%s]\n", pAttributeItem->GetName(), pFunctionBlock->GetName(), GetParticleFunctionTypeName(eType), pNew->GetName() );
-				}
-				else
-				{
-					pAttribute->SetValueFromString( pAttributeItem->GetString() );
-				}
-			}
-		}
-		else
-		{
-			Warning( "Function [%s] not found under Operator [%s] for Definition [%s]\n", pFunctionBlock->GetName(), GetParticleFunctionTypeName(eType), pNew->GetName() );
-		}
-	}
-
-}
-
-//-----------------------------------------------------------------------------
-// Given a KV, create, add and return an effect
-//-----------------------------------------------------------------------------
-CDmeParticleSystemDefinition* CParticleSystemDefinitionBrowser::CreateParticleFromKV( KeyValues *pKeyValue )
-{
-	CDmeParticleSystemDefinition* pBaseParticleDef = NULL;
-
-	// Get the Base Particle Effect Def
-	const char* pBaseParticleName = pKeyValue->GetString( "base_effect", "" );
-	for ( int i = 0; i < m_pParticleSystemsDefinitions->GetItemCount(); ++i )
-	{
-		KeyValues *kv = m_pParticleSystemsDefinitions->GetItem( i );
-		if ( !V_strcmp( kv->GetString( "name", "" ), pBaseParticleName ) )
-		{
-			// 
-			pBaseParticleDef = GetElementKeyValue< CDmeParticleSystemDefinition >( kv, "particleSystem" );
-			break;
-		}
-	}
-
-	// Base Particle could not be found, end;
-	if ( !pBaseParticleDef )
-	{
-		Warning( "Unable to to find base particle system [%s]", pBaseParticleName );
-		return NULL;
-	}
-
-	// Create a Copy of the Base Effect
-	const char *pszNewParticleName = pKeyValue->GetName();
-	//CAppUndoScopeGuard guard( NOTIFY_SETDIRTYFLAG, "Copy Particle System", "Copy Particle System" );
-	CDmeParticleSystemDefinition *pNew = CastElement<CDmeParticleSystemDefinition>( pBaseParticleDef->Copy() );
-	pNew->SetName( pszNewParticleName );
-
-	// Overrides
-	// 
-	//"properties"
-	KeyValues *pProperties = pKeyValue->FindKey( "Properties", NULL );
-	if ( pProperties )
-	{
-		FOR_EACH_SUBKEY( pProperties, pProperty )
-		{
-			CDmAttribute *pAttribute = pNew->GetAttribute( pProperty->GetName() );
-			if ( !pAttribute )
-			{
-				Warning( "Unable to Find Attribute [%s] in Function [%s]\n", pProperty->GetName(), "Properties" );
-			}
-			else
-			{
-				pAttribute->SetValueFromString( pProperty->GetString() );
-			}
-		}
-	}
-
-	LoadKVSection( pNew, pKeyValue, FUNCTION_RENDERER );
-	LoadKVSection( pNew, pKeyValue, FUNCTION_OPERATOR );
-	LoadKVSection( pNew, pKeyValue, FUNCTION_INITIALIZER );
-	LoadKVSection( pNew, pKeyValue, FUNCTION_EMITTER );
-	LoadKVSection( pNew, pKeyValue, FUNCTION_FORCEGENERATOR );
-	LoadKVSection( pNew, pKeyValue, FUNCTION_CONSTRAINT );
-
-	// Remove copied children
-	int iChildrenCount = pNew->GetParticleFunctionCount( FUNCTION_CHILDREN );
-	for ( int i = iChildrenCount - 1; i >= 0; i-- )
-	{
-		pNew->RemoveFunction( FUNCTION_CHILDREN, i );
-	}
-
-	// Search Children
-	KeyValues *pChildren = pKeyValue->FindKey( "Children", NULL );
-	if ( pChildren )
-	{
-		FOR_EACH_TRUE_SUBKEY( pChildren, pChild )
-		{
-			// each Child is its own effect so we need to add it and return it
-			CDmeParticleSystemDefinition* pChildEffect = CreateParticleFromKV( pChild );
-			if ( pChildEffect )
-			{
-				pNew->AddChild( pChildEffect );
-			}
-		}
-	}
-
-	m_pDoc->ReplaceParticleSystemDefinition( pNew );
-	m_pDoc->UpdateAllParticleSystems();
-	return pNew;
-}
-//-----------------------------------------------------------------------------
-// Create from KV
-void CParticleSystemDefinitionBrowser::CreateParticleSystemsFromKV( const char *pFileName )
-{
-	// 
-	//const char * pFileName = "particles\\_weapon_prefab_override_kv.txt";
-
-	CUtlBuffer bufRawData;
-	bool bReadFileOK = g_pFullFileSystem->ReadFile( pFileName, "MOD", bufRawData );
-	if ( !bReadFileOK )
-	{
-		Warning( "Unable to Open KV file [%s]\n", pFileName );
-		return;
-	}
-
-	// Wrap it with a text buffer reader
-	CUtlBuffer bufText( bufRawData.Base(), bufRawData.TellPut(), CUtlBuffer::READ_ONLY | CUtlBuffer::TEXT_BUFFER );
-
-	KeyValues *pBaseKeyValue = NULL;
-	pBaseKeyValue = new KeyValues( "CCreateParticlesFromKV" );
-	
-	if ( !pBaseKeyValue->LoadFromBuffer( NULL, bufText ) )
-	{
-		Warning( "Unable to Read KV file [%s]\n", pFileName );
-		pBaseKeyValue->deleteThis();
-		return;
-	}
-
-	FOR_EACH_TRUE_SUBKEY( pBaseKeyValue, pKVOver )
-	{
-		CreateParticleFromKV( pKVOver );
-	}
-
-}
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
@@ -304,20 +154,15 @@ void CParticleSystemDefinitionBrowser::OnKeyCodeTyped( vgui::KeyCode code )
 	}
 }
 
-//-----------------------------------------------------------------------------
-void CParticleSystemDefinitionBrowser::OnFileSelected(const char *fullpath)
-{
-	CreateParticleSystemsFromKV( fullpath );
-}
+
 //-----------------------------------------------------------------------------
 // Called when the selection changes
 //-----------------------------------------------------------------------------
 void CParticleSystemDefinitionBrowser::UpdateParticleSystemSelection()
 {
-	if ( m_pParticleSystemsDefinitions->GetSelectedItemsCount() == 1 )
+	if ( m_pSystemGrid->GetSelectedSystemCount() == 1 )
 	{
-		CDmeParticleSystemDefinition *pParticleSystem = GetSelectedParticleSystem( 0 );
-		g_pPetTool->SetCurrentParticleSystem( pParticleSystem, false );
+		g_pPetTool->SetCurrentParticleSystem( m_pDoc->GetParticleSystem( m_pSystemGrid->GetSelectedSystemId(0) ), false );
 	}
 	else
 	{
@@ -326,18 +171,15 @@ void CParticleSystemDefinitionBrowser::UpdateParticleSystemSelection()
 }
 
 
-//-----------------------------------------------------------------------------
-// Item selection/deselection
-//-----------------------------------------------------------------------------
-void CParticleSystemDefinitionBrowser::OnItemSelected( void )
+void CParticleSystemDefinitionBrowser::OnParticleSystemSelectionChanged( )
 {
 	UpdateParticleSystemSelection();
+
+	bool bAnySelected = ( m_pSystemGrid->GetSelectedSystemCount() > 0 );
+	m_pDeleteButton->SetEnabled( bAnySelected );
+	m_pCopyButton->SetEnabled( bAnySelected );
 }
 
-void CParticleSystemDefinitionBrowser::OnItemDeselected( void )
-{
-	UpdateParticleSystemSelection();
-}
 
 
 //-----------------------------------------------------------------------------
@@ -345,14 +187,11 @@ void CParticleSystemDefinitionBrowser::OnItemDeselected( void )
 //-----------------------------------------------------------------------------
 void CParticleSystemDefinitionBrowser::SelectParticleSystem( CDmeParticleSystemDefinition *pFind )
 {
-	m_pParticleSystemsDefinitions->ClearSelectedItems();
-	for ( int nItemID = m_pParticleSystemsDefinitions->FirstItem(); nItemID != m_pParticleSystemsDefinitions->InvalidItemID(); nItemID = m_pParticleSystemsDefinitions->NextItem( nItemID ) )
+	for ( int i = 0; i < m_pDoc->GetParticleSystemCount(); ++i )
 	{
-		KeyValues *kv = m_pParticleSystemsDefinitions->GetItem( nItemID );
-		CDmeParticleSystemDefinition *pParticleSystem = GetElementKeyValue<CDmeParticleSystemDefinition>( kv, "particleSystem" );
-		if ( pParticleSystem == pFind )
+		if ( m_pDoc->GetParticleSystem(i) == pFind )
 		{
-			m_pParticleSystemsDefinitions->AddSelectedItem( nItemID );
+			m_pSystemGrid->SelectId( i, false, false );
 			break;
 		}
 	}
@@ -379,18 +218,51 @@ void CParticleSystemDefinitionBrowser::OnInputCompleted( KeyValues *pKeyValues )
 		CDmeParticleSystemDefinition *pParticleSystem = m_pDoc->AddNewParticleSystemDefinition( pText );
 		g_pPetTool->SetCurrentParticleSystem( pParticleSystem );
 	}
-	else if ( pKeyValues->FindKey( "copy" ) )
+	else if ( pKeyValues->FindKey( "copy_one" ) || pKeyValues->FindKey( "copy_many" ) )
 	{
-		int nCount = m_pParticleSystemsDefinitions->GetSelectedItemsCount();
-		if ( nCount )
+		int nCount = m_pSystemGrid->GetSelectedSystemCount();
+		
+		if ( nCount == 1 )
 		{
 			CDmeParticleSystemDefinition *pParticleSystem = GetSelectedParticleSystem( 0 );
-			CAppUndoScopeGuard guard( NOTIFY_SETDIRTYFLAG, "Copy Particle System",
-										"Copy Particle System" );
-			CDmeParticleSystemDefinition * pNew =
-				CastElement<CDmeParticleSystemDefinition>( pParticleSystem->Copy( ) );
-			pNew->SetName( pText );
-			m_pDoc->AddNewParticleSystemDefinition( pNew, guard );
+			CDmeParticleSystemDefinition * pNew = NULL;
+			{
+				CAppUndoScopeGuard guard( NOTIFY_SETDIRTYFLAG|NOTIFY_FLAG_PARTICLESYS_ADDED_OR_REMOVED, "Duplicate One Particle System", "Duplicate One Particle System" );
+				pNew = CastElement<CDmeParticleSystemDefinition>( pParticleSystem->Copy( ) );
+				pNew->SetName( pText );
+				m_pDoc->AddNewParticleSystemDefinition( pNew, guard );
+			}
+
+			g_pPetTool->SetCurrentParticleSystem( pNew );
+		}
+		else if ( nCount > 1 )
+		{
+			CAppUndoScopeGuard guard( NOTIFY_SETDIRTYFLAG|NOTIFY_FLAG_PARTICLESYS_ADDED_OR_REMOVED, "Duplicate Multiple Particle Systems", "Duplicate Multiple Particle Systems" );
+
+			CUtlVector<CDmeParticleSystemDefinition*> pNewSystems;
+
+			for ( int i = 0; i < nCount; ++i )
+			{
+				CDmeParticleSystemDefinition *pParticleSystem = GetSelectedParticleSystem( i );
+				CDmeParticleSystemDefinition *pNew = NULL;
+
+				CUtlString newName = pParticleSystem->GetName();
+				newName += pText;
+
+				pNew = CastElement<CDmeParticleSystemDefinition>( pParticleSystem->Copy( ) );
+				pNew->SetName( newName.Get() );
+
+				pNewSystems.AddToTail(pNew);
+			}
+
+			Assert( pNewSystems.Count() == nCount );
+
+			for ( int i = 0; i < nCount; ++i )
+			{
+				m_pDoc->AddNewParticleSystemDefinition( pNewSystems[i], guard );
+			}
+
+			g_pPetTool->SetCurrentParticleSystem( NULL );
 		}
 	}
 }
@@ -399,9 +271,9 @@ void CParticleSystemDefinitionBrowser::OnInputCompleted( KeyValues *pKeyValues )
 //-----------------------------------------------------------------------------
 // Copy to clipboard
 //-----------------------------------------------------------------------------
-void CParticleSystemDefinitionBrowser::CopyToClipboard( )
+void CParticleSystemDefinitionBrowser::OnCopy( )
 {
-	int nCount = m_pParticleSystemsDefinitions->GetSelectedItemsCount();
+	int nCount = m_pSystemGrid->GetSelectedSystemCount();
 
 	CUtlVector< KeyValues * > list;
 	CUtlRBTree< CDmeParticleSystemDefinition* > defs( 0, 0, DefLessFunc( CDmeParticleSystemDefinition* ) );
@@ -413,7 +285,7 @@ void CParticleSystemDefinitionBrowser::CopyToClipboard( )
 		if ( g_pDataModel->Serialize( buf, "keyvalues2", "pcf", pParticleSystem->GetHandle() ) )
 		{
 			KeyValues *pData = new KeyValues( "Clipboard" );
-			pData->SetString( "pcf", (char*)buf.Base() );
+			pData->SetString( PARTICLE_CLIPBOARD_DEFINITION_STR, (char*)buf.Base() );
 			list.AddToTail( pData );
 		}
 	}
@@ -443,6 +315,29 @@ void CParticleSystemDefinitionBrowser::ReplaceDef_r( CUndoScopeGuard& guard, CDm
 	}
 }
 
+void CParticleSystemDefinitionBrowser::PasteOperator( CUndoScopeGuard& guard, CDmeParticleFunction *pFunc )
+{
+	int nCount = m_pSystemGrid->GetSelectedSystemCount();
+
+	for ( int i = 0; i < nCount; ++i )
+	{
+		CDmeParticleSystemDefinition *pParticleSystem = GetSelectedParticleSystem( i );
+		pParticleSystem->AddCopyOfOperator( pFunc );
+	}
+}
+
+
+void CParticleSystemDefinitionBrowser::PasteDefinitionBody( CUndoScopeGuard& guard, CDmeParticleSystemDefinition *pDef )
+{
+	int nCount = m_pSystemGrid->GetSelectedSystemCount();
+
+	for ( int i = 0; i < nCount; ++i )
+	{
+		CDmeParticleSystemDefinition *pParticleSystem = GetSelectedParticleSystem( i );
+		pParticleSystem->OverrideAttributesFromOtherDefinition( pDef );
+	}
+}
+
 void CParticleSystemDefinitionBrowser::PasteFromClipboard( )
 {
 	// This is undoable
@@ -454,23 +349,29 @@ void CParticleSystemDefinitionBrowser::PasteFromClipboard( )
 	int nItems = list.Count();
 	for ( int i = 0; i < nItems; ++i )
 	{
-		const char *pData = list[i]->GetString( "pcf" );
-		if ( !pData )
+		CDmeParticleSystemDefinition *pDef = ReadParticleClassFromKV<CDmeParticleSystemDefinition>( list[i], PARTICLE_CLIPBOARD_DEFINITION_STR );
+		if ( pDef )
+		{
+			ReplaceDef_r( guard, pDef );
+			bRefreshAll = true;
 			continue;
+		}
 
-		int nLen = Q_strlen( pData );
-		CUtlBuffer buf( pData, nLen, CUtlBuffer::TEXT_BUFFER | CUtlBuffer::READ_ONLY );
-
-		DmElementHandle_t hRoot;
-		if ( !g_pDataModel->Unserialize( buf, "keyvalues2", "pcf", NULL, "paste", CR_FORCE_COPY, hRoot ) )
+		CDmeParticleFunction *pFunc = ReadParticleClassFromKV<CDmeParticleFunction>( list[i], PARTICLE_CLIPBOARD_FUNCTIONS_STR );
+		if ( pFunc )
+		{
+			PasteOperator( guard, pFunc );
+			bRefreshAll = true;
 			continue;
+		}
 
-		CDmeParticleSystemDefinition *pDef = GetElement<CDmeParticleSystemDefinition>( hRoot );
-		if ( !pDef )
+		pDef = ReadParticleClassFromKV<CDmeParticleSystemDefinition>( list[i], PARTICLE_CLIPBOARD_DEF_BODY_STR );
+		if ( pDef )
+		{
+			PasteDefinitionBody( guard, pDef );
+			bRefreshAll = true;
 			continue;
-
-		ReplaceDef_r( guard, pDef );
-		bRefreshAll = true;
+		}
 	}
 
 	guard.Release();
@@ -498,23 +399,25 @@ void CParticleSystemDefinitionBrowser::OnCommand( const char *pCommand )
 	}
 	if ( !Q_stricmp( pCommand, "copy" ) )
 	{
-		vgui::InputDialog *pInputDialog = new vgui::InputDialog( g_pPetTool->GetRootPanel(), "Enter Particle System Name", "Name:", "" );
-		pInputDialog->SetSmallCaption( true );
-		pInputDialog->SetMultiline( false );
-		pInputDialog->AddActionSignalTarget( this );
-		pInputDialog->DoModal( new KeyValues("copy") );
-		return;
-	}
-	if ( !Q_stricmp( pCommand, "Create From KeyValue" ) )
-	{
-		vgui::FileOpenDialog *pDialog = new vgui::FileOpenDialog( g_pPetTool->GetRootPanel(), "Select KV File", vgui::FOD_OPEN );
-		pDialog->SetTitle( "Choose KeyValue File", true );
-		pDialog->AddFilter( "*.txt", "KeyValue File (*.txt)", true );
-		pDialog->AddActionSignalTarget( this );
+		if ( m_pSystemGrid->GetSelectedSystemCount() == 1 )
+		{
+			CUtlString newName = m_pSystemGrid->GetSystemName(m_pSystemGrid->GetSelectedSystemId(0));
+			newName += "_copy";
 
-		char szParticlesDir[MAX_PATH];
-		pDialog->SetStartDirectory( g_pFullFileSystem->RelativePathToFullPath( "particles", "MOD", szParticlesDir, sizeof(szParticlesDir) ) );
-		pDialog->DoModal( new KeyValues( "Create From KeyValue" ) );
+			vgui::InputDialog *pInputDialog = new vgui::InputDialog( g_pPetTool->GetRootPanel(), "Enter Duplicate System Name", "Name:", newName.Get() );
+			pInputDialog->SetSmallCaption( true );
+			pInputDialog->SetMultiline( false );
+			pInputDialog->AddActionSignalTarget( this );
+			pInputDialog->DoModal( new KeyValues("copy_one") );
+		}
+		else if ( m_pSystemGrid->GetSelectedSystemCount() > 1 )
+		{
+			vgui::InputDialog *pInputDialog = new vgui::InputDialog( g_pPetTool->GetRootPanel(), "Enter Suffix for New Systems", "Suffix:", "_copy" );
+			pInputDialog->SetSmallCaption( true );
+			pInputDialog->SetMultiline( false );
+			pInputDialog->AddActionSignalTarget( this );
+			pInputDialog->DoModal( new KeyValues("copy_many") );
+		}
 
 		return;
 	}
@@ -544,56 +447,67 @@ void CParticleSystemDefinitionBrowser::OnCommand( const char *pCommand )
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-void CParticleSystemDefinitionBrowser::UpdateParticleSystemList(void)
+void CParticleSystemDefinitionBrowser::UpdateParticleSystemList( bool bRetainSelection )
 {
-	const CDmrParticleSystemList particleSystemList = m_pDoc->GetParticleSystemDefinitionList();
-	if ( !particleSystemList.IsValid() )
-		return;
-
-	// Maintain selection if possible
+	/////////////////////////
+	// build a list of previously selected systems
 	CUtlVector< CUtlString > selectedItems;
-	int nCount = m_pParticleSystemsDefinitions->GetSelectedItemsCount();
-	for ( int i = 0; i < nCount; ++i )
+	if ( bRetainSelection )
 	{
-		CDmeParticleSystemDefinition *pParticleSystem = GetSelectedParticleSystem( i );
-		if ( pParticleSystem )
+		int nCount = m_pSystemGrid->GetSelectedSystemCount();
+		for ( int i = 0; i < nCount; ++i )
 		{
-			selectedItems.AddToTail( pParticleSystem->GetName() );
+			CDmeParticleSystemDefinition *pParticleSystem = GetSelectedParticleSystem( i );
+			if ( pParticleSystem )
+			{
+				selectedItems.AddToTail( pParticleSystem->GetName() );
+			}
 		}
 	}
 
-	m_pParticleSystemsDefinitions->RemoveAll();
-	int nSelectedItemCount = selectedItems.Count();
-	nCount = particleSystemList.Count();
-	for ( int i = 0; i < nCount; ++i )
+	/////////////////////////
+	// now go nuts
+
+	const CDmrParticleSystemList particleSystemList = m_pDoc->GetParticleSystemDefinitionList();
+	if ( !particleSystemList.IsValid() )
+	{
+		m_pSystemGrid->SetParticleList( CUtlVector<const char *>() );
+		return;
+	}
+
+	CUtlVector<const char *> systemNames;
+	CUtlVector<int> selectionIndicies;
+
+	/////////////////////////
+	// populate the new list
+	for ( int i = 0; i < particleSystemList.Count(); ++i )
 	{
 		CDmeParticleSystemDefinition *pParticleSystem = particleSystemList[i];
 		if ( !pParticleSystem )
 			continue;
 
-		const char *pName = pParticleSystem->GetName();
-		if ( !pName || !pName[0] )
+		systemNames.AddToTail( pParticleSystem->GetName() );
+
+		// see if the system was previously selected
+		for ( int s = 0; s < selectedItems.Count(); ++s )
 		{
-			pName = "<no name>";
-		}
-
-		KeyValues *kv = new KeyValues( "node" );
-		kv->SetString( "name", pName ); 
-		SetElementKeyValue( kv, "particleSystem", pParticleSystem );
-
-		int nItemID = m_pParticleSystemsDefinitions->AddItem( kv, 0, false, false );
-
-		for ( int j = 0; j < nSelectedItemCount; ++j )
-		{
-			if ( Q_stricmp( selectedItems[j], pName ) )
-				continue;
-
-			m_pParticleSystemsDefinitions->AddSelectedItem( nItemID );
-			selectedItems.FastRemove(j);
-			--nSelectedItemCount;
-			break;
+			if( !V_strcmp(pParticleSystem->GetName(), selectedItems[s]) )
+			{
+				selectionIndicies.AddToTail(i);
+			}
 		}
 	}
-	m_pParticleSystemsDefinitions->SortList();
+
+	m_pSystemGrid->SetParticleList( systemNames );
+
+	/////////////////////////
+	// reselect any identified systems
+	if ( bRetainSelection )
+	{
+		for ( int i = 0; i < selectionIndicies.Count(); ++i )
+		{
+			m_pSystemGrid->SelectId( selectionIndicies[i], true, false );
+		}
+	}
 }
 

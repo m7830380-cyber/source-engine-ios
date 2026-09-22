@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2006, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -34,8 +34,7 @@ bool GetPersistentEnvironmentVariable( const char *pName, char *pReturn, int siz
 {
 	// Open the key
 	HKEY hregkey; 
-	// Changed to HKEY_CURRENT_USER from HKEY_LOCAL_MACHINE
-	if ( RegOpenKeyEx( HKEY_CURRENT_USER, VPROJECT_REG_KEY, 0, KEY_QUERY_VALUE, &hregkey ) != ERROR_SUCCESS )
+	if ( RegOpenKeyEx( HKEY_LOCAL_MACHINE, VPROJECT_REG_KEY, 0, KEY_QUERY_VALUE, &hregkey ) != ERROR_SUCCESS )
 		return false;
 	
 	// Get the value
@@ -60,8 +59,8 @@ void SetPersistentEnvironmentVariable( const char *pName, const char *pValue )
 	HKEY hregkey; 
 	DWORD dwReturnValue = 0;
 
-	// Changed from HKEY_LOCAL_MACHINE to HKEY_CURRENT_USER
-	if ( RegOpenKeyEx( HKEY_CURRENT_USER, VPROJECT_REG_KEY, 0, KEY_ALL_ACCESS, &hregkey ) != ERROR_SUCCESS )
+	// Open the key
+	if ( RegOpenKeyEx( HKEY_LOCAL_MACHINE, VPROJECT_REG_KEY, 0, KEY_ALL_ACCESS, &hregkey ) != ERROR_SUCCESS )
 		return;
 	
 	// Set the value to the string passed in
@@ -184,6 +183,7 @@ void COPTConfigs::DoDataExchange(CDataExchange* pDX)
 	CPropertyPage::DoDataExchange(pDX);
 	//{{AFX_DATA_MAP(COPTConfigs)
 	DDX_Control(pDX, IDC_MAPDIR, m_cMapDir);
+	DDX_Control(pDX, IDC_PREFABDIR, m_cPrefabDir);
 	DDX_Control(pDX, IDC_GAMEEXEDIR, m_cGameExeDir);
 	DDX_Control(pDX, IDC_MODDIR, m_cModDir);
 	DDX_Control(pDX, IDC_MAPFORMAT, m_cMapFormat);
@@ -206,6 +206,7 @@ BEGIN_MESSAGE_MAP(COPTConfigs, CPropertyPage)
 	ON_BN_CLICKED(IDC_GDFILE_REMOVE, OnGdfileRemove)
 	ON_CBN_SELCHANGE(IDC_CONFIGURATIONS, OnSelchangeConfigurations)
 	ON_BN_CLICKED(IDC_BROWSEMAPDIR, OnBrowsemapdir)
+	ON_BN_CLICKED(IDC_BROWSEPREFABDIR, OnBrowsePrefabDir)
 	ON_BN_CLICKED(IDC_BROWSEGAMEEXEDIR, OnBrowseGameExeDir)
 	ON_BN_CLICKED(IDC_BROWSEMODDIR, OnBrowseModDir)
 	ON_BN_CLICKED(IDC_BROWSE_CORDON_TEXTURE, OnBrowseCordonTexture)
@@ -357,6 +358,16 @@ void COPTConfigs::SaveInfo(CGameConfig *pConfig)
 	EditorUtil_TransferPath(this, IDC_GAMEEXEDIR, pConfig->m_szGameExeDir, true);
 	EditorUtil_TransferPath(this, IDC_MODDIR, pConfig->m_szModDir, true);
 	EditorUtil_TransferPath(this, IDC_MAPDIR, pConfig->szMapDir, true);
+	
+	// Check to see if the prefab folder changed, and warn user that they need to restart hammer if it did
+	char szOldPrefabDir[128];
+	strcpy(szOldPrefabDir, pConfig->m_szPrefabDir);
+	EditorUtil_TransferPath(this, IDC_PREFABDIR, pConfig->m_szPrefabDir, true);
+
+	if ( strcmp( szOldPrefabDir, pConfig->m_szPrefabDir ) )
+	{
+		AfxMessageBox("Your changes to the prefab path will not take effect until the next time you run Hammer.");
+	}
 
 	char szCordonTexture[MAX_PATH];
 	m_cCordonTexture.GetWindowText(szCordonTexture, sizeof(szCordonTexture));
@@ -410,6 +421,7 @@ void COPTConfigs::OnSelchangeConfigurations(void)
 	m_cGameExeDir.EnableWindow(!bKillFields);
 	m_cModDir.EnableWindow(!bKillFields);
 	m_cMapDir.EnableWindow(!bKillFields);
+	m_cPrefabDir.EnableWindow(!bKillFields);
 	m_cCordonTexture.EnableWindow(!bKillFields);
 
 	if (pConfig == NULL)
@@ -459,6 +471,7 @@ void COPTConfigs::OnSelchangeConfigurations(void)
 	EditorUtil_TransferPath(this, IDC_GAMEEXEDIR, pConfig->m_szGameExeDir, false);
 	EditorUtil_TransferPath(this, IDC_MODDIR, pConfig->m_szModDir, false);
 	EditorUtil_TransferPath(this, IDC_MAPDIR, pConfig->szMapDir, false);
+	EditorUtil_TransferPath(this, IDC_PREFABDIR, pConfig->m_szPrefabDir, false);
 
 	m_cCordonTexture.SetWindowText(pConfig->GetCordonTexture());
 	
@@ -818,6 +831,23 @@ void COPTConfigs::OnBrowsemapdir(void)
 	CString str(szTmp);
 	EditorUtil_ConvertPath(str, false);
 	m_cMapDir.SetWindowText(str);
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+void COPTConfigs::OnBrowsePrefabDir(void)
+{
+	char szTmp[MAX_PATH];
+	if (!BrowseForFolder("Select Map Directory", szTmp))
+	{
+		return;
+	}
+
+	CString str(szTmp);
+	EditorUtil_ConvertPath(str, false);
+	m_cPrefabDir.SetWindowText(str);
 }
 
 

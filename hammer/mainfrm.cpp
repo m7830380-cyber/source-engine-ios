@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -9,6 +9,7 @@
 #include <oaidl.h>
 #include "hammer.h"
 #include "Box3D.h"				// For units
+#include "EntityReportDlg.h"
 #include "FaceEditSheet.h"
 #include "MainFrm.h"
 #include "MessageWnd.h"
@@ -37,10 +38,17 @@
 #include "TextureSystem.h"
 #include "ToolManager.h"
 #include "Material.h"
-#include "materialsystem/imaterialsystem.h"
+#include "materialsystem/IMaterialSystem.h"
 #include "materialsystem/MaterialSystem_Config.h"
 #include "soundbrowser.h"
 #include "lprvwindow.h"
+#include "toolframework/ienginetool.h"
+#include "toolutils/enginetools_int.h"
+#include "foundrytool.h"
+#include "cmdhandlers.h"
+#include "modelbrowser.h"
+#include <wintab.h>
+#include "tablet.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include <tier0/memdbgon.h>
@@ -56,6 +64,19 @@ BEGIN_MESSAGE_MAP(CMainFrame, CMDIFrameWnd)
 	ON_UPDATE_COMMAND_UI(ID_EDIT_PROPERTIES, OnUpdateEditFunction)
 	ON_COMMAND(ID_VIEW_MESSAGES, OnViewMessages)
 	ON_UPDATE_COMMAND_UI(ID_VIEW_MESSAGES, OnUpdateViewMessages)
+
+	ON_UPDATE_COMMAND_UI(ID_FOUNDRY_SENDSELECTEDENTITIESTOENGINE, OnUpdateFoundrySendSelectedEntitiesToEngine)
+	ON_COMMAND(ID_FOUNDRY_SENDSELECTEDENTITIESTOENGINE, OnFoundrySendSelectedEntitiesToEngine)
+
+	ON_UPDATE_COMMAND_UI(ID_FOUNDRY_MOVEENGINEVIEWTOHAMMER3DVIEW, OnUpdateFoundryMoveEngineViewToHammer3DView)
+	ON_COMMAND(ID_FOUNDRY_MOVEENGINEVIEWTOHAMMER3DVIEW, OnFoundryMoveEngineViewToHammer3DView)
+
+	ON_UPDATE_COMMAND_UI(ID_FOUNDRY_REMOVESELECTEDENTITIESFROMENGINE, OnUpdateFoundryRemoveSelectedEntitiesFromEngine)
+	ON_COMMAND(ID_FOUNDRY_REMOVESELECTEDENTITIESFROMENGINE, OnFoundryRemoveSelectedEntitiesFromEngine)
+
+	ON_UPDATE_COMMAND_UI(ID_FOUNDRY_MOVEFOCUSTOENGINE, OnUpdateFoundryMoveFocusToEngine)
+	ON_COMMAND(ID_FOUNDRY_MOVEFOCUSTOENGINE, OnFoundryMoveFocusToEngine)
+
 	ON_WM_ACTIVATEAPP()
 	ON_WM_SIZE()
 	ON_WM_CLOSE()
@@ -121,6 +142,8 @@ BEGIN_MESSAGE_MAP(CMainFrame, CMDIFrameWnd)
 	ON_UPDATE_COMMAND_UI(ID_TOOLS_APPLYDECALS, OnUpdateToolUI)
 	ON_COMMAND_EX(ID_TOOLS_MORPH, OnChangeTool)
 	ON_UPDATE_COMMAND_UI(ID_TOOLS_MORPH, OnUpdateToolUI)
+	ON_COMMAND_EX(ID_TOOLS_SYNC_MESH, OnChangeTool)
+	ON_UPDATE_COMMAND_UI(ID_TOOLS_SYNC_MESH, OnUpdateToolUI)
 	ON_COMMAND_EX(ID_TOOLS_CLIPPER, OnChangeTool)
 	ON_UPDATE_COMMAND_UI(ID_TOOLS_CLIPPER, OnUpdateToolUI)
 	ON_COMMAND_EX(ID_TOOLS_EDITCORDON, OnChangeTool)
@@ -131,6 +154,7 @@ BEGIN_MESSAGE_MAP(CMainFrame, CMDIFrameWnd)
 	ON_UPDATE_COMMAND_UI(ID_TOOLS_OVERLAY, OnUpdateToolUI)
 	ON_COMMAND_EX(ID_MODE_APPLICATOR, OnApplicator)
 	ON_COMMAND_EX(ID_TOOLS_SOUND_BROWSER, OnSoundBrowser)
+	ON_COMMAND(ID_TOOLS_MODEL_BROWSER, OnModelBrowser)
 	ON_COMMAND_EX(ID_FILE_RELOAD_SOUNDS, OnReloadSounds)
     ON_UPDATE_COMMAND_UI(ID_MODE_APPLICATOR, OnUpdateApplicatorUI)
 	ON_COMMAND(ID_HELP_FINDER, CMDIFrameWnd::OnHelpFinder)
@@ -141,6 +165,7 @@ BEGIN_MESSAGE_MAP(CMainFrame, CMDIFrameWnd)
 	ON_WM_HELPINFO()
 	ON_WM_SYSCOMMAND()
 	ON_WM_ENTERMENULOOP()
+	ON_MESSAGE( WT_PACKET, OnWTPacket )
 	//}}AFX_MSG_MAP
 END_MESSAGE_MAP()
 
@@ -186,7 +211,7 @@ struct
 
 
 static GameData gd;
-static CMainFrame *pMainWnd;
+static CMainFrame *g_pMainWnd;
 
 
 //-----------------------------------------------------------------------------
@@ -196,6 +221,7 @@ CMainFrame::CMainFrame(void)
 {
 	pTextureBrowser = NULL;
 	pObjectProperties = NULL;
+	m_pModelBrowser = NULL;
 	m_bUndoActive = TRUE;
 	m_bShellSessionActive = false;
 	m_pFaceEditSheet = NULL;
@@ -216,6 +242,9 @@ CMainFrame::~CMainFrame(void)
 	delete m_pFaceEditSheet;
 	delete m_pSearchReplaceDlg;
 	delete m_pLightingPreviewOutputWindow;
+	delete m_pModelBrowser;
+	
+	g_pMainWnd = NULL;
 
 	CPrefabLibrary::FreeAllLibraries();
 }
@@ -442,9 +471,14 @@ int CMainFrame::OnCreate(LPCREATESTRUCT lpCreateStruct)
 	//
 	pObjectProperties = new CObjectProperties;
 	pObjectProperties->SetupPages();
-	pObjectProperties->Create(this, WS_SYSMENU | WS_POPUP | WS_CAPTION | DS_MODALFRAME | WS_THICKFRAME);
+	
+	CWnd *pPropertiesParent = this;
+	if ( APP()->IsFoundryMode() )
+		pPropertiesParent = NULL;
+		
+	pObjectProperties->Create(pPropertiesParent, WS_SYSMENU | WS_POPUP | WS_CAPTION | DS_MODALFRAME | WS_THICKFRAME);
 
-	pMainWnd = this;
+	g_pMainWnd = this;
 
 	//
 	// Create the smoothing group visualization dialog.
@@ -573,6 +607,45 @@ static ToolID_t _ToolMsgToEnum(UINT uMsg)
 }
 
 
+class CToolHandler_Disabled : public IToolHandlerInfo
+{
+public:
+	virtual BOOL UpdateCmdUI( CCmdUI *pCmdUI );
+	virtual BOOL Execute( UINT uMsg );
+}
+g_ToolHandlerDisabled;
+
+BOOL CToolHandler_Disabled::UpdateCmdUI( CCmdUI *pCmdUI )
+{
+	pCmdUI->Enable( FALSE );
+	pCmdUI->SetCheck( FALSE );
+	return TRUE;
+}
+
+BOOL CToolHandler_Disabled::Execute( UINT uMsg )
+{
+	uMsg;
+	return TRUE;
+}
+
+
+IToolHandlerInfo * _ToolToHanderInfo(UINT uMsg)
+{
+	extern IToolHandlerInfo *g_pToolHandlerSyncMesh;
+
+	switch ( uMsg )
+	{
+	case ID_TOOLS_SYNC_MESH:
+		return g_pToolHandlerSyncMesh;
+	
+	default:
+		return NULL;
+
+		// return &g_ToolHandlerDisabled to make a control look disabled
+	}
+}
+
+
 //-----------------------------------------------------------------------------
 // Purpose: activates the current tool toolbar button
 // Input  : pUI - interface to button that has had a action happen
@@ -625,9 +698,17 @@ void CMainFrame::OnUpdateToolUI(CCmdUI *pUI)
 			pUI->Enable( bIsEditable );
 		}		
 
-		ToolID_t eToolID = _ToolMsgToEnum(pUI->m_nID);
-		pUI->Enable( bIsEditable );
-		pUI->SetCheck(eToolID == ToolManager()->GetActiveToolID());
+		// Obtain custom tool handler
+		IToolHandlerInfo *pHandlerInfo = _ToolToHanderInfo( pUI->m_nID );
+		BOOL bHandled = pHandlerInfo ? pHandlerInfo->UpdateCmdUI( pUI ) : FALSE;
+		
+		// Use default handler if custom tool handler didn't work
+		if ( !bHandled )
+		{
+			ToolID_t eToolID = _ToolMsgToEnum(pUI->m_nID);
+			pUI->Enable(bIsEditable);
+			pUI->SetCheck(eToolID == ToolManager()->GetActiveToolID());
+		}
 	}
 }
 
@@ -650,11 +731,19 @@ BOOL CMainFrame::OnChangeTool(UINT nMessageID)
 		EnableFaceEditMode(false);
 	}
 
-	//
-	// Activate the new tool.
-	//
-	ToolID_t eToolID = _ToolMsgToEnum(nMessageID);
-	ToolManager()->SetTool(eToolID);
+	// Obtain custom tool handler
+	IToolHandlerInfo *pHandlerInfo = _ToolToHanderInfo( nMessageID );
+	BOOL bHandled = pHandlerInfo ? pHandlerInfo->Execute( nMessageID ) : FALSE;
+
+	if ( !bHandled )
+	{
+		//
+		// Activate the new tool.
+		//
+		ToolID_t eToolID = _ToolMsgToEnum(nMessageID);
+		ToolManager()->SetTool(eToolID);
+	}
+
 	return TRUE;
 }
 
@@ -796,7 +885,7 @@ void CMainFrame::OnSize(UINT nType, int cx, int cy)
 //-----------------------------------------------------------------------------
 CMainFrame *GetMainWnd(void)
 {
-	return pMainWnd;
+	return g_pMainWnd;
 }
 
 
@@ -1039,6 +1128,54 @@ BOOL CMainFrame::OnSoundBrowser(UINT nID)
 
 
 //-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+CModelBrowser *CMainFrame::GetModelBrowser()
+{
+	delete m_pModelBrowser;
+	m_pModelBrowser = NULL;
+
+	if (m_pModelBrowser == NULL)
+	{
+		m_pModelBrowser = new CModelBrowser( this );
+	}
+	
+	return m_pModelBrowser;
+}
+
+
+//-----------------------------------------------------------------------------
+// Brings up the model browser.
+//-----------------------------------------------------------------------------
+void CMainFrame::OnModelBrowser()
+{
+	CModelBrowser *pModelBrowser = GetModelBrowser();
+	pModelBrowser->Show();
+
+	CMapDoc *pDoc = CMapDoc::GetActiveMapDoc();
+	CUtlVector<AssetUsageInfo_t> usedModels;
+	pDoc->GetUsedModels( usedModels );
+
+	pModelBrowser->SetUsedModelList( usedModels );
+
+	int nRet = pModelBrowser->DoModal();
+	pModelBrowser->Hide();
+
+	if ( nRet == ID_FIND_ASSET )
+	{
+		// They hit the Find button in the model browser. Invoke the Entity Report dialog
+		// to find all occurences of the chosen model.
+		char szModelName[1024];
+		pModelBrowser->GetModelName( szModelName, sizeof( szModelName ) );
+
+		EntityReportFilterParms_t filter;
+		filter.FilterByKeyValue( "model", szModelName );
+
+		CEntityReportDlg::ShowEntityReport( pDoc, this, &filter );
+	}
+}
+
+
+//-----------------------------------------------------------------------------
 // Purpose: Brings up the sound browser
 //-----------------------------------------------------------------------------
 BOOL CMainFrame::OnReloadSounds(UINT nID)
@@ -1234,9 +1371,10 @@ void CMainFrame::GlobalNotify(int nCode)
 		case WM_MAPDOC_CHANGED:
 		{
 			//
-			// Update the visgroups.
+			// Update the visgroups & cordons.
 			//
 			m_FilterControl.UpdateGroupList();
+			m_FilterControl.UpdateCordonList();
 		
 			//
 			// If the Object Properties dialog has a Groups tab, update
@@ -1858,4 +1996,70 @@ void CMainFrame::WinHelp(DWORD dwData, UINT nCmd)
 {
 	// dvs: HACK: just punt them to the main help page
 	APP()->OpenURL(ID_HELP_TOPICS, m_hWnd);
+}
+
+
+void CMainFrame::OnUpdateFoundrySendSelectedEntitiesToEngine( CCmdUI *pCmdUI )
+{
+	pCmdUI->Enable( true );
+}
+
+
+void CMainFrame::OnFoundrySendSelectedEntitiesToEngine()
+{
+	if ( !g_pFoundryTool )
+		return;
+
+	g_pFoundryTool->ConsoleCommand( "foundry_send_ents_to_engine" );
+}
+
+
+void CMainFrame::OnUpdateFoundryMoveEngineViewToHammer3DView( CCmdUI *pCmdUI )
+{
+	// TODO: This should only be on if Foundry is around.
+	pCmdUI->Enable( true );
+}
+
+
+void CMainFrame::OnFoundryMoveEngineViewToHammer3DView()
+{
+	if ( !g_pFoundryTool )
+		return;
+
+	g_pFoundryTool->ConsoleCommand( "foundry_sync_engine_view" );
+}
+
+
+void CMainFrame::OnUpdateFoundryRemoveSelectedEntitiesFromEngine( CCmdUI *pCmdUI )
+{
+	pCmdUI->Enable( true );
+}
+
+
+void CMainFrame::OnFoundryRemoveSelectedEntitiesFromEngine()
+{
+	if ( !g_pFoundryTool )
+		return;
+
+	g_pFoundryTool->ConsoleCommand( "foundry_remove_selected" );
+}
+
+void CMainFrame::OnUpdateFoundryMoveFocusToEngine( CCmdUI *pCmdUI )
+{
+	pCmdUI->Enable( true );
+}
+
+void CMainFrame::OnFoundryMoveFocusToEngine()
+{
+	if ( !g_pFoundryTool )
+		return;
+
+	g_pFoundryTool->ConsoleCommand( "foundry_move_focus_to_engine" );
+}
+
+LRESULT CMainFrame::OnWTPacket(WPARAM wSerial, LPARAM hCtx)
+{
+	WinTab_Packet( wSerial, hCtx );
+
+	return TRUE;
 }

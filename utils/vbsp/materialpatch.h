@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -56,5 +56,9 @@ enum LoadMaterialKeyValuesFlags_t
 
 KeyValues *LoadMaterialKeyValues( const char *pMaterialName, unsigned int nFlags );
 void WriteMaterialKeyValuesToPak( const char *pMaterialName, KeyValues *kv );
+
+// This makes it so that when looking for whether a material has a cubemap, etc., anything that
+// has the pNewMaterialName will look at it's original material name.
+extern void AddNewTranslation( const char *pOriginalMaterialName, const char *pNewMaterialName );
 
 #endif // MATERIALPATCH_H

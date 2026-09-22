@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -14,12 +14,13 @@
 #pragma once
 #endif
 
-#include "zip_utils.h"
+
 #include "bspfile.h"
 #include "utlvector.h"
 #include "utlstring.h"
 #include "utllinkedlist.h"
 #include "byteswap.h"
+#include "mathlib/vector4d.h"
 #ifdef ENGINE_DLL
 #include "zone.h"
 #endif
@@ -108,6 +109,7 @@ extern	dtexdata_t	    dtexdata[MAX_MAP_TEXDATA];
 extern  CUtlVector<ddispinfo_t>		g_dispinfo;
 extern  CUtlVector<CDispVert>		g_DispVerts;
 extern  CUtlVector<CDispTri>		g_DispTris;
+extern	CUtlVector<CDispMultiBlend>	g_DispMultiBlend;
 extern  CDispLightmapSamplePositions g_DispLightmapSamplePositions; // LUMP_DISP_LIGHTMAP_SAMPLE_POSITIONS
 
 extern  int             numorigfaces;
@@ -127,6 +129,8 @@ extern	dface_t		    dfaces[MAX_MAP_FACES];
 
 extern	int				numfaceids;
 extern	CUtlVector<dfaceid_t>	dfaceids;
+extern	CUtlVector<uint16>	dfacebrushes;
+extern	CUtlVector<dfacebrushlist_t>	dfacebrushlists;
 
 extern	int			    numfaces_hdr;
 extern	dface_t		    dfaces_hdr[MAX_MAP_FACES];
@@ -164,9 +168,11 @@ extern int				g_nClipPortalVerts;
 extern dcubemapsample_t	g_CubemapSamples[MAX_MAP_CUBEMAPSAMPLES];
 extern int				g_nCubemapSamples;
 
-extern int				g_nOverlayCount;
-extern doverlay_t		g_Overlays[MAX_MAP_OVERLAYS];
-extern doverlayfade_t	g_OverlayFades[MAX_MAP_OVERLAYS];	// Parallel array of fade info in a separate lump to avoid breaking backwards compat
+extern int						g_nOverlayCount;
+extern doverlay_t				g_Overlays[MAX_MAP_OVERLAYS];
+extern doverlayfade_t			g_OverlayFades[MAX_MAP_OVERLAYS];	// Parallel array of fade info in a separate lump to avoid breaking backwards compat
+extern doverlaysystemlevel_t	g_OverlaySystemLevels[MAX_MAP_OVERLAYS]; // Parallel array of system level info in a separate lump to avoid breaking backwards compat
+
 
 extern int				g_nWaterOverlayCount;
 extern dwateroverlay_t	g_WaterOverlays[MAX_MAP_WATEROVERLAYS];
@@ -196,9 +202,8 @@ extern int			g_PhysDispSize;
 IZip				*GetPakFile( void );
 IZip				*GetSwapPakFile( void );
 void				ClearPakFile( IZip *pak );
-void				AddFileToPak( IZip *pak, const char *pRelativeName, const char *fullpath, IZip::eCompressionType compressionType = IZip::eCompressionType_None );
-void				AddBufferToPak( IZip *pak, const char *pRelativeName, void *data, int length, bool bTextMode, IZip::eCompressionType compressionType = IZip::eCompressionType_None );
-void				AddDirToPak( IZip *pak, const char *pDirPath, const char *pPakPrefix = NULL );
+void				AddFileToPak( IZip *pak, const char *pRelativeName, const char *fullpath );
+void				AddBufferToPak( IZip *pak, const char *pRelativeName, void *data, int length, bool bTextMode );
 bool				FileExistsInPak( IZip *pak, const char *pRelativeName );
 bool				ReadFileFromPak( IZip *pak, const char *pRelativeName, bool bTextMode, CUtlBuffer &buf );
 void				RemoveFileFromPak( IZip *pak, const char *pRelativeName );
@@ -206,8 +211,9 @@ int					GetNextFilename( IZip *pak, int id, char *pBuffer, int bufferSize, int &
 void				ForceAlignment( IZip *pak, bool bAlign, bool bCompatibleFormat, unsigned int alignmentSize );
 
 typedef bool (*CompressFunc_t)( CUtlBuffer &inputBuffer, CUtlBuffer &outputBuffer );
-typedef bool (*VTFConvertFunc_t)( const char *pDebugName, CUtlBuffer &sourceBuf, CUtlBuffer &targetBuf, CompressFunc_t pCompressFunc );
+typedef bool (*VTFConvertFunc_t)( const char *pDebugName, CUtlBuffer &sourceBuf, CUtlBuffer &targetBuf, CompressFunc_t pCompressFunc, int nMaxMip );
 typedef bool (*VHVFixupFunc_t)( const char *pVhvFilename, const char *pModelName, CUtlBuffer &sourceBuf, CUtlBuffer &targetBuf );
+typedef bool (*StudioConvertFunc_t)( const char *pDebugName, CUtlBuffer &sourceBuf, CUtlBuffer &targetBuf /*, CompressFunc_t pCompressFunc */ );
 
 //-----------------------------------------------------------------------------
 // Game lump memory storage
@@ -239,7 +245,7 @@ public:
 	int					GetGameLumpFlags( GameLumpHandle_t handle );
 	int					GetGameLumpVersion( GameLumpHandle_t handle );
 	void				ComputeGameLumpSizeAndCount( int& size, int& clumpCount );
-	void				ParseGameLump( dheader_t* pHeader );
+	void				ParseGameLump( BSPHeader_t *pHeader );
 	void				SwapGameLump( GameLumpId_t id, int version, byte *dest, byte *src, int size );
 
 
@@ -296,15 +302,10 @@ void	WriteBSPFile( const char *filename, char *pUnused = NULL );
 void	PrintBSPFileSizes(void);
 void	PrintBSPPackDirectory(void);
 void	ReleasePakFileLumps(void);
-
-bool	RepackBSPCallback_LZMA( CUtlBuffer &inputBuffer, CUtlBuffer &outputBuffer );
-bool	RepackBSP( CUtlBuffer &inputBuffer, CUtlBuffer &outputBuffer, CompressFunc_t pCompressFunc, IZip::eCompressionType packfileCompression );
-bool	SwapBSPFile( const char *filename, const char *swapFilename, bool bSwapOnLoad, VTFConvertFunc_t pVTFConvertFunc, VHVFixupFunc_t pVHVFixupFunc, CompressFunc_t pCompressFunc );
-
+bool	SwapBSPFile( const char *filename, const char *swapFilename, bool bSwapOnLoad, VTFConvertFunc_t pVTFConvertFunc, VHVFixupFunc_t pVHVFixupFunc, StudioConvertFunc_t pStudioConvertFunc, CompressFunc_t pCompressFunc, char const *szPlatform );
 bool	GetPakFileLump( const char *pBSPFilename, void **pPakData, int *pPakSize );
 bool	SetPakFileLump( const char *pBSPFilename, const char *pNewFilename, void *pPakData, int pakSize );
 void	WriteLumpToFile( char *filename, int lump );
-void	WriteLumpToFile( char *filename, int lump, int nLumpVersion, void *pBuffer, size_t nBufLen );
 bool	GetBSPDependants( const char *pBSPFilename, CUtlVector< CUtlString > *pList );
 void	UnloadBSPFile();
 
@@ -312,18 +313,18 @@ void	ParseEntities (void);
 void	UnparseEntities (void);
 void	PrintEntity (entity_t *ent);
 
-void 	SetKeyValue (entity_t *ent, const char *key, const char *value);
-char 	*ValueForKey (entity_t *ent, char *key);
+epair_t	*SetKeyValue ( entity_t *ent, const char *key, const char *value, bool bAllowDuplicates = false );
+void	RemoveKey( entity_t *pMapEnt, const char *pKey );
+char 	*ValueForKey (entity_t *ent, const char *key);
 // will return "" if not present
-int		IntForKey (entity_t *ent, char *key);
-int		IntForKeyWithDefault(entity_t *ent, char *key, int nDefault );
-vec_t	FloatForKey (entity_t *ent, char *key);
-vec_t	FloatForKeyWithDefault (entity_t *ent, char *key, float default_value);
-void 	GetVectorForKey (entity_t *ent, char *key, Vector& vec);
-void 	GetVector2DForKey (entity_t *ent, char *key, Vector2D& vec);
-void 	GetAnglesForKey (entity_t *ent, char *key, QAngle& vec);
+int		IntForKey (entity_t *ent, const char *key);
+vec_t	FloatForKey (entity_t *ent, const char *key);
+vec_t	FloatForKeyWithDefault (entity_t *ent, const char *key, float default_value);
+void 	GetVectorForKey (entity_t *ent, const char *key, Vector& vec);
+void 	GetVector2DForKey (entity_t *ent, const char *key, Vector2D& vec);
+void 	GetAnglesForKey (entity_t *ent, const char *key, QAngle& vec);
 epair_t *ParseEpair (void);
-void StripTrailing (char *e);
+
 
 // Build a list of the face's vertices (index into dvertexes).
 // points must be able to hold pFace->numedges indices.
@@ -386,6 +387,8 @@ extern CUtlVector<clusterlist_t> g_ClusterLeaves;
 
 // Call this to build the mapping from cluster to leaves
 void BuildClusterTable( );
+
+void GetPlatformMapPath( const char *pMapPath, char *pPlatformMapPath, int dxlevel, int maxLength );
 
 void SetHDRMode( bool bHDR );
 

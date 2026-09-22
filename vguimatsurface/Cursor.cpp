@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright (c) 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: Methods associated with the cursor
 //
@@ -6,59 +6,54 @@
 // $NoKeywords: $
 //===========================================================================//
 
-#if !defined( _X360 )
-	#define OEMRESOURCE //for OCR_* cursor junk
-	#include "winlite.h"
-#endif
-#include <appframework/ilaunchermgr.h>
 
-#if defined( USE_SDL )
-#undef M_PI
-#include "SDL.h"
+#if !defined( _X360 )
+#define OEMRESOURCE //for OCR_* cursor junk
+#include "winlite.h"
 #endif
 
 #include "tier0/dbg.h"
-#include "tier0/vcrmode.h"
-#include "tier0/icommandline.h"
 #include "tier1/utldict.h"
 #include "Cursor.h"
 #include "vguimatsurface.h"
-#include "MatSystemSurface.h"
 #include "filesystem.h"
-#if defined( _X360 )
-#include "xbox/xbox_win32stubs.h"
+
+#if defined( PLATFORM_OSX )
+#include <Carbon/Carbon.h>
 #endif
 
-#if defined( USE_SDL ) 
+#include <appframework/ilaunchermgr.h>
+
+#if (USE_SDL)
+#include "SDL.h"
+#endif
+
+#if defined( DX_TO_GL_ABSTRACTION ) 
 #include "materialsystem/imaterialsystem.h"
 #endif
 
 #include "inputsystem/iinputsystem.h"
+#include "inputsystem/iinputstacksystem.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
 
 using namespace vgui;
+
+
 #if defined( USE_SDL )
 static SDL_Cursor *s_pDefaultCursor[ dc_last ];
 static SDL_Cursor *s_hCurrentCursor = NULL;
 static SDL_Cursor *s_hCurrentlySetCursor = NULL;
 #elif defined( WIN32 )
-static HICON s_pDefaultCursor[ dc_last ];
-static HICON s_hCurrentCursor = NULL;
+static InputCursorHandle_t s_pDefaultCursor[20];
+static InputCursorHandle_t s_hCurrentCursor = NULL;
 #endif
+
+
 static bool s_bCursorLocked = false; 
 static bool s_bCursorVisible = true;
-static int s_nForceCursorVisibleCount = 0;
-static bool s_bSoftwareCursorActive = false;
-static int  s_nSoftwareCursorTexture = -1;
-static float  s_fSoftwareCursorOffsetX = 0;
-static float  s_fSoftwareCursorOffsetY = 0;
-static int	s_rnSoftwareCursorID[20];
-static float s_rfSoftwareCursorOffset[20][2];
-static bool s_bSoftwareCursorsInitialized = false;
 
-extern CMatSystemSurface g_MatSystemSurface;
 
 //-----------------------------------------------------------------------------
 // Initializes cursors
@@ -68,47 +63,47 @@ void InitCursors()
 	// load up all default cursors
 #if defined( USE_SDL )
 
-	s_pDefaultCursor[ dc_none ]     = NULL;
-	s_pDefaultCursor[ dc_arrow ]    = SDL_CreateSystemCursor( SDL_SYSTEM_CURSOR_ARROW );
-	s_pDefaultCursor[ dc_ibeam ]    = SDL_CreateSystemCursor( SDL_SYSTEM_CURSOR_IBEAM );
-	s_pDefaultCursor[ dc_hourglass ]= SDL_CreateSystemCursor( SDL_SYSTEM_CURSOR_WAIT );
-	s_pDefaultCursor[ dc_crosshair ]= SDL_CreateSystemCursor( SDL_SYSTEM_CURSOR_CROSSHAIR );
-	s_pDefaultCursor[ dc_waitarrow ]= SDL_CreateSystemCursor( SDL_SYSTEM_CURSOR_WAITARROW );
-	s_pDefaultCursor[ dc_sizenwse ] = SDL_CreateSystemCursor( SDL_SYSTEM_CURSOR_SIZENWSE );
-	s_pDefaultCursor[ dc_sizenesw ] = SDL_CreateSystemCursor( SDL_SYSTEM_CURSOR_SIZENESW );
-	s_pDefaultCursor[ dc_sizewe ]   = SDL_CreateSystemCursor( SDL_SYSTEM_CURSOR_SIZEWE );
-	s_pDefaultCursor[ dc_sizens ]   = SDL_CreateSystemCursor( SDL_SYSTEM_CURSOR_SIZENS );
-	s_pDefaultCursor[ dc_sizeall ]  = SDL_CreateSystemCursor( SDL_SYSTEM_CURSOR_SIZEALL );
-	s_pDefaultCursor[ dc_no ]       = SDL_CreateSystemCursor( SDL_SYSTEM_CURSOR_NO );
-	s_pDefaultCursor[ dc_hand ]     = SDL_CreateSystemCursor( SDL_SYSTEM_CURSOR_HAND );
+    s_pDefaultCursor[ dc_none ]     = NULL;
+    s_pDefaultCursor[ dc_arrow ]    = SDL_CreateSystemCursor( SDL_SYSTEM_CURSOR_ARROW );
+    s_pDefaultCursor[ dc_ibeam ]    = SDL_CreateSystemCursor( SDL_SYSTEM_CURSOR_IBEAM );
+    s_pDefaultCursor[ dc_hourglass ]= SDL_CreateSystemCursor( SDL_SYSTEM_CURSOR_WAIT );
+    s_pDefaultCursor[ dc_crosshair ]= SDL_CreateSystemCursor( SDL_SYSTEM_CURSOR_CROSSHAIR );
+    s_pDefaultCursor[ dc_waitarrow ]= SDL_CreateSystemCursor( SDL_SYSTEM_CURSOR_WAITARROW );
+    s_pDefaultCursor[ dc_sizenwse ] = SDL_CreateSystemCursor( SDL_SYSTEM_CURSOR_SIZENWSE );
+    s_pDefaultCursor[ dc_sizenesw ] = SDL_CreateSystemCursor( SDL_SYSTEM_CURSOR_SIZENESW );
+    s_pDefaultCursor[ dc_sizewe ]   = SDL_CreateSystemCursor( SDL_SYSTEM_CURSOR_SIZEWE );
+    s_pDefaultCursor[ dc_sizens ]   = SDL_CreateSystemCursor( SDL_SYSTEM_CURSOR_SIZENS );
+    s_pDefaultCursor[ dc_sizeall ]  = SDL_CreateSystemCursor( SDL_SYSTEM_CURSOR_SIZEALL );
+    s_pDefaultCursor[ dc_no ]       = SDL_CreateSystemCursor( SDL_SYSTEM_CURSOR_NO );
+    s_pDefaultCursor[ dc_hand ]     = SDL_CreateSystemCursor( SDL_SYSTEM_CURSOR_HAND );
 
 	s_hCurrentCursor = s_pDefaultCursor[ dc_arrow ];
 
 #elif defined( WIN32 )
 
-	s_pDefaultCursor[ dc_none ]      = NULL;
-	s_pDefaultCursor[ dc_arrow ]     =(HICON)LoadCursor(NULL, (LPCTSTR)OCR_NORMAL);
-	s_pDefaultCursor[ dc_ibeam ]     =(HICON)LoadCursor(NULL, (LPCTSTR)OCR_IBEAM);
-	s_pDefaultCursor[ dc_hourglass ] =(HICON)LoadCursor(NULL, (LPCTSTR)OCR_WAIT);
-	s_pDefaultCursor[ dc_crosshair ] =(HICON)LoadCursor(NULL, (LPCTSTR)OCR_CROSS);
-	s_pDefaultCursor[ dc_waitarrow ] =(HICON)LoadCursor(NULL, (LPCTSTR)32650);
-	s_pDefaultCursor[ dc_up ]        =(HICON)LoadCursor(NULL, (LPCTSTR)OCR_UP);
-	s_pDefaultCursor[ dc_sizenwse ]  =(HICON)LoadCursor(NULL, (LPCTSTR)OCR_SIZENWSE);
-	s_pDefaultCursor[ dc_sizenesw ]  =(HICON)LoadCursor(NULL, (LPCTSTR)OCR_SIZENESW);
-	s_pDefaultCursor[ dc_sizewe ]    =(HICON)LoadCursor(NULL, (LPCTSTR)OCR_SIZEWE);
-	s_pDefaultCursor[ dc_sizens ]    =(HICON)LoadCursor(NULL, (LPCTSTR)OCR_SIZENS);
-	s_pDefaultCursor[ dc_sizeall ]   =(HICON)LoadCursor(NULL, (LPCTSTR)OCR_SIZEALL);
-	s_pDefaultCursor[ dc_no ]        =(HICON)LoadCursor(NULL, (LPCTSTR)OCR_NO);
-	s_pDefaultCursor[ dc_hand ]      =(HICON)LoadCursor(NULL, (LPCTSTR)32649);
+	s_pDefaultCursor[dc_none]     = INPUT_CURSOR_HANDLE_INVALID;
+	s_pDefaultCursor[dc_arrow]    = g_pInputSystem->GetStandardCursor( INPUT_CURSOR_ARROW );
+	s_pDefaultCursor[dc_ibeam]    = g_pInputSystem->GetStandardCursor( INPUT_CURSOR_IBEAM );
+	s_pDefaultCursor[dc_hourglass]= g_pInputSystem->GetStandardCursor( INPUT_CURSOR_HOURGLASS );
+	s_pDefaultCursor[dc_crosshair]= g_pInputSystem->GetStandardCursor( INPUT_CURSOR_CROSSHAIR );
+	s_pDefaultCursor[dc_waitarrow]= g_pInputSystem->GetStandardCursor( INPUT_CURSOR_WAITARROW );
+	s_pDefaultCursor[dc_up]       = g_pInputSystem->GetStandardCursor( INPUT_CURSOR_UP );
+	s_pDefaultCursor[dc_sizenwse] = g_pInputSystem->GetStandardCursor( INPUT_CURSOR_SIZE_NW_SE );
+	s_pDefaultCursor[dc_sizenesw] = g_pInputSystem->GetStandardCursor( INPUT_CURSOR_SIZE_NE_SW );
+	s_pDefaultCursor[dc_sizewe]   = g_pInputSystem->GetStandardCursor( INPUT_CURSOR_SIZE_W_E );
+	s_pDefaultCursor[dc_sizens]   = g_pInputSystem->GetStandardCursor( INPUT_CURSOR_SIZE_N_S );
+	s_pDefaultCursor[dc_sizeall]  = g_pInputSystem->GetStandardCursor( INPUT_CURSOR_SIZE_ALL );
+	s_pDefaultCursor[dc_no]       = g_pInputSystem->GetStandardCursor( INPUT_CURSOR_NO );
+	s_pDefaultCursor[dc_hand]     = g_pInputSystem->GetStandardCursor( INPUT_CURSOR_HAND );
 
-	s_hCurrentCursor = s_pDefaultCursor[ dc_arrow ];
+	s_hCurrentCursor = s_pDefaultCursor[dc_arrow];
 
 #endif
 
 	s_bCursorLocked = false;
 	s_bCursorVisible = true;
-	s_nForceCursorVisibleCount = 0;
 }
+
 
 
 #define USER_CURSOR_MASK 0x80000000
@@ -122,17 +117,13 @@ class CUserCursorManager
 public:
 	void Shutdown();
 	vgui::HCursor CreateCursorFromFile( char const *curOrAniFile, char const *pPathID );
-	bool LookupCursor( vgui::HCursor cursor, HCURSOR& handle );
+	bool LookupCursor( vgui::HCursor cursor, InputCursorHandle_t& handle );
 private:
-	CUtlDict< HCURSOR, int >	m_UserCursors;
+	CUtlDict< InputCursorHandle_t, int >	m_UserCursors;
 };
 
 void CUserCursorManager::Shutdown()
 {
-	for ( int i = m_UserCursors.First() ; i != m_UserCursors.InvalidIndex(); i = m_UserCursors.Next( i ) )
-	{
-		::DestroyCursor( m_UserCursors[ i ] );
-	}
 	m_UserCursors.RemoveAll();
 }
 
@@ -149,17 +140,12 @@ vgui::HCursor CUserCursorManager::CreateCursorFromFile( char const *curOrAniFile
 		return cursorIndex | USER_CURSOR_MASK;
 	}
 
-	g_pFullFileSystem->GetLocalCopy( fn );
-
-	char fullpath[ 512 ];
-	g_pFullFileSystem->RelativePathToFullPath( fn, pPathID, fullpath, sizeof( fullpath ) );
-	
-	HCURSOR newCursor = (HCURSOR)LoadCursorFromFile( fullpath );
+	InputCursorHandle_t newCursor = g_pInputSystem->LoadCursorFromFile( fn, pPathID );
 	cursorIndex = m_UserCursors.Insert( fn, newCursor );
 	return cursorIndex | USER_CURSOR_MASK;
 }
 
-bool CUserCursorManager::LookupCursor( vgui::HCursor cursor, HCURSOR& handle )
+bool CUserCursorManager::LookupCursor( vgui::HCursor cursor, InputCursorHandle_t& handle )
 {
 	if ( !( (int)cursor & USER_CURSOR_MASK ) )
 	{
@@ -193,112 +179,81 @@ vgui::HCursor Cursor_CreateCursorFromFile( char const *curOrAniFile, char const 
 
 void Cursor_ClearUserCursors()
 {
-#ifdef WIN32 
-	g_UserCursors.Shutdown();
+}
+
+#ifdef OSX
+static HCursor s_hCursor = dc_arrow;
+
+#if defined( PLATFORM_64BITS )
+
+// MCCLEANUP
+OSStatus SetThemeCursor(ThemeCursor inCursor) 
+{ 
+	return OSStatus(0); 
+}
+
 #endif
-}
 
-
-//-----------------------------------------------------------------------------
-// Initializes all the textures for software cursors
-//-----------------------------------------------------------------------------
-int InitSoftwareCursorTexture( const char *pchFilename )
-{
-	if( !pchFilename || !*pchFilename )
-		return -1;
-
-	int nTextureID = g_MatSystemSurface.DrawGetTextureId( pchFilename );
-	if( nTextureID == -1 )
-	{
-		nTextureID = g_MatSystemSurface.CreateNewTextureID();
-		g_MatSystemSurface.DrawSetTextureFile( nTextureID, pchFilename, true, false );
-	}
-	return nTextureID;
-}
-
-void InitSoftwareCursors()
-{
-	if( s_bSoftwareCursorsInitialized )
-		return;
-
-	memset( s_rfSoftwareCursorOffset, 0, sizeof( s_rfSoftwareCursorOffset ) );
-
-	s_rnSoftwareCursorID[dc_none]     = -1;
-	s_rnSoftwareCursorID[dc_arrow]    =InitSoftwareCursorTexture( "vgui/cursors/arrow" );
-	s_rnSoftwareCursorID[dc_ibeam]    =InitSoftwareCursorTexture( "vgui/cursors/ibeam" );
-	s_rnSoftwareCursorID[dc_hourglass]=InitSoftwareCursorTexture( "vgui/cursors/hourglass" );
-	s_rnSoftwareCursorID[dc_crosshair]=InitSoftwareCursorTexture( "vgui/cursors/crosshair" );
-	s_rnSoftwareCursorID[dc_waitarrow]=InitSoftwareCursorTexture( "vgui/cursors/waitarrow" );
-	s_rnSoftwareCursorID[dc_up]       =InitSoftwareCursorTexture( "vgui/cursors/up" );
-	s_rnSoftwareCursorID[dc_sizenwse] =InitSoftwareCursorTexture( "vgui/cursors/sizenwse" );
-	s_rnSoftwareCursorID[dc_sizenesw] =InitSoftwareCursorTexture( "vgui/cursors/sizenesw" );
-	s_rnSoftwareCursorID[dc_sizewe]   =InitSoftwareCursorTexture( "vgui/cursors/sizewe" );
-	s_rnSoftwareCursorID[dc_sizens]   =InitSoftwareCursorTexture( "vgui/cursors/sizens" );
-	s_rnSoftwareCursorID[dc_sizeall]  =InitSoftwareCursorTexture( "vgui/cursors/sizeall" );
-	s_rnSoftwareCursorID[dc_no]       =InitSoftwareCursorTexture( "vgui/cursors/no" );
-	s_rnSoftwareCursorID[dc_hand]     =InitSoftwareCursorTexture( "vgui/cursors/hand" );
-
-	// handle the cursor hotspots not being at their origin
-	s_rfSoftwareCursorOffset[dc_arrow][0] = -0.1;
-	s_rfSoftwareCursorOffset[dc_arrow][1] = -0.1;
-	s_rfSoftwareCursorOffset[dc_ibeam][0] = -0.5;
-	s_rfSoftwareCursorOffset[dc_ibeam][1] = -0.8;
-	s_rfSoftwareCursorOffset[dc_hourglass][0] = -0.5;
-	s_rfSoftwareCursorOffset[dc_hourglass][1] = -0.5;
-	s_rfSoftwareCursorOffset[dc_crosshair][0] = -0.5;
-	s_rfSoftwareCursorOffset[dc_crosshair][1] = -0.5;
-	s_rfSoftwareCursorOffset[dc_waitarrow][0] = -0.1;
-	s_rfSoftwareCursorOffset[dc_waitarrow][1] = -0.1;
-	s_rfSoftwareCursorOffset[dc_up][0] = -0.5;
-	s_rfSoftwareCursorOffset[dc_up][1] = -0.5;
-	s_rfSoftwareCursorOffset[dc_sizenwse][0] = -0.5;
-	s_rfSoftwareCursorOffset[dc_sizenwse][1] = -0.5;
-	s_rfSoftwareCursorOffset[dc_sizenesw][0] = -0.5;
-	s_rfSoftwareCursorOffset[dc_sizenesw][1] = -0.5;
-	s_rfSoftwareCursorOffset[dc_sizewe][0] = -0.5;
-	s_rfSoftwareCursorOffset[dc_sizewe][1] = -0.5;
-	s_rfSoftwareCursorOffset[dc_sizens][0] = -0.5;
-	s_rfSoftwareCursorOffset[dc_sizens][1] = -0.5;
-	s_rfSoftwareCursorOffset[dc_sizeall][0] = -0.5;
-	s_rfSoftwareCursorOffset[dc_sizeall][1] = -0.5;
-	s_rfSoftwareCursorOffset[dc_no][0] = -0.5;
-	s_rfSoftwareCursorOffset[dc_no][1] = -0.5;
-	s_rfSoftwareCursorOffset[dc_hand][0] = -0.5;
-	s_rfSoftwareCursorOffset[dc_hand][1] = -0.5;
-
-	s_bSoftwareCursorsInitialized = true;
-}
-
+#endif
 
 //-----------------------------------------------------------------------------
 // Selects a cursor
 //-----------------------------------------------------------------------------
-void CursorSelect(HCursor hCursor)
-{
-	if ( ( hCursor == dc_alwaysvisible_push ) || ( hCursor == dc_alwaysvisible_pop ) )
-	{
-		// CConPanel in engine/console.cpp does a SetCursor(null). So when the TF2 chat window pops up
-		//	and there are console commands showing and fading out in the top left, our chat window
-		//	will have a cursor show/hide fight with them. So the cursor flickers or doesn't show up
-		//	at all. Unfortunately on Linux, it's even worse since we recenter the mouse when it's
-		//	not shown - so we added this API call which causes cursor.cpp to always show the cursor.
-		s_nForceCursorVisibleCount += ( hCursor == dc_alwaysvisible_push ? 1 : -1 );
-		Assert( s_nForceCursorVisibleCount >= 0 );
 
-		if( ( s_nForceCursorVisibleCount && !s_bCursorVisible ) ||
-			( !s_nForceCursorVisibleCount && s_bCursorVisible ) )
-		{
-			ActivateCurrentCursor();
-		}
+void CursorSelect( InputContextHandle_t hContext, HCursor hCursor )
+{
+	if ( s_bCursorLocked )
 		return;
+
+	static ConVarRef cv_vguipanel_active( "vgui_panel_active" );
+
+#if defined( USE_SDL )
+	switch (hCursor)
+	{
+		case dc_user:
+		case dc_none:
+		case dc_blank:
+			// Make sure we have the latest blank cursor handle.
+			//		s_pDefaultCursor[dc_none] = (Cursor) g_pLauncherMgr->GetBlankCursor();
+			s_bCursorVisible = false;
+			break;
+
+		case dc_arrow:
+		case dc_waitarrow:
+		case dc_ibeam:
+		case dc_hourglass:
+		case dc_crosshair:
+		case dc_up:
+		case dc_sizenwse:
+		case dc_sizenesw:
+		case dc_sizewe:
+		case dc_sizens:
+		case dc_sizeall:
+		case dc_no:
+		case dc_hand:
+			s_bCursorVisible = true;
+			s_hCurrentCursor = s_pDefaultCursor[hCursor];
+			break;
+
+		default:
+			s_bCursorVisible = false;  // we don't support custom cursors at the moment (but could, if necessary).
+			Assert(0);
+			break;
 	}
 
-	if (s_bCursorLocked)
-		return;
+	ActivateCurrentCursor( hContext );
 
-#if defined( WIN32 ) && !defined( USE_SDL )
+#elif defined( WIN32 ) 
+
+	// [jason] When the console window is raised, keep the cursor active even if the mouse focus is not on the console window.
+	//	This makes it easier track where the cursor is on-screen when the user moves off of the console.
+	if ( cv_vguipanel_active.GetBool() == true && hCursor == dc_none )
+	{
+		hCursor = dc_arrow;
+	}
+
 	s_bCursorVisible = true;
-	switch (hCursor)
+	switch ( hCursor )
 	{
 	case dc_user:
 	case dc_none:
@@ -319,26 +274,19 @@ void CursorSelect(HCursor hCursor)
 	case dc_sizeall:
 	case dc_no:
 	case dc_hand:
-		if( !s_bSoftwareCursorActive )
-		{
-			s_hCurrentCursor = s_pDefaultCursor[hCursor];
-		}
-		else
-		{
-			s_nSoftwareCursorTexture = s_rnSoftwareCursorID[ hCursor ];
-			s_fSoftwareCursorOffsetX = s_rfSoftwareCursorOffset[ hCursor ][0];
-			s_fSoftwareCursorOffsetY = s_rfSoftwareCursorOffset[ hCursor ][1];
-		}
+		s_hCurrentCursor = s_pDefaultCursor[hCursor];
 		break;
 
 	default:
 		{
-			HCURSOR custom = 0;
+			InputCursorHandle_t custom = 0;
+#ifdef WIN32 
 			if ( g_UserCursors.LookupCursor( hCursor, custom ) && custom != 0 )
 			{
 				s_hCurrentCursor = custom;
 			}
 			else
+#endif // WIN32
 			{
 				s_bCursorVisible = false;
 				Assert(0);
@@ -347,74 +295,112 @@ void CursorSelect(HCursor hCursor)
 		break;
 	}
 
-	ActivateCurrentCursor();
+	ActivateCurrentCursor( hContext );
 
-#elif defined( USE_SDL )
+	g_pInputSystem->SetMouseCursorVisible( s_bCursorVisible );
+#elif defined( PLATFORM_OSX )
+	// @wge: Copied from window's section above
+	// [jason] When the console window is raised, keep the cursor active even if the mouse focus is not on the console window.
+	//	This makes it easier track where the cursor is on-screen when the user moves off of the console.
+	if ( cv_vguipanel_active.GetBool() == true && hCursor == dc_none )
+	{
+		if (!CommandLine()->FindParm("-keepmousehooked"))
+		{
+			CGAssociateMouseAndMouseCursorPosition( false );
+			if ( CGCursorIsVisible() )
+			{
+				CGDisplayHideCursor(kCGDirectMainDisplay);
 
+				CMatRenderContextPtr pRenderContext( g_pMaterialSystem );
+				int rx, ry, width, height;
+				pRenderContext->GetViewport( rx, ry, width, height );
+				CursorSetPos( NULL, width/2, height/2 ); // we are hiding the cursor so move it to the middle of our window
+				
+			}
+		}
+		s_bCursorVisible = false;
+	}
+	else
+	{
+		if (!CommandLine()->FindParm("-keepmousehooked"))
+		{
+			CGAssociateMouseAndMouseCursorPosition( true );
+			if ( !CGCursorIsVisible() )
+			{
+			  CGDisplayShowCursor(kCGDirectMainDisplay);
+			}
+		}
+		s_bCursorVisible = true;
+	}
+	
+	s_hCursor = hCursor;
+	s_bCursorVisible = true;
 	switch (hCursor)
 	{
-	case dc_user:
-	case dc_none:
-	case dc_blank:
-		s_bCursorVisible = false;
-		break;
+		case dc_none:  
+		case dc_user:
+		case dc_blank: 
+			s_bCursorVisible = false;
 
-	default:
-		// We don't support custom cursors at the moment (but could, if necessary).
-		// Fall through and use the arrow for now...
-		Assert(0);
-		hCursor = dc_arrow;
+			break;
+		case dc_arrow:
 
-	case dc_arrow:
-	case dc_waitarrow:
-	case dc_ibeam:
-	case dc_hourglass:
-	case dc_crosshair:
-	case dc_up:
-	case dc_sizenwse:
-	case dc_sizenesw:
-	case dc_sizewe:
-	case dc_sizens:
-	case dc_sizeall:
-	case dc_no:
-	case dc_hand:
-		s_bCursorVisible = true;
-		if( !s_bSoftwareCursorActive )
-		{
-			s_hCurrentCursor = s_pDefaultCursor[hCursor];
-		}
-		else
-		{
-			s_nSoftwareCursorTexture = s_rnSoftwareCursorID[ hCursor ];
-			s_fSoftwareCursorOffsetX = s_rfSoftwareCursorOffset[ hCursor ][0];
-			s_fSoftwareCursorOffsetY = s_rfSoftwareCursorOffset[ hCursor ][1];
-		}
-		break;
-	}
+			SetThemeCursor( kThemeArrowCursor );
+			break;
+		case dc_ibeam:
 
-	ActivateCurrentCursor();
+			SetThemeCursor( kThemeIBeamCursor );
+			break;
+		case dc_hourglass:
 
-#else
+			SetThemeCursor( kThemeSpinningCursor );
+			break;
+		case dc_waitarrow:
+
+			SetThemeCursor( kThemeSpinningCursor );
+			break;
+		case dc_crosshair:
+
+			SetThemeCursor( kThemeCrossCursor );
+			break;
+		case dc_up:
+
+			SetThemeCursor( kThemeResizeUpCursor );
+			break;
+		case dc_sizenwse:
+
+			SetThemeCursor( kThemeCountingUpAndDownHandCursor );
+			break;
+		case dc_sizenesw:
+
+			SetThemeCursor( kThemeResizeUpDownCursor );
+			break;
+		case dc_sizewe:
+
+			SetThemeCursor( kThemeResizeLeftRightCursor );
+			break;
+		case dc_sizens:
+
+			SetThemeCursor( kThemeResizeUpDownCursor );
+			break;
+		case dc_sizeall:
+
+			SetThemeCursor( kThemeContextualMenuArrowCursor );
+			break;
+		case dc_no:
+
+			SetThemeCursor( kThemeNotAllowedCursor );
+			break;
+		case dc_hand:
+
+			SetThemeCursor( kThemePointingHandCursor );
+			break;
+	};
+	
+	g_pInputSystem->SetMouseCursorVisible( s_bCursorVisible );
+#elif defined( _PS3 )
+#elif defined( LINUX )
 #error
-#endif
-
-}
-
-
-//-----------------------------------------------------------------------------
-// Hides the hardware cursor
-//-----------------------------------------------------------------------------
-void HideHardwareCursor()
-{
-#if defined( WIN32 ) && !defined( USE_SDL )
-	::SetCursor(NULL);
-#elif defined( USE_SDL )
-	//if ( s_hCurrentlySetCursor != s_pDefaultCursor[ dc_none ] )
-	{
-		s_hCurrentlySetCursor = s_pDefaultCursor[ dc_none ];
-		g_pLauncherMgr->SetMouseCursor( s_hCurrentlySetCursor );
-		g_pLauncherMgr->SetMouseVisible( false );
-	}
 #else
 #error
 #endif
@@ -424,24 +410,24 @@ void HideHardwareCursor()
 //-----------------------------------------------------------------------------
 // Activates the current cursor
 //-----------------------------------------------------------------------------
-void ActivateCurrentCursor()
+void ActivateCurrentCursor( InputContextHandle_t hContext )
 {
-	if( s_bSoftwareCursorActive )
+	if (s_bCursorVisible)
 	{
-		HideHardwareCursor();
-		return;
-	}
-
-	if ( s_bCursorVisible || ( s_nForceCursorVisibleCount > 0 ) )
-	{
-#if defined( WIN32 ) && !defined( USE_SDL )
-		::SetCursor(s_hCurrentCursor);
-#elif defined( USE_SDL )
-		if (s_hCurrentlySetCursor != s_hCurrentCursor )
+#if defined( USE_SDL )
+		if (s_hCurrentlySetCursor != s_hCurrentCursor)
 		{
 			s_hCurrentlySetCursor = s_hCurrentCursor;
 			g_pLauncherMgr->SetMouseCursor( s_hCurrentlySetCursor );
 			g_pLauncherMgr->SetMouseVisible( true );
+		}
+
+#elif defined( WIN32 )
+		g_pInputStackSystem->SetCursorIcon( hContext, s_hCurrentCursor );
+#elif defined( OSX )
+		if ( !CGCursorIsVisible() && !CommandLine()->FindParm("-keepmousehooked") )
+		{
+			CGDisplayShowCursor(kCGDirectMainDisplay);
 		}
 #else
 #error
@@ -449,7 +435,23 @@ void ActivateCurrentCursor()
 	}
 	else
 	{
-		HideHardwareCursor();
+#if defined( USE_SDL )
+		if (s_hCurrentlySetCursor != s_pDefaultCursor[dc_none])
+		{
+			s_hCurrentlySetCursor = s_pDefaultCursor[dc_none];
+			g_pLauncherMgr->SetMouseCursor( s_hCurrentlySetCursor );
+			g_pLauncherMgr->SetMouseVisible( false );
+		}
+#elif defined( WIN32 )
+		g_pInputStackSystem->SetCursorIcon( hContext, INPUT_CURSOR_HANDLE_INVALID );
+#elif defined( OSX )
+		if ( CGCursorIsVisible() && !CommandLine()->FindParm("-keepmousehooked") )
+		{
+			CGDisplayHideCursor(kCGDirectMainDisplay);
+		}
+#else
+#error
+#endif
 	}
 }
 
@@ -457,10 +459,10 @@ void ActivateCurrentCursor()
 //-----------------------------------------------------------------------------
 // Purpose: prevents vgui from changing the cursor
 //-----------------------------------------------------------------------------
-void LockCursor( bool bEnable )
+void LockCursor( InputContextHandle_t hContext, bool bEnable )
 {
 	s_bCursorLocked = bEnable;
-	ActivateCurrentCursor();
+	ActivateCurrentCursor( hContext );
 }
 
 
@@ -476,90 +478,67 @@ bool IsCursorLocked()
 //-----------------------------------------------------------------------------
 // handles mouse movement
 //-----------------------------------------------------------------------------
-void CursorSetPos( void *hwnd, int x, int y )
+void CursorSetPos( InputContextHandle_t hContext, int x, int y )
 {
-#if defined( USE_SDL )
+	Assert( hContext != INPUT_CONTEXT_HANDLE_INVALID );
+#if defined( DX_TO_GL_ABSTRACTION )
 	if ( s_bCursorVisible )
 #endif
-		g_pInputSystem->SetCursorPosition( x, y );
+		g_pInputStackSystem->SetCursorPosition( hContext, x, y );
 }
 
-void CursorGetPos(void *hwnd, int &x, int &y)
+void CursorGetPos( InputContextHandle_t hContext, int &x, int &y )
 {
-#if defined ( USE_SDL ) && !defined( PLATFORM_WINDOWS )
-	if ( s_bCursorVisible )
-	{
-		SDL_GetMouseState( &x, &y );
+	// Should I add GetCursorPosition to InputStackSystem?
 
-		int windowHeight = 0;
-		int windowWidth = 0;
-		//unsigned int ignored;
-		SDL_GetWindowSize( ( SDL_Window * )g_pLauncherMgr->GetWindowRef(), &windowWidth, &windowHeight );
+	Assert( hContext != INPUT_CONTEXT_HANDLE_INVALID );
+	g_pInputSystem->GetCursorPosition( &x, &y );
+}
 
-		CMatRenderContextPtr pRenderContext( g_pMaterialSystem );
-		int rx, ry, width, height;
-		pRenderContext->GetViewport( rx, ry, width, height );
+
+#ifdef OSX
+void CursorRunFrame()
+{
+	static HCursor hCursorLast = dc_none;
 	
-		if ( !s_bSoftwareCursorActive && (width != windowWidth || height != windowHeight )  )
+	if ( hCursorLast == s_hCursor )
+		return;
+	
+	hCursorLast = s_hCursor;
+	
+	if ( s_hCursor == dc_none || s_hCursor == dc_user || s_hCursor == dc_blank )
+	{
+		if (!CommandLine()->FindParm("-keepmousehooked"))
 		{
-			// scale the x/y back into the co-ords of the back buffer, not the scaled up window 
-			//DevMsg( "Mouse x:%d y:%d %d %d %d %d\n", x, y, width, windowWidth, height, abs( height - windowHeight ) );
-			x = x * (float)width/windowWidth;
-			y = y * (float)height/windowHeight;
+			// @wge Removed. After this is called, all mouse coordinates will be locked (returning only delta). We need coordinates for Scaleform.
+			//CGAssociateMouseAndMouseCursorPosition( false );
+			if ( CGCursorIsVisible() )
+				CGDisplayHideCursor(kCGDirectMainDisplay);
+			
+			CMatRenderContextPtr pRenderContext( g_pMaterialSystem );
+			int rx, ry, width, height;
+			pRenderContext->GetViewport( rx, ry, width, height );
+			// we are hiding the cursor so move it to the middle of our window
+			g_pInputSystem->SetCursorPosition( width/2, height/2 );
 		}
+		s_bCursorVisible = false;
 	}
-	else 
+	else
 	{
-		// cursor is invisible, just say we have it pinned to the middle of the screen
-		CMatRenderContextPtr pRenderContext( g_pMaterialSystem );
-		int rx, ry, width, height;
-		pRenderContext->GetViewport( rx, ry, width, height );
-		x = rx + width/2;
-		y = ry + height/2;
-		//printf( "Mouse(inv) x:%d y:%d %d %d\n", x, y, width, height );
-	}
-#else
-	POINT pt;
-
-	// Default implementation
-	VCRHook_GetCursorPos( &pt );
-	VCRHook_ScreenToClient((HWND)hwnd, &pt);
-	x = pt.x; y = pt.y;
+		if (!CommandLine()->FindParm("-keepmousehooked"))
+		{
+			// @wge Removed, see above comment.
+			//CGAssociateMouseAndMouseCursorPosition( true );
+			if ( !CGCursorIsVisible() )
+			{
+				CGDisplayShowCursor( kCGDirectMainDisplay );
+			}
+		}
+		s_bCursorVisible = true;
+	}	
+}
 #endif
-}
 
 
-void EnableSoftwareCursor( bool bEnable )
-{
-	if( bEnable )
-		InitSoftwareCursors();
-
-	bool bWasEnabled = s_bSoftwareCursorActive;
-	s_bSoftwareCursorActive = bEnable;
-
-	// set the cursor to the arrow (or none if appropriate) if we're activating the
-	// software cursor. VGUI will likely update it again soon, but this will give
-	// us some kind of cursor in the meantime
-	if( !bWasEnabled && bEnable )
-	{
-		if( s_bCursorVisible )
-			CursorSelect( dc_arrow );
-	}
-}
-
-bool ShouldDrawSoftwareCursor()
-{
-	return s_bSoftwareCursorActive && s_bCursorVisible;
-}
-
-int  GetSoftwareCursorTexture( float *px, float *py )
-{
-	if( px && py )
-	{
-		*px = s_fSoftwareCursorOffsetX;
-		*py = s_fSoftwareCursorOffsetY;
-	}
-	return s_nSoftwareCursorTexture;
-}
 
 

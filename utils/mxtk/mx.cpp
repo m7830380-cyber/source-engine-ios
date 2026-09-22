@@ -20,7 +20,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "tier1/utlvector.h"
+#include "tier1/UtlVector.h"
 
 
 #define WM_MOUSEWHEEL                   0x020A
@@ -188,6 +188,34 @@ static LRESULT CALLBACK WndProc (HWND hwnd, UINT uMessage, WPARAM wParam, LPARAM
 
 	switch (uMessage)
 	{
+	case WM_DROPFILES:
+	{
+		mxWindow *window = (mxWindow *) GetWindowLong (hwnd, GWL_USERDATA);
+		if (window)
+		{
+			SwitchToThisWindow(hwnd,1);
+
+			TCHAR lpszFile[MAX_PATH] = {0};
+			UINT uFile = 0;
+			HDROP hDrop = (HDROP)wParam;
+
+			uFile = DragQueryFile( hDrop, 0xFFFFFFFF, NULL, NULL );
+			for ( UINT i=0; i<uFile; i++ )
+			{
+				if ( DragQueryFile( hDrop, i, lpszFile, MAX_PATH ) )
+				{
+					mxEvent event;
+					event.event = mxEvent::DropFile;
+					V_strcpy_safe( event.szChars, lpszFile );
+					window->handleEvent (&event);
+				}
+			}
+
+			DragFinish(hDrop);
+		}
+	}
+	break;
+
 	case WM_SETFOCUS:
 	case WM_KILLFOCUS:
 	{

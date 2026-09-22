@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -12,6 +12,8 @@
 #include "hammer.h"
 #include "RunMapExpertDlg.h"
 #include "RunMapCfgDlg.h"
+#include "mapdoc.h"
+#include "gridnav.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include <tier0/memdbgon.h>
@@ -28,6 +30,7 @@ CRunMapExpertDlg::CRunMapExpertDlg(CWnd* pParent /*=NULL*/)
 	m_pActiveSequence = NULL;
 	m_bNoUpdateCmd = FALSE;
 	m_bSwitchMode = FALSE;
+	m_bWaitForKeypress = FALSE;
 }
 
 
@@ -35,7 +38,6 @@ void CRunMapExpertDlg::DoDataExchange(CDataExchange* pDX)
 {
 	CDialog::DoDataExchange(pDX);
 	//{{AFX_DATA_MAP(CRunMapExpertDlg)
-	DDX_Control(pDX, IDC_USEPROCESSWND, m_cUseProcessWnd);
 	DDX_Control(pDX, IDC_CONFIGURATIONS, m_cCmdSequences);
 	DDX_Control(pDX, IDC_MOVEUP, m_cMoveUp);
 	DDX_Control(pDX, IDC_MOVEDOWN, m_cMoveDown);
@@ -43,6 +45,7 @@ void CRunMapExpertDlg::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, IDC_ENSURECHECK, m_cEnsureCheck);
 	DDX_Control(pDX, IDC_PARAMETERS, m_cParameters);
 	DDX_Control(pDX, IDC_COMMAND, m_cCommand);
+	DDX_Check(pDX, IDC_WAITFORKEYPRESS, m_bWaitForKeypress);
 	//}}AFX_DATA_MAP
 
 	DDX_Control(pDX, IDC_COMMANDLIST, m_cCommandList);
@@ -76,6 +79,8 @@ enum
 	id_BrBSPProgram,
 	id_BrLIGHTProgram,
 
+	id_BrGenerateGridNav,
+
 	id_BrEnd
 };
 
@@ -96,7 +101,6 @@ BEGIN_MESSAGE_MAP(CRunMapExpertDlg, CDialog)
 	ON_EN_UPDATE(IDC_ENSUREFN, OnUpdateEnsurefn)
 	ON_CBN_SELCHANGE(IDC_CONFIGURATIONS, OnSelchangeConfigurations)
 	ON_BN_CLICKED(IDC_EDITCONFIGS, OnEditconfigs)
-	ON_BN_CLICKED(IDC_USEPROCESSWND, OnUseprocesswnd)
 	ON_COMMAND_EX_RANGE(id_InsertParmMapFileNoExt, id_InsertParmEnd, HandleInsertParm)
 	ON_COMMAND_EX_RANGE(id_BrExecutable, id_BrEnd, HandleInsertCommand)
 	//}}AFX_MSG_MAP
@@ -154,6 +158,9 @@ BOOL CRunMapExpertDlg::HandleInsertCommand(UINT nID)
 		case id_BrBSPProgram:
 			m_cCommand.SetWindowText("$bsp_exe");
 			break;
+		case id_BrGenerateGridNav:
+			pCommand->iSpecialCmd = CCGenerateGridNav;
+			break;
 		}
 
 		if(pCommand->iSpecialCmd)
@@ -175,12 +182,20 @@ void CRunMapExpertDlg::OnBrowsecommand(void)
 	menu.AppendMenu(MF_STRING, id_BrChangeDir, "Change Directory");
 	menu.AppendMenu(MF_STRING, id_BrCopyFile, "Copy File");
 	menu.AppendMenu(MF_STRING, id_BrDelFile, "Delete File");
-	menu.AppendMenu(MF_STRING, id_BrRenameFile, "Rename File");
+	menu.AppendMenu(MF_STRING, id_BrRenameFile, "Rename File");	
 	menu.AppendMenu(MF_SEPARATOR);
 	menu.AppendMenu(MF_STRING, id_BrBSPProgram, "BSP program");
 	menu.AppendMenu(MF_STRING, id_BrVISProgram, "VIS program");
 	menu.AppendMenu(MF_STRING, id_BrLIGHTProgram, "LIGHT program");
 	menu.AppendMenu(MF_STRING, id_BrGameProgram, "Game program");
+
+	// the generate grid nav command only appears if grid nav is enabled
+	CMapDoc* pMapDoc = CMapDoc::GetActiveMapDoc();
+	if ( pMapDoc && pMapDoc->GetGridNav() && pMapDoc->GetGridNav()->IsEnabled() )
+	{
+		menu.AppendMenu(MF_SEPARATOR);
+		menu.AppendMenu(MF_STRING, id_BrGenerateGridNav, "Generate Grid Nav");
+	}
 
 	// track menu
 	CWnd *pButton = GetDlgItem(IDC_BROWSECOMMAND);
@@ -204,6 +219,8 @@ LPCTSTR CRunMapExpertDlg::GetCmdString(PCCOMMAND pCommand)
 		return "Rename File";
 	case CCChangeDir:
 		return "Change Directory";
+	case CCGenerateGridNav:
+		return "Generate Grid Nav";
 	}
 
 	return "";
@@ -228,7 +245,6 @@ void CRunMapExpertDlg::OnSelchangeCommandlist()
 
 		// checkboxes/buttons:
 		IDC_ENSURECHECK,
-		IDC_USEPROCESSWND,
 		IDC_INSERTPARM,
 		IDC_BROWSECOMMAND,
 
@@ -264,7 +280,6 @@ void CRunMapExpertDlg::OnSelchangeCommandlist()
 	m_cParameters.SetWindowText(pCommand->szParms);
 	m_cEnsureCheck.SetCheck(pCommand->bEnsureCheck);
 	m_cEnsureFn.SetWindowText(pCommand->szEnsureFn);		
-	m_cUseProcessWnd.SetCheck(pCommand->bUseProcessWnd);
 	// don't forget to call this:
 		OnEnsurecheck();
 
@@ -399,7 +414,6 @@ void CRunMapExpertDlg::OnNew()
 	// add a command
 	PCCOMMAND pCommand = new CCOMMAND;
 	memset(pCommand, 0, sizeof(CCOMMAND));
-	pCommand->bUseProcessWnd = TRUE;
 	AddCommand(-1, pCommand);
 	m_cCommandList.SetCurSel(m_cCommandList.GetCount()-1);
 	// sleection has changed
@@ -414,6 +428,7 @@ void CRunMapExpertDlg::OnNormal()
 	CHammer *pApp = (CHammer*) AfxGetApp();
 	pApp->SaveSequences();
 
+	UpdateData();
 	EndDialog(IDOK);
 }
 
@@ -425,7 +440,6 @@ void CRunMapExpertDlg::UpdateCommandWithEditFields(int iIndex)
 	m_cCommand.GetWindowText(pCommand->szRun, MAX_PATH);
 	m_cParameters.GetWindowText(pCommand->szParms, MAX_PATH);
 	m_cEnsureFn.GetWindowText(pCommand->szEnsureFn, MAX_PATH);
-	pCommand->bUseProcessWnd = m_cUseProcessWnd.GetCheck();
 	pCommand->bEnsureCheck = m_cEnsureCheck.GetCheck();
 
 	// save checked state..
@@ -508,14 +522,6 @@ void CRunMapExpertDlg::OnUpdateEnsurefn()
 {
 	if(!m_bNoUpdateCmd)
 		UpdateCommandWithEditFields(-1);
-}
-
-void CRunMapExpertDlg::OnUseprocesswnd() 
-{
-	// update the command here..
-	PCCOMMAND pCommand = GetCommandAtIndex(NULL);
-	Assert(pCommand);
-	pCommand->bUseProcessWnd = m_cUseProcessWnd.GetCheck() ? TRUE : FALSE;
 }
 
 void CRunMapExpertDlg::InitSequenceList()

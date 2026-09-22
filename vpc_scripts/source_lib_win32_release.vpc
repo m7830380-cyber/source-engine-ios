@@ -6,21 +6,12 @@
 
 $IgnoreRedundancyWarning	"ON"
 
-// Disable frame pointer omission to allow fast stack walking, necessary for
-// good ETW profiling.
-$Conditional  NOFPO  "1"
-
 $MacroRequired				"SRCDIR"
 $MacroRequired				"OUTLIBNAME"
 $MacroRequired				"OUTLIBDIR"
 $MacroRequired				"LIBPUBLIC"
 $MacroRequired				"LIBCOMMON"
 $MacroRequired				"PLATSUBDIR"
-$MacroRequiredAllowEmpty	"GAMENAME"
-$MacroRequiredAllowEmpty	"INTERMEDIATESUBDIR"
-$MacroRequiredAllowEmpty	"_UNITYSUBDIR"
-$MacroRequiredAllowEmpty	"_STATICSUBDIR"
-$Macro						"_SUBDIRSUFFIX"		"$INTERMEDIATESUBDIR$_STATICSUBDIR$GAMENAME$PLATSUBDIR$_UNITYSUBDIR"
 
 $Configuration "Release"
 {
@@ -28,9 +19,7 @@ $Configuration "Release"
 	{
 		// General
 		$OutputDirectory					"$OUTLIBDIR"
-		$IntermediateDirectory				".\Release$_SUBDIRSUFFIX"		[!$RETAIL && !$PROFILE]
-		$IntermediateDirectory				".\Retail$_SUBDIRSUFFIX"		[$RETAIL]
-		$IntermediateDirectory				".\Profile$_SUBDIRSUFFIX"		[!$RETAIL && $PROFILE]
+		$IntermediateDirectory				".\Release$PLATSUBDIR"
 		$ExtensionsToDeleteOnClean
 		$BuildLogFile
 		$InheritedProjectPropertySheets
@@ -80,7 +69,6 @@ $Configuration "Release"
 
 		// Preprocessor
 		$PreprocessorDefinitions			"$BASE;WIN32;_WIN32;NDEBUG;_LIB;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE;_ALLOW_RUNTIME_LIBRARY_MISMATCH;_ALLOW_ITERATOR_DEBUG_LEVEL_MISMATCH;_ALLOW_MSC_VER_MISMATCH;%(PreprocessorDefinitions)"
-		$PreprocessorDefinitions			"$BASE;RELEASEASSERTS" [$RELEASEASSERTS]
 		$IgnoreStandardIncludePath
 		$GeneratePreprocessedFile
 		$KeepComments
@@ -93,8 +81,7 @@ $Configuration "Release"
 		$BasicRuntimeChecks
 		$RuntimeLibrary						"Multi-threaded (/MT)"
 		$StructMemberAlignment
-		$BufferSecurityCheck                "No"	[$RETAIL]
-		$BufferSecurityCheck 				"Yes"	[!$RETAIL]
+		$BufferSecurityCheck 				"No" [$WINDOWS]
 		$EnableFunctionLevelLinking			"Yes (/Gy)"
 		$EnableEnhancedInstructionSet
 		$FloatingPointModel					"Fast (/fp:fast)"
@@ -135,15 +122,14 @@ $Configuration "Release"
 		$ShowIncludes
 		$UndefinePreprocessorDefinitions
 		$UndefineAllPreprocessorDefinitions
-		$UseFullPaths						"Yes (/FC)"
+		$UseFullPaths
 		$OmitDefaultLibraryNames
 		$ErrorReporting						"Prompt Immediately (/errorReport:prompt)"
 
-		// Enable extra debugging information. This switch requires VS 2013 Update 3.
-		// With VS 2013 make sure that Edit-And-Continue is disabled in the debugger settings so that
-		// the debugger uses the enhanced debug information.
-		// http://randomascii.wordpress.com/2013/09/11/debugging-optimized-codenew-in-visual-studio-2012/
-		$AdditionalOptions					"$BASE /Zo"
+		// Command Line
+		$AdditionalOptions					"/MP"
+		// Enable extra debugging information.
+		$AdditionalOptions					"$BASE /d2Zi+"
 		$AdditionalOptions					"$BASE /Oy-"	[$NOFPO]
 	}
 

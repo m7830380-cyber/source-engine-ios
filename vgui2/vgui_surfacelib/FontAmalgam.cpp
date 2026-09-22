@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -6,12 +6,15 @@
 //=============================================================================//
 
 #include "vgui_surfacelib/FontAmalgam.h"
-#include <tier0/dbg.h>
-#include <vgui/VGUI.h>
-#include <vgui/ISurface.h>
+#include "vgui_surfacelib/ifontsurface.h"
+#include "tier0/dbg.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
+
+#ifndef max
+#define max(a,b)            (((a) > (b)) ? (a) : (b))
+#endif
 
 //-----------------------------------------------------------------------------
 // Purpose: Constructor
@@ -31,34 +34,18 @@ CFontAmalgam::~CFontAmalgam()
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: Data accessor
-//-----------------------------------------------------------------------------
-const char *CFontAmalgam::Name()
-{
-	return m_szName;
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: Data accessor
-//-----------------------------------------------------------------------------
-void CFontAmalgam::SetName(const char *name)
-{
-	Q_strncpy(m_szName, name, sizeof(m_szName));
-}
-
-//-----------------------------------------------------------------------------
 // Purpose: adds a font to the amalgam
 //-----------------------------------------------------------------------------
-void CFontAmalgam::AddFont(font_t *font, int lowRange, int highRange)
+void CFontAmalgam::AddFont(font_t *pFont, int lowRange, int highRange)
 {
 	int i = m_Fonts.AddToTail();
 
-	m_Fonts[i].font = font;
+	m_Fonts[i].pWin32Font = pFont;
 	m_Fonts[i].lowRange = lowRange;
 	m_Fonts[i].highRange = highRange;
 
-	m_iMaxHeight = max(font->GetHeight(), m_iMaxHeight);
-	m_iMaxWidth = max(font->GetMaxCharWidth(), m_iMaxWidth);
+	m_iMaxHeight = MAX(pFont->GetHeight(), m_iMaxHeight);
+	m_iMaxWidth = MAX(pFont->GetMaxCharWidth(), m_iMaxWidth);
 }
 
 //-----------------------------------------------------------------------------
@@ -79,14 +66,10 @@ font_t *CFontAmalgam::GetFontForChar(int ch)
 {
 	for (int i = 0; i < m_Fonts.Count(); i++)
 	{
-#if defined(LINUX)
-        if ( ch >= m_Fonts[i].lowRange && ch <= m_Fonts[i].highRange && m_Fonts[i].font->HasChar(ch))
-#else
-		if (ch >= m_Fonts[i].lowRange && ch <= m_Fonts[i].highRange)
-#endif
+		if ( ch >= m_Fonts[i].lowRange && ch <= m_Fonts[i].highRange )
 		{
-			Assert( m_Fonts[i].font->IsValid() );
-			return m_Fonts[i].font;
+			Assert( m_Fonts[i].pWin32Font->IsValid() );
+			return m_Fonts[i].pWin32Font;
 		}
 	}
 
@@ -102,13 +85,13 @@ void CFontAmalgam::SetFontScale(float sx, float sy)
 		return;
 
 	// Make sure this is a bitmap font!
-	if ( GetFlags( 0 ) & vgui::ISurface::FONTFLAG_BITMAP )
+	if ( GetFlags( 0 ) & FONTFLAG_BITMAP )
 	{
-		reinterpret_cast< CBitmapFont* >( m_Fonts[0].font )->SetScale( sx, sy );
+		reinterpret_cast< CBitmapFont* >( m_Fonts[0].pWin32Font )->SetScale( sx, sy );
 	}
 	else
 	{
-		Warning( "%s: Can't set font scale on a non-bitmap font!\n", m_Fonts[0].font->GetName() );
+		Warning( "%s: Can't set font scale on a non-bitmap font!\n", m_Fonts[0].pWin32Font->GetName() );
 	}
 }
 
@@ -121,19 +104,7 @@ int CFontAmalgam::GetFontHeight()
 	{
 		return m_iMaxHeight;
 	}
-	return m_Fonts[0].font->GetHeight();
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: returns requested height of the font
-//-----------------------------------------------------------------------------
-int CFontAmalgam::GetFontHeightRequested()
-{
-	if (!m_Fonts.Count())
-	{
-		return m_iMaxHeight;
-	}
-	return m_Fonts[0].font->GetHeightRequested();
+	return m_Fonts[0].pWin32Font->GetHeight();
 }
 
 //-----------------------------------------------------------------------------
@@ -147,26 +118,11 @@ int CFontAmalgam::GetFontMaxWidth()
 //-----------------------------------------------------------------------------
 // Purpose: returns the name of the font that is loaded
 //-----------------------------------------------------------------------------
-const char *CFontAmalgam::GetFontName(int i)
+const char *CFontAmalgam::GetFontName( int i )
 {	
-	if ( m_Fonts.IsValidIndex( i ) && m_Fonts[ i ].font )
+	if ( m_Fonts.Count() && m_Fonts[i].pWin32Font && m_Fonts[i].pWin32Font->IsValid() )
 	{
-		return m_Fonts[ i ].font->GetName();
-	}
-	else
-	{
-		return NULL;
-	}
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: returns the family name of the font that is loaded
-//-----------------------------------------------------------------------------
-const char *CFontAmalgam::GetFontFamilyName( int i )
-{	
-	if ( m_Fonts.IsValidIndex( i ) && m_Fonts[ i ].font )
-	{
-		return m_Fonts[ i ].font->GetFamilyName();
+		return m_Fonts[i].pWin32Font->GetName();
 	}
 	
 	return "";
@@ -177,9 +133,9 @@ const char *CFontAmalgam::GetFontFamilyName( int i )
 //-----------------------------------------------------------------------------
 int CFontAmalgam::GetFlags(int i)
 {	
-	if ( m_Fonts.Count() && m_Fonts[i].font )
+	if ( m_Fonts.Count() && m_Fonts[i].pWin32Font )
 	{
-		return m_Fonts[i].font->GetFlags();
+		return m_Fonts[i].pWin32Font->GetFlags();
 	}
 	else
 	{
@@ -205,7 +161,7 @@ bool CFontAmalgam::GetUnderlined()
 	{
 		return false;
 	}
-	return m_Fonts[0].font->GetUnderlined();
+	return m_Fonts[0].pWin32Font->GetUnderlined();
 }
 
 

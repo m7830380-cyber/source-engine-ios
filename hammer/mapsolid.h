@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -57,7 +57,11 @@ public:
 	// Serialization.
 	//
 	static void PreloadWorld( void );
+
 	static int GetBadSolidCount( void );
+	static int GetRecordedBadSolidCount( void );
+	static int GetBadSolidId( int i );
+
 	virtual void PostloadWorld(CMapWorld *pWorld);
 	ChunkFileResult_t LoadVMF( CChunkFile *pFile, bool &bValid );
 	ChunkFileResult_t SaveVMF( CChunkFile *pFile, CSaveInfo *pSaveInfo );
@@ -84,6 +88,7 @@ public:
 
 	virtual bool ShouldAppearInLightingPreview(void);
 	virtual bool ShouldAppearInRaytracedLightingPreview(void);
+	virtual bool ShouldAppearOverEngine(void);
 
 	//
 	// rendering
@@ -111,7 +116,7 @@ public:
 	inline void SetHL1SolidType(HL1_SolidType_t eSolidType) { m_eSolidType = eSolidType; }
 	HL1_SolidType_t HL1SolidTypeFromTextureName(const char *pszTexture);
 
-	virtual bool IsScaleable(void) { return(true); }
+	virtual bool IsScaleable(void) const { return(true); }
 	virtual bool IsVisualElement(void) { return(true); }
 
 	// Overridden to set the render color of each of our faces.
@@ -171,6 +176,9 @@ protected:
 	static ChunkFileResult_t LoadSideCallback(CChunkFile *pFile, CMapSolid *pSolid);
 	ChunkFileResult_t SaveEditorData(CChunkFile *pFile);
 	static int g_nBadSolidCount;
+	static int g_nRecordedBadSolidCount;
+	static const int MAX_RECORDED_BAD_SOLIDS = 10;
+	static int g_nRecordedBadSolidIds[MAX_RECORDED_BAD_SOLIDS];
 
 	CSolidFaces Faces;					// The list of faces on this solid.	
 

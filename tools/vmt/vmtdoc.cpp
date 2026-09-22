@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2005, Valve Corporation, All rights reserved. =======//
 //
 // Purpose: 
 //
@@ -7,9 +7,10 @@
 //=============================================================================//
 
 #include "vmtdoc.h"
-#include "tier1/KeyValues.h"
+#include "tier1/keyvalues.h"
 #include "tier1/utlbuffer.h"
 #include "datamodel/dmelement.h"
+#include "datamodel/dmattributevar.h"
 #include "vmttool.h"
 #include "materialsystem/imaterialsystem.h"
 #include "materialsystem/ishader.h"
@@ -53,6 +54,7 @@ static StandardParam_t g_pStandardParams[] =
 	{ "%compiledetail", SHADER_PARAM_TYPE_BOOL, "0", NULL, NULL },
 	{ "%compilewater", SHADER_PARAM_TYPE_BOOL, "0", NULL, NULL },
 	{ "%compileslime", SHADER_PARAM_TYPE_BOOL, "0", NULL, NULL },
+	{ "%compilegrenadeclip", SHADER_PARAM_TYPE_BOOL, "0", NULL, NULL },
 	{ NULL, SHADER_PARAM_TYPE_BOOL, NULL, NULL, NULL }
 };
 
@@ -429,11 +431,11 @@ CDmElement* CVMTDoc::ExtractDefaultParameters( )
 		continue;
 
 		// Remove parameters which match the default value
-		nCount = m_pCurrentIShader->GetNumParams();
+		nCount = m_pCurrentIShader->GetParamCount();
 		for ( i = 0; i < nCount; ++i )
 		{
 			// FIXME: Check type matches
-			if ( Q_stricmp( pShaderParam, m_pCurrentIShader->GetParamName( i ) ) )
+			if ( Q_stricmp( pShaderParam, m_pCurrentIShader->GetParamInfo( i ).m_pName ) )
 				continue;
 
 			// NOTE: This isn't particularly efficient. Too bad!
@@ -443,7 +445,7 @@ CDmElement* CVMTDoc::ExtractDefaultParameters( )
 			CUtlBuffer buf( temp, sizeof(temp), CUtlBuffer::TEXT_BUFFER | CUtlBuffer::EXTERNAL_GROWABLE );
 			CUtlBuffer buf2( temp2, sizeof(temp2), CUtlBuffer::TEXT_BUFFER | CUtlBuffer::EXTERNAL_GROWABLE );
 			pAttribute->Serialize( buf );
-			SetAttributeValueFromDefault( pMaterial, pAttribute, m_pCurrentIShader->GetParamDefault( i ) );
+			SetAttributeValueFromDefault( pMaterial, pAttribute, m_pCurrentIShader->GetParamInfo( i ).m_pDefaultValue );
 			pAttribute->Serialize( buf2 );
 
 			if ( ( buf.TellMaxPut() == buf2.TellMaxPut() ) && !memcmp( buf.Base(), buf2.Base(), buf.TellMaxPut() ) )
@@ -512,8 +514,8 @@ bool CVMTDoc::IsShaderParam( CDmAttribute* pAttribute )
 	if ( pName[0] != '$' && pName[0] != '%' )
 		return false;
 
-	// Don't remove name, type, or id
-	if ( pAttribute->IsFlagSet( FATTRIB_STANDARD ) )
+	// Don't remove name
+	if ( pAttribute->IsStandard() )
 		return false;
 
 	// All shader params have USERDEFINED set
@@ -587,11 +589,11 @@ void CVMTDoc::RemoveUnusedShaderParams( CDmElement *pMaterial, IShader *pShader,
 		const char *pShaderParam = pAttribute->GetName();
 
 		// Remove parameters we've currently got but which don't exist in the new shader
-		nCount = pShader->GetNumParams();
+		nCount = pShader->GetParamCount();
 		for ( i = 0; i < nCount; ++i )
 		{
 			// FIXME: Check type matches
-			if ( !Q_stricmp( pShaderParam, pShader->GetParamName( i ) ) )
+			if ( !Q_stricmp( pShaderParam, pShader->GetParamInfo( i ).m_pName ) )
 				break;
 		}
 
@@ -607,11 +609,13 @@ void CVMTDoc::RemoveUnusedShaderParams( CDmElement *pMaterial, IShader *pShader,
 		// This will make the default values update to the new shader's defaults
 		if ( pOldShader )
 		{
-			nCount = pOldShader->GetNumParams();
+			nCount = pOldShader->GetParamCount();
 			for ( i = 0; i < nCount; ++i )
 			{
+				const ShaderParamInfo_t& info = pOldShader->GetParamInfo( i );
+
 				// FIXME: Check type matches
-				if ( Q_stricmp( pShaderParam, pOldShader->GetParamName( i ) ) )
+				if ( Q_stricmp( pShaderParam, info.m_pName ) )
 					continue;
 
 				// NOTE: This isn't particularly efficient. Too bad!
@@ -621,7 +625,7 @@ void CVMTDoc::RemoveUnusedShaderParams( CDmElement *pMaterial, IShader *pShader,
 				CUtlBuffer buf1( temp1, sizeof(temp1), CUtlBuffer::TEXT_BUFFER | CUtlBuffer::EXTERNAL_GROWABLE );
 				CUtlBuffer buf2( temp2, sizeof(temp2), CUtlBuffer::TEXT_BUFFER | CUtlBuffer::EXTERNAL_GROWABLE );
 				pAttribute->Serialize( buf1 );
-				SetAttributeValueFromDefault( pMaterial, pAttribute, pOldShader->GetParamDefault( i ) );
+				SetAttributeValueFromDefault( pMaterial, pAttribute, info.m_pDefaultValue );
 				pAttribute->Serialize( buf2 );
 
 				if ( ( buf1.TellMaxPut() == buf2.TellMaxPut() ) && !memcmp( buf1.Base(), buf2.Base(), buf1.TellMaxPut() ) )
@@ -907,8 +911,8 @@ void CVMTDoc::AddNewShaderParam( CDmElement *pMaterial, const char *pParamName, 
 	CDmAttribute* pAttribute = NULL;
 	for ( pAttribute = pMaterial->FirstAttribute(); pAttribute; pAttribute = pAttribute->NextAttribute() )
 	{
-		// Don't bother testing against name, type, or id
-		if ( pAttribute->IsFlagSet( FATTRIB_STANDARD ) )
+		// Don't bother testing against name
+		if ( pAttribute->IsStandard() )
 			continue;
 
 		const char *pAttributeName = pAttribute->GetName();
@@ -942,17 +946,18 @@ void CVMTDoc::AddNewShaderParams( CDmElement *pMaterial, IShader *pShader )
 	}
 
 	// Next add all shader-specific parameters
-	nCount = pShader->GetNumParams();
+	nCount = pShader->GetParamCount();
 	for ( i = 0; i < nCount; ++i )
 	{
-		const char *pParamName = pShader->GetParamName( i );
+		const ShaderParamInfo_t &info = pShader->GetParamInfo( i );
+		const char *pParamName = info.m_pName;
 
 		// Don't add parameters that don't want to be editable
-		if ( pShader->GetParamFlags( i ) & SHADER_PARAM_NOT_EDITABLE )
+		if ( info.m_nFlags & SHADER_PARAM_NOT_EDITABLE )
 			continue;
 
-		ShaderParamType_t paramType = pShader->GetParamType( i );
-		const char *pDefault = pShader->GetParamDefault( i );
+		ShaderParamType_t paramType = info.m_Type;
+		const char *pDefault = info.m_pDefaultValue;
 		AddNewShaderParam( pMaterial, pParamName, paramType, pDefault );
 	}
 }
@@ -967,13 +972,14 @@ void CVMTDoc::SetParamsToDefault()
 	CAppUndoScopeGuard guard( 0, "Set Params to Default", "Set Params to Default" );
 
 	// Next add all shader-specific parameters
-	int nCount = m_pCurrentIShader->GetNumParams();
+	int nCount = m_pCurrentIShader->GetParamCount();
 	for ( int i = 0; i < nCount; ++i )
 	{
-		const char *pParamName = m_pCurrentIShader->GetParamName( i );
+		const ShaderParamInfo_t &info = m_pCurrentIShader->GetParamInfo( i );
+		const char *pParamName = info.m_pName;
 
 		// Don't set parameters that don't want to be editable
-		if ( m_pCurrentIShader->GetParamFlags( i ) & SHADER_PARAM_NOT_EDITABLE )
+		if ( info.m_nFlags & SHADER_PARAM_NOT_EDITABLE )
 			continue;
 
 		char pAttributeName[512];
@@ -984,7 +990,7 @@ void CVMTDoc::SetParamsToDefault()
 			continue;
 
 		CDmAttribute *pAttribute = m_hRoot->GetAttribute( pAttributeName );
-		const char *pDefault = m_pCurrentIShader->GetParamDefault( i );
+		const char *pDefault = info.m_pDefaultValue;
 		SetAttributeValueFromDefault( m_hRoot, pAttribute, pDefault );
 	}
 }

@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2005, Valve Corporation, All rights reserved. =======//
 //
 // Purpose: 
 //
@@ -7,7 +7,7 @@
 //=============================================================================//
 
 #include "commeditdoc.h"
-#include "tier1/KeyValues.h"
+#include "tier1/keyvalues.h"
 #include "tier1/utlbuffer.h"
 #include "toolutils/enginetools_int.h"
 #include "filesystem.h"
@@ -73,22 +73,6 @@ bool CCommEditDoc::IsDirty() const
 {
 	return m_bDirty;
 }
-
-
-//-----------------------------------------------------------------------------
-// Handles creation of the right element for a keyvalue
-//-----------------------------------------------------------------------------
-class CElementForKeyValueCallback : public IElementForKeyValueCallback
-{
-public:
-	const char *GetElementForKeyValue( const char *pszKeyName, int iNestingLevel )
-	{
-		if ( iNestingLevel == 1 && !Q_strncmp(pszKeyName, "entity", 6) )
-			return "DmeCommentaryNodeEntity";
-
-		return NULL;
-	}
-};
 
 //-----------------------------------------------------------------------------
 // Saves/loads from file
@@ -160,15 +144,10 @@ bool CCommEditDoc::LoadFromFile( const char *pFileName )
 		*pComm = '\0';
 
 		// This is not undoable
-		CDisableUndoScopeGuard guardFile;
+		CDisableUndoScopeGuard guard;
 
 		CDmElement *pTXT = NULL;
-
-		CElementForKeyValueCallback KeyValuesCallback;
-		g_pDataModel->SetKeyValuesElementCallback( &KeyValuesCallback );
-		DmFileId_t fileid = g_pDataModel->RestoreFromFile( pFileName, NULL, "keyvalues", &pTXT );
-		g_pDataModel->SetKeyValuesElementCallback( NULL );
-
+		DmFileId_t fileid = g_pDataModel->RestoreFromFile( pFileName, NULL, "commentary", &pTXT );
 		if ( fileid == DMFILEID_INVALID )
 		{
 			m_pTXTFileName[0] = 0;
@@ -221,6 +200,48 @@ CDmAttribute *CCommEditDoc::GetEntityList()
 	CDmeHandle<CDmElement> hEntityList;
 	hEntityList = mainKeys[ 0 ];
 	return hEntityList ? hEntityList->GetAttribute( "subkeys", AT_ELEMENT_ARRAY ) : NULL;
+}
+
+
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+void CCommEditDoc::AddNewInfoRemarkable( const Vector &vecOrigin, const QAngle &angAngles )
+{
+	CDmrCommentaryNodeEntityList entities( GetEntityList() );
+	if ( !entities.IsValid() )
+		return;
+
+	CDmeCommentaryNodeEntity *pTarget;
+	{
+		CAppUndoScopeGuard guard( NOTIFY_SETDIRTYFLAG, "Add Info Remarkable", "Add Info Remarkable" );
+
+		pTarget = CreateElement<CDmeCommentaryNodeEntity>( "remarkable", entities.GetOwner()->GetFileId() );
+		pTarget->SetName( "entity" );
+		pTarget->SetValue( "classname", "info_remarkable" );
+		pTarget->SetRenderOrigin( vecOrigin );
+		pTarget->SetRenderAngles( angAngles );
+
+		entities.AddToTail( pTarget );
+		pTarget->MarkDirty();
+		pTarget->DrawInEngine( true );
+	}
+
+	g_pCommEditTool->GetCommentaryNodeBrowser()->SelectNode( pTarget );
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+void CCommEditDoc::AddNewInfoRemarkable( void )
+{
+	Vector vecOrigin;
+	QAngle angAngles;
+	float flFov;
+	clienttools->GetLocalPlayerEyePosition( vecOrigin, angAngles, flFov );
+	AddNewInfoRemarkable( vecOrigin, vec3_angle ); 
 }
 
 
@@ -281,14 +302,14 @@ void CCommEditDoc::AddNewCommentaryNode( const Vector &vecOrigin, const QAngle &
 		pNode->SetValue( "classname", "point_commentary_node" );
 		pNode->SetRenderOrigin( vecOrigin );
 		pNode->SetRenderAngles( angAngles );
-		pNode->SetValue<CUtlString>( "precommands", "" );
-		pNode->SetValue<CUtlString>( "postcommands", "" );
-		pNode->SetValue<CUtlString>( "commentaryfile", "" );
-		pNode->SetValue<CUtlString>( "viewtarget", "" );
-		pNode->SetValue<CUtlString>( "viewposition", "" );
+		pNode->SetValue( "precommands", "" );
+		pNode->SetValue( "postcommands", "" );
+		pNode->SetValue( "commentaryfile", "" );
+		pNode->SetValue( "viewtarget", "" );
+		pNode->SetValue( "viewposition", "" );
 		pNode->SetValue<int>( "prevent_movement", 0 );
-		pNode->SetValue<CUtlString>( "speakers", "" );
-		pNode->SetValue<CUtlString>( "synopsis", "" );
+		pNode->SetValue( "speakers", "" );
+		pNode->SetValue( "synopsis", "" );
 
 		entities.AddToTail( pNode );
 		pNode->MarkDirty();
@@ -380,6 +401,7 @@ bool CCommEditDoc::GetStringChoiceList( const char *pChoiceListType, CDmElement 
 
 			if ( !V_stricmp( pNode->GetClassName(), "info_target" ) )
 			{
+				StringChoice_t sChoice;
 				sChoice.m_pValue = pNode->GetTargetName();
 				sChoice.m_pChoiceString = pNode->GetTargetName();
 				list.AddToTail( sChoice );

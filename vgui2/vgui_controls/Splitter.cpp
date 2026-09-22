@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright � 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -9,7 +9,7 @@
 #include <vgui/Cursor.h>
 #include <vgui/IInput.h>
 #include <vgui_controls/Splitter.h>
-#include "tier1/KeyValues.h"
+#include "tier1/keyvalues.h"
 #include <limits.h>
 
 // memdbgon must be the last include file in a .cpp file!!!
@@ -182,21 +182,6 @@ public:
 };
 
 } // end namespace vgui
-
-//-----------------------------------------------------------------------------
-//
-// Splitter panel
-//
-//-----------------------------------------------------------------------------
-vgui::Panel *Splitter_V_Factory()
-{
-	return new Splitter( NULL, NULL, SPLITTER_MODE_VERTICAL, 1 );
-}
-
-vgui::Panel *Splitter_H_Factory()
-{
-	return new Splitter( NULL, NULL, SPLITTER_MODE_HORIZONTAL, 1 );
-}
 
 //-----------------------------------------------------------------------------
 // Purpose: Constructor
@@ -670,7 +655,7 @@ void Splitter::ApplyUserConfigSettings(KeyValues *userConfig)
 
 	// read the splitter sizes
 	int c = m_Splitters.Count();
-	float *pFractions = (float*)_alloca( c * sizeof(float) );
+	float *pFractions = (float*)stackalloc( c * sizeof(float) );
 	float flTotalSize = 0.0f;
 	for ( int i = 0; i < c; i++ )
 	{

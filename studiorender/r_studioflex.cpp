@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2008, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -20,7 +20,7 @@
 #include "pixelwriter.h"
 #include "vtf/vtf.h"
 #include "tier1/convar.h"
-#include "tier1/KeyValues.h"
+#include "tier1/keyvalues.h"
 #include "tier0/vprof.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
@@ -105,9 +105,7 @@ void CStudioRender::R_StudioEyelidFACS( const mstudioeyeball_t *peyeball, const 
 	if ( peyeball->m_bNonFACS )
 		return;
 
-	Vector  headup;
-	Vector  headforward;
-	Vector	pos;
+	Vector pos, headup, headforward;
 
 	float upperlid = DEG2RAD( 9.5 );
 	float lowerlid = DEG2RAD( -26.4 );
@@ -173,25 +171,21 @@ void CStudioRender::MaterialPlanerProjection( const matrix3x4_t& mat, int count,
 //-----------------------------------------------------------------------------
 float CStudioRender::RampFlexWeight( mstudioflex_t &flex, float w )
 {
-	if (w <= flex.target0 || w >= flex.target3)
+	if ( w <= flex.target0 || w >= flex.target3 )
 	{
-		// value outside of range
-		w = 0.0;
+		w = 0.0;												// value outside of range
 	}
-	else if (w < flex.target1)
+	else if ( w < flex.target1 )
 	{
-		// 0 to 1 ramp
-		w = (w - flex.target0) / (flex.target1 - flex.target0);
+		w = (w - flex.target0) / (flex.target1 - flex.target0);	// 0 to 1 ramp
 	}
-	else if (w > flex.target2)
+	else if ( w > flex.target2 )
 	{
-		// 1 to 0 ramp
-		w = (flex.target3 - w) / (flex.target3 - flex.target2);
+		w = (flex.target3 - w) / (flex.target3 - flex.target2);	// 1 to 0 ramp
 	}
 	else
 	{
-		// plat
-		w = 1.0;
+		w = 1.0;												// plat
 	}
 	return w;
 }
@@ -199,7 +193,7 @@ float CStudioRender::RampFlexWeight( mstudioflex_t &flex, float w )
 //-----------------------------------------------------------------------------
 // Setup the flex verts for this rendering
 //-----------------------------------------------------------------------------
-void CStudioRender::R_StudioFlexVerts( mstudiomesh_t *pmesh, int lod )
+void CStudioRender::R_StudioFlexVerts( mstudiomesh_t *pmesh, int lod, bool bQuadList )
 {
 	VPROF_BUDGET( "CStudioRender::R_StudioFlexVerts", VPROF_BUDGETGROUP_MODEL_RENDERING );
 
@@ -209,10 +203,10 @@ void CStudioRender::R_StudioFlexVerts( mstudiomesh_t *pmesh, int lod )
 
 	// There's a chance we can actually do the flex twice on a single mesh
 	// since there's flexed HW + SW portions of the mesh.
-	if (m_VertexCache.IsFlexComputationDone())
+	if ( m_VertexCache.IsFlexComputationDone() )
 		return;
 
-	// get pointers to geometry
+	// Get pointers to geometry
 	if ( !pmesh->pModel()->CacheVertexData( m_pStudioHdr ) )
 	{
 		// not available yet
@@ -224,7 +218,7 @@ void CStudioRender::R_StudioFlexVerts( mstudiomesh_t *pmesh, int lod )
 	{
 		static unsigned int warnCount = 0;
 		if ( warnCount++ < 20 )
-			Warning( "ERROR: R_StudioFlexVerts, model verts have been compressed, cannot render! (use \"-no_compressed_vvds\")" );
+			Warning( "ERROR: model verts have been compressed, cannot render! (use \"-no_compressed_vvds\")" );
 		return;
 	}
 
@@ -237,26 +231,16 @@ void CStudioRender::R_StudioFlexVerts( mstudiomesh_t *pmesh, int lod )
 			Warning( "ERROR: flex verts have not been converted (queued loader refcount bug?) - expect to see 'exploded' faces" );
 	}
 
-
 	mstudiovertex_t *pVertices = vertData->Vertex( 0 );
-	Vector4D *pStudioTangentS;
-	if ( vertData->HasTangentData() )
-	{
-		pStudioTangentS	= vertData->TangentS( 0 );
-	}
-	else
-	{
-		pStudioTangentS = NULL;
-	}
-
+	Vector4D *pStudioTangentS = vertData->HasTangentData() ? vertData->TangentS( 0 ) : NULL;
 	mstudioflex_t *pflex = pmesh->pFlex( 0 );
 	
 	m_VertexCache.SetupComputation( pmesh, true );
 
-	// apply flex weights
+	// Apply flex weights
 	int i, j, n;
 
-	for (i = 0; i < pmesh->numflexes; i++)
+	for ( i = 0; i < pmesh->numflexes; i++ )
 	{
 		float w1 = RampFlexWeight( pflex[i], m_pFlexWeights[ pflex[i].flexdesc ] );
 		float w2 = RampFlexWeight( pflex[i], m_pFlexDelayedWeights[ pflex[i].flexdesc ] );
@@ -281,35 +265,35 @@ void CStudioRender::R_StudioFlexVerts( mstudiomesh_t *pmesh, int lod )
 			}
 		}
 
-		// We may have wrinkle information for this flex, but if we're software skinning
-		// we're going to ignore it.
 		byte *pvanim = pflex[i].pBaseVertanim();
 		int nVAnimSizeBytes = pflex[i].VertAnimSizeBytes();
 
-		for (j = 0; j < pflex[i].numverts; j++)
+		bool bWrinkleFlex = pflex[i].vertanimtype == STUDIO_VERT_ANIM_WRINKLE;
+
+		for ( j = 0; j < pflex[i].numverts; j++ )
 		{
 			mstudiovertanim_t *pAnim = (mstudiovertanim_t*)( pvanim + j * nVAnimSizeBytes );
 			n = pAnim->index;
 
-			// Only flex the indices that are (still) part of this mesh
-			// need lod restriction here
-			if (n < pmesh->vertexdata.numLODVertexes[lod])
+			// Only flex the indices that are (still) part of this mesh need lod restriction here
+			if ( n < pmesh->vertexdata.numLODVertexes[lod] )
 			{
 				mstudiovertex_t &vert = pVertices[n];
 
 				CachedPosNormTan_t* pFlexedVertex;
-				if (!m_VertexCache.IsVertexFlexed(n))
+				if ( !m_VertexCache.IsVertexFlexed(n) )
 				{
-					// Add a new flexed vert to the flexed vertex list
-					pFlexedVertex = m_VertexCache.CreateFlexVertex(n);
-					// skip processing if no more flexed verts can be allocated
-					if (pFlexedVertex == NULL)
+					pFlexedVertex = m_VertexCache.CreateFlexVertex(n);	// Add a new flexed vert to the list
+
+					if ( pFlexedVertex == NULL )						// Skip processing if no more can be allocated
 						continue;
 
-					VectorCopy( vert.m_vecPosition, pFlexedVertex->m_Position );
-					VectorCopy( vert.m_vecNormal, pFlexedVertex->m_Normal );
+					VectorCopy( vert.m_vecPosition, pFlexedVertex->m_Position.AsVector3D() );
+					pFlexedVertex->m_Position.w = 0.0f;
 
-					if (pStudioTangentS)
+					VectorCopy( vert.m_vecNormal, pFlexedVertex->m_Normal.AsVector3D() );
+
+					if ( pStudioTangentS )
 					{
 						Vector4DCopy( pStudioTangentS[n], pFlexedVertex->m_TangentS );
 						Assert( pFlexedVertex->m_TangentS.w == -1.0f || pFlexedVertex->m_TangentS.w == 1.0f );
@@ -320,14 +304,24 @@ void CStudioRender::R_StudioFlexVerts( mstudiomesh_t *pmesh, int lod )
 					pFlexedVertex = m_VertexCache.GetFlexVertex(n);
 				}
 
-				float s = pAnim->speed * (1.0F/255.0F);
-				float b = pAnim->side * (1.0F/255.0F);
+				float s = pAnim->speed * ( 1.0f/255.0f );
+				float b = pAnim->side * ( 1.0f/255.0f );
 
 				float w = (w1 * s + (1.0f - s) * w2) * (1.0f - b) + b * (w3 * s + (1.0f - s) * w4);
 
 				// Accumulate weighted deltas
-				pFlexedVertex->m_Position += pAnim->GetDeltaFixed( flVertAnimFixedPointScale ) * w;
-				pFlexedVertex->m_Normal += pAnim->GetNDeltaFixed( flVertAnimFixedPointScale ) * w;
+				pFlexedVertex->m_Position.AsVector3D() += pAnim->GetDeltaFixed( flVertAnimFixedPointScale ) * w;
+
+				if ( bWrinkleFlex )
+				{
+					float delta = ((mstudiovertanim_wrinkle_t *)pAnim)->GetWrinkleDeltaFixed( flVertAnimFixedPointScale );
+					pFlexedVertex->m_Position.w += w * delta;
+				}
+
+				if ( !bQuadList )
+				{
+					pFlexedVertex->m_Normal.AsVector3D() += pAnim->GetNDeltaFixed( flVertAnimFixedPointScale ) * w;
+				}
 
 				if ( pStudioTangentS )
 				{
@@ -338,7 +332,7 @@ void CStudioRender::R_StudioFlexVerts( mstudiomesh_t *pmesh, int lod )
 		}
 	}
 
-	m_VertexCache.RenormalizeFlexVertices( vertData->HasTangentData() );
+	m_VertexCache.RenormalizeFlexVertices( vertData->HasTangentData(), bQuadList );
 }
 
 // REMOVED!!  Look in version 32 if you need it.
@@ -506,19 +500,21 @@ static CGlintTextureRegenerator s_GlintTextureRegen;
 static ITexture *s_pProcGlint = NULL;
 void CStudioRender::PrecacheGlint()
 {
-	if ( !m_pGlintTexture )
+	if ( ! m_pGlintTexture )
 	{
 		// Begin block in which all render targets should be allocated
-		g_pMaterialSystem->BeginRenderTargetAllocation();
 
 		// Get the texture that we are going to be updating procedurally.
-		m_pGlintTexture = g_pMaterialSystem->CreateNamedRenderTargetTextureEx2( 
-			"_rt_eyeglint", 32, 32, RT_SIZE_NO_CHANGE, IMAGE_FORMAT_BGRA8888, MATERIAL_RT_DEPTH_NONE );
+		m_pGlintTexture = materials->FindTexture( "_rt_eyeglint", TEXTURE_GROUP_RENDER_TARGET );
+		if ( IsErrorTexture( m_pGlintTexture ) )
+		{
+			g_pMaterialSystem->BeginRenderTargetAllocation();
+			m_pGlintTexture = g_pMaterialSystem->CreateNamedRenderTargetTextureEx2( 
+				"_rt_eyeglint", 32, 32, RT_SIZE_NO_CHANGE, IMAGE_FORMAT_BGRA8888, MATERIAL_RT_DEPTH_NONE );
+			g_pMaterialSystem->EndRenderTargetAllocation();
+		}
 		m_pGlintTexture->IncrementReferenceCount();
-
-		// Begin block in which all render targets should be allocated
-		g_pMaterialSystem->EndRenderTargetAllocation();
-
+		
 		if ( !IsX360() )
 		{
 			// Get the texture that we are going to be updating procedurally.
@@ -587,8 +583,7 @@ int CStudioRender::BuildGlintRenderData( GlintRenderData_t *pData, int nMaxGlint
 	// move cornea to world space
 	VectorAdd( cornea, pState->org, cornea );
 
-	Vector delta, intensity;
-	Vector reflection, coord;
+	Vector delta, intensity, reflection, coord;
 
 	// Put in glints due to the lights in the scene
 	int nGlintCount = 0;
@@ -637,6 +632,13 @@ ITexture* CStudioRender::RenderGlintTexture( const eyeballstate_t *pState,
 	if ( nGlintCount == 0 )
 		return m_pGlintLODTexture;
 
+	// This could be done during the context of a flashlight rendering,
+	// which could be setting the scissor rectangle. We need to save/restore this state
+//	if ( m_pCurrentFlashlight )
+//	{
+//		DisableScissor();
+//	}
+
 	CMatRenderContextPtr pRenderContext( g_pMaterialSystem );
 	pRenderContext->PushRenderTargetAndViewport( m_pGlintTexture );
 
@@ -647,10 +649,10 @@ ITexture* CStudioRender::RenderGlintTexture( const eyeballstate_t *pState,
 	bool bPrevClippingEnabled = pRenderContext->EnableClipping( false );
 	bool bInFlashlightMode = pRenderContext->GetFlashlightMode();
 
-	if ( bInFlashlightMode )
-	{
-		DisableScissor();
-	}
+//	if ( bInFlashlightMode )
+//	{
+//		DisableScissor();
+//	}
 	pRenderContext->ClearColor4ub( 0, 0, 0, 0 );
 	pRenderContext->ClearBuffers( true, false, false );
 
@@ -675,6 +677,7 @@ ITexture* CStudioRender::RenderGlintTexture( const eyeballstate_t *pState,
 	IMesh *pMesh = pRenderContext->GetDynamicMesh( );
 	meshBuilder.Begin( pMesh, MATERIAL_TRIANGLES, nGlintCount * 4, nGlintCount * 6 );
 
+	Vector4D white( 1.0f, 1.0f, 1.0f, 1.0f );
 	const float epsilon = 0.5f / 32.0f;
 	int nIndex = 0;
 	for ( int i = 0; i < nGlintCount; ++i )
@@ -734,7 +737,7 @@ ITexture* CStudioRender::RenderGlintTexture( const eyeballstate_t *pState,
 	}
 
 	meshBuilder.End();
-	pMesh->Draw();
+	pMesh->DrawModulated( white );
 
 	pRenderContext->MatrixMode( MATERIAL_MODEL );
 	pRenderContext->PopMatrix();
@@ -757,6 +760,11 @@ ITexture* CStudioRender::RenderGlintTexture( const eyeballstate_t *pState,
 	pRenderContext->SetHeightClipMode( nPrevClipMode );
 	pRenderContext->EnableClipping( bPrevClippingEnabled );
 	pRenderContext->SetFlashlightMode( bInFlashlightMode );
+
+//	if ( m_pCurrentFlashlight )
+//	{
+//		EnableScissor( m_pCurrentFlashlight );
+//	}
 
 	return m_pGlintTexture;
 }
@@ -789,7 +797,7 @@ void CStudioRender::R_StudioEyeballGlint( const eyeballstate_t *pstate, IMateria
 	}
 
 	// Legacy method for DX8
-	if ( !IsX360() && ( r_glint_procedural.GetInt() || g_pMaterialSystemHardwareConfig->GetDXSupportLevel() < 90 ) )
+	if ( !IsX360() && r_glint_procedural.GetInt() )
 	{
 		// Set up the texture regenerator
 		s_GlintTextureRegen.m_pVRight = &vright;
@@ -904,8 +912,7 @@ void CStudioRender::R_MouthSetupVertexShader( IMaterial* pMaterial )
 	// FIXME: this needs to get the mouth index from the shader
 	mstudiomouth_t *pMouth = m_pStudioHdr->pMouth( 0 ); 
 
-	// Don't deal with illum gamma, we apply it at a different point
-	// for vertex shaders
+	// Don't deal with illum gamma, we apply it at a different point for vertex shaders
 	float fIllum = m_pFlexWeights[pMouth->flexdesc];
 	if (fIllum < 0) fIllum = 0;
 	if (fIllum > 1) fIllum = 1;

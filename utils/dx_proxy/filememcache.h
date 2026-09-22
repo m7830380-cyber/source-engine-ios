@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright c 1996-2007, Valve Corporation, All rights reserved. =======//
 //
 // Purpose: 
 //
@@ -13,8 +13,10 @@
 #endif
 
 #include "tier0/platform.h"
-#include "tier1/generichash.h"
-#include <unordered_map>
+#include "tier0/basetypes.h"
+
+#define _SILENCE_STDEXT_HASH_DEPRECATION_WARNINGS
+#include <hash_map>
 
 #pragma warning ( disable : 4200 )
 
@@ -58,18 +60,8 @@ public:
 	void Clear( void );
 
 protected:
-	struct eqstr {
-		inline size_t operator()( const char *s ) const {
-			if ( !s )
-				return 0;
-			return HashString( s );
-		}
-		inline bool operator()( const char *s1, const char *s2 ) const {
-			return _stricmp( s1, s2 ) < 0;
-		}
-	};
-
-	typedef std::unordered_map< const char *, CachedFileData *, eqstr, eqstr > Mapping;
+	struct icmp { bool operator()( char const *x, char const *y ) const { return _stricmp( x, y ) < 0; } };
+	typedef stdext::hash_map< char const *, CachedFileData *, stdext::hash_compare< char const *, icmp > > Mapping;
 	Mapping m_map;
 };
 

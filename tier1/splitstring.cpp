@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//================ Copyright (c) 1996-2009 Valve Corporation. All Rights Reserved. =================
 //
 //
 //
@@ -6,6 +6,11 @@
 
 #include "strtools.h"
 #include "utlvector.h"
+
+CSplitString::CSplitString()
+{
+	m_szBuffer = nullptr;
+}
 
 CSplitString::CSplitString(const char *pString, const char **pSeparators, int nSeparators)
 {
@@ -21,6 +26,12 @@ CSplitString::~CSplitString()
 {
 	if(m_szBuffer)
 		delete [] m_szBuffer;
+}
+
+void CSplitString::Set(const char *pString, const char **pSeparators, int nSeparators)
+{
+	delete[] m_szBuffer;
+	Construct(pString, pSeparators, nSeparators);
 }
 
 void CSplitString::Construct( const char *pString, const char **pSeparators, int nSeparators )
@@ -70,8 +81,7 @@ void CSplitString::Construct( const char *pString, const char **pSeparators, int
 		else
 		{
 			// Copy the rest of the string
-			int nTokenLength = strlen( pCurPos );
-			if ( nTokenLength )
+			if ( int nTokenLength = strlen( pCurPos ) )
 			{
 				//////////////////////////////////////////////////////////////////////////
 				// There's no need to cut this token, because there's no separator after it.

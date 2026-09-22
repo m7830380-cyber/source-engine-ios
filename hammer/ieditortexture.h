@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ====
 //
 // Purpose: Defines the interface a given texture for the 3D renderer. Current
 //			implementations are for world textures (WADTexture.cpp) and sprite
@@ -69,11 +69,14 @@ class IEditorTexture
 		//
 		// dvs: remove one of these
 		//
-		virtual int GetImageWidth( void ) const = 0;
-		virtual int GetImageHeight( void ) const = 0;
+		virtual int GetPreviewImageWidth( void ) const = 0;
+		virtual int GetPreviewImageHeight( void ) const = 0;
 
 		virtual int GetWidth( void ) const = 0;
 		virtual int GetHeight( void ) const = 0;
+
+		virtual int GetMappingWidth( void ) const = 0;
+		virtual int GetMappingHeight( void ) const = 0;
 
 		virtual float GetDecalScale( void ) const = 0;
 

@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -14,11 +14,6 @@
 #include "filesystem.h"
 #include "filesystem_engine.h"
 #include "materialsystem/imaterial.h"
-#ifdef APPLE
-#include <malloc/malloc.h>
-#else
-#include <malloc.h>
-#endif
 #include "utldict.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
@@ -49,6 +44,11 @@ int Draw_DecalMax( void )
 	return g_nMaxDecals;
 }
 
+static bool BIsPlayerLogoDecal( int index )
+{
+	return ( ( ( index >> 24 ) & 0x7F ) != 0 );
+}
+
 //-----------------------------------------------------------------------------
 // Purpose: 
 // Sets the name of the bitmap from decals.wad to be used in a specific slot #
@@ -60,6 +60,9 @@ int Draw_DecalMax( void )
 // called from gl_rsurf.cpp
 IMaterial *Draw_DecalMaterial( int index )
 {
+	if ( BIsPlayerLogoDecal( index ) )
+		return materials->FindMaterial( "decals/playerlogo01", TEXTURE_GROUP_DECAL, true );
+
 	if ( index < 0 || index >= g_DecalLookup.Count() )
 		return NULL;
 
@@ -79,7 +82,7 @@ IMaterial *Draw_DecalMaterial( int index )
 	}
 }
 
-#ifndef SWDS
+#ifndef DEDICATED
 void Draw_DecalSetName( int decal, char *name )
 {
 	while ( decal >= g_DecalLookup.Count() )
@@ -99,7 +102,8 @@ void Draw_DecalSetName( int decal, char *name )
 		entry.m_pDebugName = new char[len];
 		memcpy( entry.m_pDebugName, name, len );
 #endif
-		entry.material = GL_LoadMaterial( name, TEXTURE_GROUP_DECAL );
+		// fully precache the decal
+		entry.material = GL_LoadMaterial( name, TEXTURE_GROUP_DECAL, true );
 		entry.index = decal;
 
 		lookup = g_DecalDictionary.Insert( fnHandle, entry );
@@ -143,7 +147,7 @@ int Draw_DecalIndexFromName( char *name, bool *found )
 
 const char *Draw_DecalNameFromIndex( int index )
 {
-#if !defined(SWDS)
+#if !defined(DEDICATED)
 	return g_DecalDictionary[index].material ? g_DecalDictionary[index].material->GetName() : "";
 #else
 	return "";

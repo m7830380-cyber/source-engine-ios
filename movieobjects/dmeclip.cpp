@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2004, Valve Corporation, All rights reserved. =======
 //
 // Purpose: 
 //
@@ -14,7 +14,6 @@
 #include "movieobjects/dmesound.h"
 #include "movieobjects/dmechannel.h"
 #include "movieobjects/dmecamera.h"
-#include "movieobjects/dmelight.h"
 #include "movieobjects/dmedag.h"
 #include "movieobjects/dmeinput.h"
 #include "movieobjects/dmeoperator.h"
@@ -74,49 +73,12 @@ void CDmeClip::OnConstruction()
 	m_ClipColor.InitAndSet( this, "color", Color( 0, 0, 0, 0 ) );
 	m_ClipText.Init( this, "text" );
 	m_bMute.Init( this, "mute" );
-	m_TrackGroups.Init( this, "trackGroups", FATTRIB_MUSTCOPY | FATTRIB_HAS_ARRAY_CALLBACK );
+	m_TrackGroups.Init( this, "trackGroups", FATTRIB_MUSTCOPY );
+	m_flDisplayScale.InitAndSet( this, "displayScale", 1.0f );
 }
 
 void CDmeClip::OnDestruction()
 {
-}
-
-
-//-----------------------------------------------------------------------------
-// Inherited from IDmElement
-//-----------------------------------------------------------------------------
-void CDmeClip::OnAttributeArrayElementAdded( CDmAttribute *pAttribute, int nFirstElem, int nLastElem )
-{
-	BaseClass::OnAttributeArrayElementAdded( pAttribute, nFirstElem, nLastElem );
-	if ( pAttribute == m_TrackGroups.GetAttribute() )
-	{
-		for ( int i = nFirstElem; i <= nLastElem; ++i )
-		{
-			CDmeTrackGroup *pTrackGroup = m_TrackGroups[ i ];
-			if ( pTrackGroup )
-			{
-				pTrackGroup->SetOwnerClip( this );
-			}
-		}
-		return;
-	}
-}
-
-void CDmeClip::OnAttributeArrayElementRemoved( CDmAttribute *pAttribute, int nFirstElem, int nLastElem )
-{
-	BaseClass::OnAttributeArrayElementRemoved( pAttribute, nFirstElem, nLastElem );
-	if ( pAttribute == m_TrackGroups.GetAttribute() )
-	{
-		for ( int i = nFirstElem; i <= nLastElem; ++i )
-		{
-			CDmeTrackGroup *pTrackGroup = m_TrackGroups[ i ];
-			if ( pTrackGroup )
-			{
-				pTrackGroup->SetOwnerClip( NULL );
-			}
-		}
-		return;
-	}
 }
 
 
@@ -255,6 +217,52 @@ void CDmeClip::SetDuration( DmeTime_t t )
 	if ( tf )
 	{
 		tf->SetDuration( t );
+	}
+}
+
+
+void CDmeClip::BakeTimeScale( float scale /*= 1.0f*/ )
+{
+	CDmeTimeFrame *tf = m_TimeFrame.GetElement();
+	Assert( tf );
+	if ( !tf )
+		return;
+
+	float flNewScale = tf->GetTimeScale();
+	tf->SetTimeScale( 1.0f );
+
+	if ( scale != 1.0f )
+	{
+		tf->SetStartTime ( tf->GetStartTime () / scale );
+		tf->SetDuration  ( tf->GetDuration  () / scale );
+		tf->SetTimeOffset( tf->GetTimeOffset() / scale );
+		flNewScale *= scale;
+	}
+
+	int nTrackGroups = m_TrackGroups.Count();
+	for ( int gi = 0; gi < nTrackGroups; ++gi )
+	{
+		CDmeTrackGroup *pTrackGroup = m_TrackGroups[ gi ];
+		if ( !pTrackGroup )
+			continue;
+
+		int nTracks = pTrackGroup->GetTrackCount();
+		for ( int ti = 0; ti < nTracks; ++ti )
+		{
+			CDmeTrack *pTrack = pTrackGroup->GetTrack( ti );
+			if ( !pTrack )
+				continue;
+
+			int nClips = pTrack->GetClipCount();
+			for ( int ci = 0; ci < nClips; ++ci )
+			{
+				CDmeClip *pClip = pTrack->GetClip( ci );
+				if ( !pClip )
+					continue;
+
+				pClip->BakeTimeScale( flNewScale );
+			}
+		}
 	}
 }
 
@@ -400,7 +408,6 @@ void CDmeClip::SwapOrder( CDmeTrackGroup *pTrackGroup1, CDmeTrackGroup *pTrackGr
 	m_TrackGroups.Swap( nIndex1, nIndex2 );
 }
 
-	
 //-----------------------------------------------------------------------------
 // Track group finding
 //-----------------------------------------------------------------------------
@@ -515,6 +522,22 @@ void CDmeClip::FindClipsAtTime( DmeClipType_t clipType, DmeTime_t time, DmeClipS
 	}
 }
 
+void CDmeClip::FindClipsIntersectingTime( DmeClipType_t clipType, DmeTime_t startTime, DmeTime_t endTime, DmeClipSkipFlag_t flags, CUtlVector< CDmeClip * >& clips ) const
+{
+	if ( clipType == DMECLIP_FILM )
+		return;
+
+	int gc = GetTrackGroupCount();
+	for ( int i = 0; i < gc; ++i )
+	{
+		CDmeTrackGroup *pTrackGroup = GetTrackGroup( i );
+		if ( !pTrackGroup )
+			continue;
+
+		pTrackGroup->FindClipsIntersectingTime( clipType, startTime, endTime, flags, clips );
+	}
+}
+
 void CDmeClip::FindClipsWithinTime( DmeClipType_t clipType, DmeTime_t startTime, DmeTime_t endTime, DmeClipSkipFlag_t flags, CUtlVector< CDmeClip * >& clips ) const
 {
 	if ( clipType == DMECLIP_FILM )
@@ -535,7 +558,7 @@ void CDmeClip::FindClipsWithinTime( DmeClipType_t clipType, DmeTime_t startTime,
 //-----------------------------------------------------------------------------
 // Build a list of all referring clips
 //-----------------------------------------------------------------------------
-static int BuildReferringClipList( CDmeClip *pClip, CDmeClip** ppParents, int nMaxCount )
+static int BuildReferringClipList( const CDmeClip *pClip, CDmeClip** ppParents, int nMaxCount )
 {
 	int nCount = 0;
 
@@ -583,14 +606,20 @@ static int BuildReferringClipList( CDmeClip *pClip, CDmeClip** ppParents, int nM
 	return nCount;
 }
 
+bool CDmeClip::BuildClipStack( DmeClipStack_t* pStack, const CDmeClip *pMovie, CDmeClip *pShot /*=NULL*/ )
+{
+	// Walk through each shot in the movie and look for the subClip, if don't find it recurse into each shot
+	return pStack->BuildClipStack( pMovie, pShot, this );
+}
+
 
 //-----------------------------------------------------------------------------
 // Clip stack
 //-----------------------------------------------------------------------------
-static bool BuildClipStack_R( DmeClipStack_t* pStack, CDmeClip *pMovie, CDmeClip *pShot, CDmeClip *pCurrent )
+bool DmeClipStack_t::BuildClipStack_R( const CDmeClip *pMovie, const CDmeClip *pShot, const CDmeClip *pCurrent )
 {
 	// Add this clip to the stack
-	int nIndex = pStack->AddToHead( CDmeHandle< CDmeClip >( pCurrent ) );
+	int nIndex = AddClipToHead( pCurrent );
 
 	// Is this clip the shot? We don't need to look for it any more.
 	if ( pCurrent == pShot )
@@ -613,84 +642,207 @@ static bool BuildClipStack_R( DmeClipStack_t* pStack, CDmeClip *pMovie, CDmeClip
 		for ( int i = 0; i < nCount; ++i )
 		{
 			// Can we find a path to the root through the shot? We succeeded!
-			if ( BuildClipStack_R( pStack, pMovie, pShot, ppParents[i] ) )
+			if ( BuildClipStack_R( pMovie, pShot, ppParents[i] ) )
 				return true;
 		}
 	}
 
 	// This clip didn't work out for us. Remove it.
-	pStack->Remove( nIndex );
+	RemoveClip( nIndex );
 
 	return false;
 }
 
-bool CDmeClip::BuildClipStack( DmeClipStack_t* pStack, CDmeClip *pMovie, CDmeClip *pShot )
+bool DmeClipStack_t::BuildClipStack( const CDmeClip *pMovie, const CDmeClip *pShot, const CDmeClip *pClip )
 {
 	// Walk through each shot in the movie and look for the subClip, if don't find it recurse into each shot
-	return BuildClipStack_R( pStack, pMovie, pShot, this );
+	RemoveAll();
+	return BuildClipStack_R( pMovie, pShot, pClip );
 }
 
-DmeTime_t CDmeClip::ToChildMediaTime( const DmeClipStack_t& stack, DmeTime_t globalTime, bool bClamp /* = true */ )
+int DmeClipStack_t::FindClip( const CDmeClip *pClip ) const
 {
-	DmeTime_t time = globalTime;
+	if ( !pClip )
+		return m_clips.InvalidIndex();
 
-	int nClips = stack.Count();
-	for ( int i = 0; i < nClips; ++i )
+	return m_clips.Find( pClip->GetHandle() );
+}
+
+int DmeClipStack_t::AddClipToHead( const CDmeClip *pClip )
+{
+	if ( !pClip )
+		return m_clips.InvalidIndex();
+
+	m_bOptimized = false;
+	return m_clips.AddToHead( pClip->GetHandle() );
+}
+
+int DmeClipStack_t::AddClipToTail( const CDmeClip *pClip )
+{
+	if ( !pClip )
+		return m_clips.InvalidIndex();
+
+	m_bOptimized = false;
+	return m_clips.AddToTail( pClip->GetHandle() );
+}
+
+//#define TEST_CLIP_STACK_OPTIMIZER
+
+void DmeClipStack_t::Optimize() const
+{
+	m_bOptimized = true;
+
+	int nClips = m_clips.Count();
+	if ( nClips == 0 )
 	{
-		time = stack[ i ]->ToChildMediaTime( time, bClamp );
+		m_tStart = m_tOffset = DMETIME_MINTIME + DMETIME_MAXTIME / 2; // HACK
+		m_tDuration = DMETIME_MAXTIME;
+		m_flScale = 1.0f;
+		return;
 	}
 
-	return time;
+	// 0 = global, n-1 = local
+
+#ifdef TEST_CLIP_STACK_OPTIMIZER
+	DmeTime_t tOptimizedClamped0 = DMETIME_ZERO;
+	DmeTime_t tTimeFrameClamped0 = DMETIME_ZERO;
+	DmeTime_t tOptimizedUnclamped0 = DMETIME_ZERO;
+	DmeTime_t tTimeFrameUnclamped0 = DMETIME_ZERO;
+	DmeTime_t tOptimizedClamped1 = DmeTime_t( 10000 );
+	DmeTime_t tTimeFrameClamped1 = DmeTime_t( 10000 );
+	DmeTime_t tOptimizedUnclamped1 = DmeTime_t( 10000 );
+	DmeTime_t tTimeFrameUnclamped1 = DmeTime_t( 10000 );
+#endif
+
+	const CDmeClip *pClip = m_clips[ nClips - 1 ];
+	m_tStart    = pClip->GetStartTime();
+	m_tOffset   = pClip->GetTimeOffset();
+	m_tDuration = pClip->GetDuration();
+	m_flScale   = pClip->GetTimeScale();
+
+#ifdef TEST_CLIP_STACK_OPTIMIZER
+	tOptimizedClamped0 = FromChildMediaTime( DMETIME_ZERO, true );
+	tTimeFrameClamped0 = pClip->FromChildMediaTime( tTimeFrameClamped0, true );
+	Assert( tOptimizedClamped0 == tTimeFrameClamped0 );
+
+	tOptimizedUnclamped0 = FromChildMediaTime( DMETIME_ZERO, false );
+	tTimeFrameUnclamped0 = pClip->FromChildMediaTime( tTimeFrameUnclamped0, false );
+	Assert( tOptimizedUnclamped0 == tTimeFrameUnclamped0 );
+
+	tOptimizedClamped1 = FromChildMediaTime( DmeTime_t( 10000 ), true );
+	tTimeFrameClamped1 = pClip->FromChildMediaTime( tTimeFrameClamped1, true );
+	Assert( tOptimizedClamped1 == tTimeFrameClamped1 );
+
+	tOptimizedUnclamped1 = FromChildMediaTime( DmeTime_t( 10000 ), false );
+	tTimeFrameUnclamped1 = pClip->FromChildMediaTime( tTimeFrameUnclamped1, false );
+	Assert( tOptimizedUnclamped1 == tTimeFrameUnclamped1 );
+#endif
+
+	for ( int i = nClips - 2; i > 0; --i )
+	{
+		const CDmeClip *pClip = m_clips[ i ];
+
+#ifdef TEST_CLIP_STACK_OPTIMIZER
+		DmeTime_t tOldStart = m_tStart;
+		DmeTime_t tOldOffset = m_tOffset;
+		DmeTime_t tOldDuration = m_tDuration;
+		float flOldScale = m_flScale;
+
+		DmeTime_t tClipStart = pClip->GetStartTime();
+		DmeTime_t tClipOffset = pClip->GetTimeOffset();
+		DmeTime_t tClipDuration = pClip->GetDuration();
+		float flClipSCale = pClip->GetTimeScale();
+#endif
+
+		DmeTime_t tChildStartInParentTime = pClip->FromChildMediaTime( m_tStart, false );
+		DmeTime_t tChildOffsetInParentTime = pClip->FromChildMediaDuration( m_tOffset );
+		DmeTime_t tChildDurationInParentTime = pClip->FromChildMediaDuration( m_tDuration );
+		DmeTime_t tChildEndInParentTime = tChildStartInParentTime + tChildDurationInParentTime;
+		m_flScale = pClip->GetTimeScale() * m_flScale;
+
+		m_tStart = MAX( tChildStartInParentTime, pClip->GetStartTime() );
+		DmeTime_t tDiff = tChildStartInParentTime - m_tStart;
+		m_tOffset = tChildOffsetInParentTime - tDiff;
+		DmeTime_t tEnd = MIN( tChildEndInParentTime, pClip->GetEndTime() );
+		m_tDuration = MAX( DMETIME_ZERO, tEnd - m_tStart );
+
+#ifdef TEST_CLIP_STACK_OPTIMIZER
+		tOptimizedClamped0 = FromChildMediaTime( DMETIME_ZERO, true );
+		tTimeFrameClamped0 = pClip->FromChildMediaTime( tTimeFrameClamped0, true );
+		Assert( tOptimizedClamped0 == tTimeFrameClamped0 );
+
+		tOptimizedUnclamped0 = FromChildMediaTime( DMETIME_ZERO, false );
+		tTimeFrameUnclamped0 = pClip->FromChildMediaTime( tTimeFrameUnclamped0, false );
+		Assert( tOptimizedUnclamped0 == tTimeFrameUnclamped0 );
+
+		tOptimizedClamped1 = FromChildMediaTime( DmeTime_t( 10000 ), true );
+		tTimeFrameClamped1 = pClip->FromChildMediaTime( tTimeFrameClamped1, true );
+		Assert( tOptimizedClamped1 == tTimeFrameClamped1 );
+
+		tOptimizedUnclamped1 = FromChildMediaTime( DmeTime_t( 10000 ), false );
+		tTimeFrameUnclamped1 = pClip->FromChildMediaTime( tTimeFrameUnclamped1, false );
+		Assert( tOptimizedUnclamped1 == tTimeFrameUnclamped1 );
+#endif
+	}
 }
 
-DmeTime_t CDmeClip::FromChildMediaTime( const DmeClipStack_t& stack, DmeTime_t localTime, bool bClamp /* = true */ )
+DmeTime_t DmeClipStack_t::ToChildMediaTime( DmeTime_t t, bool bClamp /*=true*/ ) const
 {
-	DmeTime_t time = localTime;
-
-	int nClips = stack.Count();
-	for ( int i = nClips-1; i >= 0; --i )
+	if ( !m_bOptimized )
 	{
-		time = stack[ i ]->FromChildMediaTime( time, bClamp );
+		Optimize();
 	}
 
-	return time;
+	t -= m_tStart;
+	if ( bClamp )
+	{
+		t.Clamp( DMETIME_ZERO, m_tDuration );
+	}
+	return ( t + m_tOffset ) * m_flScale;
 }
 
-DmeTime_t CDmeClip::ToChildMediaDuration( const DmeClipStack_t& stack, DmeTime_t globalDuration )
+DmeTime_t DmeClipStack_t::FromChildMediaTime( DmeTime_t t, bool bClamp /*=true*/ ) const
 {
-	DmeTime_t duration = globalDuration;
-
-	int nClips = stack.Count();
-	for ( int i = 0; i < nClips; ++i )
+	if ( !m_bOptimized )
 	{
-		duration = stack[ i ]->ToChildMediaDuration( duration );
+		Optimize();
 	}
 
-	return duration;
+	t = t / m_flScale - m_tOffset;
+	if ( bClamp )
+	{
+		t.Clamp( DMETIME_ZERO, m_tDuration );
+	}
+	return t + m_tStart;
 }
 
-DmeTime_t CDmeClip::FromChildMediaDuration( const DmeClipStack_t& stack, DmeTime_t localDuration )
+DmeTime_t DmeClipStack_t::ToChildMediaDuration( DmeTime_t t ) const
 {
-	DmeTime_t duration = localDuration;
-
-	int nClips = stack.Count();
-	for ( int i = nClips-1; i >= 0; --i )
+	if ( !m_bOptimized )
 	{
-		duration = stack[ i ]->FromChildMediaDuration( duration );
+		Optimize();
 	}
 
-	return duration;
+	return t * m_flScale;
 }
 
+DmeTime_t DmeClipStack_t::FromChildMediaDuration( DmeTime_t t ) const
+{
+	if ( !m_bOptimized )
+	{
+		Optimize();
+	}
 
-void CDmeClip::ToChildMediaTime( DmeLog_TimeSelection_t &params, const DmeClipStack_t& stack )
+	return t / m_flScale;
+}
+
+void DmeClipStack_t::ToChildMediaTime( TimeSelection_t &params ) const
 {
 	for ( int i = 0; i < TS_TIME_COUNT; ++i )
 	{
-		params.m_nTimes[i] = ToChildMediaTime( stack, params.m_nTimes[i], false );
+		params.m_Times[i] = ToChildMediaTime( params.m_Times[i], false );
 	}
 }
-
 
 //-----------------------------------------------------------------------------
 //
@@ -703,6 +855,8 @@ void CDmeSoundClip::OnConstruction()
 {
 	m_Sound.Init( this, "sound" );
 	m_bShowWave.InitAndSet( this, "showwave", false );
+	m_fadeInDuration .InitAndSet( this, "fadeIn", DMETIME_ZERO );
+	m_fadeOutDuration.InitAndSet( this, "fadeOut", DMETIME_ZERO );
 }
 
 void CDmeSoundClip::OnDestruction()
@@ -719,6 +873,31 @@ bool CDmeSoundClip::ShouldShowWave( ) const
 	return m_bShowWave;
 }
 
+float CDmeSoundClip::GetVolumeFade( DmeTime_t tParent )
+{
+	float fade = 1.0f;
+	if ( tParent < GetStartTime() + m_fadeInDuration )
+	{
+		fade = ( tParent - GetStartTime() ) / m_fadeInDuration;
+	}
+	if ( tParent > GetEndTime() - m_fadeOutDuration )
+	{
+		fade = MIN( fade, ( GetEndTime() - tParent ) / m_fadeOutDuration );
+	}
+	return fade;
+}
+
+void CDmeSoundClip::BakeTimeScale( float scale /*= 1.0f*/ )
+{
+	float flNewScale = scale * GetTimeScale();
+	float flInvScale = 1.0f / flNewScale;
+
+	m_fadeInDuration  *= flInvScale;
+	m_fadeOutDuration *= flInvScale;
+
+	BaseClass::BakeTimeScale( scale );
+}
+
 //-----------------------------------------------------------------------------
 // CDmeChannelsClip - timeframe view into a set of channels
 //-----------------------------------------------------------------------------
@@ -731,6 +910,68 @@ void CDmeChannelsClip::OnConstruction()
 
 void CDmeChannelsClip::OnDestruction()
 {
+}
+
+bool IsParticleSystemChannelsClip( CDmeChannelsClip *pChannelsClip )
+{
+	int nChannels = pChannelsClip->m_Channels.Count();
+	for ( int i = 0; i < nChannels; ++i )
+	{
+		CDmeChannel *pChannel = pChannelsClip->m_Channels[ i ];
+		if ( !pChannel )
+			continue;
+
+		CDmElement *pToElement = pChannel->GetToElement();
+		if ( !pToElement )
+			continue;
+
+		if ( !V_stricmp( pToElement->GetTypeString(), "DmeGameParticleSystem" ) )
+			return true;
+
+		CDmeTransform *pTransform = CastElement< CDmeTransform >( pToElement );
+		if ( !pTransform )
+			continue;
+
+		CUtlVector< CDmeDag* > dags;
+		FindAncestorsReferencingElement( pTransform, dags );
+		int nDags = dags.Count();
+		for ( int i = 0; i < nDags; ++i )
+		{
+			if ( !V_stricmp( dags[ i ]->GetTypeString(), "DmeGameParticleSystem" ) )
+				return true;
+		}
+	}
+
+	return false;
+}
+
+void CDmeChannelsClip::BakeTimeScale( float scale /*= 1.0f*/ )
+{
+	float flNewScale = scale * GetTimeScale();
+
+	// HACK - particle systems can't really be un-scaled in this way, for apparently two reasons:
+	//		1) we're storing time data in the dmegameparticlesystem (ie in the scene, rather than in clips/channels)
+	//		2) the game's particle systems appear to be semi-hardcoded in relation to time (so blinking materials don't blink at the scaled rate after baking)
+	if ( IsParticleSystemChannelsClip( this ) )
+	{
+		CDmeTimeFrame *tf = m_TimeFrame.GetElement();
+		tf->SetStartTime ( tf->GetStartTime () / scale );
+		tf->SetDuration  ( tf->GetDuration  () / scale );
+		tf->SetTimeOffset( tf->GetTimeOffset() / scale );
+		tf->SetTimeScale ( scale );
+		return; // skip particle system channels clips
+	}
+
+	int nChannels = m_Channels.Count();
+	for ( int i = 0; i < nChannels; ++i )
+	{
+		CDmeChannel *pChannel = m_Channels[ i ];
+		if ( !pChannel )
+			continue;
+ 		pChannel->ScaleSampleTimes( 1.0f / flNewScale );
+	}
+
+	BaseClass::BakeTimeScale( scale );
 }
 
 CDmeChannel *CDmeChannelsClip::CreatePassThruConnection( char const *passThruName,
@@ -762,6 +1003,56 @@ void CDmeChannelsClip::RemoveChannel( CDmeChannel *pChannel )
 	}
 }
 
+
+//-----------------------------------------------------------------------------
+// Purpose: Set the mode of all of the channels in the clip
+//-----------------------------------------------------------------------------
+void CDmeChannelsClip::SetChannelMode( const ChannelMode_t &mode )
+{
+	int nCount = m_Channels.Count();
+	for ( int i = 0; i < nCount; ++i )
+	{
+		CDmeChannel *pChannel = m_Channels[ i ];
+		if ( pChannel )
+		{
+			pChannel->SetMode( mode );
+		}
+	}
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: Operate all of the channels in the clip
+//-----------------------------------------------------------------------------
+void CDmeChannelsClip::OperateChannels()
+{
+	int nCount = m_Channels.Count();
+	for ( int i = 0; i < nCount; ++i )
+	{
+		CDmeChannel *pChannel = m_Channels[ i ];
+		if ( pChannel )
+		{
+			pChannel->Operate();
+		}
+	}
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: Play all of the channels in the clip
+//-----------------------------------------------------------------------------
+void CDmeChannelsClip::PlayChannels()
+{
+	int nCount = m_Channels.Count();
+	for ( int i = 0; i < nCount; ++i )
+	{
+		CDmeChannel *pChannel = m_Channels[ i ];
+		if ( pChannel )
+		{
+			pChannel->Play();
+		}
+	}
+}
 
 
 //-----------------------------------------------------------------------------
@@ -817,38 +1108,82 @@ IMPLEMENT_ELEMENT_FACTORY( DmeFilmClip, CDmeFilmClip );
 
 void CDmeFilmClip::OnConstruction()
 {
+	m_pRemoteVideoMaterial = NULL;
 	m_MaterialOverlayEffect.Init( this, "materialOverlay" );
 
 	m_MapName.Init( this, "mapname" );
 	m_Camera.Init( this, "camera" );
 	m_MonitorCameras.Init( this, "monitorCameras" );
 	m_nActiveMonitor.InitAndSet( this, "activeMonitor", -1 );
-	m_Lights.Init( this, "lights" );
 	m_Scene.Init( this, "scene" );
-	m_AVIFile.Init( this, "aviFile" );
-	m_fadeInDuration .InitAndSet( this, "fadeIn", 0 );
-	m_fadeOutDuration.InitAndSet( this, "fadeOut", 0 );
+	m_AVIFile.Init( this, "aviFile", FATTRIB_HAS_CALLBACK );
+	m_fadeInDuration .InitAndSet( this, "fadeIn", DMETIME_ZERO );
+	m_fadeOutDuration.InitAndSet( this, "fadeOut", DMETIME_ZERO );
 
 	m_Inputs.Init( this, "inputs" );
 	m_Operators.Init( this, "operators" );
-	m_bIsUsingCachedVersion.Init( this, "useAviFile" );
+	m_bIsUsingCachedVersion.Init( this, "useAviFile", FATTRIB_HAS_CALLBACK );
 	m_AnimationSets.Init( this, "animationSets" );
-	m_Bookmarks.Init( this, "bookmarks" );
-	m_FilmTrackGroup.Init( this, "subClipTrackGroup", FATTRIB_HAS_CALLBACK | FATTRIB_HAS_PRE_CALLBACK );
+	m_BookmarkSets.Init( this, "bookmarkSets" );
+	m_nActiveBookmarkSet.Init(this, "activeBookmarkSet", 0 );
+	m_FilmTrackGroup.Init( this, "subClipTrackGroup", FATTRIB_HAS_CALLBACK );
 	m_Volume.InitAndSet( this, "volume", 1.0);
+	m_ConCommands.Init( this, "concommands" );
+	m_ConVars.Init( this, "convars" );
 
-	m_pCachedVersion = NULL;
+	m_hCachedVersion = AVIMATERIAL_INVALID;
 	m_bIsUsingCachedVersion = false;
 	m_bReloadCachedVersion = false;
+
+	m_CameraStack.Init( this, "camerastack" );
+
+	m_nCurrentStackCamera = 0;
 }
 
 void CDmeFilmClip::OnDestruction()
 {
-	if ( g_pVideo != NULL && m_pCachedVersion != NULL )
+	AssignRemoteVideoMaterial( NULL );
+	if ( m_hCachedVersion != AVIMATERIAL_INVALID )
 	{
-		g_pVideo->DestroyVideoMaterial( m_pCachedVersion );
-		m_pCachedVersion = NULL;
+		g_pAVI->DestroyAVIMaterial( m_hCachedVersion );
+		m_hCachedVersion = AVIMATERIAL_INVALID;
 	}
+
+	PurgeCameraStack();
+}
+
+void CDmeFilmClip::BakeTimeScale( float scale /*= 1.0f*/ )
+{
+	float flNewScale = scale * GetTimeScale();
+	float flInvScale = 1.0f / flNewScale;
+
+	int nBookmarkSets = m_BookmarkSets.Count();
+	for ( int i = 0; i < nBookmarkSets; ++i )
+	{
+		CDmeBookmarkSet *pBookmarkSet = m_BookmarkSets[ i ];
+		if ( !pBookmarkSet )
+			continue;
+
+		pBookmarkSet->ScaleBookmarkTimes( flInvScale );
+	}
+
+	m_fadeInDuration  *= flInvScale;
+	m_fadeOutDuration *= flInvScale;
+
+	if ( CDmeTrack *pTrack = GetFilmTrack() )
+	{
+		int nClips = pTrack->GetClipCount();
+		for ( int i = 0; i < nClips; ++i )
+		{
+			CDmeClip *pClip = pTrack->GetClip( i );
+			if ( !pClip )
+				continue;
+
+			pClip->BakeTimeScale( flNewScale );
+		}
+	}
+
+	BaseClass::BakeTimeScale( scale );
 }
 
 
@@ -878,7 +1213,6 @@ CDmeTrackGroup *CDmeFilmClip::FindOrCreateFilmTrackGroup()
 		m_FilmTrackGroup = CreateElement< CDmeTrackGroup >( "subClipTrackGroup", GetFileId() );
 		m_FilmTrackGroup->SetMinimized( false );
 		m_FilmTrackGroup->SetMaxTrackCount( 1 );
-		m_FilmTrackGroup->SetOwnerClip( this );
 	}
 	return m_FilmTrackGroup;
 }
@@ -928,6 +1262,19 @@ void CDmeFilmClip::FindClipsAtTime( DmeClipType_t clipType, DmeTime_t time, DmeC
 	CDmeClip::FindClipsAtTime( clipType, time, flags, clips );
 }
 
+void CDmeFilmClip::FindClipsIntersectingTime( DmeClipType_t clipType, DmeTime_t startTime, DmeTime_t endTime, DmeClipSkipFlag_t flags, CUtlVector< CDmeClip * >& clips ) const
+{
+	if ( ( clipType == DMECLIP_FILM ) || ( clipType == DMECLIP_UNKNOWN ) )
+	{
+		if ( m_FilmTrackGroup )
+		{
+			m_FilmTrackGroup->FindClipsIntersectingTime( clipType, startTime, endTime, flags, clips );
+		}
+	}
+
+	CDmeClip::FindClipsIntersectingTime( clipType, startTime, endTime, flags, clips );
+}
+
 void CDmeFilmClip::FindClipsWithinTime( DmeClipType_t clipType, DmeTime_t startTime, DmeTime_t endTime, DmeClipSkipFlag_t flags, CUtlVector< CDmeClip * >& clips ) const
 {
 	if ( ( clipType == DMECLIP_FILM ) || ( clipType == DMECLIP_UNKNOWN ) )
@@ -954,6 +1301,26 @@ float CDmeFilmClip::GetVolume() const
 	return m_Volume.Get();
 }
 
+int	CDmeFilmClip::GetConCommandCount() const
+{
+	return m_ConCommands.Count();
+}
+
+const char *CDmeFilmClip::GetConCommand( int i ) const
+{
+	return m_ConCommands[ i ];
+}
+
+int	CDmeFilmClip::GetConVarCount() const
+{
+	return m_ConVars.Count();
+}
+
+const char *CDmeFilmClip::GetConVar( int i ) const
+{
+	return m_ConVars[ i ];
+}
+
 //-----------------------------------------------------------------------------
 // mapname helper methods
 //-----------------------------------------------------------------------------
@@ -971,19 +1338,6 @@ void CDmeFilmClip::SetMapName( const char *pMapName )
 //-----------------------------------------------------------------------------
 // Attribute changed
 //-----------------------------------------------------------------------------
-void CDmeFilmClip::PreAttributeChanged( CDmAttribute *pAttribute )
-{
-	BaseClass::PreAttributeChanged( pAttribute );
-	if ( pAttribute == m_FilmTrackGroup.GetAttribute() )
-	{
-		if ( m_FilmTrackGroup.GetElement() )
-		{
-			m_FilmTrackGroup->SetOwnerClip( NULL );
-		}
-		return;
-	}
-}
-
 void CDmeFilmClip::OnAttributeChanged( CDmAttribute *pAttribute )
 {
 	BaseClass::OnAttributeChanged( pAttribute );
@@ -992,16 +1346,99 @@ void CDmeFilmClip::OnAttributeChanged( CDmAttribute *pAttribute )
 		if ( m_FilmTrackGroup.GetElement() )
 		{
 			m_FilmTrackGroup->SetMaxTrackCount( 1 );
-			m_FilmTrackGroup->SetOwnerClip( this );
 		}																											 
 	}
 	else if ( pAttribute->GetOwner() == m_TimeFrame.GetElement() )
 	{
 		InvokeOnAttributeChangedOnReferrers( GetHandle(), pAttribute );
 	}
+	else if( pAttribute == m_bIsUsingCachedVersion.GetAttribute()  || pAttribute == m_AVIFile.GetAttribute() )
+	{
+		// video caching info has changed ...
+		UpdateRemoteVideoMaterialStatus();
+	}
+	
 }
 
-void CDmeFilmClip::OnElementUnserialized( )
+
+//-----------------------------------------------------------------------------
+// methods for dealing with remote cached video
+//-----------------------------------------------------------------------------
+void CDmeFilmClip::AssignRemoteVideoMaterial( IRemoteVideoMaterial *theMaterial )
+{
+	if ( theMaterial == m_pRemoteVideoMaterial ) return;		// no change
+
+	// ok, release any previous material
+	if ( m_pRemoteVideoMaterial != NULL )
+	{
+		m_pRemoteVideoMaterial->Release();
+	}
+
+	// assign the new material
+	m_pRemoteVideoMaterial = theMaterial;
+}
+
+
+void CDmeFilmClip::UpdateRemoteVideoMaterialStatus()
+{
+	// is the quicktime Video caching service available?   If not, we don't do anything...
+	if ( m_pRemoteVideoMaterial == NULL || !m_pRemoteVideoMaterial->IsInitialized() )
+	{
+		return;
+	}
+
+	// are we selecting to not used cached video?
+	if ( m_bIsUsingCachedVersion == false )
+	{
+		// check to see if we've gone from using cached video for this clip to off
+		if ( m_pRemoteVideoMaterial->IsRemoteVideoAvailable() && m_pRemoteVideoMaterial->IsConnectedToRemoteVideo() )
+		{
+			// turn off video caching for the specified clip
+			m_pRemoteVideoMaterial->DisconnectFromRemoteVideo();
+		}
+		return;
+	}
+	
+	// ok, we've selected to use a remotely cached video.  If the filename is setup correctly
+	// this should attempt to connect to the remote video
+	m_pRemoteVideoMaterial->ConnectToRemoteVideo( m_AVIFile.Get() );
+
+}
+
+bool CDmeFilmClip::HasRemoteVideo()
+{
+	// if we don't have a working connection, say we don't have any video
+	return  ( ( m_pRemoteVideoMaterial == NULL ) ? false : m_pRemoteVideoMaterial->IsRemoteVideoAvailable() );
+}
+
+bool CDmeFilmClip::GetCachedQTVideoFrameAt( float theTime )
+{
+	if ( m_pRemoteVideoMaterial == NULL )  return false;
+	
+	return m_pRemoteVideoMaterial->GetRemoteVideoFrame( theTime );
+}
+
+IMaterial* CDmeFilmClip::GetRemoteVideoMaterial()
+{
+	return ( m_pRemoteVideoMaterial == NULL ) ? NULL : m_pRemoteVideoMaterial->GetRemoteVideoFrameMaterial();
+}
+
+void CDmeFilmClip::GetRemoteVideoMaterialTexCoordRange( float *u, float *v )
+{
+	if ( m_pRemoteVideoMaterial == NULL )
+	{
+		*u = 0.0f;
+		*v = 0.0f;
+	}
+	else
+	{
+		m_pRemoteVideoMaterial->GetRemoteVideoFrameTextureCoordRange( *u, *v );
+	}
+}
+
+
+
+void CDmeFilmClip::OnElementUnserialized()
 {
 	BaseClass::OnElementUnserialized();
 
@@ -1013,45 +1450,6 @@ void CDmeFilmClip::OnElementUnserialized( )
 		{
 			pFilmTrackGroup->CreateFilmTrack();
 		}
-	}
-
-	// this conversion code went in on 10/31/2005
-	// I'm hoping we don't care about any files that old - if we ever hit this, we should move this code into an unserialization converter
-	Assert( !HasAttribute( "overlay" ) && !HasAttribute( "overlayalpha" ) );
-	if ( HasAttribute( "overlay" ) || HasAttribute( "overlayalpha" ) )
-	{
-		Warning( "CDmeFilmClip %s is an old version that has overlay and/or overlayalpha attributes!\n", GetName() );
-
-		// Backward compat conversion
-		// If this is an older file with an overlay attribute, strip it out into materialoverlay
-		CDmAttribute *pOverlayAttribute = GetAttribute( "overlay" );
-		if ( !pOverlayAttribute )
-			goto cleanUp;
-
-		const char *pName = pOverlayAttribute->GetValueString();
-		if ( !pName || !pName[0] )
-			goto cleanUp;
-
-		// If we don't yet have a material overlay, create one
-		if ( m_MaterialOverlayEffect.GetElement() == NULL )
-		{
-			m_MaterialOverlayEffect = CreateElement<CDmeMaterialOverlayFXClip>( "materialOverlay", GetFileId() );
-		}
-
-		m_MaterialOverlayEffect->SetOverlayEffect( pName );
-
-		// If this is an older file with an overlayalpha attribute, strip it out into materialoverlay
-		CDmAttribute *pOverlayAlphaAttribute = GetAttribute( "overlayalpha" );
-		if ( pOverlayAlphaAttribute )
-		{
-			float alpha = pOverlayAlphaAttribute->GetValue<float>();
-			m_MaterialOverlayEffect->SetAlpha( alpha );
-		}
-
-cleanUp:
-		// Always strip out the old overlay attribute
-		RemoveAttribute( "overlay" );							
-		RemoveAttribute( "overlayalpha" );
 	}
 }
 
@@ -1126,17 +1524,14 @@ void CDmeFilmClip::DrawOverlay( DmeTime_t time, Rect_t &currentRect, Rect_t &tot
 		m_MaterialOverlayEffect->ApplyEffect( ToChildMediaTime( time ), currentRect, totalRect, NULL );
 	}
 
-	DmeTime_t fadeIn( m_fadeInDuration );
-	DmeTime_t fadeOut( m_fadeOutDuration );
-
 	float fade = 1.0f;
-	if ( time < GetStartTime() + fadeIn )
+	if ( time < GetStartTime() + m_fadeInDuration )
 	{
-		fade = ( time - GetStartTime() ) / fadeIn;
+		fade = ( time - GetStartTime() ) / m_fadeInDuration;
 	}
-	if ( time > GetEndTime() - fadeOut )
+	if ( time > GetEndTime() - m_fadeOutDuration )
 	{
-		fade = min( fade, ( GetEndTime() - time ) / fadeOut );
+		fade = MIN( fade, ( GetEndTime() - time ) / m_fadeOutDuration );
 	}
 	if ( fade < 1.0f )
 	{
@@ -1163,16 +1558,16 @@ void CDmeFilmClip::DrawOverlay( DmeTime_t time, Rect_t &currentRect, Rect_t &tot
 		meshBuilder.Begin( pMesh, MATERIAL_TRIANGLE_STRIP, 2 );
 
 		meshBuilder.Position3f( 0.0f, 0.0f, 0.0f );
-		meshBuilder.AdvanceVertex();
+		meshBuilder.AdvanceVertexF<VTX_HAVEPOS, 0>();
 
 		meshBuilder.Position3f( 0.0f, h, 0.0f );
-		meshBuilder.AdvanceVertex();
+		meshBuilder.AdvanceVertexF<VTX_HAVEPOS, 0>();
 
 		meshBuilder.Position3f( w, 0.0f, 0.0f );
-		meshBuilder.AdvanceVertex();
+		meshBuilder.AdvanceVertexF<VTX_HAVEPOS, 0>();
 
 		meshBuilder.Position3f( w, h, 0.0f );
-		meshBuilder.AdvanceVertex();
+		meshBuilder.AdvanceVertexF<VTX_HAVEPOS, 0>();
 
 		meshBuilder.End();
 		pMesh->Draw();
@@ -1196,26 +1591,25 @@ bool CDmeFilmClip::IsUsingCachedVersion() const
 	return m_bIsUsingCachedVersion;
 }
 
-IVideoMaterial *CDmeFilmClip::GetCachedVideoMaterial()
+AVIMaterial_t CDmeFilmClip::GetCachedAVI()
 {
 	if ( m_bReloadCachedVersion )
 	{
-		if ( g_pVideo )
+		if ( g_pAVI )
 		{
-			if ( m_pCachedVersion != NULL )
+			if ( m_hCachedVersion != AVIMATERIAL_INVALID )
 			{
-				g_pVideo->DestroyVideoMaterial( m_pCachedVersion );
-				m_pCachedVersion = NULL;
+				g_pAVI->DestroyAVIMaterial( m_hCachedVersion );
+				m_hCachedVersion = AVIMATERIAL_INVALID;
 			}
 			if ( m_AVIFile[0] )
 			{
-				m_pCachedVersion = g_pVideo->CreateVideoMaterial( m_AVIFile, m_AVIFile, "MOD" );
+				m_hCachedVersion = g_pAVI->CreateAVIMaterial( m_AVIFile, m_AVIFile, "MOD" );
 			}
-		
 		}
 		m_bReloadCachedVersion = false;
 	}
-	return m_pCachedVersion;
+	return m_hCachedVersion;
 }
 	
 void CDmeFilmClip::SetCachedAVI( const char *pAVIFile )
@@ -1279,33 +1673,17 @@ void CDmeFilmClip::SelectMonitorCamera( CDmeCamera *pCamera )
 
 
 //-----------------------------------------------------------------------------
-// Light helper methods
-//-----------------------------------------------------------------------------
-int CDmeFilmClip::GetLightCount()
-{
-	return m_Lights.Count();
-}
-
-CDmeLight *CDmeFilmClip::GetLight( int nIndex )
-{
-	if ( ( nIndex < 0 ) || ( nIndex >= m_Lights.Count() ) )
-		return NULL;
-
-	return m_Lights[ nIndex ];
-}
-
-void CDmeFilmClip::AddLight( CDmeLight *pLight )
-{
-	m_Lights.AddToTail( pLight );
-}
-
-
-//-----------------------------------------------------------------------------
 // Scene / Dag helper methods
 //-----------------------------------------------------------------------------
-CDmeDag *CDmeFilmClip::GetScene()
+CDmeDag *CDmeFilmClip::GetScene( bool bCreateIfNull /*= false*/ )
 {
-	return m_Scene.GetElement();
+	CDmeDag *pScene = m_Scene.GetElement();
+	if ( !pScene && bCreateIfNull )
+	{
+		pScene = CreateElement< CDmeDag >( "scene", GetFileId() );
+		m_Scene = pScene;
+	}
+	return pScene;
 }
 
 void CDmeFilmClip::SetScene( CDmeDag *pDag )
@@ -1345,6 +1723,17 @@ void CDmeFilmClip::AddOperator( CDmeOperator *pOperator )
 	m_Operators.AddToTail( pOperator );
 }
 
+void CDmeFilmClip::RemoveOperator( CDmeOperator *pOperator )
+{
+	for ( int i = m_Operators.Count() - 1 ; i >= 0; --i )
+	{
+		if ( m_Operators[ i ] == pOperator )
+		{
+			m_Operators.Remove( i );
+		}
+	}
+}
+
 void CDmeFilmClip::CollectOperators( CUtlVector< DmElementHandle_t > &operators )
 {
 	int numInputs = m_Inputs.Count();
@@ -1360,107 +1749,70 @@ void CDmeFilmClip::CollectOperators( CUtlVector< DmElementHandle_t > &operators 
 	}
 }
 
-int	CDmeFilmClip::GetAnimationSetCount()
+CDmaElementArray< CDmeOperator > &CDmeFilmClip::GetOperators()
 {
-	// yes, this is nasty perf-wise, but since we only have a dozen or so animation sets,
-	// and we're about to rewrite the entire structure of animation sets vs. clips vs. scene
-	// it's not worth polluting the leaf code just to save a couple cycles short term
-
-	int nCount = 0;
-
-	int nElements = m_AnimationSets.Count();
-	for ( int i = 0; i < nElements; ++i )
-	{
-		CDmElement *pElement = m_AnimationSets.Get( i );
-		if ( !pElement )
-			continue;
-
-		CDmeAnimationSet *pAnimSet = CastElement< CDmeAnimationSet >( pElement );
-		if ( pAnimSet )
-		{
-			++nCount;
-		}
-		else
-		{
-			const CDmAttribute *pChildren = pElement->GetAttribute( "children", AT_ELEMENT_ARRAY );
-			if ( !pChildren )
-				continue;
-
-			CDmrElementArrayConst< CDmElement > array( pChildren );
-			nCount += array.Count();
-		}
-	}
-
-	return nCount;
+	return m_Operators;
 }
 
-CDmeAnimationSet *CDmeFilmClip::GetAnimationSet( int idx )
+CDmaElementArray< CDmeAnimationSet > &CDmeFilmClip::GetAnimationSets()
 {
-	// yes, this is nasty perf-wise, but since we only have a dozen or so animation sets,
-	// and we're about to rewrite the entire structure of animation sets vs. clips vs. scene
-	// it's not worth polluting the leaf code just to save a couple cycles short term
+	return m_AnimationSets;
+}
 
-	int nElements = m_AnimationSets.Count();
-	for ( int i = 0; i < nElements; ++i )
+const CDmaElementArray< CDmeAnimationSet > &CDmeFilmClip::GetAnimationSets() const
+{
+	return m_AnimationSets;
+}
+
+CDmeAnimationSet *CDmeFilmClip::FindAnimationSet( const char *pAnimSetName ) const
+{
+	int nAnimSets = m_AnimationSets.Count();
+	for ( int i = 0; i < nAnimSets; ++i )
 	{
-		CDmElement *pElement = m_AnimationSets.Get( i );
-		if ( !pElement )
+		CDmeAnimationSet *pAnimSet = m_AnimationSets[ i ];
+		if ( !pAnimSet )
 			continue;
 
-		CDmeAnimationSet *pAnimSet = CastElement< CDmeAnimationSet >( pElement );
-		if ( pAnimSet )
-		{
-			if ( idx == 0 )
-				return pAnimSet;
-			--idx;
-		}
-		else
-		{
-			const CDmAttribute *pChildren = pElement->GetAttribute( "children", AT_ELEMENT_ARRAY );
-			if ( !pChildren )
-				continue;
-
-			CDmrElementArrayConst< CDmElement > array( pChildren );
-			int nChildren = array.Count();
-
-			if ( idx < nChildren )
-				return CastElement< CDmeAnimationSet >( array[ idx ] );
-			idx -= nChildren;
-		}
+		if ( V_stricmp( pAnimSet->GetName(), pAnimSetName ) == 0 )
+			return pAnimSet;
 	}
-
 	return NULL;
 }
 
-void CDmeFilmClip::AddAnimationSet( CDmeAnimationSet *element )
+const CDmaElementArray< CDmeBookmarkSet > &CDmeFilmClip::GetBookmarkSets() const
 {
-	m_AnimationSets.AddToTail( element );
+	return m_BookmarkSets;
 }
 
-void CDmeFilmClip::RemoveAllAnimationSets()
+CDmaElementArray< CDmeBookmarkSet > &CDmeFilmClip::GetBookmarkSets()
 {
-	m_AnimationSets.RemoveAll();
+	return m_BookmarkSets;
 }
 
-CDmaElementArray< CDmElement > &CDmeFilmClip::GetAnimationSets()
+int CDmeFilmClip::GetActiveBookmarkSetIndex() const
 {
-	return m_AnimationSets;
+	return m_nActiveBookmarkSet;
 }
 
-const CDmaElementArray< CDmElement > &CDmeFilmClip::GetAnimationSets() const
+void CDmeFilmClip::SetActiveBookmarkSetIndex( int nActiveBookmarkSet )
 {
-	return m_AnimationSets;
+	m_nActiveBookmarkSet = nActiveBookmarkSet;
 }
 
-
-const CDmaElementArray< CDmeBookmark > &CDmeFilmClip::GetBookmarks() const
+CDmeBookmarkSet *CDmeFilmClip::GetActiveBookmarkSet()
 {
-	return m_Bookmarks;
+	int nBookmarkSets = m_BookmarkSets.Count();
+	if ( m_nActiveBookmarkSet >= nBookmarkSets )
+		return NULL;
+
+	return m_BookmarkSets[ m_nActiveBookmarkSet ];
 }
 
-CDmaElementArray< CDmeBookmark > &CDmeFilmClip::GetBookmarks()
+CDmeBookmarkSet *CDmeFilmClip::CreateBookmarkSet( const char *pName /*= "default set"*/ )
 {
-	return m_Bookmarks;
+	CDmeBookmarkSet *pBookmarkSet = CreateElement< CDmeBookmarkSet >( pName, GetFileId() );
+	m_BookmarkSets.AddToTail( pBookmarkSet );
+	return pBookmarkSet;
 }
 
 
@@ -1512,9 +1864,11 @@ void CDmeFilmClip::BuildClipAssociations( CUtlVector< ClipAssociation_t > &assoc
 				int nIndex = association.AddToTail();
 				association[nIndex].m_hClip = pClip;
 				association[nIndex].m_hAssociation = pFilmClip;
+				association[nIndex].m_startTimeInAssociatedClip = DMETIME_ZERO;
+				association[nIndex].m_offset = DMETIME_ZERO;
 				if ( pFilmClip )
 				{
-					association[nIndex].m_offset = pClip->GetStartTime() - pFilmClip->GetStartTime();
+					association[nIndex].m_startTimeInAssociatedClip = pFilmClip->ToChildMediaTime( pClip->GetStartTime(), false );
 					association[nIndex].m_nType = ClipAssociation_t::HAS_CLIP;
 					continue;
 				}
@@ -1534,53 +1888,12 @@ void CDmeFilmClip::BuildClipAssociations( CUtlVector< ClipAssociation_t > &assoc
 					continue;
 				}
 
-				association[nIndex].m_offset = DmeTime_t( 0 );
 				association[nIndex].m_nType = ClipAssociation_t::NO_MOVEMENT;
 			}
 		}
 	}
 }
 
-
-//-----------------------------------------------------------------------------
-// Rolls associated clips so they remain in the same relative time
-//-----------------------------------------------------------------------------
-void CDmeFilmClip::RollAssociatedClips( CDmeClip *pClip, CUtlVector< ClipAssociation_t > &association, DmeTime_t dt )
-{
-	int c = association.Count();
-	for ( int i = 0; i < c; ++i )
-	{
-		if ( association[i].m_nType != ClipAssociation_t::HAS_CLIP )
-			continue;
-
-		if ( association[i].m_hAssociation.Get() != pClip )
-			continue;
-		  
-		DmeTime_t newStartTime = association[i].m_hClip->GetStartTime() - dt;
-		association[i].m_hClip->SetStartTime( newStartTime );
-	}
-}
-
-//-----------------------------------------------------------------------------
-// Rolls associated clips so they remain in the same relative time
-//-----------------------------------------------------------------------------
-void CDmeFilmClip::ScaleAssociatedClips( CDmeClip *pClip, CUtlVector< ClipAssociation_t > &association, float ratio, DmeTime_t oldOffset )
-{
-	int c = association.Count();
-	for ( int i = 0; i < c; ++i )
-	{
-		if ( association[i].m_nType != ClipAssociation_t::HAS_CLIP )
-			continue;
-
-		if ( association[i].m_hAssociation.Get() != pClip )
-			continue;
-
-		DmeTime_t clipStartTime = pClip->GetStartTime();
-		DmeTime_t oldStartTime = association[i].m_hClip->GetStartTime();
-		DmeTime_t newStartTime = ( oldStartTime - clipStartTime + oldOffset ) / ratio + clipStartTime - pClip->GetTimeOffset();
-		association[i].m_hClip->SetStartTime( newStartTime );
-	}
-}
 
 void CDmeFilmClip::UpdateAssociatedClips( CUtlVector< ClipAssociation_t > &association )
 {
@@ -1607,7 +1920,7 @@ void CDmeFilmClip::UpdateAssociatedClips( CUtlVector< ClipAssociation_t > &assoc
 			case ClipAssociation_t::HAS_CLIP:
 				if ( curr.m_hAssociation.Get() )
 				{
-					curr.m_hClip->SetStartTime( curr.m_hAssociation->GetStartTime() + curr.m_offset ); 
+					curr.m_hClip->SetStartTime( curr.m_hAssociation->FromChildMediaTime( curr.m_startTimeInAssociatedClip, false ) );
 				}
 				break;
 
@@ -1640,6 +1953,7 @@ void CDmeFilmClip::UpdateAssociatedClips( CUtlVector< ClipAssociation_t > &assoc
 CDmeFilmClip *CreateSlugClip( const char *pClipName, DmeTime_t startTime, DmeTime_t endTime, DmFileId_t fileid )
 {
 	CDmeFilmClip *pSlugClip = CreateElement<CDmeFilmClip>( pClipName, fileid );
+	pSlugClip->CreateBookmarkSet();
 	pSlugClip->GetTimeFrame()->SetName( "timeframe" );
 	pSlugClip->SetStartTime( startTime );
 	pSlugClip->SetDuration( endTime - startTime );
@@ -1671,14 +1985,21 @@ CDmeTrack *GetParentTrack( CDmeClip *pClip )
 
 
 //-----------------------------------------------------------------------------
-// Finds a channel in a channel or film clip targetting a particular element 
+// Purpose: Find the channel within targeting the specified element and 
+// attribute.
 //-----------------------------------------------------------------------------
-CDmeChannel *FindChannelTargetingElement( CDmeChannelsClip *pChannelsClip, CDmElement *pElement, const char *pAttributeName )
+CDmeChannel *FindChannelTargetingElement( CDmElement *pElement, const char *pAttributeName )
 {
-	int nChannels = pChannelsClip->m_Channels.Count();
+	CUtlVector< CDmeChannel* > channels( 0, 8 );
+	FindAncestorsReferencingElement( pElement, channels );
+
+	int nChannels = channels.Count();
 	for ( int i = 0; i < nChannels; ++i )
 	{
-		CDmeChannel *pChannel = pChannelsClip->m_Channels[ i ];
+		CDmeChannel *pChannel = channels[ i ];
+		if ( !pChannel )
+			continue;
+
 		CDmElement *toElement = pChannel->GetToElement();
 		if ( toElement != pElement )
 			continue;
@@ -1692,6 +2013,38 @@ CDmeChannel *FindChannelTargetingElement( CDmeChannelsClip *pChannelsClip, CDmEl
 	return NULL;
 }
 
+
+//-----------------------------------------------------------------------------
+// Purpose: Find the channel within the specified channels clip targeting the 
+// specified element and attribute.
+//-----------------------------------------------------------------------------
+CDmeChannel *FindChannelTargetingElement( CDmeChannelsClip *pChannelsClip, CDmElement *pElement, const char *pAttributeName )
+{
+	int nChannels = pChannelsClip->m_Channels.Count();
+	for ( int i = 0; i < nChannels; ++i )
+	{
+		CDmeChannel *pChannel = pChannelsClip->m_Channels[ i ];
+		if ( !pChannel )
+			continue;
+
+		CDmElement *toElement = pChannel->GetToElement();
+		if ( toElement != pElement )
+			continue;
+
+		if ( pAttributeName && ( Q_stricmp( pChannel->GetToAttribute()->GetName(), pAttributeName ) != 0 ) )
+			continue;
+
+		return pChannel;
+	}
+
+	return NULL;
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: Find the channel within the specified film clip targeting the 
+// specified element and attribute.
+//-----------------------------------------------------------------------------
 CDmeChannel *FindChannelTargetingElement( CDmeFilmClip *pClip, CDmElement *pElement, const char *pAttributeName, CDmeChannelsClip **ppChannelsClip, CDmeTrack **ppTrack, CDmeTrackGroup **ppTrackGroup )
 {
 	int gc = pClip->GetTrackGroupCount();
@@ -1722,4 +2075,204 @@ CDmeChannel *FindChannelTargetingElement( CDmeFilmClip *pClip, CDmElement *pElem
 	}
 
 	return NULL;
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: Construct a clip stack for each one of the channels in the provided
+// list using the specified root movie and shot.
+//-----------------------------------------------------------------------------
+void BuildClipStackList( const CUtlVector< CDmeChannel* > &channelList, CUtlVector< DmeClipStack_t > &clipStackList, CUtlVector< DmeTime_t > &orginalTimeList, const CDmeClip *pMovie, CDmeClip *pShot )
+{
+	int nChannels = channelList.Count();
+	clipStackList.Purge();
+	clipStackList.EnsureCount( nChannels );
+	orginalTimeList.Purge();
+	orginalTimeList.EnsureCount( nChannels );
+
+	for ( int iChannel = 0; iChannel < nChannels; ++iChannel )
+	{
+		CDmeChannel *pChannel = channelList[ iChannel ];
+		CDmeChannelsClip *pChannelsClip = FindAncestorReferencingElement< CDmeChannelsClip >( pChannel );
+
+		if ( pChannelsClip )
+		{
+			pChannelsClip->BuildClipStack( &clipStackList[ iChannel ], pMovie, pShot );
+		}
+		else
+		{		
+			if ( pMovie )
+			{
+				clipStackList[ iChannel ].AddClipToTail( pMovie );
+			}
+			if ( pShot && ( pShot != pMovie ) )
+			{
+				clipStackList[ iChannel ].AddClipToTail( pShot );
+			}
+		}
+
+		orginalTimeList[ iChannel ] = pChannel->GetCurrentTime();
+	}
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: Play each of the channels in the provided list at the specified 
+// global time.
+//-----------------------------------------------------------------------------
+void PlayChannelsAtTime( DmeTime_t time, const CUtlVector< CDmeChannel* > &channelList, const CUtlVector< CDmeOperator* > &operatorList, const CUtlVector< DmeClipStack_t > &clipStackList, bool forcePlay )
+{
+	int nCount = channelList.Count();
+	for ( int iChannel = 0; iChannel < nCount; ++iChannel )
+	{
+		CDmeChannel *pChannel = channelList[ iChannel ];
+		DmeTime_t localTime = clipStackList[ iChannel ].ToChildMediaTime( time, false );
+		pChannel->SetCurrentTime( localTime );
+		if ( forcePlay || ( pChannel->GetMode() == CM_RECORD ) )
+		{
+			pChannel->Play();
+		}
+		else
+		{
+			pChannel->Operate();
+		}
+	}
+
+	int nOperators = operatorList.Count();
+	for ( int iOpeator = 0; iOpeator < nOperators; ++iOpeator )
+	{
+		operatorList[ iOpeator ]->Operate();
+	}
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: Play each of the channels in the provided list at the specified 
+// local time.
+//-----------------------------------------------------------------------------
+void PlayChannelsAtLocalTimes( const CUtlVector< DmeTime_t > &timeList, const CUtlVector< CDmeChannel* > &channelList, const CUtlVector< CDmeOperator* > &operatorList, bool forcePlay )
+{
+	int nCount = channelList.Count();
+
+	Assert( timeList.Count() >= channelList.Count() );
+	if ( timeList.Count() < nCount )
+		return;
+
+	for ( int iChannel = 0; iChannel < nCount; ++iChannel )
+	{
+		CDmeChannel *pChannel = channelList[ iChannel ];
+		pChannel->SetCurrentTime( timeList[ iChannel ] );
+		if ( forcePlay || ( pChannel->GetMode() == CM_RECORD ) )
+		{
+			pChannel->Play();
+		}
+		else
+		{
+			pChannel->Operate();
+		}
+	}
+
+	int nOperators = operatorList.Count();
+	for ( int iOpeator = 0; iOpeator < nOperators; ++iOpeator )
+	{
+		operatorList[ iOpeator ]->Operate();
+	}
+}
+
+
+CDmeFilmClip *FindFilmClipContainingDag( CDmeDag *pDag )
+{
+	CDmeFilmClip *pFilmClip = FindReferringElement< CDmeFilmClip >( pDag, "scene" );
+	if ( pFilmClip )
+		return pFilmClip;
+
+	for ( DmAttributeReferenceIterator_t it = g_pDataModel->FirstAttributeReferencingElement( pDag->GetHandle() );
+		it != DMATTRIBUTE_REFERENCE_ITERATOR_INVALID;
+		it = g_pDataModel->NextAttributeReferencingElement( it ) )
+	{
+		CDmAttribute *pAttr = g_pDataModel->GetAttribute( it );
+		Assert( pAttr );
+
+		static const CUtlSymbolLarge symChildren = g_pDataModel->GetSymbol( "children" );
+		if ( pAttr->GetNameSymbol() != symChildren )
+			continue;
+
+		CDmeDag* pParent = CastElement< CDmeDag >( pAttr->GetOwner() );
+		if ( !pParent )
+			continue;
+
+		CDmeFilmClip *pFilmClip = FindFilmClipContainingDag( pParent );
+		if ( pFilmClip )
+			return pFilmClip;
+	}
+
+	return NULL;
+}
+
+
+static ConVar sfm_maxcamerastack( "sfm_maxcamerastack", "10", FCVAR_ARCHIVE, "Number of work cameras to store in camera stack." );
+
+void CDmeFilmClip::LatchWorkCamera( CDmeCamera *pCamera )
+{
+	// Wipe everything after current stack ptr
+	while ( ( m_CameraStack.Count() - 1 ) > m_nCurrentStackCamera )
+	{
+		m_CameraStack.Remove( m_CameraStack.Count() - 1 );
+	}
+
+	// Add to end
+	CDmeCamera *newEntry = CreateElement< CDmeCamera >( "camerastack", GetFileId() );
+	newEntry->FromCamera( pCamera );
+
+	m_CameraStack.AddToTail( newEntry );
+
+	m_nCurrentStackCamera = m_CameraStack.Count() - 1;
+
+	int maxStack = clamp( sfm_maxcamerastack.GetInt(), 4, 100 );
+
+	while ( m_CameraStack.Count() > maxStack )
+	{
+		m_CameraStack.Remove( 0 );
+		--m_nCurrentStackCamera;
+	}
+}
+
+void CDmeFilmClip::UpdateWorkCamera( CDmeCamera *pCamera )
+{
+	m_nCurrentStackCamera = clamp( m_nCurrentStackCamera, 0, m_CameraStack.Count() - 1 );
+	if ( m_nCurrentStackCamera < 0 || m_nCurrentStackCamera >= m_CameraStack.Count() )
+		return;
+
+	m_CameraStack[ m_nCurrentStackCamera ]->FromCamera( pCamera );
+}
+
+
+void CDmeFilmClip::PreviousWorkCamera()
+{
+	m_nCurrentStackCamera -= 1;
+}
+
+
+void CDmeFilmClip::NextWorkCamera()
+{
+	m_nCurrentStackCamera += 1;
+}
+
+CDmeCamera *CDmeFilmClip::GetCurrentCameraStackEntry()
+{
+	m_nCurrentStackCamera = clamp( m_nCurrentStackCamera, 0, m_CameraStack.Count() - 1 );
+	if ( m_nCurrentStackCamera < 0 || m_nCurrentStackCamera >= m_CameraStack.Count() )
+		return NULL;
+
+	CDmeCamera *entry = m_CameraStack[ m_nCurrentStackCamera ];
+	return entry;
+}
+
+void CDmeFilmClip::PurgeCameraStack()
+{
+	m_nCurrentStackCamera = -1;
+	while ( m_CameraStack.Count() > 0 )
+	{
+		m_CameraStack.Remove( 0 );
+	}
 }

@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright (c) 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // r_studio.cpp: routines for setting up to draw 3DStudio models 
 //
@@ -11,6 +11,7 @@
 #include "studio.h"
 #include "studiorender.h"
 #include "studiorendercontext.h"
+#include "optimize.h"
 #include "materialsystem/imaterial.h"
 #include "materialsystem/imaterialvar.h"
 #include "tier0/vprof.h"
@@ -36,27 +37,14 @@ FORCEINLINE StudioModelLighting_t CStudioRender::R_StudioComputeLighting( IMater
 	Assert( pMaterial );
 	bool doMouthLighting = materialFlags && (m_pStudioHdr->nummouths >= 1);
 
-	if ( IsX360() )
+	if ( IsGameConsole() )
 	{
-		// 360 does not do software lighting
+		// Console does not do software lighting
 		return doMouthLighting ? LIGHTING_MOUTH : LIGHTING_HARDWARE;
 	}
 
 	bool doSoftwareLighting = doMouthLighting ||
-		(pMaterial->IsVertexLit() && pMaterial->NeedsSoftwareLighting() );
-
-	if ( !m_pRC->m_Config.m_bSupportsVertexAndPixelShaders )
-	{
-		if ( !doSoftwareLighting && pColorMeshes )
-		{
-			pMaterial->SetUseFixedFunctionBakedLighting( true );
-		}
-		else
-		{
-			doSoftwareLighting = true;
-			pMaterial->SetUseFixedFunctionBakedLighting( false );
-		}
-	}
+		(pMaterial && pMaterial->IsVertexLit() && pMaterial->NeedsSoftwareLighting() );
 
 	StudioModelLighting_t lighting = LIGHTING_HARDWARE;
 	if ( doMouthLighting )
@@ -74,32 +62,64 @@ IMaterial* CStudioRender::R_StudioSetupSkinAndLighting( IMatRenderContext *pRend
 	VPROF( "R_StudioSetupSkin" );
 	IMaterial *pMaterial = NULL;
 	bool bCheckForConVarDrawTranslucentSubModels = false;
-	if( m_pRC->m_Config.bWireframe && !m_pRC->m_pForcedMaterial )
+	bool translucent;
+	if( m_pRC->m_Config.bWireframe && !m_pRC->m_pForcedMaterial[ 0 ] )
 	{
-		if ( m_pRC->m_Config.bDrawZBufferedWireframe )
-			pMaterial = m_pMaterialMRMWireframeZBuffer;
-		else
-			pMaterial = m_pMaterialMRMWireframe;
+		// Initially, assume no displacement mapping 
+		pMaterial = m_pMaterialWireframe[m_pRC->m_Config.bDrawZBufferedWireframe?1:0][0];
+		translucent = false;
+
+		// Look to see if the original material is displacement mapped
+		IMaterial *pOriginalMaterial = ppMaterials[index];
+		static unsigned int originalDisplacementMap = 0;
+		IMaterialVar* pOriginalMaterialVar = pOriginalMaterial->FindVarFast( "$displacementmap", &originalDisplacementMap );
+
+		// If we are displacement mapped
+		if ( pOriginalMaterialVar && pOriginalMaterialVar->IsTexture() )
+		{
+			// Switch to displacement mapped wireframe material
+			pMaterial = m_pMaterialWireframe[m_pRC->m_Config.bDrawZBufferedWireframe?1:0][1];
+
+			static unsigned int newDisplacementMap = 0;
+			IMaterialVar* pNewMaterialVar = pMaterial->FindVarFast( "$displacementmap", &newDisplacementMap );
+
+			if ( pNewMaterialVar )
+			{
+				pNewMaterialVar->SetTextureValue( pOriginalMaterialVar->GetTextureValue() );
+			}
+		}
 	}
 	else if( m_pRC->m_Config.bShowEnvCubemapOnly )
 	{
 		pMaterial = m_pMaterialModelEnvCubemap;
+		translucent = false;
 	}
 	else
 	{
-		if ( !m_pRC->m_pForcedMaterial && ( m_pRC->m_nForcedMaterialType != OVERRIDE_DEPTH_WRITE && m_pRC->m_nForcedMaterialType != OVERRIDE_SSAO_DEPTH_WRITE ) )
+		if ( ( !m_pRC->m_pForcedMaterial[ 0 ] && ( m_pRC->m_nForcedMaterialType != OVERRIDE_DEPTH_WRITE && m_pRC->m_nForcedMaterialType != OVERRIDE_SSAO_DEPTH_WRITE ) ) 
+			 || m_pRC->m_nForcedMaterialType == OVERRIDE_SELECTIVE )
 		{
-			pMaterial = ppMaterials[index];
+			int nOverrideIndex = GetForcedMaterialOverrideIndex( index );
+			if ( m_pRC->m_nForcedMaterialType == OVERRIDE_SELECTIVE && nOverrideIndex != -1 )
+			{
+				pMaterial = m_pRC->m_pForcedMaterial[ nOverrideIndex ];
+			}
+			else
+			{
+				pMaterial = ppMaterials[index];
+			}
 			if ( !pMaterial )
 			{
 				Assert( 0 );
 				return 0;
 			}
+
+			translucent = pMaterial->IsTranslucentUnderModulation( m_pRC->m_AlphaMod );
 		}
 		else
 		{
 			materialFlags = 0;
-			pMaterial = m_pRC->m_pForcedMaterial;
+			pMaterial = m_pRC->m_pForcedMaterial[ 0 ];
 			if (m_pRC->m_nForcedMaterialType == OVERRIDE_BUILD_SHADOWS)
 			{
 				// Connect the original material up to the shadow building material
@@ -110,99 +130,50 @@ IMaterial* CStudioRender::R_StudioSetupSkinAndLighting( IMatRenderContext *pRend
 				IMaterial *pOriginalMaterial = ppMaterials[index];
 				if ( pOriginalMaterial )
 				{
-					// Disable any alpha modulation on the original material that was left over from when it was last rendered
-					pOriginalMaterial->AlphaModulate( 1.0f );
 					pRenderContext->Bind( pOriginalMaterial, pClientRenderable );
-					if ( pOriginalMaterial->IsTranslucent() || pOriginalMaterial->IsAlphaTested() )
+					if ( pOriginalMaterial->IsTranslucentUnderModulation() || pOriginalMaterial->IsAlphaTested() )
 					{
-						if ( pOriginalMaterialVar )
-							pOriginalMaterialVar->SetMaterialValue( pOriginalMaterial );
+						pOriginalMaterialVar->SetMaterialValue( pOriginalMaterial );
 					}
 					else
 					{
-						if ( pOriginalMaterialVar )
-							pOriginalMaterialVar->SetMaterialValue( NULL );
+						pOriginalMaterialVar->SetMaterialValue( NULL );
 					}
 				}
 				else
 				{
-					if ( pOriginalMaterialVar )
-						pOriginalMaterialVar->SetMaterialValue( NULL );
+					pOriginalMaterialVar->SetMaterialValue( NULL );
 				}
+				translucent = pMaterial->IsTranslucentUnderModulation( m_pRC->m_AlphaMod );
 			}
 			else if ( m_pRC->m_nForcedMaterialType == OVERRIDE_DEPTH_WRITE || m_pRC->m_nForcedMaterialType == OVERRIDE_SSAO_DEPTH_WRITE )
 			{
-				// Disable any alpha modulation on the original material that was left over from when it was last rendered
-				ppMaterials[index]->AlphaModulate( 1.0f );
-
 				// Bail if the material is still considered translucent after setting the AlphaModulate to 1.0
-				if ( ppMaterials[index]->IsTranslucent() )
-				{
+				if ( ppMaterials[index]->IsTranslucentUnderModulation() )
 					return NULL;
-				}
 
-				static unsigned int originalTextureVarCache = 0;
-				IMaterialVar *pOriginalTextureVar = ppMaterials[index]->FindVarFast( "$basetexture", &originalTextureVarCache );
-
-				// Select proper override material
-				int nAlphaTest = (int) ( ppMaterials[index]->IsAlphaTested() && pOriginalTextureVar->IsTexture() ); // alpha tested base texture
-				int nNoCull = (int) ppMaterials[index]->IsTwoSided();
-				if ( m_pRC->m_nForcedMaterialType == OVERRIDE_SSAO_DEPTH_WRITE )
+				bool bIsAlphaTested = false;
+				bool bUsesTreeSway = false;
+				GetDepthWriteMaterial( &pMaterial, &bIsAlphaTested, &bUsesTreeSway, ppMaterials[ index ], false, ( m_pRC->m_nForcedMaterialType == OVERRIDE_SSAO_DEPTH_WRITE) );
+				if ( bIsAlphaTested )
 				{
-					pMaterial = m_pSSAODepthWrite[nAlphaTest][nNoCull];
+					SetupAlphaTestedDepthWrite( pMaterial, ppMaterials[index] );
 				}
-				else
+				if ( bUsesTreeSway )
 				{
-					pMaterial = m_pDepthWrite[nAlphaTest][nNoCull];
+					SetupTreeSwayDepthWrite( pMaterial, ppMaterials[index] );
 				}
 
-				// If we're alpha tested, we should set up the texture variables from the original material
-				if ( nAlphaTest != 0 )
-				{
-					static unsigned int originalTextureFrameVarCache = 0;
-					IMaterialVar *pOriginalTextureFrameVar = ppMaterials[index]->FindVarFast( "$frame", &originalTextureFrameVarCache );
-					static unsigned int originalAlphaRefCache = 0;
-					IMaterialVar *pOriginalAlphaRefVar = ppMaterials[index]->FindVarFast( "$AlphaTestReference", &originalAlphaRefCache );
-
-					static unsigned int textureVarCache = 0;
-					IMaterialVar *pTextureVar = pMaterial->FindVarFast( "$basetexture", &textureVarCache );
-					static unsigned int textureFrameVarCache = 0;
-					IMaterialVar *pTextureFrameVar = pMaterial->FindVarFast( "$frame", &textureFrameVarCache );
-					static unsigned int alphaRefCache = 0;
-					IMaterialVar *pAlphaRefVar = pMaterial->FindVarFast( "$AlphaTestReference", &alphaRefCache );
-
-					if ( pOriginalTextureVar->IsTexture() ) // If $basetexture is defined
-					{
-						if( pTextureVar && pOriginalTextureVar )
-						{
-							pTextureVar->SetTextureValue( pOriginalTextureVar->GetTextureValue() );
-						}
-
-						if( pTextureFrameVar && pOriginalTextureFrameVar )
-						{
-							pTextureFrameVar->SetIntValue( pOriginalTextureFrameVar->GetIntValue() );
-						}
-
-						if( pAlphaRefVar && pOriginalAlphaRefVar )
-						{
-							pAlphaRefVar->SetFloatValue( pOriginalAlphaRefVar->GetFloatValue() );
-						}
-					}
-				}
+				translucent = false;
+			}
+			else
+			{
+				translucent = pMaterial->IsTranslucentUnderModulation( m_pRC->m_AlphaMod );
 			}
 		}
 
 		// Set this bool to check after the bind below
 		bCheckForConVarDrawTranslucentSubModels = true;
-
-		if ( m_pRC->m_nForcedMaterialType != OVERRIDE_DEPTH_WRITE && m_pRC->m_nForcedMaterialType != OVERRIDE_SSAO_DEPTH_WRITE)
-		{
-			// Try to set the alpha based on the blend
-			pMaterial->AlphaModulate( m_pRC->m_AlphaMod );
-
-			// Try to set the color based on the colormod
-			pMaterial->ColorModulate( m_pRC->m_ColorMod[0], m_pRC->m_ColorMod[1], m_pRC->m_ColorMod[2] );
-		}
 	}
 
 	lighting = R_StudioComputeLighting( pMaterial, materialFlags, pColorMeshes );
@@ -217,26 +188,10 @@ IMaterial* CStudioRender::R_StudioSetupSkinAndLighting( IMatRenderContext *pRend
 		}
 	}
 
-	// TODO: It's possible we don't want to use the color texels--for example because of a convar. 
-	// We should check that here in addition to whether or not we have the data available.
-	static unsigned int lightmapVarCache = 0;
-	IMaterialVar *pLightmapVar = pMaterial->FindVarFast( "$lightmap", &lightmapVarCache );
-	if ( pLightmapVar )
-	{
-		ITexture* newTex = pColorMeshes ? pColorMeshes->m_pLightmap : NULL;
-
-		if (newTex)
-			pLightmapVar->SetTextureValue(newTex);
-		else 
-			pLightmapVar->SetUndefined();
-	}
-	
 	pRenderContext->Bind( pMaterial, pClientRenderable );
 
 	if ( bCheckForConVarDrawTranslucentSubModels )
 	{
-		bool translucent = pMaterial->IsTranslucent();
-
 		if (( m_bDrawTranslucentSubModels && !translucent ) ||
 			( !m_bDrawTranslucentSubModels && translucent ))
 		{
@@ -277,11 +232,6 @@ int R_StudioSetupModel( int bodypart, int entity_body, mstudiomodel_t **ppSubMod
 
 	pbodypart = pStudioHdr->pBodypart( bodypart );
 
-	if ( pbodypart->base == 0 )
-	{
-		Warning( "Model has missing body part: %s\n", pStudioHdr->pszName() );
-		Assert( 0 );
-	}
 	index = entity_body / pbodypart->base;
 	index = index % pbodypart->nummodels;
 
@@ -353,7 +303,7 @@ void ComputePoseToWorld( matrix3x4_t *pPoseToWorld, studiohdr_t *pStudioHdr, int
 		// convert bone to world transformations into pose to world transformations
 		for (int i = 0; i < pStudioHdr->numbones; i++)
 		{
-			mstudiobone_t *pCurBone = pStudioHdr->pBone( i );
+			const mstudiobone_t *pCurBone = pStudioHdr->pBone( i );
 			if ( !(pCurBone->flags & boneMask) )
 				continue;
 
@@ -389,4 +339,15 @@ void ComputePoseToWorld( matrix3x4_t *pPoseToWorld, studiohdr_t *pStudioHdr, int
 #endif
 }
 
-
+//-----------------------------------------------------------------------------
+// Helper to determine which material type to use depending on what strip
+// header flags are set.
+//-----------------------------------------------------------------------------
+MaterialPrimitiveType_t GetPrimitiveTypeForStripHeaderFlags( unsigned char Flags )
+{
+	if ( Flags & OptimizedModel::STRIP_IS_QUADLIST_EXTRA )
+		return MATERIAL_SUBD_QUADS_EXTRA;
+	else if( Flags & OptimizedModel::STRIP_IS_QUADLIST_REG )
+		return MATERIAL_SUBD_QUADS_REG;
+	return MATERIAL_TRIANGLES;
+}

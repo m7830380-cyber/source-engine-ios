@@ -4,21 +4,17 @@
 //	Base Settings for all Source(TM) Projects
 //-----------------------------------------------------------------------------
 
+$Include "$SRCDIR\vpc_scripts\platform_dirs.vpc"
+$Include "$SRCDIR\vpc_scripts\source_base.vpc"
+
 $IgnoreRedundancyWarning	"ON"
 $MacroRequired				"SRCDIR"
 $MacroRequired				"OUTBINDIR"
-$MacroRequired				"PLATSUBDIR"
-
 
 $Include "$SRCDIR\vpc_scripts\source_exe_win_win32_base.vpc"
 
 $Configuration
 {
-	$General
-	{
-		$TargetName		"$OUTBINNAME"
-	}
-
 	$Linker
 	{
 		$SubSystem		"Console (/SUBSYSTEM:CONSOLE)"

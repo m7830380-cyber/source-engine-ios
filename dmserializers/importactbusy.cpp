@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2004, Valve Corporation, All rights reserved. =======
 //
 // Purpose: 
 //
@@ -8,8 +8,9 @@
 #include "dmserializers.h"
 #include "datamodel/idatamodel.h"
 #include "datamodel/dmelement.h"
+#include "datamodel/dmattributevar.h"
 #include "tier1/KeyValues.h"
-#include "tier1/utlbuffer.h"
+#include "tier1/UtlBuffer.h"
 #include "datamodel/dmattribute.h"
 
 
@@ -22,6 +23,8 @@ public:
 	virtual const char *GetName() const { return "actbusy"; }
 	virtual const char *GetDescription() const { return "ActBusy Script File"; }
 	virtual int GetCurrentVersion() const { return 0; } // doesn't store a version
+ 	virtual const char *GetImportedFormat() const { return "actbusy"; }
+ 	virtual int GetImportedVersion() const { return 1; }
 
 	bool Serialize( CUtlBuffer &outBuf, CDmElement *pRoot );
 	CDmElement* UnserializeFromKeyValues( KeyValues *pKeyValues );

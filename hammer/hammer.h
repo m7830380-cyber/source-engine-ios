@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: Defines the application object.
 //
@@ -95,6 +95,11 @@ public:
 	virtual void Shutdown();
 
 	// Methods of IHammer
+	virtual void InitFoundryMode( CreateInterfaceFn factory, void *hGameWnd, const char *szGameDir );
+	virtual void NoteEngineGotFocus();
+	virtual bool IsHammerVisible();
+	virtual void ToggleHammerVisible();
+	
 	virtual bool HammerPreTranslateMessage( MSG * pMsg );
 	virtual bool HammerIsIdleMessage( MSG * pMsg );
 	virtual bool HammerOnIdle( long count );
@@ -108,13 +113,17 @@ public:
 
 	virtual BOOL PreTranslateMessage(MSG *pMsg);
 
+	// Are we running in Foundry mode?
+	bool IsFoundryMode() const { return m_bFoundryMode; }
+
 	// Overrides
 	// ClassWizard generated virtual function overrides
 	//{{AFX_VIRTUAL(CHammer)
 	public:
 	virtual BOOL InitInstance();
 	virtual int ExitInstance();
-	virtual CDocument* OpenDocumentFile(LPCTSTR lpszFileName);
+	virtual CDocument *OpenDocumentFile(LPCTSTR lpszFileName);	// Called by the framework
+	virtual CDocument *OpenDocumentOrInstanceFile(LPCTSTR lpszFileName);	// Called by instances or other Hammer code
 	virtual BOOL OnIdle(LONG lCount);
 	virtual int Run(void);
 	//}}AFX_VIRTUAL
@@ -149,7 +158,7 @@ public:
 	// list of "command arrays" for compiling files:
 	CTypedPtrArray<CPtrArray,CCommandSequence*> m_CmdSequences;
 	void SaveSequences();
-	void LoadSequences();
+	bool LoadSequences( const char *szSeqFileName );
 
 	void Autosave();
 	void LoadLastGoodSave();
@@ -164,6 +173,9 @@ public:
 
 	static void SetIsNewDocumentVisible( bool bIsVisible );
 	static bool IsNewDocumentVisible( void );
+
+	void SetCustomAccelerator( HWND hWnd, WORD nID );
+	void ClearCustomAccelerator( );
 
 	CHammerDocTemplate *pMapDocTemplate;
 	CHammerDocTemplate *pManifestDocTemplate;
@@ -200,6 +212,11 @@ protected:
 
 	char m_szAppDir[MAX_PATH];
 	char m_szAutosaveDir[MAX_PATH];
+
+	bool m_bFoundryMode;
+
+	HWND	m_CustomAcceleratorWindow;
+	HACCEL	m_CustomAccelerator;
 };
 
 
@@ -209,6 +226,7 @@ protected:
 //-----------------------------------------------------------------------------
 // Global interfaces...
 //-----------------------------------------------------------------------------
+#define HAMMER_FILESYSTEM_DEFINED
 extern IBaseFileSystem	*g_pFileSystem;
 extern IEngineAPI	*g_pEngineAPI;
 extern CreateInterfaceFn g_Factory;

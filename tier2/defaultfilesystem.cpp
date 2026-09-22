@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 2005-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: A higher level link library for general use in the game and tools.
 //
@@ -7,6 +7,9 @@
 #include <tier0/platform.h>
 #include <tier2/tier2.h>
 #include <filesystem_init.h>
+
+// NOTE: This has to be the last file included!
+#include "tier0/memdbgon.h"
 
 
 static CSysModule *g_pFullFileSystemModule = NULL;
@@ -27,11 +30,7 @@ void InitDefaultFileSystem( void )
 	if ( !Sys_LoadInterface( "filesystem_stdio", FILESYSTEM_INTERFACE_VERSION,
 		&g_pFullFileSystemModule, (void**)&g_pFullFileSystem ) )
 	{
-		if ( !Sys_LoadInterface( "filesystem_steam", FILESYSTEM_INTERFACE_VERSION,
-			&g_pFullFileSystemModule, (void**)&g_pFullFileSystem ) )
-		{
-			exit(0);
-		}
+		exit(0);
 	}
 
 	if ( !g_pFullFileSystem->Connect( DefaultCreateInterfaceFn ) )
@@ -46,6 +45,7 @@ void InitDefaultFileSystem( void )
 
 	g_pFullFileSystem->RemoveAllSearchPaths();
 	g_pFullFileSystem->AddSearchPath( "", "LOCAL", PATH_ADD_TO_HEAD );
+	g_pFullFileSystem->AddSearchPath( "", "DEFAULT_WRITE_PATH", PATH_ADD_TO_HEAD );
 }
 
 void ShutdownDefaultFileSystem(void)

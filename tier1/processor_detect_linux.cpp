@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: linux dependant ASM code for CPU capability detection
 //
@@ -6,42 +6,38 @@
 // $NoKeywords: $
 //=============================================================================//
 
-#include "platform.h"
 
-#if defined __SANITIZE_ADDRESS__
-bool CheckMMXTechnology(void) { return false; }
-bool CheckSSETechnology(void) { return false; }
-bool CheckSSE2Technology(void) { return false; }
-bool Check3DNowTechnology(void) { return false; }
-#elif defined (__arm__) || defined (__aarch64__)
-bool CheckMMXTechnology(void) { return false; }
-bool CheckSSETechnology(void) { return false; }
-bool CheckSSE2Technology(void) { return false; }
-bool Check3DNowTechnology(void) { return false; }
-#else
+// NOTE: This has to be the last file included! (turned off below, since this is included like a header)
+#include "tier0/memdbgon.h"
+
+
+
+
+// Turn off memdbg macros (turned on up top) since this is included like a header
+#include "tier0/memdbgoff.h"
 
 static void cpuid(uint32 function, uint32& out_eax, uint32& out_ebx, uint32& out_ecx, uint32& out_edx)
 {
 #if defined(PLATFORM_64BITS)
-        asm("mov %%rbx, %%rsi\n\t"
-                "cpuid\n\t"
-                "xchg %%rsi, %%rbx"
-                : "=a" (out_eax),
-                  "=S" (out_ebx),
-                  "=c" (out_ecx),
-                  "=d" (out_edx)
-                : "a" (function) 
-        );
+	asm("mov %%rbx, %%rsi\n\t"
+		"cpuid\n\t"
+		"xchg %%rsi, %%rbx"
+		: "=a" (out_eax),
+		  "=S" (out_ebx),
+		  "=c" (out_ecx),
+		  "=d" (out_edx)
+		: "a" (function) 
+	);
 #else
-        asm("mov %%ebx, %%esi\n\t"
-                "cpuid\n\t"
-                "xchg %%esi, %%ebx"
-                : "=a" (out_eax),
-                  "=S" (out_ebx),
-                  "=c" (out_ecx),
-                  "=d" (out_edx)
-                : "a" (function) 
-        );
+	asm("mov %%ebx, %%esi\n\t"
+		"cpuid\n\t"
+		"xchg %%esi, %%ebx"
+		: "=a" (out_eax),
+		  "=S" (out_ebx),
+		  "=c" (out_ecx),
+		  "=d" (out_edx)
+		: "a" (function) 
+	);
 #endif
 }
 
@@ -82,4 +78,3 @@ bool Check3DNowTechnology(void)
     return false;
 }
 
-#endif

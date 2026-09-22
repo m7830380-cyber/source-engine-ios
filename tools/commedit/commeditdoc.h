@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -68,6 +68,10 @@ public:
 	// Adds a new commentary node
 	void AddNewCommentaryNode( void );
 	void AddNewCommentaryNode( const Vector &vecOrigin, const QAngle &angAngles );
+
+	// Adds an info remarkable
+	void AddNewInfoRemarkable( void );
+	void AddNewInfoRemarkable( const Vector &vecOrigin, const QAngle &angAngles );
 
 	// Deletes a commentary node
 	void DeleteCommentaryNode( CDmElement *pNode );

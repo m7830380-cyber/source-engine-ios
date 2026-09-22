@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -292,7 +292,7 @@ void Clipper3D::SetClipObjects( const CMapObjectList *pList )
     //
     FOR_EACH_OBJ( *m_pOrigObjects, pos )
     {
-        CMapClass *pObject = m_pOrigObjects->Element( pos );
+        CMapClass *pObject = (CUtlReference< CMapClass >)m_pOrigObjects->Element( pos );
         if( !pObject )
             continue;
 

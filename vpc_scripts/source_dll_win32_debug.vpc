@@ -12,20 +12,14 @@ $MacroRequired				"OUTBINDIR"
 $MacroRequired				"LIBPUBLIC"
 $MacroRequired				"LIBCOMMON"
 $MacroRequired				"PLATSUBDIR"
-$MacroRequired				"OUTDLLEXT"
-$MacroRequiredAllowEmpty	"GAMENAME"
-$MacroRequiredAllowEmpty	"INTERMEDIATESUBDIR"
-$MacroRequiredAllowEmpty	"_UNITYSUBDIR"
-$Macro						"_SUBDIRSUFFIX"		"$INTERMEDIATESUBDIR$GAMENAME$PLATSUBDIR$_UNITYSUBDIR"
 
 $Configuration "Debug"
 {
 	$General	
 	{
 		// General
-		$OutputDirectory					".\Debug$_SUBDIRSUFFIX"
-		$IntermediateDirectory				".\Debug$_SUBDIRSUFFIX"
-
+		$OutputDirectory					".\Debug$PLATSUBDIR"
+		$IntermediateDirectory				".\Debug$PLATSUBDIR"
 		$ExtensionsToDeleteOnClean
 		$BuildLogFile
 		$InheritedProjectPropertySheets
@@ -57,11 +51,13 @@ $Configuration "Debug"
 		// General
 		$AdditionalIncludeDirectories		"$SRCDIR\common;$SRCDIR\public;$SRCDIR\public\tier0;$SRCDIR\public\tier1"
 		$Resolve#UsingReferences
-		$DebugInformationFormat				"Program Database for Edit & Continue (/ZI)" [$WIN32]
+		$DebugInformationFormat				"Program Database for Edit & Continue (/ZI)" [$WINDOWS]
 		$DebugInformationFormat				"Program Database (/Zi)" [$WIN64]
 		$SuppressStartupBanner		
 		$WarningLevel						"Level 4 (/W4)"
+		$Detect64bitPortabilityIssues		"Yes (/Wp64)"
 		$TreatWarningsAsErrors
+		$MultiProcessorCompilation			"Yes (/MP)"
 		$UseUNICODEResponseFiles
 
 		// Optimization
@@ -74,23 +70,22 @@ $Configuration "Debug"
 		$WholeProgramOptimization
 
 		// Preprocessor
-		$PreprocessorDefinitions			"$BASE;WIN32;_WIN32;_DEBUG;DEBUG;_WINDOWS;_USRDLL;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE;_SCL_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)"
-		$PreprocessorDefinitions			"$BASE;_HAS_ITERATOR_DEBUGGING=0;_ALLOW_RUNTIME_LIBRARY_MISMATCH;_ALLOW_ITERATOR_DEBUG_LEVEL_MISMATCH;_ALLOW_MSC_VER_MISMATCH" [!$WIN64&&!$VS2015]
+		$PreprocessorDefinitions			"$BASE;_HAS_ITERATOR_DEBUGGING=0;WIN32;_WIN32;_DEBUG;DEBUG;_WINDOWS;_USRDLL;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE;DLLNAME=$OUTBINNAME;_ALLOW_RUNTIME_LIBRARY_MISMATCH;_ALLOW_ITERATOR_DEBUG_LEVEL_MISMATCH;_ALLOW_MSC_VER_MISMATCH;%(PreprocessorDefinitions)"
 		$IgnoreStandardIncludePath
 		$GeneratePreprocessedFile
 		$KeepComments
 
 		// Code Generation
 		$EnableStringPooling				"Yes (/GF)"
-		$EnableMinimalRebuild				
+		$EnableMinimalRebuild				"No"
 		$EnableC++Exceptions				"No"
 		$SmallerTypeCheck
 		$BasicRuntimeChecks					"Default"
 		$RuntimeLibrary						"Multi-threaded Debug (/MTd)"
 		$StructMemberAlignment
-		$BufferSecurityCheck				"Yes"
+		$BufferSecurityCheck				"No" [$WINDOWS]
 		$EnableFunctionLevelLinking
-		$EnableEnhancedInstructionSet
+		$EnableEnhancedInstructionSet 
 		$FloatingPointModel					"Fast (/fp:fast)"
 		$EnableFloatingPointExceptions
 
@@ -129,17 +124,18 @@ $Configuration "Debug"
 		$ShowIncludes
 		$UndefinePreprocessorDefinitions
 		$UndefineAllPreprocessorDefinitions
-		$UseFullPaths						"Yes (/FC)"
+		$UseFullPaths
 		$OmitDefaultLibraryNames
 		$ErrorReporting						"Prompt Immediately (/errorReport:prompt)"
 
-		$AdditionalOptions					"/Zm200"
+		// Command Line
+		$AdditionalOptions					
 	}
 
 	$Linker
 	{
 		// General
-		$OutputFile							"$(OutDir)/$OUTBINNAME$OUTDLLEXT"
+		$OutputFile							"$(OutDir)/$OUTBINNAME.dll"
 		$ShowProgress						"Not Set"
 		$Version
 		$EnableIncrementalLinking			"Yes (/INCREMENTAL)"
@@ -154,7 +150,7 @@ $Configuration "Debug"
 		// Input
 		$AdditionalDependencies
 		$IgnoreAllDefaultLibraries
-		$IgnoreSpecificLibrary				"libc;libcd;libcmt;libcpmt;libcpmt1"
+		$IgnoreSpecificLibrary				"libc;libcd;libcmt"
 		$ModuleDefinitionFile
 		$AddModuleToAssembly
 		$EmbedManagedResourceFile
@@ -186,9 +182,6 @@ $Configuration "Debug"
 		$SwapRunFromCD
 		$SwapRunFromNetwork
 		$Driver
-
-		// DYNAMICBASE/ASLR in debug builds is annoying and not helpful.
-		$RandomizedBaseAddress				"false"
 
 		// Optimization
 		$References

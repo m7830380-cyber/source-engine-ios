@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2005, Valve Corporation, All rights reserved. =======
 //
 // Purpose: 
 //
@@ -8,19 +8,19 @@
 #include "tier1/utlstring.h"
 #include "vgui/ISurface.h"
 #include "materialsystem/imaterialsystemhardwareconfig.h"
-#include "materialsystem/imaterialsystem.h"
+#include "materialsystem/IMaterialSystem.h"
 #include "materialsystem/MaterialSystemUtil.h"
-#include "materialsystem/imesh.h"
-#include "materialsystem/imaterial.h"
+#include "materialsystem/IMesh.h"
+#include "materialsystem/IMaterial.h"
 #include "materialsystem/itexture.h"
 #include "tier1/KeyValues.h"
 #include "toolframework/ienginetool.h"
 #include "toolutils/enginetools_int.h"
-#include "VGuiMatSurface/IMatSystemSurface.h"
+#include "vguimatsurface/imatsystemsurface.h"
 #include "view_shared.h"
 #include "texture_group_names.h"
 #include "vgui_controls/PropertySheet.h"
-#include "tier2/tier2.h"
+#include "tier3/tier3.h"
 #include <windows.h>	// for MultiByteToWideChar
 #include "cdll_int.h"
 
@@ -30,8 +30,6 @@
 class CMiniViewportEngineRenderArea;
 
 using namespace vgui;
-
-extern IMatSystemSurface *g_pMatSystemSurface;
 
 #define DEFAULT_PREVIEW_WIDTH 1280
 
@@ -80,9 +78,6 @@ public:
 
 	void	RenderFrameBegin();
 	void	SetOverlayText( const char *pText );
-
-	// Called when the layoff texture needs to be released
-	void ReleaseLayoffTexture();
 
 protected:
 	void			InitSceneMaterials();
@@ -186,16 +181,6 @@ void CMiniViewportEngineRenderArea::InitSceneMaterials()
 	pVMTKeyValues->SetInt( "$nofog", 1 );
 	m_ScreenMaterial.Init( "MiniViewportEngineRenderAreaSceneMaterial", pVMTKeyValues );
 	m_ScreenMaterial->Refresh();
-}
-
-
-//-----------------------------------------------------------------------------
-// Called when the layoff texture needs to be released
-//-----------------------------------------------------------------------------
-void CMiniViewportEngineRenderArea::ReleaseLayoffTexture()
-{
-	m_ScreenBuffer.Shutdown();
-	m_ScreenMaterial.Shutdown();
 }
 
 
@@ -422,18 +407,6 @@ void CMiniViewport::GetViewport( bool& enabled, int& x, int& y, int& w, int& h )
 void CMiniViewport::GetEngineBounds( int& x, int& y, int& w, int& h )
 {
 	m_hPage->GetEngineBounds( x, y, w, h );
-}
-
-
-//-----------------------------------------------------------------------------
-// Called when the layoff texture needs to be released
-//-----------------------------------------------------------------------------
-void CMiniViewport::ReleaseLayoffTexture()
-{
-	if ( m_hPage.Get() )
-	{
-		m_hPage->GetViewportArea()->ReleaseLayoffTexture();
-	}
 }
 
 

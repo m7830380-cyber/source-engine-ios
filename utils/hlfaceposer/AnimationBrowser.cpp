@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -14,8 +14,8 @@
 #include "faceposer_models.h"
 #include "tabwindow.h"
 #include "inputproperties.h"
-#include "KeyValues.h"
-#include "filesystem.h"
+#include "keyvalues.h"
+#include "FileSystem.h"
 #include "tier1/KeyValues.h"
 #include "tier1/UtlBuffer.h"
 
@@ -322,7 +322,7 @@ bool AnimationBrowser::ComputeRect( int cell, int& rcx, int& rcy, int& rcw, int&
 	return true;
 }
 
-void AnimationBrowser::DrawSequenceFocusRect( CChoreoWidgetDrawHelper& helper, int x, int y, int w, int h, COLORREF clr )
+void AnimationBrowser::DrawSequenceFocusRect( CChoreoWidgetDrawHelper& helper, int x, int y, int w, int h, const Color& clr )
 {
 	helper.DrawOutlinedRect( clr, PS_SOLID, 4, x, y, x + w, y + h );
 }
@@ -337,7 +337,7 @@ void AnimationBrowser::DrawSequenceDescription( CChoreoWidgetDrawHelper& helper,
 	textRect.right = x + w - 10;
 	textRect.bottom = y + h - 12;
 
-	helper.DrawColoredText( "Arial", 9, FW_NORMAL, RGB( 63, 63, 63 ), textRect, "%s", seqdesc.pszLabel() );
+	helper.DrawColoredText( "Arial", 9, FW_NORMAL, Color( 63, 63, 63 ), textRect, "%s", seqdesc.pszLabel() );
 
 	StudioModel *mdl = models->GetActiveStudioModel();
 	if ( !mdl )
@@ -345,18 +345,18 @@ void AnimationBrowser::DrawSequenceDescription( CChoreoWidgetDrawHelper& helper,
 
 	OffsetRect( &textRect, 0, textheight );
 
-	helper.DrawColoredText( "Arial", 9, FW_NORMAL, RGB( 63, 63, 63 ), textRect, "%.2f seconds", 
+	helper.DrawColoredText( "Arial", 9, FW_NORMAL, Color( 63, 63, 63 ), textRect, "%.2f seconds", 
 		mdl->GetDuration( sequence ) );
 
 	textRect.top = y + h - 4 * textheight - 1;
 	textRect.bottom = textRect.top + textheight;
 
-	helper.DrawColoredText( "Arial", 9, FW_NORMAL, RGB( 50, 200, 255 ), textRect, "frames %i", 
+	helper.DrawColoredText( "Arial", 9, FW_NORMAL, Color( 50, 200, 255 ), textRect, "frames %i", 
 		mdl->GetNumFrames( sequence ) );
 
 	OffsetRect( &textRect, 0, textheight - 4 );
 	
-	helper.DrawColoredText( "Arial", 9, FW_NORMAL, RGB( 50, 200, 255 ), textRect, "fps %.2f", 
+	helper.DrawColoredText( "Arial", 9, FW_NORMAL, Color( 50, 200, 255 ), textRect, "fps %.2f", 
 		(float)mdl->GetFPS( sequence ) );
 
 }
@@ -371,7 +371,7 @@ void AnimationBrowser::DrawThumbNail( int sequence, CChoreoWidgetDrawHelper& hel
 {
 	HDC dc = helper.GrabDC();
 
-	helper.DrawFilledRect( GetSysColor( COLOR_BTNFACE ), rcx, rcy, rcw + rcx, rch + rcy );
+	helper.DrawFilledRect( RGBToColor( GetSysColor( COLOR_BTNFACE ) ), rcx, rcy, rcw + rcx, rch + rcy );
 
 	mstudioseqdesc_t *pseqdesc = GetSeqDesc( sequence );
 	if ( !pseqdesc )
@@ -381,14 +381,14 @@ void AnimationBrowser::DrawThumbNail( int sequence, CChoreoWidgetDrawHelper& hel
 	if ( bm && bm->valid )
 	{
 		DrawBitmapToDC( dc, rcx, rcy, rcw, rch - m_nDescriptionHeight, *bm );
-		helper.DrawOutlinedRect( RGB( 127, 127, 127 ), PS_SOLID, 1, rcx, rcy, rcx + rcw, rcy + rch - m_nDescriptionHeight );
+		helper.DrawOutlinedRect( Color( 127, 127, 127 ), PS_SOLID, 1, rcx, rcy, rcx + rcw, rcy + rch - m_nDescriptionHeight );
 	}
 
 	DrawSequenceDescription( helper, rcx, rcy, rcw, rch, TranslateSequenceNumber( sequence ), *pseqdesc );
 
 	if ( sequence == m_nCurCell )
 	{
-		DrawSequenceFocusRect( helper, rcx, rcy, rcw, rch - m_nDescriptionHeight, RGB( 255, 100, 63 ) );
+		DrawSequenceFocusRect( helper, rcx, rcy, rcw, rch - m_nDescriptionHeight, Color( 255, 100, 63 ) );
 	}
 }
 
@@ -408,7 +408,7 @@ void AnimationBrowser::redraw()
 		updateSelection = true;
 	}
 
-	CChoreoWidgetDrawHelper helper( this, GetSysColor( COLOR_BTNFACE ) );
+	CChoreoWidgetDrawHelper helper( this, RGBToColor( GetSysColor( COLOR_BTNFACE ) ) );
 	HandleToolRedraw( helper );
 
 	int w, h;
@@ -450,7 +450,7 @@ void AnimationBrowser::redraw()
 	rcText.top = 8;
 	rcText.bottom = rcText.top + 15;
 
-	helper.DrawColoredText( "Arial", 9, FW_NORMAL, RGB( 63, 63, 63 ), rcText, "%i sequences", 
+	helper.DrawColoredText( "Arial", 9, FW_NORMAL, Color( 63, 63, 63 ), rcText, "%i sequences", 
 		curcount );
 
 }
@@ -1290,7 +1290,7 @@ void AnimationBrowser::RenameCustomFile( int index )
 	anim->m_ShortName = params.m_szInputText;
 	
 	char basename[ 128 ];
-	Q_StripExtension( hdr->pszName(), basename, sizeof( basename ) );
+	Q_StripExtension( hdr->name(), basename, sizeof( basename ) );
 	Q_snprintf( fn, sizeof( fn ), "expressions/%s/animation/%s.txt", basename, params.m_szInputText );
 	Q_FixSlashes( fn );
 	Q_strlower( fn );
@@ -1374,7 +1374,7 @@ void AnimationBrowser::OnModelChanged()
 		{
 			char subdir[ 512 ];
 			char basename[ 512 ];
-			Q_StripExtension( hdr->pszName(), basename, sizeof( basename ) );
+			Q_StripExtension( hdr->name(), basename, sizeof( basename ) );
 			Q_snprintf( subdir, sizeof( subdir ), "expressions/%s/animation", basename );
 			Q_FixSlashes( subdir );
 			Q_strlower( subdir );
@@ -1425,7 +1425,7 @@ void AnimationBrowser::OnModelChanged()
 	// Create it
 	char fn[ 512 ];
 	char basename[ 512 ];
-	Q_StripExtension( hdr->pszName(), basename, sizeof( basename ) );
+	Q_StripExtension( hdr->name(), basename, sizeof( basename ) );
 	Q_snprintf( fn, sizeof( fn ), "expressions/%s/animation/%s.txt", basename, params.m_szInputText );
 	Q_FixSlashes( fn );
 	Q_strlower( fn );

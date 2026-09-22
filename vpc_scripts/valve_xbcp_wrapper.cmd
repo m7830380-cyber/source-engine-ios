@@ -17,7 +17,7 @@ set remoteFilename=%2
 "%XEDK%\bin\win32\xbcp" /y /t "%localFilename%" "%remoteFilename%"
 
 if %ERRORLEVEL%==1 (
-	echo XBCP failed. If you don't have an X360 but want to compile its sources, define VALVE_NO_XBCP.
+	echo XBCP failed. If you don't have an X360 but want to compile its sources, set the environment variable VALVE_NO_XBCP to 1.
 	del /q %1%
 	exit 1
 )

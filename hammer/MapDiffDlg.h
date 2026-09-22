@@ -1,4 +1,3 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
 
 #ifndef MAPDIFFDLG_H
 #define MAPDIFFDLG_H

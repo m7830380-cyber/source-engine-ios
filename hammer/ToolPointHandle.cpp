@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -148,8 +148,9 @@ bool CToolPointHandle::OnLMouseUp2D(CMapView2D *pView, UINT nFlags, const Vector
 	ToolManager()->PopTool();
 	ReleaseCapture();
 
+	m_pDocument->SetModifiedFlag();
+
 	m_pDocument->UpdateAllViews( MAPVIEW_UPDATE_TOOL );
-	
 	return true;
 }
 
@@ -259,6 +260,9 @@ void CToolPointHandle::CenterOnParent(CMapView *pView)
 		Vector vecCenter;
 		pParent->GetBoundsCenter(vecCenter);
 		m_pPoint->UpdateOrigin(vecCenter);
+
+		m_pDocument->SetModifiedFlag();
+
 		m_pDocument->UpdateAllViews( MAPVIEW_UPDATE_TOOL );
 	}
 }

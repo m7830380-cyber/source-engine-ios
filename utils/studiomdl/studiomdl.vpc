@@ -5,21 +5,25 @@
 //-----------------------------------------------------------------------------
 
 $Macro SRCDIR		"..\.."
-$Macro OUTBINDIR	"$LIBPUBLIC"
+$Macro OUTBINDIR	"$SRCDIR\..\game\bin"
 
-$Include "$SRCDIR\vpc_scripts\source_exe_con_base.vpc"
+$Include "$SRCDIR\vpc_scripts\source_exe_con_win32_base.vpc"
+
+$Include "$SRCDIR\vpc_scripts\fbx.vpc"
 
 $Configuration
 {
 	$Compiler
 	{
-		$AdditionalIncludeDirectories		"$BASE,..\common,..\nvtristriplib,$SRCDIR\Game_Shared"
+		$AdditionalIncludeDirectories		"$BASE,..\common,..\nvtristriplib,$SRCDIR\Game_Shared, $SRCDIR\ps3sdk\cell\host-common\include,$SRCDIR\ps3sdk\cell\target\common\include"
+
 		$PreprocessorDefinitions			"$BASE;PROTECTED_THINGS_DISABLE"
 	}
 
 	$Linker
 	{
-		$AdditionalDependencies				"$BASE winmm.lib"
+		$AdditionalDependencies			"$BASE winmm.lib libedgegeomtool.Release.Win32.vs8.lib"
+		$AdditionalLibraryDirectories   	"$BASE;$SRCDIR\ps3sdk\cell\host-win32\lib"
 	}
 }
 
@@ -27,21 +31,24 @@ $Project "Studiomdl"
 {
 	$Folder	"Source Files"
 	{
-		$File	"$SRCDIR\public\bone_setup.cpp"
 		$File	"..\common\cmdlib.cpp"
+		$File	"..\common\datalinker.cpp"
 		$File	"collisionmodel.cpp"
-		$File	"$SRCDIR\public\CollisionUtils.cpp"
+		$File	"collisionmodelsource.cpp"
+//		$File   "physics2collision.cpp"
+		$File	"$SRCDIR\public\collisionutils.cpp"
 		$File	"dmxsupport.cpp"
 		$File	"$SRCDIR\public\filesystem_helpers.cpp"
 		$File	"$SRCDIR\public\filesystem_init.cpp"
-		$File	"..\common\FileSystem_Tools.cpp"
-		$File	"HardwareMatrixState.cpp"
-		$File	"HardwareVertexCache.cpp"
+		$File	"..\common\filesystem_tools.cpp"
+		$File	"hardwarematrixstate.cpp"
+		$File	"hardwarevertexcache.cpp"
 		$File	"$SRCDIR\public\interpolatortypes.cpp"
 		$File	"$SRCDIR\public\mdlobjects\mdlobjects.cpp"
 		$File	"$SRCDIR\public\movieobjects\movieobjects_compiletools.cpp"
 		$File	"mrmsupport.cpp"
 		$File	"objsupport.cpp"
+		$File   "optimize_subd.cpp"
 		$File	"optimize.cpp"
 		$File	"perfstats.cpp"
 		$File	"..\common\physdll.cpp"
@@ -50,35 +57,40 @@ $Project "Studiomdl"
 		$File	"$SRCDIR\public\studio.cpp"
 		$File	"$SRCDIR\common\studiobyteswap.cpp"
 		$File	"studiomdl.cpp"
+		$File	"compileclothproxy.cpp"
 		$File	"UnifyLODs.cpp"
 		$File	"v1support.cpp"
 		$File	"write.cpp"
-		$File	"checkuv.cpp"
 	}
 
 	$Folder	"Header Files"
 	{
 		$File	"..\common\cmdlib.h"
+		$File	"..\common\datalinker.h"
 		$File	"collisionmodel.h"
-		$File	"FileBuffer.h"
-		$File	"..\common\FileSystem_Tools.h"
-		$File	"HardwareMatrixState.h"
-		$File	"HardwareVertexCache.h"
-		$File	"..\NvTriStripLib\NvTriStrip.h"
+		$File	"collisionmodelsource.h"
+		$File   "physics2collision.h"
+		$File	"physics2collision.h"
+		$File	"filebuffer.h"
+		$File	"..\common\filesystem_tools.h"
+		$File	"hardwarematrixstate.h"
+		$File	"hardwarevertexcache.h"
+		$File	"..\nvtristriplib\nvtristrip.h"
 		$File	"perfstats.h"
 		$File	"..\common\physdll.h"
 		$File	"..\common\scriplib.h"
 		$File	"studiomdl.h"
-		$File	"checkuv.h"
+		$File   "optimize_subd.h"
+		$File	"compileclothproxy.h"
 	}
 
 	$Folder	"Public Header Files"
 	{
+		$File	"$SRCDIR\public\alignedarray.h"
 		$File	"$SRCDIR\public\gametrace.h"
 		$File	"$SRCDIR\public\filesystem.h"
 		$File	"$SRCDIR\public\filesystem_helpers.h"
 		$File	"$SRCDIR\public\cmodel.h"
-		$File	"$SRCDIR\public\mathlib\amd3dx.h"
 		$File	"$SRCDIR\public\basehandle.h"
 		$File	"$SRCDIR\public\tier0\basetypes.h"
 		$File	"$SRCDIR\public\bitvec.h"
@@ -87,14 +99,13 @@ $Project "Studiomdl"
 		$File	"$SRCDIR\public\bspflags.h"
 		$File	"$SRCDIR\public\tier1\byteswap.h"
 		$File	"$SRCDIR\public\tier1\characterset.h"
-		$File	"$SRCDIR\public\CollisionUtils.h"
-		$File	"$SRCDIR\public\tier0\commonmacros.h"
+		$File	"$SRCDIR\public\collisionutils.h"
 		$File	"$SRCDIR\public\mathlib\compressed_vector.h"
 		$File	"$SRCDIR\public\const.h"
 		$File	"$SRCDIR\public\vphysics\constraints.h"
 		$File	"$SRCDIR\public\tier0\dbg.h"
 		$File	"$SRCDIR\public\tier0\fasttimer.h"
-		$File	"$SRCDIR\public\appframework\IAppSystem.h"
+		$File	"$SRCDIR\public\appframework\iappsystem.h"
 		$File	"$SRCDIR\public\tier0\icommandline.h"
 		$File	"$SRCDIR\public\ihandleentity.h"
 		$File	"$SRCDIR\public\materialsystem\imaterial.h"
@@ -102,15 +113,15 @@ $Project "Studiomdl"
 		$File	"$SRCDIR\public\materialsystem\imaterialvar.h"
 		$File	"$SRCDIR\public\tier1\interface.h"
 		$File	"$SRCDIR\public\istudiorender.h"
-		$File	"$SRCDIR\public\tier1\KeyValues.h"
+		$File	"$SRCDIR\public\tier1\keyvalues.h"
 		$File	"$SRCDIR\public\materialsystem\materialsystem_config.h"
 		$File	"$SRCDIR\public\mathlib\mathlib.h"
 		$File	"$SRCDIR\public\tier0\memdbgoff.h"
 		$File	"$SRCDIR\public\tier0\memdbgon.h"
 		$File	"$SRCDIR\public\phyfile.h"
+		$File	"$SRCDIR\public\phzfile.h"
 		$File	"$SRCDIR\public\optimize.h"
 		$File	"$SRCDIR\public\tier0\platform.h"
-		$File	"$SRCDIR\public\tier0\protected_things.h"
 		$File	"$SRCDIR\public\vstdlib\random.h"
 		$File	"$SRCDIR\common\studiobyteswap.h"
 		$File	"$SRCDIR\public\string_t.h"
@@ -138,14 +149,21 @@ $Project "Studiomdl"
 	
 	$Folder	"Link Libraries"
 	{
-		$Lib appframework
-		$Lib datamodel
-		$Lib dmserializers
-		$Lib mathlib
-		$Lib mdlobjects
-		$Lib movieobjects
-		$Lib nvtristrip
-		$Lib tier2
-		$Lib tier3
+		$Lib	resourcefile
+		$Lib	dmeutils
+		$Lib	meshutils
+		$Lib	appframework
+		$Lib	bonesetup
+		$Lib	datamodel
+		$Lib	dmserializers
+		$Lib	mathlib
+		$Lib	mathlib_extended
+		$Lib	mdlobjects
+		$Lib	movieobjects
+		$Lib	nvtristrip
+		$Lib	tier1
+		$Lib	tier2
+		$Lib	tier3
+		$Lib	fbxutils
 	}
 }

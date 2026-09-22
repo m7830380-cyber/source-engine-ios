@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2005, Valve Corporation, All rights reserved. =======
 //
 // Purpose: Core Movie Maker UI API
 //
@@ -32,7 +32,7 @@
 #include "toolutils/miniviewport.h"
 #include "materialsystem/imaterialsystem.h"
 #include "materialsystem/imaterial.h"
-#include "materialsystem/imesh.h"
+#include "materialsystem/IMesh.h"
 #include "toolutils/BaseStatusBar.h"
 #include "movieobjects/movieobjects.h"
 #include "vgui_controls/KeyBoardEditorDialog.h"
@@ -107,6 +107,15 @@ void CBaseToolSystem::ApplySchemeSettings(IScheme *pScheme)
 	BaseClass::ApplySchemeSettings(pScheme);
 	SetKeyBoardInputEnabled( true );
 }
+
+//-----------------------------------------------------------------------------
+// Derived classes can implement this to get a new scheme to be applied to this tool
+//-----------------------------------------------------------------------------
+vgui::HScheme CBaseToolSystem::GetToolScheme()
+{
+	return vgui::scheme()->LoadSchemeFromFile( "Resource/BoxRocket.res", GetToolName() );
+}
+
 
 //-----------------------------------------------------------------------------
 // Called at the end of engine startup (after client .dll and server .dll have been loaded)
@@ -224,6 +233,9 @@ void CBaseToolSystem::Shutdown()
 		delete m_hMiniViewport.Get();
 	}
 
+	// Delete ourselves
+	MarkForDeletion();
+
 	// Make sure anything "marked for deletion"
 	//  actually gets deleted before this dll goes away
 	vgui::ivgui()->RunFrame();
@@ -233,7 +245,7 @@ void CBaseToolSystem::Shutdown()
 //-----------------------------------------------------------------------------
 // Can the tool quit?
 //-----------------------------------------------------------------------------
-bool CBaseToolSystem::CanQuit()
+bool CBaseToolSystem::CanQuit( const char* /*pExitMsg*/ )
 {
 	return true;
 }
@@ -312,16 +324,9 @@ void CBaseToolSystem::Think( bool finalTick )
 	vgui::GetAnimationController()->UpdateAnimations( enginetools->Time() );
 }
 
-void CBaseToolSystem::PostMessage( HTOOLHANDLE hEntity, KeyValues *message )
+void CBaseToolSystem::PostToolMessage( HTOOLHANDLE hEntity, KeyValues *message )
 {
-	if ( !Q_stricmp( message->GetName(), "ReleaseLayoffTexture" ) )
-	{
-		if ( m_hMiniViewport.Get() )
-		{
-			m_hMiniViewport->ReleaseLayoffTexture();
-		}
-		return;
-	}
+	return;
 }
 
 void CBaseToolSystem::ServerFrameUpdatePostEntityThink()
@@ -340,6 +345,12 @@ const char* CBaseToolSystem::GetEntityData( const char *pActualEntityData )
 {
 	return pActualEntityData;
 }
+
+void* CBaseToolSystem::QueryInterface( const char *pInterfaceName )
+{
+	return NULL;
+}
+
 
 //-----------------------------------------------------------------------------
 // Level init, shutdown for client
@@ -405,6 +416,12 @@ bool CBaseToolSystem::TrapKey( ButtonCode_t key, bool down )
 	// Don't hook keyboard if not topmost
 	if ( !m_bIsActive )
 		return false; // didn't trap, continue processing
+
+	// This is a bit of a hack to work around the mouse capture bugs we seem to keep getting...
+	if ( !IsGameInputEnabled() && key == KEY_ESCAPE )
+	{
+		vgui::input()->SetMouseCapture( NULL );
+	}
 
 	// If in fullscreen toolMode, don't let ECSAPE bring up the game menu
 	if ( !m_bGameInputEnabled && m_bFullscreenMode && ( key == KEY_ESCAPE ) )
@@ -511,6 +528,13 @@ void CBaseToolSystem::SetMode( bool bGameInputEnabled, bool bFullscreen )
 	{
 		Warning( "Input is now being sent to the %s\n", m_bGameInputEnabled ? "Game" : "Tools" );
 		
+		// If switching from tool to game mode, release the mouse capture so that the 
+		// tool knows that it is going to miss mouse events that are handed to the game.
+		if ( bGameInputEnabled == true )
+		{
+			input()->SetMouseCapture( NULL );
+		}
+
 		// The subtree starts at the tool system root panel.  If game input is enabled then
 		//  the subtree should not receive or process input messages, otherwise it should
 		Assert( input()->GetModalSubTree() );
@@ -518,6 +542,8 @@ void CBaseToolSystem::SetMode( bool bGameInputEnabled, bool bFullscreen )
 		{
 			input()->SetModalSubTreeReceiveMessages( !m_bGameInputEnabled );
 		}
+
+		enginetools->OnModeChanged( m_bGameInputEnabled );
 	}
 
 	if ( m_pToolUI )
@@ -602,6 +628,19 @@ void CBaseToolSystem::UnregisterAllToolWindows()
 	m_MostRecentlyFocused = NULL;
 }
 
+//-----------------------------------------------------------------------------
+// Destroys all tool windows containers
+//-----------------------------------------------------------------------------
+void CBaseToolSystem::DestroyToolContainers()
+{
+	int c = ToolWindow::GetToolWindowCount();
+	for ( int i = c - 1; i >= 0 ; --i )
+	{
+		ToolWindow *kill = ToolWindow::GetToolWindow( i );
+		delete kill;
+	}
+}
+
 Panel *CBaseToolSystem::GetMostRecentlyFocusedTool()
 {
 	VPANEL focus = input()->GetFocus();
@@ -654,7 +693,7 @@ void CBaseToolSystem::PostMessageToAllTools( KeyValues *message )
 	for ( int i = 0; i < nCount; ++i )
 	{
 		IToolSystem *pToolSystem = const_cast<IToolSystem*>( enginetools->GetToolSystem( i ) );
-		pToolSystem->PostMessage( HTOOLHANDLE_INVALID, message );
+		pToolSystem->PostToolMessage( HTOOLHANDLE_INVALID, message );
 	}
 }
 
@@ -671,16 +710,37 @@ void CBaseToolSystem::OnThink()
 			continue;
 
 		// Not a visible tool
-		if ( !p->GetParent() )
+		Panel *pPage = p->GetParent();
+		if ( !pPage )
 			continue;
 
 		bool hasFocus = p->HasFocus();
-		bool focusOnChild = focus && ipanel()->HasParent(focus, p->GetVPanel());
+		bool bFocusOnTab = false;
+		bool focusOnChild = false;
 
-		if ( !hasFocus && !focusOnChild )
+		if ( !hasFocus )
+		{
+			PropertySheet *pSheet = dynamic_cast< PropertySheet * >( pPage );
+			if ( pSheet )
+			{
+				Panel *pActiveTab = pSheet->GetActiveTab();
+				if ( pActiveTab ) 
+				{
+					bFocusOnTab = ( ( focus == pActiveTab->GetVPanel() ) ||				// Tab itself has focus
+						ipanel()->HasParent( focus, pActiveTab->GetVPanel() ) );		// Tab is parent of panel that has focus (in case we add subpanels to tabs)
+				}
+			}
+
+			focusOnChild = focus && ipanel()->HasParent(focus, p->GetVPanel());
+		}
+
+		if ( !hasFocus && !focusOnChild && !bFocusOnTab )
 			continue;
 
-		m_MostRecentlyFocused = p;
+		if ( m_MostRecentlyFocused != p )
+		{
+			m_MostRecentlyFocused = p;
+		}
 		break;
 	}
 }
@@ -747,6 +807,11 @@ bool CBaseToolSystem::ShouldGameRenderView()
 	return false;
 }
 
+bool CBaseToolSystem::ShouldGamePlaySounds()
+{
+	return true;
+}
+
 bool CBaseToolSystem::IsThirdPersonCamera()
 {
 	return false;
@@ -808,10 +873,16 @@ void CBaseToolSystem::VGui_PreSimulate()
 
 	// only show the gameUI when in gameMode
 	vgui::VPANEL gameui = enginevgui->GetPanel( PANEL_GAMEUIDLL );
+#if defined( TOOLFRAMEWORK_VGUI_REFACTOR )
+	vgui::VPANEL gameuiBackground = enginevgui->GetPanel( PANEL_GAMEUIBACKGROUND );
+#endif
 	if ( gameui != 0 )
 	{
 		bool wantsToBeSeen = IsGameInputEnabled() && (enginetools->IsGamePaused() || !enginetools->IsInGame() || enginetools->IsConsoleVisible());
 		vgui::ipanel()->SetVisible(gameui, wantsToBeSeen);
+#if defined( TOOLFRAMEWORK_VGUI_REFACTOR )
+		vgui::ipanel()->SetVisible(gameuiBackground, wantsToBeSeen);
+#endif
 	}
 
 	// if there's no map loaded and we're in fullscreen toolMode, switch to gameMode
@@ -900,6 +971,22 @@ vgui::Menu *CBaseToolSystem::GetActionMenu()
 vgui::Panel* CBaseToolSystem::GetClientArea()
 {
 	return m_pToolUI->GetClientArea();
+}
+
+//-----------------------------------------------------------------------------
+// Returns the menu bar
+//-----------------------------------------------------------------------------
+vgui::MenuBar* CBaseToolSystem::GetMenuBar()
+{
+	return m_pToolUI->GetMenuBar();
+}
+
+//-----------------------------------------------------------------------------
+// Returns the status bar
+//-----------------------------------------------------------------------------
+vgui::Panel* CBaseToolSystem::GetStatusBar()
+{
+	return m_pToolUI->GetStatusBar();
 }
 
 

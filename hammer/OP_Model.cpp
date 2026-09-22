@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ====
 //
 // Purpose: 
 //
@@ -84,6 +84,8 @@ void COP_Model::UpdateData( int Mode, PVOID pData, bool bCanEdit )
 	
 	if (Mode == LoadFirstData)
 	{
+		m_ComboSequence.Clear();
+
 		CMapStudioModel *pModel = GetModelHelper();
 		if ( pModel )
 		{
@@ -107,13 +109,11 @@ void COP_Model::UpdateData( int Mode, PVOID pData, bool bCanEdit )
 			}
 			
 			m_ComboSequence.SetSuggestions( suggestions, 0 );
-			
-			// Tell it to go to the last sequence the model was on.
-			if ( txt[0] )
-			{
-				m_ComboSequence.SelectItem( txt );
-			}
+			m_ComboSequence.SetCurSel( iSequence );
 		}
+
+		// Reset the scroll bar
+		InitScrollRange();
 	}
 	else if (Mode == LoadData)
 	{
@@ -128,12 +128,17 @@ BOOL COP_Model::OnSetActive()
 	m_bOldAnimatedModels = Options.view3d.bAnimateModels;
 	Options.view3d.bAnimateModels = true;
 
+	CMapStudioModel *pModel = GetModelHelper();
+	if ( pModel )
+	{
+		m_nOldSequence = pModel->GetSequence();
+	}
+
 	CMapDoc *pDoc = CMapDoc::GetActiveMapDoc();
 	if ( pDoc )
 	{
 		pDoc->UpdateAllViews( MAPVIEW_UPDATE_ANIMATION|MAPVIEW_OPTIONS_CHANGED );
 	}
-
 
 	return CObjectPage::OnSetActive();
 }
@@ -156,15 +161,30 @@ BOOL COP_Model::OnKillActive()
 // Purpose: 
 // Output : Returns true on success, false on failure.
 //-----------------------------------------------------------------------------
-bool COP_Model::SaveData(void)
+bool COP_Model::SaveData( SaveData_Reason_t reason )
 {
 	if (!IsWindow(m_hWnd))
 	{
 		return false;
 	}
 
-	// Apply the dialog data to all the objects being edited.
-	
+	// If we've closed the dialog or changed focus, reset the model now
+	if ( reason == SAVEDATA_SELECTION_CHANGED || reason == SAVEDATA_CLOSE )
+	{
+		CMapStudioModel *pModel = GetModelHelper();
+		if (pModel != NULL)
+		{
+			pModel->SetSequence( m_nOldSequence );
+			pModel->SetFrame( 0 );
+			
+			CMapDoc *pDoc = CMapDoc::GetActiveMapDoc();
+			if ( pDoc )
+			{
+				pDoc->UpdateAllViews( MAPVIEW_UPDATE_ANIMATION );
+			}
+		}
+	}
+
 	return true;
 }
 
@@ -186,10 +206,10 @@ void COP_Model::UpdateForClass(LPCTSTR pszClass)
 // Purpose: 
 // Input  : flFrame - 
 //-----------------------------------------------------------------------------
-void COP_Model::UpdateFrameText(float flFrame)
+void COP_Model::UpdateFrameText( int nFrame)
 {
 	char szFrame[40];
-	sprintf(szFrame, "%0.2f", flFrame);
+	sprintf(szFrame, "%d", nFrame);
 	GetDlgItem(IDC_FRAME_TEXT)->SetWindowText(szFrame);
 }
 
@@ -202,14 +222,31 @@ BOOL COP_Model::OnInitDialog()
 {
 	CObjectPage::OnInitDialog();
 
-	//
-	// Set the frame number scrollbar range.
-	//
-	m_ScrollBarFrame.SetRange(0, FRAME_SCROLLBAR_RANGE);
+	InitScrollRange();
 
 	return TRUE;	             
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+void COP_Model::InitScrollRange( void )
+{
+	// Set the frame number scrollbar range
+	int nMaxRange = FRAME_SCROLLBAR_RANGE;
+	CMapStudioModel *pModel = GetModelHelper();
+	if (pModel != NULL)
+	{
+		nMaxRange = pModel->GetMaxFrame();
+	}
+
+	// Setup the bar
+	m_ScrollBarFrame.SetRange( 0, nMaxRange );
+	m_ScrollBarFrame.SetPos( 0 );
+
+	// Start at the zeroth frame
+	UpdateFrameText( 0 );
+}
 
 //-----------------------------------------------------------------------------
 // Purpose: 
@@ -221,17 +258,21 @@ void COP_Model::OnHScroll(UINT nSBCode, UINT nPos, CScrollBar *pScrollBar)
 {
 	if (pScrollBar == (CScrollBar *)&m_ScrollBarFrame)
 	{
+		if ( nSBCode == SB_ENDSCROLL )
+			return;
+
 		CMapStudioModel *pModel = GetModelHelper();
 		if (pModel != NULL)
 		{
-			float flFrame = (float)nPos / (float)FRAME_SCROLLBAR_RANGE;
-			pModel->SetFrame(flFrame);
-			UpdateFrameText(flFrame);
+			pModel->SetFrame( nPos );
+			UpdateFrameText( nPos );
+
+			Options.view3d.bAnimateModels = false;	// Pause animations while we're scrubbing
 
 			CMapDoc *pDoc = CMapDoc::GetActiveMapDoc();
 			if ( pDoc )
 			{
-				pDoc->UpdateAllViews( MAPVIEW_UPDATE_ANIMATION );
+				pDoc->UpdateAllViews( MAPVIEW_UPDATE_ANIMATION|MAPVIEW_OPTIONS_CHANGED );
 			}
 		}
 	}
@@ -252,12 +293,16 @@ void COP_Model::OnTextChanged( const char *pText )
 		if ( iSequence != -1 )
 			pModel->SetSequence( iSequence );
 
-		UpdateFrameText(pModel->GetFrame());
+		pModel->SetFrame( 0 );
+
+		InitScrollRange();
+
+		Options.view3d.bAnimateModels = true; // They've changed sequences, so allow animation again
 
 		CMapDoc *pDoc = CMapDoc::GetActiveMapDoc();
 		if ( pDoc )
 		{
-			pDoc->UpdateAllViews( MAPVIEW_UPDATE_ANIMATION );
+			pDoc->UpdateAllViews( MAPVIEW_UPDATE_ANIMATION|MAPVIEW_OPTIONS_CHANGED );
 		}
 	}
 }
@@ -271,7 +316,7 @@ CMapStudioModel *COP_Model::GetModelHelper(void)
 	if ( m_pObjectList->Count() == 0 )
 		return NULL;
 
-	CMapClass *pObject = m_pObjectList->Element( 0 );
+	CMapClass *pObject = (CUtlReference< CMapClass >)m_pObjectList->Element( 0 );
 
 	if (pObject != NULL)
 	{

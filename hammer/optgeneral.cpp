@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2005, Valve Corporation, All rights reserved. =======
 //
 // Purpose: 
 //
@@ -24,6 +24,7 @@ IMPLEMENT_DYNCREATE(COPTGeneral, CPropertyPage)
 BEGIN_MESSAGE_MAP(COPTGeneral, CPropertyPage)
 	//{{AFX_MSG_MAP(COPTGeneral)
 	ON_BN_CLICKED(IDC_INDEPENDENTWINDOWS, OnIndependentwindows)
+//	ON_BN_CLICKED(IDC_ENABLE_PERFORCE_INTEGRATION, OnEnablePerforceIntegration)
 	ON_BN_CLICKED(IDC_BROWSEAUTOSAVEDIR, OnBrowseAutosaveDir)
 	ON_BN_CLICKED(IDC_ENABLEAUTOSAVE, OnEnableAutosave)
 	//}}AFX_MSG_MAP
@@ -110,12 +111,14 @@ void COPTGeneral::DoDataExchange(CDataExchange* pDX)
 	//{{AFX_DATA_MAP(COPTGeneral)
 	DDX_Control(pDX, IDC_LOADWINPOSITIONS, m_cLoadWinPos);
 	DDX_Control(pDX, IDC_INDEPENDENTWINDOWS, m_cIndependentWin);
+//	DDX_Control(pDX, IDC_ENABLE_PERFORCE_INTEGRATION, m_cEnablePerforceIntegration);
 	DDX_Control(pDX, IDC_UNDOSPIN, m_UndoSpin);
 	DDX_Text(pDX, IDC_UNDO, m_iUndoLevels);	
 	DDX_Text(pDX, IDC_MAX_CAMERAS, m_nMaxCameras);
 	DDX_Check(pDX, IDC_STRETCH_ARCH, Options.general.bStretchArches);
 	DDX_Check(pDX, IDC_GROUPWHILEIGNOREGROUPS, Options.general.bGroupWhileIgnore);
 	DDX_Check(pDX, IDC_INDEPENDENTWINDOWS, Options.general.bIndependentwin);
+	DDX_Check(pDX, IDC_ENABLE_PERFORCE_INTEGRATION, Options.general.bEnablePerforceIntegration);
 	DDX_Check(pDX, IDC_LOADWINPOSITIONS, Options.general.bLoadwinpos);
 	DDV_UndoLevels( pDX, m_iUndoLevels );
 	DDV_MaxCameras( pDX, m_nMaxCameras );
@@ -137,7 +140,6 @@ void COPTGeneral::DoDataExchange(CDataExchange* pDX)
 	DDV_AutosaveSpace( pDX, m_iMaxAutosaveSpace );
 	DDV_NumberAutosaves( pDX, m_iMaxAutosavesPerMap );
 	DDV_AutosaveTimer( pDX, m_iTimeBetweenSaves );
-	DDX_Check(pDX, IDC_VGUI_MODELBROWSER, Options.general.bUseVGUIModelBrowser);
 	//}}AFX_DATA_MAP		
 	
 }
@@ -240,6 +242,10 @@ BOOL COPTGeneral::OnApply(void)
 void COPTGeneral::OnIndependentwindows(void)
 {
 	m_cLoadWinPos.EnableWindow(m_cIndependentWin.GetCheck());
+}
+
+void COPTGeneral::OnEnablePerforceIntegration(void)
+{
 }
 
 void COPTGeneral::OnEnableAutosave(void)

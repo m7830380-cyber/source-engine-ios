@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -12,9 +12,9 @@
 #include "expclass.h"
 #include "mxExpressionTab.h"
 #include "mxExpressionTray.h"
-#include "filesystem.h"
+#include "FileSystem.h"
 #include "faceposer_models.h"
-#include "utldict.h"
+#include "UtlDict.h"
 #include "scriplib.h"
 #include "checksum_crc.h"
 
@@ -88,7 +88,7 @@ int GetGlobalFlexControllerCount( void )
 // Input  : *szName - 
 // Output : int
 //-----------------------------------------------------------------------------
-int AddGlobalFlexController( StudioModel *model, const char *szName )
+int AddGlobalFlexController( StudioModel *model, char *szName )
 {
 	int idx = g_GlobalFlexControllerLookup.Find( szName );
 	if ( idx != g_GlobalFlexControllerLookup.InvalidIndex() )
@@ -204,7 +204,7 @@ CExpressionManager::~CExpressionManager( void )
 //-----------------------------------------------------------------------------
 void CExpressionManager::Reset( void )
 {
-	while ( m_Classes.Size() > 0 )
+	while ( m_Classes.Count() > 0 )
 	{
 		CExpClass *p = m_Classes[ 0 ];
 		m_Classes.Remove( 0 );
@@ -261,7 +261,7 @@ CExpClass * CExpressionManager::AddCExpClass( const char *classname, const char 
 //-----------------------------------------------------------------------------
 void CExpressionManager::RemoveCExpClass( CExpClass *cl )
 {
-	for ( int i = 0; i < m_Classes.Size(); i++ )
+	for ( int i = 0; i < m_Classes.Count(); i++ )
 	{
 		CExpClass *p = m_Classes[ i ];
 		if ( p == cl )
@@ -272,7 +272,7 @@ void CExpressionManager::RemoveCExpClass( CExpClass *cl )
 		}
 	}
 
-	if ( m_Classes.Size() >= 1 )
+	if ( m_Classes.Count() >= 1 )
 	{
 		ActivateExpressionClass( m_Classes[ 0 ] );
 	}
@@ -309,7 +309,7 @@ void CExpressionManager::ActivateExpressionClass( CExpClass *cl )
 //-----------------------------------------------------------------------------
 int CExpressionManager::GetNumClasses( void )
 {
-	return m_Classes.Size();
+	return m_Classes.Count();
 }
 
 //-----------------------------------------------------------------------------
@@ -332,7 +332,7 @@ CExpClass *CExpressionManager::FindClass( const char *classname, bool bMatchBase
 	Q_FixSlashes( search );
 	Q_strlower( search );
 
-	for ( int i = 0; i < m_Classes.Size(); i++ )
+	for ( int i = 0; i < m_Classes.Count(); i++ )
 	{
 		CExpClass *cl = m_Classes[ i ];
 
@@ -392,7 +392,7 @@ CExpression *CExpressionManager::GetCopyBuffer( void )
 //-----------------------------------------------------------------------------
 bool CExpressionManager::CanClose( void )
 {
-	for ( int i = 0; i < m_Classes.Size(); i++ )
+	for ( int i = 0; i < m_Classes.Count(); i++ )
 	{
 		CExpClass *pclass = m_Classes[ i ];
 		if ( pclass->GetDirty() )
@@ -643,7 +643,7 @@ bool CExpressionManager::CloseClass( CExpClass *cl )
 
 	// The memory can be freed here, so be more careful
 	char temp[ 256 ];
-	V_strcpy_safe( temp, cl->GetName() );
+	strcpy( temp, cl->GetName() );
 
 	RemoveCExpClass( cl );
 

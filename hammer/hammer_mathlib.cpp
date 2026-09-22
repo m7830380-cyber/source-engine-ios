@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Math functions specific to the editor.
 //
@@ -16,16 +16,6 @@ extern void Error(char* fmt, ...);
 extern "C" void Sys_Error( char *error, ... )
 {
 	Error( "%s", error );
-}
-
-float V_rint(float f)
-{
-	if (f > 0.0f) {
-		return (float) floor(f + 0.5f);
-	} else if (f < 0.0f) {
-		return (float) ceil(f - 0.5f);
-	} else
-		return 0.0f;
 }
 
 static int s_BoxFaces[6][3] =
@@ -53,8 +43,8 @@ void polyMake( float x1, float  y1, float x2, float y2, int npoints, float start
         if( angle > 360 )
             angle -= 360;
 
-        pmPoints[point][0] = V_rint(xCenter + (sin(DEG2RAD(angle)) * (float)xrad));
-        pmPoints[point][1] = V_rint(yCenter + (cos(DEG2RAD(angle)) * (float)yrad));
+        pmPoints[point][0] = rint(xCenter + (sin(DEG2RAD(angle)) * (float)xrad));
+        pmPoints[point][1] = rint(yCenter + (cos(DEG2RAD(angle)) * (float)yrad));
     }
 
     pmPoints[point][0] = pmPoints[0][0];
@@ -89,6 +79,19 @@ float lineangle(float x1, float y1, float x2, float y2)
     return (rvl);
 }
 
+
+#if !defined(_MSC_VER) || _MSC_VER < 1800
+// This C99 function exists in VS 2013's math.h but are not currently available elsewhere.
+float rint(float f)
+{
+	if (f > 0.0f) {
+		return (float) floor(f + 0.5f);
+	} else if (f < 0.0f) {
+		return (float) ceil(f - 0.5f);
+	} else
+		return 0.0f;
+}
+#endif
 
 //-----------------------------------------------------------------------------
 // Purpose: Builds the matrix for a counterclockwise rotation about an arbitrary axis.
@@ -350,51 +353,6 @@ void GetAxisFromFace( int nFace, Vector& vHorz, Vector &vVert, Vector &vThrd )
 	vThrd = CrossProduct( vHorz, vVert );
 }
 
-//
-// Generate the corner points of a box:
-//    3---7   
-//   /|  /|
-//  / | / |
-// 2---6  |
-// |  1|--5
-// | / | /
-// |/  |/
-// 0---4 
-
-void PointsFromBox( const Vector &mins, const Vector &maxs, Vector *points )
-{
-	points[0][0] = mins[0];
-	points[0][1] = mins[1];
-	points[0][2] = mins[2];
-
-	points[1][0] = mins[0];
-	points[1][1] = mins[1];
-	points[1][2] = maxs[2];
-
-	points[2][0] = mins[0];
-	points[2][1] = maxs[1];
-	points[2][2] = mins[2];
-
-	points[3][0] = mins[0];
-	points[3][1] = maxs[1];
-	points[3][2] = maxs[2];
-
-	points[4][0] = maxs[0];
-	points[4][1] = mins[1];
-	points[4][2] = mins[2];
-
-	points[5][0] = maxs[0];
-	points[5][1] = mins[1];
-	points[5][2] = maxs[2];
-
-	points[6][0] = maxs[0];
-	points[6][1] = maxs[1];
-	points[6][2] = mins[2];
-
-	points[7][0] = maxs[0];
-	points[7][1] = maxs[1];
-	points[7][2] = maxs[2];
-}
 
 float IntersectionLineAABBox( const Vector& mins, const Vector& maxs, const Vector& vStart, const Vector& vEnd, int &nFace )
 {

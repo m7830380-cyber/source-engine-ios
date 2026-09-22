@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -35,6 +35,10 @@ public:
 	void RebuildMRU(void);
 	void NotifyNewMaterial( IEditorTexture *pTex );
 
+	void BeginCustomGraphicList( );
+	void AddTexture( IEditorTexture *pTex );
+	void EndCustomGraphicList( );
+
 // Overrides
 	// ClassWizard generated virtual function overrides
 	//{{AFX_VIRTUAL(CTextureBox)
@@ -44,6 +48,8 @@ public:
 	virtual void DrawItem(LPDRAWITEMSTRUCT lpDrawItemStruct);
 	virtual void MeasureItem(LPMEASUREITEMSTRUCT lpMeasureItemStruct);
 	//}}AFX_VIRTUAL
+
+private:
 
 // Implementation
 public:
@@ -57,6 +63,7 @@ protected:
 	//}}AFX_MSG
 
 	DECLARE_MESSAGE_MAP()
+
 };
 
 

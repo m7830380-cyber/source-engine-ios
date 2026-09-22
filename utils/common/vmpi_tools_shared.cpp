@@ -1,11 +1,10 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
-//=============================================================================//
+//===========================================================================//
 
 #include <windows.h>
-#include <dbghelp.h>
 #include "vmpi.h"
 #include "cmdlib.h"
 #include "vmpi_tools_shared.h"
@@ -89,8 +88,8 @@ bool SharedDispatch( MessageBuffer *pBuf, int iSource, int iPacketID )
 						*pch = 0, pModuleName = pch + 1;
 
 					// Current time
-					time_t currTime = ::time( NULL );
-					struct tm * pTime = ::localtime( &currTime );
+					struct tm curTime;
+					Plat_GetLocalTime( &curTime );
 
 					// Number of minidumps this run
 					static int s_numMiniDumps = 0;
@@ -102,12 +101,12 @@ bool SharedDispatch( MessageBuffer *pBuf, int iSource, int iPacketID )
 						szFolder,
 						pModuleName,
 						VMPI_GetMachineName( iSource ),
-						pTime->tm_year + 1900,	/* Year less 2000 */
-						pTime->tm_mon + 1,		/* month (0 - 11 : 0 = January) */
-						pTime->tm_mday,			/* day of month (1 - 31) */
-						pTime->tm_hour,			/* hour (0 - 23) */
-						pTime->tm_min,		    /* minutes (0 - 59) */
-						pTime->tm_sec,		    /* seconds (0 - 59) */
+						curTime.tm_year + 1900,	/* Year less 2000 */
+						curTime.tm_mon + 1,		/* month (0 - 11 : 0 = January) */
+						curTime.tm_mday,			/* day of month (1 - 31) */
+						curTime.tm_hour,			/* hour (0 - 23) */
+						curTime.tm_min,		    /* minutes (0 - 59) */
+						curTime.tm_sec,		    /* seconds (0 - 59) */
 						s_numMiniDumps
 						);
 
@@ -135,6 +134,11 @@ bool SharedDispatch( MessageBuffer *pBuf, int iSource, int iPacketID )
 
 CDispatchReg g_SharedDispatchReg( VMPI_SHARED_PACKET_ID, SharedDispatch );
 
+VMPI_REGISTER_PACKET_ID( VMPI_SHARED_PACKET_ID );
+VMPI_REGISTER_SUBPACKET_ID( VMPI_SHARED_PACKET_ID, VMPI_SUBPACKETID_DIRECTORIES );
+VMPI_REGISTER_SUBPACKET_ID( VMPI_SHARED_PACKET_ID, VMPI_SUBPACKETID_DBINFO );
+VMPI_REGISTER_SUBPACKET_ID( VMPI_SHARED_PACKET_ID, VMPI_SUBPACKETID_CRASH );
+VMPI_REGISTER_SUBPACKET_ID( VMPI_SHARED_PACKET_ID, VMPI_SUBPACKETID_MULTICAST_ADDR );
 
 
 // ----------------------------------------------------------------------------- //
@@ -227,7 +231,7 @@ done:
 	return iResult;
 }
 
-void VMPI_HandleCrash( const char *pMessage, void *pvExceptionInfo, bool bAssert )
+void VMPI_HandleCrash( const char *pMessage, uint uCode, void *pvExceptionInfo, bool bAssert )
 {
 	static LONG crashHandlerCount = 0;
 	if ( InterlockedIncrement( &crashHandlerCount ) == 1 )
@@ -247,14 +251,12 @@ void VMPI_HandleCrash( const char *pMessage, void *pvExceptionInfo, bool bAssert
 		// Now attempt to create a minidump with the given exception information
 		if ( pvExceptionInfo )
 		{
-			struct _EXCEPTION_POINTERS *pvExPointers = ( struct _EXCEPTION_POINTERS * ) pvExceptionInfo;
 			tchar tchMinidumpFileName[_MAX_PATH] = { 0 };
 			bool bSucceededWritingMinidump = WriteMiniDumpUsingExceptionInfo(
-				pvExPointers->ExceptionRecord->ExceptionCode,
-				pvExPointers,
-				( MINIDUMP_TYPE )( MiniDumpWithDataSegs | MiniDumpWithIndirectlyReferencedMemory | MiniDumpWithProcessThreadData ),
-				// ( MINIDUMP_TYPE )( MiniDumpWithDataSegs | MiniDumpWithFullMemory | MiniDumpWithHandleData | MiniDumpWithUnloadedModules | MiniDumpWithIndirectlyReferencedMemory | MiniDumpWithProcessThreadData | MiniDumpWithPrivateReadWriteMemory  ),
-				// ( MINIDUMP_TYPE )( MiniDumpNormal ),
+				uCode, (ExceptionInfo_t*)pvExceptionInfo,
+				MINIDUMP_WithDataSegs | MINIDUMP_WithIndirectlyReferencedMemory | MINIDUMP_WithProcessThreadData,
+				// MINIDUMP_WithDataSegs | MINIDUMP_WithFullMemory | MINIDUMP_WithHandleData | MINIDUMP_WithUnloadedModules | MINIDUMP_WithIndirectlyReferencedMemory | MINIDUMP_WithProcessThreadData | MINIDUMP_WithPrivateReadWriteMemory,
+				// MINIDUMP_Normal,
 				tchMinidumpFileName );
 			if ( bSucceededWritingMinidump )
 			{
@@ -333,7 +335,7 @@ void VMPI_ExceptionFilter( unsigned long uCode, void *pvExceptionInfo )
 		pchReason = chUnknownBuffer;
 	}
 	
-	VMPI_HandleCrash( pchReason, pvExceptionInfo, true );
+	VMPI_HandleCrash( pchReason, uCode, pvExceptionInfo, true );
 
 	TerminateProcess( GetCurrentProcess(), 1 );
 }

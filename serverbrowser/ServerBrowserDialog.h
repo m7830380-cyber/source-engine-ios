@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2002, Valve LLC, All rights reserved. ============
 //
 // Purpose: 
 //
@@ -31,12 +31,12 @@ public:
 	void		Open( void );
 
 	// gets server info
-	newgameserver_t *GetServer(unsigned int serverID);
+	gameserveritem_t *GetServer(unsigned int serverID);
 	// called every frame
 	virtual void OnTick();
 
 	// updates status text at bottom of window
-	void UpdateStatusText(PRINTF_FORMAT_STRING const char *format, ...);
+	void UpdateStatusText(const char *format, ...);
 	
 	// updates status text at bottom of window
 	void UpdateStatusText(wchar_t *unicode);
@@ -49,23 +49,28 @@ public:
 	static CServerBrowserDialog *GetInstance();
 
 	// Adds a server to the list of favorites
-	void AddServerToFavorites(newgameserver_t &server);
+	void AddServerToFavorites(gameserveritem_t &server);
+	// Adds a server to our list of blacklisted servers
+	void AddServerToBlacklist(gameserveritem_t &server);
+	bool IsServerBlacklisted(gameserveritem_t &server); 
 
 	// begins the process of joining a server from a game list
 	// the game info dialog it opens will also update the game list
-	CDialogGameInfo *JoinGame(IGameList *gameList, newgameserver_t *pServer);
+	// Join type param indicates the server browser tab used.
+	CDialogGameInfo *JoinGame(IGameList *gameList, unsigned int serverIndex, const char* szJoinType );
 
 	// joins a game by a specified IP, not attached to any game list
-	CDialogGameInfo *JoinGame(int serverIP, int serverPort, const char *pszConnectCode);
+	CDialogGameInfo *JoinGame(int serverIP, int serverPort);
 
 	// opens a game info dialog from a game list
-	CDialogGameInfo *OpenGameInfoDialog(IGameList *gameList, newgameserver_t *pServer);
+	CDialogGameInfo *OpenGameInfoDialog(IGameList *gameList, unsigned int serverIndex);
 
 	// opens a game info dialog by a specified IP, not attached to any game list
-	CDialogGameInfo *OpenGameInfoDialog( int serverIP, uint16 connPort, uint16 queryPort, const char *pszConnectCode );
+	CDialogGameInfo *OpenGameInfoDialog( int serverIP, uint16 connPort, uint16 queryPort );
 
 	// closes all the game info dialogs
 	void CloseAllGameInfoDialogs();
+	CDialogGameInfo *GetDialogGameInfoForFriend( uint64 ulSteamIDFriend );
 
 	// accessor to the filter save data
 	KeyValues *GetFilterSaveData(const char *filterSet);
@@ -87,6 +92,13 @@ public:
 		return &m_CurrentConnection;
 	}
 
+	void		BlacklistsChanged();
+	CBlacklistedServers *GetBlacklistPage( void ) { return m_pBlacklist; }
+
+	virtual void OnKeyCodePressed( vgui::KeyCode code );
+	virtual void OnKeyCodeTyped( vgui::KeyCode code );
+	virtual void OnClose();
+
 private:
 
 	// current game list change
@@ -99,12 +111,14 @@ private:
 	// notification that we connected / disconnected
 	MESSAGE_FUNC_PARAMS( OnConnectToGame, "ConnectedToGame", kv );
 	MESSAGE_FUNC( OnDisconnectFromGame, "DisconnectedFromGame" );
-	MESSAGE_FUNC( OnLoadingStarted, "LoadingStarted" );
+
+	MESSAGE_FUNC_PARAMS( ShowServerBrowserPage, "ShowServerBrowserPage", kv );
+	MESSAGE_FUNC_PARAMS( SetCustomScheme, "SetCustomScheme", kv );
+
+	MESSAGE_FUNC_CHARPTR( RunModuleCommand, "RunModuleCommand", command );
 
 	virtual bool GetDefaultScreenPosition(int &x, int &y, int &wide, int &tall);
 	virtual void ActivateBuildMode();
-
-	void OnKeyCodePressed( vgui::KeyCode code );
 
 private:
 	// list of all open game info dialogs
@@ -118,12 +132,13 @@ private:
 
 	// property sheet
 	vgui::PropertySheet *m_pTabPanel;
-
-	CInternetGames *m_pInternetGames;
-	//CSpectateGames *m_pSpectateGames;
-	CLanGames *m_pLanGames;
 	CFavoriteGames *m_pFavorites;
+	CBlacklistedServers *m_pBlacklist;
 	CHistoryGames *m_pHistory;
+	CInternetGames *m_pInternetGames;
+	CSpectateGames *m_pSpectateGames;
+	CLanGames *m_pLanGames;
+	CFriendsGames *m_pFriendsGames;
 
 	KeyValues *m_pSavedData;
 	KeyValues *m_pFilterData;
@@ -139,6 +154,8 @@ private:
 	// currently connected game
 	bool m_bCurrentlyConnected;
 	gameserveritem_t m_CurrentConnection;
+
+	bool	m_bActive;
 };
 
 // singleton accessor

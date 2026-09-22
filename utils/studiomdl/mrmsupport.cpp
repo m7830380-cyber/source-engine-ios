@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2008, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -71,11 +71,19 @@ int SortAndBalanceBones( int iCount, int iMaxCount, int bones[], float weights[]
 		}
 	} while (bShouldSort);
 
+#ifdef MDLCOMPILE
+	// throw away all weights less than 1/10,000th
+	while (iCount > 1 && weights[iCount-1] < 0.0001)
+	{
+		iCount--;
+	}
+#else // #ifdef MDLCOMPILE
 	// throw away all weights less than 1/20th
 	while (iCount > 1 && weights[iCount-1] < 0.05)
 	{
 		iCount--;
 	}
+#endif // #ifdef MDLCOMPILE
 
 	// clip to the top iMaxCount bones
 	if (iCount > iMaxCount)
@@ -239,13 +247,13 @@ void Grab_Materiallist( s_source_t *psource )
 				{
 					psource->texmap[j] = -1;
 				}
-				else if (j < ARRAYSIZE(psource->texmap))
+				else if (j < sizeof(psource->texmap))
 				{
 					psource->texmap[j] = LookupTexture( path );
 				}
 				else
 				{
-					MdlError( "Too many materials, max %d\n", ARRAYSIZE(psource->texmap) );
+					MdlError( "Too many materials, max %d\n", sizeof(psource->texmap) );
 				}
 			}
 		}
@@ -273,8 +281,8 @@ void Grab_Texcoordlist( s_source_t *psource )
 				&t[0], &t[1]) == 3)
 			{
 				t[1] = 1.0 - t[1];
-				g_texcoord[j][0] = t[0];
-				g_texcoord[j][1] = t[1];
+				g_texcoord[0][j][0] = t[0];
+				g_texcoord[0][j][1] = t[1];
 			}
 			else 
 			{
@@ -348,7 +356,7 @@ void Grab_Faceattriblist( s_source_t *psource )
 				&j, 
 				&material,
 				&smooth,
-				&f.ta, &f.tb, &f.tc,
+				&f.ta[0], &f.tb[0], &f.tc[0],
 				&f.na, &f.nb, &f.nc) == 9)
 			{
 				f.a = g_face[j].a;
@@ -364,7 +372,7 @@ void Grab_Faceattriblist( s_source_t *psource )
 				if (1)
 				{
 					s = f.b;  f.b  = f.c;  f.c  = s;
-					s = f.tb; f.tb = f.tc; f.tc = s;
+					s = f.tb[0]; f.tb[0] = f.tc[0]; f.tc[0] = s;
 					s = f.nb; f.nb = f.nc; f.nc = s;
 				}
 
@@ -402,35 +410,48 @@ int closestNormal( int v, int n )
 }
 
 
-int AddToVlist( int v, int m, int n, int t, int firstref )
+int AddToVlist(int v, int m, int n, int* t, int firstref)
 {
 	v_unify_t *prev = NULL;
 	v_unify_t *cur = v_list[v];
 
 	while (cur)
 	{
-		if (cur->m == m && cur->n == n && cur->t == t)
+		if (cur->m == m && cur->n == n)
 		{
-			cur->refcount++;
-			return cur - v_listdata;
+			bool bMatch = true;
+			for (int i = 0; (i < MAXSTUDIOTEXCOORDS) && bMatch; ++i)
+			{
+				if (cur->t[i] != t[i])
+				{
+					bMatch = false;
+				}
+			}
+			if (bMatch)
+			{
+				cur->refcount++;
+				return cur - v_listdata;
+			}
 		}
 		prev = cur;
 		cur = cur->next;
 	}
 
-	if (numvlist >= MAXSTUDIOVERTS)
+	if (g_numvlist >= MAXSTUDIOSRCVERTS)
 	{
 		MdlError( "Too many unified vertices\n");
 	}
 
-	cur = &v_listdata[numvlist++];
+	cur = &v_listdata[g_numvlist++];
 	cur->lastref = -1;
 	cur->refcount = 1;
-	cur->firstref = firstref;
 	cur->v = v;
 	cur->m = m;
 	cur->n = n;
-	cur->t = t;
+	for (int i = 0; i < MAXSTUDIOTEXCOORDS; ++i)
+	{
+		cur->t[i] = t[i];
+	}
 
 	if (prev)
 	{
@@ -441,12 +462,12 @@ int AddToVlist( int v, int m, int n, int t, int firstref )
 		v_list[v] = cur;
 	}
 
-	return numvlist - 1;
+	return g_numvlist - 1;
 }
 
 void DecrementReferenceVlist( int uv, int numverts )
 {
-	if (uv < 0 || uv >= MAXSTUDIOVERTS)
+	if (uv < 0 || uv > MAXSTUDIOSRCVERTS)
 		MdlError( "decrement outside of range\n");
 
 	v_listdata[uv].refcount--;
@@ -466,25 +487,28 @@ void UnifyIndices( s_source_t *psource )
 {
 	int i;
 
-	static s_tmpface_t		tmpface[MAXSTUDIOTRIANGLES];	// mrm processed g_face
-	static s_face_t			uface[MAXSTUDIOTRIANGLES];		// mrm processed unified face
+	s_face_t uface;
 
 	// clear v_list
-	numvlist = 0;
+	g_numvlist = 0;
 	memset( v_list, 0, sizeof( v_list ) );
 	memset( v_listdata, 0, sizeof( v_listdata ) );
 
 	// create an list of all the 
 	for (i = 0; i < g_numfaces; i++)
 	{
-		tmpface[i] = g_face[i];
+		uface.a = AddToVlist(g_face[i].a, g_face[i].material, g_face[i].na, (int*)g_face[i].ta, g_numverts);
+		uface.b = AddToVlist(g_face[i].b, g_face[i].material, g_face[i].nb, (int*)g_face[i].tb, g_numverts);
+		uface.c = AddToVlist(g_face[i].c, g_face[i].material, g_face[i].nc, (int*)g_face[i].tc, g_numverts);
+		uface.d = 0xFFFFFFFF;
 
-		uface[i].a = AddToVlist( g_face[i].a, g_face[i].material, g_face[i].na, g_face[i].ta, g_numverts );
-		uface[i].b = AddToVlist( g_face[i].b, g_face[i].material, g_face[i].nb, g_face[i].tb, g_numverts );
-		uface[i].c = AddToVlist( g_face[i].c, g_face[i].material, g_face[i].nc, g_face[i].tc, g_numverts );
+		if ( g_face[i].d != 0xFFFFFFFF )
+		{
+			uface.d = AddToVlist(g_face[i].d, g_face[i].material, g_face[i].nd, (int*)g_face[i].td, g_numverts);
+		}
 
 		// keep an original copy
-		g_src_uface[i] = uface[i];
+		g_src_uface[i] = uface;
 	}
 
 	// printf("%d : %d %d %d\n", numvlist, g_numverts, g_numnormals, g_numtexcoords );
@@ -499,7 +523,21 @@ void CalcModelTangentSpaces( s_source_t *pSrc );
 static void BuildUniqueVertexList( s_source_t *pSource, const int *pDesiredToVList )
 {
 	// allocate memory
-	pSource->vertex = (s_vertexinfo_t *)kalloc( pSource->numvertices, sizeof( s_vertexinfo_t ) );
+	pSource->vertex = (s_vertexinfo_t *)calloc( pSource->numvertices, sizeof( s_vertexinfo_t ) );
+
+	int numValidTexcoords = 1;
+
+	for (int i = 1; i < MAXSTUDIOTEXCOORDS; ++i)
+	{
+		if (g_numtexcoords[i])
+		{
+			numValidTexcoords++;
+		}
+		else
+		{
+			break;
+		}
+	}
 
 	// create arrays of unique vertexes, normals, texcoords.
 	for (int i = 0; i < pSource->numvertices; i++)
@@ -509,7 +547,6 @@ static void BuildUniqueVertexList( s_source_t *pSource, const int *pDesiredToVLi
 		s_vertexinfo_t &vertex = pSource->vertex[i];
 		VectorCopy( g_vertex[ v_listdata[j].v ], vertex.position );
 		VectorCopy( g_normal[ v_listdata[j].n ], vertex.normal );		
-		Vector2Copy( g_texcoord[ v_listdata[j].t ], vertex.texcoord );
 
 		vertex.boneweight.numbones		= g_bone[ v_listdata[j].v ].numbones;
 		int k;
@@ -518,6 +555,12 @@ static void BuildUniqueVertexList( s_source_t *pSource, const int *pDesiredToVLi
 			vertex.boneweight.bone[k]	= g_bone[ v_listdata[j].v ].bone[k];
 			vertex.boneweight.weight[k]	= g_bone[ v_listdata[j].v ].weight[k];
 		}
+
+		for (k = 0; k < numValidTexcoords; ++k)
+		{
+			Vector2Copy(g_texcoord[k][v_listdata[j].t[k]], vertex.texcoord[k]);
+		}
+		vertex.numTexcoord = numValidTexcoords;
 
 		// store a bunch of other info
 		vertex.material			= v_listdata[j].m;
@@ -557,12 +600,12 @@ static int vlistCompare( const void *elem1, const void *elem2 )
 
 static void SortVerticesByMaterial( int *pDesiredToVList, int *pVListToDesired )
 {
-	for ( int i = 0; i < numvlist; i++ )
+	for ( int i = 0; i < g_numvlist; i++ )
 	{
 		pDesiredToVList[i] = i;
 	}
-	qsort( pDesiredToVList, numvlist, sizeof( int ), vlistCompare );
-	for ( int i = 0; i < numvlist; i++ )
+	qsort( pDesiredToVList, g_numvlist, sizeof( int ), vlistCompare );
+	for ( int i = 0; i < g_numvlist; i++ )
 	{
 		pVListToDesired[ pDesiredToVList[i] ] = i;
 	}
@@ -656,7 +699,7 @@ static void PointMeshesToVertexAndFaceData( s_source_t *pSource, int *pDesiredTo
 //-----------------------------------------------------------------------------
 static void BuildFaceList( s_source_t *pSource, int *pVListToDesired, int *pDesiredToSrcFace )
 {
-	pSource->face = (s_face_t *)kalloc( pSource->numfaces, sizeof( s_face_t ));
+	pSource->face = (s_face_t *)calloc( pSource->numfaces, sizeof( s_face_t ));
 	for ( int m = 0; m < MAXSTUDIOSKINS; m++)
 	{
 		if ( !pSource->mesh[m].numfaces )
@@ -668,14 +711,19 @@ static void BuildFaceList( s_source_t *pSource, int *pVListToDesired, int *pDesi
 		{
 			int j = pDesiredToSrcFace[i];
 
-			// NOTE: per-face vertex indices a,b,c are mesh relative (hence the subtraction),
-			// while g_src_uface are model relative 
+			// NOTE: per-face vertex indices a,b,c,d are mesh relative (hence the subtraction), while g_src_uface are model relative 
 			pSource->face[i].a = pVListToDesired[ g_src_uface[j].a ] - pSource->mesh[m].vertexoffset;
 			pSource->face[i].b = pVListToDesired[ g_src_uface[j].b ] - pSource->mesh[m].vertexoffset;
 			pSource->face[i].c = pVListToDesired[ g_src_uface[j].c ] - pSource->mesh[m].vertexoffset;
-			Assert( ((pSource->face[i].a & 0xF0000000) == 0) && ((pSource->face[i].b & 0xF0000000) == 0) && 
-				((pSource->face[i].c & 0xF0000000) == 0) );
-			// printf("%3d : %4d %4d %4d\n", i, pSource->face[i].a, pSource->face[i].b, pSource->face[i].c );
+
+			if ( g_src_uface[j].d != 0xFFFFFFFF )
+			{
+				pSource->face[i].d = pVListToDesired[ g_src_uface[j].d ] - pSource->mesh[m].vertexoffset;
+			}
+
+			Assert( ((pSource->face[i].a & 0xF0000000) == 0) &&  ((pSource->face[i].b & 0xF0000000) == 0) &&
+				    ((pSource->face[i].c & 0xF0000000) == 0) && (((pSource->face[i].d & 0xF0000000) == 0) || (pSource->face[i].d == 0xFFFFFFFF)) );
+			// printf("%3d : %4d %4d %4d %4d\n", i, pSource->face[i].a, pSource->face[i].b, pSource->face[i].c, pSource->face[i].d );
 		}
 	}
 }
@@ -686,6 +734,7 @@ static void BuildFaceList( s_source_t *pSource, int *pVListToDesired, int *pDesi
 //-----------------------------------------------------------------------------
 static void RemapVertexAnimations( s_source_t *pSource, int *pVListToDesired )
 {
+	CUtlVectorAuto< int > temp;
 	int nAnimationCount = pSource->m_Animations.Count();
 	for ( int i = 0; i < nAnimationCount; ++i )
 	{
@@ -701,16 +750,15 @@ static void RemapVertexAnimations( s_source_t *pSource, int *pVListToDesired )
 
 			// Copy off the initial vertex data
 			// Have to do it in 2 loops because it'll overwrite itself if we do it in 1
-			int *pTemp = (int*)_alloca( nVAnimCount * sizeof(int) );
 			for ( int k = 0; k < nVAnimCount; ++k )
 			{
-				pTemp[k] = anim.vanim[j][k].vertex;
+				temp[k] = anim.vanim[j][k].vertex;
 			}
 
 			for ( int k = 0; k < nVAnimCount; ++k )
 			{
 				// NOTE: vertex animations are model relative, not mesh relative
-				anim.vanim[j][k].vertex = pVListToDesired[ pTemp[k] ];
+				anim.vanim[j][k].vertex = pVListToDesired[ temp[k] ];
 			}
 		}
 	}
@@ -723,14 +771,14 @@ static void RemapVertexAnimations( s_source_t *pSource, int *pVListToDesired )
 //-----------------------------------------------------------------------------
 void BuildIndividualMeshes( s_source_t *pSource )
 {	
-	static int v_listsort[MAXSTUDIOVERTS];		// map desired order to vlist entry
-	static int v_ilistsort[MAXSTUDIOVERTS];		// map vlist entry to desired order
-	static int facesort[MAXSTUDIOTRIANGLES];	// map desired order to src_face entry
+	int *v_listsort = (int *)malloc( g_numvlist * sizeof( int ) );	// map desired order to vlist entry
+	int *v_ilistsort = (int *)malloc( g_numvlist * sizeof( int ) );	// map vlist entry to desired order
+	int *facesort = (int *)malloc( g_numfaces * sizeof( int ) );		// map desired order to src_face entry
 
 	SortVerticesByMaterial( v_listsort, v_ilistsort );
 	SortFacesByMaterial( facesort );
 
-	pSource->numvertices = numvlist;
+	pSource->numvertices = g_numvlist;
 	pSource->numfaces = g_numfaces;
 
 	BuildUniqueVertexList( pSource, v_listsort );
@@ -738,6 +786,10 @@ void BuildIndividualMeshes( s_source_t *pSource )
 	BuildFaceList( pSource, v_ilistsort, facesort );
 	RemapVertexAnimations( pSource, v_ilistsort );
 	CalcModelTangentSpaces( pSource );
+
+	free( facesort );
+	free( v_ilistsort );
+	free( v_listsort );
 }
 
 
@@ -801,7 +853,7 @@ int Load_VRM ( s_source_t *psource )
 		}
 		else if (stricmp( cmd, "texcoords" ) == 0) 
 		{
-			g_numtexcoords = option;
+			g_numtexcoords[0] = option;
 			if (option == 0)
 				MdlError( "model has no texture coordinates\n");
 		}

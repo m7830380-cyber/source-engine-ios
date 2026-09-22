@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2001, Valve LLC, All rights reserved. ============
 //
 // Purpose: 
 //
@@ -16,6 +16,10 @@ CFavoriteGames::CFavoriteGames(vgui::Panel *parent) :
 	CBaseGamesPage(parent, "FavoriteGames", eFavoritesServer )
 {
 	m_bRefreshOnListReload = false;
+
+	m_pGameList->AddColumnHeader(10, "Tags", "#ServerBrowser_Tags", 200);
+	m_pGameList->SetSortFunc(10, TagsCompare);
+	m_pGameList->SetSortColumn(9);
 }
 
 //-----------------------------------------------------------------------------
@@ -61,7 +65,7 @@ bool CFavoriteGames::SupportsItem(InterfaceItem_e item)
 		return true;
 
 	case ADDCURRENTSERVER:
-		return !IsSteam() && BFiltersVisible();
+		return !IsSteam();
 	
 	case GETNEWLIST:
 	default:
@@ -73,7 +77,7 @@ bool CFavoriteGames::SupportsItem(InterfaceItem_e item)
 //-----------------------------------------------------------------------------
 // Purpose: called when the current refresh list is complete
 //-----------------------------------------------------------------------------
-void CFavoriteGames::RefreshComplete( NServerResponse response )
+void CFavoriteGames::RefreshComplete( HServerListRequest hReq, EMatchMakingServerResponse response )
 {
 	SetRefreshing(false);
 	if ( steamapicontext->SteamMatchmaking() && steamapicontext->SteamMatchmaking()->GetFavoriteGameCount() == 0 )
@@ -88,7 +92,7 @@ void CFavoriteGames::RefreshComplete( NServerResponse response )
 	}
 	m_pGameList->SortList();
 
-	BaseClass::RefreshComplete( response );
+	BaseClass::RefreshComplete( hReq, response );
 }
 
 //-----------------------------------------------------------------------------
@@ -166,14 +170,6 @@ void CFavoriteGames::OnAddCurrentServer()
 	{
 		steamapicontext->SteamMatchmaking()->AddFavoriteGame( pConnected->m_nAppID, pConnected->m_NetAdr.GetIP(), pConnected->m_NetAdr.GetConnectionPort(), pConnected->m_NetAdr.GetQueryPort(), k_unFavoriteFlagFavorite, time( NULL ) );
 		m_bRefreshOnListReload = true;
-
-		if ( GameSupportsReplay() )
-		{
-			// send command to propagate to the client so the client can send it on to the GC
-			char command[ 256 ];
-			Q_snprintf( command, Q_ARRAYSIZE( command ), "rfgc %s\n", pConnected->m_NetAdr.GetConnectionAddressString() );
-			g_pRunGameEngine->AddTextCommand( command );
-		}
 	}
 }
 

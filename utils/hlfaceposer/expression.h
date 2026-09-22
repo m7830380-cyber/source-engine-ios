@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -11,6 +11,7 @@
 #pragma once
 #endif
 
+#include "tier0/platform.h"
 #include "utlvector.h"
 #include "mxBitmapTools.h"
 #include "hlfaceposer.h"
@@ -35,7 +36,7 @@ public:
 class CExpression;
 class CExpClass;
 
-typedef unsigned int CRC32_t;
+typedef uint32 CRC32_t;
 
 //-----------------------------------------------------------------------------
 // Purpose: 

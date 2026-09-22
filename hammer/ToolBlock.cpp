@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -326,6 +326,7 @@ bool CToolBlock::OnMouseMove2D(CMapView2D *pView, UINT nFlags, const Vector2D &v
 
 		// Start the new box with the extents of the last selected thing.
 
+		Vector bmins,bmaxs;		
 		m_pDocument->GetSelection()->GetLastValidBounds(bmins, bmaxs);
 
 		vecStart[pView->axThird] = bmins[pView->axThird];

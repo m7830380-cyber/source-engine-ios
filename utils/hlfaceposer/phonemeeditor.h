@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -182,7 +182,7 @@ public:
 
 	EditorMode			GetMode( void ) const;
 	void				SetupPhonemeEditorColors( void );
-	COLORREF			PEColor( int colornum );
+	Color			PEColor( int colornum );
 	void				OnModeChanged( void );
 
 	// Change wave file being edited

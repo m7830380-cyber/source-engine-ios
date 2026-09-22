@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ====
 //
 // Purpose: 
 //
@@ -27,6 +27,7 @@ BEGIN_MESSAGE_MAP(CMessageWnd, CMDIChildWnd)
 	ON_WM_SIZE()
 	ON_WM_KEYDOWN()
 	ON_WM_CLOSE()
+	ON_WM_DESTROY()
 	//}}AFX_MSG_MAP
 END_MESSAGE_MAP()
 
@@ -49,6 +50,7 @@ CMessageWnd::CMessageWnd()
 	// set initial elements
 	iCharWidth = -1;
 	iNumMsgs = 0;
+	bDestroyed = false;
 
 	// load font
 	Font.CreatePointFont(iMsgPtSize * 10, "Courier New");
@@ -92,6 +94,9 @@ void CMessageWnd::CreateMessageWindow( CMDIFrameWnd *pwndParent, CRect &rect )
 //-----------------------------------------------------------------------------
 void CMessageWnd::AddMsg(MWMSGTYPE type, TCHAR* msg)
 {
+	if ( bDestroyed )
+		return;
+
 	int iAddAt = iNumMsgs;
 
 	// Don't allow growth after MAX_MESSAGE_WND_LINES
@@ -129,7 +134,7 @@ void CMessageWnd::AddMsg(MWMSGTYPE type, TCHAR* msg)
 //-----------------------------------------------------------------------------
 void CMessageWnd::ShowMessageWindow()
 {
-	if ( m_hWnd == NULL )
+	if ( m_hWnd == NULL || bDestroyed )
 		return;
 
 	ShowWindow( SW_SHOW );
@@ -140,7 +145,7 @@ void CMessageWnd::ShowMessageWindow()
 //-----------------------------------------------------------------------------
 void CMessageWnd::ToggleMessageWindow()
 {
-	if ( m_hWnd == NULL )
+	if ( m_hWnd == NULL || bDestroyed )
 		return;
 
 	ShowWindow( IsWindowVisible() ? SW_HIDE : SW_SHOWNA );
@@ -151,7 +156,7 @@ void CMessageWnd::ToggleMessageWindow()
 //-----------------------------------------------------------------------------
 void CMessageWnd::Activate()
 {
-	if ( m_hWnd == NULL )
+	if ( m_hWnd == NULL || bDestroyed )
 		return;
 
 	ShowWindow( SW_SHOW );
@@ -165,7 +170,7 @@ void CMessageWnd::Activate()
 //-----------------------------------------------------------------------------
 bool CMessageWnd::IsVisible()
 {
-	if ( m_hWnd == NULL )
+	if ( m_hWnd == NULL || bDestroyed )
 		return false;
 
 	return ( IsWindowVisible() == TRUE );
@@ -176,7 +181,7 @@ bool CMessageWnd::IsVisible()
 //-----------------------------------------------------------------------------
 void CMessageWnd::Resize( CRect &rect )
 {
-	if ( m_hWnd == NULL )
+	if ( m_hWnd == NULL || bDestroyed )
 		return;
 
 	MoveWindow( rect );
@@ -187,7 +192,7 @@ void CMessageWnd::Resize( CRect &rect )
 //-----------------------------------------------------------------------------
 void CMessageWnd::CalculateScrollSize()
 {
-	if ( m_hWnd == NULL )
+	if ( m_hWnd == NULL || bDestroyed )
 		return;
 
 	int iHorz;
@@ -206,8 +211,8 @@ void CMessageWnd::CalculateScrollSize()
 	SCROLLINFO si;
 	si.cbSize = sizeof(si);
 	si.fMask = SIF_ALL;
+	GetScrollInfo(SB_VERT, &si);
 	si.nMin = 0; 
-	si.nPos = 0;
 
 	CRect clientrect;
 	GetClientRect(clientrect);
@@ -419,4 +424,11 @@ void CMessageWnd::OnClose()
 {
 	// just hide the window
 	ShowWindow(SW_HIDE);
+}
+
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+void CMessageWnd::OnDestroy()
+{
+	bDestroyed = true;
 }

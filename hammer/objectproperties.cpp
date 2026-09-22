@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -365,7 +365,7 @@ void CObjectProperties::UpdateOutputButton(void)
 		if ((pObject != NULL) && (pObject->IsMapClass(MAPCLASS_TYPE(CMapEntity))))
 		{
 			CMapEntity *pEntity = (CMapEntity *)pObject;
-			int nStatus = CEntityConnection::ValidateOutputConnections(pEntity, true, bIgnoreHiddenTargets);
+			int nStatus = CEntityConnection::ValidateOutputConnections( pEntity, true, bIgnoreHiddenTargets, true );
 			if (nStatus == CONNECTION_BAD)
 			{
 				SetOutputButtonState(CONNECTION_BAD);
@@ -875,7 +875,7 @@ void CObjectProperties::SetPageToInput(CEntityConnection *pConnection)
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-void CObjectProperties::SaveData(void)
+void CObjectProperties::SaveData( SaveData_Reason_t reason )
 {
 	//VPROF_BUDGET( "CObjectProperties::SaveData", "Object Properties" );
 
@@ -927,7 +927,7 @@ void CObjectProperties::SaveData(void)
 		//
 		if (IsWindow(m_ppPages[i]->m_hWnd) && m_ppPages[i]->m_bHasUpdatedData )
 		{
-			m_ppPages[i]->SaveData();
+			m_ppPages[i]->SaveData( reason );
 		}
 	}
 
@@ -1055,7 +1055,7 @@ void CObjectProperties::AddObjectExpandGroups(CMapClass *pObject)
 		
 		FOR_EACH_OBJ( *pChildren, pos )
 		{
-			AddObjectExpandGroups( pChildren->Element(pos) );
+			AddObjectExpandGroups( (CUtlReference< CMapClass >)pChildren->Element(pos) );
 		}
 	}
 	else
@@ -1090,7 +1090,7 @@ void CObjectProperties::ReloadData()
 	{
 		FOR_EACH_OBJ( (*m_pOrgObjects), pos )
 		{
-			AddObjectExpandGroups( m_pOrgObjects->Element(pos) );
+			AddObjectExpandGroups( (CUtlReference< CMapClass >)m_pOrgObjects->Element(pos) );
 		}
 	}
 
@@ -1216,7 +1216,7 @@ void CObjectProperties::UpdateAnchors( CWnd *pPage )
 void CObjectProperties::OnClose(void)
 {
 	//VPROF_BUDGET( "CObjectProperties::OnClose", "Object Properties" );
-	OnApply();
+	ApplyChanges( true );
 
 	ShowWindow(SW_HIDE);
 }
@@ -1261,7 +1261,7 @@ void CObjectProperties::OnSize( UINT nType, int cx, int cy )
 //-----------------------------------------------------------------------------
 // Purpose: Handles the Apply button.
 //-----------------------------------------------------------------------------
-void CObjectProperties::OnApply(void)
+void CObjectProperties::ApplyChanges( bool bCalledOnClose )
 {
 	//VPROF_BUDGET( "CObjectProperties::OnApply", "Object Properties" );
 
@@ -1290,10 +1290,12 @@ void CObjectProperties::OnApply(void)
 	//
 	// Save and reload the data so the GUI updates.
 	//
-	SaveData();
+	
+	SaveData_Reason_t reason = ( bCalledOnClose ) ? SAVEDATA_CLOSE : SAVEDATA_APPLY;
+	SaveData( reason );
 
 	ReloadData();
-	
+
 	// Pass along the apply message to the entities.
 	FOR_EACH_OBJ( m_DstObjects, pos )
 	{
@@ -1311,12 +1313,20 @@ void CObjectProperties::OnApply(void)
 }
 
 //-----------------------------------------------------------------------------
+// Purpose: Handles the Apply button.
+//-----------------------------------------------------------------------------
+void CObjectProperties::OnApply(void)
+{
+	ApplyChanges( false );
+}
+
+//-----------------------------------------------------------------------------
 // Purpose: Handles <return> keys sent to OK -> apply instead
 //-----------------------------------------------------------------------------
 void CObjectProperties::OnOK(void)
 {
 	//VPROF_BUDGET( "CObjectProperties::OnClose", "Object Properties" );
-	OnApply();
+	ApplyChanges( false );
 }
 
 //-----------------------------------------------------------------------------

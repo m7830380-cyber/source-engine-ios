@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -65,9 +65,9 @@ public:
 
 	virtual bool HitTest2D(CMapView2D *pView, const Vector2D &point, HitInfo_t &HitData);
 
-	virtual bool IsVisualElement(void) { return(false); } // Only visible if our parent is selected.
-	virtual bool IsClutter(void) { return true; }
-	virtual bool IsCulledByCordon(const Vector &vecMins, const Vector &vecMaxs) { return false; } // We don't hide unless our parent hides.
+	virtual bool IsVisualElement(void) { return false; } // Only visible if our parent is selected.
+	virtual bool IsClutter(void) const { return true; }
+	virtual bool CanBeCulledByCordon() const { return false; } // We don't hide unless our parent hides.
 	
 	virtual const char* GetDescription() { return("Point helper"); }
 

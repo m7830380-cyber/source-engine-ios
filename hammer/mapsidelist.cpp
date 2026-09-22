@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Implements a helper that manages a single keyvalue of type "side"
 //			or "sidelist" for the entity that is its parent.
@@ -7,7 +7,7 @@
 
 #include "stdafx.h"
 #include "fgdlib/HelperInfo.h"
-#include "materialsystem/imesh.h"
+#include "materialsystem/IMesh.h"
 #include "MapClass.h"
 #include "MapSolid.h"
 #include "MapWorld.h"			// For the world's face ID functions.
@@ -233,7 +233,7 @@ CMapFace *CMapSideList::FindFaceIDInList(int nFaceID, const CMapObjectList &List
 		//
 		// If this object is a solid, look for the face there.
 		//
-		CMapClass *pObject = List.Element(pos);
+		CMapClass *pObject = (CUtlReference< CMapClass >)List.Element(pos);
 		CMapSolid *pSolid = dynamic_cast <CMapSolid *>(pObject);
 		if (pSolid != NULL)
 		{
@@ -481,7 +481,7 @@ void CMapSideList::ReplaceFacesInCopy(CMapSideList *pCopy, const CMapObjectList 
 	
 	FOR_EACH_OBJ( OriginalList, pos )
 	{
-		CMapClass *pOriginal = OriginalList.Element(pos);
+		CMapClass *pOriginal = (CUtlReference< CMapClass >)OriginalList.Element(pos);
 		CMapClass *pNew = NewList.Element(pos);
 
 		if (pOriginal != this)

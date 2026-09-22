@@ -1,8 +1,8 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===================== Copyright (c) Valve Corporation. All Rights Reserved. ======================
 //
-// Purpose: Singleton dialog that generates and presents the entity report.
+// Singleton dialog that generates and presents the entity report.
 //
-//=============================================================================//
+//==================================================================================================
 
 #include "stdafx.h"
 #include "EntityReportDlg.h"
@@ -28,15 +28,36 @@ static char *pszIniSection = "EntityReportDlg";
 //-----------------------------------------------------------------------------
 // Purpose: Static function 
 //-----------------------------------------------------------------------------
-void CEntityReportDlg::ShowEntityReport(CMapDoc *pDoc, CWnd *pwndParent)
+void CEntityReportDlg::ShowEntityReport( CMapDoc *pDoc, CWnd *pwndParent, EntityReportFilterParms_t *pParms )
 {
 	if (!s_pDlg)
 	{
 		s_pDlg = new CEntityReportDlg(pDoc, pwndParent);
 		s_pDlg->Create(IDD, pwndParent);
 	}
-
-	s_pDlg->ShowWindow(SW_SHOW);
+	
+	if ( pParms )
+	{
+		s_pDlg->m_bFilterByKeyvalue = pParms->m_bFilterByKeyvalue;
+		s_pDlg->m_bFilterByClass = pParms->m_bFilterByClass;
+		s_pDlg->m_bFilterByHidden = pParms->m_bFilterByHidden;
+		s_pDlg->m_bExact = pParms->m_bExact;
+		s_pDlg->m_iFilterByType = pParms->m_nFilterByType;
+		
+		s_pDlg->m_szFilterKey.SetString( pParms->m_filterKey.Get() );
+		s_pDlg->m_szFilterValue.SetString( pParms->m_filterValue.Get() );
+		s_pDlg->m_szFilterClass.SetString( pParms->m_filterClass.Get() );
+		
+		s_pDlg->m_bGotoFirstMatch = true;
+		
+		s_pDlg->UpdateData( FALSE );
+	}
+	else
+	{
+		s_pDlg->m_bGotoFirstMatch = false;
+	}
+	
+	s_pDlg->ShowWindow( SW_SHOW );
 	s_pDlg->GenerateReport();
 }
 
@@ -61,7 +82,8 @@ CEntityReportDlg::CEntityReportDlg(CMapDoc *pDoc, CWnd* pParent /*=NULL*/)
 	m_szFilterKey = pApp->GetProfileString(pszIniSection, "FilterKey", "");
 	m_szFilterValue = pApp->GetProfileString(pszIniSection, "FilterValue", "");
 
-	m_bFilterTextChanged = FALSE;
+	m_bFilterTextChanged = false;
+	m_bGotoFirstMatch = false;
 
 	//{{AFX_DATA_INIT(CEntityReportDlg)
 	//}}AFX_DATA_INIT
@@ -215,7 +237,7 @@ void CEntityReportDlg::OnChangeFilterkey()
 	m_cFilterKey.GetWindowText(m_szFilterKey);
 	m_szFilterKey.MakeUpper();
 	m_dwFilterTime = time(NULL);
-	m_bFilterTextChanged = TRUE;
+	m_bFilterTextChanged = true;
 }
 
 void CEntityReportDlg::OnChangeFiltervalue() 
@@ -223,7 +245,7 @@ void CEntityReportDlg::OnChangeFiltervalue()
 	m_cFilterValue.GetWindowText(m_szFilterValue);
 	m_szFilterValue.MakeUpper();
 	m_dwFilterTime = time(NULL);
-	m_bFilterTextChanged = TRUE;
+	m_bFilterTextChanged = true;
 }
 
 
@@ -303,7 +325,7 @@ void CEntityReportDlg::OnTimer(UINT nIDEvent)
 
 	if((time(NULL) - m_dwFilterTime) > 1)
 	{
-		m_bFilterTextChanged = FALSE;
+		m_bFilterTextChanged = false;
 		m_dwFilterTime = time(NULL);
 		UpdateEntityList();
 	}
@@ -366,7 +388,7 @@ BOOL AddEntityToList(CMapEntity *pEntity, CEntityReportDlg *pDlg)
 		}
 		else
 		{
-			V_strcpy_safe( szString, pEntity->GetClassName() );
+			strcpy(szString, pEntity->GetClassName());
 			strupr(szString);
 			if (!strstr(szString, pDlg->m_szFilterClass))
 			{
@@ -377,9 +399,16 @@ BOOL AddEntityToList(CMapEntity *pEntity, CEntityReportDlg *pDlg)
 
 	strcpy(szString, pszClassName);
 
+	// Append targetname in brackets, if applicable
+	if ( pEntity->GetKeyValue("targetname") && strcmp(pEntity->GetKeyValue("targetname"), "(null)") )
+	{
+		sprintf(szString + strlen(szString), "      (%s)", pEntity->GetKeyValue("targetname") );
+	}
+
+
 	BOOL bAdd = TRUE;
 
-	if(pDlg->m_bFilterByKeyvalue)
+	if (pDlg->m_bFilterByKeyvalue)
 		bAdd = FALSE;
 
 	MDkeyvalue tmpkv;
@@ -393,7 +422,7 @@ BOOL AddEntityToList(CMapEntity *pEntity, CEntityReportDlg *pDlg)
 			{
 				// now, check value
 				char szTmp1[128], szTmp2[128];
-				V_strcpy_safe( szTmp1, pEntity->GetKeyValue( i ) );
+				strcpy(szTmp1, pEntity->GetKeyValue(i));
 				strupr(szTmp1);
 				strcpy(szTmp2, pDlg->m_szFilterValue);
 				if ((!pDlg->m_bExact && strstr(szTmp1, szTmp2)) || !strcmpi(szTmp1, szTmp2))
@@ -403,20 +432,15 @@ BOOL AddEntityToList(CMapEntity *pEntity, CEntityReportDlg *pDlg)
 			}
 		}
 
-		const char* pszName = pEntity->GetKey(i);
-		
 		GDclass *pClass = pEntity->GetClass();
 		if (pClass != NULL)
 		{
 			GDinputvariable *pVar = pClass->VarForName(pEntity->GetKey(i));
 			if (!pVar || !pVar->IsReportable())
-			{
 				continue;
-			}
-			pszName = pVar->GetLongName();
 		}
 
-		sprintf(szString + strlen(szString), "\t%s \"%s\"", pszName, pEntity->GetKeyValue(i));
+		sprintf(szString + strlen(szString), "\t%s", pEntity->GetKeyValue(i));
 
 		if (pClass == NULL)
 		{
@@ -424,7 +448,7 @@ BOOL AddEntityToList(CMapEntity *pEntity, CEntityReportDlg *pDlg)
 		}
 	}
 	
-	if(bAdd)
+	if (bAdd)
 	{
 		int iIndex = pDlg->m_cEntities.AddString(szString);
 		pDlg->m_cEntities.SetItemDataPtr(iIndex, PVOID(pEntity));
@@ -439,7 +463,7 @@ BOOL AddEntityToList(CMapEntity *pEntity, CEntityReportDlg *pDlg)
 //-----------------------------------------------------------------------------
 void CEntityReportDlg::UpdateEntityList(void)
 {
-	m_bFilterTextChanged = FALSE;
+	m_bFilterTextChanged = false;
 
 	m_cEntities.SetRedraw(FALSE);
 	m_cEntities.ResetContent();
@@ -483,6 +507,14 @@ void CEntityReportDlg::GenerateReport()
 	OnFilterbykeyvalue();
 	OnFilterbytype();
 	OnFilterbyclass();
+
+	if ( m_bGotoFirstMatch && m_cEntities.GetCount() )
+	{
+		// Select and go to first matching entity
+		m_cEntities.SetSel( 0 );
+		MarkSelectedEntities();
+		OnGoto();
+	}
 }
 
 void CEntityReportDlg::OnEditchangeFilterclass() 
@@ -490,7 +522,7 @@ void CEntityReportDlg::OnEditchangeFilterclass()
 	m_cFilterClass.GetWindowText(m_szFilterClass);
 	m_szFilterClass.MakeUpper();
 	m_dwFilterTime = time(NULL);
-	m_bFilterTextChanged = TRUE;
+	m_bFilterTextChanged = true;
 }
 
 void CEntityReportDlg::OnFilterbyclass() 

@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -36,7 +36,7 @@ public:
 	virtual void		StopAll( void ) = 0;
 	virtual void		StopSound( CAudioMixer *mixer ) = 0;
 
-	virtual void		RenderWavToDC( HDC dc, RECT& outrect, COLORREF clr, 
+	virtual void		RenderWavToDC( HDC dc, RECT& outrect, const Color& clr, 
 		float starttime, float endtime, CAudioSource *pWave, 
 		bool selected = false, int selectionstart = 0, int selectionend = 0 ) = 0;
 

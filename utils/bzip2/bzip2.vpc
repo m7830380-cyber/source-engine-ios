@@ -5,15 +5,21 @@
 //-----------------------------------------------------------------------------
 
 $Macro SRCDIR		"..\.."
-$Macro OUTLIBDIR	"$LIBCOMMON"
-$Include "$SRCDIR\vpc_scripts\source_lib_base.vpc"
+$Macro OUTLIBDIR	"$OUTLIBCOMMONDIR"
+
+$include "$SRCDIR\vpc_scripts\source_lib_base.vpc"
 
 $Configuration
 {
-	$Compiler
+	$Compiler [$PS3]
 	{
-		$ForceIncludes						" "
-		$CompileAs							"Compile as C Code (/TC)" [!$POSIX]
+		$PreprocessorDefinitions	"$BASE;_PS3"
+		$ForceIncludes				" "
+	}
+	$Compiler [!$PS3]
+	{
+		$ForceIncludes		" "
+		$CompileAs			"Compile as C Code (/TC)"
 	}
 }
 

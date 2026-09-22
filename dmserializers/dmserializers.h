@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//=========== (C) Copyright 1999 Valve, L.L.C. All rights reserved. ===========
 //
 // The copyright to the contents herein is the property of Valve, L.L.C.
 // The contents may be used and/or copied only with the written permission of
@@ -33,6 +33,7 @@ class IDataModel;
 // Externally defined importers
 //-----------------------------------------------------------------------------
 void InstallActBusyImporter( IDataModel *pFactory );
+void InstallCommentaryImporter( IDataModel *pFactory );
 void InstallVMTImporter( IDataModel *pFactory );
 void InstallSFMV1Importer( IDataModel *pFactory );
 void InstallSFMV2Importer( IDataModel *pFactory );
@@ -44,6 +45,8 @@ void InstallSFMV7Importer( IDataModel *pFactory );
 void InstallSFMV8Importer( IDataModel *pFactory );
 void InstallSFMV9Importer( IDataModel *pFactory );
 void InstallVMFImporter( IDataModel *pFactory );
+void InstallMKSImporter( IDataModel *pFactory );
+void InstallTEXImporter( IDataModel *pFactory );
 
 void InstallDMXUpdater( IDataModel *pFactory );
 void InstallSFMSessionUpdater( IDataModel *pFactory );

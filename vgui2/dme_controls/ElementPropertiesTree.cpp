@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2005, Valve Corporation, All rights reserved. =======//
 //
 // Purpose: 
 //
@@ -9,6 +9,7 @@
 #include "dme_controls/elementpropertiestree.h"
 #include "tier1/KeyValues.h"
 #include "datamodel/dmelement.h"
+#include "datamodel/dmelementfactoryhelper.h"
 
 #include "vgui/IInput.h"
 #include "vgui/ISurface.h"
@@ -66,8 +67,8 @@ public:
 
 	virtual void OnLabelChanged( int itemIndex, const char *oldString, const char *newString );
 
-	virtual bool IsItemDroppable( int m_ItemIndex, CUtlVector< KeyValues * >& msglist );
-	virtual void OnItemDropped( int m_ItemIndex, CUtlVector< KeyValues * >& msglist );
+	virtual bool IsItemDroppable( int m_ItemIndex, bool bInsertBefore, CUtlVector< KeyValues * >& msglist );
+	virtual void OnItemDropped( int m_ItemIndex, bool bInsertBefore, CUtlVector< KeyValues * >& msglist );
 	virtual bool GetItemDropContextMenu( int itemIndex, Menu *menu, CUtlVector< KeyValues * >& msglist );
 	virtual HCursor GetItemDropCursor( int itemIndex, CUtlVector< KeyValues * >& msglist );
 
@@ -107,9 +108,9 @@ ScrollBar *CElementTree::GetScrollBar()
 	return m_pVertSB;
 }
 
-bool CElementTree::IsItemDroppable( int itemIndex, CUtlVector< KeyValues * >& msglist )
+bool CElementTree::IsItemDroppable( int itemIndex, bool bInsertBefore, CUtlVector< KeyValues * >& msglist )
 {
-	return m_pParent->IsItemDroppable( itemIndex, msglist );
+	return m_pParent->IsItemDroppable( itemIndex, bInsertBefore, msglist );
 }
 
 bool CElementTree::GetItemDropContextMenu( int itemIndex, Menu *menu, CUtlVector< KeyValues * >& msglist )
@@ -117,9 +118,9 @@ bool CElementTree::GetItemDropContextMenu( int itemIndex, Menu *menu, CUtlVector
 	return m_pParent->GetItemDropContextMenu( itemIndex, menu, msglist );
 }
 
-void CElementTree::OnItemDropped( int itemIndex, CUtlVector< KeyValues * >& msglist )
+void CElementTree::OnItemDropped( int itemIndex, bool bInsertBefore, CUtlVector< KeyValues * >& msglist )
 {
-	m_pParent->OnItemDropped( itemIndex, msglist );
+	m_pParent->OnItemDropped( itemIndex, bInsertBefore, msglist );
 }
 
 HCursor CElementTree::GetItemDropCursor( int itemIndex, CUtlVector< KeyValues * >& msglist )
@@ -186,12 +187,15 @@ CElementTreeViewListControl::CElementTreeViewListControl( Panel *pParent, const 
 	m_iFontSize = 1;
 	m_bMouseLeftIsDown = false;
 	m_bMouseIsDragging = false;
+
 	m_bDrawGrid = false;
+	m_bDrawAlternatingRowColors = false;
+	m_bHideTypeSubColumn = false;
 
 	// why do this here?
 	SetScheme( vgui::scheme()->LoadSchemeFromFile( "Resource/BoxRocket.res", "BoxRocket" ) );
 
-	// the column lable font
+	// the column label font
 	vgui::IScheme *scheme = vgui::scheme()->GetIScheme( GetScheme() );
 	HFont font = scheme->GetFont( "DefaultVerySmall", IsProportional() );
 
@@ -410,6 +414,8 @@ void CElementTreeViewListControl::OnMouseWheeled(int delta)
 	}
 }
 
+//-----------------------------------------------------------------------------
+
 void CElementTreeViewListControl::ToggleDrawGrid()
 {
 	m_bDrawGrid = !m_bDrawGrid;
@@ -418,6 +424,67 @@ void CElementTreeViewListControl::ToggleDrawGrid()
 bool CElementTreeViewListControl::IsDrawingGrid()
 {
 	return m_bDrawGrid;
+}
+
+void CElementTreeViewListControl::ToggleDrawAlternatingRowColors()
+{
+	m_bDrawAlternatingRowColors = !m_bDrawAlternatingRowColors;
+}
+
+bool CElementTreeViewListControl::IsDrawingAlternatingRowColors()
+{
+	return m_bDrawAlternatingRowColors;
+}
+
+void CElementTreeViewListControl::ToggleHideSubColumn()
+{
+	m_bHideTypeSubColumn = !m_bHideTypeSubColumn;
+}
+
+bool CElementTreeViewListControl::IsHidingTypeSubColumn()
+{
+	return m_bHideTypeSubColumn;
+}
+
+//-----------------------------------------------------------------------------
+void CElementTreeViewListControl::Paint()
+{
+	if( m_bDrawAlternatingRowColors )
+	{
+		int left, top, right, bottom;
+		int numColumns = GetNumColumns();
+		int numRows = GetNumRows();
+
+		int vbarTop, nItemsVisible;
+		bool hbarVisible = false;
+		GetTree()->GetVBarInfo( vbarTop, nItemsVisible, hbarVisible );
+
+		if ( hbarVisible )
+		{
+			--nItemsVisible;
+		}
+
+		for ( int col = 0; col < numColumns; ++col )
+		{
+			for ( int row = 0; row < MIN( numRows, nItemsVisible); ++row )
+			{
+				GetGridElementBounds( col, row, left, top, right, bottom );
+				int grey = row % 2 ? (vbarTop % 2 ? 0 : 84) : (vbarTop % 2 ? 84 : 0);
+				if (col == 0)
+				{
+					vgui::surface()->DrawSetColor( Color( grey, grey, grey, 50 ) );
+					vgui::surface()->DrawFilledRect( left + 4, top, right, bottom );
+				}
+				else
+				{
+					vgui::surface()->DrawSetColor( Color( grey, grey, grey, 50 ) );
+					vgui::surface()->DrawFilledRect( left, top, right , bottom );
+				}
+			}
+		}
+	}
+
+	BaseClass::Paint();
 }
 
 void CElementTreeViewListControl::PostChildPaint()
@@ -434,17 +501,11 @@ void CElementTreeViewListControl::PostChildPaint()
 	if ( m_bDrawGrid )
 	{
 		int numColumns = GetNumColumns();
-		int rows = GetNumRows();
+		int numRows = GetNumRows();
 
 		int vbarTop, nItemsVisible;
 		bool hbarVisible = false;
 		GetTree()->GetVBarInfo( vbarTop, nItemsVisible, hbarVisible );
-
-		int vBarWidth = 0;
-		if ( nItemsVisible <= rows )
-		{
-			vBarWidth = 21;
-		}
 
 		if ( hbarVisible )
 		{
@@ -453,7 +514,7 @@ void CElementTreeViewListControl::PostChildPaint()
 
 		for ( int col = 0; col < numColumns; ++col )
 		{
-			for ( int row = 0; row < rows; ++row )
+			for ( int row = 0; row < MIN( numRows, nItemsVisible); ++row )
 			{
 				GetGridElementBounds( col, row, left, top, right, bottom );
 				if (col == 0)
@@ -462,7 +523,7 @@ void CElementTreeViewListControl::PostChildPaint()
 				}
 				else
 				{
-					vgui::surface()->DrawLine( left-3, bottom, right-2, bottom );
+					vgui::surface()->DrawLine( left-4, bottom, right-2, bottom );
 				}
 			}
 		}
@@ -654,7 +715,7 @@ int CElementTreeViewListControl::GetFontSize()
 
 void CElementTreeViewListControl::SetFontSize( int size )
 {
-	m_iFontSize = min( 5, max( 1, size ) );
+	m_iFontSize = MIN( 5, MAX( 1, size ) );
 	SetFont( GetFont( m_iFontSize ) );
 }
 
@@ -787,11 +848,13 @@ private:
 
 	CElementPropertiesTreeInternal	*m_pTree;
 
+	CHistoryMenuButton	*m_pUp;
 	CHistoryMenuButton	*m_pBack;
 	CHistoryMenuButton	*m_pFwd;
 	Label				*m_pSearchLabel;
 	CSearchComboBox		*m_pSearch;
 	// Button				*m_pShowSearchResults;
+	Button				*m_pRefresh;
 };
 
 CPropertiesTreeToolbar::CPropertiesTreeToolbar( vgui::Panel *parent, const char *panelName, CElementPropertiesTreeInternal *tree ) :
@@ -800,6 +863,13 @@ CPropertiesTreeToolbar::CPropertiesTreeToolbar( vgui::Panel *parent, const char 
 	Assert( m_pTree );
 
 	SetPaintBackgroundEnabled( false );
+
+	m_pUp = new CHistoryMenuButton( this, "Nav_Up", "#Dme_NavUp", tree, CElementPropertiesTreeInternal::DME_PROPERTIESTREE_MENU_UP );
+	m_pUp->SetCommand( new KeyValues( "OnNavigateUp", "item", -1 ) );
+	m_pUp->AddActionSignalTarget( parent );
+	m_pUp->SetDropMenuButtonStyle( true );
+
+	m_pUp->SetMenu( new Menu( this, "Nav_UpMenu" ) );
 
 	m_pBack = new CHistoryMenuButton( this, "Nav_Back", "#Dme_NavBack", tree, CElementPropertiesTreeInternal::DME_PROPERTIESTREE_MENU_BACKWARD );
 	m_pBack->SetCommand( new KeyValues( "OnNavigateBack", "item", -1 ) );
@@ -819,20 +889,25 @@ CPropertiesTreeToolbar::CPropertiesTreeToolbar( vgui::Panel *parent, const char 
 	m_pSearch->SelectAllOnFocusAlways( true );
 	m_pSearch->AddActionSignalTarget( this );
 
+
 	/*
 	m_pShowSearchResults = new Button( this, "Nav_ShowResults", "Show Results" );
 	m_pShowSearchResults->SetCommand( new KeyValues( "OnShowSearchResults" ) );
 	m_pShowSearchResults->AddActionSignalTarget( parent );
 	*/
 
+	m_pRefresh = new Button( this, "Nav_Refresh", "Refresh" );
+	m_pRefresh->SetCommand( new KeyValues( "OnRefresh" ) );
+	m_pRefresh->AddActionSignalTarget( parent );
+
 	m_pSearchLabel = new Label( this, "Nav_SearchLabel", "#Dme_NavSearch" );
 }
 
 void CPropertiesTreeToolbar::UpdateButtonState()
 {
+	m_pUp->SetEnabled( m_pTree->GetHistoryMenuItemCount( CElementPropertiesTreeInternal::DME_PROPERTIESTREE_MENU_UP ) > 0 ? true : false );
 	m_pBack->SetEnabled( m_pTree->GetHistoryMenuItemCount( CElementPropertiesTreeInternal::DME_PROPERTIESTREE_MENU_BACKWARD ) > 0 ? true : false );
 	m_pFwd->SetEnabled( m_pTree->GetHistoryMenuItemCount( CElementPropertiesTreeInternal::DME_PROPERTIESTREE_MENU_FORWARD ) > 0 ? true : false );
-	
 	//m_pShowSearchResults->SetEnabled( m_pTree->GetHistoryMenuItemCount( CElementPropertiesTreeInternal::DME_PROPERTIESTREE_MENU_SEARCHHSITORY ) > 0 ? true : false );
 }
 
@@ -878,15 +953,22 @@ void CPropertiesTreeToolbar::ApplySchemeSettings( IScheme *scheme )
 {
 	BaseClass::ApplySchemeSettings( scheme );
 
+	m_pUp->SetFont( scheme->GetFont( "DefaultVerySmall" ) );
 	m_pBack->SetFont( scheme->GetFont( "DefaultVerySmall" ) );
 	m_pFwd->SetFont( scheme->GetFont( "DefaultVerySmall" ) );
 	m_pSearch->SetFont( scheme->GetFont( "DefaultVerySmall" ) );
 	m_pSearchLabel->SetFont( scheme->GetFont( "DefaultVerySmall" ) );
 	//m_pShowSearchResults->SetFont( scheme->GetFont( "DefaultVerySmall" ) );
 
+	m_pRefresh->SetFont( scheme->GetFont( "DefaultVerySmall" ) );
+	m_pRefresh->ClearImages();
+	m_pRefresh->SetImageAtIndex( 0, vgui::scheme()->GetImage( "tools/ifm/icon_properties_refresh" , false), 0 );
+	m_pRefresh->SizeToContents();
+
 	m_pSearch->SendNewLine( true );
 	m_pSearch->SelectAllOnFocusAlways( true );
 
+	m_pUp->GetMenu()->SetFont( scheme->GetFont( "DefaultVerySmall" ) );
 	m_pBack->GetMenu()->SetFont( scheme->GetFont( "DefaultVerySmall" ) );
 	m_pFwd->GetMenu()->SetFont( scheme->GetFont( "DefaultVerySmall" ) );
 }
@@ -902,13 +984,25 @@ void CPropertiesTreeToolbar::PerformLayout()
 
 	int x = 2;
 
+	int upw = 50;
+
+	m_pUp->SetBounds( x, 3, upw, buttonh );
+
+	x += upw + 2;
+
 	m_pBack->SetBounds( x, 3, buttonw, buttonh );
 
 	x += buttonw + 2;
 
 	m_pFwd->SetBounds( x, 3, buttonw, buttonh );
 
-	x += buttonw + 15;
+	x += buttonw + 2;
+
+	int cw, ch;
+	m_pRefresh->GetContentSize( cw, ch );
+	m_pRefresh->SetBounds( x, 2, cw+2, ch+2 );
+
+	x += cw + 15;
 
 	m_pSearchLabel->SetBounds( x, 2, 50, buttonh );
 
@@ -941,13 +1035,16 @@ CElementPropertiesTreeInternal::CElementPropertiesTreeInternal(
 	BaseClass( parent, "ElementPropertiesTree" ),
 	m_pNotify( pNotify ),
 	m_hTypeDictionary( pDict ),
-	m_bAutoApply( autoApply ), m_bShowMemoryUsage( false )
+	m_bAutoApply( autoApply ), 
+	m_bShowMemoryUsage( false ),
+	m_bShowUniqueID( true )
 {
 	m_hObject = pObject;
 	m_bSuppressHistoryUpdates = false;
 	m_nCurrentHistoryPosition = 0;
 	m_szSearchStr[ 0 ] = 0;
 	m_nCurrentSearchResult = 0;
+	m_bSortAttributesByName = false;
 
 	SetVisible( true );
 
@@ -987,6 +1084,8 @@ CElementPropertiesTreeInternal::CElementPropertiesTreeInternal(
 	m_hDragCopyCursor = surface()->CreateCursorFromFile( "resource/drag_copy.cur" );
 	m_hDragLinkCursor = surface()->CreateCursorFromFile( "resource/drag_link.cur" );
 	m_hDragMoveCursor = surface()->CreateCursorFromFile( "resource/drag_move.cur" );
+
+	UpdateReferences();
 }
 
 
@@ -1034,6 +1133,7 @@ void CElementPropertiesTreeInternal::Init( )
 		return;
 
 	UpdateTree();
+	UpdateReferences();
 }
 
 
@@ -1082,6 +1182,8 @@ void CElementPropertiesTreeInternal::Refresh( RefreshType_t rebuild /* = false *
 	{
 		attributewidgetfactorylist->Refresh( m_AttributeWidgets[i].m_pValueWidget, this );
 	}
+
+	UpdateReferences();
 }
 
 //-----------------------------------------------------------------------------
@@ -1094,6 +1196,68 @@ void CElementPropertiesTreeInternal::OnRename()
 		return;
 
 	m_pTree->GetTree()->StartEditingLabel( m_pTree->GetTree()->GetFirstSelectedItem() );
+}
+
+void CElementPropertiesTreeInternal::OnEstimateMemory()
+{
+	CUtlVector< int > selected;
+	m_pTree->GetTree()->GetSelectedItems( selected ) ;
+	int c = selected.Count();
+	if ( c <= 0 )
+		return;
+
+	for ( int i = 0; i < c; ++i )
+	{
+		KeyValues *item = m_pTree->GetTree()->GetItemData( selected[ i ] );
+		Assert( item );
+
+		// Check to see if this attribute refers to an element
+		CDmElement *pOwner = GetElementKeyValue<CDmElement>( item, "ownerelement" );
+		if ( pOwner == NULL )
+			continue;
+
+		CDmAttribute *pAttr = pOwner->GetAttribute( item->GetString( "attributeName" ) );
+		if ( pAttr == NULL )
+			continue;
+
+		DmAttributeType_t attrType = pAttr->GetType();
+		if ( attrType == AT_ELEMENT )
+		{
+			CDmElement *pElement = pAttr->GetValueElement<CDmElement>();
+			if ( pElement )
+			{
+				Msg( "memory for %s\n", pElement->GetName() );
+				g_pDataModel->DisplayMemoryStats( pElement->GetHandle() );
+			}
+		}
+		else if ( attrType == AT_ELEMENT_ARRAY )
+		{
+			const CDmrElementArray<> array( pAttr );
+			int n = array.Count();
+			int index = item->GetInt( "arrayIndex", -1 );
+			if ( index >= 0 )
+			{
+				CDmElement *pElement = array[ index ];
+				if ( pElement )
+				{
+					Msg( "memory for %s\n", pElement->GetName() );
+					g_pDataModel->DisplayMemoryStats( pElement->GetHandle() );
+				}
+			}
+			else
+			{
+				for ( int i = 0; i < n; ++i )
+				{
+					CDmElement *pElement = array[ i ];
+					if ( pElement )
+					{
+						Msg( "memory for %s\n", pElement->GetName() );
+						g_pDataModel->DisplayMemoryStats( pElement->GetHandle() );
+					}
+				}
+			}
+		}
+	}
 }
 
 void CElementPropertiesTreeInternal::OnCopy()
@@ -1124,6 +1288,7 @@ void CElementPropertiesTreeInternal::GetPathToItem( CUtlVector< TreeItem_t > &pa
 	for ( int idx = itemIndex; idx != m_pTree->GetTree()->GetRootItemIndex(); idx = m_pTree->GetTree()->GetItemParent( idx ) )
 	{
 		KeyValues *itemData = m_pTree->GetTree()->GetItemData( idx );
+		Assert( itemData );
 		bool isArrayElement = !itemData->IsEmpty( "arrayIndex" );
 
 		TreeItem_t treeitem;
@@ -1231,7 +1396,7 @@ void CElementPropertiesTreeInternal::OnPaste_( bool reference )
 	// Pasting after an element array item or at the end of an element array
 	if ( isArrayElement || attType == AT_ELEMENT_ARRAY )
 	{
-		CElementTreeUndoScopeGuard guard( NOTIFY_SETDIRTYFLAG, m_pNotify, reference ? "Paste Reference" : "Paste" );
+		CUndoScopeGuard guard( reference ? "Paste Reference" : "Paste" );
 
 		CDmrElementArray<> array( pAttribute );
 		int nArrayIndex = isArrayElement ? itemData->GetInt( "arrayIndex" ) + 1 : array.Count();
@@ -1240,7 +1405,7 @@ void CElementPropertiesTreeInternal::OnPaste_( bool reference )
 	// Pasting onto an element attribute
 	else
 	{
-		CElementTreeUndoScopeGuard guard( NOTIFY_SETDIRTYFLAG, m_pNotify, reference ? "Paste Reference" : "Paste" );
+		CUndoScopeGuard guard( reference ? "Paste Reference" : "Paste" );
 
 		pAttribute->SetValue( reference ? list[ 0 ] : list[ 0 ]->Copy() );
 	}
@@ -1254,6 +1419,8 @@ void CElementPropertiesTreeInternal::OnPaste_( bool reference )
 
 	// Does a forced refresh
 	Refresh( REFRESH_TREE_VIEW );
+	// notify is moved here, outside of the undo block, since otherwise we get an extra refresh, which invalidates our itemIndex
+	m_pNotify->NotifyDataChanged( "OnPaste", NOTIFY_SOURCE_PROPERTIES_TREE, NOTIFY_SETDIRTYFLAG );
 
 	itemIndex = OpenPath( dropTargetPath );
 	if ( attType == AT_ELEMENT_ARRAY )
@@ -1264,99 +1431,17 @@ void CElementPropertiesTreeInternal::OnPaste_( bool reference )
 
 void CElementPropertiesTreeInternal::OnPaste()
 {
-	Warning( "CElementPropertiesTreeInternal::OnPaste\n" );
 	OnPaste_( false );
 }
 
 void CElementPropertiesTreeInternal::OnPasteReference()
 {
-	Warning( "CElementPropertiesTreeInternal::OnPasteReference\n" );
 	OnPaste_( true );
 }
 
 void CElementPropertiesTreeInternal::OnPasteInsert()
 {
 	Warning( "CElementPropertiesTreeInternal::OnPasteInsert\n" );
-}
-
-void RemoveAllReferencesToElement( CDmElement *pElement )
-{
-	if ( pElement == NULL )
-		return;
-
-	for ( DmElementHandle_t hElement = g_pDataModel->FirstAllocatedElement();
-		hElement != DMELEMENT_HANDLE_INVALID;
-		hElement = g_pDataModel->NextAllocatedElement( hElement ) )
-	{
-		CDmElement *pElt = g_pDataModel->GetElement( hElement );
-		if ( pElt )
-		{
-			pElt->RemoveAllReferencesToElement( pElement );
-		}
-	}
-}
-
-void CElementPropertiesTreeInternal::OnDeleteSelected()
-{
-	CUtlVector< KeyValues * > selection;
-	m_pTree->GetTree()->GetSelectedItemData( selection );
-	int nSelected = selection.Count();
-	if ( !nSelected )
-		return;
-
-	bool bChangeOccurred = false;
-	{
-		CElementTreeUndoScopeGuard guard( NOTIFY_SETDIRTYFLAG, m_pNotify, "Delete Elements" );
-
-		for ( int si = 0; si < nSelected; ++si )
-		{
-			KeyValues *item = selection[ si ];
-			Assert( item );
-
-			// Check to see if this attribute refers to an element
-			CDmElement *pOwner = GetElementKeyValue<CDmElement>( item, "ownerelement" );
-			if ( pOwner == NULL )
-				continue;
-
-			CDmAttribute *pAttr = pOwner->GetAttribute( item->GetString( "attributeName" ) );
-			if ( pAttr == NULL )
-				continue;
-
-			bChangeOccurred = true;
-
-			DmAttributeType_t attrType = pAttr->GetType();
-			if ( attrType == AT_ELEMENT )
-			{
-				CDmElement *pElement = pAttr->GetValueElement<CDmElement>();
-				RemoveAllReferencesToElement( pElement );
-			}
-			else if ( attrType == AT_ELEMENT_ARRAY )
-			{
-				const CDmrElementArray<> array( pAttr );
-				int n = array.Count();
-				int index = item->GetInt( "arrayIndex", -1 );
-				if ( index >= 0 )
-				{
-					CDmElement *pElement = array[ index ];
-					RemoveAllReferencesToElement( pElement );
-				}
-				else
-				{
-					for ( int i = 0; i < n; ++i )
-					{
-						CDmElement *pElement = array[ i ];
-						RemoveAllReferencesToElement( pElement );
-					}
-				}
-			}
-		}
-	}
-
-	// Does a forced refresh
-	if ( bChangeOccurred )
-	{
-		Refresh( REFRESH_TREE_VIEW );
-	}
 }
 
 void CElementPropertiesTreeInternal::OnCut()
@@ -1660,6 +1745,8 @@ void CElementPropertiesTreeInternal::OnSortByName()
 	CUtlVector< KeyValues * > list;
 	m_pTree->GetTree()->GetSelectedItemData( list );
 
+	CUtlVector< CDmElement* > sortedElements;
+
 	int c = list.Count();
 
 	bool bRefreshNeeded = false;
@@ -1680,20 +1767,20 @@ void CElementPropertiesTreeInternal::OnSortByName()
 			continue;
 
 		bRefreshNeeded = true;
-		CDmElement **pArray = ( CDmElement** )_alloca( nCount * sizeof( CDmElement* ) );
+		sortedElements.EnsureCapacity( nCount );
 		for ( int i = 0; i < nCount; ++i )
 		{
-			pArray[i] = elementArray[i];
+			sortedElements.AddToTail( elementArray[i] );
 		}
 
-		qsort( pArray, nCount, sizeof( CDmElement* ), ElementNameSortFunc );
+		qsort( sortedElements.Base(), nCount, sizeof( CDmElement* ), ElementNameSortFunc );
 
 		elementArray.RemoveAll();
 		elementArray.AddMultipleToTail( nCount );
 
 		for ( int i = 0; i < nCount; ++i )
 		{
-			elementArray.Set( i, pArray[i] );
+			elementArray.Set( i, sortedElements[i] );
 		}
 	}
 
@@ -1748,6 +1835,87 @@ void CElementPropertiesTreeInternal::OnShowSearchResults()
 	KeyValues *kv = new KeyValues( "NotifyViewedElementChanged" );
 	SetElementKeyValue( kv, "dmeelement", m_SearchResultsRoot.Get() );
 	PostActionSignal( kv );
+}
+
+void CElementPropertiesTreeInternal::OnNavUp( int item )
+{
+	CDmElement *pParent = NULL;
+	CDmElement *pChild = m_hObject;
+
+	if ( item == -1 )
+	{
+		item = 0;
+
+		// find a "strong" reference if any (an element with a CDmaVar that doesn't have the nevercopy flag set)
+		for ( DmAttributeReferenceIterator_t i = g_pDataModel->FirstAttributeReferencingElement( m_hObject->GetHandle() );
+			i != DMATTRIBUTE_REFERENCE_ITERATOR_INVALID;
+			i = g_pDataModel->NextAttributeReferencingElement( i ) )
+		{
+			CDmAttribute *pAttribute = g_pDataModel->GetAttribute( i );
+			Assert( pAttribute );
+			if ( !pAttribute )
+				continue;
+
+			if ( !pAttribute->IsFlagSet( FATTRIB_EXTERNAL ) )
+				continue; // ignore non-static attributes (those that aren't CDmaVars)
+
+			if ( pAttribute->IsFlagSet( FATTRIB_NEVERCOPY ) )
+				continue; // ignore channel to/from references and the like
+
+			pParent = pAttribute->GetOwner();
+			break;
+		}
+	}
+
+	if ( !pParent )
+	{
+		int c = m_vecDmeReferencesToObject.Count();
+		if ( item < 0 || item >= c )
+			return;
+
+		pParent = m_vecDmeReferencesToObject[ item ];
+	}
+
+	if ( !pParent )
+		return;
+
+	SetObject( pParent );
+
+	// Expand tree to the previous root
+	// this currently expands to EVERY attribute that refers to the old root, since we're not storing which attribute was the "good" one
+	int nRootIndex = m_pTree->GetTree()->GetRootItemIndex();
+	int idx = pParent->AttributeCount() - 1;
+	for ( CDmAttribute *pAttr = pParent->FirstAttribute(); pAttr; pAttr = pAttr->NextAttribute(), --idx )
+	{
+		DmAttributeType_t type = pAttr->GetType();
+		if ( type == AT_ELEMENT )
+		{
+			if ( pAttr->GetValueElement< CDmElement >() != pChild )
+				continue;
+
+			int childIndex = m_pTree->GetTree()->GetChild( nRootIndex, idx );
+			m_pTree->ExpandItem( childIndex, true );
+		}
+		else if ( type == AT_ELEMENT_ARRAY )
+		{
+			CDmrElementArray< CDmElement > array( pAttr );
+			int nCount = array.Count();
+			for ( int i = 0; i < nCount; ++i )
+			{
+				CDmElement *pElem = array[ i ];
+				if ( !pElem || pElem != pChild )
+					continue;
+
+				int childIndex = m_pTree->GetTree()->GetChild( nRootIndex, idx );
+				m_pTree->ExpandItem( childIndex, true );
+
+				int grandChildIndex = m_pTree->GetTree()->GetChild( childIndex, i );
+				m_pTree->ExpandItem( grandChildIndex, true );
+			}
+		}
+	}
+
+	UpdateButtonState();
 }
 
 void CElementPropertiesTreeInternal::OnNavBack( int item )
@@ -1869,7 +2037,7 @@ bool CElementPropertiesTreeInternal::BuildExpansionListToFindElement_R(
 
 static ConVar dme_properties_maxsearchresults( "dme_properties_maxsearchresults", "50", 0, "Max number of search results to track." );
 
-void CElementPropertiesTreeInternal::FindMatchingElements_R( CUtlRBTree< CDmElement *, int >& visited, const char *searchstr, CDmElement *element, CUtlVector< SearchResult_t >& list )
+void CElementPropertiesTreeInternal::FindMatchingElements_R( CUtlRBTree< CDmElement *, int >& visited, const char *searchstr, const DmObjectId_t *pSearchId, CDmElement *element, CUtlVector< SearchResult_t >& list )
 {
 	if ( list.Count() >= dme_properties_maxsearchresults.GetInt() )
 		return;
@@ -1896,6 +2064,29 @@ void CElementPropertiesTreeInternal::FindMatchingElements_R( CUtlRBTree< CDmElem
 			list.AddToTail( sr );
 		}
 	}
+	else
+	{
+		// Match by objectid?
+		DmObjectId_t searchId;
+		if ( UniqueIdFromString( &searchId, searchstr, Q_strlen( searchstr ) ) )
+		{
+			const DmObjectId_t &id = element->GetId();
+			if ( id == searchId )
+			{
+				CDmeHandle< CDmElement > h;
+				h = element;
+
+				SearchResult_t sr;
+				sr.handle = h;
+				sr.attributeName = "";
+
+				if ( list.Find( sr ) == list.InvalidIndex() )
+				{
+					list.AddToTail( sr );
+				}
+			}
+		}
+	}
 
 	for ( CDmAttribute *attribute = element->FirstAttribute(); attribute; attribute = attribute->NextAttribute() )
 	{
@@ -1917,7 +2108,22 @@ void CElementPropertiesTreeInternal::FindMatchingElements_R( CUtlRBTree< CDmElem
 
 		if ( attribute->GetType() == AT_ELEMENT )
 		{
-			FindMatchingElements_R( visited, searchstr, attribute->GetValueElement<CDmElement>(), list );
+			if ( pSearchId && attribute->GetValueElement<CDmElement>() && attribute->GetValueElement<CDmElement>()->GetId() == *pSearchId )
+			{
+				CDmeHandle< CDmElement > h;
+				h = element;
+
+				SearchResult_t sr;
+				sr.handle = h;
+				sr.attributeName = attributeName;
+
+				if ( list.Find( sr ) == list.InvalidIndex() )
+				{
+					list.AddToTail( sr );
+				}
+			}
+
+			FindMatchingElements_R( visited, searchstr, pSearchId, attribute->GetValueElement<CDmElement>(), list );
 		}
 		else if ( attribute->GetType() == AT_ELEMENT_ARRAY )
 		{
@@ -1926,7 +2132,22 @@ void CElementPropertiesTreeInternal::FindMatchingElements_R( CUtlRBTree< CDmElem
 			int c = elementArray.Count();
 			for ( int i = 0; i < c; ++i )
 			{
-				FindMatchingElements_R( visited, searchstr, elementArray[ i ], list );
+				if ( pSearchId && elementArray[ i ] && elementArray[ i ]->GetId() == *pSearchId )
+				{
+					CDmeHandle< CDmElement > h;
+					h = element;
+
+					SearchResult_t sr;
+					sr.handle = h;
+					sr.attributeName = attributeName;
+
+					if ( list.Find( sr ) == list.InvalidIndex() )
+					{
+						list.AddToTail( sr );
+					}
+				}
+
+				FindMatchingElements_R( visited, searchstr, pSearchId, elementArray[ i ], list );
 			}
 		}
 	}
@@ -2043,7 +2264,15 @@ void CElementPropertiesTreeInternal::OnNavSearch( const char *text )
 
 		CUtlRBTree< CDmElement *, int > visited( 0, 0, DefLessFunc( CDmElement * ) );
 
-		FindMatchingElements_R( visited, m_szSearchStr, m_hObject.Get(), m_SearchResults );
+		const DmObjectId_t *pSearchForId = NULL;
+
+		DmObjectId_t searchId;
+		if ( UniqueIdFromString( &searchId, m_szSearchStr, Q_strlen( m_szSearchStr ) ) )
+		{
+			pSearchForId = &searchId;
+		}
+
+		FindMatchingElements_R( visited, m_szSearchStr, pSearchForId, m_hObject.Get(), m_SearchResults );
 
 		AddToSearchHistory( text );
 
@@ -2129,6 +2358,10 @@ int CElementPropertiesTreeInternal::GetHistoryMenuItemCount( int whichMenu )
 			return m_SearchHistory.Count();
 		}
 		break;
+	case DME_PROPERTIESTREE_MENU_UP:
+		{
+			return m_vecDmeReferencesToObject.Count();
+		}
 	}
 
 	return 0;
@@ -2183,7 +2416,40 @@ void CElementPropertiesTreeInternal::PopulateHistoryMenu( int whichMenu, Menu *m
 			}
 		}
 		break;
+	case DME_PROPERTIESTREE_MENU_UP:
+		{
+			int c = m_vecDmeReferencesToObject.Count();
+			for ( int i = 0; i < c; ++i )
+			{
+				CDmElement *element = m_vecDmeReferencesToObject[ i ];
+				if ( element )
+				{
+					char sz[ 256 ];
+					Q_snprintf( sz, sizeof( sz ), "%s < %s >", element->GetName(), element->GetTypeString() );
+					menu->AddMenuItem( "up", sz, new KeyValues( "OnNavigateUp", "item", i ), this );
+				}
+			}
+		}
+		break;
 	}
+}
+
+void CElementPropertiesTreeInternal::UpdateReferences()
+{
+	m_vecDmeReferencesToObject.RemoveAll();
+	if ( m_hObject.Get() )
+	{
+		CUtlVector< CDmElement * > elements;
+		FindAncestorsReferencingElement( m_hObject, elements );
+		m_vecDmeReferencesToObject.EnsureCapacity( elements.Count() );
+		for ( int i = 0; i < elements.Count(); ++i )
+		{
+			CDmeHandle< CDmElement > handle;
+			handle = elements[ i ];
+			m_vecDmeReferencesToObject.AddToTail( handle );
+		}
+	}
+	UpdateButtonState();
 }
 
 void CElementPropertiesTreeInternal::AddToSearchHistory( const char *str )
@@ -2510,9 +2776,25 @@ void CElementPropertiesTreeInternal::OnCommand( const char *cmd )
 	}
 }
 
-void CElementPropertiesTreeInternal::OnShowMemoryUsage()
+bool CElementPropertiesTreeInternal::IsShowingMemoryUsage()
+{
+	return m_bShowMemoryUsage;
+}
+
+void CElementPropertiesTreeInternal::OnToggleShowMemoryUsage()
 {
 	m_bShowMemoryUsage = !m_bShowMemoryUsage;
+	Refresh( REFRESH_TREE_VIEW, true );
+}
+
+bool CElementPropertiesTreeInternal::IsShowingUniqueID()
+{
+	return m_bShowUniqueID;
+}
+
+void CElementPropertiesTreeInternal::OnToggleShowUniqueID()
+{
+	m_bShowUniqueID = !m_bShowUniqueID;
 	Refresh( REFRESH_TREE_VIEW, true );
 }
 
@@ -2545,7 +2827,7 @@ void CElementPropertiesTreeInternal::OnAddItem()
 					continue;
 
 				CUtlSymbol typeSymbol = array.GetElementType();
-				const char *pElementType = g_pDataModel->GetString( typeSymbol );
+				const char *pElementType = typeSymbol.String();
 				const char *pElementTypeName = StringAfterPrefix( pElementType, "Dme" );
 				if ( !pElementTypeName )
 				{
@@ -2695,9 +2977,12 @@ void CElementPropertiesTreeInternal::OnShowFileDialog( KeyValues *params )
 
 	pDialog->SetStartDirectoryContext( pTitle, pStartingDir );
 	pDialog->AddFilter( "*.*", "All Files (*.*)", false );
-	pDialog->AddFilter( "*.dmx", "Generic MovieObjects File (*.dmx)", true, "movieobjects" ); // read/write generic movieobjects files
 
-	pDialog->SetDeleteSelfOnClose( true );
+	const char *pFormatName = params->GetString( "format", "movieobjects" );
+	const char *pExtension = g_pDataModel->GetFormatExtension( pFormatName );
+	const char *pDescription = g_pDataModel->GetFormatDescription( pFormatName );
+	pDialog->AddFilter( CFmtStr("*.%s", pExtension ), CFmtStr("%s (*.%s)", pDescription, pExtension ), true, pFormatName );
+
 	pDialog->AddActionSignalTarget( this );
 	pDialog->DoModal( true );
 }
@@ -2715,7 +3000,7 @@ void CElementPropertiesTreeInternal::OnImportElement( const char *pFullPath, Key
 
 	CDmElement *pParent = GetElementKeyValue<CDmElement>( pContext, "owner" );
 
-	pRoot->SetFileId( pParent->GetFileId(), TD_DEEP, true );
+	pRoot->SetFileId( pParent->GetFileId(), TD_ALL, true );
 	g_pDataModel->RemoveFileId( tempFileid );
 
 	{
@@ -2747,6 +3032,53 @@ void CElementPropertiesTreeInternal::OnImportElement( const char *pFullPath, Key
 	Refresh( REFRESH_TREE_VIEW );
 }
 
+template < class C >
+void CElementPropertiesTreeInternal::CollectSelectedElements( C &container )
+{
+	CUtlVector< KeyValues * > selection;
+	m_pTree->GetTree()->GetSelectedItemData( selection );
+
+	int nSelected = selection.Count();
+	for ( int si = 0; si < nSelected; ++si )
+	{
+		KeyValues *item = selection[ si ];
+		if ( !item )
+			continue;
+
+		CDmAttribute *pAttr = ElementTree_GetAttribute( item );
+		if ( !pAttr )
+			continue;
+
+		DmAttributeType_t attrType = pAttr->GetType();
+		if ( attrType == AT_ELEMENT )
+		{
+			container.AddToTail( pAttr->GetValueElement< CDmElement >() );
+		}
+		else if ( attrType == AT_ELEMENT_ARRAY )
+		{
+			const CDmrElementArray<> arrayAttr( pAttr );
+			int n = arrayAttr.Count();
+			int index = item->GetInt( "arrayIndex", -1 );
+			if ( index >= 0 )
+			{
+				container.AddToTail( arrayAttr[ index ] );
+			}
+			else
+			{
+				for ( int i = 0; i < n; ++i )
+				{
+					container.AddToTail( arrayAttr[ i ] );
+				}
+			}
+		}
+	}
+}
+
+template
+void CElementPropertiesTreeInternal::CollectSelectedElements< CUtlVector< CDmElement* > >( CUtlVector< CDmElement* > &container );
+
+
+
 void CElementPropertiesTreeInternal::OnExportElement( const char *pFullPath, KeyValues *pContext )
 {
 	CDmElement *pRoot = NULL;
@@ -2768,43 +3100,7 @@ void CElementPropertiesTreeInternal::OnExportElement( const char *pFullPath, Key
 		pRoot = CreateElement< CDmElement >( pFullPath, fileid );
 		CDmrElementArray<> children( pRoot, "children", true );
 
-		for ( int si = 0; si < nSelected; ++si )
-		{
-			KeyValues *item = selection[ si ];
-			Assert( item );
-
-			//Check to see if this attribute refers to an element
-			CDmElement *pOwner = GetElementKeyValue< CDmElement >( item, "ownerelement" );
-			if ( pOwner == NULL )
-				continue;
-
-			CDmAttribute *pAttr = pOwner->GetAttribute( item->GetString( "attributeName" ) );
-			if ( pAttr == NULL )
-				continue;
-
-			DmAttributeType_t attrType = pAttr->GetType();
-			if ( attrType == AT_ELEMENT )
-			{
-				children.AddToTail( pAttr->GetValue< DmElementHandle_t >() );
-			}
-			else if ( attrType == AT_ELEMENT_ARRAY )
-			{
-				const CDmrElementArray<> arrayAttr( pAttr );
-				int n = arrayAttr.Count();
-				int index = item->GetInt( "arrayIndex", -1 );
-				if ( index >= 0 )
-				{
-					children.AddToTail( arrayAttr[ index ] );
-				}
-				else
-				{
-					for ( int i = 0; i < n; ++i )
-					{
-						children.AddToTail( arrayAttr[ i ] );
-					}
-				}
-			}
-		}
+		CollectSelectedElements( children );
 	}
 
 	// if this control is ever moved to vgui_controls, change the default format to "dmx", the generic dmx format
@@ -2849,7 +3145,14 @@ vgui::Panel *CElementPropertiesTreeInternal::CreateAttributeDataWidget( CDmEleme
 	IAttributeWidgetFactory *pFactory = attributewidgetfactorylist->GetWidgetFactory( pWidgetName );
 	if ( !pFactory )
 		return NULL;
-	return pFactory->Create( NULL, info );
+	vgui::Panel *returnPanel = pFactory->Create( NULL, info );
+
+	CBaseAttributePanel *attrPanel = dynamic_cast< CBaseAttributePanel * >( returnPanel );
+	if ( attrPanel )
+	{
+		attrPanel->SetFont( m_pTree->GetFont( m_pTree->GetFontSize() ) );
+	}
+	return returnPanel;
 }
 
 
@@ -2925,6 +3228,57 @@ void CElementPropertiesTreeInternal::GenerateDragDataForItem( int itemIndex, Key
 	msg->SetInt( "arrayIndex", data->GetInt( "arrayIndex" ) );
 	
 	msg->SetString( "text", data->GetString( "Text" ) );
+}
+
+void CElementPropertiesTreeInternal::PopulateMenuWithElementHierarchy_R( Menu *pMenu, const char *pElementType, CDmElementFactoryHelper *pChildFactory /*= NULL*/ )
+{
+	CDmElementFactoryHelper *pFactory = g_pDataModel->GetElementFactoryHelper( pElementType );
+	Assert( pFactory );
+	if ( !pFactory )
+		return;
+
+	int itemID = pMenu->AddMenuItem( pElementType, CFmtStr( "element_%s", pElementType ), this );
+	if ( pFactory->GetFactory()->IsAbstract() )
+	{
+		pMenu->SetItemEnabled( itemID, false );
+	}
+
+	if ( !pChildFactory )
+	{
+		pChildFactory = pFactory->GetChild();
+		if ( !pChildFactory )
+			return;
+	}
+
+	pMenu->AddSeparator();
+
+	for ( ; pChildFactory; pChildFactory = pChildFactory->GetSibling() )
+	{
+		PopulateMenuWithElementHierarchy_R( pMenu, pChildFactory );
+	}
+}
+
+void CElementPropertiesTreeInternal::PopulateMenuWithElementHierarchy_R( Menu *pMenu, CDmElementFactoryHelper *pFactory )
+{
+	Assert( pFactory );
+	if ( !pFactory )
+		return;
+
+	const char *pElementType = pFactory->GetClassname();
+
+	CDmElementFactoryHelper *pChildFactory = pFactory->GetChild();
+	if ( pChildFactory )
+	{
+		Menu *pChildMenu = new Menu( pMenu, pElementType );
+		pChildMenu->SetFont( m_pTree->GetTree()->GetFont() );
+		pMenu->AddCascadingMenuItem( pElementType, this, pChildMenu );
+
+		PopulateMenuWithElementHierarchy_R( pChildMenu, pElementType, pChildFactory );
+	}
+	else
+	{
+		pMenu->AddMenuItem( pElementType, CFmtStr( "element_%s", pElementType ), this );
+	}
 }
 
 struct DataModelFilenameArray
@@ -3045,6 +3399,8 @@ void CElementPropertiesTreeInternal::GenerateContextMenu( int itemIndex, int x, 
 		removeItemID = m_hContextMenu->AddMenuItem( "#DmeElementPropertiesRemove", new KeyValues( "OnRemove" ), this );
 	}
 
+	m_hContextMenu->AddMenuItem( "Estimate Memory", new KeyValues( "OnEstimateMemory" ), this );
+
 	// ----------------------------------------------------
 	// other ops
 
@@ -3091,7 +3447,6 @@ void CElementPropertiesTreeInternal::GenerateContextMenu( int itemIndex, int x, 
 					char add_attribute[ 256 ];
 					Q_snprintf( add_attribute, sizeof( add_attribute ), "attribute_%s", typeName );
 					id = addMenu->AddMenuItem( typeName, new KeyValues( "Command", "command", add_attribute ), this );
-					addMenu->GetMenuItem( id )->SetContentAlignment( Label::a_center );
 				}
 			}
 		}
@@ -3118,16 +3473,13 @@ void CElementPropertiesTreeInternal::GenerateContextMenu( int itemIndex, int x, 
 		}
 
 		// Populate from factories
-		for ( int i = g_pDataModel->GetFirstFactory(); g_pDataModel->IsValidFactory( i ); i = g_pDataModel->GetNextFactory( i ) )
+		CUtlSymbolLarge requiredElementType = pAttribute->GetElementTypeSymbol();
+		if ( requiredElementType == UTL_INVAL_SYMBOL_LARGE )
 		{
-			const char *elementType = g_pDataModel->GetFactoryName( i );
-			Assert( elementType && elementType[ 0 ] );
-
-			char add_element[ 256 ];
-			Q_snprintf( add_element, sizeof( add_element ), "element_%s", elementType );
-			id = addMenu->AddMenuItem( elementType, new KeyValues( "Command", "command", add_element ), this );
-			addMenu->GetMenuItem( id )->SetContentAlignment( Label::a_center );
+			requiredElementType = CDmElement::GetStaticTypeSymbol();
 		}
+
+		PopulateMenuWithElementHierarchy_R( addMenu, requiredElementType.String() );
 	}
 
 	// sharing
@@ -3197,6 +3549,7 @@ void CElementPropertiesTreeInternal::GenerateContextMenu( int itemIndex, int x, 
 
 		KeyValues *kv = new KeyValues( "OnShowFileDialog", "title", "Import Element" );
 		kv->SetInt( "openOnly", 1 );
+		kv->SetString( "format", "movieobjects" );
 		kv->AddSubKey( pContext );
 		m_hContextMenu->AddMenuItem( "Import element...", kv, this );
 	}
@@ -3205,10 +3558,11 @@ void CElementPropertiesTreeInternal::GenerateContextMenu( int itemIndex, int x, 
 	if ( ( bIsElementAttribute && !bIsElementAttributeNull ) || m_pTree->GetTree()->GetRootItemIndex() == itemIndex || bIsElementArrayItem )
 	{
 		KeyValues *pContext = new KeyValues( "context", "command", "OnExportElement" );
-		pContext->SetInt( "element", ( int )pElement->GetHandle() );
+		pContext->SetInt( "element", pElement ? ( int )pElement->GetHandle() : DMELEMENT_HANDLE_INVALID );
 
 		KeyValues *kv = new KeyValues( "OnShowFileDialog", "title", "Export Element" );
 		kv->SetInt( "openOnly", 0 );
+		kv->SetString( "format", "movieobjects" );
 		kv->AddSubKey( pContext );
 		m_hContextMenu->AddMenuItem( "Export element...", kv, this );
 	}
@@ -3309,7 +3663,7 @@ void CElementPropertiesTreeInternal::OnLabelChanged( int itemIndex, const char *
 		return;
 
 	CDmElement *pElement = GetElementKeyValue< CDmElement >( data, "dmeelement" );
-	bool bEditableLabel = data->GetInt( "editablelabel" );
+	bool bEditableLabel = data->GetBool( "editablelabel" );
 
 	CDmElement *pOwner = GetElementKeyValue< CDmElement >( data, "ownerelement" );
 	const char *pAttributeName = data->GetString( "attributeName" );
@@ -3339,7 +3693,7 @@ void CElementPropertiesTreeInternal::OnLabelChanged( int itemIndex, const char *
 	}
 }
 
-bool CElementPropertiesTreeInternal::IsItemDroppable( int itemIndex, CUtlVector< KeyValues * >& msglist )
+bool CElementPropertiesTreeInternal::IsItemDroppable( int itemIndex, bool bInsertBefore, CUtlVector< KeyValues * >& msglist )
 {
 	KeyValues *itemData = m_pTree->GetItemData( itemIndex );
 	if ( !itemData )
@@ -3499,7 +3853,7 @@ CElementPropertiesTreeInternal::DropOperation_t CElementPropertiesTreeInternal::
 	return op;
 }
 
-void CElementPropertiesTreeInternal::OnItemDropped( int itemIndex, CUtlVector< KeyValues * >& msglist )
+void CElementPropertiesTreeInternal::OnItemDropped( int itemIndex, bool bInsertBefore, CUtlVector< KeyValues * >& msglist )
 {
 	if ( !msglist.Count() )
 		return;
@@ -3556,7 +3910,7 @@ void CElementPropertiesTreeInternal::OnItemDropped( int itemIndex, CUtlVector< K
 			op == DO_COPY ? "copied" : ( op == DO_MOVE ? "moved" : "referenced" ),
 			bBefore ? " before" : bAfter ? " after" : "" );
 
-		CElementTreeUndoScopeGuard guard( NOTIFY_SETDIRTYFLAG, m_pNotify, str );
+		CUndoScopeGuard guard( str );
 
 		int nArrayIndex = itemData->GetInt( "arrayIndex" );
 		if ( bAfter )
@@ -3581,7 +3935,7 @@ void CElementPropertiesTreeInternal::OnItemDropped( int itemIndex, CUtlVector< K
 			char str[ 128 ];
 			V_snprintf( str, sizeof( str ), "Replace with %s element",
 				op == DO_COPY ? "copied" : ( op == DO_MOVE ? "moved" : "referenced" ) );
-			CElementTreeUndoScopeGuard guard( NOTIFY_SETDIRTYFLAG, m_pNotify, str );
+			CUndoScopeGuard guard( str );
 
 			pAttribute->SetValue( op == DO_COPY ? list[ 0 ]->Copy() : list[ 0 ] );
 
@@ -3619,7 +3973,7 @@ void CElementPropertiesTreeInternal::OnItemDropped( int itemIndex, CUtlVector< K
 				op == DO_COPY ? "copied" : ( op == DO_MOVE ? "moved" : "referenced" ),
 				bHead ? " at head" : bTail ? " at tail" : "" );
 
-			CElementTreeUndoScopeGuard guard( NOTIFY_SETDIRTYFLAG, m_pNotify, str );
+			CUndoScopeGuard guard( str );
 
 			CDmrElementArray<> array( pAttribute );
 			if ( bReplace )
@@ -3640,6 +3994,8 @@ void CElementPropertiesTreeInternal::OnItemDropped( int itemIndex, CUtlVector< K
 
 	// Does a forced refresh
 	Refresh( REFRESH_TREE_VIEW );
+	// notify is moved here, outside of the undo block, since otherwise we get an extra refresh, which invalidates our itemIndex
+	m_pNotify->NotifyDataChanged( "OnItemDropped", NOTIFY_SOURCE_PROPERTIES_TREE, NOTIFY_SETDIRTYFLAG );
 
 	itemIndex = OpenPath( dropTargetPath );
 	if ( attType == AT_ELEMENT_ARRAY )
@@ -4066,8 +4422,8 @@ void CElementPropertiesTreeInternal::RefreshTreeItemState( int nItemID )
 
 	KeyValues *kv = m_pTree->GetTree()->GetItemData( nItemID );
 	CDmElement *pEntryElement = GetElementKeyValue<CDmElement>( kv, "dmeelement" );
-	bool bIsElementArrayItem = kv->GetInt( "elementArrayItem", 0 );
-	bool bEditableLabel = kv->GetInt( "editablelabel", 0 );
+	bool bIsElementArrayItem = kv->GetBool( "elementArrayItem", false );
+	bool bEditableLabel = kv->GetBool( "editablelabel", false );
 	SetTreeItemColor( nItemID, pEntryElement, bIsElementArrayItem, bEditableLabel );
 
 	int nChildCount = m_pTree->GetTree()->GetNumChildren( nItemID );
@@ -4177,6 +4533,8 @@ void CElementPropertiesTreeInternal::SetupWidgetInfo( AttributeWidgetInfo_t *pIn
 	pInfo->m_pEditorTypeDictionary = m_hTypeDictionary;
 	pInfo->m_pEditorInfo = NULL;
 	pInfo->m_bShowMemoryUsage = m_bShowMemoryUsage;
+	pInfo->m_bShowUniqueID = m_bShowUniqueID;
+
 	if ( m_hTypeDictionary && pAttributeName )
 	{
 		if ( nArrayIndex < 0 )
@@ -4187,6 +4545,7 @@ void CElementPropertiesTreeInternal::SetupWidgetInfo( AttributeWidgetInfo_t *pIn
 		{
 			pInfo->m_pEditorInfo = m_hTypeDictionary->GetAttributeArrayInfo( obj, pAttributeName );
 		}
+
 	}
 }
 
@@ -4234,16 +4593,22 @@ void CElementPropertiesTreeInternal::InsertSingleAttribute( int parentNodeIndex,
 	m_AttributeWidgets.AddToTail( attributeWidget );
 }
 
-
-//-----------------------------------------------------------------------------
-// Used to insert attributes in alphabetical order
-//-----------------------------------------------------------------------------
-struct AttributeInfo_t
+void CElementPropertiesTreeInternal::SetSortAttributesByName( bool bSortAttributesByName )
 {
-	CDmAttribute *m_pAttribute;
-	const char *m_pName;
-};
+	m_bSortAttributesByName = bSortAttributesByName;
+	UpdateTree();
+}
 
+class CDmAttributeAlphabeticalLess
+{
+public:
+	bool Less( const CDmAttribute *pLeft, const CDmAttribute *pRight, void *pContext )
+	{
+		const char *pszLeft = pLeft->GetName();
+		const char *pszRight = pRight->GetName();
+		return Q_stricmp( pszLeft, pszRight ) < 0;
+	}
+};
 
 //-----------------------------------------------------------------------------
 // Adds editable attributes of the element to the tree
@@ -4252,20 +4617,42 @@ void CElementPropertiesTreeInternal::InsertAttributes( int parentNodeIndex, CDmE
 {
 	Assert( obj );
 
-	// Build a list of attributes for sorting
-	AttributeInfo_t *pInfo = (AttributeInfo_t*)_alloca( obj->AttributeCount() * sizeof(AttributeInfo_t) );
-	int nCount = 0;
-	for ( CDmAttribute *pAttribute = obj->FirstAttribute(); pAttribute; pAttribute = pAttribute->NextAttribute() )
+	if ( m_bSortAttributesByName )
 	{
-		pInfo[nCount].m_pAttribute = pAttribute;
-		pInfo[nCount].m_pName = pAttribute->GetName();
-		++nCount;
-	}
+		CUtlSortVector< CDmAttribute*, CDmAttributeAlphabeticalLess > sortedAttributes;
+		for ( CDmAttribute *pAttribute = obj->FirstAttribute(); pAttribute; pAttribute = pAttribute->NextAttribute() )
+		{
+			if ( pAttribute->GetFlags() & FATTRIB_HIDDEN )
+				continue;
 
-	// Iterate over each element and create a widget and tree entry for it
-	for ( int i = nCount - 1; i >= 0; --i )
+			sortedAttributes.Insert( pAttribute );
+		}
+
+		int nCount = sortedAttributes.Count();
+		for ( int i = 0; i < nCount; i++ )
+		{
+			InsertSingleAttribute( parentNodeIndex, obj, sortedAttributes[i] );
+		}
+	}
+	else
 	{
-		InsertSingleAttribute( parentNodeIndex, obj, pInfo[i].m_pAttribute );
+		// Build a list of attributes for sorting
+		CDmAttribute **pInfo = ( CDmAttribute** )_alloca( obj->AttributeCount() * sizeof( CDmAttribute* ) );
+		int nCount = 0;
+		for ( CDmAttribute *pAttribute = obj->FirstAttribute(); pAttribute; pAttribute = pAttribute->NextAttribute() )
+		{
+			if ( pAttribute->GetFlags() & FATTRIB_HIDDEN )
+				continue;
+
+			pInfo[nCount] = pAttribute;
+			++nCount;
+		}	
+
+		// Iterate over each element and create a widget and tree entry for it
+		for ( int i = nCount - 1; i >= 0; --i )
+		{
+			InsertSingleAttribute( parentNodeIndex, obj, pInfo[i] );
+		}
 	}
 }
 

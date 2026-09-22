@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright c 1996-2007, Valve Corporation, All rights reserved. =======//
 //
 // Purpose: 
 //
@@ -29,7 +29,7 @@ CachedFileData * CachedFileData::Create( char const *szFilename )
 		fseek( f, 0, SEEK_SET );
 	}
 
-	CachedFileData *pData = ( CachedFileData * ) malloc( eHeaderSize + max( nSize, 0 ) );
+	CachedFileData *pData = ( CachedFileData * ) malloc( eHeaderSize + MAX( nSize + 1, 0 ) );
 	strcpy( pData->m_chFilename, szFilename );
 	pData->m_numRefs = 0;
 	pData->m_numDataBytes = nSize;
@@ -38,6 +38,7 @@ CachedFileData * CachedFileData::Create( char const *szFilename )
 	if ( f )
 	{
 		fread( pData->m_data, 1, nSize, f );
+		pData->m_data[nSize] = '\0';
 		fclose( f );
 	}
 
@@ -72,7 +73,7 @@ void const * CachedFileData::GetDataPtr() const
 
 int CachedFileData::GetDataLen() const
 {
-	return max( m_numDataBytes, 0 );
+	return MAX( m_numDataBytes, 0 );
 }
 
 bool CachedFileData::IsValid() const

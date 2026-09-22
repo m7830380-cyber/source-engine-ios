@@ -22,11 +22,14 @@ $Project "matsys_controls"
 		$File	"mdlpanel.cpp"
 		$File	"mdlpicker.cpp"
 		$File	"mdlsequencepicker.cpp"
+		$File	"particlepicker.cpp"
 		$File	"picker.cpp"
 		$File	"potterywheelpanel.cpp"
 		$File	"proceduraltexturepanel.cpp"
 		$File	"QCGenerator.cpp"
 		$File	"sequencepicker.cpp"
+		$File	"sheetsequencepanel.cpp"
+		$File	"tgapicker.cpp"
 		$File	"tgapreviewpanel.cpp"
 		$File	"vmtpicker.cpp"
 		$File	"vmtpreviewpanel.cpp"
@@ -46,11 +49,14 @@ $Project "matsys_controls"
 		$File	"$SRCDIR\public\matsys_controls\mdlpanel.h"
 		$File	"$SRCDIR\public\matsys_controls\mdlpicker.h"
 		$File	"$SRCDIR\public\matsys_controls\mdlsequencepicker.h"
+		$File	"$SRCDIR\public\matsys_controls\particlepicker.h"
 		$File	"$SRCDIR\public\matsys_controls\picker.h"
 		$File	"$SRCDIR\public\matsys_controls\potterywheelpanel.h"
 		$File	"$SRCDIR\public\matsys_controls\proceduraltexturepanel.h"
 		$File	"$SRCDIR\public\matsys_controls\QCGenerator.h"
 		$File	"$SRCDIR\public\matsys_controls\sequencepicker.h"
+		$File	"$SRCDIR\public\matsys_controls\sheetsequencepanel.h"
+		$File	"$SRCDIR\public\matsys_controls\tgapicker.h"
 		$File	"$SRCDIR\public\matsys_controls\tgapreviewpanel.h"
 		$File	"$SRCDIR\public\matsys_controls\vmtpicker.h"
 		$File	"$SRCDIR\public\matsys_controls\vmtpreviewpanel.h"
@@ -59,8 +65,8 @@ $Project "matsys_controls"
 		$File	"$SRCDIR\public\matsys_controls\vmtpanel.h"
 	}
 
-	$Folder	"Link Libraries"
+	$Folder	"Link Libraries" [$WINDOWS]
 	{
-		$Lib bitmap [$WIN32]
+		$Lib	bitmap
 	}
 }

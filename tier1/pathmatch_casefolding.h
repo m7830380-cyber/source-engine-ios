@@ -1,4 +1,3 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
 // This file was originally part of PhysicsFS (http://icculus.org/physfs/)
 //  (zlib license, even if Ryan hadn't written it originally.)
 //

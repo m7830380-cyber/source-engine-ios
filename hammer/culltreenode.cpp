@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -38,10 +38,7 @@ CCullTreeNode::~CCullTreeNode(void)
 //-----------------------------------------------------------------------------
 void CCullTreeNode::AddCullTreeChild(CCullTreeNode *pChild)
 {
-	if ( pChild == NULL )
-		Assert( pChild );
-	else
-		m_Children.AddToTail(pChild);
+	m_Children.AddToTail(pChild);
 }
 
 
@@ -128,8 +125,7 @@ void CCullTreeNode::RemoveAllCullTreeObjectsRecurse(void)
 void CCullTreeNode::RemoveCullTreeObject(CMapClass *pObject)
 {
 	// Remove occurrence of pObject from the array
-	
-	m_Objects.FindAndRemove( pObject );
+	m_Objects.FindAndFastRemove( pObject );
 
 	// make sure it's not in there twice
 	Assert( m_Objects.Find( pObject) == -1 );

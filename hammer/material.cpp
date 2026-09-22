@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Implementation of IEditorTexture interface for materials.
 //
@@ -21,14 +21,14 @@
 #include "GlobalFunctions.h"
 #include "WADTypes.h"
 #include "BSPFile.h"
-#include "materialsystem/imaterialsystem.h"
+#include "materialsystem/IMaterialSystem.h"
 #include "materialsystem/IMaterialSystemHardwareConfig.h"
 #include "materialsystem/MaterialSystem_Config.h"
 #include "materialsystem/MaterialSystemUtil.h"
-#include "materialsystem/itexture.h"
-#include "materialsystem/imaterial.h"
+#include "materialsystem/ITexture.h"
+#include "materialsystem/IMaterial.h"
 #include "bitmap/imageformat.h" // hack : don't want to include this just for ImageFormat
-#include "filesystem.h"
+#include "FileSystem.h"
 #include "StudioModel.h"
 #include "tier1/strtools.h"
 #include "tier0/dbg.h"
@@ -395,8 +395,9 @@ CMaterial::CMaterial(void)
 	memset(m_szFileName, 0, sizeof(m_szFileName));
 	memset(m_szKeywords, 0, sizeof(m_szKeywords));
 
-	m_nWidth = 0;
-	m_nHeight = 0;
+	m_nPreviewImageWidth = 0;
+	m_nPreviewImageHeight = 0;
+
     m_nTextureID = 0;
 	m_pData = NULL;
 	m_bLoaded = false;
@@ -732,8 +733,9 @@ void CMaterial::Reload( bool bFullReload )
 	if (retVal == MATERIAL_PREVIEW_IMAGE_BAD)
 		return;
 
-	m_nWidth = width;
-	m_nHeight = height;
+	m_nPreviewImageWidth = width;
+	m_nPreviewImageHeight = height;
+
 	m_TranslucentBaseTexture = translucentBaseTexture; 
 
 	// Find the keywords for this material from the vmt file.
@@ -741,16 +743,10 @@ void CMaterial::Reload( bool bFullReload )
 	IMaterialVar *pVar = m_pMaterial->FindVar("%keywords", &bFound, false);
 	if (bFound)
 	{
-		V_strcpy_safe( m_szKeywords, pVar->GetStringValue() );
+		strcpy(m_szKeywords, pVar->GetStringValue());
 
 		// Register the keywords
 		g_Textures.RegisterTextureKeywords( this );
-	}
-
-	// Make sure to bump the refcount again. Not sure why this wasn't always done (check for leaks).
-	if (m_pMaterial)
-	{
-		m_pMaterial->IncrementReferenceCount();
 	}
 }
 
@@ -924,7 +920,7 @@ void CMaterial::Draw(CDC *pDC, RECT& rect, int iFontHeight, int iIconHeight, Dra
 		return;
 	}
 	
-	if (m_nWidth <= 0)
+	if (m_nPreviewImageWidth <= 0)
 	{
 NoData:
 		// draw "no data"
@@ -958,8 +954,8 @@ NoData:
 	RECT srcRect, dstRect;
 	srcRect.left = 0;
 	srcRect.top = 0;
-	srcRect.right = m_nWidth;
-	srcRect.bottom = m_nHeight;
+	srcRect.right = m_nPreviewImageWidth;
+	srcRect.bottom = m_nPreviewImageHeight;
 	dstRect = rect;
 
 	if (DrawTexData.nFlags & drawCaption)
@@ -973,14 +969,14 @@ NoData:
 
 	if (!(DrawTexData.nFlags & drawResizeAlways))
 	{
-		if (m_nWidth < dstRect.right - dstRect.left )
+		if (m_nPreviewImageWidth < dstRect.right - dstRect.left )
 		{
-			dstRect.right = dstRect.left + m_nWidth;
+			dstRect.right = dstRect.left + m_nPreviewImageWidth;
 		}
 
-		if (m_nHeight < dstRect.bottom - dstRect.top )
+		if (m_nPreviewImageHeight < dstRect.bottom - dstRect.top )
 		{
-			dstRect.bottom = dstRect.top + m_nHeight;
+			dstRect.bottom = dstRect.top + m_nPreviewImageHeight;
 		}
 	}
 	DrawBitmap( pDC, srcRect, dstRect );
@@ -1076,7 +1072,6 @@ int CMaterial::GetShortName(char *pszName) const
 //-----------------------------------------------------------------------------
 bool CMaterial::LoadMaterialHeader( IMaterial *pMat )
 {
-
 	PreviewImageRetVal_t retVal;
 	bool translucentBaseTexture;
 	ImageFormat eImageFormat;
@@ -1088,8 +1083,9 @@ bool CMaterial::LoadMaterialHeader( IMaterial *pMat )
 	m_pMaterial = pMat;
 	m_pMaterial->IncrementReferenceCount();
 
-	m_nWidth = width;
-	m_nHeight = height;
+	m_nPreviewImageWidth = width;
+	m_nPreviewImageHeight = height;
+
 	m_TranslucentBaseTexture = translucentBaseTexture; 
 
 	// Find the keywords for this material from the vmt file.
@@ -1097,7 +1093,7 @@ bool CMaterial::LoadMaterialHeader( IMaterial *pMat )
 	IMaterialVar *pVar = pMat->FindVar("%keywords", &bFound, false);
 	if (bFound)
 	{
-		V_strcpy_safe( m_szKeywords, pVar->GetStringValue() );
+		strcpy(m_szKeywords, pVar->GetStringValue());
 
 		// Register the keywords
 		g_Textures.RegisterTextureKeywords( this );
@@ -1140,7 +1136,7 @@ bool CMaterial::IsWater( void ) const
 //-----------------------------------------------------------------------------
 int CMaterial::GetImageDataRGB( void *pImageRGB )
 {
-	Assert( m_nWidth > 0 );
+	Assert( m_nPreviewImageWidth > 0 );
 
 	if ( pImageRGB != NULL )
 	{
@@ -1155,17 +1151,17 @@ int CMaterial::GetImageDataRGB( void *pImageRGB )
 		unsigned char *src, *dst;
 		src = ( unsigned char * )m_pData;
 		dst = (unsigned char *)pImageRGB;
-		for( ; src < ( unsigned char * )m_pData + m_nWidth * m_nHeight * 3; src += 3, dst += 3 )
+		for( ; src < ( unsigned char * )m_pData + m_nPreviewImageWidth * m_nPreviewImageHeight * 3; src += 3, dst += 3 )
 		{
 			dst[0] = src[2];
 			dst[1] = src[1];
 			dst[2] = src[0];
 		}
 
-		return(	m_nWidth * m_nHeight * 3 );
+		return(	m_nPreviewImageWidth * m_nPreviewImageHeight * 3 );
 	}
 
-	return(	m_nWidth * m_nHeight * 3 );
+	return(	m_nPreviewImageWidth * m_nPreviewImageHeight * 3 );
 }
 
 
@@ -1178,7 +1174,7 @@ int CMaterial::GetImageDataRGB( void *pImageRGB )
 //-----------------------------------------------------------------------------
 int CMaterial::GetImageDataRGBA(void *pImageRGBA)
 {
-	Assert( m_nWidth > 0 );
+	Assert( m_nPreviewImageWidth > 0 );
 
 	if (pImageRGBA != NULL)
 	{
@@ -1194,7 +1190,7 @@ int CMaterial::GetImageDataRGBA(void *pImageRGBA)
 		src = (unsigned char *)m_pData;
 		dst = (unsigned char *)pImageRGBA;
 
-		while (src < (unsigned char *)m_pData + m_nWidth * m_nHeight * 4);	
+		while (src < (unsigned char *)m_pData + m_nPreviewImageWidth * m_nPreviewImageHeight * 4);	
 		{
 			dst[0] = src[2];
 			dst[1] = src[1];
@@ -1206,7 +1202,7 @@ int CMaterial::GetImageDataRGBA(void *pImageRGBA)
 		}
 	}
 
-	return(m_nWidth * m_nHeight * 4);
+	return(m_nPreviewImageWidth * m_nPreviewImageHeight * 4);
 }
 
 
@@ -1217,10 +1213,10 @@ int CMaterial::GetImageDataRGBA(void *pImageRGBA)
 void CMaterial::GetSize(SIZE &size) const
 {
 	const_cast<CMaterial*>(this)->Load();
-	Assert( m_nWidth >= 0 );
+	Assert( m_nPreviewImageWidth >= 0 );
 
-	size.cx = m_nWidth;
-	size.cy = m_nHeight;
+	size.cx = m_nPreviewImageWidth;
+	size.cy = m_nPreviewImageHeight;
 }
 
 
@@ -1238,28 +1234,42 @@ bool CMaterial::Load( void )
 //-----------------------------------------------------------------------------
 // cache in the image size only when we need to
 //-----------------------------------------------------------------------------
-int CMaterial::GetImageWidth(void) const
+int CMaterial::GetMappingWidth(void) const
 {
 	const_cast<CMaterial*>(this)->Load();
-	return(m_nWidth);
+	return m_pMaterial ? m_pMaterial->GetMappingWidth() : 0;
 }
 
-int CMaterial::GetImageHeight(void) const
+int CMaterial::GetMappingHeight(void) const
 {
 	const_cast<CMaterial*>(this)->Load();
-	return(m_nHeight);
+	return m_pMaterial ? m_pMaterial->GetMappingHeight() : 0;
 }
 
+//-----------------------------------------------------------------------------
+// cache in the image size only when we need to
+//-----------------------------------------------------------------------------
+int CMaterial::GetPreviewImageWidth(void) const
+{
+	const_cast<CMaterial*>(this)->Load();
+	return(m_nPreviewImageWidth);
+}
+
+int CMaterial::GetPreviewImageHeight(void) const
+{
+	const_cast<CMaterial*>(this)->Load();
+	return(m_nPreviewImageHeight);
+}
+
+// change this to GetPreviewImageWidth
 int CMaterial::GetWidth(void) const
 {
-	const_cast<CMaterial*>(this)->Load();
-	return(m_nWidth);
+	return GetPreviewImageWidth();
 }
 
 int CMaterial::GetHeight(void) const
 {
-	const_cast<CMaterial*>(this)->Load();
-	return(m_nHeight);
+	return GetPreviewImageHeight();
 }
 
 float CMaterial::GetDecalScale(void) const
@@ -1288,10 +1298,10 @@ bool CMaterial::LoadMaterialImage( void )
 {
 	Load();
 
-	if ((!m_nWidth) || (!m_nHeight))
+	if ((!m_nPreviewImageWidth) || (!m_nPreviewImageHeight))
 		return(false);
 
-	m_pData = malloc(m_nWidth * m_nHeight * 3);
+	m_pData = malloc(m_nPreviewImageWidth * m_nPreviewImageHeight * 3);
 	Assert(m_pData);
 
 	ImageFormat imageFormat;
@@ -1306,7 +1316,7 @@ bool CMaterial::LoadMaterialImage( void )
 	}
 	
 	PreviewImageRetVal_t retVal;
-	retVal = m_pMaterial->GetPreviewImage( (unsigned char *)m_pData, m_nWidth, m_nHeight, imageFormat );
+	retVal = m_pMaterial->GetPreviewImage( (unsigned char *)m_pData, m_nPreviewImageWidth, m_nPreviewImageHeight, imageFormat );
 	return (retVal != MATERIAL_PREVIEW_IMAGE_BAD); 
 }
 
@@ -1321,17 +1331,11 @@ static void InitMaterialSystemConfig(MaterialSystem_Config_t *pConfig)
 }
 
 
-static char const *s_rt_names[]={"_rt_albedo","_rt_normal","_rt_position","_rt_flags",
-							   "_rt_accbuf_0","_rt_accbuf_1"};
+static char const *s_rt_names[]={"_rt_albedo","_rt_normal","_rt_position",
+							   "_rt_accbuf" };
 ImageFormat s_rt_formats[]={ IMAGE_FORMAT_RGBA32323232F, IMAGE_FORMAT_RGBA32323232F, 
-							 IMAGE_FORMAT_RGBA32323232F, IMAGE_FORMAT_RGBA32323232F,
-							 IMAGE_FORMAT_RGBA16161616F, IMAGE_FORMAT_RGBA16161616F };
-
-// ImageFormat s_rt_formats[]={ 
-// 	IMAGE_FORMAT_RGBA16161616F, IMAGE_FORMAT_RGBA16161616F,
-// 	IMAGE_FORMAT_RGBA16161616F, IMAGE_FORMAT_RGBA16161616F,
-// 	IMAGE_FORMAT_RGBA16161616F, IMAGE_FORMAT_RGBA16161616F,
-// 	IMAGE_FORMAT_RGBA16161616F, IMAGE_FORMAT_RGBA16161616F };
+							 IMAGE_FORMAT_RGBA32323232F, 
+							 IMAGE_FORMAT_RGBA16161616F };
 
 static CTextureReference sg_ExtraFP16Targets[NELEMS(s_rt_names)];
 
@@ -1367,7 +1371,10 @@ bool CMaterial::Initialize( HWND hwnd )
 {
 	// NOTE: This gets set to true later upon creating a 3d view.
 	g_materialSystemConfig = materials->GetCurrentConfigForVideoCard();
-	InitMaterialSystemConfig( &g_materialSystemConfig );
+	if ( !APP()->IsFoundryMode() )
+	{
+		InitMaterialSystemConfig( &g_materialSystemConfig );
+	}
 
 	// Create a cache for material images (for browsing and uploading to the driver).
 	if (g_pMaterialImageCache == NULL)
@@ -1377,20 +1384,23 @@ bool CMaterial::Initialize( HWND hwnd )
 			return false ;
 	}
 
-	materials->OverrideConfig( g_materialSystemConfig, false );
+	if ( !APP()->IsFoundryMode() )
+	{
+		materials->OverrideConfig( g_materialSystemConfig, false );
 
-	// Set the mode
-	// When setting the mode, we need to grab the parent window
-	// since that's going to enclose all our little render windows
-	g_materialSystemConfig.m_VideoMode.m_Width = g_materialSystemConfig.m_VideoMode.m_Height = 0;
-	g_materialSystemConfig.m_VideoMode.m_Format = IMAGE_FORMAT_BGRA8888;
-	g_materialSystemConfig.m_VideoMode.m_RefreshRate = 0;
-	g_materialSystemConfig.SetFlag( MATSYS_VIDCFG_FLAGS_WINDOWED, true );
-	g_materialSystemConfig.SetFlag( MATSYS_VIDCFG_FLAGS_RESIZING, true );
+		// Set the mode
+		// When setting the mode, we need to grab the parent window
+		// since that's going to enclose all our little render windows
+		g_materialSystemConfig.m_VideoMode.m_Width = g_materialSystemConfig.m_VideoMode.m_Height = 0;
+		g_materialSystemConfig.m_VideoMode.m_Format = IMAGE_FORMAT_BGRA8888;
+		g_materialSystemConfig.m_VideoMode.m_RefreshRate = 0;
+		g_materialSystemConfig.SetFlag( MATSYS_VIDCFG_FLAGS_WINDOWED, true );
+		g_materialSystemConfig.SetFlag( MATSYS_VIDCFG_FLAGS_RESIZING, true );
 
 
-	if (!MaterialSystemInterface()->SetMode( hwnd, g_materialSystemConfig ) )
-		return false;
+		if (!MaterialSystemInterface()->SetMode( hwnd, g_materialSystemConfig ) )
+			return false;
+	}
 
 	return true;
 }

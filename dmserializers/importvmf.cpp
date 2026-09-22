@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2004, Valve Corporation, All rights reserved. =======
 //
 // Purpose: 
 //
@@ -8,8 +8,9 @@
 #include "dmserializers.h"
 #include "datamodel/idatamodel.h"
 #include "datamodel/dmelement.h"
+#include "datamodel/dmattributevar.h"
 #include "tier1/KeyValues.h"
-#include "tier1/utlbuffer.h"
+#include "tier1/UtlBuffer.h"
 #include "datamodel/dmattribute.h"
 
 
@@ -22,6 +23,8 @@ public:
 	virtual const char *GetName() const { return "vmf"; }
 	virtual const char *GetDescription() const { return "Valve Map File"; }
 	virtual int GetCurrentVersion() const { return 0; } // doesn't store a version
+ 	virtual const char *GetImportedFormat() const { return "vmf"; }
+ 	virtual int GetImportedVersion() const { return 1; }
 
 	bool Serialize( CUtlBuffer &outBuf, CDmElement *pRoot );
 	CDmElement* UnserializeFromKeyValues( KeyValues *pKeyValues );
@@ -68,27 +71,14 @@ void InstallVMFImporter( IDataModel *pFactory )
 
 
 //-----------------------------------------------------------------------------
-// Deals with poorly-named key values for the DME system
-//-----------------------------------------------------------------------------
-static const char *s_pKeyRemapNames[][2] = 
-{
-	{ "id", "__id" },
-	{ "name", "__name" },
-	{ "type", "__type" },
-	{ NULL, NULL },
-};
-
-
-//-----------------------------------------------------------------------------
-// Gets remap name for unserialization/serailzation
+// Gets remap name for unserialization/serialization
 //-----------------------------------------------------------------------------
 static const char *GetRemapName( const char *pName, bool bSerialization )
 {
-	for ( int i = 0; s_pKeyRemapNames[i][0]; ++i )
-	{
-		if ( !Q_stricmp( pName, s_pKeyRemapNames[i][bSerialization] ) )
-			return s_pKeyRemapNames[i][1 - bSerialization];
-	}
+	const char *pKeyValuesFieldName = "name";
+	const char *pDmeAttributeName = "__name";
+	if ( !Q_stricmp( pName, bSerialization ? pDmeAttributeName : pKeyValuesFieldName ) )
+		return bSerialization ? pKeyValuesFieldName : pDmeAttributeName;
 	return pName;
 }
 
@@ -98,7 +88,7 @@ static const char *GetRemapName( const char *pName, bool bSerialization )
 //-----------------------------------------------------------------------------
 bool CImportVMF::SerializeAttribute( CUtlBuffer &buf, CDmAttribute *pAttribute, bool bElementArrays )
 {
-	if ( pAttribute->IsFlagSet( FATTRIB_STANDARD | FATTRIB_DONTSAVE ) )
+	if ( pAttribute->IsStandard() || pAttribute->IsFlagSet( FATTRIB_DONTSAVE ) )
 		return true;
 
 	const char *pFieldName = GetRemapName( pAttribute->GetName(), true );
@@ -143,6 +133,8 @@ bool CImportVMF::SerializeAttribute( CUtlBuffer &buf, CDmAttribute *pAttribute, 
 //-----------------------------------------------------------------------------
 bool CImportVMF::SerializeOther( CUtlBuffer &buf, CDmAttribute *pOther, const char **ppFilter )
 {
+	CUtlVectorFixedGrowable< char, 256 > temp;
+
 	CDmrElementArray<> array( pOther );
 	int nCount = array.Count();
 	for ( int i = 0; i < nCount; ++i )
@@ -163,10 +155,10 @@ bool CImportVMF::SerializeOther( CUtlBuffer &buf, CDmAttribute *pOther, const ch
 		}
 
 		int nLen = Q_strlen( pElementName ) + 1;
-		char *pTemp = (char*)_alloca( nLen );
-		Q_strncpy( pTemp, pElementName, nLen );
-		Q_strlower( pTemp );
-		buf.Printf( "%s\n", pTemp );
+		temp.EnsureCount( nLen );
+		Q_strncpy( temp.Base(), pElementName, nLen );
+		Q_strlower( temp.Base() );
+		buf.Printf( "%s\n", temp.Base() );
 		buf.Printf( "{\n" );
 		buf.PushTab();
 
@@ -205,22 +197,21 @@ bool CImportVMF::SerializeEntityEditorKey( CUtlBuffer &buf, DmElementHandle_t hE
 	buf.Printf( "{\n" );
 	buf.PushTab();
 
+	CDmAttribute *pAttribute = pEditorElement->GetAttribute( "color" );
+	if ( pAttribute )
 	{
-		CDmAttribute *pAttribute = pEditorElement->GetAttribute( "color" );
-		if ( pAttribute )
-		{
-			Color c = pAttribute->GetValue<Color>();
-			buf.Printf( "\"color\" \"%d %d %d\"\n", c.r(), c.g(), c.b() );
-		}
+		Color c = pAttribute->GetValue<Color>( );
+		buf.Printf( "\"color\" \"%d %d %d\"\n", c.r(), c.g(), c.b() );
 	}
-	PrintIntAttribute( pEditorElement, buf, "id" ); // FIXME - id is a DmObjectId_t!!! This should never print anything!
+
+	PrintIntAttribute( pEditorElement, buf, "id" );
 	PrintStringAttribute( pEditorElement, buf, "comments" );
 	PrintBoolAttribute( pEditorElement, buf, "visgroupshown" );
 	PrintBoolAttribute( pEditorElement, buf, "visgroupautoshown" );
 
 	for ( CDmAttribute *pAttribute = pEditorElement->FirstAttribute(); pAttribute != NULL; pAttribute = pAttribute->NextAttribute() )
 	{
-		if ( pAttribute->IsFlagSet( FATTRIB_STANDARD | FATTRIB_DONTSAVE ) )
+		if ( pAttribute->IsStandard() || pAttribute->IsFlagSet( FATTRIB_DONTSAVE ) )
 			continue;
 
 		const char *pKeyName = pAttribute->GetName();

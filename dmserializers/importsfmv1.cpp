@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2006, Valve Corporation, All rights reserved. =======
 //
 // Purpose: 
 //
@@ -9,6 +9,7 @@
 #include "datamodel/idatamodel.h"
 #include "datamodel/dmattribute.h"
 #include "datamodel/dmelement.h"
+#include "datamodel/dmattributevar.h"
 
 #include <math.h>
 

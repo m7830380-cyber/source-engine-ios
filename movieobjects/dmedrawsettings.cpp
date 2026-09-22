@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//======= Copyright © 1996-2006, Valve Corporation, All rights reserved. ======
 //
 // Purpose:
 //
@@ -34,7 +34,7 @@ CMaterialReference CDmeDrawSettings::s_FlatGrayMaterial;
 bool CDmeDrawSettings::s_bUnlitGrayMaterial( false );
 CMaterialReference CDmeDrawSettings::s_UnlitGrayMaterial;
 
-CUtlRBTree< CUtlSymbol > CDmeDrawSettings::s_KnownDrawableTypes;
+CUtlRBTree< CUtlSymbolLarge > CDmeDrawSettings::s_KnownDrawableTypes;
 
 
 //-----------------------------------------------------------------------------
@@ -47,7 +47,7 @@ void CDmeDrawSettings::OnConstruction()
 		BuildKnownDrawableTypes();
 	}
 
-	SetDefLessFunc< CUtlRBTree< CUtlSymbol > >( m_NotDrawable );
+	SetDefLessFunc< CUtlRBTree< CUtlSymbolLarge > >( m_NotDrawable );
 	m_NotDrawable.RemoveAll();
 
 	m_DrawType.InitAndSet( this, "drawType", static_cast< int >( DRAW_SMOOTH ) );
@@ -184,7 +184,7 @@ bool CDmeDrawSettings::Drawable( CDmElement *pElement )
 //-----------------------------------------------------------------------------
 void CDmeDrawSettings::BuildKnownDrawableTypes()
 {
-	SetDefLessFunc< CUtlRBTree< CUtlSymbol > >( s_KnownDrawableTypes );
+	SetDefLessFunc< CUtlRBTree< CUtlSymbolLarge > >( s_KnownDrawableTypes );
 
 	s_KnownDrawableTypes.RemoveAll();
 

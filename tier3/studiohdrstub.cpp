@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright � 1996-2004, Valve Corporation, All rights reserved. =======
 //
 // Purpose: 
 //
@@ -6,9 +6,7 @@
 //#include "studio.h"
 #include "studio.h"
 #include "datacache/imdlcache.h"
-#include "datamodel/dmelementfactoryhelper.h"
 #include "istudiorender.h"
-#include "bone_setup.h"
 #include "tier3/tier3.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
@@ -18,6 +16,7 @@
 //-----------------------------------------------------------------------------
 // FIXME: This trashy glue code is really not acceptable. Figure out a way of making it unnecessary.
 //-----------------------------------------------------------------------------
+
 const studiohdr_t *studiohdr_t::FindModel( void **cache, char const *pModelName ) const
 {
 	MDLHandle_t handle = g_pMDLCache->FindMDL( pModelName );
@@ -30,9 +29,15 @@ virtualmodel_t *studiohdr_t::GetVirtualModel( void ) const
 	return g_pMDLCache->GetVirtualModel( VoidPtrToMDLHandle( VirtualModel() ) );
 }
 
-byte *studiohdr_t::GetAnimBlock( int i ) const
+byte *studiohdr_t::GetAnimBlock( int i, bool preloadIfMissing ) const
 {
-	return g_pMDLCache->GetAnimBlock( VoidPtrToMDLHandle( VirtualModel() ), i );
+	return g_pMDLCache->GetAnimBlock( VoidPtrToMDLHandle( VirtualModel() ), i, preloadIfMissing );
+}
+
+// Shame that this code is duplicated... :(
+bool studiohdr_t::hasAnimBlockBeenPreloaded( int i ) const
+{
+	return g_pMDLCache->HasAnimBlockBeenPreloaded( VoidPtrToMDLHandle( VirtualModel() ), i );
 }
 
 int studiohdr_t::GetAutoplayList( unsigned short **pOut ) const

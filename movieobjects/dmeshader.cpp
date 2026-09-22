@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2004, Valve Corporation, All rights reserved. =======
 //
 // Purpose: 
 //
@@ -8,7 +8,7 @@
 #include "movieobjects_interfaces.h"
 
 #include "materialsystem/IShader.h"
-#include "materialsystem/imaterialsystem.h"
+#include "materialsystem/IMaterialSystem.h"
 
 
 //-----------------------------------------------------------------------------

@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -11,6 +11,7 @@
 #include <mmsystem.h>
 #include <stdio.h>
 #include <math.h>
+#include "color.h"
 #include "snd_audio_source.h"
 #include "AudioWaveOutput.h"
 #include "ifaceposersound.h"
@@ -20,7 +21,7 @@
 #include "expclass.h"
 #include "PhonemeConverter.h"
 #include "utlvector.h"
-#include "filesystem.h"
+#include "FileSystem.h"
 #include "sentence.h"
 #include "faceposer_models.h"
 #include "iclosecaptionmanager.h"
@@ -28,9 +29,6 @@
 #include "wavebrowser.h"
 #include "choreoscene.h"
 #include "choreoview.h"
-#include "KeyValues.h"
-
-extern ISoundEmitterSystemBase *soundemitter;
 
 typedef struct channel_s
 {
@@ -543,7 +541,7 @@ void CAudioWaveOutput::RemoveMixerChannelReferences( CAudioMixer *mixer )
 void CAudioWaveOutput::AddToReferencedList( CAudioMixer *mixer, CAudioBuffer *buffer )
 {
 	// Already in list
-	for ( int i = 0; i < buffer->m_Referenced.Size(); i++ )
+	for ( int i = 0; i < buffer->m_Referenced.Count(); i++ )
 	{
 		if ( buffer->m_Referenced[ i ].mixer == mixer )
 		{
@@ -562,7 +560,7 @@ void CAudioWaveOutput::AddToReferencedList( CAudioMixer *mixer, CAudioBuffer *bu
 
 void CAudioWaveOutput::RemoveFromReferencedList( CAudioMixer *mixer, CAudioBuffer *buffer )
 {
-	for ( int i = 0; i < buffer->m_Referenced.Size(); i++ )
+	for ( int i = 0; i < buffer->m_Referenced.Count(); i++ )
 	{
 		if ( buffer->m_Referenced[ i ].mixer == mixer )
 		{
@@ -574,7 +572,7 @@ void CAudioWaveOutput::RemoveFromReferencedList( CAudioMixer *mixer, CAudioBuffe
 
 bool CAudioWaveOutput::IsSoundInReferencedList( CAudioMixer *mixer, CAudioBuffer *buffer )
 {
-	for ( int i = 0; i < buffer->m_Referenced.Size(); i++ )
+	for ( int i = 0; i < buffer->m_Referenced.Count(); i++ )
 	{
 		if ( buffer->m_Referenced[ i ].mixer == mixer )
 		{
@@ -1046,7 +1044,7 @@ public:
 	void		StopAll( void );
 	void		StopSound( CAudioMixer *mixer );
 
-	void		RenderWavToDC( HDC dc, RECT& outrect, COLORREF clr, float starttime, float endtime, 
+	void		RenderWavToDC( HDC dc, RECT& outrect, const Color& clr, float starttime, float endtime, 
 		CAudioSource *pWave, bool selected = false, int selectionstart = 0, int selectionend = 0 );
 
 	// void		InstallPhonemecallback( IPhonemeTag *pTagInterface );
@@ -1078,8 +1076,8 @@ IFacePoserSound *sound = ( IFacePoserSound * )&g_FacePoserSound;
 
 CFacePoserSound::~CFacePoserSound( void )
 {
-	OutputDebugString( va( "Removing %i sounds\n", m_ActiveSounds.Size() ) );
-	for ( int i = 0 ; i < m_ActiveSounds.Size(); i++ )
+	OutputDebugString( va( "Removing %i sounds\n", m_ActiveSounds.Count() ) );
+	for ( int i = 0 ; i < m_ActiveSounds.Count(); i++ )
 	{
 		CSoundFile *p = &m_ActiveSounds[ i ];
 		OutputDebugString( va( "Removing sound:  %s\n", p->filename ) );
@@ -1102,7 +1100,7 @@ CAudioSource *CFacePoserSound::FindOrAddSound( const char *filename )
 	CSoundFile *s;
 
 	int i;
-	for ( i = 0; i < m_ActiveSounds.Size(); i++ )
+	for ( i = 0; i < m_ActiveSounds.Count(); i++ )
 	{
 		s = &m_ActiveSounds[ i ];
 		Assert( s );
@@ -1133,22 +1131,6 @@ void CFacePoserSound::Init( void )
 {
 	m_flElapsedTime = 0.0f;
 	m_pAudio = CAudioOutput::Create();
-
-	// Load SoundOverrides for Faceposer
-
-	KeyValues *manifest = new KeyValues( "scripts/game_sounds_manifest.txt" );
-	if ( filesystem->LoadKeyValues( *manifest, IFileSystem::TYPE_SOUNDEMITTER, "scripts/game_sounds_manifest.txt", "GAME" ) )
-	{
-		for ( KeyValues *sub = manifest->GetFirstSubKey(); sub != NULL; sub = sub->GetNextKey() )
-		{
-			if ( !Q_stricmp( sub->GetName(), "faceposer_file" ) )
-			{
-				soundemitter->AddSoundOverrides( sub->GetString() );
-				continue;
-			}
-		}
-	}
-	manifest->deleteThis();
 }
 
 void CFacePoserSound::Shutdown( void )
@@ -1449,13 +1431,13 @@ void CFacePoserSound::SetupWeights( void )
 
 			if ( t > 0.0f )
 			{
-				for ( int w = 0 ; w < sentence->m_Words.Size(); w++ )
+				for ( int w = 0 ; w < sentence->m_Words.Count(); w++ )
 				{
 					CWordTag *word = sentence->m_Words[ w ];
 					if ( !word )
 						continue;
 
-					for ( int k = 0; k < word->m_Phonemes.Size(); k++)
+					for ( int k = 0; k < word->m_Phonemes.Count(); k++)
 					{
 						CPhonemeTag *phoneme = word->m_Phonemes[ k ];
 						if ( !phoneme )
@@ -1468,11 +1450,11 @@ void CFacePoserSound::SetupWeights( void )
 						{
 							CPhonemeTag *next = NULL;
 							// try next phoneme, or first phoneme of next word
-							if (k < word->m_Phonemes.Size()-1)
+							if (k < word->m_Phonemes.Count()-1)
 							{
 								next = word->m_Phonemes[ k+1 ];
 							}
-							else if ( w < sentence->m_Words.Size() - 1  && sentence->m_Words[ w+1 ]->m_Phonemes.Size() )
+							else if ( w < sentence->m_Words.Count() - 1  && sentence->m_Words[ w+1 ]->m_Phonemes.Count() )
 							{
 								next = sentence->m_Words[ w+1 ]->m_Phonemes[ 0 ];
 							}
@@ -1583,7 +1565,7 @@ void CFacePoserSound::StopSound( CAudioMixer *mixer )
 	}
 }
 
-void CFacePoserSound::RenderWavToDC( HDC dc, RECT& outrect, COLORREF clr, 
+void CFacePoserSound::RenderWavToDC( HDC dc, RECT& outrect, const Color& clr, 
 	float starttime, float endtime, CAudioSource *pWave, 
 	bool selected /*= false*/, int selectionstart /*= 0*/, int selectionend /*= 0*/ )
 {
@@ -1620,10 +1602,10 @@ void CFacePoserSound::RenderWavToDC( HDC dc, RECT& outrect, COLORREF clr,
 
 	HPEN oldPen, pen, pen2, pen3, pen4;
 
-	pen = CreatePen( PS_SOLID, 1, RGB( 175, 175, 250 ) );
-	pen2 = CreatePen( PS_SOLID, 1, clr );
-	pen3 = CreatePen( PS_SOLID, 1, RGB( 127, 200, 249 ) );
-	pen4 = CreatePen( PS_SOLID, 2, RGB( 0, 0, 200 ) );
+	pen = CreatePen( PS_SOLID, 1, ColorToRGB( Color( 175, 175, 250 ) ) );
+	pen2 = CreatePen( PS_SOLID, 1, ColorToRGB( clr ) );
+	pen3 = CreatePen( PS_SOLID, 1, ColorToRGB( Color( 127, 200, 249 ) ) );
+	pen4 = CreatePen( PS_SOLID, 2, ColorToRGB( Color( 0, 0, 200 ) ) );
 
 	oldPen = (HPEN)SelectObject( dc, pen );
 

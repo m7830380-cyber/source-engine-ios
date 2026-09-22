@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -50,8 +50,8 @@ public:
 	virtual void PostloadWorld(CMapWorld *pWorld);
 
 	virtual bool IsVisualElement(void) { return(false); } // Only visible when parent entity is selected.
-	virtual bool IsClutter(void) { return true; }
-	virtual bool IsCulledByCordon(const Vector &vecMins, const Vector &vecMaxs) { return false; } // We don't hide unless our parent hides.
+	virtual bool IsClutter(void) const { return true; }
+	virtual bool CanBeCulledByCordon() const { return false; } // We don't hide unless our parent hides.
 
 	virtual CMapClass *PrepareSelection(SelectMode_t eSelectMode);
 		

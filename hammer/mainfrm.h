@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -22,6 +22,7 @@
 class CChildFrame;
 class CObjectProperties;
 class CTextureBrowser;
+class CModelBrowser;
 class CSearchReplaceDlg;
 class CFaceEditSheet;
 class CMessageWnd;
@@ -62,6 +63,7 @@ public:
 	HACCEL GetAccelTable( void ) { return m_hAccelTable; }
 
 	CFaceSmoothingVisualDlg *GetSmoothingGroupDialog( void )	{ return &m_SmoothingGroupDlg; }
+	CModelBrowser *GetModelBrowser();
 
 	void ResetAutosaveTimer();
 
@@ -83,6 +85,7 @@ public:
 
 	CFilterControl			m_FilterControl;
 	CObjectBar				m_ObjectBar;
+	CToolBar				m_wndMapOps;
 	CTextureBar				m_TextureBar;
 	CManifestFilter			m_ManifestFilterControl;
 	CFaceEditSheet			*m_pFaceEditSheet;
@@ -104,6 +107,18 @@ public:
 protected:
 
 	//{{AFX_MSG(CMainFrame)
+	afx_msg void OnUpdateFoundrySendSelectedEntitiesToEngine( CCmdUI *pCmdUI );
+	afx_msg void OnFoundrySendSelectedEntitiesToEngine();
+
+	afx_msg void OnUpdateFoundryMoveEngineViewToHammer3DView( CCmdUI *pCmdUI );
+	afx_msg void OnFoundryMoveEngineViewToHammer3DView();
+
+	afx_msg void OnUpdateFoundryRemoveSelectedEntitiesFromEngine( CCmdUI *pCmdUI );
+	afx_msg void OnFoundryRemoveSelectedEntitiesFromEngine();
+
+	afx_msg void OnUpdateFoundryMoveFocusToEngine( CCmdUI *pCmdUI );
+	afx_msg void OnFoundryMoveFocusToEngine();
+
 	afx_msg int OnCreate(LPCREATESTRUCT lpCreateStruct);
 	afx_msg void OnEditProperties();
 	afx_msg void OnViewMessages();
@@ -114,6 +129,7 @@ protected:
 	afx_msg void OnPaint();
 	afx_msg void OnTimer(UINT nIDEvent);
 	afx_msg void OnToolsOptions();
+	afx_msg void OnViewDotACamera();
 	afx_msg void OnViewShowconnections();
 	afx_msg void OnToolsPrefabfactory();
 	afx_msg BOOL OnHelpOpenURL(UINT nID);
@@ -142,6 +158,7 @@ protected:
 	afx_msg void OnUpdateEditFunction(CCmdUI *pCmdUI);
 	afx_msg BOOL OnApplicator(UINT nID);
 	afx_msg BOOL OnSoundBrowser(UINT nID);
+	afx_msg void OnModelBrowser();
 	afx_msg BOOL OnReloadSounds(UINT nID);
 	afx_msg void OnUpdateOpaqueMaterials(CCmdUI *pCmdUI);
 	afx_msg void OnOpaqueMaterials();
@@ -149,6 +166,7 @@ protected:
 	afx_msg BOOL OnChangeTool(UINT nID);
 	afx_msg void OnInitMenu( CMenu *pMenu );
 	afx_msg void OnHDR( void );
+	afx_msg LRESULT OnWTPacket(WPARAM, LPARAM);
 	//}}AFX_MSG
 
 	DECLARE_MESSAGE_MAP()
@@ -169,6 +187,7 @@ private:
 	CMDIClientWnd			wndMDIClient;			// dvs: what in God's name is this for?
 
 	CSearchReplaceDlg		*m_pSearchReplaceDlg;
+	CModelBrowser			*m_pModelBrowser;
 
 	BOOL					m_bUndoActive;
 
@@ -176,7 +195,6 @@ private:
 	CToolBar				m_wndMapToolBar;
 	CToolBar				m_wndUndoRedoToolBar;
 	CToolBar				m_wndMapEditToolBar;
-	CToolBar				m_wndMapOps;
 
 	CSelectModeDlgBar		m_SelectModeDlg;
 

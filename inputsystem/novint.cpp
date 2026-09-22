@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -6,8 +6,8 @@
 
 #include "inputsystem.h"
 #include "key_translation.h"
-#include "inputsystem/ButtonCode.h"
-#include "inputsystem/AnalogCode.h"
+#include "inputsystem/buttoncode.h"
+#include "inputsystem/analogcode.h"
 #include "tier1/convar.h"
 
 typedef void*(*NovintGetIHaptics_t)(void);

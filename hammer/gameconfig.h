@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -15,11 +15,11 @@
 #include <fstream>
 #pragma warning(pop)
 #include "fgdlib/HelperInfo.h"
-#include "TokenReader.h"
+#include "tier2/TokenReader.h"
 #include "fgdlib/gamedata.h"
 #include "GamePalette.h"
 #include "IEditorTexture.h"
-#include "utlvector.h"
+#include "UtlVector.h"
 
 
 class MDkeyvalue;
@@ -90,6 +90,7 @@ public:
 	char szMapDir[128];
 	char szBSPDir[128];
 	char m_szModDir[128];
+	char m_szPrefabDir[128];
 	int	 m_MaterialExcludeCount;
 
 	CStringArray GDFiles;

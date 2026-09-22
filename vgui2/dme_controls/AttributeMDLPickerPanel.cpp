@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2005, Valve Corporation, All rights reserved. =====//
 //
 // Purpose: 
 //
@@ -7,12 +7,12 @@
 //===========================================================================//
 
 #include "dme_controls/AttributeMDLPickerPanel.h"
-#include "filesystem.h"
+#include "FileSystem.h"
 #include "vgui_controls/Button.h"
 #include "vgui_controls/FileOpenDialog.h"
 #include "dme_controls/AttributeTextEntry.h"
 #include "matsys_controls/MDLPicker.h"
-#include "tier1/KeyValues.h"
+#include "tier1/keyvalues.h"
 
 
 using namespace vgui;
@@ -39,6 +39,10 @@ void CAttributeMDLPickerPanel::ShowPickerDialog()
 	// Open file
 	CMDLPickerFrame *pMDLPickerDialog = new CMDLPickerFrame( this, "Select .MDL File" );
 	pMDLPickerDialog->AddActionSignalTarget( this );
+
+	char pszModelName[ 1024 ];
+	m_pData->GetText( pszModelName, sizeof( pszModelName ) );
+	pMDLPickerDialog->SetInitialSelection( pszModelName );
 	pMDLPickerDialog->DoModal( );
 }
 
@@ -48,7 +52,7 @@ void CAttributeMDLPickerPanel::ShowPickerDialog()
 //-----------------------------------------------------------------------------
 void CAttributeMDLPickerPanel::OnMDLSelected( KeyValues *pKeyValues )
 {
-	const char *pMDLName = pKeyValues->GetString( "mdl", NULL );
+	const char *pMDLName = pKeyValues->GetString( "asset", NULL );
 	if ( !pMDLName || !pMDLName[ 0 ] )
 		return;
 

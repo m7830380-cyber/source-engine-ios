@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -9,7 +9,7 @@
 #include "VPanel.h"
 #include "vgui_internal.h"
 
-#include <KeyValues.h>
+#include <keyvalues.h>
 #include "vgui/IClientPanel.h"
 #include "vgui/IVGui.h"
 

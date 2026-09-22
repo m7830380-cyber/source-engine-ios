@@ -1,11 +1,11 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2005, Valve Corporation, All rights reserved. =======
 //
 // Purpose: 
 //
 //=============================================================================
 
 #include "matsys_controls/mdlsequencepicker.h"
-#include "tier1/KeyValues.h"
+#include "tier1/keyvalues.h"
 #include "tier1/utldict.h"
 #include "datacache/imdlcache.h"
 #include "filesystem.h"
@@ -184,7 +184,7 @@ void CMDLSequencePicker::RefreshActivitiesAndSequencesList()
 {
 	m_pActivitiesList->RemoveAll();
 	m_pSequencesList->RemoveAll();
-	m_pMDLPreview->SetSequence( 0 );
+	m_pMDLPreview->SetSequence( 0, false );
 
 	if ( m_hSelectedMDL == MDLHANDLE_INVALID )
 	{
@@ -312,7 +312,7 @@ void CMDLSequencePicker::PlaySelectedActivity( )
 		if ( stricmp( seqdesc.pszActivityName(), pActivityName ) == 0 )
 		{
 			// FIXME: Add weighted sequence selection logic?
-			m_pMDLPreview->SetSequence( i );
+			m_pMDLPreview->SetSequence( i, false );
 			break;
 		}
 	}
@@ -339,7 +339,7 @@ void CMDLSequencePicker::PlaySelectedSequence( )
 		mstudioseqdesc_t &seqdesc = pstudiohdr->pSeqdesc( i );
 		if ( !Q_stricmp( seqdesc.pszLabel(), pSequenceName ) )
 		{
-			m_pMDLPreview->SetSequence( i );
+			m_pMDLPreview->SetSequence( i, false );
 			break;
 		}
 	}

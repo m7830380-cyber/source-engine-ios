@@ -1,8 +1,8 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===================== Copyright (c) Valve Corporation. All Rights Reserved. ======================
 //
-// Purpose: 
+// A modeless dialog showing a list of all entities in the map that can be filtered by various criteria.
 //
-//=============================================================================//
+//==================================================================================================
 
 #ifndef ENTITYREPORTDLG_H
 #define ENTITYREPORTDLG_H
@@ -15,11 +15,44 @@
 #include "MapDoc.h"
 
 
+//
+// Used to invoke the entity report dialog with a specific filter configuration.
+//
+struct EntityReportFilterParms_t
+{
+	EntityReportFilterParms_t()
+	{
+		m_bFilterByKeyvalue = false;
+		m_bFilterByClass = false;
+		m_bFilterByHidden = false;
+		m_bExact = false;
+		m_nFilterByType = 0;
+	}
+
+	void FilterByKeyValue( const char *key, const char *value )
+	{
+		m_bFilterByKeyvalue = true;
+		m_filterKey.Set( key );
+		m_filterValue.Set( value );
+	}
+
+	bool m_bFilterByKeyvalue;
+	bool m_bFilterByClass;
+	bool m_bFilterByHidden;
+	bool m_bExact;
+	int m_nFilterByType;
+
+	CUtlString m_filterKey;
+	CUtlString m_filterValue;
+	CUtlString m_filterClass;
+};
+
+
 class CEntityReportDlg : public CDialog
 {
 public:
 
-	static void ShowEntityReport(CMapDoc *pDoc, CWnd* pParent = NULL);
+	static void ShowEntityReport(CMapDoc *pDoc, CWnd *pParent = NULL, EntityReportFilterParms_t *pParms = NULL );
 
 private:
 
@@ -63,7 +96,9 @@ protected:
 	CString m_szFilterValue;
 	CString m_szFilterClass;
 
-	BOOL m_bFilterTextChanged;
+	bool m_bFilterTextChanged : 1;
+	bool m_bGotoFirstMatch: 1;
+	
 	DWORD m_dwFilterTime;
 
 	// Generated message map functions

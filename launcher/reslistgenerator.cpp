@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -15,7 +15,7 @@
 #include "tier1/utlvector.h"
 #include "tier1/utlbuffer.h"
 #include "tier0/icommandline.h"
-#include "tier1/KeyValues.h"
+#include "tier1/keyvalues.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
@@ -112,7 +112,9 @@ void MergeResLists( CUtlVector< CUtlString > &fileNames, char const *pchOutputFi
 class CWorkItem
 {
 public:
-	CWorkItem() = default;
+	CWorkItem()
+	{
+	}
 
 	CUtlString		m_sSubDir;
 	CUtlString		m_sAddCommands;
@@ -122,8 +124,10 @@ class CResListGenerator: public IResListGenerator
 public:
 	enum
 	{
-		STATE_BUILDINGRESLISTS = 0,
+		STATE_SETUP = 0,
+		STATE_BUILDINGRESLISTS,
 		STATE_GENERATINGCACHES,
+		STATE_MAXSTATES
 	};
 
 	CResListGenerator();
@@ -131,9 +135,7 @@ public:
 	virtual void Init( char const *pchBaseDir, char const *pchGameDir );
 	virtual bool IsActive();
 	virtual void Shutdown();
-	virtual void Collate();
-
-	virtual void SetupCommandLine();
+	virtual bool TickAndFixupCommandLine();
 	virtual bool ShouldContinue();
 
 private:
@@ -141,9 +143,12 @@ private:
 	bool InitCommandFile( char const *pchGameDir, char const *pchCommandFile );
 	void LoadMapList( char const *pchGameDir, CUtlVector< CUtlString > &vecMaps, char const *pchMapFile );
 	void CollateFiles( char const *pchResListFilename );
+	void Collate();
 
 	bool		m_bInitialized;
 	bool		m_bActive;
+	bool		m_bCreatingForXbox;
+
 	CUtlString	m_sBaseDir;
 	CUtlString  m_sGameDir;
 	CUtlString	m_sFullGamePath;
@@ -167,8 +172,9 @@ IResListGenerator *reslistgenerator = &g_ResListGenerator;
 CResListGenerator::CResListGenerator() :
 	m_bInitialized( false ),
 	m_bActive( false ),
+	m_bCreatingForXbox( false ),
 	m_nCurrentWorkItem( 0 ),
-	m_nCurrentState( STATE_BUILDINGRESLISTS )
+	m_nCurrentState( STATE_SETUP )
 {
 	MEM_ALLOC_CREDIT();
 
@@ -194,7 +200,7 @@ void CResListGenerator::Init( char const *pchBaseDir, char const *pchGameDir )
 {
 	if ( IsX360() )
 	{
-		// not used or supported
+		// not used or supported, PC builds them for Xbox
 		return;
 	}
 
@@ -219,6 +225,7 @@ void CResListGenerator::Init( char const *pchBaseDir, char const *pchGameDir )
 	if ( CommandLine()->CheckParm( "-makereslists", &pchCommandFile ) && pchCommandFile )
 	{
 		// base path setup, now can get and parse command file
+		// one time setup ONLY
 		InitCommandFile( path, pchCommandFile );
 	}
 }
@@ -249,13 +256,58 @@ void CResListGenerator::Collate()
 	}
 }
 
-void CResListGenerator::SetupCommandLine()
+//-----------------------------------------------------------------------------
+// Called at each restart invocation, clocks the state.
+// Returns TRUE if caller should proceed with command line, FALSE otherwise.
+// FALSE is used to stop the reslist process which requires additional post passes.
+//-----------------------------------------------------------------------------
+bool CResListGenerator::TickAndFixupCommandLine()
 {
 	if ( !m_bActive )
-		return;
+	{
+		return true;
+	}
+
+	// clock the state
+	switch ( m_nCurrentState )
+	{
+	default:
+		m_bActive = false;
+		break;
+
+	case STATE_SETUP:
+		// first time
+		m_nCurrentState = STATE_BUILDINGRESLISTS;
+		break;
+
+	case STATE_BUILDINGRESLISTS:
+		{ 
+			CommandLine()->RemoveParm( "-startmap" );
+
+			// Advance to next item
+			++m_nCurrentWorkItem;
+			if ( m_nCurrentWorkItem >= m_WorkItems.Count() )
+			{
+				// out of work, finalize
+				Collate();
+
+				// advance to next state
+				++m_nCurrentState;
+			}
+		}
+		break;
+
+	case STATE_GENERATINGCACHES:
+		++m_nCurrentState;
+		break;
+	}
 
 	switch ( m_nCurrentState )
 	{
+	default:
+		m_bActive = false;
+		break;
+
 	case STATE_BUILDINGRESLISTS:
 		{
 			Assert( m_nCurrentWorkItem < m_WorkItems.Count() );
@@ -283,80 +335,68 @@ void CResListGenerator::SetupCommandLine()
 			// Reset command line based on current state
 			char szCmd[ 512 ];
 			Q_snprintf( szCmd, sizeof( szCmd ), "%s %s %s -reslistdir %s", m_sOriginalCommandLine.String(), m_sBaseCommandLine.String(), work.m_sAddCommands.String(), szWorkingDir );
-
-			Warning( "Reslists:  Setting command line:\n'%s'\n", szCmd );
-
 			CommandLine()->CreateCmdLine( szCmd );
+
 			// Never rebuild caches by default, inly do it in STATE_GENERATINGCACHES
 			CommandLine()->AppendParm( "-norebuildaudio", NULL );
 			if ( szMap[ 0 ] )
 			{
 				CommandLine()->AppendParm( "-startmap", szMap );
 			}
+
+			if ( m_bCreatingForXbox )
+			{
+				CommandLine()->AppendParm( "-xboxreslist", NULL );
+			}
+
+			Warning( "Generating Reslists: Setting command line:\n'%s'\n", CommandLine()->GetCmdLine() );
 		}
 		break;
+
 	case STATE_GENERATINGCACHES:
 		{
-			Collate();
+			if ( m_bCreatingForXbox )
+			{
+				// Xbox has no caches, process finished
+				m_bActive = false;
+				break;
+			}
 
 			// Prepare stuff
 			// Reset command line based on current state
 			char szCmd[ 512 ];
 			Q_snprintf( szCmd, sizeof( szCmd ), "%s -reslistdir %s -rebuildaudio", m_sOriginalCommandLine.String(), m_sFinalDir.String());
-
-			Warning( "Caches:  Setting command line:\n'%s'\n", szCmd );
-
 			CommandLine()->CreateCmdLine( szCmd );
 			
 			CommandLine()->RemoveParm( "-norebuildaudio" );
 			CommandLine()->RemoveParm( "-makereslists" );
 
-			++m_nCurrentState;
+			Warning( "Generating Caches: Setting command line:\n'%s'\n", CommandLine()->GetCmdLine() );
 		}
 		break;
 	}
+
+	if ( !m_bActive )
+	{
+		// no further processing required, make the engine shut down cleanly in this pass
+		CommandLine()->RemoveParm( "-makereslists" );
+		CommandLine()->AppendParm( "-autoquit", NULL );
+	}
+
+	// continue
+	return m_bActive;
 }
 
 bool CResListGenerator::ShouldContinue()
 {
-	if ( !m_bActive )
-		return false;
-	
-	bool bContinueAdvancing = false;
-	do
+	// some states require post processing
+	// let the state processing determine the final quit state
+	if ( !m_bActive || m_nCurrentState >= STATE_MAXSTATES )
 	{
-		switch ( m_nCurrentState )
-		{
-		default:
-			break;
-		case STATE_BUILDINGRESLISTS:
-			{ 
-				CommandLine()->RemoveParm( "-startmap" );
+		return false;
+	}
 
-				// Advance to next time
-				++m_nCurrentWorkItem;
-
-				if ( m_nCurrentWorkItem >= m_WorkItems.Count())
-				{
-					// Will stay in the loop
-					++m_nCurrentState;
-					bContinueAdvancing = true;
-				}
-				else
-				{
-					return true;
-				}
-			}
-			break;
-		case STATE_GENERATINGCACHES:
-			{
-				return true;
-			}
-			break;
-		}
-	} while ( bContinueAdvancing );
-	
-	return false;
+	return true;
 }
 
 void CResListGenerator::LoadMapList( char const *pchGameDir, CUtlVector< CUtlString > &vecMaps, char const *pchMapFile )
@@ -378,7 +418,7 @@ void CResListGenerator::LoadMapList( char const *pchGameDir, CUtlVector< CUtlStr
 
 			// Strip trailing CR/LF chars
 			int len = Q_strlen( szMap );
-			while ( len >= 1 && ( szMap[ len - 1 ] == '\n' || szMap[ len - 1 ] == '\r' ) )
+			while ( len >= 1 && ( ( szMap[ len - 1 ] == '\n' ) || ( szMap[ len - 1 ] == '\r' ) ) )
 			{
 				szMap[ len - 1 ] = 0;
 				len = Q_strlen( szMap );
@@ -400,7 +440,7 @@ bool CResListGenerator::InitCommandFile( char const *pchGameDir, char const *pch
 	if ( *pchCommandFile == '+' ||
 		 *pchCommandFile == '-' )
 	{
-		Msg( "falling back to legacy reslists system\n" );
+		Msg( "CResListGenerator: Falling back to legacy reslists system.\n" );
 		return false;
 	}
 
@@ -432,7 +472,7 @@ bool CResListGenerator::InitCommandFile( char const *pchGameDir, char const *pch
 	}
 
 	char const *pszSolo = NULL;
-	if ( CommandLine()->CheckParm( "+map", &pszSolo ) && pszSolo )
+	if ( CommandLine()->CheckParm( "-reslistmap", &pszSolo ) && pszSolo )
 	{
 		m_MapList.Purge();
 
@@ -467,6 +507,7 @@ bool CResListGenerator::InitCommandFile( char const *pchGameDir, char const *pch
 	m_sBaseCommandLine = kv->GetString( "basecommandline", "" );
 	m_sFinalDir = kv->GetString( "finaldir", m_sFinalDir.String() );
 	m_sWorkingDir = kv->GetString( "workdir", m_sWorkingDir.String() );
+	m_bCreatingForXbox = kv->GetInt( "xbox", 0 ) != 0;
 
 	int i = 0;
 	do
@@ -508,13 +549,6 @@ bool CResListGenerator::InitCommandFile( char const *pchGameDir, char const *pch
 
 	kv->deleteThis();
 
-	/*
-	if ( m_bActive )
-	{
-		// Wipe console log
-		g_pFullFileSystem->RemoveFile( "console.log", "GAME" );
-	}
-	*/
 	return m_bActive;
 }
 

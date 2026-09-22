@@ -4,7 +4,7 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 ROOT="$PWD"
 OUT="$ROOT/build/ios"
-SDL_SRC="$ROOT/thirdparty/SDL-src"
+SDL_SRC="$ROOT/ios/thirdparty/SDL-src"
 
 mkdir -p "$OUT"
 

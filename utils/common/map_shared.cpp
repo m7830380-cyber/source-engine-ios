@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -49,7 +49,12 @@ ChunkFileResult_t LoadEntityKeyCallback(const char *szKey, const char *szValue, 
 	else if( !stricmp( szKey, "mapversion" ) )
 	{
 		// .vmf map revision number
-		g_MapRevision = atoi( szValue );
+		if ( g_MapRevision == 0 )
+		{
+			// only take the first occurrence of this.  func_instance will each have another occurrence but we want the root map's revision
+			g_MapRevision = atoi( szValue );
+			Msg("Map revision %d\n", g_MapRevision );
+		}
 		SetKeyValue( pLoadEntity->pEntity, szKey, szValue );
 		return ( ChunkFile_Ok );
 	}

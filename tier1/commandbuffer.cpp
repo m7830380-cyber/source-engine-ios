@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2006, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -7,7 +7,7 @@
 // $NoKeywords: $
 //===========================================================================//
 
-#include "tier1/CommandBuffer.h"
+#include "tier1/commandbuffer.h"
 #include "tier1/utlbuffer.h"
 #include "tier1/strtools.h"
 
@@ -37,7 +37,6 @@ CCommandBuffer::CCommandBuffer( ) : m_Commands( 32, 32 )
 	m_nArgSBufferSize = 0;
 	m_bIsProcessingCommands = false;
 	m_nMaxArgSBufferLength = ARGS_BUFFER_LENGTH;
-	m_bWaitEnabled = true;
 }
 
 CCommandBuffer::~CCommandBuffer()
@@ -93,7 +92,7 @@ bool CCommandBuffer::ParseArgV0( CUtlBuffer &buf, char *pArgV0, int nMaxLen, con
 //-----------------------------------------------------------------------------
 // Insert a command into the command queue
 //-----------------------------------------------------------------------------
-void CCommandBuffer::InsertCommandAtAppropriateTime( CommandHandle_t hCommand )
+void CCommandBuffer::InsertCommandAtAppropriateTime( intp hCommand )
 {
 	intp i;
 	Command_t &command = m_Commands[hCommand];
@@ -109,7 +108,7 @@ void CCommandBuffer::InsertCommandAtAppropriateTime( CommandHandle_t hCommand )
 //-----------------------------------------------------------------------------
 // Insert a command into the command queue at the appropriate time
 //-----------------------------------------------------------------------------
-void CCommandBuffer::InsertImmediateCommand( CommandHandle_t hCommand )
+void CCommandBuffer::InsertImmediateCommand( intp hCommand )
 {
 	m_Commands.LinkBefore( m_hNextCommand, hCommand );
 }
@@ -118,7 +117,7 @@ void CCommandBuffer::InsertImmediateCommand( CommandHandle_t hCommand )
 //-----------------------------------------------------------------------------
 // Insert a command into the command queue
 //-----------------------------------------------------------------------------
-bool CCommandBuffer::InsertCommand( const char *pArgS, int nCommandSize, int nTick )
+bool CCommandBuffer::InsertCommand( const char *pArgS, int nCommandSize, int nTick, cmd_source_t cmdSource )
 {
 	if ( nCommandSize >= CCommand::MaxCommandLength() )
 	{
@@ -143,6 +142,7 @@ bool CCommandBuffer::InsertCommand( const char *pArgS, int nCommandSize, int nTi
 	command.m_nTick = nTick;
 	command.m_nFirstArgS = m_nArgSBufferSize;
 	command.m_nBufferSize = nCommandSize;
+	command.m_source = cmdSource;
 
 	m_nArgSBufferSize += nCommandSize;
 
@@ -207,7 +207,7 @@ void CCommandBuffer::GetNextCommandLength( const char *pText, int nMaxLen, int *
 //-----------------------------------------------------------------------------
 // Add text to command buffer, return false if it couldn't owing to overflow
 //-----------------------------------------------------------------------------
-bool CCommandBuffer::AddText( const char *pText, int nTickDelay )
+bool CCommandBuffer::AddText( const char *pText, cmd_source_t cmdSource, int nTickDelay )
 {
 	Assert( nTickDelay >= 0 );
 
@@ -226,7 +226,7 @@ bool CCommandBuffer::AddText( const char *pText, int nTickDelay )
 			continue;
 
 		const char *pArgS;
-		char *pArgV0 = (char*)_alloca( nCommandLength+1 );
+		char *pArgV0 = (char*)stackalloc( nCommandLength+1 );
 		CUtlBuffer bufParse( pCurrentCommand, nCommandLength, CUtlBuffer::TEXT_BUFFER | CUtlBuffer::READ_ONLY ); 
 		ParseArgV0( bufParse, pArgV0, nCommandLength+1, &pArgS );
 		if ( pArgV0[0] == 0 )
@@ -240,7 +240,7 @@ bool CCommandBuffer::AddText( const char *pText, int nTickDelay )
 			continue;
 		}
 
-		if ( !InsertCommand( pCurrentCommand, nCommandLength, nTick ) )
+		if ( !InsertCommand( pCurrentCommand, nCommandLength, nTick, cmdSource ) )
 			return false;
 	}
 
@@ -292,9 +292,9 @@ void CCommandBuffer::BeginProcessingCommands( int nDeltaTicks )
 //-----------------------------------------------------------------------------
 // Returns the next command
 //-----------------------------------------------------------------------------
-bool CCommandBuffer::DequeueNextCommand( )
+bool CCommandBuffer::DequeueNextCommand( CCommand* pCommand )
 {
-	m_CurrentCommand.Reset();
+	pCommand->Reset();
 
 	Assert( m_bIsProcessingCommands );
 	if ( m_Commands.Count() == 0 )
@@ -312,7 +312,7 @@ bool CCommandBuffer::DequeueNextCommand( )
 	// to become invalid by calling AddText. Is there a way we can avoid the memcpy?
 	if ( command.m_nBufferSize > 0 )
 	{
-		m_CurrentCommand.Tokenize( &m_pArgSBuffer[command.m_nFirstArgS] );
+		pCommand->Tokenize( &m_pArgSBuffer[command.m_nFirstArgS], command.m_source );
 	}
 
 	m_Commands.Remove( nHead );
@@ -328,18 +328,6 @@ bool CCommandBuffer::DequeueNextCommand( )
 //	Msg("\n");
 	return true;
 }
-
-
-//-----------------------------------------------------------------------------
-// Returns the next command
-//-----------------------------------------------------------------------------
-int CCommandBuffer::DequeueNextCommand( const char **& ppArgv )
-{
-	DequeueNextCommand();
-	ppArgv = ArgV();
-	return ArgC();
-}
-
 
 //-----------------------------------------------------------------------------
 // Compacts the command buffer
@@ -396,8 +384,10 @@ void CCommandBuffer::EndProcessingCommands()
 			break;
 
 		AssertMsgOnce( false, "CCommandBuffer::EndProcessingCommands() called before all appropriate commands were dequeued.\n" );
+		int nNext = i;
 		Msg( "Warning: Skipping command %s\n", &m_pArgSBuffer[ m_Commands[i].m_nFirstArgS ] );
 		m_Commands.Remove( i );
+		i = nNext;
 	}
 
 	Compact();
@@ -414,222 +404,4 @@ CommandHandle_t CCommandBuffer::GetNextCommandHandle()
 }
 
 
-#if 0
-/*
-===============
-Cmd_Alias_f
 
-Creates a new command that executes a command string (possibly ; seperated)
-===============
-*/
-void Cmd_Alias_f (void)
-{
-	cmdalias_t	*a;
-	char		cmd[MAX_COMMAND_LENGTH];
-	int			i, c;
-	char		*s;
-
-	if (Cmd_Argc() == 1)
-	{
-		Con_Printf ("Current alias commands:\n");
-		for (a = cmd_alias ; a ; a=a->next)
-			Con_Printf ("%s : %s\n", a->name, a->value);
-		return;
-	}
-
-	s = Cmd_Argv(1);
-	if (strlen(s) >= MAX_ALIAS_NAME)
-	{
-		Con_Printf ("Alias name is too long\n");
-		return;
-	}
-
-// copy the rest of the command line
-	cmd[0] = 0;		// start out with a null string
-	c = Cmd_Argc();
-	for (i=2 ; i< c ; i++)
-	{
-		Q_strncat(cmd, Cmd_Argv(i), sizeof( cmd ), COPY_ALL_CHARACTERS);
-		if (i != c)
-		{
-			Q_strncat (cmd, " ", sizeof( cmd ), COPY_ALL_CHARACTERS );
-		}
-	}
-	Q_strncat (cmd, "\n", sizeof( cmd ), COPY_ALL_CHARACTERS);
-
-	// if the alias already exists, reuse it
-	for (a = cmd_alias ; a ; a=a->next)
-	{
-		if (!strcmp(s, a->name))
-		{
-			if ( !strcmp( a->value, cmd ) )		// Re-alias the same thing
-				return;
-
-			delete[] a->value;
-			break;
-		}
-	}
-
-	if (!a)
-	{
-		a = (cmdalias_t *)new cmdalias_t;
-		a->next = cmd_alias;
-		cmd_alias = a;
-	}
-	Q_strncpy (a->name, s, sizeof( a->name ) );	
-
-	a->value = COM_StringCopy(cmd);
-}
-
-
-	
-/*
-=============================================================================
-
-					COMMAND EXECUTION
-
-=============================================================================
-*/
-
-#define	MAX_ARGS		80
-
-static	int			cmd_argc;
-static	char		*cmd_argv[MAX_ARGS];
-static	char		*cmd_null_string = "";
-static	const char	*cmd_args = NULL;
-
-cmd_source_t	cmd_source;
-
-//-----------------------------------------------------------------------------
-// Purpose: 
-// Output : void Cmd_Init
-//-----------------------------------------------------------------------------
-
-//-----------------------------------------------------------------------------
-// Purpose: 
-//-----------------------------------------------------------------------------
-void Cmd_Shutdown( void )
-{
-	// TODO, cleanup
-	while ( cmd_alias )
-	{
-		cmdalias_t *next = cmd_alias->next;
-		delete cmd_alias->value;	// created by StringCopy()
-		delete cmd_alias;
-		cmd_alias = next;
-	}
-}
-
-
-
-/*
-============
-Cmd_ExecuteString
-
-A complete command line has been parsed, so try to execute it
-FIXME: lookupnoadd the token to speed search?
-============
-*/
-const ConCommandBase *Cmd_ExecuteString (const char *text, cmd_source_t src)
-{	
-	cmdalias_t		*a;
-
-	cmd_source = src;
-	Cmd_TokenizeString (text);
-			
-// execute the command line
-	if (!Cmd_Argc())
-		return NULL;		// no tokens
-
-// check alias
-	for (a=cmd_alias ; a ; a=a->next)
-	{
-		if (!Q_strcasecmp (cmd_argv[0], a->name))
-		{
-			Cbuf_InsertText (a->value);
-			return NULL;
-		}
-	}
-	
-// check ConCommands
-	ConCommandBase const *pCommand = ConCommandBase::FindCommand( cmd_argv[ 0 ] );
-	if ( pCommand && pCommand->IsCommand() )
-	{
-		bool isServerCommand = ( pCommand->IsBitSet( FCVAR_GAMEDLL ) && 
-								// Typed at console
-								cmd_source == src_command &&
-								// Not HLDS
-								!sv.IsDedicated() );
-
-		// Hook to allow game .dll to figure out who type the message on a listen server
-		if ( serverGameClients )
-		{
-			// We're actually the server, so set it up locally
-			if ( sv.IsActive() )
-			{
-				g_pServerPluginHandler->SetCommandClient( -1 );
-						
-#ifndef SWDS
-				// Special processing for listen server player
-				if ( isServerCommand )
-				{
-					g_pServerPluginHandler->SetCommandClient( cl.m_nPlayerSlot );
-				}
-#endif
-			}
-			// We're not the server, but we've been a listen server (game .dll loaded)
-			//  forward this command tot he server instead of running it locally if we're still
-			//  connected
-			// Otherwise, things like "say" won't work unless you quit and restart
-			else if ( isServerCommand )
-			{
-				if ( cl.IsConnected() )
-				{
-					Cmd_ForwardToServer();
-					return NULL;
-				}
-				else
-				{
-					// It's a server command, but we're not connected to a server.  Don't try to execute it.
-					return NULL;
-				}
-			}
-		}
-
-		// Allow cheat commands in singleplayer, debug, or multiplayer with sv_cheats on
-#ifndef _DEBUG
-		if ( pCommand->IsBitSet( FCVAR_CHEAT ) )
-		{
-			if ( !Host_IsSinglePlayerGame() && sv_cheats.GetInt() == 0 )
-			{
-				Msg( "Can't use cheat command %s in multiplayer, unless the server has sv_cheats set to 1.\n", pCommand->GetName() );
-				return NULL;
-			}
-		}
-#endif
-
-		(( ConCommand * )pCommand )->Dispatch();
-		return pCommand;
-	}
-
-	// check cvars
-	if ( cv->IsCommand() )
-	{
-		return pCommand;
-	}
-
-	// forward the command line to the server, so the entity DLL can parse it
-	if ( cmd_source == src_command )
-	{
-		if ( cl.IsConnected() )
-		{
-			Cmd_ForwardToServer();
-			return NULL;
-		}
-	}
-	
-	Msg("Unknown command \"%s\"\n", Cmd_Argv(0));
-
-	return NULL;
-}
-#endif

@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -8,7 +8,7 @@
 #include "movieobjects/dmelog.h"
 #include "vgui_controls/button.h"
 #include "vgui_controls/combobox.h"
-#include "tier1/KeyValues.h"
+#include "tier1/keyvalues.h"
 
 using namespace vgui;
 

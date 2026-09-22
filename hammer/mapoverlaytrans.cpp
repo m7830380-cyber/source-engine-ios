@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2004, Valve LLC, All rights reserved. ============
 //
 //
 //=============================================================================
@@ -269,7 +269,8 @@ bool CMapOverlayTransition::BuildFaceCaches( void )
 		const CMapObjectList *pChildren = pEntity->GetChildren();
 		FOR_EACH_OBJ( *pChildren, pos )
 		{
-			CMapSideList *pSideList = dynamic_cast<CMapSideList*>( pChildren->Element(pos) );
+			CMapClass *pMapClass = (CUtlReference< CMapClass >)pChildren->Element(pos);
+			CMapSideList *pSideList = dynamic_cast<CMapSideList*>( pMapClass );
 			if ( pSideList )
 			{
 				// Check name.

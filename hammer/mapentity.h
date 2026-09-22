@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -32,6 +32,8 @@ int CompareEntityNames(const char *szName1, const char *szName2);
 
 class CMapEntity : public CMapClass, public CEditGameClass
 {
+	DECLARE_REFERENCED_CLASS( CMapEntity );
+
 	friend CManifest;
 
 public:
@@ -61,13 +63,16 @@ public:
 		ALIGN_BOTTOM,
 	};
 
-	bool NameMatches(const char *szName);
-	bool ClassNameMatches(const char *szName);
+	bool NameMatches(const char *szName) const;
+	bool ClassNameMatches(const char *szName) const;
 
 	virtual bool ShouldAppearInRaytracedLightingPreview(void)
 	{
 		return ( m_EntityTypeFlags & ENTITY_FLAG_SHOW_IN_LPREVIEW2 ) != 0;
 	}
+
+	static inline void ShowDotACamera(bool bShow) { s_bShowDotACamera = bShow; }
+	static inline bool GetShowDotACamera(void) { return s_bShowDotACamera; }
 
 	static inline void ShowEntityNames(bool bShow) { s_bShowEntityNames = bShow; }
 	static inline bool GetShowEntityNames(void) { return s_bShowEntityNames; }
@@ -96,7 +101,7 @@ public:
 		}
 	}
 
-	inline BOOL IsPlaceholder(void)
+	inline BOOL IsPlaceholder(void) const
 	{
 		return((flags & flagPlaceholder) ? TRUE : FALSE);
 	}
@@ -106,7 +111,7 @@ public:
 	//
 	// CMapClass overrides.
 	//
-	bool IsCulledByCordon(const Vector &vecMins, const Vector &vecMaxs);
+	virtual bool IsIntersectingCordon(const Vector &vecMins, const Vector &vecMaxs);
 
 	//
 	// Serialization.
@@ -183,11 +188,11 @@ public:
 	void AssignNodeID(void);
 
 	const char* GetDescription();
-	bool IsScaleable() { return !IsPlaceholder(); }
+	bool IsScaleable() const { return !IsPlaceholder(); }
 
 	// animation
 	bool GetTransformMatrix( VMatrix& matrix );
-	BOOL IsAnimationController( void ) { return IsMoveClass(); }
+	bool IsAnimationController() { return IsMoveClass(); }
 
 	//-----------------------------------------------------------------------------
 	// Purpose: If the first child of this entity is of type MapClass, this function
@@ -195,12 +200,12 @@ public:
 	// Output : Returns a pointer to the MapClass that is a child of this
 	//			entity, NULL if the first child of this entity is not MapClass.
 	//-----------------------------------------------------------------------------
-	template< class MapClass >
-	MapClass *GetChildOfType( MapClass *null )
+	template <class MapClass>
+	MapClass *GetChildOfType( MapClass *ignoredArg )
 	{
 		FOR_EACH_OBJ( m_Children, pos )
 		{
-			MapClass *pChild = dynamic_cast<MapClass*>( m_Children.Element(pos) );
+			MapClass *pChild = dynamic_cast<MapClass *>( m_Children.Element(pos).GetObject() );
 			if ( pChild != NULL )
 			{
 				return pChild;
@@ -249,6 +254,7 @@ private:
 	static ChunkFileResult_t LoadKeyCallback(const char *szKey, const char *szValue, CMapEntity *pEntity);
 	static ChunkFileResult_t LoadEditorKeyCallback(const char *szKey, const char *szValue, CMapEntity *pEntity);
 
+	static bool s_bShowDotACamera;
 	static bool s_bShowEntityNames;			// Whether to render entity names in the 2D views.
 	static bool s_bShowEntityConnections;	// Whether to render lines indicating entity connections in the 2D views.
 	static bool s_bShowUnconnectedEntities;	// Whether to render unconnected entities in logical views
@@ -259,8 +265,7 @@ private:
 	Vector2D m_vecLogicalPosition;	// Position in logical space
 };
 
-
-typedef CUtlVector<CMapEntity*> CMapEntityList;
+class IMapEntity_Type_t : public CMapEntity {};
 
 bool MapEntityList_HasInput(const CMapEntityList *pList, const char *szInput, InputOutputType_t eType = iotInvalid);
 

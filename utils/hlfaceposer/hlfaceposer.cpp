@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -12,7 +12,7 @@
 #include "filesystem.h"
 #include "mxtk/mx.h"
 #include "mxStatusWindow.h"
-#include "filesystem.h"
+#include "FileSystem.h"
 #include "StudioModel.h"
 #include "ControlPanel.h"
 #include "MDLViewer.h"
@@ -32,8 +32,6 @@
 #include "filesystem_init.h"
 #include "tier2/p4helpers.h"
 
-
-extern vgui::ILocalize *g_pLocalize;
 
 StudioModel *FindAssociatedModel( CChoreoScene *scene, CChoreoActor *a );
 
@@ -166,7 +164,7 @@ void Con_Printf( const char *fmt, ... )
 	g_pStatusWindow->StatusPrint( CONSOLE_COLOR, false, output );
 }
 
-void Con_ColorPrintf( COLORREF rgb, const char *fmt, ... )
+void Con_ColorPrintf( const Color& rgb, const char *fmt, ... )
 {
 	va_list args;
 	static char output[1024];
@@ -319,13 +317,6 @@ bool FacePoser_HasWindowStyle( mxWindow *w, int bits )
 	return ( style & bits ) ? true : false;
 }
 
-bool FacePoser_HasWindowExStyle( mxWindow *w, int bits )
-{
-	HWND wnd = (HWND)w->getHandle();
-	DWORD style = GetWindowLong( wnd, GWL_EXSTYLE );
-	return ( style & bits ) ? true : false;
-}
-
 void FacePoser_AddWindowStyle( mxWindow *w, int addbits )
 {
 	HWND wnd = (HWND)w->getHandle();
@@ -348,14 +339,6 @@ void FacePoser_RemoveWindowStyle( mxWindow *w, int removebits )
 	DWORD style = GetWindowLong( wnd, GWL_STYLE );
 	style &= ~removebits;
 	SetWindowLong( wnd, GWL_STYLE, style );
-}
-
-void FacePoser_RemoveWindowExStyle( mxWindow *w, int removebits )
-{
-	HWND wnd = (HWND)w->getHandle();
-	DWORD style = GetWindowLong( wnd, GWL_EXSTYLE );
-	style &= ~removebits;
-	SetWindowLong( wnd, GWL_EXSTYLE, style );
 }
 
 //-----------------------------------------------------------------------------

@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Texture management functions. Exposes a list of available textures,
 //			texture groups, and Most Recently Used textures.
@@ -23,7 +23,7 @@
 #include "WADTypes.h"
 #include "hammer.h"
 #include "filesystem.h"
-#include "materialsystem/itexture.h"
+#include "materialsystem/ITexture.h"
 #include "tier1/utldict.h"
 #include "FaceEditSheet.h"
 
@@ -64,7 +64,7 @@ CTextureSystem g_Textures;
 //-----------------------------------------------------------------------------
 // CMaterialFileChangeWatcher implementation.
 //-----------------------------------------------------------------------------
-void CMaterialFileChangeWatcher::Init( CTextureSystem *pSystem, intp context )
+void CMaterialFileChangeWatcher::Init( CTextureSystem *pSystem, int context )
 {
 	m_pTextureSystem = pSystem;
 	m_Context = context;
@@ -74,15 +74,12 @@ void CMaterialFileChangeWatcher::Init( CTextureSystem *pSystem, intp context )
 	char searchPaths[1024 * 16];
 	if ( g_pFullFileSystem->GetSearchPath( "GAME", false, searchPaths, sizeof( searchPaths ) ) > 0 )
 	{
-		CUtlVector<char*> searchPathList;
-		V_SplitString( searchPaths, ";", searchPathList );
+		CSplitString searchPathList( searchPaths, ";" );
 
 		for ( int i=0; i < searchPathList.Count(); i++ )
 		{
 			m_Watcher.AddDirectory( searchPathList[i], "materials", true );
 		}
-		
-		searchPathList.PurgeAndDeleteElements();
 	}
 	else
 	{
@@ -370,12 +367,12 @@ IEditorTexture *CTextureSystem::FindActiveTexture(LPCSTR pszInputName, int *piIn
 		int nDummyCount = m_pActiveContext->Dummies.Count();
 		for (int nDummy = 0; nDummy < nDummyCount; nDummy++)
 		{
-			IEditorTexture *pTexDummy = m_pActiveContext->Dummies.Element(nDummy);
-			if (!strcmpi(pszName, pTexDummy->GetName()))
+			IEditorTexture *pTex = m_pActiveContext->Dummies.Element(nDummy);
+			if (!strcmpi(pszName, pTex->GetName()))
 			{
-				m_pLastTex = pTexDummy;
+				m_pLastTex = pTex;
 				m_nLastIndex = -1;
-				return(pTexDummy);
+				return(pTex);
 			}
 		}
 
@@ -503,44 +500,6 @@ void CTextureSystem::SetActiveGroup(const char *pcszName)
 }
 
 
-void HammerFileSystem_ReportSearchPath( const char *szPathID )
-{
-	char szSearchPath[ 4096 ];
-	g_pFullFileSystem->GetSearchPath( szPathID, true, szSearchPath, sizeof( szSearchPath ) );
-
-	Msg( mwStatus, "------------------------------------------------------------------" );
-
-	char *pszOnePath = strtok( szSearchPath, ";" );
-	while ( pszOnePath )
-	{
-		Msg( mwStatus, "Search Path (%s): %s", szPathID, pszOnePath );
-		pszOnePath = strtok( NULL, ";" );
-	}
-}
-
-
-//-----------------------------------------------------------------------------
-// FIXME: Make this work correctly, using the version in filesystem_tools.cpp
-// (it doesn't work currently owing to filesystem setup issues)
-//-----------------------------------------------------------------------------
-void HammerFileSystem_SetGame( const char *pExeDir, const char *pModDir )
-{
-	static bool s_bOnce = false;
-	Assert( !s_bOnce );
-	s_bOnce = true;
-
-	char buf[MAX_PATH];
-
-	Q_snprintf( buf, MAX_PATH, "%s\\hl2", pExeDir );
-	g_pFullFileSystem->AddSearchPath( buf, "GAME", PATH_ADD_TO_HEAD );
-
-	if ( pModDir && *pModDir != '\0' )
-	{
-		g_pFullFileSystem->AddSearchPath( pModDir, "GAME", PATH_ADD_TO_HEAD );
-	}
-
-	HammerFileSystem_ReportSearchPath( "GAME" );
-}
 
 
 //-----------------------------------------------------------------------------
@@ -566,8 +525,6 @@ void CTextureSystem::LoadAllGraphicsFiles(void)
 		// Create a group to hold all the textures for this context.
 		pContext->pAllGroup = new CTextureGroup("All Textures");
 		pContext->Groups.AddToTail(pContext->pAllGroup);
-
-		HammerFileSystem_SetGame(pConfig->m_szGameExeDir, pConfig->m_szModDir);
 
 		// Set the new context as the active context.
 		m_pActiveContext = pContext;
@@ -662,7 +619,7 @@ void CTextureSystem::UpdateFileChangeWatchers()
 }
 
 
-void CTextureSystem::OnFileChange( const char *pFilename, intp context, CTextureSystem::EFileType eFileType )
+void CTextureSystem::OnFileChange( const char *pFilename, int context, CTextureSystem::EFileType eFileType )
 {
 	// It requires the forward slashes later...
 	char fixedSlashes[MAX_PATH];
@@ -688,11 +645,11 @@ void CTextureSystem::OnFileChange( const char *pFilename, intp context, CTexture
 		else
 		{
 			EnumMaterial( fixedSlashes, context );
-			IEditorTexture *pTexFixed = FindActiveTexture( fixedSlashes, NULL, FALSE );
-			if ( pTexFixed )
+			IEditorTexture *pTex = FindActiveTexture( fixedSlashes, NULL, FALSE );
+			if ( pTex )
 			{
-				GetMainWnd()->m_TextureBar.NotifyNewMaterial( pTexFixed );
-				GetMainWnd()->GetFaceEditSheet()->NotifyNewMaterial( pTexFixed );
+				GetMainWnd()->m_TextureBar.NotifyNewMaterial( pTex );
+				GetMainWnd()->GetFaceEditSheet()->NotifyNewMaterial( pTex );
 			}
 		}
 	}
@@ -736,6 +693,7 @@ void CTextureSystem::ReloadMaterialsUsingTexture( ITexture *pTestTexture )
 			if ( pTex == pTestTexture )
 			{
 				pEditorTex->Reload( true );
+				break;
 			}
 		}
 	}
@@ -886,7 +844,9 @@ void ScaleBitmap(CSize sizeSrc, CSize sizeDest, char *src, char *dest)
 			srclinep = src + (srcline * sizeSrc.cx);
 			destlinep = dest + (destline * sizeDest.cx);
 
-			for( int j = 0; j < sizeDest.cx; j++ )
+			int i;
+
+			for( i = 0; i < sizeDest.cx; i++ )
 			{
 				*destlinep = *srclinep;
 
@@ -1240,6 +1200,27 @@ void CTextureSystem::OpenSource( const char *pMaterialName )
 	if ( g_pFullFileSystem->GetLocalPath( pRelativePath, pFullPath, MAX_PATH ) )
 	{
 		ShellExecute( NULL, "open", pFullPath, NULL, NULL, SW_SHOWNORMAL );
+	}
+}
+
+//-----------------------------------------------------------------------------
+// Opens explorer dialog and selects the source file
+//-----------------------------------------------------------------------------
+void CTextureSystem::ExploreToSource( const char *pMaterialName )
+{
+	if ( !pMaterialName )
+		return;
+
+	char pRelativePath[MAX_PATH];
+	Q_snprintf( pRelativePath, MAX_PATH, "materials/%s.vmt", pMaterialName );
+
+	char pFullPath[MAX_PATH];
+	if ( g_pFullFileSystem->GetLocalPath( pRelativePath, pFullPath, MAX_PATH ) )
+	{
+		CString strSel = "/select, ";
+		strSel += pFullPath;
+
+		ShellExecute(NULL, "open", "explorer", strSel, NULL, SW_SHOWNORMAL );
 	}
 }
 

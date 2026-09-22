@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2004, Valve Corporation, All rights reserved. =======
 //
 // Purpose: 
 //
@@ -7,9 +7,10 @@
 #include "datamodel/dmelementfactoryhelper.h"
 #include "movieobjects_interfaces.h"
 
-#include "materialsystem/imaterial.h"
-#include "materialsystem/imaterialsystem.h"
+#include "materialsystem/IMaterial.h"
+#include "materialsystem/IMaterialSystem.h"
 #include "tier2/tier2.h"
+#include "datamodel/dmattributevar.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
@@ -26,10 +27,13 @@ IMPLEMENT_ELEMENT_FACTORY( DmeMaterial, CDmeMaterial );
 //-----------------------------------------------------------------------------
 void CDmeMaterial::OnConstruction()
 {
-	m_pMTL = NULL;
 	m_mtlName.Init( this, "mtlName" );
 }
 
+
+//-----------------------------------------------------------------------------
+//
+//-----------------------------------------------------------------------------
 void CDmeMaterial::OnDestruction()
 {
 }
@@ -41,9 +45,10 @@ void CDmeMaterial::OnDestruction()
 void CDmeMaterial::Resolve()
 {
 	BaseClass::Resolve();
+
 	if ( m_mtlName.IsDirty() )
 	{
-		m_pMTL = NULL; // no cleanup necessary
+		m_mtlRef.Shutdown();
 	}
 }
 
@@ -71,12 +76,14 @@ const char *CDmeMaterial::GetMaterialName() const
 //-----------------------------------------------------------------------------
 IMaterial *CDmeMaterial::GetCachedMTL()
 {
-	if ( m_pMTL == NULL )
+	if ( !m_mtlRef.IsValid() )
 	{
 		const char *mtlName = m_mtlName.Get();
 		if ( mtlName == NULL )
 			return NULL;
-		m_pMTL = g_pMaterialSystem->FindMaterial( mtlName, NULL, false );
+
+		m_mtlRef.Init( g_pMaterialSystem->FindMaterial( mtlName, NULL, false ) );
 	}
-	return m_pMTL;
+
+	return (IMaterial * )m_mtlRef;
 }

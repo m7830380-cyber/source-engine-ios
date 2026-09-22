@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -90,7 +90,11 @@ BEGIN_MESSAGE_MAP( CFaceEditMaterialPage, CPropertyPage )
 	ON_CBN_SELCHANGE( IDC_TEXTUREGROUPS, OnChangeTextureGroup )
 	ON_BN_CLICKED( IDC_BROWSE, OnBrowse )
 	ON_BN_CLICKED( ID_BUTTON_SMOOTHING_GROUPS, OnButtonSmoothingGroups )
+	ON_BN_CLICKED( ID_BUTTON_SHIFTX_RANDOM, OnButtonShiftXRandom )
+	ON_BN_CLICKED( ID_BUTTON_SHIFTY_RANDOM, OnButtonShiftYRandom )
 	//}}AFX_MSG_MAP
+	ON_BN_CLICKED(IDC_FACE_MARK_BUTTON, &CFaceEditMaterialPage::OnBnClickedFaceMarkButton)
+	
 END_MESSAGE_MAP()
 
 //=============================================================================
@@ -100,12 +104,6 @@ END_MESSAGE_MAP()
 #define	CONTENTS_MONSTERCLIP	0x20000
 
 // I don't think we need these currents.  We'll stick to triggers for this
-#define	CONTENTS_CURRENT_0		0x40000
-#define	CONTENTS_CURRENT_90		0x80000
-#define	CONTENTS_CURRENT_180	0x100000
-#define	CONTENTS_CURRENT_270	0x200000
-#define	CONTENTS_CURRENT_UP		0x400000
-#define	CONTENTS_CURRENT_DOWN	0x800000
 #define	CONTENTS_ORIGIN			0x1000000	// removed before bsping an entity
 #define	CONTENTS_MONSTER		0x2000000	// should never be on a brush, only in game
 #define	CONTENTS_DEBRIS			0x4000000
@@ -330,7 +328,7 @@ void FloatToWnd(float fValue, CWnd *pWnd)
 	}
 	else
 	{
-		sprintf(szNew, "%g", fValue);
+		sprintf(szNew, "%.3f", fValue);
 	}
 
 	pWnd->GetWindowText(szCurrent, 128);
@@ -1375,8 +1373,8 @@ void CFaceEditMaterialPage::OnDeltaPosFloatSpin( NMHDR *pNMHDR, LRESULT *pResult
 		CString str;
 		pEdit->GetWindowText(str);
 		float fTmp = atof(str);
-		fTmp += 0.1f * float( pNMUpDown->iDelta );
-		str.Format( "%.2f", fTmp );
+		fTmp += 0.005f * float( pNMUpDown->iDelta );
+		str.Format( "%.3f", fTmp );
 		pEdit->SetWindowText( str );
 
 		*pResult = 0;
@@ -1725,6 +1723,24 @@ void CFaceEditMaterialPage::OnButtonSmoothingGroups( void )
 }
 
 //-----------------------------------------------------------------------------
+// Purpose: Apply a random value to the x shift
+//-----------------------------------------------------------------------------
+void CFaceEditMaterialPage::OnButtonShiftXRandom( void )
+{
+	IntegerToSpin( rand() % 512, (CSpinButtonCtrl*)GetDlgItem(IDC_SPINSHIFTX) );
+	Apply(NULL, FACE_APPLY_MAPPING);
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: Apply a random value to the y shift
+//-----------------------------------------------------------------------------
+void CFaceEditMaterialPage::OnButtonShiftYRandom( void )
+{
+	IntegerToSpin( rand() % 512, (CSpinButtonCtrl*)GetDlgItem(IDC_SPINSHIFTY) );
+	Apply(NULL, FACE_APPLY_MAPPING);
+}
+
+//-----------------------------------------------------------------------------
 // Purpose:
 //-----------------------------------------------------------------------------
 void CFaceEditMaterialPage::SetMaterialPageTool( unsigned short iMaterialTool )
@@ -1782,4 +1798,26 @@ void CFaceEditMaterialPage::SetReadOnly( bool bIsReadOnly )
 	::EnableWindow( ::GetDlgItem( m_hWnd, ID_FACEEDIT_APPLY ), State );
 	::EnableWindow( ::GetDlgItem( m_hWnd, IDC_MODE ), State );
 	::EnableWindow( ::GetDlgItem( m_hWnd, ID_BUTTON_SMOOTHING_GROUPS ), State );
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: Select all faces that have the currently selected texture applied
+//-----------------------------------------------------------------------------
+void CFaceEditMaterialPage::OnBnClickedFaceMarkButton()
+{
+	CMapDoc *pDoc = CMapDoc::GetActiveMapDoc();
+	if (pDoc == NULL)
+		return;
+
+	int iSel = m_TextureList.GetCurSel();
+	if (iSel == LB_ERR)
+		return;
+
+	IEditorTexture *pTex = (IEditorTexture *)m_TextureList.GetItemDataPtr(iSel);
+	if (pTex == NULL)
+		return;
+
+	char sz[128];
+	pTex->GetShortName(sz);
+	pDoc->ReplaceTextures(sz, "", TRUE, 0x100, FALSE, FALSE);
 }

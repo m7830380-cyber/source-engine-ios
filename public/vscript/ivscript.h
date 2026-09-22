@@ -1,4 +1,4 @@
-//========== Copyright ï¿½ 2008, Valve Corporation, All rights reserved. ========
+//========== Copyright © 2008, Valve Corporation, All rights reserved. ========
 //
 // Purpose: VScript
 //
@@ -97,11 +97,8 @@
 
 #include "platform.h"
 #include "datamap.h"
-#include "appframework/IAppSystem.h"
+#include "appframework/iappsystem.h"
 #include "tier1/functors.h"
-#include "vscript/variant.h"
-#include "fmtstr.h"
-#include <functional>
 #include "tier0/memdbgon.h"
 
 #if defined( _WIN32 )
@@ -124,7 +121,7 @@ class CUtlBuffer;
 //
 //-----------------------------------------------------------------------------
 
-#define VSCRIPT_INTERFACE_VERSION		"VScriptManager010"
+#define VSCRIPT_INTERFACE_VERSION		"VScriptManager009"
 
 //-----------------------------------------------------------------------------
 //
@@ -157,29 +154,73 @@ public:
 DECLARE_POINTER_HANDLE( HSCRIPT );
 #define INVALID_HSCRIPT ((HSCRIPT)-1)
 
-inline bool IsValid( HSCRIPT hScript )
-{
-	return ( hScript != NULL && hScript != INVALID_HSCRIPT );
-}
-
 //-----------------------------------------------------------------------------
 // 
 //-----------------------------------------------------------------------------
 
+enum ExtendedFieldType
+{
+	FIELD_TYPEUNKNOWN = FIELD_TYPECOUNT,
+	FIELD_CSTRING,
+	FIELD_HSCRIPT,
+	FIELD_VARIANT,
+};
+
 typedef int ScriptDataType_t;
-typedef CVariant ScriptVariant_t;
-#define SCRIPT_VARIANT_NULL VARIANT_NULL
-#define ScriptDeduceType( T ) VariantDeduceType( T )
+struct ScriptVariant_t;
+
+template <typename T> struct ScriptDeducer { /*enum { FIELD_TYPE = FIELD_TYPEUNKNOWN };*/ };
+#define DECLARE_DEDUCE_FIELDTYPE( fieldType, type ) template<> struct ScriptDeducer<type> { enum { FIELD_TYPE = fieldType }; };
+
+DECLARE_DEDUCE_FIELDTYPE( FIELD_VOID,		void );
+DECLARE_DEDUCE_FIELDTYPE( FIELD_FLOAT,		float );
+DECLARE_DEDUCE_FIELDTYPE( FIELD_CSTRING,	const char * );
+DECLARE_DEDUCE_FIELDTYPE( FIELD_CSTRING,	char * );
+DECLARE_DEDUCE_FIELDTYPE( FIELD_VECTOR,		Vector );
+DECLARE_DEDUCE_FIELDTYPE( FIELD_VECTOR,		const Vector &);
+DECLARE_DEDUCE_FIELDTYPE( FIELD_INTEGER,	int );
+DECLARE_DEDUCE_FIELDTYPE( FIELD_BOOLEAN,	bool );
+DECLARE_DEDUCE_FIELDTYPE( FIELD_CHARACTER,	char );
+DECLARE_DEDUCE_FIELDTYPE( FIELD_HSCRIPT,	HSCRIPT );
+DECLARE_DEDUCE_FIELDTYPE( FIELD_VARIANT,	ScriptVariant_t );
+
+#define ScriptDeduceType( T ) ScriptDeducer<T>::FIELD_TYPE
 
 template <typename T>
 inline const char * ScriptFieldTypeName() 
 {
-	return VariantFieldTypeName< T >();
+	T::using_unknown_script_type(); 
+	return NULL;
 }
 
-inline const char * ScriptFieldTypeName( int16 eType )
+#define DECLARE_NAMED_FIELDTYPE( fieldType, strName ) template <> inline const char * ScriptFieldTypeName<fieldType>() { return strName; }
+DECLARE_NAMED_FIELDTYPE( void,	"void" );
+DECLARE_NAMED_FIELDTYPE( float,	"float" );
+DECLARE_NAMED_FIELDTYPE( const char *,	"cstring" );
+DECLARE_NAMED_FIELDTYPE( char *,	"cstring" );
+DECLARE_NAMED_FIELDTYPE( Vector,	"vector" );
+DECLARE_NAMED_FIELDTYPE( const Vector&,	"vector" );
+DECLARE_NAMED_FIELDTYPE( int,	"integer" );
+DECLARE_NAMED_FIELDTYPE( bool,	"boolean" );
+DECLARE_NAMED_FIELDTYPE( char,	"character" );
+DECLARE_NAMED_FIELDTYPE( HSCRIPT,	"hscript" );
+DECLARE_NAMED_FIELDTYPE( ScriptVariant_t,	"variant" );
+
+inline const char * ScriptFieldTypeName( int16 eType)
 {
-	return VariantFieldTypeName( eType );
+	switch( eType )
+	{
+	case FIELD_VOID:	return "void";
+	case FIELD_FLOAT:	return "float";
+	case FIELD_CSTRING:	return "cstring";
+	case FIELD_VECTOR:	return "vector";
+	case FIELD_INTEGER:	return "integer";
+	case FIELD_BOOLEAN:	return "boolean";
+	case FIELD_CHARACTER:	return "character";
+	case FIELD_HSCRIPT:	return "hscript";
+	case FIELD_VARIANT:	return "variant";
+	default:	return "unknown_script_type";
+	}
 }
 
 //---------------------------------------------------------
@@ -188,7 +229,6 @@ struct ScriptFuncDescriptor_t
 {
 	ScriptFuncDescriptor_t()
 	{
-		m_pszScriptName = NULL;
 		m_pszFunction = NULL;
 		m_ReturnType = FIELD_TYPEUNKNOWN;
 		m_pszDescription = NULL;
@@ -220,19 +260,11 @@ enum ScriptFuncBindingFlags_t
 	SF_MEMBER_FUNC	= 0x01,
 };
 
-struct ScriptFunctionBindingStorageType_t
-{
-	intptr_t val_0;
-	intptr_t val_1;
-	// Josh:
-	// Why do we need *even more* space for a function pointer?
-	// MSVC is very special.
-	// Read https://rants.vastheman.com/2021/09/21/msvc/
-	// This accounts for the "Unknown Inheritance" case, which
-	// CTFPlayer hits.
-	intptr_t val_2;
-	intptr_t val_3;
-};
+#ifdef _PS3
+typedef void* ScriptFunctionBindingStorageType_t; // Function descriptor is actually 64-bit
+#else
+typedef void* ScriptFunctionBindingStorageType_t;
+#endif
 
 typedef bool (*ScriptBindingFunc_t)( ScriptFunctionBindingStorageType_t pFunction, void *pContext, ScriptVariant_t *pArguments, int nArguments, ScriptVariant_t *pReturn );
 
@@ -248,7 +280,7 @@ struct ScriptFunctionBinding_t
 class IScriptInstanceHelper
 {
 public:
-	virtual void *GetProxied( void *p, ScriptFunctionBinding_t *pBinding )			{ return p; }
+	virtual void *GetProxied( void *p )												{ return p; }
 	virtual bool ToString( void *p, char *pBuf, int bufSize )						{ return false; }
 	virtual void *BindOnRead( HSCRIPT hInstance, void *pOld, const char *pszId )	{ return NULL; }
 };
@@ -283,6 +315,195 @@ struct ScriptClassDesc_t
 		return &pHead;
 	}
 };
+
+//---------------------------------------------------------
+// A simple variant type. Intentionally not full featured (no implicit conversion, no memory management)
+//---------------------------------------------------------
+
+enum SVFlags_t
+{
+	SV_FREE = 0x01,
+};
+
+#pragma warning(push)
+#pragma warning(disable:4800)
+struct ScriptVariant_t
+{
+	ScriptVariant_t() :						m_flags( 0 ), m_type( FIELD_VOID )		{ m_pVector = 0; }
+	ScriptVariant_t( int val ) :			m_flags( 0 ), m_type( FIELD_INTEGER )	{ m_int = val;}
+	ScriptVariant_t( float val ) :			m_flags( 0 ), m_type( FIELD_FLOAT )		{ m_float = val; }
+	ScriptVariant_t( double val ) :			m_flags( 0 ), m_type( FIELD_FLOAT )		{ m_float = (float)val; }
+	ScriptVariant_t( char val ) :			m_flags( 0 ), m_type( FIELD_CHARACTER )	{ m_char = val; }
+	ScriptVariant_t( bool val ) :			m_flags( 0 ), m_type( FIELD_BOOLEAN )	{ m_bool = val; }
+	ScriptVariant_t( HSCRIPT val ) :		m_flags( 0 ), m_type( FIELD_HSCRIPT )	{ m_hScript = val; }
+
+	ScriptVariant_t( const Vector &val, bool bCopy = false ) :	m_flags( 0 ), m_type( FIELD_VECTOR )	{ if ( !bCopy ) { m_pVector = &val; } else { m_pVector = new Vector( val ); m_flags |= SV_FREE; } }
+	ScriptVariant_t( const Vector *val, bool bCopy = false ) :	m_flags( 0 ), m_type( FIELD_VECTOR )	{ if ( !bCopy ) { m_pVector = val; } else { m_pVector = new Vector( *val ); m_flags |= SV_FREE; } }
+	ScriptVariant_t( const char *val , bool bCopy = false ) :	m_flags( 0 ), m_type( FIELD_CSTRING )	{ if ( !bCopy ) { m_pszString = val; } else { m_pszString = strdup( val ); m_flags |= SV_FREE; } }
+
+	bool IsNull() const						{ return (m_type == FIELD_VOID ); }
+
+	operator int() const					{ Assert( m_type == FIELD_INTEGER );	return m_int; }
+	operator int64() const					{ Assert( m_type == FIELD_INTEGER );	return static_cast<int64>(m_int); }
+	operator float() const					{ Assert( m_type == FIELD_FLOAT );		return m_float; }
+	operator const char *() const			{ Assert( m_type == FIELD_CSTRING );	return ( m_pszString ) ? m_pszString : ""; }
+	operator const Vector &() const			{ Assert( m_type == FIELD_VECTOR );		static Vector vecNull(0, 0, 0); return (m_pVector) ? *m_pVector : vecNull; }
+	operator char() const					{ Assert( m_type == FIELD_CHARACTER );	return m_char; }
+	operator bool() const					{ Assert( m_type == FIELD_BOOLEAN );	return m_bool; }
+	operator HSCRIPT() const				{ Assert( m_type == FIELD_HSCRIPT );	return m_hScript; }
+
+	void operator=( int i ) 				{ m_type = FIELD_INTEGER; m_int = i; }
+	void operator=( int64 i ) 				{ m_type = FIELD_INTEGER; m_int = i; }
+	void operator=( float f ) 				{ m_type = FIELD_FLOAT; m_float = f; }
+	void operator=( double f ) 				{ m_type = FIELD_FLOAT; m_float = (float)f; }
+	void operator=( const Vector &vec )		{ m_type = FIELD_VECTOR; m_pVector = &vec; }
+	void operator=( const Vector *vec )		{ m_type = FIELD_VECTOR; m_pVector = vec; }
+	void operator=( const char *psz )		{ m_type = FIELD_CSTRING; m_pszString = psz; }
+	void operator=( char c )				{ m_type = FIELD_CHARACTER; m_char = c; }
+	void operator=( bool b ) 				{ m_type = FIELD_BOOLEAN; m_bool = b; }
+	void operator=( HSCRIPT h ) 			{ m_type = FIELD_HSCRIPT; m_hScript = h; }
+
+	void Free()								{ if ( ( m_flags & SV_FREE ) && ( m_type == FIELD_HSCRIPT || m_type == FIELD_VECTOR || m_type == FIELD_CSTRING ) ) delete m_pszString; } // Generally only needed for return results
+
+	template <typename T>
+	T Get()
+	{
+		T value;
+		AssignTo( &value );
+		return value;
+	}
+
+	template <typename T>
+	bool AssignTo( T *pDest )
+	{
+		ScriptDataType_t destType = ScriptDeduceType( T );
+		if ( destType == FIELD_TYPEUNKNOWN )
+		{
+			DevWarning( "Unable to convert script variant to unknown type\n" );
+		}
+		if ( destType == m_type )
+		{
+			*pDest = *this;
+			return true;
+		}
+
+		if ( m_type != FIELD_VECTOR && m_type != FIELD_CSTRING && destType != FIELD_VECTOR && destType != FIELD_CSTRING )
+		{
+			switch ( m_type )
+			{
+			case FIELD_VOID:		*pDest = 0; break;
+			case FIELD_INTEGER:		*pDest = m_int; return true;
+			case FIELD_FLOAT:		*pDest = m_float; return true;
+			case FIELD_CHARACTER:	*pDest = m_char; return true;
+			case FIELD_BOOLEAN:		*pDest = m_bool; return true;
+			case FIELD_HSCRIPT:		*pDest = m_hScript; return true;
+			}
+		}
+		else
+		{
+			DevWarning( "No free conversion of %s script variant to %s right now\n",
+				ScriptFieldTypeName( m_type ), ScriptFieldTypeName<T>() );
+			if ( destType != FIELD_VECTOR )
+			{
+				*pDest = 0;
+			}
+		}
+		return false;
+	}
+
+	bool AssignTo( float *pDest )
+	{
+		switch( m_type )
+		{
+		case FIELD_VOID:		*pDest = 0; return false;
+		case FIELD_INTEGER:		*pDest = m_int; return true;
+		case FIELD_FLOAT:		*pDest = m_float; return true;
+		case FIELD_BOOLEAN:		*pDest = m_bool; return true;
+		default:
+			DevWarning( "No conversion from %s to float now\n", ScriptFieldTypeName( m_type ) );
+			return false;
+		}
+	}
+
+	bool AssignTo( int *pDest )
+	{
+		switch( m_type )
+		{
+		case FIELD_VOID:		*pDest = 0; return false;
+		case FIELD_INTEGER:		*pDest = m_int; return true;
+		case FIELD_FLOAT:		*pDest = ( int )m_float; return true;
+		case FIELD_BOOLEAN:		*pDest = m_bool; return true;
+		default:
+			DevWarning( "No conversion from %s to int now\n", ScriptFieldTypeName( m_type ) );
+			return false;
+		}
+	}
+
+	bool AssignTo( bool *pDest )
+	{
+		switch( m_type )
+		{
+		case FIELD_VOID:		*pDest = 0; return false;
+		case FIELD_INTEGER:		*pDest = m_int; return true;
+		case FIELD_FLOAT:		*pDest = m_float; return true;
+		case FIELD_BOOLEAN:		*pDest = m_bool; return true;
+		default:
+			DevWarning( "No conversion from %s to bool now\n", ScriptFieldTypeName( m_type ) );
+			return false;
+		}
+	}
+
+	bool AssignTo( char **pDest )
+	{
+		DevWarning( "No free conversion of string or vector script variant right now\n" );
+		// If want to support this, probably need to malloc string and require free on other side [3/24/2008 tom]
+		*pDest = "";
+		return false;
+	}
+
+	bool AssignTo( ScriptVariant_t *pDest )
+	{
+		pDest->m_type = m_type;
+		if ( m_type == FIELD_VECTOR ) 
+		{
+			pDest->m_pVector = new Vector;
+			((Vector *)(pDest->m_pVector))->Init( m_pVector->x, m_pVector->y, m_pVector->z );
+			pDest->m_flags |= SV_FREE;
+		}
+		else if ( m_type == FIELD_CSTRING ) 
+		{
+			pDest->m_pszString = strdup( m_pszString );
+			pDest->m_flags |= SV_FREE;
+		}
+		else
+		{
+			pDest->m_int = m_int;
+		}
+		return false;
+	}
+
+	union
+	{
+		int				m_int;
+		float			m_float;
+		const char *	m_pszString;
+		const Vector *	m_pVector;
+		char			m_char;
+		bool			m_bool;
+		HSCRIPT			m_hScript;
+	};
+
+	int16				m_type;
+	int16				m_flags;
+
+private:
+};
+
+#define SCRIPT_VARIANT_NULL ScriptVariant_t()
+
+#pragma warning(pop)
+
+
 
 //-----------------------------------------------------------------------------
 // 
@@ -386,11 +607,7 @@ inline IScriptInstanceHelper *GetScriptInstanceHelper_ScriptNoBase_t()
 		return; \
 	}
 
-#define SCRIPTFUNC_CONCAT_(x, y) x##y
-#define SCRIPTFUNC_CONCAT(x, y) SCRIPTFUNC_CONCAT_(x, y)
-
 #define DEFINE_SCRIPTFUNC( func, description )												DEFINE_SCRIPTFUNC_NAMED( func, #func, description )
-#define DEFINE_SCRIPTFUNC_WRAPPED( func, description )										DEFINE_SCRIPTFUNC_NAMED( SCRIPTFUNC_CONCAT( Script, func ), #func, description )
 #define DEFINE_SCRIPTFUNC_NAMED( func, scriptName, description )							ScriptAddFunctionToClassDescNamed( pDesc, _className, func, scriptName, description );
 #define DEFINE_SCRIPT_CONSTRUCTOR()															ScriptAddConstructorToClassDesc( pDesc, _className );
 #define DEFINE_SCRIPT_INSTANCE_HELPER( className, p )										template <> IScriptInstanceHelper *GetScriptInstanceHelperOverride< className >( IScriptInstanceHelper * ) { return p; }
@@ -398,6 +615,9 @@ inline IScriptInstanceHelper *GetScriptInstanceHelper_ScriptNoBase_t()
 template <typename T> ScriptClassDesc_t *GetScriptDesc(T *);
 
 template <>
+#ifdef _PS3
+static
+#endif
 inline ScriptClassDesc_t *GetScriptDesc<ScriptNoBase_t>( ScriptNoBase_t *) { return NULL; }
 
 #define GetScriptDescForClass( className ) GetScriptDesc( ( className *)NULL )
@@ -444,11 +664,6 @@ enum ScriptStatus_t
 	SCRIPT_RUNNING,
 };
 
-// forward declarations for the ForwardConsoleCommand() workaround
-class CCommandContext;
-class CCommand;
-class CSquirrelMetamethodDelegateImpl;
-
 class IScriptVM
 {
 public:
@@ -490,13 +705,12 @@ public:
 	// Scope
 	//--------------------------------------------------------
 	virtual HSCRIPT CreateScope( const char *pszScope, HSCRIPT hParent = NULL ) = 0;
-	virtual HSCRIPT ReferenceScope( HSCRIPT hScript ) = 0;
 	virtual void ReleaseScope( HSCRIPT hScript ) = 0;
 
 	//--------------------------------------------------------
 	// Script functions
 	//--------------------------------------------------------
-	virtual HSCRIPT LookupFunction( const char *pszFunction, HSCRIPT hScope = NULL, bool bNoDelegation = false ) = 0;
+	virtual HSCRIPT LookupFunction( const char *pszFunction, HSCRIPT hScope = NULL ) = 0;
 	virtual void ReleaseFunction( HSCRIPT hScript ) = 0;
 
 	//--------------------------------------------------------
@@ -534,7 +748,7 @@ public:
 	template <typename T> HSCRIPT RegisterInstance( T *pInstance, const char *pszInstance, HSCRIPT hScope = NULL)					{ HSCRIPT hInstance = RegisterInstance( GetScriptDesc( pInstance ), pInstance ); SetValue( hScope, pszInstance, hInstance ); return hInstance; }
 	virtual void RemoveInstance( HSCRIPT ) = 0;
 	void RemoveInstance( HSCRIPT hInstance, const char *pszInstance, HSCRIPT hScope = NULL )										{ ClearValue( hScope, pszInstance ); RemoveInstance( hInstance ); }
-	void RemoveInstance( const char *pszInstance, HSCRIPT hScope = NULL )															{ ScriptVariant_t val; if ( GetValue( hScope, pszInstance, &val ) ) { if ( val.GetType() == FIELD_HSCRIPT) { RemoveInstance(val, pszInstance, hScope); } ReleaseValue(val); } }
+	void RemoveInstance( const char *pszInstance, HSCRIPT hScope = NULL )															{ ScriptVariant_t val; if ( GetValue( hScope, pszInstance, &val ) ) { if ( val.m_type == FIELD_HSCRIPT ) { RemoveInstance( val, pszInstance, hScope ); } ReleaseValue( val ); } }
 
 	virtual void *GetInstanceValue( HSCRIPT hInstance, ScriptClassDesc_t *pExpectedType = NULL ) = 0;
 
@@ -561,45 +775,6 @@ public:
 
 	virtual bool ClearValue( HSCRIPT hScope, const char *pszKey ) = 0;
 	bool ClearValue( const char *pszKey)																							{ return ClearValue( NULL, pszKey ); }
-
-	//----------------------------------------------------------------------------
-
-	// Josh: Some extra helpers here.
-	template <typename T>
-	T Get( HSCRIPT hScope, const char *pszKey )
-	{
-		ScriptVariant_t variant;
-		GetValue( hScope, pszKey, &variant );
-		return variant.Get<T>();
-	}
-
-	template <typename T>
-	T Get( const char *pszKey )
-	{
-		return Get<T>( NULL, pszKey );
-	}
-
-	bool Has( HSCRIPT hScope, const char* pszKey )
-	{
-		return ValueExists( hScope, pszKey );
-	}
-
-	bool Has( const char* pszKey )
-	{
-		return Has( NULL, pszKey );
-	}
-
-	template <typename T>
-	using IfHasFuncType = std::function<void(T)>;
-
-	template <typename T>
-	void IfHas( HSCRIPT hScope, const char *pszKey, IfHasFuncType<T> func )
-	{
-		if ( Has( hScope, pszKey ) )
-		{
-			func( Get<T>( hScope, pszKey ) );
-		}
-	}
 
 	//----------------------------------------------------------------------------
 
@@ -724,111 +899,6 @@ public:
 		return ExecuteFunction( hFunction, args, ARRAYSIZE(args), pReturn, hScope, bWait );
 	}
 
-	//-----------------------------------------------------
-	/// @{
-	/// Machinery for smuggling a _get() metamethod override 
-	/// through the VSCRIPT layer into a Squirrel object.
-	/// This allows you to have a Squrirrel slot that delegates
-	/// its Get() call to some C++ class you specify.
-	/// These all deliberately have 'Squirrel' in the name to make
-	/// obvious that this is a workaround the abstraction layer, and
-	/// thus something that must be implemented better or moved elsewhere
-	/// if we decide not to kill the vscript abstraction.
-
-	/*! 
-	\desc When squirrel does a lookup like "foo.bar", the class that's behind foo has a chance
-	to override the _get() function, so that it can intercept the lookup for "foo" and
-	supply whatever it likes in its place. This interface lets you inject, from the C++
-	side, any key->value dictionary that fits this mechanism. 
-	
-	It registers itself as a slot in the given Squirrel class, then any get() on that slot 
-	actually comes to the Get() function here. 
-
-	Note that it's impossible to create a new slot on a class *instance*, only set the 
-	value of an existing slot. So you can't make a new slot with CSquirrelNamedSlotToGetMethodDelegate --
-	its pszSlotName should match a slot already existing in the class.
-
-	Your C++ dictionary (anything with get-value-by-key semantics) 
-	should inherit from this:
-	*/
-	class ISquirrelMetamethodDelegate
-	{
-	public:
-		/// create a virtual destructor 
-		virtual ~ISquirrelMetamethodDelegate() {};
-
-		/// This is  the function you must implement.
-		/// If the given key (usually a string) was "found", write the return value through the *pReturnValue, 
-		/// and return true. 
-		/// Returning false tells the script engine "key not found", which is a special kind of exception for Squirrel.
-		virtual bool Get( const ScriptVariant_t *pKey, ScriptVariant_t *pReturnValue ) = 0;
-	};
-
-	/*! RAII class used to register an ISquirrelMetamethodDelegate as a slot in an existing Squirrel 
-		class. For example, if you have a class foo, and you call this with the slotName "bar",
-		this will make things so that foo.bar.x in Squirrel will actually call Get( "x") on the 
-		ISquirrelMetamethodDelegate you provided. 
-	
-		To register a ISquirrelMetamethodDelegate for a given Squirrel object, 
-		create one of these. When this object goes out of scope, the _get metamethod will
-		be unregistered and unbound. That lets you have automatic cleanup. 
-		This kooky workaround is necessary because the actual machinery of registering
-		a metamethod has to be inside the vscript.dll, so the code that you would like
-		to simply be in the constructor for ISquirrelMetamethodDelegate actually has to
-		be hidden behind a function in this interface.
-
-		\note It's impossible to create a new slot on a class *instance*, only set the 
-		value of an existing slot. So you can't make a new slot with CSquirrelNamedSlotToGetMethodDelegate --
-		its pszSlotName should match a slot already existing in the class.
-	 */
-	class CSquirrelNamedSlotToGetMethodDelegate
-	{
-	public:
-		inline CSquirrelNamedSlotToGetMethodDelegate( IScriptVM *pVM, 
-			HSCRIPT &hParentObject,  ///< the instance or class in which you want to register this metamethod
-			const char *pszSlotName, ///< the name of the slot in the instance which will delegate to this metamethod. (eg, if you use "foo" here, then any call to instance.foo.x will result in a Get() call to your delegate with key 'x').
-			ISquirrelMetamethodDelegate *pDelegate, ///< your implementation of the delegate class, which has a Get() providing dictionary semantics
-			bool bDeleteDelegateOnExit ///< if true, this class' destructor will call DELETE on the ISquirrelMetamethodDelegate pointer you give it -- ie, have this take ownership of the delegate, and delete it when finished. You usually want true.
-			);
-		inline ~CSquirrelNamedSlotToGetMethodDelegate();
-
-		inline bool IsValid() const; ///< check if everything got constructed properly, etc
-
-	protected:
-		/// PIMPL idiom, necessary because the necessary Squirrel details can't be
-		/// included at this interface layer. When we break the Squirrel abstraction,
-		/// the code and data through this pointer can be brought into one class and
-		/// we can have less insanity.
-		CSquirrelMetamethodDelegateImpl * const m_pImpl;
-		// ISquirrelMetamethodDelegate * const m_pDelegate;
-		IScriptVM * const m_pVM;
-
-	private:
-		/// prevent inadvertent copying, etc. 
-		/// if we really need to copy these (or more to the point, return them by value),
-		/// could implement some kind of ref-counting to make copy constructors safe.
-		CSquirrelNamedSlotToGetMethodDelegate( const CSquirrelNamedSlotToGetMethodDelegate & );  ///< no implementation.
-		void operator =( const CSquirrelNamedSlotToGetMethodDelegate & ); ///< no implementation.
-	};
-
-	/// @}
-
-	protected:
-	/// interface hiding for the squirrel metamethod machinery -- don't call these directly,
-	/// but instead try to use the constructor and dtor of the CSquirrelNamedSlotToGetMethodDelegate
-	/// instead. That'll automatically clean up after itself when it goes out of scope.
-	virtual CSquirrelMetamethodDelegateImpl *MakeSquirrelMetamethod_Get(
-		HSCRIPT &hParentObject,  ///< the instance or class in which you want to register this metamethod
-		const char *pszSlotName, ///< the name of the slot in the instance which will delegate to this metamethod. (eg, if you use "foo" here, then any call to instance.foo.x will result in a Get() call to your delegate with key 'x').
-		ISquirrelMetamethodDelegate *pDelegate, ///< your implementation of the delegate class, which has a Get() providing dictionary semantics
-		bool bDeleteDelegateWhenIAmDeleted ///< if true, DestroySquirrelMetamethod_Get will also call delete on the pDelegate stored here.
-		) = 0;
-	/// calls delete on the given pointer, and does other important cleanup work as well.
-	virtual void DestroySquirrelMetamethod_Get( CSquirrelMetamethodDelegateImpl * pMetaMethodImpl ) = 0;
-
-public:
-
-	virtual int GetKeyValue2( HSCRIPT hScope, int nIterator, ScriptVariant_t *pKey, ScriptVariant_t *pValue ) = 0;
 };
 
 
@@ -958,9 +1028,9 @@ public:
 		return Run( (const char *)pszScriptText, pszScriptName);
 	}
 
-	HSCRIPT LookupFunction( const char *pszFunction, bool bNoDelegation = false )
+	HSCRIPT LookupFunction( const char *pszFunction )
 	{
-		return GetVM()->LookupFunction( pszFunction, m_hScope, bNoDelegation );
+		return GetVM()->LookupFunction( pszFunction, m_hScope );
 	}
 
 	void ReleaseFunction( HSCRIPT hScript )
@@ -1391,16 +1461,6 @@ public:
 #define DEFINE_SCRIPT_PROXY_14V( FuncName ) DEFINE_SCRIPT_PROXY_GUTS_NO_RETVAL( FuncName, 14 )
 
 //-----------------------------------------------------------------------------
-
-template <>
-inline HSCRIPT IScriptVM::Get<HSCRIPT>( HSCRIPT hScope, const char *pszKey )
-{
-	ScriptVariant_t variant;
-	GetValue( hScope, pszKey, &variant );
-	if ( variant.GetType() == FIELD_VOID )
-		return NULL;
-	return variant.Get<HSCRIPT>();
-}
 
 #include "tier0/memdbgoff.h"
 

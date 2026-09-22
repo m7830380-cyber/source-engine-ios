@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Builds/merges the BSP tree of detail brushes
 //
@@ -380,7 +380,7 @@ bool ClipFaceToBrush( face_t *pFace, bspbrush_t *pbrush, face_t **pOutputList )
 			}
 		}
 
-		for ( i = 0; i < sortedSides.Size(); i++ )
+		for ( i = 0; i < sortedSides.Count(); i++ )
 		{
 			int index = sortedSides[i];
 			if ( index == foundSide )
@@ -418,7 +418,7 @@ bool ClipFaceToBrush( face_t *pFace, bspbrush_t *pbrush, face_t **pOutputList )
 		FreeFace( currentface );
 
 		// if we made it all the way through and didn't produce any fragments then the whole face was clipped away
-		if ( !*pOutputList && i == sortedSides.Size() )
+		if ( !*pOutputList && i == sortedSides.Count() )
 		{
 			return true;
 		}
@@ -445,6 +445,7 @@ face_t *MakeBrushFace( side_t *originalSide, winding_t *winding )
 	//
 	f->texinfo = originalSide->texinfo;
 	f->dispinfo = -1;
+	f->smoothingGroups = originalSide->smoothingGroups;
 
 	// save plane info
 	f->planenum = originalSide->planenum;
@@ -497,6 +498,16 @@ side_t *FindOriginalSide( mapbrush_t *mb, side_t *pBspSide )
 		Error( "Bad detail brush side\n" );
 	}
 	return bestside;
+}
+
+static bool IsAllNodraw( mapbrush_t *pMapBrush )
+{
+	for ( int i = 0; i < pMapBrush->numsides; i++ )
+	{
+		if ( !(pMapBrush->original_sides[i].surf & SURF_NODRAW) )
+			return false;
+	}
+	return true;
 }
 
 // Get a list of brushes from pBrushList that could cut faces on the source brush

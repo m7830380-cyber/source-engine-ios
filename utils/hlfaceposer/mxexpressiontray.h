@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -21,7 +21,7 @@
 #define IDC_THUMBNAIL_DECREASE		1016
 #define IDC_CONTEXT_CREATEBITMAP	1017
 
-#define COLOR_TRAYBACKGROUND		RGB( 240, 240, 220 )
+#define COLOR_TRAYBACKGROUND		Color( 240, 240, 220 )
 
 class ControlPanel;
 class FlexPanel;
@@ -97,7 +97,7 @@ private: // Methods
 							int rcx, int rcy, int rcw, int rch, int c, int selected, bool updateselection );
 
 	void				DrawDirtyFlag( CChoreoWidgetDrawHelper& helper, CExpression *current, int rcx, int rcy, int rcw, int rch );
-	void				DrawExpressionFocusRect( CChoreoWidgetDrawHelper& helper, int x, int y, int w, int h, COLORREF clr );
+	void				DrawExpressionFocusRect( CChoreoWidgetDrawHelper& helper, int x, int y, int w, int h, const Color& clr );
 	void				DrawExpressionDescription( CChoreoWidgetDrawHelper& helper, int x, int y, int w, int h, const char *expressionname, const char *description );
 
 	void				CreateButtons( void );

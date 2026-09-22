@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -6,9 +6,9 @@
 //=============================================================================//
 
 #include <windows.h>
-#include <dbghelp.h>
 #include "tier0/minidump.h"
 #include "tools_minidump.h"
+
 
 static bool g_bToolsWriteFullMinidumps = false;
 static ToolsExceptionHandler g_pCustomExceptionHandler = NULL;
@@ -18,23 +18,23 @@ static ToolsExceptionHandler g_pCustomExceptionHandler = NULL;
 // Internal helpers.
 // --------------------------------------------------------------------------------- //
 
-static LONG __stdcall ToolsExceptionFilter( struct _EXCEPTION_POINTERS *ExceptionInfo )
+static void ToolsExceptionFilter( uint uStructuredExceptionCode, ExceptionInfo_t * pExceptionInfo, const char *pszFilenameSuffix )
 {
 	// Non VMPI workers write a minidump and show a crash dialog like normal.
-	int iType = MiniDumpNormal;
+	uint32 iType = MINIDUMP_Normal;
 	if ( g_bToolsWriteFullMinidumps )
-		iType = MiniDumpWithDataSegs | MiniDumpWithIndirectlyReferencedMemory;
+	{
+		iType |= MINIDUMP_WithDataSegs | MINIDUMP_WithIndirectlyReferencedMemory;
+	}
 		
-	WriteMiniDumpUsingExceptionInfo( ExceptionInfo->ExceptionRecord->ExceptionCode, ExceptionInfo, (MINIDUMP_TYPE)iType );
-	return EXCEPTION_CONTINUE_SEARCH;
+	WriteMiniDumpUsingExceptionInfo( uStructuredExceptionCode, pExceptionInfo, iType, pszFilenameSuffix );
 }
 
 
-static LONG __stdcall ToolsExceptionFilter_Custom( struct _EXCEPTION_POINTERS *ExceptionInfo )
+static void ToolsExceptionFilter_Custom( uint uStructuredExceptionCode, ExceptionInfo_t * pExceptionInfo, const char *pszFilenameSuffix )
 {
 	// Run their custom handler.
-	g_pCustomExceptionHandler( ExceptionInfo->ExceptionRecord->ExceptionCode, ExceptionInfo );
-	return EXCEPTION_EXECUTE_HANDLER; // (never gets here anyway)
+	g_pCustomExceptionHandler( uStructuredExceptionCode, pExceptionInfo );
 }
 
 
@@ -50,12 +50,12 @@ void EnableFullMinidumps( bool bFull )
 
 void SetupDefaultToolsMinidumpHandler()
 {
-	SetUnhandledExceptionFilter( ToolsExceptionFilter );
+	MinidumpSetUnhandledExceptionFunction( ToolsExceptionFilter );
 }
 
 
 void SetupToolsMinidumpHandler( ToolsExceptionHandler fn )
 {
 	g_pCustomExceptionHandler = fn;
-	SetUnhandledExceptionFilter( ToolsExceptionFilter_Custom );
+	MinidumpSetUnhandledExceptionFunction( ToolsExceptionFilter_Custom );
 }

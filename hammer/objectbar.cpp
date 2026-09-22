@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ====
 //
 // Purpose: 
 //
@@ -312,7 +312,8 @@ CMapClass *CObjectBar::CreateInBox(BoundBox *pBox, CMapView *pView)
 			const CMapObjectList &SolidList = *pArch->GetChildren();
 			FOR_EACH_OBJ( SolidList, nSolid )
 			{	
-				CMapSolid	*pSolid = dynamic_cast<CMapSolid *>(SolidList[nSolid]);
+				CMapClass *pMapClass = (CUtlReference< CMapClass >)SolidList[nSolid];
+				CMapSolid	*pSolid = dynamic_cast<CMapSolid *>(pMapClass);
 				if ( pSolid )
 					pSolid->SetTexture(GetDefaultTextureName());
 			}	
@@ -339,7 +340,8 @@ CMapClass *CObjectBar::CreateInBox(BoundBox *pBox, CMapView *pView)
 			const CMapObjectList &SolidList = *pTorus->GetChildren();
 			FOR_EACH_OBJ( SolidList, nSolid )
 			{	
-				CMapSolid	*pSolid = dynamic_cast<CMapSolid *>(SolidList[nSolid]);
+				CMapClass *pMapClass = (CUtlReference< CMapClass >)SolidList[nSolid];
+				CMapSolid	*pSolid = dynamic_cast<CMapSolid *>( pMapClass );
 				if ( pSolid )
 					pSolid->SetTexture(GetDefaultTextureName());
 			}	

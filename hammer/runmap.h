@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -20,6 +20,8 @@ public:
 	int		m_iLight;
 	int		m_iQBSP;
 	BOOL	m_bHDRLight;
+	BOOL	m_bWaitForKeypress;
+
 	//}}AFX_DATA
 
 	BOOL m_bSwitchMode;

@@ -142,7 +142,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifndef _PS3
 #include <signal.h>
+#endif
 #include <math.h>
 #include <errno.h>
 #include <ctype.h>
@@ -165,7 +167,9 @@
 #   include <utime.h>
 #   include <unistd.h>
 #   include <sys/stat.h>
-#   include <sys/times.h>
+#	ifndef _PS3
+#	include <sys/times.h>
+#	endif
 
 #   define PATH_SEP    '/'
 #   define MY_LSTAT    lstat
@@ -638,7 +642,7 @@ static
 Bool testStream ( FILE *zStream )
 {
    BZFILE* bzf = NULL;
-   Int32   bzerr, bzerr_dummy, ret, streamNo, i;
+   Int32   bzerr, bzerr_dummy, ret, nread, streamNo, i;
    UChar   obuf[5000];
    UChar   unused[BZ_MAX_UNUSED];
    Int32   nUnused;
@@ -660,7 +664,7 @@ Bool testStream ( FILE *zStream )
       streamNo++;
 
       while (bzerr == BZ_OK) {
-         BZ2_bzRead ( &bzerr, bzf, obuf, 5000 );
+         nread = BZ2_bzRead ( &bzerr, bzf, obuf, 5000 );
          if (bzerr == BZ_DATA_ERROR_MAGIC) goto errhandler;
       }
       if (bzerr != BZ_STREAM_END) goto errhandler;
@@ -1061,6 +1065,9 @@ FILE* fopen_output_safely ( Char* name, const char* mode )
 static 
 Bool notAStandardFile ( Char* name )
 {
+#ifdef _PS3
+	return True;
+#else
    IntNative      i;
    struct MY_STAT statBuf;
 
@@ -1068,6 +1075,7 @@ Bool notAStandardFile ( Char* name )
    if (i != 0) return True;
    if (MY_S_ISREG(statBuf.st_mode)) return False;
    return True;
+#endif
 }
 
 
@@ -1078,12 +1086,16 @@ Bool notAStandardFile ( Char* name )
 static 
 Int32 countHardLinks ( Char* name )
 {  
+#ifdef _PS3
+	return 0;
+#else
    IntNative      i;
    struct MY_STAT statBuf;
 
    i = MY_LSTAT ( name, &statBuf );
    if (i != 0) return 0;
    return (statBuf.st_nlink - 1);
+#endif
 }
 
 
@@ -1143,7 +1155,9 @@ void applySavedMetaInfoToOutputFile ( Char *dstName )
    retVal = utime ( dstName, &uTimBuf );
    ERROR_IF_NOT_ZERO ( retVal );
 
+#ifndef _PS3
    retVal = chown ( dstName, fileMetaInfo.st_uid, fileMetaInfo.st_gid );
+#endif
    /* chown() will in many cases return with EPERM, which can
       be safely ignored.
    */
@@ -1255,6 +1269,7 @@ void compress ( Char *name )
    }
    if ( srcMode == SM_F2F || srcMode == SM_F2O ) {
       MY_STAT(inName, &statBuf);
+#ifndef _PS3
       if ( MY_S_ISDIR(statBuf.st_mode) ) {
          fprintf( stderr,
                   "%s: Input file %s is a directory.\n",
@@ -1262,6 +1277,7 @@ void compress ( Char *name )
          setExit(1);
          return;
       }
+#endif
    }
    if ( srcMode == SM_F2F && !forceOverwrite && notAStandardFile ( inName )) {
       if (noisy)
@@ -1299,6 +1315,7 @@ void compress ( Char *name )
       case SM_I2O:
          inStr = stdin;
          outStr = stdout;
+#ifndef _PS3
          if ( isatty ( fileno ( stdout ) ) ) {
             fprintf ( stderr,
                       "%s: I won't write compressed data to a terminal.\n",
@@ -1308,11 +1325,13 @@ void compress ( Char *name )
             setExit(1);
             return;
          };
+#endif
          break;
 
       case SM_F2O:
          inStr = fopen ( inName, "rb" );
          outStr = stdout;
+#ifndef _PS3
          if ( isatty ( fileno ( stdout ) ) ) {
             fprintf ( stderr,
                       "%s: I won't write compressed data to a terminal.\n",
@@ -1323,6 +1342,7 @@ void compress ( Char *name )
             setExit(1);
             return;
          };
+#endif
          if ( inStr == NULL ) {
             fprintf ( stderr, "%s: Can't open input file %s: %s.\n",
                       progName, inName, strerror(errno) );
@@ -1434,6 +1454,7 @@ void uncompress ( Char *name )
    }
    if ( srcMode == SM_F2F || srcMode == SM_F2O ) {
       MY_STAT(inName, &statBuf);
+#ifndef _PS3
       if ( MY_S_ISDIR(statBuf.st_mode) ) {
          fprintf( stderr,
                   "%s: Input file %s is a directory.\n",
@@ -1441,6 +1462,7 @@ void uncompress ( Char *name )
          setExit(1);
          return;
       }
+#endif
    }
    if ( srcMode == SM_F2F && !forceOverwrite && notAStandardFile ( inName )) {
       if (noisy)
@@ -1485,6 +1507,7 @@ void uncompress ( Char *name )
       case SM_I2O:
          inStr = stdin;
          outStr = stdout;
+#ifndef _PS3
          if ( isatty ( fileno ( stdin ) ) ) {
             fprintf ( stderr,
                       "%s: I won't read compressed data from a terminal.\n",
@@ -1494,6 +1517,7 @@ void uncompress ( Char *name )
             setExit(1);
             return;
          };
+#endif
          break;
 
       case SM_F2O:
@@ -1614,6 +1638,7 @@ void testf ( Char *name )
    }
    if ( srcMode != SM_I2O ) {
       MY_STAT(inName, &statBuf);
+#ifndef _PS3
       if ( MY_S_ISDIR(statBuf.st_mode) ) {
          fprintf( stderr,
                   "%s: Input file %s is a directory.\n",
@@ -1621,11 +1646,13 @@ void testf ( Char *name )
          setExit(1);
          return;
       }
+#endif
    }
 
    switch ( srcMode ) {
 
       case SM_I2O:
+#ifndef _PS3
          if ( isatty ( fileno ( stdin ) ) ) {
             fprintf ( stderr,
                       "%s: I won't read compressed data from a terminal.\n",
@@ -1635,6 +1662,7 @@ void testf ( Char *name )
             setExit(1);
             return;
          };
+#endif
          inStr = stdin;
          break;
 
@@ -1818,7 +1846,7 @@ Cell *snocString ( Cell *root, Char *name )
 static 
 void addFlagsFromEnvVar ( Cell** argList, Char* varName ) 
 {
-#ifndef _X360
+#if !defined(_X360) && !defined(_PS3)
    Int32 i, j, k;
    Char *envbase, *p;
 
@@ -1830,8 +1858,8 @@ void addFlagsFromEnvVar ( Cell** argList, Char* varName )
          if (p[i] == 0) break;
          p += i;
          i = 0;
-         while (isspace((Int32)(p[0]))) p++;
-         while (p[i] != 0 && !isspace((Int32)(p[i]))) i++;
+         while (V_isspace((Int32)(p[0]))) p++;
+         while (p[i] != 0 && !V_isspace((Int32)(p[i]))) i++;
          if (i > 0) {
             k = i; if (k > FILE_NAME_LEN-10) k = FILE_NAME_LEN-10;
             for (j = 0; j < k; j++) tmpName[j] = p[j];
@@ -1879,10 +1907,14 @@ IntNative main ( IntNative argc, Char *argv[] )
    i = j = 0; /* avoid bogus warning from egcs-1.1.X */
 
    /*-- Set up signal handlers for mem access errors --*/
+#ifndef _PS3
    signal (SIGSEGV, mySIGSEGVorSIGBUScatcher);
+#endif
 #  if BZ_UNIX
 #  ifndef __DJGPP__
+#ifndef _PS3
    signal (SIGBUS,  mySIGSEGVorSIGBUScatcher);
+#endif
 #  endif
 #  endif
 
@@ -2023,11 +2055,13 @@ IntNative main ( IntNative argc, Char *argv[] )
    if (opMode != OM_Z) blockSize100k = 0;
 
    if (srcMode == SM_F2F) {
+#ifndef _PS3
       signal (SIGINT,  mySignalCatcher);
       signal (SIGTERM, mySignalCatcher);
 #     if BZ_UNIX
       signal (SIGHUP,  mySignalCatcher);
 #     endif
+#endif
    }
 
    if (opMode == OM_Z) {

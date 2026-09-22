@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright � 2005-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: A set of utilities to render standard shapes
 //
@@ -6,15 +6,17 @@
 
 #include "tier2/renderutils.h"
 #include "tier2/tier2.h"
-#include "tier1/KeyValues.h"
+#include "tier1/keyvalues.h"
 #include "materialsystem/imaterialsystem.h"
 #include "materialsystem/imesh.h"
 #include "materialsystem/imaterial.h"
+#include "tier1/callqueue.h"
 #include "tier0/vprof.h"
 #include "tier0/basetypes.h"
-#ifdef DX_TO_GL_ABSTRACTION
 #include "togl/rendermechanism.h"
-#endif
+
+// NOTE: This has to be the last file included!
+#include "tier0/memdbgon.h"
 
 #if !defined(M_PI)
 	#define M_PI			3.14159265358979323846
@@ -35,31 +37,38 @@ static IMaterial *s_pVertexColorIgnoreZ;
 //-----------------------------------------------------------------------------
 void InitializeStandardMaterials()
 {
+	LOCAL_THREAD_LOCK();
+
 	if ( s_bMaterialsInitialized )
 		return;
 
 	s_bMaterialsInitialized = true;
 
+
 	KeyValues *pVMTKeyValues = new KeyValues( "wireframe" );
 	pVMTKeyValues->SetInt( "$vertexcolor", 1 );
 	s_pWireframe = g_pMaterialSystem->CreateMaterial( "__utilWireframe", pVMTKeyValues );
+	s_pWireframe->IncrementReferenceCount();
 
 	pVMTKeyValues = new KeyValues( "wireframe" );
 	pVMTKeyValues->SetInt( "$vertexcolor", 1 );
 	pVMTKeyValues->SetInt( "$vertexalpha", 1 );
 	pVMTKeyValues->SetInt( "$ignorez", 1 );
 	s_pWireframeIgnoreZ = g_pMaterialSystem->CreateMaterial( "__utilWireframeIgnoreZ", pVMTKeyValues );
+	s_pWireframeIgnoreZ->IncrementReferenceCount();
 
 	pVMTKeyValues = new KeyValues( "unlitgeneric" );
 	pVMTKeyValues->SetInt( "$vertexcolor", 1 );
 	pVMTKeyValues->SetInt( "$vertexalpha", 1 );
 	s_pVertexColor = g_pMaterialSystem->CreateMaterial( "__utilVertexColor", pVMTKeyValues );
+	s_pVertexColor->IncrementReferenceCount();
 
 	pVMTKeyValues = new KeyValues( "unlitgeneric" );
 	pVMTKeyValues->SetInt( "$vertexcolor", 1 );
 	pVMTKeyValues->SetInt( "$vertexalpha", 1 );
 	pVMTKeyValues->SetInt( "$ignorez", 1 );
 	s_pVertexColorIgnoreZ = g_pMaterialSystem->CreateMaterial( "__utilVertexColorIgnoreZ", pVMTKeyValues );
+	s_pVertexColorIgnoreZ->IncrementReferenceCount();
 }
 
 void ShutdownStandardMaterials()
@@ -90,13 +99,20 @@ void RenderWireframeSphere( const Vector &vCenter, float flRadius, int nTheta, i
 {
 	InitializeStandardMaterials();
 
+	CMatRenderContextPtr pRenderContext( g_pMaterialSystem );
+	ICallQueue *pCallQueue = pRenderContext->GetCallQueue();
+	if ( pCallQueue )
+	{
+		pCallQueue->QueueCall( RenderWireframeSphere, RefToVal( vCenter ), flRadius, nTheta, nPhi, c, bZBuffer );
+		return;
+	}
+
 	// Make one more coordinate because (u,v) is discontinuous.
 	++nTheta;
 
 	int nVertices = nPhi * nTheta; 
 	int nIndices = ( nTheta - 1 ) * 4 * ( nPhi - 1 );
 
-	CMatRenderContextPtr pRenderContext( g_pMaterialSystem );
 	pRenderContext->Bind( bZBuffer ? s_pWireframe : s_pWireframeIgnoreZ );
 
 	CMeshBuilder meshBuilder;
@@ -155,11 +171,17 @@ void RenderWireframeSphere( const Vector &vCenter, float flRadius, int nTheta, i
 //-----------------------------------------------------------------------------
 // Draws a sphere
 //-----------------------------------------------------------------------------
-void RenderSphere( const Vector &vCenter, float flRadius, int nTheta, int nPhi, Color c, IMaterial *pMaterial )
+void RenderSphereInternal( const Vector &vCenter, float flRadius, int nTheta, int nPhi, Color c, IMaterial *pMaterial, bool bInsideOut )
 {
 	InitializeStandardMaterials();
 
 	CMatRenderContextPtr pRenderContext( materials );
+	ICallQueue *pCallQueue = pRenderContext->GetCallQueue();
+	if ( pCallQueue )
+	{
+		pCallQueue->QueueCall( RenderSphereInternal, RefToVal( vCenter ), flRadius, nTheta, nPhi, c, pMaterial, bInsideOut );
+		return;
+	}
 
 	unsigned char chRed = c.r();
 	unsigned char chGreen = c.g();
@@ -200,11 +222,14 @@ void RenderSphere( const Vector &vCenter, float flRadius, int nTheta, int nPhi, 
 			Vector vecNormal = vecPos;
 			VectorNormalize(vecNormal);
 
+			Vector4D vecTangent( -vecPos.y, vecPos.x, 0.0f, 1.0f );
+			VectorNormalize( vecTangent.AsVector3D() );
 			vecPos += vCenter;
 
 			meshBuilder.Position3f( vecPos.x, vecPos.y, vecPos.z );
 			meshBuilder.Normal3f( vecNormal.x, vecNormal.y, vecNormal.z );
 			meshBuilder.Color4ub( chRed, chGreen, chBlue, chAlpha );
+			meshBuilder.UserData( vecTangent.Base() );
 			meshBuilder.TexCoord2f( 0, j * flOONTheta, i * flOONPhi );
 			meshBuilder.AdvanceVertex();
 		}
@@ -214,25 +239,41 @@ void RenderSphere( const Vector &vCenter, float flRadius, int nTheta, int nPhi, 
 	int idx = 0;
 	for ( i = 0; i < nPhi - 1; ++i )
 	{
-		for ( j = 0; j < nTheta; ++j )
+		if ( bInsideOut )
 		{
-			idx = nTheta * i + j;
+			for ( j = nTheta-1; j >= 0; --j )
+			{
+				idx = nTheta * i + j;
 
-			meshBuilder.Index( idx + nTheta );
-			meshBuilder.AdvanceIndex();
+				meshBuilder.Index( idx + nTheta );
+				meshBuilder.AdvanceIndex();
 
-			meshBuilder.Index( idx );
-			meshBuilder.AdvanceIndex();
+				meshBuilder.Index( idx );
+				meshBuilder.AdvanceIndex();
+			}
 		}
-
-		// Emit a degenerate triangle to skip to the next row without a connecting triangle
-		if ( i < nPhi - 2 )
+		else
 		{
-			meshBuilder.Index( idx );
-			meshBuilder.AdvanceIndex();
+			for ( j = 0; j < nTheta; ++j )
+			{
+				idx = nTheta * i + j;
 
-			meshBuilder.Index( idx + nTheta + 1 );
-			meshBuilder.AdvanceIndex();
+				meshBuilder.Index( idx + nTheta );
+				meshBuilder.AdvanceIndex();
+
+				meshBuilder.Index( idx );
+				meshBuilder.AdvanceIndex();
+			}
+
+			// Emit a degenerate triangle to skip to the next row without a connecting triangle
+			if ( i < nPhi - 2 )
+			{
+				meshBuilder.Index( idx );
+				meshBuilder.AdvanceIndex();
+
+				meshBuilder.Index( idx + nTheta + 1 );
+				meshBuilder.AdvanceIndex();
+			}
 		}
 	}
 
@@ -240,11 +281,18 @@ void RenderSphere( const Vector &vCenter, float flRadius, int nTheta, int nPhi, 
 	pMesh->Draw();
 }
 
-void RenderSphere( const Vector &vCenter, float flRadius, int nTheta, int nPhi, Color c, bool bZBuffer )
+void RenderSphere( const Vector &vCenter, float flRadius, int nTheta, int nPhi, Color c, IMaterial *pMaterial, bool bInsideOut )
 {
+	RenderSphereInternal( vCenter, flRadius, nTheta, nPhi, c, pMaterial, bInsideOut );
+}
+
+void RenderSphere( const Vector &vCenter, float flRadius, int nTheta, int nPhi, Color c, bool bZBuffer, bool bInsideOut )
+{
+	InitializeStandardMaterials();
+
 	IMaterial *pMaterial = bZBuffer ? s_pVertexColor : s_pVertexColorIgnoreZ;
 	Color cActual( c.r(), c.g(), c.b(), c.a() );
-	RenderSphere( vCenter, flRadius, nTheta, nPhi, cActual, pMaterial );
+	RenderSphereInternal( vCenter, flRadius, nTheta, nPhi, cActual, pMaterial, bInsideOut );
 }
 
 
@@ -298,6 +346,13 @@ void RenderWireframeBox( const Vector &vOrigin, const QAngle& angles, const Vect
 	InitializeStandardMaterials();
 
 	CMatRenderContextPtr pRenderContext( materials );
+	ICallQueue *pCallQueue = pRenderContext->GetCallQueue();
+	if ( pCallQueue )
+	{
+		pCallQueue->QueueCall( RenderWireframeBox, RefToVal( vOrigin ), RefToVal( angles ), RefToVal( vMins ), RefToVal( vMaxs ), c, bZBuffer );
+		return;
+	}
+
 	pRenderContext->Bind( bZBuffer ? s_pWireframe : s_pWireframeIgnoreZ );
 
 	Vector p[8];
@@ -337,11 +392,19 @@ void RenderWireframeBox( const Vector &vOrigin, const QAngle& angles, const Vect
 //-----------------------------------------------------------------------------
 // Renders a solid box 
 //-----------------------------------------------------------------------------
-void RenderBox( const Vector& vOrigin, const QAngle& angles, const Vector& vMins, const Vector& vMaxs, Color c, IMaterial *pMaterial, bool bInsideOut )
+void RenderBoxInternal( const Vector& vOrigin, const QAngle& angles, const Vector& vMins, const Vector& vMaxs, Color c, IMaterial *pMaterial, bool bInsideOut )
 {
 	InitializeStandardMaterials();
 
 	CMatRenderContextPtr pRenderContext( materials );
+	ICallQueue *pCallQueue = pRenderContext->GetCallQueue();
+	if ( pCallQueue )
+	{
+		pCallQueue->QueueCall( RenderBoxInternal, RefToVal( vOrigin ), RefToVal( angles ), RefToVal( vMins ), RefToVal( vMaxs ), c, pMaterial, bInsideOut );
+		return;
+	}
+
+
 	pRenderContext->Bind( pMaterial );
 
 	Vector p[8];
@@ -394,23 +457,41 @@ void RenderBox( const Vector& vOrigin, const QAngle& angles, const Vector& vMins
 	pMesh->Draw();
 }
 
+void RenderBox( const Vector& vOrigin, const QAngle& angles, const Vector& vMins, const Vector& vMaxs, Color c, IMaterial *pMaterial, bool bInsideOut )
+{
+	RenderBoxInternal( vOrigin, angles, vMins, vMaxs, c, pMaterial, bInsideOut );
+}
 
 void RenderBox( const Vector& vOrigin, const QAngle& angles, const Vector& vMins, const Vector& vMaxs, Color c, bool bZBuffer, bool bInsideOut )
 {
+	InitializeStandardMaterials();
+
 	IMaterial *pMaterial = bZBuffer ? s_pVertexColor : s_pVertexColorIgnoreZ;
 	Color cActual( c.r(), c.g(), c.b(), c.a() );
-	RenderBox( vOrigin, angles, vMins, vMaxs, cActual, pMaterial, bInsideOut );
+	RenderBoxInternal( vOrigin, angles, vMins, vMaxs, cActual, pMaterial, bInsideOut );
 }
 
 
 //-----------------------------------------------------------------------------
 // Renders axes, red->x, green->y, blue->z
 //-----------------------------------------------------------------------------
+void RenderAxesAtOrigin( const Vector &vOrigin, float flScale, bool bZBuffer )
+{
+	RenderAxes( vOrigin, flScale, bZBuffer );
+}
+
 void RenderAxes( const Vector &vOrigin, float flScale, bool bZBuffer )
 {
 	InitializeStandardMaterials();
 
 	CMatRenderContextPtr pRenderContext( g_pMaterialSystem );
+	ICallQueue *pCallQueue = pRenderContext->GetCallQueue();
+	if ( pCallQueue )
+	{
+		pCallQueue->QueueCall( RenderAxesAtOrigin, RefToVal( vOrigin ), flScale, bZBuffer );
+		return;
+	}
+
 	pRenderContext->Bind( bZBuffer ? s_pWireframe : s_pWireframeIgnoreZ );
 	IMesh *pMesh = pRenderContext->GetDynamicMesh( );
 
@@ -445,10 +526,22 @@ void RenderAxes( const Vector &vOrigin, float flScale, bool bZBuffer )
 	pMesh->Draw();
 }
 
+void RenderAxesWithTransform( const matrix3x4_t &transform, float flScale, bool bZBuffer )
+{
+	RenderAxes( transform, flScale, bZBuffer );
+}
 
 void RenderAxes( const matrix3x4_t &transform, float flScale, bool bZBuffer )
 {
 	InitializeStandardMaterials();
+
+	CMatRenderContextPtr pRenderContext( g_pMaterialSystem );
+	ICallQueue *pCallQueue = pRenderContext->GetCallQueue();
+	if ( pCallQueue )
+	{
+		pCallQueue->QueueCall( RenderAxesWithTransform, RefToVal( transform ), flScale, bZBuffer );
+		return;
+	}
 
 	Vector xAxis, yAxis, zAxis, vOrigin, temp;
 	MatrixGetColumn( transform, 0, xAxis );
@@ -456,7 +549,6 @@ void RenderAxes( const matrix3x4_t &transform, float flScale, bool bZBuffer )
 	MatrixGetColumn( transform, 2, zAxis );
 	MatrixGetColumn( transform, 3, vOrigin );
 
-	CMatRenderContextPtr pRenderContext( g_pMaterialSystem );
 	pRenderContext->Bind( bZBuffer ? s_pWireframe : s_pWireframeIgnoreZ );
 	IMesh *pMesh = pRenderContext->GetDynamicMesh( );
 
@@ -502,6 +594,13 @@ void RenderLine( const Vector& v1, const Vector& v2, Color c, bool bZBuffer )
 	InitializeStandardMaterials();
 
 	CMatRenderContextPtr pRenderContext( materials );
+	ICallQueue *pCallQueue = pRenderContext->GetCallQueue();
+	if ( pCallQueue )
+	{
+		pCallQueue->QueueCall( RenderLine, RefToVal( v1 ), RefToVal( v2 ), c, bZBuffer );
+		return;
+	}
+
 	pRenderContext->Bind( bZBuffer ? s_pWireframe : s_pWireframeIgnoreZ );
 
 	unsigned char chRed = c.r();
@@ -525,15 +624,122 @@ void RenderLine( const Vector& v1, const Vector& v2, Color c, bool bZBuffer )
 	pMesh->Draw();
 }
 
+// todo: draw a capsule procedurally instead of using these baked-in unit capsule verts
+#define CAPSULE_VERTS 74
+#define CAPSULE_LINES 117
 
-//-----------------------------------------------------------------------------
-// Draws a triangle
-//-----------------------------------------------------------------------------
-void RenderTriangle( const Vector& p1, const Vector& p2, const Vector& p3, Color c, IMaterial *pMaterial )
+float g_capsuleVertPositions[CAPSULE_VERTS][3] = {
+	{ -0.01, -0.01, 1.0 },	{ 0.51, 0.0, 0.86 },	{ 0.44, 0.25, 0.86 },	{ 0.25, 0.44, 0.86 },	{ -0.01, 0.51, 0.86 },	{ -0.26, 0.44, 0.86 },	{ -0.45, 0.25, 0.86 },	{ -0.51, 0.0, 0.86 },	{ -0.45, -0.26, 0.86 },
+	{ -0.26, -0.45, 0.86 },	{ -0.01, -0.51, 0.86 },	{ 0.25, -0.45, 0.86 },	{ 0.44, -0.26, 0.86 },	{ 0.86, 0.0, 0.51 },	{ 0.75, 0.43, 0.51 },	{ 0.43, 0.75, 0.51 },	{ -0.01, 0.86, 0.51 },	{ -0.44, 0.75, 0.51 },
+	{ -0.76, 0.43, 0.51 },	{ -0.87, 0.0, 0.51 },	{ -0.76, -0.44, 0.51 },	{ -0.44, -0.76, 0.51 },	{ -0.01, -0.87, 0.51 },	{ 0.43, -0.76, 0.51 },	{ 0.75, -0.44, 0.51 },	{ 1.0, 0.0, 0.01 },		{ 0.86, 0.5, 0.01 },
+	{ 0.49, 0.86, 0.01 },	{ -0.01, 1.0, 0.01 },	{ -0.51, 0.86, 0.01 },	{ -0.87, 0.5, 0.01 },	{ -1.0, 0.0, 0.01 },	{ -0.87, -0.5, 0.01 },	{ -0.51, -0.87, 0.01 },	{ -0.01, -1.0, 0.01 },	{ 0.49, -0.87, 0.01 },
+	{ 0.86, -0.51, 0.01 },	{ 1.0, 0.0, -0.02 },	{ 0.86, 0.5, -0.02 },	{ 0.49, 0.86, -0.02 },	{ -0.01, 1.0, -0.02 },	{ -0.51, 0.86, -0.02 },	{ -0.87, 0.5, -0.02 },	{ -1.0, 0.0, -0.02 },	{ -0.87, -0.5, -0.02 },
+	{ -0.51, -0.87, -0.02 },{ -0.01, -1.0, -0.02 },	{ 0.49, -0.87, -0.02 },	{ 0.86, -0.51, -0.02 },	{ 0.86, 0.0, -0.51 },	{ 0.75, 0.43, -0.51 },	{ 0.43, 0.75, -0.51 },	{ -0.01, 0.86, -0.51 },	{ -0.44, 0.75, -0.51 },
+	{ -0.76, 0.43, -0.51 },	{ -0.87, 0.0, -0.51 },	{ -0.76, -0.44, -0.51 },{ -0.44, -0.76, -0.51 },{ -0.01, -0.87, -0.51 },{ 0.43, -0.76, -0.51 },	{ 0.75, -0.44, -0.51 },	{ 0.51, 0.0, -0.87 },	{ 0.44, 0.25, -0.87 },
+	{ 0.25, 0.44, -0.87 },	{ -0.01, 0.51, -0.87 },	{ -0.26, 0.44, -0.87 },	{ -0.45, 0.25, -0.87 },	{ -0.51, 0.0, -0.87 },	{ -0.45, -0.26, -0.87 },{ -0.26, -0.45, -0.87 },{ -0.01, -0.51, -0.87 },{ 0.25, -0.45, -0.87 },
+	{ 0.44, -0.26, -0.87 },	{ 0.0, 0.0, -1.0 },
+};
+
+int g_capsuleLineIndices[CAPSULE_LINES] = { -1,
+	14,		0,	4,	16,	28,	40,	52,	64,	73,	70,	58,	46,	34,	22,	10,		-1,
+	14,		0,	1,	13,	25,	37,	49,	61,	73,	67,	55,	43,	31,	19,	7,		-1,
+	12,		61,	62,	63,	64,	65,	66,	67,	68,	69,	70,	71,	72,				-1,
+	12,		49,	50,	51,	52,	53,	54,	55,	56,	57,	58,	59,	60,				-1,
+	12,		37,	38,	39,	40,	41,	42,	43,	44,	45,	46,	47,	48,				-1,
+	12,		25,	26,	27,	28,	29,	30,	31,	32,	33,	34,	35,	36,				-1,
+	12,		13,	14,	15,	16,	17,	18,	19,	20,	21,	22,	23,	24,				-1,
+	12,		1,	2,	3,	4,	5,	6,	7,	8,	9,	10,	11,	12,				-1
+};
+
+void RenderCapsule( const Vector &vStart, const Vector &vEnd, const float &flRadius, Color c, IMaterial *pMaterial )
 {
 	InitializeStandardMaterials();
 
 	CMatRenderContextPtr pRenderContext( materials );
+	ICallQueue *pCallQueue = pRenderContext->GetCallQueue();
+	if ( pCallQueue )
+	{
+		pCallQueue->QueueCall( RenderCapsule, RefToVal( vStart ), RefToVal( vEnd ), RefToVal( flRadius ), c, pMaterial );
+		return;
+	}
+
+	//RenderLine( vStart, vEnd, c, false );
+
+	Vector vecCapsuleCoreNormal = ( vStart - vEnd ).Normalized();
+
+	matrix3x4_t matCapsuleRotationSpace;
+	VectorMatrix( Vector(0,0,1), matCapsuleRotationSpace );
+
+	matrix3x4_t matCapsuleSpace;
+	VectorMatrix( vecCapsuleCoreNormal, matCapsuleSpace );
+
+	Vector v[CAPSULE_VERTS];
+	Vector vecLen = (vEnd - vStart);
+	for ( int i=0; i<CAPSULE_VERTS; i++ )
+	{
+		Vector vecCapsuleVert = Vector( g_capsuleVertPositions[i][0], g_capsuleVertPositions[i][1], g_capsuleVertPositions[i][2] );
+		
+		VectorRotate( vecCapsuleVert, matCapsuleRotationSpace, vecCapsuleVert );
+		VectorRotate( vecCapsuleVert, matCapsuleSpace, vecCapsuleVert );
+
+		vecCapsuleVert *= flRadius;
+
+		if ( g_capsuleVertPositions[i][2] > 0 )
+		{
+			vecCapsuleVert += vecLen;
+		}
+
+		v[i] = vecCapsuleVert + vStart;
+	}
+
+	unsigned char chRed = c.r();
+	unsigned char chGreen = c.g();
+	unsigned char chBlue = c.b();
+	unsigned char chAlpha = c.a();
+
+	pRenderContext->Bind( s_pWireframeIgnoreZ );
+
+	IMesh* pMesh = pRenderContext->GetDynamicMesh( );
+	CMeshBuilder meshBuilder;
+
+	for ( int i=0; i<CAPSULE_LINES; i++ )
+	{
+		if ( g_capsuleLineIndices[i] == -1 )
+		{
+			if ( i > 0 )
+			{
+				meshBuilder.End( false, true );
+
+				if ( i == CAPSULE_LINES - 1 )
+					break;
+			}
+			
+			i++;
+			meshBuilder.Begin( pMesh, MATERIAL_LINE_LOOP, g_capsuleLineIndices[i] );
+			i++;
+		}
+
+		meshBuilder.Position3fv (v[g_capsuleLineIndices[i]].Base());
+		meshBuilder.Color4ub( chRed, chGreen, chBlue, chAlpha );
+		meshBuilder.AdvanceVertex();
+	}
+}
+
+//-----------------------------------------------------------------------------
+// Draws a triangle
+//-----------------------------------------------------------------------------
+void RenderTriangleInternal( const Vector& p1, const Vector& p2, const Vector& p3, Color c, IMaterial *pMaterial )
+{
+	InitializeStandardMaterials();
+
+	CMatRenderContextPtr pRenderContext( materials );
+	ICallQueue *pCallQueue = pRenderContext->GetCallQueue();
+	if ( pCallQueue )
+	{
+		pCallQueue->QueueCall( RenderTriangleInternal, RefToVal( p1 ), RefToVal( p2 ), RefToVal( p3 ), c, pMaterial );
+		return;
+	}
+
 	pRenderContext->Bind( pMaterial );
 
 	unsigned char chRed = c.r();
@@ -574,12 +780,18 @@ void RenderTriangle( const Vector& p1, const Vector& p2, const Vector& p3, Color
 	pMesh->Draw();
 }
 
+void RenderTriangle( const Vector& p1, const Vector& p2, const Vector& p3, Color c, IMaterial *pMaterial )
+{
+	RenderTriangleInternal( p1, p2, p3, c, pMaterial );
+}
 
 void RenderTriangle( const Vector& p1, const Vector& p2, const Vector& p3, Color c, bool bZBuffer )
 {
+	InitializeStandardMaterials();
+
 	IMaterial *pMaterial = bZBuffer ? s_pVertexColor : s_pVertexColorIgnoreZ;
 	Color cActual( c.r(), c.g(), c.b(), c.a() );
-	RenderTriangle( p1, p2, p3, cActual, pMaterial );
+	RenderTriangleInternal( p1, p2, p3, cActual, pMaterial );
 }
 
 
@@ -666,6 +878,8 @@ static void DrawExtrusionFace( const Vector& start, const Vector& end,
 
 void RenderWireframeSweptBox( const Vector &vStart, const Vector &vEnd, const QAngle &angles, const Vector &vMins, const Vector &vMaxs, Color c, bool bZBuffer )
 {
+	InitializeStandardMaterials();
+
 	CMatRenderContextPtr pRenderContext( g_pMaterialSystem );
 	pRenderContext->Bind( bZBuffer ? s_pWireframe : s_pWireframeIgnoreZ );
 
@@ -782,10 +996,8 @@ void DrawScreenSpaceRectangle( IMaterial *pMaterial,
 {
 	CMatRenderContextPtr pRenderContext( g_pMaterialSystem );
 
-	if ( ( nWidth <= 0 ) || ( nHeight <= 0 ) )
+	if ( ( nWidth <= 0 ) || ( nHeight <= 0 ) || ( nSrcTextureWidth <= 0 ) || ( nSrcTextureHeight <= 0 ) )
 		return;
-
-	tmZone( TELEMETRY_LEVEL1, TMZF_NONE, "%s", __FUNCTION__ );
 
 	pRenderContext->MatrixMode( MATERIAL_VIEW );
 	pRenderContext->PushMatrix();
@@ -797,8 +1009,8 @@ void DrawScreenSpaceRectangle( IMaterial *pMaterial,
 
 	pRenderContext->Bind( pMaterial, pClientRenderable );
 
-	int xSegments = max( nXDice, 1);
-	int ySegments = max( nYDice, 1);
+	int xSegments = MAX( nXDice, 1);
+	int ySegments = MAX( nYDice, 1);
 
 	CMeshBuilder meshBuilder;
 	
@@ -808,8 +1020,9 @@ void DrawScreenSpaceRectangle( IMaterial *pMaterial,
 	int nScreenWidth, nScreenHeight;
 	pRenderContext->GetRenderTargetDimensions( nScreenWidth, nScreenHeight );
 
-	float flOffset = 0.5f;
-	
+	// TOGL now automatically accounts for the half pixel offset between D3D9 vs. GL (including OSX unless using the older OSX togl lib. in which case flOffset = 0.0f)
+	float flOffset = .5f;
+			
 	float flLeftX = nDestX - flOffset;
 	float flRightX = nDestX + nWidth - flOffset;
 
@@ -916,3 +1129,38 @@ void DrawScreenSpaceRectangle( IMaterial *pMaterial,
 	pRenderContext->MatrixMode( MATERIAL_PROJECTION );
 	pRenderContext->PopMatrix();
 }
+
+void DrawNDCSpaceUntexturedPolygon( IMaterial *pMaterial, int nVertexCount, Vector2D *pScreenSpaceCoordinates, void *pClientRenderable )
+{
+	CMatRenderContextPtr pRenderContext( g_pMaterialSystem );
+
+	pRenderContext->MatrixMode( MATERIAL_VIEW );
+	pRenderContext->PushMatrix();
+	pRenderContext->LoadIdentity();
+
+	pRenderContext->MatrixMode( MATERIAL_PROJECTION );
+	pRenderContext->PushMatrix();
+	pRenderContext->LoadIdentity();
+
+	pRenderContext->Bind( pMaterial, pClientRenderable );	
+
+	CMeshBuilder meshBuilder;
+	IMesh* pMesh = pRenderContext->GetDynamicMesh( true );
+	meshBuilder.Begin( pMesh, MATERIAL_POLYGON, nVertexCount );
+
+	for ( int i = 0; i < nVertexCount; ++ i )
+	{
+		meshBuilder.Position3f( pScreenSpaceCoordinates[i].x, pScreenSpaceCoordinates[i].y, 0.0f );
+		meshBuilder.AdvanceVertex();
+	}
+
+	meshBuilder.End();
+	pMesh->Draw();
+
+	pRenderContext->MatrixMode( MATERIAL_VIEW );
+	pRenderContext->PopMatrix();
+
+	pRenderContext->MatrixMode( MATERIAL_PROJECTION );
+	pRenderContext->PopMatrix();
+}
+

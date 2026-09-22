@@ -1,24 +1,24 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright (c) 1996-2005, Valve Corporation, All rights reserved. =======//
 //
 // Purpose: An application framework 
 //
 //=============================================================================//
 
-#ifdef POSIX
-#error
-#else
-#if defined( _WIN32 ) && !defined( _X360 )
-#include <windows.h>
-#endif
-#include "appframework/appframework.h"
+#include "appframework/AppFramework.h"
 #include "tier0/dbg.h"
 #include "tier0/icommandline.h"
 #include "interface.h"
 #include "filesystem.h"
-#include "appframework/iappsystemgroup.h"
+#include "appframework/IAppSystemGroup.h"
 #include "filesystem_init.h"
 #include "vstdlib/cvar.h"
+#include "tier2/tier2.h"
+
+#ifdef _X360
+#include "xbox/xbox_win32stubs.h"
 #include "xbox/xbox_console.h"
+#include "xbox/xbox_launch.h"
+#endif
 
 // NOTE: This has to be the last file included!
 #include "tier0/memdbgon.h"
@@ -27,11 +27,12 @@
 //-----------------------------------------------------------------------------
 // Globals...
 //-----------------------------------------------------------------------------
-HINSTANCE s_HInstance;
+void* s_HInstance;
 
-//static CSimpleWindowsLoggingListener s_SimpleWindowsLoggingListener;
-//static CSimpleLoggingListener s_SimpleLoggingListener;
-//ILoggingListener *g_pDefaultLoggingListener = &s_SimpleLoggingListener;
+static CSimpleWindowsLoggingListener s_SimpleWindowsLoggingListener;
+static CSimpleLoggingListener s_SimpleLoggingListener;
+ILoggingListener *g_pDefaultLoggingListener = &s_SimpleLoggingListener;
+
 
 //-----------------------------------------------------------------------------
 // HACK: Since I don't want to refit vgui yet...
@@ -47,27 +48,8 @@ void *GetAppInstance()
 //-----------------------------------------------------------------------------
 void SetAppInstance( void* hInstance )
 {
-	s_HInstance = (HINSTANCE)hInstance;
+	s_HInstance = hInstance;
 }
-
-//-----------------------------------------------------------------------------
-// Specific 360 environment setup.
-//-----------------------------------------------------------------------------
-#if defined( _X360 )
-bool SetupEnvironment360()
-{
-	CommandLine()->CreateCmdLine( GetCommandLine() );
-
-	if ( !CommandLine()->FindParm( "-game" ) && !CommandLine()->FindParm( "-vproject" ) )
-	{
-		// add the default game name due to lack of vproject environment
-		CommandLine()->AppendParm( "-game", "hl2" );
-	}
-
-	// success
-	return true;
-}
-#endif
 
 //-----------------------------------------------------------------------------
 // Version of AppMain used by windows applications
@@ -76,14 +58,24 @@ int AppMain( void* hInstance, void* hPrevInstance, const char* lpCmdLine, int nC
 {
 	Assert( pAppSystemGroup );
 
-//	g_pDefaultLoggingListener = &s_SimpleWindowsLoggingListener;
-	s_HInstance = (HINSTANCE)hInstance;
-#if !defined( _X360 )
-	CommandLine()->CreateCmdLine( ::GetCommandLine() );
-#else
-	SetupEnvironment360();
-#endif
+	g_pDefaultLoggingListener = &s_SimpleWindowsLoggingListener;
+	s_HInstance = hInstance;
 
+#ifdef WIN32
+	// Prepend the module filename since most apps expect arg 0 to be that.
+	char szModuleFilename[MAX_PATH];
+	Plat_GetModuleFilename( szModuleFilename, sizeof( szModuleFilename ) );
+	int nAllocLen = strlen( lpCmdLine ) + strlen( szModuleFilename ) + 4;
+	char *pNewCmdLine = new char[nAllocLen];	// 2 for quotes, 1 for a space, and 1 for a null-terminator.
+	_snprintf( pNewCmdLine, nAllocLen, "\"%s\" %s", szModuleFilename, lpCmdLine );
+
+	// Setup ICommandLine.
+	CommandLine()->CreateCmdLine( pNewCmdLine );
+	delete [] pNewCmdLine;
+#else
+	CommandLine()->CreateCmdLine( lpCmdLine );	
+#endif
+	
 	return pAppSystemGroup->Run();
 }
 
@@ -94,13 +86,9 @@ int AppMain( int argc, char **argv, CAppSystemGroup *pAppSystemGroup )
 {
 	Assert( pAppSystemGroup );
 
-//	g_pDefaultLoggingListener = &s_SimpleLoggingListener;
+	g_pDefaultLoggingListener = &s_SimpleLoggingListener;
 	s_HInstance = NULL;
-#if !defined( _X360 )
 	CommandLine()->CreateCmdLine( argc, argv );
-#else
-	SetupEnvironment360();
-#endif
 
 	return pAppSystemGroup->Run();
 }
@@ -112,13 +100,9 @@ int AppStartup( void* hInstance, void* hPrevInstance, const char* lpCmdLine, int
 {
 	Assert( pAppSystemGroup );
 
-//	g_pDefaultLoggingListener = &s_SimpleWindowsLoggingListener;
-	s_HInstance = (HINSTANCE)hInstance;
-#if !defined( _X360 )
-	CommandLine()->CreateCmdLine( ::GetCommandLine() );
-#else
-	SetupEnvironment360();
-#endif
+	g_pDefaultLoggingListener = &s_SimpleWindowsLoggingListener;
+	s_HInstance = hInstance;
+	CommandLine()->CreateCmdLine( lpCmdLine );
 
 	return pAppSystemGroup->Startup();
 }
@@ -127,13 +111,9 @@ int AppStartup( int argc, char **argv, CAppSystemGroup *pAppSystemGroup )
 {
 	Assert( pAppSystemGroup );
 
-//	g_pDefaultLoggingListener = &s_SimpleLoggingListener;
+	g_pDefaultLoggingListener = &s_SimpleLoggingListener;
 	s_HInstance = NULL;
-#if !defined( _X360 )
 	CommandLine()->CreateCmdLine( argc, argv );
-#else
-	SetupEnvironment360();
-#endif
 
 	return pAppSystemGroup->Startup();
 }
@@ -170,9 +150,11 @@ bool CSteamApplication::Create()
 	FileSystem_SetErrorMode( FS_ERRORMODE_AUTO );
 
 	char pFileSystemDLL[MAX_PATH];
-	if ( FileSystem_GetFileSystemDLLName( pFileSystemDLL, MAX_PATH, m_bSteam ) != FS_OK )
+	if ( !GetFileSystemDLLName( pFileSystemDLL, MAX_PATH, m_bSteam ) )
 		return false;
 	
+	FileSystem_SetupSteamInstallPath();
+
 	// Add in the cvar factory
 	AppModule_t cvarModule = LoadModule( VStdLib_GetICVarFactory() );
 	AddSystem( cvarModule, CVAR_INTERFACE_VERSION );
@@ -181,11 +163,17 @@ bool CSteamApplication::Create()
 	m_pFileSystem = (IFileSystem*)AddSystem( fileSystemModule, FILESYSTEM_INTERFACE_VERSION );
 	if ( !m_pFileSystem )
 	{
-		Error( "Unable to load %s", pFileSystemDLL );
+		if( !IsPS3() )
+			Error( "Unable to load %s", pFileSystemDLL );
 		return false;
 	}
 
 	return true;
+}
+
+bool CSteamApplication::GetFileSystemDLLName( char *pOut, int nMaxBytes, bool &bIsSteam )
+{
+	return FileSystem_GetFileSystemDLLName( pOut, nMaxBytes, bIsSteam ) == FS_OK;
 }
 
 //-----------------------------------------------------------------------------
@@ -228,7 +216,7 @@ int CSteamApplication::Main()
 int CSteamApplication::Startup()
 {
 	int nRetVal = BaseClass::Startup();
-	if ( GetErrorStage() != NONE )
+	if ( GetCurrentStage() != RUNNING )
 		return nRetVal;
 
 	if ( FileSystem_SetBasePaths( m_pFileSystem ) != FS_OK )
@@ -245,4 +233,3 @@ void CSteamApplication::Shutdown()
 	BaseClass::Shutdown();
 }
 
-#endif

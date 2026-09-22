@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2004, Valve Corporation, All rights reserved. =======
 //
 // Implementation of CDmMeshComp - CDmeMesh computation class
 //
@@ -352,7 +352,7 @@ int CDmMeshComp::FindFacesWithVert( int vIndex, CUtlVector< CFace * > &faces )
 	// TODO: optimize this by adding a vector of face pointers to each vertex
 	faces.RemoveAll();
 
-	for ( int fi( m_faces.Head() ); fi != m_faces.InvalidIndex(); fi = m_faces.Next( fi ) )
+	for ( intp fi( m_faces.Head() ); fi != m_faces.InvalidIndex(); fi = m_faces.Next( fi ) )
 	{
 		CFace &face( m_faces[ fi ] );
 		for ( int i = 0; i < face.m_verts.Count(); ++i )

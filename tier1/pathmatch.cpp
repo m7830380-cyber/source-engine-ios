@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright (c), Valve LLC, All rights reserved. ============
 //
 // Purpose: Utility to interrogate and modify the data in the OSX IPC Server
 //
@@ -57,7 +57,6 @@
 #include <string>
 #include <time.h>
 
-
 // Enable to do pathmatch caching. Beware: this code isn't threadsafe.
 // #define DO_PATHMATCH_CACHE
 
@@ -67,16 +66,7 @@
 
 static bool s_bShowDiag;
 #define DEBUG_MSG( ... ) if ( s_bShowDiag ) fprintf( stderr, ##__VA_ARGS__ )
-
-#ifdef POSIX
-#include <signal.h>
-#define DEBUG_BREAK() raise(SIGINT)
-#elif !defined (__arm__)
 #define DEBUG_BREAK() __asm__ __volatile__ ( "int $3" )
-#else
-#define DEBUG_BREAK() 
-#endif
-
 #define _COMPILE_TIME_ASSERT(pred) switch(0){case 0:case pred:;}
 
 #define WRAP( fn, ret, ... ) \
@@ -326,7 +316,6 @@ inline __attribute__ ((always_inline)) static int utf8casecmp_loop(const uint32_
 	}
 }
 
-#ifdef UTF8_PATHMATCH
 static int utf8casecmp(const char *str1, const char *str2)
 {
 	uint32_t *folded1 = fold_utf8(str1);
@@ -336,7 +325,6 @@ static int utf8casecmp(const char *str1, const char *str2)
 	delete[] folded2;
 	return retval;
 }
-#endif
 
 // Simple object to help make sure a DIR* from opendir
 // gets closed when it goes out of scope.
@@ -501,14 +489,6 @@ static const int k_cMaxCacheLifetimeSeconds = 2;
 
 PathMod_t pathmatch( const char *pszIn, char **ppszOut, bool bAllowBasenameMismatch, char *pszOutBuf, size_t OutBufLen )
 {
-	// Path matching can be very expensive, and the cost is unpredictable because it
-	// depends on how many files are in directories on a user's machine. Therefore
-	// it should be disabled whenever possible, and only enabled in environments (such
-	// as running with loose files such as out of Perforce) where it is needed.
-	static const char *s_pszPathMatchEnabled = getenv("ENABLE_PATHMATCH");
-	if ( !s_pszPathMatchEnabled )
-		return kPathUnchanged;
-
 	static const char *s_pszDbgPathMatch = getenv("DBG_PATHMATCH");
 
 	s_bShowDiag = ( s_pszDbgPathMatch != NULL );
@@ -750,7 +730,7 @@ extern "C" {
 
 		return CALL(freopen)( mpath, mode, stream );
 	}
-#ifndef ANDROID
+
 	WRAP(fopen, FILE *, const char *path, const char *mode)
 	{
 		// if mode does not have w, a, or +, it's open for read.
@@ -788,7 +768,7 @@ extern "C" {
 	{
 		return __wrap_open( pathname, O_CREAT|O_WRONLY|O_TRUNC, mode );
 	}
-#endif
+
 	int __wrap_access(const char *pathname, int mode)
 	{
 		return __real_access( CWrap( pathname, false ), mode );
@@ -815,7 +795,6 @@ extern "C" {
 	{
 		return CALL(opendir)( CWrap( name, false ) );
 	}
-#ifndef ANDROID
 
     WRAP(__xstat, int, int __ver, __const char *__filename, struct stat *__stat_buf)
     {
@@ -836,7 +815,7 @@ extern "C" {
     {
         return CALL(__lxstat64)( __ver, CWrap( __filename, false), __stat_buf );
     }
-#endif
+
 	WRAP(chmod, int, const char *path, mode_t mode)
 	{
         return CALL(chmod)( CWrap( path, false), mode );

@@ -6,18 +6,29 @@
 
 #include "tier0/platform.h"
 
-#if defined(_WIN32)
+#if defined( PLATFORM_WINDOWS_PC )
 #define WIN32_LEAN_AND_MEAN
 #define _WIN32_WINNT 0x0403
 #include <windows.h>
 #endif
 
-#ifdef _WIN32
+#ifdef PLATFORM_WINDOWS
 	#include <process.h>
-	#include <Mmsystem.h>
-	#pragma comment(lib, "winmm.lib")
-	#include "tier0/vcrmode.h"
-#elif POSIX
+	#ifdef PLATFORM_WINDOWS_PC
+		#include <Mmsystem.h>
+		#pragma comment(lib, "winmm.lib")
+	#endif
+#elif PLATFORM_PS3
+	#include <sched.h>
+	#include <unistd.h>
+	#include <exception>
+	#include <errno.h>
+	#include <pthread.h>
+	#include <sys/time.h>
+	#include <sys/timer.h>
+	#define GetLastError() errno
+	typedef void *LPVOID;
+#elif PLATFORM_POSIX
 	#include <sched.h>
 	#include <exception>
 	#include <errno.h>
@@ -26,9 +37,9 @@
 	#include <sys/time.h>
 	#define GetLastError() errno
 	typedef void *LPVOID;
-#if !defined(APPLE)
-        #include <fcntl.h>
-        #include <unistd.h>
+#if !defined(OSX)
+	#include <sys/fcntl.h>
+	#include <sys/unistd.h>
 	#define sem_unlink( arg )
 	#define OS_TO_PTHREAD(x) (x)
 #else
@@ -36,12 +47,7 @@
 	#include <mach/thread_act.h>
 	#include <mach/mach.h>
 	#define OS_TO_PTHREAD(x) pthread_from_mach_thread_np( x )
-#endif // !APPLE
-
-#ifdef PLATFORM_BSD
-# undef OS_TO_PTRHEAD
-# define OS_TO_PTHREAD(x) (pthread_t)(x)
-#endif
+#endif // !OSX
 
 #endif
 
@@ -94,7 +100,11 @@ const int MAX_THREAD_IDS = 128;
 
 static volatile bool s_bThreadIDAllocated[MAX_THREAD_IDS];
 
-#if defined(_PS3)
+#if defined(_LINUX) && defined(DEDICATED)
+
+DLL_CLASS_EXPORT __thread int g_nThreadID;
+
+#elif defined(_PS3)
 	#include "tls_ps3.h"
 #else 
 	DLL_CLASS_EXPORT CTHREADLOCALINT g_nThreadID;
@@ -145,7 +155,7 @@ struct ThreadProcInfo_t
 
 //---------------------------------------------------------
 
-#ifdef _WIN32
+#ifdef PLATFORM_WINDOWS
 static DWORD WINAPI ThreadProcConvert( void *pParam )
 {
 	ThreadProcInfo_t info = *((ThreadProcInfo_t *)pParam);
@@ -155,7 +165,7 @@ static DWORD WINAPI ThreadProcConvert( void *pParam )
 	FreeThreadID();
 	return nRet;
 }
-#elif defined( PS3 )
+#elif defined( PLATFORM_PS3 )
 union ThreadProcInfoUnion_t
 {
 	struct Val_t
@@ -252,7 +262,7 @@ void TlsSetValue( uint32 index, void *pValue )
 
 
 
-#ifdef _WIN32
+#ifdef PLATFORM_WINDOWS
 class CThreadHandleToIDMap
 {
 public:
@@ -411,12 +421,12 @@ void JoinTestThreads( ThreadHandle_t *pHandles )
 
 ThreadHandle_t CreateSimpleThread( ThreadFunc_t pfnThread, void *pParam, unsigned stackSize )
 {
-#ifdef _WIN32
+#ifdef PLATFORM_WINDOWS
 	DWORD threadID;
 	HANDLE hThread = (HANDLE)CreateThread( NULL, stackSize, ThreadProcConvert, new ThreadProcInfo_t( pfnThread, pParam ), stackSize ? STACK_SIZE_PARAM_IS_A_RESERVATION : 0, &threadID );
 	AddThreadHandleToIDMap( hThread, threadID );
 	return (ThreadHandle_t)hThread;
-#elif PS3
+#elif PLATFORM_PS3
 	//TestThreads();
 	ThreadHandle_t th;
 	ThreadProcInfoUnion_t info;
@@ -429,31 +439,9 @@ ThreadHandle_t CreateSimpleThread( ThreadFunc_t pfnThread, void *pParam, unsigne
 		return 0;
 	}
 	return th;
-#elif POSIX
+#elif PLATFORM_POSIX
 	pthread_t tid;
 	pthread_create( &tid, NULL, ThreadProcConvert, new ThreadProcInfo_t( pfnThread, pParam ) );
-	return ( ThreadHandle_t ) tid;
-#else
-	Assert( 0 );
-	DebuggerBreak();
-	return 0;
-#endif
-}
-
-ThreadHandle_t CreateSimpleThread( ThreadFunc_t pfnThread, void *pParam, ThreadId_t *pID, unsigned stackSize )
-{
-#ifdef _WIN32
-	DWORD threadID;
-	HANDLE hThread = (HANDLE)CreateThread( NULL, stackSize, ThreadProcConvert, new ThreadProcInfo_t( pfnThread, pParam ), stackSize ? STACK_SIZE_PARAM_IS_A_RESERVATION : 0, &threadID );
-	if( pID )
-		*pID = (ThreadId_t)threadID;
-	AddThreadHandleToIDMap( hThread, threadID );
-	return (ThreadHandle_t)hThread;
-#elif POSIX
-	pthread_t tid;
-	pthread_create( &tid, NULL, ThreadProcConvert, new ThreadProcInfo_t( pfnThread, pParam ) );
-	if( pID )
-		*pID = (ThreadId_t)tid;
 	return ( ThreadHandle_t ) tid;
 #else
 	Assert( 0 );
@@ -478,6 +466,59 @@ bool ReleaseThreadHandle( ThreadHandle_t hThread )
 //
 // Wrappers for other simple threading operations
 //
+//-----------------------------------------------------------------------------
+
+void ThreadSleep(unsigned nMilliseconds)
+{
+#ifdef _WIN32
+
+#ifdef PLATFORM_WINDOWS_PC
+	static bool bInitialized = false;
+	if ( !bInitialized )
+	{
+		bInitialized = true;
+		// Set the timer resolution to 1 ms (default is 10.0, 15.6, 2.5, 1.0 or
+		// some other value depending on hardware and software) so that we can
+		// use Sleep( 1 ) to avoid wasting CPU time without missing our frame
+		// rate.
+		timeBeginPeriod( 1 );
+	}
+#endif
+
+	Sleep( nMilliseconds );
+#elif PLATFORM_PS3
+	if( nMilliseconds == 0 )
+	{
+		// sys_ppu_thread_yield doesn't seem to function properly, so sleep instead.
+//		sys_timer_usleep( 60 );
+		sys_ppu_thread_yield();
+	}
+	else
+	{
+		sys_timer_usleep( nMilliseconds * 1000 );
+	}
+#elif defined(POSIX)
+   usleep( nMilliseconds * 1000 ); 
+#endif
+}
+
+//-----------------------------------------------------------------------------
+void ThreadNanoSleep(unsigned ns)
+{
+#ifdef _WIN32
+	// ceil
+	Sleep( ( ns + 999 ) / 1000 );
+#elif PLATFORM_PS3
+	sys_timer_usleep( ns );
+#elif defined(POSIX)
+	struct timespec tm;
+	tm.tv_sec = 0;
+	tm.tv_nsec = ns;
+	nanosleep( &tm, NULL ); 
+#endif
+}
+
+
 //-----------------------------------------------------------------------------
 
 #ifndef ThreadGetCurrentId
@@ -717,18 +758,7 @@ void ThreadSetDebugName( ThreadHandle_t hThread, const char *pszName )
 #endif
 }
 
-//-----------------------------------------------------------------------------
 
-#ifdef _WIN32
-ASSERT_INVARIANT( TW_FAILED == WAIT_FAILED );
-ASSERT_INVARIANT( TW_TIMEOUT  == WAIT_TIMEOUT );
-ASSERT_INVARIANT( WAIT_OBJECT_0 == 0 );
-
-int ThreadWaitForObjects( int nEvents, const HANDLE *pHandles, bool bWaitAll, unsigned timeout )
-{
-	return VCRHook_WaitForMultipleObjects( nEvents, pHandles, bWaitAll, timeout );
-}
-#endif
 
 //-----------------------------------------------------------------------------
 // Used to thread LoadLibrary on the 360
@@ -762,7 +792,7 @@ sys_lwmutex_t CThreadSyncObject::m_staticMutex;
 CThreadSyncObject::CThreadSyncObject()
 #ifdef _WIN32
   : m_hSyncObject( NULL ), m_bCreatedHandle(false)
-#elif defined(POSIX) && !defined(PS3)
+#elif defined(POSIX) && !defined(PLATFORM_PS3)
   : m_bInitalized( false )
 #endif
 {
@@ -805,7 +835,7 @@ CThreadSyncObject::~CThreadSyncObject()
 		  Assert( 0 );
 	  }
    }
-#elif defined(POSIX) && !defined( PS3 )
+#elif defined(POSIX) && !defined( PLATFORM_PS3 )
    if ( m_bInitalized )
    {
 		pthread_cond_destroy( &m_Condition );
@@ -819,7 +849,7 @@ CThreadSyncObject::~CThreadSyncObject()
 
 bool CThreadSyncObject::operator!() const
 {
-#if PS3
+#if PLATFORM_PS3
 	return m_bstaticMutexInitialized;
 #elif defined( _WIN32 ) 
    return !m_hSyncObject;
@@ -833,7 +863,7 @@ bool CThreadSyncObject::operator!() const
 void CThreadSyncObject::AssertUseable()
 {
 #ifdef THREADS_DEBUG
-#if PS3
+#if PLATFORM_PS3
 	AssertMsg( m_bstaticMutexInitialized, "Thread synchronization object is unuseable" );
 #elif defined( _WIN32 )
    AssertMsg( m_hSyncObject, "Thread synchronization object is unuseable" );
@@ -853,7 +883,7 @@ bool CThreadSyncObject::Wait( uint32 dwTimeout )
 #endif
 #ifdef _WIN32
    return ( WaitForSingleObject( m_hSyncObject, dwTimeout ) == WAIT_OBJECT_0 );
-#elif defined( POSIX ) && !defined( PS3 )
+#elif defined( POSIX ) && !defined( PLATFORM_PS3 )
     pthread_mutex_lock( &m_Mutex );
     bool bRet = false;
     if ( m_cSet > 0 )
@@ -1211,7 +1241,7 @@ void CThreadEvent::UnregisterWaitingThread(sys_semaphore_t *pSemaphore)
 #endif // _PS3
 
 
-#ifdef _WIN32
+#ifdef PLATFORM_WINDOWS
 	CThreadEvent::CThreadEvent( const char *name, bool initialState, bool bManualReset )
 	{
 		m_hSyncObject = CreateEvent( NULL, bManualReset, (BOOL) initialState, name );
@@ -1627,7 +1657,7 @@ bool CThreadFullMutex::Release()
 //
 //-----------------------------------------------------------------------------
 
-#if defined( WIN32 ) || defined( _PS3 ) || defined( _APPLE ) || defined (_LINUX) || defined(PLATFORM_BSD)
+#if defined( WIN32 ) || defined( _PS3 ) || defined( _OSX ) || ( defined (_LINUX) && !defined(DEDICATED) )
 #if !defined(_PS3)
 namespace GenericThreadLocals
 {
@@ -1855,7 +1885,7 @@ bool ThreadInterlockedAssignIf128( volatile int128 *pDest, const int128 &value, 
 
 #elif defined(GNUC)
 
-#ifdef APPLE
+#ifdef OSX
 #include <libkern/OSAtomic.h>
 #endif
 

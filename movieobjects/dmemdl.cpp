@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2004, Valve Corporation, All rights reserved. =======
 //
 // Purpose: 
 //
@@ -30,6 +30,7 @@ IMPLEMENT_ELEMENT_FACTORY( DmeMDL, CDmeMDL );
 void CDmeMDL::OnConstruction()
 {
 	m_bDrawInEngine = false;
+	m_bZUp = false;
 //	SetAttributeValueElement( "transform", CreateElement< CDmeTransform >() );
 //	SetAttributeValue( "mdlfilename", "models/alyx.mdl" );
 	m_Color.InitAndSet( this, "color", Color( 255, 255, 255, 255 ) );
@@ -79,7 +80,16 @@ bool CDmeMDL::IsDrawingInEngine() const
 {
 	return m_bDrawInEngine;
 }
-	
+
+void CDmeMDL::ZUp( bool bZUp )
+{
+	m_bZUp = bZUp;
+}
+
+bool CDmeMDL::IsZUp() const
+{
+	return m_bZUp;
+}
 
 //-----------------------------------------------------------------------------
 // Returns the bounding box for the model
@@ -94,7 +104,7 @@ void CDmeMDL::GetBoundingBox( Vector *pMins, Vector *pMaxs ) const
 	{
 		Vector vecMins, vecMaxs;
 		matrix3x4_t engineToDme;
-		CDmeDag::EngineToDmeMatrix( engineToDme );
+		CDmeDag::EngineToDmeMatrix( engineToDme, m_bZUp );
 		TransformAABB( engineToDme, *pMins, *pMaxs, vecMins, vecMaxs );
 		*pMins = vecMins;
 		*pMaxs = vecMaxs;
@@ -124,7 +134,7 @@ void CDmeMDL::GetBoundingSphere( Vector &vecCenter, float &flRadius )
 	if ( !m_bDrawInEngine )
 	{
 		matrix3x4_t engineToDme;
-		CDmeDag::EngineToDmeMatrix( engineToDme );
+		CDmeDag::EngineToDmeMatrix( engineToDme, m_bZUp );
 		VectorTransform( vecEngineCenter, engineToDme, vecCenter );
 	}
 	else
@@ -169,11 +179,11 @@ void CDmeMDL::Draw( const matrix3x4_t &shapeToWorld, CDmeDrawSettings *pDrawSett
 		pRenderContext->CullMode( MATERIAL_CULLMODE_CCW );
 	}
 
-	matrix3x4_t *pBoneToWorld = g_pStudioRender->LockBoneMatrices( pStudioHdr->numbones );
-	SetUpBones( shapeToWorld, pStudioHdr->numbones, pBoneToWorld );
-	g_pStudioRender->UnlockBoneMatrices();
+	CMatRenderData< matrix3x4_t > rdPoseToWorld( pRenderContext, pStudioHdr->numbones );
+	matrix3x4_t *pPoseToWorld = rdPoseToWorld.Base();
+	SetUpBones( shapeToWorld, pStudioHdr->numbones, pPoseToWorld );
 
-	m_MDL.Draw( shapeToWorld, pBoneToWorld );
+	m_MDL.Draw( shapeToWorld, pPoseToWorld );
 
 	// FIXME: Why is this necessary!?!?!?
 	if ( !m_bDrawInEngine )
@@ -195,7 +205,7 @@ void CDmeMDL::SetUpBones( const matrix3x4_t& shapeToWorld, int nMaxBoneCount, ma
 	if ( !m_bDrawInEngine )
 	{
 		matrix3x4_t engineToDme;
-		CDmeDag::EngineToDmeMatrix( engineToDme );
+		CDmeDag::EngineToDmeMatrix( engineToDme, m_bZUp );
 		ConcatTransforms( engineToDme, shapeToWorld, rootToWorld );
 	}
 	else

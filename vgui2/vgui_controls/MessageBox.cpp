@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright (c) 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -6,7 +6,7 @@
 //=============================================================================//
 
 #include <vgui/ISurface.h>
-#include <KeyValues.h>
+#include <keyvalues.h>
 #include <vgui/IInput.h>
 
 #include <vgui_controls/Button.h>
@@ -145,15 +145,9 @@ void MessageBox::ApplySchemeSettings(IScheme *pScheme)
 	int wide, tall;
 	m_pMessageLabel->GetContentSize(wide, tall);
 	m_pMessageLabel->SetSize(wide, tall);
-	
-	int indent = 100;
-	if (IsProportional())
-	{
-		indent = scheme()->GetProportionalScaledValueEx(GetScheme(), 100);
-	}
 
-	wide += indent;
-	tall += indent;
+	wide += 100;
+	tall += 100;
 	SetSize(wide, tall);
 
 	if ( m_bShowMessageBoxOverCursor )
@@ -188,41 +182,8 @@ void MessageBox::ApplySchemeSettings(IScheme *pScheme)
 //-----------------------------------------------------------------------------
 void MessageBox::DoModal(Frame* pFrameOver)
 {
+	BaseClass::DoModal();
     ShowWindow(pFrameOver);
-/*
-	// move to the middle of the screen
-	// get the screen size
-	int wide, tall;
-	// get our dialog size
-	GetSize(wide, tall);
-
-	if (pFrameOver)
-	{
-		int frameX, frameY;
-		int frameWide, frameTall;
-		pFrameOver->GetPos(frameX, frameY);
-		pFrameOver->GetSize(frameWide, frameTall);
-
-		SetPos((frameWide - wide) / 2 + frameX, (frameTall - tall) / 2 + frameY);
-	}
-	else
-	{
-		int swide, stall;
-		surface()->GetScreenSize(swide, stall);
-		// put the dialog in the middle of the screen
-		SetPos((swide - wide) / 2, (stall - tall) / 2);
-	}
-
-	SetVisible( true );
-	SetEnabled( true );
-	MoveToFront();
-
-	if (m_pOkButton->IsVisible())
-		m_pOkButton->RequestFocus();
-	else	 // handle message boxes with no button
-		RequestFocus();
-*/
-	input()->SetAppModalSurface(GetVPanel());
 }
 
 void MessageBox::ShowWindow(Frame *pFrameOver)
@@ -249,7 +210,7 @@ void MessageBox::ShowWindow(Frame *pFrameOver)
 // Purpose: Put the text and OK buttons in correct place
 //-----------------------------------------------------------------------------
 void MessageBox::PerformLayout()
-{
+{	
 	int x, y, wide, tall;
 	GetClientArea(x, y, wide, tall);
 	wide += x;
@@ -261,51 +222,38 @@ void MessageBox::PerformLayout()
 	int oldWide, oldTall;
 	m_pOkButton->GetSize(oldWide, oldTall);
 	
-	// calc proportionality scale
-	float scale = 1;
-	if (IsProportional())
-	{
-		int screenW, screenH;
-		surface()->GetScreenSize(screenW, screenH);
-
-		int proW, proH;
-		surface()->GetProportionalBase(proW, proH);
-
-		scale = ((float)(screenH) / (float)(proH));
-	}
-
 	int btnWide, btnTall;
 	m_pOkButton->GetContentSize(btnWide, btnTall);
-	btnWide = max(oldWide, btnWide + 10 * scale);
-	btnTall = max(oldTall, btnTall + 10 * scale);
+	btnWide = max(oldWide, btnWide + 10);
+	btnTall = max(oldTall, btnTall + 10);
 	m_pOkButton->SetSize(btnWide, btnTall);
-	 
+
 	int btnWide2 = 0, btnTall2 = 0;
 	if ( m_pCancelButton->IsVisible() )
 	{
 		m_pCancelButton->GetSize(oldWide, oldTall);
 		
 		m_pCancelButton->GetContentSize(btnWide2, btnTall2);
-		btnWide2 = max(oldWide, btnWide2 + 10 * scale);
-		btnTall2 = max(oldTall, btnTall2 + 10 * scale);
-		m_pCancelButton->SetSize(btnWide2, boxTall);
+		btnWide2 = max(oldWide, btnWide2 + 10);
+		btnTall2 = max(oldTall, btnTall2 + 10);
+		m_pCancelButton->SetSize(btnWide2, btnTall2);
 	}
 
-	boxWidth = max(boxWidth, m_pMessageLabel->GetWide() + 100 * scale);
-	boxWidth = max(boxWidth, (btnWide + btnWide2) * 2 + 30 * scale);
+	boxWidth = max(boxWidth, m_pMessageLabel->GetWide() + 100);
+	boxWidth = max(boxWidth, (btnWide + btnWide2) * 2 + 30);
 	SetSize(boxWidth, boxTall);
 
 	GetSize(boxWidth, boxTall);
 
-	m_pMessageLabel->SetPos((wide/2)-(m_pMessageLabel->GetWide()/2) + x, y + 5 * scale);
+	m_pMessageLabel->SetPos((wide/2)-(m_pMessageLabel->GetWide()/2) + x, y + 5 );
 	if ( !m_pCancelButton->IsVisible() )
 	{
-		m_pOkButton->SetPos((wide/2)-(m_pOkButton->GetWide()/2) + x, tall - m_pOkButton->GetTall() - 15 * scale);
+		m_pOkButton->SetPos((wide/2)-(m_pOkButton->GetWide()/2) + x, tall - m_pOkButton->GetTall() - 15);
 	}
 	else
 	{
-		m_pOkButton->SetPos((wide/4)-(m_pOkButton->GetWide()/2) + x, tall - m_pOkButton->GetTall() - 15 * scale);
-		m_pCancelButton->SetPos((3*wide/4)-(m_pOkButton->GetWide()/2) + x, tall - m_pOkButton->GetTall() - 15 * scale);
+		m_pOkButton->SetPos((wide/4)-(m_pOkButton->GetWide()/2) + x, tall - m_pOkButton->GetTall() - 15);
+		m_pCancelButton->SetPos((3*wide/4)-(m_pOkButton->GetWide()/2) + x, tall - m_pOkButton->GetTall() - 15);
 	}
 
 	BaseClass::PerformLayout();

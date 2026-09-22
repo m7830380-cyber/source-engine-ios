@@ -10,6 +10,7 @@ $MacroRequired				"SRCDIR"
 $MacroRequired				"OUTLIBNAME"	"$PROJECTNAME"
 $MacroRequired				"OUTLIBDIR"
 
+$Macro PLATSUBDIR	"\."
 $Macro LIBPUBLIC	"$SRCDIR\lib\public"
 $Macro LIBCOMMON	"$SRCDIR\lib\common"
 
@@ -23,6 +24,7 @@ $Configuration
 {
 	$Compiler
 	{
+		$PreprocessorDefinitions	"$BASE;_MEMTEST"		[$MEMTEST]
 		$PreprocessorDefinitions	"$BASE;_LOWVIOLENCE"	[$LV]
 		$PreprocessorDefinitions	"$BASE;_X360DEMO"		[$X360DEMO]
 		$PreprocessorDefinitions	"$BASE;COMPILER_MSVC;COMPILER_MSVCX360;_DLL_EXT=$_DLL_EXT"
@@ -39,6 +41,13 @@ $Configuration
 							"    attrib +r $OUTLIBDIR\$(TargetName).lib" "\n" \
 							")" "\n" \
 							"$CRCCHECK" "\n"
+	}
+
+	$PostBuildEvent
+	{
+		$CommandLine			"call $SRCDIR\..\game\bin\CSSVersionNumber.exe $SRCDIR\..\game\platform\resource\css_code_version_local.txt quiet" "\n"
+		$Description			"Creating version number."
+		$ExcludedFromBuild		"No"
 	}
 
 	$PreLinkEvent

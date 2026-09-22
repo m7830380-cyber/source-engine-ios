@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright (c) 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -60,9 +60,28 @@
 #define IDC_PLAYSOUNDS				2027
 #define IDC_MESSAGES				2028
 #define IDC_SHADERS					2029
-//#define IDC_PARALLAXMAP			2030
-#define IDC_SHOWORIGINAXIS			2029
-#define IDC_ORIGINAXISLENGTH		2030
+#define IDC_SHOWORIGINAXIS			2030
+#define IDC_ORIGINAXISLENGTH		2031
+#define IDC_DISPLACEMENTMAP			2032
+#define IDC_EYELOOK					2033
+#define IDC_INCLUDEDMODELS			2034
+#define IDC_DRAWHITBOXSET			2035
+#define IDC_DRAWHITBOXNUMBER		2036
+#define IDC_MATERIALVARMATS			2037
+#define IDC_MATERIALVARPARAMS		2038
+#define IDC_ROLL_BODYGROUPS			2039
+#define IDC_EXPLORE_TO_VMT			2040
+#define IDC_BONEWEIGHTINDEX			2041
+
+#define IDC_MATVARSLIDERMATRIX		2050
+#define IDC_MATVAREDIT				2051
+#define IDC_MATVARCOLORPICKER		2052
+#define IDC_MATVARSLIDERFLOAT		2053
+#ifdef MATERIAL_SCRIPT_SAVE_FEATURE
+#define IDC_MATVARSAVE				2054
+#endif
+#define IDC_MATVARLOAD				2055
+#define IDC_MATVARCOPYTOCLIPBOARD	2056
 
 #define MAX_SEQUENCES				5
 #define IDC_SEQUENCE0				3000
@@ -83,6 +102,12 @@
 #define IDC_FRAMESELECTION3			3013
 #define IDC_FRAMESELECTION4			3014
 
+#define IDC_SEQUENCEFILTER0			3020
+#define IDC_SEQUENCEFILTER1			3021
+#define IDC_SEQUENCEFILTER2			3022
+#define IDC_SEQUENCEFILTER3			3023
+#define IDC_SEQUENCEFILTER4			3024
+
 #define NUM_POSEPARAMETERS			8
 #define IDC_POSEPARAMETER_SCALE		3100
 #define IDC_POSEPARAMETER			3120
@@ -102,7 +127,9 @@
 #define IDC_CONTROLLERVALUE			4004
 #define IDC_SKINS					4005
 #define IDC_MATERIALS				4006
+#define IDC_BODYGROUPPRESET			4007
 
+#define IDC_BONE_NAMES				4999
 #define IDC_BONE_BONELIST			5000
 #define IDC_BONE_GENERATEQC			5001
 #define IDC_BONE_HIGHLIGHT_BONE		5002
@@ -127,6 +154,7 @@
 #define IDC_BONE_HITBOXDELETESET	5021
 #define IDC_BONE_HITBOXSETNAME		5022
 #define IDC_BONE_HITBOXSETNAME_EDIT	5023
+#define IDC_BONE_HITBOX_EDITMODE	5024
 
 // This range is reserved for the attachment window.
 #define IDC_ATTACHMENT_WINDOW_FIRST	5024
@@ -167,6 +195,29 @@
 #define IDC_PHYS_CON_TYPE_LIMIT		7520
 #define IDC_PHYS_LAST				7599
 
+#define IDC_SOFT_FIRST			7600
+#define IDC_SOFT_MASS			7600
+#define IDC_SOFT_BONE			7601
+#define IDC_SOFT_CON_AXIS_X		7603
+#define IDC_SOFT_CON_AXIS_Y		7604
+#define IDC_SOFT_CON_AXIS_Z		7605
+#define	IDC_SOFT_SIMULATE		7606
+#define	IDC_SOFT_SHOW_POLYGONS	7610
+#define	IDC_SOFT_SHOW_EDGES		7611
+#define	IDC_SOFT_SHOW_BASES		7612
+#define IDC_SOFT_SHOW_WIND		7613
+#define IDC_SOFT_SHOW_INDICES	7614
+#define IDC_SOFT_ITERATIONS		7615
+#define IDC_SOFT_WIND_YAW		7616
+#define IDC_SOFT_WIND_STRENGTH	7617
+#define IDC_SOFT_SURFACE_STRETCH 7618
+#define IDC_SOFT_THREAD_STRETCH 7619
+#define IDC_SOFT_SIMD			7620
+#define IDC_SOFT_GRAVITY		7621
+#define IDC_SOFT_VELOCITY_DAMPING 7622
+#define IDC_SOFT_SHOW_COLLISION	7623
+#define IDC_SOFT_LAST			7699
+
 #define MAX_ANIMS					4
 #define IDC_ANIMX					8020 // through 8023 ( MAX_ANIMS )
 #define IDC_ANIMY					8030 // through 8033 ( MAX_ANIMS )
@@ -189,6 +240,21 @@
 #define IDC_IKRULE_CONTACT_FRAME	9015
 #define IDC_IKRULE_USING			9016
 #define IDC_IKRULE_QC_STRING		9017
+
+#define IDC_SUBMODEL_LOADMERGEDMODEL			9018
+#define IDC_SUBMODEL_UNLOADMERGEDMODEL			9019
+#define IDC_SUBMODEL_UNLOADALLMERGEDMODELS		9020
+#define IDC_SUBMODEL_LOADMERGEDMODEL_STEAM		9021
+#define IDC_SUBMODEL_UPDATE_SELECTION			9022
+#define IDC_SUBMODEL_UPDATE_BONESELECTION		9023
+
+#define IDC_COMPILE_UPDATE_QCPATHSELECTION		9024
+#define IDC_COMPILE_REMOVEFROMLIST				9025
+#define IDC_COMPILE_CALLSTUDIOMDL				9026
+#define IDC_COMPILE_OPENLOGFILE					9027
+#define IDC_COMPILE_EXPLORETOQC					9028
+#define IDC_COMPILE_LOADMODELFILE				9029
+#define IDC_COMPILE_SELECTEDTOGGLE				9030
 
 #define IDC_EVENT_SOUND_FRAME_NOW	6000
 #define IDC_EVENT_SOUND_FRAME		6001
@@ -229,6 +295,8 @@ class ControlPanel : public mxWindow
 	mxTab *tab;
 	mxChoice *cRenderMode;
 	mxChoice *cHighlightBone;
+	mxChoice *cDrawHitBoxSet;
+	mxChoice *cDrawHitBoxNumber;
 
 	mxCheckBox *cbGround;
 	mxCheckBox *cbHitBoxes;
@@ -242,6 +310,7 @@ class ControlPanel : public mxWindow
 	mxCheckBox *cbBones;
 	mxCheckBox *cbNormals;
 	mxCheckBox *cbNormalMap;
+	mxCheckBox *cbDisplacementMap;
 //	mxCheckBox *cbParallaxMap;
 	mxCheckBox *cbTangentFrame;
 	mxCheckBox *cbOverlayWireframe;
@@ -252,15 +321,22 @@ class ControlPanel : public mxWindow
 	mxCheckBox *cbPlaySounds;
 	mxCheckBox *cbShowOriginAxis;
 	mxSlider *leOriginAxisLength;
+	mxChoice *cIncludedModels;
+
+	mxChoice *cbBoneWeightInspectIndex;
+	mxLabel *lblBoneWeightInspectValues;
 
 	mxChoice *cLODChoice;
 	mxCheckBox *cbAutoLOD;
 	mxLineEdit *leLODSwitch;
 	mxLabel *lLODMetric;
 	mxChoice *cSequence[MAX_SEQUENCES];
+	mxLabel *laFilters;
+	mxLineEdit *leSequenceFilter[MAX_SEQUENCES];
 	mxSlider *slSequence[MAX_SEQUENCES];
-	int		 *iSelectionToSequence; // selection to sequence
-	int		 *iSequenceToSelection; // sequence to selection
+	int		 m_iLastSequenceCount;
+	int		 *iSelectionToSequence[MAX_SEQUENCES]; // selection to sequence
+	int		 *iSequenceToSelection[MAX_SEQUENCES]; // sequence to selection
 	mxLabel *laGroundSpeed;
 	mxSlider *slSpeedScale;
 	mxLabel *laFPS;
@@ -277,11 +353,11 @@ class ControlPanel : public mxWindow
 	mxSlider *slForceFrame;
 	mxLabel	*lForcedFrame;
 	mxRadioButton *rbFrameSelection[MAX_SEQUENCES];
-	mxChoice *cBodypart, *cController, *cSubmodel;
+	mxChoice *cBodypart, *cController, *cSubmodel, *cBodyGroupPreset;
 	mxSlider *slController;
 	mxChoice *cSkin;
 	mxChoice *cMaterials;
-	mxLabel *lModelInfo1, *lModelInfo2, *lModelInfo3, *lModelInfo4, *lModelInfo5;
+	mxLabel *lModelInfo1, *lModelInfo2, *lModelInfo3, *lModelInfo4;
 	//mxChoice *cTextures;
 	//mxCheckBox *cbChrome;
 	//mxLabel *lTexSize;
@@ -296,9 +372,27 @@ class ControlPanel : public mxWindow
 	mxSlider *slFlexScale[NUM_FLEX_SLIDERS];
 
 	mxChoice *cPhysicsBone;
-	mxRadioButton *rbConstraintAxis[3];
+	mxChoice *cSoftbodyCtrl;
+	mxCheckBox *cbSoftbodyPolygons;
+	mxCheckBox *cbSoftbodyWind;
+	mxCheckBox *cbSoftbodyIndices;
+	mxCheckBox *cbSoftbodyCollision;
+	mxCheckBox *cbSoftbodyEdges;
+	mxCheckBox *cbSoftbodyBases;
+	mxCheckBox *cbSoftbodyEnableSimd;
+	mxCheckBox *cbSoftbodySimulate;
+	mxRadioButton *rbConstraintAxis[ 3 ];
+	mxRadioButton *rbSoftbodyAxis[ 3 ];
 	mxSlider *slPhysicsFriction;
 	mxLabel	 *lPhysicsFriction;
+	mxLabel *leSoftbodyIterations;
+	mxSlider *slSoftbodyIterations;
+	mxSlider *slSoftbodyWindYaw;
+	mxSlider *slSoftbodyWindStrength;
+	mxSlider *slSoftbodyGravity;
+	mxSlider *slSoftbodyVelocityDamping;
+	mxSlider *slSoftbodySurfaceStretch;
+	mxSlider *slSoftbodyThreadStretch;
 
 	mxSlider *slPhysicsConMin;
 	mxLabel	 *lPhysicsConMin;
@@ -342,50 +436,115 @@ class ControlPanel : public mxWindow
 	mxLineEdit2 *leEventSoundFrame;
 	mxListBox *lbEventSoundName;
 	mxLineEdit2 *leEventQCString;
+	mxListBox *lbEventHistory;
+	mxLabel	 *lEventSequence;
+	float m_lastEventCycle;
 
 	CBoneControlWindow* m_pBoneWindow;
 	CAttachmentsWindow* m_pAttachmentsWindow;
 	mxListBox *cMessageList;
 	mxListBox *cShaderUsed;
+	mxButton *m_bRandomizeWeaponModuleSlots;
+
+	mxButton *m_bExploreToMaterial;
+
+	int m_iSavedSequences[MAX_SEQUENCES];
+	float m_flSavedWeights[MAX_SEQUENCES];
+
+	mxListBox *cMaterialList;
+	mxListBox *cMaterialParamList;
+	mxLineEdit2 *leMaterialParamText;
+	mxButton *bMaterialParamColor;
+	mxCheckBox *cbMaterialParamMultiEdit;
+	
+#ifdef MATERIAL_SCRIPT_SAVE_FEATURE
+	mxButton *bMaterialParamSave;
+	mxLineEdit2 *leMaterialParamSavePath;
+	mxCheckBox *cbMaterialParamSaveRun;
+	mxLineEdit2 *leMaterialParamSaveRun;
+#endif
+	mxButton *bMaterialParamLoad;
+	mxButton *bMaterialParamCopyToClipboard;
+
+	mxSlider *slMaterialParamMatrixSliderScaleX;
+	mxSlider *slMaterialParamMatrixSliderScaleY;
+	mxSlider *slMaterialParamMatrixSliderRotation;
+	mxSlider *slMaterialParamMatrixSliderTranslateX;
+	mxSlider *slMaterialParamMatrixSliderTranslateY;
+	mxSlider *slMaterialParamFloat;
+
+	mxLabel *lblMatrixScaleX;
+	mxLabel *lblMatrixScaleY;
+	mxLabel *lblMatrixRotation;
+	mxLabel *lblMatrixTranslateX;
+	mxLabel *lblMatrixTranslateY;
+
+	mxListBox *cSubmodelList;
+
+	mxButton *bSubmodelAdd;
+	mxButton *bSubmodelAddSteam;
+	mxButton *bSubmodelRemoveAll;
+	mxButton *bSubmodelRemoveSelected;
+
+	mxChoice *cSubmodelAttachTo;
+	mxChoice *cSubmodelLocalAttachOrigin;
+
+	mxListBox *cCompileRecentQCpaths;
+	mxLabel *lblFullQCPath;
+	mxButton *bCompileQCRemoveFromList;
+	mxButton *bCompileQCCompile;
+	mxButton *bCompileQCLoadModel;
+	mxButton *bCompileQCShowCompileOutput;
+	mxButton *bCompileQCBrowseToQC;
+	mxButton *bCompileQCWhenSelected;
+	bool bCompileSelectedToggle;
+	mxLabel *lblCompileWarningOrError;
+	mxListBox *cCompileQCOutput;
+
+	int nCompileLastUpdateTick;
 
 public:
 	// CREATORS
-	ControlPanel (mxWindow *parent);
+	ControlPanel( mxWindow *parent );
 	virtual ~ControlPanel ();
 
 	virtual void OnDelete();
 
 	// MANIPULATORS
-	int handleEvent (mxEvent *event);
+	int handleEvent( mxEvent *event );
 
 	int handlePhysicsEvent( mxEvent *event );
+	int handleSoftbodyEvent( mxEvent *event );
 	void UpdateConstraintSliders( int clamp );
 	void setupPhysics( void );
 	void setupPhysicsBone( int boneIndex );
 	void setupPhysicsAxis( int boneIndex, int axis );
 	int getPhysicsAxis( void );
 	void setPhysicsAxis( int axisIndex );
+	int getSoftbodyAxis( void );
+	void setSoftbodyAxis( int axisIndex );
 	void writePhysicsData( void );
 	void handlePhysicsKey( mxEvent *event );
 //	void readPhysicsMaterials( mxChoice *pList );
 
 	void dumpModelInfo ();
-	LoadModelResult_t loadModel(const char *filename);
-	LoadModelResult_t loadModel(const char *filename, int slot );
+	LoadModelResult_t loadModel( const char *filename );
+	LoadModelResult_t loadModel( const char *filename, int slot );
 	void OnLoadModel( void );
 
 	void resetControlPanel( void );
-	void setRenderMode (int mode);
-	void setShowGround (bool b);
-	void setShowMovement (bool b);
-	void setShowBackground (bool b);
-	void setShowNormals (bool b);
-	void setShowTangentFrame (bool b);
-	void setOverlayWireframe (bool b);
-	void setShowShadow (bool b);
-	void setShowHitBoxes (bool b);
-	void setShowBones (bool b);
-	void setShowAttachments (bool b);
+	void setRenderMode( int mode );
+	void setShowGround( bool b );
+	void setShowMovement( bool b );
+	void setShowBackground( bool b );
+	void setShowNormals( bool b );
+	void setShowTangentFrame( bool b );
+	void setOverlayWireframe( bool b );
+	void setDisplacementMapping( bool b );
+	void setShowShadow( bool b );
+	void setShowHitBoxes( bool b );
+	void setShowBones( bool b );
+	void setShowAttachments( bool b );
 	void setHighlightBone( int index );
 	void setLOD( int index, bool setLODchoice, bool force );
 	void setAutoLOD( bool b );
@@ -393,7 +552,6 @@ public:
 	void setOverbright( bool b );
 	void setLODMetric( float metric );
 	void setPolycount( int polycount );
-	void setModelInfo( int nVertCount, int nIndexCount, int nTriCount );
 	void setTransparent( bool isTransparent );
 	void updatePoseParameters( void );
 	void setFOV( float fov );
@@ -401,50 +559,58 @@ public:
 	void setShowOriginAxis( bool b );
 	void setOriginAxisLength( float originAxisLength );
 
-	void initSequenceChoices();
-	void setSequence( int index );
+	void updateSequenceSizes( int tabWidth );
+	void initSequenceChoices( int iOnlyInitSlot = -1 );
+	void setSequence( int nSequence );
 	void showActivityModifiers( int sequence );
+	void GetSequenceFilter( int sequenceSlot, char *pszFilterBuf, int iBufSize );
 	void updateGroundSpeed( void );
-	void setOverlaySequence(int num, int index, float weight);
+	void setOverlaySequence( int num, int nSequence, float weight );
 	void updateTransitionAmount();
 	void startBlending( void );
 	void setSpeedScale ( float scale );
 	void updateSpeedScale( void );
-	void setBlend(int index, float value );
+	void setBlend( int index, float value );
 
 	int	getFrameSelection( void );
 	void setFrame( float frame );
 	void updateFrameSelection( void );
 	void updateFrameSlider( void );
+	void UpdateEventHistory( void );
 
 	void initBodypartChoices();
-	void setBodypart (int index);
-	void setSubmodel (int index);
+	void setBodypart( int index );
+	void setSubmodel( int index );
 
-	void initBoneControllers ();
-	void setBoneController (int index);
+	void initBoneControllers();
+	void setBoneController( int index );
 	void setBoneControllerValue (int index, float value);
 
 	void initSkinChoices();
 	void initMaterialChoices();
 
-	void setModelInfo ();
+	void setModelInfo();
 
 	void initPhysicsBones();
 	
+	void initIncludedModels();
+
 	void initLODs();
 
-	void centerView ();
+	void centerView();
 	void UpdateMaterialList ();
+	void centerVerts();
 	void viewmodelView();
+	void cs_gunsidemodelView();
+	void dotaView();
 
-	void fullscreen ();
+	void fullscreen();
 
-	void setMatSysWindow (MatSysWindow *window) { d_MatSysWindow = window; }
+	void setMatSysWindow( MatSysWindow *window ) { d_MatSysWindow = window; }
 
 	void ConvertFlexData();
-	void initFlexes ();
-	void connectFlexes( CStudioHdr* hdr );
+	void MapExtraFlexes( int nSlot );
+	void initFlexes();
 
 	int GetCurrentHitboxSet( void );
 
@@ -456,7 +622,27 @@ public:
 	void CreateSortedSequenceList( CStudioHdr* hdr, int *pSequence );
 	void SetFrameSlider( float flFrame );
 
-	void UnloadAllMergedModels();
+	int GetSequenceForSelection( int sequenceSlot, int selection );
+	int SetSequenceForSelection( int sequenceSlot, int selection, int sequence );
+
+	int GetSelectionForSequence( int sequenceSlot, int sequence );
+	int SetSelectionForSequence( int sequenceSlot, int sequence, int selection );
+
+	void SaveSelectedSequences( void );
+	void RestoreSelectedSequences( void );
+
+	void UpdateMaterialVars( void );
+
+	void setCameraOrigin( float flX, float flY, float flZ );
+	void setCameraAngles( float flX, float flY, float flZ );
+	void setLightAngles( float flX, float flY, float flZ );
+
+	void setMaterialVar( const char *p_szMatParameterName, const char *p_szMatParameterValue );
+
+	void UpdateSubmodelWindow( void );
+	void UpdateSubmodelSelection( void );
+
+	void redrawMatSysWin( void );
 
 public:
 	// Sets up the main tabs
@@ -466,10 +652,22 @@ public:
 	void SetupBodyWindow( mxTab* pTab );
 	void SetupFlexWindow( mxTab* pTab );
 	void SetupPhysicsWindow( mxTab* pTab );
+	void SetupSoftbodyWindow( mxTab* pTab );
 	void SetupAttachmentsWindow( mxTab *pTab );
 	void SetupIKRuleWindow( mxTab *pTab );
 	void SetupEventWindow( mxTab *pTab );
+	void SetupMatVarWindow( mxTab *pTab );
+	void SetupSubmodelWindow( mxTab *pTab );
+	void SetupCompileWindow( mxTab *pTab );
 	bool m_bVMTInfoLoaded;
+
+	void AddQCRecordPath( const char* szPath, bool bCompileWhenLoaded = false );
+	void UpdateQCPathPanel( bool bUpdateList = true, int nForceSelection = -1 );
+	void CompileTimerUpdate( void );
+	void CompileSelectedIndex( void );
+
+	void UpdateBoneWeightInspect( void );
+
 };
 
 

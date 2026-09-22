@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -10,52 +10,121 @@
 
 #include <vgui/ISurface.h>
 #include <vgui/IScheme.h>
-#include <KeyValues.h>
+#include <keyvalues.h>
 
 #include <vgui_controls/Image.h>
 #include <vgui_controls/CheckButton.h>
+#include <vgui_controls/TextImage.h>
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include <tier0/memdbgon.h>
 
 using namespace vgui;
 
-void CheckImage::Paint()
+//-----------------------------------------------------------------------------
+// Purpose: Check box image
+//-----------------------------------------------------------------------------
+class CheckImage : public TextImage
 {
-	DrawSetTextFont(GetFont());
-
-	// draw background
-	if (_CheckButton->IsEnabled() && _CheckButton->IsCheckButtonCheckable() )
+public:
+	CheckImage(CheckButton *CheckButton) : TextImage( "g" )
 	{
-		DrawSetTextColor(_bgColor);
+		_CheckButton = CheckButton;
+		_drawMode = 0;
+
+		SetSize(20, 13);
 	}
-	else
-	{
-		DrawSetTextColor(_CheckButton->GetDisabledBgColor());
-	}
-	DrawPrintChar(0, 1, 'g');
 
-	// draw border box
-	DrawSetTextColor(_borderColor1);
-	DrawPrintChar(0, 1, 'e');
-	DrawSetTextColor(_borderColor2);
-	DrawPrintChar(0, 1, 'f');
-
-	// draw selected check
-	if (_CheckButton->IsSelected())
+	virtual void Paint()
 	{
-		if ( !_CheckButton->IsEnabled() )
+		DrawSetTextFont(GetFont());
+
+		if ( !_drawMode )
 		{
-			DrawSetTextColor( _CheckButton->GetDisabledFgColor() );
+			// draw background
+			if (_CheckButton->IsEnabled() && _CheckButton->IsCheckButtonCheckable() )
+			{
+				DrawSetTextColor(_bgColor);
+			}
+			else
+			{
+				DrawSetTextColor(_CheckButton->GetDisabledBgColor());
+			}
+			DrawPrintChar(0, 1, 'g');
+		
+			// draw border box
+			DrawSetTextColor(_borderColor1);
+			DrawPrintChar(0, 1, 'e');
+			DrawSetTextColor(_borderColor2);
+			DrawPrintChar(0, 1, 'f');
 		}
 		else
 		{
-			DrawSetTextColor(_checkColor);
+			// Left4Dead custom background/border:
+			// always 1-pixel thick border, for proportional in-game menus
+			// slightly rounded corners to match our visuals
+			int x, y;
+			GetPos( x, y );
+
+			int wide, tall;
+			GetContentSize( wide, tall );
+
+			x += 1;
+			wide -= 2;
+			y += 1;
+			tall -= 2;
+
+			// draw background
+			if (_CheckButton->IsEnabled() && _CheckButton->IsCheckButtonCheckable() )
+			{
+				surface()->DrawSetColor(_bgColor);
+				surface()->DrawSetTextColor(_bgColor);
+			}
+			else
+			{
+				surface()->DrawSetColor(_CheckButton->GetDisabledBgColor());
+				surface()->DrawSetTextColor(_CheckButton->GetDisabledBgColor());
+			}
+			surface()->DrawFilledRect( x+1, y+1, x+wide-1, y+tall-1 );
+
+			// draw border box
+			surface()->DrawSetColor(_borderColor1);
+			surface()->DrawSetTextColor(_borderColor1);
+			surface()->DrawFilledRect( x+1, y, x+wide-1, y+1 );
+			surface()->DrawFilledRect( x, y+1, x+1, y+tall-1 );
+			surface()->DrawSetColor(_borderColor2);
+			surface()->DrawSetTextColor(_borderColor2);
+			surface()->DrawFilledRect( x+1, y+tall-1, x+wide-1, y+tall );
+			surface()->DrawFilledRect( x+wide-1, y+1, x+wide, y+tall-1 );
 		}
 
-		DrawPrintChar(0, 2, 'b');
+		// draw selected check
+		if (_CheckButton->IsSelected())
+		{
+			if ( !_CheckButton->IsEnabled() )
+			{
+				DrawSetTextColor( _CheckButton->GetDisabledFgColor() );
+			}
+			else
+			{
+				DrawSetTextColor(_checkColor);
+			}
+
+			DrawPrintChar(0, 2, 'b');
+		}
 	}
-}
+
+	Color _borderColor1;
+	Color _borderColor2;
+	Color _checkColor;
+
+	Color _bgColor;
+
+	int _drawMode;
+
+private:
+	CheckButton *_CheckButton;
+};
 
 DECLARE_BUILD_FACTORY_DEFAULT_TEXT( CheckButton, CheckButton );
 
@@ -66,7 +135,6 @@ CheckButton::CheckButton(Panel *parent, const char *panelName, const char *text)
 {
  	SetContentAlignment(a_west);
 	m_bCheckButtonCheckable = true;
-	m_bUseSmallCheckImage = false;
 
 	// create the image
 	_checkBoxImage = new CheckImage(this);
@@ -91,11 +159,9 @@ CheckButton::~CheckButton()
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-void CheckButton::ApplySettings( KeyValues *inResourceData )
+void CheckButton::SetCheckDrawMode( int mode )
 {
-	BaseClass::ApplySettings( inResourceData );
-
-	m_bUseSmallCheckImage = inResourceData->GetBool( "smallcheckimage", false );
+	_checkBoxImage->_drawMode = mode;
 }
 
 //-----------------------------------------------------------------------------
@@ -124,7 +190,7 @@ void CheckButton::ApplySchemeSettings(IScheme *pScheme)
 
 	SetContentAlignment(Label::a_west);
 
-	_checkBoxImage->SetFont( pScheme->GetFont( m_bUseSmallCheckImage ? "MarlettSmall" : "Marlett", IsProportional()) );
+	_checkBoxImage->SetFont( pScheme->GetFont("Marlett", IsProportional()) );
 	_checkBoxImage->ResizeImageToContent();
 	SetImageAtIndex(0, _checkBoxImage, CHECK_INSET);
 
@@ -167,7 +233,7 @@ void CheckButton::SetCheckButtonCheckable(bool state)
 //-----------------------------------------------------------------------------
 // Purpose: Gets a different foreground text color if we are selected
 //-----------------------------------------------------------------------------
-#ifdef _X360
+#ifdef _GAMECONSOLE
 Color CheckButton::GetButtonFgColor()
 {
 	if (HasFocus())
@@ -200,17 +266,3 @@ Color CheckButton::GetButtonFgColor()
 void CheckButton::OnCheckButtonChecked(Panel *panel)
 {
 }
-
-//-----------------------------------------------------------------------------
-// Purpose: 
-//-----------------------------------------------------------------------------
-void CheckButton::SetHighlightColor(Color fgColor)
-{
-	if ( _highlightFgColor != fgColor )
-	{
-		_highlightFgColor = fgColor;
-
-		InvalidateLayout(false);
-	}
-}
-

@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -11,6 +11,7 @@
 #include "mathlib/vmatrix.h"
 #include "iscratchpad3d.h"
 #include "csg.h"
+#include "utlmap.h"
 #include "fmtstr.h"
 
 int		c_active_portals;
@@ -635,7 +636,17 @@ FLOOD ENTITIES
 // Input  : node - 
 //			dist - 
 //-----------------------------------------------------------------------------
-void FloodPortals_r (node_t *node, int dist)
+#define VBSP_COMPILE_FLOOD_PORTALS_NORECURSE 1
+#if VBSP_COMPILE_FLOOD_PORTALS_NORECURSE
+struct FloodPortalsParams_t
+{
+	node_t *node;
+	int dist;
+};
+void FloodPortals_r( node_t *node, int dist, CUtlVector< FloodPortalsParams_t > &arrPendingFlood )
+#else
+void FloodPortals_r( node_t *node, int dist )
+#endif
 {
 	portal_t	*p;
 	int			s;
@@ -654,7 +665,26 @@ void FloodPortals_r (node_t *node, int dist)
 		if (!Portal_EntityFlood (p, s))
 			continue;
 
+#if VBSP_COMPILE_FLOOD_PORTALS_NORECURSE
+		bool bAlreadyPending = false;
+		FOR_EACH_VEC( arrPendingFlood, idxPendingFlood )
+		{
+			if ( arrPendingFlood[idxPendingFlood].node == p->nodes[!s] )
+			{
+				bAlreadyPending = true;
+				break;
+			}
+		}
+		if ( bAlreadyPending )
+			continue;
+
+		FloodPortalsParams_t params = {};
+		params.node = p->nodes[!s];
+		params.dist = dist+1;
+		arrPendingFlood.AddToTail( params );
+#else
 		FloodPortals_r (p->nodes[!s], dist+1);
+#endif
 	}
 }
 
@@ -728,8 +758,18 @@ qboolean PlaceOccupant (node_t *headnode, Vector& origin, entity_t *occupant)
 
 	node->occupant = occupant;
 
+#if VBSP_COMPILE_FLOOD_PORTALS_NORECURSE
+	CUtlVector< FloodPortalsParams_t > arrPendingFlood;
+	FloodPortals_r( node, 1, arrPendingFlood );
+	while ( arrPendingFlood.Count() )
+	{
+		FloodPortals_r( arrPendingFlood.Head().node, arrPendingFlood.Head().dist, arrPendingFlood );
+		arrPendingFlood.RemoveMultipleFromHead( 1 );
+	}
+#else
 	// Flood outward from here to see if this entity leaks.
 	FloodPortals_r (node, 1);
+#endif
 
 	return true;
 }
@@ -1211,7 +1251,7 @@ void EmitClipPortalGeometry( node_t *pHeadNode, portal_t *pPortal, int iSrcArea,
 		portals );
 
 	CUtlVector<Vector> points;
-	for( int iPortal=0; iPortal < portals.Size(); iPortal++ )
+	for( int iPortal=0; iPortal < portals.Count(); iPortal++ )
 	{
 		portal_t *pPointPortal = portals[iPortal];
 		winding_t *pWinding = pPointPortal->winding;
@@ -1236,7 +1276,7 @@ void EmitClipPortalGeometry( node_t *pHeadNode, portal_t *pPortal, int iSrcArea,
 
 	int i;
 	CUtlVector<Vector2D> points2D;
-	for( i=0; i < points.Size(); i++ )
+	for( i=0; i < points.Count(); i++ )
 	{
 		Vector vTest = mTransform * points[i];
 		points2D.AddToTail( Vector2D( vTest.y, vTest.z ) );
@@ -1244,7 +1284,7 @@ void EmitClipPortalGeometry( node_t *pHeadNode, portal_t *pPortal, int iSrcArea,
 
 	// Build the hull.
 	int indices[512];
-	int nIndices = Convex2D( points2D.Base(), points2D.Size(), indices, 512 );
+	int nIndices = Convex2D( points2D.Base(), points2D.Count(), indices, 512 );
 
 	// Output the hull.
 	dp->m_FirstClipPortalVert = g_nClipPortalVerts;
@@ -1301,7 +1341,7 @@ void EmitAreaPortals (node_t *headnode)
 	dareaportal_t	*dp;
 
 	if (c_areas > MAX_MAP_AREAS)
-		Error ("Map is split into too many unique areas (max = %d)\nProbably too many areaportals", MAX_MAP_AREAS);
+		Error ("Map is split into %d unique areas which is too many (max = %d)\nProbably too many areaportals", c_areas, MAX_MAP_AREAS);
 	numareas = c_areas+1;
 	numareaportals = 1;		// leave 0 as an error
 
@@ -1562,7 +1602,7 @@ gotit:
 		qprintf ("WARNING: side not found for portal\n");
 
 	// Compute average dist, check for problems...
-	if ((bestdist / p->winding->numpoints) > 2)
+	if ( ((bestdist / p->winding->numpoints) > 2) && ( p->nodes[0]->brushlist || p->nodes[1]->brushlist ) )
 	{
 		static int nWarnCount = 0;
 		if ( nWarnCount < 8 )

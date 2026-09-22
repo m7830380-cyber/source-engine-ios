@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -34,6 +34,7 @@ protected:
 private:
 	void DrawPointFile( CRender2D *pRender );
 	void AddToRenderLists( CMapClass *pObject );
+	void RenderFoW( void );
 	void Render();
 	void SetDrawType( DrawType_t drawType );
 	virtual void ActivateView( bool bActivate );
@@ -46,6 +47,12 @@ private:
 	bool m_bLastActiveView;					// is this the last active view?
 	CUtlVector<CMapClass *> m_RenderList;	// list of current rendered objects
 	bool m_bUpdateRenderObjects;			// if true, update render list on next draw
+
+//	bool		m_bInstanceRendering;		// if true, we are rendering an instance
+//	Vector		m_InstanceOrigin;			// the origin offset of instance rendering
+//	QAngle		m_InstanceAngles;			// the rotation of the instance rendering
+//	VMatrix		m_InstanceMatrix;			// matrix of the origin and rotation of rendering
+//	matrix3x4_t	m_Instance3x4Matrix;		// matrix of the origin and rotation of rendering
 
 // Overrides
 	// ClassWizard generated virtual function overrides

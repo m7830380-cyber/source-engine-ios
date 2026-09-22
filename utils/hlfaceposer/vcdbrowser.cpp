@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -200,7 +200,7 @@ public:
 	
 	virtual void redraw()
 	{
-		CChoreoWidgetDrawHelper drawHelper( this, GetSysColor( COLOR_BTNFACE ) );
+		CChoreoWidgetDrawHelper drawHelper( this, RGBToColor( GetSysColor( COLOR_BTNFACE ) ) );
 	}
 	virtual int handleEvent( mxEvent *event )
 	{
@@ -347,7 +347,7 @@ HIMAGELIST CVCDBrowser::CreateImageList()
     // Load the icon resources, and add the icons to the image list. 
     HICON hicon;
 	int slot;
-#if defined( DBGFLAG_ASSERT )
+#if defined( _DEBUG )
 	int c = 0;
 #endif
 

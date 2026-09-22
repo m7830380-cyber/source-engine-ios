@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -10,6 +10,7 @@
 #include "MapClass.h"
 #include "MapEntity.h"			// dvs: evil - base knows about the derived class
 #include "MapGroup.h"			// dvs: evil - base knows about the derived class
+#include "MapInstance.h"		// dvs: evil - base knows about the derived class
 #include "MapWorld.h"			// dvs: evil - base knows about the derived class
 #include "GlobalFunctions.h"
 #include "MapDoc.h"
@@ -18,6 +19,8 @@
 #include "tier0/minidump.h"
 
 int CMapAtom::s_nObjectIDCtr = 1;
+
+int CMapClass::sm_nDropTraceMarker = 0;
 
 static CUtlVector<MCMSTRUCT> s_Classes;
 
@@ -79,8 +82,6 @@ CMapClass *CMapClassManager::CreateObject(MAPCLASSTYPE Type)
 //-----------------------------------------------------------------------------
 CMapClass::CMapClass(void)
 {
-	m_pSafeObject = CSafeObject<CMapClass>::Create( this );
-	
 	//
 	// The document manages the unique object IDs. Eventually all object construction
 	// should be done through the document, eliminating the need for CMapClass to know
@@ -96,6 +97,9 @@ CMapClass::CMapClass(void)
 		m_nID = 0;
 	}
 
+	// PORTAL2 SHIP: keep track of load order to preserve it on save so that maps can be diffed.
+	m_nLoadID = 0;
+
 	dwKept = 0;
 	m_bTemporary = FALSE;
 
@@ -109,7 +113,8 @@ CMapClass::CMapClass(void)
 	m_pParent = NULL;
 	m_nRenderFrame = 0;
 	m_pEditorKeys = NULL;
-	m_Dependents.Purge();
+	m_Dependents.RemoveAll();
+	m_nDropTraceMarker = 0;
 }
 
 
@@ -119,39 +124,9 @@ CMapClass::CMapClass(void)
 CMapClass::~CMapClass(void)
 {
 	// Delete all of our children.
-	m_Children.PurgeAndDeleteElements();
+	m_Children.RemoveAll();
 
 	delete m_pEditorKeys;
-	
-	// In case any CMapDocs are pointing at us, let them know we're gone.
-	m_pSafeObject->m_pObject = NULL;
-	
-	// Show a warning if anyone is left pointing at us.
-	static bool bCheckSafeObjects = true;
-	if ( bCheckSafeObjects && m_pSafeObject->GetRefCount() != 1 )
-	{
-		int ret = AfxMessageBox(	"Warning: a CMapClass is being deleted but is still referenced by a CMapDoc.\n"
-									"Please tell a programmer.\n"
-									"Click Yes to write a minidump and continue.\n"
-									"Click No to ignore.", 
-						MB_YESNO );
-		
-		if ( ret == IDYES )
-		{
-			WriteMiniDump();
-		}
-		else if ( ret == IDNO )
-		{
-			// Ignore it and don't get in here again.
-			bCheckSafeObjects = false;
-		}		
-	}
-}
-
-
-const CSmartPtr< CSafeObject< CMapClass > >& CMapClass::GetSafeObjectSmartPtr()
-{
-	return m_pSafeObject;
 }
 
 
@@ -161,6 +136,10 @@ const CSmartPtr< CSafeObject< CMapClass > >& CMapClass::GetSafeObjectSmartPtr()
 //-----------------------------------------------------------------------------
 void CMapClass::AddDependent(CMapClass *pDependent)
 {
+	Assert( pDependent != NULL );
+	if ( !pDependent )
+		return;
+
 	//
 	// Never add ourselves to our dependents. It creates a circular dependency
 	// which is bad.
@@ -274,7 +253,7 @@ CMapClass *CMapClass::CopyFrom(CMapClass *pFrom, bool bUpdateDependencies)
 // Input  : mins - receives the minima for culling
 //			maxs - receives the maxima for culling.
 //-----------------------------------------------------------------------------
-void CMapClass::GetCullBox(Vector &mins, Vector &maxs)
+void CMapClass::GetCullBox(Vector &mins, Vector &maxs) const
 {
 	m_CullBox.GetBounds(mins, maxs);
 }
@@ -318,9 +297,9 @@ void CMapClass::SetBoxFromFaceList( CMapFaceList *pFaces, BoundBox &Box )
 	// Calculate our 3D bounds.
 	//
 	Box.ResetBounds();
-	for (int iFace = 0; iFace < pFaces->Count(); iFace++)
+	for (int i = 0; i < pFaces->Count(); i++)
 	{
-		CMapFace *pFace = pFaces->Element( iFace );
+		CMapFace *pFace = pFaces->Element(i);
 		int nPoints = pFace->GetPointCount();
 		for (int i = 0; i < nPoints; i++)
 		{
@@ -464,7 +443,7 @@ CMapClass *CMapClass::GetNextDescendent(EnumChildrenPos_t &pos)
 
 			// If this object has children, push it onto the stack.
 
-			if ( pChild->m_Children.Count() )
+			if ( pChild && pChild->m_Children.Count() )
 			{
 				pos.nDepth++;
 
@@ -681,7 +660,7 @@ void CMapClass::AddChild(CMapClass *pChild)
 	}
 
 	m_Children.AddToTail(pChild);
-	pChild->m_pParent = this;
+	pChild->SetParent( this );
 
 	//
 	// Update our bounds with the child's bounds.
@@ -740,7 +719,7 @@ void CMapClass::RemoveChild(CMapClass *pChild, bool bUpdateBounds)
 		return;
 	}
 
-	m_Children.Remove(index);
+	m_Children.FastRemove(index);
 	pChild->m_pParent = NULL;
 
 	if (bUpdateBounds)
@@ -785,6 +764,12 @@ void CMapClass::CalcBounds(BOOL bFullUpdate)
 	FOR_EACH_OBJ( m_Children, pos )
 	{
 		CMapClass *pChild = m_Children.Element(pos);
+
+		if ( !pChild )
+		{
+			continue;
+		}
+
 		if (bFullUpdate)
 		{
 			pChild->CalcBounds(TRUE);
@@ -870,6 +855,10 @@ BOOL CMapClass::EnumChildren(ENUMMAPCHILDRENPROC pfn, unsigned int dwParam, MAPC
 	FOR_EACH_OBJ( m_Children, pos )
 	{
 		CMapClass *pChild = m_Children.Element(pos);
+
+		if ( !pChild )
+			continue;
+
 		if (!Type || pChild->IsMapClass(Type))
 		{
 			if(!(*pfn)(pChild, dwParam))
@@ -882,6 +871,62 @@ BOOL CMapClass::EnumChildren(ENUMMAPCHILDRENPROC pfn, unsigned int dwParam, MAPC
 		if (!pChild->EnumChildren(pfn, dwParam, Type))
 		{
 			return FALSE;
+		}
+	}
+
+	return TRUE;
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: Calls an enumerating function for each of our children that are of
+//			of a given type, recursively enumerating their children also.
+// Input  : pfn - Enumeration callback function. Called once per child.
+//			dwParam - User data to pass into the enumerating callback.
+//			Type - Unless NULL, only objects of the given type will be enumerated.
+// Output : Returns FALSE if the enumeration was terminated early, TRUE if it completed.
+//-----------------------------------------------------------------------------
+BOOL CMapClass::EnumChildrenAndInstances( ENUMMAPCHILDRENPROC pfn, unsigned int dwParam, MAPCLASSTYPE Type )
+{
+	FOR_EACH_OBJ( m_Children, pos )
+	{
+		CMapClass *pChild = m_Children.Element(pos);
+		if (!Type || pChild->IsMapClass(Type))
+		{
+			if (!(*pfn)(pChild, dwParam))
+			{
+				return FALSE;
+			}
+		}
+
+		// enum this child's children
+		if (!pChild->EnumChildren(pfn, dwParam, Type))
+		{
+			return FALSE;
+		}
+
+		//
+		// If this is an instance, enumerate the stuff inside it also.
+		//
+		if ( pChild->IsMapClass( MAPCLASS_TYPE( CMapEntity ) ) )
+		{
+			CMapEntity *pEntity = (CMapEntity *)pChild;
+
+			const char *pszClassName = pEntity->GetClassName();
+			if ( pszClassName && !stricmp( pszClassName, "func_instance" ) )
+			{
+				CMapInstance *pMapInstance = pEntity->GetChildOfType( ( CMapInstance * )NULL );
+				if ( pMapInstance )
+				{
+					CMapDoc *pMapDoc = pMapInstance->GetInstancedMap();
+					if ( pMapDoc )
+					{
+						CMapWorld *pWorld = pMapDoc->GetMapWorld();
+						if ( !pWorld->EnumChildren( pfn, dwParam, Type ) )
+							return FALSE;
+					}
+				}
+			}
 		}
 	}
 
@@ -939,6 +984,12 @@ CMapEntity *CMapClass::FindChildByKeyValue( const char* key, const char* value, 
 	FOR_EACH_OBJ( m_Children, pos )
 	{
 		CMapClass *pChild = m_Children.Element( pos );
+
+		if ( !pChild )
+		{
+			continue;
+		}
+
 		CMapEntity *e = pChild->FindChildByKeyValue( key, value, bIsInInstance, InstanceMatrix );
 		if ( e )
 			return e;
@@ -1334,6 +1385,9 @@ ChunkFileResult_t CMapClass::LoadEditorKeyCallback(const char *szKey, const char
 	else if (!stricmp(szKey, "id"))
 	{
 		CChunkFile::ReadKeyValueInt(szValue, pObject->m_nID);
+
+		// PORTAL2 SHIP: keep track of load order to preserve it on save so that maps can be diffed.
+		pObject->m_nLoadID = CMapDoc::GetActiveMapDoc()->GetNextLoadID();
 	}
 	else  if (!stricmp(szKey, "comments"))
 	{
@@ -1665,7 +1719,7 @@ void CMapClass::SetVisible(bool bVisible)
 	FOR_EACH_OBJ( m_Children, pos )
 	{
 		CMapClass *pChild = m_Children.Element(pos);
-		pChild->SetVisible(bVisible);
+		pChild ? pChild->SetVisible(bVisible) : NULL;;
 	}
 
 	m_bVisible = bVisible;
@@ -1745,14 +1799,14 @@ void CMapClass::UpdateAllDependencies(CMapClass *pObject)
 
 
 //-----------------------------------------------------------------------------
-// Purpose: Returns whether this object should be hidden based on the given
-//			cordon bounds.
-// Output : Returns true to cull the object, false to keep it.
+// Returns whether this object intersects the given cordon bounds.
+// Return true to keep the object, false to cull it.
 //-----------------------------------------------------------------------------
-bool CMapClass::IsCulledByCordon(const Vector &vecMins, const Vector &vecMaxs)
+bool CMapClass::IsIntersectingCordon(const Vector &vecMins, const Vector &vecMaxs)
 {
-	return !IsIntersectingBox(vecMins, vecMaxs);
+	return IsIntersectingBox(vecMins, vecMaxs);
 }
+
 
 //-----------------------------------------------------------------------------
 // Purpose: Checks to see if the object is hidden by auto or user visgroups

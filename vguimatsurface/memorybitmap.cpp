@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -10,12 +10,12 @@
 #include <string.h>
 #include <stdlib.h>
 #include "MatSystemSurface.h"
-#include "materialsystem/imaterialvar.h"
-#include "materialsystem/itexture.h"
+#include "materialsystem/IMaterialVar.h"
+#include "materialsystem/ITexture.h"
 #include "bitmap/imageformat.h"
 #include "vtf/vtf.h"
 #include "KeyValues.h"
-#include "TextureDictionary.h"
+#include "vgui_surfacelib/TextureDictionary.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
@@ -37,7 +37,7 @@ MemoryBitmap::MemoryBitmap(unsigned char *texture,int wide, int tall)
 	_valid = true;
 	_w = wide;
 	_h = tall;
-	m_iTextureID = -1;
+	m_iTextureID = 0;
 
 	ForceUpload(texture,wide,tall);
 }
@@ -48,11 +48,8 @@ MemoryBitmap::MemoryBitmap(unsigned char *texture,int wide, int tall)
 MemoryBitmap::~MemoryBitmap()
 {
 	// Free the old texture ID.
-	if ( m_iTextureID != -1 )
-	{
+	if ( m_iTextureID != 0 )
 		TextureDictionary()->DestroyTexture( m_iTextureID );
-		m_iTextureID = -1;
-	}
 }
 
 //-----------------------------------------------------------------------------
@@ -152,19 +149,19 @@ void MemoryBitmap::ForceUpload(unsigned char *texture,int wide, int tall)
 	if(_w==0 || _h==0)
 		return;
 
-	// Not our first time through and the size changed, destroy and recreate texture id...
-	if ( m_iTextureID != -1 && sizechanged )
+	// If size changed, or first time through, destroy and recreate texture id...
+	if ( sizechanged && m_iTextureID )
 	{
 		TextureDictionary()->DestroyTexture( m_iTextureID );
-		m_iTextureID = -1;
+		m_iTextureID = 0;
 	}
 
-	if ( m_iTextureID == -1 )
+	if ( !m_iTextureID )
 	{
 		m_iTextureID = g_MatSystemSurface.CreateNewTextureID( true );
 	}
 
-	g_MatSystemSurface.DrawSetTextureRGBA( m_iTextureID, texture, wide, tall, true, true );
+	g_MatSystemSurface.DrawSetTextureRGBA( m_iTextureID, texture, wide, tall );
 
 	_uploaded = true;
 	_valid = g_MatSystemSurface.IsTextureIDValid(m_iTextureID);

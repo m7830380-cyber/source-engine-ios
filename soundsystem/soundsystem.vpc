@@ -7,7 +7,7 @@
 $Macro SRCDIR		".."
 $Macro OUTBINDIR	"$SRCDIR\..\game\bin"
 
-$Include "$SRCDIR\vpc_scripts\source_dll_base.vpc"
+$Include "$SRCDIR\vpc_scripts\source_dll_win32_base.vpc"
 
 $Configuration
 {
@@ -27,6 +27,7 @@ $Project "Soundsystem"
 	$Folder	"Source Files"
 	{
 		$File	"$SRCDIR\public\sentence.cpp"
+		$File	"$SRCDIR\public\phonemeconverter.cpp"
 		$File	"snd_audio_source.cpp"
 		$File	"snd_dev_wave.cpp"
 		$File	"snd_io.cpp"
@@ -55,10 +56,11 @@ $Project "Soundsystem"
 
 	$Folder	"Link Libraries"
 	{
-		$Lib mathlib
-		$Lib tier2
+		$Lib	soundsystem_lowlevel	[$WIN32]
 		$File	"$SRCDIR\dx9sdk\lib\dsound.lib"
 		$File	"$SRCDIR\dx9sdk\lib\dxguid.lib"
+		$File	"$SRCDIR\lib\public\mathlib.lib"
 		$File	"$SRCDIR\lib\common\mss32.lib"
+		$File	"$SRCDIR\lib\public\tier2.lib"
 	}
 }

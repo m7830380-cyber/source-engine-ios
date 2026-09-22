@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2005, Valve Corporation, All rights reserved. =======
 //
 // Purpose: 
 //
@@ -78,19 +78,6 @@ char *ExpandPath (char *path)
 	static char fullpath[ 512 ];
 	g_pFullFileSystem->RelativePathToFullPath( path, "GAME", fullpath, sizeof( fullpath ) );
 	return fullpath;
-}
-
-
-//-----------------------------------------------------------------------------
-// This is here because scriplib.cpp is included in this project but cmdlib.cpp
-// is not, but scriplib.cpp uses some stuff from cmdlib.cpp, same with
-// LoadFile and ExpandPath above.  The only thing that currently uses this
-// is $include in scriptlib, if this function returns 0, $include will
-// behave the way it did before this change
-//-----------------------------------------------------------------------------
-int CmdLib_ExpandWithBasePaths( CUtlVector< CUtlString > &expandedPathList, const char *pszPath )
-{
-	return 0;
 }
 
 

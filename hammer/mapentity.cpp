@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -28,6 +28,7 @@
 #include "MapSprite.h"
 #include "camera.h"
 #include "hammer.h"
+#include "vmfentitysupport.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include <tier0/memdbgon.h>
@@ -48,7 +49,7 @@ IMPLEMENT_MAPCLASS(CMapEntity)
 class CMapAnimator;
 class CMapKeyFrame;
 
-
+bool CMapEntity::s_bShowDotACamera = false;
 bool CMapEntity::s_bShowEntityNames = true;
 bool CMapEntity::s_bShowEntityConnections = false;
 bool CMapEntity::s_bShowUnconnectedEntities = true;
@@ -162,7 +163,7 @@ static void ReplaceNodeIDRecursive(CMapClass *pRoot, int nOldNodeID, int nNewNod
 		const CMapObjectList *pChildren = pRoot->GetChildren();
 		FOR_EACH_OBJ( *pChildren, pos )
 		{
-			ReplaceNodeIDRecursive(pChildren->Element(pos), nOldNodeID, nNewNodeID);
+			ReplaceNodeIDRecursive((CUtlReference< CMapClass >)pChildren->Element(pos), nOldNodeID, nNewNodeID);
 		}
 	}
 }
@@ -378,15 +379,15 @@ void CMapEntity::AddHelpersForClass(GDclass *pClass, bool bLoading)
 		//
 		// Add all the helpers that this class declares in the FGD.
 		//
-		GDclass *pClassLocal = GetClass();
+		GDclass *pClass = GetClass();
 		
 		//
 		// For every helper in the class definition...
 		//
-		int nHelperCount = pClassLocal->GetHelperCount();
+		int nHelperCount = pClass->GetHelperCount();
 		for (int i = 0; i < nHelperCount; i++)
 		{
-			CHelperInfo *pHelperInfo = pClassLocal->GetHelper(i);
+			CHelperInfo *pHelperInfo = pClass->GetHelper(i);
 
 			//
 			// Create the helper and attach it to this entity.
@@ -407,10 +408,10 @@ void CMapEntity::AddHelpersForClass(GDclass *pClass, bool bLoading)
 		//
 		// FIXME: make this totally data driven like the helper factory, or better
 		//		  yet, like the LINK_ENTITY_TO_CLASS stuff in the game DLL
-		int nVarCount = pClassLocal->GetVariableCount();
+		int nVarCount = pClass->GetVariableCount();
 		for (int i = 0; i < nVarCount; i++)
 		{
-			GDinputvariable *pVar = pClassLocal->GetVariableAt(i);
+			GDinputvariable *pVar = pClass->GetVariableAt(i);
 			GDIV_TYPE eType = pVar->GetType();
 		
 			CHelperInfo HelperInfo;
@@ -478,7 +479,7 @@ void CMapEntity::AddHelpersForClass(GDclass *pClass, bool bLoading)
 	{
 		CHelperInfo HelperInfo;
 		HelperInfo.SetName("iconsprite");
-		HelperInfo.AddParameter("sprites/obsolete.spr");
+		HelperInfo.AddParameter("sprites/obsolete.vmt");
 
 		CMapClass *pSprite = CHelperFactory::CreateHelper(&HelperInfo, this);
 		if (pSprite != NULL)
@@ -607,7 +608,7 @@ const char* CMapEntity::GetDescription(void)
 	}
 	else
 	{
-		V_strcpy_safe( szBuf, GetClassName() );
+		strcpy(szBuf, GetClassName());
 	}
 
 	return(szBuf);
@@ -685,6 +686,8 @@ ChunkFileResult_t CMapEntity::LoadVMF(CChunkFile *pFile)
 	Handlers.AddHandler("editor", (ChunkHandler_t)LoadEditorCallback, this);
 	Handlers.AddHandler("connections", (ChunkHandler_t)LoadConnectionsCallback, (CEditGameClass *)this);
 
+	VmfAddMapEntityHandlers( &Handlers, static_cast< IMapEntity_Type_t * >( this ) );
+
 	pFile->PushHandlers(&Handlers);
 	ChunkFileResult_t eResult = pFile->ReadChunk((KeyHandler_t)LoadKeyCallback, this);
 	pFile->PopHandlers();
@@ -705,6 +708,9 @@ ChunkFileResult_t CMapEntity::LoadKeyCallback(const char *szKey, const char *szV
 	if (!stricmp(szKey, "id"))
 	{
 		pEntity->SetID(atoi(szValue));
+
+		// PORTAL2 SHIP: keep track of load order to preserve it on save so that maps can be diffed.
+		pEntity->m_nLoadID = CMapDoc::GetActiveMapDoc()->GetNextLoadID();
 	}
 	else
 	{
@@ -1137,7 +1143,7 @@ void CMapEntity::PostloadWorld(CMapWorld *pWorld)
 	//
 	if (IsPlaceholder() && (!IsClass() || GetClass()->VarForName("origin") == NULL))
 	{
-		pszValue = m_KeyValues.GetValue("origin", &nIndex);
+		const char *pszValue = m_KeyValues.GetValue("origin", &nIndex);
 		if (pszValue != NULL)
 		{
 			RemoveKey(nIndex);
@@ -1281,11 +1287,11 @@ void CMapEntity::SetKeyValue(LPCSTR pszKey, LPCSTR pszValue)
 	const char *pszOld = GetKeyValue(pszKey);
 	if (pszOld != NULL)
 	{
-		V_strcpy_safe(szOldValue, pszOld);
+		strcpy(szOldValue, pszOld);
 	}
 	else
 	{
-		szOldValue[0] = '\0';
+	  szOldValue[0] = '\0';
 	}
 
 	CEditGameClass::SetKeyValue(pszKey, pszValue);
@@ -1307,7 +1313,7 @@ void CMapEntity::OnPreClone(CMapClass *pClone, CMapWorld *pWorld, const CMapObje
 	{
 		// dvs: TODO: make this FGD-driven instead of hardcoded, see also MapKeyFrame.cpp
 		// dvs: TODO: use letters of the alphabet between adjacent numbers, ie path2a path2b, etc.
-		if (!stricmp(GetClassName(), "path_corner") || !stricmp(GetClassName(), "path_track"))
+		if (!stricmp(GetClassName(), "path_corner") || !stricmp(GetClassName(), "path_track") || !stricmp(GetClassName(), "info_blob_spit_path") )
 		{
 			//
 			// Generate a new name for the clone.
@@ -1348,7 +1354,7 @@ void CMapEntity::OnClone(CMapClass *pClone, CMapWorld *pWorld, const CMapObjectL
 
 	if (OriginalList.Count() == 1)
 	{
-		if (!stricmp(GetClassName(), "path_corner") || !stricmp(GetClassName(), "path_track"))
+		if (!stricmp(GetClassName(), "path_corner") || !stricmp(GetClassName(), "path_track") || !stricmp(GetClassName(), "info_blob_spit_path") )
 		{
 			// dvs: TODO: make this FGD-driven instead of hardcoded, see also MapKeyFrame.cpp
 			// dvs: TODO: use letters of the alphabet between adjacent numbers, ie path2a path2b, etc.
@@ -1357,15 +1363,17 @@ void CMapEntity::OnClone(CMapClass *pClone, CMapWorld *pWorld, const CMapObjectL
 			if (!pNewEntity)
 				return;
 
+			const char *pFieldName = !stricmp(GetClassName(), "info_blob_spit_path") ? "NextPath" : "target";
+
 			// Point the clone at what we were pointing at.
-			const char *pszNext = GetKeyValue("target");
+			const char *pszNext = GetKeyValue( pFieldName );
 			if (pszNext)
 			{
-				pNewEntity->SetKeyValue("target", pszNext);
+				pNewEntity->SetKeyValue( pFieldName, pszNext );
 			}
 
 			// Point this path corner at the clone.
-			SetKeyValue("target", pNewEntity->GetKeyValue("targetname"));
+			SetKeyValue( pFieldName, pNewEntity->GetKeyValue("targetname"));
 		}
 	}
 
@@ -1761,7 +1769,12 @@ ChunkFileResult_t CMapEntity::SaveVMF(CChunkFile *pFile, CSaveInfo *pSaveInfo)
 	{
 		eResult = CMapClass::SaveVMF(pFile, pSaveInfo);
 	}
-	
+
+	//
+	// Save custom model information
+	//
+	eResult = VmfSaveVmfEntityHandlers( pFile, static_cast< IMapEntity_Type_t * >( this ),
+		static_cast< IMapEntity_SaveInfo_t * >( pSaveInfo ) );
 	//
 	// End this entity's scope.
 	//
@@ -1887,8 +1900,9 @@ bool MapEntityList_HasInput(const CMapEntityList *pList, const char *szInput, In
 	GDclass *pLastClass = NULL;
 	FOR_EACH_OBJ( *pList, pos )
 	{
-		CMapEntity *pEntity = pList->Element(pos);
-		GDclass *pClass = pEntity->GetClass();
+		const CMapEntity *pEntity = pList->Element(pos).GetObject();
+		GDclass *pClass = pEntity ? pEntity->GetClass() : NULL;
+
 		if ((pClass != pLastClass) && (pClass != NULL))
 		{
 			CClassInput *pInput = pClass->FindInput(szInput);
@@ -2002,16 +2016,17 @@ void CMapEntity::Render2D(CRender2D *pRender)
 			CMapWorld *pWorld = GetWorldObject(this);
 			MDkeyvalue kv("targetname", pszTarget);
 
-			CMapObjectList FoundEntitiesTarget;
-			FoundEntitiesTarget.RemoveAll();
+			CMapObjectList FoundEntities;
+			FoundEntities.RemoveAll();
 			pWorld->EnumChildren((ENUMMAPCHILDRENPROC)FindKeyValue, (DWORD)&kv, MAPCLASS_TYPE(CMapEntity));
 
 			Vector vCenter1,vCenter2;
 			GetBoundsCenter( vCenter1 );
 			
-			FOR_EACH_OBJ( FoundEntitiesTarget, p )
+			FOR_EACH_OBJ( FoundEntities, p )
 			{
-				CMapClass *pEntity = (CMapEntity *)FoundEntitiesTarget.Element(p);
+				CMapClass *pMapClass = (CUtlReference< CMapClass >)FoundEntities.Element(p);
+				CMapClass *pEntity = (CMapEntity *)pMapClass;
 				pEntity->GetBoundsCenter(vCenter2);
 				pRender->DrawLine( vCenter1, vCenter2 );
 			}
@@ -2110,10 +2125,10 @@ void CMapEntity::RenderLogical( CRender2D *pRender )
 
 	// Get the entity render color
 	color32 rgbColor = GetRenderColor( pRender );
-	color32	rgbHighlight = {(byte)(7*rgbColor.r/8), (byte)(7*rgbColor.g/8), (byte)(7*rgbColor.b/8), (byte)255 };
-	color32 rgbLowlight = { (byte)(5*rgbColor.r/8), (byte)(5*rgbColor.g/8), (byte)(5*rgbColor.b/8), (byte)255 };
-	color32 rgbEdgeColor = { (byte)(3*rgbColor.r/8), (byte)(3*rgbColor.g/8), (byte)(3*rgbColor.b/8), (byte)255 };
-	color32 rgbInterior = { (byte)(2*rgbColor.r/8), (byte)(2*rgbColor.g/8), (byte)(2*rgbColor.b/8), (byte)255 };
+	color32	rgbHighlight = {7*rgbColor.r/8, 7*rgbColor.g/8, 7*rgbColor.b/8, 255 };
+	color32 rgbLowlight = {5*rgbColor.r/8, 5*rgbColor.g/8, 5*rgbColor.b/8, 255 };
+	color32 rgbEdgeColor = {3*rgbColor.r/8, 3*rgbColor.g/8, 3*rgbColor.b/8, 255 };
+	color32 rgbInterior = {2*rgbColor.r/8, 2*rgbColor.g/8, 2*rgbColor.b/8, 255 };
 
 	// Draw an inside UpperLeft highlight rect (leading edge highlight)
 	pRender->SetDrawColor( rgbHighlight.r, rgbHighlight.g, rgbHighlight.b );
@@ -2140,7 +2155,8 @@ void CMapEntity::RenderLogical( CRender2D *pRender )
 
 	FOR_EACH_OBJ( m_Children, pos )
 	{
-		CMapSprite *pSprite = dynamic_cast<CMapSprite*>( m_Children[pos] );
+		CMapClass *pMapClass = (CUtlReference< CMapClass >)m_Children[pos];
+		CMapSprite *pSprite = dynamic_cast<CMapSprite*>( pMapClass );
 		if ( pSprite )
 		{
 			// Render the sprite on top of the background
@@ -2231,11 +2247,10 @@ int CMapEntity::GetNodeID(void)
 
 
 //-----------------------------------------------------------------------------
-// Purpose: Returns whether this object should be hidden based on the given
-//			cordon bounds.
-// Output : Returns true to cull the object, false to keep it.
+// Returns whether this object intersects the given cordon bounds.
+// Return true to keep the object, false to cull it.
 //-----------------------------------------------------------------------------
-bool CMapEntity::IsCulledByCordon(const Vector &vecMins, const Vector &vecMaxs)
+bool CMapEntity::IsIntersectingCordon(const Vector &vecMins, const Vector &vecMaxs)
 {
 	// Point entities are culled by their origin, not by their bounding box.
 	// An exception to that is swept hulls, such as ladders, that are more like solid ents.
@@ -2243,10 +2258,10 @@ bool CMapEntity::IsCulledByCordon(const Vector &vecMins, const Vector &vecMaxs)
 	{
 		Vector vecOrigin;
 		GetOrigin(vecOrigin);
-		return !IsPointInBox(vecOrigin, vecMins, vecMaxs);
+		return IsPointInBox(vecOrigin, vecMins, vecMaxs);
 	}
 
-	return !IsIntersectingBox(vecMins, vecMaxs);
+	return IsIntersectingBox(vecMins, vecMaxs);
 }
 
 
@@ -2389,7 +2404,7 @@ bool CMapEntity::IsVisibleLogical(void)
 //			wildcards.
 // Input  : szName - 
 //-----------------------------------------------------------------------------
-bool CMapEntity::NameMatches(const char *szName)
+bool CMapEntity::NameMatches(const char *szName) const
 {
 	const char *pszTargetName = GetKeyValue( "targetname" );
 	if (pszTargetName)
@@ -2406,7 +2421,7 @@ bool CMapEntity::NameMatches(const char *szName)
 //			wildcards.
 // Input  : szName - 
 //-----------------------------------------------------------------------------
-bool CMapEntity::ClassNameMatches(const char *szName)
+bool CMapEntity::ClassNameMatches(const char *szName) const
 {
 	const char *pszClassName = GetClassName();
 	if (pszClassName)

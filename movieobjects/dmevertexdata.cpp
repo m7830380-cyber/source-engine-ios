@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2004, Valve Corporation, All rights reserved. =======
 //
 // Purpose: 
 //
@@ -10,6 +10,7 @@
 #include "tier3/tier3.h"
 #include "tier0/dbg.h"
 #include "datamodel/dmelementfactoryhelper.h"
+#include <algorithm>
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
@@ -30,7 +31,8 @@ static char *g_pStandardFieldNames[] =
 	"balance",
 	"speed",
 	"wrinkle",
-	"weight"
+	"weight",
+	"cloth_enable",
 };
 
 static DmAttributeType_t g_pStandardFieldTypes[] =
@@ -45,7 +47,8 @@ static DmAttributeType_t g_pStandardFieldTypes[] =
 	AT_FLOAT_ARRAY,
 	AT_FLOAT_ARRAY,
 	AT_FLOAT_ARRAY,
-	AT_FLOAT_ARRAY
+	AT_FLOAT_ARRAY,
+	AT_FLOAT_ARRAY,
 };
 
 
@@ -84,7 +87,7 @@ void CDmeVertexDataBase::UpdateStandardFieldInfo( int nFieldIndex, const char *p
 
 	for ( int i = 0; i < STANDARD_FIELD_COUNT; ++i )
 	{
-		if ( !Q_stricmp( pFieldName, g_pStandardFieldNames[i] ) )
+		if ( !V_stricmp( pFieldName, g_pStandardFieldNames[i] ) )
 		{
 			if ( attrType != g_pStandardFieldTypes[i] )
 			{
@@ -94,6 +97,11 @@ void CDmeVertexDataBase::UpdateStandardFieldInfo( int nFieldIndex, const char *p
 			m_pStandardFieldIndex[i] = nFieldIndex;
 			break;
 		}
+	}
+
+	if ( m_pStandardFieldIndex[ FIELD_CLOTH_ENABLE ] < 0 && !V_stricmp( pFieldName, "cloth_enable" ) && attrType == g_pStandardFieldTypes[ FIELD_CLOTH_ENABLE ] )
+	{
+		m_pStandardFieldIndex[ FIELD_CLOTH_ENABLE ] = nFieldIndex;
 	}
 }
 
@@ -112,14 +120,16 @@ void CDmeVertexDataBase::ComputeFieldInfo()
 		m_FieldInfo[i].m_pVertexData = NULL;
 	}
 
+	CUtlVectorFixedGrowable< char, 256 > indicesName;
+
 	// FIXME: Want to maintain field indices as constants for all time 
 	int nFieldCount = m_VertexFormat.Count();
 	for ( int i = 0; i < nFieldCount; ++i )
 	{
 		const char *pFieldName = m_VertexFormat[i];
 		int nLen = Q_strlen( pFieldName ) + 21;
-		char *pIndicesName = (char*)_alloca( nLen );
-		Q_snprintf( pIndicesName, nLen, "%sIndices", pFieldName );
+		indicesName.EnsureCount( nLen );
+		Q_snprintf( indicesName.Base(), nLen, "%sIndices", pFieldName );
 
 		CDmAttribute *pVerticesArray = GetAttribute( pFieldName );
 		if ( !pVerticesArray || !IsArrayType( pVerticesArray->GetType() ) )
@@ -129,7 +139,7 @@ void CDmeVertexDataBase::ComputeFieldInfo()
 		if ( Q_stricmp( pFieldName, g_pStandardFieldNames[FIELD_JOINT_WEIGHTS] ) &&
 			Q_stricmp( pFieldName, g_pStandardFieldNames[FIELD_JOINT_INDICES] ) )
 		{
-			pIndicesArray = GetAttribute( pIndicesName );
+			pIndicesArray = GetAttribute( indicesName.Base() );
 			if ( !pIndicesArray || pIndicesArray->GetType() != AT_INT_ARRAY )
 				continue;
 		}
@@ -562,8 +572,8 @@ void CDmeVertexDataBase::RemoveAllVertexData( FieldIndex_t nFieldIndex )
 	array.RemoveAll();
 	if ( IsVertexDeltaData() )
 	{
-		CDmrArray<int> arrayDelta( m_FieldInfo[nFieldIndex].m_pIndexData );
-		arrayDelta.RemoveAll();
+		CDmrArray<int> array( m_FieldInfo[nFieldIndex].m_pIndexData );
+		array.RemoveAll();
 	}
 }
 
@@ -787,6 +797,18 @@ bool CDmeVertexDataBase::HasSkinningData() const
 }
 
 
+bool CDmeVertexDataBase::HasClothData()
+{
+	Resolve();
+
+	FieldIndex_t nClothEnableIndex = m_pStandardFieldIndex[ FIELD_CLOTH_ENABLE ];
+	if ( nClothEnableIndex < 0 )
+		return false;
+	CDmrArrayConst< float > weightData = GetVertexData( nClothEnableIndex );
+	CDmrArrayConst< int > indexData = GetIndexData( nClothEnableIndex );
+	return weightData.Count() > 0 && indexData.Count() > 0;
+}
+
 //-----------------------------------------------------------------------------
 // Do we need tangent data? (Utility method for applications to know if they should call ComputeDefaultTangentData)
 //-----------------------------------------------------------------------------
@@ -810,7 +832,7 @@ int CDmeVertexDataBase::FieldCount() const
 
 
 //-----------------------------------------------------------------------------
-//
+// Returns the full fieldname (semanticname$index)
 //-----------------------------------------------------------------------------
 const char *CDmeVertexDataBase::FieldName( int i ) const
 {
@@ -846,6 +868,92 @@ void CDmeVertexDataBase::CopyTo( CDmeVertexDataBase *pDst ) const
 
 
 //-----------------------------------------------------------------------------
+// Sort models function
+//-----------------------------------------------------------------------------
+struct TempVertex_t
+{
+	float m_flBoneWeight;
+	int m_nBoneIndex;
+};
+
+inline bool TempVertexLessFunc( const TempVertex_t &left, const TempVertex_t &right )
+{
+	return left.m_nBoneIndex < right.m_nBoneIndex;
+}
+
+inline bool WeightLessFunc( const TempVertex_t &left, const TempVertex_t &right )
+{
+	return left.m_flBoneWeight > right.m_flBoneWeight;
+}
+
+//-----------------------------------------------------------------------------
+// Reskins the vertex data to new bones
+// The joint index remap maps an initial bone index to a new bone index
+//-----------------------------------------------------------------------------
+void CDmeVertexDataBase::Reskin( const int *pJointTransformIndexRemap )
+{
+	if ( !HasSkinningData() )
+		return;
+
+	FieldIndex_t nWeightFieldIndex = m_pStandardFieldIndex[FIELD_JOINT_WEIGHTS];
+	FieldIndex_t nIndexFieldIndex = m_pStandardFieldIndex[FIELD_JOINT_INDICES];
+	CDmrArray<float> weightData = GetVertexData( nWeightFieldIndex );
+	CDmrArray<int> indexData = GetVertexData( nIndexFieldIndex );
+
+	int nVertexCount = weightData.Count();
+	Assert( ( nVertexCount % m_nJointCount ) == 0 );
+	Assert( nVertexCount == indexData.Count() );
+	nVertexCount /= m_nJointCount;
+
+	TempVertex_t *pTempVertex = (TempVertex_t*)stackalloc( m_nJointCount * sizeof(TempVertex_t) );
+	for ( int i = 0; i < nVertexCount; ++i )
+	{
+		// Remap bones
+		int nOffset = i * m_nJointCount;
+		for ( int j = 0; j < m_nJointCount; ++j )
+		{
+			pTempVertex[j].m_nBoneIndex = pJointTransformIndexRemap[ indexData[ nOffset + j ] ];
+			pTempVertex[j].m_flBoneWeight = weightData[ nOffset + j ];
+		}
+
+		std::make_heap( pTempVertex, pTempVertex + m_nJointCount, TempVertexLessFunc ); 
+		std::sort_heap( pTempVertex, pTempVertex + m_nJointCount, TempVertexLessFunc );
+
+		// Collapse identical bones
+		int nRemapCount = m_nJointCount;
+		for ( int j = 1; j < nRemapCount; ++j )
+		{
+			if ( pTempVertex[j].m_nBoneIndex != pTempVertex[j-1].m_nBoneIndex )
+				continue;
+			pTempVertex[j-1].m_flBoneWeight += pTempVertex[j].m_flBoneWeight;
+			--nRemapCount;
+			memmove( &pTempVertex[j], &pTempVertex[j+1], ( m_nJointCount - j - 1 ) * sizeof(TempVertex_t) );
+			pTempVertex[ m_nJointCount-1 ].m_flBoneWeight = 0.0f;
+			pTempVertex[ m_nJointCount-1 ].m_nBoneIndex = 0; //-1 ?
+			--j;
+		}
+
+		std::make_heap( pTempVertex, pTempVertex + m_nJointCount, WeightLessFunc ); 
+		std::sort_heap( pTempVertex, pTempVertex + m_nJointCount, WeightLessFunc );
+
+#ifdef _DEBUG
+		float flTotalWeight = 0;
+		for ( int j = 0; j < m_nJointCount; ++j )
+		{
+			flTotalWeight += pTempVertex[j].m_flBoneWeight;
+		}
+		Assert( fabs( flTotalWeight - 1.0f ) < 1e-3 );
+#endif
+		for ( int j = 0; j < m_nJointCount; ++j )
+		{
+			indexData.Set( nOffset + j, pTempVertex[j].m_nBoneIndex );
+			weightData.Set( nOffset + j, pTempVertex[j].m_flBoneWeight );
+		}
+	}
+}
+
+
+//-----------------------------------------------------------------------------
 // Expose this class to the scene database 
 //-----------------------------------------------------------------------------
 IMPLEMENT_ELEMENT_FACTORY( DmeVertexData, CDmeVertexData );
@@ -866,6 +974,7 @@ void CDmeVertexData::OnDestruction()
 void CDmeVertexDeltaData::OnConstruction()
 {
 	m_bCorrected.InitAndSet( this, "corrected", false );
+	m_bRenderVerts.InitAndSet( this, "renderVerts", false, FATTRIB_DONTSAVE );	// Runtime flag
 }
 
 void CDmeVertexDeltaData::OnDestruction()
@@ -917,7 +1026,11 @@ float CDmeVertexDeltaData::ComputeMaxDeflection( )
 //-----------------------------------------------------------------------------
 // Computes wrinkle data from position deltas
 //-----------------------------------------------------------------------------
-void CDmeVertexDeltaData::GenerateWrinkleDelta( CDmeVertexData *pBindState, float flScale, bool bOverwrite )
+void CDmeVertexDeltaData::GenerateWrinkleDelta(
+	CDmeVertexData *pBindState,
+	float flScale,
+	bool bOverwrite,
+	bool bUseNormalForSign /* = false */ )
 {
 	FieldIndex_t nPosIndex = FindFieldIndex( FIELD_POSITION );
 	if ( nPosIndex < 0 )
@@ -925,6 +1038,10 @@ void CDmeVertexDeltaData::GenerateWrinkleDelta( CDmeVertexData *pBindState, floa
 
 	FieldIndex_t nBaseTexCoordIndex = pBindState->FindFieldIndex( FIELD_TEXCOORD );
 	if ( nBaseTexCoordIndex < 0 )
+		return;
+
+	FieldIndex_t nNormalIndex = pBindState->FindFieldIndex( FIELD_NORMAL );
+	if ( bUseNormalForSign && nNormalIndex < 0 )
 		return;
 
 	FieldIndex_t nWrinkleIndex = FindFieldIndex( FIELD_WRINKLE );
@@ -955,31 +1072,110 @@ void CDmeVertexDeltaData::GenerateWrinkleDelta( CDmeVertexData *pBindState, floa
 	unsigned char *pUsedBits = (unsigned char*)_alloca( nBufSize );
 	memset( pUsedBits, 0, nBufSize );
 
-	int nCount = pos.Count();
-	for ( int i = 0; i < nCount; ++i )
+	const int nCount = pos.Count();
+
+	if ( bUseNormalForSign )
 	{
-		float flWrinkleDelta = static_cast< float >( static_cast< double >( pos[i].Length() ) * scaledInverseMaxDeflection );
-		Assert( fabs( flWrinkleDelta ) <= fabs( flScale ) );
+		const CUtlVector<int> &normalIndices = pBindState->GetVertexIndexData( nNormalIndex );
+		const CUtlVector<Vector> &normals = pBindState->GetNormalData();
 
-		// NOTE: This will produce bad behavior in cases where two positions share the
-		// same texcoord, which shouldn't theoretically happen.
-		const CUtlVector< int > &baseVerts = pBindState->FindVertexIndicesFromDataIndex( FIELD_POSITION, positionIndices[i] );
-		int nBaseVertCount = baseVerts.Count();
-		for ( int j = 0; j < nBaseVertCount; ++j )
+		for ( int i = 0; i < nCount; ++i )
 		{
-			// See if we have a delta for this texcoord...
-			int nTexCoordIndex = baseTexCoordIndices[ baseVerts[j] ];
-			if ( pUsedBits[ nTexCoordIndex >> 3 ] & ( 1 << ( nTexCoordIndex & 0x7 ) ) )
-				continue;
+			float flWrinkleDelta = static_cast< float >( static_cast< double >( pos[i].Length() ) * scaledInverseMaxDeflection );
+			Assert( fabs( flWrinkleDelta ) <= fabs( flScale ) );
+			float flNegativeWrinkleDelta = -flWrinkleDelta;
 
-			pUsedBits[ nTexCoordIndex >> 3 ] |= 1 << ( nTexCoordIndex & 0x7 );
+			Vector vPosDelta = pos[i];
+			vPosDelta.NormalizeInPlace();
 
-			int nDeltaIndex = AddVertexData( nWrinkleIndex, 1 );
-			SetVertexIndices( nWrinkleIndex, nDeltaIndex, 1, &nTexCoordIndex );
-			SetVertexData( nWrinkleIndex, nDeltaIndex, 1, AT_FLOAT, &flWrinkleDelta );
+			// NOTE: This will produce bad behavior in cases where two positions share the
+			// same texcoord, which shouldn't theoretically happen.
+			const CUtlVector< int > &baseVerts = pBindState->FindVertexIndicesFromDataIndex( FIELD_POSITION, positionIndices[i] );
+			int nBaseVertCount = baseVerts.Count();
+			for ( int j = 0; j < nBaseVertCount; ++j )
+			{
+				// See if we have a delta for this texcoord...
+				int nTexCoordIndex = baseTexCoordIndices[ baseVerts[j] ];
+				if ( pUsedBits[ nTexCoordIndex >> 3 ] & ( 1 << ( nTexCoordIndex & 0x7 ) ) )
+					continue;
+
+				pUsedBits[ nTexCoordIndex >> 3 ] |= 1 << ( nTexCoordIndex & 0x7 );
+
+				Vector vNormal = normals[ normalIndices[ baseVerts[j] ] ];
+				vNormal.NormalizeInPlace();
+
+				int nDeltaIndex = AddVertexData( nWrinkleIndex, 1 );
+				SetVertexIndices( nWrinkleIndex, nDeltaIndex, 1, &nTexCoordIndex );
+
+				if ( DotProduct( vPosDelta, vNormal ) < 0 )
+				{
+					SetVertexData( nWrinkleIndex, nDeltaIndex, 1, AT_FLOAT, &flNegativeWrinkleDelta );
+				}
+				else
+				{
+					SetVertexData( nWrinkleIndex, nDeltaIndex, 1, AT_FLOAT, &flWrinkleDelta );
+				}
+			}
+		}
+	}
+	else
+	{
+		for ( int i = 0; i < nCount; ++i )
+		{
+			float flWrinkleDelta = static_cast< float >( static_cast< double >( pos[i].Length() ) * scaledInverseMaxDeflection );
+			Assert( fabs( flWrinkleDelta ) <= fabs( flScale ) );
+
+			// NOTE: This will produce bad behavior in cases where two positions share the
+			// same texcoord, which shouldn't theoretically happen.
+			const CUtlVector< int > &baseVerts = pBindState->FindVertexIndicesFromDataIndex( FIELD_POSITION, positionIndices[i] );
+			int nBaseVertCount = baseVerts.Count();
+			for ( int j = 0; j < nBaseVertCount; ++j )
+			{
+				// See if we have a delta for this texcoord...
+				int nTexCoordIndex = baseTexCoordIndices[ baseVerts[j] ];
+				if ( pUsedBits[ nTexCoordIndex >> 3 ] & ( 1 << ( nTexCoordIndex & 0x7 ) ) )
+					continue;
+
+				pUsedBits[ nTexCoordIndex >> 3 ] |= 1 << ( nTexCoordIndex & 0x7 );
+
+				int nDeltaIndex = AddVertexData( nWrinkleIndex, 1 );
+				SetVertexIndices( nWrinkleIndex, nDeltaIndex, 1, &nTexCoordIndex );
+				SetVertexData( nWrinkleIndex, nDeltaIndex, 1, AT_FLOAT, &flWrinkleDelta );
+			}
 		}
 	}
 }
+
+
+//-----------------------------------------------------------------------------
+// Updates existing wrinkle data or generates new data if there is no existing data
+//-----------------------------------------------------------------------------
+void CDmeVertexDeltaData::UpdateWrinkleDelta( CDmeVertexData *pBindState, float flOldScale, float flScale )
+{
+	// if no wrinkle data exists, generate new data
+	const FieldIndex_t nWrinkleFieldIndex = FindFieldIndex( FIELD_WRINKLE );
+	if ( nWrinkleFieldIndex < 0 || flOldScale == 0.0f || flScale == 0.0 )
+	{
+		GenerateWrinkleDelta( pBindState, flScale, true );
+		return;
+	}
+
+	CDmAttribute *pWrinkleDataAttr = GetVertexData( nWrinkleFieldIndex );
+	if ( pWrinkleDataAttr )
+	{
+		CDmrArray< float > wrinkleData( pWrinkleDataAttr );
+		const int nWrinkleCount = wrinkleData.Count();
+		if ( nWrinkleCount <= 0 )
+			GenerateWrinkleDelta( pBindState, flScale, true );
+
+		const double dNewScale = static_cast< double >( flScale ) / static_cast< double >( flOldScale );
+		for ( int nWrinkleIndex = 0; nWrinkleIndex < nWrinkleCount; ++nWrinkleIndex )
+		{
+			wrinkleData.Set( nWrinkleIndex, wrinkleData.Get( nWrinkleIndex ) * dNewScale );
+		}
+	}
+}
+
 
 //-----------------------------------------------------------------------------
 // Computes weight data from position deltas
@@ -1021,3 +1217,4 @@ float CDmeVertexDeltaData::GenerateWeightDelta( CDmeVertexData *pBindState )
 
 	return maxDeflection;
 }
+

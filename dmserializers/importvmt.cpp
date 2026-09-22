@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2004, Valve Corporation, All rights reserved. =======
 //
 // Purpose: 
 //
@@ -8,8 +8,9 @@
 #include "dmserializers.h"
 #include "datamodel/idatamodel.h"
 #include "datamodel/dmelement.h"
+#include "datamodel/dmattributevar.h"
 #include "tier1/KeyValues.h"
-#include "tier1/utlbuffer.h"
+#include "tier1/UtlBuffer.h"
 #include "datamodel/dmattribute.h"
 #include "filesystem.h"
 #include "tier2/tier2.h"
@@ -24,6 +25,8 @@ public:
 	virtual const char *GetName() const { return "vmt"; }
 	virtual const char *GetDescription() const { return "Valve Material File"; }
 	virtual int GetCurrentVersion() const { return 0; } // doesn't store a version
+  	virtual const char *GetImportedFormat() const { return "vmt"; }
+ 	virtual int GetImportedVersion() const { return 1; }
 
 	bool Serialize( CUtlBuffer &outBuf, CDmElement *pRoot );
 	CDmElement* UnserializeFromKeyValues( KeyValues *pKeyValues );
@@ -93,7 +96,11 @@ bool CImportVMT::SerializeShaderParameter( CUtlBuffer &buf, CDmAttribute *pAttri
 		break;
 
 	case AT_STRING:
-		buf.Printf( "\"%s\" \"%s\"\n", pAttribute->GetName(), pAttribute->GetValue<CUtlString>( ).Get() );
+		{
+			CUtlSymbolLarge symbol = pAttribute->GetValue<CUtlSymbolLarge>();
+			const char *pString = symbol.String();
+			buf.Printf( "\"%s\" \"%s\"\n", pAttribute->GetName(), pString );
+		}
 		break;
 
 	case AT_VECTOR2:
@@ -154,7 +161,7 @@ bool CImportVMT::SerializeShaderParameters( CUtlBuffer &buf, CDmElement *pRoot )
 	for ( CDmAttribute *pAttribute = pRoot->FirstAttribute(); pAttribute; pAttribute = pAttribute->NextAttribute() )
 	{
 		// Skip the standard attributes
-		if ( pAttribute->IsFlagSet( FATTRIB_STANDARD ) )
+		if ( pAttribute->IsStandard() )
 			continue;
 
 		// Skip the shader name

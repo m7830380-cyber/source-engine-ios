@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2009, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -31,6 +31,7 @@ class CMapInstance : public CMapHelper
 		static CMapClass	*Create( CHelperInfo *pInfo, CMapEntity *pParent );
 		static void			SetInstancePath( const char *pszInstancePath );
 		static const char	*GetInstancePath( void ) { return m_InstancePath; }
+		static bool			IsMapInVersionControl( const char *pszFileName );
 		static bool			DeterminePath( const char *pszBaseFileName, const char *pszInstanceFileName, char *pszOutFileName );
 
 		//
@@ -40,7 +41,7 @@ class CMapInstance : public CMapHelper
 		CMapInstance( const char *pszBaseFileName, const char *pszInstanceFileName );
 		~CMapInstance(void);
 
-		GDIV_TYPE	GetFieldType( const char *pszValue );
+				GDIV_TYPE	GetFieldType( const char *pszValue );
 
 		virtual void FindTargetNames( CUtlVector< const char * > &Names );
 		virtual void ReplaceTargetname( const char *szOldName, const char *szNewName );

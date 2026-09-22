@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2005, Valve Corporation, All rights reserved. =======//
 //
 // Purpose: 
 //
@@ -29,6 +29,14 @@ CAttributeElementPanel::CAttributeElementPanel( vgui::Panel *parent, const Attri
 	m_pType->SetText( "element" );
 
 	m_bShowMemoryUsage = info.m_bShowMemoryUsage;
+	m_bShowUniqueID = info.m_bShowUniqueID;
+}
+
+void CAttributeElementPanel::SetFont( HFont font )
+{
+	BaseClass::SetFont( font );
+	m_pData->SetFont( font );
+	m_pType->SetFont( font );
 }
 
 void CAttributeElementPanel::Apply()
@@ -80,11 +88,15 @@ void CAttributeElementPanel::Refresh()
 
 	if ( element )
 	{
-		char idstr[ 37 ];
-		UniqueIdToString( element->GetId(), idstr, sizeof( idstr ) );
+		char idstr[ 37 ] = "";
+		if( m_bShowUniqueID )
+		{
+			UniqueIdToString( element->GetId(), idstr, sizeof( idstr ) );
+		}
 		if ( m_bShowMemoryUsage )
 		{
-			Q_snprintf( elemText, sizeof( elemText ), "%s %s %.3fMB", element->GetTypeString(), idstr, element->EstimateMemoryUsage() / float( 1 << 20 ) );
+			Q_snprintf( elemText, sizeof( elemText ), "%s %s (%.3fMB total / %.3fKB self)", element->GetTypeString(),
+				idstr, element->EstimateMemoryUsage( TD_DEEP ) / float( 1 << 20 ), element->EstimateMemoryUsage( TD_NONE ) / float( 1 << 10 ) );
 		}
 		else
 		{

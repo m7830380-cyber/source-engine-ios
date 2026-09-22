@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -12,7 +12,7 @@
 #endif
 
 #include "sound.h"
-#include "utlvector.h"
+#include "UtlVector.h"
 
 #define OUTPUT_BUFFER_COUNT		32
 #define MAX_CHANNELS			16

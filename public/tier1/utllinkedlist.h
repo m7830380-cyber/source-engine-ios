@@ -121,6 +121,9 @@ public:
 	I		Alloc( bool multilist = false );
 	void	Free( I elem );
 
+	// Identify the owner of this linked list's memory:
+	void	SetAllocOwner( const char *pszAllocOwner );
+
 	// list modification
 	void	LinkBefore( I before, I elem );
 	void	LinkAfter( I after, I elem );
@@ -257,8 +260,9 @@ public:
 		typedef _CUtlLinkedList_constiterator_t< List_t > Base;
 
 		// Default constructor -- gives a currently unusable iterator.
-		_CUtlLinkedList_iterator_t() = default;
-
+		_CUtlLinkedList_iterator_t()
+		{
+		}
 		// Normal constructor.
 		_CUtlLinkedList_iterator_t( const List_t& list, IndexType_t index )
 			: _CUtlLinkedList_constiterator_t< List_t >( list, index )
@@ -612,6 +616,12 @@ void CUtlLinkedList<T,S,ML,I,M>::SetGrowSize( int growSize )
 	RemoveAll();
 	m_Memory.Init( growSize );
 	ResetDbgInfo();
+}
+
+template< class T, class S, bool ML, class I, class M >
+void CUtlLinkedList<T,S,ML,I,M>::SetAllocOwner( const char *pszAllocOwner )
+{
+	m_Memory.SetAllocOwner( pszAllocOwner );
 }
 
 
@@ -1230,7 +1240,7 @@ private:
 
 	struct Node_t
 	{
-		Node_t() = default;
+		Node_t() {}
 		Node_t( const T &_elem ) : elem( _elem ) {}
 
 		T elem;

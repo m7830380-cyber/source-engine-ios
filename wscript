@@ -1,176 +1,154 @@
 #! /usr/bin/env python
 # encoding: utf-8
-# nillerusr
+#
+# CS:GO (cstrike15) iOS build.
+#
+# Valve's .vpc project scripts are the source of truth for what goes into each
+# module: scripts/waifulib/vpc.py reads them and build() turns every project
+# into a waf task generator. The iOS toolchain, SDL2/ANGLE and dependency
+# handling come from nillerusr's source-engine port.
 
 from __future__ import print_function
-from waflib import Logs, Context, Configure
+from waflib import Logs, Context, Configure, Utils, Errors
 import sys
 import os
+import re
+import subprocess
 
 VERSION = '1.0'
-APPNAME = 'source-engine'
+APPNAME = 'csgo'
 top = '.'
 
-FT2_CHECK='''extern "C" {
-#include <ft2build.h>
-#include FT_FREETYPE_H
+Context.Context.line_just = 55
+
+# VPC conditionals for the iOS target. iOS rides on CS:GO's OSX64
+# configuration (Darwin, clang, libc++, togl GL backend); IOS marks the places
+# that need UIKit/GLES instead of AppKit/desktop GL.
+VPC_CONDITIONALS = {
+	'POSIX': 1,
+	'OSXALL': 1,
+	'OSX64': 1,
+	'GL': 1,
+	'SDL': 1,
+	'CSGO': 1,
+	'NO_STEAM': 1,
+	'NO_CEG': 1,
+	'IOS': 1,
 }
 
-int main() { return FT_Init_FreeType( NULL ); }
-'''
-
-FC_CHECK='''extern "C" {
-#include <fontconfig/fontconfig.h>
+VPC_MACROS = {
+	'_DLL_EXT': '.dylib',
+	'_STATICLIB_EXT': '.a',
+	'_IMPLIB_EXT': '.dylib',
+	'_EXE_EXT': '',
+	'_SYM_EXT': '.dSYM',
+	'PLATFORM': 'osx64',
+	'PLATSUBDIR': '/osx64',
+	'GAMENAME': 'csgo',
 }
 
-int main() { return (int)FcInit(); }
-'''
+# The runtime modules (loaded with dlopen by the launcher/engine) plus the
+# executable. Static libraries are pulled in through VPC link dependencies.
+ROOT_PROJECTS = [
+	'launcher_main',
+	'launcher',
+	'engine',
+	'filesystem_stdio',
+	'inputsystem',
+	'materialsystem',
+	'shaderapidx9',
+	'stdshader_dbg',
+	'stdshader_dx9',
+	'datacache',
+	'studiorender',
+	'soundemittersystem',
+	'vscript',
+	'vguimatsurface',
+	'vgui_dll',
+	'localize',
+	'togl',
+	'scenefilecache',
+	'client',
+	'server',
+	'matchmaking',
+	'serverbrowser',
+]
 
-CPP_64BIT_CHECK='''
-#define TEST(a) (sizeof(void*) == a ? 1 : -1) 
-int g_Test[TEST(8)];
-
-int main () { return 0; }
-'''
-
-CPP_32BIT_CHECK='''
-#define TEST(a) (sizeof(void*) == a ? 1 : -1) 
-int g_Test[TEST(4)];
-
-int main () { return 0; }
-'''
-
-
-Context.Context.line_just = 55 # should fit for everything on 80x26
-
-projects={
-	'game': [
-		'appframework',
-		'bitmap',
-		'choreoobjects',
-		'datacache',
-		'datamodel',
-		'dmxloader',
-		'engine',
-		'engine/voice_codecs/minimp3',
-		'filesystem',
-		'game/client',
-		'game/server',
-		'gameui',
-		'inputsystem',
-		'ivp/havana',
-		'ivp/havana/havok/hk_base',
-		'ivp/havana/havok/hk_math',
-		'ivp/ivp_compact_builder',
-		'ivp/ivp_physics',
-		'launcher',
-		'launcher_main',
-		'materialsystem',
-#		'materialsystem/shaderapiempty',
-		'materialsystem/shaderapidx9',
-		'materialsystem/shaderlib',
-		'materialsystem/stdshaders',
-		'mathlib',
-		'particles',
-		'scenefilecache',
-		'serverbrowser',
-		'soundemittersystem',
-		'studiorender',
-		'stub_steam',
-		'tier0',
-		'tier1',
-		'tier2',
-		'tier3',
-		'vgui2/matsys_controls',
-		'vgui2/src',
-		'vgui2/vgui_controls',
-		'vgui2/vgui_surfacelib',
-		'vguimatsurface',
-		'video',
-		'vphysics',
-		'vpklib',
-		'vstdlib',
-		'vtf',
-		'utils/vtex',
-		'unicode',
-		'video',
-	],
-	'tests': [
-		'appframework',
-		'tier0',
-		'tier1',
-		'tier2',
-		'tier3',
-		'unitlib',
-		'mathlib',
-		'vstdlib',
-		'filesystem',
-		'vpklib',
-		'unittests/tier0test',
-		'unittests/tier1test',
-		'unittests/tier2test',
-		'unittests/tier3test',
-		'unittests/mathlibtest',
-		'utils/unittest'
-	],
-	'dedicated': [
-		'appframework',
-		'bitmap',
-		'choreoobjects',
-		'datacache',
-		'dedicated',
-		'dedicated_main',
-		'dmxloader',
-		'engine',
-		'game/server',
-		'ivp/havana',
-		'ivp/havana/havok/hk_base',
-		'ivp/havana/havok/hk_math',
-		'ivp/ivp_compact_builder',
-		'ivp/ivp_physics',
-		'materialsystem',
-		'mathlib',
-		'particles',
-		'scenefilecache',
-		'materialsystem/shaderapiempty',
-		'materialsystem/shaderlib',
-		'soundemittersystem',
-		'studiorender',
-		'tier0',
-		'tier1',
-		'tier2',
-		'tier3',
-		'vgui2/vgui_controls',
-		'vphysics',
-		'vpklib',
-		'vstdlib',
-		'vtf',
-		'stub_steam'
-	]
+# projects.vgc gates a few projects away from OSX (the partner branch never
+# finished the Mac port of the shader API); point at them directly.
+PROJECT_OVERRIDES = {
+	'shaderapidx9': 'materialsystem/shaderapidx9/shaderapidx9.vpc',
+	'stdshader_dx9': 'materialsystem/stdshaders/stdshader_dx9.vpc',
+	'stdshader_dbg': 'materialsystem/stdshaders/stdshader_dbg.vpc',
+	'shaderlib': 'materialsystem/shaderlib/shaderlib.vpc',
+	'vgui2': 'vgui2/src/vgui_dll.vpc',
 }
 
-def game_projects(games):
-	prj = list(projects['game'])
-	if games in ('tf', 'csgo'):
-		idx = prj.index('game/client')
-		prj[idx:idx] = ['protobuf', 'gcsdk']
-	return prj
+# VPC link names that are not VPC projects -> waf task/uselib names.
+EXTERNAL_LIBS = {
+	'sdl2': 'SDL2',
+	'protobuf': 'PROTOBUF',
+	'jpeglib': 'JPEG',
+	'libjpeg': 'JPEG',
+	'png': 'PNG',
+	'libpng': 'PNG',
+	'z': 'ZLIB',
+	'zlib': 'ZLIB',
+	'steam_api': 'steam_api',
+	'libsteam_api': 'steam_api',
+}
 
-@Configure.conf
-def check_pkg(conf, package, uselib_store, fragment, *k, **kw):
-	errormsg = '{0} not available! Install {0} development package. Also you may need to set PKG_CONFIG_PATH environment variable'.format(package)
-	confmsg = 'Checking for \'{0}\' sanity'.format(package)
-	errormsg2 = '{0} isn\'t installed correctly. Make sure you installed proper development package for target architecture'.format(package)
+# Static libraries that CS:GO links as prebuilt binaries but whose sources
+# are in the tree; built by build_custom_projects().
+CUSTOM_LIBS = set([
+	'cryptopp',
+])
 
-	try:
-		conf.check_cfg(package=package, args='--cflags --libs', uselib_store=uselib_store, *k, **kw )
-	except conf.errors.ConfigurationError:
-		conf.fatal(errormsg)
+# VPC link dependencies whose source is not part of the leak. Code that
+# needs them is compiled out or stubbed.
+MISSING_LIBS = set([
+	'gcsdk',
+	'steamdatagramlib',
+	'libcef',
+	'tcmalloc',
+	'vtune',
+])
 
-	try:
-		conf.check_cxx(fragment=fragment, use=uselib_store, msg=confmsg, *k, **kw)
-	except conf.errors.ConfigurationError:
-		conf.fatal(errormsg2)
+# Defines from the VPC scripts that must not reach the iOS build.
+DROP_DEFINES = set([
+	'INCLUDE_SCALEFORM',     # Scaleform GFx is a prebuilt x86 library
+	'USE_BREAKPAD_HANDLER',
+	'VERSION_SAFE_STEAM_API_INTERFACES',
+])
+
+# Platform defines CS:GO's POSIX/OSX64 VPC base scripts give every project;
+# set globally so non-VPC subprojects (vphysics, ivp) see the same platform.
+PLATFORM_DEFINES = [
+	'POSIX', '_POSIX', 'OSX', '_OSX', 'GNUC', 'COMPILER_GCC',
+	'PLATFORM_64BITS', 'USE_SDL', 'DX_TO_GL_ABSTRACTION', 'GL_GLEXT_PROTOTYPES',
+	'CSTRIKE15', 'CSTRIKE_REL_BUILD=1', 'RAD_TELEMETRY_DISABLED',
+	'_DARWIN_UNLIMITED_SELECT', 'FD_SETSIZE=10240', '_DLL_EXT=.dylib',
+]
+
+IOS_DEFINES = [
+	'IOS=1',
+	'_IOS=1',
+	'PLATFORM_IOS=1',
+	'NO_STEAM=1',
+	'NO_CEG=1',
+]
+
+# VPC include dirs replaced by the build's own copies.
+DROP_INCLUDES = set([
+	'thirdparty/SDL2',  # CS:GO's bundled SDL2 headers; we use the SDL we link
+])
+
+IOS_FRAMEWORKS = [
+	'Foundation', 'CoreFoundation', 'UIKit', 'QuartzCore', 'CoreGraphics',
+	'CoreAudio', 'AudioToolbox', 'AVFoundation', 'OpenAL', 'GameController',
+	'CoreMotion', 'CoreHaptics', 'Metal', 'SystemConfiguration', 'CFNetwork',
+	'Security',
+]
 
 @Configure.conf
 def get_taskgen_count(self):
@@ -178,565 +156,321 @@ def get_taskgen_count(self):
 	except: idx = 0 # don't set tg_idx_count to not increase counter
 	return idx
 
-@Configure.conf
-def run_test(self, fragment, msg):
-	result = self.check_cxx(fragment=fragment, msg=msg, mandatory = False)
-	return False if result == None else True
-
-def define_platform(conf):
-	conf.env.DEDICATED = conf.options.DEDICATED
-	conf.env.TESTS = conf.options.TESTS
-	conf.env.TOGLES = conf.options.TOGLES
-	conf.env.GL = conf.options.GL and not conf.options.TESTS and not conf.options.DEDICATED
-	conf.env.OPUS = conf.options.OPUS
-	conf.env.IOS = conf.options.IOS
-	conf.env.ANGLE = conf.options.ANGLE
-	conf.env.GAMES = conf.options.GAMES
-
-	# Official TF2 SDK path: stub Valve-private GC/schema/crypto instead of
-	# compiling the incomplete in-tree TF2 snapshot against full TF2 APIs.
-	if conf.options.GAMES == 'tf':
-		conf.env.append_unique('DEFINES', ['SOURCESDK'])
-
-	# CS:GO overlay: offline, no Steam, no Scaleform. NO_STEAM must be in
-	# env.DEFINES before VPC parse so !$NO_STEAM files are dropped.
-	if conf.options.GAMES == 'csgo':
-		conf.env.append_unique('DEFINES', ['NO_STEAM', 'NO_STEAM=1'])
-
-	arch32 = conf.run_test(CPP_32BIT_CHECK, 'Testing 32bit support')
-	arch64 = conf.run_test(CPP_64BIT_CHECK, 'Testing 64bit support')
-
-	if not (arch32 ^ arch64):
-		conf.fatal('Your compiler sucks')
-
-	if conf.options.DEDICATED:
-		conf.options.SDL = False
-		conf.define('DEDICATED', 1)
-
-	if conf.options.TESTS:
-		conf.define('UNITTESTS', 1)
-
-	if conf.env.GL:
-		conf.env.append_unique('DEFINES', [
-			'DX_TO_GL_ABSTRACTION',
-			'GL_GLEXT_PROTOTYPES',
-			'BINK_VIDEO'
-		])
-
-	if conf.options.TOGLES:
-		conf.define('TOGLES', 1)
-
-	if conf.env.ANGLE:
-		conf.define('ANGLE', 1)
-
-	if conf.options.TESTS:
-		conf.define('UNITTESTS', 1)
-
-	if conf.options.SDL and not conf.options.TESTS:
-		conf.env.SDL = 1
-		conf.define('USE_SDL', 1)
-
-	if arch64:
-		conf.define('PLATFORM_64BITS', 1)
-
-	if conf.env.DEST_OS == 'linux':
-		conf.define('_GLIBCXX_USE_CXX11_ABI',0)
-		conf.env.append_unique('DEFINES', [
-			'LINUX=1', '_LINUX=1',
-			'POSIX=1', '_POSIX=1', 'PLATFORM_POSIX=1',
-			'GNUC',
-			'NO_HOOK_MALLOC',
-			'_DLL_EXT=.so'
-		])
-		conf.env.append_unique('CFLAGS', '-U_FORTIFY_SOURCE')
-		conf.env.append_unique('CXXFLAGS', '-U_FORTIFY_SOURCE')
-	elif conf.env.DEST_OS == 'android':
-		conf.env.append_unique('DEFINES', [
-			'ANDROID=1', '_ANDROID=1',
-			'LINUX=1', '_LINUX=1',
-			'POSIX=1', '_POSIX=1',
-			'GNUC',
-			'NO_HOOK_MALLOC',
-			'_DLL_EXT=.so'
-		])
-		
-	elif conf.env.DEST_OS == 'win32':
-		conf.env.append_unique('DEFINES', [
-			'WIN32=1', '_WIN32=1',
-			'_WINDOWS',
-			'_DLL_EXT=.dll',
-			'_CRT_SECURE_NO_DEPRECATE',
-			'_CRT_NONSTDC_NO_DEPRECATE',
-			'_ALLOW_RUNTIME_LIBRARY_MISMATCH',
-			'_ALLOW_ITERATOR_DEBUG_LEVEL_MISMATCH',
-			'_ALLOW_MSC_VER_MISMATCH',
-			'NO_X360_XDK'
-		])
-	elif conf.env.DEST_OS == 'darwin':
-		conf.env.append_unique('DEFINES', [
-			'APPLE=1', '_APPLE=1',
-			'POSIX=1', '_POSIX=1', 'PLATFORM_POSIX=1',
-			'GNUC',
-			'NO_HOOK_MALLOC',
-			'_DLL_EXT=.dylib'
-		])
-		conf.env.append_unique('INCLUDES', [
-			os.path.abspath('thirdparty/angle/include'),
-			#'/opt/local/include'
-		])
-		if not conf.env.IOS:
-			conf.env.append_unique('DEFINES', [
-				'OSX=1', '_OSX=1'
-			])
-		else:
-			conf.env.append_unique('DEFINES', [
-				'IOS=1', '_IOS=1'
-			])
-		
-
-	elif conf.env.DEST_OS in ['freebsd', 'openbsd', 'netbsd', 'dragonflybsd']: # Tested only in freebsd
-		conf.env.append_unique('DEFINES', [
-			'POSIX=1', '_POSIX=1', 'PLATFORM_POSIX=1',
-			'GNUC', # but uses clang
-			'PLATFORM_BSD=1',
-			'_DLL_EXT=.so'
-		])
-
-	if conf.env.DEST_OS != 'win32':
-		conf.define('NO_MEMOVERRIDE_NEW_DELETE', 1)
-#		conf.define('NO_MALLOC_OVERRIDE', 1)
-
-	if conf.options.DEBUG_ENGINE:
-		conf.env.append_unique('DEFINES', [
-			'DEBUG', '_DEBUG'
-		])
-	else:
-		conf.env.append_unique('DEFINES', [
-			'NDEBUG'
-		])
-
-	conf.define('GIT_COMMIT_HASH', conf.env.GIT_VERSION)
-
-
 def options(opt):
 	grp = opt.add_option_group('Common options')
-
-	grp.add_option('-4', '--32bits', action = 'store_true', dest = 'TARGET32', default = False,
-		help = 'allow targetting 32-bit engine(Linux/Windows/OSX x86 only) [default: %default]')
-
-	grp.add_option('-d', '--dedicated', action = 'store_true', dest = 'DEDICATED', default = False,
-		help = 'build dedicated server [default: %default]')
-
-	grp.add_option('--tests', action = 'store_true', dest = 'TESTS', default = False,
-		help = 'build unit tests [default: %default]')
 
 	grp.add_option('-D', '--debug-engine', action = 'store_true', dest = 'DEBUG_ENGINE', default = False,
 		help = 'build with -DDEBUG [default: %default]')
 
-	grp.add_option('--use-sdl', action = 'store', dest = 'SDL', type = 'int', default = sys.platform != 'win32',
-		help = 'build engine with SDL [default: %default]')
+	grp.add_option('--disable-warns', action = 'store_true', dest = 'DISABLE_WARNS', default = False,
+		help = 'disable compiler warnings [default: %default]')
 
-	grp.add_option('--use-togl', action = 'store', dest = 'GL', type = 'int', default = sys.platform != 'win32',
-		help = 'build engine with ToGL [default: %default]')
+	grp.add_option('--ios', action = 'store_true', dest = 'IOS', default = False,
+		help = 'build for iOS [default: %default]')
 
-	grp.add_option('--build-games', action = 'store', dest = 'GAMES', type = 'string', default = 'hl2',
-		help = 'build games [default: %default]')
+	grp.add_option('--simulator', action = 'store_true', dest = 'IOSSIM', default = False,
+		help = 'build for iOS simulator (Use with --ios) [default: %default]')
+
+	grp.add_option('--angle', action = 'store_true', dest = 'ANGLE', default = False,
+		help = 'use ANGLE (GLES over Metal) instead of native OpenGLES [default: %default]')
+
+	grp.add_option('--togles', action = 'store_true', dest = 'TOGLES', default = False,
+		help = 'accepted for compatibility with the CI script [default: %default]')
+
+	grp.add_option('--build-games', action = 'store', dest = 'GAMES', type = 'string', default = 'csgo',
+		help = 'accepted for compatibility with the CI script [default: %default]')
+
+	grp.add_option('--projects', action = 'store', dest = 'PROJECTS', type = 'string', default = '',
+		help = 'comma separated root projects to build instead of the full game [default: all]')
 
 	grp.add_option('--use-ccache', action = 'store_true', dest = 'CCACHE', default = False,
 		help = 'build using ccache [default: %default]')
 
-	grp.add_option('--disable-warns', action = 'store_true', dest = 'DISABLE_WARNS', default = False,
-		help = 'build using ccache [default: %default]')
-
-	grp.add_option('--togles', action = 'store_true', dest = 'TOGLES', default = False,
-		help = 'build engine with ToGLES [default: %default]')
-
-	# TODO(nillerusr): add wscript for opus building
-	grp.add_option('--enable-opus', action = 'store_true', dest = 'OPUS', default = False,
-		help = 'build engine with Opus voice codec [default: %default]')
-	
-	grp.add_option('--ios', action = 'store_true', dest = 'IOS', default = False,
-		help = 'build engine for iOS [default: %default]')
-	
-	grp.add_option('--simulator', action = 'store_true', dest = 'IOSSIM', default = False,
-		help = 'build engine for iOS simulator (Use with --ios) [default: %default]')
-	
-	grp.add_option('--angle', action = 'store_true', dest = 'ANGLE', default = False,
-		help = 'build engine with ANGLE instead of native OpenGLES [default: %default]')
-
-	grp.add_option('--sanitize', action = 'store', dest = 'SANITIZE', default = '',
-		help = 'build with sanitizers [default: %default]')
+	grp.add_option('--protoc', action = 'store', dest = 'PROTOC', type = 'string', default = '',
+		help = 'host protoc 2.5.0 used to generate protobuf sources [default: search PATH]')
 
 	opt.load('compiler_optimizations subproject')
-
-	opt.load('xcompile compiler_cxx compiler_c sdl2 clang_compilation_database strip_on_install_v2 waf_unit_test subproject')
-	if sys.platform == 'win32':
-		opt.load('msvc msdev msvs')
+	opt.load('xcompile compiler_cxx compiler_c sdl2 clang_compilation_database strip_on_install_v2 subproject')
 	opt.load('reconfigure')
-
-def check_deps(conf):
-	if conf.env.DEST_OS != 'win32':
-		conf.check_cc(lib='dl', mandatory=False)
-		conf.check_cc(lib='bz2', mandatory=True)
-		conf.check_cc(lib='rt', mandatory=False)
-
-		if not conf.env.LIB_M: # HACK: already added in xcompile!
-			conf.check_cc(lib='m')
-	else:
-		# Common Win32 libraries
-		# Don't check them more than once, to save time
-		# Usually, they are always available
-		# but we need them in uselib
-		a = [
-			'user32',
-			'shell32',
-			'gdi32',
-			'advapi32',
-			'dbghelp',
-			'psapi',
-			'ws2_32',
-			'rpcrt4',
-			'winmm',
-			'wininet',
-			'ole32',
-			'shlwapi',
-			'imm32'
-		]
-
-		if conf.env.COMPILER_CC == 'msvc':
-			for i in a:
-				conf.check_lib_msvc(i)
-		else:
-			for i in a:
-				conf.check_cc(lib = i)
-
-	if conf.env.DEST_OS == "darwin":
-		conf.env.FRAMEWORK_IOKIT = "IOKit"
-		conf.env.FRAMEWORK_FOUNDATION = "Foundation"
-		conf.env.FRAMEWORK_COREFOUNDATION = "CoreFoundation"
-		conf.env.FRAMEWORK_COREGRAPHICS = "CoreGraphics"
-		conf.env.FRAMEWORK_COREAUDIO = "CoreAudio"
-		conf.env.FRAMEWORK_AUDIOTOOLBOX = "AudioToolbox"
-		conf.env.FRAMEWORK_SYSTEMCONFIGURATION = "SystemConfiguration"
-		if not conf.env.IOS:
-			conf.check(lib='iconv', uselib_store='ICONV')
-			conf.env.FRAMEWORK_APPKIT = "AppKit"
-			conf.env.FRAMEWORK_CARBON = "Carbon"
-			conf.env.FRAMEWORK_OPENGL = "OpenGL"
-			conf.env.FRAMEWORK_APPLICATIONSERVICES = "ApplicationServices"
-			conf.env.FRAMEWORK_CORESERVICES = "CoreServices"
-		else:
-			conf.env.FRAMEWORK_UIKIT = "UIKit"
-			conf.env.FRAMEWORK_CFNETWORK = "CFNetwork"
-			conf.env.FRAMEWORK_QUARTZCORE = "QuartzCore"
-			conf.env.FRAMEWORK_SDL2 = "SDL2"
-			if not conf.env.ANGLE:
-				conf.env.FRAMEWORK_OPENGLES = "OpenGLES"
-			else:
-				conf.env.FRAMEWORK_OPENGLES = "libEGL"
-				angle_fw_path = os.environ.get('ANGLE_FRAMEWORK_PATH', os.path.abspath('build/ios'))
-				conf.env.FRAMEWORKPATH_OPENGLES = [angle_fw_path]
-				conf.env.LINKFLAGS += ['-F' + angle_fw_path]
-	if conf.options.TESTS:
-		return
-
-	if conf.env.DEST_OS != 'android' and not conf.env.IOS:
-		if conf.env.DEST_OS != 'win32':
-			if conf.options.SDL:
-				conf.check_cfg(package='sdl2', uselib_store='SDL2', args=['--cflags', '--libs'])
-			if conf.options.DEDICATED:
-				conf.check_cfg(package='libedit', uselib_store='EDIT', args=['--cflags', '--libs'])
-			else:
-				conf.check_pkg('freetype2', 'FT2', FT2_CHECK)
-				conf.check_pkg('fontconfig', 'FC', FC_CHECK)
-				if conf.env.DEST_OS == "darwin":
-					conf.env.FRAMEWORK_OPENAL = "OpenAL"
-				else:
-					conf.check_cfg(package='openal', uselib_store='OPENAL', args=['--cflags', '--libs'])
-				conf.check_cfg(package='libjpeg', uselib_store='JPEG', args=['--cflags', '--libs'])
-				conf.check_cfg(package='libpng', uselib_store='PNG', args=['--cflags', '--libs'])
-				conf.check_cfg(package='libcurl', uselib_store='CURL', args=['--cflags', '--libs'])
-			conf.check_cfg(package='zlib', uselib_store='ZLIB', args=['--cflags', '--libs'])
-
-			if conf.options.OPUS:
-				conf.check_cfg(package='opus', uselib_store='OPUS', args=['--cflags', '--libs'])
-	elif conf.env.IOS:
-		conf.check(lib='freetype2', uselib_store='FT2')
-		conf.check(lib='jpeg', uselib_store='JPEG', define_name='HAVE_JPEG')
-		conf.check(lib='png', uselib_store='PNG', define_name='HAVE_PNG')
-		conf.check(lib='curl', uselib_store='CURL', define_name='HAVE_CURL')
-		conf.check(lib='z', uselib_store='ZLIB', define_name='HAVE_ZLIB')
-		if not conf.env.TOGLES:
-			conf.check(lib='gl4es', uselib_store='GL')
-		conf.env.FRAMEWORK_OPENAL = "OpenAL"
-		conf.check(framework='CoreFoundation', uselib_store='COREFOUNDATION', msg='Checking for CoreFoundation')
-	else:
-		conf.check(lib='SDL2', uselib_store='SDL2')
-		conf.check(lib='freetype2', uselib_store='FT2')
-		conf.check(lib='jpeg', uselib_store='JPEG', define_name='HAVE_JPEG')
-		conf.check(lib='png', uselib_store='PNG', define_name='HAVE_PNG')
-		conf.check(lib='curl', uselib_store='CURL', define_name='HAVE_CURL')
-		conf.check(lib='z', uselib_store='ZLIB', define_name='HAVE_ZLIB')
-		if conf.env.DEST_CPU != 'aarch64':
-			conf.check(lib='unwind', uselib_store='UNWIND')
-			conf.check(lib='crypto', uselib_store='CRYPTO')
-			conf.check(lib='ssl', uselib_store='SSL')
-		conf.check(lib='android_support', uselib_store='ANDROID_SUPPORT')
-		conf.check(lib='opus', uselib_store='OPUS')
-
-	if conf.env.DEST_OS == 'win32':
-		conf.check(lib='libz', uselib_store='ZLIB', define_name='USE_ZLIB')
-		# conf.check(lib='nvtc', uselib_store='NVTC')
-		# conf.check(lib='ati_compress_mt_vc10', uselib_store='ATI_COMPRESS_MT_VC10')
-		conf.check(lib='SDL2', uselib_store='SDL2')
-		conf.check(lib='libjpeg', uselib_store='JPEG', define_name='HAVE_JPEG')
-		conf.check(lib='libpng', uselib_store='PNG', define_name='HAVE_PNG')
-		conf.check(lib='d3dx9', uselib_store='D3DX9')
-		conf.check(lib='d3d9', uselib_store='D3D9')
-		conf.check(lib='dsound', uselib_store='DSOUND')
-		conf.check(lib='dxguid', uselib_store='DXGUID')
-		if conf.options.OPUS:
-			conf.check(lib='opus', uselib_store='OPUS')
-
-		# conf.multicheck(*a, run_all_tests = True, mandatory = True)
 
 def configure(conf):
 	conf.load('fwgslib reconfigure compiler_optimizations')
 
-	# Force XP compability, all build targets should add
-	# subsystem=bld.env.MSVC_SUBSYSTEM
-	# TODO: wrapper around bld.stlib, bld.shlib and so on?
-	conf.env.MSVC_SUBSYSTEM = 'WINDOWS,5.01'
-	conf.env.MSVC_TARGETS = ['x64'] # explicitly request x86 target for MSVC
-	if conf.options.TARGET32:
-		conf.env.MSVC_TARGETS = ['x86']
+	if not conf.options.IOS:
+		conf.fatal('This tree only supports the iOS build (--ios)')
 
-	if sys.platform == 'win32':
-		conf.load('msvc_pdb_ext msdev msvs msvcdeps')
-	conf.load('subproject xcompile compiler_c compiler_cxx gccdeps gitversion clang_compilation_database strip_on_install_v2 waf_unit_test enforce_pic')
-	if conf.env.DEST_OS == 'win32' and conf.env.DEST_CPU == 'amd64':
-		conf.load('masm')
-	elif conf.env.DEST_OS == 'darwin':
-		conf.load('mm_hook')
+	conf.load('subproject xcompile compiler_c compiler_cxx gccdeps gitversion clang_compilation_database strip_on_install_v2 enforce_pic mm_hook')
 
-	conf.env.BIT32_MANDATORY = conf.options.TARGET32
-	if conf.env.BIT32_MANDATORY:
-		Logs.info('WARNING: will build engine for 32-bit target')
-		conf.load('force_32bit')
+	conf.env.IOS = 1
+	conf.env.ANGLE = conf.options.ANGLE
+	conf.env.PROJECTS = conf.options.PROJECTS
 
-	define_platform(conf)
-
-	if conf.env.TOGLES:
-		projects['game'] += ['togles']
-	elif conf.env.GL:
-		projects['game'] += ['togl']
-
-	if conf.env.DEST_OS == 'win32':
-		projects['game'] += ['utils/bzip2']
-		projects['dedicated'] += ['utils/bzip2']
-	if conf.options.OPUS or conf.env.DEST_OS == 'android':
-		projects['game'] += ['engine/voice_codecs/opus']
-
-	if conf.options.DISABLE_WARNS:
-		compiler_optional_flags = ['-w']
+	protoc = conf.options.PROTOC or os.environ.get('PROTOC', '')
+	if protoc:
+		conf.env.PROTOC = [os.path.abspath(protoc)]
 	else:
-		compiler_optional_flags = [
-			'-Wall',
-			'-fdiagnostics-color=always',
-			'-Wcast-align',
-			'-Wuninitialized',
-			'-Winit-self',
-			'-Wstrict-aliasing',
-			'-Wno-reorder',
-			'-Wno-unknown-pragmas',
-			'-Wno-unused-function',
-			'-Wno-unused-but-set-variable',
-			'-Wno-unused-value',
-			'-Wno-unused-variable',
-			'-faligned-new',
-		]
+		conf.find_program('protoc', var = 'PROTOC')
 
-	c_compiler_optional_flags = [
-		'-fnonconst-initializers' # owcc
-	]
+	defines = PLATFORM_DEFINES + IOS_DEFINES
+	if conf.options.ANGLE:
+		defines += ['ANGLE=1']
+	defines += ['DEBUG', '_DEBUG'] if conf.options.DEBUG_ENGINE else ['NDEBUG']
+	conf.env.append_unique('DEFINES', defines)
 
 	cflags, linkflags = conf.get_optimization_flags()
 
+	flags = [
+		'-pipe', '-fPIC', '-pthread',
+		'-fsigned-char',
+		'-fvisibility=hidden',
+		'-fno-strict-aliasing',
+		'-L' + os.path.abspath('lib/darwin/aarch64'),
+	]
+	if conf.options.DISABLE_WARNS:
+		flags += ['-w']
 
-	flags = []
+	# Valve's code predates C++11 narrowing rules and newer clang defaults
+	# that turn old-style C into hard errors.
+	compat = [
+		'-Wno-c++11-narrowing',
+		'-Wno-reserved-user-defined-literal',
+		'-Wno-register',
+		'-Wno-error=implicit-function-declaration',
+		'-Wno-error=int-conversion',
+		'-Wno-error=incompatible-pointer-types',
+		'-Wno-error=incompatible-function-pointer-types',
+		'-Wno-error=enum-constexpr-conversion',
+		'-Wno-error=non-pod-varargs',
+		'-Wno-error=address-of-temporary',
+		'-Wno-error=invalid-offsetof',
+		'-Wno-error=return-type',
+		'-Wno-error=format-security',
+	]
 
-	if conf.options.SANITIZE:
-		flags += ['-fsanitize=%s'%conf.options.SANITIZE, '-fno-sanitize=vptr']
+	cflags += flags
+	linkflags += flags
 
-	if conf.env.DEST_OS != 'win32':
-		flags += ['-pipe', '-fPIC', '-L'+os.path.abspath('.')+'/lib/'+conf.env.DEST_OS+'/'+conf.env.DEST_CPU+'/']
-	if conf.env.COMPILER_CC != 'msvc':
-		flags += ['-pthread']
+	cxxflags = list(cflags) + ['-std=gnu++11']
 
-	if conf.env.DEST_OS == 'android' or conf.env.IOS:
-		flags += [
-			'-I'+os.path.abspath('.')+'/thirdparty/curl/include',
-			'-I'+os.path.abspath('.')+'/thirdparty/fontconfig',
-			'-I'+os.path.abspath('.')+'/thirdparty/freetype/include',
-		]
-		if conf.env.IOS:
-			flags += [
-				'-I'+os.path.abspath('.')+'/thirdparty/SDL-src/include',
-				'-I'+os.path.abspath('.')+'/thirdparty/SDL-src/src/video/khronos',
-				'-I'+os.path.abspath('.')+'/common',
-			]
-	if conf.env.DEST_OS == 'android':
-		flags += [
-			'-llog', 
-			'-I'+os.path.abspath('.')+'/thirdparty/openal-soft/include/',
-			'-lz',
-			'-I'+os.path.abspath('.')+'/thirdparty/SDL',
-		]
-
-		flags += ['-funwind-tables', '-g']
-	elif conf.env.COMPILER_CC != 'msvc' and conf.env.DEST_OS != 'darwin' and conf.env.DEST_CPU in ['x86', 'x86_64']:
-		flags += ['-march=core2']
-
-	if conf.env.DEST_CPU in ['x86', 'x86_64']:
-		flags += ['-mfpmath=sse']
-	elif conf.env.DEST_CPU in ['arm', 'aarch64']:
-		flags += ['-fsigned-char']
-
-	if conf.env.DEST_CPU == 'arm':
-		flags += ['-march=armv7-a', '-mfpu=neon-vfpv4']
-
-	if conf.env.DEST_OS == 'freebsd':
-		linkflags += ['-lexecinfo']
-
-	if conf.env.DEST_OS != 'win32':
-		cflags += flags
-		linkflags += flags
-	else:
-		cflags += [
-			'/I'+os.path.abspath('.')+'/thirdparty/SDL',
-			'/arch:SSE' if conf.env.DEST_CPU == 'x86' else '/arch:AVX',
-			'/GF',
-			'/Gy',
-			'/fp:fast',
-			'/Zc:forScope',
-			'/Zc:wchar_t',
-			'/GR',
-			'/TP',
-			'/EHsc'
-		]
-
-		if conf.options.BUILD_TYPE == 'debug':
-			linkflags += [
-				'/FORCE:MULTIPLE',
-				'/INCREMENTAL:NO',
-				'/NODEFAULTLIB:libc',
-				'/NODEFAULTLIB:libcd',
-				'/NODEFAULTLIB:libcmt',
-				'/LARGEADDRESSAWARE'
-			]
-		else:
-			linkflags += [
-				'/INCREMENTAL',
-				'/NODEFAULTLIB:libc',
-				'/NODEFAULTLIB:libcd',
-				'/NODEFAULTLIB:libcmtd',
-				'/LARGEADDRESSAWARE'
-			]
-
-		linkflags += [
-			'/LIBPATH:'+os.path.abspath('.')+'/lib/win32/'+conf.env.DEST_CPU+'/',
-			'/LIBPATH:'+os.path.abspath('.')+'/dx9sdk/lib/'+conf.env.DEST_CPU+'/'
-		]
-
-	# And here C++ flags starts to be treated separately
-	cxxflags = list(cflags)
-	if conf.env.DEST_OS != 'win32':
-		cxxflags += ['-std=c++11','-fpermissive']
-
-	if conf.env.COMPILER_CC == 'gcc':
-		conf.define('COMPILER_GCC', 1)
-	elif conf.env.COMPILER_CC == 'msvc':
-		conf.define('COMPILER_MSVC', 1)
-		conf.define('MSVC', 1)
-		if conf.env.DEST_CPU == 'x86':
-			conf.define('COMPILER_MSVC32', 1)
-		elif conf.env.DEST_CPU in ['x86_64', 'amd64']:
-			conf.define('COMPILER_MSVC64', 1)
-
-	if conf.env.COMPILER_CC != 'msvc':
-		conf.check_cc(cflags=cflags, linkflags=linkflags, msg='Checking for required C flags')
-		conf.check_cxx(cxxflags=cxxflags, linkflags=linkflags, msg='Checking for required C++ flags')
-
-		conf.env.append_unique('CFLAGS', cflags)
-		conf.env.append_unique('CXXFLAGS', cxxflags)
-		conf.env.append_unique('LINKFLAGS', linkflags)
-
-		cxxflags += conf.filter_cxxflags(compiler_optional_flags, cflags)
-		cflags += conf.filter_cflags(compiler_optional_flags + c_compiler_optional_flags, cflags)
+	cflags += conf.filter_cflags(compat, cflags)
+	cxxflags += conf.filter_cxxflags(compat, cxxflags)
 
 	conf.env.append_unique('CFLAGS', cflags)
 	conf.env.append_unique('CXXFLAGS', cxxflags)
 	conf.env.append_unique('LINKFLAGS', linkflags)
-	conf.env.append_unique('INCLUDES', [os.path.abspath('common/')])
 
-	check_deps( conf )
+	check_deps(conf)
 
 	conf.load('sdl2')
 	if not conf.env.HAVE_SDL2:
 		conf.fatal("SDL2 isn't available")
-	else:
-		for inc in conf.env.INCLUDES_SDL2:
-			conf.env.append_unique('INCLUDES', inc)
-		if conf.env.IOS and conf.options.SDL2_PATH:
-			sdl_headers = os.path.abspath(os.path.join(conf.options.SDL2_PATH, 'Headers'))
-			sdl_source_headers = os.path.abspath('thirdparty/SDL-src/include')
-			conf.env.append_unique('CFLAGS', '-I' + sdl_source_headers)
-			conf.env.append_unique('CXXFLAGS', '-I' + sdl_source_headers)
-			conf.env.append_unique('INCLUDES', sdl_source_headers)
-			conf.env.append_unique('INCLUDES', sdl_headers)
+	for inc in conf.env.INCLUDES_SDL2:
+		conf.env.append_unique('INCLUDES', inc)
+	if conf.options.SDL2_PATH:
+		sdl_headers = os.path.abspath(os.path.join(conf.options.SDL2_PATH, 'Headers'))
+		sdl_source_headers = os.path.abspath('ios/thirdparty/SDL-src/include')
+		conf.env.append_unique('INCLUDES', sdl_source_headers)
+		conf.env.append_unique('INCLUDES', sdl_headers)
 
-	# indicate if we are packaging for Linux/BSD
-	if conf.env.DEST_OS != 'android' and not conf.env.IOS:
-		conf.env.LIBDIR = conf.env.PREFIX+'/bin/'
-		conf.env.TESTDIR = conf.env.PREFIX+'/tests/'
-		conf.env.BINDIR = conf.env.PREFIX
-	else:
-		conf.env.LIBDIR = conf.env.BINDIR = conf.env.PREFIX
+	conf.env.LIBDIR = conf.env.BINDIR = conf.env.PREFIX
 
 	if conf.options.CCACHE:
 		conf.env.CC.insert(0, 'ccache')
 		conf.env.CXX.insert(0, 'ccache')
 
-	if conf.options.TESTS:
-		conf.add_subproject(projects['tests'])
-	elif conf.options.DEDICATED:
-		conf.add_subproject(projects['dedicated'])
+	conf.add_subproject(['ivp/havana', 'ivp/havana/havok/hk_base', 'ivp/havana/havok/hk_math',
+		'ivp/ivp_compact_builder', 'ivp/ivp_physics', 'vphysics'])
+
+def check_deps(conf):
+	conf.env.FRAMEWORK_IOS = list(IOS_FRAMEWORKS)
+	conf.env.FRAMEWORK_SDL2 = ['SDL2']
+	if conf.env.ANGLE:
+		angle_fw_path = os.environ.get('ANGLE_FRAMEWORK_PATH', os.path.abspath('build/ios'))
+		conf.env.FRAMEWORK_GLES = ['libEGL', 'libGLESv2']
+		conf.env.FRAMEWORKPATH_GLES = [angle_fw_path]
+		conf.env.LINKFLAGS += ['-F' + angle_fw_path]
 	else:
-		conf.add_subproject(game_projects(conf.options.GAMES))
+		conf.env.FRAMEWORK_GLES = ['OpenGLES']
+
+	conf.check(lib='z', uselib_store='ZLIB')
+	conf.check(lib='bz2', uselib_store='BZ2')
+	conf.check(lib='iconv', uselib_store='ICONV')
+	conf.check(lib='jpeg', uselib_store='JPEG')
+	conf.check(lib='png', uselib_store='PNG')
+	conf.check(lib='freetype2', uselib_store='FT2')
+	conf.check(lib='protobuf', uselib_store='PROTOBUF')
+
+# ---------------------------------------------------------------------------
+# VPC driven build
+
+def _vpc():
+	sys.path.insert(0, os.path.abspath('scripts/waifulib'))
+	import vpc
+	return vpc
+
+def _project_map(vpc):
+	'''name -> vpc path, from vpc_scripts/projects.vgc evaluated for iOS'''
+	ctx = vpc._Ctx(os.path.abspath('.'), os.path.abspath('.'), VPC_CONDITIONALS, VPC_MACROS)
+	with open('vpc_scripts/projects.vgc', 'rb') as f:
+		text = f.read().decode('latin-1')
+	projects = {}
+	for m in re.finditer(r'\$Project\s+"([^"]+)"\s*\{(.*?)\}', text, re.S):
+		for line in m.group(2).split('\n'):
+			line = line.strip()
+			if not line.startswith('"'):
+				continue
+			path = line.split('"')[1].replace('\\', '/')
+			cond = re.search(r'\[.*\]', line)
+			if cond and not ctx.eval_cond(cond.group(0)):
+				continue
+			projects.setdefault(m.group(1).lower(), path)
+	for k, v in PROJECT_OVERRIDES.items():
+		projects[k] = v
+	return projects
+
+def _load_projects(roots):
+	vpc = _vpc()
+	pmap = _project_map(vpc)
+	parsed = {}
+	order = []
+	todo = list(roots)
+	while todo:
+		name = todo.pop(0).lower()
+		if name in parsed or name in MISSING_LIBS or name in EXTERNAL_LIBS or name in CUSTOM_LIBS:
+			continue
+		path = pmap.get(name)
+		if not path:
+			Logs.warn('VPC: no project for %s, skipping' % name)
+			parsed[name] = None
+			continue
+		macros = dict(VPC_MACROS)
+		macros['PROJECTNAME'] = name
+		proj = vpc.parse('.', path, VPC_CONDITIONALS, macros)
+		parsed[name] = proj
+		order.append(name)
+		for dep in proj.libs + proj.implibs:
+			todo.append(dep)
+	return [(n, parsed[n]) for n in order]
+
+def _gen_protos(bld, proj):
+	if not proj.protos:
+		return
+	gen = proj.macros.get('GENERATED_PROTO_DIR', 'generated_proto').replace('\\', '/')
+	outdir = os.path.normpath(os.path.join(proj.projdir, gen))
+	if not os.path.isdir(outdir):
+		os.makedirs(outdir)
+	protoc = bld.env.PROTOC
+	if not protoc:
+		bld.fatal('protoc not configured, pass --protoc')
+	# always regenerate: waf only rebuilds when the output content changes
+	for proto in proj.protos:
+		cmd = protoc + [
+			'--proto_path=thirdparty/protobuf-2.5.0/src',
+			'--proto_path=' + os.path.dirname(proto),
+			'--proto_path=gcsdk',
+			'--proto_path=game/shared',
+			'--proto_path=game/shared/cstrike15',
+			'--proto_path=common',
+			'--cpp_out=' + outdir,
+			proto,
+		]
+		Logs.info('protoc %s -> %s' % (proto, outdir))
+		subprocess.check_call(cmd)
+
+def _uses(names):
+	out = []
+	for n in names:
+		low = n.lower()
+		if low in MISSING_LIBS:
+			continue
+		out.append(EXTERNAL_LIBS.get(low, low))
+	return out
+
+def _defines(proj):
+	out = []
+	for d in proj.defines:
+		key = d.split('=')[0]
+		if key in DROP_DEFINES or '$' in d:
+			continue
+		out.append(d)
+	out.append('MEMOVERRIDE_MODULE=%s' % proj.macros.get('PROJECTNAME', proj.name))
+	return out
+
+CRYPTOPP_DIR = 'external/crypto++-5.61'
+# test/benchmark programs from the GNUmakefile's TESTOBJS
+CRYPTOPP_EXCLUDE = set(['bench.cpp', 'bench2.cpp', 'test.cpp', 'validat1.cpp',
+	'validat2.cpp', 'validat3.cpp', 'adhoc.cpp', 'datatest.cpp', 'regtest.cpp',
+	'fipsalgt.cpp', 'dlltest.cpp'])
+
+def build_custom_projects(bld):
+	sources = sorted(f for f in os.listdir(CRYPTOPP_DIR)
+		if f.endswith('.cpp') and f not in CRYPTOPP_EXCLUDE)
+	env = bld.env.derive()
+	# Crypto++ 5.6.1 relies on MSVC-style template lookup
+	env.append_value('CXXFLAGS', ['-fdelayed-template-parsing'])
+	bld(
+		features = 'cxx cxxstlib',
+		source   = [CRYPTOPP_DIR + '/' + f for f in sources],
+		target   = 'cryptopp',
+		name     = 'cryptopp',
+		includes = [CRYPTOPP_DIR],
+		export_includes = [CRYPTOPP_DIR],
+		defines  = ['CRYPTOPP_DISABLE_ASM', 'CRYPTOPP_DISABLE_SSE2'],
+		env      = env,
+	)
 
 def build(bld):
-	os.environ["CCACHE_DIR"] = os.path.abspath('.ccache/'+bld.env.COMPILER_CC+'/'+bld.env.DEST_OS+'/'+bld.env.DEST_CPU)
+	# VPC paths are relative to the source root
+	os.chdir(bld.path.abspath())
 
-	if bld.env.DEST_OS in ['win32', 'android']:
-		sdl_name = 'SDL2.dll' if bld.env.DEST_OS == 'win32' else 'libSDL2.so'
-		sdl_path = os.path.join('lib', bld.env.DEST_OS, bld.env.DEST_CPU, sdl_name)
-		bld.install_files(bld.env.LIBDIR, [sdl_path])
+	bld.add_subproject(['ivp/havana', 'ivp/havana/havok/hk_base', 'ivp/havana/havok/hk_math',
+		'ivp/ivp_compact_builder', 'ivp/ivp_physics', 'vphysics'])
 
-	if bld.env.DEST_OS == 'win32':
-		projects['game'] += ['utils/bzip2']
-		projects['dedicated'] += ['utils/bzip2']
+	build_custom_projects(bld)
 
-	if bld.env.OPUS or bld.env.DEST_OS == 'android':
-		projects['game'] += ['engine/voice_codecs/opus']
+	roots = [p for p in bld.env.PROJECTS.split(',') if p] if bld.env.PROJECTS else ROOT_PROJECTS
+	projects = _load_projects(roots)
 
-	if bld.env.TESTS:
-		bld.add_subproject(projects['tests'])
-	elif bld.env.DEDICATED:
-		bld.add_subproject(projects['dedicated'])
-	else:
-		if bld.env.TOGLES:
-			projects['game'] += ['togles']
-		elif bld.env.GL:
-			projects['game'] += ['togl']
+	for name, proj in projects:
+		if proj is None:
+			continue
+		_gen_protos(bld, proj)
 
-		bld.add_subproject(game_projects(bld.env.GAMES))
+		sources = [s for s in proj.sources if os.path.exists(s)]
+		missing = [s for s in proj.sources if not os.path.exists(s)]
+		for s in missing:
+			Logs.warn('%s: missing source %s' % (name, s))
+
+		includes = [i for i in proj.includes if i not in DROP_INCLUDES]
+		use = _uses(proj.libs + proj.implibs)
+
+		env = bld.env.derive()
+		install_path = None
+		if proj.kind == 'lib':
+			features = 'c cxx cstlib cxxstlib'
+			target = name
+		elif proj.kind == 'exe':
+			features = 'c cxx cprogram cxxprogram'
+			target = proj.macros.get('OUTBINNAME', name)
+			install_path = bld.env.BINDIR
+			use += ['IOS', 'SDL2', 'GLES', 'ZLIB', 'BZ2', 'ICONV']
+		else:
+			features = 'c cxx cshlib cxxshlib'
+			target = proj.macros.get('OUTBINNAME', name)
+			env.cshlib_PATTERN = env.cxxshlib_PATTERN = '%s.dylib'
+			install_path = bld.env.LIBDIR
+			use += ['IOS', 'SDL2', 'GLES', 'ZLIB', 'BZ2', 'ICONV']
+
+		bld(
+			features = features,
+			source   = sources,
+			target   = target,
+			name     = name,
+			includes = includes,
+			defines  = _defines(proj),
+			use      = use,
+			env      = env,
+			# no idx: waf numbers task generators itself, which keeps object
+			# names unique for sources shared by several modules
+			install_path = install_path,
+		)

@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2008, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -12,6 +12,7 @@
 #endif
 
 #include "mathlib/vector.h"
+#include "mathlib/ssemath.h"
 #include "utlvector.h"
 #include "studio.h"
 
@@ -27,16 +28,16 @@ struct mstudiomesh_t;
 
 struct CachedPosNormTan_t
 {
-	Vector		m_Position;
-	Vector		m_Normal;
+	Vector4D	m_Position;
+	Vector4D	m_Normal;
 	Vector4D	m_TangentS;
 
-	CachedPosNormTan_t() = default;
+	CachedPosNormTan_t() {}
 
 	CachedPosNormTan_t( CachedPosNormTan_t const& src )
 	{
-		VectorCopy( src.m_Position, m_Position );
-		VectorCopy( src.m_Normal, m_Normal );
+		Vector4DCopy( src.m_Position, m_Position );
+		Vector4DCopy( src.m_Normal, m_Normal );
 		Vector4DCopy( src.m_TangentS, m_TangentS );
 		Assert( m_TangentS.w == 1.0f || m_TangentS.w == -1.0f );
 	}
@@ -51,7 +52,7 @@ struct CachedPosNorm_t
 	Vector4DAligned	m_Position;
 	Vector4DAligned	m_Normal;
 
-	CachedPosNorm_t() = default;
+	CachedPosNorm_t() {}
 
 	CachedPosNorm_t( CachedPosNorm_t const& src )
 	{
@@ -109,7 +110,7 @@ public:
 	CachedPosNorm_t* CreateThinFlexVertex( int vertex );
 
 	// Renormalizes the normals and tangents of the flex verts
-	void RenormalizeFlexVertices( bool bHasTangentData );
+	void RenormalizeFlexVertices( bool bHasTangentData, bool bQuadList );
 
 	// Gets a decal vertex
 	CachedPosNorm_t* GetWorldVertex( int vertex );
@@ -120,11 +121,8 @@ public:
 	template< class T >
 	void ComputeFlexedVertex_StreamOffset( studiohdr_t *pStudioHdr, mstudioflex_t *pflex, T *pvanim, int vertCount, float w1, float w2, float w3, float w4 );
 
-#ifdef PLATFORM_WINDOWS
 	void ComputeFlexedVertex_StreamOffset_Optimized( studiohdr_t *pStudioHdr, mstudioflex_t *pflex, mstudiovertanim_t *pvanim, int vertCount, float w1, float w2, float w3, float w4);
 	void ComputeFlexedVertexWrinkle_StreamOffset_Optimized( studiohdr_t *pStudioHdr, mstudioflex_t *pflex, mstudiovertanim_wrinkle_t *pvanim, int vertCount, float w1, float w2, float w3, float w4);
-#endif // PLATFORM_WINDOWS
-
 private:
 	// Used to create the flex render data. maps 
 	struct CacheIndex_t
@@ -252,9 +250,6 @@ inline void CCachedRenderData::SetBodyModelMesh( int body, int model, int mesh)
 	m_Body = body;
 	m_Model = model;
 	m_Mesh = mesh;
-
-	Assert((m_Model >= 0) && (m_Body >= 0));
-	m_CacheDict[m_Body][m_Model].EnsureCount(m_Mesh+1);
 
 	// At this point, we should have all 3 defined.
 	CacheDict_t& dict = m_CacheDict[m_Body][m_Model][m_Mesh];

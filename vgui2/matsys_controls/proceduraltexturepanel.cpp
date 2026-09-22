@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -9,8 +9,13 @@
 #include "materialsystem/imaterialsystem.h"
 #include "materialsystem/itexture.h"
 #include "VGuiMatSurface/IMatSystemSurface.h"
-#include "tier1/KeyValues.h"
+#include "tier1/keyvalues.h"
 #include "pixelwriter.h"
+#include "materialsystem/imaterial.h"
+#include "materialsystem/imaterialvar.h"
+
+// NOTE: This has to be the last file included!
+#include "tier0/memdbgon.h"
 
 
 using namespace vgui;
@@ -26,6 +31,8 @@ CProceduralTexturePanel::CProceduralTexturePanel( vgui::Panel *pParent, const ch
 	m_bUsePaintRect = false;
 	m_PaintRect.x = m_PaintRect.y = 0;
 	m_PaintRect.width = m_PaintRect.height = 0;
+
+	m_nTextureID = -1;
 }
 
 CProceduralTexturePanel::~CProceduralTexturePanel()
@@ -59,12 +66,18 @@ bool CProceduralTexturePanel::Init( int nWidth, int nHeight, bool bAllocateImage
 			TEXTUREFLAGS_NOLOD | TEXTUREFLAGS_PROCEDURAL | TEXTUREFLAGS_SINGLECOPY );
 	pTex->SetTextureRegenerator( this );
 	m_ProceduralTexture.Init( pTex );
+	pTex->DecrementReferenceCount();
 
 	KeyValues *pVMTKeyValues = new KeyValues( "UnlitGeneric" );
 	pVMTKeyValues->SetString( "$basetexture", pTemp );
 	pVMTKeyValues->SetInt( "$nocull", 1 );
 	pVMTKeyValues->SetInt( "$nodebug", 1 );
-	m_ProceduralMaterial.Init( MaterialSystem()->CreateMaterial( pTemp, pVMTKeyValues ));
+	IMaterial *pMaterial = MaterialSystem()->CreateMaterial( pTemp, pVMTKeyValues ); 
+	m_ProceduralMaterial.Init( pMaterial );
+	pMaterial->DecrementReferenceCount();
+	static unsigned int textureVarCache = 0;
+	IMaterialVar *pTextureVar = m_ProceduralMaterial->FindVarFast( "$basetexture", &textureVarCache );
+	pTextureVar->SetTextureValue( pTex );
 
 	m_nTextureID = MatSystemSurface()->CreateNewTextureID( false );
 	MatSystemSurface()->DrawSetTextureMaterial( m_nTextureID, m_ProceduralMaterial );
@@ -91,13 +104,23 @@ void CProceduralTexturePanel::MaintainProportions( bool bEnable )
 //-----------------------------------------------------------------------------
 void CProceduralTexturePanel::CleanUp()
 {
-	if ( (ITexture*)m_ProceduralTexture )
+	if ( m_nTextureID != -1 )
+	{
+		MatSystemSurface()->DestroyTextureID( m_nTextureID );
+		m_nTextureID = -1;
+	}
+
+	if ( m_ProceduralMaterial )
+	{
+		m_ProceduralMaterial.Shutdown( true );
+	}
+
+	if ( m_ProceduralTexture )
 	{
 		m_ProceduralTexture->SetTextureRegenerator( NULL );
+		m_ProceduralTexture.Shutdown( true );
 	}
-	m_ProceduralTexture.Shutdown();
-	m_ProceduralMaterial.Shutdown();
-
+	
 	if ( m_pImageBuffer )
 	{
 		delete[] m_pImageBuffer;
@@ -193,6 +216,9 @@ void CProceduralTexturePanel::DownloadTexture()
 //-----------------------------------------------------------------------------
 void CProceduralTexturePanel::Paint( void )
 {
+	if ( m_nTextureID == -1 )
+		return;
+
 	vgui::surface()->DrawSetTexture( m_nTextureID );
 	vgui::surface()->DrawSetColor( 255, 255, 255, 255 );
 

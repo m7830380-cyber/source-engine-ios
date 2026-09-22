@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: Methods related to input
 //
@@ -14,6 +14,7 @@
 #endif
 
 struct InputEvent_t;
+FORWARD_DECLARE_HANDLE( InputContextHandle_t );
 
 
 //-----------------------------------------------------------------------------
@@ -35,7 +36,7 @@ void InputHandleWindowMessage( void *hwnd, unsigned int uMsg, unsigned int wPara
 // Handles an input event, returns true if the event should be filtered
 // from the rest of the game
 //-----------------------------------------------------------------------------
-bool InputHandleInputEvent( const InputEvent_t &event );
+bool InputHandleInputEvent( InputContextHandle_t hContext, const InputEvent_t &event );
 
 
 //-----------------------------------------------------------------------------

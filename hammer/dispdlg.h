@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -178,6 +178,7 @@ protected:
 class CSculptPushOptions;
 class CSculptCarveOptions;
 class CSculptProjectOptions;
+class CSculptBlendOptions;
 
 class CPaintSculptDlg : public CDialog
 {
@@ -211,6 +212,7 @@ protected:
 	afx_msg void OnBnClickedSculptPush( );
 	afx_msg void OnBnClickedSculptCarve( );
 	afx_msg void OnBnClickedSculptProject( );
+	afx_msg void OnBnClickedSculptBlend( );
 	//}}AFX_MSG
 
 	DECLARE_MESSAGE_MAP()
@@ -221,6 +223,7 @@ protected:
 		SCULPT_MODE_PUSH,
 		SCULPT_MODE_CARVE,
 		SCULPT_MODE_PROJECT,
+		SCULPT_MODE_BLEND,
 	} SculptMode;
 
 	// Save/Restore
@@ -229,6 +232,7 @@ protected:
 	CSculptPushOptions		*m_PushOptions;
 	CSculptCarveOptions		*m_CarveOptions;
 	CSculptProjectOptions	*m_ProjectOptions;
+	CSculptBlendOptions		*m_BlendOptions;
 
 	bool					m_bAutoSew;
 	SculptMode				m_SculptMode;
@@ -240,6 +244,8 @@ protected:
 	CButton m_PushButton;
 	CButton m_CarveButton;
 	CButton m_ProjectButton;
+public:
+	CButton m_BlendButton;
 };
 
 

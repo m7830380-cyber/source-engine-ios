@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -9,17 +9,20 @@
 // $Log: $
 //
 // $NoKeywords: $
-//=============================================================================//
+//===========================================================================//
 
 #ifndef MATSYSWIN_H
 #define MATSYSWIN_H
-#pragma once
 
+#ifdef COMPILER_MSVC
+#pragma once
+#endif
 
 #include <mxtk/mxMatSysWindow.h>
 #include "materialsystem/imaterialsystem.h"
 #include "faceposertoolwindow.h"
 #include "interface.h"
+#include "tier2/tier2.h"
 
 
 class MatSysWindow : public mxMatSysWindow, public IFacePoserToolWindow
@@ -69,7 +72,6 @@ private:
 
 extern MatSysWindow		*g_pMatSysWindow;
 
-extern IMaterialSystem *g_pMaterialSystem;
 extern IMaterial *g_materialBackground;
 extern IMaterial *g_materialWireframe;
 extern IMaterial *g_materialWireframe;
@@ -81,7 +83,9 @@ extern IMaterial *g_materialSmoothshaded;
 extern IMaterial *g_materialBones;
 extern IMaterial *g_materialLines;
 extern IMaterial *g_materialFloor;
-
+extern IMaterial *g_materialArcActive;
+extern IMaterial *g_materialArcInActive;
+extern IMaterial *g_materialDebugText;
 
 #if 0
 
@@ -124,7 +128,7 @@ public:
 	bool			FindParameter(const char *s);
 	const char*		FindParameterArg(const char *s);
 
-	void			SetTitleText(PRINTF_FORMAT_STRING const char *fmt, ...);
+	void			SetTitleText(const char *fmt, ...);
 
 
 private:
@@ -181,10 +185,10 @@ public:
 // ---------------------------------------------------------------------------------------- //
 
 // Show an error dialog and quit.
-bool Sys_Error(PRINTF_FORMAT_STRING const char *pMsg, ...);
+bool Sys_Error(const char *pMsg, ...);
 
 // Print to the trace window.
-void con_Printf(PRINTF_FORMAT_STRING const char *pMsg, ...);
+void con_Printf(const char *pMsg, ...);
 
 // Returns true if the key is down.
 bool IsKeyDown(char key);

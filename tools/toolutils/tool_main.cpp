@@ -1,10 +1,10 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2005, Valve Corporation, All rights reserved. =======
 //
 // Purpose: 
 //
 //=============================================================================
 
-#include "tier1/utlvector.h"
+#include "tier1/UtlVector.h"
 #include "tier1/convar.h"
 #include "icvar.h"
 #include "toolframework/itoolsystem.h"
@@ -23,6 +23,7 @@
 #include "tier3/tier3dm.h"
 #include "datamodel/dmelementfactoryhelper.h"
 #include "dmserializers/idmserializers.h"
+#include "engine/ivmodelinfo.h"
 
 //-----------------------------------------------------------------------------
 // Singleton interfaces
@@ -31,6 +32,7 @@ IEngineTool	*enginetools = NULL;
 IEngineVGui	*enginevgui = NULL;
 IFileSystem *g_pFileSystem = NULL;
 IVDebugOverlay *debugoverlay = NULL;
+IVModelInfoClient *modelinfoclient = NULL;
 
 
 //-----------------------------------------------------------------------------
@@ -133,8 +135,9 @@ bool CToolDictionary::Connect( CreateInterfaceFn factory )
 	enginevgui = ( IEngineVGui * )factory( VENGINE_VGUI_VERSION, NULL );
 	enginetools = ( IEngineTool * )factory( VENGINETOOL_INTERFACE_VERSION, NULL );
 	debugoverlay = ( IVDebugOverlay * )factory( VDEBUG_OVERLAY_INTERFACE_VERSION, NULL );
+	modelinfoclient = ( IVModelInfoClient *)factory( VMODELINFO_CLIENT_INTERFACE_VERSION, NULL );
 
-	if ( !enginevgui || !debugoverlay || !g_pCVar || !enginetools || !g_pFileSystem  )
+	if ( !enginevgui || !debugoverlay || !g_pCVar || !enginetools || !g_pFileSystem || ( !p4 && !CommandLine()->FindParm( "-nop4" ) ) || !modelinfoclient )
 		return false;
 
 	if ( !VGui_Startup( factory ) )

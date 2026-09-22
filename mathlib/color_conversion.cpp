@@ -1,13 +1,15 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Color conversion routines.
 //
 //=====================================================================================//
 
 #include <math.h>
-#include <float.h>	// Needed for FLT_EPSILON
+#include <float.h>	// needed for flt_epsilon
 #include "basetypes.h"
+#ifndef _PS3
 #include <memory.h>
+#endif
 #include "tier0/dbg.h"
 #include "mathlib/mathlib.h"
 #include "mathlib/vector.h"
@@ -154,7 +156,7 @@ void BuildGammaTable( float gamma, float texGamma, float brightness, int overbri
 
 	for (i=0 ; i<256 ; i++)
 	{
-		inf = 255 * pow ( i/255.f, g1 ); 
+		inf = ( int )( 255 * pow ( i/255.f, g1 ) ); 
 		if (inf < 0)
 			inf = 0;
 		if (inf > 255)
@@ -179,7 +181,7 @@ void BuildGammaTable( float gamma, float texGamma, float brightness, int overbri
 			f = 0.125 + ((f - g3) / (1.0 - g3)) * 0.875;
 
 		// convert linear space to desired gamma space
-		inf = 255 * pow ( f, g ); 
+		inf = ( int )( 255 * pow ( f, g ) ); 
 
 		if (inf < 0)
 			inf = 0;
@@ -213,7 +215,7 @@ void BuildGammaTable( float gamma, float texGamma, float brightness, int overbri
 	for (i=0 ; i<1024 ; i++)
 	{
 		// convert from linear space (0..1) to nonlinear texture space (0..255)
-		lineartotexture[i] =  pow( i / 1023.0, 1.0 / texGamma ) * 255;
+		lineartotexture[i] = ( int )pow( i / 1023.0, 1.0 / texGamma ) * 255;
 	}
 
 #if 0
@@ -423,7 +425,7 @@ int LinearToTexture( float f )
 {
 	Assert( s_bMathlibInitialized );
 	int i;
-	i = f * 1023;	// assume 0..1 range
+	i = ( int )( f * 1023 );	// assume 0..1 range
 	if (i < 0)
 		i = 0;
 	if (i > 1023)
@@ -438,7 +440,7 @@ int LinearToScreenGamma( float f )
 {
 	Assert( s_bMathlibInitialized );
 	int i;
-	i = f * 1023;	// assume 0..1 range
+	i = ( int )( f * 1023 );	// assume 0..1 range
 	if (i < 0)
 		i = 0;
 	if (i > 1023)
@@ -609,17 +611,17 @@ void VectorToColorRGBExp32( const Vector& vin, ColorRGBExp32 &c )
 		scalar = *reinterpret_cast<float *>(&fbits);
 	}
 
-	// We can totally wind up above 255 and that's okay--but above 256 would be right out.
-	Assert(vin.x * scalar < 256.0f && 
-		   vin.y * scalar < 256.0f && 
-		   vin.z * scalar < 256.0f);
+	// we should never need to clamp:
+	Assert(vin.x * scalar <= 255.0f && 
+		   vin.y * scalar <= 255.0f && 
+		   vin.z * scalar <= 255.0f);
 
 	// This awful construction is necessary to prevent VC2005 from using the 
 	// fldcw/fnstcw control words around every float-to-unsigned-char operation.
 	{
-		int red = (vin.x * scalar);
-		int green = (vin.y * scalar);
-		int blue = (vin.z * scalar);
+		int red = ( int )(vin.x * scalar);
+		int green = ( int )(vin.y * scalar);
+		int blue = ( int )(vin.z * scalar);
 
 		c.r = red;
 		c.g = green;

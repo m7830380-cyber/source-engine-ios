@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -23,6 +23,9 @@
 #include "FilteredComboBox.h"
 #include "AnchorMgr.h"
 #include "ModelBrowser.h"
+#include "dlglistmanage.h"
+#include "particlebrowser.h"
+
 
 class CEditGameClass;
 class COP_Entity;
@@ -163,7 +166,7 @@ private:
 };
 
 
-class COP_Entity : public CObjectPage, CFilteredComboBox::ICallbacks, public CColoredListCtrl::IItemColorCallback
+class COP_Entity : public CObjectPage, CFilteredComboBox::ICallbacks, public CColoredListCtrl::IItemColorCallback, public IDlgListManageBrowse
 {
 	DECLARE_DYNCREATE(COP_Entity)
 	typedef CObjectPage BaseClass;
@@ -183,7 +186,7 @@ class COP_Entity : public CObjectPage, CFilteredComboBox::ICallbacks, public CCo
 		//
 		// Interface for property sheet.
 		//
-		virtual bool SaveData(void);
+		virtual bool SaveData( SaveData_Reason_t reason );
 		virtual void UpdateData( int Mode, PVOID pData, bool bCanEdit );
 		virtual void RememberState(void);
 
@@ -231,6 +234,10 @@ class COP_Entity : public CObjectPage, CFilteredComboBox::ICallbacks, public CCo
 		virtual void GetItemColor( int iItem, COLORREF *pBackgroundColor, COLORREF *pTextColor );
 		virtual bool CustomDrawItemValue( const LPDRAWITEMSTRUCT p, const RECT *pRect );
 
+	// Implementation of IDlgListManageBrowse
+
+		virtual bool HandleBrowse( CStringList &lstBrowse );
+
 
 	// Other functions.
 
@@ -277,6 +284,7 @@ class COP_Entity : public CObjectPage, CFilteredComboBox::ICallbacks, public CCo
 		afx_msg void OnBrowse(void);
 		afx_msg void OnBrowseInstance(void);
 		afx_msg void OnPlaySound(void);
+		afx_msg void OnManageList(void);
 		virtual BOOL OnInitDialog();
 		afx_msg void OnSelchangeKeyvalues();
 		afx_msg void OnRemovekeyvalue();
@@ -308,6 +316,7 @@ class COP_Entity : public CObjectPage, CFilteredComboBox::ICallbacks, public CCo
 
 		void BrowseTextures( const char *szFilter, bool bIsSprite = false ); 
 		bool BrowseModels( char *szModelName, int length, int &nSkin );
+		bool BrowseParticles( char *szParticleSysName, int length );
 		void MergeObjectKeyValues(CEditGameClass *pEdit);
 		void MergeKeyValue(char const *pszKey);
 		void SetCurKey(LPCTSTR pszKey);
@@ -356,7 +365,7 @@ class COP_Entity : public CObjectPage, CFilteredComboBox::ICallbacks, public CCo
 		bool m_bSmartedit;
 		int m_nNewKeyCount;
 
-		CEdit		*m_pEditInstanceVariable, *m_pEditInstanceValue;
+		CEdit		*m_pEditInstanceVariable, *m_pEditInstanceValue, *m_pEditInstanceDefault;
 		CMyComboBox	*m_pComboInstanceParmType;
 
 		// Used to prevent unnecessary calls to PresentProperties.
@@ -408,7 +417,8 @@ class COP_Entity : public CObjectPage, CFilteredComboBox::ICallbacks, public CCo
 		// Used when multiselecting classes to remember whether they've selected a class
 		// or not yet.
 		bool m_bClassSelectionEmpty;
-		CModelBrowser *pModelBrowser; 
+		CModelBrowser *m_pModelBrowser; 
+		CParticleBrowser *m_pParticleBrowser; 
 
 	friend class CPickAnglesTarget;
 	friend class CPickEntityTarget;

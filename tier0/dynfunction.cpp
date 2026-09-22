@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright (c) 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Shared library loading and symbol lookup.
 //
@@ -9,6 +9,9 @@
 #include "tier0/dynfunction.h"
 
 #if defined(WIN32)
+
+#include <windows.h>
+
 typedef HMODULE LibraryHandle;
 #define LoadLibraryHandle(libname) LoadLibrary(libname)
 #define CloseLibraryHandle(handle) FreeLibrary(handle)
@@ -23,7 +26,7 @@ typedef void *LibraryHandle;
 #error Please define your platform.
 #endif
 
-#if 1
+#ifndef DEBUG
 static inline void dbgdynfn(const char *fmt, ...) {}
 #else
 #define dbgdynfn printf

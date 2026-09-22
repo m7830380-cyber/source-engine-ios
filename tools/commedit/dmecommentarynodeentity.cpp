@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2005, Valve Corporation, All rights reserved. =======
 //
 // Purpose: 
 //
@@ -13,7 +13,7 @@
 #include "engine/iclientleafsystem.h"
 #include "toolutils/enginetools_int.h"
 #include "commedittool.h"
-#include "KeyValues.h"
+#include "keyvalues.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
@@ -90,7 +90,7 @@ void CDmeCommentaryNodeEntity::OnAttributeChanged( CDmAttribute *pAttribute )
 	 
 	if ( pAttribute == m_ClassName.GetAttribute() )
 	{
-		m_bInfoTarget = !Q_strncmp( m_ClassName, "info_target", 11 );
+		m_bInfoTarget = !Q_strncmp( m_ClassName, "info_target", 11 ) || !Q_strcmp( m_ClassName, "info_remarkable" );
 		if ( !Q_stricmp( m_ClassName, "point_commentary_node" ) )
 		{
 			SetModelName( "models/extras/info_speech.mdl" );
@@ -100,6 +100,7 @@ void CDmeCommentaryNodeEntity::OnAttributeChanged( CDmAttribute *pAttribute )
 		{
 			SetModelName( NULL );
 		}
+		OnTranslucencyTypeChanged();
 		return;
 	}
 }
@@ -120,15 +121,18 @@ int CDmeCommentaryNodeEntity::GetEntityId() const
 void CDmeCommentaryNodeEntity::MarkDirty( bool bDirty )
 {
 	m_bIsDirty = bDirty;
+	OnTranslucencyTypeChanged();
 }
 
 
 //-----------------------------------------------------------------------------
 // Is the renderable transparent?
 //-----------------------------------------------------------------------------
-bool CDmeCommentaryNodeEntity::IsTransparent( void )
+RenderableTranslucencyType_t CDmeCommentaryNodeEntity::ComputeTranslucencyType( void )
 {
-	return m_bIsDirty || m_bInfoTarget || BaseClass::IsTransparent();
+	if ( m_bIsDirty || m_bInfoTarget )
+		return RENDERABLE_IS_TRANSLUCENT;
+	return BaseClass::ComputeTranslucencyType();
 }
 
 	
@@ -252,7 +256,7 @@ void CDmeCommentaryNodeEntity::DrawSprite( IMaterial *pMaterial )
 //-----------------------------------------------------------------------------
 // Draws the helper for the entity
 //-----------------------------------------------------------------------------
-int CDmeCommentaryNodeEntity::DrawModel( int flags )
+int CDmeCommentaryNodeEntity::DrawModel( int flags, const RenderableInstance_t &instance )
 {  
 	bool bSelected = ( g_pCommEditTool->GetCurrentEntity().Get() == this );
 	if ( !m_bInfoTarget )
@@ -270,7 +274,7 @@ int CDmeCommentaryNodeEntity::DrawModel( int flags )
 		{
 			GetMDL()->m_Color.SetColor( 255, 255, 255, nAlpha );
 		}
-		return BaseClass::DrawModel( flags );
+		return BaseClass::DrawModel( flags, instance );
 	}
 
 	Assert( IsDrawingInEngine() );

@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -27,7 +27,7 @@
 #include "tier1/strtools.h"
 #include "faceposer_models.h"
 #include "UtlBuffer.h"
-#include "filesystem.h"
+#include "FileSystem.h"
 #include "iscenetokenprocessor.h"
 #include "MatSysWin.h"
 #include "choreoviewcolors.h"
@@ -1166,7 +1166,7 @@ void ExpressionTool::SetEvent( CChoreoEvent *event )
 //-----------------------------------------------------------------------------
 bool ExpressionTool::HasCopyData( void )
 {
-	return ( m_CopyData[0].Size() != 0 ) ? true : false;
+	return ( m_CopyData[0].Count() != 0 ) ? true : false;
 }
 
 //-----------------------------------------------------------------------------
@@ -1203,7 +1203,7 @@ void ExpressionTool::Paste( CFlexAnimationTrack *destination )
 
 	for ( int t = 0; t < 2; t++ )
 	{
-		for ( int i = 0; i < m_CopyData[ t ].Size() ; i++ )
+		for ( int i = 0; i < m_CopyData[ t ].Count() ; i++ )
 		{
 			CExpressionSample *s = &m_CopyData[ t ][ i ];
 
@@ -1280,9 +1280,9 @@ void ExpressionTool::GetScrubHandleRect( RECT& rcHandle, bool clipped )
 //-----------------------------------------------------------------------------
 void ExpressionTool::DrawScrubHandle( CChoreoWidgetDrawHelper& drawHelper, RECT& rcHandle )
 {
-	HBRUSH br = CreateSolidBrush( RGB( 0, 150, 100 ) );
+	HBRUSH br = CreateSolidBrush( ColorToRGB( Color( 0, 150, 100 ) ) );
 
-	COLORREF areaBorder = RGB( 230, 230, 220 );
+	Color areaBorder = Color( 230, 230, 220 );
 
 	drawHelper.DrawColoredLine( areaBorder,
 		PS_SOLID, 1, 0, rcHandle.top, w2(), rcHandle.top );
@@ -1317,7 +1317,7 @@ void ExpressionTool::DrawScrubHandle( CChoreoWidgetDrawHelper& drawHelper, RECT&
 
 	rcText.left += ( textw - len ) / 2;
 
-	drawHelper.DrawColoredText( "Arial", 9, 500, RGB( 255, 255, 255 ), rcText, sz );
+	drawHelper.DrawColoredText( "Arial", 9, 500, Color( 255, 255, 255 ), rcText, sz );
 
 	DeleteObject( br );
 }
@@ -1455,7 +1455,7 @@ void ExpressionTool::redraw()
 	CChoreoWidgetDrawHelper drawHelper( this );
 	HandleToolRedraw( drawHelper );
 
-	COLORREF areaBorder = RGB( 230, 230, 220 );
+	Color areaBorder = Color( 230, 230, 220 );
 
 	RECT rcSelection;
 	GetWorkspaceRect( rcSelection );
@@ -1478,10 +1478,10 @@ void ExpressionTool::redraw()
 		rcSelection.right = right;
 		rcSelection.bottom = TRAY_HEIGHT;
 		
-		drawHelper.DrawFilledRect( RGB( 200, 220, 230 ), rcSelection );
+		drawHelper.DrawFilledRect( Color( 200, 220, 230 ), rcSelection );
 
-		drawHelper.DrawColoredLine( RGB( 100, 100, 255 ), PS_SOLID, 3, rcSelection.left, rcSelection.top, rcSelection.left, rcSelection.bottom );
-		drawHelper.DrawColoredLine( RGB( 100, 100, 255 ), PS_SOLID, 3, rcSelection.right, rcSelection.top, rcSelection.right, rcSelection.bottom );
+		drawHelper.DrawColoredLine( Color( 100, 100, 255 ), PS_SOLID, 3, rcSelection.left, rcSelection.top, rcSelection.left, rcSelection.bottom );
+		drawHelper.DrawColoredLine( Color( 100, 100, 255 ), PS_SOLID, 3, rcSelection.right, rcSelection.top, rcSelection.right, rcSelection.bottom );
 
 	}
 
@@ -1505,7 +1505,7 @@ void ExpressionTool::redraw()
 			RECT rcUndo = rcText;
 			OffsetRect( &rcUndo, 0, 2 );
 
-			drawHelper.DrawColoredText( "Small Fonts", 8, FW_NORMAL, RGB( 0, 100, 0 ), rcUndo,
+			drawHelper.DrawColoredText( "Small Fonts", 8, FW_NORMAL, Color( 0, 100, 0 ), rcUndo,
 				"Undo:  %i/%i", current, total );
 		}
 
@@ -1513,7 +1513,7 @@ void ExpressionTool::redraw()
 		
 		// Found it, write out description
 		// 
-		drawHelper.DrawColoredText( "Arial", 11, 900, RGB( 200, 150, 100 ), rcText,
+		drawHelper.DrawColoredText( "Arial", 11, 900, Color( 200, 150, 100 ), rcText,
 			"Event:  %s",
 			ev->GetName() );
 
@@ -1536,7 +1536,7 @@ void ExpressionTool::redraw()
 
 		Q_snprintf( sz, sizeof( sz ), "%.2f", st );
 
-		drawHelper.DrawColoredText( "Arial", 9, FW_NORMAL, RGB( 0, 0, 0 ), timeRect, sz );
+		drawHelper.DrawColoredText( "Arial", 9, FW_NORMAL, Color( 0, 0, 0 ), timeRect, sz );
 
 		timeRect = rcText;
 
@@ -1547,7 +1547,7 @@ void ExpressionTool::redraw()
 		timeRect.right = w2() - 10;
 		timeRect.left = timeRect.right - textW;
 
-		drawHelper.DrawColoredText( "Arial", 9, FW_NORMAL, RGB( 0, 0, 0 ), timeRect, sz );
+		drawHelper.DrawColoredText( "Arial", 9, FW_NORMAL, Color( 0, 0, 0 ), timeRect, sz );
 	}
 
 	RECT rcHandle;
@@ -1716,7 +1716,7 @@ void ExpressionTool::DrawRelativeTags( CChoreoWidgetDrawHelper& drawHelper )
 					if ( clipped )
 						continue;
 
-					//drawHelper.DrawColoredLine( RGB( 180, 180, 220 ), PS_SOLID, 1, tagx, rcClient.top, tagx, rcClient.bottom );
+					//drawHelper.DrawColoredLine( Color( 180, 180, 220 ), PS_SOLID, 1, tagx, rcClient.top, tagx, rcClient.bottom );
 					
 					RECT rcMark;
 					rcMark = rcClient;
@@ -1724,7 +1724,7 @@ void ExpressionTool::DrawRelativeTags( CChoreoWidgetDrawHelper& drawHelper )
 					rcMark.left = tagx - 3;
 					rcMark.right = tagx + 3;
 					
-					drawHelper.DrawTriangleMarker( rcMark, RGB( 0, 100, 250 ) );
+					drawHelper.DrawTriangleMarker( rcMark, Color( 0, 100, 250 ) );
 					
 					RECT rcText;
 					rcText = rcMark;
@@ -1736,7 +1736,7 @@ void ExpressionTool::DrawRelativeTags( CChoreoWidgetDrawHelper& drawHelper )
 					
 					rcText.bottom = rcText.top + 10;
 					
-					drawHelper.DrawColoredText( "Arial", 9, FW_NORMAL, RGB( 0, 100, 200 ), rcText, tag->GetName() );
+					drawHelper.DrawColoredText( "Arial", 9, FW_NORMAL, Color( 0, 100, 200 ), rcText, tag->GetName() );
 
 				}
 			}
@@ -1754,7 +1754,7 @@ void ExpressionTool::DrawRelativeTags( CChoreoWidgetDrawHelper& drawHelper )
 		if ( !GetTimingTagRect( rcClient, event, tag, rcMark ) )
 			continue;
 
-		drawHelper.DrawTriangleMarker( rcMark, RGB( 250, 100, 0 ) );
+		drawHelper.DrawTriangleMarker( rcMark, Color( 250, 100, 0 ) );
 		
 		RECT rcText;
 		rcText = rcMark;
@@ -1773,7 +1773,7 @@ void ExpressionTool::DrawRelativeTags( CChoreoWidgetDrawHelper& drawHelper )
 		
 		rcText.bottom = rcText.top + 10;
 		
-		drawHelper.DrawColoredText( "Arial", 9, FW_NORMAL, RGB( 200, 100, 0 ), rcText, text );
+		drawHelper.DrawColoredText( "Arial", 9, FW_NORMAL, Color( 200, 100, 0 ), rcText, text );
 
 	}
 }
@@ -2002,7 +2002,7 @@ void ExpressionTool::DrawFocusRect( void )
 {
 	HDC dc = GetDC( NULL );
 
-	for ( int i = 0; i < m_FocusRects.Size(); i++ )
+	for ( int i = 0; i < m_FocusRects.Count(); i++ )
 	{
 		RECT rc = m_FocusRects[ i ].m_rcFocus;
 
@@ -2132,7 +2132,7 @@ void ExpressionTool::OnMouseMove( mxEvent *event )
 	{
 		DrawFocusRect();
 
-		for ( int i = 0; i < m_FocusRects.Size(); i++ )
+		for ( int i = 0; i < m_FocusRects.Count(); i++ )
 		{
 			CFocusRect *f = &m_FocusRects[ i ];
 			f->m_rcFocus = f->m_rcOrig;
@@ -3958,7 +3958,7 @@ void ExpressionTool::DrawMouseOverPos( CChoreoWidgetDrawHelper& drawHelper, RECT
 	RECT rcText = rcPos;
 	rcText.left = max( rcPos.left, rcPos.right - len );
 
-	drawHelper.DrawColoredText( "Arial", 11, 900, RGB( 255, 50, 70 ), rcText, sz );
+	drawHelper.DrawColoredText( "Arial", 11, 900, Color( 255, 50, 70 ), rcText, sz );
 }
 
 //-----------------------------------------------------------------------------
@@ -4245,7 +4245,7 @@ void ExpressionTool::RepositionHSlider( void )
 	}
 	m_pHorzScrollBar->setBounds( 0, h2() - m_nScrollbarHeight, w2(), m_nScrollbarHeight );
 
-	m_flLeftOffset = max( 0.f, m_flLeftOffset );
+	m_flLeftOffset = max( 0, m_flLeftOffset );
 	m_flLeftOffset = min( (float)pixelsneeded, m_flLeftOffset );
 
 	m_pHorzScrollBar->setRange( 0, pixelsneeded );

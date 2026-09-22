@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -40,7 +40,7 @@ typedef struct
 
 } script_t;
 
-#define	MAX_INCLUDES	64
+#define	MAX_INCLUDES	16
 script_t	scriptstack[MAX_INCLUDES];
 script_t	*script = NULL;
 int			scriptline;
@@ -53,6 +53,7 @@ typedef struct
 {
 	char *param;
 	char *value;
+	char *param_lcase;
 } variable_t;
 
 CUtlVector<variable_t> g_definevariable;
@@ -131,7 +132,8 @@ void LoadScriptFile (char *filename, ScriptPathMode_t pathMode)
 ==============
 */
 
-script_t	*macrolist[256];
+#define MAX_MACROS 128
+script_t	*macrolist[MAX_MACROS];
 int nummacros;
 
 void DefineMacro( char *macroname )
@@ -198,6 +200,8 @@ void DefineMacro( char *macroname )
 	pmacro->end_p = &pmacro->buffer[size]; 
 
 	macrolist[nummacros++] = pmacro;
+	if ( nummacros == MAX_MACROS )
+		Error ("script file exceeded MAX_MACROS");
 
 	script->script_p = cp;
 }
@@ -212,11 +216,49 @@ void DefineVariable( char *variablename )
 	GetToken( false );
 	
 	v.value = strdup( token );
+	
+	v.param_lcase = strlwr( strdup(v.param) );
+
+	for ( int i=0; i<g_definevariable.Count(); i++ )
+	{
+		if ( !V_strcmp( g_definevariable[i].value, v.value ) )
+		{
+			Warning( "\"$definevariable %s %s\" already exists as \"%s\".", v.param_lcase, v.value, g_definevariable[i].param_lcase );
+		}
+	}
 
 	g_definevariable.AddToTail( v );
 }
 
+void RedefineVariable( char *variablename )
+{
+	variable_t v;
 
+	v.param = strdup( variablename );
+
+	GetToken( false );
+	
+	v.value = strdup( token );
+
+	int nIdx = -1;
+	for ( int i=0; i<g_definevariable.Count(); i++ )
+	{
+		if ( !V_strcmp( g_definevariable[i].param, v.param ) )
+		{
+			nIdx = i;
+			break;
+		}
+	}
+
+	if ( nIdx >= 0 )
+	{
+		g_definevariable[nIdx] = v;
+	}
+	else
+	{
+		Error("Cannot redefine undefined variable \"%s\". Use $definevariable instead.\n", v.param );
+	}
+}
 
 /*
 ==============
@@ -282,6 +324,35 @@ bool AddMacroToStack( char *macroname )
 }
 
 
+bool ExpandSubMacroToken( char *&token_p )
+{
+	if ( *token_p == '^' )
+	{
+		token_p++;
+
+		char * szPotentialVar = token_p;
+
+		while ( *token_p != '^' )
+		{
+			token_p++;
+		}
+
+		*token_p = '\0';
+
+		token_p = szPotentialVar;
+
+		int index;
+		for (index = 0; index < g_definevariable.Count(); index++)
+		{
+			if ( !Q_strcmp( g_definevariable[index].param, szPotentialVar ) )
+			{
+				strcpy( token, g_definevariable[index].value );
+				return true;
+			}
+		}
+	}
+	return false;
+}
 
 bool ExpandMacroToken( char *&token_p )
 {
@@ -365,10 +436,25 @@ bool ExpandVariableToken( char *&token_p )
 		int index;
 		for (index = 0; index < g_definevariable.Count(); index++)
 		{
-			if (Q_strnicmp( g_definevariable[index].param, tp, len ) == 0)
+			// [wills] just strcmp here, this was doing nearest partial comparison before which could result in a false positive variable name match. Bad!
+			if ( !Q_strcmp( g_definevariable[index].param, tp ) )
 				break;
 		}
 	
+		// if we can't find the variable, try again without case sensitivity, then complain loudly if we find anything
+		if (index >= g_definevariable.Count() )
+		{
+			for (index = 0; index < g_definevariable.Count(); index++)
+			{
+				char *tp_lower = strlwr(strdup(tp));
+				if ( !Q_strcmp( g_definevariable[index].param_lcase, tp_lower ) )
+				{
+					Warning( "Unknown variable token fell back to case-insensitive match ( found: \"%s\", matched it to: \"%s\" ) in %s\n", tp, g_definevariable[index].param, script->filename );
+					break;
+				}
+			}
+		}
+
 		if (index >= g_definevariable.Count() )
 		{
 			Error("unknown variable token \"%s\" in %s\n", tp, script->filename );
@@ -513,68 +599,46 @@ qboolean EndOfScript (qboolean crossline)
 	return GetToken (crossline);
 }
 
-
-//-----------------------------------------------------------------------------
-// Purpose: Given an absolute path, do a find first find next on it and build
-// a list of files.  Physical file system only
-//-----------------------------------------------------------------------------
-static void FindFileAbsoluteList( CUtlVector< CUtlString > &outAbsolutePathNames, const char *pszFindName )
+void AttemptConditionalInclude( void )
 {
-	char szPath[MAX_PATH];
-	V_strncpy( szPath, pszFindName, sizeof( szPath ) );
-	V_StripFilename( szPath );
+	// Look for additional $include parameters, and only perform the include if the condition succeeds.
+	// Right now, there's only a check for a file existing. This is a hacky way to get some logical
+	// processing into qc, short of giving it full language-like arbitrary expression evaluation.
 
-	char szResult[MAX_PATH];
-	FileFindHandle_t hFile = FILESYSTEM_INVALID_FIND_HANDLE;
+	GetToken (false);
 
-	for ( const char *pszFoundFile = g_pFullFileSystem->FindFirst( pszFindName, &hFile ); pszFoundFile && hFile != FILESYSTEM_INVALID_FIND_HANDLE; pszFoundFile = g_pFullFileSystem->FindNext( hFile ) )
+	char szSavedPath[MAX_PATH];
+	V_strcpy( szSavedPath, token );
+
+	// check for a conditional flag
+	
+	bool bConditionSuccess = true;
+
+	if ( TokenAvailable() )
 	{
-		V_ComposeFileName( szPath, pszFoundFile, szResult, sizeof( szResult ) );
-		outAbsolutePathNames.AddToTail( szResult );
+		GetToken (false);
+		if ( !stricmp (token, "iffileexists") )
+		{
+			bConditionSuccess = false;
+
+			if ( TokenAvailable() )
+			{
+				GetToken (false);
+				bConditionSuccess = g_pFullFileSystem->FileExists( token ) != 0;
+			}
+
+			printf("Condition 'iffileexists' for input '%s' is %s.\n", token, bConditionSuccess ? "True" : "False" );			
+		}
+		else
+		{
+			Error ("Unknown $include parameter %s\n",token);
+		}
 	}
 
-	g_pFullFileSystem->FindClose( hFile );
+	printf("%s: %s\n", bConditionSuccess ? "Including" : "SKIPPING", szSavedPath );
+	if ( bConditionSuccess )
+		AddScriptToStack( szSavedPath );
 }
-
-
-//-----------------------------------------------------------------------------
-// Data for checking for single character tokens while parsing
-//-----------------------------------------------------------------------------
-bool g_bCheckSingleCharTokens = false;
-CUtlString g_sSingleCharTokens;
-
-
-//-----------------------------------------------------------------------------
-// Sets whether the scriplib parser will do a special check for single
-// character tokens.  Returns previous state of whether single character
-// tokens will be checked.
-//-----------------------------------------------------------------------------
-bool SetCheckSingleCharTokens( bool bCheck )
-{
-	const bool bRetVal = g_bCheckSingleCharTokens;
-
-	g_bCheckSingleCharTokens = bCheck;
-
-	return bRetVal;
-}
-
-
-//-----------------------------------------------------------------------------
-// Sets the list of single character tokens to check if SetCheckSingleCharTokens
-// is turned on.
-//-----------------------------------------------------------------------------
-CUtlString SetSingleCharTokenList( const char *pszSingleCharTokenList )
-{
-	const CUtlString sRetVal = g_sSingleCharTokens;
-
-	if ( pszSingleCharTokenList )
-	{
-		g_sSingleCharTokens = pszSingleCharTokenList;
-	}
-
-	return sRetVal;
-}
-
 
 /*
 ==============
@@ -677,10 +741,6 @@ skipspace:
 		}
 		script->script_p++;
 	}
-	else if ( g_bCheckSingleCharTokens && !g_sSingleCharTokens.IsEmpty() && strchr( g_sSingleCharTokens.String(), *script->script_p ) != NULL )
-	{
-		*token_p++ = *script->script_p++;
-	}
 	else	// regular token
 	while ( *script->script_p > 32 && *script->script_p != ';')
 	{
@@ -701,43 +761,18 @@ skipspace:
 	// add null to end of token
 	*token_p = 0;
 
-	// check for other commands
-	if ( !stricmp( token, "$include" ) )
+	// quick hack: check for submacro variables
+	char *token_submacro = token;
+	if ( ExpandSubMacroToken(token_submacro) )
 	{
-		GetToken( false );
+		return true;
+	}
 
-		bool bFallbackToToken = true;
-
-		CUtlVector< CUtlString > expandedPathList;
-
-		if ( CmdLib_ExpandWithBasePaths( expandedPathList, token ) > 0 )
-		{
-			for ( int i = 0; i < expandedPathList.Count(); ++i )
-			{
-				CUtlVector< CUtlString > findFileList;
-				FindFileAbsoluteList( findFileList, expandedPathList[i].String() );
-
-				if ( findFileList.Count() > 0 )
-				{
-					bFallbackToToken = false;
-
-					// Only add the first set of glob matches from the first base path
-					for ( int j = 0; j < findFileList.Count(); ++j )
-					{
-						AddScriptToStack( const_cast< char * >( findFileList[j].String() ) );
-					}
-
-					break;
-				}
-			}
-		}
-
-		if ( bFallbackToToken )
-		{
-			AddScriptToStack( token );
-		}
-
-		return GetToken( crossline );
+	// check for other commands
+	if (!stricmp (token, "$include"))
+	{
+		AttemptConditionalInclude();
+		return GetToken (crossline);
 	}
 	else if (!stricmp (token, "$definemacro"))
 	{
@@ -749,6 +784,12 @@ skipspace:
 	{
 		GetToken (false);
 		DefineVariable(token);
+		return GetToken (crossline);
+	}
+	else if (!stricmp (token, "$redefinevariable"))
+	{
+		GetToken (false);
+		RedefineVariable(token);
 		return GetToken (crossline);
 	}
 	else if (AddMacroToStack( token ))
@@ -866,8 +907,7 @@ skipspace:
 
 	if (!stricmp (token, "$include"))
 	{
-		GetToken (false);
-		AddScriptToStack (token);
+		AttemptConditionalInclude();
 		return GetToken (crossline);
 	}
 
@@ -1216,7 +1256,7 @@ int CScriptLib::GetFileList( const char* pDirPath, const char* pPattern, CUtlVec
 	FIND_DATA findData;
 	Q_FixSlashes( fullPath );
 	void *h = FindFirstFile( fullPath, &findData );
-	if ( (int)h == -1 )
+	if ( (intp)h == -1 )
 	{
 		return 0;
 	}
@@ -1251,10 +1291,10 @@ int CScriptLib::GetFileList( const char* pDirPath, const char* pPattern, CUtlVec
 		fileList[j].fileName.Set( fileName );
 		struct stat statbuf;
 		if ( stat( fileName, &statbuf ) )
-#ifdef OSX
-			fileList[j].timeWrite = statbuf.st_mtimespec.tv_sec;
-#else
+#ifdef LINUX
 			fileList[j].timeWrite = statbuf.st_mtime;
+#else
+			fileList[j].timeWrite = statbuf.st_mtimespec.tv_sec;
 #endif
 		else
 			fileList[j].timeWrite = 0;

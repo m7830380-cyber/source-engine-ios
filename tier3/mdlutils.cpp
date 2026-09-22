@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright � 2005-2013, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: Utility methods for mdl files
 //
@@ -6,11 +6,19 @@
 
 #include "tier3/mdlutils.h"
 #include "tier0/dbg.h"
-#include "tier1/callqueue.h"
 #include "tier3/tier3.h"
 #include "studio.h"
 #include "istudiorender.h"
 #include "bone_setup.h"
+#include "bone_accessor.h"
+#include "materialsystem/imaterialvar.h"
+#include "vcollide_parse.h"
+#include "renderparm.h"
+#include "tier2/renderutils.h"
+#include "mathlib/camera.h"
+
+// NOTE: This has to be the last file included!
+#include "tier0/memdbgon.h"
 
 
 //-----------------------------------------------------------------------------
@@ -80,6 +88,52 @@ void GetMDLBoundingSphere( Vector *pVecCenter, float *pRadius, MDLHandle_t h, in
 
 
 //-----------------------------------------------------------------------------
+// Determines which pose parameters are used by the specified sequence
+//-----------------------------------------------------------------------------
+void FindSequencePoseParameters( CStudioHdr &hdr, int nSequence, bool *pPoseParameters, int nCount )
+{
+	if ( ( nSequence < 0 ) && ( nSequence >= hdr.GetNumSeq() ) )
+		return;
+
+	const mstudioseqdesc_t &seqdesc = hdr.pSeqdesc( nSequence );
+
+	// Add the pose parameters that are directly referenced by this sequence
+	int nParamIndex;
+	nParamIndex = hdr.GetSharedPoseParameter( nSequence, seqdesc.paramindex[ 0 ] );
+	if ( ( nParamIndex >= 0 ) && ( nParamIndex < nCount ) )
+	{	
+		pPoseParameters[ nParamIndex ] = true;
+	}
+
+	nParamIndex = hdr.GetSharedPoseParameter( nSequence, seqdesc.paramindex[ 1 ] );
+	if ( ( nParamIndex >= 0 ) && ( nParamIndex < nCount ) )
+	{
+		pPoseParameters[ nParamIndex ] = true;
+	}
+
+	if ( seqdesc.flags & STUDIO_CYCLEPOSE )
+	{
+		nParamIndex = hdr.GetSharedPoseParameter( nSequence, seqdesc.cycleposeindex );
+		if ( ( nParamIndex >= 0 ) && ( nParamIndex < nCount ) )
+		{
+			pPoseParameters[ nParamIndex ] = true;
+		}
+	}
+
+	// Now recursively add the parameters for the auto layers
+	for ( int i = 0; i < seqdesc.numautolayers; ++i )
+	{
+		const mstudioautolayer_t *pLayer = seqdesc.pAutolayer( i );
+		int nLayerSequence = hdr.iRelativeSeq( nSequence, pLayer->iSequence );
+		if ( nLayerSequence != nSequence )
+		{
+			FindSequencePoseParameters( hdr, nLayerSequence, pPoseParameters, nCount );
+		}
+	}
+}
+
+
+//-----------------------------------------------------------------------------
 // Constructor
 //-----------------------------------------------------------------------------
 CMDL::CMDL()
@@ -96,11 +150,42 @@ CMDL::CMDL()
 	m_bWorldSpaceViewTarget = false;
 	memset( m_pFlexControls, 0, sizeof(m_pFlexControls) );
 	m_pProxyData = NULL;
+	m_bUseSequencePlaybackFPS = false;
+	m_flTimeBasisAdjustment = 0.0f;
+
+	// Deal with the default cubemap
+	ITexture *pCubemapTexture = g_pMaterialSystem->FindTexture( "editor/cubemap", NULL, true );
+	m_DefaultEnvCubemap.Init( pCubemapTexture );
+	pCubemapTexture = g_pMaterialSystem->FindTexture( "editor/cubemap.hdr", NULL, true );
+	m_DefaultHDREnvCubemap.Init( pCubemapTexture );
+
+	m_pSimpleMaterialOverride = NULL;
 }
 
 CMDL::~CMDL()
 {
+	m_DefaultEnvCubemap.Shutdown( );
+	m_DefaultHDREnvCubemap.Shutdown();
+
+	if ( m_pSimpleMaterialOverride != NULL )
+	{
+		m_pSimpleMaterialOverride.Shutdown();
+		m_pSimpleMaterialOverride = NULL;
+	}
+
 	UnreferenceMDL();
+}
+
+ITexture *CMDL::GetEnvCubeMap()
+{
+	if ( g_pMaterialSystemHardwareConfig->GetHDRType() == HDR_TYPE_NONE )
+	{
+		return m_DefaultEnvCubemap;
+	}
+	else
+	{
+		return m_DefaultHDREnvCubemap;
+	}
 }
 
 void CMDL::SetMDL( MDLHandle_t h )
@@ -110,8 +195,8 @@ void CMDL::SetMDL( MDLHandle_t h )
 	if ( m_MDLHandle != MDLHANDLE_INVALID )
 	{
 		g_pMDLCache->AddRef( m_MDLHandle );
-		
-		studiohdr_t *pHdr = g_pMDLCache->LockStudioHdr( m_MDLHandle );
+
+		studiohdr_t *pHdr = g_pMDLCache->GetStudioHdr( m_MDLHandle );
 
 		if ( pHdr )
 		{
@@ -121,6 +206,21 @@ void CMDL::SetMDL( MDLHandle_t h )
 				{
 					pHdr->pFlexcontroller( i )->localToGlobal = i;
 				}
+			}
+
+			if ( m_Attachments.Count() != pHdr->GetNumAttachments() )
+			{
+				m_Attachments.SetSize( pHdr->GetNumAttachments() );
+
+				// This is to make sure we don't use the attachment before its been set up
+				for ( int i=0; i < m_Attachments.Count(); i++ )
+				{
+					m_Attachments[i].m_bValid = false;
+#ifdef _DEBUG
+					m_Attachments[i].m_AttachmentToWorld.Invalidate();
+#endif
+				}
+
 			}
 		}
 	}
@@ -142,21 +242,7 @@ void CMDL::UnreferenceMDL()
 
 	if ( m_MDLHandle != MDLHANDLE_INVALID )
 	{
-		// XXX need to figure out where it is safe to flush the queue during map change to not crash
-#if 0
-		if ( ICallQueue *pCallQueue = materials->GetRenderContext()->GetCallQueue() )
-		{
-			// Parallel rendering: don't unlock model data until end of rendering
-			pCallQueue->QueueCall( g_pMDLCache, &IMDLCache::UnlockStudioHdr, m_MDLHandle );
-			pCallQueue->QueueCall( g_pMDLCache, &IMDLCache::Release, m_MDLHandle );
-		}
-		else
-#endif
-		{
-			// Immediate-mode rendering, can unlock immediately
-			g_pMDLCache->UnlockStudioHdr( m_MDLHandle );
-			g_pMDLCache->Release( m_MDLHandle );
-		}
+		g_pMDLCache->Release( m_MDLHandle );
 		m_MDLHandle = MDLHANDLE_INVALID;
 	}
 }
@@ -173,10 +259,16 @@ studiohdr_t *CMDL::GetStudioHdr()
 }
 
 
+void CMDL::SetSimpleMaterialOverride( IMaterial *pNewMaterial )
+{
+	m_pSimpleMaterialOverride.Init( pNewMaterial );
+}
+
+
 //-----------------------------------------------------------------------------
 // Draws the mesh
 //-----------------------------------------------------------------------------
-void CMDL::Draw( const matrix3x4_t& rootToWorld, const matrix3x4_t *pBoneToWorld )
+void CMDL::Draw( const matrix3x4_t& rootToWorld, const matrix3x4_t *pBoneToWorld, int flags )
 {
 	if ( !g_pMaterialSystem || !g_pMDLCache || !g_pStudioRender )
 		return;
@@ -212,8 +304,8 @@ void CMDL::Draw( const matrix3x4_t& rootToWorld, const matrix3x4_t *pBoneToWorld
 	}
 	g_pStudioRender->SetEyeViewTarget( info.m_pStudioHdr, info.m_Body, vecWorldViewTarget );
 
-	// FIXME: Why is this necessary!?!?!?
 	CMatRenderContextPtr pRenderContext( g_pMaterialSystem );
+	CMatRenderData< float > rdFlexWeights( pRenderContext );
 
 	// Set default flex values
 	float *pFlexWeights = NULL;
@@ -221,16 +313,41 @@ void CMDL::Draw( const matrix3x4_t& rootToWorld, const matrix3x4_t *pBoneToWorld
 	if ( nFlexDescCount )
 	{
 		CStudioHdr cStudioHdr( info.m_pStudioHdr, g_pMDLCache );
-
-		g_pStudioRender->LockFlexWeights( info.m_pStudioHdr->numflexdesc, &pFlexWeights );
+		pFlexWeights = rdFlexWeights.Lock( info.m_pStudioHdr->numflexdesc );
 		cStudioHdr.RunFlexRules( m_pFlexControls, pFlexWeights );
-		g_pStudioRender->UnlockFlexWeights();
 	}
 
 	Vector vecModelOrigin;
 	MatrixGetColumn( rootToWorld, 3, vecModelOrigin );
+
+
+	bool bOverride = false;
+	static ConVarRef cl_custom_material_override( "cl_custom_material_override" );
+	if ( cl_custom_material_override.IsValid() && cl_custom_material_override.GetBool() && !g_pStudioRender->IsForcedMaterialOverride() )
+	{
+		for ( int i = 0; i < GetCustomMaterialCount(); i++ )
+		{
+			if ( IsCustomMaterialValid( i ) )
+			{
+				g_pStudioRender->ForcedMaterialOverride( GetCustomMaterial( i )->GetMaterial(), OVERRIDE_SELECTIVE, i );
+				bOverride = true;
+			}
+		}
+	}
+
+	if ( m_pSimpleMaterialOverride != NULL )
+	{
+		bOverride = true;
+		g_pStudioRender->ForcedMaterialOverride( m_pSimpleMaterialOverride );
+	}
+
 	g_pStudioRender->DrawModel( NULL, info, const_cast<matrix3x4_t*>( pBoneToWorld ), 
-		pFlexWeights, NULL, vecModelOrigin, STUDIORENDER_DRAW_ENTIRE_MODEL );
+		pFlexWeights, NULL, vecModelOrigin, STUDIORENDER_DRAW_ENTIRE_MODEL | flags );
+
+	if ( bOverride )
+	{
+		g_pStudioRender->ForcedMaterialOverride( NULL );
+	}
 }
 
 void CMDL::Draw( const matrix3x4_t &rootToWorld )
@@ -243,60 +360,69 @@ void CMDL::Draw( const matrix3x4_t &rootToWorld )
 
 	studiohdr_t *pStudioHdr = g_pMDLCache->GetStudioHdr( m_MDLHandle );
 
-	matrix3x4_t *pBoneToWorld = g_pStudioRender->LockBoneMatrices( pStudioHdr->numbones );
-	SetUpBones( rootToWorld, pStudioHdr->numbones, pBoneToWorld );
-	g_pStudioRender->UnlockBoneMatrices();
-
-	Draw( rootToWorld, pBoneToWorld );
+	CMatRenderContextPtr pRenderContext( g_pMaterialSystem );
+	CMatRenderData< matrix3x4_t > rdBoneToWorld( pRenderContext, pStudioHdr->numbones );
+	SetUpBones( rootToWorld, pStudioHdr->numbones, rdBoneToWorld.Base() );
+	Draw( rootToWorld, rdBoneToWorld.Base() );
 }
 
 
 void CMDL::SetUpBones( const matrix3x4_t& rootToWorld, int nMaxBoneCount, matrix3x4_t *pBoneToWorld, const float *pPoseParameters, MDLSquenceLayer_t *pSequenceLayers, int nNumSequenceLayers )
 {
+	MDLCACHE_CRITICAL_SECTION();
+
 	CStudioHdr studioHdr( g_pMDLCache->GetStudioHdr( m_MDLHandle ), g_pMDLCache );
 
-	float pPoseParameter[MAXSTUDIOPOSEPARAM];
-	if ( pPoseParameters )
+	// Default to middle of the pose parameter range
+	float defaultPoseParameters[MAXSTUDIOPOSEPARAM];
+	if ( pPoseParameters == NULL )
 	{
-		V_memcpy( pPoseParameter, pPoseParameters, sizeof(pPoseParameter) );
-	}
-	else
-	{
-		// Default to middle of the pose parameter range
-		int nPoseCount = studioHdr.GetNumPoseParameters();
-		for ( int i = 0; i < MAXSTUDIOPOSEPARAM; ++i )
-		{
-			pPoseParameter[i] = 0.5f;
-			if ( i < nPoseCount )
-			{
-				const mstudioposeparamdesc_t &Pose = studioHdr.pPoseParameter( i );
-
-				// Want to try for a zero state.  If one doesn't exist set it to .5 by default.
-				if ( Pose.start < 0.0f && Pose.end > 0.0f )
-				{
-					float flPoseDelta = Pose.end - Pose.start;
-					pPoseParameter[i] = -Pose.start / flPoseDelta;
-				}
-			}
-		}
+		Studio_CalcDefaultPoseParameters( &studioHdr, defaultPoseParameters, MAXSTUDIOPOSEPARAM );
+		pPoseParameters = defaultPoseParameters;
 	}
 
-	int nFrameCount = Studio_MaxFrame( &studioHdr, m_nSequence, pPoseParameter );
+	int nFrameCount = Studio_MaxFrame( &studioHdr, m_nSequence, pPoseParameters );
 	if ( nFrameCount == 0 )
 	{
 		nFrameCount = 1;
 	}
-	float flCycle = ( m_flTime * m_flPlaybackRate ) / nFrameCount;
+	float flPlaybackRate = m_bUseSequencePlaybackFPS ? Studio_FPS( &studioHdr, m_nSequence, pPoseParameters ) : m_flPlaybackRate;
+	float flAdjustedTime = m_flTime - m_flTimeBasisAdjustment;
+	float flCycle = ( flAdjustedTime * flPlaybackRate ) / nFrameCount;
+	m_flCurrentAnimEndTime = flPlaybackRate > 0.0f ? float( nFrameCount ) / flPlaybackRate : float( nFrameCount );
+
+	if ( flCycle > 1.0f )
+	{
+		// We need to rollover into the next sequence followup
+		if ( flPlaybackRate > 0.0f && flAdjustedTime < float(flPlaybackRate) )
+			m_flTimeBasisAdjustment += float( nFrameCount ) / float( flPlaybackRate );
+		else
+			m_flTimeBasisAdjustment = m_flTime;
+
+		if ( m_arrSequenceFollowLoop.Count() )
+		{
+			m_nSequence = m_arrSequenceFollowLoop.Head();
+			m_arrSequenceFollowLoop.RemoveMultipleFromHead( 1 );
+			// Recurse with the updated sequence
+			SetUpBones( rootToWorld, nMaxBoneCount, pBoneToWorld, pPoseParameters, pSequenceLayers, nNumSequenceLayers );
+			return;
+		}
+		else
+		{
+			flAdjustedTime = m_flTime - m_flTimeBasisAdjustment;
+			flCycle = ( flAdjustedTime * flPlaybackRate ) / nFrameCount;
+		}
+	}
 
 	// FIXME: We're always wrapping; may want to determing if we should clamp
-	flCycle -= (int)(flCycle);
+	flCycle = SubtractIntegerPart(flCycle);
 
-	Vector		pos[MAXSTUDIOBONES];
-	Quaternion	q[MAXSTUDIOBONES];
+	BoneVector		pos[MAXSTUDIOBONES];
+	BoneQuaternionAligned	q[MAXSTUDIOBONES];
 
-	IBoneSetup boneSetup( &studioHdr, BONE_USED_BY_ANYTHING_AT_LOD( m_nLOD ), pPoseParameter, NULL );
+	IBoneSetup boneSetup( &studioHdr, BONE_USED_BY_ANYTHING_AT_LOD( m_nLOD ), pPoseParameters, NULL );
 	boneSetup.InitPose( pos, q );
-	boneSetup.AccumulatePose( pos, q, m_nSequence, flCycle, 1.0f, m_flTime, NULL );
+	boneSetup.AccumulatePose( pos, q, m_nSequence, flCycle, 1.0f, flAdjustedTime, NULL );
 
 	// Accumulate the additional layers if specified.
 	if ( pSequenceLayers )
@@ -309,32 +435,13 @@ void CMDL::SetUpBones( const matrix3x4_t& rootToWorld, int nMaxBoneCount, matrix
 			{				
 				float flWeight = pSequenceLayers[ i ].m_flWeight;
 
-				float flLayerCycle;
-				int nLayerFrameCount = MAX( 1, Studio_MaxFrame( &studioHdr, nSeqIndex, pPoseParameter ) );
+				int nFrameCount = MAX( 1, Studio_MaxFrame( &studioHdr, nSeqIndex, pPoseParameters ) );
+				float flLayerCycle = ( flAdjustedTime * flPlaybackRate ) / nFrameCount;
 
-				if ( pSequenceLayers[i].m_bNoLoop )
-				{
-					if ( pSequenceLayers[i].m_flCycleBeganAt == 0 )
-					{
-						pSequenceLayers[i].m_flCycleBeganAt = m_flTime;
-					}
+				// FIXME: We're always wrapping; may want to determing if we should clamp
+				flLayerCycle = SubtractIntegerPart(flLayerCycle);
 
-					float flElapsedTime = m_flTime - pSequenceLayers[i].m_flCycleBeganAt;
-					flLayerCycle = ( flElapsedTime * m_flPlaybackRate ) / nLayerFrameCount;
-
-					// Should we keep playing layers that have ended?
-					//if ( flLayerCycle >= 1.0 )
-						//continue;
-				}
-				else
-				{
-					flLayerCycle = ( m_flTime * m_flPlaybackRate ) / nLayerFrameCount;
-
-					// FIXME: We're always wrapping; may want to determing if we should clamp
-					flLayerCycle -= (int)(flLayerCycle);
-				}
-
-				boneSetup.AccumulatePose( pos, q, nSeqIndex, flLayerCycle, flWeight, m_flTime, NULL );
+				boneSetup.AccumulatePose( pos, q, nSeqIndex, flLayerCycle, flWeight, flAdjustedTime, NULL );
 			}
 		}
 	}
@@ -371,7 +478,14 @@ void CMDL::SetUpBones( const matrix3x4_t& rootToWorld, int nMaxBoneCount, matrix
 		QuaternionMatrix( q[i], boneMatrix );
 		MatrixSetColumn( pos[i], 3, boneMatrix );
 
-		if ( studioHdr.pBone(i)->parent == -1 ) 
+		// WARNING: converting from matrix3x4_t to matrix3x4a_t is going to asplode on a console.
+		// Calculate helper bones!
+		AssertAligned( pBoneToWorld );
+		CBoneAccessor tempCBoneAccessor( ( matrix3x4a_t * )pBoneToWorld );
+		if ( CalcProceduralBone( &studioHdr, i,  tempCBoneAccessor ) )
+		{
+		}
+		else if ( studioHdr.pBone(i)->parent == -1 ) 
 		{
 			ConcatTransforms( rootToWorld, boneMatrix, pBoneToWorld[i] );
 		} 
@@ -380,7 +494,10 @@ void CMDL::SetUpBones( const matrix3x4_t& rootToWorld, int nMaxBoneCount, matrix
 			ConcatTransforms( pBoneToWorld[ studioHdr.pBone(i)->parent ], boneMatrix, pBoneToWorld[i] );
 		}
 	}
+
 	Studio_RunBoneFlexDrivers( m_pFlexControls, &studioHdr, pos, pBoneToWorld, rootToWorld );
+
+	SetupBones_AttachmentHelper( &studioHdr, pBoneToWorld );
 }
 
 //-----------------------------------------------------------------------------
@@ -390,44 +507,56 @@ void CMDL::SetupBonesWithBoneMerge( const CStudioHdr *pMergeHdr, matrix3x4_t *pM
 								    const CStudioHdr *pFollow, const matrix3x4_t *pFollowBoneToWorld,
 									const matrix3x4_t &matModelToWorld )
 {
+
 	// Default to middle of the pose parameter range
-	int nPoseCount = pMergeHdr->GetNumPoseParameters();
-	float pPoseParameter[MAXSTUDIOPOSEPARAM];
-	for ( int i = 0; i < MAXSTUDIOPOSEPARAM; ++i )
-	{
-		pPoseParameter[i] = 0.5f;
-		if ( i < nPoseCount )
-		{
-			const mstudioposeparamdesc_t &Pose = ((CStudioHdr *)pMergeHdr)->pPoseParameter( i );
+	float flPoseParameter[MAXSTUDIOPOSEPARAM];
+	Studio_CalcDefaultPoseParameters( pMergeHdr, flPoseParameter, MAXSTUDIOPOSEPARAM );
 
-			// Want to try for a zero state.  If one doesn't exist set it to .5 by default.
-			if ( Pose.start < 0.0f && Pose.end > 0.0f )
-			{
-				float flPoseDelta = Pose.end - Pose.start;
-				pPoseParameter[i] = -Pose.start / flPoseDelta;
-			}
-		}
-	}
-
-	int nFrameCount = Studio_MaxFrame( pMergeHdr, m_nSequence, pPoseParameter );
+	int nFrameCount = Studio_MaxFrame( pMergeHdr, m_nSequence, flPoseParameter );
 	if ( nFrameCount == 0 )
 	{
 		nFrameCount = 1;
 	}
-	float flCycle = ( m_flTime * m_flPlaybackRate ) / nFrameCount;
+	float flPlaybackRate = m_bUseSequencePlaybackFPS ? Studio_FPS( pMergeHdr, m_nSequence, flPoseParameter ) : m_flPlaybackRate;
+	float flAdjustedTime = m_flTime - m_flTimeBasisAdjustment;
+	float flCycle = ( flAdjustedTime * flPlaybackRate ) / nFrameCount;
+	m_flCurrentAnimEndTime = flPlaybackRate > 0.0f ? float( nFrameCount ) / flPlaybackRate : float( nFrameCount );
+
+	if ( flCycle > 1.0f )
+	{
+		// We need to rollover into the next sequence followup
+		if ( flPlaybackRate > 0.0f && flAdjustedTime < float(flPlaybackRate) )
+			m_flTimeBasisAdjustment += float( nFrameCount ) / float( flPlaybackRate );
+		else
+			m_flTimeBasisAdjustment = m_flTime;
+
+		if ( m_arrSequenceFollowLoop.Count() )
+		{
+			m_nSequence = m_arrSequenceFollowLoop.Head();
+			m_arrSequenceFollowLoop.RemoveMultipleFromHead( 1 );
+			// Recurse with the updated sequence
+			SetupBonesWithBoneMerge( pMergeHdr, pMergeBoneToWorld, pFollow, pFollowBoneToWorld, matModelToWorld );
+			return;
+		}
+		else
+		{
+			flAdjustedTime = m_flTime - m_flTimeBasisAdjustment;
+			flCycle = ( flAdjustedTime * flPlaybackRate ) / nFrameCount;
+		}
+	}
 
 	// FIXME: We're always wrapping; may want to determing if we should clamp
-	flCycle -= (int)(flCycle);
+	flCycle = SubtractIntegerPart(flCycle);
 
-	Vector pos[MAXSTUDIOBONES];
-	Quaternion q[MAXSTUDIOBONES];
+	BoneVector		pos[MAXSTUDIOBONES];
+	BoneQuaternionAligned	q[MAXSTUDIOBONES];
 
-	IBoneSetup boneSetup( pMergeHdr,  BONE_USED_BY_ANYTHING_AT_LOD( m_nLOD ), pPoseParameter );
+	IBoneSetup boneSetup( pMergeHdr,  BONE_USED_BY_ANYTHING_AT_LOD( m_nLOD ), flPoseParameter );
 	boneSetup.InitPose( pos, q );
-	boneSetup.AccumulatePose( pos, q, m_nSequence, flCycle, 1.0f, m_flTime, NULL );
+	boneSetup.AccumulatePose( pos, q, m_nSequence, flCycle, 1.0f, flAdjustedTime, NULL );
 
 	// Get the merge bone list.
-	mstudiobone_t *pMergeBones = pMergeHdr->pBone( 0 );
+	const mstudiobone_t *pMergeBones = pMergeHdr->pBone( 0 );
 	for ( int iMergeBone = 0; iMergeBone < pMergeHdr->numbones(); ++iMergeBone )
 	{
 		// Now find the bone in the parent entity.
@@ -457,3 +586,488 @@ void CMDL::SetupBonesWithBoneMerge( const CStudioHdr *pMergeHdr, matrix3x4_t *pM
 	}
 }
 
+void CMDL::SetupBones_AttachmentHelper( CStudioHdr *hdr, matrix3x4_t *pBoneToWorld )
+{
+	if ( !hdr || !hdr->GetNumAttachments() )
+		return;
+
+	// calculate attachment points
+	matrix3x4_t world;
+	for (int i = 0; i < hdr->GetNumAttachments(); i++)
+	{
+		const mstudioattachment_t &pattachment = hdr->pAttachment( i );
+		int iBone = hdr->GetAttachmentBone( i );
+
+		if ( (pattachment.flags & ATTACHMENT_FLAG_WORLD_ALIGN) == 0 )
+		{
+			ConcatTransforms( pBoneToWorld[iBone], pattachment.local, world ); 
+		}
+		else
+		{
+			Vector vecLocalBonePos, vecWorldBonePos;
+			MatrixGetColumn( pattachment.local, 3, vecLocalBonePos );
+			VectorTransform( vecLocalBonePos, pBoneToWorld[iBone], vecWorldBonePos );
+
+			SetIdentityMatrix( world );
+			MatrixSetColumn( vecWorldBonePos, 3, world );
+		}
+
+		PutAttachment( i + 1, world );
+	}
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: Put a value into an attachment point by index
+// Input  : number - which point
+// Output : float * - the attachment point
+//-----------------------------------------------------------------------------
+bool CMDL::PutAttachment( int number, const matrix3x4_t &attachmentToWorld )
+{
+	if ( number < 1 || number > m_Attachments.Count() )
+		return false;
+
+	CMDLAttachmentData *pAtt = &m_Attachments[number-1];
+	pAtt->m_AttachmentToWorld = attachmentToWorld;
+	pAtt->m_bValid = true;
+
+	return true;
+}
+
+bool CMDL::GetAttachment( int number, matrix3x4_t& matrix )
+{
+	if ( number < 1 || number > m_Attachments.Count() )
+		return false;
+
+	if ( !m_Attachments[number-1].m_bValid )
+		return false;
+
+	matrix = m_Attachments[number-1].m_AttachmentToWorld;
+	return true;
+}
+
+bool CMDL::GetAttachment( const char *pszAttachment, matrix3x4_t& matrixOut )
+{
+	if ( GetMDL() == MDLHANDLE_INVALID )
+		return false;
+
+	CStudioHdr studioHdr( g_pMDLCache->GetStudioHdr( GetMDL() ), g_pMDLCache );
+
+	int iAttachmentNum = Studio_FindAttachment( &studioHdr, pszAttachment );
+	if ( iAttachmentNum == -1 )
+		return false;
+
+	return GetAttachment( iAttachmentNum + 1, matrixOut );
+}
+
+bool CMDL::GetBoundingSphere( Vector &vecCenter, float &flRadius )
+{
+	// Check to see if we have a valid model to look at.
+	if ( m_MDLHandle == MDLHANDLE_INVALID )
+		return false;
+
+	GetMDLBoundingSphere( &vecCenter, &flRadius, m_MDLHandle, m_nSequence );
+
+	return true;
+}
+
+void CMDL::AdjustTime( float flAmount )
+{
+	m_flTime += flAmount;
+}
+
+MDLData_t::MDLData_t()
+{
+	SetIdentityMatrix( m_MDLToWorld );
+	m_bRequestBoneMergeTakeover = false;
+}
+
+//-----------------------------------------------------------------------------
+// Constructor, destructor
+//-----------------------------------------------------------------------------
+CMergedMDL::CMergedMDL()
+{
+	m_nNumSequenceLayers = 0;
+}
+
+CMergedMDL::~CMergedMDL()
+{
+	m_aMergeMDLs.Purge();
+}
+
+//-----------------------------------------------------------------------------
+// Stores the clip
+//-----------------------------------------------------------------------------
+void CMergedMDL::SetMDL( MDLHandle_t handle, CCustomMaterialOwner* pCustomMaterialOwner, void *pProxyData )
+{
+	m_RootMDL.m_MDL.SetMDL( handle );
+	m_RootMDL.m_MDL.m_pProxyData = pProxyData;
+
+	Vector vecMins, vecMaxs;
+	GetMDLBoundingBox( &vecMins, &vecMaxs, handle, m_RootMDL.m_MDL.m_nSequence );
+
+	m_RootMDL.m_MDL.m_bWorldSpaceViewTarget = false;
+	m_RootMDL.m_MDL.m_vecViewTarget.Init( 100.0f, 0.0f, vecMaxs.z );
+
+	if ( pCustomMaterialOwner )
+	{
+		pCustomMaterialOwner->DuplicateCustomMaterialsToOther( &m_RootMDL.m_MDL );
+	}
+
+	// Set the pose parameters to the default for the mdl
+	SetPoseParameters( NULL, 0 );
+	
+	// Clear any sequence layers
+	SetSequenceLayers( NULL, 0 );
+}
+
+//-----------------------------------------------------------------------------
+// An MDL was selected
+//-----------------------------------------------------------------------------
+void CMergedMDL::SetMDL( const char *pMDLName, CCustomMaterialOwner* pCustomMaterialOwner, void *pProxyData )
+{
+	MDLHandle_t hMDL = pMDLName ? g_pMDLCache->FindMDL( pMDLName ) : MDLHANDLE_INVALID;
+	if ( g_pMDLCache->IsErrorModel( hMDL ) )
+	{
+		hMDL = MDLHANDLE_INVALID;
+	}
+
+	SetMDL( hMDL, pCustomMaterialOwner, pProxyData );
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: Returns a model bounding box.
+//-----------------------------------------------------------------------------
+bool CMergedMDL::GetBoundingBox( Vector &vecBoundsMin, Vector &vecBoundsMax )
+{
+	// Check to see if we have a valid model to look at.
+	if ( m_RootMDL.m_MDL.GetMDL() == MDLHANDLE_INVALID )
+		return false;
+
+	GetMDLBoundingBox( &vecBoundsMin, &vecBoundsMax, m_RootMDL.m_MDL.GetMDL(), m_RootMDL.m_MDL.m_nSequence );
+
+	return true;
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: Returns a more accurate bounding sphere
+//-----------------------------------------------------------------------------
+bool CMergedMDL::GetBoundingSphere( Vector &vecCenter, float &flRadius )
+{
+	// Check to see if we have a valid model to look at.
+	if ( m_RootMDL.m_MDL.GetMDL() == MDLHANDLE_INVALID )
+		return false;
+
+	Vector vecEngineCenter;
+	GetMDLBoundingSphere( &vecEngineCenter, &flRadius, m_RootMDL.m_MDL.GetMDL(), m_RootMDL.m_MDL.m_nSequence );
+	VectorTransform( vecEngineCenter, m_RootMDL.m_MDLToWorld, vecCenter );
+
+	return true;
+}
+
+//-----------------------------------------------------------------------------
+// Purpose:
+//-----------------------------------------------------------------------------
+bool CMergedMDL::GetAttachment( const char *pszAttachment, matrix3x4_t& matrixOut )
+{
+	if ( m_RootMDL.m_MDL.GetMDL() == MDLHANDLE_INVALID )
+		return false;
+
+	CStudioHdr studioHdr( g_pMDLCache->GetStudioHdr( m_RootMDL.m_MDL.GetMDL() ), g_pMDLCache );
+
+	int iAttachmentNum = Studio_FindAttachment( &studioHdr, pszAttachment );
+	if ( iAttachmentNum == -1 )
+		return false;
+
+	return GetAttachment( iAttachmentNum + 1, matrixOut );
+}
+
+//-----------------------------------------------------------------------------
+// Purpose:
+//-----------------------------------------------------------------------------
+bool CMergedMDL::GetAttachment( int iAttachmentNum, matrix3x4_t& matrixOut )
+{
+	if ( m_RootMDL.m_MDL.GetMDL() == MDLHANDLE_INVALID )
+		return false;
+
+	return m_RootMDL.m_MDL.GetAttachment( iAttachmentNum, matrixOut );
+}
+
+//-----------------------------------------------------------------------------
+// Purpose:
+//-----------------------------------------------------------------------------
+void CMergedMDL::SetModelAnglesAndPosition(  const QAngle &angRot, const Vector &vecPos )
+{
+	SetIdentityMatrix( m_RootMDL.m_MDLToWorld );
+	AngleMatrix( angRot, vecPos, m_RootMDL.m_MDLToWorld );
+}
+
+//-----------------------------------------------------------------------------
+// Purpose:
+//-----------------------------------------------------------------------------
+void CMergedMDL::SetupBonesForAttachmentQueries( void )
+{
+	if ( !g_pMDLCache )
+		return;
+
+	if ( m_RootMDL.m_MDL.GetMDL() == MDLHANDLE_INVALID )
+		return;
+
+	CMatRenderContextPtr pRenderContext( materials );
+
+	CStudioHdr *pRootStudioHdr = new CStudioHdr( g_pMDLCache->GetStudioHdr( m_RootMDL.m_MDL.GetMDL() ), g_pMDLCache );
+	CMatRenderData< matrix3x4_t > rdBoneToWorld( pRenderContext, pRootStudioHdr->numbones() );
+	m_RootMDL.m_MDL.SetUpBones( m_RootMDL.m_MDLToWorld, pRootStudioHdr->numbones(), rdBoneToWorld.Base(), m_PoseParameters, m_SequenceLayers, m_nNumSequenceLayers );
+
+	delete pRootStudioHdr;
+}
+
+//-----------------------------------------------------------------------------
+// paint it!
+//-----------------------------------------------------------------------------
+void CMergedMDL::Draw()
+{
+	if ( !g_pMDLCache )
+		return;
+
+	if ( m_RootMDL.m_MDL.GetMDL() == MDLHANDLE_INVALID )
+		return;
+
+	CMatRenderContextPtr pRenderContext( materials );
+
+	// Draw the MDL
+	CStudioHdr *pRootStudioHdr = new CStudioHdr( g_pMDLCache->GetStudioHdr( m_RootMDL.m_MDL.GetMDL() ), g_pMDLCache );
+	CMatRenderData< matrix3x4_t > rdBoneToWorld( pRenderContext, pRootStudioHdr->numbones() );
+	const matrix3x4_t *pRootMergeHdrModelToWorld = &m_RootMDL.m_MDLToWorld;
+	const matrix3x4_t *pFollowBoneToWorld = rdBoneToWorld.Base();
+	m_RootMDL.m_MDL.SetUpBones( m_RootMDL.m_MDLToWorld, pRootStudioHdr->numbones(), rdBoneToWorld.Base(), m_PoseParameters, m_SequenceLayers, m_nNumSequenceLayers );
+
+	OnPostSetUpBonesPreDraw();
+
+	int nFlags = STUDIORENDER_DRAW_NO_SHADOWS;
+
+	OnModelDrawPassStart( 0, pRootStudioHdr, nFlags );
+	m_RootMDL.m_MDL.Draw( m_RootMDL.m_MDLToWorld, rdBoneToWorld.Base(), nFlags );
+	OnModelDrawPassFinished( 0, pRootStudioHdr, nFlags );
+
+	// Draw the merge MDLs.
+	matrix3x4_t *pStackCopyOfRootMergeHdrModelToWorld = NULL;
+	matrix3x4_t matMergeBoneToWorld[MAXSTUDIOBONES];
+	int nMergeCount = m_aMergeMDLs.Count();
+	for ( int iMerge = 0; iMerge < nMergeCount; ++iMerge )
+	{
+		matrix3x4_t *pMergeBoneToWorld = &matMergeBoneToWorld[0];
+
+		// Get the merge studio header.
+		CStudioHdr *pMergeHdr = new CStudioHdr( g_pMDLCache->GetStudioHdr( m_aMergeMDLs[iMerge].m_MDL.GetMDL() ), g_pMDLCache );
+		m_aMergeMDLs[iMerge].m_MDL.SetupBonesWithBoneMerge( pMergeHdr, pMergeBoneToWorld, pRootStudioHdr, pFollowBoneToWorld, *pRootMergeHdrModelToWorld );
+
+		OnModelDrawPassStart( 0, pMergeHdr, nFlags );
+		m_aMergeMDLs[iMerge].m_MDL.Draw( m_aMergeMDLs[iMerge].m_MDLToWorld, pMergeBoneToWorld, nFlags );
+		OnModelDrawPassFinished( 0, pMergeHdr, nFlags );
+
+		if ( m_aMergeMDLs[iMerge].m_bRequestBoneMergeTakeover && ( iMerge + 1 < nMergeCount ) )
+		{
+			// This model is requesting bonemerge takeover and we have more models to render after it
+			delete pRootStudioHdr;
+			pRootStudioHdr = pMergeHdr;
+			pRootMergeHdrModelToWorld = &m_aMergeMDLs[iMerge].m_MDLToWorld;
+
+			// Make a copy of bone to world transforms in a separate stack buffer and repoint root transforms
+			// for future bonemerge into that buffer
+			if ( !pStackCopyOfRootMergeHdrModelToWorld )
+				pStackCopyOfRootMergeHdrModelToWorld = ( matrix3x4_t * ) stackalloc( sizeof( matMergeBoneToWorld ) );
+			Q_memcpy( pStackCopyOfRootMergeHdrModelToWorld, matMergeBoneToWorld, sizeof( matMergeBoneToWorld ) );
+			pFollowBoneToWorld = pStackCopyOfRootMergeHdrModelToWorld;
+		}
+		else
+		{
+			delete pMergeHdr;
+		}
+	}
+	rdBoneToWorld.Release();
+
+	delete pRootStudioHdr;
+}
+
+
+void CMergedMDL::Draw( const matrix3x4_t &rootToWorld )
+{
+	m_RootMDL.m_MDLToWorld = rootToWorld;
+	Draw();
+}
+
+
+//-----------------------------------------------------------------------------
+// Sets the current sequence
+//-----------------------------------------------------------------------------
+void CMergedMDL::SetSequence( int nSequence, bool bUseSequencePlaybackFPS )
+{
+	m_RootMDL.m_MDL.m_nSequence = nSequence;
+	m_RootMDL.m_MDL.m_bUseSequencePlaybackFPS = bUseSequencePlaybackFPS;
+	m_RootMDL.m_MDL.m_flTimeBasisAdjustment = m_RootMDL.m_MDL.m_flTime;
+}
+
+//-----------------------------------------------------------------------------
+// Add a follow loop sequence
+//-----------------------------------------------------------------------------
+void CMergedMDL::AddSequenceFollowLoop( int nSequence, bool bUseSequencePlaybackFPS )
+{
+	Assert( bUseSequencePlaybackFPS == m_RootMDL.m_MDL.m_bUseSequencePlaybackFPS );
+	m_RootMDL.m_MDL.m_arrSequenceFollowLoop.AddToTail( nSequence );
+}
+
+//-----------------------------------------------------------------------------
+// Clear any follow loop sequences
+//-----------------------------------------------------------------------------
+void CMergedMDL::ClearSequenceFollowLoop()
+{
+	m_RootMDL.m_MDL.m_arrSequenceFollowLoop.RemoveAll();
+}
+
+
+//-----------------------------------------------------------------------------
+// Set the current pose parameters. If NULL the pose parameters will be reset
+// to the default values.
+//-----------------------------------------------------------------------------
+void CMergedMDL::SetPoseParameters( const float *pPoseParameters, int nCount )
+{
+	if ( pPoseParameters )
+	{
+		int nParameters = MIN( MAXSTUDIOPOSEPARAM, nCount );
+		for ( int iParam = 0; iParam < nParameters; ++iParam )
+		{
+			m_PoseParameters[ iParam ] = pPoseParameters[ iParam ];
+		}
+	}
+	else if ( m_RootMDL.m_MDL.GetMDL() != MDLHANDLE_INVALID )
+	{
+		CStudioHdr studioHdr( g_pMDLCache->GetStudioHdr( m_RootMDL.m_MDL.GetMDL() ), g_pMDLCache );
+		Studio_CalcDefaultPoseParameters( &studioHdr, m_PoseParameters, MAXSTUDIOPOSEPARAM );
+	}
+}
+
+
+//-----------------------------------------------------------------------------
+// Set the overlay sequence layers
+//-----------------------------------------------------------------------------
+void CMergedMDL::SetSequenceLayers( const MDLSquenceLayer_t *pSequenceLayers, int nCount )
+{
+	if ( pSequenceLayers )
+	{
+		m_nNumSequenceLayers = MIN( MAX_SEQUENCE_LAYERS, nCount );
+		for ( int iLayer = 0; iLayer < m_nNumSequenceLayers; ++iLayer )
+		{
+			m_SequenceLayers[ iLayer ] = pSequenceLayers[ iLayer ];
+		}
+	}
+	else
+	{
+		m_nNumSequenceLayers = 0;
+		V_memset( m_SequenceLayers, 0, sizeof( m_SequenceLayers ) );
+	}
+}
+
+void CMergedMDL::SetSkin( int nSkin )
+{
+	m_RootMDL.m_MDL.m_nSkin = nSkin;
+}
+
+	
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+void CMergedMDL::SetMergeMDL( MDLHandle_t handle, CCustomMaterialOwner* pCustomMaterialOwner, void *pProxyData, bool bRequestBonemergeTakeover )
+{
+	// Verify that we have a root model to merge to.
+	if ( m_RootMDL.m_MDL.GetMDL() == MDLHANDLE_INVALID )
+		return;
+
+	int iIndex = m_aMergeMDLs.AddToTail();
+	if ( !m_aMergeMDLs.IsValidIndex( iIndex ) )
+		return;
+
+	m_aMergeMDLs[iIndex].m_MDL.SetMDL( handle );
+	m_aMergeMDLs[iIndex].m_MDL.m_pProxyData = pProxyData;
+	m_aMergeMDLs[iIndex].m_bRequestBoneMergeTakeover = bRequestBonemergeTakeover;
+
+	if ( pCustomMaterialOwner )
+	{
+		pCustomMaterialOwner->DuplicateCustomMaterialsToOther( &m_aMergeMDLs[iIndex].m_MDL );
+	}
+}
+
+//-----------------------------------------------------------------------------
+// Purpose:
+//-----------------------------------------------------------------------------
+MDLHandle_t CMergedMDL::SetMergeMDL( const char *pMDLName, CCustomMaterialOwner* pCustomMaterialOwner, void *pProxyData, bool bRequestBonemergeTakeover )
+{
+	if ( g_pMDLCache == NULL )
+		return MDLHANDLE_INVALID;
+
+	MDLHandle_t hMDL = pMDLName ? g_pMDLCache->FindMDL( pMDLName ) : MDLHANDLE_INVALID;
+	if ( g_pMDLCache->IsErrorModel( hMDL ) )
+	{
+		hMDL = MDLHANDLE_INVALID;
+	}
+
+	SetMergeMDL( hMDL, pCustomMaterialOwner, pProxyData, bRequestBonemergeTakeover );
+	return hMDL;
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+int CMergedMDL::GetMergeMDLIndex( MDLHandle_t handle )
+{
+	int nMergeCount = m_aMergeMDLs.Count();
+	for ( int iMerge = 0; iMerge < nMergeCount; ++iMerge )
+	{
+		if ( m_aMergeMDLs[iMerge].m_MDL.GetMDL() == handle )
+			return iMerge;
+	}
+
+	return -1;
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+CMDL *CMergedMDL::GetMergeMDL( MDLHandle_t handle )
+{
+	int nMergeCount = m_aMergeMDLs.Count();
+	for ( int iMerge = 0; iMerge < nMergeCount; ++iMerge )
+	{
+		if ( m_aMergeMDLs[iMerge].m_MDL.GetMDL() == handle )
+			return (&m_aMergeMDLs[iMerge].m_MDL);
+	}
+
+	return NULL;
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+void CMergedMDL::ClearMergeMDLs( void )
+{
+	m_aMergeMDLs.Purge();
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+void CMergedMDL::UpdateModelCustomMaterials( MDLHandle_t handle, CCustomMaterialOwner* pCustomMaterialOwner )
+{
+	CMDL* pMDL = (handle != MDLHANDLE_INVALID) ? GetMergeMDL( handle ) : NULL;
+
+	if ( pMDL )
+	{
+		if ( pCustomMaterialOwner )
+		{
+			pCustomMaterialOwner->DuplicateCustomMaterialsToOther( pMDL );
+		}
+		else
+		{
+			pMDL->ClearCustomMaterials();
+		}
+	}
+}

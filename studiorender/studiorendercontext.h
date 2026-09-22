@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright � 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -31,7 +31,6 @@ class CStudioRender;
 extern IStudioDataCache *g_pStudioDataCache;
 extern CStudioRender *g_pStudioRenderImp;
 
-IMaterial* GetModelSpecificDecalMaterial( IMaterial* pDecalMaterial );
 
 //-----------------------------------------------------------------------------
 // Internal config structure
@@ -41,7 +40,6 @@ struct StudioRenderConfigInternal_t : public StudioRenderConfig_t
 	bool m_bSupportsVertexAndPixelShaders : 1;
 	bool m_bSupportsOverbright : 1;
 	bool m_bEnableHWMorph : 1;
-	bool m_bStatsMode : 1;
 };
 
 
@@ -67,8 +65,10 @@ struct StudioRenderContext_t
 	int						m_NumLocalLights;
 	float					m_ColorMod[3];
 	float					m_AlphaMod;
-	IMaterial*				m_pForcedMaterial;
+	IMaterial*				m_pForcedMaterial[MAX_MAT_OVERRIDES];
 	OverrideType_t			m_nForcedMaterialType;
+	int						m_nForcedMaterialIndex[MAX_MAT_OVERRIDES];
+	int						m_nForcedMaterialIndexCount;
 };
 
 
@@ -137,14 +137,18 @@ public:
 	virtual void SetColorModulation( const float* pColor );
 	virtual void SetAlphaModulation( float alpha );
 	virtual void DrawModel( DrawModelResults_t *pResults, const DrawModelInfo_t& info, matrix3x4_t *pCustomBoneToWorld, float *pFlexWeights, float *pFlexDelayedWeights, const Vector& origin, int flags = STUDIORENDER_DRAW_ENTIRE_MODEL );
-	virtual void DrawModelArray( const DrawModelInfo_t &drawInfo, int arrayCount, model_array_instance_t *pInstanceData, int instanceStride, int flags = STUDIORENDER_DRAW_ENTIRE_MODEL );
+	virtual void DrawModelArray( const StudioModelArrayInfo_t &drawInfo, int arrayCount, StudioArrayInstanceData_t *pInstanceData, int instanceStride, int flags );
+	virtual void DrawModelArray( const StudioModelArrayInfo2_t &drawInfo, int nArrayCount, StudioArrayData_t *pArrayData, int nInstanceStride, int flags = STUDIORENDER_DRAW_ENTIRE_MODEL );
+	virtual void DrawModelShadowArray( int nCount, StudioArrayData_t *pShadowData, int nInstanceStride, int flags );
 	virtual void DrawModelStaticProp( const DrawModelInfo_t& info, const matrix3x4_t &modelToWorld, int flags = STUDIORENDER_DRAW_ENTIRE_MODEL );
+	virtual void DrawModelArrayStaticProp( const DrawModelInfo_t& info, int nInstanceCount, const MeshInstanceData_t *pInstanceData, ColorMeshInfo_t **pColorMeshes );
 	virtual void DrawStaticPropDecals( const DrawModelInfo_t &drawInfo, const matrix3x4_t &modelToWorld );
 	virtual void DrawStaticPropShadows( const DrawModelInfo_t &drawInfo, const matrix3x4_t &modelToWorld, int flags );
-	virtual void ForcedMaterialOverride( IMaterial *newMaterial, OverrideType_t nOverrideType = OVERRIDE_NORMAL );
+	virtual void ForcedMaterialOverride( IMaterial *newMaterial, OverrideType_t nOverrideType = OVERRIDE_NORMAL, int nMaterialIndex = -1 );
+	virtual bool IsForcedMaterialOverride();
 	DELEGATE_TO_OBJECT_1( StudioDecalHandle_t, CreateDecalList, studiohwdata_t *, g_pStudioRenderImp );
 	virtual void DestroyDecalList( StudioDecalHandle_t handle );
-	virtual void AddDecal( StudioDecalHandle_t handle, studiohdr_t *pStudioHdr, matrix3x4_t *pBoneToWorld, const Ray_t & ray, const Vector& decalUp, IMaterial* pDecalMaterial, float radius, int body, bool noPokethru, int maxLODToDecal = ADDDECAL_TO_ALL_LODS );
+	virtual void AddDecal( StudioDecalHandle_t handle, studiohdr_t *pStudioHdr, matrix3x4_t *pBoneToWorld, const Ray_t & ray, const Vector& decalUp, IMaterial* pDecalMaterial, float radius, int body, bool noPokethru, int maxLODToDecal = ADDDECAL_TO_ALL_LODS, void *pvProxyUserData = NULL, int nAdditionalDecalFlags = 0 );
 	virtual void ComputeLighting( const Vector* pAmbient, int lightCount, LightDesc_t* pLights, const Vector& pt, const Vector& normal, Vector& lighting );
 	virtual void ComputeLightingConstDirectional( const Vector* pAmbient, int lightCount, LightDesc_t* pLights, const Vector& pt, const Vector& normal, Vector& lighting, float flDirectionalAmount );
 	virtual void AddShadow( IMaterial* pMaterial, void* pProxyData, FlashlightState_t *pFlashlightState, VMatrix *pWorldToTexture, ITexture *pFlashlightDepthTexture );
@@ -154,11 +158,12 @@ public:
 	virtual void GetTriangles( const DrawModelInfo_t& info, matrix3x4_t *pBoneToWorld, GetTriangles_Output_t &out );
 	virtual int GetMaterialList( studiohdr_t *pStudioHdr, int count, IMaterial** ppMaterials );
 	virtual int GetMaterialListFromBodyAndSkin( MDLHandle_t studio, int nSkin, int nBody, int nCountOutputMaterials, IMaterial** ppOutputMaterials );
-	virtual matrix3x4_t* LockBoneMatrices( int nCount );
-	virtual void UnlockBoneMatrices();
-	virtual void LockFlexWeights( int nWeightCount, float **ppFlexWeights, float **ppFlexDelayedWeights = NULL );
-	virtual void UnlockFlexWeights();
-	virtual void GetMaterialOverride( IMaterial** ppOutForcedMaterial, OverrideType_t* pOutOverrideType );
+
+#ifndef _CERT
+	// Gathers information about faces rendered this past frame and feeds them into the given callback function (presuambly to spew)
+	// Callback may be invoked on mat queue thread!
+	virtual void GatherRenderedFaceInfo( IStudioRender::FaceInfoCallbackFunc_t pFunc );
+#endif // _CERT
 
 	// Other public methods
 public:
@@ -170,7 +175,7 @@ private:
 	void LoadMaterials( studiohdr_t *phdr, OptimizedModel::FileHeader_t *, studioloddata_t &lodData, int lodID );
 
 	// Determines material flags
-	void ComputeMaterialFlags( studiohdr_t *phdr, studioloddata_t &lodData, IMaterial *pMaterial );
+	void ComputeMaterialFlags( studiohdr_t *phdr, IMaterial *pMaterial );
 
 	// Creates, destroys static meshes
 	void R_StudioCreateStaticMeshes( studiohdr_t *pStudioHdr, OptimizedModel::FileHeader_t* pVtxHdr,
@@ -200,15 +205,17 @@ private:
 	// Helper methods used to construct static meshes
 	int GetNumBoneWeights( const OptimizedModel::StripGroupHeader_t *pGroup );
 	VertexFormat_t CalculateVertexFormat( const studiohdr_t *pStudioHdr, const studioloddata_t *pStudioLodData,
-																const mstudiomesh_t* pMesh, OptimizedModel::StripGroupHeader_t *pGroup, bool bIsHwSkinned );
+										  const mstudiomesh_t* pMesh, OptimizedModel::StripGroupHeader_t *pGroup, bool bIsHwSkinned );
+	VertexStreamSpec_t *CalculateStreamSpec(	const studiohdr_t *pStudioHdr, const studioloddata_t *pStudioLodData,
+		const mstudiomesh_t* pMesh, OptimizedModel::StripGroupHeader_t *pGroup, bool bIsHwSkinned, VertexFormat_t *pVertexFormat );
 	bool MeshNeedsTangentSpace( studiohdr_t *pStudioHdr, studioloddata_t *pStudioLodData, mstudiomesh_t* pMesh );
-	void R_StudioBuildMeshGroup( const char *pModelName, bool bNeedsTangentSpace, studiomeshgroup_t* pMeshGroup,
-		OptimizedModel::StripGroupHeader_t *pStripGroup, mstudiomesh_t* pMesh,
-		studiohdr_t *pStudioHdr, VertexFormat_t vertexFormat );
+	void R_StudioBuildMeshGroup( const char *pModelName, bool bNeedsTangentSpace, studioloddata_t *pStudioLodData,
+		studiomeshgroup_t* pMeshGroup, OptimizedModel::StripGroupHeader_t *pStripGroup, mstudiomesh_t* pMesh,
+		studiohdr_t *pStudioHdr, VertexFormat_t vertexFormat, VertexStreamSpec_t *pStreamSpec );
 	void R_StudioBuildMeshStrips( studiomeshgroup_t* pMeshGroup,
 		OptimizedModel::StripGroupHeader_t *pStripGroup );
 	template <VertexCompressionType_t T> bool R_AddVertexToMesh( const char *pModelName, bool bNeedsTangentSpace, CMeshBuilder& meshBuilder, 
-		OptimizedModel::Vertex_t* pVertex, mstudiomesh_t* pMesh, const mstudio_meshvertexdata_t *vertData, bool hwSkin );
+		OptimizedModel::Vertex_t* pVertex, mstudiomesh_t* pMesh, const mstudio_meshvertexdata_t *vertData, bool hwSkin, bool bExtraUv );
 
 	// This will generate random flex data that has a specified # of non-zero values
 	void GenerateRandomFlexWeights( int nWeightCount, float* pWeights, float *pDelayedWeights );
@@ -217,13 +224,7 @@ private:
 	int ComputeRenderLOD( IMatRenderContext *pRenderContext, const DrawModelInfo_t& info, const Vector &origin, float *pMetric );
 
 	// This invokes proxies of all materials that are queued to be rendered
-	void InvokeBindProxies( const DrawModelInfo_t &info );
-
-	// Did this matrix come from our allocator?
-	bool IsInternallyAllocated( const matrix3x4_t *pBoneToWorld );
-
-	// Did this flex weights come from our allocator?
-	bool IsInternallyAllocated( const float *pFlexWeights );
+	void InvokeBindProxies( IMatRenderContext *pRenderContext, ICallQueue *pCallQueue, const DrawModelInfo_t &info );
 
 private:
 	StudioRenderContext_t m_RC;

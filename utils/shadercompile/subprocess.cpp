@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright c 1996-2007, Valve Corporation, All rights reserved. =======//
 //
 // Purpose: 
 //
@@ -118,8 +118,13 @@ void * SubProcessKernelObjects_Memory::Lock( void )
 		case WAIT_OBJECT_0:
 			{
 				m_pLockData = MapViewOfFile( m_pObjs->m_hMemorySection, FILE_MAP_ALL_ACCESS, 0, 0, 0 );
-				
-				if ( * ( const DWORD * ) m_pLockData != m_pObjs->m_dwCookie )
+				if ( !m_pLockData )
+				{
+					DWORD err = GetLastError();
+					Msg( "MapViewOfFile failed with error %d\n", err );
+				}
+
+				if ( m_pLockData && * ( const DWORD * ) m_pLockData != m_pObjs->m_dwCookie )
 				{
 					// Yes, this is our turn, set our cookie in that memory segment
 					* ( DWORD * ) m_pLockData = m_pObjs->m_dwCookie;
@@ -168,7 +173,13 @@ BOOL SubProcessKernelObjects_Memory::Unlock( void )
 		// Assert that the memory hasn't been spoiled
 		Assert( m_pObjs->m_dwCookie == * ( const DWORD * ) m_pLockData );
 		
-		UnmapViewOfFile( m_pLockData );
+		DWORD ret = UnmapViewOfFile( m_pLockData );
+		if ( ret == 0 )
+		{
+			DWORD err = GetLastError();
+			Msg( "UnmapViewOfFile failed with error %d\n", err );
+		}
+
 		m_pMemory = NULL;
 		m_pLockData = NULL;
 		

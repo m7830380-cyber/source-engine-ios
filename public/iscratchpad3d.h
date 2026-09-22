@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -54,7 +54,7 @@ public:
 class CSPVert
 {
 public:
-				CSPVert() = default;
+				CSPVert();
 				CSPVert( Vector const &vPos, const CSPColor &vColor=CSPColor( Vector(1, 1, 1), 1 ) );
 	
 	void		Init( Vector const &vPos, const CSPColor &vColor=CSPColor( Vector(1, 1, 1), 1 ) );
@@ -68,7 +68,7 @@ public:
 class CSPVertList
 {
 public:
-				CSPVertList( int nVerts = 0 );
+				explicit CSPVertList( int nVerts = 0 );
 				CSPVertList(CSPVert const *pVerts, int nVerts);
 				CSPVertList(Vector const *pVerts, int nVerts, CSPColor vColor=CSPColor(1,1,1) );
 
@@ -225,8 +225,8 @@ public:
 class CScratchPadAutoRelease
 {
 public:
-			CScratchPadAutoRelease( IScratchPad3D *pPad )	{ m_pPad = pPad; }
-			~CScratchPadAutoRelease()						{ if( m_pPad ) m_pPad->Release(); }
+	explicit CScratchPadAutoRelease( IScratchPad3D *pPad )	{ m_pPad = pPad; }
+	~CScratchPadAutoRelease()								{ if( m_pPad ) m_pPad->Release(); }
 
 	IScratchPad3D *m_pPad;
 };
@@ -252,6 +252,10 @@ inline CTextParams::CTextParams()
 	m_vAngles.Init();
 	m_bTwoSided = true;
 	m_flLetterWidth = 3;
+}
+
+inline CSPVert::CSPVert()
+{
 }
 
 inline CSPVert::CSPVert( Vector const &vPos, const CSPColor &vColor )

@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ====
 //
 // Purpose: Implements a factory for entity helpers. When an entity is created,
 //			the helpers from its class definition in the FGD are each instantiated
@@ -27,7 +27,11 @@
 #include "MapSideList.h"
 #include "MapCylinder.h"
 #include "MapInstance.h"
+#include "MapOccluder.h"
+#include "MapViewer.h"
+#include "maplineoccluder.h"
 #include "mapsweptplayerhull.h"
+#include "mapworldtext.h"
 #include "DispShore.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
@@ -70,6 +74,10 @@ static HelperFactoryMap_t HelperFactoryMap[] =
 	"sweptplayerhull", CMapSweptPlayerHull::Create,			// A swept player sized hull between two points (ladders)
 	"overlay_transition", CMapOverlayTransition::Create,	// Notes!!	
 	"instance", CMapInstance::Create,						// A map instance used for rendering the sub-map
+	"occluder", CMapOccluder::Create,						// FoW Occluder
+	"line_occluder", CMapLineOccluder::Create,				// FoW Line Occluder
+	"viewer", CMapViewer::Create,							// FoW Viewer
+	"worldtext", CWorldTextHelper::CreateWorldText,			// Text string oriented in world space
 };
 
 

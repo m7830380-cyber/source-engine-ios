@@ -12,11 +12,7 @@
 #include "tier1/strtools.h"
 
 #ifndef _PS3
-#ifdef _APPLE
-#include <malloc/malloc.h>
-#else
 #include <malloc.h>
-#endif
 #endif
 
 // Should be last include
@@ -45,12 +41,7 @@ CUtlMemoryPool::CUtlMemoryPool( int blockSize, int numElements, int growMode, co
 	}
 #endif
 
-#ifdef PLATFORM_64BITS
-	m_nAlignment = ( nAlignment != 0 ) ? nAlignment : 8;
-#else
-	m_nAlignment = ( nAlignment != 0 ) ? nAlignment : 4;
-#endif
-
+	m_nAlignment = ( nAlignment != 0 ) ? nAlignment : 1;
 	Assert( IsPowerOfTwo( m_nAlignment ) );
 	m_BlockSize = blockSize < sizeof(void*) ? sizeof(void*) : blockSize;
 	m_BlockSize = AlignValue( m_BlockSize, m_nAlignment );

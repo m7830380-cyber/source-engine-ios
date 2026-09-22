@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========== Copyright © 2007, Valve Corporation, All rights reserved. ========
 //
 // Purpose:
 //
@@ -6,12 +6,17 @@
 
 #include "pch_tier0.h"
 #include "tier0/tslist.h"
-#include <list>
-#include <stdlib.h>
 #if defined( _X360 )
 #include "xbox/xbox_win32stubs.h"
 #endif
-#include "unitlib/unitlib.h"
+
+#include <stdlib.h>
+#include "tier0/threadtools.h"											// for rand()
+// NOTE: This has to be the last file included!
+#include "tier0/memdbgon.h"
+
+extern ThreadHandle_t * CreateTestThreads( ThreadFunc_t fnThread, int numThreads, int nProcessorsToDistribute );
+extern void JoinTestThreads( ThreadHandle_t *pHandles );
 
 namespace TSListTests
 {
@@ -29,7 +34,6 @@ CInterlockedInt g_nPops;
 CTSQueue<int, true> g_TestQueue;
 CTSList<int> g_TestList;
 volatile bool g_bStart;
-std::list<ThreadHandle_t> g_ThreadHandles;
 
 int *g_pTestBuckets;
 
@@ -48,25 +52,33 @@ public:
 	virtual bool IsEmpty() = 0;
 };
 
+bool g_bUseMutex = false;
+CThreadConditionalMutex< CThreadFastMutex, &g_bUseMutex > g_TestLock;
+
 class CQueueOps : public CTestOps
 {
 	void Push( int item )
 	{
+		g_TestLock.Lock();
 		g_TestQueue.PushItem( item );
+		g_TestLock.Unlock();
 		g_nPushes++;
 	}
 	bool Pop( int *pResult )
 	{
+		g_TestLock.Lock();
 		if ( g_TestQueue.PopItem( pResult ) )
 		{
+			g_TestLock.Unlock();
 			g_nPops++;
 			return true;
 		}
+		g_TestLock.Unlock();
 		return false;
 	}
 	bool Validate()
 	{
-		return g_TestQueue.ValidateQueue();
+		return true; //g_TestQueue.Validate();
 	}
 	bool IsEmpty()
 	{
@@ -78,16 +90,20 @@ class CListOps : public CTestOps
 {
 	void Push( int item )
 	{
+		g_TestLock.Lock();
 		g_TestList.PushItem( item );
 		g_nPushes++;
 	}
 	bool Pop( int *pResult )
 	{
+		g_TestLock.Lock();
 		if ( g_TestList.PopItem( pResult ) )
 		{
+			g_TestLock.Unlock();
 			g_nPops++;
 			return true;
 		}
+		g_TestLock.Unlock();
 		return false;
 	}
 	bool Validate()
@@ -130,7 +146,7 @@ void ValidateBuckets()
 		if ( g_pTestBuckets[i] != 0 )
 		{
 			Msg( "Test bucket %d has an invalid value %d\n", i, g_pTestBuckets[i] );
-			Shipping_Assert( 0 );
+			DebuggerBreakIfDebugging();
 			return;
 		}
 	}
@@ -138,23 +154,26 @@ void ValidateBuckets()
 
 uintp PopThreadFunc( void *)
 {
-	ThreadSetDebugName( "PopThread" );
+	//ThreadSetDebugName( "PopThread" );
 	g_nPopThreads++;
 	g_nThreads++;
 	while ( !g_bStart )
 	{
-		ThreadSleep( 0 );
+		ThreadSleep( 1 );
 	}
 	int ignored;
 	for (;;)
 	{
 		if ( !g_pTestOps->Pop( &ignored ) )
 		{
+			ThreadPause();
+			ThreadSleep(0);
 			if ( g_nPushThreads == 0 )
 			{
-				// Pop the rest
+				// Pop the rest 
 				while ( g_pTestOps->Pop( &ignored ) )
 				{
+					ThreadPause();
 					ThreadSleep( 0 );
 				}
 				break;
@@ -168,18 +187,18 @@ uintp PopThreadFunc( void *)
 
 uintp PushThreadFunc( void * )
 {
-	ThreadSetDebugName( "PushThread" );
+	//ThreadSetDebugName( "PushThread" );
 	g_nPushThreads++;
 	g_nThreads++;
 	while ( !g_bStart )
 	{
+		ThreadPause();
 		ThreadSleep( 0 );
 	}
 
-	while ( g_nTested < NUM_TEST )
+	while ( ++g_nTested <= NUM_TEST )
 	{
 		g_pTestOps->Push( g_nTested );
-		g_nTested++;
 	}
 	g_nThreads--;
 	g_nPushThreads--;
@@ -206,7 +225,7 @@ void TestWait()
 	g_bStart = true;
 	while ( g_nThreads > 0 )
 	{
-		ThreadSleep( 50 );
+		ThreadSleep( 0 );
 	}
 }
 
@@ -217,7 +236,6 @@ void TestEnd( bool bExpectEmpty = true )
 	if ( g_nPops != g_nPushes )
 	{
 		Msg( "FAIL: Not all items popped\n" );
-		Shipping_Assert( 0 );
 		return;
 	}
 
@@ -230,20 +248,11 @@ void TestEnd( bool bExpectEmpty = true )
 		else
 		{
 			Msg("FAIL: !IsEmpty()\n");
-			Shipping_Assert( 0 );
 		}
 	}
 	else
 	{
 		Msg("FAIL: !Validate()\n");
-		Shipping_Assert( 0 );
-	}
-	while ( g_ThreadHandles.size() )
-	{
-		ThreadJoin( g_ThreadHandles.front(), 0 );
-
-		ReleaseThreadHandle( g_ThreadHandles.front() );
-		g_ThreadHandles.pop_front();
 	}
 }
 
@@ -323,55 +332,49 @@ uintp PushPopInterleavedTestThreadFunc( void * )
 	return 0;
 }
 
+
+
 void STPushMTPop( bool bDistribute )
 {
 	Msg( "%s test: single thread push, multithread pop, %s", g_pListType, bDistribute ? "distributed..." : "no affinity..." );
 	TestStart();
-	g_ThreadHandles.push_back( CreateSimpleThread( &PushThreadFunc, NULL ) );
-	for ( int i = 0; i < NUM_THREADS - 1; i++ )
-	{
-		ThreadHandle_t hThread = CreateSimpleThread( &PopThreadFunc, NULL );
-		g_ThreadHandles.push_back( hThread );
-		if ( bDistribute )
-		{
-			int32 mask = 1 << (i % NUM_PROCESSORS);
-			ThreadSetAffinity( hThread, mask );
-		}
-	}
+	ThreadHandle_t hPush = CreateSimpleThread( &PushThreadFunc, NULL );
+	ThreadHandle_t *arrPops = CreateTestThreads( PopThreadFunc, NUM_THREADS - 1, ( bDistribute ) ? NUM_PROCESSORS : 0 );
 
 	TestWait();
 	TestEnd();
+	JoinTestThreads( arrPops );
+	ThreadJoin( hPush );
+	ReleaseThreadHandle( hPush );
 }
 
 void MTPushSTPop( bool bDistribute )
 {
 	Msg( "%s test: multithread push, single thread pop, %s", g_pListType, bDistribute ? "distributed..." : "no affinity..." );
 	TestStart();
-	g_ThreadHandles.push_back( 	CreateSimpleThread( &PopThreadFunc, NULL ) );
-	for ( int i = 0; i < NUM_THREADS - 1; i++ )
-	{
-		ThreadHandle_t hThread = CreateSimpleThread( &PushThreadFunc, NULL );
-		g_ThreadHandles.push_back( hThread );
-		if ( bDistribute )
-		{
-			int32 mask = 1 << (i % NUM_PROCESSORS);
-			ThreadSetAffinity( hThread, mask );
-		}
-	}
-
+	ThreadHandle_t hPop = CreateSimpleThread( &PopThreadFunc, NULL );
+	ThreadHandle_t* arrPushes = CreateTestThreads( PushThreadFunc, NUM_THREADS - 1, ( bDistribute ) ? NUM_PROCESSORS : 0 );
+	
 	TestWait();
 	TestEnd();
+	JoinTestThreads( arrPushes );
+	ThreadJoin( hPop );
+	ReleaseThreadHandle( hPop );
 }
+
 
 void MTPushMTPop( bool bDistribute )
 {
 	Msg( "%s test: multithread push, multithread pop, %s", g_pListType, bDistribute ? "distributed..." : "no affinity..." );
 	TestStart();
 	int ct = 0;
+	ThreadHandle_t *threadHandles = (ThreadHandle_t *)stackalloc( NUM_THREADS * sizeof(ThreadHandle_t) );
+	int nHandles = 0;
+
 	for ( int i = 0; i < NUM_THREADS / 2 ; i++ )
 	{
 		ThreadHandle_t hThread = CreateSimpleThread( &PopThreadFunc, NULL );
-		g_ThreadHandles.push_back( hThread );
+		threadHandles[nHandles++] = hThread;
 		if ( bDistribute )
 		{
 			int32 mask = 1 << (ct++ % NUM_PROCESSORS);
@@ -381,7 +384,7 @@ void MTPushMTPop( bool bDistribute )
 	for ( int i = 0; i < NUM_THREADS / 2 ; i++ )
 	{
 		ThreadHandle_t hThread = CreateSimpleThread( &PushThreadFunc, NULL );
-		g_ThreadHandles.push_back( hThread );
+		threadHandles[nHandles++] = hThread;
 		if ( bDistribute )
 		{
 			int32 mask = 1 << (ct++ % NUM_PROCESSORS);
@@ -391,6 +394,11 @@ void MTPushMTPop( bool bDistribute )
 
 	TestWait();
 	TestEnd();
+
+	for ( int i = 0; i < nHandles; i++ )
+	{
+		ReleaseThreadHandle( threadHandles[i] );
+	}
 }
 
 void MTPushPopPopInterleaved( bool bDistribute )
@@ -398,43 +406,38 @@ void MTPushPopPopInterleaved( bool bDistribute )
 	Msg( "%s test: multithread interleaved push/pop, %s", g_pListType, bDistribute ? "distributed..." : "no affinity..." );
 	srand( Plat_MSTime() );
 	TestStart();
-	for ( int i = 0; i < NUM_THREADS; i++ )
-	{
-		ThreadHandle_t hThread = CreateSimpleThread( &PushPopInterleavedTestThreadFunc, NULL );
-		g_ThreadHandles.push_back( hThread );
-		if ( bDistribute )
-		{
-			int32 mask = 1 << (i % NUM_PROCESSORS);
-			ThreadSetAffinity( hThread, mask );
-		}
-	}
+	ThreadHandle_t * arrPushPops = CreateTestThreads( &PushPopInterleavedTestThreadFunc, NUM_THREADS, ( bDistribute ) ? NUM_PROCESSORS : 0 );
 	TestWait();
 	TestEnd();
+	JoinTestThreads( arrPushPops );
 }
+
+
 
 void MTPushSeqPop( bool bDistribute )
 {
 	Msg( "%s test: multithread push, sequential pop, %s", g_pListType, bDistribute ? "distributed..." : "no affinity..." );
 	TestStart();
-	for ( int i = 0; i < NUM_THREADS; i++ )
-	{
-		ThreadHandle_t hThread = CreateSimpleThread( &PushThreadFunc, NULL );
-		g_ThreadHandles.push_back( hThread );
-		if ( bDistribute )
-		{
-			int32 mask = 1 << (i % NUM_PROCESSORS);
-			ThreadSetAffinity( hThread, mask );
-		}
-	}
+	ThreadHandle_t * arrPushes = CreateTestThreads( PushThreadFunc, NUM_THREADS, ( bDistribute ) ? NUM_PROCESSORS : 0 );
 
 	TestWait();
 	int ignored;
 	g_pTestOps->Validate();
+	int nPopped = 0;
 	while ( g_pTestOps->Pop( &ignored ) )
 	{
+		nPopped++;
+	}
+	if ( nPopped != NUM_TEST )
+	{
+		Msg( "Pops != pushes?\n" );
+		DebuggerBreakIfDebugging();
 	}
 	TestEnd();
+	
+	JoinTestThreads( arrPushes );
 }
+
 
 void SeqPushMTPop( bool bDistribute )
 {
@@ -444,27 +447,48 @@ void SeqPushMTPop( bool bDistribute )
 	{
 		g_pTestOps->Push( g_nTested );
 	}
-	for ( int i = 0; i < NUM_THREADS; i++ )
-	{
-		ThreadHandle_t hThread = CreateSimpleThread( &PopThreadFunc, NULL );
-		g_ThreadHandles.push_back( hThread );
-		if ( bDistribute )
-		{
-			int32 mask = 1 << (i % NUM_PROCESSORS);
-			ThreadSetAffinity( hThread, mask );
-		}
-	}
+
+	ThreadHandle_t * arrPops = CreateTestThreads( PopThreadFunc, NUM_THREADS, ( bDistribute ) ? NUM_PROCESSORS : 0 );
 
 	TestWait();
 	TestEnd();
+	
+	JoinTestThreads( arrPops );
 }
 
+
+#ifdef _PS3
+void TestThreadProc( uint64_t id )
+{
+	printf( "(TS)Hello from PPU thread %lld @%p\n", id, &id );
+	sys_ppu_thread_exit( id );
 }
+uintp TestThreadProc2( void *p )
+{
+	printf( "(TS)Hello from PPU thread %lld @%p\n", (int64)p, &p );
+	return (uintp)p;
+}
+#endif
+
+void TestThreads()
+{
+#ifdef _PS3
+	printf("(TS)testing threads\n");
+	const int numThreads = 40;
+	ThreadHandle_t * arrTests = CreateTestThreads( TestThreadProc2, numThreads, false );
+	JoinTestThreads( arrTests );
+#endif
+}
+
+
+}
+
+
 void RunSharedTests( int nTests )
 {
 	using namespace TSListTests;
-
-	const CPUInformation &pi = *GetCPUInformation();
+	TestThreads();
+	const CPUInformation &pi = GetCPUInformation();
 	NUM_PROCESSORS = pi.m_nLogicalProcessors;
 	MAX_THREADS = NUM_PROCESSORS * 2;
 	g_pTestBuckets = new int[NUM_TEST];
@@ -500,12 +524,16 @@ bool RunTSListTests( int nListSize, int nTests )
 	using namespace TSListTests;
 	NUM_TEST = nListSize;
 
-	TSLHead_t foo;
-	(void)foo; // Avoid warning about unused variable.
 #ifdef USE_NATIVE_SLIST
-	int maxSize = ( 1 << (sizeof( foo.Depth ) * 8) ) - 1;
+
+#ifdef _WIN64
+	int maxSize = 65536; // FIXME: How should this be computed?
 #else
-	int maxSize = ( 1 << (sizeof( foo.value.Depth ) * 8) ) - 1;
+	int maxSize = ( 1 << (sizeof( ((TSLHead_t *)(0))->Depth ) * 8) ) - 1;
+#endif
+
+#else
+	int maxSize = ( 1 << (sizeof( ((TSLHead_t *)(0))->value.Depth ) * 8) ) - 1;
 #endif
 	if ( NUM_TEST > maxSize )
 	{

@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: The document. Exposes functions for object creation, deletion, and
 //			manipulation. Holds the current tool. Handles GUI messages that are
@@ -32,7 +32,7 @@ void CSelection::Init( CMapDoc *pDocument )
 {
 	m_pDocument = pDocument;
 	m_eSelectMode = selectGroups;
-	m_SelectionList.Purge();
+	m_SelectionList.RemoveAll();
 	ClearHitList();
 
 	m_LastValidBounds.bmins = Vector(0, 0, 0);
@@ -90,6 +90,19 @@ void CSelection::GetBoundsForTranslation( Vector &vecMins, Vector &vecMaxs )
 	vecMins.Init( COORD_NOTINIT, COORD_NOTINIT, 0 );
 	vecMaxs.Init( -COORD_NOTINIT, -COORD_NOTINIT, 0 );
 
+	// If there are any solids, then only use the bounds for those. Otherwise, 
+	// an entity that is off the grid can pull all the solids off the grid and you never want that.
+	int nSolids = 0;
+	for (int i = 0; i < m_SelectionList.Count(); i++)
+	{
+		CMapClass *pobj = m_SelectionList[i];
+		CEditGameClass *pEdit = dynamic_cast< CEditGameClass* >( pobj );
+		if ( (pEdit && pEdit->IsSolidClass()) || dynamic_cast<CMapSolid *>(pobj) )
+		{
+			++nSolids;
+		}
+	}
+
 	for (int i = 0; i < m_SelectionList.Count(); i++)
 	{
 		CMapClass *pobj = m_SelectionList[i];
@@ -102,7 +115,7 @@ void CSelection::GetBoundsForTranslation( Vector &vecMins, Vector &vecMaxs )
 		{
 			pobj->GetRender2DBox(mins, maxs);
 		}
-		else
+		else if ( nSolids == 0 )
 		{
 			pobj->GetOrigin( mins );
 			maxs = mins;
@@ -206,7 +219,8 @@ void CSelection::SetSelectionState(SelectionState_t eSelectionState)
 {
 	for ( int i=0; i<m_SelectionList.Count(); i++ )
 	{
-		CMapEntity *pObject = (CMapEntity *)m_SelectionList.Element(i);
+		CMapClass *pMapClass = (CUtlReference< CMapClass >)m_SelectionList.Element(i);
+		CMapEntity *pObject = (CMapEntity *)pMapClass;
 		pObject->SetSelectionState( eSelectionState );
 	}
 }
@@ -549,7 +563,7 @@ bool CSelection::SelectObject(CMapClass *pObj, int cmd)
 		else if ( (cmd & scUnselect) && bAlreadySelected )
 		{
 			// ok unselect an yet selected object
-			m_SelectionList.Remove(iIndex);
+			m_SelectionList.FastRemove(iIndex);
 			pObj->SetSelectionState(SELECT_NONE);
 		}
 		else
@@ -564,7 +578,7 @@ bool CSelection::SelectObject(CMapClass *pObj, int cmd)
 	if ( cmd & scSaveChanges )
 	{
 		// changing the selection automatically saves changes made to the properties dialog
-		GetMainWnd()->pObjectProperties->SaveData();
+		GetMainWnd()->pObjectProperties->SaveData( SAVEDATA_SELECTION_CHANGED );
 	}
 
 	// always mark data dirty
@@ -587,7 +601,7 @@ void CSelection::SelectObjectList( const CMapObjectList *pList, int cmd )
 	// Clear the current selection.
 	if ( cmd & scSaveChanges )
 	{
-		GetMainWnd()->pObjectProperties->SaveData();
+		GetMainWnd()->pObjectProperties->SaveData( SAVEDATA_SELECTION_CHANGED );
 		cmd &= ~scSaveChanges;
 	}
 
@@ -601,7 +615,7 @@ void CSelection::SelectObjectList( const CMapObjectList *pList, int cmd )
 	{
 		for (int pos=0;pos<pList->Count();pos++)
 		{
-			CMapClass *pObject = pList->Element(pos);
+			CMapClass *pObject = (CUtlReference< CMapClass >)pList->Element(pos);
 			CMapClass *pSelObject = pObject->PrepareSelection( m_eSelectMode );
 			if (pSelObject)
 			{

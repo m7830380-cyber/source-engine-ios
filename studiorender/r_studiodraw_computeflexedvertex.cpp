@@ -1,9 +1,4 @@
 //========= Copyright c 1996-2008, Valve Corporation, All rights reserved. ============//
-
-#include "tier0/platform.h"
-
-#ifdef PLATFORM_WINDOWS
-
 #include "studiorender.h"
 #include "studio.h"
 #include "materialsystem/imesh.h"
@@ -15,19 +10,18 @@
 #include "optimize.h"
 #include "mathlib/mathlib.h"
 #include "mathlib/vector.h"
-#include <malloc.h>
 #include "mathlib/vmatrix.h"
 #include "studiorendercontext.h"
 #include "tier2/tier2.h"
 #include "tier0/vprof.h"
-//#include "tier0/miniprofiler.h"
+#include "tier0/miniprofiler.h"
 #include <algorithm>
 #include "filesystem.h"
 
 #define PROFILE_THIS_FILE 0
 
 
-//DLL_IMPORT CLinkedMiniProfiler *g_pOtherMiniProfilers;
+DLL_IMPORT CLinkedMiniProfiler *g_pOtherMiniProfilers;
 #if PROFILE_THIS_FILE
 
 #if !ENABLE_HARDWARE_PROFILER
@@ -62,12 +56,8 @@ uint32 g_mp_morph_Vx[2];
 uint32 g_mp_morph_Vw[2];
 #endif
 
-#ifdef _X360
 ConVar g_cv_morph_path("morph_path", "7");
-#ifdef _DEBUG
 ConVar g_cv_morph_debug("morph_debug", "0");
-#endif // _DEBUG
-#endif // _X360
 
 
 #ifdef _X360
@@ -1617,5 +1607,3 @@ void CCachedRenderData::ComputeFlexedVertexWrinkle_StreamOffset_Optimized( studi
 		ComputeFlexedVertex_StreamOffset( pStudioHdr, pflex, pvanim, vertCount, w1, w2, w3, w4);
 	}
 }
-
-#endif // PLATFORM_WINDOWS

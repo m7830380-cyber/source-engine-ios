@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -6,7 +6,7 @@
 //=============================================================================//
 #include "hlfaceposer.h"
 #include "faceposertoolwindow.h"
-#include "utlvector.h"
+#include "UtlVector.h"
 #include "tier1/strtools.h"
 #include "MDLViewer.h"
 #include "choreowidgetdrawhelper.h"
@@ -570,15 +570,15 @@ void IFacePoserToolWindow::HandleToolRedraw( CChoreoWidgetDrawHelper& helper )
 	RECT rcClient = captionRect;
 	captionRect.bottom = captionRect.top + LOCK_SIZE + 2 * LOCK_INSET;
 
-	COLORREF textColor = GetSysColor( COLOR_MENUTEXT ); //GetSysColor( COLOR_INACTIVECAPTIONTEXT );
+	Color textColor = RGBToColor( GetSysColor( COLOR_MENUTEXT ) ); //GetSysColor( COLOR_INACTIVECAPTIONTEXT );
 
 	if ( IsActiveTool() )
 	{
-		helper.DrawFilledRect( GetSysColor( COLOR_ACTIVECAPTION ), captionRect );
+		helper.DrawFilledRect( RGBToColor( GetSysColor( COLOR_ACTIVECAPTION ) ), captionRect );
 	}
 	else
 	{
-		helper.DrawFilledRect( GetSysColor( COLOR_INACTIVECAPTION ), captionRect );
+		helper.DrawFilledRect( RGBToColor( GetSysColor( COLOR_INACTIVECAPTION ) ), captionRect );
 	}
 
 	captionRect.top += 1;

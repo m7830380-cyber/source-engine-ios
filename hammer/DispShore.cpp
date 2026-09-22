@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2004, Valve LLC, All rights reserved. ============
 //
 //
 //=============================================================================
@@ -9,11 +9,11 @@
 #include "GlobalFunctions.h"
 #include "MapDisp.h"
 #include "DispShore.h"
-#include "utlvector.h"
+#include "UtlVector.h"
 #include "mapdoc.h"
 #include "mapworld.h"
 #include "mapsolid.h"
-#include "materialsystem/imesh.h"
+#include "materialsystem/IMesh.h"
 #include "Material.h"
 #include "collisionutils.h"
 #include "TextureSystem.h"

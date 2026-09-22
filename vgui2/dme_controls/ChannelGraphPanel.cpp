@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -51,8 +51,8 @@ void CChannelGraphPanel::SetChannel( CDmeChannel *pChannel )
 		for ( int i = 0; i < nComponents; ++i )
 		{
 			float f = pLog->GetComponent( t, i );
-			m_graphMinValue = min( m_graphMinValue, f );
-			m_graphMaxValue = max( m_graphMaxValue, f );
+			m_graphMinValue = MIN( m_graphMinValue, f );
+			m_graphMaxValue = MAX( m_graphMaxValue, f );
 		}
 	}
 }
@@ -173,7 +173,7 @@ float GetDisplayIncrement( int windowpixels, int fontpixels, float valuerange, i
 	int nPower = ( int )ceil( log10( ratio ) );
 	if ( pDecimalPlaces )
 	{
-		*pDecimalPlaces = max( 0, -nPower );
+		*pDecimalPlaces = MAX( 0, -nPower );
 	}
 	return pow( 10.0f, nPower );
 }
@@ -198,7 +198,7 @@ void CChannelGraphPanel::Paint()
 	int tall = GetTall() - m_nGraphOriginY;
 
 	int textwidth = 40, textheight = 10;
-	surface()->GetTextSize( m_font, L"999.9", textwidth, textheight );
+	surface()->GetTextSize( m_font, L"999.999", textwidth, textheight );
 
 	// draw current time marker
 	DmeTime_t curtime = m_hChannel->GetCurrentTime();
@@ -228,10 +228,10 @@ void CChannelGraphPanel::Paint()
 	for ( int i = nMinValueIndex; i <= nMaxValueIndex; ++i, flValue += flValueIncrement )
 	{
 		wchar_t pFormat[ 32 ];
-		V_swprintf_safe( pFormat, L"%%.%df", nDecimalPlaces );
+		_snwprintf( pFormat, ARRAYSIZE( pFormat ), L"%%.%df", nDecimalPlaces );
 
 		wchar_t wstring[ 32 ];
-		V_swprintf_safe( wstring, pFormat, flValue );
+		_snwprintf( wstring, ARRAYSIZE( wstring ), pFormat, flValue );
 
 		int tw = 0, th = 0;
 		surface()->GetTextSize( m_font, wstring, tw, th );
@@ -251,10 +251,10 @@ void CChannelGraphPanel::Paint()
 	for ( int i = nMinTimeIndex; i <= nMaxTimeIndex; ++i, flTime += flTimeIncrement )
 	{
 		wchar_t pFormat[ 32 ];
-		V_swprintf_safe( pFormat, L"%%.%df", nDecimalPlaces );
+		_snwprintf( pFormat, ARRAYSIZE( pFormat ), L"%%.%df", nDecimalPlaces );
 
 		wchar_t wstring[ 32 ];
-		V_swprintf_safe( wstring, pFormat, flTime );
+		_snwprintf( wstring, ARRAYSIZE( wstring ), pFormat, flTime );
 
 		int tw = 0, th = 0;
 		surface()->GetTextSize( m_font, wstring, tw, th );
@@ -296,6 +296,8 @@ void CChannelGraphPanel::Paint()
 			{
 				surface()->DrawLine( lastx, lasty, x, y );
 			}
+			surface()->DrawLine( x-1, y, x+1, y );
+			surface()->DrawLine( x, y-1, x, y+1 );
 			lastx = x;
 			lasty = y;
 		}

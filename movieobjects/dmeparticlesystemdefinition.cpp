@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2005, Valve Corporation, All rights reserved. =======
 //
 // Purpose: 
 //
@@ -8,7 +8,7 @@
 #include "datamodel/dmelementfactoryhelper.h"
 #include "movieobjects/dmeeditortypedictionary.h"
 #include "toolutils/enginetools_int.h"
-#include "tier1/KeyValues.h"
+#include "tier1/keyvalues.h"
 #include "tier1/utlbuffer.h"
 #include "tier1/convar.h"
 #include "particles/particles.h"
@@ -53,11 +53,11 @@ IMPLEMENT_ELEMENT_FACTORY_INSTALL_EXPLICITLY( DmeParticleFunction, CDmeParticleF
 void CDmeParticleFunction::OnConstruction()
 {
 	m_bSkipNextResolve = false;
+	m_hTypeDictionary.Init( this, "type_dictionary", FATTRIB_DONTSAVE | FATTRIB_HIDDEN );
 }
 
 void CDmeParticleFunction::OnDestruction()
 {
-	DestroyElement( m_hTypeDictionary, TD_DEEP );
 }
 
 
@@ -73,7 +73,7 @@ static void CreateEditorAttributeInfo( CDmeEditorType *pEditorType, const char *
 	parse.Tokenize( pWidgetInfo );
 	if ( parse.ArgC() == 1 )
 	{
-		CDmeEditorAttributeInfo *pInfo = CreateElement< CDmeEditorAttributeInfo >( "field info" );
+		CDmeEditorAttributeInfo *pInfo = CreateElement< CDmeEditorAttributeInfo >( "field info", DMFILEID_INVALID );
 		pEditorType->AddAttributeInfo( pAttributeName, pInfo ); 
 		pInfo->m_Widget = parse[0];
 		return;
@@ -84,22 +84,22 @@ static void CreateEditorAttributeInfo( CDmeEditorType *pEditorType, const char *
 		CDmeEditorChoicesInfo *pInfo = NULL;
 		if ( !Q_stricmp( parse[0], "intchoice" ) )
 		{
-			pInfo = CreateElement< CDmeEditorIntChoicesInfo >( "field info" );
+			pInfo = CreateElement< CDmeEditorIntChoicesInfo >( "field info", DMFILEID_INVALID );
 		}
 
 		if ( !Q_stricmp( parse[0], "boolchoice" ) )
 		{
-			pInfo = CreateElement< CDmeEditorBoolChoicesInfo >( "field info" );
+			pInfo = CreateElement< CDmeEditorBoolChoicesInfo >( "field info", DMFILEID_INVALID );
 		}
 
 		if ( !Q_stricmp( parse[0], "stringchoice" ) )
 		{
-			pInfo = CreateElement< CDmeEditorStringChoicesInfo >( "field info" );
+			pInfo = CreateElement< CDmeEditorStringChoicesInfo >( "field info", DMFILEID_INVALID );
 		}
 
 		if ( !Q_stricmp( parse[0], "elementchoice" ) )
 		{
-			pInfo = CreateElement< CDmeEditorChoicesInfo >( "field info" );
+			pInfo = CreateElement< CDmeEditorChoicesInfo >( "field info", DMFILEID_INVALID );
 		}
 
 		if ( pInfo )
@@ -119,8 +119,8 @@ static void CreateEditorAttributeInfo( CDmeEditorType *pEditorType, const char *
 void CDmeParticleFunction::AddMissingFields( const DmxElementUnpackStructure_t *pUnpack )
 {
 	DestroyElement( m_hTypeDictionary, TD_DEEP );
-	m_hTypeDictionary = CreateElement< CDmeEditorTypeDictionary >( "particleFunctionDict" );
-	CDmeEditorType *pEditorType = CreateElement< CDmeEditorType >( GetTypeString() );
+	m_hTypeDictionary = CreateElement< CDmeEditorTypeDictionary >( "particleFunctionDict", DMFILEID_INVALID );
+	CDmeEditorType *pEditorType = CreateElement< CDmeEditorType >( GetTypeString(), DMFILEID_INVALID );
 
 	for ( ; pUnpack->m_pAttributeName; ++pUnpack )
 	{
@@ -153,7 +153,7 @@ void CDmeParticleFunction::UpdateAttributes( const DmxElementUnpackStructure_t *
 	for( CDmAttribute *pAttr = FirstAttribute(); pAttr; pAttr = pNext )
 	{
 		pNext = pAttr->NextAttribute();
-		if ( pAttr->IsFlagSet( FATTRIB_EXTERNAL | FATTRIB_STANDARD ) )
+		if ( pAttr->IsStandard() || pAttr->IsFlagSet( FATTRIB_EXTERNAL ) )
 			continue;
 
 		RemoveAttributeByPtr( pAttr );
@@ -231,7 +231,13 @@ CDmeEditorTypeDictionary* CDmeParticleFunction::GetEditorTypeDictionary()
 	return m_hTypeDictionary;
 }
 
-
+void CDmeParticleFunction::InstanceTypeDictionary()
+{
+	if ( m_hTypeDictionary != DMELEMENT_HANDLE_INVALID )
+	{
+		m_hTypeDictionary = m_hTypeDictionary->Copy();
+	}
+}
 
 //-----------------------------------------------------------------------------
 // Expose this class to the scene database 
@@ -280,6 +286,13 @@ IMPLEMENT_ELEMENT_FACTORY_INSTALL_EXPLICITLY( DmeParticleChild, CDmeParticleChil
 void CDmeParticleChild::OnConstruction()
 {
 	m_Child.Init( this, "child", FATTRIB_NEVERCOPY );
+/*
+	CDmeEditorType *pEditorType = CreateElement< CDmeEditorType >( "DmeParticleChild", DMFILEID_INVALID );
+	CDmeEditorAttributeInfo *pInfo = CreateElement< CDmeEditorAttributeInfo >( "field info", DMFILEID_INVALID );
+	pEditorType->AddAttributeInfo( "child", pInfo ); 
+	pInfo->m_Widget = "particle_picker";
+	m_hTypeDictionary->AddEditorType( pEditorType );
+*/
 }
 
 void CDmeParticleChild::OnDestruction()
@@ -326,8 +339,8 @@ void CDmeParticleSystemDefinition::OnConstruction()
 	m_ParticleFunction[FUNCTION_CONSTRAINT].Init( this, "constraints" );
 	m_bPreventNameBasedLookup.Init( this, "preventNameBasedLookup" );
 
-	m_hTypeDictionary = CreateElement< CDmeEditorTypeDictionary >( "particleSystemDefinitionDict" );
-	CDmeEditorType *pEditorType = CreateElement< CDmeEditorType >( "DmeParticleSystemDefinition" );
+	m_hTypeDictionary = CreateElement< CDmeEditorTypeDictionary >( "particleSystemDefinitionDict", DMFILEID_INVALID );
+	CDmeEditorType *pEditorType = CreateElement< CDmeEditorType >( "DmeParticleSystemDefinition", DMFILEID_INVALID );
 
 	const DmxElementUnpackStructure_t *pUnpack = g_pParticleSystemMgr->GetParticleSystemDefinitionUnpackStructure();
 	for ( ; pUnpack->m_pAttributeName; ++pUnpack )
@@ -337,7 +350,7 @@ void CDmeParticleSystemDefinition::OnConstruction()
 		CDmAttribute *pAttribute = AddAttribute( pUnpack->m_pAttributeName, pUnpack->m_AttributeType );
 		if ( pUnpack->m_pDefaultString )
 		{
-			int nLen = Q_strlen( pUnpack->m_pDefaultString );
+			int nLen = MAX( 1, Q_strlen( pUnpack->m_pDefaultString ) );
 			CUtlBuffer bufParse( pUnpack->m_pDefaultString, nLen, CUtlBuffer::TEXT_BUFFER | CUtlBuffer::READ_ONLY );
 			pAttribute->Unserialize( bufParse );
 		}
@@ -371,7 +384,7 @@ static void RemoveObsoleteAttributes( CDmElement *pElement, const DmxElementUnpa
 	for( CDmAttribute *pAttr = pElement->FirstAttribute(); pAttr; pAttr = pNext )
 	{
 		pNext = pAttr->NextAttribute();
-		if ( pAttr->IsFlagSet( FATTRIB_EXTERNAL | FATTRIB_STANDARD ) )
+		if ( pAttr->IsStandard() || pAttr->IsFlagSet( FATTRIB_EXTERNAL ) )
 			continue;
 
 		bool bFound = false;
@@ -387,6 +400,47 @@ static void RemoveObsoleteAttributes( CDmElement *pElement, const DmxElementUnpa
 		if ( !bFound )
 		{
 			pElement->RemoveAttributeByPtr( pAttr );
+		}
+	}
+}
+
+// Remove all attributes from the element that are either:
+// A) Not in the unpack structure (eg. stale)
+// B) Equal to their default value
+static void CompactElement( CDmElement *pElement, const DmxElementUnpackStructure_t *pUnpack )
+{
+	CDmAttribute *pNext;
+	for( CDmAttribute *pAttr = pElement->FirstAttribute(); pAttr; pAttr = pNext )
+	{
+		pNext = pAttr->NextAttribute();
+		if ( pAttr->IsStandard() || pAttr->IsFlagSet( FATTRIB_EXTERNAL ) )
+			continue;
+
+		const DmxElementUnpackStructure_t *pFoundUnpack = NULL;
+		for ( const DmxElementUnpackStructure_t *pTrav = pUnpack; pTrav->m_pAttributeName; ++pTrav )
+		{
+			if ( !Q_stricmp( pTrav->m_pAttributeName, pAttr->GetName() ) )
+			{
+				pFoundUnpack = pTrav;
+				break;
+			}
+		}
+
+		if ( !pFoundUnpack )
+		{
+			// wasn't found in the unpack - attribute is stale
+			pElement->RemoveAttributeByPtr( pAttr );
+		}
+		else if ( pFoundUnpack && pFoundUnpack->m_pDefaultString )
+		{
+			int nLen = Q_strlen( pFoundUnpack->m_pDefaultString );
+			CUtlBuffer bufParse( pFoundUnpack->m_pDefaultString, nLen, CUtlBuffer::TEXT_BUFFER | CUtlBuffer::READ_ONLY );
+
+			if ( pAttr->IsIdenticalToSerializedValue( bufParse ) )
+			{
+				// equal to the default value - safe to remove
+				pElement->RemoveAttributeByPtr( pAttr );
+			}
 		}
 	}
 }
@@ -470,6 +524,90 @@ CDmeParticleFunction* CDmeParticleSystemDefinition::AddOperator( ParticleFunctio
 	return NULL;
 }
 
+void CDmeParticleSystemDefinition::OverrideAttributesFromOtherDefinition( CDmeParticleSystemDefinition *pDef )
+{
+	for ( const CDmAttribute *pAttr = pDef->FirstAttribute(); pAttr != NULL; pAttr = pAttr->NextAttribute() )
+	{
+		DmAttributeType_t type = pAttr->GetType();
+		const char *pAttrName = pAttr->GetName();
+		CDmAttribute *pCopyAttr = GetAttribute( pAttrName );
+
+		if ( !V_stricmp( pAttrName, "name" ) )
+			continue;
+
+		if ( pCopyAttr == NULL )
+		{
+			pCopyAttr = AddAttribute( pAttrName, type );
+
+			int flags = pAttr->GetFlags();
+			Assert( ( flags & FATTRIB_EXTERNAL ) == 0 );
+			flags &= ~FATTRIB_EXTERNAL;
+
+			pCopyAttr->ClearFlags();
+			pCopyAttr->AddFlag( flags );
+		}
+
+		// Temporarily remove the read-only flag from the copy while we copy into it
+		bool bReadOnly = pCopyAttr->IsFlagSet( FATTRIB_READONLY );
+		if ( bReadOnly )
+		{
+			pCopyAttr->RemoveFlag( FATTRIB_READONLY );
+		}
+
+		if ( type == AT_ELEMENT )
+		{
+			// nothing.
+		}
+		else if ( type == AT_ELEMENT_ARRAY )
+		{
+			// nothing.
+		}
+		else
+		{
+			pCopyAttr->SetValue( pAttr );
+		}
+
+		if ( bReadOnly )
+		{
+			pCopyAttr->AddFlag( FATTRIB_READONLY );
+		}
+
+	}
+}
+
+CDmeParticleFunction* CDmeParticleSystemDefinition::AddCopyOfOperator( CDmeParticleFunction *pFunc )
+{
+	for ( int nType = 0; nType < PARTICLE_FUNCTION_COUNT; ++nType )
+	{
+		CUtlVector< IParticleOperatorDefinition *> &list = g_pParticleSystemMgr->GetAvailableParticleOperatorList( (ParticleFunctionType_t)nType );
+
+		int nCount = list.Count();
+		for ( int i = 0; i < nCount; ++i )
+		{
+			if ( nType == FUNCTION_CHILDREN )
+			{
+				if ( !pFunc->IsA<CDmeParticleChild>() )
+					continue;
+			}
+			else
+			{
+				if ( Q_stricmp( pFunc->GetFunctionType(), list[i]->GetName() ) ) 
+					continue;
+			}
+
+			CDmeParticleFunction *pCopy = pFunc->Copy(TD_SHALLOW);
+			pCopy->SetFileId( GetFileId(), TD_SHALLOW );
+			pCopy->InstanceTypeDictionary();
+			m_ParticleFunction[nType].AddToTail( pCopy );
+
+			return pCopy;
+		}
+	}
+
+	return NULL;
+}
+
+
 CDmeParticleFunction* CDmeParticleSystemDefinition::AddChild( CDmeParticleSystemDefinition *pChild )
 {
 	Assert( pChild );
@@ -482,16 +620,9 @@ CDmeParticleFunction* CDmeParticleSystemDefinition::AddChild( CDmeParticleSystem
 	return pFunction;
 }
 
-//-----------------------------------------------------------------------------
-// Remove
 void CDmeParticleSystemDefinition::RemoveFunction( ParticleFunctionType_t type, CDmeParticleFunction *pFunction )
 {
 	int nIndex = FindFunction( type, pFunction );
-	RemoveFunction( type, nIndex );
-}
-
-void CDmeParticleSystemDefinition::RemoveFunction( ParticleFunctionType_t type, int nIndex )
-{
 	if ( nIndex >= 0 )
 	{
 		m_ParticleFunction[type].Remove(nIndex);
@@ -591,8 +722,60 @@ void CDmeParticleSystemDefinition::RecompileParticleSystem()
 	CUtlBuffer buf( 0, 0, nFlags );
 	if ( g_pDataModel->Serialize( buf, pEncoding, pFileFormat, GetHandle() ) )
 	{
-		g_pParticleSystemMgr->ReadParticleConfigFile( buf, true, NULL );
+		g_pParticleSystemMgr->ReadParticleConfigFile( buf, true );
 	}
 }
 
 
+void CDmeParticleSystemDefinition::RemoveInvalidFunctions()
+{
+	for ( int f = 0; f < PARTICLE_FUNCTION_COUNT; ++f )
+	{
+		for ( int i = 0; i < m_ParticleFunction[f].Count(); )
+		{
+			CDmeParticleFunction* pFunc = m_ParticleFunction[f].Element(i);
+			if ( pFunc == NULL )
+			{
+				m_ParticleFunction[f].Remove(i);
+			}
+			else
+			{
+				++i;
+			}
+		}
+	}
+}
+
+void CDmeParticleSystemDefinition::Compact()
+{
+	// Traverse the entire definition and purge all the DM elements
+
+	CompactElement( this, g_pParticleSystemMgr->GetParticleSystemDefinitionUnpackStructure() );
+
+	for ( int i = 0; i < PARTICLE_FUNCTION_COUNT; ++i )
+	{
+		ParticleFunctionType_t type = (ParticleFunctionType_t)i;
+		CUtlVector< IParticleOperatorDefinition *> &list = g_pParticleSystemMgr->GetAvailableParticleOperatorList( type );
+		int nAvailType = list.Count();
+		int nCount = GetParticleFunctionCount( type );
+		for ( int j = 0; j < nCount; ++j )
+		{
+			CDmeParticleFunction *pFunction = GetParticleFunction( type, j );
+
+			if ( i == FUNCTION_CHILDREN )
+			{
+				CompactElement( pFunction, list[0]->GetUnpackStructure() );
+				continue;
+			}
+
+			for ( int k = 0; k < nAvailType; ++k )
+			{
+				if ( Q_stricmp( pFunction->GetName(), list[k]->GetName() ) ) 
+					continue;
+
+				CompactElement( pFunction, list[k]->GetUnpackStructure() );
+				break;
+			}
+		}
+	}
+}

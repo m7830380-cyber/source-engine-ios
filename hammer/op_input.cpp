@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Implements a dialog for showing the input connections of an entity
 //
@@ -591,7 +591,7 @@ void COP_Input::UpdateEntityList()
 	{
 		FOR_EACH_OBJ( *m_pObjectList, pos )
 		{
-			CMapClass *pObject = m_pObjectList->Element(pos);
+			const CMapClass *pObject = m_pObjectList->Element(pos);
 	
 			if ((pObject != NULL) && (pObject->IsMapClass(MAPCLASS_TYPE(CMapEntity))))
 			{
@@ -635,7 +635,7 @@ void COP_Input::UpdateConnectionList(void)
 			
 			FOR_EACH_OBJ( *pEntityList, pos2 )
 			{
-				CMapEntity *pTestEntity = pEntityList->Element(pos2);
+				CMapEntity *pTestEntity = (CUtlReference<CMapEntity>)pEntityList->Element( pos2 );
 				if (pTestEntity != NULL)
 				{
 					AddEntityConnections(pszTargetName, pTestEntity);

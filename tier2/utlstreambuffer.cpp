@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright (c) 1996-2005, Valve Corporation, All rights reserved. =======//
 //
 // Purpose: 
 //
@@ -7,10 +7,12 @@
 // Serialization/unserialization buffer
 //=============================================================================//
 
-
 #include "tier2/utlstreambuffer.h"
 #include "tier2/tier2.h"
 #include "filesystem.h"
+
+// NOTE: This has to be the last file included!
+#include "tier0/memdbgon.h"
 
 
 //-----------------------------------------------------------------------------
@@ -33,14 +35,24 @@ CUtlStreamBuffer::CUtlStreamBuffer( ) : BaseClass( DEFAULT_STREAM_CHUNK_SIZE, DE
 	m_pPath = NULL;
 }
 
-CUtlStreamBuffer::CUtlStreamBuffer( const char *pFileName, const char *pPath, int nFlags, bool bDelayOpen ) :
+CUtlStreamBuffer::CUtlStreamBuffer( const char *pFileName, const char *pPath, int nFlags, bool bDelayOpen, int nOpenFileFlags ) :
 	BaseClass( DEFAULT_STREAM_CHUNK_SIZE, DEFAULT_STREAM_CHUNK_SIZE, nFlags )
 {
+	if ( nFlags & TEXT_BUFFER )
+	{
+		Warning( "CUtlStreamBuffer does not support TEXT_BUFFER's use CUtlBuffer\n" );
+		Assert( 0 );
+		m_Error	|= FILE_OPEN_ERROR;
+		return;
+	}
+
 	SetUtlBufferOverflowFuncs( &CUtlStreamBuffer::StreamGetOverflow, &CUtlStreamBuffer::StreamPutOverflow );
 
 	if ( bDelayOpen )
 	{
-		m_pFileName = V_strdup( pFileName );
+		int nFileNameLen = Q_strlen( pFileName );
+		m_pFileName = new char[ nFileNameLen + 1 ];
+		Q_strcpy( m_pFileName, pFileName );
 
 		if ( pPath )
 		{
@@ -53,16 +65,19 @@ CUtlStreamBuffer::CUtlStreamBuffer( const char *pFileName, const char *pPath, in
 			m_pPath = new char[ 1 ];
 			m_pPath[0] = 0;
 		}
-
+		
+		m_nOpenFileFlags = nOpenFileFlags;
 		m_hFileHandle = FILESYSTEM_INVALID_HANDLE;
 	}
 	else
 	{
 		m_pFileName = NULL;
 		m_pPath = NULL;
-		m_hFileHandle = OpenFile( pFileName, pPath );
+		m_nOpenFileFlags = 0;
+		m_hFileHandle = OpenFile( pFileName, pPath, nOpenFileFlags );
 		if ( m_hFileHandle == FILESYSTEM_INVALID_HANDLE )
 		{
+			m_Error |= FILE_OPEN_ERROR;
 			return;
 		}
 	}
@@ -76,7 +91,7 @@ CUtlStreamBuffer::CUtlStreamBuffer( const char *pFileName, const char *pPath, in
 		// Read in the first bytes of the file
 		if ( Size() > 0 )
 		{
-			int nSizeToRead = min( Size(), m_nMaxPut );
+			int nSizeToRead = MIN( Size(), m_nMaxPut );
 			ReadBytesFromFile( nSizeToRead, 0 );
 		}
 	}
@@ -93,22 +108,12 @@ void CUtlStreamBuffer::Close()
 		{
 			if ( ( m_hFileHandle == FILESYSTEM_INVALID_HANDLE ) && m_pFileName )
 			{
-				m_hFileHandle = OpenFile( m_pFileName, m_pPath );
-				if( m_hFileHandle == FILESYSTEM_INVALID_HANDLE )
-				{
-					Error( "CUtlStreamBuffer::Close() Unable to open file %s!\n", m_pFileName );
-				}
+				m_hFileHandle = OpenFile( m_pFileName, m_pPath, m_nOpenFileFlags );
 			}
 			if ( m_hFileHandle != FILESYSTEM_INVALID_HANDLE )
 			{
 				if ( g_pFullFileSystem )
-				{
-					int nBytesWritten = g_pFullFileSystem->Write( Base(), nBytesToWrite, m_hFileHandle );
-					if( nBytesWritten != nBytesToWrite )
-					{
-						Error( "CUtlStreamBuffer::Close() Write %s failed %d != %d.\n", m_pFileName, nBytesWritten, nBytesToWrite );
-					}
-				}
+					g_pFullFileSystem->Write( Base(), nBytesToWrite, m_hFileHandle );
 			}
 		}
 	}
@@ -144,7 +149,7 @@ CUtlStreamBuffer::~CUtlStreamBuffer()
 //-----------------------------------------------------------------------------
 // Open the file. normally done in constructor
 //-----------------------------------------------------------------------------
-void CUtlStreamBuffer::Open( const char *pFileName, const char *pPath, int nFlags )
+void CUtlStreamBuffer::Open( const char *pFileName, const char *pPath, int nFlags, int nOpenFileFlags )
 {
 	if ( IsOpen() )
 	{
@@ -156,9 +161,12 @@ void CUtlStreamBuffer::Open( const char *pFileName, const char *pPath, int nFlag
 	m_nTab = 0;
 	m_nOffset = 0;
 	m_Flags = nFlags;
-	m_hFileHandle = OpenFile( pFileName, pPath );
+	m_hFileHandle = OpenFile( pFileName, pPath, nOpenFileFlags );
 	if ( m_hFileHandle == FILESYSTEM_INVALID_HANDLE )
+	{
+		m_Error |= FILE_OPEN_ERROR;
 		return;
+	}
 
 	if ( IsReadOnly() )
 	{
@@ -169,7 +177,7 @@ void CUtlStreamBuffer::Open( const char *pFileName, const char *pPath, int nFlag
 		// Read in the first bytes of the file
 		if ( Size() > 0 )
 		{
-			int nSizeToRead = min( Size(), m_nMaxPut );
+			int nSizeToRead = MIN( Size(), m_nMaxPut );
 			ReadBytesFromFile( nSizeToRead, 0 );
 		}
 	}
@@ -178,7 +186,7 @@ void CUtlStreamBuffer::Open( const char *pFileName, const char *pPath, int nFlag
 		if ( m_Memory.NumAllocated() != 0 )
 		{
 			m_nMaxPut = -1;
-			AddNullTermination();
+			AddNullTermination( m_Put );
 		}
 		else
 		{
@@ -219,7 +227,7 @@ void CUtlStreamBuffer::GrowAllocatedSize( int nSize )
 
 
 //-----------------------------------------------------------------------------
-// Load up more of the stream when we overflow
+// Commit some of the stream to disk when we overflow.
 //-----------------------------------------------------------------------------
 bool CUtlStreamBuffer::StreamPutOverflow( int nSize )
 {
@@ -232,34 +240,26 @@ bool CUtlStreamBuffer::StreamPutOverflow( int nSize )
 		GrowAllocatedSize( nSize + 2 );
 	}
 
-	// Don't write the last byte (for NULL termination logic to work)
-	int nBytesToWrite = TellPut() - m_nOffset - 1;
+	// m_nOffset represents the location in the virtual buffer of m_Memory[0].
+	// Compute the number of bytes that we've buffered up in memory so that we know what to write to disk.
+	int nBytesToWrite = TellPut() - m_nOffset;
 	if ( ( nBytesToWrite > 0 ) || ( nSize < 0 ) )
 	{
 		if ( m_hFileHandle == FILESYSTEM_INVALID_HANDLE )
 		{
-			m_hFileHandle = OpenFile( m_pFileName, m_pPath );
-			if( m_hFileHandle == FILESYSTEM_INVALID_HANDLE )
-				return false;
+			m_hFileHandle = OpenFile( m_pFileName, m_pPath, m_nOpenFileFlags );
 		}
 	}
 
+	// Write out the data that we have buffered if we have any.
 	if ( nBytesToWrite > 0 )
 	{
 		int nBytesWritten = g_pFullFileSystem->Write( Base(), nBytesToWrite, m_hFileHandle );
 		if ( nBytesWritten != nBytesToWrite )
-		{
-			m_Error	|= FILE_WRITE_ERROR;
 			return false;
-		}
 
-		// This is necessary to deal with auto-NULL terminiation
-		m_Memory[0] = *(unsigned char*)PeekPut( -1 );
-		if ( TellPut() < Size() )
-		{
-			m_Memory[1] = *(unsigned char*)PeekPut( );
-		}
-		m_nOffset = TellPut() - 1;
+		// Set the offset to the current Put location to indicate that the buffer is now empty.
+		m_nOffset = TellPut();
 	}
 
 	if ( nSize < 0 )
@@ -270,6 +270,44 @@ bool CUtlStreamBuffer::StreamPutOverflow( int nSize )
 
 	return true;
 }
+
+//-----------------------------------------------------------------------------
+// Commit some of the stream to disk upon requests
+//-----------------------------------------------------------------------------
+bool CUtlStreamBuffer::TryFlushToFile( int nFlushToFileBytes )
+{
+	if ( !IsValid() || IsReadOnly() || ( m_Error & PUT_OVERFLOW ) )
+		return false;
+
+	// m_nOffset represents the location in the virtual buffer of m_Memory[0].
+	// Compute the number of bytes that we've buffered up in memory so that we know what to write to disk.
+	int nBytesToWrite = TellPut() - m_nOffset;
+	if ( nFlushToFileBytes < nBytesToWrite )
+		nBytesToWrite = nFlushToFileBytes;	// cannot write more than what we have, but can flush beginning of buffer up to certain amount
+
+	if ( nBytesToWrite <= 0 )
+		return true;	// nothing buffered to write
+
+	if ( m_hFileHandle == FILESYSTEM_INVALID_HANDLE )
+	{
+		m_hFileHandle = OpenFile( m_pFileName, m_pPath, m_nOpenFileFlags );
+	}
+
+	// Write out the data that we have buffered if we have any.
+	int nBytesWritten = g_pFullFileSystem->Write( Base(), nBytesToWrite, m_hFileHandle );
+	if ( nBytesWritten != nBytesToWrite )
+	{
+		m_Error |= PUT_OVERFLOW;	// Flag the buffer the same way as if put overflow callback failed
+		return false;				// Let caller know about file IO failure
+	}
+
+	// Move the uncommitted data over and advance the offset up by as many bytes
+	memmove( Base(), ( const char* ) Base() + nBytesWritten, ( TellPut() - m_nOffset ) - nBytesWritten + 1 ); // + 1 byte for null termination character
+	m_nOffset += nBytesWritten;
+
+	return true;
+}
+
 
 
 //-----------------------------------------------------------------------------
@@ -286,7 +324,7 @@ int CUtlStreamBuffer::ReadBytesFromFile( int nBytesToRead, int nReadOffset )
 			return 0;
 		}
 
-		m_hFileHandle = OpenFile( m_pFileName, m_pPath );
+		m_hFileHandle = OpenFile( m_pFileName, m_pPath, m_nOpenFileFlags );
 		if ( m_hFileHandle == FILESYSTEM_INVALID_HANDLE )
 		{
 			Error( "Unable to read file %s!\n", m_pFileName );
@@ -367,20 +405,14 @@ bool CUtlStreamBuffer::StreamGetOverflow( int nSize )
 //-----------------------------------------------------------------------------
 // open file unless already failed to open
 //-----------------------------------------------------------------------------
-FileHandle_t CUtlStreamBuffer::OpenFile( const char *pFileName, const char *pPath )
+FileHandle_t CUtlStreamBuffer::OpenFile( const char *pFileName, const char *pPath, int nOpenFileFlags )
 {
 	if ( m_Error & FILE_OPEN_ERROR )
 		return FILESYSTEM_INVALID_HANDLE;
 
-	char openflags[ 3 ] = "xx";
-	openflags[ 0 ] = IsReadOnly() ? 'r' : 'w';
-	openflags[ 1 ] = IsText() && !ContainsCRLF() ? 't' : 'b';
+	char options[ 3 ] = "xx";
+	options[ 0 ] = IsReadOnly() ? 'r' : 'w';
+	options[ 1 ] = IsText() && !ContainsCRLF() ? 't' : 'b';
 
-	FileHandle_t fh = g_pFullFileSystem->Open( pFileName, openflags, pPath );
-	if( fh == FILESYSTEM_INVALID_HANDLE )
-	{
-		m_Error	|= FILE_OPEN_ERROR;
-	}
-
-	return fh;
+	return g_pFullFileSystem->OpenEx( pFileName, options, nOpenFileFlags, pPath );
 }

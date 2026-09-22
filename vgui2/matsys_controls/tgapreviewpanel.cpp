@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -8,6 +8,10 @@
 #include "bitmap/tgaloader.h"
 #include "tier1/utlbuffer.h"
 #include "filesystem.h"
+
+// NOTE: This has to be the last file included!
+#include "tier0/memdbgon.h"
+
 
 using namespace vgui;
 
@@ -50,6 +54,7 @@ void CTGAPreviewPanel::SetTGA( const char *pFullPath )
 	Init( nWidth, nHeight, true );
 	m_TGAName = pFullPath;
 
+
 	buf.SeekGet( CUtlBuffer::SEEK_HEAD, 0 );
 	if ( !TGALoader::Load( (unsigned char*)GetImageBuffer(), buf, 
 		  nWidth, nHeight, IMAGE_FORMAT_BGRA8888, flGamma, false ) )
@@ -60,6 +65,8 @@ void CTGAPreviewPanel::SetTGA( const char *pFullPath )
 	{
 		DownloadTexture();
 	}
+
+	InvalidateLayout();
 }
 
 
@@ -69,4 +76,19 @@ void CTGAPreviewPanel::SetTGA( const char *pFullPath )
 const char *CTGAPreviewPanel::GetTGA() const
 {
 	return m_TGAName;
+}
+
+//-----------------------------------------------------------------------------
+// Lays out the panel
+//-----------------------------------------------------------------------------
+void CTGAPreviewPanel::PerformLayout()
+{
+	BaseClass::PerformLayout();
+
+	Rect_t paintRect;
+	paintRect.x = 0;
+	paintRect.y = 0;
+	paintRect.width = GetImageWidth();
+	paintRect.height = GetImageHeight();
+	SetPaintRect( &paintRect );
 }

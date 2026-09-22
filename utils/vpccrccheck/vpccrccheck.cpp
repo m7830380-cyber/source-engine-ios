@@ -1,4 +1,3 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
 
 #include "tier1/checksum_crc.h"
 #include "crccheck_shared.h"

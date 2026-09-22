@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -102,7 +102,7 @@ void FlexPanel::redraw()
 	if ( !ToolCanDraw() )
 		return;
 
-	CChoreoWidgetDrawHelper helper( this, GetSysColor( COLOR_BTNFACE ) );
+	CChoreoWidgetDrawHelper helper( this, RGBToColor( GetSysColor( COLOR_BTNFACE ) ) );
 	HandleToolRedraw( helper );
 
 	BaseClass::redraw();

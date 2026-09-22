@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Implements the spawnflags page of the Entity Properties dialog.
 //
@@ -85,7 +85,7 @@ void COP_Flags::UpdateData( int Mode, PVOID pData, bool bCanEdit )
 // Purpose: 
 // Output : Returns true on success, false on failure.
 //-----------------------------------------------------------------------------
-bool COP_Flags::SaveData(void)
+bool COP_Flags::SaveData( SaveData_Reason_t reason )
 {
 	if (!IsWindow(m_hWnd))
 	{
@@ -97,7 +97,7 @@ bool COP_Flags::SaveData(void)
 	//
 	FOR_EACH_OBJ( *m_pObjectList, pos )
 	{
-		CMapClass *pObject = m_pObjectList->Element(pos);
+		CMapClass *pObject = (CUtlReference< CMapClass >)m_pObjectList->Element(pos);
 		CEditGameClass *pEdit = dynamic_cast <CEditGameClass *>(pObject);
 		Assert(pEdit != NULL);
 

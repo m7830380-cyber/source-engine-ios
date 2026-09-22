@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2004, Valve Corporation, All rights reserved. =======
 //
 // Purpose: 
 //
@@ -33,16 +33,19 @@ void CDmePackColorOperator::OnDestruction()
 bool CDmePackColorOperator::IsDirty()
 {
 	const Color &c = m_color.Get();
-//	float s = 255.999f;
-//	return c.r() != s*m_red.Get() || c.g() != s*m_green.Get() || c.b() != s*m_blue.Get() || c.a() != s*m_alpha.Get();
-	return c.r() != m_red.Get() || c.g() != m_green.Get() || c.b() != m_blue.Get() || c.a() != m_alpha.Get();
+	float s = 255.999f;
+	return c.r() != s*m_red.Get() || c.g() != s*m_green.Get() || c.b() != s*m_blue.Get() || c.a() != s*m_alpha.Get();
+// 	return c.r() != m_red.Get() || c.g() != m_green.Get() || c.b() != m_blue.Get() || c.a() != m_alpha.Get();
 }
 
 void CDmePackColorOperator::Operate()
 {
-//	float s = 255.999f;
-//	m_color.Set( Color( s*m_red.Get(), s*m_green.Get(), s*m_blue.Get(), s*m_alpha.Get() ) );
-	m_color.Set( Color( m_red.Get(), m_green.Get(), m_blue.Get(), m_alpha.Get() ) );
+	float s = 255.999f;
+	int r = clamp( s*m_red.Get(),   0, 255 );
+	int g = clamp( s*m_green.Get(), 0, 255 );
+	int b = clamp( s*m_blue.Get(),  0, 255 );
+	int a = clamp( s*m_alpha.Get(), 0, 255 );
+	m_color.Set( Color( r, g, b, a ) );
 }
 
 void CDmePackColorOperator::GetInputAttributes( CUtlVector< CDmAttribute * > &attrs )

@@ -717,6 +717,21 @@ void unRLE_obuf_to_output_FAST ( DState* s )
 
 
 /*---------------------------------------------------*/
+Int32 BZ2_indexIntoF ( Int32 indx, Int32 *cftab )
+{
+   Int32 nb, na, mid;
+   nb = 0;
+   na = 256;
+   do {
+      mid = (nb + na) >> 1;
+      if (indx >= cftab[mid]) nb = mid; else na = mid;
+   }
+   while (na - nb != 1);
+   return nb;
+}
+
+
+/*---------------------------------------------------*/
 static
 void unRLE_obuf_to_output_SMALL ( DState* s )
 {
@@ -1484,7 +1499,7 @@ BZFILE * BZ_API(BZ2_bzdopen)
 /*---------------------------------------------------*/
 int BZ_API(BZ2_bzread) (BZFILE* b, void* buf, int len )
 {
-   int bzerr, nread;
+   int bzerr = BZ_OK, nread;
    if (((bzFile*)b)->lastErr == BZ_STREAM_END) return 0;
    nread = BZ2_bzRead(&bzerr,b,buf,len);
    if (bzerr == BZ_OK || bzerr == BZ_STREAM_END) {
@@ -1498,7 +1513,7 @@ int BZ_API(BZ2_bzread) (BZFILE* b, void* buf, int len )
 /*---------------------------------------------------*/
 int BZ_API(BZ2_bzwrite) (BZFILE* b, void* buf, int len )
 {
-   int bzerr;
+   int bzerr = BZ_OK;
 
    BZ2_bzWrite(&bzerr,b,buf,len);
    if(bzerr == BZ_OK){

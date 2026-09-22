@@ -252,16 +252,6 @@ extern float AvergeBufferAmplitude( float flInput[MIX_BUFFER_SIZE] );
 extern void ConvertFloat32Int16_Clamp_Interleave2( short *pOut, float *pflLeft, float *pflRight, int nSampleCount );
 extern void ConvertFloat32Int16_Clamp_InterleaveStride( short *pOut, int nOutputChannelCount, int nChannelStrideFloats, float *pflChannel0, int nInputChannelCount, int nSampleCount );
 
-
-// some conversion routines used by mixing code
-// convert mono short to mono float, multiply by scale
-extern void ConvertShortToFloat( float *pFloatOut, const short *pMonoInput, uint nCount, float flScale );
-// convert a stereo source from signed 16-bit PCM to mono signed unit scale float, add L/R stereo channels to produce mono, multiply by scale
-extern void SumStereoShortToFloat( float *pFloatOut, const short *pStereoInput, uint nCount, float flScale );
-extern void ConvertFloatToShort( short *pOutput, const float *pFloatInput, uint nCount, float flScale );
-extern void AddStereoFloatToStereoShort( short *pOutput, float *pFloatInput, float flFloatScale, short *pShortInput, float flShortScale, uint nCount );
-extern void AddStereoFloatToMonoShort( short *pOutput, float *pFloatInput, float flFloatScale, short *pShortInput, float flShortScale, uint nCount );
-
 #if IS_WINDOWS_PC
 void InitCOM();
 void ShutdownCOM();

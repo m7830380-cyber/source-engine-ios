@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2005, Valve Corporation, All rights reserved. =======
 //
 // Purpose: Act busy tool; main UI smarts class
 //
@@ -28,7 +28,7 @@
 #include "matsys_controls/mdlsequencepicker.h"
 #include "istudiorender.h"
 #include "materialsystem/imaterialsystem.h"
-#include "VGuiMatSurface/IMatSystemSurface.h"
+#include "vguimatsurface/imatsystemsurface.h"
 #include "toolutils/toolwindowfactory.h"
 #include "toolutils/basepropertiescontainer.h"
 #include "toolutils/savewindowpositions.h"
@@ -82,8 +82,8 @@ public:
 	virtual const char *GetBindingsContextFile() { return "cfg/VMTTool.kb"; }
 	virtual bool	Init();
     virtual void	Shutdown();
-	virtual bool	CanQuit( );
-	virtual void	PostMessage( HTOOLHANDLE hEntity, KeyValues *message );
+	virtual bool	CanQuit( const char *pExitMsg );
+	virtual void	PostToolMessage( HTOOLHANDLE hEntity, KeyValues *message );
 
 	// Inherited from IFileMenuCallbacks
 	virtual int		GetFileMenuItemsEnabled( );
@@ -278,6 +278,12 @@ void CVMTTool::Shutdown()
 	BaseClass::Shutdown();
 }
 
+
+//-----------------------------------------------------------------------------
+bool UTIL_IsDedicatedServer( void )
+{
+	return false;
+}
 
 //-----------------------------------------------------------------------------
 // Tool activation/deactivation
@@ -638,7 +644,7 @@ int CVMTTool::GetFileMenuItemsEnabled( )
 	int nFlags;
 	if ( !m_pDoc )
 	{
-		nFlags = FILE_NEW | FILE_OPEN | FILE_RECENT | FILE_CLEAR_RECENT | FILE_EXIT;
+		nFlags = FILE_NEW | FILE_OPEN | FILE_RECENT | FILE_EXIT;
 	}
 	else
 	{
@@ -647,7 +653,7 @@ int CVMTTool::GetFileMenuItemsEnabled( )
 
 	if ( m_RecentFiles.IsEmpty() )
 	{
-		nFlags &= ~(FILE_RECENT | FILE_CLEAR_RECENT);
+		nFlags &= ~FILE_RECENT;
 	}
 	return nFlags;
 }
@@ -744,7 +750,7 @@ void CVMTTool::OnCommand( const char *cmd )
 //-----------------------------------------------------------------------------
 // Messages from the engine
 //-----------------------------------------------------------------------------
-void CVMTTool::PostMessage( HTOOLHANDLE hEntity, KeyValues *message )
+void CVMTTool::PostToolMessage( HTOOLHANDLE hEntity, KeyValues *message )
 {
 	if ( !Q_stricmp( message->GetName(), "EditMaterial" ) )
 	{
@@ -804,6 +810,13 @@ void CVMTTool::OnFileOperationCompleted( const char *pFileType, bool bWroteFile,
 		vgui::ivgui()->PostMessage( GetVPanel(), new KeyValues( "OnExit" ), 0 );
 		return;
 	}
+
+	if ( !Q_stricmp( pContextKeyValues->GetName(), "OnUnload" ) )
+	{
+		enginetools->Command( "toolunload vmt -nosave\n" );
+		return;
+	}
+
 }
 
 
@@ -991,13 +1004,12 @@ void CVMTTool::OpenFileFromHistory( int slot, const char *pCommand )
 	OpenSpecificFile( pFileName );
 }
 
-bool CVMTTool::CanQuit()
+bool CVMTTool::CanQuit( const char *pExitMsg )
 {
 	if ( m_pDoc && m_pDoc->IsDirty() )
 	{
 		// Show Save changes Yes/No/Cancel and re-quit if hit yes/no
-		SaveFile( m_pDoc->GetFileName(), "vmt", FOSM_SHOW_PERFORCE_DIALOGS | FOSM_SHOW_SAVE_QUERY, 
-			new KeyValues( "OnQuit" ) );
+		SaveFile( m_pDoc->GetFileName(), "vmt", FOSM_SHOW_PERFORCE_DIALOGS | FOSM_SHOW_SAVE_QUERY, new KeyValues( pExitMsg ) );
 		return false;
 	}
 	return true;

@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -57,6 +57,33 @@ private:
 	mxLineEdit2 *m_cTranslation;
 	mxLineEdit2 *m_cRotation;
 	mxLineEdit2 *m_cQCString;
+
+	mxButton *m_bTranslateXSmallPlus;
+	mxButton *m_bTranslateYSmallPlus;
+	mxButton *m_bTranslateZSmallPlus;
+	mxButton *m_bTranslateXSmallMinus;
+	mxButton *m_bTranslateYSmallMinus;
+	mxButton *m_bTranslateZSmallMinus;
+	mxButton *m_bTranslateXLargePlus;
+	mxButton *m_bTranslateYLargePlus;
+	mxButton *m_bTranslateZLargePlus;
+	mxButton *m_bTranslateXLargeMinus;
+	mxButton *m_bTranslateYLargeMinus;
+	mxButton *m_bTranslateZLargeMinus;
+
+	mxButton *m_bRotateXSmallPlus;
+	mxButton *m_bRotateYSmallPlus;
+	mxButton *m_bRotateZSmallPlus;
+	mxButton *m_bRotateXSmallMinus;
+	mxButton *m_bRotateYSmallMinus;
+	mxButton *m_bRotateZSmallMinus;
+	mxButton *m_bRotateXLargePlus;
+	mxButton *m_bRotateYLargePlus;
+	mxButton *m_bRotateZLargePlus;
+	mxButton *m_bRotateXLargeMinus;
+	mxButton *m_bRotateYLargeMinus;
+	mxButton *m_bRotateZLargeMinus;
+
 };
 
 

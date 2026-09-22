@@ -1,8 +1,8 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
 
 
 #include "crccheck_shared.h"
 #include "tier1/checksum_crc.h"
+#include "tier1/strtools.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdarg.h>
@@ -17,9 +17,7 @@
 #pragma warning( disable : 4127 )
 
 #define MAX_INCLUDE_STACK_DEPTH 10
-#ifdef POSIX
-#define _vsnprintf vsnprintf
-#endif
+
 
 //-----------------------------------------------------------------------------
 //	Sys_Error
@@ -41,7 +39,7 @@ void SafeSnprintf( char *pOut, int nOutLen, const char *pFormat, ... )
 {
 	va_list marker;
 	va_start( marker, pFormat );
-	_vsnprintf( pOut, nOutLen, pFormat, marker );
+	V_vsnprintf( pOut, nOutLen, pFormat, marker );
 	va_end( marker );
 
 	pOut[nOutLen-1] = 0;

@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -14,7 +14,9 @@
 #include "tier0/memdbgon.h"
 
 
-float V_rint(float f)
+#if !defined(_MSC_VER) || _MSC_VER < 1800
+// This C99 function exists in VS 2013's math.h but are not currently available elsewhere.
+float rint(float f)
 {
 	if (f > 0.0f) {
 		return (float) floor(f + 0.5f);
@@ -23,6 +25,7 @@ float V_rint(float f)
 	} else
 		return 0.0f;
 }
+#endif
 
 //-----------------------------------------------------------------------------
 // Purpose: 
@@ -223,7 +226,7 @@ void BoundBox::GetBoundsSize(Vector& size)
 //-----------------------------------------------------------------------------
 static int Snap(/*int*/ float iValue, int iGridSize)
 {
-	return (int)(V_rint(iValue/iGridSize) * iGridSize);
+	return (int)(rint(iValue/iGridSize) * iGridSize);
 }
 
 

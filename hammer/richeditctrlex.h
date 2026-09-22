@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -107,8 +107,8 @@ class CTextAttributes
 		{
 			CString s;
 			s.Format("\\plain%s%s%s%s\\f%d\\fs%d\\cb%d\\cf%d ",
-					((CString)m_bsBold).GetBuffer(),
-					((CString)m_bsUnderline).GetBuffer(), ((CString)m_bsItalic).GetBuffer(), ((CString)m_bsStrike).GetBuffer(),
+					(CString)m_bsBold,
+					(CString)m_bsUnderline, (CString)m_bsItalic, (CString)m_bsStrike,
 					m_nFontNumber ,
 					m_nFontSize ,
 					m_nColorBground,
@@ -134,7 +134,7 @@ class CFontList : public list<CString>
 			for (const_iterator i = begin(); i!=end(); i++)
 			{
 				CString s2;
-				s2.Format("{\\f%d %s;}", nCount++, (const char*)(*i));
+				s2.Format("{\\f%d %s;}", nCount++, (*i));
 				s+=s2;
 			}
 

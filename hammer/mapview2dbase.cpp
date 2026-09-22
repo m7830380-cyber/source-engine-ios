@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. =======//
 //
 // Purpose: Rendering and mouse handling in the 2D view.
 //
@@ -192,7 +192,7 @@ void CMapView2DBase::OnInitialUpdate(void)
 	m_pToolManager = pDoc->GetTools();
 
 	CenterView();
-	SetColorMode(Options.view2d.bWhiteOnBlack);
+	SetColorMode(Options.view2d.bWhiteOnBlack ? true : false);
 
 	ShowScrollBar(SB_HORZ, Options.view2d.bScrollbars);
 	ShowScrollBar(SB_VERT, Options.view2d.bScrollbars);
@@ -405,7 +405,7 @@ void CMapView2DBase::DrawGrid(CRender2D *pRender, int xAxis, int yAxis, float de
 	}
 
 	// No dots if too close together.
-	s_bGridDots = Options.view2d.bGridDots;
+	s_bGridDots = Options.view2d.bGridDots ? true : false;
 	s_iCustomGridSpacing = nGridSpacing * Options.view2d.iGridHighSpec;
 
 	int xMin = SnapToGrid( (int)max( g_MIN_MAP_COORD, m_ViewMin[xAxis]-nGridSpacing ), nGridSpacing );
@@ -460,7 +460,7 @@ void CMapView2DBase::DrawGrid(CRender2D *pRender, int xAxis, int yAxis, float de
 				meshBuilder.Color4ubv( (byte*)&m_clrGridDot );
 				meshBuilder.AdvanceVertex();
                 
-				meshBuilder.Position3f( roundfx+1, v2D.y+1, 0 );
+				meshBuilder.Position3f( roundfx+1, v2D.y, 0 );
 				meshBuilder.Color4ubv( (byte*)&m_clrGridDot );
 				meshBuilder.AdvanceVertex();
 
@@ -926,7 +926,7 @@ void CMapView2DBase::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
 
 	// The tool didn't handle the key. Perform default handling for this view.
 //	bool bShift = nFlags & MK_SHIFT;
-	bool bCtrl = nFlags & MK_CONTROL;
+	bool bCtrl = ( nFlags & MK_CONTROL ) ? true : false;
 
 	switch (nChar)
 	{
@@ -1088,7 +1088,7 @@ bool CMapView2DBase::HitTest( const Vector2D &vPoint, const Vector& mins, const 
 	CRect rect(vecMinClient.x, vecMinClient.y, vecMaxClient.x, vecMaxClient.y);
 	rect.NormalizeRect();
 
-	return rect.PtInRect( CPoint( vPoint.x, vPoint.y) );
+	return rect.PtInRect( CPoint( vPoint.x, vPoint.y ) ) ? true : false;
 }
 
 
@@ -1120,12 +1120,12 @@ int CMapView2DBase::ObjectsAt( CMapWorld *pWorld, const Vector2D &vPoint, HitInf
 	const CMapObjectList *pChildren = pWorld->GetChildren();
 	FOR_EACH_OBJ( *pChildren, pos )
 	{
-		CMapClass *pChild = pChildren->Element(pos);
-		CMapWorld *pWorldChild = dynamic_cast< CMapWorld * >( pChild );
+		CMapClass *pChild = (CUtlReference< CMapClass >)pChildren->Element(pos);
+		CMapWorld *pWorld = dynamic_cast< CMapWorld * >( pChild );
 
-		if ( pWorldChild )
+		if ( pWorld )
 		{
-			nIndex += ObjectsAt( pWorldChild, vPoint, &pHitData[ nIndex ], nMaxObjects - nIndex );
+			nIndex += ObjectsAt( pWorld, vPoint, &pHitData[ nIndex ], nMaxObjects - nIndex );
 		}
 		else if ( IsLogical() )
 		{
@@ -1224,7 +1224,7 @@ void CMapView2DBase::OnMouseMove(UINT nFlags, CPoint point)
 	//
 	// If we are the active application, make sure this view has the input focus.
 	//	
-	if (APP()->IsActiveApp() && !IsRunningInEngine() )
+	if (APP()->IsActiveApp() )
 	{
 		if (GetFocus() != this)
 		{
@@ -1519,7 +1519,7 @@ void CMapView2DBase::UpdateView( int nFlags )
 	{
 		ShowScrollBar(SB_HORZ, Options.view2d.bScrollbars);
 		ShowScrollBar(SB_VERT, Options.view2d.bScrollbars);
-		SetColorMode(Options.view2d.bWhiteOnBlack);
+		SetColorMode(Options.view2d.bWhiteOnBlack ? true : false);
 		
 		UpdateClientView();
 	}

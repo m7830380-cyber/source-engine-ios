@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2005, Valve Corporation, All rights reserved. =======
 //
 // Standard file menu
 //
@@ -6,7 +6,7 @@
 
 #include "toolutils/toolfilemenubutton.h"
 #include "toolutils/toolmenubutton.h"
-#include "tier1/KeyValues.h"
+#include "tier1/keyvalues.h"
 #include "tier1/utlstring.h"
 #include "vgui_controls/menu.h"
 #include "vgui_controls/frame.h"
@@ -62,7 +62,6 @@ CToolFileMenuButton::CToolFileMenuButton( vgui::Panel *pParent, const char *pane
 	m_pRecentFiles = new vgui::Menu( this, "RecentFiles" );
 	m_nRecentFiles = m_pMenu->AddCascadingMenuItem( "#ToolFileRecent", pActionSignalTarget, m_pRecentFiles );
 
-	AddMenuItem( "clearrecent", "#ToolFileClearRecent", new KeyValues ( "OnClearRecent" ), pActionSignalTarget );
 	AddSeparator();
 	AddMenuItem( "exit", "#ToolFileExit", new KeyValues ( "OnExit" ), pActionSignalTarget );
 
@@ -90,8 +89,6 @@ void CToolFileMenuButton::OnShowMenu( vgui::Menu *menu )
 	SetItemEnabled( id, (nEnableMask & IFileMenuCallbacks::FILE_SAVEAS) != 0 );
 	id = m_Items.Find( "close" );
 	SetItemEnabled( id, (nEnableMask & IFileMenuCallbacks::FILE_CLOSE) != 0 );
-	id = m_Items.Find( "clearrecent" );
-	SetItemEnabled( id, (nEnableMask & IFileMenuCallbacks::FILE_CLEAR_RECENT) != 0 );
 
 	m_pRecentFiles->DeleteAllItems();
 
@@ -108,7 +105,7 @@ void CToolFileMenuButton::OnShowMenu( vgui::Menu *menu )
 	// We only have the Perforce menu items if we have valid p4 interface
 	if ( p4 )
 	{
-		bool bP4Connected = p4->IsConnectedToServer();
+		bool bP4Connected = p4->IsConnectedToServer( false );
 		char pPerforceFile[MAX_PATH];
 		if ( bP4Connected && m_pFileMenuCallback->GetPerforceFileName( pPerforceFile, sizeof(pPerforceFile) ) )
 		{

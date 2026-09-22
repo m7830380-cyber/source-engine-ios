@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: BSP Building tool
 //
@@ -19,6 +19,8 @@
 #include "loadcmdline.h"
 #include "byteswap.h"
 #include "worldvertextransitionfixup.h"
+#include "lzma/lzma.h"
+#include "tier1/UtlBuffer.h"
 
 extern float		g_maxLightmapDimension;
 
@@ -45,6 +47,19 @@ qboolean	notjunc;
 qboolean	noopt;
 qboolean	leaktest;
 qboolean	verboseentities;
+qboolean	staticpropcombine = false;
+qboolean	staticpropcombine_delsources = true;
+qboolean	staticpropcombine_doflagcompare_STATIC_PROP_IGNORE_NORMALS = true;
+qboolean	staticpropcombine_doflagcompare_STATIC_PROP_NO_SHADOW = true;
+qboolean	staticpropcombine_doflagcompare_STATIC_PROP_NO_FLASHLIGHT = true;
+qboolean	staticpropcombine_doflagcompare_STATIC_PROP_MARKED_FOR_FAST_REFLECTION = true;
+qboolean	staticpropcombine_doflagcompare_STATIC_PROP_NO_PER_VERTEX_LIGHTING = true;
+qboolean	staticpropcombine_doflagcompare_STATIC_PROP_NO_SELF_SHADOWING = true;
+qboolean	staticpropcombine_doflagcompare_STATIC_PROP_FLAGS_EX_DISABLE_SHADOW_DEPTH = true;
+qboolean	staticpropcombine_considervis = false;
+qboolean	staticpropcombine_autocombine = false;
+qboolean	staticpropcombine_suggestcombinerules = false;
+int			g_nAutoCombineMinInstances = 2;
 qboolean	dumpcollide = false;
 qboolean	g_bLowPriority = false;
 qboolean	g_DumpStaticProps = false;
@@ -56,33 +71,38 @@ bool		g_NodrawTriggers = false;
 bool		g_DisableWaterLighting = false;
 bool		g_bAllowDetailCracks = false;
 bool		g_bNoVirtualMesh = false;
+int			g_nVisGranularityX = 0, g_nVisGranularityY = 0, g_nVisGranularityZ = 0;
 
 float		g_defaultLuxelSize = DEFAULT_LUXEL_SIZE;
 float		g_luxelScale = 1.0f;
 float		g_minLuxelScale = 1.0f;
+float		g_maxLuxelScale = 999999.0f;
 bool		g_BumpAll = false;
 
-int			g_nDXLevel = 0; // default dxlevel if you don't specify it on the command-line.
+// Convert structural BSP brushes (which affect visibility) to detail brushes
+bool		g_bConvertStructureToDetail = false;
+
 CUtlVector<int> g_SkyAreas;
 char		outbase[32];
 
-char		g_szEmbedDir[MAX_PATH] = { 0 };
-
 // HLTOOLS: Introduce these calcs to make the block algorithm proportional to the proper 
 // world coordinate extents.  Assumes square spatial constraints.
-#define BLOCKS_SIZE		1024
-#define BLOCKS_SPACE	(COORD_EXTENT/BLOCKS_SIZE)
+
+int g_nBlockSize = 1024;
+
+#define BLOCKS_SPACE	(COORD_EXTENT/g_nBlockSize)
 #define BLOCKX_OFFSET	((BLOCKS_SPACE/2)+1)
 #define BLOCKY_OFFSET	((BLOCKS_SPACE/2)+1)
 #define BLOCKS_MIN		(-(BLOCKS_SPACE/2))
 #define BLOCKS_MAX		((BLOCKS_SPACE/2)-1)
+#define BLOCKS_ARRAY_WIDTH	( BLOCKS_SPACE + 2 )
 
 int			block_xl = BLOCKS_MIN, block_xh = BLOCKS_MAX, block_yl = BLOCKS_MIN, block_yh = BLOCKS_MAX;
 
 int			entity_num;
 
 
-node_t		*block_nodes[BLOCKS_SPACE+2][BLOCKS_SPACE+2];
+node_t		**ppBlockNodes = NULL;
 
 //-----------------------------------------------------------------------------
 // Assign occluder areas (must happen *after* the world model is processed)
@@ -97,39 +117,39 @@ BlockTree
 
 ============
 */
-node_t	*BlockTree (int xl, int yl, int xh, int yh)
+node_t	*BlockTree ( int xl, int yl, int xh, int yh )
 {
-	node_t	*node;
+	node_t	*pNode;
 	Vector	normal;
 	float	dist;
 	int		mid;
-
-	if (xl == xh && yl == yh)
+	
+	if ( xl == xh && yl == yh )
 	{
-		node = block_nodes[xl+BLOCKX_OFFSET][yl+BLOCKY_OFFSET];
-		if (!node)
+		pNode = ppBlockNodes[ xl+BLOCKX_OFFSET + ( ( yl+BLOCKY_OFFSET ) * BLOCKS_ARRAY_WIDTH ) ];
+		if ( !pNode )
 		{	// return an empty leaf
-			node = AllocNode ();
-			node->planenum = PLANENUM_LEAF;
-			node->contents = 0; //CONTENTS_SOLID;
-			return node;
+			pNode = AllocNode ();
+			pNode->planenum = PLANENUM_LEAF;
+			pNode->contents = 0; //CONTENTS_SOLID;
+			return pNode;
 		}
-		return node;
+		return pNode;
 	}
 
 	// create a seperator along the largest axis
-	node = AllocNode ();
+	pNode = AllocNode ();
 
-	if (xh - xl > yh - yl)
+	if ( xh - xl > yh - yl )
 	{	// split x axis
 		mid = xl + (xh-xl)/2 + 1;
 		normal[0] = 1;
 		normal[1] = 0;
 		normal[2] = 0;
-		dist = mid*BLOCKS_SIZE;
-		node->planenum = g_MainMap->FindFloatPlane (normal, dist);
-		node->children[0] = BlockTree ( mid, yl, xh, yh);
-		node->children[1] = BlockTree ( xl, yl, mid-1, yh);
+		dist = mid*g_nBlockSize;
+		pNode->planenum = g_MainMap->FindFloatPlane (normal, dist);
+		pNode->children[0] = BlockTree ( mid, yl, xh, yh);
+		pNode->children[1] = BlockTree ( xl, yl, mid-1, yh);
 	}
 	else
 	{
@@ -137,13 +157,13 @@ node_t	*BlockTree (int xl, int yl, int xh, int yh)
 		normal[0] = 0;
 		normal[1] = 1;
 		normal[2] = 0;
-		dist = mid*BLOCKS_SIZE;
-		node->planenum = g_MainMap->FindFloatPlane (normal, dist);
-		node->children[0] = BlockTree ( xl, mid, xh, yh);
-		node->children[1] = BlockTree ( xl, yl, xh, mid-1);
+		dist = mid*g_nBlockSize;
+		pNode->planenum = g_MainMap->FindFloatPlane (normal, dist);
+		pNode->children[0] = BlockTree ( xl, mid, xh, yh);
+		pNode->children[1] = BlockTree ( xl, yl, xh, mid-1);
 	}
 
-	return node;
+	return pNode;
 }
 
 /*
@@ -166,11 +186,11 @@ void ProcessBlock_Thread (int threadnum, int blocknum)
 
 	qprintf ("############### block %2i,%2i ###############\n", xblock, yblock);
 
-	mins[0] = xblock*BLOCKS_SIZE;
-	mins[1] = yblock*BLOCKS_SIZE;
+	mins[0] = xblock*g_nBlockSize;
+	mins[1] = yblock*g_nBlockSize;
 	mins[2] = MIN_COORD_INTEGER;
-	maxs[0] = (xblock+1)*BLOCKS_SIZE;
-	maxs[1] = (yblock+1)*BLOCKS_SIZE;
+	maxs[0] = (xblock+1)*g_nBlockSize;
+	maxs[1] = (yblock+1)*g_nBlockSize;
 	maxs[2] = MAX_COORD_INTEGER;
 
 	// the makelist and chopbrushes could be cached between the passes...
@@ -180,7 +200,7 @@ void ProcessBlock_Thread (int threadnum, int blocknum)
 		node = AllocNode ();
 		node->planenum = PLANENUM_LEAF;
 		node->contents = CONTENTS_SOLID;
-		block_nodes[xblock+BLOCKX_OFFSET][yblock+BLOCKY_OFFSET] = node;
+		ppBlockNodes[ xblock+BLOCKX_OFFSET + ( ( yblock+BLOCKY_OFFSET ) * BLOCKS_ARRAY_WIDTH ) ] = node;
 		return;
 	}    
 
@@ -190,7 +210,7 @@ void ProcessBlock_Thread (int threadnum, int blocknum)
 
 	tree = BrushBSP (brushes, mins, maxs);
 	
-	block_nodes[xblock+BLOCKX_OFFSET][yblock+BLOCKY_OFFSET] = tree->headnode;
+	ppBlockNodes[ xblock+BLOCKX_OFFSET + ( ( yblock+BLOCKY_OFFSET ) * BLOCKS_ARRAY_WIDTH ) ] = tree->headnode;
 }
 
 
@@ -215,24 +235,30 @@ void ProcessWorldModel (void)
 	brush_end = brush_start + e->numbrushes;
 	leaked = false;
 
+	if ( ppBlockNodes == NULL )
+	{
+		ppBlockNodes = new node_t *[ BLOCKS_ARRAY_WIDTH * BLOCKS_ARRAY_WIDTH ]; 
+		Q_memset( ppBlockNodes, 0, BLOCKS_ARRAY_WIDTH * BLOCKS_ARRAY_WIDTH * sizeof( node_t* ) );
+	}
+
 	//
 	// perform per-block operations
 	//
-	if (block_xh * BLOCKS_SIZE > g_MainMap->map_maxs[0])
+	if (block_xh * g_nBlockSize > g_MainMap->map_maxs[0])
 	{
-		block_xh = floor(g_MainMap->map_maxs[0]/BLOCKS_SIZE);
+		block_xh = floor(g_MainMap->map_maxs[0]/g_nBlockSize);
 	}
-	if ( (block_xl+1) * BLOCKS_SIZE < g_MainMap->map_mins[0])
+	if ( (block_xl+1) * g_nBlockSize < g_MainMap->map_mins[0])
 	{
-		block_xl = floor(g_MainMap->map_mins[0]/BLOCKS_SIZE);
+		block_xl = floor(g_MainMap->map_mins[0]/g_nBlockSize);
 	}
-	if (block_yh * BLOCKS_SIZE > g_MainMap->map_maxs[1])
+	if (block_yh * g_nBlockSize > g_MainMap->map_maxs[1])
 	{
-		block_yh = floor(g_MainMap->map_maxs[1]/BLOCKS_SIZE);
+		block_yh = floor(g_MainMap->map_maxs[1]/g_nBlockSize);
 	}
-	if ( (block_yl+1) * BLOCKS_SIZE < g_MainMap->map_mins[1])
+	if ( (block_yl+1) * g_nBlockSize < g_MainMap->map_mins[1])
 	{
-		block_yl = floor(g_MainMap->map_mins[1]/BLOCKS_SIZE);
+		block_yl = floor(g_MainMap->map_mins[1]/g_nBlockSize);
 	}
 
 	// HLTOOLS: updated to +/- MAX_COORD_INTEGER ( new world size limits / worldsize.h )
@@ -271,12 +297,12 @@ void ProcessWorldModel (void)
 		tree = AllocTree ();
 		tree->headnode = BlockTree (block_xl-1, block_yl-1, block_xh+1, block_yh+1);
 
-		tree->mins[0] = (block_xl)*BLOCKS_SIZE;
-		tree->mins[1] = (block_yl)*BLOCKS_SIZE;
+		tree->mins[0] = (block_xl)*g_nBlockSize;
+		tree->mins[1] = (block_yl)*g_nBlockSize;
 		tree->mins[2] = g_MainMap->map_mins[2] - 8;
 
-		tree->maxs[0] = (block_xh+1)*BLOCKS_SIZE;
-		tree->maxs[1] = (block_yh+1)*BLOCKS_SIZE;
+		tree->maxs[0] = (block_xh+1)*g_nBlockSize;
+		tree->maxs[1] = (block_yh+1)*g_nBlockSize;
 		tree->maxs[2] = g_MainMap->map_maxs[2] + 8;
 
 		//
@@ -430,6 +456,208 @@ void ProcessSubModel( )
 	FreeTree (tree);
 }
 
+//-----------------------------------------------------------------------------
+// Helper routine to setup side and texture setting of a splitting hint brush
+//-----------------------------------------------------------------------------
+bool InsertVisibilitySplittingHintBrush( Vector const &cut0, Vector const &cut1, Vector const &cut2, Vector const &cut3, Vector vNormal, int &nSideID, int &nBrushID )
+{
+	if ( g_MainMap->nummapbrushes == MAX_MAP_BRUSHES )
+	{
+		Error( "nummapbrushes == MAX_MAP_BRUSHES when inserting visibility split hint brushes" );
+	}
+
+	mapbrush_t &mbr = g_MainMap->mapbrushes[g_MainMap->nummapbrushes];
+	V_memset( &mbr, 0, sizeof( mbr ) );
+	mbr.brushnum = g_MainMap->nummapbrushes;
+	mbr.id = ( ++ nBrushID );
+	mbr.numsides = 6;
+	mbr.original_sides = &g_MainMap->brushsides[g_MainMap->nummapbrushsides];
+	g_MainMap->nummapbrushes ++;
+
+	//
+	// HINT
+	//
+	{
+		if ( g_MainMap->nummapbrushsides == MAX_MAP_BRUSHSIDES )
+		{
+			Error( "nummapbrushsides == MAX_MAP_BRUSHSIDES when inserting visibility split hint brushes" );
+		}
+		side_t &side = g_MainMap->brushsides[g_MainMap->nummapbrushsides];
+		V_memset( &side, 0, sizeof( side ) );
+		side.planenum = g_MainMap->PlaneFromPoints( cut0, cut1, cut2 );
+		side.id = ( ++ nSideID );
+		side.visible = true;
+		side.thin = true;
+		side.surf = ( SURF_NODRAW | SURF_NOLIGHT | SURF_HINT );
+		side.texinfo = FindMiptex( "TOOLS/TOOLSHINT" );
+
+		brush_texture_t &btt = g_MainMap->side_brushtextures[g_MainMap->nummapbrushsides];
+		V_memset( &btt, 0, sizeof( btt ) );
+		V_strcpy_safe( btt.name, "TOOLS/TOOLSHINT" );
+		btt.flags = ( SURF_NODRAW | SURF_NOLIGHT | SURF_HINT );
+		btt.lightmapWorldUnitsPerLuxel = 16;
+		btt.textureWorldUnitsPerTexel[0] = btt.textureWorldUnitsPerTexel[1] = 0.25f;
+		btt.UAxis[0] = 1;
+		btt.VAxis[2] = -1;
+
+		g_MainMap->nummapbrushsides ++;
+	}
+
+	// SKIP points array
+	Vector arrSkipPoints[15] =
+	{
+		cut2 + vNormal, cut1 + vNormal, cut0 + vNormal, // LARGE skip
+		cut1 + vNormal, cut1, cut0, // small skip 0->1->1'
+		cut2 + vNormal, cut2, cut1, // small skip 1->2->2'
+		cut3 + vNormal, cut3, cut2, // small skip 3'->3->2
+		cut0 + vNormal, cut0, cut3, // small skip 3->0->0'
+	};
+
+	for ( int iSkip = 0; iSkip < 5; ++ iSkip )
+	{
+		if ( g_MainMap->nummapbrushsides == MAX_MAP_BRUSHSIDES )
+		{
+			Error( "nummapbrushsides == MAX_MAP_BRUSHSIDES when inserting visibility split hint brushes" );
+		}
+
+		side_t &side = g_MainMap->brushsides[g_MainMap->nummapbrushsides];
+		V_memset( &side, 0, sizeof( side ) );
+		side.planenum = g_MainMap->PlaneFromPoints( arrSkipPoints[ iSkip*3 + 0 ], arrSkipPoints[ iSkip*3 + 1 ], arrSkipPoints[ iSkip*3 + 2 ] );
+		side.id = ( ++ nSideID );
+		side.visible = false;
+		side.thin = true;
+		side.surf = ( SURF_NODRAW | SURF_NOLIGHT | SURF_SKIP );
+		side.texinfo = FindMiptex( "TOOLS/TOOLSSKIP" );
+
+		brush_texture_t &btt = g_MainMap->side_brushtextures[g_MainMap->nummapbrushsides];
+		V_memset( &btt, 0, sizeof( btt ) );
+		V_strcpy_safe( btt.name, "TOOLS/TOOLSSKIP" );
+		btt.flags = ( SURF_NODRAW | SURF_NOLIGHT | SURF_SKIP );
+		btt.lightmapWorldUnitsPerLuxel = 16;
+		btt.textureWorldUnitsPerTexel[0] = btt.textureWorldUnitsPerTexel[1] = 0.25f;
+		btt.UAxis[0] = 1;
+		btt.VAxis[2] = -1;
+
+		g_MainMap->nummapbrushsides ++;
+	}
+	
+	g_MainMap->MakeBrushWindings( &mbr );
+
+	return true;
+}
+
+//-----------------------------------------------------------------------------
+// Inserts visibility splitting hint brushes
+//-----------------------------------------------------------------------------
+void InsertVisibilitySplittingHintBrushes()
+{
+	// Compute max brush side ID
+	int		max_side_id = 0;
+	for( int i = 0; i < g_MainMap->nummapbrushsides; i++ )
+	{
+		if ( g_MainMap->brushsides[ i ].id > max_side_id )
+		{
+			max_side_id = g_MainMap->brushsides[ i ].id;
+		}
+	}
+
+	// Compute max brush ID
+	int		max_brush_id = 0;
+	for( int i = 0; i < g_MainMap->nummapbrushes; i++ )
+	{
+		if ( g_MainMap->mapbrushes[ i ].id > max_brush_id )
+		{
+			max_brush_id = g_MainMap->mapbrushes[ i ].id;
+		}
+	}
+
+	// Have a fake entity tracking all the splits that we added
+	entity_t entityForVisibilitySplits;
+	V_memset( &entityForVisibilitySplits, 0, sizeof( entityForVisibilitySplits ) );
+	entityForVisibilitySplits.firstbrush = g_MainMap->nummapbrushes;
+
+	// Force visibility splits
+	if ( g_nVisGranularityX > 0 )
+	{
+		int nMinX = g_MainMap->map_mins.x;
+		nMinX = 1 + ( nMinX / g_nVisGranularityX ) * g_nVisGranularityX;
+		int nMaxX = g_MainMap->map_maxs.x;
+		nMaxX = -1 + ( nMaxX / g_nVisGranularityX ) * g_nVisGranularityX;
+		int numCuts = 0;
+		for ( ; nMinX < nMaxX; nMinX += g_nVisGranularityX )
+		{
+			Vector cut0( nMinX, g_MainMap->map_maxs.y, g_MainMap->map_maxs.z );
+			Vector cut1( nMinX, g_MainMap->map_mins.y, g_MainMap->map_maxs.z );
+			Vector cut2( nMinX, g_MainMap->map_mins.y, g_MainMap->map_mins.z );
+			Vector cut3( nMinX, g_MainMap->map_maxs.y, g_MainMap->map_mins.z );
+			Vector vNormal( 1, 0, 0 );
+			if ( InsertVisibilitySplittingHintBrush( cut0, cut1, cut2, cut3, vNormal, max_side_id, max_brush_id ) )
+			{
+				++ entityForVisibilitySplits.numbrushes;
+				++ numCuts;
+			}
+		}
+		Msg("Vis granularity X introduced %i cuts between %.0f and %.0f\n", numCuts, g_MainMap->map_mins.x, g_MainMap->map_maxs.x );
+	}
+	if ( g_nVisGranularityY > 0 )
+	{
+		int nMinY = g_MainMap->map_mins.y;
+		nMinY = 1 + ( nMinY / g_nVisGranularityY ) * g_nVisGranularityY;
+		int nMaxY = g_MainMap->map_maxs.y;
+		nMaxY = -1 + ( nMaxY / g_nVisGranularityY ) * g_nVisGranularityY;
+		int numCuts = 0;
+		for ( ; nMinY < nMaxY; nMinY += g_nVisGranularityY )
+		{
+			Vector cut0( g_MainMap->map_maxs.x, nMinY, g_MainMap->map_mins.z );
+			Vector cut1( g_MainMap->map_mins.x, nMinY, g_MainMap->map_mins.z );
+			Vector cut2( g_MainMap->map_mins.x, nMinY, g_MainMap->map_maxs.z );
+			Vector cut3( g_MainMap->map_maxs.x, nMinY, g_MainMap->map_maxs.z );
+			Vector vNormal( 0, 1, 0 );
+			if ( InsertVisibilitySplittingHintBrush( cut0, cut1, cut2, cut3, vNormal, max_side_id, max_brush_id ) )
+			{
+				++ entityForVisibilitySplits.numbrushes;
+				++ numCuts;
+			}
+		}
+		Msg("Vis granularity Y introduced %i cuts between %.0f and %.0f\n", numCuts, g_MainMap->map_mins.y, g_MainMap->map_maxs.y );
+	}
+	if ( g_nVisGranularityZ > 0 )
+	{
+		int nMinZ = g_MainMap->map_mins.z;
+		nMinZ = 1 + ( nMinZ / g_nVisGranularityZ ) * g_nVisGranularityZ;
+		int nMaxZ = g_MainMap->map_maxs.z;
+		nMaxZ = -1 + ( nMaxZ / g_nVisGranularityZ ) * g_nVisGranularityZ;
+		int numCuts = 0;
+		for ( ; nMinZ < nMaxZ; nMinZ += g_nVisGranularityZ )
+		{
+			Vector cut0( g_MainMap->map_mins.x, g_MainMap->map_maxs.y, nMinZ );
+			Vector cut1( g_MainMap->map_mins.x, g_MainMap->map_mins.y, nMinZ );
+			Vector cut2( g_MainMap->map_maxs.x, g_MainMap->map_mins.y, nMinZ );
+			Vector cut3( g_MainMap->map_maxs.x, g_MainMap->map_maxs.y, nMinZ );
+			Vector vNormal( 0, 0, 1 );
+			if ( InsertVisibilitySplittingHintBrush( cut0, cut1, cut2, cut3, vNormal, max_side_id, max_brush_id ) )
+			{
+				++ entityForVisibilitySplits.numbrushes;
+				++ numCuts;
+			}
+		}
+		Msg("Vis granularity Z introduced %i cuts between %.0f and %.0f\n", numCuts, g_MainMap->map_mins.z, g_MainMap->map_maxs.z );
+	}
+
+	// Now move all the newly introduced brushes to world
+	if ( entityForVisibilitySplits.numbrushes )
+	{
+		g_MainMap->MoveBrushesToWorld( &entityForVisibilitySplits );
+		if ( num_entities != g_MainMap->num_entities )
+		{
+			Error( "Entities accounting error while enforcing visibility granularity!\n" );
+		}
+		else
+		{	// Force a re-copy since moving brushes to world affected all brushes and sides
+			memcpy( entities, g_MainMap->entities, sizeof( g_MainMap->entities ) );
+		}
+	}
+}
 
 //-----------------------------------------------------------------------------
 // Returns true if the entity is a func_occluder
@@ -780,6 +1008,53 @@ void MarkNoDynamicShadowSides()
 	}
 }
 
+// These must match what is used in engine/networkstringtable.cpp!!!
+#define BSPPACK_STRINGTABLE_DICTIONARY_FALLBACK "stringtable_dictionary_fallback.dct"
+#define BSPPACK_STRINGTABLE_DICTIONARY_X360_FALLBACK "stringtable_dictionary_fallback_xbox.dct"
+
+#define RESLISTS_FOLDER			"reslists"
+#define RESLISTS_FOLDER_X360	"reslists_xbox"
+
+static void AddBufferToPackAndLZMACompress( const char *relativename, void *data, int length )
+{
+	unsigned int compressedSize = 0;
+	byte *compressed = LZMA_Compress( (byte *)data, length, &compressedSize );
+	if ( compressed )
+	{
+		::AddBufferToPak( GetPakFile(), relativename, compressed, compressedSize, false );
+		free( compressed );
+	}
+	else
+	{
+		::AddBufferToPak( GetPakFile(), relativename, data, length, false );
+	}
+}
+
+void AddDefaultStringtableDictionaries()
+{
+	CUtlBuffer buf;
+	char reslistsPath[ MAX_PATH ];
+	// PC default
+	Q_snprintf( reslistsPath, sizeof( reslistsPath ), "%s%s/%s.dict", gamedir, RESLISTS_FOLDER, mapbase );
+
+	// Add PC default file
+	if ( g_pFileSystem->ReadFile( reslistsPath, NULL, buf ) )
+	{
+		// Add to BSP pack file
+		::AddBufferToPak( GetPakFile(), BSPPACK_STRINGTABLE_DICTIONARY_FALLBACK, buf.Base(), buf.TellPut(), false );
+	}
+
+	buf.Clear();
+
+	// Add 360 default file
+	Q_snprintf( reslistsPath, sizeof( reslistsPath ), "%s%s/%s.dict", gamedir, RESLISTS_FOLDER_X360, mapbase );
+	if ( g_pFileSystem->ReadFile( reslistsPath, NULL, buf ) )
+	{
+		// Add to BSP pack file
+		::AddBufferToPak( GetPakFile(), BSPPACK_STRINGTABLE_DICTIONARY_X360_FALLBACK, buf.Base(), buf.TellPut(), false );
+	}
+}
+
 //-----------------------------------------------------------------------------
 // Compute the 3D skybox areas
 //-----------------------------------------------------------------------------
@@ -833,7 +1108,7 @@ void ProcessModels (void)
 
 	for ( entity_num=0; entity_num < num_entities; ++entity_num )
 	{
-		entity_t *pEntity = &entities[entity_num];
+		entity_t *pEntity = &entities[ entity_num ];
 		if ( !pEntity->numbrushes )
 			continue;
 
@@ -857,6 +1132,8 @@ void ProcessModels (void)
 			verbose = false;	// don't bother printing submodels
 		}
 	}
+
+	GetMapDataFilesMgr()->AddAllRegisteredFilesToPak();
 
 	// Turn the skybox into a cubemap in case we don't build env_cubemap textures.
 	Cubemap_CreateDefaultCubemaps();
@@ -890,19 +1167,13 @@ int RunVBSP( int argc, char **argv )
 	CommandLine()->CreateCmdLine( argc, argv );
 	MathLib_Init( 2.2f, 2.2f, 0.0f, OVERBRIGHT, false, false, false, false );
 	InstallSpewFunction();
-	SpewActivate( "developer", 1 );
+	LoggingSystem_SetChannelSpewLevelByTag( "Developer", LS_MESSAGE );
 	
 	CmdLib_InitFileSystem( argv[ argc-1 ] );
 
 	Q_StripExtension( ExpandArg( argv[ argc-1 ] ), source, sizeof( source ) );
 	Q_FileBase( source, mapbase, sizeof( mapbase ) );
 	strlwr( mapbase );
-
-	// Maintaining legacy behavior here to avoid breaking tools: regardless of the extension we are passed, we strip it
-	// to get the "source" name, and append extensions as desired...
-	char		mapFile[1024];
-	V_strncpy( mapFile, source, sizeof( mapFile ) );
-	V_strncat( mapFile, ".bsp", sizeof( mapFile ) );
 
 	LoadCmdLineFromFile( argc, argv, mapbase, "vbsp" );
 
@@ -949,6 +1220,47 @@ int RunVBSP( int argc, char **argv )
 			Msg ("nowater = true\n");
 			nowater = true;
 		}
+		else if (!Q_stricmp(argv[i], "-staticpropcombine"))
+		{
+			Msg ("staticpropcombine = true\n");
+			staticpropcombine = true;
+		}
+		else if (!Q_stricmp(argv[i], "-keepsources"))
+		{
+			Msg ("keepsources = true\n");
+			staticpropcombine_delsources = false;
+		}
+		else if ( !Q_stricmp( argv[ i ], "-staticpropcombine_considervis" ) )
+		{
+			Msg( "staticpropcombine_considervis = true\n" );
+			staticpropcombine_considervis = true;
+		}
+		else if ( !Q_stricmp( argv[ i ], "-staticpropcombine_autocombine" ) )
+		{
+			Msg( "staticpropcombine_autocombine = true\n" );
+			staticpropcombine_autocombine = true;
+		}
+		else if ( !Q_stricmp( argv[ i ], "-staticpropcombine_suggestrules" ) )
+		{
+			Msg( "staticpropcombine_suggestcombinerules = true\n" );
+			staticpropcombine_suggestcombinerules = true;
+		}
+		else if ( !Q_stricmp( argv[ i ], "-staticpropcombine_mininstances" ) )
+		{
+			g_nAutoCombineMinInstances = atoi( argv[ i + 1 ] );
+			g_nAutoCombineMinInstances = Max( g_nAutoCombineMinInstances, 2 );
+			Msg( "staticpropcombine_mininstances = %d\n", g_nAutoCombineMinInstances );
+			i++;
+		}
+
+		else if (!Q_stricmp(argv[i], "-combineignore_normals"))				{ Msg ("combineignore_normals = true\n");				staticpropcombine_doflagcompare_STATIC_PROP_IGNORE_NORMALS = false; }
+		else if (!Q_stricmp(argv[i], "-combineignore_noshadow"))			{ Msg ("combineignore_noshadow = true\n");				staticpropcombine_doflagcompare_STATIC_PROP_NO_SHADOW = false; }
+		else if (!Q_stricmp(argv[i], "-combineignore_noflashlight"))		{ Msg ("combineignore_noflashlight = true\n");			staticpropcombine_doflagcompare_STATIC_PROP_NO_FLASHLIGHT = false; }
+		else if (!Q_stricmp(argv[i], "-combineignore_fastreflection"))		{ Msg ("combineignore_fastreflection = true\n");		staticpropcombine_doflagcompare_STATIC_PROP_MARKED_FOR_FAST_REFLECTION = false; }
+		else if (!Q_stricmp(argv[i], "-combineignore_novertexlighting"))	{ Msg ("combineignore_novertexlighting = true\n");		staticpropcombine_doflagcompare_STATIC_PROP_NO_PER_VERTEX_LIGHTING = false; }
+		else if (!Q_stricmp(argv[i], "-combineignore_noselfshadowing"))		{ Msg ("combineignore_noselfshadowing = true\n");		staticpropcombine_doflagcompare_STATIC_PROP_NO_SELF_SHADOWING = false; }
+		else if (!Q_stricmp(argv[i], "-combineignore_disableshadowdepth"))	{ Msg ("combineignore_disableshadowdepth = true\n");	staticpropcombine_doflagcompare_STATIC_PROP_FLAGS_EX_DISABLE_SHADOW_DEPTH = false; }
+
 		else if (!Q_stricmp(argv[i], "-noopt"))
 		{
 			Msg ("noopt = true\n");
@@ -983,6 +1295,10 @@ int RunVBSP( int argc, char **argv )
 		{
 			Msg ("fulldetail = true\n");
 			fulldetail = true;
+		}
+		else if (!Q_stricmp(argv[i], "-alldetail"))
+		{
+			g_bConvertStructureToDetail = true;
 		}
 		else if (!Q_stricmp(argv[i], "-onlyents"))
 		{
@@ -1040,6 +1356,20 @@ int RunVBSP( int argc, char **argv )
 				block_xl, block_yl, block_xh, block_yh);
 			i+=4;
 		}
+		else if (!Q_stricmp(argv[i], "-visgranularity"))
+		{
+			g_nVisGranularityX = abs( atoi( argv[i+1] ) );
+			g_nVisGranularityY = abs( atoi( argv[i+2] ) );
+			g_nVisGranularityZ = abs( atoi( argv[i+3] ) );
+			Msg ("visgranularity: %i,%i,%i\n", 
+				g_nVisGranularityX, g_nVisGranularityY, g_nVisGranularityZ);
+			i += 3;
+		}
+		else if (!Q_stricmp(argv[i], "-blocksize"))
+		{
+			g_nBlockSize = atoi(argv[i+1]);
+			i++;
+		}
 		else if ( !Q_stricmp( argv[i], "-dumpcollide" ) )
 		{
 			Msg("Dumping collision models to collideXXX.txt\n" );
@@ -1078,10 +1408,11 @@ int RunVBSP( int argc, char **argv )
 				g_minLuxelScale = 1;
 			i++;
 		}
-		else if( !Q_stricmp( argv[i], "-dxlevel" ) )
+		else if( !strcmp( argv[i], "-maxluxelscale" ) )
 		{
-			g_nDXLevel = atoi( argv[i+1] );
-			Msg( "DXLevel = %d\n", g_nDXLevel );
+			g_maxLuxelScale = atof( argv[i+1] );
+			if ( g_maxLuxelScale < 1 )
+				g_maxLuxelScale = 1;
 			i++;
 		}
 		else if( !Q_stricmp( argv[i], "-bumpall" ) )
@@ -1103,7 +1434,7 @@ int RunVBSP( int argc, char **argv )
 		{
 			// nothing to do here, but don't bail on this option
 		}
-		else if ( !Q_stricmp( argv[i], "-vproject" ) || !Q_stricmp( argv[i], "-game" ) || !Q_stricmp( argv[i], "-insert_search_path" ) )
+		else if ( !Q_stricmp( argv[i], "-vproject" ) || !Q_stricmp( argv[i], "-game" ) )
 		{
 			++i;
 		}
@@ -1137,18 +1468,13 @@ int RunVBSP( int argc, char **argv )
 		{
 			EnableFullMinidumps( true );
 		}
-		else if ( !Q_stricmp( argv[i], "-embed" ) && i < argc - 1 )
+		else if ( !Q_stricmp( argv[i], "-tempcontent" ) )
 		{
-			V_MakeAbsolutePath( g_szEmbedDir, sizeof( g_szEmbedDir ), argv[++i], "." );
-			V_FixSlashes( g_szEmbedDir );
-			if ( !V_RemoveDotSlashes( g_szEmbedDir ) )
-			{
-				Error( "Bad -embed - Can't resolve pathname for '%s'", g_szEmbedDir );
-				break;
-			}
-			V_StripTrailingSlash( g_szEmbedDir );
-			g_pFullFileSystem->AddSearchPath( g_szEmbedDir, "GAME", PATH_ADD_TO_TAIL );
-			g_pFullFileSystem->AddSearchPath( g_szEmbedDir, "MOD", PATH_ADD_TO_TAIL );
+			// ... Do nothing, just let this pass to the filesystem
+		}
+		else if ( !Q_stricmp( argv[ i ], "-processheap" ) )
+		{
+			// ... Do nothing, just let this pass to the mem system
 		}
 		else if (argv[i][0] == '-')
 		{
@@ -1182,10 +1508,14 @@ int RunVBSP( int argc, char **argv )
 			"  -nodetail   : Get rid of all detail geometry. The geometry left over is\n"
 			"                what affects visibility.\n"
 			"  -nowater    : Get rid of water brushes.\n"
+			"  -staticpropcombine    : Cluster specially supported static prop models.\n"
+			"  -keepsources    : Don't clean up cluster models after bspzip.\n"
+			"  -staticpropcombine_considervis : Cluster static prop models only within\n"
+			"                                   vis clusters.\n"
+			"  -staticpropcombine_autocombine : Automatically combine simple static props\n"
+			"                                   without an explicit combine rule.\n"
+			"  -staticpropcombine_suggestrules: Suggest rules to add to spcombinerules.txt\n"
 			"  -low        : Run as an idle-priority process.\n"
-			"  -embed <directory>  : Use <directory> as an additional search path for assets\n"
-			"                        and embed all assets in this directory into the compiled\n"
-			"                        map\n"
 			"\n"
 			"  -vproject <directory> : Override the VPROJECT environment variable.\n"
 			"  -game <directory>     : Same as -vproject.\n"
@@ -1213,7 +1543,11 @@ int RunVBSP( int argc, char **argv )
 				"  -micro <#>   : vbsp will warn when brushes are output with a volume less\n"
 				"                 than this number (default: 1.0).\n"
 				"  -fulldetail  : Mark all detail geometry as normal geometry (so all detail\n"
-				"                 geometry will affect visibility).\n"
+				"                 geometry will affect visibility).\n" 
+				"  -alldetail   : Convert all structural brushes to detail brushes, except\n"
+				"                 func_brush entities whose names begin with ""structure_"".\n"
+				);
+			Warning(
 				"  -leaktest    : Stop processing the map if a leak is detected. Whether or not\n"
 				"                 this flag is set, a leak file will be written out at\n"
 				"                 <vmf filename>.lin, and it can be imported into Hammer.\n"
@@ -1221,38 +1555,32 @@ int RunVBSP( int argc, char **argv )
 				"  -snapaxial   : Snap axial planes to integer coordinates.\n"
 				"  -block # #      : Control the grid size mins that vbsp chops the level on.\n"
 				"  -blocks # # # # : Enter the mins and maxs for the grid size vbsp uses.\n"
+				"  -blocksize #    : Control the size of each grid square that vbsp chops the level on.  Default is 1024."
 				"  -dumpstaticprops: Dump static props to staticprop*.txt\n"
 				"  -dumpcollide    : Write files with collision info.\n"
 				"  -forceskyvis	   : Enable vis calculations in 3d skybox leaves\n"
 				"  -luxelscale #   : Scale all lightmaps by this amount (default: 1.0).\n"
 				"  -minluxelscale #: No luxel scale will be lower than this amount (default: 1.0).\n"
+				"  -maxluxelscale #: No luxel scale will be higher than this amount (default: 999999.0).\n"
 				"  -lightifmissing : Force lightmaps to be generated for all surfaces even if\n"
 				"                    they don't need lightmaps.\n"
 				"  -keepstalezip   : Keep the BSP's zip files intact but regenerate everything\n"
 				"                    else.\n"
-				"  -virtualdispphysics : Use virtual (not precomputed) displacement collision models\n"
-				"  -xbox           : Enable mandatory xbox options\n"
-				"  -x360		   : Generate Xbox360 version of vsp\n"
-				"  -nox360		   : Disable generation Xbox360 version of vsp (default)\n"
-				"  -replacematerials : Substitute materials according to materialsub.txt in content\\maps\n"
-				"  -FullMinidumps  : Write large minidumps on crash.\n"
+				"  -virtualdispphysics : Use virtual (not precomputed) displacement collision\n"
+				"						 models\n"
+				"  -visgranularity # # # : Force visibility splits # of units along X, Y, Z\n"
+				"  -xbox		: Enable mandatory xbox options\n"
+				"  -x360		: Generate Xbox360 version of vsp\n"
+				"  -nox360		: Disable generation Xbox360 version of vsp (default)\n"
+				"  -replacematerials : Substitute materials according to materialsub.txt in\n"
+				"					   content\\maps\n"
+				"  -FullMinidumps	: Write large minidumps on crash.\n"
 				);
 			}
 
 		DeleteCmdLine( argc, argv );
 		CmdLib_Cleanup();
-		CmdLib_Exit( 1 );
-	}
-
-	// Sanity check
-	if ( *g_szEmbedDir && ( onlyents || onlyprops ) )
-	{
-		Warning( "-embed only makes sense alongside full BSP compiles.\n"
-		         "\n"
-		         "Use the bspzip utility to update embedded files.\n" );
-		DeleteCmdLine( argc, argv );
-		CmdLib_Cleanup();
-		CmdLib_Exit( 1 );
+		exit( 1 );
 	}
 
 	start = Plat_FloatTime();
@@ -1263,26 +1591,13 @@ int RunVBSP( int argc, char **argv )
 		SetLowPriority();
 	}
 
-	if( ( g_nDXLevel != 0 ) && ( g_nDXLevel < 80 ) )
-	{
-		g_BumpAll = false;
-	}
-
-	if( g_luxelScale == 1.0f )
-	{
-		if ( g_nDXLevel == 70 )
-		{
-			g_luxelScale = 4.0f;
-		}
-	}
-
 	ThreadSetDefault ();
 	numthreads = 1;		// multiple threads aren't helping...
 
 	// Setup the logfile.
 	char logFile[512];
 	_snprintf( logFile, sizeof(logFile), "%s.log", source );
-	SetSpewFunctionLogFile( logFile );
+	g_CmdLibFileLoggingListener.Open( logFile );
 
 	LoadPhysicsDLL();
 	LoadSurfaceProperties();
@@ -1296,7 +1611,7 @@ int RunVBSP( int argc, char **argv )
 	sprintf( materialPath, "%smaterials", gamedir );
 	InitMaterialSystem( materialPath, CmdLib_GetFileSystemFactory() );
 	Msg( "materialPath: %s\n", materialPath );
-
+	
 	// delete portal and line files
 	sprintf (path, "%s.prt", source);
 	remove (path);
@@ -1315,6 +1630,9 @@ int RunVBSP( int argc, char **argv )
 		}
 	}
 
+	char platformBSPFileName[1024];
+	GetPlatformMapPath( source, platformBSPFileName, 0, 1024 );
+	
 	// if we're combining materials, load the script file
 	if ( g_ReplaceMaterials )
 	{
@@ -1326,7 +1644,7 @@ int RunVBSP( int argc, char **argv )
 	//
 	if (onlyents)
 	{
-		LoadBSPFile (mapFile);
+		LoadBSPFile (platformBSPFileName);
 		num_entities = 0;
 		// Clear out the cubemap samples since they will be reparsed even with -onlyents
 		g_nCubemapSamples = 0;
@@ -1358,12 +1676,12 @@ int RunVBSP( int argc, char **argv )
 		// Doing this here because stuff abov may filter out entities
 		UnparseEntities ();
 
-		WriteBSPFile (mapFile);
+		WriteBSPFile (platformBSPFileName);
 	}
 	else if (onlyprops)
 	{
 		// In the only props case, deal with static + detail props only
-		LoadBSPFile (mapFile);
+		LoadBSPFile (platformBSPFileName);
 
 		LoadMapFile(name);
 		SetModelNumbers();
@@ -1376,7 +1694,7 @@ int RunVBSP( int argc, char **argv )
 		LoadEmitDetailObjectDictionary( gamedir );
 		EmitDetailObjects();
 
-		WriteBSPFile (mapFile);
+		WriteBSPFile (platformBSPFileName);
 	}
 	else
 	{
@@ -1385,32 +1703,28 @@ int RunVBSP( int argc, char **argv )
 		//
 
 		// Load just the file system from the bsp
-		if( g_bKeepStaleZip && FileExists( mapFile ) )
+		if( g_bKeepStaleZip && FileExists( platformBSPFileName ) )
 		{
-			LoadBSPFile_FileSystemOnly (mapFile);
+			LoadBSPFile_FileSystemOnly (platformBSPFileName);
 			// Mark as stale since the lighting could be screwed with new ents.
 			AddBufferToPak( GetPakFile(), "stale.txt", "stale", strlen( "stale" ) + 1, false );
 		}
 
 		LoadMapFile (name);
+
+		InsertVisibilitySplittingHintBrushes();
+
 		WorldVertexTransitionFixup();
-		if( ( g_nDXLevel == 0 ) || ( g_nDXLevel >= 70 ) )
-		{
-			Cubemap_FixupBrushSidesMaterials();
-			Cubemap_AttachDefaultCubemapToSpecularSides();
-			Cubemap_AddUnreferencedCubemaps();
-		}
+
+		Cubemap_FixupBrushSidesMaterials();
+		Cubemap_AttachDefaultCubemapToSpecularSides();
+		Cubemap_AddUnreferencedCubemaps();
+
 		SetModelNumbers ();
 		SetLightStyles ();
 		LoadEmitDetailObjectDictionary( gamedir );
+		AddDefaultStringtableDictionaries();
 		ProcessModels ();
-
-		// Add embed dir if provided
-		if ( *g_szEmbedDir )
-		{
-			AddDirToPak( GetPakFile(), g_szEmbedDir );
-			WriteBSPFile( mapFile );
-		}
 	}
 
 	end = Plat_FloatTime();

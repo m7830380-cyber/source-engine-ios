@@ -25,7 +25,7 @@ inline void HeapSort( T *pArr, int nCount, const LessThan &lessThan )
 			int nParent = ( nIdx + 1 ) / 2 - 1;
 			if ( lessThan( pArr[ nParent ], pArr[ nIdx ] ) )
 			{
-				V_swap( pArr[ nParent ], pArr[ nIdx ] );
+				Swap( pArr[ nParent ], pArr[ nIdx ] );
 			}
 			else
 			{
@@ -35,13 +35,13 @@ inline void HeapSort( T *pArr, int nCount, const LessThan &lessThan )
 		}
 		while ( nIdx > 0 );
 	}
-	//AssertDbg( IsHeap( pArr, nCount, lessThan ) );
+	AssertDbg( IsHeap( pArr, nCount, lessThan ) );
 
 	// heap sort
 	for ( int nEndOfHeap = nCount; nEndOfHeap-- > 1; )
 	{
-		//AssertDbg( !lessThan( pArr[ 0 ], pArr[ nEndOfHeap ] ) );
-		V_swap( pArr[ 0 ], pArr[ nEndOfHeap ] );
+		AssertDbg( !lessThan( pArr[ 0 ], pArr[ nEndOfHeap ] ) );
+		Swap( pArr[ 0 ], pArr[ nEndOfHeap ] );
 		// re-heapify the heap
 		int nIdx = 0;
 		for ( ;; )
@@ -59,7 +59,7 @@ inline void HeapSort( T *pArr, int nCount, const LessThan &lessThan )
 			}
 			if ( lessThan( pArr[ nIdx ], pArr[ nChild ] ) )
 			{
-				V_swap( pArr[ nIdx ], pArr[ nChild ] );
+				Swap( pArr[ nIdx ], pArr[ nChild ] );
 				nIdx = nChild;
 			}
 			else
@@ -68,7 +68,7 @@ inline void HeapSort( T *pArr, int nCount, const LessThan &lessThan )
 				break;
 			}
 		}
-		//AssertDbg( IsHeap( pArr, nEndOfHeap, lessThan ) );
+		AssertDbg( IsHeap( pArr, nEndOfHeap, lessThan ) );
 	}
 }
 

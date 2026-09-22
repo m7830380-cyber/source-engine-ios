@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -13,7 +13,7 @@
 #include "bitmap/TGALoader.h"
 #include "materialsystem/imaterial.h"
 #include "materialsystem/imaterialvar.h"
-#include "materialsystem/itexture.h"
+#include "materialsystem/ITexture.h"
 #include "matsyswin.h"
 #include "istudiorender.h"
 
@@ -46,31 +46,21 @@ float LocalTextureToLinear( int c )
 
 void StudioModel::RunFlexRules( )
 {
-	StudioModel *pSrcModel = g_pStudioModel;
+	CStudioHdr *pStudioHdr = GetStudioHdr();
 
-	// only the root model has control over flex rules
-	CStudioHdr *pSrcStudioHdr = pSrcModel->GetStudioHdr();
-	CStudioHdr *pDstStudioHdr = GetStudioHdr();
-
-	if ( !pSrcStudioHdr )
-	{
-		pSrcModel = this;
-		pSrcStudioHdr = GetStudioHdr();
-	}
-	
 	float src[MAXSTUDIOFLEXCTRL*4];
 
-	for (LocalFlexController_t i = LocalFlexController_t(0); i < pSrcStudioHdr->numflexcontrollers(); i++)
+	for (LocalFlexController_t i = LocalFlexController_t(0); i < pStudioHdr->numflexcontrollers(); i++)
 	{
-		mstudioflexcontroller_t *pflex = pSrcStudioHdr->pFlexcontroller( i );
-		int j = pSrcStudioHdr->pFlexcontroller( i )->localToGlobal;
+		mstudioflexcontroller_t *pflex = pStudioHdr->pFlexcontroller( i );
+		int j = pStudioHdr->pFlexcontroller( i )->localToGlobal;
 		// remap m_flexweights to full dynamic range, global flexcontroller indexes
 		if (j >= 0 && j < MAXSTUDIOFLEXCTRL*4)
 		{
-			src[j] = pSrcModel->m_flexweight[i] * (pflex->max - pflex->min) + pflex->min; 
+			src[j] = m_flexweight[i] * (pflex->max - pflex->min) + pflex->min; 
 		}
 	}
 	
-	pDstStudioHdr->RunFlexRules( src, g_flexdescweight );
+	pStudioHdr->RunFlexRules( src, g_flexdescweight );
 }
 

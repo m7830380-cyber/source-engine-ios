@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Implementation of IEditorTexture interface for placeholder textures.
 //			Placeholder textures are used for textures that are referenced in
@@ -49,12 +49,12 @@ class CDummyTexture : public IEditorTexture
 		int GetImageDataRGB( void *pImageRGB );
 		int GetImageDataRGBA( void *pImageRGBA );
 
-		inline int GetImageWidth() const
+		inline int GetPreviewImageWidth() const
 		{
 			return(0);
 		}
 
-		inline int GetImageHeight() const
+		inline int GetPreviewImageHeight() const
 		{
 			return(0);
 		}
@@ -75,6 +75,16 @@ class CDummyTexture : public IEditorTexture
 		}
 
 		inline int GetHeight() const
+		{
+			return(0);
+		}
+
+		inline int GetMappingWidth() const
+		{
+			return(0);
+		}
+
+		inline int GetMappingHeight() const
 		{
 			return(0);
 		}

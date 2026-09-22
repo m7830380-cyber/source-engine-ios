@@ -1,29 +1,31 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright � 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: Memory allocation!
 //
 // $NoKeywords: $
-//=============================================================================//
+//===========================================================================//
 
 
 #include "pch_tier0.h"
 
 #if !defined(STEAM) && !defined(NO_MALLOC_OVERRIDE)
 
-#ifdef APPLE
-#include <malloc/malloc.h>
-#else
-#include <malloc.h>
-#endif
+//#include <malloc.h>
 #include <string.h>
 #include "tier0/dbg.h"
+#include "tier0/stackstats.h"
 #include "tier0/memalloc.h"
+#include "tier0/fasttimer.h"
 #include "mem_helpers.h"
-#ifdef _WIN32
+#ifdef PLATFORM_WINDOWS_PC
+#undef WIN32_LEAN_AND_MEAN
+#include <windows.h>
 #include <crtdbg.h>
+#include <errno.h>
+#include <io.h>
 #endif
-#ifdef APPLE
-#include <mach/mach.h>
+#ifdef OSX
+#include <malloc/malloc.h>
 #include <stdlib.h>
 #endif
 
@@ -34,148 +36,89 @@
 #ifdef _X360
 #include "xbox/xbox_console.h"
 #endif
-#if ( !defined(_DEBUG) && defined(USE_MEM_DEBUG) )
+
+#ifdef _PS3
+#include "sys/memory.h"
+#include "tls_ps3.h"
+#include "ps3/ps3_helpers.h"
+#include "memoverride_ps3.h"
+#endif
+
+#ifdef USE_LIGHT_MEM_DEBUG
+#undef USE_MEM_DEBUG
+#endif
+
+#if (!defined( POSIX ) && (defined(_DEBUG) || defined(USE_MEM_DEBUG)))
 #pragma message ("USE_MEM_DEBUG is enabled in a release build. Don't check this in!")
 #endif
-#if (defined(_DEBUG) || defined(USE_MEM_DEBUG))
+
+#include "mem_impl_type.h"
+
+#if MEM_IMPL_TYPE_DBG
 
 #if defined(_WIN32) && ( !defined(_X360) && !defined(_WIN64) )
-// #define USE_STACK_WALK
+//be sure to disable frame pointer omission for all projects. "vpc /nofpo" when using stack traces
+//#define USE_STACK_TRACES 
 // or:
-// #define USE_STACK_WALK_DETAILED
+//#define USE_STACK_TRACES_DETAILED
+const size_t STACK_TRACE_LENGTH = 32;
+#endif
+
+//prevent stupid bugs from checking one and not the other
+#if defined( USE_STACK_TRACES_DETAILED ) && !defined( USE_STACK_TRACES )
+#define USE_STACK_TRACES //don't comment me. I'm a safety check
+#endif
+
+#if defined( USE_STACK_TRACES )
+#define SORT_STACK_TRACE_DESCRIPTION_DUMPS
+#endif
+
+#if (defined( USE_STACK_TRACES )) && !(defined( TIER0_FPO_DISABLED ) || defined( _DEBUG ))
+#error Stack traces will not work unless FPO is disabled for every function traced through. Rebuild everything with FPO disabled "vpc /nofpo"
 #endif
 
 //-----------------------------------------------------------------------------
 
-#ifndef _X360
-#define DebugAlloc	malloc
-#define DebugFree	free
-#else
+#ifdef _PS3
+MemOverrideRawCrtFunctions_t *g_pMemOverrideRawCrtFns;
+#define DebugAlloc	(g_pMemOverrideRawCrtFns->pfn_malloc)
+#define DebugFree	(g_pMemOverrideRawCrtFns->pfn_free)
+#elif defined( _X360 )
 #define DebugAlloc	DmAllocatePool
 #define DebugFree	DmFreePool
+#else
+#define DebugAlloc	malloc
+#define DebugFree	free
 #endif
 
-#ifdef WIN32
+#ifdef _WIN32
 int g_DefaultHeapFlags = _CrtSetDbgFlag( _CrtSetDbgFlag(_CRTDBG_REPORT_FLAG) | _CRTDBG_ALLOC_MEM_DF );
-#endif
+#else
+int g_DefaultHeapFlags = 0;
+#endif // win32
 
 #if defined( _MEMTEST )
 static char s_szStatsMapName[32];
 static char s_szStatsComment[256];
 #endif
 
+#pragma optimize( "", off )
 //-----------------------------------------------------------------------------
 
-#if defined( USE_STACK_WALK ) || defined( USE_STACK_WALK_DETAILED )
-#include <dbghelp.h>
+#if defined( USE_STACK_TRACES )
 
-#pragma comment(lib, "Dbghelp.lib" )
-
-#pragma auto_inline(off)
-__declspec(naked) DWORD GetEIP()
+bool GetModuleFromAddress( void *address, char *pResult, int iLength )
 {
-	__asm 
-	{
-		mov eax, [ebp + 4]
-		ret
-	}
+	return GetModuleNameFromAddress( address, pResult, iLength );	
 }
 
-int WalkStack( void **ppAddresses, int nMaxAddresses, int nSkip = 0 )
+bool GetCallerModule( char *pDest, int iLength )
 {
-	HANDLE hProcess = GetCurrentProcess();
-	HANDLE hThread = GetCurrentThread();
-
-	STACKFRAME64 frame;
-
-	memset(&frame, 0, sizeof(frame));
-	DWORD valEsp, valEbp;
-	__asm
-	{
-		mov [valEsp], esp;
-		mov [valEbp], ebp
-	}
-	frame.AddrPC.Offset    = GetEIP();
-	frame.AddrStack.Offset = valEsp;
-	frame.AddrFrame.Offset = valEbp;
-	frame.AddrPC.Mode      = AddrModeFlat;
-	frame.AddrStack.Mode   = AddrModeFlat;
-	frame.AddrFrame.Mode   = AddrModeFlat;
-
-	// Walk the stack.
-	int nWalked = 0;
-	nSkip++;
-	while ( nMaxAddresses - nWalked > 0 ) 
-	{
-		if ( !StackWalk64(IMAGE_FILE_MACHINE_I386, hProcess, hThread, &frame, NULL, NULL, SymFunctionTableAccess64, SymGetModuleBase64, NULL ) ) 
-		{
-			break;
-		}
-
-		if ( nSkip == 0 )
-		{
-			if (frame.AddrFrame.Offset == 0) 
-			{
-				// End of stack.
-				break;
-			}
-
-			*ppAddresses++ = (void *)frame.AddrPC.Offset;
-			nWalked++;
-			
-			if (frame.AddrPC.Offset == frame.AddrReturn.Offset)
-			{
-				// Catching a stack loop
-				break;
-			}
-		}
-		else
-		{
-			nSkip--;
-		}
-	}
-
-	if ( nMaxAddresses )
-	{
-		memset( ppAddresses, 0, ( nMaxAddresses - nWalked ) * sizeof(*ppAddresses) );
-	}
-
-	return nWalked;
-}
-
-bool GetModuleFromAddress( void *address, char *pResult )
-{
-	IMAGEHLP_MODULE   moduleInfo;
-
-	moduleInfo.SizeOfStruct = sizeof(moduleInfo);
-
-	if ( SymGetModuleInfo( GetCurrentProcess(), (DWORD)address, &moduleInfo ) )
-	{
-		strcpy( pResult, moduleInfo.ModuleName );
-		return true;
-	}
-
-	return false;
-}
-
-bool GetCallerModule( char *pDest )
-{
-	static bool bInit;
-	if ( !bInit )
-	{
-		PSTR psUserSearchPath = NULL;
-		psUserSearchPath = "u:\\data\\game\\bin\\;u:\\data\\game\\episodic\\bin\\;u:\\data\\game\\hl2\\bin\\;\\\\perforce\\symbols";
-		SymInitialize( GetCurrentProcess(), psUserSearchPath, true );
-		bInit = true;
-	}
 	void *pCaller;
-	WalkStack( &pCaller, 1, 2 );
+	GetCallStack_Fast( &pCaller, 1, 2 );
 
-	return ( pCaller != 0 && GetModuleFromAddress( pCaller, pDest ) );
+	return ( pCaller != 0 && GetModuleFromAddress( pCaller, pDest, iLength ) );
 }
-
-
-#if defined( USE_STACK_WALK_DETAILED )
 
 //
 // Note: StackDescribe function is non-reentrant:
@@ -186,72 +129,113 @@ bool GetCallerModule( char *pDest )
 //		heap memory will be allocated to copy the text.
 //
 
-char * StackDescribe( void **ppAddresses, int nMaxAddresses )
+char * StackDescribe( void * const *ppAddresses, int nMaxAddresses )
 {
 	static char s_chStackDescription[ 32 * 1024 ];
-	static char s_chSymbolBuffer[ sizeof( IMAGEHLP_SYMBOL64 ) + 1024 ];
-	
-	IMAGEHLP_SYMBOL64 &hlpSymbol = * ( IMAGEHLP_SYMBOL64 * ) s_chSymbolBuffer;
-	hlpSymbol.SizeOfStruct = sizeof( IMAGEHLP_SYMBOL64 );
-	hlpSymbol.MaxNameLength = 1024;
-	DWORD64 hlpSymbolOffset = 0;
-
-	IMAGEHLP_LINE64 hlpLine;
-	hlpLine.SizeOfStruct = sizeof( IMAGEHLP_LINE64 );
-	DWORD hlpLineOffset = 0;
-
-	s_chStackDescription[ 0 ] = 0;
 	char *pchBuffer = s_chStackDescription;
 
-	for ( int k = 0; k < nMaxAddresses; ++ k )
+#if defined( SORT_STACK_TRACE_DESCRIPTION_DUMPS ) //Assuming StackDescribe is called iteratively on a sorted set of stacks (as in DumpStackStats()). We can save work by skipping unchanged parts at the beginning of the string.
+	static void *LastCallStack[STACK_TRACE_LENGTH] = { NULL };
+	static char *pEndPos[STACK_TRACE_LENGTH] = { NULL };
+	bool bUseExistingString = true;
+#else
+	s_chStackDescription[ 0 ] = 0;
+#endif
+
+	int k;
+	for ( k = 0; k < nMaxAddresses; ++ k )
 	{
 		if ( !ppAddresses[k] )
 			break;
 
-		pchBuffer += strlen( pchBuffer );
-		if ( SymGetLineFromAddr64( GetCurrentProcess(), ( DWORD64 ) ppAddresses[k], &hlpLineOffset, &hlpLine ) )
+#if defined( SORT_STACK_TRACE_DESCRIPTION_DUMPS )
+		if( bUseExistingString && (k < STACK_TRACE_LENGTH) )
 		{
-			char const *pchFileName = hlpLine.FileName ? hlpLine.FileName + strlen( hlpLine.FileName ) : NULL;
-			for ( size_t numSlashesAllowed = 2; pchFileName > hlpLine.FileName; -- pchFileName )
+			if( ppAddresses[k] == LastCallStack[k] )
 			{
-				if ( *pchFileName == '\\' )
-				{
-					if ( numSlashesAllowed -- )
-						continue;
-					else
-						break;
-				}
+				pchBuffer = pEndPos[k];
+				continue;
 			}
-			sprintf( pchBuffer, hlpLineOffset ? "%s:%d+0x%I32X" : "%s:%d", pchFileName, hlpLine.LineNumber, hlpLineOffset );
-		}
-		else if ( SymGetSymFromAddr64( GetCurrentProcess(), ( DWORD64 ) ppAddresses[k], &hlpSymbolOffset, &hlpSymbol ) )
-		{
-			sprintf( pchBuffer, ( hlpSymbolOffset > 0 && !( hlpSymbolOffset >> 63 ) ) ? "%s+0x%I64X" : "%s", hlpSymbol.Name, hlpSymbolOffset );
-		}
-		else
-		{
-			sprintf( pchBuffer, "#0x%08p", ppAddresses[k] );
-		}
+			else
+			{
+				//everything from here on is invalidated
+				bUseExistingString = false;
+				for( int clearEntries = k; clearEntries < STACK_TRACE_LENGTH; ++clearEntries ) //wipe out unused entries
+				{
+					LastCallStack[clearEntries] = NULL;
+					pEndPos[clearEntries] = NULL;
+				}
+				//fall through to existing code
 
-		pchBuffer += strlen( pchBuffer );
-		sprintf( pchBuffer, "<--" );
+				if( k == 0 )
+					*pchBuffer = '\0';
+				else
+					sprintf( pchBuffer, "<--" );
+			}
+		}
+#endif
+		{
+			pchBuffer += strlen( pchBuffer );
+
+			char szTemp[MAX_PATH];
+			szTemp[0] = '\0';
+			uint32 iLine = 0;
+			uint32 iLineDisplacement = 0;
+			uint64 iSymbolDisplacement = 0;
+			if ( GetFileAndLineFromAddress( ppAddresses[k], szTemp, MAX_PATH, iLine, &iLineDisplacement ) )
+			{
+				char const *pchFileName = szTemp + strlen( szTemp );
+				for ( size_t numSlashesAllowed = 2; pchFileName > szTemp; --pchFileName )
+				{
+					if ( *pchFileName == '\\' )
+					{
+						if ( numSlashesAllowed-- )
+							continue;
+						else
+							break;
+					}
+				}
+				sprintf( pchBuffer, iLineDisplacement ? "%s:%d+0x%I32X" : "%s:%d", pchFileName, iLine, iLineDisplacement );
+			}
+			else if ( GetSymbolNameFromAddress( ppAddresses[k], szTemp, MAX_PATH, &iSymbolDisplacement ) )
+			{
+				sprintf( pchBuffer, ( iSymbolDisplacement > 0 && !( iSymbolDisplacement >> 63 ) ) ? "%s+0x%llX" : "%s", szTemp, iSymbolDisplacement );
+			}
+			else
+			{
+				sprintf( pchBuffer, "#0x%08p", ppAddresses[k] );
+			}
+
+			pchBuffer += strlen( pchBuffer );
+			sprintf( pchBuffer, "<--" );
+
+#if defined( SORT_STACK_TRACE_DESCRIPTION_DUMPS )
+			if( k < STACK_TRACE_LENGTH )
+			{
+				LastCallStack[k] = ppAddresses[k];
+				pEndPos[k] = pchBuffer;
+			}
+#endif
+		}
 	}
-	*pchBuffer  = 0;
+	*pchBuffer = 0;
+
+#if defined( SORT_STACK_TRACE_DESCRIPTION_DUMPS )
+	for( ; k < STACK_TRACE_LENGTH; ++k ) //wipe out unused entries
+	{
+		LastCallStack[k] = NULL;
+		pEndPos[k] = NULL;
+	}
+#endif
 
 	return s_chStackDescription;
 }
 
-#endif // #if defined( USE_STACK_WALK_DETAILED )
-
 #else
 
-inline int WalkStack( void **ppAddresses, int nMaxAddresses, int nSkip = 0 )
-{
-	memset( ppAddresses, 0, nMaxAddresses * sizeof(*ppAddresses) );
-	return 0;
-}
-#define GetModuleFromAddress( address, pResult ) ( ( *pResult = 0 ), 0)
-#define GetCallerModule( pDest ) false
+#define GetModuleFromAddress( address, pResult, iLength ) ( ( *pResult = 0 ), 0)
+#define GetCallerModule( pDest, iLength ) false
+
 #endif
 
 
@@ -267,14 +251,110 @@ struct CrtDbgMemHeader_t
 	unsigned char m_Reserved2[16];
 };
 
+struct Sentinal_t
+{
+	DWORD value[4];
+};
+
+Sentinal_t g_HeadSentinelAllocated = 
+{
+	0xeee1beef,
+	0xeee1f00d,
+	0xbd122969,
+	0xbeefbeef,
+};
+
+Sentinal_t g_HeadSentinelFree = 
+{
+	0xdeadbeef,
+	0xbaadf00d,
+	0xbd122969,
+	0xdeadbeef,
+};
+
+Sentinal_t g_TailSentinel = 
+{
+	0xbaadf00d,
+	0xbd122969,
+	0xdeadbeef,
+	0xbaadf00d,
+};
+
+const byte g_FreeFill = 0xdd;
+
+enum DbgMemHeaderBlockType_t
+{
+	BLOCKTYPE_FREE,
+	BLOCKTYPE_ALLOCATED
+};
+
 struct DbgMemHeader_t
-#if !defined( _DEBUG ) || defined( POSIX )
+#if !defined( _DEBUG ) || defined( _PS3 )
 	: CrtDbgMemHeader_t
 #endif
 {
 	size_t nLogicalSize;
-	byte reserved[12];	// MS allocator always returns mem aligned on 16 bytes, which some of our code depends on
+#if defined( USE_STACK_TRACES )
+	unsigned int nStatIndex;
+	byte reserved[ 16 - (sizeof(unsigned int) + sizeof( size_t ) ) ];	// MS allocator always returns mem aligned on 16 bytes, which some of our code depends on
+#else
+	byte reserved[16 - sizeof( size_t )]; // MS allocator always returns mem aligned on 16 bytes, which some of our code depends on
+#endif
+	Sentinal_t sentinal;
 };
+
+const int g_nRecentFrees = ( IsPC() ) ? 8192 : 512;
+DbgMemHeader_t ** GetRecentFrees() { static DbgMemHeader_t **g_pRecentFrees = (DbgMemHeader_t**)
+#ifdef _PS3
+g_pMemOverrideRawCrtFns->pfn_calloc
+#else
+calloc
+#endif
+( g_nRecentFrees, sizeof(DbgMemHeader_t *) );
+return g_pRecentFrees; }
+uint32 volatile g_iNextFreeSlot;
+
+uint32 volatile g_break_BytesFree = 0xffffffff;
+
+void LMDReportInvalidBlock( DbgMemHeader_t *pHeader, const char *pszMessage )
+{
+	char szMsg[256];
+	if ( pHeader )
+	{
+		sprintf( szMsg, "HEAP IS CORRUPT: %s (block 0x%x, %d bytes)\n", pszMessage, (size_t)( ((byte*) pHeader) + sizeof( DbgMemHeader_t ) ), pHeader->nLogicalSize );
+	}
+	else
+	{
+		sprintf( szMsg, "HEAP IS CORRUPT: %s\n", pszMessage );
+	}
+	Assert( !"HEAP IS CORRUPT!" );
+	DebuggerBreak();
+}
+
+void LMDValidateBlock( DbgMemHeader_t *pHeader, bool bFreeList )
+{
+	if ( memcmp( &pHeader->sentinal, bFreeList ? &g_HeadSentinelFree : &g_HeadSentinelAllocated, sizeof(Sentinal_t) ) != 0 )
+	{
+		LMDReportInvalidBlock( pHeader, "Head sentinel corrupt" );
+	}
+	if ( memcmp( ((Sentinal_t *)(( ((byte*) pHeader) + sizeof( DbgMemHeader_t ) + pHeader->nLogicalSize ))), &g_TailSentinel, sizeof(Sentinal_t) ) != 0 )
+	{
+		LMDReportInvalidBlock( pHeader, "Tail sentinel corrupt" );
+	}
+	if ( bFreeList )
+	{
+		byte *pCur = (byte *)pHeader + sizeof(DbgMemHeader_t);
+		byte *pLimit = pCur + pHeader->nLogicalSize;
+		while ( pCur != pLimit )
+		{
+			if ( *pCur++ != g_FreeFill )
+			{
+				LMDReportInvalidBlock( pHeader, "Write after free" );
+			}
+		}
+	}
+}
+
 
 //-----------------------------------------------------------------------------
 
@@ -283,7 +363,11 @@ struct DbgMemHeader_t
 #elif defined( OSX )
 DbgMemHeader_t *GetCrtDbgMemHeader( void *pMem );
 #else
-#define GetCrtDbgMemHeader( pMem ) ((DbgMemHeader_t*)pMem - 1)
+#define GetCrtDbgMemHeader( pMem ) ((DbgMemHeader_t*)(pMem) - 1)
+#endif
+
+#if defined( USE_STACK_TRACES )
+#define GetAllocationStatIndex_Internal( pMem ) ( ((DbgMemHeader_t*)pMem - 1)->nStatIndex )
 #endif
 
 #ifdef OSX
@@ -294,62 +378,144 @@ DbgMemHeader_t *GetCrtDbgMemHeader( void *pMem )
 }
 #endif
 
+
 inline void *InternalMalloc( size_t nSize, const char *pFileName, int nLine )
 {
+#if defined( POSIX ) || defined( _PS3 )
+	void *pAllocedMem = NULL;
 #ifdef OSX
-	void *pAllocedMem = malloc_zone_malloc( malloc_default_zone(), nSize + sizeof(DbgMemHeader_t) );
-	if (!pAllocedMem)
-	{
-		return NULL;
-	}
+	pAllocedMem = malloc_zone_malloc( malloc_default_zone(), nSize + sizeof(DbgMemHeader_t) + sizeof( Sentinal_t ) );	
 	DbgMemHeader_t *pInternalMem = GetCrtDbgMemHeader( pAllocedMem );
-
+#elif defined( _PS3 )
+	pAllocedMem = (g_pMemOverrideRawCrtFns->pfn_malloc)( nSize + sizeof(DbgMemHeader_t) + sizeof( Sentinal_t ) );
+	DbgMemHeader_t *pInternalMem = (DbgMemHeader_t *)pAllocedMem;
+	*((void**)pInternalMem->m_Reserved2) = pAllocedMem;
+#else
+	pAllocedMem = malloc( nSize + sizeof(DbgMemHeader_t) + sizeof( Sentinal_t ) );
+	DbgMemHeader_t *pInternalMem = (DbgMemHeader_t *)pAllocedMem;
+#endif
+	
 	pInternalMem->m_pFileName = pFileName;
 	pInternalMem->m_nLineNumber = nLine;
 	pInternalMem->nLogicalSize = nSize;
 	*((int*)pInternalMem->m_Reserved) = 0xf00df00d;
+	
+	pInternalMem->sentinal = g_HeadSentinelAllocated;
+	*( (Sentinal_t *)( ((byte*)pInternalMem) + sizeof( DbgMemHeader_t ) + nSize ) ) = g_TailSentinel;
+	LMDValidateBlock( pInternalMem, false );
 
+#ifdef OSX
 	return pAllocedMem;
-#else // LINUX || WIN32
+#else
+	return pInternalMem + 1;	
+#endif
+	
+#else // WIN32
 	DbgMemHeader_t *pInternalMem;
-#if defined( POSIX ) || !defined( _DEBUG )
+#if !defined( _DEBUG ) 
 	pInternalMem = (DbgMemHeader_t *)malloc( nSize + sizeof(DbgMemHeader_t) );
-	if (!pInternalMem)
-	{
-		return NULL;
-	}
 	pInternalMem->m_pFileName = pFileName;
 	pInternalMem->m_nLineNumber = nLine;
-	*((int*)pInternalMem->m_Reserved) = 0xf00df00d;
 #else
 	pInternalMem = (DbgMemHeader_t *)_malloc_dbg( nSize + sizeof(DbgMemHeader_t), _NORMAL_BLOCK, pFileName, nLine );
-#endif // defined( POSIX ) || !defined( _DEBUG )
+#endif
 
 	pInternalMem->nLogicalSize = nSize;
 	return pInternalMem + 1;
-#endif // LINUX || WIN32
+#endif // WIN32
 }
+
+#ifdef MEMALLOC_SUPPORTS_ALIGNED_ALLOCATIONS
+inline void *InternalMallocAligned( size_t nSize, size_t align, const char *pFileName, int nLine )
+{
+#if defined( POSIX ) || defined( _PS3 )
+	void *pAllocedMem = NULL;
+#ifdef OSX
+	pAllocedMem = malloc_zone_malloc( malloc_default_zone(), nSize + sizeof(DbgMemHeader_t) + sizeof( Sentinal_t ) );	
+	DbgMemHeader_t *pInternalMem = GetCrtDbgMemHeader( pAllocedMem );
+#elif defined( _PS3 )
+	size_t numWastedAlignPages = ( sizeof( DbgMemHeader_t ) / align );
+	if ( align * numWastedAlignPages < sizeof( DbgMemHeader_t ) )
+		++ numWastedAlignPages;
+	size_t nSizeRequired = nSize + numWastedAlignPages*align + sizeof( Sentinal_t );
+	pAllocedMem = (g_pMemOverrideRawCrtFns->pfn_memalign)( align, nSizeRequired );
+	DbgMemHeader_t *pInternalMem = GetCrtDbgMemHeader( ((char*)pAllocedMem) + numWastedAlignPages*align );
+	*((void**)pInternalMem->m_Reserved2) = pAllocedMem;
+#else
+	pAllocedMem = malloc( nSize + sizeof(DbgMemHeader_t) + sizeof( Sentinal_t ) );
+	DbgMemHeader_t *pInternalMem = (DbgMemHeader_t *)pAllocedMem;
+#endif
+	
+	pInternalMem->m_pFileName = pFileName;
+	pInternalMem->m_nLineNumber = nLine;
+	pInternalMem->nLogicalSize = nSize;
+	*((int*)pInternalMem->m_Reserved) = 0xf00df00d;
+
+	pInternalMem->sentinal = g_HeadSentinelAllocated;
+	*( (Sentinal_t *)( ((byte*)pInternalMem) + sizeof( DbgMemHeader_t ) + nSize ) ) = g_TailSentinel;
+	LMDValidateBlock( pInternalMem, false );
+
+#ifdef OSX
+	return pAllocedMem;
+#else
+	return pInternalMem + 1;	
+#endif
+	
+#else // WIN32
+	DbgMemHeader_t *pInternalMem;
+#if !defined( _DEBUG ) 
+	pInternalMem = (DbgMemHeader_t *)malloc( nSize + sizeof(DbgMemHeader_t) );
+	pInternalMem->m_pFileName = pFileName;
+	pInternalMem->m_nLineNumber = nLine;
+#else
+	pInternalMem = (DbgMemHeader_t *)_malloc_dbg( nSize + sizeof(DbgMemHeader_t), _NORMAL_BLOCK, pFileName, nLine );
+#endif
+
+	pInternalMem->nLogicalSize = nSize;
+	return pInternalMem + 1;
+#endif // WIN32
+}
+#endif
 
 inline void *InternalRealloc( void *pMem, size_t nNewSize, const char *pFileName, int nLine )
 {
 	if ( !pMem )
 		return InternalMalloc( nNewSize, pFileName, nLine );
 
-#ifdef OSX
+#ifdef POSIX
 	void *pNewAllocedMem = NULL;
-
-	pNewAllocedMem = (void *)malloc_zone_realloc( malloc_default_zone(), pMem, nNewSize + sizeof(DbgMemHeader_t) );
+#ifdef OSX
+	pNewAllocedMem = (DbgMemHeader_t *)malloc_zone_realloc( malloc_default_zone(), pMem, nNewSize + sizeof(DbgMemHeader_t) + sizeof( Sentinal_t ) );
 	DbgMemHeader_t *pInternalMem = GetCrtDbgMemHeader( pNewAllocedMem );
-
+#elif defined( _PS3 )
+	DbgMemHeader_t *pInternalMem = GetCrtDbgMemHeader( pMem );
+	pNewAllocedMem = (DbgMemHeader_t *)(g_pMemOverrideRawCrtFns->pfn_realloc)( *((void**)pInternalMem->m_Reserved2), nNewSize + sizeof(DbgMemHeader_t) + sizeof( Sentinal_t ) );
+	pInternalMem = (DbgMemHeader_t *)pNewAllocedMem;
+	*((void**)pInternalMem->m_Reserved2) = pNewAllocedMem;
+#else
+	DbgMemHeader_t *pInternalMem = GetCrtDbgMemHeader( pMem );
+	pNewAllocedMem = (DbgMemHeader_t *)realloc( pInternalMem, nNewSize + sizeof(DbgMemHeader_t) + sizeof( Sentinal_t ) );
+	pInternalMem = (DbgMemHeader_t *)pNewAllocedMem;
+#endif
+	
 	pInternalMem->m_pFileName = pFileName;
 	pInternalMem->m_nLineNumber = nLine;
 	pInternalMem->nLogicalSize = static_cast<unsigned int>( nNewSize );
 	*((int*)pInternalMem->m_Reserved) = 0xf00df00d;
 
+	pInternalMem->sentinal = g_HeadSentinelAllocated;
+	*( (Sentinal_t *)( ((byte*)pInternalMem) + sizeof( DbgMemHeader_t ) + nNewSize ) ) = g_TailSentinel;
+	LMDValidateBlock( pInternalMem, false );
+	
+#ifdef OSX
 	return pNewAllocedMem;
-#else // LINUX || WIN32
+#else
+	return pInternalMem + 1;
+#endif
+	
+#else // WIN32
 	DbgMemHeader_t *pInternalMem = (DbgMemHeader_t *)pMem - 1;
-#if defined( POSIX ) || !defined( _DEBUG )
+#if !defined( _DEBUG )
 	pInternalMem = (DbgMemHeader_t *)realloc( pInternalMem, nNewSize + sizeof(DbgMemHeader_t) );
 	pInternalMem->m_pFileName = pFileName;
 	pInternalMem->m_nLineNumber = nLine;
@@ -359,8 +525,66 @@ inline void *InternalRealloc( void *pMem, size_t nNewSize, const char *pFileName
 
 	pInternalMem->nLogicalSize = nNewSize;
 	return pInternalMem + 1;
-#endif // LINUX || WIN32
+#endif // WIN32
 }
+
+#ifdef MEMALLOC_SUPPORTS_ALIGNED_ALLOCATIONS
+inline void *InternalReallocAligned( void *pMem, size_t nNewSize, size_t align, const char *pFileName, int nLine )
+{
+	if ( !pMem )
+		return InternalMallocAligned( nNewSize, align, pFileName, nLine );
+
+#ifdef POSIX
+	void *pNewAllocedMem = NULL;
+#ifdef OSX
+	pNewAllocedMem = (DbgMemHeader_t *)malloc_zone_realloc( malloc_default_zone(), pMem, nNewSize + sizeof(DbgMemHeader_t) + sizeof( Sentinal_t ) );
+	DbgMemHeader_t *pInternalMem = GetCrtDbgMemHeader( pNewAllocedMem );
+#elif defined( _PS3 )
+	size_t numWastedAlignPages = ( sizeof( DbgMemHeader_t ) / align );
+	if ( align * numWastedAlignPages < sizeof( DbgMemHeader_t ) )
+		++ numWastedAlignPages;
+	size_t nSizeRequired = nNewSize + numWastedAlignPages*align + sizeof( Sentinal_t );
+	
+	DbgMemHeader_t *pInternalMem = GetCrtDbgMemHeader( pMem );
+	pNewAllocedMem = (DbgMemHeader_t *)(g_pMemOverrideRawCrtFns->pfn_reallocalign)( *((void**)pInternalMem->m_Reserved2), nSizeRequired, align );
+	pInternalMem = GetCrtDbgMemHeader( ((char*)pNewAllocedMem) + numWastedAlignPages*align );
+	*((void**)pInternalMem->m_Reserved2) = pNewAllocedMem;
+#else
+	DbgMemHeader_t *pInternalMem = GetCrtDbgMemHeader( pMem );
+	pNewAllocedMem = (DbgMemHeader_t *)realloc( pInternalMem, nNewSize + sizeof(DbgMemHeader_t) + sizeof( Sentinal_t ) );
+	pInternalMem = (DbgMemHeader_t *)pNewAllocedMem;
+#endif
+	
+	pInternalMem->m_pFileName = pFileName;
+	pInternalMem->m_nLineNumber = nLine;
+	pInternalMem->nLogicalSize = static_cast<unsigned int>( nNewSize );
+	*((int*)pInternalMem->m_Reserved) = 0xf00df00d;
+
+	pInternalMem->sentinal = g_HeadSentinelAllocated;
+	*( (Sentinal_t *)( ((byte*)pInternalMem) + sizeof( DbgMemHeader_t ) + nNewSize ) ) = g_TailSentinel;
+	LMDValidateBlock( pInternalMem, false );
+	
+#ifdef OSX
+	return pNewAllocedMem;
+#else
+	return pInternalMem + 1;
+#endif
+	
+#else // WIN32
+	DbgMemHeader_t *pInternalMem = (DbgMemHeader_t *)pMem - 1;
+#if !defined( _DEBUG )
+	pInternalMem = (DbgMemHeader_t *)realloc( pInternalMem, nNewSize + sizeof(DbgMemHeader_t) );
+	pInternalMem->m_pFileName = pFileName;
+	pInternalMem->m_nLineNumber = nLine;
+#else
+	pInternalMem = (DbgMemHeader_t *)_realloc_dbg( pInternalMem, nNewSize + sizeof(DbgMemHeader_t), _NORMAL_BLOCK, pFileName, nLine );
+#endif
+
+	pInternalMem->nLogicalSize = nNewSize;
+	return pInternalMem + 1;
+#endif // WIN32
+}
+#endif
 
 inline void InternalFree( void *pMem )
 {
@@ -368,23 +592,72 @@ inline void InternalFree( void *pMem )
 		return;
 
 	DbgMemHeader_t *pInternalMem = (DbgMemHeader_t *)pMem - 1;
-#if !defined( _DEBUG ) || defined( POSIX )
+
+#if defined( POSIX )
+	// Record it in recent free blocks list
+	DbgMemHeader_t **pRecentFrees = GetRecentFrees();
+	uint32 iNextSlot = ThreadInterlockedIncrement( &g_iNextFreeSlot );
+	iNextSlot %= g_nRecentFrees;
+
+	if ( memcmp( &pInternalMem->sentinal, &g_HeadSentinelAllocated, sizeof( Sentinal_t ) ) != 0 )
+	{
+		Assert( !"Double Free or Corrupt Block Header!" );
+		DebuggerBreak();
+	}
+	LMDValidateBlock( pInternalMem, false );
+	if ( g_break_BytesFree == pInternalMem->nLogicalSize )
+	{
+		DebuggerBreak();
+	}
+	pInternalMem->sentinal = g_HeadSentinelFree;
+	memset( pMem, g_FreeFill, pInternalMem->nLogicalSize );
+
+	DbgMemHeader_t *pToFree = pInternalMem;
+	if ( pInternalMem->nLogicalSize < 16*1024 )
+	{
+		pToFree = pRecentFrees[iNextSlot];
+		pRecentFrees[iNextSlot] = pInternalMem;
+
+		if ( pToFree )
+		{
+			LMDValidateBlock( pToFree, true );
+		}
+	}
+
+	// Validate several last frees
+	for ( uint32 k = iNextSlot - 1, iteration = 0; iteration < 10; ++ iteration, -- k )
+	{
+		if ( DbgMemHeader_t *pLastFree = pRecentFrees[ k % g_nRecentFrees ] )
+		{
+			LMDValidateBlock( pLastFree, true );
+		}
+	}
+
+	if ( !pToFree )
+		return;
+
 #ifdef OSX
-	malloc_zone_free( malloc_default_zone(), pMem );
+	malloc_zone_free( malloc_default_zone(), pToFree );
+#elif defined( _PS3 )
+	(g_pMemOverrideRawCrtFns->pfn_free)( *((void**)pToFree->m_Reserved2) );
 #elif LINUX
-	free( pInternalMem );
+	free( pToFree );
 #else
-	free( pInternalMem );	
+	free( pToFree );	
 #endif
-#else
+#elif defined( _DEBUG )
 	_free_dbg( pInternalMem, _NORMAL_BLOCK );
+#else
+	free( pInternalMem );
 #endif
 }
 
 inline size_t InternalMSize( void *pMem )
 {
-	//$ TODO. For Linux, we could use 'int size = malloc_usable_size( pMem )'...
-#if defined(POSIX)
+#if defined( _PS3 )
+	DbgMemHeader_t *pInternalMem = GetCrtDbgMemHeader( pMem );
+	return pInternalMem->nLogicalSize;
+#elif defined(POSIX)
 	DbgMemHeader_t *pInternalMem = GetCrtDbgMemHeader( pMem );
 	return pInternalMem->nLogicalSize;
 #elif !defined(_DEBUG)
@@ -411,7 +684,6 @@ inline size_t InternalLogicalSize( void *pMem )
 #ifndef _DEBUG
 #define _CrtDbgReport( nRptType, szFile, nLine, szModule, pMsg ) 0
 #endif
-
 
 //-----------------------------------------------------------------------------
 
@@ -467,7 +739,7 @@ class CStringLess
 public:
 	bool operator()(const char *pszLeft, const char *pszRight ) const 
 	{
-		return ( stricmp( pszLeft, pszRight ) < 0 );
+		return ( V_tier0_stricmp( pszLeft, pszRight ) < 0 );
 	}
 };
 
@@ -492,20 +764,30 @@ public:
 	virtual void  Free( void *pMem );
     virtual void *Expand_NoLongerSupported( void *pMem, size_t nSize );
 
+#ifdef MEMALLOC_SUPPORTS_ALIGNED_ALLOCATIONS
+	virtual void *AllocAlign( size_t nSize, size_t align );
+	virtual void *AllocAlign( size_t nSize, size_t align, const char *pFileName, int nLine );
+	virtual void *ReallocAlign( void *pMem, size_t nSize, size_t align );
+	virtual void *ReallocAlign( void *pMem, size_t nSize, size_t align, const char *pFileName, int nLine );
+#endif
+
 	// Debug versions
     virtual void *Alloc( size_t nSize, const char *pFileName, int nLine );
     virtual void *Realloc( void *pMem, size_t nSize, const char *pFileName, int nLine );
     virtual void  Free( void *pMem, const char *pFileName, int nLine );
     virtual void *Expand_NoLongerSupported( void *pMem, size_t nSize, const char *pFileName, int nLine );
 
-	// Returns size of a particular allocation
+	virtual void *RegionAlloc( int region, size_t nSize ) { return Alloc( nSize ); }
+	virtual void *RegionAlloc( int region, size_t nSize, const char *pFileName, int nLine ) { return Alloc( nSize, pFileName, nLine ); }
+
+	// Returns the size of a particular allocation (NOTE: may be larger than the size requested!)
 	virtual size_t GetSize( void *pMem );
 
     // Force file + line information for an allocation
     virtual void PushAllocDbgInfo( const char *pFileName, int nLine );
     virtual void PopAllocDbgInfo();
 
-	virtual long CrtSetBreakAlloc( long lNewBreakAlloc );
+	virtual int32 CrtSetBreakAlloc( int32 lNewBreakAlloc );
 	virtual	int CrtSetReportMode( int nReportType, int nReportMode );
 	virtual int CrtIsValidHeapPointer( const void *pMem );
 	virtual int CrtIsValidPointer( const void *pMem, unsigned int size, int access );
@@ -538,18 +820,21 @@ public:
 #endif
 	}
 
+	virtual void CompactIncremental() {}
+	virtual void OutOfMemory( size_t nBytesAttempted = 0 ) {}
+
 	virtual MemAllocFailHandler_t SetAllocFailHandler( MemAllocFailHandler_t pfnMemAllocFailHandler ) { return NULL; } // debug heap doesn't attempt retries
 
-#if defined( _MEMTEST )
 	void SetStatsExtraInfo( const char *pMapName, const char *pComment )
 	{
+#if defined( _MEMTEST )
 		strncpy( s_szStatsMapName, pMapName, sizeof( s_szStatsMapName ) );
 		s_szStatsMapName[sizeof( s_szStatsMapName ) - 1] = '\0';
 
 		strncpy( s_szStatsComment, pComment, sizeof( s_szStatsComment ) );
 		s_szStatsComment[sizeof( s_szStatsComment ) - 1] = '\0';
-	}
 #endif
+	}
 
 	virtual size_t MemoryAllocFailed();
 	void		SetCRTAllocFailed( size_t nMemSize );
@@ -559,17 +844,20 @@ public:
 		BYTE_COUNT_16 = 0,
 		BYTE_COUNT_32,
 		BYTE_COUNT_128,
-		BYTE_COUNT_1024,
+		BYTE_COUNT_2048,
 		BYTE_COUNT_GREATER,
 
 		NUM_BYTE_COUNT_BUCKETS
 	};
 
-	void Shutdown();
-
 private:
 	struct MemInfo_t
 	{
+#if defined( USE_STACK_TRACES )
+		DECLARE_CALLSTACKSTATSTRUCT();
+		DECLARE_CALLSTACKSTATSTRUCT_FIELDDESCRIPTION();
+#endif
+
 		MemInfo_t()
 		{
 			memset( this, 0, sizeof(*this) );
@@ -583,23 +871,27 @@ private:
 		size_t m_nPeakOverheadSize;
 
 		// Count in terms of # of allocations
-		size_t m_nCurrentCount;
-		size_t m_nPeakCount;
-		size_t m_nTotalCount;
+		int m_nCurrentCount;
+		int m_nPeakCount;
+		int m_nTotalCount;
+
+		int m_nSumTargetRange;
+		int m_nCurTargetRange;
+		int m_nMaxTargetRange;
 
 		// Count in terms of # of allocations of a particular size
-		size_t m_pCount[NUM_BYTE_COUNT_BUCKETS];
+		int m_pCount[NUM_BYTE_COUNT_BUCKETS];
 
 		// Time spent allocating + deallocating	(microseconds)
 		int64 m_nTime;
 	};
 
-	struct MemInfoKey_t
+	struct MemInfoKey_FileLine_t
 	{
-		MemInfoKey_t( const char *pFileName, int line ) : m_pFileName(pFileName), m_nLine(line) {}
-		bool operator<( const MemInfoKey_t &key ) const
+		MemInfoKey_FileLine_t( const char *pFileName, int line ) : m_pFileName(pFileName), m_nLine(line) {}
+		bool operator<( const MemInfoKey_FileLine_t &key ) const
 		{
-			int iret = stricmp( m_pFileName, key.m_pFileName );
+			int iret = V_tier0_stricmp( m_pFileName, key.m_pFileName );
 			if ( iret < 0 )
 				return true;
 
@@ -611,15 +903,15 @@ private:
 
 		const char *m_pFileName;
 		int			m_nLine;
-	};
+	};	
 
 	// NOTE: Deliberately using STL here because the UTL stuff
 	// is a client of this library; want to avoid circular dependency
 
 	// Maps file name to info
-	typedef std::map< MemInfoKey_t, MemInfo_t, std::less<MemInfoKey_t>, CNoRecurseAllocator<std::pair<const MemInfoKey_t, MemInfo_t> > > StatMap_t;
-	typedef StatMap_t::iterator StatMapIter_t;
-	typedef StatMap_t::value_type StatMapEntry_t;
+	typedef std::map< MemInfoKey_FileLine_t, MemInfo_t, std::less<MemInfoKey_FileLine_t>, CNoRecurseAllocator<std::pair<const MemInfoKey_FileLine_t, MemInfo_t> > > StatMap_FileLine_t;
+	typedef StatMap_FileLine_t::iterator StatMapIter_FileLine_t;
+	typedef StatMap_FileLine_t::value_type StatMapEntry_FileLine_t;
 
 	typedef std::set<const char *, CStringLess, CNoRecurseAllocator<const char *> > Filenames_t;
 
@@ -628,18 +920,24 @@ private:
 
 private:
 	// Returns the actual debug info
-	void GetActualDbgInfo( const char *&pFileName, int &nLine );
-
-	void Initialize();
+	virtual void GetActualDbgInfo( const char *&pFileName, int &nLine );
 
 	// Finds the file in our map
 	MemInfo_t &FindOrCreateEntry( const char *pFileName, int line );
 	const char *FindOrCreateFilename( const char *pFileName );
 
-	// Updates stats
-	void RegisterAllocation( const char *pFileName, int nLine, size_t nLogicalSize, size_t nActualSize, unsigned nTime );
-	void RegisterDeallocation( const char *pFileName, int nLine, size_t nLogicalSize, size_t nActualSize, unsigned nTime );
+#if defined( USE_STACK_TRACES )
+	int GetCallStackForIndex( unsigned int index, void **pCallStackOut, int iMaxEntriesOut );
+	friend int GetAllocationCallStack( void *mem, void **pCallStackOut, int iMaxEntriesOut );
+#endif
 
+	// Updates stats
+	virtual void RegisterAllocation( const char *pFileName, int nLine, size_t nLogicalSize, size_t nActualSize, unsigned nTime );
+	virtual void RegisterDeallocation( const char *pFileName, int nLine, size_t nLogicalSize, size_t nActualSize, unsigned nTime );
+#if defined( USE_STACK_TRACES )
+	void RegisterAllocation( unsigned int nStatIndex, size_t nLogicalSize, size_t nActualSize, unsigned nTime );
+	void RegisterDeallocation( unsigned int nStatIndex, size_t nLogicalSize, size_t nActualSize, unsigned nTime );
+#endif
 	void RegisterAllocation( MemInfo_t &info, size_t nLogicalSize, size_t nActualSize, unsigned nTime );
 	void RegisterDeallocation( MemInfo_t &info, size_t nLogicalSize, size_t nActualSize, unsigned nTime );
 
@@ -651,27 +949,82 @@ private:
 	// Stat output
 	void DumpMemInfo( const char *pAllocationName, int line, const MemInfo_t &info );
 	void DumpFileStats();
-	void DumpStats();
-	void DumpStatsFileBase( char const *pchFileBase );
-	void DumpBlockStats( void *p );
+#if defined( USE_STACK_TRACES )
+	void DumpMemInfo( void * const CallStack[STACK_TRACE_LENGTH], const MemInfo_t &info );
+	void DumpCallStackFlow( char const *pchFileBase );
+#endif
+	virtual void DumpStats();
+	virtual void DumpStatsFileBase( char const *pchFileBase, DumpStatsFormat_t nFormat = FORMAT_TEXT ) OVERRIDE;
+	virtual void DumpBlockStats( void *p );
 	virtual void GlobalMemoryStatus( size_t *pUsedMemory, size_t *pFreeMemory );
+	
+	virtual size_t ComputeMemoryUsedBy( char const *pchSubStr );
+
+	virtual IVirtualMemorySection * AllocateVirtualMemorySection( size_t numMaxBytes )
+	{
+#if defined( _GAMECONSOLE ) || defined( _WIN32 )
+		extern IVirtualMemorySection * VirtualMemoryManager_AllocateVirtualMemorySection( size_t numMaxBytes );
+		return VirtualMemoryManager_AllocateVirtualMemorySection( numMaxBytes );
+#else
+		return NULL;
+#endif
+	}
+
+	virtual int GetGenericMemoryStats( GenericMemoryStat_t **ppMemoryStats )
+	{
+		// TODO: reuse code from GlobalMemoryStatus (though this is only really useful when using CStdMemAlloc...)
+		return 0;
+	}
 
 private:
-	StatMap_t *m_pStatMap;
+	StatMap_FileLine_t m_StatMap_FileLine;
+#if defined( USE_STACK_TRACES )
+	typedef CCallStackStatsGatherer<MemInfo_t, STACK_TRACE_LENGTH, GetCallStack_Fast, CCallStackStatsGatherer_StatMutexPool<128>, CNoRecurseAllocator> CallStackStatsType_t;
+	CallStackStatsType_t m_CallStackStats;
+#endif
+
 	MemInfo_t m_GlobalInfo;
 	CFastTimer m_Timer;
 	bool		m_bInitialized;
-	Filenames_t *m_pFilenames;
+	Filenames_t m_Filenames;
 
 	HeapReportFunc_t m_OutputFunc;
 
-	static int s_pCountSizes[NUM_BYTE_COUNT_BUCKETS];
+	static size_t s_pCountSizes[NUM_BYTE_COUNT_BUCKETS];
 	static const char *s_pCountHeader[NUM_BYTE_COUNT_BUCKETS];
 
 	size_t				m_sMemoryAllocFailed;
 };
 
 static char const *g_pszUnknown = "unknown";
+
+#if defined( USE_STACK_TRACES )
+BEGIN_STATSTRUCTDESCRIPTION( CDbgMemAlloc::MemInfo_t )
+	WRITE_STATSTRUCT_FIELDDESCRIPTION();
+END_STATSTRUCTDESCRIPTION()
+
+
+BEGIN_STATSTRUCTFIELDDESCRIPTION( CDbgMemAlloc::MemInfo_t )
+	DEFINE_STATSTRUCTFIELD( m_nCurrentSize, BasicStatStructFieldDesc, ( BSSFT_SIZE_T, BSSFCM_ADD ) )
+	DEFINE_STATSTRUCTFIELD( m_nPeakSize, BasicStatStructFieldDesc, ( BSSFT_SIZE_T, BSSFCM_ADD ) )
+	DEFINE_STATSTRUCTFIELD( m_nTotalSize, BasicStatStructFieldDesc, ( BSSFT_SIZE_T, BSSFCM_ADD ) )
+	DEFINE_STATSTRUCTFIELD( m_nOverheadSize, BasicStatStructFieldDesc, ( BSSFT_SIZE_T, BSSFCM_ADD ) )
+	DEFINE_STATSTRUCTFIELD( m_nPeakOverheadSize, BasicStatStructFieldDesc, ( BSSFT_SIZE_T, BSSFCM_ADD ) )
+	DEFINE_STATSTRUCTFIELD( m_nCurrentCount, BasicStatStructFieldDesc, ( BSSFT_INT, BSSFCM_ADD ) )
+	DEFINE_STATSTRUCTFIELD( m_nPeakCount, BasicStatStructFieldDesc, ( BSSFT_INT, BSSFCM_ADD ) )
+	DEFINE_STATSTRUCTFIELD( m_nTotalCount, BasicStatStructFieldDesc, ( BSSFT_INT, BSSFCM_ADD ) )
+	DEFINE_STATSTRUCTFIELD( m_nSumTargetRange, BasicStatStructFieldDesc, ( BSSFT_INT, BSSFCM_ADD ) )
+	DEFINE_STATSTRUCTFIELD( m_nCurTargetRange, BasicStatStructFieldDesc, ( BSSFT_INT, BSSFCM_ADD ) )
+	DEFINE_STATSTRUCTFIELD( m_nMaxTargetRange, BasicStatStructFieldDesc, ( BSSFT_INT, BSSFCM_ADD ) )
+	DEFINE_STATSTRUCTFIELD_ARRAYENTRY( m_pCount, BYTE_COUNT_16, BasicStatStructFieldDesc, ( BSSFT_INT, BSSFCM_ADD ) )
+	DEFINE_STATSTRUCTFIELD_ARRAYENTRY( m_pCount, BYTE_COUNT_32, BasicStatStructFieldDesc, ( BSSFT_INT, BSSFCM_ADD ) )
+	DEFINE_STATSTRUCTFIELD_ARRAYENTRY( m_pCount, BYTE_COUNT_128, BasicStatStructFieldDesc, ( BSSFT_INT, BSSFCM_ADD ) )
+	DEFINE_STATSTRUCTFIELD_ARRAYENTRY( m_pCount, BYTE_COUNT_2048, BasicStatStructFieldDesc, ( BSSFT_INT, BSSFCM_ADD ) )
+	DEFINE_STATSTRUCTFIELD_ARRAYENTRY( m_pCount, BYTE_COUNT_GREATER, BasicStatStructFieldDesc, ( BSSFT_INT, BSSFCM_ADD ) )
+	DEFINE_STATSTRUCTFIELD( m_nTime, BasicStatStructFieldDesc, ( BSSFT_INT64, BSSFCM_ADD ) )
+END_STATSTRUCTFIELDDESCRIPTION()
+#endif
+
 
 //-----------------------------------------------------------------------------
 
@@ -683,19 +1036,65 @@ struct DbgInfoStack_t
 	int m_nLine;
 };
 
-CThreadLocalPtr<DbgInfoStack_t> g_DbgInfoStack CONSTRUCT_EARLY;
-CThreadLocalInt<>				g_nDbgInfoStackDepth CONSTRUCT_EARLY;
+#ifdef _PS3
+#ifndef _CERT
+extern TLSGlobals * ( *g_pfnElfGetTlsGlobals )();
+#define IfDbgInfoIsReady() if ( TLSGlobals *IfDbgInfoIsReady_pTlsGlobals = g_pfnElfGetTlsGlobals ? g_pfnElfGetTlsGlobals() : NULL )
+#else
+#define IfDbgInfoIsReady() if ( TLSGlobals *IfDbgInfoIsReady_pTlsGlobals = GetTLSGlobals() )
+#endif
+#define g_DbgInfoStack ( ( DbgInfoStack_t *& ) IfDbgInfoIsReady_pTlsGlobals->pMallocDbgInfoStack )
+#define g_nDbgInfoStackDepth ( IfDbgInfoIsReady_pTlsGlobals->nMallocDbgInfoStackDepth )
+#else
+CTHREADLOCALPTR( DbgInfoStack_t)	g_DbgInfoStack CONSTRUCT_EARLY;
+CTHREADLOCALINT						g_nDbgInfoStackDepth CONSTRUCT_EARLY;
+#define IfDbgInfoIsReady() if (true)
+#endif
+
+#ifdef _PS3
+struct CDbgMemAlloc_GetRawCrtMemOverrideFuncs_Early
+{
+	CDbgMemAlloc_GetRawCrtMemOverrideFuncs_Early()
+	{
+		malloc_managed_size mms;
+		mms.current_inuse_size = 0x12345678;
+		mms.current_system_size = 0x09ABCDEF;
+		mms.max_system_size = 0;
+		int iResult = malloc_stats( &mms );
+		g_pMemOverrideRawCrtFns = reinterpret_cast< MemOverrideRawCrtFunctions_t * >( iResult );
+	}
+}
+g_CDbgMemAlloc_GetRawCrtMemOverrideFuncs_Early CONSTRUCT_EARLY;
+#endif
 
 //-----------------------------------------------------------------------------
 // Singleton...
 //-----------------------------------------------------------------------------
 static CDbgMemAlloc s_DbgMemAlloc CONSTRUCT_EARLY;
 
+#ifdef _PS3
+
+IMemAlloc *g_pMemAllocInternalPS3 = &s_DbgMemAlloc;
+PLATFORM_OVERRIDE_MEM_ALLOC_INTERNAL_PS3_IMPL
+
+#else // !_PS3
+
 #ifndef TIER0_VALIDATE_HEAP
-IMemAlloc *g_pMemAlloc = &s_DbgMemAlloc;
+IMemAlloc *g_pMemAlloc CONSTRUCT_EARLY = &s_DbgMemAlloc;
+void SetAllocatorObject( IMemAlloc* pAllocator )
+{
+	g_pMemAlloc = pAllocator;
+}
 #else
 IMemAlloc *g_pActualAlloc = &s_DbgMemAlloc;
+void SetAllocatorObject( IMemAlloc* pAllocator )
+{
+	g_pActualAlloc = pAllocator;
+}
 #endif
+
+#endif // _PS3
+
 
 //-----------------------------------------------------------------------------
 
@@ -707,9 +1106,9 @@ CThreadMutex g_DbgMemMutex CONSTRUCT_EARLY;
 //-----------------------------------------------------------------------------
 // Byte count buckets
 //-----------------------------------------------------------------------------
-int CDbgMemAlloc::s_pCountSizes[CDbgMemAlloc::NUM_BYTE_COUNT_BUCKETS] = 
+size_t CDbgMemAlloc::s_pCountSizes[CDbgMemAlloc::NUM_BYTE_COUNT_BUCKETS] = 
 {
-	16, 32, 128, 1024, INT_MAX
+	16, 32, 128, 2048, INT_MAX
 };
 
 const char *CDbgMemAlloc::s_pCountHeader[CDbgMemAlloc::NUM_BYTE_COUNT_BUCKETS] = 
@@ -717,9 +1116,12 @@ const char *CDbgMemAlloc::s_pCountHeader[CDbgMemAlloc::NUM_BYTE_COUNT_BUCKETS] =
 	"<=16 byte allocations", 
 	"17-32 byte allocations",
 	"33-128 byte allocations", 
-	"129-1024 byte allocations",
-	">1024 byte allocations"
+	"129-2048 byte allocations",
+	">2048 byte allocations"
 };
+
+
+size_t g_TargetCountRangeMin = 0, g_TargetCountRangeMax = 0;
 
 //-----------------------------------------------------------------------------
 // Standard output
@@ -739,80 +1141,49 @@ static void DefaultHeapReportFunc( char const *pFormat, ... )
 //-----------------------------------------------------------------------------
 CDbgMemAlloc::CDbgMemAlloc() : m_sMemoryAllocFailed( (size_t)0 )
 {
-	// Make sure that we return 64-bit addresses in 64-bit builds.
-	ReserveBottomMemory();
+	CClockSpeedInit::Init();
 
 	m_OutputFunc = DefaultHeapReportFunc;
-	m_bInitialized = false;
+	m_bInitialized = true;
 
 	if ( !IsDebug() && !IsX360() )
 	{
 		Plat_DebugString( "USE_MEM_DEBUG is enabled in a release build. Don't check this in!\n" );
 	}
+
+#ifdef _PS3
+	g_pMemAllocInternalPS3 = &s_DbgMemAlloc;
+	PLATFORM_OVERRIDE_MEM_ALLOC_INTERNAL_PS3.m_pMemAllocCached = &s_DbgMemAlloc;
+	malloc_managed_size mms;
+	mms.current_inuse_size = 0x12345678;
+	mms.current_system_size = 0x09ABCDEF;
+	mms.max_system_size = reinterpret_cast< size_t >( this );
+	int iResult = malloc_stats( &mms );
+	g_pMemOverrideRawCrtFns = reinterpret_cast< MemOverrideRawCrtFunctions_t * >( iResult );
+#elif IsPlatformWindowsPC()
+	char *pStr = (char*)Plat_GetCommandLineA();
+	if ( pStr )
+	{
+		char tempStr[512];
+		strncpy( tempStr, pStr, sizeof( tempStr ) - 1 );
+		tempStr[ sizeof( tempStr ) - 1 ] = 0;
+		_strupr( tempStr );
+		CheckWindowsAllocSettings( tempStr );
+	}
+#endif
 }
 
 CDbgMemAlloc::~CDbgMemAlloc()
 {
-	Shutdown();
-}
-
-
-void CDbgMemAlloc::Initialize()
-{
-	if ( !m_bInitialized )
+	Filenames_t::const_iterator iter = m_Filenames.begin();
+	while(iter != m_Filenames.end())
 	{
-		m_pFilenames = new Filenames_t;
-		m_pStatMap= new StatMap_t;
-		m_bInitialized = true;
+		char *pFileName = (char*)(*iter);
+		free( pFileName );
+		iter++;
 	}
-}
-
-
-//-----------------------------------------------------------------------------
-// Release versions
-//-----------------------------------------------------------------------------
-void CDbgMemAlloc::Shutdown()
-{
-	if ( m_bInitialized )
-	{
-		Filenames_t::const_iterator iter = m_pFilenames->begin();
-		while ( iter != m_pFilenames->end() )
-		{
-			char *pFileName = (char*)(*iter);
-			free( pFileName );
-			iter++;
-		}
-		m_pFilenames->clear();
-
-		m_bInitialized = false;
-
-		delete m_pFilenames;
-		m_pFilenames = nullptr;
-
-		delete m_pStatMap;
-		m_pStatMap = nullptr;
-	}
-
 	m_bInitialized = false;
 }
-
-
-#ifdef WIN32
-extern "C" BOOL APIENTRY MemDbgDllMain( HMODULE hDll, DWORD dwReason, PVOID pvReserved )
-{
-	UNREFERENCED_PARAMETER( pvReserved );
-
-	// Check if we are shutting down
-	if ( dwReason == DLL_PROCESS_DETACH )
-	{
-		// CDbgMemAlloc is a global object and destructs after the _Lockit object in the CRT runtime,
-		//  so we can't actually operate on the STL object in a normal destructor here as its support libraries have been turned off already
-		s_DbgMemAlloc.Shutdown();
-	}
-
-	return TRUE;
-}
-#endif
 
 
 //-----------------------------------------------------------------------------
@@ -832,7 +1203,7 @@ void *CDbgMemAlloc::Alloc( size_t nSize )
 	}
 */
 	char szModule[MAX_PATH];
-	if ( GetCallerModule( szModule ) )
+	if ( GetCallerModule( szModule, MAX_PATH ) )
 	{
 		return Alloc( nSize, szModule, 0 );
 	}
@@ -842,6 +1213,32 @@ void *CDbgMemAlloc::Alloc( size_t nSize )
 	}
 //	return malloc( nSize );
 }
+
+#ifdef MEMALLOC_SUPPORTS_ALIGNED_ALLOCATIONS
+void *CDbgMemAlloc::AllocAlign( size_t nSize, size_t align )
+{
+/*
+	// NOTE: Uncomment this to find unknown allocations
+	const char *pFileName = g_pszUnknown;
+	int nLine;
+	GetActualDbgInfo( pFileName, nLine );
+	if (pFileName == g_pszUnknown)
+	{
+		int x = 3;
+	}
+*/
+	char szModule[MAX_PATH];
+	if ( GetCallerModule( szModule, MAX_PATH ) )
+	{
+		return AllocAlign( nSize, align, szModule, 0 );
+	}
+	else
+	{
+		return AllocAlign( nSize, align, g_pszUnknown, 0 );
+	}
+//	return malloc( nSize );
+}
+#endif
 
 void *CDbgMemAlloc::Realloc( void *pMem, size_t nSize )
 {
@@ -857,7 +1254,7 @@ void *CDbgMemAlloc::Realloc( void *pMem, size_t nSize )
 */
 	// FIXME: Should these gather stats?
 	char szModule[MAX_PATH];
-	if ( GetCallerModule( szModule ) )
+	if ( GetCallerModule( szModule, MAX_PATH ) )
 	{
 		return Realloc( pMem, nSize, szModule, 0 );
 	}
@@ -886,28 +1283,38 @@ void *CDbgMemAlloc::Expand_NoLongerSupported( void *pMem, size_t nSize )
 //-----------------------------------------------------------------------------
 void CDbgMemAlloc::PushAllocDbgInfo( const char *pFileName, int nLine )
 {
-	if ( g_DbgInfoStack == (int)NULL )
+	IfDbgInfoIsReady()
 	{
-		g_DbgInfoStack = (DbgInfoStack_t *)DebugAlloc( sizeof(DbgInfoStack_t) * DBG_INFO_STACK_DEPTH );
-		g_nDbgInfoStackDepth = -1;
-	}
 
-	++g_nDbgInfoStackDepth;
-	Assert( g_nDbgInfoStackDepth < DBG_INFO_STACK_DEPTH );
-	g_DbgInfoStack[g_nDbgInfoStackDepth].m_pFileName = FindOrCreateFilename( pFileName );
-	g_DbgInfoStack[g_nDbgInfoStackDepth].m_nLine = nLine;
+		if ( g_DbgInfoStack == NULL )
+		{
+			g_DbgInfoStack = (DbgInfoStack_t *)DebugAlloc( sizeof(DbgInfoStack_t) * DBG_INFO_STACK_DEPTH );
+			g_nDbgInfoStackDepth = -1;
+		}
+
+		++g_nDbgInfoStackDepth;
+		Assert( g_nDbgInfoStackDepth < DBG_INFO_STACK_DEPTH );
+		g_DbgInfoStack[g_nDbgInfoStackDepth].m_pFileName = FindOrCreateFilename( pFileName );
+		g_DbgInfoStack[g_nDbgInfoStackDepth].m_nLine = nLine;
+
+	}
 }
 
 void CDbgMemAlloc::PopAllocDbgInfo()
 {
-	if ( g_DbgInfoStack == (int)NULL )
+	IfDbgInfoIsReady()
 	{
-		g_DbgInfoStack = (DbgInfoStack_t *)DebugAlloc( sizeof(DbgInfoStack_t) * DBG_INFO_STACK_DEPTH );
-		g_nDbgInfoStackDepth = -1;
-	}
 
-	--g_nDbgInfoStackDepth;
-	Assert( g_nDbgInfoStackDepth >= -1 );
+		if ( g_DbgInfoStack == NULL )
+		{
+			g_DbgInfoStack = (DbgInfoStack_t *)DebugAlloc( sizeof(DbgInfoStack_t) * DBG_INFO_STACK_DEPTH );
+			g_nDbgInfoStackDepth = -1;
+		}
+
+		--g_nDbgInfoStackDepth;
+		Assert( g_nDbgInfoStackDepth >= -1 );
+
+	}
 }
 
 
@@ -921,35 +1328,40 @@ uint32 CDbgMemAlloc::GetDebugInfoSize()
 
 void CDbgMemAlloc::SaveDebugInfo( void *pvDebugInfo )
 {
-	if ( g_DbgInfoStack == (int)NULL )
+	IfDbgInfoIsReady()
 	{
-		g_DbgInfoStack = (DbgInfoStack_t *)DebugAlloc( sizeof(DbgInfoStack_t) * DBG_INFO_STACK_DEPTH );
-		g_nDbgInfoStackDepth = -1;
-	}
+		if ( g_DbgInfoStack == NULL )
+		{
+			g_DbgInfoStack = (DbgInfoStack_t *)DebugAlloc( sizeof(DbgInfoStack_t) * DBG_INFO_STACK_DEPTH );
+			g_nDbgInfoStackDepth = -1;
+		}
 
-	int32 *pnStackDepth = (int32*) pvDebugInfo;
-	*pnStackDepth = g_nDbgInfoStackDepth;
-	memcpy( pnStackDepth+1, &g_DbgInfoStack[0], sizeof( DbgInfoStack_t ) * DBG_INFO_STACK_DEPTH );
+		int32 *pnStackDepth = (int32*) pvDebugInfo;
+		*pnStackDepth = g_nDbgInfoStackDepth;
+		memcpy( pnStackDepth+1, &g_DbgInfoStack[0], sizeof( DbgInfoStack_t ) * DBG_INFO_STACK_DEPTH );
+	}
 }
 
 void CDbgMemAlloc::RestoreDebugInfo( const void *pvDebugInfo )
 {
-	if ( g_DbgInfoStack == (int)NULL )
+	IfDbgInfoIsReady()
 	{
-		g_DbgInfoStack = (DbgInfoStack_t *)DebugAlloc( sizeof(DbgInfoStack_t) * DBG_INFO_STACK_DEPTH );
-		g_nDbgInfoStackDepth = -1;
+		if ( g_DbgInfoStack == NULL )
+		{
+			g_DbgInfoStack = (DbgInfoStack_t *)DebugAlloc( sizeof(DbgInfoStack_t) * DBG_INFO_STACK_DEPTH );
+			g_nDbgInfoStackDepth = -1;
+		}
+
+		const int32 *pnStackDepth = (const int32*) pvDebugInfo;
+		g_nDbgInfoStackDepth = *pnStackDepth;
+		memcpy( &g_DbgInfoStack[0], pnStackDepth+1, sizeof( DbgInfoStack_t ) * DBG_INFO_STACK_DEPTH );
 	}
-
-	const int32 *pnStackDepth = (const int32*) pvDebugInfo;
-	g_nDbgInfoStackDepth = *pnStackDepth;
-	memcpy( &g_DbgInfoStack[0], pnStackDepth+1, sizeof( DbgInfoStack_t ) * DBG_INFO_STACK_DEPTH );
-
 }
 
 void CDbgMemAlloc::InitDebugInfo( void *pvDebugInfo, const char *pchRootFileName, int nLine )
 {
 	int32 *pnStackDepth = (int32*) pvDebugInfo;
-
+		
 	if( pchRootFileName )
 	{
 		*pnStackDepth = 0;
@@ -965,26 +1377,30 @@ void CDbgMemAlloc::InitDebugInfo( void *pvDebugInfo, const char *pchRootFileName
 
 }
 
-
 //-----------------------------------------------------------------------------
 // Returns the actual debug info
 //-----------------------------------------------------------------------------
 void CDbgMemAlloc::GetActualDbgInfo( const char *&pFileName, int &nLine )
 {
-#if defined( USE_STACK_WALK_DETAILED )
+#if defined( USE_STACK_TRACES_DETAILED )
 	return;
 #endif
 
-	if ( g_DbgInfoStack == (int)NULL )
+	IfDbgInfoIsReady()
 	{
-		g_DbgInfoStack = (DbgInfoStack_t *)DebugAlloc( sizeof(DbgInfoStack_t) * DBG_INFO_STACK_DEPTH );
-		g_nDbgInfoStackDepth = -1;
-	}
 
-	if ( g_nDbgInfoStackDepth >= 0 && g_DbgInfoStack[0].m_pFileName)
-	{
-		pFileName = g_DbgInfoStack[0].m_pFileName;
-		nLine = g_DbgInfoStack[0].m_nLine;
+		if ( g_DbgInfoStack == NULL )
+		{
+			g_DbgInfoStack = (DbgInfoStack_t *)DebugAlloc( sizeof(DbgInfoStack_t) * DBG_INFO_STACK_DEPTH );
+			g_nDbgInfoStackDepth = -1;
+		}
+
+		if ( g_nDbgInfoStackDepth >= 0 && g_DbgInfoStack[0].m_pFileName)
+		{
+			pFileName = g_DbgInfoStack[0].m_pFileName;
+			nLine = g_DbgInfoStack[0].m_nLine;
+		}
+
 	}
 }
 
@@ -994,8 +1410,6 @@ void CDbgMemAlloc::GetActualDbgInfo( const char *&pFileName, int &nLine )
 //-----------------------------------------------------------------------------
 const char *CDbgMemAlloc::FindOrCreateFilename( const char *pFileName )
 {
-	Initialize();
-
 	// If we created it for the first time, actually *allocate* the filename memory
 	HEAP_LOCK();
 	// This is necessary for shutdown conditions: the file name is stored
@@ -1007,12 +1421,12 @@ const char *CDbgMemAlloc::FindOrCreateFilename( const char *pFileName )
 		pFileName = g_pszUnknown;
 	}
 
-#if defined( USE_STACK_WALK_DETAILED )
+#if defined( USE_STACK_TRACES_DETAILED )
 {
 
 	// Walk the stack to determine what's causing the allocation
 	void *arrStackAddresses[ 10 ] = { 0 };
-	int numStackAddrRetrieved = WalkStack( arrStackAddresses, 10, 0 );
+	int numStackAddrRetrieved = GetCallStack_Fast( arrStackAddresses, 10, 2 ); //Skip this function, and either CDbgMemAlloc::Alloc() or CDbgMemAlloc::Realloc()
 	char *szStack = StackDescribe( arrStackAddresses, numStackAddrRetrieved );
 	if ( szStack && *szStack )
 	{
@@ -1020,16 +1434,16 @@ const char *CDbgMemAlloc::FindOrCreateFilename( const char *pFileName )
 	}
 
 }
-#endif // #if defined( USE_STACK_WALK_DETAILED )
+#endif // #if defined( USE_STACK_TRACES_DETAILED )
 
 	char *pszFilenameCopy;
-	Filenames_t::const_iterator iter = m_pFilenames->find( pFileName );
-	if ( iter == m_pFilenames->end() )
+	Filenames_t::const_iterator iter = m_Filenames.find( pFileName );
+	if ( iter == m_Filenames.end() )
 	{
-		int nLen = strlen(pFileName) + 1;
+		size_t nLen = strlen(pFileName) + 1;
 		pszFilenameCopy = (char *)DebugAlloc( nLen );
 		memcpy( pszFilenameCopy, pFileName, nLen );
-		m_pFilenames->insert( pszFilenameCopy );
+		m_Filenames.insert( pszFilenameCopy );
 	}
 	else
 	{
@@ -1044,16 +1458,30 @@ const char *CDbgMemAlloc::FindOrCreateFilename( const char *pFileName )
 //-----------------------------------------------------------------------------
 CDbgMemAlloc::MemInfo_t &CDbgMemAlloc::FindOrCreateEntry( const char *pFileName, int line )
 {
-	Initialize();
 	// Oh how I love crazy STL. retval.first == the StatMapIter_t in the std::pair
 	// retval.first->second == the MemInfo_t that's part of the StatMapIter_t 
-	std::pair<StatMapIter_t, bool> retval;
-	if ( m_pStatMap )
-	{
-		retval = m_pStatMap->insert( StatMapEntry_t( MemInfoKey_t( pFileName, line ), MemInfo_t() ) );
-	}
+	std::pair<StatMapIter_FileLine_t, bool> retval;
+	retval = m_StatMap_FileLine.insert( StatMapEntry_FileLine_t( MemInfoKey_FileLine_t( pFileName, line ), MemInfo_t() ) );
 	return retval.first->second;
 }
+
+#if defined( USE_STACK_TRACES )
+int CDbgMemAlloc::GetCallStackForIndex( unsigned int index, void **pCallStackOut, int iMaxEntriesOut )
+{
+	if( iMaxEntriesOut > STACK_TRACE_LENGTH )
+		iMaxEntriesOut = STACK_TRACE_LENGTH;
+
+	CallStackStatsType_t::StackReference stackRef = m_CallStackStats.GetCallStackForIndex( index );
+
+	memcpy( pCallStackOut, stackRef, iMaxEntriesOut * sizeof( void * ) );
+	for( int i = 0; i != iMaxEntriesOut; ++i )
+	{
+		if( pCallStackOut[i] == NULL )
+			return i;
+	}
+	return iMaxEntriesOut;
+}
+#endif
 
 
 //-----------------------------------------------------------------------------
@@ -1073,6 +1501,24 @@ void CDbgMemAlloc::RegisterDeallocation( const char *pFileName, int nLine, size_
 	RegisterDeallocation( FindOrCreateEntry( pFileName, nLine ), nLogicalSize, nActualSize, nTime );
 }
 
+#if defined( USE_STACK_TRACES )
+void CDbgMemAlloc::RegisterAllocation( unsigned int nStatIndex, size_t nLogicalSize, size_t nActualSize, unsigned nTime )
+{
+	HEAP_LOCK();
+	RegisterAllocation( m_GlobalInfo, nLogicalSize, nActualSize, nTime );
+	CCallStackStatsGatherer_StructAccessor_AutoLock<MemInfo_t> entryAccessor = m_CallStackStats.GetEntry( nStatIndex );
+	RegisterAllocation( *entryAccessor.GetStruct(), nLogicalSize, nActualSize, nTime );
+}
+
+void CDbgMemAlloc::RegisterDeallocation( unsigned int nStatIndex, size_t nLogicalSize, size_t nActualSize, unsigned nTime )
+{
+	HEAP_LOCK();
+	RegisterDeallocation( m_GlobalInfo, nLogicalSize, nActualSize, nTime );
+	CCallStackStatsGatherer_StructAccessor_AutoLock<MemInfo_t> entryAccessor = m_CallStackStats.GetEntry( nStatIndex );
+	RegisterDeallocation( *entryAccessor.GetStruct(), nLogicalSize, nActualSize, nTime );
+}
+#endif
+
 void CDbgMemAlloc::RegisterAllocation( MemInfo_t &info, size_t nLogicalSize, size_t nActualSize, unsigned nTime )
 {
 	++info.m_nCurrentCount;
@@ -1087,6 +1533,16 @@ void CDbgMemAlloc::RegisterAllocation( MemInfo_t &info, size_t nLogicalSize, siz
 	if (info.m_nCurrentSize > info.m_nPeakSize)
 	{
 		info.m_nPeakSize = info.m_nCurrentSize;
+	}
+
+	if ( nLogicalSize > g_TargetCountRangeMin && nLogicalSize <= g_TargetCountRangeMax )
+	{
+		info.m_nSumTargetRange++;
+		info.m_nCurTargetRange++;
+		if ( info.m_nCurTargetRange > info.m_nMaxTargetRange )
+		{
+			info.m_nMaxTargetRange = info.m_nCurTargetRange;
+		}	
 	}
 
 	for (int i = 0; i < NUM_BYTE_COUNT_BUCKETS; ++i)
@@ -1112,15 +1568,6 @@ void CDbgMemAlloc::RegisterAllocation( MemInfo_t &info, size_t nLogicalSize, siz
 
 void CDbgMemAlloc::RegisterDeallocation( MemInfo_t &info, size_t nLogicalSize, size_t nActualSize, unsigned nTime )
 {
-	// Check for decrementing these counters below zero. The checks
-	// must be done here because these unsigned counters will wrap-around and
-	// still be positive.
-	Assert( info.m_nCurrentCount != 0 );
-
-	// It is technically legal for code to request allocations of zero bytes, and there are a number of places in our code
-	// that do. So only assert that nLogicalSize >= 0. http://stackoverflow.com/questions/1087042/c-new-int0-will-it-allocate-memory
-	Assert( nLogicalSize >= 0 );
-	Assert( info.m_nCurrentSize >= nLogicalSize );
 	--info.m_nCurrentCount;
 	info.m_nCurrentSize -= nLogicalSize;
 
@@ -1133,8 +1580,15 @@ void CDbgMemAlloc::RegisterDeallocation( MemInfo_t &info, size_t nLogicalSize, s
 		}
 	}
 
+	if ( nLogicalSize > g_TargetCountRangeMin && nLogicalSize <= g_TargetCountRangeMax )
+	{
+		info.m_nCurTargetRange--;
+	}
+
 	Assert( info.m_nPeakCount >= info.m_nCurrentCount );
 	Assert( info.m_nPeakSize >= info.m_nCurrentSize );
+	Assert( info.m_nCurrentCount >= 0 );
+	Assert( info.m_nCurrentSize >= 0 );
 
 	info.m_nOverheadSize -= (nActualSize - nLogicalSize);
 
@@ -1177,8 +1631,25 @@ void *CDbgMemAlloc::Alloc( size_t nSize, const char *pFileName, int nLine )
 {
 	HEAP_LOCK();
 
+#if defined( USE_STACK_TRACES )
+	unsigned int iStatEntryIndex = m_CallStackStats.GetEntryIndex( CCallStackStorage( m_CallStackStats.StackFunction, 1 ) );
+#endif
+
 	if ( !m_bInitialized )
-		return InternalMalloc( nSize, pFileName, nLine );
+	{
+		void *pRetval = InternalMalloc( nSize, pFileName, nLine );
+
+#if defined( USE_STACK_TRACES )
+		if( pRetval )
+		{
+			GetAllocationStatIndex_Internal( pRetval ) = iStatEntryIndex;
+		}
+#endif
+
+		return pRetval;
+	}
+
+
 
 	if ( pFileName != g_pszUnknown )
 		pFileName = FindOrCreateFilename( pFileName );
@@ -1196,18 +1667,91 @@ void *CDbgMemAlloc::Alloc( size_t nSize, const char *pFileName, int nLine )
 	void *pMem = InternalMalloc( nSize, pFileName, nLine );
 	m_Timer.End();
 
+#if defined( USE_STACK_TRACES )
+	if( pMem )
+	{
+		GetAllocationStatIndex_Internal( pMem ) = iStatEntryIndex;
+	}
+#endif
+
 	ApplyMemoryInitializations( pMem, nSize );
 
-	if ( pMem )
-	{
-		RegisterAllocation( GetAllocatonFileName( pMem ), GetAllocatonLineNumber( pMem ), InternalLogicalSize( pMem ), InternalMSize( pMem ), m_Timer.GetDuration().GetMicroseconds() );
-	}
-	else
+#if defined( USE_STACK_TRACES )
+	RegisterAllocation( GetAllocationStatIndex_Internal( pMem ), InternalLogicalSize( pMem ), InternalMSize( pMem ), m_Timer.GetDuration().GetMicroseconds() );
+#else
+	RegisterAllocation( GetAllocatonFileName( pMem ), GetAllocatonLineNumber( pMem ), InternalLogicalSize( pMem ), InternalMSize( pMem ), m_Timer.GetDuration().GetMicroseconds() );
+#endif
+
+	if ( !pMem )
 	{
 		SetCRTAllocFailed( nSize );
 	}
 	return pMem;
 }
+
+#ifdef MEMALLOC_SUPPORTS_ALIGNED_ALLOCATIONS
+void *CDbgMemAlloc::AllocAlign( size_t nSize, size_t align, const char *pFileName, int nLine )
+{
+	HEAP_LOCK();
+
+#if defined( USE_STACK_TRACES )
+	unsigned int iStatEntryIndex = m_CallStackStats.GetEntryIndexForCurrentCallStack( 1 );
+#endif
+
+	if ( !m_bInitialized )
+	{
+		void *pRetval = InternalMalloc( nSize, pFileName, nLine );
+
+#if defined( USE_STACK_TRACES )
+		if( pRetval )
+		{
+			GetAllocationStatIndex_Internal( pRetval ) = iStatEntryIndex;
+		}
+#endif
+
+		return pRetval;
+	}
+
+
+
+	if ( pFileName != g_pszUnknown )
+		pFileName = FindOrCreateFilename( pFileName );
+
+	GetActualDbgInfo( pFileName, nLine );
+
+	/*
+	if ( strcmp( pFileName, "class CUtlVector<int,class CUtlMemory<int> >" ) == 0)
+	{
+		GetActualDbgInfo( pFileName, nLine );
+	}
+	*/
+
+	m_Timer.Start();
+	void *pMem = InternalMallocAligned( nSize, align, pFileName, nLine );
+	m_Timer.End();
+
+#if defined( USE_STACK_TRACES )
+	if( pMem )
+	{
+		GetAllocationStatIndex_Internal( pMem ) = iStatEntryIndex;
+	}
+#endif
+
+	ApplyMemoryInitializations( pMem, nSize );
+
+#if defined( USE_STACK_TRACES )
+	RegisterAllocation( GetAllocationStatIndex_Internal( pMem ), InternalLogicalSize( pMem ), InternalMSize( pMem ), m_Timer.GetDuration().GetMicroseconds() );
+#else
+	RegisterAllocation( GetAllocatonFileName( pMem ), GetAllocatonLineNumber( pMem ), InternalLogicalSize( pMem ), InternalMSize( pMem ), m_Timer.GetDuration().GetMicroseconds() );
+#endif
+
+	if ( !pMem )
+	{
+		SetCRTAllocFailed( nSize );
+	}
+	return pMem;
+}
+#endif
 
 void *CDbgMemAlloc::Realloc( void *pMem, size_t nSize, const char *pFileName, int nLine )
 {
@@ -1215,12 +1759,30 @@ void *CDbgMemAlloc::Realloc( void *pMem, size_t nSize, const char *pFileName, in
 
 	pFileName = FindOrCreateFilename( pFileName );
 
+#if defined( USE_STACK_TRACES )
+	unsigned int iStatEntryIndex = m_CallStackStats.GetEntryIndex( CCallStackStorage( m_CallStackStats.StackFunction, 1 ) );
+#endif
+
 	if ( !m_bInitialized )
-		return InternalRealloc( pMem, nSize, pFileName, nLine );
+	{
+		pMem = InternalRealloc( pMem, nSize, pFileName, nLine );
+
+#if defined( USE_STACK_TRACES )
+		if( pMem )
+		{
+			GetAllocationStatIndex_Internal( pMem ) = iStatEntryIndex;
+		}
+#endif
+		return pMem;
+	}
 
 	if ( pMem != 0 )
 	{
-		RegisterDeallocation( GetAllocatonFileName( pMem ), GetAllocatonLineNumber( pMem ), InternalLogicalSize( pMem), InternalMSize( pMem ), 0 );
+#if defined( USE_STACK_TRACES )
+		RegisterDeallocation( GetAllocationStatIndex_Internal( pMem ), InternalLogicalSize( pMem ), InternalMSize( pMem ), 0 );
+#else
+		RegisterDeallocation( GetAllocatonFileName( pMem ), GetAllocatonLineNumber( pMem ), InternalLogicalSize( pMem ), InternalMSize( pMem ), 0 );
+#endif
 	}
 
 	GetActualDbgInfo( pFileName, nLine );
@@ -1229,16 +1791,108 @@ void *CDbgMemAlloc::Realloc( void *pMem, size_t nSize, const char *pFileName, in
 	pMem = InternalRealloc( pMem, nSize, pFileName, nLine );
 	m_Timer.End();
 
-	if ( pMem )
+#if defined( USE_STACK_TRACES )
+	if( pMem )
 	{
-		RegisterAllocation( GetAllocatonFileName( pMem ), GetAllocatonLineNumber( pMem ), InternalLogicalSize( pMem), InternalMSize( pMem ), m_Timer.GetDuration().GetMicroseconds() );
+		GetAllocationStatIndex_Internal( pMem ) = iStatEntryIndex;
 	}
-	else
+#endif
+	
+#if defined( USE_STACK_TRACES )
+	RegisterAllocation( GetAllocationStatIndex_Internal( pMem ), InternalLogicalSize( pMem ), InternalMSize( pMem ), m_Timer.GetDuration().GetMicroseconds() );
+#else
+	RegisterAllocation( GetAllocatonFileName( pMem ), GetAllocatonLineNumber( pMem ), InternalLogicalSize( pMem ), InternalMSize( pMem ), m_Timer.GetDuration().GetMicroseconds() );
+#endif
+	
+	if ( !pMem )
 	{
 		SetCRTAllocFailed( nSize );
 	}
 	return pMem;
 }
+
+#ifdef MEMALLOC_SUPPORTS_ALIGNED_ALLOCATIONS
+void *CDbgMemAlloc::ReallocAlign( void *pMem, size_t nSize, size_t align )
+{
+/*
+	// NOTE: Uncomment this to find unknown allocations
+	const char *pFileName = g_pszUnknown;
+	int nLine;
+	GetActualDbgInfo( pFileName, nLine );
+	if (pFileName == g_pszUnknown)
+	{
+		int x = 3;
+	}
+*/
+	char szModule[MAX_PATH];
+	if ( GetCallerModule( szModule, MAX_PATH ) )
+	{
+		return ReallocAlign( pMem, nSize, align, szModule, 0 );
+	}
+	else
+	{
+		return ReallocAlign( pMem, nSize, align, g_pszUnknown, 0 );
+	}
+//	return malloc( nSize );
+}
+void *CDbgMemAlloc::ReallocAlign( void *pMem, size_t nSize, size_t align, const char *pFileName, int nLine )
+{
+	HEAP_LOCK();
+
+	pFileName = FindOrCreateFilename( pFileName );
+
+#if defined( USE_STACK_TRACES )
+	unsigned int iStatEntryIndex = m_CallStackStats.GetEntryIndexForCurrentCallStack( 1 );
+#endif
+
+	if ( !m_bInitialized )
+	{
+		pMem = InternalReallocAligned( pMem, nSize, align, pFileName, nLine );
+
+#if defined( USE_STACK_TRACES )
+		if( pMem )
+		{
+			GetAllocationStatIndex_Internal( pMem ) = iStatEntryIndex;
+		}
+#endif
+		return pMem;
+	}
+
+	if ( pMem != 0 )
+	{
+#if defined( USE_STACK_TRACES )
+		RegisterDeallocation( GetAllocationStatIndex_Internal( pMem ), InternalLogicalSize( pMem ), InternalMSize( pMem ), 0 );
+#else
+		RegisterDeallocation( GetAllocatonFileName( pMem ), GetAllocatonLineNumber( pMem ), InternalLogicalSize( pMem ), InternalMSize( pMem ), 0 );
+#endif
+	}
+
+	GetActualDbgInfo( pFileName, nLine );
+
+	m_Timer.Start();
+	pMem = InternalReallocAligned( pMem, nSize, align, pFileName, nLine );
+	m_Timer.End();
+
+#if defined( USE_STACK_TRACES )
+	if( pMem )
+	{
+		GetAllocationStatIndex_Internal( pMem ) = iStatEntryIndex;
+	}
+#endif
+	
+#if defined( USE_STACK_TRACES )
+	RegisterAllocation( GetAllocationStatIndex_Internal( pMem ), InternalLogicalSize( pMem ), InternalMSize( pMem ), m_Timer.GetDuration().GetMicroseconds() );
+#else
+	RegisterAllocation( GetAllocatonFileName( pMem ), GetAllocatonLineNumber( pMem ), InternalLogicalSize( pMem ), InternalMSize( pMem ), m_Timer.GetDuration().GetMicroseconds() );
+#endif
+	
+	if ( !pMem )
+	{
+		SetCRTAllocFailed( nSize );
+	}
+	return pMem;
+}
+#endif
 
 void  CDbgMemAlloc::Free( void *pMem, const char * /*pFileName*/, int nLine )
 {
@@ -1254,15 +1908,25 @@ void  CDbgMemAlloc::Free( void *pMem, const char * /*pFileName*/, int nLine )
 	}
 
 	size_t nOldLogicalSize = InternalLogicalSize( pMem );
-    size_t nOldSize = InternalMSize( pMem );
+	size_t nOldSize = InternalMSize( pMem );	
+
+#if defined( USE_STACK_TRACES )
+	unsigned int oldStatIndex = GetAllocationStatIndex_Internal( pMem );
+#else
 	const char *pOldFileName = GetAllocatonFileName( pMem );
 	int oldLine = GetAllocatonLineNumber( pMem );
+#endif
+
 
 	m_Timer.Start();
 	InternalFree( pMem );
  	m_Timer.End();
 
+#if defined( USE_STACK_TRACES )
+	RegisterDeallocation( oldStatIndex, nOldLogicalSize, nOldSize, m_Timer.GetDuration().GetMicroseconds() );
+#else
 	RegisterDeallocation( pOldFileName, oldLine, nOldLogicalSize, nOldSize, m_Timer.GetDuration().GetMicroseconds() );
+#endif
 }
 
 void *CDbgMemAlloc::Expand_NoLongerSupported( void *pMem, size_t nSize, const char *pFileName, int nLine )
@@ -1272,14 +1936,14 @@ void *CDbgMemAlloc::Expand_NoLongerSupported( void *pMem, size_t nSize, const ch
 
 
 //-----------------------------------------------------------------------------
-// Returns size of a particular allocation
+// Returns the size of a particular allocation (NOTE: may be larger than the size requested!)
 //-----------------------------------------------------------------------------
 size_t CDbgMemAlloc::GetSize( void *pMem )
 {
 	HEAP_LOCK();
 
 	if ( !pMem )
-		return CalcHeapUsed();
+		return m_GlobalInfo.m_nCurrentSize;
 
 	return InternalMSize( pMem );
 }
@@ -1288,7 +1952,7 @@ size_t CDbgMemAlloc::GetSize( void *pMem )
 //-----------------------------------------------------------------------------
 // FIXME: Remove when we make our own heap! Crt stuff we're currently using
 //-----------------------------------------------------------------------------
-long CDbgMemAlloc::CrtSetBreakAlloc( long lNewBreakAlloc )
+int32 CDbgMemAlloc::CrtSetBreakAlloc( int32 lNewBreakAlloc )
 {
 #ifdef POSIX
 	return 0;
@@ -1330,12 +1994,14 @@ int CDbgMemAlloc::CrtCheckMemory( void )
 {
 #if !defined( DBGMEM_CHECKMEMORY ) || defined( POSIX )
 	return 1;
-#else
+#elif defined( _WIN32 )
 	if ( !_CrtCheckMemory())
 	{
 		Msg( "Memory check failed!\n" );
 		return 0;
 	}
+	return 1;
+#else
 	return 1;
 #endif
 }
@@ -1390,7 +2056,10 @@ int CDbgMemAlloc::heapchk()
 #ifdef POSIX
 	return 0;
 #else
-	return _HEAPOK;
+	if ( CrtCheckMemory() )
+		return _HEAPOK;
+	else
+		return _HEAPBADPTR;
 #endif
 }
 
@@ -1406,7 +2075,7 @@ void CDbgMemAlloc::DumpBlockStats( void *p )
 	const char *pFileName = GetAllocatonFileName( p );
 	int line = GetAllocatonLineNumber( p );
 
-	Msg( "0x%p allocated by %s line %d, %llu bytes\n", p, pFileName, line, (uint64)GetSize( p ) );
+	Msg( "0x%p allocated by %s line %d, %d bytes\n", p, pFileName, line, GetSize( p ) );
 }
 
 //-----------------------------------------------------------------------------
@@ -1414,7 +2083,7 @@ void CDbgMemAlloc::DumpBlockStats( void *p )
 //-----------------------------------------------------------------------------
 void CDbgMemAlloc::DumpMemInfo( const char *pAllocationName, int line, const MemInfo_t &info )
 {
-	m_OutputFunc("%s, line %i\t%.1f\t%.1f\t%.1f\t%.1f\t%.1f\t%d\t%d\t%d\t%d",
+	m_OutputFunc("%s, line %i\t%.1f\t%.1f\t%.1f\t%.1f\t%.1f\t%d\t%d\t%d\t%d\t%d\t%d\t%d",
 		pAllocationName,
 		line,
 		info.m_nCurrentSize / 1024.0f,
@@ -1425,7 +2094,10 @@ void CDbgMemAlloc::DumpMemInfo( const char *pAllocationName, int line, const Mem
 		(int)(info.m_nTime / 1000),
 		info.m_nCurrentCount,
 		info.m_nPeakCount,
-		info.m_nTotalCount
+		info.m_nTotalCount,
+		info.m_nSumTargetRange,
+		info.m_nCurTargetRange,
+		info.m_nMaxTargetRange
 		);
 
 	for (int i = 0; i < NUM_BYTE_COUNT_BUCKETS; ++i)
@@ -1440,36 +2112,54 @@ void CDbgMemAlloc::DumpMemInfo( const char *pAllocationName, int line, const Mem
 //-----------------------------------------------------------------------------
 // Stat output
 //-----------------------------------------------------------------------------
+size_t CDbgMemAlloc::ComputeMemoryUsedBy( char const *pchSubStr)
+{
+	size_t total = 0;
+	StatMapIter_FileLine_t iter = m_StatMap_FileLine.begin();
+	while(iter != m_StatMap_FileLine.end())
+	{
+		if(!pchSubStr || strstr(iter->first.m_pFileName,pchSubStr))
+		{
+			total += iter->second.m_nCurrentSize;
+		}
+		iter++;
+	}
+	return total;
+}
+
 void CDbgMemAlloc::DumpFileStats()
 {
-	if ( !m_pStatMap )
-		return;
-
-	StatMapIter_t iter = m_pStatMap->begin();
-	while ( iter != m_pStatMap->end() )
+	StatMapIter_FileLine_t iter = m_StatMap_FileLine.begin();
+	while(iter != m_StatMap_FileLine.end())
 	{
 		DumpMemInfo( iter->first.m_pFileName, iter->first.m_nLine, iter->second );
 		iter++;
 	}
 }
 
-void CDbgMemAlloc::DumpStatsFileBase( char const *pchFileBase )
+void CDbgMemAlloc::DumpStatsFileBase( char const *pchFileBase, DumpStatsFormat_t nFormat )
 {
-	HEAP_LOCK();
-
 	char szFileName[MAX_PATH];
 	static int s_FileCount = 0;
 	if (m_OutputFunc == DefaultHeapReportFunc)
 	{
 		char *pPath = "";
-		if ( IsX360() )
-		{
-			pPath = "D:\\";
-		}
+#ifdef _X360
+		pPath = "D:\\";
+#elif defined( _PS3 )
+		pPath = "/app_home/";
+#endif
+		
 
-#if defined( _MEMTEST ) && defined( _X360 )
+
+		// [mhansen] Give out a unique filename for mem dumps
+#if defined( _MEMTEST )
 		char szXboxName[32];
-		strcpy( szXboxName, "xbox" );
+		strcpy( szXboxName, "memdump" );
+
+#if defined( _PS3 )
+		_snprintf( szFileName, sizeof( szFileName ), "%s%s_%d.txt", pPath, s_szStatsMapName, s_FileCount );
+#else
 		DWORD numChars = sizeof( szXboxName );
 		DmGetXboxName( szXboxName, &numChars ); 
 		char *pXboxName = strstr( szXboxName, "_360" );
@@ -1481,10 +2171,34 @@ void CDbgMemAlloc::DumpStatsFileBase( char const *pchFileBase )
 		SYSTEMTIME systemTime;
 		GetLocalTime( &systemTime );
 		_snprintf( szFileName, sizeof( szFileName ), "%s%s_%2.2d%2.2d_%2.2d%2.2d%2.2d_%d.txt", pPath, s_szStatsMapName, systemTime.wMonth, systemTime.wDay, systemTime.wHour, systemTime.wMinute, systemTime.wSecond, s_FileCount );
-#else
-		_snprintf( szFileName, sizeof( szFileName ), "%s%s%d.txt", pPath, pchFileBase, s_FileCount );
 #endif
+
+#else // _MEMTEST
+
+#if defined( _WIN32 ) && !defined( _X360 )
+		bool fileExists = true;
+		while (fileExists)
+		{
+			_snprintf( szFileName, sizeof( szFileName ), "%s%s%d.txt", pPath, pchFileBase, s_FileCount );
+			szFileName[ ARRAYSIZE(szFileName) - 1 ] = 0;
+			if (_access_s(szFileName, 0) == ENOENT)
+			{
+				fileExists = false;
+			}
+			else
+			{
+				++s_FileCount;
+			}
+		}
+#else // _WIN32
+		_snprintf( szFileName, sizeof( szFileName ), "%s%s%d.txt", pPath, pchFileBase, s_FileCount );
+#endif // _WIN32
+
+#endif // _MEMTEST
+
+
 		szFileName[ ARRAYSIZE(szFileName) - 1 ] = 0;
+
 
 		++s_FileCount;
 
@@ -1493,37 +2207,103 @@ void CDbgMemAlloc::DumpStatsFileBase( char const *pchFileBase )
 			return;
 	}
 
-	m_OutputFunc("Allocation type\tCurrent Size(k)\tPeak Size(k)\tTotal Allocations(k)\tOverhead Size(k)\tPeak Overhead Size(k)\tTime(ms)\tCurrent Count\tPeak Count\tTotal Count");
-
-	for (int i = 0; i < NUM_BYTE_COUNT_BUCKETS; ++i)
 	{
-		m_OutputFunc( "\t%s", s_pCountHeader[i] );
-	}
+		HEAP_LOCK();
 
-	m_OutputFunc("\n");
+		m_OutputFunc("Allocation type\tCurrent Size(k)\tPeak Size(k)\tTotal Allocations(k)\tOverhead Size(k)\tPeak Overhead Size(k)\tTime(ms)\tCurrent Count\tPeak Count\tTotal Count\tTNum\tTCur\tTMax");
 
-	DumpMemInfo( "Totals", 0, m_GlobalInfo );
+		for (int i = 0; i < NUM_BYTE_COUNT_BUCKETS; ++i)
+		{
+			m_OutputFunc( "\t%s", s_pCountHeader[i] );
+		}
 
-#ifdef WIN32
-	if ( IsX360() )
-	{
-		// add a line that has free memory
-		size_t usedMemory, freeMemory;
-		GlobalMemoryStatus( &usedMemory, &freeMemory );
-		MemInfo_t info;
-		// OS takes 32 MB, report our internal allocations only
-		info.m_nCurrentSize = usedMemory;
-		DumpMemInfo( "Used Memory", 0, info );
-	}
+		m_OutputFunc("\n");
+
+		MemInfo_t totals = m_GlobalInfo;
+#ifdef _PS3
+		{
+			// Add a line for system heap stats
+			static malloc_managed_size mms;
+			(g_pMemOverrideRawCrtFns->pfn_malloc_stats)( &mms );
+
+			MemInfo_t info;
+			info.m_nCurrentSize		= mms.current_inuse_size;
+			info.m_nPeakSize		= mms.max_system_size;
+			info.m_nOverheadSize	= mms.current_system_size - mms.current_inuse_size;
+			DumpMemInfo( "||PS3 malloc_stats||", 0, info );
+
+			// Add a line for PRXs
+			char prxFilename[256];
+			sys_prx_id_t prxIDs[256];
+			sys_prx_segment_info_t prxSegments[32];
+			sys_prx_get_module_list_t prxList = { sizeof( sys_prx_get_module_list_t ), ARRAYSIZE( prxIDs ), 0, prxIDs, NULL };
+			sys_prx_get_module_list( 0, &prxList );
+			Assert( prxList.count < ARRAYSIZE( prxIDs ) );
+			memset( &info, 0, sizeof( info ) );
+			for ( int i = 0; i < prxList.count; i++ )
+			{
+				sys_prx_module_info_t prxInfo;
+				prxInfo.size          = sizeof( sys_prx_module_info_t );
+				prxInfo.filename      = prxFilename;
+				prxInfo.filename_size = sizeof( prxFilename );
+				prxInfo.segments      = prxSegments;
+				prxInfo.segments_num  = ARRAYSIZE( prxSegments );
+				sys_prx_get_module_info( prxList.idlist[i], 0, &prxInfo );
+				Assert( prxInfo.segments_num < ARRAYSIZE( prxSegments ) );
+				for ( int j = 0; j < prxInfo.segments_num; j++ )
+				{
+					info.m_nCurrentSize += prxInfo.segments[j].memsz;
+				}
+			}
+			DumpMemInfo( "PS3 PRXs", 0, info );
+
+			// Add PRX sizes to our global tracked total:
+			totals.m_nCurrentSize += info.m_nCurrentSize;
+		}
+#endif // _PS3
+
+		// The total of all memory usage we know about:
+		DumpMemInfo( "||Totals||", 0, totals );
+
+		if ( IsGameConsole() )
+		{
+			// Add a line showing total system memory usage from the OS (if this is more than
+			// "||Totals||", then there is unknown memory usage that we need to track down):
+			size_t usedMemory, freeMemory;
+			GlobalMemoryStatus( &usedMemory, &freeMemory );
+			MemInfo_t info;
+			info.m_nCurrentSize = usedMemory;
+			DumpMemInfo( "||Used Memory||", 0, info );
+		}
+
+#ifdef _MEMTEST
+		{
+			// Add lines for GPU allocations
+			int nGPUMemSize, nGPUMemFree, nTextureSize, nRTSize, nVBSize, nIBSize, nUnknown;
+			if ( 7 == sscanf( s_szStatsComment, "%d %d %d %d %d %d %d", &nGPUMemSize, &nGPUMemFree, &nTextureSize, &nRTSize, &nVBSize, &nIBSize, &nUnknown ) )
+			{
+				int nTotalUsed = nTextureSize + nRTSize + nVBSize + nIBSize + nUnknown;
+				int nOverhead  = ( nGPUMemSize - nTotalUsed ) - nGPUMemFree;
+				m_OutputFunc( "||PS3 RSX: total used||, line 0\t%.1f\n",	nTotalUsed		/ 1024.0f );
+				m_OutputFunc( "PS3 RSX: textures, line 0\t%.1f\n",			nTextureSize	/ 1024.0f );
+				m_OutputFunc( "PS3 RSX: render targets, line 0\t%.1f\n",	nRTSize			/ 1024.0f );
+				m_OutputFunc( "PS3 RSX: vertex buffers, line 0\t%.1f\n",	nVBSize			/ 1024.0f );
+				m_OutputFunc( "PS3 RSX: index buffers, line 0\t%.1f\n",		nIBSize			/ 1024.0f );
+				m_OutputFunc( "PS3 RSX: unknown, line 0\t%.1f\n",			nUnknown		/ 1024.0f );
+				m_OutputFunc( "PS3 RSX: overhead, line 0\t%.1f\n",			nOverhead		/ 1024.0f );
+			}
+		}
 #endif
 
-	DumpFileStats();
+		//m_OutputFunc("File/Line Based\n");
+		DumpFileStats();
+	}
 
 	if (m_OutputFunc == DefaultHeapReportFunc)
 	{
 		fclose(s_DbgFile);
 
-#if defined( _X360 ) && !defined( _RETAIL )
+#if defined( _X360 )
 		XBX_rMemDump( szFileName );
 #endif
 	}
@@ -1544,6 +2324,26 @@ void CDbgMemAlloc::GlobalMemoryStatus( size_t *pUsedMemory, size_t *pFreeMemory 
 	// Used is total minus free (discount the 32MB system reservation)
 	*pUsedMemory = ( stat.dwTotalPhys - 32*1024*1024 ) - *pFreeMemory;
 
+#elif defined( _PS3 )
+
+	// need to factor in how much empty space there is in the heap
+	// (since it NEVER returns pages back to the OS after hitting a high-watermark)
+	static malloc_managed_size mms;
+	(g_pMemOverrideRawCrtFns->pfn_malloc_stats)( &mms );
+	int heapFree = mms.current_system_size - mms.current_inuse_size;
+	Assert( heapFree >= 0 );
+
+	// sys_memory_get_user_memory_size tells us how much PPU memory is used/free
+	static sys_memory_info stat;
+	sys_memory_get_user_memory_size( &stat );
+	*pFreeMemory  = stat.available_user_memory;
+	*pFreeMemory += heapFree;
+	*pUsedMemory  = stat.total_user_memory - *pFreeMemory;
+	// 213MB are available in retail mode, so adjust free mem to reflect that even if we're in devkit mode
+	const size_t RETAIL_SIZE = 213*1024*1024;
+	if ( stat.total_user_memory > RETAIL_SIZE )
+		*pFreeMemory -= stat.total_user_memory - RETAIL_SIZE;
+
 #else
 
 	// no data
@@ -1553,19 +2353,91 @@ void CDbgMemAlloc::GlobalMemoryStatus( size_t *pUsedMemory, size_t *pFreeMemory 
 #endif
 }
 
+#ifdef USE_STACK_TRACES
+void CDbgMemAlloc::DumpCallStackFlow( char const *pchFileBase )
+{
+	HEAP_LOCK();
+
+	char szFileName[MAX_PATH];
+	static int s_FileCount = 0;
+	
+	char *pPath = "";
+	if ( IsX360() )
+	{
+		pPath = "D:\\";
+	}
+
+#if defined( _MEMTEST ) && defined( _WIN32 )
+	char szXboxName[32];
+	strcpy( szXboxName, "xbox" );
+	DWORD numChars = sizeof( szXboxName );
+	DmGetXboxName( szXboxName, &numChars ); 
+	char *pXboxName = strstr( szXboxName, "_360" );
+	if ( pXboxName )
+	{
+		*pXboxName = '\0';
+	}
+
+	SYSTEMTIME systemTime;
+	GetLocalTime( &systemTime );
+	_snprintf( szFileName, sizeof( szFileName ), "%s%s_%2.2d%2.2d_%2.2d%2.2d%2.2d_%d.csf", pPath, s_szStatsMapName, systemTime.wMonth, systemTime.wDay, systemTime.wHour, systemTime.wMinute, systemTime.wSecond, s_FileCount );
+#else
+	_snprintf( szFileName, sizeof( szFileName ), "%s%s%d.vcsf", pPath, pchFileBase, s_FileCount );
+#endif
+
+	++s_FileCount;
+	m_CallStackStats.DumpToFile( szFileName, false );
+}
+#endif
+
 //-----------------------------------------------------------------------------
 // Stat output
 //-----------------------------------------------------------------------------
 void CDbgMemAlloc::DumpStats()
 {
 	DumpStatsFileBase( "memstats" );
+#ifdef USE_STACK_TRACES
+	DumpCallStackFlow( "memflow" );
+#endif
 }
 
 void CDbgMemAlloc::SetCRTAllocFailed( size_t nSize )
 {
 	m_sMemoryAllocFailed = nSize;
+	DebuggerBreakIfDebugging();
+	char buffer[256];
+	_snprintf( buffer, sizeof( buffer ), "***** OUT OF MEMORY! attempted allocation size: %u ****\n", nSize );
+	buffer[ ARRAYSIZE(buffer) - 1] = 0;
+#if defined( _PS3 ) && defined( _DEBUG )
+	DebuggerBreak();
+#endif // _PS3
 
-	MemAllocOOMError( nSize );
+#ifdef _X360 
+	XBX_OutputDebugString( buffer );
+	if ( !Plat_IsInDebugSession() )
+	{
+		XBX_CrashDump( true );
+#if defined( _DEMO )
+		XLaunchNewImage( XLAUNCH_KEYWORD_DEFAULT_APP, 0 );
+#else
+		XLaunchNewImage( "default.xex", 0 );
+#endif
+	}
+#elif defined(_WIN32 )
+	OutputDebugString( buffer );
+	if ( !Plat_IsInDebugSession() )
+	{
+		AssertFatalMsg( false, buffer );
+		abort();
+	}
+#else
+	printf( "%s\n", buffer );
+	if ( !Plat_IsInDebugSession() )
+	{
+		AssertFatalMsg( false, buffer );
+		exit( 0 );
+	}
+#endif
 }
 
 size_t CDbgMemAlloc::MemoryAllocFailed()
@@ -1575,7 +2447,7 @@ size_t CDbgMemAlloc::MemoryAllocFailed()
 
 
 
-#if defined( LINUX ) && !defined( NO_HOOK_MALLOC )
+#ifdef LINUX
 //
 // Under linux we can ask GLIBC to override malloc for us
 //   Base on code from Ryan, http://hg.icculus.org/icculus/mallocmonitor/file/29c4b0d049f7/monitor_client/malloc_hook_glibc.c
@@ -1712,7 +2584,7 @@ static inline void set_override_hooks(void)
  * glibc will call this when the malloc subsystem is initializing, giving
  *  us a chance to install hooks that override the functions.
  */
-static void __attribute__((constructor)) override_init_hook(void)
+static void override_init_hook(void)
 {
     AUTO_LOCK( g_HookMutex );
 
@@ -1728,12 +2600,9 @@ static void __attribute__((constructor)) override_init_hook(void)
  *  us hook into malloc as soon as the runtime initializes, and before
  *  main() is called. Basically, this whole trick depends on this.
  */
-void (*__MALLOC_HOOK_VOLATILE __malloc_initialize_hook)(void) __attribute__((visibility("default")))= override_init_hook;
+void (*__malloc_initialize_hook)(void) __attribute__((visibility("default")))= override_init_hook;
 
-#endif // LINUX
-
-
-#if defined( OSX ) && !defined( NO_HOOK_MALLOC )
+#elif defined( OSX )
 //
 // pointers to the osx versions of these functions
 static void *osx_malloc_hook = NULL;
@@ -1829,31 +2698,6 @@ static void override_free_hook(struct _malloc_zone_t *zone, void *ptr)
  */
 
 
-static inline void unprotect_malloc_zone( malloc_zone_t *malloc_zone )
-{
-	// Starting in OS X 10.7 the default zone defaults to read-only, version 8.
-	// The version check may not be necessary, but we know it was RW before that.
-	if ( malloc_zone->version >= 8 )
-	{
-#ifdef __aarch64__
-        // MoeMod : this is required for Apple Silicon
-        pthread_jit_write_protect_np(false);
-#endif
-		vm_protect( mach_task_self(), (uintptr_t)malloc_zone, sizeof( malloc_zone_t ), 0, VM_PROT_READ | VM_PROT_WRITE );
-	}
-}
-
-static inline void protect_malloc_zone( malloc_zone_t *malloc_zone )
-{
-	if ( malloc_zone->version >= 8 )
-	{
-		vm_protect( mach_task_self(), (uintptr_t)malloc_zone, sizeof( malloc_zone_t ), 0, VM_PROT_READ );
-#ifdef __aarch64__
-        // MoeMod : this is required for Apple Silicon
-        pthread_jit_write_protect_np(true);
-#endif
-	}
-}
 
 //
 //  Save a copy of the original allocation hooks, so we can call into them
@@ -1863,43 +2707,40 @@ static inline void protect_malloc_zone( malloc_zone_t *malloc_zone )
 //   the originals.
 //
 static inline void save_osx_hooks(void)
-{
+{ 
 	malloc_zone_t *malloc_zone = malloc_default_zone();
-
-	osx_malloc_hook = (void *)malloc_zone->malloc;
-	osx_realloc_hook = (void *)malloc_zone->realloc;
-	osx_free_hook = (void *)malloc_zone->free;
-
+	
+    osx_malloc_hook = (void *)malloc_zone->malloc;
+    osx_realloc_hook = (void *)malloc_zone->realloc;
+    osx_free_hook = (void *)malloc_zone->free;
+	
 	// These are func's we could optionally override right now on OSX but don't need to
 	// osx_size_hook = (void *)malloc_zone->size;
 	// osx_calloc_hook = (void *)malloc_zone->calloc;
 	// osx_valloc_hook = (void *)malloc_zone->valloc;
 	// osx_destroy_hook = (void *)malloc_zone->destroy;
-}
+} 
 
 //
 //  Restore the hooks to the osx versions. This is needed since, say,
 //   their realloc() might call malloc() or free() under the hood, etc, so
 //   it's safer to let them have complete control over the subsystem, which
 //   also makes our logging saner, too.
-//
+// 
 static inline void set_osx_hooks(void)
 {
 	malloc_zone_t *malloc_zone = malloc_default_zone();
-
-	unprotect_malloc_zone( malloc_zone );
 	malloc_zone->malloc = (void* (*)(_malloc_zone_t*, size_t))osx_malloc_hook;
-	malloc_zone->realloc = (void* (*)(_malloc_zone_t*, void*, size_t))osx_realloc_hook;
-	malloc_zone->free = (void (*)(_malloc_zone_t*, void*))osx_free_hook;
-	protect_malloc_zone( malloc_zone );
-
+    malloc_zone->realloc = (void* (*)(_malloc_zone_t*, void*, size_t))osx_realloc_hook;
+    malloc_zone->free = (void (*)(_malloc_zone_t*, void*))osx_free_hook;
+	
 	// These are func's we could optionally override right now on OSX but don't need to
-
+	
 	//malloc_zone->size = (size_t (*)(_malloc_zone_t*, const void *))osx_size_hook;
-	//malloc_zone->calloc = (void* (*)(_malloc_zone_t*, size_t, size_t))osx_calloc_hook;
-	//malloc_zone->valloc = (void* (*)(_malloc_zone_t*, size_t))osx_valloc_hook;
-	//malloc_zone->destroy = (void (*)(_malloc_zone_t*))osx_destroy_hook;
-}
+    //malloc_zone->calloc = (void* (*)(_malloc_zone_t*, size_t, size_t))osx_calloc_hook;
+    //malloc_zone->valloc = (void* (*)(_malloc_zone_t*, size_t))osx_valloc_hook;
+    //malloc_zone->destroy = (void (*)(_malloc_zone_t*))osx_destroy_hook;
+} 
 
 
 /*
@@ -1911,20 +2752,17 @@ static inline void set_osx_hooks(void)
 static inline void set_override_hooks(void)
 {
 	malloc_zone_t *malloc_zone = malloc_default_zone();
-	AssertMsg( malloc_zone, "No malloc zone returned by malloc_default_zone" );
-
-	unprotect_malloc_zone( malloc_zone );
+	
 	malloc_zone->malloc = override_malloc_hook;
-	malloc_zone->realloc = override_realloc_hook;
-	malloc_zone->free = override_free_hook;
-	protect_malloc_zone( malloc_zone );
-
+    malloc_zone->realloc = override_realloc_hook;
+    malloc_zone->free = override_free_hook;
+	
 	// These are func's we could optionally override right now on OSX but don't need to
 	//malloc_zone->size = override_size_hook;
-	//malloc_zone->calloc = override_calloc_hook;
+    //malloc_zone->calloc = override_calloc_hook;
 	// malloc_zone->valloc = override_valloc_hook;
-	//malloc_zone->destroy = override_destroy_hook;
-}
+    //malloc_zone->destroy = override_destroy_hook;
+} 
 
 
 //
@@ -1957,10 +2795,18 @@ void *operator new[] ( size_t nSize, int nBlockUse, const char *pFileName, int n
 	return pMem;
 }
 
+#endif // OSX
 
-#endif // defined( OSX ) && !defined( NO_HOOK_MALLOC )
+int GetAllocationCallStack( void *mem, void **pCallStackOut, int iMaxEntriesOut )
+{
+#if defined( USE_MEM_DEBUG ) && (defined( USE_STACK_TRACES ))
+	return s_DbgMemAlloc.GetCallStackForIndex( GetAllocationStatIndex_Internal( mem ), pCallStackOut, iMaxEntriesOut );
+#else
+	return 0;
+#endif
+}
 
 
-#endif // (defined(_DEBUG) || defined(USE_MEM_DEBUG))
+#endif // MEM_IMPL_TYPE_DBG
 
-#endif // !STEAM && !NO_MALLOC_OVERRIDE
+#endif // !defined(STEAM) && !defined(NO_MALLOC_OVERRIDE)

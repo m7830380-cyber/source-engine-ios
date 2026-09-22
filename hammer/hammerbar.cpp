@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Implements a special dockable dialog bar that activates itself when
 //			the mouse cursor moves over it. This enables stacking of the
@@ -195,7 +195,7 @@ void CHammerBar::AdjustControls( void )
 	int nHammerBarHeight = HammerBarPos.Height();
 	int nHammerBarWidth  = HammerBarPos.Width();
 	
-	for( int iControl = 0; iControl < m_ControlList.Size(); iControl++ )
+	for( int iControl = 0; iControl < m_ControlList.Count(); iControl++ )
 	{
 		ControlInfo_t currentControl = m_ControlList[ iControl ];
 		int nDialogID = currentControl.m_nIDDialogItem;		

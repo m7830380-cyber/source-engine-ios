@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -385,6 +385,7 @@ bool CAudioMixerWave::SkipSamples( channel_t *pChannel, int startSample, int sam
 
 	while ( sampleCount > 0 )
 	{
+		int availableSamples;
 		int inputSampleCount;
 		char *pData = NULL;
 		int outputSampleCount = sampleCount;
@@ -407,9 +408,9 @@ bool CAudioMixerWave::SkipSamples( channel_t *pChannel, int startSample, int sam
 			}
 
 			// compute new fraction part of sample index
-			float flOffset = (m_fracOffset / FIX_SCALE) + (rate * outputSampleCount);
-			flOffset = flOffset - (float)((int)flOffset);
-			m_fracOffset = FIX_FLOAT( flOffset );
+			float offset = (m_fracOffset / FIX_SCALE) + (rate * outputSampleCount);
+			offset = offset - (float)((int)offset);
+			m_fracOffset = FIX_FLOAT(offset);
 		}
 		else
 		{
@@ -417,7 +418,7 @@ bool CAudioMixerWave::SkipSamples( channel_t *pChannel, int startSample, int sam
 			{
 				startSample = max( 0, startSample - sampleCount );
 			}
-			int availableSamples = GetOutputData( (void **)&pData, startSample, sampleCount, forward );
+			availableSamples = GetOutputData( (void **)&pData, startSample, sampleCount, forward );
 			if ( !availableSamples )
 				break;
 			outputSampleCount = availableSamples;
@@ -477,6 +478,7 @@ bool CAudioMixerWave::MixDataToDevice( IAudioDevice *pDevice, channel_t *pChanne
 
 	while ( sampleCount > 0 )
 	{
+		int availableSamples;
 		int inputSampleCount;
 		char *pData = NULL;
 		int outputSampleCount = sampleCount;
@@ -499,13 +501,13 @@ bool CAudioMixerWave::MixDataToDevice( IAudioDevice *pDevice, channel_t *pChanne
 			Mix( pDevice, pChannel, pData, offset, m_fracOffset, fracstep, outputSampleCount, 0, forward );
 			
 			// compute new fraction part of sample index
-			float flOffset = (m_fracOffset / FIX_SCALE) + (rate * outputSampleCount);
-			flOffset = flOffset - (float)((int)flOffset);
-			m_fracOffset = FIX_FLOAT( flOffset );
+			float offset = (m_fracOffset / FIX_SCALE) + (rate * outputSampleCount);
+			offset = offset - (float)((int)offset);
+			m_fracOffset = FIX_FLOAT(offset);
 		}
 		else
 		{
-			int availableSamples = GetOutputData( (void **)&pData, startpos, sampleCount, forward );
+			availableSamples = GetOutputData( (void **)&pData, startpos, sampleCount, forward );
 			if ( !availableSamples )
 				break;
 

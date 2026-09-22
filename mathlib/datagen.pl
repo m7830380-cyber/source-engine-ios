@@ -1,5 +1,6 @@
 #! perl
 use Text::Wrap;
+use Math::Trig;
 
 # generate output data for noise generators
 
@@ -48,6 +49,16 @@ print "static float impulse_ycoords[]={\n",wrap('    ','    ',join(",",@perm_a))
 &fisher_yates_shuffle(\@perm_a);
 print "static float impulse_zcoords[]={\n",wrap('    ','    ',join(",",@perm_a)),"\n};\n\n";
 
+
+# now, generate 256 random gradient vectors
+for($i=0; $i < 256; $i++)
+  {
+	$z=rand(2)-1;
+	$phi=rand(2.0*3.141592654);
+	$theta=asin($z);
+	$perm_a[$i]=sprintf("%f, %f, %f ", cos($theta)*cos($phi), cos($theat)*sin($phi), $z );
+  }
+print "static float s_randomGradients[]={\n",wrap('    ','    ',join(",",@perm_a)),"\n};\n\n";
 
 
 # fisher_yates_shuffle( \@array ) : generate a random permutation

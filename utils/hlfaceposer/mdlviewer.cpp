@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -25,7 +25,7 @@
 #include "ifaceposerworkspace.h"
 #include "expclass.h"
 #include "PhonemeEditor.h"
-#include "filesystem.h"
+#include "FileSystem.h"
 #include "ExpressionTool.h"
 #include "ControlPanel.h"
 #include "choreowidgetdrawhelper.h"
@@ -63,14 +63,12 @@
 #include "materialsystem/imaterialsystemhardwareconfig.h"
 #include "tier1/strtools.h"
 #include "appframework/tier3app.h"
-#include "faceposer_vgui.h"
-#include "vguiwnd.h"
-#include "vgui_controls/Frame.h"
-#include "vgui/ISurface.h"
 #include "p4lib/ip4.h"
 #include "tier2/p4helpers.h"
 #include "ProgressDialog.h"
 #include "scriplib.h"
+#include "MessageBoxWithCheckBox.h"
+#include "configmanager.h"
 
 #define WINDOW_TAB_OFFSET 24
 
@@ -79,14 +77,12 @@ char g_appTitle[] = "Half-Life Face Poser";
 static char recentFiles[8][256] = { "", "", "", "", "", "", "", "" };
 
 using namespace vgui;
-
 //-----------------------------------------------------------------------------
 // Singleton interfaces
 //-----------------------------------------------------------------------------
 IPhysicsSurfaceProps *physprop;
 IPhysicsCollision *physcollision;
 IStudioDataCache *g_pStudioDataCache;
-vgui::ILocalize *g_pLocalize = NULL;
 ISoundEmitterSystemBase *soundemitter = NULL;
 CreateInterfaceFn g_Factory;
 IFileSystem *g_pFileSystem = NULL;
@@ -99,114 +95,6 @@ static char gamedirsimple[MAX_PATH];  // just short name:  ep2
 // Filesystem dialog module wrappers.
 CSysModule *g_pFSDialogModule = 0;
 CreateInterfaceFn g_FSDialogFactory = 0;
-
-#include "vgui_controls/TextEntry.h"
-#include "vgui_controls/Button.h"
-#include "vgui_controls/Label.h"
-#include "vgui_controls/ComboBox.h"
-#include "tier1/fmtstr.h"
-
-class CFacePoserVguiFrame : public Frame
-{
-	DECLARE_CLASS_SIMPLE( CFacePoserVguiFrame, Frame );
-
-public:
-	CFacePoserVguiFrame( Panel *parent, const char *panelName ) :
-	BaseClass( parent, panelName )
-	{
-		SetTitle( panelName, true );
-
-		SetTitleBarVisible( false );
-
-		SetSizeable( false );
-		SetMoveable( false );
-
-		SetPaintBackgroundEnabled( true );
-		SetCloseButtonVisible( false );
-		m_pEntry = new TextEntry( this, "textentry" );
-		m_pEntry->AddActionSignalTarget( this );
-		m_pButton = new Button( this, "button", "Button1", this );
-		m_pButton->SetCommand( new KeyValues( "OnButtonPressed" ) );
-		m_pLabel = new Label( this, "label", "..." );
-
-		m_pCombo = new ComboBox( this, "combo", 5, true );
-		for ( int i = 0; i < 10; ++i )
-		{
-			m_pCombo->AddItem( CFmtStr( "item%02d", i + 1 ), NULL );
-		}
-	}
-
-	MESSAGE_FUNC( OnButtonPressed, "OnButtonPressed" )
-	{
-		Msg( "OnButtonPressed\n" );
-	}
-
-	MESSAGE_FUNC_PARAMS( OnTextChanged, "TextChanged", str )
-	{
-		char sz[ 256 ];
-		m_pEntry->GetText( sz, sizeof( sz ) );
-		m_pLabel->SetText( sz );
-
-		m_pCombo->GetText( sz, sizeof( sz ) );
-		Msg( "Combo %s\n", sz );
-	}
-
-	virtual void PerformLayout()
-	{
-		BaseClass::PerformLayout();
-
-		int w, h;
-		GetSize( w, h );
-
-		int y = 30;
-		int skip = 20;
-		m_pEntry->SetBounds( 5, y, w, skip - 2 );
-		y += skip;
-		m_pButton->SetBounds( 5, y, w, skip - 2 );
-		y += skip;
-		m_pCombo->SetBounds( 5, y, w, skip - 2 );
-		y += skip;
-		m_pLabel->SetBounds( 5, y, w, skip - 2 );
-		y += skip;
-
-	}
-
-private:
-
-	TextEntry		*m_pEntry;
-	Button			*m_pButton;
-	Label			*m_pLabel;
-	ComboBox		*m_pCombo;
-};
-
-class TestWindow : public CVGuiPanelWnd, public IFacePoserToolWindow
-{
-	typedef CVGuiPanelWnd BaseClass;
-
-public:
-
-	TestWindow( mxWindow *parent, int x, int y, int w, int h) : 
-		BaseClass(parent, x, y, w, h ), 
-		IFacePoserToolWindow( "FacePoser Frame", "FacePoser Frame" )
-	{
-		CFacePoserVguiFrame *f = new CFacePoserVguiFrame( NULL, "FacePoser Frame" );
-		
-		SetParentWindow( this );
-		SetMainPanel( f );
-		f->SetVisible( true );
-		f->SetPaintBackgroundEnabled( true );
-
-		FacePoser_MakeToolWindow( this, true );
-	}
-
-	virtual int handleEvent( mxEvent *event )
-	{
-		if ( HandleToolEvent( event ) )
-			return 1;
-		return BaseClass::handleEvent( event );
-	}
-};
-
 
 //-----------------------------------------------------------------------------
 // FIXME: Remove this crap (from cmdlib.cpp)
@@ -276,27 +164,14 @@ int LoadFile (const char *filename, void **bufferptr)
 	return length;
 }
 
-char *ExpandPath(char *path)
+char *ExpandPath (char *path)
 {
 	static char full[1024];
 	if (path[0] == '/' || path[0] == '\\' || path[1] == ':')
 		return path;
 
-	V_sprintf_safe( full, "%s%s", gamedir, path );
+	Q_snprintf (full, 1024, "%s%s", gamedir, path);
 	return full;
-}
-
-
-//-----------------------------------------------------------------------------
-// This is here because scriplib.cpp is included in this project but cmdlib.cpp
-// is not, but scriplib.cpp uses some stuff from cmdlib.cpp, same with
-// LoadFile and ExpandPath above.  The only thing that currently uses this
-// is $include in scriptlib, if this function returns 0, $include will
-// behave the way it did before this change
-//-----------------------------------------------------------------------------
-int CmdLib_ExpandWithBasePaths( CUtlVector< CUtlString > &expandedPathList, const char *pszPath )
-{
-	return 0;
 }
 
 
@@ -405,18 +280,26 @@ bool MDLViewer::CanClose()
 {
 	Con_Printf( "Checking for vcd changes...\n" );
 
-	if ( m_bVCDSaved )
+	if ( m_vecDirtyVCDs.Count() > 0 )
 	{
-		int retval = mxMessageBox( NULL, "Rebuild scenes.image?", g_appTitle, MX_MB_YESNOCANCEL );
-		if ( retval == 2 )
-		{
-			return false;
-		}
+		CMessageBoxWithCheckBoxParams params;
+		Q_memset( &params, 0, sizeof( params ) );
+		Q_strncpy( params.m_szDialogTitle, "Scenes Image", sizeof( params.m_szDialogTitle ) );
+		Q_strncpy( params.m_szPrompt, "Update scenes.image?", sizeof( params.m_szPrompt ) );
+		Q_strncpy( params.m_szCheckBoxText, "Rebuild full .image", sizeof( params.m_szCheckBoxText ) );
+		params.m_bChecked = false;
 
-		m_bVCDSaved = false;
-		if ( retval == 0 ) // YES
+		// FIXME:  Needs a "rebuild all" checkbox
+		if ( !MessageBoxWithCheckBox( &params ) )
+			return false;
+
+		if ( params.m_bChecked )
 		{
 			OnRebuildScenesImage();	
+		}
+		else
+		{
+			OnUpdateScenesImage();
 		}
 	}
 
@@ -620,7 +503,7 @@ public:
 		CChoreoWidgetDrawHelper drawHelper( this );
 		RECT rc;
 		drawHelper.GetClientRect( rc );
-		drawHelper.DrawFilledRect( GetSysColor( COLOR_BTNFACE ), rc );
+		drawHelper.DrawFilledRect( RGBToColor( GetSysColor( COLOR_BTNFACE ) ), rc );
 		return false;
 	}
 	
@@ -767,7 +650,7 @@ public:
 					break;
 				case IDC_MODELTAB_LOAD:
 					{
-						if ( ! CommandLine()->FindParm( "-NoSteamDialog" ) )
+						if ( filesystem->IsSteam() )
 						{
 							g_MDLViewer->LoadModel_Steam();
 						}
@@ -1100,7 +983,7 @@ public:
 		CChoreoWidgetDrawHelper drawHelper( this );
 		RECT rc;
 		drawHelper.GetClientRect( rc );
-		drawHelper.DrawFilledRect( GetSysColor( COLOR_APPWORKSPACE ), rc );
+		drawHelper.DrawFilledRect( RGBToColor( GetSysColor( COLOR_APPWORKSPACE ) ), rc );
 		return false;
 	}
 };
@@ -1171,7 +1054,7 @@ MDLViewer::MDLViewer () :
 	mxWindow (0, 0, 0, 0, 0, g_appTitle, mxWindow::Normal),
 	menuCloseCaptionLanguages(0),
 	m_bOldSoundScriptsDirty( -1 ),
-	m_bVCDSaved( false )
+	m_bAlwaysUpdate( true )
 {
 	int i;
 
@@ -1195,7 +1078,6 @@ MDLViewer::MDLViewer () :
 	LoadViewerRootSettings( );
 
 	LoadPosition();
-	// ShowWindow( (HWND)getHandle(), SW_SHOWMAXIMIZED );
 
 	g_pStatusWindow->setBounds(  0, h2() - 150, w2(), 150 );
 
@@ -1212,12 +1094,20 @@ MDLViewer::MDLViewer () :
 	menuEdit = new mxMenu ();
 	menuExpressions = new mxMenu();
 	menuChoreography = new mxMenu();
+	menuFoundry = new mxMenu();
 
 	mb->addMenu ("File", menuFile);
 	//mb->addMenu( "Edit", menuEdit );
 	mb->addMenu ("Options", menuOptions);
 	mb->addMenu ( "Expression", menuExpressions );
 	mb->addMenu ( "Choreography", menuChoreography );
+	
+	// Don't show Foundry mode in the SDK
+	if ( CGameConfigManager::IsSDKDeployment() == false )
+	{
+		mb->addMenu ("Foundry", menuFoundry);
+	}
+
 	mb->addMenu ("Window", menuWindow);
 	mb->addMenu ("Help", menuHelp);
 
@@ -1233,6 +1123,8 @@ MDLViewer::MDLViewer () :
 	menuFile->addSeparator();
 	menuFile->add ("Save Sound Changes...", IDC_FILE_SAVESOUNDSCRIPTCHANGES );
 	menuFile->add( "Rebuild scenes.image...", IDC_FILE_REBUILDSCENESIMAGE );
+	menuFile->add( "Update scenes.image...", IDC_FILE_UPDATESCENESIMAGE );
+	menuFile->setEnabled( IDC_FILE_UPDATESCENESIMAGE, false );
 
 	menuFile->addSeparator();
 
@@ -1301,6 +1193,8 @@ MDLViewer::MDLViewer () :
 	menuChoreography->addSeparator();
 	menuChoreography->add( "Add Actor...", IDC_CHOREOSCENE_ADDACTOR );
 	menuChoreography->addSeparator();
+	menuChoreography->add( "Scrubber units in seconds", IDC_CHOREOSCENE_SCRUB_UNITS );
+	menuChoreography->addSeparator();
 	menuChoreography->add( "Load Next", IDC_CHOREOSCENE_LOADNEXT );
 
 #ifdef WIN32
@@ -1308,6 +1202,13 @@ MDLViewer::MDLViewer () :
 	menuHelp->addSeparator ();
 #endif
 	menuHelp->add ("About...", IDC_HELP_ABOUT);
+
+	// Foundry-specific menu items
+	// Don't show Foundry mode in the SDK
+	if ( CGameConfigManager::IsSDKDeployment() == false )
+	{
+		menuFoundry->add( "Play Scene In Engine...", IDC_FOUNDRY_PLAYSCENE );
+	}
 
 	// create the Material System window
 	Con_Printf( "Creating 3D View\n" );
@@ -1353,9 +1254,6 @@ MDLViewer::MDLViewer () :
 	g_pChoreoView = new CChoreoView( workspace, 200, 200, 400, 300, 0 );
 	// Choreo scene file drives main window title name
 	g_pChoreoView->SetUseForMainWindowTitle( true );
-#if 0
-	new TestWindow( workspace, 100, 100, 256, 256 );
-#endif
 
 	Con_Printf( "IFacePoserToolWindow::Init\n" );
 
@@ -1501,7 +1399,7 @@ void MDLViewer::SetActiveModelTab( int modelindex )
 //-----------------------------------------------------------------------------
 void MDLViewer::Refresh( void )
 {
-	Con_ColorPrintf( RGB( 0, 125, 255 ), "Refreshing...\n" );
+	Con_ColorPrintf( Color( 0, 125, 255 ), "Refreshing...\n" );
 
 	bool reinit_soundemitter = true;
 
@@ -1532,7 +1430,7 @@ void MDLViewer::Refresh( void )
 		if ( retval == 0 )
 		{
 			soundemitter->SaveChangesToSoundScript( i );
-			Con_ColorPrintf( RGB( 50, 255, 100 ), "  saving changes to script file '%s'\n", scriptname );
+			Con_ColorPrintf( Color( 50, 255, 100 ), "  saving changes to script file '%s'\n", scriptname );
 		}
 	}
 
@@ -1543,26 +1441,26 @@ void MDLViewer::Refresh( void )
 	}
 
 
-	Con_ColorPrintf( RGB( 50, 255, 100 ), "  reloading textures\n" );
+	Con_ColorPrintf( Color( 50, 255, 100 ), "  reloading textures\n" );
 	g_pMaterialSystem->ReloadTextures();
 
 	models->ReleaseModels();
 
-	Con_ColorPrintf( RGB( 50, 255, 100 ), "  reloading models\n" );
+	Con_ColorPrintf( Color( 50, 255, 100 ), "  reloading models\n" );
 	models->RestoreModels();
 
 	// restart the soundemitter system
 	if ( reinit_soundemitter )
 	{
-		Con_ColorPrintf( RGB( 50, 255, 100 ), "  reloading sound emitter system\n" );
+		Con_ColorPrintf( Color( 50, 255, 100 ), "  reloading sound emitter system\n" );
 		soundemitter->Init();
 	}
 	else
 	{
-		Con_ColorPrintf( RGB( 250, 50, 50 ), "  NOT reloading sound emitter system\n" );
+		Con_ColorPrintf( Color( 250, 50, 50 ), "  NOT reloading sound emitter system\n" );
 	}
 
-	Con_ColorPrintf( RGB( 0, 125, 255 ), "done.\n" );
+	Con_ColorPrintf( Color( 0, 125, 255 ), "done.\n" );
 }
 
 void MDLViewer::OnFileLoaded( char const *pszFile )
@@ -1729,7 +1627,7 @@ int MDLViewer::handleEvent (mxEvent *event)
 			
 			case IDC_FILE_LOADMODEL:
 				{
-					if ( ! CommandLine()->FindParm( "-NoSteamDialog" ) )
+					if ( filesystem->IsSteam() )
 					{
 						g_MDLViewer->LoadModel_Steam();
 					}
@@ -1758,6 +1656,11 @@ int MDLViewer::handleEvent (mxEvent *event)
 			case IDC_FILE_REBUILDSCENESIMAGE:
 				{
 					OnRebuildScenesImage();
+				}
+				break;
+			case IDC_FILE_UPDATESCENESIMAGE:
+				{
+					OnUpdateScenesImage();
 				}
 				break;
 
@@ -1867,7 +1770,7 @@ int MDLViewer::handleEvent (mxEvent *event)
 			case IDC_OPTIONS_CLEARMODELSOUNDS:
 				{
 					sound->StopAll();
-					Con_ColorPrintf( RGB( 0, 100, 255 ), "Resetting model sound channels\n" );
+					Con_ColorPrintf( Color( 0, 100, 255 ), "Resetting model sound channels\n" );
 				}
 				break;
 
@@ -2004,6 +1907,12 @@ int MDLViewer::handleEvent (mxEvent *event)
 			case IDC_CHOREOSCENE_ADDACTOR:
 				g_pChoreoView->NewActor();
 				break;
+			case IDC_CHOREOSCENE_SCRUB_UNITS:
+				{
+					g_pChoreoView->SetScrubUnitSeconds( !menuChoreography->isChecked( IDC_CHOREOSCENE_SCRUB_UNITS ));
+					menuChoreography->setChecked( IDC_CHOREOSCENE_SCRUB_UNITS, !menuChoreography->isChecked( IDC_CHOREOSCENE_SCRUB_UNITS ) );
+				}
+				break;
 			case IDC_WINDOW_TILE:
 				{
 					OnTile();
@@ -2034,6 +1943,10 @@ int MDLViewer::handleEvent (mxEvent *event)
 					OnShowAll();
 				}
 				break;
+			case IDC_FOUNDRY_PLAYSCENE:
+				{
+					OnPlaySceneInFoundry();
+				}
 			default:
 				{
 					iret = 0;
@@ -2339,6 +2252,49 @@ bool MDLViewer::PaintBackground( void )
 	return false;
 }
 
+void MDLViewer::OnUpdateScenesImage()
+{
+	if ( m_vecDirtyVCDs.Count() > 0 )
+	{
+		g_pProgressDialog->Start( "Updating scenes.image", "", false );
+
+		CUtlBuffer	targetBuffer;
+
+		bool bLittleEndian = true;
+
+		const char *pFilename = bLittleEndian ? "scenes/scenes.image" : "scenes/scenes.360.image";
+		char szFilename[MAX_PATH];
+		Q_strncpy( szFilename, gamedir, sizeof(szFilename) );
+		Q_strncat( szFilename, pFilename, sizeof(szFilename) );
+
+		CP4AutoEditAddFile checkout( szFilename );
+
+		bool bSuccess = false;
+
+		// Load existing file
+		if ( scriptlib->ReadFileToBuffer( szFilename, targetBuffer ) )
+		{
+			bSuccess = g_pSceneImage->UpdateSceneImageFile( targetBuffer, gamedir, bLittleEndian, false, this, m_vecDirtyVCDs.Base(), m_vecDirtyVCDs.Count() );
+		}
+		// Error loading, or didn't exist, do the full image creation
+		else
+		{
+			bSuccess = g_pSceneImage->CreateSceneImageFile( targetBuffer, gamedir, bLittleEndian, false, this );
+		}
+
+		if ( bSuccess )
+		{
+			MakeFileWriteable( szFilename );
+			scriptlib->WriteBufferToFile( szFilename, targetBuffer, WRITE_TO_DISK_ALWAYS );
+		}
+
+		g_pProgressDialog->Finish();
+		m_vecDirtyVCDs.RemoveAll();
+	}
+
+	UpdateTheUpdateScenesImageMenu();
+}
+
 void MDLViewer::OnRebuildScenesImage()
 {
 	g_pProgressDialog->Start( "Rebuilding scenes.image", "", false );
@@ -2348,18 +2304,119 @@ void MDLViewer::OnRebuildScenesImage()
 	bool bLittleEndian = true;
 
 	const char *pFilename = bLittleEndian ? "scenes/scenes.image" : "scenes/scenes.360.image";
+	char szModDir[MAX_PATH];
+	Q_strncpy( szModDir, gamedir, sizeof(szModDir) );
+	V_StripTrailingSlash( szModDir );
 
-	CP4AutoEditAddFile checkout( CFmtStr( "%s%s", gamedir, pFilename ) );
+	char szDLCPath[MAX_PATH];
+
+	int nHighestDLC = 1;
+	for ( ;nHighestDLC <= 99; nHighestDLC++ )
+	{
+		V_snprintf( szDLCPath, sizeof( szDLCPath ), "%s_dlc%d", szModDir, nHighestDLC );
+		if ( !filesystem->IsDirectory( szDLCPath ) )
+		{
+			// does not exist, highest dlc available is previous
+			nHighestDLC--;
+			break;
+		}
+
+		V_snprintf( szDLCPath, sizeof( szDLCPath ), "%s_dlc%d/dlc_disabled.txt", szModDir, nHighestDLC );
+		if ( filesystem->FileExists( szDLCPath ) )
+		{
+			// disabled, highest dlc available is previous
+			nHighestDLC--;
+			break;
+		}
+	}
+
+	if ( nHighestDLC > 0 )
+	{
+		V_snprintf( szDLCPath, sizeof( szDLCPath ), "%s_dlc%d/%s", szModDir, nHighestDLC, pFilename );
+	}
+	else
+	{
+		V_snprintf( szDLCPath, sizeof( szDLCPath ), "%s/%s", szModDir, pFilename );
+	}
+
+	CP4AutoEditAddFile checkout( szDLCPath );
 
 	bool bSuccess = g_pSceneImage->CreateSceneImageFile( targetBuffer, gamedir, bLittleEndian, false, this );
 	if ( bSuccess )
 	{
-		scriptlib->WriteBufferToFile( pFilename, targetBuffer, WRITE_TO_DISK_ALWAYS );
+		MakeFileWriteable( szDLCPath );
+		scriptlib->WriteBufferToFile( szDLCPath, targetBuffer, WRITE_TO_DISK_ALWAYS );
 	}
 
 	g_pProgressDialog->Finish();
-	m_bVCDSaved = false;
+	m_vecDirtyVCDs.RemoveAll();
+
+	UpdateTheUpdateScenesImageMenu();
 }
+
+
+
+bool SendConsoleCommandToEngine( const char* szConsoleCommand, const char* szCopyDataFailedMsg, const char* szEngineNotRunningMsg = "The Source engine must be running in order to utilize this feature." )
+{
+	bool bRetVal = false;
+	const HWND hwndEngine = FindWindow( "Valve001", NULL );
+
+	// Can't find the engine
+	if ( hwndEngine == NULL )
+	{
+		::MessageBox( NULL, szEngineNotRunningMsg, "Source Engine Not Running", MB_OK | MB_ICONEXCLAMATION );
+	}
+	else
+	{			
+		//
+		// Fill out the data structure to send to the engine.
+		//
+		COPYDATASTRUCT copyData;
+		copyData.cbData = strlen( szConsoleCommand ) + 1;
+		copyData.dwData = 0;
+		copyData.lpData = ( void * )szConsoleCommand;
+
+		if ( !SendMessageA( hwndEngine, WM_COPYDATA, 0, (LPARAM)&copyData ) )
+		{
+			::MessageBox( NULL, szCopyDataFailedMsg, "Source Engine Declined Request", MB_OK | MB_ICONEXCLAMATION );
+		}
+		else
+		{
+			bRetVal = true;
+			::SetFocus( hwndEngine );
+
+		}
+	}
+
+	return bRetVal;
+}
+
+void MDLViewer::OnPlaySceneInFoundry()
+{
+	const CChoreoScene *scene = g_pChoreoView->GetScene();
+	
+	if ( NULL != scene )
+	{
+		// Rebuild the scenes.image file
+		OnRebuildScenesImage();
+
+		// Instruct the engine to flush the scene cache and reload the scenes.image file
+		SendConsoleCommandToEngine( "scene_flush\n", "Unable to clear scene_cache." );
+
+		// Instruct the engine to load the savegame that was created right before the given scene was to be played
+		char szConsoleCommand[MAX_PATH];
+		char szSceneFileName[MAX_PATH];
+
+		V_FileBase( scene->GetFilename(), szSceneFileName, sizeof( szSceneFileName ) );
+		V_snprintf( szConsoleCommand, sizeof( szConsoleCommand ), "load faceposer\\%s\n", szSceneFileName );
+		SendConsoleCommandToEngine( szConsoleCommand, "Unable to load savegame for requested scene." );
+	}
+	else
+	{
+		::MessageBox( NULL, "There is no scene presently loaded. Please load a scene using Choreography|Load... before attempting to play the scene inside the engine.", "No Scene Loaded", MB_OK | MB_ICONEXCLAMATION );
+	}
+}
+
 
 void MDLViewer::UpdateStatus( char const *pchSceneName, bool bQuiet, int nIndex, int nCount )
 {
@@ -2367,40 +2424,22 @@ void MDLViewer::UpdateStatus( char const *pchSceneName, bool bQuiet, int nIndex,
 	g_pProgressDialog->Update( (float)nIndex / (float)nCount );
 }
 
-void MDLViewer::OnVCDSaved()
+void MDLViewer::OnVCDSaved( char const *pFullpath )
 {
-	m_bVCDSaved = true;
+	CUtlString str;
+	str = pFullpath;
+	m_vecDirtyVCDs.AddToTail( str );
+
+	UpdateTheUpdateScenesImageMenu();
+	if ( m_bAlwaysUpdate )
+	{
+		OnUpdateScenesImage();
+	}
 }
 
-SpewRetval_t HLFacePoserSpewFunc( SpewType_t spewType, char const *pMsg )
+void MDLViewer::UpdateTheUpdateScenesImageMenu()
 {
-	g_bInError = true;
-
-	switch (spewType)
-	{
-	case SPEW_ERROR:
-		::MessageBox(NULL, pMsg, "FATAL ERROR", MB_OK);
-		g_bInError = false;
-		return SPEW_ABORT;
-
-	case SPEW_LOG:
-		g_bInError = false;
-		return SPEW_CONTINUE;
-
-	case SPEW_WARNING:
-		Con_ErrorPrintf( pMsg );
-		g_bInError = false;
-		return SPEW_CONTINUE;
-
-	default:
-		Con_Printf(pMsg);
-		g_bInError = false;
-#ifdef _DEBUG
-		return spewType == SPEW_ASSERT ? SPEW_DEBUGGER : SPEW_CONTINUE;
-#else
-		return SPEW_CONTINUE;
-#endif
-	}
+	mb->setEnabled( IDC_FILE_UPDATESCENESIMAGE, m_vecDirtyVCDs.Count() > 0 );
 }
 
 void MDLViewer::OnSaveSoundScriptChanges()
@@ -2467,6 +2506,34 @@ private:
 };
 
 
+class CHLFacePoserLoggingListener : public ILoggingListener
+{
+public:
+	virtual void Log( const LoggingContext_t *pContext, const tchar *pMessage )
+	{
+		g_bInError = true;
+
+		switch ( pContext->m_Severity )
+		{
+		case LS_ERROR:
+			Plat_MessageBox( "Error", pMessage );
+			g_bInError = false;
+			break;
+		case LS_WARNING:
+			Con_ErrorPrintf( pMessage );
+			g_bInError = false;
+			break;
+
+		case LS_MESSAGE:
+			Con_Printf( pMessage );
+			g_bInError = false;
+			break;
+		}
+	}
+};
+
+static CHLFacePoserLoggingListener s_HLFacePoserLoggingListener;
+
 //-----------------------------------------------------------------------------
 // Create all singleton systems
 //-----------------------------------------------------------------------------
@@ -2475,7 +2542,8 @@ bool CHLFacePoserApp::Create()
 	// Save some memory so engine/hammer isn't so painful
 	CommandLine()->AppendParm( "-disallowhwmorph", NULL );
 
-	SpewOutputFunc( HLFacePoserSpewFunc );
+	LoggingSystem_PushLoggingState();
+	LoggingSystem_RegisterLoggingListener( &s_HLFacePoserLoggingListener );
 
 	AppSystemInfo_t appSystems[] = 
 	{
@@ -2486,7 +2554,6 @@ bool CHLFacePoserApp::Create()
 		{ "datacache.dll",			DATACACHE_INTERFACE_VERSION },
 		{ "datacache.dll",			MDLCACHE_INTERFACE_VERSION },
 		{ "datacache.dll",			STUDIO_DATA_CACHE_INTERFACE_VERSION },
-		{ "vguimatsurface.dll",		VGUI_SURFACE_INTERFACE_VERSION },
 		{ "vgui2.dll",				VGUI_IVGUI_INTERFACE_VERSION },
 		{ "soundemittersystem.dll",	SOUNDEMITTERSYSTEM_INTERFACE_VERSION },
 		{ "", "" }	// Required to terminate the list
@@ -2496,9 +2563,9 @@ bool CHLFacePoserApp::Create()
 		return false;
 
 	// Add the P4 module separately so that if it is absent (say in the SDK) then the other system will initialize properly
-	AppModule_t p4Module = LoadModule( "p4lib.dll" );
-	if ( p4Module != APP_MODULE_INVALID )
+	if ( CGameConfigManager::IsSDKDeployment() == false )
 	{
+		AppModule_t p4Module = LoadModule( "p4lib.dll" );
 		AddSystem( p4Module, P4_INTERFACE_VERSION );
 	}
 
@@ -2524,6 +2591,7 @@ bool CHLFacePoserApp::Create()
 
 void CHLFacePoserApp::Destroy()
 {
+	LoggingSystem_PopLoggingState();
 }
 
 
@@ -2574,7 +2642,6 @@ bool CHLFacePoserApp::PreInit( )
 	g_pStudioDataCache = (IStudioDataCache*)FindSystem( STUDIO_DATA_CACHE_INTERFACE_VERSION ); 
 	physcollision = (IPhysicsCollision *)FindSystem( VPHYSICS_COLLISION_INTERFACE_VERSION );
 	physprop = (IPhysicsSurfaceProps *)FindSystem( VPHYSICS_SURFACEPROPS_INTERFACE_VERSION );
-	g_pLocalize = (vgui::ILocalize *)FindSystem(VGUI_LOCALIZE_INTERFACE_VERSION );
 	soundemitter = (ISoundEmitterSystemBase*)FindSystem(SOUNDEMITTERSYSTEM_INTERFACE_VERSION);
 
 	if ( !soundemitter || !g_pLocalize || !filesystem || !physprop || !physcollision || 
@@ -2632,14 +2699,13 @@ int CHLFacePoserApp::Main()
 {
 	// Do Perforce Stuff
 	g_p4factory->SetDummyMode( false );
-	if ( CommandLine()->FindParm( "-nop4" ) || !p4 )
+	if ( CommandLine()->FindParm( "-nop4" ) || CGameConfigManager::IsSDKDeployment() )
 	{
 		g_p4factory->SetDummyMode( true );
 	}
 
 	g_p4factory->SetOpenFileChangeList( "FacePoser Auto Checkout" );
 
-	soundemitter->ModInit();
 	g_pMaterialSystem->ModInit();
 
 	g_pDataCache->SetSize( 64 * 1024 * 1024 );
@@ -2653,8 +2719,6 @@ int CHLFacePoserApp::Main()
 
 	g_MDLViewer = new MDLViewer ();
 	g_MDLViewer->setMenuBar (g_MDLViewer->getMenuBar ());
-
-	FaceposerVGui()->Init( (HWND)g_MDLViewer->getHandle() );
 
 	// Force reload of close captioning data file!!!
 	SetCloseCaptionLanguageId( g_viewerSettings.cclanguageid, true );
@@ -2699,11 +2763,6 @@ int CHLFacePoserApp::Main()
 	}
 
 	g_pMaterialSystem->ModShutdown();
-	soundemitter->ModShutdown();
- 	g_pMaterialSystem->ModShutdown();
-
-	FaceposerVGui()->Shutdown();
-
 	return nRetVal;
 }
 

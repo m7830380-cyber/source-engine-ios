@@ -5,22 +5,17 @@
 //-----------------------------------------------------------------------------
 
 $Macro SRCDIR		".."
-$Macro OUTBINDIR	"$LIBPUBLIC"
+$Macro OUTBINDIR	"$SRCDIR\..\game\bin"
 
 $Include "$SRCDIR\vpc_scripts\source_dll_base.vpc"
 
-$Linux
-{
-	$BuildForLinux 1
-}
 $Configuration
 {
 	$Compiler
 	{
-		$PreprocessorDefinitions			"$BASE;fopen=dont_use_fopen;UNITLIB_DLL_EXPORT"
+		$PreprocessorDefinitions			"$BASE;UNITLIB_DLL_EXPORT"
 	}
-
-	$PreLinkEvent [$WIN32]
+	$PreLinkEvent [!$POSIX]
 	{	
 		$CommandLine	"call $SRCDIR\vpc_scripts\valve_p4_edit.cmd $SRCDIR\lib\public\$(TargetName).lib $SRCDIR" "\n" \
 						"call $SRCDIR\vpc_scripts\valve_p4_edit.cmd $SRCDIR\lib\public\$(TargetName).exp $SRCDIR" "\n" \
@@ -28,9 +23,9 @@ $Configuration
 	}
 
 
-	$Linker
+	$Linker [!$POSIX]
 	{
-		$AdditionalDependencies				"$BASE odbc32.lib odbccp32.lib"
+		$AdditionalDependencies				"odbc32.lib odbccp32.lib"
 		$ImportLibrary					"$SRCDIR\lib\public\$(TargetName).lib"
 
 	}
@@ -45,6 +40,6 @@ $Project "Unitlib"
 
 	$Folder	"Header Files"
 	{
-		$File	"$SRCDIR\public\unitlib\UnitLib.h"
+		$File	"$SRCDIR\public\unitlib\unitlib.h"
 	}
 }

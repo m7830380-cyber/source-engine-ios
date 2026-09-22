@@ -715,11 +715,6 @@
 			"type"	"ignore"
 		}
 		
-		"$LocalFrameworks"
-		{
-			"type"	"ignore"
-		}
-
 		"$GCC_ExtraLinkerFlags"
 		{
 			"type"	"ignore"

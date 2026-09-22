@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -27,7 +27,7 @@ class CMapPoint : public CMapAtom
 
 		CMapPoint(void);
 
-		virtual void GetOrigin(Vector& pfOrigin);
+		virtual void GetOrigin(Vector& pfOrigin) const;
 		virtual void SetOrigin(Vector& pfOrigin);
 		
 	protected:

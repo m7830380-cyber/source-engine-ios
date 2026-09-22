@@ -207,8 +207,4 @@ struct HTTPRequestDataReceived_t
 
 #pragma pack( pop )
 
-#ifdef VERSION_SAFE_STEAM_API_INTERFACES
-inline ISteamHTTP *SteamHTTP() { return NULL; }
-#endif
-
 #endif // ISTEAMHTTP_H

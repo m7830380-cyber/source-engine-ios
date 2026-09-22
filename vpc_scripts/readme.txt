@@ -1,4 +1,4 @@
-Usage for the vpc-generating perl scripts::
+Usage for the vpc-generating perl scripts:
 
 (Note, perl is case sensitive.)
 

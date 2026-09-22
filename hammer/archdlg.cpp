@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ====
 //
 // Purpose: 
 //
@@ -172,6 +172,7 @@ CArchDlg::~CArchDlg()
 
 void CArchDlg::DrawArch(CDC* pDC)
 {
+	int i;
 	float fOuterPoints[ARC_MAX_POINTS][2];
 	float fInnerPoints[ARC_MAX_POINTS][2];
 
@@ -228,7 +229,7 @@ void CArchDlg::DrawArch(CDC* pDC)
 	
 	BOOL bCreateSouthFace = TRUE;
 	float fCenter[3];
-	for (int i = 0; i < 3; i++)
+	for (i = 0; i < 3; i++)
 		fCenter[i] = (bmins[i] + bmaxs[i])/2.0;
 	
 	if((iWallWidth*2+8)  >= (bmaxs[0] - bmins[0]) ||
@@ -242,7 +243,7 @@ void CArchDlg::DrawArch(CDC* pDC)
 		bCreateSouthFace = FALSE;
 	}
 
-	for (int i = 0; i < iSides; i++)
+	for (i = 0; i < iSides; i++)
 	{
 		int iNextPoint = i+1;
 		if (iNextPoint >= iSides + 1)

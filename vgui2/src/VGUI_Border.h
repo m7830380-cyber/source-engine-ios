@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Core implementation of vgui
 //
@@ -12,10 +12,10 @@
 #pragma once
 #endif
 
-#include <vgui/VGUI.h>
+#include <vgui/vgui.h>
 #include <vgui/IBorder.h>
 #include <vgui/IScheme.h>
-#include <Color.h>
+#include <color.h>
 
 class KeyValues;
 

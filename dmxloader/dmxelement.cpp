@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright 1996-2004, Valve Corporation, All rights reserved. =======
 //
 // Purpose: 
 //
@@ -8,15 +8,19 @@
 #include "dmxloader/dmxattribute.h"
 #include "tier1/utlbuffer.h"
 #include "mathlib/ssemath.h"
+#include "tier1/utlbufferutil.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
 
+#ifdef OSX
+#pragma GCC diagnostic ignored "-Wtautological-compare"
+#endif
 
 //-----------------------------------------------------------------------------
 // globals
 //-----------------------------------------------------------------------------
-CUtlSymbolTableMT CDmxElement::s_TypeSymbols;
+CUtlSymbolTableLargeMT CDmxElement::s_TypeSymbols;
 
 
 //-----------------------------------------------------------------------------
@@ -50,14 +54,14 @@ CDmxElement::~CDmxElement()
 //-----------------------------------------------------------------------------
 // Utility method for getting at the type
 //-----------------------------------------------------------------------------
-CUtlSymbol CDmxElement::GetType()  const
+CUtlSymbolLarge CDmxElement::GetType()  const
 {
 	return m_Type;
 }
 
 const char* CDmxElement::GetTypeString() const
 {
-	return s_TypeSymbols.String( m_Type );
+	return m_Type.String();
 }
 
 const char* CDmxElement::GetName() const
@@ -72,11 +76,16 @@ const DmObjectId_t &CDmxElement::GetId() const
 
 
 //-----------------------------------------------------------------------------
-// Sets the object id
+// Sets the object id, name
 //-----------------------------------------------------------------------------
 void CDmxElement::SetId( const DmObjectId_t &id )
 {
 	CopyUniqueId( id, &m_Id );
+}
+
+void CDmxElement::SetName( const char *pName )
+{
+	SetValue< CUtlString >( "name", pName );
 }
 
 
@@ -95,6 +104,11 @@ void CDmxElement::Resort( )	const
 		int nCount = m_Attributes.Count();
 		for ( int i = nCount; --i >= 1; )
 		{
+			if ( m_Attributes[i] == NULL || m_Attributes[i-1] == NULL )
+			{
+				continue;
+			}
+
 			if ( m_Attributes[i]->GetNameSymbol() == m_Attributes[i-1]->GetNameSymbol() )
 			{
 				Warning( "Duplicate attribute name %s encountered!\n", m_Attributes[i]->GetName() );
@@ -225,7 +239,7 @@ int CDmxElement::FindAttribute( const char *pAttributeName ) const
 //-----------------------------------------------------------------------------
 // Find an attribute by name-based lookup
 //-----------------------------------------------------------------------------
-int CDmxElement::FindAttribute( CUtlSymbol attributeName ) const
+int CDmxElement::FindAttribute( CUtlSymbolLarge attributeName ) const
 {
 	Resort();
 	CDmxAttribute search( attributeName );
@@ -334,26 +348,101 @@ void CDmxElement::RemoveAllElementsRecursive()
 	}
 }
 
+//-----------------------------------------------------------------------------
+// Template for unpacking a bitfield inside of an unpack structure.
+// pUnpack->m_nSize is the number of bits in the bitfield
+// pUnpack->m_nBitOffset is the number of bits to offset from pDest
+//-----------------------------------------------------------------------------
+template <typename T>
+void CDmxElement::UnpackBitfield( T *pDest, const DmxElementUnpackStructure_t *pUnpack, const CDmxAttribute *pAttribute ) const
+{
+	// Determine if T is a signed type
+	const bool bIsSigned = ( 0 > (T)(-1) );
+	if ( bIsSigned )
+	{
+		// signed types need to be larger than 1 in size or else you get sign extension problems
+		Assert( pUnpack->m_nSize > 1 );   
+	}
+
+	// Right now the max size bitfield we handle is 32.
+	Assert( pUnpack->m_nSize <= 32 );
+	Assert( pUnpack->m_nSize <= 8*sizeof(T) );
+	Assert( pUnpack->m_nBitOffset + pUnpack->m_nSize <= 8*sizeof(T) );
+
+	// Create a mask that covers the bitfield.
+	T mask;
+	T maskBeforeShift;
+	if ( pUnpack->m_nSize == 8*sizeof(T) )
+	{
+		maskBeforeShift = (T)~0;
+		mask = maskBeforeShift;
+	}
+	else
+	{
+		maskBeforeShift = ( 1 << pUnpack->m_nSize ) - 1;
+		mask = maskBeforeShift << pUnpack->m_nBitOffset;	
+	}
+	mask = ~mask;
+
+	T value = ( *(T *)pAttribute->m_pData );
+
+	// Determine if value is in the range that this variable can hold.
+	T signedMaskBeforeShift = bIsSigned ? ( 1 << (pUnpack->m_nSize-1) ) - 1 : maskBeforeShift;
+	if ( !bIsSigned || ( value >= 0 ) )
+	{
+		if ( ( value & ~signedMaskBeforeShift ) != 0 )
+		{
+			Warning( "Value %s exeeds size of datatype. \n", pUnpack->m_pAttributeName );
+			value = 0;    // Clear value
+		}
+	}
+	else
+	{
+		if ( !bIsSigned || ( ( value & ~signedMaskBeforeShift ) != ~signedMaskBeforeShift ) )
+		{
+			Warning( "Value %s exeeds size of datatype. \n", pUnpack->m_pAttributeName );
+			value = 0;    // Clear value
+		}
+	}
+
+	// Mask value to the correct number of bits (important if value is a neg number!)
+	value &= maskBeforeShift;
+	
+	// Pack it together.
+	// Clear value
+	*pDest &= mask;
+	// Install value
+	*pDest |=  ( value << pUnpack->m_nBitOffset );
+
+}
 
 //-----------------------------------------------------------------------------
 // Method to unpack data into a structure
 //-----------------------------------------------------------------------------
-void CDmxElement::UnpackIntoStructure( void *pData, size_t DestSizeInBytes, const DmxElementUnpackStructure_t *pUnpack ) const
+void CDmxElement::UnpackIntoStructure( void *pData, const DmxElementUnpackStructure_t *pUnpack ) const
 {
-	void *pDataEnd = ( char * )pData + DestSizeInBytes;
-
 	for ( ; pUnpack->m_AttributeType != AT_UNKNOWN; ++pUnpack )
 	{
 		char *pDest = (char*)pData + pUnpack->m_nOffset;
 
-		// NOTE: This does not work with array data at the moment
-		if ( IsArrayType( pUnpack->m_AttributeType ) )
+		// Recurse?
+		if ( pUnpack->m_pSub )
 		{
-			AssertMsg( 0, ( "CDmxElement::UnpackIntoStructure: Array attribute types not currently supported!\n" ) );
+			UnpackIntoStructure( (void *)pDest, pUnpack->m_pSub );
 			continue;
 		}
 
-		if ( pUnpack->m_AttributeType == AT_VOID )
+		if ( IsArrayType( pUnpack->m_AttributeType ) )
+		{
+			// NOTE: This does not work with string/bitfield array data at the moment
+			if ( ( pUnpack->m_AttributeType == AT_STRING_ARRAY ) || ( pUnpack->m_nBitOffset != NO_BIT_OFFSET ) )
+			{
+				AssertMsg( 0, ( "CDmxElement::UnpackIntoStructure: String and bitfield array attribute types not currently supported!\n" ) );
+				continue;
+			}
+		}
+
+		if ( ( pUnpack->m_AttributeType == AT_VOID ) || ( pUnpack->m_AttributeType == AT_VOID_ARRAY ) )
 		{
 			AssertMsg( 0, ( "CDmxElement::UnpackIntoStructure: Binary blob attribute types not currently supported!\n" ) );
 			continue;
@@ -366,17 +455,11 @@ void CDmxElement::UnpackIntoStructure( void *pData, size_t DestSizeInBytes, cons
 			if ( !pUnpack->m_pDefaultString )
 				continue;
 
-			// Convert the default string into the target
-			int nLen = Q_strlen( pUnpack->m_pDefaultString );
-			if ( nLen > 0 )
+			temp.AllocateDataMemory_AndConstruct( pUnpack->m_AttributeType );
+			if ( !IsArrayType( pUnpack->m_AttributeType ) )
 			{
-				CUtlBuffer buf( pUnpack->m_pDefaultString, nLen, CUtlBuffer::READ_ONLY | CUtlBuffer::TEXT_BUFFER );
-				temp.Unserialize( pUnpack->m_AttributeType, buf );
-			}
-			else
-			{
-				CUtlBuffer buf;
-				temp.Unserialize( pUnpack->m_AttributeType, buf );				
+				// Convert the default string into the target (array types do this inside GetArrayValue below)
+				temp.SetValueFromString( pUnpack->m_pDefaultString );
 			}
 			pAttribute = &temp;
 		}
@@ -389,43 +472,107 @@ void CDmxElement::UnpackIntoStructure( void *pData, size_t DestSizeInBytes, cons
 
 		if ( pAttribute->GetType() == AT_STRING )
 		{
-			if ( pDest + pUnpack->m_nSize > pDataEnd )
+			if ( pUnpack->m_nSize == UTL_STRING_SIZE )  // the string is a UtlString.
 			{
-				Warning( "ERROR Memory corruption: CDmxElement::UnpackIntoStructure string buffer overrun!\n" );
-				continue;
+				*(CUtlString *)pDest = pAttribute->GetValueString();		
 			}
-
-			// Strings get special treatment: they are stored as in-line arrays of chars
-			Q_strncpy( pDest, pAttribute->GetValueString(), pUnpack->m_nSize );
+			else  // the string is a preallocated char array.
+			{
+				// Strings get special treatment: they are stored as in-line arrays of chars
+				Q_strncpy( pDest, pAttribute->GetValueString(), pUnpack->m_nSize );
+			}
 			continue;
 		}
 
-		// special case - if data type is float, but dest size == 16, we are unpacking into simd by
-		// replication
-		if ( ( pAttribute->GetType() == AT_FLOAT ) && ( pUnpack->m_nSize == sizeof( fltx4 ) ) )
-		{
-			if ( pDest + 4 * sizeof( float ) > pDataEnd )
-			{
-				Warning( "ERROR Memory corruption: CDmxElement::UnpackIntoStructure float buffer overrun!\n" );
-				continue;
-			}
+		// Get the basic type, if the attribute is an array:
+		DmAttributeType_t basicType = CDmxAttribute::ArrayAttributeBasicType( pAttribute->GetType() );
 
-			memcpy( pDest + 0 * sizeof( float ) , pAttribute->m_pData, sizeof( float ) );
-			memcpy( pDest + 1 * sizeof( float ) , pAttribute->m_pData, sizeof( float ) );
-			memcpy( pDest + 2 * sizeof( float ) , pAttribute->m_pData, sizeof( float ) );
-			memcpy( pDest + 3 * sizeof( float ) , pAttribute->m_pData, sizeof( float ) );
+		// Special case - if data type is float, but dest size == 16, we are unpacking into simd by replication
+		if ( ( basicType == AT_FLOAT ) && ( pUnpack->m_nSize == sizeof( fltx4 ) ) )
+		{
+			if ( IsArrayType( pUnpack->m_AttributeType ) )
+			{
+				// Copy from the attribute into a fixed-size array:
+				float *pfDest = (float *)pDest;
+				const CUtlVector< float > &floatVector = pAttribute->GetArray< float >();
+				for ( int i = 0; i < pUnpack->m_nArrayLength; i++ )
+				{
+					for ( int j = 0; j < 4; j++ ) memcpy( pfDest++, &floatVector[ i ], sizeof( float ) );
+				}
+			}
+			else
+			{
+				memcpy( pDest + 0 * sizeof( float ), pAttribute->m_pData, sizeof( float ) );
+				memcpy( pDest + 1 * sizeof( float ), pAttribute->m_pData, sizeof( float ) );
+				memcpy( pDest + 2 * sizeof( float ), pAttribute->m_pData, sizeof( float ) );
+				memcpy( pDest + 3 * sizeof( float ), pAttribute->m_pData, sizeof( float ) );
+			}
 		}
 		else
 		{
-			if ( pDest + pUnpack->m_nSize > pDataEnd )
+			int nDataTypeSize = pUnpack->m_nSize;
+			if ( basicType == AT_INT )
 			{
-				Warning( "ERROR Memory corruption: CDmxElement::UnpackIntoStructure memcpy buffer overrun!\n" );
-				continue;
+				if ( pUnpack->m_nBitOffset == NO_BIT_OFFSET ) // This test is not for bitfields
+				{
+					AssertMsg( nDataTypeSize <= CDmxAttribute::AttributeDataSize( basicType ), 
+						( "CDmxElement::UnpackIntoStructure: Incorrect size to unpack data into in attribute \"%s\"!\n", pUnpack->m_pAttributeName ) );
+				}
+			}
+			else
+			{
+				AssertMsg( nDataTypeSize == CDmxAttribute::AttributeDataSize( basicType ), 
+					( "CDmxElement::UnpackIntoStructure: Incorrect size to unpack data into in attribute \"%s\"!\n", pUnpack->m_pAttributeName ) );
 			}
 
-			AssertMsg( pUnpack->m_nSize == CDmxAttribute::AttributeDataSize( pAttribute->GetType() ), 
-					   "CDmxElement::UnpackIntoStructure: Incorrect size to unpack data into in attribute \"%s\"!\n", pUnpack->m_pAttributeName );
-			memcpy( pDest, pAttribute->m_pData, pUnpack->m_nSize );
+			if ( IsArrayType( pUnpack->m_AttributeType ) )
+			{
+				// Copy from the attribute into a fixed-size array (padding with the default value if need be):
+				pAttribute->GetArrayValue( pUnpack->m_AttributeType, pDest, nDataTypeSize, pUnpack->m_nArrayLength, pUnpack->m_pDefaultString );
+			}
+			else if ( pUnpack->m_nBitOffset == NO_BIT_OFFSET )
+			{
+				memcpy( pDest, pAttribute->m_pData, pUnpack->m_nSize );
+			}
+			else
+			{
+				if ( pAttribute->GetType() == AT_INT )
+				{
+					// Int attribute types are used for char/short/int.
+					switch ( pUnpack->m_BitfieldType )
+					{
+					case BITFIELD_TYPE_BOOL:
+						// Note: unsigned char handles bools as bitfields.
+						UnpackBitfield( (unsigned char *)pDest, pUnpack, pAttribute );
+						break;
+					case BITFIELD_TYPE_CHAR : 		
+						UnpackBitfield( (char *)pDest, pUnpack, pAttribute );
+						break;
+					case BITFIELD_TYPE_UNSIGNED_CHAR : 		
+						UnpackBitfield( (unsigned char *)pDest, pUnpack, pAttribute );
+						break;
+					case BITFIELD_TYPE_SHORT : 		
+						UnpackBitfield( (short *)pDest, pUnpack, pAttribute );
+						break;
+					case BITFIELD_TYPE_UNSIGNED_SHORT : 		
+						UnpackBitfield( (unsigned short *)pDest, pUnpack, pAttribute );
+						break;
+					case BITFIELD_TYPE_INT : 		
+						UnpackBitfield( (int *)pDest, pUnpack, pAttribute );
+						break;
+					case BITFIELD_TYPE_UNSIGNED_INT : 		
+						UnpackBitfield( (unsigned int *)pDest, pUnpack, pAttribute );
+						break;
+					default:
+						Assert(0);
+						break;
+					};
+				}
+				else
+				{
+					UnpackBitfield( (char *)pDest, pUnpack, pAttribute );
+				}	
+			}
 		}
 	}
 }
@@ -434,55 +581,122 @@ void CDmxElement::UnpackIntoStructure( void *pData, size_t DestSizeInBytes, cons
 //-----------------------------------------------------------------------------
 // Creates attributes based on the unpack structure
 //-----------------------------------------------------------------------------
-void CDmxElement::AddAttributesFromStructure_Internal( const void *pData, size_t byteCount, const DmxElementUnpackStructure_t *pUnpack )
+void CDmxElement::AddAttributesFromStructure( const void *pData, const DmxElementUnpackStructure_t *pUnpack )
 {
 	for ( ; pUnpack->m_AttributeType != AT_UNKNOWN; ++pUnpack )
 	{
 		const char *pSrc = (const char*)pData + pUnpack->m_nOffset;
-
-		// NOTE: This does not work with array data at the moment
-		if ( IsArrayType( pUnpack->m_AttributeType ) )
+		if ( pUnpack->m_pSub )
 		{
-			AssertMsg( 0, "CDmxElement::AddAttributesFromStructure: Array attribute types not currently supported!\n" );
+			CDmxElement *pDest = CreateDmxElement( pUnpack->m_pTypeName );
+			pDest->AddAttributesFromStructure( pSrc, pUnpack->m_pSub );
+			SetValue( pUnpack->m_pAttributeName, pDest );
 			continue;
 		}
 
-		if ( pUnpack->m_AttributeType == AT_VOID )
+		if ( IsArrayType( pUnpack->m_AttributeType ) )
 		{
-			AssertMsg( 0, "CDmxElement::AddAttributesFromStructure: Binary blob attribute types not currently supported!\n" );
+			// NOTE: This does not work with string/bitfield array data at the moment
+			if ( ( pUnpack->m_AttributeType == AT_STRING_ARRAY ) || ( pUnpack->m_nBitOffset != NO_BIT_OFFSET ) )
+			{
+				AssertMsg( 0, ( "CDmxElement::AddAttributesFromStructure: String and bitfield array attribute types not currently supported!\n" ) );
+				continue;
+			}
+		}
+
+		if ( ( pUnpack->m_AttributeType == AT_VOID ) || ( pUnpack->m_AttributeType == AT_VOID_ARRAY ) )
+		{
+			AssertMsg( 0, ( "CDmxElement::AddAttributesFromStructure: Binary blob attribute types not currently supported!\n" ) );
 			continue;
 		}
 
 		if ( HasAttribute( pUnpack->m_pAttributeName ) )
 		{
-			AssertMsg( 0, "CDmxElement::AddAttributesFromStructure: Attribute %s already exists!\n", pUnpack->m_pAttributeName );
+			AssertMsg( 0, ( "CDmxElement::AddAttributesFromStructure: Attribute %s already exists!\n", pUnpack->m_pAttributeName ) );
 			continue;
 		}
 
 		{
-			if ( (size_t)(pUnpack->m_nOffset + pUnpack->m_nSize) > byteCount )
-			{
-				Msg( "Buffer underread! Mismatched type/type-descriptor.\n" );
-			}
 			CDmxElementModifyScope modify( this );
 			CDmxAttribute *pAttribute = AddAttribute( pUnpack->m_pAttributeName );
 			if ( pUnpack->m_AttributeType == AT_STRING )
 			{
-				pAttribute->SetValue( pSrc );
+				if ( pUnpack->m_nSize == UTL_STRING_SIZE )	  // it is a UtlString. 
+				{
+					const char *test = (*(CUtlString *)pSrc).Get();
+					pAttribute->SetValue( test );
+				}
+				else
+				{
+					pAttribute->SetValue( pSrc );
+				}
 			}
 			else
 			{
-				int nSize = pUnpack->m_nSize;
+				// Get the basic data type, if the attribute is an array:
+				DmAttributeType_t basicType = CDmxAttribute::ArrayAttributeBasicType( pUnpack->m_AttributeType );
+				int nDataTypeSize = pUnpack->m_nSize;
 
 				// handle float attrs stored as replicated fltx4's
-				if ( ( pUnpack->m_AttributeType == AT_FLOAT ) && ( nSize == sizeof( fltx4 ) ) )
+				if ( ( basicType == AT_FLOAT ) && ( nDataTypeSize == sizeof( fltx4 ) ) )
 				{
-					nSize = sizeof( float );
+					nDataTypeSize = sizeof( float );
 				}
 
-				AssertMsg( nSize == CDmxAttribute::AttributeDataSize( pUnpack->m_AttributeType ), 
-						   "CDmxElement::UnpackIntoStructure: Incorrect size to unpack data into in attribute \"%s\"!\n", pUnpack->m_pAttributeName );
-				pAttribute->SetValue( pUnpack->m_AttributeType, pSrc, nSize );
+				if ( basicType == AT_INT )
+				{
+					if ( pUnpack->m_nBitOffset == NO_BIT_OFFSET ) // This test is not for bitfields.
+					{
+						AssertMsg( nDataTypeSize <= CDmxAttribute::AttributeDataSize( basicType ), 
+							( "CDmxElement::UnpackIntoStructure: Incorrect size to unpack data into %s attribute \"%s\"!\n", CDmxAttribute::s_pAttributeTypeName[ pUnpack->m_AttributeType ], pUnpack->m_pAttributeName ) );
+					}
+				}
+				else
+				{
+					AssertMsg( nDataTypeSize == CDmxAttribute::AttributeDataSize( basicType ), 
+							( "CDmxElement::UnpackIntoStructure: Incorrect size to unpack data into %s attribute \"%s\"!\n", CDmxAttribute::s_pAttributeTypeName[ pUnpack->m_AttributeType ], pUnpack->m_pAttributeName ) );
+				}
+
+				if ( IsArrayType( pUnpack->m_AttributeType ) )
+				{
+					// Copy from a fixed-size array into the attribute:
+					int nArrayStride = pUnpack->m_nSize;
+					pAttribute->SetArrayValue( pUnpack->m_AttributeType, pSrc, nDataTypeSize, pUnpack->m_nArrayLength, nArrayStride );
+				}
+				else if ( pUnpack->m_nBitOffset == NO_BIT_OFFSET )
+				{
+					pAttribute->SetValue( pUnpack->m_AttributeType, pSrc, nDataTypeSize );
+				}
+				else
+				{
+					
+					// Right now the max size bitfield we handle is 32.
+					Assert( pUnpack->m_nBitOffset + pUnpack->m_nSize <= 32 );
+
+					int mask = 0;
+					if ( pUnpack->m_nSize == 32 )
+					{
+						mask = ~0;
+					}
+					else
+					{
+						mask = ( 1 << pUnpack->m_nSize ) - 1;
+						mask <<= pUnpack->m_nBitOffset;
+					}
+					
+					int value = ( ( *(int *)pSrc ) & mask );
+					if ( ( pUnpack->m_BitfieldType == BITFIELD_TYPE_CHAR ) ||
+						( pUnpack->m_BitfieldType == BITFIELD_TYPE_SHORT ) ||
+						( pUnpack->m_BitfieldType == BITFIELD_TYPE_INT ) )
+					{
+						// move it all the way up to make sure we get the correct sign extension.
+						value <<= ( 32 - ( pUnpack->m_nBitOffset + pUnpack->m_nSize ) );
+						// move it back down into position.
+						value >>= ( 32 - ( pUnpack->m_nBitOffset + pUnpack->m_nSize ) );	
+					}
+					value >>= pUnpack->m_nBitOffset;
+					pAttribute->SetValue( pUnpack->m_AttributeType, &value, sizeof( int ) );
+				}
 			}
 		}
 	}

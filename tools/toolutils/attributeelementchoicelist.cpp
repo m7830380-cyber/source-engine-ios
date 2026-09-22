@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2005, Valve Corporation, All rights reserved. =======//
 //
 // Purpose: 
 //
@@ -8,7 +8,7 @@
 
 #include "toolutils/attributeelementchoicelist.h"
 #include "datamodel/dmelement.h"
-
+#include "datamodel/dmattributevar.h"
 	
 typedef CUtlRBTree< CDmElement *, int > ElementDict_t;
 
@@ -114,7 +114,7 @@ void AddElementsRecursively( CDmElement *obj, ElementChoiceList_t &list, const c
 {
 	if ( !pElementType )
 	{
-		pElementType = g_pDataModel->GetString( CDmElement::GetStaticTypeSymbol() );
+		pElementType = CDmElement::GetStaticTypeSymbol().String();
 	}
 
 	ElementDict_t dict( 0, 0, DefLessFunc( CDmElement * ) );
@@ -129,7 +129,7 @@ void AddElementsRecursively( CDmElement *pElement, DmeHandleVec_t &list, const c
 {
 	if ( !pElementType )
 	{
-		pElementType = g_pDataModel->GetString( CDmElement::GetStaticTypeSymbol() );
+		pElementType = CDmElement::GetStaticTypeSymbol().String();
 	}
 
 	ElementDict_t dict( 0, 0, DefLessFunc( CDmElement * ) );

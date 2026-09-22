@@ -20,6 +20,7 @@ $MacroRequired				"LOADADDRESSNAME"
 $Macro DLLDEMOSUFFIX "_demo\" 			[$DEMO]
 $MacroEmptyString DLLDEMOSUFFIX "empty" [!$DEMO]
 
+$Macro PLATSUBDIR	"\."
 $Macro LIBPUBLIC	"$SRCDIR\lib\public"
 $Macro LIBCOMMON	"$SRCDIR\lib\common"
 
@@ -33,10 +34,10 @@ $Configuration
 {	
 	$Compiler
 	{
+		$PreprocessorDefinitions	"$BASE;_MEMTEST"		[$MEMTEST]
 		$PreprocessorDefinitions	"$BASE;_LOWVIOLENCE"	[$LV]
 		$PreprocessorDefinitions	"$BASE;_X360DEMO"		[$X360DEMO]
-		$PreprocessorDefinitions	"$BASE;COMPILER_MSVC;COMPILER_MSVCX360;_DLL_EXT=$_DLL_EXT"
-		$PreprocessorDefinitions	"$BASE;DLLNAME=$OUTBINNAME"
+		$PreprocessorDefinitions	"$BASE;COMPILER_MSVC;COMPILER_MSVCX360;MEMOVERRIDE_MODULE=$PROJECTNAME;_DLL_EXT=$_DLL_EXT"
 	}
 	
 	$Linker
@@ -51,6 +52,7 @@ $Configuration
 		// the version of the DLL must match the version of default.xex that is signed
 		// with another XML including more settings (privileges, ratings, memory, etc.)
 		// DLLs must NOT be signed with the XML used for XEX
+		$TitleID				"0x5841125A"
 		$ProjectDefaults		"$SRCDIR\common\xlast_$VPCGAME$DLLDEMOSUFFIX\$VPCGAME""_dll.xml"
 	}
 	
@@ -76,7 +78,8 @@ $Configuration
 								"call $SRCDIR\vpc_scripts\valve_p4_edit.cmd $OUTBINDIR\$(TargetName).pdb $SRCDIR" "\n" \
 								"copy $(TargetDir)$(TargetName).pdb $OUTBINDIR\$(TargetName).pdb" "\n" \
 								"copy $(TargetDir)$(TargetName).xdb $OUTBINDIR\$(TargetName).xdb" "\n" \
-								"call $SRCDIR\vpc_scripts\valve_xbcp_wrapper.cmd $(TargetDir)$(TargetName)_converted.dll $(RemoteRoot)\$DEVKITBINDIR\$(TargetFileName)" "\n"
+								"call $SRCDIR\vpc_scripts\valve_xbcp_wrapper.cmd $(TargetDir)$(TargetName)_converted.dll $(RemoteRoot)\$DEVKITBINDIR\$(TargetFileName)" "\n" \
+								"call $SRCDIR\..\game\bin\CSSVersionNumber.exe $SRCDIR\..\game\platform\resource\css_code_version_local.txt quiet" "\n"
 
 		$CommandLine			"$BASE" \
 								"echo LoadAddressName=$LOADADDRESSNAME > $(TargetDir)$(TargetName).vpcinfo" "\n" \
@@ -85,18 +88,6 @@ $Configuration
 								
 		$Description			"Publishing to $OUTBINDIR"
 		$ExcludedFromBuild		"No"
-	}
-		
-
-	// this forces a dependency on the published directory
-	// when the dependency fails (the dll was deleted), the PostBuildEvent will run, thus causing the publish to re-occur
-	// this allows for faster debug/release flipping without having to recompile or relink
-	$CustomBuildStep
-	{
-		// General
-		$CommandLine				"echo Checking Dependency $OUTBINDIR\$(TargetFileName)"			
-		$Description				" "
-		$Outputs					"$OUTBINDIR\$(TargetFileName)"
 	}
 }
 

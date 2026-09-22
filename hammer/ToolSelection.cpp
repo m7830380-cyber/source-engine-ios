@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -189,7 +189,7 @@ bool Selection3D::HitTestLogical( CMapView *pView, const Vector2D &ptClient )
 	rect.NormalizeRect();
 
 	// See if the point lies within the main rect.
-	return rect.PtInRect( CPoint( ptClient.x, ptClient.y ) );
+	return rect.PtInRect( CPoint( ptClient.x, ptClient.y ) ) ? true : false;
 }
 
 
@@ -279,7 +279,8 @@ void Selection3D::TransformSelection(void)
 	const CMapObjectList *pSelList = m_pSelection->GetList();
 	for (int i = 0; i < pSelList->Count(); i++)
 	{
-		CMapClass *pobj = pSelList->Element(i);
+		CUtlReference< CMapClass > ref = pSelList->Element(i);
+		CMapClass *pobj = ref;
 		pobj->Transform( GetTransformMatrix() );
 	}
 
@@ -296,7 +297,8 @@ void Selection3D::TransformLogicalSelection( const Vector2D &vecTranslation )
 	const CMapObjectList *pSelList = m_pSelection->GetList();
 	for (int i = 0; i < pSelList->Count(); i++)
 	{
-		CMapClass *pObj = pSelList->Element(i);
+		CUtlReference< CMapClass > ref = pSelList->Element(i);
+		CMapClass *pObj = ref;
 		Vector2D vecNewPosition;
 		Vector2DAdd( pObj->GetLogicalPosition(), vecTranslation, vecNewPosition );
 		pObj->SetLogicalPosition( vecNewPosition );
@@ -381,7 +383,7 @@ void Selection3D::RenderTool2D(CRender2D *pRender)
 		const CMapObjectList *pSelList = m_pSelection->GetList();
 		for (int i = 0; i < pSelList->Count(); i++)
 		{
-			CMapClass *pobj = pSelList->Element(i);
+			CMapClass *pobj = (CUtlReference< CMapClass >)pSelList->Element(i);
 			
 			DrawObject(pobj, pRender);
 			pobj->EnumChildren((ENUMMAPCHILDRENPROC)DrawObject, (DWORD)pRender);
@@ -418,7 +420,7 @@ void Selection3D::RenderToolLogical( CRender2D *pRender )
 		const CMapObjectList *pSelList = m_pSelection->GetList();
 		for (int i = 0; i < pSelList->Count(); i++)
 		{
-			CMapClass *pobj = pSelList->Element(i);
+			CMapClass *pobj = (CUtlReference< CMapClass>)pSelList->Element(i);
 			
 			DrawObjectLogical(pobj, pRender);
 			pobj->EnumChildren((ENUMMAPCHILDRENPROC)DrawObjectLogical, (DWORD)pRender);
@@ -464,7 +466,7 @@ void Selection3D::RenderTool3D(CRender3D *pRender)
 		if ( pSelList->Count() )
 		{
 			pRender->PushRenderMode( RENDER_MODE_FLAT );
-			pRender->BeginRenderHitTarget( pSelList->Element(0) );
+			pRender->BeginRenderHitTarget( (CUtlReference< CMapClass>)pSelList->Element(0) );
 			pRender->RenderBox( bmins, bmaxs, 255,255,255, SELECT_NONE );
 			pRender->EndRenderHitTarget();
 			pRender->PopRenderMode();
@@ -488,7 +490,7 @@ void Selection3D::RenderTool3D(CRender3D *pRender)
 		
 		for (int i = 0; i < pSelList->Count(); i++)
 		{
-			CMapClass *pobj = pSelList->Element(i);
+			CMapClass *pobj = (CUtlReference< CMapClass>)pSelList->Element(i);
 
 			DrawObject(pobj, pRender);
 			pobj->EnumChildren((ENUMMAPCHILDRENPROC)DrawObject, (DWORD)pRender);
@@ -516,7 +518,7 @@ CBaseTool *Selection3D::GetToolObject( CMapView2D *pView, const Vector2D &vPoint
 	const CMapObjectList *pSelList = m_pSelection->GetList();
 	for (int i = 0; i < pSelList->Count(); i++)
 	{
-		CMapClass *pObject = pSelList->Element(i);
+		CMapClass *pObject = (CUtlReference< CMapClass>)pSelList->Element(i);
 
 		//
 		// Hit test against the object. nHitData will return with object-specific
@@ -545,7 +547,7 @@ CBaseTool *Selection3D::GetToolObjectLogical( CMapViewLogical *pView, const Vect
 	const CMapObjectList *pSelList = m_pSelection->GetList();
 	for (int i = 0; i < pSelList->Count(); i++)
 	{
-		CMapClass *pObject = pSelList->Element(i);
+		CMapClass *pObject = (CUtlReference< CMapClass>)pSelList->Element(i);
 
 		//
 		// Hit test against the object. nHitData will return with object-specific
@@ -948,7 +950,7 @@ unsigned int Selection3D::GetConstraints(unsigned int nKeyFlags)
 	{
 		if ( m_pSelection->GetCount() == 1)
 		{
-			CMapClass *pObject = m_pSelection->GetList()->Element(0);
+			CMapClass *pObject = (CUtlReference< CMapClass>)m_pSelection->GetList()->Element(0);
 
 			if (pObject->ShouldSnapToHalfGrid())
 			{
@@ -974,7 +976,7 @@ bool Selection3D::OnMouseMove2D(CMapView2D *pView, UINT nFlags, const Vector2D &
 
 	vgui::HCursor hCursor = vgui::dc_arrow;
 
-	bool bCtrl = (GetAsyncKeyState(VK_CONTROL) & 0x8000);
+	bool bCtrl = (GetAsyncKeyState(VK_CONTROL) & 0x8000) ? true : false;
 	unsigned int uConstraints = GetConstraints( nFlags);
 			
 	// Convert to world coords.
@@ -1114,7 +1116,8 @@ void Selection3D::StartTranslation(CMapView *pView, const Vector2D &vPoint, cons
 	{
 		if ( vHandleOrigin.IsZero() || m_TranslateMode == modeRotate )
 		{
-			CMapEntity *pObject = (CMapEntity *)m_pSelection->GetList()->Element(0);
+			CMapClass *pMapClassObj = (CUtlReference< CMapClass>)m_pSelection->GetList()->Element(0);
+			CMapEntity *pObject = (CMapEntity *)pMapClassObj;
 
 			if ( pObject->IsMapClass(MAPCLASS_TYPE(CMapEntity)) && pObject->IsPlaceholder() )
 			{
@@ -1150,7 +1153,7 @@ void Selection3D::StartTranslation(CMapView *pView, const Vector2D &vPoint, cons
 //-----------------------------------------------------------------------------
 bool Selection3D::OnLMouseUp2D(CMapView2D *pView, UINT nFlags, const Vector2D &vPoint) 
 {
-	bool bShift = nFlags & MK_SHIFT;
+	bool bShift = ( nFlags & MK_SHIFT ) ? true : false;
 
 	Tool3D::OnLMouseUp2D(pView, nFlags, vPoint);
 
@@ -1526,7 +1529,7 @@ bool Selection3D::OnLMouseDblClk3D(CMapView3D *pView, UINT nFlags, const Vector2
 	{
 		if ( m_pSelection->GetCount() == 1 )
 		{
-			CMapClass			*pObject = m_pSelection->GetList()->Element( 0 );
+			CMapClass			*pObject = (CUtlReference< CMapClass>)m_pSelection->GetList()->Element( 0 );
 			CManifestInstance	*pManifestInstance = dynamic_cast< CManifestInstance * >( pObject );
 			if ( pManifestInstance )
 			{
@@ -1636,8 +1639,8 @@ void Selection3D::EyedropperPick(CMapView *pView, CMapClass *pObject)
 
 	for (int i = 0; i < pSelList->Count(); i++)
 	{
-		pObject = pSelList->Element(i);
-		pEntity = dynamic_cast <CMapEntity *> (pObject);
+		CMapClass *pObject = (CUtlReference< CMapClass>)pSelList->Element(i);
+		CMapEntity *pEntity = dynamic_cast <CMapEntity *> (pObject);
 		if (pEntity != NULL)
 		{
 			nEntityCount++;
@@ -1689,13 +1692,13 @@ void Selection3D::EyedropperPick(CMapView *pView, CMapClass *pObject)
 	//
 	for (int i = 0; i < pSelList->Count(); i++)
 	{
-		pObject = pSelList->Element(i);
+		CMapClass *pObject = (CUtlReference< CMapClass>)pSelList->Element(i);
 	
-		pEntity = dynamic_cast <CMapEntity *> (pObject);
+		CMapEntity *pEntity = dynamic_cast <CMapEntity *> (pObject);
 		if (pEntity != NULL)
 		{
 			GDclass *pClass = pEntity->GetClass();
-			pVar = pClass->VarForName(pszVarName);
+			GDinputvariable *pVar = pClass->VarForName(pszVarName);
 			if (pVar && ((pVar->GetType() == ivTargetDest) || (pVar->GetType() == ivTargetNameOrClass)))
 			{
 				GetHistory()->Keep(pEntity);
@@ -1811,7 +1814,7 @@ bool Selection3D::OnLMouseDown3D(CMapView3D *pView, UINT nFlags, const Vector2D 
 //-----------------------------------------------------------------------------
 bool Selection3D::OnLMouseUp3D(CMapView3D *pView, UINT nFlags, const Vector2D &vPoint) 
 {
-	bool bShift = nFlags & MK_SHIFT;
+	bool bShift = ( nFlags & MK_SHIFT ) ? true : false;
 
 	Tool3D::OnLMouseUp3D(pView, nFlags, vPoint) ;
 

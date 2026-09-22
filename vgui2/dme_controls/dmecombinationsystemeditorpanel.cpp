@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2001, Valve LLC, All rights reserved. ============
 //
 // Purpose: 
 //
@@ -23,7 +23,7 @@
 #include "vgui_controls/perforcefilelistframe.h"
 #include "vgui/MouseCode.h"
 #include "vgui/IInput.h"
-#include "tier1/KeyValues.h"
+#include "tier1/keyvalues.h"
 #include "tier2/fileutils.h"
 
 
@@ -46,6 +46,8 @@ static void ImportCombinationControls( CDmeCombinationOperator *pDestComboOp, CD
 {
 	pDestComboOp->RemoveAllControls();
 
+	CUtlVectorFixedGrowable< bool, 256 > foundMatch;
+
 	// Iterate through all controls in the imported operator.
 	// For each control that contains at least 1 raw controls
 	// that also exist in this combination op, create a control here also.
@@ -55,13 +57,13 @@ static void ImportCombinationControls( CDmeCombinationOperator *pDestComboOp, CD
 		const char *pControlName = pSrcComboOp->GetControlName( i );
 
 		int nRawControls = pSrcComboOp->GetRawControlCount( i );
-		int nMatchCount = 0; 
-		bool *pFoundMatch = (bool*)_alloca( nRawControls * sizeof(bool) );
+		int nMatchCount = 0;
+		foundMatch.EnsureCount( nRawControls );
 		for ( int j = 0; j < nRawControls; ++j )
 		{
 			const char *pRawControl = pSrcComboOp->GetRawControlName( i, j );
-			pFoundMatch[j] = pDestComboOp->DoesTargetContainDeltaState( pRawControl );
-			nMatchCount += pFoundMatch[j];
+			foundMatch[j] = pDestComboOp->DoesTargetContainDeltaState( pRawControl );
+			nMatchCount += foundMatch[j];
 		}
 
 		// No match? Don't import
@@ -81,7 +83,7 @@ static void ImportCombinationControls( CDmeCombinationOperator *pDestComboOp, CD
 		pDestComboOp->SetEyelidControl( index, bIsEyelid );
 		for ( int j = 0; j < nRawControls; ++j )
 		{
-			if ( pFoundMatch[j] )
+			if ( foundMatch[j] )
 			{
 				const char *pRawControl = pSrcComboOp->GetRawControlName( i, j );
 				float flWrinkleScale = pSrcComboOp->GetRawControlWrinkleScale( i, j );
@@ -339,17 +341,6 @@ static int __cdecl ControlNameSortFunc( vgui::ListPanel *pPanel, const vgui::Lis
 	return Q_stricmp( string1, string2 );
 }
 
-static int __cdecl PeakSortFunc( vgui::ListPanel *pPanel, const vgui::ListPanelItem &item1, const vgui::ListPanelItem &item2 )
-{
-	float flPeak1 = item1.kv->GetFloat("peak");
-	float flPeak2 = item2.kv->GetFloat("peak");
-	if ( flPeak1 < flPeak2 )
-		return -1;
-	if ( flPeak1 > flPeak2 )
-		return 1;
-	return 0;
-}
-
 
 //-----------------------------------------------------------------------------
 // constructor, destructor
@@ -362,10 +353,10 @@ CDmeCombinationControlsPanel::CDmeCombinationControlsPanel( vgui::Panel *pParent
 	vgui::Panel *pSplitterRightSide = m_pSplitter->GetChild( 1 );
 
 	m_pControlList = new CDmeInputControlListPanel( pSplitterLeftSide, "ControlList", this );
-	m_pControlList->AddColumnHeader( 0, "name", "Control Name", 150, 0 );
-	m_pControlList->AddColumnHeader( 1, "stereo", "Stereo", 70, 0 );
-	m_pControlList->AddColumnHeader( 2, "eyelid", "Eyelid", 70, 0 );
-	m_pControlList->AddColumnHeader( 3, "default", "Default", 52, 0 );
+	m_pControlList->AddColumnHeader( 0, "name", "Control Name", 60, 60, 1000, vgui::ListPanel::COLUMN_RESIZEWITHWINDOW );
+	m_pControlList->AddColumnHeader( 1, "stereo", "Stereo", 35, 35, 35, 0 );
+	m_pControlList->AddColumnHeader( 2, "eyelid", "Eyelid", 32, 32, 32, 0 );
+	m_pControlList->AddColumnHeader( 3, "default", "Default", 65, 65, 65, 0 );
 	m_pControlList->SetSelectIndividualCells( false );
 	m_pControlList->SetMultiselectEnabled( true );
 	m_pControlList->SetEmptyListText( "No controls" );
@@ -383,20 +374,18 @@ CDmeCombinationControlsPanel::CDmeCombinationControlsPanel( vgui::Panel *pParent
 	m_pControlList->SetDropEnabled( true );
 
 	m_pRawControlList = new CDmeRawControlListPanel( pSplitterRightSide, "RawControlList", this );
-	m_pRawControlList->AddColumnHeader( 0, "name", "Raw Control Name", 150, 0 );
-	m_pRawControlList->AddColumnHeader( 1, "peak", "Peak", 52, 0 );
-	m_pRawControlList->AddColumnHeader( 2, "wrinkletype", "Wrinkle Type", 100, 0 );
-	m_pRawControlList->AddColumnHeader( 3, "wrinkle", "Wrinkle Amount", 100, 0 );
+	m_pRawControlList->AddColumnHeader( 0, "name", "Raw Control Name", 75, 75, 1000, vgui::ListPanel::COLUMN_RESIZEWITHWINDOW );
+	m_pRawControlList->AddColumnHeader( 1, "wrinkletype", "Type", 60, 60, 1000, 0 );
+	m_pRawControlList->AddColumnHeader( 2, "wrinkle", "Amount", 65, 65, 1000, 0 );
 	m_pRawControlList->SetSelectIndividualCells( false );
 	m_pRawControlList->SetEmptyListText( "No raw controls" );
 	m_pRawControlList->AddActionSignalTarget( this );
 	m_pRawControlList->SetSortFunc( 0, ControlNameSortFunc );
-	m_pRawControlList->SetSortFunc( 1, PeakSortFunc );
+	m_pRawControlList->SetSortFunc( 1, NULL );
+	m_pRawControlList->SetColumnSortable( 1, false );
 	m_pRawControlList->SetSortFunc( 2, NULL );
 	m_pRawControlList->SetColumnSortable( 2, false );
-	m_pRawControlList->SetSortFunc( 3, NULL );
-	m_pRawControlList->SetColumnSortable( 3, false );
-	m_pRawControlList->SetSortColumn( 1 );
+	m_pRawControlList->SetSortColumn( 0 );
 }
 
 
@@ -506,24 +495,8 @@ void CDmeCombinationControlsPanel::RefreshRawControlNames()
 	for ( int i = 0; i < nCount; ++i )
 	{
 		KeyValues *kv = new KeyValues( "node", "name", m_hCombinationOperator->GetRawControlName( nControlIndex, i ) );
-		switch( nCount )
-		{
-		case 0:
-		case 1:
-			kv->SetFloat( "peak", 1.0f );
-			break;
-
-		case 2:
-			kv->SetFloat( "peak", i == 0 ? 0.0f : 1.0f );
-			break;
-
-		default:
-			kv->SetFloat( "peak", (float)i / (nCount - 1) );
-			break;
-		}
-
-		float flWrinkleScale = m_hCombinationOperator->GetRawControlWrinkleScale( nControlIndex, i );
-		kv->SetString( "wrinkletype", ( flWrinkleScale < 0.0f ) ? "Compress" : "Stretch" );
+		const float flWrinkleScale = m_hCombinationOperator->GetRawControlWrinkleScale( nControlIndex, i );
+		kv->SetString( "wrinkletype", ( flWrinkleScale < 0.0f ) ? "- Compress" : "+ Stretch" );
 		kv->SetFloat( "wrinkle", fabs( flWrinkleScale ) );
 		m_pRawControlList->AddItem( kv, 0, false, false );
 	}
@@ -678,6 +651,9 @@ void CDmeCombinationControlsPanel::MoveControlInFrontOf(
 
 //-----------------------------------------------------------------------------
 // Toggles the wrinkle type
+// NOTE: The wrinkle type merely controls the sign of the wrinkle scale
+//       It might be better to dispense with wrinkle type, rename the textures
+//       positive & negative and not call them wrinkles at all... but whatever
 //-----------------------------------------------------------------------------
 void CDmeCombinationControlsPanel::OnToggleWrinkleType()
 {
@@ -689,10 +665,16 @@ void CDmeCombinationControlsPanel::OnToggleWrinkleType()
 	float flWrinkleScale = m_hCombinationOperator->GetRawControlWrinkleScale( nControlIndex, pRawControlName );
 	m_hCombinationOperator->SetWrinkleScale( nControlIndex, pRawControlName, -flWrinkleScale );
 	RefreshRawControlNames();
-	m_hCombinationOperator->GenerateWrinkleDeltas();
 }
 
 
+//-----------------------------------------------------------------------------
+// NOTE: The wrinkle type merely controls the sign of the wrinkle scale
+//       It might be better to dispense with wrinkle type, rename the textures
+//       positive & negative and not call them wrinkles at all... but whatever
+// Also, the wrinkle type isn't stored.  It could be queried from the GUI but
+// the sign of the current wrinkle value should reflect the wrinkle type
+//-----------------------------------------------------------------------------
 void CDmeCombinationControlsPanel::SetRawControlWrinkleValue( float flWrinkleValue )
 {
 	ControlIndex_t nControlIndex;
@@ -700,9 +682,16 @@ void CDmeCombinationControlsPanel::SetRawControlWrinkleValue( float flWrinkleVal
 	if ( !pRawControlName )
 		return;
 
-	m_hCombinationOperator->SetWrinkleScale( nControlIndex, pRawControlName, flWrinkleValue );
+	float flOldWrinkleScale = m_hCombinationOperator->GetRawControlWrinkleScale( nControlIndex, pRawControlName );
+	if ( flOldWrinkleScale < 0.0f )
+	{
+		m_hCombinationOperator->SetWrinkleScale( nControlIndex, pRawControlName, -flWrinkleValue );
+	}
+	else
+	{
+		m_hCombinationOperator->SetWrinkleScale( nControlIndex, pRawControlName, flWrinkleValue );
+	}
 	RefreshRawControlNames();
-	m_hCombinationOperator->GenerateWrinkleDeltas();
 }
 
 
@@ -1169,7 +1158,6 @@ void CDmeCombinationControlsPanel::OnImportCombination()
 	vgui::FileOpenDialog *pDialog = new vgui::FileOpenDialog( this, "Select File to Import", true, new KeyValues( "ImportControls" ) );
 	pDialog->SetStartDirectoryContext( "combination_system_import", pStartingDir );
 	pDialog->AddFilter( "*.dmx", "Exported model file (*.dmx)", true );
-	pDialog->SetDeleteSelfOnClose( true );
 	pDialog->AddActionSignalTarget( this );
 	pDialog->DoModal( false );
 }
@@ -1347,7 +1335,7 @@ void CDmeRawControlListPanel::OnMouseDoublePressed( vgui::MouseCode code )
 	m_pWrinkleEdit->SetVisible( true );
 	m_pWrinkleEdit->SendNewLine( true );
 
-	// Always edit column 3, which contains the wrinkle amount
+	// Always edit column 2, which contains the wrinkle amount
 	int nEditingItem = GetSelectedItem( 0 );
 	KeyValues *pKeyValues = GetItem( nEditingItem );
 	float flWrinkleValue = pKeyValues->GetFloat( "wrinkle" );
@@ -1358,7 +1346,7 @@ void CDmeRawControlListPanel::OnMouseDoublePressed( vgui::MouseCode code )
 	Q_snprintf( buf, sizeof(buf), "%f", flWrinkleValue );
 	m_pWrinkleEdit->SetText( buf );
 
-	EnterEditMode( nEditingItem, 3, m_pWrinkleEdit );
+	EnterEditMode( nEditingItem, 2, m_pWrinkleEdit );
 }
 
 void CDmeRawControlListPanel::OnNewWrinkleText()
@@ -1599,8 +1587,8 @@ CDmeCombinationDominationRulesPanel::CDmeCombinationDominationRulesPanel( vgui::
 	BaseClass( pParent, pName )
 {
 	m_pDominationRulesList = new vgui::ListPanel( this, "DominationRulesList" );
-	m_pDominationRulesList->AddColumnHeader( 0, "suppressed", "Suppress", 100, 0 );
-	m_pDominationRulesList->AddColumnHeader( 1, "dominator", "Dominate", 100, 0 );
+	m_pDominationRulesList->AddColumnHeader( 0, "dominator", "Dominate", 100, 0 );
+	m_pDominationRulesList->AddColumnHeader( 1, "suppressed", "Suppress", 100, 0 );
 	m_pDominationRulesList->AddActionSignalTarget( this );
 	m_pDominationRulesList->SetSortFunc( 0, DominatorNameSortFunc );
 	m_pDominationRulesList->SetSortFunc( 1, DominatorNameSortFunc );
@@ -1662,6 +1650,8 @@ void CDmeCombinationDominationRulesPanel::RefreshCombinationOperator()
 	if ( !m_hCombinationOperator.Get() )
 		return;
 
+	CUtlVectorFixedGrowable< const char*, 256 > strings;
+
 	char pTemp[1024];
 	int nCount = m_hCombinationOperator->DominationRuleCount();
 	for ( int i = 0; i < nCount; ++i )
@@ -1673,15 +1663,15 @@ void CDmeCombinationDominationRulesPanel::RefreshCombinationOperator()
 		int nLen = 0;
 		int nControlCount = pRule->DominatorCount();
 		pTemp[0] = 0;
-		const char **ppStrings = (const char**)_alloca( nControlCount * sizeof(const char*) );
+		strings.EnsureCount( nControlCount );
 		for ( int j = 0; j < nControlCount; ++j )
 		{
-			ppStrings[j] = pRule->GetDominator(j);
+			strings[j] = pRule->GetDominator(j);
 		}
-		qsort( ppStrings, (size_t)nControlCount, (size_t)sizeof(char*), ControlNameSortFunc );
+		qsort( strings.Base(), (size_t)nControlCount, (size_t)sizeof(char*), ControlNameSortFunc );
 		for ( int j = 0; j < nControlCount; ++j )
 		{
-			nLen += Q_snprintf( &pTemp[nLen], sizeof(pTemp) - nLen, "%s ", ppStrings[j] );
+			nLen += Q_snprintf( &pTemp[nLen], sizeof(pTemp) - nLen, "%s ", strings[j] );
 		}
 
 		pItemKeys->SetString( "dominator", pTemp ); 
@@ -1689,15 +1679,15 @@ void CDmeCombinationDominationRulesPanel::RefreshCombinationOperator()
 		nLen = 0;
 		nControlCount = pRule->SuppressedCount();
 		pTemp[0] = 0;
-		ppStrings = (const char**)_alloca( nControlCount * sizeof(const char*) );
+		strings.EnsureCount( nControlCount );
 		for ( int j = 0; j < nControlCount; ++j )
 		{
-			ppStrings[j] = pRule->GetSuppressed(j);
+			strings[j] = pRule->GetSuppressed(j);
 		}
-		qsort( ppStrings, (size_t)nControlCount, (size_t)sizeof(char*), ControlNameSortFunc );
+		qsort( strings.Base(), (size_t)nControlCount, (size_t)sizeof(char*), ControlNameSortFunc );
 		for ( int j = 0; j < nControlCount; ++j )
 		{
-			nLen += Q_snprintf( &pTemp[nLen], sizeof(pTemp) - nLen, "%s ", ppStrings[j] );
+			nLen += Q_snprintf( &pTemp[nLen], sizeof(pTemp) - nLen, "%s ", strings[j] );
 		}
 		pItemKeys->SetString( "suppressed", pTemp ); 
 		pItemKeys->SetInt( "index", i ); 
@@ -1784,7 +1774,6 @@ void CDmeCombinationDominationRulesPanel::OnImportDominationRules()
 	vgui::FileOpenDialog *pDialog = new vgui::FileOpenDialog( this, "Select File to Import", true, new KeyValues( "ImportDominationRules" ) );
 	pDialog->SetStartDirectoryContext( "combination_system_import", pStartingDir );
 	pDialog->AddFilter( "*.dmx", "Exported model file (*.dmx)", true );
-	pDialog->SetDeleteSelfOnClose( true );
 	pDialog->AddActionSignalTarget( this );
 	pDialog->DoModal( false );
 }

@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -397,14 +397,20 @@ CCriticalSection g_SpewTextCS;
 CUtlVector<char> g_SpewText( 1024 );
 
 
-void VMPI_Stats_SpewHook( const char *pMsg )
+class CLoggingListener_VMPIStats : public ILoggingListener
 {
-	CCriticalSectionLock csLock( &g_SpewTextCS );
-	csLock.Lock();
-
+public:
+	virtual void Log( const LoggingContext_t *pContext, const tchar *pMessage )
+	{
+		CCriticalSectionLock csLock( &g_SpewTextCS );
+		csLock.Lock();
 		// Queue the text up so we can send it to the DB right away when we connect.
-		g_SpewText.AddMultipleToTail( strlen( pMsg ), pMsg );
-}
+		g_SpewText.AddMultipleToTail( strlen( pMessage ), pMessage );
+		csLock.Unlock();
+	}
+};
+
+CLoggingListener_VMPIStats g_VMPIStatsLoggingListener;
 
 
 void PerfThread_SendSpewText()
@@ -498,7 +504,7 @@ DWORD WINAPI PerfThreadFn( LPVOID pParameter )
 
 void VMPI_Stats_InstallSpewHook()
 {
-	InstallExtraSpewHook( VMPI_Stats_SpewHook );
+	LoggingSystem_RegisterLoggingListener( &g_VMPIStatsLoggingListener );
 }
 
 
@@ -821,7 +827,7 @@ void StatsDB_InitStatsDatabase(
 		if ( dbInfo.m_HostName[0] != 0 )
 		{
 			if ( !VMPI_Stats_Init_Worker( dbInfo.m_HostName, dbInfo.m_DBName, dbInfo.m_UserName, jobPrimaryID ) )
-				Error( "VMPI_Stats_Init_Worker( %s, %s, %s, %d ) failed.\n", dbInfo.m_HostName, dbInfo.m_DBName, dbInfo.m_UserName, jobPrimaryID );
+				Error( "VMPI_Stats_Init_Worker( %s, %s, %d ) failed.\n", dbInfo.m_HostName, dbInfo.m_DBName, dbInfo.m_UserName, jobPrimaryID );
 		}
 	}
 }

@@ -1,36 +1,43 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright (c) 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
-//=============================================================================//
+//===========================================================================//
 
-#include "pch_tier0.h"
+#include "tier0/platform.h"
 
 #include "tier0/valve_off.h"
 #ifdef _X360
 #include "xbox/xbox_console.h"
 #include "xbox/xbox_vxconsole.h"
+#elif defined( _PS3 )
+#include "ps3/ps3_console.h"
 #elif defined( _WIN32 )
 #include <windows.h>
-#elif defined( POSIX )
-#include <stdlib.h>
+#elif POSIX
+char *GetCommandLine();
 #endif
 #include "resource.h"
 #include "tier0/valve_on.h"
 #include "tier0/threadtools.h"
+#include "tier0/icommandline.h"
 
-#if defined( POSIX )
+#if defined( LINUX ) || defined( OSX )
 #include <dlfcn.h>
 #endif
 
-#if defined( USE_SDL )
-
+#if defined( LINUX ) || defined( USE_SDL )
 // We lazily load the SDL shared object, and only reference functions if it's
 // available, so this can be included on the dedicated server too.
 #include "SDL.h"
 
 typedef int ( SDLCALL FUNC_SDL_ShowMessageBox )( const SDL_MessageBoxData *messageboxdata, int *buttonid );
+typedef SDL_Window* ( SDLCALL FUNC_SDL_GetKeyboardFocus )();
 #endif
+
+// NOTE: This has to be the last file included!
+#include "tier0/memdbgon.h"
+
 
 class CDialogInitInfo
 {
@@ -64,6 +71,7 @@ static HINSTANCE g_hTier0Instance = 0;
 #endif
 
 static bool g_bAssertsEnabled = true;
+static bool g_bAssertDialogEnabled = true;
 
 static CAssertDisable *g_pAssertDisables = NULL;
 
@@ -71,8 +79,8 @@ static CAssertDisable *g_pAssertDisables = NULL;
 static int g_iLastLineRange = 5;
 static int g_nLastIgnoreNumTimes = 1;
 #endif
-#if defined( _X360 )
-static int g_VXConsoleAssertReturnValue = -1;
+#if defined( _X360 ) || defined( _PS3 )
+	static int g_VXConsoleAssertReturnValue = -1;
 #endif
 
 // Set to true if they want to break in the debugger.
@@ -80,14 +88,14 @@ static bool g_bBreak = false;
 
 static CDialogInitInfo g_Info;
 
+static bool g_bDisableAsserts = false;
+
 
 // -------------------------------------------------------------------------------- //
 // Internal functions.
 // -------------------------------------------------------------------------------- //
 
 #if defined(_WIN32) && !defined(STATIC_TIER0)
-extern "C" BOOL APIENTRY MemDbgDllMain( HMODULE hDll, DWORD dwReason, PVOID pvReserved );
-
 BOOL WINAPI DllMain(
   HINSTANCE hinstDLL,  // handle to the DLL module
   DWORD fdwReason,     // reason for calling function
@@ -95,24 +103,31 @@ BOOL WINAPI DllMain(
 )
 {
 	g_hTier0Instance = hinstDLL;
-#ifdef DEBUG
-	MemDbgDllMain( hinstDLL, fdwReason, lpvReserved );
-#endif
 	return true;
 }
 #endif
 
 static bool IsDebugBreakEnabled()
 {
-	static bool bResult = ( _tcsstr( Plat_GetCommandLine(), _T("-debugbreak") )    != NULL ) || \
-	                      ( _tcsstr( Plat_GetCommandLine(), _T("-raiseonassert") ) != NULL ) || \
-	                      getenv( "RAISE_ON_ASSERT" );
+	static bool bResult = ( _tcsstr( Plat_GetCommandLine(), _T("-debugbreak") ) != NULL );
+	return bResult;
+}
+
+static bool AssertStack()
+{
+	static bool bResult = ( _tcsstr( Plat_GetCommandLine(), _T("-assertstack") ) != NULL );
 	return bResult;
 }
 
 static bool AreAssertsDisabled()
 {
 	static bool bResult = ( _tcsstr( Plat_GetCommandLine(), _T("-noassert") ) != NULL );
+	return bResult || g_bDisableAsserts;
+}
+
+static bool AllAssertOnce()
+{
+	static bool bResult = ( _tcsstr( Plat_GetCommandLine(), _T("-assertonce") ) != NULL );
 	return bResult;
 }
 
@@ -340,38 +355,50 @@ static HWND FindLikelyParentWindow()
 	EnumWindows( ParentWindowEnumProc, GetCurrentProcessId() );
 	return g_hBestParentWindow;
 }
-#endif // ( defined( _WIN32 ) && !defined( _X360 ) )
+#endif
 
 // -------------------------------------------------------------------------------- //
 // Interface functions.
 // -------------------------------------------------------------------------------- //
 
 // provides access to the global that turns asserts on and off
-DBG_INTERFACE bool AreAllAssertsDisabled()
+PLATFORM_INTERFACE bool AreAllAssertsDisabled()
 {
 	return !g_bAssertsEnabled;
 }
 
-DBG_INTERFACE void SetAllAssertsDisabled( bool bAssertsDisabled )
+PLATFORM_INTERFACE void SetAllAssertsDisabled( bool bAssertsDisabled )
 {
 	g_bAssertsEnabled = !bAssertsDisabled;
 }
 
-#if defined( USE_SDL )
+
+// provides access to the global that turns asserts on and off
+PLATFORM_INTERFACE bool IsAssertDialogDisabled()
+{
+	return !g_bAssertDialogEnabled;
+}
+
+PLATFORM_INTERFACE void SetAssertDialogDisabled( bool bAssertDialogDisabled )
+{
+	g_bAssertDialogEnabled = !bAssertDialogDisabled;
+}
+
+#if defined( LINUX ) || ( defined( USE_SDL ) && defined( OSX ) )
 SDL_Window *g_SDLWindow = NULL;
 
-DBG_INTERFACE void SetAssertDialogParent( struct SDL_Window *window )
+PLATFORM_INTERFACE void SetAssertDialogParent( struct SDL_Window *window )
 {
 	g_SDLWindow = window;
 }
 
-DBG_INTERFACE struct SDL_Window * GetAssertDialogParent()
+PLATFORM_INTERFACE struct SDL_Window * GetAssertDialogParent()
 {
 	return g_SDLWindow;
 }
 #endif
 
-DBG_INTERFACE bool ShouldUseNewAssertDialog()
+PLATFORM_INTERFACE bool ShouldUseNewAssertDialog()
 {
 	static bool bMPIWorker = ( _tcsstr( Plat_GetCommandLine(), _T("-mpi_worker") ) != NULL );
 	if ( bMPIWorker )
@@ -386,38 +413,18 @@ DBG_INTERFACE bool ShouldUseNewAssertDialog()
 #endif // DBGFLAG_ASSERTDLG
 }
 
-#if defined( POSIX ) && PLATFORM_GLIBC
 
-static void SpewBacktrace()
-{
-	void *buffer[ 16 ];
-	int nptrs = backtrace( buffer, ARRAYSIZE( buffer ) );
-	if ( nptrs )
-	{
-		char **strings = backtrace_symbols(buffer, nptrs);
-		if ( strings )
-		{
-			for ( int i = 0; i < nptrs; i++)
-			{
-				const char *module = strrchr( strings[ i ], '/' );
-				module = module ? ( module + 1 ) : strings[ i ];
-
-				printf("  %s\n", module );
-			}
-
-			free( strings );
-		}
-	}
-}
-
-#endif
-
-DBG_INTERFACE bool DoNewAssertDialog( const tchar *pFilename, int line, const tchar *pExpression )
+PLATFORM_INTERFACE bool DoNewAssertDialog( const tchar *pFilename, int line, const tchar *pExpression )
 {
 	LOCAL_THREAD_LOCK();
 
 	if ( AreAssertsDisabled() )
 		return false;
+
+	// If they have the old mode enabled (always break immediately), then just break right into
+	// the debugger like we used to do.
+	if ( IsDebugBreakEnabled() )
+		return true;
 
 	// Have ALL Asserts been disabled?
 	if ( !g_bAssertsEnabled )
@@ -427,38 +434,24 @@ DBG_INTERFACE bool DoNewAssertDialog( const tchar *pFilename, int line, const tc
 	if ( !AreAssertsEnabledInFileLine( pFilename, line ) )
 		return false;
 
-	// Assert not suppressed. Spew it, and optionally a backtrace.
-#if defined( POSIX )
-	if( isatty( STDERR_FILENO ) )
-	{
-		#define COLOR_YELLOW 	"\033[1;33m"
-		#define COLOR_GREEN 	"\033[1;32m"
-		#define COLOR_RED 		"\033[1;31m"
-		#define COLOR_END		"\033[0m"
-		fprintf(stderr, COLOR_YELLOW "ASSERT:" COLOR_END " " COLOR_RED "%s" COLOR_GREEN ":%i:" COLOR_END " " COLOR_RED "%s" COLOR_END "\n",
-		        pFilename, line, pExpression);
-		if ( getenv( "POSIX_ASSERT_BACKTRACE" ) )
-		{
-#if PLATFORM_GLIBC
-			SpewBacktrace();
-#endif
-		}
-	}
-	else
-#endif
-	{
-		fprintf(stderr, "ASSERT: %s:%i: %s\n", pFilename, line, pExpression);
-	}
-
-	// If they have the old mode enabled (always break immediately), then just break right into
-	// the debugger like we used to do.
-	if ( IsDebugBreakEnabled() )
-		return true;
-
-	// Now create the dialog. Just return true for old-style debug break upon failure.
+	// Now create the dialog.
 	g_Info.m_pFilename = pFilename;
 	g_Info.m_iLine = line;
 	g_Info.m_pExpression = pExpression;
+
+	if ( AssertStack() )
+	{
+		IgnoreAssertsNearby( 0 );
+		// @TODO: add-back callstack spew support
+		Warning( "%s (%d) : Assertion callstack...(NOT IMPLEMENTED IN NEW LOGGING SYSTEM.)\n", pFilename, line );
+		// Warning_SpewCallStack( 10, "%s (%d) : Assertion callstack...\n", pFilename, line );
+		return false;
+	}
+
+	if( AllAssertOnce() )
+	{
+		IgnoreAssertsNearby( 0 );
+	}
 
 	g_bBreak = false;
 
@@ -511,41 +504,127 @@ DBG_INTERFACE bool DoNewAssertDialog( const tchar *pFilename, int line, const tc
 			break;
 		}
 	}
+#elif defined( _PS3 )
+	// There are a few ways to handle this sort of assert behavior with the PS3 / Target Manager API.
+	// One is to use a DebuggerBreak per usual, and then SNProcessContinue in the TMAPI to make 
+	// the game resume after a breakpoint. (You can use snIsDebuggerPresent() to determine if 
+	// the debugger is attached, although really it doesn't matter here.) 
+	// This doesn't work because the DebuggerBreak() is actually an interrupt op, and so Continue()
+	// won't continue past it -- you need to do that from inside the ProDG debugger itself.
+	// Another is to wait on a mutex here and then trip it from the TMAPI, but there isn't
+	// a clean way to trip sync primitives from TMAPI.
+	// Another way is to suspend the thread here and have TMAPI resume it.
+	// The simplest way is to spin-wait on a shared variable that you expect the 
+	// TMAPI to poke into memory. I'm trying that.
 
-#elif defined( _WIN32 )
+	char cmdString[XBX_MAX_RCMDLENGTH];
 
-	if ( !ThreadInMainThread() )
+	// Before calling VXConsole, init the global variable that receives the result
+	g_VXConsoleAssertReturnValue = -1;
+
+	// Message VXConsole to pop up a PC-side Assert dialog
+	_snprintf( cmdString, sizeof(cmdString), "Assert() 0x%.8x File: %s\tLine: %d\t%s",
+		&g_VXConsoleAssertReturnValue, pFilename, line, pExpression );
+	XBX_SendRemoteCommand( cmdString, false );
+
+	if ( g_pValvePS3Console->IsConsoleConnected() )
 	{
-		int result = MessageBox( NULL,  pExpression, "Assertion Failed", MB_SYSTEMMODAL | MB_CANCELTRYCONTINUE );
+		// DebuggerBreak();
 
-		if ( result == IDCANCEL )
+		while ( g_VXConsoleAssertReturnValue == -1 )
 		{
-			IgnoreAssertsNearby( 0 );
+			ThreadSleep( 1000 );
 		}
-		else if ( result == IDCONTINUE )
+
+		// assume that the VX has poked the return value
+		// Respond to what the user selected
+		switch( g_VXConsoleAssertReturnValue )
 		{
+		case ASSERT_ACTION_IGNORE_FILE:
+			IgnoreAssertsInCurrentFile();
+			break;
+		case ASSERT_ACTION_IGNORE_THIS:
+			// Ignore this Assert once
+			break;
+		case ASSERT_ACTION_BREAK:
+			// Break on this Assert
 			g_bBreak = true;
+			break;
+		case ASSERT_ACTION_IGNORE_ALL:
+			// Ignore all Asserts from now on
+			g_bAssertsEnabled = false;
+			break;
+		case ASSERT_ACTION_IGNORE_ALWAYS:
+			// Ignore this Assert from now on
+			IgnoreAssertsNearby( 0 );
+			break;
+		case ASSERT_ACTION_OTHER:
+		default:
+			// nothing.
+			break;
 		}
+	}
+	else if ( g_pValvePS3Console->IsDebuggerPresent() )
+	{
+		g_bBreak = true;
 	}
 	else
 	{
-		HWND hParentWindow = FindLikelyParentWindow();
-
-		DialogBox( g_hTier0Instance, MAKEINTRESOURCE( IDD_ASSERT_DIALOG ), hParentWindow, AssertDialogProc );
+		// ignore the assert
 	}
 
-#elif defined( POSIX ) && defined ( USE_SDL )
-	static FUNC_SDL_ShowMessageBox *pfnSDLShowMessageBox = NULL;
-	if( !pfnSDLShowMessageBox )
+#elif defined( _WIN32 )
+
+if ( !g_hTier0Instance || !ThreadInMainThread() )
+{
+	int result = MessageBox( NULL,  pExpression, "Assertion Failed", MB_SYSTEMMODAL | MB_CANCELTRYCONTINUE );
+
+	if ( result == IDCANCEL )
 	{
-#ifdef OSX
-		void *ret = dlopen( "libSDL2-2.0.0.dylib", RTLD_LAZY );
-#else
-		void *ret = dlopen( "libSDL2-2.0.so.0", RTLD_LAZY );
-#endif
-		if ( ret )
-			{ pfnSDLShowMessageBox = ( FUNC_SDL_ShowMessageBox * )dlsym( ret, "SDL_ShowMessageBox" ); }
+		IgnoreAssertsNearby( 0 );
 	}
+	else if ( result == IDCONTINUE )
+	{
+		g_bBreak = true;
+	}
+}
+else
+{
+	HWND hParentWindow = FindLikelyParentWindow();
+
+	DialogBox( g_hTier0Instance, MAKEINTRESOURCE( IDD_ASSERT_DIALOG ), hParentWindow, AssertDialogProc );
+}
+
+#elif defined( LINUX ) || defined( USE_SDL )
+
+	#define COLOR_YELLOW 	"\033[1;33m"
+	#define COLOR_GREEN 	"\033[1;32m"
+	#define COLOR_RED 		"\033[1;31m"
+	#define COLOR_END		"\033[0m"
+	fprintf(stderr, COLOR_YELLOW "ASSERT: " COLOR_RED "%s" COLOR_GREEN ":%i:" COLOR_RED "%s" COLOR_END "\n", pFilename, line, pExpression);
+	
+
+	static FUNC_SDL_ShowMessageBox *pfnSDLShowMessageBox = NULL;
+    static FUNC_SDL_GetKeyboardFocus *pfnSDLGetKeyboardFocus = NULL;
+	if( getenv( "GAME_ASSERT_DIALOG" ) && !pfnSDLShowMessageBox )
+	{
+#if defined( WIN32 )
+        HMODULE ret = LoadLibrary( "SDL2.lib" );
+
+        pfnSDLShowMessageBox = ( FUNC_SDL_ShowMessageBox * )GetProcAddress( ret, "SDL_ShowMessageBox" );
+        pfnSDLGetKeyboardFocus = ( FUNC_SDL_GetKeyboardFocus * )GetProcAddress( ret, "SDL_GetKeyboardFocus" );
+#else
+
+#if defined( OSX )
+        void *ret = dlopen( "libSDL2-2.0.0.dylib", RTLD_LAZY );
+#else
+        void *ret = dlopen( "libSDL2-2.0.so.0", RTLD_LAZY );
+#endif
+
+        pfnSDLShowMessageBox = ( FUNC_SDL_ShowMessageBox * )dlsym( ret, "SDL_ShowMessageBox" );
+        pfnSDLGetKeyboardFocus = ( FUNC_SDL_GetKeyboardFocus * )dlsym( ret, "SDL_GetKeyboardFocus" );
+#endif
+    }
 
 	if( pfnSDLShowMessageBox )
 	{
@@ -587,7 +666,7 @@ DBG_INTERFACE bool DoNewAssertDialog( const tchar *pFilename, int line, const tc
 		case IDC_IGNORE_THIS:
 			// Ignore this Assert once
 			break;
-		case IDC_IGNORE_FILE:
+        case IDC_IGNORE_FILE:
 			IgnoreAssertsInCurrentFile();
 			break;
 		case IDC_IGNORE_ALWAYS:
@@ -600,15 +679,21 @@ DBG_INTERFACE bool DoNewAssertDialog( const tchar *pFilename, int line, const tc
 			break;
 		}
 	}
-	else
+	else if ( getenv( "RAISE_ON_ASSERT" ) )
 	{
-		// Couldn't SDL it up
 		g_bBreak = true;
 	}
 
-#else
-	// No dialog mode on this platform
-	g_bBreak = true;
+#elif defined( POSIX )
+
+	fprintf(stderr, "%s %i %s\n", pFilename, line, pExpression);
+	if ( getenv( "RAISE_ON_ASSERT" ) )
+	{
+		g_bBreak = true;
+	}
+
+
+
 #endif
 
 	return g_bBreak;

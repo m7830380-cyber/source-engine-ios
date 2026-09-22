@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2005, Valve Corporation, All rights reserved. =======//
 //
 // Purpose: 
 //
@@ -46,7 +46,7 @@ void CDmeEditorStringChoicesInfo::OnDestruction()
 CDmElement *CDmeEditorStringChoicesInfo::AddChoice( const char *pValueString, const char *pChoiceString )
 {
 	CDmElement *pChoice = CreateChoice( pChoiceString );
-	pChoice->SetValue<CUtlString>( "value", pValueString );
+	pChoice->SetValue( "value", pChoiceString );
 	return pChoice;
 }
 
@@ -61,7 +61,11 @@ const char *CDmeEditorStringChoicesInfo::GetChoiceValue( int nIndex ) const
 	if ( !pChoice )
 		return 0;
 
-	return pChoice->GetValue<CUtlString>( "value" );
+	CUtlSymbolLarge symbol = pChoice->GetValue< CUtlSymbolLarge >( "value" );
+	if ( symbol == UTL_INVAL_SYMBOL_LARGE )
+		return NULL;
+
+	return symbol.String();
 }
 
 
@@ -117,7 +121,8 @@ void CAttributeStringChoicePanel::PopulateComboBox( vgui::ComboBox *pComboBox )
 //-----------------------------------------------------------------------------
 void CAttributeStringChoicePanel::SetAttributeFromComboBox( vgui::ComboBox *pComboBox, KeyValues *pKeyValues )
 {
-	const char *pOldString = GetAttributeValue<CUtlString>();
+	CUtlSymbolLarge oldSymbol = GetAttributeValue<CUtlSymbolLarge>();
+	const char *pOldString = oldSymbol.String();
 	const char *pNewString = pKeyValues->GetString( "value", "" );
 	if ( pOldString == pNewString )
 		return;
@@ -135,8 +140,8 @@ void CAttributeStringChoicePanel::SetComboBoxFromAttribute( vgui::ComboBox *pCom
 	CDmeEditorStringChoicesInfo *pInfo = CastElement<CDmeEditorStringChoicesInfo>( GetEditorInfo() );
 	if ( !pInfo )
 		return;
-
-	const char *pValue = GetAttributeValue<CUtlString>();
+	CUtlSymbolLarge symbol = GetAttributeValue<CUtlSymbolLarge>();
+	const char *pValue = symbol.String();
 	int c = pInfo->GetChoiceCount();
 	for ( int i = 0; i < c; ++i )
 	{

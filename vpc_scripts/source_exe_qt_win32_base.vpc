@@ -2,8 +2,6 @@
 //
 //==================================================================================================
 
-$Macro	QT_ROOT	"$SRCDIR\thirdparty\lgpl\qt"
-
 $Include "$SRCDIR\vpc_scripts\source_exe_win_win32_base.vpc"
 $Include "$SRCDIR\vpc_scripts\qt_base.vpc"
 

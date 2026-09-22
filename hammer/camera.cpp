@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Implements a camera for the 3D view.
 //
@@ -27,7 +27,7 @@
 #define MAX_PITCH		90.0f
 
 
-static void DBG(PRINTF_FORMAT_STRING const char *fmt, ...)
+static void DBG(char *fmt, ...)
 {
     char ach[128];
     va_list va;
@@ -498,6 +498,15 @@ void CCamera::SetViewTarget(const Vector &ViewTarget)
 
 	float fPitch = -RAD2DEG(asin(ViewForward[2]));
 	SetPitch(fPitch);
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: Move the camera along a worldspace vector.
+//-----------------------------------------------------------------------------
+void CCamera::Move(Vector &vDelta)
+{
+	m_ViewPoint += vDelta;
+	BuildViewMatrix();
 }
 
 

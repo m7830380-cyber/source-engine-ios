@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -48,11 +48,7 @@
 #define IDC_FILE_RECENTMODELS8				1015
 #define IDC_FILE_EXIT						1016
 #define IDC_FILE_REFRESH					1017
-#define IDC_FILE_LOADMERGEDMODEL			1018
-#define IDC_FILE_UNLOADMERGEDMODEL			1019
 #define IDC_FILE_LOADMODEL_STEAM			1020
-#define IDC_FILE_LOADMERGEDMODEL_STEAM		1021
-#define IDC_FLUSH_SHADERS					1022
 
 #define IDC_OPTIONS_COLORBACKGROUND			1101
 #define IDC_OPTIONS_COLORGROUND				1102
@@ -66,10 +62,18 @@
 #define IDC_OPTIONS_SYNCHLMVCAMERA			1110
 #define IDC_OPTIONS_LINKHLMV				1111
 #define IDC_OPTIONS_UNLINKHLMV				1112
+#define IDC_OPTIONS_SECONDARYLIGHTS			1113
+#define IDC_OPTIONS_RUNMVSCRIPT				1114
+#define IDC_OPTIONS_SAVEMVSCRIPT			1115
 
 #define IDC_VIEW_FILEASSOCIATIONS			1201
 #define IDC_VIEW_ACTIVITIES					1202
 #define IDC_VIEW_HIDDEN						1203
+#define IDC_VIEW_SEQUENCE_INDICES			1204
+#define IDC_VIEW_SORT_SEQUENCES				1205
+#define IDC_VIEW_DOTA						1206
+#define IDC_VIEW_ORBIT_CIRCLE				1207
+#define IDC_VIEW_ORBIT_YAW					1208
 
 #define IDC_HELP_GOTOHOMEPAGE				1301
 #define IDC_HELP_ABOUT						1302
@@ -85,21 +89,12 @@
 #define IDC_ACCEL_NORMALS					1408
 #define IDC_ACCEL_TANGENTS					1409
 #define IDC_ACCEL_SHADOW					1410
+#define IDC_ACCEL_DISPLACEMENT				1411
+#define IDC_ACCEL_TESSELLATION_INC			1412
+#define IDC_ACCEL_TESSELLATION_DEC			1413
 
-#define IDC_FILE_UNLOADMERGEDMODEL1			1414
-#define IDC_FILE_UNLOADMERGEDMODEL2			1415
-#define IDC_FILE_UNLOADMERGEDMODEL3			1416
-#define IDC_FILE_UNLOADMERGEDMODEL4			1417
-#define IDC_FILE_UNLOADMERGEDMODEL5			1418
-#define IDC_FILE_UNLOADMERGEDMODEL6			1419
-#define IDC_FILE_UNLOADMERGEDMODEL7			1420
-#define IDC_FILE_UNLOADMERGEDMODEL8			1421
-#define IDC_FILE_UNLOADMERGEDMODEL9			1422
-#define IDC_FILE_UNLOADMERGEDMODEL10		1423
-#define IDC_FILE_UNLOADMERGEDMODEL11		1424
-#define IDC_FILE_UNLOADMERGEDMODEL12		1425
 
-#define IDC_FILE_UNLOADALLMERGEDMODELS		1430
+#define IDC_FILE_RECOMPILE					1427
 
 class mxMenuBar;
 class MatSysWindow;
@@ -132,7 +127,6 @@ public:
 	virtual int handleEvent (mxEvent *event);
 
 	void SendModelTransformToLinkedHlmv();
-	void SendLightRotToLinkedHlmv();
 
 	void redraw ();
 
@@ -149,7 +143,8 @@ public:
 
 	int GetCurrentHitboxSet( void );
 
-private:
+	void ExecuteMVScript( const char* p_szScriptPath );
+
 	const char* SteamGetOpenFilename();
 };
 

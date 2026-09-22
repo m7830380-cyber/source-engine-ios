@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -24,6 +24,13 @@ class COP_Model;
 
 enum LayoutType_t;
 
+enum SaveData_Reason_t
+{
+	SAVEDATA_CLOSE,				// Dialog is being closed down
+	SAVEDATA_APPLY,				// Apply was hit
+	SAVEDATA_SELECTION_CHANGED,	// Selection was changed but 
+	SAVEDATA_TOOL_TRANSFORM,
+};
 
 //
 // Wrap map classes in CObject so we can use runtime identification
@@ -35,8 +42,8 @@ class editCMapClass : public CObject, public CMapClass
 
 public:
 	// kludge:
-	MAPCLASSTYPE GetType() { return NULL; }
-	BOOL IsMapClass(MAPCLASSTYPE Type) { return FALSE; }
+	MAPCLASSTYPE GetType() const { return NULL; }
+	BOOL IsMapClass(MAPCLASSTYPE Type) const { return FALSE; }
 };
 
 
@@ -69,7 +76,7 @@ public:
 
 	BOOL SetupPages(void);
 	void CreatePages(void);
-	void SaveData(void);
+	void SaveData( SaveData_Reason_t reason );
 		
 	void LoadDataForPages(int iPage = -1);
 
@@ -88,6 +95,7 @@ public:
 
 protected:
 
+	void ApplyChanges( bool bCalledOnClose );
 	void AddObjectExpandGroups(CMapClass *pObject);
 	void ReloadData();
 

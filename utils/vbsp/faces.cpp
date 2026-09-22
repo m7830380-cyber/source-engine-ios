@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -59,7 +59,7 @@ int		num_edge_verts;
 int		edge_verts[MAX_MAP_VERTS];
 
 
-float	g_maxLightmapDimension = 32;
+float	g_maxLightmapDimension = MAX_BRUSH_LIGHTMAP_DIM_WITHOUT_BORDER;
 
 
 face_t *NewFaceFromFace (face_t *f);
@@ -848,7 +848,7 @@ void GetEdge2_InitOptimizedList()
 
 void IntSort( CUtlVector<int> &theList )
 {
-	for( int i=0; i < theList.Size()-1; i++ )
+	for( int i=0; i < theList.Count()-1; i++ )
 	{
 		if( theList[i] > theList[i+1] )
 		{
@@ -902,7 +902,7 @@ int GetEdge2 (int v1, int v2,  face_t *f)
 	{
 		// Check all edges connected to v1.
 		CUtlVector<int> &theList = g_VertEdgeList[v1];
-		for( int i=0; i < theList.Size(); i++ )
+		for( int i=0; i < theList.Count(); i++ )
 		{
 			int iEdge = theList[i];
 			edge = &dedges[iEdge];
@@ -1111,9 +1111,28 @@ face_t *TryMerge (face_t *f1, face_t *f2, Vector& planenormal)
 	newf = NewFaceFromFace (f1);
 	newf->w = nw;
 
+	// ----------------------------------------------------------------------------
+	// NOTE: Keep this list so we can build the face->brush map for portal2
+	// this lets us know every brush that contributed a chunk of this merged face
+	newf->pMergedList = new CUtlVector<side_t *>;
+	newf->pMergedList->AddToTail( f1->originalface );
+	newf->pMergedList->AddToTail( f2->originalface );
+	if ( f1->pMergedList )
+	{
+		newf->pMergedList->AddVectorToTail( *f1->pMergedList );
+		delete f1->pMergedList;
+		f1->pMergedList = NULL;
+	}
+	if ( f2->pMergedList )
+	{
+		newf->pMergedList->AddVectorToTail( *f2->pMergedList );
+		delete f2->pMergedList;
+		f2->pMergedList = NULL;
+	}
+	// ----------------------------------------------------------------------------
+
 	f1->merged = newf;
 	f2->merged = newf;
-
 	return newf;
 }
 
@@ -1678,7 +1697,7 @@ static void SubdivideFaceBySubdivSize( face_t *f, float subdivsize )
 
 	delete [] windings;
 	// We've already updated the verts and have a trilist. . let's strip it!
-	if( !triListIndices.Size() )
+	if( !triListIndices.Count() )
 	{
 		return;
 	}
@@ -1686,7 +1705,7 @@ static void SubdivideFaceBySubdivSize( face_t *f, float subdivsize )
 #ifdef USE_TRISTRIPS
 	int numTristripIndices;
 	WORD *pStripIndices = NULL;
-	Stripify( triListIndices.Size() / 3, triListIndices.Base(), &numTristripIndices, 
+	Stripify( triListIndices.Count() / 3, triListIndices.Base(), &numTristripIndices, 
 		&pStripIndices );
 	Assert( pStripIndices );
 

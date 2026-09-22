@@ -168,7 +168,7 @@ class CVoxelHash
 {
 public:
 	// Constructor, destructor
-	CVoxelHash() = default;
+	CVoxelHash();
 	~CVoxelHash();
 
 	// Call this to clear out the spatial partition and to re-initialize it given a particular world size (ISpatialPartitionInternal)
@@ -352,7 +352,6 @@ public:
 	virtual void UnhideElement( SpatialPartitionHandle_t handle, SpatialTempHandle_t tempHandle );
 
 	virtual void InstallQueryCallback( IPartitionQueryCallback *pCallback );
-	virtual void InstallQueryCallback_V1( IPartitionQueryCallback *pCallback ) { Error("Use InstallQueryCallback instead of InstallQueryCallback_V1\n"); }
 	virtual void RemoveQueryCallback( IPartitionQueryCallback *pCallback );
 
 	virtual void SuppressLists( SpatialPartitionListMask_t nListMask, bool bSuppress );
@@ -481,6 +480,10 @@ inline CVoxelTree *CSpatialPartition::VoxelTreeForHandle( SpatialPartitionHandle
 //-----------------------------------------------------------------------------
 // Constructor, destructor
 //-----------------------------------------------------------------------------
+CVoxelHash::CVoxelHash( )
+{
+}
+
 CVoxelHash::~CVoxelHash()
 {
 	Shutdown();
@@ -987,7 +990,7 @@ private:
 	int m_iTree;
 };
 
-/*
+
 class CIntersectPoint : public CPartitionVisitor
 {
 public:
@@ -1009,7 +1012,7 @@ public:
 private:
 	fltx4 m_f4Point;
 };
-*/
+
 
 class CIntersectBox : public CPartitionVisitor
 {
@@ -1040,8 +1043,8 @@ class CIntersectRay : public CPartitionVisitor
 public:
 	CIntersectRay( CVoxelTree *pPartition, const Ray_t &ray, const Vector &vecInvDelta ) : CPartitionVisitor( pPartition )
 	{
-		m_f4Start = LoadAlignedSIMD( ray.m_Start.Base() );
-		m_f4Delta = LoadAlignedSIMD( ray.m_Delta.Base() );
+		m_f4Start = LoadUnaligned3SIMD( ray.m_Start.Base() );
+		m_f4Delta = LoadUnaligned3SIMD( ray.m_Delta.Base() );
 		m_f4InvDelta = LoadUnaligned3SIMD( vecInvDelta.Base() );
 	}
 
@@ -1069,10 +1072,10 @@ class CIntersectSweptBox : public CPartitionVisitor
 public:
 	CIntersectSweptBox( CVoxelTree *pPartition, const Ray_t &ray, const Vector &vecInvDelta ) : CPartitionVisitor( pPartition )
 	{
-		m_f4Start = LoadAlignedSIMD( ray.m_Start.Base() );
-		m_f4Delta = LoadAlignedSIMD( ray.m_Delta.Base() );
-		m_f4Extents = LoadAlignedSIMD( ray.m_Extents.Base() );
+		m_f4Start = LoadUnaligned3SIMD( ray.m_Start.Base() );
+		m_f4Delta = LoadUnaligned3SIMD( ray.m_Delta.Base() );
 		m_f4InvDelta = LoadUnaligned3SIMD( vecInvDelta.Base() );
+		m_f4Extents = LoadUnaligned3SIMD( ray.m_Extents.Base() );
 	}
 
 	bool Intersects( const float *pMins, const float *pMaxs ) const
@@ -2443,10 +2446,10 @@ bool CVoxelTree::EnumerateElementsAlongRay_ExtrudedRay( SpatialPartitionListMask
 		return true;
 
 	// Setup.
-	int nStep[3] = {0, 0, 0};
-	float tMax[3] = {0.f, 0.f, 0.f};	// amount of change in t along ray until we hit the next new voxel
-	float tMin[3] = {0.f, 0.f, 0.f};	// amount of change in t along ray until we leave the last voxel
-	float tDelta[3] = {0.f, 0.f, 0.f};
+	int nStep[3];
+	float tMax[3];	// amount of change in t along ray until we hit the next new voxel
+	float tMin[3];	// amount of change in t along ray until we leave the last voxel
+	float tDelta[3];
 	m_pVoxelHash[0].LeafListExtrudedRaySetup( ray, vecInvDelta, vecMin, vecMax, voxelBounds[0][0], voxelBounds[0][1], nStep, tMin, tMax, tDelta );
 
 	int nLastVoxel1[3];
@@ -2703,6 +2706,7 @@ ISpatialPartitionInternal *SpatialPartition()
 CSpatialPartition::CSpatialPartition()
 {
 	m_nQueryCallbackCount = 0;
+	m_aHandles.SetAllocOwner( "CSpatialPartition::m_aHandles" );
 }
 
 

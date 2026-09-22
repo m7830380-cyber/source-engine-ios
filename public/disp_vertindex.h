@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -22,7 +22,7 @@
 class CVertIndex
 {
 public:
-				CVertIndex() = default;
+				CVertIndex();
 				CVertIndex( short ix, short iy );
 	
 	void		Init( short ix, short iy );
@@ -61,6 +61,11 @@ inline CVertIndex BuildOffsetVertIndex(
 // ------------------------------------------------------------------ //
 // CVertIndex inlines.
 // ------------------------------------------------------------------ //
+
+inline CVertIndex::CVertIndex()
+{
+}
+
 
 inline CVertIndex::CVertIndex( short ix, short iy )
 {

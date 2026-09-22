@@ -5,7 +5,9 @@
 //-----------------------------------------------------------------------------
 
 $Macro SRCDIR		"..\.."
-$Include "$SRCDIR\vpc_scripts\source_lib_base.vpc"
+$Macro OUTLIBDIR	"$SRCDIR\lib\public"
+
+$Include "$SRCDIR\vpc_scripts\source_lib_win32_base.vpc"
 
 $Project "Toolutils"
 {
@@ -19,6 +21,7 @@ $Project "Toolutils"
 		$File	"miniviewport.cpp"
 		$File	"recentfilelist.cpp"
 		$File	"savewindowpositions.cpp"
+		$File   "ScriptEditorPanel.cpp"
 		$File	"tool_main.cpp"
 		$File	"tooleditmenubutton.cpp"
 		$File	"ToolFileMenuButton.cpp"
@@ -42,6 +45,7 @@ $Project "Toolutils"
 		$File	"$SRCDIR\public\toolutils\miniviewport.h"
 		$File	"$SRCDIR\public\toolutils\recentfilelist.h"
 		$File	"$SRCDIR\public\toolutils\savewindowpositions.h"
+		$File	"$SRCDIR\public\toolutils\ScriptEditorPanel.h"
 		$File	"$SRCDIR\public\toolutils\ToolEditMenuButton.h"
 		$File	"$SRCDIR\public\toolutils\ToolFileMenuButton.h"
 		$File	"$SRCDIR\public\toolutils\ToolHelpMenuButton.h"

@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -20,11 +20,15 @@ int DebugDrawModelTangentT( IStudioRender *pStudioRender, DrawModelInfo_t& info,
 			        int flags = STUDIORENDER_DRAW_ENTIRE_MODEL );
 int DebugDrawModelBoneWeights( IStudioRender *pStudioRender, DrawModelInfo_t& info, matrix3x4_t *pBoneToWorld, const Vector &modelOrigin,
 			        int flags = STUDIORENDER_DRAW_ENTIRE_MODEL  );
+int DebugDrawModelVertColocation( IStudioRender *pStudioRender, DrawModelInfo_t& info, matrix3x4_t *pBoneToWorld, const Vector &modelOrigin,
+			        int flags = STUDIORENDER_DRAW_ENTIRE_MODEL  );
 int DebugDrawModelBadVerts( IStudioRender *pStudioRender, DrawModelInfo_t& info, matrix3x4_t *pBoneToWorld, const Vector &modelOrigin,
 							  int flags = STUDIORENDER_DRAW_ENTIRE_MODEL  );
 int DebugDrawModelWireframe( IStudioRender *pStudioRender, DrawModelInfo_t& info, matrix3x4_t *pBoneToWorld, const Vector &modelOrigin,
 						   const Vector &color, int flags = STUDIORENDER_DRAW_ENTIRE_MODEL );
 int DebugDrawModelTexCoord( IStudioRender *pStudioRender, const char *pMaterialName, const DrawModelInfo_t& info, matrix3x4_t *pBoneToWorld, float w, float h );
+
+int DebugModelVertExtents( IStudioRender *pStudioRender, DrawModelInfo_t& info, matrix3x4_t *pBoneToWorld, Vector &vecMin, Vector &vecMax );
 
 
 #endif // DEBUGDRAWMODEL_H

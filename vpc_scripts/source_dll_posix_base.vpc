@@ -4,8 +4,9 @@ $Include "$SRCDIR\vpc_scripts\source_posix_base.vpc"
 
 
 $MacroRequired	 "OUTBINNAME"	"$PROJECTNAME"
-$MacroRequired	 "OUTBINDIR"	"$LIBPUBLIC"
+$MacroRequired	 "OUTBINDIR"
 
+$Macro "OUTBINDIR"  "$OUTBINDIR$PLATSUBDIR"	[$LINUX64 || $OSX64]
 
 // General configuration info.
 $Configuration
@@ -33,15 +34,6 @@ $Project
 	$Folder	"Source Files"
 	{
 		$File	"$SRCDIR\public\tier0\memoverride.cpp"
-		{
-			$Configuration
-			{
-				$Compiler
-				{
-					$Create/UsePrecompiledHeader	"Not Using Precompiled Headers"
-				}
-			}
-		}
 	}
 
 	$Folder "Resources"

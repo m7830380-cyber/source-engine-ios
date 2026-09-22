@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: Defines the interface that tools implement to allow views to call
 //			through them.
@@ -51,6 +51,7 @@ enum ToolID_t
 	TOOL_PICK_ANGLES,
 	TOOL_SWEPT_HULL,
 	TOOL_PLAYERHULL_HANDLE,
+	TOOL_ENTITY_SPRINKLE,
 };
 
 enum
@@ -100,6 +101,8 @@ public:
 	//
     virtual void OnActivate() {}
     virtual void OnDeactivate() {}
+
+	virtual void RefreshToolState() {}
 
 	virtual ToolID_t GetToolID(void) { return TOOL_NONE; }
 

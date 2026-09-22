@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Implements a sphere helper for entities that have a radius of effect.
 //			Renders only when the parent entity is selected.
@@ -9,7 +9,7 @@
 #include "Box3D.h"
 #include "fgdlib/HelperInfo.h"
 #include "materialsystem/imaterialsystem.h"
-#include "materialsystem/imesh.h"
+#include "materialsystem/IMesh.h"
 #include "MapDoc.h"
 #include "MapSphere.h"
 #include "MapView2D.h"
@@ -177,7 +177,7 @@ CMapClass *CMapSphere::CopyFrom(CMapClass *pObject, bool bUpdateDependencies)
 //-----------------------------------------------------------------------------
 void CMapSphere::SetRadius(float flRadius)
 {
-	m_flRadius = V_rint(flRadius);
+	m_flRadius = rint(flRadius);
 
 	CMapEntity *pEntity = dynamic_cast <CMapEntity *>(m_pParent);
 	if (pEntity != NULL)

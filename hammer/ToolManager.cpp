@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -31,6 +31,7 @@
 #include "ToolSelection.h"
 #include "ToolMagnify.h"
 #include "ToolMaterial.h"
+#include "toolsprinkle.h"
 #include "ChunkFile.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
@@ -84,7 +85,7 @@ bool CToolManager::Init( CMapDoc *pDocument )
 	AddTool( new Clipper3D );
 	AddTool( new Cordon3D );
 	AddTool( new CToolOverlay );
-	
+	AddTool( new CToolEntitySprinkle );
 
 	return true;
 }
@@ -128,7 +129,7 @@ void CToolManager::AddTool(CBaseTool *pTool)
 	if ( GetToolForID( pTool->GetToolID() ) )
 	{
 		Assert( !pTool );
-		Msg("CToolManager::AddTool: Tool %i already registered.\n", pTool->GetToolID());
+		Msg("CToolManager::AddTool: Tool %i already registered.\n");
 		return;
 	}
 

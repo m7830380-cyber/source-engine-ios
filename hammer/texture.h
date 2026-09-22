@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Simple texture object used for sprites. Handed to the renderer
 //			for binding. May become a general purpose texture object.
@@ -50,12 +50,12 @@ class CTexture : public IEditorTexture
 		int GetImageDataRGB( void *pData = NULL );
 		int GetImageDataRGBA( void *pData = NULL );
 
-		inline int GetImageWidth( void ) const
+		inline int GetPreviewImageWidth( void ) const
 		{
 			return( m_nWidth );
 		}
 
-		inline int GetImageHeight( void ) const
+		inline int GetPreviewImageHeight( void ) const
 		{
 			return( m_nHeight );
 		}

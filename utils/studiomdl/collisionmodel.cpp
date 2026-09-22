@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Builds physics collision models from studio model source
 //
@@ -20,7 +20,9 @@
 #include <math.h>
 
 #include "vphysics/constraints.h"
+#include "collisionmodelsource.h"
 #include "collisionmodel.h"
+//#include "physics2collision.h"
 #include "cmdlib.h"
 #include "scriplib.h"
 #include "mathlib/mathlib.h"
@@ -32,11 +34,19 @@
 #include "vcollide_parse.h"
 #include "tier1/strtools.h"
 #include "tier2/tier2.h"
-#include "KeyValues.h"
-
+#include "keyvalues.h"
 #include "tier1/smartptr.h"
 #include "tier2/p4helpers.h"
+#include "datamodel/dmattributevar.h"
+#include "datamodel/dmelement.h"
 
+#ifdef MDLCOMPILE
+#include "mdlobjects/dmecollisionjoints.h"
+#endif // #ifdef MDLCOMPILE
+//#include "vphysics2_interface.h"
+
+// Finds the bone index for a particular source
+extern int FindLocalBoneNamed( const s_source_t *pSource, const char *pName );
 
 // these functions just wrap atoi/atof and check for NULL
 static float Safe_atof( const char *pString );
@@ -47,6 +57,7 @@ IPhysicsSurfaceProps *physprops = NULL;
 
 float g_WeldVertEpsilon = 0.0f;
 float g_WeldNormalEpsilon = 0.999f;
+bool g_ConvexHullCountOverride = false;
 
 //-----------------------------------------------------------------------------
 // Purpose: Contains a single convex element of a physical collision system
@@ -85,12 +96,6 @@ enum jointlimit_t
 	JOINT_LIMIT = 2,
 };
 
-// list of vertex indices that form a convex element
-struct convexlist_t
-{
-	int	firstVertIndex;
-	int numVertIndex;
-};
 
 
 //-----------------------------------------------------------------------------
@@ -135,34 +140,6 @@ struct collisionpair_t
 	collisionpair_t *pNext;
 };
 
-//-----------------------------------------------------------------------------
-// Purpose: Search a source for a bone with a specified name
-// Input  : *pSource - 
-//			*pName - 
-// Output : int boneIndex, -1 if none
-//-----------------------------------------------------------------------------
-int FindLocalBoneNamed( const s_source_t *pSource, const char *pName )
-{
-	if ( pName )
-	{
-		int i;
-		for ( i = 0; i < pSource->numbones; i++ )
-		{
-			if ( !stricmp( pName, pSource->localBone[i].name ) )
-				return i;
-		}
-
-		pName = RenameBone( pName );
-
-		for ( i = 0; i < pSource->numbones; i++ )
-		{
-			if ( !stricmp( pName, pSource->localBone[i].name ) )
-				return i;
-		}
-	}
-
-	return -1;
-}
 
 
 // Returns the index to pName in g_bonetable
@@ -176,22 +153,16 @@ int FindBoneInTable( const char *pName )
 // Purpose: Contains a complete physical joint system with constraint relationships
 //-----------------------------------------------------------------------------
 // This class is really just a namespace for a set of globals...
-class CJointedModel
+class CJointedModel: public CCollisionModelSource
 {
 public:
-	s_source_t				*m_pModel;
 	int						m_collisionCount;
 	CPhysCollisionModel		*m_pCollisionList;
 	collisionpair_t			*m_pCollisionPairs;
 	float					m_totalMass;
-	int						m_bonemap[MAXSTUDIOSRCBONES];
 	CJointConstraint		*m_pConstraintList;
 	int						m_constraintCount;
 	int						m_totalVerts;
-	int						m_maxConvex;
-	char					m_rootName[128];
-	bool					m_allowConcave;
-	bool					m_allowConcaveJoints;
 	bool					m_isMassCenterForced;
 	bool					m_noSelfCollisions;
 	bool					m_remove2d;
@@ -207,18 +178,31 @@ public:
 	CJointedModel( void );
 
 	void SetSource( s_source_t *pmodel );
+	void SetOverrideName( const char *pName )
+	{
+		if ( m_pOverrideName )
+		{
+			delete[] m_pOverrideName;
+		}
+		if ( pName )
+		{
+			int len = V_strlen(pName);
+			if ( len )
+			{
+				len++;
+				m_pOverrideName = new char[len];
+				V_strncpy( m_pOverrideName, pName, len );
+			}
+		}
+	}
 
-	void InitBoneMap( void );
-	void SkipBone( int boneIndex );
-	void MergeBones( int parent, int child );
 	void AddMergeCommand( char const *pParent, char const *pChild );
-	bool ShouldProcessBone( int boneIndex );
 	int BoneIndex( const char *pName );
-	int	RemapBone( int boneIndex ) const;
 	void AppendCollisionModel( CPhysCollisionModel *pCollide );
 	void UnlinkCollisionModel( CPhysCollisionModel *pCollide );
 	CPhysCollisionModel *GetCollisionModel( const char *pName );
 	void AppendCollisionPair( const char *pName0, const char *pName1 );
+	void RemoveCollisionPair( const char *pName0, const char *pName1 );
 	void AddConstraint( const char *pJointName, int axis, jointlimit_t jointType, float limitMin, float limitMax, float friction );
 	int CollisionIndex( const char *pName );
 	void SortCollisionList( void );
@@ -227,7 +211,6 @@ public:
 	void AllowConcaveJoints() { m_allowConcaveJoints = true; }
 	void Remove2DConvex() { m_remove2d = true; }
 	void SetMaxConvex( int newMax ) { m_maxConvex = newMax; }
-	void Simplify();
 	void DefaultDamping( float damping );
 	void DefaultRotdamping( float rotdamping );
 	void DefaultInertia( float inertia );
@@ -236,16 +219,26 @@ public:
 	void SetAutoMass( void );
 	void SetNoSelfCollisions();
 	void SetCollisionModelDefaults( CPhysCollisionModel *pModel );
+	CPhysCollisionModel *InitCollisionModel( const char *pJointName );
 
 	void JointDamping( const char *pJointName, float damping );
 	void JointRotdamping( const char *pJointName, float rotdamping );
 	void JointInertia( const char *pJointName, float inertia );
 	void JointMassBias( const char *pJointName, float massBias );
+	void FixBoneList();
+	const char *FixParent( const char *pParentName );
+	void FixCollisionHierarchy( );
+	int ProcessSingleBody();
+	int ProcessJointedModel();
+	
+	int CopyFaceVertsByBone( Vector **verts, Vector *worldVerts, int boneIndex );
+
+	void AddConvexSrc( const char *szFileName );
 
 	void AddText( const char *pText )
 	{
 		int len = strlen(pText);
-		int count = m_textCommands.Size();
+		int count = m_textCommands.Count();
 		m_textCommands.AddMultipleToTail( len );
 		memcpy( m_textCommands.Base() + count, pText, len );
 	}
@@ -257,30 +250,36 @@ public:
 	int						m_iMinAnimatedFriction;
 	int						m_iMaxAnimatedFriction;
 	bool					m_bHasAnimatedFriction;
-
-	bool					m_bAssumeWorldspace; // assume the model is already declared in worldspace, regardless of bone names
 };
 
 
 CJointedModel g_JointedModel;
-bool g_bJointed = false;
 
 CJointedModel::CJointedModel( void )
 {
 	m_pModel = NULL;
+	
+	for ( int i=0; i<=MAX_EXTRA_COLLISION_MODELS; i++ )
+	{
+		m_ExtraModels[i].m_pSrc = NULL;
+		m_ExtraModels[i].m_bConcave = false;
+	}
+
+	m_bRootCollisionIsEmpty = false;
 
 	m_collisionCount = 0;
 	m_pCollisionList = NULL;
 	m_pCollisionPairs = NULL;
 	m_totalMass = 1.0;
 
-	memset( m_bonemap, 0, sizeof(m_bonemap) );
+	m_bonemap.SetSize(0);
 	m_pConstraintList = NULL;
 	m_constraintCount = 0;
 	
 	m_totalVerts = 0;
 
 	// UNDONE: Move these defaults elsewhere?  They are all overrideable by the QC/script
+	// These defaults are also in the CDmeCollisionModel/CDmeCollisionJoints
 	m_defaultDamping = 0;
 	m_defaultRotdamping = 0;
 	m_defaultInertia = 1.0;
@@ -298,6 +297,7 @@ CJointedModel::CJointedModel( void )
 	m_iMinAnimatedFriction = 1.0f;
 	m_iMaxAnimatedFriction = 1.0f;
 	m_bHasAnimatedFriction = false;
+	m_pOverrideName = NULL;
 }
 
 
@@ -309,19 +309,7 @@ void CJointedModel::SetSource( s_source_t *pmodel )
 	m_totalVerts = pmodel->numvertices;
 }
 
-void CJointedModel::InitBoneMap( void )
-{
-	for ( int i = 0; i < m_pModel->numbones; i++ )
-	{
-		m_bonemap[i] = i;
-	}
-}
 
-void CJointedModel::SkipBone( int boneIndex )
-{
-	if ( boneIndex >= 0 )
-		m_bonemap[boneIndex] = -1;
-}
 
 void CJointedModel::AddMergeCommand( char const *pParent, char const *pChild )
 {
@@ -330,38 +318,7 @@ void CJointedModel::AddMergeCommand( char const *pParent, char const *pChild )
 	m_mergeList[i].pChild = strdup(pChild);
 }
 
-void CJointedModel::MergeBones( int parent, int child )
-{
-	if ( parent < 0 || child < 0 )
-		return;
 
-	int map = parent;
-	int safety = 0;
-	while ( m_bonemap[map] != map )
-	{
-		map = m_bonemap[map];
-		safety++;
-		// infinite loop?
-		if ( safety > m_pModel->numbones )
-			break;
-
-		if ( map < 0 )
-			break;
-	}
-
-	m_bonemap[child] = map;
-}
-
-
-bool CJointedModel::ShouldProcessBone( int boneIndex )
-{
-	if ( boneIndex >= 0 )
-	{
-		if ( m_bonemap[boneIndex] == boneIndex )
-			return true;
-	}
-	return false;
-}
 
 int CJointedModel::BoneIndex( const char *pName )
 {
@@ -375,12 +332,6 @@ int CJointedModel::BoneIndex( const char *pName )
 	return -1;
 }
 
-int	CJointedModel::RemapBone( int boneIndex ) const
-{
-	if ( boneIndex >= 0 )
-		return m_bonemap[boneIndex];
-	return boneIndex;
-}
 
 void CJointedModel::AppendCollisionModel( CPhysCollisionModel *pCollide )
 {
@@ -418,6 +369,9 @@ void CJointedModel::UnlinkCollisionModel( CPhysCollisionModel *pCollide )
 
 int CJointedModel::CollisionIndex( const char *pName )
 {
+	if ( !pName )
+		return -1;
+
 	CPhysCollisionModel *pList = m_pCollisionList;
 	int index = 0;
 	while ( pList )
@@ -509,18 +463,169 @@ void CJointedModel::SortCollisionList( void )
 	delete[] pArray;
 }
 
+void CJointedModel::AddConvexSrc( const char *szFileName )
+{
+	s_source_t *pmodel;
+
+	for ( int i=0; i<MAX_EXTRA_COLLISION_MODELS; i++ )
+	{
+		if ( m_ExtraModels[i].m_pSrc == NULL )
+		{
+
+			int nummaterials = g_nummaterials;
+			int numtextures = g_numtextures;
+
+			pmodel = Load_Source( szFileName, "SMD", false, false, false );
+			if ( !pmodel )
+				return;
+
+			// auto-remove any new materials/textures
+			if (nummaterials && numtextures && (numtextures != g_numtextures || nummaterials != g_nummaterials))
+			{
+				g_numtextures = numtextures;
+				g_nummaterials = nummaterials;
+
+				pmodel->texmap[0] = 0;
+			}
+
+			m_ExtraModels[i].m_pSrc = pmodel;
+			m_ExtraModels[i].m_matOffset.SetToIdentity();
+
+			if ( TokenAvailable() )
+			{
+				GetToken(false);
+
+				if ( !V_strncmp( token, "offset", 6 ) )
+				{
+
+					Vector vecOffsetPosition; vecOffsetPosition.Init();
+					QAngle angOffsetAngle; angOffsetAngle.Init();
+					float flScale = 1;
+
+					int nCount = sscanf( token, "offset pos[ %f %f %f ] angle[ %f %f %f ] scale[ %f ]",
+						&vecOffsetPosition.x, &vecOffsetPosition.y, &vecOffsetPosition.z,
+						&angOffsetAngle.x, &angOffsetAngle.y, &angOffsetAngle.z,
+						&flScale );
+					
+					if ( nCount == 7 )
+					{
+						// physics model SMDs are in a different space, so this hacky conversion happens 
+						// to their offset matrix so the matrices fed to the src combiner are always the same.
+						// see: https://intranet.valvesoftware.com/wiki/3D_Coordinate_Systems
+
+						matrix3x4_t matLocal; AngleMatrix( angOffsetAngle, vecOffsetPosition, matLocal );
+
+						matLocal.ScaleUpper3x3Matrix( flScale * (1.0f / g_currentscale) );
+
+						matrix3x4_t matConvert;	matConvert.InitXYZ( Vector(0,1,0), Vector(-1,0,0), Vector(0,0,1), Vector(0,0,0) );
+						ConcatTransforms( matLocal, matConvert.InverseTR(), matLocal );
+						matrix3x4_t matRotate; matRotate.InitFromQAngles( QAngle(0,90,0) );
+						ConcatTransforms( matRotate, matLocal, matLocal );
+						MatrixCopy( matLocal, m_ExtraModels[i].m_matOffset );
+
+					}
+					else
+					{
+						MdlError( "Malformed offset parameters to $addconvexsrc." );
+						return;
+					}
+
+				}
+				else
+				{
+					UnGetToken();
+				}
+			}
+
+			if ( TokenAvailable() )
+			{
+				GetToken(false);
+				if ( !V_strncmp( token, "concave", 7 ) )
+				{
+					m_ExtraModels[i].m_bConcave = true;
+				}
+				else
+				{
+					UnGetToken();
+				}
+			}
+
+			return;
+		}
+	}
+
+	MdlWarning( "Cannot add more than %i extra collision models. Ignoring $addconvexsrc \"%s\".\n", MAX_EXTRA_COLLISION_MODELS, szFileName );
+}
+
 void CJointedModel::AppendCollisionPair( const char *pName0, const char *pName1 )
 {
 	collisionpair_t *pPair = new collisionpair_t;
 	pPair->obj0 = -1;
 	pPair->obj1 = -1;
-	int jointIndex0 = FindLocalBoneNamed( m_pModel, pName0 );
+	int jointIndex0 = FindLocalBoneNamed( pName0 );
 	pPair->pName0 = (jointIndex0 >= 0) ? m_pModel->localBone[jointIndex0].name : NULL;
-	int jointIndex1 = FindLocalBoneNamed( m_pModel, pName1 );
+	int jointIndex1 = FindLocalBoneNamed( pName1 );
 	pPair->pName1 = (jointIndex1 >= 0) ? m_pModel->localBone[jointIndex1].name : NULL;
+
+	//printf("Appending collision pair: %s to %s\n", pPair->pName0, pPair->pName1 );
 
 	pPair->pNext = m_pCollisionPairs;
 	m_pCollisionPairs = pPair;
+}
+
+void CJointedModel::RemoveCollisionPair( const char *pName0, const char *pName1 )
+{
+	int jointIndex0 = FindLocalBoneNamed( pName0 );
+	const char *szName0 = m_pModel->localBone[jointIndex0].name;
+	int jointIndex1 = FindLocalBoneNamed( pName1 );
+	const char *szName1 = m_pModel->localBone[jointIndex1].name;
+	
+	collisionpair_t *pPairToRemove = NULL;
+
+	// find the pair to remove
+	collisionpair_t *pPair = m_pCollisionPairs;
+	while ( pPair )
+	{
+		if ( !strcmp( pPair->pName0, szName0 ) && !strcmp( pPair->pName1, szName1 ) )
+		{
+			pPairToRemove = pPair;
+			break;
+		}
+		pPair = pPair->pNext;
+	}
+
+	if ( pPairToRemove )
+	{
+		// find the prev
+		collisionpair_t *pPairPrev = NULL;
+
+		pPair = m_pCollisionPairs;
+		while ( pPair )
+		{
+			if ( pPair->pNext == pPairToRemove )
+			{
+				pPairPrev = pPair;
+				break;
+			}
+			pPair = pPair->pNext;
+		}
+
+		if ( pPairPrev )
+		{
+			pPairPrev->pNext = pPairToRemove->pNext;
+		}
+		else
+		{
+			// the pair we're removing is at the front
+			m_pCollisionPairs = pPairToRemove->pNext;
+		}
+
+		//printf("Removing collision pair: %s to %s\n", szName0, szName1 );
+	}
+	else
+	{
+		//MdlWarning( "No such collision pair exists: [%s] to [%s]\n", pName0, pName1 );
+	}
 }
 
 void CJointedModel::ForceMassCenter( const Vector &centerOfMass )
@@ -529,29 +634,13 @@ void CJointedModel::ForceMassCenter( const Vector &centerOfMass )
 	m_massCenterForced = centerOfMass;
 }
 
-// called before processing, after the model has been simplified.
-// Update internal state due to simplification
-void CJointedModel::Simplify()
-{
-	for ( int i = 0; i < m_pModel->numbones; i++ )
-	{
-		if ( m_pModel->boneLocalToGlobal[i] < 0 )
-		{
-			SkipBone(i);
-		}
-	}
-
-	extern int g_rootIndex;
-	const char *pAnimationRootBone = g_bonetable[g_rootIndex].name;
-
-	// merge this root bone with the root of animation
-	MergeBones( FindLocalBoneNamed( m_pModel, pAnimationRootBone ), FindLocalBoneNamed( m_pModel, m_rootName ) );
-
-}
 
 
 CPhysCollisionModel *CJointedModel::GetCollisionModel( const char *pName )
 {
+	if ( !pName )
+		return NULL;
+
 	CPhysCollisionModel *pList = m_pCollisionList;
 	while ( pList )
 	{
@@ -658,29 +747,29 @@ void CJointedModel::ComputeMass( void )
 //			*pJointName - name to give this model
 // Output : static CPhysCollisionModel
 //-----------------------------------------------------------------------------
-static CPhysCollisionModel *InitCollisionModel( CJointedModel &joints, const char *pJointName )
+CPhysCollisionModel *CJointedModel::InitCollisionModel( const char *pJointName )
 {
-	CPhysCollisionModel *pModel = joints.GetCollisionModel( pJointName );
+	CPhysCollisionModel *pModel = GetCollisionModel( pJointName );
 	if ( !pModel )
 	{
-		int boneIndex = joints.BoneIndex( pJointName );
+		int boneIndex = BoneIndex( pJointName );
 		if ( boneIndex < 0 )
 			return NULL;
 
 		pModel = new CPhysCollisionModel;
 		// this name is the same as pJointName, but guaranteed to be non-volatile (we'd have to copy pJointName)
-		pModel->m_name = joints.m_pModel->localBone[boneIndex].name;
-		if ( joints.m_pModel->localBone[boneIndex].parent >= 0 )
+		pModel->m_name = m_pModel->localBone[boneIndex].name;
+		if ( m_pModel->localBone[boneIndex].parent >= 0 )
 		{
-			pModel->m_parent = joints.m_pModel->localBone[joints.m_pModel->localBone[boneIndex].parent].name;
+			pModel->m_parent = m_pModel->localBone[m_pModel->localBone[boneIndex].parent].name;
 		}
 		else
 		{
 			pModel->m_parent = NULL;
 		}
 
-		joints.SetCollisionModelDefaults( pModel );
-		joints.AppendCollisionModel( pModel );
+		SetCollisionModelDefaults( pModel );
+		AppendCollisionModel( pModel );
 	}
 
 	return pModel;
@@ -688,7 +777,7 @@ static CPhysCollisionModel *InitCollisionModel( CJointedModel &joints, const cha
 
 void CJointedModel::JointDamping( const char *pJointName, float damping )
 {
-	CPhysCollisionModel *pModel = InitCollisionModel( *this, pJointName );
+	CPhysCollisionModel *pModel = InitCollisionModel( pJointName );
 	if ( pModel )
 	{
 		pModel->m_damping = damping;
@@ -697,7 +786,7 @@ void CJointedModel::JointDamping( const char *pJointName, float damping )
 
 void CJointedModel::JointRotdamping( const char *pJointName, float rotdamping )
 {
-	CPhysCollisionModel *pModel = InitCollisionModel( *this, pJointName );
+	CPhysCollisionModel *pModel = InitCollisionModel( pJointName );
 	if ( pModel )
 	{
 		pModel->m_rotdamping = rotdamping;
@@ -706,7 +795,7 @@ void CJointedModel::JointRotdamping( const char *pJointName, float rotdamping )
 
 void CJointedModel::JointMassBias( const char *pJointName, float massBias )
 {
-	CPhysCollisionModel *pModel = InitCollisionModel( *this, pJointName );
+	CPhysCollisionModel *pModel = InitCollisionModel( pJointName );
 	if ( pModel )
 	{
 		pModel->m_massBias = massBias;
@@ -715,7 +804,7 @@ void CJointedModel::JointMassBias( const char *pJointName, float massBias )
 
 void CJointedModel::JointInertia( const char *pJointName, float inertia )
 {
-	CPhysCollisionModel *pModel = InitCollisionModel( *this, pJointName );
+	CPhysCollisionModel *pModel = InitCollisionModel( pJointName );
 	if ( pModel )
 	{
 		pModel->m_inertia = inertia;
@@ -728,161 +817,12 @@ void CJointedModel::DefaultDrag( float drag )
 	m_defaultDrag = drag;
 }
 
-// ----------------------------------------------------------
 
 
-//-----------------------------------------------------------------------------
-// Purpose: Transforms the source's verts into "world" space
-// Input  : *psource - 
-//			*worldVerts - 
-//-----------------------------------------------------------------------------
-void ConvertToWorldSpace( CJointedModel &joints, s_source_t *psource, CUtlVector<Vector> &worldVerts )
-{
-	int i, n;
-
-	if (!joints.m_bAssumeWorldspace)
-	{
-		matrix3x4_t boneToWorld[MAXSTUDIOSRCBONES];	// bone transformation matrix
-		CalcBoneTransforms( g_panimation[0], 0, boneToWorld );
-
-		for (i = 0; i < psource->numvertices; i++)
-		{
-			Vector tmp,tmp2;
-			worldVerts[i].Init( 0, 0, 0 );
-
-			int nBoneCount = psource->vertex[i].boneweight.numbones;
-			for (n = 0; n < nBoneCount; n++)
-			{
-				// convert to Half-Life world space
-				// convert vertex into original models' bone local space
-				int localBone = psource->vertex[i].boneweight.bone[n];
-				int globalBone = psource->boneLocalToGlobal[localBone];
-				Assert( localBone >= 0 );
-				Assert( globalBone >= 0 );
-
-				matrix3x4_t boneToPose;
-				ConcatTransforms( psource->boneToPose[localBone], g_bonetable[globalBone].srcRealign, boneToPose );
-				VectorITransform( psource->vertex[i].position, boneToPose, tmp2 );
-
-				// now transform to that bone's world-space position in this animation
-				VectorTransform(tmp2, boneToWorld[globalBone], tmp );
-				VectorMA( worldVerts[i], psource->vertex[i].boneweight.weight[n], tmp, worldVerts[i] );
-			}
-		}
-	}
-	else
-	{
-		matrix3x4_t srcBoneToWorld[MAXSTUDIOSRCBONES];	// bone transformation matrix
-		BuildRawTransforms( psource, "BindPose", 0, psource->scale, psource->adjust, psource->rotation, 0, srcBoneToWorld );
-
-		for (i = 0; i < psource->numvertices; i++)
-		{
-			Vector tmp;
-			worldVerts[i].Init( 0, 0, 0 );
-
-			int nBoneCount = psource->vertex[i].boneweight.numbones;
-			for (n = 0; n < nBoneCount; n++)
-			{
-				int localBone = psource->vertex[i].boneweight.bone[n];
-				Assert( localBone >= 0 );
-
-				// convert vertex into world space
-				VectorTransform( psource->vertex[i].position, srcBoneToWorld[localBone], tmp );
-				// just assume the model is in identity space 
-				// FIXME: shouldn't this do an inverse xform of the default boneToWorld?
-
-				VectorMA( worldVerts[i], psource->vertex[i].boneweight.weight[n], tmp, worldVerts[i] );
-			}
-		}
-	}
-}
 
 
-//-----------------------------------------------------------------------------
-// Purpose: Transforms the set of verts into the space of a particular bone
-// Input  : *psource - 
-//			boneIndex - 
-//			*boneVerts - 
-//-----------------------------------------------------------------------------
-void ConvertToBoneSpace( s_source_t *psource, int boneIndex, CUtlVector<Vector> &boneVerts )
-{
-	int i;
-
-	int remapIndex = psource->boneLocalToGlobal[boneIndex];
-	matrix3x4_t boneToPose;
-	if ( remapIndex < 0 )
-	{
-		MdlWarning("Error! physics for unused bone %s\n", psource->localBone[boneIndex].name );
-		MatrixCopy( psource->boneToPose[boneIndex], boneToPose );
-	}
-	else
-	{
-		ConcatTransforms( psource->boneToPose[boneIndex], g_bonetable[remapIndex].srcRealign, boneToPose );
-	}
-
-	for (i = 0; i < psource->numvertices; i++)
-	{
-		VectorITransform(psource->vertex[i].position, boneToPose, boneVerts[i] );
-	}
-}
 
 
-//-----------------------------------------------------------------------------
-// Purpose: Test this face to see if any of its verts are assigned to a particular bone
-// Input  : &joints - 
-//			*pmodel - 
-//			*face - 
-//			boneIndex - 
-// Output : Returns true if this face has a vert assigned to boneIndex
-//-----------------------------------------------------------------------------
-bool FaceHasVertOnBone( const CJointedModel &joints, s_source_t *pSource, s_face_t *face, int boneIndex )
-{
-	if ( boneIndex < 0 )
-		return true;
-
-	int j;
-	s_boneweight_t *pweight;
-	pweight = &pSource->vertex[ face->a ].boneweight;
-	for ( j = 0; j < pweight->numbones; j++ )
-	{
-		// assigned to boneIndex?
-		if ( joints.RemapBone( pweight->bone[j] ) == boneIndex )
-			return true;
-	}
-
-	pweight = &pSource->vertex[ face->b ].boneweight;
-	for ( j = 0; j < pweight->numbones; j++ )
-	{
-		// assigned to boneIndex?
-		if ( joints.RemapBone( pweight->bone[j] ) == boneIndex )
-			return true;
-	}
-
-	pweight = &pSource->vertex[ face->c ].boneweight;
-	for ( j = 0; j < pweight->numbones; j++ )
-	{
-		// assigned to boneIndex?
-		if ( joints.RemapBone( pweight->bone[j] ) == boneIndex )
-			return true;
-	}
-
-	return false;
-
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: Fixup the pointers in this face to reference the mesh globally (source relative)
-//			(faces are mesh relative, each source has several meshes)
-// Input  : *pout - 
-//			*pmesh - 
-//			*pin - 
-//-----------------------------------------------------------------------------
-void GlobalFace( s_face_t *pout, s_mesh_t *pmesh, s_face_t *pin )
-{
-	pout->a = pmesh->vertexoffset + pin->a;
-	pout->b = pmesh->vertexoffset + pin->b;
-	pout->c = pmesh->vertexoffset + pin->c;
-}
 
 
 //-----------------------------------------------------------------------------
@@ -933,26 +873,25 @@ int CopyVertsByBone( Vector **verts, Vector *worldVerts, const CJointedModel &jo
 //			boneIndex - 
 // Output : int
 //-----------------------------------------------------------------------------
-int CopyFaceVertsByBone( Vector **verts, Vector *worldVerts, const CJointedModel &joints, int boneIndex )
+int CJointedModel::CopyFaceVertsByBone( Vector **verts, Vector *worldVerts, int boneIndex )
 {
 	int vertCount = 0;
-	s_source_t *pmodel = joints.m_pModel;
 
-	int *vertChecked = new int[pmodel->numvertices];
-	for ( int b = 0; b < pmodel->numvertices; b++ )
+	int *vertChecked = new int[m_pModel->numvertices];
+	for ( int b = 0; b < m_pModel->numvertices; b++ )
 	{
 		vertChecked[b] = 0;
 	}
 
-	for ( int i = 0; i < pmodel->nummeshes; i++ )
+	for ( int i = 0; i < m_pModel->nummeshes; i++ )
 	{
-		s_mesh_t *pmesh = pmodel->mesh + pmodel->meshindex[i];
+		s_mesh_t *pmesh = m_pModel->mesh + m_pModel->meshindex[i];
 		for ( int j = 0; j < pmesh->numfaces; j++ )
 		{
-			s_face_t *face = pmodel->face + pmesh->faceoffset + j;
+			s_face_t *face = m_pModel->face + pmesh->faceoffset + j;
 			s_face_t globalFace;
 			GlobalFace( &globalFace, pmesh, face );
-			if ( FaceHasVertOnBone( joints, pmodel, &globalFace, boneIndex ) )
+			if ( FaceHasVertOnBone( globalFace, boneIndex ) )
 			{
 				if ( !vertChecked[globalFace.a] )
 				{
@@ -1063,9 +1002,9 @@ void MarkConnectedMeshes( int *vertID, s_source_t *pmodel, int *vertMap )
 
 
 				// find min(faceid, vertID[a], vertID[b], vertID[c]);
-				int newid = min(faceid, vertID[globalFace.a]);
-				newid = min( newid, vertID[globalFace.b]);
-				newid = min( newid, vertID[globalFace.c]);
+				int newid = MIN(faceid, vertID[globalFace.a]);
+				newid = MIN( newid, vertID[globalFace.b]);
+				newid = MIN( newid, vertID[globalFace.c]);
 				
 				// mark all verts with the minimum, count the number we had to mark
 				if ( vertID[globalFace.a] != newid )
@@ -1112,18 +1051,15 @@ CPhysCollisionModel *FindObjectInList( CPhysCollisionModel *pHead, const char *p
 
 //-----------------------------------------------------------------------------
 // Purpose: Fix all bones to reference the remapped/collapsed bone structure
-// Input  : *pSource - 
-//			*pList - 
-//-----------------------------------------------------------------------------
-void FixBoneList( int *boneMap, const s_source_t *pSource, CPhysCollisionModel *pList )
+void CJointedModel::FixBoneList()
 {
-	if ( !g_bJointed )
+	if ( !m_isJointed )
 		return;
 
-	CPhysCollisionModel *pmodel = pList;
+	CPhysCollisionModel *pmodel = m_pCollisionList;
 	while ( pmodel )
 	{
-		int nodeIndex = FindLocalBoneNamed( pSource, pmodel->m_name );
+		int nodeIndex = FindLocalBoneNamed( pmodel->m_name );
 		if ( nodeIndex < 0 )
 		{
 			MdlWarning("Physics for unknown bone %s\n", pmodel->m_name );
@@ -1132,32 +1068,32 @@ void FixBoneList( int *boneMap, const s_source_t *pSource, CPhysCollisionModel *
 		{
 			int count = 0;
 			// remove simplified bones
-			while ( pSource->boneLocalToGlobal[nodeIndex] < 0 )
+			while ( m_pModel->boneLocalToGlobal[nodeIndex] < 0 )
 			{
 				if ( count++ > MAXSTUDIOSRCBONES )
 					break;
 
 				// simplified out, move up to the parent
-				nodeIndex = pSource->localBone[nodeIndex].parent;
+				nodeIndex = m_pModel->localBone[nodeIndex].parent;
 			}
 
 			if ( nodeIndex >= 0 )
 			{
 				// bone collapse may have changed parent hierarchy, and the root name. 
 				// The vertices are converted to the new reference by ConvertToWorldSpace(), as well as RemapVerticesToGlobalBones()
-				pmodel->m_name = g_bonetable[  pSource->boneLocalToGlobal[nodeIndex] ].name;
+				pmodel->m_name = g_bonetable[  m_pModel->boneLocalToGlobal[nodeIndex] ].name;
 				pmodel->m_parent = NULL;
-				int parentIndex = pSource->localBone[nodeIndex].parent;
+				int parentIndex = m_pModel->localBone[nodeIndex].parent;
 				if ( parentIndex >= 0 && parentIndex != nodeIndex )
 				{
-					parentIndex = boneMap[parentIndex];
-					if (pSource->boneLocalToGlobal[parentIndex] < 0)
+					parentIndex = m_bonemap[parentIndex];
+					if (m_pModel->boneLocalToGlobal[parentIndex] < 0)
 					{
-						pmodel->m_parent = pSource->localBone[parentIndex].name;
+						pmodel->m_parent = m_pModel->localBone[parentIndex].name;
 					}
 					else
 					{
-						pmodel->m_parent = g_bonetable[  pSource->boneLocalToGlobal[parentIndex] ].name;
+						pmodel->m_parent = g_bonetable[  m_pModel->boneLocalToGlobal[parentIndex] ].name;
 					}
 				}
 			}
@@ -1183,24 +1119,24 @@ void FixBoneList( int *boneMap, const s_source_t *pSource, CPhysCollisionModel *
 //			*pParentName - 
 // Output : const char
 //-----------------------------------------------------------------------------
-const char *FixParent( CPhysCollisionModel *pList, s_source_t *pSource, const char *pParentName )
+const char *CJointedModel::FixParent( const char *pParentName )
 {
 	while ( pParentName )
 	{
-		if ( FindObjectInList( pList, pParentName ) )
+		if ( FindObjectInList( m_pCollisionList, pParentName ) )
 		{
 			return pParentName;
 		}
-		int nodeIndex = FindLocalBoneNamed( pSource, pParentName );
+		int nodeIndex = FindLocalBoneNamed( pParentName );
 		if ( nodeIndex < 0 )
 			return NULL;
-		int parentIndex = pSource->localBone[nodeIndex].parent;
+		int parentIndex = m_pModel->localBone[nodeIndex].parent;
 		if ( parentIndex < 0 )
 		{
 			break;
 		}
 
-		pParentName = pSource->localBone[parentIndex].name;
+		pParentName = m_pModel->localBone[parentIndex].name;
 	}
 
 	return NULL;
@@ -1234,6 +1170,7 @@ void CreateCollide( CPhysCollisionModel *pBase, CPhysConvex **pElements, int ele
 	params.Defaults();
 	params.buildOuterConvexHull = true;
 	params.buildDragAxisAreas = true;
+	params.checkOptimalTracing = true;
 	Vector size = bv.maxs - bv.mins;
 
 	int largest = 0;
@@ -1438,9 +1375,9 @@ void BuildConvexListForFaceList( s_source_t *pmodel, CUtlVector<convexlist_t> &c
 			globalFace.c = weldTable[globalFace.c];
 
 
-			int newid = min(i, vertID[globalFace.a]);
-			newid = min( newid, vertID[globalFace.b]);
-			newid = min( newid, vertID[globalFace.c]);
+			int newid = MIN(i, vertID[globalFace.a]);
+			newid = MIN( newid, vertID[globalFace.b]);
+			newid = MIN( newid, vertID[globalFace.c]);
 
 			// mark all verts with the minimum, count the number we had to mark
 			if ( vertID[globalFace.a] != newid )
@@ -1511,66 +1448,64 @@ bool BuildConvexesForLists( CUtlVector<CPhysConvex *> &convexOut, const CUtlVect
 
 //-----------------------------------------------------------------------------
 // Purpose: Build a jointed collision model with constraints
-// Input  : &joints - 
 // Output : int
 //-----------------------------------------------------------------------------
-int ProcessJointedModel( CJointedModel &joints )
+int CJointedModel::ProcessJointedModel()
 {
 	if( !g_quiet )
 	{
 		printf("Processing jointed collision model\n" );
 	}
-	s_source_t *pmodel = joints.m_pModel;
 	// loop through each bone and form a collision model
-	for ( int boneIndex = 0; boneIndex < joints.m_pModel->numbones; boneIndex++ )
+	for ( int boneIndex = 0; boneIndex < m_pModel->numbones; boneIndex++ )
 	{
-		if ( !joints.ShouldProcessBone( boneIndex ) )
+		if ( !ShouldProcessBone( boneIndex ) )
 			continue;
 
 		CUtlVector<Vector> bonespaceVerts;
-		bonespaceVerts.SetCount(pmodel->numvertices);
-		ConvertToBoneSpace( joints.m_pModel, boneIndex, bonespaceVerts );
+		bonespaceVerts.SetCount(m_pModel->numvertices);
+		ConvertToBoneSpace( boneIndex, bonespaceVerts );
 		CUtlVector<s_face_t> faceList;
 		CUtlVector<convexlist_t> convexList;
 		CUtlVector<int> vertList;
 		CUtlVector<CPhysConvex *> convexOut;
 		bool bValid = false;
 
-		for ( int i = 0; i < pmodel->nummeshes; i++ )
+		for ( int i = 0; i < m_pModel->nummeshes; i++ )
 		{
-			s_mesh_t *pmesh = pmodel->mesh + pmodel->meshindex[i];
+			s_mesh_t *pmesh = m_pModel->mesh + m_pModel->meshindex[i];
 			for ( int j = 0; j < pmesh->numfaces; j++ )
 			{
-				s_face_t *face = pmodel->face + pmesh->faceoffset + j;
+				s_face_t *face = m_pModel->face + pmesh->faceoffset + j;
 				s_face_t globalFace;
 				GlobalFace( &globalFace, pmesh, face );
-				if ( FaceHasVertOnBone( joints, pmodel, &globalFace, boneIndex ) )
+				if ( FaceHasVertOnBone( globalFace, boneIndex ) )
 				{
 					faceList.AddToTail( globalFace );
 				}
 			}
 			
-			if ( joints.m_allowConcaveJoints )
+			if ( m_allowConcaveJoints )
 			{
-				BuildConvexListForFaceList( pmodel, convexList, vertList, faceList );
+				BuildConvexListForFaceList( m_pModel, convexList, vertList, faceList );
 			}
 			else
 			{
-				BuildSingleConvexForFaceList( pmodel, convexList, vertList, faceList );
+				BuildSingleConvexForFaceList( m_pModel, convexList, vertList, faceList );
 			}
 
-			bValid = BuildConvexesForLists( convexOut, convexList, vertList, bonespaceVerts, joints.m_remove2d );
+			bValid = BuildConvexesForLists( convexOut, convexList, vertList, bonespaceVerts, m_remove2d );
 		}
 
-		if ( convexOut.Count() > joints.m_maxConvex )
+		if ( convexOut.Count() > m_maxConvex )
 		{
-			MdlWarning("COSTLY COLLISION MODEL!!!! (%d parts - %d allowed)\n", convexOut.Count(), joints.m_maxConvex );
+			MdlWarning("COSTLY COLLISION MODEL!!!! (%d parts - %d allowed)\n", convexOut.Count(), m_maxConvex );
 			bValid = false;
 		}
 
 		if ( !bValid && convexOut.Count() )
 		{
-			MdlWarning("Error with convex elements of %s, building single convex!!!!\n", pmodel->filename );
+			MdlWarning("Error with convex elements of %s, building single convex!!!!\n", m_pModel->filename );
 			for ( int i = 0; i < convexOut.Count(); i++ )
 			{
 				physcollision->ConvexFree( convexOut[i] );
@@ -1582,13 +1517,13 @@ int ProcessJointedModel( CJointedModel &joints )
 		{
 			int i;
 
-			CPhysCollisionModel *pPhys = InitCollisionModel( joints, pmodel->localBone[boneIndex].name );
+			CPhysCollisionModel *pPhys = InitCollisionModel( m_pModel->localBone[boneIndex].name );
 
 			pPhys->m_mass = 1.0;
-			pPhys->m_name = joints.m_pModel->localBone[boneIndex].name;
-			if ( joints.m_pModel->localBone[boneIndex].parent >= 0 )
+			pPhys->m_name = m_pModel->localBone[boneIndex].name;
+			if ( m_pModel->localBone[boneIndex].parent >= 0 )
 			{
-				pPhys->m_parent = joints.m_pModel->localBone[joints.m_pModel->localBone[boneIndex].parent].name;
+				pPhys->m_parent = m_pModel->localBone[m_pModel->localBone[boneIndex].parent].name;
 			}
 			else
 			{
@@ -1610,7 +1545,7 @@ int ProcessJointedModel( CJointedModel &joints )
 			for ( i = 0; i < convexOut.Count(); i++ )
 			{
 				// Attach this convex data to this particular bone
-				int globalBoneIndex = joints.m_pModel->boneLocalToGlobal[boneIndex];
+				int globalBoneIndex = m_pModel->boneLocalToGlobal[boneIndex];
 				physcollision->SetConvexGameData( convexOut[i], globalBoneIndex + 1 );
 			}
 
@@ -1619,18 +1554,18 @@ int ProcessJointedModel( CJointedModel &joints )
 			{
 				printf("%-24s (%3d verts, %d convex elements) volume: %4.2f\n", pPhys->m_name, vertCount, convexOut.Count(), pPhys->m_volume );
 			}
-			joints.UnlinkCollisionModel( pPhys );
-			joints.AppendCollisionModel( pPhys );
+			UnlinkCollisionModel( pPhys );
+			AppendCollisionModel( pPhys );
 		}
 	}
 	// remove any non-physical joints at this point
-	CPhysCollisionModel *pPhys = joints.m_pCollisionList;
+	CPhysCollisionModel *pPhys = m_pCollisionList;
 	while (pPhys)
 	{
 		CPhysCollisionModel *pNext = pPhys->m_pNext;
 		if ( !pPhys->m_pCollisionData )
 		{
-			joints.UnlinkCollisionModel(pPhys);
+			UnlinkCollisionModel(pPhys);
 			delete pPhys;
 		}
 		pPhys = pNext;
@@ -1693,45 +1628,180 @@ void DumpToGLView( char const *pName, s_source_t *pmodel, Vector *worldVerts, in
 #endif
 
 
-int ProcessSingleBody( CJointedModel &joints )
+int CJointedModel::ProcessSingleBody()
 {
-	s_source_t *pmodel = joints.m_pModel;
-	// THIS CODE IS ONLY EXECUTED ON PROPS - i.e. NON-JOINTED MODELS
-	CUtlVector<Vector> worldspaceVerts;
-	worldspaceVerts.SetCount(pmodel->numvertices);
-	ConvertToWorldSpace( joints, pmodel, worldspaceVerts );
-	CUtlVector<s_face_t> faceList;
 
-	CUtlVector<convexlist_t> convexList;
-	CUtlVector<int> vertList;
-	CUtlVector<CPhysConvex *> convexOut;
-	bool bValid = false;
-	if ( joints.m_allowConcave )
+	// THIS CODE IS ONLY EXECUTED ON PROPS - i.e. NON-JOINTED MODELS
+
+
+	static const int nMaxModels = MAX_EXTRA_COLLISION_MODELS + 1;
+
+	if ( !m_bRootCollisionIsEmpty )
 	{
-		for ( int i = 0; i < pmodel->nummeshes; i++ )
+		m_ExtraModels[MAX_EXTRA_COLLISION_MODELS].m_pSrc = m_pModel;
+		m_ExtraModels[MAX_EXTRA_COLLISION_MODELS].m_bConcave = m_allowConcave;
+		m_ExtraModels[MAX_EXTRA_COLLISION_MODELS].m_matOffset.SetToIdentity();
+	}
+
+	// Transform all the extra models using their offset matrices. May as well do this right away.
+	for ( int i = 0; i < nMaxModels; i++ )
+	{
+		if ( m_ExtraModels[i].m_pSrc != NULL )
 		{
-			s_mesh_t *pmesh = pmodel->mesh + pmodel->meshindex[i];
+			if ( !m_allowConcave )
+				m_ExtraModels[i].m_bConcave = false;
+
+			// Note this doesn't even touch the verts if the offset matrix is identity (assumed no position/rotation change in that case).
+			ApplyOffsetToSrcVerts( m_ExtraModels[i].m_pSrc, m_ExtraModels[i].m_matOffset );
+		}
+	}
+
+	// the root collision model is now 'empty' meaning that the overall collision model will be built entirely from
+	// appended sources in the extra models list. If the extra model list is empty, we've got nothing to build
+	// and that's an error.
+
+	// find and group up the concave sources into a single welded source
+	s_source_t *pConcaveSrc = NULL;
+	s_source_t *pFallbackSrc = NULL;
+
+	for ( int i = 0; i < nMaxModels; i++ )
+	{
+		if ( m_ExtraModels[i].m_pSrc != NULL )
+		{
+			if ( !pFallbackSrc )
+				pFallbackSrc = m_ExtraModels[i].m_pSrc;
+
+			if ( m_ExtraModels[i].m_bConcave )
+			{
+				if ( !pConcaveSrc )
+				{
+					pConcaveSrc = m_ExtraModels[i].m_pSrc;
+				}
+				else
+				{
+					AddSrcToSrc( pConcaveSrc, m_ExtraModels[i].m_pSrc );
+				}
+			}
+		}
+	}
+
+	if ( !m_pModel )
+	{
+		if ( pConcaveSrc )
+		{
+			m_pModel = pConcaveSrc;
+		}
+		else if ( pFallbackSrc )
+		{
+			m_pModel = pFallbackSrc;
+		}
+		else
+		{
+			Error( "No valid physics source mesh!\n" );
+		}
+	}
+	
+
+
+	CUtlVector<CPhysConvex *> convexOut;
+	CUtlVector<convexlist_t> convexList;
+
+	CUtlVector<Vector> allworldspaceVerts;
+
+	bool bValid = true;
+
+	// if concavity is allowed, build out pConcaveSrc
+	if ( pConcaveSrc && m_allowConcave )
+	{
+
+		CUtlVector<Vector> worldspaceVerts;
+		worldspaceVerts.SetCount(pConcaveSrc->numvertices);
+		ConvertToWorldSpace( worldspaceVerts, pConcaveSrc );
+
+		allworldspaceVerts.AddVectorToTail( worldspaceVerts );
+	
+		CUtlVector<s_face_t> faceList;
+		CUtlVector<int> vertList;
+		
+		for ( int i = 0; i < pConcaveSrc->nummeshes; i++ )
+		{
+			s_mesh_t *pmesh = pConcaveSrc->mesh + pConcaveSrc->meshindex[i];
 			for ( int j = 0; j < pmesh->numfaces; j++ )
 			{
-				s_face_t *face = pmodel->face + pmesh->faceoffset + j;
+				s_face_t *face = pConcaveSrc->face + pmesh->faceoffset + j;
 				s_face_t globalFace;
 				GlobalFace( &globalFace, pmesh, face );
 				faceList.AddToTail( globalFace );
 			}
 		}
-		BuildConvexListForFaceList( pmodel, convexList, vertList, faceList );
-		bValid = BuildConvexesForLists( convexOut, convexList, vertList, worldspaceVerts, joints.m_remove2d );
+		BuildConvexListForFaceList( pConcaveSrc, convexList, vertList, faceList );
+		bValid = BuildConvexesForLists( convexOut, convexList, vertList, worldspaceVerts, m_remove2d );
+		
 	}
 
-	if ( convexOut.Count() > joints.m_maxConvex )
-	{
-		MdlWarning("COSTLY COLLISION MODEL!!!! (%d parts - %d allowed)\n", convexOut.Count(), joints.m_maxConvex );
-		bValid = false;
+	// now add convex extramodel sources that are themselves convex but want to be part of the larger concave system
+
+
+	// we need to do this because once we've welded a combined model together, we can't tell what pieces of it
+	// used their renderable geometry to create a convex hull. The next best (but still gross) assumption is
+	// that if the physics src is the same src as the renderable geo then it should get naively convex-hulled,
+	// then transformed into the given offset in the (possibly concave) overall physics model.
+
+	for ( int i = 0; i < nMaxModels; i++ )
+	{	
+		if ( m_ExtraModels[i].m_pSrc != NULL && !m_ExtraModels[i].m_bConcave )
+		{
+			s_source_t *pmodel = m_ExtraModels[i].m_pSrc;
+	
+			CUtlVector<Vector> worldspaceVertsExtra;
+			worldspaceVertsExtra.SetCount(pmodel->numvertices);
+			ConvertToWorldSpace( worldspaceVertsExtra, pmodel );
+
+			allworldspaceVerts.AddVectorToTail( worldspaceVertsExtra );
+	
+			CUtlVector<Vector *> vertsThisConvex;
+			vertsThisConvex.RemoveAll();
+	
+			FOR_EACH_VEC( worldspaceVertsExtra, j )
+			{
+				// transform the verts using the offset
+				//worldspaceVertsExtra[j] = VectorTransform( worldspaceVertsExtra[j], m_ExtraModels[i].m_matOffset );
+	
+				// this is ok because physcollision won't modify these, but wants non-const
+				Vector *pVert = const_cast<Vector *>(&worldspaceVertsExtra[j]);
+				vertsThisConvex.AddToTail( pVert );
+			}
+	
+			CPhysConvex *pConvex = physcollision->ConvexFromVerts( vertsThisConvex.Base(), vertsThisConvex.Count() );
+			if ( pConvex )
+			{
+				// Got something valid, attach this convex data to the root model
+				physcollision->SetConvexGameData( pConvex, 0 );
+				convexOut.AddToTail(pConvex);
+			}
+			else
+			{
+				MdlWarning("Error with convex elements of %s!\n", pmodel->filename );
+				bValid = false;
+			}
+		}
 	}
 
-	if ( !bValid && convexOut.Count() )
+	if ( convexOut.Count() > m_maxConvex )
 	{
-		MdlWarning("Error with convex elements of %s, building single convex!!!!\n", pmodel->filename );
+		if ( g_ConvexHullCountOverride )
+		{
+			MdlWarning("Allowing costly collision model. Please be careful. (%d parts - %d normally allowed)\n", convexOut.Count(), m_maxConvex);
+		}
+		else
+		{
+			MdlWarning("COSTLY COLLISION MODEL!!!! (%d parts - %d allowed)\n", convexOut.Count(), m_maxConvex);
+			bValid = false;
+		}
+	}
+
+	if ( !bValid )
+	{
 		for ( int i = 0; i < convexOut.Count(); i++ )
 		{
 			physcollision->ConvexFree( convexOut[i] );
@@ -1740,17 +1810,31 @@ int ProcessSingleBody( CJointedModel &joints )
 	}
 
 	// either we don't want concave, or there was an error building it
-	if ( !convexOut.Count() )
+	if ( !convexOut.Count() || !m_allowConcave )
 	{
-		convexlist_t elem;
-		elem.firstVertIndex = 0;
-		elem.numVertIndex = pmodel->numvertices;
-		convexList.AddToTail(elem);
-		for ( int i = 0; i < pmodel->numvertices; i++ )
+		convexOut.Purge();
+	
+		CUtlVector<Vector *> vertsThisConvex;
+		vertsThisConvex.RemoveAll();
+	
+		FOR_EACH_VEC( allworldspaceVerts, j )
 		{
-			vertList.AddToTail(i);
+			// this is ok because physcollision won't modify these, but wants non-const
+			Vector *pVert = const_cast<Vector *>(&allworldspaceVerts[j]);
+			vertsThisConvex.AddToTail( pVert );
 		}
-		BuildConvexesForLists( convexOut, convexList, vertList, worldspaceVerts, true );
+	
+		CPhysConvex *pConvex = physcollision->ConvexFromVerts( vertsThisConvex.Base(), vertsThisConvex.Count() );
+		if ( pConvex )
+		{
+			// Got something valid, attach this convex data to the root model
+			physcollision->SetConvexGameData( pConvex, 0 );
+			convexOut.AddToTail(pConvex);
+		}
+		else
+		{
+			Error( "Error building fallback convex hull!\n" );
+		}
 	}
 
 	if ( convexOut.Count() )
@@ -1761,20 +1845,20 @@ int ProcessSingleBody( CJointedModel &joints )
 		}
 
 		CPhysCollisionModel *pPhys = new CPhysCollisionModel;
-		joints.SetCollisionModelDefaults( pPhys );
+		SetCollisionModelDefaults( pPhys );
 
 		boundingvolume_t bv;
 		ClearBounds( bv.mins, bv.maxs );
-		for ( int i = worldspaceVerts.Count()-1; --i >= 0; )
+		for ( int i = allworldspaceVerts.Count()-1; --i >= 0; )
 		{
-			AddPointToBounds( worldspaceVerts[i], bv.mins, bv.maxs );
+			AddPointToBounds( allworldspaceVerts[i], bv.mins, bv.maxs );
 		}
 		CreateCollide( pPhys, convexOut.Base(), convexOut.Count(), bv );
 
 		// Init mass, write routine will distribute the total mass
 		pPhys->m_mass = 1.0;
 		char tmp[512];
-		Q_FileBase( pmodel->filename, tmp, sizeof( tmp ) );
+		Q_FileBase( m_pModel->filename, tmp, sizeof( tmp ) );
 
 		// UNDONE: Memory leak
 		char *out = new char[strlen(tmp)+1];
@@ -1782,7 +1866,7 @@ int ProcessSingleBody( CJointedModel &joints )
 		pPhys->m_name = out;
 		pPhys->m_parent = NULL;
 
-		joints.AppendCollisionModel( pPhys );
+		AppendCollisionModel( pPhys );
 	}
 	return 1;
 }
@@ -1857,7 +1941,7 @@ void CCmd_JointConstrain( CJointedModel &joints, const char *pJointName, const c
 	float friction = Safe_atof(pFriction);
 	
 	int axis = -1;
-	int jointIndex = FindLocalBoneNamed( joints.m_pModel, pJointName );
+	int jointIndex = joints.FindLocalBoneNamed( pJointName );
 	if ( !g_bCreateMakefile && jointIndex < 0 )
 	{
 		MdlWarning("Can't find joint %s\n", pJointName );
@@ -1898,6 +1982,52 @@ void CCmd_JointConstrain( CJointedModel &joints, const char *pJointName, const c
 
 
 //-----------------------------------------------------------------------------
+// Purpose: Add a constraint to our joint system
+// Input  : &joints - 
+//			*pJointName - 
+//			*pJointAxis - 
+//			*pJointType - 
+//			*pLimitMin - 
+//			*pLimitMax - 
+//-----------------------------------------------------------------------------
+#ifdef MDLCOMPILE
+void CCmd_JointConstrain( CJointedModel &joints, int nAxis, const char *pJointName, CDmeJointConstrain *pJointConstrain )
+{
+	if ( !pJointConstrain )
+		return;
+
+	const int jointIndex = FindLocalBoneNamed( joints.m_pModel, pJointName );
+	if ( !g_bCreateMakefile && jointIndex < 0 )
+	{
+		MdlWarning("Can't find joint %s\n", pJointConstrain->GetName() );
+		return;
+	}
+	pJointName = joints.m_pModel->localBone[jointIndex].name;
+
+	const float limitMin = pJointConstrain->m_aLimitMin.Get();
+	const float limitMax = pJointConstrain->m_aLimitMax.Get();
+	const float friction = pJointConstrain->m_flFriction.Get();
+
+	if ( nAxis < 0 || nAxis > 2 || limitMin > limitMax )
+	{
+		MdlError( "Invalid joint constraint for %s\nCan't build ragdoll!\n", pJointName );
+		return;
+	}
+
+	const int nJointType = pJointConstrain->m_nType.Get();
+	if ( nJointType < 0 || nJointType > 2 )
+	{
+		MdlWarning("Invalid joint constraint for %s, Unknown joint type %d (must be 0:free, 1:fixed, or 2:limit)\n", pJointName, nJointType );
+		return;
+	}
+
+	const jointlimit_t jointType = static_cast< jointlimit_t >( nJointType );
+	joints.AddConstraint( pJointName, nAxis, jointType, limitMin, limitMax, friction );
+}
+#endif // #ifdef MDLCOMPILE
+
+
+//-----------------------------------------------------------------------------
 // Purpose: Remove a joint from the system (don't create physical geometry for it)
 // Input  : &joints - 
 //			args[][ARG_SIZE] - 
@@ -1906,7 +2036,7 @@ void CCmd_JointConstrain( CJointedModel &joints, const char *pJointName, const c
 // UNDONE: Automatically skip joints that will have mass that is too low?
 void CCmd_JointSkip( CJointedModel &joints, const char *pName )
 {
-	int boneIndex = FindLocalBoneNamed( joints.m_pModel, pName );
+	int boneIndex = joints.FindLocalBoneNamed( pName );
 	if ( boneIndex < 0 )
 	{
 		MdlWarning("Can't skip joint %s, not found\n", pName );
@@ -1940,7 +2070,7 @@ void CCmd_TotalMass( CJointedModel &joints, const char *pMass )
 void CCmd_JointMerge( CJointedModel &joints, const char *pParent, const char *pChild )
 {
 	joints.AddMergeCommand( pParent, pChild );
-	joints.MergeBones( FindLocalBoneNamed( joints.m_pModel, pParent ), FindLocalBoneNamed( joints.m_pModel, pChild ) );
+	joints.MergeBones( pParent , pChild );
 }
 
 
@@ -1961,6 +2091,21 @@ void CCmd_JoinAnimatedFriction( CJointedModel &joints, const char *pMinFriction,
 	joints.m_bHasAnimatedFriction = true;
 }
 
+#ifdef MDLCOMPILE
+void CCmd_JoinAnimatedFriction( CJointedModel &joints, CDmeJointAnimatedFriction *pJaf )
+{
+	if ( !pJaf )
+		return;
+
+	joints.m_flFrictionTimeIn = pJaf->m_tTimeIn.Get().GetSeconds();
+	joints.m_flFrictionTimeOut = pJaf->m_tTimeOut.Get().GetSeconds();
+	joints.m_flFrictionTimeHold = pJaf->m_tTimeHold.Get().GetSeconds();
+	joints.m_iMinAnimatedFriction = pJaf->m_nMinFriction.Get();
+	joints.m_iMaxAnimatedFriction = pJaf->m_nMaxFriction.Get();
+	joints.m_bHasAnimatedFriction = true;
+}
+#endif // #ifdef MDLCOMPILE
+
 
 //-----------------------------------------------------------------------------
 // Purpose: Parses all legal commands inside the $collisionjoints {} block
@@ -1972,6 +2117,8 @@ void ParseCollisionCommands( CJointedModel &joints )
 
 	char args[MAX_ARGS][ARG_SIZE];
 	int argCount;
+
+	g_ConvexHullCountOverride = false;
 
 	while( GetToken( true ) )
 	{
@@ -2042,6 +2189,11 @@ void ParseCollisionCommands( CJointedModel &joints )
 		else if ( !stricmp( command, "$concave" ) )
 		{
 			joints.AllowConcave();
+		}
+		else if (!stricmp(command, "$convexhullcountoverride"))
+		{
+			argCount = ReadArgs(args, 1);
+			g_ConvexHullCountOverride = true;
 		}
 		else if ( !stricmp( command, "$masscenter" ) )
 		{
@@ -2119,6 +2271,49 @@ void ParseCollisionCommands( CJointedModel &joints )
 		{
 			joints.m_bAssumeWorldspace = true;
 		}
+		else if ( !stricmp( command, "$addconvexsrc" ) )
+		{
+			argCount = ReadArgs( args, 1 );
+			joints.AddConvexSrc( args[0] );
+		}
+		else if ( !stricmp( command, "$jointcollidealltoall" ) )
+		{
+			char szTempNames[32][256];
+			int nNumEntries = 0;
+
+			GetToken( true );
+			if ( token[0] == '{' )
+			{
+				while ( GetToken(true) && nNumEntries < 32 && strcmp( token, "}" ) )
+				{
+					V_strcpy_safe( szTempNames[nNumEntries], token );
+					nNumEntries++;
+				}
+			}
+
+			//printf( "Num entries: %i\n", nNumEntries );
+			
+			for ( int i=0; i<nNumEntries; i++ )
+			{
+				for ( int j=0; j<nNumEntries; j++ )
+				{
+					if ( i != j )
+					{
+						const char* szBoneNameA = szTempNames[i];
+						const char* szBoneNameB = szTempNames[j];
+
+						joints.AppendCollisionPair( szBoneNameA, szBoneNameB );
+					}
+				}
+			}
+
+		}
+		else if ( !stricmp( command, "$jointnocollide" ) )
+		{
+			argCount = ReadArgs( args, 2 );
+			joints.RemoveCollisionPair( args[0], args[1] );
+			joints.RemoveCollisionPair( args[1], args[0] ); // lol
+		}
 		else
 		{
 			MdlWarning("Unknown command %s in collision series\n", command );
@@ -2170,6 +2365,7 @@ void Cmd_CollisionText( void )
 	}
 }
 
+
 static bool LoadSurfaceProps( const char *pMaterialFilename )
 {
 	if ( !physprops )
@@ -2195,14 +2391,16 @@ static bool LoadSurfaceProps( const char *pMaterialFilename )
 
 void LoadSurfacePropsAll()
 {
+	static bool bIsLoaded = false;
 	// already loaded
-	if ( physprops->SurfacePropCount() )
+	if ( bIsLoaded )
 		return;
 
 	const char *SURFACEPROP_MANIFEST_FILE = "scripts/surfaceproperties_manifest.txt";
 	KeyValues *manifest = new KeyValues( SURFACEPROP_MANIFEST_FILE );
 	if ( manifest->LoadFromFile( g_pFileSystem, SURFACEPROP_MANIFEST_FILE, "GAME" ) )
 	{
+		bIsLoaded = true;
 		for ( KeyValues *sub = manifest->GetFirstSubKey(); sub != NULL; sub = sub->GetNextKey() )
 		{
 			if ( !Q_stricmp( sub->GetName(), "file" ) )
@@ -2229,9 +2427,10 @@ int DoCollisionModel( bool separateJoints )
 	s_source_t *pmodel;
 
 	// name
-	if (!GetToken(false)) return 0;
+	if ( !GetToken(false) ) 
+		return 0;
 
-	V_strcpy_safe( name, token );
+	strcpyn( name, token );
 
 	PhysicsDLLPath( "VPHYSICS.DLL" );
 
@@ -2240,6 +2439,7 @@ int DoCollisionModel( bool separateJoints )
 	if ( !physicsFactory )
 		return 0;
 
+//	g_pPhysics2 = (IPhysics2*)physicsFactory(VPHYSICS2_INTERFACE_VERSION, NULL);
 	physcollision = (IPhysicsCollision *)physicsFactory( VPHYSICS_COLLISION_INTERFACE_VERSION, NULL );
 	physprops = (IPhysicsSurfaceProps *)physicsFactory( VPHYSICS_SURFACEPROPS_INTERFACE_VERSION, NULL );
 	LoadSurfacePropsAll();
@@ -2247,21 +2447,34 @@ int DoCollisionModel( bool separateJoints )
 	int nummaterials = g_nummaterials;
 	int numtextures = g_numtextures;
 
-	pmodel = Load_Source( name, "SMD" );
-	if ( !pmodel )
-		return 0;
-
-	// auto-remove any new materials/textures
-	if (nummaterials && numtextures && (numtextures != g_numtextures || nummaterials != g_nummaterials))
+	// Special case where the input collision is empty.
+	// This means that a list of collision meshes follows.
+	if ( !V_strcmp( name, "blank" ) )
 	{
-		g_numtextures = numtextures;
-		g_nummaterials = nummaterials;
+		g_JointedModel.m_bRootCollisionIsEmpty = true;
 
-		pmodel->texmap[0] = 0;
+		// g_JointedModel.m_pModel is still NULL,
+		// which will be handled when the additional meshes are appended.
 	}
+	else
+	{
 
-	// all bones map to themselves by default
-	g_JointedModel.SetSource( pmodel );
+		pmodel = Load_Source( name, "SMD", false, false, false );
+		if ( !pmodel )
+			return 0;
+
+		// auto-remove any new materials/textures
+		if (nummaterials && numtextures && (numtextures != g_numtextures || nummaterials != g_nummaterials))
+		{
+			g_numtextures = numtextures;
+			g_nummaterials = nummaterials;
+
+			pmodel->texmap[0] = 0;
+		}
+
+		// all bones map to themselves by default
+		g_JointedModel.SetSource( pmodel );
+	}
 	
 	bool parseCommands = false;
 
@@ -2283,7 +2496,7 @@ int DoCollisionModel( bool separateJoints )
 		ParseCollisionCommands( g_JointedModel );
 	}
 
-	g_bJointed = separateJoints;
+	g_JointedModel.m_isJointed = separateJoints;
 
 	// collision script is stored in g_JointedModel for later processing
 	return 1;
@@ -2343,32 +2556,32 @@ void KeyWriteFloat( FILE *fp, const char *pKeyName, float outputData )
 }
 
 
-void FixCollisionHierarchy( CJointedModel &joints )
+void CJointedModel::FixCollisionHierarchy( )
 {
-	if ( joints.m_pCollisionList )
+	if ( m_pCollisionList )
 	{
-		CPhysCollisionModel *pPhys = joints.m_pCollisionList;
+		CPhysCollisionModel *pPhys = m_pCollisionList;
 
-		FixBoneList( joints.m_bonemap, joints.m_pModel, joints.m_pCollisionList );
+		FixBoneList( );
 		// Point parents at joints that are actually in the model
 		for ( ;pPhys; pPhys = pPhys->m_pNext )
 		{
-			pPhys->m_parent = FixParent( joints.m_pCollisionList, joints.m_pModel, pPhys->m_parent );
+			pPhys->m_parent = FixParent( pPhys->m_parent );
 		}
 
 		// sort the list so parents come before children
-		joints.SortCollisionList();
+		SortCollisionList();
 		// Now remap the constraints to bones to 
 		// Now that bones are in order, set physics indices in main bone structure
 
 		CJointConstraint *pList = g_JointedModel.m_pConstraintList;
 		while ( pList )
 		{
-			pList->m_pJointName = FixParent( joints.m_pCollisionList, joints.m_pModel, pList->m_pJointName );
+			pList->m_pJointName = FixParent( pList->m_pJointName );
 			pList = pList->m_pNext;
 		}
 
-		pPhys = joints.m_pCollisionList;
+		pPhys = m_pCollisionList;
 		int i;
 		for ( i = 0; i < g_numbones; i++ )
 		{
@@ -2422,19 +2635,21 @@ void FixCollisionHierarchy( CJointedModel &joints )
 void CollisionModel_Build( void )
 {
 	// no collision model referenced
-	if ( !g_JointedModel.m_pModel )
+	if ( !g_JointedModel.m_pModel && !g_JointedModel.m_bRootCollisionIsEmpty )
 		return;
 
+//	Physics2Collision_Build(&g_JointedModel);
+
 	g_JointedModel.Simplify();
-	if ( g_bJointed )
+	if ( g_JointedModel.m_isJointed )
 	{
-		ProcessJointedModel( g_JointedModel );
+		g_JointedModel.ProcessJointedModel( );
 	}
 	else
 	{
-		ProcessSingleBody( g_JointedModel );
+		g_JointedModel.ProcessSingleBody( );
 	}
-	FixCollisionHierarchy( g_JointedModel );
+	g_JointedModel.FixCollisionHierarchy(  );
 	if( !g_quiet )
 	{
 		printf("Collision model completed.\n" );
@@ -2496,7 +2711,7 @@ float GetCollisionModelMass()
 void CollisionModel_ExpandBBox( Vector &mins, Vector &maxs )
 {
 	// don't do fixup for ragdolls
-	if ( g_bJointed )
+	if ( g_JointedModel.m_isJointed )
 		return;
 
 	if ( g_JointedModel.m_pCollisionList )
@@ -2515,26 +2730,33 @@ void CollisionModel_ExpandBBox( Vector &mins, Vector &maxs )
 	}
 }
 
+void CollisionModel_SetName( const char *pName )
+{
+	g_JointedModel.SetOverrideName(pName);
+}
+
 //-----------------------------------------------------------------------------
 // Purpose: Write out any data that's been saved in the globals
 //-----------------------------------------------------------------------------
 void CollisionModel_Write( long checkSum )
 {
+//	Physics2Collision_Write();
+
 	if ( g_JointedModel.m_pCollisionList )
 	{
 		CPhysCollisionModel *pPhys = g_JointedModel.m_pCollisionList;
 
-		char filename[MAX_PATH];
+		char filename[512];
 
-		V_strcpy_safe( filename, gamedir );
+		strcpy( filename, gamedir );
 //		if( *g_pPlatformName )
 //		{
 //			strcat( filename, "platform_" );
 //			strcat( filename, g_pPlatformName );
 //			strcat( filename, "/" );	
 //		}
-		V_strcat_safe( filename, "models/" );	
-		V_strcat_safe( filename, outname );	
+		strcat( filename, "models/" );	
+		strcat( filename, g_JointedModel.m_pOverrideName ? g_JointedModel.m_pOverrideName : g_outname );	
 
 		float volume = TotalVolume( pPhys );
 		if ( volume <= 0 )
@@ -2572,9 +2794,10 @@ void CollisionModel_Write( long checkSum )
 			{
 				int size = physcollision->CollideSize( pPhys->m_pCollisionData );
 				fwrite( &size, sizeof(int), 1, fp );
-				char *buf = (char *)stackalloc( size );
+				char *buf = (char *)malloc( size );
 				physcollision->CollideWrite( buf, pPhys->m_pCollisionData );
 				fwrite( buf, size, 1, fp );
+				free( buf );
 				pPhys = pPhys->m_pNext;
 			}
 
@@ -2706,9 +2929,9 @@ void CollisionModel_Write( long checkSum )
 			fprintf( fp, "}\n" );
 
 			char terminator = 0;
-			if ( g_JointedModel.m_textCommands.Size() )
+			if ( g_JointedModel.m_textCommands.Count() )
 			{
-				fwrite( g_JointedModel.m_textCommands.Base(), g_JointedModel.m_textCommands.Size(), 1, fp );
+				fwrite( g_JointedModel.m_textCommands.Base(), g_JointedModel.m_textCommands.Count(), 1, fp );
 			}
 			fwrite( &terminator, sizeof(terminator), 1, fp );
 			fclose( fp );
@@ -2722,3 +2945,229 @@ void CollisionModel_Write( long checkSum )
 }
 
 
+
+#ifdef MDLCOMPILE
+//-----------------------------------------------------------------------------
+// mdlcompile
+//
+// mdlcompile uses DMX instead of qc as input
+//-----------------------------------------------------------------------------
+
+
+//-----------------------------------------------------------------------------
+// Purpose: Parses all legal commands inside the $collisionjoints {} block
+// Input  : &joints - 
+//-----------------------------------------------------------------------------
+void ParseCollisionCommands( CJointedModel &joints, CDmeCollisionModel *pCollisionModel, bool bStaticProp )
+{
+	g_JointedModel.m_isJointed = false;
+
+	if ( !pCollisionModel )
+		return;
+
+	if ( pCollisionModel->m_bAutomaticMassComputation.Get() )
+	{
+		joints.SetAutoMass();
+	}
+	else
+	{
+		joints.SetTotalMass( pCollisionModel->m_flMass.Get() );
+	}
+
+	joints.DefaultInertia( pCollisionModel->m_flInertia.Get() );
+	joints.DefaultDamping( pCollisionModel->m_flDamping.Get() );
+	joints.DefaultRotdamping( pCollisionModel->m_flRotationalDamping.Get() );
+	joints.DefaultDrag( pCollisionModel->m_flDrag.Get() );
+	joints.SetMaxConvex( pCollisionModel->m_nMaxConvexPieces.Get() );
+
+	if ( pCollisionModel->m_bRemove2D.Get() )
+	{
+		joints.Remove2DConvex();
+	}
+
+	float flWeld = pCollisionModel->m_flWeldPositionTolerance.Get();
+	if ( flWeld < 0.0f )
+	{
+		MdlWarning( "1003: Invalid negative weld position tolerance (%f), ignoring and using %f\n", flWeld, g_WeldVertEpsilon );
+	}
+	else
+	{
+		g_WeldVertEpsilon = flWeld;
+	}
+
+	flWeld = pCollisionModel->m_flWeldNormalTolerance.Get();
+	if ( flWeld < 0.0f )
+	{
+		MdlWarning( "1004: Invalid negative weld normal tolerance (%f), ignoring and using %f\n", flWeld, g_WeldNormalEpsilon );
+	}
+	else if ( flWeld > g_WeldNormalEpsilon )
+	{
+		MdlWarning( "1005: Weld normal tolerance too high (%f), should be slightly less than 1, ignoring and using %f\n", flWeld, g_WeldNormalEpsilon );
+	}
+	else
+	{
+		g_WeldNormalEpsilon = flWeld;
+	}
+
+	if ( pCollisionModel->m_bConcave.Get() )
+	{
+		joints.AllowConcave();
+	}
+
+	if ( pCollisionModel->m_bForceMassCenter.Get() )
+	{
+		joints.ForceMassCenter( pCollisionModel->m_vecMassCenter.Get() );
+	}
+
+	joints.m_bAssumeWorldspace = pCollisionModel->m_bAssumeWorldSpace.Get();
+
+	CDmeCollisionJoints *pCollisionJoints = CastElement< CDmeCollisionJoints >( pCollisionModel );
+	if ( !bStaticProp && pCollisionJoints )
+	{
+		if ( pCollisionJoints->m_bConcavePerJoint.Get() )
+		{
+			joints.AllowConcaveJoints();
+		}
+
+		if ( !pCollisionJoints->m_bSelfCollisions.Get() )
+		{
+			joints.SetNoSelfCollisions();
+		}
+
+		if ( !pCollisionJoints->m_bSelfCollisions.Get() )
+		{
+			joints.SetNoSelfCollisions();
+		}
+
+		CCmd_JointRoot( joints, pCollisionJoints->m_RootBone.Get() );
+		CCmd_JoinAnimatedFriction( joints, pCollisionJoints->m_AnimatedFriction.GetElement() );
+
+		for ( int nIndex = 0; nIndex < pCollisionJoints->m_JointSkipList.Count(); ++nIndex )
+		{
+			CCmd_JointSkip( joints, pCollisionJoints->m_JointSkipList.Element( nIndex ) );
+		}
+
+		int nValidCollisionJointCount = 0;
+
+		for ( int i = 0; i < pCollisionJoints->m_JointList.Count(); ++i )
+		{
+			const CDmeCollisionJoint *pCollisionJoint = pCollisionJoints->m_JointList.Element( i );
+			if ( !pCollisionJoint )
+			{
+				MdlWarning( "1000: root.collisionModel.joints[ %d ] exists but undefined\n", i );
+				continue;
+			}
+
+			const char *pJointName = pCollisionJoint->GetName();
+
+			const int nJointIndex = FindLocalBoneNamed( joints.m_pModel, pJointName );
+			if ( !g_bCreateMakefile && nJointIndex < 0 )
+			{
+				MdlWarning( "1001: root.collisionModel.joints[ %d ] refers to joint \"%s\" but that joint wasn't defined in the model\n", i, pJointName );
+				continue;
+			}
+
+			pJointName = joints.m_pModel->localBone[nJointIndex].name;
+
+			joints.JointMassBias( pJointName, pCollisionJoint->m_flMassBias.Get() );
+			joints.JointInertia( pJointName, pCollisionJoint->m_flInertia.Get() );
+			joints.JointDamping( pJointName, pCollisionJoint->m_flDamping.Get() );
+			joints.JointRotdamping( pJointName, pCollisionJoint->m_flRotDamping.Get() );
+
+			CCmd_JointConstrain( joints, 0 /* x */, pJointName, pCollisionJoint->m_ConstrainX.GetElement() );
+			CCmd_JointConstrain( joints, 1 /* y */, pJointName, pCollisionJoint->m_ConstrainY.GetElement() );
+			CCmd_JointConstrain( joints, 2 /* z */, pJointName, pCollisionJoint->m_ConstrainZ.GetElement() );
+
+			for ( int j = 0; j < pCollisionJoint->m_JointMergeList.Count(); ++j )
+			{
+				CCmd_JointMerge( joints, pJointName, pCollisionJoint->m_JointMergeList.Element( j ) );
+			}
+
+			for ( int j = 0; j < pCollisionJoint->m_JointMergeList.Count(); ++j )
+			{
+				joints.AppendCollisionPair( pJointName, pCollisionJoint->m_JointCollideList.Element( j ) );
+			}
+
+			++nValidCollisionJointCount;
+		}
+
+		if ( nValidCollisionJointCount > 0 )
+		{
+			g_JointedModel.m_isJointed = true;
+		}
+		else
+		{
+			MdlWarning( "1002: Jointed collision model defined but no valid CDmeCollisionJoints, making non-jointed\n" );
+		}
+	}
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: Entry point for script processing. This version is used by preprocessed files
+//-----------------------------------------------------------------------------
+int DoCollisionModel( s_source_t *pSource, CDmElement *pInfo, bool bStaticProp )
+{
+	CDmeCollisionModel *pCollisionModel = CastElement< CDmeCollisionModel >( pInfo );
+	if ( !pCollisionModel )
+		return 0;
+
+	PhysicsDLLPath( "VPHYSICS.DLL" );
+	CreateInterfaceFn physicsFactory = GetPhysicsFactory();
+	if ( !physicsFactory )
+		return 0;
+
+	physcollision = (IPhysicsCollision *)physicsFactory( VPHYSICS_COLLISION_INTERFACE_VERSION, NULL );
+	physprops = (IPhysicsSurfaceProps *)physicsFactory( VPHYSICS_SURFACEPROPS_INTERFACE_VERSION, NULL );
+	LoadSurfacePropsAll();
+
+	// all bones map to themselves by default
+	g_JointedModel.SetSource( pSource );
+	ParseCollisionCommands( g_JointedModel, pCollisionModel, bStaticProp );
+
+	// collision script is stored in g_JointedModel for later processing
+	return 1;
+}
+
+
+//-----------------------------------------------------------------------------
+// Loads collision text keyvalues from the passed string
+// NOTE: It essentially is packing keyValues -> keyValues
+//       but the .phy keyValues parser is more particular
+//       about the format
+//-----------------------------------------------------------------------------
+void LoadCollisionText( const char *pszKeyValues )
+{
+	if ( !pszKeyValues )
+		return;
+
+	KeyValues *pKeyValues = new KeyValues( "collisionText" );
+	if ( !pKeyValues )
+		return;
+
+	KeyValues::AutoDelete adKeyValues( pKeyValues );
+
+	pKeyValues->UsesEscapeSequences( true );
+	if ( pKeyValues->LoadFromBuffer( "collisionText", pszKeyValues ) )
+	{
+		while ( pKeyValues )
+		{
+			g_JointedModel.AddText( pKeyValues->GetName() );
+
+			g_JointedModel.AddText( " {" );
+			for ( KeyValues *pKv = pKeyValues->GetFirstValue(); pKv; pKv = pKv->GetNextValue() )
+			{
+				g_JointedModel.AddText( " \"" );
+				g_JointedModel.AddText( pKv->GetName() );
+				g_JointedModel.AddText( "\" \"" );
+				g_JointedModel.AddText( pKv->GetString() );
+				g_JointedModel.AddText( "\"" );
+			}
+			g_JointedModel.AddText( " }\n" );
+
+			pKeyValues = pKeyValues->GetNextKey();
+		}
+	}
+}
+
+#endif // #ifdef MDLCOMPILE

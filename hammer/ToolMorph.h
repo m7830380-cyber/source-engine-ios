@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -63,8 +63,6 @@ public:
 	bool SelectAt( CMapView *pView, UINT nFlags, const Vector2D &vPoint );
 
 	void GetMorphBounds(Vector &mins, Vector &maxs, bool bReset);
-
-	void SnapSelectedToGrid( int nGridSpacing );
 
 	// Toggle mode - vertex & edge, vertex, edge.
 	void ToggleMode();

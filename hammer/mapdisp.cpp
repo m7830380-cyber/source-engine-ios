@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -18,7 +18,7 @@
 #include "GlobalFunctions.h"
 #include "SaveInfo.h"
 #include "TextureSystem.h"
-#include "materialsystem/imesh.h"
+#include "materialsystem/IMesh.h"
 #include "Material.h"
 #include "CollisionUtils.h"
 #include "CModel.h"
@@ -30,6 +30,7 @@
 #include "Color.h"
 #include "render2d.h"
 #include "faceeditsheet.h"
+#include "..\FoW\FoW.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include <tier0/memdbgon.h>
@@ -62,10 +63,12 @@ CMapDisp::CMapDisp()
 	m_bSubdiv = false;
 	m_bReSubdiv = false;
 
-	m_CoreDispInfo.InitDispInfo( 4, 0, 0, NULL, NULL, NULL ); 
+	m_CoreDispInfo.InitDispInfo( 4, 0, 0, NULL, NULL, NULL, 0, NULL ); 
 	Paint_Init( DISPPAINT_CHANNEL_POSITION );
 
 	m_CoreDispInfo.AllowedVerts_Clear();
+
+	m_FoWTriSoupID = -1;
 }
 
 //-----------------------------------------------------------------------------
@@ -81,8 +84,15 @@ CMapDisp::~CMapDisp()
 	m_aBuildableIndices.Purge();
 	m_aForcedBuildableIndices.Purge();
 
-	m_aRemoveVerts.Purge();
-	m_aRemoveIndices.Purge();
+	if ( m_FoWTriSoupID != -1 )
+	{
+		CFoW	*pFoW = CMapDoc::GetActiveMapDoc()->GetFoW();
+		if ( pFoW )
+		{
+			pFoW->RemoveTriSoup( m_FoWTriSoupID );
+		}
+		m_FoWTriSoupID = -1;
+	}
 }
 
 
@@ -217,6 +227,39 @@ void CMapDisp::PostCreate( void )
 	CMapFace *pFace = static_cast<CMapFace*>( GetParent() );
 	if ( pFace )
 		DetailObjects::BuildAnyDetailObjects(pFace);
+
+	CFoW	*pFoW = CMapDoc::GetActiveMapDoc()->GetFoW();
+
+	CMapFace *pParent = NULL;
+	CMapSolid *pParent2 = NULL;
+
+	pParent = dynamic_cast< CMapFace * >( GetParent() );
+	if ( pParent )
+	{
+		pParent2 = dynamic_cast< CMapSolid * >( pParent->GetParent() );
+	}
+	if ( pFoW && pParent2 && pParent2->IsVisible() )
+	{
+		if ( m_FoWTriSoupID == -1 )
+		{
+			m_FoWTriSoupID = pFoW->AddTriSoup();
+		}
+
+		pFoW->ClearTriSoup( m_FoWTriSoupID );
+
+		unsigned short *pTriList = m_CoreDispInfo.GetRenderIndexList();
+		int listSize = m_CoreDispInfo.GetRenderIndexCount();
+		for( int i = 0; i < listSize; i += 3 )
+		{
+			// get the triangle
+			Vector v[3];
+			GetVert( pTriList[i], v[0] );
+			GetVert( pTriList[i+1], v[1] );
+			GetVert( pTriList[i+2], v[2] );
+
+			pFoW->AddTri( m_FoWTriSoupID, v[ 0 ], v[ 1 ], v[ 2 ] );
+		}
+	}
 }
 
 
@@ -239,8 +282,11 @@ CMapDisp *CMapDisp::CopyFrom( CMapDisp *pMapDisp, bool bUpdateDependencies )
 	int pointCount = pFromSurf->GetPointCount();
 	pToSurf->SetPointCount( pointCount );
 
-	Vector2D v2;
-	Vector v3;
+	Vector2D	v2;
+	Vector		v3;
+	Vector4D	vBlend, vAlphaBlend;
+	Vector		vColor1, vColor2, vColor3, vColor4;
+
 	for( int i = 0; i < pointCount; i++ )
 	{
 		pFromSurf->GetPoint( i, v3 );
@@ -290,6 +336,9 @@ CMapDisp *CMapDisp::CopyFrom( CMapDisp *pMapDisp, bool bUpdateDependencies )
 		SetFlatVert( i, v3 );
 
 		SetAlpha( i, pMapDisp->GetAlpha( i ) );
+
+		pMapDisp->GetMultiBlend( i, vBlend, vAlphaBlend, vColor1, vColor2, vColor3, vColor4 );
+		SetMultiBlend( i, vBlend, vAlphaBlend, vColor1, vColor2, vColor3, vColor4 );
 	}
 
 	int renderCount = pMapDisp->m_CoreDispInfo.GetRenderIndexCount();
@@ -1520,37 +1569,6 @@ void CMapDisp::UpdateBuildable( void )
 	}
 }
 
-
-//-----------------------------------------------------------------------------
-// Purpose:
-//-----------------------------------------------------------------------------
-void CMapDisp::UpdateTriRemove( void )
-{
-	// Create the remove render list.
-	m_aRemoveVerts.RemoveAll();
-	m_aRemoveIndices.RemoveAll();
-
-	int nTriCount = GetTriCount();
-	for ( int iTri = 0; iTri < nTriCount; ++iTri )
-	{
-		if ( IsTriRemove( iTri ) )
-		{
-			unsigned short triIndices[3];
-			unsigned short newTriIndices[3];
-			GetTriIndices( iTri, triIndices[0], triIndices[1], triIndices[2] );
-
-			newTriIndices[0] = m_aRemoveVerts.AddToTail( m_CoreDispInfo.GetDispVert( triIndices[0] ) );
-			newTriIndices[1] = m_aRemoveVerts.AddToTail( m_CoreDispInfo.GetDispVert( triIndices[1] ) );
-			newTriIndices[2] = m_aRemoveVerts.AddToTail( m_CoreDispInfo.GetDispVert( triIndices[2] ) );
-
-			m_aRemoveIndices.AddToTail( newTriIndices[0] );
-			m_aRemoveIndices.AddToTail( newTriIndices[1] );
-			m_aRemoveIndices.AddToTail( newTriIndices[2] );
-		}
-	}
-}
-
-
 //-----------------------------------------------------------------------------
 // Purpose:
 //-----------------------------------------------------------------------------
@@ -1617,6 +1635,10 @@ void CMapDisp::CreateShoreOverlays( CMapFace *pFace, Shoreline_t *pShoreline )
 			pShoreline->AddSegment( vecPoints[0], vecPoints[1], vecNormal, pFace->plane.dist, pFace, GetEditHandle() );
 		}
 	}
+}
+
+void CMapDisp::PostUpdate(Notify_Dependent_t eNotifyType)
+{
 }
 
 //-----------------------------------------------------------------------------
@@ -2055,14 +2077,6 @@ void CMapDisp::Render3D( CRender3D *pRender, bool bIsSelected, SelectionState_t 
 		RenderBuildableSurface( pRender, bIsSelected, faceSelectionState );
 	}
 
-	// Note: the rendermode == textured is so that this only gets rendered
-	//       once per frame.
-	bool bDispRemoveMode = CMapDoc::GetActiveMapDoc()->IsDispDrawRemove();
-	if ( bDispRemoveMode && RenderingModeIsTextured( renderMode ))
-	{
-		RenderRemoveSurface( pRender, bIsSelected, faceSelectionState );
-	}
-
 	bool bDispRemovedVertMode = CMapDoc::GetActiveMapDoc()->IsDispDrawRemovedVerts();
 	if ( bDispRemovedVertMode && RenderingModeIsTextured( renderMode ) )
 	{
@@ -2118,6 +2132,7 @@ void CMapDisp::RenderOverlaySurface( CRender3D *pRender, bool bIsSelected, Selec
 void CMapDisp::RenderSurface( CRender3D *pRender, bool bIsSelected, SelectionState_t faceSelectionState )
 {
 	Color color( 255, 255, 255, 255 );
+	Vector	test( 1.0f, 0.0f, 0.0f );
 	CalcColor( pRender, bIsSelected, faceSelectionState, color );
 
 	int numVerts = m_CoreDispInfo.GetSize();
@@ -2132,31 +2147,38 @@ void CMapDisp::RenderSurface( CRender3D *pRender, bool bIsSelected, SelectionSta
 	for (int i = 0; i < numVerts; ++i )
 	{
 		meshBuilder.Position3fv( pVert[i].m_Vert.Base() );
-		meshBuilder.Color4ub( color[0], color[1], color[2], 255 - ( unsigned char )( pVert[i].m_Alpha ) );
+		meshBuilder.Color4ub( color[0], color[1], color[2], ( unsigned char )( pVert[i].m_Alpha ) );
 		meshBuilder.Normal3fv( pVert[i].m_Normal.Base() );
 		meshBuilder.TangentS3fv( pVert[i].m_TangentS.Base() );
 		meshBuilder.TangentT3fv( pVert[i].m_TangentT.Base() );
 		meshBuilder.TexCoord2fv( 0, pVert[i].m_TexCoord.Base() );
 		meshBuilder.TexCoord2fv( 1, pVert[i].m_LuxelCoords[0].Base() );
+
+		// multiblend uses these
+		meshBuilder.TexCoord4fv( 3, pVert[ i ].m_AlphaBlend.Base() );
+		Vector4D	temp;
+		temp.Init( pVert[ i ].m_vBlendColors[ 0 ], pVert[ i ].m_MultiBlend.x );
+		meshBuilder.TexCoord4fv( 4, temp.Base() );
+		temp.Init( pVert[ i ].m_vBlendColors[ 1 ], pVert[ i ].m_MultiBlend.y );
+		meshBuilder.TexCoord4fv( 5, temp.Base() );
+		temp.Init( pVert[ i ].m_vBlendColors[ 2 ], pVert[ i ].m_MultiBlend.z );
+		meshBuilder.TexCoord4fv( 6, temp.Base() );
+		temp.Init( pVert[ i ].m_vBlendColors[ 3 ], pVert[ i ].m_MultiBlend.w );
+		meshBuilder.TexCoord4fv( 7, temp.Base() );
+
+		// lightmapped_4wayblend uses this
+		meshBuilder.Specular4fv( pVert[ i ].m_MultiBlend.Base() );
+
 		meshBuilder.AdvanceVertex();
 	}
 	
 	unsigned short *pIndex = m_CoreDispInfo.GetRenderIndexList();
-	int nTriCount = numIndices / 3;
-	for ( int nTri = 0; nTri < nTriCount; ++nTri )
+	for ( int i = 0; i < numIndices; ++i )
 	{
-		if ( !IsTriRemove( nTri ) )
-		{
-			int nIndex = nTri * 3;
-			meshBuilder.Index( pIndex[nIndex] );
-			meshBuilder.AdvanceIndex();
-			meshBuilder.Index( pIndex[nIndex+1] );
-			meshBuilder.AdvanceIndex();
-			meshBuilder.Index( pIndex[nIndex+2] );
-			meshBuilder.AdvanceIndex();
-		}
+		meshBuilder.Index( pIndex[i] );
+		meshBuilder.AdvanceIndex();
 	}
-
+	
 	meshBuilder.End();
 	pMesh->Draw();
 }
@@ -2362,61 +2384,6 @@ void CMapDisp::RenderBuildableSurface( CRender3D *pRender, bool bIsSelected, Sel
 			meshBuilder.AdvanceIndex();
 		}
 		
-		meshBuilder.End();
-		pMesh->Draw();
-
-		pRender->PopRenderMode();
-	}
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: Render the displacement surface removed faces.
-//-----------------------------------------------------------------------------
-void CMapDisp::RenderRemoveSurface( CRender3D *pRender, bool bIsSelected, SelectionState_t faceSelectionState )
-{
-	// Remove Faces
-	for ( int iPass = 0; iPass < 2; ++iPass )
-	{
-		Color color;
-		if ( iPass == 0 )
-		{
-			pRender->PushRenderMode( RENDER_MODE_TRANSLUCENT_FLAT );
-			color.SetColor( 0, 0, 255, 64 );
-			CalcColor( pRender, false, faceSelectionState, color );
-		}
-		else
-		{
-			pRender->PushRenderMode( RENDER_MODE_WIREFRAME );
-			color.SetColor( 0, 0, 255, 255 );
-			CalcColor( pRender, false, faceSelectionState, color );
-		}
-
-		int nVertCount = m_aRemoveVerts.Count();
-		int nIndexCount = m_aRemoveIndices.Count();
-
-		CMeshBuilder meshBuilder;
-		CMatRenderContextPtr pRenderContext( MaterialSystemInterface() );
-		IMesh *pMesh = pRenderContext->GetDynamicMesh();
-		meshBuilder.Begin( pMesh, MATERIAL_TRIANGLES, nVertCount, nIndexCount );
-
-		CoreDispVert_t **ppVerts = m_aRemoveVerts.Base();
-		for (int i = 0; i < nVertCount; ++i )
-		{
-			CoreDispVert_t *pVert = ppVerts[i];
-
-			meshBuilder.Position3fv( pVert->m_Vert.Base() );
-			meshBuilder.Color4ub( color[0], color[1], color[2], color[3] );
-			meshBuilder.Normal3fv( pVert->m_Normal.Base() );
-			meshBuilder.AdvanceVertex();
-		}
-
-		unsigned short *pIndex = m_aRemoveIndices.Base();
-		for ( int i = 0; i < nIndexCount; ++i )
-		{
-			meshBuilder.Index( pIndex[i] );
-			meshBuilder.AdvanceIndex();
-		}
-
 		meshBuilder.End();
 		pMesh->Draw();
 
@@ -3055,6 +3022,217 @@ ChunkFileResult_t CMapDisp::LoadDispAlphasKeyCallback(const char *szKey, const c
 	return(ChunkFile_Ok);
 }
 
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+// Input  : *pFile - 
+//			*pDisp - 
+// Output : ChunkFileResult_t
+//-----------------------------------------------------------------------------
+ChunkFileResult_t CMapDisp::LoadDispMultiBlendCallback(CChunkFile *pFile, CMapDisp *pDisp)
+{
+	return(pFile->ReadChunk((KeyHandler_t)LoadDispMultiBlendKeyCallback, pDisp));
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+// Input  : *pFile - 
+//			*pDisp - 
+// Output : ChunkFileResult_t
+//-----------------------------------------------------------------------------
+ChunkFileResult_t CMapDisp::LoadDispMultiBlendKeyCallback(const char *szKey, const char *szValue, CMapDisp *pDisp)
+{
+	if (!strnicmp(szKey, "row", 3))
+	{
+		char szBuf[MAX_KEYVALUE_LEN];
+		strcpy(szBuf, szValue);
+
+		int nCols = (1 << pDisp->GetPower()) + 1;
+		int nRow = atoi(&szKey[3]);
+
+		char *pszNext = strtok(szBuf, " ");
+
+		int nIndex = nRow * nCols;
+
+		while (pszNext != NULL) 
+		{
+			Vector4D	vMultiBlend;
+
+			vMultiBlend.x = ( float )atof( pszNext );
+			pszNext = strtok(NULL, " ");
+			vMultiBlend.y = ( float )atof( pszNext );
+			pszNext = strtok(NULL, " ");
+			vMultiBlend.z = ( float )atof( pszNext );
+			pszNext = strtok(NULL, " ");
+			vMultiBlend.w = ( float )atof( pszNext );
+			pszNext = strtok(NULL, " ");
+
+			pDisp->m_CoreDispInfo.SetMultiBlend( nIndex, vMultiBlend );
+
+			nIndex++;
+		}
+	}
+
+	return(ChunkFile_Ok);
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+// Input  : *pFile - 
+//			*pDisp - 
+// Output : ChunkFileResult_t
+//-----------------------------------------------------------------------------
+ChunkFileResult_t CMapDisp::LoadDispAlphaBlendCallback(CChunkFile *pFile, CMapDisp *pDisp)
+{
+	return(pFile->ReadChunk((KeyHandler_t)LoadDispAlphaBlendKeyCallback, pDisp));
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+// Input  : *pFile - 
+//			*pDisp - 
+// Output : ChunkFileResult_t
+//-----------------------------------------------------------------------------
+ChunkFileResult_t CMapDisp::LoadDispAlphaBlendKeyCallback(const char *szKey, const char *szValue, CMapDisp *pDisp)
+{
+	if (!strnicmp(szKey, "row", 3))
+	{
+		char szBuf[MAX_KEYVALUE_LEN];
+		strcpy(szBuf, szValue);
+
+		int nCols = (1 << pDisp->GetPower()) + 1;
+		int nRow = atoi(&szKey[3]);
+
+		char *pszNext = strtok(szBuf, " ");
+
+		int nIndex = nRow * nCols;
+
+		while (pszNext != NULL) 
+		{
+			Vector4D	vMultiBlend;
+
+			vMultiBlend.x = ( float )atof( pszNext );
+			pszNext = strtok(NULL, " ");
+			vMultiBlend.y = ( float )atof( pszNext );
+			pszNext = strtok(NULL, " ");
+			vMultiBlend.z = ( float )atof( pszNext );
+			pszNext = strtok(NULL, " ");
+			vMultiBlend.w = ( float )atof( pszNext );
+			pszNext = strtok(NULL, " ");
+
+			pDisp->m_CoreDispInfo.SetAlphaBlend( nIndex, vMultiBlend );
+
+			nIndex++;
+		}
+	}
+
+	return(ChunkFile_Ok);
+}
+
+
+static int nMultiBlendColorIndex = 0;
+
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+// Input  : *pFile - 
+//			*pDisp - 
+// Output : ChunkFileResult_t
+//-----------------------------------------------------------------------------
+ChunkFileResult_t CMapDisp::LoadDispMultiBlendColorCallback0(CChunkFile *pFile, CMapDisp *pDisp)
+{
+	nMultiBlendColorIndex = 0;
+
+	return(pFile->ReadChunk((KeyHandler_t)LoadDispMultiBlendColorKeyCallback, pDisp));
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+// Input  : *pFile - 
+//			*pDisp - 
+// Output : ChunkFileResult_t
+//-----------------------------------------------------------------------------
+ChunkFileResult_t CMapDisp::LoadDispMultiBlendColorCallback1(CChunkFile *pFile, CMapDisp *pDisp)
+{
+	nMultiBlendColorIndex = 1;
+
+	return(pFile->ReadChunk((KeyHandler_t)LoadDispMultiBlendColorKeyCallback, pDisp));
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+// Input  : *pFile - 
+//			*pDisp - 
+// Output : ChunkFileResult_t
+//-----------------------------------------------------------------------------
+ChunkFileResult_t CMapDisp::LoadDispMultiBlendColorCallback2(CChunkFile *pFile, CMapDisp *pDisp)
+{
+	nMultiBlendColorIndex = 2;
+
+	return(pFile->ReadChunk((KeyHandler_t)LoadDispMultiBlendColorKeyCallback, pDisp));
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+// Input  : *pFile - 
+//			*pDisp - 
+// Output : ChunkFileResult_t
+//-----------------------------------------------------------------------------
+ChunkFileResult_t CMapDisp::LoadDispMultiBlendColorCallback3(CChunkFile *pFile, CMapDisp *pDisp)
+{
+	nMultiBlendColorIndex = 3;
+
+	return(pFile->ReadChunk((KeyHandler_t)LoadDispMultiBlendColorKeyCallback, pDisp));
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+// Input  : *pFile - 
+//			*pDisp - 
+// Output : ChunkFileResult_t
+//-----------------------------------------------------------------------------
+ChunkFileResult_t CMapDisp::LoadDispMultiBlendColorKeyCallback(const char *szKey, const char *szValue, CMapDisp *pDisp)
+{
+	if (!strnicmp(szKey, "row", 3))
+	{
+		char szBuf[MAX_KEYVALUE_LEN];
+		strcpy(szBuf, szValue);
+
+		int nCols = (1 << pDisp->GetPower()) + 1;
+		int nRow = atoi(&szKey[3]);
+
+		char *pszNext = strtok(szBuf, " ");
+
+		int nIndex = nRow * nCols;
+
+		while (pszNext != NULL) 
+		{
+			Vector	vMultiBlendColor;
+
+			vMultiBlendColor.x = ( float )atof( pszNext );
+			pszNext = strtok(NULL, " ");
+			vMultiBlendColor.y = ( float )atof( pszNext );
+			pszNext = strtok(NULL, " ");
+			vMultiBlendColor.z = ( float )atof( pszNext );
+			pszNext = strtok(NULL, " ");
+
+			pDisp->m_CoreDispInfo.SetMultiBlendColor( nIndex, nMultiBlendColorIndex, vMultiBlendColor );
+
+			nIndex++;
+		}
+	}
+
+	return(ChunkFile_Ok);
+}
+
+
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 ChunkFileResult_t CMapDisp::LoadDispTriangleTagsCallback(CChunkFile *pFile, CMapDisp *pDisp)
@@ -3198,6 +3376,14 @@ ChunkFileResult_t CMapDisp::LoadVMF(CChunkFile *pFile)
 	Handlers.AddHandler("alphas", (ChunkHandler_t)LoadDispAlphasCallback, this);
 	Handlers.AddHandler("triangle_tags", (ChunkHandler_t)LoadDispTriangleTagsCallback, this );
 	Handlers.AddHandler("allowed_verts", (ChunkHandler_t)LoadDispAllowedVertsCallback, this );
+	Handlers.AddHandler("multiblend", (ChunkHandler_t)LoadDispMultiBlendCallback, this );
+	Handlers.AddHandler("alphablend", (ChunkHandler_t)LoadDispAlphaBlendCallback, this );
+
+	Assert( MAX_MULTIBLEND_CHANNELS == 4 );
+	Handlers.AddHandler("multiblend_color_0", (ChunkHandler_t)LoadDispMultiBlendColorCallback0, this );
+	Handlers.AddHandler("multiblend_color_1", (ChunkHandler_t)LoadDispMultiBlendColorCallback1, this );
+	Handlers.AddHandler("multiblend_color_2", (ChunkHandler_t)LoadDispMultiBlendColorCallback2, this );
+	Handlers.AddHandler("multiblend_color_3", (ChunkHandler_t)LoadDispMultiBlendColorCallback3, this );
 
 	pFile->PushHandlers(&Handlers);
 	ChunkFileResult_t eResult = pFile->ReadChunk((KeyHandler_t)LoadDispKeyCallback, this);
@@ -3616,6 +3802,163 @@ ChunkFileResult_t CMapDisp::SaveVMF(CChunkFile *pFile, CSaveInfo *pSaveInfo)
 			eResult = pFile->EndChunk();
 		}
 	}
+
+	//
+	// Save multi blends
+	//
+	if ( eResult == ChunkFile_Ok )
+	{
+		int		nRows = (1 << power) + 1;
+		int		nCols = nRows;
+		bool	bHasMultiBlend = false;
+
+		for (int nRow = 0; nRow < nRows; nRow++)
+		{
+			for (int nCol = 0; nCol < nCols; nCol++)
+			{
+				int			nIndex = nRow * nCols + nCol;
+				Vector4D	vMultiBlend;
+
+				m_CoreDispInfo.GetMultiBlend( nIndex, vMultiBlend );
+
+				if ( vMultiBlend != Vector4D( 0.0f, 0.0f, 0.0f, 0.0f ) )
+				{
+					bHasMultiBlend = true;
+					break;
+				}
+			}
+		}
+
+		if ( bHasMultiBlend == true )
+		{
+			eResult = pFile->BeginChunk( "multiblend" );
+			if( eResult == ChunkFile_Ok )
+			{
+				char szBuf[ MAX_KEYVALUE_LEN ];
+				char szTemp[ 256 ];
+
+				for (int nRow = 0; nRow < nRows; nRow++)
+				{
+					bool bFirst = true;
+					szBuf[ 0 ] = '\0';
+
+					for (int nCol = 0; nCol < nCols; nCol++)
+					{
+						int nIndex = nRow * nCols + nCol;
+
+						if ( bFirst == false )
+						{
+							strcat( szBuf, " " );
+						}
+
+						bFirst = false;
+						Vector4D	vMultiBlend;
+
+						m_CoreDispInfo.GetMultiBlend( nIndex, vMultiBlend );
+						Assert( MAX_MULTIBLEND_CHANNELS == 4 );
+						sprintf( szTemp, "%g %g %g %g", vMultiBlend.x, vMultiBlend.y, vMultiBlend.z, vMultiBlend.w );
+						strcat( szBuf, szTemp );
+					}
+
+					char szKey[ 10 ];
+					sprintf( szKey, "row%d", nRow );
+					eResult = pFile->WriteKeyValue( szKey, szBuf );
+				}
+			}
+
+			if (eResult == ChunkFile_Ok)
+			{
+				eResult = pFile->EndChunk();
+			}
+
+			eResult = pFile->BeginChunk( "alphablend" );
+			if( eResult == ChunkFile_Ok )
+			{
+				char szBuf[ MAX_KEYVALUE_LEN ];
+				char szTemp[ 256 ];
+
+				for (int nRow = 0; nRow < nRows; nRow++)
+				{
+					bool bFirst = true;
+					szBuf[ 0 ] = '\0';
+
+					for (int nCol = 0; nCol < nCols; nCol++)
+					{
+						int nIndex = nRow * nCols + nCol;
+
+						if ( bFirst == false )
+						{
+							strcat( szBuf, " " );
+						}
+
+						bFirst = false;
+						Vector4D	vAlphaBlend;
+
+						m_CoreDispInfo.GetAlphaBlend( nIndex, vAlphaBlend );
+						Assert( MAX_MULTIBLEND_CHANNELS == 4 );
+						sprintf( szTemp, "%g %g %g %g", vAlphaBlend.x, vAlphaBlend.y, vAlphaBlend.z, vAlphaBlend.w );
+						strcat( szBuf, szTemp );
+					}
+
+					char szKey[ 10 ];
+					sprintf( szKey, "row%d", nRow );
+					eResult = pFile->WriteKeyValue( szKey, szBuf );
+				}
+			}
+
+			if (eResult == ChunkFile_Ok)
+			{
+				eResult = pFile->EndChunk();
+			}
+
+			for( int i = 0; i < MAX_MULTIBLEND_CHANNELS; i++ )
+			{
+				char temp[ 128 ];
+
+				sprintf( temp, "multiblend_color_%d", i );
+				eResult = pFile->BeginChunk( temp );
+				if( eResult == ChunkFile_Ok )
+				{
+					char szBuf[ MAX_KEYVALUE_LEN ];
+					char szTemp[ 256 ];
+
+					for (int nRow = 0; nRow < nRows; nRow++)
+					{
+						bool bFirst = true;
+						szBuf[ 0 ] = '\0';
+
+						for (int nCol = 0; nCol < nCols; nCol++)
+						{
+							int nIndex = nRow * nCols + nCol;
+
+							if ( bFirst == false )
+							{
+								strcat( szBuf, " " );
+							}
+
+							bFirst = false;
+							Vector4D	vMultiBlend, vAlphaBlend;
+							Vector		vColorBlend[ MAX_MULTIBLEND_CHANNELS ];
+
+							m_CoreDispInfo.GetMultiBlend( nIndex, vMultiBlend, vAlphaBlend, vColorBlend[ 0 ], vColorBlend[ 1 ], vColorBlend[ 2 ], vColorBlend[ 3 ] );
+							sprintf( szTemp, "%g %g %g", vColorBlend[ i ].x, vColorBlend[ i ].y, vColorBlend[ i ].z );
+							strcat( szBuf, szTemp );
+						}
+
+						char szKey[ 10 ];
+						sprintf( szKey, "row%d", nRow );
+						eResult = pFile->WriteKeyValue( szKey, szBuf );
+					}
+				}
+
+				if (eResult == ChunkFile_Ok)
+				{
+					eResult = pFile->EndChunk();
+				}
+			}
+		}
+	}
+
 
 	if (eResult == ChunkFile_Ok)
 	{

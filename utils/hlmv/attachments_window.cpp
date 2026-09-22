@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -16,6 +16,8 @@
 #define IDC_ATTACHMENT_TRANSLATION	(IDC_ATTACHMENT_WINDOW_FIRST+2)
 #define IDC_ATTACHMENT_ROTATION		(IDC_ATTACHMENT_WINDOW_FIRST+3)
 #define IDC_ATTACHMENT_QC_STRING	(IDC_ATTACHMENT_WINDOW_FIRST+4)
+
+#define IDC_ATTACHMENT_NUDGE (IDC_ATTACHMENT_WINDOW_FIRST+5)
 
 
 CAttachmentsWindow::CAttachmentsWindow( ControlPanel* pParent )	: mxWindow( pParent, 0, 0, 0, 0 )
@@ -62,6 +64,50 @@ void CAttachmentsWindow::Init( )
 	left = 5;
 	new mxLabel( this, left, top, 60, 18, "QC String" );
 	m_cQCString = new mxLineEdit2( this, left + 70, top, 400, 25, "$attachment \"controlpanel0_ur\" \"Vgui\" -22 -15 4 rotate 0 0 0", IDC_ATTACHMENT_QC_STRING );
+
+	top = 5;
+	left = 550;
+
+	m_bTranslateXLargeMinus = new mxButton( this, left, top, 30, 20, "-X", IDC_ATTACHMENT_NUDGE );
+	m_bTranslateXSmallMinus = new mxButton( this, left+30, top, 30, 20, "-x", IDC_ATTACHMENT_NUDGE );
+	m_bTranslateXSmallPlus  = new mxButton( this, left+70, top, 30, 20, "+x", IDC_ATTACHMENT_NUDGE );
+	m_bTranslateXLargePlus  = new mxButton( this, left+100, top, 30, 20, "+X", IDC_ATTACHMENT_NUDGE );
+
+	top += 20;
+
+	m_bTranslateYLargeMinus = new mxButton( this, left, top, 30, 20, "-Y", IDC_ATTACHMENT_NUDGE );
+	m_bTranslateYSmallMinus = new mxButton( this, left+30, top, 30, 20, "-y", IDC_ATTACHMENT_NUDGE );
+	m_bTranslateYSmallPlus  = new mxButton( this, left+70, top, 30, 20, "+y", IDC_ATTACHMENT_NUDGE );
+	m_bTranslateYLargePlus  = new mxButton( this, left+100, top, 30, 20, "+Y", IDC_ATTACHMENT_NUDGE );
+
+	top += 20;
+
+	m_bTranslateZLargeMinus = new mxButton( this, left, top, 30, 20, "-Z", IDC_ATTACHMENT_NUDGE );
+	m_bTranslateZSmallMinus = new mxButton( this, left+30, top, 30, 20, "-z", IDC_ATTACHMENT_NUDGE );
+	m_bTranslateZSmallPlus  = new mxButton( this, left+70, top, 30, 20, "+z", IDC_ATTACHMENT_NUDGE );
+	m_bTranslateZLargePlus  = new mxButton( this, left+100, top, 30, 20, "+Z", IDC_ATTACHMENT_NUDGE );
+
+	top += 30;
+
+	m_bRotateXLargeMinus = new mxButton( this, left, top, 30, 20, "-XR", IDC_ATTACHMENT_NUDGE );
+	m_bRotateXSmallMinus = new mxButton( this, left+30, top, 30, 20, "-xr", IDC_ATTACHMENT_NUDGE );
+	m_bRotateXSmallPlus  = new mxButton( this, left+70, top, 30, 20, "+xr", IDC_ATTACHMENT_NUDGE );
+	m_bRotateXLargePlus  = new mxButton( this, left+100, top, 30, 20, "+XR", IDC_ATTACHMENT_NUDGE );
+
+	top += 20;
+
+	m_bRotateYLargeMinus = new mxButton( this, left, top, 30, 20, "-YR", IDC_ATTACHMENT_NUDGE );
+	m_bRotateYSmallMinus = new mxButton( this, left+30, top, 30, 20, "-yr", IDC_ATTACHMENT_NUDGE );
+	m_bRotateYSmallPlus  = new mxButton( this, left+70, top, 30, 20, "+yr", IDC_ATTACHMENT_NUDGE );
+	m_bRotateYLargePlus  = new mxButton( this, left+100, top, 30, 20, "+YR", IDC_ATTACHMENT_NUDGE );
+
+	top += 20;
+
+	m_bRotateZLargeMinus = new mxButton( this, left, top, 30, 20, "-ZR", IDC_ATTACHMENT_NUDGE );
+	m_bRotateZSmallMinus = new mxButton( this, left+30, top, 30, 20, "-zr", IDC_ATTACHMENT_NUDGE );
+	m_bRotateZSmallPlus  = new mxButton( this, left+70, top, 30, 20, "+zr", IDC_ATTACHMENT_NUDGE );
+	m_bRotateZLargePlus  = new mxButton( this, left+100, top, 30, 20, "+ZR", IDC_ATTACHMENT_NUDGE );
+
 }
 
 
@@ -221,6 +267,82 @@ int CAttachmentsWindow::handleEvent (mxEvent *event)
 		}
 		break;
 	
+		case IDC_ATTACHMENT_NUDGE:
+		{
+			int iAttachment = g_viewerSettings.m_iEditAttachment;
+			if ( iAttachment >= 0 && iAttachment < pHdr->GetNumAttachments() )
+			{
+				mstudioattachment_t &pAttachment = (mstudioattachment_t &)pHdr->pAttachment( iAttachment );
+				
+				QAngle vRotation( 0, 0, 0 );
+				char curText[512];
+				m_cRotation->getText( curText, sizeof( curText ) );
+				sscanf( curText, "%f %f %f", &vRotation.x, &vRotation.y, &vRotation.z );
+				
+				Vector vTrans( 0, 0, 0 );
+				m_cTranslation->getText( curText, sizeof( curText ) );
+				sscanf( curText, "%f %f %f", &vTrans.x, &vTrans.y, &vTrans.z );
+
+				if ( Q_strcmp( event->widget->getLabel(), "+x" ) == 0 )
+					vTrans.x += 0.1f;
+				if ( Q_strcmp( event->widget->getLabel(), "-x" ) == 0 )
+					vTrans.x -= 0.1f;
+				if ( Q_strcmp( event->widget->getLabel(), "+X" ) == 0 )
+					vTrans.x += 1;
+				if ( Q_strcmp( event->widget->getLabel(), "-X" ) == 0 )
+					vTrans.x -= 1;
+
+				if ( Q_strcmp( event->widget->getLabel(), "+y" ) == 0 )
+					vTrans.y += 0.1f;
+				if ( Q_strcmp( event->widget->getLabel(), "-y" ) == 0 )
+					vTrans.y -= 0.1f;
+				if ( Q_strcmp( event->widget->getLabel(), "+Y" ) == 0 )
+					vTrans.y += 1;
+				if ( Q_strcmp( event->widget->getLabel(), "-Y" ) == 0 )
+					vTrans.y -= 1;
+
+				if ( Q_strcmp( event->widget->getLabel(), "+z" ) == 0 )
+					vTrans.z += 0.1f;
+				if ( Q_strcmp( event->widget->getLabel(), "-z" ) == 0 )
+					vTrans.z -= 0.1f;
+				if ( Q_strcmp( event->widget->getLabel(), "+Z" ) == 0 )
+					vTrans.z += 1;
+				if ( Q_strcmp( event->widget->getLabel(), "-Z" ) == 0 )
+					vTrans.z -= 1;
+
+				if ( Q_strcmp( event->widget->getLabel(), "+xr" ) == 0 )
+					vRotation.x += 0.1f;
+				if ( Q_strcmp( event->widget->getLabel(), "-xr" ) == 0 )
+					vRotation.x -= 0.1f;
+				if ( Q_strcmp( event->widget->getLabel(), "+XR" ) == 0 )
+					vRotation.x += 1;
+				if ( Q_strcmp( event->widget->getLabel(), "-XR" ) == 0 )
+					vRotation.x -= 1;
+
+				if ( Q_strcmp( event->widget->getLabel(), "+yr" ) == 0 )
+					vRotation.y += 0.1f;
+				if ( Q_strcmp( event->widget->getLabel(), "-yr" ) == 0 )
+					vRotation.y -= 0.1f;
+				if ( Q_strcmp( event->widget->getLabel(), "+YR" ) == 0 )
+					vRotation.y += 1;
+				if ( Q_strcmp( event->widget->getLabel(), "-YR" ) == 0 )
+					vRotation.y -= 1;
+
+				if ( Q_strcmp( event->widget->getLabel(), "+zr" ) == 0 )
+					vRotation.z += 0.1f;
+				if ( Q_strcmp( event->widget->getLabel(), "-zr" ) == 0 )
+					vRotation.z -= 0.1f;
+				if ( Q_strcmp( event->widget->getLabel(), "+ZR" ) == 0 )
+					vRotation.z += 1;
+				if ( Q_strcmp( event->widget->getLabel(), "-ZR" ) == 0 )
+					vRotation.z -= 1;
+
+				AngleMatrix( vRotation, vTrans, pAttachment.local );
+				UpdateStrings( true, true, true );
+			}
+		}
+		break;
+
 		default:
 			return 0;
 	}

@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -32,6 +32,7 @@ public:
 	enum { IDD = IDD_OPTIONS_MAIN };
 	CButton	m_cLoadWinPos;
 	CButton	m_cIndependentWin;
+	CButton	m_cEnablePerforceIntegration;
 	CButton m_cEnableAutosave;
 	CStatic	m_cAutosaveTimeLabel;
 	CEdit	m_cAutosaveTime;
@@ -64,6 +65,7 @@ protected:
 	//{{AFX_MSG(COPTGeneral)
 	virtual BOOL OnInitDialog(void);
 	afx_msg void OnIndependentwindows(void);
+	afx_msg void OnEnablePerforceIntegration(void);
 	afx_msg void OnEnableAutosave(void);
 	afx_msg void OnBrowseAutosaveDir(void);
 	//}}AFX_MSG

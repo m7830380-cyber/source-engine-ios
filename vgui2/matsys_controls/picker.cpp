@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2005, Valve Corporation, All rights reserved. =======
 //
 // Purpose: 
 //
@@ -6,12 +6,15 @@
 
 #include "filesystem.h"
 #include "matsys_controls/picker.h"
-#include "tier1/KeyValues.h"
+#include "tier1/keyvalues.h"
 #include "vgui_controls/ListPanel.h"
 #include "vgui_controls/TextEntry.h"
 #include "vgui_controls/Button.h"
 #include "vgui/ISurface.h"
 #include "vgui/IInput.h"
+
+// NOTE: This has to be the last file included!
+#include "tier0/memdbgon.h"
 
 
 using namespace vgui;
@@ -74,17 +77,17 @@ CPicker::~CPicker()
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-void CPicker::OnKeyCodePressed( KeyCode code )
+void CPicker::OnKeyCodeTyped( KeyCode code )
 {
 	if (( code == KEY_UP ) || ( code == KEY_DOWN ) || ( code == KEY_PAGEUP ) || ( code == KEY_PAGEDOWN ))
 	{
-		KeyValues *pMsg = new KeyValues("KeyCodePressed", "code", code);
+		KeyValues *pMsg = new KeyValues("KeyCodeTyped", "code", code);
 		vgui::ipanel()->SendMessage( m_pPickerBrowser->GetVPanel(), pMsg, GetVPanel());
 		pMsg->deleteThis();
 	}
 	else
 	{
-		BaseClass::OnKeyCodePressed( code );
+		BaseClass::OnKeyCodeTyped( code );
 	}
 }
 
@@ -170,7 +173,7 @@ void CPicker::OnTextChanged( )
 	m_Filter.SetLength( nLength );
 	if ( nLength > 0 )
 	{
-		m_pFilterList->GetText( m_Filter.GetForModify(), nLength+1 );
+		m_pFilterList->GetText( m_Filter.Get(), nLength+1 );
 	}
 	RefreshChoiceList();
 }

@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -27,7 +27,7 @@
 #include "tier1/strtools.h"
 #include "faceposer_models.h"
 #include "UtlBuffer.h"
-#include "filesystem.h"
+#include "FileSystem.h"
 #include "iscenetokenprocessor.h"
 #include "choreoviewcolors.h"
 #include "MatSysWin.h"
@@ -209,9 +209,9 @@ void RampTool::GetScrubHandleRect( RECT& rcHandle, float scrub, bool clipped )
 //-----------------------------------------------------------------------------
 void RampTool::DrawScrubHandle( CChoreoWidgetDrawHelper& drawHelper, RECT& rcHandle, float scrub, bool reference )
 {
-	HBRUSH br = CreateSolidBrush( reference ? RGB( 150, 0, 0 ) : RGB( 0, 150, 100 ) );
+	HBRUSH br = CreateSolidBrush( ColorToRGB( reference ? Color( 150, 0, 0 ) : Color( 0, 150, 100 ) ) );
 
-	COLORREF areaBorder = RGB( 230, 230, 220 );
+	Color areaBorder = Color( 230, 230, 220 );
 
 	drawHelper.DrawColoredLine( areaBorder,
 		PS_SOLID, 1, 0, rcHandle.top, w2(), rcHandle.top );
@@ -246,7 +246,7 @@ void RampTool::DrawScrubHandle( CChoreoWidgetDrawHelper& drawHelper, RECT& rcHan
 
 	rcText.left += ( textw - len ) / 2;
 
-	drawHelper.DrawColoredText( "Arial", 9, 500, RGB( 255, 255, 255 ), rcText, sz );
+	drawHelper.DrawColoredText( "Arial", 9, 500, Color( 255, 255, 255 ), rcText, sz );
 
 	DeleteObject( br );
 }
@@ -426,7 +426,7 @@ void RampTool::redraw()
 			RECT rcUndo = rcText;
 			OffsetRect( &rcUndo, 0, 2 );
 
-			drawHelper.DrawColoredText( "Small Fonts", 8, FW_NORMAL, RGB( 0, 100, 0 ), rcUndo,
+			drawHelper.DrawColoredText( "Small Fonts", 8, FW_NORMAL, Color( 0, 100, 0 ), rcUndo,
 				"Undo:  %i/%i", current, total );
 		}
 
@@ -436,7 +436,7 @@ void RampTool::redraw()
 		// 
 		RECT rcTextLine = rcText;
 
-		drawHelper.DrawColoredText( "Arial", 11, 900, RGB( 200, 0, 0 ), rcTextLine,
+		drawHelper.DrawColoredText( "Arial", 11, 900, Color( 200, 0, 0 ), rcTextLine,
 			"Event:  %s",
 			ev->GetName() );
 
@@ -463,7 +463,7 @@ void RampTool::redraw()
 
 		Q_snprintf( sz, sizeof( sz ), "%.2f", lefttime + ev->GetStartTime() );
 
-		drawHelper.DrawColoredText( "Arial", 9, FW_NORMAL, RGB( 0, 0, 0 ), timeRect, sz );
+		drawHelper.DrawColoredText( "Arial", 9, FW_NORMAL, Color( 0, 0, 0 ), timeRect, sz );
 
 		timeRect = rcText;
 
@@ -474,7 +474,7 @@ void RampTool::redraw()
 		timeRect.right = w2() - 10;
 		timeRect.left = timeRect.right - textW;
 
-		drawHelper.DrawColoredText( "Arial", 9, FW_NORMAL, RGB( 0, 0, 0 ), timeRect, sz );
+		drawHelper.DrawColoredText( "Arial", 9, FW_NORMAL, Color( 0, 0, 0 ), timeRect, sz );
 	}
 
 	RECT rcHandle;
@@ -553,7 +553,7 @@ void RampTool::DrawFocusRect( void )
 {
 	HDC dc = GetDC( NULL );
 
-	for ( int i = 0; i < m_FocusRects.Size(); i++ )
+	for ( int i = 0; i < m_FocusRects.Count(); i++ )
 	{
 		RECT rc = m_FocusRects[ i ].m_rcFocus;
 
@@ -650,7 +650,7 @@ void RampTool::OnMouseMove( mxEvent *event )
 	{
 		DrawFocusRect();
 
-		for ( int i = 0; i < m_FocusRects.Size(); i++ )
+		for ( int i = 0; i < m_FocusRects.Count(); i++ )
 		{
 			CFocusRect *f = &m_FocusRects[ i ];
 			f->m_rcFocus = f->m_rcOrig;
@@ -1284,7 +1284,7 @@ void RampTool::DrawMouseOverPos( CChoreoWidgetDrawHelper& drawHelper, RECT& rcPo
 	RECT rcText = rcPos;
 	rcText.left = max( rcPos.left, rcPos.right - len );
 
-	drawHelper.DrawColoredText( "Arial", 11, 900, RGB( 255, 50, 70 ), rcText, sz );
+	drawHelper.DrawColoredText( "Arial", 11, 900, Color( 255, 50, 70 ), rcText, sz );
 }
 
 //-----------------------------------------------------------------------------
@@ -1329,7 +1329,7 @@ void RampTool::DrawTimeLine( CChoreoWidgetDrawHelper& drawHelper, RECT& rc, floa
 	RECT rcLabel;
 	float granularity = 0.5f;
 
-	drawHelper.DrawColoredLine( RGB( 150, 150, 200 ), PS_SOLID, 1, rc.left, rc.top + 2, rc.right, rc.top + 2 );
+	drawHelper.DrawColoredLine( Color( 150, 150, 200 ), PS_SOLID, 1, rc.left, rc.top + 2, rc.right, rc.top + 2 );
 
 	float f = SnapTime( left, granularity );
 	while ( f < right )
@@ -1343,7 +1343,7 @@ void RampTool::DrawTimeLine( CChoreoWidgetDrawHelper& drawHelper, RECT& rc, floa
 
 			if ( f != left )
 			{
-				drawHelper.DrawColoredLine( RGB( 220, 220, 240 ), PS_DOT,  1, 
+				drawHelper.DrawColoredLine( Color( 220, 220, 240 ), PS_DOT,  1, 
 					rcLabel.left, rc.top, rcLabel.left, h2() );
 			}
 
@@ -1362,7 +1362,7 @@ void RampTool::DrawTimeLine( CChoreoWidgetDrawHelper& drawHelper, RECT& rc, floa
 				OffsetRect( &rcOut, -rcOut.left + 2, 0 );
 			}
 
-			drawHelper.DrawColoredText( "Arial", 9, FW_NORMAL, RGB( 0, 50, 150 ), rcOut, sz );
+			drawHelper.DrawColoredText( "Arial", 9, FW_NORMAL, Color( 0, 50, 150 ), rcOut, sz );
 
 		}
 		f += granularity;
@@ -1388,7 +1388,7 @@ void RampTool::DrawTimingTags( CChoreoWidgetDrawHelper& drawHelper, RECT& rc )
 	RECT rcText = rc;
 	rcText.bottom = rcText.top + 10;
 
-	drawHelper.DrawColoredText( "Arial", 9, FW_NORMAL, RGB( 0, 100, 200 ), rcText, "Timing Tags:" );
+	drawHelper.DrawColoredText( "Arial", 9, FW_NORMAL, Color( 0, 100, 200 ), rcText, "Timing Tags:" );
 
 	// Loop through all events in scene
 
@@ -1453,7 +1453,7 @@ void RampTool::DrawAbsoluteTagsForEvent( CChoreoWidgetDrawHelper& drawHelper, RE
 			continue;
 		}
 
-		COLORREF clr = event == rampevent ? RGB( 0, 100, 250 ) : RGB( 100, 100, 100 );
+		Color clr = event == rampevent ? Color( 0, 100, 250 ) : Color( 100, 100, 100 );
 
 		RECT rcMark;
 		rcMark = rc;
@@ -1510,7 +1510,7 @@ void RampTool::DrawRelativeTagsForEvent( CChoreoWidgetDrawHelper& drawHelper, RE
 
 		//int left = rc.left + (int)( frac * ( float )( rc.right - rc.left ) + 0.5f );
 
-		COLORREF clr = event == rampevent ? RGB( 0, 100, 250 ) : RGB( 100, 100, 100 );
+		Color clr = event == rampevent ? Color( 0, 100, 250 ) : Color( 100, 100, 100 );
 
 		RECT rcMark;
 		rcMark = rc;
@@ -1569,7 +1569,7 @@ void RampTool::RepositionHSlider( void )
 	}
 	m_pHorzScrollBar->setBounds( 0, h2() - m_nScrollbarHeight, w2() - m_nScrollbarHeight, m_nScrollbarHeight );
 
-	m_flLeftOffset = max( 0.f, m_flLeftOffset );
+	m_flLeftOffset = max( 0, m_flLeftOffset );
 	m_flLeftOffset = min( (float)pixelsneeded, m_flLeftOffset );
 
 	m_pHorzScrollBar->setRange( 0, pixelsneeded );
@@ -1758,11 +1758,11 @@ void RampTool::GetSampleTrayRect( RECT& rc )
 	rc.bottom = h2() - m_nScrollbarHeight-2;
 }
 
-void RampTool::DrawSamplesSimple( CChoreoWidgetDrawHelper& drawHelper, CChoreoEvent *e, bool clearbackground, COLORREF sampleColor, RECT &rcSamples )
+void RampTool::DrawSamplesSimple( CChoreoWidgetDrawHelper& drawHelper, CChoreoEvent *e, bool clearbackground, const Color& sampleColor, RECT &rcSamples )
 {
 	if ( clearbackground )
 	{
-		drawHelper.DrawFilledRect( RGB( 230, 230, 215 ), rcSamples );
+		drawHelper.DrawFilledRect( Color( 230, 230, 215 ), rcSamples );
 	}
 
 	if ( !e )
@@ -1770,7 +1770,7 @@ void RampTool::DrawSamplesSimple( CChoreoWidgetDrawHelper& drawHelper, CChoreoEv
 
 	float starttime = e->GetStartTime();
 
-	COLORREF lineColor = sampleColor;
+	Color lineColor = sampleColor;
 
 	int width = rcSamples.right  - rcSamples.left;
 	if ( width <= 0.0f )
@@ -1804,7 +1804,7 @@ void RampTool::DrawSamplesSimple( CChoreoWidgetDrawHelper& drawHelper, CChoreoEv
 
 void RampTool::DrawSamples( CChoreoWidgetDrawHelper& drawHelper, RECT &rcSamples )
 {
-	drawHelper.DrawFilledRect( RGB( 230, 230, 215 ), rcSamples );
+	drawHelper.DrawFilledRect( Color( 230, 230, 215 ), rcSamples );
 
 	CChoreoEvent *e = GetSafeEvent();
 	if ( !e )
@@ -1819,10 +1819,10 @@ void RampTool::DrawSamples( CChoreoWidgetDrawHelper& drawHelper, RECT &rcSamples
 
 	GetStartAndEndTime( starttime, endtime );
 
-	COLORREF lineColor = RGB( 0, 0, 255 );
-	COLORREF dotColor = RGB( 0, 0, 255 );
-	COLORREF dotColorSelected = RGB( 240, 80, 20 );
-	COLORREF shadowColor = RGB( 150, 150, 250 );
+	Color lineColor = Color( 0, 0, 255 );
+	Color dotColor = Color( 0, 0, 255 );
+	Color dotColorSelected = Color( 240, 80, 20 );
+	Color shadowColor = Color( 150, 150, 250 );
 
 	int height = rcSamples.bottom - rcSamples.top;
 	int bottom = rcSamples.bottom;
@@ -1837,7 +1837,7 @@ void RampTool::DrawSamples( CChoreoWidgetDrawHelper& drawHelper, RECT &rcSamples
 
 	if ( 0 )
 	{
-		COLORREF shadowColor = RGB( 150, 150, 250 );
+		Color shadowColor = Color( 150, 150, 250 );
 
 		// draw hermite version of time step
 		float i0, i1, i2;
@@ -1934,8 +1934,8 @@ void RampTool::DrawSamples( CChoreoWidgetDrawHelper& drawHelper, RECT &rcSamples
 		int dotsize = 6;
 		int dotSizeSelected = 6;
 
-		COLORREF clr = dotColor;
-		COLORREF clrSelected = dotColorSelected;
+		Color clr = dotColor;
+		Color clrSelected = dotColorSelected;
 
 		drawHelper.DrawCircle( 
 			start->selected ? clrSelected : clr, 
@@ -1976,9 +1976,9 @@ void RampTool::DrawAutoHighlight( mxEvent *event )
 
 	RECT rcClient = rcSamples;
 
-	COLORREF dotColor = RGB( 0, 0, 255 );
-	COLORREF dotColorSelected = RGB( 240, 80, 20 );
-	COLORREF clrHighlighted = RGB( 0, 200, 0 );
+	Color dotColor = Color( 0, 0, 255 );
+	Color dotColorSelected = Color( 240, 80, 20 );
+	Color clrHighlighted = Color( 0, 200, 0 );
 
 	int height = rcClient.bottom - rcClient.top;
 	int bottom = rcClient.bottom;
@@ -1987,9 +1987,9 @@ void RampTool::DrawAutoHighlight( mxEvent *event )
 	int dotSizeSelected = 6;
 	int dotSizeHighlighted = 6;
 
-	COLORREF clr = dotColor;
-	COLORREF clrSelected = dotColorSelected;
-	COLORREF bgColor = RGB( 230, 230, 200 );
+	Color clr = dotColor;
+	Color clrSelected = dotColorSelected;
+	Color bgColor = Color( 230, 230, 200 );
 
 	// Fixme, could look at 1st derivative and do more sampling at high rate of change?
 	// or near actual sample points!

@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -168,7 +168,13 @@ BOOL CEventPropertiesGenericDialog::HandleMessage( HWND hwndDlg, UINT uMsg, WPAR
 				
 				if ( !g_Params.m_szName[ 0 ] )
 				{
-					Q_snprintf( g_Params.m_szName, sizeof( g_Params.m_szName ), "%s to %s", g_Params.m_szParameters, g_Params.m_szParameters2 );
+					Q_snprintf( g_Params.m_szName, sizeof( g_Params.m_szName ), "%s", g_Params.m_szParameters );
+					if ( g_Params.m_szParameters2[ 0 ] )
+					{
+						char szAdd[ 512 ];
+						Q_snprintf( szAdd, sizeof( szAdd ), " to %s", g_Params.m_szParameters2 );
+						Q_strncat( g_Params.m_szName, szAdd, sizeof( g_Params.m_szName ), COPY_ALL_CHARACTERS );
+					}
 				}
 
 				char szTime[ 32 ];

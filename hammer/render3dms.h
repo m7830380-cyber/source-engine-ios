@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -15,7 +15,6 @@
 #include "utlpriorityqueue.h"
 #include "mapclass.h"
 #include "lpreview_thread.h"
-#include "shaderapi/ishaderapi.h"
 
 //
 // Size of the buffer used for picking. See glSelectBuffer for documention on
@@ -89,6 +88,13 @@ typedef struct
 	bool bFilterTextures;	// Whether to filter textures.
 	bool bReverseSelection;	// Driver issue fix - whether to return the largest (rather than smallest) Z value when picking
 } RenderStateInfo_t;
+
+class CLightPreview_Light
+{
+public:
+	LightDesc_t m_Light;
+	float m_flDistanceToEye;
+};
 
 static inline bool RenderingModeIsTextured(EditorRenderMode_t mode)
 {
@@ -179,7 +185,7 @@ public:
 	void UncacheAllTextures();
 
 	bool SetView( CMapView *pView );
-	void StartRenderFrame(void);
+	virtual void StartRenderFrame( bool bRenderingOverEngine );
 	void EndRenderFrame(void);
 
 	virtual	void						PushInstanceData( CMapInstance *pInstanceClass, Vector &InstanceOrigin, QAngle &InstanceAngles );
@@ -191,7 +197,7 @@ public:
 	void BeginRenderHitTarget(CMapAtom *pObject, unsigned int uHandle = 0);
 	void EndRenderHitTarget(void);
 
-	void Render(void);
+	void Render( bool bRenderingOverEngine );
 	void RenderEnable(RenderState_t eRenderState, bool bEnable);
 
 	void RenderCrossHair();
@@ -215,12 +221,25 @@ public:
 	// indicates we need to render an overlay pass...
 	bool NeedsOverlay() const;
 
-	void BuildLightList( CUtlVector<CLightingPreviewLightDescription> *pList ) const;
+	CUtlIntrusiveList<CLightingPreviewLightDescription> BuildLightList( void ) const;
 
 	void SendLightList();									// send lighting list to lighting preview thread
 	
 	void SendShadowTriangles();
 	void AddTranslucentDeferredRendering( CMapPoint *pMapPoint );
+	
+	void AccumulateLights( CUtlPriorityQueue<CLightPreview_Light> &light_queue,
+						   CMatRenderContextPtr &pRenderContext,
+						   int nTargetWidth, int nTargetHeight,
+						   ITexture *dest_rt );
+
+	void SendGBuffersToLightingThread( void );
+	void SendGBuffersToLightingThread( int nTargetWidth, int nTargetHeight );
+
+	// Utility.
+	float ComputePixelWidthOfSphere( const Vector &vecOrigin, float flRadius );
+	float ComputePixelDiameterOfSphere( const Vector &vecOrigin, float flRadius );
+
 
 protected:
 
@@ -236,6 +255,7 @@ protected:
     void RenderPointsAndPortals(void);
 	void RenderWorldAxes();
 	void RenderTranslucentObjects( void );
+	void RenderFoW( void );
 
 	// Utility functions.
 	void Preload(CMapClass *pParent);

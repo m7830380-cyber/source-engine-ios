@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -73,6 +73,8 @@ class CMapWorld : public CMapClass, public CEditGameClass
 		CMapWorld( CMapDoc *pOwningDocument );
 		~CMapWorld(void);
 
+		void Init();
+
 		CMapDoc *GetOwningDocument( void ) { return m_pOwningDocument; }
 
 		//
@@ -116,6 +118,8 @@ class CMapWorld : public CMapClass, public CEditGameClass
 		virtual int SerializeMAP(std::fstream &file, BOOL fIsStoring, BoundBox *pIntersecting = NULL);
 
 		virtual void UpdateChild(CMapClass *pChild);
+
+		virtual void OnUndoRedo();
 
 		void UpdateAllDependencies( CMapClass *pObject );
 

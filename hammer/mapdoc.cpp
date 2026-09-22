@@ -1,10 +1,10 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===================== Copyright (c) Valve Corporation. All Rights Reserved. ======================
 //
-// Purpose: The document. Exposes functions for object creation, deletion, and
-//			manipulation. Holds the current tool. Handles GUI messages that are
-//			view-independent.
+// The map document. Exposes functions for object creation, deletion, and manipulation.
+// Holds a pointer to the world, which may contain func_instances which contain sub-worlds.
+// Holds the current tool. Handles GUI messages that are view-independent.
 //
-//=============================================================================//
+//==================================================================================================
 
 #include "stdafx.h"
 #include <direct.h>
@@ -39,7 +39,6 @@
 #include "ObjectProperties.h"
 #include "OptionProperties.h"
 #include "Options.h"
-#include "ProcessWnd.h"
 #include "PasteSpecialDlg.h"
 #include "Prefabs.h"
 #include "Prefab3D.h"
@@ -49,11 +48,9 @@
 #include "SaveInfo.h"
 #include "Manifest.h"
 #include "ManifestDialog.h"
-
 #include "ToolManager.h"
 #include "ToolCamera.h"
 #include "ToolEntity.h"
-
 #include "SelectEntityDlg.h"
 #include "Shell.h"
 #include "StatusBarIDs.h"
@@ -69,9 +66,19 @@
 #include "StockSolids.h"
 #include "ToolMorph.h"
 #include "ToolBlock.h"
+#include "foundrytool.h"
+#include "fadedlg.h"
 #include "p4lib/ip4.h"
+#include "culltreenode.h"
+#include "gridnav.h"
+#include "configmanager.h"
+
+#include "..\fow\fow.h"
 
 #include "mapdoc.h"
+#include "assetpickerdefs.h"
+#include "versioncontroldialog.h"
+#include "p4lib/ip4.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include <tier0/memdbgon.h>
@@ -175,6 +182,8 @@ BEGIN_MESSAGE_MAP(CMapDoc, CDocument)
 	ON_COMMAND(ID_LOGICALOBJECT_SELECTALLCONNECTED, OnLogicalSelectAllConnected)	
 	ON_COMMAND_EX(ID_VIEW_HIDESELECTEDOBJECTS, OnViewHideObjects)
 	ON_COMMAND(ID_MAP_CHECK, OnMapCheck)
+	ON_COMMAND(ID_VIEW_DOTACAMERA, OnViewDotACamera)
+	ON_UPDATE_COMMAND_UI(ID_VIEW_DOTACAMERA, OnUpdateViewDotACamera)
 	ON_COMMAND(ID_VIEW_SHOWCONNECTIONS, OnViewShowconnections)
 	ON_UPDATE_COMMAND_UI(ID_VIEW_SHOWCONNECTIONS, OnUpdateViewShowconnections)
 	ON_UPDATE_COMMAND_UI(ID_FILE_SAVE, OnUpdateFileSave)
@@ -209,6 +218,8 @@ BEGIN_MESSAGE_MAP(CMapDoc, CDocument)
 	ON_UPDATE_COMMAND_UI(ID_VIEW_SHOWMODELSIN2D, OnUpdateViewShowModelsIn2D)
 	ON_COMMAND(ID_VIEW_PREVIEW_MODEL_FADE, OnViewPreviewModelFade)
 	ON_UPDATE_COMMAND_UI(ID_VIEW_PREVIEW_MODEL_FADE, OnUpdateViewPreviewModelFade)
+	ON_COMMAND(ID_VIEW_PREVIEWGRIDNAV, OnViewPreviewGridNav)
+	ON_UPDATE_COMMAND_UI(ID_VIEW_PREVIEWGRIDNAV, OnUpdateViewPreviewGridNav)
 	ON_COMMAND(ID_COLLISION_WIREFRAME, OnCollisionWireframe)
 	ON_UPDATE_COMMAND_UI(ID_COLLISION_WIREFRAME, OnUpdateCollisionWireframe)
 	ON_COMMAND(ID_SHOW_DETAIL_OBJECTS, OnShowDetailObjects)
@@ -269,6 +280,7 @@ BEGIN_MESSAGE_MAP(CMapDoc, CDocument)
 	ON_UPDATE_COMMAND_UI(ID_TOOLS_INSTANCES_SHOWNORMAL, OnUpdateToolsInstancesShowNormal)
 	ON_COMMAND(ID_INSTANCES_HIDEALL, OnInstancesHideAll)
 	ON_COMMAND(ID_INSTANCES_SHOWALL, OnInstancesShowAll)
+	ON_COMMAND(ID_TOOLS_NEWCORDON, OnNewCordon)
 	//}}AFX_MSG_MAP
 	ON_COMMAND(ID_INSTANCING_CREATEMANIFEST, &CMapDoc::OnInstancingCreatemanifest)
 	ON_UPDATE_COMMAND_UI(ID_INSTANCING_CREATEMANIFEST, &CMapDoc::OnUpdateInstancingCreatemanifest)
@@ -280,6 +292,21 @@ BEGIN_MESSAGE_MAP(CMapDoc, CDocument)
 	ON_UPDATE_COMMAND_UI(ID_VERSIONCONTROL_ADDMANIFEST, &CMapDoc::OnUpdateInstancingAddManifest)
 	ON_COMMAND(ID_INSTANCES_COLLAPSEALL, &CMapDoc::OnInstancesCollapseAll)
 	ON_COMMAND(ID_INSTANCES_COLLAPSESELECTION, &CMapDoc::OnInstancesCollapseSelection)
+	ON_COMMAND(ID_INSTANCES_COLLAPSEALLRECURSIVE, &CMapDoc::OnInstancesCollapseAllRecursive)
+	ON_COMMAND(ID_INSTANCES_COLLAPSESELECTIONRECURSIVE, &CMapDoc::OnInstancesCollapseSelectionRecursive)
+	ON_COMMAND(ID_FILE_VERSIONCONTROL_ADD, &CMapDoc::OnFileVersionControlAdd)
+	ON_UPDATE_COMMAND_UI(ID_FILE_VERSIONCONTROL_ADD, OnUpdateVersionControlAdd)
+	ON_COMMAND(ID_FILE_VERSIONCONTROL_CHECKOUT, &CMapDoc::OnFileVersionControlCheckOut)
+	ON_UPDATE_COMMAND_UI(ID_FILE_VERSIONCONTROL_CHECKOUT, OnUpdateVersionControlCheckOut)
+	ON_COMMAND(ID_FILE_VERSIONCONTROL_CHECKOUTBSP, &CMapDoc::OnFileVersionControlCheckOutBsp)
+	ON_UPDATE_COMMAND_UI(ID_FILE_VERSIONCONTROL_CHECKOUTBSP, OnUpdateVersionControlCheckOutBsp)
+	ON_COMMAND(ID_FILE_VERSIONCONTROL_CHECKIN, &CMapDoc::OnFileVersionControlCheckIn)
+	ON_UPDATE_COMMAND_UI(ID_FILE_VERSIONCONTROL_CHECKIN, OnUpdateVersionControlCheckIn)
+	ON_COMMAND(ID_FILE_VERSIONCONTROL_CHECKINALL, &CMapDoc::OnFileVersionControlCheckInAll)
+	ON_UPDATE_COMMAND_UI(ID_FILE_VERSIONCONTROL_CHECKINALL, OnUpdateVersionControlCheckInAll)
+	ON_COMMAND(ID_FILE_VERSIONCONTROL_OVERVIEW, &CMapDoc::OnFileVersionControlOverview)
+	ON_COMMAND(ID_TOOLS_SPRINKLE, &CMapDoc::OnToolsSprinkle)
+	ON_UPDATE_COMMAND_UI(ID_TOOLS_SPRINKLE, &CMapDoc::OnUpdateToolsSprinkle)
 	ON_COMMAND( ID_VIEW_QUICKHIDE, OnQuickHide_HideObjects )
 	ON_UPDATE_COMMAND_UI(ID_VIEW_QUICKHIDE, OnUpdateEditSelection)
 	ON_COMMAND( ID_VIEW_QUICKHIDEUNSELECTED, OnQuickHide_HideUnselectedObjects )
@@ -308,7 +335,7 @@ class CHammerClipboard : public IHammerClipboard
 {
 public:
 	CHammerClipboard(){}
-
+	
 public:
 	virtual void Destroy() { delete this; }
 
@@ -329,11 +356,11 @@ IHammerClipboard * IHammerClipboard::CreateInstance()
 CHammerClipboard * GetHammerClipboard()
 {
 	static class CGlobalHammerClipboard :
-	public CHammerClipboard
+		public CHammerClipboard
 	{
 		virtual void Destroy() { Assert( 0 ); }
 	}
-	s_Clipboard;
+		s_Clipboard;
 	return &s_Clipboard;
 }
 
@@ -342,6 +369,7 @@ CHammerClipboard * GetHammerClipboard( IHammerClipboard *pInterface )
 {
 	return static_cast< CHammerClipboard * >( pInterface );
 }
+
 
 
 struct BatchReplaceTextures_t
@@ -402,6 +430,9 @@ struct SelectLogicalBoxInfo_t
 };
 
 
+#include <tier0/memdbgoff.h>
+
+
 //-----------------------------------------------------------------------------
 // Purpose: Constructor. Attaches all tools members to this document. Adds this
 //			document to the list of active documents.
@@ -448,13 +479,14 @@ CMapDoc::CMapDoc(void)
 	m_nGridSpacing = Options.view2d.iDefaultGrid;
 	m_bShow3DGrid = false;
 
-	m_tShowInstance = INSTANCES_SHOW_TINTED;
+	m_tShowInstance = (ShowInstance_t)(Options.view3d.iViewInstancesMode);
 
 	m_nExternalReferenceCount = 0;
 
 	m_nDocVersion = 0;
 
 	m_nNextMapObjectID = 1;
+	m_nNextLoadID = 1;			// PORTAL2 SHIP: keep track of load order to preserve it on save so that maps can be diffed.
 	m_nNextNodeID = 1;
 
 	m_pGame = NULL;
@@ -490,12 +522,57 @@ CMapDoc::CMapDoc(void)
 	m_strAutosavedFrom = "";
 
 	m_bIsCordoning = false;
-	m_vCordonMins = Vector(-1024,-1024,-1024);
-	m_vCordonMaxs = Vector( 1024,1024,1024);
+	m_nEditCordon = 0;
+	m_nEditCordonBox = 0;
 
 	m_bIsEditable = true;
 	m_pManifestOwner = NULL;
 	m_bCollapsingInstances = false;
+
+	m_bReadOnly = true;
+	m_bIsVersionControlled = false;
+	m_bCheckedOut = false;
+	m_bDefaultCheckin = false;
+	m_bDeferredSave = false;
+
+	m_pGridNav = NULL;
+
+#if 0
+
+	#define DOTA_FOW_MAX_HEIGHT_LEVELS 4
+	#define DOTA_HEIGHT_FILENAME "scripts/height_levels.txt"
+
+	KeyValues *kv = new KeyValues( "heightfile" );
+	Assert( kv );
+
+	float		flHeightLevels[DOTA_FOW_MAX_HEIGHT_LEVELS];
+	int			nNumHeights = -1;
+
+	if ( kv->LoadFromFile( g_pFullFileSystem, DOTA_HEIGHT_FILENAME, "MOD" ) )
+	{
+		char		temp[ 128 ];
+
+		for ( int i = 0; i < DOTA_FOW_MAX_HEIGHT_LEVELS; i++ )
+		{
+			sprintf( temp, "%d", i );
+			flHeightLevels[i] = kv->GetFloat( temp, 64.0f );
+		}
+
+		kv->deleteThis();
+
+		nNumHeights = DOTA_FOW_MAX_HEIGHT_LEVELS;
+	}
+
+	m_pFoW = new CFoW();
+	m_pFoW->SetNumberOfTeams( 1 );
+	m_pFoW->SetSize( Vector( -8192.0f, -8192.0f, -1024.0f ), Vector( 8192.0f, 8192.0f, 1024.0f ), 128, ( nNumHeights == -1 ? 64 : -1 ) );
+	if ( nNumHeights != -1 )
+	{
+		m_pFoW->SetCustomVerticalLevels( flHeightLevels, nNumHeights );
+	}
+#else
+	m_pFoW = NULL;
+#endif
 }
 
 
@@ -504,6 +581,9 @@ CMapDoc::CMapDoc(void)
 //-----------------------------------------------------------------------------
 CMapDoc::~CMapDoc(void)
 {
+	if ( g_pFoundryTool )
+		g_pFoundryTool->OnMapDocDestroy( this );
+
 	GetMainWnd()->pObjectProperties->MarkDataDirty();
 
 	//
@@ -539,6 +619,12 @@ CMapDoc::~CMapDoc(void)
 	{
 		delete m_pSelection;
 		m_pSelection = NULL;
+	}
+
+	if ( m_pFoW )
+	{
+		delete m_pFoW;
+		m_pFoW = NULL;
 	}
 
 	OnDisableLightPreview();
@@ -601,9 +687,6 @@ void CMapDoc::RemoveEmptyGroups(void)
 }
 
 
-//-----------------------------------------------------------------------------
-// Purpose: 
-//-----------------------------------------------------------------------------
 void CMapDoc::AssignToGroups()
 {
 	//
@@ -622,7 +705,7 @@ void CMapDoc::AssignToGroups()
 	{
 		// Assign the object to its group, if any.
 
-		CMapClass *pChild = pChildren->Element(pos);
+		CMapClass *pChild = (CUtlReference< CMapClass >)pChildren->Element(pos);
 		
 		const char *pszGroupID = pChild->GetEditorKeyValue("groupid");
 		if (pszGroupID != NULL)
@@ -1063,9 +1146,9 @@ BOOL CMapDoc::FindEntityCallback(CMapClass *pObject, FindEntity_t *pFindInfo)
 		// HACK: Round to origin integers since entity origins are rounded when
 		//       saving to MAP file. This makes finding entities from the engine
 		//       in the editor work.
-		Pos[0] = V_rint(Pos[0]);
-		Pos[1] = V_rint(Pos[1]);
-		Pos[2] = V_rint(Pos[2]);
+		Pos[0] = rint(Pos[0]);
+		Pos[1] = rint(Pos[1]);
+		Pos[2] = rint(Pos[2]);
 
 		if (VectorCompare(Pos, pFindInfo->Pos))
 		{
@@ -1101,9 +1184,9 @@ CMapEntity *CMapDoc::FindEntity(const char *pszClassName, float x, float y, floa
 
 		// dvs: HACK - only find by integer coordinates because the editor rounds
 		//		entity origins when saving the MAP file.
-		FindInfo.Pos[0] = V_rint(x);
-		FindInfo.Pos[1] = V_rint(y);
-		FindInfo.Pos[2] = V_rint(z);
+		FindInfo.Pos[0] = rint(x);
+		FindInfo.Pos[1] = rint(y);
+		FindInfo.Pos[2] = rint(z);
 
 		m_pWorld->EnumChildren((ENUMMAPCHILDRENPROC)FindEntityCallback, (DWORD)&FindInfo, MAPCLASS_TYPE(CMapEntity));
 
@@ -1124,6 +1207,36 @@ CMapEntity *CMapDoc::FindEntity(const char *pszClassName, float x, float y, floa
 CMapEntity *CMapDoc::FindEntityByName( const char *pszName, bool bVisiblesOnly )
 {
 	return m_pWorld->FindEntityByName( pszName, bVisiblesOnly );
+}
+
+
+BOOL CMapDoc::FindEntityByHammerIDCallback( CMapClass *pObject, FindEntityByHammerID_t *pFindInfo )
+{
+	CMapEntity *pEntity = dynamic_cast<CMapEntity *>(pObject);
+	if ( pEntity != NULL )
+	{
+		if ( pObject->GetHammerID() == pFindInfo->m_nHammerID )
+		{
+			pFindInfo->m_pEntityFound = pEntity;
+			return(FALSE);
+		}
+	}
+
+	return(TRUE);
+}
+
+
+//-------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------
+CMapEntity *CMapDoc::FindEntityByHammerID( int nHammerID )
+{
+	FindEntityByHammerID_t FindInfo;
+
+	memset(&FindInfo, 0, sizeof(FindInfo));
+	FindInfo.m_nHammerID = nHammerID;
+	m_pWorld->EnumChildren( (ENUMMAPCHILDRENPROC)FindEntityByHammerIDCallback, (DWORD)&FindInfo, MAPCLASS_TYPE(CMapEntity) );
+
+	return FindInfo.m_pEntityFound;
 }
 
 
@@ -1185,18 +1298,32 @@ CMapDoc *CMapDoc::GetDocument(int index)
 
 
 //-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+void CMapDoc::OnNewCordon()
+{
+	BoundBox *pBox;
+	Cordon_t *pCordon = Cordon_CreateNewCordon( NULL, &pBox );
+	if ( !pCordon || !pBox )
+		return;
+
+	// Not very useful to do this without editing it after.
+	GetTools()->SetTool( TOOL_EDITCORDON );
+	Cordon_SelectCordonForEditing( pCordon, pBox );
+}
+
+
+//-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
 void CMapDoc::OnViewGotoCoords()
 {
-	CStrDlg dlg(0, "", "Coordinates to go to (x y z), ex: 200 -4096 1154\nex: setpos -1 2 3; setang 4 5 6", "Go to coordinates");
+	CStrDlg dlg(0, "", "Coordinates to go to (x y z), ex: 200 -4096 1154\nex: setpos -1 2 3;setang 4 5 6", "Go to coordinates");
 	while (dlg.DoModal() == IDOK)
 	{
 		Vector posVec;
 		Vector angVec;
 		char setposString[255];
 		char setangString[255];
-		char semicolonString[2];
 		
 		if (sscanf(dlg.m_string, "%f %f %f", &posVec.x, &posVec.y, &posVec.z) == 3)
 		{
@@ -1209,7 +1336,7 @@ void CMapDoc::OnViewGotoCoords()
 			CenterViewsOn(posVec);
 			return;
 		}
-		if ( sscanf( dlg.m_string, "%s %f %f %f%s %s %f %f %f", setposString, &posVec.x, &posVec.y, &posVec.z, semicolonString, setangString, &angVec.x, &angVec.y, &angVec.z ) == 9 )
+		if ( sscanf( dlg.m_string, "%s %f %f %f%s %f %f %f", setposString, &posVec.x, &posVec.y, &posVec.z, setangString, &angVec.x, &angVec.y, &angVec.z ) == 8 )
 		{
 			posVec.z += HALF_LIFE_2_EYE_HEIGHT;			
 			CenterViewsOn( posVec );
@@ -1218,7 +1345,7 @@ void CMapDoc::OnViewGotoCoords()
 		}
 		
 
-		AfxMessageBox("Please enter 3 coordinates, space-delimited or use\nsetpos x y z; setang u v w format.", MB_OK | MB_ICONEXCLAMATION);
+		AfxMessageBox("Please enter 3 coordinates, space-delimited or use\nsetpos x y z;setang u v w format.", MB_OK | MB_ICONEXCLAMATION);
 	}
 }
 
@@ -1336,7 +1463,8 @@ void CMapDoc::OnMapShowSelectedBrushNumber()
 
 	const CMapObjectList *pSelList = m_pSelection->GetList();
 
-	info.m_pBrush = dynamic_cast< CMapSolid* >( pSelList->Element( 0 ) );
+	CMapClass *pMapClass = (CUtlReference< CMapClass >)pSelList->Element( 0 );
+	info.m_pBrush = dynamic_cast< CMapSolid* >( pMapClass );
 	if ( !info.m_pBrush )
 	{
 		AfxMessageBox( ID_NO_BRUSH_SELECTED, MB_OK );
@@ -1391,7 +1519,548 @@ void CMapDoc::Initialize(void)
 
 	m_pWorld = new CMapWorld( this );
 	m_pWorld->CullTree_Build();
+
+	m_pGridNav = new CGridNav;
 }
+
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+// Input  : 
+// Output : 
+//-----------------------------------------------------------------------------
+bool CMapDoc::CheckOut( )
+{
+	if ( !p4 )
+	{
+		return false;
+	}
+
+	P4File_t	FileInfo;
+
+	if ( p4->GetFileInfo( GetPathName(), &FileInfo ) == true )
+	{
+		if ( FileInfo.m_iHeadRevision != FileInfo.m_iHaveRevision )
+		{
+			char szMessage[MAX_PATH+MAX_PATH+256];
+
+			sprintf( szMessage, "The map is not at the head revision!  The file needs to be at the head revision in order to be checked out.  Do you want to sync to the head revision?\n\n%s\n\nLocal Revision: %d  Head Revision: %d", GetPathName(), FileInfo.m_iHaveRevision, FileInfo.m_iHeadRevision );
+			if ( AfxMessageBox( szMessage, MB_ICONHAND | MB_YESNO ) == IDYES )
+			{			
+				if ( SyncToHeadRevision() == false )
+				{
+					AfxMessageBox( "Sync operation was NOT successful!", MB_OK ) ;
+					return false;
+				}
+			}
+			else
+			{
+				return false;
+			}
+		}
+	}
+
+	if ( !p4->OpenFileForEdit( GetPathName() ) )
+	{
+		return false;
+	}
+
+	CheckFileStatus();
+
+	return true;
+}
+
+//-----------------------------------------------------------------------------
+// Checks out the BSP for the currently loaded VMF, if possible
+//-----------------------------------------------------------------------------
+bool CMapDoc::CheckOutBsp( )
+{
+	if ( !p4 )
+		return false;
+
+	if ( !BspOkToCheckOut() )
+	{
+		return false;
+	}
+
+	// get the BSP file path based on the opened map
+	CUtlString bspPath;
+	GetBspPathFromVmfPath( bspPath );
+
+	P4File_t	FileInfo;
+
+	if ( p4->GetFileInfo( bspPath.Get(), &FileInfo ) == false )
+		return false;
+
+	if ( FileInfo.m_iHeadRevision != FileInfo.m_iHaveRevision )
+	{
+		CUtlString message;
+
+		sprintf( message.Get(), "The BSP is not at the head revision!  The file needs to be at the head revision in order to be checked out.  Do you want to sync to the head revision?\n\n%s\n\nLocal Revision: %d  Head Revision: %d", GetPathName(), FileInfo.m_iHaveRevision, FileInfo.m_iHeadRevision );
+		if ( AfxMessageBox( message, MB_ICONHAND | MB_YESNO ) == IDNO )
+			return false;
+
+		if ( SyncBspToHeadRevision() == false )
+		{
+			AfxMessageBox( "Sync operation was NOT successful!", MB_OK ) ;
+			return false;
+		}
+	}
+
+	// Check out the file
+	if ( !p4->OpenFileForEdit( bspPath.Get() ) )
+	{
+		AfxMessageBox( "BSP Checkout was NOT successful!", MB_OK );
+		return false;
+	}
+
+	return true;
+}
+
+//-----------------------------------------------------------------------------
+// Composes a BSP path string based on the open document
+//-----------------------------------------------------------------------------
+void CMapDoc::GetBspPathFromVmfPath( CUtlString &bspPath )
+{
+	CUtlString bspFileName;
+
+	// Extract the VMF file name
+	bspFileName = GetPathName();
+	bspFileName = bspFileName.UnqualifiedFilename();
+
+ 	// Change .VMF extension to .BSP
+ 	V_SetExtension( bspFileName.Get(), ".bsp", bspFileName.Length()+1 );
+ 
+ 	// Compose BSP path string and BSP file name
+	bspPath = CUtlString::PathJoin( g_pGameConfig->szBSPDir, bspFileName );
+}
+
+//-----------------------------------------------------------------------------
+// Determines the file state of the BSP for the currently loaded VMF
+//-----------------------------------------------------------------------------
+bool CMapDoc::GetBspFileStatus( unsigned char &FileStatus  )
+{
+	P4File_t	FileInfo;
+
+	CUtlString bspPath;
+	GetBspPathFromVmfPath( bspPath );
+	
+	// bitfield for file status
+	FileStatus = 0;
+
+	// does the file exist?
+	if( !g_pFileSystem->FileExists( bspPath ) )
+	{
+		return false;
+	}
+	
+	// is the file version controlled?
+	if ( p4 != NULL && p4->GetFileInfo( bspPath, &FileInfo ) == true )
+	{
+		FileStatus |= FILE_IS_VERSION_CONTROLLED;
+
+		if ( FileInfo.m_eOpenState == P4FILE_OPENED_FOR_ADD || FileInfo.m_eOpenState == P4FILE_OPENED_FOR_EDIT )
+		{
+			FileStatus |= FILE_IS_CHECKED_OUT;
+		}
+	}
+
+	// is the file is read only?
+	if( !g_pFullFileSystem->IsFileWritable( bspPath ) )
+	{
+		FileStatus |= FILE_IS_READ_ONLY;
+	}
+
+	return true;
+}
+
+//-----------------------------------------------------------------------------
+// Returns true if the BSP for the current VMF exists, is not checked out, and
+// is under version control
+//-----------------------------------------------------------------------------
+bool CMapDoc::BspOkToCheckOut()
+{
+	unsigned char FileStatus;
+	if ( !GetBspFileStatus( FileStatus ) )
+		return false;
+
+	if ( FileStatus & FILE_IS_CHECKED_OUT )
+		return false;
+
+	if ( !( FileStatus & FILE_IS_VERSION_CONTROLLED ) )
+		return false;
+
+	return true;
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+// Input  : 
+// Output : 
+//-----------------------------------------------------------------------------
+bool CMapDoc::AddToVersionControl( )
+{
+	if ( !p4 )
+	{
+		return false;
+	}
+
+	if ( p4->OpenFileForAdd( GetPathName() ) == false )
+	{
+		return false;
+	}
+
+	CheckFileStatus();
+
+	return true;
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+// Input  : 
+// Output : 
+//-----------------------------------------------------------------------------
+bool CMapDoc::SyncToHeadRevision( )
+{
+	if ( !p4 )
+	{
+		return false;
+	}
+
+	if ( p4->SyncFile( GetPathName() ) == false )
+	{
+		return false;
+	}
+
+	DeleteContents();
+	OnOpenDocument( GetPathName() );
+
+	CheckFileStatus();
+
+	return true;
+}
+
+//-----------------------------------------------------------------------------
+// Syncs BSP to head revision.  Returns true if successful.
+//-----------------------------------------------------------------------------
+bool CMapDoc::SyncBspToHeadRevision()
+{
+	if ( !p4 )
+	{
+		return false;
+	}
+
+	CUtlString bspPath;
+	GetBspPathFromVmfPath( bspPath );
+
+	if ( p4->SyncFile( bspPath ) == false )
+	{
+		return false;
+	}
+
+	return true;
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+// Input  : 
+// Output : 
+//-----------------------------------------------------------------------------
+bool CMapDoc::Revert( )
+{
+	if ( !p4 )
+	{
+		return false;
+	}
+
+	if ( p4->RevertFile( GetPathName() ) == false )
+	{
+		return false;
+	}
+
+	DeleteContents();
+	OnOpenDocument( GetPathName() );
+
+	CheckFileStatus();
+
+	return true;
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+// Input  : 
+// Output : 
+//-----------------------------------------------------------------------------
+void CMapDoc::CheckFileStatus( )
+{
+	P4File_t	FileInfo;
+	bool		bOriginalReadOnly = m_bReadOnly;
+	bool		bOriginalCheckedOut = m_bCheckedOut;
+	bool		bOriginalIsVersionControlled = m_bIsVersionControlled;
+
+	m_bReadOnly = !g_pFullFileSystem->IsFileWritable( GetPathName() );
+	m_bCheckedOut = false;
+	m_bIsVersionControlled = false;
+	if ( p4 != NULL && Options.general.bEnablePerforceIntegration == TRUE )
+	{
+		if ( p4->GetFileInfo( GetPathName(), &FileInfo ) == true )
+		{
+			m_bIsVersionControlled = true;
+			if ( FileInfo.m_eOpenState == P4FILE_OPENED_FOR_ADD || FileInfo.m_eOpenState == P4FILE_OPENED_FOR_EDIT )
+			{
+				m_bCheckedOut = true;
+			}
+		}
+	}
+
+	if ( bOriginalReadOnly != m_bReadOnly ||
+		 bOriginalCheckedOut != m_bCheckedOut ||
+		 bOriginalIsVersionControlled != m_bIsVersionControlled )
+	{
+		CView *pView = GetMainWnd()->GetActiveFrame()->GetActiveView();
+		if ( pView != NULL && GetMainWnd()->GetActiveFrame()->GetActiveDocument() == this )
+		{
+			UpdateTitle( pView );
+		}
+	}
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+// Input  : 
+// Output : 
+//-----------------------------------------------------------------------------
+void CMapDoc::OnFileVersionControlAdd( void )
+{
+	CMapDoc	*activeDoc = CMapDoc::GetActiveMapDoc();
+	if ( !activeDoc )
+	{
+		return;
+	}
+
+	if ( AddToVersionControl() == false && p4 )
+	{
+		char temp[ 2048 ];
+
+		sprintf( temp, "Could not add file to version control: %s", p4->GetLastError() );
+		AfxMessageBox( temp, MB_ICONHAND | MB_OK );
+	}
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+// Input  : 
+// Output : 
+//-----------------------------------------------------------------------------
+void CMapDoc::OnUpdateVersionControlAdd(CCmdUI *pCmdUI)
+{
+	if ( p4 == NULL || m_bIsVersionControlled == true || Options.general.bEnablePerforceIntegration == FALSE )
+	{
+		pCmdUI->Enable( false );
+		return;
+	}
+
+	pCmdUI->Enable( true );
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+// Input  : 
+// Output : 
+//-----------------------------------------------------------------------------
+void CMapDoc::OnFileVersionControlCheckOut( void )
+{
+	CMapDoc	*activeDoc = CMapDoc::GetActiveMapDoc();
+	if ( !activeDoc )
+	{
+		return;
+	}
+	
+	if ( p4 == NULL )
+		return;
+
+	if ( CheckOut() == false )
+	{
+		char temp[ 2048 ];
+
+		sprintf( temp, "Could not check out file: %s", p4->GetLastError() );
+		AfxMessageBox( temp, MB_ICONHAND | MB_OK );
+	}
+	
+}
+
+//-----------------------------------------------------------------------------
+// Checks out BSP for the currently loaded VMF, if it exists.
+//-----------------------------------------------------------------------------
+void CMapDoc::OnFileVersionControlCheckOutBsp( void )
+{
+	CMapDoc	*activeDoc = CMapDoc::GetActiveMapDoc();
+	if ( !activeDoc )
+	{
+		return;
+	}
+
+	if ( p4 == NULL )
+		return;
+
+	if ( !BspOkToCheckOut() )
+	{
+		return;
+	}
+
+	if ( CheckOutBsp() == false )
+	{
+		CUtlString temp;
+
+		sprintf( temp.Get(), "Could not check out file: %s", p4->GetLastError() );
+		AfxMessageBox( temp, MB_ICONHAND | MB_OK );
+	}
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+// Input  : 
+// Output : 
+//-----------------------------------------------------------------------------
+void CMapDoc::OnUpdateVersionControlCheckOut(CCmdUI *pCmdUI)
+{
+	// update the vmf file status before checking state since it may have changed externally
+	CheckFileStatus();
+
+	if ( p4 == NULL || m_bCheckedOut == true || m_bIsVersionControlled == false || Options.general.bEnablePerforceIntegration == FALSE )
+	{
+		pCmdUI->Enable( false );
+		return;
+	}
+
+	pCmdUI->Enable( true );
+}
+
+//-----------------------------------------------------------------------------
+// Disables the version control -> check out bsp option if BSP is not OK to check out
+//-----------------------------------------------------------------------------
+void CMapDoc::OnUpdateVersionControlCheckOutBsp(CCmdUI *pCmdUI)
+{
+	if ( p4 == NULL || BspOkToCheckOut() == false || Options.general.bEnablePerforceIntegration == FALSE )
+	{
+		pCmdUI->Enable( false );
+		return;
+	}
+
+	pCmdUI->Enable( true );
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+// Input  : 
+// Output : 
+//-----------------------------------------------------------------------------
+void CMapDoc::OnFileVersionControlCheckIn( void )
+{
+	if ( !p4 )
+	{
+		return;
+	}
+
+	CMapDoc	*activeDoc = CMapDoc::GetActiveMapDoc();
+	if ( !activeDoc )
+	{
+		return;
+	}
+
+	m_bDefaultCheckin = true;
+
+	CMapDocCheckin	MapDocCheckin;
+	if ( MapDocCheckin.DoModal() == IDOK )
+	{
+	}
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+// Input  : 
+// Output : 
+//-----------------------------------------------------------------------------
+void CMapDoc::OnUpdateVersionControlCheckIn(CCmdUI *pCmdUI)
+{
+	if ( p4 == NULL || m_bCheckedOut == false || Options.general.bEnablePerforceIntegration == FALSE )
+	{
+		pCmdUI->Enable( false );
+		return;
+	}
+
+	pCmdUI->Enable( true );
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+// Input  : 
+// Output : 
+//-----------------------------------------------------------------------------
+void CMapDoc::OnFileVersionControlCheckInAll( void )
+{
+	if ( !p4 )
+	{
+		return;
+	}
+
+	POSITION pos = APP()->pMapDocTemplate->GetFirstDocPosition();
+	while( pos != NULL )
+	{
+		CDocument *pDoc = APP()->pMapDocTemplate->GetNextDoc( pos );
+		CMapDoc *pMapDoc = dynamic_cast< CMapDoc * >( pDoc );
+
+		if ( pMapDoc != NULL && pMapDoc->IsCheckedOut() )
+		{
+			pMapDoc->m_bDefaultCheckin = true;
+		}
+	}
+
+	CMapDocCheckin	MapDocCheckin;
+	if ( MapDocCheckin.DoModal() == IDOK )
+	{
+	}
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+// Input  : 
+// Output : 
+//-----------------------------------------------------------------------------
+void CMapDoc::OnUpdateVersionControlCheckInAll(CCmdUI *pCmdUI)
+{
+	if ( p4 == NULL || Options.general.bEnablePerforceIntegration == FALSE )
+	{
+		pCmdUI->Enable( false );
+		return;
+	}
+
+	pCmdUI->Enable( true );
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+// Input  : 
+// Output : 
+//-----------------------------------------------------------------------------
+void CMapDoc::OnFileVersionControlOverview( void )
+{
+	CMapDocStatus	MapDocStatus;
+	if ( MapDocStatus.DoModal() == IDOK )
+	{
+	}
+}
+
 
 //-----------------------------------------------------------------------------
 // Purpose: 
@@ -1510,7 +2179,8 @@ bool CMapDoc::LoadVMF( const char *pszFileName, int LoadFlags )
 		Handlers.AddHandler("autosave", (ChunkHandler_t)CMapDoc::LoadAutosaveCallback, this);
 		Handlers.AddHandler("visgroups", (ChunkHandler_t)CVisGroup::LoadVisGroupsCallback, this);
 		Handlers.AddHandler("viewsettings", (ChunkHandler_t)CMapDoc::LoadViewSettingsCallback, this);
-		Handlers.AddHandler("cordon", (ChunkHandler_t)CMapDoc::LoadCordonCallback, this);
+		Handlers.AddHandler("cordons", (ChunkHandler_t)CMapDoc::LoadCordonsCallback, this);
+		Handlers.AddHandler("cordon", (ChunkHandler_t)CMapDoc::LoadCordonCallback_Legacy, this); // Legacy support for maps with only one cordon
 
 		m_pToolManager->AddToolHandlers( &Handlers );
 
@@ -1545,11 +2215,10 @@ bool CMapDoc::LoadVMF( const char *pszFileName, int LoadFlags )
 		File.PopHandlers();
 	}
 
-
 	if (eResult == ChunkFile_Ok)
 	{
 		pProgDlg->SetWindowText( "Postload Processing..." );
-		Postload( pszFileName );
+		PostloadDocument( pszFileName );
 
 		pProgDlg->StepIt();
 		m_bLoading = false;
@@ -1558,6 +2227,8 @@ bool CMapDoc::LoadVMF( const char *pszFileName, int LoadFlags )
 	{
 		GetMainWnd()->MessageBox(File.GetErrorText(eResult), "Error loading file", MB_OK | MB_ICONEXCLAMATION);
 	}
+	
+	GetMainWnd()->m_FilterControl.UpdateCordonList();
 
 	if ( bLocked )
 		VisGroups_LockUpdates( false );
@@ -1631,11 +2302,17 @@ ChunkFileResult_t CMapDoc::LoadVersionInfoKeyCallback(const char *szKey, const c
 	return(ChunkFile_Ok);
 }
 
+
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
 ChunkFileResult_t CMapDoc::LoadAutosaveCallback( CChunkFile *pFile, CMapDoc *pDoc)
 {
 	return(pFile->ReadChunk((KeyHandler_t)LoadAutosaveKeyCallback, pDoc));
 }
 
+
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
 ChunkFileResult_t CMapDoc::LoadAutosaveKeyCallback(const char *szKey, const char *szValue, CMapDoc *pDoc)
 {
 	if (!stricmp(szKey, "originalname"))
@@ -1651,31 +2328,175 @@ ChunkFileResult_t CMapDoc::LoadAutosaveKeyCallback(const char *szKey, const char
 	return(ChunkFile_Ok);
 }
 
-ChunkFileResult_t CMapDoc::LoadCordonCallback(CChunkFile *pFile, CMapDoc *pDoc)
+
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+ChunkFileResult_t CMapDoc::LoadCordonBoxCallback( CChunkFile *pFile, Cordon_t *pCordon )
 {
-	return pFile->ReadChunk((KeyHandler_t)LoadCordonKeyCallback, pDoc);
+	// Add a box to this cordon.
+	pCordon->m_Boxes.AddToTail();
+	BoundBox &box = pCordon->m_Boxes.Tail();
+
+	// Fill it in with the data from the VMF.
+	return pFile->ReadChunk( (KeyHandler_t)LoadCordonBoxKeyCallback, (void *)&box );
 }
 
-ChunkFileResult_t CMapDoc::LoadCordonKeyCallback(const char *szKey, const char *szValue, CMapDoc *pDoc)
+
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+ChunkFileResult_t CMapDoc::LoadCordonBoxKeyCallback(const char *szKey, const char *szValue, BoundBox *pBox)
 {
 	if (!stricmp(szKey, "mins"))
 	{
-		CChunkFile::ReadKeyValuePoint(szValue, pDoc->m_vCordonMins);
+		CChunkFile::ReadKeyValuePoint(szValue, pBox->bmins);
 	}
 	else if (!stricmp(szKey, "maxs"))
 	{
-		CChunkFile::ReadKeyValuePoint(szValue, pDoc->m_vCordonMaxs);
-	}
-	else if (!stricmp(szKey, "active"))
-	{
-		bool bActive;
-		CChunkFile::ReadKeyValueBool(szValue, bActive );
-		pDoc->SetCordoning( bActive );
-		
+		CChunkFile::ReadKeyValuePoint(szValue, pBox->bmaxs);
 	}
 
-	return(ChunkFile_Ok);
+	return ChunkFile_Ok;
 }
+
+
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+ChunkFileResult_t CMapDoc::LoadCordonCallback(CChunkFile *pFile, CMapDoc *pDoc)
+{
+	// Add a new cordon which will be filled in by the key callback
+	pDoc->m_Cordons.AddToTail();
+	Cordon_t &cordon = pDoc->m_Cordons.Tail();
+
+	CChunkHandlerMap Handlers;
+	Handlers.AddHandler( "box", (ChunkHandler_t)CMapDoc::LoadCordonBoxCallback, (void *)&cordon );
+
+	pFile->PushHandlers(&Handlers);
+	ChunkFileResult_t eResult = pFile->ReadChunk( (KeyHandler_t)LoadCordonKeyCallback, (void *)&cordon );
+	pFile->PopHandlers();
+
+	return(eResult);
+}
+
+
+
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+ChunkFileResult_t CMapDoc::LoadCordonKeyCallback( const char *szKey, const char *szValue, Cordon_t *pCordon )
+{
+	if (!stricmp(szKey, "name"))
+	{
+		pCordon->m_szName.Set( szValue );
+	}
+	// Whether this particular cordon volume is active.
+	else if (!stricmp(szKey, "active"))
+	{
+		CChunkFile::ReadKeyValueBool(szValue, pCordon->m_bActive);
+	}
+
+	return ChunkFile_Ok;
+}
+
+
+//-----------------------------------------------------------------------------------------------------------
+// Parses keys that are applicable to all cordons in the map.
+//-----------------------------------------------------------------------------
+ChunkFileResult_t CMapDoc::LoadCordonsKeyCallback( const char *szKey, const char *szValue, CMapDoc *pDoc )
+{
+	// Whether the cordoning system is enabled or disabled.
+	if ( !stricmp( szKey, "active" ) )
+	{
+		CChunkFile::ReadKeyValueBool( szValue, pDoc->m_bIsCordoning );
+	}
+
+	return ChunkFile_Ok;
+}
+
+
+//-----------------------------------------------------------------------------
+// Parses the VMF chunk that pertains to all the cordons in the map:
+//
+//		cordons
+//		{
+//			"active" "true"
+//			cordon
+//			{
+//				"active" "true"
+//				"box"
+//				{
+//					"mins" "-1024, -1024, -1024"
+//					"maxs" "1024, 1024, 1024"
+//				}
+//				...may be more boxes...
+//			}
+//			...may be more cordons...
+//		}
+//
+//-----------------------------------------------------------------------------
+ChunkFileResult_t CMapDoc::LoadCordonsCallback(CChunkFile *pFile, CMapDoc *pDoc)
+{
+	CChunkHandlerMap Handlers;
+	Handlers.AddHandler( "cordon", (ChunkHandler_t)CMapDoc::LoadCordonCallback, pDoc );
+
+	pFile->PushHandlers(&Handlers);
+	ChunkFileResult_t eResult = pFile->ReadChunk( (KeyHandler_t)LoadCordonsKeyCallback, pDoc );
+	pFile->PopHandlers();
+
+	return(eResult);
+}
+
+
+//-----------------------------------------------------------------------------
+// Legacy support: loading old files before multiple cordons were implemented.
+//-----------------------------------------------------------------------------
+ChunkFileResult_t CMapDoc::LoadCordonKeyCallback_Legacy( const char *szKey, const char *szValue, CMapDoc *pDoc )
+{
+	// Whether the cordon is active.
+	if ( !stricmp( szKey, "active" ) )
+	{
+		CChunkFile::ReadKeyValueBool( szValue, pDoc->m_bIsCordoning );
+	}
+	else if ( !stricmp( szKey, "mins" ) || !stricmp( szKey, "maxs" ) )
+	{
+		// Make sure there's a cordon to fill in.
+		if ( pDoc->m_Cordons.Count() < 1 )
+		{
+			pDoc->m_Cordons.AddToTail();
+			pDoc->m_Cordons[0].m_szName = DEFAULT_CORDON_NAME;
+			pDoc->m_Cordons[0].m_bActive = true;				// The lone cordon was always "active" the current sense.
+			pDoc->m_Cordons[0].m_Boxes.AddToTail();
+		}
+		
+		if ( !stricmp( szKey, "mins" ) )
+		{
+			CChunkFile::ReadKeyValuePoint( szValue, pDoc->m_Cordons[0].m_Boxes[0].bmins );
+		}
+		else
+		{
+			CChunkFile::ReadKeyValuePoint( szValue, pDoc->m_Cordons[0].m_Boxes[0].bmaxs );
+		}
+	}
+
+	return ChunkFile_Ok;
+}
+
+
+//-----------------------------------------------------------------------------
+// This loads old VMFs whose cordon chunk looked like this:
+//
+//		cordon
+//		{
+//			"mins" "-1024, -1024, -1024"
+//			"maxs" "1024, 1024, 1024"
+//			"active" "true"
+//		}
+//
+//-----------------------------------------------------------------------------
+ChunkFileResult_t CMapDoc::LoadCordonCallback_Legacy(CChunkFile *pFile, CMapDoc *pDoc)
+{
+	ChunkFileResult_t eResult = pFile->ReadChunk( (KeyHandler_t)LoadCordonKeyCallback_Legacy, pDoc );
+	return(eResult);
+}
+
 
 //-----------------------------------------------------------------------------
 // Purpose: 
@@ -1725,9 +2546,24 @@ ChunkFileResult_t CMapDoc::LoadWorldCallback(CChunkFile *pFile, CMapDoc *pDoc)
 
 
 //-----------------------------------------------------------------------------
-// Purpose: Called after loading a map file.
+// Called just before a map is loaded from disk.
 //-----------------------------------------------------------------------------
-void CMapDoc::Postload(const char *pszFileName)
+void CMapDoc::PreloadDocument()
+{
+	// Purge the default cordon so we don't append new ones to it.
+	m_Cordons.RemoveAll();
+
+	//
+	// Call any per-class PreloadWorld functions here.
+	//
+	CMapSolid::PreloadWorld();
+}
+
+
+//-------------------------------------------------------------------------------------------------
+// Called after loading a map file from disk.
+//-------------------------------------------------------------------------------------------------
+void CMapDoc::PostloadDocument(const char *pszFileName)
 {
 	if ( pszFileName[ 0 ] ) 
 	{	// this path needs to be set early so that instances may properly find their base path
@@ -1739,14 +2575,29 @@ void CMapDoc::Postload(const char *pszFileName)
 	//
 	if (CMapSolid::GetBadSolidCount() > 0)
 	{
-		char szError[ 1024 ];
-
-		V_sprintf_safe( szError, "For your information, %d solid(s) were not loaded due to errors in the file. Would you like to Re-Save your map with the invalid solids removed?", CMapSolid::GetBadSolidCount() );
+		char szError[256];
+		char szSoidIds[256]; szSoidIds[0] = 0;
+		char szId[256];
+		for (int i=0; i<CMapSolid::GetRecordedBadSolidCount(); ++i)
+		{
+			sprintf (szId, "%d ", CMapSolid::GetBadSolidId( i ) );
+			strcat( szSoidIds, szId );
+		}
+		V_snprintf( szError, sizeof(szError), "For your information, %d solid(s) were not loaded due to errors in the file.\nIDs:( %s)\nWould you like to Re-Save your map with the invalid solids removed?", CMapSolid::GetBadSolidCount(), szSoidIds );
 		if ( GetMainWnd()->MessageBox(szError, "Warning", MB_YESNO | MB_ICONQUESTION) == IDYES )
 		{
-			OnFileSave();
+			// Mark that we should save the map at the end of our loading process
+			m_bDeferredSave = true;
 		}
 	}
+
+	// Fix single-cordon maps that were loaded and then saved with incomplete cordon data.
+	if ( ( m_Cordons.Count() == 1 ) && ( m_Cordons[0].m_szName.Length() == 0 ) && !m_Cordons[0].m_bActive )
+	{
+		m_Cordons[0].m_szName = DEFAULT_CORDON_NAME;
+		m_Cordons[0].m_bActive = true;
+	}
+	Cordon_SetCordoning( m_bIsCordoning );
 
 	//
 	// Count GUIDs before calling PostLoadWorld because objects that need to generate GUIDs
@@ -1895,7 +2746,7 @@ bool CMapDoc::IsSelectionEditable( void )
 	int nCount = m_pSelection->GetCount();
 	for( int i = 0; i < nCount; i++ )
 	{
-		CMapClass *pObj = m_pSelection->GetList()->Element( i );
+		CMapClass *pObj = (CUtlReference< CMapClass >)m_pSelection->GetList()->Element( i );
 		if ( !pObj->IsEditable() )
 		{
 			bResult = false;
@@ -1914,14 +2765,11 @@ bool CMapDoc::IsSelectionEditable( void )
 //-----------------------------------------------------------------------------
 bool CMapDoc::CreateNewManifest( void )
 {
-	if ( IsModified() )
-	{
-		OnFileSave();
-	}
+	OnFileSave();
 
 	if ( IsModified() )
 	{
-		AfxMessageBox( "Manifest was NOT created as map was not able to be saved!", MB_OK );
+		AfxMessageBox( "Manifest was NOT created!", MB_OK );
 		return false;
 	}
 
@@ -1970,7 +2818,7 @@ int CMapDoc::GetClipboardCount( void )
 void CMapDoc::ManifestPaste( CMapWorld *pDestWorld, Vector vecOffset, QAngle vecRotate, CMapClass *pParent, bool bMakeEntityNamesUnique, const char *pszEntityNamePrefix )
 {
 	Paste( GetHammerClipboard()->Objects, GetHammerClipboard()->pSourceWorld, pDestWorld, vecOffset, vecRotate, pParent, bMakeEntityNamesUnique, pszEntityNamePrefix );
-	GetHammerClipboard()->Objects.PurgeAndDeleteElements();
+	GetHammerClipboard()->Objects.RemoveAll();
 	SetModifiedFlag( true );
 }
 
@@ -1991,7 +2839,7 @@ void CMapDoc::UpdateInstanceMap( CMapDoc *pInstanceMapDoc )
 	const CMapObjectList *pChildren = m_pWorld->GetChildren();
 	FOR_EACH_OBJ( *pChildren, pos )
 	{
-		CMapClass	*pChild = pChildren->Element( pos );
+		CMapClass	*pChild = (CUtlReference< CMapClass >)pChildren->Element( pos );
 		CMapEntity	*pEntity = dynamic_cast< CMapEntity * >( pChild );
 
 		if ( pEntity && stricmp( pEntity->GetClassName(), "func_instance" ) == 0 )
@@ -2014,11 +2862,96 @@ void CMapDoc::UpdateInstanceMap( CMapDoc *pInstanceMapDoc )
 	}
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: This function will collapse a single instance into the map
+//-----------------------------------------------------------------------------
+bool CMapDoc::CollapseInstance( CMapEntity *pEntity, int &InstanceCount )
+{
+	CMapInstance	*pMapInstance = pEntity->GetChildOfType( ( CMapInstance * )NULL );
+	if ( pMapInstance )
+	{
+		if ( pMapInstance->GetInstancedMap() )
+		{
+			char	temp[ 256 ];
+			Vector	origin;
+			QAngle	angles;
+
+			pMapInstance->GetInstancedMap()->OnEditSelectall();
+			pMapInstance->GetInstancedMap()->Copy();
+			pMapInstance->GetInstancedMap()->OnEditClearselection();
+			SetActiveMapDoc( this ); // just in case the last instance copy forces the map to close, we need to make ourselves active again
+
+			InstanceCount++;
+			sprintf( temp, "AutoInstance%d-", InstanceCount );
+
+			pEntity->GetOrigin( origin );
+			pEntity->GetAngles( angles );
+
+			PasteInstance( GetHammerClipboard()->Objects, pMapInstance->GetInstancedMap()->GetMapWorld(), GetMapWorld(), origin, angles, NULL, true, temp );
+			Update();
+		}
+
+		DeleteObject( pEntity );
+		m_UpdateList.RemoveAll();
+		SetActiveMapDoc( this ); // just in case the last instance copy forces the map to close, we need to make ourselves active again
+
+		return true;
+	}
+
+	return false;
+}
 
 //-----------------------------------------------------------------------------
-// Purpose: This function will collapse instances into the map ( and any children instances )
+// Purpose: This function will collapse instances into the map
 //-----------------------------------------------------------------------------
 void CMapDoc::CollapseInstances( bool bOnlySelected )
+{
+	int		InstanceCount = 0;
+
+	if ( AfxMessageBox( "Collapsing does not perform all of the operations that the BSP process does for instancing.  There may be some issues or differences between results.  Are you sure you want to do this?", MB_YESNO | MB_ICONQUESTION ) == IDNO )
+	{
+		return;
+	}
+
+	m_bCollapsingInstances = true;
+
+	CUtlVector< CMapEntity* > EntitiesToCollapse;
+
+	// collect up entities to collapse
+	const CMapObjectList *pChildren = m_pWorld->GetChildren();
+	FOR_EACH_OBJ( *pChildren, pos )
+	{
+		CMapClass	*pChild = (CUtlReference< CMapClass >)pChildren->Element( pos );
+		CMapEntity	*pEntity = dynamic_cast< CMapEntity * >( pChild );
+
+		if ( pEntity && stricmp( pEntity->GetClassName(), "func_instance" ) == 0 && ( !bOnlySelected || pEntity->GetSelectionState() != SELECT_NONE ) )
+		{
+			EntitiesToCollapse.AddToTail( pEntity );
+		}
+	}
+
+	// now collapse them
+	while( EntitiesToCollapse.Count() )
+	{
+		CMapEntity *pEntity = EntitiesToCollapse.Head();
+		EntitiesToCollapse.RemoveMultipleFromHead(1);
+		CollapseInstance( pEntity, InstanceCount );
+	}
+
+	m_bCollapsingInstances = false;
+	APP()->pMapDocTemplate->UpdateInstanceMap( this );
+	APP()->pManifestDocTemplate->UpdateInstanceMap( this );
+
+	SetModifiedFlag( true );
+	UpdateAllViews( MAPVIEW_UPDATE_SELECTION | MAPVIEW_UPDATE_TOOL | MAPVIEW_RENDER_NOW );
+
+	char temp[ 256 ];
+	sprintf( temp, "A total of %d instances were collapsed into the main map.", InstanceCount );
+
+	AfxMessageBox( temp, MB_OK | MB_ICONEXCLAMATION );
+}
+
+void CMapDoc::CollapseInstancesRecursive( bool bOnlySelected )
 {
 	int		InstanceCount = 0;
 
@@ -2032,39 +2965,13 @@ void CMapDoc::CollapseInstances( bool bOnlySelected )
 	const CMapObjectList *pChildren = m_pWorld->GetChildren();
 	FOR_EACH_OBJ( *pChildren, pos )
 	{
-		CMapClass	*pChild = pChildren->Element( pos );
+		CMapClass	*pChild = (CUtlReference< CMapClass >)pChildren->Element( pos );
 		CMapEntity	*pEntity = dynamic_cast< CMapEntity * >( pChild );
 
 		if ( pEntity && stricmp( pEntity->GetClassName(), "func_instance" ) == 0 && ( !bOnlySelected || pEntity->GetSelectionState() != SELECT_NONE ) )
 		{
-			CMapInstance	*pMapInstance = pEntity->GetChildOfType( ( CMapInstance * )NULL );
-			if ( pMapInstance )
+			if ( CollapseInstance( pEntity, InstanceCount ) )
 			{
-				if ( pMapInstance->GetInstancedMap() )
-				{
-					char	temp[ 256 ];
-					Vector	origin;
-					QAngle	angles;
-
-					pMapInstance->GetInstancedMap()->OnEditSelectall();
-					pMapInstance->GetInstancedMap()->Copy();
-					pMapInstance->GetInstancedMap()->OnEditClearselection();
-					SetActiveMapDoc( this ); // just in case the last instance copy forces the map to close, we need to make ourselves active again
-
-					InstanceCount++;
-					sprintf( temp, "AutoInstance%d-", InstanceCount );
-
-					pEntity->GetOrigin( origin );
-					pEntity->GetAngles( angles );
-
-					PasteInstance( GetHammerClipboard()->Objects, pMapInstance->GetInstancedMap()->GetMapWorld(), GetMapWorld(), origin, angles, NULL, true, temp );
-					Update();
-				}
-
-				DeleteObject( pEntity );
-				m_UpdateList.RemoveAll();
-				SetActiveMapDoc( this ); // just in case the last instance copy forces the map to close, we need to make ourselves active again
-
 				pos = -1;		// start over so that we find any instances within instances
 			}
 		}
@@ -2121,12 +3028,11 @@ int FindInstanceParm( char *Text, int StartPos, CString &Result )
 	return StartPos;
 }
 
-
 void CMapDoc::PopulateInstanceParms_r( CMapEntity *pEntity, const CMapObjectList *pChildren, CUtlVector< CString > &ParmList )
 {
 	FOR_EACH_OBJ( *pChildren, pos )
 	{
-		CMapClass *pChild = pChildren->Element( pos );
+		CMapClass *pChild = (CUtlReference< CMapClass >)pChildren->Element( pos );
 		CMapEntity *pInstanceEntity = dynamic_cast< CMapEntity * >( pChild );
 
 		if ( pInstanceEntity && pInstanceEntity != pEntity )
@@ -2210,7 +3116,7 @@ void CMapDoc::PopulateInstanceParms( CMapEntity *pEntity )
 				{
 					char	tempValue[ MAX_KEYVALUE_LEN ];
 
-					sprintf( tempValue, "%s string", (const char*)ParmList[ i ] );
+					sprintf( tempValue, "%s string", ParmList[ i ] );
 					pEntity->SetKeyValue( tempKey, tempValue );
 					break;
 				}
@@ -2435,6 +3341,26 @@ void CMapDoc::EditPrefab3D(DWORD dwPrefabID)
 
 
 //-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+CMapWorld *CMapDoc::Cordon_AddTempObjectsToWorld( CMapObjectList &CordonList )
+{		
+	CMapWorld *pCordonWorld = Cordon_CreateWorld();
+
+	const CMapObjectList *pChildren = pCordonWorld->GetChildren();
+	FOR_EACH_OBJ( *pChildren, pos )
+	{
+		CMapClass *pChild = (CUtlReference< CMapClass >)pChildren->Element(pos);
+		pChild->SetTemporary(TRUE);
+		m_pWorld->AddObjectToWorld(pChild);
+
+		CordonList.AddToTail(pChild);
+	}
+	
+	return pCordonWorld;
+}
+
+
+//-----------------------------------------------------------------------------
 // Purpose: 
 // Input  : file - 
 //			fIsStoring - 
@@ -2521,7 +3447,9 @@ Done:;
 	{
 		CMapObjectList CordonList;
 		CMapWorld *pCordonWorld = NULL;
-		BoundBox CordonBox(m_vCordonMins, m_vCordonMaxs);
+
+		BoundBox CordonBox;
+		Cordon_GetBounds( CordonBox.bmins, CordonBox.bmaxs );
 
 		if ( m_bIsCordoning )
 		{
@@ -2529,15 +3457,14 @@ Done:;
 			// Create "cordon world", add its objects to our real world, create a list in
 			// CordonList so we can remove them again.
 			//
-			pCordonWorld = CordonCreateWorld();
+			pCordonWorld = Cordon_CreateWorld();
 			
 			const CMapObjectList *pChildren = pCordonWorld->GetChildren();
 			FOR_EACH_OBJ( *pChildren, pos )
 			{
-				CMapClass *pChild = pChildren->Element(pos);
+				CMapClass *pChild = (CUtlReference< CMapClass >)pChildren->Element(pos);
 				pChild->SetTemporary(TRUE);
 				m_pWorld->AddObjectToWorld(pChild);
-
 				CordonList.AddToTail(pChild);
 			}
 
@@ -2586,6 +3513,7 @@ Done:;
 }
 
 
+
 #ifdef _DEBUG
 //-----------------------------------------------------------------------------
 // Purpose: 
@@ -2612,7 +3540,7 @@ void CMapDoc::Dump(CDumpContext& dc) const
 //-----------------------------------------------------------------------------
 void CMapDoc::DeleteContents(void)
 {
-	m_NotifyList.RemoveAll();
+	m_NotifyList.PurgeAndDeleteElements();
 
 	//
 	// Don't leave pointers to deleted worlds lying around!
@@ -2647,6 +3575,12 @@ void CMapDoc::DeleteContents(void)
 	{
 		delete m_pWorld;
 		m_pWorld = NULL;
+	}
+
+	if ( m_pGridNav )
+	{
+		delete m_pGridNav;
+		m_pGridNav = NULL;
 	}
 	
 	GetMainWnd()->m_pFaceEditSheet->ClearFaceListByMapDoc( this );
@@ -3099,7 +4033,7 @@ BOOL CMapDoc::SaveModified(void)
 BOOL CMapDoc::OnOpenDocument(LPCTSTR lpszPathName) 
 {
 	Initialize();
-
+	
 	if (!SelectDocType())
 	{
 		return FALSE;
@@ -3120,10 +4054,7 @@ BOOL CMapDoc::OnOpenDocument(LPCTSTR lpszPathName)
 		bMAP = TRUE;
 	}
 
-	//
-	// Call any per-class PreloadWorld functions here.
-	//
-	CMapSolid::PreloadWorld();
+	PreloadDocument();
 
 	if ((bRMF) || (bMAP))
 	{
@@ -3158,6 +4089,13 @@ BOOL CMapDoc::OnOpenDocument(LPCTSTR lpszPathName)
 	GetMainWnd()->GlobalNotify(WM_MAPDOC_CHANGED);
 
 	m_pToolManager->SetTool( TOOL_POINTER );
+
+	// Clear any deferred saves until this point
+	if ( m_bDeferredSave )
+	{
+		OnFileSave();
+		m_bDeferredSave = false;
+	}
 
 	return(TRUE);
 }
@@ -3230,6 +4168,8 @@ BOOL CMapDoc::OnSaveDocument(LPCTSTR lpszPathName)
 	{
 		if (!CopyFile(lpszPathName, szFile, FALSE))
 		{
+			CheckFileStatus();
+
 			DWORD dwError = GetLastError();
 
 			char szError[_MAX_PATH];
@@ -3267,6 +4207,7 @@ BOOL CMapDoc::OnSaveDocument(LPCTSTR lpszPathName)
 			SetModifiedFlag(FALSE);
 		}
 		EndWaitCursor();
+		CheckFileStatus();
 
 		return(bSaved);
 	}
@@ -3277,6 +4218,8 @@ BOOL CMapDoc::OnSaveDocument(LPCTSTR lpszPathName)
 	std::fstream file(lpszPathName, std::ios::out | std::ios::binary);
 	if (!file.is_open())
 	{
+		CheckFileStatus();
+
 		char szError[_MAX_PATH];
 		wsprintf(szError, "Hammer was unable to open the file \"%s\" for writing. Please verify that the file is writable and that the path exists.", lpszPathName);
 		AfxMessageBox(szError);
@@ -3287,11 +4230,14 @@ BOOL CMapDoc::OnSaveDocument(LPCTSTR lpszPathName)
 	if (!Serialize(file, TRUE, bRMF))
 	{
 		EndWaitCursor();
+		CheckFileStatus();
 		return(FALSE);
 	}
 	EndWaitCursor();
 
 	SetModifiedFlag(FALSE);
+	CheckFileStatus();
+
 	return(TRUE);
 }
 
@@ -3325,16 +4271,32 @@ DWORD SubTime(SYSTEMTIME& st2, SYSTEMTIME& st1)
 	return dwMil;
 }
 
+
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
 void CMapDoc::RenderDocument(CRender *pRender)
 {
+	// Render every cordon that is active.
 	if ( m_bIsCordoning )
 	{
 		pRender->PushRenderMode( RENDER_MODE_WIREFRAME );
 		pRender->SetDrawColor( Color(255,0,0,255) );
-		pRender->DrawBox( m_vCordonMins, m_vCordonMaxs, false );
+		
+		for ( int i = 0; i < m_Cordons.Count(); i++ )
+		{
+			if ( m_Cordons[i].m_bActive )
+			{
+				for ( int j = 0; j < m_Cordons[i].m_Boxes.Count(); j++ )
+				{
+					pRender->DrawBox( m_Cordons[i].m_Boxes[j].bmins, m_Cordons[i].m_Boxes[j].bmaxs, false );
+				}
+			}
+		}
+		
 		pRender->PopRenderMode();
 	}
 }
+
 
 //-----------------------------------------------------------------------------
 // Purpose: Forces a render of all the 3D views. Called from OnIdle to render
@@ -3444,6 +4406,21 @@ static BOOL _UpdateAnimation( CMapClass *mapClass, float animTime )
 //-----------------------------------------------------------------------------
 void CMapDoc::UpdateAnimation( void )
 {
+	if ( m_pFoW )
+	{
+		static float	LastTime = m_flCurrentTime;
+
+		float diff = m_flCurrentTime - LastTime;
+
+		if ( diff >= 0.1f )
+		{
+			LastTime = m_flCurrentTime;
+			m_pFoW->SolveVisibility( diff );
+
+			UpdateAllViews( MAPVIEW_UPDATE_ANIMATION | MAPVIEW_UPDATE_ONLY_2D );
+		}
+	}
+
 	//GetMainWnd()->m_AnimationDlg.RunFrame();
 
 	// check to see if the animation needs to be updated
@@ -3710,7 +4687,7 @@ void CMapDoc::UpdateStatusbar(void)
 
 		case 1:
 			{
-				CMapClass *pobj = m_pSelection->GetList()->Element(0);
+				CMapClass *pobj = (CUtlReference< CMapClass >)m_pSelection->GetList()->Element(0);
 				str = pobj->GetDescription();
 
 				// Look for the 3D view so we can also add the distance to the object.
@@ -4055,13 +5032,19 @@ void CMapDoc::OnEditClearselection(void)
 	}
 	else
 	{
-		if ( m_pSelection->GetCount() > 2)
-		{
-			GetHistory()->MarkUndoPosition( m_pSelection->GetList(), "Clear Selection");
-		}
-
-		SelectObject(NULL, scClear|scSaveChanges);
+		ClearEntitySelection();
 	}
+}
+
+
+void CMapDoc::ClearEntitySelection()
+{
+	if ( m_pSelection->GetCount() > 2)
+	{
+		GetHistory()->MarkUndoPosition( m_pSelection->GetList(), "Clear Selection");
+	}
+
+	SelectObject(NULL, scClear|scSaveChanges);
 }
 
 
@@ -4086,7 +5069,6 @@ void CMapDoc::OnUpdateEditApplytexture(CCmdUI* pCmdUI)
 	if ( IsSelectionEditable() == false )
 	{
 		pCmdUI->Enable( FALSE );
-
 	}
 	else
 	{
@@ -4109,7 +5091,7 @@ void CMapDoc::OnEditApplytexture(void)
 
 	for (int i = 0; i < pSelList->Count(); i++)
 	{
-		CMapClass *pobj = pSelList->Element(i);
+		CMapClass *pobj = (CUtlReference< CMapClass >)pSelList->Element(i);
 		if (pobj->IsMapClass(MAPCLASS_TYPE(CMapSolid)))
 		{
 			GetHistory()->Keep(pobj);
@@ -4156,7 +5138,7 @@ void CMapDoc::OnEditToEntity(void)
 	
 	for (int i = 0; i < pSelList->Count(); i++)
 	{
-		CMapClass *pObject = pSelList->Element(i);
+		CMapClass *pObject = (CUtlReference< CMapClass >)pSelList->Element(i);
 
 		//
 		// If the object is a solid, add it to our list.
@@ -4383,7 +5365,7 @@ void CMapDoc::OnEditToWorld(void)
 				const CMapObjectList *pChildren = pEntity->GetChildren();
 				FOR_EACH_OBJ( *pChildren, pos2 )
 				{
-					CMapClass *pChild = pChildren->Element(pos2);
+					CMapClass *pChild = (CUtlReference< CMapClass >)pChildren->Element(pos2);
 
 					if ((dynamic_cast<CMapSolid *>(pChild)) != NULL)
 					{
@@ -4458,7 +5440,7 @@ void CMapDoc::OnToolsSubtractselection(void)
 
 	const CMapObjectList *pSelList = m_pSelection->GetList();
 
-	CMapClass *pSubtractWith = pSelList->Element(0);
+	CMapClass *pSubtractWith = (CUtlReference< CMapClass >)pSelList->Element(0);
 
 	Assert( pSubtractWith != NULL );
 	
@@ -4495,7 +5477,8 @@ void CMapDoc::OnToolsSubtractselection(void)
 	//
 	FOR_EACH_OBJ( WorldSolids, p )
 	{
-		CMapSolid *pSubtractFrom = (CMapSolid *)WorldSolids.Element(p);
+		CMapClass *pMapClass = (CUtlReference< CMapClass >)WorldSolids.Element(p);
+		CMapSolid *pSubtractFrom = (CMapSolid *)pMapClass;
 		CMapClass *pDestParent = pSubtractFrom->GetParent();
 
 		//
@@ -4552,33 +5535,382 @@ void CMapDoc::OnToolsSubtractselection(void)
 //-----------------------------------------------------------------------------
 void CMapDoc::OnEditCopy(void)
 {
-	if ( !m_pSelection->IsCopyable() )
+	if ( m_pSelection->IsEmpty() )
 	{
 		return;
 	}
 
-	Copy();
+	// Copy into the global clipboard
+	Copy( GetHammerClipboard() );
 }
 
 
 //-----------------------------------------------------------------------------
-// Purpose: 
-// Input  : ptOrg - 
+// Create paste position at center of most recently used 2D view.
+// NOTE: Only fills in dimensions that are initialized with COORD_NOTINIT
 //-----------------------------------------------------------------------------
-void CMapDoc::GetBestVisiblePoint(Vector& ptOrg)
+void CMapDoc::GetBestVisiblePoint( Vector &ptOrg )
 {
-	// create paste position at center of 1st 2d view
-	
-	FOR_EACH_OBJ( MRU2DViews, pos )
+	CMapView2D *pView = MRU2DViews.Head();
+	if ( pView )
 	{
-		CMapView2D *pView = MRU2DViews.Element(pos);
-		pView->GetCenterPoint(ptOrg);
+		pView->GetCenterPoint( ptOrg );
 	}
 
-	for(int i = 0; i < 3; i++)
+	for ( int i = 0; i < 3; i++ )
 	{
-		if(ptOrg[i] == COORD_NOTINIT)
+		if ( ptOrg[i] == COORD_NOTINIT )
+		{
 			ptOrg[i] = 0;
+		}
+	}
+}
+
+
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+void CMapDoc::GetBestVisibleBox( Vector &vecMins, Vector &vecMaxs )
+{
+	Vector vecCenter( COORD_NOTINIT, COORD_NOTINIT, COORD_NOTINIT );
+	GetBestVisiblePoint( vecCenter );
+
+	float flZoom = 1.0f;
+
+	CMapView2D *pView = MRU2DViews.Head();
+	if ( pView )
+	{
+		flZoom = pView->GetZoom();
+	}
+	
+	// Don't make a cordon smaller than (2 x 2 x 2)
+	if ( flZoom > 128 )
+	{
+		flZoom = 128; 
+	}
+	
+	vecMins = vecCenter - Vector( 128, 128, 128 ) / flZoom;
+	vecMaxs = vecCenter + Vector( 128, 128, 128 ) / flZoom;
+	
+	for ( int i = 0; i < 3; i++ )
+	{
+		if ( vecMaxs[i] > g_MAX_MAP_COORD )
+		{
+			float flShift = vecMaxs[i] - g_MAX_MAP_COORD;
+			vecMaxs[i] = g_MAX_MAP_COORD;
+			vecMins[i] = max( vecMins[i] - flShift, g_MIN_MAP_COORD );
+		}
+
+		if ( vecMins[i] < g_MIN_MAP_COORD )
+		{
+			float flShift = g_MIN_MAP_COORD - vecMins[i];
+			vecMins[i] = g_MIN_MAP_COORD;
+			vecMaxs[i] = min( vecMaxs[i] + flShift, g_MAX_MAP_COORD );
+		}
+	}
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: Allows picking into the world from an arbitrary position and direction,
+//           not restricted to the camera position.
+//          Requires an open 3D view.
+//          Returns true if an object was picked.
+//          Fills pHitPosition with the pick location if an object was detected.
+//-----------------------------------------------------------------------------
+// 
+bool CMapDoc::PickTrace( const Vector &vPosition, const Vector &vDirection, Vector *pHitPosition )
+{
+	Assert( pHitPosition );
+
+	// requires an open 3D view, use the first one.
+	CMapView3D *pView = GetFirst3DView();
+	if ( !pView )
+		return false;
+
+	CCamera *pCam = pView->GetCamera();
+	Assert( pCam );
+
+	int nViewportWidth, nViewportHeight;
+	pCam->GetViewPort( nViewportWidth, nViewportHeight );
+
+	// save off old camera values before we hijack them
+	Vector vSavedViewPoint;
+	pCam->GetViewPoint( vSavedViewPoint );
+	const float flSavedYaw = pCam->GetYaw();
+	const float flSavedPitch = pCam->GetPitch();
+
+	// hijack the camera
+	pCam->SetViewPoint( vPosition );
+	pCam->SetViewTarget( vPosition + vDirection );
+
+	bool bPickSuccess = false;
+
+	ULONG ulFace;
+	VMatrix LocalMatrix, LocalMatrixNeg;
+	const Vector2D vViewportPickPos( ((float)nViewportWidth) * 0.5f, ((float)nViewportHeight) * 0.5f );
+	CMapClass *pObj = pView->NearestObjectAt( vViewportPickPos, ulFace, FLAG_OBJECTS_AT_ONLY_SOLIDS | FLAG_OBJECTS_AT_RESOLVE_INSTANCES, &LocalMatrix );
+	if ( pObj )
+	{
+		CMapSolid *pSolid = dynamic_cast <CMapSolid *> ( pObj );
+		if ( pSolid )
+		{
+			LocalMatrix.InverseTR( LocalMatrixNeg );
+
+			// Build a ray to trace against the face that they clicked on to
+			// find the point of intersection.
+
+			Vector vStart,vEnd;
+			pView->GetCamera()->BuildRay( vViewportPickPos, vStart, vEnd );
+
+			Vector vHitPos, vHitNormal;
+			CMapFace *pFace = pSolid->GetFace( ulFace );
+			Vector vFinalStart, vFinalEnd;
+			LocalMatrixNeg.V3Mul( vStart, vFinalStart );
+			LocalMatrixNeg.V3Mul( vEnd, vFinalEnd );
+			if ( pFace->TraceLine( vHitPos, vHitNormal, vFinalStart, vFinalEnd ) )
+			{
+				Vector vFinalHitPos;
+				LocalMatrix.V3Mul( vHitPos, vFinalHitPos );				
+				*pHitPosition = vHitPos;
+				bPickSuccess = true;	
+			}
+		}
+	}
+
+	// restore saved camera values
+	pCam->SetViewPoint( vSavedViewPoint );
+	pCam->SetYaw( flSavedYaw );
+	pCam->SetPitch( flSavedPitch );
+
+	return bPickSuccess;
+}
+
+
+//-----------------------------------------------------------------------------
+static int DropTraceBBoxSort( CMapSolid * const *pLeft, CMapSolid * const *pRight )
+{	
+	// sort the objects from highest to lowest bounding box top
+
+	Vector vLeftMins, vLeftMaxs, vRightMins, vRightMaxs;
+	(*pLeft)->GetCullBox( vLeftMins, vLeftMaxs );
+	(*pRight)->GetCullBox( vRightMins, vRightMaxs );
+
+	if ( vLeftMaxs.z > vRightMaxs.z )
+		return -1;
+	else if ( vLeftMaxs.z < vRightMaxs.z )
+		return 1; // positive return value = swap order
+	else
+		return 0;
+}
+
+
+
+//-----------------------------------------------------------------------------
+// Purpose: From a given point, determine the highest point below it that rests on
+//             a displacement or a clip brush.
+//-----------------------------------------------------------------------------
+// 
+bool CMapDoc::DropTraceOnDisplacementsAndClips( const Vector &vPosition, Vector *pHitPosition, bool *pHitClip )
+{
+	CMapWorld *pMapWorld = GetMapWorld();
+	CManifest *pManifest = GetManifest();
+	
+	if ( pManifest )
+	{
+		pMapWorld = pManifest->GetManifestWorld();
+	}
+
+	if ( pMapWorld == NULL )
+		return false;
+
+	CCullTreeNode *pTree = pMapWorld->CullTree_GetCullTree();
+	if ( pTree == NULL )
+		return false;
+
+	// begin marker for keeping track of which map class objects we have touched so far while searching for objects
+	CMapClass::MakeNewDropTraceMarker();
+
+	CUtlVector< CMapSolid* > objects;
+	DropTraceRecurse( pTree, vPosition, objects );
+
+	// sort the objects from highest bounding box top to lowest
+	objects.Sort( DropTraceBBoxSort );
+	
+	const Vector vUnderground = vPosition + Vector( 0.0f, 0.0f, -99999.f ); // end of trace, hopefully below the ground.
+
+	bool bHitSomething = false;
+	bool bHitClip = false;
+	float flHitHeight = 0.0f;
+
+	FOR_EACH_VEC( objects, it )
+	{
+		CMapSolid *obj = objects[ it ];
+		Assert( obj );
+
+		// if we have already hit something, and this object's bounding box top is below the hit height,
+		//  we have no need to proceed since the objects are sorted with descending bbox tops.
+		if ( bHitSomething )
+		{
+			Vector vObjMins, vObjMaxs;
+			obj->GetCullBox( vObjMins, vObjMaxs );
+			if ( vObjMaxs.z < flHitHeight )
+				break;
+		}
+
+		int nFaces = obj->GetFaceCount();
+		if ( nFaces > 50 )
+			exit(0);
+		for ( int nFace = 0; nFace < nFaces; ++nFace )
+		{
+			CMapFace *pFace = obj->GetFace( nFace );
+
+			// trivially reject faces with cull box that does not overlap 2D point
+			Vector vMins, vMaxs;
+			pFace->GetCullBox( vMins, vMaxs ); 
+			if ( vMins.x <= vPosition.x && vPosition.x <= vMaxs.x &&
+				 vMins.y <= vPosition.y && vPosition.y <= vMaxs.y )
+			{
+				// We only care about two kinds of faces: Those with displacements, and those with a clip texture.
+				bool bIsClip = false;
+				if ( !pFace->HasDisp() )
+				{
+					char texName[256];
+					pFace->GetTextureName( texName );
+					if ( V_strcmp( texName, "tools/toolsnpcclip" ) != 0 )
+						continue;
+					
+					bIsClip = true;
+				}
+
+				Vector vHitPos, vHitNormal;
+				if ( pFace->TraceLine( vHitPos, vHitNormal, vPosition, vUnderground ) )
+				{
+					if ( !bHitSomething || vHitPos.z > flHitHeight )
+					{
+						// Test whether the point is inside the bounds of the face. Necessary for rotated brushes.
+						const int nPoints = pFace->nPoints;
+						const Vector *pPoints = pFace->Points;
+						bool bInFace = true;
+						for ( int i = 0; i < nPoints; ++i )
+						{
+							const int n1 = i;
+							const int n2 = ( i != nPoints - 1 ? i + 1 : 0 );
+							const Vector &p1 = pPoints[n1];
+							const Vector &p2 = pPoints[n2];
+							const Vector v = p2 - p1;
+
+							const Vector toHitPos = vHitPos - p1;
+
+							if ( toHitPos.x * v.y - toHitPos.y * v.x < 0.0f ) // 2D cross product, z = 0
+							{
+								bInFace = false;
+								break;
+							}
+
+						}
+
+						if ( bInFace )
+						{
+							bHitSomething = true;
+							bHitClip = bIsClip;
+							flHitHeight = vHitPos.z;
+						}
+					}
+				}
+			}
+		}		
+	}
+
+	if ( bHitSomething )
+	{
+		if ( pHitPosition )
+		{
+			*pHitPosition = vPosition;		
+			pHitPosition->z = flHitHeight;
+		}
+		
+		if ( pHitClip )
+		{
+			*pHitClip = bHitClip;
+		}
+	}
+
+	return bHitSomething;
+}
+
+
+void CMapDoc::DropTraceRecurse( CCullTreeNode *pCullTreeNode, const Vector &vTraceStart, CUtlVector< CMapSolid* > &objects )
+{
+	int nChildren = pCullTreeNode->GetChildCount();
+	if ( nChildren != 0 )
+	{
+		for ( int nChild = 0; nChild < nChildren; ++nChild )
+		{
+			CCullTreeNode *pChild = pCullTreeNode->GetCullTreeChild( nChild );
+			Assert( pChild != NULL );
+			if ( pChild != NULL )
+			{
+				Vector vMins;
+				Vector vMaxs;
+				pChild->GetBounds( vMins, vMaxs );
+				if ( vMins.x <= vTraceStart.x && vTraceStart.x <= vMaxs.x &&
+					 vMins.y <= vTraceStart.y && vTraceStart.y <= vMaxs.y )
+				{
+					DropTraceRecurse( pChild, vTraceStart, objects );
+				}
+			}
+		}
+	}
+	else
+	{
+		int nObjects = pCullTreeNode->GetObjectCount();
+		for ( int nObject = 0; nObject < nObjects; ++nObject )
+		{
+			CMapClass *pObject = pCullTreeNode->GetCullTreeObject( nObject );
+			Assert( pObject != NULL );
+
+			DropTraceObjectRecurse( pObject, vTraceStart, objects );
+		}
+	}	
+}
+
+
+void CMapDoc::DropTraceObjectRecurse( CMapClass *pObject, const Vector &vTraceStart, CUtlVector< CMapSolid* > &objects )
+{
+	// If we have already tested this object, no need to do so again.
+	if ( pObject->IsDropTraceMarkerCurrent() )
+		return;
+
+	pObject->DropTraceMark();
+
+	// skip invisible objects
+	if ( !pObject->IsVisible() )
+		return;
+
+	const Vector &vMins = pObject->GetCullBoxMins();
+	const Vector &vMaxs = pObject->GetCullBoxMaxs();
+	if ( vMins.x <= vTraceStart.x && vTraceStart.x <= vMaxs.x &&
+		vMins.y <= vTraceStart.y && vTraceStart.y <= vMaxs.y &&
+		vMins.z < vTraceStart.z )
+	{
+		if ( pObject->IsMapClass( MAPCLASS_TYPE(CMapSolid) ) )
+		{
+			CMapSolid *pMapSolid = static_cast< CMapSolid* >( pObject );
+			if ( objects.Find( pMapSolid ) == -1 )
+				objects.AddToTail( pMapSolid );
+		}
+
+		const CMapObjectList *pChildren = pObject->GetChildren();
+		Assert( pChildren );
+
+		int nChildren = pObject->GetChildCount();
+		for ( int nChild = 0; nChild < nChildren; ++nChild )
+		{
+			CMapClass *pChild = (CUtlReference< CMapClass >)(*pChildren)[nChild];
+			Assert( pChild );
+
+			DropTraceObjectRecurse( pChild, vTraceStart, objects );
+		}
 	}
 }
 
@@ -4587,7 +5919,7 @@ void CMapDoc::GetBestVisiblePoint(Vector& ptOrg)
 // Purpose: Gets a point on the screen to paste to. Functionalized because it
 //			is called from OnEditPaste and OnEditPasteSpecial.
 //-----------------------------------------------------------------------------
-void CMapDoc::GetBestPastePoint(Vector &vecPasteOrigin)
+void CMapDoc::GetBestPastePoint(Vector &vecPasteOrigin, IHammerClipboard *pClipboard)
 {
 	//
 	// Start with a visible grid point near the center of the screen.
@@ -4671,8 +6003,8 @@ void CMapDoc::GetBestPastePoint(Vector &vecPasteOrigin)
 						Hits.m_LocalMatrix.V3Mul( HitPos, vFinalHitPos );
 						vFinalHitNormal = Hits.m_LocalMatrix.ApplyRotation( HitNormal );
 
-						mins = GetHammerClipboard()->Bounds.bmins;
-						maxs = GetHammerClipboard()->Bounds.bmaxs;
+						mins = GetHammerClipboard( pClipboard )->Bounds.bmins;
+						maxs = GetHammerClipboard( pClipboard )->Bounds.bmaxs;
 						delta = vFinalHitPos - (mins+maxs)/2;
 						mins += delta;
 						maxs += delta;
@@ -4708,9 +6040,9 @@ void CMapDoc::GetBestPastePoint(Vector &vecPasteOrigin)
 		Snap(vecPasteOrigin);
 
 		// Offset the center relative to the grid the same as it was originally.
-		Vector vecSnappedOriginalCenter = GetHammerClipboard()->vecOriginalCenter;
+		Vector vecSnappedOriginalCenter = GetHammerClipboard( pClipboard )->vecOriginalCenter;
 		Snap(vecSnappedOriginalCenter);
-		vecPasteOrigin += GetHammerClipboard()->vecOriginalCenter - vecSnappedOriginalCenter;
+		vecPasteOrigin += GetHammerClipboard( pClipboard )->vecOriginalCenter - vecSnappedOriginalCenter;
 	}
 }
 
@@ -4743,6 +6075,11 @@ void CMapDoc::Copy( IHammerClipboard *pClipboard )
 		return;
 	}
 
+	if ( !m_pSelection->IsCopyable() )
+	{
+		return;
+	}
+
 	if ( pClipboard == NULL )
 	{
 		pClipboard = GetHammerClipboard();
@@ -4751,7 +6088,7 @@ void CMapDoc::Copy( IHammerClipboard *pClipboard )
 	BeginWaitCursor();
 
 	// Delete the contents of the clipboard.
-	GetHammerClipboard( pClipboard )->Objects.PurgeAndDeleteElements();
+	GetHammerClipboard( pClipboard )->Objects.RemoveAll();
 
 	m_pSelection->GetBoundsCenter(GetHammerClipboard( pClipboard )->vecOriginalCenter);
 	m_pSelection->GetBounds(GetHammerClipboard( pClipboard )->Bounds.bmins, GetHammerClipboard( pClipboard )->Bounds.bmaxs);
@@ -4765,7 +6102,7 @@ void CMapDoc::Copy( IHammerClipboard *pClipboard )
 
 	for (int i = 0; i < pSelList->Count()	; i++)
 	{
-		CMapClass *pobj = pSelList->Element(i);
+		CMapClass *pobj = (CUtlReference< CMapClass >)pSelList->Element(i);
 		CMapClass *pNewobj = pobj->Copy(false);
 
 		//
@@ -4932,9 +6269,9 @@ void CMapDoc::PasteInstance(CMapObjectList &Objects, CMapWorld *pSourceWorld, CM
 {
 	QAngle	vecRotateFix;
 
-	vecRotateFix.x = vecRotate[ PITCH ];
-	vecRotateFix.y = vecRotate[ ROLL ];
-	vecRotateFix.z = vecRotate[ YAW ];
+	vecRotateFix.x = vecRotate.z;
+	vecRotateFix.y = -vecRotate.x;
+	vecRotateFix.z = vecRotate.y;
 
 	//
 	// Copy the objects in the clipboard and build a list of objects to paste
@@ -5071,7 +6408,7 @@ void CMapDoc::Delete( void )
 	// Delete objects in selection.
 	while ( !m_pSelection->IsEmpty() )
 	{
-		CMapClass *pobj = pSelList->Element(0);
+		CMapClass *pobj = (CUtlReference< CMapClass >)pSelList->Element(0);
 
 		DeleteObject(pobj);
 	}
@@ -5095,14 +6432,13 @@ void CMapDoc::OnEditPaste(void)
 	// Build a translation that will put the pasted objects in the center of the view.
 	//
 	Vector vecPasteOffset;
-	GetBestPastePoint(vecPasteOffset);
+	GetBestPastePoint(vecPasteOffset, GetHammerClipboard());
 	vecPasteOffset -= GetHammerClipboard()->vecOriginalCenter;
 
 	//
 	// Paste the objects into the active world.
 	//
-	CMapWorld *pWorld = GetActiveWorld();
-	Paste(GetHammerClipboard()->Objects, GetHammerClipboard()->pSourceWorld, pWorld, vecPasteOffset, QAngle(0, 0, 0), NULL, false, NULL);
+	Paste(GetHammerClipboard(), GetActiveWorld(), vecPasteOffset, QAngle(0, 0, 0), NULL, false, NULL);
 
 	m_pToolManager->SetTool(TOOL_POINTER);
 	
@@ -5131,11 +6467,9 @@ void CMapDoc::OnQuickHide_UpdateCreateVisGroupFromHidden(CCmdUI *pCmdUI)
 //-----------------------------------------------------------------------------
 void CMapDoc::OnUpdateEditSelection(CCmdUI *pCmdUI) 
 {
-	bool bMorphSnap = m_pToolManager->GetActiveToolID() == TOOL_MORPH && pCmdUI->m_nID == ID_TOOLS_SNAPSELECTEDTOGRID;
-	bool bStandardCommand = ( m_pSelection->GetCount() != 0 ) && m_pSelection->IsCopyable() &&
-							  ( m_pToolManager->GetActiveToolID() != TOOL_FACEEDIT_MATERIAL ) &&
-							  !GetMainWnd()->IsShellSessionActive();
-	pCmdUI->Enable( bMorphSnap || bStandardCommand );
+	pCmdUI->Enable( ( m_pSelection->GetCount() != 0 ) && m_pSelection->IsCopyable() &&
+					( m_pToolManager->GetActiveToolID() != TOOL_FACEEDIT_MATERIAL ) &&
+					!GetMainWnd()->IsShellSessionActive() );
 }
 
 
@@ -5199,7 +6533,7 @@ void CMapDoc::OnToolsGroup(void)
 	// First see if grouping these objects will remove them from an existing entity or group.
 	for (int i = 0; i < pSelList->Count(); i++)
 	{
-		CMapClass *pobj = pSelList->Element(i);
+		CMapClass *pobj = (CUtlReference< CMapClass >)pSelList->Element(i);
 		if ((pobj->GetParent() != NULL) && (!IsWorldObject(pobj->GetParent())))
 		{
 			if (GetMainWnd()->MessageBox("Some selected objects are part of an entity or belong to a group. Grouping them now will remove them from the entity or group! Continue?", "Warning", MB_YESNO | MB_ICONEXCLAMATION) != IDYES)
@@ -5223,7 +6557,7 @@ void CMapDoc::OnToolsGroup(void)
 
 	for (int i = 0; i < pSelList->Count(); i++)
 	{
-		CMapClass *pobj = pSelList->Element(i);
+		CMapClass *pobj = (CUtlReference< CMapClass >)pSelList->Element(i);
 		if (pobj->GetParent() != NULL)
 		{
 			pobj->GetParent()->RemoveChild(pobj);
@@ -5377,7 +6711,7 @@ void CMapDoc::OnEditSelectall(void)
 	const CMapObjectList *pChildren = m_pWorld->GetChildren();
 	FOR_EACH_OBJ( *pChildren, pos )
 	{
-		CMapClass *pChild = pChildren->Element(pos);
+		CMapClass *pChild = (CUtlReference< CMapClass >)pChildren->Element(pos);
 
 		if (pChild->IsVisible())
 		{
@@ -5489,13 +6823,13 @@ void CMapDoc::OnFileSaveAs(void)
 			if (access(str, 2) == -1)
 			{
 				// The file is read-only
-				wsprintf(szConfirm, "The file %s is read-only. You must change the file's attributes to overwrite it.", (const char*)str);
+				wsprintf(szConfirm, "The file %s is read-only. You must change the file's attributes to overwrite it.", str);
 				AfxMessageBox(szConfirm, MB_OK | MB_ICONEXCLAMATION);
 				bSave = false;
 			}
 			else
 			{
-				wsprintf(szConfirm, "Overwrite existing file %s?", (const char*)str);
+				wsprintf(szConfirm, "Overwrite existing file %s?", str);
 				if (AfxMessageBox(szConfirm, MB_YESNO | MB_ICONQUESTION) != IDYES)
 				{
 					bSave = false;
@@ -5788,23 +7122,17 @@ void CMapDoc::OnFileRunmap(void)
 
 	CRunMap dlg;
 	CRunMapExpertDlg dlgExpert;
-
-	CString strFile = GetPathName();
-
-	bool bWasModified = (IsModified() == TRUE);
+	dlg.m_bWaitForKeypress = dlgExpert.m_bWaitForKeypress = (AfxGetApp()->GetProfileInt("Run Map", "WaitForKeypress", 0) != 0);
 
 	bSaveVisiblesOnly = FALSE;
 
-	// Make sure the .VMF or .RMF is saved first.
-	if (strFile.IsEmpty() || bWasModified)
-	{
-		OnFileSave();
-		strFile = GetPathName();
-		if (strFile.IsEmpty() || IsModified())
-		{
-			return;
-		}
-	}
+	// Always save the map in case there's a dirty flag bug
+	CString strFile = GetPathName();
+	OnFileSave();
+	strFile = GetPathName();
+	if (strFile.IsEmpty() || IsModified())
+		return;
+
 	strFile.MakeLower();
 
 	// Make sure it has the correct extension for compilation (.VMF or .MAP).
@@ -5814,12 +7142,6 @@ void CMapDoc::OnFileRunmap(void)
 	{
 		strcpy(strFile.GetBuffer(0) + iPos, strCompileExtension);
 		strFile.ReleaseBuffer();
-
-		// Make sure the .MAP version is up to date.
-		if (bWasModified)
-		{
-			OnSaveDocument(strFile);
-		}
 	}
 		
 	// make "bsp" string
@@ -5847,6 +7169,7 @@ void CMapDoc::OnFileRunmap(void)
 			{
 				dlg.m_bSwitchMode = FALSE;
 				AfxGetApp()->WriteProfileInt("Run Map", "Mode", 1);
+				dlgExpert.m_bWaitForKeypress = dlg.m_bWaitForKeypress;
 			}
 			else 
 			{
@@ -5865,11 +7188,13 @@ void CMapDoc::OnFileRunmap(void)
 			{
 				AfxGetApp()->WriteProfileInt("Run Map", "Mode", 0);
 				dlgExpert.m_bSwitchMode = FALSE;
+				dlg.m_bWaitForKeypress = dlgExpert.m_bWaitForKeypress;
 			}
 			else if (dlgExpert.m_pActiveSequence) // clicked ok
 			{
 				// run the commands in the active sequence
-				RunCommands(dlgExpert.m_pActiveSequence->m_Commands, strFile);
+				RunCommands(dlgExpert.m_pActiveSequence->m_Commands, strFile, dlgExpert.m_bWaitForKeypress == TRUE);
+				AfxGetApp()->WriteProfileInt("Run Map", "WaitForKeypress", dlgExpert.m_bWaitForKeypress);
 				return;
 			}
 			else
@@ -5890,7 +7215,6 @@ void CMapDoc::OnFileRunmap(void)
 	CCOMMAND cmd;
 	memset(&cmd, 0, sizeof cmd);
 	cmd.bEnable = TRUE;
-	cmd.bUseProcessWnd = TRUE;
 	cmd.bLongFilenames = TRUE;
 
 	CCommandArray cmds;
@@ -5947,20 +7271,42 @@ void CMapDoc::OnFileRunmap(void)
 	// Run the game.
 	if (dlg.m_bNoQuake == FALSE)
 	{
-		cmd.bUseProcessWnd = FALSE;
 		cmd.bNoWait = TRUE;
 
 		//When running under steam, use applaunch always because if a user forgets to run the game they're trying to launch, it will fail
 		//with an obscure error they won't understand.
+		if ( CGameConfigManager::IsSDKDeployment() )
+		{
+			CString strSteamExe;
+			m_pGame->GetSteamExe(strSteamExe);
+
+			CString strSteamAppID;
+			m_pGame->GetSteamAppID(strSteamAppID);
+			strcpy(cmd.szRun, strSteamExe);
+
+			if (strSteamAppID.GetLength() != 0)
+			{
+				sprintf(cmd.szParms, "-applaunch %s -game $gamedir %s +map $file", strSteamAppID, dlg.m_strQuakeParms);
+			}
+			else
+			{
+				// If the appid can't be found for whatever reason just launch normally. *sigh*
+				strcpy(cmd.szRun, "$game_exe");
+				sprintf(cmd.szParms, "-game $gamedir %s +map $file", dlg.m_strQuakeParms);
+			}
+
+		}
+		else
 		{
 			strcpy(cmd.szRun, "$game_exe");
-			sprintf(cmd.szParms, "-game $gamedir %s +map $file -steam", (const char*)dlg.m_strQuakeParms);
+			sprintf(cmd.szParms, "-game $gamedir %s +map $file", dlg.m_strQuakeParms);
 		}
 
 		cmds.Add(cmd);
 	}
 
-	RunCommands(cmds, GetPathName());
+	AfxGetApp()->WriteProfileInt("Run Map", "WaitForKeypress", dlg.m_bWaitForKeypress);
+	RunCommands(cmds, GetPathName(), dlg.m_bWaitForKeypress == TRUE);
 }
 
 
@@ -6079,6 +7425,14 @@ void CMapDoc::UpdateTitle(CView *pView)
 	{
 		str.Format("%s", pszFilename);
 	}
+	if ( m_bReadOnly == true )
+	{
+		str += " [ READ ONLY ]";
+	}
+	if ( m_bCheckedOut == true )
+	{
+		str += " [ CHECKED OUT ]";
+	}
 
 	SetTitle(str);
 }
@@ -6193,7 +7547,7 @@ void CMapDoc::UpdateForApplicator(BOOL bApplicator)
 		const CMapObjectList *pSelList = m_pSelection->GetList();
 		for (int i = 0; i < pSelList->Count(); i++)
 		{
-			CMapClass *pObject = pSelList->Element(i);
+			CMapClass *pObject = (CUtlReference< CMapClass >)pSelList->Element(i);
 						
 			CMapSolid *pSolid = dynamic_cast<CMapSolid*>(pObject);
 
@@ -6354,9 +7708,8 @@ void CMapDoc::SelectFace(CMapSolid *pSolid, int iFace, int cmd)
 
 
 //-----------------------------------------------------------------------------
-// Purpose: 
 //-----------------------------------------------------------------------------
-void CMapDoc::OnMapInformation(void)
+void CMapDoc::OnMapInformation()
 {
 	CMapInfoDlg dlg(m_pWorld);
 	dlg.DoModal();
@@ -6614,7 +7967,7 @@ void CMapDoc::OnToolsHollow(void)
 	
 	for (int i = 0; i < pSelList->Count(); i++)
 	{
-		CMapClass *pObject = pSelList->Element(i);
+		CMapClass *pObject = (CUtlReference< CMapClass >)pSelList->Element(i);
 
 		CMapSolid *pSolid = dynamic_cast <CMapSolid *> (pObject);
 		if (pSolid != NULL)
@@ -6626,7 +7979,7 @@ void CMapDoc::OnToolsHollow(void)
 		CMapClass *pChild = pObject->GetFirstDescendent(pos2);
 		while (pChild != NULL)
 		{
-			pSolid = dynamic_cast <CMapSolid *> (pChild);
+			CMapSolid *pSolid = dynamic_cast <CMapSolid *> (pChild);
 			if (pSolid != NULL)
 			{
 				SelectedSolids.AddToTail(pSolid);
@@ -6643,7 +7996,8 @@ void CMapDoc::OnToolsHollow(void)
 	
 	FOR_EACH_OBJ( SelectedSolids, pos )
 	{
-		CMapSolid *pSelectedSolid = (CMapSolid *)SelectedSolids.Element(pos);
+		CMapClass *pMapClass = (CUtlReference< CMapClass >)SelectedSolids.Element(pos);
+		CMapSolid *pSelectedSolid = (CMapSolid *)pMapClass;
 		CMapClass *pDestParent = pSelectedSolid->GetParent();
 
 		GetHistory()->Keep(pSelectedSolid);
@@ -6766,7 +8120,7 @@ void CMapDoc::OnEditPastespecial(void)
 
 	if (!dlg.m_bCenterOriginal)
 	{
-		GetBestPastePoint(vecPasteOffset);
+		GetBestPastePoint(vecPasteOffset, GetHammerClipboard());
 		vecPasteOffset -= GetHammerClipboard()->vecOriginalCenter;
 	}
 	else
@@ -6806,7 +8160,7 @@ void CMapDoc::OnEditPastespecial(void)
 		//
 		// Paste the objects with the current offset and rotation.
 		//
-		Paste(GetHammerClipboard()->Objects, GetHammerClipboard()->pSourceWorld, pWorld, vecPasteOffset, vecPasteAngles, pParent, bMakeNamesUnique, pszPrefix );
+		Paste(GetHammerClipboard(), pWorld, vecPasteOffset, vecPasteAngles, pParent, bMakeNamesUnique, pszPrefix );
 
 		//
 		// Increment the paste offset.
@@ -6846,6 +8200,19 @@ void CMapDoc::OnUpdateEditPastespecial(CCmdUI *pCmdUI)
 {
 	pCmdUI->Enable((GetHammerClipboard()->Objects.Count() != 0) && !GetMainWnd()->IsShellSessionActive());
 }
+
+
+void DumpWorldRecursive( CMapClass *pObj, int nDepth )
+{
+	Msg( "%*s\n", 10 + ( 4 * nDepth ), pObj->GetType() );
+
+	const CMapObjectList *children = pObj->GetChildren();
+	for ( int i = 0; i < children->Count(); i++ )
+	{
+		DumpWorldRecursive( (CUtlReference< CMapClass >)children->Element( i ), nDepth + 1 );
+	}
+}
+
 
 
 //-----------------------------------------------------------------------------
@@ -6941,8 +8308,9 @@ bool CMapDoc::ExpandTargetNameKeywords(char *szNewTargetName, const char *szOldT
 		
 		FOR_EACH_OBJ( *pEntityList, pos )
 		{
-			CMapEntity *pEntity = pEntityList->Element( pos );
-			const char *pszTargetName = pEntity->GetKeyValue("targetname");
+			const CMapEntity *pEntity = pEntityList->Element(pos).GetObject();
+
+			const char *pszTargetName = pEntity ? pEntity->GetKeyValue("targetname") : NULL;
 
 			//
 			// If this entity has a targetname, check to see if it is of the
@@ -7113,6 +8481,7 @@ void CMapDoc::RenameEntities( CMapClass *pRoot, CMapWorld *pWorld, bool bMakeUni
 		pChild = pRoot->GetNextDescendent( pos );
 	}
 
+
 	for ( int i=0; i<oldNames.Count(); i++ )
 	{
 		if ( pWorld->GenerateNewTargetname( oldNames[i], szName, sizeof( szName ), bMakeUnique, szAddPrefix, pRoot ) )
@@ -7245,7 +8614,7 @@ void CMapDoc::OnLogicalMoveBlock(void)
 	  
  	for ( int i = 0; i < pSelList->Count(); ++i )
 	{
-		CMapClass *pClass = pSelList->Element( i );
+		CMapClass *pClass = (CUtlReference< CMapClass >)pSelList->Element( i );
 		if ( !pClass->IsLogical() )
 			continue;
 
@@ -7284,7 +8653,7 @@ void CMapDoc::OnLogicalSelectAllCascading(void)
 	CUtlRBTree< CMapClass*, unsigned short > list( 0, 0, DefLessFunc( CMapClass* ) );
 	for ( int i = 0; i < pSelList->Count(); ++i )
 	{
-		CMapClass *pMapClass = pSelList->Element(i);
+		CMapClass *pMapClass = (CUtlReference< CMapClass >)pSelList->Element(i);
 		list.InsertIfNotFound( pMapClass );
 		BuildCascadingSelectionList( pMapClass, list, true );
 	}
@@ -7346,8 +8715,13 @@ void CMapDoc::AddConnectedNodes( CMapClass *pObject, CUtlRBTree< CMapClass*, uns
 						FOR_EACH_OBJ( *pConn->GetTargetEntityList(), pos )
 						{	
 							CMapEntity *pEntity = pConn->GetTargetEntityList()->Element( pos );
+
+							// If you hit this assert it means that an entity was deleted but not removed
+							// from this entity's list of targets.
+							ASSERT( pEntity != NULL );
+
 							// Don't bother recursing back into this current node
-							if ( pEntity != pObject )
+							if ( pEntity && ( pEntity != pObject ) )
 							{
 								// Recurse to the adjacent target entity
 								AddConnectedNodes( pEntity, visited );
@@ -7361,7 +8735,7 @@ void CMapDoc::AddConnectedNodes( CMapClass *pObject, CUtlRBTree< CMapClass*, uns
 			const CMapObjectList *pChildren = pObject->GetChildren();
 			FOR_EACH_OBJ( *pChildren, pos )
 			{
-				AddConnectedNodes( pChildren->Element(pos), visited );
+				AddConnectedNodes( (CUtlReference< CMapClass >)pChildren->Element(pos), visited );
 			}
 		}
 	}
@@ -7383,7 +8757,7 @@ void CMapDoc::OnLogicalSelectAllConnected(void)
 
 		for ( int i = 0; i < nSelected; ++i )
 		{
-			CMapClass *pMapClass = pSelList->Element(i);
+			CMapClass *pMapClass = (CUtlReference< CMapClass >)pSelList->Element(i);
 			AddConnectedNodes( pMapClass, visited );
 		}
 
@@ -7419,7 +8793,7 @@ BOOL CMapDoc::OnViewHideObjects(UINT nID)
 		CMapClass *pObject = Objects.Element(pos);
 		if (!VisGroups_ObjectCanBelongToVisGroup(pObject))
 		{
-			Objects.Remove(pos);
+			Objects.FastRemove(pos);
 		}
 	}
 	int nFinalCount = Objects.Count();
@@ -7465,7 +8839,7 @@ bool CMapDoc::GetChildrenToHide(CMapClass *pObject, bool bSelected, CMapObjectLi
 	const CMapObjectList *pChildren = pObject->GetChildren();
 	FOR_EACH_OBJ( *pChildren, pos )
 	{
-		CMapClass *pChild = pChildren->Element(pos);
+		CMapClass *pChild = (CUtlReference< CMapClass >)pChildren->Element(pos);
 		CMapGroup *pGroup = dynamic_cast<CMapGroup *>(pChild);
 		CMapSolid *pSolid = dynamic_cast<CMapSolid *>(pChild);
 		CMapEntity *pEntity = dynamic_cast<CMapEntity *>(pChild);
@@ -7474,7 +8848,7 @@ bool CMapDoc::GetChildrenToHide(CMapClass *pObject, bool bSelected, CMapObjectLi
 		{
 			if (pChild->IsVisible())
 			{
-				pEntity = dynamic_cast<CMapEntity *>(pChild);
+				CMapEntity *pEntity = dynamic_cast<CMapEntity *>(pChild);
 				if (pGroup || (pEntity && pEntity->IsSolidClass()))
 				{
 					// This child is a group or a solid entity -- check all its children.
@@ -7569,10 +8943,54 @@ void CMapDoc::OnUpdateViewPreviewModelFade(CCmdUI *pCmdUI)
 	pCmdUI->Enable(!GetMainWnd()->IsShellSessionActive());
 }
 
+//-----------------------------------------------------------------------------
+// Purpose:
+//-----------------------------------------------------------------------------
 void CMapDoc::OnViewPreviewModelFade(void)
 {
 	Options.view3d.bPreviewModelFade = !Options.view3d.bPreviewModelFade;
+
+	// Bring up the Low, Med, High modes.
+	if ( Options.view3d.bPreviewModelFade )
+	{
+		CMainFrame *pMainFrame = GetMainWnd();
+		if( pMainFrame )
+		{
+			CFadeDlg dlg( &pMainFrame->m_wndMapOps );
+			dlg.DoModal();
+		}
+	}
+
 	UpdateAllViews( MAPVIEW_UPDATE_ONLY_3D );
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: Toggles the state of the grid nav preview.
+//-----------------------------------------------------------------------------
+void CMapDoc::OnViewPreviewGridNav(void)
+{
+	if ( !m_pGridNav || !m_pGridNav->IsEnabled() )
+		return;
+
+	m_pGridNav->TogglePreview();
+
+	UpdateVisibilityAll();
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: Manages the state of the View | Preview Grid Nav menu item.
+//-----------------------------------------------------------------------------
+void CMapDoc::OnUpdateViewPreviewGridNav(CCmdUI *pCmdUI) 
+{
+	if ( !m_pGridNav || !m_pGridNav->IsEnabled() )
+	{
+		pCmdUI->Enable( false );
+		return;
+	}
+
+	pCmdUI->Enable( !GetMainWnd()->IsShellSessionActive() );
+	pCmdUI->SetCheck(m_pGridNav->IsPreviewActive() ? TRUE : FALSE);
 }
 
 //-----------------------------------------------------------------------------
@@ -7643,6 +9061,17 @@ void CMapDoc::OnMapDiff(void)
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
+void CMapDoc::OnViewDotACamera(void)
+{
+	bool bShow = CMapEntity::GetShowDotACamera();
+	CMapEntity::ShowDotACamera(!bShow);
+
+	UpdateAllViews( MAPVIEW_UPDATE_ONLY_3D | MAPVIEW_OPTIONS_CHANGED );
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
 void CMapDoc::OnViewShowconnections(void)
 {
 	bool bShow = CMapEntity::GetShowEntityConnections();
@@ -7687,6 +9116,14 @@ void CMapDoc::OnMapEntityGallery(void)
 			}
 		}
 	}
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+void CMapDoc::OnUpdateViewDotACamera(CCmdUI *pCmdUI) 
+{
+	pCmdUI->SetCheck(CMapEntity::GetShowDotACamera());
 }
 
 
@@ -7776,7 +9213,7 @@ void CMapDoc::OnToolsCreateprefab(void)
 	const CMapObjectList *pSelList = m_pSelection->GetList();
 	for (int i = 0; i < pSelList->Count(); i++)
 	{
-		CMapClass *pObject = pSelList->Element(i);
+		CMapClass *pObject = (CUtlReference< CMapClass >)pSelList->Element(i);
 		CMapClass *pNew = pObject->Copy(false);
 
 		// HACK: prune the object from the tree without doing any notification
@@ -8299,11 +9736,6 @@ void CMapDoc::OnEditReplacetex(void)
 //-----------------------------------------------------------------------------
 void CMapDoc::OnToolsSnapselectedtogrid(void)
 {
-	if ( m_pToolManager->GetActiveToolID() == TOOL_MORPH )
-	{
-		Morph3D *pMorphTool = assert_cast< Morph3D* >( m_pToolManager->GetActiveTool() );
-		pMorphTool->SnapSelectedToGrid( m_nGridSpacing );
-	}
 	if (m_pSelection->IsEmpty())
 		return;
 
@@ -8318,7 +9750,7 @@ void CMapDoc::OnToolsSnapselectedtogrid(void)
 	bool bOnePointEntity = false;
 	if (pSelList->Count() == 1)
 	{
-		CMapClass *pObject = pSelList->Element(0);
+		CMapClass *pObject = (CUtlReference< CMapClass >)pSelList->Element(0);
 		CMapEntity *pEntity = dynamic_cast<CMapEntity *>(pObject);
 		if (pEntity && pEntity->IsPlaceholder())
 		{
@@ -8349,7 +9781,7 @@ void CMapDoc::OnToolsSnapselectedtogrid(void)
 	// do move
 	for (int i = 0; i < pSelList->Count(); i++)
 	{
-		CMapClass *pObject = pSelList->Element(i);
+		CMapClass *pObject = (CUtlReference< CMapClass >)pSelList->Element(i);
 		pObject->TransMove(vecMove);
 	}
 
@@ -8392,7 +9824,7 @@ void CMapDoc::SnapObjectsRecursive(CMapClass *pObject)
 		const CMapObjectList *pChildren = pObject->GetChildren();
 		FOR_EACH_OBJ( *pChildren, pos )
 		{
-			SnapObjectsRecursive(pChildren->Element(pos));
+			SnapObjectsRecursive((CUtlReference< CMapClass >)pChildren->Element(pos));
 		}
 	}
 }
@@ -8416,7 +9848,7 @@ void CMapDoc::OnToolsSnapSelectedToGridIndividually()
 
 	for (int i = 0; i < pSelList->Count(); i++)
 	{
-		CMapClass *pObject = pSelList->Element(i);
+		CMapClass *pObject = (CUtlReference< CMapClass >)pSelList->Element(i);
 		SnapObjectsRecursive(pObject);
 	}
 
@@ -8487,7 +9919,7 @@ void CMapDoc::CenterOriginsRecursive(CMapClass *pObject)
 		const CMapObjectList *pChildren = pObject->GetChildren();
 		FOR_EACH_OBJ( *pChildren, pos )
 		{
-			CenterOriginsRecursive(pChildren->Element(pos));
+			CenterOriginsRecursive((CUtlReference< CMapClass >)pChildren->Element(pos));
 		}
 	}
 }
@@ -8504,7 +9936,7 @@ void CMapDoc::OnToolsCenterOrigins()
 
 	for (int i = 0; i < pSelList->Count(); i++)
 	{
-		CMapClass *pObject = pSelList->Element(i);
+		CMapClass *pObject = (CUtlReference< CMapClass >)pSelList->Element(i);
 		CenterOriginsRecursive(pObject);
 	}
 
@@ -8526,7 +9958,7 @@ void CMapDoc::Snap(Vector &pt, int nFlags)
 	{
 		for (int i = 0; i < 3; i++)
 		{
-			pt[i] = V_rint(pt[i]);
+			pt[i] = rint(pt[i]);
 		}
 	}
 	else if (nFlags & constrainSnap )
@@ -8538,7 +9970,7 @@ void CMapDoc::Snap(Vector &pt, int nFlags)
 
 		for (int i = 0; i < 3; i++)
 		{
-			pt[i] = V_rint(pt[i] / flGridSpacing) * flGridSpacing;
+			pt[i] = rint(pt[i] / flGridSpacing) * flGridSpacing;
 		}
 	}
 
@@ -8591,11 +10023,11 @@ void CMapDoc::OnToolsTransform(void)
 	// This prevents the LoadData below from losing any changes that were made in the
 	// object properties dialog.
 	//
-	GetMainWnd()->pObjectProperties->SaveData();
+	GetMainWnd()->pObjectProperties->SaveData( SAVEDATA_TOOL_TRANSFORM );
 
 	for (int i = 0; i < pSelList->Count(); i++)
 	{
-		CMapClass *pObject = pSelList->Element(i);
+		CMapClass *pObject = (CUtlReference< CMapClass >)pSelList->Element(i);
 
 		if ( dlg.m_iMode == 0 ) 
 		{
@@ -8767,18 +10199,13 @@ bool CMapDoc::IsShellSessionActive(void)
 
 
 //-----------------------------------------------------------------------------
-// Purpose: Returns the current active state of the cordon tool.
 //-----------------------------------------------------------------------------
-bool CMapDoc::IsCordoning(void)
-{
-	return m_bIsCordoning;
-}
-
-bool CMapDoc::SetCordoning( bool bState)
+bool CMapDoc::Cordon_SetCordoning( bool bState)
 {
 	if ( m_bIsCordoning != bState )
 	{
 		m_bIsCordoning = bState;
+		
 		UpdateVisibilityAll();
 		SetModifiedFlag( true );
 		return true;
@@ -8787,36 +10214,344 @@ bool CMapDoc::SetCordoning( bool bState)
 	return false;
 }
 
-void CMapDoc::GetCordon( Vector &mins, Vector &maxs)
+
+//-----------------------------------------------------------------------------
+// Called when the selection changes in the filter dialog. Picks a cordon to
+// edit when the cordon tool is active.
+//-----------------------------------------------------------------------------
+void CMapDoc::Cordon_SelectCordonForEditing( Cordon_t *cordon, BoundBox *box, int nFlags )
 {
-	mins = m_vCordonMins;
-	maxs = m_vCordonMaxs;
+	for ( int i = 0; i < m_Cordons.Count(); i++ )
+	{
+		if ( &m_Cordons[i] != cordon )
+			continue;
+		
+		for ( int j = 0; j < m_Cordons[i].m_Boxes.Count(); j++ )
+		{
+			if ( &m_Cordons[i].m_Boxes[j] == box )
+			{
+				m_nEditCordon = i;
+				m_nEditCordonBox = j;
+				
+				if ( !( nFlags & SELECT_CORDON_FROM_TOOL ) && ( m_pToolManager->GetActiveToolID() == TOOL_EDITCORDON ) )
+				{
+					m_pToolManager->GetActiveTool()->OnActivate();
+					UpdateAllViews( MAPVIEW_UPDATE_TOOL );
+				}
+
+				if ( !(nFlags & SELECT_CORDON_FROM_DIALOG ) )
+				{
+					GetMainWnd()->m_FilterControl.SelectCordon( cordon, box );
+				}
+
+				return;
+			}
+		}
+	}
+	
+	Assert( false );
 }
 
-void CMapDoc::SetCordon( const Vector &mins, const Vector &maxs)
+
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+void CMapDoc::Cordon_GetEditCordon( Vector &mins, Vector &maxs )
 {
-	m_vCordonMins = mins;
-	m_vCordonMaxs = maxs;
+	if ( m_Cordons.Count() == 0 )
+	{
+		Cordon_CreateNewCordon( DEFAULT_CORDON_NAME );
+		m_nEditCordon = m_nEditCordonBox = 0;
+	}
+	else
+	{
+		mins = m_Cordons[m_nEditCordon].m_Boxes[m_nEditCordonBox].bmins;
+		maxs = m_Cordons[m_nEditCordon].m_Boxes[m_nEditCordonBox].bmaxs;
+	}
+}
+
+
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+void CMapDoc::Cordon_SetEditCordon( const Vector &mins, const Vector &maxs )
+{
+	if ( m_Cordons.Count() == 0 )
+	{
+		Cordon_CreateNewCordon( DEFAULT_CORDON_NAME );
+		m_nEditCordon = m_nEditCordonBox = 0;
+	}
+	
+	m_Cordons[m_nEditCordon].m_Boxes[m_nEditCordonBox].bmins = mins;
+	m_Cordons[m_nEditCordon].m_Boxes[m_nEditCordonBox].bmaxs = maxs;
+
 	UpdateVisibilityAll();
 	SetModifiedFlag( true );
 }
 
+
 //-----------------------------------------------------------------------------
-// Purpose: 
 //-----------------------------------------------------------------------------
-void CMapDoc::OnToggleCordon(void)
+Cordon_t *CMapDoc::Cordon_CreateNewCordon( const char *name, BoundBox **ppBox )
 {
-	SetCordoning( !m_bIsCordoning ); 
+	CUtlString cordonName;
+	if ( !name )
+	{
+		CStrDlg dlg( 0, "cordon", "Name:", "New Cordon" );
+		if ( dlg.DoModal() != IDOK )
+			return NULL;
+			
+		cordonName.Set( dlg.m_string );
+	}
+	else
+	{
+		cordonName = name;
+	}
+	
+	Cordon_t *pCordon = Cordon_AddCordon( cordonName );
+	if ( pCordon )
+	{
+		pCordon->m_bActive = true;
+		BoundBox *pBox = Cordon_AddBox( pCordon );
+		if ( ppBox )
+		{
+			*ppBox = pBox;
+		}
+		
+		GetBestVisibleBox( pBox->bmins, pBox->bmaxs );
+		
+		if ( m_bIsCordoning )
+		{
+			UpdateVisibilityAll();
+		}
+
+		SetModifiedFlag( true );
+	}
+	
+	return pCordon;
 }
 
 
 //-----------------------------------------------------------------------------
-// Purpose: 
-// Input  : pCmdUI - 
+//-----------------------------------------------------------------------------
+bool CMapDoc::Cordon_IsCulledByCordon( CMapClass *pObject )
+{
+	if ( !pObject->CanBeCulledByCordon() )
+		return false;
+
+	// If this object intersects any active cordons, it's visible.
+	for ( int i = 0; i < m_Cordons.Count(); i++ )
+	{
+		if ( !m_Cordons[i].m_bActive )
+			continue;
+		
+		for ( int j = 0; j < m_Cordons[i].m_Boxes.Count(); j++ )
+		{
+			if ( pObject->IsIntersectingCordon( m_Cordons[i].m_Boxes[j].bmins, m_Cordons[i].m_Boxes[j].bmaxs ) )
+				return false;
+		}
+	}
+	
+	return true;
+}
+
+
+//-----------------------------------------------------------------------------
+// Together, the cordon/box indices uniquely identify the cordon box within the doc.
+// NOTE: These indices change as cordons and boxes are added and removed.
+//-----------------------------------------------------------------------------
+void CMapDoc::Cordon_GetIndices( Cordon_t *pCordon, BoundBox *pBox, int *pnCordon, int *pnBox )
+{
+	*pnCordon = *pnBox = -1;
+	
+	for ( int i = 0; i < m_Cordons.Count(); i++ )
+	{
+		if ( &m_Cordons[i] == pCordon )
+		{
+			*pnCordon = i;
+			break;
+		}
+	}
+	
+	if ( pBox )
+	{		
+		for ( int j = 0; j < pCordon->m_Boxes.Count(); j++ )
+		{
+			if ( &pCordon->m_Boxes[j] == pBox )
+			{
+				*pnBox = j;
+				break;
+			}
+		}
+	}
+}
+
+
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+Cordon_t *CMapDoc::Cordon_AddCordon( const char *szName )
+{
+	m_Cordons.AddToTail();
+	m_Cordons.Tail().m_szName.Set( szName ? szName : DEFAULT_CORDON_NAME );
+	return &m_Cordons.Tail();
+}
+
+
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+BoundBox *CMapDoc::Cordon_AddBox( Cordon_t *cordon )
+{
+	Assert( cordon );
+	if ( !cordon )
+		return NULL;
+
+	cordon->m_Boxes.AddToTail();
+
+	// The above call to AddToTail may have moved memory and invalidated pointers
+	// held by m_cCordonBox in CFilterControl, so we need to refresh the list.
+	GetMainWnd()->m_FilterControl.UpdateCordonList();
+
+	return &cordon->m_Boxes.Tail();
+}
+
+
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+void CMapDoc::Cordon_RemoveBox( Cordon_t *cordon, BoundBox *box )
+{
+	Assert( cordon );
+	if ( !cordon )
+		return;
+
+	Assert( box );
+	if ( !box)
+		return;
+
+	bool bRemoved = false;
+	
+	for ( int i = 0; i < cordon->m_Boxes.Count(); i++ )
+	{
+		if ( &cordon->m_Boxes[i] == box )
+		{
+			cordon->m_Boxes.Remove( i );
+			bRemoved = true;
+			break;
+		}
+	}
+
+	Assert( bRemoved );
+	
+	// The above call to Remove may have moved memory and invalidated pointers
+	// held by m_cCordonBox in CFilterControl, so we need to refresh the list.
+	GetMainWnd()->m_FilterControl.UpdateCordonList();
+	
+	if ( m_bIsCordoning )
+	{
+		UpdateVisibilityAll();
+	}
+
+	SetModifiedFlag( true );
+}
+
+
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+void CMapDoc::Cordon_RemoveCordon( Cordon_t *cordon )
+{
+	Assert( cordon );
+	if ( !cordon )
+		return;
+
+	bool bRemoved = false;
+	for ( int i = 0; i < m_Cordons.Count(); i++ )
+	{
+		if ( &m_Cordons[i] == cordon )
+		{
+			m_Cordons.Remove( i );
+			bRemoved = true;
+			break;
+		}
+	}
+
+	Assert( bRemoved );
+	
+	// The above call to Remove may have moved memory and invalidated pointers
+	// held by m_cCordonList in CFilterControl, so we need to refresh the list.
+	GetMainWnd()->m_FilterControl.UpdateCordonList();
+	
+	if ( ( m_Cordons.Count() <= 0 ) && ( m_pToolManager->GetActiveToolID() == TOOL_EDITCORDON ) )
+	{	
+		m_pToolManager->GetActiveTool()->RefreshToolState();
+	}
+	
+	if ( m_bIsCordoning )
+	{
+		UpdateVisibilityAll();
+	}
+
+	SetModifiedFlag( true );
+}
+
+
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+void CMapDoc::Cordon_CombineCordons( Cordon_t *pSourceCordon, BoundBox *pSourceBox, Cordon_t *pDestCordon )
+{
+	if ( ( !pSourceCordon || !pDestCordon ) || ( pSourceCordon == pDestCordon ) )
+		return;
+
+	if ( pSourceBox )
+	{
+		pDestCordon->m_Boxes.AddToTail( *pSourceBox );
+		
+		// This will also update the UI
+		Cordon_RemoveBox( pSourceCordon, pSourceBox );
+	}
+	else
+	{
+		pDestCordon->m_Boxes.AddVectorToTail( pSourceCordon->m_Boxes );
+
+		// This will also update the UI
+		Cordon_RemoveCordon( pSourceCordon );
+	}
+}
+
+
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+Cordon_t *CMapDoc::Cordon_GetSelectedCordonForEditing( BoundBox **ppBox )
+{
+	if ( m_Cordons.Count() <= 0 )
+	{
+		if ( ppBox )
+		{
+			*ppBox = NULL;
+		}
+		
+		return NULL;
+	}
+
+	if ( ppBox )
+	{
+		*ppBox = &m_Cordons[m_nEditCordon].m_Boxes[m_nEditCordonBox];
+	}
+
+	return &m_Cordons[m_nEditCordon];
+}
+
+
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+void CMapDoc::OnToggleCordon(void)
+{
+	Cordon_SetCordoning( !m_bIsCordoning ); 
+}
+
+
+//-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 void CMapDoc::OnUpdateToggleCordon(CCmdUI* pCmdUI) 
 {
-	pCmdUI->SetCheck( m_bIsCordoning?1:0 );
+	pCmdUI->Enable( m_Cordons.Count() > 0 );
+	pCmdUI->SetCheck( m_bIsCordoning ? 1 : 0 );
 }
 
 
@@ -9060,7 +10795,7 @@ void CMapDoc::OnMapLoadportalfile(void)
 	SetFilenameExtension( m_pPortalFile->fileName, ".prt" );
 
 	CString str;
-	str.Format("Load default portal file?\n(%s)", m_pPortalFile->fileName.GetBuffer());
+	str.Format("Load default portal file?\n(%s)", m_pPortalFile->fileName);
 	if(GetFileAttributes(m_pPortalFile->fileName) == 0xFFFFFFFF ||
 		AfxMessageBox(str, MB_ICONQUESTION | MB_YESNO) == IDNO)
 	{
@@ -9088,7 +10823,7 @@ void CMapDoc::OnMapLoadportalfile(void)
 	{
 		if ( !Q_stricmp( szLine, "PRT1") )
 		{
-			for ( int iPortal = 0; iPortal < portalCount; iPortal++ )
+			for ( int i = 0; i < portalCount; i++ )
 			{
 				int pointCount, leaf0, leaf1;
 				if (fscanf (fp, "%i %i %i ", &pointCount, &leaf0, &leaf1 ) == 3 )
@@ -9154,7 +10889,7 @@ void CMapDoc::OnMapLoadpointfile(void)
 	}
 
 	CString str;
-	str.Format("Load default pointfile?\n(%s)", m_strLastPointFile.GetBuffer());
+	str.Format("Load default pointfile?\n(%s)", m_strLastPointFile);
 	if(GetFileAttributes(m_strLastPointFile) == 0xFFFFFFFF ||
 		AfxMessageBox(str, MB_ICONQUESTION | MB_YESNO) == IDNO)
 	{
@@ -9260,7 +10995,7 @@ CVisGroup *CMapDoc::GetRootAutoVisGroup()
 
 	return pFoundVisGroup;
 }
-
+ 
 
 //-----------------------------------------------------------------------------
 // Determine visgroup and add it to that.
@@ -9291,6 +11026,11 @@ void CMapDoc::AddToAutoVisGroup( CMapClass *pObject )
 				AddChildGroupToAutoVisGroup( pObject, "NPCs", "Entities" );	
 			}
 			
+ 			if ( !Q_stricmp( pMapEntity->GetClassName(), "func_instance" ) )
+			{
+				AddToAutoVisGroup( pObject, "Instances" );
+			}
+
 			if ( !Q_strnicmp( pMapEntity->GetClassName(), "light_", strlen("light_") ) )
 			{
 				AddChildGroupToAutoVisGroup( pObject, "Lights", "Entities" );	
@@ -9300,13 +11040,23 @@ void CMapDoc::AddToAutoVisGroup( CMapClass *pObject )
 			{
 				AddChildGroupToAutoVisGroup( pObject, "Props", "World Details" );					 			
 			}
+
+			if ( !Q_strnicmp( pMapEntity->GetClassName(), "prop_physics", strlen("prop_physics") ) )
+			{
+				AddChildGroupToAutoVisGroup( pObject, "Physics Props", "Entities" );					 			
+			}
+
+			if ( !Q_stricmp( pMapEntity->GetClassName(), "env_sprite" ) )
+			{
+				AddChildGroupToAutoVisGroup( pObject, "Sprites", "Entities" );					 			
+			}
 		}
 		else
 		{
 			// Solid entities.
 			if ( !pMapEntity->IsClass("func_detail") )
 			{
-				AddChildGroupToAutoVisGroup( pObject, "Brush Entities", "Entities" );					
+				AddChildGroupToAutoVisGroup( pObject, "Brush Entities", "Entities" );
 			}
 			else
 			{
@@ -9322,6 +11072,11 @@ void CMapDoc::AddToAutoVisGroup( CMapClass *pObject )
 			if ( !Q_strnicmp( pMapEntity->GetClassName(), "func_areaportal", strlen("func_areaportal") ) )
 			{
 				AddChildGroupToAutoVisGroup( pObject, "Areaportals", "Tool Brushes" );					 			
+			}
+
+			if ( pMapEntity->IsClass("func_viscluster") )
+			{
+				AddChildGroupToAutoVisGroup( pObject, "Visclusters", "Tool Brushes" );					 			
 			}
 
 			if ( pMapEntity->IsClass("func_occluder") )
@@ -9383,7 +11138,7 @@ void CMapDoc::AddToAutoVisGroup( CMapClass *pObject )
 				}	
 				if ( strstr( buf, "tools/toolsblock" ) )					
 				{					
-					AddChildGroupToAutoVisGroup( NULL, "Block", "Tool Brushes" );					 
+					AddAutoVisGroup( "Block", "Tool Brushes" );					 
 					if ( strstr( buf, "block_los" ) )
 					{
 						AddChildGroupToAutoVisGroup( pObject, "LOS", "Block" );
@@ -9402,7 +11157,7 @@ void CMapDoc::AddToAutoVisGroup( CMapClass *pObject )
 				}				
 				if ( strstr( buf, "tools/tools" ) && strstr( buf, "clip" ) )
 				{
-					AddChildGroupToAutoVisGroup( NULL, "Clips", "Tool Brushes" );					 					
+					AddAutoVisGroup( "Clips", "Tool Brushes" );					 					
 					if ( strstr( buf, "npcclip" ) )
 					{
 						AddChildGroupToAutoVisGroup( pObject, "NPC", "Clips" );
@@ -9436,7 +11191,7 @@ void CMapDoc::AddToAutoVisGroup( CMapClass *pObject )
 				}
 				if ( strstr( buf, "invisible") )
 				{
-					AddChildGroupToAutoVisGroup( NULL, "Invisible", "Tool Brushes");
+					AddAutoVisGroup( "Invisible", "Tool Brushes" );	
 					if ( strstr( buf, "invisibleladder") )
 					{
 						AddChildGroupToAutoVisGroup( pObject, "Ladder", "Invisible");
@@ -9487,8 +11242,8 @@ void CMapDoc::AddToAutoVisGroup( CMapClass *pObject )
 		const CMapObjectList *pChildren = pObject->GetChildren();
 		FOR_EACH_OBJ( *pChildren, pos )
 		{
-			AddToAutoVisGroup(pChildren->Element(pos));
-			AddToFGDAutoVisGroups( pChildren->Element( pos ) );
+			AddToAutoVisGroup( (CUtlReference< CMapClass >)pChildren->Element(pos) );
+			AddToFGDAutoVisGroups( (CUtlReference< CMapClass >)pChildren->Element( pos ) );
 		}
 	}
 
@@ -9506,25 +11261,11 @@ void CMapDoc::AddToAutoVisGroup( CMapClass *pObject )
 //-----------------------------------------------------------------------------
 void CMapDoc::AddToAutoVisGroup( CMapClass *pObject, const char *pAutoVisGroup )
 {
-	CVisGroup *pRootVisGroup = GetRootAutoVisGroup();
-
-	// Find the desired visgroup
-	CVisGroup *pFoundVisGroup = NULL;
-	int nVisGroupCount = pRootVisGroup->GetChildCount();
-	for ( int i = 0; i < nVisGroupCount; ++i )
-	{
-		CVisGroup *pVisGroup = pRootVisGroup->GetChild(i);
-		if ( !Q_stricmp( pAutoVisGroup, pVisGroup->GetName() ) )
-		{
-			pFoundVisGroup = pVisGroup;
-			break;
-		}
-	}
-
+	CVisGroup *pFoundVisGroup = VisGroups_GroupForName( pAutoVisGroup, true );
 	if ( !pFoundVisGroup )
 	{
 		pFoundVisGroup = VisGroups_AddGroup( pAutoVisGroup, true );
-		VisGroups_SetParent( pFoundVisGroup, pRootVisGroup );		
+		VisGroups_SetParent( pFoundVisGroup, GetRootAutoVisGroup() );		
 	}
 
 	CMapObjectList Objects;
@@ -9534,43 +11275,45 @@ void CMapDoc::AddToAutoVisGroup( CMapClass *pObject, const char *pAutoVisGroup )
 
 
 //-----------------------------------------------------------------------------
-// Purpose: 
-// Input  : *pObject - 
+// Creates an auto visgroup with no members.
+//-----------------------------------------------------------------------------
+void CMapDoc::AddAutoVisGroup( const char *pNewGroupName, const char *pParentName )
+{
+	// If the group already exists, bail.
+	CVisGroup *pNewGroup = VisGroups_GroupForName( pNewGroupName, true );
+	if ( pNewGroup )
+		return;
+
+	// Ensure that the parent exists.
+	CVisGroup *pParentGroup = VisGroups_GroupForName( pParentName, true );
+	if ( !pParentGroup )
+	{
+		pParentGroup = VisGroups_AddGroup( pParentName, true );
+		VisGroups_SetParent( pParentGroup, GetRootAutoVisGroup() );
+	}
+
+	// Create the new group and link it in.
+	pNewGroup = VisGroups_AddGroup( pNewGroupName, true );
+	VisGroups_SetParent( pNewGroup, pParentGroup );
+}
+
+
+//-----------------------------------------------------------------------------
+// Adds the object to the given auto visgroup, creating the visgroup if it
+// doesn't exist.
 //-----------------------------------------------------------------------------
 void CMapDoc::AddChildGroupToAutoVisGroup( CMapClass *pObject, const char *pAutoVisGroup, const char *pParentName )
 {
-	CVisGroup *pRootVisGroup = VisGroups_GroupForName( pParentName, true );
-	if ( !pRootVisGroup )
-	{
-		CVisGroup *pRootAutoVisGroup = GetRootAutoVisGroup();
-		pRootVisGroup = VisGroups_AddGroup( pParentName, true );
-		VisGroups_SetParent( pRootVisGroup, pRootAutoVisGroup );
-	}
+	AddAutoVisGroup( pAutoVisGroup, pParentName );
 
-	// Find the desired visgroup
-	CVisGroup *pFoundVisGroup = NULL;
-	int nVisGroupCount = pRootVisGroup->GetChildCount();
-	for ( int i = 0; i < nVisGroupCount; ++i )
+	if ( pObject )
 	{
-		CVisGroup *pVisGroup = pRootVisGroup->GetChild(i);
-		if ( !Q_stricmp( pAutoVisGroup, pVisGroup->GetName() ) )//&& pVisGroup->IsAutoVisGroup() )
-		{
-			pFoundVisGroup = pVisGroup;
-			break;
-		}
+		AddToAutoVisGroup( pObject, pAutoVisGroup );
 	}
-
-	if ( !pFoundVisGroup )
-	{
-		pFoundVisGroup = VisGroups_AddGroup( pAutoVisGroup, true );
-		VisGroups_SetParent( pFoundVisGroup, pRootVisGroup );	
-	}
-
-	CMapObjectList Objects;
-	Objects.AddToTail( pObject );
-	VisGroups_AddObjectsToVisGroup( Objects, pFoundVisGroup, false, false );
 }
 
+
+//-----------------------------------------------------------------------------
 // Remove from all auto visgroup
 //-----------------------------------------------------------------------------
 void CMapDoc::RemoveFromAutoVisGroups( CMapClass *pObject )
@@ -9677,7 +11420,7 @@ void CMapDoc::RemoveObjectFromWorld(CMapClass *pObject, bool bRemoveChildren)
 		VisGroups_PurgeGroups();
 
 		// Remove the object from the update list.
-		m_UpdateList.FindAndRemove(pObject);
+		m_UpdateList.FindAndFastRemove(pObject);
 		// remove object from selection list
 		m_pSelection->SelectObject(pObject, scUnselect );
 		pObject->SignalChanged();
@@ -9704,122 +11447,200 @@ void CMapDoc::RenderPreloadObject(CMapClass *pObject)
 	}
 }
 
+
 //-----------------------------------------------------------------------------
-// Purpose: CreateTempWorld creates a world with the brushes that make up the
-//			cordoned area. it does this by creating a solid of the size of the
-//			box, and another solid 1200 units bigger. subtract A from B, and
+// Calculates the aggregate bounds of all the active cordons.
+// CORDON TODO: this can go away when MAP file serialization is deleted
+//-----------------------------------------------------------------------------
+void CMapDoc::Cordon_GetBounds( Vector &mins, Vector &maxs )
+{
+	mins.Init(COORD_NOTINIT, COORD_NOTINIT, COORD_NOTINIT);
+	maxs.Init(-COORD_NOTINIT, -COORD_NOTINIT, -COORD_NOTINIT);
+
+	for ( int i = 0; i < m_Cordons.Count(); i++ )
+	{
+		if ( !m_Cordons[i].m_bActive )
+			continue;
+	
+		for ( int nBox = 0; nBox < m_Cordons[i].m_Boxes.Count(); nBox++ )
+		{
+			// Push out maxs
+			for ( int j = 0; j < 3; j++ )
+			{
+				if ( m_Cordons[i].m_Boxes[nBox].bmaxs[j] > maxs[j] )
+				{
+					maxs[j] = m_Cordons[i].m_Boxes[nBox].bmaxs[j];
+				}
+			}
+		
+			// Push out mins
+			for ( int j = 0; j < 3; j++ )
+			{
+				if ( m_Cordons[i].m_Boxes[nBox].bmins[j] < mins[j] )
+				{
+					mins[j] = m_Cordons[i].m_Boxes[nBox].bmins[j];
+				}
+			}
+		}
+	}
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: Creates a world with the brushes that make up the cordoned area.
+//			It does this by creating a solid of the size of the cordon
+//			box, and another solid 1200 units bigger. Subtract A from B, and
 //			keep those brushes.
 // Output : Returns a pointer to the newly-created world.
 //-----------------------------------------------------------------------------
-CMapWorld *CMapDoc::CordonCreateWorld()
+CMapWorld *CMapDoc::Cordon_CreateWorld()
 {
 	CMapWorld *pWorld = new CMapWorld( NULL );
 
 	GetHistory()->Pause();
 
-	// create solids
+	//
+	// Make a giant box the size of the maximum map extents.
+	//
 	CMapSolid *pBigSolid = new CMapSolid;
 	pBigSolid->SetCordonBrush( true );
 
-	CMapSolid *pSmallSolid = new CMapSolid;
-	pSmallSolid->SetCordonBrush( true );
-
-	BoundBox bigbounds( m_vCordonMins, m_vCordonMaxs );
+	// dvs: FIXME: vbsp barfs if I go all the way out to the full mins & maxs
+	BoundBox bigbounds( Vector( g_MIN_MAP_COORD + 8, g_MIN_MAP_COORD + 8, g_MIN_MAP_COORD + 8 ),
+						Vector( g_MAX_MAP_COORD - 8, g_MAX_MAP_COORD - 8, g_MAX_MAP_COORD - 8 ) );
 		
 	StockBlock box;
 	box.SetFromBox( &bigbounds );
-    box.CreateMapSolid(pSmallSolid, Options.GetTextureAlignment());
+    box.CreateMapSolid( pBigSolid, Options.GetTextureAlignment() );
 
-	// make bigger box
-	for (int i = 0; i < 3; i++)
+	// Add the big solid to our list of outer solids. It's our first cordon brush.
+    CUtlVector<CMapSolid *> outerSolids;
+    outerSolids.AddToTail( pBigSolid );
+
+	//
+	// Create brush proxies for our cordon boxes so that we can use them in subtraction operations.
+	// They'll be the inner solids.
+	//
+    CUtlVector<CMapSolid *> innerSolids;
+	for ( int i = 0; i < m_Cordons.Count(); i++ )
 	{
-		// dvs: FIXME: vbsp barfs if I go all the way out to the full mins & maxs
-		bigbounds.bmins[i] = g_MIN_MAP_COORD + 8;
-		if (bigbounds.bmins[i] > m_vCordonMins[i])
+		if ( !m_Cordons[i].m_bActive )
+			continue;
+			
+		for ( int j = 0; j < m_Cordons[i].m_Boxes.Count(); j++ )
 		{
-			bigbounds.bmins[i] = g_MIN_MAP_COORD;
-		}
+			CMapSolid *pSolid = new CMapSolid;
+			box.SetFromBox( &m_Cordons[i].m_Boxes[j] );
+		    box.CreateMapSolid( pSolid, Options.GetTextureAlignment() );
 
-		bigbounds.bmaxs[i] = g_MAX_MAP_COORD - 8;
-		if (bigbounds.bmaxs[i] < m_vCordonMaxs[i])
-		{
-			bigbounds.bmaxs[i] = g_MAX_MAP_COORD;
+			innerSolids.AddToTail( pSolid );
 		}
+	}		    
+
+	//
+	// Subtract each cordon brush from everything in the outerSolids list,
+	// adding the results to the outerSolids list. This will yield a list
+	// of brushes surrounding the cordoned-off areas.
+	//
+	for ( int j = 0; j < innerSolids.Count(); j++ )
+	{
+		CUtlVector<CMapSolid *> tempResults;
+
+		for ( int i = 0; i < outerSolids.Count(); i++ )
+		{
+			CMapObjectList outside;
+			if ( !outerSolids[i]->Subtract( NULL, &outside, innerSolids[j] ) )
+			{
+				tempResults.AddToTail( outerSolids[i] );
+				continue;
+			}
+			
+			for ( int k = 0; k < outside.Count(); k++ )
+			{
+				CMapClass *pResult = outside[k];
+				if ( pResult->IsMapClass( MAPCLASS_TYPE(CMapSolid) ) )
+				{
+					tempResults.AddToTail( (CMapSolid *)pResult );
+				}
+				else
+				{
+					Assert( false );
+				}
+			}
+			
+			outside.RemoveAll();
+	    }
+
+		// Transfer the results of those subtractions to the list of outer solids.
+		outerSolids.RemoveAll();
+		outerSolids.AddVectorToTail( tempResults );
+		tempResults.RemoveAll();
 	}
 
-	box.SetFromBox(&bigbounds);
-	box.CreateMapSolid(pBigSolid, Options.GetTextureAlignment());
-
 	//
-	// Subtract the small box from the large box and add the outside pieces to the
-	// cordon world. This gives a hollow box.
+	// Add all the resulting brushes to the cordon world for return to the caller.
 	//
-	CMapObjectList Outside;
-	pBigSolid->Subtract(NULL, &Outside, pSmallSolid);
-
-	for (int p=0;p<Outside.Count();p++)
+	const char *cordonTexture = g_pGameConfig->GetCordonTexture();
+    for ( int i = 0; i < outerSolids.Count(); i++ )
 	{
-		CMapClass *pObject = Outside.Element(p);
-		pWorld->AddObjectToWorld(pObject);
-	}
-
-	delete pBigSolid;
-	delete pSmallSolid;
-
-	//
-	// Set all the brush textures to the texture specified in the options.
-	//
-	const char *pszTexture = g_pGameConfig->GetCordonTexture();
-	EnumChildrenPos_t pos;
-	CMapClass *pChild = pWorld->GetFirstDescendent(pos);
-	while (pChild != NULL)
-	{
-		CMapSolid *pSolid = dynamic_cast<CMapSolid *>(pChild);
-		if (pSolid != NULL)
-		{
-			pSolid->SetCordonBrush(true);
-			pSolid->SetTexture(pszTexture);
-		}
-
-		pChild = pWorld->GetNextDescendent(pos);
-	}
+		outerSolids[i]->SetCordonBrush( true );
+		outerSolids[i]->SetTexture( cordonTexture );
+		pWorld->AddObjectToWorld( outerSolids[i] );
+    }
 
 	GetHistory()->Resume();
 
-	return(pWorld);
+	return pWorld;
 }
 
+
 //-----------------------------------------------------------------------------
-// Purpose: 
-// Input  : *pFile - 
-// Output : ChunkFileResult_t
 //-----------------------------------------------------------------------------
-ChunkFileResult_t CMapDoc::CordonSaveVMF(CChunkFile *pFile, CSaveInfo *pSaveInfo)
+ChunkFileResult_t CMapDoc::Cordon_SaveVMF(CChunkFile *pFile, CSaveInfo *pSaveInfo)
 {
-	ChunkFileResult_t eResult = pFile->BeginChunk("cordon");
+	ChunkFileResult_t eResult = ChunkFile_Ok;
 
-	if (eResult == ChunkFile_Ok)
+	if ((eResult = pFile->BeginChunk("cordons")) != ChunkFile_Ok)
+		return eResult;
+
+	if ((eResult = pFile->WriteKeyValueBool("active", m_bIsCordoning )) != ChunkFile_Ok)
+		return eResult;
+
+	for (int i = 0; i < m_Cordons.Count(); i++)
 	{
-		eResult = pFile->WriteKeyValuePoint("mins", m_vCordonMins);
-	}
+		// Each cordon is in its own subchunk
+		if ((eResult = pFile->BeginChunk("cordon")) != ChunkFile_Ok)
+			return eResult;
 
-	if (eResult == ChunkFile_Ok)
-	{
-		eResult = pFile->WriteKeyValuePoint("maxs", m_vCordonMaxs);
-	}
+		if ((eResult = pFile->WriteKeyValue("name", m_Cordons[i].m_szName)) != ChunkFile_Ok)
+			return eResult;
 
-	if (eResult == ChunkFile_Ok)
-	{
-		eResult = pFile->WriteKeyValueBool("active", m_bIsCordoning );
-	}
+		if ((eResult = pFile->WriteKeyValueBool("active", m_Cordons[i].m_bActive)) != ChunkFile_Ok)
+			return eResult;
 
-	if (eResult == ChunkFile_Ok)
-	{
-		eResult = pFile->EndChunk();
-	}
+		// This stuff is in the box subchunk
+		for (int j = 0; j < m_Cordons[i].m_Boxes.Count(); j++)
+		{
+			if ((eResult = pFile->BeginChunk("box")) != ChunkFile_Ok)
+				return eResult;
 
-	return(eResult);
+			if ((eResult = pFile->WriteKeyValuePoint("mins", m_Cordons[i].m_Boxes[j].bmins)) != ChunkFile_Ok)
+				return eResult;
+
+			if ((eResult = pFile->WriteKeyValuePoint("maxs", m_Cordons[i].m_Boxes[j].bmaxs)) != ChunkFile_Ok)
+				return eResult;
+
+			if ((eResult = pFile->EndChunk()) != ChunkFile_Ok)
+				return eResult;
+		}
+
+		if ((eResult = pFile->EndChunk()) != ChunkFile_Ok)
+			return eResult;
+	}
+	
+	return pFile->EndChunk();
 }
+
 
 //-----------------------------------------------------------------------------
 // Purpose: 
@@ -9856,12 +11677,15 @@ bool CMapDoc::SaveVMF(const char *pszFileName, int saveFlags )
 				// Create "cordon world", add its objects to our real world, create a list in
 				// CordonList so we can remove them again.
 				//
-				pCordonWorld = CordonCreateWorld();
+				pCordonWorld = Cordon_CreateWorld();
 				
 				const CMapObjectList *pChildren = pCordonWorld->GetChildren();
-				FOR_EACH_OBJ( *pChildren, pos )
+
+				// AddObjectToWorld magically removes our children, so keep going until all
+				// of our children have left us to enter the world.
+				while( pCordonWorld->GetChildren()->Count() )
 				{
-					CMapClass *pChild = pChildren->Element(pos);
+					CMapClass *pChild = (CUtlReference< CMapClass >)pChildren->Element(0); // each time we remove the first element so we can just get this every time.
 					pChild->SetTemporary(TRUE);
 					m_pWorld->AddObjectToWorld(pChild);
 					CordonList.AddToTail(pChild);
@@ -9931,7 +11755,7 @@ bool CMapDoc::SaveVMF(const char *pszFileName, int saveFlags )
 
 			if (eResult == ChunkFile_Ok)
 			{
-				eResult = CordonSaveVMF(&File, &SaveInfo);
+				eResult = Cordon_SaveVMF(&File, &SaveInfo);
 			}
 
 			// We use this to flag VMFs checked-in to P4 with QuickHide active
@@ -10003,7 +11827,7 @@ ChunkFileResult_t CMapDoc::SaveVersionInfoVMF(CChunkFile *pFile, bool bIsAutoSav
 		if ( eResult == ChunkFile_Ok )
 		{
 			char szOriginalName[MAX_PATH];
-			V_strcpy_safe( szOriginalName, GetPathName() );
+			strcpy(szOriginalName, GetPathName());		
 			if ( strlen( szOriginalName ) == 0 )
 			{
 				strcpy(szOriginalName, g_pGameConfig->szMapDir);
@@ -10213,13 +12037,8 @@ bool CMapDoc::ShouldObjectBeVisible(CMapClass *pObject, UpdateVisibilityData_t *
 	// hide the object. The exception to this is some helpers, which only hide if their
 	// parent entity is culled by the cordon.
 	//
-	if ( m_bIsCordoning && !IsManifest() )
-	{
-		if (pObject->IsCulledByCordon(m_vCordonMins, m_vCordonMaxs))
-		{
-			return(false);
-		}
-	}
+	if ( m_bIsCordoning && !IsManifest() && Cordon_IsCulledByCordon( pObject ) )
+		return false;
 
 	return(true);
 }
@@ -10536,8 +12355,10 @@ CVisGroup *CMapDoc::VisGroups_GetRootVisGroup(int nIndex)
 
 
 //-----------------------------------------------------------------------------
-// Purpose: 
-// Input  : pGroup - 
+// FIXME: Currently the sort order in the visgroups and cordon tree views is
+//        exactly the order that they are in the document. It would be better
+//        if those controls kept their sort order independent of the document
+//        and could save that into the VMF.
 //-----------------------------------------------------------------------------
 void CMapDoc::VisGroups_MoveUp(CVisGroup *pGroup)
 {
@@ -10559,8 +12380,6 @@ void CMapDoc::VisGroups_MoveUp(CVisGroup *pGroup)
 
 
 //-----------------------------------------------------------------------------
-// Purpose: 
-// Input  : pGroup - 
 //-----------------------------------------------------------------------------
 void CMapDoc::VisGroups_MoveDown(CVisGroup *pGroup)
 {
@@ -10577,6 +12396,58 @@ void CMapDoc::VisGroups_MoveDown(CVisGroup *pGroup)
 			m_RootVisGroups->Remove(nIndex);
 			m_RootVisGroups->InsertAfter(nIndex, pGroup);
 		}
+	}
+}
+
+
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+void CMapDoc::Cordon_MoveUp( Cordon_t *cordon )
+{
+	int nIndex = -1;
+	for ( int i = 0; i < m_Cordons.Count(); i++ )
+	{
+		if ( &m_Cordons.Element( i ) == cordon )
+		{
+			nIndex = i;
+			break;
+		}
+	}
+
+	if (nIndex > 0)
+	{
+		Cordon_t temp;
+		temp = *cordon;
+	
+		m_Cordons.Remove( nIndex );
+		m_Cordons.InsertBefore( nIndex - 1 );
+		m_Cordons.Element( nIndex - 1 ) = temp;
+	}
+}
+
+
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+void CMapDoc::Cordon_MoveDown( Cordon_t *cordon )
+{
+	int nIndex = -1;
+	for ( int i = 0; i < m_Cordons.Count(); i++ )
+	{
+		if ( &m_Cordons.Element( i ) == cordon )
+		{
+			nIndex = i;
+			break;
+		}
+	}
+
+	if ( ( nIndex != -1 ) && ( nIndex < m_Cordons.Count() - 1 ) )
+	{
+		Cordon_t temp;
+		temp = *cordon;
+	
+		m_Cordons.Remove( nIndex );
+		m_Cordons.InsertAfter( nIndex );
+		m_Cordons.Element( nIndex + 1 ) = temp;
 	}
 }
 
@@ -10972,7 +12843,7 @@ void CMapDoc::OnUpdateLightPreview()
 
 	// Save out a file with just the ents.
 	char szFile[MAX_PATH];
-	V_strcpy_safe( szFile, GetPathName() );
+	strcpy(szFile, GetPathName());
 	szFile[strlen(szFile) - 1] = 'e';
 	
 	if( !SaveVMF( szFile, SAVEFLAGS_LIGHTSONLY ) )
@@ -11056,8 +12927,8 @@ bool CMapDoc::FindNotification(CMapClass *pObject, Notify_Dependent_t eNotifyTyp
 	int nCount = m_NotifyList.Count();
 	for (int i = 0; i < nCount; i++)
 	{
-		if ((m_NotifyList.Element(i).pObject->m_pObject == pObject) &&
-			(m_NotifyList.Element(i).eNotifyType == eNotifyType))
+		if ((m_NotifyList.Element(i)->pObject == pObject) &&
+			(m_NotifyList.Element(i)->eNotifyType == eNotifyType))
 		{
 			return true;
 		}
@@ -11072,7 +12943,7 @@ bool CMapDoc::AnyNotificationsForObject(CMapClass *pObject)
 	int nCount = m_NotifyList.Count();
 	for (int i = 0; i < nCount; i++)
 	{
-		if ( m_NotifyList.Element(i).pObject->m_pObject == pObject )
+		if ( m_NotifyList.Element(i)->pObject == pObject )
 			return true;
 	}
 
@@ -11101,10 +12972,10 @@ void CMapDoc::NotifyDependents(CMapClass *pObject, Notify_Dependent_t eNotifyTyp
 	{
 		if (!FindNotification(pObject, eNotifyType))
 		{
-			NotifyListEntry_t entry;
-			entry.pObject = pObject->GetSafeObjectSmartPtr();
-			entry.eNotifyType = eNotifyType;
-			m_NotifyList.AddToTail(entry);
+			NotifyListEntry_t *pEntry = new NotifyListEntry_t;
+			pEntry->pObject = pObject;
+			pEntry->eNotifyType = eNotifyType;
+			m_NotifyList.AddToTail(pEntry);
 		}
 	}
 	else
@@ -11128,10 +12999,10 @@ void CMapDoc::ProcessNotifyList()
 	{
 		for (int i = 0; i < nCount; i++)
 		{
-			NotifyListEntry_t entry = m_NotifyList.Element(i);
-			if ( entry.pObject->m_pObject )
+			NotifyListEntry_t *pEntry = m_NotifyList.Element(i);
+			if ( pEntry->pObject.IsValid() )
 			{
-				DispatchNotifyDependents(entry.pObject->m_pObject, entry.eNotifyType);
+				DispatchNotifyDependents(pEntry->pObject, pEntry->eNotifyType);
 			}
 			else
 			{
@@ -11144,7 +13015,7 @@ void CMapDoc::ProcessNotifyList()
 			}
 		}
 
-		m_NotifyList.RemoveAll();
+		m_NotifyList.PurgeAndDeleteElements();
 	}
 
 	s_bDispatchingNotifications = false;
@@ -11156,21 +13027,30 @@ void CMapDoc::ProcessNotifyList()
 // Input  : pObject - 
 //			eNotifyType - 
 //-----------------------------------------------------------------------------
-void CMapDoc::DispatchNotifyDependents(CMapClass *pObject, Notify_Dependent_t eNotifyType)
+void CMapDoc::DispatchNotifyDependents(CUtlReference< CMapClass > pObject, Notify_Dependent_t eNotifyType)
 {
-	const CMapObjectList *pDependents = pObject->GetDependents();
+	if ( !pObject.IsValid() )
+	{
+		Assert( 0 );
+		return;
+	}
+
+	const CMapObjectRefList *pDependents = pObject->GetDependents();
 
 	if ( pDependents->Count() == 0 )
 		return;
 	
 	// Get a copy of the dependecies list because it may change during iteration.
-	CMapObjectList TempDependents;
+	CMapObjectRefList TempDependents;
 
 	TempDependents.AddVectorToTail( *pDependents );
 	
 	for (int i = 0; i < TempDependents.Count(); i++)
 	{
 		CMapClass *pDependent = TempDependents.Element(i);
+
+		if ( !pDependent )
+			continue;
 		
 		//
 		// Maybe we should give our dependents the opportunity to unlink themselves here?
@@ -11198,7 +13078,7 @@ void CMapDoc::CloneObjects(const CMapObjectList &Objects)
 	//
 	FOR_EACH_OBJ( Objects, pos )
 	{
-		CMapClass *pobj = Objects.Element(pos);
+		CMapClass *pobj = (CUtlReference< CMapClass >)Objects.Element(pos);
 		CMapClass *pNewobj = pobj->Copy(false);
 		pNewobj->CopyChildrenFrom(pobj, false);
 
@@ -11217,8 +13097,8 @@ void CMapDoc::CloneObjects(const CMapObjectList &Objects)
 
 	FOR_EACH_OBJ( Objects, pos )
 	{
-		CMapClass *pobj = Objects.Element(pos);
-		CMapClass *pNewobj = NewObjects.Element(pos);
+		CMapClass *pobj = (CUtlReference< CMapClass >)Objects.Element(pos);
+		CMapClass *pNewobj = (CUtlReference< CMapClass >)NewObjects.Element(pos);
 		pobj->OnPreClone(pNewobj, m_pWorld, Objects, NewObjects);
 	}
 
@@ -11227,8 +13107,8 @@ void CMapDoc::CloneObjects(const CMapObjectList &Objects)
 
 	FOR_EACH_OBJ( Objects, pos )
 	{
-		CMapClass *pobj = Objects.Element(pos);
-		CMapClass *pNewobj = NewObjects.Element(pos);
+		CMapClass *pobj = (CUtlReference< CMapClass >)Objects.Element(pos);
+		CMapClass *pNewobj = (CUtlReference< CMapClass >)NewObjects.Element(pos);
 
 		pobj->OnClone(pNewobj, m_pWorld, Objects, NewObjects);
 
@@ -11287,7 +13167,7 @@ void CMapDoc::NudgeObjects(const Vector &Delta, bool bClone)
 
 	for (int i = 0; i < pSelList->Count(); i++)
 	{
-		CMapClass *pObject = pSelList->Element(i);
+		CMapClass *pObject = (CUtlReference< CMapClass >)pSelList->Element(i);
 		pObject->TransMove(Delta);
 	}
 
@@ -11414,7 +13294,7 @@ void CMapDoc::OnLogicalobjectLayoutgeometric()
 
  	for ( int i = 0; i < pSelList->Count(); ++i )
 	{
-		CMapClass *pClass = pSelList->Element( i );
+		CMapClass *pClass = (CUtlReference< CMapClass >)pSelList->Element( i );
 		if ( !pClass->IsLogical() )
 			continue;
 
@@ -11464,7 +13344,7 @@ void CMapDoc::OnLogicalobjectLayoutdefault()
 	m_nLogicalPositionCount = 0;
  	for ( int i = 0; i < pSelList->Count(); ++i )
 	{
-		CMapClass *pClass = pSelList->Element( i );
+		CMapClass *pClass = (CUtlReference< CMapClass >)pSelList->Element( i );
 		if ( !pClass->IsLogical() )
 			continue;
 
@@ -11489,12 +13369,30 @@ void CMapDoc::OnLogicalobjectLayoutlogical()
 }
 
 
+void CMapDoc::NoteEngineGotFocus()
+{
+	for ( int i=0; i < s_ActiveDocs.Count(); i++ )
+	{
+		CMapDoc *pDoc = s_ActiveDocs[i];
+
+		POSITION p = pDoc->GetFirstViewPosition();
+		while ( p )
+		{
+			CMapView *pView = dynamic_cast<CMapView*>( pDoc->GetNextView( p ) );
+			if ( pView )
+				pView->ActivateView( false );
+		}		
+	}
+}
+
+
 //-----------------------------------------------------------------------------
 // Purpose: Toggles the state of Tools | Instances | Hide. When enabled, instances are hidden.
 //-----------------------------------------------------------------------------
 void CMapDoc::OnToolsInstancesHide(void)
 {
 	m_tShowInstance = INSTANCES_HIDE;
+	Options.view3d.iViewInstancesMode = INSTANCES_HIDE;
 	UpdateAllViews( MAPVIEW_RENDER_NOW );
 }
 
@@ -11515,6 +13413,7 @@ void CMapDoc::OnUpdateToolsInstancesHide(CCmdUI *pCmdUI)
 void CMapDoc::OnToolsInstancesShowTinted(void)
 {
 	m_tShowInstance = INSTANCES_SHOW_TINTED;
+	Options.view3d.iViewInstancesMode = INSTANCES_SHOW_TINTED;
 	UpdateAllViews( MAPVIEW_RENDER_NOW );
 }
 
@@ -11535,6 +13434,7 @@ void CMapDoc::OnUpdateToolsInstancesShowTinted(CCmdUI *pCmdUI)
 void CMapDoc::OnToolsInstancesShowNormal(void)
 {
 	m_tShowInstance = INSTANCES_SHOW_NORMAL;
+	Options.view3d.iViewInstancesMode = INSTANCES_SHOW_NORMAL;
 	UpdateAllViews( MAPVIEW_RENDER_NOW );
 }
 
@@ -11763,7 +13663,7 @@ void CMapDoc::OnInstancingAddManifest( )
 void CMapDoc::OnUpdateInstancingCreatemanifest(CCmdUI *pCmdUI)
 {
 	CMapDoc *pDoc = CMapDoc::GetActiveMapDoc();
-	if (!pDoc)
+	if ( !pDoc )
 	{
 		pCmdUI->Enable( false );
 		return;
@@ -11881,20 +13781,107 @@ void CMapDoc::OnUpdateInstancingAddManifest( CCmdUI *pCmdUI )
 
 
 //-----------------------------------------------------------------------------
-// Purpose: This function will collapse all instances into the map ( and any children instances )
+// Purpose: This function will collapse all instances into the map
 //-----------------------------------------------------------------------------
 void CMapDoc::OnInstancesCollapseAll()
 {
 	CollapseInstances( false );
 }
 
-
 //-----------------------------------------------------------------------------
-// Purpose: This function will collapse all instances that are selected into the map ( and any children instances )
+// Purpose: This function will collapse all instances that are selected into the map
 //-----------------------------------------------------------------------------
 void CMapDoc::OnInstancesCollapseSelection()
 {
 	CollapseInstances( true );
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: This function will collapse all instances into the map ( and any children instances )
+//-----------------------------------------------------------------------------
+void CMapDoc::OnInstancesCollapseAllRecursive()
+{
+	CollapseInstancesRecursive( false );
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: This function will collapse all instances that are selected into the map ( and any children instances )
+//-----------------------------------------------------------------------------
+void CMapDoc::OnInstancesCollapseSelectionRecursive()
+{
+	CollapseInstancesRecursive( true );
+}
+
+//--------------------------------------------------------------------------------------------------
+//--------------------------------------------------------------------------------------------------
+static BOOL CountUsedModels( CMapClass *pobj, unsigned int dwParam )
+{
+	CUtlVector<AssetUsageInfo_t> *pUsedModels = ( CUtlVector<AssetUsageInfo_t> * )dwParam;
+	if ( pobj->IsMapClass( MAPCLASS_TYPE( CMapEntity ) ) )
+	{
+		CMapEntity *pEntity = ( CMapEntity * )pobj;
+
+		if (pEntity->IsPlaceholder())
+		{
+			if ( pEntity->ClassNameMatches( "prop_*" ) )
+			{
+				const char *name = pEntity->GetKeyValue( "model" );
+				if ( name )
+				{
+					CUtlString modelName;
+					modelName.Set( name );
+					Q_FixSlashes( modelName.Get() );
+
+					for ( int i = 0; i < pUsedModels->Count(); i++ )
+					{
+						if ( !Q_stricmp( modelName.Get(), pUsedModels->Element( i ).m_assetName.Get() ) )
+						{
+							pUsedModels->Element( i ).m_nTimesUsed++;
+							return TRUE;
+						}
+					}
+
+					pUsedModels->AddToTail();
+					pUsedModels->Tail().m_assetName.Set( modelName );
+					pUsedModels->Tail().m_nTimesUsed = 1;
+				}
+			}
+		}
+	}
+
+	return TRUE;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+//--------------------------------------------------------------------------------------------------
+void CMapDoc::GetUsedModels( CUtlVector<AssetUsageInfo_t> &usedModels )
+{
+	m_pWorld->EnumChildrenAndInstances( ( ENUMMAPCHILDRENPROC )CountUsedModels, ( unsigned int )&usedModels );
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+// Input  : 
+// Output : 
+//-----------------------------------------------------------------------------
+void CMapDoc::OnUpdateToolsSprinkle( CCmdUI *pCmdUI )
+{
+	int iCurTool = m_pToolManager->GetActiveToolID();
+
+	pCmdUI->Enable( ( iCurTool != TOOL_ENTITY_SPRINKLE ) );
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+// Input  : 
+// Output : 
+//-----------------------------------------------------------------------------
+void CMapDoc::OnToolsSprinkle()
+{
+	ToolManager()->SetTool( TOOL_ENTITY_SPRINKLE );
 }
 
 //-----------------------------------------------------------------------------
@@ -11942,11 +13929,11 @@ void CMapDoc::QuickHide_HideObjects( void )
 
 	for ( int index = 0; index < pSelList->Count(); index++ )
 	{
-		CMapClass *pObject = pSelList->Element( index );
+		CMapClass *pObject = (CUtlReference< CMapClass >)pSelList->Element( index );
 
 		// Hide the object
 		m_QuickHideGroup.AddToTail( pObject );
-		
+
 		// If it's a Group or Entity, add each child - otherwise we get ghost group selection (driller:  FIXME)
 		if ( pObject->IsGroup() || pObject->IsMapClass( MAPCLASS_TYPE( CMapEntity ) ) )
 		{
@@ -12001,7 +13988,7 @@ void CMapDoc::QuickHide_HideObjects( void )
 				{
 					// With the way GetChildCount() works, we need to count nested children, too
 					nChildCount += pChild->GetChildCount();
-					
+
 					if (  m_QuickHideGroup.Find( pChild ) != m_QuickHideGroup.InvalidIndex() )
 					{
 						nHiddenChildCount++;
@@ -12049,8 +14036,8 @@ void CMapDoc::QuickHide_HideUnselectedObjects( void )
 	const CMapObjectList *pSelList = m_pSelection->GetList();
 	for ( int index = 0; index < pSelList->Count(); index++ )
 	{
-		CMapClass *pSelectedObject = pSelList->Element( index );
-		CMapClass *pSelectedParent = pSelectedObject->GetParent();
+		CMapClass *pSelectedObject = (CUtlReference< CMapClass >)pSelList->Element( index );
+		CMapClass *pSelectedParent = (CUtlReference< CMapClass >)pSelectedObject->GetParent();
 
 		while ( pSelectedParent )
 		{
@@ -12103,9 +14090,16 @@ void CMapDoc::OnQuickHide_CreateVisGroupFromHidden( void )
 
 	if ( iQuickHideObjects > 0 )
 	{
+		CMapObjectList Objects;
+		FOR_EACH_OBJ( m_QuickHideGroup, pos )
+		{
+			CMapClass *pChild = m_QuickHideGroup[pos];
+			Objects.AddToTail( pChild );
+		}
+
 		CString str;
 		str.Format( "_FromQuickHide(%d)", iQuickHideObjects );
-		VisGroups_CreateNamedVisGroup( m_QuickHideGroup, str, true, false );
+		VisGroups_CreateNamedVisGroup( Objects, str, true, false );
 	}
 
 	QuickHide_Unhide();
@@ -12178,6 +14172,5 @@ void CMapDoc::OnUpdateRadiusCulling( CCmdUI *pCmdUI )
 	pCmdUI->SetCheck( Options.general.bRadiusCulling ? 1 : 0 );
 	pCmdUI->Enable(!GetMainWnd()->IsShellSessionActive());
 }
-
 
 #include <tier0/memdbgoff.h>

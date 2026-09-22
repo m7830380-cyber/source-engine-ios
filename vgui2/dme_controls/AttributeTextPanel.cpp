@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2005, Valve Corporation, All rights reserved. =======//
 //
 // Purpose: 
 //
@@ -12,6 +12,7 @@
 #include "tier1/KeyValues.h"
 #include "datamodel/dmelement.h"
 #include "movieobjects/dmeeditortypedictionary.h"
+#include "movieobjects/dmechannel.h"
 #include "dme_controls/inotifyui.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
@@ -20,7 +21,6 @@
 
 using namespace vgui;
 
-
 //-----------------------------------------------------------------------------
 // CAttributeTextPanel constructor
 //-----------------------------------------------------------------------------
@@ -28,7 +28,7 @@ CAttributeTextPanel::CAttributeTextPanel( vgui::Panel *parent, const AttributeWi
 	BaseClass( parent, info ), m_pData( 0 ), m_bShowMemoryUsage( info.m_bShowMemoryUsage )
 {
 	m_pData = new CAttributeTextEntry( this, "AttributeValue" );
-	m_pData->SetEnabled( !HasFlag( READONLY ) );
+	m_pData->SetEnabled( !HasFlag( READONLY ) && FindChannelTargetingAttribute( GetAttribute() ) == NULL );
 
 	m_pData->AddActionSignalTarget(this);
 	SetAllowKeyBindingChainToParent( false );
@@ -92,11 +92,11 @@ void CAttributeTextPanel::Refresh()
 		if ( m_bShowMemoryUsage )
 		{
 			CDmAttribute *pAttr = GetPanelElement()->GetAttribute( GetAttributeName() );
-			Q_snprintf( buf, sizeof( buf ), "%d items %.3fMB", count, pAttr->EstimateMemoryUsage( TD_DEEP )  / float( 1 << 20 ) );
+			Q_snprintf( buf, sizeof( buf ), "%d %s (%.3fMB)", count, (count == 1) ? "item" : "items", pAttr->EstimateMemoryUsage( TD_DEEP )  / float( 1 << 20 ) );
 		}
 		else
 		{
-			Q_snprintf( buf, sizeof( buf ), "%d items", count );
+			Q_snprintf( buf, sizeof( buf ), "%d %s", count, (count == 1) ? "item" : "items" );
 		}
 		m_pData->SetText( buf );
 		m_pData->SetEnabled(false);
@@ -108,7 +108,21 @@ void CAttributeTextPanel::Refresh()
 	else
 	{
 		GetAttributeValueAsString( buf, sizeof( buf ) );
+		// This is a hack because VMatrix has \n characters in the text and the TextEntry field doesn't show them.
+		if ( GetAttributeType() == AT_VMATRIX )
+		{
+			// Replace \n with ' '
+			char *p = buf;
+			while ( *p )
+			{
+				if ( *p == '\n' )
+					*p = ' ';
+				++p;
+			}
+		}
 		m_pData->SetText( buf );
+
+		m_pData->SetEnabled( !HasFlag( READONLY ) && FindChannelTargetingAttribute( GetAttribute() ) == NULL );
 	}
 }
 

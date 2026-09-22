@@ -54,7 +54,7 @@ $Configuration "Release"
 
 		// Preprocessor
 		$PreprocessorDefinitions			"_X360;NDEBUG;_LIB;_WIN32;WIN32;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE;__VMX128_SUPPORTED"
-		$PreprocessorDefinitions			"$BASE;_CERT" [$CERT]
+		$PreprocessorDefinitions			"$BASE;_CERT"	[$CERT]
 		$PreprocessorDefinitions			"$BASE;PROFILE"	[$PROFILE]
 		$IgnoreStandardIncludePath
 		$GeneratePreprocessedFile
@@ -91,7 +91,7 @@ $Configuration "Release"
 		$AssemblerOutput					"No Listing"
 		$ASMListLocation					"$(IntDir)/"
 		$ObjectFileName						"$(IntDir)/"
-		$ProgramDatabaseFileName			"$(IntDir)/"
+		$ProgramDatabaseFileName			"$(IntDir)/vc90.pdb"
 
 		// Browse Information
 		$EnableBrowseInformation			"None"

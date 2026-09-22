@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -12,7 +12,7 @@
 #include "bitmap.h"
 #include "vgui_internal.h"
 #include "filesystem.h"
-#include "tier1/utlbuffer.h"
+#include "utlbuffer.h"
 #include <tier0/dbg.h>
 
 // memdbgon must be the last include file in a .cpp file!!!
@@ -41,7 +41,7 @@ Bitmap::Bitmap(const char *filename, bool hardwareFiltered)
 		_bProcedural = true;
 	}
 
-	_id = 0;
+	_id = ( vgui::HTexture )-1;
 	_uploaded = false;
 	_color = Color(255, 255, 255, 255);
 	_pos[0] = _pos[1] = 0;
@@ -59,8 +59,6 @@ Bitmap::Bitmap(const char *filename, bool hardwareFiltered)
 //-----------------------------------------------------------------------------
 Bitmap::~Bitmap()
 {
-	Evict();
-
 	if ( _filename )
 	{
 		free( _filename );
@@ -141,7 +139,7 @@ void Bitmap::Paint()
 		return;
 
 	// if we don't have an _id then lets make one
-	if ( !_id )
+	if ( _id == -1 )
 	{
 		_id = g_pSurface->CreateNewTextureID();
 	}
@@ -213,7 +211,7 @@ void Bitmap::ForceUpload()
 	if ( !_valid || _uploaded )
 		return;
 
-	if ( !_id )
+	if ( _id == -1 )
 	{
 		_id = g_pSurface->CreateNewTextureID( _bProcedural );
 	}
@@ -237,12 +235,12 @@ HTexture Bitmap::GetID()
 
 bool Bitmap::Evict()
 {
-	if ( _id != 0 )
+	if ( _id != -1 )
 	{
 		g_pSurface->DestroyTextureID( _id );
 		// purposely not resetting _valid to match existing silly logic
 		// either a Paint() or ForceUpload() will re-establish
-		_id = 0;
+		_id = ( vgui::HTexture )-1;
 		_uploaded = false;
 		return true;
 	}

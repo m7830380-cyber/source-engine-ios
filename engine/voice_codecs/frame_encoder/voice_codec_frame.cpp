@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -6,7 +6,7 @@
 //
 //=============================================================================//
 
-#include "ivoicecodec.h"
+#include "audio/public/ivoicecodec.h"
 #include <string.h>
 #include "tier0/dbg.h"
 #include "iframeencoder.h"

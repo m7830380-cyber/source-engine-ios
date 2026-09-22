@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -14,7 +14,7 @@
 #include <vgui/ISurface.h>
 #include <vgui/ISystem.h>
 #include <vgui/KeyCode.h>
-#include <KeyValues.h>
+#include <keyvalues.h>
 #include <vgui/MouseCode.h>
 
 #include <vgui_controls/BuildModeDialog.h>
@@ -90,7 +90,7 @@ public:
 
 	void RemoveAll( void )
 	{
-		for ( int i = 0; i < m_PanelList.Size(); i++ )
+		for ( int i = 0; i < m_PanelList.Count(); i++ )
 		{
 			PanelItem_t *item = &m_PanelList[i];
 			delete item->m_EditLabel;
@@ -144,7 +144,7 @@ public:
 
 		// lookup the value
 		StringIndex_t val = g_pVGuiLocalize->FindIndex(token);
-		if (val != INVALID_LOCALIZE_STRING_INDEX)
+		if (val != INVALID_STRING_INDEX)
 		{
 			m_pValueEntry->SetText(g_pVGuiLocalize->GetValueByIndex(val));
 
@@ -734,11 +734,13 @@ void BuildModeDialog::SetActiveControl(Panel *controlToEdit)
 		else if (datat == TYPE_CORNER)
 		{
 			// drop-down combo box
-			editCombo = new ComboBox(this, NULL, 4, false);
+			editCombo = new ComboBox(this, NULL, 5, false);
 			editCombo->AddItem("0 - top-left", NULL);
 			editCombo->AddItem("1 - top-right", NULL);
 			editCombo->AddItem("2 - bottom-left", NULL);
 			editCombo->AddItem("3 - bottom-right", NULL);
+			editCombo->AddItem("4 - no pin", NULL);
+			editCombo->ActivateItemByRow( 4 );
 		
 			edit = editCombo;
 		}
@@ -836,7 +838,7 @@ void BuildModeDialog::UpdateControlData(Panel *control)
 	control->GetSettings( dat );
 
 	// apply the settings to the edit panels
-	for ( int i = 0; i < m_pPanelList->m_PanelList.Size(); i++ )
+	for ( int i = 0; i < m_pPanelList->m_PanelList.Count(); i++ )
 	{
 		const char *name = m_pPanelList->m_PanelList[i].m_szName;
 		const char *datstring = dat->GetString( name, "" );
@@ -973,7 +975,7 @@ void BuildModeDialog::ApplyDataToControls()
 		{
 			char messageString[255];
 			Q_snprintf(messageString, sizeof( messageString ), "Fieldname is not unique: %s\nRename it and try again.", fieldName);
-			MessageBox *errorBox = new MessageBox("Cannot Apply", messageString);
+			MessageBox *errorBox = new MessageBox("Cannot Apply", messageString );
 			errorBox->DoModal();
 			UpdateControlData(m_pCurrentPanel);
 			m_pApplyButton->SetEnabled(false);
@@ -986,7 +988,7 @@ void BuildModeDialog::ApplyDataToControls()
 	KeyValues *dat = new KeyValues( m_pCurrentPanel->GetName() );
 
 	// loop through the textedit filling in settings
-	for ( int i = 0; i < m_pPanelList->m_PanelList.Size(); i++ )
+	for ( int i = 0; i < m_pPanelList->m_PanelList.Count(); i++ )
 	{
 		const char *name = m_pPanelList->m_PanelList[i].m_szName;
 		char buf[512];
@@ -1110,7 +1112,7 @@ KeyValues *BuildModeDialog::StoreSettings()
 	storedSettings = new KeyValues( m_pCurrentPanel->GetName() );
 
 	// loop through the textedit filling in settings
-	for ( int i = 0; i < m_pPanelList->m_PanelList.Size(); i++ )
+	for ( int i = 0; i < m_pPanelList->m_PanelList.Count(); i++ )
 	{
 		const char *name = m_pPanelList->m_PanelList[i].m_szName;
 		char buf[512];

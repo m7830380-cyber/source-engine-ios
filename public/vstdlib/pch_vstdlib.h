@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//======== (C) Copyright 1999, 2000 Valve, L.L.C. All rights reserved. ========
 //
 // The copyright to the contents herein is the property of Valve, L.L.C.
 // The contents may be used and/or copied only with the written permission of
@@ -11,19 +11,14 @@
 // $NoKeywords: $
 //=============================================================================
 
-#ifdef _WIN32
+
 #pragma warning(disable: 4514)
-#endif
 
 // First include standard libraries
 #include <stdio.h>
 #include <ctype.h>
 #include <math.h>
-#ifdef APPLE
-#include <malloc/malloc.h>
-#else
 #include <malloc.h>
-#endif
 #include <memory.h>
 #include <ctype.h>
 
@@ -36,7 +31,7 @@
 #include "vstdlib/vstdlib.h"
 #include "tier1/strtools.h"
 #include "vstdlib/random.h"
-#include "tier1/KeyValues.h"
+#include "tier1/keyvalues.h"
 #include "tier1/utlmemory.h"
 #include "tier1/utlrbtree.h"
 #include "tier1/utlvector.h"

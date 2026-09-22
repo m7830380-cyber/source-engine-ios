@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2006, Valve Corporation, All rights reserved. =======//
 //
 // Purpose: D3DX command implementation.
 //
@@ -24,10 +24,19 @@ namespace InterceptFxc
 {
 
 	// The command that is intercepted by this namespace routines
-	static const char *s_pszCommand = "fxc.exe ";
-	static size_t s_uCommandLen = strlen( s_pszCommand );
+	enum ExecutableEnum
+	{
+		EXEC_FXC,
+		EXEC_SCE_CGC,
+		EXEC_COUNT
+	};
+	static const char * g_pExecutables[EXEC_COUNT] = 
+	{
+		"fxc.exe",
+		"sce-cgc.exe"
+	};
 
-	namespace Private
+	namespace Private		 
 	{
 		//
 		// Response implementation
@@ -75,36 +84,21 @@ namespace InterceptFxc
 		// @param pMacros			null-terminated array of macro-defines
 		// @param pszModel			shader model for compilation
 		//
-		void FastShaderCompile( const char *pszFilename, const D3DXMACRO *pMacros, const char *pszModel, CmdSink::IResponse **ppResponse )
+		void FastShaderCompile( ExecutableEnum nExecutable, const char *pszFilename, const D3DXMACRO *pMacros, const char *pszModel, CmdSink::IResponse **ppResponse )
 		{
 			LPD3DXBUFFER pShader = NULL; // NOTE: Must release the COM interface later
 			LPD3DXBUFFER pErrorMessages = NULL; // NOTE: Must release COM interface later
 			
-			// DxProxyModule
-			static DxProxyModule s_dxModule;
+			HRESULT hresult = S_OK;
 
-			// X360TEMP: This needs to be moved to an external semantic (or fixed)
-			bool bIsX360 = false;
-			for ( int i=0; ;i++ )
-			{
-				if ( !pMacros[i].Name )
-				{
-					break;
-				}
-				if ( V_stristr( pMacros[i].Name, "_X360" ) && atoi( pMacros[i].Definition ) )
-				{
-					bIsX360 = true;
-					break;
-				}
-			}
-			
-			HRESULT hr = s_dxModule.D3DXCompileShaderFromFile( pszFilename, pMacros, NULL /* LPD3DXINCLUDE */,
+			static DxProxyModule s_dxModule;
+			hresult = s_dxModule.D3DXCompileShaderFromFile( pszFilename, pMacros, NULL /* LPD3DXINCLUDE */,
 				"main",	pszModel, 0, &pShader, &pErrorMessages,
 				NULL /* LPD3DXCONSTANTTABLE *ppConstantTable */ );
 
 			if ( ppResponse )
 			{
-				*ppResponse = new CResponse( pShader, pErrorMessages, hr );
+				*ppResponse = new CResponse( pShader, pErrorMessages, hresult );
 			}
 			else
 			{
@@ -122,6 +116,25 @@ namespace InterceptFxc
 
 	}; // namespace Private
 
+	// return the next option (starting with -D or /D), or NULL
+	inline char * FindOptionD( char * pCommand )
+	{
+		char * p = pCommand;
+		while( V_isspace(*p) )
+			++p;
+		while( *p )
+		{
+			if( ( *p == '/' || *p == '-' ) && p[1] == 'D' )
+			{
+				return p + 2;
+			}
+			++p;
+		}
+		return NULL;
+	}
+	
+	
+
 	//
 	// Completely mimic the behaviour of "fxc.exe" in the specific cases related
 	// to shader compilations.
@@ -129,12 +142,8 @@ namespace InterceptFxc
 	// @param pCommand       the command in form
 	//		"fxc.exe /DSHADERCOMBO=1 /DTOTALSHADERCOMBOS=4 /DCENTROIDMASK=0 /DNUMDYNAMICCOMBOS=4 /DFLAGS=0x0 /DNUM_BONES=1 /Dmain=main /Emain /Tvs_2_0 /DSHADER_MODEL_VS_2_0=1 /D_X360=1 /nologo /Foshader.o debugdrawenvmapmask_vs20.fxc>output.txt 2>&1"
 	//
-	void ExecuteCommand( const char *pCommand, CmdSink::IResponse **ppResponse )
+	void ExecuteCommand( ExecutableEnum nExecutable, const char *pCommand, CmdSink::IResponse **ppResponse )
 	{
-		// Expect that the command passed is exactly "fxc.exe"
-		Assert( !strncmp( pCommand, s_pszCommand, s_uCommandLen ) );
-		pCommand += s_uCommandLen;
-
 		// A duplicate portion of memory for modifications
 		void *bufEditableCommand = alloca( strlen( pCommand ) + 1 );
 		char *pEditableCommand = strcpy( (char *) bufEditableCommand, pCommand );
@@ -147,20 +156,12 @@ namespace InterceptFxc
 
 		// Iterate over the command line and find all "/D...=..." settings
 		for ( char *pszFlag = pEditableCommand;
-			( pszFlag = strstr( pszFlag, "/D" ) ) != NULL;
+			( pszFlag = FindOptionD( pszFlag ) ) != NULL;
 			/* advance inside */ )
 		{
-			// Make sure this is a command-line flag (basic check for preceding space)
-			if ( pszFlag > pEditableCommand &&
-				pszFlag[-1] &&
-				' ' != pszFlag[-1] )
-			{
-				++ pszFlag;
-				continue;
-			}
-
-			// Name is immediately after "/D"
-			char *pszFlagName = pszFlag + 2; // 2 = length of "/D"
+			// Name is immediately after "/D" or "-D", which is taken care of by FindOptionD
+			char *pszFlagName = pszFlag ;
+			
 			// Value will be determined later
 			char *pszValue = "";
 
@@ -184,7 +185,8 @@ namespace InterceptFxc
 				pszFlag = "";
 			}
 
-			// Shader model extraction
+			// Shader model extraction; see src\devtools\bin\fxc_prep.pl for details how this is generated;
+			// for PS3, it'll be sce_vp_rsx or sce_fp_rsx
 			if ( !strncmp(pszFlagName, "SHADER_MODEL_", 13) )
 			{
 				pszShaderModel = pszFlagName + 13;
@@ -231,21 +233,38 @@ namespace InterceptFxc
 		}
 
 		// Compile the stuff
-		Private::FastShaderCompile( pszFilename, macros.Base(), chShaderModel, ppResponse );
+		Private::FastShaderCompile( nExecutable, pszFilename, macros.Base(), chShaderModel, ppResponse );
 	}
 
 	bool TryExecuteCommand( const char *pCommand, CmdSink::IResponse **ppResponse )
 	{
 		{
 			static bool s_bNoIntercept = ( CommandLine()->FindParm("-nointercept") != 0 );
-			static int s_dummy = ( Msg( s_bNoIntercept ?
-				"[shadercompile] Using old slow technique - runs 'fxc.exe'.\n" :
-				"[shadercompile] Using new faster Vitaliy's implementation.\n" ), 1 );
-			if ( !s_bNoIntercept && !strncmp(pCommand, InterceptFxc::s_pszCommand, InterceptFxc::s_uCommandLen) )
+			if ( !s_bNoIntercept )
 			{
-				// Trap "fxc.exe" so that we did not spawn extra process every time
-				InterceptFxc::ExecuteCommand( pCommand, ppResponse );
-				return true;
+				const char * pExecutable = pCommand;
+				while( *pExecutable && V_isspace(*pExecutable) )
+					++pExecutable;
+				const char *pExecutableEnd = pExecutable;
+				while( *pExecutableEnd && !V_isspace(*pExecutableEnd) )
+					++pExecutableEnd;
+
+				for( int i = 0;i < EXEC_COUNT; ++i )
+				{
+					if( pExecutable == strstr( pExecutable, g_pExecutables[i] ) )
+					{
+						
+						// Trap "???.exe" so that we did not spawn extra process 
+						//Msg( "[shadercompile] Intercepting call to %s\n", g_pExecutables[i] );
+						
+						const char *pParameters = pExecutableEnd;
+						while( *pParameters && V_isspace(*pParameters) )
+							++pParameters ;
+						
+						InterceptFxc::ExecuteCommand( ( ExecutableEnum )i, pParameters, ppResponse );
+						return true;
+					}
+				}
 			}
 		}
 

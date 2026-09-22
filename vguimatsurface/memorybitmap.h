@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -12,9 +12,9 @@
 #pragma once
 #endif
 
-#include <vgui/VGUI.h>
+#include <vgui/vgui.h>
 #include <vgui/IImage.h>
-#include <Color.h>
+#include <color.h>
 
 namespace vgui
 {
@@ -37,6 +37,11 @@ public:
 	virtual void SetPos(int x, int y);
 	virtual void SetSize(int x, int y);
 	virtual void SetColor(Color col);
+
+	virtual bool Evict() OVERRIDE{ return false; }
+	virtual int GetNumFrames() OVERRIDE{ return 0; }
+	virtual void SetFrame(int nFrame) OVERRIDE{}
+	virtual void SetRotation(int iRotation) OVERRIDE{ return; };
 
 	// methods
 	void ForceUpload(unsigned char *texture,int wide, int tall);	// ensures the bitmap has been uploaded

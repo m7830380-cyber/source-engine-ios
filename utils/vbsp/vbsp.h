@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -12,6 +12,7 @@
 	   
 #include "cmdlib.h"
 #include "mathlib/vector.h"
+#include "mathlib/vector4d.h"
 #include "scriplib.h"
 #include "polylib.h"
 #include "threads.h"
@@ -71,9 +72,10 @@ struct side_t
 	side_t			*original;	    // bspbrush_t sides will reference the mapbrush_t sides
 	int			    contents;		// from miptex
 	int			    surf;			// from miptex
-	qboolean	    visible;		// choose visble planes first
-	qboolean	    tested;			// this plane allready checked as a split
-	qboolean	    bevel;			// don't ever use for bsp splitting
+	bool			visible;		// choose visble planes first
+	bool			tested;			// this plane allready checked as a split
+	bool			bevel;			// don't ever use for bsp splitting
+	bool			thin;			// surface is thin
 
     side_t			*next;
     int             origIndex;      
@@ -131,6 +133,7 @@ struct face_t
 	int				firstPrimID;
 	int				numPrims;
 	unsigned int	smoothingGroups;
+	CUtlVector<side_t *> *pMergedList;		// FOR PORTAL2 paint face->brush map, keep track of a list of all sides that contributed faces to this face (via merges)
 };
 
 void EmitFace( face_t *f, qboolean onNode );
@@ -146,6 +149,7 @@ struct mapdispinfo_t
     Vector			vAxis;
 	Vector			startPosition;
 	float			alphaValues[MAX_DISPVERTS];
+	CDispMultiBlend	m_vMultiBlends[MAX_DISPVERTS];
     float			maxDispDist;
     float			dispDists[MAX_DISPVERTS];
     Vector			vectorDisps[MAX_DISPVERTS];
@@ -163,13 +167,13 @@ struct mapdispinfo_t
 };
 
 extern int              nummapdispinfo;
-extern mapdispinfo_t    mapdispinfo[MAX_MAP_DISPINFO];
+extern CUtlBlockVector<mapdispinfo_t>    mapdispinfo;
 
 extern float			g_defaultLuxelSize;
 extern float			g_luxelScale;
 extern float			g_minLuxelScale;
+extern float			g_maxLuxelScale;
 extern bool				g_BumpAll;
-extern int				g_nDXLevel;
 
 int GetDispInfoEntityNum( mapdispinfo_t *pDisp );
 void ComputeBoundsNoSkybox( );
@@ -250,6 +254,7 @@ extern	int			entity_num;
 struct LoadSide_t;
 struct LoadEntity_t;
 class CManifest;
+class GameData;
 
 class CMapFile
 {
@@ -279,16 +284,18 @@ public:
 	static char			m_InstancePath[ MAX_PATH ];
 	static void			SetInstancePath( const char *pszInstancePath );
 	static const char	*GetInstancePath( void ) { return m_InstancePath; }
-	static bool			DeterminePath( const char *pszBaseFileName, const char *pszInstanceFileName, char *pszOutFileName );
-
+	
 	void				CheckForInstances( const char *pszFileName );
 	void				MergeInstance( entity_t *pInstanceEntity, CMapFile *Instance );
+	void				PreLoadInstances( GameData *pGD );
+	void				PostLoadInstances( );
 	void				MergePlanes( entity_t *pInstanceEntity, CMapFile *Instance, Vector &InstanceOrigin, QAngle &InstanceAngle, matrix3x4_t &InstanceMatrix );
 	void				MergeBrushes( entity_t *pInstanceEntity, CMapFile *Instance, Vector &InstanceOrigin, QAngle &InstanceAngle, matrix3x4_t &InstanceMatrix );
 	void				MergeBrushSides( entity_t *pInstanceEntity, CMapFile *Instance, Vector &InstanceOrigin, QAngle &InstanceAngle, matrix3x4_t &InstanceMatrix );
-	void				ReplaceInstancePair( epair_t *pPair, entity_t *pInstanceEntity );
+	void				ReplaceInstancePair( epair_t *pPair, entity_t *pInstanceEntity, entity_t *pParmsEntity );
 	void				MergeEntities( entity_t *pInstanceEntity, CMapFile *Instance, Vector &InstanceOrigin, QAngle &InstanceAngle, matrix3x4_t &InstanceMatrix );
 	void				MergeOverlays( entity_t *pInstanceEntity, CMapFile *Instance, Vector &InstanceOrigin, QAngle &InstanceAngle, matrix3x4_t &InstanceMatrix );
+	void				MergeIOProxy( entity_t *pInstanceEntity, CMapFile *Instance, Vector &InstanceOrigin, QAngle &InstanceAngle, matrix3x4_t &InstanceMatrix );
 
 	static int	m_InstanceCount;
 	static int	c_areaportals;
@@ -359,7 +366,21 @@ extern  qboolean	dumpcollide;
 extern	qboolean	nodetailcuts;
 extern  qboolean	g_DumpStaticProps;
 extern	qboolean	g_bSkyVis;
+extern	qboolean	staticpropcombine;
+extern	qboolean	staticpropcombine_delsources;
+extern	qboolean	staticpropcombine_doflagcompare_STATIC_PROP_IGNORE_NORMALS;
+extern	qboolean	staticpropcombine_doflagcompare_STATIC_PROP_NO_SHADOW;
+extern	qboolean	staticpropcombine_doflagcompare_STATIC_PROP_NO_FLASHLIGHT;
+extern	qboolean	staticpropcombine_doflagcompare_STATIC_PROP_MARKED_FOR_FAST_REFLECTION;
+extern	qboolean	staticpropcombine_doflagcompare_STATIC_PROP_NO_PER_VERTEX_LIGHTING;
+extern	qboolean	staticpropcombine_doflagcompare_STATIC_PROP_NO_SELF_SHADOWING;
+extern	qboolean	staticpropcombine_doflagcompare_STATIC_PROP_FLAGS_EX_DISABLE_SHADOW_DEPTH;
+extern	qboolean	staticpropcombine_considervis;
+extern	qboolean	staticpropcombine_autocombine;
+extern	qboolean	staticpropcombine_suggestcombinerules;
+extern int			g_nAutoCombineMinInstances;
 extern	vec_t		microvolume;
+extern	bool		g_bConvertStructureToDetail;
 extern	bool		g_snapAxialPlanes;
 extern	bool		g_NodrawTriggers;
 extern	bool		g_DisableWaterLighting;
@@ -392,7 +413,7 @@ extern	textureref_t	textureref[MAX_MAP_TEXTURES];
 int	FindMiptex (const char *name);
 
 int TexinfoForBrushTexture (plane_t *plane, brush_texture_t *bt, const Vector& origin);
-int GetSurfaceProperties2( MaterialSystemMaterial_t matID, const char *pMatName );
+int GetSurfaceProperties2( MaterialSystemMaterial_t matID, const char *pMatName, const char *pVarName );
 
 extern int g_SurfaceProperties[MAX_MAP_TEXDATA];
 void LoadSurfaceProperties( void );
@@ -628,6 +649,10 @@ struct mapoverlay_t
 	float				flV[2];
 	float				flFadeDistMinSq;
 	float				flFadeDistMaxSq;
+	unsigned char		nMinCPULevel;
+	unsigned char		nMaxCPULevel;
+	unsigned char		nMinGPULevel;
+	unsigned char		nMaxGPULevel;
 	Vector				vecUVPoints[4];
 	Vector				vecOrigin;
 	Vector				vecBasis[3];

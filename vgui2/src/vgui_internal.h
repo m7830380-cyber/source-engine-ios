@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: Wraps pointers to basic vgui interfaces
 //
@@ -12,10 +12,14 @@
 #pragma once
 #endif
 
-#include <vgui/VGUI.h>
+#include <vgui/vgui.h>
 #include "interface.h"
 #include "tier3/tier3.h"
 #include "xbox/xboxstubs.h"
+
+
+// <vgui/ISchemeSurface.h> header
+extern class ISchemeSurface *g_pSchemeSurface;
 
 namespace vgui
 {

@@ -45,7 +45,7 @@ damage. */
 
 #include "iframeencoder.h"
 
-#include <speex/speex.h>
+#include <speex.h>
 
 class VoiceEncoder_Speex : public IFrameEncoder
 {

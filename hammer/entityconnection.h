@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Defines a connection (output-to-input) between two entities.
 //
@@ -20,9 +20,9 @@
 #pragma once
 #endif
 
-#include "utlvector.h"
+#include "UtlVector.h"
 #include "fgdlib/InputOutput.h"
-
+#include "tier1/utlobjectreference.h"
 
 #define EVENT_FIRE_ALWAYS	-1
 
@@ -40,7 +40,8 @@ enum
 };
 
 class CMapEntity;
-typedef CUtlVector<CMapEntity*> CMapEntityList;
+typedef CUtlReferenceVector<CMapEntity> CMapEntityList;
+class CMapDoc;
 
 class CEntityConnection
 {
@@ -91,15 +92,15 @@ public:
 	static int CALLBACK CompareTargetNames(CEntityConnection *pConn1, CEntityConnection *pConn2, SortDirection_t eDirection);
 
 	// Validation functions
-	static bool ValidateOutput(CMapEntity *pEntity, const char* pszOutput);
+	static bool ValidateOutput(const CMapEntity *pEntity, const char* pszOutput);
 	static bool ValidateOutput(const CMapEntityList *pEntityList, const char* pszOutput);
 	static bool ValidateTarget(const CMapEntityList *pEntityList, bool bVisibilityCheck, const char* pszTarget);
-	static bool ValidateInput(const char* pszTarget, const char* pszInput, bool bVisiblesOnly);
+	static bool ValidateInput( const char *pszTarget, const char *pszInput, bool bVisiblesOnly, CMapDoc *pDoc = NULL );
 
-	static int  ValidateOutputConnections(CMapEntity *pEntity, bool bVisibilityCheck, bool bIgnoreHiddenTargets=false );
+	static int  ValidateOutputConnections( CMapEntity *pEntity, bool bVisibilityCheck, bool bIgnoreHiddenTargets=false, bool CheckAllDocuments = false );
 	static int  ValidateInputConnections(CMapEntity *pEntity, bool bVisibilityCheck);
 
-	static void FindBadConnections(CMapEntity *pEntity, bool bVisibilityCheck, CUtlVector<CEntityConnection *> &BadConnectionList, bool bIgnoreHiddenTargets=false);
+	static void FindBadConnections( CMapEntity *pEntity, bool bVisibilityCheck, CUtlVector<CEntityConnection *> &BadConnectionList, bool bIgnoreHiddenTargets=false, bool CheckAllDocuments = false );
 	static void FixBadConnections(CMapEntity *pEntity, bool bVisibilityCheck);
 
 protected:

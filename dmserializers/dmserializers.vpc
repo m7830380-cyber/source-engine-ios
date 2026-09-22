@@ -5,7 +5,7 @@
 //-----------------------------------------------------------------------------
 
 $Macro SRCDIR		".."
-$include "$SRCDIR\vpc_scripts\source_lib_base.vpc"
+$Include "$SRCDIR\vpc_scripts\source_lib_base.vpc"
 
 $Configuration
 {
@@ -22,7 +22,9 @@ $Project "Dmserializers"
 		$File	"dmebaseimporter.cpp"
 		$File	"dmserializers.cpp"
 		$File	"importactbusy.cpp"
+		$File	"importcommentary.cpp"
 		$File	"importkeyvaluebase.cpp"
+		$File	"importmks.cpp"
 		$File	"importsfmv1.cpp"
 		$File	"importsfmv2.cpp"
 		$File	"importsfmv3.cpp"
@@ -32,6 +34,7 @@ $Project "Dmserializers"
 		$File	"importsfmv7.cpp"
 		$File	"importsfmv8.cpp"
 		$File	"importsfmv9.cpp"
+		$File	"importtex.cpp"
 		$File	"importvmf.cpp"
 		$File	"importvmt.cpp"
 	}

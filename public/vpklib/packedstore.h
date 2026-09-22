@@ -13,18 +13,13 @@
 
 #include <tier0/platform.h>
 #include <tier0/threadtools.h>
-#include <tier0/tslist.h>
 #include <tier2/tier2.h>
 
 #include "filesystem.h"
 #include "tier1/utlintrusivelist.h"
 #include "tier1/utlvector.h"
-#include "tier1/utllinkedlist.h"
-#include "tier1/UtlSortVector.h"
+#include "tier1/utlsortvector.h"
 #include "tier1/utlmap.h"
-#include "tier1/utlstring.h"
-#include "tier1/checksum_md5.h"
-#include <stdio.h>
 
 //#define VPK_ENABLE_SIGNING
 
@@ -120,12 +115,10 @@ public:
 #define PACKEDFILE_EXT_HASH_SIZE 15
 
 
-#ifdef IS_WINDOWS_PC
+#ifdef _WIN32
 typedef HANDLE PackDataFileHandle_t;
-#define PACKEDSTORE_INVALID_HANDLE INVALID_HANDLE_VALUE
 #else
-typedef FILE *PackDataFileHandle_t;
-#define PACKEDSTORE_INVALID_HANDLE ((FILE *)NULL)
+typedef FileHandle_t PackDataFileHandle_t;
 #endif
 
 struct FileHandleTracker_t
@@ -138,13 +131,6 @@ struct FileHandleTracker_t
 	FileHandleTracker_t( void )
 	{
 		m_nFileNumber = -1;
-		m_hFileHandle = PACKEDSTORE_INVALID_HANDLE;
-		m_nCurOfs = 0;
-	}
-
-	bool IsValid() const
-	{
-		return m_nFileNumber != -1 && m_hFileHandle != PACKEDSTORE_INVALID_HANDLE;
 	}
 };
 
@@ -211,6 +197,7 @@ struct CachedVPKRead_t
 	int m_hMD5RequestHandle;// bookkeeping
 	int m_cFailedHashes;	// did the MD5 match what it was supposed to?
 	MD5Value_t m_md5Value;
+	MD5Value_t m_md5ValueRetry;
 
 	static bool Less( const CachedVPKRead_t& lhs, const CachedVPKRead_t& rhs )
 	{
@@ -239,17 +226,19 @@ class CPackedStoreReadCache
 public:
 	CPackedStoreReadCache( IBaseFileSystem *pFS );
 
-	bool ReadCacheLine( FileHandleTracker_t &fHandle, CachedVPKRead_t &cachedVPKRead );
+	bool ReadCacheLine( FileHandleTracker_t &fHandle, CachedVPKRead_t &cachedVPKRead, int &nRead );
 	bool BCanSatisfyFromReadCache( uint8 *pOutData, CPackedStoreFileHandle &handle, FileHandleTracker_t &fHandle, int nDesiredPos, int nNumBytes, int &nRead );
 	bool BCanSatisfyFromReadCacheInternal( uint8 *pOutData, CPackedStoreFileHandle &handle, FileHandleTracker_t &fHandle, int nDesiredPos, int nNumBytes, int &nRead );
-	bool CheckMd5Result( CachedVPKRead_t &cachedVPKRead );
+	bool CheckMd5Result( CachedVPKRead_t &cachedVPKRead, MD5Value_t &md5Value );
 	int FindBufferToUse();
-	void RetryBadCacheLine( CachedVPKRead_t &cachedVPKRead );
+	void RereadBadCacheLine( CachedVPKRead_t &cachedVPKRead );
+	void RecheckBadCacheLine( CachedVPKRead_t &cachedVPKRead );
 	void RetryAllBadCacheLines();
 
 
-	// cache 64 MB total
-	static const int k_nCacheBuffersToKeep = 4;
+	// cache 8 MB total. Caching more wastes too much memory.
+	// On dedicated servers this cache is not used.
+	static const int k_nCacheBuffersToKeep = 8;
 	static const int k_cubCacheBufferSize = 0x00100000; // 1MB
 	static const int k_nCacheBufferMask = 0x7FF00000;
 
@@ -349,6 +338,7 @@ public:
 	CUtlSortVector<ChunkHashFraction_t, ChunkHashFractionLess_t > &AccessPackFileHashes() { return m_vecChunkHashFraction; }
 	bool FindFileHashFraction( int nPackFileNumber, int nFileFraction, ChunkHashFraction_t &chunkFileHashFraction );
 	void GetPackFileLoadErrorSummary( CUtlString &sErrors );
+	void GetPackFileLoadErrorSummaryKV( KeyValues *pKV );
 
 	void GetPackFileName( CPackedStoreFileHandle &handle, char *pchFileNameOut, int cchFileNameOut ) const;
 	void GetDataFileName( char *pchFileNameOut, int cchFileNameOut, int nFileNumber ) const;
@@ -371,8 +361,6 @@ public:
 	int GetWriteChunkSize() const { return m_nWriteChunkSize; }
 
 	int GetHighestChunkFileIndex() { return m_nHighestChunkFileIndex; }
-
-	bool HasMissingChunkFiles() const { return m_nMissingChunkFileCount > 0; }
 
 	void DiscardChunkHashes( int iChunkFileIndex );
 
@@ -422,9 +410,6 @@ private:
 	MD5Value_t m_TotalFileMD5;
 
 	int m_nHighestChunkFileIndex;
-	int m_nMissingChunkFileCount;
-	CUtlVector<uint8> m_bChunkFileMissing;
-	CUtlVector<CUtlString> m_ResolvedChunkFileNames;
 
 	/// The private key that will be used to sign the directory file.
 	/// This will be empty for unsigned VPK's, or if we don't know the
@@ -449,9 +434,6 @@ private:
 		uint8 **pExtBaseOut = NULL, uint8 **pNameBaseOut = NULL );
 
 	void BuildHashTables( void );
-	void ValidateChunkFiles( void );
-	bool IsChunkFileMissing( int nFileNumber ) const;
-	void BuildDefaultDataFileName( char *pchFileNameOut, int cchFileNameOut, int nFileNumber ) const;
 
 	FileHandleTracker_t &GetFileHandle( int nFileNumber );
 

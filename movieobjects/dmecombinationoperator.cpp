@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2004, Valve Corporation, All rights reserved. =======
 //
 // Purpose: 
 //
@@ -263,8 +263,8 @@ IMPLEMENT_ELEMENT_FACTORY( DmeCombinationDominationRule, CDmeCombinationDominati
 //-----------------------------------------------------------------------------
 void CDmeCombinationDominationRule::OnConstruction()
 {
-	m_Dominators.Init( this, "dominators", FATTRIB_HAS_CALLBACK | FATTRIB_HAS_ARRAY_CALLBACK );
-	m_Suppressed.Init( this, "suppressed", FATTRIB_HAS_CALLBACK | FATTRIB_HAS_ARRAY_CALLBACK );
+	m_Dominators.Init( this, "dominators", FATTRIB_HAS_CALLBACK );
+	m_Suppressed.Init( this, "suppressed", FATTRIB_HAS_CALLBACK );
 }
 
 void CDmeCombinationDominationRule::OnDestruction()
@@ -313,7 +313,7 @@ void CDmeCombinationDominationRule::AddDominator( const char *pDominatorControl 
 	}
 	if ( HasString( pDominatorControl, m_Suppressed ) )
 	{
-		Warning( "Attemped to add a control as both dominator + suppressed %s\n", pDominatorControl );
+		Warning( "Attempted to add a control as both dominator + suppressed %s\n", pDominatorControl );
 		return;
 	}
 	m_Dominators.AddToTail( pDominatorControl );
@@ -332,7 +332,7 @@ void CDmeCombinationDominationRule::AddSuppressed( const char *pSuppressedContro
 	}
 	if ( HasString( pSuppressedControl, m_Dominators ) )
 	{
-		Warning( "Attemped to add a control as both dominator + suppressed %s\n", pSuppressedControl );
+		Warning( "Attempted to add a control as both dominator + suppressed %s\n", pSuppressedControl );
 		return;
 	}
 	m_Suppressed.AddToTail( pSuppressedControl );
@@ -419,7 +419,7 @@ void CDmeCombinationOperator::OnConstruction()
 	m_ControlValues[COMBO_CONTROL_LAGGED].Init( this, "controlValuesLagged" );
 	m_bSpecifyingLaggedData.Init( this, "usesLaggedValues" );
 
-	m_Dominators.Init( this, "dominators", FATTRIB_HAS_CALLBACK | FATTRIB_HAS_ARRAY_CALLBACK );
+	m_Dominators.Init( this, "dominators", FATTRIB_HAS_CALLBACK );
 
 	m_Targets.Init( this, "targets" );
 	m_flLastLaggedComputationTime = FLT_MIN;
@@ -479,8 +479,8 @@ ControlIndex_t CDmeCombinationOperator::FindOrCreateControl( const char *pContro
 	CDmeCombinationInputControl *pInputControl = CreateElement< CDmeCombinationInputControl >( pControlName, GetFileId() );
 	pInputControl->SetStereo( bStereo );
 	int nIndex = m_InputControls.AddToTail( pInputControl );
-	m_ControlValues[COMBO_CONTROL_NORMAL].AddToTail( Vector( 0.0f, 0.5f, 0.5f ) );
-	m_ControlValues[COMBO_CONTROL_LAGGED].AddToTail( Vector( 0.0f, 0.5f, 0.5f ) );
+	m_ControlValues[COMBO_CONTROL_NORMAL].AddToTail( Vector( 0.0f, 0.0f, 0.5f ) );
+	m_ControlValues[COMBO_CONTROL_LAGGED].AddToTail( Vector( 0.0f, 0.0f, 0.5f ) );
 	m_IsDefaultValue.AddToTail( true );
 	Assert( m_InputControls.Count() == m_ControlValues[COMBO_CONTROL_NORMAL].Count() );
 	Assert( m_InputControls.Count() == m_ControlValues[COMBO_CONTROL_LAGGED].Count() );
@@ -577,9 +577,9 @@ void CDmeCombinationOperator::UpdateDefaultValue( ControlIndex_t nControlIndex )
 	{
 		float flDefaultValue = GetRawControlCount( nControlIndex ) == 2 ? 0.5f : 0.0f;
 		const Vector& vec = m_ControlValues[COMBO_CONTROL_NORMAL][nControlIndex];
-		m_ControlValues[COMBO_CONTROL_NORMAL].Set( nControlIndex, Vector( flDefaultValue, vec.y, vec.z ) );
+		m_ControlValues[COMBO_CONTROL_NORMAL].Set( nControlIndex, Vector( flDefaultValue, flDefaultValue, vec.z ) );
 		const Vector& vec2 = m_ControlValues[COMBO_CONTROL_LAGGED][nControlIndex];
-		m_ControlValues[COMBO_CONTROL_LAGGED].Set( nControlIndex, Vector( flDefaultValue, vec2.y, vec2.z ) );
+		m_ControlValues[COMBO_CONTROL_LAGGED].Set( nControlIndex, Vector( flDefaultValue, flDefaultValue, vec2.z ) );
 	}
 }
 
@@ -716,7 +716,26 @@ void CDmeCombinationOperator::SetWrinkleScale( ControlIndex_t nControl, const ch
 {
 	CDmeCombinationInputControl *pInputControl = m_InputControls[nControl];
 	Assert( pInputControl );
+	const float flOldWrinkleScale = pInputControl->WrinkleScale( pRawControlName );
 	pInputControl->SetWrinkleScale( pRawControlName, flWrinkleScale );
+
+	for ( int nTargetIndex = 0; nTargetIndex < m_Targets.Count(); ++nTargetIndex )
+	{
+		CDmeMesh *pDmeMesh = CastElement< CDmeMesh >( m_Targets[ nTargetIndex ] );
+		if ( !pDmeMesh )
+			continue;
+
+		CDmeVertexData *pDmeBindState = pDmeMesh->GetBindBaseState();
+		if ( !pDmeBindState )
+			continue;
+
+		CDmeVertexDeltaData *pDmeDelta = pDmeMesh->FindDeltaState( pRawControlName );
+		if ( !pDmeDelta )
+			continue;
+
+		pDmeDelta->UpdateWrinkleDelta( pDmeBindState, flOldWrinkleScale, flWrinkleScale );
+	}
+
 	RebuildRawControlList();
 }
 
@@ -898,12 +917,12 @@ void CDmeCombinationOperator::SetControlValue( ControlIndex_t nControlIndex, flo
 	m_ControlValues[type].Set( nControlIndex, Vector( flValue, flValue, flMultiLevel ) );
 }
 
-void CDmeCombinationOperator::SetControlValue( ControlIndex_t nControlIndex, float flLevel, float flBalance, CombinationControlType_t type )
+void CDmeCombinationOperator::SetControlValue( ControlIndex_t nControlIndex, float flLeftValue, float flRightValue, CombinationControlType_t type )
 {
 	Assert( IsStereoControl( nControlIndex ) );
 	m_IsDefaultValue[ nControlIndex ] = false;
 	float flMultiLevel = m_ControlValues[type][nControlIndex].z;
-	m_ControlValues[type].Set( nControlIndex, Vector( flLevel, flBalance, flMultiLevel ) );
+	m_ControlValues[type].Set( nControlIndex, Vector( flLeftValue, flRightValue, flMultiLevel ) );
 }
 
 void CDmeCombinationOperator::SetControlValue( ControlIndex_t nControlIndex, const Vector2D& vec, CombinationControlType_t type )
@@ -1599,7 +1618,20 @@ void CDmeCombinationOperator::AddTarget( CDmeDag *pDag )
 	}
 }
 
- 
+float RemapValue( float flValue, const Vector4D &filterRamp )
+{
+	if ( flValue <= filterRamp.x || flValue >= filterRamp.w )
+		return 0.0f;
+
+	if ( flValue < filterRamp.y )
+		return RemapVal( flValue, filterRamp.x, filterRamp.y, 0.0f, 1.0f );
+
+	if ( flValue > filterRamp.z )
+		return RemapVal( flValue, filterRamp.z, filterRamp.w, 1.0f, 0.0f );
+
+	return 1.0f;
+}
+
 //-----------------------------------------------------------------------------
 // Remaps non-stereo -> stereo, stereo ->left/right, also adds multilevel + filter
 //-----------------------------------------------------------------------------
@@ -1609,55 +1641,31 @@ void CDmeCombinationOperator::ComputeInternalControlValue( RawControlIndex_t nRa
 	const Vector &vecControlValue = m_ControlValues[ type ][ info.m_InputControl ];
 
 	const bool bMultiControl = IsMultiControl( info.m_InputControl );
-	float flValue = bMultiControl ? vecControlValue.z : vecControlValue.x;
-
-	// Apply multicontrol remapping
-	if ( flValue <= info.m_FilterRamp.x || flValue >= info.m_FilterRamp.w )
-	{
-		flValue = 0.0f;
-	}
-	else if ( flValue < info.m_FilterRamp.y )
-	{
-		flValue = RemapVal( flValue, info.m_FilterRamp.x, info.m_FilterRamp.y, 0.0f, 1.0f );
-	}
-	else if ( flValue > info.m_FilterRamp.z )
-	{
-		flValue = RemapVal( flValue, info.m_FilterRamp.z, info.m_FilterRamp.w, 1.0f, 0.0f );
-	}
-	else
-	{
-		flValue = 1.0f;
-	}
 
 	if ( IsEyelidControl( info.m_InputControl ) )
 	{
+		float flMultiValue = RemapValue( vecControlValue.z, info.m_FilterRamp );
 		if ( info.m_bLowerEyelid )
 		{
-			flValue = ( 1.0f - flValue ) * vecControlValue.x;
+			value.x = ( 1.0f - flMultiValue ) * vecControlValue.x;
+			value.y = ( 1.0f - flMultiValue ) * vecControlValue.y;
 		}
 		else
 		{
-			flValue *= vecControlValue.x;
+			value.x = flMultiValue * vecControlValue.x;
+			value.y = flMultiValue * vecControlValue.y;
 		}
 	}
 	else if ( bMultiControl )
 	{
-		flValue *= vecControlValue.x;
+		float flMultiValue = RemapValue( vecControlValue.z, info.m_FilterRamp );
+		value.x = flMultiValue * vecControlValue.x;
+		value.y = flMultiValue * vecControlValue.y;
 	}
-
-	value.x = value.y = flValue;
-	if ( IsStereoControl( info.m_InputControl ) )
+	else
 	{
-		if ( vecControlValue.y < 0.5f )
-		{
-			float flRightAmount = RemapVal( vecControlValue.y, 0.0f, 0.5f, 0.0f, 1.0f );
-			value.y *= flRightAmount;
-		}
-		else
-		{
-			float flLeftAmount = RemapVal( vecControlValue.y, 0.5f, 1.0f, 1.0f, 0.0f );
-			value.x *= flLeftAmount;
-		}
+		value.x = RemapValue( vecControlValue.x, info.m_FilterRamp );
+		value.y = RemapValue( vecControlValue.y, info.m_FilterRamp );
 	}
 }
 
@@ -1879,7 +1887,11 @@ void CDmeCombinationOperator::CopyControls( CDmeCombinationOperator *pSrc )
 // Generates wrinkle deltas for the uncorrected controls
 // NOTE: This is only being used because we have no authoring path for wrinkle data yet
 //-----------------------------------------------------------------------------
-void CDmeCombinationOperator::GenerateWrinkleDeltas( CDmeShape *pShape, bool bOverwrite )
+void CDmeCombinationOperator::GenerateWrinkleDeltas(
+	CDmeShape *pShape,
+	bool bOverwrite,
+	bool bUseNormalForSign /* = false */,
+	float flScale /* = 1.0f */ )
 {
 	CDmeMesh* pMesh = CastElement< CDmeMesh >( pShape );
 	CDmeVertexData *pBindState = pMesh ? pMesh->FindBaseState( "bind" ) : NULL;
@@ -1891,18 +1903,26 @@ void CDmeCombinationOperator::GenerateWrinkleDeltas( CDmeShape *pShape, bool bOv
 			CDmeVertexDeltaData* pDelta = pMesh->FindDeltaState( m_RawControlInfo[i].m_Name );
 			if ( pDelta )
 			{
-				pDelta->GenerateWrinkleDelta( pBindState, m_RawControlInfo[i].m_flWrinkleScale, bOverwrite );
+				if ( bUseNormalForSign )
+				{
+					pDelta->GenerateWrinkleDelta( pBindState, flScale, bOverwrite, bUseNormalForSign );
+				}
+				else
+				{
+					pDelta->GenerateWrinkleDelta( pBindState, m_RawControlInfo[i].m_flWrinkleScale, bOverwrite, bUseNormalForSign );
+				}
 			}
 		}
 	}
 }
 
-void CDmeCombinationOperator::GenerateWrinkleDeltas( bool bOverwrite /* = true */ )
+
+void CDmeCombinationOperator::GenerateWrinkleDeltas( bool bOverwrite /* = true */, bool bUseNormalForSign /* = false */, float flScale /* = 1.0f */ )
 {
 	int nTargetCount = m_Targets.Count();
 	for ( int i = 0; i < nTargetCount; ++i )
 	{
-		GenerateWrinkleDeltas( CastElement< CDmeShape >( m_Targets[i] ), bOverwrite );
+		GenerateWrinkleDeltas( CastElement< CDmeShape >( m_Targets[i] ), bOverwrite, bUseNormalForSign, flScale );
 	}
 }
 
@@ -1924,6 +1944,7 @@ void CDmeCombinationOperator::RemoveAllTargets()
 void CDmeCombinationOperator::SetToDefault()
 {
 	const int nControlsCount = m_InputControls.Count();
+	m_IsDefaultValue.SetCount( nControlsCount );
 	for ( int i = 0; i < nControlsCount; ++i )
 	{
 		m_IsDefaultValue[ i ] = true;
@@ -1944,7 +1965,7 @@ void CDmeCombinationOperator::SetToBase()
 		for ( int j = 0; j < COMBO_CONTROL_TYPE_COUNT; ++j )
 		{
 			const Vector &v = m_ControlValues[ j ][ i ];
-			m_ControlValues[ j ].Set( i, Vector( flBaseValue, v.y, v.z ) );
+			m_ControlValues[ j ].Set( i, Vector( flBaseValue, flBaseValue, v.z ) );
 		}
 	}
 }
@@ -2061,6 +2082,8 @@ void CreateLaggedVertexAnimation( CDmeChannelsClip *pClip, int nSamplesPerSec )
 	if ( !pClip )
 		return;
 
+	CUtlVectorFixedGrowable< char, 256 > newChannelName;
+
 	int nChannelCount = pClip->m_Channels.Count();
 	for ( int i = 0; i < nChannelCount; ++i )
 	{
@@ -2083,10 +2106,10 @@ void CreateLaggedVertexAnimation( CDmeChannelsClip *pClip, int nSamplesPerSec )
 			continue;
 
 		int nLen = Q_strlen( pChannel->GetName() );
-		char *pNewChannelName = (char*)_alloca( nLen + 10 );
-		memcpy( pNewChannelName, pChannel->GetName(), nLen+1 );
-		Q_strncpy( &pNewChannelName[nLen], "_lagged", 10 );
-		CDmeChannel *pNewChannel = CreateElement< CDmeChannel >( pNewChannelName, pClip->GetFileId() );
+		newChannelName.EnsureCount( nLen + 10 );
+		memcpy( newChannelName.Base(), pChannel->GetName(), nLen+1 );
+		Q_strncpy( &newChannelName[nLen], "_lagged", 10 );
+		CDmeChannel *pNewChannel = CreateElement< CDmeChannel >( newChannelName.Base(), pClip->GetFileId() );
 		pNewChannel->SetOutput( pLaggedAttr, nArrayIndex );
 		CDmeVector2Log *pNewLog = pNewChannel->CreateLog< Vector2D >( );
 		pClip->m_Channels.AddToTail( pNewChannel );
@@ -2125,7 +2148,7 @@ void CDmeMayaCombinationOperator::OnDestruction()
 //-----------------------------------------------------------------------------
 void CDmeMayaCombinationOperator::AddDeltaState( const char *pDeltaStateName )
 {
-	m_DeltaStates.AddToTail( CreateElement<CDmElement>( pDeltaStateName ) );
+	m_DeltaStates.AddToTail( CreateElement<CDmElement>( pDeltaStateName, DMFILEID_INVALID ) );
 	for ( int i = 0; i < COMBO_CONTROL_TYPE_COUNT; ++i )
 	{
 		m_DeltaStateWeights[i].AddToTail( Vector2D( 1.0f, 1.0f ) );

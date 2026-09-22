@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -9,6 +9,8 @@
 #include "unitlib/unitlib.h"
 #include "tier0/dbg.h"
 #include <string.h>
+
+#include "memdbgon.h"
 
 
 

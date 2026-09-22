@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2009, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -19,7 +19,6 @@
 #include "History.h"
 #include "HelperFactory.h"
 #include "SaveInfo.h"
-#include "tier2/tier2.h"
 #include "p4lib/ip4.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
@@ -343,7 +342,7 @@ ChunkFileResult_t CManifest::LoadManifestMapsPrefsCallback( CChunkFile *pFile, C
 ChunkFileResult_t CManifest::LoadManifestCordoningPrefsCallback( CChunkFile *pFile, CManifest *pDoc )
 {
 	CChunkHandlerMap Handlers;
-	Handlers.AddHandler( "cordons", ( ChunkHandler_t )CMapDoc::LoadCordonCallback, pDoc );
+	Handlers.AddHandler( "cordons", ( ChunkHandler_t )CMapDoc::LoadCordonsCallback, pDoc );
 	pFile->PushHandlers(&Handlers);
 
 	ChunkFileResult_t eResult = ChunkFile_Ok;
@@ -418,7 +417,7 @@ bool CManifest::LoadVMFManifest( const char *pszFileName )
 	}
 
 	SetActiveMapDoc( this );
-	Postload( pszFileName );
+	PostloadDocument( pszFileName );
 	m_ManifestWorld->PostloadWorld();
 
 	bool bSetIDs = false;
@@ -625,7 +624,7 @@ bool CManifest::SaveVMFManifest( const char *pszFileName )
 			{
 				CManifestMap	*pManifestMap = GetMap( i );
 
-				eResult = File.BeginChunk("VMF");
+				ChunkFileResult_t eResult = File.BeginChunk("VMF");
 				if (eResult == ChunkFile_Ok)
 				{
 					eResult = File.WriteKeyValue( "Name", pManifestMap->m_FriendlyName );
@@ -745,7 +744,7 @@ bool CManifest::SaveVMFManifestUserPrefs( const char *pszFileName )
 			{
 				CManifestMap	*pManifestMap = GetMap( i );
 
-				eResult = File.BeginChunk("VMF");
+				ChunkFileResult_t eResult = File.BeginChunk("VMF");
 				if (eResult == ChunkFile_Ok)
 				{
 					eResult = File.WriteKeyValueInt( "InternalID", pManifestMap->m_InternalID );
@@ -778,14 +777,14 @@ bool CManifest::SaveVMFManifestUserPrefs( const char *pszFileName )
 		}
 
 		eResult = File.BeginChunk( "cordoning" );
-		eResult = CordonSaveVMF( &File, NULL );
+		eResult = Cordon_SaveVMF( &File, NULL );
 
 		if ( m_bIsCordoning )
 		{
 			CSaveInfo	SaveInfo;
 
 			SaveInfo.SetVisiblesOnly( false );
-			CMapWorld *pCordonWorld = CordonCreateWorld();
+			CMapWorld *pCordonWorld = Cordon_CreateWorld();
 			eResult = pCordonWorld->SaveSolids( &File, &SaveInfo, 0 );
 		}
 
@@ -1257,7 +1256,7 @@ bool CManifest::AddExistingMap( void )
 {
 	char szInitialDir[ MAX_PATH ];
 	
-	V_strcpy_safe( szInitialDir, GetPathName() );
+	strcpy( szInitialDir, GetPathName() );
 	if ( szInitialDir[ 0 ] == '\0' )
 	{
 		strcpy( szInitialDir, g_pGameConfig->szMapDir );
@@ -1310,7 +1309,7 @@ bool CManifest::RemoveSubMap( CManifestMap *pManifestMap )
 		const CMapObjectList *pChildren = m_ManifestWorld->GetChildren();
 		FOR_EACH_OBJ( *pChildren, pos )
 		{
-			CMapClass	*pChild = pChildren->Element( pos );
+			CMapClass	*pChild = (CUtlReference< CMapClass >)pChildren->Element( pos );
 			CMapEntity	*pEntity = dynamic_cast< CMapEntity * >( pChild );
 
 			if ( pEntity && stricmp( pEntity->GetClassName(), "func_instance" ) == 0 )
@@ -1455,7 +1454,7 @@ void CManifest::UpdateInstanceMap( CMapDoc *pInstanceMapDoc )
 	const CMapObjectList *pChildren = m_ManifestWorld->GetChildren();
 	FOR_EACH_OBJ( *pChildren, pos )
 	{
-		CMapClass	*pChild = pChildren->Element( pos );
+		CMapClass	*pChild = (CUtlReference< CMapClass >)pChildren->Element( pos );
 		CMapEntity	*pEntity = dynamic_cast< CMapEntity * >( pChild );
 
 		if ( pEntity && stricmp( pEntity->GetClassName(), "func_instance" ) == 0 )

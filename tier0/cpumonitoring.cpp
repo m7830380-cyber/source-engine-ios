@@ -26,8 +26,6 @@
 #ifdef PLATFORM_WINDOWS_PC32
 #include "tier0/threadtools.h"
 #define NOMINMAX
-#undef min
-#undef max
 #include <windows.h>
 #include "PowrProf.h"
 #include <algorithm>
@@ -43,7 +41,7 @@ static bool s_fEnabled = false;
 
 // This is the delay between measurements when measurements are 'disabled'. If it
 // is zero then the measurements are truly disabled.
-const unsigned kDelayMillisecondsWhenDisabled = 0; //5000;
+const unsigned kDelayMillisecondsWhenDisabled = 5000;
 // Delay before first measurement
 const unsigned kFirstInterval = 500;
 const unsigned kPostMeasureInterval = 5;
@@ -122,13 +120,13 @@ start:
 	}
 }
 
-static LARGE_INTEGER s_QPCfrequency;
-static LARGE_INTEGER s_QPCbase;
+static LARGE_INTEGER frequency;
+static LARGE_INTEGER base;
 
 static void InitializeGetTime()
 {
-	QueryPerformanceFrequency( &s_QPCfrequency );
-	QueryPerformanceCounter( &s_QPCbase );
+	QueryPerformanceFrequency( &frequency );
+	QueryPerformanceCounter( &base );
 }
 
 static double GetTime()
@@ -138,7 +136,7 @@ static double GetTime()
 
 	// Subtracting off the base time gives us a zero point at application start up and
 	// gives us more precision.
-	return ( value.QuadPart - s_QPCbase.QuadPart ) / double( s_QPCfrequency.QuadPart );
+	return ( value.QuadPart - base.QuadPart ) / double( frequency.QuadPart );
 }
 
 static float GetFrequency()
@@ -177,7 +175,7 @@ static float GetSampledFrequency( int iterations )
 }
 
 // The measured frequency of all of the threads
-static float s_frequencies[ nMaxCPUs ];
+static float s_frequency[ nMaxCPUs ];
 
 // Measurement thread, designed to be one per core.
 static DWORD WINAPI MeasureThread( LPVOID vThreadNum )
@@ -192,7 +190,7 @@ static DWORD WINAPI MeasureThread( LPVOID vThreadNum )
 		// Seven seems like a good number of times to measure the frequency -- it makes
 		// it likely that a couple of the tests will not hit any interrupts.
 		float frequency = GetSampledFrequency( 7 );
-		s_frequencies[ threadNum ] = frequency;
+		s_frequency[ threadNum ] = frequency;
 
 		// Tell the heartbeat thread that one thread has completed.
 		ReleaseSemaphore( g_workCompleteSemaphore, 1, NULL );
@@ -266,12 +264,12 @@ static DWORD WINAPI HeartbeatThread( LPVOID )
 			}
 
 			// Find the minimum and maximum measured frequencies.
-			float minActualFreq = s_frequencies[ 0 ];
-			float maxActualFreq = s_frequencies[ 0 ];
+			float minActualFreq = s_frequency[ 0 ];
+			float maxActualFreq = s_frequency[ 0 ];
 			for ( DWORD i = 1; i < g_numCPUs; ++i )
 			{
-				minActualFreq = std::min( minActualFreq, s_frequencies[ i ] );
-				maxActualFreq = std::max( maxActualFreq, s_frequencies[ i ] );
+				minActualFreq = std::min( minActualFreq, s_frequency[ i ] );
+				maxActualFreq = std::max( maxActualFreq, s_frequency[ i ] );
 			}
 
 			{

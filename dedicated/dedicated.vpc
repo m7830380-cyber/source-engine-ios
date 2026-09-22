@@ -8,21 +8,20 @@ $Macro SRCDIR		".."
 $Macro OUTBINDIR	"$SRCDIR\..\game\bin"
 
 $Include "$SRCDIR\vpc_scripts\source_dll_base.vpc"
-$include "$SRCDIR\vpc_scripts\source_cryptlib_include.vpc"
 
 $Configuration
 {
 	$Compiler
 	{
 		$AdditionalIncludeDirectories		"$BASE,.\,$SRCDIR\engine"
-		$PreprocessorDefinitions			"$BASE;DEDICATED;LAUNCHERONLY;SUPPORT_PACKED_STORE"
+		$PreprocessorDefinitions			"$BASE;DEDICATED;LAUNCHERONLY"
 	}
 
 	$Linker
 	{
-		$AdditionalDependencies					"$BASE wsock32.lib odbc32.lib odbccp32.lib winmm.lib"
-		$SystemLibraries						"iconv;edit;curses" [$OSXALL]
-		$SystemFrameworks						"AppKit" [$OSXALL]
+		$AdditionalDependencies				"$BASE wsock32.lib odbc32.lib odbccp32.lib winmm.lib" [$WINDOWS]
+		$SystemFrameworks					"AppKit"
+		$SystemLibraries                     "iconv" [$OSXALL]
 	}
 }
 
@@ -31,31 +30,15 @@ $Project "Dedicated"
 	$Folder	"Source Files"
 	{
 		$File	"dedicated.rc"
-		$File	"sys_linux.cpp"
-		{
-			$Configuration
-			{
-				$ExcludedFromBuild					"Yes"
-			}
-		}
+		$File	"sys_linux.cpp"  [$POSIX]
 		$File	"filesystem.cpp"
 		$File	"$SRCDIR\public\filesystem_init.cpp"
 		$File	"$SRCDIR\common\netapi.cpp"
 		$File	"$SRCDIR\common\SteamAppStartup.cpp"
 		$File	"sys_common.cpp"
 		$File	"sys_ded.cpp"
+		$File   "sys_subproc.cpp"
 		$File	"sys_windows.cpp" [$WINDOWS]
-		$File	"sys_linux.cpp" [$POSIX]
-		{
-			$Configuration
-			{
-				$Compiler
-				{
-					$AdditionalOptions					"/EHa"
-					$EnableC++Exceptions				"Yes (/EHsc)"
-				}
-			}
-		}
 		
 		$Folder	"Console"
 		{
@@ -65,7 +48,7 @@ $Project "Dedicated"
 			$File	"console\TextConsoleWin32.cpp" [$WINDOWS]
 		}
 
-		$Folder	"VGUI" [$WINDOWS]
+		$Folder	"VGUI" [$WINDOWS||$POSIX]
 		{
 			$File	"vgui\CreateMultiplayerGameServerPage.cpp"
 			$File	"vgui\MainPanel.cpp"
@@ -77,10 +60,10 @@ $Project "Dedicated"
 		{
 			$File	"$SRCDIR\filesystem\filetracker.cpp"
 			$File	"$SRCDIR\filesystem\basefilesystem.cpp"
-			$File	"$SRCDIR\filesystem\packfile.cpp"
-			$File	"$SRCDIR\filesystem\filesystem_async.cpp"
+			$File	"$SRCDIR\filesystem\basefilesystemasync.cpp"
 			$File	"$SRCDIR\filesystem\filesystem_stdio.cpp"
-			$File	"$SRCDIR\filesystem\QueuedLoader.cpp"
+			$File	"$SRCDIR\filesystem\filesystem_steam.cpp" [!$POSIX]
+			$File	"$SRCDIR\filesystem\filesystemasync.cpp"
 			$File	"$SRCDIR\public\zip_utils.cpp"
 			$File	"$SRCDIR\filesystem\linux_support.cpp" [$POSIX]
 		}
@@ -92,14 +75,13 @@ $Project "Dedicated"
 		$File	"$SRCDIR\filesystem\threadsaferefcountedobject.h"
 		$File	"$SRCDIR\public\ifilelist.h"
 		$File	"$SRCDIR\public\tier0\basetypes.h"
-		$File	"$SRCDIR\public\tier0\commonmacros.h"
 		$File	"$SRCDIR\public\tier0\dbg.h"
 		$File	"dedicated.h"
 		$File	"$SRCDIR\public\engine_hlds_api.h"
 		$File	"$SRCDIR\public\tier0\fasttimer.h"
 		$File	"$SRCDIR\public\filesystem.h"
 		$File	"$SRCDIR\common\IAdminServer.h"
-		$File	"$SRCDIR\public\appframework\IAppSystem.h"
+		$File	"$SRCDIR\public\appframework\iappsystem.h"
 		$File	"$SRCDIR\public\tier0\icommandline.h"
 		$File	"$SRCDIR\public\idedicatedexports.h"
 		$File	"$SRCDIR\common\IManageServer.h"
@@ -107,17 +89,12 @@ $Project "Dedicated"
 		$File	"isys.h"
 		$File	"$SRCDIR\public\mathlib\mathlib.h"
 		$File	"$SRCDIR\common\netapi.h"
-		$File	"$SRCDIR\common\GameUI\ObjectList.h"
 		$File	"$SRCDIR\public\tier0\platform.h"
-		$File	"$SRCDIR\public\tier0\protected_things.h"
 		$File	"$SRCDIR\common\SteamAppStartup.h"
 		$File	"$SRCDIR\public\string_t.h"
 		$File	"$SRCDIR\public\tier1\strtools.h"
-		$File	"$SRCDIR\public\tier0\vcr_shared.h"
-		$File	"$SRCDIR\public\tier0\vcrmode.h"
 		$File	"$SRCDIR\public\mathlib\vector.h"
 		$File	"$SRCDIR\public\mathlib\vector2d.h"
-		$File	"$SRCDIR\public\vstdlib\vstdlib.h"
 
 		$Folder	"Console Headers"
 		{
@@ -135,16 +112,16 @@ $Project "Dedicated"
 		}
 	}
 
-	$Folder	"Link Libraries"
+	$Folder	"Link Libraries" [$WINDOWS || $POSIX]
 	{
 		$Lib	appframework
+		$Lib	dmxloader
+		$ImplibExternal	steam_api							[ ( $WIN32 || $POSIX || $PS3 ) && !$NO_STEAM ]
+		$ImplibExternal	steam_api64							[ $WIN64 && !$NO_STEAM ]
 		$Lib	mathlib
-		$Lib	tier2
+		$Lib 	tier2
 		$Lib	tier3
-		$Lib	vgui_controls [$WIN32]
 		$Lib 	vpklib
-		$LibExternal "$SRCDIR/thirdparty/libedit-3.1/src/.libs/libedit" [$LINUXALL]
-		$ImpLibExternal steam_api
-		$ImpLib SDL2 [$SDL]
+		$Lib	vgui_controls [$WINDOWS||$OSXALL]
 	}
 }

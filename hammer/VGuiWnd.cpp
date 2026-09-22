@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2007, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -17,6 +17,9 @@
 #include "material.h"
 #include "istudiorender.h"
 #include "hammer.h"
+#include "toolutils/enginetools_int.h"
+#include "toolframework/ienginetool.h"
+#include "ienginevgui.h"
 
 
 IMPLEMENT_DYNCREATE(CVGuiPanelWnd, CWnd)
@@ -46,7 +49,13 @@ LRESULT CVGuiPanelWnd::WindowProc( UINT message, WPARAM wParam, LPARAM lParam )
 	return 1;
 }
 
+BOOL CVGuiPanelWnd::OnEraseBkgnd(CDC* pDC) 
+{
+	return TRUE;
+}
+
 BEGIN_MESSAGE_MAP(CVGuiPanelWnd, CWnd)
+	ON_WM_ERASEBKGND()
 END_MESSAGE_MAP()
 
 CVGuiWnd::CVGuiWnd(void)
@@ -119,6 +128,10 @@ void CVGuiWnd::SetMainPanel( vgui::EditablePanel * pPanel )
 	m_pMainPanel->SetPaintBackgroundEnabled( false );
 	m_pMainPanel->SetCursor( vgui::dc_arrow );
 	
+	// Initially, don't trap mouse input in case the engine is around (if we have this set to true and they go to the engine,
+	// it'll hog mouse input that the engine should get).
+	m_pMainPanel->SetMouseInputEnabled( false ); 
+	
 	m_hVGuiContext = vgui::ivgui()->CreateContext();
 	vgui::ivgui()->AssociatePanelWithContext( m_hVGuiContext, m_pMainPanel->GetVPanel() );
 }
@@ -179,13 +192,35 @@ void CVGuiWnd::DrawVGuiPanel()
 
 	HammerVGui()->Simulate(); 
 
+	// Don't draw the engine's vgui stuff when in .
+	int iWasVisible = -1;
+	vgui::VPANEL hRoot = NULL;
+	if ( APP()->IsFoundryMode() && enginevgui )
+	{
+		hRoot = enginevgui->GetPanel( PANEL_ROOT );
+		iWasVisible = g_pVGuiPanel->IsVisible( hRoot );
+		g_pVGuiPanel->SetVisible( hRoot, false );
+	}
+
+	vgui::surface()->RestrictPaintToSinglePanel( m_pMainPanel->GetVPanel(), true );
 	vgui::surface()->PaintTraverseEx( m_pMainPanel->GetVPanel(), true );
+	vgui::surface()->RestrictPaintToSinglePanel( NULL );
+
+	if ( iWasVisible != -1 )
+	{
+		g_pVGuiPanel->SetVisible( hRoot, (iWasVisible != 0) );
+	}
 	
 	g_pStudioRender->EndFrame();
 	MaterialSystemInterface()->EndFrame();
 
 	MaterialSystemInterface()->SwapBuffers();
 
+	if ( enginetools )
+	{
+		MaterialSystemInterface()->SetView( enginetools->GetEngineHwnd() );
+	}
+	
 	m_bIsDrawing = false;
 }
 
@@ -257,7 +292,10 @@ LRESULT CVGuiWnd::WindowProcVGui( UINT uMsg, WPARAM wParam, LPARAM lParam )
 	case WM_SYSKEYUP: 
 		{
 			// redraw window
-			m_pParentWnd->Invalidate();
+			if ( m_pParentWnd )
+			{
+				m_pParentWnd->Invalidate();
+			}
 			break;
 		}
 	}

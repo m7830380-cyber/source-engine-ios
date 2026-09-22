@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -9,6 +9,10 @@
 #include "choreoview.h"
 #include "choreowidgetdrawhelper.h"
 #include "choreoviewcolors.h"
+#include "hlfaceposer.h"
+
+// memdbgon must be the last include file in a .cpp file!!!
+#include "tier0/memdbgon.h"
 
 //-----------------------------------------------------------------------------
 // Purpose: 
@@ -23,7 +27,7 @@ CChoreoWidgetDrawHelper::CChoreoWidgetDrawHelper( mxWindow *widget )
 // Purpose: 
 // Input  : *widget - 
 //-----------------------------------------------------------------------------
-CChoreoWidgetDrawHelper::CChoreoWidgetDrawHelper( mxWindow *widget, COLORREF bgColor )
+CChoreoWidgetDrawHelper::CChoreoWidgetDrawHelper( mxWindow *widget, const Color& bgColor )
 {
 	Init( widget, 0, 0, 0, 0, bgColor, false );
 }
@@ -57,7 +61,7 @@ CChoreoWidgetDrawHelper::CChoreoWidgetDrawHelper( mxWindow *widget, RECT& bounds
 //			w - 
 //			h - 
 //-----------------------------------------------------------------------------
-CChoreoWidgetDrawHelper::CChoreoWidgetDrawHelper( mxWindow *widget, int x, int y, int w, int h, COLORREF bgColor )
+CChoreoWidgetDrawHelper::CChoreoWidgetDrawHelper( mxWindow *widget, int x, int y, int w, int h, const Color& bgColor )
 {
 	Init( widget, x, y, w, h, bgColor, false );
 }
@@ -68,7 +72,7 @@ CChoreoWidgetDrawHelper::CChoreoWidgetDrawHelper( mxWindow *widget, int x, int y
 //			bounds - 
 //			bgColor - 
 //-----------------------------------------------------------------------------
-CChoreoWidgetDrawHelper::CChoreoWidgetDrawHelper( mxWindow *widget, RECT& bounds, COLORREF bgColor )
+CChoreoWidgetDrawHelper::CChoreoWidgetDrawHelper( mxWindow *widget, RECT& bounds, const Color& bgColor )
 {
 	Init( widget, bounds.left, bounds.top, bounds.right - bounds.left, bounds.bottom - bounds.top, bgColor, false );
 }
@@ -81,7 +85,7 @@ CChoreoWidgetDrawHelper::CChoreoWidgetDrawHelper( mxWindow *widget, RECT& bounds
 //			w - 
 //			h - 
 //-----------------------------------------------------------------------------
-void CChoreoWidgetDrawHelper::Init( mxWindow *widget, int x, int y, int w, int h, COLORREF bgColor, bool noPageFlip )
+void CChoreoWidgetDrawHelper::Init( mxWindow *widget, int x, int y, int w, int h, const Color& bgColor, bool noPageFlip )
 {
 	m_bNoPageFlip = noPageFlip;
 
@@ -111,14 +115,14 @@ void CChoreoWidgetDrawHelper::Init( mxWindow *widget, int x, int y, int w, int h
 		m_x = m_y = 0;
 	}
 
-	m_clrOld = SetBkColor( m_dcMemory, bgColor );
+	m_clrOld = RGBToColor( SetBkColor( m_dcMemory, ColorToRGB( bgColor ) ) );
 
 	RECT rcFill = m_rcClient;
 	OffsetRect( &rcFill, -m_rcClient.left, -m_rcClient.top );
 
 	if ( !noPageFlip )
 	{
-		HBRUSH br = CreateSolidBrush( bgColor );
+		HBRUSH br = CreateSolidBrush( ColorToRGB( bgColor ) );
 		FillRect( m_dcMemory, &rcFill, br );
 		DeleteObject( br );
 	}
@@ -133,7 +137,7 @@ CChoreoWidgetDrawHelper::~CChoreoWidgetDrawHelper( void )
 {
 	SelectClipRgn( m_dcMemory, NULL );
 
-	while ( m_ClipRects.Size() > 0 )
+	while ( m_ClipRects.Count() > 0 )
 	{
 		StopClipping();
 	}
@@ -142,7 +146,7 @@ CChoreoWidgetDrawHelper::~CChoreoWidgetDrawHelper( void )
 	{
 		BitBlt( m_dcReal, m_x, m_y, m_w, m_h, m_dcMemory, 0, 0, SRCCOPY );
 
-		SetBkColor( m_dcMemory, m_clrOld );
+		SetBkColor( m_dcMemory, ColorToRGB( m_clrOld ) );
 
 		SelectObject( m_dcMemory, m_bmOld );
 		DeleteObject( m_bmMemory );
@@ -411,7 +415,7 @@ int CChoreoWidgetDrawHelper::CalcTextWidthW( HFONT fnt, const wchar_t *fmt, ... 
 //			*fmt - 
 //			... - 
 //-----------------------------------------------------------------------------
-void CChoreoWidgetDrawHelper::DrawColoredText( const char *font, int pointsize, int weight, COLORREF clr, RECT& rcText, const char *fmt, ... )
+void CChoreoWidgetDrawHelper::DrawColoredText( const char *font, int pointsize, int weight, const Color& clr, RECT& rcText, const char *fmt, ... )
 {
 	va_list args;
 	static char output[1024];
@@ -433,7 +437,7 @@ void CChoreoWidgetDrawHelper::DrawColoredText( const char *font, int pointsize, 
 //			*fmt - 
 //			... - 
 //-----------------------------------------------------------------------------
-void CChoreoWidgetDrawHelper::DrawColoredTextW( const char *font, int pointsize, int weight, COLORREF clr, RECT& rcText, const wchar_t *fmt, ... )
+void CChoreoWidgetDrawHelper::DrawColoredTextW( const char *font, int pointsize, int weight, const Color& clr, RECT& rcText, const wchar_t *fmt, ... )
 {
 	va_list args;
 	static wchar_t output[1024];
@@ -454,7 +458,7 @@ void CChoreoWidgetDrawHelper::DrawColoredTextW( const char *font, int pointsize,
 //			*fmt - 
 //			... - 
 //-----------------------------------------------------------------------------
-void CChoreoWidgetDrawHelper::DrawColoredText( HFONT font, COLORREF clr, RECT& rcText, const char *fmt, ... )
+void CChoreoWidgetDrawHelper::DrawColoredText( HFONT font, const Color& clr, RECT& rcText, const char *fmt, ... )
 {
 	va_list args;
 	static char output[1024];
@@ -464,7 +468,7 @@ void CChoreoWidgetDrawHelper::DrawColoredText( HFONT font, COLORREF clr, RECT& r
 	va_end( args  );
 	
 	HFONT oldFont = (HFONT)SelectObject( m_dcMemory, font );
-	COLORREF oldColor = SetTextColor( m_dcMemory, clr );
+	Color oldColor = RGBToColor( SetTextColor( m_dcMemory, ColorToRGB( clr ) ) );
 	int oldMode = SetBkMode( m_dcMemory, TRANSPARENT );
 
 	RECT rcTextOffset = rcText;
@@ -474,7 +478,7 @@ void CChoreoWidgetDrawHelper::DrawColoredText( HFONT font, COLORREF clr, RECT& r
 
 	SetBkMode( m_dcMemory, oldMode );
 
-	SetTextColor( m_dcMemory, oldColor );
+	SetTextColor( m_dcMemory, ColorToRGB( oldColor ) );
 
 	SelectObject( m_dcMemory, oldFont );
 }
@@ -487,7 +491,7 @@ void CChoreoWidgetDrawHelper::DrawColoredText( HFONT font, COLORREF clr, RECT& r
 //			*fmt - 
 //			... - 
 //-----------------------------------------------------------------------------
-void CChoreoWidgetDrawHelper::DrawColoredTextW( HFONT font, COLORREF clr, RECT& rcText, const wchar_t *fmt, ... )
+void CChoreoWidgetDrawHelper::DrawColoredTextW( HFONT font, const Color& clr, RECT& rcText, const wchar_t *fmt, ... )
 {
 	va_list args;
 	static wchar_t output[1024];
@@ -497,7 +501,7 @@ void CChoreoWidgetDrawHelper::DrawColoredTextW( HFONT font, COLORREF clr, RECT& 
 	va_end( args  );
 	
 	HFONT oldFont = (HFONT)SelectObject( m_dcMemory, font );
-	COLORREF oldColor = SetTextColor( m_dcMemory, clr );
+	Color oldColor = RGBToColor( SetTextColor( m_dcMemory, ColorToRGB( clr ) ) );
 	int oldMode = SetBkMode( m_dcMemory, TRANSPARENT );
 
 	RECT rcTextOffset = rcText;
@@ -507,7 +511,7 @@ void CChoreoWidgetDrawHelper::DrawColoredTextW( HFONT font, COLORREF clr, RECT& 
 
 	SetBkMode( m_dcMemory, oldMode );
 
-	SetTextColor( m_dcMemory, oldColor );
+	SetTextColor( m_dcMemory, ColorToRGB( oldColor ) );
 
 	SelectObject( m_dcMemory, oldFont );
 }
@@ -521,7 +525,7 @@ void CChoreoWidgetDrawHelper::DrawColoredTextW( HFONT font, COLORREF clr, RECT& 
 //			*fmt - 
 //			... - 
 //-----------------------------------------------------------------------------
-void CChoreoWidgetDrawHelper::DrawColoredTextCharset( const char *font, int pointsize, int weight, DWORD charset, COLORREF clr, RECT& rcText, const char *fmt, ... )
+void CChoreoWidgetDrawHelper::DrawColoredTextCharset( const char *font, int pointsize, int weight, DWORD charset, const Color& clr, RECT& rcText, const char *fmt, ... )
 {
 	va_list args;
 	static char output[1024];
@@ -548,7 +552,7 @@ void CChoreoWidgetDrawHelper::DrawColoredTextCharset( const char *font, int poin
 		 font );
 
 	HFONT oldFont = (HFONT)SelectObject( m_dcMemory, fnt );
-	COLORREF oldColor = SetTextColor( m_dcMemory, clr );
+	Color oldColor = RGBToColor( SetTextColor( m_dcMemory, ColorToRGB( clr ) ) );
 	int oldMode = SetBkMode( m_dcMemory, TRANSPARENT );
 
 	RECT rcTextOffset = rcText;
@@ -558,13 +562,13 @@ void CChoreoWidgetDrawHelper::DrawColoredTextCharset( const char *font, int poin
 
 	SetBkMode( m_dcMemory, oldMode );
 
-	SetTextColor( m_dcMemory, oldColor );
+	SetTextColor( m_dcMemory, ColorToRGB( oldColor ) );
 
 	SelectObject( m_dcMemory, oldFont );
 	DeleteObject( fnt );
 }
 
-void CChoreoWidgetDrawHelper::DrawColoredTextCharsetW( const char *font, int pointsize, int weight, DWORD charset, COLORREF clr, RECT& rcText, const wchar_t *fmt, ... )
+void CChoreoWidgetDrawHelper::DrawColoredTextCharsetW( const char *font, int pointsize, int weight, DWORD charset, const Color& clr, RECT& rcText, const wchar_t *fmt, ... )
 {
 	va_list args;
 	static wchar_t output[1024];
@@ -591,7 +595,7 @@ void CChoreoWidgetDrawHelper::DrawColoredTextCharsetW( const char *font, int poi
 		 font );
 
 	HFONT oldFont = (HFONT)SelectObject( m_dcMemory, fnt );
-	COLORREF oldColor = SetTextColor( m_dcMemory, clr );
+	Color oldColor = RGBToColor( SetTextColor( m_dcMemory, ColorToRGB( clr ) ) );
 	int oldMode = SetBkMode( m_dcMemory, TRANSPARENT );
 
 	RECT rcTextOffset = rcText;
@@ -601,7 +605,7 @@ void CChoreoWidgetDrawHelper::DrawColoredTextCharsetW( const char *font, int poi
 
 	SetBkMode( m_dcMemory, oldMode );
 
-	SetTextColor( m_dcMemory, oldColor );
+	SetTextColor( m_dcMemory, ColorToRGB( oldColor ) );
 
 	SelectObject( m_dcMemory, oldFont );
 	DeleteObject( fnt );
@@ -617,7 +621,7 @@ void CChoreoWidgetDrawHelper::DrawColoredTextCharsetW( const char *font, int poi
 //			*fmt - 
 //			... - 
 //-----------------------------------------------------------------------------
-void CChoreoWidgetDrawHelper::DrawColoredTextMultiline( const char *font, int pointsize, int weight, COLORREF clr, RECT& rcText, const char *fmt, ... )
+void CChoreoWidgetDrawHelper::DrawColoredTextMultiline( const char *font, int pointsize, int weight, const Color& clr, RECT& rcText, const char *fmt, ... )
 {
 	va_list args;
 	static char output[1024];
@@ -643,7 +647,7 @@ void CChoreoWidgetDrawHelper::DrawColoredTextMultiline( const char *font, int po
 		 font );
 
 	HFONT oldFont = (HFONT)SelectObject( m_dcMemory, fnt );
-	COLORREF oldColor = SetTextColor( m_dcMemory, clr );
+	Color oldColor = RGBToColor( SetTextColor( m_dcMemory, ColorToRGB( clr ) ) );
 	int oldMode = SetBkMode( m_dcMemory, TRANSPARENT );
 
 	RECT rcTextOffset = rcText;
@@ -653,7 +657,7 @@ void CChoreoWidgetDrawHelper::DrawColoredTextMultiline( const char *font, int po
 
 	SetBkMode( m_dcMemory, oldMode );
 
-	SetTextColor( m_dcMemory, oldColor );
+	SetTextColor( m_dcMemory, ColorToRGB( oldColor ) );
 
 	SelectObject( m_dcMemory, oldFont );
 	DeleteObject( fnt );
@@ -670,9 +674,9 @@ void CChoreoWidgetDrawHelper::DrawColoredTextMultiline( const char *font, int po
 //			x2 - 
 //			y2 - 
 //-----------------------------------------------------------------------------
-void CChoreoWidgetDrawHelper::DrawColoredLine( COLORREF clr, int style, int width, int x1, int y1, int x2, int y2 )
+void CChoreoWidgetDrawHelper::DrawColoredLine( const Color& clr, int style, int width, int x1, int y1, int x2, int y2 )
 {
-	HPEN pen = CreatePen( style, width, clr );
+	HPEN pen = CreatePen( style, width, ColorToRGB( clr ) );
 	HPEN oldPen = (HPEN)SelectObject( m_dcMemory, pen );
 	MoveToEx( m_dcMemory, x1-m_x, y1-m_y, NULL );
 	LineTo( m_dcMemory, x2-m_x, y2-m_y );
@@ -688,13 +692,13 @@ void CChoreoWidgetDrawHelper::DrawColoredLine( COLORREF clr, int style, int widt
 //			count - 
 //			*pts - 
 //-----------------------------------------------------------------------------
-void CChoreoWidgetDrawHelper::DrawColoredPolyLine( COLORREF clr, int style, int width, CUtlVector< POINT >& points )
+void CChoreoWidgetDrawHelper::DrawColoredPolyLine( const Color& clr, int style, int width, CUtlVector< POINT >& points )
 {
 	int c = points.Count();
 	if ( c < 2 )
 		return;
 
-	HPEN pen = CreatePen( style, width, clr );
+	HPEN pen = CreatePen( style, width, ColorToRGB( clr ) );
 	HPEN oldPen = (HPEN)SelectObject( m_dcMemory, pen );
 
 	POINT *temp = (POINT *)_alloca( c * sizeof( POINT ) );
@@ -726,9 +730,9 @@ void CChoreoWidgetDrawHelper::DrawColoredPolyLine( COLORREF clr, int style, int 
 //			x2 - 
 //			y2 - 
 //-----------------------------------------------------------------------------
-POINTL CChoreoWidgetDrawHelper::DrawColoredRamp( COLORREF clr, int style, int width, int x1, int y1, int x2, int y2, float rate, float sustain )
+POINTL CChoreoWidgetDrawHelper::DrawColoredRamp( const Color& clr, int style, int width, int x1, int y1, int x2, int y2, float rate, float sustain )
 {
-	HPEN pen = CreatePen( style, width, clr );
+	HPEN pen = CreatePen( style, width, ColorToRGB( clr ) );
 	HPEN oldPen = (HPEN)SelectObject( m_dcMemory, pen );
 	MoveToEx( m_dcMemory, x1-m_x, y1-m_y, NULL );
 	int dx = x2 - x1;
@@ -758,11 +762,11 @@ POINTL CChoreoWidgetDrawHelper::DrawColoredRamp( COLORREF clr, int style, int wi
 //			x2 - 
 //			y2 - 
 //-----------------------------------------------------------------------------
-void CChoreoWidgetDrawHelper::DrawFilledRect( COLORREF clr, RECT& rc )
+void CChoreoWidgetDrawHelper::DrawFilledRect( const Color& clr, RECT& rc )
 {
 	RECT rcCopy = rc;
 
-	HBRUSH br = CreateSolidBrush( clr );
+	HBRUSH br = CreateSolidBrush( ColorToRGB( clr ) );
 	OffsetSubRect( rcCopy );
 	FillRect( m_dcMemory, &rcCopy, br );
 	DeleteObject( br );
@@ -776,9 +780,9 @@ void CChoreoWidgetDrawHelper::DrawFilledRect( COLORREF clr, RECT& rc )
 //			x2 - 
 //			y2 - 
 //-----------------------------------------------------------------------------
-void CChoreoWidgetDrawHelper::DrawFilledRect( COLORREF clr, int x1, int y1, int x2, int y2 )
+void CChoreoWidgetDrawHelper::DrawFilledRect( const Color& clr, int x1, int y1, int x2, int y2 )
 {
-	HBRUSH br = CreateSolidBrush( clr );
+	HBRUSH br = CreateSolidBrush( ColorToRGB( clr ) );
 	RECT rc;
 	rc.left = x1;
 	rc.right = x2;
@@ -796,7 +800,7 @@ void CChoreoWidgetDrawHelper::DrawFilledRect( COLORREF clr, int x1, int y1, int 
 //			width - 
 //			rc - 
 //-----------------------------------------------------------------------------
-void CChoreoWidgetDrawHelper::DrawOutlinedRect( COLORREF clr, int style, int width, RECT& rc )
+void CChoreoWidgetDrawHelper::DrawOutlinedRect( const Color& clr, int style, int width, RECT& rc )
 {
 	DrawOutlinedRect( clr, style, width, rc.left, rc.top, rc.right, rc.bottom );
 }
@@ -811,12 +815,12 @@ void CChoreoWidgetDrawHelper::DrawOutlinedRect( COLORREF clr, int style, int wid
 //			x2 - 
 //			y2 - 
 //-----------------------------------------------------------------------------
-void CChoreoWidgetDrawHelper::DrawOutlinedRect( COLORREF clr, int style, int width, int x1, int y1, int x2, int y2 )
+void CChoreoWidgetDrawHelper::DrawOutlinedRect( const Color& clr, int style, int width, int x1, int y1, int x2, int y2 )
 {
 	HPEN oldpen, pen;
 	HBRUSH oldbrush, brush;
 
-	pen = CreatePen( PS_SOLID, width, clr );
+	pen = CreatePen( PS_SOLID, width, ColorToRGB( clr ) );
 	oldpen = (HPEN)SelectObject( m_dcMemory, pen );
 
 	brush = (HBRUSH)GetStockObject( NULL_BRUSH );
@@ -846,12 +850,12 @@ void CChoreoWidgetDrawHelper::DrawOutlinedRect( COLORREF clr, int style, int wid
 //			clr - 
 //			thickness - 
 //-----------------------------------------------------------------------------
-void CChoreoWidgetDrawHelper::DrawLine( int x1, int y1, int x2, int y2, COLORREF clr, int thickness )
+void CChoreoWidgetDrawHelper::DrawLine( int x1, int y1, int x2, int y2, const Color& clr, int thickness )
 {
 	HPEN oldpen, pen;
 	HBRUSH oldbrush, brush;
 
-	pen = CreatePen( PS_SOLID, thickness, clr );
+	pen = CreatePen( PS_SOLID, thickness, ColorToRGB( clr ) );
 	oldpen = (HPEN)SelectObject( m_dcMemory, pen );
 
 	brush = (HBRUSH)GetStockObject( NULL_BRUSH );
@@ -878,7 +882,7 @@ void CChoreoWidgetDrawHelper::DrawLine( int x1, int y1, int x2, int y2, COLORREF
 //			fillg - 
 //			fillb - 
 //-----------------------------------------------------------------------------
-void CChoreoWidgetDrawHelper::DrawTriangleMarker( RECT& rc, COLORREF fill, bool inverted /*= false*/ )
+void CChoreoWidgetDrawHelper::DrawTriangleMarker( RECT& rc, const Color& fill, bool inverted /*= false*/ )
 {
 	POINT region[3];
 	int cPoints = 3;
@@ -910,7 +914,7 @@ void CChoreoWidgetDrawHelper::DrawTriangleMarker( RECT& rc, COLORREF fill, bool 
 
 	int oldPF = SetPolyFillMode( m_dcMemory, ALTERNATE );
 	
-	HBRUSH brFace = CreateSolidBrush( fill );
+	HBRUSH brFace = CreateSolidBrush( ColorToRGB( fill ) );
 
 	FillRgn( m_dcMemory, rgn, brFace );
 
@@ -933,11 +937,11 @@ void CChoreoWidgetDrawHelper::StartClipping( RECT& clipRect )
 
 void CChoreoWidgetDrawHelper::StopClipping( void )
 {
-	Assert( m_ClipRects.Size() > 0 );
-	if ( m_ClipRects.Size() <= 0 )
+	Assert( m_ClipRects.Count() > 0 );
+	if ( m_ClipRects.Count() <= 0 )
 		return;
 
-	m_ClipRects.Remove( m_ClipRects.Size() - 1 );
+	m_ClipRects.Remove( m_ClipRects.Count() - 1 );
 
 	ClipToRects();
 }
@@ -951,11 +955,11 @@ void CChoreoWidgetDrawHelper::ClipToRects( void )
 		m_ClipRegion = HRGN( 0 );
 	}
 
-	if ( m_ClipRects.Size() > 0 )
+	if ( m_ClipRects.Count() > 0 )
 	{
 		RECT rc = m_ClipRects[ 0 ];
 		m_ClipRegion = CreateRectRgn( rc.left, rc.top, rc.right, rc.bottom );
-		for ( int i = 1; i < m_ClipRects.Size(); i++ )
+		for ( int i = 1; i < m_ClipRects.Count(); i++ )
 		{
 			RECT add = m_ClipRects[ i ];
 
@@ -995,7 +999,7 @@ void CChoreoWidgetDrawHelper::DrawFilledRect( HBRUSH br, RECT& rc )
 	FillRect( m_dcMemory, &rcFill, br );
 }
 
-void CChoreoWidgetDrawHelper::DrawCircle( COLORREF clr, int x, int y, int radius, bool filled /*= true*/ )
+void CChoreoWidgetDrawHelper::DrawCircle( const Color& clr, int x, int y, int radius, bool filled /*= true*/ )
 {
 	RECT rc;
 	int ihalfradius = radius >> 1;
@@ -1007,8 +1011,8 @@ void CChoreoWidgetDrawHelper::DrawCircle( COLORREF clr, int x, int y, int radius
 
 	OffsetSubRect( rc );
 
-	HPEN pen = CreatePen( PS_SOLID, 1, clr );
-	HBRUSH br = CreateSolidBrush( clr );
+	HPEN pen = CreatePen( PS_SOLID, 1, ColorToRGB( clr ) );
+	HBRUSH br = CreateSolidBrush( ColorToRGB( clr ) );
 
 	HPEN oldPen = (HPEN)SelectObject( m_dcMemory, pen );
 	HBRUSH oldBr = (HBRUSH)SelectObject( m_dcMemory, br );
@@ -1037,7 +1041,7 @@ void CChoreoWidgetDrawHelper::DrawCircle( COLORREF clr, int x, int y, int radius
 //			clr2 - 
 //			vertical - 
 //-----------------------------------------------------------------------------
-void CChoreoWidgetDrawHelper::DrawGradientFilledRect( RECT& rc, COLORREF clr1, COLORREF clr2, bool vertical )
+void CChoreoWidgetDrawHelper::DrawGradientFilledRect( RECT& rc, const Color& clr1, const Color& clr2, bool vertical )
 {
 	RECT rcDraw = rc;
 	OffsetRect( &rcDraw, -m_x, -m_y );
@@ -1046,16 +1050,16 @@ void CChoreoWidgetDrawHelper::DrawGradientFilledRect( RECT& rc, COLORREF clr1, C
 	GRADIENT_RECT    gradient_rect;
 	vert[0].x      = rcDraw.left;
 	vert[0].y      = rcDraw.top;
-	vert[0].Red    = GetRValue( clr1 ) << 8;
-	vert[0].Green  = GetGValue( clr1 ) << 8;
-	vert[0].Blue   = GetBValue( clr1 ) << 8;
+	vert[0].Red    = clr1.r() << 8;
+	vert[0].Green  = clr1.g() << 8;
+	vert[0].Blue   = clr1.b() << 8;
 	vert[0].Alpha  = 0x0000;
 	
 	vert[1].x      = rcDraw.right;
 	vert[1].y      = rcDraw.bottom; 
-	vert[1].Red    = GetRValue( clr2 ) << 8;
-	vert[1].Green  = GetGValue( clr2 ) << 8;
-	vert[1].Blue   = GetBValue( clr2 ) << 8;
+	vert[1].Red    = clr2.r() << 8;
+	vert[1].Green  = clr2.g() << 8;
+	vert[1].Blue   = clr2.b() << 8;
 	vert[1].Alpha  = 0x0000;
 
 	gradient_rect.UpperLeft  = 0;

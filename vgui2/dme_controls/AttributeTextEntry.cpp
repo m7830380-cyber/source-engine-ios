@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2005, Valve Corporation, All rights reserved. =======//
 //
 // Purpose: 
 //
@@ -197,6 +197,7 @@ void CAttributeTextEntry::OnKeyCodeTyped(KeyCode code)
 			else
 			{
 				WriteValueToAttribute();
+				StoreInitialValue( true );
 			}
 		}
 		break;
@@ -379,14 +380,17 @@ void CAttributeTextEntry::WriteValueToAttribute()
 void CAttributeTextEntry::OnKillFocus()
 {
 	BaseClass::OnKillFocus();
+	if ( !IsEnabled() )
+		return; // don't bother writing data if this attribute is read-only or being driven by a channel
+
 	WriteValueToAttribute();
 	StoreInitialValue();
 }
 
 void CAttributeTextEntry::OnMouseWheeled( int delta )
 {
-	// Must have *keyboard* focus for it to work
-	if ( !HasFocus() )
+	// Must have *keyboard* focus for it to work, and alse be writeable and not driven by a channel
+	if ( !HasFocus() || !IsEnabled() )
 	{
 		// Otherwise, let the base class scroll up + down
 		BaseClass::OnMouseWheeled( delta );

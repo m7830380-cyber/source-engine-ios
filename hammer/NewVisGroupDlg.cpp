@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: A dialog that is invoked when a new visgroup is created.
 //			It lets the user pick an existing visgroup or create a new one.
@@ -153,7 +153,10 @@ void CNewVisGroupDlg::UpdateGroupList(void)
 		for (int i = 0; i < nCount; i++)
 		{
 			CVisGroup *pGroup = pDoc->VisGroups_GetRootVisGroup(i);
-			m_cGroupList.AddVisGroup(pGroup);
+			if (stricmp(pGroup->GetName(), "Auto") != 0)
+			{
+				m_cGroupList.AddVisGroup(pGroup);
+			}			
 		}
 	}
 

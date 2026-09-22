@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -14,7 +14,7 @@
 #include "MapDoc.h"
 #include "TextureSystem.h"
 #include "Material.h"
-#include "materialsystem/imesh.h"
+#include "materialsystem/IMesh.h"
 #include "Box3D.h"
 #include "MapDefs.h"
 #include "CollisionUtils.h"
@@ -334,8 +334,8 @@ void CMapOverlay::Handles_Clear( void )
 void CMapOverlay::Handles_Init( CMapFace *pFace )
 {
 	IEditorTexture *pTexture = g_Textures.FindActiveTexture( GetDefaultTextureName() );
-	int nWidth = pTexture->GetImageWidth();
-	int nHeight = pTexture->GetImageHeight();
+	int nWidth = pTexture->GetMappingWidth();
+	int nHeight = pTexture->GetMappingHeight();
 
 	// Half-height (width) and 1/4 scale
 	int nWidthHalf = nWidth / 8;
@@ -483,6 +483,7 @@ CMapOverlay::ClipFace_t *CMapOverlay::ClipFace_Create( int nSize )
 		if ( nSize > 0 )
 		{
 			pClipFace->m_aPoints.SetSize( nSize );
+			pClipFace->m_aNormals.SetSize( nSize );
 			pClipFace->m_aDispPointUVs.SetSize( nSize );
 			
 			for ( int iCoord = 0; iCoord < NUM_CLIPFACE_TEXCOORDS; iCoord++ )
@@ -495,6 +496,7 @@ CMapOverlay::ClipFace_t *CMapOverlay::ClipFace_Create( int nSize )
 			for ( int iPoint = 0; iPoint < nSize; iPoint++ )
 			{
 				pClipFace->m_aPoints[iPoint].Init();
+				pClipFace->m_aNormals[iPoint].Init( 0, 0, 1 );
 				pClipFace->m_aDispPointUVs[iPoint].Init();
 				pClipFace->m_aBlends[iPoint].Init();
 				
@@ -531,6 +533,7 @@ CMapOverlay::ClipFace_t *CMapOverlay::ClipFace_Copy( ClipFace_t *pSrc )
 		for ( int iPoint = 0; iPoint < pSrc->m_nPointCount; iPoint++ )
 		{
 			pDst->m_aPoints[iPoint] = pSrc->m_aPoints[iPoint];
+			pDst->m_aNormals[iPoint] = pSrc->m_aNormals[iPoint];
 			pDst->m_aDispPointUVs[iPoint] = pSrc->m_aDispPointUVs[iPoint];
 			for ( int iTexCoord=0; iTexCoord < NUM_CLIPFACE_TEXCOORDS; iTexCoord++ )
 			{
@@ -655,11 +658,13 @@ void CMapOverlay::ClipFace_Clip( ClipFace_t *pClipFace, cplane_t *pClipPlane, fl
 		if ( nSides[iPoint] == SIDE_ON )
 		{
 			pFront->m_aPoints[pFront->m_nPointCount] = pClipFace->m_aPoints[iPoint];
+			pFront->m_aNormals[pFront->m_nPointCount] = pClipFace->m_aNormals[iPoint];
 			for ( int iTexCoord=0; iTexCoord < NUM_CLIPFACE_TEXCOORDS; iTexCoord++ )
 				pFront->m_aTexCoords[iTexCoord][pFront->m_nPointCount] = pClipFace->m_aTexCoords[iTexCoord][iPoint];
 			pFront->m_nPointCount++;
 
 			pBack->m_aPoints[pBack->m_nPointCount] = pClipFace->m_aPoints[iPoint];
+			pBack->m_aNormals[pBack->m_nPointCount] = pClipFace->m_aNormals[iPoint];
 			for ( int iTexCoord=0; iTexCoord < NUM_CLIPFACE_TEXCOORDS; iTexCoord++ )
 				pBack->m_aTexCoords[iTexCoord][pBack->m_nPointCount] = pClipFace->m_aTexCoords[iTexCoord][iPoint];
 			pBack->m_nPointCount++;
@@ -671,6 +676,7 @@ void CMapOverlay::ClipFace_Clip( ClipFace_t *pClipFace, cplane_t *pClipPlane, fl
 		if ( nSides[iPoint] == SIDE_BACK )
 		{
 			pBack->m_aPoints[pBack->m_nPointCount] = pClipFace->m_aPoints[iPoint];
+			pBack->m_aNormals[pBack->m_nPointCount] = pClipFace->m_aNormals[iPoint];
 			for ( int iTexCoord=0; iTexCoord < NUM_CLIPFACE_TEXCOORDS; iTexCoord++ )
 				pBack->m_aTexCoords[iTexCoord][pBack->m_nPointCount] = pClipFace->m_aTexCoords[iTexCoord][iPoint];
 			pBack->m_nPointCount++;
@@ -680,6 +686,7 @@ void CMapOverlay::ClipFace_Clip( ClipFace_t *pClipFace, cplane_t *pClipPlane, fl
 		if ( nSides[iPoint] == SIDE_FRONT )
 		{
 			pFront->m_aPoints[pFront->m_nPointCount] = pClipFace->m_aPoints[iPoint];
+			pFront->m_aNormals[pFront->m_nPointCount] = pClipFace->m_aNormals[iPoint];
 			for ( int iTexCoord=0; iTexCoord < NUM_CLIPFACE_TEXCOORDS; iTexCoord++ )
 				pFront->m_aTexCoords[iTexCoord][pFront->m_nPointCount] = pClipFace->m_aTexCoords[iTexCoord][iPoint];
 			pFront->m_nPointCount++;
@@ -692,6 +699,8 @@ void CMapOverlay::ClipFace_Clip( ClipFace_t *pClipFace, cplane_t *pClipPlane, fl
 		float fraction = flDists[iPoint] / ( flDists[iPoint] - flDists[iPoint+1] );
 
 		Vector vecPoint = pClipFace->m_aPoints[iPoint] + ( pClipFace->m_aPoints[(iPoint+1)%pClipFace->m_nPointCount] - pClipFace->m_aPoints[iPoint] ) * fraction;
+		Vector vecNormal = pClipFace->m_aNormals[iPoint] + ( pClipFace->m_aNormals[(iPoint+1)%pClipFace->m_nPointCount] - pClipFace->m_aNormals[iPoint] ) * fraction;
+		vecNormal.NormalizeInPlace();
 		for ( int iTexCoord=0; iTexCoord < NUM_CLIPFACE_TEXCOORDS; iTexCoord++ )
 		{
 			Vector2D vecTexCoord = pClipFace->m_aTexCoords[iTexCoord][iPoint] + ( pClipFace->m_aTexCoords[iTexCoord][(iPoint+1)%pClipFace->m_nPointCount] - pClipFace->m_aTexCoords[iTexCoord][iPoint] ) * fraction;
@@ -700,9 +709,11 @@ void CMapOverlay::ClipFace_Clip( ClipFace_t *pClipFace, cplane_t *pClipPlane, fl
 		}
 	
 		pFront->m_aPoints[pFront->m_nPointCount] = vecPoint;
+		pFront->m_aNormals[pFront->m_nPointCount] = vecNormal;
 		pFront->m_nPointCount++;
 
 		pBack->m_aPoints[pBack->m_nPointCount] = vecPoint;
+		pBack->m_aNormals[pBack->m_nPointCount] = vecNormal;
 		pBack->m_nPointCount++;
 	}
 
@@ -787,6 +798,7 @@ void CMapOverlay::ClipFace_ClipBarycentric( ClipFace_t *pClipFace, cplane_t *pCl
 		if ( nSides[iPoint] == SIDE_ON )
 		{
 			pFront->m_aPoints[pFront->m_nPointCount] = pClipFace->m_aPoints[iPoint];
+			pFront->m_aNormals[pFront->m_nPointCount] = pClipFace->m_aNormals[iPoint];
 			pFront->m_aDispPointUVs[pFront->m_nPointCount] = pClipFace->m_aDispPointUVs[iPoint];
 			
 			for ( int iTexCoord=0; iTexCoord < NUM_CLIPFACE_TEXCOORDS; iTexCoord++ )
@@ -796,6 +808,7 @@ void CMapOverlay::ClipFace_ClipBarycentric( ClipFace_t *pClipFace, cplane_t *pCl
 			pFront->m_nPointCount++;
 
 			pBack->m_aPoints[pBack->m_nPointCount] = pClipFace->m_aPoints[iPoint];
+			pBack->m_aNormals[pBack->m_nPointCount] = pClipFace->m_aNormals[iPoint];
 			pBack->m_aDispPointUVs[pBack->m_nPointCount] = pClipFace->m_aDispPointUVs[iPoint];
 
 			for ( int iTexCoord=0; iTexCoord < NUM_CLIPFACE_TEXCOORDS; iTexCoord++ )
@@ -811,6 +824,7 @@ void CMapOverlay::ClipFace_ClipBarycentric( ClipFace_t *pClipFace, cplane_t *pCl
 		if ( nSides[iPoint] == SIDE_BACK )
 		{
 			pBack->m_aPoints[pBack->m_nPointCount] = pClipFace->m_aPoints[iPoint];
+			pBack->m_aNormals[pBack->m_nPointCount] = pClipFace->m_aNormals[iPoint];
 			pBack->m_aDispPointUVs[pBack->m_nPointCount] = pClipFace->m_aDispPointUVs[iPoint];
 
 			for ( int iTexCoord=0; iTexCoord < NUM_CLIPFACE_TEXCOORDS; iTexCoord++ )
@@ -824,6 +838,7 @@ void CMapOverlay::ClipFace_ClipBarycentric( ClipFace_t *pClipFace, cplane_t *pCl
 		if ( nSides[iPoint] == SIDE_FRONT )
 		{
 			pFront->m_aPoints[pFront->m_nPointCount] = pClipFace->m_aPoints[iPoint];
+			pFront->m_aNormals[pFront->m_nPointCount] = pClipFace->m_aNormals[iPoint];
 			pFront->m_aDispPointUVs[pFront->m_nPointCount] = pClipFace->m_aDispPointUVs[iPoint];
 
 			for ( int iTexCoord=0; iTexCoord < NUM_CLIPFACE_TEXCOORDS; iTexCoord++ )
@@ -840,6 +855,8 @@ void CMapOverlay::ClipFace_ClipBarycentric( ClipFace_t *pClipFace, cplane_t *pCl
 		float fraction = flDists[iPoint] / ( flDists[iPoint] - flDists[iPoint+1] );
 
 		Vector vecPoint = pClipFace->m_aPoints[iPoint] + ( pClipFace->m_aPoints[(iPoint+1)%pClipFace->m_nPointCount] - pClipFace->m_aPoints[iPoint] ) * fraction;
+		Vector vecNormal = pClipFace->m_aNormals[iPoint] + ( pClipFace->m_aNormals[(iPoint+1)%pClipFace->m_nPointCount] - pClipFace->m_aNormals[iPoint] ) * fraction;
+		vecNormal.NormalizeInPlace();
 		Vector vecDispPointUV = pClipFace->m_aDispPointUVs[iPoint] + ( pClipFace->m_aDispPointUVs[(iPoint+1)%pClipFace->m_nPointCount] - pClipFace->m_aDispPointUVs[iPoint] ) * fraction;
 
 		Vector2D vecUV, vecTexCoord;
@@ -861,11 +878,13 @@ void CMapOverlay::ClipFace_ClipBarycentric( ClipFace_t *pClipFace, cplane_t *pCl
 		}
 
 		pFront->m_aPoints[pFront->m_nPointCount] = vecPoint;
+		pFront->m_aNormals[pFront->m_nPointCount] = vecNormal;
 		pFront->m_aDispPointUVs[pFront->m_nPointCount] = vecDispPointUV;
 		ClipFace_BuildBlend( pFront, pDisp, pClipPlane, iClip, vecDispPointUV, vecPoint );
 		pFront->m_nPointCount++;
 
 		pBack->m_aPoints[pBack->m_nPointCount] = vecPoint;
+		pBack->m_aNormals[pBack->m_nPointCount] = vecNormal;
 		pBack->m_aDispPointUVs[pBack->m_nPointCount] = vecDispPointUV;
 		ClipFace_BuildBlend( pBack, pDisp, pClipPlane, iClip, vecDispPointUV, vecPoint );
 		pBack->m_nPointCount++;
@@ -1179,6 +1198,7 @@ void CMapOverlay::ClipFace_BuildFacesFromBlendedData( ClipFace_t *pClipFace )
 		CMapDisp *pDisp = EditDispMgr()->GetDisp( handle );
 
 		Vector vecPos[3];
+		Vector vecNormal[3];
 		for ( int iPoint = 0; iPoint < pClipFace->m_nPointCount; iPoint++ )
 		{
 			if ( pClipFace->m_aBlends[iPoint].m_nType == OVERLAY_BLENDTYPE_VERT )
@@ -1700,7 +1720,6 @@ void CMapOverlay::OnPaste( CMapClass *pCopy, CMapWorld *pSourceWorld, CMapWorld 
 	CMapOverlay *pOverlay = dynamic_cast<CMapOverlay*>( pCopy );
 	if ( pOverlay )
 	{
-		pOverlay->Basis_BuildFromSideList();
 		pOverlay->PostModified();
 	}
 }
@@ -1827,13 +1846,13 @@ void CMapOverlay::Render3D( CRender3D *pRender )
 						meshBuilder.Color4ub( 255, 255, 255, 255 );
 					}
 					meshBuilder.Position3f( pRenderFace->m_aPoints[iPoint].x, pRenderFace->m_aPoints[iPoint].y, pRenderFace->m_aPoints[iPoint].z );
+					meshBuilder.Normal3f( pRenderFace->m_aNormals[iPoint].x, pRenderFace->m_aNormals[iPoint].y, pRenderFace->m_aNormals[iPoint].z );
 					meshBuilder.AdvanceVertex();
 				}
 				meshBuilder.End();
 				
 				pMesh->Draw();
 			}
-
 			pRender->PopRenderMode();
 		}
 		
@@ -1859,6 +1878,7 @@ void CMapOverlay::Render3D( CRender3D *pRender )
 				{
 					meshBuilder.Color3ub( 0, 255, 0 );
 					meshBuilder.Position3f( pRenderFace->m_aPoints[iPoint].x, pRenderFace->m_aPoints[iPoint].y, pRenderFace->m_aPoints[iPoint].z );
+					meshBuilder.Normal3f( pRenderFace->m_aNormals[iPoint].x, pRenderFace->m_aNormals[iPoint].y, pRenderFace->m_aNormals[iPoint].z );
 					meshBuilder.AdvanceVertex();
 				}
 				meshBuilder.End();
@@ -2694,6 +2714,7 @@ ChunkFileResult_t CMapOverlay::SaveDataToVMF( CChunkFile *pFile, CSaveInfo *pSav
 	}
 
 	// Basis data.
+	Vector vecTmp;
 	if ( eResult == ChunkFile_Ok )
 	{
 		eResult = pFile->WriteKeyValueVector3( "BasisOrigin", m_Basis.m_vecOrigin );

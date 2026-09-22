@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -17,7 +17,7 @@
 #include "checksum_crc.h"
 #include "ViewerSettings.h"
 #include "matsyswin.h"
-#include "KeyValues.h"
+#include "keyvalues.h"
 #include "utlbuffer.h" 
 #include "expression.h"
 #include "ProgressDialog.h"
@@ -331,7 +331,7 @@ void IFaceposerModels::CFacePoserModel::CreateNewBitmap( char const *pchBitmapFi
 				if ( Q_stricmp( attachment.pszName(), "eyes" ) )
 					continue;
 
-				mstudiobone_t *bone = hdr->pBone( iBone );
+				const mstudiobone_t *bone = hdr->pBone( iBone );
 				if ( !bone )
 					continue;
 
@@ -351,6 +351,7 @@ void IFaceposerModels::CFacePoserModel::CreateNewBitmap( char const *pchBitmapFi
 		}
 
 		KeyValues *seqKeyValues = new KeyValues("");
+		KeyValues::AutoDelete autodelete_key(seqKeyValues);
 		if ( seqKeyValues->LoadFromBuffer( model->GetFileName( ), model->GetKeyValueText( sequence ) ) )
 		{
 			// Do we have a build point section?
@@ -622,13 +623,16 @@ void IFaceposerModels::CFacePoserModel::Restore( void )
 
 	if (m_pModel->LoadModel( m_pModel->GetFileName() ) )
 	{
-		m_pModel->PostLoadModel( m_pModel->GetFileName() );
-		m_pModel->SetSequence( m_pModel->LookupSequence( "idle_subtle" ) );
-	}
-	
-	g_pStudioModel = save;
+		SetupModelFlexcontrollerLinks( m_pModel );
 
-	SetupModelFlexcontrollerLinks( m_pModel );
+		if (!LoadViewerSettings( m_pModel->GetFileName(), m_pModel ))
+		{
+			InitViewerSettings( "faceposer" );
+		}
+		m_pModel->ClearOverlaysSequences();
+	}
+
+	g_pStudioModel = save;
 }
 
 

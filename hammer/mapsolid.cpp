@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -20,6 +20,7 @@
 #include "MapDisp.h"
 #include "camera.h"
 #include "ssolid.h"
+#include "utlvector.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include <tier0/memdbgon.h>
@@ -32,7 +33,8 @@ IMPLEMENT_MAPCLASS(CMapSolid)
 
 
 int CMapSolid::g_nBadSolidCount = 0;
-
+int CMapSolid::g_nRecordedBadSolidCount = 0;
+int CMapSolid::g_nRecordedBadSolidIds[CMapSolid::MAX_RECORDED_BAD_SOLIDS];
 
 //-----------------------------------------------------------------------------
 // Purpose: Constructor. Sets this solid's color to a random blue-green color.
@@ -210,7 +212,7 @@ bool CMapSolid::Carve(CMapObjectList *pInside, CMapObjectList *pOutside, CMapSol
 //			b - Returns the part of the solid that was in back of the clipping
 //				face (in the opposite direction of the face normal).
 //-----------------------------------------------------------------------------
-void CMapSolid::ClipByFace(const CMapFace *fa, CMapSolid **fsolid, CMapSolid **bSolid)
+void CMapSolid::ClipByFace(const CMapFace *fa, CMapSolid **f, CMapSolid **b)
 {
 	CMapSolid *front = new CMapSolid;
 	CMapSolid *back = new CMapSolid;
@@ -244,18 +246,18 @@ void CMapSolid::ClipByFace(const CMapFace *fa, CMapSolid **fsolid, CMapSolid **b
 		front = NULL;
 	}
 
-	if (fsolid != NULL)
+	if (f != NULL)
 	{
-		*fsolid = front;
+		*f = front;
 	}
 	else
 	{
 		delete front;
 	}
 
-	if (bSolid != NULL)
+	if (b != NULL)
 	{
-		*bSolid = back;
+		*b = back;
 	}
 	else
 	{
@@ -794,7 +796,7 @@ LPCTSTR CMapSolid::GetTexture(int iFace)
 int CMapSolid::CreateFromPlanes( DWORD dwFlags )
 {
 	int i, j, k;
-    BOOL useplane[MAPSOLID_MAX_FACES];
+    CUtlVector<bool> useplane;
 
 	m_Render2DBox.SetBounds(Vector(COORD_NOTINIT, COORD_NOTINIT, COORD_NOTINIT), 
 							Vector(-COORD_NOTINIT, -COORD_NOTINIT, -COORD_NOTINIT));
@@ -805,6 +807,9 @@ int CMapSolid::CreateFromPlanes( DWORD dwFlags )
 	// Free all points from all faces and assign parentage.
 	//
 	int nFaces = GetFaceCount();
+	Assert( nFaces > 0 );
+
+	useplane.SetCount( nFaces );
 
 	for (i = 0; i < nFaces; i++)
 	{
@@ -832,7 +837,7 @@ int CMapSolid::CreateFromPlanes( DWORD dwFlags )
         //
         if (VectorCompare(f->normal, vec3_origin))
         {
-            useplane[i] = FALSE;
+            useplane[i] = false;
 			continue;
         }
         
@@ -840,7 +845,7 @@ int CMapSolid::CreateFromPlanes( DWORD dwFlags )
 		// If the plane duplicates another plane, don't use it (assume it is a brush
 		// being edited that will be fixed).
 		//
-		useplane[i] = TRUE;
+		useplane[i] = true;
 		for (j = 0; j < i; j++)
 		{
 			CMapFace *pFaceCheck = GetFace(j);
@@ -853,7 +858,7 @@ int CMapSolid::CreateFromPlanes( DWORD dwFlags )
 			//
 			if ((DotProduct(f1, f2) > 0.999) && (fabs(f->dist - pFaceCheck->plane.dist) < 0.01))
 			{
-				useplane[j] = FALSE;
+				useplane[j] = false;
 				break;
 			}
 		}
@@ -910,7 +915,7 @@ int CMapSolid::CreateFromPlanes( DWORD dwFlags )
 				for (k = 0; k < 3; k++)
 				{
 					float v = w->p[j][k];
-					float v1 = V_rint(v);
+					float v1 = rint(v);
 					if ((v != v1) && (fabs(v - v1) < ROUND_VERTEX_EPSILON))
 					{
 					   w->p[j][k] = v1;
@@ -964,8 +969,7 @@ int CMapSolid::CreateFromPlanes( DWORD dwFlags )
 			if ((!useplane[nFace]) || (pFace->GetPointCount() == 0))
 			{
 				DeleteFace(nFace);
-
-				memcpy(useplane + nFace, useplane + nFace + 1, MAPSOLID_MAX_FACES - (nFace + 1));
+				useplane.Remove( nFace );
 			}
 		}
 	}
@@ -1128,6 +1132,10 @@ ChunkFileResult_t CMapSolid::LoadVMF(CChunkFile *pFile, bool &bValid)
 		else
 		{
 			g_nBadSolidCount++;
+			if ( g_nRecordedBadSolidCount < MAX_RECORDED_BAD_SOLIDS )
+			{
+				g_nRecordedBadSolidIds[g_nRecordedBadSolidCount++] = m_nID;
+			}
 		}
 	}
 
@@ -1150,6 +1158,7 @@ void CMapSolid::PickRandomColor()
 void CMapSolid::PreloadWorld(void)
 {
 	g_nBadSolidCount = 0;
+	g_nRecordedBadSolidCount = 0;
 }
 
 
@@ -1163,6 +1172,25 @@ int CMapSolid::GetBadSolidCount(void)
 	return(g_nBadSolidCount);
 }
 
+
+//-----------------------------------------------------------------------------
+// Purpose: Returns the number of recorded solids that could not be loaded due to errors
+//			in the VMF file.
+//-----------------------------------------------------------------------------
+int CMapSolid::GetRecordedBadSolidCount(void)
+{
+	return(g_nRecordedBadSolidCount);
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: Returns an ID for a bad recorded solid.
+//-----------------------------------------------------------------------------
+int CMapSolid::GetBadSolidId( int i )
+{
+	if ( i < 0 || i >= g_nRecordedBadSolidCount ) return -1;
+
+	return g_nRecordedBadSolidIds[i];
+}
 
 //-----------------------------------------------------------------------------
 // Purpose: Called after this object is added to the world.
@@ -1213,7 +1241,7 @@ void CMapSolid::OnAddToWorld(CMapWorld *pWorld)
 				CUtlRBTree<int,int> faceIDs;
 				SetDefLessFunc( faceIDs );
 
-				nFaceCount = GetFaceCount();
+				int nFaceCount = GetFaceCount();
 				for (int nFace = 0; nFace < nFaceCount; nFace++)
 				{	
 					CMapFace *pFace = GetFace(nFace);
@@ -1626,6 +1654,11 @@ bool CMapSolid::ShouldAppearInRaytracedLightingPreview(void)
 	return true;
 }
 
+bool CMapSolid::ShouldAppearOverEngine(void)
+{
+	return false;
+}
+
 //-----------------------------------------------------------------------------
 // Purpose: 
 // Input  : *pFile - 
@@ -1660,12 +1693,12 @@ void CMapSolid::SetCordonBrush(bool bSet)
 
 
 //-----------------------------------------------------------------------------
-// Purpose: Subtracts one solid from another.
-// Input  : pSubtraction - Solid (or group of solids) to subtract with.
-//			pOther - Solid (or group of solids) to subtract from.
-//			pSubParent - Receives the results of the subtraction as children.
-// Output : Returns true if the objects intersected (subtraction was performed),
-//			false if the objects did not intersect (no subtraction was performed).
+// Subtracts geometry from this solid.
+//   pSubtractWith - Solid (or group of solids) to subtract with.
+//	 pInside - Unless NULL, receives the list of solids inside the subtraction (swallowed).
+//	 pOutside - Unless NULL, receives the list of solids outside the subtraction (remainder).
+// Returns true if the objects intersected (subtraction was performed),
+// false if the objects did not intersect (no subtraction was performed).
 //-----------------------------------------------------------------------------
 bool CMapSolid::Subtract(CMapObjectList *pInside, CMapObjectList *pOutside, CMapClass *pSubtractWith)
 {
@@ -1698,7 +1731,8 @@ bool CMapSolid::Subtract(CMapObjectList *pInside, CMapObjectList *pOutside, CMap
 
 	FOR_EACH_OBJ( SubList, p )
 	{
-		CMapSolid *pCarver = (CMapSolid *)SubList.Element(p);
+		CMapClass *pMapClass = (CUtlReference< CMapClass >)SubList.Element(p);
+		CMapSolid *pCarver = (CMapSolid *)pMapClass;
 
 		//
 		// Subtract the 'with' solid from the 'from' solid, and place the

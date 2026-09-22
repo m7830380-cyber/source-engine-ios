@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 2005-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: Helper methods + classes for file access
 //
@@ -20,14 +20,8 @@
 void GetModSubdirectory( const char *pSubDir, char *pBuf, int nBufLen )
 {
 	// Compute starting directory
-	Assert( g_pFullFileSystem->GetSearchPath( "MOD_WRITE", false, NULL, 0 ) < nBufLen );
-	if ( g_pFullFileSystem->GetSearchPath( "MOD_WRITE", false, pBuf, nBufLen ) == 0 )
-	{
-		// if we didn't find MOD_WRITE, back to the old MOD
-		Assert( g_pFullFileSystem->GetSearchPath( "MOD", false, NULL, 0 ) < nBufLen );
-		g_pFullFileSystem->GetSearchPath( "MOD", false, pBuf, nBufLen );
-	}
-
+	Assert( g_pFullFileSystem->GetSearchPath( "MOD", false, NULL, 0 ) < nBufLen );
+	g_pFullFileSystem->GetSearchPath( "MOD", false, pBuf, nBufLen );
 	char *pSemi = strchr( pBuf, ';' );
 	if ( pSemi )
 	{
@@ -63,21 +57,21 @@ void GetModContentSubdirectory( const char *pSubDir, char *pBuf, int nBufLen )
 void ComputeModFilename( const char *pContentFileName, char *pBuf, size_t nBufLen )
 {
 	char pRelativePath[ MAX_PATH ];
-	if ( !g_pFullFileSystem->FullPathToRelativePathEx( pContentFileName, "CONTENTROOT", pRelativePath, sizeof(pRelativePath) ) )
+	if ( !g_pFullFileSystem->FullPathToRelativePathEx( pContentFileName, "CONTENT", pRelativePath, sizeof(pRelativePath) ) )
 	{
-		Q_strncpy( pBuf, pContentFileName, (int)nBufLen );
+		Q_strncpy( pBuf, pContentFileName, nBufLen );
 		return;
 	}
 
 	char pGameRoot[ MAX_PATH ];
-	g_pFullFileSystem->GetSearchPath( "GAMEROOT", false, pGameRoot, sizeof(pGameRoot) );
+	g_pFullFileSystem->GetSearchPath( "GAME", false, pGameRoot, sizeof(pGameRoot) );
 	char *pSemi = strchr( pGameRoot, ';' );
 	if ( pSemi )
 	{
 		*pSemi = 0;
 	}
 
-	Q_ComposeFileName( pGameRoot, pRelativePath, pBuf, (int)nBufLen );
+	Q_ComposeFileName( pGameRoot, pRelativePath, pBuf, nBufLen );
 }
 
 
@@ -87,34 +81,34 @@ void ComputeModFilename( const char *pContentFileName, char *pBuf, size_t nBufLe
 void ComputeModContentFilename( const char *pGameFileName, char *pBuf, size_t nBufLen )
 {
 	char pRelativePath[ MAX_PATH ];
-	if ( !g_pFullFileSystem->FullPathToRelativePathEx( pGameFileName, "GAMEROOT", pRelativePath, sizeof(pRelativePath) ) )
+	if ( !g_pFullFileSystem->FullPathToRelativePathEx( pGameFileName, "GAME", pRelativePath, sizeof(pRelativePath) ) )
 	{
-		Q_strncpy( pBuf, pGameFileName, (int)nBufLen );
+		Q_strncpy( pBuf, pGameFileName, nBufLen );
 		return;
 	}
 
 	char pContentRoot[ MAX_PATH ];
-	g_pFullFileSystem->GetSearchPath( "CONTENTROOT", false, pContentRoot, sizeof(pContentRoot) );
+	g_pFullFileSystem->GetSearchPath( "CONTENT", false, pContentRoot, sizeof(pContentRoot) );
 	char *pSemi = strchr( pContentRoot, ';' );
 	if ( pSemi )
 	{
 		*pSemi = 0;
 	}
 
-	Q_ComposeFileName( pContentRoot, pRelativePath, pBuf, (int)nBufLen );
+	Q_ComposeFileName( pContentRoot, pRelativePath, pBuf, nBufLen );
 }
 
 
 //-----------------------------------------------------------------------------
 // Purpose: Generates an Xbox 360 filename from a PC filename
 //-----------------------------------------------------------------------------
-char *CreateX360Filename( const char *pSourceName, char *pTargetName, int targetLen )
+char *CreatePlatformFilename( const char *pSourceName, char *pTargetName, int targetLen )
 {
 	Q_StripExtension( pSourceName, pTargetName, targetLen );
 	int idx = Q_strlen( pTargetName );
 
 	// restore extension
-	Q_snprintf( pTargetName, targetLen, "%s.360%s", pTargetName, &pSourceName[idx] );
+	Q_snprintf( pTargetName, targetLen, "%s" PLATFORM_EXT "%s", pTargetName, &pSourceName[idx] );
 
 	return pTargetName;
 }
@@ -139,7 +133,7 @@ char *RestoreFilename( const char *pSourceName, char *pTargetName, int targetLen
 		--end;
 	}
 
-	if ( end >= 4 && pSourceName[end] == '.' && !V_strncmp( pSourceName + end - 4 , ".360", 4 ) )
+	if ( end >= 4 && pSourceName[end] == '.' && ( !V_strncmp( pSourceName + end - 4 , ".360", 4 ) || !V_strnicmp( pSourceName + end - 4 , ".ps3", 4 ) ) )
 	{
 		// cull the .360, leave the trailing extension
 		end -= 4;
@@ -169,7 +163,7 @@ int UpdateOrCreate( const char *pSourceName, char *pTargetName, int targetLen, c
 		char szFixedSourceName[MAX_PATH];
 		pSourceName = RestoreFilename( pSourceName, szFixedSourceName, sizeof( szFixedSourceName ) );
 		// caller wants us to provide 360 named version of source
-		CreateX360Filename( pSourceName, pTargetName, targetLen );
+		CreatePlatformFilename( pSourceName, pTargetName, targetLen );
 	}
 
 	// no conversion are performed by the game at runtime anymore
@@ -222,6 +216,39 @@ bool GenerateFullPath( const char *pFileName, char const *pPathID, char *pBuf, i
 }
 
 //-----------------------------------------------------------------------------
+// Search start directory, recurse into sub directories collecting all files matching the target name.
+//-----------------------------------------------------------------------------
+void RecursiveFindFilesMatchingName( CUtlVector< CUtlString > *outFileList, const char* szStartDirectory, const char* szTargetFileName, const char *pathID )
+{
+	char searchString[MAX_PATH];
+	Q_snprintf( searchString, sizeof( searchString ), "%s/*.*", szStartDirectory );
+	Q_FixSlashes( searchString );
+	
+	FileFindHandle_t handle;
+	const char* curFile = g_pFullFileSystem->FindFirstEx( searchString, pathID, &handle );
+	while ( curFile )
+	{
+		if ( *curFile != '.' && g_pFullFileSystem->FindIsDirectory( handle ) )
+		{	
+			char newSearchPath[MAX_PATH];
+			Q_snprintf( newSearchPath, sizeof( newSearchPath ), "%s/%s", szStartDirectory, curFile );
+			RecursiveFindFilesMatchingName( outFileList, newSearchPath, szTargetFileName, pathID );
+		}
+		else if ( V_StringMatchesPattern( curFile, szTargetFileName ) )
+		{
+			CUtlString outFile;
+			outFile.Format( "%s/%s", szStartDirectory, curFile );
+			Q_FixSlashes( outFile.Get() );
+			outFileList->AddToTail( outFile );
+		}
+
+		curFile = g_pFullFileSystem->FindNext( handle );
+	}
+	g_pFullFileSystem->FindClose( handle );
+}
+
+
+//-----------------------------------------------------------------------------
 // Builds a list of all files under a directory with a particular extension
 //-----------------------------------------------------------------------------
 void AddFilesToList( CUtlVector< CUtlString > &list, const char *pDirectory, const char *pPathID, const char *pExtension )
@@ -252,8 +279,7 @@ void AddFilesToList( CUtlVector< CUtlString > &list, const char *pDirectory, con
 		}
 
 		// Check the extension matches
-		const char *pExt = Q_GetFileExtension( pFoundFile );
-		if ( !pExt || Q_stricmp( pExt, pExtension ) != 0 )
+		if ( Q_stricmp( Q_GetFileExtension( pFoundFile ), pExtension ) )
 			continue;
 
 		char pFullPathBuf[MAX_PATH];

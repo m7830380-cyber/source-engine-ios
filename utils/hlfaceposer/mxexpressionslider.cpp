@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -348,18 +348,18 @@ void mxExpressionSlider::DrawThumb( int barnum, HDC& dc )
 			frac = min( 1.0f, frac );
 			frac = max( 0.0f, frac );
 
-			COLORREF clr = GetSysColor( COLOR_3DFACE );
+			Color clr = RGBToColor( GetSysColor( COLOR_3DFACE ) );
 			int r, g, b;
-			r = GetRValue( clr );
-			g = GetRValue( clr );
-			b = GetRValue( clr );
+			r = clr.r();
+			g = clr.g();
+			b = clr.b();
 
 			// boost colors
 			r = (int)( (1-frac) * b );
 			b = min( 255, (int)(r + ( 255 - r ) * frac ) );
 			g = (int)( (1-frac) * g );
 
-			face = CreateSolidBrush( RGB( r, g, b ) );
+			face = CreateSolidBrush( ColorToRGB( Color( r, g, b ) ) );
 		}
 		break;
 	case BALANCE_BAR:
@@ -368,11 +368,11 @@ void mxExpressionSlider::DrawThumb( int barnum, HDC& dc )
 			frac = min( 1.0f, frac );
 			frac = max( 0.0f, frac );
 
-			COLORREF clr = GetSysColor( COLOR_3DFACE );
+			Color clr = RGBToColor( GetSysColor( COLOR_3DFACE ) );
 			int r, g, b;
-			r = GetRValue( clr );
-			g = GetRValue( clr );
-			b = GetRValue( clr );
+			r = clr.r();
+			g = clr.g();
+			b = clr.b();
 
 			// boost colors toward red if we are not at 0.5
 			float boost = 2.0 * ( fabs( frac - 0.5f ) );
@@ -381,7 +381,7 @@ void mxExpressionSlider::DrawThumb( int barnum, HDC& dc )
 			g = ( 1 - boost ) * g;
 			b = ( 1 - boost ) * b;
 
-			face = CreateSolidBrush( RGB( r, g, b ) );
+			face = CreateSolidBrush( ColorToRGB( Color( r, g, b ) ) );
 		}
 		break;
 	}
@@ -492,15 +492,15 @@ void mxExpressionSlider::DrawTitle( HDC &dc )
 		, VARIABLE_PITCH | FF_DONTCARE   // Pitch and Fam.
 		, "Arial" );
 
-	COLORREF oldColor;
+	Color oldColor;
 
 	if (!isEdited( 0 ))
 	{
-		oldColor = SetTextColor( dc, GetSysColor( COLOR_BTNTEXT ) );
+		oldColor = RGBToColor( SetTextColor( dc, GetSysColor( COLOR_BTNTEXT ) ) );
 	}
 	else
 	{
-		oldColor = SetTextColor( dc, RGB( 255, 0, 0 ) );
+		oldColor = RGBToColor( SetTextColor( dc, ColorToRGB( Color( 255, 0, 0 ) ) ) );
 	}
 	int oldMode = SetBkMode( dc, TRANSPARENT );
 	oldfont = (HFONT)SelectObject( dc, fnt );
@@ -510,7 +510,7 @@ void mxExpressionSlider::DrawTitle( HDC &dc )
 	SelectObject( dc, oldfont );
 	DeleteObject( fnt );
 	SetBkMode( dc, oldMode );
-	SetTextColor( dc, oldColor );
+	SetTextColor( dc, ColorToRGB( oldColor ) );
 }
 
 void mxExpressionSlider::redraw()

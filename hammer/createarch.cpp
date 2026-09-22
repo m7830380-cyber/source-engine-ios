@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -331,8 +331,8 @@ void MakeArcCenterRadius(float xCenter, float yCenter, float xrad, float yrad, i
            angle -= 360;
 		}
 
-        points[point][0] = V_rint(xCenter + (float)cos(DEG2RAD(angle)) * xrad);
-        points[point][1] = V_rint(yCenter + (float)sin(DEG2RAD(angle)) * yrad);
+        points[point][0] = rint(xCenter + (float)cos(DEG2RAD(angle)) * xrad);
+        points[point][1] = rint(yCenter + (float)sin(DEG2RAD(angle)) * yrad);
 
 		angle += angle_delta;
     }

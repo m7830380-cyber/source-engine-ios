@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2004, Valve Corporation, All rights reserved. =======
 //
 // Purpose: 
 //
@@ -84,10 +84,10 @@ void CDmxSerializationDictionary::BuildElementList_R( CDmxElement *pElement, boo
 		case AT_ELEMENT_ARRAY:
 			{
 				const CUtlVector<CDmxElement*> &array = pAttribute->GetArray<CDmxElement*>( );
-				int nCountArray = array.Count();
-				for ( int j = 0; j < nCountArray; ++j )
+				int nCount = array.Count();
+				for ( int i = 0; i < nCount; ++i )
 				{
-					CDmxElement *pChild = array[ j ];
+					CDmxElement *pChild = array[ i ];
 					if ( !pChild )
 						break;
 

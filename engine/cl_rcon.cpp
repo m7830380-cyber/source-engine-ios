@@ -1,16 +1,12 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose:  implementation of the rcon client
 //
 //===========================================================================//
 
-// If we are going to include winsock.h then we need to disable protected_things.h
-// or else we get many warnings.
-#undef PROTECTED_THINGS_ENABLE
 #include "tier0/platform.h"
 #ifdef POSIX
 #include "net_ws_headers.h"
-#define WSAGetLastError() errno
 #else
 #if !defined( _X360 )
 #include <winsock.h>
@@ -56,10 +52,12 @@ public:
 		// Immediately try to start vprofiling
 		// Also, enable cheats on this client only
 		Cmd_SetRptActive( true );
+		StartVProfData();
 	}
 
 	virtual void OnSocketClosed( SocketHandle_t hSocket, const netadr_t & netAdr, void* pData )
 	{
+		StopVProfData();
 		Cmd_SetRptActive( false );
 		BaseClass::OnSocketClosed( hSocket, netAdr, pData );
 	}
@@ -74,27 +72,153 @@ CRConClient & RPTClient()
 
 static void RconAddressChanged_f( IConVar *pConVar, const char *pOldString, float flOldValue )
 {
-#ifndef SWDS
+#ifndef DEDICATED
 	ConVarRef var( pConVar );
 	netadr_t to;
-
 	const char *cmdargs = var.GetString(); 
-	if ( ( !cmdargs || !cmdargs[ 0 ] ) && cl.m_NetChannel )
-	{
-		to = cl.m_NetChannel->GetRemoteAddress();
-	}
-	else if ( !NET_StringToAdr( cmdargs, &to ) )
+	if ( !NET_StringToAdr( cmdargs, &to ) )
 	{
 		Msg( "Unable to resolve rcon address %s\n", var.GetString() );
 		return;
 	}
-
-	Msg( "Setting rcon_address: %s:%d\n", to.ToString( true ), to.GetPort() );
 	RCONClient().SetAddress( to );
 #endif
 }
 
-static ConVar	rcon_address( "rcon_address", "", FCVAR_SERVER_CANNOT_QUERY|FCVAR_DONTRECORD, "Address of remote server if sending unconnected rcon commands (format x.x.x.x:p) ", RconAddressChanged_f );
+static ConVar	rcon_address( "rcon_address", "", FCVAR_SERVER_CANNOT_QUERY | FCVAR_DONTRECORD | FCVAR_RELEASE, "Address of remote server if sending unconnected rcon commands (format x.x.x.x:p) ", RconAddressChanged_f );
+
+
+
+//-----------------------------------------------------------------------------
+// Implementation of remote vprof
+//-----------------------------------------------------------------------------
+CRConVProfExport::CRConVProfExport()
+{
+}
+
+void CRConVProfExport::AddListener()
+{
+}
+
+void CRConVProfExport::RemoveListener()
+{
+}
+
+void CRConVProfExport::SetBudgetFlagsFilter( int filter )
+{
+}
+
+int CRConVProfExport::GetNumBudgetGroups()
+{
+	return m_Info.Count();
+}
+
+void CRConVProfExport::GetBudgetGroupInfos( CExportedBudgetGroupInfo *pInfos )
+{
+	memcpy( pInfos, m_Info.Base(), GetNumBudgetGroups() * sizeof(CExportedBudgetGroupInfo) );
+}
+
+void CRConVProfExport::GetBudgetGroupTimes( float times[IVProfExport::MAX_BUDGETGROUP_TIMES] )
+{
+	int nGroups = MIN( m_Times.Count(), IVProfExport::MAX_BUDGETGROUP_TIMES );
+	memset( times, 0, nGroups * sizeof(float) );
+	nGroups = MIN( GetNumBudgetGroups(), nGroups );
+	memcpy( times, m_Times.Base(), nGroups * sizeof(float) );
+}
+
+void CRConVProfExport::PauseProfile()
+{
+#ifdef VPROF_ENABLED
+	// NOTE: This only has effect when testing on a listen server
+	// it shouldn't do anything in the wild. When drawing the budget panel
+	// this will cause the time spent doing so to not be counted
+	VProfExport_Pause();
+#endif
+}
+
+void CRConVProfExport::ResumeProfile()
+{
+#ifdef VPROF_ENABLED
+	// NOTE: This only has effect when testing on a listen server
+	// it shouldn't do anything in the wild
+	VProfExport_Resume();
+#endif
+}		
+
+void CRConVProfExport::CleanupGroupData()
+{
+	int nCount = m_Info.Count();
+	for ( int i = 0; i < nCount; ++i )
+	{
+		delete m_Info[i].m_pName;
+	}
+
+	m_Info.RemoveAll();
+}
+
+void CRConVProfExport::OnRemoteGroupData( const void *data, int len )
+{
+	CUtlBuffer buf( data, len, CUtlBuffer::READ_ONLY );
+	int nFirstGroup = buf.GetInt();
+
+	if ( nFirstGroup == 0 )
+	{
+		CleanupGroupData();
+	}
+	else
+	{
+		Assert( nFirstGroup == m_Info.Count() );
+	}
+
+	// NOTE: See WriteRemoteVProfGroupData in vprof_engine.cpp
+	// to see the encoding of this data
+	int nGroupCount = buf.GetInt();
+	int nBase = m_Info.AddMultipleToTail( nGroupCount );
+	char temp[1024];
+	for ( int i = 0; i < nGroupCount; ++i )
+	{
+		CExportedBudgetGroupInfo *pInfo = &m_Info[nBase + i];
+
+		unsigned char red, green, blue, alpha;
+		red = buf.GetUnsignedChar( );
+		green = buf.GetUnsignedChar( );
+		blue = buf.GetUnsignedChar( );
+		alpha = buf.GetUnsignedChar( );
+		buf.GetString( temp, sizeof(temp) );
+		int nLen = Q_strlen( temp );
+
+		pInfo->m_Color.SetColor( red, green, blue, alpha );
+		char *pBuf = new char[ nLen + 1 ];
+		pInfo->m_pName = pBuf;
+		memcpy( pBuf, temp, nLen+1 );
+		pInfo->m_BudgetFlags = 0;
+	}
+}
+
+void CRConVProfExport::OnRemoteData( const void *data, int len )
+{
+	// NOTE: See WriteRemoteVProfData in vprof_engine.cpp
+	// to see the encoding of this data
+	int nCount = len / sizeof(float);
+	Assert( nCount == m_Info.Count() );
+
+	CUtlBuffer buf( data, len, CUtlBuffer::READ_ONLY );
+	m_Times.SetCount( nCount );
+	memcpy( m_Times.Base(), data, nCount * sizeof(float) );
+}
+
+
+CON_COMMAND( vprof_remote_start, "Request a VProf data stream from the remote server (requires authentication)" )
+{
+	// TODO: Make this work (it might already!)
+//	RCONClient().StartVProfData();
+}
+
+CON_COMMAND( vprof_remote_stop, "Stop an existing remote VProf data request" )
+{
+	// TODO: Make this work (it might already!)
+//	RCONClient().StopVProfData();
+}
 
 #ifdef ENABLE_RPT
 CON_COMMAND_F( rpt_screenshot, "", FCVAR_HIDDEN | FCVAR_DONTRECORD )
@@ -302,8 +426,8 @@ void CRConClient::ParseReceivedData()
 					m_bAuthenticated = true;
 				}
 				char dummy[2];
-				m_RecvBuffer.GetString( dummy );
-				m_RecvBuffer.GetString( dummy );
+				m_RecvBuffer.GetString( dummy, sizeof(dummy) );
+				m_RecvBuffer.GetString( dummy, sizeof(dummy) );
 			}
 			break;
 
@@ -323,11 +447,42 @@ void CRConClient::ParseReceivedData()
 			}
 			break;
 
+		case SERVERDATA_VPROF_DATA:
+			{
+				int nDataSize = m_RecvBuffer.GetInt();
+				m_VProfExport.OnRemoteData( m_RecvBuffer.PeekGet(), nDataSize );
+				m_RecvBuffer.SeekGet( CUtlBuffer::SEEK_CURRENT, nDataSize );
+			}
+			break;
+
+		case SERVERDATA_VPROF_GROUPS:
+			{
+				int nDataSize = m_RecvBuffer.GetInt();
+				m_VProfExport.OnRemoteGroupData( m_RecvBuffer.PeekGet(), nDataSize );
+				m_RecvBuffer.SeekGet( CUtlBuffer::SEEK_CURRENT, nDataSize );
+			}
+			break;
+
 		case SERVERDATA_RESPONSE_STRING:
 			{
 				char pBuf[2048];
-				m_RecvBuffer.GetString( pBuf );
+				m_RecvBuffer.GetString( pBuf, sizeof(pBuf) );
 				Msg( "%s", pBuf );
+			}
+			break;
+		case SERVERDATA_RESPONSE_REMOTEBUG:
+			{
+				// Our connected server has submitted a partial bug report
+				// to a directory. Start a bug report and populate the fields
+				// with the data in the provided directory.
+				char pBuf[MAX_PATH];
+				m_RecvBuffer.GetString( pBuf, sizeof(pBuf) );
+
+				CUtlString bugcmd;
+				bugcmd.Format( "bug -remotebugpath %s",pBuf );
+
+				Cbuf_AddText( CBUF_SERVER, bugcmd.Get() );
+				Cbuf_Execute();
 			}
 			break;
 
@@ -337,11 +492,11 @@ void CRConClient::ParseReceivedData()
 				int strLen = m_RecvBuffer.TellPut() - m_RecvBuffer.TellGet();
 				CUtlMemory<char> msg;
 				msg.EnsureCapacity( strLen + 1 );
-				m_RecvBuffer.GetStringManualCharCount( msg.Base(), msg.Count() );
+				m_RecvBuffer.GetString( msg.Base(), msg.Count() );
 
 				msg[ msg.Count() - 1 ] = '\0';
 				Msg( "%s", (const char *)msg.Base() );
-				m_RecvBuffer.GetStringManualCharCount( msg.Base(), msg.Count() ); // ignore the second string
+				m_RecvBuffer.GetString( msg.Base(), msg.Count() ); // ignore the second string
 			}
 			break;
 		}
@@ -415,18 +570,23 @@ void CRConClient::RunFrame()
 
 	// find out how much we have to read
 	unsigned long readLen = 0;
+#ifdef _PS3
+	ExecuteNTimes( 5, Warning( "CRConClient unsupported on PS3!\n" ) );
+	readLen = 0;
+#else
 	ioctlsocket( hSocket, FIONREAD, &readLen );
+#endif
 	if ( readLen <= sizeof(int) ) 
 		return;
 
 	// we have a command to process
 	// Read data into a utlbuffer
 	m_RecvBuffer.EnsureCapacity( m_RecvBuffer.TellPut() + readLen + 1 );
-	char *recvbuffer = (char *)_alloca( min( 1024ul, readLen + 1 ) );
+	char *recvbuffer = (char *)stackalloc( MIN( 1024, readLen + 1 ) );
 	unsigned int len = 0;
 	while ( len < readLen )
 	{
-		int recvLen = recv( hSocket, recvbuffer , min( 1024ul, readLen - len ) , 0 );
+		int recvLen = recv( hSocket, recvbuffer , MIN( 1024, readLen - len ) , 0 );
 		if ( recvLen == 0 ) // socket was closed
 		{
 			CloseSocket();
@@ -512,14 +672,14 @@ void CRConClient::Authenticate()
 	// Use the otherwise-empty second string for the userid.  The server will use this to
 	// exec "mp_disable_autokick <userid>" upon successful authentication.
 	bool addedUserID = false;
-	if ( cl.IsConnected() )
+	if ( GetBaseLocalClient().IsConnected() )
 	{
-		if ( cl.m_nPlayerSlot < cl.m_nMaxClients && cl.m_nPlayerSlot >= 0 )
+		if ( GetBaseLocalClient().m_nPlayerSlot < GetBaseLocalClient().m_nMaxClients && GetBaseLocalClient().m_nPlayerSlot >= 0 )
 		{
-			Assert( cl.m_pUserInfoTable );
-			if ( cl.m_pUserInfoTable )
+			Assert( GetBaseLocalClient().m_pUserInfoTable );
+			if ( GetBaseLocalClient().m_pUserInfoTable )
 			{
-				player_info_t *pi = (player_info_t*) cl.m_pUserInfoTable->GetStringUserData( cl.m_nPlayerSlot, NULL );
+				player_info_t *pi = (player_info_t*) GetBaseLocalClient().m_pUserInfoTable->GetStringUserData( GetBaseLocalClient().m_nPlayerSlot, NULL );
 				if ( pi )
 				{
 					addedUserID = true;
@@ -559,6 +719,49 @@ void CRConClient::SendCmd( const char *msg )
 	SendResponse( response );
 }
 
+
+//-----------------------------------------------------------------------------
+// Purpose: Start vprofiling
+//-----------------------------------------------------------------------------
+void CRConClient::StartVProfData()
+{
+	if ( !IsConnected() )
+	{
+		if ( !ConnectSocket() )
+			return;
+	}
+
+#ifdef VPROF_ENABLED
+	// Override the vprof export to point to our local profiling data
+	OverrideVProfExport( &m_VProfExport );
+#endif
+
+	CUtlBuffer response;
+	BuildResponse( response, SERVERDATA_VPROF, "", "" );
+	SendResponse( response );
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: Stop vprofiling
+//-----------------------------------------------------------------------------
+void CRConClient::StopVProfData()
+{
+#ifdef VPROF_ENABLED
+	// Reset the vprof export to point to the normal profiling data
+	ResetVProfExport( &m_VProfExport );
+#endif
+
+	// Don't bother restarting a connection to turn this off
+	if ( !IsConnected() )
+		return;
+
+	CUtlBuffer response;
+	BuildResponse( response, SERVERDATA_REMOVE_VPROF, "", "" );
+	SendResponse( response );
+}
+
+
 //-----------------------------------------------------------------------------
 // Purpose: get data from the server
 //-----------------------------------------------------------------------------
@@ -588,6 +791,28 @@ void CRConClient::GrabConsoleLog()
 	SendResponse( response );
 }
 
+void CRConClient::SendBugRequest()
+{
+	if ( !IsConnected() )
+	{
+		if ( !ConnectSocket() )
+		{
+			Warning( "Could not connect to remote machine, remote bug command failed\n" );
+			return;
+		}
+	}
+	
+	CUtlBuffer response;
+	BuildResponse( response, SERVERDATA_SEND_REMOTEBUG, "", "" );
+	SendResponse( response );
+}
+
+#if 0
+CON_COMMAND( remote_bug, "Starts a bug report with data from the currently connected rcon machine" )
+{ 
+	RCONClient().SendBugRequest();
+}
+#endif
 
 //-----------------------------------------------------------------------------
 // We've got data from the server, save it

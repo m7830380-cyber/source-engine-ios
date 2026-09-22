@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2004, Valve Corporation, All rights reserved. =======
 //
 // Purpose: 
 //
@@ -8,7 +8,7 @@
 #include "datamodel/dmelementfactoryhelper.h"
 #include "materialsystem/imesh.h"
 #include "materialsystem/imaterial.h"
-#include "tier1/KeyValues.h"
+#include "tier1/keyvalues.h"
 #include "tier1/convar.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
@@ -40,10 +40,21 @@ void CDmeMaterialOverlayFXClip::OnConstruction()
 	m_bFullScreen = true;
 	m_nLeft = m_nTop = 0;
 	m_nWidth = m_nHeight = 1;
+
+	// Set up the Blt material
+	KeyValues *pVMTKeyValues = new KeyValues( "accumbuff4sample" );
+	pVMTKeyValues->SetString( "$INPUT", "Effects/FilmScan256" ); // dummy
+
+	KeyValues *pProxiesKV = pVMTKeyValues->FindKey( "proxies", true );	// create a subkey
+	pProxiesKV->FindKey( "sfm_blt", true );
+
+	m_BltMaterial.Init( "accumbuff4sample", pVMTKeyValues );
+	m_BltMaterial->Refresh();
 }
 
 void CDmeMaterialOverlayFXClip::OnDestruction()
 {
+	m_BltMaterial.Shutdown();
 }
 
 
@@ -98,12 +109,92 @@ IMaterial *CDmeMaterialOverlayFXClip::GetMaterial()
 }
 
 
+void CDmeMaterialOverlayFXClip::DrawQuad( int x, int y, int w, int h, float u0, float v0, float u1, float v1 )
+{
+	CMatRenderContextPtr pRenderContext( materials );
+	IMesh *pMesh = pRenderContext->GetDynamicMesh();
+	CMeshBuilder meshBuilder;
+
+	meshBuilder.Begin( pMesh, MATERIAL_TRIANGLE_STRIP, 2 );
+
+	meshBuilder.Position3f( x, y, 0.0f );
+	meshBuilder.BoneWeight( 0, 1.0f );
+	meshBuilder.BoneMatrix( 0, 0 );
+	meshBuilder.Color4ub( 255, 255, 255, 255 );
+	meshBuilder.TexCoord2f( 0, u0, v0 );
+	meshBuilder.TexCoord2f( 1, 0.0f, 0.0f );
+	meshBuilder.TexCoord2f( 2, 0.0f, 0.0f );
+	meshBuilder.AdvanceVertexF<VTX_HAVEPOS | VTX_HAVECOLOR, 3>();
+
+	meshBuilder.Position3f( x, y+h, 0.0f );
+	meshBuilder.BoneWeight( 0, 1.0f );
+	meshBuilder.BoneMatrix( 0, 0 );
+	meshBuilder.Color4ub( 255, 255, 255, 255 );
+	meshBuilder.TexCoord2f( 0, u0, v1 );
+	meshBuilder.TexCoord2f( 1, 0.0f, 1.0f );
+	meshBuilder.TexCoord2f( 2, 0.0f, 0.0f );
+	meshBuilder.AdvanceVertexF<VTX_HAVEPOS | VTX_HAVECOLOR, 3>();
+
+	meshBuilder.Position3f( x+w, y, 0.0f );
+	meshBuilder.BoneWeight( 0, 1.0f );
+	meshBuilder.BoneMatrix( 0, 0 );
+	meshBuilder.Color4ub( 255, 255, 255, 255 );
+	meshBuilder.TexCoord2f( 0, u1, v0 );
+	meshBuilder.TexCoord2f( 1, 1.0f, 0.0f );
+	meshBuilder.TexCoord2f( 2, 0.0f, 0.0f );
+	meshBuilder.AdvanceVertexF<VTX_HAVEPOS | VTX_HAVECOLOR, 3>();
+
+	meshBuilder.Position3f( x+w, y+h, 0.0f );
+	meshBuilder.BoneWeight( 0, 1.0f );
+	meshBuilder.BoneMatrix( 0, 0 );
+	meshBuilder.Color4ub( 255, 255, 255, 255 );
+	meshBuilder.TexCoord2f( 0, u1, v1 );
+	meshBuilder.TexCoord2f( 1, 1.0f, 1.0f );
+	meshBuilder.TexCoord2f( 2, 0.0f, 0.0f );
+	meshBuilder.AdvanceVertexF<VTX_HAVEPOS | VTX_HAVECOLOR, 3>();
+
+	meshBuilder.End();
+	pMesh->Draw();
+}
+
+void CDmeMaterialOverlayFXClip::DrawOneToOneQuad( int nWidth, int nHeight )
+{
+	CMatRenderContextPtr pRenderContext( materials );
+	IMesh *pMesh = pRenderContext->GetDynamicMesh();
+	CMeshBuilder meshBuilder;
+
+	// Epsilons for 1:1 texel to pixel mapping
+	float fWidthEpsilon = 0.5f / ((float) nWidth);
+	float fHeightEpsilon = 0.5f / ((float) nHeight);
+
+	meshBuilder.Begin( pMesh, MATERIAL_QUADS, 1 );
+
+	meshBuilder.Position3f( -1.0f, 1.0f, 0.5f );	// Upper left
+	meshBuilder.TexCoord2f( 0, 0.0f + fWidthEpsilon, 0.0f + fHeightEpsilon);
+	meshBuilder.AdvanceVertexF<VTX_HAVEPOS, 1>();
+
+	meshBuilder.Position3f( -1.0f,  -1.0f, 0.5f );	// Lower left
+	meshBuilder.TexCoord2f( 0, 0.0f + fWidthEpsilon, 1.0f + fHeightEpsilon);
+	meshBuilder.AdvanceVertexF<VTX_HAVEPOS, 1>();
+
+	meshBuilder.Position3f( 1.0f, -1.0f, 0.5 );		// Lower right
+	meshBuilder.TexCoord2f( 0, 1.0f + fWidthEpsilon, 1.0f + fHeightEpsilon);
+	meshBuilder.AdvanceVertexF<VTX_HAVEPOS, 1>();
+
+	meshBuilder.Position3f( 1.0f, 1.0f, 0.5 );		// Upper right
+	meshBuilder.TexCoord2f( 0, 1.0f + fWidthEpsilon, 0.0f + fHeightEpsilon);
+	meshBuilder.AdvanceVertexF<VTX_HAVEPOS, 1>();
+
+	meshBuilder.End();
+	pMesh->Draw();
+}
+
 //-----------------------------------------------------------------------------
 // All effects must be able to apply their effect
 //-----------------------------------------------------------------------------
 void CDmeMaterialOverlayFXClip::ApplyEffect( DmeTime_t time, Rect_t &currentRect, Rect_t &totalRect, ITexture *pTextures[MAX_FX_INPUT_TEXTURES] )
 {
-	if ( !m_OverlayMaterial || m_Color.a() == 0 )
+	if ( !m_OverlayMaterial || !m_BltMaterial || m_Color.a() == 0 )
 		return;
 	
 	time = ToChildMediaTime( time, false );
@@ -123,8 +214,8 @@ void CDmeMaterialOverlayFXClip::ApplyEffect( DmeTime_t time, Rect_t &currentRect
 	}
 	else
 	{
-		x = clamp( m_nLeft, currentRect.x, currentRect.x + currentRect.width );
-		y = clamp( m_nTop, currentRect.y, currentRect.y + currentRect.height );
+		x = clamp( m_nLeft.Get(), currentRect.x, currentRect.x + currentRect.width );
+		y = clamp( m_nTop.Get(), currentRect.y, currentRect.y + currentRect.height );
 		int x1 = clamp( m_nLeft + m_nWidth, currentRect.x, currentRect.x + currentRect.width );
 		int y1 = clamp( m_nTop + m_nHeight, currentRect.y, currentRect.y + currentRect.height );
 		w = x1 - x;
@@ -196,19 +287,18 @@ void CDmeMaterialOverlayFXClip::ApplyEffect( DmeTime_t time, Rect_t &currentRect
 	x -= currentRect.x;
 	y -= currentRect.y;
 
+	CMatRenderContextPtr pRenderContext( materials );
+
 	if ( m_OverlayMaterial->NeedsPowerOfTwoFrameBufferTexture() )
 	{
-		CMatRenderContextPtr pRenderContext( materials );
-		ITexture *pTexture = materials->FindTexture( "_rt_PowerOfTwoFB", TEXTURE_GROUP_RENDER_TARGET );
+		pRenderContext->Bind( m_BltMaterial, pTextures[0] );
+		pRenderContext->PushRenderTargetAndViewport( pTextures[1], 0, 0, w, h );		// Blt current input to temp surface
+		DrawOneToOneQuad( w, h );
+		pRenderContext->PopRenderTargetAndViewport();
 
-		// forced or only once per frame 
-		Rect_t rect;
-		rect.x = 0;
-		rect.y = 0;
-		rect.width = currentRect.width;
-		rect.height = currentRect.height;
-		pRenderContext->CopyRenderTargetToTextureEx( pTexture, 0, &rect, NULL );
-		pRenderContext->SetFrameBufferCopyTexture( pTexture );
+		pRenderContext->SetFrameBufferCopyTexture( pTextures[1] );
+
+		pRenderContext->PushRenderTargetAndViewport( pTextures[0], 0, 0, w, h );			// Render to result surface
 	}
 
 	float r, g, b, a;
@@ -218,51 +308,14 @@ void CDmeMaterialOverlayFXClip::ApplyEffect( DmeTime_t time, Rect_t &currentRect
 	m_OverlayMaterial->ColorModulate( m_Color.r() / 255.0f, m_Color.g() / 255.0f, m_Color.b() / 255.0f );
 	m_OverlayMaterial->AlphaModulate( m_Color.a() / 255.0f );
 
-	CMatRenderContextPtr pRenderContext( materials );
 	pRenderContext->Bind( m_OverlayMaterial );
 
-	IMesh *pMesh = pRenderContext->GetDynamicMesh();
-	CMeshBuilder meshBuilder;
-	meshBuilder.Begin( pMesh, MATERIAL_TRIANGLE_STRIP, 2 );
+	DrawQuad( x, y, w, h, u0, v0, u1, v1 );
 
-	meshBuilder.Position3f( x, y, 0.0f );
-	meshBuilder.BoneWeight( 0, 1.0f );
-	meshBuilder.BoneMatrix( 0, 0 );
-	meshBuilder.Color4ub( 255, 255, 255, 255 );
-	meshBuilder.TexCoord2f( 0, u0, v0 );
-	meshBuilder.TexCoord2f( 1, 0.0f, 0.0f );
-	meshBuilder.TexCoord2f( 2, 0.0f, 0.0f );
-	meshBuilder.AdvanceVertex();
-
-	meshBuilder.Position3f( x, y+h, 0.0f );
-	meshBuilder.BoneWeight( 0, 1.0f );
-	meshBuilder.BoneMatrix( 0, 0 );
-	meshBuilder.Color4ub( 255, 255, 255, 255 );
-	meshBuilder.TexCoord2f( 0, u0, v1 );
-	meshBuilder.TexCoord2f( 1, 0.0f, 1.0f );
-	meshBuilder.TexCoord2f( 2, 0.0f, 0.0f );
-	meshBuilder.AdvanceVertex();
-
-	meshBuilder.Position3f( x+w, y, 0.0f );
-	meshBuilder.BoneWeight( 0, 1.0f );
-	meshBuilder.BoneMatrix( 0, 0 );
-	meshBuilder.Color4ub( 255, 255, 255, 255 );
-	meshBuilder.TexCoord2f( 0, u1, v0 );
-	meshBuilder.TexCoord2f( 1, 1.0f, 0.0f );
-	meshBuilder.TexCoord2f( 2, 0.0f, 0.0f );
-	meshBuilder.AdvanceVertex();
-
-	meshBuilder.Position3f( x+w, y+h, 0.0f );
-	meshBuilder.BoneWeight( 0, 1.0f );
-	meshBuilder.BoneMatrix( 0, 0 );
-	meshBuilder.Color4ub( 255, 255, 255, 255 );
-	meshBuilder.TexCoord2f( 0, u1, v1 );
-	meshBuilder.TexCoord2f( 1, 1.0f, 1.0f );
-	meshBuilder.TexCoord2f( 2, 0.0f, 0.0f );
-	meshBuilder.AdvanceVertex();
-
-	meshBuilder.End();
-	pMesh->Draw();
+	if ( m_OverlayMaterial->NeedsPowerOfTwoFrameBufferTexture() )
+	{
+		pRenderContext->PopRenderTargetAndViewport();
+	}
 
 	m_OverlayMaterial->ColorModulate( r, g, b );
 	m_OverlayMaterial->AlphaModulate( a );

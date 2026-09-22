@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -148,7 +148,7 @@ struct constraint_limitedhingeparams_t : public constraint_hingeparams_t
 	Vector							referencePerpAxisDirection;		// unit direction vector vector perpendicular to the hinge axis in world space
 	Vector							attachedPerpAxisDirection;		// unit direction vector vector perpendicular to the hinge axis in world space
 
-	constraint_limitedhingeparams_t() = default;
+	constraint_limitedhingeparams_t() {}
 	constraint_limitedhingeparams_t( const constraint_hingeparams_t &hinge )
 	{
 		static_cast<constraint_hingeparams_t &>(*this) = hinge;
@@ -284,6 +284,14 @@ struct constraint_lengthparams_t
 		pRef->WorldToLocal( &objectPosition[0], refPosition );
 		pAttached->WorldToLocal( &objectPosition[1], attachedPosition );
 		totalLength = (refPosition - attachedPosition).Length();
+		minLength = rigid ? totalLength : 0;
+	}
+
+	void Init( IPhysicsObject *pRef, IPhysicsObject *pAttached, float flLength, bool rigid = false )
+	{
+		objectPosition[0] = vec3_origin;
+		objectPosition[1] = vec3_origin;
+		totalLength = flLength;
 		minLength = rigid ? totalLength : 0;
 	}
 

@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Implements a system for managing prefabs. There are two types
 //			of prefabs implemented here: Half-Life style prefabs, and Half-Life 2
@@ -697,8 +697,8 @@ int CPrefabLibraryRMF::Save(LPCTSTR pszFilename, BOOL bIndexOnly)
 			// setup this dir entry
 			ph[iCur].dwOffset = pPrefab->dwFileOffset;
 			ph[iCur].dwSize = pPrefab->dwFileSize;
-			V_strcpy_safe(ph[iCur].szName, pPrefab->GetName());
-			V_strcpy_safe(ph[iCur].szNotes, pPrefab->GetNotes());
+			strcpy(ph[iCur].szName, pPrefab->GetName());
+			strcpy(ph[iCur].szNotes, pPrefab->GetNotes());
 			ph[iCur].iType = pPrefab->GetType();
 
 			++iCur;	// increase current directory entry
@@ -769,8 +769,8 @@ int CPrefabLibraryRMF::Save(LPCTSTR pszFilename, BOOL bIndexOnly)
 
 		// setup this dir entry
 		ph[iCur].dwOffset = file.tellp();
-		V_strcpy_safe( ph[iCur].szName, pPrefab->GetName() );
-		V_strcpy_safe( ph[iCur].szNotes, pPrefab->GetNotes() );
+		strcpy(ph[iCur].szName, pPrefab->GetName());
+		strcpy(ph[iCur].szNotes, pPrefab->GetNotes());
 		ph[iCur].iType = pPrefab->GetType();
 
 		if(pPrefab->IsLoaded())

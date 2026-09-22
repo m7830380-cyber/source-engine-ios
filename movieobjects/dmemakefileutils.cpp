@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2004, Valve Corporation, All rights reserved. =====//
 //
 // Interface for makefiles to build differently depending on where they are run from
 //
@@ -30,10 +30,10 @@ IDmeMakefileUtils *GetDefaultDmeMakefileUtils()
 //-----------------------------------------------------------------------------
 // Constructor, destructor
 //-----------------------------------------------------------------------------
-CDmeMakefileUtils::CDmeMakefileUtils() : BaseClass( false )
+CDmeMakefileUtils::CDmeMakefileUtils()
 {
 	m_CompilationStep = NOT_COMPILING;
-	m_hCompileProcess = PROCESS_HANDLE_INVALID;
+	m_hCompileProcess = NULL;
 	m_nCurrentCompileTask = -1;
 	m_nExitCode = 0;
 }
@@ -182,11 +182,11 @@ void CDmeMakefileUtils::AddCompilationTask( CDmElement* pElement )
 //-----------------------------------------------------------------------------
 // Sets the compile process
 //-----------------------------------------------------------------------------
-void CDmeMakefileUtils::SetCompileProcess( ProcessHandle_t hProcess )
+void CDmeMakefileUtils::SetCompileProcess( IProcess *hProcess )
 {
 	Assert( m_CompilationStep == PERFORMING_COMPILATION );
 	m_hCompileProcess = hProcess;
-	if ( m_hCompileProcess == PROCESS_HANDLE_INVALID )
+	if ( m_hCompileProcess == NULL )
 	{
 		m_CompilationStep = AFTER_COMPILATION_FAILED;
 	}
@@ -287,7 +287,7 @@ bool CDmeMakefileUtils::PerformCompilationStep( CDmeMakefile *pMakefile, Compila
 //-----------------------------------------------------------------------------
 void CDmeMakefileUtils::StartNextCompileTask( )
 {
-	Assert( m_hCompileProcess == PROCESS_HANDLE_INVALID );
+	Assert( m_hCompileProcess == NULL );
 	++m_nCurrentCompileTask;
 	if ( m_nCurrentCompileTask == m_CompileTasks.Count() )
 	{
@@ -297,13 +297,13 @@ void CDmeMakefileUtils::StartNextCompileTask( )
 		return;
 	}
 
-	m_hCompileProcess = PROCESS_HANDLE_INVALID;
+	m_hCompileProcess = NULL;
 
 	// NOTE: PerformCompilationStep is expected to call SetCompileProcess to set m_hCompileProcess
 	CompileInfo_t &info = m_CompileTasks[m_nCurrentCompileTask];
 	bool bOk = info.m_pAdapter->PerformCompilationStep( info.m_hElement, PERFORMING_COMPILATION );
 
-	if ( !bOk || ( m_hCompileProcess == PROCESS_HANDLE_INVALID ) )
+	if ( !bOk || ( m_hCompileProcess == NULL ) )
 	{
 		AbortCurrentCompilation();
 		return;
@@ -389,10 +389,11 @@ bool CDmeMakefileUtils::IsCurrentlyCompiling()
 //-----------------------------------------------------------------------------
 void CDmeMakefileUtils::AbortCurrentCompilation()
 {
-	if ( m_hCompileProcess != PROCESS_HANDLE_INVALID )
+	if ( m_hCompileProcess != NULL )
 	{
-		g_pProcessUtils->AbortProcess( m_hCompileProcess );
-		m_hCompileProcess = PROCESS_HANDLE_INVALID;
+		m_hCompileProcess->Abort();
+		m_hCompileProcess->Release();
+		m_hCompileProcess = NULL;
 	}
 
 	if ( IsCurrentlyCompiling() )
@@ -418,9 +419,9 @@ int CDmeMakefileUtils::GetExitCode()
 //-----------------------------------------------------------------------------
 int CDmeMakefileUtils::GetCompileOutputSize()
 {
-	if ( m_hCompileProcess == PROCESS_HANDLE_INVALID )
+	if ( m_hCompileProcess == NULL )
 		return 0;
-	return g_pProcessUtils->GetProcessOutputSize( m_hCompileProcess );
+	return m_hCompileProcess->GetStdout()->GetNumBytesAvailable();
 }
 
 CompilationState_t CDmeMakefileUtils::UpdateCompilation( char *pOutputBuf, int nBufLen )
@@ -445,7 +446,7 @@ CompilationState_t CDmeMakefileUtils::UpdateCompilation( char *pOutputBuf, int n
 
 	// FIXME: Check return codes from compile process..
 	// fail if compilation process had a problem
-	if ( m_hCompileProcess == PROCESS_HANDLE_INVALID )
+	if ( m_hCompileProcess == NULL )
 	{
 		if ( nBufLen > 0 )
 		{
@@ -456,16 +457,19 @@ CompilationState_t CDmeMakefileUtils::UpdateCompilation( char *pOutputBuf, int n
 
 	if ( nBufLen > 0 )
 	{
-		g_pProcessUtils->GetProcessOutput( m_hCompileProcess, pOutputBuf, nBufLen );
+		CUtlString sOutput;
+		m_hCompileProcess->GetStdout()->ReadAvailable( sOutput );
+		V_strncpy( pOutputBuf, sOutput.String(), nBufLen );
+		V_TranslateLineFeedsToUnix( pOutputBuf );
 	}
 
-	if ( !g_pProcessUtils->IsProcessComplete( m_hCompileProcess ) )
+	if ( !m_hCompileProcess->IsComplete() )
 		return COMPILATION_NOT_COMPLETE;
 
-	m_nExitCode = g_pProcessUtils->GetProcessExitCode( m_hCompileProcess ); 
+	m_nExitCode = m_hCompileProcess->GetExitCode();
 	bool bCompileSucceeded = ( m_nExitCode == 0 );
-	g_pProcessUtils->CloseProcess( m_hCompileProcess );
-	m_hCompileProcess = PROCESS_HANDLE_INVALID;
+	m_hCompileProcess->Release();
+	m_hCompileProcess = NULL;
 
 	if ( !bCompileSucceeded )
 	{
@@ -502,7 +506,7 @@ bool CDmeMakefileUtils::PerformCompilationStep( CDmeMDLMakefile *pMakeFile, Comp
 	Q_snprintf( pStudioMDLCmd, sizeof(pStudioMDLCmd), "%s\\studiomdl.exe %s", pBinDirectory, pMakeFile->GetFileName() );
 #endif
 
-	ProcessHandle_t hProcess = g_pProcessUtils->StartProcess( pStudioMDLCmd, true );
+	IProcess *hProcess = g_pProcessUtils->StartProcess( pStudioMDLCmd, STARTPROCESS_CONNECTSTDPIPES );
 	SetCompileProcess( hProcess );
 	return true;
 }
@@ -586,7 +590,7 @@ bool CDmeMakefileUtils::PerformCompilationStep( CDmeMayaMakefile *pMakeFile, Com
     
 	char pMayaCommand[1024];
 	Q_snprintf( pMayaCommand, sizeof(pMayaCommand), "mayabatch.exe -batch -file \"%s\" -command \"%s\"", pSourcePath, mayaCommand.Get() );
-	ProcessHandle_t hProcess = g_pProcessUtils->StartProcess( pMayaCommand, true );
+	IProcess *hProcess = g_pProcessUtils->StartProcess( pMayaCommand, STARTPROCESS_CONNECTSTDPIPES );
 	SetCompileProcess( hProcess );
 	return true;
 }
@@ -609,5 +613,5 @@ void CDmeMakefileUtils::OpenEditor( CDmeSourceMayaFile *pDmeSourceDCCFile )
 
 	char pMayaCommand[1024];
 	Q_snprintf( pMayaCommand, sizeof(pMayaCommand), "maya.exe -file \"%s\"", pSourcePath );
-	g_pProcessUtils->StartProcess( pMayaCommand, true );
+	g_pProcessUtils->StartProcess( pMayaCommand, STARTPROCESS_CONNECTSTDPIPES );
 }

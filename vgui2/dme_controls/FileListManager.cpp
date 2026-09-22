@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2005, Valve Corporation, All rights reserved. =======//
 //
 // Purpose: 
 //
@@ -340,7 +340,6 @@ void CFileListManager::OnOpenFile( KeyValues *pParams )
 	vgui::FileOpenDialog *pFileOpenDialog = new vgui::FileOpenDialog( this, "Save .dmx File As", false, pContextKeyValues );
 	pFileOpenDialog->AddFilter( "*.dmx", "DmElements File (*.dmx)", true );
 	pFileOpenDialog->AddActionSignalTarget( this );
-	pFileOpenDialog->SetDeleteSelfOnClose( true );
 	pFileOpenDialog->DoModal( false );
 }
 
@@ -366,7 +365,6 @@ void CFileListManager::OnSaveFileAs( KeyValues *pParams )
 		pFileOpenDialog->AddFilter( "*.dmx", description, true, pFileFormat );
 	}
 	pFileOpenDialog->AddActionSignalTarget( this );
-	pFileOpenDialog->SetDeleteSelfOnClose( true );
 	pFileOpenDialog->DoModal( false );
 }
 

@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Implements the 3D options property page.
 //
@@ -75,8 +75,7 @@ void COPTView3D::DoDataExchange(CDataExchange* pDX)
 	DDX_Check(pDX, IDC_ANIMATE_MODELS, Options.view3d.bAnimateModels);
 	DDX_Check(pDX, IDC_REVERSE_SELECTION, Options.view3d.bReverseSelection);
 	DDX_Text(pDX, IDC_FOV, Options.view3d.fFOV);
-	DDX_Text(pDX, IDC_LIGHT_CONE_LENGTH, Options.view3d.fLightConeLength);
-
+	
 	DDV_FOVRange(pDX, Options.view3d.fFOV);
 	//}}AFX_DATA_MAP
 

@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2006, Valve Corporation, All rights reserved. =======
 //
 // Purpose: 
 //
@@ -8,6 +8,7 @@
 #include "dmebaseimporter.h"
 #include "datamodel/idatamodel.h"
 #include "datamodel/dmelement.h"
+#include "datamodel/dmattributevar.h"
 #include "tier1/KeyValues.h"
 #include "tier1/utlbuffer.h"
 #include "tier1/utlmap.h"
@@ -262,8 +263,8 @@ void CImportSFMV2::BuildList( CDmElement *pElement, CUtlRBTree< CDmElement *, in
 	{
 		if ( pAttribute->GetType() == AT_ELEMENT )
 		{
-			CDmElement *pElementAt = pAttribute->GetValueElement<CDmElement>( );
-			BuildList( pElementAt, list );
+			CDmElement *pElement = pAttribute->GetValueElement<CDmElement>( );
+			BuildList( pElement, list );
 			continue;
 		}
 

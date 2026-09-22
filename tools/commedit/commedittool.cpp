@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2005, Valve Corporation, All rights reserved. =======
 //
 // Purpose: Core Movie Maker UI API
 //
@@ -16,7 +16,7 @@
 #include "dme_controls/elementpropertiestree.h"
 #include "tier0/icommandline.h"
 #include "materialsystem/imaterialsystem.h"
-#include "VGuiMatSurface/IMatSystemSurface.h"
+#include "vguimatsurface/imatsystemsurface.h"
 #include "commeditdoc.h"
 #include "commentarynodebrowserpanel.h"
 #include "commentarypropertiespanel.h"
@@ -80,8 +80,17 @@ CCommEditTool::CCommEditTool()
 //-----------------------------------------------------------------------------
 // Init, shutdown
 //-----------------------------------------------------------------------------
+static const char *s_pDropClassName[ ] =
+{
+	"point_commentary_node",
+	"info_target",
+	"info_remarkable"
+};
+
 bool CCommEditTool::Init( )
 {
+	COMPILE_TIME_ASSERT( ARRAYSIZE( s_pDropClassName ) == DROP_MODE_COUNT );
+
 	m_pDoc = NULL;
 	m_RecentFiles.LoadFromRegistry( GetRegistryName() );
 
@@ -91,11 +100,12 @@ bool CCommEditTool::Init( )
 	if ( !BaseClass::Init( ) )
 		return false;
 
+	for ( int i = 0; i < DROP_MODE_COUNT; ++i )
 	{
-		m_hPreviewNode = CreateElement<CDmeCommentaryNodeEntity>( "preview node", DMFILEID_INVALID );
-		m_hPreviewNode->SetValue( "classname", "point_commentary_node" );
-		m_hPreviewTarget = CreateElement<CDmeCommentaryNodeEntity>( "preview target", DMFILEID_INVALID );
-		m_hPreviewTarget->SetValue( "classname", "info_target" );
+		char pTemp[256];
+		Q_snprintf( pTemp, sizeof(pTemp), "preview %s", s_pDropClassName[i] );
+		m_hPreviewEntity[i] = CreateElement<CDmeCommentaryNodeEntity>( pTemp, DMFILEID_INVALID );
+		m_hPreviewEntity[i]->SetValue( "classname", s_pDropClassName[i] );
 	}
 
 	return true;
@@ -105,8 +115,11 @@ void CCommEditTool::Shutdown()
 {
 	m_RecentFiles.SaveToRegistry( GetRegistryName() );
 
-	g_pDataModel->DestroyElement( m_hPreviewNode );
-	g_pDataModel->DestroyElement( m_hPreviewTarget );
+	for ( int i = 0; i < DROP_MODE_COUNT; ++i )
+	{
+		g_pDataModel->DestroyElement( m_hPreviewEntity[i] );
+		m_hPreviewEntity[i] = NULL;
+	}
 
 	BaseClass::Shutdown();
 }
@@ -149,11 +162,11 @@ void CCommEditTool::EnterNodeDropMode()
 		return;
 	 
 	m_bInNodeDropMode = true;
-	m_bDroppingCommentaryNodes = true;
+	m_nDropMode = DROP_MODE_COMMENTARY;
 	SetMode( true, IsFullscreen() );
 	{
 		CDisableUndoScopeGuard guard;
-		m_hPreviewNode->DrawInEngine( true ); 
+		m_hPreviewEntity[DROP_MODE_COMMENTARY]->DrawInEngine( true ); 
 	}
 	SetMiniViewportText( "Left Click To Place Commentary\nRight Click To Toggle Modes\nESC to exit" );
 	enginetools->Command( "noclip\n" );
@@ -167,8 +180,10 @@ void CCommEditTool::LeaveNodeDropMode()
 	SetMode( false, IsFullscreen() );
 	{
 		CDisableUndoScopeGuard guard;
-		m_hPreviewNode->DrawInEngine( false );
-		m_hPreviewTarget->DrawInEngine( false );
+		for ( int i = 0; i < DROP_MODE_COUNT; ++i )
+		{
+			m_hPreviewEntity[i]->DrawInEngine( false );
+		}
 	}
 	SetMiniViewportText( NULL );
 	enginetools->Command( "noclip\n" );
@@ -208,11 +223,11 @@ void CCommEditTool::ClientPreRender()
 	GetPlacementInfo( vecOrigin, angAngles );
 
 	CDisableUndoScopeGuard guard;
-	m_hPreviewNode->SetRenderOrigin( vecOrigin );
-	m_hPreviewNode->SetRenderAngles( angAngles );
-
-	m_hPreviewTarget->SetRenderOrigin( vecOrigin );
-	m_hPreviewTarget->SetRenderAngles( angAngles );
+	for ( int i = 0; i < DROP_MODE_COUNT; ++i )
+	{
+		m_hPreviewEntity[i]->SetRenderOrigin( vecOrigin );
+		m_hPreviewEntity[i]->SetRenderAngles( angAngles );
+	}
 }
 
 	
@@ -249,31 +264,50 @@ bool CCommEditTool::TrapKey( ButtonCode_t key, bool down )
 		Vector vecOrigin;
 		QAngle angAngles;
 		GetPlacementInfo( vecOrigin, angAngles );
-		if ( m_bDroppingCommentaryNodes )
+		switch( m_nDropMode )
 		{
+		case DROP_MODE_COMMENTARY:
 			m_pDoc->AddNewCommentaryNode( vecOrigin, angAngles );
-		}
-		else
-		{
+			break;
+
+		case DROP_MODE_TARGET:
 			m_pDoc->AddNewInfoTarget( vecOrigin, angAngles );
+			break;
+
+		case DROP_MODE_REMARKABLE:
+			m_pDoc->AddNewInfoRemarkable( vecOrigin, angAngles );
+			break;
 		}
 		return true;	// trapping this key, stop processing
 	}
 
 	if ( key == MOUSE_RIGHT )
 	{
-		m_bDroppingCommentaryNodes = !m_bDroppingCommentaryNodes;
-		if ( m_bDroppingCommentaryNodes )
+		m_nDropMode = (DropNodeMode_t)( m_nDropMode + 1 );
+		if ( m_nDropMode >= DROP_MODE_COUNT )
 		{
+			m_nDropMode = DROP_MODE_COMMENTARY;
+		}
+		switch( m_nDropMode )
+		{
+		case DROP_MODE_COMMENTARY:
 			SetMiniViewportText( "Left Click To Place Commentary\nRight Click To Toggle Modes\nESC to exit" );
-		}
-		else
-		{
+			break;
+
+		case DROP_MODE_TARGET:
 			SetMiniViewportText( "Left Click To Place Target\nRight Click To Toggle Modes\nESC to exit" );
+			break;
+
+		case DROP_MODE_REMARKABLE:
+			SetMiniViewportText( "Left Click To Place Remarkable\nRight Click To Toggle Modes\nESC to exit" );
+			break;
 		}
+
 		CDisableUndoScopeGuard guard;
-		m_hPreviewNode->DrawInEngine( m_bDroppingCommentaryNodes );
-		m_hPreviewTarget->DrawInEngine( !m_bDroppingCommentaryNodes );
+		for ( int i = 0; i < DROP_MODE_COUNT; ++i )
+		{
+			m_hPreviewEntity[i]->DrawInEngine( i == m_nDropMode );
+		}
 		return true;	// trapping this key, stop processing
 	}
 
@@ -391,7 +425,7 @@ void CCommEditViewMenuButton::OnShowMenu(vgui::Menu *menu)
 		m_pMenu->SetItemEnabled( id, true );
 
 		CConsolePage *console = m_pTool->GetConsole();
-		m_pMenu->SetMenuItemChecked( id, console->GetParent() );
+		m_pMenu->SetMenuItemChecked( id, console->GetParent() ? true : false );
 	}
 	else
 	{
@@ -626,7 +660,7 @@ void CCommEditTool::OnToggleConsole()
 void CCommEditTool::BringConsoleToFront()
 {
 	CConsolePage *p = GetConsole();
-	Panel *pPage = p ? p->GetParent() : NULL;
+	Panel *pPage = p->GetParent();
 	if ( pPage == NULL )
 	{
 		OnToggleConsole();
@@ -792,7 +826,7 @@ int	CCommEditTool::GetFileMenuItemsEnabled( )
 	int nFlags = FILE_ALL;
 	if ( m_RecentFiles.IsEmpty() )
 	{
-		nFlags &= ~(FILE_RECENT | FILE_CLEAR_RECENT);
+		nFlags &= ~FILE_RECENT;
 	}
 	return nFlags;
 }
@@ -840,9 +874,9 @@ void CCommEditTool::OnCommand( const char *cmd )
 		int idx = Q_atoi( pSuffix );
 		OpenFileFromHistory( idx );
 	}
-	else if ( const char *pSuffixTool = StringAfterPrefix( cmd, "OnTool" ) )
+	else if ( const char *pSuffix = StringAfterPrefix( cmd, "OnTool" ) )
 	{
-		int idx = Q_atoi( pSuffixTool );
+		int idx = Q_atoi( pSuffix );
 		enginetools->SwitchToTool( idx );
 	}
 	else if ( !V_stricmp( cmd, "OnUndo" ) )
@@ -1118,11 +1152,18 @@ void CCommEditTool::OnFileOperationCompleted( const char *pFileType, bool bWrote
 		return;
 	}
 
+	if ( !Q_stricmp( pContextKeyValues->GetName(), "OnUnload" ) )
+	{
+		enginetools->Command( "toolunload commedit -nosave\n" );
+		return;
+	}
+
 	if ( !Q_stricmp( pContextKeyValues->GetName(), "RestartLevel" ) )
 	{
 		OnRestartLevel();
 		return;
 	}
+
 }
 
 
@@ -1155,13 +1196,12 @@ void CCommEditTool::SetupFileOpenDialog( vgui::FileOpenDialog *pDialog, bool bOp
 //-----------------------------------------------------------------------------
 // Can we quit?
 //-----------------------------------------------------------------------------
-bool CCommEditTool::CanQuit()
+bool CCommEditTool::CanQuit( const char *pExitMsg )
 {
 	if ( m_pDoc && m_pDoc->IsDirty() )
 	{
 		// Show Save changes Yes/No/Cancel and re-quit if hit yes/no
-		SaveFile( m_pDoc->GetTXTFileName(), "txt", FOSM_SHOW_PERFORCE_DIALOGS | FOSM_SHOW_SAVE_QUERY, 
-			new KeyValues( "OnQuit" ) );
+		SaveFile( m_pDoc->GetTXTFileName(), "txt", FOSM_SHOW_PERFORCE_DIALOGS | FOSM_SHOW_SAVE_QUERY, new KeyValues( pExitMsg ) );
 		return false;
 	}
 

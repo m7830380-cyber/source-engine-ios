@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2005, Valve Corporation, All rights reserved. =======//
 //
 // Purpose: base class for all element attribute panels
 //    An attribute panel is a one line widget that can be used by a list
@@ -181,20 +181,6 @@ void CBaseAttributePanel::ApplySchemeSettings( IScheme *pScheme )
 }
 
 //-----------------------------------------------------------------------------
-// Returns the panel element
-//-----------------------------------------------------------------------------
-CDmElement *CBaseAttributePanel::GetPanelElement()
-{
-	return m_hObject;
-}
-
-const CDmElement *CBaseAttributePanel::GetPanelElement() const
-{
-	return m_hObject;
-}
-
-
-//-----------------------------------------------------------------------------
 // Gets/Sets the attribute value from a string
 //-----------------------------------------------------------------------------
 void CBaseAttributePanel::SetAttributeValueFromString( const char *pString )
@@ -210,18 +196,34 @@ void CBaseAttributePanel::SetAttributeValueFromString( const char *pString )
 	}
 }
 
-const char *CBaseAttributePanel::GetAttributeValueAsString( char *pBuf, int nLength )
+bool CBaseAttributePanel::GetAttributeValueAsString( char *pBuf, int nLength )
 {
+	CDmElement *pElement = m_hObject.Get();
+	if ( !pElement )
+	{
+		*pBuf = '\0';
+		return false;
+	}
+
 	if ( m_nArrayIndex < 0 )
 	{
-		GetPanelElement()->GetValueAsString( m_szAttributeName, pBuf, nLength );
+		pElement->GetValueAsString( m_szAttributeName, pBuf, nLength );
 	}
 	else
 	{
-		CDmrGenericArray array( GetPanelElement(), m_szAttributeName );
+		CDmrGenericArray array( pElement, m_szAttributeName );
 		array.GetAsString( m_nArrayIndex, pBuf, nLength );
 	}
-	return pBuf;
+	return true;
+}
+
+CDmAttribute *CBaseAttributePanel::GetAttribute()
+{
+	CDmElement *pElement = m_hObject.Get();
+	if ( !pElement )
+		return NULL;
+
+	return pElement->GetAttribute( m_szAttributeName );
 }
 
 
@@ -269,6 +271,16 @@ int CBaseAttributePanel::GetSizeForColumn( Panel *panel )
 	return m_ColumnSize[ idx ].width;
 }
 
+void CBaseAttributePanel::GetPickerBounds( int *x, int *y, int *w, int *h )
+{
+	int viewX, viewY, viewWidth, viewHeight;
+	GetBounds( viewX, viewY, viewWidth, viewHeight );
+
+	*x = ColumnBorderWidth;
+	*w = PickerWidth;
+	*y = MAX(0, ceil((viewHeight - PickerHeight) * 0.5)) + 1;
+	*h = PickerHeight;
+}
 
 //-----------------------------------------------------------------------------
 // Creates a widget using editor attribute info
@@ -277,56 +289,42 @@ void CBaseAttributePanel::PerformLayout()
 {
 	BaseClass::PerformLayout();
 	
-	CUtlVector< Panel * >	vispanels;
-
-	if ( HasFlag( HIDETYPE ) )
+	vgui::Panel *valuePanel = GetDataPanel();
+	if ( valuePanel && HasFlag( HIDEVALUE ) )
 	{
-		m_pType->SetVisible( false );
-	}
-	else
-	{
-		vispanels.AddToTail( m_pType );
-	}
-
-	vgui::Panel *dataPanel = GetDataPanel();
-	if ( dataPanel )
-	{
-		if ( HasFlag( HIDEVALUE ) )
-		{
-			dataPanel->SetVisible( false );
-		}
-		else
-		{
-			vispanels.AddToTail( dataPanel );
-		}
+		valuePanel->SetVisible( false );
 	}
 	
-	int c = vispanels.Count();
-
-	Assert( c >= 0 );
-	if ( c == 0 )
+	vgui::Panel *typePanel = m_pType;
+	if ( typePanel && HasFlag( HIDETYPE ) )
 	{
-		return;
+		typePanel->SetVisible( false );
+		
 	}
 
-	int w, h;
-	GetSize( w, h );
+	int viewWidth, viewHeight;
+	GetSize( viewWidth, viewHeight );
 
-	int x = 1;
-	int y = 0;
-	w-= 2;
-
-	for ( int i = 0; i < c; ++i )
+	if( typePanel->IsVisible() && valuePanel->IsVisible() )
 	{
-		Panel *panel = vispanels[ i ];
-		int width = GetSizeForColumn( panel );
-		if ( i == c - 1 )
-		{
-			width = w - x;
-		}
-
-		panel->SetBounds( x, y, width, h );
-		x += width;
+		valuePanel->SetBounds( 
+			FirstColumnWidth, 
+			1, 
+			viewWidth - FirstColumnWidth - ColumnBorderWidth - TypeColumnWidth - ColumnBorderWidth,
+			viewHeight );
+		typePanel->SetBounds( 
+			viewWidth - TypeColumnWidth, 
+			1, 
+			TypeColumnWidth,
+			viewHeight );
+	}
+	else if( typePanel->IsVisible() )
+	{
+		typePanel->SetBounds( FirstColumnWidth, 1, viewWidth - FirstColumnWidth - ColumnBorderWidth - ColumnBorderWidth, viewHeight);	
+	}
+	else if( valuePanel->IsVisible() )
+	{
+		valuePanel->SetBounds( FirstColumnWidth, 1, viewWidth - FirstColumnWidth - ColumnBorderWidth - ColumnBorderWidth, viewHeight);
 	}
 }
 

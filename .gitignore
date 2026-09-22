@@ -40,3 +40,8 @@ source-engine.sln
 # game/server/tf/bot/behavior/scenario/payload/).
 build/ios/Payload/
 *.ipa
+
+# generated at build time by protoc 2.5.0 (see wscript _gen_protos)
+generated_proto/
+# iOS deps prefix built by scripts/ios/build-deps.sh
+/lib/

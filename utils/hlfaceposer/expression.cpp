@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -63,7 +63,7 @@ CExpression::CExpression( const CExpression& from )
 
 	m_bModified = from.m_bModified;
 
-	for ( i = 0 ; i < from.undo.Size(); i++ )
+	for ( i = 0 ; i < from.undo.Count(); i++ )
 	{
 		CExpUndoInfo *newUndo = new CExpUndoInfo();
 		*newUndo = *from.undo[ i ];
@@ -168,7 +168,7 @@ bool CExpression::GetSelected( void )
 void CExpression::ResetUndo( void )
 {
 	CExpUndoInfo *u;
-	for ( int i = 0; i < undo.Size(); i++ )
+	for ( int i = 0; i < undo.Count(); i++ )
 	{
 		u = undo[ i ];
 		delete u;
@@ -184,7 +184,7 @@ void CExpression::ResetUndo( void )
 //-----------------------------------------------------------------------------
 bool CExpression::CanRedo( void )
 {
-	if ( !undo.Size() )
+	if ( !undo.Count() )
 		return false;
 
 	if ( m_nUndoCurrent == 0 )
@@ -199,10 +199,10 @@ bool CExpression::CanRedo( void )
 //-----------------------------------------------------------------------------
 bool CExpression::CanUndo( void )
 {
-	if ( !undo.Size() )
+	if ( !undo.Count() )
 		return false;
 
-	if ( m_nUndoCurrent >= undo.Size() )
+	if ( m_nUndoCurrent >= undo.Count() )
 		return false;
 
 	return true;
@@ -213,7 +213,7 @@ bool CExpression::CanUndo( void )
 //-----------------------------------------------------------------------------
 int	CExpression::UndoLevels( void )
 {
-	return undo.Size();
+	return undo.Count();
 }
 
 //-----------------------------------------------------------------------------
@@ -235,10 +235,10 @@ CRC32_t	CExpression::GetBitmapCRC()
 	float *w = weight;
 
 	// Note, we'll use the pristine values if this has changed
-	if ( undo.Size() >= 1 )
+	if ( undo.Count() >= 1 )
 	{
-		s = undo[ undo.Size() - 1 ]->setting;
-		w = undo[ undo.Size() - 1 ]->weight;
+		s = undo[ undo.Count() - 1 ]->setting;
+		w = undo[ undo.Count() - 1 ]->weight;
 	}
 
 	// This walks the global controllers sorted by name and only includes values with a setting or value which is != 0.0f
@@ -324,7 +324,7 @@ void CExpression::CreateNewBitmap( int modelindex )
 		return;
 
 	char filename[ 256 ];
-	V_strcpy_safe( filename, GetBitmapFilename( modelindex ) );
+	strcpy( filename, GetBitmapFilename( modelindex ) );
 	if ( !Q_strstr( filename, ".bmp" ) )
 		return;
 
@@ -362,7 +362,7 @@ void CExpression::PushUndoInformation( void )
 //-----------------------------------------------------------------------------
 void CExpression::PushRedoInformation( void )
 {
-	Assert( undo.Size() >= 1 );
+	Assert( undo.Count() >= 1 );
 
 	CExpUndoInfo *redo = undo[ 0 ];
 	memcpy( redo->redosetting, setting, GLOBAL_STUDIO_FLEX_CONTROL_COUNT * sizeof( float ) );
@@ -378,7 +378,7 @@ void CExpression::Undo( void )
 	if ( !CanUndo() )
 		return;
 
-	Assert( m_nUndoCurrent < undo.Size() );
+	Assert( m_nUndoCurrent < undo.Count() );
 
 	CExpUndoInfo *u = undo[ m_nUndoCurrent++ ];
 	Assert( u );
@@ -397,7 +397,7 @@ void CExpression::Redo( void )
 		return;
 
 	Assert( m_nUndoCurrent >= 1 );
-	Assert( m_nUndoCurrent <= undo.Size() );
+	Assert( m_nUndoCurrent <= undo.Count() );
 
 	CExpUndoInfo *u = undo[ --m_nUndoCurrent ];
 	Assert( u );
@@ -434,11 +434,11 @@ void CExpression::Revert( void )
 {
 	SetDirty( false );
 
-	if ( undo.Size() <= 0 )
+	if ( undo.Count() <= 0 )
 		return;
 
 	// Go back to original data
-	CExpUndoInfo *u = undo[ undo.Size() - 1 ];
+	CExpUndoInfo *u = undo[ undo.Count() - 1 ];
 	Assert( u );
 
 	memcpy( setting, u->setting, GLOBAL_STUDIO_FLEX_CONTROL_COUNT * sizeof( float ) );

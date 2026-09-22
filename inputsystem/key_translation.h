@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -28,11 +28,12 @@ int ButtonCode_ButtonCodeToVirtualKey( ButtonCode_t code );
 
 ButtonCode_t ButtonCode_XKeyToButtonCode( int nPort, int keyCode );
 
+ButtonCode_t ButtonCode_SKeyToButtonCode( int nPort, int keyCode );
+
 // Convert back + forth between ButtonCode/AnalogCode + strings
 const char *ButtonCode_ButtonCodeToString( ButtonCode_t code, bool bXController );
 const char *AnalogCode_AnalogCodeToString( AnalogCode_t code );
 ButtonCode_t ButtonCode_StringToButtonCode( const char *pString, bool bXController );
 AnalogCode_t AnalogCode_StringToAnalogCode( const char *pString );
-ButtonCode_t ButtonCode_SKeyToButtonCode( int nPort, int keyCode );
 
 #endif // KEY_TRANSLATION_H

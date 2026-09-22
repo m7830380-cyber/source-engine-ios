@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 2005-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: Helper methods + classes for file access
 //
@@ -10,9 +10,12 @@
 #include "studio.h"
 #include "../game/shared/choreoscene.h"
 #include "../game/shared/choreoevent.h"
-#include "tier1/KeyValues.h"
+#include "tier1/keyvalues.h"
 #include "bone_setup.h"
 #include "soundchars.h"
+
+// NOTE: This has to be the last file included!
+#include "tier0/memdbgon.h"
 
 
 //-----------------------------------------------------------------------------
@@ -20,12 +23,7 @@
 //-----------------------------------------------------------------------------
 static int LookupSequence( CStudioHdr *pStudioHdr, const char *pSequenceName )
 {
-	for ( int i = 0; i < pStudioHdr->GetNumSeq(); i++ )
-	{
-		if ( !Q_stricmp( pSequenceName, pStudioHdr->pSeqdesc( i ).pszLabel() ) )
-			return i;
-	}
-	return -1;
+	return pStudioHdr->LookupSequence( pSequenceName );
 }
 
 
@@ -62,7 +60,7 @@ bool AutoAddGestureKeys( CChoreoEvent *e, CStudioHdr *pStudioHdr, float *pPosePa
 		return false;
 
 	KeyValues *pSeqKeyValues = new KeyValues( "" );
-	if ( !pSeqKeyValues->LoadFromBuffer( pStudioHdr->pszName(), Studio_GetKeyValueText( pStudioHdr, iSequence ) ) )
+	if ( !pSeqKeyValues->LoadFromBuffer( pStudioHdr->name(), Studio_GetKeyValueText( pStudioHdr, iSequence ) ) )
 	{
 		pSeqKeyValues->deleteThis();
 		return false;
@@ -342,6 +340,6 @@ const char *GetSoundForEvent( CChoreoEvent *pEvent, CStudioHdr *pStudioHdr )
 	if ( Q_stristr( pSoundName, ".wav" ) )
 		return PSkipSoundChars( pSoundName );
 
-	const char *pFileName = g_pSoundEmitterSystem->GetWavFileForSound( pSoundName, ( pStudioHdr && pStudioHdr->IsValid() ) ? pStudioHdr->pszName() : NULL );
+	const char *pFileName = g_pSoundEmitterSystem->GetWavFileForSound( pSoundName, ( pStudioHdr && pStudioHdr->IsValid() ) ? pStudioHdr->name() : NULL );
 	return PSkipSoundChars( pFileName );
 }

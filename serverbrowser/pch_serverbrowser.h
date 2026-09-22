@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright 1996-2001, Valve LLC, All rights reserved. ============
 //
 // Purpose: 
 //
@@ -26,6 +26,7 @@
 #include "tier3/tier3.h"
 
 // steam3 API
+//#include "steam/isteammasterserverupdater.h"
 //#include "steam/steam_querypackets.h"
 #include "steam/steam_api.h"
 #include "steam/isteamuser.h"
@@ -57,19 +58,18 @@
 
 // game list
 #include "BaseGamesPage.h"
+#include "blacklistedservers.h"
 #include "InternetGames.h"
 #include "FavoriteGames.h"
-//#include "SpectateGames.h"
+#include "SpectateGames.h"
 #include "LanGames.h"
+#include "FriendsGames.h"
 #include "HistoryGames.h"
+#include "SpectateGames.h"
+#include "CustomGames.h"
 #include "ServerBrowserDialog.h"
-#include "QuickListPanel.h"
+#include "quicklistpanel.h"
 #include "vgui_controls/PanelListPanel.h"
-
-#include "replay/ienginereplay.h"
-
-extern bool GameSupportsReplay();
-extern bool IsReplayServer( newgameserver_t &server );
 
 #pragma warning( disable: 4355 )  //  warning C4355: 'this' : used in base member initializer list
 

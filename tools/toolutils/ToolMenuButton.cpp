@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2005, Valve Corporation, All rights reserved. =======
 //
 // Purpose: Core Movie Maker UI API
 //
@@ -99,6 +99,11 @@ int CToolMenuButton::FindMenuItem( char const *itemName )
 	if ( id == m_Items.InvalidIndex() )
 		return -1;
 	return m_Items[ id ].m_ItemID;
+}
+
+MenuItem *CToolMenuButton::GetMenuItem( int itemID )
+{
+	return m_pMenu->GetMenuItem( itemID );
 }
 
 void CToolMenuButton::AddSeparatorAfterItem( char const *itemName )

@@ -6,33 +6,20 @@
 
 $IgnoreRedundancyWarning	"ON"
 
-// Disable frame pointer omission to allow fast stack walking, necessary for
-// good ETW profiling.
-$Conditional  NOFPO  "1"
-
 $MacroRequired				"SRCDIR"
 $MacroRequired				"OUTBINNAME"
 $MacroRequired				"OUTBINDIR"
 $MacroRequired				"LIBPUBLIC"
 $MacroRequired				"LIBCOMMON"
 $MacroRequired				"PLATSUBDIR"
-$MacroRequiredAllowEmpty	"GAMENAME"
-$MacroRequiredAllowEmpty	"INTERMEDIATESUBDIR"
-$MacroRequiredAllowEmpty	"_UNITYSUBDIR"
-$MacroRequiredAllowEmpty	"_STATICSUBDIR"
-$Macro						"_SUBDIRSUFFIX"		"$INTERMEDIATESUBDIR$_STATICSUBDIR$GAMENAME$PLATSUBDIR$_UNITYSUBDIR"
 
 $Configuration "Release"
 {
 	$General
 	{
 		// General
-		$OutputDirectory					".\Release$_SUBDIRSUFFIX"	[!$RETAIL && !$PROFILE]
-		$IntermediateDirectory				".\Release$_SUBDIRSUFFIX"	[!$RETAIL && !$PROFILE]
-		$OutputDirectory					".\Retail$_SUBDIRSUFFIX"	[$RETAIL]
-		$IntermediateDirectory				".\Retail$_SUBDIRSUFFIX"	[$RETAIL]
-		$OutputDirectory					".\Profile$_SUBDIRSUFFIX"	[!$RETAIL && $PROFILE]
-		$IntermediateDirectory				".\Profile$_SUBDIRSUFFIX"	[!$RETAIL && $PROFILE]
+		$OutputDirectory						".\Release$PLATSUBDIR"
+		$IntermediateDirectory					".\Release$PLATSUBDIR"
 		$ExtensionsToDeleteOnClean
 		$BuildLogFile
 		$InheritedProjectPropertySheets
@@ -68,6 +55,7 @@ $Configuration "Release"
 		$DebugInformationFormat					"Program Database (/Zi)"
 		$SuppressStartupBanner
 		$WarningLevel							"Level 4 (/W4)"
+		$Detect64bitPortabilityIssues			"Yes (/Wp64)"
 		$TreatWarningsAsErrors
 		$UseUnicodeResponseFiles
 
@@ -82,7 +70,6 @@ $Configuration "Release"
 
 		// Preprocessor
 		$PreprocessorDefinitions				"$BASE;WIN32;_WIN32;NDEBUG;_WINDOWS;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE;_ALLOW_RUNTIME_LIBRARY_MISMATCH;_ALLOW_ITERATOR_DEBUG_LEVEL_MISMATCH;_ALLOW_MSC_VER_MISMATCH;%(PreprocessorDefinitions)"
-		$PreprocessorDefinitions				"$BASE;RELEASEASSERTS" [$RELEASEASSERTS]
 		$IgnoreStandardIncludePath
 		$GeneratePreprocessedFile
 		$KeepComments
@@ -95,8 +82,7 @@ $Configuration "Release"
 		$BasicRuntimeChecks
 		$RuntimeLibrary							"Multi-threaded (/MT)"
 		$StructMemberAlignment
-		$BufferSecurityCheck					"No"	[$RETAIL]
-		$BufferSecurityCheck					"Yes"	[!$RETAIL]
+		$BufferSecurityCheck					"No" [$WINDOWS]
 		$EnableFunctionLevelLinking				"Yes (/Gy)"
 		$EnableEnhancedInstructionSet
 		$FloatingPointModel						"Fast (/fp:fast)"
@@ -137,16 +123,13 @@ $Configuration "Release"
 		$ShowIncludes
 		$UndefinePreprocessorDefinitions
 		$UndefineAllPreprocessorDefinitions
-		$UseFullPaths							"Yes (/FC)"
+		$UseFullPaths
 		$OmitDefaultLibraryNames
 		$ErrorReporting							"Prompt Immediately (/errorReport:prompt)"
 
-		// Enable extra debugging information. This switch requires VS 2013 Update 3.
-		// With VS 2013 make sure that Edit-And-Continue is disabled in the debugger settings so that
-		// the debugger uses the enhanced debug information.
-		// http://randomascii.wordpress.com/2013/09/11/debugging-optimized-codenew-in-visual-studio-2012/
-		$AdditionalOptions					"$BASE /Zo"
 		// Command Line
+		// Enable extra debugging information.
+		$AdditionalOptions						"$BASE /d2Zi+"
 		$AdditionalOptions						"$BASE /Oy-"	[$NOFPO]
 	}
 
@@ -168,7 +151,7 @@ $Configuration "Release"
 		// Input
 		$AdditionalDependencies
 		$IgnoreAllDefaultLibraries
-		$IgnoreSpecificLibrary					"libc;libcd;libcmtd;libcpmtd;libcpmtd0;libcpmtd1"
+		$IgnoreSpecificLibrary					"libc;libcd;libcmtd"
 		$ModuleDefinitionFile
 		$AddModuleToAssembly
 		$EmbedManagedResourceFile
@@ -181,7 +164,6 @@ $Configuration "Release"
 		$ManifestFile
 		$AdditionalManifestDependencies
 		$AllowIsolation
-		$UACExecutionLevel
 
 		// Debugging
 		$GenerateDebugInfo						"Yes (/DEBUG)"
@@ -202,22 +184,9 @@ $Configuration "Release"
 		$SwapRunFromNetwork
 		$Driver
 
-		// RandomizeBaseAddress (/DYNAMICBASE, /ASLR) is a hugely important security setting.
-		// However it can cause confusion during development and can make tracking down certain
-		// bugs tricky by making code/stack/heap addresses change between runs. Enable for retail,
-		// but disable for development builds.
-		$RandomizedBaseAddress				"true" [$RETAIL]
-		$RandomizedBaseAddress				"false" [!$RETAIL]
-
 		// Optimization
 		$References							"Eliminate Unreferenced Data (/OPT:REF)"
-		// COMDAT folding can be very confusing when debugging and profiling because it can
-		// cause execution to go through nonsensical functions (that happen to be binary
-		// equivalent to the logical function). The performance benefit is small enough that
-		// it is not worth enabling in the development builds. It should be enabled on retail
-		// builds.
-		$EnableCOMDATFolding				"Remove Redundant COMDATs (/OPT:ICF)" [$RETAIL]
-		$EnableCOMDATFolding				"No (/OPT:NOICF)" [!$RETAIL]
+		$EnableCOMDATFolding				"Remove Redundant COMDATs (/OPT:ICF)"
 		$OptimizeForWindows98
 		$FunctionOrder
 		$ProfileGuidedDatabase
@@ -235,7 +204,7 @@ $Configuration "Release"
 		$NoEntryPoint
 		$SetChecksum
 		$BaseAddress							"$LOADADDRESS_DEVELOPMENT"
-		//$BaseAddress							"$LOADADDRESS_RETAIL" [$RETAIL]
+		$BaseAddress							"$LOADADDRESS_RETAIL" [$RETAIL]
 		$FixedBaseAddress
 		$TurnOffAssemblyGeneration
 		$DelayLoadedDLL
@@ -254,7 +223,8 @@ $Configuration "Release"
 		$ImageHasSafeExceptionHandlers		"false"
 
 		// Command Line
-		$AdditionalOptions						
+		// This undocumented linker command-line option improves LTCG build speeds slightly.
+		$AdditionalOptions					"$BASE /d2:-threads8" [$VS2013 && $LTCG]
 	}
 
 	$ManifestTool
@@ -310,7 +280,7 @@ $Configuration "Release"
 	$Resources
 	{
 		// General
-		$PreprocessorDefinitions				"NDEBUG;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE;%(PreprocessorDefinitions)"
+		$PreprocessorDefinitions				"$BASE;NDEBUG;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE;%(PreprocessorDefinitions)"
 		$Culture								"English (United States) (0x409)"
 		$AdditionalIncludeDirectories
 		$IgnoreStandardIncludePath

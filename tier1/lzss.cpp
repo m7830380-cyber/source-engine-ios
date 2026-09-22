@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2007, Valve Corporation, All rights reserved. ============//
 //
 //	LZSS Codec. Designed for fast cheap gametime encoding/decoding. Compression results
 //	are	not aggresive as other alogrithms, but gets 2:1 on most arbitrary uncompressed data.
@@ -7,8 +7,6 @@
 
 #include "tier0/platform.h"
 #include "tier0/dbg.h"
-#include "tier0/vprof.h"
-#include "tier0/etwprof.h"
 #include "tier1/lzss.h"
 #include "tier1/utlbuffer.h"
 
@@ -21,7 +19,7 @@
 //-----------------------------------------------------------------------------
 // Returns true if buffer is compressed.
 //-----------------------------------------------------------------------------
-bool CLZSS::IsCompressed( const unsigned char *pInput )
+bool CLZSS::IsCompressed( unsigned char *pInput )
 {
 	lzss_header_t *pHeader = (lzss_header_t *)pInput;
 	if ( pHeader && pHeader->id == LZSS_ID )
@@ -37,7 +35,7 @@ bool CLZSS::IsCompressed( const unsigned char *pInput )
 // Returns uncompressed size of compressed input buffer. Used for allocating output
 // buffer for decompression. Returns 0 if input buffer is not compressed.
 //-----------------------------------------------------------------------------
-unsigned int CLZSS::GetActualSize( const unsigned char *pInput )
+unsigned int CLZSS::GetActualSize( unsigned char *pInput )
 {
 	lzss_header_t *pHeader = (lzss_header_t *)pInput;
 	if ( pHeader && pHeader->id == LZSS_ID )
@@ -49,12 +47,12 @@ unsigned int CLZSS::GetActualSize( const unsigned char *pInput )
 	return 0;
 }
 
-void CLZSS::BuildHash( const unsigned char *pData )
+void CLZSS::BuildHash( unsigned char *pData )
 {
 	lzss_list_t *pList;
 	lzss_node_t *pTarget;
 
-	intp targetindex = (intp)pData & ( m_nWindowSize - 1 );
+	int targetindex = (unsigned int)( uintp( pData ) & 0xFFFFFFFF ) & ( m_nWindowSize - 1 );
 	pTarget = &m_pHashTarget[targetindex];
 	if ( pTarget->pData )
 	{
@@ -86,14 +84,12 @@ void CLZSS::BuildHash( const unsigned char *pData )
 	pList->pStart = pTarget;
 }
 
-unsigned char *CLZSS::CompressNoAlloc( const unsigned char *pInput, int inputLength, unsigned char *pOutputBuf, unsigned int *pOutputSize )
+unsigned char *CLZSS::CompressNoAlloc( unsigned char *pInput, int inputLength, unsigned char *pOutputBuf, unsigned int *pOutputSize )
 {
 	if ( inputLength <= sizeof( lzss_header_t ) + 8 )
 	{
 		return NULL;
 	}
-	VPROF( "CLZSS::CompressNoAlloc" );
-	ETWMark1I("CompressNoAlloc", inputLength );
 
 	// create the compression work buffers, small enough (~64K) for stack
 	m_pHashTable = (lzss_list_t *)stackalloc( 256 * sizeof( lzss_list_t ) );
@@ -112,9 +108,9 @@ unsigned char *CLZSS::CompressNoAlloc( const unsigned char *pInput, int inputLen
 	pHeader->actualSize = LittleLong( inputLength );
 
 	unsigned char *pOutput = pStart + sizeof (lzss_header_t);
-	const unsigned char *pLookAhead = pInput; 
-	const unsigned char *pWindow = pInput;
-	const unsigned char *pEncodedPosition = NULL;
+	unsigned char *pLookAhead = pInput; 
+	unsigned char *pWindow = pInput;
+	unsigned char *pEncodedPosition = NULL;
 	unsigned char *pCmdByte = NULL;
 	int putCmdByte = 0;
 
@@ -216,7 +212,7 @@ unsigned char *CLZSS::CompressNoAlloc( const unsigned char *pInput, int inputLen
 // Compress an input buffer. Caller must free output compressed buffer.
 // Returns NULL if compression failed (i.e. compression yielded worse results)
 //-----------------------------------------------------------------------------
-unsigned char* CLZSS::Compress( const unsigned char *pInput, int inputLength, unsigned int *pOutputSize )
+unsigned char* CLZSS::Compress( unsigned char *pInput, int inputLength, unsigned int *pOutputSize )
 {
 	unsigned char *pStart = (unsigned char *)malloc( inputLength );
 	unsigned char *pFinal = CompressNoAlloc( pInput, inputLength, pStart, pOutputSize );
@@ -294,61 +290,59 @@ unsigned int CLZSS::Uncompress( unsigned char *pInput, CUtlBuffer &buf )
 }
 */
 
-unsigned int CLZSS::SafeUncompress( const unsigned char *pInput, unsigned int inputSize, unsigned char *pOutput, unsigned int unBufSize )
+unsigned int CLZSS::SafeUncompress( unsigned char *pInput, unsigned char *pOutput, unsigned int unBufSize )
 {
 	unsigned int totalBytes = 0;
 	int cmdByte = 0;
 	int getCmdByte = 0;
 
 	unsigned int actualSize = GetActualSize( pInput );
-
-	if ( !actualSize ||
-		actualSize > unBufSize ||
-		inputSize <= sizeof( lzss_header_t ) )
+	if ( !actualSize )
+	{
+		// unrecognized
 		return 0;
+	}
 
-	const unsigned char *pInputEnd = pInput+inputSize-1;
-	const unsigned char *pOrigOutput = pOutput;
+	if ( actualSize > unBufSize )
+	{
+		return 0;
+	}
 
 	pInput += sizeof( lzss_header_t );
 
 	for ( ;; )
 	{
-		if ( !getCmdByte )
+		if ( !getCmdByte ) 
 		{
-			if( pInput > pInputEnd )
-				return 0;
-
 			cmdByte = *pInput++;
 		}
 		getCmdByte = ( getCmdByte + 1 ) & 0x07;
 
 		if ( cmdByte & 0x01 )
 		{
-			if( pInput+1 > pInputEnd )
-				return 0;
-
 			int position = *pInput++ << LZSS_LOOKSHIFT;
 			position |= ( *pInput >> LZSS_LOOKSHIFT );
 			int count = ( *pInput++ & 0x0F ) + 1;
-			if ( count == 1 )
+			if ( count == 1 ) 
+			{
 				break;
-
+			}
 			unsigned char *pSource = pOutput - position - 1;
 
-			if ( totalBytes + count > unBufSize ||
-				pSource < pOrigOutput )
+			if ( totalBytes + count > unBufSize )
+			{
 				return 0;
+			}
 
 			for ( int i=0; i<count; i++ )
+			{
 				*pOutput++ = *pSource++;
-
+			}
 			totalBytes += count;
-		}
-		else
+		} 
+		else 
 		{
-			if ( totalBytes + 1 > unBufSize ||
-				pInput > pInputEnd )
+			if ( totalBytes + 1 > unBufSize )
 				return 0;
 
 			*pOutput++ = *pInput++;
@@ -371,7 +365,7 @@ unsigned int CLZSS::SafeUncompress( const unsigned char *pInput, unsigned int in
 // Uncompress a buffer, Returns the uncompressed size. Caller must provide an
 // adequate sized output buffer or memory corruption will occur.
 //-----------------------------------------------------------------------------
-unsigned int CLZSS::Uncompress( const unsigned char *pInput, unsigned char *pOutput )
+unsigned int CLZSS::Uncompress( unsigned char *pInput, unsigned char *pOutput )
 {
 	unsigned int totalBytes = 0;
 	int cmdByte = 0;

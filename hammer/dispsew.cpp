@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -13,7 +13,7 @@
 #include "GlobalFunctions.h"
 #include "MapDisp.h"
 #include "MapFace.h"
-#include "utlvector.h"
+#include "UtlVector.h"
 #include "disp_tesselate.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
@@ -352,6 +352,22 @@ void AverageVectorFieldData( CMapDisp *pDisp1, int ndx1, CMapDisp *pDisp2, int n
 		pDisp2->SetAlpha( ndx2, flAlphaBlend );
 	}
 
+	// average the multiblends
+	// should this check for the same texture, or maybe just blend the first two channels?  or check for same sub textures?
+	Vector4D	vMultiBlendA, vMultiBlendB;
+	Vector4D	vAlphaBlendA, vAlphaBlendB;
+	Vector		vColorA[ MAX_MULTIBLEND_CHANNELS], vColorB[ MAX_MULTIBLEND_CHANNELS ];
+	pDisp1->GetMultiBlend( ndx1, vMultiBlendA, vAlphaBlendA, vColorA[ 0 ], vColorA[ 1 ], vColorA[ 2 ], vColorA[ 3 ] );
+	pDisp2->GetMultiBlend( ndx2, vMultiBlendB, vAlphaBlendB, vColorB[ 0 ], vColorB[ 1 ], vColorB[ 2 ], vColorB[ 3 ] );
+	vMultiBlendA = ( vMultiBlendA + vMultiBlendB ) * 0.5f;
+	vMultiBlendA = ( vMultiBlendA + vMultiBlendB ) * 0.5f;
+	vColorA[ 0 ] = ( vColorA[ 0 ] + vColorB[ 0 ] ) * 0.5f;
+	vColorA[ 1 ] = ( vColorA[ 1 ] + vColorB[ 1 ] ) * 0.5f;
+	vColorA[ 2 ] = ( vColorA[ 2 ] + vColorB[ 2 ] ) * 0.5f;
+	vColorA[ 3 ] = ( vColorA[ 3 ] + vColorB[ 3 ] ) * 0.5f;
+	pDisp1->SetMultiBlend( ndx1, vMultiBlendA, vAlphaBlendA, vColorA[ 0 ], vColorA[ 1 ], vColorA[ 2 ], vColorA[ 3 ] );
+	pDisp2->SetMultiBlend( ndx2, vMultiBlendA, vAlphaBlendA, vColorA[ 0 ], vColorA[ 1 ], vColorA[ 2 ], vColorA[ 3 ] );
+
 	//
 	// average the subdivion positions and normals
 	//
@@ -417,6 +433,22 @@ void BlendVectorFieldData( CMapDisp *pDisp1, int ndxSrc1, int ndxDst1,
 		pDisp1->SetAlpha( ndxDst1, flAlphaBlend );
 		pDisp2->SetAlpha( ndxDst2, flAlphaBlend );
 	}
+
+	// average the multiblends
+	// should this check for the same texture, or maybe just blend the first two channels?  or check for same sub textures?
+	Vector4D	vMultiBlendA, vMultiBlendB;
+	Vector4D	vAlphaBlendA, vAlphaBlendB;
+	Vector		vColorA[ MAX_MULTIBLEND_CHANNELS], vColorB[ MAX_MULTIBLEND_CHANNELS ];
+	pDisp1->GetMultiBlend( ndxDst1, vMultiBlendA, vAlphaBlendA, vColorA[ 0 ], vColorA[ 1 ], vColorA[ 2 ], vColorA[ 3 ] );
+	pDisp2->GetMultiBlend( ndxDst2, vMultiBlendB, vAlphaBlendB, vColorB[ 0 ], vColorB[ 1 ], vColorB[ 2 ], vColorB[ 3 ] );
+	vMultiBlendA = ( vMultiBlendA + vMultiBlendB ) * 0.5f;
+	vAlphaBlendA = ( vAlphaBlendA + vAlphaBlendB ) * 0.5f;
+	vColorA[ 0 ] = ( vColorA[ 0 ] + vColorB[ 0 ] ) * 0.5f;
+	vColorA[ 1 ] = ( vColorA[ 1 ] + vColorB[ 1 ] ) * 0.5f;
+	vColorA[ 2 ] = ( vColorA[ 2 ] + vColorB[ 2 ] ) * 0.5f;
+	vColorA[ 3 ] = ( vColorA[ 3 ] + vColorB[ 3 ] ) * 0.5f;
+	pDisp1->SetMultiBlend( ndxDst1, vMultiBlendA, vAlphaBlendA, vColorA[ 0 ], vColorA[ 1 ], vColorA[ 2 ], vColorA[ 3 ] );
+	pDisp2->SetMultiBlend( ndxDst2, vMultiBlendA, vAlphaBlendA, vColorA[ 0 ], vColorA[ 1 ], vColorA[ 2 ], vColorA[ 3 ] );
 
 	//
 	// blend subdivision positions and normals as before,
@@ -496,19 +528,19 @@ void PreFaceListSew( void )
 void PostFaceListSew( void )
 {
 	// Destroy all corners, midpoint, edges.
-	int count = s_CornerData.Size();
+	int count = s_CornerData.Count();
 	for( int i = 0; i < count; i++ )
 	{
 		SewCorner_Destroy( s_CornerData.Element( i ) );
 	}
 
-	count = s_TJData.Size();
+	count = s_TJData.Count();
 	for( int i = 0; i < count; i++ )
 	{
 		SewTJunc_Destroy( s_TJData.Element( i ) );
 	}
 	
-	count = s_EdgeData.Size();
+	count = s_EdgeData.Count();
 	for( int i = 0; i < count; i++ )
 	{
 		SewEdge_Destroy( s_EdgeData.Element( i ) );
@@ -614,7 +646,7 @@ void SewCorner_AddToList( SewCornerData_t *pCornerData )
 	//
 	// check to see if the corner point already exists in the corner data list
 	//
-	int cornerCount = s_CornerData.Size();
+	int cornerCount = s_CornerData.Count();
 
 	for( int i = 0; i < cornerCount; i++ )
 	{
@@ -738,12 +770,24 @@ void SewCorner_ResolveDisp( SewCornerData_t *pCornerData )
 	Vector vAvgSubdivNormal( 0.0f, 0.0f, 0.0f );
 	float flAvgAlpha = 0.0f;
 
+	Vector4D	vAvgMultiBlend, vAvgAlphaBlend;
+	Vector		vAvgColor1, vAvgColor2, vAvgColor3, vAvgColor4;
+
+	vAvgMultiBlend.Init();
+	vAvgAlphaBlend.Init();
+	vAvgColor1.Init();
+	vAvgColor2.Init();
+	vAvgColor3.Init();
+	vAvgColor4.Init();
+
+	int i;
+
 	// Blend the alpha?
 	bool bBlendAlpha = true;
 	char szMatName1[128];
 	char szMatName2[128];
 	bool bInitMat = false;
-	for( int i = 0; i < pCornerData->faceCount; i++ )
+	for( i = 0; i < pCornerData->faceCount; i++ )
 	{
 		// get the current corner face
 		CMapFace *pFace = pCornerData->pFaces[i];
@@ -773,7 +817,7 @@ void SewCorner_ResolveDisp( SewCornerData_t *pCornerData )
 	}
 
 	// for all the faces at the corner
-	for( int i = 0; i < pCornerData->faceCount; i++ )
+	for( i = 0; i < pCornerData->faceCount; i++ )
 	{
 		// get the current corner face
 		CMapFace *pFace = pCornerData->pFaces[i];
@@ -812,6 +856,17 @@ void SewCorner_ResolveDisp( SewCornerData_t *pCornerData )
 		{
 			flAvgAlpha += pDisp->GetAlpha( ndxPt );
 		}
+
+		Vector4D	vMultiBlend, vAlphaBlend;
+		Vector		vColor1, vColor2, vColor3, vColor4;
+
+		pDisp->GetMultiBlend( ndxPt, vMultiBlend, vAlphaBlend, vColor1, vColor2, vColor3, vColor4 );
+		vAvgMultiBlend += vMultiBlend;
+		vAvgAlphaBlend += vAlphaBlend;
+		vAvgColor1 += vColor1;
+		vAvgColor2 += vColor2;
+		vAvgColor3 += vColor3;
+		vAvgColor4 += vColor4;
 	}
 
 	// calculate the average
@@ -823,6 +878,12 @@ void SewCorner_ResolveDisp( SewCornerData_t *pCornerData )
 	{
 		flAvgAlpha /= pCornerData->faceCount;
 	}
+	vAvgMultiBlend /= pCornerData->faceCount;
+	vAvgAlphaBlend /= pCornerData->faceCount;
+	vAvgColor1 /= pCornerData->faceCount;
+	vAvgColor2 /= pCornerData->faceCount;
+	vAvgColor3 /= pCornerData->faceCount;
+	vAvgColor4 /= pCornerData->faceCount;
 
 	for( int i = 0; i < pCornerData->faceCount; i++ )
 	{
@@ -852,6 +913,7 @@ void SewCorner_ResolveDisp( SewCornerData_t *pCornerData )
 		{
 			pDisp->SetAlpha( ndxPt, flAvgAlpha );
 		}
+		pDisp->SetMultiBlend( ndxPt, vAvgMultiBlend, vAvgAlphaBlend, vAvgColor1, vAvgColor2, vAvgColor3, vAvgColor4 );
 	}
 }
 
@@ -861,7 +923,12 @@ void SewCorner_ResolveDisp( SewCornerData_t *pCornerData )
 void SewCorner_ResolveSolid( SewCornerData_t *pCornerData )
 {
 	// create a clear vector - to reset the offset vector
-	Vector vClear( 0.0f, 0.0f, 0.0f );
+	Vector		vClear( 0.0f, 0.0f, 0.0f );
+	Vector		vSet( 1.0f, 1.0f, 1.0f );
+	Vector4D	vClearMultiBlend, vClearAlphaBlend;
+
+	vClearMultiBlend.Init();
+	vClearAlphaBlend.Init();
 
 	// for all the faces at the corner
 	for( int i = 0; i < pCornerData->faceCount; i++ )
@@ -895,6 +962,7 @@ void SewCorner_ResolveSolid( SewCornerData_t *pCornerData )
 		pDisp->SetSubdivPosition( ndxPt, vClear );
 		pDisp->SetSubdivNormal( ndxPt, vNormal );
 		pDisp->SetAlpha( ndxPt, 0.0f );
+		pDisp->SetMultiBlend( ndxPt, vClearMultiBlend, vClearAlphaBlend, vSet, vSet, vSet, vSet );
 	}
 }
 
@@ -904,7 +972,7 @@ void SewCorner_ResolveSolid( SewCornerData_t *pCornerData )
 void SewCorner_Resolve( void )
 {
 	// get the number of corners in the corner list
-	int cornerCount = s_CornerData.Size();
+	int cornerCount = s_CornerData.Count();
 
 	// resolve each corner
 	for( int i = 0; i < cornerCount; i++ )
@@ -1001,7 +1069,7 @@ void SewTJunc_AddToList( SewTJuncData_t *pTJData )
 	//
 	// check to see if the t-junction point already exists in the t-junction data list
 	//
-	int tjCount = s_TJData.Size();
+	int tjCount = s_TJData.Count();
 	for( int i = 0; i < tjCount; i++ )
 	{
 		// get the compare t-junction point
@@ -1123,6 +1191,15 @@ void SewTJunc_ResolveDisp( SewTJuncData_t *pTJData )
 	Vector vAvgSubdivPos( 0.0f, 0.0f, 0.0f );
 	Vector vAvgSubdivNormal( 0.0f, 0.0f, 0.0f );
 	float  flAvgAlpha = 0.0f;
+	Vector4D	vAvgMultiBlend, vAvgAlphaBlend;
+	Vector		vAvgColor1, vAvgColor2, vAvgColor3, vAvgColor4;
+
+	vAvgMultiBlend.Init();
+	vAvgAlphaBlend.Init();
+	vAvgColor1.Init();
+	vAvgColor2.Init();
+	vAvgColor3.Init();
+	vAvgColor4.Init();
 
 	// for all the faces at the t-junction
 	for( int i = 0; i < pTJData->faceCount; i++ )
@@ -1168,6 +1245,17 @@ void SewTJunc_ResolveDisp( SewTJuncData_t *pTJData )
 		vAvgSubdivNormal += vTmp;
 
 		flAvgAlpha += pDisp->GetAlpha( ndxPt );
+
+		Vector4D	vMultiBlend, vAlphaBlend;
+		Vector		vColor1, vColor2, vColor3, vColor4;
+
+		pDisp->GetMultiBlend( ndxPt, vMultiBlend, vAlphaBlend, vColor1, vColor2, vColor3, vColor4 );
+		vAvgMultiBlend += vMultiBlend;
+		vAvgAlphaBlend += vAlphaBlend;
+		vAvgColor1 += vColor1;
+		vAvgColor2 += vColor2;
+		vAvgColor3 += vColor3;
+		vAvgColor4 += vColor4;
 	}
 
 	// calculate the average
@@ -1176,6 +1264,12 @@ void SewTJunc_ResolveDisp( SewTJuncData_t *pTJData )
 	vAvgSubdivPos /= pTJData->faceCount;
 	vAvgSubdivNormal /= pTJData->faceCount;
 	flAvgAlpha /= pTJData->faceCount;
+	vAvgMultiBlend /= pTJData->faceCount;
+	vAvgAlphaBlend /= pTJData->faceCount;
+	vAvgColor1 /= pTJData->faceCount;
+	vAvgColor2 /= pTJData->faceCount;
+	vAvgColor3 /= pTJData->faceCount;
+	vAvgColor4 /= pTJData->faceCount;
 
 	for( int i = 0; i < pTJData->faceCount; i++ )
 	{
@@ -1212,6 +1306,7 @@ void SewTJunc_ResolveDisp( SewTJuncData_t *pTJData )
 		pDisp->SetSubdivPosition( ndxPt, vAvgSubdivPos );
 		pDisp->SetSubdivNormal( ndxPt, vAvgSubdivNormal );
 		pDisp->SetAlpha( ndxPt, flAvgAlpha );
+		pDisp->SetMultiBlend( ndxPt, vAvgMultiBlend, vAvgAlphaBlend, vAvgColor1, vAvgColor2, vAvgColor3, vAvgColor4 );
 	}
 }
 
@@ -1221,7 +1316,12 @@ void SewTJunc_ResolveDisp( SewTJuncData_t *pTJData )
 void SewTJunc_ResolveSolid( SewTJuncData_t *pTJData )
 {
 	// create a clear vector - to reset the offset vector
-	Vector vClear( 0.0f, 0.0f, 0.0f );
+	Vector		vClear( 0.0f, 0.0f, 0.0f );
+	Vector		vSet( 1.0f, 1.0f, 1.0f );
+	Vector4D	vClearMultiBlend, vClearAlphaBlend;
+
+	vClearMultiBlend.Init();
+	vClearAlphaBlend.Init();
 
 	// for all the faces at the t-junction
 	for( int i = 0; i < pTJData->faceCount; i++ )
@@ -1265,6 +1365,7 @@ void SewTJunc_ResolveSolid( SewTJuncData_t *pTJData )
 		pDisp->SetSubdivPosition( ndxPt, vClear );
 		pDisp->SetSubdivNormal( ndxPt, vNormal );
 		pDisp->SetAlpha( ndxPt, 0.0f );
+		pDisp->SetMultiBlend( ndxPt, vClearMultiBlend, vClearAlphaBlend, vSet, vSet, vSet, vSet );
 	}
 }
 
@@ -1275,7 +1376,7 @@ void SewTJunc_ResolveSolid( SewTJuncData_t *pTJData )
 void SewTJunc_Resolve( void )
 {
 	// get the number of t-junctions in the t-junction list
-	int tjCount = s_TJData.Size();
+	int tjCount = s_TJData.Count();
 
 	// resolve each t-junction
 	for( int i = 0; i < tjCount; i++ )
@@ -1451,7 +1552,7 @@ bool SewEdge_AddToListTJunc( SewEdgeData_t *pEdgeData )
 	//
 	// check to see if the edge already exists in the edge data list
 	//
-	int edgeCount = s_EdgeData.Size();
+	int edgeCount = s_EdgeData.Count();
 	for( int i = 0; i < edgeCount; i++ )
 	{
 		// get the edge points to compare against
@@ -1502,7 +1603,7 @@ void SewEdge_AddToListNormal( SewEdgeData_t *pEdgeData )
 	//
 	// check to see if the edge already exists in the edge data list
 	//
-	int edgeCount = s_EdgeData.Size();
+	int edgeCount = s_EdgeData.Count();
 	for( int i = 0; i < edgeCount; i++ )
 	{
 		// get the edge points to compare against
@@ -1806,7 +1907,12 @@ void SewEdge_ResolveDispTJunc( SewEdgeData_t *pEdgeData, int ndxTJ, int ndxTJNei
 void SewEdge_ResolveSolidTJunc( SewEdgeData_t *pEdgeData, int type, bool bStart )
 {
 	// create an empty vector to reset the offset with
-	Vector vClear( 0.0f, 0.0f, 0.0f );
+	Vector		vClear( 0.0f, 0.0f, 0.0f );
+	Vector		vSet( 1.0f, 1.0f, 1.0f );
+	Vector4D	vClearMultiBlend, vClearAlphaBlend;
+
+	vClearMultiBlend.Init();
+	vClearAlphaBlend.Init();
 
 	for( int i = 0; i < pEdgeData->faceCount; i++ )
 	{	
@@ -1846,6 +1952,7 @@ void SewEdge_ResolveSolidTJunc( SewEdgeData_t *pEdgeData, int type, bool bStart 
 				pDisp->SetSubdivPosition( ndxPt, vClear );
 				pDisp->SetSubdivNormal( ndxPt, vNormal );
 				pDisp->SetAlpha( ndxPt, 0.0f );
+				pDisp->SetMultiBlend( ndxPt, vClearMultiBlend, vClearAlphaBlend, vSet, vSet, vSet, vSet );
 			}
 		}
 		// reset tj (upper and lower)
@@ -1874,6 +1981,7 @@ void SewEdge_ResolveSolidTJunc( SewEdgeData_t *pEdgeData, int type, bool bStart 
 					pDisp->SetSubdivPosition( ndxPt, vClear );
 					pDisp->SetSubdivNormal( ndxPt, vNormal );
 					pDisp->SetAlpha( ndxPt, 0.0f );
+					pDisp->SetMultiBlend( ndxPt, vClearMultiBlend, vClearAlphaBlend, vSet, vSet, vSet, vSet );
 				}
 			}
 			else
@@ -1893,6 +2001,7 @@ void SewEdge_ResolveSolidTJunc( SewEdgeData_t *pEdgeData, int type, bool bStart 
 					pDisp->SetSubdivPosition( ndxPt, vClear );
 					pDisp->SetSubdivNormal( ndxPt, vNormal );
 					pDisp->SetAlpha( ndxPt, 0.0f );
+					pDisp->SetMultiBlend( ndxPt, vClearMultiBlend, vClearAlphaBlend, vSet, vSet, vSet, vSet );
 				}
 			}
 		}
@@ -1989,7 +2098,12 @@ void SewEdge_ResolveDispNormal( SewEdgeData_t *pEdgeData )
 void SewEdge_ResolveSolidNormal( SewEdgeData_t *pEdgeData )
 {
 	// create an empty vector to reset the offset with
-	Vector vClear( 0.0f, 0.0f, 0.0f );
+	Vector		vClear( 0.0f, 0.0f, 0.0f );
+	Vector		vSet( 1.0f, 1.0f, 1.0f );
+	Vector4D	vClearMultiBlend, vClearAlphaBlend;
+
+	vClearMultiBlend.Init();
+	vClearAlphaBlend.Init();
 
 	for( int i = 0; i < pEdgeData->faceCount; i++ )
 	{
@@ -2023,6 +2137,7 @@ void SewEdge_ResolveSolidNormal( SewEdgeData_t *pEdgeData )
 			pDisp->SetSubdivPosition( ndxPt, vClear );
 			pDisp->SetSubdivNormal( ndxPt, vNormal );
 			pDisp->SetAlpha( ndxPt, 0.0f );
+			pDisp->SetMultiBlend( ndxPt, vClearMultiBlend, vClearAlphaBlend, vSet, vSet, vSet, vSet );
 		}
 	}
 }
@@ -2033,7 +2148,7 @@ void SewEdge_ResolveSolidNormal( SewEdgeData_t *pEdgeData )
 void SewEdge_Resolve( void )
 {
 	// get the number of edges in the edge list
-	int edgeCount = s_EdgeData.Size();
+	int edgeCount = s_EdgeData.Count();
 
 	// resolve each edge
 	for( int i = 0; i < edgeCount; i++ )

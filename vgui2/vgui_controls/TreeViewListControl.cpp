@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -15,7 +15,7 @@
 #include <vgui/IPanel.h>
 #include <vgui/ISurface.h>
 #include <vgui/KeyCode.h>
-#include <KeyValues.h>
+#include <keyvalues.h>
 #include <vgui/MouseCode.h>
 #include <vgui/IBorder.h>
 
@@ -301,7 +301,7 @@ void CTreeViewListControl::DrawTitleBars()
 		}
 		else
 		{
-			int textRight = min( right, rightEdge );
+			int textRight = MIN( right, rightEdge );
 
 			int midx = (left+textRight)/2;
 			int midy = (top+bottom)/2;

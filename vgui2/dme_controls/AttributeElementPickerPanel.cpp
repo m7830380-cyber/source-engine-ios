@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2005, Valve Corporation, All rights reserved. =======//
 //
 // Purpose: 
 //
@@ -37,6 +37,7 @@ BaseClass( parent, info )
 	m_pType->SetText( "element" );
 
 	m_bShowMemoryUsage = info.m_bShowMemoryUsage;
+	m_bShowUniqueID = info.m_bShowMemoryUsage;
 }
 
 void CAttributeElementPickerPanel::PostConstructor()
@@ -76,11 +77,15 @@ void CAttributeElementPickerPanel::Refresh()
 
 	if ( element )
 	{
-		char idstr[ 37 ];
-		UniqueIdToString( element->GetId(), idstr, sizeof( idstr ) );
+		char idstr[ 37 ] = "";
+		if( m_bShowUniqueID )
+		{
+			UniqueIdToString( element->GetId(), idstr, sizeof( idstr ) );
+		}
 		if ( m_bShowMemoryUsage )
 		{
-			Q_snprintf( elemText, sizeof( elemText ), "%s %s %.3fMB", element->GetTypeString(), idstr, element->EstimateMemoryUsage() / float( 1 << 20 ) );
+			Q_snprintf( elemText, sizeof( elemText ), "%s %s (%.3fMB total / %.3fKB self)", element->GetTypeString(),
+				idstr, element->EstimateMemoryUsage( TD_DEEP ) / float( 1 << 20 ), element->EstimateMemoryUsage( TD_NONE ) / float( 1 << 10 ) );
 		}
 		else
 		{
@@ -152,23 +157,26 @@ void CAttributeElementPickerPanel::OnCommand( char const *cmd )
 
 
 //-----------------------------------------------------------------------------
-// Lay out the panel
+// Layout the panel
 //-----------------------------------------------------------------------------
 void CAttributeElementPickerPanel::PerformLayout()
 {
 	BaseClass::PerformLayout();
 
-	int x, y, w, h;
-	m_pType->GetBounds( x, y, w, h );
+	int viewWidth, viewHeight;
+	GetSize( viewWidth, viewHeight );
 
-	int inset = 25;
-	m_pType->SetWide( w - inset );
-
-	x += w;
-	x -= inset;
-
-	h -= 2;
-
-	m_hEdit->SetBounds( x, y, inset, h );
+	IImage *arrowImage = vgui::scheme()->GetImage( "tools/ifm/icon_properties_linkarrow" , false);
+	if( arrowImage )
+	{
+		m_hEdit->SetImage( arrowImage , 0 );
+		m_hEdit->SetPaintBorderEnabled( false );
+		m_hEdit->SetContentAlignment( vgui::Label::a_center );
+		m_hEdit->SetBounds( (FirstColumnWidth - ColumnBorderWidth - 16) * 0.5 , ( viewHeight - 16 )* 0.5 , 16, 16 );
+	}
+	else
+	{
+		m_hEdit->SetBounds( 0, 0, 100, 20 );
+	}
 }
 

@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -19,7 +19,7 @@
 
 // map displacement info -- runs parallel to the dispinfos struct
 int              nummapdispinfo = 0;
-mapdispinfo_t    mapdispinfo[MAX_MAP_DISPINFO];
+CUtlBlockVector<mapdispinfo_t>	mapdispinfo;
 
 CUtlVector<CCoreDispInfo*> g_CoreDispInfos;
 
@@ -272,7 +272,7 @@ void DispMapToCoreDispInfo( mapdispinfo_t *pMapDisp, CCoreDispInfo *pCoreDispInf
 
 	// Use CCoreDispInfo to setup the actual vertex positions.
 	pCoreDispInfo->InitDispInfo( pMapDisp->power, pMapDisp->minTess, pMapDisp->smoothingAngle,
-						 pMapDisp->alphaValues, vectorDisps, dispDists );
+						 pMapDisp->alphaValues, vectorDisps, dispDists, pMapDisp->flags, pMapDisp->m_vMultiBlends );
 	pCoreDispInfo->Create();
 }
 
@@ -289,10 +289,15 @@ void EmitInitialDispInfos( void )
 	// Calculate the total number of verts.
 	int nTotalVerts = 0;
 	int nTotalTris = 0;
+	int nTotalMultiBlend = 0;
 	for ( i=0; i < nummapdispinfo; i++ )
 	{
 		nTotalVerts += NUM_DISP_POWER_VERTS( mapdispinfo[i].power );
 		nTotalTris += NUM_DISP_POWER_TRIS( mapdispinfo[i].power );
+		if ( ( mapdispinfo[ i ].flags & DISP_INFO_FLAG_HAS_MULTIBLEND ) != 0 )
+		{
+			nTotalMultiBlend += NUM_DISP_POWER_VERTS( mapdispinfo[i].power );
+		}
 	}
 
 	// Clear the output arrays..
@@ -300,9 +305,12 @@ void EmitInitialDispInfos( void )
 	g_dispinfo.SetSize( nummapdispinfo );
 	g_DispVerts.SetSize( nTotalVerts );
 	g_DispTris.SetSize( nTotalTris );
+	g_DispMultiBlend.SetSize( nTotalMultiBlend );
 
 	int iCurVert = 0;
 	int iCurTri = 0;
+	int iCurMultiBlend = 0;
+
 	for( i = 0; i < nummapdispinfo; i++ )
 	{
 		pDisp = &g_dispinfo[i];
@@ -323,8 +331,7 @@ void EmitInitialDispInfos( void )
 		pDisp->power = pMapDisp->power;
 		
 		// If the high bit is set - this is FLAGS!
-		pDisp->minTess = pMapDisp->flags;
-		pDisp->minTess |= 0x80000000;
+		pDisp->minTess = pMapDisp->flags | DISP_INFO_FLAG_MAGIC;
 //		pDisp->minTess = pMapDisp->minTess;
 		pDisp->smoothingAngle = pMapDisp->smoothingAngle;
 		pDisp->m_iMapFace = (unsigned short)-2;
@@ -349,6 +356,12 @@ void EmitInitialDispInfos( void )
 			pOutVerts[j].m_flDist = dist;
 
 			pOutVerts[j].m_flAlpha = pMapDisp->alphaValues[j];
+
+			if ( ( pMapDisp->flags & DISP_INFO_FLAG_HAS_MULTIBLEND ) != 0 )
+			{
+				g_DispMultiBlend[ iCurMultiBlend ] = pMapDisp->m_vMultiBlends[ j ];
+				iCurMultiBlend++;
+			}
 		}
 
 		int nTriCount = ( (1 << (pDisp->power)) * (1 << (pDisp->power)) * 2 );

@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Core implementation of vgui
 //
@@ -6,17 +6,21 @@
 //=============================================================================//
 
 #include "vgui_internal.h"
+#include "igameevents.h"
 
 #include <vgui/ISurface.h>
 #include <vgui/ILocalize.h>
 #include <vgui/IPanel.h>
 #include "filesystem.h"
-#include <vstdlib/IKeyValuesSystem.h>
+#include <vstdlib/ikeyvaluessystem.h>
 
 #include <stdio.h>
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
+
+ISchemeSurface *g_pSchemeSurface = NULL;
+IGameEventManager2* g_pGameEventManager = NULL;
 
 namespace vgui
 {
@@ -58,8 +62,10 @@ bool VGui_InternalLoadInterfaces( CreateInterfaceFn *factoryList, int numFactori
 	g_pSurface = (ISurface *)InitializeInterface(VGUI_SURFACE_INTERFACE_VERSION, factoryList, numFactories );
 //	g_pKeyValues = (IKeyValues *)InitializeInterface(KEYVALUES_INTERFACE_VERSION, factoryList, numFactories );
 	g_pIPanel = (IPanel *)InitializeInterface(VGUI_PANEL_INTERFACE_VERSION, factoryList, numFactories );
+	g_pSchemeSurface = (ISchemeSurface*)InitializeInterface( SCHEME_SURFACE_INTERFACE_VERSION, factoryList, numFactories );
+	g_pGameEventManager = ( IGameEventManager2* )InitializeInterface ( INTERFACEVERSION_GAMEEVENTSMANAGER2, factoryList, numFactories );
 
-	if (g_pSurface && /*g_pKeyValues &&*/ g_pIPanel)
+	if (g_pSurface && g_pSchemeSurface && /* g_pKeyValues &&*/ g_pIPanel)
 		return true;
 
 	return false;

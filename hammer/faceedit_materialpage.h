@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -164,9 +164,13 @@ protected:
 	afx_msg void OnBrowse( void );
 	afx_msg void OnChangeTextureGroup( void );
 	afx_msg void OnButtonSmoothingGroups( void );
+	afx_msg void OnButtonShiftXRandom( void );
+	afx_msg void OnButtonShiftYRandom( void );
 	//}}AFX_MSG
 
 	DECLARE_MESSAGE_MAP()
+public:
+	afx_msg void OnBnClickedFaceMarkButton();
 };
 
 #endif // FACEEDIT_MATERIALPAGE_H

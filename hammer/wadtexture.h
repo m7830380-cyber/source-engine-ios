@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Implementation of the IEditorTexture interface for WAD textures.
 //
@@ -49,12 +49,12 @@ class CWADTexture : public IEditorTexture
 		int GetImageDataRGB( void *pImageRGB );
 		int GetImageDataRGBA( void *pImageRGBA );
 
-		inline int GetImageWidth() const
+		inline int GetPreviewImageWidth() const
 		{
 			return( m_datawidth );
 		}
 
-		inline int GetImageHeight() const
+		inline int GetPreviewImageHeight() const
 		{
 			return( m_dataheight );
 		}
@@ -65,6 +65,16 @@ class CWADTexture : public IEditorTexture
 		}
 
 		inline int GetHeight() const
+		{
+			return(m_nHeight);
+		}
+
+		inline int GetMappingWidth() const
+		{
+			return(m_nWidth);
+		}
+
+		inline int GetMappingHeight() const
 		{
 			return(m_nHeight);
 		}

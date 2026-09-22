@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -9,8 +9,8 @@
 #include "const.h"
 #include "Sprite.h"
 #include "Material.h"			// FIXME: we need to work only with IEditorTexture!
-#include "materialsystem/imaterial.h"
-#include "materialsystem/imaterialsystem.h"
+#include "materialsystem/IMaterial.h"
+#include "materialsystem/IMaterialSystem.h"
 #include "Render3d.h"
 #include "camera.h"
 #include "tier1/utldict.h"
@@ -190,6 +190,7 @@ void CSpriteCache::Release(CSpriteModel *pSprite)
 CSpriteModel::CSpriteModel(void) : 
 	m_pMaterial(0), m_NumFrames(-1), m_fScale(1.0), m_Origin(0,0,0), m_UL(0,0), m_LR(0,0), m_TexUL(0,1), m_TexLR(1,0), m_bInvert(false)
 {
+	m_Normal = Vector( 0, 0, 1 );
 }
 
 
@@ -445,24 +446,28 @@ void CSpriteModel::DrawSprite3D( CRender3D *pRender, unsigned char color[3]  )
 	meshBuilder.Position3fv(corner.Base());
 	meshBuilder.TexCoord2f(0, texul.x, texul.y);
 	meshBuilder.Color3ub( color[0], color[1], color[2] );
+	meshBuilder.Normal3fv( m_Normal.Base() );
 	meshBuilder.AdvanceVertex();
 
 	corner += spritey;
 	meshBuilder.Position3fv(corner.Base());
 	meshBuilder.TexCoord2f(0, texul.x, texlr.y);
 	meshBuilder.Color3ub( color[0], color[1], color[2] );
+	meshBuilder.Normal3fv( m_Normal.Base() );
 	meshBuilder.AdvanceVertex();
 
 	corner += spritex;
 	meshBuilder.Position3fv(corner.Base());
 	meshBuilder.TexCoord2f(0, texlr.x, texlr.y);
 	meshBuilder.Color3ub( color[0], color[1], color[2] );
+	meshBuilder.Normal3fv( m_Normal.Base() );
 	meshBuilder.AdvanceVertex();
 
 	corner -= spritey;
 	meshBuilder.Position3fv(corner.Base());
 	meshBuilder.TexCoord2f(0, texlr.x, texul.y);
 	meshBuilder.Color3ub( color[0], color[1], color[2] );
+	meshBuilder.Normal3fv( m_Normal.Base() );
 	meshBuilder.AdvanceVertex();
 
 	meshBuilder.End();
@@ -499,11 +504,19 @@ CSpriteDataCache* LookupSpriteDataCache( const char *pSpritePath )
 		pData->m_pMaterial = CMaterial::CreateMaterial( filename, true );
 		if ( pData->m_pMaterial && pData->m_pMaterial->GetMaterial() )
 		{
+			bool bFound;
 			pData->m_Width = pData->m_pMaterial->GetWidth();
 			pData->m_Height = pData->m_pMaterial->GetHeight();
-			pData->m_pFrameVar = pData->m_pMaterial->GetMaterial()->FindVar( "$spriteFrame", 0 );
-			pData->m_pRenderModeVar = pData->m_pMaterial->GetMaterial()->FindVar( "$spriterendermode", 0 );
-
+			pData->m_pFrameVar = pData->m_pMaterial->GetMaterial()->FindVar( "$spriteFrame", &bFound );
+			if ( !bFound )
+			{
+				pData->m_pFrameVar = NULL;
+			}
+			pData->m_pRenderModeVar = pData->m_pMaterial->GetMaterial()->FindVar( "$spriterendermode", &bFound );
+			if ( !bFound )
+			{
+				pData->m_pRenderModeVar = NULL;
+			}
 			pData->m_pOrientationVar = pData->m_pMaterial->GetMaterial()->FindVar( "$spriteOrientation", &pData->m_bOrientationVarFound, false );
 			pData->m_pOriginVar = pData->m_pMaterial->GetMaterial()->FindVar( "$spriteorigin", &pData->m_bOriginVarFound );
 		}

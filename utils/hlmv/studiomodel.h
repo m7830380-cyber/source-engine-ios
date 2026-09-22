@@ -1,10 +1,10 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
 // $NoKeywords: $
 //
-//=============================================================================//
+//===========================================================================//
 
 #ifndef INCLUDED_STUDIOMODEL
 #define INCLUDED_STUDIOMODEL
@@ -13,11 +13,13 @@
 #include "studio.h"
 #include "mouthinfo.h"
 #include "UtlLinkedList.h"
-#include "utlsymbol.h"
+#include "UtlSymbol.h"
 #include "bone_setup.h"
 #include "datacache/imdlcache.h"
-#include "viewersettings.h"
 #include "tier1/utlstring.h"
+#include "viewersettings.h"
+#include "tier3/tier3.h"
+#include "mathlib/softbody.h"
 
 #define DEFAULT_BLEND_TIME 0.2
 
@@ -48,15 +50,11 @@ class CJiggleBones;
 //-----------------------------------------------------------------------------
 // Singleton interfaces
 //-----------------------------------------------------------------------------
-extern IStudioRender *g_pStudioRender;
-extern IMDLCache *g_pMDLCache;
+
 extern IPhysicsSurfaceProps *physprop;
 extern IPhysicsCollision *physcollision;
 extern IStudioDataCache *g_pStudioDataCache;
-extern IDataCache *g_pDataCache;
 extern IFileSystem *g_pFileSystem;
-extern IMaterialSystem *g_pMaterialSystem;
-extern IMaterialSystemHardwareConfig *g_pMaterialSystemHardwareConfig;
 
 
 class AnimationLayer
@@ -98,14 +96,13 @@ class StudioModel
 {
 public:
 	StudioModel();
+	~StudioModel();
 
 	// memory handling, uses calloc so members are zero'd out on instantiation
-	static void *operator new( size_t nSize );
-	static void* operator new( size_t size, int nBlockUse, const char *pFileName, int nLine );
-
-	static void operator delete( void *pData );
-	static void operator delete( void* p, int nBlockUse, const char *pFileName, int nLine );
-
+	void *operator new( size_t stAllocateBlock );
+	void* operator new( size_t stAllocateBlock, int nBlockUse, const char *pFileName, int nLine );
+	void operator delete( void *pMem );
+	void operator delete( void* pMem, int nBlockUse, const char *pFileName, int nLine );
 
 	static void				Init( void );
 	static void				Shutdown( void ); // garymcthack - need to call this.
@@ -124,7 +121,6 @@ public:
 	IStudioRender				    *GetStudioRender();
 
 	static void UpdateStudioRenderConfig( bool bWireframe, bool bZBufferWireframe, bool bNormals, bool bTangentFrame );
-	studiohdr_t						*getAnimHeader (int i) const;
 
 	virtual void					ModelInit( void ) { }
 
@@ -134,8 +130,11 @@ public:
 	bool							LoadModel( const char *modelname );
 	virtual bool					PostLoadModel ( const char *modelname );
 	bool							HasModel();
+	bool							HasMesh();
 
-	virtual int						DrawModel( bool mergeBones = false );
+	virtual int						DrawModel( bool mergeBones = false, int nRenderPassMode = PASS_DEFAULT );
+
+	virtual void					DrawWidgetModel( );
 
 	virtual void					AdvanceFrame( float dt );
 	float							GetInterval( void );
@@ -197,9 +196,14 @@ public:
 
 	int								LookupAttachment( char const *szName );
 
-	int								SetBodygroup( int iGroup, int iValue = -1 );
+	void							ExtractVertExtents( Vector &vecMin, Vector &vecMax );
+
+	int								SetBodygroup( int iGroup, int iValue );
+	int								GetBodygroup( int iGroup );
+	void							SetBodygroupPreset( char const *szName );
 	int								SetSkin( int iValue );
 	int								FindBone( const char *pName );
+	int								GetBodyIndex() const {return m_bodynum;}
 
 	LocalFlexController_t			LookupFlexController( char *szName );
 	void							SetFlexController( char *szName, float flValue );
@@ -244,9 +248,12 @@ public:
 	studiohdr_t						*GetStudioRenderHdr() const;
 	studiohwdata_t					*GetHardwareData( void ) const;
 
+	int								GetNumIncludeModels() const;
+	const char *					GetIncludeModelName( int index ) const;
 	// Get and set the model transform (i.e. what m_origin and m_angles are used to generate).
 	void GetModelTransform( matrix3x4_t &mat );
 	void SetModelTransform( const matrix3x4_t &mat );
+
 
 public:
 	// entity settings
@@ -324,10 +331,12 @@ public:
 
 private:
 	mstudioanimdesc_t				&GetAnimDesc( int anim );
-	mstudioanim_t					*GetAnim( int anim );
+	mstudio_rle_anim_t				*GetAnim( int anim );
 
 	void							DrawPhysmesh( CPhysmesh *pMesh, int boneIndex, IMaterial *pMaterial, float *color );
-	void							DrawPhysConvex( CPhysmesh *pMesh, IMaterial *pMaterial );
+	void							DrawPhysConvex( CPhysmesh *pMesh, int boneIndex, IMaterial *pMaterial );
+
+	void							DrawRangeOfMotionArcs( CPhysmesh *pMesh, int boneIndex, IMaterial* pMaterial );
 
 	void							SetupLighting( void );
 
@@ -335,7 +344,7 @@ private:
 
 private:
 	float							m_flexweight[MAXSTUDIOFLEXCTRL];
-	matrix3x4_t						m_pBoneToWorld[MAXSTUDIOBONES];
+	matrix3x4a_t					*m_pBoneToWorld;
 
 public:
 	virtual void					RunFlexRules( void );
@@ -354,6 +363,7 @@ private:
 	void DrawEditAttachment();
 	void DrawHitboxes();
 	void DrawPhysicsModel( );
+	void DrawSoftbody();
 	void DrawIllumPosition( );
 	void DrawOriginAxis( );
 
@@ -364,6 +374,8 @@ public:
 	void drawTransform( matrix3x4_t& m, float flLength = 4 );
 	void drawLine( Vector const &p1, Vector const &p2, int r = 0, int g = 0, int b = 255 );
 	void drawTransparentBox( Vector const &bbmin, Vector const &bbmax, const matrix3x4_t& m, float const *color, float const *wirecolor );
+	void drawCapsule( Vector const &bbmin, Vector const &bbmax, float flRadius, const matrix3x4_t& m, float const *interiorcolor, float const *wirecolor );
+	void drawText( Vector const &pos, const char* szText );
 
 private:
 	int						m_LodUsed;
@@ -384,6 +396,9 @@ public:
 	float					GetBodyYaw( void ) const;
 	void					SetSpineYaw( float yaw );
 	float					GetSpineYaw( void ) const;
+
+	CSoftbody*			GetSoftbody() const { return m_pStudioHdr->GetSoftbody() ; }
+	void					SetSoftbodyOrientation( );
 
 private:
 
@@ -445,11 +460,6 @@ inline studiohwdata_t *StudioModel::GetHardwareData( void ) const
 	return g_pMDLCache->GetHardwareData( m_MDLHandle );
 }
 
-inline studiohdr_t *StudioModel::getAnimHeader( int i ) const 
-{ 
-//	return g_pMDLCache->GetStudioHdr( m_AnimHandle[i] );
-//	return m_panimhdr[i]; 
-}
 
 inline char const *StudioModel::GetFileName( void ) 
 { 
@@ -471,6 +481,44 @@ inline const matrix3x4_t* StudioModel::BoneToWorld( int nBoneIndex ) const
 	return &m_pBoneToWorld[nBoneIndex];
 }
 
+enum WidgetType
+{
+	WIDGET_ROTATE = 0,
+	WIDGET_TRANSLATE,
+	WIDGET_NUM_WIDGET_TYPES,
+};
+
+enum WidgetState
+{
+	WIDGET_STATE_NONE = 0,
+	WIDGET_CHANGE_X,
+	WIDGET_CHANGE_Y,
+	WIDGET_CHANGE_Z,
+};
+
+class WidgetControl
+{
+public:
+	WidgetControl();
+	~WidgetControl();
+
+	void SetStateUsingInputColor( Color inputColor );
+
+	void WidgetMouseDown( int x, int y );
+	void WidgetMouseDrag( int x, int y );
+
+	bool HasStoredValue( void );
+
+	StudioModel *GetWidgetModel( void );
+
+	WidgetType m_WidgetType;
+	StudioModel *m_pWidgetModel[WIDGET_NUM_WIDGET_TYPES];
+	WidgetState m_WidgetState;
+	Vector2D m_vecWidgetMouseDownCoord;
+	Vector2D m_vecWidgetDeltaCoord;
+	
+	Vector m_vecValue;
+};
 
 //-----------------------------------------------------------------------------
 // Globals
@@ -478,6 +526,13 @@ inline const matrix3x4_t* StudioModel::BoneToWorld( int nBoneIndex ) const
 extern Vector g_vright;		// needs to be set to viewer's right in order for chrome to work
 extern StudioModel *g_pStudioModel;
 extern StudioModel *g_pStudioExtraModel[HLMV_MAX_MERGED_MODELS];
+extern WidgetControl *g_pWidgetControl;
 
+struct mergemodelbonepair_t
+{
+	char szTargetBone[256];
+	char szLocalBone[256];
+};
+extern mergemodelbonepair_t g_MergeModelBonePairs[ HLMV_MAX_MERGED_MODELS ];
 
 #endif // INCLUDED_STUDIOMODEL

@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -1073,6 +1073,7 @@ BEGIN_MESSAGE_MAP(CPaintSculptDlg, CDialog)
 	ON_BN_CLICKED(IDC_SCULPT_PUSH, &CPaintSculptDlg::OnBnClickedSculptPush)
 	ON_BN_CLICKED(IDC_SCULPT_CARVE, &CPaintSculptDlg::OnBnClickedSculptCarve)
 	ON_BN_CLICKED(IDC_SCULPT_PROJECT, &CPaintSculptDlg::OnBnClickedSculptProject)
+	ON_BN_CLICKED(IDC_SCULPT_BLEND, &CPaintSculptDlg::OnBnClickedSculptBlend)
 	ON_WM_LBUTTONUP()
 	ON_WM_LBUTTONDOWN()
 	ON_WM_MOUSEMOVE()
@@ -1092,6 +1093,7 @@ CDialog( CPaintSculptDlg::IDD, pParent )
 	m_PushOptions = new CSculptPushOptions();
 	m_CarveOptions = new CSculptCarveOptions();
 //	m_ProjectOptions = new CSculptProjectOptions();
+	m_BlendOptions = new CSculptBlendOptions();
 }
 
 
@@ -1103,6 +1105,7 @@ CPaintSculptDlg::~CPaintSculptDlg( )
 	delete m_PushOptions;
 	delete m_CarveOptions;
 //	delete m_ProjectOptions;
+	delete m_BlendOptions;
 }
 
 
@@ -1144,6 +1147,7 @@ BOOL CPaintSculptDlg::OnInitDialog( )
 	m_PushOptions->SetPaintOwner( this );
 	m_CarveOptions->SetPaintOwner( this );
 //	m_ProjectOptions->SetPaintOwner( this );
+	m_BlendOptions->SetPaintOwner( this );
 
 	if( !m_PushOptions->Create( IDD_DISP_SCULPT_PUSH_OPTIONS, this ) )
 	{
@@ -1162,6 +1166,11 @@ BOOL CPaintSculptDlg::OnInitDialog( )
 	}
 #endif
 
+	if( !m_BlendOptions->Create( IDD_DISP_SCULPT_BLEND_OPTIONS, this ) )
+	{
+		return FALSE;	
+	}
+	
 	RECT	OptionsLoc, ThisLoc;
 
  	m_SculptOptionsLoc.GetWindowRect( &OptionsLoc );
@@ -1170,10 +1179,12 @@ BOOL CPaintSculptDlg::OnInitDialog( )
 	m_PushOptions->SetWindowPos( NULL, 10, OptionsLoc.top - ThisLoc.top - 20, 0, 0, SWP_NOSIZE | SWP_SHOWWINDOW );
 	m_CarveOptions->SetWindowPos( NULL, 10, OptionsLoc.top - ThisLoc.top - 20, 0, 0, SWP_NOSIZE | SWP_SHOWWINDOW );
 //	m_ProjectOptions->SetWindowPos( NULL, 10, OptionsLoc.top - ThisLoc.top - 20, 0, 0, SWP_NOSIZE | SWP_SHOWWINDOW );
+	m_BlendOptions->SetWindowPos( NULL, 10, OptionsLoc.top - ThisLoc.top - 20, 0, 0, SWP_NOSIZE | SWP_SHOWWINDOW );
 
 	m_PushOptions->ShowWindow( SW_HIDE );
 	m_CarveOptions->ShowWindow( SW_HIDE );
 //	m_ProjectOptions->ShowWindow( SW_HIDE );
+	m_BlendOptions->ShowWindow( SW_HIDE );
 
 	m_ProjectButton.EnableWindow( FALSE );
 
@@ -1197,6 +1208,7 @@ void CPaintSculptDlg::DoDataExchange( CDataExchange *pDX )
 	DDX_Control(pDX, IDC_SCULPT_PUSH, m_PushButton);
 	DDX_Control(pDX, IDC_SCULPT_CARVE, m_CarveButton);
 	DDX_Control(pDX, IDC_SCULPT_PROJECT, m_ProjectButton);
+	DDX_Control(pDX, IDC_SCULPT_BLEND, m_BlendButton);
 }
 
 
@@ -1238,11 +1250,14 @@ void CPaintSculptDlg::OnClose( )
 void CPaintSculptDlg::OnLButtonUp( UINT nFlags, CPoint point )
 {
 	CToolDisplace *pDispTool = GetDisplacementTool();
-	CSculptPainter *painter = dynamic_cast< CSculptPainter * >( pDispTool->GetSculptPainter() );
-
-	if ( painter )
+	if ( pDispTool != NULL )
 	{
-		painter->OnLButtonUpDialog( nFlags, point );
+		CSculptPainter *painter = dynamic_cast< CSculptPainter * >( pDispTool->GetSculptPainter() );
+
+		if ( painter )
+		{
+			painter->OnLButtonUpDialog( nFlags, point );
+		}
 	}
 	
 	__super::OnLButtonUp(nFlags, point);
@@ -1257,11 +1272,14 @@ void CPaintSculptDlg::OnLButtonUp( UINT nFlags, CPoint point )
 void CPaintSculptDlg::OnLButtonDown( UINT nFlags, CPoint point )
 {
 	CToolDisplace *pDispTool = GetDisplacementTool();
-	CSculptPainter *painter = dynamic_cast< CSculptPainter * >( pDispTool->GetSculptPainter() );
-
-	if ( painter )
+	if ( pDispTool != NULL )
 	{
-		painter->OnLButtonDownDialog( nFlags, point );
+		CSculptPainter *painter = dynamic_cast< CSculptPainter * >( pDispTool->GetSculptPainter() );
+
+		if ( painter )
+		{
+			painter->OnLButtonDownDialog( nFlags, point );
+		}
 	}
 
 	__super::OnLButtonDown(nFlags, point);
@@ -1276,11 +1294,14 @@ void CPaintSculptDlg::OnLButtonDown( UINT nFlags, CPoint point )
 void CPaintSculptDlg::OnMouseMove( UINT nFlags, CPoint point )
 {
 	CToolDisplace *pDispTool = GetDisplacementTool();
-	CSculptPainter *painter = dynamic_cast< CSculptPainter * >( pDispTool->GetSculptPainter() );
-
-	if ( painter )
+	if ( pDispTool != NULL )
 	{
-		painter->OnMouseMoveDialog( nFlags, point );
+		CSculptPainter *painter = dynamic_cast< CSculptPainter * >( pDispTool->GetSculptPainter() );
+
+		if ( painter )
+		{
+			painter->OnMouseMoveDialog( nFlags, point );
+		}
 	}
 
 	__super::OnMouseMove(nFlags, point);
@@ -1295,6 +1316,18 @@ void CPaintSculptDlg::OnDestroy( )
 	// save the current dialog data - window position, effect, etc...
 	//
 	GetWindowRect( &m_DialogPosRect );
+
+	CToolDisplace *pDispTool = GetDisplacementTool();
+	if( pDispTool )
+	{
+		pDispTool->GetSelectedDisps();		// ensure we have a selection count!
+		CDialog *painter = dynamic_cast< CDialog * >( pDispTool->GetSculptPainter() );
+
+		if ( painter )
+		{
+			painter->ShowWindow( SW_HIDE );
+		}
+	}
 
 #if 0
 	CToolDisplace *pTool = GetDisplacementTool();
@@ -1335,6 +1368,16 @@ void CPaintSculptDlg::OnBnClickedSculptProject( )
 //	SetActiveMode( SCULPT_MODE_PROJECT );
 }
 
+
+//-----------------------------------------------------------------------------
+// Purpose: sets the active mode to blend
+//-----------------------------------------------------------------------------
+void CPaintSculptDlg::OnBnClickedSculptBlend( )
+{
+	SetActiveMode( SCULPT_MODE_BLEND );
+}
+
+
 #if 0
 //-----------------------------------------------------------------------------
 // Purpose: 
@@ -1358,10 +1401,13 @@ void CPaintSculptDlg::SetActiveMode( SculptMode NewMode )
 	m_PushButton.SetCheck( m_SculptMode == SCULPT_MODE_PUSH );
 	m_CarveButton.SetCheck( m_SculptMode == SCULPT_MODE_CARVE );
 	m_ProjectButton.SetCheck( m_SculptMode == SCULPT_MODE_PROJECT );
+	m_BlendButton.SetCheck( m_SculptMode == SCULPT_MODE_BLEND );
 
 	CToolDisplace *pDispTool = GetDisplacementTool();
 	if( pDispTool )
 	{
+		pDispTool->GetSelectedDisps();		// ensure we have a selection count!
+
 		CDialog *painter = dynamic_cast< CDialog * >( pDispTool->GetSculptPainter() );
 
 		if ( painter )
@@ -1387,6 +1433,11 @@ void CPaintSculptDlg::SetActiveMode( SculptMode NewMode )
 				pDispTool->SetSculptPainter( m_ProjectOptions );
 				break;
 #endif
+
+			case SCULPT_MODE_BLEND:
+				m_BlendOptions->ShowWindow( SW_SHOW );
+				pDispTool->SetSculptPainter( m_BlendOptions );
+				break;
 		}
 	}
 }

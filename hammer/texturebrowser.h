@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -52,6 +52,7 @@ protected:
 	afx_msg void OnFilterEnvmask();
 	afx_msg void OnShowErrors();
 	afx_msg void OnOpenSource();
+	afx_msg void OnExploreToSource();
 	afx_msg void OnReload();
 	afx_msg void OnChangeFilterOrKeywords(void);
 	afx_msg void OnUpdateFiltersNOW();

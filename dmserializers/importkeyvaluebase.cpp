@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2004, Valve Corporation, All rights reserved. =======
 //
 // Purpose: 
 //
@@ -8,6 +8,7 @@
 #include "dmserializers.h"
 #include "datamodel/idatamodel.h"
 #include "datamodel/dmelement.h"
+#include "datamodel/dmattributevar.h"
 #include "tier1/KeyValues.h"
 #include "tier1/utlbuffer.h"
 #include <limits.h>
@@ -244,8 +245,8 @@ void CImportKeyValueBase::RecursivelyResolveElement( CDmElement* pElement )
 		{
 		case AT_ELEMENT:
 			{
-				CDmElement *pElementAt = pAttribute->GetValueElement<CDmElement>();
-				RecursivelyResolveElement( pElementAt );
+				CDmElement *pElement = pAttribute->GetValueElement<CDmElement>();
+				RecursivelyResolveElement( pElement );
 			}
 			break;
 
@@ -255,8 +256,8 @@ void CImportKeyValueBase::RecursivelyResolveElement( CDmElement* pElement )
 				int nCount = array.Count();
 				for ( int i = 0; i < nCount; ++i )
 				{
-					CDmElement *pElementAt = array[ i ];
-					RecursivelyResolveElement( pElementAt );
+					CDmElement *pElement = array[ i ];
+					RecursivelyResolveElement( pElement );
 				}
 			}
 			break;

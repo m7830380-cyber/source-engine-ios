@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -67,7 +67,7 @@ BOOL CSelectEntityDlg::OnInitDialog()
 	// add entities from our list of entities to the listbox
 	FOR_EACH_OBJ( *m_pEntityList, pos )
 	{
-		CMapClass *pObject = m_pEntityList->Element(pos);
+		const CMapClass *pObject = m_pEntityList->Element(pos);
 		if(!pObject->IsMapClass(MAPCLASS_TYPE(CMapEntity)))
 			continue;
 		CMapEntity *pEntity = (CMapEntity*) pObject;

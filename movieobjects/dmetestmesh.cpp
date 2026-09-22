@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2004, Valve Corporation, All rights reserved. =======
 //
 // Purpose: 
 //
@@ -1006,11 +1006,11 @@ void CDmeTestMesh::Draw( const matrix3x4_t& shapeToWorld, CDmeDrawSettings *pDra
 	// FIXME: Deal with lighting
 	for ( int i = 0; i < 6; ++ i )
 	{
-		info.m_vecAmbientCube[i].Init( 1, 1, 1 );
+		info.m_LightingState.m_vecAmbientCube[i].Init( 1, 1, 1 );
 	}
 
-	info.m_nLocalLightCount = 0;
-//	info.m_LocalLightDescs;
+	info.m_LightingState.m_nLocalLightCount = 0;
+//	info.m_LightingState.m_LocalLightDescs;
 	
 	matrix3x4_t *pBoneToWorld = g_pStudioRender->LockBoneMatrices( info.m_pStudioHdr->numbones );
 	SetUpBones( pTransform, info.m_pStudioHdr->numbones, pBoneToWorld );

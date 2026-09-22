@@ -1,22 +1,25 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright (c) 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
-//=============================================================================//
+//===========================================================================//
 
-#include "pch_tier0.h"
+#include "tier0/platform.h"
+#include "tier0/icommandline.h"
+#include "tier0/dbg.h"
 #include "mem_helpers.h"
 #include <string.h>
-#ifdef APPLE
-#include <malloc/malloc.h>
-#else
-#include <malloc.h>
-#endif
+//#include <malloc.h>
 
+// NOTE: This has to be the last file included!
+#include "tier0/memdbgon.h"
+
+// Needed for debugging
+const char *g_pszModule = "tier0";
 bool g_bInitMemory = true;
 
-#ifdef POSIX
-void DoApplyMemoryInitializations( void *pMem, int nSize )
+#if defined(PLATFORM_POSIX) || defined( PLATFORM_PS3)
+void DoApplyMemoryInitializations( void *pMem, size_t nSize )
 {
 }
 
@@ -24,7 +27,6 @@ size_t CalcHeapUsed()
 {
 	return 0;
 }
-
 #else
 
 unsigned long g_dwFeeFee = 0xffeeffee;
@@ -51,10 +53,10 @@ unsigned char g_RandomValues[256] = {
 unsigned long g_iCurRandomValueOffset = 0;
 
 
-void InitializeToFeeFee( void *pMem, int nSize )
+void InitializeToFeeFee( void *pMem, size_t nSize )
 {
 	unsigned long *pCurDWord = (unsigned long*)pMem;
-	int nDWords = nSize >> 2;
+	size_t nDWords = nSize >> 2;
 	while ( nDWords )
 	{
 		*pCurDWord = 0xffeeffee;
@@ -63,8 +65,8 @@ void InitializeToFeeFee( void *pMem, int nSize )
 	}
 	
 	unsigned char *pCurChar = (unsigned char*)pCurDWord;
-	int nBytes = nSize & 3;
-	int iOffset = 0;
+	size_t nBytes = nSize & 3;
+	size_t iOffset = 0;
 	while ( nBytes )
 	{
 		*pCurChar = ((unsigned char*)&g_dwFeeFee)[iOffset];
@@ -75,10 +77,10 @@ void InitializeToFeeFee( void *pMem, int nSize )
 }
 
 
-void InitializeToRandom( void *pMem, int nSize )
+void InitializeToRandom( void *pMem, size_t nSize )
 {
 	unsigned char *pOut = (unsigned char *)pMem;
-	for ( int i=0; i < nSize; i++ )
+	for ( size_t i=0; i < nSize; i++ )
 	{
 		pOut[i] = g_RandomValues[(g_iCurRandomValueOffset & 255)];
 		++g_iCurRandomValueOffset;
@@ -86,7 +88,7 @@ void InitializeToRandom( void *pMem, int nSize )
 }
 
 
-void DoApplyMemoryInitializations( void *pMem, int nSize )
+void DoApplyMemoryInitializations( void *pMem, size_t nSize )
 {
 	if ( !pMem )
 		return;
@@ -133,7 +135,14 @@ void DoApplyMemoryInitializations( void *pMem, int nSize )
 		}
 		else
 		{
-#ifdef _DEBUG
+#if defined(_DEBUG) || defined(USE_LIGHT_MEM_DEBUG)
+#if !defined(_DEBUG) && defined(LIGHT_MEM_DEBUG_REQUIRES_CMD_LINE_SWITCH)
+			extern bool g_bUsingLMD;
+			if ( !g_bUsingLMD )
+			{
+				return;
+			}
+#endif
 			// Ok, it's already set to 0xcdcdcdcd, but we want something that will make floating-point #'s NANs.
 			InitializeToFeeFee( pMem, nSize );
 #endif
@@ -172,5 +181,6 @@ size_t CalcHeapUsed()
 	return nTotal;
 #endif
 }
-#endif
+
+#endif // not PLATFORM_POSIX
 

@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Makes .DAT files
 //
@@ -24,7 +24,6 @@ extern void Con_Printf( char *fmt, ... );
 
 // So we can link CRC
 int LittleLongFn( int l );
-int (*LittleLong)(int l) = LittleLongFn;
 
 
 // So we can link CRC

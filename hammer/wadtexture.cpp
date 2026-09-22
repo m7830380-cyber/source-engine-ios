@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Implementation of the IEditorTexture interface for WAD textures.
 //
@@ -289,7 +289,6 @@ int CWADTexture::GetKeywords(char *pszKeywords) const
 int CWADTexture::GetShortName(char *pszName) const
 {
 	char szBuf[MAX_PATH];
-	szBuf[0] = '\0';
 
 	if (pszName == NULL)
 	{

@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright (c) Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -6,7 +6,7 @@
 //=============================================================================//
 
 
-#if !defined( _X360 )
+#if !defined( _GAMECONSOLE )
 #define WIN32_LEAN_AND_MEAN
 #define OEMRESOURCE
 #include <windows.h>
@@ -38,8 +38,7 @@
 #include <KeyValues.h>
 #include <vgui/IInputInternal.h>
 #include <vgui/ISurface.h>
-#include "tier0/vcrmode.h"
-#include "filesystem.h"
+#include "FileSystem.h"
 
 #include "vgui_internal.h"
 #include "filesystem_helpers.h"
@@ -57,7 +56,7 @@
 
 
 
-#ifndef _X360
+#if !defined ( _GAMECONSOLE )
 
 
 //////////////////////////////////////////////////////////////////////////
@@ -124,7 +123,7 @@ static HWND GetMainApplicationWindowHWND()
 }
 
 
-#endif // #ifndef _X360
+#endif // #ifndef _GAMECONSOLE 
 
 
 
@@ -139,8 +138,8 @@ using namespace vgui;
 
 SHORT System_GetKeyState( int virtualKeyCode )
 {
-#ifndef _X360
-	return VCRHook_GetKeyState(virtualKeyCode);
+#ifndef _GAMECONSOLE
+	return GetKeyState(virtualKeyCode);
 #else
 	return 0;
 #endif
@@ -308,14 +307,14 @@ long CSystem::GetTimeMillis()
 
 void CSystem::ShellExecute( const char *command, const char *file )
 {
-#ifndef _X360
+#ifndef _GAMECONSOLE
 	::ShellExecuteA(NULL, command, file, NULL, NULL, SW_SHOWNORMAL);
 #endif
 }
 
 void CSystem::ShellExecuteEx( const char *command, const char *file, const char *pParams )
 {
-#ifndef _X360
+#ifndef _GAMECONSOLE
 	::ShellExecuteA(NULL, command, file, pParams, NULL, SW_SHOWNORMAL);
 #endif
 }
@@ -323,7 +322,7 @@ void CSystem::ShellExecuteEx( const char *command, const char *file, const char 
 
 void CSystem::SetClipboardImage( void *pWnd, int x1, int y1, int x2, int y2 )
 {
-#ifndef _X360
+#ifndef _GAMECONSOLE
 	if ( x2 <= x1 || y2 <= y1 )
 		return;
 
@@ -365,7 +364,7 @@ void CSystem::SetClipboardImage( void *pWnd, int x1, int y1, int x2, int y2 )
 
 void CSystem::SetClipboardText(const char *text, int textLen)
 {
-#ifndef _X360
+#ifndef _GAMECONSOLE
 	if (!text)
 		return;
 
@@ -381,7 +380,7 @@ void CSystem::SetClipboardText(const char *text, int textLen)
 	if (hmem)
 	{
 		void *ptr = GlobalLock(hmem);
-		if (ptr != null)
+		if (ptr != 0)
 		{
 			memset(ptr, 0, textLen + 1);
 			memcpy(ptr, text, textLen);
@@ -400,7 +399,7 @@ void CSystem::SetClipboardText(const char *text, int textLen)
 //-----------------------------------------------------------------------------
 void CSystem::SetClipboardText(const wchar_t *text, int textLen)
 {
-#ifndef _X360
+#ifndef _GAMECONSOLE
 	if (!text)
 		return;
 
@@ -417,7 +416,7 @@ void CSystem::SetClipboardText(const wchar_t *text, int textLen)
 	if (hmem)
 	{
 		void *ptr = GlobalLock(hmem);
-		if (ptr != null)
+		if (ptr != 0)
 		{
 			memset(ptr, 0, (textLen + 1) * sizeof(wchar_t));
 			memcpy(ptr, text, textLen * sizeof(wchar_t));
@@ -433,23 +432,19 @@ void CSystem::SetClipboardText(const wchar_t *text, int textLen)
 
 int CSystem::GetClipboardTextCount()
 {
-#ifndef _X360
+#ifndef _GAMECONSOLE
 	int count = 0;
 	
-	if ( VCRGetMode() != VCR_Playback )
+	if (OpenClipboard(GetDesktopWindow() ))
 	{
-		if (OpenClipboard(GetDesktopWindow() ))
+		HANDLE hmem = GetClipboardData(CF_TEXT);
+		if (hmem)
 		{
-			HANDLE hmem = GetClipboardData(CF_TEXT);
-			if (hmem)
-			{
-				count = GlobalSize(hmem);
-			}
-
-			CloseClipboard();
+			count = GlobalSize(hmem);
 		}
+
+		CloseClipboard();
 	}
-	VCRGenericValue( "clipboard", &count, sizeof( count ) );
 
 	return count;
 #else
@@ -459,9 +454,9 @@ int CSystem::GetClipboardTextCount()
 
 int CSystem::GetClipboardText(int offset, char *buf, int bufLen)
 {
-#ifndef _X360
+#ifndef _GAMECONSOLE
 	int count = 0;
-	if ( buf && bufLen > 0 && VCRGetMode() != VCR_Playback )
+	if ( buf && bufLen > 0 )
 	{
 		if (OpenClipboard(GetDesktopWindow()))
 		{
@@ -492,8 +487,6 @@ int CSystem::GetClipboardText(int offset, char *buf, int bufLen)
 			CloseClipboard();
 		}
 	}
-	VCRGenericValue( "cb", &count, sizeof( count ) );
-	VCRGenericValue( "cb", buf, count );
 
 	return count;
 #else
@@ -506,9 +499,9 @@ int CSystem::GetClipboardText(int offset, char *buf, int bufLen)
 //-----------------------------------------------------------------------------
 int CSystem::GetClipboardText(int offset, wchar_t *buf, int bufLen)
 {
-#ifndef _X360
+#ifndef _GAMECONSOLE
 	int retVal = 0;
-	if ( buf && bufLen > 0 && VCRGetMode() != VCR_Playback )
+	if ( buf && bufLen > 0 )
 	{
 		if (OpenClipboard( GetDesktopWindow() ) )
 		{
@@ -537,9 +530,6 @@ int CSystem::GetClipboardText(int offset, wchar_t *buf, int bufLen)
 		CloseClipboard();
 	}
 
-	VCRGenericValue( "cb", &retVal, sizeof( retVal ) );
-	VCRGenericValue( "cb", buf, retVal*sizeof(wchar_t) );
-
 	return retVal;
 #else
 	return 0;
@@ -548,7 +538,7 @@ int CSystem::GetClipboardText(int offset, wchar_t *buf, int bufLen)
 
 static bool staticSplitRegistryKey(const char *key, char *key0, int key0Len, char *key1, int key1Len)
 {
-	if(key==null)
+	if(key==0)
 	{
 		return false;
 	}
@@ -585,7 +575,7 @@ static bool staticSplitRegistryKey(const char *key, char *key0, int key0Len, cha
 
 bool CSystem::SetRegistryString(const char *key, const char *value)
 {
-#ifndef _X360
+#ifndef _GAMECONSOLE
 	HKEY hKey;
 
 	HKEY hSlot = HKEY_CURRENT_USER;
@@ -606,18 +596,18 @@ bool CSystem::SetRegistryString(const char *key, const char *value)
 		return false;
 	}
 
-	if(VCRHook_RegCreateKeyEx(hSlot,key0,null,null,REG_OPTION_NON_VOLATILE, value ? KEY_WRITE : KEY_ALL_ACCESS,null,&hKey,null)!=ERROR_SUCCESS)
+	if ( RegCreateKeyEx( hSlot,key0,0,0,REG_OPTION_NON_VOLATILE, value ? KEY_WRITE : KEY_ALL_ACCESS,0,&hKey,0 ) != ERROR_SUCCESS )
 	{
 		return false;
 	}
 
-	if (VCRHook_RegSetValueEx(hKey, key1, NULL, REG_SZ, (uchar*)value, strlen(value) + 1) == ERROR_SUCCESS)
+	if ( RegSetValueEx( hKey, key1, NULL, REG_SZ, (uchar*)value, strlen(value) + 1 ) == ERROR_SUCCESS )
 	{
-		VCRHook_RegCloseKey(hKey);
+		RegCloseKey(hKey);
 		return true;
 	}
 
-	VCRHook_RegCloseKey(hKey);
+	RegCloseKey(hKey);
 #endif
 
 	return false;
@@ -625,7 +615,7 @@ bool CSystem::SetRegistryString(const char *key, const char *value)
 
 bool CSystem::GetRegistryString(const char *key, char *value, int valueLen)
 {
-#ifndef _X360
+#ifndef _GAMECONSOLE
 	if (!value)
 		return false;
 	value[0] = 0;
@@ -650,19 +640,19 @@ bool CSystem::GetRegistryString(const char *key, char *value, int valueLen)
 		return false;
 	}
 
-	if(VCRHook_RegOpenKeyEx(hSlot,key0,null,KEY_READ,&hKey)!=ERROR_SUCCESS)
+	if ( RegOpenKeyEx( hSlot,key0,0,KEY_READ,&hKey ) != ERROR_SUCCESS )
 	{
 		return false;
 	}
 
 	ulong len=valueLen;
-	if(VCRHook_RegQueryValueEx(hKey,key1,null,null,(uchar*)value,&len)==ERROR_SUCCESS)
+	if ( RegQueryValueEx( hKey,key1,0,0,(uchar*)value,&len ) == ERROR_SUCCESS )
 	{		
-		VCRHook_RegCloseKey(hKey);
+		RegCloseKey(hKey);
 		return true;
 	}
 
-	VCRHook_RegCloseKey(hKey);
+	RegCloseKey(hKey);
 #endif
 
 	return false;
@@ -670,7 +660,7 @@ bool CSystem::GetRegistryString(const char *key, char *value, int valueLen)
 
 bool CSystem::SetRegistryInteger(const char *key, int value)
 {
-#ifndef _X360
+#ifndef _GAMECONSOLE
 	HKEY hKey;
 	HKEY hSlot = HKEY_CURRENT_USER;
 	if (!strncmp(key, "HKEY_LOCAL_MACHINE", 18))
@@ -690,25 +680,25 @@ bool CSystem::SetRegistryInteger(const char *key, int value)
 		return false;
 	}
 
-	if(VCRHook_RegCreateKeyEx(hSlot,key0,null,null,REG_OPTION_NON_VOLATILE,KEY_WRITE,null,&hKey,null)!=ERROR_SUCCESS)
+	if ( RegCreateKeyEx( hSlot,key0,0,0,REG_OPTION_NON_VOLATILE,KEY_WRITE,0,&hKey,0 ) != ERROR_SUCCESS )
 	{
 		return false;
 	}
 		
-	if(VCRHook_RegSetValueEx(hKey,key1,null,REG_DWORD,(uchar*)&value,4)==ERROR_SUCCESS)
+	if ( RegSetValueEx( hKey,key1,0,REG_DWORD,(uchar*)&value,4 ) == ERROR_SUCCESS )
 	{
-		VCRHook_RegCloseKey(hKey);
+		RegCloseKey(hKey);
 		return true;
 	}
 
-	VCRHook_RegCloseKey(hKey);
+	RegCloseKey(hKey);
 #endif
 	return false;
 }
 
 bool CSystem::GetRegistryInteger(const char *key, int &value)
 {
-#ifndef _X360
+#ifndef _GAMECONSOLE
 	HKEY hKey;
 	HKEY hSlot = HKEY_CURRENT_USER;
 	if (!strncmp(key, "HKEY_LOCAL_MACHINE", 18))
@@ -728,19 +718,19 @@ bool CSystem::GetRegistryInteger(const char *key, int &value)
 		return false;
 	}
 
-	if(VCRHook_RegOpenKeyEx(hSlot,key0,null,KEY_READ,&hKey)!=ERROR_SUCCESS)
+	if ( RegOpenKeyEx( hSlot,key0,0,KEY_READ,&hKey ) != ERROR_SUCCESS )
 	{
 		return false;
 	}
 
 	ulong len=4;
-	if(VCRHook_RegQueryValueEx(hKey,key1,null,null,(uchar*)&value,&len)==ERROR_SUCCESS)
+	if ( RegQueryValueEx( hKey,key1,0,0,(uchar*)&value,&len ) == ERROR_SUCCESS )
 	{		
-		VCRHook_RegCloseKey(hKey);
+		RegCloseKey(hKey);
 		return true;
 	}
 
-	VCRHook_RegCloseKey(hKey);
+	RegCloseKey(hKey);
 #endif
 	return false;
 }
@@ -750,7 +740,7 @@ bool CSystem::GetRegistryInteger(const char *key, int &value)
 //-----------------------------------------------------------------------------
 bool CSystem::DeleteRegistryKey(const char *key)
 {
-#ifndef _X360
+#ifndef _GAMECONSOLE
 	HKEY hSlot = HKEY_CURRENT_USER;
 	if (!strncmp(key, "HKEY_LOCAL_MACHINE", 18))
 	{
@@ -811,10 +801,10 @@ double CSystem::GetTimeSinceLastUse()
 //-----------------------------------------------------------------------------
 int CSystem::GetAvailableDrives(char *buf, int bufLen)
 {
-#if defined( _X360 ) || defined ( APPLE )
+#if ( defined( _GAMECONSOLE ) || defined ( OSX ) )
 	return 0;
 #else // Windows
-	return GetLogicalDriveStrings( bufLen, buf );
+	return GetLogicalDriveStrings(bufLen, buf);
 #endif
 }
 
@@ -823,6 +813,7 @@ int CSystem::GetAvailableDrives(char *buf, int bufLen)
 //-----------------------------------------------------------------------------
 double CSystem::GetFreeDiskSpace(const char *path)
 {
+#if !defined (_PS3)
 	char buf[_MAX_PATH];
 	strcpy(buf, path);
 	// strip of to first slash (to make it look like 'x:\')
@@ -837,6 +828,7 @@ double CSystem::GetFreeDiskSpace(const char *path)
 	{
 		return (double)userFreeBytes.QuadPart;
 	}
+#endif
 	return 0.0;
 }
 
@@ -925,7 +917,11 @@ bool CSystem::GetCommandLineParamValue(const char *paramName, char *value, int v
 //-----------------------------------------------------------------------------
 const char *CSystem::GetFullCommandLine()
 {
-	return VCRHook_GetCommandLine();
+#if defined(_PS3)
+	return Plat_GetCommandLine();
+#else
+	return GetCommandLine();
+#endif
 }
 
 
@@ -939,6 +935,7 @@ KeyCode CSystem::KeyCode_VirtualKeyToVGUI( int keyCode )
 //-----------------------------------------------------------------------------
 bool CSystem::GetCurrentTimeAndDate(int *year, int *month, int *dayOfWeek, int *day, int *hour, int *minute, int *second)
 {
+#if !defined (_PS3)
 	SYSTEMTIME time;
 	GetLocalTime(&time);
 	if (year)
@@ -969,6 +966,7 @@ bool CSystem::GetCurrentTimeAndDate(int *year, int *month, int *dayOfWeek, int *
 	{
 		*second = time.wSecond;
 	}
+#endif
 	return true;
 }
 
@@ -977,7 +975,7 @@ bool CSystem::GetCurrentTimeAndDate(int *year, int *month, int *dayOfWeek, int *
 //-----------------------------------------------------------------------------
 bool CSystem::CreateShortcut(const char *linkFileName, const char *targetPath, const char *arguments, const char *workingDirectory, const char *iconFile)
 {
-#ifndef _X360
+#ifndef _GAMECONSOLE
 	bool bSuccess = false;
 	char temp[MAX_PATH];
 	strcpy(temp, linkFileName);
@@ -1032,7 +1030,7 @@ bool CSystem::CreateShortcut(const char *linkFileName, const char *targetPath, c
 //-----------------------------------------------------------------------------
 bool CSystem::GetShortcutTarget(const char *linkFileName, char *targetPath, char *arguments, int destBufferSizes)
 {
-#ifndef _X360
+#ifndef _GAMECONSOLE
 	char temp[MAX_PATH];
 	strcpy(temp, linkFileName);
 	strlwr(temp);
@@ -1081,7 +1079,7 @@ bool CSystem::GetShortcutTarget(const char *linkFileName, char *targetPath, char
 //-----------------------------------------------------------------------------
 bool CSystem::ModifyShortcutTarget(const char *linkFileName, const char *targetPath, const char *arguments, const char *workingDirectory)
 {
-#ifndef _X360
+#ifndef _GAMECONSOLE
 	bool bSuccess = false;
 	char temp[MAX_PATH];
 	strcpy(temp, linkFileName);
@@ -1128,7 +1126,7 @@ bool CSystem::ModifyShortcutTarget(const char *linkFileName, const char *targetP
 //-----------------------------------------------------------------------------
 const char *CSystem::GetDesktopFolderPath()
 {
-#ifndef _X360
+#ifndef _GAMECONSOLE
 	static char folderPath[MAX_PATH];
 	folderPath[0] = 0;
 

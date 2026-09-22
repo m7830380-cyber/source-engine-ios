@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -13,7 +13,7 @@
 #include <malloc.h>
 #include "tier1/strtools.h"
 #include "materialpatch.h"
-#include "KeyValues.h"
+#include "keyvalues.h"
 
 void LoadSurfaceProperties( void );
 
@@ -80,6 +80,20 @@ int	FindMiptex (const char *name)
 		Warning("Material not found!: %s\n", name );
 
 	// HANDLE ALL OF THE STUFF THAT ISN'T RENDERED WITH THE MATERIAL THAT IS ONE IT.
+
+	// can't have portals
+	if ( ( propVal = GetMaterialVar( matID, "%noPortal" ) ) &&
+		StringIsTrue( propVal ) )
+	{
+		textureref[i].flags |= SURF_NOPORTAL;
+	}
+
+	// can't have paint
+	if ( ( propVal = GetMaterialVar( matID, "%noPaint" ) ) &&
+		StringIsTrue( propVal ) )
+	{
+		textureref[i].flags |= SURF_NOPAINT;
+	}
 	
 	// handle sky
 	if( ( propVal = GetMaterialVar( matID, "%compileSky" ) ) &&
@@ -153,6 +167,13 @@ int	FindMiptex (const char *name)
 	{
 		textureref[i].flags |= SURF_NOLIGHT;
 	}
+	// Handle grenade clip.
+	else if ( ( propVal = GetMaterialVar( matID, "%compilegrenadeclip" ) ) && StringIsTrue( propVal ) )
+	{
+		textureref[i].contents |= CONTENTS_DETAIL;
+		textureref[i].contents |= CONTENTS_GRENADECLIP;
+		textureref[i].flags |= SURF_NODRAW | SURF_NOLIGHT;
+	}
 	else
 	{
 		// HANDLE ALL OF THE STUFF THAT IS RENDERED WITH THE MATERIAL THAT IS ON IT.
@@ -163,9 +184,22 @@ int	FindMiptex (const char *name)
 			textureref[i].contents |= CONTENTS_LADDER;
 		}
 
-		// handle wet materials
-		if ( ( propVal = GetMaterialVar( matID, "%noPortal" ) ) &&
-			StringIsTrue( propVal ) )
+		// Handle team-specific textures.
+		if ( propVal = GetMaterialVar( matID, "%compileTeam" ) )
+		{
+			int val = atoi( propVal );
+			if ( val == 1 )
+			{
+				textureref[i].contents |= CONTENTS_TEAM1;
+			}
+			else if ( val == 2 )
+			{
+				textureref[i].contents |= CONTENTS_TEAM2;
+			}
+		}
+
+		// Handle hot surfaces (ice won't stick to them). We're piggybacking on SURF_NOPORTAL for now.
+		if ( ( propVal = GetMaterialVar( matID, "%hotSurface" ) ) && StringIsTrue( propVal ) )
 		{
 			textureref[i].flags |= SURF_NOPORTAL;
 		}
@@ -250,8 +284,16 @@ int	FindMiptex (const char *name)
 			// Set this so that we can check at the end of the process the presence of a a WaterLODControl entity.
 			g_bHasWater = true;
 		}
+
+		// handle materials that want to be treated as water.
+		if ( ( propVal = GetMaterialVar( matID, "%compileNoShadows" ) ) &&
+			StringIsTrue( propVal ) )
+		{
+			textureref[i].flags |= SURF_NOSHADOWS;
+		}
+
 		const char *pShaderName = GetMaterialShaderName(matID);
-		if ( !bKeepLighting && !Q_strncasecmp( pShaderName, "water", 5 ) || !Q_strncasecmp( pShaderName, "UnlitGeneric", 12 ) )
+		if ( !Q_strncasecmp( pShaderName, "UnlitGeneric", 12 ) )
 		{
 			//if ( !(textureref[i].flags & SURF_NOLIGHT) )
 			//	Warning("Forcing lit materal %s to nolight\n", name );
@@ -364,20 +406,20 @@ int GetSurfaceProperties( MaterialSystemMaterial_t matID, const char *pMatName )
 	return surfaceIndex;
 }
 
-int GetSurfaceProperties2( MaterialSystemMaterial_t matID, const char *pMatName )
+int GetSurfaceProperties2( MaterialSystemMaterial_t matID, const char *pMatName, const char *pVarName )
 {
 	const char *pPropString = NULL;
 	int surfaceIndex = -1;
 
 	if ( physprops )
 	{
-		pPropString = GetMaterialVar( matID, "$surfaceprop2" );
+		pPropString = GetMaterialVar( matID, pVarName );
 		if ( pPropString )
 		{
 			surfaceIndex = physprops->GetSurfaceIndex( pPropString );
 			if ( surfaceIndex < 0 )
 			{
-				Msg("Can't find surfacepropblend %s for material %s, using default\n", pPropString, pMatName );
+				Msg("Can't find %s %s for material %s, using default\n", pVarName, pPropString, pMatName );
 				surfaceIndex = physprops->GetSurfaceIndex( "default" );
 			}
 		}

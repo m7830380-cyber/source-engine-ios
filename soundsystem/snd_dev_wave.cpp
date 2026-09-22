@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -19,9 +19,13 @@
 #include "soundsystem.h"
 #include "soundsystem/snd_device.h"
 #include "tier1/utlvector.h"
-#include "filesystem.h"
+#include "FileSystem.h"
 #include "sentence.h"
 
+// NOTE: This has to be the last file included!
+#include "tier0/memdbgon.h"
+
+DEFINE_LOGGING_CHANNEL_NO_TAGS( LOG_SoundSystem, "SoundSystem", 0, LS_ERROR );
 
 //-----------------------------------------------------------------------------
 // Forward declarations
@@ -219,7 +223,7 @@ void CAudioDeviceWave::OpenWaveOut( void )
 	{
 		if ( errorCode != MMSYSERR_ALLOCATED )
 		{
-			DWarning( "soundsystem", 1, "waveOutOpen failed\n" );
+			Log_Warning( LOG_SoundSystem, "waveOutOpen failed\n" );
 			m_waveOutHandle = 0;
 			return;
 		}
@@ -232,7 +236,7 @@ void CAudioDeviceWave::OpenWaveOut( void )
 
 		if ( nRetVal != IDRETRY )
 		{
-			DWarning( "soundsystem", 1, "waveOutOpen failure--hardware already in use\n" );
+			Log_Warning( LOG_SoundSystem, "waveOutOpen failure--hardware already in use\n" );
 			m_waveOutHandle = 0;
 			return;
 		}
@@ -269,7 +273,7 @@ void* CAudioDeviceWave::AllocOutputMemory( int nSize, HGLOBAL &hMemory )
 	hMemory = GlobalAlloc( GMEM_MOVEABLE | GMEM_SHARE, nSize ); 
 	if ( !hMemory ) 
 	{ 
-		DWarning( "soundsystem", 1, "Sound: Out of memory.\n");
+		Log_Warning( LOG_SoundSystem, "Sound: Out of memory.\n");
 		CloseWaveOut();
 		return NULL;
 	}
@@ -277,7 +281,7 @@ void* CAudioDeviceWave::AllocOutputMemory( int nSize, HGLOBAL &hMemory )
 	HPSTR lpData = (char *)GlobalLock( hMemory );
 	if ( !lpData )
 	{ 
-		DWarning( "soundsystem", 1, "Sound: Failed to lock.\n");
+		Log_Warning( LOG_SoundSystem, "Sound: Failed to lock.\n");
 		GlobalFree( hMemory );
 		hMemory = NULL;
 		CloseWaveOut();
@@ -329,7 +333,7 @@ void CAudioDeviceWave::AllocateOutputBuffers()
 		MMRESULT nResult = waveOutPrepareHeader( m_waveOutHandle, lpHdr, sizeof(WAVEHDR) );
 		if ( nResult != MMSYSERR_NOERROR )
 		{
-			DWarning( "soundsystem", 1, "Sound: failed to prepare wave headers\n" );
+			Log_Warning( LOG_SoundSystem, "Sound: failed to prepare wave headers\n" );
 			CloseWaveOut();
 			return;
 		}
@@ -546,7 +550,7 @@ void CAudioDeviceWave::RemoveMixerChannelReferences( CAudioMixer *mixer )
 void CAudioDeviceWave::AddToReferencedList( CAudioMixer *mixer, CAudioBuffer *buffer )
 {
 	// Already in list
-	for ( int i = 0; i < buffer->m_Referenced.Size(); i++ )
+	for ( int i = 0; i < buffer->m_Referenced.Count(); i++ )
 	{
 		if ( buffer->m_Referenced[ i ].mixer == mixer )
 			return;
@@ -561,7 +565,7 @@ void CAudioDeviceWave::AddToReferencedList( CAudioMixer *mixer, CAudioBuffer *bu
 
 void CAudioDeviceWave::RemoveFromReferencedList( CAudioMixer *mixer, CAudioBuffer *buffer )
 {
-	for ( int i = 0; i < buffer->m_Referenced.Size(); i++ )
+	for ( int i = 0; i < buffer->m_Referenced.Count(); i++ )
 	{
 		if ( buffer->m_Referenced[ i ].mixer == mixer )
 		{
@@ -573,7 +577,7 @@ void CAudioDeviceWave::RemoveFromReferencedList( CAudioMixer *mixer, CAudioBuffe
 
 bool CAudioDeviceWave::IsSoundInReferencedList( CAudioMixer *mixer, CAudioBuffer *buffer )
 {
-	for ( int i = 0; i < buffer->m_Referenced.Size(); i++ )
+	for ( int i = 0; i < buffer->m_Referenced.Count(); i++ )
 	{
 		if ( buffer->m_Referenced[ i ].mixer == mixer )
 		{

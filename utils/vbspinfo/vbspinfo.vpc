@@ -5,9 +5,9 @@
 //-----------------------------------------------------------------------------
 
 $Macro SRCDIR		"..\.."
-$Macro OUTBINDIR	"$LIBPUBLIC"
+$Macro OUTBINDIR	"$SRCDIR\..\game\bin"
 
-$Include "$SRCDIR\vpc_scripts\source_exe_con_base.vpc"
+$Include "$SRCDIR\vpc_scripts\source_exe_con_win32_base.vpc"
 
 $Configuration
 {
@@ -41,6 +41,7 @@ $Project "Vbspinfo"
 		$File	"..\common\scriplib.cpp"
 		$File	"vbspinfo.cpp"
 		$File	"$SRCDIR\public\zip_utils.cpp"
+		$File   "$SRCDIR\public\collisionutils.cpp"
 	}
 
 	$Folder	"Header Files"
@@ -54,8 +55,7 @@ $Project "Vbspinfo"
 
 	$Folder	"Link Libraries"
 	{
-		$Lib mathlib
-		$Lib tier2
-		$Lib "$LIBCOMMON/lzma"
+		$File	"$SRCDIR\lib\public\mathlib.lib"
+		$File	"$SRCDIR\lib\public\tier2.lib"
 	}
 }

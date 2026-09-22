@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -13,6 +13,7 @@
 
 #include <mxtk/mx.h>
 #include "utlvector.h"
+#include "color.h"
 
 class CChoreoWidgetDrawHelper;
 
@@ -56,7 +57,7 @@ public:
 	virtual char const	*getPrefix( int item );
 	virtual void		ShowRightClickMenu( int mx, int my ) = 0;
 
-	void				SetColor( int index, COLORREF clr );
+	void				SetColor( int index, const Color& clr );
 
 	void				SetInverted( bool invert );
 	void				SetRightJustify( bool rightjustify );
@@ -95,7 +96,7 @@ protected:
 	bool					m_bInverted;
 	bool					m_bRightJustify;
 
-	COLORREF				m_Colors[ NUM_COLORS ];
+	Color				m_Colors[ NUM_COLORS ];
 
 	int						m_nRowHeight;
 };

@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2005, Valve Corporation, All rights reserved. =======
 //
 // Purpose: Represents an entity in a VMF
 //
@@ -13,7 +13,7 @@
 #include "toolutils/dmemdlrenderable.h"
 #include "datamodel/dmelement.h"
 #include "toolframework/itoolentity.h"
-#include "materialsystem/MaterialSystemUtil.h"
+#include "materialsystem/materialsystemutil.h"
 
 
 //-----------------------------------------------------------------------------
@@ -31,9 +31,9 @@ public:
 	// Inherited from DmeRenderable
 	virtual const Vector &GetRenderOrigin( void );
 	virtual const QAngle &GetRenderAngles( void );
-	virtual int		DrawModel( int flags );
+	virtual int		DrawModel( int flags, const RenderableInstance_t &instance );
 	virtual void	GetRenderBounds( Vector& mins, Vector& maxs );
-	virtual bool	IsTransparent( void ); 
+	virtual RenderableTranslucencyType_t ComputeTranslucencyType( void );
 
 public:
 	int GetEntityId() const;

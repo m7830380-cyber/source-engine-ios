@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2004, Valve Corporation, All rights reserved. =======
 //
 // Purpose: 
 //
@@ -27,8 +27,8 @@ IMPLEMENT_ELEMENT_FACTORY( DmeLight, CDmeLight );
 //-----------------------------------------------------------------------------
 void CDmeLight::OnConstruction()
 {
-	m_Color.InitAndSet( this, "color", Color( 255, 255, 255, 255 ), FATTRIB_HAS_CALLBACK );
-	m_flIntensity.InitAndSet( this, "intensity", 1.0f, FATTRIB_HAS_CALLBACK );
+	m_Color.InitAndSet( this, "color", Color( 255, 255, 255, 255 ) );
+	m_flIntensity.InitAndSet( this, "intensity", 1.0f );
 }
 
 void CDmeLight::OnDestruction()
@@ -82,22 +82,6 @@ void CDmeLight::SetupRenderStateInternal( LightDesc_t &desc, float flAtten0, flo
 
 
 //-----------------------------------------------------------------------------
-//   Sets lighting state
-//-----------------------------------------------------------------------------
-void CDmeLight::SetupRenderState( int nLightIndex )
-{
-	LightDesc_t desc;
-	if ( GetLightDesc( &desc ) )
-	{
-		// FIXME: Should we pass the light color in?
-		CMatRenderContextPtr pRenderContext( g_pMaterialSystem );
-		pRenderContext->SetLight( nLightIndex, desc );
-	}
-}
-
-
-
-//-----------------------------------------------------------------------------
 //
 // A directional light
 //
@@ -110,22 +94,11 @@ IMPLEMENT_ELEMENT_FACTORY( DmeDirectionalLight, CDmeDirectionalLight );
 //-----------------------------------------------------------------------------
 void CDmeDirectionalLight::OnConstruction()
 {
-	m_Direction.InitAndSet( this, "direction", Vector( 0.0f, 0.0f, -1.0f ), FATTRIB_HAS_CALLBACK );
 }
 
 void CDmeDirectionalLight::OnDestruction()
 {
 }
-
-
-//-----------------------------------------------------------------------------
-// Sets the light direction
-//-----------------------------------------------------------------------------
-void CDmeDirectionalLight::SetDirection( const Vector &direction )
-{
-	m_Direction.Set( direction );
-}
-
 
 //-----------------------------------------------------------------------------
 // Gets a light desc for the light
@@ -138,13 +111,13 @@ bool CDmeDirectionalLight::GetLightDesc( LightDesc_t *pDesc )
 	SetupRenderStateInternal( *pDesc, 1.0f, 0.0f, 0.0f );
 
 	matrix3x4_t m;
-	GetTransform()->GetTransform( m );
-	VectorRotate( m_Direction.Get(), m, pDesc->m_Direction );
-	VectorNormalize( pDesc->m_Direction );
+	GetAbsTransform( m );
+	MatrixGetColumn( m, 0, pDesc->m_Direction ); // from mathlib_base.cpp: MatrixVectors(): Matrix is right-handed x=forward, y=left, z=up. We a left-handed convention for vectors in the game code (forward, right, up)
 
 	pDesc->m_Theta = 0.0f;
 	pDesc->m_Phi = 0.0f;
 	pDesc->m_Falloff = 1.0f;
+	pDesc->RecalculateDerivedValues();
 
 	return true;
 }
@@ -163,11 +136,10 @@ IMPLEMENT_ELEMENT_FACTORY( DmePointLight, CDmePointLight );
 //-----------------------------------------------------------------------------
 void CDmePointLight::OnConstruction()
 {
-	m_Position.InitAndSet( this, "position", Vector( 0, 0, 0 ), FATTRIB_HAS_CALLBACK );
-	m_flAttenuation0.InitAndSet( this, "constantAttenuation", 1.0f, FATTRIB_HAS_CALLBACK );
-	m_flAttenuation1.InitAndSet( this, "linearAttenuation", 0.0f, FATTRIB_HAS_CALLBACK );
-	m_flAttenuation2.InitAndSet( this, "quadraticAttenuation", 0.0f, FATTRIB_HAS_CALLBACK );
-	m_flMaxDistance.InitAndSet( this, "maxDistance", 0.0f, FATTRIB_HAS_CALLBACK );
+	m_flAttenuation0.InitAndSet( this, "constantAttenuation", 1.0f );
+	m_flAttenuation1.InitAndSet( this, "linearAttenuation", 0.0f );
+	m_flAttenuation2.InitAndSet( this, "quadraticAttenuation", 0.0f );
+	m_flMaxDistance.InitAndSet( this, "maxDistance", 600.0f ); // 50 feet
 }
 
 void CDmePointLight::OnDestruction()
@@ -206,14 +178,15 @@ bool CDmePointLight::GetLightDesc( LightDesc_t *pDesc )
 	SetupRenderStateInternal( *pDesc, m_flAttenuation0, m_flAttenuation1, m_flAttenuation2 );
 
 	matrix3x4_t m;
-	GetTransform()->GetTransform( m );
-	VectorTransform( m_Position, m, pDesc->m_Position );
+	GetAbsTransform( m );
+	MatrixPosition( m, pDesc->m_Position );
 	pDesc->m_Direction.Init( 0, 0, 1 );
 	pDesc->m_Range = m_flMaxDistance;
 
 	pDesc->m_Theta = 0.0f;
 	pDesc->m_Phi = 0.0f;
 	pDesc->m_Falloff = 1.0f;
+	pDesc->RecalculateDerivedValues();
 
 	return true;
 }
@@ -232,7 +205,6 @@ IMPLEMENT_ELEMENT_FACTORY( DmeSpotLight, CDmeSpotLight );
 //-----------------------------------------------------------------------------
 void CDmeSpotLight::OnConstruction()
 {
-	m_Direction.InitAndSet( this, "direction", Vector( 0.0f, 0.0f, -1.0f ) );
 	m_flSpotInnerAngle.InitAndSet( this, "spotInnerAngle", 60.0f );
 	m_flSpotOuterAngle.InitAndSet( this, "spotOuterAngle", 90.0f );
 	m_flSpotAngularFalloff.InitAndSet( this, "spotAngularFalloff", 1.0f );
@@ -241,16 +213,6 @@ void CDmeSpotLight::OnConstruction()
 void CDmeSpotLight::OnDestruction()
 {
 }
-
-
-//-----------------------------------------------------------------------------
-// Sets the light direction
-//-----------------------------------------------------------------------------
-void CDmeSpotLight::SetDirection( const Vector &direction )
-{
-	m_Direction = direction;
-}
-
 
 //-----------------------------------------------------------------------------
 // Sets the spotlight angle factors
@@ -275,16 +237,16 @@ bool CDmeSpotLight::GetLightDesc( LightDesc_t *pDesc )
 	SetupRenderStateInternal( *pDesc, m_flAttenuation0, m_flAttenuation1, m_flAttenuation2 );
 
 	matrix3x4_t m;
-	GetTransform()->GetTransform( m );
-	VectorTransform( m_Position, m, pDesc->m_Position );
-	VectorRotate( m_Direction.Get(), m, pDesc->m_Direction );
-	VectorNormalize( pDesc->m_Direction );
+	GetAbsTransform( m );
+	MatrixPosition( m, pDesc->m_Position );
+	MatrixGetColumn( m, 0, pDesc->m_Direction ); // from mathlib_base.cpp: MatrixVectors(): Matrix is right-handed x=forward, y=left, z=up. We a left-handed convention for vectors in the game code (forward, right, up)
 	pDesc->m_Range = m_flMaxDistance;
 
 	// Convert to radians
-	pDesc->m_Theta = m_flSpotInnerAngle * M_PI / 180.0f;
-	pDesc->m_Phi = m_flSpotOuterAngle * M_PI / 180.0f;
+	pDesc->m_Theta = 0.5f * m_flSpotInnerAngle * M_PI / 180.0f;
+	pDesc->m_Phi = 0.5f * m_flSpotOuterAngle * M_PI / 180.0f;
 	pDesc->m_Falloff = m_flSpotAngularFalloff;
+	pDesc->RecalculateDerivedValues();
 
 	return true;
 }
@@ -308,24 +270,3 @@ void CDmeAmbientLight::OnConstruction()
 void CDmeAmbientLight::OnDestruction()
 {
 }
-
-
-//-----------------------------------------------------------------------------
-// Sets up render state in the material system for rendering
-//-----------------------------------------------------------------------------
-void CDmeAmbientLight::SetupRenderState( int nLightIndex )
-{
-	CMatRenderContextPtr pRenderContext( g_pMaterialSystem );
-	Vector4D cube[6];
-
-	Vector4D vec4color( m_Color.Get().r(), m_Color.Get().g(), m_Color.Get().b(), m_Color.Get().a() );
-	Vector4DMultiply( vec4color, m_flIntensity / 255.0f, cube[0] );
-	cube[1] = cube[0];
-	cube[2] = cube[0];
-	cube[3] = cube[0];
-	cube[4] = cube[0];
-	cube[5] = cube[0];
-
-	pRenderContext->SetAmbientLightCube( cube );
-}
-

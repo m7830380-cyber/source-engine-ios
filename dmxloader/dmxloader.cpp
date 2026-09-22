@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2004, Valve Corporation, All rights reserved. =======
 //
 // Purpose: 
 //
@@ -9,9 +9,17 @@
 #include "tier2/tier2.h"
 #include "tier2/utlstreambuffer.h"
 #include "filesystem.h"
-#include "datamodel/idatamodel.h"	// for the file format #defines
+#include "datamodel/dmxheader.h"
 #include "dmxserializationdictionary.h"
 #include "tier1/memstack.h"
+#include "tier1/utldict.h"
+
+
+#define DMX_BINARY_VER_STRINGTABLE 2
+#define DMX_BINARY_VER_GLOBAL_STRINGTABLE 4
+#define DMX_BINARY_VER_STRINGTABLE_LARGESYMBOLS 5
+
+#define CURRENT_BINARY_ENCODING		5
 
 
 //-----------------------------------------------------------------------------
@@ -27,7 +35,12 @@ void BeginDMXContext( )
 
 	if ( !s_bAllocatorInitialized )
 	{
-		s_DMXAllocator.Init( 2 * 1024 * 1024, 0, 0, 4 );
+#ifdef PLATFORM_64BITS
+		const int k_nStackSize = 4 * 1024 * 1024;
+#else
+		const int k_nStackSize = 2 * 1024 * 1024;
+#endif
+		s_DMXAllocator.Init( "DMXAlloc", k_nStackSize, 0, 0, 4 );
 		s_bAllocatorInitialized = true;
 	}
 
@@ -55,6 +68,7 @@ void* DMXAlloc( size_t size )
 	Assert( s_bInDMXContext );
 	if ( !s_bInDMXContext )
 		return 0;
+	MEM_ALLOC_CREDIT_( "DMXAlloc" );
 	return s_DMXAllocator.Alloc( size, false );
 }
 
@@ -86,20 +100,32 @@ public:
 	bool Serialize( CUtlBuffer &buf, CDmxElement *pRoot, const char *pFileName );
 
 private:
+	// For serialize
+	typedef CUtlDict< int, int > mapSymbolToIndex_t;
+
 	// Methods related to serialization
 	bool ShouldWriteAttribute( const char *pAttributeName, CDmxAttribute *pAttribute );
 	void SerializeElementIndex( CUtlBuffer& buf, CDmxSerializationDictionary& list, CDmxElement *pElement );
 	void SerializeElementAttribute( CUtlBuffer& buf, CDmxSerializationDictionary& list, CDmxAttribute *pAttribute );
 	void SerializeElementArrayAttribute( CUtlBuffer& buf, CDmxSerializationDictionary& list, CDmxAttribute *pAttribute );
-	bool SaveElementDict( CUtlBuffer& buf, CUtlRBTree< const char* > &stringTable, CDmxElement *pElement );
-	bool SaveElement( CUtlBuffer& buf, CDmxSerializationDictionary& dict, CUtlRBTree< const char* > &stringTable, CDmxElement *pElement);
+	bool SaveElementDict( CUtlBuffer& buf, mapSymbolToIndex_t *pStringValueSymbols, CDmxElement *pElement );
+	bool SaveElement( CUtlBuffer& buf, CDmxSerializationDictionary& dict, mapSymbolToIndex_t *pStringValueSymbols, CDmxElement *pElement);
+	void GatherSymbols( CUtlSymbolTableLarge *pStringValueSymbols, CDmxElement *pElement );
 
 	// Methods related to unserialization
 	CDmxElement* UnserializeElementIndex( CUtlBuffer &buf, CUtlVector<CDmxElement*> &elementList );
 	void UnserializeElementAttribute( CUtlBuffer &buf, CDmxAttribute *pAttribute, CUtlVector<CDmxElement*> &elementList );
 	void UnserializeElementArrayAttribute( CUtlBuffer &buf, CDmxAttribute *pAttribute, CUtlVector<CDmxElement*> &elementList );
-	bool UnserializeAttributes( CUtlBuffer &buf, CDmxElement *pElement, CUtlVector<CDmxElement*> &elementList, int nStrings, int *offsetTable, char *stringTable );
+	bool UnserializeAttributes( CUtlBuffer &buf, CDmxElement *pElement, CUtlVector<CDmxElement*> &elementList, int nStrings, int *offsetTable, char *stringTable, int nEncodingVersion );
 	int GetStringOffsetTable( CUtlBuffer &buf, int *offsetTable, int nStrings );
+
+	inline char const *Dme_GetStringFromBuffer( CUtlBuffer &buf, bool bUseLargeSymbols, int nStrings, int *offsetTable, char *stringTable )
+	{
+		int uSym = ( bUseLargeSymbols ) ? buf.GetInt() : buf.GetShort();
+		if ( uSym >= nStrings )
+			return NULL;
+		return stringTable + offsetTable[ uSym ];
+	}
 };
 
 
@@ -163,7 +189,7 @@ void CDmxSerializer::SerializeElementArrayAttribute( CUtlBuffer& buf, CDmxSerial
 //-----------------------------------------------------------------------------
 // Writes out all attributes
 //-----------------------------------------------------------------------------
-bool CDmxSerializer::SaveElement( CUtlBuffer& buf, CDmxSerializationDictionary& list, CUtlRBTree< const char* > &stringTable, CDmxElement *pElement )
+bool CDmxSerializer::SaveElement( CUtlBuffer& buf, CDmxSerializationDictionary& list, mapSymbolToIndex_t *pStringValueSymbols, CDmxElement *pElement )
 {
 	int nAttributesToSave = 0;
 
@@ -188,11 +214,7 @@ bool CDmxSerializer::SaveElement( CUtlBuffer& buf, CDmxSerializationDictionary& 
 		if ( !ShouldWriteAttribute( pName, pAttribute ) )
 			continue;
 
-		unsigned short sym = stringTable.Find( pName );
-		if ( sym == stringTable.InvalidIndex() )
-			return false;
-
-		buf.PutShort( sym );
+		buf.PutInt( pStringValueSymbols->Find( pName ) );
 		buf.PutChar( pAttribute->GetType() );
 		switch( pAttribute->GetType() )
 		{
@@ -207,20 +229,22 @@ bool CDmxSerializer::SaveElement( CUtlBuffer& buf, CDmxSerializationDictionary& 
 		case AT_ELEMENT_ARRAY:
 			SerializeElementArrayAttribute( buf, list, pAttribute );
 			break;
+
+		case AT_STRING:
+			{
+				buf.PutInt( pStringValueSymbols->Find( pAttribute->GetValueString() ) );
+			}
+			break;
 		}
 	}
 
 	return buf.IsValid();
 }
 
-bool CDmxSerializer::SaveElementDict( CUtlBuffer& buf, CUtlRBTree< const char* > &stringTable, CDmxElement *pElement )
+bool CDmxSerializer::SaveElementDict( CUtlBuffer& buf, mapSymbolToIndex_t *pStringValueSymbols, CDmxElement *pElement )
 {
-	unsigned short sym = stringTable.Find( pElement->GetTypeString() );
-	if ( sym == stringTable.InvalidIndex() )
-		return false;
-
-	buf.PutShort( sym );
-	buf.PutString( pElement->GetName() );
+	buf.PutInt( pStringValueSymbols->Find( pElement->GetTypeString() ) );
+	buf.PutInt( pStringValueSymbols->Find( pElement->GetName() ) );
 	buf.Put( &pElement->GetId(), sizeof(DmObjectId_t) );
 	return buf.IsValid();
 }
@@ -228,53 +252,80 @@ bool CDmxSerializer::SaveElementDict( CUtlBuffer& buf, CUtlRBTree< const char* >
 //-----------------------------------------------------------------------------
 // Main entry point for serialization
 //-----------------------------------------------------------------------------
+
+void CDmxSerializer::GatherSymbols( CUtlSymbolTableLarge *pStringValueSymbols, CDmxElement *pElement )
+{
+	pStringValueSymbols->AddString( pElement->GetTypeString() );
+	pStringValueSymbols->AddString( pElement->GetName() );
+
+	int nAttributes = pElement->AttributeCount();
+	for ( int ai = 0; ai < nAttributes; ++ai )
+	{
+		CDmxAttribute *pAttr = pElement->GetAttribute( ai );
+		if ( !pAttr )
+			continue;
+
+		pStringValueSymbols->AddString( pAttr->GetName() );
+
+		if ( pAttr->GetType() == AT_STRING )
+		{
+			pStringValueSymbols->AddString( pAttr->GetValueString() );
+		}
+	}
+}
+
 bool CDmxSerializer::Serialize( CUtlBuffer &buf, CDmxElement *pRoot, const char *pFileName )
 {
+	DmxSerializationHandle_t i;
+
 	// Save elements, attribute links
 	CDmxSerializationDictionary dict;
 	dict.BuildElementList( pRoot, true );
 
-	// collect list of attribute names and element types into string table
-	CUtlRBTree< const char* > stringTable( CaselessStringLessThan );
-	DmxSerializationHandle_t i;
+	// collect string table
+	CUtlSymbolTableLarge stringSymbols;
+
 	for ( i = dict.FirstRootElement(); i != DMX_SERIALIZATION_HANDLE_INVALID; i = dict.NextRootElement(i) )
 	{
 		CDmxElement *pElement = dict.GetRootElement( i );
 		if ( !pElement )
 			return false;
-		stringTable.InsertIfNotFound( pElement->GetTypeString() );
-		int nAttributes = pElement->AttributeCount();
-		for ( int ai = 0; ai < nAttributes; ++ai )
-		{
-			CDmxAttribute *pAttr = pElement->GetAttribute( ai );
-			if ( !pAttr )
-				return false;
-			stringTable.InsertIfNotFound( pAttr->GetName() );
-		}
+
+		GatherSymbols( &stringSymbols, pElement );
 	}
 
-	// write out the string table
-	int nStrings = stringTable.Count();
-	if ( nStrings > 65535 )
-		return false;
-	buf.PutShort( nStrings );
-	for ( int si = 0; si < nStrings; ++si )
+	// write out the symbol table for this file (may be significantly smaller than datamodel's full symbol table)
+	int nSymbols = stringSymbols.GetNumStrings();
+
+	buf.PutInt( nSymbols );
+
+	CUtlVector< CUtlSymbolLarge > symbols;
+	symbols.EnsureCount( nSymbols );
+	stringSymbols.GetElements( 0, nSymbols, symbols.Base() );
+
+	// It's case sensitive
+	mapSymbolToIndex_t symbolToIndexMap( k_eDictCompareTypeCaseSensitive );
+
+	for ( int si = 0; si < nSymbols; ++si )
 	{
-		buf.PutString( stringTable[ si ] );
+		CUtlSymbolLarge sym = symbols[ si ];
+		const char *pStr = sym.String();
+		symbolToIndexMap.Insert( pStr, si );
+		buf.PutString( pStr );
 	}
 
 	// First write out the dictionary of all elements (to avoid later stitching up in unserialize)
 	buf.PutInt( dict.RootElementCount() );
 	for ( i = dict.FirstRootElement(); i != DMX_SERIALIZATION_HANDLE_INVALID; i = dict.NextRootElement(i) )
 	{
-		if ( !SaveElementDict( buf, stringTable, dict.GetRootElement( i ) ) )
+		if ( !SaveElementDict( buf, &symbolToIndexMap, dict.GetRootElement( i ) ) )
 			return false;
 	}
 
 	// Now write out the attributes of each of those elements
 	for ( i = dict.FirstRootElement(); i != DMX_SERIALIZATION_HANDLE_INVALID; i = dict.NextRootElement(i) )
 	{
-		if ( !SaveElement( buf, dict, stringTable, dict.GetRootElement( i ) ) )
+		if ( !SaveElement( buf, dict, &symbolToIndexMap, dict.GetRootElement( i ) ) )
 			return false;
 	}
 
@@ -291,6 +342,12 @@ CDmxElement* CDmxSerializer::UnserializeElementIndex( CUtlBuffer &buf, CUtlVecto
 	if ( nElementIndex == ELEMENT_INDEX_EXTERNAL )
 	{
 		Warning( "Reading externally referenced elements is not supported!\n" );
+
+		char idstr[ 40 ];
+		buf.GetString( idstr, sizeof( idstr ) );
+//		DmObjectId_t id;
+//		UniqueIdFromString( &id, idstr, sizeof( idstr ) );
+
 		return NULL;
 	}
 
@@ -333,32 +390,41 @@ void CDmxSerializer::UnserializeElementArrayAttribute( CUtlBuffer &buf, CDmxAttr
 //-----------------------------------------------------------------------------
 // Reads a single element
 //-----------------------------------------------------------------------------
-bool CDmxSerializer::UnserializeAttributes( CUtlBuffer &buf, CDmxElement *pElement, CUtlVector<CDmxElement*> &elementList, int nStrings, int *offsetTable, char *stringTable )
+bool CDmxSerializer::UnserializeAttributes( CUtlBuffer &buf, CDmxElement *pElement, CUtlVector<CDmxElement*> &elementList, int nStrings, int *offsetTable, char *stringTable, int nEncodingVersion )
 {
 	CDmxElementModifyScope modify( pElement );
+
+	bool bUseLargeSymbols = nEncodingVersion >= DMX_BINARY_VER_STRINGTABLE_LARGESYMBOLS;
+
 
 	char nameBuf[ 1024 ];
 	int nAttributeCount = buf.GetInt();
 	for ( int i = 0; i < nAttributeCount; ++i )
 	{
 		const char *pName = NULL;
-		if ( stringTable )
 		{
-			int si = buf.GetShort();
-			if ( si >= nStrings )
-				return false;
-			pName = stringTable + offsetTable[ si ];
+			if ( stringTable )
+			{
+				pName = Dme_GetStringFromBuffer( buf, bUseLargeSymbols, nStrings, offsetTable, stringTable );
+				if ( !pName )
+					return false;
+			}
+			else
+			{
+				buf.GetString( nameBuf, sizeof( nameBuf ) );
+				pName = nameBuf;
+			}
 		}
-		else
-		{
-			buf.GetString( nameBuf );
-			pName = nameBuf;
-		}
+
 		DmAttributeType_t nAttributeType = (DmAttributeType_t)buf.GetChar();
+		Assert( nAttributeType >= AT_FIRST_VALUE_TYPE && nAttributeType < AT_TYPE_COUNT );
 
 		CDmxAttribute *pAttribute = pElement->AddAttribute( pName );
 		if ( !pAttribute )
+		{
+			Warning( "WARNING: Failed to create attribute '%s' - likely out of memory in s_DMXAllocator!\n", pName );
 			return false;
+		}
 
 		switch( nAttributeType )
 		{
@@ -372,6 +438,20 @@ bool CDmxSerializer::UnserializeAttributes( CUtlBuffer &buf, CDmxElement *pEleme
 
 		case AT_ELEMENT_ARRAY:
 			UnserializeElementArrayAttribute( buf, pAttribute, elementList );
+			break;
+
+		case AT_STRING:
+			if ( stringTable && nEncodingVersion >= DMX_BINARY_VER_GLOBAL_STRINGTABLE )
+			{
+				const char *pValue = Dme_GetStringFromBuffer( buf, bUseLargeSymbols, nStrings, offsetTable, stringTable );
+				if ( !pValue )
+					return false;
+				pAttribute->SetValue( pValue );
+			}
+			else
+			{
+				pAttribute->Unserialize( nAttributeType, buf );
+			}
 			break;
 		}
 	}
@@ -412,10 +492,11 @@ int CDmxSerializer::GetStringOffsetTable( CUtlBuffer &buf, int *offsetTable, int
 //-----------------------------------------------------------------------------
 bool CDmxSerializer::Unserialize( CUtlBuffer &buf, int nEncodingVersion, CDmxElement **ppRoot )
 {
-	if ( nEncodingVersion < 0 || nEncodingVersion > 2 )
+	if ( nEncodingVersion < 0 || nEncodingVersion > CURRENT_BINARY_ENCODING )
 		return false;
 
-	bool bReadStringTable = nEncodingVersion >= 2;
+	bool bReadStringTable = nEncodingVersion >= DMX_BINARY_VER_STRINGTABLE;
+	bool bUseLargeSymbols = nEncodingVersion >= DMX_BINARY_VER_STRINGTABLE_LARGESYMBOLS;
 
 	// Keep reading until we read a NULL terminator
 	while( buf.GetChar() != 0 )
@@ -430,7 +511,16 @@ bool CDmxSerializer::Unserialize( CUtlBuffer &buf, int nEncodingVersion, CDmxEle
 	char *stringTable = NULL;
 	if ( bReadStringTable )
 	{
-		nStrings = buf.GetShort();
+		if ( nEncodingVersion >= DMX_BINARY_VER_GLOBAL_STRINGTABLE )
+		{
+			nStrings = buf.GetInt();
+		}
+		else
+		{
+			nStrings = buf.GetShort();
+		}
+
+
 		if ( nStrings > 0 )
 		{
 			offsetTable = ( int* )stackalloc( nStrings * sizeof( int ) );
@@ -457,7 +547,7 @@ bool CDmxSerializer::Unserialize( CUtlBuffer &buf, int nEncodingVersion, CDmxEle
 	}
 
 	char pTypeBuf[256];
-	char pName[2048];
+	char pNameBuf[2048];
 	DmObjectId_t id;
 
 	// Read + create all elements
@@ -467,24 +557,36 @@ bool CDmxSerializer::Unserialize( CUtlBuffer &buf, int nEncodingVersion, CDmxEle
 		const char *pType = NULL;
 		if ( stringTable )
 		{
-			int si = buf.GetShort();
-			if ( si >= nStrings )
+			pType = Dme_GetStringFromBuffer( buf, bUseLargeSymbols, nStrings, offsetTable, stringTable );
+			if ( !pType )
 				return false;
-			pType = stringTable + offsetTable[ si ];
 		}
 		else
 		{
-			buf.GetString( pTypeBuf );
+			buf.GetString( pTypeBuf, sizeof( pTypeBuf ) );
 			pType = pTypeBuf;
 		}
-		buf.GetString( pName );
+
+		const char *pName = NULL;
+		if ( bReadStringTable && nEncodingVersion >= DMX_BINARY_VER_GLOBAL_STRINGTABLE )
+		{
+			pName = Dme_GetStringFromBuffer( buf, bUseLargeSymbols, nStrings, offsetTable, stringTable );
+			if ( !pName )
+				return false;
+		}
+		else
+		{
+			buf.GetString( pNameBuf, sizeof( pNameBuf ) );
+			pName = pNameBuf;
+		}
+
 		buf.Get( &id, sizeof(DmObjectId_t) );
 
 		CDmxElement *pElement = new CDmxElement( pType );
 		{
 			CDmxElementModifyScope modify( pElement );
 			CDmxAttribute *pAttribute = pElement->AddAttribute( "name" );
-			pAttribute->SetValue( (char const *) pName );
+			pAttribute->SetValue( pName );
 			pElement->SetId( id );
 		}
 		elementList.AddToTail( pElement );
@@ -496,7 +598,10 @@ bool CDmxSerializer::Unserialize( CUtlBuffer &buf, int nEncodingVersion, CDmxEle
 	// Now read all attributes
 	for ( int i = 0; i < nElementCount; ++i )
 	{
-		UnserializeAttributes( buf, elementList[ i ], elementList, nStrings, offsetTable, stringTable );
+		if ( !UnserializeAttributes( buf, elementList[ i ], elementList, nStrings, offsetTable, stringTable, nEncodingVersion ) )
+		{
+			return false;
+		}
 	}
 
 	return buf.IsValid();
@@ -511,7 +616,7 @@ bool SerializeDMX( CUtlBuffer &buf, CDmxElement *pRoot, const char *pFileName )
 	// Write the format name into the file using XML format so that 
 	// 3rd-party XML readers can read the file without fail
 	const char *pEncodingName = buf.IsText() ? "keyvalues2" : "binary";
-	int nEncodingVersion = buf.IsText() ? 1 : 2; // HACK - we should have some way of automatically updating this when the encoding version changes!
+	int nEncodingVersion = buf.IsText() ? 1 : CURRENT_BINARY_ENCODING;
 	const char *pFormatName = GENERIC_DMX_FORMAT;
 	int nFormatVersion = 1; // HACK - we should have some way of automatically updating this when the encoding version changes!
 	buf.Printf( "%s encoding %s %d format %s %d %s\n", DMX_VERSION_STARTING_TOKEN, pEncodingName, nEncodingVersion, pFormatName, nFormatVersion, DMX_VERSION_ENDING_TOKEN );
@@ -539,16 +644,33 @@ bool SerializeDMX( const char *pFileName, const char *pPathID, bool bTextMode, C
 		}
 	}
 
-	CUtlBuffer buf( 0, 0, CUtlBuffer::TEXT_BUFFER |  CUtlBuffer::READ_ONLY );
-	g_pFullFileSystem->ReadFile( pFullPath, pPathID, buf );
-
-	if ( !buf.IsValid() )
+	if ( !bTextMode )
 	{
-		Warning( "SerializeDMX: Unable to open file \"%s\"\n", pFullPath );
-		return DMFILEID_INVALID;
+		CUtlStreamBuffer buf( pFullPath, pPathID, 0 );
+		if ( !buf.IsValid() )
+		{
+			Warning( "SerializeDMX: Unable to open file \"%s\"\n", pFullPath );
+			return false;
+		}
+
+		return SerializeDMX( buf, pRoot, pFullPath );
+	}
+	else
+	{
+		CUtlBuffer buf( 0, 0, CUtlBuffer::TEXT_BUFFER );
+
+		bool bOk = SerializeDMX( buf, pRoot, pFullPath );
+		if ( !bOk )
+			return false;
+
+		if ( !g_pFullFileSystem->WriteFile( pFullPath, pPathID, buf ) )
+		{
+			Warning( "SerializeDMX: Unable to open file \"%s\"\n", pFullPath );
+			return false;
+		}
 	}
 
-	return SerializeDMX( buf, pRoot, pFullPath );
+	return true;
 }
 
 
@@ -588,7 +710,7 @@ bool ReadDMXHeader( CUtlBuffer &buf, char *pEncodingName, int nEncodingNameLen, 
 	if ( !bOk )
 	{
 		buf.SeekGet( CUtlBuffer::SEEK_HEAD, 0 );
-		bOk = buf.ParseToken( DMX_LEGACY_VERSION_STARTING_TOKEN, DMX_LEGACY_VERSION_ENDING_TOKEN, pFormatName, sizeof( pFormatName ) );
+		bOk = buf.ParseToken( DMX_LEGACY_VERSION_STARTING_TOKEN, DMX_LEGACY_VERSION_ENDING_TOKEN, pFormatName, nFormatNameLen );
 		if ( bOk )
 		{
 			nEncodingVersion = 0;
@@ -667,21 +789,30 @@ bool UnserializeDMX( const char *pFileName, const char *pPathID, bool bTextMode,
 	}
 
 	int nFlags = CUtlBuffer::READ_ONLY;
-	if ( bTextMode )
+	if ( !bTextMode )
+	{
+		CUtlStreamBuffer buf( pFullPath, pPathID, nFlags );
+		if ( !buf.IsValid() )
+		{
+			Warning( "UnserializeDMX: Unable to open file \"%s\"\n", pFullPath );
+			return false;
+		}
+
+		return UnserializeDMX( buf, ppRoot, pFullPath );
+	}
+	else
 	{
 		nFlags |= CUtlBuffer::TEXT_BUFFER;
+		
+		CUtlBuffer buf( 0, 0, nFlags );
+		if ( !g_pFullFileSystem->ReadFile( pFullPath, pPathID, buf ) )
+		{
+			Warning( "UnserializeDMX: Unable to open file \"%s\"\n", pFullPath );
+			return false;
+		}
+
+		return UnserializeDMX( buf, ppRoot, pFullPath ); 
 	}
-
-	CUtlBuffer buf( 0, 0, nFlags );
-	g_pFullFileSystem->ReadFile( pFullPath, pPathID, buf );
-
-	if ( !buf.IsValid() )
-	{
-		Warning( "UnserializeDMX: Unable to open file \"%s\"\n", pFullPath );
-		return false;
-	}
-
-	return UnserializeDMX( buf, ppRoot, pFullPath );
 }
 
 

@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -75,6 +75,8 @@ public:
 
 	// Returns the particle system definition list
 	CDmAttribute *GetParticleSystemDefinitionList();
+	int GetParticleSystemCount( );
+	CDmeParticleSystemDefinition *GetParticleSystem( int nIndex );
 
 	// add a new definition we've created
 	void AddNewParticleSystemDefinition( CDmeParticleSystemDefinition *pNew, 

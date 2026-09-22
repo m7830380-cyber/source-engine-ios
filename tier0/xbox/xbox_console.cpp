@@ -1,10 +1,10 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Xbox console link
 //
 //=====================================================================================//
 
-#include "pch_tier0.h"
+#include "../pch_tier0.h"
 #include "xbox/xbox_console.h"
 #include "tier0/memdbgon.h"
 
@@ -16,13 +16,13 @@ void XboxConsoleInit()
 {
 	g_pXboxConsole = NULL;
 
-	HMODULE hDLL = ::LoadLibrary( "vxbdm_360.dll" );
+	HMODULE hDLL = ::LoadLibrary( "game:\\bin\\vxbdm_360.dll" );
 	if ( !hDLL )
 	{
 		return;
 	}
 
-	CONSOLEINTERFACEFUNC fpnGetConsoleInterface = (CONSOLEINTERFACEFUNC) ::GetProcAddress( hDLL, "GetConsoleInterface" );
+	CONSOLEINTERFACEFUNC fpnGetConsoleInterface = (CONSOLEINTERFACEFUNC) ::GetProcAddress( hDLL, (LPSTR)1 );
 
 	if ( fpnGetConsoleInterface )
 	{

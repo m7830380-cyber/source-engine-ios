@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2002, Valve LLC, All rights reserved. ============
 //
 // Purpose: 
 //
@@ -11,7 +11,7 @@
 #pragma once
 #endif
 
-#include "utldict.h"
+#include "UtlDict.h"
 
 class IAttributeWidgetFactory;
 class IAttributeElementChoiceList;

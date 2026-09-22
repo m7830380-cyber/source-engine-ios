@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -46,6 +46,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#include "tier1/convar.h"
 #include <string.h>
 #include "MatSysWin.h"
 #include "MDLViewer.h"
@@ -54,11 +55,11 @@
 #include "ViewerSettings.h"
 #include "materialsystem/imaterialsystem.h"
 #include "materialsystem/imaterialproxyfactory.h"
-#include "filesystem.h"
-#include <keyvalues.h>
-#include "materialsystem/imesh.h"
+#include "FileSystem.h"
+#include <KeyValues.h>
+#include "materialsystem/IMesh.h"
 #include "materialsystem/IMaterialSystemHardwareConfig.h"
-#include "materialsystem/itexture.h"
+#include "materialsystem/ITexture.h"
 #include "materialsystem/MaterialSystem_Config.h"
 #include "tier0/dbg.h"
 #include "istudiorender.h"
@@ -69,7 +70,7 @@
 #include "SoundEmitterSystem/isoundemittersystembase.h"
 #include "soundsystem/isoundsystem.h"
 #include "soundchars.h"
-#include <optimize.h>
+#include "mathlib/softbodyenvironment.h"
 #include "valve_ipc_win32.h"
 
 extern char g_appTitle[];
@@ -77,10 +78,11 @@ extern bool g_bInError;
 extern int g_dxlevel;
 
 extern ISoundEmitterSystemBase *g_pSoundEmitterBase;
-extern ISoundSystem *g_pSoundSystem;
 
 extern CValveIpcClientUtl g_HlmvIpcClient;
 extern bool g_bHlmvMaster;
+
+extern CSoftbodyEnvironment g_SoftbodyEnvironment;
 
 
 void UpdateSounds()
@@ -103,11 +105,12 @@ class DummyMaterialProxyFactory : public IMaterialProxyFactory
 public:
 	virtual IMaterialProxy *CreateProxy( const char *proxyName )	{return NULL;}
 	virtual void DeleteProxy( IMaterialProxy *pProxy )				{}
+	virtual CreateInterfaceFn GetFactory()							{return NULL;}
 };
 DummyMaterialProxyFactory	g_DummyMaterialProxyFactory;
 
 
-static void ReleaseMaterialSystemObjects()
+static void ReleaseMaterialSystemObjects( int nChangeFlags )
 {
 	StudioModel::ReleaseStudioModel();
 }
@@ -118,38 +121,17 @@ static void RestoreMaterialSystemObjects( int nChangeFlags )
 	g_ControlPanel->OnLoadModel();
 }
 
+static ConVar mat_bumpmap( "mat_bumpmap", "1" );
+static ConVar mat_specular( "mat_specular", "1" );
+static ConVar mat_parallaxmap( "mat_parallaxmap", "0" );
+static ConVar mat_displacementmap( "mat_displacementmap", "1" );
+
 void InitMaterialSystemConfig(MaterialSystem_Config_t *pConfig)
 {
-	if ( g_viewerSettings.enableNormalMapping )
-	{
-		pConfig->m_Flags &= ~MATSYS_VIDCFG_FLAGS_DISABLE_BUMPMAP;
-	}
-	else
-	{
-		pConfig->m_Flags |= MATSYS_VIDCFG_FLAGS_DISABLE_BUMPMAP;
-	}
-
-	if ( g_viewerSettings.enableSpecular)
-	{
-		pConfig->m_Flags &= ~MATSYS_VIDCFG_FLAGS_DISABLE_SPECULAR;
-	}
-	else
-	{
-		pConfig->m_Flags |= MATSYS_VIDCFG_FLAGS_DISABLE_SPECULAR;
-	}
-
-	if ( g_viewerSettings.enableParallaxMapping )
-	{
-		pConfig->m_Flags |= MATSYS_VIDCFG_FLAGS_ENABLE_PARALLAX_MAPPING;
-	}
-	else
-	{
-		pConfig->m_Flags &= ~MATSYS_VIDCFG_FLAGS_ENABLE_PARALLAX_MAPPING;
-	}
-
-
-	// JasonM...did we foul this up?
-
+	mat_bumpmap.SetValue( g_viewerSettings.enableNormalMapping );
+	mat_displacementmap.SetValue( g_viewerSettings.enableDisplacementMapping );
+	mat_specular.SetValue( g_viewerSettings.enableSpecular );
+	mat_parallaxmap.SetValue( g_viewerSettings.enableParallaxMapping );
 }
 
 MatSysWindow *g_MatSysWindow = 0;
@@ -168,7 +150,9 @@ IMaterial *g_materialLines = NULL;
 IMaterial *g_materialFloor = NULL;
 IMaterial *g_materialVertexColor = NULL;
 IMaterial *g_materialShadow = NULL;
-
+IMaterial *g_materialArcActive = NULL;
+IMaterial *g_materialArcInActive = NULL;
+IMaterial *g_materialDebugText = NULL;
 
 MatSysWindow::MatSysWindow (mxWindow *parent, int x, int y, int w, int h, const char *label, int style)
 : mxMatSysWindow (parent, x, y, w, h, label, style)
@@ -206,20 +190,9 @@ MatSysWindow::MatSysWindow (mxWindow *parent, int x, int y, int w, int h, const 
 	pRenderContext->BindLocalCubemap( m_pCubemapTexture );
 
 	g_materialBackground	= g_pMaterialSystem->FindMaterial("hlmv/background", TEXTURE_GROUP_OTHER, true);
-	if ( g_materialBackground )
-	{
-		g_materialBackground->AddRef();
-	}
 	g_materialWireframe		= g_pMaterialSystem->FindMaterial("debug/debugmrmwireframe", TEXTURE_GROUP_OTHER, true);
-	if ( g_materialWireframe )
-	{
-		g_materialWireframe->AddRef();
-	}
 	g_materialWireframeVertexColor = g_pMaterialSystem->FindMaterial("debug/debugwireframevertexcolor", TEXTURE_GROUP_OTHER, true);
-	if ( g_materialWireframeVertexColor )
-	{
-		g_materialWireframeVertexColor->AddRef();
-	}
+
 	// test: create this from code - you need a vmt to make $nocull 1 happen, can't do it from the render context
 	{
 		KeyValues *pVMTKeyValues = new KeyValues( "Wireframe" );
@@ -228,56 +201,39 @@ MatSysWindow::MatSysWindow (mxWindow *parent, int x, int y, int w, int h, const 
 		pVMTKeyValues->SetInt("$vertexcolor", 1);
 		pVMTKeyValues->SetInt("$decal", 1);
 		g_materialWireframeVertexColorNoCull = g_pMaterialSystem->CreateMaterial( "debug/wireframenocull", pVMTKeyValues );
-		if ( g_materialWireframeVertexColorNoCull )
-		{
-			g_materialWireframeVertexColorNoCull->AddRef();
-		}
 	}
 	{
 		KeyValues *pVMTKeyValues = new KeyValues( "UnlitGeneric" );
 		pVMTKeyValues->SetString("$basetexture", "vgui/white" );
 		g_materialDebugCopyBaseTexture = g_pMaterialSystem->CreateMaterial( "debug/copybasetexture", pVMTKeyValues );
-		if ( g_materialDebugCopyBaseTexture )
-		{
-			g_materialDebugCopyBaseTexture->AddRef();
-		}
+
 	}
 
 	g_materialFlatshaded	= g_pMaterialSystem->FindMaterial("debug/debugdrawflatpolygons", TEXTURE_GROUP_OTHER, true);
-	if ( g_materialFlatshaded )
-	{
-		g_materialFlatshaded->AddRef();
-	}
 	g_materialSmoothshaded	= g_pMaterialSystem->FindMaterial("debug/debugmrmfullbright2", TEXTURE_GROUP_OTHER, true);
-	if ( g_materialSmoothshaded )
-	{
-		g_materialSmoothshaded->AddRef();
-	}
 	g_materialBones			= g_pMaterialSystem->FindMaterial("debug/debugskeleton", TEXTURE_GROUP_OTHER, true);
-	if ( g_materialBones )
-	{
-		g_materialBones->AddRef();
-	}
 	g_materialLines			= g_pMaterialSystem->FindMaterial("debug/debugwireframevertexcolor", TEXTURE_GROUP_OTHER, true);
-	if ( g_materialLines )
-	{
-		g_materialLines->AddRef();
-	}
 	g_materialFloor			= g_pMaterialSystem->FindMaterial("hlmv/floor", TEXTURE_GROUP_OTHER, true);
-	if ( g_materialFloor )
-	{
-		g_materialFloor->AddRef();
-	}
 	g_materialVertexColor   = g_pMaterialSystem->FindMaterial("debug/debugvertexcolor", TEXTURE_GROUP_OTHER, true);
-	if ( g_materialVertexColor )
-	{
-		g_materialVertexColor->AddRef();
-	}
 	g_materialShadow		= g_pMaterialSystem->FindMaterial("hlmv/shadow", TEXTURE_GROUP_OTHER, true);
-	if ( g_materialShadow )
+	g_materialDebugText		= g_pMaterialSystem->FindMaterial("hlmv/debugtext", TEXTURE_GROUP_OTHER, true);
+
 	{
-		g_materialShadow->AddRef();
+		KeyValues *pVMTKeyValues = new KeyValues( "UnLitGeneric" );
+		pVMTKeyValues->SetInt("$nocull", 1);
+		pVMTKeyValues->SetInt("$vertexcolor", 1);
+		pVMTKeyValues->SetFloat("$alpha", 0.5f);
+		g_materialArcActive = g_pMaterialSystem->CreateMaterial( "hlmv/arc_active", pVMTKeyValues );
 	}
+
+	{
+		KeyValues *pVMTKeyValues = new KeyValues( "UnLitGeneric" );
+		pVMTKeyValues->SetInt("$nocull", 1);
+		pVMTKeyValues->SetInt("$vertexcolor", 1);
+		pVMTKeyValues->SetFloat("$alpha", 0.2f);
+		g_materialArcInActive = g_pMaterialSystem->CreateMaterial( "hlmv/arc_inactive", pVMTKeyValues );
+	}
+
 	if (!parent)
 		setVisible (true);
 	else
@@ -355,6 +311,18 @@ MatSysWindow::handleEvent (mxEvent *event)
 			g_ControlPanel->updateGroundSpeed( );
 		}
 		prev = curr;
+		g_pStudioModel->SetSoftbodyOrientation();
+		for ( int i = 0; i < HLMV_MAX_MERGED_MODELS; i++ )
+		{
+			if ( g_pStudioExtraModel[ i ] != NULL )
+			{
+				g_pStudioExtraModel[ i ]->SetSoftbodyOrientation();
+			}
+		}
+		if ( g_viewerSettings.simulateSoftbodies )
+		{
+			g_SoftbodyEnvironment.Step( dt * g_viewerSettings.speedScale );
+		}
 
 		if (!g_viewerSettings.pause)
 			redraw ();
@@ -370,12 +338,23 @@ MatSysWindow::handleEvent (mxEvent *event)
 	case mxEvent::MouseUp:
 	{
 		g_viewerSettings.mousedown = false;
+
+		if ( g_pWidgetControl )
+			g_pWidgetControl->m_WidgetState = WIDGET_STATE_NONE;
 	}
 	break;
 
 	case mxEvent::MouseDown:
 	{
 		g_viewerSettings.mousedown = true;
+
+		if ( g_pWidgetControl != NULL && g_viewerSettings.highlightHitbox >= 0 )
+		{
+			g_pWidgetControl->WidgetMouseDown( event->x, event->y );
+			g_pWidgetControl->SetStateUsingInputColor( getViewportPixelColor( event->x, event->y ) );
+			if ( g_pWidgetControl->m_WidgetState != WIDGET_STATE_NONE )
+				return 1;
+		}
 
 		oldrx = g_pStudioModel->m_angles[0];
 		oldry = g_pStudioModel->m_angles[1];
@@ -392,7 +371,7 @@ MatSysWindow::handleEvent (mxEvent *event)
 
 		float d = sqrt( ( float )( (event->x - w()/2) * (event->x - w()/2) + (event->y - h()/2) * (event->y - h()/2) ) );
 
-		if (d < r)
+		if ( d < r || !g_viewerSettings.allowOrbitYaw )
 			g_viewerSettings.rotating = false;
 		else
 			g_viewerSettings.rotating = true;
@@ -403,19 +382,46 @@ MatSysWindow::handleEvent (mxEvent *event)
 
 	case mxEvent::MouseDrag:
 	{
-		bool bSendModelTransform = true;
-
-		if ( event->buttons & mxEvent::MouseLeftButton )
+		if (event->buttons & mxEvent::MouseLeftButton)
 		{
-			if ( event->modifiers & mxEvent::KeyShift )
+
+			if ( g_pWidgetControl && g_pWidgetControl->m_WidgetState != WIDGET_STATE_NONE )
+				{
+					g_pWidgetControl->WidgetMouseDrag( event->x, event->y );
+					break;
+				}
+
+			if ( g_viewerSettings.dotaMode )
 			{
-				g_pStudioModel->m_origin[1] = oldty - (float)( event->x - oldx );
-				g_pStudioModel->m_origin[2] = oldtz + (float)( event->y - oldy );
+				if (event->modifiers & mxEvent::KeyShift)
+				{
+					g_pStudioModel->m_origin[1] = oldty - (float) (event->x - oldx);
+					g_pStudioModel->m_origin[2] = oldtz + (float) (event->y - oldy);
+				}
+				else
+				{
+					float rx = (float) (event->x - oldx);
+					oldx = event->x;
+
+					QAngle movement;
+					matrix3x4_t tmp1, tmp2, tmp3;
+
+					movement = QAngle( 0, rx, 0 );
+					AngleMatrix( g_pStudioModel->m_angles, tmp1 );
+					AngleMatrix( movement, tmp2 );
+					ConcatTransforms( tmp1, tmp2, tmp3 );
+					MatrixAngles( tmp3, g_pStudioModel->m_angles );
+				}
 			}
-			else if ( event->modifiers & mxEvent::KeyCtrl )
+			else if (event->modifiers & mxEvent::KeyShift)
 			{
-				float ry = (float)( event->y - oldy );
-				float rx = (float)( event->x - oldx );
+				g_pStudioModel->m_origin[1] = oldty - (float) (event->x - oldx) / 8.0;
+				g_pStudioModel->m_origin[2] = oldtz + (float) (event->y - oldy) / 8.0;
+			}
+			else if (event->modifiers & mxEvent::KeyCtrl)
+			{
+				float ry = (float) (event->y - oldy);
+				float rx = (float) (event->x - oldx);
 				oldx = event->x;
 				oldy = event->y;
 
@@ -429,15 +435,13 @@ MatSysWindow::handleEvent (mxEvent *event)
 
 				// g_viewerSettings.lightrot[0] = oldlrx + (float) (event->y - oldy);
 				// g_viewerSettings.lightrot[1] = oldlry + (float) (event->x - oldx);
-
-				bSendModelTransform = false;
 			}
 			else
 			{
-				if ( !g_viewerSettings.rotating )
+				if (!g_viewerSettings.rotating)
 				{
-					float ry = (float)( event->y - oldy );
-					float rx = (float)( event->x - oldx );
+					float ry = (float) (event->y - oldy);
+					float rx = (float) (event->x - oldx);
 					oldx = event->x;
 					oldy = event->y;
 
@@ -458,8 +462,8 @@ MatSysWindow::handleEvent (mxEvent *event)
 				}
 				else
 				{
-					float ang1 = ( 180 / 3.1415 ) * atan2( oldx - w() / 2.0, oldy - h() / 2.0 );
-					float ang2 = ( 180 / 3.1415 ) * atan2( event->x - w() / 2.0, event->y - h() / 2.0 );
+					float ang1 = (180 / 3.1415) * atan2( oldx - w()/2.0, oldy - h()/2.0 );
+					float ang2 = (180 / 3.1415) * atan2( event->x - w()/2.0, event->y - h()/2.0 );
 					oldx = event->x;
 					oldy = event->y;
 
@@ -473,24 +477,33 @@ MatSysWindow::handleEvent (mxEvent *event)
 				}
 			}
 		}
-		else if ( event->buttons & mxEvent::MouseRightButton )
+		else if (event->buttons & mxEvent::MouseRightButton)
 		{
-			g_pStudioModel->m_origin[0] = oldtx + (float)( event->y - oldy );
-		}
-
-		if ( g_bHlmvMaster )
-		{
-			if ( bSendModelTransform )
+			if ( !g_viewerSettings.dotaMode )
 			{
-				g_MDLViewer->SendModelTransformToLinkedHlmv();
-			}
-			else
-			{
-				g_MDLViewer->SendLightRotToLinkedHlmv();
+				g_pStudioModel->m_origin[0] = oldtx + (float) (event->y - oldy);
 			}
 		}
 
-		redraw();
+		if ( g_bHlmvMaster && g_HlmvIpcClient.Connect() )
+		{
+			CUtlBuffer cmd;
+			CUtlBuffer res;
+
+			matrix3x4_t m;
+			g_pStudioModel->GetModelTransform( m );
+
+			cmd.Printf( "%s %f %f %f %f %f %f %f %f %f %f %f %f",
+				"hlmvModelTransform",
+				m.m_flMatVal[0][0], m.m_flMatVal[0][1], m.m_flMatVal[0][2], m.m_flMatVal[0][3],
+				m.m_flMatVal[1][0], m.m_flMatVal[1][1], m.m_flMatVal[1][2], m.m_flMatVal[1][3],
+				m.m_flMatVal[2][0], m.m_flMatVal[2][1], m.m_flMatVal[2][2], m.m_flMatVal[2][3] );
+
+			g_HlmvIpcClient.ExecuteCommand( cmd, res );
+			g_HlmvIpcClient.Disconnect();
+		}
+
+		redraw ();
 
 		return 1;
 	}
@@ -500,12 +513,7 @@ MatSysWindow::handleEvent (mxEvent *event)
 	{
 		switch (event->key)
 		{
-		case VK_F5: // F5
-			{
-				g_MDLViewer->Refresh();
-				break;
-			}
-		case 32:
+			case VK_SPACE:
 			{
 				int iSeq = g_pStudioModel->GetSequence ();
 				if (iSeq == g_pStudioModel->SetSequence (iSeq + 1))
@@ -515,6 +523,14 @@ MatSysWindow::handleEvent (mxEvent *event)
 			}
 			break;
 		}
+	}
+	break;
+
+	case mxEvent::DropFile:
+	{
+		V_strlower( event->szChars );
+		g_ControlPanel->AddQCRecordPath( event->szChars );
+		break;
 	}
 	break;
 
@@ -572,7 +588,7 @@ void DrawBackground()
 
 void DrawHelpers()
 {
-	if (g_viewerSettings.mousedown)
+	if (g_viewerSettings.mousedown && g_viewerSettings.showOrbitCircle )
 	{
 		CMatRenderContextPtr pRenderContext( g_pMaterialSystem );
 		pRenderContext->Bind( g_materialBones );
@@ -998,7 +1014,7 @@ MatSysWindow::draw ()
 
 	g_pStudioModel->ClearLookTargets();
 	g_pStudioModel->AddLookTarget( Vector( 0, 0, 0 ), g_pStudioModel->GetSolveHeadTurn() ? 1.0f : 0.0f );
-	int polycount = g_pStudioModel->DrawModel ();
+	int polycount = g_pStudioModel->DrawModel( false, PASS_MODELONLY );
 
 	g_pStudioModel->GetStudioRender()->EndFrame();
 
@@ -1014,38 +1030,6 @@ MatSysWindow::draw ()
 	g_ControlPanel->setLODMetric( metric );
 
 	g_ControlPanel->setPolycount( polycount );
-
-	int nVertCount = 0;
-	int nIndexCount = 0;
-	int nTriCount = 0;
-
-	CStudioHdr *pStudioHdr = g_pStudioModel->GetStudioHdr();
-	if ( pStudioHdr != NULL )
-	{
-		studiohwdata_t *pHardwareData = g_pStudioModel->GetHardwareData();
-		if ( pHardwareData != NULL )
-		{
-			studioloddata_t *pLODData = &pHardwareData->m_pLODs[ pHardwareData->m_RootLOD ];
-			for ( int meshID = 0; meshID < pHardwareData->m_NumStudioMeshes; meshID++ )
-			{
-				studiomeshdata_t *pMesh = &pLODData->m_pMeshData[meshID];
-				for ( int groupID = 0; groupID < pMesh->m_NumGroup; groupID++ )
-				{
-					studiomeshgroup_t	*pMeshGroup = &pMesh->m_pMeshGroup[ groupID ];
-
-					for( int j = 0; j < pMeshGroup->m_NumStrips; j++ )
-					{
-						nIndexCount += pMeshGroup->m_pStripData[ j ].numIndices;
-						nVertCount += pMeshGroup->m_pStripData[ j ].numVerts;
-						nTriCount += ( pMeshGroup->m_pStripData[ j ].numIndices / 3 );
-					}
-				}
-			}
-		}
-	}
-
-	g_ControlPanel->setModelInfo( nVertCount, nIndexCount, nTriCount );
-
 	g_ControlPanel->setTransparent( g_pStudioModel->m_bIsTransparent );
 
 	g_ControlPanel->updatePoseParameters( );
@@ -1061,6 +1045,10 @@ MatSysWindow::draw ()
 			g_pStudioModel->GetStudioRender()->EndFrame();
 		}
 	}
+
+	g_pStudioModel->GetStudioRender()->BeginFrame();
+	g_pStudioModel->DrawModel( false, PASS_EXTRASONLY );
+	g_pStudioModel->GetStudioRender()->EndFrame();
 
 	g_pStudioModel->IncrementFramecounter();
 
@@ -1143,40 +1131,133 @@ MatSysWindow::loadTexture (const char *filename, int name)
 }
 */
 
+void MatSysWindow::dumpViewport (const char *filename)
+{
+	dumpViewportWithLabel( filename, "" );
+}
 
-void
-MatSysWindow::dumpViewport (const char *filename)
+
+Color MatSysWindow::getViewportPixelColor( int x, int y )
 {
 	redraw ();
-	int w = w2 ();
-	int h = h2 ();
 
-	mxImage *image = new mxImage ();
-	if (image->create (w, h, 24))
+	HDC hDC = GetDC ((HWND) getHandle ());
+	COLORREF color = GetPixel(hDC, x, y);
+	ReleaseDC ((HWND) getHandle (), hDC);
+	
+	Color temp;
+
+	temp.SetColor( GetRValue( color ), GetGValue( color ), GetBValue( color ), 255 );
+
+	return temp;
+}
+
+// Save HDC as a bitmap:
+void MatSysWindow::dumpViewportWithLabel(const char *filename, const char *label)
+{
+
+	redraw ();
+	//int w = w2 ();
+	//int h = h2 ();
+
+	RECT client;
+	HDC hDC = GetDC ((HWND) getHandle ());
+	RECT rcClient;
+	bool bOk = false;
+	HBITMAP hImage = NULL;
+
+	GetClientRect ((HWND) getHandle (), &rcClient);
+	client = rcClient;
+
+	if ((hImage = CreateCompatibleBitmap (hDC, rcClient.right, rcClient.bottom)) != NULL)
 	{
-#if 0
-		glReadBuffer (GL_FRONT);
-		glReadPixels (0, 0, w, h, GL_RGB, GL_UNSIGNED_BYTE, image->data);
-#else
-		HDC hdc = GetDC ((HWND) getHandle ());
-		byte *data = (byte *) image->data;
-		int i = 0;
-		for (int y = 0; y < h; y++)
-		{
-			for (int x = 0; x < w; x++)
-			{
-				COLORREF cref = GetPixel (hdc, x, y);
-				data[i++] = (byte) ((cref >> 0)& 0xff);
-				data[i++] = (byte) ((cref >> 8) & 0xff);
-				data[i++] = (byte) ((cref >> 16) & 0xff);
-			}
-		}
-		ReleaseDC ((HWND) getHandle (), hdc);
-#endif
-		if (!mxTgaWrite (filename, image))
-			mxMessageBox (this, "Error writing screenshot.", g_appTitle, MX_MB_OK | MX_MB_ERROR);
+		HDC hMemDC;
+		HBITMAP hDCBmp;
 
-		delete image;
+		if ((hMemDC = CreateCompatibleDC (hDC)) != NULL)
+		{
+			hDCBmp = (HBITMAP) SelectObject (hMemDC, hImage);
+			BitBlt (hMemDC, 0, 0, rcClient.right, rcClient.bottom, hDC, 0, 0, SRCCOPY);
+
+			if ( strlen(label) > 0 )
+			{
+				HFONT font = CreateFont( 24, 0, 0, 0, 700, false, false, false, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH, "Arial" );
+				SetBkColor(hMemDC,  RGB(60,60,60) );
+				SetTextColor(hMemDC, RGB(255,255,255) );
+				HFONT hFontOld = (HFONT)SelectObject( hMemDC, font );
+				DrawText( hMemDC, label, strlen(label), &rcClient, DT_TOP|DT_CENTER);
+				SelectObject( hMemDC, hFontOld );
+			}
+
+			SelectObject (hMemDC, hDCBmp);
+			DeleteDC (hMemDC);
+			bOk = true;
+		}
 	}
+
+	ReleaseDC ((HWND) getHandle (), hDC);
+
+	if (! bOk)
+	{
+		if (hImage)
+		{
+			DeleteObject (hImage);
+			hImage = NULL;
+		}
+	}
+
+	if ( !hImage )
+	{
+		mxMessageBox (this, "Screenshot failure: Couldn't capture the model window.", g_appTitle, MX_MB_OK | MX_MB_ERROR);
+		return;
+	}
+
+	if ( hImage != NULL) {
+		UINT uiBytesPerRow = 3 * client.right; // RGB takes 24 bits
+		UINT uiRemainderForPadding;
+
+		if ((uiRemainderForPadding = uiBytesPerRow % sizeof (DWORD)) > 0)
+		{
+			uiBytesPerRow += (sizeof (DWORD) - uiRemainderForPadding);
+		}
+
+		UINT uiBytesPerAllRows = uiBytesPerRow * client.bottom;
+		PBYTE pDataBits;
+
+		if ((pDataBits = new BYTE [uiBytesPerAllRows]) != NULL)
+		{
+			BITMAPINFOHEADER bmi = {0};
+			BITMAPFILEHEADER bmf = {0};
+			HDC hDC = GetDC ((HWND) getHandle ());
+
+			// Prepare to get the data out of HBITMAP:
+			bmi.biSize = sizeof (bmi);
+			bmi.biPlanes = 1;
+			bmi.biBitCount = 24;
+			bmi.biHeight = client.bottom;
+			bmi.biWidth = client.right;
+
+			GetDIBits (hDC, hImage, 0, client.bottom, pDataBits, (BITMAPINFO*) &bmi, DIB_RGB_COLORS);
+
+			ReleaseDC ((HWND) getHandle (), hDC);
+
+			// Fill the file header:
+			bmf.bfOffBits = sizeof (bmf) + sizeof (bmi);
+			bmf.bfSize = bmf.bfOffBits + uiBytesPerAllRows;
+			bmf.bfType = 0x4D42;
+
+			FILE* pFile;
+			if ((pFile = fopen (filename, "wb")) != NULL)
+			{
+				fwrite (&bmf, sizeof (bmf), 1, pFile);
+				fwrite (&bmi, sizeof (bmi), 1, pFile);
+				fwrite (pDataBits, sizeof (BYTE), uiBytesPerAllRows, pFile);
+				fclose (pFile);
+			}
+			delete [] pDataBits;
+		}
+		DeleteObject (hImage);
+	}
+
 }
 

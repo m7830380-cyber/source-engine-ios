@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright (c) 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose:
 //
@@ -12,25 +12,21 @@
 #include <stdarg.h>
 #include <sys/types.h>
 #include <sys/time.h>
-#ifdef APPLE
-#include <malloc/malloc.h>
-#else
 #include <malloc.h>
-#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <dlfcn.h>
 #include "isys.h"
-#include "console/conproc.h"
+#include "conproc.h"
 #include "dedicated.h"
 #include "engine_hlds_api.h"
 #include "checksum_md5.h"
 #include "idedicatedexports.h"
-#include "tier0/vcrmode.h"
 #include "tier0/dbg.h"
 #include "mathlib/mathlib.h"
 #include "interface.h"
 #include "tier1/strtools.h"
+#include "tier0/stacktools.h"
 #include "tier0/icommandline.h"
 #include "materialsystem/imaterialsystem.h"
 #include "istudiorender.h"
@@ -39,14 +35,23 @@
 #include "datacache/imdlcache.h"
 #include "vphysics_interface.h"
 #include "icvar.h"
-#include "filesystem/IQueuedLoader.h"
-#include "console/TextConsoleUnix.h"
+#include "net.h"
+#include "vscript/ivscript.h"
 
 bool InitInstance( );
+void ProcessConsoleInput( void );
 
-char g_szEXEName[ MAX_PATH ];
+#define stringize(a) #a
+#define engine_binary(a,b,c) a stringize(b) c
 
+static const char *g_pszengine = "bin/engine" DLL_EXT_STRING;
+static const char *g_pszsoundemitter = "bin/soundemitter" DLL_EXT_STRING;
+
+char g_szEXEName[ 256 ];
+
+#include "console/TextConsoleUnix.h"
 extern CTextConsoleUnix console;
+
 
 //-----------------------------------------------------------------------------
 // Purpose: Implements OS Specific layer ( loosely )
@@ -73,8 +78,8 @@ public:
 	void		DestroyConsoleWindow( void );
 
 	void		ConsoleOutput ( char *string );
-	char		*ConsoleInput ( int index, char *buf, int buflen );
-	void		Printf( const char *fmt, ...);
+	char		*ConsoleInput (void);
+	void		Printf(const char *fmt, ...);
 };
 
 static CSys g_Sys;
@@ -95,7 +100,7 @@ CSys::~CSys()
 //-----------------------------------------------------------------------------
 void CSys::Sleep( int msec )
 {
-	usleep(msec * 1000);
+    usleep(msec * 1000);
 }
 
 //-----------------------------------------------------------------------------
@@ -117,21 +122,25 @@ long CSys::LoadLibrary( char *lib )
 {
 	void *hDll = NULL;
 
-	char cwd[1024];
-	char absolute_lib[1024];
-
-	if (!getcwd(cwd, sizeof(cwd)))
-		ErrorMessage(1, "Sys_LoadLibrary: Couldn't determine current directory.");
-
-	if (cwd[strlen(cwd)-1] == '/')
-		cwd[strlen(cwd)-1] = 0;
-
-	Q_snprintf(absolute_lib, sizeof( absolute_lib ), "%s/%s", cwd, lib);
-
-	hDll = dlopen( absolute_lib, RTLD_NOW );
-	if ( !hDll )
+    char    cwd[1024];
+    char    absolute_lib[1024];
+    
+    if (!getcwd(cwd, sizeof(cwd)))
+        ErrorMessage(1, "Sys_LoadLibrary: Couldn't determine current directory.");
+        
+    if (cwd[strlen(cwd)-1] == '/')
+        cwd[strlen(cwd)-1] = 0;
+        
+    Q_snprintf(absolute_lib, sizeof( absolute_lib ), "%s/%s", cwd, lib);
+    
+    hDll = dlopen( absolute_lib, RTLD_NOW );
+    if ( !hDll )
+    {
+        ErrorMessage( 1, dlerror() );
+    }
+	else
 	{
-		ErrorMessage( 1, dlerror() );
+		StackToolsNotify_LoadedLibrary( absolute_lib );
 	}
 	return (long)hDll;
 }
@@ -194,7 +203,7 @@ Printf
 Engine is printing to console
 ==============
 */
-void CSys::Printf( const char *fmt, ...)
+void CSys::Printf(const char *fmt, ...)
 {
 	// Dump text to debugging console.
 	va_list argptr;
@@ -214,9 +223,9 @@ ConsoleInput
 
 ================
 */
-char *CSys::ConsoleInput( int index, char *buf, int buflen )
+char *CSys::ConsoleInput( void )
 {
-	return console.GetLine( index, buf, buflen );
+	return console.GetLine();
 }
 
 /*
@@ -260,27 +269,29 @@ bool CSys::LoadModules( CDedicatedAppSystemGroup *pAppSystemGroup )
 {
 	AppSystemInfo_t appSystems[] = 
 	{
- 		{ "engine" DLL_EXT_STRING,				CVAR_QUERY_INTERFACE_VERSION },
-		{ "soundemittersystem" DLL_EXT_STRING,	SOUNDEMITTERSYSTEM_INTERFACE_VERSION }, // loaded for backwards compatability, prevents crash on exit for old game dlls
-		{ "materialsystem" DLL_EXT_STRING,		MATERIAL_SYSTEM_INTERFACE_VERSION },
-		{ "studiorender" DLL_EXT_STRING,		STUDIO_RENDER_INTERFACE_VERSION },
-		{ "vphysics" DLL_EXT_STRING,			VPHYSICS_INTERFACE_VERSION },
-		{ "datacache" DLL_EXT_STRING,			DATACACHE_INTERFACE_VERSION },
-		{ "datacache" DLL_EXT_STRING,			MDLCACHE_INTERFACE_VERSION },
-		{ "datacache" DLL_EXT_STRING,			STUDIO_DATA_CACHE_INTERFACE_VERSION },
-		{ "dedicated" DLL_EXT_STRING,			QUEUEDLOADER_INTERFACE_VERSION },
-		{ "engine" DLL_EXT_STRING,				VENGINE_HLDS_API_VERSION },
+ 		{ g_pszengine,								CVAR_QUERY_INTERFACE_VERSION },
+		{ "bin/materialsystem" DLL_EXT_STRING,		MATERIAL_SYSTEM_INTERFACE_VERSION },
+		{ "bin/studiorender" DLL_EXT_STRING,		STUDIO_RENDER_INTERFACE_VERSION },
+		{ "bin/vphysics" DLL_EXT_STRING,			VPHYSICS_INTERFACE_VERSION },
+		{ "bin/datacache" DLL_EXT_STRING,			DATACACHE_INTERFACE_VERSION },
+		{ "bin/datacache" DLL_EXT_STRING,			MDLCACHE_INTERFACE_VERSION },
+		{ "bin/datacache" DLL_EXT_STRING,			STUDIO_DATA_CACHE_INTERFACE_VERSION },
+		{ "bin/vscript" DLL_EXT_STRING,			VSCRIPT_INTERFACE_VERSION },
+
+		{ g_pszengine,						VENGINE_HLDS_API_VERSION },
 		{ "", "" }	// Required to terminate the list
 	};
 
 	if ( !pAppSystemGroup->AddSystems( appSystems ) ) 
 		return false;
-
+	
 	engine = (IDedicatedServerAPI *)pAppSystemGroup->FindSystem( VENGINE_HLDS_API_VERSION );
-	// obsolete i think SetCVarIF( (ICvar*)pAppSystemGroup->FindSystem( VENGINE_CVAR_INTERFACE_VERSION ) );
+															// obsolete i think SetCVarIF( (ICvar*)pAppSystemGroup->FindSystem( VENGINE_CVAR_INTERFACE_VERSION ) );
 
 	IMaterialSystem* pMaterialSystem = (IMaterialSystem*)pAppSystemGroup->FindSystem( MATERIAL_SYSTEM_INTERFACE_VERSION );
-	pMaterialSystem->SetShaderAPI( "shaderapiempty" DLL_EXT_STRING );	
+	pMaterialSystem->SetShaderAPI( "bin/shaderapiempty" DLL_EXT_STRING );
+
+
 	return true;
 }
 

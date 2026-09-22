@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: Implementation of IEditorTexture interface for materials.
 //
@@ -11,8 +11,8 @@
 
 
 #include "IEditorTexture.h"
-#include "materialsystem/imaterialvar.h"
-#include "materialsystem/imaterial.h"
+#include "materialsystem/IMaterialVar.h"
+#include "materialsystem/IMaterial.h"
 
 
 class IMaterial;
@@ -69,10 +69,14 @@ public:
 	int GetImageDataRGBA(void *pImageRGBA);
 
 	// Image dimensions
-	int GetImageWidth(void) const;
-	int GetImageHeight(void) const;
+	int GetPreviewImageWidth(void) const;
+	int GetPreviewImageHeight(void) const;
+	int GetMappingWidth(void) const;
+	int GetMappingHeight(void) const;
+	// todo: remove these.  They are the same as GetPreviewImageWidth, etc.
 	int GetWidth(void) const;
 	int GetHeight(void) const;
+
 
 	float GetDecalScale(void) const;
 	
@@ -115,7 +119,7 @@ public:
 
 	inline bool HasData(void) const
 	{
-		return((m_nWidth != 0) && (m_nHeight != 0));
+		return((m_nPreviewImageWidth != 0) && (m_nPreviewImageHeight != 0));
 	}
 
 	inline bool HasPalette(void) const
@@ -177,8 +181,9 @@ protected:
 
 	int m_nTextureID;			// Uniquely identifies this texture in all 3D renderers.
 
-	int m_nWidth;				// Texture width in texels.
-	int m_nHeight;				// Texture height in texels.
+	int m_nPreviewImageWidth;				// Texture width in texels.
+	int m_nPreviewImageHeight;				// Texture height in texels.
+
 	bool m_TranslucentBaseTexture;
 	bool m_bLoaded;				// We don't load these immediately; only when needed..
 

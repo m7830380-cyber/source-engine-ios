@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Defines options that are written to the registry.
 //
@@ -31,6 +31,7 @@ public:
 	TextureAlignment_t eTextureAlignment;
 	BOOL bLoadwinpos;
 	BOOL bIndependentwin;
+	BOOL bEnablePerforceIntegration;
 	BOOL bGroupWhileIgnore;
 	BOOL bStretchArches;
 	BOOL bShowHelpers;
@@ -40,7 +41,6 @@ public:
 	int iMaxAutosavesPerMap;
 	BOOL bClosedCorrectly;
 	char szAutosaveDir[MAX_PATH];
-	BOOL bUseVGUIModelBrowser;
 	BOOL bShowCollisionModels;
 	BOOL bShowDetailObjects;
 	BOOL bShowNoDrawBrushes;
@@ -137,8 +137,9 @@ public:
 	BOOL bFilterTextures;	// Whether to filter textures.
 	BOOL bReverseSelection;	// Whether to animate studio models.
 	bool bPreviewModelFade; // Whether to preview model fade in the 3D view.
+	int	nFadeMode;			// Fade - Low, Med, High
 	float fFOV;				// FOV of 3D Camera
-	float fLightConeLength;  // Multiplier for light_spot cone length 
+	int iViewInstancesMode; // View Instances mode, none, tinted, normal
 };
 
 
@@ -218,8 +219,6 @@ public:
 
 	BOOL SetScaleLockingTextures(BOOL b);
 	BOOL IsScaleLockingTextures(void);
-
-	bool IsVGUIModelBrowserEnabled();
 
 	// Attributes:
 	UINT uDaysSinceInstalled;

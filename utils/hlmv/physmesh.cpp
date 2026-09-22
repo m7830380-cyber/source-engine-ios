@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -29,10 +29,11 @@
 #include "bone_setup.h"
 #include "fmtstr.h"
 #include "vcollide_parse.h"
+#include "KeyValues.h"
 
 int FindPhysprop( const char *pPropname );
 
-bool LoadPhysicsProperties( void );
+void LoadPhysicsProperties( void );
 extern int FindBoneIndex( CStudioHdr *pstudiohdr, const char *pName );
 
 
@@ -302,7 +303,7 @@ public:
 
 void CStudioPhysics::ParseKeydata( void )
 {
-	IVPhysicsKeyParser *pParser = physcollision->VPhysicsKeyParserCreate( GetVCollide()->pKeyValues );
+	IVPhysicsKeyParser *pParser = physcollision->VPhysicsKeyParserCreate( GetVCollide() );
 
 	while ( !pParser->Finished() )
 	{
@@ -376,7 +377,7 @@ public:
 	CTextBuffer( void ) {}
 	~CTextBuffer( void ) {}
 
-	inline int GetSize( void ) { return m_buffer.Size(); }
+	inline int GetSize( void ) { return m_buffer.Count(); }
 	inline char *GetData( void ) { return m_buffer.Base(); }
 	
 	void WriteText( const char *pText )
@@ -593,27 +594,52 @@ char *CStudioPhysics::DumpQC( void )
 	return NULL;
 }
 
-static const char *pMaterialFilename = "scripts/surfaceproperties.txt";
-
-bool LoadPhysicsProperties( void )
+static bool LoadSurfaceProps( const char *pMaterialFilename )
 {
-	// already loaded
-	if ( physprop->SurfacePropCount() )
+	if ( !physprop )
 		return false;
 
-	FileHandle_t fp = g_pFileSystem->Open( pMaterialFilename, "rb" );
+	FileHandle_t fp = g_pFileSystem->Open( pMaterialFilename, "rb", "GAME" );
 	if ( fp == FILESYSTEM_INVALID_HANDLE )
 		return false;
 
 	int len = g_pFileSystem->Size( fp );
-
 	char *pText = new char[len+1];
 	g_pFileSystem->Read( pText, len, fp );
 	g_pFileSystem->Close( fp );
+
 	pText[len]=0;
 
 	physprop->ParseSurfaceData( pMaterialFilename, pText );
 
 	delete[] pText;
+
 	return true;
+}
+
+void LoadPhysicsProperties( void )
+{
+	static bool bIsLoaded = false;
+	// already loaded
+	if ( bIsLoaded )
+		return;
+
+	const char *SURFACEPROP_MANIFEST_FILE = "scripts/surfaceproperties_manifest.txt";
+	KeyValues *manifest = new KeyValues( SURFACEPROP_MANIFEST_FILE );
+	if ( manifest->LoadFromFile( g_pFileSystem, SURFACEPROP_MANIFEST_FILE, "GAME" ) )
+	{
+		Msg("Loaded %s\n", SURFACEPROP_MANIFEST_FILE );
+		bIsLoaded = true;
+		for ( KeyValues *sub = manifest->GetFirstSubKey(); sub != NULL; sub = sub->GetNextKey() )
+		{
+			if ( !Q_stricmp( sub->GetName(), "file" ) )
+			{
+				// Add
+				LoadSurfaceProps( sub->GetString() );
+				continue;
+			}
+		}
+	}
+
+	manifest->deleteThis();
 }

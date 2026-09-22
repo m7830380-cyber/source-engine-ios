@@ -41,7 +41,7 @@ public:
 	struct ConversionArray_t
 	{
 		char m_nActualChar;
-		const char *m_pReplacementString;
+		char *m_pReplacementString;
 	};
 
 	CUtlCharConversion( char nEscapeChar, const char *pDelimiter, int nCount, ConversionArray_t *pArray );
@@ -60,7 +60,7 @@ protected:
 	struct ConversionInfo_t
 	{
 		int m_nLength;
-		const char *m_pReplacementString;
+		char *m_pReplacementString;
 	};
 
 	char m_nEscapeChar;
@@ -254,16 +254,6 @@ public:
 	bool			Get( void* pMem, int size );
 	void			GetLine( char* pLine, int nMaxChars );
 
-	void GetStringManualCharCount( char *pString, size_t maxLenInChars )
-	{
-		GetString( pString, maxLenInChars );
-	}
-
-	template <size_t maxLenInChars> void GetString( char( &pString )[maxLenInChars] )
-	{
-		GetString( pString, maxLenInChars );
-	}
-
 	// Used for getting objects that have a byteswap datadesc defined
 	template <typename T> void GetObjects( T *dest, int count = 1 );
 
@@ -332,7 +322,6 @@ public:
 	void			PutInt64( int64 i );
 	void			PutUnsignedInt( unsigned int u );
 	void			PutUnsignedInt64( uint64 u );
-	void			PutUint64( uint64 u );
 	void			PutFloat( float f );
 	void			PutDouble( double d );
 	void			PutPtr( void * ); // Writes the pointer, not the pointed to
@@ -374,8 +363,6 @@ public:
 	// Buffer base
 	const void* Base() const;
 	void* Base();
-
-	const void* String() const;
 
 	// memory allocation size, does *not* reflect size written or read,
 	//	use TellPut or TellGet for that
@@ -435,7 +422,6 @@ protected:
 
 	// NOTE: Pass in nPut here even though it is just a copy of m_Put.  This is almost always called immediately 
 	// after modifying m_Put and this lets it stay in a register
-	void AddNullTermination( );
 	void AddNullTermination( int nPut );
 
 	// Methods to help with pretty-printing
@@ -672,7 +658,7 @@ inline void CUtlBuffer::GetObject( T *dest )
 	{
 		if ( !m_Byteswap.IsSwappingBytes() || ( sizeof( T ) == 1 ) )
 		{
-			memcpy( dest, PeekGet(), sizeof( T ) );
+			*dest = *(T *)PeekGet();
 		}
 		else
 		{
@@ -704,7 +690,7 @@ inline void CUtlBuffer::GetTypeBin( T &dest )
 	{
 		if ( !m_Byteswap.IsSwappingBytes() || ( sizeof( T ) == 1 ) )
 		{
-			memcpy(&dest, PeekGet(), sizeof(T) );
+			dest = *(T *)PeekGet();
 		}
 		else
 		{
@@ -734,7 +720,8 @@ inline void CUtlBuffer::GetTypeBin< float >( float &dest )
 		}
 		else
 		{
-			memcpy( &dest, (void*)pData, sizeof(float) );
+			// aligned read
+			dest = *(float *)pData;
 		}
 		if ( m_Byteswap.IsSwappingBytes() )
 		{
@@ -1049,7 +1036,7 @@ inline void CUtlBuffer::PutObject( T *src )
 	{
 		if ( !m_Byteswap.IsSwappingBytes() || ( sizeof( T ) == 1 ) )
 		{
-			memcpy( PeekPut(), src, sizeof( T ) );
+			*(T *)PeekPut() = *src;
 		}
 		else
 		{
@@ -1078,7 +1065,7 @@ inline void CUtlBuffer::PutTypeBin( T src )
 	{
 		if ( !m_Byteswap.IsSwappingBytes() || ( sizeof( T ) == 1 ) )
 		{
-			memcpy( PeekPut(), &src, sizeof( T ) );
+			*(T *)PeekPut() = src;
 		}
 		else
 		{
@@ -1280,10 +1267,6 @@ inline void CUtlBuffer::PutUnsignedInt64( uint64 i )
 	PutType( i );
 }
 
-inline void CUtlBuffer::PutUint64( uint64 i )
-{
-	PutType( i );
-}
 
 inline void CUtlBuffer::PutFloat( float f )
 {
@@ -1356,25 +1339,19 @@ inline bool CUtlBuffer::IsReadOnly() const
 //-----------------------------------------------------------------------------
 // Buffer base and size
 //-----------------------------------------------------------------------------
-inline const void* CUtlBuffer::Base() const
-{
-	return m_Memory.Base();
+inline const void* CUtlBuffer::Base() const	
+{ 
+	return m_Memory.Base(); 
 }
 
 inline void* CUtlBuffer::Base()
 {
-	return m_Memory.Base();
+	return m_Memory.Base(); 
 }
 
-inline const void* CUtlBuffer::String() const
-{
-	Assert( IsText() );
-	return reinterpret_cast<const char*>( m_Memory.Base() );
-}
-
-inline int CUtlBuffer::Size() const
-{
-	return m_Memory.NumAllocated();
+inline int CUtlBuffer::Size() const			
+{ 
+	return m_Memory.NumAllocated(); 
 }
 
 

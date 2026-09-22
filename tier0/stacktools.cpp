@@ -1,4 +1,4 @@
-//===== Copyright ï¿½ 1996-2005, Valve Corporation, All rights reserved. ======//
+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -27,10 +27,6 @@
 #include <set>
 #endif
 
-#if defined( LINUX ) && defined( PLATFORM_GLIBC )
-#include <execinfo.h>
-#endif
-
 #include "tier0/valve_on.h"
 
 #include "tier0/memdbgon.h"
@@ -38,20 +34,6 @@
 
 #if !defined( ENABLE_RUNTIME_STACK_TRANSLATION ) //disable the whole toolset
 
-#if defined( LINUX ) && defined( PLATFORM_GLIBC )
-
-int GetCallStack( void **pReturnAddressesOut, int iArrayCount, int iSkipCount )
-{
-	return backtrace( pReturnAddressesOut, iArrayCount );
-}
-
-int GetCallStack_Fast( void **pReturnAddressesOut, int iArrayCount, int iSkipCount )
-{
-	return backtrace( pReturnAddressesOut, iArrayCount );
-}
-
-#else
-
 int GetCallStack( void **pReturnAddressesOut, int iArrayCount, int iSkipCount )
 {
 	return 0;
@@ -61,8 +43,6 @@ int GetCallStack_Fast( void **pReturnAddressesOut, int iArrayCount, int iSkipCou
 {
 	return 0;
 }
-
-#endif
 
 //where we'll find our PDB's for win32. Translation will not work until this has been called once (even if with NULL)
 void SetStackTranslationSymbolSearchPath( const char *szSemicolonSeparatedList )
@@ -155,7 +135,7 @@ inline int AppendParentStackTrace( void **pReturnAddressesOut, int iArrayCount, 
 
 inline bool ValidStackAddress( void *pAddress, const void *pNoLessThan, const void *pNoGreaterThan )
 {
-	if( (uintp)pAddress & 3 )
+	if( ( int )pAddress & 3 )
 		return false;
 	if( pAddress < pNoLessThan ) //frame pointer traversal should always increase the pointer
 		return false;
@@ -436,7 +416,7 @@ public:
 
 	void TryLoadingNewSymbols( void )
 	{
-		AUTO_LOCK( m_Mutex );
+		AUTO_LOCK_FM( m_Mutex );
 
 		if( m_bIsInitialized )
 		{
@@ -448,7 +428,7 @@ public:
 
 	void SetStackTranslationSymbolSearchPath( const char *szSemicolonSeparatedList )
 	{
-		AUTO_LOCK( m_Mutex );
+		AUTO_LOCK_FM( m_Mutex );
 
 		if( m_szPDBSearchPath != NULL )
 			delete []m_szPDBSearchPath;
@@ -475,7 +455,7 @@ public:
 		if( pAddress == NULL )
 			return false;
 
-		AUTO_LOCK( m_Mutex );
+		AUTO_LOCK_FM( m_Mutex );
 
 		unsigned char genericbuffer[sizeof(SYMBOL_INFO) + MAX_SYM_NAME*sizeof(TCHAR)];
 
@@ -499,7 +479,7 @@ public:
 		if( pAddress == NULL )
 			return false;
 
-		AUTO_LOCK( m_Mutex );
+		AUTO_LOCK_FM( m_Mutex );
 
 		tchar szBuffer[1024];
 		szBuffer[0] = _T('\0');
@@ -525,7 +505,7 @@ public:
 
 	bool GetModuleNameFromAddress( const void *pAddress, tchar *pModuleNameOut, int iMaxModuleNameLength )
 	{
-		AUTO_LOCK( m_Mutex );
+		AUTO_LOCK_FM( m_Mutex );
 		IMAGEHLP_MODULE64 moduleInfo;
 
 		moduleInfo.SizeOfStruct = sizeof(IMAGEHLP_MODULE64);
@@ -701,7 +681,7 @@ public:
 			return;
 		}
 
-		AUTO_LOCK( m_Mutex );
+		AUTO_LOCK_FM( m_Mutex );
 
 		//Only enabled for P4 and Steam Beta builds
 		if( (CommandLine()->FindParm( "-steam" ) != 0) && //is steam
@@ -849,7 +829,7 @@ int CrawlStack_StackWalk64( CONTEXT *pExceptionContext, void **pReturnAddressesO
 {
 	s_HelperFunctions.EnsureReady();
 
-	AUTO_LOCK( s_HelperFunctions.m_Mutex );
+	AUTO_LOCK_FM( s_HelperFunctions.m_Mutex );
 
 	CONTEXT currentContext;
 	memcpy( &currentContext, pExceptionContext, sizeof( CONTEXT ) );
@@ -1426,25 +1406,25 @@ int TranslateStackInfo( const void * const *pCallStack, int iCallStackCount, tch
 
 void PreloadStackInformation( void * const *pAddresses, int iAddressCount )
 {
-	AUTO_LOCK( s_360StackTranslator.m_hMutex );
+	AUTO_LOCK_FM( s_360StackTranslator.m_hMutex );
 	s_360StackTranslator.LoadStackInformation( pAddresses, iAddressCount );
 }
 
 bool GetFileAndLineFromAddress( const void *pAddress, tchar *pFileNameOut, int iMaxFileNameLength, uint32 &iLineNumberOut, uint32 *pDisplacementOut )
 {
-	AUTO_LOCK( s_360StackTranslator.m_hMutex );
+	AUTO_LOCK_FM( s_360StackTranslator.m_hMutex );
 	return s_360StackTranslator.GetFileAndLineFromAddress( pAddress, pFileNameOut, iMaxFileNameLength, iLineNumberOut, pDisplacementOut );
 }
 
 bool GetSymbolNameFromAddress( const void *pAddress, tchar *pSymbolNameOut, int iMaxSymbolNameLength, uint64 *pDisplacementOut )
 {
-	AUTO_LOCK( s_360StackTranslator.m_hMutex );
+	AUTO_LOCK_FM( s_360StackTranslator.m_hMutex );
 	return s_360StackTranslator.GetSymbolNameFromAddress( pAddress, pSymbolNameOut, iMaxSymbolNameLength, pDisplacementOut );
 }
 
 bool GetModuleNameFromAddress( const void *pAddress, tchar *pModuleNameOut, int iMaxModuleNameLength )
 {
-	AUTO_LOCK( s_360StackTranslator.m_hMutex );
+	AUTO_LOCK_FM( s_360StackTranslator.m_hMutex );
 	return s_360StackTranslator.GetModuleNameFromAddress( pAddress, pModuleNameOut, iMaxModuleNameLength );
 }
 

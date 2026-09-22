@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -43,7 +43,7 @@ public:
 	void			DrawFocusRect( void );
 private:
 
-	void			DrawLabel( CChoreoWidgetDrawHelper& drawHelper, COLORREF clr, int x, int y, bool right );
+	void			DrawLabel( CChoreoWidgetDrawHelper& drawHelper, const Color& clr, int x, int y, bool right );
 
 	// The underlying scene object
 	CChoreoEvent	*m_pEvent;

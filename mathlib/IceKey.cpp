@@ -5,7 +5,12 @@
 #if !defined(_STATIC_LINKED) || defined(_SHARED_LIB)
 
 #include "mathlib/IceKey.H"
+#include "tier1/strtools.h"
+
+// NOTE: This has to be the last file included!
 #include "tier0/memdbgon.h"
+
+
 #pragma warning(disable: 4244)
 
 
@@ -60,11 +65,11 @@ static const int	ice_keyrot[16] = {
 
 static unsigned int
 gf_mult (
-	unsigned int	a,
-	unsigned int	b,
-	unsigned int	m
+	register unsigned int	a,
+	register unsigned int	b,
+	register unsigned int	m
 ) {
-	unsigned int	res = 0;
+	register unsigned int	res = 0;
 
 	while (b) {
 	    if (b & 1)
@@ -88,10 +93,10 @@ gf_mult (
 
 static unsigned long
 gf_exp7 (
-	unsigned int	b,
+	register unsigned int	b,
 	unsigned int		m
 ) {
-	unsigned int	x;
+	register unsigned int	x;
 
 	if (b == 0)
 	    return (0);
@@ -109,10 +114,10 @@ gf_exp7 (
 
 static unsigned long
 ice_perm32 (
-	unsigned long	x
+	register unsigned long	x
 ) {
-	unsigned long		res = 0;
-	const unsigned long	*pbox = ice_pbox;
+	register unsigned long		res = 0;
+	register const unsigned long	*pbox = ice_pbox;
 
 	while (x) {
 	    if (x & 1)
@@ -133,7 +138,7 @@ ice_perm32 (
 static void
 ice_sboxes_init (void)
 {
-	int	i;
+	register int	i;
 
 	for (i=0; i<1024; i++) {
 	    int			col = (i >> 1) & 0xff;
@@ -202,7 +207,7 @@ IceKey::~IceKey ()
 
 static unsigned long
 ice_f (
-	unsigned long	p,
+	register unsigned long	p,
 	const IceSubkey		*sk
 ) {
 	unsigned long	tl, tr;		/* Expanded 40-bit values */
@@ -240,8 +245,8 @@ IceKey::encrypt (
 	unsigned char		*ctext
 ) const
 {
-	int		i;
-	unsigned long	l, r;
+	register int		i;
+	register unsigned long	l, r;
 
 	l = (((unsigned long) ptext[0]) << 24)
 				| (((unsigned long) ptext[1]) << 16)
@@ -275,8 +280,8 @@ IceKey::decrypt (
 	unsigned char		*ptext
 ) const
 {
-	int		i;
-	unsigned long	l, r;
+	register int		i;
+	register unsigned long	l, r;
 
 	l = (((unsigned long) ctext[0]) << 24)
 				| (((unsigned long) ctext[1]) << 16)
@@ -313,20 +318,20 @@ IceKey::scheduleBuild (
 	int		i;
 
 	for (i=0; i<8; i++) {
-	    int	j;
-	    int	kr = keyrot[i];
+	    register int	j;
+	    register int	kr = keyrot[i];
 	    IceSubkey		*isk = &_keysched[n + i];
 
 	    for (j=0; j<3; j++)
 		isk->val[j] = 0;
 
 	    for (j=0; j<15; j++) {
-		int	k;
+		register int	k;
 		unsigned long	*curr_sk = &isk->val[j % 3];
 
 		for (k=0; k<4; k++) {
 		    unsigned short	*curr_kb = &kb[(kr + k) & 3];
-		    int	bit = *curr_kb & 1;
+		    register int	bit = *curr_kb & 1;
 
 		    *curr_sk = (*curr_sk << 1) | bit;
 		    *curr_kb = (*curr_kb >> 1) | ((bit ^ 1) << 15);
@@ -389,5 +394,36 @@ IceKey::blockSize () const
 {
 	return (8);
 }
+
+
+// Valve-written routine  to decode a buffer
+void DecodeICE( unsigned char *pBuffer, int nSize, const unsigned char *pKey)
+{
+	if ( !pKey )
+		return;
+
+	IceKey ice( 0 ); // level 0 = 64bit key
+	ice.set( pKey ); // set key
+
+	int nBlockSize = ice.blockSize();
+
+	unsigned char *pTemp = (unsigned char *) stackalloc( PAD_NUMBER( nSize, nBlockSize ) );
+	unsigned char *p1 = pBuffer;
+	unsigned char *p2 = pTemp;
+
+	// encrypt data in 8 byte blocks
+	int nBytesLeft = nSize;
+	while ( nBytesLeft >= nBlockSize )
+	{
+		ice.decrypt( p1, p2 );
+		nBytesLeft -= nBlockSize;
+		p1+=nBlockSize;
+		p2+=nBlockSize;
+	}
+
+	// copy encrypted data back to original buffer
+	Q_memcpy( pBuffer, pTemp, nSize - nBytesLeft );
+}
+
 
 #endif // !_STATIC_LINKED || _SHARED_LIB

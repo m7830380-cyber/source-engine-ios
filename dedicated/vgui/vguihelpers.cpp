@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -72,7 +72,7 @@ int StartVGUI( CreateInterfaceFn dedicatedFactory )
 	vgui::surface()->SetEmbeddedPanel(g_pMainPanel->GetVPanel());
 
 	// load the scheme
-	vgui::scheme()->LoadSchemeFromFile("Resource/SourceScheme.res", NULL);
+	vgui::scheme()->LoadSchemeFromFile("Resource/SourceScheme.res", "SourceScheme");
 
 	// localization
 	g_pVGuiLocalize->AddFile( "Resource/platform_%language%.txt" );
@@ -175,7 +175,7 @@ void VGUIPrintf( const char *msg )
 {
 	if ( !g_pMainPanel || VGUIIsInConfig() || VGUIIsStopping() )
 	{
-		OutputDebugStringA( msg );
+		::MessageBox( NULL, msg, "Dedicated Server Message", MB_OK | MB_TOPMOST );
 	}
 	else if ( g_pMainPanel )
 	{

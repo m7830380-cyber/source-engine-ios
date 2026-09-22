@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2005, Valve Corporation, All rights reserved. =======//
 //
 // Purpose: 
 //
@@ -48,12 +48,15 @@ void CDmeEditorBoolChoicesInfo::OnDestruction()
 //-----------------------------------------------------------------------------
 void CDmeEditorBoolChoicesInfo::SetFalseChoice( const char *pChoiceString )
 {
-	m_Choices[0]->SetValue<CUtlString>( "string", pChoiceString );
+	//m_Choices[0]->SetValue<CUtlString>( "string", pChoiceString );
+	CUtlSymbolLarge symbol = g_pDataModel->GetSymbol( pChoiceString );
+	m_Choices[0]->SetValue<CUtlSymbolLarge>( "string", symbol );
 }
 
 void CDmeEditorBoolChoicesInfo::SetTrueChoice( const char *pChoiceString )
 {
-	m_Choices[1]->SetValue<CUtlString>( "string", pChoiceString );
+	CUtlSymbolLarge symbol = g_pDataModel->GetSymbol( pChoiceString );
+	m_Choices[0]->SetValue<CUtlSymbolLarge>( "string", symbol );
 }
 
 

@@ -22,7 +22,7 @@ build_zlib() {
 	local dir="$BUILD/zlib"
 	rm -rf "$dir"
 	mkdir -p "$dir"
-	cp -R "$ROOT/thirdparty/zlib/"* "$dir/"
+	cp -R "$ROOT/ios/thirdparty/zlib/"* "$dir/"
 	cd "$dir"
 	CHOST=aarch64-apple-darwin ./configure --static --prefix="$PREFIX"
 	make -j"$JOBS"
@@ -40,7 +40,7 @@ build_png() {
 	local dir="$BUILD/libpng"
 	rm -rf "$dir"
 	mkdir -p "$dir"
-	cp -R "$ROOT/thirdparty/libpng/"* "$dir/"
+	cp -R "$ROOT/ios/thirdparty/libpng/"* "$dir/"
 	cd "$dir"
 	./configure --host=aarch64-apple-darwin --enable-static --disable-shared \
 		--prefix="$PREFIX" CPPFLAGS="-I$PREFIX/include" LDFLAGS="-L$PREFIX/lib"
@@ -53,7 +53,7 @@ build_jpeg() {
 	local dir="$BUILD/libjpeg"
 	rm -rf "$dir"
 	mkdir -p "$dir"
-	cp -R "$ROOT/thirdparty/libjpeg/"* "$dir/"
+	cp -R "$ROOT/ios/thirdparty/libjpeg/"* "$dir/"
 	cd "$dir"
 	./configure --host=aarch64-apple-darwin --enable-static --disable-shared \
 		--prefix="$PREFIX"
@@ -63,7 +63,7 @@ build_jpeg() {
 }
 
 build_freetype() {
-	cd "$ROOT/thirdparty/freetype"
+	cd "$ROOT/ios/thirdparty/freetype"
 	if [ ! -f subprojects/dlg/include/dlg/output.h ]; then
 		rm -rf subprojects/dlg
 		git clone --depth 1 https://github.com/nyorain/dlg.git subprojects/dlg
@@ -97,6 +97,37 @@ build_curl() {
 	cp lib/.libs/libcurl.a "$PREFIX/libcurl.a"
 }
 
+# CS:GO pins protobuf 2.5.0: generated .pb.cc files must match the runtime
+# headers exactly. Build a host protoc and an iOS libprotobuf.a from the copy
+# in thirdparty/.
+build_protobuf() {
+	local src="$ROOT/thirdparty/protobuf-2.5.0"
+	local hdir="$BUILD/protobuf-host"
+	local idir="$BUILD/protobuf-ios"
+
+	rm -rf "$hdir" "$idir"
+	mkdir -p "$hdir" "$idir" "$ROOT/build/host"
+	cp -R "$src/"* "$hdir/"
+	cp -R "$src/"* "$idir/"
+
+	(
+		cd "$hdir"
+		env CC=clang CXX=clang++ CFLAGS="-O2" CXXFLAGS="-O2 -std=gnu++11" LDFLAGS="" \
+			./configure --disable-shared --enable-static
+		make -j"$JOBS" -C src protoc
+		cp src/protoc "$ROOT/build/host/protoc"
+	)
+
+	(
+		cd "$idir"
+		CXXFLAGS="$CXXFLAGS -std=gnu++11" ./configure --host=aarch64-apple-darwin \
+			--build="$(./config.guess)" --enable-static --disable-shared \
+			--with-protoc="$ROOT/build/host/protoc"
+		make -j"$JOBS" -C src libprotobuf.la
+		cp src/.libs/libprotobuf.a "$PREFIX/libprotobuf.a"
+	)
+}
+
 # Ensure waf's lib checks find archives in the search path root.
 finalize_libs() {
 	for lib in libz libpng libjpeg libcurl libfreetype2 libbz2; do
@@ -112,6 +143,7 @@ build_png
 build_jpeg
 build_freetype
 build_curl
+build_protobuf
 finalize_libs
 
 echo "iOS deps installed to $PREFIX"

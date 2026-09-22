@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2005, Valve Corporation, All rights reserved. =======//
 //
 // Contains a bunch of information about editor types
 // Editor types are arbitrary
@@ -135,7 +135,8 @@ CDmElement *CDmeEditorChoicesInfo::CreateChoice( const char *pChoiceString )
 {
 	CDmElement *pChoice = CreateElement< CDmElement >( "", GetFileId() );
 	m_Choices.AddToTail( pChoice );
-	pChoice->SetValue<CUtlString>( "string", pChoiceString );
+	CUtlSymbolLarge symbol = g_pDataModel->GetSymbol( pChoiceString );
+	pChoice->SetValue<CUtlSymbolLarge>( "string", symbol );
 	return pChoice;
 }
 
@@ -176,13 +177,6 @@ const char *CDmeEditorType::GetActualAttributeName( const char *pAttributeName )
 	// Fixup the names of the attribute info for the 3 standard fields (name, type, id)
 	if ( !V_stricmp( "name", pAttributeName ) )
 		return "__name";
-
-	if ( !V_stricmp( "id", pAttributeName ) )
-		return "__id";
-
-	if ( !V_stricmp( "type", pAttributeName ) )
-		return "__type";
-
 	return pAttributeName;
 }
 

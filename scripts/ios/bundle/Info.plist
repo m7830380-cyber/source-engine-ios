@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleExecutable</key>
-	<string>hl2_launcher</string>
+	<string>csgo_osx64</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.sourceengine.port</string>
 	<key>CFBundleInfoDictionaryVersion</key>

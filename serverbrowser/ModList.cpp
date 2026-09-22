@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2001, Valve LLC, All rights reserved. ============
 //
 // Purpose: 
 //
@@ -102,20 +102,14 @@ int CModList::ModNameCompare( const mod_t *pLeft, const mod_t *pRight )
 //-----------------------------------------------------------------------------
 void CModList::ParseSteamMods()
 {
-
 }
-
-
 //-----------------------------------------------------------------------------
 // Purpose: load settings for an app
 //-----------------------------------------------------------------------------
 int CModList::LoadAppConfiguration( uint32 nAppID )
 {
-
 	return -1;
 }
-
-
 //-----------------------------------------------------------------------------
 // Purpose: add a vgui panel to message when the app list changes
 //-----------------------------------------------------------------------------

@@ -20,11 +20,6 @@ $Configuration	"Debug"
 		$OutputDirectory			".\Debug_$DX_SDK_VER"
 		$IntermediateDirectory		".\Debug_$DX_SDK_VER"
 	}
-	
-	$Linker
-	{
-		$IgnoreSpecificLibrary		"libcp.lib; libcmt.lib;"
-	}
 }
 
 $Configuration	"Release"
@@ -34,18 +29,13 @@ $Configuration	"Release"
 		$OutputDirectory			".\Release_$DX_SDK_VER"
 		$IntermediateDirectory		".\Release_$DX_SDK_VER"
 	}
-	
-	$Linker
-	{
-		$IgnoreSpecificLibrary		"libcpd.lib libcmtd.lib;"
-	}
 }
 
 $Configuration
 {
 	$General
 	{
-			$AdditionalProjectDependencies                  "$BASE;vstdlib;tier1;tier0"
+		$TargetName	"dx_proxy"
 	}
 
 	$Compiler
@@ -53,9 +43,14 @@ $Configuration
 		$PreprocessorDefinitions	"$BASE;DX_PROXY_EXPORTS;$DX_SDK_VER"
 		$EnableC++Exceptions		"Yes (/EHsc)"
 	}
+
+	$Linker
+	{
+		$IgnoreSpecificLibrary		"libcp.lib; libcpd.lib"
+	}
 }
 
-$Project "DX_Proxy ($DX_SDK_VER)"
+$Project 
 {
 	$Folder	"Source Files"
 	{
@@ -70,5 +65,12 @@ $Project "DX_Proxy ($DX_SDK_VER)"
 		$File	"$SRCDIR\common\dx_proxy\dx_proxy.h"
 		$File	"dxincludeimpl.h"
 		$File	"filememcache.h"
+	}
+
+	$Folder "Link Libraries"
+	{
+		-$File	"$SRCDIR\lib\public\tier0.lib"
+		-$File	"$SRCDIR\lib\public\tier1.lib"
+		-$File	"$SRCDIR\lib\public\vstdlib.lib"
 	}
 }

@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -54,6 +54,7 @@
 #define IDC_EDITGLOBALEVENT			5022
 #define IDC_DELETEGLOBALEVENT		5023
 #define IDC_ADDEVENT_PAUSE			5024
+
 
 #define IDC_ADDCHANNEL		5025
 #define IDC_EDITCHANNEL		5026
@@ -142,6 +143,8 @@
 
 #define IDC_CV_ENABLEEVENTS						5091
 #define IDC_CV_DISABLEEVENTS					5092
+
+#define IDC_ADDEVENT_CAMERA						5093
 
 /////////////////////////////////////////////////////////////////////////////
 // CChoreoView window
@@ -485,6 +488,7 @@ public:
 	bool				ValidateCombinedSoundCheckSum( CChoreoEvent *e );
 
 	void				OnPlaceNextSpeakEvent();
+	void				SetScrubUnitSeconds( bool bUseSeconds);
 
 private:
 
@@ -671,6 +675,7 @@ private:
 	};
 
 	float				m_flScrub;
+	int					m_bScrubSeconds;
 	float				m_flScrubTarget;
 
 	bool				m_bDragging;

@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -11,6 +11,7 @@
 #endif
 
 #include "faceposertoolwindow.h"
+#include "color.h"
 
 class mxScrollbar;
 
@@ -22,7 +23,7 @@ public:
 	mxStatusWindow (mxWindow *parent, int x, int y, int w, int h, const char *label = 0 );
 	~mxStatusWindow();
 
-	void StatusPrint( COLORREF clr, bool overwrite, const char *text );
+	void StatusPrint(const Color& clr, bool overwrite, const char *text );
 
 	virtual void	DrawActiveTool();
 
@@ -46,7 +47,7 @@ private:
 	struct TextLine
 	{
 		char		m_szText[ 512 ];
-		COLORREF	rgb;
+		Color		rgb;
 		float		curtime;
 	};
 

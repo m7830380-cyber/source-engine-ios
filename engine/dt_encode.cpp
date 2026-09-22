@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -31,17 +31,17 @@ static inline bool EncodeSpecialFloat( const SendProp *pProp, float fVal, bf_wri
 	}
 	else if ( flags & SPROP_COORD_MP )
 	{
-		pOut->WriteBitCoordMP( fVal, false, false );
+		pOut->WriteBitCoordMP( fVal, kCW_None );
 		return true;
 	}
 	else if ( flags & SPROP_COORD_MP_LOWPRECISION )
 	{
-		pOut->WriteBitCoordMP( fVal, false, true );
+		pOut->WriteBitCoordMP( fVal, kCW_LowPrecision );
 		return true;
 	}
 	else if ( flags & SPROP_COORD_MP_INTEGRAL )
 	{
-		pOut->WriteBitCoordMP( fVal, true, false );
+		pOut->WriteBitCoordMP( fVal, kCW_Integral );
 		return true;
 	}
 	else if ( flags & SPROP_NOSCALE )
@@ -54,6 +54,22 @@ static inline bool EncodeSpecialFloat( const SendProp *pProp, float fVal, bf_wri
 		pOut->WriteBitNormal( fVal );
 		return true;
 	}
+	else if ( flags & SPROP_CELL_COORD )
+	{
+		pOut->WriteBitCellCoord( fVal, pProp->m_nBits, kCW_None );
+		return true;
+	}
+	else if ( flags & SPROP_CELL_COORD_LOWPRECISION )
+	{
+		pOut->WriteBitCellCoord( fVal, pProp->m_nBits, kCW_LowPrecision );
+		return true;
+	}
+	else if ( flags & SPROP_CELL_COORD_INTEGRAL )
+	{
+		pOut->WriteBitCellCoord( fVal, pProp->m_nBits, kCW_Integral );
+		return true;
+	}
+
 	return false;
 }
 
@@ -66,7 +82,7 @@ static inline void EncodeFloat( const SendProp *pProp, float fVal, bf_write *pOu
 		return;
 	}
 
-	uint32 ulVal;
+	unsigned long ulVal;
 	if( fVal < pProp->m_fLowValue )
 	{
 		// clamp < 0
@@ -110,17 +126,17 @@ static inline bool DecodeSpecialFloat( SendProp const *pProp, bf_read *pIn, floa
 	}
 	else if ( flags & SPROP_COORD_MP )
 	{
-		fVal = pIn->ReadBitCoordMP( false, false );
+		fVal = pIn->ReadBitCoordMP( kCW_None );
 		return true;
 	}
 	else if ( flags & SPROP_COORD_MP_LOWPRECISION )
 	{
-		fVal = pIn->ReadBitCoordMP( false, true );
+		fVal = pIn->ReadBitCoordMP( kCW_LowPrecision );
 		return true;
 	}
 	else if ( flags & SPROP_COORD_MP_INTEGRAL )
 	{
-		fVal = pIn->ReadBitCoordMP( true, false );
+		fVal = pIn->ReadBitCoordMP( kCW_Integral );
 		return true;
 	}
 	else if ( flags & SPROP_NOSCALE )
@@ -133,6 +149,21 @@ static inline bool DecodeSpecialFloat( SendProp const *pProp, bf_read *pIn, floa
 		fVal = pIn->ReadBitNormal();
 		return true;
 	}
+	else if ( flags & SPROP_CELL_COORD )
+	{
+		fVal = pIn->ReadBitCellCoord( pProp->m_nBits, kCW_None );
+		return true;
+	}
+	else if ( flags & SPROP_CELL_COORD_LOWPRECISION )
+	{
+		fVal = pIn->ReadBitCellCoord( pProp->m_nBits, kCW_LowPrecision );
+		return true;
+	}
+	else if ( flags & SPROP_CELL_COORD_INTEGRAL )
+	{
+		fVal = pIn->ReadBitCellCoord( pProp->m_nBits, kCW_Integral );
+		return true;
+	}
 
 	return false;
 }
@@ -140,8 +171,8 @@ static inline bool DecodeSpecialFloat( SendProp const *pProp, bf_read *pIn, floa
 
 static float DecodeFloat(SendProp const *pProp, bf_read *pIn)
 {
-	float fVal;
-	uint32 dwInterp;
+	float fVal = 0;
+	unsigned long dwInterp;
 
 	// Check for special flags..
 	if( DecodeSpecialFloat( pProp, pIn, fVal ) )
@@ -261,55 +292,52 @@ void DecodeInfo::CopyVars( const DecodeInfo *pOther )
 
 void Int_Encode( const unsigned char *pStruct, DVariant *pVar, const SendProp *pProp, bf_write *pOut, int objectID )
 {
-	int nValue = pVar->m_Int;
-	
-	if ( pProp->GetFlags() & SPROP_VARINT)
-	{
-		if ( pProp->GetFlags() & SPROP_UNSIGNED )
-		{
-			pOut->WriteVarInt32( nValue );
-		}
-		else
-		{
-			pOut->WriteSignedVarInt32( nValue );
-		}
-	}
-	else
-	{
-		// If signed, preserve lower bits and then re-extend sign if nValue < 0;
-		// if unsigned, preserve all 32 bits no matter what. Bonus: branchless.
-		int nPreserveBits = ( 0x7FFFFFFF >> ( 32 - pProp->m_nBits ) );
-		nPreserveBits |= ( pProp->GetFlags() & SPROP_UNSIGNED ) ? 0xFFFFFFFF : 0;
-		int nSignExtension = ( nValue >> 31 ) & ~nPreserveBits;
-
-		nValue &= nPreserveBits;
-		nValue |= nSignExtension;
-
 #ifdef DBGFLAG_ASSERT
-		// Assert that either the property is unsigned and in valid range,
-		// or signed with a consistent sign extension in the high bits
+	// Assert that either the property is unsigned and in valid range,
+	// or signed with a consistant sign extension in the high bits
+	if ( !(pProp->GetFlags() & SPROP_VARINT) )
+	{
 		if ( pProp->m_nBits < 32 )
 		{
 			if ( pProp->GetFlags() & SPROP_UNSIGNED )
 			{
-				AssertMsg3( nValue == pVar->m_Int, "Unsigned prop %s needs more bits? Expected %i == %i", pProp->GetName(), nValue, pVar->m_Int );
+				int32 nMaskedValue = pVar->m_Int;
+				nMaskedValue &= (1u << pProp->m_nBits) - 1;
+				Assert( nMaskedValue == pVar->m_Int );
 			}
 			else 
 			{
-				AssertMsg3( nValue == pVar->m_Int, "Signed prop %s needs more bits? Expected %i == %i", pProp->GetName(), nValue, pVar->m_Int );
+				int32 nSignExtendedValue = pVar->m_Int;
+				nSignExtendedValue <<= 32 - pProp->m_nBits;
+				nSignExtendedValue >>= 32 - pProp->m_nBits;
+				Assert( nSignExtendedValue == pVar->m_Int );
 			}
+		}
+	}
+#endif
+	if ( pProp->GetFlags() & SPROP_VARINT)
+	{
+		if ( pProp->GetFlags() & SPROP_UNSIGNED )
+		{
+			pOut->WriteVarInt32( pVar->m_Int );
 		}
 		else
 		{
-			// This should never trigger, but I'm leaving it in for old-time's sake.
-			Assert( nValue == pVar->m_Int );
+			pOut->WriteSignedVarInt32( pVar->m_Int );
 		}
-#endif
-
-		pOut->WriteUBitLong( nValue, pProp->m_nBits, false );
+	}
+	else
+	{
+		if( pProp->IsSigned() )
+		{
+			pOut->WriteSBitLong( pVar->m_Int, pProp->m_nBits );
+		}
+		else
+		{
+			pOut->WriteUBitLong( (unsigned int)pVar->m_Int, pProp->m_nBits );
+		}
 	}
 }
-
 
 void Int_Decode( DecodeInfo *pInfo )
 {
@@ -320,7 +348,7 @@ void Int_Decode( DecodeInfo *pInfo )
 	{
 		if ( flags & SPROP_UNSIGNED )
 		{
-			pInfo->m_Value.m_Int = (int)pInfo->m_pIn->ReadVarInt32();
+			pInfo->m_Value.m_Int = (long)pInfo->m_pIn->ReadVarInt32();
 		}
 		else
 		{
@@ -329,20 +357,16 @@ void Int_Decode( DecodeInfo *pInfo )
 	}
 	else
 	{
-		int bits = pProp->m_nBits;
-		pInfo->m_Value.m_Int = pInfo->m_pIn->ReadUBitLong(bits);
-
-		if( bits != 32 && (flags & SPROP_UNSIGNED) == 0 )
+		if ( flags & SPROP_UNSIGNED )
 		{
-			unsigned int highbit = 1ul << (pProp->m_nBits - 1);
-			if ( pInfo->m_Value.m_Int & highbit )
-			{
-				pInfo->m_Value.m_Int -= highbit; // strip high bit...
-				pInfo->m_Value.m_Int -= highbit; // ... then put it back with sign extension
-			}
+			pInfo->m_Value.m_Int = pInfo->m_pIn->ReadUBitLong(pInfo->m_pProp->m_nBits);
+		}
+		else
+		{
+			pInfo->m_Value.m_Int = pInfo->m_pIn->ReadSBitLong( pInfo->m_pProp->m_nBits );
 		}
 	}
-
+	
 	if ( pInfo->m_pRecvProp )
 	{
 		pInfo->m_pRecvProp->GetProxyFn()( pInfo, pInfo->m_pStruct, pInfo->m_pData );
@@ -361,7 +385,7 @@ int Int_CompareDeltas( const SendProp *pProp, bf_read *p1, bf_read *p2 )
 		return p1->ReadSignedVarInt32() != p2->ReadSignedVarInt32();
 	}
 
-	return p1->CompareBits(p2, pProp->m_nBits);
+	return p1->ReadUBitLong( pProp->m_nBits ) != p2->ReadUBitLong( pProp->m_nBits );
 }
 
 const char* Int_GetTypeNameString()
@@ -445,15 +469,15 @@ int	Float_CompareDeltas( const SendProp *pProp, bf_read *p1, bf_read *p2 )
 	}
 	else if ( pProp->GetFlags() & SPROP_COORD_MP )
 	{
-		return p1->ReadBitCoordMP( false, false ) != p2->ReadBitCoordMP( false, false );
+		return p1->ReadBitCoordMP( kCW_None ) != p2->ReadBitCoordMP( kCW_None );
 	}
 	else if ( pProp->GetFlags() & SPROP_COORD_MP_LOWPRECISION )
 	{
-		return p1->ReadBitCoordMP( false, true ) != p2->ReadBitCoordMP( false, true );
+		return p1->ReadBitCoordMP( kCW_LowPrecision ) != p2->ReadBitCoordMP( kCW_LowPrecision );
 	}
 	else if ( pProp->GetFlags() & SPROP_COORD_MP_INTEGRAL )
 	{
-		return p1->ReadBitCoordMP( true, false ) != p2->ReadBitCoordMP( true, false );
+		return p1->ReadBitCoordMP( kCW_Integral ) != p2->ReadBitCoordMP( kCW_Integral );
 	}
 	else if ( pProp->GetFlags() & SPROP_NOSCALE )
 	{
@@ -462,6 +486,18 @@ int	Float_CompareDeltas( const SendProp *pProp, bf_read *p1, bf_read *p2 )
 	else if ( pProp->GetFlags() & SPROP_NORMAL )
 	{
 		return p1->ReadUBitLong( NORMAL_FRACTIONAL_BITS+1 ) != p2->ReadUBitLong( NORMAL_FRACTIONAL_BITS+1 );
+	}
+	else if ( pProp->GetFlags() & SPROP_CELL_COORD )
+	{
+		return p1->ReadBitCellCoord( pProp->m_nBits, kCW_None ) != p2->ReadBitCellCoord( pProp->m_nBits, kCW_None );
+	}
+	else if ( pProp->GetFlags() & SPROP_CELL_COORD_LOWPRECISION )
+	{
+		return p1->ReadBitCellCoord( pProp->m_nBits, kCW_LowPrecision ) != p2->ReadBitCellCoord( pProp->m_nBits, kCW_LowPrecision );
+	}
+	else if ( pProp->GetFlags() & SPROP_CELL_COORD_INTEGRAL )
+	{
+		return p1->ReadBitCellCoord( pProp->m_nBits, kCW_Integral ) != p2->ReadBitCellCoord( pProp->m_nBits, kCW_Integral );
 	}
 	else
 	{
@@ -521,15 +557,15 @@ void Float_SkipProp( const SendProp *pProp, bf_read *pIn )
 	}
 	else if ( pProp->GetFlags() & SPROP_COORD_MP )
 	{
-		pIn->ReadBitCoordMP( false, false );
+		pIn->ReadBitCoordMP( kCW_None );
 	}
 	else if ( pProp->GetFlags() & SPROP_COORD_MP_LOWPRECISION )
 	{
-		pIn->ReadBitCoordMP( false, true );
+		pIn->ReadBitCoordMP( kCW_LowPrecision );
 	}
 	else if ( pProp->GetFlags() & SPROP_COORD_MP_INTEGRAL )
 	{
-		pIn->ReadBitCoordMP( true, false );
+		pIn->ReadBitCoordMP( kCW_Integral );
 	}
 	else if(pProp->GetFlags() & SPROP_NOSCALE)
 	{
@@ -538,6 +574,18 @@ void Float_SkipProp( const SendProp *pProp, bf_read *pIn )
 	else if(pProp->GetFlags() & SPROP_NORMAL)
 	{
 		pIn->SeekRelative( NORMAL_FRACTIONAL_BITS + 1 );
+	}
+	else if ( pProp->GetFlags() & SPROP_CELL_COORD )
+	{
+		pIn->ReadBitCellCoord( pProp->m_nBits, kCW_None );
+	}
+	else if ( pProp->GetFlags() & SPROP_CELL_COORD_LOWPRECISION )
+	{
+		pIn->ReadBitCellCoord( pProp->m_nBits, kCW_LowPrecision );
+	}
+	else if ( pProp->GetFlags() & SPROP_CELL_COORD_INTEGRAL )
+	{
+		pIn->ReadBitCellCoord( pProp->m_nBits, kCW_Integral );
 	}
 	else
 	{
@@ -554,6 +602,7 @@ void Vector_Encode( const unsigned char *pStruct, DVariant *pVar, const SendProp
 {
 	EncodeFloat(pProp, pVar->m_Vector[0], pOut, objectID);
 	EncodeFloat(pProp, pVar->m_Vector[1], pOut, objectID);
+
 	// Don't write out the third component for normals
 	if ((pProp->GetFlags() & SPROP_NORMAL) == 0)
 	{
@@ -941,7 +990,7 @@ int Array_GetLength( const unsigned char *pStruct, const SendProp *pProp, int ob
 void Array_Encode( const unsigned char *pStruct, DVariant *pVar, const SendProp *pProp, bf_write *pOut, int objectID )
 {
 	SendProp *pArrayProp = pProp->GetArrayProp();
-	AssertMsg( pArrayProp, "Array_Encode: missing m_pArrayProp for SendProp '%s'.", pProp->m_pVarName );
+	AssertMsg( pArrayProp, ("Array_Encode: missing m_pArrayProp for SendProp '%s'.", pProp->m_pVarName) );
 	
 	int nElements = Array_GetLength( pStruct, pProp, objectID );
 
@@ -1003,7 +1052,7 @@ void Array_Decode( DecodeInfo *pInfo )
 int Array_CompareDeltas( const SendProp *pProp, bf_read *p1, bf_read *p2 )
 {
 	SendProp *pArrayProp = pProp->GetArrayProp();
-	AssertMsg( pArrayProp, "Array_CompareDeltas: missing m_pArrayProp for SendProp '%s'.", pProp->m_pVarName );
+	AssertMsg( pArrayProp, ("Array_CompareDeltas: missing m_pArrayProp for SendProp '%s'.", pProp->m_pVarName) );
 
 	int nLengthBits = pProp->GetNumArrayLengthBits(); 
 	int length1 = p1->ReadUBitLong( nLengthBits );
@@ -1012,7 +1061,7 @@ int Array_CompareDeltas( const SendProp *pProp, bf_read *p1, bf_read *p2 )
 	int bDifferent = length1 != length2;
 	
 	// Compare deltas on the props that are the same.
-	int nSame = min( length1, length2 );
+	int nSame = MIN( length1, length2 );
 	for ( int iElement=0; iElement < nSame; iElement++ )
 	{
 		bDifferent |= g_PropTypeFns[pArrayProp->GetType()].CompareDeltas( pArrayProp, p1, p2 );
@@ -1023,7 +1072,7 @@ int Array_CompareDeltas( const SendProp *pProp, bf_read *p1, bf_read *p2 )
 	{
 		bf_read *buffer = (length1 > length2) ? p1 : p2;
 
-		int nExtra = max( length1, length2 ) - nSame;
+		int nExtra = MAX( length1, length2 ) - nSame;
 		for ( int iEatUp=0; iEatUp < nExtra; iEatUp++ )
 		{
 			SkipPropData( buffer, pArrayProp );
@@ -1135,7 +1184,6 @@ const char* DataTable_GetTypeNameString()
 
 void Int64_Encode( const unsigned char *pStruct, DVariant *pVar, const SendProp *pProp, bf_write *pOut, int objectID )
 {
-#ifdef SUPPORTS_INT64
 	if ( pProp->GetFlags() & SPROP_VARINT)
 	{
 		if ( pProp->GetFlags() & SPROP_UNSIGNED )
@@ -1144,7 +1192,7 @@ void Int64_Encode( const unsigned char *pStruct, DVariant *pVar, const SendProp 
 		}
 		else
 		{
-			pOut->WriteSignedVarInt32( pVar->m_Int64 );
+			pOut->WriteSignedVarInt64( pVar->m_Int64 );
 		}
 	}
 	else
@@ -1166,13 +1214,11 @@ void Int64_Encode( const unsigned char *pStruct, DVariant *pVar, const SendProp 
 			pOut->WriteUBitLong( (unsigned int)highInt, pProp->m_nBits - 32 );
 		}
 	}
-#endif
 }
 
 
 void Int64_Decode( DecodeInfo *pInfo )
 {
-#ifdef SUPPORTS_INT64
 	if ( pInfo->m_pProp->GetFlags() & SPROP_VARINT )
 	{
 		if ( pInfo->m_pProp->GetFlags() & SPROP_UNSIGNED )
@@ -1215,7 +1261,6 @@ void Int64_Decode( DecodeInfo *pInfo )
 	{
 		pInfo->m_pRecvProp->GetProxyFn()( pInfo, pInfo->m_pStruct, pInfo->m_pData );
 	}
-#endif
 }
 
 
@@ -1245,24 +1290,18 @@ const char* Int64_GetTypeNameString()
 
 bool Int64_IsZero( const unsigned char *pStruct, DVariant *pVar, const SendProp *pProp )
 {
-#ifdef SUPPORTS_INT64
 	return (pVar->m_Int64 == 0);
-#else
-	return false;
-#endif
 }
 
 
 void Int64_DecodeZero( DecodeInfo *pInfo )
 {
-#ifdef SUPPORTS_INT64
 	pInfo->m_Value.m_Int64 = 0;
 
 	if ( pInfo->m_pRecvProp )
 	{
 		pInfo->m_pRecvProp->GetProxyFn()( pInfo, pInfo->m_pStruct, pInfo->m_pData );
 	}
-#endif
 }
 
 bool Int64_IsEncodedZero( const SendProp *pProp, bf_read *pIn )
@@ -1410,7 +1449,6 @@ PropTypeFns g_PropTypeFns[DPT_NUMSendPropTypes] =
 	},
 #endif
 
-#ifdef SUPPORTS_INT64
 	// DPT_Int64
 	{
 		Int64_Encode,
@@ -1423,6 +1461,4 @@ PropTypeFns g_PropTypeFns[DPT_NUMSendPropTypes] =
 		Int64_IsEncodedZero,
 		Int64_SkipProp,
 	},
-#endif
-
 };

@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ====
 //
 // Purpose: Structured Solid (CSSolid) implementation.
 //
@@ -28,7 +28,7 @@
 
 BOOL CheckFace(Vector *Points, int nPoints, Vector* pNormal, float dist, CCheckFaceInfo *pInfo)
 {
-	int		 j;
+	int		i, j;
 	float	d, edgedist;
 	Vector	dir, edgenormal;
 
@@ -77,7 +77,7 @@ BOOL CheckFace(Vector *Points, int nPoints, Vector* pNormal, float dist, CCheckF
 		return FALSE;
 	}
 
-	for(int i = pInfo->iPoint + 1; i < nPoints; i++ )
+	for(i = pInfo->iPoint + 1; i < nPoints; i++ )
 	{
 		pInfo->iPoint = i;
 
@@ -358,7 +358,7 @@ Vector * CSSolid::CreatePointList(CSSFace & face)
 		{
 			CString str;
 			str.Format("Conversion error!\n"
-				"edgeCur = %p, edgeNext = %p", edgeCur, edgeNext);
+				"edgeCur = %08X, edgeNext = %08X", edgeCur, edgeNext);
 			AfxMessageBox(str);
 			return NULL;
 		}
@@ -1209,7 +1209,7 @@ DoNextFace:
 		if(pUpdFace == pNewFace || pUpdFace == pFace)
 			continue;
 		
-		phVertexList = CreateNewVertexList(pUpdFace, pEdge1, pEdge2,
+		SSHANDLE *phVertexList = CreateNewVertexList(pUpdFace, pEdge1, pEdge2,
 			nv1index, nv2index, pNewVertex1, pNewVertex2);
 
 		if(phVertexList == NULL)	// don't need to update this face

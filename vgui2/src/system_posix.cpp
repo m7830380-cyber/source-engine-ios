@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -14,13 +14,13 @@
 #include <sys/stat.h>
 #include <sys/param.h>
 
-#include <vgui/VGUI.h>
+#include <vgui/vgui.h>
 #include <vgui/ISystem.h>
-#include <KeyValues.h>
+#include <keyvalues.h>
 #include <vgui/IInputInternal.h>
 #include <vgui/ISurface.h>
-#include "tier0/vcrmode.h"
 #include "tier1/fmtstr.h"
+#include "vstdlib/vstrtools.h"
 #include "filesystem.h"
 
 #include "vgui_internal.h"
@@ -28,18 +28,14 @@
 #include "vgui_key_translation.h"
 #include "filesystem.h"
 
-#if defined(OSX) || defined(PLATFORM_BSD)
-#include <sys/param.h>
-#include <sys/mount.h>
-#elif defined(LINUX)
-#define _LARGEFILE64_SOURCE
-#include <sys/vfs.h>
-#endif
 #ifdef OSX
 #include <Carbon/Carbon.h>
+#elif defined(LINUX)
+#include <sys/vfs.h>
 #endif
 
 #ifdef USE_SDL
+#include "SDL_stdinc.h"
 #include "SDL_clipboard.h"
 #include "SDL_error.h"
 #endif
@@ -52,11 +48,7 @@ using namespace vgui;
 
 uint16 System_GetKeyState( int virtualKeyCode )
 {
-#ifndef _XBOX
-	return g_pVCR->Hook_GetKeyState(virtualKeyCode);
-#else
 	return 0;
-#endif
 }
 
 class CSystem : public ISystem
@@ -173,9 +165,11 @@ CSystem::CSystem()
 	PasteboardCreate( kPasteboardClipboard, &m_PasteBoardRef );
 #endif
 	
+//	char *pchHome = getenv( "HOME" );
 	Q_snprintf( m_szRegistryPath, sizeof(m_szRegistryPath), "%s", REGISTRY_NAME );
 	
 	m_pRegistry = new KeyValues( "registry" );
+	//m_pRegistry->LoadFromFile( g_pFileSystem, REGISTRY_NAME, NULL );
 }
 
 //-----------------------------------------------------------------------------
@@ -271,50 +265,23 @@ long CSystem::GetTimeMillis()
 	return (long)(Plat_MSTime() );
 }
 
+
 //-----------------------------------------------------------------------------
-// Purpose: Legacy stub to allow ShellExecute( "open", "file" ) -- doesn't otherwise work
+// Purpose: does a windows shell execute
 //-----------------------------------------------------------------------------
 void CSystem::ShellExecute(const char *command, const char *file)
 {
-	if ( V_strcmp( command, "open" ) != 0 )
-	{
-		// Nope
-		Assert( !"This legacy command is only supported in the form of open <foo>" );
-		return;
-	}
-
 #ifdef OSX
-	const char *szCommand = "open";
+	command = "open ";
+	char const *szSuffix = "";
 #else
-	const char *szCommand = "xdg-open";
+#define ESCAPE_STEAM_RUNTIME "STEAM_RUNTIME=0 LD_LIBRARY_PATH=\"$SYSTEM_LD_LIBRARY_PATH\" PATH=\"$SYSTEM_PATH\" "
+	command = ESCAPE_STEAM_RUNTIME "xdg-open '";
+	char const *szSuffix = "'";
 #endif
-
-	pid_t pid = fork();
-	if ( pid == 0 )
-	{
-		// Child
-#if defined(LINUX) || defined(PLATFORM_BSD)
-		// Escape steam runtime if necessary
-		const char *szSteamRuntime = getenv( "STEAM_RUNTIME" );
-		if ( szSteamRuntime )
-		{
-			unsetenv( "STEAM_RUNTIME" );
-
-			const char *szSystemLibraryPath = getenv( "SYSTEM_LD_LIBRARY_PATH" );
-			const char *szSystemPath = getenv( "SYSTEM_PATH" );
-			if ( szSystemLibraryPath )
-			{
-				setenv( "LD_LIBRARY_PATH", szSystemLibraryPath, 1 );
-			}
-			if ( szSystemPath )
-			{
-				setenv( "PATH", szSystemPath, 1 );
-			}
-		}
-#endif
-		execlp( szCommand, szCommand, file, (char *)0 );
-		Assert( !"execlp failed" );
-	}
+	char szRealCommand[ 1024 ];
+	Q_snprintf( szRealCommand, sizeof( szRealCommand ), "%s%s%s", command, file, szSuffix );
+	system( szRealCommand );
 }
 
 void CSystem::ShellExecuteEx( const char *command, const char *file, const char *pParams )
@@ -325,33 +292,27 @@ void CSystem::ShellExecuteEx( const char *command, const char *file, const char 
 
 void CSystem::SetClipboardText(const char *text, int textLen)
 {
-#ifdef OSX
+#if defined( USE_SDL )
+	if( Q_strlen( text ) <= textLen )
+	{
+		SDL_SetClipboardText( text );
+	}
+	else
+	{
+		char *ClipText = ( char *)malloc( textLen + 1 );
+		if( ClipText )
+		{
+			Q_strncpy( ClipText, text, textLen + 1 );
+			SDL_SetClipboardText( ClipText );
+			free( ClipText );
+		}
+	}
+#elif defined( OSX )
 	PasteboardSynchronize( m_PasteBoardRef );
 	PasteboardClear( m_PasteBoardRef );
 	CFDataRef theData = CFDataCreate( kCFAllocatorDefault, (const UInt8*)text, textLen );
 	PasteboardPutItemFlavor( m_PasteBoardRef, (PasteboardItemID)1, CFSTR("public.utf8-plain-text"), theData, 0 );
 	CFRelease( theData );
-#elif defined( USE_SDL )
-	if ( Q_strlen( text ) <= textLen )
-	{
-		if ( SDL_SetClipboardText( text ) )
-		{
-			Msg( "SDL_SetClipboardText failed: %s\n", SDL_GetError() );
-		}
-	}
-	else
-	{
-		char *ClipText = ( char *)malloc( textLen + 1 );
-		if ( ClipText )
-		{
-			Q_strncpy( ClipText, text, textLen + 1 );
-			if ( SDL_SetClipboardText( ClipText ) )
-			{
-				Msg( "SDL_SetClipboardText failed: %s\n", SDL_GetError() );
-			}
-			free( ClipText );
-		}
-	}
 #endif
 }
 
@@ -371,15 +332,15 @@ void CSystem::SetClipboardText(const wchar_t *text, int textLen)
 
 	Q_UnicodeToUTF8( text, charStr, textLen*4 );
 
-#ifdef OSX
+#if defined( USE_SDL )
+	SetClipboardText( charStr, Q_strlen( charStr ) );
+#elif defined( OSX )
 	PasteboardSynchronize( m_PasteBoardRef );
 	PasteboardClear( m_PasteBoardRef );
 
 	CFDataRef theData = CFDataCreate( kCFAllocatorDefault, (const UInt8*)charStr, Q_strlen(charStr) );
 	PasteboardPutItemFlavor( m_PasteBoardRef, (PasteboardItemID)1, CFSTR("public.utf8-plain-text"), theData, 0 );
 	CFRelease( theData );
-#elif defined( USE_SDL )
-	SetClipboardText( charStr, Q_strlen( charStr ) );
 #endif
 
 	free( charStr );
@@ -387,7 +348,23 @@ void CSystem::SetClipboardText(const wchar_t *text, int textLen)
 
 int CSystem::GetClipboardTextCount()
 {
-#ifdef OSX
+#if defined( USE_SDL )
+	int Count = 0;
+
+	if( SDL_HasClipboardText() )
+	{
+		char *text = SDL_GetClipboardText();
+
+		if ( text )
+		{
+			Count = Q_strlen( text ) + 1;
+            //SDL_free( text );
+            free( text );
+		}
+	}
+
+	return Count;
+#elif defined( OSX )
 	ItemCount count;
 	PasteboardSynchronize( m_PasteBoardRef );
 	
@@ -411,21 +388,6 @@ int CSystem::GetClipboardTextCount()
 	int copyLen = CFDataGetLength( outData );
 	CFRelease( outData );
 	return (int)copyLen + 1;
-#elif defined( USE_SDL )
-	int Count = 0;
-
-	if ( SDL_HasClipboardText() )
-	{
-		char *text = SDL_GetClipboardText();
-
-		if ( text )
-		{
-			Count = Q_strlen( text ) + 1;
-			SDL_free( text );
-		}
-	}
-
-	return Count;
 #else
 	return 0;
 #endif
@@ -435,7 +397,22 @@ int CSystem::GetClipboardText(int offset, char *buf, int bufLen)
 {
 	Assert( !offset );
 
-#ifdef OSX
+#if defined( USE_SDL )
+	if( SDL_HasClipboardText() )
+	{
+		char *text = SDL_GetClipboardText();
+
+		if ( text )
+		{
+			Q_strncpy( buf, text, bufLen );
+            //SDL_free( text );
+            free( text );
+			return Q_strlen( buf );
+		}
+	}
+
+	return 0;
+#elif defined( OSX )
 	ItemCount count;
 	PasteboardSynchronize( m_PasteBoardRef );
 	
@@ -459,20 +436,6 @@ int CSystem::GetClipboardText(int offset, char *buf, int bufLen)
 		memcpy( buf, pchOutData, copyLen );
 	CFRelease( outData );
 	return copyLen;
-#elif defined( USE_SDL )
-	if( SDL_HasClipboardText() )
-	{
-		char *text = SDL_GetClipboardText();
-
-		if ( text )
-		{
-			Q_strncpy( buf, text, bufLen );
-			SDL_free( text );
-			return Q_strlen( buf );
-		}
-	}
-
-	return 0;
 #else
 	return 0;
 #endif
@@ -483,20 +446,10 @@ int CSystem::GetClipboardText(int offset, char *buf, int bufLen)
 //-----------------------------------------------------------------------------
 int CSystem::GetClipboardText(int offset, wchar_t *buf, int bufLen)
 {
-	Assert( !offset );
-
 	char *outputUTF8 = (char *)malloc( bufLen*4 );
 	int ret = GetClipboardText( offset, outputUTF8, bufLen );
-
 	if ( ret )
-	{
-		Q_UTF8ToUnicode( outputUTF8, buf, bufLen );
-	}
-	else if( bufLen > 0 )
-	{
-		buf[ 0 ] = 0;
-	}
-
+		V_UTF8ToUnicode( outputUTF8, buf, bufLen );
 	free( outputUTF8 );
 	return ret;
 }
@@ -588,14 +541,8 @@ int CSystem::GetAvailableDrives(char *buf, int bufLen)
 //-----------------------------------------------------------------------------
 double CSystem::GetFreeDiskSpace(const char *path)
 {
-#if __DARWIN_ONLY_64_BIT_INO_T || PLATFORM_BSD
-    // MoeMod: newer macOS only support 64bit, so no statfs64 is provided
-    struct statfs buf;
-    int ret = statfs( path, &buf );
-#else
 	struct statfs64 buf;
 	int ret = statfs64( path, &buf );
-#endif
 	if ( ret < 0 )
 		return 0.0;
 	return (double) ( buf.f_bsize * buf.f_bfree );
@@ -684,7 +631,7 @@ bool CSystem::GetCommandLineParamValue(const char *paramName, char *value, int v
 //-----------------------------------------------------------------------------
 const char *CSystem::GetFullCommandLine()
 {
-	return VCRHook_GetCommandLine();
+	return CommandLine()->GetCmdLine();
 }
 
 
@@ -725,8 +672,8 @@ bool CSystem::GetCurrentTimeAndDate(int *year, int *month, int *dayOfWeek, int *
 		if ( hour ) *hour = now->tm_hour;
 		if ( minute ) *minute = now->tm_min;
 		if ( second )  *second = now->tm_sec;
-		return true;
-	}
+	return true;
+}
 	return false;
 }
 

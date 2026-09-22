@@ -1,4 +1,4 @@
-//========= Copyright 1996-2005, Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Some macros for the raytraces-in-think-function-counter. 
 //          They're in a header because they're included in a bunch of 
@@ -19,7 +19,7 @@
 #ifdef THINK_TRACE_COUNTER_COMPILED
 	// create a macro that is true if we are allowed to debug traces during thinks, and compiles out to nothing otherwise.
 	#if defined( _GAMECONSOLE ) || defined( NO_STEAM )
-		#define DEBUG_THINK_TRACE_COUNTER_ALLOWED()  (false)
+		#define DEBUG_THINK_TRACE_COUNTER_ALLOWED()  (!IsCert())
 	#else
 		#ifdef THINK_TRACE_COUNTER_COMPILE_FUNCTIONS_ENGINE
 			bool DEBUG_THINK_TRACE_COUNTER_ALLOWED()

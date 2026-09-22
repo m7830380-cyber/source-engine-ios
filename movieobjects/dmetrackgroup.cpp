@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2005, Valve Corporation, All rights reserved. =======
 //
 // Purpose: 
 //
@@ -25,16 +25,14 @@ IMPLEMENT_ELEMENT_FACTORY( DmeTrackGroup, CDmeTrackGroup );
 
 void CDmeTrackGroup::OnConstruction()
 {
-	m_hOwner = DMELEMENT_HANDLE_INVALID;
-
-	m_Tracks.Init( this, "tracks", FATTRIB_MUSTCOPY | FATTRIB_HAS_ARRAY_CALLBACK );
+	m_Tracks.Init( this, "tracks", FATTRIB_MUSTCOPY | FATTRIB_HAS_CALLBACK );
 	m_bIsVisible.InitAndSet( this, "visible", true );
 	m_bMute.Init( this, "mute" );
-	m_nDisplaySize.InitAndSet( this, "displaySize", 110 );
+	m_flDisplayScale.InitAndSet( this, "displayScale", 1.0f );
 	m_bMinimized.InitAndSet( this, "minimized", true );
 	m_nMaxTrackCount = INT_MAX;
 	m_Volume.InitAndSet( this, "volume", 1.0 );
-
+	m_bForceMultiTrack.InitAndSet( this, "forcemultitrack", false );
 }
 
 void CDmeTrackGroup::OnDestruction()
@@ -84,12 +82,12 @@ float CDmeTrackGroup::GetVolume() const
 //-----------------------------------------------------------------------------
 CDmeClip *CDmeTrackGroup::GetOwnerClip()
 {
-	return GetElement< CDmeClip >( m_hOwner );
-}
-
-void CDmeTrackGroup::SetOwnerClip( CDmeClip *pClip )
-{
-	m_hOwner = pClip ? pClip->GetHandle() : DMELEMENT_HANDLE_INVALID;
+	CDmeClip *pFindClip = FindReferringElement< CDmeClip >( this, "subClipTrackGroup" );
+	if ( !pFindClip )
+	{
+		pFindClip = FindReferringElement< CDmeClip >( this, "trackGroups" );
+	}
+	return pFindClip;
 }
 
 
@@ -502,6 +500,16 @@ void CDmeTrackGroup::GetSubClips( CDmeClip **ppClips )
 	DMETRACKGROUP_FOREACH_CLIP_START( this, pTrack, pClip )
 		ppClips[nCount++] = pClip;
 	DMETRACKGROUP_FOREACH_CLIP_END()
+}
+
+bool CDmeTrackGroup::GetForceMultiTrack() const
+{
+	return const_cast< CDmeTrackGroup * >( this )->IsFilmTrackGroup() && m_bForceMultiTrack;
+}
+
+void CDmeTrackGroup::SetForceMultiTrack( bool bForce )
+{
+	m_bForceMultiTrack = bForce;
 }
 
 //-----------------------------------------------------------------------------

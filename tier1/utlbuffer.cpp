@@ -1573,7 +1573,7 @@ void CUtlBuffer::VaPrintf( const char* pFmt, va_list list )
 {
 	char temp[8192];
 	int nLen = V_vsnprintf( temp, sizeof( temp ), pFmt, list );
-	ErrorIfNot( nLen < sizeof( temp ), ( "CUtlBuffer::VaPrintf: String overflowed buffer [%zd]\n", sizeof( temp ) ) );
+	ErrorIfNot( nLen < sizeof( temp ), ( "CUtlBuffer::VaPrintf: String overflowed buffer [%d]\n", sizeof( temp ) ) );
 	PutString( temp );
 }
 
@@ -1710,28 +1710,6 @@ bool CUtlBuffer::IsBigEndian( void )
 // NOTE: Pass in nPut here even though it is just a copy of m_Put.  This is almost always called immediately 
 // after modifying m_Put and this lets it stay in a register and avoid LHS on PPC.
 //-----------------------------------------------------------------------------
-void CUtlBuffer::AddNullTermination( )
-{
-	if ( m_Put > m_nMaxPut )
-	{
-		if ( !IsReadOnly() && ((m_Error & PUT_OVERFLOW) == 0)  )
-		{
-			// Add null termination value
-			if ( CheckPut( 1 ) )
-			{
-				m_Memory[m_Put - m_nOffset] = 0;
-			}
-			else
-			{
-				// Restore the overflow state, it was valid before...
-				m_Error &= ~PUT_OVERFLOW;
-			}
-		}
-		m_nMaxPut = m_Put;
-	}		
-}
-
-
 void CUtlBuffer::AddNullTermination( int nPut )
 {
 	if ( nPut > m_nMaxPut )
@@ -1752,7 +1730,6 @@ void CUtlBuffer::AddNullTermination( int nPut )
 		m_nMaxPut = nPut;
 	}		
 }
-
 
 
 //-----------------------------------------------------------------------------

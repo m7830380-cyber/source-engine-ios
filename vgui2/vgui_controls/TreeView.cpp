@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -17,7 +17,7 @@
 #include <vgui/ISystem.h>
 #include <vgui/IVGui.h>
 #include <vgui/KeyCode.h>
-#include <KeyValues.h>
+#include <keyvalues.h>
 #include <vgui/MouseCode.h>
 
 #include <vgui_controls/TreeView.h>
@@ -57,13 +57,14 @@ class TreeNodeText : public TextEntry
 	DECLARE_CLASS_SIMPLE( TreeNodeText, TextEntry );
 
 public:
-    TreeNodeText(Panel *parent, const char *panelName, TreeView *tree) : BaseClass(parent, panelName), m_pTree( tree )
+    TreeNodeText(Panel *parent, const char *panelName, int nItemIndex, TreeView *tree) : BaseClass(parent, panelName), m_ItemIndex( nItemIndex ), m_pTree( tree )
     {
 		m_bEditingInPlace = false;
 		m_bLabelEditingAllowed = false;
 		SetDragEnabled( false );
 		SetDropEnabled( false );
 		AddActionSignalTarget( this );
+		m_bTemporarilyDisallowLabelEditing = true; // Needs to be true so that if an item is selected procedurally without being clicked on, the rename will not trigger on the first time it is clicked.
 		m_bArmForEditing = false;
 		m_bWaitingForRelease = false;
 		m_lArmingTime = 0L;
@@ -152,7 +153,13 @@ public:
 				m_bArmForEditing = false;
 				m_bWaitingForRelease = false;
 				ivgui()->RemoveTickSignal( GetVPanel() );
-				EnterEditingInPlace();
+
+				// Make sure the selection has not changed while waiting on the delay, this fixes a bug where 
+				// you could click an item twice and then click another item before the editing started
+				if ( m_pTree->CanCurrentlyEditLabel( m_ItemIndex ) )
+				{
+					EnterEditingInPlace();
+				}
 			}
 		}
 	}
@@ -201,22 +208,25 @@ public:
 			bool shift = (input()->IsKeyDown(KEY_LSHIFT) || input()->IsKeyDown(KEY_RSHIFT));
 			bool ctrl = (input()->IsKeyDown(KEY_LCONTROL) || input()->IsKeyDown(KEY_RCONTROL));
 
-			// make sure there is only one item selected
-			// before "WaitingForRelease" which leads to label editing.
-			CUtlVector< int > list;
-			m_pTree->GetSelectedItems( list );
-			bool bIsOnlyOneItemSelected = ( list.Count() == 1 );
+			// Before setting "WaitingForRelease",  which leads to label editing, ask the tree label 
+			// editing can be performed in the current state, the base implementation will only allow 
+			// editing when a single item is selected, but derived tree classes may behave differently.
+			bool bTreeCurrentlyAllowsEditing = m_pTree->CanCurrentlyEditLabel( m_ItemIndex );
 
-			if ( !shift && 
+			if ( ( code == MOUSE_LEFT ) &&
+				!shift && 
 				!ctrl &&
+				!m_bTemporarilyDisallowLabelEditing &&
 				!m_bArmForEditing && 
 				IsLabelEditingAllowed() && 
-				bIsOnlyOneItemSelected && 
+				bTreeCurrentlyAllowsEditing && 
 				IsTextFullySelected() && 
 				!IsBeingDragged() )
 			{
 				m_bWaitingForRelease = true;
 			}
+
+			m_bTemporarilyDisallowLabelEditing = false;
 		}
 
         // let parent deal with it
@@ -303,6 +313,8 @@ public:
 		BaseClass::OnKillFocus();
 
 		FinishEditingInPlace();
+
+		m_bTemporarilyDisallowLabelEditing = true;
 	}
 
 	virtual void OnMouseWheeled(int delta)
@@ -328,9 +340,11 @@ private:
 	CUtlString	m_OriginalText;
 	bool		m_bLabelEditingAllowed;
 
+	bool		m_bTemporarilyDisallowLabelEditing;
 	bool		m_bArmForEditing;
 	bool		m_bWaitingForRelease;
 	long		m_lArmingTime;
+	const int	m_ItemIndex;
 	TreeView	*m_pTree;
 };
 
@@ -409,6 +423,47 @@ public:
 	}
 };
 
+
+//-----------------------------------------------------------------------------
+// The TreeNodeDropPanel is a simple panel designed to be a child of a tree 
+// node that can be used to have an area of the top of the node that will 
+// provide an insert before behavior instead of a drop onto behavior.
+//-----------------------------------------------------------------------------
+class TreeNodeDropPanel : public Panel
+{
+	DECLARE_CLASS_SIMPLE( TreeNodeDropPanel, Panel );
+
+public:
+	TreeNodeDropPanel( Panel *parent, int nItemIndex, TreeView *pTreeView );
+
+	virtual bool IsDroppable( CUtlVector< KeyValues * >& msglist );
+	virtual void OnPanelDropped( CUtlVector< KeyValues * >& msglist );
+
+private:
+	
+	const int	m_ItemIndex;
+    TreeView    *m_pTreeView;
+};
+
+TreeNodeDropPanel::TreeNodeDropPanel( Panel *parent, int nItemIndex, TreeView *pTreeView ) 
+: BaseClass( parent, "TreeNodeDropPanel" )
+, m_ItemIndex( nItemIndex )
+, m_pTreeView( pTreeView )
+{
+	
+}
+
+bool TreeNodeDropPanel::IsDroppable( CUtlVector< KeyValues * >& msglist )
+{
+	return m_pTreeView->IsItemDroppable( m_ItemIndex, true, msglist );
+}
+
+void TreeNodeDropPanel::OnPanelDropped( CUtlVector< KeyValues * >& msglist )
+{
+	m_pTreeView->OnItemDropped( m_ItemIndex, true, msglist );
+}
+
+
 //-----------------------------------------------------------------------------
 // Purpose: A single entry in the tree
 //-----------------------------------------------------------------------------
@@ -417,7 +472,7 @@ class TreeNode : public Panel
 	DECLARE_CLASS_SIMPLE( TreeNode, Panel );
 
 public:
-    TreeNode(Panel *parent, TreeView *pTreeView);
+    TreeNode( Panel *parent, int nItemIndex, TreeView *pTreeView );
 	~TreeNode();
     void SetText(const char *pszText);
     void SetFont(HFont font);
@@ -425,6 +480,7 @@ public:
     bool IsSelected();
 	// currently unused, could be re-used if necessary
 //	bool IsInFocus();
+	virtual void RequestFocus( int direction = 0 );
 	virtual void PaintBackground();
     virtual void PerformLayout();
 	TreeNode *GetParentNode();
@@ -463,7 +519,6 @@ public:
  	virtual void OnMouseWheeled(int delta);
     virtual void OnMousePressed( MouseCode code);
 	virtual void OnMouseReleased( MouseCode code);
-	virtual void OnCursorMoved( int x, int y );
 	virtual bool IsDragEnabled() const;
     void PositionAndSetVisibleNodes(int &nStart, int &nCount, int x, int &y);
 
@@ -492,8 +547,11 @@ public:
 	void SetSelectionTextColor( const Color& clr );
 	void SetSelectionBgColor( const Color& clr );
 	void SetSelectionUnfocusedBgColor( const Color& clr );
+
+	void				SetHiddenRootNode( bool bHiddenRootNode );
+	bool				IsHiddenRootNode() const;
 public:
-	int                 m_ItemIndex;
+	const int           m_ItemIndex;
 	int					m_ParentIndex;
 	KeyValues           *m_pData;
     CUtlVector<TreeNode *> m_Children;
@@ -509,23 +567,33 @@ private:
     TreeNodeText        *m_pText;
     TextImage           *m_pExpandImage;
     TreeNodeImage       *m_pImagePanel;
-
-	bool				m_bExpandableWithoutChildren;
+	TreeNodeDropPanel	*m_pDropPanel;
 
     TreeView            *m_pTreeView;
-	int					m_nClickedItem;
-	bool				m_bClickedSelected;
+
+	enum
+	{
+		ON_MOUSE_RELEASED_DO_NOTHING,
+		ON_MOUSE_RELEASED_DESELECT_ITEM,
+		ON_MOUSE_RELEASED_SELECT_ITEM,
+	};
+
+	int					m_nMouseReleasedOp;
+
+	bool				m_bExpandableWithoutChildren : 1;
+	bool				m_bHiddenRootNode : 1;
 };
 
 
-TreeNode::TreeNode(Panel *parent, TreeView *pTreeView) : 
+TreeNode::TreeNode( Panel *parent, int nItemIndex, TreeView *pTreeView ) : 
 	BaseClass(parent, "TreeNode" ),
-	m_nClickedItem( 0 ),
-	m_bClickedSelected( false )
+	m_ItemIndex( nItemIndex ),
+	m_nMouseReleasedOp( ON_MOUSE_RELEASED_DO_NOTHING ),
+	m_bHiddenRootNode( false ),
+	m_pDropPanel( NULL )
 {
     m_pData = NULL;
     m_pTreeView = pTreeView;
-    m_ItemIndex = -1;
 	m_iNodeWidth = 0; 
 	m_iMaxVisibleWidth = 0;
 
@@ -535,11 +603,18 @@ TreeNode::TreeNode(Panel *parent, TreeView *pTreeView) :
     m_pImagePanel = new TreeNodeImage(this, "TreeImage");
     m_pImagePanel->SetPos(TREE_INDENT_AMOUNT, 3);
 
-    m_pText = new TreeNodeText(this, "TreeNodeText",pTreeView);
+    m_pText = new TreeNodeText( this, "TreeNodeText", m_ItemIndex, pTreeView );
     m_pText->SetMultiline(false);
     m_pText->SetEditable(false);
     m_pText->SetPos(TREE_INDENT_AMOUNT*2, 0);
 	m_pText->AddActionSignalTarget( this );
+
+	if ( pTreeView->AreInsertDropLocationsEnabled() )
+	{
+		m_pDropPanel = new TreeNodeDropPanel( this, nItemIndex, pTreeView );
+		m_pDropPanel->SetPos(0, 0);
+		m_pDropPanel->SetDropEnabled( true );
+	}
 
     m_bExpand = false;
 	m_bExpandableWithoutChildren = false;
@@ -578,12 +653,12 @@ bool TreeNode::GetDropContextMenu( Menu *menu, CUtlVector< KeyValues * >& msglis
 
 bool TreeNode::IsDroppable( CUtlVector< KeyValues * >& msglist )
 {
-	return m_pTreeView->IsItemDroppable( m_ItemIndex, msglist );
+	return m_pTreeView->IsItemDroppable( m_ItemIndex, false, msglist );
 }
 
 void TreeNode::OnPanelDropped( CUtlVector< KeyValues * >& msglist )
 {
-	m_pTreeView->OnItemDropped( m_ItemIndex, msglist );
+	m_pTreeView->OnItemDropped( m_ItemIndex, false, msglist );
 }
 
 HCursor TreeNode::GetDropCursor( CUtlVector< KeyValues * >& msglist )
@@ -596,7 +671,10 @@ void TreeNode::OnCreateDragData( KeyValues *msg )
 {
 	// make sure the dragged item appears selected,
 	// on the off chance it appears deselected by a cntl mousedown
-	m_pTreeView->AddSelectedItem( m_ItemIndex, false );
+	if ( m_pTreeView->IsItemSelected( m_ItemIndex ) == false )
+	{
+		m_pTreeView->AddSelectedItem( m_ItemIndex, false );
+	}
 
 	m_pTreeView->GenerateDragDataForItem( m_ItemIndex, msg );
 }
@@ -605,7 +683,7 @@ void TreeNode::OnCreateDragData( KeyValues *msg )
 void TreeNode::OnGetAdditionalDragPanels( CUtlVector< Panel * >& dragabbles )
 {
 	CUtlVector< int > list;
-	m_pTreeView->GetSelectedItems( list );
+	m_pTreeView->GetSelectedItemsForDrag( m_ItemIndex, list );
 	int c = list.Count();
 	// walk this in reverse order so that panels are in order of selection
 	// even though GetSelectedItems returns items in reverse selection order
@@ -669,7 +747,7 @@ void TreeNode::SetKeyValues(KeyValues *data)
 
     // set text
     m_pText->SetText(data->GetString("Text", ""));
- 	m_bExpandableWithoutChildren = data->GetInt("Expand");
+	m_bExpandableWithoutChildren = data->GetBool("Expand");
     InvalidateLayout();
 }
 
@@ -707,6 +785,11 @@ bool TreeNode::IsInFocus()
 }
 */
 
+void TreeNode::RequestFocus( int direction /*= 0*/ )
+{
+	m_pText->RequestFocus( direction );
+}
+
 void TreeNode::PerformLayout()
 {
     BaseClass::PerformLayout();
@@ -731,6 +814,11 @@ void TreeNode::PerformLayout()
 	m_pText->SetSize( contentWide, m_pTreeView->GetRowHeight() );
     width += contentWide;
     SetSize(width, m_pTreeView->GetRowHeight());
+
+	if ( m_pDropPanel )
+	{
+		m_pDropPanel->SetSize( width, 3 );
+	}
 
 	m_iNodeWidth = width;
 	CalculateVisibleMaxWidth();
@@ -781,7 +869,6 @@ int TreeNode::FindChild( TreeNode *pChild )
 {
 	if ( !m_pTreeView->m_pSortFunc )
 	{
-		AssertMsg( 0, "This code has never been tested. Is it correct?" );
 		for ( int i = 0; i < GetChildrenCount(); ++i )
 		{
 			if ( m_Children[i] == pChild )
@@ -882,7 +969,7 @@ bool TreeNode::IsExpanded()
 
 int TreeNode::CountVisibleNodes()
 {
-    int count = 1;  // count myself
+	int count = 1;  // count self
     if (m_bExpand)
     {
         int i;
@@ -1420,74 +1507,26 @@ void TreeNode::OnMouseReleased(MouseCode code)
 {
 	BaseClass::OnMouseReleased( code );
 
-	if ( input()->GetMouseCapture() == GetVPanel() )
+	if ( m_nMouseReleasedOp == ON_MOUSE_RELEASED_DESELECT_ITEM )
 	{
-		input()->SetMouseCapture( NULL );
-		return;
+		m_pTreeView->RemoveSelectedItem( m_ItemIndex );
 	}
-	int x, y;
-	input()->GetCursorPos(x, y);
-	ScreenToLocal(x, y);
-
-	if ( x < TREE_INDENT_AMOUNT )
-		return;
-
-	bool ctrldown = (input()->IsKeyDown(KEY_LCONTROL) || input()->IsKeyDown(KEY_RCONTROL));
-	bool shiftdown = (input()->IsKeyDown(KEY_LSHIFT) || input()->IsKeyDown(KEY_RSHIFT));
-
-	if ( !ctrldown && !shiftdown && ( code == MOUSE_LEFT ) )
+	else if ( m_nMouseReleasedOp == ON_MOUSE_RELEASED_SELECT_ITEM )
 	{
 		m_pTreeView->AddSelectedItem( m_ItemIndex, true );
 	}
-}
-
-void TreeNode::OnCursorMoved( int x, int y )
-{
-	if ( input()->GetMouseCapture() != GetVPanel() )
-		return;
-
-	LocalToScreen( x, y );
-	m_pTreeView->ScreenToLocal( x, y );
-	int newItem = m_pTreeView->FindItemUnderMouse( x, y );
-	if ( newItem == -1 )
-	{
-		// Fixme:  Figure out best item
-		return;
-	}
-
-	int startItem = m_nClickedItem;
-	int endItem = newItem;
-	if ( startItem > endItem )
-	{
-		int temp = startItem;
-		startItem = endItem;
-		endItem = temp;
-	}
-
-	CUtlVector< TreeNode * > list;
-	m_pTreeView->m_pRootNode->FindNodesInRange( list, startItem, endItem );
-
-	int c = list.Count();
-	for ( int i = 0; i < c; ++i )
-	{
-		TreeNode *item = list[ i ];
-		if ( m_bClickedSelected )
-		{
-			m_pTreeView->AddSelectedItem( item->m_ItemIndex, false );
-		}
-		else
-		{
-			m_pTreeView->RemoveSelectedItem( item->m_ItemIndex );
-		}
-	}
+	m_nMouseReleasedOp = ON_MOUSE_RELEASED_DO_NOTHING;
 }
 
 void TreeNode::OnMousePressed( MouseCode code)
 {
 	BaseClass::OnMousePressed( code );
 
+	m_nMouseReleasedOp = ON_MOUSE_RELEASED_DO_NOTHING;
+
 	bool ctrl = (input()->IsKeyDown(KEY_LCONTROL) || input()->IsKeyDown(KEY_RCONTROL));
 	bool shift = (input()->IsKeyDown(KEY_LSHIFT) || input()->IsKeyDown(KEY_RSHIFT));
+
 	int x, y;
 	input()->GetCursorPos(x, y);
 
@@ -1507,46 +1546,27 @@ void TreeNode::OnMousePressed( MouseCode code)
 		}
 		else
 		{
-			m_nClickedItem = m_ItemIndex;
-			if ( m_pTreeView->IsMultipleItemDragEnabled() )
-			{
-				input()->SetMouseCapture( GetVPanel() );
-			}
-
 			if ( shift )
 			{
 				m_pTreeView->RangeSelectItems( m_ItemIndex );
 			}
 			else
 			{
-				if ( !IsSelected() || ctrl )
+				if ( IsSelected() )
 				{
-					if ( IsSelected() && ctrl )
-					{
-						m_pTreeView->RemoveSelectedItem( m_ItemIndex );
-					}
-					else
-					{
-						m_pTreeView->AddSelectedItem( m_ItemIndex, !ctrl );
-					}
+					m_nMouseReleasedOp = ctrl ? ON_MOUSE_RELEASED_DESELECT_ITEM : ON_MOUSE_RELEASED_SELECT_ITEM;
 				}
-				else if ( IsSelected() && m_pTreeView->IsMultipleItemDragEnabled() )
+				else
 				{
-					m_pTreeView->AddSelectedItem( m_ItemIndex, !shift );
+					m_pTreeView->AddSelectedItem( m_ItemIndex, !ctrl );
 				}
 			}
-
-			m_bClickedSelected = m_pTreeView->IsItemSelected( m_ItemIndex );
 		}
 	}
 	else if (code == MOUSE_RIGHT)
 	{
 		// context menu selection
-		// If the item was selected, leave selected items alone, otherwise make it the only selected item
-		if ( !m_pTreeView->IsItemSelected( m_ItemIndex ) )
-		{
-			m_pTreeView->AddSelectedItem( m_ItemIndex, true );
-		}
+		m_pTreeView->OnContextMenuSelection( m_ItemIndex );
 
 		// ask parent to context menu
 		m_pTreeView->GenerateContextMenu(m_ItemIndex, x, y);
@@ -1610,21 +1630,31 @@ void TreeNode::FindNodesInRange_R( CUtlVector< TreeNode * >& list, bool& finishe
 
 void TreeNode::PositionAndSetVisibleNodes(int &nStart, int &nCount, int x, int &y)
 {
-    // position ourselves
-    if (nStart == 0)
-    {
-        BaseClass::SetVisible(true);
-        SetPos(x, y);
-        y += m_pTreeView->GetRowHeight();      // m_nRowHeight
-        nCount--;
-    }
-    else // still looking for first element
-    {
-        nStart--;
-        BaseClass::SetVisible(false);
-    }
+	if ( IsHiddenRootNode() )
+	{
+		BaseClass::SetVisible( false );
+		SetPos( x, y );
+		nCount--;
+	}
+	else
+	{
+		// position ourselves
+		if (nStart == 0)
+		{
+			BaseClass::SetVisible(true);
+			SetPos(x, y);
+			y += m_pTreeView->GetRowHeight();      // m_nRowHeight
+			nCount--;
+		}
+		else // still looking for first element
+		{
+			nStart--;
+			BaseClass::SetVisible(false);
+		}
 
-    x += TREE_INDENT_AMOUNT;
+		x += TREE_INDENT_AMOUNT;
+	}
+
     int i;
     for (i=0;i<GetChildrenCount();i++)
     {
@@ -1695,6 +1725,15 @@ int TreeNode::CountVisibleIndex()
         return nCount;
 }
 
+void TreeNode::SetHiddenRootNode( bool bHiddenRootNode )
+{
+	m_bHiddenRootNode = bHiddenRootNode;
+}
+
+bool TreeNode::IsHiddenRootNode() const
+{
+	return m_bHiddenRootNode;
+}
 
 }; // namespace vgui
 
@@ -1707,6 +1746,7 @@ TreeView::TreeView(Panel *parent, const char *panelName) : Panel(parent, panelNa
 {
 	m_bScrollbarExternal[ 0 ] = m_bScrollbarExternal[ 1 ] = false;
     m_nRowHeight = 20;
+	m_nTreeIndent = 0;
     m_pRootNode = NULL;
     m_pImageList = NULL;
     m_pSortFunc = NULL;
@@ -1728,10 +1768,11 @@ TreeView::TreeView(Panel *parent, const char *panelName) : Panel(parent, panelNa
 	m_bDragEnabledItems = false;
 	m_bDeleteImageListWhenDone = false;
 	m_bLabelBeingEdited = false;
-	m_bMultipleItemDragging = false;
 	m_bLeftClickExpandsTree = true;
 	m_bAllowMultipleSelections = false;
 	m_nMostRecentlySelectedItem = -1;
+	m_bRootVisible = true;
+	m_bInsertDropLocations = false;
 }
 
 
@@ -1823,9 +1864,11 @@ int TreeView::AddItem(KeyValues *data, int parentItemIndex)
 {
     Assert(parentItemIndex == -1 || m_NodeList.IsValidIndex(parentItemIndex));
 
-    TreeNode *pTreeNode = new TreeNode(m_pSubPanel, this);
+	int nIndex = m_NodeList.AddToTail();
+    TreeNode *pTreeNode = new TreeNode( m_pSubPanel, nIndex, this );
+	m_NodeList[ nIndex ] = pTreeNode;
+
 	pTreeNode->SetDragEnabled( m_bDragEnabledItems );
-    pTreeNode->m_ItemIndex = m_NodeList.AddToTail(pTreeNode);
     pTreeNode->SetKeyValues(data);
 
 	if ( m_Font != 0 )
@@ -1852,6 +1895,7 @@ int TreeView::AddItem(KeyValues *data, int parentItemIndex)
     {
         Assert(m_pRootNode == NULL);
         m_pRootNode = pTreeNode;
+		m_pRootNode->SetHiddenRootNode( !m_bRootVisible );
         pTreeNode->m_ParentIndex = -1;
     }
     else
@@ -1918,7 +1962,7 @@ int TreeView::GetItemCount(void)
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-KeyValues* TreeView::GetItemData(int itemIndex)
+KeyValues* TreeView::GetItemData(int itemIndex) const
 {
     if (!m_NodeList.IsValidIndex(itemIndex))
         return NULL;
@@ -2114,7 +2158,7 @@ void TreeView::SetItemBgColor(int itemIndex, const Color& color)
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-int TreeView::GetItemParent(int itemIndex)
+int TreeView::GetItemParent(int itemIndex) const
 {
 	return m_NodeList[itemIndex]->m_ParentIndex;
 }
@@ -2143,15 +2187,27 @@ IImage *TreeView::GetImage(int index)
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-void TreeView::GetSelectedItems( CUtlVector< int >& list )
+void TreeView::GetSelectedItems( CUtlVector< int >& list ) const
 {
 	list.RemoveAll();
 
 	int c = m_SelectedItems.Count();
+	list.EnsureCapacity( c );
 	for ( int i = 0 ; i < c; ++i )
 	{
 		list.AddToTail( m_SelectedItems[ i ]->m_ItemIndex );
 	}
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: Get the currently selected items which may be dragged. For the base
+// tree view this is all selected items, but derived classes may wish to only 
+// allow a sub-set of the selected items to be dragged.
+//-----------------------------------------------------------------------------
+void TreeView::GetSelectedItemsForDrag( int nPrimaryDragItem, CUtlVector< int >& list )
+{
+	GetSelectedItems( list );
 }
 
 //-----------------------------------------------------------------------------
@@ -2203,7 +2259,24 @@ bool TreeView::IsItemExpanded( int itemIndex )
 
     return m_NodeList[itemIndex]->IsExpanded();
 }
-	
+
+
+//-----------------------------------------------------------------------------
+// Purpose: Provide the default selection behavior when right clicking on an 
+// item to open a context menu. The default behavior is to select the item the 
+// was clicked on and to clear the rest of the selection, unless the item was
+// already selected, in which case the selection does not change.
+// Input  : itemIndex - Index of the item which was clicked on to open the menu
+//-----------------------------------------------------------------------------
+void TreeView::OnContextMenuSelection( int itemIndex )
+{
+	// If the item was selected, leave selected items alone, otherwise make it the only selected item
+	if ( !IsItemSelected( itemIndex ) )
+	{
+		AddSelectedItem( itemIndex, true );
+	}
+}
+
 
 //-----------------------------------------------------------------------------
 // Purpose: Scrolls the list according to the mouse wheel movement
@@ -2259,7 +2332,7 @@ void TreeView::PerformLayout()
 
     if ( !m_pRootNode )
 	{
-		m_pSubPanel->SetSize( wide, tall );
+		m_pSubPanel->SetSize( wide - m_nTreeIndent, tall );
         return;
 	}
 
@@ -2304,7 +2377,7 @@ void TreeView::PerformLayout()
         }
     }
 
-    int subPanelWidth = wide;
+    int subPanelWidth = wide - m_nTreeIndent;
     int subPanelHeight = tall;
 
 	int vbarPos = 0;
@@ -2368,6 +2441,7 @@ void TreeView::PerformLayout()
 		m_pHorzScrollBar->SetValue( 0 );
     }
 
+	m_pSubPanel->SetPos( m_nTreeIndent, 0 );
     m_pSubPanel->SetSize(subPanelWidth, subPanelHeight);
 
 	int y = 0;
@@ -2403,10 +2477,19 @@ void TreeView::MakeItemVisible(int itemIndex)
     int range = m_pVertScrollBar->GetRangeWindow();
     int vbarPos = m_pVertScrollBar->GetValue();
 
+	// Fix the offset to account for the root being hidden
+	if ( ( visibleIndex > 0 ) && ( m_pRootNode ) )
+	{		
+		if ( m_pRootNode->IsHiddenRootNode() )
+		{
+			--visibleIndex;
+		}
+	}
+
     // do we need to scroll up or down?
     if (visibleIndex < vbarPos)
     {
-        m_pVertScrollBar->SetValue(visibleIndex);
+        m_pVertScrollBar->SetValue( visibleIndex );
     }
     else if (visibleIndex+1 > vbarPos+range)
     {
@@ -2499,6 +2582,16 @@ void TreeView::SetAllowLabelEditing( bool state )
 	m_bAllowLabelEditing = state;
 }
 
+bool TreeView::CanCurrentlyEditLabel( int nItemIndex ) const
+{
+	if ( m_SelectedItems.Count() == 1 )
+	{
+		return ( m_SelectedItems[ 0 ]->m_ItemIndex == nItemIndex );
+	}
+
+	return false;
+}
+
 void TreeView::EnableExpandTreeOnLeftClick( bool bEnable )
 {
 	m_bLeftClickExpandsTree = bEnable;
@@ -2566,6 +2659,13 @@ void TreeView::OnMousePressed( MouseCode code )
 	BaseClass::OnMousePressed( code );
 }
 
+
+void TreeView::SetTreeIndent( int nIndentAmount )
+{
+	m_nTreeIndent = nIndentAmount;
+}
+
+
 //-----------------------------------------------------------------------------
 // Purpose: 
 // Input  : state - 
@@ -2602,31 +2702,28 @@ int TreeView::GetSelectedItemCount() const
 void TreeView::ClearSelection()
 {
 	m_SelectedItems.RemoveAll();
-	m_nMostRecentlySelectedItem = -1;
 	PostActionSignal( new KeyValues( "TreeViewItemSelectionCleared" ) );
 }
 
 void TreeView::RangeSelectItems( int endItem )
 {
-	int startItem = m_nMostRecentlySelectedItem;
-	ClearSelection();
-	m_nMostRecentlySelectedItem = startItem;
-
-	if ( !m_NodeList.IsValidIndex( startItem ) )
+	if ( !m_NodeList.IsValidIndex( m_nMostRecentlySelectedItem ) )
 	{
-		AddSelectedItem( endItem, false );
+		AddSelectedItem( endItem, true );
 		return;
 	}
 
 	Assert( m_NodeList.IsValidIndex( endItem ) );
 
 	if ( !m_pRootNode )
-	{
 		return;
-	}
 
 	CUtlVector< TreeNode * > list;
-	m_pRootNode->FindNodesInRange( list, startItem, endItem );
+	m_pRootNode->FindNodesInRange( list, m_nMostRecentlySelectedItem, endItem );
+
+	PostActionSignal( new KeyValues( "TreeViewStartRangeSelection" ) );
+
+	m_SelectedItems.RemoveAll();
 
 	int c = list.Count();
 	for ( int i = 0; i < c; ++i )
@@ -2634,6 +2731,8 @@ void TreeView::RangeSelectItems( int endItem )
 		TreeNode *item = list[ i ];
 		AddSelectedItem( item->m_ItemIndex, false );
 	}
+
+	PostActionSignal( new KeyValues( "TreeViewFinishRangeSelection" ) );
 }
 
 void TreeView::FindNodesInRange( int startItem, int endItem, CUtlVector< int >& itemIndices )
@@ -2671,20 +2770,26 @@ void TreeView::RemoveSelectedItem( int itemIndex )
 //-----------------------------------------------------------------------------
 void TreeView::AddSelectedItem( int itemIndex, bool clearCurrentSelection, bool requestFocus /* = true */, bool bMakeItemVisible /*= true*/ )
 {
-	if ( clearCurrentSelection )
-	{
-		ClearSelection();
-	}
-
 	// Assume it's bogus
     if ( !m_NodeList.IsValidIndex( itemIndex ) )
-        return;
+	{
+		if ( clearCurrentSelection )
+		{
+			ClearSelection();
+		}
+		return;
+	}
 
     TreeNode *sel = m_NodeList[ itemIndex ];
 	Assert( sel );
 	if ( requestFocus )
 	{
 		sel->RequestFocus();
+	}
+
+	if ( clearCurrentSelection )
+	{
+		m_SelectedItems.RemoveAll();
 	}
 
 	// Item 0 is most recently selected!!!
@@ -2704,7 +2809,7 @@ void TreeView::AddSelectedItem( int itemIndex, bool clearCurrentSelection, bool 
 		MakeItemVisible( itemIndex );
 	}
 
-    PostActionSignal( new KeyValues( "TreeViewItemSelected", "itemIndex", itemIndex ) );
+	PostActionSignal( new KeyValues( "TreeViewItemSelected", "itemIndex", itemIndex, "replaceSelection", clearCurrentSelection ? 1 : 0 ) );
     InvalidateLayout();
 
 	if ( clearCurrentSelection )
@@ -2712,6 +2817,70 @@ void TreeView::AddSelectedItem( int itemIndex, bool clearCurrentSelection, bool 
 		m_nMostRecentlySelectedItem = itemIndex;
 	}
 }
+
+
+//-----------------------------------------------------------------------------
+// Add the specified list of items to the selection list.
+//-----------------------------------------------------------------------------
+void TreeView::AddSelectedItems( const CUtlVector< TreeNode * > &selectionList, bool clearCurrentSelection, bool requestFocus /* = true */, bool bMakeItemVisible /*= true*/ )
+{
+	if ( clearCurrentSelection )
+	{
+		ClearSelection();
+	}
+
+	// Add each of the items to the head of the selection list, removing them from
+	// their current location in the list if they are already selected.
+	int nItems = selectionList.Count();
+
+	for ( int iItem = 0; iItem < nItems; ++iItem )
+	{
+		TreeNode *pItem  = selectionList[ iItem ];
+		Assert( pItem );
+
+		if ( pItem )
+		{
+			Assert( pItem == m_NodeList[ pItem->m_ItemIndex  ] );
+
+			int slot = m_SelectedItems.Find( pItem );
+			if ( slot == m_SelectedItems.InvalidIndex() )
+			{
+				m_SelectedItems.AddToHead( pItem );
+				PostActionSignal( new KeyValues( "TreeViewItemSelected", "itemIndex", pItem->m_ItemIndex ) );
+			}
+			else
+			{
+				m_SelectedItems.Remove( slot );
+				m_SelectedItems.AddToHead( pItem );
+			}
+
+			if ( bMakeItemVisible )
+			{
+				MakeItemVisible( pItem->m_ItemIndex );
+			}
+		}
+	}
+
+	// If request focus is set, the focus will be requested for the last item in the list.
+	if ( requestFocus )
+	{
+		if ( m_SelectedItems.Tail() )
+		{
+			m_SelectedItems.Tail()->RequestFocus();
+		}
+	}
+	
+    InvalidateLayout();
+
+	if ( clearCurrentSelection )
+	{
+		if ( m_SelectedItems.Tail() )
+		{
+			m_nMostRecentlySelectedItem = m_SelectedItems.Tail()->m_ItemIndex;
+		}
+	}
+}
+
 
 //-----------------------------------------------------------------------------
 // Purpose: 
@@ -2725,12 +2894,19 @@ int TreeView::GetFirstSelectedItem() const
 	return m_SelectedItems[ 0 ]->m_ItemIndex;
 }
 
+int TreeView::GetSelectedItem( int nSelectionIndex ) const
+{
+	if ( nSelectionIndex < 0 || m_SelectedItems.Count() <= nSelectionIndex )
+		return -1;
+	return m_SelectedItems[nSelectionIndex]->m_ItemIndex;
+}
+
 //-----------------------------------------------------------------------------
 // Purpose: 
 // Input  : itemIndex - 
 // Output : Returns true on success, false on failure.
 //-----------------------------------------------------------------------------
-bool TreeView::IsItemSelected( int itemIndex )
+bool TreeView::IsItemSelected( int itemIndex ) const
 {
 	// Assume it's bogus
     if ( !m_NodeList.IsValidIndex( itemIndex ) )
@@ -2788,13 +2964,13 @@ int TreeView::GetNextChildItemIndex( int itemIndex )
 	return parent->GetNextChildItemIndex( sel );
 }
 
-bool TreeView::IsItemDroppable( int itemIndex, CUtlVector< KeyValues * >& msglist )
+bool TreeView::IsItemDroppable( int itemIndex, bool bInsertBefore, CUtlVector< KeyValues * >& msglist )
 {
 	// Derived classes should implement
 	return false;
 }
 
-void TreeView::OnItemDropped( int itemIndex, CUtlVector< KeyValues * >& msglist )
+void TreeView::OnItemDropped( int itemIndex, bool bInsertBefore, CUtlVector< KeyValues * >& msglist )
 {
 }
 
@@ -2830,17 +3006,6 @@ ScrollBar *TreeView::SetScrollBarExternal( bool vertical, Panel *newParent )
 	return m_pHorzScrollBar;
 }
 
-// if this is set, then clicking on one row and dragging will select a run or items, etc.
-void TreeView::SetMultipleItemDragEnabled( bool state )
-{
-	m_bMultipleItemDragging = state;
-}
-
-bool TreeView::IsMultipleItemDragEnabled() const
-{
-	return m_bMultipleItemDragging;
-}
-
 void TreeView::SelectAll()
 {
 	m_SelectedItems.RemoveAll();
@@ -2851,4 +3016,82 @@ void TreeView::SelectAll()
 
 	PostActionSignal( new KeyValues( "TreeViewItemSelected", "itemIndex", GetRootItemIndex() ) );
 	InvalidateLayout();
+}
+
+// Returns false if item is not visible
+bool TreeView::GetItemBounds( int itemIndex, int &x, int &y, int &w, int &h )
+{
+	if ( !IsItemIDValid( itemIndex ) )
+		return false;
+
+	TreeNode *tn = GetItem( itemIndex );
+	if ( !tn )
+		return false;
+
+	if ( !tn->IsVisible() )
+		return false;
+
+	if ( !tn->IsBeingDisplayed() )
+		return false;
+
+	tn->GetBounds( x, y, w, h );
+	return true;
+}
+
+bool TreeView::IsItemBeingDisplayed( int itemIndex )
+{
+	if ( !IsItemIDValid( itemIndex ) )
+		return false;	
+
+	TreeNode *tn = GetItem( itemIndex );
+	if ( !tn )
+		return false;
+	return tn->IsBeingDisplayed() && tn->IsVisible();
+}
+
+// If set to false, all of the immediate children of the root node are displayed, but not the root
+void TreeView::SetShowRootNode( bool bRootVisible )
+{
+	m_bRootVisible = bRootVisible;
+	int nRootIndex = GetRootItemIndex();
+	if ( nRootIndex != -1 )
+	{
+		TreeNode *tn = GetItem( nRootIndex );
+		if ( tn )
+		{
+			tn->SetHiddenRootNode( !m_bRootVisible );
+		}
+	}
+	InvalidateLayout();
+}
+
+
+//-----------------------------------------------------------------------------
+// Enable or disable the insert drop location state. The insert drop location 
+// functionality provides drop locations between nodes which can be used to 
+// perform an insertion at a specific location.
+//-----------------------------------------------------------------------------
+void TreeView::SetEnableInsertDropLocation( bool bEnable )
+{
+	m_bInsertDropLocations = bEnable;
+}
+
+bool TreeView::AreInsertDropLocationsEnabled() const
+{
+	return m_bInsertDropLocations;
+}
+
+int TreeView::FirstItem() const
+{
+	return m_NodeList.Head();
+}
+
+int TreeView::NextItem( int iItem ) const
+{
+	return m_NodeList.Next( iItem );
+}
+
+int TreeView::InvalidItemID() const
+{
+	return m_NodeList.InvalidIndex();
 }

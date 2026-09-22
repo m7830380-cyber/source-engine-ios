@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright � 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -11,7 +11,7 @@
 #pragma once
 #endif
 
-#include <vgui/VGUI.h>
+#include <vgui/vgui.h>
 #include <vgui/ISurface.h>
 #include <vgui/IPanel.h>
 #include <vgui/IClientPanel.h>
@@ -28,12 +28,22 @@
 #include "materialsystem/MaterialSystemUtil.h"
 #include "tier1/utldict.h"
 #include "tier3/tier3.h"
+#include "inputsystem/iinputsystem.h"
+#include "inputsystem/iinputstacksystem.h"
+#include "vgui/ILocalize.h"
+
+#ifdef LINUX
+#include <ft2build.h>
+#include FT_FREETYPE_H
+#endif
+
 
 using namespace vgui;
 
 class IImage;
 
-extern class IMaterialSystem *g_pMaterialSystem;
+class HtmlWindow;
+
 //-----------------------------------------------------------------------------
 // The default material system embedded panel
 //-----------------------------------------------------------------------------
@@ -52,7 +62,7 @@ public:
 // Implementation of the VGUI surface on top of the material system
 //
 //-----------------------------------------------------------------------------
-class CMatSystemSurface : public CTier3AppSystem< IMatSystemSurface >
+class CMatSystemSurface : public CTier3AppSystem< IMatSystemSurface >, public ISchemeSurface, public ILocalizeTextQuery
 {
 	typedef CTier3AppSystem< IMatSystemSurface > BaseClass;
 
@@ -66,6 +76,9 @@ public:
 	virtual void *QueryInterface( const char *pInterfaceName );
 	virtual InitReturnVal_t Init();
 	virtual void Shutdown();
+	virtual const AppSystemInfo_t* GetDependencies();
+	virtual AppSystemTier_t GetTier() { return BaseClass::GetTier(); }
+	virtual void Reconnect( CreateInterfaceFn factory, const char *pInterfaceName ) { BaseClass::Reconnect( factory, pInterfaceName ); }
 
 	// initialization
 	virtual void SetEmbeddedPanel(vgui::VPANEL pEmbeddedPanel);
@@ -74,7 +87,7 @@ public:
 	bool IsMinimized(vgui::VPANEL panel);
 
 	// Sets the only panel to draw.  Set to NULL to clear.
-	void RestrictPaintToSinglePanel(vgui::VPANEL panel);
+	virtual void RestrictPaintToSinglePanel(vgui::VPANEL panel, bool bForceAllowNonModalSurface = false);
 
 	// frame
 	virtual void RunFrame();
@@ -89,11 +102,13 @@ public:
 	// rendering functions
 	virtual void DrawSetColor(int r,int g,int b,int a);
 	virtual void DrawSetColor(Color col);
-	
+	virtual void DrawSetApparentDepth( float flDepth );
+	virtual void DrawClearApparentDepth();
+
 	virtual void DrawLine( int x0, int y0, int x1, int y1 );
-	virtual void DrawTexturedLine( const vgui::Vertex_t &a, const vgui::Vertex_t &b );
+	virtual void DrawTexturedLine( const Vertex_t &a, const Vertex_t &b );
 	virtual void DrawPolyLine(int *px, int *py, int numPoints);
-	virtual void DrawTexturedPolyLine( const vgui::Vertex_t *p, int n );
+	virtual void DrawTexturedPolyLine( const Vertex_t *p, int n );
 
 	virtual void DrawFilledRect(int x0, int y0, int x1, int y1);
 	virtual void DrawFilledRectArray( IntRect *pRects, int numRects );
@@ -108,20 +123,57 @@ public:
 
 	virtual bool DrawGetTextureFile(int id, char *filename, int maxlen );
 	virtual int	 DrawGetTextureId( char const *filename );
-	virtual int  DrawGetTextureId( ITexture *pTexture );
 	virtual void DrawSetTextureFile(int id, const char *filename, int hardwareFilter, bool forceReload);
 	virtual void DrawSetTexture(int id);
 	virtual void DrawGetTextureSize(int id, int &wide, int &tall);
 	virtual bool DeleteTextureByID(int id);
 
-	virtual IVguiMatInfo *DrawGetTextureMatInfoFactory(int id);
+	virtual IVguiMatInfo *DrawGetTextureMatInfoFactory( int id );
 
-	virtual void DrawSetTextureRGBA(int id, const unsigned char *rgba, int wide, int tall, int hardwareFilter, bool forceReload);
+	virtual void DrawSetTextureRGBA( int id, const unsigned char *rgba, int wide, int tall );
+	virtual void DrawSetTextureRGBALinear( int id, const unsigned char *rgba, int wide, int tall );
 
-	virtual void DrawTexturedRect(int x0, int y0, int x1, int y1);
+#if defined( _X360 )
+
+	//
+	// Local gamerpic
+	//
+
+	// Get the texture id for the local gamerpic.
+	virtual int GetLocalGamerpicTextureID( void );
+
+	// Update the local gamerpic texture. Use the given texture if a gamerpic cannot be loaded.
+	virtual bool SetLocalGamerpicTexture( DWORD userIndex, const char *pDefaultGamerpicFileName );
+
+	// Set the current texture to be the local gamerpic.
+	// Returns false if the local gamerpic texture has not been set.
+	virtual bool DrawSetTextureLocalGamerpic( void );
+
+	//
+	// Remote gamerpic
+	//
+
+	// Get the texture id for a remote gamerpic with the given xuid.
+	virtual int GetRemoteGamerpicTextureID( XUID xuid );
+
+	// Update the remote gamerpic texture for the given xuid. Use the given texture if a gamerpic cannot be loaded.
+	virtual bool SetRemoteGamerpicTextureID( XUID xuid, const char *pDefaultGamerpicFileName );
+
+	// Set the current texture to be the remote player's gamerpic.
+	// Returns false if the remote gamerpic texture has not been set for the given xuid.
+	virtual bool DrawSetTextureRemoteGamerpic( XUID xuid );
+
+#endif // _X360
+
+	virtual void DrawTexturedRect( int x0, int y0, int x1, int y1 );
 	virtual void DrawTexturedSubRect( int x0, int y0, int x1, int y1, float texs0, float text0, float texs1, float text1 );
+	virtual void DrawTexturedSubRectGradient( int x0, int y0, int x1, int y1, float texs0, float text0, float texs1, float text1, Color colStart, Color colEnd, bool bHorizontal );
 
-	virtual void DrawTexturedPolygon(int n, vgui::Vertex_t *pVertices, bool bClipVertices = true );
+
+	virtual void DrawTexturedPolygon(int n, Vertex_t *pVertices, bool bClipVertices = true );
+
+	virtual void DrawWordBubble( int x0, int y0, int x1, int y1, int nBorderThickness, Color rgbaBackground, Color rgbaBorder, 
+								 bool bPointer = false, int nPointerX = 0, int nPointerY = 0, int nPointerBaseThickness = 16 );
 
 	virtual void DrawPrintText(const wchar_t *text, int textLen, FontDrawType_t drawType = FONT_DRAW_DEFAULT);
 	virtual void DrawUnicodeChar(wchar_t wch, FontDrawType_t drawType = FONT_DRAW_DEFAULT );
@@ -160,13 +212,13 @@ public:
 
 	virtual void SetCursor(vgui::HCursor cursor);
 	virtual bool IsCursorVisible();
-	virtual void SetCursorAlwaysVisible(bool visible);
 
 	virtual void ApplyChanges();
 	virtual bool IsWithin(int x, int y);
 	virtual bool HasFocus();
 
-	virtual bool SupportsFeature(SurfaceFeature_e feature);
+	virtual bool SupportsFontFeature( FontFeature_t feature );
+	virtual bool SupportsFeature( SurfaceFeature_t feature );
 
 	// engine-only focus handling (replacing WM_FOCUS windows handling)
 	virtual void SetTopLevelFocus(vgui::VPANEL panel);
@@ -176,25 +228,26 @@ public:
 	virtual bool SetFontGlyphSet(vgui::HFont font, const char *windowsFontName, int tall, int weight, int blur, int scanlines, int flags, int nRangeMin = 0, int nRangeMax = 0);
 	virtual bool SetBitmapFontGlyphSet(vgui::HFont font, const char *windowsFontName, float scalex, float scaley, int flags);
 	virtual int GetFontTall(HFont font);
-	virtual int GetFontTallRequested(HFont font);
 	virtual int GetFontAscent(HFont font, wchar_t wch);
 	virtual bool IsFontAdditive(HFont font);
 	virtual void GetCharABCwide(HFont font, int ch, int &a, int &b, int &c);
 	virtual void GetTextSize(HFont font, const wchar_t *text, int &wide, int &tall);
 	virtual int GetCharacterWidth(vgui::HFont font, int ch);
-	virtual bool AddCustomFontFile(const char *fontName, const char *fontFileName);
+	virtual bool AddCustomFontFile(const char *fontFileName);
 	virtual bool AddBitmapFontFile(const char *fontFileName);
 	virtual void SetBitmapFontName( const char *pName, const char *pFontFilename );
 	virtual const char *GetBitmapFontName( const char *pName );
-	virtual void PrecacheFontCharacters(HFont font, const wchar_t *pCharacters);
+	virtual void PrecacheFontCharacters(HFont font, wchar_t *pCharacters);
 	virtual void ClearTemporaryFontCache( void );
 	virtual const char *GetFontName( HFont font );
-	virtual const char *GetFontFamilyName( HFont font );
 
-	// GameUI-only accessed functions
 	// uploads a part of a texture, used for font rendering
 	void DrawSetSubTextureRGBA(int textureID, int drawX, int drawY, unsigned const char *rgba, int subTextureWide, int subTextureTall);
 	void DrawUpdateRegionTextureRGBA( int nTextureID, int x, int y, const unsigned char *pchData, int wide, int tall, ImageFormat imageFormat );
+
+	// helpers for web browser painting
+	int GetHTMLWindowCount() { return _htmlWindows.Count(); }
+	HtmlWindow *GetHTMLWindow(int i) { return _htmlWindows[i]; }
 
 	// notify icons?!?
 	virtual vgui::VPANEL GetNotifyPanel();
@@ -222,7 +275,7 @@ public:
 	virtual void GetWorkspaceBounds(int &x, int &y, int &wide, int &tall);
 
 	// Hook needed to Get input to work
-	virtual void AttachToWindow( void *hwnd, bool bLetAppDriveInput );
+	virtual void SetAppDrivesInput( bool bLetAppDriveInput );
 	virtual bool HandleInputEvent( const InputEvent_t &event );
 
 	void		 InitFullScreenBuffer( const char *pszRenderTargetName );
@@ -230,16 +283,11 @@ public:
 	virtual void Reset3DPaintTempRenderTarget( void );
 
 	// Begins, ends 3D painting
-	virtual void Begin3DPaint( int iLeft, int iTop, int iRight, int iBottom, bool bRenderToTexture = true );
-	virtual void End3DPaint();
-
-	virtual void BeginSkinCompositionPainting() OVERRIDE;
-	virtual void EndSkinCompositionPainting() OVERRIDE;
+	virtual void Begin3DPaint( int iLeft, int iTop, int iRight, int iBottom, bool bSupersampleRT = false );
+	virtual void End3DPaint( bool bIgnoreAlphaWhenCompositing );
 
 	// Disable clipping during rendering
-	virtual void DisableClipping( bool bDisable ) OVERRIDE;
-	virtual void GetClippingRect( int &left, int &top, int &right, int &bottom, bool &bClippingDisabled ) OVERRIDE;
-	virtual void SetClippingRect( int left, int top, int right, int bottom ) OVERRIDE;
+	virtual void DisableClipping( bool bDisable );
 
 	// Prevents vgui from changing the cursor
 	virtual bool IsCursorLocked() const;
@@ -255,12 +303,12 @@ public:
 
 	// Some drawing methods that cannot be accomplished under Win32
 	virtual void DrawColoredCircle( int centerx, int centery, float radius, int r, int g, int b, int a );
-	virtual int	DrawColoredText( vgui::HFont font, int x, int y, int r, int g, int b, int a, PRINTF_FORMAT_STRING const char *fmt, ... );
-	virtual void DrawColoredTextRect( vgui::HFont font, int x, int y, int w, int h, int r, int g, int b, int a, PRINTF_FORMAT_STRING const char *fmt, ... );
-	virtual void DrawTextHeight( vgui::HFont font, int w, int& h, PRINTF_FORMAT_STRING const char *fmt, ... );
+	virtual void DrawColoredText( vgui::HFont font, int x, int y, int r, int g, int b, int a, const char *fmt, ... ) OVERRIDE;
+	virtual void DrawColoredTextRect( vgui::HFont font, int x, int y, int w, int h, int r, int g, int b, int a, const char *fmt, ... ) OVERRIDE;
+	virtual void DrawTextHeight( vgui::HFont font, int w, int& h, char *fmt, ... );
 
 	// Returns the length in pixels of the text
-	virtual int	DrawTextLen( vgui::HFont font, PRINTF_FORMAT_STRING const char *fmt, ... );
+	virtual int	DrawTextLen( vgui::HFont font, const char *fmt, ... );
 
 	// Draws a panel in 3D space. 
 	virtual void DrawPanelIn3DSpace( vgui::VPANEL pRootPanel, const VMatrix &panelCenterToWorld, int pw, int ph, float sw, float sh ); 
@@ -289,8 +337,8 @@ public:
 
 	virtual bool IsInThink( VPANEL panel); 
 
-	virtual bool DrawGetUnicodeCharRenderInfo( wchar_t ch, CharRenderInfo& info );
-	virtual void DrawRenderCharFromInfo( const CharRenderInfo& info );
+	virtual bool DrawGetUnicodeCharRenderInfo( wchar_t ch, FontCharRenderInfo& info );
+	virtual void DrawRenderCharFromInfo( const FontCharRenderInfo& info );
 
 	// global alpha setting functions
 	// affect all subsequent draw calls - shouldn't normally be used directly, only in Panel::PaintTraverse()
@@ -315,8 +363,14 @@ public:
 
 	virtual void DestroyTextureID( int id );
 
+	virtual void GetKernedCharWidth( HFont font, wchar_t ch, wchar_t chBefore, wchar_t chAfter, float &wide, float &flabcA, float &abcC );
+	
+	virtual const char *GetWebkitHTMLUserAgentString() { return "Valve Client"; }
 
-	virtual const char *GetResolutionKey( void ) const;
+	virtual void *Deprecated_AccessChromeHTMLController() OVERRIDE { return NULL; }
+
+	// Methods of ILocalizeTextQuery
+	//virtual int ComputeTextWidth( const wchar_t *pString );
 
 	virtual bool ForceScreenSizeOverride( bool bState, int wide, int tall );
 	// LocalToScreen, ParentLocalToScreen fixups for explicit PaintTraverse calls on Panels not at 0, 0 position
@@ -324,27 +378,8 @@ public:
 
 	virtual void OffsetAbsPos( int &x, int &y );
 
-	virtual void GetKernedCharWidth( HFont font, wchar_t ch, wchar_t chBefore, wchar_t chAfter, float &wide, float &flabcA );
-	
-
-	virtual const char *GetWebkitHTMLUserAgentString() { return "Valve Client"; }
-
-	virtual void *Deprecated_AccessChromeHTMLController() { return NULL; }
-
-	virtual void SetFullscreenViewport( int x, int y, int w, int h ) OVERRIDE;
-	virtual void SetFullscreenViewportAndRenderTarget( int x, int y, int w, int h, ITexture *pRenderTarget ) OVERRIDE;
-	virtual void GetFullscreenViewportAndRenderTarget( int & x, int & y, int & w, int & h, ITexture **ppRenderTarget ) OVERRIDE;
-	virtual void GetFullscreenViewport( int & x, int & y, int & w, int & h ) OVERRIDE;
-	virtual void PushFullscreenViewport() OVERRIDE;
-	virtual void PopFullscreenViewport() OVERRIDE;
-
-	// support for software cursors
-	virtual void SetSoftwareCursor( bool bUseSoftwareCursor ) OVERRIDE;
-	virtual void PaintSoftwareCursor()  OVERRIDE;
-
-	// Methods of ILocalizeTextQuery
-public:
-	//virtual int ComputeTextWidth( const wchar_t *pString );
+	virtual void SetAbsPosForContext( int id, int x, int y );
+	virtual void GetAbsPosForContext( int id, int &x, int& y );
 
 	// Causes fonts to get reloaded, etc.
 	virtual void ResetFontCaches();
@@ -353,13 +388,28 @@ public:
 	virtual bool IsScreenPosOverrideActive( void );
 
 	virtual IMaterial *DrawGetTextureMaterial( int id );
+	virtual void SetInputContext( InputContextHandle_t hContext );
 
 	virtual int GetTextureNumFrames( int id );
 	virtual void DrawSetTextureFrame( int id, int nFrame, unsigned int *pFrameCache );
 
+	virtual void GetClipRect( int &x0, int &y0, int &x1, int &y1 );
+	virtual void SetClipRect( int x0, int y0, int x1, int y1 );
+
+	virtual void SetLanguage( const char *pLanguage );
+	virtual const char *GetLanguage();
+
+	InputContextHandle_t GetInputContext() const;
+
+	virtual void DrawTexturedRectEx( DrawTexturedRectParms_t *pDrawParms );
+
+	// Methods of ILocalizeTextQuery
+public:
+	virtual int ComputeTextWidth( const wchar_t *pString );
+
 private:
 	//void DrawRenderCharInternal( const FontCharRenderInfo& info );
-	void DrawRenderCharInternal( const CharRenderInfo& info );
+	void DrawRenderCharInternal( const FontCharRenderInfo& info );
 
 private:
 	enum { BASE_HEIGHT = 480, BASE_WIDTH = 640 };
@@ -379,14 +429,14 @@ private:
 	void InternalSetMaterial( IMaterial *material = NULL );
 
 	// Draws the fullscreen buffer into the panel
-	void DrawFullScreenBuffer( int nLeft, int nTop, int nRight, int nBottom );
+	void DrawFullScreenBuffer( int nLeft, int nTop, int nRight, int nBottom, int nOffscreenWidth, int nOffscreenHeight, bool bIgnoreAlphaWhenCompositing );
 
 	// Helper method to initialize vertices (transforms them into screen space too)
-	void InitVertex( vgui::Vertex_t &vertex, int x, int y, float u, float v );
+	void InitVertex( Vertex_t &vertex, int x, int y, float u, float v );
 
 	// Draws a quad + quad array 
-	void DrawQuad( const vgui::Vertex_t &ul, const vgui::Vertex_t &lr, unsigned char *pColor );
-	void DrawQuadArray( int numQuads, vgui::Vertex_t *pVerts, unsigned char *pColor, bool bShouldClip = true );
+	void DrawQuad( const Vertex_t &ul, const Vertex_t &lr, unsigned char *pColor );
+	void DrawQuadArray( int numQuads, Vertex_t *pVerts, unsigned char *pColor, bool bShouldClip = true );
 
 	// Necessary to wrap the rendering
 	void StartDrawing( void );
@@ -402,7 +452,7 @@ private:
 	void AddPopupsToList( vgui::VPANEL panel );
 
 	// Helper for drawing colored text
-	int DrawColoredText( vgui::HFont font, int x, int y, int r, int g, int b, int a, const char *fmt, va_list argptr );
+	void DrawColoredText( vgui::HFont font, int x, int y, int r, int g, int b, int a, const char *fmt, va_list argptr );
 	void SearchForWordBreak( vgui::HFont font, char *text, int& chars, int& pixels );
 
 	void InternalThinkTraverse(VPANEL panel);
@@ -421,12 +471,21 @@ private:
 	// Is a panel under the restricted panel?
 	bool IsPanelUnderRestrictedPanel( VPANEL panel );
 
+	// Returns the attached window
+	PlatWindow_t GetAttachedWindow() const;
+
+	void ReloadSchemes();
+
 	// Point Translation for current panel
 	int				m_nTranslateX;
 	int				m_nTranslateY;
 
 	// alpha multiplier for current panel [0..1]
 	float			m_flAlphaMultiplier;
+
+	// the apparent depth we should draw the current object at.
+	// values <= STEREO_NOOP will be ignored, other values will scale by a matrix
+	float			m_flApparentDepth;
 
 	// The size of the window to draw into
 	int				m_pSurfaceExtents[4];
@@ -450,10 +509,13 @@ private:
 	// Used for 3D-rendered images
 	CTextureReference m_FullScreenBuffer;
 	CMaterialReference m_FullScreenBufferMaterial;
+	CMaterialReference m_FullScreenBufferMaterialIgnoreAlpha;
 	int m_nFullScreenBufferMaterialId;
+	int m_nFullScreenBufferMaterialIgnoreAlphaId;
 	CUtlString		m_FullScreenBufferName;
 
 	bool			m_bUsingTempFullScreenBufferMaterial;
+	bool m_bRestrictedPanelOverrodeAppModalPanel;
 
 	// Root panel
 	vgui::VPANEL m_pEmbeddedPanel;
@@ -461,31 +523,36 @@ private:
 	vgui::VPANEL m_pRestrictedPanel;
 
 	// List of pop-up panels based on the type enum above (draw order vs last clicked)
-	CUtlVector<vgui::HPanel>	m_PopupList;
+	CUtlVector<VPANEL>	m_PopupList;
 
 	// Stack of paint state...
 	CUtlVector<	PaintState_t > m_PaintStateStack;
 
+	CUtlVector<HtmlWindow *> _htmlWindows;
+
 	vgui::HFont				m_hCurrentFont;
 	vgui::HCursor			_currentCursor;
-	bool					m_cursorAlwaysVisible;
+
+	// The input context for cursor control
+	InputContextHandle_t	m_hInputContext;
 
 	// The currently bound texture
 	int m_iBoundTexture;
 
 	// font drawing batching code
 	enum { MAX_BATCHED_CHAR_VERTS = 4096 };
-	vgui::Vertex_t m_BatchedCharVerts[ MAX_BATCHED_CHAR_VERTS ];
+	Vertex_t m_BatchedCharVerts[ MAX_BATCHED_CHAR_VERTS ];
 	int m_nBatchedCharVertCount;
 
 	// What's the rectangle we're drawing in 3D paint mode?
 	int m_n3DLeft, m_n3DRight, m_n3DTop, m_n3DBottom;
+	int m_n3DViewportWidth, m_n3DViewportHeight;
+
+	// Curr stencil value
+	int m_nCurrReferenceValue;
 
 	// Are we painting in 3D? (namely drawing 3D objects *inside* the vgui panel)
 	bool m_bIn3DPaintMode : 1;
-
-	// If we are in 3d Paint mode, are we rendering to a texture?  (Or directly to the screen)
-	bool m_b3DPaintRenderToTexture : 1;
 
 	// Are we drawing the vgui panel in the 3D world somewhere?
 	bool m_bDrawingIn3DWorld : 1;
@@ -495,17 +562,14 @@ private:
 
 	// Are we currently in the think() loop
 	bool m_bInThink : 1;
-
 	bool m_bNeedsKeyboard : 1;
 	bool m_bNeedsMouse : 1;
 	bool m_bAllowJavaScript : 1;
+	bool m_bEnableInput : 1;
 
 	int m_nLastInputPollCount;
 
 	VPANEL m_CurrentThinkPanel;
-
-	// The attached HWND
-	void *m_HWnd;
 
 	// Installed function to play sounds
 	PlaySoundFunc_t m_PlaySoundFunc;
@@ -535,8 +599,7 @@ private:
 
 	int		GetTitleEntry( vgui::VPANEL panel );
 
-	virtual void DrawSetTextureRGBAEx(int id, const unsigned char *rgba, int wide, int tall, ImageFormat format );
-	virtual void DrawSetTextureRGBAEx2( int id, const unsigned char* rgba, int wide, int tall, ImageFormat format, bool bLinearFilter );
+	virtual void DrawSetTextureRGBAEx( int id, const unsigned char *rgba, int wide, int tall, ImageFormat format );
 
 	struct ScreenOverride_t
 	{
@@ -551,13 +614,24 @@ private:
 	ScreenOverride_t m_ScreenSizeOverride;
 	ScreenOverride_t m_ScreenPosOverride;
 
-	int m_nFullscreenViewportX;
-	int m_nFullscreenViewportY;
-	int m_nFullscreenViewportWidth;
-	int m_nFullscreenViewportHeight;
-	ITexture *m_pFullscreenRenderTarget;
+	struct ContextAbsPos_t
+	{
+		ContextAbsPos_t() : id( -1 )
+		{
+			m_nPos[ 0 ] = m_nPos[ 1 ] = 0;
+		}
 
-#if defined(LINUX) || defined(APPLE) || defined(PLATFORM_BSD)
+		static bool Less( const ContextAbsPos_t &lhs, const ContextAbsPos_t &rhs )
+		{
+			return lhs.id < rhs.id;
+		}
+		int id;
+		int m_nPos[ 2 ];
+	};
+
+	CUtlRBTree< ContextAbsPos_t > m_ContextAbsPos;
+
+#ifdef LINUX
 	struct font_entry
 	{
 		void *data;
@@ -566,9 +640,36 @@ private:
 
 	static CUtlDict< font_entry, unsigned short > m_FontData;
 
-	static void *FontDataHelper( const char *pchFontName, int &size, const char *fontFileName );
+	static void *FontDataHelper( const char *pchFontName, int &size );		
 #endif
+
+
+#if defined( PLATFORM_WINDOWS_PC )
+	CUtlVector< HANDLE >		m_CustomFontHandles;
+#endif
+
 };
+
+FORCEINLINE VPANEL CMatSystemSurface::GetPopup( int index )
+{
+	return m_PopupList[ index ];
+}
+
+FORCEINLINE int CMatSystemSurface::GetPopupCount()
+{  
+	return m_PopupList.Count();
+}
+
+inline PlatWindow_t CMatSystemSurface::GetAttachedWindow() const
+{
+	return g_pInputSystem->GetAttachedWindow();
+}
+
+inline InputContextHandle_t CMatSystemSurface::GetInputContext() const
+{
+	Assert( m_hInputContext != INPUT_CONTEXT_HANDLE_INVALID );
+	return m_hInputContext;
+}
 
 #if GLMDEBUG
 class MatSurfFuncLogger	// rip off of GLMFuncLogger - figure out a way to reunify these soon
@@ -588,7 +689,7 @@ class MatSurfFuncLogger	// rip off of GLMFuncLogger - figure out a way to reunif
 		
 		// more advanced version lets you pass args (i.e. called parameters or anything else of interest)
 		// no macro for this one, since no easy way to pass through the args as well as the funcname
-		MatSurfFuncLogger( char *funcName, PRINTF_FORMAT_STRING const char *fmt, ... )
+		MatSurfFuncLogger( char *funcName, char *fmt, ... )
 		{
 			CMatRenderContextPtr prc( g_pMaterialSystem );
 

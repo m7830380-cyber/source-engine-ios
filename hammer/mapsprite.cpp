@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: Supports sprite preview and sprite icons for entities.
 //
@@ -18,7 +18,7 @@
 #include "hammer.h"
 #include "Texture.h"
 #include "TextureSystem.h"
-#include "materialsystem/imesh.h"
+#include "materialsystem/IMesh.h"
 #include "Material.h"
 #include "Options.h"
 #include "camera.h"

@@ -5,9 +5,9 @@
 //-----------------------------------------------------------------------------
 
 $Macro SRCDIR		"..\.."
-$Macro OUTBINDIR	"$LIBPUBLIC"
+$Macro OUTBINDIR	"$SRCDIR\..\game\bin"
 
-$Include "$SRCDIR\vpc_scripts\source_exe_con_base.vpc"
+$Include "$SRCDIR\vpc_scripts\source_exe_con_win32_base.vpc"
 
 $Configuration
 {
@@ -28,6 +28,5 @@ $Project "Newdat"
 	{
 		$File	"$SRCDIR\public\tier0\basetypes.h"
 		$File	"$SRCDIR\public\tier1\checksum_md5.h"
-		$File	"$SRCDIR\public\tier0\commonmacros.h"
 	}
 }

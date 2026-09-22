@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -11,8 +11,6 @@
 #include "CloseCaptionTool.h"
 #include "choreowidgetdrawhelper.h"
 #include <vgui/ILocalize.h>
-
-extern vgui::ILocalize *g_pLocalize;
 
 using namespace vgui;
 
@@ -58,8 +56,8 @@ public:
 	void	SetStream( const wchar_t *stream );
 	const wchar_t	*GetStream() const;
 
-	void	SetColor( COLORREF clr );
-	COLORREF GetColor() const;
+	void	SetColor( const Color& clr );
+	const Color& GetColor() const;
 
 	int		GetFontNumber() const
 	{
@@ -84,7 +82,7 @@ private:
 	bool			m_bBold;
 	bool			m_bItalic;
 	wchar_t			*m_pszStream;
-	COLORREF		m_Color;
+	Color		m_Color;
 };
 
 CCloseCaptionWorkUnit::CCloseCaptionWorkUnit() :
@@ -93,7 +91,7 @@ CCloseCaptionWorkUnit::CCloseCaptionWorkUnit() :
 	m_bBold(false),
 	m_bItalic(false),
 	m_pszStream(0),
-	m_Color( RGB( 255, 255, 255 ) )
+	m_Color( Color( 255, 255, 255 ) )
 {
 }
 
@@ -172,12 +170,12 @@ const wchar_t *CCloseCaptionWorkUnit::GetStream() const
 	return m_pszStream ? m_pszStream : L"";
 }
 
-void CCloseCaptionWorkUnit::SetColor( COLORREF clr )
+void CCloseCaptionWorkUnit::SetColor( const Color& clr )
 {
 	m_Color = clr;
 }
 
-COLORREF CCloseCaptionWorkUnit::GetColor() const
+const Color &CCloseCaptionWorkUnit::GetColor() const
 {
 	return m_Color;
 }
@@ -481,8 +479,8 @@ void CloseCaptionTool::redraw()
 	drawHelper.GetClientRect( rcOutput );
 
 	RECT rcText = rcOutput;
-	drawHelper.DrawFilledRect( RGB( 0, 0, 0 ), rcText );
-	drawHelper.DrawOutlinedRect( RGB( 200, 245, 150 ), PS_SOLID, 2, rcText );
+	drawHelper.DrawFilledRect( Color( 0, 0, 0 ), rcText );
+	drawHelper.DrawOutlinedRect( Color( 200, 245, 150 ), PS_SOLID, 2, rcText );
 	InflateRect( &rcText, -4, 0 );
 
 	int avail_width = rcText.right - rcText.left;
@@ -701,7 +699,7 @@ bool CloseCaptionTool::SplitCommand( wchar_t const **ppIn, wchar_t *cmd, wchar_t
 	cmd[ 0 ]= 0;
 	wchar_t *out = cmd;
 	in++;
-	while ( *in != L'\0' && *in != L':' && *in != L'>' && !isspace( *in ) )
+	while ( *in != L'\0' && *in != L':' && *in != L'>' && !V_isspace( *in ) )
 	{
 		*out++ = *in++;
 	}
@@ -738,7 +736,7 @@ struct WorkUnitParams
 		y = 0;
 		width = 0;
 		bold = italic = false;
-		clr = RGB( 255, 255, 255 );
+		clr = Color( 255, 255, 255 );
 		newline = false;
 	}
 
@@ -783,7 +781,7 @@ struct WorkUnitParams
 	int		width;
 	bool	bold;
 	bool	italic;
-	COLORREF clr;
+	Color clr;
 	bool	newline;
 };
 
@@ -828,7 +826,7 @@ void CloseCaptionTool::ComputeStreamWork( CChoreoWidgetDrawHelper &helper, int a
 
 	const wchar_t *curpos = item->GetStream();
 	
-	CUtlVector< COLORREF > colorStack;
+	CUtlVector< Color > colorStack;
 
 	for ( ; curpos && *curpos != L'\0'; ++curpos )
 	{
@@ -853,11 +851,11 @@ void CloseCaptionTool::ComputeStreamWork( CChoreoWidgetDrawHelper &helper, int a
 				}
 				else
 				{
-					int r = 0, g = 0, b = 0;
-					COLORREF newcolor;
+					int r, g, b;
+					Color newcolor;
 					if ( 3 == swscanf( args, L"%i,%i,%i", &r, &g, &b ) )
 					{
-						newcolor = RGB( r, g, b );
+						newcolor = Color( r, g, b );
 						colorStack.AddToTail( newcolor );
 						params.clr = colorStack[ colorStack.Count() - 1 ];
 					}
@@ -876,12 +874,12 @@ void CloseCaptionTool::ComputeStreamWork( CChoreoWidgetDrawHelper &helper, int a
 				{
 					// player and npc color selector
 					// e.g.,. 255,255,255:200,200,200
-					int pr = 0, pg = 0, pb = 0, nr = 0, ng = 0, nb = 0;
-					COLORREF newcolor;
+					int pr, pg, pb, nr, ng, nb;
+					Color newcolor;
 					if ( 6 == swscanf( args, L"%i,%i,%i:%i,%i,%i", &pr, &pg, &pb, &nr, &ng, &nb ) )
 					{
 						// FIXME:  nothing in .vcds is ever from the player...
-						newcolor = /*item->IsFromPlayer()*/ false ? RGB( pr, pg, pb ) : RGB( nr, ng, nb );
+						newcolor = /*item->IsFromPlayer()*/ false ? Color( pr, pg, pb ) : Color( nr, ng, nb );
 						colorStack.AddToTail( newcolor );
 						params.clr = colorStack[ colorStack.Count() - 1 ];
 					}
@@ -956,13 +954,13 @@ void CloseCaptionTool::DrawStream( CChoreoWidgetDrawHelper &helper, RECT &rcText
 		rcOut.top = rcText.top + y;
 		rcOut.bottom = rcOut.top + wu->GetHeight();
 
-		COLORREF useColor = wu->GetColor();
+		Color useColor = wu->GetColor();
 
 		if ( !item->IsValid() )
 		{
-			useColor = RGB( 255, 255, 255 );
+			useColor = Color( 255, 255, 255 );
 			rcOut.right += 2;
-			helper.DrawFilledRect( RGB( 100, 100, 40 ), rcOut );
+			helper.DrawFilledRect( Color( 100, 100, 40 ), rcOut );
 		}
 
 		helper.DrawColoredTextW( useF, useColor,

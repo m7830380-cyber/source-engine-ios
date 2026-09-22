@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Implements an autoselection combo box that color codes the text
 //			based on whether the current selection represents a single entity,
@@ -15,6 +15,9 @@
 #include "stdafx.h"
 #include "MapEntity.h"
 #include "TargetNameCombo.h"
+#include "hammer.h"
+#include "mapdoc.h"
+#include "mapworld.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include <tier0/memdbgon.h>
@@ -114,8 +117,9 @@ void CTargetNameComboBox::SetEntityList(const CMapEntityList *pEntityList)
 	{
 		FOR_EACH_OBJ( *m_pEntityList, pos )
 		{
-			CMapEntity *pEntity = m_pEntityList->Element(pos);
-			const char *pszTargetName = pEntity->GetKeyValue("targetname");
+			CMapEntity *pEntity = (CUtlReference<CMapEntity>)m_pEntityList->Element(pos);
+			const char *pszTargetName = pEntity ? pEntity->GetKeyValue("targetname") : NULL;
+
 			if (pszTargetName != NULL)
 			{
 				//
@@ -127,7 +131,7 @@ void CTargetNameComboBox::SetEntityList(const CMapEntityList *pEntityList)
 				if (nIndex == m_EntityLists.InvalidIndex())
 				{
 					CMapEntityList *pList = new CMapEntityList;
-					pList->AddToTail(pEntity);
+					pList->AddToTail( pEntity );
 
 					m_EntityLists.Insert( pszTargetName, pList );
 
@@ -188,7 +192,27 @@ void CTargetNameComboBox::OnTextChanged( const char *pText )
 
 	COLORREF clrWanted = RGB(255,0,0);
 	if ( nCount > 0 )
+	{
 		clrWanted = RGB(0,0,0);
+	}
+	else
+	{
+		POSITION	pos = APP()->pMapDocTemplate->GetFirstDocPosition();
+		while( pos != NULL )
+		{
+			CDocument *pDoc = APP()->pMapDocTemplate->GetNextDoc( pos );
+			CMapDoc *pMapDoc = dynamic_cast< CMapDoc * >( pDoc );
+
+			if ( pMapDoc )
+			{
+				if ( pMapDoc->GetMapWorld()->FindEntityByName( pText ) != NULL )
+				{
+					clrWanted = RGB( 0, 192, 192 );
+					break;
+				}
+			}
+		}
+	}
 
 	SetEditControlFont( *pWantedFont );
 	SetEditControlTextColor( clrWanted );

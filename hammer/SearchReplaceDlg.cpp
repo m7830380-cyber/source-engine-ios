@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -31,7 +31,7 @@ struct FindObject_t
 	CMapWorld *pWorld;
 	EnumChildrenPos_t WorldPos;					// A position in the world tree for world searches.
 
-	CUtlVector<CMapClass *> SelectionList;		// A copy of the selection list for selection only searches.
+	CMapObjectRefList SelectionList;			// A copy of the selection list for selection only searches.
 	int nSelectionIndex;						// The index into the selection list for iterating the selection list.
 
 	//
@@ -394,11 +394,11 @@ void CSearchReplaceDlg::GetFindCriteria(FindObject_t &FindObject, CMapDoc *pDoc)
 		const CMapObjectList *pSelection = pDoc->GetSelection()->GetList();
 		for (int i = 0; i < pSelection->Count(); i++)
 		{
-			CMapClass *pObject = pSelection->Element(i);
-			if ( pObject->IsGroup() )
+			CUtlReference< CMapClass > object = pSelection->Element(i);
+			if ( object->IsGroup() )
 			{
 				// If it's a group, get all the entities in the group.
-				const CMapObjectList *pChildren = pObject->GetChildren();
+				const CMapObjectList *pChildren = object->GetChildren();
 				FOR_EACH_OBJ( *pChildren, pos )
 				{
 					FindObject.SelectionList.AddToTail( pChildren->Element(pos) );
@@ -406,7 +406,7 @@ void CSearchReplaceDlg::GetFindCriteria(FindObject_t &FindObject, CMapDoc *pDoc)
 			}
 			else				 
 			{
-				FindObject.SelectionList.AddToTail(pObject);
+				FindObject.SelectionList.AddToTail( object );
 			}
 		}
 	}
@@ -539,7 +539,7 @@ BOOL CSearchReplaceDlg::OnFindReplace(UINT uCmd)
 			if ((m_bNewSearch) || (uCmd != IDC_REPLACE_ALL))
 			{
 				CString str;
-				str.Format("Finished searching for '%s'.", m_strFindText.GetBuffer());
+				str.Format("Finished searching for '%s'.", m_strFindText);
 				MessageBox(str, "Find/Replace Text", MB_OK);
 
 				// TODO: put the old selection back
@@ -547,7 +547,7 @@ BOOL CSearchReplaceDlg::OnFindReplace(UINT uCmd)
 			else if (uCmd == IDC_REPLACE_ALL)
 			{
 				CString str;
-				str.Format("Replaced %d occurrences of the string '%s' with '%s'.", nReplaceCount, m_strFindText.GetBuffer(), m_strReplaceText.GetBuffer());
+				str.Format("Replaced %d occurrences of the string '%s' with '%s'.", nReplaceCount, m_strFindText, m_strReplaceText);
 				MessageBox(str, "Find/Replace Text", MB_OK);
 			}
 

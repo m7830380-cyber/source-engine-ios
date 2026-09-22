@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Miscellaneous utility functions.
 //
@@ -58,7 +58,7 @@ void NotifyDuplicates(const CMapObjectList *pList)
 
 	FOR_EACH_OBJ( *pList, pos )
 	{
-		CMapClass *pobj = pList->Element(pos);
+		CMapClass *pobj = (CUtlReference< CMapClass >)pList->Element(pos);
 		if(!pobj->IsMapClass(MAPCLASS_TYPE(CMapSolid)))
 			continue;	// not a solid
 		NotifyDuplicates((CMapSolid*) pobj);

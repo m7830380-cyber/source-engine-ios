@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2007, Valve Corporation, All rights reserved. =======
 //
 // Purpose: 
 //
@@ -7,8 +7,8 @@
 #include "bsplib.h"
 #include "vbsp.h"
 #include "tier1/UtlBuffer.h"
-#include "tier1/utlvector.h"
-#include "KeyValues.h"
+#include "tier1/UtlVector.h"
+#include "keyvalues.h"
 #include "materialpatch.h"
 
 struct entitySideList_t
@@ -85,13 +85,15 @@ void CreateWorldVertexTransitionPatchedMaterial( const char *pOriginalMaterialNa
 		RemoveKey( kv, "$surfaceprop2" );
 		// If we didn't want a basetexture on the first texture in the blend, we don't want an envmap at all.
 		KeyValues *basetexturenoenvmap = kv->FindKey( "$BASETEXTURENOENVMAP" );
-		if( basetexturenoenvmap->GetInt() )
+		if( basetexturenoenvmap && basetexturenoenvmap->GetInt() )
 		{
 			RemoveKey( kv, "$envmap" );
 		}
 
 		Warning( "Patching WVT material: %s\n", pPatchedMaterialName );
 		WriteMaterialKeyValuesToPak( pPatchedMaterialName, kv );
+
+		AddNewTranslation( pOriginalMaterialName, pPatchedMaterialName );
 	}
 }
 

@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -16,16 +16,16 @@
 #include "Render3D.h"
 #include "StudioModel.h"
 #include "ViewerSettings.h"
-#include "materialsystem/imesh.h"
+#include "materialsystem/IMesh.h"
 #include "TextureSystem.h"
 #include "bone_setup.h"
 #include "IStudioRender.h"
 #include "GlobalFunctions.h"
 #include "UtlMemory.h"
-#include "utldict.h"
+#include "UtlDict.h"
 #include "bone_accessor.h"
 #include "optimize.h"
-#include "filesystem.h"
+#include "FileSystem.h"
 #include "Hammer.h"
 #include "HammerVGui.h"
 #include <VGuiMatSurface/IMatSystemSurface.h>
@@ -75,7 +75,7 @@ bool			g_bUpdateBones2D = true;
 // Model meshes themselves are cached to avoid redundancy. There should never be
 // more than one copy of a given studio model in memory at once.
 //-----------------------------------------------------------------------------
-ModelCache_t CStudioModelCache::m_Cache[1024];
+ModelCache_t CStudioModelCache::m_Cache[MAX_STUDIOMODELCACHE];
 int CStudioModelCache::m_nItems = 0;
 
 
@@ -108,6 +108,31 @@ StudioModel *CStudioModelCache::FindModel(const char *pszModelPath)
 	return NULL;
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: Find all models in the cache with the same model name and reload them
+//-----------------------------------------------------------------------------
+void CStudioModelCache::ReloadModel( const char *pszModelPath )
+{
+	// Fix up our name to match what will be in the cache
+	char testPath[MAX_PATH];
+	V_strncpy( testPath, pszModelPath, sizeof( testPath ) );
+	V_FixSlashes( testPath );
+
+	// Look through all models in the cache, updating them as we find them
+	for ( int i = 0; i < m_nItems; i++ )
+	{
+		char testPath2[MAX_PATH];
+		V_strncpy( testPath2, m_Cache[i].pszPath, sizeof( testPath2 ) );
+		V_FixSlashes( testPath2 );
+
+		// If it's a match, reload it
+		if (!stricmp(testPath, testPath2))
+		{
+			m_Cache[i].pModel->FreeModel();
+			m_Cache[i].pModel->LoadModel( pszModelPath );
+		}
+	}
+}
 
 //-----------------------------------------------------------------------------
 // Purpose: Returns an instance of a particular studio model. If the model is
@@ -117,10 +142,6 @@ StudioModel *CStudioModelCache::FindModel(const char *pszModelPath)
 //-----------------------------------------------------------------------------
 StudioModel *CStudioModelCache::CreateModel(const char *pszModelPath)
 {
-	StudioModel *pTest = FindModel( pszModelPath );
-	if ( pTest )
-		return pTest;
-
 	//
 	// If it isn't there, try to create one.
 	//
@@ -164,29 +185,34 @@ StudioModel *CStudioModelCache::CreateModel(const char *pszModelPath)
 //-----------------------------------------------------------------------------
 BOOL CStudioModelCache::AddModel(StudioModel *pModel, const char *pszModelPath)
 {
-	//
-	// Copy the model pointer.
-	//
-	m_Cache[m_nItems].pModel = pModel;
-
-	//
-	// Allocate space for and copy the model path.
-	//
-	m_Cache[m_nItems].pszPath = new char [strlen(pszModelPath) + 1];
-	if (m_Cache[m_nItems].pszPath != NULL)
+	if ( m_nItems < MAX_STUDIOMODELCACHE )
 	{
-		strcpy(m_Cache[m_nItems].pszPath, pszModelPath);
+		//
+		// Copy the model pointer.
+		//
+		m_Cache[m_nItems].pModel = pModel;
+
+		//
+		// Allocate space for and copy the model path.
+		//
+		m_Cache[m_nItems].pszPath = new char [strlen(pszModelPath) + 1];
+		if (m_Cache[m_nItems].pszPath != NULL)
+		{
+			strcpy(m_Cache[m_nItems].pszPath, pszModelPath);
+		}
+		else
+		{
+			return(FALSE);
+		}
+
+		m_Cache[m_nItems].nRefCount = 1;
+
+		m_nItems++;
+
+		return(TRUE);
 	}
-	else
-	{
-		return(FALSE);
-	}
 
-	m_Cache[m_nItems].nRefCount = 1;
-
-	m_nItems++;
-
-	return(TRUE);
+	return(FALSE);
 }
 
 
@@ -276,15 +302,12 @@ void CStudioFileChangeWatcher::Init()
 	char searchPaths[1024 * 16];
 	if ( g_pFullFileSystem->GetSearchPath( "GAME", false, searchPaths, sizeof( searchPaths ) ) > 0 )
 	{
-		CUtlVector<char*> searchPathList;
-		V_SplitString( searchPaths, ";", searchPathList );
+		CSplitString searchPathList( searchPaths, ";" );
 
 		for ( int i=0; i < searchPathList.Count(); i++ )
 		{
 			m_Watcher.AddDirectory( searchPathList[i], "models", true );
 		}
-		
-		searchPathList.PurgeAndDeleteElements();
 	}
 	else
 	{
@@ -314,7 +337,7 @@ void CStudioFileChangeWatcher::OnFileChange( const char *pRelativeFilename, cons
 		
 		// Now it might have a "dx80" or "dx90" or some other extension. Get rid of that too.
 		const char *pTestFilename = V_UnqualifiedFileName( tempFilename );
-		pExt = V_GetFileExtension( pTestFilename );
+		const char *pExt = V_GetFileExtension( pTestFilename );
 		char filename[MAX_PATH];
 		if ( pExt )
 			V_strncpy( filename, tempFilename, pExt - tempFilename );
@@ -349,13 +372,8 @@ void CStudioFileChangeWatcher::Update()
 			g_pMDLCache->Flush( hModel );
 			g_pMDLCache->ResetErrorModelStatus( hModel );
 
-			// If we have it in the StudioModel cache, flush its data.
-			StudioModel *pTest = CStudioModelCache::FindModel( pName );
-			if ( pTest )
-			{
-				pTest->FreeModel();
-				pTest->LoadModel( pName );
-			}
+			// Find all studio models and refresh their data
+			CStudioModelCache::ReloadModel( pName );			
 		}
 		
 		m_ChangedModels.Purge();	
@@ -469,7 +487,7 @@ void StudioModel::AdvanceFrame( float dt )
 	}
 }
 
-void StudioModel::SetUpBones( bool bUpdatePose, matrix3x4_t *pBoneToWorld )
+void StudioModel::SetUpBones( bool bUpdatePose, matrix3x4a_t *pBoneToWorld )
 {
 	CStudioHdr *pStudioHdr = GetStudioHdr();
 
@@ -477,7 +495,7 @@ void StudioModel::SetUpBones( bool bUpdatePose, matrix3x4_t *pBoneToWorld )
 	{
 		bUpdatePose = true;
 		m_pPosePos = new Vector[pStudioHdr->numbones()] ;
-		m_pPoseAng = new Quaternion[pStudioHdr->numbones()];
+		m_pPoseAng = new QuaternionAligned[pStudioHdr->numbones()];
 	}
 	
 	if ( bUpdatePose )
@@ -487,7 +505,7 @@ void StudioModel::SetUpBones( bool bUpdatePose, matrix3x4_t *pBoneToWorld )
 		boneSetup.AccumulatePose( m_pPosePos, m_pPoseAng, m_sequence, m_cycle, 1.0f, 0.0f, NULL );
 	}
 	
-	mstudiobone_t *pbones = pStudioHdr->pBone( 0 );
+	const mstudiobone_t *pbones = pStudioHdr->pBone( 0 );
 
 	matrix3x4_t cameraTransform;
 	AngleMatrix( m_angles, cameraTransform );
@@ -554,7 +572,7 @@ void StudioModel::SetupModel ( int bodypart )
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-void StudioModel::DrawModel3D( CRender3D *pRender, float flAlpha, bool bWireframe )
+void StudioModel::DrawModel3D( CRender3D *pRender, const Color &color, float flAlpha, bool bWireframe )
 {
 	studiohdr_t *pStudioHdr = GetStudioRenderHdr();
 	if (!pStudioHdr)
@@ -596,18 +614,18 @@ void StudioModel::DrawModel3D( CRender3D *pRender, float flAlpha, bool bWirefram
 		QAngle newAngles;
 		MatrixAngles(fMatrixNew, m_angles);
 
-		matrix3x4_t boneToWorld[MAXSTUDIOBONES];
-		SetUpBones( false, boneToWorld );
-		pRender->DrawModel( &info, boneToWorld, m_origin, flAlpha, bWireframe );
+		CMatRenderData< matrix3x4a_t > rdBoneToWorld( pRenderContext, GetStudioHdr()->numbones() );
+		SetUpBones( false, rdBoneToWorld.Base() );
+		pRender->DrawModel( &info, rdBoneToWorld.Base(), m_origin, flAlpha, bWireframe, color );
 		
 		m_origin = orgOrigin;
 		m_angles = orgAngles;
 	}
 	else
 	{
-		matrix3x4_t boneToWorld[MAXSTUDIOBONES];
-		SetUpBones( true, boneToWorld );
-		pRender->DrawModel( &info, boneToWorld, m_origin, flAlpha, bWireframe );
+		CMatRenderData< matrix3x4a_t > rdBoneToWorld( pRenderContext, GetStudioHdr()->numbones() );
+		SetUpBones( true, rdBoneToWorld.Base() );
+		pRender->DrawModel( &info, rdBoneToWorld.Base(), m_origin, flAlpha, bWireframe, color );
 
 		if ( Options.general.bShowCollisionModels )
 		{
@@ -667,9 +685,10 @@ void StudioModel::DrawModel2D( CRender2D *pRender, float flAlpha, bool bWireFram
 	}
 	else
 	{
-		matrix3x4_t boneToWorld[MAXSTUDIOBONES];
-		SetUpBones( false, boneToWorld );
-		pRender->DrawModel( &info, boneToWorld, m_origin, flAlpha, bWireFrame );
+		CMatRenderContextPtr pRenderContext( g_pMaterialSystem );
+		CMatRenderData< matrix3x4a_t > rdBoneToWorld( pRenderContext, GetStudioHdr()->numbones() );
+		SetUpBones( false, rdBoneToWorld.Base() );
+		pRender->DrawModel( &info, rdBoneToWorld.Base(), m_origin, flAlpha, bWireFrame );
 	}	
 
 
@@ -682,7 +701,7 @@ void StudioModel::DrawModel2D( CRender2D *pRender, float flAlpha, bool bWireFram
 }
 
 //-----------------------------------------------------------------------------
-// It's translucent if all its materials are translucent
+// It's translucent if any its materials are translucent
 //-----------------------------------------------------------------------------
 bool StudioModel::IsTranslucent()
 {
@@ -696,12 +715,12 @@ bool StudioModel::IsTranslucent()
 	{
 		for (int i = 0; i < pHardwareData->m_pLODs[lodID].numMaterials; ++i)
 		{
-			if (!pHardwareData->m_pLODs[lodID].ppMaterials[i]->IsTranslucent())
-				return false;
+			if (pHardwareData->m_pLODs[lodID].ppMaterials[i]->IsTranslucent())
+				return true;
 		}
 	}
 
-	return true;
+	return false;
 }
 
 
@@ -997,6 +1016,12 @@ void StudioModel::SetOrigin( float x, float y, float z )
 }
 
 
+int StudioModel::SetBodygroups( int iValue )
+{
+	m_bodynum = iValue;
+	return m_bodynum;
+}
+
 void StudioModel::SetOrigin( const Vector &v )
 {
 	m_origin = v;
@@ -1057,6 +1082,37 @@ int StudioModel::SetSkin( int iValue )
 	return iValue;
 }
 
+const char *StudioModel::GetModelName( void )
+{
+	return m_pModelName;
+}
+
+void StudioModel::SetFrame( int nFrame )
+{
+	CStudioHdr *pStudioHdr = GetStudioHdr();
+	if ( !pStudioHdr )
+		return;
+
+	if ( nFrame <= 0 )
+		nFrame = 0;
+
+	int maxFrame = GetMaxFrame();
+	if ( nFrame >= maxFrame )
+	{
+		nFrame = maxFrame;
+		m_cycle = 0.99999;
+		return;
+	}
+
+	m_cycle = nFrame / (float)maxFrame;
+	return;
+}
+
+int StudioModel::GetMaxFrame( void )
+{
+	CStudioHdr *pStudioHdr = GetStudioHdr();
+	return Studio_MaxFrame( pStudioHdr, m_sequence, NULL );
+}
 
 //-----------------------------------------------------------------------------
 // Purpose: 
@@ -1086,7 +1142,7 @@ int StudioModel::SetSkin( int iValue )
 	if ( pView->m_fZoom < 3 )
 		info.m_Lod = 3;
 
-	matrix3x4_t *pBoneToWorld = SetUpBones( g_bUpdateBones2D );
+	matrix3x4a_t *pBoneToWorld = SetUpBones( g_bUpdateBones2D );
 
 	GetTriangles_Output_t tris;
 	g_pStudioRender->GetTriangles( info, tris );

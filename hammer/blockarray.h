@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -86,9 +86,7 @@ void BlockArray<T,nBlockSize,nMaxBlocks>::
 template <class T, int nBlockSize, int nMaxBlocks>
 T& BlockArray<T,nBlockSize,nMaxBlocks>::operator[] (int iIndex)
 {
-	// Cast to unsigned so that this check will reject negative values as
-	// well as overly large values.
-	if((unsigned)iIndex >= (unsigned)nCount)
+	if(iIndex >= nCount)
 	{
 		Error( "BlockArray< %d, %d > - invalid block index.", iIndex, nCount );
 		SetCount(iIndex+1);

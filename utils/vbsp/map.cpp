@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright (c) 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -11,14 +11,96 @@
 #include "tier1/strtools.h"
 #include "builddisp.h"
 #include "tier0/icommandline.h"
-#include "KeyValues.h"
+#include "keyvalues.h"
 #include "materialsub.h"
 #include "fgdlib/fgdlib.h"
 #include "manifest.h"
+#include "utlbuffer.h"
+#include "vmfentitysupport.h"
+#include "vmfmeshdatasupport.h"
+#include "UtlStringMap.h"
+#include "instancing_helper.h"
+#include "map.h"
+
 
 #ifdef VSVMFIO
 #include "VmfImport.h"
 #endif // VSVMFIO
+
+
+//////////////////////////////////////////////////////////////////////////
+//
+//	Implementation of map data files mgr
+//
+//////////////////////////////////////////////////////////////////////////
+
+class CMapDataFilesMgr : public IMapDataFilesMgr
+{
+public:
+	~CMapDataFilesMgr() { Cleanup(); }
+
+public:
+	void Cleanup();
+
+public:
+	void RegisterFile( char const *szFileName, CUtlBuffer &bufData );
+	bool ReadRegisteredFile( char const *szFileName, CUtlBuffer &bufRead );
+	void AddAllRegisteredFilesToPak();
+
+protected:
+	typedef CUtlStringMap< CUtlBuffer * > FileMap;
+	FileMap m_map;
+};
+
+IMapDataFilesMgr *GetMapDataFilesMgr()
+{
+	static CMapDataFilesMgr s_mgr;
+	return &s_mgr;
+}
+
+void CMapDataFilesMgr::Cleanup()
+{
+	m_map.PurgeAndDeleteElements();
+}
+
+void CMapDataFilesMgr::RegisterFile( const char *szFileName, CUtlBuffer &bufData )
+{
+	UtlSymId_t fid = m_map.Find( szFileName );
+	if ( fid != m_map.InvalidIndex() )
+	{
+		delete m_map[ fid ];
+	}
+
+	CUtlBuffer *pDataCopy = new CUtlBuffer;
+	pDataCopy->Put( bufData.Base(), bufData.TellPut() );
+
+	m_map[ szFileName ] = pDataCopy;
+}
+
+bool CMapDataFilesMgr::ReadRegisteredFile( char const *szFileName, CUtlBuffer &bufRead )
+{
+	UtlSymId_t fid = m_map.Find( szFileName );
+	if ( fid == m_map.InvalidIndex() )
+		return false;
+
+	CUtlBuffer *pBufFile = m_map[ fid ];
+	bufRead.Put( pBufFile->Base(), pBufFile->TellPut() );
+	return true;
+}
+
+void CMapDataFilesMgr::AddAllRegisteredFilesToPak()
+{
+	for ( int k = 0; k < m_map.GetNumStrings(); ++ k )
+	{
+		char const *szFileName = m_map.String( k );
+		CUtlBuffer *pBuffer = m_map[k];
+
+		AddBufferToPak( GetPakFile(), szFileName, pBuffer->Base(), pBuffer->TellPut(), false );
+	}
+}
+
+
+
 
 
 // undefine to make plane finding use linear sort
@@ -34,6 +116,7 @@
 											// for clipping brush solids
 struct LoadSide_t
 {
+	entity_t *pEntity;
 	mapbrush_t *pBrush;
 	side_t *pSide;
 	int nSideIndex;
@@ -103,6 +186,15 @@ ChunkFileResult_t LoadDispAlphasCallback(CChunkFile *pFile, mapdispinfo_t *pMapD
 ChunkFileResult_t LoadDispAlphasKeyCallback(const char *szKey, const char *szValue, mapdispinfo_t *pMapDispInfo);
 ChunkFileResult_t LoadDispTriangleTagsCallback(CChunkFile *pFile, mapdispinfo_t *pMapDispInfo);
 ChunkFileResult_t LoadDispTriangleTagsKeyCallback(const char *szKey, const char *szValue, mapdispinfo_t *pMapDispInfo);
+ChunkFileResult_t LoadDispMultiBlendCallback( CChunkFile *pFile, mapdispinfo_t *pMapDispInfo );
+ChunkFileResult_t LoadDispMultiBlendKeyCallback( const char *szKey, const char *szValue, mapdispinfo_t *pMapDispInfo );
+ChunkFileResult_t LoadDispAlphaBlendCallback( CChunkFile *pFile, mapdispinfo_t *pMapDispInfo );
+ChunkFileResult_t LoadDispAlphaBlendKeyCallback( const char *szKey, const char *szValue, mapdispinfo_t *pMapDispInfo );
+ChunkFileResult_t LoadDispMultiBlendColorCallback0(CChunkFile *pFile, mapdispinfo_t *pMapDispInfo);
+ChunkFileResult_t LoadDispMultiBlendColorCallback1(CChunkFile *pFile, mapdispinfo_t *pMapDispInfo);
+ChunkFileResult_t LoadDispMultiBlendColorCallback2(CChunkFile *pFile, mapdispinfo_t *pMapDispInfo);
+ChunkFileResult_t LoadDispMultiBlendColorCallback3(CChunkFile *pFile, mapdispinfo_t *pMapDispInfo);
+ChunkFileResult_t LoadDispMultiBlendColorKeyCallback(const char *szKey, const char *szValue, mapdispinfo_t *pMapDispInfo);
 
 #ifdef VSVMFIO
 ChunkFileResult_t LoadDispOffsetNormalsCallback(CChunkFile *pFile, mapdispinfo_t *pMapDispInfo);
@@ -436,6 +528,11 @@ int	BrushContents (mapbrush_t *b)
 		contents &= ~CONTENTS_SOLID;
 	}
 
+	if ( unionContents & CONTENTS_LADDER )
+	{
+		contents |= CONTENTS_LADDER;	// now add CONTENTS_LADDER, so it won't slam it into each side
+	}
+
 	return contents;
 }
 
@@ -611,6 +708,30 @@ void CMapFile::AddBrushBevels (mapbrush_t *b)
 }
 
 /*
+==================
+SetBrushSideThickness
+
+Sets whether the side is thin, based on the edges of the winding
+==================
+*/
+void SetBrushSideThickness( side_t* side )
+{
+	const int numPoints = side->winding->numpoints;
+	const Vector* points = side->winding->p;
+	const float STEP_HEIGHT_SQ = 16.0f * 16.0f;
+	side->thin = 0;
+
+	// If any edge of the brush side polygon is shorter than step height, the side is thin.
+	for( int i = 1; i < numPoints && side->thin == 0; ++i )
+	{
+		side->thin |= (points[i] - points[i - 1]).LengthSqr() - STEP_HEIGHT_SQ < EQUAL_EPSILON ? 1 : 0;
+	}
+
+	side->thin |= (points[0] - points[numPoints - 1]).LengthSqr() - STEP_HEIGHT_SQ < EQUAL_EPSILON ? 1 : 0;
+}
+
+
+/*
 ================
 MakeBrushWindings
 
@@ -650,6 +771,7 @@ qboolean CMapFile::MakeBrushWindings (mapbrush_t *ob)
 			side->visible = true;
 			for (j=0 ; j<w->numpoints ; j++)
 				AddPointToBounds (w->p[j], ob->mins, ob->maxs);
+			SetBrushSideThickness( side );
 		}
 	}
 
@@ -865,8 +987,12 @@ ChunkFileResult_t LoadDispInfoCallback(CChunkFile *pFile, mapdispinfo_t **ppMapD
 	}
 
     // get a pointer to the next available displacement info slot
-    mapdispinfo_t *pMapDispInfo = &mapdispinfo[nummapdispinfo];
+	mapdispinfo.AddToTail();
+	mapdispinfo_t *pMapDispInfo = &mapdispinfo.Tail();
+	V_memset( pMapDispInfo, 0, sizeof( *pMapDispInfo ) );
     nummapdispinfo++;
+
+	pMapDispInfo->flags = 0;
 
 	//
 	// Set up handlers for the subchunks that we are interested in.
@@ -877,6 +1003,14 @@ ChunkFileResult_t LoadDispInfoCallback(CChunkFile *pFile, mapdispinfo_t **ppMapD
 	Handlers.AddHandler("offsets", (ChunkHandler_t)LoadDispOffsetsCallback, pMapDispInfo);
 	Handlers.AddHandler("alphas", (ChunkHandler_t)LoadDispAlphasCallback, pMapDispInfo);
 	Handlers.AddHandler("triangle_tags", (ChunkHandler_t)LoadDispTriangleTagsCallback, pMapDispInfo);
+	Handlers.AddHandler("multiblend", (ChunkHandler_t)LoadDispMultiBlendCallback, pMapDispInfo );
+	Handlers.AddHandler("alphablend", (ChunkHandler_t)LoadDispAlphaBlendCallback, pMapDispInfo );
+
+	Assert( MAX_MULTIBLEND_CHANNELS == 4 );
+	Handlers.AddHandler("multiblend_color_0", (ChunkHandler_t)LoadDispMultiBlendColorCallback0, pMapDispInfo );
+	Handlers.AddHandler("multiblend_color_1", (ChunkHandler_t)LoadDispMultiBlendColorCallback1, pMapDispInfo );
+	Handlers.AddHandler("multiblend_color_2", (ChunkHandler_t)LoadDispMultiBlendColorCallback2, pMapDispInfo );
+	Handlers.AddHandler("multiblend_color_3", (ChunkHandler_t)LoadDispMultiBlendColorCallback3, pMapDispInfo );
 
 #ifdef VSVMFIO
 	Handlers.AddHandler("offset_normals", (ChunkHandler_t)LoadDispOffsetNormalsCallback, pMapDispInfo);
@@ -932,7 +1066,10 @@ ChunkFileResult_t LoadDispInfoKeyCallback(const char *szKey, const char *szValue
 	}
 	else if( !stricmp( szKey, "flags" ) )
 	{
-		CChunkFile::ReadKeyValueInt( szValue, pMapDispInfo->flags );
+		int nFlags;
+
+		CChunkFile::ReadKeyValueInt( szValue, nFlags );
+		pMapDispInfo->flags |= nFlags;
 	}
 #if 0 // old data
 	else if (!stricmp( szKey, "alpha" ) )
@@ -1213,6 +1350,220 @@ ChunkFileResult_t LoadDispTriangleTagsKeyCallback(const char *szKey, const char 
 
 //-----------------------------------------------------------------------------
 // Purpose: 
+// Input  : *szKey - 
+//			*szValue - 
+//			*pDisp - 
+// Output : ChunkFileResult_t
+//-----------------------------------------------------------------------------
+ChunkFileResult_t LoadDispMultiBlendCallback( CChunkFile *pFile, mapdispinfo_t *pMapDispInfo )
+{
+	pMapDispInfo->flags |= DISP_INFO_FLAG_HAS_MULTIBLEND;
+	return( pFile->ReadChunk( ( KeyHandler_t ) LoadDispMultiBlendKeyCallback, pMapDispInfo ) );
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+// Input  : *pFile - 
+//			*pDisp - 
+// Output : ChunkFileResult_t
+//-----------------------------------------------------------------------------
+ChunkFileResult_t LoadDispMultiBlendKeyCallback( const char *szKey, const char *szValue, mapdispinfo_t *pMapDispInfo )
+{
+	if ( !strnicmp( szKey, "row", 3 ) )
+	{
+		char szBuf[ MAX_KEYVALUE_LEN ];
+		strcpy( szBuf, szValue );
+
+		int nCols = ( 1 << pMapDispInfo->power ) + 1;
+		int nRow = atoi( &szKey[ 3 ] );
+
+		char *pszNext = strtok( szBuf, " " );
+
+		int nIndex = nRow * nCols;
+
+		while ( pszNext != NULL )
+		{
+			Vector4D	vMultiBlend;
+
+			vMultiBlend.x = ( float )atof( pszNext );
+			pszNext = strtok(NULL, " ");
+			vMultiBlend.y = ( float )atof( pszNext );
+			pszNext = strtok(NULL, " ");
+			vMultiBlend.z = ( float )atof( pszNext );
+			pszNext = strtok(NULL, " ");
+			vMultiBlend.w = ( float )atof( pszNext );
+			pszNext = strtok(NULL, " ");
+
+			pMapDispInfo->m_vMultiBlends[ nIndex ].m_vMultiBlend = vMultiBlend;
+
+			nIndex++;
+		}
+	}
+
+	return(ChunkFile_Ok);
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+// Input  : *szKey - 
+//			*szValue - 
+//			*pDisp - 
+// Output : ChunkFileResult_t
+//-----------------------------------------------------------------------------
+ChunkFileResult_t LoadDispAlphaBlendCallback( CChunkFile *pFile, mapdispinfo_t *pMapDispInfo )
+{
+	pMapDispInfo->flags |= DISP_INFO_FLAG_HAS_MULTIBLEND;
+	return( pFile->ReadChunk( ( KeyHandler_t ) LoadDispAlphaBlendKeyCallback, pMapDispInfo ) );
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+// Input  : *pFile - 
+//			*pDisp - 
+// Output : ChunkFileResult_t
+//-----------------------------------------------------------------------------
+ChunkFileResult_t LoadDispAlphaBlendKeyCallback( const char *szKey, const char *szValue, mapdispinfo_t *pMapDispInfo )
+{
+	if ( !strnicmp( szKey, "row", 3 ) )
+	{
+		char szBuf[ MAX_KEYVALUE_LEN ];
+		strcpy( szBuf, szValue );
+
+		int nCols = ( 1 << pMapDispInfo->power ) + 1;
+		int nRow = atoi( &szKey[ 3 ] );
+
+		char *pszNext = strtok( szBuf, " " );
+
+		int nIndex = nRow * nCols;
+
+		while ( pszNext != NULL )
+		{
+			Vector4D	vAlphaBlend;
+
+			vAlphaBlend.x = ( float )atof( pszNext );
+			pszNext = strtok(NULL, " ");
+			vAlphaBlend.y = ( float )atof( pszNext );
+			pszNext = strtok(NULL, " ");
+			vAlphaBlend.z = ( float )atof( pszNext );
+			pszNext = strtok(NULL, " ");
+			vAlphaBlend.w = ( float )atof( pszNext );
+			pszNext = strtok(NULL, " ");
+
+			pMapDispInfo->m_vMultiBlends[ nIndex ].m_vAlphaBlend = vAlphaBlend;
+
+			nIndex++;
+		}
+	}
+
+	return(ChunkFile_Ok);
+}
+
+
+static int nMultiBlendColorIndex = 0;
+
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+// Input  : *pFile - 
+//			*pDisp - 
+// Output : ChunkFileResult_t
+//-----------------------------------------------------------------------------
+ChunkFileResult_t LoadDispMultiBlendColorCallback0(CChunkFile *pFile, mapdispinfo_t *pMapDispInfo)
+{
+	nMultiBlendColorIndex = 0;
+
+	return(pFile->ReadChunk((KeyHandler_t)LoadDispMultiBlendColorKeyCallback, pMapDispInfo));
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+// Input  : *pFile - 
+//			*pDisp - 
+// Output : ChunkFileResult_t
+//-----------------------------------------------------------------------------
+ChunkFileResult_t LoadDispMultiBlendColorCallback1(CChunkFile *pFile, mapdispinfo_t *pMapDispInfo)
+{
+	nMultiBlendColorIndex = 1;
+
+	return(pFile->ReadChunk((KeyHandler_t)LoadDispMultiBlendColorKeyCallback, pMapDispInfo));
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+// Input  : *pFile - 
+//			*pDisp - 
+// Output : ChunkFileResult_t
+//-----------------------------------------------------------------------------
+ChunkFileResult_t LoadDispMultiBlendColorCallback2(CChunkFile *pFile, mapdispinfo_t *pMapDispInfo)
+{
+	nMultiBlendColorIndex = 2;
+
+	return(pFile->ReadChunk((KeyHandler_t)LoadDispMultiBlendColorKeyCallback, pMapDispInfo));
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+// Input  : *pFile - 
+//			*pDisp - 
+// Output : ChunkFileResult_t
+//-----------------------------------------------------------------------------
+ChunkFileResult_t LoadDispMultiBlendColorCallback3(CChunkFile *pFile, mapdispinfo_t *pMapDispInfo)
+{
+	nMultiBlendColorIndex = 3;
+
+	return(pFile->ReadChunk((KeyHandler_t)LoadDispMultiBlendColorKeyCallback, pMapDispInfo));
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+// Input  : *pFile - 
+//			*pDisp - 
+// Output : ChunkFileResult_t
+//-----------------------------------------------------------------------------
+ChunkFileResult_t LoadDispMultiBlendColorKeyCallback(const char *szKey, const char *szValue, mapdispinfo_t *pMapDispInfo)
+{
+	if (!strnicmp(szKey, "row", 3))
+	{
+		char szBuf[MAX_KEYVALUE_LEN];
+		strcpy(szBuf, szValue);
+
+		int nCols = ( 1 << pMapDispInfo->power ) + 1;
+		int nRow = atoi(&szKey[3]);
+
+		char *pszNext = strtok(szBuf, " ");
+
+		int nIndex = nRow * nCols;
+
+		while (pszNext != NULL) 
+		{
+			Vector	vMultiBlendColor;
+
+			vMultiBlendColor.x = ( float )atof( pszNext );
+			pszNext = strtok(NULL, " ");
+			vMultiBlendColor.y = ( float )atof( pszNext );
+			pszNext = strtok(NULL, " ");
+			vMultiBlendColor.z = ( float )atof( pszNext );
+			pszNext = strtok(NULL, " ");
+
+			pMapDispInfo->m_vMultiBlends[ nIndex ].m_vMultiBlendColors[ nMultiBlendColorIndex ] = vMultiBlendColor;
+
+			nIndex++;
+		}
+	}
+
+	return(ChunkFile_Ok);
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: 
 // Input  : brushSideID - 
 // Output : int
 //-----------------------------------------------------------------------------
@@ -1435,38 +1786,97 @@ static ChunkFileResult_t LoadOverlayTransitionCallback( CChunkFile *pFile, int n
 //-----------------------------------------------------------------------------
 void CMapFile::AddLadderKeys( entity_t *mapent )
 {
-	Vector mins, maxs;
-	ClearBounds( mins, maxs );
+	char buf[128];
+
+	// Default to usable by any team
+	SetKeyValue( mapent, "team", "0" );
+
+	// Default to up (should have at least one climbable surface)
+	SetKeyValue( mapent, "normal.x", "0" );
+	SetKeyValue( mapent, "normal.y", "0" );
+	SetKeyValue( mapent, "normal.z", "1" );
 
 	int i;
 	for ( i = 0; i < mapent->numbrushes; i++ )
 	{
 		int brushnum = mapent->firstbrush + i;
 		mapbrush_t *brush = &mapbrushes[ brushnum ];
+		for ( int j=0; j<brush->numsides; ++j )
+		{
+			side_t *side = &(brush->original_sides[j]);
+			if ( (side->contents & CONTENTS_LADDER) == 0 )
+				continue;
 
-		AddPointToBounds( brush->mins, mins, maxs );
-		AddPointToBounds( brush->maxs, mins, maxs );
+			dplane_t* pPlane = &mapplanes[side->planenum];
+			const Vector &normal = pPlane->normal;
+			/*
+			Msg( "%.0f,%.0f,%.0f -> %.0f,%.0f,%.0f: Ladder %d has climbable side with normal %.1f,%.1f,%.1f\n",
+				brush->mins.x, brush->mins.y, brush->mins.z,
+				brush->maxs.z, brush->maxs.y, brush->maxs.z,
+				mapent->firstbrush, normal.x, normal.y, normal.z );
+			*/
+
+			if ( side->contents & CONTENTS_TEAM1 )
+			{
+				SetKeyValue( mapent, "team", "1" );
+			}
+			else if ( side->contents & CONTENTS_TEAM2 )
+			{
+				SetKeyValue( mapent, "team", "2" );
+			}
+
+			Q_snprintf( buf, sizeof(buf), "%f", normal.x );
+			SetKeyValue( mapent, "normal.x", buf );
+
+			Q_snprintf( buf, sizeof(buf), "%f", normal.y );
+			SetKeyValue( mapent, "normal.y", buf );
+
+			Q_snprintf( buf, sizeof(buf), "%f", normal.z );
+			SetKeyValue( mapent, "normal.z", buf );
+		}
 	}
+}
 
-	char buf[16];
+//////////////////////////////////////////////////////////////////////////
+//
+// Special implementation of custom load/save chunks for entities
+//
+//////////////////////////////////////////////////////////////////////////
 
-	Q_snprintf( buf, sizeof(buf), "%2.2f", mins.x );
-	SetKeyValue( mapent, "mins.x", buf );
+class CSyncMesh_SaveLoadHandler : public CVmfMeshDataSupport_SaveLoadHandler
+{
+public:
+	virtual char const *GetCustomSectionName() { return "meshdata"; }
 
-	Q_snprintf( buf, sizeof(buf), "%2.2f", mins.y );
-	SetKeyValue( mapent, "mins.y", buf );
+protected:
+	virtual ChunkFileResult_t OnFileDataLoaded( CUtlBuffer &bufData );
+};
 
-	Q_snprintf( buf, sizeof(buf), "%2.2f", mins.z );
-	SetKeyValue( mapent, "mins.z", buf );
+ChunkFileResult_t CSyncMesh_SaveLoadHandler::OnFileDataLoaded( CUtlBuffer &bufData )
+{
+	char const * arrFiles[] = { ".ma", ".dmx", ".mdl", ".vvd", ".dx90.vtx", ".phy", ".ss2" };
+	char const * arrNames[] = { "maa", "dmx", "mdl", "vvd", "vtx", "phy", "ss2" };
 
-	Q_snprintf( buf, sizeof(buf), "%2.2f", maxs.x );
-	SetKeyValue( mapent, "maxs.x", buf );
+	char const *pFileExt = NULL;
 
-	Q_snprintf( buf, sizeof(buf), "%2.2f", maxs.y );
-	SetKeyValue( mapent, "maxs.y", buf );
+	// Determine the file name to save
+	for ( int j = 0; j < ARRAYSIZE( arrFiles ); ++ j )
+	{
+		if ( !stricmp( m_hLoadHeader.sPrefix, arrNames[j] ) )
+		{
+			pFileExt = arrFiles[j];
+			break;
+		}
+	}
+	if ( !pFileExt )
+		return ChunkFile_Fail;
 
-	Q_snprintf( buf, sizeof(buf), "%2.2f", maxs.z );
-	SetKeyValue( mapent, "maxs.z", buf );
+	// The filename
+	char sSaveFileName[ MAX_PATH ] = {0};
+	sprintf( sSaveFileName, "models/.hammer.mdlcache/%s%s", m_hLoadHeader.sHash, pFileExt );
+	GetMapDataFilesMgr()->RegisterFile( sSaveFileName, bufData );
+	
+	return ChunkFile_Ok;
 }
 
 ChunkFileResult_t LoadEntityCallback(CChunkFile *pFile, int nParam)
@@ -1511,6 +1921,11 @@ ChunkFileResult_t CMapFile::LoadEntityCallback(CChunkFile *pFile, int nParam)
 	Handlers.AddHandler("connections", (ChunkHandler_t)LoadConnectionsCallback, &LoadEntity);
 	Handlers.AddHandler( "overlaytransition", ( ChunkHandler_t )LoadOverlayTransitionCallback, 0 );
 
+	CSyncMesh_SaveLoadHandler hdlrEntityMeshData;
+	VmfInstallMapEntitySaveLoadHandler( &hdlrEntityMeshData );
+
+	VmfAddMapEntityHandlers( &Handlers, NULL );
+
 	//
 	// Read the entity chunk.
 	//
@@ -1518,42 +1933,28 @@ ChunkFileResult_t CMapFile::LoadEntityCallback(CChunkFile *pFile, int nParam)
 	ChunkFileResult_t eResult = pFile->ReadChunk((KeyHandler_t)LoadEntityKeyCallback, &LoadEntity);
 	pFile->PopHandlers();
 
+	VmfUninstallMapEntitySaveLoadHandler( &hdlrEntityMeshData );
+
 	if (eResult == ChunkFile_Ok)
 	{
 		GetVectorForKey (mapent, "origin", mapent->origin);
 
-		const char *pMinDXLevelStr = ValueForKey( mapent, "mindxlevel" );
-		const char *pMaxDXLevelStr = ValueForKey( mapent, "maxdxlevel" );
-		if( *pMinDXLevelStr != '\0' || *pMaxDXLevelStr != '\0' )
-		{
-			int min = 0;
-			int max = 0;
-			if( *pMinDXLevelStr )
-			{
-				min = atoi( pMinDXLevelStr );
-			}
-			if( *pMaxDXLevelStr )
-			{
-				max = atoi( pMaxDXLevelStr );
-			}
+		//
+		// func_detail brushes are moved into the world entity. The CONTENTS_DETAIL flag was set by the loader.
+		//
+		const char *pClassName = ValueForKey( mapent, "classname" );
 
-			// Set min and max to default values.
-			if( min == 0 )
-			{
-				min = g_nDXLevel;
-			}
-			if( max == 0 )
-			{
-				max = g_nDXLevel;
-			}
-			if( ( g_nDXLevel != 0 ) && ( g_nDXLevel < min || g_nDXLevel > max ) )
-			{
-				mapent->numbrushes = 0;
-				mapent->epairs = NULL;
-				return(ChunkFile_Ok);
-			}
+		// func_brush entities whose names begin with "structure_" are moved into the world
+		if ( g_bConvertStructureToDetail && !Q_strcmp( "func_brush", pClassName ) && Q_strncmp( ValueForKey( mapent, "targetname" ), "structure_", 10 ) == 0 )
+		{
+			MoveBrushesToWorld (mapent);
+			mapent->numbrushes = 0;
+
+			// clear out this entity
+			mapent->epairs = NULL;
+			return(ChunkFile_Ok);
 		}
-		
+
 		// offset all of the planes and texinfo
 		if ( mapent->origin[0] || mapent->origin[1] || mapent->origin[2] )
 		{
@@ -1573,11 +1974,6 @@ ChunkFileResult_t CMapFile::LoadEntityCallback(CChunkFile *pFile, int nParam)
 				MakeBrushWindings (b);
 			}
 		}
-
-		//
-		// func_detail brushes are moved into the world entity. The CONTENTS_DETAIL flag was set by the loader.
-		//
-		const char *pClassName = ValueForKey( mapent, "classname" );
 
 		if ( !strcmp( "func_detail", pClassName ) )
 		{
@@ -1605,26 +2001,9 @@ ChunkFileResult_t CMapFile::LoadEntityCallback(CChunkFile *pFile, int nParam)
 		{
 			AddLadderKeys( mapent );
 
-			MoveBrushesToWorld (mapent);
+			// Convert to in-game entity classname
+			SetKeyValue( mapent, "classname", "func_simpleladder" );
 
-			// Convert to info_ladder entity
-			SetKeyValue( mapent, "classname", "info_ladder" );
-
-			return(ChunkFile_Ok);
-		}
-
-		if( !strcmp( "env_cubemap", pClassName ) )
-		{
-			if( ( g_nDXLevel == 0 ) || ( g_nDXLevel >= 70 ) )
-			{
-				const char *pSideListStr = ValueForKey( mapent, "sides" );
-				int size;
-				size = IntForKey( mapent, "cubemapsize" );
-				Cubemap_InsertSample( mapent->origin, size );
-				Cubemap_SaveBrushSides( pSideListStr );
-			}
-			// clear out this entity
-			mapent->epairs = NULL;
 			return(ChunkFile_Ok);
 		}
 
@@ -1667,13 +2046,6 @@ ChunkFileResult_t CMapFile::LoadEntityCallback(CChunkFile *pFile, int nParam)
 		if ( Q_stricmp( pClassName, "info_no_dynamic_shadow" ) == 0 )
 		{
 			return HandleNoDynamicShadowsEnt( mapent );
-		}
-
-		if ( Q_stricmp( pClassName, "func_instance_parms" ) == 0 )
-		{
-			// Clear out this entity.
-			mapent->epairs = NULL;
-			return ( ChunkFile_Ok );
 		}
 
 		// areaportal entities move their brushes, but don't eliminate
@@ -1770,6 +2142,14 @@ ChunkFileResult_t CMapFile::LoadEntityCallback(CChunkFile *pFile, int nParam)
 				ValueForKey( mapent, "origin" ),
 				MDagPath() );
 		}
+
+		const char *pHammerId = ValueForKey( mapent, "hammerid" );
+		if ( !pHammerId )
+		{
+			pHammerId = "UNKNOWN";
+		}
+
+		CVmfImport::GetVmfImporter()->EntityCallback( mapent, pHammerId );
 #endif // VSVMFIO
 
 		// If it's not in the world at this point, unmark CONTENTS_DETAIL from all sides...
@@ -1849,37 +2229,9 @@ void CMapFile::ForceFuncAreaPortalWindowContents()
 // #define MERGE_INSTANCE_DEBUG_INFO	1
 
 #define INSTANCE_VARIABLE_KEY			"replace"
+#define INSTANCE_PARM_KEY				"parm"
 
 static GameData	GD;
-
-//-----------------------------------------------------------------------------
-// Purpose: this function will read in a standard key / value file
-// Input  : pFilename - the absolute name of the file to read
-// Output : returns the KeyValues of the file, NULL if the file could not be read.
-//-----------------------------------------------------------------------------
-static KeyValues *ReadKeyValuesFile( const char *pFilename )
-{
-	// Read in the gameinfo.txt file and null-terminate it.
-	FILE *fp = fopen( pFilename, "rb" );
-	if ( !fp )
-		return NULL;
-	CUtlVector<char> buf;
-	fseek( fp, 0, SEEK_END );
-	buf.SetSize( ftell( fp ) + 1 );
-	fseek( fp, 0, SEEK_SET );
-	fread( buf.Base(), 1, buf.Count()-1, fp );
-	fclose( fp );
-	buf[buf.Count()-1] = 0;
-
-	KeyValues *kv = new KeyValues( "" );
-	if ( !kv->LoadFromBuffer( pFilename, buf.Base() ) )
-	{
-		kv->deleteThis();
-		return NULL;
-	}
-
-	return kv;
-}
 
 
 //-----------------------------------------------------------------------------
@@ -1892,76 +2244,6 @@ void CMapFile::SetInstancePath( const char *pszInstancePath )
 	V_strlower( m_InstancePath );
 	V_FixSlashes( m_InstancePath );
 }
-
-
-//-----------------------------------------------------------------------------
-// Purpose: This function will attempt to find a full path given the base and relative names.
-// Input  : pszBaseFileName - the base file that referenced this instance
-//			pszInstanceFileName - the relative file name of this instance
-// Output : Returns true if it was able to locate the file
-//			pszOutFileName - the full path to the file name if located
-//-----------------------------------------------------------------------------
-bool CMapFile::DeterminePath( const char *pszBaseFileName, const char *pszInstanceFileName, char *pszOutFileName )
-{
-	char		szInstanceFileNameFixed[ MAX_PATH ];
-	const char *pszMapPath = "\\maps\\";
-
-	strcpy( szInstanceFileNameFixed, pszInstanceFileName );
-	V_SetExtension( szInstanceFileNameFixed, ".vmf", sizeof( szInstanceFileNameFixed ) );
-	V_FixSlashes( szInstanceFileNameFixed );
-
-	// first, try to find a relative location based upon the Base file name
-	strcpy( pszOutFileName, pszBaseFileName );
-	V_StripFilename( pszOutFileName );
-
-	strcat( pszOutFileName, "\\" );
-	strcat( pszOutFileName, szInstanceFileNameFixed );
-
-	if ( g_pFullFileSystem->FileExists( pszOutFileName ) )
-	{
-		return true;
-	}
-
-	// second, try to find the master 'maps' directory and make it relative from that
-	strcpy( pszOutFileName, pszBaseFileName );
-	V_StripFilename( pszOutFileName );
-	V_RemoveDotSlashes( pszOutFileName );
-	V_FixDoubleSlashes( pszOutFileName );
-	V_strlower( pszOutFileName );
-	strcat( pszOutFileName, "\\" );
-
-	char *pos = strstr( pszOutFileName, pszMapPath );
-	if ( pos )
-	{
-		pos += strlen( pszMapPath );
-		*pos = 0;
-		strcat( pszOutFileName, szInstanceFileNameFixed );
-
-		if ( g_pFullFileSystem->FileExists( pszOutFileName ) )
-		{
-			return true;
-		}
-	}
-
-	if ( m_InstancePath[ 0 ] != 0 )
-	{
-		sprintf( szInstanceFileNameFixed, "%s%s", m_InstancePath, pszInstanceFileName );
-
-		if ( g_pFullFileSystem->FileExists( szInstanceFileNameFixed, "GAME" ) )
-		{
-			char FullPath[ MAX_PATH ];
-			g_pFullFileSystem->RelativePathToFullPath( szInstanceFileNameFixed, "GAME", FullPath, sizeof( FullPath ) );
-			strcpy( pszOutFileName, FullPath );
-
-			return true;
-		}
-	}
-
-	pszOutFileName[ 0 ] = 0;
-
-	return false;
-}
-
 
 //-----------------------------------------------------------------------------
 // Purpose: this function will check the main map for any func_instances.  It will
@@ -2003,13 +2285,19 @@ void CMapFile::CheckForInstances( const char *pszFileName )
 	char	FDGPath[ MAX_PATH ];
 	if ( !g_pFullFileSystem->RelativePathToFullPath( GameDataFile, "EXECUTABLE_PATH", FDGPath, sizeof( FDGPath ) ) )
 	{
-		if ( !g_pFullFileSystem->RelativePathToFullPath( GameDataFile, NULL, FDGPath, sizeof( FDGPath ) ) )
+		if ( !g_pFullFileSystem->RelativePathToFullPath( GameDataFile, "", FDGPath, sizeof( FDGPath ) ) )
 		{
 			Msg( "Could not locate GameData file %s\n", GameDataFile );
 		}
 	}
 
+	bool	bFoundInstances = false;
+
 	GD.Load( FDGPath );
+
+	PreLoadInstances( &GD );
+
+	GD.BeginInstancing( 1 );
 
 	// this list will grow as instances are merged onto it.  sub-instances are merged and 
 	// automatically done in this processing.
@@ -2024,24 +2312,38 @@ void CMapFile::CheckForInstances( const char *pszFileName )
 				char	InstancePath[ MAX_PATH ];
 				bool	bLoaded = false;
 
-				if ( DeterminePath( pszFileName, pInstanceFile, InstancePath ) )
+				if ( CInstancingHelper::ResolveInstancePath( g_pFullFileSystem, pszFileName, pInstanceFile, m_InstancePath, InstancePath, MAX_PATH ) )
 				{
 					if ( LoadMapFile( InstancePath ) )
 					{
 						MergeInstance( &entities[ i ], g_LoadingMap );
 						delete g_LoadingMap;
 						bLoaded = true;
+						bFoundInstances = true;
 					}
 				}
 
 				if ( bLoaded == false )
 				{
-					Color red( 255, 0, 0, 255 );
-
-					ColorSpewMessage( SPEW_ERROR, &red, "Could not open instance file %s\n", pInstanceFile );
+					Log_Error( LOG_GENERAL, "Could not open instance file %s\n", pInstanceFile );
 				}
 			}
 
+			entities[ i ].numbrushes = 0;
+			entities[ i ].epairs = NULL;
+		}
+	}
+
+	if ( bFoundInstances )
+	{
+		PreLoadInstances( &GD );
+	}
+
+	for ( int i = 0; i < num_entities; i++ )
+	{
+		char *pEntity = ValueForKey( &entities[ i ], "classname" );
+		if ( Q_stricmp( pEntity, "func_instance_parms" ) == 0 )
+		{	// Clear out this entity.
 			entities[ i ].numbrushes = 0;
 			entities[ i ].epairs = NULL;
 		}
@@ -2066,17 +2368,91 @@ void CMapFile::MergeInstance( entity_t *pInstanceEntity, CMapFile *Instance )
 
 	m_InstanceCount++;
 
+	GD.BeginMapInstance();
+
 	GetAnglesForKey( pInstanceEntity, "angles", angles );
 	AngleMatrix( angles, OriginOffset, mat );
 
 #ifdef MERGE_INSTANCE_DEBUG_INFO
 	Msg( "Instance Remapping: O:( %g, %g, %g ) A:( %g, %g, %g )\n", OriginOffset.x, OriginOffset.y, OriginOffset.z, angles.x, angles.y, angles.z );
 #endif // #ifdef MERGE_INSTANCE_DEBUG_INFO
+//	MergeAINodes( pInstanceEntity, Instance, OriginOffset, angles, mat );
 	MergePlanes( pInstanceEntity, Instance, OriginOffset, angles, mat );
 	MergeBrushes( pInstanceEntity, Instance, OriginOffset, angles, mat );
 	MergeBrushSides( pInstanceEntity, Instance, OriginOffset, angles, mat );
 	MergeEntities( pInstanceEntity, Instance, OriginOffset, angles, mat );
 	MergeOverlays( pInstanceEntity, Instance, OriginOffset, angles, mat );
+	MergeIOProxy( pInstanceEntity, Instance, OriginOffset, angles, mat );
+}
+
+
+void CMapFile::PreLoadInstances( GameData *pGD )
+{
+	char					temp[ 2048 ];
+	// none of these parameters are used in the 2nd pass
+	Vector					InstanceOrigin = vec3_origin;
+	QAngle					InstanceAngle = vec3_angle;
+	char					NameFixup[ 128 ] = "";
+	GameData::TNameFixup	FixupStyle = GameData::NAME_FIXUP_NONE;
+
+	GD.BeginInstancing( 2 );
+
+	for( int i = 0; i < num_entities; i++ )
+	{
+		entity_t	*pEntity = &entities[ i ];
+		char		*pClassName = ValueForKey( pEntity, "classname" );
+		GDclass		*pEntClass = pGD->BeginInstanceRemap( pClassName, NameFixup, InstanceOrigin, InstanceAngle );
+
+		if ( pEntClass )
+		{
+			for( int i = 0; i < pEntClass->GetVariableCount(); i++ )
+			{
+				GDinputvariable *EntVar = pEntClass->GetVariableAt( i );
+				char *pValue = ValueForKey( pEntity, ( char * )EntVar->GetName() );
+				if ( pGD->RemapKeyValue( EntVar->GetName(), pValue, temp, FixupStyle ) )
+				{
+#ifdef MERGE_INSTANCE_DEBUG_INFO
+					Msg( "   %d. Remapped %s: from %s to %s\n", i, EntVar->GetName(), pValue, temp );
+#endif // #ifdef MERGE_INSTANCE_DEBUG_INFO
+					SetKeyValue( pEntity, EntVar->GetName(), temp );
+				}
+				else
+				{
+#ifdef MERGE_INSTANCE_DEBUG_INFO
+					Msg( "   %d. Ignored %s: %s\n", i, EntVar->GetName(), pValue );
+#endif // #ifdef MERGE_INSTANCE_DEBUG_INFO
+				}
+			}
+		}
+	}
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: this function will do some overall work after all instances have been
+//			transformed and fixed up
+// Input  : none
+// Output : none
+//-----------------------------------------------------------------------------
+void CMapFile::PostLoadInstances( )
+{
+	for( int i = 0; i < num_entities; i++ )
+	{
+		entity_t	*pEntity = &entities[ i ];
+		char		*pClassName = ValueForKey( pEntity, "classname" );
+
+		if( !strcmp( "env_cubemap", pClassName ) )
+		{
+			const char *pSideListStr = ValueForKey( pEntity, "sides" );
+			int size;
+			size = IntForKey( pEntity, "cubemapsize" );
+			Cubemap_InsertSample( pEntity->origin, size );
+			Cubemap_SaveBrushSides( pSideListStr );
+
+			// clear out this entity
+			pEntity->epairs = NULL;
+		}
+	}
 }
 
 
@@ -2276,7 +2652,7 @@ void CMapFile::MergeBrushSides( entity_t *pInstanceEntity, CMapFile *Instance, V
 //			pInstanceEntity - the func_instance that may ahve replace keywords
 // Output : pPair - the value field may be updated
 //-----------------------------------------------------------------------------
-void CMapFile::ReplaceInstancePair( epair_t *pPair, entity_t *pInstanceEntity )
+void CMapFile::ReplaceInstancePair( epair_t *pPair, entity_t *pInstanceEntity, entity_t *pParmsEntity )
 {
 	char	Value[ MAX_KEYVALUE_LEN ], NewValue[ MAX_KEYVALUE_LEN ];
 	bool	Overwritten = false;
@@ -2330,7 +2706,8 @@ void CMapFile::MergeEntities( entity_t *pInstanceEntity, CMapFile *Instance, Vec
 	int						max_entity_id = 0;
 	char					temp[ 2048 ];
 	char					NameFixup[ 128 ];
-	entity_t				*WorldspawnEnt = NULL;
+	entity_t				*pWorldspawnEnt = NULL;
+	entity_t				*pParmsEnt = NULL;
 	GameData::TNameFixup	FixupStyle;
 
 	char *pTargetName = ValueForKey( pInstanceEntity, "targetname" );
@@ -2363,6 +2740,109 @@ void CMapFile::MergeEntities( entity_t *pInstanceEntity, CMapFile *Instance, Vec
 
 	FixupStyle = ( GameData::TNameFixup )( IntForKey( pInstanceEntity, "fixup_style" ) );
 
+	for ( int i = 0; i < Instance->num_entities; i++ )
+	{
+		char *pEntity = ValueForKey( &Instance->entities[ i ], "classname" );
+		if ( Q_stricmp( pEntity, "func_instance_parms" ) == 0 )
+		{
+			pParmsEnt = &Instance->entities[ i ];
+			break;
+		}
+	}
+
+	if ( pParmsEnt != NULL )
+	{
+		int		nReplaceCount = 1;
+
+		for ( epair_t *epParms = pParmsEnt->epairs; epParms != NULL; epParms = epParms->next )
+		{
+			char	ParmTemp[ MAX_KEYVALUE_LEN ];
+			char	*pszParmVariable;
+			char	*pszParmDefaultValue;
+			bool	bFound = false;
+
+			if ( strnicmp( epParms->key, INSTANCE_PARM_KEY, strlen( INSTANCE_PARM_KEY ) ) != 0 )
+			{
+				continue;
+			}
+
+			strcpy( ParmTemp, epParms->value );
+
+			pszParmVariable = ParmTemp;
+
+			char *pPos = strchr( ParmTemp, ' ' );
+			if ( !pPos )
+			{
+				continue;
+			}
+
+			*pPos = 0;
+			pPos++;
+
+			pPos = strchr( pPos, ' ' );
+			if ( !pPos )
+			{
+				continue;
+			}
+
+			pPos++;
+			pszParmDefaultValue = pPos;
+
+			for ( epair_t *epInstance = pInstanceEntity->epairs; epInstance != NULL; epInstance = epInstance->next )
+			{
+				if ( strnicmp( epInstance->key, INSTANCE_VARIABLE_KEY, strlen( INSTANCE_VARIABLE_KEY ) ) == 0 )
+				{
+					char InstanceVariable[ MAX_KEYVALUE_LEN ];
+
+					strcpy( InstanceVariable, epInstance->value );
+
+					char *ValuePos = strchr( InstanceVariable, ' ' );
+					if ( !ValuePos )
+					{
+						continue;
+					}
+					*ValuePos = 0;
+					ValuePos++;
+
+					if ( strcmpi( pszParmVariable, InstanceVariable ) == 0 )
+					{
+						if ( strcmpi( ValuePos, "???" ) == 0 )
+						{
+							epInstance->key[ 0 ] = 0;
+							epInstance->value[ 0 ] = 0;
+						}
+						else
+						{
+							bFound = true;
+						}
+						break;
+					}
+				}
+			}
+
+			if ( !bFound )
+			{
+				char	ParmReplacementKey[ MAX_KEYVALUE_LEN ];
+				char	ParmReplacementValue[ MAX_KEYVALUE_LEN ];
+
+				sprintf( ParmReplacementKey, "%stemp%d", INSTANCE_VARIABLE_KEY, nReplaceCount );
+				nReplaceCount++;
+				sprintf( ParmReplacementValue, "%s %s", pszParmVariable, pszParmDefaultValue );
+
+				epair_t *pNewKV = new epair_t;
+
+				pNewKV->key = new char [ strlen( ParmReplacementKey ) + 1 ];
+				pNewKV->value = new char [ strlen( ParmReplacementValue ) + 1 ];
+
+				strcpy( pNewKV->key, ParmReplacementKey );
+				strcpy( pNewKV->value, ParmReplacementValue );
+
+				pNewKV->next = pInstanceEntity->epairs;
+				pInstanceEntity->epairs = pNewKV;
+			}
+		}
+	}
+
 	for( int i = 0; i < Instance->num_entities; i++ )
 	{
 		entities[ num_entities + i ] = Instance->entities[ i ];
@@ -2383,7 +2863,7 @@ void CMapFile::MergeEntities( entity_t *pInstanceEntity, CMapFile *Instance, Vec
 		char *pEntity = ValueForKey( entity, "classname" );
 		if ( strcmpi( pEntity, "worldspawn" ) == 0 )
 		{
-			WorldspawnEnt = entity;
+			pWorldspawnEnt = entity;
 		}
 		else
 		{
@@ -2394,7 +2874,7 @@ void CMapFile::MergeEntities( entity_t *pInstanceEntity, CMapFile *Instance, Vec
 			// this is done before entity fixup, so fixup may occur on the replaced value.  Not sure if this is a desired order of operation yet.
 			for ( epair_t *ep = entity->epairs; ep != NULL; ep = ep->next )
 			{
-				ReplaceInstancePair( ep, pInstanceEntity );
+				ReplaceInstancePair( ep, pInstanceEntity, pParmsEnt );
 			}
 
 #ifdef MERGE_INSTANCE_DEBUG_INFO
@@ -2448,7 +2928,7 @@ void CMapFile::MergeEntities( entity_t *pInstanceEntity, CMapFile *Instance, Vec
 		Msg( "Instance Entity %d remapped to %d\n", i, num_entities + i );
 		Msg( "   FirstBrush: from %d to %d\n", Instance->entities[ i ].firstbrush, entity->firstbrush );
 		Msg( "   KV Pairs:\n" );
-		for ( epair_t *ep = entity->epairs; ep->next != NULL; ep = ep->next )
+		for ( epair_t *ep = entity->epairs; ep != NULL; ep = ep->next )
 		{
 			Msg( "      %s %s\n", ep->key, ep->value );
 		}
@@ -2459,7 +2939,7 @@ void CMapFile::MergeEntities( entity_t *pInstanceEntity, CMapFile *Instance, Vec
 	// this is done before connection fix up, so fix up may occur on the replaced value.  Not sure if this is a desired order of operation yet.
 	for( CConnectionPairs *Connection = Instance->m_ConnectionPairs; Connection; Connection = Connection->m_Next )
 	{
-		ReplaceInstancePair( Connection->m_Pair, pInstanceEntity );
+		ReplaceInstancePair( Connection->m_Pair, pInstanceEntity, pParmsEnt );
 	}
 
 	for( CConnectionPairs *Connection = Instance->m_ConnectionPairs; Connection; Connection = Connection->m_Next )
@@ -2470,7 +2950,7 @@ void CMapFile::MergeEntities( entity_t *pInstanceEntity, CMapFile *Instance, Vec
 
 		oldValue = Connection->m_Pair->value;
 		strcpy( origValue, oldValue );
-		char *pos = strchr( origValue, ',' );
+		char *pos = strchr( origValue, VMF_IOPARAM_STRING_DELIMITER );
 		if ( pos )
 		{	// null terminate the first field
 			*pos = NULL;
@@ -2483,20 +2963,75 @@ void CMapFile::MergeEntities( entity_t *pInstanceEntity, CMapFile *Instance, Vec
 			strcpy( newValue, temp );
 			if ( pos )
 			{
-				strcat( newValue, "," );
-				strcat( newValue, pos + 1 );
+				int nSize = strlen( newValue );
+				newValue[ nSize ] = VMF_IOPARAM_STRING_DELIMITER;
+				strcpy( &newValue[ nSize + 1 ], pos + 1 );
 			}
 
 			Connection->m_Pair->value = newValue;
 			delete oldValue;
 		}
+
+		// we need to look for operations that have target names as parameters
+		// ugly below:
+		oldValue = Connection->m_Pair->value;
+		strcpy( origValue, oldValue );
+		pos = strchr( origValue, VMF_IOPARAM_STRING_DELIMITER );
+		if ( pos )
+		{
+			pos++;
+			char *pos2 = strchr( pos, VMF_IOPARAM_STRING_DELIMITER );
+			if ( pos2 && strnicmp( pos, "setparent", pos2 - pos ) == 0 )
+			{
+				pos2++;
+				char *pos3 = strchr( pos2, VMF_IOPARAM_STRING_DELIMITER );
+
+				if ( pos3 )
+				{
+					char	szFixupValue[ 4096 ];
+
+					strncpy( szFixupValue, pos2, pos3 - pos2 );
+					szFixupValue[ pos3 - pos2 ] = 0;
+					if ( GD.RemapNameField( szFixupValue, temp, FixupStyle ) )
+					{
+						strcpy( szFixupValue, origValue );
+						strcpy( &szFixupValue[ pos2 - origValue ], temp );
+						strcat( szFixupValue, pos3 );
+
+						newValue = new char[ strlen( szFixupValue ) + 1 ];
+						strcpy( newValue, szFixupValue );
+						Connection->m_Pair->value = newValue;
+						delete oldValue;
+					}
+				}
+			}
+		}
 	}
 
 	num_entities += Instance->num_entities;
 
-	MoveBrushesToWorldGeneral( WorldspawnEnt );
-	WorldspawnEnt->numbrushes = 0;
-	WorldspawnEnt->epairs = NULL;
+	CConnectionPairs	*pLast = m_ConnectionPairs;
+	while( pLast != NULL && pLast->m_Next != NULL )
+	{
+		pLast = pLast->m_Next;
+	}
+
+	if ( pLast == NULL )
+	{
+		m_ConnectionPairs = Instance->m_ConnectionPairs;
+	}
+	else
+	{
+		pLast->m_Next = Instance->m_ConnectionPairs;
+	}
+
+	MoveBrushesToWorldGeneral( pWorldspawnEnt );
+	if ( IntForKey( pInstanceEntity, "toplevel" ) == 1 )
+	{
+		entities[ 0 ].epairs = pWorldspawnEnt->epairs;
+	}
+	pWorldspawnEnt->numbrushes = 0;
+	pWorldspawnEnt->epairs = NULL;
 }
 
 
@@ -2523,6 +3058,213 @@ void CMapFile::MergeOverlays( entity_t *pInstanceEntity, CMapFile *Instance, Vec
 }
 
 
+#define PROXY_ID "instance:"
+#define PROXY_RELAY "OnProxyRelay"
+
+
+void CMapFile::MergeIOProxy( entity_t *pInstanceEntity, CMapFile *Instance, Vector &InstanceOrigin, QAngle &InstanceAngle, matrix3x4_t &InstanceMatrix )
+{
+	char *pTargetName = ValueForKey( pInstanceEntity, "targetname" );
+
+	if ( pTargetName[ 0 ] == 0 )
+	{	// we can only do this for explicity named instances
+		return;
+	}
+
+	entity_t *io_proxy_entity = NULL;
+
+	// find the proxy entity
+	for( int i = 0; i < Instance->num_entities; i++ )
+	{
+		entity_t *entity = &entities[ num_entities - Instance->num_entities + i ];
+
+		char *pEntity = ValueForKey( entity, "classname" );
+		if ( strcmpi( pEntity, "func_instance_io_proxy" ) == 0 )
+		{
+			io_proxy_entity = entity;
+			break;
+		}
+	}
+
+	if ( io_proxy_entity == NULL )
+	{	// if we don't have a proxy, bail
+		return;
+	}
+
+	char *pProxyName = ValueForKey( io_proxy_entity, "targetname" );
+	GameData::TNameFixup FixupStyle = ( GameData::TNameFixup )( IntForKey( pInstanceEntity, "fixup_style" ) );
+	int nNumRelay = 0;
+
+	// rename existing proxy events to be uniquely numbered
+	for ( epair_t *ep = io_proxy_entity->epairs; ep != NULL; ep = ep->next )
+	{
+		if ( strcmpi( ep->key, PROXY_RELAY ) == 0 )
+		{
+			nNumRelay++;
+
+			char *pszOldKey = ep->key;
+			char temp[ MAX_KEYVALUE_LEN ];
+			sprintf( temp, "%s%d", pszOldKey, nNumRelay );
+
+			ep->key = new char[ strlen( temp ) + 1 ];
+			strcpy( ep->key, temp );
+			delete pszOldKey;
+		}
+	}
+
+	// examine all entity connections external to the instance, this is for IO going in to the instance
+	CConnectionPairs	*pConnection = m_ConnectionPairs;
+	while( pConnection != Instance->m_ConnectionPairs )
+	{
+		char	origValue[ MAX_KEYVALUE_LEN ];
+
+		strcpy( origValue, pConnection->m_Pair->value );
+		char *pos = strchr( origValue, VMF_IOPARAM_STRING_DELIMITER );
+		if ( pos != NULL )
+		{	// this is a proxy relay io
+			*pos = 0;
+
+			if ( strcmpi( origValue, pTargetName ) == 0 )
+			{	// which goes to the proxy relay inside the instance
+				char *pszProxy = pos + 1;
+
+				pos = strchr( pszProxy, VMF_IOPARAM_STRING_DELIMITER );
+				if ( pos != NULL )
+				{	// it is properly formatted
+					if ( strnicmp( pszProxy, PROXY_ID, strlen( PROXY_ID ) ) == 0 )
+					{	// the entity linkup is properly formatted   instance:xxxxxxx
+						pszProxy += strlen( PROXY_ID );
+
+						char test[ MAX_KEYVALUE_LEN ], search[ MAX_KEYVALUE_LEN ];
+						strcpy( test, pszProxy );
+						
+						char *Seperator = strchr( test, ';' );
+						*Seperator = NULL;
+
+						GD.RemapNameField( test, search, FixupStyle );
+
+						*Seperator = VMF_IOPARAM_STRING_DELIMITER;
+						char *NextSeperator = strchr( Seperator + 1, VMF_IOPARAM_STRING_DELIMITER );
+						*NextSeperator = 0;
+						strcat( search, Seperator );
+
+						// try and find the matchup entry in the proxy
+						for ( epair_t *ep = io_proxy_entity->epairs; ep != NULL; ep = ep->next )
+						{
+							if ( strnicmp( ep->key, PROXY_RELAY, strlen( PROXY_RELAY ) ) == 0 &&
+								 strnicmp( ep->value, search, strlen( search ) ) == 0 )
+							{	// the key is a relay and the value is identical
+								int len = sprintf( search, "%s%c%s%c%s", pProxyName, VMF_IOPARAM_STRING_DELIMITER, ep->key, VMF_IOPARAM_STRING_DELIMITER, NextSeperator + 1 );
+
+								char *pszOldKey = pConnection->m_Pair->value;
+
+								pConnection->m_Pair->value = new char[ len + 1 ];
+								strcpy( pConnection->m_Pair->value, search );
+								delete pszOldKey;
+
+								break;
+							}
+						}
+					}
+				}
+			}
+		}
+
+		pConnection = pConnection->m_Next;
+	}
+
+	CUtlVector< epair_t * > RenameList, RemoveList;
+
+	// examine all entity connections external to the instance, this is for IO going out of the instance
+	pConnection = m_ConnectionPairs;
+	while( pConnection != Instance->m_ConnectionPairs )
+	{
+		// ugly way to find connections for the func_instance
+		for ( epair_t *ep = pInstanceEntity->epairs; ep != NULL; ep = ep->next )
+		{
+			if ( ep == pConnection->m_Pair )
+			{	// this connection is a member of our func_instance
+				char *pszProxy = ep->key;
+
+				if ( strnicmp( pszProxy, PROXY_ID, strlen( PROXY_ID ) ) == 0 )
+				{	// it is a proxy relay
+					pszProxy += strlen( PROXY_ID );
+
+					char test[ MAX_KEYVALUE_LEN ], search[ MAX_KEYVALUE_LEN ];
+					strcpy( test, pszProxy );
+
+					char *Seperator = strchr( test, ';' );
+					*Seperator = NULL;
+
+					GD.RemapNameField( test, search, FixupStyle );
+
+					char temp[ MAX_KEYVALUE_LEN ];
+
+					nNumRelay++;
+					sprintf( temp, "%s%d", PROXY_RELAY, nNumRelay );
+					// attach the new io to the proxy
+					SetKeyValue( io_proxy_entity, temp, ep->value ); 
+
+					// attempt to find the entity inside of the instance to hook this up to
+					for( int i = 0; i < Instance->num_entities; i++ )
+					{
+						entity_t *entity = &entities[ num_entities - Instance->num_entities + i ];
+
+						char *pszName = ValueForKey( entity, "targetname" );
+						if ( strcmpi( pszName, search ) == 0 )
+						{	// the target name matches, so this is the entity to hook up
+							for ( epair_t *epTarget = entity->epairs; epTarget != NULL; epTarget = epTarget->next )
+							{
+								if ( strcmpi( epTarget->key, Seperator + 1 ) != 0 )
+								{
+									continue;
+								}
+
+								char temp2[ MAX_KEYVALUE_LEN ];
+								strcpy( temp2, epTarget->value );
+
+								char *Pos1 = strchr( temp2, VMF_IOPARAM_STRING_DELIMITER );
+								if ( Pos1 != NULL )
+								{	// we found the key and it is formatted properly
+									*Pos1 = NULL;
+									Pos1 = strchr( Pos1 + 1, VMF_IOPARAM_STRING_DELIMITER );
+									if ( Pos1 != NULL )
+									{	// also continues to be formatted properly
+										char NewKey[ MAX_KEYVALUE_LEN ], NewValue[ MAX_KEYVALUE_LEN ];
+
+										sprintf( NewKey, "%s_NEW", Seperator + 1 );
+										sprintf( NewValue, "%s%c%s%s", temp2, VMF_IOPARAM_STRING_DELIMITER, temp, Pos1 );
+										// attach it to the new proxy
+										epair_t *pNewEP = SetKeyValue( entity, NewKey, NewValue, true );
+										RenameList.AddToHead( pNewEP );
+										RemoveList.AddToHead( epTarget );
+									}
+								}
+							}
+
+							break;
+						}
+					}
+				}
+			}
+		}
+
+		pConnection = pConnection->m_Next;
+	}
+
+	for( int i = 0; i < RenameList.Count(); i++ )
+	{
+		RenameList[ i ]->key[ strlen( RenameList[ i ]->key ) - strlen( "_NEW" ) ] = 0;
+	}
+
+	for( int i = 0; i < RemoveList.Count(); i++ )
+	{
+		RemoveList[ i ]->key[ 0 ] = 0;
+		RemoveList[ i ]->value[ 0 ] = 0;
+	}
+}
+
+
 //-----------------------------------------------------------------------------
 // Purpose: Loads a VMF or MAP file. If the file has a .MAP extension, the MAP
 //			loader is used, otherwise the file is assumed to be in VMF format.
@@ -2531,16 +3273,16 @@ void CMapFile::MergeOverlays( entity_t *pInstanceEntity, CMapFile *Instance, Vec
 bool LoadMapFile( const char *pszFileName )
 {
 	bool				bLoadingManifest = false;
-	CManifest			*pMainManifest = NULL;
 	ChunkFileResult_t	eResult;
-	
+	CManifest			*pMainManifest = NULL;
+
 	//
 	// Dummy this up for the texture handling. This can be removed when old .MAP file
 	// support is removed.
 	//
 	g_nMapFileVersion = 400;
 
-	const char *pszExtension =V_GetFileExtension( pszFileName );
+	const char *pszExtension = V_GetFileExtension( pszFileName );
 	if ( pszExtension && strcmpi( pszExtension, "vmm" ) == 0 )
 	{
 		pMainManifest = new CManifest();
@@ -2566,7 +3308,7 @@ bool LoadMapFile( const char *pszFileName )
 		//
 		// Read the file.
 		//
-		if (eResult == ChunkFile_Ok)
+		if ( eResult == ChunkFile_Ok)
 		{
 			int index = g_Maps.AddToTail( new CMapFile() );
 			g_LoadingMap = g_Maps[ index ];
@@ -2606,6 +3348,7 @@ bool LoadMapFile( const char *pszFileName )
 		else
 		{
 			Error("Error opening %s: %s.\n", pszFileName, File.GetErrorText(eResult));
+			g_MapError.ReportError(File.GetErrorText(eResult));
 		}
 	}
 
@@ -2616,6 +3359,11 @@ bool LoadMapFile( const char *pszFileName )
 		OverlayTransition_UpdateSideLists( g_LoadingMap->m_StartMapWaterOverlays );
 
 		g_LoadingMap->CheckForInstances( pszFileName );
+		if ( g_LoadingMap == g_MainMap )
+		{
+			g_LoadingMap->PostLoadInstances();
+		}
+
 
 		if ( pMainManifest )
 		{
@@ -2708,7 +3456,7 @@ ChunkFileResult_t CMapFile::LoadSideCallback(CChunkFile *pFile, LoadSide_t *pSid
 		side->surf |= pSideInfo->nBaseFlags;
 		pSideInfo->td.flags |= pSideInfo->nBaseFlags;
 
-		if (side->contents & (CONTENTS_PLAYERCLIP|CONTENTS_MONSTERCLIP) )
+		if (side->contents & (CONTENTS_PLAYERCLIP|CONTENTS_MONSTERCLIP|CONTENTS_GRENADECLIP) )
 		{
 			side->contents |= CONTENTS_DETAIL;
 		}
@@ -2718,7 +3466,13 @@ ChunkFileResult_t CMapFile::LoadSideCallback(CChunkFile *pFile, LoadSide_t *pSid
 			side->contents &= ~CONTENTS_DETAIL;
 		}
 		
-		if (!(side->contents & (ALL_VISIBLE_CONTENTS | CONTENTS_PLAYERCLIP|CONTENTS_MONSTERCLIP)  ) )
+ 		if ( g_bConvertStructureToDetail && pSideInfo->pEntity == &entities[0] )
+ 		{
+ 			// Convert world structural brushes to detail if the flag is set
+ 			side->contents |= CONTENTS_DETAIL;
+ 		}
+		
+		if (!(side->contents & (ALL_VISIBLE_CONTENTS | CONTENTS_PLAYERCLIP|CONTENTS_MONSTERCLIP|CONTENTS_BLOCKLOS|CONTENTS_OPAQUE|CONTENTS_GRENADECLIP)  ) )
 		{
 			side->contents |= CONTENTS_SOLID;
 		}
@@ -2861,10 +3615,7 @@ ChunkFileResult_t LoadSideKeyCallback(const char *szKey, const char *szValue, Lo
 			pSideInfo->td.lightmapWorldUnitsPerLuxel = g_defaultLuxelSize; 
 		}
 		pSideInfo->td.lightmapWorldUnitsPerLuxel *= g_luxelScale;
-		if (pSideInfo->td.lightmapWorldUnitsPerLuxel < g_minLuxelScale)
-		{
-			pSideInfo->td.lightmapWorldUnitsPerLuxel = g_minLuxelScale;
-		}
+		pSideInfo->td.lightmapWorldUnitsPerLuxel = MIN( MAX( pSideInfo->td.lightmapWorldUnitsPerLuxel, g_minLuxelScale ), g_maxLuxelScale );
 	}
 	else if (!stricmp(szKey, "contents"))
 	{
@@ -2974,6 +3725,7 @@ ChunkFileResult_t CMapFile::LoadSolidCallback(CChunkFile *pFile, LoadEntity_t *p
 	b->brushnum = nummapbrushes - pLoadEntity->pEntity->firstbrush;
 
 	LoadSide_t SideInfo;
+	SideInfo.pEntity = pLoadEntity->pEntity;
 	SideInfo.pBrush = b;
 	SideInfo.nSideIndex = 0;
 	SideInfo.nBaseContents = pLoadEntity->nBaseContents;
@@ -3020,7 +3772,9 @@ ChunkFileResult_t CMapFile::LoadSolidCallback(CChunkFile *pFile, LoadEntity_t *p
 		//
 		// only do this on the world entity
 		//
-		if ( b->entitynum == 0 )
+
+		// UNDONE (wills) CSGO wants lots of unique textures for different clip brush material types
+		/*if ( b->entitynum == 0 )
 		{
 			if (b->contents & (CONTENTS_PLAYERCLIP|CONTENTS_MONSTERCLIP) )
 			{
@@ -3034,7 +3788,7 @@ ChunkFileResult_t CMapFile::LoadSolidCallback(CChunkFile *pFile, LoadEntity_t *p
 					b->original_sides[i].texinfo = TEXINFO_NODE;
 				}
 			}
-		}
+		}*/
 
 		//
 		// origin brushes are removed, but they set
@@ -3176,129 +3930,3 @@ void CMapFile::TestExpandBrushes (void)
 
 	Error ("can't proceed after expanding brushes");
 }
-
-
-//-----------------------------------------------------------------------------
-// Purpose: load in the displacement info "chunk" from the .map file into the
-//          vbsp map displacement info data structure
-//  Output: return the pointer to the displacement map
-//-----------------------------------------------------------------------------
-mapdispinfo_t *ParseDispInfoChunk( void )
-{
-    int             i, j;
-    int             vertCount;
-    mapdispinfo_t   *pMapDispInfo;
-
-    //
-    // check to see if we exceeded the maximum displacement info list size
-    //
-    if( nummapdispinfo > MAX_MAP_DISPINFO )
-        g_MapError.ReportError( "ParseDispInfoChunk: nummapdispinfo > MAX_MAP_DISPINFO");
-
-    // get a pointer to the next available displacement info slot
-    pMapDispInfo = &mapdispinfo[nummapdispinfo];
-    nummapdispinfo++;
-
-    //
-    // get the chunk opener - "{"
-    //
-    GetToken( false );
-    if( strcmp( token, "{" ) )
-        g_MapError.ReportError( "ParseDispInfoChunk: Illegal Chunk! - {" );
-
-    //
-    //
-    // get the displacement info attribs
-    //
-    //
-
-    // power
-    GetToken( true );
-    pMapDispInfo->power = atoi( token );
-
-    // u and v mapping axes
-    for( i = 0; i < 2; i++ )
-    {
-        GetToken( false );
-        if( strcmp( token, "[" ) )
-            g_MapError.ReportError( "ParseDispInfoChunk: Illegal Chunk! - [" );
-
-        for( j = 0; j < 3; j++ )
-        {
-            GetToken( false );
-
-            if( i == 0 )
-            {
-                pMapDispInfo->uAxis[j] = atof( token );
-            }
-            else
-            {
-                pMapDispInfo->vAxis[j] = atof( token );
-            }
-        }
-
-        GetToken( false );
-        if( strcmp( token, "]" ) )
-            g_MapError.ReportError( "ParseDispInfoChunk: Illegal Chunk! - ]" );
-    }
-
-    // max displacement value
-   	if( g_nMapFileVersion < 350 )
-	{
-		GetToken( false );
-		pMapDispInfo->maxDispDist = atof( token );
-	}
-
-    // minimum tesselation value
-    GetToken( false );
-    pMapDispInfo->minTess = atoi( token );
-
-    // light smoothing angle
-    GetToken( false );
-    pMapDispInfo->smoothingAngle = atof( token );
-
-    //
-    // get the displacement info displacement normals
-    //
-    GetToken( true );
-    pMapDispInfo->vectorDisps[0][0] = atof( token );
-    GetToken( false );
-    pMapDispInfo->vectorDisps[0][1] = atof( token );
-    GetToken( false );
-    pMapDispInfo->vectorDisps[0][2] = atof( token );
-
-    vertCount = ( ( ( 1 << pMapDispInfo->power ) + 1 ) * ( ( 1 << pMapDispInfo->power ) + 1 ) );
-    for( i = 1; i < vertCount; i++ )
-    {
-        GetToken( false );
-        pMapDispInfo->vectorDisps[i][0] = atof( token );
-        GetToken( false );
-        pMapDispInfo->vectorDisps[i][1] = atof( token );
-        GetToken( false );
-        pMapDispInfo->vectorDisps[i][2] = atof( token );
-    }
-
-    //
-    // get the displacement info displacement values
-    //
-    GetToken( true );
-    pMapDispInfo->dispDists[0] = atof( token );
-
-    for( i = 1; i < vertCount; i++ )
-    {
-        GetToken( false );
-        pMapDispInfo->dispDists[i] = atof( token );
-    }
-
-    //
-    // get the chunk closer - "}"
-    //
-    GetToken( true );
-    if( strcmp( token, "}" ) )
-        g_MapError.ReportError( "ParseDispInfoChunk: Illegal Chunk! - }" );
-    
-    // return the index of the displacement info slot
-    return pMapDispInfo;
-}
-
-

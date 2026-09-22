@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2004, Valve Corporation, All rights reserved. =======
 //
 // The transform operator class - shortcut to setting transform values from floats
 //
@@ -47,8 +47,8 @@ void CDmeTransformOperator::Operate()
 	if ( pTransform == NULL )
 		return;
 
-	Vector     position    = pTransform->GetValue< Vector     >( "position" );
-	Quaternion orientation = pTransform->GetValue< Quaternion >( "orientation" );
+	Vector     position    = pTransform->GetValue< Vector     >( TRANSFORM_POSITION );
+	Quaternion orientation = pTransform->GetValue< Quaternion >( TRANSFORM_ORIENTATION );
 
 	position.x = m_positionX.Get();
 	position.y = m_positionY.Get();
@@ -59,8 +59,8 @@ void CDmeTransformOperator::Operate()
 	orientation.z = m_orientationZ.Get();
 	orientation.w = m_orientationW.Get();
 
-	pTransform->SetValue( "position", position );
-	pTransform->SetValue( "orientation", orientation );
+	pTransform->SetValue( TRANSFORM_POSITION, position );
+	pTransform->SetValue( TRANSFORM_ORIENTATION, orientation );
 }
 
 // hack to avoid MSVC complaining about multiply defined symbols
@@ -92,8 +92,8 @@ void CDmeTransformOperator::GetOutputAttributes( CUtlVector< CDmAttribute * > &a
 	if ( pTransform == NULL )
 		return;
 
-	AddAttr( attrs, pTransform->GetAttribute( "position" ) );
-	AddAttr( attrs, pTransform->GetAttribute( "orientation" ) );
+	AddAttr( attrs, pTransform->GetAttribute( TRANSFORM_POSITION ) );
+	AddAttr( attrs, pTransform->GetAttribute( TRANSFORM_ORIENTATION ) );
 }
 
 void CDmeTransformOperator::SetTransform( CDmeTransform *pTransform )

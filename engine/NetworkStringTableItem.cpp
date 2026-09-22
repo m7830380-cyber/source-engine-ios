@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -199,7 +199,7 @@ bool CNetworkStringTableItem::SetUserData( int tick, int length, const void *use
 
 	if ( length > 0 )
 	{
-		m_pUserData = new unsigned char[ALIGN_VALUE( length, 4 )];
+		m_pUserData = new unsigned char[ length ];
 		Q_memcpy( m_pUserData, userData, length );
 	}
 	else

@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -118,7 +118,7 @@ template < class FunctionType >
 class CDynamicFunctionMustInit : public CDynamicFunction < FunctionType >
 {
 private:  // forbid default constructor.
-	CDynamicFunctionMustInit() = default;
+	CDynamicFunctionMustInit() {}
 
 public:
 	CDynamicFunctionMustInit(const char *libname, const char *fn, FunctionType fallback=NULL)

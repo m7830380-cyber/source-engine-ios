@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -7,8 +7,8 @@
 #include "stdafx.h"
 #include "GlobalFunctions.h"
 #include "History.h"
-#include "materialsystem/imaterialsystem.h"
-#include "materialsystem/imesh.h"
+#include "materialsystem/IMaterialSystem.h"
+#include "materialsystem/IMesh.h"
 #include "MainFrm.h"
 #include "MapDefs.h"
 #include "MapDoc.h"
@@ -97,7 +97,7 @@ void Morph3D::OnActivate()
 		const CMapObjectList *pSelection = m_pDocument->GetSelection()->GetList();
 		for (int i = 0; i < pSelection->Count(); i++)
 		{
-			CMapClass *pobj = pSelection->Element(i);
+			CMapClass *pobj = (CUtlReference< CMapClass >)pSelection->Element(i);
 			if (pobj->IsMapClass(MAPCLASS_TYPE(CMapSolid)))
 			{
 				SelectObject((CMapSolid *)pobj, scSelect);
@@ -867,7 +867,7 @@ bool Morph3D::UpdateTranslation(const Vector &vUpdate, UINT uFlags)
 	if ( !Tool3D::UpdateTranslation( vUpdate, uFlags) )
 		return false;
 
-	bool bSnap =  uFlags & constrainSnap;
+	bool bSnap = ( uFlags & constrainSnap ) ? true : false;
 	
 	if (m_DragHandle.ssh == SSH_SCALEORIGIN)
 	{
@@ -1136,7 +1136,6 @@ void Morph3D::GetSelectedCenter(Vector& pt)
 		{
 			MORPHHANDLE *mh = &m_SelectedHandles[i];
 			mh->pStrucSolid->GetHandleInfo(&hi, mh->ssh);
-
 			box.UpdateBounds(hi.pos);
 		}
 	}
@@ -1266,7 +1265,7 @@ void Morph3D::UpdateScale()
 		{
 			float delta = pOrigPos[d] - m_ScaleOrg[d];
 			// YWB rounding
-			newpos[d] = /*V_rint*/(m_ScaleOrg[d] + (delta * fScale));
+			newpos[d] = /*rint*/(m_ScaleOrg[d] + (delta * fScale));
 		}
 
 		hnd.pStrucSolid->SetVertexPosition(hi.iIndex, newpos[0], 
@@ -1946,59 +1945,6 @@ bool Morph3D::OnLMouseUp3D(CMapView3D *pView, UINT nFlags, const Vector2D &vPoin
 	ReleaseCapture();
 
 	return true;
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: Snap the selected handles to the grid
-// Input  : 
-//-----------------------------------------------------------------------------
-void Morph3D::SnapSelectedToGrid( int nGridSpacing )
-{
-	CUtlVector<MORPHHANDLE> vecHandles;
-	
-	if ( GetSelectedHandleCount() != 0 )
-	{
-		// Remember selected verts
-		vecHandles.AddVectorToTail( m_SelectedHandles );
-	}
-	else
-	{
-		// None selected.  Do nothing
-		return;
-	}
-
-	FOR_EACH_VEC( vecHandles, i )
-	{
-		// Set as sole-selection
-		SelectHandle( &vecHandles[i], scSelect | scClear );
-
-		// Get current position
-		Vector vCurPos;
-		SSHANDLEINFO hi;
-		vecHandles[i].pStrucSolid->GetHandleInfo(&hi, vecHandles[i].ssh);
-		vCurPos = hi.pos;
-
-		// Get snapped position
-		Vector vSnappedPos( V_rint(vCurPos[0] / nGridSpacing) * nGridSpacing,
-							V_rint(vCurPos[1] / nGridSpacing) * nGridSpacing,
-							V_rint(vCurPos[2] / nGridSpacing) * nGridSpacing );
-
-		// Get delta to move original position into snapped position
-		Vector vDelta = vSnappedPos - vCurPos;
-
-		// Move!
-		MoveSelectedHandles( vDelta );
-	}
-
-	// Re-select all the handles
-	SelectHandle( NULL, scClear );
-	FOR_EACH_VEC( vecHandles, i )
-	{
-		SelectHandle( &vecHandles[i], scSelect );
-	}
-
-	FinishTranslation( true );
-	m_pDocument->SetModifiedFlag();
 }
 
 

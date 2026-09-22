@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: A helper that repesents a player hull swept through space between a
 //			start and end point. It writes out both points as keyvalues to the entity.
@@ -9,8 +9,8 @@
 #include "Box3D.h"
 #include "GlobalFunctions.h"
 #include "fgdlib/HelperInfo.h"
-#include "materialsystem/imaterialsystem.h"
-#include "materialsystem/imesh.h"
+#include "materialsystem/IMaterialSystem.h"
+#include "materialsystem/IMesh.h"
 #include "MainFrm.h"			// For refreshing the object properties dialog
 #include "MapDoc.h"
 #include "MapSweptPlayerHull.h"
@@ -432,7 +432,7 @@ void CMapSweptPlayerHull::OnParentKeyChanged(const char *szKey, const char *szVa
 	if (!stricmp(szKey, "point0"))
 	{
 		Vector vecOrigin;
-		sscanf(szValue, "%f %f %f", &vecOrigin.x, &vecOrigin.y, &vecOrigin.z );
+		sscanf(szValue, "%f %f %f, %f %f %f", &vecOrigin.x, &vecOrigin.y, &vecOrigin.z );
 
 		vecOrigin += playerFixup;
 
@@ -442,7 +442,7 @@ void CMapSweptPlayerHull::OnParentKeyChanged(const char *szKey, const char *szVa
 	else if (!stricmp(szKey, "point1"))
 	{
 		Vector vecOrigin;
-		sscanf(szValue, "%f %f %f", &vecOrigin.x, &vecOrigin.y, &vecOrigin.z );
+		sscanf(szValue, "%f %f %f, %f %f %f", &vecOrigin.x, &vecOrigin.y, &vecOrigin.z );
 
 		vecOrigin += playerFixup;
 

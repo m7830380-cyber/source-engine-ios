@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//============ Copyright (c) Valve Corporation, All rights reserved. ============
 //
 // ETW (Event Tracing for Windows) profiling helpers.
 // This allows easy insertion of Generic Event markers into ETW/xperf tracing
@@ -9,9 +9,9 @@
 #include "pch_tier0.h"
 #include "tier0/etwprof.h"
 
-#ifdef	ETW_MARKS_ENABLED
-
 #include <memory>
+
+#ifdef	ETW_MARKS_ENABLED
 
 // After building the DLL if it has never been registered on this machine or
 // if the providers have changed you need to go:
@@ -108,7 +108,7 @@ ULONG EVNTAPI EventRegister( LPCGUID ProviderId, PENABLECALLBACK EnableCallback,
 	if ( g_ETWRegister.m_pEventRegister )
 		return g_ETWRegister.m_pEventRegister( ProviderId, EnableCallback, CallbackContext, RegHandle );
 
-	// RegHandle is an _Out_ parameter and must always be initialized.
+	// We are contractually obliged to initialize this.
 	*RegHandle = 0;
 	return 0;
 }
@@ -149,6 +149,13 @@ static float QPCToMS( int64 nDelta )
 }
 
 // Public functions for emitting ETW events.
+
+bool ETWIsTracingEnabled()
+{
+	if ( VALVE_MAIN_Context.IsEnabled )
+		return true;
+	return false;
+}
 
 int64 ETWMark( const char *pMessage )
 {

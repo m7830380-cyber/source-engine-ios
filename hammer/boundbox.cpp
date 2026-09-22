@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -213,7 +213,7 @@ void BoundBox::GetBoundsSize(Vector& size)
 //-----------------------------------------------------------------------------
 static int Snap(/*int*/ float iValue, int iGridSize)
 {
-	return (int)(V_rint(iValue/iGridSize) * iGridSize);
+	return (int)(rint(iValue/iGridSize) * iGridSize);
 }
 
 

@@ -5,16 +5,16 @@
 //-----------------------------------------------------------------------------
 
 $Macro SRCDIR		".."
-$Macro OUTBINDIR	"$LIBPUBLIC"
+$Macro OUTBINDIR	"$SRCDIR\..\game\bin"
 $Macro OUTBINNAME	"hammer"
 
-$Include "$SRCDIR\vpc_scripts\source_exe_base.vpc"
+$Include "$SRCDIR\vpc_scripts\source_exe_win_win32_base.vpc"
 
 $Configuration
 {
 	$Compiler
 	{
-		$AdditionalOptions					"$BASE /EHa"
+		$AdditionalOptions					"/EHa"
 	}
 
 	$Linker [$WIN32]
@@ -38,6 +38,7 @@ $Project "Hammer_launcher"
 	
 	$Folder	"Link Libraries"
 	{
-		$Lib appframework
+		$Lib	"$SRCDIR\lib\public\appframework"
+		$Lib	"$SRCDIR\lib\common\Steam"
 	}
 }

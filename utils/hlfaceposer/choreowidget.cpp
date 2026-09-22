@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -75,20 +75,6 @@ int	CChoreoWidget::GetItemHeight( void )
 //-----------------------------------------------------------------------------
 void CChoreoWidget::LocalToScreen( int& mx, int& my )
 {
-	/*
-	HWND wnd = (HWND)getHandle();
-	if ( !wnd )
-		return;
-
-	POINT pt;
-	pt.x = (short)mx;
-	pt.y = (short)my;
-	
-	ClientToScreen( wnd, &pt );
-	
-	mx = pt.x;
-	my = pt.y;
-	*/
 }
 
 //-----------------------------------------------------------------------------

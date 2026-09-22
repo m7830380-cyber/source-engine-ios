@@ -5,10 +5,10 @@
 //-----------------------------------------------------------------------------
 
 $Macro SRCDIR		"..\.."
-$Macro OUTBINDIR	"$LIBPUBLIC"
+$Macro OUTBINDIR	"$SRCDIR\..\game\bin"
 $Macro OUTBINNAME	"vtex"
 
-$Include "$SRCDIR\vpc_scripts\source_exe_con_base.vpc"
+$Include "$SRCDIR\vpc_scripts\source_exe_con_win32_base.vpc"
 
 $Configuration
 {
@@ -34,11 +34,11 @@ $Project "Vtex_launcher"
 	$Folder	"Header Files"
 	{
 		$File	"$SRCDIR\public\ilaunchabledll.h"
-		$File	"$SRCDIR\public\tier1\interface.h"
 	}
 
 	$Folder	"Link Libraries"
 	{
-		$Lib tier2
+		$File	"$SRCDIR\lib\public\tier2.lib"
+		$File	"$SRCDIR\lib\public\mathlib.lib"
 	}
 }

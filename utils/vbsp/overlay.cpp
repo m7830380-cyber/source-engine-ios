@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -51,14 +51,17 @@ int Overlay_GetFromEntity( entity_t *pMapEnt )
 	{
 		pMapOverlay->flFadeDistMaxSq *= pMapOverlay->flFadeDistMaxSq;
 	}
+	
+	pMapOverlay->nMinCPULevel = IntForKey( pMapEnt, "mincpulevel" );
+	pMapOverlay->nMaxCPULevel = IntForKey( pMapEnt, "maxcpulevel" );
+	pMapOverlay->nMinGPULevel = IntForKey( pMapEnt, "mingpulevel" );
+	pMapOverlay->nMaxGPULevel = IntForKey( pMapEnt, "maxgpulevel" );
 
 	GetVectorForKey( pMapEnt, "BasisOrigin", pMapOverlay->vecOrigin );
 
 	pMapOverlay->m_nRenderOrder = IntForKey( pMapEnt, "RenderOrder" );
 	if ( pMapOverlay->m_nRenderOrder < 0 || pMapOverlay->m_nRenderOrder >= OVERLAY_NUM_RENDER_ORDERS )
-		Error( "Overlay (%s) at %f %f %f has invalid render order (%d).\n", ValueForKey( pMapEnt, "material" ),
-				pMapOverlay->vecOrigin.x, pMapOverlay->vecOrigin.y, pMapOverlay->vecOrigin.z,
-				pMapOverlay->m_nRenderOrder );
+		Error( "Overlay (%s) at %f %f %f has invalid render order (%d).\n", ValueForKey( pMapEnt, "material" ), pMapOverlay->vecOrigin );
 
 	GetVectorForKey( pMapEnt, "uv0", pMapOverlay->vecUVPoints[0] );
 	GetVectorForKey( pMapEnt, "uv1", pMapOverlay->vecUVPoints[1] );
@@ -215,6 +218,7 @@ void Overlay_EmitOverlayFace( mapoverlay_t *pMapOverlay )
 
 	doverlay_t *pOverlay = &g_Overlays[g_nOverlayCount];
 	doverlayfade_t *pOverlayFade = &g_OverlayFades[g_nOverlayCount];
+	doverlaysystemlevel_t *pOverlaySystemLevel = &g_OverlaySystemLevels[g_nOverlayCount];
 
 	g_nOverlayCount++;
 
@@ -289,6 +293,14 @@ void Overlay_EmitOverlayFace( mapoverlay_t *pMapOverlay )
 	{
 		pOverlayFade->flFadeDistMinSq = pMapOverlay->flFadeDistMinSq;
 		pOverlayFade->flFadeDistMaxSq = pMapOverlay->flFadeDistMaxSq;
+	}
+
+	if ( pOverlaySystemLevel )
+	{
+		pOverlaySystemLevel->nMinCPULevel = pMapOverlay->nMinCPULevel;
+		pOverlaySystemLevel->nMaxCPULevel = pMapOverlay->nMaxCPULevel;
+		pOverlaySystemLevel->nMinGPULevel = pMapOverlay->nMinGPULevel;
+		pOverlaySystemLevel->nMaxGPULevel = pMapOverlay->nMaxGPULevel;
 	}
 }
 

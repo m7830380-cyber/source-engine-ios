@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -6,7 +6,7 @@
 //=============================================================================//
 
 #include <vgui/KeyCode.h>
-#include <KeyValues.h>
+#include <keyvalues.h>
 
 #include <vgui_controls/Button.h>
 #include <vgui_controls/PropertyDialog.h>
@@ -115,36 +115,37 @@ void PropertyDialog::PerformLayout()
 	GetClientArea(x, y, wide, tall);
 	_propertySheet->SetBounds(x, y, wide, tall - iBottom);
 
-	// calc button size and indent for proportionality 
-	int iBtnWide = 72;
-	int iBtnTall = 24;
-	int iWideIndent = 8;
-	int iTallIndent = 4;
-	if (IsProportional())
+	int nRightOffset = 80;
+	int nBottomOffset = 28;
+	int nButtonWidth = 72;
+	int nButtonHeight = 24;
+	int nButtonGap = 80;
+	if ( IsProportional() )
 	{
-		iBtnWide = scheme()->GetProportionalScaledValueEx(GetScheme(), iBtnWide);
-		iBtnTall = scheme()->GetProportionalScaledValueEx(GetScheme(), iBtnTall);
-		iWideIndent = scheme()->GetProportionalScaledValueEx(GetScheme(), iWideIndent);
-		iTallIndent = scheme()->GetProportionalScaledValueEx(GetScheme(), iTallIndent);
+		nRightOffset = scheme()->GetProportionalScaledValueEx( GetScheme(), nRightOffset );
+		nBottomOffset = scheme()->GetProportionalScaledValueEx( GetScheme(), nBottomOffset );
+		nButtonWidth = scheme()->GetProportionalScaledValueEx( GetScheme(), nButtonWidth );
+		nButtonHeight = scheme()->GetProportionalScaledValueEx( GetScheme(), nButtonHeight );
+		nButtonGap = scheme()->GetProportionalScaledValueEx( GetScheme(), nButtonGap );
 	}
 
 	// move the buttons to the bottom-right corner
-	int xpos = x + wide - iBtnWide - iWideIndent;
-	int ypos = tall + y - iBtnTall - iTallIndent;
+	int xpos = x + wide - nRightOffset;
+	int ypos = tall + y - nBottomOffset;
 
 	if (_applyButton->IsVisible())
 	{
-		_applyButton->SetBounds(xpos, ypos, iBtnWide, iBtnTall);
-		xpos -= iBtnWide + iWideIndent;
+		_applyButton->SetBounds(xpos, ypos, nButtonWidth, nButtonHeight );
+		xpos -= nButtonGap;
 	}
 
 	if (_cancelButton->IsVisible())
 	{
-		_cancelButton->SetBounds(xpos, ypos, iBtnWide, iBtnTall);
-		xpos -= iBtnWide + iWideIndent;
+		_cancelButton->SetBounds(xpos, ypos, nButtonWidth, nButtonHeight );
+		xpos -= nButtonGap;
 	}
 
-	_okButton->SetBounds(xpos, ypos, iBtnWide, iBtnTall);
+	_okButton->SetBounds(xpos, ypos, nButtonWidth, nButtonHeight );
 
 	_propertySheet->InvalidateLayout(); // tell the propertysheet to redraw!
 	Repaint();

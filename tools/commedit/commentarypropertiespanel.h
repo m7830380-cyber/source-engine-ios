@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -55,6 +55,9 @@ private:
 	// Populates the info_target fields
 	void PopulateInfoTargetFields();
 
+	// Populates the info_remarkable fields
+	void PopulateInfoRemarkableFields();
+
 	// Text to attribute...
 	void TextEntryToAttribute( vgui::TextEntry *pEntry, const char *pAttributeName );
 	void TextEntriesToVector( vgui::TextEntry *pEntry[3], const char *pAttributeName );
@@ -62,6 +65,7 @@ private:
 	// Updates entity state when text fields change
 	void UpdateCommentaryNode();
 	void UpdateInfoTarget();
+	void UpdateInfoRemarkable();
 
 	// Called when the audio picker button is selected
 	void PickSound();
@@ -83,8 +87,10 @@ private:
 
 	vgui::EditablePanel *m_pCommentaryNodeScroll;
 	vgui::EditablePanel *m_pInfoTargetScroll;
+	vgui::EditablePanel *m_pInfoRemarkableScroll;
 	vgui::EditablePanel *m_pCommentaryNode;
 	vgui::EditablePanel *m_pInfoTarget;
+	vgui::EditablePanel *m_pInfoRemarkable;
 
 	vgui::TextEntry *m_pNodeName;
 	vgui::Button *m_pSoundFilePicker;
@@ -105,6 +111,10 @@ private:
 	vgui::TextEntry *m_pTargetName;
 	vgui::TextEntry *m_pTargetPosition[3];
 	vgui::TextEntry *m_pTargetOrientation[3];
+
+	vgui::TextEntry *m_pInfoRemarkableName;
+	vgui::TextEntry *m_pInfoRemarkableSubject;
+	vgui::TextEntry *m_pRemarkablePosition[3];
 
 	CDmeHandle< CDmeCommentaryNodeEntity > m_hEntity;
 };

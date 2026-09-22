@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -12,15 +12,17 @@
 
 #include "vgui_controls/editablepanel.h"
 #include "tier1/utlstring.h"
-#include "particles/particles.h"
 
 
 //-----------------------------------------------------------------------------
 // Forward declarations
 //-----------------------------------------------------------------------------
 class CPetDoc;
+class CPetTool;
 class CDmeParticleSystemDefinition;
 class CUndoScopeGuard;
+class CParticleSnapshotGrid;
+
 namespace vgui
 {
 	class ComboBox;
@@ -46,27 +48,30 @@ public:
 	// Inherited from Panel
 	virtual void OnCommand( const char *pCommand );
 	virtual void OnKeyCodeTyped( vgui::KeyCode code );
-	MESSAGE_FUNC_CHARPTR( OnFileSelected, "FileSelected", fullpath );
+
 	// Methods related to updating the listpanel
-	void UpdateParticleSystemList();
+	void UpdateParticleSystemList( bool bRetainSelection = true );
 
 	// Select a particular node
 	void SelectParticleSystem( CDmeParticleSystemDefinition *pParticleSystem );
 
-	// Copy, paste.
-	void CopyToClipboard( );
-	void PasteFromClipboard( );
+	// paste.
+	void PasteFromClipboard();
 
 private:
-	// Messages handled
-	MESSAGE_FUNC( OnItemDeselected, "ItemDeselected" );
-	MESSAGE_FUNC( OnItemSelected, "ItemSelected" );
+	MESSAGE_FUNC( OnCopy, "OnCopy" );
+	KEYBINDING_FUNC_NODECLARE( edit_copy, KEY_C, vgui::MODIFIER_CONTROL, OnCopy, "#edit_copy_help", 0 );
+
 	MESSAGE_FUNC_PARAMS( OnInputCompleted, "InputCompleted", kv );
 
-	void ReplaceDef_r( CUndoScopeGuard& guard, CDmeParticleSystemDefinition *pDef );
+	MESSAGE_FUNC( OnParticleSystemSelectionChanged, "ParticleSystemSelectionChanged" );
 
-	// Gets the ith selected particle system
-	CDmeParticleSystemDefinition* GetSelectedParticleSystem( int i );
+	void ReplaceDef_r( CUndoScopeGuard& guard, CDmeParticleSystemDefinition *pDef );
+	void PasteOperator( CUndoScopeGuard& guard, class CDmeParticleFunction *pDef );
+	void PasteDefinitionBody( CUndoScopeGuard& guard, CDmeParticleSystemDefinition *pDef );
+
+	// Gets the selected particle system
+	CDmeParticleSystemDefinition* GetSelectedParticleSystem( int nIdx );
 
 	// Called when the selection changes
 	void UpdateParticleSystemSelection();
@@ -74,16 +79,14 @@ private:
 	// Deletes selected particle systems
 	void DeleteParticleSystems();
 
-	// Create from KV
-	void LoadKVSection( CDmeParticleSystemDefinition *pNew, KeyValues *pOverridesKv, ParticleFunctionType_t eType );
-	CDmeParticleSystemDefinition* CreateParticleFromKV( KeyValues *pKeyValue );
-	void CreateParticleSystemsFromKV( const char *pFilepath );
-
 	// Shows the most recent selected object in properties window
 	void OnProperties();
 
 	CPetDoc *m_pDoc;
-	vgui::ListPanel		*m_pParticleSystemsDefinitions;
+	CParticleSnapshotGrid *m_pSystemGrid;
+	vgui::Button *m_pCreateButton;
+	vgui::Button *m_pDeleteButton;
+	vgui::Button *m_pCopyButton;
 };
 
 

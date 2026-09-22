@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -83,7 +83,7 @@ CChoreoActorWidget::CChoreoActorWidget( CChoreoWidget *parent )
 //-----------------------------------------------------------------------------
 CChoreoActorWidget::~CChoreoActorWidget( void )
 {
-	for ( int i = 0 ; i < m_Channels.Size(); i++ )
+	for ( int i = 0 ; i < m_Channels.Count(); i++ )
 	{
 		CChoreoChannelWidget *c = m_Channels[ i ];
 		delete c;
@@ -176,7 +176,7 @@ void CChoreoActorWidget::Layout( RECT& rc )
 	rcChannels.top += ACTOR_NAME_HEIGHT;
 
 	// Create objects for children
-	for ( int i = 0; i < m_Channels.Size(); i++ )
+	for ( int i = 0; i < m_Channels.Count(); i++ )
 	{
 		CChoreoChannelWidget *channel = m_Channels[ i ];
 		Assert( channel );
@@ -203,7 +203,7 @@ int	CChoreoActorWidget::GetItemHeight( void )
 	int itemHeight = ACTOR_NAME_HEIGHT + 2;
 	if ( m_bShowChannels )
 	{
-		for ( int i = 0; i < m_Channels.Size(); i++ )
+		for ( int i = 0; i < m_Channels.Count(); i++ )
 		{
 			CChoreoChannelWidget *channel = m_Channels[ i ];
 			itemHeight += channel->GetItemHeight();
@@ -232,7 +232,7 @@ void CChoreoActorWidget::redraw( CChoreoWidgetDrawHelper& drawHelper )
 		rcBg.right = rcBg.left + m_pView->GetLabelWidth() ;
 		InflateRect( &rcBg, -3, -5 );
 
-		drawHelper.DrawFilledRect( RGB( 220, 220, 220 ), rcBg );
+		drawHelper.DrawFilledRect( Color( 220, 220, 220 ), rcBg );
 	}
 
 	RECT rcText;
@@ -247,7 +247,7 @@ void CChoreoActorWidget::redraw( CChoreoWidgetDrawHelper& drawHelper )
 
 	drawHelper.DrawColoredLine( COLOR_CHOREO_ACTORLINE, PS_SOLID, 1, 0, rcClient.bottom-2,
 		rcClient.right, rcClient.bottom-2 );
-	drawHelper.DrawColoredLine( RGB(200,206,255), PS_SOLID, 1, 0, rcClient.bottom-1,
+	drawHelper.DrawColoredLine( Color(200,206,255), PS_SOLID, 1, 0, rcClient.bottom-1,
 		rcClient.right, rcClient.bottom-1 );
 
 	drawHelper.DrawColoredLine( COLOR_CHOREO_DIVIDER, PS_SOLID, 1, rcText.right, rcClient.top,
@@ -257,7 +257,7 @@ void CChoreoActorWidget::redraw( CChoreoWidgetDrawHelper& drawHelper )
 
 	rcName.left += 18;
 	char n[ 512 ];
-	V_strcpy_safe( n, actor->GetName() );
+	strcpy( n, actor->GetName() );
 
 	drawHelper.DrawColoredText( "Arial", 
 		m_pView->GetFontSize() + 5, 
@@ -394,7 +394,7 @@ CChoreoChannelWidget *CChoreoActorWidget::GetChannel( int num )
 //-----------------------------------------------------------------------------
 int CChoreoActorWidget::GetNumChannels( void )
 {
-	return m_Channels.Size();
+	return m_Channels.Count();
 }
 
 //-----------------------------------------------------------------------------

@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -10,7 +10,7 @@
 #include <vgui/IPanel.h>
 #include <vgui/IInput.h>
 #include <vgui/ISurface.h>
-#include <KeyValues.h>
+#include <keyvalues.h>
 #include <vgui/IVGui.h>
 
 #include <vgui_controls/Controls.h>
@@ -35,7 +35,6 @@ MenuButton::MenuButton(Panel *parent, const char *panelName, const char *text) :
 	m_pDropMenuImage = NULL;
 	m_nImageIndex = -1;
 	_openOffsetY = 0;
-	m_bDropMenuButtonStyle = true;  // set to true so SetDropMenuButtonStyle() forces real init.
 
 	SetDropMenuButtonStyle( false );
 	SetUseCaptureMouse( false );
@@ -155,7 +154,7 @@ void MenuButton::DoClick()
 		int contentW, contentH;
 		m_pDropMenuImage->GetContentSize( contentW, contentH );
 		int drawX = GetWide() - contentW - 2;
-		if ( mx <= drawX || !OnCheckMenuItemCount() )
+		if ( mx <= drawX || ( OnCheckMenuItemCount() <= 1 ) )
 		{
 			// Treat it like a "regular" button click
 			BaseClass::DoClick();
@@ -314,11 +313,19 @@ void MenuButton::Paint(void)
 
 	int contentW, contentH;
 	m_pDropMenuImage->GetContentSize( contentW, contentH );
-	m_pDropMenuImage->SetColor( IsEnabled() ? GetButtonFgColor() : GetDisabledFgColor1() );
+
+	int nItemCount = OnCheckMenuItemCount();
+	Color clr = GetButtonFgColor();
+	if ( !IsEnabled() || nItemCount <= 1 )
+	{
+		clr = GetDisabledFgColor1();
+	}
+
+	m_pDropMenuImage->SetColor( clr );
 	
 	int drawX = GetWide() - contentW - 2;
 
-	surface()->DrawSetColor(  IsEnabled() ? GetButtonFgColor() : GetDisabledFgColor1() );
+	surface()->DrawSetColor( clr );
 	surface()->DrawFilledRect( drawX, 3, drawX + 1, GetTall() - 3 );
 }
 
@@ -332,7 +339,7 @@ void MenuButton::OnCursorMoved( int x, int y )
 	int contentW, contentH;
 	m_pDropMenuImage->GetContentSize( contentW, contentH );
 	int drawX = GetWide() - contentW - 2;
-	if ( x <= drawX || !OnCheckMenuItemCount() )
+	if ( x <= drawX || ( OnCheckMenuItemCount() <= 1 ) )
 	{
 		SetButtonActivationType(ACTIVATE_ONPRESSEDANDRELEASED);
 		SetUseCaptureMouse(true);

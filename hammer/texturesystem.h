@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Texture management functions. Exposes a list of available textures,
 //			texture groups, and Most Recently Used textures.
@@ -106,7 +106,7 @@ struct TextureContext_t
 class CMaterialFileChangeWatcher : private CFileChangeWatcher::ICallbacks
 {
 public:
-	void Init( CTextureSystem *pSystem, intp context );
+	void Init( CTextureSystem *pSystem, int context );
 	void Update();	// Call this periodically to update.
 
 private:
@@ -192,6 +192,9 @@ public:
 	// Opens the source file associated with a material.
 	void OpenSource( const char *pMaterialName );
 
+	// Opens explorer dialog and selects the source file
+	void ExploreToSource( const char *pMaterialName );
+
 	// Reload individual textures.
 	void ReloadTextures( const char *pFilterName );
 
@@ -214,7 +217,7 @@ protected:
 		k_eFileTypeVMT,
 		k_eFileTypeVTF
 	};
-	void OnFileChange( const char *pFilename, intp context, EFileType eFileType );
+	void OnFileChange( const char *pFilename, int context, EFileType eFileType );
 	void ReloadMaterialsUsingTexture( ITexture *pTestTexture );
 
 	static bool GetFileTypeFromFilename( const char *pFilename, CTextureSystem::EFileType *pFileType );

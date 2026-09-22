@@ -75,7 +75,7 @@ INLINE_ON_PS3 const char *CThread::GetName()
 #elif defined( _PS3 )
 		snprintf( m_szName, sizeof(m_szName) - 1, "Thread(%p)", this );
 #elif defined( POSIX )
-		_snprintf( m_szName, sizeof(m_szName) - 1, "Thread(%p/0x%p)", this, (void*)m_threadId );
+		_snprintf( m_szName, sizeof(m_szName) - 1, "Thread(%p/0x%p)", this, m_threadId );
 #endif
 		m_szName[sizeof(m_szName) - 1] = 0;
 	}
@@ -120,7 +120,7 @@ INLINE_ON_PS3 bool CThread::Start( unsigned nBytesStack, ThreadPriorityEnum_t nP
 	}
 #endif
 
-#ifdef _WIN32
+#ifdef PLATFORM_WINDOWS
 	m_hThread = (HANDLE)CreateThread( NULL,
 		nBytesStack,
 		(LPTHREAD_START_ROUTINE)GetThreadProc(),
@@ -168,15 +168,11 @@ INLINE_ON_PS3 bool CThread::Start( unsigned nBytesStack, ThreadPriorityEnum_t nP
 	}
 
 	bInitSuccess = true;
-#elif POSIX
+#elif PLATFORM_POSIX
 	pthread_attr_t attr;
 	pthread_attr_init( &attr );
 	pthread_attr_setstacksize( &attr, MAX( nBytesStack, 1024u*1024 ) );
-	//lwss - fix memory leak here
-	m_threadInit = ThreadInit_t( init );
-	//if ( pthread_create( &m_threadId, &attr, (void *(*)(void *))GetThreadProc(), new ThreadInit_t( init ) ) != 0 )
-	if ( pthread_create( &m_threadId, &attr, (void *(*)(void *))GetThreadProc(), &m_threadInit ) != 0 )
-	//lwss end
+	if ( pthread_create( &m_threadId, &attr, (void *(*)(void *))GetThreadProc(), new ThreadInit_t( init ) ) != 0 )
 	{
 		AssertMsg1( 0, "Failed to create thread (error 0x%x)", GetLastError() );
 		return false;
@@ -236,7 +232,7 @@ INLINE_ON_PS3 bool CThread::Start( unsigned nBytesStack, ThreadPriorityEnum_t nP
 
 INLINE_ON_PS3 bool CThread::IsAlive()
 {
-#ifdef _WIN32
+#ifdef PLATFORM_WINDOWS
 	DWORD dwExitCode;
 	return (
 		m_hThread 
@@ -450,7 +446,7 @@ INLINE_ON_PS3 void CThread::Yield()
 	// sys_ppu_thread_yield doesn't seem to function properly, so sleep instead.
 	sys_timer_usleep( 60 );
 #elif defined(POSIX)
-	sched_yield();
+	pthread_yield();
 #endif
 }
 
@@ -526,17 +522,17 @@ INLINE_ON_PS3 void CThread::ThreadProcRunWithMinidumpHandler( void *pv )
 	pInit->pThread->m_result = pInit->pThread->Run();
 }
 
-#ifdef _WIN32
+#ifdef PLATFORM_WINDOWS
 unsigned long STDCALL CThread::ThreadProc(LPVOID pv)
 #else
 INLINE_ON_PS3 void* CThread::ThreadProc(LPVOID pv)
 #endif
 {
-// #if defined( POSIX ) || defined( _PS3 )
+#if defined( POSIX ) || defined( _PS3 )
 	ThreadInit_t *pInit = reinterpret_cast<ThreadInit_t*>(pv);
-// #else
-// 	std::auto_ptr<ThreadInit_t> pInit((ThreadInit_t *)pv);
-// #endif
+#else
+	std::auto_ptr<ThreadInit_t> pInit((ThreadInit_t *)pv);
+#endif
 
 #ifdef _X360
 	// Make sure all threads are consistent w.r.t floating-point math

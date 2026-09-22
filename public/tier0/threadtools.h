@@ -35,7 +35,7 @@
 #include <sys/timer.h>
 #endif
 
-#ifdef APPLE
+#ifdef OSX
 // Add some missing defines
 #define PTHREAD_MUTEX_TIMED_NP         PTHREAD_MUTEX_NORMAL
 #define PTHREAD_MUTEX_RECURSIVE_NP     PTHREAD_MUTEX_RECURSIVE
@@ -52,12 +52,6 @@
 #pragma once
 #pragma warning(push)
 #pragma warning(disable:4251)
-
-extern "C"
-{
-	void __declspec(dllimport) __stdcall Sleep( unsigned long );
-}
-
 #endif
 
 #ifdef COMPILER_MSVC64
@@ -87,7 +81,7 @@ enum ThreadPriorityEnum_t
 	TP_PRIORITY_LOW = 2001,
 	TP_PRIORITY_DEFAULT = 1001
 #error "Need PRIORITY_LOWEST/HIGHEST"
-#elif defined( LINUX )
+#elif defined( PLATFORM_LINUX )
     // We can use nice on Linux threads to change scheduling.
     // pthreads on Linux only allows priority setting on
     // real-time threads.
@@ -109,7 +103,7 @@ enum ThreadPriorityEnum_t
 #endif // PLATFORM_PS3
 };
 
-#if defined( LINUX )
+#if defined( PLATFORM_LINUX )
 #define TP_IS_PRIORITY_HIGHER( a, b ) ( ( a ) < ( b ) )
 #else
 #define TP_IS_PRIORITY_HIGHER( a, b ) ( ( a ) > ( b ) )
@@ -173,7 +167,12 @@ extern bool gbCheckNotMultithreaded;
 //-----------------------------------------------------------------------------
 
 const unsigned TT_INFINITE = 0xffffffff;
-typedef uintp ThreadId_t;
+
+#ifdef PLATFORM_64BITS
+typedef uint64 ThreadId_t;
+#else
+typedef uint32 ThreadId_t;
+#endif
 
 //-----------------------------------------------------------------------------
 //
@@ -200,6 +199,8 @@ PLATFORM_INTERFACE bool ReleaseThreadHandle( ThreadHandle_t );
 
 //-----------------------------------------------------------------------------
 
+PLATFORM_INTERFACE void ThreadSleep(unsigned duration = 0);
+PLATFORM_INTERFACE void ThreadNanoSleep(unsigned ns);
 PLATFORM_INTERFACE ThreadId_t ThreadGetCurrentId();
 PLATFORM_INTERFACE ThreadHandle_t ThreadGetCurrentHandle();
 PLATFORM_INTERFACE int ThreadGetPriority( ThreadHandle_t hThread = NULL );
@@ -220,7 +221,7 @@ inline bool ThreadInMainThread()
 #endif
 
 // NOTE: ThreadedLoadLibraryFunc_t needs to return the sleep time in milliseconds or TT_INFINITE
-typedef uintp (*ThreadedLoadLibraryFunc_t)(void *pParam); 
+typedef int (*ThreadedLoadLibraryFunc_t)(); 
 PLATFORM_INTERFACE void SetThreadedLoadLibraryFunc( ThreadedLoadLibraryFunc_t func );
 PLATFORM_INTERFACE ThreadedLoadLibraryFunc_t GetThreadedLoadLibraryFunc();
 
@@ -233,10 +234,8 @@ inline void ThreadPause()
 {
 #if defined( COMPILER_PS3 )
 	__db16cyc();
-#elif defined( COMPILER_GCC ) && (defined( __i386__ ) || defined( __x86_64__ ))
+#elif defined( COMPILER_GCC )
 	__asm __volatile( "pause" );
-#elif defined( POSIX )
-        sched_yield();
 #elif defined ( COMPILER_MSVC64 )
 	_mm_pause();
 #elif defined( COMPILER_MSVC32 )
@@ -248,36 +247,6 @@ inline void ThreadPause()
 	__asm { or r1,r1,r1 } 
 #else
 #error "implement me"
-#endif
-}
-
-inline void ThreadSleep(unsigned nMilliseconds = 0)
-{
-	if( nMilliseconds == 0 )
-	{
-		ThreadPause();
-		return;
-        }
-
-#ifdef _WIN32
-
-#ifdef _WIN32_PC
-        static bool bInitialized = false;
-        if ( !bInitialized )
-        {
-                bInitialized = true;
-                // Set the timer resolution to 1 ms (default is 10.0, 15.6, 2.5, 1.0 or
-                // some other value depending on hardware and software) so that we can
-                // use Sleep( 1 ) to avoid wasting CPU time without missing our frame
-                // rate.
-                timeBeginPeriod( 1 );
-        }
-#endif
-	Sleep( nMilliseconds );
-#elif PS3
-	sys_timer_usleep( nMilliseconds * 1000 );
-#elif defined(POSIX)
-        usleep( nMilliseconds * 1000 );
 #endif
 }
 
@@ -319,7 +288,7 @@ PLATFORM_INTERFACE void ThreadSetAffinity( ThreadHandle_t hThread, int nAffinity
 #error Every platform needs to define ThreadMemoryBarrier to at least prevent compiler reordering
 #endif
 
-#if defined( _LINUX ) || defined( _APPLE ) || defined(PLATFORM_BSD)
+#if defined( _LINUX ) || defined( _OSX )
 #define USE_INTRINSIC_INTERLOCKED
 // linux implementation
 inline int32 ThreadInterlockedIncrement( int32 volatile *p )
@@ -337,7 +306,15 @@ inline int32 ThreadInterlockedDecrement( int32 volatile *p )
 inline int32 ThreadInterlockedExchange( int32 volatile *p, int32 value )
 {
 	Assert( (size_t)p % 4 == 0 );
-	return __sync_lock_test_and_set( p, value );
+	int32 nRet;
+
+	// Note: The LOCK instruction prefix is assumed on the XCHG instruction and GCC gets very confused on the Mac when we use it.
+	__asm __volatile(
+		"xchgl %2,(%1)"
+		: "=r" (nRet)
+		: "r" (p), "0" (value)
+		: "memory");
+	return nRet;
 }
 
 inline int32 ThreadInterlockedExchangeAdd( int32 volatile *p, int32 value )
@@ -453,13 +430,13 @@ PLATFORM_INTERFACE int64 ThreadInterlockedExchangeAdd64( int64 volatile *, int64
 
 inline int64 ThreadInterlockedIncrement64( int64 volatile *p )
 {
-	Assert( (size_t)p % 8 == 0 );
+	AssertDbg( (size_t)p % 8 == 0 );
 	return __sync_fetch_and_add( p, 1 ) + 1;
 }
 
 inline int64 ThreadInterlockedDecrement64( int64 volatile *p )
 {
-	Assert( (size_t)p % 8 == 0 ); 
+	AssertDbg( (size_t)p % 8 == 0 ); 
 	return __sync_fetch_and_add( p, -1 ) - 1;
 }
 
@@ -520,7 +497,22 @@ PLATFORM_INTERFACE void ThreadNotifySyncReleasing(void *p);
 
 #ifndef NO_THREAD_LOCAL
 
-#if defined(WIN32) || defined(APPLE) ||  defined( _PS3 ) || ( defined (_LINUX) ) || defined(PLATFORM_BSD)
+
+#if ( defined(_LINUX) && defined(DEDICATED) ) && !defined(OSX)
+// linux totally supports compiler thread locals, even across dll's.
+#define PLAT_COMPILER_SUPPORTED_THREADLOCALS 1
+#define CTHREADLOCALINTEGER( typ ) __thread int
+#define CTHREADLOCALINT __thread int
+#define CTHREADLOCALPTR( typ ) __thread typ *
+#define CTHREADLOCAL( typ ) __thread typ
+#define GETLOCAL( x ) ( x )
+#ifndef TIER0_DLL_EXPORT
+DLL_IMPORT __thread int g_nThreadID;
+#endif
+#endif
+
+
+#if defined(WIN32) || defined(OSX) ||  defined( _PS3 ) || ( defined (_LINUX) && !defined(DEDICATED) )
 #ifndef __AFXTLS_H__ // not compatible with some Windows headers
 
 #if defined(_PS3)
@@ -643,7 +635,7 @@ private:
 	class CThreadLocalPtr : private CThreadLocalBase
 	{
 	public:
-		CThreadLocalPtr() = default;
+		CThreadLocalPtr() {}
 
 		operator const void *() const          					{ return (const T *)Get(); }
 		operator void *()                      					{ return (T *)Get(); }
@@ -683,13 +675,11 @@ private:
 	};
 #if !defined(_PS3)
 }
-using namespace GenericThreadLocals;
 #endif
 
-
-#ifdef _APPLE
+#ifdef _OSX
 PLATFORM_INTERFACE GenericThreadLocals::CThreadLocalInt<int> g_nThreadID;
-#else // _APPLE
+#else // _OSX
 #ifndef TIER0_DLL_EXPORT
 
 #ifndef _PS3
@@ -697,7 +687,7 @@ DLL_GLOBAL_IMPORT CTHREADLOCALINT g_nThreadID;
 #endif // !_PS3
 
 #endif // TIER0_DLL_EXPORT
-#endif // _APPLE
+#endif // _OSX
 
 #endif /// afx32
 #endif //__win32
@@ -1621,11 +1611,8 @@ public:
 	}
 };
 
-#ifdef _WIN32
 PLATFORM_INTERFACE int ThreadWaitForObjects( int nEvents, const HANDLE *pHandles, bool bWaitAll = true, unsigned timeout = TT_INFINITE );
 inline int ThreadWaitForEvents( int nEvents, const CThreadEvent *pEvents, bool bWaitAll = true, unsigned timeout = TT_INFINITE ) { return ThreadWaitForObjects( nEvents, (const HANDLE *)pEvents, bWaitAll, timeout ); }
-inline int ThreadWaitForObject(HANDLE handle, bool bWaitAll = true, unsigned timeout = TT_INFINITE) { return ThreadWaitForObjects(1, &handle, bWaitAll, timeout); }
-#endif
 
 //-----------------------------------------------------------------------------
 //
@@ -1955,9 +1942,6 @@ private:
 #elif defined(POSIX)
 	pthread_t m_threadId;
 	volatile pthread_t	m_threadZombieId;
-	//lwss add - Thread params. These were previously allocated on the heap and leaked.
-    ThreadInit_t m_threadInit;
-    //lwss end
 #endif
 	int		m_result;
 	char	m_szName[32];

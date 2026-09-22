@@ -1,9 +1,12 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
 #include "movieobjects/dmetimeselection.h"
 #include "interpolatortypes.h"
 #include "datamodel/dmelementfactoryhelper.h"
 // #include "dme_controls/RecordingState.h"
-						   
+
+float ComputeInterpolationFactor( float flFactor, int nInterpolatorType );
+float GetAmountForTime( DmeTime_t dmetime, const TimeSelection_t &times, const int nInterpolationTypes[ 2 ] );
+
+
 IMPLEMENT_ELEMENT_FACTORY( DmeTimeSelection, CDmeTimeSelection );
 
 void CDmeTimeSelection::OnConstruction()
@@ -13,8 +16,8 @@ void CDmeTimeSelection::OnConstruction()
 
 	DmeTime_t one( 1.0f );
 
-	m_falloff[ 0 ].InitAndSet( this, "falloff_left", -one.GetTenthsOfMS() );
-	m_falloff[ 1 ].InitAndSet( this, "falloff_right", one.GetTenthsOfMS() );
+	m_falloff[ 0 ].InitAndSet( this, "falloff_left", -one );
+	m_falloff[ 1 ].InitAndSet( this, "falloff_right", one );
 
 	m_hold[ 0 ].Init( this, "hold_left" );
 	m_hold[ 1 ].Init( this, "hold_right" );
@@ -24,6 +27,8 @@ void CDmeTimeSelection::OnConstruction()
 
 	m_threshold.InitAndSet( this, "threshold", 0.0005f );
 
+	m_resampleInterval.InitAndSet( this, "resampleinterval", DmeTime_t( 100 ) ); // 10 ms
+
 	m_nRecordingState.InitAndSet( this, "recordingstate", 3 /*AS_PLAYBACK :  HACK THIS SHOULD MOVE TO A PUBLIC HEADER*/ );
 }
 
@@ -32,34 +37,9 @@ void CDmeTimeSelection::OnDestruction()
 {
 }
 
-static int g_InterpolatorTypes[] = 
-{
-	INTERPOLATE_LINEAR_INTERP,
-	INTERPOLATE_EASE_IN,
-	INTERPOLATE_EASE_OUT,								
-	INTERPOLATE_EASE_INOUT,		
-};
-
 float CDmeTimeSelection::AdjustFactorForInterpolatorType( float factor, int side )
 {
-	Vector points[ 4 ];
-	points[ 0 ].Init();
-	points[ 1 ].Init( 0.0, 0.0, 0.0f );
-	points[ 2 ].Init( 1.0f, 1.0f, 0.0f );
-	points[ 3 ].Init();
-
-	Vector out;
-	Interpolator_CurveInterpolate
-	( 
-		GetFalloffInterpolatorType( side ), 
-			points[ 0 ], // unused
-			points[ 1 ], 
-			points[ 2 ], 
-			points[ 3 ], // unused
-		factor, 
-		out 
-	);
-	return out.y; // clamp( out.y, 0.0f, 1.0f );
+	return ComputeInterpolationFactor( factor, GetFalloffInterpolatorType( side ) );
 }
 
 
@@ -70,64 +50,15 @@ float CDmeTimeSelection::GetAmountForTime( DmeTime_t t, DmeTime_t curtime )
 {
 	Assert( IsEnabled() );
 
-	float minfrac = 0.0f;
-
-	// FIXME, this is slow, we should cache this maybe?
-	DmeTime_t times[ 4 ];
+	TimeSelection_t times;
 	times[ 0 ] = GetAbsFalloff( curtime, 0 );
 	times[ 1 ] = GetAbsHold( curtime, 0 );
 	times[ 2 ] = GetAbsHold( curtime, 1 );
 	times[ 3 ] = GetAbsFalloff( curtime, 1 );
 
-	Vector points[ 4 ];
-	points[ 0 ].Init();
-	points[ 1 ].Init( 0.0, 0.0, 0.0f );
-	points[ 2 ].Init( 1.0f, 1.0f, 0.0f );
-	points[ 3 ].Init();
+	int nInterpolatorTypes[ 2 ] = { m_nFalloffInterpolatorType[0], m_nFalloffInterpolatorType[1] };
 
-	if ( t >= times[ 0 ] && t < times[ 1 ] )
-	{
-		float f = GetFractionOfTimeBetween( t, times[ 0 ], times[ 1 ], true );
-
-		Vector out;
-
-		Interpolator_CurveInterpolate
-		( 
-			GetFalloffInterpolatorType( 0 ), 
-				points[ 0 ], // unused
-				points[ 1 ], 
-				points[ 2 ], 
-				points[ 3 ], // unused
-			f, 
-			out 
-		);
-		return clamp( out.y, minfrac, 1.0f );
-	}
-	
-	if ( t >= times[ 1 ] && t <= times[ 2 ] )
-	{
-		return 1.0f;
-	}
-
-	if ( t > times[ 2 ] && t <= times[ 3 ] )
-	{
-		float f = 1.0f - GetFractionOfTimeBetween( t, times[ 2 ], times[ 3 ], true );
-
-		Vector out;
-
-		Interpolator_CurveInterpolate
-		( 
-			GetFalloffInterpolatorType( 1 ), 
-				points[ 0 ], // unused
-				points[ 1 ], 
-				points[ 2 ], 
-				points[ 3 ], // unused
-			f, 
-			out 
-		);
-		return clamp( out.y, minfrac, 1.0f );
-	}
-	return minfrac;
+	return ::GetAmountForTime( t, times, nInterpolatorTypes );
 }
 
 void CDmeTimeSelection::GetAlphaForTime( DmeTime_t t, DmeTime_t curtime, byte& alpha )
@@ -135,39 +66,15 @@ void CDmeTimeSelection::GetAlphaForTime( DmeTime_t t, DmeTime_t curtime, byte& a
 	Assert( IsEnabled() );
 
 	byte minAlpha = 31;
-
-	// FIXME, this is slow, we should cache this maybe?
-	DmeTime_t times[ 4 ];
-	times[ 0 ] = GetAbsFalloff( curtime, 0 );
-	times[ 1 ] = GetAbsHold( curtime, 0 );
-	times[ 2 ] = GetAbsHold( curtime, 1 );
-	times[ 3 ] = GetAbsFalloff( curtime, 1 );
-
-	DmeTime_t dt1, dt2;
-	dt1 = times[ 1 ] - times[ 0 ];
-	dt2 = times[ 3 ] - times[ 2 ];
-
-	if ( dt1 > DmeTime_t( 0 ) &&
-		t >= times[ 0 ] && t < times[ 1 ] )
-	{
-		float frac = GetFractionOfTime( t - times[ 0 ], dt1, false );
-		alpha = clamp( alpha * frac, minAlpha, 255 );
+	if ( alpha <= minAlpha )
 		return;
-	}
-	if ( dt2 > DmeTime_t( 0 ) &&
-		t > times[ 2 ] && t <= times[ 3 ] )
-	{
-		float frac = GetFractionOfTime( times[ 3 ] - t, dt2, false );
-		alpha = clamp( alpha * frac, minAlpha, 255 );
-		return;
-	}
-	if ( t < times[ 0 ] )
-		alpha = minAlpha;
-	else if ( t > times[ 3 ] )
-		alpha = minAlpha;
+
+	float f = GetAmountForTime( t, curtime );
+	alpha = ( byte )( f * ( alpha - minAlpha ) + minAlpha );
+	alpha = clamp( alpha, minAlpha, 255 );
 }
 
-int CDmeTimeSelection::GetFalloffInterpolatorType( int side )
+int CDmeTimeSelection::GetFalloffInterpolatorType( int side ) const
 {
 	return m_nFalloffInterpolatorType[ side ];
 }
@@ -194,6 +101,8 @@ bool CDmeTimeSelection::IsRelative() const
 
 void CDmeTimeSelection::SetRelative( DmeTime_t time, bool state )
 {
+	Assert( !IsSuspicious( true ) );
+
 	bool changed = m_bRelative != state;
 	m_bRelative = state;
 	if ( changed )
@@ -203,88 +112,102 @@ void CDmeTimeSelection::SetRelative( DmeTime_t time, bool state )
 		else 
 			ConvertToAbsolute( time );
 	}
+
+	Assert( !IsSuspicious( true ) );
 }
 
-DmeTime_t CDmeTimeSelection::GetAbsFalloff( DmeTime_t time, int side )
+DmeTime_t CDmeTimeSelection::GetAbsFalloff( DmeTime_t time, int side ) const
 {
-	if ( m_bRelative )
+	if ( IsInfinite( side ) )
 	{
-		return DmeTime_t( m_falloff[ side ] ) + time;
+		return m_falloff[ side ];
 	}
-	return DmeTime_t( m_falloff[ side ] );
+	return m_bRelative ? m_falloff[ side ].Get() + time : m_falloff[ side ];
 }
 
-DmeTime_t CDmeTimeSelection::GetAbsHold( DmeTime_t time, int side )
+DmeTime_t CDmeTimeSelection::GetAbsHold( DmeTime_t time, int side ) const
 {
-	if ( m_bRelative )
+	if ( IsInfinite( side ) )
 	{
-		return DmeTime_t( m_hold[ side ] ) + time;
+		return m_hold[ side ];
 	}
-	return DmeTime_t( m_hold[ side ] );
+	return m_bRelative ? m_hold[ side ].Get() + time : m_hold[ side ];
 }
 
-DmeTime_t CDmeTimeSelection::GetRelativeFalloff( DmeTime_t time, int side )
+DmeTime_t CDmeTimeSelection::GetRelativeFalloff( DmeTime_t time, int side ) const
 {
-	if ( m_bRelative )
+	if ( IsInfinite( side ) )
 	{
-		return DmeTime_t( m_falloff[ side ] );
+		return m_falloff[ side ];
 	}
-	return DmeTime_t( m_falloff[ side ] ) - time;
+	return m_bRelative ? m_falloff[ side ] : m_falloff[ side ].Get() - time;
 }
 
-DmeTime_t CDmeTimeSelection::GetRelativeHold( DmeTime_t time, int side )
+DmeTime_t CDmeTimeSelection::GetRelativeHold( DmeTime_t time, int side ) const
 {
-	if ( m_bRelative )
+	if ( IsInfinite( side ) )
 	{
-		return DmeTime_t( m_hold[ side ] );
+		return m_hold[ side ];
 	}
-	return DmeTime_t( m_hold[ side ] ) - time;
+	return m_bRelative ? m_hold[ side ] : m_hold[ side ].Get() - time;
 }
 
 void CDmeTimeSelection::ConvertToRelative( DmeTime_t time )
 {
-	m_falloff[ 0 ] -= time.GetTenthsOfMS();
-	m_falloff[ 1 ] -= time.GetTenthsOfMS();
-	m_hold[ 0 ] -= time.GetTenthsOfMS();
-	m_hold[ 1 ] -= time.GetTenthsOfMS();
+	Assert( !IsSuspicious( true ) );
+
+	for ( int side = 0; side < 2; ++side )
+	{
+		if ( !IsInfinite( side ) )
+		{
+			m_falloff[ side ] -= time;
+			m_hold[ side ] -= time;
+		}
+	}
+
+	Assert( !IsSuspicious( true ) );
 }
 
 void CDmeTimeSelection::ConvertToAbsolute( DmeTime_t time )
 {
-	m_falloff[ 0 ] += time.GetTenthsOfMS();
-	m_falloff[ 1 ] += time.GetTenthsOfMS();
-	m_hold[ 0 ] += time.GetTenthsOfMS();
-	m_hold[ 1 ] += time.GetTenthsOfMS();
+	Assert( !IsSuspicious( true ) );
+
+	for ( int side = 0; side < 2; ++side )
+	{
+		if ( !IsInfinite( side ) )
+		{
+			m_falloff[ side ] += time;
+			m_hold[ side ] += time;
+		}
+	}
+
+	Assert( !IsSuspicious( true ) );
 }
 
 void CDmeTimeSelection::SetAbsFalloff( DmeTime_t time, int side, DmeTime_t absfallofftime )
 {
-	DmeTime_t newTime;
-	if ( m_bRelative )
+	// If going to infinite edge, don't need to remember the time delta in relative mode, so zero it
+	if ( absfallofftime == DMETIME_MAXTIME ||
+		 absfallofftime == DMETIME_MINTIME )
 	{
-		newTime = absfallofftime - time;
-	}
-	else
-	{
-		newTime = absfallofftime;
+		time = DMETIME_ZERO;
 	}
 
-	m_falloff[ side ] = newTime.GetTenthsOfMS();
+	m_falloff[ side ] = m_bRelative ? absfallofftime - time : absfallofftime;
+	Assert( !IsSuspicious() );
 }
 
 void CDmeTimeSelection::SetAbsHold( DmeTime_t time, int side, DmeTime_t absholdtime )
 {
-	DmeTime_t newTime;
-	if ( m_bRelative )
+	// If going to infinite edge, don't need to remember the time delta in relative mode, so zero it
+	if ( absholdtime == DMETIME_MAXTIME ||
+		absholdtime == DMETIME_MINTIME )
 	{
-		newTime = absholdtime - time;
-	}
-	else
-	{
-		newTime = absholdtime;
+		time = DMETIME_ZERO;
 	}
 
-	m_hold[ side ] = newTime.GetTenthsOfMS();
+	m_hold[ side ] = m_bRelative ? absholdtime - time : absholdtime;
+	Assert( !IsSuspicious() );
 }
 
 void CDmeTimeSelection::CopyFrom( const CDmeTimeSelection& src )
@@ -300,30 +223,64 @@ void CDmeTimeSelection::CopyFrom( const CDmeTimeSelection& src )
 		m_nFalloffInterpolatorType[ i ] = src.m_nFalloffInterpolatorType[ i ];
 	}
 
+	Assert( !IsSuspicious( true ) );
+
 	m_nRecordingState = src.m_nRecordingState;
 }
 
-void CDmeTimeSelection::GetCurrent( DmeTime_t pTimes[TS_TIME_COUNT] )
+void CDmeTimeSelection::GetAbsTimes( DmeTime_t time, DmeTime_t pTimes[TS_TIME_COUNT] ) const
 {
-	pTimes[TS_LEFT_FALLOFF].SetTenthsOfMS( m_falloff[ 0 ] );
-	pTimes[TS_LEFT_HOLD].SetTenthsOfMS( m_hold[ 0 ] );
-	pTimes[TS_RIGHT_HOLD].SetTenthsOfMS( m_hold[ 1 ] );
-	pTimes[TS_RIGHT_FALLOFF].SetTenthsOfMS( m_falloff[ 1 ] );
+	if ( m_bRelative )
+	{
+		pTimes[TS_LEFT_FALLOFF ] = GetRelativeFalloff( time, 0 );
+		pTimes[TS_LEFT_HOLD    ] = GetRelativeHold( time, 0 );
+		pTimes[TS_RIGHT_HOLD   ] = GetRelativeHold( time, 1 );
+		pTimes[TS_RIGHT_FALLOFF] = GetRelativeFalloff( time, 1 );
+		return;
+	}
+	pTimes[TS_LEFT_FALLOFF ] = m_falloff[ 0 ];
+	pTimes[TS_LEFT_HOLD    ] = m_hold   [ 0 ];
+	pTimes[TS_RIGHT_HOLD   ] = m_hold   [ 1 ];
+	pTimes[TS_RIGHT_FALLOFF] = m_falloff[ 1 ];
 }
 
-void CDmeTimeSelection::SetCurrent( DmeTime_t* pTimes )
+void CDmeTimeSelection::GetCurrent( DmeTime_t pTimes[TS_TIME_COUNT] ) const
 {
-	m_falloff[ 0 ] = pTimes[ TS_LEFT_FALLOFF ].GetTenthsOfMS();
-	m_hold[ 0 ] = pTimes[ TS_LEFT_HOLD ].GetTenthsOfMS();
-	m_hold[ 1 ] = pTimes[ TS_RIGHT_HOLD ].GetTenthsOfMS();
-	m_falloff[ 1 ] = pTimes[ TS_RIGHT_FALLOFF ].GetTenthsOfMS();
+	pTimes[TS_LEFT_FALLOFF ] = m_falloff[ 0 ];
+	pTimes[TS_LEFT_HOLD    ] = m_hold   [ 0 ];
+	pTimes[TS_RIGHT_HOLD   ] = m_hold   [ 1 ];
+	pTimes[TS_RIGHT_FALLOFF] = m_falloff[ 1 ];
 }
 
-float CDmeTimeSelection::GetThreshold()
+void CDmeTimeSelection::SetCurrent( const TimeSelection_t &times )
+{
+	m_falloff[ 0 ] = times[ TS_LEFT_FALLOFF ];
+	m_hold   [ 0 ] = times[ TS_LEFT_HOLD ];
+	m_hold   [ 1 ] = times[ TS_RIGHT_HOLD ];
+	m_falloff[ 1 ] = times[ TS_RIGHT_FALLOFF ];
+
+	Assert( !IsSuspicious( true ) );
+}
+
+float CDmeTimeSelection::GetThreshold() const
 {
 	return m_threshold;
 }
 
+void CDmeTimeSelection::SetThreshold( float threshold )
+{
+	m_threshold = threshold;
+}
+
+DmeTime_t CDmeTimeSelection::GetResampleInterval() const
+{
+	return m_resampleInterval.Get();
+}
+
+void CDmeTimeSelection::SetResampleInterval( DmeTime_t resampleInterval )
+{
+	m_resampleInterval.Set( resampleInterval );
+}
 
 void CDmeTimeSelection::SetRecordingState( RecordingState_t state )
 {
@@ -333,4 +290,176 @@ void CDmeTimeSelection::SetRecordingState( RecordingState_t state )
 RecordingState_t CDmeTimeSelection::GetRecordingState() const
 {
 	return ( RecordingState_t )m_nRecordingState.Get();
+}
+
+void CDmeTimeSelection::GetTimeSelectionTimes( DmeTime_t curtime, DmeTime_t t[ TS_TIME_COUNT ] ) const
+{
+	t[0] = GetAbsFalloff( curtime, 0 );
+	t[1] = GetAbsHold   ( curtime, 0 );
+	t[2] = GetAbsHold   ( curtime, 1 );
+	t[3] = GetAbsFalloff( curtime, 1 );
+}
+
+
+void CDmeTimeSelection::SetTimeSelectionTimes( DmeTime_t curtime, DmeTime_t t[ TS_TIME_COUNT ] )
+{
+	SetAbsFalloff( curtime, 0, t[0] );
+	SetAbsHold   ( curtime, 0, t[1] );
+	SetAbsHold   ( curtime, 1, t[2] );
+	SetAbsFalloff( curtime, 1, t[3] );
+
+	Assert( !IsSuspicious( true ) );
+}
+
+bool CDmeTimeSelection::IsInfinite( int side ) const
+{
+	if ( side == 0 )
+	{
+		return m_hold[ side ] == DMETIME_MINTIME;
+	}
+	else if ( side == 1 )
+	{
+		return m_hold[ side ] == DMETIME_MAXTIME;
+	}
+
+	// Shouldn't get here
+	Assert( 0 );
+	return false;
+}
+
+void CDmeTimeSelection::GetInfinite( bool bInfinite[ 2 ] ) const
+{
+	bInfinite[ 0 ] = IsInfinite( 0 );
+	bInfinite[ 1 ] = IsInfinite( 1 );
+}
+
+bool CDmeTimeSelection::IsFullyInfinite() const
+{
+	return ( m_hold[ 0 ] == DMETIME_MINTIME ) && ( m_hold[ 1 ] == DMETIME_MAXTIME );
+}
+
+bool CDmeTimeSelection::IsEitherInfinite() const
+{
+	return ( m_hold[ 0 ] == DMETIME_MINTIME ) || ( m_hold[ 1 ] == DMETIME_MAXTIME );
+}
+
+void CDmeTimeSelection::SetInfinite( int side )
+{
+	if ( side == 0 )
+	{
+		m_hold[ side ] = DMETIME_MINTIME;
+		m_falloff[ side ] = DMETIME_MINTIME;
+	}
+	else if ( side == 1 )
+	{
+		m_hold[ side ] = DMETIME_MAXTIME;
+		m_falloff[ side ] = DMETIME_MAXTIME;
+	}
+	else
+	{
+		Assert( 0 );
+	}
+}
+
+bool CDmeTimeSelection::IsSuspicious( bool bCheckHoldAndFalloff /*= false*/ )
+{
+	DmeTime_t t[ TS_TIME_COUNT ];
+	GetAbsTimes( DMETIME_ZERO, t );
+	DmeTime_t bounds[ 2 ] =
+	{
+		( DMETIME_MINTIME + DmeTime_t( 1000.0f ) ),
+		( DMETIME_MAXTIME - DmeTime_t( 1000.0f ) )
+	};
+	for ( int i = 0; i < 4 ; ++i )
+	{
+		if ( t[ i ] == DMETIME_MINTIME ||
+			 t[ i ] == DMETIME_MAXTIME )
+			continue;
+
+		if ( t[ i ] < bounds[ 0 ] || 
+			 t[ i ] > bounds[ 1 ] )
+			return true;
+	}
+
+	if ( bCheckHoldAndFalloff )
+	{
+		// Also check for mismatched edges if infinite
+		bool bEdgesInfinite[ 4 ] =
+		{
+			t[ TS_LEFT_FALLOFF ] == DMETIME_MINTIME,
+			t[ TS_LEFT_HOLD ] == DMETIME_MINTIME,
+			t[ TS_RIGHT_HOLD ] == DMETIME_MAXTIME,
+			t[ TS_RIGHT_FALLOFF ] == DMETIME_MAXTIME,
+		};
+
+		if ( ( bEdgesInfinite[ 0 ] ^ bEdgesInfinite[ 1 ] ) ||
+			 ( bEdgesInfinite[ 2 ] ^ bEdgesInfinite[ 3 ] ) )
+		{
+			return true;
+		} 
+	}
+
+ 	return false;
+}
+
+DmeTime_t CDmeTimeSelection::GetAbsTime( DmeTime_t time, int tsType ) const
+{
+	switch ( tsType )
+	{
+	default:
+		break;
+	case TS_LEFT_FALLOFF:
+		return GetAbsFalloff( time, 0 );
+	case TS_LEFT_HOLD:
+		return GetAbsHold( time, 0 );
+	case TS_RIGHT_HOLD:
+		return GetAbsHold( time, 1 );
+	case TS_RIGHT_FALLOFF:
+		return GetAbsFalloff( time, 1 );
+	}
+	Assert( 0 );
+	return DMETIME_ZERO;
+}
+
+DmeTime_t CDmeTimeSelection::GetRelativeTime( DmeTime_t time, int tsType ) const
+{
+	switch ( tsType )
+	{
+	default:
+		break;
+	case TS_LEFT_FALLOFF:
+		return GetRelativeFalloff( time, 0 );
+	case TS_LEFT_HOLD:
+		return GetRelativeHold( time, 0 );
+	case TS_RIGHT_HOLD:
+		return GetRelativeHold( time, 1 );
+	case TS_RIGHT_FALLOFF:
+		return GetRelativeFalloff( time, 1 );
+	}
+	Assert( 0 );
+	return DMETIME_ZERO;
+}
+
+void CDmeTimeSelection::SetAbsTime( DmeTime_t time, int tsType, DmeTime_t absTime )
+{
+	switch ( tsType )
+	{
+	default:
+		Assert( 0 );
+		break;
+	case TS_LEFT_FALLOFF:
+		SetAbsFalloff( time, 0, absTime );  
+		break;
+	case TS_LEFT_HOLD:
+		SetAbsHold( time, 0, absTime );
+		break;
+	case TS_RIGHT_HOLD:
+		SetAbsHold( time, 1, absTime );
+		break;
+	case TS_RIGHT_FALLOFF:
+		SetAbsFalloff( time, 1, absTime );
+		break;
+	}
+
+	Assert( !IsSuspicious() );
 }

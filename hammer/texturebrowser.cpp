@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -54,6 +54,7 @@ BEGIN_MESSAGE_MAP(CTextureBrowser, CDialog)
 	ON_BN_CLICKED(IDC_MARK, OnMark)
 	ON_BN_CLICKED(IDC_REPLACE, OnReplace)
 	ON_BN_CLICKED(IDC_TEXTURES_OPEN_SOURCE, OnOpenSource)
+	ON_BN_CLICKED(IDC_TEXTURES_EXPLORE_SOURCE, OnExploreToSource)
 	ON_BN_CLICKED(IDC_TEXTURES_RELOAD, OnReload)
 	ON_MESSAGE(TWN_SELCHANGED, OnTexturewindowSelchange)
 	ON_MESSAGE(TWN_LBUTTONDBLCLK, OnTextureWindowDblClk)
@@ -124,6 +125,7 @@ void CTextureBrowser::OnSize(UINT nType, int cx, int cy)
 		IDC_FILTER_SELFILLUM,
 		IDC_SHOW_ERROR,
 		IDC_TEXTURES_OPEN_SOURCE,
+		IDC_TEXTURES_EXPLORE_SOURCE,
 		-1
 	};
 
@@ -318,11 +320,9 @@ BOOL CTextureBrowser::OnInitDialog()
 	//
 	// Create CTextureWindow that takes up area of dummy control.
 	//
-	{
-		RECT r;
-		GetDlgItem( IDC_BROWSERDUMMY )->GetClientRect( &r );
-		m_cTextureWindow.Create( this, r );
-	}
+	RECT r;
+	GetDlgItem(IDC_BROWSERDUMMY)->GetClientRect(&r);
+	m_cTextureWindow.Create(this, r);
 
 	// Show everything initially
 	m_cTextureWindow.SetTypeFilter( ~0, true );
@@ -382,7 +382,7 @@ BOOL CTextureBrowser::OnInitDialog()
 	CString str = pApp->GetProfileString(pszIniSection, "Position");
 	if (!str.IsEmpty())
 	{
-		RECT r;
+		CRect r;
 		sscanf(str, "%d %d %d %d", &r.left, &r.top, &r.right, &r.bottom);
 
 		if (r.left < 0)
@@ -642,6 +642,17 @@ void CTextureBrowser::OnOpenSource()
 	if ( m_cTextureWindow.szCurTexture[0] )
 	{
 		g_Textures.OpenSource( m_cTextureWindow.szCurTexture );
+	}
+}
+
+//-----------------------------------------------------------------------------
+// Explores to the source file: 
+//-----------------------------------------------------------------------------
+void CTextureBrowser::OnExploreToSource()
+{
+	if ( m_cTextureWindow.szCurTexture[0] )
+	{
+		g_Textures.ExploreToSource( m_cTextureWindow.szCurTexture );
 	}
 }
 

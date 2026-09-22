@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//============ Copyright (c) Valve Corporation, All rights reserved. ============
 //
 // ETW (Event Tracing for Windows) profiling helpers.
 // This allows easy insertion of Generic Event markers into ETW/xperf tracing
@@ -27,10 +27,14 @@
 #ifdef	IS_WINDOWS_PC
 // ETW support should be compiled in for all Windows PC platforms. It isn't
 // supported on Windows XP but that is determined at run-time.
-//#define	ETW_MARKS_ENABLED
+#define	ETW_MARKS_ENABLED
 #endif
 
 #ifdef	ETW_MARKS_ENABLED
+
+// This returns true if VTrace is running and tracing is enabled.
+// More exactly it returns true if the VALVE_MAIN provider is enabled.
+PLATFORM_INTERFACE bool ETWIsTracingEnabled();
 
 // Insert a single event to mark a point in an ETW trace. The return value is a 64-bit
 // time stamp.
@@ -107,6 +111,7 @@ private:
 
 #else
 
+inline bool ETWIsTracingEnabled() { return false; }
 inline int64 ETWMark( const char* ) { return 0; }
 inline void ETWMarkPrintf( const char *, ... ) { return; }
 inline void ETWMark1F( const char *, float ) { }

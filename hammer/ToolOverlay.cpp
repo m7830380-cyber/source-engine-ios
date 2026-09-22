@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -54,6 +54,47 @@ void CToolOverlay::OnActivate()
 //-----------------------------------------------------------------------------
 void CToolOverlay::OnDeactivate()
 {
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: Handles key down events in the 2D view.
+// Input  : Per CWnd::OnKeyDown.
+// Output : Returns true if the message was handled, false if not.
+//-----------------------------------------------------------------------------
+bool CToolOverlay::OnKeyDown2D(CMapView2D *pView, UINT nChar, UINT nRepCnt, UINT nFlags)
+{
+	switch (nChar)
+	{
+
+	case VK_ESCAPE:
+		{
+			ToolManager()->SetTool(TOOL_POINTER);
+			return true;
+		}
+	}
+
+	return false;
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: Handles key down events in the 3D view.
+// Input  : Per CWnd::OnKeyDown.
+// Output : Returns true if the message was handled, false if not.
+//-----------------------------------------------------------------------------
+bool CToolOverlay::OnKeyDown3D(CMapView3D *pView, UINT nChar, UINT nRepCnt, UINT nFlags)
+{
+	switch (nChar)
+	{
+
+	case VK_ESCAPE:
+		{
+			ToolManager()->SetTool(TOOL_POINTER);
+			return true;
+		}
+	}
+
+	return false;
 }
 
 //-----------------------------------------------------------------------------
@@ -179,7 +220,8 @@ void CToolOverlay::InitOverlay( CMapEntity *pEntity, CMapFace *pFace )
 
 	FOR_EACH_OBJ( *pChildren, pos )
 	{
-		CMapOverlay *pOverlay = dynamic_cast<CMapOverlay*>( pChildren->Element(pos) );
+		CMapClass *pMapClassObj = (CUtlReference< CMapClass >)pChildren->Element(pos);
+		CMapOverlay *pOverlay = dynamic_cast<CMapOverlay*>( pMapClassObj );
 		if ( pOverlay )
 		{
 			pOverlay->Basis_Init( pFace );
@@ -240,7 +282,8 @@ void CToolOverlay::OverlaySelection( CMapView3D *pView, UINT nFlags, const Vecto
 				const CMapObjectList *pChildren = pHitObject->GetChildren();
 				FOR_EACH_OBJ( *pChildren, pos2 )
 				{
-					CMapOverlay *pOverlay = dynamic_cast<CMapOverlay*>( pChildren->Element(pos2) );
+					CMapClass *pMapClassObj = (CUtlReference< CMapClass >)pChildren->Element(pos2);
+					CMapOverlay *pOverlay = dynamic_cast<CMapOverlay*>( pMapClassObj );
 					if ( pOverlay )
 					{
 						m_pDocument->GetSelection()->AddHit( pHitObject );
@@ -316,13 +359,14 @@ void CToolOverlay::HandlesReset( void )
 	const CMapObjectList *pSelection = m_pDocument->GetSelection()->GetList();
 	for( int iSelection = 0; iSelection < pSelection->Count(); ++iSelection )
 	{
-		CMapClass *pMapClass = pSelection->Element( iSelection );
+		CMapClass *pMapClass = (CUtlReference< CMapClass >)pSelection->Element( iSelection );
 		if ( pMapClass && pMapClass->IsMapClass( MAPCLASS_TYPE( CMapEntity ) ) )
 		{	
 			const CMapObjectList *pChildren = pMapClass->GetChildren();
 			FOR_EACH_OBJ( *pChildren, pos )
 			{
-				CMapOverlay *pOverlay = dynamic_cast<CMapOverlay*>( pChildren->Element(pos) );
+				CMapClass *pMapClassCast = (CUtlReference< CMapClass >)pChildren->Element( pos );
+				CMapOverlay *pOverlay = dynamic_cast<CMapOverlay*>( pMapClassCast );
 				if ( pOverlay )
 				{
 					pOverlay->HandlesReset();
@@ -345,13 +389,14 @@ bool CToolOverlay::HandleSelection( CMapView *pView, const Vector2D &vPoint )
 	const CMapObjectList *pSelection = m_pDocument->GetSelection()->GetList();
 	for ( int iSelection = 0; iSelection < pSelection->Count(); ++iSelection )
 	{
-		CMapClass *pMapClass = pSelection->Element( iSelection );
+		CMapClass *pMapClass = (CUtlReference< CMapClass >)pSelection->Element( iSelection );
 		if ( pMapClass && pMapClass->IsMapClass( MAPCLASS_TYPE( CMapEntity ) ) )
 		{
 			const CMapObjectList *pChildren = pMapClass->GetChildren();
 			FOR_EACH_OBJ( *pChildren, pos )
 			{
-				CMapOverlay *pOverlay = dynamic_cast<CMapOverlay*>( pChildren->Element(pos) );
+				CMapClass *pMapClassCast = (CUtlReference< CMapClass >)pChildren->Element(pos);
+				CMapOverlay *pOverlay = dynamic_cast<CMapOverlay*>( pMapClassCast );
 				if ( pOverlay && pOverlay->IsSelected() )
 				{
 					if ( pOverlay->HandlesHitTest( pView, vPoint ) )
@@ -419,8 +464,8 @@ void CToolOverlay::SnapHandle( Vector &vecHandlePt )
 	if ( !pWorld )
 		return;
 
-	EnumChildrenPos_t posWorld;
-	CMapClass *pChild = pWorld->GetFirstDescendent( posWorld );
+	EnumChildrenPos_t pos;
+	CMapClass *pChild = pWorld->GetFirstDescendent( pos );
 	while ( pChild )
 	{
 		CMapEntity *pEntity = dynamic_cast<CMapEntity*>( pChild );
@@ -429,7 +474,8 @@ void CToolOverlay::SnapHandle( Vector &vecHandlePt )
 			const CMapObjectList *pChildren = pEntity->GetChildren();
 			FOR_EACH_OBJ( *pChildren, pos )
 			{
-				CMapOverlay *pOverlay = dynamic_cast<CMapOverlay*>( pChildren->Element(pos) );
+				CMapClass *pMapClassCast = (CUtlReference< CMapClass >)pChildren->Element(pos);
+				CMapOverlay *pOverlay = dynamic_cast<CMapOverlay*>( pMapClassCast );
 				if ( pOverlay && pOverlay != m_pActiveOverlay && pOverlay->IsSelected() )
 				{
 					// Intersection test and attempt to snap
@@ -442,7 +488,7 @@ void CToolOverlay::SnapHandle( Vector &vecHandlePt )
 			}
 		}
 
-		pChild = pWorld->GetNextDescendent( posWorld );
+		pChild = pWorld->GetNextDescendent( pos );
 	}
 }
 

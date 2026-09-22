@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -17,11 +17,10 @@
 #include "vmpi_distribute_work.h"
 #include "vmpi_tools_shared.h"
 #include "cmdlib.h"
-#include "utlvector.h"
+#include "UtlVector.h"
 #include "Utlhash.h"
 #include "UtlBuffer.h"
 #include "utlstring.h"
-#include "utlbinaryblock.h"
 #include "tier2/utlstreambuffer.h"
 #include "UtlLinkedList.h"
 #include "UtlStringMap.h"
@@ -46,12 +45,15 @@
 #include "tier1/checksum_crc.h"
 #include "tier0/tslist.h"
 #include "tools_minidump.h"
+#include "shadercompile_ps3_helpers.h"
 
 #include "cmdsink.h"
 #include "d3dxfxc.h"
 #include "subprocess.h"
 #include "cfgprocessor.h"
 
+// Set this to one when working on shaders to get immediate errors rather than waiting for the end of the compile.
+#define IMMEDIATEERRORS 0
 
 // Type conversions should be controlled by programmer explicitly - shadercompile makes use of 64-bit integer arithmetics
 #pragma warning( error : 4244 )
@@ -68,10 +70,20 @@ static inline UtlSymId_t int_as_symid( int x )
 	return UtlSymId_t( x );
 }
 
+static bool isspace_force_valid_characters( char c )
+{
+	return !!V_isspace( ( unsigned char )c );
+}
+
+static bool isalpha_force_valid_characters( char c )
+{
+	return !!V_isalpha( ( unsigned char )c );
+}
+
+
 
 // VMPI packets
 #define STARTWORK_PACKETID	5
-#define WORKUNIT_PACKETID	6
 #define ERRMSG_PACKETID		7
 #define SHADERHADERROR_PACKETID		8
 #define MACHINE_NAME 9
@@ -135,9 +147,12 @@ bool g_bGotStartWorkPacket = false;
 double g_flStartTime;
 bool g_bVerbose = false;
 bool g_bIsX360 = false;
+bool g_bIsPS3 = false;
+bool g_bGeneratePS3DebugInfo = false;
+bool g_bOptimizePS3ShaderScheduling = false;
 bool g_bSuppressWarnings = false;
 
-FORCEINLINE long AsTargetLong( long x ) { return ( ( g_bIsX360 ) ? ( BigLong( x ) ) : ( x ) ); }
+FORCEINLINE long AsTargetLong( long x ) { return ( ( g_bIsX360 || g_bIsPS3 ) ? ( BigLong( x ) ) : ( x ) ); }
 
 
 struct ShaderInfo_t
@@ -248,7 +263,7 @@ struct CStaticCombo									// all the data for one static combo
 typedef CUtlNodeHash<CStaticCombo, 7097, uint64> StaticComboNodeHash_t;
 
 template <> 
-inline StaticComboNodeHash_t **Construct( StaticComboNodeHash_t ** pMemory )
+inline StaticComboNodeHash_t ** Construct( StaticComboNodeHash_t ** pMemory )
 {
 	return ::new( pMemory ) StaticComboNodeHash_t *( NULL ); // Explicitly new with NULL
 }
@@ -296,14 +311,17 @@ public:
 	CompilerMsgInfo() : m_numTimesReported( 0 ) {}
 
 public:
-	void SetMsgReportedCommand( char const *szCommand, int numTimesReported = 1 ) { if ( !m_numTimesReported ) m_sFirstCommand = szCommand; m_numTimesReported += numTimesReported; }
+	void SetMsgReportedCommand( char const *szCommand, int numTimesReported = 1, const char *szMachineName = "" ) { if ( !m_numTimesReported ) { m_sFirstCommand = szCommand; if ( szMachineName ) m_sFirstMachineName = szMachineName; } m_numTimesReported += numTimesReported; }
 
 public:
 	char const * GetFirstCommand() const { return m_sFirstCommand.String(); }
+	char const * GetFirstMachineName() const { return m_sFirstMachineName.String(); }
+
 	int GetNumTimesReported() const { return m_numTimesReported; }
 
 protected:
 	CUtlString m_sFirstCommand;
+	CUtlString m_sFirstMachineName;
 	int m_numTimesReported;
 };
 
@@ -375,8 +393,6 @@ public:
 
 
 
-CDispatchReg g_DistributeWorkReg( WORKUNIT_PACKETID, DistributeWorkDispatch );
-
 unsigned long VMPI_Stats_GetJobWorkerID( void )
 {
 	return 0;
@@ -390,6 +406,9 @@ bool StartWorkDispatch( MessageBuffer *pBuf, int iSource, int iPacketID )
 }
 
 CDispatchReg g_StartWorkReg( STARTWORK_PACKETID, StartWorkDispatch );
+
+CDispatchReg g_PS3ShaderDebugInfoReg( PS3_SHADER_DEBUG_INFO_PACKETID, PS3ShaderDebugInfoDispatch );
+CDispatchReg g_PS3ShaderCompileLogReg( PS3_SHADER_COMPILE_LOG_PACKETID, PS3ShaderCompileLogDispatch );
 
 // Consume all characters for which (isspace) is true
 template < typename T >
@@ -449,7 +468,7 @@ char * FindLast( char *szString, char *szSearchSet )
 void ErrMsgDispatchMsgLine( char const *szCommand, char *szMsgLine, char const *szShaderName = NULL )
 {
 	// When the filename is specified in front of the message, make sure it is truncated to the bare name only
-	if ( V_isalpha( *szMsgLine ) && szMsgLine[1] == ':' )
+	if ( isalpha_force_valid_characters( *szMsgLine ) && szMsgLine[1] == ':' )
 	{
 		// Preceded by drive letter
 		szMsgLine += 2;
@@ -494,13 +513,13 @@ void ErrMsgDispatchMsgLine( char const *szCommand, char *szMsgLine, char const *
 	}
 
 	// Now store the message with the command it was generated from
-	g_Master_CompilerMsgInfo[ szMsgLine ].SetMsgReportedCommand( szCommand );
+	g_Master_CompilerMsgInfo[ szMsgLine ].SetMsgReportedCommand( szCommand, 1, VMPI_GetLocalMachineName() );
 }
 
 void ErrMsgDispatchInt( char *szMessage, char const *szShaderName = NULL )
 {
 	// First line is the command number "szCommand"
-	char *szCommand = ConsumeCharacters( szMessage, isspace );
+	char *szCommand = ConsumeCharacters( szMessage, V_isspace );
 	char *szMessageListing = FindNext(szCommand, "\r\n");
 	char chTerminator = *szMessageListing;
 	*( szMessageListing ++ ) = 0;
@@ -508,7 +527,7 @@ void ErrMsgDispatchInt( char *szMessage, char const *szShaderName = NULL )
 	// Now come the command lines actually
 	while ( chTerminator )
 	{
-		char *szMsgText = ConsumeCharacters( szMessageListing, isspace );
+		char *szMsgText = ConsumeCharacters( szMessageListing, isspace_force_valid_characters );
 		szMessageListing = FindNext( szMsgText, "\r\n" );
 		chTerminator = *szMessageListing;
 		*( szMessageListing ++ ) = 0;
@@ -540,7 +559,7 @@ void ErrMsgDispatchInt( char *szMessage, char const *szShaderName = NULL )
 bool ErrMsgDispatch( MessageBuffer *pBuf, int iSource, int iPacketID )
 {
 	GLOBAL_DATA_MTX_LOCK_AUTO;
-
+	
 	bool bInvalidPkgRetCode = true;
 
 	// Parse the err msg packet
@@ -550,7 +569,7 @@ bool ErrMsgDispatch( MessageBuffer *pBuf, int iSource, int iPacketID )
 	if ( !*szCommand )
 		return bInvalidPkgRetCode;
 	*( szCommand ++ ) = 0;
-
+		
 	char *szNumTimesReported = FindNext( szCommand, "\n" );
 	if ( !*szNumTimesReported )
 		return bInvalidPkgRetCode;
@@ -561,8 +580,27 @@ bool ErrMsgDispatch( MessageBuffer *pBuf, int iSource, int iPacketID )
 		return bInvalidPkgRetCode;
 	*( szTerminator ++ ) = 0;
 
+#if IMMEDIATEERRORS
+	char str[ 4096 ];
+	uint64 iFirstCommand = _strtoui64( szCommand, NULL, 10 );
+	CfgProcessor::ComboHandle hCombo = NULL;
+	CfgProcessor::CfgEntryInfo const *pComboEntryInfo = NULL;
+	if ( CfgProcessor::Combo_GetNext( iFirstCommand, hCombo, g_numCompileCommands ) )
+	{
+		Combo_FormatCommand( hCombo, str );
+		pComboEntryInfo = Combo_GetEntryInfo( hCombo );
+		Combo_Free( hCombo );
+	}
+	else
+	{
+		sprintf( str, "cmd # %s", szCommand );
+	}
+
+	fprintf( stderr, "%s\n%s\nMachine: %s\n", szMsgLine, str, VMPI_GetMachineName( iSource ) );
+#endif
+
 	// Set the msg info
-	g_Master_CompilerMsgInfo[ szMsgLine ].SetMsgReportedCommand( szCommand, atoi( szNumTimesReported ) );
+	g_Master_CompilerMsgInfo[ szMsgLine ].SetMsgReportedCommand( szCommand, atoi( szNumTimesReported ), VMPI_GetMachineName( iSource ) );
 	
 	return true;
 }
@@ -690,10 +728,10 @@ static void FlushCombos( size_t *pnTotalFlushedSize, CUtlBuffer *pDynamicComboBu
 		return;
 
 	size_t nCompressedSize;
-	uint8 *pCompressedShader = LZMA_OpportunisticCompress( reinterpret_cast<uint8 *> ( pDynamicComboBuffer->Base() ),
-	                                                       pDynamicComboBuffer->TellPut(),
-	                                                       &nCompressedSize );
-	// high 2 bits of length =
+	uint8 *pCompressedShader = LZMA_Compress( reinterpret_cast<uint8 *> ( pDynamicComboBuffer->Base() ),
+											  pDynamicComboBuffer->TellPut(),
+											  &nCompressedSize );
+	// high 2 bits of length = 
 	// 00 = bzip2 compressed
 	// 10 = uncompressed
 	// 01 = lzma compressed
@@ -762,6 +800,10 @@ void GetVCSFilenames( char *pszMainOutFileName, ShaderInfo_t const &si )
 	if ( g_bIsX360 )
 	{
 		strcat( pszMainOutFileName, ".360" );
+	}
+	else if ( g_bIsPS3 )
+	{
+		strcat( pszMainOutFileName, ".ps3" );
 	}
 
 	strcat( pszMainOutFileName, ".vcs" );					// Different extensions for main output file
@@ -960,7 +1002,7 @@ static void WriteShaderFiles( const char *pShaderName )
 	// Shader file stream buffer
 	//
 	CUtlStreamBuffer ShaderFile( szVCSfilename, NULL );			// Streaming buffer for vcs file (since this can blow memory)
-	ShaderFile.SetBigEndian( g_bIsX360 );						// Swap the header bytes to X360 format
+	ShaderFile.SetBigEndian( g_bIsX360 || g_bIsPS3 );						// Swap the header bytes to X360 format
 
 	// ------ Header --------------
 	ShaderFile.PutInt( SHADER_VCS_VERSION_NUMBER );				// Version
@@ -1005,7 +1047,7 @@ static void WriteShaderFiles( const char *pShaderName )
 			ShaderFile.PutInt( 0xffffffff );				// end of dynamic combos
 		}
 
-		if ( g_bIsX360 )
+		if ( g_bIsX360 || g_bIsPS3 )
 		{
 			SRec.m_nFileOffset = BigLong( SRec.m_nFileOffset );
 			SRec.m_nStaticComboID = BigLong( SRec.m_nStaticComboID );
@@ -1167,7 +1209,9 @@ void MySystem( char const * const pCommand, CmdSink::IResponse **ppResponse )
 
 	unlink( "shader.o" );
 
-	FILE *batFp = fopen( "temp.bat", "w" );
+	char szTempFileName[100];
+	sprintf( szTempFileName, "sc%d_%d.bat", GetCurrentProcessId(), GetCurrentThreadId() );
+	FILE *batFp = fopen( szTempFileName, "w" );
 	fprintf( batFp, "%s\n", pCommand );
 	fclose( batFp );
 	
@@ -1180,7 +1224,7 @@ void MySystem( char const * const pCommand, CmdSink::IResponse **ppResponse )
 	
 	// Start the child process. 
 	if( !CreateProcess( NULL, // No module name (use command line). 
-		"temp.bat", // Command line. 
+		szTempFileName, // Command line. 
 		NULL,             // Process handle not inheritable. 
 		NULL,             // Thread handle not inheritable. 
 		FALSE,            // Set handle inheritance to FALSE. 
@@ -1201,6 +1245,8 @@ void MySystem( char const * const pCommand, CmdSink::IResponse **ppResponse )
 	// Close process and thread handles. 
 	CloseHandle( pi.hProcess );
 	CloseHandle( pi.hThread );
+	
+	unlink( szTempFileName );
 }
 
 // Assemble a reply package to the master from the compiled bytecode
@@ -1218,7 +1264,7 @@ size_t AssembleWorkerReplyPackage( CfgProcessor::CfgEntryInfo const *pEntry, uin
 	if ( pStComboRec && pStComboRec->m_DynamicCombos.Count() )
 	{
 		CUtlBuffer ubDynamicComboBuffer;
-		ubDynamicComboBuffer.SetBigEndian( g_bIsX360 );
+		ubDynamicComboBuffer.SetBigEndian( g_bIsX360 || g_bIsPS3 );
 
 		pStComboRec->SortDynamicCombos();
 		// iterate over all dynamic combos. 
@@ -1259,10 +1305,14 @@ size_t AssembleWorkerReplyPackage( CfgProcessor::CfgEntryInfo const *pEntry, uin
 
 	GLOBAL_DATA_MTX_LOCK();
 	if ( pStComboRec )
+	{
+		CStaticCombo *pCombo = pByteCodeArray->FindByKey( nComboOfEntry );
 		pByteCodeArray->DeleteByKey( nComboOfEntry );
+		delete pCombo;
+	}
 	if( fabs( fCurTime - s_fLastInfoTime ) > 1.f )
 	{
-		Msg( "\rCompiling  %s  [ %2llu remaining ] ...         \r",
+		Msg( "\rCompiling  %s  [ %2d remaining ] ...         \r",
 			 pEntry->m_szName, nComboOfEntry );
 		s_fLastInfoTime = fCurTime;
 	}
@@ -1299,7 +1349,9 @@ size_t CopyWorkerReplyPackage( CfgProcessor::CfgEntryInfo const *pEntry, uint64 
 	if ( pStComboRec )
 	{
 		GLOBAL_DATA_MTX_LOCK();
+			CStaticCombo *pCombo = pByteCodeArray->FindByKey( nComboOfEntry );
 			pByteCodeArray->DeleteByKey( nComboOfEntry );
+			delete pCombo;
 		GLOBAL_DATA_MTX_UNLOCK();
 	}
 
@@ -1355,7 +1407,7 @@ protected:
 		PROCESS_INFORMATION pi;
 		SubProcessKernelObjects *pCommObjs;
 	};
-	CThreadLocal < SubProcess * > m_lpSubProcessInfo;
+	CTHREADLOCAL( SubProcess * ) m_lpSubProcessInfo;
 	CUtlVector < SubProcess * > m_arrSubProcessInfos;
 	uint64 m_iFirstCommand;
 	uint64 m_iNextCommand;
@@ -1481,7 +1533,7 @@ void CWorkerAccumState < TMutexType > ::PrepareSubProcess( SubProcess **ppSp, Su
 		pSp->dwSvcThreadId = ThreadGetCurrentId();
 
 		char chBaseNameBuffer[0x30];
-		sprintf( chBaseNameBuffer, "SHCMPL_SUB_%08X_%08llX_%08X", pSp->dwSvcThreadId, (long long)time( NULL ), GetCurrentProcessId() );
+		sprintf( chBaseNameBuffer, "SHCMPL_SUB_%08X_%I64X_%08X", pSp->dwSvcThreadId, time( NULL ), GetCurrentProcessId() );
 		pCommObjs = pSp->pCommObjs = new SubProcessKernelObjects_Create( chBaseNameBuffer );
 
 		ZeroMemory( &pSp->pi, sizeof( pSp->pi ) );
@@ -1549,6 +1601,8 @@ void CWorkerAccumState < TMutexType > ::ExecuteCompileCommandThreaded( CfgProces
 
 		HandleCommandResponse( hCombo, pResponse );
 
+		delete pResponse;
+
 		shrmem.Unlock();
 	}
 }
@@ -1611,7 +1665,7 @@ void CWorkerAccumState < TMutexType > ::HandleCommandResponse( CfgProcessor::Com
 		char chUnreportedListing[0xFF];
 		if ( !szListing )
 		{
-			sprintf( chUnreportedListing, "(0): error 0000: Compiler failed without error description, latest version of fxc.exe might give a description." );
+			sprintf( chUnreportedListing, "(0): error %s: shadercompile.cpp: Compiler failed without error description - possible DX_PROXY DLL, D3DX DLL, D3DCOMPILER DLL, or other .DLL dependency problem?", chCommandNumber );
 			szListing = chUnreportedListing;
 		}
 
@@ -1822,12 +1876,12 @@ protected:
 void Worker_ProcessCommandRange_Singleton::Startup( void )
 {
 	bool bInitializedThreadPool = false;
-	CPUInformation const &cpu = *GetCPUInformation();
+	CPUInformation const &cpu = GetCPUInformation();
 
 	if ( cpu.m_nLogicalProcessors > 1 )
 	{
 		// Attempt to initialize thread pool
-		m_MT.pThreadPool = g_pThreadPool;
+		m_MT.pThreadPool = CommandLine()->FindParm("-singlethreaded") ? NULL : g_pThreadPool;
 		if ( m_MT.pThreadPool )
 		{
 			m_MT.tpsp.bIOThreads = false;
@@ -1950,6 +2004,17 @@ void Worker_ProcessWorkUnitFn( int iThread, uint64 iWorkUnit, MessageBuffer *pBu
 		pBuf->write( &nSkipsSoFar, sizeof( nSkipsSoFar ) );
 	}
 
+	// Copy off SCE-CGC compiler generated metadata, used for shader debugging
+	if ( g_bIsPS3 )
+	{
+		PS3SendShaderCompileLogContentsToMaster();
+
+		if ( g_bGeneratePS3DebugInfo )
+		{
+			SendSubDirectoryToMaster( "cgc-capture" );
+		}
+	}
+
 	//////////////////////////////////////////////////////////////////////////
 	//
 	// Now deliver all our accumulated spew to the master
@@ -2008,21 +2073,37 @@ void Shader_ParseShaderInfoFromCompileCommands( CfgProcessor::CfgEntryInfo const
 		{
 			memset( &shaderInfo, 0, sizeof( ShaderInfo_t ) );
 
-			const char *pCentroidMask = strstr( cmd, "/DCENTROIDMASK=" );
-			const char *pFlags = strstr( cmd, "/DFLAGS=0x" );
-			const char *pShaderModel = strstr( cmd, "/DSHADER_MODEL_" );
+			const char *pCentroidMask;
+			const char *pFlags;
+			const char *pShaderModel;
 
+			if ( g_bIsPS3 )
+			{
+				pCentroidMask = strstr( cmd, "-DCENTROIDMASK=" );
+				pFlags = strstr( cmd, "-DFLAGS=0x" );
+				pShaderModel = strstr( cmd, "-DSHADER_MODEL_" );
+			}
+			else
+			{
+				pCentroidMask = strstr( cmd, "/DCENTROIDMASK=" );
+				pFlags = strstr( cmd, "/DFLAGS=0x" );
+				pShaderModel = strstr( cmd, "/DSHADER_MODEL_" );
+			}
+			
 			if( !pCentroidMask || !pFlags || !pShaderModel )
 			{
 				Assert( !"!pCentroidMask || !pFlags || !pShaderModel" );
 				return;
 			}
 
+		
+			// Don't need to adjust the string for PS3 because it's the same length
 			sscanf( pCentroidMask + strlen( "/DCENTROIDMASK=" ), "%u", &shaderInfo.m_CentroidMask );
 			sscanf( pFlags + strlen( "/DFLAGS=0x" ), "%x", &shaderInfo.m_Flags );
 
 			// Copy shader model
-			pShaderModel += strlen( "/DSHADER_MODEL_" );
+			pShaderModel += strlen( "-DSHADER_MODEL_" );
+
 			for ( char *pszSm = shaderInfo.m_szShaderModel, * const pszEnd = pszSm + sizeof( shaderInfo.m_szShaderModel ) - 1;
 				pszSm < pszEnd ; ++ pszSm )
 			{
@@ -2069,7 +2150,7 @@ void Worker_GetLocalCopyOfShaders( void )
 
 	while( char *pszLineToCopy = bffr.InplaceGetLinePtr() )
 	{
-		V_MakeAbsolutePath( filename, sizeof( filename ), pszLineToCopy, g_pShaderPath );
+		sprintf( filename, "%s\\%s", g_pShaderPath, pszLineToCopy );
 		
 		if ( g_bVerbose )
 			printf( "getting local copy of shader: \"%s\" (\"%s\")\n", pszLineToCopy, filename );
@@ -2168,9 +2249,9 @@ void Worker_GetLocalCopyOfBinaries( void )
 
 void Shared_ParseListOfCompileCommands( void )
 {
-//	double tt_start = Plat_FloatTime();
+	double tt_start = Plat_FloatTime();
 
-	char fileListFileName[1024];
+	char fileListFileName[1024] = {0};
 	sprintf( fileListFileName, "%s\\filelist.txt", g_pShaderPath );
 
 	CUtlInplaceBuffer bffr( 0, 0, CUtlInplaceBuffer::TEXT_BUFFER );
@@ -2192,9 +2273,9 @@ void Shared_ParseListOfCompileCommands( void )
 		g_numCompileCommands = pInfo->m_iCommandEnd;
 	}
 
-//	double tt_end = Plat_FloatTime();
+	double tt_end = Plat_FloatTime();
 	
-	Msg( "\rCompiling %s commands.         \r", PrettyPrintNumber( g_numCompileCommands ) );
+	Msg( "\rCompiling %s commands.         \r", PrettyPrintNumber( g_numCompileCommands ), (tt_end - tt_start) );
 }
 
 void SetupExeDir( int argc, char **argv )
@@ -2396,6 +2477,10 @@ int ShaderCompile_Main( int argc, char* argv[] )
 	SetupExeDir( argc, argv );
 
 	g_bIsX360 = CommandLine()->FindParm( "-x360" ) != 0;
+	g_bIsPS3 = CommandLine()->FindParm( "-ps3" ) != 0;
+	g_bGeneratePS3DebugInfo = CommandLine()->FindParm( "-ps3debug" ) != 0;
+	g_bOptimizePS3ShaderScheduling = CommandLine()->FindParm( "-ps3optimizeschedules" ) != 0;
+
 	// g_bSuppressWarnings = g_bIsX360;
 
 	bool bShouldUseVMPI = ( CommandLine()->FindParm( "-nompi" ) == 0 );
@@ -2471,6 +2556,13 @@ int ShaderCompile_Main( int argc, char* argv[] )
 		DebugOut( "Before conditional\n" );
 		if ( g_bMPIMaster )
 		{
+			if ( g_bIsPS3 && g_bGeneratePS3DebugInfo )
+			{
+				// Prepare the files on the master which we will use to store the large amount of 
+				// debug metadata generated by the Sony Cg compiler on each worker machine.
+				InitializePS3ShaderDebugPackFiles();
+			}
+
 			// Send all of the workers the complete list of work to do.
 			DebugOut( "Before STARTWORK_PACKETID\n" );
 
@@ -2492,7 +2584,7 @@ int ShaderCompile_Main( int argc, char* argv[] )
 			// nWorkUnits is how many work units. . .1000 is good.
 			// The work unit number impies which combo to do.
 			DebugOut( "Before DistributeWork\n" );
-			DistributeWork( nWorkUnits, WORKUNIT_PACKETID, NULL, Master_ReceiveWorkUnitFn );
+			DistributeWork( nWorkUnits, NULL, Master_ReceiveWorkUnitFn );
 
 			g_pDistributeWorkCallbacks = NULL;
 		}
@@ -2514,6 +2606,28 @@ int ShaderCompile_Main( int argc, char* argv[] )
 
 			DebugOut( "Before _chdir\n" );
 			_chdir( g_WorkerTempPath );
+			
+			if ( g_bIsPS3 )
+			{
+				char szLogFilename[MAX_PATH];
+				if ( GetEnvironmentVariableA( "PS3COMPILELOG", szLogFilename, sizeof( szLogFilename ) ) == 0 )
+				{
+					uint nUniqueIndex = ( (DWORD)GetCurrentProcessId() ^ (DWORD)GetCurrentThreadId() ) + (DWORD)GetTickCount() + (DWORD)&nWorkUnits;
+					sprintf_s( szLogFilename, sizeof( szLogFilename ), "%s__ps3compilelog%08X__.tmp", g_WorkerTempPath, nUniqueIndex );
+
+					_unlink( szLogFilename );
+					SetEnvironmentVariableA( "PS3COMPILELOG", szLogFilename );
+				}
+
+				SetEnvironmentVariableA( "PS3FINDOPTIMALSCHEDULES", g_bOptimizePS3ShaderScheduling ? "1" : "0" );
+				SetEnvironmentVariableA( "PS3OPTIMALSCHEDULESFILE", g_bOptimizePS3ShaderScheduling ? "" : "ps3optimalschedules.bin" );
+				
+				if ( g_bGeneratePS3DebugInfo )
+				{
+					// Required by the Sony Cg compiler to emit debug metadata. Files are emitted on worker machine then copied back to master.
+					SetEnvironmentVariable( "SCECGC_CAPTUREDIR", g_WorkerTempPath );
+				}
+			}
 
 			// nWorkUnits is how many work units. . .1000 is good.
 			// The work unit number impies which combo to do.
@@ -2522,7 +2636,7 @@ int ShaderCompile_Main( int argc, char* argv[] )
 			// Allows calling into ProcessCommandRange inside the worker function
 			{
 				Worker_ProcessCommandRange_Singleton pcr;
-				DistributeWork( nWorkUnits, WORKUNIT_PACKETID, Worker_ProcessWorkUnitFn, NULL );
+				DistributeWork( nWorkUnits, Worker_ProcessWorkUnitFn, NULL );
 			}
 		}
 
@@ -2573,6 +2687,7 @@ int ShaderCompile_Main( int argc, char* argv[] )
 			CompilerMsgInfo const &cmi = g_Master_CompilerMsgInfo[ int_as_symid( k ) ];
 
 			char const * const szFirstCmd = cmi.GetFirstCommand();
+			char const * const szFirstMachineName = cmi.GetFirstMachineName();
 			int const numReported = cmi.GetNumTimesReported();
 
 			uint64 iFirstCommand = _strtoui64( szFirstCmd, NULL, 10 );
@@ -2591,7 +2706,7 @@ int ShaderCompile_Main( int argc, char* argv[] )
 
 
 			Msg( "\n%s\n", szMsg );
-			Msg( "    Reported %d time(s), example command:\n", numReported);
+			Msg( "    Reported %d time(s), first machine \"%s\", example command:\n", numReported, szFirstMachineName );
 
 			if ( bValveVerboseComboErrors )
 			{
@@ -2603,10 +2718,21 @@ int ShaderCompile_Main( int argc, char* argv[] )
 				}
 
 				// Between     /DSHADERCOMBO=   and    /Dmain
-				char const *pBegin = strstr( str, "/DSHADERCOMBO=" );
-				char const *pEnd = strstr( str, "/Dmain" );
+				char const *pBegin;
+				char const *pEnd;
+				if ( g_bIsPS3 )
+				{
+					pBegin = strstr( str, "-DSHADERCOMBO=" );
+					pEnd = strstr( str, "-Dmain" );
+				}
+				else
+				{
+					pBegin = strstr( str, "/DSHADERCOMBO=" );
+					pEnd = strstr( str, "/Dmain" );
+				}
 				if ( pBegin )
 				{
+					// Don't need to adjust the string for PS3 because it's the same length
 					pBegin += strlen( "/DSHADERCOMBO=" ) ;
 					char const *pSpace = strchr( pBegin, ' ' );
 					if ( pSpace )
@@ -2623,7 +2749,15 @@ int ShaderCompile_Main( int argc, char* argv[] )
 				// Now parse all combo defines in [pBegin, pEnd]
 				while ( pBegin && *pBegin && ( pBegin < pEnd ) )
 				{
-					char const *pDefine = strstr( pBegin, "/D" );
+					char const *pDefine;
+					if ( g_bIsPS3 )
+					{
+						pDefine = strstr( pBegin, "-D" );
+					}
+					else
+					{
+						pDefine = strstr( pBegin, "/D" );
+					}
 					if ( !pDefine || pDefine >= pEnd )
 						break;
 
@@ -2669,6 +2803,12 @@ int ShaderCompile_Main( int argc, char* argv[] )
 			VMPI_FileSystem_Term();
 			DebugOut( "Before VMPI_Finalize\n" );
 			VMPI_Finalize();
+		}
+
+		if ( g_bIsPS3 && g_bGeneratePS3DebugInfo )
+		{
+			// On the master, expand the giant TOC/Pack files we've built into many tiny files needed by the shader debug process.
+			ExpandPS3DebugInfo();
 		}
 	}
 	

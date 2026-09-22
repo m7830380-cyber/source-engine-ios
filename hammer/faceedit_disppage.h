@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -37,9 +37,7 @@ public:
 			FACEEDITTOOL_SUBDIV,
 			FACEEDITTOOL_NOISE,
 			FACEEDITTOOL_TAG_WALK,
-			FACEEDITTOOL_TAG_BUILD,
-			FACEEDITTOOL_TAG_REMOVE,
-	};
+			FACEEDITTOOL_TAG_BUILD };
 
 public:
 
@@ -115,7 +113,6 @@ protected:
 	afx_msg void OnButtonPaintData( void );
 	afx_msg void OnButtonTagWalkable( void );
 	afx_msg void OnButtonTagBuildable( void );
-	afx_msg void OnButtonTagRemove( void );
 	afx_msg void OnSelectAdjacent();
 	afx_msg void OnButtonInvertAlpha( void );
 

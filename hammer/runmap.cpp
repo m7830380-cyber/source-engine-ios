@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: The UI for simple map compiles.
 //
@@ -27,6 +27,7 @@ CRunMap::CRunMap(CWnd* pParent /*=NULL*/)
 	m_iLight = -1;
 	m_iQBSP = -1;
 	m_bHDRLight = FALSE;
+	m_bWaitForKeypress = false;
 	//}}AFX_DATA_INIT
 
 	// read from ini
@@ -37,7 +38,7 @@ CRunMap::CRunMap(CWnd* pParent /*=NULL*/)
 	m_iLight = App->GetProfileInt(pszSection, "Light", 1);
 	m_bHDRLight = App->GetProfileInt(pszSection, "HDRLight", 0);
 	m_bNoQuake = App->GetProfileInt(pszSection, "No Game", 0);
-	m_strQuakeParms = App->GetProfileString(pszSection, "Game Parms", "");
+	m_strQuakeParms = App->GetProfileString(pszSection, "Game Parms", "+sv_lan 1");
 }
 
 
@@ -51,6 +52,7 @@ void CRunMap::DoDataExchange(CDataExchange* pDX)
 	DDX_Radio(pDX, IDC_VIS0, m_iVis);
 	DDX_Radio(pDX, IDC_RAD0, m_iLight);
 	DDX_Check(pDX, IDC_RAD_HDR, m_bHDRLight);
+	DDX_Check(pDX, IDC_WAITFORKEYPRESS, m_bWaitForKeypress);
 	//}}AFX_DATA_MAP
 }
 
@@ -79,6 +81,7 @@ END_MESSAGE_MAP()
 void CRunMap::OnExpert() 
 {
 	m_bSwitchMode = TRUE;
+	UpdateData();
 	EndDialog(IDOK);
 }
 

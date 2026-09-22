@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -33,13 +33,13 @@ CTabWindow::CTabWindow( mxWindow *parent, int x, int y, int w, int h, int id /*=
 	m_nPixelDelta = 3;
 	m_bInverted = false;
 	m_bRightJustify = false;
-	SetColor( COLOR_BG, GetSysColor( COLOR_BTNFACE ) );
-	SetColor( COLOR_FG, GetSysColor( COLOR_INACTIVECAPTION ) );
-	SetColor( COLOR_FG_SELECTED, GetSysColor( COLOR_ACTIVECAPTION ) );
-	SetColor( COLOR_HILITE, GetSysColor( COLOR_3DSHADOW ) );
-	SetColor( COLOR_HILITE_SELECTED, GetSysColor( COLOR_3DHILIGHT ) );
-	SetColor( COLOR_TEXT, GetSysColor( COLOR_CAPTIONTEXT ) );
-	SetColor( COLOR_TEXT_SELECTED, GetSysColor( COLOR_INACTIVECAPTIONTEXT ) );
+	SetColor( COLOR_BG, RGBToColor( GetSysColor( COLOR_BTNFACE ) ) );
+	SetColor( COLOR_FG, RGBToColor( GetSysColor( COLOR_INACTIVECAPTION ) ) );
+	SetColor( COLOR_FG_SELECTED, RGBToColor( GetSysColor( COLOR_ACTIVECAPTION ) ) );
+	SetColor( COLOR_HILITE, RGBToColor( GetSysColor( COLOR_3DSHADOW ) ) );
+	SetColor( COLOR_HILITE_SELECTED, RGBToColor( GetSysColor( COLOR_3DHILIGHT ) ) );
+	SetColor( COLOR_TEXT, RGBToColor( GetSysColor( COLOR_CAPTIONTEXT ) ) );
+	SetColor( COLOR_TEXT_SELECTED, RGBToColor( GetSysColor( COLOR_INACTIVECAPTIONTEXT ) ) );
 
 	FacePoser_AddWindowStyle( this, WS_CLIPCHILDREN | WS_CLIPSIBLINGS );
 }
@@ -58,7 +58,7 @@ CTabWindow::~CTabWindow ( void )
 // Input  : index - 
 //			clr - 
 //-----------------------------------------------------------------------------
-void CTabWindow::SetColor( int index, COLORREF clr )
+void CTabWindow::SetColor( int index, const Color& clr )
 {
 	if ( index < 0 || index >= NUM_COLORS )
 		return;
@@ -100,14 +100,14 @@ void CTabWindow::DrawTab( CChoreoWidgetDrawHelper& drawHelper, RECT& rcClient, i
 {
 	RECT rcTab;
 
-	if ( tabnum < 0 || tabnum >= m_Items.Size() )
+	if ( tabnum < 0 || tabnum >= m_Items.Count() )
 		return;
 
 	GetTabRect( rcClient, rcTab, tabnum );
 
-	COLORREF fgcolor = m_Colors[ selected ? COLOR_FG_SELECTED : COLOR_FG ];
-	COLORREF hilightcolor = m_Colors[ selected ? COLOR_HILITE_SELECTED : COLOR_HILITE ];
-	COLORREF text = m_Colors[ selected ? COLOR_TEXT_SELECTED : COLOR_TEXT ];
+	Color fgcolor = m_Colors[ selected ? COLOR_FG_SELECTED : COLOR_FG ];
+	Color hilightcolor = m_Colors[ selected ? COLOR_HILITE_SELECTED : COLOR_HILITE ];
+	Color text = m_Colors[ selected ? COLOR_TEXT_SELECTED : COLOR_TEXT ];
 
 	// Create a trapezoid/paralleogram
 	POINT region[4];
@@ -150,9 +150,8 @@ void CTabWindow::DrawTab( CChoreoWidgetDrawHelper& drawHelper, RECT& rcClient, i
 
 	int oldPF = SetPolyFillMode( dc, ALTERNATE );
 	
-	HBRUSH brBg = CreateSolidBrush( fgcolor );
-	HBRUSH brBorder = CreateSolidBrush( hilightcolor );
-	//HBRUSH brInset = CreateSolidBrush( fgcolor );
+	HBRUSH brBg = CreateSolidBrush( ColorToRGB( fgcolor ) );
+	HBRUSH brBorder = CreateSolidBrush( ColorToRGB(  hilightcolor ) );
 
 	FillRgn( dc, rgn, brBg );
 	FrameRgn( dc, rgn, brBorder, 1, 1 );
@@ -187,7 +186,7 @@ void CTabWindow::redraw( void )
 	drawHelper.GetClientRect( rc );
 
 	// Draw non-selected first
-	for ( int i = 0 ; i < m_Items.Size(); i++ )
+	for ( int i = 0 ; i < m_Items.Count(); i++ )
 	{
 		if ( i == m_nSelected )
 			continue;
@@ -196,7 +195,7 @@ void CTabWindow::redraw( void )
 	}
 
 	// Draw selected last, so that it appears to pop to top of z order
-	if ( m_nSelected >= 0 && m_nSelected < m_Items.Size() )
+	if ( m_nSelected >= 0 && m_nSelected < m_Items.Count() )
 	{
 		DrawTab( drawHelper, rc, m_nSelected, true );
 	}
@@ -213,7 +212,7 @@ int CTabWindow::GetItemUnderMouse( int mx, int my )
 	RECT rcClient;
 	GetClientRect( (HWND)getHandle(), &rcClient );
 
-	for ( int i = 0; i < m_Items.Size() ; i++ )
+	for ( int i = 0; i < m_Items.Count() ; i++ )
 	{
 		RECT rcTab;
 		GetTabRect( rcClient, rcTab, i );
@@ -288,14 +287,14 @@ int CTabWindow::handleEvent (mxEvent *event)
 void CTabWindow::add( const char *item )
 {
 	m_Items.AddToTail();
-	CETItem *p = &m_Items[ m_Items.Size() - 1 ];
+	CETItem *p = &m_Items[ m_Items.Count() - 1 ];
 	Assert( p );
 
 	Q_memset( &p->rect, 0, sizeof( p->rect) );
 
 	strcpy( p->m_szString, item );
 	p->m_szPrefix[ 0 ] = 0;
-	m_nSelected = min( m_nSelected, m_Items.Size() - 1 );
+	m_nSelected = min( m_nSelected, m_Items.Count() - 1 );
 	m_nSelected = max( m_nSelected, 0 );
 
 	RecomputeLayout( w2() );
@@ -305,7 +304,7 @@ void CTabWindow::add( const char *item )
 
 void CTabWindow::setPrefix( int item, char const *prefix )
 {
-	if ( item < 0 || item >= m_Items.Size() )
+	if ( item < 0 || item >= m_Items.Count() )
 		return;
 
 	Q_strncpy( m_Items[ item ].m_szPrefix, prefix, sizeof( m_Items[ item ].m_szPrefix ) );
@@ -318,7 +317,7 @@ void CTabWindow::setPrefix( int item, char const *prefix )
 //-----------------------------------------------------------------------------
 void CTabWindow::select( int index )
 {
-	if ( index < 0 || index >= m_Items.Size() )
+	if ( index < 0 || index >= m_Items.Count() )
 		return;
 
 	m_nSelected = index;
@@ -331,12 +330,12 @@ void CTabWindow::select( int index )
 //-----------------------------------------------------------------------------
 void CTabWindow::remove( int index )
 {
-	if ( index < 0 || index >= m_Items.Size() )
+	if ( index < 0 || index >= m_Items.Count() )
 		return;
 	
 	m_Items.Remove( index );
 
-	m_nSelected = min( m_nSelected, m_Items.Size() - 1 );
+	m_nSelected = min( m_nSelected, m_Items.Count() - 1 );
 	m_nSelected = max( m_nSelected, 0 );
 
 	RecomputeLayout( w2() );
@@ -363,7 +362,7 @@ void CTabWindow::removeAll()
 //-----------------------------------------------------------------------------
 int CTabWindow::getItemCount () const
 {
-	return m_Items.Size();
+	return m_Items.Count();
 }
 
 //-----------------------------------------------------------------------------
@@ -420,7 +419,7 @@ int CTabWindow::RecomputeLayout( int windowWidth, bool dolayout /*=true*/ )
 
 	int currentrow = 0;
 
-	for ( int i = 0 ; i < m_Items.Size(); i++ )
+	for ( int i = 0 ; i < m_Items.Count(); i++ )
 	{
 		CETItem *p = &m_Items[ i ];
 

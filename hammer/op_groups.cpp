@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Implements the groups page of the Object Properties dialog. This
 //			allows the user to edit which visgroups the selected objects belong to.
@@ -85,7 +85,7 @@ void COP_Groups::SetMultiEdit(bool b)
 // Purpose: 
 // Output : Returns true on success, false on failure.
 //-----------------------------------------------------------------------------
-bool COP_Groups::SaveData(void)
+bool COP_Groups::SaveData( SaveData_Reason_t reason )
 {
 	if (!IsWindow(m_hWnd))
 	{
@@ -107,7 +107,7 @@ bool COP_Groups::SaveData(void)
 		{
 			FOR_EACH_OBJ( *m_pObjectList, pos )
 			{
-				CMapClass *pObject = m_pObjectList->Element(pos);
+				CMapClass *pObject = (CUtlReference< CMapClass >)m_pObjectList->Element(pos);
 				if (nCheck)
 				{
 					pObject->AddVisGroup(pVisGroup);
@@ -206,21 +206,41 @@ void COP_Groups::UpdateGroupList(void)
 	m_cGroups.SetRedraw(false);
 	m_cGroups.DeleteAllItems();
 
+	CVisGroup *pAuto = NULL;
+
 	CMapDoc *pDoc = CMapDoc::GetActiveMapDoc();
 	if (pDoc != NULL)
 	{
-		int nCount = pDoc->VisGroups_GetCount();
+		int nCount = pDoc->VisGroups_GetRootCount();
 		for (int i = 0; i < nCount; i++)
 		{
-			CVisGroup *pGroup = pDoc->VisGroups_GetVisGroup(i);
-			if (!pGroup->GetParent())
+			CVisGroup *pGroup = pDoc->VisGroups_GetRootVisGroup(i);
+			if (stricmp(pGroup->GetName(), "Auto") != 0)
 			{
 				m_cGroups.AddVisGroup(pGroup);
 			}
+			else
+			{
+				pAuto = pGroup;
+			}
+		}
+		
+		// We can't reassign membership to auto visgroups, and rarely need to check membership,
+		// so add the "Auto" visgroup last so that it doesn't get in the way.
+		if (pAuto)
+		{
+			m_cGroups.AddVisGroup(pAuto);
 		}
 	}
 
 	m_cGroups.ExpandAll();
+
+	// If this ever gets slow we could pass a param into ExpandAll to not expand "Auto"
+	if (pAuto)
+	{
+		m_cGroups.CollapseItem(pAuto);
+	}
+
 	m_cGroups.SetRedraw(true);
 	m_cGroups.Invalidate();
 }

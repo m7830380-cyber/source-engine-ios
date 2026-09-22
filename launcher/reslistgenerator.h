@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -20,9 +20,8 @@ public:
 	virtual void Init( char const *pchBaseDir, char const *pchGameDir ) = 0;
 	virtual void Shutdown() = 0;
 	virtual bool IsActive() = 0;
-
-	virtual void SetupCommandLine() = 0;
-
+	// Returns true if processing should continue, otherwise false
+	virtual bool TickAndFixupCommandLine() = 0;
 	virtual bool ShouldContinue() = 0;
 };
 

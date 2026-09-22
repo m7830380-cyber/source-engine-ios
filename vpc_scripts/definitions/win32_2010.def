@@ -12,34 +12,34 @@
 
 	"$General"
 	{
+		"$DisableFastUpToDateCheck"
+		{
+			"type"	"bool"
+			"globalproperty"	"1"
+		}
+
 		"$AdditionalProjectDependencies"
 		{
-			"type"	"ignore"
+			"type"				"string"
+			"IgnoreForOutput"	"1"
 		}
-	
+		
+		"$SchemaPreIncludeFiles"
+		{
+			"type"	"string"
+			"IgnoreForOutput"	"1"
+		}
+		
 		"$AdditionalOutputFiles"
 		{
-			"type"	"ignore"
+			"type"				"string"
+			"IgnoreForOutput"	"1"
 		}
 	
 		"$GameOutputFile"
 		{
-			"type"	"ignore"
-		}
-
-		"$TargetCopies"
-		{
-			"type"	"ignore"
-		}
-
-		"$BuildMultiArch"
-		{
-			"type"	"ignore"
-		}
-
-		"$BuildX64Only"
-		{
-			"type"	"ignore"
+			"type"				"string"
+			"IgnoreForOutput"	"1"
 		}
 	
 		"$InheritedProjectPropertySheets"
@@ -100,13 +100,18 @@
 			"type"	"string"
 		}
 
+		"$PreferredToolArchitecture"
+		{
+			"type"	"string"
+		}
+		
 		"$ExecutableDirectories"
 		{
 			"type"				"string"
 			"output"			"ExecutablePath"
 			"globalproperty"	"1"
 		}
-
+				
 		"$ConfigurationType"
 		{
 			"ordinals"
@@ -117,6 +122,7 @@
 				"Dynamic Library (.dll)"	"DynamicLibrary"
 				"Dynamic Library (.xex)"	"DynamicLibrary"
 				"Static Library (.lib)"		"StaticLibrary"
+				"Makefile"					"Makefile"
 			}
 		}
 		
@@ -165,6 +171,69 @@
 				"Profile Guided Optimization - Optimize"	"PGOptimize"
 				"Profile Guided Optimization - Update"		"PGUpdate"
 			}
+		}
+
+		"$NMakeBuildCommandLine"
+		{
+			"type"	"string"
+		}
+		"$NMakeReBuildCommandLine"
+		{
+			"type"	"string"
+		}
+		"$NMakeCleanCommandLine"
+		{
+			"type"	"string"
+		}
+		"$NMakeOutput"
+		{
+			"type"	"string"
+		}
+	}
+
+	"$Intellisense"
+	{
+		//we glean most of these from other tools
+		"$NMakePreprocessorDefinitions"
+		{
+			"type"	"string"
+			"globalproperty"	"1"
+			"GeneratedOnOutput" "1"
+		}
+
+		"$NMakeIncludeSearchPath"
+		{
+			"type"	"string"
+			"globalproperty"	"1"
+			"GeneratedOnOutput" "1"
+		}
+
+		"$NMakeForcedIncludes"
+		{
+			"type"	"string"
+			"globalproperty"	"1"
+			"GeneratedOnOutput" "1"
+		}
+
+		"$NMakeAssemblySearchPath"
+		{
+			"type"	"string"
+			"globalproperty"	"1"
+			"GeneratedOnOutput" "1"
+		}
+
+		"$NMakeForcedUsingAssemblies"
+		{
+			"type"	"string"
+			"globalproperty"	"1"
+			"GeneratedOnOutput" "1"
+		}
+
+		"$AdditionalOptions"
+		{
+			"type"	"string"
+			"globalproperty"	"1"
+			"GeneratedOnOutput" "1"
 		}
 	}
 	
@@ -220,12 +289,20 @@
 	{
 		"$SymbolVisibility"
 		{
-			"type"	"ignore"
+			"type"				"string"
+			"IgnoreForOutput"	"1"
 		}
 	
 		"$GCC_ExtraCompilerFlags"
 		{
-			"type"	"ignore"
+			"type"				"string"
+			"IgnoreForOutput"	"1"
+		}
+
+		"$GCC_ExtraCxxCompilerFlags"
+		{
+			"type"				"string"
+			"IgnoreForOutput"	"1"
 		}
 
 		"$Detect64bitPortabilityIssues"
@@ -248,9 +325,10 @@
 			"type"	"ignore"
 		}
 		
-		"$AdditionalLibraryDirectories"
+		"$OptimizerLevel"
 		{
-			"type"	"ignore"
+			"type"				"string"
+			"IgnoreForOutput"	"1"
 		}
 		
 		// General
@@ -667,6 +745,8 @@
 		"$DisableSpecificWarnings"
 		{
 			"type"	"string"
+			"PreferSemicolonNoComma"	"1"
+			"PreferSemicolonNoSpace"	"1"
 		}
 		
 		"$ForcedIncludeFile"
@@ -693,7 +773,7 @@
 			"type"	"bool"
 		}
 						
-		"$OmitDefaultLibName"
+		"$OmitDefaultLibraryName"
 		{
 			"type"		"bool"
 			"legacy"	"$OmitDefaultLibraryNames"
@@ -743,25 +823,6 @@
 			"type"	"string"
 		}
 		
-		"$TargetMachine"
-		{
-			"ordinals"
-			{
-				"Not Set"								"NotSet"
-				"MachineARM (/MACHINE:ARM)"				"MachineARM"
-				"MachineEBC (/MACHINE:EBC)"				"MachineEBC"
-				"MachineIA64 (/MACHINE:IA64)"			"MachineIA64"
-				"MachineMIPS (/MACHINE:MIPS)"			"MachineIA64"
-				"MachineMIPS16 (/MACHINE:MIPS16)"		"MachineMIPS16"
-				"MachineMIPSFPU (/MACHINE:MIPSFPU)"		"MachineMIPSFPU"
-				"MachineMIPSFPU16 (/MACHINE:MIPSFPU16)"	"MachineMIPSFPU16"
-				"MachineSH4 (/MACHINE:SH4)"				"MachineSH4"
-				"MachineTHUMB (/MACHINE:THUMB)"			"MachineTHUMB"
-				"MachineX64 (/MACHINE:X64)"				"MachineX64"
-				"MachineX86 (/MACHINE:X86)"				"MachineX86"
-			}
-		}
-
 		"$SuppressStartupBanner"
 		{
 			"type"	"bool"
@@ -805,6 +866,25 @@
 			"type"				"bool"
 		}
 		
+		"$TargetMachine"
+		{
+			"ordinals"
+			{
+				"Not Set"								"NotSet"
+				"MachineARM (/MACHINE:ARM)"				"MachineARM"
+				"MachineEBC (/MACHINE:EBC)"				"MachineEBC"
+				"MachineIA64 (/MACHINE:IA64)"			"MachineIA64"
+				"MachineMIPS (/MACHINE:MIPS)"			"MachineIA64"
+				"MachineMIPS16 (/MACHINE:MIPS16)"		"MachineMIPS16"
+				"MachineMIPSFPU (/MACHINE:MIPSFPU)"		"MachineMIPSFPU"
+				"MachineMIPSFPU16 (/MACHINE:MIPSFPU16)"	"MachineMIPSFPU16"
+				"MachineSH4 (/MACHINE:SH4)"				"MachineSH4"
+				"MachineTHUMB (/MACHINE:THUMB)"			"MachineTHUMB"
+				"MachineX64 (/MACHINE:X64)"				"MachineX64"
+				"MachineX86 (/MACHINE:X86)"				"MachineX86"
+			}
+		}
+
 		"$AdditionalOptions"					
 		{
 			"type"	"string"
@@ -815,32 +895,38 @@
 	{
 		"$SystemLibraries"
 		{
-			"type"	"ignore"
+			"type"				"string"
+			"IgnoreForOutput"	"1"
 		}
 		
 		"$SystemFrameworks"
 		{
-			"type"	"ignore"
+			"type"				"string"
+			"IgnoreForOutput"	"1"
 		}
 		
 		"$LocalFrameworks"
 		{
-			"type"	"ignore"
+			"type"				"string"
+			"IgnoreForOutput"	"1"
 		}
 
 		"$GCC_ExtraLinkerFlags"
 		{
-			"type"	"ignore"
-		}
-		
-		"$GCC_CustomVersionScript"
-		{
-			"type"	"ignore"
+			"type"				"string"
+			"IgnoreForOutput"	"1"
 		}
 
-		"$LinkAsBundle"
+		"$POSIX_RPaths"
 		{
-			"type"	"ignore"
+			"type"				"string"
+			"IgnoreForOutput"	"1"
+		}
+
+		"$DisableLinkerDeadCodeElimination"
+		{
+			"type"				"string"
+			"IgnoreForOutput"	"1"
 		}
 
 		"$UseUNICODEResponseFiles"
@@ -1060,6 +1146,12 @@
 		// Debugging
 		"$GenerateDebugInfo"
 		{
+			// This is gross, but VS2015 diverged from VS2010 here by turning a bool
+			// into a multi-choice setting, so instead of forking off all of the
+			// VS2010 code/definitions into a separate VS2015 one, I just changed
+			// this to a string and updated the old values to "true" to match what
+			// the vcxproj files expect.
+			//"type"		"string"
 			"type"		"bool"
 			"output"	"GenerateDebugInformation"
 		}
@@ -1264,6 +1356,7 @@
 		"$NoEntryPoint"
 		{
 			"type"		"bool"
+			"output"	"ResourceOnlyDLL"
 		}
 		
 		"$SetChecksum"
@@ -1292,9 +1385,10 @@
 			}
 		}
 		
-		"$DataExecutionPrevention"
+		"$DataExecutionPrevention(DEP)"
 		{
 			"type"	"bool"
+			"alias"	"DataExecutionPrevention"
 		}
 		
 		"$TurnOffAssemblyGeneration"
@@ -1853,10 +1947,35 @@
 			"type"	"string"
 		}
 
+		"$PotentialOutputs"
+		{
+			"type"	"string"
+		}
+
 		"$AdditionalDependencies"
 		{
 			"type"		"string"
 			"output"	"AdditionalInputs"
+		}
+
+		"$AdditionalDependencies_Proj"
+		{
+			"type"		"string"
+			"output"	"Inputs"
+		}
+
+		//we should run after these file dependencies are complete, but they don't invalidate the step
+		"$OrderOnlyFileDependencies"
+		{
+			"type"				"string"
+			"IgnoreForOutput"	"1"
+		}
+
+		//exactly the same as $General->$AdditionalProjectDependencies except it can be attached to build tools
+		"$OrderOnlyProjectDependencies"
+		{
+			"type"				"string"
+			"IgnoreForOutput"	"1"
 		}
 		
 		"$ExecuteAfter"
@@ -1869,9 +1988,11 @@
 		
 		"$ExecuteBefore"
 		{
+			"globalproperty"	"1"
+			"output"			"CustomBuildBeforeTargets"
 			"ordinals"
 			{
-				"AddIntermediateAssemblyToReferenceList"	"0"
+				"ClCompile"		"ClCompile"
 			}
 		}
 	}

@@ -83,14 +83,14 @@ flatten_dir "$APP/usr"
 flatten_dir "$APP/bin"
 flatten_dir "$APP/lib"
 
-if [ ! -f "$APP/hl2_launcher" ]; then
-	echo "Packaging failed: hl2_launcher missing from app root" >&2
+if [ ! -f "$APP/csgo_osx64" ]; then
+	echo "Packaging failed: csgo_osx64 missing from app root" >&2
 	echo "App tree:" >&2
 	find "$APP" -maxdepth 4 -print >&2 || true
 	exit 1
 fi
 
-chmod +x "$APP/hl2_launcher"
+chmod +x "$APP/csgo_osx64"
 
 # Offline game dir (gameinfo only in-repo; maps/vpks come from the Steam install).
 if [ -d "$ROOT/csgo" ]; then
@@ -136,7 +136,7 @@ fix_macho() {
 }
 
 if command -v install_name_tool >/dev/null && command -v otool >/dev/null; then
-	fix_macho "$APP/hl2_launcher"
+	fix_macho "$APP/csgo_osx64"
 	shopt -s nullglob
 	for dylib in "$APP"/*.dylib; do
 		fix_macho "$dylib"
@@ -145,7 +145,7 @@ if command -v install_name_tool >/dev/null && command -v otool >/dev/null; then
 
 	# Fail the pack if any LC_LOAD_DYLIB still points at the CI workspace.
 	# otool -L prints "<path>:" headers — only check indented dependency lines.
-	bad_deps="$(otool -L "$APP"/lib*.dylib "$APP/hl2_launcher" 2>/dev/null | awk '/^\t/ {print $1}' | grep -E '^/Users/|/build/(tier0|vstdlib|togles|stub_steam)/' || true)"
+	bad_deps="$(otool -L "$APP"/*.dylib "$APP/csgo_osx64" 2>/dev/null | awk '/^\t/ {print $1}' | grep -E '^/Users/|/build/' || true)"
 	if [ -n "$bad_deps" ]; then
 		echo "Packaging failed: absolute build paths still present in load commands:" >&2
 		echo "$bad_deps" >&2

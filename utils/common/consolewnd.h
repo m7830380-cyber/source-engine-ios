@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -34,6 +34,9 @@ public:
 
 
 // Utility functions.
+
+// Clear the contents of the edit control.
+void ClearEditControl( void *hWnd );
 
 // This converts adds \r's where necessary and sends the text to the edit control.
 void FormatAndSendToEditControl( void *hWnd, const char *pText );

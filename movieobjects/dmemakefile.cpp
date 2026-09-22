@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2004, Valve Corporation, All rights reserved. =======
 //
 // Describes an asset: something that is compiled from sources, 
 // in potentially multiple steps, to a compiled resource
@@ -75,7 +75,7 @@ void CDmeMakefile::OnConstruction()
 {
 	m_Sources.Init( this, "sources" );
 	m_hOutput = NULL;
-	m_hCompileProcess = PROCESS_HANDLE_INVALID;
+	m_hCompileProcess = NULL;
 	m_bIsDirty = false;
 }
 

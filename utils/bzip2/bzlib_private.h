@@ -90,7 +90,7 @@ typedef unsigned short  UInt16;
 #define False ((Bool)0)
 
 #ifndef __GNUC__
-#define __inline__  __forceinline
+#define __inline__  /* */
 #endif 
 
 #ifndef BZ_NO_STDIO
@@ -509,19 +509,8 @@ typedef
 
 /*-- externs for decompression. --*/
 
-/*---------------------------------------------------*/
-__inline__ Int32 BZ2_indexIntoF ( Int32 indx, Int32 *cftab )
-{
-   Int32 nb, na, mid;
-   nb = 0;
-   na = 256;
-   do {
-      mid = (nb + na) >> 1;
-      if (indx >= cftab[mid]) nb = mid; else na = mid;
-   }
-   while (na - nb != 1);
-   return nb;
-}
+extern Int32 
+BZ2_indexIntoF ( Int32, Int32* );
 
 extern Int32 
 BZ2_decompress ( DState* );
@@ -552,6 +541,9 @@ BZ2_hbCreateDecodeTables ( Int32*, Int32*, Int32*, UChar*,
 #pragma warning(disable : 4100) // warning C4100: 'hwnd' : unreferenced formal parameter
 #pragma warning( disable : 4267 )	// conversion from 'size_t' to 'int', possible loss of data
 #endif
+
+// We use this Valve func as an optimization:
+extern int V_isspace(int c);
 
 /*-------------------------------------------------------------*/
 /*--- end                                   bzlib_private.h ---*/

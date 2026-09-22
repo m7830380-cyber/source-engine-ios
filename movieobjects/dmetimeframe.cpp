@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2004, Valve Corporation, All rights reserved. =======
 //
 // Purpose: 
 //
@@ -22,9 +22,9 @@ IMPLEMENT_ELEMENT_FACTORY( DmeTimeFrame, CDmeTimeFrame );
 //-----------------------------------------------------------------------------
 void CDmeTimeFrame::OnConstruction()
 {
-	m_Start   .InitAndSet( this, "startTime",    0, FATTRIB_HAS_CALLBACK );
-	m_Duration.InitAndSet( this, "durationTime", 0, FATTRIB_HAS_CALLBACK );
-	m_Offset  .InitAndSet( this, "offsetTime",   0 );
+	m_Start   .InitAndSet( this, "start",    DMETIME_ZERO, FATTRIB_HAS_CALLBACK );
+	m_Duration.InitAndSet( this, "duration", DMETIME_ZERO, FATTRIB_HAS_CALLBACK );
+	m_Offset  .InitAndSet( this, "offset",   DMETIME_ZERO );
 	m_Scale   .InitAndSet( this, "scale",    1.0f );
 }
 
@@ -48,11 +48,11 @@ void CDmeTimeFrame::SetEndTime( DmeTime_t endTime, bool bChangeDuration )
 {
 	if ( bChangeDuration )
 	{
-		m_Duration = endTime.GetTenthsOfMS() - m_Start;
+		m_Duration = endTime - m_Start;
 	}
 	else
 	{
-		m_Start = endTime.GetTenthsOfMS() - m_Duration;
+		m_Start = endTime - m_Duration;
 	}
 }
 
@@ -63,27 +63,24 @@ void CDmeTimeFrame::SetTimeScale( float flScale, DmeTime_t scaleCenter, bool bCh
 #endif
 
 	float ratio = m_Scale / flScale;
-	int t = scaleCenter.GetTenthsOfMS() - m_Start;
+	DmeTime_t t = scaleCenter - m_Start;
 
 	if ( bChangeDuration )
 	{
-		int newDuration = int( m_Duration * ratio );
+		DmeTime_t newDuration = m_Duration.Get() * ratio;
 
-		if ( scaleCenter.GetTenthsOfMS() != m_Start )
+		if ( scaleCenter != m_Start )
 		{
-			int newStart = int( ( m_Start - scaleCenter.GetTenthsOfMS() ) * ratio + scaleCenter.GetTenthsOfMS() );
-			SetStartTime( DmeTime_t( newStart ) );
+			DmeTime_t newStart = ( m_Start.Get() - scaleCenter ) * ratio + scaleCenter;
+			SetStartTime( newStart );
 		}
 
-		int newStart = m_Start;
-		int newOffset = int( ( t + m_Offset ) * ratio + newStart - scaleCenter.GetTenthsOfMS() );
-		SetTimeOffset( DmeTime_t( newOffset ) );
-		SetDuration( DmeTime_t( newDuration ) );
+		SetTimeOffset( ( t + m_Offset.Get() ) * ratio + m_Start.Get() - scaleCenter );
+		SetDuration( newDuration );
 	}
 	else
 	{
-		int newOffset = int( ( t + m_Offset ) * ratio - t );
-		SetTimeOffset( DmeTime_t( newOffset ) );
+		SetTimeOffset( ( t + m_Offset.Get() ) * ratio - t );
 	}
 
 	SetTimeScale( flScale );

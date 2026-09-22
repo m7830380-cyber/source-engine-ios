@@ -28,7 +28,6 @@
 class CUtlSymbolTable;
 class CUtlSymbolTableMT;
 
-#define FILENAMEHANDLE_INVALID 0
 
 //-----------------------------------------------------------------------------
 // This is a symbol, which is a easier way of dealing with strings.
@@ -138,7 +137,9 @@ protected:
 	class CStringPoolIndex
 	{
 	public:
-		inline CStringPoolIndex() = default;
+		inline CStringPoolIndex()
+		{
+		}
 
 		inline CStringPoolIndex( unsigned short iPool, unsigned short iOffset )
 			: 	m_iPool(iPool), m_iOffset(iOffset)

@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -90,6 +90,7 @@ class COP_Output : public CObjectPage, public CFilteredComboBox::ICallbacks
 
 		// Validation functions
 		bool ValidateConnections(COutputConnection *pOutputConn, bool bVisibilityCheck);
+		bool ValidateExternalConnections(COutputConnection *pOutputConn, bool bVisibilityCheck);
 		void UpdateValidityButton(void);
 
 		// Edit controls
@@ -150,6 +151,8 @@ class COP_Output : public CObjectPage, public CFilteredComboBox::ICallbacks
 		void FillInputList(void);
 		void FillOutputList(void);
 		void FillTargetList(void);
+
+		CMapEntity *GetTargetInstanceIOProxy();
 
 		void FilterInputList(void);
 		void FilterOutputList(void);
@@ -223,6 +226,7 @@ class COP_Output : public CObjectPage, public CFilteredComboBox::ICallbacks
 		COP_OutputPickEntityTarget m_PickEntityTarget;
 		CString m_strLastParam;
 		bool m_bIgnoreTextChanged;
+		bool m_bIsInstanceIOProxy;
 
 	friend class COP_OutputPickEntityTarget;
 public:

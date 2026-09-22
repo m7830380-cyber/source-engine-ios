@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -14,10 +14,10 @@
 #include <string.h>
 #include <ctype.h>
 #include "tier0/dbg.h"
+#include "tier0_strtools.h"
+#include "tier1/strtools.h" // this is included for the definition of V_isspace()
 
-#include "tier0/memdbgon.h"
-
-#ifdef POSIX
+#ifdef PLATFORM_POSIX
 #include <limits.h>
 #define _MAX_PATH PATH_MAX
 #endif
@@ -53,12 +53,12 @@ public:
 	virtual int			FindParm( const char *psz ) const;
 	virtual const char* GetParm( int nIndex ) const;
 
-	virtual const char	*ParmValue( const char *psz, const char *pDefaultVal = NULL ) const OVERRIDE;
-	virtual int			ParmValue( const char *psz, int nDefaultVal ) const OVERRIDE;
-	virtual float		ParmValue( const char *psz, float flDefaultVal ) const OVERRIDE;
-	virtual const char *ParmValueByIndex( int nIndex, const char *pDefaultVal = 0 ) const OVERRIDE;
-
+	virtual const char	*ParmValue( const char *psz, const char *pDefaultVal = NULL ) const;
+	virtual int			ParmValue( const char *psz, int nDefaultVal ) const;
+	virtual float		ParmValue( const char *psz, float flDefaultVal ) const;
 	virtual void        SetParm( int nIndex, char const *pParm );
+
+	virtual const char **GetParms() const { return (const char**)m_ppParms; }
 
 private:
 	enum
@@ -68,7 +68,7 @@ private:
 	};
 
 	// When the commandline contains @name, it reads the parameters from that file
-	void LoadParametersFromFile( const char *&pSrc, char *&pDst, int maxDestLen, bool bInQuotes );
+	void LoadParametersFromFile( const char *&pSrc, char *&pDst, intp maxDestLen, bool bInQuotes );
 
 	// Parse command line...
 	void ParseCommandLine();
@@ -120,10 +120,10 @@ CCommandLine::~CCommandLine( void )
 //-----------------------------------------------------------------------------
 // Read commandline from file instead...
 //-----------------------------------------------------------------------------
-void CCommandLine::LoadParametersFromFile( const char *&pSrc, char *&pDst, int maxDestLen, bool bInQuotes )
+void CCommandLine::LoadParametersFromFile( const char *&pSrc, char *&pDst, intp maxDestLen, bool bInQuotes )
 {
 	// Suck out the file name
-	char szFileName[ _MAX_PATH ];
+	char szFileName[ MAX_PATH ];
 	char *pOut;
 	char *pDestStart = pDst;
 
@@ -142,7 +142,7 @@ void CCommandLine::LoadParametersFromFile( const char *&pSrc, char *&pDst, int m
 	while ( *pSrc && *pSrc != terminatingChar )
 	{
 		*pOut++ = *pSrc++;
-		if ( (pOut - szFileName) >= (_MAX_PATH-1) )
+		if ( (pOut - szFileName) >= (MAX_PATH-1) )
 			break;
 	}
 
@@ -191,28 +191,16 @@ void CCommandLine::LoadParametersFromFile( const char *&pSrc, char *&pDst, int m
 //-----------------------------------------------------------------------------
 void CCommandLine::CreateCmdLine( int argc, char **argv )
 {
-	char cmdline[ 2048 ];
-	cmdline[ 0 ] = 0;
-
-	char *dest = cmdline;
-	size_t size = sizeof( cmdline );
-	const char *space = "";
-
+	char cmdline[2048];
+	cmdline[0] = 0;
+	const int MAX_CHARS = sizeof(cmdline) - 1;
+	cmdline[MAX_CHARS] = 0;
 	for ( int i = 0; i < argc; ++i )
 	{
-		// We need room for: space, arg, 2 quotes, and a nil.
-		Assert( strlen( space ) + strlen( argv[ i ] ) + 2 + 1 <= size );
-
-		if ( size )
-		{
-			_snprintf( dest, size, "%s\"%s\"", space, argv[ i ] );
-			dest[ size - 1 ] = 0;
-		}
-
-		size_t len = strlen( dest );
-		size -= len;
-		dest += len;
-		space = " ";
+		strncat( cmdline, "\"", MAX_CHARS );
+		strncat( cmdline, argv[i], MAX_CHARS );
+		strncat( cmdline, "\"", MAX_CHARS );
+		strncat( cmdline, " ", MAX_CHARS );
 	}
 
 	CreateCmdLine( cmdline );
@@ -226,13 +214,13 @@ void CCommandLine::CreateCmdLine( int argc, char **argv )
 //-----------------------------------------------------------------------------
 void CCommandLine::CreateCmdLine( const char *commandline )
 {
+	const bool bNoAutoArgs = (Plat_GetEnv("autoargs")) == nullptr;
 	if ( m_pszCmdLine )
 	{
 		delete[] m_pszCmdLine;
 	}
 
 	char szFull[ 4096 ];
-	szFull[0] = '\0';
 
 	char *pDst = szFull;
 	const char *pSrc = commandline;
@@ -251,9 +239,9 @@ void CCommandLine::CreateCmdLine( const char *commandline )
 			}
 		}
 
-		if ( *pSrc == '@' )
+		if ( !bNoAutoArgs && *pSrc == '@' )
 		{
-			if ( pSrc == commandline || (!bInQuotes && isspace( pSrc[-1] )) || (bInQuotes && pSrc == pInQuotesStart) )
+			if ( pSrc == commandline || (!bInQuotes && V_isspace( pSrc[-1] )) || (bInQuotes && pSrc == pInQuotesStart) )
 			{
 				LoadParametersFromFile( pSrc, pDst, sizeof( szFull ) - (pDst - szFull), bInQuotes );
 				continue;
@@ -269,9 +257,13 @@ void CCommandLine::CreateCmdLine( const char *commandline )
 
 	*pDst = '\0';
 
-	int len = strlen( szFull ) + 1;
+	size_t len = strlen( szFull ) + 1;
 	m_pszCmdLine = new char[len];
 	memcpy( m_pszCmdLine, szFull, len );
+
+#if defined( POSIX )
+	Plat_SetCommandLine( m_pszCmdLine );
+#endif
 
 	ParseCommandLine();
 }
@@ -336,8 +328,8 @@ void CCommandLine::RemoveParm( const char *pszParm )
 	// Search for first occurrence of pszParm
 	char *p, *found;
 	char *pnextparam;
-	int n;
-	int curlen;
+	intp n;
+	size_t curlen;
 
 	p = m_pszCmdLine;
 	while ( *p )
@@ -389,7 +381,7 @@ void CCommandLine::RemoveParm( const char *pszParm )
 	// Strip and trailing ' ' characters left over.
 	while ( 1 )
 	{
-		int len = strlen( m_pszCmdLine );
+		intp len = strlen( m_pszCmdLine );
 		if ( len == 0 || m_pszCmdLine[ len - 1 ] != ' ' )
 			break;
 		
@@ -407,7 +399,7 @@ void CCommandLine::RemoveParm( const char *pszParm )
 //-----------------------------------------------------------------------------
 void CCommandLine::AppendParm( const char *pszParm, const char *pszValues )
 {
-	int nNewLength = 0;
+	intp nNewLength = 0;
 	char *pCmdString;
 
 	nNewLength = strlen( pszParm );            // Parameter.
@@ -502,13 +494,13 @@ const char *CCommandLine::CheckParm( const char *psz, const char **ppszValue ) c
 //-----------------------------------------------------------------------------
 void CCommandLine::AddArgument( const char *pFirst, const char *pLast )
 {
-	if ( pLast <= pFirst )
+	if ( pLast == pFirst )
 		return;
 
 	if ( m_nParmCount >= MAX_PARAMETERS )
 		Error( "CCommandLine::AddArgument: exceeded %d parameters", MAX_PARAMETERS );
 
-	size_t nLen = pLast - pFirst + 1;
+	size_t nLen = ( pLast - pFirst ) + 1;
 	m_ppParms[m_nParmCount] = new char[nLen];
 	memcpy( m_ppParms[m_nParmCount], pFirst, nLen - 1 );
 	m_ppParms[m_nParmCount][nLen - 1] = 0;
@@ -527,7 +519,7 @@ void CCommandLine::ParseCommandLine()
 		return;
 
 	const char *pChar = m_pszCmdLine;
-	while ( *pChar && isspace(*pChar) )
+	while ( *pChar && V_isspace(*pChar) )
 	{
 		++pChar;
 	}
@@ -557,7 +549,7 @@ void CCommandLine::ParseCommandLine()
 				continue;
 			}
 
-			if ( isspace( *pChar ) )
+			if ( V_isspace( *pChar ) )
 				continue;
 
 			pFirstLetter = pChar;
@@ -565,7 +557,7 @@ void CCommandLine::ParseCommandLine()
 		}
 
 		// Here, we're in the middle of a word. Look for the end of it.
-		if ( isspace( *pChar ) )
+		if ( V_isspace( *pChar ) )
 		{
 			AddArgument( pFirstLetter, pChar );
 			pFirstLetter = NULL;
@@ -606,7 +598,7 @@ int CCommandLine::FindParm( const char *psz ) const
 	// Start at 1 so as to not search the exe name
 	for ( int i = 1; i < m_nParmCount; ++i )
 	{
-		if ( !_stricmp( psz, m_ppParms[i] ) )
+		if ( !V_tier0_stricmp( psz, m_ppParms[i] ) )
 			return i;
 	}
 	return 0;
@@ -682,15 +674,3 @@ float CCommandLine::ParmValue( const char *psz, float flDefaultVal ) const
 
 	return atof( m_ppParms[nIndex + 1] );
 }
-const char *CCommandLine::ParmValueByIndex( int nIndex, const char *pDefaultVal ) const
-{
-	if (( nIndex == 0 ) || (nIndex == m_nParmCount - 1))
-		return pDefaultVal;
-
-	// Probably another cmdline parameter instead of a valid arg if it starts with '+' or '-'
-	if ( m_ppParms[nIndex + 1][0] == '-' || m_ppParms[nIndex + 1][0] == '+' )
-		return pDefaultVal;
-
-	return m_ppParms[nIndex + 1];
-}
-

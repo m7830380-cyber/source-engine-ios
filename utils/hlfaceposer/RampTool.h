@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -13,7 +13,7 @@
 
 #include <mxtk/mx.h>
 #include "studio.h"
-#include "utlvector.h"
+#include "UtlVector.h"
 #include "faceposertoolwindow.h"
 
 class CChoreoEvent;
@@ -79,7 +79,7 @@ public:
 	void				SetScrubTime( float t );
 	void				SetScrubTargetTime( float t );
 
-	void				DrawSamplesSimple( CChoreoWidgetDrawHelper& drawHelper, CChoreoEvent *e, bool clearbackground, COLORREF sampleColor, RECT &rcSamples );
+	void				DrawSamplesSimple( CChoreoWidgetDrawHelper& drawHelper, CChoreoEvent *e, bool clearbackground, const Color& sampleColor, RECT &rcSamples );
 	virtual void		OnModelChanged();
 
 	void				SetMousePositionForEvent( mxEvent *event );

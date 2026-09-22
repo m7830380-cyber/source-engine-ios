@@ -1,8 +1,10 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright (c) 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
-//=============================================================================//
+//===========================================================================//
+
+#include "tier0/platform.h"
 
 #include "pch_tier0.h"
 #define WINDOWS_LEAN_AND_MEAN
@@ -15,6 +17,10 @@
 #include "tier0/pmelib.h"
 #include "tier0/l2cache.h"
 #include "tier0/dbg.h"
+
+// memdbgon must be the last include file in a .cpp file!!!
+#include "tier0/memdbgon.h"
+
 
 //-----------------------------------------------------------------------------
 // Purpose: Initialization

@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -51,7 +51,6 @@ BEGIN_MESSAGE_MAP( CFaceEditDispPage, CPropertyPage )
 	ON_BN_CLICKED( ID_DISP_PAINT_DATA, OnButtonPaintData )
 	ON_BN_CLICKED( ID_DISP_TAG_WALK, OnButtonTagWalkable )
 	ON_BN_CLICKED( ID_DISP_TAG_BUILD, OnButtonTagBuildable )
-	ON_BN_CLICKED( ID_DISP_TAG_REMOVE, OnButtonTagRemove )
 	ON_BN_CLICKED( ID_DISP_INVERT_ALPHA, OnButtonInvertAlpha )
 	ON_BN_CLICKED( IDC_SELECT_ADJACENT, OnSelectAdjacent )
 
@@ -590,9 +589,12 @@ void CFaceEditDispPage::SetTool( unsigned int tool )
 		m_PaintDataDlg.DestroyWindow();
 	}
 
-	if ( ( m_uiTool == FACEEDITTOOL_TAG_WALK ) ||
-		 ( m_uiTool == FACEEDITTOOL_TAG_BUILD ) || 
-		 ( m_uiTool == FACEEDITTOOL_TAG_REMOVE ) )
+	if ( m_uiTool == FACEEDITTOOL_TAG_WALK )
+	{
+		ResetForceShows();
+	}
+
+	if ( m_uiTool == FACEEDITTOOL_TAG_BUILD )
 	{
 		ResetForceShows();
 	}
@@ -611,7 +613,6 @@ void CFaceEditDispPage::SetTool( unsigned int tool )
 	CButton *pbuttonNoise = ( CButton* )GetDlgItem( ID_DISP_NOISE );
 	CButton *pButtonWalk = ( CButton* )GetDlgItem( ID_DISP_TAG_WALK );
 	CButton *pButtonBuild = ( CButton* )GetDlgItem( ID_DISP_TAG_BUILD );
-	CButton *pButtonRemove = ( CButton* )GetDlgItem( ID_DISP_TAG_REMOVE );
 
 	pbuttonSelect->SetCheck( m_uiTool == FACEEDITTOOL_SELECT );
 	pbuttonCreate->SetCheck( m_uiTool == FACEEDITTOOL_CREATE );
@@ -624,7 +625,6 @@ void CFaceEditDispPage::SetTool( unsigned int tool )
 	pbuttonNoise->SetCheck( m_uiTool == FACEEDITTOOL_NOISE );
 	pButtonWalk->SetCheck( m_uiTool == FACEEDITTOOL_TAG_WALK );
 	pButtonBuild->SetCheck( m_uiTool == FACEEDITTOOL_TAG_BUILD );
-	pButtonRemove->SetCheck( m_uiTool == FACEEDITTOOL_TAG_REMOVE );
 
 	// Update button state, etc.
 	UpdateDialogData();
@@ -1136,7 +1136,7 @@ void CFaceEditDispPage::OnButtonTagBuildable( void )
 	}
 	else
 	{
-		// Set the tag buildable tool.
+		// Set the tag walkable tool.
 		SetTool( FACEEDITTOOL_TAG_BUILD );
 		pDispTool->SetTool( DISPTOOL_TAG_BUILDABLE );
 
@@ -1144,42 +1144,6 @@ void CFaceEditDispPage::OnButtonTagBuildable( void )
 		{
 			pDoc->SetDispDrawBuildable( true );
 			m_bForceShowBuildable = true;
-		}
-	}
-
-	UpdateDialogData();
-}
-
-//-----------------------------------------------------------------------------
-// Purpose:
-//-----------------------------------------------------------------------------
-void CFaceEditDispPage::OnButtonTagRemove( void )
-{
-	// Set removed faces viewable -- if they are not already.
-	CMapDoc *pDoc = CMapDoc::GetActiveMapDoc();
-	if ( !pDoc )
-		return;
-
-	CToolDisplace *pDispTool = GetDisplacementTool();
-	if( !pDispTool )
-		return;
-
-	// Toggle the functionality.
-	if ( GetTool() == FACEEDITTOOL_TAG_REMOVE )
-	{
-		// Set the select tool.
-		SetTool( FACEEDITTOOL_SELECT );
-		pDispTool->SetTool( DISPTOOL_SELECT_DISP_FACE );
-		pDoc->SetDispDrawRemove( false );
-	}
-	else
-	{
-		// Set the tag remove tool.
-		SetTool( FACEEDITTOOL_TAG_REMOVE );
-		pDispTool->SetTool( DISPTOOL_TAG_REMOVE );
-		if ( !pDoc->IsDispDrawRemove() )
-		{
-			pDoc->SetDispDrawRemove( true );
 		}
 	}
 
@@ -1260,7 +1224,7 @@ void CFaceEditDispPage::OnSelectAdjacent()
 				continue;
 
 			// Get its map face and solid.
-			pFace = dynamic_cast< CMapFace* >( pNeighbor->GetParent() );
+			CMapFace *pFace = dynamic_cast< CMapFace* >( pNeighbor->GetParent() );
 			if ( !pFace || pFace->GetSelectionState() != SELECT_NONE )
 				continue;
 
@@ -1461,12 +1425,10 @@ void CFaceEditDispPage::CloseAllDialogs( void )
 //-----------------------------------------------------------------------------
 void CFaceEditDispPage::ResetForceShows( void )
 {
-	// Get the active map doc.
-	CMapDoc *pDoc = CMapDoc::GetActiveMapDoc();
-
 	// Walkable
 	if ( m_bForceShowWalkable )
 	{
+		CMapDoc *pDoc = CMapDoc::GetActiveMapDoc();
 		if ( pDoc )
 		{
 			pDoc->SetDispDrawWalkable( false );
@@ -1477,17 +1439,12 @@ void CFaceEditDispPage::ResetForceShows( void )
 	// Buildable
 	if ( m_bForceShowBuildable )
 	{
+		CMapDoc *pDoc = CMapDoc::GetActiveMapDoc();
 		if ( pDoc )
 		{
 			pDoc->SetDispDrawBuildable( false );
 		}
 		m_bForceShowBuildable = false;
-	}
-
-	// Always force this off!
-	if ( pDoc )
-	{
-		pDoc->SetDispDrawRemove( false );
 	}
 }
 

@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -13,7 +13,7 @@
 
 
 #include "MapClass.h"
-
+enum SaveData_Reason_t;
 
 class CObjectPage : public CPropertyPage
 {
@@ -51,7 +51,7 @@ public:
 	virtual void UpdateData( int Mode, PVOID pData, bool bCanEdit );
 	
 	// Called by the sheet to store this page's data into the objects being edited.
-	virtual bool SaveData(void) { return(true); }
+	virtual bool SaveData( SaveData_Reason_t reason ) { return(true); }
 
 	// Called by the sheet to let the dialog remember its state before a refresh of the data.
 	virtual void RememberState(void) {}

@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -36,8 +36,8 @@ void CalculateTreeInfo_R( int iNode, int depth )
 	dnode_t *pNode = &dnodes[iNode];
 	if ( iNode < 0 ) // (is this a leaf)
 	{
-		g_nMinTreeDepth = min( g_nMinTreeDepth, depth );
-		g_nMaxTreeDepth = max( g_nMaxTreeDepth, depth );
+		g_nMinTreeDepth = MIN( g_nMinTreeDepth, depth );
+		g_nMaxTreeDepth = MAX( g_nMaxTreeDepth, depth );
 		g_TotalTreeDepth += depth;
 		g_TotalVariance += fabs( depth - g_nOptimumDepth );
 	}
@@ -102,7 +102,7 @@ void DrawTreeToScratchPad_R(
 
 void CalcTreeDepth_R( int iNode, int iLevel, int &iMaxDepth )
 {
-	iMaxDepth = max( iLevel, iMaxDepth );
+	iMaxDepth = MAX( iLevel, iMaxDepth );
 	if ( iNode < 0 )
 		return;
 
@@ -118,7 +118,7 @@ void DrawTreeToScratchPad()
 
 	int maxDepth = 0;
 	CalcTreeDepth_R( dmodels[0].headnode, 0, maxDepth );
-	float flXSpace = (1 << min( maxDepth, 14 )) * g_xSpacing;
+	float flXSpace = (1 << MIN( maxDepth, 14 )) * g_xSpacing;
 	g_ySpacing = (flXSpace / maxDepth) / 4;
 
 	DrawTreeToScratchPad_R(
@@ -190,41 +190,126 @@ void PrintModelStats( FILE *fp )
 	// Deal with static props
 	// -------------------------------------------------------
 	GameLumpHandle_t handle = g_GameLumps.GetGameLumpHandle( GAMELUMP_STATIC_PROPS );
-//	int nLumpSize = g_GameLumps.GameLumpSize( handle );
-	void *pStaticPropLump = g_GameLumps.GetGameLump( handle );
-	unsigned char *pScan = ( unsigned char * )pStaticPropLump;
-	//	fprintf( fp, "nLumpSize: %d\n", nLumpSize );
+	int nLumpVersion = g_GameLumps.GetGameLumpVersion( handle );
 
-	// read dictionary
-	int nDictCount = ( ( int * )pScan )[0];
-	pScan += sizeof( int );
-	StaticPropDictLump_t *pDictLump = ( StaticPropDictLump_t * )pScan;
-	pScan += nDictCount * sizeof( StaticPropDictLump_t );
-
-	// read leaves
-	int nLeafCount = ( ( int * )pScan )[0];
-	pScan += sizeof( int );
-//	StaticPropLeafLump_t *pLeafLump = ( StaticPropLeafLump_t * )pScan;
-	pScan += nLeafCount * sizeof( StaticPropLeafLump_t );
-
-	// read objects
-	int nObjCount = ( ( int * )pScan )[0];
-	pScan += sizeof( int );
-	StaticPropLump_t *pStaticPropLumpData = ( StaticPropLump_t * )pScan;
-	pScan += nObjCount * sizeof( StaticPropLump_t );
-
-	int i;
-	for( i = 0; i < nObjCount; i++ )
+	if ( nLumpVersion == GAMELUMP_STATIC_PROPS_VERSION )
 	{
-		StaticPropLump_t &pData = pStaticPropLumpData[i];
-		const char *pName = pDictLump[pData.m_PropType].m_Name;
-		if( modelMap.Defined( pName ) )
+	//	int nLumpSize = g_GameLumps.GameLumpSize( handle );
+		void *pStaticPropLump = g_GameLumps.GetGameLump( handle );
+		unsigned char *pScan = ( unsigned char * )pStaticPropLump;
+		//	fprintf( fp, "nLumpSize: %d\n", nLumpSize );
+
+		// read dictionary
+		int nDictCount = ( ( int * )pScan )[0];
+		pScan += sizeof( int );
+		StaticPropDictLump_t *pDictLump = ( StaticPropDictLump_t * )pScan;
+		pScan += nDictCount * sizeof( StaticPropDictLump_t );
+
+		// read leaves
+		int nLeafCount = ( ( int * )pScan )[0];
+		pScan += sizeof( int );
+	//	StaticPropLeafLump_t *pLeafLump = ( StaticPropLeafLump_t * )pScan;
+		pScan += nLeafCount * sizeof( StaticPropLeafLump_t );
+
+		// read objects
+		int nObjCount = ( ( int * )pScan )[0];
+		pScan += sizeof( int );
+		StaticPropLump_t *pStaticPropLumpData = ( StaticPropLump_t * )pScan;
+		pScan += nObjCount * sizeof( StaticPropLump_t );
+
+		int i;
+		for( i = 0; i < nObjCount; i++ )
 		{
-			modelMap[pName]++;
+			StaticPropLump_t &pData = pStaticPropLumpData[i];
+			const char *pName = pDictLump[pData.m_PropType].m_Name;
+			if( modelMap.Defined( pName ) )
+			{
+				modelMap[pName]++;
+			}
+			else
+			{
+				modelMap[pName] = 1;
+			}
 		}
-		else
+	}
+	else if ( nLumpVersion == 6 )
+	{
+		//	int nLumpSize = g_GameLumps.GameLumpSize( handle );
+		void *pStaticPropLump = g_GameLumps.GetGameLump( handle );
+		unsigned char *pScan = ( unsigned char * )pStaticPropLump;
+		//	fprintf( fp, "nLumpSize: %d\n", nLumpSize );
+
+		// read dictionary
+		int nDictCount = ( ( int * )pScan )[0];
+		pScan += sizeof( int );
+		StaticPropDictLump_t *pDictLump = ( StaticPropDictLump_t * )pScan;
+		pScan += nDictCount * sizeof( StaticPropDictLump_t );
+
+		// read leaves
+		int nLeafCount = ( ( int * )pScan )[0];
+		pScan += sizeof( int );
+		//	StaticPropLeafLump_t *pLeafLump = ( StaticPropLeafLump_t * )pScan;
+		pScan += nLeafCount * sizeof( StaticPropLeafLump_t );
+
+		// read objects
+		int nObjCount = ( ( int * )pScan )[0];
+		pScan += sizeof( int );
+		StaticPropLumpV6_t *pStaticPropLumpData = ( StaticPropLumpV6_t * )pScan;
+		pScan += nObjCount * sizeof( StaticPropLumpV6_t );
+
+		int i;
+		for( i = 0; i < nObjCount; i++ )
 		{
-			modelMap[pName] = 1;
+			StaticPropLumpV6_t &pData = pStaticPropLumpData[i];
+			const char *pName = pDictLump[pData.m_PropType].m_Name;
+			if( modelMap.Defined( pName ) )
+			{
+				modelMap[pName]++;
+			}
+			else
+			{
+				modelMap[pName] = 1;
+			}
+		}
+	}
+	else if ( nLumpVersion == 5 )
+	{
+		//	int nLumpSize = g_GameLumps.GameLumpSize( handle );
+		void *pStaticPropLump = g_GameLumps.GetGameLump( handle );
+		unsigned char *pScan = ( unsigned char * )pStaticPropLump;
+		//	fprintf( fp, "nLumpSize: %d\n", nLumpSize );
+
+		// read dictionary
+		int nDictCount = ( ( int * )pScan )[0];
+		pScan += sizeof( int );
+		StaticPropDictLump_t *pDictLump = ( StaticPropDictLump_t * )pScan;
+		pScan += nDictCount * sizeof( StaticPropDictLump_t );
+
+		// read leaves
+		int nLeafCount = ( ( int * )pScan )[0];
+		pScan += sizeof( int );
+		//	StaticPropLeafLump_t *pLeafLump = ( StaticPropLeafLump_t * )pScan;
+		pScan += nLeafCount * sizeof( StaticPropLeafLump_t );
+
+		// read objects
+		int nObjCount = ( ( int * )pScan )[0];
+		pScan += sizeof( int );
+		StaticPropLumpV5_t *pStaticPropLumpData = ( StaticPropLumpV5_t * )pScan;
+		pScan += nObjCount * sizeof( StaticPropLumpV5_t );
+
+		int i;
+		for( i = 0; i < nObjCount; i++ )
+		{
+			StaticPropLumpV5_t &pData = pStaticPropLumpData[i];
+			const char *pName = pDictLump[pData.m_PropType].m_Name;
+			if( modelMap.Defined( pName ) )
+			{
+				modelMap[pName]++;
+			}
+			else
+			{
+				modelMap[pName] = 1;
+			}
 		}
 	}
 
@@ -233,6 +318,7 @@ void PrintModelStats( FILE *fp )
 
 	ParseEntities();
 
+	int i;
 	for( i = 0; i < num_entities; i++ )
 	{
 		const entity_t *pEnt = &entities[i];
@@ -353,7 +439,7 @@ void main (int argc, char **argv)
 		printf("   -liststaticprops     \n");
 		printf("   -X[lump ID]          Extract BSP lump to file. i.e -X0 extracts entity lump.\n");
 		printf("   -size				Show .bsp worldmodel bounds\n");
-		Error("Incorrect syntax.");
+		Warning("Incorrect syntax.");
 	}
 		
 	bool bWorldTextureStats = false;

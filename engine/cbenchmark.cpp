@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -11,10 +11,9 @@
 #include <winsock2.h> // INADDR_ANY defn
 #endif
 #include "cbenchmark.h"
-#include "tier0/vcrmode.h"
 #include "filesystem_engine.h"
 #include "sys.h"
-#include "KeyValues.h"
+#include "keyvalues.h"
 #include "sv_uploaddata.h"
 #include "FindSteamServers.h"
 #include "vstdlib/random.h"
@@ -71,16 +70,13 @@ void CBenchmarkResults::StartBenchmark( const CCommand &args )
 	SetResultsFilename( pszFilename );
 
 	// set any necessary settings
-	//host_framerate.SetValue( (float)(1.0f / host_state.interval_per_tick) );
+	host_framerate.SetValue( (float)(1.0f / host_state.interval_per_tick) );
 
 	// get the current frame and time
 	m_iStartFrame = host_framecount;
 	m_flStartTime = realtime;
-
-	m_flNextSecondTime = realtime + 1.0f;
-	m_iNextSecondFrame = host_framecount;
 }
-
+	
 //-----------------------------------------------------------------------------
 // Purpose: writes out results to file
 //-----------------------------------------------------------------------------
@@ -89,7 +85,7 @@ void CBenchmarkResults::StopBenchmark()
 	m_bIsTestRunning = false;
 
 	// reset
-	//host_framerate.SetValue( 0 );
+	host_framerate.SetValue( 0 );
 
 	// print out some stats
 	int numticks = host_framecount - m_iStartFrame;
@@ -106,23 +102,12 @@ void CBenchmarkResults::StopBenchmark()
 	kv->SetFloat( "framerate", framerate );
 	kv->SetInt( "build", build_number() );
 
-	CUtlString str;
-	for( int i = 0; i < m_FPSInfo.Count(); i++ )
-	{
-		str += m_FPSInfo[i];
-		if( i != m_FPSInfo.Count()-1 )
-			str += ',';
-	}
-	kv->SetString( "framerates", str );
-
 	// get material system info
 	GetMaterialSystemConfigForBenchmarkUpload( kv );
 
 	// save
 	kv->SaveToFile( g_pFileSystem, szFilename, "MOD" );
 	kv->deleteThis();
-
-	m_FPSInfo.Purge();
 }
 
 //-----------------------------------------------------------------------------
@@ -139,7 +124,7 @@ void CBenchmarkResults::SetResultsFilename( const char *pFilename )
 //-----------------------------------------------------------------------------
 void CBenchmarkResults::Upload()
 {
-#ifndef SWDS
+#if !defined( DEDICATED )
 	if ( !m_szFilename[0] || !Steam3Client().SteamUtils() )
 		return;
 	uint32 cserIP = 0;
@@ -165,20 +150,6 @@ void CBenchmarkResults::Upload()
 	kv->deleteThis();
 #endif
 }
-
-void CBenchmarkResults::Frame()
-{
-	if( !m_bIsTestRunning )
-		return;
-
-	if( m_flNextSecondTime <= realtime )
-	{
-		m_FPSInfo.AddToTail( host_framecount-m_iNextSecondFrame );
-		m_flNextSecondTime += 1.0f;
-		m_iNextSecondFrame = host_framecount;
-	}
-}
-
 
 CON_COMMAND_F( bench_start, "Starts gathering of info. Arguments: filename to write results into", FCVAR_CHEAT )
 {

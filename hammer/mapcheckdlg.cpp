@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -459,7 +459,7 @@ void CMapCheckDlg::OnFixall()
 	{
 		if (m_Errors.GetSel(i) > 0)
 		{
-			pError = (MapError *)m_Errors.GetItemDataPtr(i);
+			MapError *pError = (MapError *)m_Errors.GetItemDataPtr(i);
 			if ((pError) && (pError->Fix == NeedsFix))
 			{
 				// Find and fix every error of the same type.
@@ -503,7 +503,7 @@ void CMapCheckDlg::OnSelchangeErrors()
 
 	// Figure out which error string we're using.
 	int iErrorStr = (int)pError->Type;
-	iErrorStr = clamp( iErrorStr, 0, ARRAYSIZE( g_MapErrorStrings ) - 1 );
+	iErrorStr = clamp( iErrorStr, 0, (int)(ARRAYSIZE( g_MapErrorStrings ) - 1) );
 	Assert( iErrorStr == (int)pError->Type );
 	
 	str.LoadString(g_MapErrorStrings[iErrorStr].m_DescriptionResourceID);
@@ -587,7 +587,7 @@ static void AddErrorToListBox(CListBox *pList, MapError *pError)
 
 	// Figure out which error string we're using.
 	int iErrorStr = (int)pError->Type;
-	iErrorStr = clamp( iErrorStr, 0, ARRAYSIZE( g_MapErrorStrings ) - 1 );
+	iErrorStr = clamp( iErrorStr, 0, (int)(ARRAYSIZE( g_MapErrorStrings ) - 1) );
 	Assert( iErrorStr == (int)pError->Type );
 	
 	str.LoadString(g_MapErrorStrings[iErrorStr].m_StrResourceID);
@@ -1371,7 +1371,8 @@ static BOOL _CheckOverlayFaceList( CMapEntity *pEntity, CListBox *pList )
 
 	FOR_EACH_OBJ( *pChildren, pos )
 	{
-		CMapOverlay *pOverlay = dynamic_cast<CMapOverlay*>( pChildren->Element(pos) );
+		CMapClass *pMapClass = (CUtlReference< CMapClass >)pChildren->Element(pos);
+		CMapOverlay *pOverlay = dynamic_cast<CMapOverlay*>( pMapClass );
 		if ( pOverlay )
 		{
 			// Check to see if the overlay has assigned faces.
@@ -1522,7 +1523,7 @@ static void FixInvalidContents(MapError *pError)
 	int nFaces = pSolid->GetFaceCount();
 	for (int i = 1; i < nFaces; i++)
 	{
-		pFace = pSolid->GetFace(i);
+		CMapFace *pFace = pSolid->GetFace(i);
 		pFace->texture.q2contents = dwContents;
 	}
 }
@@ -1606,7 +1607,8 @@ static void FixOverlayFaceList( MapError *pError )
 
 	FOR_EACH_OBJ( *pChildren, pos )
 	{
-		CMapOverlay *pOverlay = dynamic_cast<CMapOverlay*>( pChildren->Element(pos) );
+		CMapClass *pMapClass = (CUtlReference< CMapClass >)pChildren->Element(pos);
+		CMapOverlay *pOverlay = dynamic_cast<CMapOverlay*>( pMapClass );
 		if ( pOverlay )
 		{
 			// Destroy itself.

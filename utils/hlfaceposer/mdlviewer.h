@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -11,6 +11,8 @@
 #endif
 
 #include "sceneimage.h"
+#include "tier1/UtlVector.h"
+#include "tier1/UtlString.h"
 
 #define IDC_FILE_LOADMODEL			1001
 #define IDC_FILE_LOADBACKGROUNDTEX	1002
@@ -28,6 +30,7 @@
 #define IDC_FILE_REFRESH			1017
 #define IDC_FILE_SAVESOUNDSCRIPTCHANGES 1018
 #define IDC_FILE_REBUILDSCENESIMAGE	1019
+#define IDC_FILE_UPDATESCENESIMAGE	1028
 
 #define IDC_EXPRESSIONS_SAVE		1020
 #define IDC_EXPRESSIONS_LOAD		1021
@@ -40,7 +43,7 @@
 
 #define IDC_EXPRESSIONS_NEW			1026
 #define IDC_EXPRESSIONS_REDOBITMAPS 1027
-
+// #define IDC_FILE_UPDATESCENESIMAGE 1028
 
 #define IDC_CHOREOSCENE_NEW			1030
 #define IDC_CHOREOSCENE_LOAD		1031
@@ -49,6 +52,7 @@
 #define IDC_CHOREOSCENE_CLOSE		1034
 #define IDC_CHOREOSCENE_ADDACTOR	1035
 #define IDC_FILE_LOADMODEL_STEAM	1036
+#define IDC_CHOREOSCENE_SCRUB_UNITS	1037
 #define IDC_CHOREOSCENE_LOADNEXT	1038
 
 #define IDC_OPTIONS_COLORBACKGROUND	1101
@@ -78,6 +82,8 @@
 #define IDC_HELP_GOTOHOMEPAGE		1301
 #define IDC_HELP_ABOUT				1302
 
+#define IDC_FOUNDRY_PLAYSCENE		1400
+
 class mxMenuBar;
 class mxMenu;
 class MatSysWindow;
@@ -106,6 +112,7 @@ class MDLViewer : public mxWindow, public ISceneCompileStatus
 	mxMenu *menuEdit;
 	mxMenu *menuExpressions;
 	mxMenu *menuChoreography;
+	mxMenu *menuFoundry;
 
 	CMDLViewerWorkspace *workspace;
 	CMDLViewerWindowTab *windowtab;
@@ -155,6 +162,7 @@ public:
 
 	void OnSaveSoundScriptChanges();
 	void OnRebuildScenesImage();
+	void OnUpdateScenesImage();
 
 	void OnCascade();
 	void OnTile();
@@ -173,8 +181,8 @@ public:
 
 	void LoadModel_Steam();
 
-	void OnVCDSaved();
-
+	void OnVCDSaved( char const *pFullpath );
+	void OnPlaySceneInFoundry();
 private:
 	void DoTile( int x, int y );
 
@@ -182,9 +190,11 @@ private:
 	void SavePosition( void );
 
 	bool AreSoundScriptsDirty();
+	void UpdateTheUpdateScenesImageMenu();
 
+	bool	m_bAlwaysUpdate;
 	bool	m_bOldSoundScriptsDirty;
-	bool	m_bVCDSaved;
+	CUtlVector< CUtlString > m_vecDirtyVCDs;
 };
 
 

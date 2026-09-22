@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright � 1996-2005, Valve Corporation, All rights reserved. =======
 //
 // Purpose: Cache for VCDs. PC async loads and uses the datacache to manage.
 // 360 uses a baked resident image of aggregated compiled VCDs.
@@ -75,7 +75,7 @@ void CSceneFileCache::Disconnect()
 
 InitReturnVal_t CSceneFileCache::Init()
 {
-	const char *pSceneImageName = IsX360() ? "scenes/scenes.360.image" : "scenes/scenes.image";
+	const char *pSceneImageName = "scenes/scenes" PLATFORM_EXT ".image";
 
 	if ( m_SceneImageFile.TellMaxPut() == 0 )
 	{
@@ -154,7 +154,7 @@ bool CSceneFileCache::GetSceneData( char const *pFilename, byte *buf, size_t buf
 	return GetSceneDataFromImage( pFilename, FindSceneInImage( fn ), buf, &nLength );
 }
 
-bool CSceneFileCache::GetSceneCachedData( char const *pFilename, SceneCachedData_t *pData )
+bool CSceneFileCache::GetSceneCachedData( char const *pFilename, SceneCachedData_t * RESTRICT pData )
 {
 	int iScene = FindSceneInImage( pFilename );
 	SceneImageHeader_t *pHeader = (SceneImageHeader_t *)m_SceneImageFile.Base();
@@ -162,8 +162,8 @@ bool CSceneFileCache::GetSceneCachedData( char const *pFilename, SceneCachedData
 	{
 		// not available
 		pData->sceneId = -1;
-		pData->m_fLastSpeakSecs = 0;
 		pData->msecs = 0;
+		pData->m_fLastSpeakSecs = 0;
 		pData->numSounds = 0;
 		return false;
 	}
@@ -173,8 +173,8 @@ bool CSceneFileCache::GetSceneCachedData( char const *pFilename, SceneCachedData
 	SceneImageSummary_t *pSummary = (SceneImageSummary_t *)( (byte *)pHeader + pEntries[iScene].nSceneSummaryOffset );
 	
 	pData->sceneId = iScene;
-	pData->m_fLastSpeakSecs = pSummary->GetDurToSpeechEnd();
 	pData->msecs = pSummary->msecs;
+	pData->m_fLastSpeakSecs = pSummary->GetDurToSpeechEnd();
 	pData->numSounds = pSummary->numSounds;
 
 	return true;
@@ -226,7 +226,6 @@ int CSceneFileCache::FindSceneInImage( const char *pSceneName )
 	SceneImageEntry_t *pEntries = (SceneImageEntry_t *)( (byte *)pHeader + pHeader->nSceneEntryOffset );
 
 	char szCleanName[MAX_PATH];
-
 	V_strncpy( szCleanName, pSceneName, sizeof( szCleanName ) );
 	V_strlower( szCleanName );
 #ifdef POSIX
@@ -235,6 +234,7 @@ int CSceneFileCache::FindSceneInImage( const char *pSceneName )
 	V_FixSlashes( szCleanName );
 #endif
 	// Many vcd's in CSGO have a '.' in the filename, which breaks this call
+	// We're going to assume that all filenames have the correct extension
 //	V_SetExtension( szCleanName, ".vcd", sizeof( szCleanName ) );
 
 	CRC32_t crcFilename = CRC32_ProcessSingleBuffer( szCleanName, strlen( szCleanName ) );
@@ -294,22 +294,23 @@ bool CSceneFileCache::GetSceneDataFromImage( const char *pFileName, int iScene, 
 
 	SceneImageEntry_t *pEntries = (SceneImageEntry_t *)( (byte *)pHeader + pHeader->nSceneEntryOffset );
 	unsigned char *pData = (unsigned char *)pHeader + pEntries[iScene].nDataOffset;
+	CLZMA lzma;
 	bool bIsCompressed;
-	bIsCompressed = CLZMA::IsCompressed( pData );
+	bIsCompressed = lzma.IsCompressed( pData );
 	if ( bIsCompressed )
 	{
-		int originalSize = CLZMA::GetActualSize( pData );
+		int originalSize = lzma.GetActualSize( pData );
 		if ( pSceneData )
 		{
 			int nMaxLen = *pSceneLength;
 			if ( originalSize <= nMaxLen )
 			{
-				CLZMA::Uncompress( pData, pSceneData );
+				lzma.Uncompress( pData, pSceneData );
 			}
 			else
 			{
 				unsigned char *pOutputData = (unsigned char *)malloc( originalSize );
-				CLZMA::Uncompress( pData, pOutputData );
+				lzma.Uncompress( pData, pOutputData );
 				V_memcpy( pSceneData, pOutputData, nMaxLen );
 				free( pOutputData );
 			}
@@ -323,7 +324,7 @@ bool CSceneFileCache::GetSceneDataFromImage( const char *pFileName, int iScene, 
 	{
 		if ( pSceneData )
 		{
-			size_t nCountToCopy = min(*pSceneLength, (size_t)pEntries[iScene].nDataLength );
+			size_t nCountToCopy = MIN(*pSceneLength, (size_t)pEntries[iScene].nDataLength );
 			V_memcpy( pSceneData, pData, nCountToCopy );
 		}
 		if ( pSceneLength )

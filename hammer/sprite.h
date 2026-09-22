@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -46,51 +46,52 @@ enum synctype_t
 
 class CSpriteModel
 {
-	public:
+public:
 
-		CSpriteModel(void);
-		~CSpriteModel(void);
+	CSpriteModel(void);
+	~CSpriteModel(void);
 			
-		bool LoadSprite(const char *pszSpritePath);
+	bool LoadSprite(const char *pszSpritePath);
 
-		int GetFrameCount(void);
-		int GetWidth() const;
-		int GetHeight() const;
-		int GetType() const;
+	int GetFrameCount(void);
+	int GetWidth() const;
+	int GetHeight() const;
+	int GetType() const;
 
-		void Bind( CRender* pRender, int frame );
-		void GetRect( float& left, float& up,  float& right, float& down ) const;
-		void SetRenderMode( const int mode );
+	void Bind( CRender* pRender, int frame );
+	void GetRect( float& left, float& up,  float& right, float& down ) const;
+	void SetRenderMode( const int mode );
 
-		void SetMaterialPrimitiveType( const MaterialPrimitiveType_t type );
-		void SetOrigin( const Vector &v );
-		void GetOrigin( Vector &v );
-		void SetAngles( const QAngle& pfAngles );
-		void SetScale( const float fScale );
-		void SetInvert( const bool b );
-		inline void SetTextureExtent( Vector2D TexUL, Vector2D TexLR ) { m_TexUL = TexUL; m_TexLR = TexLR; }
-		inline void SetExtent( Vector2D UL, Vector2D LR ) { m_UL = UL; m_LR = LR; }
-		void DrawSprite3D( CRender3D *pRender, unsigned char color[3] );
+	void SetMaterialPrimitiveType( const MaterialPrimitiveType_t type );
+	void SetOrigin( const Vector &v );
+	void GetOrigin( Vector &v );
+	void SetAngles( const QAngle& pfAngles );
+	void SetScale( const float fScale );
+	void SetInvert( const bool b );
+	inline void SetTextureExtent( Vector2D TexUL, Vector2D TexLR ) { m_TexUL = TexUL; m_TexLR = TexLR; }
+	inline void SetExtent( Vector2D UL, Vector2D LR ) { m_UL = UL; m_LR = LR; }
+	void DrawSprite3D( CRender3D *pRender, unsigned char color[3] );
 
-	protected:
-		void GetSpriteAxes(QAngle& Angles, int type, Vector& forward, Vector& right, Vector& up, Vector& ViewUp, Vector& ViewRight, Vector& ViewForward);
+protected:
+	void GetSpriteAxes(QAngle& Angles, int type, Vector& forward, Vector& right, Vector& up, Vector& ViewUp, Vector& ViewRight, Vector& ViewForward);
 
-		Vector			m_Origin;
-		QAngle			m_Angles;
-		float			m_fScale;
-		MaterialPrimitiveType_t	m_MaterialPrimitiveType;
-
-		CMaterial*		m_pMaterial;
-		IMaterialVar*	m_pFrameVar;
-		IMaterialVar*	m_pRenderModeVar;
-		int				m_NumFrames;
-		int				m_Type;
-		int				m_Width;
-		int				m_Height;
-		bool			m_bInvert;
-
-		Vector2D		m_TexUL, m_TexLR;
-		Vector2D		m_UL, m_LR;
+	Vector			m_Origin;
+	Vector          m_Normal;								// for lpreview, etc
+	QAngle			m_Angles;
+	float			m_fScale;
+	MaterialPrimitiveType_t	m_MaterialPrimitiveType;
+	
+	CMaterial*		m_pMaterial;
+	IMaterialVar*	m_pFrameVar;
+	IMaterialVar*	m_pRenderModeVar;
+	int				m_NumFrames;
+	int				m_Type;
+	int				m_Width;
+	int				m_Height;
+	bool			m_bInvert;
+	
+	Vector2D		m_TexUL, m_TexLR;
+	Vector2D		m_UL, m_LR;
 };
 
 
@@ -140,19 +141,19 @@ struct SpriteCache_t
 
 class CSpriteCache
 {
-	public:
+public:
 
-		static CSpriteModel *CreateSprite(const char *pszSpritePath);
-		static void AddRef(CSpriteModel *pSprite);
-		static void Release(CSpriteModel *pSprite);
+	static CSpriteModel *CreateSprite(const char *pszSpritePath);
+	static void AddRef(CSpriteModel *pSprite);
+	static void Release(CSpriteModel *pSprite);
 
-	protected:
+protected:
 
-		static bool AddSprite(CSpriteModel *pSprite, const char *pszSpritePath);
-		static void RemoveSprite(CSpriteModel *pSprite);
+	static bool AddSprite(CSpriteModel *pSprite, const char *pszSpritePath);
+	static void RemoveSprite(CSpriteModel *pSprite);
 
-		static SpriteCache_t m_Cache[SPRITE_CACHE_SIZE];
-		static int m_nItems;
+	static SpriteCache_t m_Cache[SPRITE_CACHE_SIZE];
+	static int m_nItems;
 };
 
 

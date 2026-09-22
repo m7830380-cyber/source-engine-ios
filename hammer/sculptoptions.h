@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -12,6 +12,7 @@
 
 #include "disppaint.h"
 #include "afxwin.h"
+#include "afxcmn.h"
 
 class CMapView3D;
 class CPaintSculptDlg;
@@ -59,7 +60,8 @@ protected:
 	void	DrawDirection( CRender3D *pRender, Vector vDirection, Color Towards, Color Away );
 	void	DuplicateSelectedDisp( );
 	void	PrepareDispForPainting( );
-	bool	FindCollisionIntercept( CCamera *pCamera, const Vector2D &vPoint, bool bUseOrigPosition, Vector &vCollisionPoint, Vector &vCollisionNormal, float &vCollisionIntercept );
+	bool	FindCollisionIntercept( CCamera *pCamera, const Vector2D &vPoint, bool bUseOrigPosition, Vector &vCollisionPoint, Vector &vCollisionNormal, float &vCollisionIntercept,
+								    int *pnCollideDisplacement = NULL, int *pnCollideTri = NULL );
 
 private:
 	void	DetermineKeysDown();
@@ -139,7 +141,6 @@ public:
 	{
 		NORMAL_MODE_BRUSH_CENTER,
 		NORMAL_MODE_SCREEN,
-		NORMAL_MODE_SCREEN_XY,
 		NORMAL_MODE_X,
 		NORMAL_MODE_Y,
 		NORMAL_MODE_Z,
@@ -226,7 +227,6 @@ public:
 	{
 		NORMAL_MODE_BRUSH_CENTER,
 		NORMAL_MODE_SCREEN,
-		NORMAL_MODE_SCREEN_XY,
 		NORMAL_MODE_X,
 		NORMAL_MODE_Y,
 		NORMAL_MODE_Z,
@@ -379,5 +379,132 @@ public:
 	CStatic m_ProjectSizeNumControl;
 };
 #endif
+
+class CTextureButton : public CButton
+{
+public:
+	CTextureButton( );
+
+	void SetTexture( IEditorTexture *pTexture );
+	void SetSelected( bool bSelected );
+	virtual BOOL PreCreateWindow(CREATESTRUCT& cs);
+	virtual void DrawItem( LPDRAWITEMSTRUCT lpDrawItemStruct );
+
+private:
+	IEditorTexture	*m_pTexure;
+	bool			m_bSelected;
+};
+
+
+class CColorButton : public CButton
+{
+public:
+	CColorButton( );
+
+	void SetColor( float flRed, float flGreen, float flBlue );
+	virtual BOOL PreCreateWindow(CREATESTRUCT& cs);
+	virtual void DrawItem( LPDRAWITEMSTRUCT lpDrawItemStruct );
+
+private:
+	float	m_flRed, m_flGreen, m_flBlue;
+
+protected:
+	DECLARE_MESSAGE_MAP()
+};
+
+
+class CSculptBlendOptions : public CDialog, public CSculptPainter
+{
+	DECLARE_DYNAMIC(CSculptBlendOptions)
+
+public:
+	CSculptBlendOptions(CWnd* pParent = NULL);   // standard constructor
+	virtual ~CSculptBlendOptions();
+
+	virtual BOOL OnInitDialog( void );
+	virtual void OnOK();
+	virtual void OnCancel();
+
+	// Dialog Data
+	enum { IDD = IDD_DISP_SCULPT_BLEND_OPTIONS };
+
+	typedef enum
+	{
+		COLOR_MODE_SINGLE,
+		COLOR_MODE_RANGE,
+		COLOR_MODE_OR,
+
+		COLOR_MODE_MAX
+	} ColorMode;
+
+protected:
+	virtual void DoDataExchange(CDataExchange* pDX);    // DDX/DDV support
+
+	DECLARE_MESSAGE_MAP()
+
+public:
+
+private:
+	float		m_Direction;
+	float		m_flFalloffSpot;
+	float		m_flFalloffEndingValue;
+	int			m_nLastCollideDisplacement;
+	int			m_nLastCollideTri;
+	ColorMode	m_ColorMode[ MAX_MULTIBLEND_CHANNELS ];
+	int			m_nSelectedTexture;
+	Vector		m_vStartDrawColor[ MAX_MULTIBLEND_CHANNELS ];
+	Vector		m_vEndDrawColor[ MAX_MULTIBLEND_CHANNELS ];
+	int			m_nDefaultFalloffPosition;
+	int			m_nDefaultFalloffFinal;
+	int			m_nDefaultBlendAmount;
+	int			m_nDefaultColorBlendAmount;
+	int			m_nDefaultAlphaBlendAmount;
+	bool		m_b4WayBlendMode;
+
+public:
+	virtual bool BeginPaint( CMapView3D *pView, const Vector2D &vPoint );
+	virtual void RenderTool3D(CRender3D *pRender);
+	virtual bool OnRMouseDown3D( CMapView3D *pView, UINT nFlags, const Vector2D &vPoint );
+
+protected:
+	virtual bool	DoPaint( CMapView3D *pView, const Vector2D &vPoint );
+	virtual void	DoPaintOperation( CMapView3D *pView, const Vector2D &vPoint, CMapDisp *pDisp, CMapDisp *pOrigDisp );
+
+	void	SelectTexture( int nTexture );
+	void	SetColorMode( ColorMode NewMode, bool bSetDialog );
+
+public:
+	CSliderCtrl m_BlendAmountControl;
+	afx_msg void OnNMCustomdrawBlendAmount(NMHDR *pNMHDR, LRESULT *pResult);
+	CStatic m_BlendAmountTextControl;
+	afx_msg void OnShowWindow(BOOL bShow, UINT nStatus);
+	CTextureButton m_TextureControl[ MAX_MULTIBLEND_CHANNELS ];
+	CButton m_TextureMaskControl[ MAX_MULTIBLEND_CHANNELS ];
+	CButton m_ColorMaskControl[ MAX_MULTIBLEND_CHANNELS ];
+	afx_msg void OnBnClickedTextureButton1();
+	afx_msg void OnBnClickedTextureButton2();
+	afx_msg void OnBnClickedTextureButton3();
+	afx_msg void OnBnClickedTextureButton4();
+	afx_msg void ShrinkBrush();
+	afx_msg void EnlargeBrush();
+	afx_msg void OnBnClickedSetColor();
+	afx_msg void OnBnClickedSetColor2();
+	afx_msg void OnBnClickedBlendColorOperation();
+
+	CSliderCtrl m_ColorBlendAmountControl;
+	CStatic m_ColorBlendAmountTextControl;
+	CColorButton m_ColorStartControl;
+	CColorButton m_ColorEndControl;
+	afx_msg void OnNMCustomdrawColorBlendAmount(NMHDR *pNMHDR, LRESULT *pResult);
+	CComboBox m_BlendColorOperationControl;
+	afx_msg void OnCbnSelchangeBlendColorOperation();
+	CSliderCtrl m_FalloffPositionControl;
+	CSliderCtrl m_FalloffFinalControl;
+	CSliderCtrl m_AlphaBlendAmountControl;
+	CStatic m_AlphaBlendAmountTextControl;
+	afx_msg void OnNMCustomdrawAlphaBlendAmount(NMHDR *pNMHDR, LRESULT *pResult);
+	afx_msg void OnRButtonDblClk(UINT nFlags, CPoint point);
+};
+
 
 #endif // SCULPTOPTIONS_H

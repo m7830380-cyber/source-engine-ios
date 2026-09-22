@@ -1,4 +1,3 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
 /******************************************************************/
 /* qsort.c  --  Non-Recursive ANSI Quicksort function             */
 /*                                                                */

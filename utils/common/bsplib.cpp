@@ -1,12 +1,13 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
 // $Revision: $
 // $NoKeywords: $
-//=============================================================================//
+//===========================================================================//
 
 #include "cmdlib.h"
+#include "tier3/tier3.h"
 #include "mathlib/mathlib.h"
 #include "bsplib.h"
 #include "zip_utils.h"
@@ -26,21 +27,27 @@
 #include "tier0/dbg.h"
 #include "lumpfiles.h"
 #include "vtf/vtf.h"
-#include "lzma/lzma.h"
-#include "tier1/lzmaDecoder.h"
-
-#include "tier0/memdbgon.h"
+#include "collisionutils.h"
+#include "tier1/tier1.h"
+#include "vphysics2_interface.h"
+#include "vphysics2_interface_flags.h"
+#include "../common/datalinker.h"
+#include "fmtstr.h"
+#include "studio.h"
 
 //=============================================================================
 
 // Boundary each lump should be aligned to
-#define LUMP_ALIGNMENT	4
+// DO NOT CHANGE THIS! THIS IS FOR CLARITY! LUMP CENTRIC ALIGNMENT OCCURS PER LUMP
+#define LUMP_ALIGNMENT				4
+// PhysLevels require SIMD alignment
+#define LUMP_PHYSLEVEL_ALIGNMENT	16
 
 // Data descriptions for byte swapping - only needed
 // for structures that are written to file for use by the game.
-BEGIN_BYTESWAP_DATADESC( dheader_t )
+BEGIN_BYTESWAP_DATADESC( BSPHeader_t )
 	DEFINE_FIELD( ident, FIELD_INTEGER ),
-	DEFINE_FIELD( version, FIELD_INTEGER ),
+	DEFINE_FIELD( m_nVersion, FIELD_INTEGER ),
 	DEFINE_EMBEDDED_ARRAY( lumps, HEADER_LUMPS ),
 	DEFINE_FIELD( mapRevision, FIELD_INTEGER ),
 END_BYTESWAP_DATADESC()
@@ -49,7 +56,7 @@ BEGIN_BYTESWAP_DATADESC( lump_t )
 	DEFINE_FIELD( fileofs, FIELD_INTEGER ),
 	DEFINE_FIELD( filelen, FIELD_INTEGER ),
 	DEFINE_FIELD( version, FIELD_INTEGER ),
-	DEFINE_FIELD( uncompressedSize, FIELD_INTEGER ),
+	DEFINE_ARRAY( fourCC, FIELD_CHARACTER, 4 ),
 END_BYTESWAP_DATADESC()
 
 BEGIN_BYTESWAP_DATADESC( dflagslump_t )
@@ -178,6 +185,11 @@ BEGIN_BYTESWAP_DATADESC( CDispTri )
 	DEFINE_FIELD( m_uiTags, FIELD_SHORT ),
 END_BYTESWAP_DATADESC()
 
+BEGIN_BYTESWAP_DATADESC( CDispMultiBlend )
+	DEFINE_FIELD( m_vMultiBlend, FIELD_VECTOR4D ),
+	DEFINE_FIELD( m_vAlphaBlend, FIELD_VECTOR4D ),
+END_BYTESWAP_DATADESC()
+
 BEGIN_BYTESWAP_DATADESC( CFaceMacroTextureInfo )
 	DEFINE_FIELD( m_MacroTextureNameID, FIELD_SHORT ),
 END_BYTESWAP_DATADESC()
@@ -218,6 +230,11 @@ BEGIN_BYTESWAP_DATADESC( dfaceid_t )
 	DEFINE_FIELD( hammerfaceid, FIELD_SHORT ),
 END_BYTESWAP_DATADESC()
 
+BEGIN_BYTESWAP_DATADESC( dfacebrushlist_t )
+	DEFINE_FIELD( m_nFaceBrushCount, FIELD_SHORT ),
+	DEFINE_FIELD( m_nFaceBrushStart, FIELD_SHORT ),
+END_BYTESWAP_DATADESC()
+
 BEGIN_BYTESWAP_DATADESC( dbrush_t )
 	DEFINE_FIELD( firstside, FIELD_INTEGER ),
 	DEFINE_FIELD( numsides, FIELD_INTEGER ),
@@ -228,7 +245,8 @@ BEGIN_BYTESWAP_DATADESC( dbrushside_t )
 	DEFINE_FIELD( planenum, FIELD_SHORT ),
 	DEFINE_FIELD( texinfo, FIELD_SHORT ),
 	DEFINE_FIELD( dispinfo, FIELD_SHORT ),
-	DEFINE_FIELD( bevel, FIELD_SHORT ),
+	DEFINE_FIELD( bevel, FIELD_CHARACTER ),
+	DEFINE_FIELD( thin, FIELD_CHARACTER ),
 END_BYTESWAP_DATADESC()
 
 BEGIN_BYTESWAP_DATADESC( dedge_t )
@@ -268,10 +286,30 @@ BEGIN_BYTESWAP_DATADESC( dareaportal_t )
 	DEFINE_FIELD( planenum, FIELD_INTEGER ),
 END_BYTESWAP_DATADESC()
 
+BEGIN_BYTESWAP_DATADESC( dworldlight_version0_t )
+	DEFINE_FIELD( origin, FIELD_VECTOR ),
+	DEFINE_FIELD( intensity, FIELD_VECTOR ),
+	DEFINE_FIELD( normal, FIELD_VECTOR ),
+	DEFINE_FIELD( cluster, FIELD_INTEGER ),
+	DEFINE_FIELD( type, FIELD_INTEGER ),	// enumeration
+	DEFINE_FIELD( style, FIELD_INTEGER ),
+	DEFINE_FIELD( stopdot, FIELD_FLOAT ),
+	DEFINE_FIELD( stopdot2, FIELD_FLOAT ),
+	DEFINE_FIELD( exponent, FIELD_FLOAT ),
+	DEFINE_FIELD( radius, FIELD_FLOAT ),
+	DEFINE_FIELD( constant_attn, FIELD_FLOAT ),
+	DEFINE_FIELD( linear_attn, FIELD_FLOAT ),
+	DEFINE_FIELD( quadratic_attn, FIELD_FLOAT ),
+	DEFINE_FIELD( flags, FIELD_INTEGER ),
+	DEFINE_FIELD( texinfo, FIELD_INTEGER ),
+	DEFINE_FIELD( owner, FIELD_INTEGER ),
+END_BYTESWAP_DATADESC()
+
 BEGIN_BYTESWAP_DATADESC( dworldlight_t )
 	DEFINE_FIELD( origin, FIELD_VECTOR ),
 	DEFINE_FIELD( intensity, FIELD_VECTOR ),
 	DEFINE_FIELD( normal, FIELD_VECTOR ),
+	DEFINE_FIELD( shadow_cast_offset, FIELD_VECTOR ),
 	DEFINE_FIELD( cluster, FIELD_INTEGER ),
 	DEFINE_FIELD( type, FIELD_INTEGER ),	// enumeration
 	DEFINE_FIELD( style, FIELD_INTEGER ),
@@ -342,6 +380,13 @@ BEGIN_BYTESWAP_DATADESC( doverlayfade_t )
 	DEFINE_FIELD( flFadeDistMaxSq, FIELD_FLOAT ),
 END_BYTESWAP_DATADESC()
 
+BEGIN_BYTESWAP_DATADESC( doverlaysystemlevel_t )
+	DEFINE_FIELD( nMinCPULevel, FIELD_CHARACTER ),
+	DEFINE_FIELD( nMaxCPULevel, FIELD_CHARACTER ),
+	DEFINE_FIELD( nMinGPULevel, FIELD_CHARACTER ),
+	DEFINE_FIELD( nMaxGPULevel, FIELD_CHARACTER ),
+END_BYTESWAP_DATADESC()
+
 BEGIN_BYTESWAP_DATADESC( dgamelumpheader_t )
 	DEFINE_FIELD( lumpCount, FIELD_INTEGER ),
 END_BYTESWAP_DATADESC()
@@ -359,21 +404,27 @@ BEGIN_BYTESWAP_DATADESC( StaticPropDictLump_t )
 	DEFINE_ARRAY( m_Name, FIELD_CHARACTER, STATIC_PROP_NAME_LENGTH ),
 END_BYTESWAP_DATADESC()
 
+// version 10
 BEGIN_BYTESWAP_DATADESC( StaticPropLump_t )
-	DEFINE_FIELD( m_Origin, FIELD_VECTOR ),
-	DEFINE_FIELD( m_Angles, FIELD_VECTOR ),	// QAngle
-	DEFINE_FIELD( m_PropType, FIELD_SHORT ),
-	DEFINE_FIELD( m_FirstLeaf, FIELD_SHORT ),
-	DEFINE_FIELD( m_LeafCount, FIELD_SHORT ),
-	DEFINE_FIELD( m_Solid, FIELD_CHARACTER ),
-	DEFINE_FIELD( m_Flags, FIELD_CHARACTER ),
-	DEFINE_FIELD( m_Skin, FIELD_INTEGER ),
-	DEFINE_FIELD( m_FadeMinDist, FIELD_FLOAT ),
-	DEFINE_FIELD( m_FadeMaxDist, FIELD_FLOAT ),
-	DEFINE_FIELD( m_LightingOrigin, FIELD_VECTOR ),
-	DEFINE_FIELD( m_flForcedFadeScale, FIELD_FLOAT ),
-	DEFINE_FIELD( m_nMinDXLevel, FIELD_SHORT ),
-	DEFINE_FIELD( m_nMaxDXLevel, FIELD_SHORT ),
+DEFINE_FIELD( m_Origin, FIELD_VECTOR ),
+DEFINE_FIELD( m_Angles, FIELD_VECTOR ),	// QAngle
+DEFINE_FIELD( m_PropType, FIELD_SHORT ),
+DEFINE_FIELD( m_FirstLeaf, FIELD_SHORT ),
+DEFINE_FIELD( m_LeafCount, FIELD_SHORT ),
+DEFINE_FIELD( m_Solid, FIELD_CHARACTER ),
+DEFINE_FIELD( m_Flags, FIELD_CHARACTER ),
+DEFINE_FIELD( m_Skin, FIELD_INTEGER ),
+DEFINE_FIELD( m_FadeMinDist, FIELD_FLOAT ),
+DEFINE_FIELD( m_FadeMaxDist, FIELD_FLOAT ),
+DEFINE_FIELD( m_LightingOrigin, FIELD_VECTOR ),
+DEFINE_FIELD( m_flForcedFadeScale, FIELD_FLOAT ),
+DEFINE_FIELD( m_nMinCPULevel, FIELD_CHARACTER ),
+DEFINE_FIELD( m_nMinCPULevel, FIELD_CHARACTER ),
+DEFINE_FIELD( m_nMinGPULevel, FIELD_CHARACTER ),
+DEFINE_FIELD( m_nMinGPULevel, FIELD_CHARACTER ),
+DEFINE_FIELD( m_DiffuseModulation, FIELD_COLOR32 ),
+DEFINE_FIELD( m_bDisableX360, FIELD_BOOLEAN ),
+DEFINE_FIELD( m_FlagsEx, FIELD_INTEGER ),
 END_BYTESWAP_DATADESC()
 
 BEGIN_BYTESWAP_DATADESC( StaticPropLumpV4_t )
@@ -405,8 +456,102 @@ BEGIN_BYTESWAP_DATADESC( StaticPropLumpV5_t )
 	DEFINE_FIELD( m_flForcedFadeScale, FIELD_FLOAT ),
 END_BYTESWAP_DATADESC()
 
+BEGIN_BYTESWAP_DATADESC( StaticPropLumpV6_t )
+	DEFINE_FIELD( m_Origin, FIELD_VECTOR ),
+	DEFINE_FIELD( m_Angles, FIELD_VECTOR ),	// QAngle
+	DEFINE_FIELD( m_PropType, FIELD_SHORT ),
+	DEFINE_FIELD( m_FirstLeaf, FIELD_SHORT ),
+	DEFINE_FIELD( m_LeafCount, FIELD_SHORT ),
+	DEFINE_FIELD( m_Solid, FIELD_CHARACTER ),
+	DEFINE_FIELD( m_Flags, FIELD_CHARACTER ),
+	DEFINE_FIELD( m_Skin, FIELD_INTEGER ),
+	DEFINE_FIELD( m_FadeMinDist, FIELD_FLOAT ),
+	DEFINE_FIELD( m_FadeMaxDist, FIELD_FLOAT ),
+	DEFINE_FIELD( m_LightingOrigin, FIELD_VECTOR ),
+	DEFINE_FIELD( m_flForcedFadeScale, FIELD_FLOAT ),
+	DEFINE_FIELD( m_nMinDXLevel, FIELD_SHORT ),
+	DEFINE_FIELD( m_nMaxDXLevel, FIELD_SHORT ),
+END_BYTESWAP_DATADESC()
+
+BEGIN_BYTESWAP_DATADESC( StaticPropLumpV7_t )
+	DEFINE_FIELD( m_Origin, FIELD_VECTOR ),
+	DEFINE_FIELD( m_Angles, FIELD_VECTOR ),	// QAngle
+	DEFINE_FIELD( m_PropType, FIELD_SHORT ),
+	DEFINE_FIELD( m_FirstLeaf, FIELD_SHORT ),
+	DEFINE_FIELD( m_LeafCount, FIELD_SHORT ),
+	DEFINE_FIELD( m_Solid, FIELD_CHARACTER ),
+	DEFINE_FIELD( m_Flags, FIELD_CHARACTER ),
+	DEFINE_FIELD( m_Skin, FIELD_INTEGER ),
+	DEFINE_FIELD( m_FadeMinDist, FIELD_FLOAT ),
+	DEFINE_FIELD( m_FadeMaxDist, FIELD_FLOAT ),
+	DEFINE_FIELD( m_LightingOrigin, FIELD_VECTOR ),
+	DEFINE_FIELD( m_flForcedFadeScale, FIELD_FLOAT ),
+	DEFINE_FIELD( m_nMinDXLevel, FIELD_SHORT ),
+	DEFINE_FIELD( m_nMaxDXLevel, FIELD_SHORT ),
+	DEFINE_FIELD( m_DiffuseModulation, FIELD_COLOR32 ),
+END_BYTESWAP_DATADESC()
+
+BEGIN_BYTESWAP_DATADESC( StaticPropLumpV8_t )
+DEFINE_FIELD( m_Origin, FIELD_VECTOR ),
+DEFINE_FIELD( m_Angles, FIELD_VECTOR ),	// QAngle
+DEFINE_FIELD( m_PropType, FIELD_SHORT ),
+DEFINE_FIELD( m_FirstLeaf, FIELD_SHORT ),
+DEFINE_FIELD( m_LeafCount, FIELD_SHORT ),
+DEFINE_FIELD( m_Solid, FIELD_CHARACTER ),
+DEFINE_FIELD( m_Flags, FIELD_CHARACTER ),
+DEFINE_FIELD( m_Skin, FIELD_INTEGER ),
+DEFINE_FIELD( m_FadeMinDist, FIELD_FLOAT ),
+DEFINE_FIELD( m_FadeMaxDist, FIELD_FLOAT ),
+DEFINE_FIELD( m_LightingOrigin, FIELD_VECTOR ),
+DEFINE_FIELD( m_flForcedFadeScale, FIELD_FLOAT ),
+DEFINE_FIELD( m_nMinCPULevel, FIELD_CHARACTER ),
+DEFINE_FIELD( m_nMinCPULevel, FIELD_CHARACTER ),
+DEFINE_FIELD( m_nMinGPULevel, FIELD_CHARACTER ),
+DEFINE_FIELD( m_nMinGPULevel, FIELD_CHARACTER ),
+DEFINE_FIELD( m_DiffuseModulation, FIELD_COLOR32 ),
+END_BYTESWAP_DATADESC()
+
+BEGIN_BYTESWAP_DATADESC( StaticPropLumpV9_t )
+DEFINE_FIELD( m_Origin, FIELD_VECTOR ),
+DEFINE_FIELD( m_Angles, FIELD_VECTOR ),	// QAngle
+DEFINE_FIELD( m_PropType, FIELD_SHORT ),
+DEFINE_FIELD( m_FirstLeaf, FIELD_SHORT ),
+DEFINE_FIELD( m_LeafCount, FIELD_SHORT ),
+DEFINE_FIELD( m_Solid, FIELD_CHARACTER ),
+DEFINE_FIELD( m_Flags, FIELD_CHARACTER ),
+DEFINE_FIELD( m_Skin, FIELD_INTEGER ),
+DEFINE_FIELD( m_FadeMinDist, FIELD_FLOAT ),
+DEFINE_FIELD( m_FadeMaxDist, FIELD_FLOAT ),
+DEFINE_FIELD( m_LightingOrigin, FIELD_VECTOR ),
+DEFINE_FIELD( m_flForcedFadeScale, FIELD_FLOAT ),
+DEFINE_FIELD( m_nMinCPULevel, FIELD_CHARACTER ),
+DEFINE_FIELD( m_nMinCPULevel, FIELD_CHARACTER ),
+DEFINE_FIELD( m_nMinGPULevel, FIELD_CHARACTER ),
+DEFINE_FIELD( m_nMinGPULevel, FIELD_CHARACTER ),
+DEFINE_FIELD( m_DiffuseModulation, FIELD_COLOR32 ),
+DEFINE_FIELD( m_bDisableX360, FIELD_BOOLEAN ),
+END_BYTESWAP_DATADESC()
+
 BEGIN_BYTESWAP_DATADESC( StaticPropLeafLump_t )
 	DEFINE_FIELD( m_Leaf, FIELD_SHORT ),
+END_BYTESWAP_DATADESC()
+
+
+BEGIN_BYTESWAP_DATADESC( dprophull_t )
+	DEFINE_FIELD( m_nVertCount, FIELD_INTEGER ),
+	DEFINE_FIELD( m_nVertStart, FIELD_INTEGER ),
+	DEFINE_FIELD( m_nSurfaceProp, FIELD_INTEGER ),
+	DEFINE_FIELD( m_nContents, FIELD_INTEGER ),
+END_BYTESWAP_DATADESC()
+
+BEGIN_BYTESWAP_DATADESC( dprophulltris_t )
+	DEFINE_FIELD( m_nIndexCount, FIELD_INTEGER ),
+	DEFINE_FIELD( m_nIndexStart, FIELD_INTEGER ),
+END_BYTESWAP_DATADESC()
+
+BEGIN_BYTESWAP_DATADESC( dpropcollision_t )
+	DEFINE_FIELD( m_nHullCount, FIELD_INTEGER ),
+	DEFINE_FIELD( m_nHullStart, FIELD_INTEGER ),
 END_BYTESWAP_DATADESC()
 
 BEGIN_BYTESWAP_DATADESC( DetailObjectDictLump_t )
@@ -464,7 +609,35 @@ BEGIN_BYTESWAP_DATADESC( FileHeader_t )
 END_BYTESWAP_DATADESC()
 } // end namespace
 
-static const char *s_LumpNames[] = {
+
+BEGIN_BYTESWAP_DATADESC( dphyslevelV0_t )
+	DEFINE_FIELD( toolVersion, FIELD_INTEGER ),
+	DEFINE_FIELD( dataVersion, FIELD_INTEGER ),
+	DEFINE_FIELD( sizeofDiskPhysics2LevelMesh, FIELD_INTEGER ),
+	DEFINE_FIELD( buildTime, FIELD_INTEGER ),
+	DEFINE_FIELD( levelMeshes.size, FIELD_INTEGER ),
+	DEFINE_FIELD( levelMeshes.offset, FIELD_INTEGER ),
+	DEFINE_FIELD( polysoup.offset, FIELD_INTEGER ),
+	DEFINE_FIELD( mopp.offset, FIELD_INTEGER ),
+	DEFINE_FIELD( displacementMesh.offset, FIELD_INTEGER ),
+	DEFINE_FIELD( staticProps.offset, FIELD_INTEGER ),
+	DEFINE_FIELD( levelWaterMeshes.size, FIELD_INTEGER ),
+	DEFINE_FIELD( levelWaterMeshes.offset, FIELD_INTEGER ),
+	DEFINE_FIELD( nReserved2[0], FIELD_INTEGER ),
+	DEFINE_FIELD( nReserved2[1], FIELD_INTEGER ),
+END_BYTESWAP_DATADESC()
+
+BEGIN_BYTESWAP_DATADESC(DiskPhysics2Polytope_t)
+	DEFINE_FIELD( offsetPolytope, FIELD_INTEGER ),
+	DEFINE_FIELD( offsetInertia, FIELD_INTEGER )
+END_BYTESWAP_DATADESC()
+
+BEGIN_BYTESWAP_DATADESC(DiskPhysics2LevelMesh_t)
+	DEFINE_FIELD( polymesh.offset, FIELD_INTEGER ),
+	DEFINE_FIELD( flags, FIELD_INTEGER )
+END_BYTESWAP_DATADESC()
+
+static char *s_LumpNames[] = {
 	"LUMP_ENTITIES",						// 0
 	"LUMP_PLANES",							// 1
 	"LUMP_TEXDATA",							// 2
@@ -487,10 +660,10 @@ static const char *s_LumpNames[] = {
 	"LUMP_BRUSHSIDES",						// 19
 	"LUMP_AREAS",							// 20
 	"LUMP_AREAPORTALS",						// 21
-	"LUMP_UNUSED0",							// 22
-	"LUMP_UNUSED1",							// 23
-	"LUMP_UNUSED2",							// 24
-	"LUMP_UNUSED3",							// 25
+	"LUMP_FACEBRUSHES",						// 22
+	"LUMP_FACEBRUSHLIST",					// 23
+	"LUMP_UNUSED1",							// 24
+	"LUMP_UNUSED2",							// 25
 	"LUMP_DISPINFO",						// 26
 	"LUMP_ORIGINALFACES",					// 27
 	"LUMP_PHYSDISP",						// 28
@@ -514,7 +687,7 @@ static const char *s_LumpNames[] = {
 	"LUMP_LEAFMINDISTTOWATER",				// 46
 	"LUMP_FACE_MACRO_TEXTURE_INFO",			// 47
 	"LUMP_DISP_TRIS",						// 48
-	"LUMP_PHYSCOLLIDESURFACE",				// 49
+	"LUMP_PROP_BLOB",						// 49
 	"LUMP_WATEROVERLAYS",					// 50
 	"LUMP_LEAF_AMBIENT_INDEX_HDR",			// 51
 	"LUMP_LEAF_AMBIENT_INDEX",				// 52
@@ -526,6 +699,9 @@ static const char *s_LumpNames[] = {
 	"LUMP_FACES_HDR",						// 58
 	"LUMP_MAP_FLAGS",						// 59
 	"LUMP_OVERLAY_FADES",					// 60
+	"LUMP_OVERLAY_SYSTEM_LEVELS",           // 61
+	"LUMP_PHYSLEVEL",                       // 62
+	"LUMP_DISP_MULTIBLEND"					// 63
 };
 
 const char *GetLumpName( unsigned int lumpnum )
@@ -548,6 +724,7 @@ static bool g_bSwapOnWrite = false;
 VTFConvertFunc_t	g_pVTFConvertFunc;
 VHVFixupFunc_t		g_pVHVFixupFunc;
 CompressFunc_t		g_pCompressFunc;
+StudioConvertFunc_t	g_pStudioConvertFunc;
 
 CUtlVector< CUtlString >	g_StaticPropNames;
 CUtlVector< int >			g_StaticPropInstances;
@@ -611,6 +788,7 @@ dtexdata_t	dtexdata[MAX_MAP_TEXDATA];
 CUtlVector<ddispinfo_t> g_dispinfo;
 CUtlVector<CDispVert> g_DispVerts;
 CUtlVector<CDispTri> g_DispTris;
+CUtlVector<CDispMultiBlend> g_DispMultiBlend;
 CUtlVector<unsigned char> g_DispLightmapSamplePositions; // LUMP_DISP_LIGHTMAP_SAMPLE_POSITIONS
 
 int         numorigfaces;
@@ -630,6 +808,9 @@ dface_t		dfaces[MAX_MAP_FACES];
 
 int			numfaceids;
 CUtlVector<dfaceid_t>	dfaceids;
+
+CUtlVector<uint16>	dfacebrushes;
+CUtlVector<dfacebrushlist_t>	dfacebrushlists;
 
 int			numfaces_hdr;
 dface_t		dfaces_hdr[MAX_MAP_FACES];
@@ -678,9 +859,10 @@ int					g_nClipPortalVerts;
 dcubemapsample_t	g_CubemapSamples[MAX_MAP_CUBEMAPSAMPLES];
 int					g_nCubemapSamples = 0;
 
-int					g_nOverlayCount;
-doverlay_t			g_Overlays[MAX_MAP_OVERLAYS];
-doverlayfade_t		g_OverlayFades[MAX_MAP_OVERLAYS];
+int						g_nOverlayCount;
+doverlay_t				g_Overlays[MAX_MAP_OVERLAYS];
+doverlayfade_t			g_OverlayFades[MAX_MAP_OVERLAYS];
+doverlaysystemlevel_t	g_OverlaySystemLevels[MAX_MAP_OVERLAYS];
 
 int					g_nWaterOverlayCount;
 dwateroverlay_t		g_WaterOverlays[MAX_MAP_WATEROVERLAYS];
@@ -692,26 +874,30 @@ byte				*g_pPhysCollide = NULL;
 int					g_PhysCollideSize = 0;
 int					g_MapRevision = 0;
 
+byte               *g_pPhysLevel = NULL;
+int                 g_PhysLevelSize = 0;
+
 byte				*g_pPhysDisp = NULL;
 int					g_PhysDispSize = 0;
 
 CUtlVector<doccluderdata_t>	g_OccluderData( 256, 256 );
 CUtlVector<doccluderpolydata_t>	g_OccluderPolyData( 1024, 1024 );
 CUtlVector<int>	g_OccluderVertexIndices( 2048, 2048 );
- 
+
 template <class T> static void WriteData( T *pData, int count = 1 );
 template <class T> static void WriteData( int fieldType, T *pData, int count = 1 );
-template< class T > static void AddLump( int lumpnum, T *pData, int count, int version = 0 );
-template< class T > static void AddLump( int lumpnum, CUtlVector<T> &data, int version = 0 );
+template< class T > static void AddLump( int lumpnum, T *pData, int count, int version = 0, int nAlignment = 1 );
+template< class T > static void AddLump( int lumpnum, CUtlVector<T> &data, int version = 0, int nAlignment = 1 );
 
-dheader_t		*g_pBSPHeader;
+BSPHeader_t		*g_pBSPHeader;
 FileHandle_t	g_hBSPFile;
 
-struct Lump_t
+struct Lumps_t
 {
 	void	*pLumps[HEADER_LUMPS];
 	int		size[HEADER_LUMPS];
 	bool	bLumpParsed[HEADER_LUMPS];
+	bool	bLumpFixed[HEADER_LUMPS];
 } g_Lumps;
 
 CGameLump	g_GameLumps;
@@ -819,10 +1005,9 @@ void ClearPakFile( IZip *pak )
 // Input  : *relativename - 
 //			*fullpath - 
 //-----------------------------------------------------------------------------
-void AddFileToPak( IZip *pak, const char *relativename, const char *fullpath, IZip::eCompressionType compressionType )
+void AddFileToPak( IZip *pak, const char *relativename, const char *fullpath )
 {
-	DevMsg( "Adding file to pakfile [ %s ]\n", fullpath );
-	pak->AddFileToZip( relativename, fullpath, compressionType );
+	pak->AddFileToZip( relativename, fullpath );
 }
 
 //-----------------------------------------------------------------------------
@@ -831,65 +1016,9 @@ void AddFileToPak( IZip *pak, const char *relativename, const char *fullpath, IZ
 //			*data - 
 //			length - 
 //-----------------------------------------------------------------------------
-void AddBufferToPak( IZip *pak, const char *pRelativeName, void *data, int length, bool bTextMode, IZip::eCompressionType compressionType )
+void AddBufferToPak( IZip *pak, const char *pRelativeName, void *data, int length, bool bTextMode )
 {
-	pak->AddBufferToZip( pRelativeName, data, length, bTextMode, compressionType );
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: Add entire directory to .bsp PAK lump as named file
-// Input  : *relativename - 
-//			*data - 
-//			length - 
-//-----------------------------------------------------------------------------
-void AddDirToPak( IZip *pak, const char *pDirPath, const char *pPakPrefix )
-{
-	if ( !g_pFullFileSystem->IsDirectory( pDirPath ) )
-	{
-		Warning( "Passed non-directory to AddDirToPak [ %s ]\n", pDirPath );
-		return;
-	}
-
-	DevMsg( "Adding directory to pakfile [ %s ]\n", pDirPath );
-
-	// Enumerate dir
-	char szEnumerateDir[MAX_PATH] = { 0 };
-	V_snprintf( szEnumerateDir, sizeof( szEnumerateDir ), "%s/*.*", pDirPath );
-	V_FixSlashes( szEnumerateDir );
-
-	FileFindHandle_t handle;
-	const char *szFindResult = g_pFullFileSystem->FindFirst( szEnumerateDir, &handle );
-	do
-	{
-		if ( szFindResult[0] != '.' )
-		{
-			char szPakName[MAX_PATH] = { 0 };
-			char szFullPath[MAX_PATH] = { 0 };
-			if ( pPakPrefix )
-			{
-				V_snprintf( szPakName, sizeof( szPakName ), "%s/%s", pPakPrefix, szFindResult );
-			}
-			else
-			{
-				V_strncpy( szPakName, szFindResult, sizeof( szPakName ) );
-			}
-			V_snprintf( szFullPath, sizeof( szFullPath ), "%s/%s", pDirPath, szFindResult );
-			V_FixDoubleSlashes( szFullPath );
-			V_FixDoubleSlashes( szPakName );
-
-			if ( g_pFullFileSystem->FindIsDirectory( handle ) )
-			{
-				// Recurse
-				AddDirToPak( pak, szFullPath, szPakName );
-			}
-			else
-			{
-				// Just add this file
-				AddFileToPak( pak, szPakName, szFullPath );
-			}
-		}
-		szFindResult = g_pFullFileSystem->FindNext( handle );
-	} while ( szFindResult);
+	pak->AddBufferToZip( pRelativeName, data, length, bTextMode );
 }
 
 //-----------------------------------------------------------------------------
@@ -1106,9 +1235,57 @@ void CGameLump::SwapGameLump( GameLumpId_t id, int version, byte *dest, byte *sr
 				dest += sizeof( StaticPropLumpV5_t );
 			}
 		}
+		else if ( version == 6 )
+		{
+			StaticPropLumpV6_t lump;
+			for ( int i = 0; i < count; ++i )
+			{
+				Q_memcpy( &lump, src, sizeof( StaticPropLumpV6_t ) );
+				g_Swap.SwapFieldsToTargetEndian( &lump, &lump );
+				Q_memcpy( dest, &lump, sizeof( StaticPropLumpV6_t ) );
+				src += sizeof( StaticPropLumpV6_t );
+				dest += sizeof( StaticPropLumpV6_t );
+			}
+		}
+		else if ( version == 7 )
+		{
+			StaticPropLumpV7_t lump;
+			for ( int i = 0; i < count; ++i )
+			{
+				Q_memcpy( &lump, src, sizeof( StaticPropLumpV7_t ) );
+				g_Swap.SwapFieldsToTargetEndian( &lump, &lump );
+				Q_memcpy( dest, &lump, sizeof( StaticPropLumpV7_t ) );
+				src += sizeof( StaticPropLumpV7_t );
+				dest += sizeof( StaticPropLumpV7_t );
+			}
+		}
+		else if ( version == 8 )
+		{
+			StaticPropLumpV8_t lump;
+			for ( int i = 0; i < count; ++i )
+			{
+				Q_memcpy( &lump, src, sizeof(StaticPropLumpV8_t) );
+				g_Swap.SwapFieldsToTargetEndian( &lump, &lump );
+				Q_memcpy( dest, &lump, sizeof(StaticPropLumpV8_t) );
+				src += sizeof( StaticPropLumpV8_t );
+				dest += sizeof( StaticPropLumpV8_t );
+			}
+		}
+		else if ( version == 9 )
+		{
+			StaticPropLumpV9_t lump;
+			for ( int i = 0; i < count; ++i )
+			{
+				Q_memcpy( &lump, src, sizeof(StaticPropLumpV9_t) );
+				g_Swap.SwapFieldsToTargetEndian( &lump, &lump );
+				Q_memcpy( dest, &lump, sizeof(StaticPropLumpV9_t) );
+				src += sizeof( StaticPropLumpV9_t );
+				dest += sizeof( StaticPropLumpV9_t );
+			}
+		}
 		else
 		{
-			if ( version != 6 )
+			if ( version != 10 )
 			{
 				Error( "Unknown Static Prop Lump version %d didn't get swapped!\n", version );
 			}
@@ -1213,7 +1390,7 @@ void CGameLump::SwapGameLump( GameLumpId_t id, int version, byte *dest, byte *sr
 //-----------------------------------------------------------------------------
 // Game lump file I/O
 //-----------------------------------------------------------------------------
-void CGameLump::ParseGameLump( dheader_t* pHeader )
+void CGameLump::ParseGameLump( BSPHeader_t* pHeader )
 {
 	g_GameLumps.DestroyAllGameLumps();
 
@@ -1282,8 +1459,7 @@ int	TexDataStringTable_AddOrFindString( const char *pString )
 //-----------------------------------------------------------------------------
 // Adds all game lumps into one big block
 //-----------------------------------------------------------------------------
-
-static void AddGameLumps( )
+static void AddGameLumps()
 {
 	// Figure out total size of the client lumps
 	int size, clumpCount;
@@ -1304,9 +1480,10 @@ static void AddGameLumps( )
 
 	// write dictionary
 	dgamelump_t dict;
-	int offset = lump->fileofs + sizeof(header) + clumpCount * sizeof(dgamelump_t);
+	// offset is absolute
+	int offset = lump->fileofs + sizeof( header ) + clumpCount * sizeof( dgamelump_t );
 	GameLumpHandle_t h;
-	for( h = g_GameLumps.FirstGameLump(); h != g_GameLumps.InvalidGameLump(); h = g_GameLumps.NextGameLump( h ) )
+	for ( h = g_GameLumps.FirstGameLump(); h != g_GameLumps.InvalidGameLump(); h = g_GameLumps.NextGameLump( h ) )
 	{
 		dict.id = g_GameLumps.GetGameLumpId(h);
 		dict.version = g_GameLumps.GetGameLumpVersion(h);
@@ -1318,8 +1495,9 @@ static void AddGameLumps( )
 		WriteData( &dict );
 	}
 
-	// write lumps..
-	for( h = g_GameLumps.FirstGameLump(); h != g_GameLumps.InvalidGameLump(); h = g_GameLumps.NextGameLump( h ) )
+	// write game lump data
+	// offsets march along in the same manner as the dictionary encoded them
+	for ( h = g_GameLumps.FirstGameLump(); h != g_GameLumps.InvalidGameLump(); h = g_GameLumps.NextGameLump( h ) )
 	{
 		unsigned int lumpsize = g_GameLumps.GameLumpSize(h);
 		if ( g_bSwapOnWrite )
@@ -1329,8 +1507,8 @@ static void AddGameLumps( )
 		SafeWrite( g_hBSPFile, g_GameLumps.GetGameLump(h), lumpsize );
 	}
 
-	// align to doubleword
-	AlignFilePosition( g_hBSPFile, 4 );
+	// stay aligned on lump boundaries
+	AlignFilePosition( g_hBSPFile, LUMP_ALIGNMENT );
 }
 
 
@@ -1351,11 +1529,14 @@ static void AddOcclusionLump( )
 		3 * sizeof(int);
 
 	lump_t *lump = &g_pBSPHeader->lumps[LUMP_OCCLUSION];
-
+	
 	lump->fileofs = g_pFileSystem->Tell( g_hBSPFile );
 	lump->filelen = nLumpLength;
 	lump->version = LUMP_OCCLUSION_VERSION;
-	lump->uncompressedSize = 0;
+	lump->fourCC[0] = ( char )0;
+	lump->fourCC[1] = ( char )0;
+	lump->fourCC[2] = ( char )0;
+	lump->fourCC[3] = ( char )0;
 
 	// Data is swapped in place, so the 'Count' variables aren't safe to use after they're written
 	WriteData( FIELD_INTEGER, &nOccluderCount );
@@ -1779,6 +1960,159 @@ static void SwapPhyscollideLump( byte *pDestBase, byte *pSrcBase, unsigned int &
 }
 
 
+static void SwapPhyslevelLump( byte *pDest, byte *pSrc, uint &count, int maxExpand )
+{
+#if defined( PHYSICS2_PHYSX_ENABLE )
+	// TODO: this must be in AppSystem code
+	if ( !g_pPhysics2 )
+	{
+		CreateInterfaceFn pCreateVphysics = Sys_GetFactory( Sys_LoadModule( "vphysics.dll" ) );
+		ConnectTier1Libraries( &pCreateVphysics, 1 );
+	}
+	if ( !g_pPhysics2 )
+	{
+		return;
+	}
+
+	DataLinker::Stream stream;
+
+	dphyslevelV0_t *pRootIn = ( dphyslevelV0_t * )pSrc;
+	if ( count < sizeof( dphyslevelV0_t ) )
+	{
+		Warning( "Physlevel Lump size is too small (%d bytes)\n", count );
+		return;
+	}
+	if ( pRootIn->dataVersion != pRootIn->DATA_VERSION )
+	{
+		count = 0;
+		Warning( "Physlevel lump is old (%x != %x), can't swap\n", pRootIn->dataVersion, pRootIn->DATA_VERSION );
+		return;
+	}
+
+
+	if ( g_bSwapOnLoad ? g_bSwapOnWrite : !g_bSwapOnWrite )
+	{
+		Warning( "SwapPhyslevelLump: g_bSwapOnLoad  ==  g_bSwapOnWrite, so skipping swapping\n" );
+		return;
+	}
+
+	if ( g_bSwapOnLoad )
+	{
+		//g_Swap.SwapFieldsToTargetEndian(pRootIn);
+		count = 0;
+		Warning( "Physlevel swap on load is not supported\n" );
+		// Loading Big-endian data is NOT SUPPORTED
+		return;
+	}
+
+	IPhysics2ResourceManager *pManager = g_pPhysics2->GetResourceManager();
+	IPhysics2Cook *pCook = g_pPhysics2->GetCook();
+	pCook->SetTargetPlatform( g_bSwapOnWrite ? pCook->PLATFORM_XENON : pCook->PLATFORM_PC );
+
+	if ( sizeof( DiskPhysics2LevelMesh_t ) != pRootIn->sizeofDiskPhysics2LevelMesh )
+	{
+		Error( "sizeof(DiskPhysics2LevelMesh_t) changed unexpectedly!\n" );
+	}
+
+	dphyslevelV0_t *pRootOut = stream.Write<dphyslevelV0_t>();
+	pRootOut->buildTime = pRootIn->buildTime;//(int)time(NULL);
+	pRootOut->toolVersion = 4;
+	pRootOut->dataVersion = pRootOut->DATA_VERSION;
+	pRootOut->sizeofDiskPhysics2LevelMesh = sizeof( DiskPhysics2LevelMesh_t );
+
+	/*if ( pRootIn->polysoup.NotNull() )
+	{
+		CPhysics2Polysoup *pPolysoupUn = pManager->UnserializePolysoup( pRootIn->polysoup.GetPtr() );
+		stream.IStream::Link( &pRootOut->polysoup, pCook->SerializeShape( pPolysoupUn, &stream ) );
+		pManager->Release( pPolysoupUn );
+	}
+
+	if ( pRootIn->displacementMesh.NotNull() )
+	{
+		CPhysics2Polysoup *pDisplacementUn = pManager->UnserializePolysoup( pRootIn->displacementMesh.GetPtr() );
+		stream.IStream::Link( &pRootOut->displacementMesh, pCook->SerializeShape( pDisplacementUn, &stream ) );
+		pManager->Release( pDisplacementUn );
+	}*/
+
+	int nLevelMeshCount = pRootIn->levelMeshes.size, nLevelWaterMeshCount = pRootIn->levelWaterMeshes.size;
+	DiskPhysics2LevelMesh_t *pDiskLevelMeshes = stream.WriteAndLinkArray( &pRootOut->levelMeshes, nLevelMeshCount );
+	DiskPhysics2LevelMesh_t *pDiskLevelWaterMeshes = stream.WriteAndLinkArray( &pRootOut->levelWaterMeshes, nLevelWaterMeshCount );
+
+	// go through all levelMeshes and re-serialize them
+	for ( int nLevelMesh = 0; nLevelMesh < nLevelMeshCount; ++nLevelMesh )
+	{
+		const DiskPhysics2LevelMesh_t &refLevelMeshIn = pRootIn->levelMeshes[nLevelMesh];
+		Assert( refLevelMeshIn.polymesh.offset );
+		CPhysics2Shape *pShapeUn = NULL;
+		if( refLevelMeshIn.flags & refLevelMeshIn.FLAG_FORCE_POLYTOPE )
+		{
+			pShapeUn = pManager->UnserializePolytope( refLevelMeshIn.polymesh.GetPtr() );
+		}
+		else
+		{
+			// default: polysoup
+			pShapeUn = pManager->UnserializePolysoup( refLevelMeshIn.polymesh.GetPtr() );
+		}
+		DiskPhysics2LevelMesh_t &refOut = pDiskLevelMeshes[ nLevelMesh ];
+		stream.Link( &refOut.polymesh.offset, pCook->SerializeShape( pShapeUn, &stream ) );
+		pManager->Release ( pShapeUn );
+		if ( g_bSwapOnWrite )
+		{
+			g_Swap.SwapFieldsToTargetEndian( &refOut );
+		}
+	}
+	for ( int nLevelWaterMesh = 0; nLevelWaterMesh < nLevelWaterMeshCount; ++nLevelWaterMesh )
+	{
+		const DiskPhysics2LevelMesh_t &refLevelWaterMeshIn = pRootIn->levelWaterMeshes[nLevelWaterMesh];
+		Assert( refLevelWaterMeshIn.polymesh.offset );
+		CPhysics2Shape *pShapeUn = NULL;
+		
+		if( refLevelWaterMeshIn.flags & refLevelWaterMeshIn.FLAG_FORCE_POLYSOUP )
+		{
+			pShapeUn = pManager->UnserializePolysoup( refLevelWaterMeshIn.polymesh.GetPtr() );
+		}
+		else
+		{
+			// default: polytope
+			pShapeUn = pManager->UnserializePolytope( refLevelWaterMeshIn.polymesh.GetPtr() );
+		}
+
+		DiskPhysics2LevelMesh_t &refOut = pDiskLevelWaterMeshes[ nLevelWaterMesh ];
+		stream.Link( &refOut.polymesh.offset, pCook->SerializeShape( pShapeUn, &stream ) );
+		pManager->Release ( pShapeUn );
+		if ( g_bSwapOnWrite )
+		{
+			g_Swap.SwapFieldsToTargetEndian( &refOut );
+		}
+	}
+
+	// we're deliberately skipping mopp as it's not supported ATM
+
+	if ( g_bSwapOnWrite )
+	{
+		g_Swap.SwapFieldsToTargetEndian( pRootOut );
+	}
+
+	uint nNewSize = stream.GetTotalSize();
+	if ( nNewSize > maxExpand )
+	{
+		Warning( "X360 PhysLevel lump is too big (%d->%d bytes)\n", count, nNewSize );
+		count = 0;
+		return;
+	}
+
+	if ( nNewSize != count )
+	{
+//		Msg( "PhysLevel size changed %d bytes\n", nNewSize - count );
+	}
+	count = nNewSize;
+	stream.Compile( pDest );
+#endif
+}
+
+
+
+
 // UNDONE: This code is not yet tested.
 static void SwapPhysdispLump( byte *pDest, byte *pSrc, int count )
 {
@@ -1848,50 +2182,69 @@ void ValidateLump( int lump, int length, int size, int forceVersion )
 //	Add Lumps of integral types without datadescs
 //-----------------------------------------------------------------------------
 template< class T >
-int CopyLumpInternal( int fieldType, int lump, T *dest, int forceVersion )
+int CopyLumpInternal( int nFieldType, int nLump, T *pDest, int nForceVersion )
 {
-	g_Lumps.bLumpParsed[lump] = true;
+	g_Lumps.bLumpParsed[nLump] = true;
 
 	// Vectors are passed in as floats
-	int fieldSize = ( fieldType == FIELD_VECTOR ) ? sizeof(Vector) : sizeof(T);
-	unsigned int length = g_pBSPHeader->lumps[lump].filelen;
-	unsigned int ofs = g_pBSPHeader->lumps[lump].fileofs;
+	int nFieldSize = ( nFieldType == FIELD_VECTOR ) ? sizeof( Vector ) : sizeof( T );
+
+	unsigned int nLength = g_pBSPHeader->lumps[nLump].filelen;
+	if ( g_Lumps.bLumpFixed[nLump] )
+	{
+		nLength = g_Lumps.size[nLump];
+	}
+
+	ValidateLump( nLump, nLength, nFieldSize, nForceVersion );
 
 	// count must be of the integral type
-	unsigned int count = length / sizeof(T);
-	
-	ValidateLump( lump, length, fieldSize, forceVersion );
+	unsigned int nCount = nLength / sizeof( T );
+
+	byte *pLumpData;
+	if ( g_Lumps.bLumpFixed[nLump] )
+	{
+		pLumpData = (byte *)g_Lumps.pLumps[nLump];
+	}
+	else
+	{
+		unsigned int ofs = g_pBSPHeader->lumps[nLump].fileofs;
+		pLumpData = ( (byte*)g_pBSPHeader + ofs );
+	}
 
 	if ( g_bSwapOnLoad )
 	{
-		switch( lump )
+		switch( nLump )
 		{
 		case LUMP_VISIBILITY:
-			SwapVisibilityLump( (byte*)dest, ((byte*)g_pBSPHeader + ofs), count );
+			SwapVisibilityLump( (byte*)pDest, pLumpData, nCount );
 			break;
 		
 		case LUMP_PHYSCOLLIDE:
 			// SwapPhyscollideLump may change size
-			SwapPhyscollideLump( (byte*)dest, ((byte*)g_pBSPHeader + ofs), count );
-			length = count;
+			SwapPhyscollideLump( (byte*)pDest, pLumpData, nCount );
+			nLength = nCount;
 			break;
 
 		case LUMP_PHYSDISP:
-			SwapPhysdispLump( (byte*)dest, ((byte*)g_pBSPHeader + ofs), count );
+			SwapPhysdispLump( (byte*)pDest, pLumpData, nCount );
+			break;
+
+		case LUMP_PHYSLEVEL:
+			SwapPhyslevelLump( (byte*)pDest, pLumpData, nCount, nCount );
 			break;
 
 		default:
-			g_Swap.SwapBufferToTargetEndian( dest, (T*)((byte*)g_pBSPHeader + ofs), count );
+			g_Swap.SwapBufferToTargetEndian( pDest, (T*)pLumpData, nCount );
 			break;
 		}
 	}
 	else
 	{
-		memcpy( dest, (byte*)g_pBSPHeader + ofs, length );
+		memcpy( pDest, pLumpData, nLength );
 	}
 
 	// Return actual count of elements
-	return length / fieldSize;
+	return nLength / nFieldSize;
 }
 
 template< class T >
@@ -1932,26 +2285,42 @@ int CopyVariableLump( int fieldType, int lump, void **dest, int forceVersion = -
 //	Add Lumps of object types with datadescs
 //-----------------------------------------------------------------------------
 template< class T >
-int CopyLumpInternal( int lump, T *dest, int forceVersion )
+int CopyLumpInternal( int nLump, T *pDest, int forceVersion )
 {
-	g_Lumps.bLumpParsed[lump] = true;
+	g_Lumps.bLumpParsed[nLump] = true;
 
-	unsigned int length = g_pBSPHeader->lumps[lump].filelen;
-	unsigned int ofs = g_pBSPHeader->lumps[lump].fileofs;
-	unsigned int count = length / sizeof(T);
-	
-	ValidateLump( lump, length, sizeof(T), forceVersion );
-
-	if ( g_bSwapOnLoad )
+	unsigned int nLength = g_pBSPHeader->lumps[nLump].filelen;
+	if ( g_Lumps.bLumpFixed[nLump] )
 	{
-		g_Swap.SwapFieldsToTargetEndian( dest, (T*)((byte*)g_pBSPHeader + ofs), count );
+		nLength = g_Lumps.size[nLump];
+	}
+
+	ValidateLump( nLump, nLength, sizeof( T ), forceVersion );
+
+	unsigned int nCount = nLength / sizeof( T );
+
+	byte *pLumpData;
+	if ( g_Lumps.bLumpFixed[nLump] )
+	{
+		// lump has been pre-fixed, use that data
+		pLumpData = (byte *)g_Lumps.pLumps[nLump];
 	}
 	else
 	{
-		memcpy( dest, (byte*)g_pBSPHeader + ofs, length );
+		unsigned int nFileOffset = g_pBSPHeader->lumps[nLump].fileofs;
+		pLumpData = (byte*)g_pBSPHeader + nFileOffset;
 	}
 
-	return count;
+	if ( g_bSwapOnLoad )
+	{
+		g_Swap.SwapFieldsToTargetEndian( pDest, pLumpData, nCount );
+	}
+	else
+	{
+		memcpy( pDest, pLumpData, nLength );
+	}
+
+	return nCount;
 }
 
 template< class T >
@@ -2163,15 +2532,70 @@ void LoadLeafAmbientLighting( int numLeafs )
 	}
 }
 
-void ValidateHeader( const char *filename, const dheader_t *pHeader )
+int LoadWorldLights( int lumpnum,  dworldlight_t *pWorldlights )
+{
+	Assert( lumpnum == LUMP_WORLDLIGHTS || lumpnum == LUMP_WORLDLIGHTS_HDR );
+	if ( lumpnum != LUMP_WORLDLIGHTS && lumpnum != LUMP_WORLDLIGHTS_HDR )
+	{
+		Error( "Unexpected worldlight lumpnum %d\n", lumpnum );
+	}
+	if ( !HasLump( lumpnum ) )
+	{
+		return 0;
+	}
+
+	int count = 0;
+	int version = LumpVersion( lumpnum );
+	if ( version == 0 )
+	{
+		// old version
+		dworldlight_version0_t *pOldWorldlights = (dworldlight_version0_t *)malloc( g_pBSPHeader->lumps[lumpnum].filelen );
+		count = CopyLump( lumpnum, pOldWorldlights );
+
+		for ( int i = 0; i < count; i++ )
+		{
+			pWorldlights[i].origin = pOldWorldlights[i].origin;
+			pWorldlights[i].intensity = pOldWorldlights[i].intensity;
+			pWorldlights[i].normal = pOldWorldlights[i].normal;
+			pWorldlights[i].shadow_cast_offset.Init( 0.0f, 0.0f, 0.0f );
+			pWorldlights[i].cluster = pOldWorldlights[i].cluster;
+			pWorldlights[i].type = pOldWorldlights[i].type;
+			pWorldlights[i].style = pOldWorldlights[i].style;
+			pWorldlights[i].stopdot = pOldWorldlights[i].stopdot;
+			pWorldlights[i].stopdot2 = pOldWorldlights[i].stopdot2;
+			pWorldlights[i].exponent = pOldWorldlights[i].exponent;
+			pWorldlights[i].radius = pOldWorldlights[i].radius;
+			pWorldlights[i].constant_attn = pOldWorldlights[i].constant_attn;	
+			pWorldlights[i].linear_attn = pOldWorldlights[i].linear_attn;
+			pWorldlights[i].quadratic_attn = pOldWorldlights[i].quadratic_attn;
+			pWorldlights[i].flags = pOldWorldlights[i].flags;
+			pWorldlights[i].texinfo = pOldWorldlights[i].texinfo;
+			pWorldlights[i].owner = pOldWorldlights[i].owner;
+		}
+
+		free( pOldWorldlights );
+	}
+	else if ( version == LUMP_WORLDLIGHTS_VERSION )
+	{
+		count = CopyLump( lumpnum, pWorldlights );
+	}
+	else
+	{
+		Error( "Unexpected worldlights lump version %d\n", version );
+	}
+
+	return count;
+}
+
+void ValidateHeader( const char *filename, const BSPHeader_t *pHeader )
 {
 	if ( pHeader->ident != IDBSPHEADER )
 	{
 		Error ("%s is not a IBSP file", filename);
 	}
-	if ( pHeader->version < MINBSPVERSION || pHeader->version > BSPVERSION )
+	if ( pHeader->m_nVersion < MINBSPVERSION || pHeader->m_nVersion > BSPVERSION )
 	{
-		Error ("%s is version %i, not %i", filename, pHeader->version, BSPVERSION);
+		Error ("%s is version %i, not %i", filename, pHeader->m_nVersion, BSPVERSION);
 	}
 }
 
@@ -2195,6 +2619,20 @@ void OpenBSPFile( const char *filename )
 	ValidateHeader( filename, g_pBSPHeader );
 
 	g_MapRevision = g_pBSPHeader->mapRevision;
+
+	g_LevelFlags = 0;
+	if ( HasLump( LUMP_MAP_FLAGS ) )
+	{
+		dflagslump_t flagsLump;
+
+		memcpy( &flagsLump, (dflagslump_t *)((byte *)g_pBSPHeader + g_pBSPHeader->lumps[LUMP_MAP_FLAGS].fileofs ), sizeof( flagsLump ) );
+		if ( g_bSwapOnLoad )
+		{
+			g_Swap.SwapFieldsToTargetEndian( &flagsLump );
+		}
+
+		g_LevelFlags = flagsLump.m_LevelFlags;
+	}
 }
 
 //-----------------------------------------------------------------------------
@@ -2224,6 +2662,7 @@ void LoadBSPFile( const char *filename )
 	CopyLump( LUMP_DISPINFO, g_dispinfo );
     CopyLump( LUMP_DISP_VERTS, g_DispVerts );
 	CopyLump( LUMP_DISP_TRIS, g_DispTris );
+	CopyLump( LUMP_DISP_MULTIBLEND, g_DispMultiBlend );
     CopyLump( FIELD_CHARACTER, LUMP_DISP_LIGHTMAP_SAMPLE_POSITIONS, g_DispLightmapSamplePositions );
 	CopyLump( LUMP_FACE_MACRO_TEXTURE_INFO, g_FaceMacroTextureInfos );
 	
@@ -2241,6 +2680,9 @@ void LoadBSPFile( const char *filename )
     numorigfaces = CopyLump( LUMP_ORIGINALFACES, dorigfaces );   // original faces
 	numleaffaces = CopyLump( FIELD_SHORT, LUMP_LEAFFACES, dleaffaces );
 	numleafbrushes = CopyLump( FIELD_SHORT, LUMP_LEAFBRUSHES, dleafbrushes );
+	CopyLump( FIELD_SHORT, LUMP_FACEBRUSHES, dfacebrushes );
+	CopyLump( LUMP_FACEBRUSHLIST, dfacebrushlists );
+
 	numsurfedges = CopyLump( FIELD_INTEGER, LUMP_SURFEDGES, dsurfedges );
 	numedges = CopyLump( LUMP_EDGES, dedges );
 	numbrushes = CopyLump( LUMP_BRUSHES, dbrushes );
@@ -2255,11 +2697,13 @@ void LoadBSPFile( const char *filename )
 	LoadLeafAmbientLighting( numleafs );
 
 	CopyLump( FIELD_CHARACTER, LUMP_ENTITIES, dentdata );
-	numworldlightsLDR = CopyLump( LUMP_WORLDLIGHTS, dworldlightsLDR );
-	numworldlightsHDR = CopyLump( LUMP_WORLDLIGHTS_HDR, dworldlightsHDR );
+
+	numworldlightsLDR = LoadWorldLights( LUMP_WORLDLIGHTS, dworldlightsLDR );
+	numworldlightsHDR = LoadWorldLights( LUMP_WORLDLIGHTS_HDR, dworldlightsHDR );
 	
 	numleafwaterdata = CopyLump( LUMP_LEAFWATERDATA, dleafwaterdata );
 	g_PhysCollideSize = CopyVariableLump<byte>( FIELD_CHARACTER, LUMP_PHYSCOLLIDE, (void**)&g_pPhysCollide );
+	g_PhysLevelSize = CopyVariableLump<byte>( FIELD_CHARACTER, LUMP_PHYSLEVEL, (void**)&g_pPhysLevel );
 	g_PhysDispSize = CopyVariableLump<byte>( FIELD_CHARACTER, LUMP_PHYSDISP, (void**)&g_pPhysDisp );
 
 	g_numvertnormals = CopyLump( FIELD_VECTOR, LUMP_VERTNORMALS, (float*)g_vertnormals );
@@ -2274,6 +2718,7 @@ void LoadBSPFile( const char *filename )
 	g_nOverlayCount = CopyLump( LUMP_OVERLAYS, g_Overlays );
 	g_nWaterOverlayCount = CopyLump( LUMP_WATEROVERLAYS, g_WaterOverlays );
 	CopyLump( LUMP_OVERLAY_FADES, g_OverlayFades );
+	CopyLump( LUMP_OVERLAY_SYSTEM_LEVELS, g_OverlaySystemLevels );
 	
 	dflagslump_t flags_lump;
 	
@@ -2351,6 +2796,7 @@ void UnloadBSPFile()
 	g_dispinfo.Purge();
 	g_DispVerts.Purge();
 	g_DispTris.Purge();
+	g_DispMultiBlend.Purge();
 
 	g_DispLightmapSamplePositions.Purge();
 	g_FaceMacroTextureInfos.Purge();
@@ -2359,6 +2805,8 @@ void UnloadBSPFile()
 	numfaces_hdr = 0;
 
 	dfaceids.Purge();
+	dfacebrushes.Purge();
+	dfacebrushlists.Purge();
 
 	g_numprimitives = 0;
 	g_numprimverts = 0;
@@ -2445,7 +2893,6 @@ void LoadBSPFile_FileSystemOnly( const char *filename )
 	// load the file header
 	//
 	LoadFile( filename, (void **)&g_pBSPHeader );
-
 	ValidateHeader( filename, g_pBSPHeader );
 
 	// Load PAK file lump into appropriate data structure
@@ -2475,7 +2922,6 @@ void ExtractZipFileFromBSP( char *pBSPFileName, char *pZipFileName )
 	// load the file header
 	//
 	LoadFile( pBSPFileName, (void **)&g_pBSPHeader);
-
 	ValidateHeader( pBSPFileName, g_pBSPHeader );
 
 	byte *pakbuffer = NULL;
@@ -2483,7 +2929,11 @@ void ExtractZipFileFromBSP( char *pBSPFileName, char *pZipFileName )
 	if ( paksize > 0 )
 	{
 		FILE *fp;
+#if defined( POSIX )
 		fp = fopen( pZipFileName, "wb" );
+#else
+		fopen_s( &fp, pZipFileName, "wb" );
+#endif
 		if( !fp )
 		{
 			fprintf( stderr, "can't open %s\n", pZipFileName );
@@ -2511,10 +2961,14 @@ void LoadBSPFileTexinfo( const char *filename )
 	FILE		*f;
 	int		length, ofs;
 
-	g_pBSPHeader = (dheader_t*)malloc( sizeof(dheader_t) );
+	g_pBSPHeader = new BSPHeader_t;
 
+#if defined( POSIX )
 	f = fopen( filename, "rb" );
-	fread( g_pBSPHeader, sizeof(dheader_t), 1, f);
+#else
+	fopen_s( &f, filename, "rb" );
+#endif
+	fread( g_pBSPHeader, sizeof( *g_pBSPHeader ), 1, f);
 
 	ValidateHeader( filename, g_pBSPHeader );
 
@@ -2535,23 +2989,32 @@ void LoadBSPFileTexinfo( const char *filename )
 	g_pBSPHeader = NULL;
 }
 
-static void AddLumpInternal( int lumpnum, void *data, int len, int version )
+static void AddLumpInternal( int lumpnum, void *data, int len, int version, int nAlignment = 1 )
 {
+	Assert( IsPowerOfTwo( nAlignment ) );
+
 	lump_t *lump;
 
 	g_Lumps.size[lumpnum] = 0;	// mark it written
 
 	lump = &g_pBSPHeader->lumps[lumpnum];
 
+	// pre-align to desired write position
+	// this may be increased alignment as needed by lumps
+	AlignFilePosition( g_hBSPFile, nAlignment );
 	lump->fileofs = g_pFileSystem->Tell( g_hBSPFile );
+
 	lump->filelen = len;
 	lump->version = version;
-	lump->uncompressedSize = 0;
+	lump->fourCC[0] = ( char )0;
+	lump->fourCC[1] = ( char )0;
+	lump->fourCC[2] = ( char )0;
+	lump->fourCC[3] = ( char )0;
 
 	SafeWrite( g_hBSPFile, data, len );
 
-	// pad out to the next dword
-	AlignFilePosition( g_hBSPFile, 4 );
+	// pad out to the next default aligned position
+	AlignFilePosition( g_hBSPFile, LUMP_ALIGNMENT );
 }
 
 template< class T >
@@ -2601,15 +3064,15 @@ static void WriteData( T *pData, int count )
 //	Add Lump of object types with datadescs
 //-----------------------------------------------------------------------------
 template< class T >
-static void AddLump( int lumpnum, T *pData, int count, int version )
+static void AddLump( int lumpnum, T *pData, int count, int version, int nAlignment )
 {
-	AddLumpInternal( lumpnum, pData, count * sizeof(T), version );
+	AddLumpInternal( lumpnum, pData, count * sizeof(T), version, nAlignment );
 }
 
 template< class T >
-static void AddLump( int lumpnum, CUtlVector<T> &data, int version )
+static void AddLump( int lumpnum, CUtlVector<T> &data, int version, int nAlignment )
 {
-	AddLumpInternal( lumpnum, data.Base(), data.Count() * sizeof(T), version );
+	AddLumpInternal( lumpnum, data.Base(), data.Count() * sizeof(T), version, nAlignment );
 }
 
 /*
@@ -2627,67 +3090,112 @@ void WriteBSPFile( const char *filename, char *pUnused )
 		return;
 	}
 
-	dheader_t outHeader;
+	BSPHeader_t outHeader;
 	g_pBSPHeader = &outHeader;
-	memset( g_pBSPHeader, 0, sizeof( dheader_t ) );
+	memset( g_pBSPHeader, 0, sizeof( BSPHeader_t ) );
 
 	g_pBSPHeader->ident = IDBSPHEADER;
-	g_pBSPHeader->version = BSPVERSION;
+	g_pBSPHeader->m_nVersion = BSPVERSION;
 	g_pBSPHeader->mapRevision = g_MapRevision;
 
 	g_hBSPFile = SafeOpenWrite( filename );
 	WriteData( g_pBSPHeader );	// overwritten later
 
-	AddLump( LUMP_PLANES, dplanes, numplanes );
+	// start on aligned boundary
+	AlignFilePosition( g_hBSPFile, LUMP_ALIGNMENT );
+
+	// NOTE: Write these in the order the engine will read them
+	dflagslump_t flags_lump;
+	flags_lump.m_LevelFlags = g_LevelFlags;
+	AddLump( LUMP_MAP_FLAGS, &flags_lump, 1 );
+
+	// first write texture data
+	AddLump( LUMP_TEXINFO, texinfo );
+	AddLump( LUMP_TEXDATA, dtexdata, numtexdata );    
+	AddLump( LUMP_TEXDATA_STRING_DATA, g_TexDataStringData );
+	AddLump( LUMP_TEXDATA_STRING_TABLE, g_TexDataStringTable );
+	// Now write collision data
 	AddLump( LUMP_LEAFS, dleafs, numleafs, LUMP_LEAFS_VERSION );
+	AddLump( LUMP_LEAFBRUSHES, dleafbrushes, numleafbrushes );
+	AddLump( LUMP_PLANES, dplanes, numplanes );
+	AddLump( LUMP_BRUSHES, dbrushes, numbrushes );
+	AddLump( LUMP_BRUSHSIDES, dbrushsides, numbrushsides );
+	AddLump( LUMP_MODELS, dmodels, nummodels );
+	AddLump( LUMP_NODES, dnodes, numnodes );
+	// visibility data
+	AddLump( LUMP_AREAS, dareas, numareas );
+	AddLump( LUMP_AREAPORTALS, dareaportals, numareaportals );
+	AddLump( LUMP_VISIBILITY, dvisdata, visdatasize );
+	// entity text
+	AddLump( LUMP_ENTITIES, dentdata );
+
+	if ( g_pPhysCollide )
+	{
+		AddLump( LUMP_PHYSCOLLIDE, g_pPhysCollide, g_PhysCollideSize );
+	}
+	if ( g_pPhysLevel )
+	{
+		// PhysLevel is 16-byte aligned (will be 128-byte aligned for PS/3)
+		AddLump( LUMP_PHYSLEVEL, g_pPhysLevel, g_PhysLevelSize, LUMP_PHYSLEVEL_ALIGNMENT );
+	}
+
+    AddLump( LUMP_DISPINFO, g_dispinfo );
+	AddLump( LUMP_VERTEXES, dvertexes, numvertexes );
+	AddLump( LUMP_EDGES, dedges, numedges );
+	AddLump( LUMP_SURFEDGES, dsurfedges, numsurfedges );
+    AddLump( LUMP_FACES, dfaces, numfaces, LUMP_FACES_VERSION );
+    if ( numfaces_hdr )
+	{
+		AddLump( LUMP_FACES_HDR, dfaces_hdr, numfaces_hdr, LUMP_FACES_VERSION );
+	}
+
+    AddLump( LUMP_DISP_VERTS, g_DispVerts );
+	AddLump( LUMP_DISP_TRIS, g_DispTris );
+	AddLump( LUMP_DISP_MULTIBLEND, g_DispMultiBlend );
+	
+	if ( g_pPhysDisp )
+	{
+		AddLump ( LUMP_PHYSDISP, g_pPhysDisp, g_PhysDispSize );
+	}
+
+	AddOcclusionLump();
+
+	AddLump( LUMP_LIGHTING, dlightdataLDR, LUMP_LIGHTING_VERSION );
+	AddLump( LUMP_LIGHTING_HDR, dlightdataHDR, LUMP_LIGHTING_VERSION );
+
+	AddLump( LUMP_PRIMITIVES, g_primitives, g_numprimitives );
+	AddLump( LUMP_PRIMVERTS, g_primverts, g_numprimverts );
+	AddLump( LUMP_PRIMINDICES, g_primindices, g_numprimindices );
+	AddLump( LUMP_VERTNORMALS, (float*)g_vertnormals, g_numvertnormals * 3 );
+	AddLump( LUMP_VERTNORMALINDICES, g_vertnormalindices, g_numvertnormalindices );
 	AddLump( LUMP_LEAF_AMBIENT_LIGHTING, g_LeafAmbientLightingLDR, LUMP_LEAF_AMBIENT_LIGHTING_VERSION );
 	AddLump( LUMP_LEAF_AMBIENT_INDEX, g_LeafAmbientIndexLDR );
 	AddLump( LUMP_LEAF_AMBIENT_INDEX_HDR, g_LeafAmbientIndexHDR );
 	AddLump( LUMP_LEAF_AMBIENT_LIGHTING_HDR, g_LeafAmbientLightingHDR, LUMP_LEAF_AMBIENT_LIGHTING_VERSION );
+	AddLump( LUMP_LEAFFACES, dleaffaces, numleaffaces );
+	AddLump( LUMP_LEAFWATERDATA, dleafwaterdata, numleafwaterdata );
 
-	AddLump( LUMP_VERTEXES, dvertexes, numvertexes );
-	AddLump( LUMP_NODES, dnodes, numnodes );
-	AddLump( LUMP_TEXINFO, texinfo );
-	AddLump( LUMP_TEXDATA, dtexdata, numtexdata );    
+	AddLump( LUMP_OVERLAYS, g_Overlays, g_nOverlayCount );
+	AddLump( LUMP_WATEROVERLAYS, g_WaterOverlays, g_nWaterOverlayCount );
+	AddLump( LUMP_OVERLAY_FADES, g_OverlayFades, g_nOverlayCount );
+	AddLump( LUMP_OVERLAY_SYSTEM_LEVELS, g_OverlaySystemLevels, g_nOverlayCount );
 
-    AddLump( LUMP_DISPINFO, g_dispinfo );
-    AddLump( LUMP_DISP_VERTS, g_DispVerts );
-	AddLump( LUMP_DISP_TRIS, g_DispTris );
+	AddLump( LUMP_LEAFMINDISTTOWATER, g_LeafMinDistToWater, numleafs );
+
+	AddLump( LUMP_CUBEMAPS, g_CubemapSamples, g_nCubemapSamples );
+	AddLump( LUMP_CLIPPORTALVERTS, (float*)g_ClipPortalVerts, g_nClipPortalVerts * 3 );
+	AddLump( LUMP_WORLDLIGHTS, dworldlightsLDR, numworldlightsLDR, LUMP_WORLDLIGHTS_VERSION );
+	AddLump( LUMP_WORLDLIGHTS_HDR, dworldlightsHDR, numworldlightsHDR, LUMP_WORLDLIGHTS_VERSION );
+
+
     AddLump( LUMP_DISP_LIGHTMAP_SAMPLE_POSITIONS, g_DispLightmapSamplePositions );
 	AddLump( LUMP_FACE_MACRO_TEXTURE_INFO, g_FaceMacroTextureInfos );
  
-	AddLump( LUMP_PRIMITIVES, g_primitives, g_numprimitives );
-	AddLump( LUMP_PRIMVERTS, g_primverts, g_numprimverts );
-	AddLump( LUMP_PRIMINDICES, g_primindices, g_numprimindices );
-    AddLump( LUMP_FACES, dfaces, numfaces, LUMP_FACES_VERSION );
-    if (numfaces_hdr)
-		AddLump( LUMP_FACES_HDR, dfaces_hdr, numfaces_hdr, LUMP_FACES_VERSION );
 	AddLump ( LUMP_FACEIDS, dfaceids, numfaceids );
+	AddLump ( LUMP_FACEBRUSHES, dfacebrushes );
+	AddLump ( LUMP_FACEBRUSHLIST, dfacebrushlists );
 
 	AddLump( LUMP_ORIGINALFACES, dorigfaces, numorigfaces );     // original faces lump
-	AddLump( LUMP_BRUSHES, dbrushes, numbrushes );
-	AddLump( LUMP_BRUSHSIDES, dbrushsides, numbrushsides );
-	AddLump( LUMP_LEAFFACES, dleaffaces, numleaffaces );
-	AddLump( LUMP_LEAFBRUSHES, dleafbrushes, numleafbrushes );
-	AddLump( LUMP_SURFEDGES, dsurfedges, numsurfedges );
-	AddLump( LUMP_EDGES, dedges, numedges );
-	AddLump( LUMP_MODELS, dmodels, nummodels );
-	AddLump( LUMP_AREAS, dareas, numareas );
-	AddLump( LUMP_AREAPORTALS, dareaportals, numareaportals );
-
-	AddLump( LUMP_LIGHTING, dlightdataLDR, LUMP_LIGHTING_VERSION );
-	AddLump( LUMP_LIGHTING_HDR, dlightdataHDR, LUMP_LIGHTING_VERSION );
-	AddLump( LUMP_VISIBILITY, dvisdata, visdatasize );
-	AddLump( LUMP_ENTITIES, dentdata );
-	AddLump( LUMP_WORLDLIGHTS, dworldlightsLDR, numworldlightsLDR );
-	AddLump( LUMP_WORLDLIGHTS_HDR, dworldlightsHDR, numworldlightsHDR );
-	AddLump( LUMP_LEAFWATERDATA, dleafwaterdata, numleafwaterdata );
-
-	AddOcclusionLump();
-
-	dflagslump_t flags_lump;
-	flags_lump.m_LevelFlags = g_LevelFlags;
-	AddLump( LUMP_MAP_FLAGS, &flags_lump, 1 );
 
 	// NOTE: This is just for debugging, so it is disabled in release maps
 #if 0
@@ -2697,29 +3205,6 @@ void WriteBSPFile( const char *filename, char *pUnused )
 	AddLump( LUMP_PORTALVERTS, dportalverts, numportalverts );
 	AddLump( LUMP_CLUSTERPORTALS, dclusterportals, numclusterportals );
 #endif
-
-	AddLump( LUMP_CLIPPORTALVERTS, (float*)g_ClipPortalVerts, g_nClipPortalVerts * 3 );
-	AddLump( LUMP_CUBEMAPS, g_CubemapSamples, g_nCubemapSamples );
-	AddLump( LUMP_TEXDATA_STRING_DATA, g_TexDataStringData );
-	AddLump( LUMP_TEXDATA_STRING_TABLE, g_TexDataStringTable );
-	AddLump( LUMP_OVERLAYS, g_Overlays, g_nOverlayCount );
-	AddLump( LUMP_WATEROVERLAYS, g_WaterOverlays, g_nWaterOverlayCount );
-	AddLump( LUMP_OVERLAY_FADES, g_OverlayFades, g_nOverlayCount );
-
-	if ( g_pPhysCollide )
-	{
-		AddLump( LUMP_PHYSCOLLIDE, g_pPhysCollide, g_PhysCollideSize );
-	}
-
-	if ( g_pPhysDisp )
-	{
-		AddLump ( LUMP_PHYSDISP, g_pPhysDisp, g_PhysDispSize );
-	}
-
-	AddLump( LUMP_VERTNORMALS, (float*)g_vertnormals, g_numvertnormals * 3 );
-	AddLump( LUMP_VERTNORMALINDICES, g_vertnormalindices, g_numvertnormalindices );
-
-	AddLump( LUMP_LEAFMINDISTTOWATER, g_LeafMinDistToWater, numleafs );
 
 	AddGameLumps();
 
@@ -2785,44 +3270,11 @@ void WriteLumpToFile( char *filename, int lump )
 	SafeWrite (lumpfile, (byte *)g_pBSPHeader + ofs, length);
 }
 
-void	WriteLumpToFile( char *filename, int lump, int nLumpVersion, void *pBuffer, size_t nBufLen )
-{
-	char lumppre[MAX_PATH];	
-	if ( !GenerateNextLumpFileName( filename, lumppre, MAX_PATH ) )
-	{
-		Warning( "Failed to find valid lump filename for bsp %s.\n", filename );
-		return;
-	}
-
-	// Open the file
-	FileHandle_t lumpfile = g_pFileSystem->Open(lumppre, "wb");
-	if ( !lumpfile )
-	{
-		Error ("Error opening %s! (Check for write enable)\n",filename);
-		return;
-	}
-
-	// Write the header
-	lumpfileheader_t lumpHeader;
-	lumpHeader.lumpID = lump;
-	lumpHeader.lumpVersion = nLumpVersion;
-	lumpHeader.lumpLength = nBufLen;
-	lumpHeader.mapRevision = LittleLong( g_MapRevision );
-	lumpHeader.lumpOffset = sizeof(lumpfileheader_t);	// Lump starts after the header
-	SafeWrite( lumpfile, &lumpHeader, sizeof(lumpfileheader_t));
-
-	// Write the lump
-	SafeWrite( lumpfile, pBuffer, nBufLen );
-
-	g_pFileSystem->Close( lumpfile );
-}
-
-
 //============================================================================
 #define ENTRIES(a)		(sizeof(a)/sizeof(*(a)))
 #define ENTRYSIZE(a)	(sizeof(*(a)))
 
-int ArrayUsage( const char *szItem, int items, int maxitems, int itemsize )
+int ArrayUsage( char *szItem, int items, int maxitems, int itemsize )
 {
 	float	percentage = maxitems ? items * 100.0 / maxitems : 0.0;
 
@@ -2839,7 +3291,7 @@ int ArrayUsage( const char *szItem, int items, int maxitems, int itemsize )
 	return items * itemsize;
 }
 
-int GlobUsage( const char *szItem, int itemstorage, int maxstorage )
+int GlobUsage( char *szItem, int itemstorage, int maxstorage )
 {
 	float	percentage = maxstorage ? itemstorage * 100.0 / maxstorage : 0.0;
     Msg("%-17.17s     [variable]    %8i/%-8i (%4.1f%%) ", 
@@ -2882,14 +3334,17 @@ void PrintBSPFileSizes (void)
 	totalmemory += ArrayUsage( "texinfos",		texinfo.Count(),MAX_MAP_TEXINFO,		sizeof(texinfo_t) );
 	totalmemory += ArrayUsage( "texdata",		numtexdata,		ENTRIES(dtexdata),		ENTRYSIZE(dtexdata) );
     
-	totalmemory += ArrayUsage( "dispinfos",     g_dispinfo.Count(),			0,			sizeof( ddispinfo_t ) );
-    totalmemory += ArrayUsage( "disp_verts",	g_DispVerts.Count(),		0,			sizeof( g_DispVerts[0] ) );
-    totalmemory += ArrayUsage( "disp_tris",		g_DispTris.Count(),			0,			sizeof( g_DispTris[0] ) );
-    totalmemory += ArrayUsage( "disp_lmsamples",g_DispLightmapSamplePositions.Count(),0,sizeof( g_DispLightmapSamplePositions[0] ) );
+	totalmemory += ArrayUsage( "dispinfos",			g_dispinfo.Count(),			0,			sizeof( ddispinfo_t ) );
+    totalmemory += ArrayUsage( "disp_verts",		g_DispVerts.Count(),		0,			sizeof( g_DispVerts[0] ) );
+    totalmemory += ArrayUsage( "disp_tris",			g_DispTris.Count(),			0,			sizeof( g_DispTris[0] ) );
+	totalmemory += ArrayUsage( "disp_multiblend",	g_DispMultiBlend.Count(),	0,			sizeof( g_DispMultiBlend[0] ) );
+    totalmemory += ArrayUsage( "disp_lmsamples",	g_DispLightmapSamplePositions.Count(),0,sizeof( g_DispLightmapSamplePositions[0] ) );
 	
 	totalmemory += ArrayUsage( "faces",			numfaces,		ENTRIES(dfaces),		ENTRYSIZE(dfaces) );
 	totalmemory += ArrayUsage( "hdr faces",     numfaces_hdr,	ENTRIES(dfaces_hdr),	ENTRYSIZE(dfaces_hdr) );
     totalmemory += ArrayUsage( "origfaces",     numorigfaces,   ENTRIES(dorigfaces),    ENTRYSIZE(dorigfaces) );    // original faces
+	totalmemory += ArrayUsage( "facebrushes",	dfacebrushes.Count(),			0,		ENTRYSIZE(dfacebrushes.Base()) );
+	totalmemory += ArrayUsage( "facebrushlists",dfacebrushlists.Count(),		0,		ENTRYSIZE(dfacebrushlists.Base()) );
 	totalmemory += ArrayUsage( "leaves",		numleafs,		ENTRIES(dleafs),		ENTRYSIZE(dleafs) );
 	totalmemory += ArrayUsage( "leaffaces",		numleaffaces,	ENTRIES(dleaffaces),	ENTRYSIZE(dleaffaces) );
 	totalmemory += ArrayUsage( "leafbrushes",	numleafbrushes,	ENTRIES(dleafbrushes),	ENTRYSIZE(dleafbrushes) );
@@ -2996,24 +3451,32 @@ epair_t *ParseEpair (void)
 
 	e = (epair_t*)malloc (sizeof(epair_t));
 	memset (e, 0, sizeof(epair_t));
-	
+	StripTrailing( token );
 	if (strlen(token) >= MAX_KEY-1)
-		Error ("ParseEpar: token too long");
+		Error ("ParseEpar: key token too long [%s]", token);
 	e->key = copystring(token);
-
 	GetToken (false);
+	StripTrailing( token );
 	if (strlen(token) >= MAX_VALUE-1)
-		Error ("ParseEpar: token too long");
+		Error ("ParseEpar: value token too long [%s]", token);
 	e->value = copystring(token);
-
-	// strip trailing spaces
-	StripTrailing (e->key);
-	StripTrailing (e->value);
 
 	return e;
 }
 
-
+void RemoveKey( entity_t *pMapEnt, const char *pKey )
+{
+	epair_t **pPrev = &pMapEnt->epairs;
+	for ( epair_t *pSearch = pMapEnt->epairs; pSearch != NULL; pPrev = &pSearch->next, pSearch = pSearch->next)
+	{
+		if (!Q_stricmp( pSearch->key, pKey ) )
+		{
+			(*pPrev) = pSearch->next;
+			free( pSearch );
+			return;
+		}
+	}
+}
 /*
 ================
 ParseEntity
@@ -3095,12 +3558,16 @@ void UnparseEntities (void)
 				
 		for (ep = entities[i].epairs ; ep ; ep=ep->next)
 		{
+			if ( ep->key[ 0 ] == 0 )
+			{
+				continue;
+			}
 			strcpy (key, ep->key);
 			StripTrailing (key);
 			strcpy (value, ep->value);
 			StripTrailing (value);
 				
-			sprintf(line, "\"%s\" \"%s\"\n", key, value);
+			V_sprintf_safe(line, "\"%s\" \"%s\"\n", key, value);
 			buffer.PutString( line );
 		}
 		buffer.PutString("}\n");
@@ -3124,25 +3591,32 @@ void PrintEntity (entity_t *ent)
 
 }
 
-void SetKeyValue(entity_t *ent, const char *key, const char *value)
+epair_t *SetKeyValue( entity_t *ent, const char *key, const char *value, bool bAllowDuplicates )
 {
 	epair_t	*ep;
 	
-	for (ep=ent->epairs ; ep ; ep=ep->next)
-		if (!Q_stricmp (ep->key, key) )
+	if ( bAllowDuplicates == false )
+	{
+		for (ep=ent->epairs ; ep ; ep=ep->next)
 		{
-			free (ep->value);
-			ep->value = copystring(value);
-			return;
+			if (!Q_stricmp (ep->key, key) )
+			{
+				free (ep->value);
+				ep->value = copystring(value);
+				return ep;
+			}
 		}
+	}
 	ep = (epair_t*)malloc (sizeof(*ep));
 	ep->next = ent->epairs;
 	ent->epairs = ep;
 	ep->key = copystring(key);
 	ep->value = copystring(value);
+
+	return ep;
 }
 
-char 	*ValueForKey (entity_t *ent, char *key)
+char 	*ValueForKey (entity_t *ent, const char *key)
 {
 	for (epair_t *ep=ent->epairs ; ep ; ep=ep->next)
 		if (!Q_stricmp (ep->key, key) )
@@ -3150,13 +3624,13 @@ char 	*ValueForKey (entity_t *ent, char *key)
 	return "";
 }
 
-vec_t	FloatForKey (entity_t *ent, char *key)
+vec_t	FloatForKey (entity_t *ent, const char *key)
 {
 	char *k = ValueForKey (ent, key);
 	return atof(k);
 }
 
-vec_t	FloatForKeyWithDefault (entity_t *ent, char *key, float default_value)
+vec_t	FloatForKeyWithDefault (entity_t *ent, const char *key, float default_value)
 {
 	for (epair_t *ep=ent->epairs ; ep ; ep=ep->next)
 		if (!Q_stricmp (ep->key, key) )
@@ -3166,21 +3640,13 @@ vec_t	FloatForKeyWithDefault (entity_t *ent, char *key, float default_value)
 
 
 
-int		IntForKey (entity_t *ent, char *key)
+int		IntForKey (entity_t *ent, const char *key)
 {
 	char *k = ValueForKey (ent, key);
 	return atol(k);
 }
 
-int		IntForKeyWithDefault(entity_t *ent, char *key, int nDefault )
-{
-	char *k = ValueForKey (ent, key);
-	if ( !k[0] )
-		return nDefault;
-	return atol(k);
-}
-
-void 	GetVectorForKey (entity_t *ent, char *key, Vector& vec)
+void 	GetVectorForKey (entity_t *ent, const char *key, Vector& vec)
 {
 
 	char *k = ValueForKey (ent, key);
@@ -3193,7 +3659,7 @@ void 	GetVectorForKey (entity_t *ent, char *key, Vector& vec)
 	vec[2] = v3;
 }
 
-void 	GetVector2DForKey (entity_t *ent, char *key, Vector2D& vec)
+void 	GetVector2DForKey (entity_t *ent, const char *key, Vector2D& vec)
 {
 	double	v1, v2;
 
@@ -3205,7 +3671,7 @@ void 	GetVector2DForKey (entity_t *ent, char *key, Vector2D& vec)
 	vec[1] = v2;
 }
 
-void 	GetAnglesForKey (entity_t *ent, char *key, QAngle& angle)
+void 	GetAnglesForKey (entity_t *ent, const char *key, QAngle& angle)
 {
 	char	*k;
 	double	v1, v2, v3;
@@ -3278,7 +3744,7 @@ void TriStripToTriList(
 void CalcTextureCoordsAtPoints(
 	float const texelsPerWorldUnits[2][4],
 	int const subtractOffset[2],
-	Vector const *pPoints,
+	const Vector *pPoints,
 	int const nPoints,
 	Vector2D *pCoords )
 {
@@ -3400,10 +3866,18 @@ public:
 	int LeafCount() const;
 
 	// Enumerates the leaves along a ray, box, etc.
-	bool EnumerateLeavesAtPoint( Vector const& pt, ISpatialLeafEnumerator* pEnum, intp context );
-	bool EnumerateLeavesInBox( Vector const& mins, Vector const& maxs, ISpatialLeafEnumerator* pEnum, intp context );
-	bool EnumerateLeavesInSphere( Vector const& center, float radius, ISpatialLeafEnumerator* pEnum, intp context );
+	bool EnumerateLeavesAtPoint( const Vector& pt, ISpatialLeafEnumerator* pEnum, intp context );
+	bool EnumerateLeavesInBox( const Vector& mins, const Vector& maxs, ISpatialLeafEnumerator* pEnum, intp context );
+	bool EnumerateLeavesInSphere( const Vector& center, float radius, ISpatialLeafEnumerator* pEnum, intp context );
 	bool EnumerateLeavesAlongRay( Ray_t const& ray, ISpatialLeafEnumerator* pEnum, intp context );
+	bool EnumerateLeavesInSphereWithFlagSet( const Vector& center, float radius, ISpatialLeafEnumerator* pEnum, intp context, int nFlagsMask )
+	{
+		// engine flags not supported. Callers of this are supposed to examine the node anyway
+		return EnumerateLeavesInSphere( center, radius, pEnum, context );
+	}
+	int ListLeavesInBox( const Vector& mins, const Vector& maxs, unsigned short *pList, int listMax );
+
+	virtual int ListLeavesInSphereWithFlagSet( int *pLeafsInSphere, const Vector& vecCenter, float flRadius, int nLeafCount, const uint16 *pLeafs, int nLeafStride, int nFlagsCheck );
 };
 
 
@@ -3421,7 +3895,7 @@ int CToolBSPTree::LeafCount() const
 // Enumerates the leaves at a point
 //-----------------------------------------------------------------------------
 
-bool CToolBSPTree::EnumerateLeavesAtPoint( Vector const& pt, 
+bool CToolBSPTree::EnumerateLeavesAtPoint( const Vector& pt, 
 									ISpatialLeafEnumerator* pEnum, intp context )
 {
 	int node = 0;
@@ -3448,8 +3922,8 @@ bool CToolBSPTree::EnumerateLeavesAtPoint( Vector const& pt,
 // Enumerates the leaves in a box
 //-----------------------------------------------------------------------------
 
-static bool EnumerateLeavesInBox_R( int node, Vector const& mins, 
-				Vector const& maxs, ISpatialLeafEnumerator* pEnum, intp context )
+static bool EnumerateLeavesInBox_R( int node, const Vector& mins, 
+				const Vector& maxs, ISpatialLeafEnumerator* pEnum, intp context )
 {
 	Vector cornermin, cornermax;
 
@@ -3495,17 +3969,69 @@ static bool EnumerateLeavesInBox_R( int node, Vector const& mins,
 	return pEnum->EnumerateLeaf( - node - 1, context );
 }
 
-bool CToolBSPTree::EnumerateLeavesInBox( Vector const& mins, Vector const& maxs, 
+bool CToolBSPTree::EnumerateLeavesInBox( const Vector& mins, const Vector& maxs, 
 									ISpatialLeafEnumerator* pEnum, intp context )
 {
 	return EnumerateLeavesInBox_R( 0, mins, maxs, pEnum, context );
 }
 
+// a little helper class to implement this interface for tools - engine uses this as a more efficient path
+class CLeafMakeList : public ISpatialLeafEnumerator
+{
+public:
+	CLeafMakeList( unsigned short *pListIn, int listMaxIn )
+		: m_pList(pListIn), m_listMax(listMaxIn), m_count(0)
+	{
+	}
+	virtual bool EnumerateLeaf( int leaf, intp context )
+	{
+		if ( m_count < m_listMax )
+		{
+			m_pList[m_count] = leaf;
+			m_count++;
+			return true;
+		}
+		return false;
+	}
+	unsigned short *m_pList;
+	int m_listMax;
+	int m_count;
+};
+
+int CToolBSPTree::ListLeavesInBox( const Vector& mins, const Vector& maxs, unsigned short *pList, int listMax )
+{
+	CLeafMakeList list(pList, listMax);
+	EnumerateLeavesInBox(mins, maxs, &list, 0 );
+	return list.m_count;
+}
+
+
+int CToolBSPTree::ListLeavesInSphereWithFlagSet( int *pLeafsInSphere, const Vector& vecCenter, float flRadius, int nLeafCount, const uint16 *pLeafs, int nLeafStride, int nFlagsCheck )
+{
+	// NOTE: We ignore flags here
+	Vector vecMins, vecMaxs;
+	int nLeavesFound = 0;
+	const uint16 *pLeaf = pLeafs;
+	for ( int i = 0; i < nLeafCount; ++i, pLeaf = (const uint16*)( (const uint8*)pLeaf + nLeafStride ) )
+	{
+		dleaf_t &leaf = dleafs[ *pLeaf ];
+		VECTOR_COPY( leaf.mins, vecMins );
+		VECTOR_COPY( leaf.maxs, vecMaxs );
+		if ( !IsBoxIntersectingSphere( vecMins, vecMaxs, vecCenter, flRadius ) )
+			continue;
+
+		pLeafsInSphere[nLeavesFound++] = i;
+	}
+	return nLeavesFound;
+}
+
+
+
 //-----------------------------------------------------------------------------
 // Enumerate leaves within a sphere
 //-----------------------------------------------------------------------------
 
-static bool EnumerateLeavesInSphere_R( int node, Vector const& origin, 
+static bool EnumerateLeavesInSphere_R( int node, const Vector& origin, 
 				float radius, ISpatialLeafEnumerator* pEnum, intp context )
 {
 	while( node >= 0 )
@@ -3537,7 +4063,7 @@ static bool EnumerateLeavesInSphere_R( int node, Vector const& origin,
 	return pEnum->EnumerateLeaf( - node - 1, context );
 }
 
-bool CToolBSPTree::EnumerateLeavesInSphere( Vector const& center, float radius, ISpatialLeafEnumerator* pEnum, intp context )
+bool CToolBSPTree::EnumerateLeavesInSphere( const Vector& center, float radius, ISpatialLeafEnumerator* pEnum, intp context )
 {
 	return EnumerateLeavesInSphere_R( 0, center, radius, pEnum, context );
 }
@@ -3548,7 +4074,7 @@ bool CToolBSPTree::EnumerateLeavesInSphere( Vector const& center, float radius, 
 //-----------------------------------------------------------------------------
 
 static bool EnumerateLeavesAlongRay_R( int node, Ray_t const& ray, 
-	Vector const& start, Vector const& end, ISpatialLeafEnumerator* pEnum, intp context )
+	const Vector& start, const Vector& end, ISpatialLeafEnumerator* pEnum, intp context )
 {
 	float front,back;
 
@@ -3760,6 +4286,19 @@ void BuildClusterTable( void )
 	}
 }
 
+// There's a version of this in host.cpp!!!  Make sure that they match.
+void GetPlatformMapPath( const char *pMapPath, char *pPlatformMapPath, int dxlevel, int maxLength )
+{
+	Q_StripExtension( pMapPath, pPlatformMapPath, maxLength );
+
+//	if( dxlevel <= 60 )
+//	{
+//		Q_strncat( pPlatformMapPath, "_dx60", maxLength, COPY_ALL_CHARACTERS );
+//	}
+
+	Q_strncat( pPlatformMapPath, ".bsp", maxLength, COPY_ALL_CHARACTERS );
+}
+
 // There's a version of this in checksum_engine.cpp!!! Make sure that they match.
 static bool CRC_MapFile(CRC32_t *crcvalue, const char *pszFileName)
 {
@@ -3911,8 +4450,10 @@ const char *ResolveStaticPropToModel( const char *pPropName )
 // Iterate files in pak file, distribute to converters
 // pak file will be ready for serialization upon completion
 //-----------------------------------------------------------------------------
-void ConvertPakFileContents( const char *pInFilename )
+void ConvertPakFileContents( const char *pInFilename, char const *szPlatform )
 {
+	bool bIsXbox360 = ( V_stricmp( szPlatform, "360" ) == 0 );
+
 	IZip *newPakFile = IZip::CreateZip( NULL );
 
 	CUtlBuffer sourceBuf;
@@ -3945,13 +4486,42 @@ void ConvertPakFileContents( const char *pInFilename )
 
 		if ( pExtension && !V_stricmp( pExtension, "vtf" ) )
 		{
-			bOK = g_pVTFConvertFunc( relativeName, sourceBuf, targetBuf, g_pCompressFunc );
+			bOK = g_pVTFConvertFunc( relativeName, sourceBuf, targetBuf, g_pCompressFunc, false );
 			if ( !bOK )
 			{
 				Warning( "Failed to convert '%s' in '%s'.\n", relativeName, pInFilename );
 				continue;
 			}
-	
+
+			// handle simpleworldmodel decorated VTFs
+			if ( V_stristr( relativeName, "simpleworldmodel" ) )
+			{
+				if ( V_stristr( relativeName, ".pwl.vtf" ) )
+				{
+					// We always want to skip the pwl files since we do the gamma conversion in the shader on the 360.
+//					if ( !bIsXbox360 )
+					{
+						// pwl culled for all other platforms
+						continue;
+					}
+
+					// the .pwl concept is never exposed to the game directly
+					// no longer needed, remove it from the filename
+					// the below code will further fixup the filename for platform
+					CUtlString nameCopy = relativeName;
+					V_StrSubst( nameCopy.Get(), ".pwl.vtf", ".vtf", relativeName, sizeof( relativeName ), false );
+				}
+				else
+				{
+					// We always want to keep the non-pwl files since we do the gamma conversion in the shader on the 360.
+					if ( bIsXbox360 )
+					{
+						// xbox360 only wants the pwl versions
+//						continue;
+					}
+				}
+			}
+
 			bConverted = true;
 			pExt = ".vtf";
 		}
@@ -4017,19 +4587,77 @@ void ConvertPakFileContents( const char *pInFilename )
 			bConverted = true;
 			pExt = ".vhv";
 		}
+		else if ( pExtension && !V_stricmp( pExtension, "dct" ) )
+		{
+			
+#if defined( PORTAL2 )
+
+			// not supporting for Portal2
+			// strip all
+			continue;
+
+#endif
+
+			// take as-is no conversion necessary
+			if ( !V_stristr( relativeName, "_xbox.dct" ) )
+			{
+				// strip the pc version
+				continue;
+			}
+		}
+		else if ( pExtension && ( V_stricmp( pExtension, "mdl" ) == 0 ) )
+		{
+			// Do just enough of model conversion to get the simple world model static prop through.
+			// It's the only mdl file that is in the bsp zip file.
+			// NOTE: not doing compression!  Will want to do this if we move other models into here.
+			if ( !Studio_ConvertStudioHdrToNewVersion( ( studiohdr_t * )sourceBuf.Base() ) )
+			{
+				Warning( "%s needs to be recompiled\n", relativeName );
+			}
+			g_pStudioConvertFunc( relativeName, sourceBuf, targetBuf );
+			bConverted = true;
+			pExt = ".mdl";
+		}
+		else if ( pExtension && ( V_stricmp( pExtension, "vtx" ) == 0 ) )
+		{
+			// Do just enough of model conversion to get the simple world model static prop through.
+			// It's the only mdl file that is in the bsp zip file.
+			// NOTE: not doing compression!  Will want to do this if we move other models into here.
+			g_pStudioConvertFunc( relativeName, sourceBuf, targetBuf );
+			bConverted = true;
+			pExt = ".vtx";
+		}
+		else if ( pExtension && ( V_stricmp( pExtension, "vvd" ) == 0 ) )
+		{
+			// Do just enough of model conversion to get the simple world model static prop through.
+			// It's the only mdl file that is in the bsp zip file.
+			// NOTE: not doing compression!  Will want to do this if we move other models into here.
+			g_pStudioConvertFunc( relativeName, sourceBuf, targetBuf );
+			bConverted = true;
+			pExt = ".vvd";
+		}
+		else if ( !V_stricmp( relativeName, "stringtable_dictionary.dat" ) ||
+			 !V_stricmp( relativeName, "stringtable_dictionary.360.dat" ) ||
+			 !V_stricmp( relativeName, "stringtable_dictionary.ps3.dat" ) )
+		{
+			// sigh, causes other system problems as these aren't conversions
+			// these were a mistake that leaked in during the "dct" transition
+			continue;
+		}
 
 		if ( !bConverted )
 		{
 			// straight copy
-			AddBufferToPak( newPakFile, relativeName, sourceBuf.Base(), sourceBuf.TellMaxPut(), false, IZip::eCompressionType_None );
+			AddBufferToPak( newPakFile, relativeName, sourceBuf.Base(), sourceBuf.TellMaxPut(), false );
 		}
 		else
 		{
 			// converted filename
 			V_StripExtension( relativeName, relativeName, sizeof( relativeName ) );
-			V_strcat( relativeName, ".360", sizeof( relativeName ) );
+			V_strcat( relativeName, ".", sizeof( relativeName ) );
+			V_strcat( relativeName, szPlatform, sizeof( relativeName ) );
 			V_strcat( relativeName, pExt, sizeof( relativeName ) );
-			AddBufferToPak( newPakFile, relativeName, targetBuf.Base(), targetBuf.TellMaxPut(), false, IZip::eCompressionType_None );
+			AddBufferToPak( newPakFile, relativeName, targetBuf.Base(), targetBuf.TellMaxPut(), false );
 		}
 
 		if ( V_stristr( relativeName, ".hdr" ) || V_stristr( relativeName, "_hdr" ) )
@@ -4081,14 +4709,22 @@ int SwapLumpToDisk( int fieldType, int lumpnum )
 
 	DevMsg( "Swapping %s\n", GetLumpName( lumpnum ) );
 
+	int nLumpSize = g_pBSPHeader->lumps[lumpnum].filelen;
+	if ( g_Lumps.bLumpFixed[lumpnum] )
+	{
+		nLumpSize = g_Lumps.size[lumpnum];
+	}
+
 	// lump swap may expand, allocate enough expansion room
-	void *pBuffer = malloc( 2*g_pBSPHeader->lumps[lumpnum].filelen );
+	int maxExpand = 2 * nLumpSize;
+	void *pBuffer = malloc( maxExpand );
 
 	// CopyLumpInternal will handle the swap on load case
 	unsigned int fieldSize = ( fieldType == FIELD_VECTOR ) ? sizeof(Vector) : sizeof(T);
 	unsigned int count = CopyLumpInternal<T>( fieldType, lumpnum, (T*)pBuffer, g_pBSPHeader->lumps[lumpnum].version );
 	g_pBSPHeader->lumps[lumpnum].filelen = count * fieldSize;
 
+	int nAlignment = LUMP_ALIGNMENT;
 	if ( g_bSwapOnWrite )
 	{
 		// Swap the lump in place before writing
@@ -4108,13 +4744,21 @@ int SwapLumpToDisk( int fieldType, int lumpnum )
 			SwapPhysdispLump( (byte*)pBuffer, (byte*)pBuffer, count );
 			break;
 
+		case LUMP_PHYSLEVEL:
+			// this may change the file size
+			SwapPhyslevelLump( (byte*)pBuffer, (byte*)pBuffer, count, maxExpand );
+			g_pBSPHeader->lumps[lumpnum].filelen = count;
+			// needs to be 16 byte aligned
+			nAlignment = LUMP_PHYSLEVEL_ALIGNMENT;
+			break;
+
 		default:
 			g_Swap.SwapBufferToTargetEndian( (T*)pBuffer, (T*)pBuffer, g_pBSPHeader->lumps[lumpnum].filelen / sizeof(T) );
 			break;
 		}
 	}
 
-	SetAlignedLumpPosition( lumpnum );
+	SetAlignedLumpPosition( lumpnum, nAlignment );
 	SafeWrite( g_hBSPFile, pBuffer, g_pBSPHeader->lumps[lumpnum].filelen );
 
 	free( pBuffer );
@@ -4130,12 +4774,20 @@ int SwapLumpToDisk( int lumpnum )
 
 	DevMsg( "Swapping %s\n", GetLumpName( lumpnum ) );
 
+	int nLumpSize = g_pBSPHeader->lumps[lumpnum].filelen;
+	if ( g_Lumps.bLumpFixed[lumpnum] )
+	{
+		// use the fixed version as input to swap
+		nLumpSize = g_Lumps.size[lumpnum];
+	}
+
 	// lump swap may expand, allocate enough room
-	void *pBuffer = malloc( 2*g_pBSPHeader->lumps[lumpnum].filelen );
+	Assert( nLumpSize > 0 );
+	void *pBuffer = malloc( 2 * nLumpSize );
 
 	// CopyLumpInternal will handle the swap on load case
 	int count = CopyLumpInternal<T>( lumpnum, (T*)pBuffer, g_pBSPHeader->lumps[lumpnum].version );
-	g_pBSPHeader->lumps[lumpnum].filelen = count * sizeof(T);
+	g_pBSPHeader->lumps[lumpnum].filelen = count * sizeof( T );
 
 	if ( g_bSwapOnWrite )
 	{
@@ -4257,7 +4909,7 @@ void SwapLeafLumpToDisk( void )
 	if ( bOldLeafVersion )
 	{
 		// version has been converted in the load process
-		// not updating the version ye, SwapLeafAmbientLightingLumpToDisk() can detect
+		// not updating the version yet, SwapLeafAmbientLightingLumpToDisk() can detect
 		g_pBSPHeader->lumps[LUMP_LEAFS].filelen = count * sizeof( dleaf_t );
 	}
 
@@ -4291,7 +4943,7 @@ void SwapOcclusionLumpToDisk( void )
 	AddOcclusionLump();
 }
 
-void SwapPakfileLumpToDisk( const char *pInFilename )
+void SwapPakfileLumpToDisk( const char *pInFilename, char const *szPlatform )
 {
 	DevMsg( "Swapping %s\n", GetLumpName( LUMP_PAKFILE ) );
 
@@ -4302,7 +4954,7 @@ void SwapPakfileLumpToDisk( const char *pInFilename )
 		GetPakFile()->ActivateByteSwapping( IsX360() );
 		GetPakFile()->ParseFromBuffer( pakbuffer, paksize );
 
-		ConvertPakFileContents( pInFilename );
+		ConvertPakFileContents( pInFilename, szPlatform );
 	}
 	free( pakbuffer );
 
@@ -4319,6 +4971,82 @@ void SwapGameLumpsToDisk( void )
 	g_GameLumps.ParseGameLump( g_pBSPHeader );
 	SetAlignedLumpPosition( LUMP_GAME_LUMP );
 	AddGameLumps();
+}
+
+void SwapWorldLightsToDisk()
+{
+	bool bHasHDR = true;
+	if ( g_pBSPHeader->lumps[LUMP_WORLDLIGHTS_HDR].filelen == 0 || g_Lumps.bLumpParsed[LUMP_WORLDLIGHTS_HDR] )
+	{
+		bHasHDR = false;
+	}
+	int lumpnum = bHasHDR ? LUMP_WORLDLIGHTS_HDR : LUMP_WORLDLIGHTS;
+
+	DevMsg( "Swapping %s\n", GetLumpName( lumpnum ) );
+
+	dworldlight_version0_t *pOldWorldlights;
+	dworldlight_t *pWorldlights = NULL;
+	int count = 0;
+
+	// handle version difference
+	if ( g_pBSPHeader->lumps[lumpnum].version == 0 )
+	{
+		pOldWorldlights = (dworldlight_version0_t *)malloc( g_pBSPHeader->lumps[lumpnum].filelen );
+		count = CopyLumpInternal( lumpnum, pOldWorldlights, g_pBSPHeader->lumps[lumpnum].version );
+		pWorldlights = (dworldlight_t *)malloc( count * sizeof( dworldlight_t ) );
+
+		// translate forward
+		for ( int i = 0; i < count; i++ )
+		{
+			pWorldlights[i].origin = pOldWorldlights[i].origin;
+			pWorldlights[i].intensity = pOldWorldlights[i].intensity;
+			pWorldlights[i].normal = pOldWorldlights[i].normal;
+			pWorldlights[i].shadow_cast_offset.Init( 0.0f, 0.0f, 0.0f );
+			pWorldlights[i].cluster = pOldWorldlights[i].cluster;
+			pWorldlights[i].type = pOldWorldlights[i].type;
+			pWorldlights[i].style = pOldWorldlights[i].style;
+			pWorldlights[i].stopdot = pOldWorldlights[i].stopdot;
+			pWorldlights[i].stopdot2 = pOldWorldlights[i].stopdot2;
+			pWorldlights[i].exponent = pOldWorldlights[i].exponent;
+			pWorldlights[i].radius = pOldWorldlights[i].radius;
+			pWorldlights[i].constant_attn = pOldWorldlights[i].constant_attn;	
+			pWorldlights[i].linear_attn = pOldWorldlights[i].linear_attn;
+			pWorldlights[i].quadratic_attn = pOldWorldlights[i].quadratic_attn;
+			pWorldlights[i].flags = pOldWorldlights[i].flags;
+			pWorldlights[i].texinfo = pOldWorldlights[i].texinfo;
+			pWorldlights[i].owner = pOldWorldlights[i].owner;
+		}
+
+		free( pOldWorldlights );
+
+		g_pBSPHeader->lumps[lumpnum].filelen = count * sizeof( dworldlight_t );
+		g_pBSPHeader->lumps[lumpnum].version = LUMP_WORLDLIGHTS_VERSION;
+	}
+	else if ( g_pBSPHeader->lumps[lumpnum].version == LUMP_WORLDLIGHTS_VERSION )
+	{
+		pWorldlights = (dworldlight_t *)malloc( g_pBSPHeader->lumps[lumpnum].filelen );
+		count = CopyLumpInternal( lumpnum, pWorldlights, g_pBSPHeader->lumps[lumpnum].version );
+	}
+	else
+	{
+		Error( "Unknown World Lights Lump version %d!\n", g_pBSPHeader->lumps[lumpnum].version );
+	}
+
+	if ( g_bSwapOnWrite )
+	{
+		// Swap the lump in place before writing
+		g_Swap.SwapFieldsToTargetEndian( (dworldlight_t*)pWorldlights, (dworldlight_t*)pWorldlights, count );
+	}
+
+	SetAlignedLumpPosition( lumpnum );
+	SafeWrite( g_hBSPFile, pWorldlights, g_pBSPHeader->lumps[lumpnum].filelen );
+	free( pWorldlights );
+
+	if ( bHasHDR )
+	{
+		// has HDR, strip obsolete LDR in favor of HDR
+		g_pBSPHeader->lumps[LUMP_WORLDLIGHTS].filelen = 0;
+	}
 }
 
 //-----------------------------------------------------------------------------
@@ -4342,7 +5070,7 @@ void BuildStaticPropNameTable()
 			return;
 		}
 
-		if ( nVersion != 4 && nVersion != 5 && nVersion != 6 )
+		if ( nVersion < GAMELUMP_STATIC_PROPS_MIN_VERSION || nVersion > GAMELUMP_STATIC_PROPS_VERSION )
 		{
 			Error( "Unknown Static Prop Lump version %d!\n", nVersion );
 		}
@@ -4381,8 +5109,33 @@ void BuildStaticPropNameTable()
 					propType = ((StaticPropLumpV5_t *)pGameLumpData)->m_PropType;
 					pGameLumpData += sizeof( StaticPropLumpV5_t );
 				}
+				else if ( nVersion == 6 )
+				{
+					propType = ( ( StaticPropLumpV6_t * )pGameLumpData )->m_PropType;
+					pGameLumpData += sizeof( StaticPropLumpV6_t );
+				}
+				else if ( nVersion == 7 )
+				{
+					propType = ((StaticPropLumpV7_t *)pGameLumpData)->m_PropType;
+					pGameLumpData += sizeof( StaticPropLumpV7_t );
+				}
+				else if ( nVersion == 8 )
+				{
+					propType = ((StaticPropLumpV8_t *)pGameLumpData)->m_PropType;
+					pGameLumpData += sizeof( StaticPropLumpV8_t );
+				}
+				else if ( nVersion == 9 )
+				{
+					propType = ((StaticPropLumpV9_t *)pGameLumpData)->m_PropType;
+					pGameLumpData += sizeof( StaticPropLumpV9_t );
+				}
 				else
 				{
+					if ( nVersion != 10 )
+					{
+						Error( "BuildStaticPropNameTable: Unknown Static Prop Lump version %d!\n", nVersion );
+					}
+
 					propType = ((StaticPropLump_t *)pGameLumpData)->m_PropType;
 					pGameLumpData += sizeof( StaticPropLump_t );
 				}
@@ -4392,6 +5145,174 @@ void BuildStaticPropNameTable()
 	}
 
 	g_GameLumps.DestroyAllGameLumps();
+}
+
+int ComputeLightmapSize( dface_t *pFace, texinfo_t *pTexInfos )
+{
+	if ( pFace->lightofs == -1 )
+	{
+		// no lighting data on this face
+		return 0;
+	}
+
+	bool bNeedsBumpmap = false;
+	if ( pTexInfos[pFace->texinfo].flags & SURF_BUMPLIGHT )
+	{
+		bNeedsBumpmap = true;
+	}
+
+	// determine how many lightstyles this face has
+	int nLightstyles;
+	for ( nLightstyles = 0; nLightstyles < MAXLIGHTMAPS; nLightstyles++ )
+	{
+		if ( pFace->styles[nLightstyles] == 255 )
+			break;
+	}
+
+	int nLuxels = ( pFace->m_LightmapTextureSizeInLuxels[0] + 1 ) * ( pFace->m_LightmapTextureSizeInLuxels[1] + 1 );
+	if ( bNeedsBumpmap )
+	{
+		return nLuxels * 4 * nLightstyles * ( NUM_BUMP_VECTS + 1 );
+	}
+
+	return nLuxels * 4 * nLightstyles;
+}
+
+int ComputeLightmapPrefixSize( dface_t *pFace )
+{
+	if ( pFace->lightofs == -1 )
+	{
+		// no lighting data on this face
+		return 0;
+	}
+
+	// determine how many lightstyles this face has
+	int nLightstyles;
+	for ( nLightstyles = 0; nLightstyles < MAXLIGHTMAPS; nLightstyles++ )
+	{
+		if ( pFace->styles[nLightstyles] == 255 )
+			break;
+	}
+
+	int nHdrBytes = nLightstyles * sizeof( ColorRGBExp32 );
+	return nHdrBytes;
+}
+
+void StripUnusedLightmapAlphaData()
+{
+// 7LS CSM's now working on console => we need the lightmap alpha data
+#if 0
+	if ( ( g_LevelFlags & LVLFLAGS_LIGHTMAP_ALPHA ) == 0 )
+	{
+		// not applicable, this map does not have the extra data
+		return;
+	}
+
+	if ( g_pBSPHeader->lumps[LUMP_FACES_HDR].filelen == 0 || g_pBSPHeader->lumps[LUMP_LIGHTING_HDR].filelen == 0 )
+	{
+		// only care about fixing shipping maps built properly for HDR
+		// expected data is missing, nothing to do
+		return;
+	}
+	
+	// get the texinfo
+	texinfo_t *pTexInfos = (texinfo_t *)malloc( g_pBSPHeader->lumps[LUMP_TEXINFO].filelen );
+	CopyLumpInternal( LUMP_TEXINFO, pTexInfos, g_pBSPHeader->lumps[LUMP_TEXINFO].version );
+
+	// get the current lighting
+	int nOldTotalLightmapSize = g_pBSPHeader->lumps[LUMP_LIGHTING_HDR].filelen;
+	byte *pOldLightingBase = (byte *)malloc( nOldTotalLightmapSize );
+	CopyLumpInternal( FIELD_CHARACTER, LUMP_LIGHTING_HDR, pOldLightingBase, g_pBSPHeader->lumps[LUMP_LIGHTING_HDR].version );
+	
+	// create new lighting data
+	// the new lighting data can only be the same size or smaller
+	byte *pNewLightingBase = (byte *)malloc( g_pBSPHeader->lumps[LUMP_LIGHTING_HDR].filelen );
+	memset( pNewLightingBase, 0, g_pBSPHeader->lumps[LUMP_LIGHTING_HDR].filelen );
+	byte *pNewLighting = pNewLightingBase;
+
+	// there is no guarantee that the face order has anything to do with their luxel placement
+	// the face order will remain unchanged, but the relevant luxels will be gathered and re-serialized
+	dface_t *pFaces = (dface_t *)malloc( g_pBSPHeader->lumps[LUMP_FACES_HDR].filelen );
+	int nNumFaces = CopyLumpInternal( LUMP_FACES_HDR, pFaces, g_pBSPHeader->lumps[LUMP_FACES_HDR].version );
+	int nTotalNewLightmapSize = 0;
+	for ( int i = 0; i < nNumFaces; i++ )
+	{
+		// matches the logic in modelloader.cpp
+		int nLightmapSize = ComputeLightmapSize( &pFaces[i], pTexInfos );
+
+		// there are prefix bytes (avgcolors) stored prior to the lighting offset
+		int nLightmapPrefixSize = ComputeLightmapPrefixSize( &pFaces[i] );
+
+		if ( nLightmapSize )
+		{
+			if ( nTotalNewLightmapSize + nLightmapPrefixSize + nLightmapSize > nOldTotalLightmapSize )
+			{
+				// very bad, unexpected misalignment of data
+				// would have caused memory corruption
+				Error( "StripUnusedLightmapAlphaData: lightmap size:%d at offset:%d on face:%d causes an unexpected inflation past %d bytes\n", nLightmapSize, pFaces[i].lightofs, i, nOldTotalLightmapSize );
+			}
+			else
+			{
+				// transfer the prefix avgcolor data
+				memcpy( pNewLighting, pOldLightingBase + pFaces[i].lightofs - nLightmapPrefixSize, nLightmapPrefixSize );
+				pNewLighting += nLightmapPrefixSize;
+
+				// advance past the avgcolor prefix data, all other code expects to BACK up to get to it
+				nTotalNewLightmapSize += nLightmapPrefixSize;
+
+				// transfer the luxels
+				memcpy( pNewLighting, pOldLightingBase + pFaces[i].lightofs, nLightmapSize );
+				pNewLighting += nLightmapSize;
+
+				// update (in place) to the packed new luxel offset
+				// this face's prior luxels will not be revisited, so update is destructive
+				pFaces[i].lightofs = nTotalNewLightmapSize;
+
+				// advance past the luxels
+				nTotalNewLightmapSize += nLightmapSize;
+			}
+		}
+	}
+
+	free( pOldLightingBase );
+	free( pTexInfos );
+
+	// can't distort unexpected use of helper functions
+	g_Lumps.bLumpParsed[LUMP_LIGHTING_HDR] = false;
+	g_Lumps.bLumpParsed[LUMP_TEXINFO] = false;
+	g_Lumps.bLumpParsed[LUMP_FACES_HDR] = false;
+
+	if ( nTotalNewLightmapSize < nOldTotalLightmapSize )
+	{
+		// update the lumps
+		Msg( "Strip unused lightmap data removed %s.\n", V_pretifymem( nOldTotalLightmapSize - nTotalNewLightmapSize, 2, true ) );
+
+		// altered faces
+		g_Lumps.size[LUMP_FACES_HDR] = g_pBSPHeader->lumps[LUMP_FACES_HDR].filelen;
+		if ( g_Lumps.pLumps[LUMP_FACES_HDR] )
+		{
+			free( g_Lumps.pLumps[LUMP_FACES_HDR] );
+			g_Lumps.pLumps[LUMP_FACES_HDR] = NULL;
+		}
+		g_Lumps.pLumps[LUMP_FACES_HDR] = pFaces;
+		g_Lumps.bLumpFixed[LUMP_FACES_HDR] = true;
+
+		// altered lighting
+		g_Lumps.size[LUMP_LIGHTING_HDR] = nTotalNewLightmapSize;
+		if ( g_Lumps.pLumps[LUMP_LIGHTING_HDR] )
+		{
+			free( g_Lumps.pLumps[LUMP_LIGHTING_HDR] );
+			g_Lumps.pLumps[LUMP_LIGHTING_HDR] = NULL;
+		}
+		g_Lumps.pLumps[LUMP_LIGHTING_HDR] = pNewLightingBase;
+		g_Lumps.bLumpFixed[LUMP_LIGHTING_HDR] = true;
+	}
+	else
+	{
+		free( pNewLightingBase );
+		free( pFaces );
+	}
+#endif
 }
 
 int AlignBuffer( CUtlBuffer &buffer, int alignment )
@@ -4442,35 +5363,28 @@ int SortLumpsByOffset( const SortedLump_t *pSortedLumpA, const SortedLump_t *pSo
 	return 0;
 }
 
-bool CompressGameLump( dheader_t *pInBSPHeader, dheader_t *pOutBSPHeader, CUtlBuffer &outputBuffer, CompressFunc_t pCompressFunc )
+bool CompressGameLump( BSPHeader_t *pInBSPHeader, BSPHeader_t *pOutBSPHeader, CUtlBuffer &outputBuffer, CompressFunc_t pCompressFunc )
 {
 	CByteswap	byteSwap;
 
 	dgamelumpheader_t* pInGameLumpHeader = (dgamelumpheader_t*)(((byte *)pInBSPHeader) + pInBSPHeader->lumps[LUMP_GAME_LUMP].fileofs);
 	dgamelump_t* pInGameLump = (dgamelump_t*)(pInGameLumpHeader + 1);
 
-	if ( IsX360() )
-	{
-		byteSwap.ActivateByteSwapping( true );
-		byteSwap.SwapFieldsToTargetEndian( pInGameLumpHeader );
-		byteSwap.SwapFieldsToTargetEndian( pInGameLump, pInGameLumpHeader->lumpCount );
-	}
+	byteSwap.ActivateByteSwapping( true );
+	byteSwap.SwapFieldsToTargetEndian( pInGameLumpHeader );
+	byteSwap.SwapFieldsToTargetEndian( pInGameLump, pInGameLumpHeader->lumpCount );
 
 	unsigned int newOffset = outputBuffer.TellPut();
-	// Make room for gamelump header and gamelump structs, which we'll write at the end
-	outputBuffer.SeekPut( CUtlBuffer::SEEK_CURRENT, sizeof( dgamelumpheader_t ) );
-	outputBuffer.SeekPut( CUtlBuffer::SEEK_CURRENT, pInGameLumpHeader->lumpCount * sizeof( dgamelump_t ) );
+	outputBuffer.Put( pInGameLumpHeader, sizeof( dgamelumpheader_t ) );
+	outputBuffer.Put( pInGameLump, pInGameLumpHeader->lumpCount * sizeof( dgamelump_t ) );
 
-	// Start with input lumps, and fixup
-	dgamelumpheader_t sOutGameLumpHeader = *pInGameLumpHeader;
-	CUtlBuffer sOutGameLumpBuf;
-	sOutGameLumpBuf.Put( pInGameLump, pInGameLumpHeader->lumpCount * sizeof( dgamelump_t ) );
-	dgamelump_t *sOutGameLump = (dgamelump_t *)sOutGameLumpBuf.Base();
+	dgamelumpheader_t* pOutGameLumpHeader = (dgamelumpheader_t*)((byte *)outputBuffer.Base() + newOffset );
+	dgamelump_t* pOutGameLump = (dgamelump_t*)( pOutGameLumpHeader + 1 );
 
 	// add a dummy terminal gamelump
 	// purposely NOT updating the .filelen to reflect the compressed size, but leaving as original size
 	// callers use the next entry offset to determine compressed size
-	sOutGameLumpHeader.lumpCount++;
+	pOutGameLumpHeader->lumpCount++;
 	dgamelump_t dummyLump = { 0 };
 	outputBuffer.Put( &dummyLump, sizeof( dgamelump_t ) );
 
@@ -4479,130 +5393,64 @@ bool CompressGameLump( dheader_t *pInBSPHeader, dheader_t *pOutBSPHeader, CUtlBu
 		CUtlBuffer inputBuffer;
 		CUtlBuffer compressedBuffer;
 
-		sOutGameLump[i].fileofs = AlignBuffer( outputBuffer, 4 );
+		// each sub game lump is relative to the LUMP_GAME_LUMP
+		// this allows the 360 to naively reorder and align the lumps around without trashing embedded offsets
+		pOutGameLump[i].fileofs = AlignBuffer( outputBuffer, 4 ) - newOffset;
 
 		if ( pInGameLump[i].filelen )
 		{
-			if ( pInGameLump[i].flags & GAMELUMPFLAG_COMPRESSED )
-			{
-				byte *pCompressedLump = ((byte *)pInBSPHeader) + pInGameLump[i].fileofs;
-				if ( CLZMA::IsCompressed( pCompressedLump ) )
-				{
-					inputBuffer.EnsureCapacity( CLZMA::GetActualSize( pCompressedLump ) );
-					unsigned int outSize = CLZMA::Uncompress( pCompressedLump, (unsigned char *)inputBuffer.Base() );
-					inputBuffer.SeekPut( CUtlBuffer::SEEK_CURRENT, outSize );
-					if ( outSize != CLZMA::GetActualSize( pCompressedLump ) )
-					{
-						Warning( "Decompressed size differs from header, BSP may be corrupt\n" );
-					}
-				}
-				else
-				{
-					Assert( CLZMA::IsCompressed( pCompressedLump ) );
-					Warning( "Unsupported BSP: Unrecognized compressed game lump\n" );
-				}
+			inputBuffer.SetExternalBuffer( ((byte *)pInBSPHeader) + pInGameLump[i].fileofs, pInGameLump[i].filelen, pInGameLump[i].filelen );
 
-			}
-			else
-			{
-				inputBuffer.SetExternalBuffer( ((byte *)pInBSPHeader) + pInGameLump[i].fileofs,
-				                               pInGameLump[i].filelen, pInGameLump[i].filelen );
-			}
-
-			bool bCompressed = pCompressFunc ? pCompressFunc( inputBuffer, compressedBuffer ) : false;
+			bool bCompressed = pCompressFunc( inputBuffer, compressedBuffer );
 			if ( bCompressed )
 			{
-				sOutGameLump[i].flags |= GAMELUMPFLAG_COMPRESSED;
+				pOutGameLump[i].flags |= GAMELUMPFLAG_COMPRESSED;
 
 				outputBuffer.Put( compressedBuffer.Base(), compressedBuffer.TellPut() );
 				compressedBuffer.Purge();
 			}
 			else
 			{
-				// as is, clear compression flag from input lump
-				sOutGameLump[i].flags &= ~GAMELUMPFLAG_COMPRESSED;
+				// as is
 				outputBuffer.Put( inputBuffer.Base(), inputBuffer.TellPut() );
 			}
 		}
 	}
 
 	// fix the dummy terminal lump
-	int lastLump = sOutGameLumpHeader.lumpCount-1;
-	sOutGameLump[lastLump].fileofs = outputBuffer.TellPut();
+	int lastLump = pOutGameLumpHeader->lumpCount-1;
+	pOutGameLump[lastLump].fileofs = outputBuffer.TellPut() - newOffset;
 
-	if ( IsX360() )
-	{
-		// fix the output for 360, swapping it back
-		byteSwap.SwapFieldsToTargetEndian( sOutGameLump, sOutGameLumpHeader.lumpCount );
-		byteSwap.SwapFieldsToTargetEndian( &sOutGameLumpHeader );
-	}
+	// fix the output for 360, swapping it back
+	byteSwap.SwapFieldsToTargetEndian( pOutGameLump, pOutGameLumpHeader->lumpCount );
+	byteSwap.SwapFieldsToTargetEndian( pOutGameLumpHeader );
 
 	pOutBSPHeader->lumps[LUMP_GAME_LUMP].fileofs = newOffset;
 	pOutBSPHeader->lumps[LUMP_GAME_LUMP].filelen = outputBuffer.TellPut() - newOffset;
-	// We set GAMELUMPFLAG_COMPRESSED and handle compression at the sub-lump level, this whole lump is not
-	// decompressable as a block.
-	pOutBSPHeader->lumps[LUMP_GAME_LUMP].uncompressedSize = 0;
-
-	// Rewind to start and write lump headers
-	unsigned int endOffset = outputBuffer.TellPut();
-	outputBuffer.SeekPut( CUtlBuffer::SEEK_HEAD, newOffset );
-	outputBuffer.Put( &sOutGameLumpHeader, sizeof( dgamelumpheader_t ) );
-	outputBuffer.Put( sOutGameLumpBuf.Base(), sOutGameLumpBuf.TellPut() );
-	outputBuffer.SeekPut( CUtlBuffer::SEEK_HEAD, endOffset );
 
 	return true;
 }
 
-//-----------------------------------------------------------------------------
-// Compress callback for RepackBSP
-//-----------------------------------------------------------------------------
-bool RepackBSPCallback_LZMA( CUtlBuffer &inputBuffer, CUtlBuffer &outputBuffer )
+bool CompressBSP( CUtlBuffer &inputBuffer, CUtlBuffer &outputBuffer, CompressFunc_t pCompressFunc )
 {
-	if ( !inputBuffer.TellPut() )
-	{
-		// nothing to do
-		return false;
-	}
-
-	unsigned int originalSize = inputBuffer.TellPut() - inputBuffer.TellGet();
-	unsigned int compressedSize = 0;
-	unsigned char *pCompressedOutput = LZMA_Compress( (unsigned char *)inputBuffer.Base() + inputBuffer.TellGet(),
-													  originalSize, &compressedSize );
-	if ( pCompressedOutput )
-	{
-		outputBuffer.Put( pCompressedOutput, compressedSize );
-		DevMsg( "Compressed bsp lump %u -> %u bytes\n", originalSize, compressedSize );
-		free( pCompressedOutput );
-		return true;
-	}
-
-	return false;
-}
-
-
-bool RepackBSP( CUtlBuffer &inputBuffer, CUtlBuffer &outputBuffer, CompressFunc_t pCompressFunc, IZip::eCompressionType packfileCompression )
-{
-	dheader_t *pInBSPHeader = (dheader_t *)inputBuffer.Base();
-	// The 360 swaps this header to disk. For some reason.
-	if ( pInBSPHeader->ident != ( IsX360() ? BigLong( IDBSPHEADER ) : IDBSPHEADER ) )
-	{
-		Warning( "RepackBSP given invalid input data\n" );
-		return false;
-	}
-
 	CByteswap	byteSwap;
-	if ( IsX360() )
+
+	BSPHeader_t *pInBSPHeader = (BSPHeader_t *)inputBuffer.Base();
+	if ( pInBSPHeader->ident != BigLong( IDBSPHEADER ) || !pCompressFunc )
 	{
-		// bsp is 360, swap the header back
-		byteSwap.ActivateByteSwapping( true );
-		byteSwap.SwapFieldsToTargetEndian( pInBSPHeader );
+		// only compress 360 bsp's
+		return false;
 	}
 
-	unsigned int headerOffset = outputBuffer.TellPut();
-	outputBuffer.Put( pInBSPHeader, sizeof( dheader_t ) );
+	// bsp is 360, swap the header back
+	byteSwap.ActivateByteSwapping( true );
+	byteSwap.SwapFieldsToTargetEndian( pInBSPHeader );
 
-	// This buffer grows dynamically, don't keep pointers to it around. Write out header at end.
-	dheader_t sOutBSPHeader = *pInBSPHeader;
+	// output will be smaller, use input size as upper bound
+	outputBuffer.EnsureCapacity( inputBuffer.TellMaxPut() );
+	outputBuffer.Put( pInBSPHeader, sizeof( BSPHeader_t ) );
+
+	BSPHeader_t *pOutBSPHeader = (BSPHeader_t *)outputBuffer.Base();
 
 	// must adhere to input lump's offset order and process according to that, NOT lump num
 	// sort by offset order
@@ -4621,129 +5469,67 @@ bool RepackBSP( CUtlBuffer &inputBuffer, CUtlBuffer &outputBuffer, CompressFunc_
 		SortedLump_t *pSortedLump = &sortedLumps[i];
 		int lumpNum = pSortedLump->lumpNum;
 
-		// Should be set below, don't copy over old data
-		sOutBSPHeader.lumps[lumpNum].fileofs = 0;
-		sOutBSPHeader.lumps[lumpNum].filelen = 0;
-		// Only set by compressed lumps
-		sOutBSPHeader.lumps[lumpNum].uncompressedSize = 0;
-
-		if ( pSortedLump->pLump->filelen ) // Otherwise its degenerate
+		if ( !pSortedLump->pLump->filelen )
 		{
-			int alignment = 4;
+			// degenerate
+			pOutBSPHeader->lumps[lumpNum].fileofs = 0;
+		}
+		else
+		{
+			int alignment = LUMP_ALIGNMENT;
 			if ( lumpNum == LUMP_PAKFILE )
 			{
-				alignment = 2048;
+				alignment = XBOX_DVD_SECTORSIZE;
+			}
+			else if ( lumpNum == LUMP_PHYSLEVEL )
+			{
+				alignment = LUMP_PHYSLEVEL_ALIGNMENT;
 			}
 			unsigned int newOffset = AlignBuffer( outputBuffer, alignment );
 
+			// only set by compressed lumps, hides the uncompressed size
+			*((unsigned int *)pOutBSPHeader->lumps[lumpNum].fourCC) = 0;
+
 			CUtlBuffer inputBuffer;
-			if ( pSortedLump->pLump->uncompressedSize )
-			{
-				byte *pCompressedLump = ((byte *)pInBSPHeader) + pSortedLump->pLump->fileofs;
-				if ( CLZMA::IsCompressed( pCompressedLump ) && pSortedLump->pLump->uncompressedSize == CLZMA::GetActualSize( pCompressedLump ) )
-				{
-					inputBuffer.EnsureCapacity( CLZMA::GetActualSize( pCompressedLump ) );
-					unsigned int outSize = CLZMA::Uncompress( pCompressedLump, (unsigned char *)inputBuffer.Base() );
-					inputBuffer.SeekPut( CUtlBuffer::SEEK_CURRENT, outSize );
-					if ( outSize != pSortedLump->pLump->uncompressedSize )
-					{
-						Warning( "Decompressed size differs from header, BSP may be corrupt\n" );
-					}
-				}
-				else
-				{
-					Assert( CLZMA::IsCompressed( pCompressedLump ) &&
-					        pSortedLump->pLump->uncompressedSize == CLZMA::GetActualSize( pCompressedLump ) );
-					Warning( "Unsupported BSP: Unrecognized compressed lump\n" );
-				}
-			}
-			else
-			{
-				// Just use input
-				inputBuffer.SetExternalBuffer( ((byte *)pInBSPHeader) + pSortedLump->pLump->fileofs,
-				                               pSortedLump->pLump->filelen, pSortedLump->pLump->filelen );
-			}
+			inputBuffer.SetExternalBuffer( ((byte *)pInBSPHeader) + pSortedLump->pLump->fileofs, pSortedLump->pLump->filelen, pSortedLump->pLump->filelen );
 
 			if ( lumpNum == LUMP_GAME_LUMP )
 			{
 				// the game lump has to have each of its components individually compressed
-				CompressGameLump( pInBSPHeader, &sOutBSPHeader, outputBuffer, pCompressFunc );
+				CompressGameLump( pInBSPHeader, pOutBSPHeader, outputBuffer, pCompressFunc );
 			}
 			else if ( lumpNum == LUMP_PAKFILE )
 			{
-				IZip *newPakFile = IZip::CreateZip( NULL );
-				IZip *oldPakFile = IZip::CreateZip( NULL );
-				oldPakFile->ParseFromBuffer( inputBuffer.Base(), inputBuffer.Size() );
-
-				int id = -1;
-				int fileSize;
-				while ( 1 )
-				{
-					char relativeName[MAX_PATH];
-					id = GetNextFilename( oldPakFile, id, relativeName, sizeof( relativeName ), fileSize );
-					if ( id == -1 )
-						break;
-
-					CUtlBuffer sourceBuf;
-					CUtlBuffer targetBuf;
-
-					bool bOK = ReadFileFromPak( oldPakFile, relativeName, false, sourceBuf );
-					if ( !bOK )
-					{
-						Error( "Failed to load '%s' from lump pak for repacking.\n", relativeName );
-						continue;
-					}
-
-					AddBufferToPak( newPakFile, relativeName, sourceBuf.Base(), sourceBuf.TellMaxPut(), false, packfileCompression );
-
-					DevMsg( "Repacking BSP: Created '%s' in lump pak\n", relativeName );
-				}
-
-				// save new pack to buffer
-				newPakFile->SaveToBuffer( outputBuffer );
-				sOutBSPHeader.lumps[lumpNum].fileofs = newOffset;
-				sOutBSPHeader.lumps[lumpNum].filelen = outputBuffer.TellPut() - newOffset;
-				// Note that this *lump* is uncompressed, it just contains a packfile that uses compression, so we're
-				// not setting lumps[lumpNum].uncompressedSize
-
-				IZip::ReleaseZip( oldPakFile );
-				IZip::ReleaseZip( newPakFile );
+				// add as is, compression needs to occur in a seperate pass
+				pOutBSPHeader->lumps[lumpNum].fileofs = newOffset;
+				outputBuffer.Put( inputBuffer.Base(), inputBuffer.TellPut() );
 			}
 			else
 			{
 				CUtlBuffer compressedBuffer;
-				bool bCompressed = pCompressFunc ? pCompressFunc( inputBuffer, compressedBuffer ) : false;
+				bool bCompressed = pCompressFunc( inputBuffer, compressedBuffer );
 				if ( bCompressed )
 				{
-					sOutBSPHeader.lumps[lumpNum].uncompressedSize = inputBuffer.TellPut();
-					sOutBSPHeader.lumps[lumpNum].filelen = compressedBuffer.TellPut();
-					sOutBSPHeader.lumps[lumpNum].fileofs = newOffset;
+					// placing the uncompressed size in the unused fourCC, will decode at runtime
+					*((unsigned int *)pOutBSPHeader->lumps[lumpNum].fourCC) = BigLong( inputBuffer.TellPut() );
+					pOutBSPHeader->lumps[lumpNum].filelen = compressedBuffer.TellPut();
+					pOutBSPHeader->lumps[lumpNum].fileofs = newOffset;
 					outputBuffer.Put( compressedBuffer.Base(), compressedBuffer.TellPut() );
 					compressedBuffer.Purge();
 				}
 				else
 				{
 					// add as is
-					sOutBSPHeader.lumps[lumpNum].fileofs = newOffset;
-					sOutBSPHeader.lumps[lumpNum].filelen = inputBuffer.TellPut();
+					pOutBSPHeader->lumps[lumpNum].fileofs = newOffset;
 					outputBuffer.Put( inputBuffer.Base(), inputBuffer.TellPut() );
 				}
 			}
 		}
 	}
 
-	if ( IsX360() )
-	{
-		// fix the output for 360, swapping it back
-		byteSwap.SetTargetBigEndian( true );
-		byteSwap.SwapFieldsToTargetEndian( &sOutBSPHeader );
-	}
-
-	// Write out header
-	unsigned int endOffset = outputBuffer.TellPut();
-	outputBuffer.SeekPut( CUtlBuffer::SEEK_HEAD, headerOffset );
-	outputBuffer.Put( &sOutBSPHeader, sizeof( sOutBSPHeader ) );
-	outputBuffer.SeekPut( CUtlBuffer::SEEK_HEAD, endOffset );
+	// fix the output for 360, swapping it back
+	byteSwap.SetTargetBigEndian( true );
+	byteSwap.SwapFieldsToTargetEndian( pOutBSPHeader );
 
 	return true;
 }
@@ -4755,7 +5541,7 @@ bool RepackBSP( CUtlBuffer &inputBuffer, CUtlBuffer &outputBuffer, CompressFunc_
 //	NOTE: These lumps will be written to the file in exactly the order they appear here,
 //	so they can be shifted around if desired for file access optimization.
 //-----------------------------------------------------------------------------
-bool SwapBSPFile( const char *pInFilename, const char *pOutFilename, bool bSwapOnLoad, VTFConvertFunc_t pVTFConvertFunc, VHVFixupFunc_t pVHVFixupFunc, CompressFunc_t pCompressFunc )
+bool SwapBSPFile( const char *pInFilename, const char *pOutFilename, bool bSwapOnLoad, VTFConvertFunc_t pVTFConvertFunc, VHVFixupFunc_t pVHVFixupFunc, StudioConvertFunc_t pStudioConvertFunc, CompressFunc_t pCompressFunc, char const *szPlatform )
 {
 	DevMsg( "Creating %s\n", pOutFilename );
 
@@ -4778,6 +5564,9 @@ bool SwapBSPFile( const char *pInFilename, const char *pOutFilename, bool bSwapO
 		return false;
 	}
 	g_pVTFConvertFunc = pVTFConvertFunc;
+
+	// studio mdl file (mdl, vhv, vtx) swapper
+	g_pStudioConvertFunc = pStudioConvertFunc;
 
 	// optional VHV fixup
 	g_pVHVFixupFunc = pVHVFixupFunc;
@@ -4802,13 +5591,24 @@ bool SwapBSPFile( const char *pInFilename, const char *pOutFilename, bool bSwapO
 		return false;
 	}
 
+	// PC bloats the lightmap data for sun shadow support ~10-20% bloat
+	// the 360 does not ship with this feature
+	// the extra data burdens the loading footprint
+	// strip and fixup prior to packing
+	// !!!
+	// !!! The non obvious fact of this pre-fixup is that downstream code CANNOT rely on the BSP version of these "fixed" lumps.
+	// !!! and must read from the "fixed" store to perform any further swap work.
+	// !!! This function only runs ***ONCE*** as part of the first pass of the two-pass BSP swap (first pass swaps, second pass fixes pak file).
+	// !!!
+	StripUnusedLightmapAlphaData();
+
 	// hold a dictionary of all the static prop names
 	// this is needed to properly convert any VHV files inside the pak lump
 	BuildStaticPropNameTable();
 
 	// Set the output file pointer after the header
-	dheader_t dummyHeader = { 0 };
-	SafeWrite( g_hBSPFile, &dummyHeader, sizeof( dheader_t ) );
+	BSPHeader_t dummyHeader = { 0 };
+	SafeWrite( g_hBSPFile, &dummyHeader, sizeof( BSPHeader_t ) );
 
 	// To allow for alignment fixups, the lumps will be written to the
 	// output file in the order they appear in this function.
@@ -4816,18 +5616,38 @@ bool SwapBSPFile( const char *pInFilename, const char *pOutFilename, bool bSwapO
 	// NOTE: Flags for 360 !!!MUST!!! be first	
 	SwapLumpToDisk< dflagslump_t >( LUMP_MAP_FLAGS );
 
+	// NOTE: Order critical for the 360
 	// complex lump swaps first or for later contingent data
-	SwapLeafLumpToDisk();
-	SwapOcclusionLumpToDisk();
-	SwapGameLumpsToDisk();
+	{
+		SwapLeafLumpToDisk();
+		SwapOcclusionLumpToDisk();
+
+		// Game lumps embed an absolute offset, and must occur now
+		// before other lumps that perform alignment bloating (i.e. lump_physlevel)
+		SwapGameLumpsToDisk();
+	}
 
 	// Strip dead or non relevant lumps
 	g_pBSPHeader->lumps[LUMP_DISP_LIGHTMAP_ALPHAS].filelen = 0;
 	g_pBSPHeader->lumps[LUMP_FACEIDS].filelen = 0;
+	g_pBSPHeader->lumps[LUMP_ORIGINALFACES].filelen = 0;
+	g_pBSPHeader->lumps[LUMP_FACE_MACRO_TEXTURE_INFO].filelen = 0;
+	g_pBSPHeader->lumps[LUMP_PROP_BLOB].filelen = 0;
+	g_pBSPHeader->lumps[LUMP_XZIPPAKFILE].filelen = 0;
+	g_pBSPHeader->lumps[LUMP_DISP_MULTIBLEND].filelen = 0;
 
-	// Strip obsolete LDR in favor of HDR
+	// For PORTAL2 Only:
+	// Removing any support for Dlights, so the displacement data is not needed
+	g_pBSPHeader->lumps[LUMP_DISP_LIGHTMAP_SAMPLE_POSITIONS].filelen = 0;
+
+	if ( !g_pPhysics2 )
+	{
+		g_pBSPHeader->lumps[LUMP_PHYSLEVEL].filelen = 0;
+	}
+
 	if ( SwapLumpToDisk<dface_t>( LUMP_FACES_HDR ) )
 	{
+		// has HDR, strip obsolete LDR in favor of HDR
 		g_pBSPHeader->lumps[LUMP_FACES].filelen = 0;
 	}
 	else
@@ -4836,19 +5656,12 @@ bool SwapBSPFile( const char *pInFilename, const char *pOutFilename, bool bSwapO
 		SwapLumpToDisk<dface_t>( LUMP_FACES );
 	}
 
-	if ( SwapLumpToDisk<dworldlight_t>( LUMP_WORLDLIGHTS_HDR ) )
-	{
-		g_pBSPHeader->lumps[LUMP_WORLDLIGHTS].filelen = 0;
-	}
-	else
-	{
-		// no HDR, keep LDR version
-		SwapLumpToDisk<dworldlight_t>( LUMP_WORLDLIGHTS );
-	}
+	SwapWorldLightsToDisk();
 
 	// Simple lump swaps
 	SwapLumpToDisk<byte>( FIELD_CHARACTER, LUMP_PHYSDISP );
 	SwapLumpToDisk<byte>( FIELD_CHARACTER, LUMP_PHYSCOLLIDE );
+	SwapLumpToDisk<byte>( FIELD_CHARACTER, LUMP_PHYSLEVEL );
 	SwapLumpToDisk<byte>( FIELD_CHARACTER, LUMP_VISIBILITY );
 	SwapLumpToDisk<dmodel_t>( LUMP_MODELS );
 	SwapLumpToDisk<dvertex_t>( LUMP_VERTEXES );
@@ -4867,6 +5680,8 @@ bool SwapBSPFile( const char *pInFilename, const char *pOutFilename, bool bSwapO
     SwapLumpToDisk<dface_t>( LUMP_ORIGINALFACES );
 	SwapLumpToDisk<unsigned short>( FIELD_SHORT, LUMP_LEAFFACES );
 	SwapLumpToDisk<unsigned short>( FIELD_SHORT, LUMP_LEAFBRUSHES );
+	SwapLumpToDisk<unsigned short>( FIELD_SHORT, LUMP_FACEBRUSHES );
+	SwapLumpToDisk<dfacebrushlist_t>( LUMP_FACEBRUSHLIST );	
 	SwapLumpToDisk<int>( FIELD_INTEGER, LUMP_SURFEDGES );
 	SwapLumpToDisk<dedge_t>( LUMP_EDGES );
 	SwapLumpToDisk<dbrush_t>( LUMP_BRUSHES );
@@ -4885,9 +5700,9 @@ bool SwapBSPFile( const char *pInFilename, const char *pOutFilename, bool bSwapO
 	SwapLumpToDisk<dwateroverlay_t>( LUMP_WATEROVERLAYS );
 	SwapLumpToDisk<unsigned short>( FIELD_SHORT, LUMP_LEAFMINDISTTOWATER );
 	SwapLumpToDisk<doverlayfade_t>( LUMP_OVERLAY_FADES );
+	SwapLumpToDisk<doverlaysystemlevel_t>( LUMP_OVERLAY_SYSTEM_LEVELS );
 
-
-	// NOTE: this data placed at the end for the sake of 360:
+	// NOTE: this data placed at the end specifically and expected by the 360:
 	{
 		// NOTE: lighting must be the penultimate lump
 		//       (allows 360 to free this memory part-way through map loading)
@@ -4901,9 +5716,8 @@ bool SwapBSPFile( const char *pInFilename, const char *pOutFilename, bool bSwapO
 			SwapLumpToDisk<byte>( FIELD_CHARACTER, LUMP_LIGHTING );
 		}
 		// NOTE: Pakfile for 360 !!!MUST!!! be last	
-		SwapPakfileLumpToDisk( pInFilename );
+		SwapPakfileLumpToDisk( pInFilename, szPlatform );
 	}
-
 
 	// Store the crc in the flags lump version field
 	g_pBSPHeader->lumps[LUMP_MAP_FLAGS].version = mapCRC;
@@ -4917,7 +5731,7 @@ bool SwapBSPFile( const char *pInFilename, const char *pOutFilename, bool bSwapO
 		if ( HasLump( i ) && !g_Lumps.bLumpParsed[i] )
 		{
 			// a new lump got added that needs to have a swap function
-			Warning( "BSP: '%s', %s has no swap or copy function. Discarding!\n", pInFilename, GetLumpName(i) );
+			Warning( "BSP: '%s', lump #%d: %s has no swap or copy function. Discarding!\n", pInFilename, i, GetLumpName(i) );
 
 			// the data didn't get copied, so don't reference garbage
 			g_pBSPHeader->lumps[i].filelen = 0;
@@ -4951,12 +5765,12 @@ bool SwapBSPFile( const char *pInFilename, const char *pOutFilename, bool bSwapO
 		}
 
 		CUtlBuffer outputBuffer;
-		if ( !RepackBSP( inputBuffer, outputBuffer, pCompressFunc, IZip::eCompressionType_None ) )
+		if ( !CompressBSP( inputBuffer, outputBuffer, pCompressFunc ) )
 		{
-			Warning( "Error! Failed to compress BSP '%s'!\n", pOutFilename );
+			Warning( "Error! Failed to compress BSP '%s'!\n", pOutFilename ); 
 			return false;
 		}
-
+	
 		g_hBSPFile = SafeOpenWrite( pOutFilename );
 		if ( !g_hBSPFile )
 		{
@@ -4986,7 +5800,7 @@ bool GetPakFileLump( const char *pBSPFilename, void **pPakData, int *pPakSize )
 	}
 
 	// determine endian nature
-	dheader_t *pHeader;
+	BSPHeader_t *pHeader;
 	LoadFile( pBSPFilename, (void **)&pHeader );
 	bool bSwap = ( pHeader->ident == BigLong( IDBSPHEADER ) );
 	free( pHeader );
@@ -5062,7 +5876,9 @@ static int LumpOffsetCompare( const void *pElem1, const void *pElem2 )
 }
 
 //-----------------------------------------------------------------------------
-// Replace the pak lump in a BSP
+// Replace the pak lump in a BSP. This is strictly for the 360 conversion process
+// and encodes expected properties of the BSP w.r.t lumps, their positions, and
+// alignments.
 //-----------------------------------------------------------------------------
 bool SetPakFileLump( const char *pBSPFilename, const char *pNewFilename, void *pPakData, int pakSize )
 {
@@ -5073,7 +5889,7 @@ bool SetPakFileLump( const char *pBSPFilename, const char *pNewFilename, void *p
 	}
 
 	// determine endian nature
-	dheader_t *pHeader;
+	BSPHeader_t *pHeader;
 	LoadFile( pBSPFilename, (void **)&pHeader );
 	bool bSwap = ( pHeader->ident == BigLong( IDBSPHEADER ) );
 	free( pHeader );
@@ -5085,7 +5901,7 @@ bool SetPakFileLump( const char *pBSPFilename, const char *pNewFilename, void *p
 
 	// save a copy of the old header
 	// generating a new bsp is a destructive operation
-	dheader_t oldHeader;
+	BSPHeader_t oldHeader;
 	oldHeader = *g_pBSPHeader;
 
 	g_hBSPFile = SafeOpenWrite( pNewFilename );
@@ -5119,9 +5935,17 @@ bool SetPakFileLump( const char *pBSPFilename, const char *pNewFilename, void *p
 		int length = g_pBSPHeader->lumps[lump].filelen;
 		if ( length )
 		{
-			// save the lump data
+			// get the expected read position
 			int offset = g_pBSPHeader->lumps[lump].fileofs;
-			SetAlignedLumpPosition( lump );
+			// set the write position
+			int nAlignment = LUMP_ALIGNMENT;
+			if ( lump == LUMP_PHYSLEVEL )
+			{
+				nAlignment = LUMP_PHYSLEVEL_ALIGNMENT;
+			}
+			SetAlignedLumpPosition( lump, nAlignment );
+
+			// save the data
 			SafeWrite( g_hBSPFile, (byte *)g_pBSPHeader + offset, length );
 		}
 		else
@@ -5237,6 +6061,24 @@ bool GetBSPDependants( const char *pBSPFilename, CUtlVector< CUtlString > *pList
 					pList->AddToTail( "materials/detail/detailsprites.vmt" );
 				}
 			}
+		}
+	}
+
+	// Get all the physics excludes
+	dphyslevelV0_t *pPhysLevelData = (dphyslevelV0_t *)g_pPhysLevel;
+	if ( g_PhysLevelSize && pPhysLevelData && pPhysLevelData->dataVersion == dphyslevelV0_t::DATA_VERSION )
+	{
+		char szFilename[MAX_PATH];
+		for( int i = 0; i < pPhysLevelData->levelStaticModels.size; ++i )
+		{
+			const char *pPhz = pPhysLevelData->levelStaticModels[i];
+
+			// These MDLs need to exclude their PHZs
+			V_strncpy( szFilename, pPhz, sizeof( szFilename ) );		
+			V_SetExtension( szFilename, ".phz", sizeof( szFilename ) );
+
+			// add with prefix exclude token
+			pList->AddToTail( CFmtStr( "*%s", szFilename ).Access() );
 		}
 	}
 

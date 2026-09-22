@@ -1,4 +1,3 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
 // SculptOptions.cpp : implementation file
 //
 
@@ -23,12 +22,14 @@
 #include "Material.h"
 #include "materialsystem/imaterial.h"
 #include "materialsystem/imaterialsystem.h"
-#include "materialsystem/MaterialSystemUtil.h"
+#include "materialsystem/materialsystemutil.h"
 #include "materialsystem/itexture.h"
 #include "../materialsystem/itextureinternal.h"
 #include "pixelwriter.h"
 #include "TextureSystem.h"
 #include "SculptOptions.h"
+#include "tablet.h"
+#include "vstdlib/random.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include <tier0/memdbgon.h>
@@ -741,7 +742,8 @@ void CSculptTool::PrepareDispForPainting( )
 //			vCollisionNormal - the normal of the tri hit
 //			flCollisionIntercept - the intercept
 //-----------------------------------------------------------------------------
-bool CSculptTool::FindCollisionIntercept( CCamera *pCamera, const Vector2D &vPoint, bool bUseOrigPosition, Vector &vCollisionPoint, Vector &vCollisionNormal, float &flCollisionIntercept )
+bool CSculptTool::FindCollisionIntercept( CCamera *pCamera, const Vector2D &vPoint, bool bUseOrigPosition, Vector &vCollisionPoint, Vector &vCollisionNormal, float &flCollisionIntercept,
+										  int *pnCollideDisplacement, int *pnCollideTri )
 {
 	Vector	vecStart, vecEnd;
 	float	flFraction, flLeastFraction;
@@ -793,6 +795,15 @@ bool CSculptTool::FindCollisionIntercept( CCamera *pCamera, const Vector2D &vPoi
 				pDisp->GetVert( v3, vec3 );
 
 				ComputeTrianglePlane( vec1, vec2, vec3, vCollisionNormal, flCollisionIntercept );
+
+				if ( pnCollideDisplacement != NULL )
+				{
+					*pnCollideDisplacement = iDisp;
+				}
+				if ( pnCollideTri != NULL )
+				{
+					*pnCollideTri = iTri;
+				}
 			}
 		}
 	}
@@ -1096,7 +1107,6 @@ BOOL CSculptPushOptions::OnInitDialog( void )
 
 	m_NormalModeControl.InsertString( -1, "Brush Center" );
 	m_NormalModeControl.InsertString( -1, "Screen" );
-	m_NormalModeControl.InsertString( -1, "Screen XY" );
 	m_NormalModeControl.InsertString( -1, "X" );
 	m_NormalModeControl.InsertString( -1, "Y" );
 	m_NormalModeControl.InsertString( -1, "Z" );
@@ -1146,7 +1156,6 @@ void CSculptPushOptions::DoDataExchange(CDataExchange* pDX)
 
 
 BEGIN_MESSAGE_MAP(CSculptPushOptions, CDialog)
-	ON_CBN_SELCHANGE(IDC_IDC_SCULPT_PUSH_OPTION_NORMAL_MODE, &CSculptPushOptions::OnCbnSelchangeIdcSculptPushOptionNormalMode)
 	ON_CBN_SELCHANGE(IDC_SCULPT_PUSH_OPTION_OFFSET_MODE, &CSculptPushOptions::OnCbnSelchangeSculptPushOptionOffsetMode)
 	ON_EN_CHANGE(IDC_SCULPT_PUSH_OPTION_OFFSET_DISTANCE, &CSculptPushOptions::OnEnChangeSculptPushOptionOffsetDistance)
 	ON_CBN_SELCHANGE(IDC_SCULPT_PUSH_OPTION_DENSITY_MODE, &CSculptPushOptions::OnCbnSelchangeSculptPushOptionDensityMode)
@@ -1155,15 +1164,6 @@ BEGIN_MESSAGE_MAP(CSculptPushOptions, CDialog)
 	ON_EN_KILLFOCUS(IDC_SCULPT_PUSH_OPTION_FALLOFF_POSITION, &CSculptPushOptions::OnEnKillfocusSculptPushOptionFalloffPosition)
 	ON_EN_KILLFOCUS(IDC_SCULPT_PUSH_OPTION_FALLOFF_FINAL, &CSculptPushOptions::OnEnKillfocusSculptPushOptionFalloffFinal)
 END_MESSAGE_MAP()
-
-
-//-----------------------------------------------------------------------------
-// Purpose: sets the normal mode of the sculpt operation
-//-----------------------------------------------------------------------------
-void CSculptPushOptions::OnCbnSelchangeIdcSculptPushOptionNormalMode()
-{
-	m_NormalMode = ( NormalMode )m_NormalModeControl.GetCurSel();
-}
 
 
 //-----------------------------------------------------------------------------
@@ -1422,12 +1422,6 @@ void CSculptPushOptions::GetPaintAxis( CCamera *pCamera, const Vector2D &vPoint,
 		case NORMAL_MODE_SCREEN:
 			pCamera->GetViewForward( vPaintAxis );
 			vPaintAxis = -vPaintAxis;
-			break;
-
-		case NORMAL_MODE_SCREEN_XY:
-			pCamera->GetViewForward( vPaintAxis );
-			vPaintAxis = -vPaintAxis;
-			vPaintAxis.z = 0.f;
 			break;
 
 		case NORMAL_MODE_BRUSH_CENTER:
@@ -2322,7 +2316,6 @@ BOOL CSculptCarveOptions::OnInitDialog( )
 
 	m_NormalModeControl.InsertString( -1, "Brush Center" );
 	m_NormalModeControl.InsertString( -1, "Screen" );
-	m_NormalModeControl.InsertString( -1, "Screen XY" );
 	m_NormalModeControl.InsertString( -1, "X" );
 	m_NormalModeControl.InsertString( -1, "Y" );
 	m_NormalModeControl.InsertString( -1, "Z" );
@@ -2955,12 +2948,6 @@ void CSculptCarveOptions::GetPaintAxis( CCamera *pCamera, const Vector2D &vPoint
 			vPaintAxis = -vPaintAxis;
 			break;
 
-		case NORMAL_MODE_SCREEN_XY:
-			pCamera->GetViewForward( vPaintAxis );
-			vPaintAxis = -vPaintAxis;
-			vPaintAxis.z = 0.f;
-			break;
-
 		case NORMAL_MODE_BRUSH_CENTER:
 			if ( !m_InPaintingMode )
 			{
@@ -3134,9 +3121,9 @@ void CSculptCarveOptions::DoPaintOperation( CMapView3D *pView, const Vector2D &v
 			index = clamp( index, 0, MAX_SCULPT_SIZE - 1 );
 			index = MAX_SCULPT_SIZE - index - 1;
 
-			float		fScaledDistance = m_BrushPoints[ index ] * flDistance;
+			float		flScaledDistance = m_BrushPoints[ index ] * flDistance;
 
-			if ( fScaledDistance == 0.0f )
+			if ( flScaledDistance == 0.0f )
 			{
 				continue;
 			}
@@ -3144,12 +3131,12 @@ void CSculptCarveOptions::DoPaintOperation( CMapView3D *pView, const Vector2D &v
 			switch( m_DensityMode )
 			{
 				case DENSITY_MODE_ADDITIVE:
-					VectorScale( vDirection, fScaledDistance, vPaintPos );
+					VectorScale( vDirection, flScaledDistance, vPaintPos );
 					VectorAdd( vPaintPos, vVert, vPaintPos );
 					break;
 
 				case DENSITY_MODE_ATTENUATED:
-					VectorScale( vDirection, fScaledDistance, vPaintPos );
+					VectorScale( vDirection, flScaledDistance, vPaintPos );
 					VectorAdd( vPaintPos, vVert, vPaintPos );
 
 					if ( pOrigDisp )
@@ -3430,7 +3417,7 @@ void CSculptCarveOptions::OnMouseMove(UINT nFlags, CPoint point)
 //-----------------------------------------------------------------------------
 BOOL CSculptCarveOptions::PreTranslateMessage( MSG* pMsg )
 {
-	if ( pMsg->message == WM_LBUTTONDOWN || pMsg->message == WM_MOUSEMOVE )
+	if ( pMsg->message == WM_LBUTTONDOWN || pMsg->message == WM_LBUTTONDOWN || pMsg->message == WM_MOUSEMOVE )
 	{
 		return FALSE;
 	}
@@ -3930,4 +3917,1049 @@ BOOL CSculptProjectOptions::OnInitDialog()
 // +control = st adjust
 
 
+CTextureButton::CTextureButton( ) :
+	CButton()
+{
+	m_pTexure = NULL;
+	m_bSelected = false;
+}
+
+
+void CTextureButton::SetTexture( IEditorTexture *pTexture )
+{
+	m_pTexure = pTexture;
+}
+
+void CTextureButton::SetSelected( bool bSelected )
+{ 
+	m_bSelected = bSelected; 
+	Invalidate(); 
+}
+
+BOOL CTextureButton::PreCreateWindow(CREATESTRUCT& cs)
+{
+	cs.style |= BS_OWNERDRAW;
+
+	return __super::PreCreateWindow( cs );
+}
+
+void CTextureButton::DrawItem( LPDRAWITEMSTRUCT lpDrawItemStruct )
+{
+#if 0
+	UINT uStyle = DFCS_BUTTONPUSH;
+
+	// This code only works with buttons.
+	ASSERT(lpDrawItemStruct->CtlType == ODT_BUTTON);
+
+	// If drawing selected, add the pushed style to DrawFrameControl.
+	if (lpDrawItemStruct->itemState & ODS_SELECTED)
+		uStyle |= DFCS_PUSHED;
+
+	// Draw the button frame.
+	::DrawFrameControl(lpDrawItemStruct->hDC, &lpDrawItemStruct->rcItem, 
+		DFC_BUTTON, uStyle);
+
+	// Get the button's text.
+	CString strText;
+	GetWindowText(strText);
+
+	// Draw the button text using the text color red.
+	COLORREF crOldColor = ::SetTextColor(lpDrawItemStruct->hDC, RGB(255,0,0));
+	::DrawText(lpDrawItemStruct->hDC, strText, strText.GetLength(), 
+		&lpDrawItemStruct->rcItem, DT_SINGLELINE|DT_VCENTER|DT_CENTER);
+	::SetTextColor(lpDrawItemStruct->hDC, crOldColor);
+#endif
+
+	UINT uStyle = DFCS_BUTTONPUSH;
+
+	COLORREF dwForeColor = GetSysColor( COLOR_BTNTEXT );
+
+	// If drawing selected, add the pushed style to DrawFrameControl.
+	if (lpDrawItemStruct->itemState & ODS_SELECTED)
+	{
+		dwForeColor = GetSysColor( COLOR_BTNTEXT );
+		uStyle |= DFCS_PUSHED;
+	}
+
+	if ( m_bSelected == true )
+	{
+		dwForeColor = RGB( 200, 0, 0 );
+	}
+
+	::DrawFrameControl( lpDrawItemStruct->hDC, &lpDrawItemStruct->rcItem, DFC_BUTTON, uStyle );
+
+	CDC dc;
+	dc.Attach( lpDrawItemStruct->hDC );
+	dc.SaveDC();
+
+	RECT& r = lpDrawItemStruct->rcItem;
+
+	int iFontHeight = dc.GetTextExtent( "J", 1 ).cy;
+
+	dc.SetROP2( R2_COPYPEN );
+	CPalette *pOldPalette = NULL;
+
+	if (m_pTexure != NULL)
+	{
+		m_pTexure->Load();
+
+		pOldPalette = dc.SelectPalette( m_pTexure->HasPalette() ? m_pTexure->GetPalette() : g_pGameConfig->Palette, FALSE );
+		dc.RealizePalette();
+	}
+
+	if ( m_pTexure != NULL )
+	{
+		char szName[ MAX_PATH ];
+		int iLen = m_pTexure->GetShortName( szName );
+
+		// crop to just the name without path
+		const char *pszTextureName = V_UnqualifiedFileName( szName );
+		iLen = strlen( pszTextureName );		
+
+		DrawTexData_t DrawTexData;
+		DrawTexData.nFlags = 0;
+
+		int nWidth = m_pTexure->GetPreviewImageWidth();
+		int nHeight = m_pTexure->GetPreviewImageHeight();
+
+		CRect r2(r);
+		r2.InflateRect( -4, -4 );
+
+		if ( m_pTexure->IsLoaded() && nWidth > 0 && nHeight > 0 )
+		{
+			// draw graphic
+
+			int nDrawWidth = 64;
+			int nDrawHeight = nDrawWidth * nHeight / nWidth;
+			if ( nDrawHeight > r2.bottom - r2.top )
+			{
+				nDrawHeight = r2.bottom - r2.top;
+				nDrawWidth = nDrawHeight * nWidth / nHeight;
+			}
+
+			r2.right = r2.left + nDrawWidth;
+			r2.bottom = r2.top + nDrawHeight;
+			m_pTexure->Draw( &dc, r2, 0, 0, DrawTexData );
+		}
+		else
+		{
+			int nDrawSize = r2.bottom - r2.top;
+			r2.right = r2.left + nDrawSize;
+			r2.bottom = r2.top + nDrawSize;
+		}
+
+		// draw name
+		dc.SetTextColor( dwForeColor );
+		dc.SetBkMode( TRANSPARENT );
+		dc.TextOut( r2.right + 4, r2.top + 4, pszTextureName, iLen );
+
+		// draw size
+		sprintf( szName, "%dx%d", m_pTexure->GetWidth(), m_pTexure->GetHeight() );
+		dc.TextOut( r2.right + 4, r2.top + 4 + iFontHeight, szName, strlen( szName ) );
+	}
+
+	if (pOldPalette)
+	{
+		dc.SelectPalette( pOldPalette, FALSE );
+	}
+
+	dc.RestoreDC( -1 );
+	dc.Detach();
+}
+
+
+
+BEGIN_MESSAGE_MAP(CColorButton, CButton)
+END_MESSAGE_MAP()
+
+CColorButton::CColorButton( ) :
+	CButton()
+{
+	m_flRed = m_flGreen = m_flBlue = 1.0f;
+}
+
+
+void CColorButton::SetColor( float flRed, float flGreen, float flBlue )
+{
+	m_flRed = flRed;
+	m_flGreen = flGreen;
+	m_flBlue = flBlue;
+	Invalidate();
+}
+
+BOOL CColorButton::PreCreateWindow(CREATESTRUCT& cs)
+{
+	cs.style |= BS_OWNERDRAW;
+
+	return __super::PreCreateWindow( cs );
+}
+
+void CColorButton::DrawItem( LPDRAWITEMSTRUCT lpDrawItemStruct )
+{
+	UINT uStyle = DFCS_BUTTONPUSH;
+
+	// This code only works with buttons.
+	ASSERT(lpDrawItemStruct->CtlType == ODT_BUTTON);
+
+	// If drawing selected, add the pushed style to DrawFrameControl.
+	if (lpDrawItemStruct->itemState & ODS_SELECTED)
+		uStyle |= DFCS_PUSHED;
+
+	CDC dc;
+	dc.Attach( lpDrawItemStruct->hDC );
+	dc.SaveDC();
+
+	COLORREF	dwBackColor = RGB( m_flRed * 255, m_flGreen * 255, m_flBlue * 255 );
+
+	// Draw the button frame.
+	::DrawFrameControl(lpDrawItemStruct->hDC, &lpDrawItemStruct->rcItem, 
+		DFC_BUTTON, uStyle);
+
+	// draw background
+	CBrush	brush;
+	CRect	r2( lpDrawItemStruct->rcItem );
+
+	brush.CreateSolidBrush( dwBackColor) ;
+	r2.InflateRect( -4, -4 );
+	dc.FillRect( &r2, &brush );
+
+	dc.RestoreDC( -1 );
+	dc.Detach();
+}
+
+
+// CSculptBlendOptions dialog
+
+IMPLEMENT_DYNAMIC(CSculptBlendOptions, CDialog)
+
+
+//-----------------------------------------------------------------------------
+// Purpose: constructor
+//-----------------------------------------------------------------------------
+CSculptBlendOptions::CSculptBlendOptions(CWnd* pParent /*=NULL*/) : 
+CDialog(CSculptBlendOptions::IDD, pParent),
+CSculptPainter()
+{
+	m_flFalloffSpot = 0.5f;
+	m_flFalloffEndingValue = 0.0f;
+	m_Direction = 1.0f;
+	m_nSelectedTexture = 0;
+
+	for( int i = 0; i < MAX_MULTIBLEND_CHANNELS; i++ )
+	{
+		m_ColorMode[ i ] = COLOR_MODE_SINGLE;
+		m_vStartDrawColor[ i ].Init( 1.0f, 1.0f, 1.0f );
+		m_vEndDrawColor[ i ].Init( 1.0f, 1.0f, 1.0f );
+	}
+
+	m_nDefaultFalloffPosition = 50;
+	m_nDefaultFalloffFinal = 0;
+	m_nDefaultBlendAmount = 50;
+	m_nDefaultColorBlendAmount = 0;
+	m_nDefaultAlphaBlendAmount = 0;
+	m_b4WayBlendMode = false;
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: destructor
+//-----------------------------------------------------------------------------
+CSculptBlendOptions::~CSculptBlendOptions()
+{
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: initializes the dialog
+// Output : returns true if successful
+//-----------------------------------------------------------------------------
+BOOL CSculptBlendOptions::OnInitDialog( void )
+{
+	CDialog::OnInitDialog();
+
+	m_FalloffPositionControl.SetRange( 0, 100 );
+	m_FalloffPositionControl.SetTicFreq( 10 );
+	m_FalloffPositionControl.SetPos( m_nDefaultFalloffPosition );
+
+	m_FalloffFinalControl.SetRange( 0, 100 );
+	m_FalloffFinalControl.SetTicFreq( 10 );
+	m_FalloffFinalControl.SetPos( m_nDefaultFalloffFinal );
+
+	m_BlendAmountControl.SetRange( 0, 100 );
+	m_BlendAmountControl.SetTicFreq( 10 );
+	m_BlendAmountControl.SetPos( m_nDefaultBlendAmount );
+
+	m_ColorBlendAmountControl.SetRange( 0, 100 );
+	m_ColorBlendAmountControl.SetTicFreq( 10 );
+	m_ColorBlendAmountControl.SetPos( m_nDefaultColorBlendAmount );
+
+	m_AlphaBlendAmountControl.SetRange( 0, 100 );
+	m_AlphaBlendAmountControl.SetTicFreq( 10 );
+	m_AlphaBlendAmountControl.SetPos( m_nDefaultAlphaBlendAmount );
+
+	m_BlendColorOperationControl.InsertString( -1, "Single");
+	m_BlendColorOperationControl.InsertString( -1, "Blend");
+	m_BlendColorOperationControl.InsertString( -1, "Or");
+
+	return TRUE;
+}
+
+
+void CSculptBlendOptions::SetColorMode( ColorMode NewMode, bool bSetDialog )
+{
+	m_ColorMode[ m_nSelectedTexture ] = NewMode;
+
+	switch( m_ColorMode[ m_nSelectedTexture ] )
+	{
+		case COLOR_MODE_SINGLE:
+			m_ColorEndControl.ShowWindow( SW_HIDE );
+			break;
+
+		case COLOR_MODE_RANGE:
+			m_ColorEndControl.ShowWindow( SW_SHOW );
+			break;
+
+		case COLOR_MODE_OR:
+			m_ColorEndControl.ShowWindow( SW_SHOW );
+			break;
+	}
+
+	if ( bSetDialog == true )
+	{
+		m_BlendColorOperationControl.SetCurSel( m_ColorMode[ m_nSelectedTexture ] );
+	}
+}
+
+
+void CSculptBlendOptions::SelectTexture( int nTexture )
+{
+	m_nSelectedTexture = nTexture;
+
+	m_ColorStartControl.SetColor( m_vStartDrawColor[ m_nSelectedTexture ].x, m_vStartDrawColor[ m_nSelectedTexture ].y, m_vStartDrawColor[ m_nSelectedTexture ].z );
+	m_ColorEndControl.SetColor( m_vEndDrawColor[ m_nSelectedTexture ].x, m_vEndDrawColor[ m_nSelectedTexture ].y, m_vEndDrawColor[ m_nSelectedTexture ].z );
+
+	SetColorMode( m_ColorMode[ m_nSelectedTexture ], true );
+
+	for( int i = 0; i < MAX_MULTIBLEND_CHANNELS; i++ )
+	{
+		m_ColorMaskControl[ i ].SetCheck( ( i == m_nSelectedTexture ? BST_CHECKED : BST_UNCHECKED ) );
+	}
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: prevent the dialog from closing
+//-----------------------------------------------------------------------------
+void CSculptBlendOptions::OnOK()
+{
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: prevent the dialog from closing
+//-----------------------------------------------------------------------------
+void CSculptBlendOptions::OnCancel()
+{
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: set up the data exchange for the variables
+// Input  : pDX - the data exchange object
+//-----------------------------------------------------------------------------
+void CSculptBlendOptions::DoDataExchange(CDataExchange* pDX)
+{
+	CDialog::DoDataExchange(pDX);
+	DDX_Control(pDX, IDC_BLEND_AMOUNT, m_BlendAmountControl);
+	DDX_Control(pDX, IDC_BLEND_AMOUNT_TEXT, m_BlendAmountTextControl);
+	DDX_Control(pDX, IDC_TEXTURE_BUTTON1, m_TextureControl[ 0 ]);
+	DDX_Control(pDX, IDC_TEXTURE_BUTTON2, m_TextureControl[ 1 ]);
+	DDX_Control(pDX, IDC_TEXTURE_BUTTON3, m_TextureControl[ 2 ]);
+	DDX_Control(pDX, IDC_TEXTURE_BUTTON4, m_TextureControl[ 3 ]);
+	DDX_Control(pDX, IDC_TEXTURE1_MASK, m_TextureMaskControl[ 0 ]);
+	DDX_Control(pDX, IDC_TEXTURE2_MASK, m_TextureMaskControl[ 1 ]);
+	DDX_Control(pDX, IDC_TEXTURE3_MASK, m_TextureMaskControl[ 2 ]);
+	DDX_Control(pDX, IDC_TEXTURE4_MASK, m_TextureMaskControl[ 3 ]);
+	DDX_Control(pDX, IDC_COLOR1_MASK, m_ColorMaskControl[ 0 ]);
+	DDX_Control(pDX, IDC_COLOR2_MASK, m_ColorMaskControl[ 1 ]);
+	DDX_Control(pDX, IDC_COLOR3_MASK, m_ColorMaskControl[ 2 ]);
+	DDX_Control(pDX, IDC_COLOR4_MASK, m_ColorMaskControl[ 3 ]);
+	DDX_Control(pDX, IDC_COLOR_BLEND_AMOUNT, m_ColorBlendAmountControl);
+	DDX_Control(pDX, IDC_COLOR_BLEND_AMOUNT_TEXT, m_ColorBlendAmountTextControl);
+	DDX_Control(pDX, IDC_SET_COLOR, m_ColorStartControl);
+	DDX_Control(pDX, IDC_SET_COLOR2, m_ColorEndControl);
+	DDX_Control(pDX, IDC_BLEND_COLOR_OPERATION, m_BlendColorOperationControl);
+	DDX_Control(pDX, IDC_SCULPT_PUSH_OPTION_FALLOFF_POSITION, m_FalloffPositionControl);
+	DDX_Control(pDX, IDC_SCULPT_PUSH_OPTION_FALLOFF_FINAL, m_FalloffFinalControl);
+	DDX_Control(pDX, IDC_ALPHA_BLEND_AMOUNT, m_AlphaBlendAmountControl);
+	DDX_Control(pDX, IDC_ALPHA_BLEND_AMOUNT_TEXT, m_AlphaBlendAmountTextControl);
+}
+
+
+BEGIN_MESSAGE_MAP(CSculptBlendOptions, CDialog)
+	ON_NOTIFY(NM_CUSTOMDRAW, IDC_BLEND_AMOUNT, &CSculptBlendOptions::OnNMCustomdrawBlendAmount)
+	ON_WM_SHOWWINDOW()
+	ON_BN_CLICKED(IDC_TEXTURE_BUTTON1, &CSculptBlendOptions::OnBnClickedTextureButton1)
+	ON_BN_CLICKED(IDC_TEXTURE_BUTTON2, &CSculptBlendOptions::OnBnClickedTextureButton2)
+	ON_BN_CLICKED(IDC_TEXTURE_BUTTON3, &CSculptBlendOptions::OnBnClickedTextureButton3)
+	ON_BN_CLICKED(IDC_TEXTURE_BUTTON4, &CSculptBlendOptions::OnBnClickedTextureButton4)
+	ON_COMMAND(ID_BLEND_SELECT_TEXTURE_1, &CSculptBlendOptions::OnBnClickedTextureButton1)
+	ON_COMMAND(ID_BLEND_SELECT_TEXTURE_2, &CSculptBlendOptions::OnBnClickedTextureButton2)
+	ON_COMMAND(ID_BLEND_SELECT_TEXTURE_3, &CSculptBlendOptions::OnBnClickedTextureButton3)
+	ON_COMMAND(ID_BLEND_SELECT_TEXTURE_4, &CSculptBlendOptions::OnBnClickedTextureButton4)
+	ON_COMMAND(ID_BLEND_SHRINK_BRUSH, &CSculptBlendOptions::ShrinkBrush)
+	ON_COMMAND(ID_BLEND_ENLARGE_BRUSH, &CSculptBlendOptions::EnlargeBrush)
+	ON_BN_CLICKED(IDC_SET_COLOR, &CSculptBlendOptions::OnBnClickedSetColor)
+	ON_BN_CLICKED(IDC_SET_COLOR2, &CSculptBlendOptions::OnBnClickedSetColor2)
+	ON_NOTIFY(NM_CUSTOMDRAW, IDC_COLOR_BLEND_AMOUNT, &CSculptBlendOptions::OnNMCustomdrawColorBlendAmount)
+	ON_CBN_SELCHANGE(IDC_BLEND_COLOR_OPERATION, &CSculptBlendOptions::OnCbnSelchangeBlendColorOperation)
+	ON_NOTIFY(NM_CUSTOMDRAW, IDC_ALPHA_BLEND_AMOUNT, &CSculptBlendOptions::OnNMCustomdrawAlphaBlendAmount)
+	ON_WM_RBUTTONDBLCLK()
+END_MESSAGE_MAP()
+
+
+void CSculptBlendOptions::OnShowWindow(BOOL bShow, UINT nStatus)
+{
+	__super::OnShowWindow(bShow, nStatus);
+
+	if ( bShow == FALSE )
+	{
+		m_nDefaultFalloffPosition = m_FalloffPositionControl.GetPos();
+		m_nDefaultFalloffFinal = m_FalloffFinalControl.GetPos();
+		m_nDefaultBlendAmount = m_BlendAmountControl.GetPos();
+		m_nDefaultColorBlendAmount = m_ColorBlendAmountControl.GetPos();
+		m_nDefaultAlphaBlendAmount = m_AlphaBlendAmountControl.GetPos();
+
+		APP()->ClearCustomAccelerator();
+		return;
+	}
+
+	// Get the displacement manager from the active map document.
+	IWorldEditDispMgr *pDispMgr = GetActiveWorldEditDispManager();
+	if( pDispMgr )
+	{
+		int nDispCount = pDispMgr->SelectCount();
+		for ( int iDisp = 0; iDisp < nDispCount; iDisp++ )
+		{
+			CMapDisp *pDisp = pDispMgr->GetFromSelect( iDisp );
+			if ( pDisp )
+			{
+				CMapFace		*pFace = static_cast< CMapFace * >( pDisp->GetParent() );
+				IMaterial		*pMaterial = pFace->GetTexture()->GetMaterial();
+
+				if ( strcmpi( pMaterial->GetShaderName(), "Lightmapped_4WayBlend" ) == 0 )
+				{
+					m_b4WayBlendMode = true;
+				}
+				else
+				{
+					m_b4WayBlendMode = false;
+				}
+
+				for( int i = 1; i <= MAX_MULTIBLEND_CHANNELS; i++ )
+				{
+					char			temp[ 128 ];
+
+					if ( i == 1 )
+					{
+						sprintf( temp, "$basetexture" );
+					}
+					else
+					{
+						sprintf( temp, "$basetexture%d", i );
+					}
+					IMaterialVar	*pMaterialVar = pMaterial->FindVar( temp, NULL, false );
+					if ( pMaterialVar != NULL )
+					{
+						IEditorTexture	*pTexture = g_Textures.FindActiveTexture( pMaterialVar->GetStringValue() );
+						pTexture->Load();
+
+						m_TextureControl[ i - 1 ].SetTexture( pTexture );
+						m_TextureControl[ i - 1 ].SetSelected( ( m_nSelectedTexture == i - 1 ) );
+						m_TextureMaskControl[ i - 1 ].SetCheck( BST_CHECKED );
+						m_ColorMaskControl[ i - 1 ].SetCheck( BST_UNCHECKED );
+					}
+
+					m_ColorMaskControl[ i - 1 ].EnableWindow( !m_b4WayBlendMode );
+				}
+
+				m_AlphaBlendAmountControl.EnableWindow( !m_b4WayBlendMode );
+				m_AlphaBlendAmountTextControl.EnableWindow( !m_b4WayBlendMode );
+				m_ColorBlendAmountControl.EnableWindow( !m_b4WayBlendMode );
+				m_ColorBlendAmountTextControl.EnableWindow( !m_b4WayBlendMode );
+				m_BlendColorOperationControl.EnableWindow( !m_b4WayBlendMode );
+				m_ColorStartControl.EnableWindow( !m_b4WayBlendMode );
+				m_ColorEndControl.EnableWindow( !m_b4WayBlendMode );
+
+				break;
+			}
+		}
+	}
+
+	m_TextureControl[ m_nSelectedTexture ].SetSelected( true );
+	SelectTexture( m_nSelectedTexture );
+
+	APP()->SetCustomAccelerator( m_hWnd, IDR_BLEND_ACCELERATOR );
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: setup for starting to paint on the displacement
+// Input  : pView - the 3d view
+//			vPoint - the initial click point
+// Output : returns true if successful
+//-----------------------------------------------------------------------------
+bool CSculptBlendOptions::BeginPaint( CMapView3D *pView, const Vector2D &vPoint )
+{
+	__super::BeginPaint( pView, vPoint );
+
+	if ( m_bCtrlDown )
+	{
+		m_Direction = -1.0f;
+	}
+	else
+	{
+		m_Direction = 1.0f;
+	}
+
+	m_nLastCollideDisplacement = -1;
+
+	return true;
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: draws the tool in the 3d view
+// Input  : pRender - the 3d renderer
+//-----------------------------------------------------------------------------
+void CSculptBlendOptions::RenderTool3D( CRender3D *pRender )
+{
+	pRender->PushRenderMode( RENDER_MODE_WIREFRAME );
+
+	m_flFalloffSpot = m_FalloffPositionControl.GetPos() / 100.0f;
+	m_flFalloffEndingValue = m_FalloffFinalControl.GetPos() / 100.0f;
+
+	if ( m_InSizingMode )
+	{	// yellow for sizing mode
+		pRender->BeginClientSpace();
+		pRender->SetDrawColor( 255, 255, 0 );
+		pRender->DrawCircle( Vector( m_StartSizingPoint.x, m_StartSizingPoint.y, 0.0f ), Vector( 0.0f, 0.0f, 1.0f ), m_BrushSize, 32 );
+		if ( m_flFalloffSpot > 0.0f )
+		{
+			pRender->SetDrawColor( 192, 192, 0 );
+			pRender->DrawCircle( Vector( m_StartSizingPoint.x, m_StartSizingPoint.y, 0.0f ), Vector( 0.0f, 0.0f, 1.0f ), m_BrushSize * m_flFalloffSpot, 32 );
+		}
+		pRender->EndClientSpace();
+	}
+	else if ( m_Direction < 0.0f )
+	{	// red for negative blending
+		pRender->BeginClientSpace();
+		pRender->SetDrawColor( 255, 0, 0 );
+		pRender->DrawCircle( Vector( m_MousePoint.x, m_MousePoint.y, 0.0f ), Vector( 0.0f, 0.0f, 1.0f ), m_BrushSize, 32 );
+		if ( m_flFalloffSpot > 0.0f )
+		{
+			pRender->SetDrawColor( 192, 0, 0 );
+			pRender->DrawCircle( Vector( m_MousePoint.x, m_MousePoint.y, 0.0f ), Vector( 0.0f, 0.0f, 1.0f ), m_BrushSize * m_flFalloffSpot, 32 );
+		}
+		pRender->EndClientSpace();
+	}
+	else
+	{	// green for positive blending
+		pRender->BeginClientSpace();
+		pRender->SetDrawColor( 0, 255, 0 );
+		pRender->DrawCircle( Vector( m_MousePoint.x, m_MousePoint.y, 0.0f ), Vector( 0.0f, 0.0f, 1.0f ), m_BrushSize, 32 );
+		if ( m_flFalloffSpot > 0.0f )
+		{
+			pRender->SetDrawColor( 0, 192, 0 );
+			pRender->DrawCircle( Vector( m_MousePoint.x, m_MousePoint.y, 0.0f ), Vector( 0.0f, 0.0f, 1.0f ), m_BrushSize * m_flFalloffSpot, 32 );
+		}
+		pRender->EndClientSpace();
+	}
+
+	pRender->PopRenderMode();
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: handles the right mouse button down in the 3d view
+// Input  : pView - the 3d view
+//			nFlags - the button flags
+//			vPoint - the mouse point
+// Output : returns true if successful
+//-----------------------------------------------------------------------------
+bool CSculptBlendOptions::OnRMouseDown3D( CMapView3D *pView, UINT nFlags, const Vector2D &vPoint )
+{
+	CSculptTool::OnRMouseDown3D( pView, nFlags, vPoint );
+
+	return true;
+}
+
+
+bool CSculptBlendOptions::DoPaint( CMapView3D *pView, const Vector2D &vPoint )
+{
+	Vector		vCollisionPoint, vCollisionNormal;
+	float		flCollisionIntercept;
+	int			nCollideDisplacement, nCollideTri;
+
+	if ( FindCollisionIntercept( pView->GetCamera(), vPoint, true, vCollisionPoint, vCollisionNormal, flCollisionIntercept, &nCollideDisplacement, &nCollideTri ) == false )
+	{
+		return false;
+	}
+
+//	if ( m_nLastCollideDisplacement != -1 && m_nLastCollideDisplacement == nCollideDisplacement && m_nLastCollideTri == nCollideTri )
+//	{
+//		return false;
+//	}
+
+	m_nLastCollideDisplacement = nCollideDisplacement;
+	m_nLastCollideTri = nCollideTri;
+
+	return __super::DoPaint( pView, vPoint );
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: applies the specific push operation onto the displacement
+// Input  : pView - the 3d view
+//			vPoint - the mouse point
+//			pDisp - the displacement to apply the push to
+//			pOrigDisp - the original displacement prior to any adjustments
+//-----------------------------------------------------------------------------
+void CSculptBlendOptions::DoPaintOperation( CMapView3D *pView, const Vector2D &vPoint, CMapDisp *pDisp, CMapDisp *pOrigDisp )
+{
+	Vector4D	vBlend, vPaintBlend;
+	Vector4D	vAlphaBlend, vPaintAlphaBlend;
+	Vector		vColor[ MAX_MULTIBLEND_CHANNELS ], vPaintColor[ MAX_MULTIBLEND_CHANNELS ];
+	float		flDistance;
+	float		flLengthPercent;
+	int			nIndex = m_nSelectedTexture;
+	float		flTextureBlendAmount = ( float )m_BlendAmountControl.GetPos() / 2000.0f;
+	float		flColorBlendAmount = ( float )m_ColorBlendAmountControl.GetPos() / 2000.0f;
+	float		flAlphaBlendAmount = ( float )m_AlphaBlendAmountControl.GetPos() / 1000.0f;
+	bool		bDrawTexture = ( m_BlendAmountControl.GetPos() > 0 );
+	bool		bDrawAlpha = ( m_AlphaBlendAmountControl.GetPos() > 0 );
+	bool		bDrawColor = ( m_ColorBlendAmountControl.GetPos() > 0 );
+	bool		bDrawTextureChannel[ MAX_MULTIBLEND_CHANNELS ], bDrawColorChannel[ MAX_MULTIBLEND_CHANNELS ];
+
+	m_flFalloffSpot = m_FalloffPositionControl.GetPos() / 100.0f;
+	m_flFalloffEndingValue = m_FalloffFinalControl.GetPos() / 100.0f;
+
+	if ( nIndex < 0 )
+	{
+		return;
+	}
+
+	flAlphaBlendAmount *= m_Direction;
+
+	if ( WinTab_Opened() == true )
+	{
+		flTextureBlendAmount *= WinTab_GetPressure();
+		flColorBlendAmount *= WinTab_GetPressure();
+		flAlphaBlendAmount *= WinTab_GetPressure();
+	}
+
+	for( int i = 0; i < MAX_MULTIBLEND_CHANNELS; i++ )
+	{
+		bDrawTextureChannel[ i ] = ( bDrawTexture == true && m_TextureMaskControl[ i ].GetCheck() == BST_CHECKED );
+		bDrawColorChannel[ i ] = ( bDrawColor == true && m_ColorMaskControl[ i ].GetCheck() == BST_CHECKED );
+	}
+
+	AddToUndo( &pDisp );
+
+	int nVertCount = pDisp->GetSize();
+	for ( int iVert = 0; iVert < nVertCount; iVert++ )
+	{
+		if ( IsPointInScreenCircle( pView, pDisp, pOrigDisp, iVert, true, false, &flLengthPercent ) )
+		{
+			pDisp->GetMultiBlend( iVert, vBlend, vAlphaBlend, vColor[ 0 ], vColor[ 1 ], vColor[ 2 ], vColor[ 3 ] );
+
+			if ( flLengthPercent > m_flFalloffSpot )
+			{
+				flLengthPercent = ( flLengthPercent - m_flFalloffSpot ) / ( 1.0f - m_flFalloffSpot );
+				flLengthPercent = 1.0 - flLengthPercent;
+				flDistance = ( ( 1.0f - m_flFalloffEndingValue ) * flLengthPercent ) + ( m_flFalloffEndingValue );
+			}
+			else
+			{
+				flDistance = 1.0f;
+			}
+
+			if ( flDistance == 0.0f )
+			{
+				continue;
+			}
+
+			float	flTextureAmount = flTextureBlendAmount * flDistance;
+			float	flColorAmount = flColorBlendAmount * flDistance;
+			float	flAlphaAmount = flAlphaBlendAmount * flDistance;
+
+			vPaintBlend = vBlend;
+			vPaintAlphaBlend = vAlphaBlend;
+			vPaintColor[ 0 ] = vColor[ 0 ];
+			vPaintColor[ 1 ] = vColor[ 1 ];
+			vPaintColor[ 2 ] = vColor[ 2 ];
+			vPaintColor[ 3 ] = vColor[ 3 ];
+			Assert( MAX_MULTIBLEND_CHANNELS == 4 );
+
+			if ( bDrawTexture == true )
+			{
+				if ( m_Direction > 0.0f )
+				{
+					if ( nIndex == 4 )
+					{
+						float flRemainder = flTextureAmount;
+#if 1
+//						for( int i = 1; i < MAX_MULTIBLEND_CHANNELS; i++ )
+						for( int i = MAX_MULTIBLEND_CHANNELS - 1; i > 0; i-- )
+						{
+							if ( bDrawTextureChannel[ i ] == false )
+							{
+								continue;
+							}
+
+							if ( vPaintBlend[ i ] > flRemainder )
+							{
+								vPaintBlend[ i ] -= flRemainder;
+								flRemainder = 0.0f;
+								break;
+							}
+							else
+							{
+								flRemainder -= vPaintBlend[ i ];
+								vPaintBlend[ i ] = 0.0f;
+							}
+						}
+#else
+						for( int i = MAX_MULTIBLEND_CHANNELS - 1; i > 0; i-- )
+						{
+							if ( m_TextureMaskControl[ i ].GetCheck() != BST_CHECKED )
+							{
+								continue;
+							}
+
+							if ( vPaintBlend[ i ] > flRemainder )
+							{
+								vPaintBlend[ i ] -= flRemainder;
+							}
+							else
+							{
+								vPaintBlend[ i ] = 0.0f;
+							}
+						}
+#endif
+					}
+					else
+					{
+						if ( m_b4WayBlendMode )
+						{
+							vPaintBlend[ nIndex ] += flTextureAmount;
+
+							for ( int i = nIndex + 1; i < MAX_MULTIBLEND_CHANNELS; i++)
+							{
+								if ( bDrawTextureChannel[ i ] == false )
+								{
+									continue;
+								}
+
+								if ( vPaintBlend[ i ] > flTextureAmount )
+								{
+									vPaintBlend[ i ] -= flTextureAmount;
+								}
+								else
+								{
+									vPaintBlend[ i ] = 0.0f;
+								}
+							}
+						}
+						else // multiblend
+						{
+							for( int i = nIndex; i >= 0; i-- )
+//							for( int i = MAX_MULTIBLEND_CHANNELS - 1; i > 0; i-- )
+							{
+								if ( i == nIndex )
+								{
+									vPaintBlend[ i ] += flTextureAmount;
+								}
+								else
+								{
+									if ( bDrawTextureChannel[ i ] == false )
+									{
+										continue;
+									}
+
+									if ( vPaintBlend[ i ] > flTextureAmount )
+									{
+										vPaintBlend[ i ] -= flTextureAmount;
+										flTextureAmount = 0.0f;
+									}
+									else
+									{
+										flTextureAmount -= vPaintBlend[ i ];
+										vPaintBlend[ i ] = 0.0f;
+									}
+								}
+							}
+						}
+					}
+				}
+				else
+				{
+					vPaintBlend[ nIndex ] -= flTextureAmount;
+				}
+				vPaintBlend.x = clamp( vPaintBlend.x, 0.0f, 1.0f );
+				vPaintBlend.y = clamp( vPaintBlend.y, 0.0f, 1.0f );
+				vPaintBlend.z = clamp( vPaintBlend.z, 0.0f, 1.0f );
+				vPaintBlend.w = clamp( vPaintBlend.w, 0.0f, 1.0f );
+			}
+
+			if ( bDrawColor == true )
+			{
+				Vector	vResultColor;
+
+				switch( m_ColorMode[ nIndex ] )
+				{
+					case COLOR_MODE_SINGLE:
+						vResultColor = m_vStartDrawColor[ nIndex ];
+						break;
+
+					case COLOR_MODE_RANGE:
+						{
+							float flRange = RandomFloat( 0.0f, 1.0f );
+
+							vResultColor.x = m_vStartDrawColor[ nIndex ].x + ( ( m_vEndDrawColor[ nIndex ].x - m_vStartDrawColor[ nIndex ].x ) * flRange );
+							vResultColor.y = m_vStartDrawColor[ nIndex ].y + ( ( m_vEndDrawColor[ nIndex ].y - m_vStartDrawColor[ nIndex ].y ) * flRange );
+							vResultColor.z = m_vStartDrawColor[ nIndex ].z + ( ( m_vEndDrawColor[ nIndex ].z - m_vStartDrawColor[ nIndex ].z ) * flRange );
+						}
+						break;
+
+					case COLOR_MODE_OR:
+						if ( RandomInt( 1, 100 ) > 50 )
+						{
+							vResultColor = m_vStartDrawColor[ nIndex ];
+						}
+						else
+						{
+							vResultColor = m_vEndDrawColor[ nIndex ];
+						}
+						break;
+
+				}
+				if ( m_Direction < 0.0f )
+				{
+					vResultColor.Init( 1.0f, 1.0f, 1.0f );
+				}
+				for( int i = 0; i < MAX_MULTIBLEND_CHANNELS; i++ )
+				{
+					if ( bDrawColorChannel[ i ] == true )
+					{
+						vPaintColor[ i ] = ( vPaintColor[ i ] * ( 1.0f - flColorAmount ) ) + ( vResultColor * flColorAmount );
+					}
+				}
+			}
+
+			if ( bDrawAlpha == true )
+			{
+				vPaintAlphaBlend[ nIndex ] = clamp( vPaintAlphaBlend[ nIndex ] + flAlphaAmount, 0.0f, 2.0f );
+			}
+
+			pDisp->SetMultiBlend( iVert, vPaintBlend, vPaintAlphaBlend, vPaintColor[ 0 ], vPaintColor[ 1 ], vPaintColor[ 2 ], vPaintColor[ 3 ] );
+		}
+	}
+}
+
+
+void CSculptBlendOptions::OnNMCustomdrawBlendAmount(NMHDR *pNMHDR, LRESULT *pResult)
+{
+//	LPNMCUSTOMDRAW pNMCD = reinterpret_cast<LPNMCUSTOMDRAW>(pNMHDR);
+	// TODO: Add your control notification handler code here
+	*pResult = 0;
+
+	if ( m_BlendAmountControl.GetPos() == 0 )
+	{
+		m_BlendAmountTextControl.SetWindowText( "Off" );
+	}
+	else
+	{
+		char temp[ 128 ];
+		sprintf( temp, "%d%%", m_BlendAmountControl.GetPos() );
+		m_BlendAmountTextControl.SetWindowText( temp );
+	}
+}
+
+
+void CSculptBlendOptions::OnBnClickedTextureButton1()
+{
+	m_TextureControl[ m_nSelectedTexture ].SetSelected( false );
+	SelectTexture( 0 );
+	m_TextureControl[ m_nSelectedTexture ].SetSelected( true );
+}
+
+void CSculptBlendOptions::OnBnClickedTextureButton2()
+{
+	m_TextureControl[ m_nSelectedTexture ].SetSelected( false );
+	SelectTexture( 1 );
+	m_TextureControl[ m_nSelectedTexture ].SetSelected( true );
+}
+
+void CSculptBlendOptions::OnBnClickedTextureButton3()
+{
+	m_TextureControl[ m_nSelectedTexture ].SetSelected( false );
+	SelectTexture( 2 );
+	m_TextureControl[ m_nSelectedTexture ].SetSelected( true );
+}
+
+void CSculptBlendOptions::OnBnClickedTextureButton4()
+{
+	m_TextureControl[ m_nSelectedTexture ].SetSelected( false );
+	SelectTexture( 3 );
+	m_TextureControl[ m_nSelectedTexture ].SetSelected( true );
+}
+
+#define BRUSH_CHANGE_AMOUNT	4
+
+void CSculptBlendOptions::ShrinkBrush()
+{
+	if ( m_BrushSize > BRUSH_CHANGE_AMOUNT + 1 )
+	{
+		m_BrushSize -= BRUSH_CHANGE_AMOUNT;
+	}
+}
+
+void CSculptBlendOptions::EnlargeBrush()
+{
+	m_BrushSize += BRUSH_CHANGE_AMOUNT;
+}
+
+
 #include <tier0/memdbgoff.h>
+
+void CSculptBlendOptions::OnBnClickedSetColor()
+{
+	CColorDialog dlg( RGB( m_vStartDrawColor[ m_nSelectedTexture ].x * 255, m_vStartDrawColor[ m_nSelectedTexture ].y * 255, m_vStartDrawColor[ m_nSelectedTexture ].z * 255 ), CC_FULLOPEN );
+
+	if ( dlg.DoModal() == IDOK )
+	{
+		m_vStartDrawColor[ m_nSelectedTexture ].x = GetRValue( dlg.m_cc.rgbResult ) / 255.0f;
+		m_vStartDrawColor[ m_nSelectedTexture ].y = GetGValue( dlg.m_cc.rgbResult ) / 255.0f;
+		m_vStartDrawColor[ m_nSelectedTexture ].z = GetBValue( dlg.m_cc.rgbResult ) / 255.0f;
+
+		m_ColorStartControl.SetColor( m_vStartDrawColor[ m_nSelectedTexture ].x, m_vStartDrawColor[ m_nSelectedTexture ].y, m_vStartDrawColor[ m_nSelectedTexture ].z );
+	}
+}
+
+void CSculptBlendOptions::OnBnClickedSetColor2()
+{
+	CColorDialog dlg( RGB( m_vEndDrawColor[ m_nSelectedTexture ].x * 255, m_vEndDrawColor[ m_nSelectedTexture ].y * 255, m_vEndDrawColor[ m_nSelectedTexture ].z * 255 ), CC_FULLOPEN );
+
+	if ( dlg.DoModal() == IDOK )
+	{
+		m_vEndDrawColor[ m_nSelectedTexture ].x = GetRValue( dlg.m_cc.rgbResult ) / 255.0f;
+		m_vEndDrawColor[ m_nSelectedTexture ].y = GetGValue( dlg.m_cc.rgbResult ) / 255.0f;
+		m_vEndDrawColor[ m_nSelectedTexture ].z = GetBValue( dlg.m_cc.rgbResult ) / 255.0f;
+
+		m_ColorEndControl.SetColor( m_vEndDrawColor[ m_nSelectedTexture ].x, m_vEndDrawColor[ m_nSelectedTexture ].y, m_vEndDrawColor[ m_nSelectedTexture ].z );
+	}
+}
+
+void CSculptBlendOptions::OnNMCustomdrawColorBlendAmount(NMHDR *pNMHDR, LRESULT *pResult)
+{
+	*pResult = 0;
+
+	if ( m_ColorBlendAmountControl.GetPos() == 0 )
+	{
+		m_ColorBlendAmountTextControl.SetWindowText( "Off" );
+	}
+	else
+	{
+		char temp[ 128 ];
+		sprintf( temp, "%d%%", m_ColorBlendAmountControl.GetPos() );
+		m_ColorBlendAmountTextControl.SetWindowText( temp );
+	}
+}
+
+void CSculptBlendOptions::OnCbnSelchangeBlendColorOperation()
+{
+	SetColorMode( ( ColorMode )m_BlendColorOperationControl.GetCurSel(), false );
+}
+
+
+void CSculptBlendOptions::OnNMCustomdrawAlphaBlendAmount(NMHDR *pNMHDR, LRESULT *pResult)
+{
+//	LPNMCUSTOMDRAW pNMCD = reinterpret_cast<LPNMCUSTOMDRAW>(pNMHDR);
+
+	*pResult = 0;
+
+	if ( m_AlphaBlendAmountControl.GetPos() == 0 )
+	{
+		m_AlphaBlendAmountTextControl.SetWindowText( "Off" );
+	}
+	else
+	{
+		char temp[ 128 ];
+		sprintf( temp, "%d%%", m_AlphaBlendAmountControl.GetPos() );
+		m_AlphaBlendAmountTextControl.SetWindowText( temp );
+	}
+}
+
+void CSculptBlendOptions::OnRButtonDblClk(UINT nFlags, CPoint point)
+{
+	__super::OnRButtonDblClk(nFlags, point);
+
+	// Get the displacement manager from the active map document.
+	IWorldEditDispMgr *pDispMgr = GetActiveWorldEditDispManager();
+	if( !pDispMgr )
+	{
+		return;
+	}
+
+	bool		bDrawTexture = ( m_BlendAmountControl.GetPos() > 0 );
+	bool		bDrawAlpha = ( m_AlphaBlendAmountControl.GetPos() > 0 );
+	bool		bDrawColor = ( m_ColorBlendAmountControl.GetPos() > 0 );
+	bool		bDrawTextureChannel[ MAX_MULTIBLEND_CHANNELS ], bDrawColorChannel[ MAX_MULTIBLEND_CHANNELS ];
+
+	Vector4D	vBlend, vPaintBlend, vAlphaBlend, vPaintAlphaBlend;
+	Vector		vColor[ MAX_MULTIBLEND_CHANNELS ], vPaintColor[ MAX_MULTIBLEND_CHANNELS ];
+
+	vPaintBlend.Init( 1.0f, 0.0f, 0.0f, 0.0f );
+	vPaintAlphaBlend.Init();
+	for( int i = 0; i < MAX_MULTIBLEND_CHANNELS; i++ )
+	{
+		vPaintColor[ i ] = Vector( 1.0f, 1.0f, 1.0f );
+		bDrawTextureChannel[ i ] = ( bDrawTexture == true && m_TextureMaskControl[ i ].GetCheck() == BST_CHECKED );
+		bDrawColorChannel[ i ] = ( bDrawColor == true && m_ColorMaskControl[ i ].GetCheck() == BST_CHECKED );
+	}
+
+	// For each displacement surface is the selection list attempt to paint on it.
+	int nDispCount = pDispMgr->SelectCount();
+	for ( int iDisp = 0; iDisp < nDispCount; iDisp++ )
+	{
+		CMapDisp *pDisp = pDispMgr->GetFromSelect( iDisp );
+		if ( pDisp )
+		{
+			AddToUndo( &pDisp );
+
+			int nVertCount = pDisp->GetSize();
+			for ( int iVert = 0; iVert < nVertCount; iVert++ )
+			{
+				pDisp->GetMultiBlend( iVert, vBlend, vAlphaBlend, vColor[ 0 ], vColor[ 1 ], vColor[ 2 ], vColor[ 3 ] );
+
+				if ( bDrawAlpha == true )
+				{
+					vAlphaBlend = vPaintAlphaBlend;
+				}
+				for( int i = 0; i < MAX_MULTIBLEND_CHANNELS; i++ )
+				{
+					if ( bDrawTextureChannel[ i ] == true )
+					{
+						vBlend[ i ] = vPaintBlend[ i ];
+					}
+					if ( bDrawColorChannel[ i ] == true )
+					{
+						vColor[ i ] = vPaintColor[ i ];
+					}
+				}
+				pDisp->SetMultiBlend( iVert, vBlend, vAlphaBlend, vColor[ 0 ], vColor[ 1 ], vColor[ 2 ], vColor[ 3 ] );
+			}
+		}
+	}
+
+	pDispMgr->PostUndo();
+}

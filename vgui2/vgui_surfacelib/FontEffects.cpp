@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Font effects that operate on linear rgba data
 //
@@ -142,36 +142,51 @@ void ApplyOutlineToTexture( int rgbaWide, int rgbaTall, unsigned char *rgba, int
 	}
 }
 
-namespace
-{
+//-----------------------------------------------------------------------------
+// Purpose: Gets the blur value for a single pixel
+//-----------------------------------------------------------------------------
+FORCEINLINE void GetBlurValueForPixel(unsigned char *src, int blur, float *gaussianDistribution, int srcX, int srcY, int rgbaWide, int rgbaTall, unsigned char *dest)
+{	
+	float accum = 0.0f;
 
-	unsigned char CalculatePixelBlur(const unsigned char* src, int nStride, const float* distribution, int nValues)
+	// scan the positive x direction
+	int maxX = MIN(srcX + blur, rgbaWide - 1);
+	int minX = MAX(srcX - blur, 0);
+	for (int x = minX; x <= maxX; x++)
 	{
-		float accum = 0.0;
-		for ( int n = 0; n != nValues; ++n )
+		int maxY = MIN(srcY + blur, rgbaTall - 1);
+		int minY = MAX(srcY - blur, 0);
+		for (int y = minY; y <= maxY; y++)
 		{
-			accum += distribution[n]*static_cast<float>(src[n*nStride]);
-		}
+			unsigned char *srcPos = src + ((x + (y * rgbaWide)) * 4);
 
-		return static_cast<unsigned char>(accum);
+			// muliply by the value matrix
+			float weight = gaussianDistribution[x - srcX + blur];
+			float weight2 = gaussianDistribution[y - srcY + blur];
+			accum += (srcPos[0] * (weight * weight2));
+		}
 	}
 
+	dest[0] = dest[1] = dest[2] = 255; //leave ALL pixels white or we get black backgrounds mixed in
+	dest[3] = MIN( (int)accum, 255); //blur occurs entirely in the alpha
 }
 
 //-----------------------------------------------------------------------------
 // Purpose: blurs the texture
 //-----------------------------------------------------------------------------
-void ApplyGaussianBlurToTexture( int rgbaWide, int rgbaTall, unsigned char *rgba, int nBlur )
+void ApplyGaussianBlurToTexture( int rgbaWide, int rgbaTall, unsigned char *rgba, int iBlur )
 {
-	if ( !nBlur  )
+	float	 *pGaussianDistribution;
+
+	if ( !iBlur  )
 		return;
 
 	// generate the gaussian field
-	float *pGaussianDistribution = (float*) stackalloc( (nBlur*2+1) * sizeof(float) );
-	double sigma = 0.683 * nBlur;
-	for (int x = 0; x <= (nBlur * 2); x++)
+	pGaussianDistribution = (float*) stackalloc( (iBlur*2+1) * sizeof(float) );
+	double sigma = 0.683 * iBlur;
+	for (int x = 0; x <= (iBlur * 2); x++)
 	{
-		int val = x - nBlur;
+		int val = x - iBlur;
 		pGaussianDistribution[x] = (float)( 1.0f / sqrt(2 * 3.14 * sigma * sigma)) * pow(2.7, -1 * (val * val) / (2 * sigma * sigma));
 	}
 
@@ -181,61 +196,18 @@ void ApplyGaussianBlurToTexture( int rgbaWide, int rgbaTall, unsigned char *rgba
 	// copy in
 	memcpy(src, rgba, rgbaWide * rgbaTall * 4);
 
-	//make an initial horizontal pass
-	for ( int x = 0; x < rgbaWide; x++ )
+	// incrementing destination pointer
+	unsigned char *dest = rgba;
+	for (int y = 0; y < rgbaTall; y++)
 	{
-		const float* dist = pGaussianDistribution;
-		int nValues = nBlur*2 + 1;
-		int nOffset = 0;
-		if ( x < nBlur )
+		for (int x = 0; x < rgbaWide; x++)
 		{
-			nOffset += nBlur - x;
-			dist += nOffset;
-			nValues -= nOffset;
-		}
+			// scan the source pixel
+			GetBlurValueForPixel(src, iBlur, pGaussianDistribution, x, y, rgbaWide, rgbaTall, dest);
 
-		if ( x >= rgbaWide - nBlur )
-		{
-			nValues = rgbaWide - (x - nOffset);
-		}
-
-		for ( int y = 0; y < rgbaTall; y++ )
-		{
-			const unsigned char* read_from = src + (y*rgbaWide + x + nOffset - nBlur)*4 + 3;
-			unsigned char* dst = rgba + (y*rgbaWide + x)*4;
-			unsigned char alpha = CalculatePixelBlur(read_from, 4, dist, nValues);
-			dst[0] = dst[1] = dst[2] = alpha > 0 ? 255 : 0;
-			dst[3] = alpha;
-		}
-	}
-
-	// refresh the source buffer for a second vertical pass
-	memcpy(src, rgba, rgbaWide * rgbaTall * 4);
-
-	for ( int y = 0; y < rgbaTall; y++ )
-	{
-		const float* dist = pGaussianDistribution;
-		int nValues = nBlur*2 + 1;
-		int nOffset = 0;
-		if ( y < nBlur )
-		{
-			nOffset += nBlur - y;
-			dist += nOffset;
-			nValues -= nOffset;
-		}
-
-		if ( y >= rgbaTall - nBlur )
-		{
-			nValues = rgbaTall - (y - nOffset);
-		}
-
-		for ( int x = 0; x < rgbaWide; x++ )
-		{
-			const unsigned char* read_from = src + ((y + nOffset - nBlur)*rgbaWide + x)*4 + 3;
-			unsigned char* dst = rgba + (y*rgbaWide + x)*4;
-			unsigned char alpha = CalculatePixelBlur(read_from, 4*rgbaWide, dist, nValues);
-			dst[0] = dst[1] = dst[2] = alpha > 0 ? 255 : 0;
-			dst[3] = alpha;
+			// move to the next
+			dest += 4;
 		}
 	}
 }
+

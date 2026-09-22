@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -45,9 +45,9 @@ END_MESSAGE_MAP()
 /////////////////////////////////////////////////////////////////////////////
 // CListBoxEx message handlers
 
-void CListBoxEx::SetStyle(DWORD dwStyle_)
+void CListBoxEx::SetStyle(DWORD dwStyle)
 {
-	this->dwStyle = dwStyle_;
+	this->dwStyle = dwStyle;
 }
 
 void CListBoxEx::AddItem(char *pszCaption, int iEditType, PVOID pData,
@@ -101,7 +101,7 @@ void CListBoxEx::SetItemChoices(int iItem, CStringArray * pChoices,
 
 	lbis.pChoices = pChoices;
 	lbis.iDataValue = iDefaultChoice;
-	V_strcpy_safe( lbis.szDataString, pChoices->GetAt( iDefaultChoice ) );
+	strcpy(lbis.szDataString, pChoices->GetAt(iDefaultChoice));
 }
 
 void CListBoxEx::MeasureItem(LPMEASUREITEMSTRUCT lpMeasureItemStruct) 

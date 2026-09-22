@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2001, Valve LLC, All rights reserved. ============
 //
 // Purpose: 
 //
@@ -25,7 +25,7 @@ class CDialogGameInfo : public vgui::Frame, public ISteamMatchmakingPlayersRespo
 	DECLARE_CLASS_SIMPLE( CDialogGameInfo, vgui::Frame ); 
 
 public:
-	CDialogGameInfo(vgui::Panel *parent, int serverIP, int queryPort, unsigned short connectionPort, const char *pszConnectCode );
+	CDialogGameInfo(vgui::Panel *browser, vgui::Panel *parent, int serverIP, int queryPort, unsigned short connectionPort );
 	~CDialogGameInfo();
 
 	void Run(const char *titleName);
@@ -34,7 +34,7 @@ public:
 	uint64 GetAssociatedFriend();
 
 	// forces the dialog to attempt to connect to the server
-	void Connect();
+	void Connect( const char* szJoinType );
 
 	// implementation of IServerRefreshResponse interface
 	// called when the server has successfully responded
@@ -77,8 +77,6 @@ protected:
 	virtual void OnTick();
 	virtual void PerformLayout();
 
-	virtual void OnKeyCodePressed( vgui::KeyCode code );
-
 private:
 	STEAM_CALLBACK( CDialogGameInfo, OnPersonaStateChange, PersonaStateChange_t, m_CallbackPersonaStateChange );
 
@@ -101,6 +99,9 @@ private:
 	vgui::RadioButton *m_pAutoRetryJoin;
 	vgui::ListPanel *m_pPlayerList;
 
+	vgui::Panel *m_pBrowser;
+
+
 	enum { PING_TIMES_MAX = 4 };
 
 	// true if we should try connect to the server when it refreshes
@@ -116,11 +117,12 @@ private:
 	bool m_bShowingExtendedOptions;
 	uint64 m_SteamIDFriend;
 
-	CUtlString m_sConnectCode;
 	gameserveritem_t m_Server;
 	HServerQuery m_hPingQuery;
 	HServerQuery m_hPlayersQuery;
 	bool m_bPlayerListUpdatePending;
+	const char* m_szJoinType;
 };
+
 
 #endif // DIALOGGAMEINFO_H

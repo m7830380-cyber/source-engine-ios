@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//====== Copyright © 1996-2005, Valve Corporation, All rights reserved. =======
 //
 // Purpose: 
 //
@@ -22,12 +22,12 @@
 #include "istudiorender.h"
 #include "materialsystem/imaterialsystemhardwareconfig.h"
 #include "tier2/renderutils.h"
-#include "tier1/KeyValues.h"
+#include "tier1/keyvalues.h"
 #include "materialsystem/imesh.h"
-
-#include "inputsystem/iinputsystem.h"
-
-#include "renderparm.h"
+#include "shaderapi/ishaderapi.h"
+#include "view_shared.h"
+#include "ivrenderview.h"
+#include "game/client/irendercaptureconfiguration.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
@@ -139,51 +139,38 @@ public:
 	virtual void OnCursorMoved( int x, int y );
 	virtual void UpdateTransform();
 
-			void	UpdateFromMatrix( void );
+	void SetDefaultValues();
 
 private:
-	int		m_lastx, m_lasty;
-	float	m_altitude, m_azimuth, m_roll;
-	bool	m_bDoRoll;
+	int m_lastx, m_lasty;
+	float m_altitude, m_azimuth;
 };
 
 
 CRotationManipulator::CRotationManipulator( matrix3x4_t *pTransform ) : CTransformManipulator( pTransform )
 {
+	SetDefaultValues();
+}
+
+void CRotationManipulator::SetDefaultValues()
+{
 	m_lastx = m_lasty = 0;
 	m_altitude = M_PI/6;
 	m_azimuth = -3*M_PI/4;
-	m_roll = 0.0f;
-	m_bDoRoll = false;
 	UpdateTransform();
 }
 
 void CRotationManipulator::OnMousePressed( vgui::MouseCode code, int x, int y )
 {
-	if ( input()->IsKeyDown( KEY_LALT ) || input()->IsKeyDown( KEY_RALT ) )
-	{
-		m_bDoRoll = true;
-	}
-	else
-	{
-		m_bDoRoll = false;
-	}
 	m_lasty = y;
 	m_lastx = x;
 }
 
 void CRotationManipulator::OnCursorMoved( int x, int y )
 {
-	if ( m_bDoRoll )
-	{
-		m_roll += 0.002f * ( m_lastx - x );
-	}
-	else
-	{
-		m_azimuth  += 0.002f * ( m_lastx - x );
-		m_altitude -= 0.002f * ( m_lasty - y );
-		m_altitude = max( (float)-M_PI/2, min( (float)M_PI/2, m_altitude ) );
-	}
+	m_azimuth  += 0.002f * ( m_lastx - x );
+	m_altitude -= 0.002f * ( m_lasty - y );
+	m_altitude = MAX( -M_PI/2, MIN( M_PI/2, m_altitude ) );
 
 	m_lastx = x;
 	m_lasty = y;
@@ -196,28 +183,11 @@ void CRotationManipulator::UpdateTransform()
 	if ( !m_pTransform )
 		return;
 
-	QAngle angles( RAD2DEG( m_altitude ), RAD2DEG( m_azimuth ), RAD2DEG( m_roll ) );
+	QAngle angles( RAD2DEG( m_altitude ), RAD2DEG( m_azimuth ), 0 );
 	Vector vecPosition;
 	MatrixGetColumn( *m_pTransform, 3, vecPosition );
 	AngleMatrix( angles, vecPosition, *m_pTransform );
 }
-
-void CRotationManipulator::UpdateFromMatrix( void )
-{
-	if ( !m_pTransform )
-		return;
-
-	QAngle	angDir;
-	Vector	vecPos;
-
-	MatrixAngles( *m_pTransform, angDir, vecPos );
-
-	m_altitude = DEG2RAD( angDir.x );
-	m_azimuth = DEG2RAD( angDir.y );
-	m_roll = DEG2RAD( angDir.z );
-}
-
-
 
 //-----------------------------------------------------------------------------
 // Constructor, destructor
@@ -231,13 +201,18 @@ CPotteryWheelPanel::CPotteryWheelPanel( vgui::Panel *pParent, const char *pName 
 	m_pCurrentManip( NULL ),
 	m_nCaptureMouseCode( vgui::MouseCode( -1 ) ),
 	m_xoffset( 0 ), m_yoffset( 0 ),
-	m_bRenderToTexture( true )
+	m_bParentMouseNotify( false )
 {
 	m_bHasLightProbe = false;
+	m_bSetupRenderStateDelayed = false;
+	m_bRender3DSupersampled = false;
+	m_bInRender3dForRenderCapture = false;
+	m_pvRenderingWithFlashlightConfiguration = NULL;
 
 	SetPaintBackgroundEnabled( false );
 	SetPaintBorderEnabled( false );
 	m_ClearColor.SetColor( 76, 88, 68, 255 );
+	m_GridColor.SetColor( 255, 255, 255, 255 );
 
 	SetIdentityMatrix( m_CameraPivot );
 
@@ -247,94 +222,100 @@ CPotteryWheelPanel::CPotteryWheelPanel( vgui::Panel *pParent, const char *pName 
 
 	m_vecCameraOffset.Init( 100.0f, 0.0f, 0.0f );
 		
-	m_Camera.m_flZNear = 3.0f;
-	m_Camera.m_flZFar = 16384.0f * 1.73205080757f;
-	m_Camera.m_flFOV = 30.0f;
-
+	m_Camera.Init( Vector( 0, 0, 0 ), QAngle( 0, 0, 0 ), 3.0f, 16384.0f * 1.73205080757f, 30.0f, 1.0f );
+	
 	m_pCameraRotate = new CRotationManipulator( &m_CameraPivot );
+	m_pCameraRotate->SetDefaultValues();
 	m_pCameraTranslate = new CTranslationManipulator( &m_CameraPivot );
 	m_pCameraZoom = new CZoomManipulator( &m_vecCameraOffset.x );
 
-	KeyValues *pMaterialKeys = new KeyValues( "Wireframe", "$model", "1" );
-
-	pMaterialKeys->SetString( "$vertexcolor", "1" );
-	m_Wireframe.Init( "potterywheelpanelwireframe", pMaterialKeys );
-
 	SetKeyBoardInputEnabled( true );
 	UpdateCameraTransform();
-}
-
-void CPotteryWheelPanel::ApplySettings( KeyValues *inResourceData )
-{
-	BaseClass::ApplySettings( inResourceData );
-
-	KeyValues *pLights = inResourceData->FindKey( "lights" );
-	if ( pLights )
-	{
-		ParseLightsFromKV( pLights );
-	}
-}
-
-void CPotteryWheelPanel::Init( int x, int y, int wide, int tall )
-{
-	BaseClass::Init( x, y, wide, tall );
 
 	// Used to poll input
 	vgui::ivgui()->AddTickSignal( GetVPanel() );
 }
 
-
 CPotteryWheelPanel::~CPotteryWheelPanel()
 {
-	m_Wireframe.Shutdown();
-	m_LightProbeBackground.Shutdown();
-	m_LightProbeHDRBackground.Shutdown();
-	m_LightProbeCubemap.Shutdown();
-	m_LightProbeHDRCubemap.Shutdown();
-
-	if ( m_pCameraRotate )
-	{
-		delete m_pCameraRotate;
-		m_pCameraRotate = NULL;
-	}
-
-	if ( m_pCameraZoom )
-	{
-		delete m_pCameraZoom;
-		m_pCameraZoom = NULL;
-	}
-
-	if ( m_pCameraTranslate )
-	{
-		delete m_pCameraTranslate;
-		m_pCameraTranslate = NULL;
-	}
-
+	delete m_pCameraRotate;
+	delete m_pCameraZoom;
+	delete m_pCameraTranslate;
 	DestroyLights();
 }
 
 void CPotteryWheelPanel::CreateDefaultLights()
 {
+	memset( &m_LightingState, 0, sizeof(MaterialLightingState_t) );
 	for ( int i = 0; i < 6; ++i )
 	{
-		m_vecAmbientCube[i].Init( 0.4f, 0.4f, 0.4f, 1.0f );
+		m_LightingState.m_vecAmbientCube[i].Init( 0.4f, 0.4f, 0.4f );
 	}
 
-	memset( &m_Lights[0].m_Desc, 0, sizeof(LightDesc_t) );
-	SetIdentityMatrix( m_Lights[0].m_LightToWorld );
-	m_Lights[0].m_Desc.m_Type = MATERIAL_LIGHT_DIRECTIONAL;
-	m_Lights[0].m_Desc.m_Color.Init( 1.0f, 1.0f, 1.0f );
-	m_Lights[0].m_Desc.m_Direction.Init( 0.0f, 0.0f, -1.0f );
-	m_Lights[0].m_Desc.m_Range=0.0;
-	m_Lights[0].m_Desc.m_Attenuation0 = 1.0;
-	m_Lights[0].m_Desc.m_Attenuation1 = 0;
-	m_Lights[0].m_Desc.m_Attenuation2 = 0;
-	m_Lights[0].m_Desc.RecalculateDerivedValues();
-	m_nLightCount = 1;
+	SetIdentityMatrix( m_LightToWorld[0] );
+	m_LightingState.m_pLocalLightDesc[0].m_Type = MATERIAL_LIGHT_DIRECTIONAL;
+	m_LightingState.m_pLocalLightDesc[0].m_Color.Init( 1.0f, 1.0f, 1.0f );
+	m_LightingState.m_pLocalLightDesc[0].m_Direction.Init( 0.0f, 0.0f, -1.0f );
+	m_LightingState.m_pLocalLightDesc[0].m_Range=0.0;
+	m_LightingState.m_pLocalLightDesc[0].m_Attenuation0 = 1.0;
+	m_LightingState.m_pLocalLightDesc[0].m_Attenuation1 = 0;
+	m_LightingState.m_pLocalLightDesc[0].m_Attenuation2 = 0;
+	m_LightingState.m_pLocalLightDesc[0].RecalculateDerivedValues();
+	m_LightingState.m_nLocalLightCount = 1;
 
-	m_pLightManip = new CPotteryWheelManip( &m_Lights[0].m_LightToWorld );
+	m_pLightManip = new CPotteryWheelManip( &m_LightToWorld[0] );
 }
 
+void CPotteryWheelPanel::UpdateDirectionalLight( int idx, const Color& color, const Vector& direction )
+{
+	if ( idx >= 0 && idx < m_LightingState.m_nLocalLightCount )
+	{
+		// Update the existing light
+		SetIdentityMatrix( m_LightToWorld[idx] );
+		m_LightingState.m_pLocalLightDesc[idx].m_Type = MATERIAL_LIGHT_DIRECTIONAL;
+		m_LightingState.m_pLocalLightDesc[idx].m_Color.Init( color.r() / 255.0f, color.g() / 255.0f, color.b() / 255.0f );
+		m_LightingState.m_pLocalLightDesc[idx].m_Direction.Init( direction.x, direction.y, direction.z );
+		m_LightingState.m_pLocalLightDesc[idx].m_Range=0.0;
+		m_LightingState.m_pLocalLightDesc[idx].m_Attenuation0 = 1.0;
+		m_LightingState.m_pLocalLightDesc[idx].m_Attenuation1 = 0;
+		m_LightingState.m_pLocalLightDesc[idx].m_Attenuation2 = 0;
+		m_LightingState.m_pLocalLightDesc[idx].RecalculateDerivedValues();
+	}
+	else
+	{
+		AddDirectionalLight( color, direction );
+	}
+}
+
+void CPotteryWheelPanel::ClearDirectionalLights()
+{
+	m_LightingState.m_nLocalLightCount = 0;
+}
+
+void CPotteryWheelPanel::AddDirectionalLight( const Color& color, const Vector& direction )
+{
+	if ( m_LightingState.m_nLocalLightCount < MATERIAL_MAX_LIGHT_COUNT )
+	{
+		SetIdentityMatrix( m_LightToWorld[m_LightingState.m_nLocalLightCount] );
+		m_LightingState.m_pLocalLightDesc[m_LightingState.m_nLocalLightCount].m_Type = MATERIAL_LIGHT_DIRECTIONAL;
+		m_LightingState.m_pLocalLightDesc[m_LightingState.m_nLocalLightCount].m_Color.Init( color.r() / 255.0f, color.g() / 255.0f, color.b() / 255.0f );
+		m_LightingState.m_pLocalLightDesc[m_LightingState.m_nLocalLightCount].m_Direction.Init( direction.x, direction.y, direction.z );
+		m_LightingState.m_pLocalLightDesc[m_LightingState.m_nLocalLightCount].m_Range=0.0;
+		m_LightingState.m_pLocalLightDesc[m_LightingState.m_nLocalLightCount].m_Attenuation0 = 1.0;
+		m_LightingState.m_pLocalLightDesc[m_LightingState.m_nLocalLightCount].m_Attenuation1 = 0;
+		m_LightingState.m_pLocalLightDesc[m_LightingState.m_nLocalLightCount].m_Attenuation2 = 0;
+		m_LightingState.m_pLocalLightDesc[m_LightingState.m_nLocalLightCount].RecalculateDerivedValues();
+		m_LightingState.m_nLocalLightCount++;
+	}
+}
+
+void CPotteryWheelPanel::SetLightAmbient( const Vector& ambient )
+{
+	for ( int i = 0; i < 6; ++i )
+	{
+		m_LightingState.m_vecAmbientCube[i].Init( ambient.x, ambient.y, ambient.z );
+	}
+}
 
 void CPotteryWheelPanel::DestroyLights()
 {
@@ -344,119 +325,7 @@ void CPotteryWheelPanel::DestroyLights()
 		m_pLightManip = NULL;
 	}
 
-	m_nLightCount = 0;
-}
-
-
-void StringToFloatArray( float *pVector, int count, const char *pString )
-{
-	char *pstr, *pfront, tempString[128];
-	int	j;
-
-	Q_strncpy( tempString, pString, sizeof(tempString) );
-	pstr = pfront = tempString;
-
-	for ( j = 0; j < count; j++ )			// lifted from pr_edict.c
-	{
-		pVector[j] = atof( pfront );
-
-		// skip any leading whitespace
-		while ( *pstr && *pstr <= ' ' )
-			pstr++;
-
-		// skip to next whitespace
-		while ( *pstr && *pstr > ' ' )
-			pstr++;
-
-		if (!*pstr)
-			break;
-
-		pstr++;
-		pfront = pstr;
-	}
-	for ( j++; j < count; j++ )
-	{
-		pVector[j] = 0;
-	}
-}
-
-void StringToVector( float *pVector, const char *pString )
-{
-	StringToFloatArray( pVector, 3, pString );
-}
-
-
-//-----------------------------------------------------------------------------
-// Sets initialize lights from KeyValues
-//-----------------------------------------------------------------------------
-void CPotteryWheelPanel::ParseLightsFromKV( KeyValues *pLightsKV )
-{
-	int nLightCount = 0;
-	FOR_EACH_SUBKEY( pLightsKV, pLocalLight )
-	{
-		Assert( nLightCount < MAX_LIGHT_COUNT );
-		if ( nLightCount >= MAX_LIGHT_COUNT )
-			break;
-			
-		LightDesc_t *pDesc = &m_Lights[nLightCount].m_Desc;
-		const char *pType = pLocalLight->GetString( "name" );
-		Vector vecColor;
-		StringToVector( vecColor.Base(), pLocalLight->GetString( "color" ) );
-
-		if ( !Q_stricmp( pType, "directional" ) )
-		{
-			Vector vecDirection;
-			StringToVector( vecDirection.Base(), pLocalLight->GetString( "direction" ) );
-			pDesc->InitDirectional( vecDirection.Normalized(), vecColor ); 
-			++nLightCount;
-			continue;
-		}
-
-		if ( !Q_stricmp( pType, "point" ) )
-		{
-			Vector vecAtten;
-			StringToVector( vecAtten.Base(), pLocalLight->GetString( "attenuation" ) );
-			Vector vecOrigin;
-			StringToVector( vecOrigin.Base(), pLocalLight->GetString( "origin" ) );
-			pDesc->InitPoint( vecOrigin, vecColor );
-			pDesc->m_Attenuation0 = vecAtten.x;
-			pDesc->m_Attenuation1 = vecAtten.y;
-			pDesc->m_Attenuation2 = vecAtten.z;
-			pDesc->m_Range = pLocalLight->GetFloat( "maxDistance" );
-			pDesc->RecalculateDerivedValues();
-			++nLightCount;
-			continue;
-		}
-
-		if ( !Q_stricmp( pType, "spot" ) )
-		{
-			Vector vecAtten;
-			StringToVector( vecAtten.Base(), pLocalLight->GetString( "attenuation" ) );
-			Vector vecOrigin;
-			StringToVector( vecOrigin.Base(), pLocalLight->GetString( "origin" ) );
-			pDesc->InitSpot( vecOrigin, vecColor, vec3_origin,
-							pLocalLight->GetFloat( "inner_cone_angle" ),
-							pLocalLight->GetFloat( "outer_cone_angle" ) );
-
-			Vector vecDirection;
-			StringToVector( vecDirection.Base(), pLocalLight->GetString( "direction" ) );
-			pDesc->m_Direction = vecDirection.Normalized();
-			pDesc->m_Attenuation0 = vecAtten.x;
-			pDesc->m_Attenuation1 = vecAtten.y;
-			pDesc->m_Attenuation2 = vecAtten.z;
-			pDesc->m_Range = pLocalLight->GetFloat( "maxDistance" );
-			pDesc->m_Falloff = pLocalLight->GetFloat( "exponent" );
-			pDesc->RecalculateDerivedValues();
-			++nLightCount;
-			continue;
-		}
-
-		AssertMsg1( 0, "Failed to initialize light with type '%s'", pType );
-	}
-
-	AssertMsg( nLightCount > 0, "Must specify at least one valid light" );
-
-	m_nLightCount = nLightCount;
+	m_LightingState.m_nLocalLightCount = 0;
 }
 
 
@@ -478,6 +347,10 @@ const Color& CPotteryWheelPanel::GetBackgroundColor() const
 	return m_ClearColor;
 }
 
+void CPotteryWheelPanel::SetGridColor( int r, int g, int b )
+{
+	m_GridColor.SetColor( r, g, b, 255 );
+}
 
 //-----------------------------------------------------------------------------
 // Light probe
@@ -488,7 +361,6 @@ void CPotteryWheelPanel::SetLightProbe( CDmxElement *pLightProbe )
 	m_LightProbeHDRBackground.Shutdown();
 	m_LightProbeCubemap.Shutdown();
 	m_LightProbeHDRCubemap.Shutdown();
-
 	DestroyLights();
 
 	m_bHasLightProbe = ( pLightProbe != NULL );
@@ -525,7 +397,7 @@ void CPotteryWheelPanel::SetLightProbe( CDmxElement *pLightProbe )
 	{
 		for ( int i = 0; i < 6; ++i )
 		{
-			m_vecAmbientCube[i].Init( ambientCube[i].x, ambientCube[i].y, ambientCube[i].z, 0.0f );
+			m_LightingState.m_vecAmbientCube[i].Init( ambientCube[i].x, ambientCube[i].y, ambientCube[i].z );
 		}
 	}
 
@@ -533,10 +405,10 @@ void CPotteryWheelPanel::SetLightProbe( CDmxElement *pLightProbe )
 	int nLightCount = localLights.Count();
 	for ( int i = 0; i < nLightCount; ++i )
 	{
-		if ( m_nLightCount == MAX_LIGHT_COUNT )
+		if ( m_LightingState.m_nLocalLightCount == MATERIAL_MAX_LIGHT_COUNT )
 			break;
 
-		LightDesc_t *pDesc = &m_Lights[m_nLightCount].m_Desc;
+		LightDesc_t *pDesc = &m_LightingState.m_pLocalLightDesc[m_LightingState.m_nLocalLightCount];
 		CDmxElement *pLocalLight = localLights[ i ];
 		const char *pType = pLocalLight->GetValueString( "name" );
 		const Vector& vecColor = pLocalLight->GetValue<Vector>( "color" );
@@ -544,7 +416,7 @@ void CPotteryWheelPanel::SetLightProbe( CDmxElement *pLightProbe )
 		if ( !Q_stricmp( pType, "directional" ) )
 		{
 			pDesc->InitDirectional( pLocalLight->GetValue<Vector>( "direction" ), vecColor ); 
-			++m_nLightCount;
+			++m_LightingState.m_nLocalLightCount;
 			continue;
 		}
 
@@ -557,7 +429,7 @@ void CPotteryWheelPanel::SetLightProbe( CDmxElement *pLightProbe )
 			pDesc->m_Attenuation2 = vecAtten.z;
 			pDesc->m_Range = pLocalLight->GetValue<float>( "maxDistance" );
 			pDesc->RecalculateDerivedValues();
-			++m_nLightCount;
+			++m_LightingState.m_nLocalLightCount;
 			continue;
 		}
 
@@ -565,8 +437,8 @@ void CPotteryWheelPanel::SetLightProbe( CDmxElement *pLightProbe )
 		{
 			const Vector& vecAtten = pLocalLight->GetValue<Vector>( "attenuation" );
 			pDesc->InitSpot( pLocalLight->GetValue<Vector>( "origin" ), vecColor, vec3_origin,
-				RAD2DEG ( pLocalLight->GetValue<float>( "theta" ) ), 
-				RAD2DEG ( pLocalLight->GetValue<float>( "phi" ) ) );
+				0.5f * RAD2DEG ( pLocalLight->GetValue<float>( "theta" ) ), 
+				0.5f * RAD2DEG ( pLocalLight->GetValue<float>( "phi" ) ) );
 
 			pDesc->m_Direction = pLocalLight->GetValue<Vector>( "direction" );
 			pDesc->m_Attenuation0 = vecAtten.x;
@@ -575,14 +447,14 @@ void CPotteryWheelPanel::SetLightProbe( CDmxElement *pLightProbe )
 			pDesc->m_Range = pLocalLight->GetValue<float>( "maxDistance" );
 			pDesc->m_Falloff = pLocalLight->GetValue<float>( "exponent" );
 			pDesc->RecalculateDerivedValues();
-			++m_nLightCount;
+			++m_LightingState.m_nLocalLightCount;
 			continue;
 		}
 	}
 
 	if ( nLightCount > 0 )
 	{
-		m_pLightManip = new CPotteryWheelManip( &m_Lights[0].m_LightToWorld );
+		m_pLightManip = new CPotteryWheelManip( &m_LightToWorld[0] );
 	}
 }
 
@@ -604,7 +476,7 @@ ITexture *CPotteryWheelPanel::GetLightProbeCubemap( bool bHDR )
 //-----------------------------------------------------------------------------
 int CPotteryWheelPanel::GetCameraFOV( void )
 {
-	return m_Camera.m_flFOV;
+	return m_Camera.m_flFOVX;
 }
 
 //-----------------------------------------------------------------------------
@@ -612,7 +484,7 @@ int CPotteryWheelPanel::GetCameraFOV( void )
 //-----------------------------------------------------------------------------
 void CPotteryWheelPanel::SetCameraFOV( float flFOV )
 {
-	m_Camera.m_flFOV = flFOV;
+	m_Camera.m_flFOVX = flFOV;
 }
 
 //-----------------------------------------------------------------------------
@@ -634,16 +506,10 @@ void CPotteryWheelPanel::GetCameraOffset( Vector &vecOffset )
 //-----------------------------------------------------------------------------
 // Purpose:
 //-----------------------------------------------------------------------------
-void CPotteryWheelPanel::SetCameraPositionAndAngles( const Vector &vecPos, const QAngle &angDir, bool syncManipulators )
+void CPotteryWheelPanel::SetCameraPositionAndAngles( const Vector &vecPos, const QAngle &angDir )
 {
-	SetIdentityMatrix( m_CameraPivot );
-	AngleMatrix( angDir, vecPos, m_CameraPivot );
-
-	UpdateCameraTransform();
-	if ( syncManipulators )
-	{
-		SyncManipulation();
-	}
+	m_Camera.m_origin = vecPos;
+	m_Camera.m_angles = angDir;
 }
 
 //-----------------------------------------------------------------------------
@@ -663,6 +529,17 @@ void CPotteryWheelPanel::ResetCameraPivot( void )
 }
 
 //-----------------------------------------------------------------------------
+// Purpose:
+//-----------------------------------------------------------------------------
+void CPotteryWheelPanel::ResetView( void )
+{
+	SetIdentityMatrix( m_CameraPivot );
+	m_vecCameraOffset.Init( 100.0f, 0.0f, 0.0f );
+	m_pCameraRotate->SetDefaultValues();
+	UpdateCameraTransform();
+}
+
+//-----------------------------------------------------------------------------
 // Sets the camera to look at the the thing we're spinning around
 //-----------------------------------------------------------------------------
 void CPotteryWheelPanel::LookAt( float flRadius )
@@ -674,7 +551,7 @@ void CPotteryWheelPanel::LookAt( float flRadius )
 	// cos( fov/2 ) = r / r' where r = sphere radius, r' = perp distance from sphere center to max extent of camera
 	// d/f = r'/d' where d' is distance of camera to sphere
 	// d' = r' / tan( fov/2 ) * r' = r / ( cos (fov/2) * tan( fov/2 ) ) = r / sin( fov/2 )
-	float flFOVx = m_Camera.m_flFOV;
+	float flFOVx = m_Camera.m_flFOVX;
 
 	// Compute fov/2 in radians
 	flFOVx *= M_PI / 360.0f;
@@ -720,25 +597,18 @@ void CPotteryWheelPanel::SetupRenderState( int nDisplayWidth, int nDisplayHeight
 	pRenderContext->MatrixMode( MATERIAL_PROJECTION );
 	pRenderContext->LoadMatrix( projection );
 
-	LightDesc_t *pDesc = (LightDesc_t*)stackalloc( m_nLightCount * sizeof(LightDesc_t) );
-	for ( int i = 0; i < m_nLightCount; ++i )
+	// Transform light based on manipulator
+	MaterialLightingState_t state = m_LightingState;
+	for ( int i = 0; i < state.m_nLocalLightCount; ++i )
 	{
-		pDesc[i] = m_Lights[i].m_Desc;
-		VectorTransform( m_Lights[i].m_Desc.m_Position, m_Lights[i].m_LightToWorld, pDesc->m_Position );
-		VectorRotate( m_Lights[i].m_Desc.m_Direction, m_Lights[i].m_LightToWorld, pDesc->m_Direction );
-		VectorNormalize( pDesc->m_Direction );
-		pRenderContext->SetLight( i, pDesc[i] );
+		const LightDesc_t &srcDesc = m_LightingState.m_pLocalLightDesc[ i ];
+		LightDesc_t &destDesc = state.m_pLocalLightDesc[ i ];
+		VectorTransform( srcDesc.m_Position, m_LightToWorld[i], destDesc.m_Position );
+		VectorRotate( srcDesc.m_Direction, m_LightToWorld[i], destDesc.m_Direction );
+		VectorNormalize( destDesc.m_Direction );
 	}
 
-	LightDesc_t desc;
-	desc.m_Type = MATERIAL_LIGHT_DISABLE;
-	int nMaxLightCount = g_pMaterialSystemHardwareConfig->MaxNumLights();
-	for ( int i = m_nLightCount; i < nMaxLightCount; ++i )
-	{
-		pRenderContext->SetLight( i, desc );
-	}
-
-	pRenderContext->SetAmbientLightCube( m_vecAmbientCube );
+	pRenderContext->SetLightingState( state );
 
 	// FIXME: Remove this! This should automatically happen in DrawModel
 	// in studiorender.
@@ -754,8 +624,8 @@ void CPotteryWheelPanel::SetupRenderState( int nDisplayWidth, int nDisplayHeight
 	MatrixGetColumn( worldToCamera, 3, &vecOrigin );
 	g_pStudioRender->SetViewState( vecOrigin, vecRight, vecUp, vecForward );
 
-	g_pStudioRender->SetLocalLights( m_nLightCount, pDesc );
-	g_pStudioRender->SetAmbientLightColors( m_vecAmbientCube );
+	g_pStudioRender->SetLocalLights( state.m_nLocalLightCount, state.m_pLocalLightDesc );
+	g_pStudioRender->SetAmbientLightColors( state.m_vecAmbientCube );
 }
 
 
@@ -793,6 +663,18 @@ void CPotteryWheelPanel::ComputePanelPosition( const Vector &vecPosition, Vector
 }
 
 
+IMaterial * CPotteryWheelPanel::GetWireframeMaterial()
+{
+	if ( !m_Wireframe.IsValid() )
+	{
+		KeyValues *pMaterialKeys = new KeyValues( "Wireframe", "$model", "1" );
+		pMaterialKeys->SetString( "$vertexcolor", "1" );
+		m_Wireframe.Init( "potterywheelpanelwireframe", pMaterialKeys );
+	}
+	return m_Wireframe;
+}
+
+
 //-----------------------------------------------------------------------------
 // Utility method to draw a grid at the 'ground'
 //-----------------------------------------------------------------------------
@@ -803,7 +685,7 @@ void CPotteryWheelPanel::DrawGrid()
 	pRenderContext->MatrixMode( MATERIAL_MODEL );
 	pRenderContext->LoadIdentity( );
 
-	pRenderContext->Bind( m_Wireframe );
+	pRenderContext->Bind( GetWireframeMaterial() );
 
 	IMesh *pMesh = pRenderContext->GetDynamicMesh();
 
@@ -818,17 +700,17 @@ void CPotteryWheelPanel::DrawGrid()
 		float xy = -bounds + delta * i;
 
 		meshBuilder.Position3f( xy, -bounds, 0 );
-		meshBuilder.Color4ub( 255, 255, 255, 255 );
+		meshBuilder.Color4ub( m_GridColor.r(), m_GridColor.g(), m_GridColor.b(), m_GridColor.a());
 		meshBuilder.AdvanceVertex();
 		meshBuilder.Position3f( xy, bounds, 0 );
-		meshBuilder.Color4ub( 255, 255, 255, 255 );
+		meshBuilder.Color4ub( m_GridColor.r(), m_GridColor.g(), m_GridColor.b(), m_GridColor.a());
 		meshBuilder.AdvanceVertex();
 
 		meshBuilder.Position3f( -bounds, xy, 0 );
-		meshBuilder.Color4ub( 255, 255, 255, 255 );
+		meshBuilder.Color4ub( m_GridColor.r(), m_GridColor.g(), m_GridColor.b(), m_GridColor.a());
 		meshBuilder.AdvanceVertex();
 		meshBuilder.Position3f( bounds, xy, 0 );
-		meshBuilder.Color4ub( 255, 255, 255, 255 );
+		meshBuilder.Color4ub( m_GridColor.r(), m_GridColor.g(), m_GridColor.b(), m_GridColor.a());
 		meshBuilder.AdvanceVertex();
 	}
 
@@ -875,9 +757,19 @@ void CPotteryWheelPanel::Paint()
 		iHeight -= starty;
 	}
 
+	if( iWidth < 0 || iHeight < 0 )
+	{
+		return;
+	}
+
+	if ( GetRenderingWithFlashlightConfiguration() )
+	{
+		RenderCapture();
+	}
+
 	int w, h;
 	GetSize( w, h );
-	vgui::MatSystemSurface()->Begin3DPaint( 0, 0, w, h, m_bRenderToTexture );
+	vgui::MatSystemSurface()->Begin3DPaint( 0, 0, w, h, m_bRender3DSupersampled );
 
 	if ( m_pCurrentManip )
 	{
@@ -885,9 +777,14 @@ void CPotteryWheelPanel::Paint()
 	}
 
 	// Set up the render state for the camera + light
-	SetupRenderState( iWidth, iHeight );
+	m_nRenderWidth = iWidth;
+	m_nRenderHeight = iHeight;
+	if ( !m_bSetupRenderStateDelayed )
+		SetupRenderState( iWidth, iHeight );
 
 	CMatRenderContextPtr pRenderContext( vgui::MaterialSystem() );
+	
+	PIXEVENT( pRenderContext, "CPotteryWheelPanel::Paint" );
 
 	if ( m_bUseParentBG && GetParent() )
 	{
@@ -898,10 +795,9 @@ void CPotteryWheelPanel::Paint()
 	{
 		pRenderContext->ClearColor4ub( m_ClearColor.r(), m_ClearColor.g(), m_ClearColor.b(), m_ClearColor.a() ); 
 	}
-	pRenderContext->ClearBuffers( m_bRenderToTexture, true );
+	pRenderContext->ClearBuffers( true, true );
 
 	pRenderContext->CullMode( MATERIAL_CULLMODE_CCW );
-	pRenderContext->SetIntRenderingParameter( INT_RENDERPARM_WRITE_DEPTH_TO_DESTALPHA, false );
 
 	if ( HasLightProbe() )
 	{
@@ -917,6 +813,54 @@ void CPotteryWheelPanel::Paint()
 	pRenderContext->CullMode( MATERIAL_CULLMODE_CW );
 
 	vgui::MatSystemSurface()->End3DPaint( );
+}
+
+void CPotteryWheelPanel::EnableRenderingWithFlashlight( void *pvConfiguration )
+{
+	m_pvRenderingWithFlashlightConfiguration = pvConfiguration;
+}
+
+void CPotteryWheelPanel::RenderCapture()
+{
+	if ( !GetRenderingWithFlashlightConfiguration() )
+		return;
+
+	CRenderCaptureConfigurationState *pCfg = reinterpret_cast< CRenderCaptureConfigurationState * >( GetRenderingWithFlashlightConfiguration() );
+
+	m_nRenderWidth = pCfg->m_pFlashlightDepthTexture->GetActualWidth();
+	m_nRenderHeight = pCfg->m_pFlashlightDepthTexture->GetActualHeight();
+	if ( !m_bSetupRenderStateDelayed )
+		SetupRenderState( m_nRenderWidth, m_nRenderHeight );
+
+	CMatRenderContextPtr pRenderContext( vgui::MaterialSystem() );
+	PIXEVENT( pRenderContext, "CPotteryWheelPanel::RenderCapture" );
+
+	CViewSetup view2d;
+	view2d.x				= 0;
+	view2d.y				= 0;
+	view2d.width			= m_nRenderWidth;
+	view2d.height			= m_nRenderHeight;
+	pCfg->m_pIVRenderView->Push3DView( pRenderContext, view2d, VIEW_CLEAR_COLOR | VIEW_CLEAR_DEPTH, pCfg->m_pDummyColorBufferTexture, NULL, pCfg->m_pFlashlightDepthTexture );
+
+	pRenderContext->ClearColor4ub( 0, 0, 0, 0 );
+	pRenderContext->ClearBuffers( true, true, false );
+
+	m_bInRender3dForRenderCapture = true;
+	pRenderContext->CullMode(MATERIAL_CULLMODE_CW);
+	g_pStudioRender->ForcedMaterialOverride( NULL, OVERRIDE_DEPTH_WRITE );
+
+	// Don't draw the 3D scene w/ stencil
+	ShaderStencilState_t state;
+	pRenderContext->SetStencilState( state );
+
+	OnPaint3D();
+
+	g_pStudioRender->ForcedMaterialOverride( NULL );
+	pRenderContext->CullMode(MATERIAL_CULLMODE_CCW);
+	m_bInRender3dForRenderCapture = false;
+
+	pCfg->m_pIVRenderView->PopView( pRenderContext, NULL );
+	pRenderContext->Flush();
 }
 
 
@@ -962,7 +906,13 @@ void CPotteryWheelPanel::OnKeyCodePressed(KeyCode code)
 	BaseClass::OnKeyCodePressed( code );
 }
 
-
+//-----------------------------------------------------------------------------
+// Set whether the parent panel should be notified of mouse actions
+//-----------------------------------------------------------------------------
+void CPotteryWheelPanel::SetParentMouseNotify( bool bParentMouseNotify )
+{
+	m_bParentMouseNotify = bParentMouseNotify;
+}
 
 //-----------------------------------------------------------------------------
 // Purpose: soaks up any remaining messages
@@ -1002,6 +952,16 @@ void CPotteryWheelPanel::OnKeyCodeReleased(KeyCode code)
 	BaseClass::OnKeyCodeReleased( code );
 }
 
+void CPotteryWheelPanel::OnMouseDoublePressed( vgui::MouseCode code )
+{
+	BaseClass::OnMouseDoublePressed( code );
+
+	if( m_bParentMouseNotify && GetParent() )
+	{
+		GetParent()->OnMouseDoublePressed(code);
+	}
+}
+
 void CPotteryWheelPanel::OnMousePressed( vgui::MouseCode code )
 {
 	if ( m_pCurrentManip )
@@ -1036,6 +996,11 @@ void CPotteryWheelPanel::OnMousePressed( vgui::MouseCode code )
 	}
 
 	BaseClass::OnMousePressed( code );
+
+	if( m_bParentMouseNotify && GetParent() )
+	{
+		GetParent()->OnMousePressed(code);
+	}
 }
 
 void CPotteryWheelPanel::OnMouseReleased( vgui::MouseCode code )
@@ -1047,6 +1012,11 @@ void CPotteryWheelPanel::OnMouseReleased( vgui::MouseCode code )
 	AcceptManipulation();
 	
 	BaseClass::OnMouseReleased( code );
+
+	if( m_bParentMouseNotify && GetParent() )
+	{
+		GetParent()->OnMouseReleased(code);
+	}
 }
 
 void CPotteryWheelPanel::OnCursorMoved( int x, int y )
@@ -1060,6 +1030,11 @@ void CPotteryWheelPanel::OnCursorMoved( int x, int y )
 	}
 
 	BaseClass::OnCursorMoved( x, y );
+
+	if( m_bParentMouseNotify && GetParent() )
+	{
+		GetParent()->OnCursorMoved(x,y);
+	}
 }
 
 void CPotteryWheelPanel::OnMouseWheeled( int delta )
@@ -1070,6 +1045,11 @@ void CPotteryWheelPanel::OnMouseWheeled( int delta )
 	}
 
 	BaseClass::OnMouseWheeled( delta );
+
+	if( m_bParentMouseNotify && GetParent() )
+	{
+		GetParent()->OnMouseWheeled(delta);
+	}
 }
 
 
@@ -1151,23 +1131,6 @@ void CPotteryWheelPanel::CancelManipulation()
 	
 }
 
-void CPotteryWheelPanel::ApplyManipulation()
-{
-	if ( dynamic_cast< CRotationManipulator * >( m_pCameraRotate ) )
-	{
-		dynamic_cast< CRotationManipulator * >( m_pCameraRotate )->UpdateTransform();
-	}
-	UpdateCameraTransform();
-}
-
-void CPotteryWheelPanel::SyncManipulation()
-{
-	if ( dynamic_cast< CRotationManipulator * >( m_pCameraRotate ) )
-	{
-		dynamic_cast< CRotationManipulator * >( m_pCameraRotate )->UpdateFromMatrix();
-	}
-}
-
 void CPotteryWheelPanel::OnMouseCaptureLost()
 {
 	SetCursor( vgui::dc_arrow );
@@ -1185,7 +1148,7 @@ void CPotteryWheelPanel::EnableMouseCapture( bool enable, vgui::MouseCode mouseC
 	else
 	{
 		m_nCaptureMouseCode = vgui::MouseCode( -1 );
-		input()->SetMouseCapture( (VPANEL)0 );
+		input()->SetMouseCapture( NULL );
 		SetCursor( vgui::dc_arrow );
 	}
 }
@@ -1212,23 +1175,7 @@ bool CPotteryWheelPanel::WarpMouse( int &x, int &y )
 	int xpos = centerx;
 	int ypos = centery;
 	LocalToScreen( xpos, ypos );
-
-#if defined( DX_TO_GL_ABSTRACTION )
-	//
-	// Really reset the cursor to the center for the PotteryWheel Control
-	//
-	// In TF2's edit loadout dialog there is a character model that you can rotate
-	// around using the mouse.  This control resets the cursor to the center of the window
-	// after each mouse move.  Except the input()->SetCursorPos results (after a lot of redirection) to
-	// vgui/matsurface/Cursor.cpp function CursorSetPos but it has a (needed) test to not move the 
-	// cursor if it's currently hidden. Rather than change all the levels between here and there
-	// to support a flag, we are just jumping to the chase and directly calling the inputsystem
-	// SetCursorPosition on OpenGL platforms
-	//
-	g_pInputSystem->SetCursorPosition( xpos, ypos );
-#else
 	input()->SetCursorPos( xpos, ypos );
-#endif
 
 	int dx = x - centerx;
 	int dy = y - centery;
@@ -1241,3 +1188,4 @@ bool CPotteryWheelPanel::WarpMouse( int &x, int &y )
 
 	return true;
 }
+

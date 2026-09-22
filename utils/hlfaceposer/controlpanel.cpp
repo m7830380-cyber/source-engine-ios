@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -57,7 +57,7 @@ public:
 		  RECT rc;
 		  drawHelper.GetClientRect( rc );
 		  
-		  drawHelper.DrawFilledRect( GetSysColor( COLOR_BTNFACE ), rc );
+		  drawHelper.DrawFilledRect( RGBToColor( GetSysColor( COLOR_BTNFACE ) ), rc );
 		  return false;
 	  }
 };
@@ -165,7 +165,7 @@ void ControlPanel::redraw()
 	if ( !ToolCanDraw() )
 		return;
 
-	CChoreoWidgetDrawHelper helper( this, GetSysColor( COLOR_BTNFACE ) );
+	CChoreoWidgetDrawHelper helper( this, RGBToColor( GetSysColor( COLOR_BTNFACE ) ) );
 	HandleToolRedraw( helper );
 
 	BaseClass::redraw();
@@ -713,7 +713,7 @@ void ControlPanel::CenterOnFace( void )
 			if ( Q_stricmp( attachment.pszName(), "eyes" ) )
 				continue;
 
-			mstudiobone_t *bone = hdr->pBone( iBone );
+			const mstudiobone_t *bone = hdr->pBone( iBone );
 			if ( !bone )
 				continue;
 

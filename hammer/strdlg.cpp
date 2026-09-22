@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -55,7 +55,7 @@ END_MESSAGE_MAP()
 /////////////////////////////////////////////////////////////////////////////
 // CStrDlg message handlers
 
-void CStrDlg::SetRange(int iLow, int iHigh, int iIncrement_)
+void CStrDlg::SetRange(int iLow, int iHigh, int iIncrement)
 {
 	iRangeLow = iLow;
 	iRangeHigh = iHigh;

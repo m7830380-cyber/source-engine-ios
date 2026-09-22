@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -26,7 +26,7 @@ class CMapGroup : public CMapClass
 		virtual CMapClass *Copy(bool bUpdateDependencies);
 		virtual CMapClass *CopyFrom(CMapClass *pFrom, bool bUpdateDependencies);
 
-		virtual bool IsGroup(void) { return true; }
+		virtual bool IsGroup(void) const { return true; }
 
 		// Groups have to be treated as logical because they potentially have logical children
 		virtual bool IsLogical(void) { return true; }

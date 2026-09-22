@@ -1,4 +1,4 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright (c) 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -15,7 +15,7 @@
 
 #include "vgui_internal.h"
 #include "ScalableImageBorder.h"
-#include "KeyValues.h"
+#include "keyvalues.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
@@ -47,12 +47,6 @@ ScalableImageBorder::ScalableImageBorder()
 //-----------------------------------------------------------------------------
 ScalableImageBorder::~ScalableImageBorder()
 {
-	if ( vgui::surface() && m_iTextureID != -1 )
-	{
-		vgui::surface()->DestroyTextureID( m_iTextureID );
-		m_iTextureID = -1;
-	}
-
 	delete [] _name;
 	if ( m_pszImageName )
 	{
@@ -151,8 +145,8 @@ void ScalableImageBorder::Paint(int x, int y, int wide, int tall, int breakSide,
 		else
 		{
 			//uvh - row 1, is tall - ( 2 * src_corner_height ) ( min 0 )
-			uvh = max( 1.f - 2.f * m_flCornerHeightPercent, 0.0f );
-			drawH = max( 0, ( tall - 2 * m_iCornerHeight ) );
+			uvh = MAX( 1.0 - 2 * m_flCornerHeightPercent, 0.0f );
+			drawH = MAX( 0, ( tall - 2 * m_iCornerHeight ) );
 		}
 
 		for ( col=0;col<3;col++ )
@@ -166,8 +160,8 @@ void ScalableImageBorder::Paint(int x, int y, int wide, int tall, int breakSide,
 			else
 			{
 				//uvw - col 1, is wide - ( 2 * src_corner_width ) ( min 0 )
-				uvw = max( 1.f - 2.f * m_flCornerWidthPercent, 0.0f );
-				drawW = max( 0, ( wide - 2 * m_iCornerWidth ) );
+				uvw = MAX( 1.0 - 2 * m_flCornerWidthPercent, 0.0f );
+				drawW = MAX( 0, ( wide - 2 * m_iCornerWidth ) );
 			}
 
 			Vector2D uv11( uvx, uvy );
@@ -224,7 +218,7 @@ void ScalableImageBorder::ApplySchemeSettings(IScheme *pScheme, KeyValues *inRes
 	const char *imageName = inResourceData->GetString("image", "");
 	SetImage( imageName );
 
-	m_bPaintFirst = inResourceData->GetInt("paintfirst", true );
+	m_bPaintFirst = inResourceData->GetBool("paintfirst", true );
 
 	const char *col = inResourceData->GetString("color", NULL);
 	if ( col && col[0] )

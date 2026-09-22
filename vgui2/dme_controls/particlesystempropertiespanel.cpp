@@ -1,13 +1,13 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: Dialog used to edit properties of a particle system definition
 //
 //===========================================================================//
 
 #include "dme_controls/ParticleSystemPropertiesPanel.h"
-#include "tier1/KeyValues.h"
+#include "tier1/keyvalues.h"
 #include "tier1/utlbuffer.h"
-#include "vgui/IVGui.h"
+#include "vgui/ivgui.h"
 #include "vgui_controls/button.h"
 #include "vgui_controls/listpanel.h"
 #include "vgui_controls/splitter.h"
@@ -26,6 +26,22 @@
 #include <tier0/memdbgon.h>
 
 using namespace vgui;
+
+class CParticleFunctionTree: public vgui::TreeView
+{
+	DECLARE_CLASS_SIMPLE( CParticleFunctionTree, vgui::TreeView );
+
+public:
+	CParticleFunctionTree(Panel *parent, const char *panelName): TreeView(parent, panelName)
+	{
+
+	}
+
+	virtual void GenerateContextMenu( int itemIndex, int x, int y )
+	{
+		PostActionSignal( new KeyValues("OpenContextMenu", "itemID", itemIndex ));
+	}
+};
 
 
 //-----------------------------------------------------------------------------
@@ -49,12 +65,15 @@ public:
 
 private:
 	// Refreshes the list of particle functions
-	void RefreshParticleFunctions( CDmeParticleSystemDefinition *pDefinition, ParticleFunctionType_t type  );
+	void RefreshParticleFunctions( CDmeParticleSystemDefinition *pDefinition, ParticleFunctionType_t type );
 	void CleanUpMessage();
+
+	MESSAGE_FUNC( OnTextChanged, "TextChanged" );
 
 	vgui::ListPanel *m_pFunctionList;
 	vgui::Button *m_pOpenButton;
 	vgui::Button *m_pCancelButton;
+	vgui::ComboBox *m_pFilterCombo;
 	KeyValues *m_pContextKeyValues;
 };
 
@@ -68,6 +87,7 @@ static int __cdecl ParticleFunctionNameSortFunc( vgui::ListPanel *pPanel, const 
 CParticleFunctionPickerFrame::CParticleFunctionPickerFrame( vgui::Panel *pParent, const char *pTitle ) : 
 	BaseClass( pParent, "ParticleFunctionPickerFrame" )
 {
+
 	SetDeleteSelfOnClose( true );
 	m_pContextKeyValues = NULL;
 
@@ -82,6 +102,8 @@ CParticleFunctionPickerFrame::CParticleFunctionPickerFrame( vgui::Panel *pParent
 
 	m_pOpenButton = new vgui::Button( this, "OkButton", "#MessageBox_OK", this, "Ok" );
 	m_pCancelButton = new vgui::Button( this, "CancelButton", "#MessageBox_Cancel", this, "Cancel" );
+	m_pFilterCombo = new ComboBox(this, "FilterByOperatorType", 0, false);
+
 	SetBlockDragChaining( true );
 
 	LoadControlSettingsAndUserConfig( "resource/particlefunctionpicker.res" );
@@ -94,7 +116,6 @@ CParticleFunctionPickerFrame::~CParticleFunctionPickerFrame()
 	CleanUpMessage();
 }
 
-
 //-----------------------------------------------------------------------------
 // Refreshes the list of raw controls
 //-----------------------------------------------------------------------------
@@ -103,13 +124,15 @@ void CParticleFunctionPickerFrame::RefreshParticleFunctions( CDmeParticleSystemD
 	m_pFunctionList->RemoveAll();	
 	if ( !pParticleSystem )
 		return;
-
 	CUtlVector< IParticleOperatorDefinition *> &list = g_pParticleSystemMgr->GetAvailableParticleOperatorList( type );
+	
 	int nCount = list.Count();
 
 	// Build a list of used operator IDs
 	bool pUsedIDs[OPERATOR_ID_COUNT];
 	memset( pUsedIDs, 0, sizeof(pUsedIDs) );
+
+	uint32 allFilters = 0;
 
 	int nFunctionCount = pParticleSystem->GetParticleFunctionCount( type );
 	for ( int i = 0; i < nFunctionCount; ++i )
@@ -131,31 +154,78 @@ void CParticleFunctionPickerFrame::RefreshParticleFunctions( CDmeParticleSystemD
 	for ( int i = 0; i < nCount; ++i )
 	{
 		const char *pFunctionName = list[i]->GetName();
+		uint32 filter = list[i]->GetFilter();
+		bool disableItem = false;
 
 		// Look to see if this is in a special operator group
 		if ( list[i]->GetId() >= 0 )
 		{
-			// Don't display ones that are already in the particle system
+			// Disable ones that are already in the particle system
 			if ( pUsedIDs[ list[i]->GetId() ] )
-				continue;
+				disableItem = true;
 		}
 
 		if ( list[i]->GetId() == OPERATOR_SINGLETON )
 		{
-			// Don't display ones that are already in the particle system
-			if ( pParticleSystem->FindFunction( type, pFunctionName ) >= 0 )
-				continue;
+			// Disable ones that are already in the particle system
+			if ( pParticleSystem->FindFunction( type, pFunctionName ) >= 0 ) 
+				disableItem = true;
 		}
 
 		// Don't display obsolete operators
 		if ( list[i]->IsObsolete() )
 			continue;
 
+		allFilters = allFilters | filter;
 		KeyValues *kv = new KeyValues( "node", "name", pFunctionName );
+		kv->SetInt( "typeNumber", type );
+		kv->SetInt( "filters", filter );
 		m_pFunctionList->AddItem( kv, 0, false, false );
+		m_pFunctionList->SetItemDisabled( i, disableItem );
 	}
 
+	// Populate the combo box
+	m_pFilterCombo->RemoveAll();
+
+	for (int i = 0; i < FILTER_COUNT; ++i )
+	{
+		if ( (i == 0) || ( allFilters & ( 1 << i ) ) )
+		{
+			KeyValues *kv = new KeyValues( "Filter" );
+			kv->SetInt( "filter", i);
+			m_pFilterCombo->AddItem( g_pParticleSystemMgr->GetFilterName( (ParticleFilterType_t) i ), kv );
+		}
+	}
+
+	m_pFilterCombo->ActivateItemByRow( 0 );
+
 	m_pFunctionList->SortList();
+}
+
+//-----------------------------------------------------------------------------
+// Filters the list
+//-----------------------------------------------------------------------------
+void CParticleFunctionPickerFrame::OnTextChanged( )
+{
+	m_pFunctionList->SetAllVisible( true );
+	int nCount = m_pFunctionList->GetItemCount();
+	uint32 filter = 1 << m_pFilterCombo->GetActiveItemUserData()->GetInt( "filter", 0 );
+	if (filter != 1) 
+	{
+		for ( int i = 0; i < nCount; ++i )
+		{
+			// Hide items by filter type
+			int currFilter = m_pFunctionList->GetItem(i)->GetInt( "filters", 0 );
+			if ( ( (uint32) currFilter ) & filter )
+			{
+				m_pFunctionList->SetItemVisible( i, true );
+			}
+			else
+			{
+				m_pFunctionList->SetItemVisible( i, false );
+			}
+		}
+	}
 }
 
 
@@ -199,8 +269,12 @@ void CParticleFunctionPickerFrame::OnCommand( const char *pCommand )
 		int nItemID = m_pFunctionList->GetSelectedItem( 0 );
 		KeyValues *pKeyValues = m_pFunctionList->GetItem( nItemID );
 
+		if ( pKeyValues->GetInt( "disabled" ) == 1 )
+			return;
+
 		KeyValues *pActionKeys = new KeyValues( "ParticleFunctionPicked" );
 		pActionKeys->SetString( "name", pKeyValues->GetString( "name" ) );
+		pActionKeys->SetInt( "typeNumber", pKeyValues->GetInt("typeNumber") );
 
 		if ( m_pContextKeyValues )
 		{
@@ -223,8 +297,6 @@ void CParticleFunctionPickerFrame::OnCommand( const char *pCommand )
 
 	BaseClass::OnCommand( pCommand );
 }
-
-
 
 //-----------------------------------------------------------------------------
 //
@@ -408,7 +480,7 @@ class CParticleFunctionBrowser : public vgui::EditablePanel
 
 public:
 	// constructor, destructor
-	CParticleFunctionBrowser( vgui::Panel *pParent, const char *pName, ParticleFunctionType_t type, IParticleSystemPropertiesPanelQuery *pQuery );
+	CParticleFunctionBrowser( vgui::Panel *pParent, const char *pName, IParticleSystemPropertiesPanelQuery *pQuery );
 	virtual ~CParticleFunctionBrowser();
 
 	// Inherited from Panel
@@ -422,37 +494,48 @@ public:
 	// Called when a list panel's selection changes
 	void RefreshParticleFunctionProperties( );
 
+	MESSAGE_FUNC( DeleteSelectedFunctions, "Remove" );
+	MESSAGE_FUNC( OnCopy, "OnCopy" );
+
 private:
 	MESSAGE_FUNC_PARAMS( OnOpenContextMenu, "OpenContextMenu", kv );
-	MESSAGE_FUNC_PARAMS( OnItemSelected, "ItemSelected", kv );	
-	MESSAGE_FUNC_PARAMS( OnItemDeselected, "ItemDeselected", kv );	
-	MESSAGE_FUNC( OnAdd, "Add" );
-	MESSAGE_FUNC( OnRemove, "Remove" );
+	MESSAGE_FUNC_PARAMS( OnItemSelected, "TreeViewItemSelected", kv );	
+	MESSAGE_FUNC_PARAMS( OnItemDeselected, "TreeViewItemDeselected", kv );	
+	MESSAGE_FUNC_PARAMS( OnAdd, "Add", kv );
 	MESSAGE_FUNC( OnRename, "Rename" );
 	MESSAGE_FUNC( OnMoveUp, "MoveUp" );
 	MESSAGE_FUNC( OnMoveDown, "MoveDown" );
 	MESSAGE_FUNC_PARAMS( OnInputCompleted, "InputCompleted", kv );
 	MESSAGE_FUNC_PARAMS( OnParticleFunctionPicked, "ParticleFunctionPicked", kv );
 	MESSAGE_FUNC_PARAMS( OnParticleChildPicked, "ParticleChildPicked", kv );
+	MESSAGE_FUNC( OnPasteFuncs, "PasteFuncs" );
+
+	void RefreshParticleFunctionSubtree( ParticleFunctionType_t nFunction, const CUtlString &SelectedFuncName );
+	void ClearTree( );
 
 	// Cleans up the context menu
 	void CleanupContextMenu();
 
 	// Returns the selected particle function
 	CDmeParticleFunction* GetSelectedFunction( );
+	ParticleFunctionType_t GetSelectedFunctionType( );
+	bool IsPropertiesSlotSelected( bool bOnly );
 
 	// Returns the selected particle function
 	CDmeParticleFunction* GetSelectedFunction( int nIndex );
+	ParticleFunctionType_t GetSelectedFunctionType( int nIndex );
 
 	// Select a particular particle function
 	void SelectParticleFunction( CDmeParticleFunction *pFind );
 
 	IParticleSystemPropertiesPanelQuery *m_pQuery;
 	CDmeHandle< CDmeParticleSystemDefinition > m_hParticleSystem;
-	vgui::ListPanel *m_pFunctionList;
-	ParticleFunctionType_t m_FuncType;
+	CParticleFunctionTree *m_pFunctionTree;
 	vgui::DHANDLE< vgui::Menu > m_hContextMenu;
 	CDmeElementPanel *m_pParticleFunctionProperties;
+	int m_FunctionRootTreeIndicies[PARTICLE_FUNCTION_COUNT];
+	int m_nPropertiesRootTreeIndex;
+	int m_FunctionTreeRoot;
 };
 
 
@@ -470,40 +553,18 @@ static int __cdecl ParticleFunctionSortFunc( vgui::ListPanel *pPanel, const vgui
 //-----------------------------------------------------------------------------
 // constructor, destructor
 //-----------------------------------------------------------------------------
-CParticleFunctionBrowser::CParticleFunctionBrowser( vgui::Panel *pParent, const char *pName, ParticleFunctionType_t type, IParticleSystemPropertiesPanelQuery *pQuery ) :
+CParticleFunctionBrowser::CParticleFunctionBrowser( vgui::Panel *pParent, const char *pName, IParticleSystemPropertiesPanelQuery *pQuery ) :
 	BaseClass( pParent, pName ), m_pQuery( pQuery )
 {
 	SetKeyBoardInputEnabled( true );
 
-	m_FuncType = type;
-
-	m_pFunctionList = new vgui::ListPanel( this, "FunctionList" );
-	if ( m_FuncType != FUNCTION_CHILDREN )
-	{
-		m_pFunctionList->AddColumnHeader( 0, "name", "Function Name", 150, 0 );
-		m_pFunctionList->AddColumnHeader( 1, "type", "Function Type", 150, 0 );
-		m_pFunctionList->SetEmptyListText( "No particle functions" );
-	}
-	else
-	{
-		m_pFunctionList->AddColumnHeader( 0, "name", "Label", 150, 0 );
-		m_pFunctionList->AddColumnHeader( 1, "type", "Child Name", 150, 0 );
-		m_pFunctionList->SetEmptyListText( "No children" );
-	}
-	m_pFunctionList->SetSelectIndividualCells( false );
-	m_pFunctionList->SetMultiselectEnabled( true );
-	m_pFunctionList->AddActionSignalTarget( this );
-	m_pFunctionList->SetSortFunc( 0, ParticleFunctionSortFunc );
-	m_pFunctionList->SetSortColumn( 0 );
-	m_pFunctionList->AddActionSignalTarget( this );
-
+	m_pFunctionTree = new CParticleFunctionTree( this, "FunctionTree" );
 	LoadControlSettings( "resource/particlefunctionbrowser.res" );
 }
 
 CParticleFunctionBrowser::~CParticleFunctionBrowser()
 {
 	CleanupContextMenu();
-	SaveUserConfig();
 }
 
 
@@ -525,10 +586,9 @@ void CParticleFunctionBrowser::CleanupContextMenu()
 //-----------------------------------------------------------------------------
 void CParticleFunctionBrowser::SelectDefaultFunction()
 {
-	if ( m_pFunctionList->GetSelectedItemsCount() == 0 && m_pFunctionList->GetItemCount() > 0 )
+	if ( m_pFunctionTree->GetSelectedItemCount() == 0 && m_pFunctionTree->GetItemCount() > 0 )
 	{
-		int nItemID = m_pFunctionList->GetItemIDFromRow( 0 );
-		m_pFunctionList->SetSingleSelectedItem( nItemID );
+		m_pFunctionTree->AddSelectedItem( m_nPropertiesRootTreeIndex, true );
 	}
 }
 
@@ -559,45 +619,79 @@ void CParticleFunctionBrowser::SetParticleSystem( CDmeParticleSystemDefinition *
 //-----------------------------------------------------------------------------
 // Builds the particle function list for the particle system
 //-----------------------------------------------------------------------------
-void CParticleFunctionBrowser::RefreshParticleFunctionList()
+
+void CParticleFunctionBrowser::RefreshParticleFunctionSubtree( ParticleFunctionType_t nFunction, const CUtlString &SelectedFuncName )
 {
-	if ( !m_hParticleSystem.Get() )
-		return;
-
-	// Maintain selection if possible
-	CUtlVector< CDmeParticleFunction* > selectedItems;
-	int nCount = m_pFunctionList->GetSelectedItemsCount();
+	int nCount = m_hParticleSystem->GetParticleFunctionCount( nFunction );
 	for ( int i = 0; i < nCount; ++i )
 	{
-		selectedItems.AddToTail( GetSelectedFunction( i ) );
-	}
-
-	m_pFunctionList->RemoveAll();	
-
-	int nSelectedCount = selectedItems.Count();
-	nCount = m_hParticleSystem->GetParticleFunctionCount( m_FuncType );
-	for ( int i = 0; i < nCount; ++i )
-	{
-		CDmeParticleFunction *pFunction = m_hParticleSystem->GetParticleFunction( m_FuncType, i );
+		CDmeParticleFunction *pFunction = m_hParticleSystem->GetParticleFunction( nFunction, i );
 		KeyValues *kv = new KeyValues( "node", "name", pFunction->GetName() );
+		kv->SetString( "text", pFunction->GetName() );
 		kv->SetString( "type", pFunction->GetFunctionType() );
+		kv->SetInt( "typeNumber", nFunction );
 		kv->SetInt( "index", i );
 		SetElementKeyValue( kv, "particleFunction", pFunction );
-		int nItemID = m_pFunctionList->AddItem( kv, 0, false, false );
+		int nItemID = m_pFunctionTree->AddItem( kv, m_FunctionRootTreeIndicies[nFunction] );
+		m_pFunctionTree->SetItemFgColor( nItemID, Color(255, 255, 255, 255) );
 
-		for ( int j = 0; j < nSelectedCount; ++j )
+		if ( SelectedFuncName == pFunction->GetName() )
 		{
-			if ( selectedItems[j] == pFunction )
-			{
-				m_pFunctionList->AddSelectedItem( nItemID );
-				selectedItems.FastRemove( j );
-				--nSelectedCount;
-				break;
-			}
+			m_pFunctionTree->AddSelectedItem( nItemID, true );
 		}
 	}
+	m_pFunctionTree->ExpandItem(m_FunctionRootTreeIndicies[nFunction],true);
+}
 
-	m_pFunctionList->SortList();
+void CParticleFunctionBrowser::ClearTree( )
+{
+	m_pFunctionTree->RemoveAll();
+
+	{
+		KeyValues *pKV = new KeyValues("FunctionRoot");
+		pKV->SetString( "Text", "System Properties" );
+		pKV->SetInt( "typeNumber", -1 );
+		pKV->SetBool( "isSystemProperties", true );
+		pKV->SetInt( "index", -1 );
+		m_nPropertiesRootTreeIndex = m_pFunctionTree->AddItem( pKV, -1 );
+		m_pFunctionTree->SetItemFgColor( m_nPropertiesRootTreeIndex, Color(255, 255, 255, 255) );
+		m_FunctionTreeRoot = m_nPropertiesRootTreeIndex;
+	}
+
+	for( int i = 0; i < PARTICLE_FUNCTION_COUNT; ++i )
+	{
+		KeyValues *pKV = new KeyValues("FunctionRoot");
+		pKV->SetString( "Text", GetParticleFunctionTypeName(ParticleFunctionType_t(i)) );
+		pKV->SetInt( "typeNumber", i );
+		pKV->SetInt( "index", -1 );
+		m_FunctionRootTreeIndicies[i] = m_pFunctionTree->AddItem( pKV, m_FunctionTreeRoot );
+		m_pFunctionTree->SetItemFgColor( m_FunctionRootTreeIndicies[i], Color(96, 96, 96, 255) );
+	}
+
+	m_pFunctionTree->ExpandItem(m_FunctionTreeRoot,true);
+}
+
+void CParticleFunctionBrowser::RefreshParticleFunctionList()
+{
+	CDmeParticleFunction* pSelectedFunc = GetSelectedFunction();
+
+	CUtlString selectedFuncName = "";
+	if ( pSelectedFunc )
+	{
+		selectedFuncName = pSelectedFunc->GetName();
+	}
+
+	ClearTree();
+
+	if ( !m_hParticleSystem.Get() )
+	{
+		return;
+	}
+
+	for ( int i = 0; i < PARTICLE_FUNCTION_COUNT; ++i )
+	{
+		RefreshParticleFunctionSubtree(ParticleFunctionType_t(i), selectedFuncName);
+	}
 }
 
 
@@ -609,13 +703,45 @@ CDmeParticleFunction* CParticleFunctionBrowser::GetSelectedFunction( int nIndex 
 	if ( !m_hParticleSystem.Get() )
 		return NULL;
 
-	int nSelectedItemCount = m_pFunctionList->GetSelectedItemsCount();
+	int nSelectedItemCount = m_pFunctionTree->GetSelectedItemCount();
 	if ( nSelectedItemCount <= nIndex )
 		return NULL;
 
-	int nItemID = m_pFunctionList->GetSelectedItem( nIndex );
-	KeyValues *pKeyValues = m_pFunctionList->GetItem( nItemID );
+	int nItemID = m_pFunctionTree->GetSelectedItem(nIndex);
+	KeyValues *pKeyValues = m_pFunctionTree->GetItemData( nItemID );
 	return GetElementKeyValue<CDmeParticleFunction>( pKeyValues, "particleFunction" );
+}
+
+ParticleFunctionType_t CParticleFunctionBrowser::GetSelectedFunctionType( int nIndex )
+{
+	if ( !m_hParticleSystem.Get() )
+		return PARTICLE_FUNCTION_COUNT; // invalid
+
+	int nSelectedItemCount = m_pFunctionTree->GetSelectedItemCount();
+	if ( nSelectedItemCount <= nIndex )
+		return PARTICLE_FUNCTION_COUNT; // invalid
+
+	int nItemID = m_pFunctionTree->GetSelectedItem( nIndex );
+	KeyValues *pKeyValues = m_pFunctionTree->GetItemData( nItemID );
+	return (ParticleFunctionType_t)pKeyValues->GetInt( "typeNumber" );
+}
+
+bool CParticleFunctionBrowser::IsPropertiesSlotSelected( bool bOnly )
+{
+	int nSelectedItemCount = m_pFunctionTree->GetSelectedItemCount();
+	if ( bOnly && nSelectedItemCount != 1 )
+		return false;
+
+	for ( int i = 0; i < nSelectedItemCount; ++i )
+	{
+		int nItemID = m_pFunctionTree->GetSelectedItem(i);
+		KeyValues *pKeyValues = m_pFunctionTree->GetItemData( nItemID );
+
+		if ( pKeyValues->GetBool( "isSystemProperties" ) )
+			return true;
+	}
+
+	return false;
 }
 
 
@@ -624,16 +750,20 @@ CDmeParticleFunction* CParticleFunctionBrowser::GetSelectedFunction( int nIndex 
 //-----------------------------------------------------------------------------
 CDmeParticleFunction* CParticleFunctionBrowser::GetSelectedFunction( )
 {
-	if ( !m_hParticleSystem.Get() )
-		return NULL;
-
-	int nSelectedItemCount = m_pFunctionList->GetSelectedItemsCount();
+	int nSelectedItemCount = m_pFunctionTree->GetSelectedItemCount();
 	if ( nSelectedItemCount != 1 )
 		return NULL;
 
-	int nItemID = m_pFunctionList->GetSelectedItem( 0 );
-	KeyValues *pKeyValues = m_pFunctionList->GetItem( nItemID );
-	return GetElementKeyValue<CDmeParticleFunction>( pKeyValues, "particleFunction" );
+	return GetSelectedFunction(0);
+}
+
+ParticleFunctionType_t CParticleFunctionBrowser::GetSelectedFunctionType( )
+{
+	int nSelectedItemCount = m_pFunctionTree->GetSelectedItemCount();
+	if ( nSelectedItemCount != 1 )
+		return PARTICLE_FUNCTION_COUNT; // invalid
+
+	return GetSelectedFunctionType(0);
 }
 
 void CParticleFunctionBrowser::OnMoveUp( )
@@ -642,9 +772,11 @@ void CParticleFunctionBrowser::OnMoveUp( )
 	if ( !pFunction )
 		return;
 
+	ParticleFunctionType_t nType = GetSelectedFunctionType( );
+
 	{
 		CUndoScopeGuard guard( 0, NOTIFY_SETDIRTYFLAG, "Move Function Up", "Move Function Up" );
-		m_hParticleSystem->MoveFunctionUp( m_FuncType, pFunction );
+		m_hParticleSystem->MoveFunctionUp( nType, pFunction );
 	}
 	PostActionSignal( new KeyValues( "ParticleSystemModified" ) );
 }
@@ -655,9 +787,11 @@ void CParticleFunctionBrowser::OnMoveDown( )
 	if ( !pFunction )
 		return;
 
+	ParticleFunctionType_t nType = GetSelectedFunctionType( );
+
 	{
 		CUndoScopeGuard guard( 0, NOTIFY_SETDIRTYFLAG, "Move Function Down", "Move Function Down" );
-		m_hParticleSystem->MoveFunctionDown( m_FuncType, pFunction );
+		m_hParticleSystem->MoveFunctionDown( nType, pFunction );
 	}	
 	PostActionSignal( new KeyValues( "ParticleSystemModified" ) );
 }
@@ -668,14 +802,15 @@ void CParticleFunctionBrowser::OnMoveDown( )
 //-----------------------------------------------------------------------------
 void CParticleFunctionBrowser::SelectParticleFunction( CDmeParticleFunction *pFind )
 {
-	m_pFunctionList->ClearSelectedItems();
-	for ( int nItemID = m_pFunctionList->FirstItem(); nItemID != m_pFunctionList->InvalidItemID(); nItemID = m_pFunctionList->NextItem( nItemID ) )
+	m_pFunctionTree->ClearSelection();
+	for ( int nItemID = m_pFunctionTree->FirstItem(); nItemID != m_pFunctionTree->InvalidItemID(); nItemID = m_pFunctionTree->NextItem( nItemID ) )
 	{
-		KeyValues *kv = m_pFunctionList->GetItem( nItemID );
+		KeyValues *kv = m_pFunctionTree->GetItemData( nItemID );
 		CDmeParticleFunction *pFunction = GetElementKeyValue<CDmeParticleFunction>( kv, "particleFunction" );
+
 		if ( pFunction == pFind )
 		{
-			m_pFunctionList->AddSelectedItem( nItemID );
+			m_pFunctionTree->AddSelectedItem( nItemID, true );
 			break;
 		}
 	}
@@ -688,7 +823,7 @@ void CParticleFunctionBrowser::SelectParticleFunction( CDmeParticleFunction *pFi
 void CParticleFunctionBrowser::OnParticleChildPicked( KeyValues *pKeyValues )
 {
 	CDmeParticleSystemDefinition *pParticleSystem = GetElementKeyValue<CDmeParticleSystemDefinition>( pKeyValues, "particleSystem" );
-	if ( !pParticleSystem || ( m_FuncType != FUNCTION_CHILDREN ) )
+	if ( !pParticleSystem )
 		return;
 
 	CDmeParticleFunction *pFunction;
@@ -702,25 +837,25 @@ void CParticleFunctionBrowser::OnParticleChildPicked( KeyValues *pKeyValues )
 
 void CParticleFunctionBrowser::OnParticleFunctionPicked( KeyValues *pKeyValues )
 {
-	if ( m_FuncType == FUNCTION_CHILDREN )
-		return;
-
+	ParticleFunctionType_t nParticleFuncType = (ParticleFunctionType_t)pKeyValues->GetInt( "typeNumber" );
 	const char *pParticleFuncName = pKeyValues->GetString( "name" );
 	CDmeParticleFunction *pFunction;
 	{
 		CUndoScopeGuard guard( 0, NOTIFY_SETDIRTYFLAG, "Add Particle Function", "Add Particle Function" );
-		pFunction = m_hParticleSystem->AddOperator( m_FuncType, pParticleFuncName );
+		pFunction = m_hParticleSystem->AddOperator( nParticleFuncType, pParticleFuncName );
 	}
 	PostActionSignal( new KeyValues( "ParticleSystemModified" ) );
 	SelectParticleFunction( pFunction );
 }
 
-void CParticleFunctionBrowser::OnAdd( )
+void CParticleFunctionBrowser::OnAdd( KeyValues *pKeyValues )
 {
-	if ( m_FuncType != FUNCTION_CHILDREN )
+	ParticleFunctionType_t nParticleFuncType = (ParticleFunctionType_t)pKeyValues->GetInt( "typeNumber" );
+
+	if ( nParticleFuncType != FUNCTION_CHILDREN )
 	{
 		CParticleFunctionPickerFrame *pPicker = new CParticleFunctionPickerFrame( this, "Select Particle Function" );
-		pPicker->DoModal( m_hParticleSystem, m_FuncType, NULL );
+		pPicker->DoModal( m_hParticleSystem, nParticleFuncType, NULL );
 	}
 	else
 	{
@@ -729,10 +864,10 @@ void CParticleFunctionBrowser::OnAdd( )
 	}
 }
 
-void CParticleFunctionBrowser::OnRemove( )
+void CParticleFunctionBrowser::DeleteSelectedFunctions( )
 {
-	int iSel = m_pFunctionList->GetSelectedItem( 0 );
-	int nRow = m_pFunctionList->GetItemCurrentRow( iSel ) - 1;
+	int iSel = m_pFunctionTree->GetSelectedItem( 0 );
+
 	{
 		CUndoScopeGuard guard( 0, NOTIFY_SETDIRTYFLAG, "Remove Particle Function", "Remove Particle Function" );
 
@@ -740,43 +875,35 @@ void CParticleFunctionBrowser::OnRemove( )
 		// Build a list of objects to delete.
 		//
 		CUtlVector< CDmeParticleFunction* > itemsToDelete;
-		int nCount = m_pFunctionList->GetSelectedItemsCount();
+		CUtlVector< ParticleFunctionType_t > typesToDelete;
+		int nCount = m_pFunctionTree->GetSelectedItemCount();
 		for (int i = 0; i < nCount; i++)
 		{
 			CDmeParticleFunction *pParticleFunction = GetSelectedFunction( i );
 			if ( pParticleFunction )
 			{
 				itemsToDelete.AddToTail( pParticleFunction );
+				typesToDelete.AddToTail( GetSelectedFunctionType(i) );
 			}
 		}
 
 		nCount = itemsToDelete.Count();
 		for ( int i = 0; i < nCount; ++i )
 		{
-			m_hParticleSystem->RemoveFunction( m_FuncType, itemsToDelete[i] );
+			m_hParticleSystem->RemoveFunction( typesToDelete[i], itemsToDelete[i] );
 		}
 	}
 
 	PostActionSignal( new KeyValues( "ParticleSystemModified" ) );
 
 	// Update the list box selection.
-	if ( m_pFunctionList->GetItemCount() > 0 )
+	if ( m_pFunctionTree->GetItemCount() > 0 )
 	{
-		if ( nRow < 0 )
-		{
-			nRow = 0;
-		}
-		else if ( nRow >= m_pFunctionList->GetItemCount() ) 
-		{
-			nRow = m_pFunctionList->GetItemCount() - 1;
-		}
-
-		iSel = m_pFunctionList->GetItemIDFromRow( nRow );
-		m_pFunctionList->SetSingleSelectedItem( iSel );
+		m_pFunctionTree->AddSelectedItem( iSel, true );
 	}
 	else
 	{
-		m_pFunctionList->ClearSelectedItems();
+		m_pFunctionTree->ClearSelection();
 	}
 }
 
@@ -801,7 +928,7 @@ void CParticleFunctionBrowser::OnInputCompleted( KeyValues *pKeyValues )
 //-----------------------------------------------------------------------------
 void CParticleFunctionBrowser::OnRename()
 {
-	int nSelectedItemCount = m_pFunctionList->GetSelectedItemsCount();
+	int nSelectedItemCount = m_pFunctionTree->GetSelectedItemCount();
 	if ( nSelectedItemCount != 1 )
 		return;
 
@@ -822,8 +949,17 @@ void CParticleFunctionBrowser::RefreshParticleFunctionProperties( )
 		if ( pFunction )
 		{
 			m_pParticleFunctionProperties->SetTypeDictionary( pFunction->GetEditorTypeDictionary() );
+			m_pParticleFunctionProperties->SetDmeElement( pFunction );
 		}
-		m_pParticleFunctionProperties->SetDmeElement( pFunction );
+		else if( IsPropertiesSlotSelected(true) )
+		{
+			if ( m_hParticleSystem.Get() )
+			{
+				m_pParticleFunctionProperties->SetTypeDictionary( m_hParticleSystem->GetEditorTypeDictionary() );
+			}
+
+			m_pParticleFunctionProperties->SetDmeElement( m_hParticleSystem );
+		}
 
 		// Notify the outside world so we can get helpers to render correctly in the preview
 		KeyValues *pMessage = new KeyValues( "ParticleFunctionSelChanged" );
@@ -839,7 +975,7 @@ void CParticleFunctionBrowser::RefreshParticleFunctionProperties( )
 void CParticleFunctionBrowser::OnItemSelected( KeyValues *kv )
 {
 	Panel *pPanel = (Panel *)kv->GetPtr( "panel", NULL );
-	if ( pPanel == m_pFunctionList )
+	if ( pPanel == m_pFunctionTree )
 	{
 		RefreshParticleFunctionProperties();
 		return;
@@ -853,7 +989,7 @@ void CParticleFunctionBrowser::OnItemSelected( KeyValues *kv )
 void CParticleFunctionBrowser::OnItemDeselected( KeyValues *kv )
 {
 	Panel *pPanel = (Panel *)kv->GetPtr( "panel", NULL );
-	if ( pPanel == m_pFunctionList )
+	if ( pPanel == m_pFunctionTree )
 	{
 		RefreshParticleFunctionProperties();
 		return;
@@ -864,6 +1000,23 @@ void CParticleFunctionBrowser::OnItemDeselected( KeyValues *kv )
 //-----------------------------------------------------------------------------
 // Called to open a context-sensitive menu for a particular menu item
 //-----------------------------------------------------------------------------
+
+bool WouldPasteParticleFunctions()
+{
+	CUtlVector< KeyValues * > list;
+	g_pDataModel->GetClipboardData( list );
+
+	for ( int i = 0; i < list.Count(); ++i )
+	{
+		if ( V_strlen( list[i]->GetString( PARTICLE_CLIPBOARD_FUNCTIONS_STR ) ) )
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
 void CParticleFunctionBrowser::OnOpenContextMenu( KeyValues *kv )
 {
 	CleanupContextMenu();
@@ -871,25 +1024,99 @@ void CParticleFunctionBrowser::OnOpenContextMenu( KeyValues *kv )
 		return;
 
 	Panel *pPanel = (Panel *)kv->GetPtr( "panel", NULL );
-	if ( pPanel != m_pFunctionList )
+	if ( pPanel != m_pFunctionTree )
 		return;
 
-	int nSelectedItemCount = m_pFunctionList->GetSelectedItemsCount();
+	int nSelectedItemCount = m_pFunctionTree->GetSelectedItemCount();
 	m_hContextMenu = new vgui::Menu( this, "ActionMenu" );
-	m_hContextMenu->AddMenuItem( "#ParticleFunctionBrowser_Add", new KeyValues( "Add" ), this );
+
 	if ( nSelectedItemCount >= 1 )
 	{
 		m_hContextMenu->AddMenuItem( "#ParticleFunctionBrowser_Remove", new KeyValues( "Remove" ), this );
+		m_hContextMenu->AddSeparator();
 	}
+
+	if ( nSelectedItemCount > 0 )
+	{
+		m_hContextMenu->AddMenuItem( "Copy Functions", new KeyValues( "OnCopy" ), this );
+	}
+
+	if ( WouldPasteParticleFunctions() )
+	{
+		m_hContextMenu->AddMenuItem( "Paste Functions", new KeyValues( "PasteFuncs" ), this );
+	}
+
 	if ( nSelectedItemCount == 1 )
 	{
-		m_hContextMenu->AddMenuItem( "#ParticleFunctionBrowser_Rename", new KeyValues( "Rename" ), this  );
 		m_hContextMenu->AddSeparator();
-		m_hContextMenu->AddMenuItem( "#ParticleFunctionBrowser_MoveUp", new KeyValues( "MoveUp" ), this );
-		m_hContextMenu->AddMenuItem( "#ParticleFunctionBrowser_MoveDown", new KeyValues( "MoveDown" ), this );
+		int nType = m_pFunctionTree->GetItemData(m_pFunctionTree->GetSelectedItem(0))->GetInt("typeNumber");
+		m_hContextMenu->AddMenuItem( "#ParticleFunctionBrowser_Add", new KeyValues( "Add", "typeNumber", nType ), this );
+
+		// only rename/moveup/movedown for actual functions
+		int nIndex = m_pFunctionTree->GetItemData(m_pFunctionTree->GetSelectedItem(0))->GetInt("index", -1);
+		if ( nIndex != -1 )
+		{
+			m_hContextMenu->AddMenuItem( "#ParticleFunctionBrowser_Rename", new KeyValues( "Rename" ), this  );
+			m_hContextMenu->AddSeparator();
+			m_hContextMenu->AddMenuItem( "#ParticleFunctionBrowser_MoveUp", new KeyValues( "MoveUp" ), this );
+			m_hContextMenu->AddMenuItem( "#ParticleFunctionBrowser_MoveDown", new KeyValues( "MoveDown" ), this );
+		}
 	}
 
 	vgui::Menu::PlaceContextMenu( this, m_hContextMenu.Get() );
+}
+
+void CParticleFunctionBrowser::OnPasteFuncs( )
+{
+	PostActionSignal( new KeyValues( "PasteFuncs" ) );
+}
+
+void CParticleFunctionBrowser::OnCopy( )
+{
+	int nSelectedItemCount = m_pFunctionTree->GetSelectedItemCount();
+
+	CUtlVector< KeyValues * > list;
+	for ( int i = 0; i < nSelectedItemCount; ++i )
+	{
+		CDmeParticleFunction* pSelectedFunc = GetSelectedFunction(i);
+
+		if ( !pSelectedFunc )
+			continue;
+
+		DmFileId_t tmpFileId = pSelectedFunc->GetFileId();
+		pSelectedFunc->SetFileId( DMFILEID_INVALID, TD_NONE );
+
+		CUtlBuffer buf( 0, 0, CUtlBuffer::TEXT_BUFFER );
+		if ( g_pDataModel->Serialize( buf, "keyvalues2", "pcf", pSelectedFunc->GetHandle() ) )
+		{
+			KeyValues *pData = new KeyValues( "Clipboard" );
+			pData->SetString( PARTICLE_CLIPBOARD_FUNCTIONS_STR, (char*)buf.Base() );
+			list.AddToTail( pData );
+		}
+
+		pSelectedFunc->SetFileId( tmpFileId, TD_NONE );
+	}
+
+	if ( IsPropertiesSlotSelected(false) )
+	{
+		CDmeParticleSystemDefinition* pCopySys = CreateElement<CDmeParticleSystemDefinition>( "tempcopy", DMFILEID_INVALID );
+		pCopySys->OverrideAttributesFromOtherDefinition( m_hParticleSystem );
+
+		CUtlBuffer buf( 0, 0, CUtlBuffer::TEXT_BUFFER );
+		if ( g_pDataModel->Serialize( buf, "keyvalues2", "pcf", pCopySys->GetHandle() ) )
+		{
+			KeyValues *pData = new KeyValues( "Clipboard" );
+			pData->SetString( PARTICLE_CLIPBOARD_DEF_BODY_STR, (char*)buf.Base() );
+			list.AddToTail( pData );
+		}
+
+		g_pDataModel->DestroyElement(pCopySys->GetHandle());
+	}
+
+	if ( list.Count() )
+	{
+		g_pDataModel->SetClipboardData( list );
+	}
 }
 
 
@@ -900,7 +1127,7 @@ void CParticleFunctionBrowser::OnKeyCodeTyped( vgui::KeyCode code )
 {
 	if ( code == KEY_DELETE ) 
 	{
-		OnRemove();
+		DeleteSelectedFunctions();
 	}
 	else
 	{
@@ -909,12 +1136,11 @@ void CParticleFunctionBrowser::OnKeyCodeTyped( vgui::KeyCode code )
 }
 
 
-
 //-----------------------------------------------------------------------------
 // Strings
 //-----------------------------------------------------------------------------
 
-
+ConVar pet_sort_attributes( "pet_sort_attributes", "1", FCVAR_NONE );
 //-----------------------------------------------------------------------------
 // Constructor
 //-----------------------------------------------------------------------------
@@ -928,25 +1154,16 @@ CParticleSystemPropertiesPanel::CParticleSystemPropertiesPanel( IParticleSystemP
 	vgui::Panel *pSplitterRightSide = m_pSplitter->GetChild( 1 );
 
 	m_pFunctionBrowserArea = new vgui::EditablePanel( pSplitterLeftSide, "FunctionBrowserArea" );
-	m_pFunctionTypeCombo = new vgui::ComboBox( pSplitterLeftSide, "FunctionTypeCombo", PARTICLE_FUNCTION_COUNT+1, false );
-	m_pFunctionTypeCombo->AddItem( "Properties", new KeyValues( "choice", "index", -1 ) );
-	m_pFunctionTypeCombo->AddActionSignalTarget( this );
 
 	m_pParticleFunctionProperties = new CDmeElementPanel( pSplitterRightSide, "FunctionProperties" );
+	m_pParticleFunctionProperties->SetSortAttributesByName( pet_sort_attributes.GetBool() );
 	m_pParticleFunctionProperties->SetAutoResize( vgui::Panel::PIN_TOPLEFT, vgui::Panel::AUTORESIZE_DOWNANDRIGHT, 6, 6, -6, -6 );
 	m_pParticleFunctionProperties->AddActionSignalTarget( this );
 
-	for ( int i = 0; i < PARTICLE_FUNCTION_COUNT; ++i )
-	{
-		const char *pTypeName = GetParticleFunctionTypeName( (ParticleFunctionType_t)i );
+	m_pParticleFunctionBrowser = new CParticleFunctionBrowser( m_pFunctionBrowserArea, "FunctionBrowser", m_pQuery );
+	m_pParticleFunctionBrowser->SetParticleFunctionProperties( m_pParticleFunctionProperties );
+	m_pParticleFunctionBrowser->AddActionSignalTarget( this );
 
-		m_pFunctionTypeCombo->AddItem( pTypeName, new KeyValues( "choice", "index", i ) );
-		m_pParticleFunctionBrowser[i] = new CParticleFunctionBrowser( m_pFunctionBrowserArea, "FunctionBrowser", (ParticleFunctionType_t)i, m_pQuery );
-		m_pParticleFunctionBrowser[i]->SetParticleFunctionProperties( m_pParticleFunctionProperties );
-		m_pParticleFunctionBrowser[i]->AddActionSignalTarget( this );
-	}
-
-	m_pFunctionTypeCombo->ActivateItemByRow( 0 );
 	LoadControlSettings( "resource/particlesystempropertiespanel.res" );
 }
 
@@ -957,23 +1174,13 @@ CParticleSystemPropertiesPanel::CParticleSystemPropertiesPanel( IParticleSystemP
 void CParticleSystemPropertiesPanel::SetParticleSystem( CDmeParticleSystemDefinition *pParticleSystem )
 {
 	m_hParticleSystem = pParticleSystem;
-	for ( int i = 0; i < PARTICLE_FUNCTION_COUNT; ++i )
-	{
-		m_pParticleFunctionBrowser[i]->SetParticleSystem( pParticleSystem );
-	}
-
-	KeyValues *pKeyValues = m_pFunctionTypeCombo->GetActiveItemUserData();
-	int nPage = pKeyValues->GetInt( "index" );
-	if ( nPage < 0 )
-	{
-		if ( m_hParticleSystem.Get() )
-		{
-			m_pParticleFunctionProperties->SetTypeDictionary( m_hParticleSystem->GetEditorTypeDictionary() );
-		}
-		m_pParticleFunctionProperties->SetDmeElement( m_hParticleSystem );
-	}
+	m_pParticleFunctionBrowser->SetParticleSystem( pParticleSystem );
 }
 
+CDmeParticleSystemDefinition *CParticleSystemPropertiesPanel::GetParticleSystem( )
+{
+	return m_hParticleSystem;
+}
 
 //-----------------------------------------------------------------------------
 // Called when something changes in the dmeelement panel
@@ -985,10 +1192,7 @@ void CParticleSystemPropertiesPanel::OnDmeElementChanged( KeyValues *pKeyValues 
 
 	if ( nNotifyFlags & ( NOTIFY_CHANGE_TOPOLOGICAL | NOTIFY_CHANGE_ATTRIBUTE_ARRAY_SIZE ) )
 	{
-		for ( int i = 0; i < PARTICLE_FUNCTION_COUNT; ++i )
-		{
-			m_pParticleFunctionBrowser[i]->RefreshParticleFunctionList();
-		}
+		m_pParticleFunctionBrowser->RefreshParticleFunctionList();
 	}
 	PostActionSignal( new KeyValues( "ParticleSystemModified" ) );
 }
@@ -1010,50 +1214,30 @@ void CParticleSystemPropertiesPanel::OnParticleFunctionSelChanged( KeyValues *pP
 	PostActionSignal( pMessage );
 }
 
+void CParticleSystemPropertiesPanel::OnCopy()
+{
+	m_pParticleFunctionBrowser->OnCopy();
+}
+
+void CParticleSystemPropertiesPanel::OnPasteFuncs()
+{
+	PostActionSignal( new KeyValues( "RequestPaste" ) );
+}
 
 //-----------------------------------------------------------------------------
 // Refreshes display
 //-----------------------------------------------------------------------------
 void CParticleSystemPropertiesPanel::Refresh( bool bValuesOnly )
 {
-	for ( int i = 0; i < PARTICLE_FUNCTION_COUNT; ++i )
-	{
-		m_pParticleFunctionBrowser[i]->RefreshParticleFunctionList();
-	}
+	m_pParticleFunctionBrowser->RefreshParticleFunctionList();
 	m_pParticleFunctionProperties->Refresh( bValuesOnly ? CElementPropertiesTreeInternal::REFRESH_VALUES_ONLY :
 		CElementPropertiesTreeInternal::REFRESH_TREE_VIEW );
 }
 
-
-//-----------------------------------------------------------------------------
-// Purpose: Called when a page is shown
-//-----------------------------------------------------------------------------
-void CParticleSystemPropertiesPanel::OnTextChanged( )
+void CParticleSystemPropertiesPanel::DeleteSelectedFunctions( )
 {
-	for ( int i = 0; i < PARTICLE_FUNCTION_COUNT; ++i )
-	{
-		m_pParticleFunctionBrowser[i]->SetVisible( false );
-	}
-
-	KeyValues *pKeyValues = m_pFunctionTypeCombo->GetActiveItemUserData();
-	int nPage = pKeyValues->GetInt( "index" );
-	if ( nPage < 0 )
-	{
-		if ( m_hParticleSystem.Get() )
-		{
-			m_pParticleFunctionProperties->SetTypeDictionary( m_hParticleSystem->GetEditorTypeDictionary() );
-		}
-		m_pParticleFunctionProperties->SetDmeElement( m_hParticleSystem );
-		return;
-	}
-
-	m_pParticleFunctionBrowser[nPage]->SetVisible( true );
-	m_pParticleFunctionBrowser[nPage]->SelectDefaultFunction();
-	m_pParticleFunctionBrowser[nPage]->RefreshParticleFunctionProperties();
+	m_pParticleFunctionBrowser->DeleteSelectedFunctions();
 }
-
-
-
 
 //-----------------------------------------------------------------------------
 // A little panel used as a DmePanel for particle systems
@@ -1075,6 +1259,10 @@ private:
 	MESSAGE_FUNC( OnParticleSystemModified, "ParticleSystemModified" );
 	MESSAGE_FUNC_PARAMS( OnParticleFunctionSelChanged, "ParticleFunctionSelChanged", params );
 
+	MESSAGE_FUNC( OnPaste, "OnPaste" );
+	MESSAGE_FUNC( OnRequestPaste, "RequestPaste" );
+	KEYBINDING_FUNC_NODECLARE( edit_paste, KEY_V, vgui::MODIFIER_CONTROL, OnPaste, "#edit_paste_help", 0 );
+
 	vgui::Splitter *m_Splitter;
 	CParticleSystemPropertiesPanel *m_pProperties;
 	CParticleSystemPreviewPanel *m_pPreview;
@@ -1085,7 +1273,6 @@ private:
 // Dme panel connection
 //-----------------------------------------------------------------------------
 IMPLEMENT_DMEPANEL_FACTORY( CParticleSystemDmePanel, DmeParticleSystemDefinition, "DmeParticleSystemDefinitionEditor", "Particle System Editor", true );
-
 
 //-----------------------------------------------------------------------------
 // constructor, destructor
@@ -1117,7 +1304,7 @@ CParticleSystemDmePanel::~CParticleSystemDmePanel()
 void CParticleSystemDmePanel::SetDmeElement( CDmeParticleSystemDefinition *pDef )
 {
 	m_pProperties->SetParticleSystem( pDef );
-	m_pPreview->SetParticleSystem( pDef );
+	m_pPreview->SetParticleSystem( pDef, true );
 }
 
 
@@ -1146,4 +1333,43 @@ void CParticleSystemDmePanel::OnParticleFunctionSelChanged( KeyValues *pParams )
 void CParticleSystemDmePanel::OnParticleSystemModified()
 {
 	PostActionSignal( new KeyValues( "DmeElementChanged" ) );
+}
+
+//-----------------------------------------------------------------------------
+
+void CParticleSystemDmePanel::OnRequestPaste()
+{
+	OnPaste();
+}
+
+void CParticleSystemDmePanel::OnPaste( )
+{
+	CDmeParticleSystemDefinition *pEditingDef = m_pProperties->GetParticleSystem();
+
+	if ( !pEditingDef )
+		return;
+
+	CAppUndoScopeGuard guard( NOTIFY_SETDIRTYFLAG, "Paste From Clipboard", "Paste From Clipboard" );
+	CUtlVector< KeyValues * > list;
+	g_pDataModel->GetClipboardData( list );
+	int nItems = list.Count();
+
+	for ( int i = 0; i < nItems; ++i )
+	{
+		CDmeParticleFunction *pFunc = ReadParticleClassFromKV<CDmeParticleFunction>( list[i], PARTICLE_CLIPBOARD_FUNCTIONS_STR );
+		if ( pFunc )
+		{
+			pEditingDef->AddCopyOfOperator( pFunc );
+			continue;
+		}
+
+		CDmeParticleSystemDefinition *pDef = ReadParticleClassFromKV<CDmeParticleSystemDefinition>( list[i], PARTICLE_CLIPBOARD_DEF_BODY_STR );
+		if ( pDef )
+		{
+			pEditingDef->OverrideAttributesFromOtherDefinition( pDef );
+			continue;
+		}
+	}
+
+	guard.Release();
 }

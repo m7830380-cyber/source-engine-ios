@@ -42,6 +42,11 @@ static tchar g_rgchMinidumpFilenamePrefix[MAX_PATH];
 // Process-wide comment to put into minidumps
 static char g_rgchMinidumpComment[2048];
 
+#if defined( _WIN32 )
+static volatile LONG g_dwMinidumpWriteInProgress = 0;
+static DWORD g_dwThreadIdWritingMinidump = 0;
+#endif
+
 //-----------------------------------------------------------------------------
 // Purpose: Creates a new file and dumps the exception info into it
 // Input  : uStructuredExceptionCode	- windows exception code, unused.
@@ -59,6 +64,85 @@ bool WriteMiniDumpUsingExceptionInfo(
 	tchar *ptchMinidumpFileNameBuffer /* = NULL */
 	)
 {
+#if defined( _WIN32 )
+	// If we are running on GC then we also want to synchronize writing minidumps with Steam
+	struct CEnsureWriteMiniDumpNonConcurrentWithSteam
+	{
+		CEnsureWriteMiniDumpNonConcurrentWithSteam()
+		{
+			m_hTier0SteamDll = ::GetModuleHandle( "tier0_s.dll" );
+			if ( m_hTier0SteamDll )
+			{
+				m_pfnBGetMiniDumpLock = ( bool (*)() ) ::GetProcAddress( m_hTier0SteamDll, "BGetMiniDumpLock" );
+				m_pfnMiniDumpUnlock = ( void (*)() ) ::GetProcAddress( m_hTier0SteamDll, "MiniDumpUnlock" );
+			}
+			else
+			{
+				m_pfnBGetMiniDumpLock = NULL;
+				m_pfnMiniDumpUnlock = NULL;
+			}
+
+			if ( m_pfnBGetMiniDumpLock && m_pfnMiniDumpUnlock )
+			{
+				for ( ;; )
+				{
+					bool bLocked = m_pfnBGetMiniDumpLock();
+					if ( bLocked )
+						break;
+					::Sleep( 100 ); // Other thread is in writing minidump at the moment, keep waiting
+				}
+			}
+		}
+		~CEnsureWriteMiniDumpNonConcurrentWithSteam()
+		{
+			if ( m_pfnBGetMiniDumpLock && m_pfnMiniDumpUnlock )
+			{
+				m_pfnMiniDumpUnlock();
+			}
+		}
+	private:
+		HMODULE m_hTier0SteamDll;
+		bool (*m_pfnBGetMiniDumpLock)();
+		void (*m_pfnMiniDumpUnlock)();
+	} autoEnsureWriteMiniDumpNonConcurrentWithSteam;
+
+	if ( g_dwThreadIdWritingMinidump == ::GetCurrentThreadId() )
+		return false;	// we are already writing a minidump on the current thread :(
+
+	struct CEnsureWriteMiniDumpUsingExceptionInfoRunsNonConcurrent
+	{
+		//
+		// Use basic spin sleep implementation to avoid any shenanigans
+		// if we were to use synchronization objects like critical sections
+		// due to initialization requirements or usage in various stages
+		// of process/dll loading
+		//
+		CEnsureWriteMiniDumpUsingExceptionInfoRunsNonConcurrent()
+		{
+			for ( ;; )
+			{
+				if ( !g_dwMinidumpWriteInProgress )
+				{	// cheap check, followed by thread-safe lock attempt, followed by validation re-check
+					LONG dwMinidumpWrite = ::InterlockedIncrement( &g_dwMinidumpWriteInProgress );
+					if ( dwMinidumpWrite == 1 )
+					{
+						// We are the thread that entered the minidump writing code
+						g_dwThreadIdWritingMinidump = ::GetCurrentThreadId();
+						break;
+					}
+					::InterlockedDecrement( &g_dwMinidumpWriteInProgress ); // since we attempted to thread-safely enter
+				}
+				::Sleep( 100 ); // Other thread is in writing minidump at the moment, keep waiting
+			}
+		}
+		~CEnsureWriteMiniDumpUsingExceptionInfoRunsNonConcurrent()
+		{
+			g_dwThreadIdWritingMinidump = 0;
+			::InterlockedDecrement( &g_dwMinidumpWriteInProgress ); // since we entered in constructor
+		}
+	} autoEnsureWriteMiniDumpUsingExceptionInfoRunsNonConcurrent;
+#endif
+
 	if ( ptchMinidumpFileNameBuffer )
 	{
 		*ptchMinidumpFileNameBuffer = tchar( 0 );
@@ -113,7 +197,7 @@ bool WriteMiniDumpUsingExceptionInfo(
 		// can't use the normal string functions since we're in tier0
 		tchar rgchFileName[MAX_PATH];
 		_sntprintf( rgchFileName, sizeof(rgchFileName) / sizeof(tchar),
-			_T("%s_%d%02d%02d_%02d%02d%02d_%d%hs%hs.mdmp"),
+			_T("%s_%d%02d%02d_%02d%02d%02d_%d_x%p%hs%hs.mdmp"),
 			g_rgchMinidumpFilenamePrefix,
 			pTime->tm_year + 1900,	/* Year less 2000 */
 			pTime->tm_mon + 1,		/* month (0 - 11 : 0 = January) */
@@ -122,6 +206,7 @@ bool WriteMiniDumpUsingExceptionInfo(
 			pTime->tm_min,		    /* minutes (0 - 59) */
 			pTime->tm_sec,		    /* seconds (0 - 59) */
 			g_nMinidumpsWritten,	// ensures the filename is unique
+			&currTime,				/* address of stack variable to ensure that different threads write to different files and to differentiate game side dumps from Steam dumps */
 			( pszFilenameSuffix != NULL ) ? "_" : "",
 			( pszFilenameSuffix != NULL ) ? pszFilenameSuffix : ""
 			);
@@ -219,7 +304,27 @@ void InternalWriteMiniDumpUsingExceptionInfo( unsigned int uStructuredExceptionC
 #ifdef _WIN64
 	if ( uStructuredExceptionCode != EXCEPTION_BREAKPOINT )
 	{
-		if ( WriteMiniDumpUsingExceptionInfo( uStructuredExceptionCode, pExceptionInfo, MiniDumpWithFullMemory, pszFilenameSuffix ) )
+		bool bCanWriteFullMemoryDump = !!CommandLine()->FindParm( "-fullmemdumpallowed" );
+		int nGbRequired = CommandLine()->ParmValue( "-fullmemdumprequiregb", int( 0 ) );
+		if ( bCanWriteFullMemoryDump && ( nGbRequired > 0 ) )
+		{
+			tchar rgchModuleName[ MAX_PATH ];
+#ifdef TCHAR_IS_WCHAR
+			::GetModuleFileNameW( NULL, rgchModuleName, sizeof( rgchModuleName ) / sizeof( tchar ) );
+#else
+			::GetModuleFileName( NULL, rgchModuleName, sizeof( rgchModuleName ) / sizeof( tchar ) );
+#endif
+			if ( tchar *ptch = _tcschr( rgchModuleName, '\\' ) )
+				ptch[ 1 ] = 0; // must keep the trailing slash
+
+			ULARGE_INTEGER ullFreeBytesAvailable, ullTotalNumberOfBytes, ullTotalNumberOfFreeBytes;
+			BOOL bCheckedDiskSpace = GetDiskFreeSpaceEx( rgchModuleName, &ullFreeBytesAvailable, &ullTotalNumberOfBytes, &ullTotalNumberOfFreeBytes );
+			if ( !bCheckedDiskSpace
+				|| ( ( ullFreeBytesAvailable.QuadPart / ( 1 * 1024 * 1024 * 1024 ) ) < ( ULONGLONG ) ( nGbRequired ) ) )
+				bCanWriteFullMemoryDump = false;
+		}
+
+		if ( bCanWriteFullMemoryDump && WriteMiniDumpUsingExceptionInfo( uStructuredExceptionCode, pExceptionInfo, MiniDumpWithFullMemory, pszFilenameSuffix ) )
 		{
 			return;
 		}
@@ -429,9 +534,9 @@ static const char *GetExceptionCodeName( unsigned long code )
 int CatchAndWriteMiniDump_Impl( CatchAndWriteContext_t &ctx )
 {
 	// Sorry, this is the only action currently implemented!
-	Assert( ctx.m_eAction == k_ECatchAndWriteMiniDumpAbort );
+	//Assert( ctx.m_eAction == k_ECatchAndWriteMiniDumpAbort );
 
-	if ( Plat_IsInDebugSession() )
+	if ( 0 && Plat_IsInDebugSession() )
 	{
 		// don't mask exceptions when running in the debugger
 		return ctx.Invoke();
@@ -619,69 +724,3 @@ PLATFORM_INTERFACE void CatchAndWriteMiniDump( FnWMain pfn, int argc, tchar *arg
 }
 
 #endif 
-
-// User minidump stream info comment strings.
-//
-// Single header string of 512 bytes set via MinidumpUserStreamInfoSetHeader.
-static char g_UserStreamInfoHeader[ 512 ];
-// Array of 32 round robin 128 byte strings set via MinidumpUserStreamInfoAppend.
-static char g_UserStreamInfo[ 64 ][ 128 ];
-static int g_UserStreamInfoIndex = 0;
-
-// Set the single g_UserStreamInfoHeader string.
-void MinidumpUserStreamInfoSetHeader( const char *pFormat, ... )
-{
-	va_list marker;
-
-	va_start( marker, pFormat );
-	_vsnprintf( g_UserStreamInfoHeader, ARRAYSIZE( g_UserStreamInfoHeader ), pFormat, marker );
-	g_UserStreamInfoHeader[ ARRAYSIZE( g_UserStreamInfoHeader ) - 1 ] = 0;
-	va_end( marker );
-}
-
-// Set the next comment in the g_UserStreamInfo array.
-void MinidumpUserStreamInfoAppend( const char *pFormat, ... )
-{
-	va_list marker;
-	char *pData = g_UserStreamInfo[ g_UserStreamInfoIndex ];
-	const int DataSize = ARRAYSIZE( g_UserStreamInfo[ g_UserStreamInfoIndex ] );
-
-	// Add tick count just so we have a general idea of when this event happened.
-	_snprintf( pData, DataSize, "[%x]", Plat_MSTime() );
-	pData[ DataSize - 1 ] = 0;
-	size_t HeaderLen = strlen( pData );
-
-	va_start( marker, pFormat );
-	_vsnprintf( pData + HeaderLen, DataSize - HeaderLen, pFormat, marker );
-	pData[ DataSize - 1 ] = 0;
-	va_end( marker );
-
-	// Bump up index, and go back to 0 if we've hit the end.
-	g_UserStreamInfoIndex++;
-	if( g_UserStreamInfoIndex >= ARRAYSIZE( g_UserStreamInfo ) )
-	{
-		g_UserStreamInfoIndex = 0;
-	}
-}
-
-// Retrieve the string given the Index.
-//	Index 0: header string
-//	Index 1+: comment string
-//	Returns NULL when you've reached the end of the comment string array
-//  Empty strings ("\0") can be returned if comment hasn't been set
-const char *MinidumpUserStreamInfoGet( int Index )
-{
-	if( ( Index < 0 ) || ( Index >= (ARRAYSIZE( g_UserStreamInfo ) + 1) ) ) //+1 because we map 0 to the header
-		return NULL;
-
-	if( Index == 0 )
-		return g_UserStreamInfoHeader;
-
-	Index = ( (Index + (ARRAYSIZE( g_UserStreamInfo ) - 1)) + //subtract 1 in a way that circularly wraps. Since 0 maps to the header, the comment indices are 1 based
-		g_UserStreamInfoIndex ) //start with our oldest comment
-		% ARRAYSIZE( g_UserStreamInfo ); //circular buffer wrapping
-
-	return g_UserStreamInfo[ Index ];
-}
-
-

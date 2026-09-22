@@ -28,6 +28,7 @@ def build(bld):
 		'linuxwin/cglmtex.cpp',		
 		'linuxwin/cglmfbo.cpp',		
 		'linuxwin/cglmprogram.cpp',	
+		'linuxwin/glmprogramcache.cpp',	
 		'linuxwin/cglmbuffer.cpp',	
 		'linuxwin/cglmquery.cpp',
 		'linuxwin/asanstubs.cpp',

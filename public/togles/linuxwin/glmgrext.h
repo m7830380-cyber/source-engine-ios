@@ -89,6 +89,25 @@
 #define GL_ALL_COMPLETED_NV               0x84F2
 #endif
 
+// Program binary cache (GLES 3.0 core / GL_OES_get_program_binary).
+// Values are from the GLES 3.0 registry.
+#ifndef GL_PROGRAM_BINARY_LENGTH
+#define GL_PROGRAM_BINARY_LENGTH          0x8741
+#endif
+
+// Must be set before glLinkProgram for glGetProgramBinary to be reliable.
+#ifndef GL_PROGRAM_BINARY_RETRIEVABLE_HINT
+#define GL_PROGRAM_BINARY_RETRIEVABLE_HINT 0x8257
+#endif
+
+#ifndef GL_NUM_PROGRAM_BINARY_FORMATS
+#define GL_NUM_PROGRAM_BINARY_FORMATS     0x87FE
+#endif
+
+#ifndef GL_PROGRAM_BINARY_FORMATS
+#define GL_PROGRAM_BINARY_FORMATS         0x87FF
+#endif
+
 #ifndef GL_MAP_READ_BIT
 #define GL_MAP_READ_BIT                   0x0001
 #endif

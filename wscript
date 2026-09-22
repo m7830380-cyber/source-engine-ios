@@ -105,6 +105,11 @@ CUSTOM_LIBS = set([
 	'cryptopp',
 ])
 
+# Extra link dependencies per VPC project on iOS.
+PROJECT_EXTRA_USES = {
+	'vguimatsurface': ['fontconfig', 'FT2'], # linuxfont.cpp font lookup
+}
+
 # VPC link dependencies whose source is not part of the leak. Code that
 # needs them is compiled out or stubbed.
 MISSING_LIBS = set([
@@ -269,6 +274,8 @@ def configure(conf):
 		os.path.abspath('ios/thirdparty/freetype/include'),
 		os.path.abspath('ios/thirdparty/fontconfig'),
 	])
+	# EGL/KHR headers for the ANGLE context in appframework/sdlmgr.cpp
+	conf.env.append_unique('INCLUDES', [os.path.abspath('ios/thirdparty/SDL-src/src/video/khronos')])
 
 	check_deps(conf)
 
@@ -460,6 +467,15 @@ def build_custom_projects(bld):
 
 	sources = sorted(f for f in os.listdir(CRYPTOPP_DIR)
 		if f.endswith('.cpp') and f not in CRYPTOPP_EXCLUDE)
+	# fontconfig subset for CS:GO's Linux font code (no fontconfig on iOS)
+	bld(
+		features = 'c cstlib',
+		source   = ['ios/fontconfig/fontconfig_ios.c'],
+		target   = 'fontconfig',
+		name     = 'fontconfig',
+		use      = ['FT2'],
+	)
+
 	env = bld.env.derive()
 	# Crypto++ 5.6.1 relies on MSVC-style template lookup
 	env.append_value('CXXFLAGS', ['-fdelayed-template-parsing'])
@@ -498,7 +514,7 @@ def build(bld):
 			Logs.warn('%s: missing source %s' % (name, s))
 
 		includes = [i for i in proj.includes if i not in DROP_INCLUDES]
-		use = _uses(proj.libs + proj.implibs)
+		use = _uses(proj.libs + proj.implibs) + PROJECT_EXTRA_USES.get(name, [])
 
 		env = bld.env.derive()
 		install_path = None

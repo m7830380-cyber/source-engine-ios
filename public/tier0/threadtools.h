@@ -310,12 +310,16 @@ inline int32 ThreadInterlockedExchange( int32 volatile *p, int32 value )
 	Assert( (size_t)p % 4 == 0 );
 	int32 nRet;
 
+#if defined( __aarch64__ )
+	nRet = __atomic_exchange_n( p, value, __ATOMIC_SEQ_CST );
+#else
 	// Note: The LOCK instruction prefix is assumed on the XCHG instruction and GCC gets very confused on the Mac when we use it.
 	__asm __volatile(
 		"xchgl %2,(%1)"
 		: "=r" (nRet)
 		: "r" (p), "0" (value)
 		: "memory");
+#endif
 	return nRet;
 }
 

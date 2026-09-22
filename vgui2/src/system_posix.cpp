@@ -40,6 +40,7 @@
 #include "SDL_stdinc.h"
 #include "SDL_clipboard.h"
 #include "SDL_error.h"
+#include "SDL_misc.h" // SDL_OpenURL
 #endif
 
 #define PROTECTED_THINGS_DISABLE
@@ -273,6 +274,11 @@ long CSystem::GetTimeMillis()
 //-----------------------------------------------------------------------------
 void CSystem::ShellExecute(const char *command, const char *file)
 {
+#if defined(IOS)
+	// no shell on iOS; hand URLs/files to the system
+	SDL_OpenURL( file );
+	return;
+#endif
 #if (defined(OSX) && !defined(IOS))
 	command = "open ";
 	char const *szSuffix = "";

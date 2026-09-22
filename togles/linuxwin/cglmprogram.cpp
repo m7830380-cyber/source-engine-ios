@@ -29,6 +29,7 @@
 #include "togles/rendermechanism.h"
 
 #include "glmprogramcache.h"
+#include "glmvaryingfixup.h"
 
 #include "filesystem.h"
 #include "tier1/fmtstr.h"
@@ -714,6 +715,7 @@ CGLMShaderPair::CGLMShaderPair( GLMContext *ctx  )
 	m_valid = false;
 	m_bCheckLinkStatus = false;
 	m_revision = 0;				// bumps to 1 once linked
+	m_patchedVertexShader = 0;
 }
 
 CGLMShaderPair::~CGLMShaderPair( )
@@ -722,6 +724,12 @@ CGLMShaderPair::~CGLMShaderPair( )
 	{
 		gGL->glDeleteProgram( m_program );
 		m_program = 0;
+	}
+
+	if ( m_patchedVertexShader )
+	{
+		gGL->glDeleteShader( m_patchedVertexShader );
+		m_patchedVertexShader = 0;
 	}
 }
 
@@ -937,8 +945,19 @@ bool CGLMShaderPair::SetProgramPair( CGLMProgram *vp, CGLMProgram *fp )
 		// attempt link. but first, detach any previously attached programs
 		if (m_vertexProg)
 		{
-			gGL->glDetachShader(m_program, m_vertexProg->m_descs[kGLMGLSL].m_object.glsl);
+			// If we attached a pair-local patched shader last time, that is
+			// what is actually bound to the program - detach that handle,
+			// not the shared one.
+			gGL->glDetachShader(m_program,
+				m_patchedVertexShader ? m_patchedVertexShader
+									  : m_vertexProg->m_descs[kGLMGLSL].m_object.glsl);
 			m_vertexProg = NULL;			
+		}
+
+		if ( m_patchedVertexShader )
+		{
+			gGL->glDeleteShader( m_patchedVertexShader );
+			m_patchedVertexShader = 0;
 		}
 		
 		if (m_fragmentProg)
@@ -948,8 +967,64 @@ bool CGLMShaderPair::SetProgramPair( CGLMProgram *vp, CGLMProgram *fp )
 		}
 		
 		// now attach
-		
-		gGL->glAttachShader( m_program, vp->m_descs[kGLMGLSL].m_object.glsl );
+		//
+		// GLSL ES 3.00 (section 4.3.10) makes it a LINK ERROR for a
+		// fragment input to have no matching vertex output. D3D9 allowed
+		// it - the pixel shader simply read undefined data - and Source
+		// pairs any vs with any ps at draw time, so plenty of legitimate
+		// pairs hit this. On device it showed up as, for example:
+		//
+		//   shader 2480 link log: FRAGMENT varying oT6 does not match
+		//                         any VERTEX varying
+		//
+		// Those programs fail to link and draw nothing or garbage. Patch
+		// a pair-local copy of the vertex shader that declares and zeroes
+		// the missing varyings. The shared CGLMProgram shader object is
+		// left untouched, since other pairs still need it as-is.
+		GLuint vertexShaderToAttach = vp->m_descs[kGLMGLSL].m_object.glsl;
+
+		char *pPatchedVertexText = GLMFixupMissingVaryings(
+			vp->m_text ? vp->m_text + vp->m_descs[kGLMGLSL].m_textOffset : NULL,
+			vp->m_descs[kGLMGLSL].m_textLength,
+			fp->m_text ? fp->m_text + fp->m_descs[kGLMGLSL].m_textOffset : NULL,
+			fp->m_descs[kGLMGLSL].m_textLength );
+
+		if ( pPatchedVertexText )
+		{
+			GLuint nPatched = gGL->glCreateShader( GL_VERTEX_SHADER );
+			if ( nPatched )
+			{
+				GLint nLen = (GLint)strlen( pPatchedVertexText );
+				gGL->glShaderSource( nPatched, 1, (const GLchar **)&pPatchedVertexText, &nLen );
+				gGL->glCompileShader( nPatched );
+
+				GLint nCompiled = 0;
+				gGL->glGetShaderiv( nPatched, GL_COMPILE_STATUS, &nCompiled );
+
+				if ( nCompiled != GL_FALSE )
+				{
+					m_patchedVertexShader = nPatched;
+					vertexShaderToAttach  = nPatched;
+				}
+				else
+				{
+					// Fall back to the original: a failed link with a
+					// readable log beats a mystery compile failure.
+					GLchar log[ 1024 ];
+					GLsizei nLogLen = 0;
+					gGL->glGetShaderInfoLog( nPatched, sizeof( log ), &nLogLen, log );
+					if ( nLogLen )
+						DevWarning( "Varying fixup failed to compile for %s: %s\n",
+							vp->m_shaderName, log );
+
+					gGL->glDeleteShader( nPatched );
+				}
+			}
+
+			free( pPatchedVertexText );
+		}
+
+		gGL->glAttachShader( m_program, vertexShaderToAttach );
 		m_vertexProg = vp;
 
 		gGL->glAttachShader( m_program, fp->m_descs[kGLMGLSL].m_object.glsl );

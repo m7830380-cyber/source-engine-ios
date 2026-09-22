@@ -290,7 +290,15 @@ public:
 
 	GLint					m_locVertexScreenParams; // vcscreen
 	uint					m_nScreenWidthHeight;
-		
+
+	// Pair-local vertex shader used when this fragment shader reads
+	// varyings the shared vertex shader does not write. GLSL ES 3.00
+	// makes that a link error (it was legal under D3D9), so we compile a
+	// patched copy with stub outputs just for this pair. 0 when unused.
+	// Never touches CGLMProgram's shared shader object, which other pairs
+	// rely on. See togles/linuxwin/glmvaryingfixup.h.
+	GLuint					m_patchedVertexShader;
+
 };	
 
 //===============================================================================

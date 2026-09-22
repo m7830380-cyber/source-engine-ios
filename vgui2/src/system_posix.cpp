@@ -277,8 +277,7 @@ void CSystem::ShellExecute(const char *command, const char *file)
 #if defined(IOS)
 	// no shell on iOS; hand URLs/files to the system
 	SDL_OpenURL( file );
-	return;
-#endif
+#else
 #if (defined(OSX) && !defined(IOS))
 	command = "open ";
 	char const *szSuffix = "";
@@ -290,6 +289,7 @@ void CSystem::ShellExecute(const char *command, const char *file)
 	char szRealCommand[ 1024 ];
 	Q_snprintf( szRealCommand, sizeof( szRealCommand ), "%s%s%s", command, file, szSuffix );
 	system( szRealCommand );
+#endif // IOS
 }
 
 void CSystem::ShellExecuteEx( const char *command, const char *file, const char *pParams )

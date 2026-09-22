@@ -502,6 +502,15 @@ def build(bld):
 	roots = [p for p in bld.env.PROJECTS.split(',') if p] if bld.env.PROJECTS else ROOT_PROJECTS
 	projects = _load_projects(roots)
 
+	# Shared libraries other modules link against (VPC $ImpLib: tier0,
+	# vstdlib, togl, ...) get Valve's POSIX "lib" prefix so -l<name> finds
+	# them; modules the engine dlopens by name (engine.dylib, client.dylib)
+	# do not.
+	linked = set()
+	for _, proj in projects:
+		if proj:
+			linked.update(n.lower() for n in proj.implibs)
+
 	for name, proj in projects:
 		if proj is None:
 			continue
@@ -529,7 +538,7 @@ def build(bld):
 		else:
 			features = 'c cxx cshlib cxxshlib'
 			target = proj.macros.get('OUTBINNAME', name)
-			env.cshlib_PATTERN = env.cxxshlib_PATTERN = '%s.dylib'
+			env.cshlib_PATTERN = env.cxxshlib_PATTERN = 'lib%s.dylib' if name in linked else '%s.dylib'
 			install_path = bld.env.LIBDIR
 			use += ['IOS', 'SDL2', 'GLES', 'ZLIB', 'BZ2', 'ICONV']
 

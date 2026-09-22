@@ -38,6 +38,7 @@ static inline void SDL_GetWindowSizeInPixels( SDL_Window *window, int *w, int *h
 
 #include "tier0/vprof_telemetry.h"
 #include "tier0/icommandline.h"
+#include "tier0/fasttimer.h"
 
 #include "tier1/utllinkedlist.h"
 #include "tier1/convar.h"
@@ -1987,7 +1988,7 @@ void CSDLMgr::PumpWindowsMessageLoop()
 
 				// We still handle WM_MOUSEMOVE in CInputSystem for regular mouse events, only raw goes through SDL.
 				// This is done in order to maintain legacy mouse behaviour for Windows users.
-				if ( IsWindows() && !m_bRawInput )
+				if ( IsPlatformWindows() && !m_bRawInput )
 					break;
 
 				// When SDL_WarpMouseInWindow is called, an SDL_MOUSEMOTION
@@ -2155,7 +2156,7 @@ void CSDLMgr::PumpWindowsMessageLoop()
 					}
 					case SDL_WINDOWEVENT_LEAVE:
 					{
-						if ( !IsWindows() && !m_bRawInput && !m_bCursorVisible && m_bHasFocus )
+						if ( !IsPlatformWindows() && !m_bRawInput && !m_bCursorVisible && m_bHasFocus )
 						{
 							// If the cursor is not visible and the mouse
 							// cursor somehow manages to escape the window

@@ -16,7 +16,6 @@ mkdir -p "$APP/Frameworks"
 
 cp "$BUNDLE/Info.plist" "$APP/"
 cp "$BUNDLE/LaunchScreen.storyboard" "$APP/"
-cp "$BUNDLE/extras_dir.vpk" "$APP/"
 
 if [ -x /usr/libexec/PlistBuddy ]; then
 	/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $BUNDLE_ID" "$APP/Info.plist"
@@ -92,11 +91,8 @@ fi
 
 chmod +x "$APP/csgo_osx64"
 
-# Offline game dir (gameinfo only in-repo; maps/vpks come from the Steam install).
-if [ -d "$ROOT/csgo" ]; then
-	mkdir -p "$APP/csgo"
-	cp -a "$ROOT/csgo/." "$APP/csgo/"
-fi
+# Game content (csgo/ from a CS:GO install) goes in the app's Documents
+# directory, which launcher_main uses as the base directory.
 
 # Rewrite absolute CI/build load paths to @rpath so the IPA runs on device.
 # Also normalize ANGLE framework load paths to match the reference IPA.

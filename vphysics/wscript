@@ -65,9 +65,14 @@ def build(bld):
 
 	install_path = bld.env.LIBDIR
 
+	# the engine dlopens vphysics.dylib (no lib prefix)
+	env = bld.env.derive()
+	env.cxxshlib_PATTERN = '%s.dylib'
+
 	bld.shlib(
 		source   = source,
 		target   = PROJECT_NAME,
+		env      = env,
 		name     = PROJECT_NAME,
 		features = 'c cxx',
 		includes = includes,

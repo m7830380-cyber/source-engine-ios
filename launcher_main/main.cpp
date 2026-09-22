@@ -49,6 +49,15 @@
 #include "tier0/platform.h"
 #include "tier0/basetypes.h"
 
+#ifdef IOS
+// ios/Launchdiag.m: argument dialog and bundle paths; SDL_uikit_main.c runs
+// main() inside SDL's UIKit application (SDL.h renames it to SDL_main)
+#include "SDL.h"
+extern "C" void IOS_LaunchDialog( void );
+extern "C" const char *IOS_GetExecDir( void );
+extern "C" int IOS_GetArgs( char ***out );
+#endif
+
 #if defined( VPCGAME )
 #define _VPCGAME_STRING_HACK2(x) #x
 #define _VPCGAME_STRING_HACK1(x) _VPCGAME_STRING_HACK2(x)
@@ -659,7 +668,14 @@ int main( int argc, char *argv[] )
 
 int main( int argc, char *argv[] )
 {
-#ifdef PLATFORM_64BITS
+#if defined( IOS )
+	// every module sits in the .app bundle root
+	IOS_LaunchDialog();
+	argc = IOS_GetArgs( &argv );
+	char szLauncherPath[ MAX_PATH ];
+	snprintf( szLauncherPath, sizeof( szLauncherPath ), "%s/launcher" DLL_EXT_STRING, IOS_GetExecDir() );
+	const char *pLauncherPath = szLauncherPath;
+#elif defined( PLATFORM_64BITS )
 	#ifdef OSX
 		const char *pLauncherPath = "bin/osx64/launcher" DLL_EXT_STRING;
 	#else

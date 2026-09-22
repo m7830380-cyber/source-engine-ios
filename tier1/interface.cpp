@@ -492,6 +492,21 @@ CSysModule *Sys_LoadModule( const char *pModuleName )
 #endif // DEBUG
 	}
 
+#if defined( IOS )
+	// All modules ship in the .app bundle (APP_LIB_PATH, set by launcher_main),
+	// while game content and the paths built from it live in Documents.
+	if ( !hDLL )
+	{
+		const char *pLibPath = getenv( "APP_LIB_PATH" );
+		if ( pLibPath )
+		{
+			char szBundleModuleName[1024];
+			Q_snprintf( szBundleModuleName, sizeof( szBundleModuleName ), "%s/%s", pLibPath, V_UnqualifiedFileName( pModuleName ) );
+			hDLL = Sys_LoadLibrary( szBundleModuleName );
+		}
+	}
+#endif
+
 	// If running in the debugger, assume debug binaries are okay, otherwise they must run with -allowdebug
 	if ( !IsGameConsole() && Sys_GetProcAddress( hDLL, "BuiltDebug" ) )
 	{

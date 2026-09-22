@@ -320,6 +320,16 @@ void UTIL_ComputeBaseDir()
 #ifndef _PS3
 	g_szBasedir[0] = 0;
 
+#if defined( IOS )
+	// game content lives in the app's Documents directory (set by launcher_main)
+	const char *pGamePath = getenv( "VALVE_GAME_PATH" );
+	if ( pGamePath )
+	{
+		Q_strncpy( g_szBasedir, pGamePath, sizeof( g_szBasedir ) );
+		return;
+	}
+#endif
+
 	if ( IsX360() )
 	{
 		char const *pBaseDir = CommandLine()->ParmValue( "-basedir" );

@@ -56,10 +56,7 @@ ROOT_PROJECTS = [
 	'engine',
 	'filesystem_stdio',
 	'inputsystem',
-	'materialsystem',
-	'shaderapidx9',
-	'stdshader_dbg',
-	'stdshader_dx9',
+	'materialsystem', # on OSX64/iOS it links shaderapidx9, shaderlib and stdshaders in
 	'datacache',
 	'studiorender',
 	'soundemittersystem',
@@ -75,13 +72,8 @@ ROOT_PROJECTS = [
 	'serverbrowser',
 ]
 
-# projects.vgc gates a few projects away from OSX (the partner branch never
-# finished the Mac port of the shader API); point at them directly.
+# VPC link names that differ from their projects.vgc project name.
 PROJECT_OVERRIDES = {
-	'shaderapidx9': 'materialsystem/shaderapidx9/shaderapidx9.vpc',
-	'stdshader_dx9': 'materialsystem/stdshaders/stdshader_dx9.vpc',
-	'stdshader_dbg': 'materialsystem/stdshaders/stdshader_dbg.vpc',
-	'shaderlib': 'materialsystem/shaderlib/shaderlib.vpc',
 	'vgui2': 'vgui2/src/vgui_dll.vpc',
 }
 
@@ -103,17 +95,26 @@ EXTERNAL_LIBS = {
 # are in the tree; built by build_custom_projects().
 CUSTOM_LIBS = set([
 	'cryptopp',
+	'gcsdk', # gcsdk/gcsdk_ios.cpp: the part of the missing GC SDK the game uses
 ])
 
 # Extra link dependencies per VPC project on iOS.
 PROJECT_EXTRA_USES = {
-	'vguimatsurface': ['fontconfig', 'FT2'], # linuxfont.cpp font lookup
+	'vguimatsurface': ['fontconfig', 'FT2', 'PNG', 'ZLIB'], # linuxfont.cpp font lookup
+	'engine': ['CURL'],
+}
+
+# Extra sources per VPC project on iOS.
+PROJECT_EXTRA_SOURCES = {
+	# prebuilt libraries missing from the tree: Steam Datagram Relay, Steam Audio
+	'engine': ['ios/engine/steamdatagram_null.cpp', 'ios/engine/phonon_null.cpp'],
+	# CSteamID::Render; Valve's engine compiles this in, matchmaking needs it too
+	'matchmaking': ['common/steamid.cpp'],
 }
 
 # VPC link dependencies whose source is not part of the leak. Code that
 # needs them is compiled out or stubbed.
 MISSING_LIBS = set([
-	'gcsdk',
 	'steamdatagramlib',
 	'libcef',
 	'tcmalloc',
@@ -143,6 +144,7 @@ IOS_DEFINES = [
 	'PLATFORM_IOS=1',
 	'NO_CEG=1',
 	'TOGLES=1', # togl is the source-engine port's GLES backend
+	'IOS_DEFAULT_GAME="csgo"', # launch dialog default (launcher_main/ios)
 ]
 
 # VPC include dirs replaced by the build's own copies.
@@ -317,6 +319,7 @@ def check_deps(conf):
 	conf.check(lib='png', uselib_store='PNG')
 	conf.check(lib='freetype2', uselib_store='FT2')
 	conf.check(lib='protobuf', uselib_store='PROTOBUF')
+	conf.check(lib='curl', uselib_store='CURL')
 
 # ---------------------------------------------------------------------------
 # VPC driven build
@@ -476,6 +479,23 @@ def build_custom_projects(bld):
 		use      = ['FT2'],
 	)
 
+	# GC SDK subset plus the steammessages protobuf it builds on
+	class _GcsdkProto:
+		protos = ['gcsdk/steammessages.proto']
+		projdir = 'gcsdk'
+		macros = {'GENERATED_PROTO_DIR': 'generated_proto'}
+	_gen_protos(bld, _GcsdkProto)
+	bld(
+		features = 'cxx cxxstlib',
+		source   = ['gcsdk/gcsdk_ios.cpp', 'gcsdk/generated_proto/steammessages.pb.cc'],
+		target   = 'gcsdk',
+		name     = 'gcsdk',
+		includes = ['gcsdk/generated_proto', 'thirdparty/protobuf-2.5.0/src', 'gcsdk',
+			'gcsdk/steamextra', 'common', 'public', 'public/tier0', 'public/tier1', 'public/gcsdk'],
+		defines  = ['PROTOBUF'],
+		use      = ['PROTOBUF'],
+	)
+
 	env = bld.env.derive()
 	# Crypto++ 5.6.1 relies on MSVC-style template lookup
 	env.append_value('CXXFLAGS', ['-fdelayed-template-parsing'])
@@ -517,7 +537,7 @@ def build(bld):
 		_gen_protos(bld, proj)
 		_gen_nuts(proj)
 
-		sources = [s for s in proj.sources if os.path.exists(s)]
+		sources = [s for s in proj.sources if os.path.exists(s)] + PROJECT_EXTRA_SOURCES.get(name, [])
 		missing = [s for s in proj.sources if not os.path.exists(s)]
 		for s in missing:
 			Logs.warn('%s: missing source %s' % (name, s))

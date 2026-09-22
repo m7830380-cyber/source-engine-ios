@@ -1,35 +1,35 @@
 //========= Source Engine iOS modernization ==============================//
 //
-// Purpose: AVAudioEngine output device for iOS.
+// Purpose: AVAudioEngine-backed IAudioDevice for iOS.
 //
 //	Enabled with the waf flag --phase-audio, which defines SRC_PHASE_AUDIO.
-//	Selected at runtime ahead of the AudioQueue/OpenAL devices when built in.
+//	Selected at runtime ahead of the SDL/AudioQueue devices when built in.
+//
+//	This file is plain C++ and deliberately includes NO Objective-C
+//	framework headers - all AVFoundation work lives in
+//	snd_dev_ios_phase_backend.mm behind a C interface, because Valve's
+//	`typedef int BOOL` and ObjC's `typedef bool BOOL` cannot coexist in one
+//	translation unit. (Same problem and same fix as commit 14f6ad3d.)
 //
 //	WHY THIS IS NOT (YET) FULL PHASE SPATIAL AUDIO
 //	----------------------------------------------
 //	The Source mixer is a push model: S_TransferStereo16() mixes every
-//	audible channel down to a single interleaved stereo buffer, and the
-//	device only ever sees that finished stereo mix. Real PHASE (or
-//	AVAudioEnvironmentNode) spatialization needs the opposite - each sound
-//	source must stay separate all the way to the audio graph so the
-//	framework can place it in 3D. Handing PHASE an already-mixed stereo
-//	buffer would gain nothing but latency.
+//	audible channel down to one interleaved stereo buffer, and the device
+//	only ever sees that finished mix. Real PHASE (or AVAudioEnvironmentNode)
+//	spatialization needs each source kept separate all the way to the audio
+//	graph. Feeding PHASE an already-mixed stereo buffer would add latency
+//	and gain nothing.
 //
-//	Genuinely moving to PHASE therefore means changing the mixer, not the
-//	device, which is a much larger and riskier change. What this file does
-//	deliver is the part that is safe and self-contained:
+//	Moving to real PHASE therefore means changing the mixer, not the
+//	device. What this delivers is the part that is safe and self-contained:
 //
 //	  * AVAudioSourceNode pull-model output, replacing AudioQueue's manual
 //	    128-buffer juggling. The render callback is real-time safe.
-//	  * Correct AVAudioSession configuration, so the game ducks, handles
-//	    route changes (headphones in/out) and interruptions (phone calls)
-//	    the way iOS expects.
-//	  * Headphone detection wired to the engine's IsHeadphone(), which the
-//	    existing AudioQueue device never implemented on iOS.
-//	  * A listener transform cached for a future spatial backend.
-//
-//	The class is deliberately shaped so a later change can fan out to real
-//	PHASE sources without touching the device selection logic again.
+//	  * Correct AVAudioSession setup, so the game handles route changes
+//	    and interruptions the way iOS expects.
+//	  * Real headphone detection wired to IsHeadphone(), which the
+//	    AudioQueue device never implemented on iOS.
+//	  * A cached listener transform for a future spatial backend.
 //
 //=======================================================================//
 
@@ -37,9 +37,8 @@
 
 #if defined( SRC_PHASE_AUDIO )
 
-#import <AVFoundation/AVFoundation.h>
-
 #include "snd_dev_ios_phase.h"
+#include "snd_dev_ios_phase_backend.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
@@ -51,14 +50,12 @@ extern void S_SpatializeChannel( int volume[6], int master_vol, const Vector *ps
 //-----------------------------------------------------------------------------
 // Ring buffer sizing.
 //
-// The engine mixes ahead into this buffer and we drain it from the audio
-// render thread. It must be a power of two: GetOutputPosition() masks with
-// (DeviceSampleCount() - 1), exactly as the AudioQueue device does.
+// The engine mixes ahead into this buffer and the audio thread drains it.
+// Must be a power of two: GetOutputPosition() masks with
+// (PHASE_RING_FRAMES - 1), exactly as the AudioQueue device does.
 //-----------------------------------------------------------------------------
-#define PHASE_SAMPLE_RATE		44100
-#define PHASE_CHANNELS			2
 #define PHASE_BYTES_PER_SAMPLE	2					// 16-bit
-#define PHASE_FRAME_BYTES		( PHASE_CHANNELS * PHASE_BYTES_PER_SAMPLE )
+#define PHASE_FRAME_BYTES		( IOSPHASE_CHANNELS * PHASE_BYTES_PER_SAMPLE )
 
 // 32768 stereo frames ~= 0.74s of mix-ahead at 44.1kHz. Power of two.
 #define PHASE_RING_FRAMES		32768
@@ -93,47 +90,47 @@ public:
 	void		ApplyDSPEffects( int idsp, portable_samplepair_t *pbuffront, portable_samplepair_t *pbufrear, portable_samplepair_t *pbufcenter, int samplecount );
 
 	const char *DeviceName( void )			{ return "AVAudioEngine"; }
-	int			DeviceChannels( void )		{ return PHASE_CHANNELS; }
+	int			DeviceChannels( void )		{ return IOSPHASE_CHANNELS; }
 	int			DeviceSampleBits( void )	{ return PHASE_BYTES_PER_SAMPLE * 8; }
 	int			DeviceSampleBytes( void )	{ return PHASE_BYTES_PER_SAMPLE; }
-	int			DeviceDmaSpeed( void )		{ return PHASE_SAMPLE_RATE; }
+	int			DeviceDmaSpeed( void )		{ return IOSPHASE_SAMPLE_RATE; }
 	int			DeviceSampleCount( void )	{ return m_deviceSampleCount; }
 
-	bool		IsHeadphone( void );
+	bool		IsHeadphone( void )			{ return IOSPhase_IsHeadphone(); }
 
-	// Called from the real-time render thread.
-	void		RenderInto( AudioBufferList *pOutput, uint32 nFrames );
+	// Real-time render thread entry point.
+	void		RenderInto( float *pLeft, float *pRight, unsigned int nFrames );
 
 private:
-	bool	StartEngine( void );
-	void	StopEngine( void );
-	void	ConfigureSession( void );
+	int16			*m_pRingBuffer;		// interleaved 16-bit stereo
+	int				m_deviceSampleCount;
 
-	AVAudioEngine		*m_pEngine;
-	AVAudioSourceNode	*m_pSourceNode;
+	// Frames consumed by the audio thread. Written there, read by the game
+	// thread for GetOutputPosition().
+	CInterlockedInt	m_nFramesRendered;
 
-	// Interleaved 16-bit stereo ring buffer shared with the render thread.
-	int16				*m_pRingBuffer;
-	int					m_deviceSampleCount;	// total samples (frames * channels)
+	int				m_pauseCount;
+	bool			m_bRunning;
+	bool			m_bSoundsShutdown;
 
-	// Frames consumed by the render callback. Written only by the audio
-	// thread, read by the game thread for GetOutputPosition().
-	CInterlockedInt		m_nFramesRendered;
-
-	int					m_pauseCount;
-	bool				m_bRunning;
-	bool				m_bFailed;
-	bool				m_bSoundsShutdown;
-
-	// Cached listener transform. Unused by the stereo path, kept so a
-	// future spatial backend has it without another engine change.
-	Vector				m_vListenerOrigin;
-	Vector				m_vListenerForward;
-	Vector				m_vListenerRight;
-	Vector				m_vListenerUp;
+	// Cached for a future spatial backend; unused by the stereo path.
+	Vector			m_vListenerOrigin;
+	Vector			m_vListenerForward;
+	Vector			m_vListenerRight;
+	Vector			m_vListenerUp;
 };
 
 static CAudioDeviceIOSPhase *g_pPhaseDevice = NULL;
+
+//-----------------------------------------------------------------------------
+// Trampoline from the C backend into the device.
+//-----------------------------------------------------------------------------
+static void PhaseRenderTrampoline( void *pContext, float *pLeft, float *pRight, unsigned int nFrames )
+{
+	CAudioDeviceIOSPhase *pDevice = (CAudioDeviceIOSPhase *)pContext;
+	if ( pDevice )
+		pDevice->RenderInto( pLeft, pRight, nFrames );
+}
 
 //-----------------------------------------------------------------------------
 IAudioDevice *Audio_CreateIOSPhaseDevice( void )
@@ -150,150 +147,50 @@ IAudioDevice *Audio_CreateIOSPhaseDevice( void )
 }
 
 //-----------------------------------------------------------------------------
-// Drain the ring buffer straight into CoreAudio's planar float buffers.
+// Drain the ring buffer into CoreAudio's planar float buffers.
 //
-// REAL-TIME THREAD. No allocation, no locks, no Obj-C message sends that
-// could allocate, no engine calls. Anything else risks a glitch or a
-// priority inversion against the game thread.
-//
-// Writing directly into the destination avoids any intermediate scratch
-// buffer, which also keeps this function reentrancy-free.
+// REAL-TIME THREAD. No allocation, no locks, no engine calls - anything
+// else risks a glitch or a priority inversion against the game thread.
 //-----------------------------------------------------------------------------
-void CAudioDeviceIOSPhase::RenderInto( AudioBufferList *pOutput, uint32 nFrames )
+void CAudioDeviceIOSPhase::RenderInto( float *pLeft, float *pRight, unsigned int nFrames )
 {
-	const uint32 nNumBuffers = pOutput->mNumberBuffers;
-
 	if ( !m_pRingBuffer || !m_bRunning )
 	{
-		for ( uint32 nBuf = 0; nBuf < nNumBuffers; ++nBuf )
-		{
-			if ( pOutput->mBuffers[ nBuf ].mData )
-				memset( pOutput->mBuffers[ nBuf ].mData, 0, pOutput->mBuffers[ nBuf ].mDataByteSize );
-		}
+		if ( pLeft )  memset( pLeft,  0, nFrames * sizeof( float ) );
+		if ( pRight && pRight != pLeft ) memset( pRight, 0, nFrames * sizeof( float ) );
 		return;
 	}
 
-	const uint32 nStart = (uint32)(int)m_nFramesRendered;
+	const uint32 nStart  = (uint32)(int)m_nFramesRendered;
 	const float  flScale = 1.0f / 32768.0f;
 
-	for ( uint32 nBuf = 0; nBuf < nNumBuffers; ++nBuf )
+	for ( unsigned int i = 0; i < nFrames; ++i )
 	{
-		float *pDst = (float *)pOutput->mBuffers[ nBuf ].mData;
-		if ( !pDst )
-			continue;
+		const uint32 nFrame = ( nStart + i ) & ( PHASE_RING_FRAMES - 1 );
+		const float flL = m_pRingBuffer[ nFrame * IOSPHASE_CHANNELS + 0 ] * flScale;
+		const float flR = m_pRingBuffer[ nFrame * IOSPHASE_CHANNELS + 1 ] * flScale;
 
-		// Planar output: buffer 0 is left, buffer 1 is right.
-		const uint32 nSrcChan = ( nBuf < PHASE_CHANNELS ) ? nBuf : 0;
-
-		for ( uint32 i = 0; i < nFrames; ++i )
-		{
-			const uint32 nFrame = ( nStart + i ) & ( PHASE_RING_FRAMES - 1 );
-			pDst[ i ] = m_pRingBuffer[ nFrame * PHASE_CHANNELS + nSrcChan ] * flScale;
-		}
+		if ( pLeft )
+			pLeft[ i ] = flL;
+		if ( pRight && pRight != pLeft )
+			pRight[ i ] = flR;
 	}
 
 	m_nFramesRendered = (int)( nStart + nFrames );
 }
 
 //-----------------------------------------------------------------------------
-void CAudioDeviceIOSPhase::ConfigureSession( void )
-{
-	NSError *pError = nil;
-	AVAudioSession *pSession = [AVAudioSession sharedInstance];
-
-	// .ambient would be silenced by the ring switch; .playback is what a
-	// game wants. mixWithOthers lets background music keep playing.
-	[pSession setCategory:AVAudioSessionCategoryPlayback
-			  withOptions:AVAudioSessionCategoryOptionMixWithOthers
-					error:&pError];
-	if ( pError != nil )
-		DevMsg( "PHASE audio: setCategory failed (%s)\n", [[pError localizedDescription] UTF8String] );
-
-	pError = nil;
-	// Ask for a small buffer; iOS will clamp to what the hardware allows.
-	[pSession setPreferredIOBufferDuration:0.010 error:&pError];
-
-	pError = nil;
-	[pSession setPreferredSampleRate:PHASE_SAMPLE_RATE error:&pError];
-
-	pError = nil;
-	[pSession setActive:YES error:&pError];
-	if ( pError != nil )
-		DevMsg( "PHASE audio: session activation failed (%s)\n", [[pError localizedDescription] UTF8String] );
-}
-
-//-----------------------------------------------------------------------------
-bool CAudioDeviceIOSPhase::StartEngine( void )
-{
-	m_pEngine = [[AVAudioEngine alloc] init];
-	if ( m_pEngine == nil )
-		return false;
-
-	AVAudioFormat *pFormat =
-		[[AVAudioFormat alloc] initStandardFormatWithSampleRate:PHASE_SAMPLE_RATE channels:PHASE_CHANNELS];
-	if ( pFormat == nil )
-		return false;
-
-	// The source node renders float32 non-interleaved (the standard format),
-	// so convert from our int16 ring buffer inside the callback.
-	CAudioDeviceIOSPhase *pThis = this;
-
-	m_pSourceNode = [[AVAudioSourceNode alloc] initWithFormat:pFormat
-		renderBlock:^OSStatus( BOOL *isSilence,
-							   const AudioTimeStamp *timestamp,
-							   AVAudioFrameCount frameCount,
-							   AudioBufferList *outputData )
-		{
-			pThis->RenderInto( outputData, (uint32)frameCount );
-			*isSilence = NO;
-			return noErr;
-		}];
-
-	if ( m_pSourceNode == nil )
-		return false;
-
-	[m_pEngine attachNode:m_pSourceNode];
-	[m_pEngine connect:m_pSourceNode to:m_pEngine.mainMixerNode format:pFormat];
-
-	NSError *pError = nil;
-	[m_pEngine startAndReturnError:&pError];
-	if ( pError != nil )
-	{
-		DevMsg( "PHASE audio: engine start failed (%s)\n", [[pError localizedDescription] UTF8String] );
-		return false;
-	}
-
-	return true;
-}
-
-//-----------------------------------------------------------------------------
-void CAudioDeviceIOSPhase::StopEngine( void )
-{
-	if ( m_pEngine != nil )
-	{
-		[m_pEngine stop];
-		if ( m_pSourceNode != nil )
-			[m_pEngine detachNode:m_pSourceNode];
-	}
-	m_pSourceNode = nil;
-	m_pEngine     = nil;
-}
-
-//-----------------------------------------------------------------------------
 bool CAudioDeviceIOSPhase::Init( void )
 {
-	m_pEngine           = nil;
-	m_pSourceNode       = nil;
 	m_pRingBuffer       = NULL;
 	m_nFramesRendered   = 0;
 	m_pauseCount        = 0;
 	m_bRunning          = false;
-	m_bFailed           = false;
 	m_bSoundsShutdown   = false;
 	m_bSurround         = false;
 	m_bSurroundCenter   = false;
 	m_bHeadphone        = false;
-	m_deviceSampleCount = PHASE_RING_FRAMES * PHASE_CHANNELS;
+	m_deviceSampleCount = PHASE_RING_FRAMES * IOSPHASE_CHANNELS;
 
 	m_vListenerOrigin.Init();
 	m_vListenerForward.Init();
@@ -302,26 +199,22 @@ bool CAudioDeviceIOSPhase::Init( void )
 
 	m_pRingBuffer = (int16 *)malloc( PHASE_RING_BYTES );
 	if ( !m_pRingBuffer )
-	{
-		m_bFailed = true;
 		return false;
-	}
 	memset( m_pRingBuffer, 0, PHASE_RING_BYTES );
 
-	ConfigureSession();
+	IOSPhase_ConfigureSession();
 
-	if ( !StartEngine() )
+	if ( !IOSPhase_Start( PhaseRenderTrampoline, this ) )
 	{
 		free( m_pRingBuffer );
 		m_pRingBuffer = NULL;
-		m_bFailed = true;
 		return false;
 	}
 
 	m_bRunning = true;
 
 	if ( snd_firsttime )
-		DevMsg( "AVAudioEngine sound initialized (%d Hz, %d ch)\n", PHASE_SAMPLE_RATE, PHASE_CHANNELS );
+		DevMsg( "AVAudioEngine sound initialized (%d Hz, %d ch)\n", IOSPHASE_SAMPLE_RATE, IOSPHASE_CHANNELS );
 
 	return true;
 }
@@ -330,7 +223,7 @@ bool CAudioDeviceIOSPhase::Init( void )
 void CAudioDeviceIOSPhase::Shutdown( void )
 {
 	m_bRunning = false;
-	StopEngine();
+	IOSPhase_Stop();
 
 	if ( m_pRingBuffer )
 	{
@@ -356,9 +249,7 @@ int CAudioDeviceIOSPhase::PaintBegin( float mixAheadTime, int soundtime, int pai
 		endtime = soundtime + samps;
 
 	if ( ( endtime - paintedtime ) & 0x3 )
-	{
 		endtime -= ( endtime - paintedtime ) & 0x3;
-	}
 
 	return endtime;
 }
@@ -384,8 +275,7 @@ void CAudioDeviceIOSPhase::Pause( void )
 	if ( m_pauseCount == 1 )
 	{
 		m_bRunning = false;
-		if ( m_pEngine != nil )
-			[m_pEngine pause];
+		IOSPhase_Pause();
 	}
 }
 
@@ -394,11 +284,9 @@ void CAudioDeviceIOSPhase::UnPause( void )
 	if ( m_pauseCount > 0 )
 		m_pauseCount--;
 
-	if ( m_pauseCount == 0 && m_pEngine != nil )
+	if ( m_pauseCount == 0 )
 	{
-		NSError *pError = nil;
-		[m_pEngine startAndReturnError:&pError];
-		if ( pError == nil )
+		if ( IOSPhase_Resume() )
 			m_bRunning = true;
 	}
 }
@@ -420,25 +308,6 @@ bool CAudioDeviceIOSPhase::Should3DMix( void )
 }
 
 //-----------------------------------------------------------------------------
-// Headphone detection - AudioQueue never implemented this on iOS, so
-// headphone-aware DSP silently behaved as if speakers were always in use.
-//-----------------------------------------------------------------------------
-bool CAudioDeviceIOSPhase::IsHeadphone( void )
-{
-	AVAudioSessionRouteDescription *pRoute = [[AVAudioSession sharedInstance] currentRoute];
-	for ( AVAudioSessionPortDescription *pPort in pRoute.outputs )
-	{
-		if ( [pPort.portType isEqualToString:AVAudioSessionPortHeadphones] ||
-			 [pPort.portType isEqualToString:AVAudioSessionPortBluetoothA2DP] ||
-			 [pPort.portType isEqualToString:AVAudioSessionPortBluetoothHFP] )
-		{
-			return true;
-		}
-	}
-	return false;
-}
-
-//-----------------------------------------------------------------------------
 void CAudioDeviceIOSPhase::ClearBuffer( void )
 {
 	if ( !m_pRingBuffer )
@@ -450,7 +319,6 @@ void CAudioDeviceIOSPhase::ClearBuffer( void )
 //-----------------------------------------------------------------------------
 void CAudioDeviceIOSPhase::UpdateListener( const Vector& position, const Vector& forward, const Vector& right, const Vector& up )
 {
-	// Cached for a future spatial backend; the stereo path does not use it.
 	m_vListenerOrigin  = position;
 	m_vListenerForward = forward;
 	m_vListenerRight   = right;

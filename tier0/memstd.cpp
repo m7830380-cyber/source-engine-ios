@@ -35,6 +35,7 @@
 #include "tier0/threadtools.h"
 #include "mem_helpers.h"
 #include "memstd.h"
+#include "mem_mimalloc.h"
 #ifdef _X360
 #include "xbox/xbox_console.h"
 #endif
@@ -1488,7 +1489,7 @@ void *CStdMemAlloc::Alloc( size_t nSize )
 
 #endif
 
-	pMem = malloc( nSize );
+	pMem = Src_InternalMalloc( nSize );
 	ApplyMemoryInitializations( pMem, nSize );
 		if ( !pMem )
 		{
@@ -1520,7 +1521,7 @@ void *CStdMemAlloc::Realloc( void *pMem, size_t nSize )
 	}
 #endif
 
-	void *pRet = realloc( pMem, nSize );
+	void *pRet = Src_InternalRealloc( pMem, nSize );
 		if ( !pRet )
 		{
 			SetCRTAllocFailed( nSize );
@@ -1553,7 +1554,7 @@ void CStdMemAlloc::Free( void *pMem )
 	}
 #endif
 
-	free( pMem );
+	Src_InternalFree( pMem );
 }
 
 void *CStdMemAlloc::Expand_NoLongerSupported( void *pMem, size_t nSize )

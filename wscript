@@ -186,6 +186,15 @@ def define_platform(conf):
 	conf.env.ANGLE = conf.options.ANGLE
 	conf.env.GAMES = conf.options.GAMES
 
+	# --- Modernization feature flags (opt-in) ---
+	conf.env.METAL = conf.options.METAL
+	conf.env.MODERN_THREADS = conf.options.MODERN_THREADS
+	conf.env.MIMALLOC = conf.options.MIMALLOC
+	conf.env.HAPTICS = conf.options.HAPTICS
+	conf.env.PHASE_AUDIO = conf.options.PHASE_AUDIO
+	conf.env.PRECOMPILED_SHADERS = conf.options.PRECOMPILED_SHADERS
+	conf.env.NO_LEGACY_CONSOLES = conf.options.NO_LEGACY_CONSOLES
+
 	arch32 = conf.run_test(CPP_32BIT_CHECK, 'Testing 32bit support')
 	arch64 = conf.run_test(CPP_64BIT_CHECK, 'Testing 64bit support')
 
@@ -211,6 +220,35 @@ def define_platform(conf):
 
 	if conf.env.ANGLE:
 		conf.define('ANGLE', 1)
+
+	# --- Modernization defines ---
+	# Each is opt-in; when unset the engine compiles exactly as before.
+	if conf.env.METAL:
+		if not conf.env.IOS:
+			conf.fatal('--metal is only supported together with --ios')
+		conf.define('SRC_METAL', 1)
+
+	if conf.env.MODERN_THREADS:
+		conf.define('SRC_MODERN_THREADS', 1)
+
+	if conf.env.MIMALLOC:
+		conf.define('SRC_MIMALLOC', 1)
+
+	if conf.env.HAPTICS:
+		if not conf.env.IOS:
+			conf.fatal('--haptics is only supported together with --ios')
+		conf.define('SRC_HAPTICS', 1)
+
+	if conf.env.PHASE_AUDIO:
+		if not conf.env.IOS:
+			conf.fatal('--phase-audio is only supported together with --ios')
+		conf.define('SRC_PHASE_AUDIO', 1)
+
+	if conf.env.PRECOMPILED_SHADERS:
+		conf.define('SRC_PRECOMPILED_SHADERS', 1)
+
+	if conf.env.NO_LEGACY_CONSOLES:
+		conf.define('SRC_NO_LEGACY_CONSOLES', 1)
 
 	if conf.options.TESTS:
 		conf.define('UNITTESTS', 1)
@@ -350,6 +388,29 @@ def options(opt):
 	grp.add_option('--sanitize', action = 'store', dest = 'SANITIZE', default = '',
 		help = 'build with sanitizers [default: %default]')
 
+	# --- Modernization options (all default OFF, opt-in only) ---
+
+	grp.add_option('--metal', action = 'store_true', dest = 'METAL', default = False,
+		help = 'build iOS renderer with native Metal backend instead of GLES/ANGLE (experimental) [default: %default]')
+
+	grp.add_option('--modern-threads', action = 'store_true', dest = 'MODERN_THREADS', default = False,
+		help = 'use C++11 std::thread/mutex primitives in tier0 threadtools (experimental) [default: %default]')
+
+	grp.add_option('--mimalloc', action = 'store_true', dest = 'MIMALLOC', default = False,
+		help = 'route tier0 allocator through mimalloc (experimental) [default: %default]')
+
+	grp.add_option('--haptics', action = 'store_true', dest = 'HAPTICS', default = False,
+		help = 'enable iOS CoreHaptics feedback backend (experimental) [default: %default]')
+
+	grp.add_option('--phase-audio', action = 'store_true', dest = 'PHASE_AUDIO', default = False,
+		help = 'enable AVAudioEngine/PHASE spatial audio device on iOS (experimental) [default: %default]')
+
+	grp.add_option('--precompiled-shaders', action = 'store_true', dest = 'PRECOMPILED_SHADERS', default = False,
+		help = 'enable offline-compiled .metallib shader loading; also gated at runtime by -precompiledshaders [default: %default]')
+
+	grp.add_option('--no-legacy-consoles', action = 'store_true', dest = 'NO_LEGACY_CONSOLES', default = False,
+		help = 'compile out dead X360/PS3 console code paths [default: %default]')
+
 	opt.load('compiler_optimizations subproject')
 
 	opt.load('xcompile compiler_cxx compiler_c sdl2 clang_compilation_database strip_on_install_v2 waf_unit_test subproject')
@@ -413,6 +474,14 @@ def check_deps(conf):
 			conf.env.FRAMEWORK_CFNETWORK = "CFNetwork"
 			conf.env.FRAMEWORK_QUARTZCORE = "QuartzCore"
 			conf.env.FRAMEWORK_SDL2 = "SDL2"
+			if conf.env.METAL:
+				conf.env.FRAMEWORK_METAL = "Metal"
+				conf.env.FRAMEWORK_METALKIT = "MetalKit"
+			if conf.env.HAPTICS:
+				conf.env.FRAMEWORK_COREHAPTICS = "CoreHaptics"
+			if conf.env.PHASE_AUDIO:
+				conf.env.FRAMEWORK_AVFOUNDATION = "AVFoundation"
+				conf.env.FRAMEWORK_PHASE = "PHASE"
 			if not conf.env.ANGLE:
 				conf.env.FRAMEWORK_OPENGLES = "OpenGLES"
 			else:

@@ -86,6 +86,22 @@ def build(bld):
 
 	defines = []
 
+	# --- mimalloc backend (opt-in via --mimalloc) ---
+	# mimalloc ships a single-translation-unit amalgamation (src/static.c)
+	# which #includes every other .c file, so we can compile it straight
+	# into tier0 without pulling in its CMake build.
+	if bld.env.MIMALLOC:
+		mi_root = '../thirdparty/mimalloc'
+		if not os.path.isdir(os.path.join(bld.path.abspath(), mi_root, 'include')):
+			bld.fatal('--mimalloc was requested but thirdparty/mimalloc is missing. '
+				'Run scripts/ios/fetch-mimalloc.sh first.')
+		source += [mi_root + '/src/static.c']
+		includes.append(mi_root + '/include')
+		# MI_MALLOC_OVERRIDE is deliberately NOT set: we call mi_* explicitly
+		# from tier0 rather than hijacking the process-wide malloc symbols,
+		# which would also capture SDL2/ANGLE allocations.
+		defines += ['MI_MALLOC_OVERRIDE=0']
+
 	if bld.env.DEST_OS == 'win32':
 		libs = ['ADVAPI32', 'WS2_32']
 	else:

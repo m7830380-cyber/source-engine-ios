@@ -43,6 +43,11 @@
 #define PTHREAD_MUTEX_ADAPTIVE_NP      3
 #endif
 
+#if defined( SRC_MODERN_THREADS )
+// C++11 synchronization primitives, opt-in via --modern-threads.
+#include <mutex>
+#endif
+
 #ifdef _PS3
 #define PS3_SYS_PPU_THREAD_COMMON_STACK_SIZE ( 256 * 1024 )
 #endif
@@ -981,8 +986,13 @@ private:
 #elif defined( _PS3 )
 	sys_mutex_t m_Mutex;
 #elif defined(POSIX)
+#if defined( SRC_MODERN_THREADS )
+	// Recursive to match PTHREAD_MUTEX_RECURSIVE semantics exactly.
+	std::recursive_mutex m_Mutex;
+#else
 	pthread_mutex_t m_Mutex;
 	pthread_mutexattr_t m_Attr;
+#endif
 #else
 #error
 #endif
@@ -2291,6 +2301,61 @@ inline void CThreadMutex::SetTrace( bool bTrace )
 
 #elif defined(POSIX) && !defined( _GAMECONSOLE )
 
+#if defined( SRC_MODERN_THREADS )
+
+// --- C++11 std::recursive_mutex backend (opt-in via --modern-threads) ---
+//
+// IMPORTANT: CThreadMutex is a RECURSIVE mutex. The pthread path below
+// explicitly sets PTHREAD_MUTEX_RECURSIVE, and large parts of the engine
+// (notably the material system and the filesystem) rely on re-entrant
+// locking from the same thread. std::mutex is NOT recursive and swapping
+// to it would self-deadlock, so std::recursive_mutex is the only correct
+// mapping here.
+//
+// This also removes the manual pthread_mutexattr_t lifetime management
+// and makes the type exception-safe by construction.
+
+inline CThreadMutex::CThreadMutex()
+{
+	// std::recursive_mutex default-constructs ready to use.
+}
+
+//---------------------------------------------------------
+
+inline CThreadMutex::~CThreadMutex()
+{
+}
+
+//---------------------------------------------------------
+
+inline void CThreadMutex::Lock()
+{
+	m_Mutex.lock();
+}
+
+//---------------------------------------------------------
+
+inline void CThreadMutex::Unlock()
+{
+	m_Mutex.unlock();
+}
+
+//---------------------------------------------------------
+
+inline void CThreadMutex::LockSilent()
+{
+	m_Mutex.lock();
+}
+
+//---------------------------------------------------------
+
+inline void CThreadMutex::UnlockSilent()
+{
+	m_Mutex.unlock();
+}
+
+#else // !SRC_MODERN_THREADS - original pthread implementation
+
 inline CThreadMutex::CThreadMutex()
 {
 	// enable recursive locks as we need them
@@ -2333,6 +2398,8 @@ inline void CThreadMutex::UnlockSilent()
 {
 	pthread_mutex_unlock( &m_Mutex );
 }
+
+#endif // SRC_MODERN_THREADS
 
 //---------------------------------------------------------
 

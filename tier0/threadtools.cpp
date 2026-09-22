@@ -2186,7 +2186,11 @@ bool CThreadMutex::TryLock()
 	return false; // ?? moved from EA code
 
 #elif defined( POSIX )
+#if defined( SRC_MODERN_THREADS )
+	return m_Mutex.try_lock();
+#else
 	return pthread_mutex_trylock( &m_Mutex ) == 0;
+#endif
 #else
 #error "Implement me!"
 	return true;

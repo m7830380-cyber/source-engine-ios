@@ -3,78 +3,69 @@
 import os
 import re
 
-token_list = [
-	re.compile(r'&&'),
-	re.compile(r'\|\|'),
-	re.compile(r'\!'),
-	re.compile(r'[a-zA-Z0-9_.]*')
-]
+_token_re = re.compile(r'\s*(&&|\|\||!|\(|\)|[a-zA-Z0-9_.]+)')
 
 match_statement = re.compile(r'\[.*\]')
 
 def compute_statement( defines, statement ):
-	vars = {}
-	for define in defines:
-		d=define.split('=')[0]
-		vars.update({d:True})
+	# Evaluates VPC conditionals like [ ($WIN32 || $OSXALL) && !$NO_STEAM ].
+	# Precedence: ! > && > ||, parentheses supported.
+	vars = set(d.split('=')[0] for d in defines)
 
-	def t( op ):
-		if op == '1': return True
-		elif op == '0': return False
-		elif op not in vars: return False
-
-		return vars[op]
-
+	expr = re.sub(r'\[|\]|\$', '', statement)
+	toks = []
 	pos = 0
+	while pos < len(expr):
+		r = _token_re.match(expr, pos)
+		if not r:
+			if expr[pos:].strip() == '':
+				break
+			pos += 1 # skip unknown character instead of looping forever
+			continue
+		toks.append(r.group(1))
+		pos = r.end()
 
-	statement = re.sub(r'\[|\]| |\$', '', statement)
+	idx = [0]
 
-	l = []
+	def peek():
+		return toks[idx[0]] if idx[0] < len(toks) else None
 
-	final = True
-	final_init = False
+	def take():
+		t = peek()
+		idx[0] += 1
+		return t
 
-	while pos < len(statement):
-		for token in token_list:
-			r = token.search(statement, pos)
-			if r and r.start() == pos:
-				l += [r.group(0)]
-				pos = r.end()
+	def atom():
+		t = take()
+		if t is None: return False
+		if t == '!': return not atom()
+		if t == '(':
+			v = or_expr()
+			if peek() == ')': take()
+			return v
+		if t == '1': return True
+		if t == '0': return False
+		return t in vars
 
-	k = 0
-	for i in range(len(l)):
-		j = i-k
-		if l[j] == '!' and j+1 < len(l):
-			df = l[j+1]
-			if df in vars:
-				vars[df] = not vars[df]
-			else: vars.update({df:True})
-			del l[j]
-			k += 1
+	def and_expr():
+		v = atom()
+		while peek() == '&&':
+			take()
+			r = atom()
+			v = v and r
+		return v
 
-	k = 0
-	for i in range(len(l)):
-		j = i-k
-		if l[j] == '&&' and j+1 < len(l) and j-1 >= 0:
-			val = 0
-			if t(l[j-1]) and t(l[j+1]):
-				val = 1
-			del l[j+1], l[j], l[j-1]
-			l.insert(j, str(val))
-			k += 2
+	def or_expr():
+		v = and_expr()
+		while peek() == '||':
+			take()
+			r = and_expr()
+			v = v or r
+		return v
 
-	k = 0
-	for i in range(len(l)):
-		j = i-k
-		if l[j] == '||' and j+1 < len(l) and j-1 >= 0:
-			val = 0
-			if t(l[j-1]) or t(l[j+1]):
-				val = 1
-			del l[j+1], l[j], l[j-1]
-			l.insert(j, str(val))
-			k += 2
-
-	return t(l[0])
+	if not toks:
+		return True
+	return or_expr()
 
 def project_key(l):
 	for k in l.keys():

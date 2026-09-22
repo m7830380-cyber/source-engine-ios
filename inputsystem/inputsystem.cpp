@@ -8,6 +8,7 @@
 #include "key_translation.h"
 #include "inputsystem/ButtonCode.h"
 #include "inputsystem/AnalogCode.h"
+#include "haptics_ios.h"
 #include "tier0/etwprof.h"
 #include "tier1/convar.h"
 #include "tier0/icommandline.h"
@@ -220,6 +221,11 @@ InitReturnVal_t CInputSystem::Init()
 
 #endif
 
+	// Bring up the Taptic Engine backend. Failure is non-fatal: devices
+	// without haptic hardware simply never produce feedback.
+	// No-op unless built with --haptics.
+	Haptics_Init();
+
 	return INIT_OK; 
 }
 
@@ -253,6 +259,9 @@ void CInputSystem::Shutdown()
 	{
 		ShutdownJoysticks();
 	}
+
+	// No-op unless built with --haptics.
+	Haptics_Shutdown();
 
 	BaseClass::Shutdown();
 }
@@ -976,6 +985,10 @@ void CInputSystem::SetPrimaryUserId( int userId )
 void CInputSystem::SetRumble( float fLeftMotor, float fRightMotor, int userId )
 {
 	SetXDeviceRumble( fLeftMotor, fRightMotor, userId );
+
+	// iOS has no rumble motors; route the same intent to the Taptic Engine.
+	// Compiles to nothing unless built with --haptics.
+	Haptics_SetRumble( fLeftMotor, fRightMotor );
 }
 
 
@@ -1003,6 +1016,9 @@ void CInputSystem::StopRumble( void )
 		SetRumble(0.0, 0.0, i);
 	}
 #endif
+
+	// Hard stop the Taptic Engine too; no-op unless built with --haptics.
+	Haptics_Stop();
 }
 
 

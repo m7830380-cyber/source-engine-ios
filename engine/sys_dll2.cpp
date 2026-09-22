@@ -171,9 +171,9 @@ void EditorToggle_f();
 
 #ifdef _WIN32
 HWND *pmainwindow = NULL;
-#elif OSX
+#elif defined( OSX ) && !defined( IOS )
 WindowRef pmainwindow;
-#elif LINUX
+#elif defined( LINUX ) || defined( IOS )
 void *pmainwindow = NULL;
 #elif defined( _PS3 )
 void *pmainwindow = NULL;

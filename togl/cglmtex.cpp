@@ -49,6 +49,9 @@ extern ILauncherMgr *g_pLauncherMgr;
 CGLMTex *g_pFirstCGMLTex;
 #endif
 
+#ifndef FCVAR_INTERNAL_USE
+#define FCVAR_INTERNAL_USE 0 // not in CS:GO's convar flags
+#endif
 ConVar gl_pow2_tempmem( "gl_pow2_tempmem", "0", FCVAR_INTERNAL_USE,
                         "If set, use power-of-two allocations for temporary texture memory during uploads. "
                         "May help with fragmentation on certain systems caused by heavy churn of large allocations." );

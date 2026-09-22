@@ -617,7 +617,7 @@ static size_t curlHeaderFn( void *ptr, size_t size, size_t nmemb, void *stream)
 RequestContext g_pacRequestCtx;
 
 // system specific headers for proxy configuration
-#if defined(OSX)
+#if defined(OSX) && !defined(IOS) // macOS system proxy settings
 #include <CoreFoundation/CoreFoundation.h>
 #include <CoreServices/CoreServices.h>
 #include <SystemConfiguration/SystemConfiguration.h>
@@ -631,7 +631,7 @@ void SetProxiesForURL( CURL *hMasterCURL, const char *pszURL )
 	char *pszProxyExceptionList = NULL;
 	rgchProxyHost[0] = '\0';
 	
-#if defined(OSX)
+#if defined(OSX) && !defined(IOS)
 	
 	// create an urlref around the raw URL
 	CFURLRef url = CFURLCreateWithBytes( NULL, ( const UInt8 * ) pszURL, strlen( pszURL ), kCFStringEncodingASCII, NULL );

@@ -19,7 +19,6 @@
 #include <windows.h>
 #endif	// _WIN32 && !_X360
 
-#include "vphysics_interfaceV30.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"

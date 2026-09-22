@@ -12,6 +12,7 @@
 //===========================================================================//
 
 #include "tier1/interface.h"
+#include "tier1/convar.h"
 #include "appframework/iappsystem.h"
 #include "scaleformui/scaleformui.h"
 

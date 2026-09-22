@@ -143,7 +143,7 @@ CShaderDeviceMgrDx8::~CShaderDeviceMgrDx8()
 {
 }
 
-#ifdef OSX
+#if defined( OSX ) && !defined( IOS ) // unused on iOS; its Debugger() clashes with a macro here
 #include <Carbon/Carbon.h>
 #endif
 

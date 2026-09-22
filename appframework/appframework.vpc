@@ -39,6 +39,8 @@ $Project "appframework"
 		$File	"sdlmgr.cpp"		[$SDL]
 		$File	"cocoamgr.mm"		[!$SDL && $OSXALL]
 		$File	"glmrendererinfo_osx.mm"	[$SDL && $OSXALL && !$IOS]
+		$File	"glmrendererinfo_ios.mm"	[$IOS]
+		$File	"ios_metal_layer.mm"		[$IOS]
 	}
 
 	$Folder	"Interface"

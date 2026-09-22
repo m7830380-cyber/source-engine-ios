@@ -4,7 +4,15 @@
 
 #include "tier0/platform.h"
 
-#ifdef GNUC
+#if defined( GNUC ) && defined( __aarch64__ )
+inline int GetHardwareClockFast( void )
+{
+	unsigned long long nRet;
+	__asm__ volatile ( "mrs %0, cntvct_el0" : "=r" (nRet) );
+	return ( int ) nRet;
+}
+
+#elif defined( GNUC )
 inline int GetHardwareClockFast( void )
 {
 	unsigned long long int nRet;

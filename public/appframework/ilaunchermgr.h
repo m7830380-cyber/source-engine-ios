@@ -16,7 +16,7 @@
 // Cocoa functions that we hook were never ported to 64-bit. Until that is fixed,
 // we basically have to work around this by making sure the cursor is visible 
 // and set to something that is reasonable for usage in the overlay. 
-#if ( defined( OSX ) && defined( PLATFORM_64BITS ) && !defined( NO_STEAM ) )
+#if ( defined( OSX ) && !defined( IOS ) && defined( PLATFORM_64BITS ) && !defined( NO_STEAM ) )
 #define WITH_OVERLAY_CURSOR_VISIBILITY_WORKAROUND 1 
 #endif
 
@@ -116,8 +116,14 @@ public:
 	virtual void OnFrameRendered() = 0;
 #endif		
 
-#ifndef OSX
+#if !defined( OSX ) || defined( IOS )
     virtual void SetGammaRamp( const uint16 *pRed, const uint16 *pGreen, const uint16 *pBlue ) = 0;
+#endif
+
+#if defined( IOS )
+	// the GLES togl keeps the SDL window alive while GL objects reference it
+	virtual void IncWindowRefCount() = 0;
+	virtual void DecWindowRefCount() = 0;
 #endif
 
 #if WITH_OVERLAY_CURSOR_VISIBILITY_WORKAROUND

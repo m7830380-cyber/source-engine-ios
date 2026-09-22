@@ -30,7 +30,9 @@
 
 #if (defined(OSX) && !defined(IOS))
 #include <Carbon/Carbon.h>
-#elif (defined(LINUX) || defined(IOS))
+#elif defined(IOS)
+#include <sys/mount.h>
+#elif defined(LINUX)
 #include <sys/vfs.h>
 #endif
 
@@ -541,8 +543,13 @@ int CSystem::GetAvailableDrives(char *buf, int bufLen)
 //-----------------------------------------------------------------------------
 double CSystem::GetFreeDiskSpace(const char *path)
 {
+#if defined( IOS )
+	struct statfs buf;
+	int ret = statfs( path, &buf );
+#else
 	struct statfs64 buf;
 	int ret = statfs64( path, &buf );
+#endif
 	if ( ret < 0 )
 		return 0.0;
 	return (double) ( buf.f_bsize * buf.f_bfree );

@@ -6,7 +6,7 @@
 //=============================================================================//
 
 
-#ifdef OSX
+#if (defined(OSX) && !defined(IOS))
 #include <Carbon/Carbon.h>
 #include <CoreAudio/CoreAudio.h>
 #endif
@@ -20,7 +20,7 @@
 
 
 
-#ifndef OSX
+#if !(defined(OSX) && !defined(IOS))
 
 
 class CMixerControls : public IMixerControls
@@ -53,7 +53,7 @@ void ShutdownMixerControls()
 	g_pMixerControls = NULL;
 }
 
-#elif defined(OSX)
+#elif (defined(OSX) && !defined(IOS))
 
 class CMixerControls : public IMixerControls
 {

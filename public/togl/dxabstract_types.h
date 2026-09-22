@@ -90,14 +90,15 @@ typedef void* VD3DHANDLE;
 #if !defined(_WINNT_)
 
 	typedef int INT;
-	typedef unsigned long ULONG;
-	typedef long LONG;
+	// 32-bit as in CS:GO's togl: engine and shaderapi code assume it on 64-bit
+	typedef unsigned int ULONG;
+	typedef int LONG;
 	typedef float FLOAT;
 	typedef unsigned int DWORD;
 	typedef unsigned short WORD;
 	typedef long long LONGLONG;
 	typedef unsigned int UINT;
-	typedef long HRESULT;
+	typedef int HRESULT;
 	typedef unsigned char BYTE;
 	#define CONST const
 		

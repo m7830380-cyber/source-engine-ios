@@ -363,12 +363,17 @@ static bool ThreadInIoThread()
 
 #endif //_PS3
 
+// Valve's 32-bit OSX builds relied on the legacy 32-bit inode stat layout.
+// arm64 Darwin only has 64-bit inodes, and every module here is built with
+// the same headers, so the check does not apply to iOS.
+#if !defined( IOS )
 #if __DARWIN_64_BIT_INO_T
 #error badness
 #endif
 
 #if _DARWIN_FEATURE_64_BIT_INODE
 #error additional badness
+#endif
 #endif
 //-----------------------------------------------------------------------------
 

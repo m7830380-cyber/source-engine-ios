@@ -1268,6 +1268,8 @@ inline void CVertexBuilder::FastVertex( const ModelVertexDX8_t &vertex )
 
 			emms
 	}
+#elif defined( __aarch64__ )
+	memcpy( m_pCurrPosition, &vertex, sizeof( vertex ) );
 #elif defined(GNUC)
 	const void *pRead = &vertex;
 	void *pCurrPos = m_pCurrPosition;
@@ -1324,6 +1326,8 @@ inline void CVertexBuilder::FastVertexSSE( const ModelVertexDX8_t &vertex )
 		movntps [edi + 16], xmm1
 		movntps [edi + 32], xmm2
 	}
+#elif defined( __aarch64__ )
+	memcpy( m_pCurrPosition, &vertex, sizeof( vertex ) );
 #elif defined(GNUC)
 	const void *pRead = &vertex;
 	void *pCurrPos = m_pCurrPosition;

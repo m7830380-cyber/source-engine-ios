@@ -85,7 +85,7 @@
 #include "xbox/xbox_launch.h"
 #endif
 
-#ifdef LINUX
+#if defined( LINUX ) || defined( IOS )
 #include "SDL.h"
 
 #define MB_OK 			0x00000001
@@ -1953,7 +1953,7 @@ extern "C" DLL_EXPORT int LauncherMain( int argc, char **argv )
 
 		RegCloseKey(hKey);
 	}
-#elif defined( OSX )
+#elif defined( OSX ) && !defined( IOS ) // no system() on iOS
 	struct stat st;
 	if ( stat( RELAUNCH_FILE, &st ) == 0 ) 
 	{

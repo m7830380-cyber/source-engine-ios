@@ -42,10 +42,13 @@ def _tokenize(text):
 	return toks
 
 class _Stmt(object):
-	__slots__ = ('key', 'args', 'cond', 'block')
-	def __init__(self, key, args, cond, block):
+	__slots__ = ('key', 'args', 'arg_conds', 'cond', 'block')
+	def __init__(self, key, args, arg_conds, cond, block):
 		self.key = key
 		self.args = args
+		# condition written right after each argument; a $File statement
+		# listing several files (joined with \) has one per file
+		self.arg_conds = arg_conds
 		self.cond = cond
 		self.block = block
 
@@ -66,12 +69,16 @@ def _parse_block(toks, pos):
 		key = val
 		pos += 1
 		args = []
+		arg_conds = []
 		cond = None
 		while pos < n and toks[pos][0] in ('str', 'word', 'cond'):
 			if toks[pos][0] == 'cond':
 				cond = toks[pos][1]
+				if arg_conds:
+					arg_conds[-1] = cond
 			else:
 				args.append(toks[pos][1])
+				arg_conds.append(None)
 			pos += 1
 		# a block may start on the following line(s)
 		look = pos
@@ -83,7 +90,7 @@ def _parse_block(toks, pos):
 			if look == pos or key.startswith('$') or key.startswith('-$'):
 				block, pos = _parse_block(toks, look + 1)
 				# condition can also come after the block name on next line: rare
-		stmts.append(_Stmt(key, args, cond, block))
+		stmts.append(_Stmt(key, args, arg_conds, cond, block))
 	return stmts, pos
 
 class VPCProject(object):
@@ -100,6 +107,7 @@ class VPCProject(object):
 		self.macros = {}
 		self.vpc_files = []
 		self.protos = [] # .proto files relative to root
+		self.nuts = [] # squirrel scripts embedded as <name>_nut.h
 		self.projdir = '' # project directory relative to root
 
 	def __repr__(self):
@@ -234,10 +242,20 @@ _CODE_EXTS = ('.c', '.cc', '.cpp', '.cxx', '.mm', '.m')
 def _k(key):
 	return key.lower()
 
+# statements that list several items, each with its own [condition]
+_LIST_KEYS = ('$file', '$dynamicfile', '$schemafile', '$dynamicfile_nopch', '-$file',
+	'$lib', '$implib', '$libexternal', '$implibexternal',
+	'-$lib', '-$implib', '-$libexternal', '-$implibexternal')
+
 def _run(ctx, stmts, scope):
 	for st in stmts:
 		key = _k(st.key)
-		if st.cond is not None and not ctx.eval_cond(st.cond):
+		if key in _LIST_KEYS:
+			args = [a for a, c in zip(st.args, st.arg_conds) if c is None or ctx.eval_cond(c)]
+			if not args:
+				continue
+			st = _Stmt(st.key, args, [None] * len(args), None, st.block)
+		elif st.cond is not None and not ctx.eval_cond(st.cond):
 			continue
 
 		if key in ('$macro', '$macrorequired', '$macrorequiredallowempty', '$macroemptystring'):
@@ -318,6 +336,8 @@ def _run(ctx, stmts, scope):
 					ctx.proj.sources.append(p)
 				elif p.lower().endswith('.proto'):
 					ctx.proj.protos.append(p)
+				elif p.lower().endswith('.nut'):
+					ctx.proj.nuts.append(p)
 		elif key == '-$file':
 			for a in st.args:
 				ctx.removed.add(ctx.rel(ctx.path(a)).lower())
@@ -393,6 +413,7 @@ def parse(root, vpc, conditionals, macros=None, config='release'):
 	proj = ctx.proj
 	proj.sources = _uniq([s for s in proj.sources if s.lower() not in ctx.removed])
 	proj.protos = _uniq([s for s in proj.protos if s.lower() not in ctx.removed])
+	proj.nuts = _uniq([s for s in proj.nuts if s.lower() not in ctx.removed])
 	proj.projdir = ctx.rel(ctx.projdir)
 	proj.libs = _uniq(proj.libs)
 	proj.implibs = _uniq(proj.implibs)

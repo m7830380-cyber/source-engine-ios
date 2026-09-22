@@ -18,7 +18,22 @@
 
 static void cpuid(uint32 function, uint32& out_eax, uint32& out_ebx, uint32& out_ecx, uint32& out_edx)
 {
-#if defined(PLATFORM_64BITS)
+#if defined( __aarch64__ )
+	// arm64: no cpuid. Report the SSE levels sse2neon provides.
+	out_eax = out_ebx = out_ecx = out_edx = 0;
+	if ( function == 0 )
+	{
+		out_eax = 1;			// highest standard function
+		out_ebx = 0x756e6547;	// "Genu"
+		out_edx = 0x49656e69;	// "ineI"
+		out_ecx = 0x6c65746e;	// "ntel"
+	}
+	else if ( function == 1 )
+	{
+		out_edx = ( 1 << 23 ) | ( 1 << 25 ) | ( 1 << 26 );	// MMX, SSE, SSE2
+		out_ecx = ( 1 << 0 );								// SSE3
+	}
+#elif defined(PLATFORM_64BITS)
 	asm("mov %%rbx, %%rsi\n\t"
 		"cpuid\n\t"
 		"xchg %%rsi, %%rbx"

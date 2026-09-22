@@ -120,8 +120,6 @@ MISSING_LIBS = set([
 # so iOS loads scaleformui/null instead (Scaleform GFx itself is a prebuilt
 # x86 library).
 DROP_DEFINES = set([
-	'USE_BREAKPAD_HANDLER',
-	'VERSION_SAFE_STEAM_API_INTERFACES',
 ])
 
 # Platform defines CS:GO's POSIX/OSX64 VPC base scripts give every project;
@@ -390,6 +388,24 @@ def _gen_protos(bld, proj):
 		Logs.info('protoc %s -> %s' % (proto, outdir))
 		subprocess.check_call(cmd)
 
+def _gen_nuts(proj):
+	# Valve's devtools/bin/texttoarray.pl: embed a squirrel script as a
+	# NUL-terminated byte array named g_Script_<name>, next to the script.
+	for nut in proj.nuts:
+		base = os.path.splitext(os.path.basename(nut))[0]
+		out = os.path.join(os.path.dirname(nut), base + '_nut.h')
+		with open(nut, 'rb') as f:
+			data = bytearray(f.read())
+		lines = ['static unsigned char g_Script_%s[] = {' % base]
+		for i in range(0, len(data), 20):
+			lines.append('    ' + ''.join('0x%02x,' % b for b in data[i:i + 20]))
+		lines.append('    0x00')
+		lines.append('};')
+		text = '\n'.join(lines) + '\n'
+		if not os.path.exists(out) or open(out).read() != text:
+			with open(out, 'w') as f:
+				f.write(text)
+
 def _uses(names):
 	out = []
 	for n in names:
@@ -474,6 +490,7 @@ def build(bld):
 		if proj is None:
 			continue
 		_gen_protos(bld, proj)
+		_gen_nuts(proj)
 
 		sources = [s for s in proj.sources if os.path.exists(s)]
 		missing = [s for s in proj.sources if not os.path.exists(s)]

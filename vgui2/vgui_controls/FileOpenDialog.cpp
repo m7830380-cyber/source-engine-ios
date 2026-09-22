@@ -594,11 +594,11 @@ void FileOpenDialog::OnOpenInExplorer()
 #if !defined( _GAMECONSOLE )
 	ShellExecute( NULL, NULL, pCurrentDirectory, NULL, NULL, SW_SHOWNORMAL );
 #endif
-#elif defined( OSX )
+#elif defined( OSX ) && !defined( IOS )
 	char szCmd[ MAX_PATH ];
 	Q_snprintf( szCmd, sizeof(szCmd), "/usr/bin/open \"%s\"", pCurrentDirectory );
 	::system( szCmd );
-#elif defined( LINUX )
+#elif defined( LINUX ) || defined( IOS )
 	DevMsg( "FileOpenDialog::OnOpenInExplorer unimplemented under LINUX\n" );
 #endif
 }

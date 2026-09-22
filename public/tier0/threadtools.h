@@ -234,6 +234,8 @@ inline void ThreadPause()
 {
 #if defined( COMPILER_PS3 )
 	__db16cyc();
+#elif defined( COMPILER_GCC ) && defined( __aarch64__ )
+	__asm __volatile( "yield" );
 #elif defined( COMPILER_GCC )
 	__asm __volatile( "pause" );
 #elif defined ( COMPILER_MSVC64 )

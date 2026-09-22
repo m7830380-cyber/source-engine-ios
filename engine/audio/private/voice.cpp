@@ -806,7 +806,7 @@ bool Voice_Init(const char *pCodecName, int iVersion )
 
 	EngineVGui()->UpdateProgressBar( PROGRESS_DEFAULT );
 
-#ifdef OSX
+#if defined( OSX ) && !defined( IOS ) // iOS records through OpenAL below
 	IVoiceRecord* CreateVoiceRecord_AudioQueue(int sampleRate);
 	g_pVoiceRecord = CreateVoiceRecord_AudioQueue( Voice_SamplesPerSec() );
 	//g_pVoiceRecord = NULL;

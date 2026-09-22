@@ -134,6 +134,12 @@ float FASTCALL _SSE_VectorNormalize (Vector& vec)
 		r[ 1 ] = vec.y * recipSqrt;
 		r[ 2 ] = vec.z * recipSqrt;
 
+#elif defined( __aarch64__ )
+		radius = sqrtf( v[0] * v[0] + v[1] * v[1] + v[2] * v[2] );
+		float recip = 1.0f / radius;
+		r[0] = v[0] * recip;
+		r[1] = v[1] * recip;
+		r[2] = v[2] * recip;
 #elif POSIX
 		__asm__ __volatile__(
 #ifdef ALIGNED_VECTOR

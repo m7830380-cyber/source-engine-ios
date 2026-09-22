@@ -75,7 +75,7 @@ private:
 extern CVPhysPtrUtlVectorSaveRestoreOps g_VPhysPtrUtlVectorSaveRestoreOps;
 
 #define DEFINE_VPHYSPTR_UTLVECTOR(name) \
-	{ FIELD_CUSTOM, #name, { offsetof(classNameTypedef,name), 0 }, 1, FTYPEDESC_SAVE, NULL, &g_VPhysPtrUtlVectorSaveRestoreOps, NULL }
+	{ FIELD_CUSTOM, #name, offsetof(classNameTypedef,name), 1, FTYPEDESC_SAVE, NULL, &g_VPhysPtrUtlVectorSaveRestoreOps, NULL }
 
 
 //-----------------------------------------------------------------------------

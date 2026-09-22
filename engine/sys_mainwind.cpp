@@ -2160,7 +2160,7 @@ void CGame::PlayVideoListAndWait( const char *szVideoFileList, bool bNeedHealthW
 	// show cursor again
 	::ShowCursor(TRUE);
 #endif
-#ifdef OSX
+#if defined( OSX ) && !defined( IOS )
     CGDisplayShowCursor( kCGDirectMainDisplay );
 #endif
 #endif // DEDICATED

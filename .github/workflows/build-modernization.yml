@@ -1,0 +1,103 @@
+name: Build iOS IPA (modernization)
+
+# Verifies the opt-in modernization flags.
+#
+# Job 1 (baseline) builds with the flags OFF and must stay green - it proves
+# the changes are genuinely inert when not enabled.
+#
+# Job 2 builds each feature flag on its own. fail-fast is off so one broken
+# feature still tells us the state of all the others in a single run.
+
+on:
+  push:
+    branches: [ modernization ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  # ---------------------------------------------------------------------
+  # Baseline: flags off. Regression guard.
+  # ---------------------------------------------------------------------
+  baseline:
+    runs-on: macos-14
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Build unsigned IPA (no modernization flags)
+        env:
+          IOS_GAME: csgo
+          IOS_BUNDLE_ID: com.sourceengine.csgo
+          IOS_DISPLAY_NAME: csgo-source
+          IOS_APP_BUNDLE: csgo.app
+          IOS_IPA_NAME: source-engine-csgo-ios-arm64.ipa
+        run: |
+          chmod +x scripts/build-ios-arm64.sh scripts/ios/*.sh
+          ./scripts/build-ios-arm64.sh
+
+      - name: Upload baseline IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: baseline-csgo-ios-arm64
+          path: artifacts/source-engine-csgo-ios-arm64.ipa
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------
+  # Each feature on its own, so a failure names the feature that broke.
+  # ---------------------------------------------------------------------
+  feature:
+    runs-on: macos-14
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: mimalloc
+            flags: "--mimalloc"
+          - name: modern-threads
+            flags: "--modern-threads"
+          - name: haptics
+            flags: "--haptics"
+          - name: phase-audio
+            flags: "--phase-audio"
+          - name: precompiled-shaders
+            flags: "--precompiled-shaders"
+          - name: no-legacy-consoles
+            flags: "--no-legacy-consoles"
+          - name: metal
+            flags: "--metal"
+          # Everything at once: catches interactions between features.
+          - name: all
+            flags: "--mimalloc --modern-threads --haptics --phase-audio --precompiled-shaders --no-legacy-consoles"
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Fetch mimalloc
+        if: contains(matrix.flags, '--mimalloc')
+        run: |
+          chmod +x scripts/ios/fetch-mimalloc.sh
+          ./scripts/ios/fetch-mimalloc.sh
+
+      - name: Build ${{ matrix.name }}
+        env:
+          IOS_GAME: csgo
+          IOS_BUNDLE_ID: com.sourceengine.csgo
+          IOS_DISPLAY_NAME: csgo-source
+          IOS_APP_BUNDLE: csgo.app
+          IOS_IPA_NAME: source-engine-csgo-${{ matrix.name }}.ipa
+          EXTRA_WAF_FLAGS: ${{ matrix.flags }}
+        run: |
+          chmod +x scripts/build-ios-arm64.sh scripts/ios/*.sh
+          ./scripts/build-ios-arm64.sh $EXTRA_WAF_FLAGS
+
+      - name: Upload ${{ matrix.name }} IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: feature-${{ matrix.name }}
+          path: artifacts/source-engine-csgo-${{ matrix.name }}.ipa
+          if-no-files-found: warn

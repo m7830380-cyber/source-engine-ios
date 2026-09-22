@@ -10,6 +10,7 @@
 #ifdef IOS
 #include "SDL_metal.h"
 extern "C" void IOS_ConfigureMetalLayer( void *layerPtr );
+#include "ios_metal_device.h"
 #endif
 #if !SDL_VERSION_ATLEAST(2, 26, 0)
 static inline void SDL_GetWindowSizeInPixels( SDL_Window *window, int *w, int *h )
@@ -982,6 +983,8 @@ bool CSDLMgr::CreateHiddenGameWindow( const char *pTitle, int width, int height 
     void *renderLayer = SDL_Metal_GetLayer(metalView);
 #ifdef IOS
 	IOS_ConfigureMetalLayer( renderLayer );
+	// Report the real Metal capabilities behind ANGLE. No-op without --metal.
+	IOSMetal_ReportDevice();
 #endif
 
 	// Linear EGL surface: sRGB encoding is done in ToGLES shaders (FakeSRGBWrite).

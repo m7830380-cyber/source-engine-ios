@@ -30,6 +30,10 @@ def build(bld):
 	if bld.env.IOS:
 		source += ['glmrendererinfo_ios.mm', 'ios_metal_layer.mm']
 
+	# Native Metal capability query (opt-in via --metal).
+	if bld.env.METAL:
+		source += ['ios_metal_device.mm']
+
 
 	if bld.env.DEST_OS == 'win32':
 		source += [
@@ -68,6 +72,8 @@ def build(bld):
 		libs += ['FOUNDATION', 'APPKIT', 'IOKIT']
 	elif bld.env.IOS:
 		libs += ['FOUNDATION', 'UIKIT', 'IOKIT', 'OPENGLES', 'QUARTZCORE', 'COREGRAPHICS']
+		if bld.env.METAL:
+			libs += ['METAL']
 
 	bld.stlib(
 		source   = source,

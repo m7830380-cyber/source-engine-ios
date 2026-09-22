@@ -32,6 +32,8 @@ jobs:
           IOS_DISPLAY_NAME: ${{ matrix.display_name }}
           IOS_APP_BUNDLE: ${{ matrix.app_bundle }}
           IOS_IPA_NAME: ${{ matrix.artifact }}.ipa
+          # keep going after errors so each run reports every failing file
+          WAF_BUILD_FLAGS: -k
         run: |
           chmod +x scripts/build-ios-arm64.sh scripts/ios/*.sh
           ./scripts/build-ios-arm64.sh

@@ -19,6 +19,7 @@ struct SceneCachedData_t
 	unsigned int	msecs;
 	int				numSounds;
 	int				sceneId;
+	float			m_fLastSpeakSecs;
 };
 
 class ISceneFileCache : public IAppSystem

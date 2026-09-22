@@ -68,7 +68,7 @@ export IOS_BUNDLE_ID IOS_DISPLAY_NAME IOS_APP_BUNDLE IOS_IPA_FILE
 	--build-games="$IOS_GAME" \
 	"$@"
 
-./waf build
+./waf build ${WAF_BUILD_FLAGS:-}
 scripts/ios/createipa.sh
 
 mkdir -p artifacts

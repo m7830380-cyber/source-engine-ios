@@ -162,6 +162,7 @@ bool CSceneFileCache::GetSceneCachedData( char const *pFilename, SceneCachedData
 	{
 		// not available
 		pData->sceneId = -1;
+		pData->m_fLastSpeakSecs = 0;
 		pData->msecs = 0;
 		pData->numSounds = 0;
 		return false;
@@ -172,6 +173,7 @@ bool CSceneFileCache::GetSceneCachedData( char const *pFilename, SceneCachedData
 	SceneImageSummary_t *pSummary = (SceneImageSummary_t *)( (byte *)pHeader + pEntries[iScene].nSceneSummaryOffset );
 	
 	pData->sceneId = iScene;
+	pData->m_fLastSpeakSecs = pSummary->GetDurToSpeechEnd();
 	pData->msecs = pSummary->msecs;
 	pData->numSounds = pSummary->numSounds;
 
@@ -232,7 +234,8 @@ int CSceneFileCache::FindSceneInImage( const char *pSceneName )
 #else
 	V_FixSlashes( szCleanName );
 #endif
-	V_SetExtension( szCleanName, ".vcd", sizeof( szCleanName ) );
+	// Many vcd's in CSGO have a '.' in the filename, which breaks this call
+//	V_SetExtension( szCleanName, ".vcd", sizeof( szCleanName ) );
 
 	CRC32_t crcFilename = CRC32_ProcessSingleBuffer( szCleanName, strlen( szCleanName ) );
 

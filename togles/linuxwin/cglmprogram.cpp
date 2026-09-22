@@ -28,6 +28,8 @@
 
 #include "togles/rendermechanism.h"
 
+#include "glmprogramcache.h"
+
 #include "filesystem.h"
 #include "tier1/fmtstr.h"
 #include "tier1/KeyValues.h"
@@ -979,7 +981,28 @@ bool CGLMShaderPair::SetProgramPair( CGLMProgram *vp, CGLMProgram *fp )
 #endif
 
 		// now link
-		gGL->glLinkProgram( m_program );
+		//
+		// If the program binary cache is enabled (build flag
+		// --precompiled-shaders AND launch argument -precompiledshaders)
+		// try to restore a previously linked binary first. On a hit the
+		// driver skips the whole GLSL compile and link, which is the
+		// dominant cost of map load. On a miss, or on any failure, we
+		// fall straight through to the normal link below.
+		bool bLoadedFromCache = false;
+
+		if ( ShaderCache_IsEnabled() )
+		{
+			// Tell the driver we will want the binary back. Must happen
+			// before the link, and is harmless on a cache hit.
+			ShaderCache_MarkRetrievable( m_program );
+
+			bLoadedFromCache = ShaderCache_TryLoadProgram( m_program, vp->m_text, fp->m_text );
+		}
+
+		if ( !bLoadedFromCache )
+		{
+			gGL->glLinkProgram( m_program );
+		}
 
 		GLint isLinked = 0;
 		gGL->glGetProgramiv(m_program, GL_LINK_STATUS, &isLinked);
@@ -995,6 +1018,11 @@ bool CGLMShaderPair::SetProgramPair( CGLMProgram *vp, CGLMProgram *fp )
 				Msg("vp: \n%s\nfp: \n%s\n", vp->m_text, fp->m_text );
 				Msg("shader %d link log: %s\n", m_program, log);
 			}
+		}
+		else if ( !bLoadedFromCache && ShaderCache_IsEnabled() )
+		{
+			// Freshly linked and good - remember it for next launch.
+			ShaderCache_StoreProgram( m_program, vp->m_text, fp->m_text );
 		}
 		
 		m_bCheckLinkStatus = true;

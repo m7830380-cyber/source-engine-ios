@@ -1,7 +1,7 @@
 typedef unsigned int   uint;
 
-#include "../public/togles/linuxwin/glmdisplay.h"
-#include "../public/togles/linuxwin/glmdisplaydb.h"
+#include "../public/togl/glmdisplay.h"
+#include "../public/togl/glmdisplaydb.h"
 
 void GLMDisplayDB::PopulateRenderers( void ) { }
 void GLMDisplayDB::PopulateFakeAdapters( uint realRendererIndex ) { }		// fake adapters = one real adapter times however many displays are on 

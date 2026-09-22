@@ -38,7 +38,7 @@ $Project "appframework"
 		$File	"posixapp.cpp"		[$POSIX]
 		$File	"sdlmgr.cpp"		[$SDL]
 		$File	"cocoamgr.mm"		[!$SDL && $OSXALL]
-		$File	"glmrendererinfo_osx.mm"	[$SDL && $OSXALL]
+		$File	"glmrendererinfo_osx.mm"	[$SDL && $OSXALL && !$IOS]
 	}
 
 	$Folder	"Interface"

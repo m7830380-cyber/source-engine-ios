@@ -40,8 +40,8 @@ $Project "inputsystem"
 		$File	"inputsystem.cpp"
 		$File	"inputsystem.h"
 		$File	"joystick.cpp"			[!$POSIX]
-		$File	"joystick_osx.cpp"		[$OSXALL]
-		$File	"joystick_linux.cpp"	[$LINUXALL]
+		$File	"joystick_osx.cpp"		[$OSXALL && !$IOS]
+		$File	"joystick_linux.cpp"	[$LINUXALL || $IOS]
 		$File	"steamcontroller.cpp"
 		$File	"key_translation.cpp"
 		$File	"key_translation.h"

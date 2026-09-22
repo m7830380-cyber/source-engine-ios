@@ -60,9 +60,12 @@ $Project "togl"
 		$File	"$TOGL_SRCDIR/glentrypoints.cpp"	
 		$File	"$TOGL_SRCDIR/glmgr.cpp"			
 		$File	"$TOGL_SRCDIR/glmgrbasics.cpp"	
-		$File	"$TOGL_SRCDIR/glmgrcocoa.mm"					[$OSXALL]
-		$File	"$TOGL_SRCDIR/intelglmallocworkaround.cpp"		[$OSXALL]
-		$File	"$TOGL_SRCDIR/mach_override.c"					[$OSXALL]
+		$File	"$TOGL_SRCDIR/glmgrcocoa.mm"					[$OSXALL && !$IOS]
+		$File	"$TOGL_SRCDIR/intelglmallocworkaround.cpp"		[$OSXALL && !$IOS]
+		$File	"$TOGL_SRCDIR/mach_override.c"					[$OSXALL && !$IOS]
+		// GLES backend (from the source-engine port's togles)
+		$File	"$TOGL_SRCDIR/decompress.c"					[$IOS]
+		$File	"$TOGL_SRCDIR/asanstubs.cpp"					[$IOS]
 		$File	"$TOGL_SRCDIR/cglmtex.cpp"		
 		$File	"$TOGL_SRCDIR/cglmfbo.cpp"		
 		$File	"$TOGL_SRCDIR/cglmprogram.cpp"	

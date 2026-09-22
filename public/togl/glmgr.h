@@ -1,4 +1,26 @@
-//============ Copyright (c) Valve Corporation, All rights reserved. ============
+//========= Copyright Valve Corporation, All rights reserved. ============//
+//                       TOGL CODE LICENSE
+//
+//  Copyright 2011-2014 Valve Corporation
+//  All Rights Reserved.
+//
+//  Permission is hereby granted, free of charge, to any person obtaining a copy
+//  of this software and associated documentation files (the "Software"), to deal
+//  in the Software without restriction, including without limitation the rights
+//  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+//  copies of the Software, and to permit persons to whom the Software is
+//  furnished to do so, subject to the following conditions:
+//
+//  The above copyright notice and this permission notice shall be included in
+//  all copies or substantial portions of the Software.
+//
+//  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+//  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+//  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+//  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+//  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+//  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+//  THE SOFTWARE.
 //
 // glmgr.h
 //	singleton class, common basis for managing GL contexts
@@ -12,7 +34,7 @@
 #pragma once
 
 #undef HAVE_GL_ARB_SYNC
-#ifndef OSX
+#if !defined(OSX) || defined(IOS)
 #define HAVE_GL_ARB_SYNC 1
 #endif
 
@@ -42,6 +64,12 @@
 #define GLM_OPENGL_VENDOR_ID 1
 #define GLM_OPENGL_DEFAULT_DEVICE_ID 1
 #define GLM_OPENGL_LOW_PERF_DEVICE_ID 2
+
+#define GL_ALPHA_TEST_QCOM 0x0BC0
+#define GL_ALPHA_TEST_FUNC_QCOM 0x0BC1
+#define GL_ALPHA_TEST_REF_QCOM 0x0BC2
+
+#define GLSL_VERSION "#version 300 es\n"
 
 extern void GLMDebugPrintf( const char *pMsg, ... );
 
@@ -176,9 +204,11 @@ FORCEINLINE void glGetEnumv( GLenum which, GLenum *dst )
 // shorthand macros
 #define	EQ(fff) ( (src.fff) == (fff) )
 
+
 //rasterizer
 struct GLAlphaTestEnable_t		{ GLint		enable;													inline bool operator==(const GLAlphaTestEnable_t& src)		const { return EQ(enable);									} };
 struct GLAlphaTestFunc_t		{ GLenum	func; GLclampf ref;										inline bool operator==(const GLAlphaTestFunc_t& src)		const { return EQ(func) && EQ(ref);							} };
+struct GLAlphaTest_t { GLint enable; GLenum func; GLclampf ref; };
 struct GLCullFaceEnable_t		{ GLint		enable;													inline bool operator==(const GLCullFaceEnable_t& src)		const { return EQ(enable);									} };
 struct GLCullFrontFace_t		{ GLenum	value;													inline bool operator==(const GLCullFrontFace_t& src)		const { return EQ(value);									} };
 struct GLPolygonMode_t			{ GLenum	values[2];												inline bool operator==(const GLPolygonMode_t& src)			const { return EQ(values[0]) && EQ(values[1]);				} };
@@ -187,13 +217,13 @@ struct GLScissorEnable_t		{ GLint		enable;													inline bool operator==(co
 struct GLScissorBox_t			{ GLint		x,y;		GLsizei width, height;						inline bool operator==(const GLScissorBox_t& src)			const { return EQ(x) && EQ(y) && EQ(width) && EQ(height);	} };
 struct GLAlphaToCoverageEnable_t{ GLint		enable;													inline bool operator==(const GLAlphaToCoverageEnable_t& src) const { return EQ(enable);								} };
 struct GLViewportBox_t			{ GLint		x,y;		GLsizei width, height; uint widthheight;	inline bool operator==(const GLViewportBox_t& src)			const { return EQ(x) && EQ(y) && EQ(width) && EQ(height);	} };
-struct GLViewportDepthRange_t	{ GLdouble	flNear,flFar;											inline bool operator==(const GLViewportDepthRange_t& src)	const { return EQ(flNear) && EQ(flFar);						} };
+struct GLViewportDepthRange_t	{ GLfloat	flNear,flFar;											inline bool operator==(const GLViewportDepthRange_t& src)	const { return EQ(flNear) && EQ(flFar);						} };
 struct GLClipPlaneEnable_t		{ GLint		enable;													inline bool operator==(const GLClipPlaneEnable_t& src)		const { return EQ(enable);									} };
 struct GLClipPlaneEquation_t	{ GLfloat	x,y,z,w;												inline bool operator==(const GLClipPlaneEquation_t& src)	const { return EQ(x) && EQ(y) && EQ(z) && EQ(w);			} };
 
 //blend
-struct GLColorMaskSingle_t		{ char		r,g,b,a;												inline bool operator==(const GLColorMaskSingle_t& src)		const { return EQ(r) && EQ(g) && EQ(b) && EQ(a);			} };
-struct GLColorMaskMultiple_t	{ char		r,g,b,a;												inline bool operator==(const GLColorMaskMultiple_t& src)	const { return EQ(r) && EQ(g) && EQ(b) && EQ(a);			} };
+struct GLColorMaskSingle_t		{ signed char		r,g,b,a;												inline bool operator==(const GLColorMaskSingle_t& src)		const { return EQ(r) && EQ(g) && EQ(b) && EQ(a);			} };
+struct GLColorMaskMultiple_t	{ signed char		r,g,b,a;												inline bool operator==(const GLColorMaskMultiple_t& src)	const { return EQ(r) && EQ(g) && EQ(b) && EQ(a);			} };
 struct GLBlendEnable_t			{ GLint		enable;													inline bool operator==(const GLBlendEnable_t& src)			const { return EQ(enable);									} };
 struct GLBlendFactor_t			{ GLenum	srcfactor,dstfactor;									inline bool operator==(const GLBlendFactor_t& src)			const { return EQ(srcfactor) && EQ(dstfactor);				} };
 struct GLBlendEquation_t		{ GLenum	equation;												inline bool operator==(const GLBlendEquation_t& src)		const { return EQ(equation);								} };
@@ -203,7 +233,7 @@ struct GLBlendEnableSRGB_t		{ GLint		enable;													inline bool operator==(
 //depth
 struct GLDepthTestEnable_t		{ GLint		enable;													inline bool operator==(const GLDepthTestEnable_t& src)		const { return EQ(enable);									} };
 struct GLDepthFunc_t			{ GLenum	func;													inline bool operator==(const GLDepthFunc_t& src)			const { return EQ(func);									} };
-struct GLDepthMask_t			{ char		mask;													inline bool operator==(const GLDepthMask_t& src)			const { return EQ(mask);									} };
+struct GLDepthMask_t			{  char		mask;													inline bool operator==(const GLDepthMask_t& src)			const { return EQ(mask);									} };
 
 //stencil
 struct GLStencilTestEnable_t	{ GLint		enable;													inline bool operator==(const GLStencilTestEnable_t& src)	const { return EQ(enable);									} };
@@ -213,7 +243,7 @@ struct GLStencilWriteMask_t		{ GLint		mask;													inline bool operator==(c
 
 //clearing
 struct GLClearColor_t			{  GLfloat	r,g,b,a;												inline bool operator==(const GLClearColor_t& src)			const { return EQ(r) && EQ(g) && EQ(b) && EQ(a);			} };
-struct GLClearDepth_t			{  GLdouble	d;														inline bool operator==(const GLClearDepth_t& src)			const { return EQ(d);										} };
+struct GLClearDepth_t			{  GLfloat	d;														inline bool operator==(const GLClearDepth_t& src)			const { return EQ(d);										} };
 struct GLClearStencil_t			{  GLint	s;														inline bool operator==(const GLClearStencil_t& src)		const { return EQ(s);										} };
 
 #undef EQ
@@ -284,15 +314,24 @@ template<typename T>	void GLContextGetDefaultIndexed( T *dst, int index );
 //===============================================================================
 // template specializations for each type of state
 
+
+static GLAlphaTest_t g_alpha_test;
+
 //                                                                      --- GLAlphaTestEnable ---
 FORCEINLINE void GLContextSet( GLAlphaTestEnable_t *src )
 {
-	glSetEnable( GL_ALPHA_TEST, src->enable != 0 );
+	if( gGL->m_bHave_GL_QCOM_alpha_test )
+		glSetEnable( GL_ALPHA_TEST_QCOM, src->enable != 0 );
+	else
+		g_alpha_test.enable = src->enable;
 }
 
 FORCEINLINE void GLContextGet( GLAlphaTestEnable_t *dst )
 {
-	dst->enable = gGL->glIsEnabled( GL_ALPHA_TEST );
+	if( gGL->m_bHave_GL_QCOM_alpha_test )
+		dst->enable = gGL->glIsEnabled( GL_ALPHA_TEST_QCOM );
+	else
+		dst->enable = g_alpha_test.enable;
 }
 
 FORCEINLINE void GLContextGetDefault( GLAlphaTestEnable_t *dst )
@@ -303,13 +342,25 @@ FORCEINLINE void GLContextGetDefault( GLAlphaTestEnable_t *dst )
 //                                                                      --- GLAlphaTestFunc ---
 FORCEINLINE void GLContextSet( GLAlphaTestFunc_t *src )
 {
-	gGL->glAlphaFunc( src->func, src->ref );
+	if( gGL->m_bHave_GL_QCOM_alpha_test )
+		gGL->glAlphaFuncQCOM( src->func, src->ref );
+
+	g_alpha_test.func = src->func;
+	g_alpha_test.ref = src->ref;
 }
 
 FORCEINLINE void GLContextGet( GLAlphaTestFunc_t *dst )
 {
-	glGetEnumv( GL_ALPHA_TEST_FUNC, &dst->func );
-	gGL->glGetFloatv( GL_ALPHA_TEST_REF, &dst->ref );
+	if( gGL->m_bHave_GL_QCOM_alpha_test )
+	{
+		glGetEnumv( GL_ALPHA_TEST_FUNC_QCOM, &dst->func );
+		gGL->glGetFloatv( GL_ALPHA_TEST_REF_QCOM, &dst->ref );
+	}
+	else
+	{
+		dst->func = g_alpha_test.func;
+		dst->ref = g_alpha_test.ref;
+	}
 }
 
 FORCEINLINE void GLContextGetDefault( GLAlphaTestFunc_t *dst )
@@ -321,12 +372,12 @@ FORCEINLINE void GLContextGetDefault( GLAlphaTestFunc_t *dst )
 //                                                                      --- GLAlphaToCoverageEnable ---
 FORCEINLINE void GLContextSet( GLAlphaToCoverageEnable_t *src )
 {
-	glSetEnable( GL_SAMPLE_ALPHA_TO_COVERAGE_ARB, src->enable != 0 );
+	glSetEnable( GL_SAMPLE_ALPHA_TO_COVERAGE, src->enable != 0 );
 }
 
 FORCEINLINE void GLContextGet( GLAlphaToCoverageEnable_t *dst )
 {
-	dst->enable = gGL->glIsEnabled( GL_SAMPLE_ALPHA_TO_COVERAGE_ARB );
+	dst->enable = gGL->glIsEnabled( GL_SAMPLE_ALPHA_TO_COVERAGE );
 }
 
 FORCEINLINE void GLContextGetDefault( GLAlphaToCoverageEnable_t *dst )
@@ -371,8 +422,8 @@ FORCEINLINE void GLContextGetDefault( GLCullFrontFace_t *dst )
 //                                                                      --- GLPolygonMode ---
 FORCEINLINE void GLContextSet( GLPolygonMode_t *src )
 {
-	gGL->glPolygonMode( GL_FRONT, src->values[0] );
-	gGL->glPolygonMode( GL_BACK, src->values[1] );
+//	gGL->glPolygonMode( GL_FRONT, src->values[0] );
+//	gGL->glPolygonMode( GL_BACK, src->values[1] );
 }
 
 FORCEINLINE void GLContextGet( GLPolygonMode_t *dst )
@@ -475,12 +526,12 @@ FORCEINLINE void GLContextGetDefault( GLViewportBox_t *dst )
 //                                                                      --- GLViewportDepthRange ---
 FORCEINLINE void GLContextSet( GLViewportDepthRange_t *src )
 {
-	gGL->glDepthRange	( src->flNear, src->flFar );
+	gGL->glDepthRangef	( src->flNear, src->flFar );
 }
 
 FORCEINLINE void GLContextGet( GLViewportDepthRange_t *dst )
 {
-	gGL->glGetDoublev	( GL_DEPTH_RANGE, &dst->flNear );
+	gGL->glGetFloatv( GL_DEPTH_RANGE, &dst->flNear );
 }
 
 FORCEINLINE void GLContextGetDefault( GLViewportDepthRange_t *dst )
@@ -521,9 +572,9 @@ FORCEINLINE void GLContextGetDefaultIndexed( GLClipPlaneEnable_t *dst, int index
 FORCEINLINE void GLContextSetIndexed( GLClipPlaneEquation_t *src, int index )
 {
 	// shove into glGlipPlane
-	GLdouble coeffs[4] = { src->x, src->y, src->z, src->w };
 
-	gGL->glClipPlane( GL_CLIP_PLANE0 + index, coeffs );
+//	GLdouble coeffs[4] = { src->x, src->y, src->z, src->w };
+//	gGL->glClipPlane( GL_CLIP_PLANE0 + index, coeffs );
 }
 
 FORCEINLINE void GLContextGetIndexed( GLClipPlaneEquation_t *dst, int index )
@@ -562,12 +613,26 @@ FORCEINLINE void GLContextGetDefault( GLColorMaskSingle_t *dst )
 //                                                                      --- GLColorMaskMultiple ---
 FORCEINLINE void GLContextSetIndexed( GLColorMaskMultiple_t *src, int index )
 {
-	gGL->glColorMaskIndexedEXT ( index, src->r, src->g, src->b, src->a );
+	GLint Rfbo = 0, Dfbo = 0;
+
+	gGL->glGetIntegerv( GL_DRAW_FRAMEBUFFER_BINDING, &Dfbo );
+	gGL->glGetIntegerv( GL_READ_FRAMEBUFFER_BINDING, &Rfbo );
+	GLint target = Dfbo == Rfbo?GL_FRAMEBUFFER:GL_DRAW_FRAMEBUFFER;
+	gGL->glBindFramebuffer( target, index );
+	gGL->glColorMask ( src->r, src->g, src->b, src->a );
+	gGL->glBindFramebuffer( target, Dfbo );
 }
 
 FORCEINLINE void GLContextGetIndexed( GLColorMaskMultiple_t *dst, int index )
 {
-	gGL->glGetBooleanIndexedvEXT ( GL_COLOR_WRITEMASK, index, (GLboolean*)&dst->r );
+	GLint Rfbo = 0, Dfbo = 0;
+	
+	gGL->glGetIntegerv( GL_DRAW_FRAMEBUFFER_BINDING, &Dfbo );
+	gGL->glGetIntegerv( GL_READ_FRAMEBUFFER_BINDING, &Rfbo );
+	GLint target = Dfbo == Rfbo?GL_FRAMEBUFFER:GL_DRAW_FRAMEBUFFER;
+	gGL->glBindFramebuffer( target, index );
+	gGL->glGetBooleanv( GL_COLOR_WRITEMASK, (GLboolean*)&dst->r );
+	gGL->glBindFramebuffer( target, Dfbo );
 }
 
 FORCEINLINE void GLContextGetDefaultIndexed( GLColorMaskMultiple_t *dst, int index )
@@ -668,16 +733,15 @@ FORCEINLINE void GLContextSet( GLBlendEnableSRGB_t *src )
 	}
 #endif
 	// this query is not useful unless you have the ARB_framebuffer_srgb ext.
-	//GLint encoding = 0;
-	//pfnglGetFramebufferAttachmentParameteriv( GL_DRAW_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT0, GL_FRAMEBUFFER_ATTACHMENT_COLOR_ENCODING, &encoding );
+//	GLint encoding = 0;
+//	gGL->glGetFramebufferAttachmentParameteriv( GL_DRAW_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT0, GL_FRAMEBUFFER_ATTACHMENT_COLOR_ENCODING, &encoding );
 
 	glSetEnable( GL_FRAMEBUFFER_SRGB_EXT, src->enable != 0 );
 }
 
 FORCEINLINE void GLContextGet( GLBlendEnableSRGB_t *dst )
 {
-	//dst->enable = glIsEnabled( GL_FRAMEBUFFER_SRGB_EXT );
-	dst->enable = true; // wtf ?
+	dst->enable = gGL->glIsEnabled( GL_FRAMEBUFFER_SRGB_EXT );
 }
 
 FORCEINLINE void GLContextGetDefault( GLBlendEnableSRGB_t *dst )
@@ -842,12 +906,12 @@ FORCEINLINE void GLContextGetDefault( GLClearColor_t *dst )
 //                                                                      --- GLClearDepth ---
 FORCEINLINE void GLContextSet( GLClearDepth_t *src )
 {
-	gGL->glClearDepth ( src->d );
+	gGL->glClearDepthf( src->d );
 }
 
 FORCEINLINE void GLContextGet( GLClearDepth_t *dst )
 {
-	gGL->glGetDoublev ( GL_DEPTH_CLEAR_VALUE, &dst->d );
+	gGL->glGetFloatv( GL_DEPTH_CLEAR_VALUE, &dst->d );
 }
 
 FORCEINLINE void GLContextGetDefault( GLClearDepth_t *dst )
@@ -924,7 +988,7 @@ template<typename T> class GLState
 			result = !(temp == data);
 			return result;
 		}
-		
+
 		FORCEINLINE const T &GetData() const { return data; }
 		
 	protected:
@@ -1183,134 +1247,6 @@ public:
 };
 
 //===========================================================================//
-#ifndef OSX
-
-#ifndef GL_EXTERNAL_VIRTUAL_MEMORY_BUFFER_AMD
-#define GL_EXTERNAL_VIRTUAL_MEMORY_BUFFER_AMD 0x9160
-#endif
-
-#define GLMGR_PINNED_MEMORY_BUFFER_SIZE ( 6 * 1024 * 1024 )
-
-class CPinnedMemoryBuffer
-{
-	CPinnedMemoryBuffer( const CPinnedMemoryBuffer & );
-	CPinnedMemoryBuffer & operator= ( const CPinnedMemoryBuffer & );
-
-public:
-	CPinnedMemoryBuffer()
-	: 
-		m_pRawBuf( NULL ) 
-		, m_pBuf( NULL )
-		, m_nSize( 0 )
-		, m_nOfs( 0 )
-		, m_nBufferObj( 0 )
-#ifdef HAVE_GL_ARB_SYNC
-		, m_nSyncObj( 0 )
-#endif
-	{
-	}
-
-	~CPinnedMemoryBuffer()
-	{
-		Deinit();
-	}
-
-	bool Init( uint nSize )
-	{
-		Deinit();
-
-		// Guarantee 64KB alignment
-		m_pRawBuf = malloc( nSize + 65535 );
-		m_pBuf = reinterpret_cast<void *>((reinterpret_cast<uint64>(m_pRawBuf) + 65535) & (~65535));
-		m_nSize = nSize;
-		m_nOfs = 0;
-
-		gGL->glGenBuffersARB( 1, &m_nBufferObj );
-		gGL->glBindBufferARB( GL_EXTERNAL_VIRTUAL_MEMORY_BUFFER_AMD, m_nBufferObj );
-
-		gGL->glBufferDataARB( GL_EXTERNAL_VIRTUAL_MEMORY_BUFFER_AMD, m_nSize, m_pBuf, GL_STREAM_COPY );
-
-		return true;
-	}
-
-	void Deinit()
-	{
-		if ( !m_pRawBuf )
-			return;
-
-		BlockUntilNotBusy();
-
-		gGL->glBindBufferARB(GL_EXTERNAL_VIRTUAL_MEMORY_BUFFER_AMD, m_nBufferObj );
-
-		gGL->glBufferDataARB( GL_EXTERNAL_VIRTUAL_MEMORY_BUFFER_AMD, 0, (void*)NULL, GL_STREAM_COPY );
-
-		gGL->glBindBufferARB( GL_EXTERNAL_VIRTUAL_MEMORY_BUFFER_AMD, 0 );
-
-		gGL->glDeleteBuffersARB( 1, &m_nBufferObj );
-		m_nBufferObj = 0;
-
-		free( m_pRawBuf );
-		m_pRawBuf = NULL;
-		m_pBuf = NULL;
-	
-		m_nSize = 0;
-		m_nOfs = 0;
-	}
-
-	inline uint GetSize() const { return m_nSize; }
-	inline uint GetOfs() const { return m_nOfs; }
-	inline uint GetBytesRemaining() const { return m_nSize - m_nOfs; }
-	inline void *GetPtr() const { return m_pBuf; }
-	inline GLuint GetHandle() const { return m_nBufferObj; }
-    
-
-	void InsertFence()
-	{
-#ifdef HAVE_GL_ARB_SYNC
-		if ( m_nSyncObj  )
-		{
-			gGL->glDeleteSync( m_nSyncObj );
-		}
-
-		m_nSyncObj = gGL->glFenceSync( GL_SYNC_GPU_COMMANDS_COMPLETE, 0 );
-#endif
-	}
-
-	void BlockUntilNotBusy()
-	{
-#ifdef HAVE_GL_ARB_SYNC
-		if ( m_nSyncObj )
-		{
-			gGL->glClientWaitSync( m_nSyncObj, GL_SYNC_FLUSH_COMMANDS_BIT, 3000000000000ULL );
-
-			gGL->glDeleteSync( m_nSyncObj );
-								
-			m_nSyncObj = 0;
-		}
-#endif
-		m_nOfs = 0;
-	}
-    
-	void Append( uint nSize )
-	{
-		m_nOfs += nSize;
-		Assert( m_nOfs <= m_nSize );
-	}
-
-private:
-	void *m_pRawBuf;
-	void *m_pBuf;
-	uint m_nSize;
-	uint m_nOfs;
-
-	GLuint m_nBufferObj;
-#ifdef HAVE_GL_ARB_SYNC
-	GLsync m_nSyncObj;
-#endif
-};
-#endif // OSX
-
-//===========================================================================//
 
 class GLMContext
 {
@@ -1362,7 +1298,7 @@ class GLMContext
 		FORCEINLINE void SetSamplerAddressU( int sampler, GLenum Value );
 		FORCEINLINE void SetSamplerAddressV( int sampler, GLenum Value );
 		FORCEINLINE void SetSamplerAddressW( int sampler, GLenum Value );
-		FORCEINLINE void SetSamplerStates( int sampler, GLenum AddressU, GLenum AddressV, GLenum AddressW, GLenum minFilter, GLenum magFilter, GLenum mipFilter );
+		FORCEINLINE void SetSamplerStates( int sampler, GLenum AddressU, GLenum AddressV, GLenum AddressW, GLenum minFilter, GLenum magFilter, GLenum mipFilter, int minLod, float lodBias );
 		FORCEINLINE void SetSamplerBorderColor( int sampler, DWORD Value );
 		FORCEINLINE void SetSamplerMipMapLODBias( int sampler, DWORD Value );
 		FORCEINLINE void SetSamplerMaxMipLevel( int sampler, DWORD Value );
@@ -1430,11 +1366,11 @@ class GLMContext
 		void FlushDrawStatesNoShaders();
 				
 		// drawing
-#ifndef OSX
+#if 1 //ifndef OSX
 		FORCEINLINE void DrawRangeElements(	GLenum mode, GLuint start, GLuint end, GLsizei count, GLenum type, const GLvoid *indices, uint baseVertex, CGLMBuffer *pIndexBuf );
 		void DrawRangeElementsNonInline(	GLenum mode, GLuint start, GLuint end, GLsizei count, GLenum type, const GLvoid *indices, uint baseVertex, CGLMBuffer *pIndexBuf );
 #else
-        void DrawRangeElements( GLenum mode, GLuint start, GLuint end, GLsizei count, GLenum type, const GLvoid *indices, CGLMBuffer *pIndexBuf );
+		void DrawRangeElements( GLenum mode, GLuint start, GLuint end, GLsizei count, GLenum type, const GLvoid *indices, CGLMBuffer *pIndexBuf );
 #endif
 
 		void	CheckNative( void );
@@ -1484,7 +1420,7 @@ class GLMContext
 			else
 			{
 				m_FakeBlendEnableSRGB = src->enable != 0;
-			}	
+			}
 			// note however that we're still tracking what this mode should be, so FlushDrawStates can look at it and adjust the pixel shader
 			// if fake SRGB mode is in place (m_caps.m_hasGammaWrites is false)
 		}
@@ -1513,7 +1449,7 @@ class GLMContext
 #endif
 
 		FORCEINLINE void SetMaxUsedVertexShaderConstantsHint( uint nMaxConstants );
-		FORCEINLINE ThreadId_t GetCurrentOwnerThreadId() const { return m_nCurOwnerThreadId; }
+		FORCEINLINE uintp GetCurrentOwnerThreadId() const { return m_nCurOwnerThreadId; }
 								
 	protected:
 		friend class GLMgr;				// only GLMgr can make GLMContext objects
@@ -1537,17 +1473,17 @@ class GLMContext
 		GLMContext( IDirect3DDevice9 *pDevice, GLMDisplayParams *params );
 		~GLMContext();
 
-#ifndef OSX
+#if !defined(OSX) || defined(IOS)
 		FORCEINLINE GLuint FindSamplerObject( const GLMTexSamplingParams &desiredParams );
 #endif
-    
+
 		FORCEINLINE void SetBufAndVertexAttribPointer( uint nIndex, GLuint nGLName, GLuint stride, GLuint datatype, GLboolean normalized, GLuint nCompCount, const void *pBuf, uint nRevision )
 		{
 			VertexAttribs_t &curAttribs = m_boundVertexAttribs[nIndex];
 			if ( nGLName != m_nBoundGLBuffer[kGLMVertexBuffer] )
 			{
 				m_nBoundGLBuffer[kGLMVertexBuffer] = nGLName;
-				gGL->glBindBufferARB( GL_ARRAY_BUFFER_ARB, nGLName );
+				gGL->glBindBuffer( GL_ARRAY_BUFFER, nGLName );
 			}
 			else if ( ( curAttribs.m_pPtr == pBuf ) && 
 					  ( curAttribs.m_revision == nRevision ) &&
@@ -1603,18 +1539,18 @@ class GLMContext
 		void BindTexToTMU( CGLMTex *tex, int tmu );
 				
 		// render targets / FBO's
-		void BindFBOToCtx( CGLMFBO *fbo, GLenum bindPoint = GL_FRAMEBUFFER_EXT );				// you can also choose GL_READ_FRAMEBUFFER_EXT / GL_DRAW_FRAMEBUFFER_EXT
+		void BindFBOToCtx( CGLMFBO *fbo, GLenum bindPoint = GL_FRAMEBUFFER );				// you can also choose GL_READ_FRAMEBUFFER_EXT / GL_DRAW_FRAMEBUFFER_EXT
 		
 		// buffers
 		FORCEINLINE void BindGLBufferToCtx( GLenum nGLBufType, GLuint nGLName, bool bForce = false )
 		{
-			Assert( ( nGLBufType == GL_ARRAY_BUFFER_ARB ) || ( nGLBufType == GL_ELEMENT_ARRAY_BUFFER_ARB ) );
-						
-			const uint nIndex = ( nGLBufType == GL_ARRAY_BUFFER_ARB ) ? kGLMVertexBuffer : kGLMIndexBuffer;
+			Assert( ( nGLBufType == GL_ARRAY_BUFFER ) || ( nGLBufType == GL_ELEMENT_ARRAY_BUFFER ) );
+
+			const uint nIndex = ( nGLBufType == GL_ARRAY_BUFFER ) ? kGLMVertexBuffer : kGLMIndexBuffer;
 			if ( ( bForce ) || ( m_nBoundGLBuffer[nIndex] != nGLName ) )
 			{
 				m_nBoundGLBuffer[nIndex] = nGLName;
-				gGL->glBindBufferARB( nGLBufType, nGLName );
+				gGL->glBindBuffer( nGLBufType, nGLName );
 			}
 		}
 
@@ -1623,20 +1559,22 @@ class GLMContext
 		FORCEINLINE void BindIndexBufferToCtx( CGLMBuffer *buff );
 		FORCEINLINE void BindVertexBufferToCtx( CGLMBuffer *buff );
 		
+		GLuint CreateTex( GLenum texBind, GLenum internalFormat );
+		void CleanupTex( GLenum texBind, GLMTexLayout* pLayout, GLuint tex );
+		void DestroyTex( GLenum texBind, GLMTexLayout* pLayout, GLuint tex );
+		GLuint FillTexCache( bool holdOne, int newTextures );
+		void PurgeTexCache( );
+
 		// debug font
 		void GenDebugFontTex( void );
 		void DrawDebugText( float x, float y, float z, float drawCharWidth, float drawCharHeight, char *string );
 
-#ifndef OSX
-		CPinnedMemoryBuffer *GetCurPinnedMemoryBuffer( ) { return &m_PinnedMemoryBuffers[m_nCurPinnedMemoryBuffer]; }
-#endif
-
 		CPersistentBuffer* GetCurPersistentBuffer( EGLMBufferType type ) { return &( m_persistentBuffer[m_nCurPersistentBuffer][type] ); }
-    
+
 		// members------------------------------------------
 						
 		// context
-		ThreadId_t						m_nCurOwnerThreadId;
+		uintp							m_nCurOwnerThreadId;
 		uint							m_nThreadOwnershipReleaseCounter;
 
 		bool							m_bUseSamplerObjects;
@@ -1652,13 +1590,7 @@ class GLMContext
 		int								m_pixelFormatAttribs[100];	// more than enough
 		PseudoNSGLContextPtr			m_nsctx;
 		void *							m_ctx;
-#elif defined( OSX )
-		CGLPixelFormatAttribute			m_pixelFormatAttribs[100];	// more than enough
-		PseudoNSGLContextPtr			m_nsctx;
-		CGLContextObj					m_ctx;
 #endif
-		bool							m_oneCtxEnable;			// true if we use the window's context directly instead of making a second one shared against it
-
 		bool							m_bUseBoneUniformBuffers; // if true, we use two uniform buffers for vertex shader constants vs. one
 
 		// texture form table
@@ -1773,6 +1705,10 @@ class GLMContext
 		CGLMProgram						*m_preload3DTexFragmentProgram;
 		CGLMProgram						*m_preloadCubeTexFragmentProgram;
 
+#if (defined(OSX) && !defined(IOS)) && defined( GLMDEBUG )
+		CGLMProgram						*m_boundProgram[ kGLMNumProgramTypes ];
+#endif
+
 		CGLMShaderPairCache				*m_pairCache;				// GLSL only
 		CGLMShaderPair					*m_pBoundPair;				// GLSL only
 
@@ -1824,16 +1760,20 @@ class GLMContext
 		uint m_nCurFrame;
 		uint m_nBatchCounter;
 
-#ifndef OSX
-		enum { cNumPinnedMemoryBuffers = 4 };
-		CPinnedMemoryBuffer m_PinnedMemoryBuffers[cNumPinnedMemoryBuffers];
-		uint m_nCurPinnedMemoryBuffer;
-#endif
+		struct TextureEntry_t
+		{
+			GLenum m_nTexBind;
+			GLenum m_nInternalFormat;
+			GLuint m_nTexName;
+		};
+
+		GLuint							m_destroyPBO;
+		CUtlVector< TextureEntry_t >	m_availableTextures;
 
 		enum { cNumPersistentBuffers = 3 };
 		CPersistentBuffer	m_persistentBuffer[cNumPersistentBuffers][kGLMNumBufferTypes];
 		uint				m_nCurPersistentBuffer;
-    
+
 		void SaveColorMaskAndSetToDefault();
 		void RestoreSavedColorMask();
 		GLColorMaskSingle_t				m_SavedColorMask;
@@ -1861,13 +1801,6 @@ class GLMContext
 		float							m_selKnobMinValue,m_selKnobMaxValue,m_selKnobIncrement;
 #endif
 
-#ifdef _OSX
-		void UpdateSwapchainVariables( bool bForce );
-
-		bool m_bFramerateSmoothing;
-		bool m_bSwapLimit;
-#endif
-
 #if GL_BATCH_PERF_ANALYSIS
 		uint m_nTotalVSUniformCalls;
 		uint m_nTotalVSUniformBoneCalls;
@@ -1883,7 +1816,8 @@ class GLMContext
 	CTSQueue<CGLMTex*> m_DeleteTextureQueue;
 };
 
-#ifndef OSX
+#if 1 //ifndef OSX
+
 FORCEINLINE void GLMContext::DrawRangeElements(	GLenum mode, GLuint start, GLuint end, GLsizei count, GLenum type, const GLvoid *indices, uint baseVertex, CGLMBuffer *pIndexBuf )
 {
 #if GL_ENABLE_INDEX_VERIFICATION
@@ -1981,7 +1915,11 @@ FORCEINLINE void GLMContext::DrawRangeElements(	GLenum mode, GLuint start, GLuin
 
 	if ( m_pBoundPair )
 	{
+		#ifndef ANGLE
 		gGL->glDrawRangeElementsBaseVertex( mode, start, end, count, type, indicesActual, baseVertex );
+		#else
+		gGL->glDrawRangeElementsBaseVertexOES( mode, start, end, count, type, indicesActual, baseVertex );
+		#endif
 
 #if GLMDEBUG
 		if ( m_slowCheckEnable )
@@ -1994,6 +1932,7 @@ FORCEINLINE void GLMContext::DrawRangeElements(	GLenum mode, GLuint start, GLuin
 
 #endif // GL_ENABLE_INDEX_VERIFICATION
 }
+
 #endif // #ifndef OSX
 
 FORCEINLINE void GLMContext::SetVertexProgram( CGLMProgram *pProg )
@@ -2222,7 +2161,7 @@ FORCEINLINE void GLMContext::SetSamplerAddressW( int sampler, GLenum Value )
 	m_samplers[sampler].m_samp.m_packed.m_addressW = Value;
 }
 
-FORCEINLINE void GLMContext::SetSamplerStates( int sampler, GLenum AddressU, GLenum AddressV, GLenum AddressW, GLenum minFilter, GLenum magFilter, GLenum mipFilter )
+FORCEINLINE void GLMContext::SetSamplerStates( int sampler, GLenum AddressU, GLenum AddressV, GLenum AddressW, GLenum minFilter, GLenum magFilter, GLenum mipFilter, int minLod, float lodBias )
 {
 	Assert( AddressU < ( 1 << GLM_PACKED_SAMPLER_PARAMS_ADDRESS_BITS) );
 	Assert( AddressV < ( 1 << GLM_PACKED_SAMPLER_PARAMS_ADDRESS_BITS) );
@@ -2230,6 +2169,7 @@ FORCEINLINE void GLMContext::SetSamplerStates( int sampler, GLenum AddressU, GLe
 	Assert( minFilter < ( 1 << GLM_PACKED_SAMPLER_PARAMS_MIN_FILTER_BITS ) );
 	Assert( magFilter < ( 1 << GLM_PACKED_SAMPLER_PARAMS_MAG_FILTER_BITS ) );
 	Assert( mipFilter < ( 1 << GLM_PACKED_SAMPLER_PARAMS_MIP_FILTER_BITS ) );
+	Assert( minLod < ( 1 << GLM_PACKED_SAMPLER_PARAMS_MIN_LOD_BITS ) );
 
 	GLMTexSamplingParams &params = m_samplers[sampler].m_samp;
 	params.m_packed.m_addressU = AddressU;
@@ -2238,6 +2178,9 @@ FORCEINLINE void GLMContext::SetSamplerStates( int sampler, GLenum AddressU, GLe
 	params.m_packed.m_minFilter = minFilter;
 	params.m_packed.m_magFilter = magFilter;
 	params.m_packed.m_mipFilter = mipFilter;
+	params.m_packed.m_minLOD = minLod;
+
+	params.m_lodBias = lodBias;
 }
 
 FORCEINLINE void GLMContext::SetSamplerBorderColor( int sampler, DWORD Value )
@@ -2247,7 +2190,15 @@ FORCEINLINE void GLMContext::SetSamplerBorderColor( int sampler, DWORD Value )
 
 FORCEINLINE void GLMContext::SetSamplerMipMapLODBias( int sampler, DWORD Value )
 {
-	// not currently supported
+	typedef union {
+		DWORD asDword;
+		float asFloat;
+	} Convert_t;
+
+	Convert_t c;
+	c.asDword = Value;
+
+	m_samplers[sampler].m_samp.m_lodBias = c.asFloat;
 }
 
 FORCEINLINE void GLMContext::SetSamplerMaxMipLevel( int sampler, DWORD Value )
@@ -2278,7 +2229,7 @@ FORCEINLINE void GLMContext::BindIndexBufferToCtx( CGLMBuffer *buff )
 {
 	GLMPRINTF(( "--- GLMContext::BindIndexBufferToCtx buff %p, GL name %d", buff, (buff) ? buff->m_nHandle : -1 ));
 		
-	Assert( !buff || ( buff->m_buffGLTarget == GL_ELEMENT_ARRAY_BUFFER_ARB ) );
+	Assert( !buff || ( buff->m_buffGLTarget == GL_ELEMENT_ARRAY_BUFFER ) );
 
 	GLuint nGLName = buff ? buff->GetHandle() : 0;
 
@@ -2286,14 +2237,14 @@ FORCEINLINE void GLMContext::BindIndexBufferToCtx( CGLMBuffer *buff )
 		return;
 
 	m_nBoundGLBuffer[ kGLMIndexBuffer] = nGLName;
-	gGL->glBindBufferARB( GL_ELEMENT_ARRAY_BUFFER_ARB, nGLName );
+	gGL->glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, nGLName );
 }
 
 FORCEINLINE void GLMContext::BindVertexBufferToCtx( CGLMBuffer *buff )
 {
 	GLMPRINTF(( "--- GLMContext::BindVertexBufferToCtx buff %p, GL name %d", buff, (buff) ? buff->m_nHandle : -1 ));
 
-	Assert( !buff || ( buff->m_buffGLTarget == GL_ARRAY_BUFFER_ARB ) );
+	Assert( !buff || ( buff->m_buffGLTarget == GL_ARRAY_BUFFER ) );
 
 	GLuint nGLName = buff ? buff->GetHandle() : 0;
 
@@ -2301,7 +2252,7 @@ FORCEINLINE void GLMContext::BindVertexBufferToCtx( CGLMBuffer *buff )
 		return;
 
 	m_nBoundGLBuffer[ kGLMVertexBuffer] = nGLName;
-	gGL->glBindBufferARB( GL_ARRAY_BUFFER_ARB, nGLName );
+	gGL->glBindBuffer( GL_ARRAY_BUFFER, nGLName );
 }
 
 FORCEINLINE void GLMContext::SetMaxUsedVertexShaderConstantsHint( uint nMaxConstants )
@@ -2379,7 +2330,7 @@ public:
 };
 
 #define	kMaxCrawlFrames	100
-#define	kMaxCrawlText		(kMaxCrawlFrames * 256)
+#define	kMaxCrawlText (kMaxCrawlFrames * 256)
 class CStackCrawlParams
 {
 	public:

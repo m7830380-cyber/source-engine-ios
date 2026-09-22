@@ -1,4 +1,26 @@
-//============ Copyright (c) Valve Corporation, All rights reserved. ============
+//========= Copyright Valve Corporation, All rights reserved. ============//
+//                       TOGL CODE LICENSE
+//
+//  Copyright 2011-2014 Valve Corporation
+//  All Rights Reserved.
+//
+//  Permission is hereby granted, free of charge, to any person obtaining a copy
+//  of this software and associated documentation files (the "Software"), to deal
+//  in the Software without restriction, including without limitation the rights
+//  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+//  copies of the Software, and to permit persons to whom the Software is
+//  furnished to do so, subject to the following conditions:
+//
+//  The above copyright notice and this permission notice shall be included in
+//  all copies or substantial portions of the Software.
+//
+//  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+//  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+//  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+//  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+//  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+//  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+//  THE SOFTWARE.
 //
 // glmgr.cpp
 //
@@ -17,7 +39,7 @@
 
 #include "glmgr_flush.inl"
 
-#ifdef OSX
+#if defined(OSX) && !defined(IOS)
 #include <OpenGL/OpenGL.h>
 #include "intelglmallocworkaround.h"
 #endif
@@ -31,7 +53,11 @@
 // NOTE: This can be turned off after launch, but it cannot be turned on after launch--it implies a context-creation-time 
 // behavior.
 ConVar gl_debug_output( "gl_debug_output", "1" );
-ConVar gl_swap_limit( "gl_swap_limit", "1", FCVAR_RELEASE );
+
+
+// Whether or not we should batch up our creation and deletion behavior. 
+ConVar gl_batch_tex_creates( "gl_batch_tex_creates", "0" );
+ConVar gl_batch_tex_destroys( "gl_batch_tex_destroys", "0" ); 
 
 //===============================================================================
 
@@ -42,41 +68,48 @@ uint g_nTotalDrawsOrClears, g_nTotalVBLockBytes, g_nTotalIBLockBytes;
 TelemetryGPUStats_t g_TelemetryGPUStats;
 #endif
 
+const int kGLMInitialTexCount = 4096;
+const int kGLMReUpTexCount = 1024;
+const int kGLMHighWaterUndeleted = 2048;
+const int kDeletedTextureDim = 4;
+const uint32 g_garbageTextureBits[ 4 * kDeletedTextureDim * kDeletedTextureDim ] = { 0 };
+
+extern void CompressedTexImage2D(GLenum target, GLint level, GLenum internalformat, GLsizei width, GLsizei height, GLint border, GLsizei imageSize, const GLvoid *data);
+extern void convert_texture( GLenum &internalformat, GLsizei width, GLsizei height, GLenum &format, GLenum &type, void *data );
+
 char g_nullFragmentProgramText [] =
 {
-	"!!ARBfp1.0  \n"
-	"PARAM black = { 0.0, 0.0, 0.0, 1.0 };  \n"		// opaque black
-	"MOV result.color, black;  \n"
-	"END  \n\n\n"
-	"//GLSLfp\n"
+	"#version 300 es\n"
+	"precision mediump float;\n"
+	"out vec4 _gl_FragColor;\n"
 	"void main()\n"
 	"{\n"
-	"gl_FragColor = vec4( 0.0, 0.0, 0.0, 1.0 );\n"
+	"_gl_FragColor = vec4( 0.0, 0.0, 0.0, 1.0 );\n"
 	"}\n"
-	
 };
 
 // make dummy programs for doing texture preload via dummy draw
-char g_preloadTexVertexProgramText[] =
+char g_preloadTexVertexProgramText[] = // Гроб гроб кладбище пидор
 {
-	"//GLSLvp  \n"
-	"#version 120  \n"
-	"varying vec4 otex;  \n"
+	"#version 300 es\n"
+	"precision mediump float;\n"
+	"out vec4 otex;\n"
 	"void main()  \n"
-	"{  \n"
-	"vec4 pos = ftransform(); // vec4( 0.1, 0.1, 0.1, 0.1 );  \n"
-	"vec4 tex = vec4( 0.0, 0.0, 0.0, 0.0 );  \n"
-	"  \n"
-	"gl_Position = pos;  \n"
+	"{\n"
+	"vec4 pos = vec4( 0.1, 0.1, 0.1, 0.1 );\n"
+	"vec4 tex = vec4( 0.0, 0.0, 0.0, 0.0 );\n"
+	"\n"
+	"gl_Position = pos;\n"
 	"otex = tex;  \n"
 	"}  \n"
 };
 
 char g_preload2DTexFragmentProgramText[] =
 {
-	"//GLSLfp  \n"
-	"#version 120  \n"
-	"varying vec4 otex;  \n"
+	"#version 300 es\n"
+	"precision mediump float;\n"
+	"out vec4 _gl_FragColor;\n"		
+	"in vec4 otex;\n"
 	"//SAMPLERMASK-8000		// may not be needed  \n"
 	"//HIGHWATER-30			// may not be needed  \n"
 	"  \n"
@@ -86,37 +119,40 @@ char g_preload2DTexFragmentProgramText[] =
 	"void main()  \n"
 	"{  \n"
 	"vec4 r0;  \n"
-	"r0 = texture2D( sampler15, otex.xy );  \n"
-	"gl_FragColor = r0;	//discard;  \n"
+	"r0 = texture( sampler15, otex.xy );  \n"
+	"_gl_FragColor = r0;	//discard;  \n"
 	"}  \n"
 };
 
 char g_preload3DTexFragmentProgramText[] =
 {
-	"//GLSLfp  \n"
-	"#version 120  \n"
-	"varying vec4 otex;  \n"
+	"#version 300 es\n"
+	"precision mediump float;\n"
+	"out vec4 _gl_FragColor;\n"	
+	"in vec4 otex;\n"
 	"//SAMPLERMASK-8000		// may not be needed  \n"
 	"//HIGHWATER-30			// may not be needed  \n"
 	"  \n"
+	"precision mediump sampler3D;\n"
 	"uniform vec4 pc[31];  \n"
 	"uniform sampler3D sampler15;  \n"
 	"  \n"
 	"void main()  \n"
 	"{  \n"
 	"vec4 r0;  \n"
-	"r0 = texture3D( sampler15, otex.xyz );  \n"
-	"gl_FragColor = r0;	//discard;  \n"
+	"r0 = texture( sampler15, otex.xyz );  \n"
+	"_gl_FragColor = vec4(0,0,0,0);	//discard;  \n"
 	"}  \n"
 };
 
 char g_preloadCubeTexFragmentProgramText[] =
 {
-	"//GLSLfp  \n"
-	"#version 120  \n"
-	"varying vec4 otex;  \n"
-	"//SAMPLERMASK-8000		// may not be needed  \n"
-	"//HIGHWATER-30			// may not be needed  \n"
+	"#version 300 es\n"
+	"precision mediump float;\n"
+	"in vec4 otex;\n"
+	"out vec4 _gl_FragColor;\n"
+       "//SAMPLERMASK-8000             // may not be needed  \n"
+       "//HIGHWATER-30                 // may not be needed  \n"
 	"  \n"
 	"uniform vec4 pc[31];  \n"
 	"uniform samplerCube sampler15;  \n"
@@ -124,8 +160,8 @@ char g_preloadCubeTexFragmentProgramText[] =
 	"void main()  \n"
 	"{  \n"
 	"vec4 r0;  \n"
-	"r0 = textureCube( sampler15, otex.xyz );  \n"
-	"gl_FragColor = r0;	//discard;  \n"
+	"r0 = texture( sampler15, otex.xyz );  \n"
+	"_gl_FragColor = r0;	//discard;  \n"
 	"}  \n"
 };
 
@@ -185,9 +221,9 @@ void APIENTRY GL_Debug_Output_Callback(GLenum source, GLenum type, GLuint id, GL
 		return;
 	}
 	
-	if ( gl_debug_output.GetBool() || type == GL_DEBUG_TYPE_ERROR_ARB )
+	if ( gl_debug_output.GetBool() || type == GL_DEBUG_TYPE_ERROR_ARB || type == GL_DEBUG_SEVERITY_MEDIUM_ARB )
 	{
-		Msg("GL: [%s][%s][%s][%d]: %s\n", sSource, sType, sSeverity, id, message);
+		Msg( "GL: [%s][%s][%s][%d]: %s\n", sSource, sType, sSeverity, id, message );
 	}
 
 #ifdef WIN32
@@ -196,94 +232,19 @@ void APIENTRY GL_Debug_Output_Callback(GLenum source, GLenum type, GLuint id, GL
 			
 	if ( ( type == GL_DEBUG_TYPE_ERROR_ARB ) && ( g_bDebugOutputBreakpoints ) )
 	{
-		DebuggerBreak();
+//		DebuggerBreak();		
 	}
 }
 
 void GLMDebugPrintf( const char *pMsg, ... )
 {
+	//$ TODO: Should this call Warning()?
+	//$ TODO: Should replace call these calls with Warning() / Msg() / DevMsg()?
+
 	va_list args;
 	va_start( args, pMsg );
-	char buf[1024];
-	V_vsnprintf( buf, sizeof( buf ), pMsg, args );
+	vprintf( pMsg, args );
 	va_end( args );
-
-	Plat_DebugString( buf );
-}
-
-void CheckGLFBOStatusTMP( const char *comment )
-{
-    return;
-    char errbuf[1024];
-
-    if (!comment)
-    {
-        comment = "";
-    }
-
-    GLenum errorcode2 = 0;
-    GLenum errorcode3 = 0;
-    const char	*decodedStr2 = "";
-    const char	*decodedStr3 = "";
-
-    // dig up the more detailed FBO status
-    errorcode2 = gGL->glCheckFramebufferStatusEXT( GL_READ_FRAMEBUFFER_EXT );
-    
-    decodedStr2 = GLMDecode( eGL_ERROR, errorcode2 );
-    
-    errorcode3 = gGL->glCheckFramebufferStatusEXT( GL_DRAW_FRAMEBUFFER_EXT );
-    
-    decodedStr3 = GLMDecode( eGL_ERROR, errorcode3 );
-    
-    sprintf( errbuf, "\n%s - GL FBO Status %08x/%08x = '%s / %s'\n", comment, errorcode2, errorcode3, decodedStr2, decodedStr3 );
-    printf("%s", errbuf );
-
-}
-
-void CheckGLErrorTMP( const char *comment )
-{
-    return;
-    char errbuf[1024];
-    
-    //borrowed from GLMCheckError.. slightly different
-    
-    if (!comment)
-    {
-        comment = "";
-    }
-    
-    GLenum errorcode = (GLenum)gGL->glGetError();
-    GLenum errorcode2 = 0;
-    GLenum errorcode3 = 0;
-    
-    if ( errorcode != GL_NO_ERROR )
-    {
-        const char	*decodedStr = GLMDecode( eGL_ERROR, errorcode );
-        const char	*decodedStr2 = "";
-        const char	*decodedStr3 = "";
-        
-        if ( errorcode == GL_INVALID_FRAMEBUFFER_OPERATION_EXT )
-        {
-            // dig up the more detailed FBO status
-            errorcode2 = gGL->glCheckFramebufferStatusEXT( GL_READ_FRAMEBUFFER_EXT );
-            
-            decodedStr2 = GLMDecode( eGL_ERROR, errorcode2 );
-  
-            errorcode3 = gGL->glCheckFramebufferStatusEXT( GL_DRAW_FRAMEBUFFER_EXT );
-            
-            decodedStr3 = GLMDecode( eGL_ERROR, errorcode3 );
-
-            sprintf( errbuf, "\n%s - GL Error %08x/%08x/%08x = '%s / %s / %s'\n", comment, errorcode, errorcode2, errorcode3, decodedStr, decodedStr2, decodedStr3 );
-        }
-        else
-        {
-            sprintf( errbuf, "\n%s - GL Error %08x = '%s'\n", comment, errorcode, decodedStr );
-        }
-        
-        printf("%s", errbuf );
-
-//      DebuggerBreak();
-    }
 }
 
 //===============================================================================
@@ -306,11 +267,11 @@ inline PseudoGLContextPtr GetGLContextForWindow( void* windowref )
 
 inline void IncrementWindowRefCount()
 {
-//	g_pLauncherMgr->IncWindowRefCount();
+	g_pLauncherMgr->IncWindowRefCount();
 }
 inline void DecrementWindowRefCount()
 {
-//	g_pLauncherMgr->DecWindowRefCount();
+	g_pLauncherMgr->DecWindowRefCount();
 }
 inline void ShowPixels( CShowPixelsParams *params )
 {
@@ -326,13 +287,6 @@ inline void GetDesiredPixelFormatAttribsAndRendererInfo( uint **ptrOut, uint *co
 {
 	g_pLauncherMgr->GetDesiredPixelFormatAttribsAndRendererInfo( ptrOut, countOut, rendInfoOut );
 }
-
-#ifdef OSX
-inline PseudoNSGLContextPtr GetNSGLContextForWindow( void* windowref )
-{
-	return g_pLauncherMgr->GetGLContextForWindow( windowref );
-}
-#endif
 
 inline void GetStackCrawl( CStackCrawlParams *params )
 {
@@ -514,7 +468,6 @@ void GLMgr::DelContext( GLMContext *context )
 
 void GLMgr::SetCurrentContext( GLMContext *context )
 {
-// !!! FIXME: why isn't this abstracted in appframework?
 #if defined( USE_SDL )
 	context->m_nCurOwnerThreadId = ThreadGetCurrentId();
 	if ( !MakeContextCurrent( context->m_ctx ) )
@@ -522,43 +475,15 @@ void GLMgr::SetCurrentContext( GLMContext *context )
 		// give up
 		GLMStop();
 	}
-	// Why is there an Assert( 0 ) here? Seems like it's for once we're in game, but we should
-	// hit this on startup so wat?
 	Assert( 0 );
-#elif defined( OSX )
-	context->m_nCurOwnerThreadId = ThreadGetCurrentId();
-	CGLError	cgl_err;
-	cgl_err = CGLSetCurrentContext( context->m_ctx );
-	if (cgl_err)
-	{
-		// give up
-		GLMStop();
-	}
 #endif
 }
 
 GLMContext *GLMgr::GetCurrentContext( void )
 {
-// !!! FIXME: why isn't this abstracted in appframework?
 #if defined( USE_SDL )
 	PseudoGLContextPtr context = GetMainContext();
 	return (GLMContext*) context;
-#elif defined( OSX )
-	CGLContextObj ctx = CGLGetCurrentContext();
-	
-	// Docs say this is always a pointer-sized parameter, even though the API takes an int*
-	intp	glm_context_link = 0;
-	
-	CGLGetParameter( ctx, kCGLCPClientStorage, (int*) &glm_context_link );
-	
-	if ( glm_context_link )
-	{
-		return (GLMContext*) glm_context_link;
-	}
-	else
-	{
-		return NULL;
-	}
 #else
 	Assert( 0 );
 	return NULL;
@@ -573,11 +498,9 @@ GLMContext *GLMgr::GetCurrentContext( void )
 // GLMContext public methods
 void GLMContext::MakeCurrent( bool bRenderThread )
 {
-	TM_ZONE( TELEMETRY_LEVEL0, 0, "GLMContext::MakeCurrent" );
+	tmZone( TELEMETRY_LEVEL0, 0, "GLMContext::MakeCurrent" );
 	Assert( m_nCurOwnerThreadId == 0 || m_nCurOwnerThreadId == ThreadGetCurrentId() );
 		
-// !!! FIXME: why isn't this abstracted in appframework?
-//	GLM_FUNC;
 #if defined( USE_SDL )
 
 #ifndef CHECK_THREAD_USAGE
@@ -612,9 +535,6 @@ void GLMContext::MakeCurrent( bool bRenderThread )
 	}
 #endif
 
-#elif defined( OSX )
-	m_nCurOwnerThreadId = ThreadGetCurrentId();
-	CGLSetCurrentContext( m_ctx );
 #else
 	Assert( 0 );
 #endif
@@ -623,7 +543,7 @@ void GLMContext::MakeCurrent( bool bRenderThread )
 
 void GLMContext::ReleaseCurrent( bool bRenderThread )
 {
-	TM_ZONE( TELEMETRY_LEVEL0, 0, "GLMContext::ReleaseCurrent" );
+	tmZone( TELEMETRY_LEVEL0, 0, "GLMContext::ReleaseCurrent" );
 	Assert( m_nCurOwnerThreadId == ThreadGetCurrentId() );
 		
 #if defined( USE_SDL )
@@ -646,9 +566,6 @@ void GLMContext::ReleaseCurrent( bool bRenderThread )
 	}
 #endif
 
-#elif defined( OSX )
-	m_nCurOwnerThreadId = 0;
-	CGLSetCurrentContext( NULL );
 #else
 	Assert( 0 );
 #endif
@@ -664,13 +581,13 @@ void GLMContext::ForceFlushStates()
 
 	m_DepthBias.Flush();
 
-	m_ScissorEnable.Flush();	
+	m_ScissorEnable.Flush();
 	m_ScissorBox.Flush();
 
-	m_ViewportBox.Flush();		
+	m_ViewportBox.Flush();
 	m_ViewportDepthRange.Flush();
 
-	m_ColorMaskSingle.Flush();	
+	m_ColorMaskSingle.Flush();
 
 	m_BlendEnable.Flush();
 	m_BlendFactor.Flush();
@@ -725,19 +642,12 @@ void GLMContext::ForceFlushStates()
 	NullProgram();
 
 	// FBO
-	BindFBOToCtx( m_boundReadFBO, GL_READ_FRAMEBUFFER_EXT );
-	BindFBOToCtx( m_boundDrawFBO, GL_DRAW_FRAMEBUFFER_EXT );
+	BindFBOToCtx( m_boundReadFBO, GL_READ_FRAMEBUFFER );
+	BindFBOToCtx( m_boundDrawFBO, GL_DRAW_FRAMEBUFFER );
 
 	// Current VB/IB/pinned memory buffers
-	gGL->glBindBufferARB( GL_ELEMENT_ARRAY_BUFFER_ARB, m_nBoundGLBuffer[ kGLMIndexBuffer] );
-	gGL->glBindBufferARB( GL_ARRAY_BUFFER_ARB, m_nBoundGLBuffer[ kGLMVertexBuffer] );
-
-#ifndef OSX
-	if ( gGL->m_bHave_GL_AMD_pinned_memory )
-	{
-		gGL->glBindBufferARB( GL_EXTERNAL_VIRTUAL_MEMORY_BUFFER_AMD, m_PinnedMemoryBuffers[m_nCurPinnedMemoryBuffer].GetHandle() );
-	}
-#endif
+	gGL->glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, m_nBoundGLBuffer[ kGLMIndexBuffer] );
+	gGL->glBindBuffer( GL_ARRAY_BUFFER, m_nBoundGLBuffer[ kGLMVertexBuffer] );
 }
 
 const GLMRendererInfoFields& GLMContext::Caps( void )
@@ -757,7 +667,7 @@ void GLMContext::DumpCaps( void )
 	#define	dumpfield_hex( fff )	printf( "\n  %-30s : 0x%08x", #fff, (int) m_caps.fff )
 	#define	dumpfield_str( fff )	printf( "\n  %-30s : %s", #fff, m_caps.fff )
 
-	printf("\n-------------------------------- context caps for context %p", this);
+	printf("\n-------------------------------- context caps for context %zx", (size_t)this);
 
 	dumpfield( m_fullscreen );
 	dumpfield( m_accelerated );
@@ -898,7 +808,7 @@ void GLMContext::ProcessTextureDeletes()
 	}
 }
 
-// push and pop attrib when blit has mixed srgb source and dest?		
+// push and pop attrib when blit has mixed srgb source and dest?
 ConVar	gl_radar7954721_workaround_mixed ( "gl_radar7954721_workaround_mixed", "1" );
 
 // push and pop attrib on any blit?
@@ -914,17 +824,17 @@ enum eBlitFormatClass
 	eDepthStencil
 };
 
-uint	glAttachFromClass[ 3 ] = 		{ GL_COLOR_ATTACHMENT0_EXT, GL_DEPTH_ATTACHMENT_EXT, GL_DEPTH_STENCIL_ATTACHMENT_EXT };
+uint	glAttachFromClass[ 3 ] = 		{ GL_COLOR_ATTACHMENT0, GL_DEPTH_ATTACHMENT, GL_DEPTH_STENCIL_ATTACHMENT };
 
 void glScrubFBO			( GLenum target )
 {
-	gGL->glFramebufferRenderbufferEXT	( target, GL_COLOR_ATTACHMENT0_EXT, GL_RENDERBUFFER_EXT, 0);
-	gGL->glFramebufferRenderbufferEXT	( target, GL_DEPTH_ATTACHMENT_EXT, GL_RENDERBUFFER_EXT, 0);
-	gGL->glFramebufferRenderbufferEXT	( target, GL_STENCIL_ATTACHMENT_EXT, GL_RENDERBUFFER_EXT, 0);
+	gGL->glFramebufferRenderbuffer	( target, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, 0);
+	gGL->glFramebufferRenderbuffer	( target, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, 0);
+	gGL->glFramebufferRenderbuffer	( target, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, 0);
 
-	gGL->glFramebufferTexture2DEXT		( target, GL_COLOR_ATTACHMENT0_EXT, GL_TEXTURE_2D, 0, 0 );
-	gGL->glFramebufferTexture2DEXT		( target, GL_DEPTH_ATTACHMENT_EXT, GL_TEXTURE_2D, 0, 0 );
-	gGL->glFramebufferTexture2DEXT		( target, GL_STENCIL_ATTACHMENT_EXT, GL_TEXTURE_2D, 0, 0 );
+	gGL->glFramebufferTexture2D		( target, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0 );
+	gGL->glFramebufferTexture2D		( target, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, 0, 0 );
+	gGL->glFramebufferTexture2D		( target, GL_STENCIL_ATTACHMENT, GL_TEXTURE_2D, 0, 0 );
 }
 
 void glAttachRBOtoFBO	( GLenum target, eBlitFormatClass formatClass, uint rboName )
@@ -932,16 +842,16 @@ void glAttachRBOtoFBO	( GLenum target, eBlitFormatClass formatClass, uint rboNam
 	switch( formatClass )
 	{
 		case eColor:
-			gGL->glFramebufferRenderbufferEXT	( target, GL_COLOR_ATTACHMENT0_EXT, GL_RENDERBUFFER_EXT, rboName);
+			gGL->glFramebufferRenderbuffer	( target, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, rboName);
 		break;
 		
 		case eDepth:
-			gGL->glFramebufferRenderbufferEXT	( target, GL_DEPTH_ATTACHMENT_EXT, GL_RENDERBUFFER_EXT, rboName);
+			gGL->glFramebufferRenderbuffer	( target, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, rboName);
 		break;
 		
 		case eDepthStencil:
-			gGL->glFramebufferRenderbufferEXT	( target, GL_DEPTH_ATTACHMENT_EXT, GL_RENDERBUFFER_EXT, rboName);
-			gGL->glFramebufferRenderbufferEXT	( target, GL_STENCIL_ATTACHMENT_EXT, GL_RENDERBUFFER_EXT, rboName);
+			gGL->glFramebufferRenderbuffer	( target, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, rboName);
+			gGL->glFramebufferRenderbuffer	( target, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, rboName);
 		break;
 	}
 }
@@ -951,15 +861,15 @@ void glAttachTex2DtoFBO	( GLenum target, eBlitFormatClass formatClass, uint texN
 	switch( formatClass )
 	{
 		case eColor:
-			gGL->glFramebufferTexture2DEXT		( target, GL_COLOR_ATTACHMENT0_EXT, GL_TEXTURE_2D, texName, texMip );
+			gGL->glFramebufferTexture2D		( target, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texName, texMip );
 		break;
 		
 		case eDepth:
-			gGL->glFramebufferTexture2DEXT		( target, GL_DEPTH_ATTACHMENT_EXT, GL_TEXTURE_2D, texName, texMip );
+			gGL->glFramebufferTexture2D		( target, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, texName, texMip );
 		break;
 		
 		case eDepthStencil:
-			gGL->glFramebufferTexture2DEXT		( target, GL_DEPTH_STENCIL_ATTACHMENT_EXT, GL_TEXTURE_2D, texName, texMip );
+			gGL->glFramebufferTexture2D		( target, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, texName, texMip );
 		break;
 	}
 }
@@ -1021,12 +931,9 @@ void GLMContext::Blit2( CGLMTex *srcTex, GLMRect *srcRect, int srcFace, int srcM
 			blitMask = GL_DEPTH_BUFFER_BIT;
 		break;
 		
-		case GL_DEPTH_STENCIL_EXT:
-            // only support depth only blits for now
-            formatClass = eDepth;
-			blitMask = GL_DEPTH_BUFFER_BIT;
-            //formatClass = eDepthStencil;
-            //blitMask = GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT;
+		case GL_DEPTH_STENCIL:
+			formatClass = eDepthStencil;
+			blitMask = GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT;
 		break;
 
 		default:
@@ -1049,14 +956,6 @@ void GLMContext::Blit2( CGLMTex *srcTex, GLMRect *srcRect, int srcFace, int srcM
 	bool srcGamma = srcTex && ((srcTex->m_layout->m_key.m_texFlags & kGLMTexSRGB) != 0);
 	bool dstGamma = dstTex && ((dstTex->m_layout->m_key.m_texFlags & kGLMTexSRGB) != 0);
 
-	bool doPushPop = (srcGamma != dstGamma) && gl_radar7954721_workaround_mixed.GetInt() && m_caps.m_nv;		// workaround for cross gamma blit problems on NV
-		// ^^ need to re-check this on some post-10.6.3 build on NV to see if it was fixed
-
-	if (doPushPop)
-	{
-		gGL->glPushAttrib( 0 );
-	}
-	
 	//----------------------------------------------------------------- figure out the plan
 	
 	bool blitTwoStep = false;		// think positive
@@ -1138,109 +1037,87 @@ void GLMContext::Blit2( CGLMTex *srcTex, GLMRect *srcRect, int srcFace, int srcM
 		// a resolve that can't be done directly due to constraints on scaling or flipping.
 		
 		// bind scratch FBO0 to read, scrub it, attach RBO
-		BindFBOToCtx		( m_scratchFBO[0], GL_READ_FRAMEBUFFER_EXT );
-		glScrubFBO			( GL_READ_FRAMEBUFFER_EXT );
-		glAttachRBOtoFBO	( GL_READ_FRAMEBUFFER_EXT, formatClass, srcTex->m_rboName );
+		BindFBOToCtx		( m_scratchFBO[0], GL_READ_FRAMEBUFFER );
+		glScrubFBO			( GL_READ_FRAMEBUFFER );
+		glAttachRBOtoFBO	( GL_READ_FRAMEBUFFER, formatClass, srcTex->m_rboName );
 		
 		// bind scratch FBO1 to write, scrub it, attach scratch tex
-		BindFBOToCtx		( m_scratchFBO[1], GL_DRAW_FRAMEBUFFER_EXT );
-		glScrubFBO			( GL_DRAW_FRAMEBUFFER_EXT );
-		glAttachTex2DtoFBO	( GL_DRAW_FRAMEBUFFER_EXT, formatClass, srcTex->m_texName, 0 );
+		BindFBOToCtx		( m_scratchFBO[1], GL_DRAW_FRAMEBUFFER );
+		glScrubFBO			( GL_DRAW_FRAMEBUFFER );
+		glAttachTex2DtoFBO	( GL_DRAW_FRAMEBUFFER, formatClass, srcTex->m_texName, 0 );
 
 		// set read and draw buffers appropriately		
-		gGL->glReadBuffer		( glAttachFromClass[formatClass] );
-		gGL->glDrawBuffer		( glAttachFromClass[formatClass] );
+		gGL->glReadBuffer( glAttachFromClass[formatClass] );
+		gGL->glDrawBuffers( 1, &glAttachFromClass[formatClass] );
 		
 		// blit#1 - to resolve to scratch
 		// implicitly means no scaling, thus will be done with NEAREST sampling
 
 		GLenum resolveFilter = GL_NEAREST;
 		
-		gGL->glBlitFramebufferEXT(	0, 0,	srcTex->m_layout->m_key.m_xSize, srcTex->m_layout->m_key.m_ySize,
+		gGL->glBlitFramebuffer(	0, 0,	srcTex->m_layout->m_key.m_xSize, srcTex->m_layout->m_key.m_ySize,
 								0, 0,	srcTex->m_layout->m_key.m_xSize, srcTex->m_layout->m_key.m_ySize,	// same source and dest rect, whole surface
 								blitMask, resolveFilter );
 								
 		// FBO1 now holds the interesting content.
 		// scrub FBO0, bind FBO1 to READ, fall through to next stage of blit where 1 goes onto 0 (or BACK)
 		
-		glScrubFBO			( GL_READ_FRAMEBUFFER_EXT );	// zap FBO0
-		BindFBOToCtx		( m_scratchFBO[1], GL_READ_FRAMEBUFFER_EXT );
+		glScrubFBO			( GL_READ_FRAMEBUFFER );	// zap FBO0
+		BindFBOToCtx		( m_scratchFBO[1], GL_READ_FRAMEBUFFER );
 
 		srcTex->ForceRBONonDirty();
 	}
 	else
 	{
 #if 1
-        if ( ( blitMask == GL_DEPTH_BUFFER_BIT ) && ( srcTex->m_pBlitSrcFBO != NULL ) && ( dstTex->m_pBlitDstFBO != NULL ) )
-        {
-            // ensure fbo completeness for both src and dst buffers
-            
-            // on OSX need to call glReadBuffer and glDrawBuffer with GL_NONE for both in order to satify fb completeness (don't need this on Linux)
-            
-            // correct bindings applied below
-            
-            BindFBOToCtx( srcTex->m_pBlitSrcFBO, GL_DRAW_FRAMEBUFFER_EXT );
-            gGL->glDrawBuffer( GL_NONE );
-           
-            BindFBOToCtx( dstTex->m_pBlitDstFBO, GL_READ_FRAMEBUFFER_EXT );
-            gGL->glReadBuffer( GL_NONE );
-       }
-        
-        
 		if (srcTex->m_pBlitSrcFBO == NULL) 
 		{
 			srcTex->m_pBlitSrcFBO = NewFBO();
-			BindFBOToCtx( srcTex->m_pBlitSrcFBO, GL_READ_FRAMEBUFFER_EXT );
+			BindFBOToCtx( srcTex->m_pBlitSrcFBO, GL_READ_FRAMEBUFFER );
 			if (blitResolves)
 			{
-				glAttachRBOtoFBO( GL_READ_FRAMEBUFFER_EXT, formatClass, srcTex->m_rboName );
+				glAttachRBOtoFBO( GL_READ_FRAMEBUFFER, formatClass, srcTex->m_rboName );
 			}
 			else
 			{
-				glAttachTex2DtoFBO( GL_READ_FRAMEBUFFER_EXT, formatClass, srcTex->m_texName, srcMip );
+				glAttachTex2DtoFBO( GL_READ_FRAMEBUFFER, formatClass, srcTex->m_texName, srcMip );
 			}
 		} 
 		else 
 		{
-			BindFBOToCtx		( srcTex->m_pBlitSrcFBO, GL_READ_FRAMEBUFFER_EXT );
+			BindFBOToCtx		( srcTex->m_pBlitSrcFBO, GL_READ_FRAMEBUFFER );
+			//                     GLMCheckError();
 		}
 #else
 		// arrange source surface on FBO1 for blit directly to dest (which could be FBO0 or BACK)
-		BindFBOToCtx( m_scratchFBO[1], GL_READ_FRAMEBUFFER_EXT );
-		glScrubFBO( GL_READ_FRAMEBUFFER_EXT );
+		BindFBOToCtx( m_scratchFBO[1], GL_READ_FRAMEBUFFER );
+		glScrubFBO( GL_READ_FRAMEBUFFER );
 		GLMCheckError();
 		if (blitResolves)
 		{
-			glAttachRBOtoFBO( GL_READ_FRAMEBUFFER_EXT, formatClass, srcTex->m_rboName );
+			glAttachRBOtoFBO( GL_READ_FRAMEBUFFER, formatClass, srcTex->m_rboName );
 		}
 		else
 		{
-			glAttachTex2DtoFBO( GL_READ_FRAMEBUFFER_EXT, formatClass, srcTex->m_texName, srcMip );
+			glAttachTex2DtoFBO( GL_READ_FRAMEBUFFER, formatClass, srcTex->m_texName, srcMip );
 		}
 #endif
 
-		if ( blitMask != GL_DEPTH_BUFFER_BIT )
-		{
-			gGL->glReadBuffer( glAttachFromClass[formatClass] );
-		}
-		else
-		{
-			gGL->glReadBuffer( GL_NONE );
-        }
+		gGL->glReadBuffer( glAttachFromClass[formatClass] );
 	}
 	
-
-
 	//----------------------------------------------------------------- zero or one blits may have happened above, whichever took place, FBO1 is now on read
 	
 	bool yflip = false;
 	if (blitToBack)
 	{
 		// backbuffer is special - FBO0 is left out (either scrubbed already, or not used)
-		
-		BindFBOToCtx		( NULL, GL_DRAW_FRAMEBUFFER_EXT );
-		gGL->glDrawBuffer		( GL_BACK );
-		
+
+		BindFBOToCtx( NULL, GL_DRAW_FRAMEBUFFER );
+
+		GLenum bufs = GL_BACK;
+		gGL->glDrawBuffers( 1, &bufs );
+
 		yflip = true;
 	}
 	else
@@ -1251,42 +1128,36 @@ void GLMContext::Blit2( CGLMTex *srcTex, GLMRect *srcRect, int srcFace, int srcM
 		if (dstTex->m_pBlitDstFBO == NULL) 
 		{
 			dstTex->m_pBlitDstFBO = NewFBO();
-			BindFBOToCtx( dstTex->m_pBlitDstFBO, GL_DRAW_FRAMEBUFFER_EXT );
+			BindFBOToCtx( dstTex->m_pBlitDstFBO, GL_DRAW_FRAMEBUFFER );
 			if (dstTex->m_rboName)
 			{
-				glAttachRBOtoFBO( GL_DRAW_FRAMEBUFFER_EXT, formatClass, dstTex->m_rboName );		
+				glAttachRBOtoFBO( GL_DRAW_FRAMEBUFFER, formatClass, dstTex->m_rboName );		
 			}
 			else
 			{
-				glAttachTex2DtoFBO( GL_DRAW_FRAMEBUFFER_EXT, formatClass, dstTex->m_texName, dstMip );
+				glAttachTex2DtoFBO( GL_DRAW_FRAMEBUFFER, formatClass, dstTex->m_texName, dstMip );
 			}
 		} 
 		else
 		{
-            BindFBOToCtx( dstTex->m_pBlitDstFBO, GL_DRAW_FRAMEBUFFER_EXT );
-            
-			if ( blitMask == GL_DEPTH_BUFFER_BIT )
-			{
-                gGL->glDrawBuffer( GL_NONE );
-            }
+			BindFBOToCtx( dstTex->m_pBlitDstFBO, GL_DRAW_FRAMEBUFFER );
 		}
 #else
-		BindFBOToCtx( m_scratchFBO[0], GL_DRAW_FRAMEBUFFER_EXT );							GLMCheckError();								
-		glScrubFBO( GL_DRAW_FRAMEBUFFER_EXT );
+		BindFBOToCtx( m_scratchFBO[0], GL_DRAW_FRAMEBUFFER );							GLMCheckError();								
+		glScrubFBO( GL_DRAW_FRAMEBUFFER );
 
 		if (dstTex->m_rboName)
 		{
-			glAttachRBOtoFBO( GL_DRAW_FRAMEBUFFER_EXT, formatClass, dstTex->m_rboName );		
+			glAttachRBOtoFBO( GL_DRAW_FRAMEBUFFER, formatClass, dstTex->m_rboName );		
 		}
 		else
 		{
-			glAttachTex2DtoFBO( GL_DRAW_FRAMEBUFFER_EXT, formatClass, dstTex->m_texName, dstMip );
+			glAttachTex2DtoFBO( GL_DRAW_FRAMEBUFFER, formatClass, dstTex->m_texName, dstMip );
 		}	
 
 		gGL->glDrawBuffer		( glAttachFromClass[formatClass] );										GLMCheckError();
 #endif							
 	}
-
 
 	// final blit
 	
@@ -1301,38 +1172,32 @@ void GLMContext::Blit2( CGLMTex *srcTex, GLMRect *srcRect, int srcFace, int srcM
 	// this is blit #1 or #2 depending on what took place above.
 	if (yflip)
 	{
-		gGL->glBlitFramebufferEXT(	srcRect->xmin, srcRect->ymin, srcRect->xmax, srcRect->ymax,
+		gGL->glBlitFramebuffer(	srcRect->xmin, srcRect->ymin, srcRect->xmax, srcRect->ymax,
 								dstRect->xmin, dstRect->ymax, dstRect->xmax, dstRect->ymin,		// note dest Y's are flipped
 								blitMask, filter );
 	}
 	else
 	{
-		gGL->glBlitFramebufferEXT( srcRect->xmin, srcRect->ymin, srcRect->xmax, srcRect->ymax,
-								   dstRect->xmin, dstRect->ymin, dstRect->xmax, dstRect->ymax,
-								   blitMask, filter );
+		gGL->glBlitFramebuffer(	srcRect->xmin, srcRect->ymin, srcRect->xmax, srcRect->ymax,
+								dstRect->xmin, dstRect->ymin, dstRect->xmax, dstRect->ymax,
+								blitMask, filter );
 	}
 
 	//----------------------------------------------------------------- scrub READ and maybe DRAW FBO, and unbind
 
-//	glScrubFBO			( GL_READ_FRAMEBUFFER_EXT );
-	BindFBOToCtx		( NULL, GL_READ_FRAMEBUFFER_EXT );
+//	glScrubFBO			( GL_READ_FRAMEBUFFER );
+	BindFBOToCtx		( NULL, GL_READ_FRAMEBUFFER );
 	if (!blitToBack)
 	{
-//		glScrubFBO			( GL_DRAW_FRAMEBUFFER_EXT );
-		BindFBOToCtx		( NULL, GL_DRAW_FRAMEBUFFER_EXT );
+//		glScrubFBO			( GL_DRAW_FRAMEBUFFER );
+		BindFBOToCtx		( NULL, GL_DRAW_FRAMEBUFFER );
 	}
 		
 	//----------------------------------------------------------------- restore GLM's drawing FBO
 
 	//	restore GLM drawing FBO
-	BindFBOToCtx( m_drawingFBO, GL_FRAMEBUFFER_EXT );
+	BindFBOToCtx( m_drawingFBO, GL_FRAMEBUFFER );
 	
-	if (doPushPop)
-	{
-		gGL->glPopAttrib( );
-	}
-	
-
 	//----------------------------------------------------------------- restore old scissor state
 	if (oldsciss.enable)
 	{
@@ -1384,39 +1249,6 @@ void GLMContext::BlitTex( CGLMTex *srcTex, GLMRect *srcRect, int srcFace, int sr
 		GLMPRINTF(( "-D-       dst tex layout is %s", dstTex->m_layout->m_layoutSummary ));
 	}
 
-	int pushed = 0;
-	uint pushmask = gl_radar7954721_workaround_maskval.GetInt();
-		//GL_COLOR_BUFFER_BIT
-		//| GL_CURRENT_BIT
-		//| GL_ENABLE_BIT
-		//| GL_FOG_BIT
-		//| GL_PIXEL_MODE_BIT
-		//| GL_SCISSOR_BIT
-		//| GL_STENCIL_BUFFER_BIT
-		//| GL_TEXTURE_BIT
-		//GL_VIEWPORT_BIT
-		//;
-	
-	if (gl_radar7954721_workaround_all.GetInt()!=0)
-	{
-		gGL->glPushAttrib( pushmask );
-		pushed++;
-	}
-	else
-	{
-		bool srcGamma = (srcTex->m_layout->m_key.m_texFlags & kGLMTexSRGB) != 0;
-		bool dstGamma = (dstTex->m_layout->m_key.m_texFlags & kGLMTexSRGB) != 0;
-
-		if (srcGamma != dstGamma)
-		{
-			if (gl_radar7954721_workaround_mixed.GetInt())
-			{
-				gGL->glPushAttrib( pushmask );
-				pushed++;
-			}
-		}
-	}
-
 	if (useBlitFB)
 	{
 		// state we need to save
@@ -1449,19 +1281,19 @@ void GLMContext::BlitTex( CGLMTex *srcTex, GLMRect *srcRect, int srcFace, int sr
 			case GL_LUMINANCE:
 			case GL_LUMINANCE_ALPHA:
 				attachIndex = kAttColor0;
-				attachIndexGL = GL_COLOR_ATTACHMENT0_EXT;
+				attachIndexGL = GL_COLOR_ATTACHMENT0;
 				blitMask = GL_COLOR_BUFFER_BIT;
 			break;
 
 			case GL_DEPTH_COMPONENT:
 				attachIndex = kAttDepth;
-				attachIndexGL = GL_DEPTH_ATTACHMENT_EXT;
+				attachIndexGL = GL_DEPTH_ATTACHMENT;
 				blitMask = GL_DEPTH_BUFFER_BIT;
 			break;
 			
-			case GL_DEPTH_STENCIL_EXT:
+			case GL_DEPTH_STENCIL:
 				attachIndex = kAttDepthStencil;
-				attachIndexGL = GL_DEPTH_STENCIL_ATTACHMENT_EXT;
+				attachIndexGL = GL_DEPTH_STENCIL_ATTACHMENT;
 				blitMask = GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT;
 			break;
 
@@ -1471,31 +1303,30 @@ void GLMContext::BlitTex( CGLMTex *srcTex, GLMRect *srcRect, int srcFace, int sr
 		}
 
 		//	set the read fb, attach read tex at appropriate attach point, set read buffer
-		BindFBOToCtx( m_blitReadFBO, GL_READ_FRAMEBUFFER_EXT );
+		BindFBOToCtx( m_blitReadFBO, GL_READ_FRAMEBUFFER );
 
 		GLMFBOTexAttachParams attparams;
 		attparams.m_tex		=	srcTex;
 		attparams.m_face	=	srcFace;
 		attparams.m_mip		=	srcMip;
 		attparams.m_zslice	=	0;
-		m_blitReadFBO->TexAttach( &attparams, attachIndex, GL_READ_FRAMEBUFFER_EXT );
+		m_blitReadFBO->TexAttach( &attparams, attachIndex, GL_READ_FRAMEBUFFER );
 
 		gGL->glReadBuffer( attachIndexGL );
-		
 
 		//	set the write fb and buffer, and attach write tex
-		BindFBOToCtx( m_blitDrawFBO, GL_DRAW_FRAMEBUFFER_EXT );
+		BindFBOToCtx( m_blitDrawFBO, GL_DRAW_FRAMEBUFFER );
 
 		attparams.m_tex		=	dstTex;
 		attparams.m_face	=	dstFace;
 		attparams.m_mip		=	dstMip;
 		attparams.m_zslice	=	0;
-		m_blitDrawFBO->TexAttach( &attparams, attachIndex, GL_DRAW_FRAMEBUFFER_EXT );
+		m_blitDrawFBO->TexAttach( &attparams, attachIndex, GL_DRAW_FRAMEBUFFER );
 
-		gGL->glDrawBuffer( attachIndexGL );
+		gGL->glDrawBuffers( 1, &attachIndexGL );
 
 		//	do the blit
-		gGL->glBlitFramebufferEXT(	srcRect->xmin, srcRect->ymin, srcRect->xmax, srcRect->ymax,
+		gGL->glBlitFramebuffer(	srcRect->xmin, srcRect->ymin, srcRect->xmax, srcRect->ymax,
 								dstRect->xmin, dstRect->ymin, dstRect->xmax, dstRect->ymax,
 								blitMask, filter );
 							
@@ -1503,13 +1334,13 @@ void GLMContext::BlitTex( CGLMTex *srcTex, GLMRect *srcRect, int srcFace, int sr
 		//	unset the read fb and buffer, detach read tex
 		//	unset the write fb and buffer, detach write tex
 
-		m_blitReadFBO->TexDetach( attachIndex, GL_READ_FRAMEBUFFER_EXT );
+		m_blitReadFBO->TexDetach( attachIndex, GL_READ_FRAMEBUFFER );
 
-		m_blitDrawFBO->TexDetach( attachIndex, GL_DRAW_FRAMEBUFFER_EXT );
+		m_blitDrawFBO->TexDetach( attachIndex, GL_DRAW_FRAMEBUFFER );
 
 		//	put the original FB back in place (both read and draw)
 		// this bind will hit both read and draw bindings
-		BindFBOToCtx( m_drawingFBO, GL_FRAMEBUFFER_EXT );
+		BindFBOToCtx( m_drawingFBO, GL_FRAMEBUFFER );
 		
 			//	set the read and write buffers back to... what ? does it matter for anything but copies ?  don't worry about it
 		
@@ -1534,7 +1365,7 @@ void GLMContext::BlitTex( CGLMTex *srcTex, GLMRect *srcRect, int srcFace, int sr
 			case GL_LUMINANCE:
 			case GL_LUMINANCE_ALPHA:
 				attachIndex = kAttColor0;
-				attachIndexGL = GL_COLOR_ATTACHMENT0_EXT;
+				attachIndexGL = GL_COLOR_ATTACHMENT0;
 			break;
 
 			default:
@@ -1542,17 +1373,17 @@ void GLMContext::BlitTex( CGLMTex *srcTex, GLMRect *srcRect, int srcFace, int sr
 			break;
 		}
 		
-		BindFBOToCtx( m_blitDrawFBO, GL_DRAW_FRAMEBUFFER_EXT );
+		BindFBOToCtx( m_blitDrawFBO, GL_DRAW_FRAMEBUFFER );
 
 		GLMFBOTexAttachParams attparams;
 		attparams.m_tex		=	dstTex;
 		attparams.m_face	=	dstFace;
 		attparams.m_mip		=	dstMip;
 		attparams.m_zslice	=	0;
-		m_blitDrawFBO->TexAttach( &attparams, attachIndex, GL_DRAW_FRAMEBUFFER_EXT );
+		m_blitDrawFBO->TexAttach( &attparams, attachIndex, GL_DRAW_FRAMEBUFFER );
 
-		gGL->glDrawBuffer( attachIndexGL );
-		
+		gGL->glDrawBuffers( 1, &attachIndexGL );
+
 		// attempt to just set states directly the way we want them, then use the latched states to repair them afterward.
 		NullProgram();	// out of program mode
 		
@@ -1582,25 +1413,24 @@ void GLMContext::BlitTex( CGLMTex *srcTex, GLMRect *srcRect, int srcFace, int sr
 
 		// immediate mode is fine
 
-		float topv = 1.0;
-		float botv = 0.0;
+#if 0 // Does it needed?
+		const float topv = 1.0;
+		const float botv = 0.0;
+
+		const float verts[] = {-1.f, -1.f, 1.f, -1.f, 1.f, 1.f, -1.f, 1.f};
+		const float verts_tex[] = {0.f, botv, 1.f, botv, 1.f, topv, 0.f, topv};		
 		
-		gGL->glBegin(GL_QUADS);
-			gGL->glTexCoord2f	( 0.0, botv );
-			gGL->glVertex3f		( -1.0, -1.0, 0.0 );
-			
-			gGL->glTexCoord2f	( 1.0, botv );
-			gGL->glVertex3f		( 1.0, -1.0, 0.0 );
-			
-			gGL->glTexCoord2f	( 1.0, topv );
-			gGL->glVertex3f		( 1.0, 1.0, 0.0 );
+		gGL->glVertexPointer(2, GL_FLOAT, 0, verts);
+		gGL->glTexCoordPointer(2, GL_FLOAT, 0, verts_tex);
 
-			gGL->glTexCoord2f	( 0.0, topv );
-			gGL->glVertex3f		( -1.0, 1.0, 0.0 );
-		gGL->glEnd();
+		gGL->glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
 
+		gGL->glDisableClientState(GL_VERTEX_ARRAY);
+		gGL->glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+#endif
+		
 		gGL->glBindTexture( GL_TEXTURE_2D, 0 );
-
+		
 		gGL->glDisable(GL_TEXTURE_2D);
 
 		BindTexToTMU( m_samplers[0].m_pBoundTex, 0 );
@@ -1629,18 +1459,12 @@ void GLMContext::BlitTex( CGLMTex *srcTex, GLMRect *srcRect, int srcFace, int sr
 
 		//	unset the write fb and buffer, detach write tex
 
-		m_blitDrawFBO->TexDetach( attachIndex, GL_DRAW_FRAMEBUFFER_EXT );
+		m_blitDrawFBO->TexDetach( attachIndex, GL_DRAW_FRAMEBUFFER );
 
 		//	put the original FB back in place (both read and draw)
-		BindFBOToCtx( m_drawingFBO, GL_FRAMEBUFFER_EXT );
+		BindFBOToCtx( m_drawingFBO, GL_FRAMEBUFFER );
 	}
 	
-	while(pushed)
-	{
-		gGL->glPopAttrib();
-		pushed--;
-	}
-
 	RestoreSavedColorMask();
 }
 
@@ -1683,19 +1507,19 @@ void GLMContext::ResolveTex( CGLMTex *tex, bool forceDirty )
 	//		case GL_LUMINANCE:
 	//		case GL_LUMINANCE_ALPHA:
 				attachIndex = kAttColor0;
-				attachIndexGL = GL_COLOR_ATTACHMENT0_EXT;
+				attachIndexGL = GL_COLOR_ATTACHMENT0;
 				blitMask = GL_COLOR_BUFFER_BIT;
 			break;
 
 	//		case GL_DEPTH_COMPONENT:
 	//			attachIndex = kAttDepth;
-	//			attachIndexGL = GL_DEPTH_ATTACHMENT_EXT;
+	//			attachIndexGL = GL_DEPTH_ATTACHMENT;
 	//			blitMask = GL_DEPTH_BUFFER_BIT;
 	//		break;
 			
-			case GL_DEPTH_STENCIL_EXT:
+			case GL_DEPTH_STENCIL:
 				attachIndex = kAttDepthStencil;
-				attachIndexGL = GL_DEPTH_STENCIL_ATTACHMENT_EXT;
+				attachIndexGL = GL_DEPTH_STENCIL_ATTACHMENT;
 				blitMask = GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT;
 			break;
 
@@ -1706,35 +1530,35 @@ void GLMContext::ResolveTex( CGLMTex *tex, bool forceDirty )
 
 		
 		//	set the read fb, attach read RBO at appropriate attach point, set read buffer
-		BindFBOToCtx( m_blitReadFBO, GL_READ_FRAMEBUFFER_EXT );
+		BindFBOToCtx( m_blitReadFBO, GL_READ_FRAMEBUFFER );
 
 		// going to avoid the TexAttach / TexDetach calls due to potential confusion, implement it directly here
 		
 		//-----------------------------------------------------------------------------------
 		// put tex->m_rboName on the read FB's attachment
-		if (attachIndexGL==GL_DEPTH_STENCIL_ATTACHMENT_EXT)
+		if (attachIndexGL==GL_DEPTH_STENCIL_ATTACHMENT)
 		{
 			// you have to attach it both places...
 			// http://www.opengl.org/wiki/GL_EXT_framebuffer_object
 
-			// bind the RBO to the GL_RENDERBUFFER_EXT target - is this extraneous ?
-			//glBindRenderbufferEXT( GL_RENDERBUFFER_EXT, tex->m_rboName );
+			// bind the RBO to the GL_RENDERBUFFER target - is this extraneous ?
+			//glBindRenderbufferEXT( GL_RENDERBUFFER, tex->m_rboName );
 			
-			// attach the GL_RENDERBUFFER_EXT target to the depth and stencil attach points
-			gGL->glFramebufferRenderbufferEXT( GL_READ_FRAMEBUFFER_EXT, GL_DEPTH_ATTACHMENT_EXT, GL_RENDERBUFFER_EXT, tex->m_rboName);						
+			// attach the GL_RENDERBUFFER target to the depth and stencil attach points
+			gGL->glFramebufferRenderbuffer( GL_READ_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, tex->m_rboName);						
 				
-			gGL->glFramebufferRenderbufferEXT( GL_READ_FRAMEBUFFER_EXT, GL_STENCIL_ATTACHMENT_EXT, GL_RENDERBUFFER_EXT, tex->m_rboName);
+			gGL->glFramebufferRenderbuffer( GL_READ_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, tex->m_rboName);
 
 			// no need to leave the RBO hanging on
-			//glBindRenderbufferEXT( GL_RENDERBUFFER_EXT, 0 );
+			//glBindRenderbufferEXT( GL_RENDERBUFFER, 0 );
 		}
 		else
 		{
-			//glBindRenderbufferEXT( GL_RENDERBUFFER_EXT, tex->m_rboName );
+			//glBindRenderbufferEXT( GL_RENDERBUFFER, tex->m_rboName );
 			
-			gGL->glFramebufferRenderbufferEXT( GL_READ_FRAMEBUFFER_EXT, attachIndexGL, GL_RENDERBUFFER_EXT, tex->m_rboName);
+			gGL->glFramebufferRenderbuffer( GL_READ_FRAMEBUFFER, attachIndexGL, GL_RENDERBUFFER, tex->m_rboName);
 
-			//glBindRenderbufferEXT( GL_RENDERBUFFER_EXT, 0 );
+			//glBindRenderbufferEXT( GL_RENDERBUFFER, 0 );
 		}
 
 		gGL->glReadBuffer( attachIndexGL );
@@ -1743,27 +1567,27 @@ void GLMContext::ResolveTex( CGLMTex *tex, bool forceDirty )
 		// put tex->m_texName on the draw FBO attachment
 
 		//	set the write fb and buffer, and attach write tex
-		BindFBOToCtx( m_blitDrawFBO, GL_DRAW_FRAMEBUFFER_EXT );
+		BindFBOToCtx( m_blitDrawFBO, GL_DRAW_FRAMEBUFFER );
 
 		// regular path - attaching a texture2d
 		
-		if (attachIndexGL==GL_DEPTH_STENCIL_ATTACHMENT_EXT)
+		if (attachIndexGL==GL_DEPTH_STENCIL_ATTACHMENT)
 		{
-			gGL->glFramebufferTexture2DEXT( GL_DRAW_FRAMEBUFFER_EXT, GL_DEPTH_ATTACHMENT_EXT, GL_TEXTURE_2D, tex->m_texName, 0 );
+			gGL->glFramebufferTexture2D( GL_DRAW_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, tex->m_texName, 0 );
 
-			gGL->glFramebufferTexture2DEXT( GL_DRAW_FRAMEBUFFER_EXT, GL_STENCIL_ATTACHMENT_EXT, GL_TEXTURE_2D, tex->m_texName, 0 );
+			gGL->glFramebufferTexture2D( GL_DRAW_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_TEXTURE_2D, tex->m_texName, 0 );
 		}
 		else
 		{
-			gGL->glFramebufferTexture2DEXT( GL_DRAW_FRAMEBUFFER_EXT, attachIndexGL, GL_TEXTURE_2D, tex->m_texName, 0 );
+			gGL->glFramebufferTexture2D( GL_DRAW_FRAMEBUFFER, attachIndexGL, GL_TEXTURE_2D, tex->m_texName, 0 );
 		}
 
-		gGL->glDrawBuffer( attachIndexGL );
+		gGL->glDrawBuffers( 1, &attachIndexGL );
 
 		//-----------------------------------------------------------------------------------
 
 		// blit
-		gGL->glBlitFramebufferEXT(	0, 0,	tex->m_layout->m_key.m_xSize, tex->m_layout->m_key.m_ySize,
+		gGL->glBlitFramebuffer(	0, 0,	tex->m_layout->m_key.m_xSize, tex->m_layout->m_key.m_ySize,
 								0, 0,	tex->m_layout->m_key.m_xSize, tex->m_layout->m_key.m_ySize,
 								blitMask, GL_NEAREST );
 			// or should it be GL_LINEAR?  does it matter ?
@@ -1774,38 +1598,37 @@ void GLMContext::ResolveTex( CGLMTex *tex, bool forceDirty )
 
 
 		//	unset the read fb and buffer, detach read RBO
-		//glBindRenderbufferEXT( GL_RENDERBUFFER_EXT, 0 );
+		//glBindRenderbufferEXT( GL_RENDERBUFFER, 0 );
 
-		if (attachIndexGL==GL_DEPTH_STENCIL_ATTACHMENT_EXT)
+		if (attachIndexGL==GL_DEPTH_STENCIL_ATTACHMENT)
 		{
-			// detach the GL_RENDERBUFFER_EXT target from the depth and stencil attach points
-			gGL->glFramebufferRenderbufferEXT( GL_READ_FRAMEBUFFER_EXT, GL_DEPTH_ATTACHMENT_EXT, GL_RENDERBUFFER_EXT, 0);						
-				
-			gGL->glFramebufferRenderbufferEXT( GL_READ_FRAMEBUFFER_EXT, GL_STENCIL_ATTACHMENT_EXT, GL_RENDERBUFFER_EXT, 0);
+			// detach the GL_RENDERBUFFER target from the depth and stencil attach points
+			gGL->glFramebufferRenderbuffer( GL_READ_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, 0);
+			gGL->glFramebufferRenderbuffer( GL_READ_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, 0);
 		}
 		else
 		{
-			gGL->glFramebufferRenderbufferEXT( GL_READ_FRAMEBUFFER_EXT, attachIndexGL, GL_RENDERBUFFER_EXT, 0);
+			gGL->glFramebufferRenderbuffer( GL_READ_FRAMEBUFFER, attachIndexGL, GL_RENDERBUFFER, 0);
 		}
 
 		//-----------------------------------------------------------------------------------
 		//	unset the write fb and buffer, detach write tex
 		
 
-		if (attachIndexGL==GL_DEPTH_STENCIL_ATTACHMENT_EXT)
+		if (attachIndexGL==GL_DEPTH_STENCIL_ATTACHMENT)
 		{
-			gGL->glFramebufferTexture2DEXT( GL_DRAW_FRAMEBUFFER_EXT, GL_DEPTH_ATTACHMENT_EXT, GL_TEXTURE_2D, 0, 0 );
+			gGL->glFramebufferTexture2D( GL_DRAW_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, 0, 0 );
 
-			gGL->glFramebufferTexture2DEXT( GL_DRAW_FRAMEBUFFER_EXT, GL_STENCIL_ATTACHMENT_EXT, GL_TEXTURE_2D, 0, 0 );
+			gGL->glFramebufferTexture2D( GL_DRAW_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_TEXTURE_2D, 0, 0 );
 		}
 		else
 		{
-			gGL->glFramebufferTexture2DEXT( GL_DRAW_FRAMEBUFFER_EXT, attachIndexGL, GL_TEXTURE_2D, 0, 0 );
+			gGL->glFramebufferTexture2D( GL_DRAW_FRAMEBUFFER, attachIndexGL, GL_TEXTURE_2D, 0, 0 );
 		}
 
 		//	put the original FB back in place (both read and draw)
 		// this bind will hit both read and draw bindings
-		BindFBOToCtx( m_drawingFBO, GL_FRAMEBUFFER_EXT );
+		BindFBOToCtx( m_drawingFBO, GL_FRAMEBUFFER );
 		
 		//	set the read and write buffers back to... what ? does it matter for anything but copies ?  don't worry about it
 		
@@ -1860,9 +1683,7 @@ void GLMContext::PreloadTex( CGLMTex *tex, bool force )
 	if ( !preloadPair->m_valid )
 	{
 		if ( !preloadPair->ValidateProgramPair() )
-		{
 			return;
-		}
 	}
 
 	gGL->glUseProgram( (GLuint)preloadPair->m_program );
@@ -1890,12 +1711,13 @@ void GLMContext::PreloadTex( CGLMTex *tex, bool force )
 	// bind texture and sampling params
 	CGLMTex *pPrevTex = m_samplers[15].m_pBoundTex;
 
-#ifndef OSX // 10.6
+#if !defined(OSX) || defined(IOS) // 10.6
 	if ( m_bUseSamplerObjects )
 	{
 		gGL->glBindSampler( 15, 0 );
 	}
-#endif    
+#endif // !OSX
+
 	BindTexToTMU( tex, 15 );
 	
 	// unbind vertex/index buffers
@@ -1907,14 +1729,13 @@ void GLMContext::PreloadTex( CGLMTex *tex, bool force )
 								0.0f, 0.0f, 0.0f,
 								0.0f, 0.0f, 0.0f };
 
-	static int indices[] = { 0, 1, 2 };
-	
+	static unsigned short indices[] = { 0, 1, 2 };
 
 	gGL->glEnableVertexAttribArray( 0 );
 
 	gGL->glVertexAttribPointer( 0, 3, GL_FLOAT, 0, 0, posns );
 
-	gGL->glDrawRangeElements( GL_TRIANGLES, 0, 3, 3, GL_UNSIGNED_INT, indices);
+	gGL->glDrawRangeElements( GL_TRIANGLES, 0, 2, 3, GL_UNSIGNED_SHORT, indices);
 
 	gGL->glDisableVertexAttribArray( 0 );
 	
@@ -1949,13 +1770,13 @@ void GLMContext::DelFBO( CGLMFBO *fbo )
 	
 	if (m_boundReadFBO == fbo )
 	{
-		BindFBOToCtx( NULL, GL_READ_FRAMEBUFFER_EXT );
+		BindFBOToCtx( NULL, GL_READ_FRAMEBUFFER );
 		m_boundReadFBO = NULL;
 	}
 
 	if (m_boundDrawFBO == fbo )
 	{
-		BindFBOToCtx( NULL, GL_DRAW_FRAMEBUFFER_EXT );
+		BindFBOToCtx( NULL, GL_DRAW_FRAMEBUFFER );
 		m_boundDrawFBO = NULL;
 	}
 
@@ -2118,7 +1939,7 @@ void GLMContext::Clear( bool color, unsigned long colorValue, bool depth, float 
 
 		GLClearColor_t clearcol;
 		GLClearDepth_t cleardep = { depthValue };
-		GLClearStencil_t clearsten = { stencilValue };
+		GLClearStencil_t clearsten = { (GLint)stencilValue };
 
 		// depth write mask must be saved&restored
 		GLDepthMask_t			olddepthmask;
@@ -2126,7 +1947,7 @@ void GLMContext::Clear( bool color, unsigned long colorValue, bool depth, float 
 
 		// stencil write mask must be saved and restored
 		GLStencilWriteMask_t			oldstenmask;
-		GLStencilWriteMask_t			newstenmask = { 0xFFFFFFFF };
+		GLStencilWriteMask_t			newstenmask = { (GLint)0xFFFFFFFF };
 		
 		GLColorMaskSingle_t		oldcolormask;
 		GLColorMaskSingle_t		newcolormask = { -1,-1,-1,-1 };	// D3D clears do not honor color mask, so force it
@@ -2236,109 +2057,6 @@ void GLMContext::Clear( bool color, unsigned long colorValue, bool depth, float 
 	} while (info.m_loop);
 #endif
 }
-
-#ifdef _OSX
-void GLMContext::UpdateSwapchainVariables( bool bForce )
-{
-	static ConVarRef r_frameratesmoothing( "r_frameratesmoothing" );
-	const bool cbUpdateFramerateSmoothing = bForce || r_frameratesmoothing.GetBool() != m_bFramerateSmoothing;
-	const bool cbUpdateSwapLimit = bForce || gl_swap_limit.GetBool() != m_bSwapLimit;
-
-	
-	// Bail if no work to do.
-	if ( !cbUpdateFramerateSmoothing && !cbUpdateSwapLimit )
-		return;
-#ifdef USE_SDL
-	CGLContextObj context = GetCGLContextFromNSGL( m_ctx );
-#else
-	auto context = m_ctx;
-#endif
-
-	if ( cbUpdateFramerateSmoothing )
-	{
-		bool new_mtgl = m_caps.m_hasPerfPackage1;	// i.e. 10.6.4 plus new driver
-
-
-		if ( CommandLine()->FindParm( "-glmenablemtgl2" ) )
-		{
-			new_mtgl = true;
-		}
-
-		if ( CommandLine()->FindParm( "-glmdisablemtgl2" ) )
-		{
-			new_mtgl = false;
-		}
-
-		// Enable if we can and we haven't been told not to.
-		bool mtgl_on = m_displayParams.m_mtgl && !r_frameratesmoothing.GetBool();
-
-		if ( CommandLine()->FindParm( "-glmenablemtgl" ) )
-		{
-			mtgl_on = true;
-		}
-
-		if ( CommandLine()->FindParm( "-glmdisablemtgl" ) )
-		{
-			mtgl_on = false;
-		}
-
-		CGLError result = ( CGLError ) 0;
-		bool ready = false;
-		if ( new_mtgl )
-		{
-			// afterburner
-			CGLContextEnable kCGLCPGCDMPEngine = ( ( CGLContextEnable ) 1314 );
-			result = mtgl_on ? CGLEnable(  context, kCGLCPGCDMPEngine )
-			                 : CGLDisable( context, kCGLCPGCDMPEngine );
-
-			if ( !result )
-			{
-				ready = true;	// succeeded - no need to try non-MTGL
-				printf( "\nMTGL2 %s.\n", mtgl_on ? "enabled" : "disabled" );
-			}
-			else
-			{
-				printf( "\nMTGL2 *not* enabled, falling back.\n" );
-			}
-		}
-
-		if ( !ready )
-		{
-			// try old MTGL
-			result = mtgl_on ? CGLEnable(  context, kCGLCEMPEngine )
-			                 : CGLDisable( context, kCGLCEMPEngine );
-			if ( !result )
-			{
-				printf( "\nMTGL %s.\n", mtgl_on ? "enabled" : "disabled" );
-				ready = true;
-			}
-		}
-
-		// Make sure we can detect edges on this properly.
-		m_bFramerateSmoothing = r_frameratesmoothing.GetBool();
-	}
-
-	if ( cbUpdateSwapLimit )
-	{
-
-		if ( gl_swap_limit.GetBool() )
-		{
-			// Limit the number of frames in flight to 1.
-			CGLEnable( context, kCGLCESwapLimit );
-			printf( "Swap Limit Enabled\n" );
-		}
-		else
-		{
-			CGLDisable( context, kCGLCESwapLimit );
-			printf( "Swap Limit Disabled\n" );
-		}
-
-		// Make sure we can detect edges on this properly.
-		m_bSwapLimit = gl_swap_limit.GetBool();
-	}
-}
-#endif
-
 
 
 // stolen from glmgrbasics.cpp
@@ -2453,12 +2171,6 @@ void GLMContext::EndFrame( void )
 	
 	do
 	{
-#endif
-		if (!m_oneCtxEnable)	// if using dual contexts, this flush is needed
-		{
-			gGL->glFlush();
-		}
-#if GLMDEBUG
 		DebugHook( &info );
 	} while (info.m_loop);
 #endif
@@ -2500,46 +2212,17 @@ void GLMContext::Present( CGLMTex *tex )
 
 		ProcessTextureDeletes();
 
-#ifdef HAVE_GL_ARB_SYNC
-
-		if ( gGL->m_bHave_GL_AMD_pinned_memory )
-		{
-			m_PinnedMemoryBuffers[m_nCurPinnedMemoryBuffer].InsertFence();
-			
-			m_nCurPinnedMemoryBuffer = ( m_nCurPinnedMemoryBuffer + 1 ) % cNumPinnedMemoryBuffers;
-			
-			m_PinnedMemoryBuffers[m_nCurPinnedMemoryBuffer].BlockUntilNotBusy();
-			
-			gGL->glBindBufferARB( GL_EXTERNAL_VIRTUAL_MEMORY_BUFFER_AMD, m_PinnedMemoryBuffers[m_nCurPinnedMemoryBuffer].GetHandle() );
-		}
-
-		if ( gGL->m_bHave_GL_ARB_buffer_storage )
-		{
-			for (uint lpType = 0; lpType < kGLMNumBufferTypes; ++lpType)
-			{
-				m_persistentBuffer[m_nCurPersistentBuffer][lpType].InsertFence();
-			}
-
-			m_nCurPersistentBuffer = ( m_nCurPersistentBuffer + 1 ) % cNumPersistentBuffers;
-
-			for (uint lpType = 0; lpType < kGLMNumBufferTypes; ++lpType)
-			{
-				m_persistentBuffer[m_nCurPersistentBuffer][lpType].BlockUntilNotBusy();
-			}
-		}
-#endif
-					
 		bool newRefreshMode = false;
 		// two ways to go:
-	
+
 		// old school, do the resolve, had the tex down to cocoamgr to actually blit.
 		// that way is required if you are not in one-context mode (10.5.8)
-	
-		if ( m_oneCtxEnable && (gl_blitmode.GetInt() != 0) )
+
+		if ( (gl_blitmode.GetInt() != 0) )
 		{
 			newRefreshMode = true;
 		}
-	
+
 		// this is the path whether full screen or windowed... we always blit.
 		CShowPixelsParams showparams;
 		memset( &showparams, 0, sizeof(showparams) );
@@ -2557,7 +2240,7 @@ void GLMContext::Present( CGLMTex *tex )
 		showparams.m_onlySyncView = false;
 	
 		bool refresh = true;
-	#ifdef OSX
+	#if defined(OSX) && !defined(IOS)
 		if ( (glm_nullrefresh_capslock.GetInt()) && (GetCurrentKeyModifiers() & EalphaLock) )
 		{
 			refresh = false;
@@ -2566,7 +2249,7 @@ void GLMContext::Present( CGLMTex *tex )
 		static int counter;
 		counter ++;
 
-	#ifdef OSX
+	#if defined(OSX) && !defined(IOS)
 		if ( (glm_literefresh_capslock.GetInt()) && (GetCurrentKeyModifiers() & EalphaLock) && (counter & 127) )
 		{
 			// just show every 128th frame
@@ -2605,41 +2288,28 @@ void GLMContext::Present( CGLMTex *tex )
 				// we set showparams.m_noBlit, and just let CocoaMgr handle the swap (flushbuffer / page flip)
 				showparams.m_noBlit = true;
 
-				if (m_oneCtxEnable)			// if using single context, we need to blast some state so GLM will recover after the FBO fiddlin'
-				{
-					BindFBOToCtx( NULL, GL_FRAMEBUFFER_EXT );
-				}
+				BindFBOToCtx( NULL, GL_FRAMEBUFFER );
 			}
 			else
 			{
 				ResolveTex( tex, true );	// dxabstract used to do this unconditionally.we still do if new refresh mode doesn't engage.
-			
-				if (m_oneCtxEnable)			// if using single context, we need to blast some state so GLM will recover after the FBO fiddlin'
-				{
-					BindFBOToCtx( NULL, GL_FRAMEBUFFER_EXT );
-				}
-				else
-				{
-					gGL->glFlush();					// this call is needed for dual context mode to get pixels flushed
-				}
-			
+
+				BindFBOToCtx( NULL, GL_FRAMEBUFFER );
+
 				// showparams.m_noBlit is left set to 0.  CocoaMgr does the blit.
 			}
 
 			ShowPixels(&showparams);
 		}
 
-		if (m_oneCtxEnable)
-		{
-			//	put the original FB back in place (both read and draw)
-			// this bind will hit both read and draw bindings
-			BindFBOToCtx( m_drawingFBO, GL_FRAMEBUFFER_EXT );
-			
-			// put em back !!
-			m_ScissorEnable.Flush();	
-			m_ScissorBox.Flush();
-			m_ViewportBox.Flush();		
-		}
+		//	put the original FB back in place (both read and draw)
+		// this bind will hit both read and draw bindings
+		BindFBOToCtx( m_drawingFBO, GL_FRAMEBUFFER );
+
+		// put em back !!
+		m_ScissorEnable.Flush();	
+		m_ScissorBox.Flush();
+		m_ViewportBox.Flush();		
 	}
 
 	m_nCurFrame++;
@@ -2647,13 +2317,6 @@ void GLMContext::Present( CGLMTex *tex )
 #if GL_BATCH_PERF_ANALYSIS
 	tmMessage( TELEMETRY_LEVEL2, TMMF_ICON_EXCLAMATION, "VS Uniform Calls: %u, VS Uniforms: %u|VS Uniform Bone Calls: %u, VS Bone Uniforms: %u|PS Uniform Calls: %u, PS Uniforms: %u", m_nTotalVSUniformCalls, m_nTotalVSUniformsSet, m_nTotalVSUniformBoneCalls, m_nTotalVSUniformsBoneSet, m_nTotalPSUniformCalls, m_nTotalPSUniformsSet );
 	m_nTotalVSUniformCalls = 0, m_nTotalVSUniformBoneCalls = 0, m_nTotalVSUniformsSet = 0, m_nTotalVSUniformsBoneSet = 0, m_nTotalPSUniformCalls = 0, m_nTotalPSUniformsSet = 0;
-#endif
-
-#ifdef _OSX
-	// Give ourselves a chance to update the swapchain parameters on OSX.
-	UpdateSwapchainVariables( false );
-#else
-	GLMGPUTimestampManagerTick();
 #endif
 }
 
@@ -2684,10 +2347,6 @@ bool GLMContext::SetDisplayParams( GLMDisplayParams *params )
 }
 
 
-// this decides whether the engine will try to use fast context mode on 10.6.3 or later.
-// fast context mode means that a single GL context is used both for the window and the engine, saving on sync and flushes.
-// it's only a suggestion; if the OS is below 10.6.2 it will be ignored.
-ConVar gl_singlecontext		( "gl_singlecontext", "1" );
 ConVar gl_can_query_fast("gl_can_query_fast", "0");
 
 static uint gPersistentBufferSize[kGLMNumBufferTypes] = 
@@ -2700,40 +2359,27 @@ static uint gPersistentBufferSize[kGLMNumBufferTypes] =
 
 GLMContext::GLMContext( IDirect3DDevice9 *pDevice, GLMDisplayParams *params )
 {
-// 	m_bUseSamplerObjects = true;
-// 	
-// 	// On most AMD drivers (like the current latest, 12.10 Windows), the PCF depth comparison mode doesn't work on sampler objects, so just punt them.
-// 	if ( gGL->m_nDriverProvider == cGLDriverProviderAMD )
-// 	{
-// 		m_bUseSamplerObjects = false;
-// 	}
-	
-// 	if ( CommandLine()->CheckParm( "-gl_disablesamplerobjects" ) )
-// 	{
-	// Disable sampler object usage for now since ScaleForm isn't aware of them
-	// and doesn't know how to push/pop their binding state. It seems we don't
-	// really use them in this codebase anyhow, except to preload textures.
-	m_bUseSamplerObjects = false;
-	if ( CommandLine()->CheckParm( "-gl_enablesamplerobjects" ) )
-	{
+	m_nNumDirtySamplers = 0;
+
+	if( gGL->m_nDriverProvider == cGLDriverProviderARM )
 		m_bUseSamplerObjects = true;
-	}
+	else
+		m_bUseSamplerObjects = false;
+
+	if ( CommandLine()->CheckParm( "-gl_enablesamplerobjects" ) )
+		m_bUseSamplerObjects = true;
 
 	// Try to get some more free memory by relying on driver host copies instead of ours.
-	// In some cases the driver will be able to discard their own host copy and rely on GPU
-	// memory, reducing memory usage.
+	//  In some cases the driver will be able to discard their own host copy and rely on GPU
+	//  memory, reducing memory usage.
 	// Sadly, we have to enable tex client storage for srgb decoding. This should only happen
-	// on Macs w/ OSX 10.6.
+	//  on Macs w/ OSX 10.6.
 	m_bTexClientStorage = !gGL->m_bHave_GL_EXT_texture_sRGB_decode;
 	if ( CommandLine()->CheckParm( "-gl_texclientstorage" ) )
-	{
 		m_bTexClientStorage = true;
-	}
-	
-	char buf[256];
-	V_snprintf( buf, sizeof( buf ), "GL sampler object usage: %s\n", m_bUseSamplerObjects ? "ENABLED" : "DISABLED" );
-	Plat_DebugString( buf );
-	
+
+	GLMDebugPrintf( "GL sampler object usage: %s\n", m_bUseSamplerObjects ? "ENABLED" : "DISABLED" );
+
 	m_nCurOwnerThreadId = ThreadGetCurrentId();
 	m_nThreadOwnershipReleaseCounter = 0;
 
@@ -2742,22 +2388,9 @@ GLMContext::GLMContext( IDirect3DDevice9 *pDevice, GLMDisplayParams *params )
 	m_nBatchCounter = 0;
 
 	ClearCurAttribs();
-    
-#ifndef OSX
-	m_nCurPinnedMemoryBuffer = 0;
-	if ( gGL->m_bHave_GL_AMD_pinned_memory )
-	{
-		for ( uint t = 0; t < cNumPinnedMemoryBuffers; t++ )
-		{
-			m_PinnedMemoryBuffers[t].Init( GLMGR_PINNED_MEMORY_BUFFER_SIZE );
-		}
-
-		gGL->glBindBufferARB( GL_EXTERNAL_VIRTUAL_MEMORY_BUFFER_AMD, m_PinnedMemoryBuffers[m_nCurPinnedMemoryBuffer].GetHandle() );
-	}
-#endif // OSX
 
 	m_nCurPersistentBuffer = 0;
-	if ( gGL->m_bHave_GL_ARB_buffer_storage )
+	if ( gGL->m_bHave_GL_EXT_buffer_storage )
 	{
 		for ( uint lpType = 0; lpType < kGLMNumBufferTypes; ++lpType )
 		{
@@ -2767,8 +2400,7 @@ GLMContext::GLMContext( IDirect3DDevice9 *pDevice, GLMDisplayParams *params )
 			}
 		}
 	}
-	
-    
+
 	m_bUseBoneUniformBuffers = true;
 	if (CommandLine()->CheckParm("-disableboneuniformbuffers"))
 	{
@@ -2776,6 +2408,7 @@ GLMContext::GLMContext( IDirect3DDevice9 *pDevice, GLMDisplayParams *params )
 	}
 
 	m_nMaxUsedVertexProgramConstantsHint = 256;
+	m_FakeBlendEnableSRGB = false;
 
 	// flag our copy of display params as blank
 	m_displayParamsValid = false;
@@ -2807,16 +2440,7 @@ GLMContext::GLMContext( IDirect3DDevice9 *pDevice, GLMDisplayParams *params )
 	m_nsctx	= NULL;
 	m_ctx	= NULL;
 	
-#ifdef OSX
-	// call Cocoa manager, ask for the attrib list (also naming the specific renderer ID) and use that to make our context
-	CGLPixelFormatAttribute *selAttribs	=	NULL;
-#elif defined(LINUX)
 	int *selAttribs	=	NULL;
-#elif defined(_WIN32 )
-	int *selAttribs	=	NULL;
-#else
-#error
-#endif
 	uint					selWords	=	0;
 
 	memset( &m_caps, 0, sizeof( m_caps ) );
@@ -2826,50 +2450,15 @@ GLMContext::GLMContext( IDirect3DDevice9 *pDevice, GLMDisplayParams *params )
 #if defined( USE_SDL )
 	m_ctx = (SDL_GLContext)GetGLContextForWindow( params ? (void*)params->m_focusWindow : NULL );
 	MakeCurrent( true );
-	m_oneCtxEnable = true;
-#elif defined( OSX )
-	// call Cocoa manager, ask it about the window we're targeting, get the NSGLContext back, share against that	
-	PseudoNSGLContextPtr shareNsCtx = GetNSGLContextForWindow( (void*)params->m_focusWindow );
-
-	// decide if we're going to try single context mode.
-	m_oneCtxEnable = (m_caps.m_osComboVersion >= 0x000A0603) && (gl_singlecontext.GetInt() );
-
-	bool success = false;	//NewNSGLContext( (unsigned long*)selAttribs, shareNsCtx, &m_nsctx, &m_ctx );
-	if(m_oneCtxEnable)
-	{
-		// just steal the window's context
-		m_nsctx	= shareNsCtx;
-		m_ctx	= GetCGLContextFromNSGL( shareNsCtx );
-		
-		success	= (m_nsctx != NULL) && (m_ctx != NULL);
-	}
-	else
-	{
-		success = NewNSGLContext( (unsigned long*)selAttribs, shareNsCtx, &m_nsctx, &m_ctx );
-	}
-	
-	if (success)
-	{
-		//write a cookie into the CGL context leading back to the GLM context object
-		intp	glm_context_link = (intp) this;
-		CGLSetParameter( m_ctx, kCGLCPClientStorage, (int*) &glm_context_link );
-		
-		// save off the pixel format attributes we used		
-		memcpy(m_pixelFormatAttribs, selAttribs, selBytes );
-	}
-	else
-	{
-		DebuggerBreak(); //FIXME #PMB# bad news, maybe exit to shell if this happens
-	}
 #else
 #error
 #endif
 	IncrementWindowRefCount();
 
 	// If we're using GL_ARB_debug_output, go ahead and setup the callback here.
-	if ( gGL->m_bHave_GL_ARB_debug_output && CommandLine()->FindParm( "-gl_debug" ) ) 
+	if ( CommandLine()->FindParm( "-gl_debug" ) ) 
 	{
-#if GLMDEBUG
+//#if GLMDEBUG
 		// Turning this on is a perf loss, but it ensures that you can (at least) swap to the other 
 		// threads to see what call is currently being made.
 		// Note that if the driver is in multithreaded mode, you can put it back into singlethreaded mode
@@ -2883,16 +2472,16 @@ GLMContext::GLMContext( IDirect3DDevice9 *pDevice, GLMDisplayParams *params )
 		printf( "GLMContext::GLMContext: GL_DEBUG_OUTPUT_SYNCHRONOUS_ARB enabled!\n" );
 #endif
 
-#endif
+		// TODO(nillerusr): rewrite me!!!
 		// This should be there if we get in here--make sure.
-		Assert(gGL->glDebugMessageControlARB);
-		gGL->glDebugMessageControlARB(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, (const GLuint *)NULL, GL_TRUE);
+		gGL->glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, (const GLuint *)NULL, GL_TRUE);
 
 		// Gonna filter these out, they're "chatty".
-		gGL->glDebugMessageControlARB(GL_DEBUG_SOURCE_API_ARB, GL_DEBUG_TYPE_OTHER_ARB, GL_DEBUG_SEVERITY_LOW_ARB, 0, (const GLuint *)NULL, GL_FALSE);
-		gGL->glDebugMessageCallbackARB(GL_Debug_Output_Callback, (void*)NULL);
+		gGL->glDebugMessageControl(GL_DEBUG_SOURCE_API_ARB, GL_DEBUG_TYPE_OTHER_ARB, GL_DEBUG_SEVERITY_LOW_ARB, 0, (const GLuint *)NULL, GL_FALSE);
+		gGL->glDebugMessageCallback(GL_Debug_Output_Callback, (void*)NULL);
 
-		Plat_DebugString( "GLMContext::GLMContext: Debug output (gl_arb_debug_output) enabled!\n" );
+		GLMDebugPrintf( "GLMContext::GLMContext: Debug output (gl_arb_debug_output) enabled!\n" );
+//#endif
 	}
 
 
@@ -2905,19 +2494,19 @@ GLMContext::GLMContext( IDirect3DDevice9 *pDevice, GLMDisplayParams *params )
 
 	m_texLayoutTable = new CGLMTexLayoutTable;
 
-#ifndef OSX
+#if !defined(OSX) || defined(IOS)
 	if ( m_bUseSamplerObjects )
-    {
-        memset( m_samplerObjectHash, 0, sizeof( m_samplerObjectHash ) );
-        m_nSamplerObjectHashNumEntries = 0;
-
-        for ( uint i = 0; i < cSamplerObjectHashSize; ++i )
-        {
-            gGL->glGenSamplers( 1, &m_samplerObjectHash[i].m_samplerObject );
-        }
+	{
+		memset( m_samplerObjectHash, 0, sizeof( m_samplerObjectHash ) );
+		m_nSamplerObjectHashNumEntries = 0;
+	
+		for ( uint i = 0; i < cSamplerObjectHashSize; ++i )
+		{
+			gGL->glGenSamplers( 1, &m_samplerObjectHash[i].m_samplerObject );
+		}
 	}
-#endif
-    
+#endif // !OSX
+
 	memset( m_samplers, 0, sizeof( m_samplers ) );
 	for( int i=0; i< GLM_SAMPLER_COUNT; i++)
 	{
@@ -3036,8 +2625,75 @@ GLMContext::GLMContext( IDirect3DDevice9 *pDevice, GLMDisplayParams *params )
 		m_scratchFBO[i] = NewFBO();
 	}
 
-#ifdef OSX
-	UpdateSwapchainVariables( true );
+	// Create a PBO that we can use to fill textures with bogus data asyncronously.
+	m_nBoundGLBuffer[ kGLMPixelBuffer ] = 0;
+
+	gGL->glGenBuffers( 1, &m_destroyPBO );
+	gGL->glBindBuffer( GL_PIXEL_UNPACK_BUFFER, m_destroyPBO );
+	gGL->glBufferData( GL_PIXEL_UNPACK_BUFFER, sizeof( g_garbageTextureBits ), g_garbageTextureBits, GL_STREAM_DRAW );
+	gGL->glBindBuffer( GL_PIXEL_UNPACK_BUFFER, m_nBoundGLBuffer[ kGLMPixelBuffer ] );
+
+	// Create a bunch of texture names for us to use forever and ever ramen.
+	FillTexCache( false, kGLMInitialTexCount );
+
+#if defined(OSX) && !defined(IOS)
+	bool new_mtgl = m_caps.m_hasPerfPackage1;	// i.e. 10.6.4 plus new driver
+	
+	if ( CommandLine()->FindParm("-glmenablemtgl2") )
+	{
+		new_mtgl = true;
+	}
+
+	if ( CommandLine()->FindParm("-glmdisablemtgl2") )
+	{
+		new_mtgl = false;
+	}
+
+	bool mtgl_on = params->m_mtgl;
+	if (CommandLine()->FindParm("-glmenablemtgl"))
+	{
+		mtgl_on = true;
+	}
+	
+	if (CommandLine()->FindParm("-glmdisablemtgl"))
+	{
+		mtgl_on = false;
+	}
+
+	CGLError result = (CGLError)0;
+	if (mtgl_on)
+	{
+		bool ready = false;
+		CGLContextObj context = GetCGLContextFromNSGL(m_ctx);
+		if (new_mtgl)
+		{
+			// afterburner
+			CGLContextEnable kCGLCPGCDMPEngine = ((CGLContextEnable)1314);
+			result = CGLEnable( context, kCGLCPGCDMPEngine );
+			if (!result)
+			{
+				ready = true;	// succeeded - no need to try non-MTGL
+				printf("\nMTGL detected.\n");
+			}
+			else
+			{
+				printf("\nMTGL *not* detected, falling back.\n");
+			}
+		}
+
+		if (!ready)
+		{
+			// try old MTGL
+			result = CGLEnable( context, kCGLCEMPEngine );
+			if (!result)
+			{
+				printf("\nMTGL has been detected.\n");
+				ready = true;	// succeeded - no need to try non-MTGL
+			}
+		}
+	}
+
+/*
 	if ( m_caps.m_badDriver108Intel )
 	{
 		// this way we have something to look for in terminal spew if users report issues related to this in the future.
@@ -3047,6 +2703,7 @@ GLMContext::GLMContext( IDirect3DDevice9 *pDevice, GLMDisplayParams *params )
 			Warning( "Unable to enable OSX 10.8 / Intel HD4000 workaround, there might be crashes.\n" );
 		}
 	}
+*/
 
 #endif
 	// also, set the remote convar "gl_can_query_fast" to 1 if perf package present, else 0.
@@ -3060,6 +2717,12 @@ GLMContext::GLMContext( IDirect3DDevice9 *pDevice, GLMDisplayParams *params )
 	m_nTotalPSUniformCalls = 0;
 	m_nTotalPSUniformsSet = 0;
 #endif
+
+	// See g_D3DRS_INFO_packed in dxabstract.cpp; dithering is a non-managed
+	// piece of state that we consider off by default. However it is actually
+	// enabled by default in the GL spec, so account for that here.
+	// See: https://bugs.freedesktop.org/show_bug.cgi?id=74700
+	gGL->glDisable( GL_DITHER );
 }
 
 void GLMContext::Reset()
@@ -3068,40 +2731,6 @@ void GLMContext::Reset()
 
 GLMContext::~GLMContext	()
 {
-#ifndef OSX
-	GLMGPUTimestampManagerDeinit();
-
-	for ( uint t = 0; t < cNumPinnedMemoryBuffers; t++ )
-	{
-		m_PinnedMemoryBuffers[t].Deinit();
-	}
-
-	if (gGL->m_bHave_GL_ARB_buffer_storage)
-	{
-		for (uint lpType = 0; lpType < kGLMNumBufferTypes; ++lpType)
-		{
-			for (uint lpNum = 0; lpNum < cNumPersistentBuffers; ++lpNum)
-			{
-				m_persistentBuffer[lpNum][lpType].Deinit();
-			}
-		}
-	}
-
-	if ( m_bUseSamplerObjects )
-	{
-		for( int i=0; i< GLM_SAMPLER_COUNT; i++)
-		{
-			gGL->glBindSampler( i, 0 );
-		}
-
-		for( int i=0; i< cSamplerObjectHashSize; i++)
-        {
-            gGL->glDeleteSamplers( 1, &m_samplerObjectHash[i].m_samplerObject );
-            m_samplerObjectHash[i].m_samplerObject = 0;
-        }
-    }
-#endif
-    
 	if (m_debugFontTex)
 	{
 		DelTex( m_debugFontTex );
@@ -3134,14 +2763,9 @@ GLMContext::~GLMContext	()
 
 	// m_texLayoutTable can be scrubbed once we know that all the tex are freed
 
-#ifdef OSX
-	if (m_nsctx && (!m_oneCtxEnable) )
-	{
-		DelNSGLContext( m_nsctx );
-		m_nsctx	= NULL;
-		m_ctx	= NULL;	
-	}
-#endif
+	gGL->glDeleteBuffers( 1, &m_destroyPBO );
+
+	PurgeTexCache();
 
 	DecrementWindowRefCount();
 }
@@ -3162,7 +2786,6 @@ void GLMContext::BindTexToTMU( CGLMTex *pTex, int tmu )
 		
 	if ( !pTex )
 	{
-		gGL->glBindTexture( GL_TEXTURE_1D, 0 );
 		gGL->glBindTexture( GL_TEXTURE_2D, 0 );
 		gGL->glBindTexture( GL_TEXTURE_3D, 0 );
 		gGL->glBindTexture( GL_TEXTURE_CUBE_MAP, 0 );
@@ -3170,7 +2793,6 @@ void GLMContext::BindTexToTMU( CGLMTex *pTex, int tmu )
 	else
 	{
 		const GLenum texGLTarget = pTex->m_texGLTarget;
-		if ( texGLTarget != GL_TEXTURE_1D ) gGL->glBindTexture( GL_TEXTURE_1D, 0 );
 		if ( texGLTarget != GL_TEXTURE_2D ) gGL->glBindTexture( GL_TEXTURE_2D, 0 );
 		if ( texGLTarget != GL_TEXTURE_3D ) gGL->glBindTexture( GL_TEXTURE_3D, 0 );
 		if ( texGLTarget != GL_TEXTURE_CUBE_MAP ) gGL->glBindTexture( GL_TEXTURE_CUBE_MAP, 0 );
@@ -3189,29 +2811,29 @@ void GLMContext::BindFBOToCtx( CGLMFBO *fbo, GLenum bindPoint )
 
 	CheckCurrent();
 
-	if ( bindPoint == GL_FRAMEBUFFER_EXT )
+	if ( bindPoint == GL_FRAMEBUFFER )
 	{
-		gGL->glBindFramebufferEXT( GL_FRAMEBUFFER_EXT, fbo ? fbo->m_name : 0 );
+		gGL->glBindFramebuffer( GL_FRAMEBUFFER, fbo ? fbo->m_name : gGL->m_nSystemFramebufferID );
 		m_boundReadFBO = fbo;
 		m_boundDrawFBO = fbo;
 		return;
 	}
 	
-	bool	targetRead = (bindPoint==GL_READ_FRAMEBUFFER_EXT);
-	bool	targetDraw = (bindPoint==GL_DRAW_FRAMEBUFFER_EXT);
+	bool	targetRead = (bindPoint==GL_READ_FRAMEBUFFER);
+	bool	targetDraw = (bindPoint==GL_DRAW_FRAMEBUFFER);
 			
 	if (targetRead)
 	{
 		if (fbo)	// you can pass NULL to go back to no-FBO
 		{
-			gGL->glBindFramebufferEXT( GL_READ_FRAMEBUFFER_EXT, fbo->m_name );
+			gGL->glBindFramebuffer( GL_READ_FRAMEBUFFER, fbo->m_name );
 			
 			m_boundReadFBO = fbo;
 			//dontcare fbo->m_bound = true;
 		}
 		else
 		{
-			gGL->glBindFramebufferEXT( GL_READ_FRAMEBUFFER_EXT, 0 );
+			gGL->glBindFramebuffer( GL_READ_FRAMEBUFFER, gGL->m_nSystemFramebufferID );
 			
 			m_boundReadFBO = NULL;
 		}
@@ -3221,14 +2843,14 @@ void GLMContext::BindFBOToCtx( CGLMFBO *fbo, GLenum bindPoint )
 	{
 		if (fbo)	// you can pass NULL to go back to no-FBO
 		{
-			gGL->glBindFramebufferEXT( GL_DRAW_FRAMEBUFFER_EXT, fbo->m_name );
+			gGL->glBindFramebuffer( GL_DRAW_FRAMEBUFFER, fbo->m_name );
 			
 			m_boundDrawFBO = fbo;
 			//dontcare fbo->m_bound = true;
 		}
 		else
 		{
-			gGL->glBindFramebufferEXT( GL_DRAW_FRAMEBUFFER_EXT, 0 );
+			gGL->glBindFramebuffer( GL_DRAW_FRAMEBUFFER, gGL->m_nSystemFramebufferID );
 			
 			m_boundDrawFBO = NULL;
 		}
@@ -3254,20 +2876,172 @@ void GLMContext::BindBufferToCtx( EGLMBufferType type, CGLMBuffer *pBuff, bool b
 	GLenum target = 0;
 	switch( type )
 	{	
-		case kGLMVertexBuffer:		target = GL_ARRAY_BUFFER_ARB;			break;
-		case kGLMIndexBuffer:		target = GL_ELEMENT_ARRAY_BUFFER_ARB;	break;
-		case kGLMUniformBuffer:		target = GL_UNIFORM_BUFFER_EXT;			break;
-		case kGLMPixelBuffer:		target = GL_PIXEL_UNPACK_BUFFER_ARB;	break;
+		case kGLMVertexBuffer:		target = GL_ARRAY_BUFFER;			break;
+		case kGLMIndexBuffer:		target = GL_ELEMENT_ARRAY_BUFFER;	break;
+		case kGLMUniformBuffer:		target = GL_UNIFORM_BUFFER;			break;
+		case kGLMPixelBuffer:		target = GL_PIXEL_UNPACK_BUFFER;	break;
 		default: Assert(!"Unknown buffer type" );
 	}
 			
 	Assert( !pBuff || ( pBuff->m_buffGLTarget == target ) );
 			
 	m_nBoundGLBuffer[type] = nGLName;
-	gGL->glBindBufferARB( target, nGLName );
+	gGL->glBindBuffer( target, nGLName );
 }
 
-#ifdef OSX
+
+GLuint GLMContext::CreateTex( GLenum texBind, GLenum internalFormat )
+{
+	GLM_FUNC;
+
+	// If we're not doing batch create, just return one here.
+	if ( !gl_batch_tex_creates.GetBool() )
+	{
+		GLuint tex = 0;
+		gGL->glGenTextures( 1, &tex );
+		return tex;
+	}
+
+	FOR_EACH_VEC( m_availableTextures, i )
+	{
+		TextureEntry_t& tex = m_availableTextures[ i ];
+		if (    ( tex.m_nTexBind == GL_NONE || tex.m_nTexBind == texBind  )
+			 && ( tex.m_nInternalFormat == GL_NONE || tex.m_nInternalFormat == internalFormat ) )
+		{
+			// Hit!
+			GLuint retVal = tex.m_nTexName;
+			m_availableTextures.Remove( i );
+			return retVal;
+		}
+	}
+
+	if ( m_availableTextures.Count() >= kGLMHighWaterUndeleted )
+	{
+		PurgeTexCache();
+	}
+
+	return FillTexCache( true, kGLMReUpTexCount );
+}
+
+void GLMContext::CleanupTex( GLenum texBind, GLMTexLayout* pLayout, GLuint tex )
+{
+	// If the total 
+	if ( pLayout->m_storageTotalSize <= ( kDeletedTextureDim * kDeletedTextureDim * sizeof( uint32 ) ) )
+		return;
+
+	const GLuint oldPBO = m_nBoundGLBuffer[ kGLMPixelBuffer ];
+	const GLuint oldTex = ( m_samplers[ m_activeTexture ].m_pBoundTex != NULL ) ? m_samplers[ m_activeTexture ].m_pBoundTex->GetTexName() : 0;
+
+	gGL->glBindBuffer( GL_PIXEL_UNPACK_BUFFER, m_destroyPBO );
+	gGL->glBindTexture( texBind, tex );
+
+	// Clear out old data.
+	for ( int i = 0; i < pLayout->m_mipCount; ++i )
+	{
+		int mipDim = ( i == 0 ) ? kDeletedTextureDim : 0;
+		if ( pLayout->m_format->m_chunkSize != 1 )
+		{
+			const int chunks = ( mipDim + ( pLayout->m_format->m_chunkSize - 1 ) ) / pLayout->m_format->m_chunkSize;
+			const int dataSize = ( chunks * chunks ) * pLayout->m_format->m_bytesPerSquareChunk;
+			Assert( dataSize <= ( sizeof( uint32) * ARRAYSIZE( g_garbageTextureBits ) ) );
+
+			CompressedTexImage2D( texBind, i, pLayout->m_format->m_glIntFormat, mipDim, mipDim, 0, dataSize, NULL );
+		}
+		else
+		{
+			convert_texture( pLayout->m_format->m_glIntFormat, mipDim, mipDim, pLayout->m_format->m_glDataFormat, pLayout->m_format->m_glDataType, NULL );
+			gGL->glTexImage2D( texBind, i, pLayout->m_format->m_glIntFormat, mipDim, mipDim, 0, pLayout->m_format->m_glDataFormat, pLayout->m_format->m_glDataType, NULL );
+		}
+	}
+
+	gGL->glBindTexture( texBind, oldTex );
+	gGL->glBindBuffer( GL_PIXEL_UNPACK_BUFFER, oldPBO );
+}
+
+void GLMContext::DestroyTex( GLenum texBind, GLMTexLayout* pLayout, GLuint tex )
+{
+	GLM_FUNC;
+
+	// Code only handles 2D for now.
+	if ( texBind != GL_TEXTURE_2D || !gl_batch_tex_destroys.GetBool() )
+	{
+		gGL->glDeleteTextures( 1, &tex );
+		return;
+	}
+	
+	CleanupTex( texBind, pLayout, tex );
+
+	TextureEntry_t entry;
+	entry.m_nTexBind = texBind;
+	entry.m_nInternalFormat = pLayout->m_format->m_glIntFormat;
+	entry.m_nTexName = tex;
+
+	m_availableTextures.AddToTail( entry );
+}
+
+GLuint GLMContext::FillTexCache( bool holdOne, int newTextures )
+{
+	// If we aren't doing batch creates, then don't fill the cache. 
+	if ( !gl_batch_tex_creates.GetBool() )
+		return 0;
+	
+	// If we have to hit the name table, might as well hit it a bunch because this causes 
+	// serialization either way--at least we can do it less often.
+	GLuint* textures = (GLuint*) stackalloc( newTextures * sizeof( GLuint ) );
+	gGL->glGenTextures( newTextures, textures );
+
+	Assert( textures[ 0 ] );
+
+	TextureEntry_t entry;
+	entry.m_nTexBind = GL_NONE;
+	entry.m_nInternalFormat = GL_NONE;
+
+	// We may return 0, so skip adding it here.
+	for ( int i = 1; i < newTextures; ++i )
+	{
+		Assert( textures[ i ] );
+		if ( textures[ i ] )
+		{
+			// We still add these to the tail because we'd prefer to reuse old textures (rather 
+			// than these new ones).
+			entry.m_nTexName = textures[ i ];
+			m_availableTextures.AddToTail( entry );
+		}
+	}
+
+	if ( holdOne )
+		return textures[ 0 ];
+	
+	// If not, stick that last one in the list and return 0.
+	entry.m_nTexName = textures[ 0 ];
+	m_availableTextures.AddToTail( entry );
+
+	return 0;
+}
+
+void GLMContext::PurgeTexCache()
+{
+	GLM_FUNC;
+
+	int textureCount = m_availableTextures.Count();
+
+	if ( textureCount == 0 )
+		return;
+
+	GLuint* textures = (GLuint*) stackalloc( textureCount * sizeof( GLuint ) );
+	
+	FOR_EACH_VEC( m_availableTextures, i )
+	{
+		TextureEntry_t& tex = m_availableTextures[ i ];
+		textures[ i ] = tex.m_nTexName;
+	}
+
+	gGL->glDeleteTextures( textureCount, textures );
+	
+	m_availableTextures.RemoveAll();
+}
+
+#if defined(OSX) && !defined(IOS)
 // As far as I can tell this stuff is only useful under OSX.
 ConVar	gl_can_mix_shader_gammas( "gl_can_mix_shader_gammas", 0 );
 ConVar	gl_cannot_mix_shader_gammas( "gl_cannot_mix_shader_gammas", 0 );
@@ -3295,7 +3069,6 @@ void GLMContext::FlushDrawStatesNoShaders( )
 			
 	NullProgram();
 }
-
 
 #if GLMDEBUG
 
@@ -4579,8 +4352,7 @@ void GLMContext::DebugHook( GLMDebugHookInfo *info )
 			break;
 			
 			case 2:
-				short fakecolor[4] = { 0, 0, 0, 0 };
-				gGL->glColor4sv( fakecolor );	// break to OGLP
+				// What the fuck?
 			break;
 		}
 		// re-flush all GLM states so you can fiddle with them in the debugger. then run the batch again and spin..
@@ -4628,7 +4400,7 @@ void GLMContext::CheckNative( void )
 {
 	// note that this is available in release.  We don't use GLMPRINTF for that reason.
 	// note we do not get called unless either slow-batch asserting or logging is enabled.
-#ifdef OSX	
+#if defined(OSX) && !defined(IOS)	
 	bool gpuProcessing;
 	GLint fragmentGPUProcessing, vertexGPUProcessing;
 	
@@ -4933,36 +4705,11 @@ void GLMContext::DrawDebugText( float x, float y, float z, float drawCharWidth, 
 	
 	gGL->glEnable(GL_TEXTURE_2D);
 
-	if (0)
-	{
-		gGL->glEnableClientState(GL_VERTEX_ARRAY);
-
-		gGL->glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-		
-		gGL->glVertexPointer( 3, GL_FLOAT, sizeof( vtx[0] ), &vtx[0].x );
-		
-		gGL->glClientActiveTexture(GL_TEXTURE0);
-
-		gGL->glTexCoordPointer( 2, GL_FLOAT, sizeof( vtx[0] ), &vtx[0].u );
-	}
-	else
-	{
-		SetVertexAttributes( &vertSetup );
-	}
+	SetVertexAttributes( &vertSetup );
 
 	gGL->glDrawArrays( GL_QUADS, 0, stringlen * 4 );
 
-	// disable all the input streams
-	if (0)
-	{
-		gGL->glDisableClientState(GL_VERTEX_ARRAY);
-
-		gGL->glDisableClientState(GL_TEXTURE_COORD_ARRAY);
-	}
-	else
-	{
-		SetVertexAttributes( NULL );
-	}
+	SetVertexAttributes( NULL );
 
 	gGL->glDisable(GL_TEXTURE_2D);
 
@@ -5062,6 +4809,7 @@ void GLMContext::SetDefaultStates( void )
 	m_BlendEquation.Default();
 	m_BlendColor.Default();
 	//m_BlendEnableSRGB.Default();	// this isn't useful until there is an FBO bound - in fact it will trip a GL error.
+	m_FakeBlendEnableSRGB = false;
 
 	m_DepthTestEnable.Default();
 	m_DepthFunc.Default();
@@ -5155,7 +4903,7 @@ static inline uint GetDataTypeSizeInBytes( GLenum dataType )
 	return 0;
 }
 
-#ifndef OSX
+#if 1 //ifndef OSX
 
 void GLMContext::DrawRangeElementsNonInline( GLenum mode, GLuint start, GLuint end, GLsizei count, GLenum type, const GLvoid *indices, uint baseVertex, CGLMBuffer *pIndexBuf )
 {
@@ -5257,7 +5005,11 @@ void GLMContext::DrawRangeElementsNonInline( GLenum mode, GLuint start, GLuint e
 
 	if ( m_pBoundPair )
 	{
+		#ifndef ANGLE
 		gGL->glDrawRangeElementsBaseVertex( mode, start, end, count, type, indicesActual, baseVertex );
+		#else
+		gGL->glDrawRangeElementsBaseVertexOES( mode, start, end, count, type, indicesActual, baseVertex );
+		#endif
 
 #if GLMDEBUG
 		if ( m_slowCheckEnable )
@@ -5267,108 +5019,106 @@ void GLMContext::DrawRangeElementsNonInline( GLenum mode, GLuint start, GLuint e
 #endif
 	}
 }
+
 #else
 
 // support for OSX 10.6 (no support for glDrawRangeElementsBaseVertex)
-// legacy path that we're re-enabling for all OSX users as a result of perf regressions
-
 void GLMContext::DrawRangeElements(GLenum mode, GLuint start, GLuint end, GLsizei count, GLenum type, const GLvoid *indices, CGLMBuffer *pIndexBuf)
 {
-    GLM_FUNC;
-    
-    //	CheckCurrent();
-    ++m_nBatchCounter;				// batch index increments unconditionally on entry
-    
-    SetIndexBuffer( pIndexBuf );
-    void *indicesActual = (void*)indices;
-    if ( pIndexBuf->m_bPseudo )
-    {
-        // you have to pass actual address, not offset
-        indicesActual = (void*)( (intp)indicesActual + (intp)pIndexBuf->m_pPseudoBuf );
-    }
-    if (pIndexBuf->m_bUsingPersistentBuffer)
-    {
-        indicesActual = (void*)( (intp)indicesActual + (intp)pIndexBuf->m_nPersistentBufferStartOffset );
-    }
-    
+	GLM_FUNC;
+
+	//	CheckCurrent();
+	++m_nBatchCounter;				// batch index increments unconditionally on entry
+
+	SetIndexBuffer( pIndexBuf );
+	void *indicesActual = (void*)indices;    
+	if ( pIndexBuf->m_bPseudo )
+	{
+		// you have to pass actual address, not offset
+		indicesActual = (void*)( (int)indicesActual + (int)pIndexBuf->m_pPseudoBuf );
+	} 
+	if (pIndexBuf->m_bUsingPersistentBuffer)
+	{
+		indicesActual = (void*)( (int)indicesActual + (int)pIndexBuf->m_nPersistentBufferStartOffset );
+	}
+
 #if GLMDEBUG
-    // init debug hook information
-    GLMDebugHookInfo info;
-    memset(&info, 0, sizeof(info));
-    info.m_caller = eDrawElements;
-    
-    // relay parameters we're operating under
-    info.m_drawMode = mode;
-    info.m_drawStart = start;
-    info.m_drawEnd = end;
-    info.m_drawCount = count;
-    info.m_drawType = type;
-    info.m_drawIndices = indices;
-    
-    do
-    {
-        // obey global options re pre-draw clear
-        if (m_autoClearColor || m_autoClearDepth || m_autoClearStencil)
-        {
-            GLMPRINTF(("-- DrawRangeElements auto clear"));
-            this->DebugClear();
-        }
-        
-        // always sync with editable shader text prior to draw
+	// init debug hook information
+	GLMDebugHookInfo info;
+	memset(&info, 0, sizeof(info));
+	info.m_caller = eDrawElements;
+
+	// relay parameters we're operating under
+	info.m_drawMode = mode;
+	info.m_drawStart = start;
+	info.m_drawEnd = end;
+	info.m_drawCount = count;
+	info.m_drawType = type;
+	info.m_drawIndices = indices;
+
+	do
+	{
+		// obey global options re pre-draw clear
+		if (m_autoClearColor || m_autoClearDepth || m_autoClearStencil)
+		{
+			GLMPRINTF(("-- DrawRangeElements auto clear"));
+			this->DebugClear();
+		}
+
+		// always sync with editable shader text prior to draw
 #if GLMDEBUG
-        // TODO - fixup OSX 10.6 m_boundProg not used in this version togl (m_pBoundPair)
-        //FIXME disengage this path if context is in GLSL mode..
-        // it will need fixes to get the shader pair re-linked etc if edits happen anyway.
-        
-        if (m_boundProgram[kGLMVertexProgram])
-        {
-            m_boundProgram[kGLMVertexProgram]->SyncWithEditable();
-        }
-        else
-        {
-            AssertOnce(!"drawing with no vertex program bound");
-        }
-        
-        if (m_boundProgram[kGLMFragmentProgram])
-        {
-            m_boundProgram[kGLMFragmentProgram]->SyncWithEditable();
-        }
-        else
-        {
-            AssertOnce(!"drawing with no fragment program bound");
-        }
+		// TODO - fixup OSX 10.6 m_boundProg not used in this version togl (m_pBoundPair)
+		//FIXME disengage this path if context is in GLSL mode..
+		// it will need fixes to get the shader pair re-linked etc if edits happen anyway.
+
+		if (m_boundProgram[kGLMVertexProgram])
+		{
+			m_boundProgram[kGLMVertexProgram]->SyncWithEditable();
+		}
+		else
+		{
+			AssertOnce(!"drawing with no vertex program bound");
+		}
+
+		if (m_boundProgram[kGLMFragmentProgram])
+		{
+			m_boundProgram[kGLMFragmentProgram]->SyncWithEditable();
+		}
+		else
+		{
+			AssertOnce(!"drawing with no fragment program bound");
+		}
 #endif
-        
-        // do the drawing
-        if ( m_pBoundPair )
-        {
-            gGL->glDrawRangeElements(mode, start, end, count, type, indicesActual);
-            GLMCheckError();
-            
-            if (m_slowCheckEnable)
-            {
-                CheckNative();
-            }
-        }
-        this->DebugHook(&info);
-    } while (info.m_loop);
+
+		// do the drawing
+		if ( m_pBoundPair )
+		{
+			gGL->glDrawRangeElements(mode, start, end, count, type, indicesActual);
+			// GLMCheckError();
+
+			if (m_slowCheckEnable)
+			{
+				CheckNative();
+			}
+		}
+		this->DebugHook(&info);
+	} while (info.m_loop);
 #else
-    if ( m_pBoundPair )
-    {
-        gGL->glDrawRangeElements(mode, start, end, count, type, indicesActual);
-        
+	if ( m_pBoundPair )
+	{
+		gGL->glDrawRangeElements(mode, start, end, count, type, indicesActual);
+
 #if GLMDEBUG
-        if ( m_slowCheckEnable )
-        {
-            CheckNative();
-        }
+		if ( m_slowCheckEnable )
+		{
+			CheckNative();
+		}
 #endif
-    }
+	}
 #endif
 }
 
-#endif // #ifndef OSX
-
+#endif // !OSX
 
 #if 0
 // helper function to do enable or disable in one step
@@ -5449,7 +5199,7 @@ void GLMTester::StdSetup( void )
 	InternalError( !ready, "drawing FBO no go");
 
 	// bind it
-	ctx->BindFBOToCtx( m_drawFBO, GL_FRAMEBUFFER_EXT );
+	ctx->BindFBOToCtx( m_drawFBO, GL_FRAMEBUFFER );
 	
 	gGL->glViewport(0, 0, (GLsizei) m_drawWidth, (GLsizei) m_drawHeight );
 	CheckGLError("stdsetup viewport");
@@ -5457,7 +5207,7 @@ void GLMTester::StdSetup( void )
 	gGL->glScissor( 0,0,  (GLsizei) m_drawWidth, (GLsizei) m_drawHeight );
 	CheckGLError("stdsetup scissor");
 
-	gGL->glOrtho( -1,1, -1,1, -1,1 );
+	//gGL->glOrtho( -1,1, -1,1, -1,1 );
 	CheckGLError("stdsetup ortho");
 	
 	// activate debug font
@@ -5469,7 +5219,7 @@ void GLMTester::StdCleanup( void )
 	GLMContext *ctx = m_params.m_ctx;	
 
 	// unbind
-	ctx->BindFBOToCtx( NULL, GL_FRAMEBUFFER_EXT );
+	ctx->BindFBOToCtx( NULL, GL_FRAMEBUFFER );
 	
 	// del FBO
 	if (m_drawFBO)
@@ -5500,7 +5250,7 @@ void GLMTester::Clear( void )
 	
 	gGL->glViewport(0, 0, (GLsizei) m_drawWidth, (GLsizei) m_drawHeight );
 	gGL->glScissor( 0,0,  (GLsizei) m_drawWidth, (GLsizei) m_drawHeight );
-	gGL->glOrtho( -1,1, -1,1, -1,1 );
+	//gGL->glOrtho( -1,1, -1,1, -1,1 );
 	CheckGLError("clearing viewport");
 
 	// clear to black
@@ -5539,10 +5289,10 @@ return;
 		const char	*decodedStr = GLMDecode( eGL_ERROR, errorcode );
 		const char	*decodedStr2 = "";
 				
-		if ( errorcode == GL_INVALID_FRAMEBUFFER_OPERATION_EXT )
+		if ( errorcode == GL_INVALID_FRAMEBUFFER_OPERATION )
 		{
 			// dig up the more detailed FBO status
-			errorcode2 = gGL->glCheckFramebufferStatusEXT( GL_FRAMEBUFFER_EXT );
+			errorcode2 = gGL->glCheckFramebufferStatus( GL_FRAMEBUFFER );
 			
 			decodedStr2 = GLMDecode( eGL_ERROR, errorcode2 );
 
@@ -5987,7 +5737,7 @@ void GLMTester::Test1( void )
 					printf("\n   -> %s\n", ready ? "pass" : "fail" );
 					
 					// unbind
-					ctx->BindFBOToCtx( NULL, GL_FRAMEBUFFER_EXT );
+					ctx->BindFBOToCtx( NULL, GL_FRAMEBUFFER );
 					
 					// del FBO
 					ctx->DelFBO(fbo);
@@ -6015,7 +5765,7 @@ void GLMTester::Test2( void )
 	for( int i=0; i<m_params.m_frameCount; i++)
 	{
 		// ramping shades of blue...
-		GLfloat clear_color[4] = { 0.50f, 0.05f, ((float)(i%100)) / 100.0, 1.0f };		
+		GLfloat clear_color[4] = { 0.50f, 0.05f, ((float)(i%100)) / 100.0f, 1.0f };		
 		gGL->glClearColor(clear_color[0], clear_color[1], clear_color[2], clear_color[3]);
 		CheckGLError("test2 clear color");
 
@@ -6169,7 +5919,9 @@ void GLMTester::Test3( void )
 void GLMTriggerDebuggerBreak()
 {
 	// we call an obscure GL function which we know has been breakpointed in the OGLP function list
-	static signed short nada[] = { -1,-1,-1,-1 };
-	gGL->glColor4sv( nada );
+
+// What the fuck is that?
+//	static signed short nada[] = { -1,-1,-1,-1 };
+//	gGL->glColor4sv( nada );
 }
 #endif

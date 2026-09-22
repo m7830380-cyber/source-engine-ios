@@ -31,8 +31,8 @@ $Project "vgui_surfacelib"
 		$File	"Win32Font.cpp"			[$WINDOWS]
 		$File	"Win32Font_x360.cpp"	[$X360]
 		$File	"ps3font.cpp"			[$PS3]
-		$File	"osxfont.cpp"			[$OSXALL]
-		$File	"linuxfont.cpp"			[$LINUXALL]
+		$File	"osxfont.cpp"			[$OSXALL && !$IOS]
+		$File	"linuxfont.cpp"			[$LINUXALL || $IOS]
 	}
 
 	$Folder	"Public Header Files"

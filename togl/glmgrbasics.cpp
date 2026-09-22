@@ -1,4 +1,26 @@
-//============ Copyright (c) Valve Corporation, All rights reserved. ============
+//========= Copyright Valve Corporation, All rights reserved. ============//
+//                       TOGL CODE LICENSE
+//
+//  Copyright 2011-2014 Valve Corporation
+//  All Rights Reserved.
+//
+//  Permission is hereby granted, free of charge, to any person obtaining a copy
+//  of this software and associated documentation files (the "Software"), to deal
+//  in the Software without restriction, including without limitation the rights
+//  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+//  copies of the Software, and to permit persons to whom the Software is
+//  furnished to do so, subject to the following conditions:
+//
+//  The above copyright notice and this permission notice shall be included in
+//  all copies or substantial portions of the Software.
+//
+//  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+//  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+//  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+//  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+//  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+//  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+//  THE SOFTWARE.
 //
 // glmgrbasics.cpp
 //
@@ -11,9 +33,11 @@
 #include "tier1/utlmap.h"
 #include "tier0/vprof.h"
 
-#ifdef OSX
+#if defined(OSX) && !defined(IOS)
 #include <OpenGL/OpenGL.h>
-
+#ifdef CGLPROFILER_ENABLE
+#include <OpenGL/CGLProfilerFunctionEnum.h>
+#endif
 #endif
 
 #include "tier0/valve_minmax_off.h"
@@ -367,7 +391,7 @@ const GLMValueEntry_t g_d3d_vtxdeclusages_short[] =
 
 const GLMValueEntry_t	g_cgl_rendids[] =			// need to mask with 0xFFFFFF00 to match on these (ex: 8800GT == 0x00022608 
 {
-#ifdef OSX
+#if defined(OSX) && !defined(IOS)
 	VE( kCGLRendererGenericID ),
 	VE( kCGLRendererGenericFloatID ),
 	VE( kCGLRendererAppleSWID ),
@@ -2578,7 +2602,21 @@ const char	*GLMDecodeMask( GLMThing_t kind, unsigned long value )
 
 bool	GLMDetectOGLP( void )
 {
-	return false;
+	bool result = false;
+#if (defined(OSX) && !defined(IOS)) && defined( CGLPROFILER_ENABLE )
+	GLint forceFlush;
+	CGLError error = CGLGetParameter(CGLGetCurrentContext(), kCGLCPEnableForceFlush, &forceFlush);
+	result = error == 0;
+	if (result)
+	{
+		// enable a breakpoint on color4sv
+		int oglp_bkpt[3] = { kCGLFEglColor4sv, kCGLProfBreakBefore, 1 };
+		
+		CGLSetOption( kCGLGOEnableBreakpoint, (GLint)oglp_bkpt );			
+	}
+	
+#endif
+	return result;
 }
 
 
@@ -2590,7 +2628,11 @@ bool	GLMDetectOGLP( void )
 #include <sys/types.h>  
 #ifndef _WIN32
 	#include <unistd.h>  
-	#include <sys/sysctl.h>  
+#ifdef LINUX
+#include <linux/sysctl.h>
+#else
+#include <sys/sysctl.h>
+#endif
 #endif
 
 // From Technical Q&A QA1361  
@@ -2601,7 +2643,7 @@ bool	GLMDetectOGLP( void )
 
 bool	GLMDetectGDB( void )			// aka AmIBeingDebugged()
 {
-#ifdef OSX
+#if defined(OSX) && !defined(IOS)
 	bool				result;	
     int                 junk;  
     int                 mib[4];  
@@ -2770,6 +2812,14 @@ uint	GLMDebugFlavorMask( uint *newValue )
 //===============================================================================
 void GLMEnableTrace( bool on )
 {
+#if GLMDEBUG
+#if (defined(OSX) && !defined(IOS)) && defined( CGLPROFILER_ENABLE )
+	if ( GLMDebugChannelMask() & (1<<eGLProfiler) )
+	{
+		CGLSetOption(kCGLGOEnableFunctionTrace, on ? GL_TRUE : GL_FALSE );
+	}
+#endif
+#endif
 }
 
 //===============================================================================
@@ -2789,6 +2839,13 @@ void	GLMStringOut( char *string )
 #endif
 	}
 
+#if (defined(OSX) && !defined(IOS)) && defined( CGLPROFILER_ENABLE )
+	if ( GLMDebugChannelMask() & (1<<eGLProfiler) )
+	{
+		CGLSetOption( kCGLGOComment, (GLint)string );
+	}
+#endif
+
 	if ( GLMDebugChannelMask() & (1<<eGLProfiler) )
 	{
 		if (gGL->m_bHave_GL_GREMEDY_string_marker)
@@ -2801,7 +2858,7 @@ void	GLMStringOut( char *string )
 int		g_glm_indent = 0;
 int		g_glm_indent_max = 40;		// 40 tabs max
 
-#ifndef OSX
+#if !defined(OSX) || defined(IOS)
 const char *strnstr( const char *haystack, const char *needle, int len )
 {
 	return strstr( haystack, needle );
@@ -3055,662 +3112,22 @@ void	GLMSetIndent( int indent )
 
 #endif
 
-#if 0 // defined in platform.h
-inline uint64 Plat_Rdtsc()
-{
-#if defined( _X360 )
-	return ( uint64 )__mftb32();
-#elif defined( _WIN64 )
-	return ( uint64 )__rdtsc();
-#elif defined( _WIN32 )
-  #if defined( _MSC_VER ) && ( _MSC_VER >= 1400 )
-	return ( uint64 )__rdtsc();
-  #else
-    __asm rdtsc;
-	__asm ret;
-  #endif
-#elif defined( __i386__ )
-	uint64 val;
-	__asm__ __volatile__ ( "rdtsc" : "=A" (val) );
-	return val;
-#elif defined( __x86_64__ )
-	uint32 lo, hi;
-	__asm__ __volatile__ ( "rdtsc" : "=a" (lo), "=d" (hi));
-	return ( ( ( uint64 )hi ) << 32 ) | lo;
-#else
-	#error
-#endif
-}
-#endif
-
 // PIX tracking - you can call these outside of GLMDEBUG=true
 char sg_pPIXName[128];
 
 
-#ifndef OSX
-ConVar gl_telemetry_gpu_pipeline_flushing( "gl_telemetry_gpu_pipeline_flushing", "0" );
-
-class CGPUTimestampManager
-{
-	CGPUTimestampManager( const CGPUTimestampManager & );
-	CGPUTimestampManager& operator= ( CGPUTimestampManager & );
-		
-public:
-	CGPUTimestampManager() :
-		m_bInitialized( false ),
-		m_nCurFrame( 0 ),
-		m_flGPUToCPUOffsetInS( 0 ),
-		m_flGPUToS( 0 ),
-		m_flRdtscToS( 0 ),
-		m_flSToRdtsc( 0 ),
-		m_nFreeQueryPoolSize( 0 ),
-		m_nOutstandingQueriesHead( 0 ),
-		m_nOutstandingQueriesTail( 0 ),
-		m_nNumOutstandingQueryZones( 0 ),
-		m_nQueryZoneStackSize( 0 ),
-		m_nNumFinishedZones( 0 ),
-		m_nTotalSpanWorkCount( 0 )
-	{
-		memset( m_FreeQueryPool, 0, sizeof( m_FreeQueryPool ) ) ;
-		memset( m_QueryZoneStack, 0, sizeof( m_QueryZoneStack ) );
-		memset( m_OutstandingQueryZones, 0, sizeof( m_OutstandingQueryZones ) );
-		memset( m_FinishedZones, 0, sizeof( m_FinishedZones ) );
-	}
-
-	~CGPUTimestampManager()
-	{
-		Deinit();
-	}
-
-	inline bool IsInitialized() const { return m_bInitialized; }
-	inline uint GetCurFrame() const { return m_nCurFrame; }
-		
-	void Init()
-	{
-		Deinit();
-
-		memset( m_FreeQueryPool, 0, sizeof( m_FreeQueryPool ) ) ;
-		memset( m_QueryZoneStack, 0, sizeof( m_QueryZoneStack ) );
-		memset( m_OutstandingQueryZones, 0, sizeof( m_OutstandingQueryZones ) );
-		memset( m_FinishedZones, 0, sizeof( m_FinishedZones ) );
-
-		InitRdtsc();
-
-		m_nCurFrame = 0;
-				
-		gGL->glGenQueries( cFreeQueryPoolSize, m_FreeQueryPool );
-		m_nFreeQueryPoolSize = cFreeQueryPoolSize;
-
-		m_nOutstandingQueriesHead = 0;
-		m_nOutstandingQueriesTail = 0;
-		m_nNumOutstandingQueryZones = 0;
-
-		m_nQueryZoneStackSize = 0;
-		m_nNumFinishedZones = 0;
-										
-		m_bInitialized = true;
-		
-		m_nTotalSpanWorkCount = 0;
-		
-		Calibrate();
-	}
-
-	void Calibrate()
-	{
-		if ( !m_bInitialized )
-			return;
-
-		PipelineFlush();
-
-		m_flGPUToS = 1.0 / 1000000000.0;
-
-		//0.99997541250006794; 
-		//0.99997530000006662;
-		// Correction factor to prevent excessive drift, only calibrated on my system, we need a better way of computing/recording this.
-		double flGPURatio = 0.99997425000007034000;
-		
-		const uint NT = 1;
-		for ( uint nTrial = 0; nTrial < NT; nTrial++ )
-		{
-			const uint R = 16;
-			double flClockOffsetsInS[R];
-			for ( uint q = 0; q < R; q++)
-			{
-				uint64 nBestTotalCPUTimestamp = (uint64)-1;
-				uint64 nBestCPUTimestamp = 0;
-				GLuint64 nBestGPUTimestamp = 0;
-						
-				for ( uint i = 0; i < 10; i++)
-				{
-					const uint64 nStartCPUTimestamp = Plat_Rdtsc();
-				
-					gGL->glQueryCounter( m_FreeQueryPool[0], GL_TIMESTAMP);				
-					PipelineFlush();
-								
-					const uint64 nEndCPUTimestamp = Plat_Rdtsc();
-				
-					GLint nAvailable;
-					do 
-					{ 
-						gGL->glGetQueryObjectiv( m_FreeQueryPool[0], GL_QUERY_RESULT_AVAILABLE, &nAvailable ); 
-					} while ( !nAvailable );
-
-					GLuint64 nGPUTimestamp;
-					gGL->glGetQueryObjectui64v( m_FreeQueryPool[0], GL_QUERY_RESULT, &nGPUTimestamp );
-
-					const uint64 nTotalCPUTimestamp = nEndCPUTimestamp - nStartCPUTimestamp;
-					if ( nTotalCPUTimestamp < nBestTotalCPUTimestamp )
-					{
-						nBestTotalCPUTimestamp = nTotalCPUTimestamp;
-						nBestCPUTimestamp = nStartCPUTimestamp;
-						nBestGPUTimestamp = nGPUTimestamp;
-					}
-				}
-
-				double flCPUTimestampTimeInSeconds = nBestCPUTimestamp * m_flRdtscToS;
-				double flGPUTimestampTimeInSeconds = nBestGPUTimestamp * m_flGPUToS * flGPURatio;
-
-				flClockOffsetsInS[q] = flCPUTimestampTimeInSeconds - flGPUTimestampTimeInSeconds;
-
-				ThreadSleep(100);
-
-				DbgPrintf("%f %f %1.20f\n", flCPUTimestampTimeInSeconds, flGPUTimestampTimeInSeconds, flClockOffsetsInS[q] );
-			}
-						
-			m_flGPUToCPUOffsetInS = 0.0f;
-			for ( uint i = 0; i < R; i++ )
-				m_flGPUToCPUOffsetInS += flClockOffsetsInS[i];
-			m_flGPUToCPUOffsetInS /= R;
-
-			if ( NT > 1 )
-			{
-				DbgPrintf("------- Ratio: %2.20f\n", flGPURatio );
-
-				double flDelta = flClockOffsetsInS[0] - flClockOffsetsInS[R - 1];
-
-				DbgPrintf("------- %1.20f\n", flDelta );
-
-#if 1
-				if ( flDelta < 0.0000005f )
-				{
-					flGPURatio += .000000125f;
-				}
-				else if ( flDelta > 0.0000005f )
-				{
-					flGPURatio -= .000000125f;
-				}
-#else				
-				if ( flDelta < 0.0000005f )
-				{
-					flGPURatio += .0000000125f;
-				}
-				else if ( flDelta > 0.0000005f )
-				{
-					flGPURatio -= .0000000125f;
-				}
-#endif
-			}
-		}
-
-		m_flGPUToS *= flGPURatio;
-
-#if 0
-		// dump drift over time to debugger output
-		double flLatency = 0;
-		for ( ; ; )
-		{
-			// test
-			const uint64 nStartCPUTime = Plat_Rdtsc();
-
-			gGL->glQueryCounter( m_FreeQueryPool[0], GL_TIMESTAMP);
-
-			PipelineFlush();
-
-			GLint nAvailable;
-			do 
-			{ 
-				gGL->glGetQueryObjectiv( m_FreeQueryPool[0], GL_QUERY_RESULT_AVAILABLE, &nAvailable ); 
-			} while ( !nAvailable );
-
-			GLuint64 nGPUTime;
-			gGL->glGetQueryObjectui64v( m_FreeQueryPool[0], GL_QUERY_RESULT, &nGPUTime );
-
-			double flStartGPUTime = ( ( nGPUTime * m_flGPUToS ) + m_flGPUToCPUOffsetInS );
-
-			flLatency = flStartGPUTime - nStartCPUTime * m_flRdtscToS;
-			DbgPrintf("%f\n", flLatency );
-		}
-#endif
-	}
-
-	void Deinit()
-	{
-		if ( !m_bInitialized )
-			return;
-
-		if ( m_nFreeQueryPoolSize )
-		{
-			gGL->glDeleteQueries( m_nFreeQueryPoolSize, m_FreeQueryPool );
-		}
-		m_nFreeQueryPoolSize = 0;
-
-		for ( uint i = 0; i < m_nNumOutstandingQueryZones; i++ )
-		{
-			QueryZone_t &query = m_OutstandingQueryZones[ ( m_nOutstandingQueriesHead + i ) % cMaxQueryZones ];
-			if ( query.m_nBeginQuery )
-			{
-				gGL->glDeleteQueries( 1, &query.m_nBeginQuery );
-			}
-			if ( query.m_nEndQuery )
-			{
-				gGL->glDeleteQueries( 1, &query.m_nEndQuery );
-			}
-		}
-		m_nOutstandingQueriesHead = 0;
-		m_nOutstandingQueriesTail = 0;
-		m_nNumOutstandingQueryZones = 0;
-
-		for ( uint i = 0; i < m_nQueryZoneStackSize; i++ )
-		{
-			QueryZone_t &query = m_QueryZoneStack[i];
-			if ( query.m_nBeginQuery )
-			{
-				gGL->glDeleteQueries( 1, &query.m_nBeginQuery );
-			}
-			if ( query.m_nEndQuery )
-			{
-				gGL->glDeleteQueries( 1, &query.m_nEndQuery );
-			}
-		}
-		m_nQueryZoneStackSize = 0;
-						
-		m_flGPUToCPUOffsetInS = 0;
-		m_flGPUToS = 0;
-		m_flRdtscToS = 0;
-		m_flSToRdtsc = 0;
-
-		m_bInitialized = false;
-	}
-
-	// pName is assumed to be a telemetry dynamic string!
-	void BeginZone( const char *pName )
-	{
-		if ( !m_bInitialized ) 
-			return;
-		
-		if ( m_nQueryZoneStackSize >= cMaxQueryZoneStackSize )
-		{
-			Panic( "Increase cMaxQueryZoneStackSize!" );
-		}
-
-		QueryZone_t &zone = m_QueryZoneStack[m_nQueryZoneStackSize];
-		
-		zone.m_pName = pName;
-
-		zone.m_nBeginQuery = AllocQueryHandle();
-		zone.m_nEndQuery = 0;
-		zone.m_nStackLevel = m_nQueryZoneStackSize;
-		
-		zone.m_nTotalGPUWorkCount = g_nTotalDrawsOrClears;
-#if GL_TELEMETRY_GPU_ZONES
-		zone.m_nTotalGPUWorkCount += g_TelemetryGPUStats.GetTotal();
-#endif
-
-		gGL->glQueryCounter( m_QueryZoneStack[m_nQueryZoneStackSize].m_nBeginQuery, GL_TIMESTAMP );
-
-		m_nQueryZoneStackSize++;
-	}
-	
-	void EndZone()
-	{
-		if ( !m_bInitialized ) 
-			return;
-				
-		if ( ( !m_nQueryZoneStackSize ) || ( m_nNumOutstandingQueryZones == cMaxQueryZones ) )
-		{
-			Panic( "Query zone error!" );
-		}
-
-		m_nQueryZoneStackSize--;
-
-		uint nCurGPUWorkCount = g_nTotalDrawsOrClears;
-#if GL_TELEMETRY_GPU_ZONES
-		nCurGPUWorkCount += g_TelemetryGPUStats.GetTotal();
-#endif
-
-		uint nTotalDraws = nCurGPUWorkCount - m_QueryZoneStack[m_nQueryZoneStackSize].m_nTotalGPUWorkCount;
-
-		m_QueryZoneStack[m_nQueryZoneStackSize].m_nEndQuery = AllocQueryHandle();
-		gGL->glQueryCounter( m_QueryZoneStack[m_nQueryZoneStackSize].m_nEndQuery, GL_TIMESTAMP );
-		m_QueryZoneStack[m_nQueryZoneStackSize].m_nTotalGPUWorkCount = nTotalDraws;
-
-		m_OutstandingQueryZones[m_nOutstandingQueriesHead] = m_QueryZoneStack[m_nQueryZoneStackSize];
-		m_nOutstandingQueriesHead = ( m_nOutstandingQueriesHead + 1 ) % cMaxQueryZones;
-		m_nNumOutstandingQueryZones++;
-		
-		COMPILE_TIME_ASSERT( ( int )cMaxQueryZones > ( int )cMaxQueryZoneStackSize );
-		if ( m_nNumOutstandingQueryZones >= ( cMaxQueryZones - cMaxQueryZoneStackSize ) )
-		{
-			TM_MESSAGE( TELEMETRY_LEVEL2, TMMF_ICON_NOTE | TMMF_SEVERITY_WARNING, "CGPUTimestampManager::EndZone: Too many outstanding query zones - forcing a pipeline flush! This is probably expensive." );
-
-			FlushOutstandingQueries( true );
-		}
-
-		if ( gl_telemetry_gpu_pipeline_flushing.GetBool() )
-		{
-			PipelineFlush();
-		}
-	}
-	
-	void Tick()
-	{
-		m_nCurFrame++;
-
-		if ( !m_bInitialized ) 
-			return;
-
-		if ( m_nQueryZoneStackSize > 0 )
-		{
-			Panic( "Zone stack is not empty!" );
-		}
-
-		FlushOutstandingQueries( false );
-
-		TM_MESSAGE( TELEMETRY_LEVEL2, 0, "Total PIX timespan GPU work count: %u", m_nTotalSpanWorkCount );
-		
-		m_nTotalSpanWorkCount = 0;
-	}
-
-	void FlushOutstandingQueries( bool bForce )
-	{
-		TM_ZONE( TELEMETRY_LEVEL2, 0, "FlushOutstandingQueries: %u", m_nNumOutstandingQueryZones );
-
-		if ( bForce )
-		{
-			PipelineFlush();
-		}
-
-		while ( m_nNumOutstandingQueryZones )
-		{
-			QueryZone_t &zone = m_OutstandingQueryZones[m_nOutstandingQueriesTail];
-
-			GLint nEndAvailable = 0;
-			do 
-			{
-				gGL->glGetQueryObjectiv( zone.m_nEndQuery, GL_QUERY_RESULT_AVAILABLE, &nEndAvailable ); 
-
-			} while ( ( bForce ) && ( nEndAvailable == 0 ) );
-
-			if ( !nEndAvailable )
-			{
-				if ( bForce )
-				{
-					Panic( "Query results not available after a full pipeline flush!" );
-				}
-				break;
-			}
-
-			GLuint64 nBeginGPUTime, nEndGPUTime;
-			gGL->glGetQueryObjectui64v( zone.m_nBeginQuery, GL_QUERY_RESULT, &nBeginGPUTime );
-			gGL->glGetQueryObjectui64v( zone.m_nEndQuery, GL_QUERY_RESULT, &nEndGPUTime );
-
-			ReleaseQueryHandle( zone.m_nBeginQuery ); 
-			zone.m_nBeginQuery = 0;
-
-			ReleaseQueryHandle( zone.m_nEndQuery );
-			zone.m_nEndQuery = 0;
-
-			if ( m_nNumFinishedZones >= cMaxQueryZones )
-			{
-				Panic( "Too many finished zones!" );
-			}
-
-			FinishedQueryZone_t &finishedZone = m_FinishedZones[m_nNumFinishedZones];
-			finishedZone.m_pName = zone.m_pName;
-			finishedZone.m_nBeginGPUTime = nBeginGPUTime;
-			finishedZone.m_nEndGPUTime = nEndGPUTime;
-			finishedZone.m_nStackLevel = zone.m_nStackLevel;
-			finishedZone.m_nTotalGPUWorkCount = zone.m_nTotalGPUWorkCount;
-			m_nNumFinishedZones++;
-
-			if ( !zone.m_nStackLevel )
-			{
-				std::sort( m_FinishedZones, m_FinishedZones + m_nNumFinishedZones );
-				FlushFinishedZones();
-				m_nNumFinishedZones = 0;
-			}
-
-			m_nOutstandingQueriesTail = ( m_nOutstandingQueriesTail + 1 ) % cMaxQueryZones;
-			m_nNumOutstandingQueryZones--;
-		}
-	}
-
-private:
-	bool m_bInitialized;
-	uint m_nCurFrame;
-
-	double m_flGPUToCPUOffsetInS;
-	double m_flGPUToS;
-	double m_flRdtscToS;
-	double m_flSToRdtsc;
-
-	enum { cMaxQueryZones = 4096, cFreeQueryPoolSize = cMaxQueryZones * 2 };
-	GLuint m_FreeQueryPool[cFreeQueryPoolSize ];
-	uint m_nFreeQueryPoolSize;
-
-	GLuint AllocQueryHandle() 
-	{
-		if ( !m_nFreeQueryPoolSize )
-		{
-			Panic( "Out of query handles!");
-		}
-		return m_FreeQueryPool[--m_nFreeQueryPoolSize];
-	}
-
-	void ReleaseQueryHandle( GLuint nHandle )
-	{
-		if ( m_nFreeQueryPoolSize >= cFreeQueryPoolSize )
-		{
-			Panic( "Query handle error!" );
-		}
-		m_FreeQueryPool[m_nFreeQueryPoolSize++] = nHandle;
-	}
-
-	struct QueryZone_t
-	{
-		const char *m_pName;
-		GLuint m_nBeginQuery;
-		GLuint m_nEndQuery;
-		uint m_nStackLevel;
-		uint m_nTotalGPUWorkCount;
-	};
-
-	QueryZone_t m_OutstandingQueryZones[cMaxQueryZones];
-	uint m_nOutstandingQueriesHead; // index of first outstanding query (oldest)
-	uint m_nOutstandingQueriesTail;	// index where next query goes (newest)
-	uint m_nNumOutstandingQueryZones;
-
-	enum { cMaxQueryZoneStackSize = 256 };
-	QueryZone_t m_QueryZoneStack[cMaxQueryZoneStackSize];
-	uint m_nQueryZoneStackSize;
-
-	struct FinishedQueryZone_t
-	{
-		const char *m_pName;
-		GLuint64 m_nBeginGPUTime;
-		GLuint64 m_nEndGPUTime;
-		uint m_nStackLevel;
-		uint m_nTotalGPUWorkCount;
-
-		inline bool operator< ( const FinishedQueryZone_t &rhs ) const 
-		{ 
-			if ( m_nBeginGPUTime == rhs.m_nBeginGPUTime)
-				return m_nStackLevel < rhs.m_nStackLevel;
-
-			return m_nBeginGPUTime < rhs.m_nBeginGPUTime; 
-		}
-	};
-
-	FinishedQueryZone_t m_FinishedZones[cMaxQueryZones];
-	uint m_nNumFinishedZones;
-
-	uint m_nTotalSpanWorkCount;
-			
-	void InitRdtsc()
-	{
-		m_flRdtscToS = 0.0f;
-		m_flSToRdtsc = 0.0f;
-
-		for ( uint i = 0; i < 10; i++ )
-		{
-			TmU64 t0 = Plat_Rdtsc();
-			double d0 = Plat_FloatTime();
-
-			ThreadSleep( 250 );
-
-			TmU64 t1 = Plat_Rdtsc();
-			double d1 = Plat_FloatTime();
-
-			double flRdtscToS = ( d1 - d0 ) / ( t1 - t0 );
-			double flSToRdtsc = ( t1 - t0 ) / ( d1 - d0 );
-			if ( flSToRdtsc > m_flSToRdtsc )
-			{
-				m_flRdtscToS = flRdtscToS;
-				m_flSToRdtsc = flSToRdtsc;
-			}
-		}
-	}
-
-	void PipelineFlush()
-	{
-#ifdef HAVE_GL_ARB_SYNC
-		GLsync nSyncObj = gGL->glFenceSync( GL_SYNC_GPU_COMMANDS_COMPLETE, 0 );
-		if ( nSyncObj )
-		{
-			gGL->glClientWaitSync( nSyncObj, GL_SYNC_FLUSH_COMMANDS_BIT, 300000000000ULL );
-			gGL->glDeleteSync( nSyncObj );
-		}
-#endif
-	}
-
-	inline void NewTimeSpan( uint64 nStartGPUTime, uint64 nEndGPUTime, const char *pName, uint nTotalDraws )
-	{
-		// LINUXTODO- telemetry define off, so need this ifdef here to build
-#if defined( RAD_TELEMETRY_ENABLED ) 
-
-		// apparently we must use level0 for timespans?
-		tmBeginTimeSpanAt( TELEMETRY_LEVEL0, 1, 0, nStartGPUTime, "%s [C:%u]", pName ? pName : "", nTotalDraws );
-		tmEndTimeSpanAt( TELEMETRY_LEVEL0, 1, 0, nEndGPUTime, "%s [C:%u]", pName ? pName : "", nTotalDraws );
-#endif
-	}
-
-	void FlushFinishedZones()
-	{
-		for ( uint i = 0; i < m_nNumFinishedZones; i++ )
-		{
-			FinishedQueryZone_t	&zone = m_FinishedZones[i];
-			if ( !zone.m_nTotalGPUWorkCount )
-				continue;
-
-			bool bEmit = false;
-			if ( i == ( m_nNumFinishedZones - 1 ) )
-				bEmit = true;
-			else
-			{
-				FinishedQueryZone_t	&nextZone = m_FinishedZones[i + 1];
-				bEmit = zone.m_nEndGPUTime <= nextZone.m_nBeginGPUTime;
-			}
-
-			if ( bEmit )
-			{
-				uint64 nStartGPUTime = ( ( zone.m_nBeginGPUTime * m_flGPUToS ) + m_flGPUToCPUOffsetInS ) * m_flSToRdtsc;
-				uint64 nEndGPUTime = ( ( zone.m_nEndGPUTime * m_flGPUToS ) + m_flGPUToCPUOffsetInS ) * m_flSToRdtsc;
-
-				NewTimeSpan( nStartGPUTime, nEndGPUTime, zone.m_pName, zone.m_nTotalGPUWorkCount );
-
-				m_nTotalSpanWorkCount += zone.m_nTotalGPUWorkCount;
-			}
-		}
-	}
-
-	void Panic( const char *pMsg )
-	{
-		DXABSTRACT_BREAK_ON_ERROR();
-		Error( "%s", pMsg );
-	}
-
-	static void DbgPrintf( const char *pFmt, ... )
-	{
-		va_list	vargs;
-		va_start( vargs, pFmt );
-		char buf[1024];
-		V_vsnprintf( buf, sizeof( buf ), pFmt, vargs );
-
-#ifdef WIN32
-		OutputDebugStringA( buf );
-#else
-		printf( "%s", buf );
-#endif
-
-		va_end( vargs );
-	}
-};
-
-
-static CGPUTimestampManager g_GPUTimestampManager;
-
-void GLMGPUTimestampManagerInit()
-{
-	g_GPUTimestampManager.Init();
-}
-
-void GLMGPUTimestampManagerDeinit()
-{
-	g_GPUTimestampManager.Deinit();
-}
-
 ConVar gl_telemetry_gpu( "gl_telemetry_gpu", "0" );
 static bool g_bPrevTelemetryGPU;
-
-void GLMGPUTimestampManagerTick()
-{
-	if ( g_bPrevTelemetryGPU != gl_telemetry_gpu.GetBool() )
-	{
-		if ( !gl_telemetry_gpu.GetBool() )
-			g_GPUTimestampManager.Deinit();
-		else
-		{
-#if !PIX_ENABLE || !GL_TELEMETRY_GPU_ZONES
-			ConMsg( "Must define PIX_ENABLE and GL_TELEMETRY_GPU_ZONES to use this feature" );
-#else
-			g_GPUTimestampManager.Init();
-#endif
-		}
-
-		g_bPrevTelemetryGPU = gl_telemetry_gpu.GetBool();
-	}
-
-	g_GPUTimestampManager.Tick();
-}
-
-#endif // OSX
 
 static uint g_nPIXEventIndex;
 
 void GLMBeginPIXEvent( const char *str )
 {
-#ifndef OSX
-	char szName[1024];
-	V_snprintf( szName, sizeof( szName ), "[ID:%u FR:%u] %s", g_nPIXEventIndex, g_GPUTimestampManager.GetCurFrame(), str );
-	const char *p = tmDynamicString( TELEMETRY_LEVEL2, szName ); //p can be null if tm is getting shut down
-	TM_ENTER( TELEMETRY_LEVEL2, TMZF_NONE, "PIX %s", p ? p : ""  );
-
-	g_nPIXEventIndex++;
-			
-	g_GPUTimestampManager.BeginZone( p );
-#endif
-    
 	V_strncpy( sg_pPIXName, str, 128 );
+
+#if (defined(OSX) && !defined(IOS)) && defined( CGLPROFILER_ENABLE )
+	CGLSetOption( kCGLGOComment, (GLint)sg_pPIXName );
+#endif
 
 	if ( gGL->m_bHave_GL_GREMEDY_string_marker )
 	{
@@ -3720,8 +3137,9 @@ void GLMBeginPIXEvent( const char *str )
 
 void GLMEndPIXEvent( void )
 {
-#ifndef OSX
-	g_GPUTimestampManager.EndZone();
+#if (defined(OSX) && !defined(IOS)) && defined( CGLPROFILER_ENABLE )
+	CGLSetOption( kCGLGOComment, (GLint)sg_pPIXName );
+#endif
 
 	if ( gGL->m_bHave_GL_GREMEDY_string_marker )
 	{
@@ -3730,8 +3148,7 @@ void GLMEndPIXEvent( void )
 
 	sg_pPIXName[0] = '\0';
 		
-	TM_LEAVE( TELEMETRY_LEVEL2 );
-#endif
+	tmLeave( TELEMETRY_LEVEL2 );
 }
 
 //===============================================================================
@@ -3790,7 +3207,7 @@ float	GLMKnob( char *knobname, float *setvalue )
 		g_knobMap->SetLessFunc( LessFunc_GLMKnobKey );
 	}
 	
-#ifdef OSX
+#if defined(OSX) && !defined(IOS)
 	uint mods = GetCurrentKeyModifiers();
 #else
 	uint mods = 0;
@@ -3874,15 +3291,31 @@ float	GLMKnobToggle( char *knobname )
 // helpers for CGLSetOption - no op if no profiler
 void	GLMProfilerClearTrace( void )
 {
+#if (defined(OSX) && !defined(IOS)) && defined( CGLPROFILER_ENABLE )
+	CGLSetOption( kCGLGOResetFunctionTrace, 0 );
+#else
+	Assert( !"impl me" );
+#endif
 }
 
 void	GLMProfilerEnableTrace( bool enable )
 {
+#if (defined(OSX) && !defined(IOS)) && defined( CGLPROFILER_ENABLE )
+	CGLSetOption( kCGLGOEnableFunctionTrace, enable ? GL_TRUE : GL_FALSE );
+#else
+	Assert( !"impl me" );
+#endif
 }
 
 // helpers for CGLSetParameter - no op if no profiler
 void	GLMProfilerDumpState( void )
 {
+#if (defined(OSX) && !defined(IOS)) && defined( CGLPROFILER_ENABLE )
+	CGLContextObj curr = CGLGetCurrentContext();
+	CGLSetParameter( curr, kCGLCPDumpState, (const GLint*)1 );
+#else
+	Assert( !"impl me" );
+#endif
 }
 
 
@@ -3954,7 +3387,7 @@ static bool stat_diff( struct stat *a, struct stat *b )
 		return true;
 	}
 	
-#ifdef OSX
+#if defined(OSX) && !defined(IOS)
 	if (memcmp( &a->st_mtimespec, &b->st_mtimespec, sizeof( struct timespec ) ) )
 #else
 	if (memcmp( &a->st_mtime, &b->st_mtime, sizeof( time_t ) ) )
@@ -4097,11 +3530,13 @@ void CGLMFileMirror::WriteFile( void )
 
 void	CGLMFileMirror::OpenInEditor( bool foreground )
 {
+	#ifndef IOS
 	char temp[64000];
 	
 	// pass -b if no desire to bring editor to foreground
 	sprintf(temp,"/usr/bin/bbedit %s %s", foreground ? "" : "-b", m_path );
 	system( temp );
+	#endif
 }
 
 

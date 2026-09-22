@@ -1,4 +1,26 @@
-//====== Copyright  1996-2005, Valve Corporation, All rights reserved. =======//
+//========= Copyright Valve Corporation, All rights reserved. ============//
+//                       TOGL CODE LICENSE
+//
+//  Copyright 2011-2014 Valve Corporation
+//  All Rights Reserved.
+//
+//  Permission is hereby granted, free of charge, to any person obtaining a copy
+//  of this software and associated documentation files (the "Software"), to deal
+//  in the Software without restriction, including without limitation the rights
+//  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+//  copies of the Software, and to permit persons to whom the Software is
+//  furnished to do so, subject to the following conditions:
+//
+//  The above copyright notice and this permission notice shall be included in
+//  all copies or substantial portions of the Software.
+//
+//  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+//  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+//  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+//  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+//  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+//  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+//  THE SOFTWARE.
 //
 // glentrypoints.cpp
 //
@@ -11,7 +33,7 @@
 #include "appframework/IAppSystemGroup.h"
 #include "tier0/dbg.h"
 #include "tier0/icommandline.h"
-#include "tier0/dynfunction.h"
+#include "tier0/platform.h"
 #include "interface.h"
 #include "filesystem.h"
 #include "filesystem_init.h"
@@ -21,8 +43,12 @@
 #include "tier1.h"
 #include "tier2/tier2.h"
 
-#ifdef _LINUX
+#if defined(_LINUX) && !defined(__ANDROID__)
 #include <GL/glx.h>
+#endif
+
+#if IOS
+#include "GL/gl.h"
 #endif
 // NOTE: This has to be the last file included!
 #include "tier0/memdbgon.h"
@@ -31,7 +57,7 @@
 #error
 #endif
 
-#if defined( USE_SDL ) || defined(OSX) 
+#if defined(PLATFORM_BSD) || defined(APPLE) || defined(LINUX) || (defined (WIN32) && defined( DX_TO_GL_ABSTRACTION ))
 	#include "appframework/ilaunchermgr.h"
 	ILauncherMgr *g_pLauncherMgr = NULL;
 #endif
@@ -57,9 +83,9 @@ bool g_bPrintOpenGLCalls = false;
 	fflush(stdout); \
 	} \
 	const GLenum err = glGetError_gldebugptr(); \
-	if ( err == GL_INVALID_FRAMEBUFFER_OPERATION_EXT ) { \
-	const GLenum fberr = gGL->glCheckFramebufferStatus( GL_FRAMEBUFFER_EXT ); \
-	printf("%s triggered error GL_INVALID_FRAMEBUFFER_OPERATION_EXT! (0x%X)\n\n\n", #fn, (int) fberr); \
+	if ( err == GL_INVALID_FRAMEBUFFER_OPERATION ) { \
+	const GLenum fberr = gGL->glCheckFramebufferStatus( GL_FRAMEBUFFER ); \
+	printf("%s triggered error GL_INVALID_FRAMEBUFFER_OPERATION! (0x%X)\n\n\n", #fn, (int) fberr); \
 	fflush(stdout); \
 	__asm__ __volatile__ ( "int $3\n\t" ); \
 	} else if (err != GL_NO_ERROR) { \
@@ -84,9 +110,9 @@ bool g_bPrintOpenGLCalls = false;
 	fflush(stdout); \
 	} \
 	const GLenum err = glGetError_gldebugptr(); \
-	if ( err == GL_INVALID_FRAMEBUFFER_OPERATION_EXT ) { \
-	const GLenum fberr = gGL->glCheckFramebufferStatus( GL_FRAMEBUFFER_EXT ); \
-	printf("%s triggered error GL_INVALID_FRAMEBUFFER_OPERATION_EXT! (0x%X)\n\n\n", #fn, (int) fberr); \
+	if ( err == GL_INVALID_FRAMEBUFFER_OPERATION ) { \
+	const GLenum fberr = gGL->glCheckFramebufferStatus( GL_FRAMEBUFFER ); \
+	printf("%s triggered error GL_INVALID_FRAMEBUFFER_OPERATION! (0x%X)\n\n\n", #fn, (int) fberr); \
 	fflush(stdout); \
 	__asm__ __volatile__ ( "int $3\n\t" ); \
 	} else if (err != GL_NO_ERROR) { \
@@ -105,25 +131,20 @@ bool g_bPrintOpenGLCalls = false;
 COpenGLEntryPoints *gGL = NULL;
 GL_GetProcAddressCallbackFunc_t gGL_GetProcAddressCallback = NULL;
 
-void *VoidFnPtrLookup_GlMgr( const char *libname, const char *fn, bool &okay, const bool bRequired, void *fallback)
+void *VoidFnPtrLookup_GlMgr(const char *fn, bool &okay, const bool bRequired, void *fallback)
 {
 	void *retval = NULL;
 	if ((!okay) && (!bRequired))  // always look up if required (so we get a complete list of crucial missing symbols).
 		return NULL;
-	// The SDL path would work on all these platforms, if we were using SDL there, too...
-#if defined( LINUX ) || defined( WIN32 )
+
 	// SDL does the right thing, so we never need to use tier0 in this case.
-	retval = (*gGL_GetProcAddressCallback)( libname, fn, okay, bRequired, fallback); //SDL_GL_GetProcAddress(fn);
+	retval = (*gGL_GetProcAddressCallback)(fn, okay, bRequired, fallback);
 	//printf("CDynamicFunctionOpenGL: SDL_GL_GetProcAddress(\"%s\") returned %p\n", fn, retval);
 	if ((retval == NULL) && (fallback != NULL))
 	{
 		//printf("CDynamicFunctionOpenGL: Using fallback %p for \"%s\"\n", fallback, fn);
 		retval = fallback;
 	}
-#elif defined OSX
-	// there's no glXGetProcAddress() equivalent for Mac OS X...it's just dlopen(), basically. Let tier0 handle that.
-    retval = VoidFnPtrLookup_Tier0( libname, fn, (void *) fallback);
-#endif
 
 	// Note that a non-NULL response doesn't mean it's safe to call the function!
 	//  You always have to check that the extension is supported;
@@ -140,9 +161,10 @@ COpenGLEntryPoints *GetOpenGLEntryPoints(GL_GetProcAddressCallbackFunc_t callbac
 	if (gGL == NULL)
 	{
 		gGL_GetProcAddressCallback = callback;
-		gGL = new COpenGLEntryPoints(LIBGL_SONAME);
+		gGL = new COpenGLEntryPoints();
 		if (!gGL->m_bHave_OpenGL)
-			Error( "Missing basic required OpenGL functionality. %s", LIBGL_SONAME );
+			Error( "Missing basic required OpenGL functionality." );
+
 	}
 	return gGL;
 }
@@ -169,9 +191,7 @@ COpenGLEntryPoints *ToGLConnectLibraries( CreateInterfaceFn factory )
 	MathLib_Init( 2.2f, 2.2f, 0.0f, 2.0f );
 
 	#if defined( USE_SDL )
-		g_pLauncherMgr = (ILauncherMgr *)factory( SDLMGR_INTERFACE_VERSION, NULL );		
-	#elif defined( OSX )
-		g_pLauncherMgr = (ILauncherMgr *)factory( COCOAMGR_INTERFACE_VERSION, NULL );
+		g_pLauncherMgr = (ILauncherMgr *)factory( SDLMGR_INTERFACE_VERSION, NULL );
 	#endif
 
 	return gGL;
@@ -186,67 +206,76 @@ void ToGLDisconnectLibraries()
 
 #define GLVERNUM(Major, Minor, Patch) (((Major) * 100000) + ((Minor) * 1000) + (Patch))
 
-static void GetOpenGLVersion( const char *libname, int *major, int *minor, int *patch)
+static void GetOpenGLVersion(int *major, int *minor, int *patch)
 {
 	*major = *minor = *patch = 0;
-	static CDynamicFunctionOpenGL< true, const GLubyte *( APIENTRY *)(GLenum name), const GLubyte * > glGetString( libname, "glGetString");
+	static CDynamicFunctionOpenGL< true, const GLubyte *( _APIENTRY *)(GLenum name), const GLubyte * > glGetString("glGetString");
 	if (glGetString)
 	{
 		const char *version = (const char *) glGetString(GL_VERSION);
 		if (version)
 		{
-			sscanf( version, "%d.%d.%d", major, minor, patch );
+			const char *s = version;
+			while( *s )
+			{
+				if( *s >= '0' && *s <= '9' )
+				{
+					sscanf( s, "%d.%d", major, minor );
+					break;
+				}
+				s++;
+			}
 		}
 	}
 }
 
-static int GetOpenGLVersionMajor(const char *libname)
+static int GetOpenGLVersionMajor()
 {
 	int major, minor, patch;
-	GetOpenGLVersion(libname, &major, &minor, &patch);
+	GetOpenGLVersion(&major, &minor, &patch);
 	return major;
 }
 
-static int GetOpenGLVersionMinor(const char *libname)
+static int GetOpenGLVersionMinor()
 {
 	int major, minor, patch;
-	GetOpenGLVersion(libname, &major, &minor, &patch);
+	GetOpenGLVersion(&major, &minor, &patch);
 	return minor;
 }
 
-static int GetOpenGLVersionPatch(const char *libname)
+static int GetOpenGLVersionPatch()
 {
 	int major, minor, patch;
-	GetOpenGLVersion(libname, &major, &minor, &patch);
+	GetOpenGLVersion(&major, &minor, &patch);
 	return patch;
 }
 
-static bool CheckBaseOpenGLVersion(const char *libname)
+static bool CheckBaseOpenGLVersion()
 {
-	const int NEED_MAJOR = 2;
-	const int NEED_MINOR = 0;
+	const int NEED_MAJOR = 3;
+	const int NEED_MINOR = 2;
 	const int NEED_PATCH = 0;
 
 	int major, minor, patch;
-	GetOpenGLVersion(libname, &major, &minor, &patch);
+	GetOpenGLVersion(&major, &minor, &patch);
 
 	const int need = GLVERNUM(NEED_MAJOR, NEED_MINOR, NEED_PATCH);
 	const int have = GLVERNUM(major, minor, patch);
 	if (have < need)
 	{
-		fprintf(stderr, "PROBLEM: You appear to have OpenGL %d.%d.%d, but we need at least %d.%d.%d!\n",
+		Warning("PROBLEM: You appear to have OpenGL %d.%d.%d, but we need at least %d.%d.%d!\n",
 			major, minor, patch, NEED_MAJOR, NEED_MINOR, NEED_PATCH);
 		return false;
 	}
 	return true;
 }
 
-static bool CheckOpenGLExtension_internal(const char *libname, const char *ext, const int coremajor, const int coreminor)
+static bool CheckOpenGLExtension_internal(const char *ext, const int coremajor, const int coreminor)
 {
 	if ((coremajor >= 0) && (coreminor >= 0))  // we know that this extension is part of the base spec as of GL_VERSION coremajor.coreminor.
 	{
 		int major, minor, patch;
-		GetOpenGLVersion(libname, &major, &minor, &patch);
+		GetOpenGLVersion(&major, &minor, &patch);
 		const int need = GLVERNUM(coremajor, coreminor, 0);
 		const int have = GLVERNUM(major, minor, patch);
 		if (have >= need)
@@ -254,7 +283,7 @@ static bool CheckOpenGLExtension_internal(const char *libname, const char *ext, 
 	}
 
 	// okay, see if the GL_EXTENSIONS string reports it.
-	static CDynamicFunctionOpenGL< true, const GLubyte *( APIENTRY *)(GLenum name), const GLubyte * > glGetString(libname, "glGetString");
+	static CDynamicFunctionOpenGL< true, const GLubyte *( _APIENTRY *)(GLenum name), const GLubyte * > glGetString("glGetString");
 	if (!glGetString)
 		return false;
 
@@ -267,7 +296,7 @@ static bool CheckOpenGLExtension_internal(const char *libname, const char *ext, 
 #if _WIN32
 		if (!ptr)
 		{
-			static CDynamicFunctionOpenGL< true, const char *( APIENTRY *)( ), const char * > wglGetExtensionsStringEXT(NULL, "wglGetExtensionsStringEXT");
+			static CDynamicFunctionOpenGL< true, const char *( _APIENTRY *)( ), const char * > wglGetExtensionsStringEXT("wglGetExtensionsStringEXT");
 			if (wglGetExtensionsStringEXT) 
 			{
 				extensions = wglGetExtensionsStringEXT();
@@ -279,26 +308,23 @@ static bool CheckOpenGLExtension_internal(const char *libname, const char *ext, 
 				return false;
 			}
 		}
-#elif defined (OSX)
-		if (!ptr)
-			return false;  // definitely not there.
-#else
+
+#elif !defined ( APPLE ) && !defined( __ANDROID__ )
+/*
 		if (!ptr)
 		{
-			static CDynamicFunctionOpenGL< true, Display *( APIENTRY *)( ), Display* > glXGetCurrentDisplay( NULL, "glXGetCurrentDisplay");
-			static CDynamicFunctionOpenGL< true, const char *( APIENTRY *)( Display*, int ), const char * > glXQueryExtensionsString( NULL, "glXQueryExtensionsString");
+			static CDynamicFunctionOpenGL< true, Display *( APIENTRY *)( ), Display* > glXGetCurrentDisplay("glXGetCurrentDisplay");
+			static CDynamicFunctionOpenGL< true, const char *( APIENTRY *)( Display*, int ), const char * > glXQueryExtensionsString("glXQueryExtensionsString");
 			if (glXQueryExtensionsString && glXGetCurrentDisplay) 
 			{
 				extensions = glXQueryExtensionsString(glXGetCurrentDisplay(), 0);
 				ptr = strstr(extensions, ext);
 			}
-
-			if (!ptr) 
-			{
-				return false;
-			}
-		}
+		}*/
 #endif
+
+		if (!ptr)
+			return false;
 
 		// make sure this matches the entire string, and isn't a substring match of some other extension.
 		// if ( ( (string is at start of extension list) or (the char before the string is a space) ) and
@@ -312,25 +338,27 @@ static bool CheckOpenGLExtension_internal(const char *libname, const char *ext, 
 	return false;
 }
 
-static bool CheckOpenGLExtension(const char *libname, const char *ext, const int coremajor, const int coreminor)
+static bool CheckOpenGLExtension(const char *ext, const int coremajor, const int coreminor)
 {
-	const bool retval = CheckOpenGLExtension_internal(libname, ext, coremajor, coreminor);
+	const bool retval = CheckOpenGLExtension_internal(ext, coremajor, coreminor);
 	printf("This system %s the OpenGL extension %s.\n", retval ? "supports" : "DOES NOT support", ext);
 	return retval;
 }
 
+extern bool g_bUsePseudoBufs;
+extern bool g_bDisableStaticBuffer;
+
 // The GL context you want entry points for must be current when you hit this constructor!
-COpenGLEntryPoints::COpenGLEntryPoints(const char *libname)
+COpenGLEntryPoints::COpenGLEntryPoints()
 	: m_nTotalGLCycles(0)
 	, m_nTotalGLCalls(0)
-    , m_strLibName(libname)
-	, m_nOpenGLVersionMajor(GetOpenGLVersionMajor(m_strLibName))
-	, m_nOpenGLVersionMinor(GetOpenGLVersionMinor(m_strLibName))
-	, m_nOpenGLVersionPatch(GetOpenGLVersionPatch(m_strLibName))
-	, m_bHave_OpenGL(CheckBaseOpenGLVersion(m_strLibName))  // may reset to false as these lookups happen.
-#define GL_EXT(x,glmajor,glminor) , m_bHave_##x(CheckOpenGLExtension(m_strLibName, #x, glmajor, glminor))
-#define GL_FUNC(ext,req,ret,fn,arg,call) , fn(m_strLibName, #fn, m_bHave_##ext)
-#define GL_FUNC_VOID(ext,req,fn,arg,call) , fn(m_strLibName, #fn, m_bHave_##ext)
+	, m_nOpenGLVersionMajor(GetOpenGLVersionMajor())
+	, m_nOpenGLVersionMinor(GetOpenGLVersionMinor())
+	, m_nOpenGLVersionPatch(GetOpenGLVersionPatch())
+	, m_bHave_OpenGL(CheckBaseOpenGLVersion())  // may reset to false as these lookups happen.
+#define GL_EXT(x,glmajor,glminor) , m_bHave_##x(CheckOpenGLExtension(#x, glmajor, glminor))
+#define GL_FUNC(ext,req,ret,fn,arg,call) , fn(#fn, m_bHave_##ext)
+#define GL_FUNC_VOID(ext,req,fn,arg,call) , fn(#fn, m_bHave_##ext)
 #include "togl/glfuncs.inl"
 #undef GL_FUNC_VOID
 #undef GL_FUNC
@@ -349,6 +377,12 @@ COpenGLEntryPoints::COpenGLEntryPoints(const char *libname)
 		m_nDriverProvider = cGLDriverProviderIntelOpenSource;
 	else if ( V_stristr( m_pGLDriverStrings[cGLVendorString], "apple" ) )
 		m_nDriverProvider = cGLDriverProviderApple;
+	else if ( V_stristr( m_pGLDriverStrings[cGLVendorString], "qualcomm" ) )
+		m_nDriverProvider = cGLDriverProviderQualcomm;
+	else if ( V_stristr( m_pGLDriverStrings[cGLVendorString], "arm" ) )
+		m_nDriverProvider = cGLDriverProviderARM;
+	else if ( V_stristr( m_pGLDriverStrings[cGLVendorString], "imagination technologies" ) )
+		m_nDriverProvider = cGLDriverProviderImagination;
 
 	pszString = ( const char * )glGetString(GL_RENDERER);
 	m_pGLDriverStrings[cGLRendererString] = strdup( pszString ? pszString : "" );
@@ -359,65 +393,79 @@ COpenGLEntryPoints::COpenGLEntryPoints(const char *libname)
 	pszString = ( const char * )glGetString(GL_EXTENSIONS);
 	m_pGLDriverStrings[cGLExtensionsString] = strdup( pszString ? pszString : "" );
 
+	Msg( "GL_RENDERER=\"%s\" GL_VERSION=\"%s\" GL_VENDOR=\"%s\" (%d.%d.%d)\n", m_pGLDriverStrings[ cGLRendererString ], m_pGLDriverStrings[ cGLVersionString ], m_pGLDriverStrings[ cGLVendorString ],
+		m_nOpenGLVersionMajor, m_nOpenGLVersionMinor, m_nOpenGLVersionPatch );
+
+	Msg("GL_EXTENSIONS=\"%s\"\n", m_pGLDriverStrings[cGLExtensionsString]);
+
 	// !!! FIXME: Alfred says the original GL_APPLE_fence code only exists to
 	// !!! FIXME:  hint Apple's drivers and not because we rely on the
 	// !!! FIXME:  functionality. If so, just remove this check (and the
 	// !!! FIXME:  GL_NV_fence code entirely).
- 	if ((m_bHave_OpenGL) && ((!m_bHave_GL_NV_fence) && (!m_bHave_GL_ARB_sync) && (!m_bHave_GL_APPLE_fence)))
- 	{
- 		Error( "Required OpenGL extension \"GL_NV_fence\", \"GL_ARB_sync\", or \"GL_APPLE_fence\" is not supported. Please upgrade your OpenGL driver." );
- 	}
-
-	// same extension, different name.
-	if (m_bHave_GL_EXT_vertex_array_bgra || m_bHave_GL_ARB_vertex_array_bgra)
-	{
-		m_bHave_GL_EXT_vertex_array_bgra = m_bHave_GL_ARB_vertex_array_bgra = true;
-	}
 
 	// GL_ARB_framebuffer_object is a superset of GL_EXT_framebuffer_object,
 	//  (etc) but if you don't call in through the ARB entry points, you won't
 	//  get the relaxed restrictions on mismatched attachment dimensions.
-	if (m_bHave_GL_ARB_framebuffer_object)
+//	if (m_bHave_GL_ARB_framebuffer_object)
 	{
 		m_bHave_GL_EXT_framebuffer_object = true;
 		m_bHave_GL_EXT_framebuffer_blit = true;
-		m_bHave_GL_EXT_framebuffer_multisample = true;
-		glBindFramebufferEXT.Force(glBindFramebuffer.Pointer());
-		glBindRenderbufferEXT.Force(glBindRenderbuffer.Pointer());
-		glCheckFramebufferStatusEXT.Force(glCheckFramebufferStatus.Pointer());
-		glDeleteRenderbuffersEXT.Force(glDeleteRenderbuffers.Pointer());
-		glFramebufferRenderbufferEXT.Force(glFramebufferRenderbuffer.Pointer());
-		glFramebufferTexture2DEXT.Force(glFramebufferTexture2D.Pointer());
-		glFramebufferTexture3DEXT.Force(glFramebufferTexture3D.Pointer());
-		glGenFramebuffersEXT.Force(glGenFramebuffers.Pointer());
-		glGenRenderbuffersEXT.Force(glGenRenderbuffers.Pointer());
-		glDeleteFramebuffersEXT.Force(glDeleteFramebuffers.Pointer());
-		glBlitFramebufferEXT.Force(glBlitFramebuffer.Pointer());
-		glRenderbufferStorageMultisampleEXT.Force(glRenderbufferStorageMultisample.Pointer());
+		m_bHave_GL_ARB_map_buffer_range = true;
+		m_bHave_GL_EXT_direct_state_access = false;		
+		m_bHave_GL_ARB_occlusion_query = true;
+		m_bHave_GL_EXT_buffer_storage = false;
+		m_bHave_GL_ARB_vertex_buffer_object = true;
+		m_bHave_GL_ARB_debug_output = true;
+		m_bHave_GL_ARB_sync = true;
+
+		//	m_bHave_GL_EXT_texture_sRGB_decode = true;
+
+		if( CommandLine()->FindParm( "-gl_enable_pseudobufs" ) )
+			g_bUsePseudoBufs = true;
+		if( CommandLine()->FindParm( "-gl_enable_static_buffer" ) )
+			g_bDisableStaticBuffer = false;
+		if( CommandLine()->FindParm( "-gl_enable_buffer_storage" ) )
+			m_bHave_GL_EXT_buffer_storage = true;
+
+#if 0
+		glBindFramebuffer.Force(glBindFramebuffer.Pointer());
+		glBindRenderbuffer.Force(glBindRenderbuffer.Pointer());
+		glCheckFramebufferStatus.Force(glCheckFramebufferStatus.Pointer());
+		glDeleteRenderbuffers.Force(glDeleteRenderbuffers.Pointer());
+		glFramebufferRenderbuffer.Force(glFramebufferRenderbuffer.Pointer());
+		glFramebufferTexture2D.Force(glFramebufferTexture2D.Pointer());
+		glFramebufferTexture3D.Force(glFramebufferTexture3D.Pointer());
+		glGenFramebuffers.Force(glGenFramebuffers.Pointer());
+		glGenRenderbuffers.Force(glGenRenderbuffers.Pointer());
+		glDeleteFramebuffers.Force(glDeleteFramebuffers.Pointer());
+		glBlitFramebuffer.Force(glBlitFramebuffer.Pointer());
+		glRenderbufferStorageMultisample.Force(glRenderbufferStorageMultisample.Pointer());
+#endif
 	}
-		
+
 #if DEBUG_ALL_GLCALLS
 	// push all GL calls through the debug wrappers.
 #define GL_EXT(x,glmajor,glminor)
 #define GL_FUNC(ext,req,ret,fn,arg,call) \
 	fn##_gldebugptr = this->fn; \
-	this->fn.Force(fn##_gldebug);
+//	this->fn.Force(fn##_gldebug);
 #define GL_FUNC_VOID(ext,req,fn,arg,call) \
 	fn##_gldebugptr = this->fn; \
-	this->fn.Force(fn##_gldebug);
+//	this->fn.Force(fn##_gldebug);
 #include "togl/glfuncs.inl"
 #undef GL_FUNC_VOID
 #undef GL_FUNC
 #undef GL_EXT
 #endif
 
-#ifdef OSX
-    m_bHave_GL_NV_bindless_texture = false;
-    m_bHave_GL_AMD_pinned_memory = false;
+#if defined(OSX) && !defined(IOS)
+	m_bHave_GL_NV_bindless_texture = false;
+	m_bHave_GL_AMD_pinned_memory = false;
 #else
 	if ( ( m_bHave_GL_NV_bindless_texture ) && ( !CommandLine()->CheckParm( "-gl_nv_bindless_texturing" ) ) )
 	{
 		m_bHave_GL_NV_bindless_texture = false;
+#if 0
 		glGetTextureHandleNV.Force( NULL );
 		glGetTextureSamplerHandleNV.Force( NULL );
 		glMakeTextureHandleResidentNV.Force( NULL );
@@ -427,44 +475,53 @@ COpenGLEntryPoints::COpenGLEntryPoints(const char *libname)
 		glProgramUniformHandleui64NV.Force( NULL );
 		glProgramUniformHandleui64vNV.Force( NULL );
 		glIsTextureHandleResidentNV.Force( NULL );
+#endif
 	}
 
-	if ( ( m_bHave_GL_AMD_pinned_memory ) && ( !CommandLine()->CheckParm( "-gl_amd_pinned_memory" ) ) )
+	if ( !CommandLine()->CheckParm( "-gl_amd_pinned_memory" ) )
 	{
 		m_bHave_GL_AMD_pinned_memory = false;
 	}
+#endif // !OSX
+
+	// Getting reports of black screens, etc. with ARB_buffer_storage and AMD drivers. This type of thing:
+	//  http://forums.steampowered.com/forums/showthread.php?t=3266806
+	// So disable it for now.
+	if ( ( m_nDriverProvider == cGLDriverProviderAMD ) || CommandLine()->CheckParm( "-gl_disable_arb_buffer_storage" ) )
+	{
+		m_bHave_GL_EXT_buffer_storage = false;
+	}
+
+#if defined(IOS)
+	// ANGLE Metal advertises S3TC/DXT on Apple GPU (especially M-series iPad).
+	// Uploading those formats calls MTLTextureDescriptor setPixelFormat with an
+	// unsupported compressed format and SIGABRTs in MTLDebugValidateMTLPixelFormat.
+	// Force the CPU decompress path in CGLMTex::WriteTexels instead.
+	m_bHave_GL_EXT_texture_compression_s3tc = false;
+	m_bHave_GL_EXT_texture_compression_dxt1 = false;
+	m_bHave_GL_ANGLE_texture_compression_dxt3 = false;
+	m_bHave_GL_ANGLE_texture_compression_dxt5 = false;
 #endif
 
-	if ( ( m_bHave_GL_ARB_buffer_storage ) && ( CommandLine()->CheckParm( "-gl_disable_arb_buffer_storage" ) ) )
+	printf( "GL_NV_bindless_texture: %s\n", m_bHave_GL_NV_bindless_texture ? "ENABLED" : "DISABLED" );
+	printf( "GL_AMD_pinned_memory: %s\n", m_bHave_GL_AMD_pinned_memory ? "ENABLED" : "DISABLED" );
+	printf( "GL_EXT_buffer_storage: %s\n", m_bHave_GL_EXT_buffer_storage ? "AVAILABLE" : "NOT AVAILABLE" );
+	printf( "GL_EXT_texture_sRGB_decode: %s\n", m_bHave_GL_EXT_texture_sRGB_decode ? "AVAILABLE" : "NOT AVAILABLE" );
+
+#if defined(OSX) && !defined(IOS)
+	if ( CommandLine()->FindParm( "-glmnosrgbdecode" ) )
 	{
-		m_bHave_GL_ARB_buffer_storage = false;
+		Msg( "Forcing m_bHave_GL_EXT_texture_sRGB_decode off.\n" );
+		m_bHave_GL_EXT_texture_sRGB_decode = false;
 	}
+#endif
 
-	char buf[256];
-	V_snprintf(buf, sizeof( buf ), "GL_NV_bindless_texture: %s\n", m_bHave_GL_NV_bindless_texture ? "ENABLED" : "DISABLED" );
-	Plat_DebugString( buf );
-
-	V_snprintf(buf, sizeof( buf ), "GL_AMD_pinned_memory: %s\n", m_bHave_GL_AMD_pinned_memory ? "ENABLED" : "DISABLED" );
-	Plat_DebugString( buf );
-
-	V_snprintf( buf, sizeof(buf), "GL_ARB_buffer_storage: %s\n", m_bHave_GL_ARB_buffer_storage ? "AVAILABLE" : "NOT AVAILABLE" );
-	Plat_DebugString( buf );
-
-	V_snprintf(buf, sizeof( buf ), "GL_EXT_texture_sRGB_decode: %s\n", m_bHave_GL_EXT_texture_sRGB_decode ? "AVAILABLE" : "NOT AVAILABLE" );
-	Plat_DebugString( buf );
-
-	bool bGLCanDecodeS3TCTextures = m_bHave_GL_EXT_texture_compression_s3tc || ( m_bHave_GL_EXT_texture_compression_dxt1 && m_bHave_GL_ANGLE_texture_compression_dxt3 && m_bHave_GL_ANGLE_texture_compression_dxt5 );
-	if ( !bGLCanDecodeS3TCTextures )
-	{
-		Error( "This application requires either the GL_EXT_texture_compression_s3tc or the GL_EXT_texture_compression_dxt1 + GL_ANGLE_texture_compression_dxt3 + GL_ANGLE_texture_compression_dxt5 OpenGL extensions. Please install S3TC texture support.\n" );
-	}
-
-#ifndef OSX
+/*#ifndef OSX
 	if ( !m_bHave_GL_EXT_texture_sRGB_decode )
  	{
  		Error( "Required OpenGL extension \"GL_EXT_texture_sRGB_decode\" is not supported. Please update your OpenGL driver.\n" );
  	}
-#endif
+#endif*/
 }
 
 COpenGLEntryPoints::~COpenGLEntryPoints()
@@ -488,6 +545,3 @@ void COpenGLEntryPoints::ClearEntryPoints()
 }
 // Turn off memdbg macros (turned on up top) since this is included like a header
 #include "tier0/memdbgoff.h"
-
-
-

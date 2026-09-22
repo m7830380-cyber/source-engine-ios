@@ -1,4 +1,26 @@
-//================ Copyright (c) 1996-2012 Valve Corporation. All Rights Reserved. =================
+//========= Copyright Valve Corporation, All rights reserved. ============//
+//                       TOGL CODE LICENSE
+//
+//  Copyright 2011-2014 Valve Corporation
+//  All Rights Reserved.
+//
+//  Permission is hereby granted, free of charge, to any person obtaining a copy
+//  of this software and associated documentation files (the "Software"), to deal
+//  in the Software without restriction, including without limitation the rights
+//  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+//  copies of the Software, and to permit persons to whom the Software is
+//  furnished to do so, subject to the following conditions:
+//
+//  The above copyright notice and this permission notice shall be included in
+//  all copies or substantial portions of the Software.
+//
+//  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+//  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+//  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+//  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+//  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+//  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+//  THE SOFTWARE.
 //
 // dxabstract_types.h
 //
@@ -68,24 +90,17 @@ typedef void* VD3DHANDLE;
 #if !defined(_WINNT_)
 
 	typedef int INT;
+	typedef unsigned long ULONG;
+	typedef long LONG;
 	typedef float FLOAT;
 	typedef unsigned int DWORD;
 	typedef unsigned short WORD;
 	typedef long long LONGLONG;
 	typedef unsigned int UINT;
+	typedef long HRESULT;
 	typedef unsigned char BYTE;
 	#define CONST const
-
-#if !defined( OSX ) || defined( PLATFORM_64BITS )
-	typedef unsigned int ULONG;
-	typedef int LONG;
-	typedef int HRESULT;
-#else
-	typedef unsigned long ULONG;
-	typedef long LONG;
-	typedef long HRESULT;
-#endif		
-
+		
 	#if defined(POSIX)
 		typedef size_t ULONG_PTR;
 	#else
@@ -978,6 +993,7 @@ typedef enum _D3DTEXTUREADDRESS
 
 typedef enum _D3DSHADEMODE 
 {
+    D3DSHADE_NONE 		= 0,
     D3DSHADE_FLAT               = 1,
     D3DSHADE_GOURAUD            = 2,
     D3DSHADE_PHONG              = 3,
@@ -1026,7 +1042,7 @@ typedef enum _D3DSHADER_PARAM_REGISTER_TYPE
     D3DSPR_FORCE_DWORD  = 0x7fffffff,         // force 32-bit size enum
 } D3DSHADER_PARAM_REGISTER_TYPE;
 
-struct D3DMATRIX 
+struct alignas(16) D3DMATRIX 
 {
     union 
 	{
@@ -1179,7 +1195,7 @@ typedef enum _D3DVERTEXBLENDFLAGS
     D3DVBF_3WEIGHTS = 3,     // 4 matrix blending
     D3DVBF_TWEENING = 255,   // blending using D3DRS_TWEENFACTOR
     D3DVBF_0WEIGHTS = 256,   // one matrix is used with weight 1.0
-    D3DVBF_FORCE_DWORD = 0x7fffffff, // force 32-bit size enum
+    D3DVBF_FORCE_DWORD = 0xffffffff, // force 32-bit size enum
 } D3DVERTEXBLENDFLAGS;
 
 typedef struct _D3DINDEXBUFFER_DESC
@@ -1323,6 +1339,7 @@ typedef struct _D3DCAPS9
 	DWORD	FakeSRGBWrite;				// 1 for parts which can't support SRGB writes due to driver issues - 0 for others
 	DWORD	MixedSizeTargets;			// 1 for parts which can mix attachment sizes (RT's color vs depth)
 	DWORD	CanDoSRGBReadFromRTs;		// 0 when we're on Leopard, 1 when on Snow Leopard
+	DWORD   SupportInt16Format;
 } D3DCAPS9;
 
 typedef struct _D3DDISPLAYMODE
@@ -1516,7 +1533,7 @@ typedef enum _D3DTRANSFORMSTATETYPE
     D3DTS_VIEW          = 2,
     D3DTS_PROJECTION    = 3,
     D3DTS_TEXTURE0      = 16,
-    D3DTS_FORCE_DWORD     = 0x7fffffff, /* force 32-bit size enum */
+    D3DTS_FORCE_DWORD     = 0xffffffff, /* force 32-bit size enum */
 } D3DTRANSFORMSTATETYPE;
 
 // **** FIXED FUNCTION STUFF - None of this stuff needs support in GL.

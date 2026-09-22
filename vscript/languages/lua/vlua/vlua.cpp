@@ -6,7 +6,9 @@
 
 #include <stdio.h>
 #if defined(POSIX)
+#if !defined(IOS) // curses is only used by the VLUA_TEST console harness
 #include <curses.h>
+#endif
 #include <unistd.h>
 #else
 #include <io.h>

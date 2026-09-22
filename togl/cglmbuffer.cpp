@@ -1,6 +1,28 @@
-//============ Copyright (c) Valve Corporation, All rights reserved. ============
+//========= Copyright Valve Corporation, All rights reserved. ============//
+//                       TOGL CODE LICENSE
 //
-// cglmbuffer.cpp 
+//  Copyright 2011-2014 Valve Corporation
+//  All Rights Reserved.
+//
+//  Permission is hereby granted, free of charge, to any person obtaining a copy
+//  of this software and associated documentation files (the "Software"), to deal
+//  in the Software without restriction, including without limitation the rights
+//  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+//  copies of the Software, and to permit persons to whom the Software is
+//  furnished to do so, subject to the following conditions:
+//
+//  The above copyright notice and this permission notice shall be included in
+//  all copies or substantial portions of the Software.
+//
+//  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+//  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+//  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+//  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+//  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+//  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+//  THE SOFTWARE.
+//
+// cglmbuffer.cpp
 //
 //===============================================================================
 
@@ -9,13 +31,13 @@
 // memdbgon -must- be the last include file in a .cpp file.
 #include "tier0/memdbgon.h"
 
-// LINUXTODO : took out cmdline here
+// 7LS TODO : took out cmdline here
 bool g_bUsePseudoBufs = false; //( Plat_GetCommandLineA() ) ? ( strstr( Plat_GetCommandLineA(), "-gl_enable_pseudobufs" ) != NULL ) : false;
-#ifdef OSX
+#if defined(OSX) && !defined(IOS)
 // Significant perf degradation on some OSX parts if static buffers not disabled
 bool g_bDisableStaticBuffer = true;
 #else
-bool g_bDisableStaticBuffer = false; //( Plat_GetCommandLineA() ) ? ( strstr( Plat_GetCommandLineA(), "-gl_disable_static_buffer" ) != NULL ) : false;
+bool g_bDisableStaticBuffer = true; //( Plat_GetCommandLineA() ) ? ( strstr( Plat_GetCommandLineA(), "-gl_disable_static_buffer" ) != NULL ) : false;
 #endif
 
 // http://www.opengl.org/registry/specs/ARB/vertex_buffer_object.txt
@@ -71,32 +93,32 @@ CPersistentBuffer::~CPersistentBuffer()
 
 void CPersistentBuffer::Init( EGLMBufferType type,uint nSize )
 {
-	Assert( gGL->m_bHave_GL_ARB_buffer_storage );
-	Assert( gGL->m_bHave_GL_ARB_map_buffer_range );
-	
+//	Assert( gGL->m_bHave_GL_EXT_buffer_storage );
+//	Assert( gGL->m_bHave_GL_ARB_map_buffer_range );
+
 	m_nSize		= nSize;
 	m_nOffset	= 0;
 	m_type		= type;
-	
+
 	switch ( type )
 	{
-	case kGLMVertexBuffer:	m_buffGLTarget = GL_ARRAY_BUFFER_ARB; break;
-	case kGLMIndexBuffer:	m_buffGLTarget = GL_ELEMENT_ARRAY_BUFFER_ARB; break;
+	case kGLMVertexBuffer:	m_buffGLTarget = GL_ARRAY_BUFFER; break;
+	case kGLMIndexBuffer:	m_buffGLTarget = GL_ELEMENT_ARRAY_BUFFER; break;
 
 	default: Assert( nSize == 0 );
 	}
 	
 	if ( m_nSize > 0 )
 	{
-		gGL->glGenBuffersARB( 1, &m_nHandle );
-		gGL->glBindBufferARB( m_buffGLTarget, m_nHandle );
+		gGL->glGenBuffers( 1, &m_nHandle );
+		gGL->glBindBuffer( m_buffGLTarget, m_nHandle );
 
 		// Create persistent immutable buffer that we will permanently map.  This buffer can be written from any thread (not just
 		// the renderthread)
-		gGL->glBufferStorage( m_buffGLTarget, m_nSize, (const GLvoid *)NULL, GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT ); // V_GL_REQ: GL_ARB_buffer_storage, GL_ARB_map_buffer_range, GL_VERSION_4_4
+		gGL->glBufferStorageEXT( m_buffGLTarget, m_nSize, (const GLvoid *)NULL, GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT ); // V_GL_REQ: GL_EXT_buffer_storage, GL_ARB_map_buffer_range, GL_VERSION_4_4
 
 		// Map the buffer for all of eternity.  Pointer can be used from multiple threads.
-		m_pImmutablePersistentBuf = gGL->glMapBufferRange( m_buffGLTarget, 0, m_nSize, GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT ); // V_GL_REQ: GL_ARB_map_buffer_range, GL_ARB_buffer_storage, GL_VERSION_4_4
+		m_pImmutablePersistentBuf = gGL->glMapBufferRange( m_buffGLTarget, 0, m_nSize, GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT ); // V_GL_REQ: GL_ARB_map_buffer_range, GL_EXT_buffer_storage, GL_VERSION_4_4
 		Assert( m_pImmutablePersistentBuf != NULL );
 	}
 }
@@ -110,11 +132,11 @@ void CPersistentBuffer::Deinit()
 
 	BlockUntilNotBusy();
 
-	gGL->glBindBufferARB( m_buffGLTarget, m_nHandle );
+	gGL->glBindBuffer( m_buffGLTarget, m_nHandle );
 	gGL->glUnmapBuffer( m_buffGLTarget );
-	gGL->glBindBufferARB( m_buffGLTarget, 0 );
+	gGL->glBindBuffer( m_buffGLTarget, 0 );
 
-	gGL->glDeleteBuffersARB( 1, &m_nHandle );
+	gGL->glDeleteBuffers( 1, &m_nHandle );
 	
 	m_nSize		= 0;
 	m_nHandle	= 0;
@@ -416,10 +438,10 @@ CGLMBuffer::CGLMBuffer( GLMContext *pCtx, EGLMBufferType type, uint size, uint o
 				
 	switch ( m_type )
 	{
-		case kGLMVertexBuffer:	m_buffGLTarget = GL_ARRAY_BUFFER_ARB; break;
-		case kGLMIndexBuffer:	m_buffGLTarget = GL_ELEMENT_ARRAY_BUFFER_ARB; break;
-		case kGLMUniformBuffer:	m_buffGLTarget = GL_UNIFORM_BUFFER_EXT; break;
-		case kGLMPixelBuffer:	m_buffGLTarget = GL_PIXEL_UNPACK_BUFFER_ARB; break;
+		case kGLMVertexBuffer:	m_buffGLTarget = GL_ARRAY_BUFFER; break;
+		case kGLMIndexBuffer:	m_buffGLTarget = GL_ELEMENT_ARRAY_BUFFER; break;
+		case kGLMUniformBuffer:	m_buffGLTarget = GL_UNIFORM_BUFFER; break;
+		case kGLMPixelBuffer:	m_buffGLTarget = GL_PIXEL_UNPACK_BUFFER; break;
 		
 		default: Assert(!"Unknown buffer type" ); DXABSTRACT_BREAK_ON_ERROR();
 	}
@@ -449,6 +471,9 @@ CGLMBuffer::CGLMBuffer( GLMContext *pCtx, EGLMBufferType type, uint size, uint o
 #if GL_ENABLE_UNLOCK_BUFFER_OVERWRITE_DETECTION
 	m_bPseudo = true;
 #endif
+
+	if( strcmp(gGL->m_pGLDriverStrings[cGLVendorString], "ARM") == 0 )
+		g_bUsePseudoBufs = true; // works faster with Mali gpu
 
 #if GL_ENABLE_INDEX_VERIFICATION
 	m_BufferSpanManager.Init( m_pCtx, m_type, 512, m_nSize, m_bDynamic );
@@ -498,25 +523,25 @@ CGLMBuffer::CGLMBuffer( GLMContext *pCtx, EGLMBufferType type, uint size, uint o
 	}
 	else
 	{
-		gGL->glGenBuffersARB( 1, &m_nHandle );
+		gGL->glGenBuffers( 1, &m_nHandle );
 
 		m_pCtx->BindBufferToCtx( m_type, this );	// causes glBindBufferARB
 
 		// buffers start out static, but if they get orphaned and gl_bufmode is non zero,
 		// then they will get flipped to dynamic.
 		
-		GLenum hint = GL_STATIC_DRAW_ARB;
+		GLenum hint = GL_STREAM_DRAW;
 		switch (m_type)
 		{
-			case kGLMVertexBuffer:	hint = m_bDynamic ? GL_DYNAMIC_DRAW_ARB : GL_STATIC_DRAW_ARB; break;
-			case kGLMIndexBuffer:	hint = m_bDynamic ? GL_DYNAMIC_DRAW_ARB : GL_STATIC_DRAW_ARB; break;
-			case kGLMUniformBuffer:	hint = GL_DYNAMIC_DRAW_ARB; break;
-			case kGLMPixelBuffer:	hint = m_bDynamic ? GL_DYNAMIC_DRAW_ARB : GL_STATIC_DRAW_ARB; break;
+			case kGLMVertexBuffer:	hint = m_bDynamic ? GL_DYNAMIC_DRAW : GL_STREAM_DRAW; break;
+			case kGLMIndexBuffer:	hint = m_bDynamic ? GL_DYNAMIC_DRAW : GL_STREAM_DRAW; break;
+			case kGLMUniformBuffer:	hint = GL_DYNAMIC_DRAW; break;
+			case kGLMPixelBuffer:	hint = m_bDynamic ? GL_DYNAMIC_DRAW : GL_STREAM_DRAW; break;
 			
 			default: Assert(!"Unknown buffer type" ); DXABSTRACT_BREAK_ON_ERROR();
 		}
 
-		gGL->glBufferDataARB( m_buffGLTarget, m_nSize, (const GLvoid*)NULL, hint );	// may ultimately need more hints to set the usage correctly (esp for streaming)
+		gGL->glBufferData( m_buffGLTarget, m_nSize, (const GLvoid*)NULL, hint );	// may ultimately need more hints to set the usage correctly (esp for streaming)
 
 		SetModes( false, true, true );
 
@@ -544,7 +569,7 @@ CGLMBuffer::~CGLMBuffer( )
 	}
 	else
 	{
-		gGL->glDeleteBuffersARB( 1, &m_nHandle );
+		gGL->glDeleteBuffers( 1, &m_nHandle );
 	}
 	
 	m_pCtx = NULL;
@@ -569,11 +594,6 @@ void CGLMBuffer::SetModes( bool bAsyncMap, bool bExplicitFlush, bool bForce )
 	{
 		if ( bForce || ( m_bEnableAsyncMap != bAsyncMap ) )
 		{
-			// note the sense of the parameter, it's TRUE if you *want* serialization, so for async you turn it to false.
-			if ( ( gGL->m_bHave_GL_APPLE_flush_buffer_range ) && ( !gGL->m_bHave_GL_ARB_map_buffer_range ) )
-			{
-				gGL->glBufferParameteriAPPLE( m_buffGLTarget, GL_BUFFER_SERIALIZED_MODIFY_APPLE, bAsyncMap == false );
-			}
 			m_bEnableAsyncMap = bAsyncMap;
 		}
 
@@ -581,10 +601,6 @@ void CGLMBuffer::SetModes( bool bAsyncMap, bool bExplicitFlush, bool bForce )
 		{
 			// Note that the GL_ARB_map_buffer_range path handles this in the glMapBufferRange() call in Lock().
 			// note the sense of the parameter, it's TRUE if you *want* auto-flush-on-unmap, so for explicit-flush, you turn it to false.
-			if ( ( gGL->m_bHave_GL_APPLE_flush_buffer_range ) && ( !gGL->m_bHave_GL_ARB_map_buffer_range ) )
-			{
-				gGL->glBufferParameteriAPPLE( m_buffGLTarget, GL_BUFFER_FLUSHING_UNMAP_APPLE, bExplicitFlush == false );
-			}
 			m_bEnableExplicitFlush = bExplicitFlush;
 		}
 	}
@@ -612,16 +628,7 @@ void CGLMBuffer::FlushRange( uint offset, uint size )
 		double flStart = Plat_FloatTime();
 #endif
 
-		// assumes buffer is bound.
-		if ( gGL->m_bHave_GL_ARB_map_buffer_range )
-		{
-			gGL->glFlushMappedBufferRange( m_buffGLTarget, (GLintptr)( offset - m_dirtyMinOffset ), (GLsizeiptr)size );
-		}
-		else if ( gGL->m_bHave_GL_APPLE_flush_buffer_range )
-		{
-			gGL->glFlushMappedBufferRangeAPPLE( m_buffGLTarget, (GLintptr)offset, (GLsizeiptr)size );
-		}
-		
+		gGL->glFlushMappedBufferRange( m_buffGLTarget, (GLintptr)( offset - m_dirtyMinOffset ), (GLsizeiptr)size );
 #ifdef REPORT_LOCK_TIME
 		double flEnd = Plat_FloatTime();
 		if ( flEnd - flStart > 5.0 / 1000.0 )
@@ -683,7 +690,7 @@ void CGLMBuffer::Lock( GLMBuffLockParams *pParams, char **pAddressOut )
 	bool bUsingPersistentBuffer = false;
 
 	uint padding = 0;
-	if ( m_bDynamic && gGL->m_bHave_GL_ARB_buffer_storage )
+	if ( m_bDynamic && gGL->m_bHave_GL_EXT_buffer_storage )
 	{
 		// Compute padding to add to make sure the start offset is valid
 		CPersistentBuffer *pTempBuffer = m_pCtx->GetCurPersistentBuffer( m_type );
@@ -743,7 +750,7 @@ void CGLMBuffer::Lock( GLMBuffLockParams *pParams, char **pAddressOut )
 		}
 #endif
 	}
-	else if ( m_bDynamic && gGL->m_bHave_GL_ARB_buffer_storage && ( m_pCtx->GetCurPersistentBuffer( m_type )->GetBytesRemaining() >= ( pParams->m_nSize + padding ) ) )
+	else if ( m_bDynamic && gGL->m_bHave_GL_EXT_buffer_storage && ( m_pCtx->GetCurPersistentBuffer( m_type )->GetBytesRemaining() >= ( pParams->m_nSize + padding ) ) )
 	{
 		CPersistentBuffer *pTempBuffer = m_pCtx->GetCurPersistentBuffer( m_type );
 
@@ -770,26 +777,6 @@ void CGLMBuffer::Lock( GLMBuffLockParams *pParams, char **pAddressOut )
 
 		//DevMsg( " --> buff=%x, startOffset=%d, paramsOffset=%d, persistOffset = %d\n", this, m_nPersistentBufferStartOffset, pParams->m_nOffset, persistentBufferOffset );
 	}
-#ifndef OSX
-	else if ( m_bDynamic && gGL->m_bHave_GL_AMD_pinned_memory && ( m_pCtx->GetCurPinnedMemoryBuffer()->GetBytesRemaining() >= pParams->m_nSize ) )
-	{
-		if ( pParams->m_bDiscard )
-		{
-			m_nRevision++;
-		}
-
-		m_dirtyMinOffset = pParams->m_nOffset;
-		m_dirtyMaxOffset = pParams->m_nOffset + pParams->m_nSize;
-
-		CPinnedMemoryBuffer *pTempBuffer = m_pCtx->GetCurPinnedMemoryBuffer();
-
-		m_nPinnedMemoryOfs = pTempBuffer->GetOfs();
-
-		resultPtr = static_cast<char*>( pTempBuffer->GetPtr() ) + m_nPinnedMemoryOfs;
-		
-		pTempBuffer->Append( pParams->m_nSize );
-	}
-#endif // OSX
 	else if ( !g_bDisableStaticBuffer && ( pParams->m_bDiscard || pParams->m_bNoOverwrite ) && ( pParams->m_nSize <= GL_STATIC_BUFFER_SIZE ) )
 	{
 #if TOGL_SUPPORT_NULL_DEVICE
@@ -802,8 +789,8 @@ void CGLMBuffer::Lock( GLMBuffLockParams *pParams, char **pAddressOut )
 
 				// observe gl_bufmode on any orphan event.
 				// if orphaned and bufmode is nonzero, flip it to dynamic.
-				GLenum hint = gl_bufmode.GetInt() ? GL_DYNAMIC_DRAW_ARB : GL_STATIC_DRAW_ARB;
-				gGL->glBufferDataARB( m_buffGLTarget, m_nSize, (const GLvoid*)NULL, hint );
+				GLenum hint = gl_bufmode.GetInt() ? GL_DYNAMIC_DRAW : GL_STREAM_DRAW;
+				gGL->glBufferData( m_buffGLTarget, m_nSize, (const GLvoid*)NULL, hint );
 			
 				m_nRevision++; // revision grows on orphan event
 			}
@@ -845,8 +832,8 @@ void CGLMBuffer::Lock( GLMBuffLockParams *pParams, char **pAddressOut )
 			// if orphaned and bufmode is nonzero, flip it to dynamic.
 			
 			// We always want to call glBufferData( ..., NULL ) on discards, even though we're using the GL_MAP_INVALIDATE_BUFFER_BIT flag, because this flag is actually only a hint according to AMD.
-			GLenum hint = gl_bufmode.GetInt() ? GL_DYNAMIC_DRAW_ARB : GL_STATIC_DRAW_ARB;
-			gGL->glBufferDataARB( m_buffGLTarget, m_nSize, (const GLvoid*)NULL, hint );
+			GLenum hint = gl_bufmode.GetInt() ? GL_DYNAMIC_DRAW : GL_STREAM_DRAW;
+			gGL->glBufferData( m_buffGLTarget, m_nSize, (const GLvoid*)NULL, hint );
 									
 			m_nRevision++;	// revision grows on orphan event
 		}
@@ -856,64 +843,51 @@ void CGLMBuffer::Lock( GLMBuffLockParams *pParams, char **pAddressOut )
 
 		// map
 		char *mapPtr;
-		if ( gGL->m_bHave_GL_ARB_map_buffer_range )
-		{
-			// m_bEnableAsyncMap is actually pParams->m_bNoOverwrite
-			GLbitfield parms = GL_MAP_WRITE_BIT | ( m_bEnableAsyncMap ? GL_MAP_UNSYNCHRONIZED_BIT : 0 ) | ( pParams->m_bDiscard ? GL_MAP_INVALIDATE_BUFFER_BIT : 0 ) | ( m_bEnableExplicitFlush ? GL_MAP_FLUSH_EXPLICIT_BIT : 0 );
+
+		// m_bEnableAsyncMap is actually pParams->m_bNoOverwrite
+		GLbitfield parms = GL_MAP_WRITE_BIT | ( m_bEnableAsyncMap ? GL_MAP_UNSYNCHRONIZED_BIT : 0 ) | ( pParams->m_bDiscard ? GL_MAP_INVALIDATE_BUFFER_BIT : 0 ) | ( m_bEnableExplicitFlush ? GL_MAP_FLUSH_EXPLICIT_BIT : 0 );
 
 #ifdef REPORT_LOCK_TIME
-			double flStart = Plat_FloatTime();
+		double flStart = Plat_FloatTime();
 #endif
 
-			mapPtr = (char*)gGL->glMapBufferRange( m_buffGLTarget, pParams->m_nOffset, pParams->m_nSize, parms);
+		mapPtr = (char*)gGL->glMapBufferRange( m_buffGLTarget, pParams->m_nOffset, pParams->m_nSize, parms);
 
 #ifdef REPORT_LOCK_TIME
-			double flEnd = Plat_FloatTime();
-			if ( flEnd - flStart > 5.0 / 1000.0 )
+		double flEnd = Plat_FloatTime();
+		if ( flEnd - flStart > 5.0 / 1000.0 )
+		{
+			int nDelta = ( int )( ( flEnd - flStart ) * 1000 );
+			if ( nDelta > 2 )
 			{
-				int nDelta = ( int )( ( flEnd - flStart ) * 1000 );
-				if ( nDelta > 2 )
-				{
-					Msg( "**** " );
-				}
-				Msg( "glMapBufferRange Time=%d: ( Name=%d BufSize=%d ) Target=%p Offset=%d LockSize=%d ", nDelta, m_nHandle, m_nSize, m_buffGLTarget, pParams->m_nOffset, pParams->m_nSize );
-				if ( parms & GL_MAP_WRITE_BIT )
-				{
-					Msg( "GL_MAP_WRITE_BIT ");
-				}
-				if ( parms & GL_MAP_UNSYNCHRONIZED_BIT )
-				{
-					Msg( "GL_MAP_UNSYNCHRONIZED_BIT ");
-				}
-				if ( parms & GL_MAP_INVALIDATE_BUFFER_BIT )
-				{
-					Msg( "GL_MAP_INVALIDATE_BUFFER_BIT ");
-				}
-				if ( parms & GL_MAP_INVALIDATE_RANGE_BIT )
-				{
-					Msg( "GL_MAP_INVALIDATE_RANGE_BIT ");
-				}
-				if ( parms & GL_MAP_FLUSH_EXPLICIT_BIT )
-				{
-					Msg( "GL_MAP_FLUSH_EXPLICIT_BIT ");
-				}
-				Msg( "\n" );
+				Msg( "**** " );
 			}
+			Msg( "glMapBufferRange Time=%d: ( Name=%d BufSize=%d ) Target=%p Offset=%d LockSize=%d ", nDelta, m_nHandle, m_nSize, m_buffGLTarget, pParams->m_nOffset, pParams->m_nSize );
+			if ( parms & GL_MAP_WRITE_BIT )
+			{
+				Msg( "GL_MAP_WRITE_BIT ");
+			}
+			if ( parms & GL_MAP_UNSYNCHRONIZED_BIT )
+			{
+				Msg( "GL_MAP_UNSYNCHRONIZED_BIT ");
+			}
+			if ( parms & GL_MAP_INVALIDATE_BUFFER_BIT )
+			{
+				Msg( "GL_MAP_INVALIDATE_BUFFER_BIT ");
+			}
+			if ( parms & GL_MAP_INVALIDATE_RANGE_BIT )
+			{
+				Msg( "GL_MAP_INVALIDATE_RANGE_BIT ");
+			}
+			if ( parms & GL_MAP_FLUSH_EXPLICIT_BIT )
+			{
+				Msg( "GL_MAP_FLUSH_EXPLICIT_BIT ");
+			}
+			Msg( "\n" );
+		}
 #endif
-		}
-		else
-		{
-			mapPtr = (char*)gGL->glMapBufferARB( m_buffGLTarget, GL_WRITE_ONLY_ARB );
-		}
-
-		Assert( mapPtr );
-				
 		// calculate offset location
 		resultPtr = mapPtr;
-		if ( !gGL->m_bHave_GL_ARB_map_buffer_range )
-		{
-			resultPtr += pParams->m_nOffset;
-		}
 
 		// set range
 		m_dirtyMinOffset = pParams->m_nOffset;
@@ -1048,34 +1022,6 @@ void CGLMBuffer::Unlock( int nActualSize, const void *pActualData )
 	else if ( m_type == kGLMVertexBuffer )
 		g_nTotalVBLockBytes += nActualSize;
 #endif
-
-#ifndef OSX
-	if ( m_nPinnedMemoryOfs >= 0 )
-	{
-#if TOGL_SUPPORT_NULL_DEVICE
-		if ( !g_bNullD3DDevice )
-		{
-#endif
-		if ( nActualSize )
-		{
-			m_pCtx->BindBufferToCtx( m_type, this );
-
-			gGL->glCopyBufferSubData( 
-				GL_EXTERNAL_VIRTUAL_MEMORY_BUFFER_AMD,
-				m_buffGLTarget,
-				m_nPinnedMemoryOfs,
-				m_dirtyMinOffset,
-				nActualSize );
-		}
-
-#if TOGL_SUPPORT_NULL_DEVICE
-		}
-#endif
-		
-		m_nPinnedMemoryOfs = -1;
-	}
-	else
-#endif // OSX
 	if ( m_bUsingPersistentBuffer )
 	{
 		if ( nActualSize )
@@ -1086,7 +1032,7 @@ void CGLMBuffer::Unlock( int nActualSize, const void *pActualData )
 			//DevMsg( "   <-- actualSize=%d, persistOffset = %d\n", nActualSize, pTempBuffer->GetOffset() );
 		}
 	}
-    else if ( m_pStaticBuffer )
+	else if ( m_pStaticBuffer )
 	{
 #if TOGL_SUPPORT_NULL_DEVICE
 		if ( !g_bNullD3DDevice )
@@ -1104,7 +1050,7 @@ void CGLMBuffer::Unlock( int nActualSize, const void *pActualData )
 				Assert( nActualSize <= (int)( m_dirtyMaxOffset - m_dirtyMinOffset ) );
 
 				glBufferSubDataMaxSize( m_buffGLTarget, m_dirtyMinOffset, nActualSize, pActualData ? pActualData : m_pStaticBuffer );
-						
+
 		#ifdef REPORT_LOCK_TIME
 				double flEnd = Plat_FloatTime();
 				if ( flEnd - flStart > 5.0 / 1000.0 )

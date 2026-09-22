@@ -1,4 +1,26 @@
-//============ Copyright (c) Valve Corporation, All rights reserved. ============
+//========= Copyright Valve Corporation, All rights reserved. ============//
+//                       TOGL CODE LICENSE
+//
+//  Copyright 2011-2014 Valve Corporation
+//  All Rights Reserved.
+//
+//  Permission is hereby granted, free of charge, to any person obtaining a copy
+//  of this software and associated documentation files (the "Software"), to deal
+//  in the Software without restriction, including without limitation the rights
+//  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+//  copies of the Software, and to permit persons to whom the Software is
+//  furnished to do so, subject to the following conditions:
+//
+//  The above copyright notice and this permission notice shall be included in
+//  all copies or substantial portions of the Software.
+//
+//  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+//  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+//  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+//  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+//  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+//  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+//  THE SOFTWARE.
 //
 // glentrypoints.h
 //
@@ -16,7 +38,7 @@
 #include "interface.h"
 #include "togl/rendermechanism.h"
 
-void *VoidFnPtrLookup_GlMgr( const char *libname, const char *fn, bool &okay, const bool bRequired, void *fallback=NULL );
+void *VoidFnPtrLookup_GlMgr(const char *fn, bool &okay, const bool bRequired, void *fallback=NULL);
 
 #if GL_USE_EXECUTE_HELPER_FOR_ALL_API_CALLS
 class CGLExecuteHelperBase
@@ -108,13 +130,13 @@ public:
 	//     if (okay) { printf("All functions were loaded successfully!\n"); }
 	// If you supply a fallback, it'll be used if the lookup fails (and if
 	//  non-NULL, means this will always return (okay)).
-	bool Lookup(const char *libname, const char *fn, bool &okay, FunctionType fallback=NULL)
+	bool Lookup(const char *fn, bool &okay, FunctionType fallback=NULL)
 	{
 		if (!okay)
 			return false;
 		else if (this->m_pFn == NULL)
 		{
-			this->m_pFn = (FunctionType) VoidFnPtrLookup_GlMgr(libname, fn, okay, false, (void *) fallback);
+			this->m_pFn = (FunctionType) VoidFnPtrLookup_GlMgr(fn, okay, false, (void *) fallback);
 			this->SetFuncName( fn );
 		}
 		okay = m_pFn != NULL;
@@ -211,26 +233,26 @@ private:  // forbid default constructor.
 	CDynamicFunctionOpenGL() {}
 
 public:
-	CDynamicFunctionOpenGL(const char *libname, const char *fn, FunctionType fallback=NULL)
+	CDynamicFunctionOpenGL(const char *fn, FunctionType fallback=NULL)
 	{
         bool okay = true;
-		Lookup(libname, fn, okay, fallback);
+		Lookup(fn, okay, fallback);
 		this->SetFuncName( fn );
 	}
 
-	CDynamicFunctionOpenGL(const char *libname, const char *fn, bool &okay, FunctionType fallback=NULL)
+	CDynamicFunctionOpenGL(const char *fn, bool &okay, FunctionType fallback=NULL)
 	{
-		Lookup(libname, fn, okay, fallback);
+		Lookup(fn, okay, fallback);
 		this->SetFuncName( fn );
 	}
 
 	// Please note this is not virtual.
 	// !!! FIXME: we might want to fall back and try "EXT" or "ARB" versions in some case.
-	bool Lookup(const char *libname, const char *fn, bool &okay, FunctionType fallback=NULL)
+	bool Lookup(const char *fn, bool &okay, FunctionType fallback=NULL)
 	{
 		if (this->m_pFn == NULL)
 		{
-			this->m_pFn = (FunctionType) VoidFnPtrLookup_GlMgr(libname, fn, okay, bRequired, (void *) fallback);
+			this->m_pFn = (FunctionType) VoidFnPtrLookup_GlMgr(fn, okay, bRequired, (void *) fallback);
 			this->SetFuncName( fn );
 		}
 		return okay;
@@ -255,6 +277,9 @@ enum GLDriverProvider_t
 	cGLDriverProviderIntel,
 	cGLDriverProviderIntelOpenSource,
 	cGLDriverProviderApple,
+	cGLDriverProviderARM,
+	cGLDriverProviderQualcomm,
+	cGLDriverProviderImagination,
 
 	cGLTotalDriverProviders
 };
@@ -271,35 +296,41 @@ class COpenGLEntryPoints
 
 public:
 	// The GL context you are looking up entry points for must be current when you construct this object!
-	COpenGLEntryPoints(const char *libname);
+	COpenGLEntryPoints();
 	~COpenGLEntryPoints();
 
 	void ClearEntryPoints();
 	uint64 m_nTotalGLCycles, m_nTotalGLCalls;
 
-    const char *m_strLibName;  // this is the pointer you passed in the constructor, or a default if you passed NULL.
-
 	int m_nOpenGLVersionMajor;  // if GL_VERSION is 2.1.0, this will be set to 2.
 	int m_nOpenGLVersionMinor;  // if GL_VERSION is 2.1.0, this will be set to 1.
 	int m_nOpenGLVersionPatch;  // if GL_VERSION is 2.1.0, this will be set to 0.
 	bool m_bHave_OpenGL;
-	
-	char *m_pGLDriverStrings[cGLTotalDriverStrings];
-	GLDriverProvider_t m_nDriverProvider;		
+	unsigned int m_nSystemFramebufferID = 0; 
 
-#ifdef OSX
+	char *m_pGLDriverStrings[cGLTotalDriverStrings];
+	GLDriverProvider_t m_nDriverProvider;
+
+#ifdef LOAD_HARDFP
+#define _APIENTRY  __attribute__((pcs("aapcs"))) APIENTRY
+#else
+#define _APIENTRY APIENTRY
+#endif
+
+#if defined(OSX) && !defined(IOS)
 #define GL_EXT(x,glmajor,glminor) bool m_bHave_##x;
 #define GL_FUNC(ext,req,ret,fn,arg,call) CDynamicFunctionOpenGL< req, ret (*) arg, ret > fn;
 #define GL_FUNC_VOID(ext,req,fn,arg,call) CDynamicFunctionOpenGL< req, void (*) arg, void > fn;
 #else
 #define GL_EXT(x,glmajor,glminor) bool m_bHave_##x;
-#define GL_FUNC(ext,req,ret,fn,arg,call) CDynamicFunctionOpenGL< req, ret (APIENTRY *) arg, ret > fn;
-#define GL_FUNC_VOID(ext,req,fn,arg,call) CDynamicFunctionOpenGL< req, void (APIENTRY *) arg, void > fn;
+#define GL_FUNC(ext,req,ret,fn,arg,call) CDynamicFunctionOpenGL< req, ret (_APIENTRY *) arg, ret > fn;
+#define GL_FUNC_VOID(ext,req,fn,arg,call) CDynamicFunctionOpenGL< req, void (_APIENTRY *) arg, void > fn;
 #endif
-	#include "togl/glfuncs.inl"
-	#undef GL_FUNC_VOID
-	#undef GL_FUNC
-	#undef GL_EXT
+
+#include "togl/glfuncs.inl"
+#undef GL_FUNC_VOID
+#undef GL_FUNC
+#undef GL_EXT
 
 	bool HasSwapTearExtension() const
 	{
@@ -313,7 +344,7 @@ public:
 
 // This will be set to the current OpenGL context's entry points.
 extern COpenGLEntryPoints *gGL;
-typedef void * (*GL_GetProcAddressCallbackFunc_t)(const char *, const char *, bool &, const bool, void *);
+typedef void * (*GL_GetProcAddressCallbackFunc_t)(const char *, bool &, const bool, void *);
 
 #ifdef TOGL_DLL_EXPORT
 	DLL_EXPORT COpenGLEntryPoints *ToGLConnectLibraries( CreateInterfaceFn factory );

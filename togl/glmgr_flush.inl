@@ -1,5 +1,7 @@
 // BE VERY VERY CAREFUL what you do in these function. They are extremely hot, and calling the wrong GL API's in here will crush perf. (especially on NVidia threaded drivers).
 
+#include "togl/glmgr.h"
+
 FORCEINLINE uint32 bitmix32(uint32 a)
 {
 	a -= (a<<6);
@@ -12,7 +14,8 @@ FORCEINLINE uint32 bitmix32(uint32 a)
 	return a;
 }
 
-#ifndef OSX
+#if !defined(OSX) || defined(IOS)
+
 FORCEINLINE GLuint GLMContext::FindSamplerObject( const GLMTexSamplingParams &desiredParams )
 {
 	int h = bitmix32( desiredParams.m_bits + desiredParams.m_borderColor ) & ( cSamplerObjectHashSize - 1 );
@@ -38,7 +41,8 @@ FORCEINLINE GLuint GLMContext::FindSamplerObject( const GLMTexSamplingParams &de
 
 	return m_samplerObjectHash[h].m_samplerObject;
 }
-#endif
+
+#endif // !OSX
 
 // BE VERY CAREFUL WHAT YOU DO IN HERE. This is called on every batch, even seemingly simple changes can kill perf.
 FORCEINLINE void GLMContext::FlushDrawStates( uint nStartIndex, uint nEndIndex, uint nBaseVertex )	// shadersOn = true for draw calls, false for clear calls
@@ -146,7 +150,6 @@ FORCEINLINE void GLMContext::FlushDrawStates( uint nStartIndex, uint nEndIndex, 
 
 		bool bShaderShadow = ( m_drawingProgram[kGLMFragmentProgram]->m_nShadowDepthSamplerMask & nCurMask ) != 0;
 		
-		// NOTE - Check shader name hardcoded into ShadowDepthSamplerMaskFromName() in dxabstract.cpp!!
 		if ( bShaderShadow )
 		{
 			// Shader expects shadow depth sampling at this sampler index
@@ -253,7 +256,7 @@ FORCEINLINE void GLMContext::FlushDrawStates( uint nStartIndex, uint nEndIndex, 
 	
 	GL_BATCH_PERF( m_FlushStats.m_nNumChangedSamplers += m_nNumDirtySamplers );
 
-#if !defined( OSX ) // no support for sampler objects in OSX 10.6 (GL 2.1 profile)
+#if !(defined(OSX) && !defined(IOS)) // no support for sampler objects in OSX 10.6 (GL 2.1 profile)
 	if ( m_bUseSamplerObjects)
 	{
 		while ( m_nNumDirtySamplers )
@@ -267,7 +270,7 @@ FORCEINLINE void GLMContext::FlushDrawStates( uint nStartIndex, uint nEndIndex, 
 
 			GL_BATCH_PERF( m_FlushStats.m_nNumSamplingParamsChanged++ );
 
-#if defined( OSX ) // valid for OSX only if using GL 3.3 context 
+#if defined( APPLE ) // valid for OSX only if using GL 3.3 context 
 			CGLMTex *pTex = m_samplers[nSamplerIndex].m_pBoundTex;
 
 			if( pTex && !( gGL->m_bHave_GL_EXT_texture_sRGB_decode ) )
@@ -304,7 +307,7 @@ FORCEINLINE void GLMContext::FlushDrawStates( uint nStartIndex, uint nEndIndex, 
 
 				pTex->m_SamplingParams = m_samplers[nSamplerIndex].m_samp;
 
-#if defined( OSX )
+#if (defined(OSX) && !defined(IOS))
 				if( pTex && !( gGL->m_bHave_GL_EXT_texture_sRGB_decode ) )
 				{
 					// see if requested SRGB state differs from the known one
@@ -432,7 +435,6 @@ FORCEINLINE void GLMContext::FlushDrawStates( uint nStartIndex, uint nEndIndex, 
 		}
 	}
 
-
 	// see if VS uses i0, b0, b1, b2, b3.
 	// use a glUniform1i to set any one of these if active.  skip all of them if no dirties reported.
 	// my kingdom for the UBO extension!
@@ -474,6 +476,28 @@ FORCEINLINE void GLMContext::FlushDrawStates( uint nStartIndex, uint nEndIndex, 
 				gGL->glUniform1i( vconstInt0Loc, m_programParamsI[kGLMVertexProgram].m_values[0][0] );	//FIXME magic number
 			}
 			m_programParamsI[kGLMVertexProgram].m_dirtySlotCount = 0;
+		}
+	}
+
+
+	if( !gGL->m_bHave_GL_QCOM_alpha_test && m_pBoundPair->m_locAlphaRef != -1 )
+	{
+		if( !m_AlphaTestEnable.GetData().enable )
+			gGL->glUniform1f( m_pBoundPair->m_locAlphaRef, 0.0 );
+		else
+			gGL->glUniform1f( m_pBoundPair->m_locAlphaRef, m_AlphaTestFunc.GetData().ref );			
+	}
+
+	// Fake sRGB write: shaders mix linear vs encoded output with flSRGBWrite.
+	// This uniform was never pushed, so the suffix always stayed at the GLSL default (0)
+	// and present stayed linear/dark on iOS.
+	if ( m_pBoundPair->m_locFragmentFakeSRGBEnable >= 0 )
+	{
+		float fakeSRGBEnable = m_FakeBlendEnableSRGB ? 1.0f : 0.0f;
+		if ( fakeSRGBEnable != m_pBoundPair->m_fakeSRGBEnableValue )
+		{
+			gGL->glUniform1f( m_pBoundPair->m_locFragmentFakeSRGBEnable, fakeSRGBEnable );
+			m_pBoundPair->m_fakeSRGBEnableValue = fakeSRGBEnable;
 		}
 	}
 

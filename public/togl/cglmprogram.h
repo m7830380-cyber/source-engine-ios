@@ -1,4 +1,26 @@
-//============ Copyright (c) Valve Corporation, All rights reserved. ============
+//========= Copyright Valve Corporation, All rights reserved. ============//
+//                       TOGL CODE LICENSE
+//
+//  Copyright 2011-2014 Valve Corporation
+//  All Rights Reserved.
+//
+//  Permission is hereby granted, free of charge, to any person obtaining a copy
+//  of this software and associated documentation files (the "Software"), to deal
+//  in the Software without restriction, including without limitation the rights
+//  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+//  copies of the Software, and to permit persons to whom the Software is
+//  furnished to do so, subject to the following conditions:
+//
+//  The above copyright notice and this permission notice shall be included in
+//  all copies or substantial portions of the Software.
+//
+//  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+//  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+//  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+//  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+//  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+//  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+//  THE SOFTWARE.
 //
 // cglmprogram.h
 //	GLMgr programs (ARBVP/ARBfp)
@@ -68,7 +90,7 @@ struct GLMShaderDesc
 	union
 	{
 		GLuint		arb;		// ARB program object name
-		GLhandleARB	glsl;		// GLSL shader object handle (void*)
+		GLuint	glsl;		// GLSL shader object handle (void*)
 	}	m_object;
 
 	// these can change if shader text is edited
@@ -133,7 +155,7 @@ public:
 
 	EGLMProgramType			m_type;					// vertex or pixel
 
-	uint					m_nHashTag;				// serial number for hashing
+	unsigned long m_nHashTag;				// serial number for hashing
 	
 	char					*m_text;				// copy of text passed into constructor.  Can change if editable shaders is enabled.
 													// note - it can contain multiple flavors, so use CGLMTextSectioner to scan it and locate them
@@ -231,7 +253,7 @@ public:
 	CGLMProgram				*m_vertexProg;	
 	CGLMProgram				*m_fragmentProg;
 
-	GLhandleARB				m_program;				// linked program object
+	GLuint				m_program;				// linked program object
 
 	// need meta data for attribs / samplers / params
 	// actually we only need it for samplers and params.
@@ -241,7 +263,8 @@ public:
 	GLint					m_locVertexParams;		// "vc" per dx9asmtogl2 convention
 	GLint					m_locVertexBoneParams;	// "vcbones"
 	GLint					m_locVertexInteger0;	// "i0"
-			
+	GLint					m_locAlphaRef; // "alpha_ref"		
+	
 	enum { cMaxVertexShaderBoolUniforms = 4, cMaxFragmentShaderBoolUniforms = 1 };
 
 	GLint					m_locVertexBool[cMaxVertexShaderBoolUniforms];		// "b0", etc.

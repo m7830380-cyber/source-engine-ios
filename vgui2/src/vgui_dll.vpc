@@ -41,8 +41,8 @@ $Project "vgui2"
 		$File	"$SRCDIR\public\filesystem_helpers.cpp"
 		$File	"$SRCDIR\public\filesystem_init.cpp"
 		$File	"htmlwindow.cpp"				[$WINDOWS]
-		$File	"InputWin32.cpp"				[$WINDOWS||$X360||$PS3||$LINUXALL]
-		$File	"inputosx.cpp" 					[$OSXALL]
+		$File	"InputWin32.cpp"				[$WINDOWS||$X360||$PS3||$LINUXALL||$IOS]
+		$File	"inputosx.cpp" 					[$OSXALL && !$IOS]
 		$File	"MemoryBitmap.cpp"
 		$File	"Memorybitmap.h"
 		$File	"MessageListener.cpp"

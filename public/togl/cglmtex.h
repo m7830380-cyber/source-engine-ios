@@ -1,4 +1,26 @@
-//============ Copyright (c) Valve Corporation, All rights reserved. ============
+//========= Copyright Valve Corporation, All rights reserved. ============//
+//                       TOGL CODE LICENSE
+//
+//  Copyright 2011-2014 Valve Corporation
+//  All Rights Reserved.
+//
+//  Permission is hereby granted, free of charge, to any person obtaining a copy
+//  of this software and associated documentation files (the "Software"), to deal
+//  in the Software without restriction, including without limitation the rights
+//  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+//  copies of the Software, and to permit persons to whom the Software is
+//  furnished to do so, subject to the following conditions:
+//
+//  The above copyright notice and this permission notice shall be included in
+//  all copies or substantial portions of the Software.
+//
+//  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+//  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+//  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+//  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+//  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+//  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+//  THE SOFTWARE.
 //
 // cglmtex.h
 //	GLMgr textures
@@ -10,7 +32,7 @@
 
 #pragma once
 
-#ifdef OSX
+#if defined(OSX) && !defined(IOS)
 #include "glmgrbasics.h"
 #endif
 #include "tier1/utlhash.h"
@@ -104,6 +126,7 @@ enum EGLMTexFlags
 	kGLMTexMultisampled	=	0x40,		// has an RBO backing it.  Cannot combine with Mipped, MippedAuto.  One slice maximum, only targeting GL_TEXTURE_2D.
 										// actually not 100% positive on the mipmapping, the RBO itself can't be mipped, but the resulting texture could
 										// have mipmaps generated.
+	kGLMTexDynamic		=	0x80
 };
 
 //===============================================================================
@@ -182,6 +205,7 @@ struct GLMTexLockParams
 	// tells GLM to force re-read of the texels back from GL
 	// i.e. "I know I stepped on those texels with a draw or blit - the GLM copy is stale"
 	bool		m_readback;
+	bool		m_readonly;
 };
 
 struct GLMTexLockDesc
@@ -248,16 +272,18 @@ struct GLMTexSamplingParams
 	};
 
 	uint32 m_borderColor;
+	float m_lodBias;
 
 	FORCEINLINE bool operator== (const GLMTexSamplingParams& rhs ) const
 	{
-		return ( m_bits == rhs.m_bits ) && ( m_borderColor == rhs.m_borderColor );
+		return ( m_bits == rhs.m_bits ) && ( m_borderColor == rhs.m_borderColor ) && ( m_lodBias == rhs.m_lodBias );
 	}
 
 	FORCEINLINE void SetToDefaults()
 	{
 		m_bits = 0;
 		m_borderColor = 0;
+		m_lodBias = 0.0f;
 		m_packed.m_addressU = D3DTADDRESS_WRAP;
 		m_packed.m_addressV = D3DTADDRESS_WRAP;
 		m_packed.m_addressW = D3DTADDRESS_WRAP;
@@ -269,7 +295,7 @@ struct GLMTexSamplingParams
 		m_packed.m_isValid = true;
 	}
 
-#ifndef OSX
+#if !defined(OSX) || defined(IOS)
 	FORCEINLINE void SetToSamplerObject( GLuint nSamplerObject ) const
 	{
 		static const GLenum dxtogl_addressMode[] = { GL_REPEAT, GL_CLAMP_TO_EDGE, GL_CLAMP_TO_BORDER, (GLenum)-1 };
@@ -299,7 +325,9 @@ struct GLMTexSamplingParams
 		}
 		gGL->glSamplerParameterfv( nSamplerObject, GL_TEXTURE_BORDER_COLOR, flBorderColor ); // <-- this crashes ATI's driver, remark it out
 		gGL->glSamplerParameteri( nSamplerObject, GL_TEXTURE_MIN_LOD, m_packed.m_minLOD );
+//		gGL->glSamplerParameterfv( nSamplerObject, GL_TEXTURE_LOD_BIAS, &m_lodBias );
 		gGL->glSamplerParameteri( nSamplerObject, GL_TEXTURE_COMPARE_MODE_ARB, m_packed.m_compareMode ? GL_COMPARE_R_TO_TEXTURE_ARB : GL_NONE );
+//		gGL->glSamplerParameterf( nSamplerObject, GL_TEXTURE_LOD_BIAS, m_lodBias );
 		if ( m_packed.m_compareMode )
 		{
 			gGL->glSamplerParameteri( nSamplerObject, GL_TEXTURE_COMPARE_FUNC_ARB, GL_LEQUAL );
@@ -309,8 +337,8 @@ struct GLMTexSamplingParams
 			gGL->glSamplerParameteri( nSamplerObject, GL_TEXTURE_SRGB_DECODE_EXT, m_packed.m_srgb ? GL_DECODE_EXT : GL_SKIP_DECODE_EXT );
 		}
 	}
-#endif
-    
+#endif // !OSX
+
 	inline void DeltaSetToTarget( GLenum target, const GLMTexSamplingParams &curState )
 	{
 		static const GLenum dxtogl_addressMode[] = { GL_REPEAT, GL_CLAMP_TO_EDGE, GL_CLAMP_TO_BORDER, (GLenum)-1 };
@@ -367,6 +395,12 @@ struct GLMTexSamplingParams
 			gGL->glTexParameteri( target, GL_TEXTURE_MIN_LOD, m_packed.m_minLOD );
 		}
 
+		if ( m_lodBias != curState.m_lodBias )
+		{
+			// Could use TexParameterf instead, but we don't currently grab it. This works fine, too.
+			gGL->glTexParameterfv( target, GL_TEXTURE_LOD_BIAS, &m_lodBias );
+		}
+
 		if ( m_packed.m_compareMode != curState.m_packed.m_compareMode )
 		{
 			gGL->glTexParameteri( target, GL_TEXTURE_COMPARE_MODE_ARB, m_packed.m_compareMode ? GL_COMPARE_R_TO_TEXTURE_ARB : GL_NONE );
@@ -411,6 +445,7 @@ struct GLMTexSamplingParams
 		}
 		gGL->glTexParameterfv( target, GL_TEXTURE_BORDER_COLOR, flBorderColor ); // <-- this crashes ATI's driver, remark it out
 		gGL->glTexParameteri( target, GL_TEXTURE_MIN_LOD, m_packed.m_minLOD );
+//		gGL->glTexParameterfv( target, GL_TEXTURE_LOD_BIAS, &m_lodBias );
 		gGL->glTexParameteri( target, GL_TEXTURE_COMPARE_MODE_ARB, m_packed.m_compareMode ? GL_COMPARE_R_TO_TEXTURE_ARB : GL_NONE );
 		if ( m_packed.m_compareMode )
 		{
@@ -446,18 +481,18 @@ protected:
 	friend struct IDirect3DCubeTexture9;
 	friend struct IDirect3DVolumeTexture9;
 	
-	CGLMTex( GLMContext *ctx, GLMTexLayout *layout, uint levels, const char *debugLabel = NULL );
-	~CGLMTex( );
+			CGLMTex( GLMContext *ctx, GLMTexLayout *layout, uint levels, const char *debugLabel = NULL );
+			~CGLMTex( );
 	
 	int						CalcSliceIndex( int face, int mip );
 	void					CalcTexelDataOffsetAndStrides( int sliceIndex, int x, int y, int z, int *offsetOut, int *yStrideOut, int *zStrideOut );
 		
-	void					ReadTexels( GLMTexLockDesc *desc, bool readWholeSlice=true );
+	GLubyte					*ReadTexels( GLMTexLockDesc *desc, bool readWholeSlice=true, bool readOnly=false );
 	void					WriteTexels( GLMTexLockDesc *desc, bool writeWholeSlice=true, bool noDataWrite=false );
 		// last param lets us send NULL data ptr (only legal with uncompressed formats, beware)
 		// this helps out ResetSRGB.
 
-#if defined( OSX )
+#if defined( APPLE )
 	void					HandleSRGBMismatch( bool srgb, int &srgbFlipCount );
 	void					ResetSRGB( bool srgb, bool noDataWrite );
 	// re-specify texture format to match desired sRGB form
@@ -472,6 +507,8 @@ protected:
 		// noWrite means send NULL for texel source addresses instead of actual data - ideal for RT's
 
 	GLuint					m_texName;			// name of this texture in the context
+	GLuint					m_pbo;
+	GLubyte					*m_mapped;
 	GLenum					m_texGLTarget;
 	uint					m_nSamplerType;		// SAMPLER_2D, etc.
 	

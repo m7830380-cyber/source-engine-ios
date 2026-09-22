@@ -136,6 +136,7 @@ IOS_DEFINES = [
 	'PLATFORM_IOS=1',
 	'NO_STEAM=1',
 	'NO_CEG=1',
+	'TOGLES=1', # togl is the source-engine port's GLES backend
 ]
 
 # VPC include dirs replaced by the build's own copies.
@@ -258,6 +259,15 @@ def configure(conf):
 	conf.env.append_unique('CFLAGS', cflags)
 	conf.env.append_unique('CXXFLAGS', cxxflags)
 	conf.env.append_unique('LINKFLAGS', linkflags)
+
+	# compatibility headers for glibc/Windows-isms (e.g. <malloc.h>)
+	conf.env.append_unique('INCLUDES', [os.path.abspath('ios/include')])
+	# FreeType/fontconfig headers for vgui_surfacelib's linuxfont.cpp
+	conf.env.append_unique('INCLUDES', [
+		os.path.abspath('lib/darwin/aarch64/include'),
+		os.path.abspath('ios/thirdparty/freetype/include'),
+		os.path.abspath('ios/thirdparty/fontconfig'),
+	])
 
 	check_deps(conf)
 

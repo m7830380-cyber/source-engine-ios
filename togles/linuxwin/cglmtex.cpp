@@ -1140,7 +1140,7 @@ void CGLMTex::CalcTexelDataOffsetAndStrides( int sliceIndex, int x, int y, int z
 	*zStrideOut	= zStride;
 }
 
-extern void convert_texture( GLenum &internalformat, GLsizei width, GLsizei height, GLenum &format, GLenum &type, void *data );
+extern void convert_texture( GLenum &internalformat, GLsizei width, GLsizei height, GLenum &format, GLenum &type, void *data, GLsizei rowLengthTexels = 0, GLsizei skipPixels = 0, GLsizei skipRows = 0 );
 
 GLubyte *CGLMTex::ReadTexels( GLMTexLockDesc *desc, bool readWholeSlice, bool readOnly )
 {
@@ -3348,9 +3348,56 @@ static inline halffloat_t float_f2h(float f)
     return ret;
 }
 
-void convert_texture( GLenum &internalformat, GLsizei width, GLsizei height, GLenum &format, GLenum &type, void *data )
+void convert_texture( GLenum &internalformat, GLsizei width, GLsizei height, GLenum &format, GLenum &type, void *data, GLsizei rowLengthTexels, GLsizei skipPixels, GLsizei skipRows )
 {
-	if( format == GL_BGRA ) format = GL_RGBA;
+	// R/B CHANNEL SWAP FIX.
+	//
+	// The old code did:
+	//     if ( format == GL_BGRA ) format = GL_RGBA;
+	//     if ( type == GL_UNSIGNED_INT_8_8_8_8_REV ) type = GL_UNSIGNED_BYTE;
+	//
+	// Those two rewrites combine into a silent channel swap. The format
+	// table declares A8R8G8B8 / X8R8G8B8 as
+	//     GL_BGRA + GL_UNSIGNED_INT_8_8_8_8_REV
+	// which on little-endian ARM means the bytes in memory are literally
+	// B,G,R,A. Relabelling that as GL_RGBA + GL_UNSIGNED_BYTE tells GL to
+	// read the very same bytes as R,G,B,A - so red and blue trade places
+	// in every 32-bit texture in the game. That is the blue/green cast.
+	//
+	// Fix: keep calling it RGBA (so internalformat/format stay a
+	// combination GLES is guaranteed to accept) but actually reorder the
+	// bytes to match. Swapping in software is slower than an explicit
+	// BGRA upload, however GL_BGRA_EXT as an *internalformat* is not
+	// universally accepted and a wrong guess here means no textures at
+	// all, so correctness wins.
+	if ( format == GL_BGRA )
+	{
+		format = GL_RGBA;
+
+		if ( data )
+		{
+			// In-place B<->R swap, honouring the same UNPACK_ROW_LENGTH /
+			// SKIP_PIXELS / SKIP_ROWS window that the matching
+			// glTexSubImage2D call uses. Swapping a flat width*height run
+			// would walk outside the sub-box and corrupt neighbouring
+			// texels on the subimage path.
+			uint8_t *pBytes = (uint8_t *)data;
+
+			const GLsizei nRowLength = ( rowLengthTexels > 0 ) ? rowLengthTexels : width;
+
+			for ( GLsizei y = 0; y < height; ++y )
+			{
+				uint8_t *pRow = pBytes + ( ( (size_t)( skipRows + y ) * (size_t)nRowLength + (size_t)skipPixels ) * 4 );
+				for ( GLsizei x = 0; x < width; ++x )
+				{
+					uint8_t t = pRow[ x * 4 + 0 ];
+					pRow[ x * 4 + 0 ] = pRow[ x * 4 + 2 ];
+					pRow[ x * 4 + 2 ] = t;
+				}
+			}
+		}
+	}
+
 	if( format == GL_BGR ) format = GL_RGB;
 
 	// GLES/Metal has no RGB8 renderable. iPad M-series either aborts in
@@ -3522,6 +3569,47 @@ void CompressedTexImage2D(GLenum target, GLint level, GLenum internalformat,
 	}
 
 	gGL->glTexImage2D(target, level, intformat, width, height, border, format, type, pixels);
+
+	// Diagnostic: -textureformatspew reports exactly which texture formats
+	// take which upload path on device. Added because three rounds of
+	// reading this code did not identify why output is still garbled, and
+	// guessing again is worse than measuring.
+	{
+		static bool s_bSpewChecked = false;
+		static bool s_bSpew = false;
+		if ( !s_bSpewChecked )
+		{
+			s_bSpewChecked = true;
+			s_bSpew = ( CommandLine()->FindParm( "-textureformatspew" ) != 0 );
+		}
+
+		if ( s_bSpew )
+		{
+			// Report once per distinct (internalformat, decompressed?) pair
+			// so the log stays readable instead of one line per texture.
+			static GLenum s_seen[ 64 ];
+			static int    s_nSeen = 0;
+
+			bool bAlreadySeen = false;
+			for ( int i = 0; i < s_nSeen; ++i )
+			{
+				if ( s_seen[ i ] == internalformat ) { bAlreadySeen = true; break; }
+			}
+
+			if ( !bAlreadySeen && s_nSeen < 64 )
+			{
+				s_seen[ s_nSeen++ ] = internalformat;
+				Msg( "TEXFMT: internalformat=0x%04X isDXTc=%d decompressed=%d "
+					 "uploaded_as intformat=0x%04X format=0x%04X type=0x%04X %dx%d imageSize=%d\n",
+					 (unsigned int)internalformat,
+					 (int)isDXTc( internalformat ),
+					 (int)( pixels != data ),
+					 (unsigned int)intformat, (unsigned int)format, (unsigned int)type,
+					 (int)width, (int)height, (int)imageSize );
+			}
+		}
+	}
+
 	if( data != pixels )
 		free(pixels);
 }
@@ -3711,7 +3799,8 @@ void CGLMTex::WriteTexels( GLMTexLockDesc *desc, bool writeWholeSlice, bool noDa
 						gGL->glPixelStorei( GL_UNPACK_SKIP_PIXELS, writeBox.xmin );		// in pixels
 						gGL->glPixelStorei( GL_UNPACK_SKIP_ROWS, writeBox.ymin );		// in pixels
 
-						convert_texture(intformat, writeBox.xmax - writeBox.xmin, writeBox.ymax - writeBox.ymin, glDataFormat, glDataType, sliceAddress);
+						convert_texture(intformat, writeBox.xmax - writeBox.xmin, writeBox.ymax - writeBox.ymin, glDataFormat, glDataType, sliceAddress,
+										slice->m_xSize, writeBox.xmin, writeBox.ymin);
 
 						gGL->glTexSubImage2D(	target,
 										desc->m_req.m_mip,				// level

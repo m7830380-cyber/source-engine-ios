@@ -215,7 +215,7 @@ def build(bld):
 
 	# AVAudioEngine/PHASE output device (opt-in via --phase-audio, iOS only).
 	if bld.env.PHASE_AUDIO:
-		source += ['audio/snd_dev_ios_phase.mm']
+		source += ['audio/snd_dev_ios_phase.cpp', 'audio/snd_dev_ios_phase_backend.mm']
 
 	source_win = [
 		'audio/snd_dev_direct.cpp',

@@ -3,6 +3,13 @@
 // Purpose: Native Metal device query. See ios_metal_device.h for why this
 //          is a capability query and not a rendering backend.
 //
+//	IMPORTANT: this file includes Objective-C framework headers and must
+//	therefore NOT include any Valve header. public/tier0/basetypes.h does
+//	`typedef int BOOL` while ObjC's objc.h does `typedef bool BOOL`, and a
+//	translation unit that sees both fails to compile. (Same issue the repo
+//	fixed in commit 14f6ad3d for glmrendererinfo.) Reporting therefore
+//	goes through printf rather than Msg/Warning.
+//
 //=======================================================================//
 
 #include "ios_metal_device.h"
@@ -12,10 +19,8 @@
 #import <Metal/Metal.h>
 #import <Foundation/Foundation.h>
 
-#include "tier0/dbg.h"
-#include "tier0/platform.h"
-
 #include <string.h>
+#include <stdio.h>
 
 //-----------------------------------------------------------------------------
 bool IOSMetal_GetDeviceInfo( IOSMetalDeviceInfo_t *pOut )
@@ -37,15 +42,14 @@ bool IOSMetal_GetDeviceInfo( IOSMetalDeviceInfo_t *pOut )
 	}
 
 	// Walk the families downwards and record the highest one supported.
-	// supportsFamily: is iOS 13+; the enum values are stable.
 	if ( @available( iOS 13.0, * ) )
 	{
 		const MTLGPUFamily kFamilies[] = {
-			MTLGPUFamilyApple9, MTLGPUFamilyApple8, MTLGPUFamilyApple7,
-			MTLGPUFamilyApple6, MTLGPUFamilyApple5, MTLGPUFamilyApple4,
-			MTLGPUFamilyApple3, MTLGPUFamilyApple2, MTLGPUFamilyApple1,
+			MTLGPUFamilyApple7, MTLGPUFamilyApple6, MTLGPUFamilyApple5,
+			MTLGPUFamilyApple4, MTLGPUFamilyApple3, MTLGPUFamilyApple2,
+			MTLGPUFamilyApple1,
 		};
-		const int kFamilyNumbers[] = { 9, 8, 7, 6, 5, 4, 3, 2, 1 };
+		const int kFamilyNumbers[] = { 7, 6, 5, 4, 3, 2, 1 };
 
 		for ( size_t i = 0; i < sizeof( kFamilies ) / sizeof( kFamilies[ 0 ] ); ++i )
 		{
@@ -56,8 +60,8 @@ bool IOSMetal_GetDeviceInfo( IOSMetalDeviceInfo_t *pOut )
 			}
 		}
 
-		pOut->m_bSupportsFamilyApple4 = [pDevice supportsFamily:MTLGPUFamilyApple4];
-		pOut->m_bSupportsFamilyApple7 = [pDevice supportsFamily:MTLGPUFamilyApple7];
+		pOut->m_bSupportsFamilyApple4 = [pDevice supportsFamily:MTLGPUFamilyApple4] ? true : false;
+		pOut->m_bSupportsFamilyApple7 = [pDevice supportsFamily:MTLGPUFamilyApple7] ? true : false;
 	}
 
 	// Apple4 (A11) and later guarantee 16384; earlier hardware caps at 8192.
@@ -65,7 +69,8 @@ bool IOSMetal_GetDeviceInfo( IOSMetalDeviceInfo_t *pOut )
 
 	if ( @available( iOS 11.0, * ) )
 	{
-		pOut->m_nRecommendedMaxWorkingSetSize = (uint64)[pDevice recommendedMaxWorkingSetSize];
+		pOut->m_nRecommendedMaxWorkingSetSize =
+			(unsigned long long)[pDevice recommendedMaxWorkingSetSize];
 	}
 
 	if ( @available( iOS 13.0, * ) )
@@ -90,19 +95,19 @@ void IOSMetal_ReportDevice( void )
 	IOSMetalDeviceInfo_t info;
 	if ( !IOSMetal_GetDeviceInfo( &info ) )
 	{
-		Warning( "Metal: no device available.\n" );
+		printf( "Metal: no device available.\n" );
 		return;
 	}
 
-	Msg( "Metal device: %s\n", info.m_szDeviceName );
-	Msg( "  Apple GPU family : %d\n", info.m_nAppleGPUFamily );
-	Msg( "  Max texture size : %d\n", info.m_nMaxTextureSize );
-	Msg( "  Unified memory   : %s\n", info.m_bUnifiedMemory ? "yes" : "no" );
-	Msg( "  4x MSAA          : %s\n", info.m_bSupportsMSAA ? "yes" : "no" );
+	printf( "Metal device: %s\n", info.m_szDeviceName );
+	printf( "  Apple GPU family : %d\n", info.m_nAppleGPUFamily );
+	printf( "  Max texture size : %d\n", info.m_nMaxTextureSize );
+	printf( "  Unified memory   : %s\n", info.m_bUnifiedMemory ? "yes" : "no" );
+	printf( "  4x MSAA          : %s\n", info.m_bSupportsMSAA ? "yes" : "no" );
 
 	if ( info.m_nRecommendedMaxWorkingSetSize > 0 )
 	{
-		Msg( "  Recommended VRAM : %llu MB\n",
+		printf( "  Recommended VRAM : %llu MB\n",
 			(unsigned long long)( info.m_nRecommendedMaxWorkingSetSize / ( 1024 * 1024 ) ) );
 	}
 }

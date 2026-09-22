@@ -50,7 +50,9 @@ struct IOSMetalDeviceInfo_t
 {
 	char	m_szDeviceName[ 128 ];
 
-	// Highest Apple GPU family supported (1..9); 0 if unknown.
+	// Highest Apple GPU family supported (1..7); 0 if unknown.
+	// Capped at 7 because Xcode 15.4's SDK is the build floor here and
+	// MTLGPUFamilyApple8/9 are not guaranteed to be declared.
 	int		m_nAppleGPUFamily;
 
 	// Largest 2D texture dimension the hardware accepts.
@@ -59,7 +61,9 @@ struct IOSMetalDeviceInfo_t
 	// Recommended working set in bytes. Exceeding it makes iOS start
 	// evicting our resources, which is the usual cause of texture
 	// popping on memory-constrained devices.
-	uint64	m_nRecommendedMaxWorkingSetSize;
+	// Plain C type: this header is included from an ObjC translation unit
+	// that must not pull in Valve's basetypes.h.
+	unsigned long long	m_nRecommendedMaxWorkingSetSize;
 
 	bool	m_bSupportsFamilyApple4;	// A11 and later
 	bool	m_bSupportsFamilyApple7;	// A14/M1 and later

@@ -2554,7 +2554,12 @@ void D3DToGL::Handle_TEX( uint32 dwToken, bool bIsTexLDL )
 			V_snprintf( szExtra, sizeof( szExtra ), ".%c", GetSwizzleComponent( pSrc0Reg, 3 ) );
 			V_strncat( szLOD, szExtra, sizeof( szLOD ) );
 
-			PrintToBufWithIndents( *m_pBufALUCode, "%s = %s( %s, %s, %s );\n", pDestReg, "textureLod", pSrc1Reg, sCoordVar.String(), szLOD );
+			// A shadow sampler returns the depth comparison as a single float; CS:GO's
+			// cascaded shadow shaders use texldl on one, so widen it like the texld case.
+			if ( bIsShadowSampler )
+				PrintToBufWithIndents( *m_pBufALUCode, "%s = vec4(%s( %s, %s, %s ));\n", pDestReg, "textureLod", pSrc1Reg, sCoordVar.String(), szLOD );
+			else
+				PrintToBufWithIndents( *m_pBufALUCode, "%s = %s( %s, %s, %s );\n", pDestReg, "textureLod", pSrc1Reg, sCoordVar.String(), szLOD );
 		}
 		else if ( bIsShadowSampler )
 		{
@@ -3018,13 +3023,22 @@ void D3DToGL::WriteGLSLOutputVariableAssignments()
 
 			if ( dwUsage == D3DDECLUSAGE_COLOR )
 			{
-				if( !m_bFrontColor )
+				if ( dwUsageIndex )
+				{
+					// secondary color: GLES has no built-in, declare our own varying
+					if( !m_bFrontSecondaryColor )
+					{
+						StrcatToHeaderCode("varying highp vec4 _gl_FrontSecondaryColor;\n");
+						m_bFrontSecondaryColor = true;
+					}
+				}
+				else if( !m_bFrontColor )
 				{
 					StrcatToHeaderCode("varying highp vec4 _gl_FrontColor;\n");
 					m_bFrontColor = true;
 				}
 
-				PrintToBufWithIndents( *m_pBufALUCode, "%s = oTempT%d;\n", dwUsageIndex ? "gl_FrontSecondaryColor" : "_gl_FrontColor", i );
+				PrintToBufWithIndents( *m_pBufALUCode, "%s = oTempT%d;\n", dwUsageIndex ? "_gl_FrontSecondaryColor" : "_gl_FrontColor", i );
 			}
 			else if ( dwUsage == D3DDECLUSAGE_TEXCOORD )
 			{

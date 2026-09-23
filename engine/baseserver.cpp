@@ -900,12 +900,25 @@ bool CBaseServer::ProcessConnectionlessPacket(netpacket_t * packet)
 	// will make that function receive the original unprocessed message.
 	// [ this differs from client-side connectionless packet processing ]
 
-	if ( !CheckConnectionLessRateLimits( packet->from ) )
+	bool bRateOk = CheckConnectionLessRateLimits( packet->from );
+#ifdef IOS
+	static int s_nLogged = 0;
+	if ( s_nLogged < 40 )
+	{
+		s_nLogged++;
+		bf_read peek = packet->message;
+		printf( "[net] server got connectionless '%c' (0x%02x) from %s, rate ok %d, active %d, should run %d\n",
+				(char)peek.PeekUBitLong( 8 ) >= ' ' ? (char)peek.PeekUBitLong( 8 ) : '?', (unsigned)peek.PeekUBitLong( 8 ),
+				ns_address_render( packet->from ).String(), bRateOk ? 1 : 0, IsActive() ? 1 : 0, Host_ShouldRun() ? 1 : 0 );
+		fflush( stdout );
+	}
+#endif
+	if ( !bRateOk )
 	{
 		return false;
 	}
 
-	bf_read msg = packet->message;	// handy shortcut 
+	bf_read msg = packet->message;	// handy shortcut
 
 	char c = msg.ReadChar();
 

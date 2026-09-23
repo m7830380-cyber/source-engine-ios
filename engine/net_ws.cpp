@@ -852,6 +852,15 @@ void NET_SendLoopPacket (int sock, int length, const unsigned char *data )
 	Q_memcpy (loop->data, data, length);
 	loop->datalen = length;
 
+#ifdef IOS
+	static int s_nSent[2] = {};
+	if ( s_nSent[sock]++ < 10 )
+	{
+		printf( "[net] loop send from %s, %d bytes, first byte 0x%02x\n", sock == NS_CLIENT ? "client" : "server", length, length > 4 ? data[4] : 0 );
+		fflush( stdout );
+	}
+#endif
+
 	if ( sock == NS_SERVER )
 	{
 		s_LoopBacks[NS_CLIENT].PushItem( loop );
@@ -1346,6 +1355,14 @@ bool NET_GetLoopPacket ( netpacket_t * packet )
 	{
 		return false;
 	}
+#ifdef IOS
+	static int s_nGot[2] = {};
+	if ( s_nGot[packet->source]++ < 10 )
+	{
+		printf( "[net] loop receive on %s, %d bytes\n", packet->source == NS_CLIENT ? "client" : "server", loop->datalen );
+		fflush( stdout );
+	}
+#endif
 
 	if (loop->datalen == 0)
 	{

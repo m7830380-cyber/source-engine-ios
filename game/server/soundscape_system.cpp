@@ -164,7 +164,7 @@ bool CSoundscapeSystem::Init()
 	else
 	{
 #ifdef IOS
-		Warning( "server soundscape manifest: filesystem %p, exists %d\n", (void *)filesystem, filesystem->FileExists( SOUNDSCAPE_MANIFEST_FILE, "GAME" ) );
+		printf( "server soundscape manifest: filesystem %p, exists %d\n", (void *)filesystem, filesystem->FileExists( SOUNDSCAPE_MANIFEST_FILE, "GAME" ) );
 #endif
 		Error( "Unable to load manifest file '%s'\n", SOUNDSCAPE_MANIFEST_FILE );
 	}

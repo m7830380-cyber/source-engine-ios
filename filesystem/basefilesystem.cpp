@@ -4967,7 +4967,7 @@ bool CBaseFileSystem::LoadKeyValues( KeyValues& head, KeyValuesPreloadType_t typ
 	bool bret = true;
 
 #ifdef IOS
-	Msg( "LoadKeyValues this=%p '%s' path '%s'\n", (void *)this, filename, pPathID ? pPathID : "NULL" );
+	printf( "LoadKeyValues this=%p '%s' path '%s'\n", (void *)this, filename, pPathID ? pPathID : "NULL" );
 #endif
 #ifndef DEDICATED
 	char tempPathID[MAX_PATH];
@@ -4985,7 +4985,7 @@ bool CBaseFileSystem::LoadKeyValues( KeyValues& head, KeyValuesPreloadType_t typ
 		int nRead = hFile ? Read( head4, MIN( nSize, 4 ), hFile ) : -1;
 		if ( hFile )
 			Close( hFile );
-		Warning( "LoadKeyValues '%s' (path '%s', type %d) failed: open %s, size %d, read %d, whitelist %d\n",
+		printf( "LoadKeyValues '%s' (path '%s', type %d) failed: open %s, size %d, read %d, whitelist %d\n",
 				 filename, pPathID ? pPathID : "NULL", (int)type, hFile ? "ok" : "FAILED", nSize, nRead,
 				 m_WhitelistFileTrackingEnabled );
 	}

@@ -15,6 +15,9 @@
 #include "engine/ivdebugoverlay.h"
 #include "tier0/icommandline.h"
 #include "strtools.h"
+#ifdef IOS
+#include <dlfcn.h>
+#endif
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
@@ -468,8 +471,18 @@ bool C_SoundscapeSystem::Init()
 		KeyValues *pDirect = new KeyValues( SOUNDSCAPE_MANIFEST_FILE );
 		bool bDirect = pDirect->LoadFromFile( filesystem, SOUNDSCAPE_MANIFEST_FILE, "GAME" );
 		pDirect->deleteThis();
-		Warning( "soundscape manifest: filesystem %p, exists %d, direct KeyValues load %d\n",
+		printf( "soundscape manifest: filesystem %p, exists %d, direct KeyValues load %d\n",
 				 (void *)filesystem, filesystem->FileExists( SOUNDSCAPE_MANIFEST_FILE, "GAME" ), bDirect );
+		// Which function does the LoadKeyValues vtable slot actually hold?
+		void **pVTable = *(void ***)filesystem;
+		for ( int iSlot = 78; iSlot <= 81; iSlot++ )
+		{
+			Dl_info info = {};
+			dladdr( pVTable[iSlot], &info );
+			printf( "  vtable[%d] = %p %s (%s)\n", iSlot, pVTable[iSlot],
+					info.dli_sname ? info.dli_sname : "?", info.dli_fname ? info.dli_fname : "?" );
+		}
+		fflush( stdout );
 #endif
 		Error( "Unable to load manifest file '%s'\n", SOUNDSCAPE_MANIFEST_FILE );
 	}

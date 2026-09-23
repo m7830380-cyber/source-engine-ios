@@ -13,6 +13,9 @@
 
 #include <sys/time.h>
 #include <unistd.h>
+#ifdef IOS
+#include <execinfo.h>
+#endif
 #include <signal.h>
 
 #ifdef OSX
@@ -384,6 +387,16 @@ bool Plat_IsInDebugSession()
 
 void Plat_ExitProcess( int nCode )
 {
+#ifdef IOS
+	{
+		// _exit() leaves no crash report on iOS; say who asked for it
+		void *frames[48];
+		int n = backtrace( frames, 48 );
+		printf( "\n[exit] Plat_ExitProcess( %d ), stack:\n", nCode );
+		fflush( stdout );
+		backtrace_symbols_fd( frames, n, STDOUT_FILENO );
+	}
+#endif
 	fflush( stdout );
 	if ( nCode != 0 )
 	{

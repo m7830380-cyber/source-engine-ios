@@ -864,9 +864,42 @@ static void *IOS_WatchdogThread( void *arg )
 	return NULL;
 }
 
+// Silent deaths leave neither a crash report nor a jetsam event: exit()
+// somewhere, or a signal whose default action terminates quietly. Log them.
+static void IOS_LogStack( const char *why )
+{
+	void *frames[64];
+	int n = backtrace( frames, 64 );
+	write( STDOUT_FILENO, why, strlen( why ) );
+	backtrace_symbols_fd( frames, n, STDOUT_FILENO );
+}
+
+static void IOS_AtExit( void )
+{
+	IOS_LogStack( "\n[exit] process is exiting via exit(), stack:\n" );
+}
+
+static void IOS_FatalSignal( int sig )
+{
+	char msg[96];
+	snprintf( msg, sizeof( msg ), "\n[signal] terminating signal %d received, stack:\n", sig );
+	IOS_LogStack( msg );
+	signal( sig, SIG_DFL );
+	raise( sig );
+}
+
 void IOS_StartWatchdog( void )
 {
 	g_mainThread = pthread_self();
+
+	// Writing to a socket whose peer went away raises SIGPIPE, which kills
+	// the process without a crash report. Get EPIPE from the call instead.
+	signal( SIGPIPE, SIG_IGN );
+
+	atexit( IOS_AtExit );
+	const int quietSignals[] = { SIGTERM, SIGHUP, SIGINT, SIGQUIT, SIGUSR1, SIGALRM, SIGVTALRM, SIGPROF, SIGXCPU, SIGXFSZ, SIGSYS };
+	for( size_t i = 0; i < sizeof( quietSignals ) / sizeof( quietSignals[0] ); i++ )
+		signal( quietSignals[i], IOS_FatalSignal );
 
 	struct sigaction sa;
 	memset( &sa, 0, sizeof( sa ) );

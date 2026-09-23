@@ -184,6 +184,12 @@ S_API HSteamUser S_CALLTYPE SteamGameServer_GetHSteamUser()
 	return 0;
 }
 
+// not in the Steamworks headers; the engine declares it (host.cpp)
+S_API int SteamGameServer_GetIPCCallCount()
+{
+	return 0;
+}
+
 // The headers call accessors on the returned context, so it has to be real
 // (zeroed) storage: CSteamGameServerAPIContext then hands out NULL interfaces.
 S_API CSteamGameServerAPIContext * S_CALLTYPE SteamInternal_GlobalContextGameServerPtr( uint32 size )

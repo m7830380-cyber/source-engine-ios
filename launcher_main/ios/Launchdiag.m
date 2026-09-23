@@ -33,6 +33,9 @@
 #include <errno.h>
 #include <unistd.h>
 #include <sys/resource.h>
+#include <pthread.h>
+#include <signal.h>
+#include <execinfo.h>
 #include <fcntl.h>
 #include <dlfcn.h>
 #include <sys/stat.h>
@@ -831,4 +834,51 @@ void IOS_RaiseFileLimit( void )
 	IOS_Log( "file descriptor limit: %llu -> %llu (max %llu)",
 			 (unsigned long long)old, (unsigned long long)rl.rlim_cur,
 			 (unsigned long long)rl.rlim_max );
+}
+
+// Hang finder: a background thread periodically interrupts the main thread
+// and has it write its own call stack into the launch log (stdout is
+// redirected there). Only async-signal-safe calls are used in the handler.
+static pthread_t g_mainThread;
+
+static void IOS_WatchdogSignal( int sig )
+{
+	(void)sig;
+	void *frames[64];
+	int n = backtrace( frames, 64 );
+	static const char header[] = "\n[watchdog] main thread stack:\n";
+	write( STDOUT_FILENO, header, sizeof( header ) - 1 );
+	backtrace_symbols_fd( frames, n, STDOUT_FILENO );
+}
+
+static void *IOS_WatchdogThread( void *arg )
+{
+	(void)arg;
+	// first dump after the normal startup work, then every 20 seconds
+	sleep( 40 );
+	for( int i = 0; i < 30; i++ )
+	{
+		pthread_kill( g_mainThread, SIGUSR2 );
+		sleep( 20 );
+	}
+	return NULL;
+}
+
+void IOS_StartWatchdog( void )
+{
+	g_mainThread = pthread_self();
+
+	struct sigaction sa;
+	memset( &sa, 0, sizeof( sa ) );
+	sa.sa_handler = IOS_WatchdogSignal;
+	sa.sa_flags = SA_RESTART;
+	sigemptyset( &sa.sa_mask );
+	sigaction( SIGUSR2, &sa, NULL );
+
+	pthread_t t;
+	if( pthread_create( &t, NULL, IOS_WatchdogThread, NULL ) == 0 )
+	{
+		pthread_detach( t );
+		IOS_Log( "watchdog: main thread stack dumps every 20s after 40s" );
+	}
 }

@@ -679,6 +679,7 @@ int main( int argc, char *argv[] )
 	IOS_LogInit();
 	IOS_LogDeviceInfo();
 	IOS_RaiseFileLimit();
+	IOS_StartWatchdog();
 
 	IOS_LaunchDialog();
 

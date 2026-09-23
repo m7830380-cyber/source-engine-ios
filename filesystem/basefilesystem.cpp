@@ -4973,6 +4973,20 @@ bool CBaseFileSystem::LoadKeyValues( KeyValues& head, KeyValuesPreloadType_t typ
 #else
 	bret = head.LoadFromFile( this, filename, pPathID );
 #endif
+#ifdef IOS
+	if ( !bret )
+	{
+		FileHandle_t hFile = Open( filename, "rb", pPathID );
+		int nSize = hFile ? Size( hFile ) : -1;
+		char head4[5] = {};
+		int nRead = hFile ? Read( head4, MIN( nSize, 4 ), hFile ) : -1;
+		if ( hFile )
+			Close( hFile );
+		Warning( "LoadKeyValues '%s' (path '%s', type %d) failed: open %s, size %d, read %d, whitelist %d\n",
+				 filename, pPathID ? pPathID : "NULL", (int)type, hFile ? "ok" : "FAILED", nSize, nRead,
+				 m_WhitelistFileTrackingEnabled );
+	}
+#endif
 	return bret;
 }
 

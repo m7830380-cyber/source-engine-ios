@@ -748,7 +748,17 @@ bool KeyValues::LoadFromFile( IBaseFileSystem *filesystem, const char *resourceN
 		buffer[fileSize] = 0; // null terminate file as EOF
 		buffer[fileSize+1] = 0; // double NULL terminating in case this is a unicode file
 		bRetOK = LoadFromBuffer( resourceName, buffer, filesystem, pathID, pfnEvaluateSymbolProc );
+#ifdef IOS
+		if ( !bRetOK )
+			Warning( "KeyValues::LoadFromFile '%s': parse failed (%d bytes)\n", resourceName, fileSize );
+#endif
 	}
+#ifdef IOS
+	else
+	{
+		Warning( "KeyValues::LoadFromFile '%s': read failed (%d bytes, buffer %u)\n", resourceName, fileSize, bufSize );
+	}
+#endif
 
 	((IFileSystem *)filesystem)->FreeOptimalReadBuffer( buffer );
 

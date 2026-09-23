@@ -4787,7 +4787,7 @@ long CBaseFileSystem::FastFileTime( const CSearchPath *path, const char *pFileNa
 		{
 			return buf.st_mtime;
 		}
-#ifdef LINUX
+#if defined( LINUX ) || defined( IOS )
 		// Support Linux and its case sensitive file system
 		char realName[MAX_PATH];
 		const char *pRealName = findFileInDirCaseInsensitive( tempFileName, realName );
@@ -4878,7 +4878,7 @@ int CBaseFileSystem::FastFindFile( const CSearchPath *path, const char *pFileNam
 		return buf.st_size;
 	}
 
-#ifdef LINUX
+#if defined( LINUX ) || defined( IOS )
 	// Support Linux and its case sensitive file system
 	char realName[MAX_PATH];
 	if ( findFileInDirCaseInsensitive( tempFileName, realName ) && FS_stat( realName, &buf ) != -1 )

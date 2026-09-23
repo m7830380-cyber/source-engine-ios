@@ -28,6 +28,7 @@ const char *IOS_GetLogPath( void );
 void IOS_LogDeviceInfo( void );
 void IOS_LogBundleContents( void );
 void IOS_ProbeDylibs( void );
+void IOS_LogGameContent( void );
 void IOS_ShowOnScreenLog( void );
 
 // Reports the failure on screen and spins the runloop forever. Never returns.

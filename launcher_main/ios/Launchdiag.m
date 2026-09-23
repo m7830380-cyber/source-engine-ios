@@ -361,6 +361,51 @@ static int IOS_IsEngineLoadedModule( NSString *name )
 	return [skip containsObject:name];
 }
 
+void IOS_LogGameContent( void )
+{
+	@autoreleasepool {
+		NSFileManager *fm = [NSFileManager defaultManager];
+		NSString *game = [[NSString stringWithUTF8String:IOS_GetDocsDir()]
+						  stringByAppendingPathComponent:@"csgo"];
+		BOOL isDir = NO;
+		if( ![fm fileExistsAtPath:game isDirectory:&isDir] || !isDir )
+		{
+			IOS_Log( "game content: Documents/csgo MISSING -- copy the csgo folder from the CS:GO depots into the app's Documents" );
+			return;
+		}
+
+		IOS_Log( "--- game content (Documents/csgo) ---" );
+		for( NSString *name in @[ @"gameinfo.txt", @"gamemodes.txt", @"pak01_dir.vpk" ] )
+		{
+			NSDictionary *a = [fm attributesOfItemAtPath:[game stringByAppendingPathComponent:name] error:nil];
+			if( a )
+				IOS_Log( "  %-16s %10llu KB", [name UTF8String], [a fileSize] / 1024 );
+			else
+				IOS_Log( "  %-16s MISSING", [name UTF8String] );
+		}
+
+		NSArray *items = [fm contentsOfDirectoryAtPath:game error:nil];
+		unsigned long nChunks = 0;
+		unsigned long long nChunkBytes = 0;
+		NSMutableArray *dirs = [NSMutableArray array];
+		for( NSString *name in items )
+		{
+			NSString *full = [game stringByAppendingPathComponent:name];
+			if( [name hasPrefix:@"pak01_"] && [name hasSuffix:@".vpk"] && ![name isEqualToString:@"pak01_dir.vpk"] )
+			{
+				nChunks++;
+				nChunkBytes += [[fm attributesOfItemAtPath:full error:nil] fileSize];
+			}
+			else if( [fm fileExistsAtPath:full isDirectory:&isDir] && isDir )
+				[dirs addObject:name];
+		}
+		IOS_Log( "  pak01_###.vpk    %lu files, %llu MB", nChunks, nChunkBytes / ( 1024 * 1024 ) );
+		IOS_Log( "  dirs: %s", [[[dirs sortedArrayUsingSelector:@selector(compare:)]
+								  componentsJoinedByString:@" "] UTF8String] );
+		IOS_Log( "--- end game content ---" );
+	}
+}
+
 void IOS_ProbeDylibs( void )
 {
 	@autoreleasepool {

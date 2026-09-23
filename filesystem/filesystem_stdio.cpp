@@ -975,7 +975,7 @@ int CFileSystem_Stdio::FS_chmod( const char *path, int pmode )
 		return -1;
 
 	int rt = _chmod( path, pmode );
-#if defined( LINUX )
+#if defined( LINUX ) || defined( IOS )
 	if (rt==-1)
 	{
 		char file[MAX_PATH];
@@ -1027,7 +1027,7 @@ int CFileSystem_Stdio::FS_stat( const char *path, struct _stat *buf )
 #else
     rt = _stat( path, buf );
 #endif
-#if defined(LINUX)
+#if defined( LINUX ) || defined( IOS )
 	if ( rt == -1 )
 	{
 		char file[MAX_PATH];
@@ -1171,7 +1171,7 @@ CStdioFile *CStdioFile::FS_fopen( const char *filename, const char *options, int
 		}
 	}
 
-#if defined( LINUX )
+#if defined( LINUX ) || defined( IOS )
 	if(!pFile && !strchr(options,'w') && !strchr(options,'+') ) // try opening the lower cased version
 	{
 		char file[MAX_PATH];

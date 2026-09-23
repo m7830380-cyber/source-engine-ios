@@ -447,6 +447,17 @@ static bool FileSystem_GetBaseDir( char *baseDir, int baseDirLen )
 		
 	return baseDir[0] != 0;
 #else
+#ifdef IOS
+	// The executable lives in the read-only app bundle; game content is in
+	// Documents, which the iOS launcher exports as VALVE_GAME_PATH.
+	const char *pGamePath = getenv( "VALVE_GAME_PATH" );
+	if ( pGamePath && pGamePath[0] )
+	{
+		V_strncpy( baseDir, pGamePath, baseDirLen );
+		V_StripTrailingSlash( baseDir );
+		return true;
+	}
+#endif
 	if ( FileSystem_GetExecutableDir( baseDir, baseDirLen ) )
 	{
 		Q_StripFilename( baseDir );
@@ -877,7 +888,7 @@ FSReturnCode_t FileSystem_LoadSearchPaths( CFSSearchPathsInit &initInfo )
 		initInfo.m_pFileSystem->AddSearchPath( initInfo.m_ModPath, "DEFAULT_WRITE_PATH", PATH_ADD_TO_TAIL );
 	}
 
-#ifdef _DEBUG	
+#if defined( _DEBUG ) || defined( IOS )
 	initInfo.m_pFileSystem->PrintSearchPaths();
 #endif
 

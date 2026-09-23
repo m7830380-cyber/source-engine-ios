@@ -694,6 +694,7 @@ int main( int argc, char *argv[] )
 	// graph, so a single unresolved symbol anywhere returns one opaque NULL.
 	// Probing individually names the module that is really broken.
 	IOS_LogBundleContents();
+	IOS_LogGameContent();
 
 	// The probe is diagnostic scaffolding: it dlopens modules out of the order
 	// the engine would. Useful when something fails to load, needless noise

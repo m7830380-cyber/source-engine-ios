@@ -36,6 +36,8 @@
 #include <pthread.h>
 #include <signal.h>
 #include <execinfo.h>
+#include <mach/mach.h>
+#include <os/proc.h>
 #include <fcntl.h>
 #include <dlfcn.h>
 #include <sys/stat.h>
@@ -851,15 +853,37 @@ static void IOS_WatchdogSignal( int sig )
 	backtrace_symbols_fd( frames, n, STDOUT_FILENO );
 }
 
+// Memory as iOS sees it: phys_footprint is what jetsam compares against the
+// per-app limit, os_proc_available_memory() is the headroom left before a
+// silent SIGKILL.
+static void IOS_LogMemory( int seconds )
+{
+	task_vm_info_data_t info;
+	mach_msg_type_number_t count = TASK_VM_INFO_COUNT;
+	unsigned long long footprint = 0;
+	if( task_info( mach_task_self(), TASK_VM_INFO, (task_info_t)&info, &count ) == KERN_SUCCESS )
+		footprint = info.phys_footprint;
+
+	unsigned long long avail = 0;
+	if( __builtin_available( iOS 13.0, * ) )
+		avail = os_proc_available_memory();
+
+	char msg[160];
+	int len = snprintf( msg, sizeof( msg ), "[memory] t=%ds footprint %llu MB, available %llu MB\n",
+						seconds, footprint >> 20, avail >> 20 );
+	write( STDOUT_FILENO, msg, len );
+}
+
 static void *IOS_WatchdogThread( void *arg )
 {
 	(void)arg;
-	// first dump after the normal startup work, then every 20 seconds
-	sleep( 40 );
-	for( int i = 0; i < 30; i++ )
+	// memory every 5 seconds; main thread stack after 40s, then every 20s
+	for( int t = 5; t <= 900; t += 5 )
 	{
-		pthread_kill( g_mainThread, SIGUSR2 );
-		sleep( 20 );
+		sleep( 5 );
+		IOS_LogMemory( t );
+		if( t >= 40 && ( t - 40 ) % 20 == 0 )
+			pthread_kill( g_mainThread, SIGUSR2 );
 	}
 	return NULL;
 }

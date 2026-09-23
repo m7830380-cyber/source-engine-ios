@@ -1032,6 +1032,31 @@ bool CSDLMgr::CreateHiddenGameWindow( const char *pTitle, int width, int height 
 	}
 #endif // DBGFLAG_ASSERT
 
+#if defined( IOS )
+	// ANGLE lists S3TC/DXT as *requestable*: supported by the Metal device but
+	// absent from GL_EXTENSIONS until the app asks for it. Without this togl
+	// sees no DXT support and decompresses every texture to RGBA8, which runs
+	// CS:GO maps into the iOS memory limit. Request before togl reads the
+	// extension string.
+	{
+		bool okay = true;
+		typedef void ( *PFN_glRequestExtensionANGLE )( const char * );
+		PFN_glRequestExtensionANGLE pRequest = (PFN_glRequestExtensionANGLE)VoidFnPtrLookup_GlMgr( "glRequestExtensionANGLE", okay, false, NULL );
+		if ( pRequest )
+		{
+			static const char *s_pszExtensions[] = {
+				"GL_EXT_texture_compression_dxt1",
+				"GL_ANGLE_texture_compression_dxt3",
+				"GL_ANGLE_texture_compression_dxt5",
+				"GL_EXT_texture_compression_s3tc",
+			};
+			for ( int i = 0; i < ARRAYSIZE( s_pszExtensions ); i++ )
+				pRequest( s_pszExtensions[i] );
+		}
+		printf( "glRequestExtensionANGLE %s\n", pRequest ? "found, DXT extensions requested" : "NOT available" );
+	}
+#endif
+
 	gGL = GetOpenGLEntryPoints(VoidFnPtrLookup_GlMgr);
 
 	#if defined( IOS ) && !defined( ANGLE )

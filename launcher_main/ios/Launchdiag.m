@@ -342,6 +342,25 @@ void IOS_LogBundleContents( void )
 // Probe each shipped dylib individually. dlopen(launcher) pulls the whole
 // dependency graph with RTLD_NOW, so one bad symbol anywhere returns NULL with
 // a single opaque message. Loading them one at a time names the real culprit.
+//
+// IMPORTANT: dlopen always runs a module's C++ static initializers. The game
+// modules (client/server) register their vscript class descriptions from
+// static ScriptClassDesc_t objects, which allocate through g_pMemAlloc and
+// expect the engine's tier0/vscript state to already exist. Loading them here,
+// standalone and out of order, traps inside InitC_BaseEntityScriptDesc().
+//
+// That is a probe artifact, not a packaging fault: the engine itself loads
+// these later, after tier0 is up. So they are skipped by default. Pass
+// -probeall on the command line to force them (expect the trap).
+static int IOS_IsEngineLoadedModule( NSString *name )
+{
+	// Modules the engine dlopens itself once tier0/vscript are initialized.
+	static NSArray *skip = nil;
+	if( !skip )
+		skip = @[ @"client.dylib", @"server.dylib" ];
+	return [skip containsObject:name];
+}
+
 void IOS_ProbeDylibs( void )
 {
 	@autoreleasepool {
@@ -350,6 +369,11 @@ void IOS_ProbeDylibs( void )
 						  contentsOfDirectoryAtPath:root error:nil];
 		if( !items )
 			return;
+
+		int bProbeAll = 0;
+		for( int i = 0; i < szArgc; i++ )
+			if( szArgv[i] && strcmp( szArgv[i], "-probeall" ) == 0 )
+				bProbeAll = 1;
 
 		// Load order roughly follows the engine's dependency chain so the
 		// first failure is the most informative one.
@@ -360,7 +384,6 @@ void IOS_ProbeDylibs( void )
 								@"shaderapidx9.dylib", @"inputsystem.dylib",
 								@"soundsystem.dylib", @"vgui2.dylib",
 								@"vguimatsurface.dylib", @"engine.dylib",
-								@"client.dylib", @"server.dylib",
 								@"launcher.dylib" ];
 
 		NSMutableArray *order = [NSMutableArray array];
@@ -371,12 +394,22 @@ void IOS_ProbeDylibs( void )
 			if( [p hasSuffix:@".dylib"] && ![order containsObject:p] )
 				[order addObject:p];
 
-		IOS_Log( "--- dlopen probe (%lu dylibs) ---", (unsigned long)[order count] );
+		IOS_Log( "--- dlopen probe (%lu dylibs, probeall=%d) ---",
+				 (unsigned long)[order count], bProbeAll );
 
-		int nOk = 0, nFail = 0;
+		int nOk = 0, nFail = 0, nSkip = 0;
 		for( NSString *name in order )
 		{
+			if( !bProbeAll && IOS_IsEngineLoadedModule( name ) )
+			{
+				IOS_Log( "  SKIP  %s (engine loads this after tier0 init)",
+						 [name UTF8String] );
+				nSkip++;
+				continue;
+			}
+
 			NSString *full = [root stringByAppendingPathComponent:name];
+			IOS_Log( "  ...   %s", [name UTF8String] );   // breadcrumb: survives a trap
 			dlerror(); // clear
 			void *h = dlopen( [full fileSystemRepresentation], RTLD_NOW | RTLD_LOCAL );
 			if( h )
@@ -392,7 +425,8 @@ void IOS_ProbeDylibs( void )
 				nFail++;
 			}
 		}
-		IOS_Log( "--- probe done: %d ok, %d failed ---", nOk, nFail );
+		IOS_Log( "--- probe done: %d ok, %d failed, %d skipped ---",
+				 nOk, nFail, nSkip );
 	}
 }
 
@@ -513,10 +547,11 @@ void IOS_PrepareView( void )
 	g_window = [[UIWindow alloc] initWithFrame:[[UIScreen mainScreen] bounds]];
 	g_controller = [[UIViewController alloc] init];
 
-	// Dark background instead of the old flat grey: if the engine never draws,
-	// "black with a log overlay" reads as a diagnostic state rather than a
-	// mystery grey screen.
-	[[g_controller view] setBackgroundColor:[UIColor blackColor]];
+	// Grey, as before: this is the pre-engine placeholder. Once the engine
+	// takes over it draws into its own layer. Keeping the original colour so
+	// "grey" still means "engine has not rendered yet" and is comparable with
+	// earlier builds.
+	[[g_controller view] setBackgroundColor:[UIColor grayColor]];
 	[g_window setRootViewController:g_controller];
 	[g_window makeKeyAndVisible];
 

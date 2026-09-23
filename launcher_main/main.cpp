@@ -694,7 +694,22 @@ int main( int argc, char *argv[] )
 	// graph, so a single unresolved symbol anywhere returns one opaque NULL.
 	// Probing individually names the module that is really broken.
 	IOS_LogBundleContents();
-	IOS_ProbeDylibs();
+
+	// The probe is diagnostic scaffolding: it dlopens modules out of the order
+	// the engine would. Useful when something fails to load, needless noise
+	// (and extra memory) once it does. Off unless -probe/-probeall is given.
+	{
+		bool bProbe = false;
+		for ( int i = 0; i < argc; i++ )
+		{
+			if ( argv[i] && ( !strcmp( argv[i], "-probe" ) || !strcmp( argv[i], "-probeall" ) ) )
+				bProbe = true;
+		}
+		if ( bProbe )
+			IOS_ProbeDylibs();
+		else
+			IOS_Log( "dylib probe skipped (add -probe to enable)" );
+	}
 
 	char szLauncherPath[ MAX_PATH ];
 	snprintf( szLauncherPath, sizeof( szLauncherPath ), "%s/launcher" DLL_EXT_STRING, IOS_GetExecDir() );

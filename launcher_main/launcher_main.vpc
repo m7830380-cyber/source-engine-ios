@@ -166,6 +166,7 @@ $Project "launcher_main"
 		$File	"main.cpp"
 		$File	"SDL_uikit_main.c"	[$IOS]	// runs main() inside SDL's UIKit app
 		$File	"ios/Launchdiag.m"	[$IOS]	// argument dialog, bundle/Documents paths
+		$File	"ios/Launchdiag.h"	[$IOS]	// plain-C bridge (no ObjC types)
 		$File   "errorrenderloop.cpp" [$PS3]
 		$File   "errorrenderloop.h"   [$PS3]
 		$File   "errorshader.vp"      [$PS3]

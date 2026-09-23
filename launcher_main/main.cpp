@@ -43,6 +43,8 @@
 #endif // SN_TARGET_PS3
 #include <limits.h>
 #include <string.h>
+#include <errno.h>
+#include <sys/stat.h>
 #define MAX_PATH PATH_MAX
 #endif
 
@@ -50,12 +52,12 @@
 #include "tier0/basetypes.h"
 
 #ifdef IOS
-// ios/Launchdiag.m: argument dialog and bundle paths; SDL_uikit_main.c runs
-// main() inside SDL's UIKit application (SDL.h renames it to SDL_main)
+// ios/Launchdiag.m: argument dialog, bundle paths and boot diagnostics.
+// SDL_uikit_main.c runs main() inside SDL's UIKit application (SDL.h renames
+// it to SDL_main). Launchdiag.h is deliberately plain C — see the note there
+// about the Valve/ObjC BOOL collision.
 #include "SDL.h"
-extern "C" void IOS_LaunchDialog( void );
-extern "C" const char *IOS_GetExecDir( void );
-extern "C" int IOS_GetArgs( char ***out );
+#include "ios/Launchdiag.h"
 #endif
 
 #if defined( VPCGAME )
@@ -670,11 +672,48 @@ int main( int argc, char *argv[] )
 {
 #if defined( IOS )
 	// every module sits in the .app bundle root
+
+	// Logging first: everything below must be able to report failure. Without
+	// this, printf() on a sideloaded device goes nowhere and any early error
+	// is invisible.
+	IOS_LogInit();
+	IOS_LogDeviceInfo();
+
 	IOS_LaunchDialog();
+
 	argc = IOS_GetArgs( &argv );
+	if ( argc <= 0 || argv == NULL )
+	{
+		IOS_FatalError( "Launch aborted",
+			"IOS_GetArgs() returned no arguments. The launch dialog did not "
+			"produce a command line." );
+	}
+
+	// Inventory what actually shipped in the .app, then load each dylib on its
+	// own. dlopen(launcher) below uses RTLD_NOW and pulls the entire dependency
+	// graph, so a single unresolved symbol anywhere returns one opaque NULL.
+	// Probing individually names the module that is really broken.
+	IOS_LogBundleContents();
+	IOS_ProbeDylibs();
+
 	char szLauncherPath[ MAX_PATH ];
 	snprintf( szLauncherPath, sizeof( szLauncherPath ), "%s/launcher" DLL_EXT_STRING, IOS_GetExecDir() );
 	const char *pLauncherPath = szLauncherPath;
+
+	IOS_Log( "launcher path: %s", pLauncherPath );
+
+	struct stat stLauncher;
+	if ( stat( pLauncherPath, &stLauncher ) != 0 )
+	{
+		char szMsg[ 1024 ];
+		snprintf( szMsg, sizeof( szMsg ),
+			"launcher" DLL_EXT_STRING " is not in the app bundle.\n\n"
+			"Looked for:\n%s\n\nstat: %s\n\n"
+			"The bundle listing above shows what was actually packaged.",
+			pLauncherPath, strerror( errno ) );
+		IOS_FatalError( "Launcher missing", szMsg );
+	}
+	IOS_Log( "launcher size: %lld KB", (long long)( stLauncher.st_size / 1024 ) );
 #elif defined( PLATFORM_64BITS )
 	#ifdef OSX
 		const char *pLauncherPath = "bin/osx64/launcher" DLL_EXT_STRING;
@@ -689,18 +728,47 @@ int main( int argc, char *argv[] )
 	
 	if ( !launcher )
 	{
-		printf( "Failed to load the launcher (%s)\n", dlerror() );
-		while(1);
-		return 0;
+		const char *pszErr = dlerror();
+#if defined( IOS )
+		// Previously: printf() + `while(1);`. On device that is a silent
+		// 100%-CPU spin behind a blank window with no crash report — the
+		// classic "grey screen that never does anything" symptom.
+		char szMsg[ 2048 ];
+		snprintf( szMsg, sizeof( szMsg ),
+			"dlopen(\"%s\") failed.\n\ndlerror:\n%s\n\n"
+			"See the dlopen probe above for the first module that failed to "
+			"load; that is usually the real cause.",
+			pLauncherPath, pszErr ? pszErr : "(none)" );
+		IOS_FatalError( "Cannot load launcher" DLL_EXT_STRING, szMsg );
+#else
+		printf( "Failed to load the launcher (%s)\n", pszErr ? pszErr : "(none)" );
+		return 1;
+#endif
 	}
 	
 	LauncherMain_t main = (LauncherMain_t)dlsym( launcher, "LauncherMain" );
 	if ( !main )
 	{
+		const char *pszErr = dlerror();
+#if defined( IOS )
+		char szMsg[ 1024 ];
+		snprintf( szMsg, sizeof( szMsg ),
+			"launcher" DLL_EXT_STRING " loaded, but the symbol \"LauncherMain\" "
+			"was not found.\n\ndlerror:\n%s\n\n"
+			"The library is present but does not export the entry point — "
+			"likely a C++ name-mangling or visibility problem.",
+			pszErr ? pszErr : "(none)" );
+		IOS_FatalError( "Launcher entry point missing", szMsg );
+#else
 		printf( "Failed to load the launcher entry proc\n" );
-		while(1);
-		return 0;
+		return 1;
+#endif
 	}
+
+#if defined( IOS )
+	IOS_Log( "LauncherMain resolved at %p — handing off to the engine", (void *)main );
+	IOS_Log( "=== end of launcher_main diagnostics ===" );
+#endif
 
 	return main( argc, argv );
 }

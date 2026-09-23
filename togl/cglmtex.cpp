@@ -3504,7 +3504,19 @@ static bool IOS_UseNativeDXT( GLenum internalformat )
 		printf( "togl: native DXT textures %s (renderer '%s', dxt1 %d)\n", s_nNative ? "ON" : "off",
 				pRenderer ? pRenderer : "?", g_bIOSNativeDXTAvailable ? 1 : 0 );
 	}
-	return s_nNative && !isDXTcSRGB( internalformat );
+	if ( !s_nNative )
+		return false;
+	if ( !isDXTcSRGB( internalformat ) )
+		return true;
+
+	static int s_nNativeSRGB = -1;
+	if ( s_nNativeSRGB < 0 )
+	{
+		const char *pExt = (const char *)gGL->glGetString( GL_EXTENSIONS );
+		s_nNativeSRGB = ( pExt && V_strstr( pExt, "GL_EXT_texture_compression_s3tc_srgb" ) ) ? 1 : 0;
+		printf( "togl: native sRGB DXT textures %s\n", s_nNativeSRGB ? "ON" : "off" );
+	}
+	return s_nNativeSRGB != 0;
 }
 #endif
 

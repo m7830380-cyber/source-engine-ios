@@ -1049,9 +1049,16 @@ bool CSDLMgr::CreateHiddenGameWindow( const char *pTitle, int width, int height 
 				"GL_ANGLE_texture_compression_dxt3",
 				"GL_ANGLE_texture_compression_dxt5",
 				"GL_EXT_texture_compression_s3tc",
+				"GL_EXT_texture_compression_s3tc_srgb",
 			};
 			for ( int i = 0; i < ARRAYSIZE( s_pszExtensions ); i++ )
 				pRequest( s_pszExtensions[i] );
+
+			// an extension this device lacks leaves GL_INVALID_OPERATION behind
+			typedef unsigned int ( *PFN_glGetError )( void );
+			PFN_glGetError pGetError = (PFN_glGetError)VoidFnPtrLookup_GlMgr( "glGetError", okay, false, NULL );
+			for ( int i = 0; pGetError && i < 16 && pGetError() != 0; i++ )
+				;
 		}
 		printf( "glRequestExtensionANGLE %s\n", pRequest ? "found, DXT extensions requested" : "NOT available" );
 	}

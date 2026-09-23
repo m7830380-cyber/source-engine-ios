@@ -3485,9 +3485,32 @@ GLvoid *uncompressDXTc(GLsizei width, GLsizei height, GLenum format, GLsizei ima
     return pixels;
 }
 
+#if defined(IOS)
+// Native BC/DXT upload through ANGLE Metal. ANGLE only advertises the DXT
+// extensions when the Metal device supports BC formats. iPhone A-series GPUs
+// handle it; M-series iPads were seen aborting in setPixelFormat, so those keep
+// the CPU decompression path, as do sRGB variants (no s3tc_srgb extension).
+// -dxtdecompress forces the old path everywhere.
+extern bool g_bIOSNativeDXTAvailable; // glentrypoints.cpp
+
+static bool IOS_UseNativeDXT( GLenum internalformat )
+{
+	static int s_nNative = -1;
+	if ( s_nNative < 0 )
+	{
+		const char *pRenderer = (const char *)gGL->glGetString( GL_RENDERER );
+		const bool bIPhoneGPU = pRenderer && V_strstr( pRenderer, "Apple A" ) != NULL;
+		s_nNative = ( bIPhoneGPU && g_bIOSNativeDXTAvailable && !CommandLine()->FindParm( "-dxtdecompress" ) ) ? 1 : 0;
+		printf( "togl: native DXT textures %s (renderer '%s', dxt1 %d)\n", s_nNative ? "ON" : "off",
+				pRenderer ? pRenderer : "?", g_bIOSNativeDXTAvailable ? 1 : 0 );
+	}
+	return s_nNative && !isDXTcSRGB( internalformat );
+}
+#endif
+
 void CompressedTexImage2D(GLenum target, GLint level, GLenum internalformat,
                             GLsizei width, GLsizei height, GLint border,
-                            GLsizei imageSize, const GLvoid *data) 
+                            GLsizei imageSize, const GLvoid *data)
 {
     if (internalformat==GL_RGBA8)
         internalformat = GL_COMPRESSED_RGBA_S3TC_DXT1_EXT;
@@ -3694,7 +3717,12 @@ void CGLMTex::WriteTexels( GLMTexLockDesc *desc, bool writeWholeSlice, bool noDa
 				// iOS: never upload S3TC/DXT through ANGLE Metal. iPhone A-series
 				// can swallow it; M-series iPads abort in setPixelFormat.
 #if defined(IOS)
-				CompressedTexImage2D( target, desc->m_req.m_mip, intformat, slice->m_xSize, slice->m_ySize, 0, slice->m_storageSize, sliceAddress );
+				// ...but decompressing costs 4-8x the memory, which CS:GO maps
+				// cannot afford on a phone. Upload natively where it is safe.
+				if ( IOS_UseNativeDXT( intformat ) )
+					gGL->glCompressedTexImage2D( target, desc->m_req.m_mip, intformat, slice->m_xSize, slice->m_ySize, 0, slice->m_storageSize, sliceAddress );
+				else
+					CompressedTexImage2D( target, desc->m_req.m_mip, intformat, slice->m_xSize, slice->m_ySize, 0, slice->m_storageSize, sliceAddress );
 #else
 				if( gGL->m_bHave_GL_EXT_texture_compression_dxt1 )
 					gGL->glCompressedTexImage2D( target, desc->m_req.m_mip, intformat, slice->m_xSize, slice->m_ySize, 0, slice->m_storageSize, sliceAddress );

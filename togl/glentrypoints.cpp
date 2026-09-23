@@ -349,6 +349,10 @@ extern bool g_bUsePseudoBufs;
 extern bool g_bDisableStaticBuffer;
 
 // The GL context you want entry points for must be current when you hit this constructor!
+#if defined(IOS)
+bool g_bIOSNativeDXTAvailable = false;
+#endif
+
 COpenGLEntryPoints::COpenGLEntryPoints()
 	: m_nTotalGLCycles(0)
 	, m_nTotalGLCalls(0)
@@ -497,6 +501,10 @@ COpenGLEntryPoints::COpenGLEntryPoints()
 	// Uploading those formats calls MTLTextureDescriptor setPixelFormat with an
 	// unsupported compressed format and SIGABRTs in MTLDebugValidateMTLPixelFormat.
 	// Force the CPU decompress path in CGLMTex::WriteTexels instead.
+	// What ANGLE really offers is kept for IOS_UseNativeDXT (cglmtex.cpp),
+	// which re-enables native upload on iPhone GPUs only.
+	g_bIOSNativeDXTAvailable = m_bHave_GL_EXT_texture_compression_dxt1 &&
+		m_bHave_GL_ANGLE_texture_compression_dxt3 && m_bHave_GL_ANGLE_texture_compression_dxt5;
 	m_bHave_GL_EXT_texture_compression_s3tc = false;
 	m_bHave_GL_EXT_texture_compression_dxt1 = false;
 	m_bHave_GL_ANGLE_texture_compression_dxt3 = false;

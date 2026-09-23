@@ -1315,6 +1315,22 @@ void CBaseFileSystem::AddVPKFile( char const *pBasename, SearchPathAdd_t addType
 	Q_strlower( nameBuf );
 #endif
 	Q_FixSlashes( nameBuf );
+#ifdef IOS
+	// /var is a symlink to /private/var on iOS and both spellings reach us, so
+	// canonicalize the directory; otherwise every VPK is mounted twice and
+	// holds twice the file descriptors.
+	{
+		char dirBuf[MAX_PATH], realDir[PATH_MAX];
+		V_strncpy( dirBuf, nameBuf, sizeof( dirBuf ) );
+		V_StripFilename( dirBuf );
+		if ( realpath( dirBuf, realDir ) )
+		{
+			char canonical[MAX_PATH];
+			V_ComposeFileName( realDir, V_UnqualifiedFileName( nameBuf ), canonical, sizeof( canonical ) );
+			V_strncpy( nameBuf, canonical, sizeof( nameBuf ) );
+		}
+	}
+#endif
 	// see if we already have this vpk file
 	for( int i = 0; i < m_VPKFiles.Count(); i++ )
 	{
@@ -1360,6 +1376,22 @@ void CBaseFileSystem::RemoveVPKFile( char const *pBasename )
 	Q_MakeAbsolutePath( nameBuf, sizeof( nameBuf ), pBasename );
 	Q_strlower( nameBuf );
 	Q_FixSlashes( nameBuf );
+#ifdef IOS
+	// /var is a symlink to /private/var on iOS and both spellings reach us, so
+	// canonicalize the directory; otherwise every VPK is mounted twice and
+	// holds twice the file descriptors.
+	{
+		char dirBuf[MAX_PATH], realDir[PATH_MAX];
+		V_strncpy( dirBuf, nameBuf, sizeof( dirBuf ) );
+		V_StripFilename( dirBuf );
+		if ( realpath( dirBuf, realDir ) )
+		{
+			char canonical[MAX_PATH];
+			V_ComposeFileName( realDir, V_UnqualifiedFileName( nameBuf ), canonical, sizeof( canonical ) );
+			V_strncpy( nameBuf, canonical, sizeof( nameBuf ) );
+		}
+	}
+#endif
 	// see if we already have this vpk file
 	for( int i = 0; i < m_VPKFiles.Count(); i++ )
 	{

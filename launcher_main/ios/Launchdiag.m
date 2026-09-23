@@ -32,6 +32,7 @@
 #include <limits.h>
 #include <errno.h>
 #include <unistd.h>
+#include <sys/resource.h>
 #include <fcntl.h>
 #include <dlfcn.h>
 #include <sys/stat.h>
@@ -798,4 +799,36 @@ int IOS_GetArgs( char ***out )
 	IOS_Log( "IOS_GetArgs: szArgv is NULL — launch dialog did not run?" );
 	*out = NULL;
 	return 0;
+}
+
+// iOS starts apps with a soft limit of 256 file descriptors. The filesystem
+// keeps every VPK chunk it has read from open (pak01 alone has 80+ chunks),
+// and once the limit is reached every fopen() fails, so loose files such as
+// scripts/soundscapes_manifest.txt "exist" (stat works) but cannot be opened.
+void IOS_RaiseFileLimit( void )
+{
+	struct rlimit rl;
+	if( getrlimit( RLIMIT_NOFILE, &rl ) != 0 )
+	{
+		IOS_Log( "getrlimit(RLIMIT_NOFILE) failed: %s", strerror( errno ) );
+		return;
+	}
+
+	rlim_t old = rl.rlim_cur;
+	rlim_t want = rl.rlim_max;
+	if( want == RLIM_INFINITY || want > OPEN_MAX )
+		want = OPEN_MAX;
+
+	rl.rlim_cur = want;
+	if( setrlimit( RLIMIT_NOFILE, &rl ) != 0 )
+	{
+		// some kernels reject values above kern.maxfilesperproc; fall back
+		rl.rlim_cur = 4096;
+		setrlimit( RLIMIT_NOFILE, &rl );
+	}
+
+	getrlimit( RLIMIT_NOFILE, &rl );
+	IOS_Log( "file descriptor limit: %llu -> %llu (max %llu)",
+			 (unsigned long long)old, (unsigned long long)rl.rlim_cur,
+			 (unsigned long long)rl.rlim_max );
 }

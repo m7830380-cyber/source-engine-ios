@@ -678,6 +678,7 @@ int main( int argc, char *argv[] )
 	// is invisible.
 	IOS_LogInit();
 	IOS_LogDeviceInfo();
+	IOS_RaiseFileLimit();
 
 	IOS_LaunchDialog();
 

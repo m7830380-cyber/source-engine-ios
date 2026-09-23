@@ -1,4 +1,4 @@
-//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
+//========= Copyright ï¿½ 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -163,6 +163,9 @@ bool CSoundscapeSystem::Init()
 	}
 	else
 	{
+#ifdef IOS
+		Warning( "server soundscape manifest: filesystem %p, exists %d\n", (void *)filesystem, filesystem->FileExists( SOUNDSCAPE_MANIFEST_FILE, "GAME" ) );
+#endif
 		Error( "Unable to load manifest file '%s'\n", SOUNDSCAPE_MANIFEST_FILE );
 	}
 	manifest->deleteThis();

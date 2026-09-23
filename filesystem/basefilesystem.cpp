@@ -1325,6 +1325,7 @@ void CBaseFileSystem::AddVPKFile( char const *pBasename, SearchPathAdd_t addType
 	pNew->RegisterFileTracker( (IThreadedFileMD5Processor *)&m_FileTracker2 );
 	if ( pNew->IsEmpty() )
 	{
+		Warning( "VPK: '%s' is empty or unreadable, not mounted\n", pszFName );
 		delete pNew;
 	}
 	else
@@ -2644,6 +2645,14 @@ void CBaseFileSystem::PrintSearchPaths( void )
 		Msg( "%-20s \"%s\" %s%s\n", (const char *)pSearchPath->GetPathIDString(), pSearchPath->GetPathString(), pszType, pszPack );
 	}
 
+#ifdef SUPPORT_VPK
+	Msg( "VPK files: %d\n", m_VPKFiles.Count() );
+	for ( i = 0; i < m_VPKFiles.Count(); i++ )
+	{
+		Msg( "  %s\n", m_VPKFiles[i]->FullPathName() );
+	}
+#endif
+
 	if ( IsGameConsole() && m_ExcludeFilePaths.Count() )
 	{
 		// dump current list
@@ -2970,6 +2979,10 @@ void CBaseFileSystem::AddSearchPath( const char *pPath, const char *pathID, Sear
 		}
 		else
 		{
+#ifdef IOS
+			if ( i == 1 && errno != ENOENT )
+				Warning( "VPK: fopen '%s' failed: %s\n", newVPK, strerror( errno ) );
+#endif
 			break;
 		}
 	}

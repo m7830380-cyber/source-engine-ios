@@ -338,6 +338,10 @@ CPackedStore::CPackedStore( char const *pFileBasename, char *pszFName, IBaseFile
 			}
 			uint32 nSizeOfHeader = dirFile.Tell();
 			int nSize = dirHeader.m_nDirectorySize;
+#ifdef IOS
+			Msg( "VPK: %s version %d, directory %d bytes, file %d bytes\n", pszFName,
+				 bNewFileFormat ? (int)dirHeader.m_nVersion : 0, nSize, (int)dirFile.Size() );
+#endif
 			m_nDirectoryDataSize = dirHeader.m_nDirectorySize;
 			// Flush out the existing allocation so that we allocate exactly the right size.
 			// This saves about 3 MB of address space currently (5.1 MB was rounded up to 8 MB).
@@ -424,6 +428,12 @@ CPackedStore::CPackedStore( char const *pFileBasename, char *pszFName, IBaseFile
 				dirFile.MustRead( m_Signature.Base(), cubSignature );
 			}
 		}
+#ifdef IOS
+		else
+		{
+			Warning( "VPK: unable to open %s\n", pszFName );
+		}
+#endif
 		Q_MakeAbsolutePath( m_pszFullPathName, sizeof( m_pszFullPathName ), m_pszFileBaseName );
 		V_strcat_safe( m_pszFullPathName, ".vpk" );
 		//Q_strlower( m_pszFullPathName ); // NO!  this screws up linux.

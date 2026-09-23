@@ -891,6 +891,16 @@ FSReturnCode_t FileSystem_LoadSearchPaths( CFSSearchPathsInit &initInfo )
 #if defined( _DEBUG ) || defined( IOS )
 	initInfo.m_pFileSystem->PrintSearchPaths();
 #endif
+#ifdef IOS
+	// Files that only exist inside pak01: tells VPK mounting problems apart
+	// from missing loose content in the launch log.
+	static const char *s_pProbeFiles[] = { "scripts/soundscapes_manifest.txt", "resource/gameevents.res", "gameinfo.txt" };
+	for ( int i = 0; i < ARRAYSIZE( s_pProbeFiles ); i++ )
+	{
+		Msg( "probe %-34s %s\n", s_pProbeFiles[i],
+			 initInfo.m_pFileSystem->FileExists( s_pProbeFiles[i], "GAME" ) ? "found" : "NOT FOUND" );
+	}
+#endif
 
 #if defined( ENABLE_RUNTIME_STACK_TRANSLATION ) && !defined( _GAMECONSOLE )
 	//copy search paths to stack tools so it can grab pdb's from all over. But only on P4 or Steam Beta builds

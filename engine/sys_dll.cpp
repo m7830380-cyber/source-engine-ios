@@ -951,10 +951,15 @@ public:
 			}
 
 #ifndef _CERT
+#ifdef IOS
+			// the in-game console is not visible yet; mirror everything into the launch log
+			printf( "%s", pMessage );
+#else
 			if ( g_bTextMode )
 			{
 				printf( "%s", pMessage );
 			}
+#endif
 #endif
 			Color spewColor = pContext->m_Color;
 			switch ( pContext->m_Severity )

@@ -856,7 +856,7 @@ static void IOS_WatchdogSignal( int sig )
 // Memory as iOS sees it: phys_footprint is what jetsam compares against the
 // per-app limit, os_proc_available_memory() is the headroom left before a
 // silent SIGKILL.
-static void IOS_LogMemory( int seconds )
+static void IOS_LogMemoryHeadroom( int seconds )
 {
 	task_vm_info_data_t info;
 	mach_msg_type_number_t count = TASK_VM_INFO_COUNT;
@@ -881,7 +881,7 @@ static void *IOS_WatchdogThread( void *arg )
 	for( int t = 5; t <= 900; t += 5 )
 	{
 		sleep( 5 );
-		IOS_LogMemory( t );
+		IOS_LogMemoryHeadroom( t );
 		if( t >= 40 && ( t - 40 ) % 20 == 0 )
 			pthread_kill( g_mainThread, SIGUSR2 );
 	}

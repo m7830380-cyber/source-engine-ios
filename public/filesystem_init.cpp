@@ -899,6 +899,27 @@ FSReturnCode_t FileSystem_LoadSearchPaths( CFSSearchPathsInit &initInfo )
 	{
 		Msg( "probe %-34s %s\n", s_pProbeFiles[i],
 			 initInfo.m_pFileSystem->FileExists( s_pProbeFiles[i], "GAME" ) ? "found" : "NOT FOUND" );
+
+		FileHandle_t hFile = initInfo.m_pFileSystem->Open( s_pProbeFiles[i], "rb", "GAME" );
+		if ( !hFile )
+		{
+			Msg( "  open FAILED\n" );
+			continue;
+		}
+		int nSize = initInfo.m_pFileSystem->Size( hFile );
+		char head[33] = {};
+		int nRead = initInfo.m_pFileSystem->Read( head, MIN( nSize, 32 ), hFile );
+		initInfo.m_pFileSystem->Close( hFile );
+		for ( int j = 0; j < nRead; j++ )
+		{
+			if ( (unsigned char)head[j] < ' ' )
+				head[j] = '.';
+		}
+		Msg( "  size %d, read %d: \"%s\"\n", nSize, nRead, head );
+
+		KeyValues *pKV = new KeyValues( s_pProbeFiles[i] );
+		Msg( "  keyvalues load %s\n", pKV->LoadFromFile( initInfo.m_pFileSystem, s_pProbeFiles[i], "GAME" ) ? "ok" : "FAILED" );
+		pKV->deleteThis();
 	}
 #endif
 

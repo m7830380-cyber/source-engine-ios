@@ -1496,6 +1496,12 @@ FileHandleTracker_t & CPackedStore::GetFileHandle( int nFileNumber )
 		{
 			m_FileHandles[nFileHandleIdx].m_nFileNumber = nFileNumber;
 		}
+#ifdef IOS
+		else
+		{
+			Warning( "VPK: unable to open data file %s\n", pszDataFileName );
+		}
+#endif
 #endif
 		return m_FileHandles[nFileHandleIdx];
 	}

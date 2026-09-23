@@ -147,6 +147,11 @@ IOS_DEFINES = [
 	'NO_CEG=1',
 	'TOGLES=1', # togl is the source-engine port's GLES backend
 	'IOS_DEFAULT_GAME="csgo"', # launch dialog default (launcher_main/ios)
+	# A global operator new/delete exported from our dylibs replaces the one
+	# every system framework uses (dyld coalesces weak C++ operators), so
+	# e.g. MetalPerformanceShadersGraph allocated through tier0 before tier0
+	# was initialized and crashed at launch. Same choice as the port.
+	'NO_MEMOVERRIDE_NEW_DELETE=1',
 ]
 
 # VPC include dirs replaced by the build's own copies.

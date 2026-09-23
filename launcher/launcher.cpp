@@ -1171,7 +1171,13 @@ bool GrabSourceMutex()
 	 * OSX
 	 */
 
+#if defined( IOS )
+	// /tmp is outside the app sandbox; iOS gives each app its own TMPDIR
+	const char *pszTmpDir = getenv( "TMPDIR" );
+	V_snprintf( g_lockFilename, sizeof(g_lockFilename), "%s/source_engine_%lu.lock", pszTmpDir ? pszTmpDir : ".", gameCRC );
+#else
 	V_snprintf( g_lockFilename, sizeof(g_lockFilename), "/tmp/source_engine_%lu.lock", gameCRC );
+#endif
 	g_lockfd = open( g_lockFilename, O_CREAT | O_WRONLY | O_EXLOCK | O_NONBLOCK | O_TRUNC, 0777 );
 	if (g_lockfd >= 0)
 	{

@@ -24,8 +24,8 @@ Context.Context.line_just = 55
 # VPC conditionals for the iOS target. iOS rides on CS:GO's OSX64
 # configuration (Darwin, clang, libc++, togl GL backend); IOS marks the places
 # that need UIKit/GLES instead of AppKit/desktop GL. NO_STEAM is deliberately
-# not set: CS:GO's client/server never built without Steam headers, so they
-# link stub_steam, which reports Steam as not running.
+# not set: CS:GO's client/server never built without Steam, so they link
+# stub_steam, an offline Steam client with a single logged-in user.
 VPC_CONDITIONALS = {
 	'POSIX': 1,
 	'OSXALL': 1,
@@ -463,9 +463,11 @@ def build_custom_projects(bld):
 	env.cxxshlib_PATTERN = 'lib%s.dylib'
 	bld(
 		features = 'cxx cxxshlib',
-		source   = ['stub_steam/steam_api.cpp'],
+		# offline Steam client: CS:GO does not start without a logged-in user
+		source   = ['stub_steam/steam_api.cpp', 'stub_steam/steam_offline.cpp'],
 		target   = 'steam_api',
 		name     = 'steam_api',
+		includes = ['stub_steam', 'public', 'public/steam', 'common'],
 		env      = env,
 		install_path = bld.env.LIBDIR,
 	)

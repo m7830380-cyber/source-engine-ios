@@ -105,8 +105,19 @@ inline ScriptFunctionBindingStorageType_t ScriptConvertFreeFuncPtrToVoid( FUNCPT
 		FuncPtrConvertMI convert;
 		convert.fn8.iToc = 0;
 		convert.pFunc = pFunc;
+#if defined( __aarch64__ )
+		// ARM's C++ ABI marks virtual member functions with bit 0 of the
+		// adjustment word (adj = 2 * this_adjust + virtual) instead of bit 0
+		// of the pointer as on x86-64. For a virtual function the pointer is
+		// an even vtable offset, for others a 4-byte aligned code address,
+		// so keep the flag in bit 0 of the stored value. The this adjustment
+		// must be 0 (primary vtable), as on every other platform.
+		if ( !( convert.fn8.iToc >> 1 ) )
+			return (ScriptFunctionBindingStorageType_t)( (uintptr_t)convert.fn8.stype | ( convert.fn8.iToc & 1 ) );
+#else
 		if ( !convert.fn8.iToc )
 			return convert.fn8.stype;
+#endif
 		
 		Assert( 0 );
 		DebuggerBreak();
@@ -150,8 +161,14 @@ inline FUNCPTR_TYPE ScriptConvertFreeFuncPtrFromVoid( ScriptFunctionBindingStora
 
 		FuncPtrConvertMI convert;
 		convert.pFunc = 0;
+#if defined( __aarch64__ )
+		// undo ScriptConvertFreeFuncPtrToVoid: bit 0 is ARM's virtual flag
+		convert.fn8.stype = (ScriptFunctionBindingStorageType_t)( (uintptr_t)p & ~(uintptr_t)1 );
+		convert.fn8.iToc = (intptr_t)( (uintptr_t)p & 1 );
+#else
 		convert.fn8.stype = p;
 		convert.fn8.iToc = 0;
+#endif
 		return convert.pFunc;
 	}
 

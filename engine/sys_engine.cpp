@@ -33,6 +33,10 @@
 #include "tier0/cpumonitoring.h"
 #ifndef DEDICATED
 #include "vgui_baseui_interface.h"
+#ifdef IOS
+#include "client.h"
+#include "screen.h"
+#endif
 #endif
 #ifdef _PS3
 #include <sysutil/sysutil_sysparam.h>
@@ -439,8 +443,9 @@ void CEngine::Frame( void )
 		++s_nFrames;
 		if ( m_flCurrentTime - s_flLastBeat >= 5.0 )
 		{
-			printf( "[heartbeat] frame %d, t=%.1f, active app %d, state %d\n",
-					s_nFrames, m_flCurrentTime, game->IsActiveApp() ? 1 : 0, (int)m_nDLLState );
+			printf( "[heartbeat] frame %d, t=%.1f, active app %d, state %d, client signon %d, server active %d, loading %d\n",
+					s_nFrames, m_flCurrentTime, game->IsActiveApp() ? 1 : 0, (int)m_nDLLState,
+					GetBaseLocalClient().m_nSignonState, sv.IsActive() ? 1 : 0, scr_disabled_for_loading ? 1 : 0 );
 			fflush( stdout );
 			s_flLastBeat = m_flCurrentTime;
 		}

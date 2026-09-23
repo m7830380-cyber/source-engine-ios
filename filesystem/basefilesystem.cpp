@@ -4966,6 +4966,9 @@ bool CBaseFileSystem::LoadKeyValues( KeyValues& head, KeyValuesPreloadType_t typ
 {
 	bool bret = true;
 
+#ifdef IOS
+	Msg( "LoadKeyValues this=%p '%s' path '%s'\n", (void *)this, filename, pPathID ? pPathID : "NULL" );
+#endif
 #ifndef DEDICATED
 	char tempPathID[MAX_PATH];
 	ParsePathID( filename, pPathID, tempPathID );

@@ -897,7 +897,7 @@ FSReturnCode_t FileSystem_LoadSearchPaths( CFSSearchPathsInit &initInfo )
 	static const char *s_pProbeFiles[] = { "scripts/soundscapes_manifest.txt", "resource/gameevents.res", "gameinfo.txt" };
 	for ( int i = 0; i < ARRAYSIZE( s_pProbeFiles ); i++ )
 	{
-		Msg( "probe %-34s %s\n", s_pProbeFiles[i],
+		Msg( "probe [fs %p] %-34s %s\n", (void *)initInfo.m_pFileSystem, s_pProbeFiles[i],
 			 initInfo.m_pFileSystem->FileExists( s_pProbeFiles[i], "GAME" ) ? "found" : "NOT FOUND" );
 
 		FileHandle_t hFile = initInfo.m_pFileSystem->Open( s_pProbeFiles[i], "rb", "GAME" );

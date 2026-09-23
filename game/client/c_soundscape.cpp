@@ -464,6 +464,13 @@ bool C_SoundscapeSystem::Init()
 	}
 	else
 	{
+#ifdef IOS
+		KeyValues *pDirect = new KeyValues( SOUNDSCAPE_MANIFEST_FILE );
+		bool bDirect = pDirect->LoadFromFile( filesystem, SOUNDSCAPE_MANIFEST_FILE, "GAME" );
+		pDirect->deleteThis();
+		Warning( "soundscape manifest: filesystem %p, exists %d, direct KeyValues load %d\n",
+				 (void *)filesystem, filesystem->FileExists( SOUNDSCAPE_MANIFEST_FILE, "GAME" ), bDirect );
+#endif
 		Error( "Unable to load manifest file '%s'\n", SOUNDSCAPE_MANIFEST_FILE );
 	}
 

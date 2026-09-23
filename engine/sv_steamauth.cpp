@@ -284,6 +284,10 @@ steam_no_good:
 		m_eServerMode = eServerModeNoAuthentication;
 		if ( !IsPS3() )
 			sv_lan.SetValue( true );
+		// There is no Steam logon to wait for in LAN mode. Without this the
+		// server drops every A2S_GETCHALLENGE and clients (including the
+		// local listen-server client) can never connect.
+		m_bLogOnResult = true;
 		return;
 	}
 

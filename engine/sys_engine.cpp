@@ -430,6 +430,23 @@ void CEngine::Frame( void )
 	// Get current time
 	m_flCurrentTime	= Sys_FloatTime();
 
+#ifdef IOS
+	// Heartbeat for the launch log: tells a running-but-blank main loop apart
+	// from a hang, and shows whether the game thinks it has focus.
+	{
+		static int s_nFrames = 0;
+		static double s_flLastBeat = 0.0;
+		++s_nFrames;
+		if ( m_flCurrentTime - s_flLastBeat >= 5.0 )
+		{
+			printf( "[heartbeat] frame %d, t=%.1f, active app %d, state %d\n",
+					s_nFrames, m_flCurrentTime, game->IsActiveApp() ? 1 : 0, (int)m_nDLLState );
+			fflush( stdout );
+			s_flLastBeat = m_flCurrentTime;
+		}
+	}
+#endif
+
 	// Watch for data from the CPU frequency monitoring system and print it to the console.
 	const CPUFrequencyResults frequency = GetCPUFrequencyResults();
 	static double s_lastFrequencyTimestamp;

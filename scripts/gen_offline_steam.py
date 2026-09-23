@@ -70,7 +70,7 @@ def default_return( ret ):
 
 def methods( body ):
 	body = strip_comments( body )
-	for m in re.finditer( r'\bvirtual\b(.*?);', body, flags=re.S ):
+	for m in re.finditer( r'\bvirtual\b([^;{}]*);', body, flags=re.S ):
 		decl = ' '.join( m.group( 1 ).split() )
 		if not re.search( r'=\s*0\s*$', decl ):
 			continue

@@ -6,6 +6,9 @@
 //===========================================================================//
 
 #include "basefilesystem.h"
+#ifdef IOS
+#include <fcntl.h>
+#endif
 #include "tier0/vprof.h"
 #include "tier1/characterset.h"
 #include "tier1/utlbuffer.h"
@@ -4988,6 +4991,38 @@ bool CBaseFileSystem::LoadKeyValues( KeyValues& head, KeyValuesPreloadType_t typ
 		printf( "LoadKeyValues '%s' (path '%s', type %d) failed: open %s, size %d, read %d, whitelist %d\n",
 				 filename, pPathID ? pPathID : "NULL", (int)type, hFile ? "ok" : "FAILED", nSize, nRead,
 				 m_WhitelistFileTrackingEnabled );
+
+		// is it still in the VPKs?
+		for ( int i = 0; i < m_VPKFiles.Count(); i++ )
+		{
+			CPackedStoreFileHandle fh = m_VPKFiles[i]->OpenFile( filename );
+			printf( "  vpk[%d] %s: %s (size %d)\n", i, m_VPKFiles[i]->FullPathName(), fh ? "found" : "not found", fh ? fh.m_nFileSize : -1 );
+		}
+
+		// file descriptors in use; iOS limits a process to 256 by default
+		int nOpenFDs = 0;
+		for ( int fd = 0; fd < 4096; fd++ )
+		{
+			if ( fcntl( fd, F_GETFD ) != -1 )
+				nOpenFDs++;
+		}
+		errno = 0;
+		FILE *pProbe = fopen( "/dev/null", "r" );
+		printf( "  open fds %d, fopen(/dev/null) %s (%s)\n", nOpenFDs, pProbe ? "ok" : "FAILED", strerror( errno ) );
+		if ( pProbe )
+			fclose( pProbe );
+
+		// and what does the open path iterate over?
+		CSearchPathsIterator iter( this, &filename, pPathID );
+		for ( CSearchPath *pSearchPath = iter.GetFirst(); pSearchPath != NULL; pSearchPath = iter.GetNext() )
+		{
+			FileHandle_t h = FindFile( pSearchPath, filename, "rb", 0, NULL, false );
+			printf( "  path %s \"%s\": FastFindFile %d, FindFile %s\n", pSearchPath->GetPathIDString(), pSearchPath->GetPathString(),
+					FastFindFile( pSearchPath, filename ), h ? "ok" : "FAILED" );
+			if ( h )
+				Close( h );
+		}
+		fflush( stdout );
 	}
 #endif
 	return bret;

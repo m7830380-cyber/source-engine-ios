@@ -1,4 +1,4 @@
-//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
+//===== Copyright ï¿½ 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: Color correction entity with simple radial falloff
 //
@@ -130,6 +130,26 @@ void C_ColorCorrection::Update( C_BasePlayer *pPlayer, float ccScale )
 	{
 		m_flCurWeightOnClient[nSlot] = Lerp( GetFadeRatio( nSlot ), m_flFadeStartWeight[nSlot], m_bFadingIn[nSlot] ? m_flMaxWeight : 0.0f );
 	}
+
+#if defined( IOS )
+	{
+		// every 2s, log every color_correction entity in the same frame
+		static int s_nLogFrame = -1;
+		static double s_flNextLog = 0.0;
+		if ( Plat_FloatTime() >= s_flNextLog )
+		{
+			s_nLogFrame = gpGlobals->framecount;
+			s_flNextLog = Plat_FloatTime() + 2.0;
+		}
+		if ( gpGlobals->framecount == s_nLogFrame )
+		{
+			printf( "[cc] ent %d '%s' enabled %d clientside %d master %d exclusive %d weight srv %.3f cli %.3f max %.3f falloff %.0f..%.0f dist %.0f fade in %.2f out %.2f\n",
+					entindex(), m_netLookupFilename, bEnabled ? 1 : 0, IsClientSide() ? 1 : 0, m_bMaster ? 1 : 0, m_bExclusive ? 1 : 0,
+					m_flCurWeight, m_flCurWeightOnClient[nSlot], m_flMaxWeight, m_minFalloff, m_maxFalloff,
+					( pPlayer->GetAbsOrigin() - m_vecOrigin ).Length(), m_flFadeInDuration, m_flFadeOutDuration );
+		}
+	}
+#endif
 
 	float flCurWeight = IsClientSide() ? m_flCurWeightOnClient[nSlot] : m_flCurWeight;
 

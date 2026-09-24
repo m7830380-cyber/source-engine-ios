@@ -730,6 +730,9 @@ void CColorCorrectionSystem::LoadLookup( ColorCorrectionHandle_t handle, const c
 	}
 
 	CUtlBuffer colorBuff;
+#if defined( IOS )
+	printf( "[cc] load lookup '%s'\n", pLookupName );
+#endif
 	if ( !g_pFullFileSystem->ReadFile( pLookupName, "GAME", colorBuff ) )
 	{
 		Warning( "CColorCorrectionSystem: Missing '%s'\n", pLookupName );
@@ -964,6 +967,17 @@ void CColorCorrectionSystem::GetCurrentColorCorrection( ShaderColorCorrectionInf
 	pInfo->m_bIsEnabled = m_bEnabled && ( GetNumLookups() > 0 || m_DefaultColorCorrectionWeight != 0.0f );
 	pInfo->m_nLookupCount = GetNumLookups();
 	GetNormalizedWeights( &pInfo->m_flDefaultWeight, pInfo->m_pLookupWeights );
+
+#if defined( IOS )
+	static double s_flNextLog = 0.0;
+	if ( Plat_FloatTime() >= s_flNextLog )
+	{
+		s_flNextLog = Plat_FloatTime() + 2.0;
+		printf( "[cc] shader: enabled %d, %d lookups (list %d), default %.3f, weights %.3f %.3f %.3f %.3f\n",
+				pInfo->m_bIsEnabled ? 1 : 0, pInfo->m_nLookupCount, m_ColorCorrectionList.Count(), pInfo->m_flDefaultWeight,
+				pInfo->m_pLookupWeights[0], pInfo->m_pLookupWeights[1], pInfo->m_pLookupWeights[2], pInfo->m_pLookupWeights[3] );
+	}
+#endif
 }
 
 void CColorCorrectionSystem::OnProceduralRegenComplete( ColorCorrectionHandle_t handle )

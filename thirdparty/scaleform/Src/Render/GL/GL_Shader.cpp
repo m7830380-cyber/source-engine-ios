@@ -277,10 +277,26 @@ GLuint ShaderObject::createShaderOrProgram(ShaderStages stage, const char* shade
 
     GLenum type = getShaderTypeForStage(stage);
 
-    // The GLSL 1.10 tables (used on ANGLE) are valid GLSL ES 1.00 except that
-    // ES fragment shaders must declare a default float precision.
+    // The GLSL 1.10 tables (used on ANGLE) are compiled as GLSL ES 3.00: it has
+    // textureLod and dFdx in fragment shaders, which ES 1.00 lacks (texture2DLod
+    // and derivatives failed there, and with them HAL initialization). The 1.10
+    // syntax maps over with a few defines.
 #if defined(SF_USE_ANGLE)
-    const char* sources[2] = { (type == GL_FRAGMENT_SHADER) ? "precision highp float;" : "", shaderCode };
+    static const char* s_pVertexPrefix =
+        "#version 300 es\n"
+        "#define attribute in\n"
+        "#define varying out\n"
+        "#define texture2D texture\n"
+        "#define texture2DLod textureLod\n";
+    static const char* s_pFragmentPrefix =
+        "#version 300 es\n"
+        "precision highp float;\n"
+        "#define varying in\n"
+        "#define texture2D texture\n"
+        "#define texture2DLod textureLod\n"
+        "out vec4 sf_FragColor;\n"
+        "#define gl_FragColor sf_FragColor\n";
+    const char* sources[2] = { (type == GL_FRAGMENT_SHADER) ? s_pFragmentPrefix : s_pVertexPrefix, shaderCode };
     const GLsizei sourceCount = 2;
 #else
     const char* sources[1] = { shaderCode };

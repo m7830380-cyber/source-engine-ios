@@ -73,7 +73,7 @@ public:
             // Error.
             //throw "JPEGRwDest couldn't write data.";
         SF_DEBUG_WARNING(1, "JPEGRwDest couldn't write data.");
-        return 0;
+        return (boolean)0;
         }
 
         pdest->DMgr.next_output_byte    = pdest->Buffer;

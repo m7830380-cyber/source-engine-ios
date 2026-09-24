@@ -83,7 +83,7 @@ public:
                 // Treat this as a fatal error.
             //throw "empty jpeg source stream.";
             SF_DEBUG_WARNING(1, "empty jpeg source stream.");
-        return 0;
+        return (boolean)0;
             }
             // Warn("jpeg end-of-stream");
 
@@ -445,7 +445,7 @@ int JPEGInputImpl_jpeglib::JpegReadHeader(jpeg_decompress_struct* pcinfo,
     SF_UNUSED(pjerr); // in case if SF_NO_LONGJMP is defined.
     SF_JPEG_SET_JMP(pcinfo, pjerr, 0);
 
-    jpeg_read_header(pcinfo, require_image);
+    jpeg_read_header(pcinfo, (boolean)require_image);
     return 1;
 }
 

@@ -53,6 +53,60 @@ otherwise accompanies this software in either electronic or hard copy form.
     #if defined(SF_USE_ANGLE) && defined(GL_KHR_debug)
       // ANGLE's GLES2 headers only have the KHR-suffixed callback type
       typedef GLDEBUGPROCKHR GLDEBUGPROC;
+      #ifndef GL_DEBUG_OUTPUT_SYNCHRONOUS
+        #define GL_DEBUG_OUTPUT_SYNCHRONOUS GL_DEBUG_OUTPUT_SYNCHRONOUS_KHR
+      #endif
+      #ifndef GL_DEBUG_SOURCE_API
+        #define GL_DEBUG_SOURCE_API GL_DEBUG_SOURCE_API_KHR
+      #endif
+      #ifndef GL_DEBUG_SOURCE_WINDOW_SYSTEM
+        #define GL_DEBUG_SOURCE_WINDOW_SYSTEM GL_DEBUG_SOURCE_WINDOW_SYSTEM_KHR
+      #endif
+      #ifndef GL_DEBUG_SOURCE_SHADER_COMPILER
+        #define GL_DEBUG_SOURCE_SHADER_COMPILER GL_DEBUG_SOURCE_SHADER_COMPILER_KHR
+      #endif
+      #ifndef GL_DEBUG_SOURCE_THIRD_PARTY
+        #define GL_DEBUG_SOURCE_THIRD_PARTY GL_DEBUG_SOURCE_THIRD_PARTY_KHR
+      #endif
+      #ifndef GL_DEBUG_SOURCE_APPLICATION
+        #define GL_DEBUG_SOURCE_APPLICATION GL_DEBUG_SOURCE_APPLICATION_KHR
+      #endif
+      #ifndef GL_DEBUG_SOURCE_OTHER
+        #define GL_DEBUG_SOURCE_OTHER GL_DEBUG_SOURCE_OTHER_KHR
+      #endif
+      #ifndef GL_DEBUG_TYPE_ERROR
+        #define GL_DEBUG_TYPE_ERROR GL_DEBUG_TYPE_ERROR_KHR
+      #endif
+      #ifndef GL_DEBUG_TYPE_DEPRECATED_BEHAVIOR
+        #define GL_DEBUG_TYPE_DEPRECATED_BEHAVIOR GL_DEBUG_TYPE_DEPRECATED_BEHAVIOR_KHR
+      #endif
+      #ifndef GL_DEBUG_TYPE_UNDEFINED_BEHAVIOR
+        #define GL_DEBUG_TYPE_UNDEFINED_BEHAVIOR GL_DEBUG_TYPE_UNDEFINED_BEHAVIOR_KHR
+      #endif
+      #ifndef GL_DEBUG_TYPE_PORTABILITY
+        #define GL_DEBUG_TYPE_PORTABILITY GL_DEBUG_TYPE_PORTABILITY_KHR
+      #endif
+      #ifndef GL_DEBUG_TYPE_PERFORMANCE
+        #define GL_DEBUG_TYPE_PERFORMANCE GL_DEBUG_TYPE_PERFORMANCE_KHR
+      #endif
+      #ifndef GL_DEBUG_TYPE_OTHER
+        #define GL_DEBUG_TYPE_OTHER GL_DEBUG_TYPE_OTHER_KHR
+      #endif
+      #ifndef GL_DEBUG_SEVERITY_HIGH
+        #define GL_DEBUG_SEVERITY_HIGH GL_DEBUG_SEVERITY_HIGH_KHR
+      #endif
+      #ifndef GL_DEBUG_SEVERITY_MEDIUM
+        #define GL_DEBUG_SEVERITY_MEDIUM GL_DEBUG_SEVERITY_MEDIUM_KHR
+      #endif
+      #ifndef GL_DEBUG_SEVERITY_LOW
+        #define GL_DEBUG_SEVERITY_LOW GL_DEBUG_SEVERITY_LOW_KHR
+      #endif
+      #ifndef GL_DEBUG_SEVERITY_NOTIFICATION
+        #define GL_DEBUG_SEVERITY_NOTIFICATION GL_DEBUG_SEVERITY_NOTIFICATION_KHR
+      #endif
+      #ifndef GL_DEBUG_OUTPUT
+        #define GL_DEBUG_OUTPUT GL_DEBUG_OUTPUT_KHR
+      #endif
     #endif
 #elif defined(SF_OS_WIN32)
     #include <windows.h>

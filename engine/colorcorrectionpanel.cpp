@@ -51,13 +51,7 @@ using namespace vgui;
 const int g_nPreviewImageWidth  = 128;
 const int g_nPreviewImageHeight =  96;
 
-#if defined( IOS )
-// Blending map color correction lookups renders inverted colors on the
-// GLES path (stuck on de_dust2/de_mirage); off until that is fixed.
-ConVar mat_colorcorrection( "mat_colorcorrection", "0", FCVAR_CHEAT );
-#else
 ConVar mat_colorcorrection( "mat_colorcorrection", "1", FCVAR_CHEAT );
-#endif
 ConVar mat_colcorrection_disableentities( "mat_colcorrection_disableentities", "0" );
 ConVar mat_colcorrection_editor( "mat_colcorrection_editor", "0" );
 

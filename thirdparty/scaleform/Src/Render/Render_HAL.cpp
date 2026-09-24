@@ -21,6 +21,14 @@ otherwise accompanies this software in either electronic or hard copy form.
 #include "Render/Render_DrawableImage.h"
 #include "Render/Render_DrawableImage_Queue.h"
 
+#if defined(SF_USE_ANGLE)
+#include <stdio.h>
+extern int SF_DebugFrameLog;
+#define SF_FRAMELOG(...) do { if (SF_DebugFrameLog) { printf("[sf-frame] " __VA_ARGS__); printf("\n"); } } while (0)
+#else
+#define SF_FRAMELOG(...) do { } while (0)
+#endif
+
 namespace Scaleform { namespace Render {
 
 MatrixState::MatrixState( HAL* phal ) : UVPOChanged(0), OrientationSet(0), S3DDisplay(StereoCenter), pHAL(phal)
@@ -455,6 +463,7 @@ HALEndDisplayItem   HALEndDisplayItem::Instance;
 
 void HAL::BeginDisplay(Color backgroundColor, const Viewport& vpin)
 {
+    SF_FRAMELOG("begin display");
     if (!checkState(HS_InFrame, __FUNCTION__))
         return;
 
@@ -475,6 +484,7 @@ void HAL::BeginDisplay(Color backgroundColor, const Viewport& vpin)
 
 void HAL::EndDisplay()
 {
+    SF_FRAMELOG("end display");
     // If BeginDisplay called BeginScene, we must call EndDisplay directly (not queued), because
     // otherwise rendering will not be flushed (because EndScene would not be called). This would
     // cause no display if Present were called.
@@ -797,6 +807,7 @@ void HAL::Draw(const RenderQueueItem& item)
 
 void HAL::PushMask_BeginSubmit(MaskPrimitive* prim)
 {
+    SF_FRAMELOG("push mask begin");
     GetEvent(Event_Mask).Begin(__FUNCTION__);
     if (!checkState(HS_InDisplay, __FUNCTION__))
         return;
@@ -877,6 +888,7 @@ void HAL::PushMask_BeginSubmit(MaskPrimitive* prim)
 
 void HAL::EndMaskSubmit()
 {
+    SF_FRAMELOG("end mask submit");
     ScopedRenderEvent GPUEvent(GetEvent(Event_Mask), 0, false);
 
     if (!checkState(HS_InDisplay|HS_DrawingMask, __FUNCTION__))
@@ -903,6 +915,7 @@ void HAL::EndMaskSubmit()
 
 void HAL::PopMask()
 {
+    SF_FRAMELOG("pop mask");
     ScopedRenderEvent GPUEvent(GetEvent(Event_PopMask), __FUNCTION__);
     if (!checkState(HS_InDisplay, __FUNCTION__))
         return;
@@ -978,6 +991,7 @@ HAL::BlendModeDescriptor HAL::BlendModeTable[Blend_Count] =
 
 void HAL::PushBlendMode(BlendPrimitive* prim)
 {
+    SF_FRAMELOG("HAL push blend mode %d", prim ? (int)prim->GetBlendMode() : -1);
     if (!checkState(HS_InDisplay, __FUNCTION__))
         return;
 
@@ -991,6 +1005,7 @@ void HAL::PushBlendMode(BlendPrimitive* prim)
 
 void HAL::PopBlendMode()
 {
+    SF_FRAMELOG("HAL pop blend mode");
     if (!checkState(HS_InDisplay, __FUNCTION__))
         return;
 
@@ -1254,6 +1269,7 @@ void HAL::PrepareCacheable(CacheablePrimitive* prim, bool unprepare)
 
 void HAL::PushFilters(FilterPrimitive* prim)
 {
+    SF_FRAMELOG("push filters");
     GetEvent(Event_Filter).Begin(__FUNCTION__);
     if (!checkState(HS_InDisplay, __FUNCTION__))
         return;
@@ -1338,6 +1354,7 @@ RenderEvent& HAL::GetEvent( EventType )
 
 void HAL::PopFilters()
 {
+    SF_FRAMELOG("pop filters");
     // Do not render filters if the profile does not support it.
     ScopedRenderEvent GPUEvent(GetEvent(Event_Filter), __FUNCTION__, false);
     if (!shouldRenderFilters(FilterStack.Back().pPrimitive))

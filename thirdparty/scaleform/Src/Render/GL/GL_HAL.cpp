@@ -30,6 +30,14 @@ otherwise accompanies this software in either electronic or hard copy form.
 extern int SF_DebugTextDraw;
 #endif
 
+#if defined(SF_USE_ANGLE)
+#include <stdio.h>
+extern int SF_DebugFrameLog;
+#define SF_FRAMELOG(...) do { if (SF_DebugFrameLog) { printf("[sf-frame] " __VA_ARGS__); printf("\n"); } } while (0)
+#else
+#define SF_FRAMELOG(...) do { } while (0)
+#endif
+
 namespace Scaleform { namespace Render { namespace GL {
 
 
@@ -861,6 +869,7 @@ bool HAL::SetRenderTarget(RenderTarget* ptarget, bool setState)
 
 void HAL::PushRenderTarget(const RectF& frameRect, RenderTarget* prt, unsigned flags, Color clearColor)
 {
+    SF_FRAMELOG("push render target %.0f,%.0f-%.0f,%.0f flags 0x%x", frameRect.x1, frameRect.y1, frameRect.x2, frameRect.y2, flags);
     // Setup the render target/depth stencil on the device.
     HALState |= HS_InRenderTarget;
     RenderTargetEntry entry;
@@ -919,6 +928,7 @@ void HAL::PushRenderTarget(const RectF& frameRect, RenderTarget* prt, unsigned f
 
 void HAL::PopRenderTarget(unsigned flags)
 {
+    SF_FRAMELOG("pop render target flags 0x%x", flags);
     RenderTargetEntry& entry = RenderTargetStack.Back();
     RenderTarget* prt = entry.pRenderTarget;
     if ( prt->GetType() == RBuffer_Temporary )

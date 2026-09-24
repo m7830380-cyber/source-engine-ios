@@ -60,6 +60,7 @@ otherwise accompanies this software in either electronic or hard copy form.
 
 #if defined(SF_USE_ANGLE)
 int SF_DebugTextDraw = 0;
+int SF_DebugFrameLog = 0;
 #endif
 
 namespace Scaleform { namespace Render { namespace GL {
@@ -301,22 +302,6 @@ GLuint ShaderObject::createShaderOrProgram(ShaderStages stage, const char* shade
         "#define texture2DLod textureLod\n"
         "out vec4 sf_FragColor;\n"
         "#define gl_FragColor sf_FragColor\n";
-    // Visual test: paint every fragment of the alpha-texture (text) shaders
-    // solid magenta, to see whether text geometry reaches the screen at all.
-    String debugCode;
-    if (type == GL_FRAGMENT_SHADER && strstr(shaderCode, "texture2D(tex, tc0).a"))
-    {
-        debugCode = shaderCode;
-        const char* pcode = debugCode.ToCStr();
-        const char* plast = strrchr(pcode, '}');
-        if (plast)
-        {
-            String patched(pcode, (UPInt)(plast - pcode));
-            patched += "gl_FragColor = vec4(1.0, 0.0, 1.0, 1.0);\n}\n";
-            debugCode = patched;
-            shaderCode = debugCode.ToCStr();
-        }
-    }
     const char* sources[2] = { (type == GL_FRAGMENT_SHADER) ? s_pFragmentPrefix : s_pVertexPrefix, shaderCode };
     const GLsizei sourceCount = 2;
 #else

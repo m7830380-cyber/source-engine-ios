@@ -24,6 +24,14 @@ otherwise accompanies this software in either electronic or hard copy form.
 extern int SF_DebugTextDraw;
 #endif
 
+#if defined(SF_USE_ANGLE)
+#include <stdio.h>
+extern int SF_DebugFrameLog;
+#define SF_FRAMELOG(...) do { if (SF_DebugFrameLog) { printf("[sf-frame] " __VA_ARGS__); printf("\n"); } } while (0)
+#else
+#define SF_FRAMELOG(...) do { } while (0)
+#endif
+
 namespace Scaleform { namespace Render {
 
 template <class ShaderManagerType, class ShaderInterfaceType>
@@ -171,6 +179,7 @@ inline unsigned ShaderHAL<ShaderManagerType, ShaderInterfaceType>::GetMaximumBat
 template<class ShaderManagerType, class ShaderInterfaceType>
 inline void ShaderHAL<ShaderManagerType, ShaderInterfaceType>::drawUncachedFilter(const FilterStackEntry& e)
 {
+    SF_FRAMELOG("uncached filter");
     const FilterSet* filters = e.pPrimitive->GetFilters();
     unsigned filterCount = filters->GetFilterCount();
     const Filter* filter = 0;
@@ -344,6 +353,7 @@ inline void ShaderHAL<ShaderManagerType, ShaderInterfaceType>::drawUncachedFilte
 template<class ShaderManagerType, class ShaderInterfaceType>
 inline void ShaderHAL<ShaderManagerType, ShaderInterfaceType>::drawCachedFilter(FilterPrimitive* primitive)
 {
+    SF_FRAMELOG("cached filter");
     setBatchUnitSquareVertexStream();
     applyBlendModeEnable(true);
     BlurFilterState lowEndBlurState;
@@ -462,6 +472,7 @@ inline void ShaderHAL<ShaderManagerType, ShaderInterfaceType>::drawFilter(const 
 template<class ShaderManagerType, class ShaderInterfaceType>
 inline void ShaderHAL<ShaderManagerType, ShaderInterfaceType>::PushBlendMode(BlendPrimitive* prim)
 {
+    SF_FRAMELOG("push blend mode");
     if (!checkState(HS_InDisplay, __FUNCTION__))
         return;
 
@@ -553,6 +564,7 @@ inline void ShaderHAL<ShaderManagerType, ShaderInterfaceType>::PushBlendMode(Ble
 template<class ShaderManagerType, class ShaderInterfaceType>
 inline void ShaderHAL<ShaderManagerType, ShaderInterfaceType>::PopBlendMode()
 {
+    SF_FRAMELOG("pop blend mode");
     if (!checkState(HS_InDisplay, __FUNCTION__))
         return;
 
@@ -707,6 +719,7 @@ template<class ShaderManagerType, class ShaderInterfaceType>
 inline void ShaderHAL<ShaderManagerType, ShaderInterfaceType>::drawBlendPrimitive(BlendPrimitive* prim, Render::Texture* blendSource, 
                                                                                   Render::Texture* blendDest, Render::Texture* blendAlpha)
 {
+    SF_FRAMELOG("draw blend primitive");
     Matrix2F mvp = GetMatrices()->GetFullViewportMatrix(RenderTargetStack.Back().pRenderTarget->GetSize());
     Cxform cx    = prim->GetAreaMatrix().GetCxform();
     Matrix2F texgen[Target_Count];
@@ -787,6 +800,12 @@ inline void ShaderHAL<ShaderManagerType, ShaderInterfaceType>::DrawProcessedPrim
 #if defined(SF_USE_ANGLE)
             SF_DebugTextDraw = logText ? 1 : 0;
 #endif
+            {
+                const Matrix2F& fm = pprimitive->Meshes[meshIndex].M.GetMatrix2D();
+                SF_FRAMELOG("primitive fill %d, batch type %d, meshes %u, first at %.0f,%.0f scale %.3f, indices %u",
+                            pprimitive->pFill ? (int)pprimitive->pFill->GetType() : -1, (int)pbatch->Type, batchMeshCount,
+                            fm.Tx(), fm.Ty(), fm.Sx(), (unsigned)pmesh->IndexCount);
+            }
             ShaderData.BeginPrimitive();
 
             const typename ShaderManagerType::Shader& pShader =
@@ -904,6 +923,13 @@ inline void ShaderHAL<ShaderManagerType, ShaderInterfaceType>::DrawProcessedComp
 
         // Apply fill.
         PrimitiveFillType fillType = Profiler.GetFillType(fr.pFill->GetType());
+        if (instanceCount > 0)
+        {
+            const Matrix2F& fm = matrices[0].GetMatrix2D();
+            SF_FRAMELOG("complex fill %d (record %u/%u), instances %u, at %.0f,%.0f scale %.3f,%.3f, indices %u, fill blend %d, flags 0x%x",
+                        (int)fillType, fillIndex, fillCount, instanceCount, fm.Tx(), fm.Ty(), fm.Sx(), fm.Sy(),
+                        (unsigned)fr.IndexCount, fr.pFill->RequiresBlend() ? 1 : 0, fillFlags);
+        }
         const typename ShaderManagerType::Shader& pso = SManager.SetFill(fillType, fillFlags, batchType, fr.pFormats[formatIndex], &ShaderData);
 
         Profiler.SetBatch(this, complexMesh, fillIndex);
@@ -1117,6 +1143,7 @@ inline bool ShaderHAL<ShaderManagerType, ShaderInterfaceType>::shutdownHAL()
 template<class ShaderManagerType, class ShaderInterfaceType>
 inline void ShaderHAL<ShaderManagerType, ShaderInterfaceType>::drawMaskClearRectangles(const Matrix2F* matrices, UPInt count)
 {
+    SF_FRAMELOG("mask clear rectangles x%u", (unsigned)count);
     ScopedRenderEvent GPUEvent(GetEvent(Event_MaskClear), "HAL::drawMaskClearRectangles");
 
     // This operation is used to clear bounds for masks.
@@ -1166,6 +1193,7 @@ inline void ShaderHAL<ShaderManagerType, ShaderInterfaceType>::drawMaskClearRect
 template<class ShaderManagerType, class ShaderInterfaceType>
 inline void ShaderHAL<ShaderManagerType, ShaderInterfaceType>::clearSolidRectangle(const Rect<int>& r, Color color, bool blend)
 {
+    SF_FRAMELOG("clear solid rect %d,%d-%d,%d color 0x%08x blend %d", r.x1, r.y1, r.x2, r.y2, (unsigned)color.Raw, blend ? 1 : 0);
     ScopedRenderEvent GPUEvent(GetEvent(Event_Clear), "HAL::clearSolidRectangle");
 
     // Don't draw clears in wireframe, always draw them in solid.

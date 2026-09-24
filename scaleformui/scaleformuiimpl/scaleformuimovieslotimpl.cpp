@@ -273,6 +273,10 @@ void ScaleformUIImpl::SetSlotViewport( int slot, int x, int y, int width, int he
 
 }
 
+#if defined( SF_USE_ANGLE )
+extern int SF_DebugFrameLog;
+#endif
+
 static bool s_bScaleformInFrame = false;
 void ScaleformUIImpl::RenderSlot( int slot )
 {
@@ -378,10 +382,26 @@ void ScaleformUIImpl::RenderSlot( int slot )
 	}
 #endif
 
+#if defined( SF_USE_ANGLE )
+	// record the draw order of one menu frame
+	SF_DebugFrameLog = ( slot == 0 && nSlotRender == 300 ) ? 1 : 0;
+	if ( SF_DebugFrameLog )
+		printf( "[sf-frame] ===== slot %d render %d =====\n", slot, nSlotRender );
+#endif
+
 	if ( pslot )
 	{
 		MovieView_Display( ToSFMOVIE( pslot->m_pMovieView ) );
 	}
+
+#if defined( SF_USE_ANGLE )
+	if ( SF_DebugFrameLog )
+	{
+		printf( "[sf-frame] ===== end =====\n" );
+		fflush( stdout );
+	}
+	SF_DebugFrameLog = 0;
+#endif
 
 #if defined( SF_USE_ANGLE )
 	if ( bLogSlot )

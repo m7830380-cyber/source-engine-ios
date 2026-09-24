@@ -50,6 +50,10 @@ otherwise accompanies this software in either electronic or hard copy form.
       #define GL_GLEXT_PROTOTYPES
     #endif
     #include <GLES2/gl2ext.h>
+    #if defined(SF_USE_ANGLE) && defined(GL_KHR_debug)
+      // ANGLE's GLES2 headers only have the KHR-suffixed callback type
+      typedef GLDEBUGPROCKHR GLDEBUGPROC;
+    #endif
 #elif defined(SF_OS_WIN32)
     #include <windows.h>
     #include <gl/gl.h>

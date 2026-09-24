@@ -108,6 +108,11 @@ otherwise accompanies this software in either electronic or hard copy form.
 #if defined(__x86_64__) || defined(WIN64) || defined(_WIN64) || defined(__WIN64__)
 #  define SF_CPU_X86_64
 #  define SF_64BIT_POINTERS
+#elif defined(__aarch64__) || defined(__arm64__)
+// arm64 (iOS): 64-bit pointers; not SF_CPU_ARM, whose atomics are 32-bit
+// ldrex/strex asm. Atomics then use the compiler __sync builtins.
+#  define SF_CPU_ARM64
+#  define SF_64BIT_POINTERS
 #elif defined(__i386__) || (defined(SF_OS_WIN32) && !defined(_M_ARM_FP)) || defined(SF_OS_XBOX)
 #  define SF_CPU_X86
 #elif defined(__powerpc64__) || defined(SF_OS_PS3) || defined(SF_OS_XBOX360) || defined(SF_OS_WII) || defined(SF_OS_WIIU)

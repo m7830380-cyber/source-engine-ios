@@ -13,16 +13,51 @@
 // NOTE: This has to be the last file included!
 #include "tier0/memdbgon.h"
 
+// Scaleform shares togl's GL context. togl leaves state bound between batches
+// that Scaleform's GL HAL does not reset: a pixel unpack buffer (Scaleform's
+// texture uploads then read from togl's PBO -> garbage textures), unpack row
+// length, enabled vertex attrib arrays, scissor/depth/stencil tests. Clear it
+// before Scaleform renders and put back what togl's caches expect afterwards;
+// togl's RestoreGLState (ForceFlushStates) re-flushes the rest.
+static GLint s_nSavedUnpackBuffer = 0;
+static GLint s_nSavedUnpackAlignment = 4;
+static GLint s_nSavedUnpackRowLength = 0;
+
 void SFTogl_SaveGLState( IDirect3DDevice9 *pDevice )
 {
-	if ( pDevice )
-		pDevice->SaveGLState();
+	if ( !pDevice )
+		return;
+
+	pDevice->SaveGLState();
+
+	gGL->glGetIntegerv( GL_PIXEL_UNPACK_BUFFER_BINDING, &s_nSavedUnpackBuffer );
+	gGL->glGetIntegerv( GL_UNPACK_ALIGNMENT, &s_nSavedUnpackAlignment );
+	gGL->glGetIntegerv( GL_UNPACK_ROW_LENGTH, &s_nSavedUnpackRowLength );
+
+	gGL->glBindBuffer( GL_PIXEL_UNPACK_BUFFER, 0 );
+	gGL->glPixelStorei( GL_UNPACK_ROW_LENGTH, 0 );
+	gGL->glPixelStorei( GL_UNPACK_ALIGNMENT, 4 );
+
+	for ( int i = 0; i < 16; i++ )
+		gGL->glDisableVertexAttribArray( i );
+
+	gGL->glDisable( GL_SCISSOR_TEST );
+	gGL->glDisable( GL_DEPTH_TEST );
+	gGL->glDisable( GL_STENCIL_TEST );
+	gGL->glDisable( GL_CULL_FACE );
+	gGL->glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
 }
 
 void SFTogl_RestoreGLState( IDirect3DDevice9 *pDevice )
 {
-	if ( pDevice )
-		pDevice->RestoreGLState();
+	if ( !pDevice )
+		return;
+
+	gGL->glBindBuffer( GL_PIXEL_UNPACK_BUFFER, s_nSavedUnpackBuffer );
+	gGL->glPixelStorei( GL_UNPACK_ALIGNMENT, s_nSavedUnpackAlignment );
+	gGL->glPixelStorei( GL_UNPACK_ROW_LENGTH, s_nSavedUnpackRowLength );
+
+	pDevice->RestoreGLState();
 }
 
 void SFTogl_GetViewportSize( IDirect3DDevice9 *pDevice, int *pWidth, int *pHeight )

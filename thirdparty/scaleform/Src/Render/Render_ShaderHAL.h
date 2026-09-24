@@ -824,16 +824,10 @@ inline void ShaderHAL<ShaderManagerType, ShaderInterfaceType>::DrawProcessedPrim
                 // Draw the object with cached mesh.
                 UPInt   indexOffset = setVertexArray(pbatch, pmesh);
 
-#if defined(SF_USE_ANGLE)
-                // Visual test: draw text only, skip every other primitive.
-                if (pprimitive->pFill && pprimitive->pFill->GetType() == PrimFill_UVTextureAlpha_VColor)
-#endif
-                {
                 if (pbatch->Type != PrimitiveBatch::DP_Instanced)
                     drawIndexedPrimitive(pmesh->IndexCount, pmesh->VertexCount, pmesh->MeshCount, indexOffset, 0 );
                 else
                     drawIndexedInstanced(pmesh->IndexCount, pmesh->VertexCount, pbatch->GetMeshCount(), indexOffset, 0);
-                }
             }
 
 #if defined(SF_USE_ANGLE)
@@ -950,11 +944,7 @@ inline void ShaderHAL<ShaderManagerType, ShaderInterfaceType>::DrawProcessedComp
             {
                 ShaderData.Finish(1);
                 setVertexArrayPerDraw(fr, formatIndex, pmesh);
-                
-#if !defined(SF_USE_ANGLE) // visual test: complex meshes (shapes) skipped
-drawIndexedPrimitive(fr.IndexCount, fr.VertexCount, 1, fr.IndexOffset + indexBufferOffset, vertexBaseIndex);
-#endif
-
+                drawIndexedPrimitive(fr.IndexCount, fr.VertexCount, 1, fr.IndexOffset + indexBufferOffset, vertexBaseIndex);
                 AccumulatedStats.Primitives++;
                 if ( !lastPrimitive )
                     ShaderData.BeginPrimitive();
@@ -967,11 +957,7 @@ drawIndexedPrimitive(fr.IndexCount, fr.VertexCount, 1, fr.IndexOffset + indexBuf
                 setInstancedStreamSource(drawCount, fr.IndexCount);
                 ShaderData.Finish(drawCount);
                 setVertexArrayPerDraw(fr, formatIndex, pmesh);
-                
-#if !defined(SF_USE_ANGLE) // visual test: complex meshes (shapes) skipped
-drawIndexedInstanced(fr.IndexCount, fr.VertexCount, drawCount, fr.IndexOffset + indexBufferOffset, vertexBaseIndex);
-#endif
-
+                drawIndexedInstanced(fr.IndexCount, fr.VertexCount, drawCount, fr.IndexOffset + indexBufferOffset, vertexBaseIndex);
                 AccumulatedStats.Primitives++;
                 if ( !lastPrimitive )
                     ShaderData.BeginPrimitive();

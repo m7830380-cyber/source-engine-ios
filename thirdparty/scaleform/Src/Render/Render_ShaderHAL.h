@@ -27,6 +27,9 @@ extern int SF_DebugTextDraw;
 #if defined(SF_USE_ANGLE)
 #include <stdio.h>
 extern int SF_DebugFrameLog;
+extern int SF_IOSBlendDirect, SF_IOSTextOnly;
+extern int SF_StatPrimitives, SF_StatText, SF_StatComplex, SF_StatBlendPush,
+           SF_StatBlendTargets, SF_StatRenderTargets, SF_StatFilters, SF_StatMasks;
 #define SF_FRAMELOG(...) do { if (SF_DebugFrameLog) { printf("[sf-frame] " __VA_ARGS__); printf("\n"); } } while (0)
 #else
 #define SF_FRAMELOG(...) do { } while (0)
@@ -180,6 +183,9 @@ template<class ShaderManagerType, class ShaderInterfaceType>
 inline void ShaderHAL<ShaderManagerType, ShaderInterfaceType>::drawUncachedFilter(const FilterStackEntry& e)
 {
     SF_FRAMELOG("uncached filter");
+#if defined(SF_USE_ANGLE)
+    ++SF_StatFilters;
+#endif
     const FilterSet* filters = e.pPrimitive->GetFilters();
     unsigned filterCount = filters->GetFilterCount();
     const Filter* filter = 0;
@@ -354,6 +360,9 @@ template<class ShaderManagerType, class ShaderInterfaceType>
 inline void ShaderHAL<ShaderManagerType, ShaderInterfaceType>::drawCachedFilter(FilterPrimitive* primitive)
 {
     SF_FRAMELOG("cached filter");
+#if defined(SF_USE_ANGLE)
+    ++SF_StatFilters;
+#endif
     setBatchUnitSquareVertexStream();
     applyBlendModeEnable(true);
     BlurFilterState lowEndBlurState;
@@ -487,16 +496,22 @@ inline void ShaderHAL<ShaderManagerType, ShaderInterfaceType>::PushBlendMode(Ble
 
     BlendStackEntry& e = BlendModeStack.Back();
 #if defined(SF_USE_ANGLE)
+    ++SF_StatBlendPush;
+    if (BlendState::IsTargetAllocationNeededForBlendMode(mode))
+        ++SF_StatBlendTargets;
+    SF_FRAMELOG("  blend mode %d: offscreen target %s, direct %d, cache state %d", (int)mode,
+                BlendState::IsTargetAllocationNeededForBlendMode(mode) ? "needed" : "not needed", SF_IOSBlendDirect,
+                (int)prim->GetCacheState());
     // iOS/ANGLE: blend modes that render their content offscreen and composite
     // it back hide everything under them (text included). Draw that content
     // straight to the current target with normal blending instead; alpha/erase
     // (which only edit a layer's offscreen alpha) have no layer to act on.
-    if (BlendState::IsTargetAllocationNeededForBlendMode(mode))
+    if (SF_IOSBlendDirect && BlendState::IsTargetAllocationNeededForBlendMode(mode))
     {
         applyBlendMode(Blend_Normal, false, (HALState& HS_InRenderTarget) != 0 );
         return;
     }
-    if (mode == Blend_Alpha || mode == Blend_Erase)
+    if (SF_IOSBlendDirect && (mode == Blend_Alpha || mode == Blend_Erase))
     {
         e.NoLayerParent = true;
         applyBlendMode(Blend_Ignore, false, (HALState& HS_InRenderTarget) != 0 );
@@ -860,10 +875,19 @@ inline void ShaderHAL<ShaderManagerType, ShaderInterfaceType>::DrawProcessedPrim
                 // Draw the object with cached mesh.
                 UPInt   indexOffset = setVertexArray(pbatch, pmesh);
 
+#if defined(SF_USE_ANGLE)
+                bool isTextFill = pprimitive->pFill && pprimitive->pFill->GetType() == PrimFill_UVTextureAlpha_VColor;
+                ++SF_StatPrimitives;
+                if (isTextFill)
+                    ++SF_StatText;
+                if (!SF_IOSTextOnly || isTextFill)
+#endif
+                {
                 if (pbatch->Type != PrimitiveBatch::DP_Instanced)
                     drawIndexedPrimitive(pmesh->IndexCount, pmesh->VertexCount, pmesh->MeshCount, indexOffset, 0 );
                 else
                     drawIndexedInstanced(pmesh->IndexCount, pmesh->VertexCount, pbatch->GetMeshCount(), indexOffset, 0);
+                }
             }
 
 #if defined(SF_USE_ANGLE)
@@ -987,6 +1011,11 @@ inline void ShaderHAL<ShaderManagerType, ShaderInterfaceType>::DrawProcessedComp
             {
                 ShaderData.Finish(1);
                 setVertexArrayPerDraw(fr, formatIndex, pmesh);
+                
+#if defined(SF_USE_ANGLE)
+                ++SF_StatComplex;
+                if (!SF_IOSTextOnly)
+#endif
                 drawIndexedPrimitive(fr.IndexCount, fr.VertexCount, 1, fr.IndexOffset + indexBufferOffset, vertexBaseIndex);
                 AccumulatedStats.Primitives++;
                 if ( !lastPrimitive )
@@ -1000,6 +1029,11 @@ inline void ShaderHAL<ShaderManagerType, ShaderInterfaceType>::DrawProcessedComp
                 setInstancedStreamSource(drawCount, fr.IndexCount);
                 ShaderData.Finish(drawCount);
                 setVertexArrayPerDraw(fr, formatIndex, pmesh);
+                
+#if defined(SF_USE_ANGLE)
+                ++SF_StatComplex;
+                if (!SF_IOSTextOnly)
+#endif
                 drawIndexedInstanced(fr.IndexCount, fr.VertexCount, drawCount, fr.IndexOffset + indexBufferOffset, vertexBaseIndex);
                 AccumulatedStats.Primitives++;
                 if ( !lastPrimitive )

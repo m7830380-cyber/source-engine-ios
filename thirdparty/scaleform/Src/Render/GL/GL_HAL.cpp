@@ -33,6 +33,9 @@ extern int SF_DebugTextDraw;
 #if defined(SF_USE_ANGLE)
 #include <stdio.h>
 extern int SF_DebugFrameLog;
+extern int SF_IOSBlendDirect, SF_IOSTextOnly;
+extern int SF_StatPrimitives, SF_StatText, SF_StatComplex, SF_StatBlendPush,
+           SF_StatBlendTargets, SF_StatRenderTargets, SF_StatFilters, SF_StatMasks;
 #define SF_FRAMELOG(...) do { if (SF_DebugFrameLog) { printf("[sf-frame] " __VA_ARGS__); printf("\n"); } } while (0)
 #else
 #define SF_FRAMELOG(...) do { } while (0)
@@ -796,6 +799,7 @@ RenderTarget* HAL::CreateRenderTarget(Render::Texture* texture, bool needsStenci
 
 RenderTarget* HAL::CreateTempRenderTarget(const ImageSize& size, bool needsStencil)
 {
+    SF_FRAMELOG("create temp render target %ux%u stencil %d", size.Width, size.Height, needsStencil ? 1 : 0);
     RenderTarget* prt = pRenderBufferManager->CreateTempRenderTarget(size);
     if ( !prt )
         return 0;
@@ -870,6 +874,9 @@ bool HAL::SetRenderTarget(RenderTarget* ptarget, bool setState)
 void HAL::PushRenderTarget(const RectF& frameRect, RenderTarget* prt, unsigned flags, Color clearColor)
 {
     SF_FRAMELOG("push render target %.0f,%.0f-%.0f,%.0f flags 0x%x", frameRect.x1, frameRect.y1, frameRect.x2, frameRect.y2, flags);
+#if defined(SF_USE_ANGLE)
+    ++SF_StatRenderTargets;
+#endif
     // Setup the render target/depth stencil on the device.
     HALState |= HS_InRenderTarget;
     RenderTargetEntry entry;

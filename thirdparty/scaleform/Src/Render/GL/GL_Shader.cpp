@@ -61,6 +61,12 @@ otherwise accompanies this software in either electronic or hard copy form.
 #if defined(SF_USE_ANGLE)
 int SF_DebugTextDraw = 0;
 int SF_DebugFrameLog = 0;
+// iOS runtime switches (set every frame from scaleformui console variables)
+int SF_IOSBlendDirect = 1;   // sf_ios_blend_direct: draw offscreen blend-mode content directly
+int SF_IOSTextOnly = 0;      // sf_ios_text_only: visual test, draw text primitives only
+// per-display draw statistics (reset by scaleformui)
+int SF_StatPrimitives = 0, SF_StatText = 0, SF_StatComplex = 0, SF_StatBlendPush = 0,
+    SF_StatBlendTargets = 0, SF_StatRenderTargets = 0, SF_StatFilters = 0, SF_StatMasks = 0;
 #endif
 
 namespace Scaleform { namespace Render { namespace GL {

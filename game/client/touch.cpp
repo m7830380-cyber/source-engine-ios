@@ -78,6 +78,14 @@ CTouchPanel::CTouchPanel( vgui::VPANEL parent ) : BaseClass( NULL, "TouchPanel" 
 
 void CTouchPanel::Paint()
 {
+	static int s_nPaints = 0;
+	if ( ( s_nPaints++ % 600 ) == 0 )
+	{
+		int x, y, w, h;
+		GetBounds( x, y, w, h );
+		printf( "[touch] panel paint #%d, bounds %d %d %d %d, gameui visible %d, touch_enable %d\n",
+				s_nPaints, x, y, w, h, enginevgui->IsGameUIVisible() ? 1 : 0, touch_enable.GetInt() );
+	}
 	gTouch.Frame();
 }
 
@@ -634,7 +642,13 @@ void CTouchControls::Frame()
 	else
 		m_bCutScene = false;
 
+#if defined( IOS )
+	// CS:GO's GameUI is Scaleform (stubbed on iOS) and can report itself as
+	// visible while nothing is shown; draw the controls regardless.
+	if( touch_enable.GetBool() && touch_draw.GetBool() ) Paint();
+#else
 	if( touch_enable.GetBool() && touch_draw.GetBool() && !enginevgui->IsGameUIVisible() ) Paint();
+#endif
 }
 
 void CTouchControls::Paint()

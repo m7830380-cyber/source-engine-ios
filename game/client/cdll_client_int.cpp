@@ -1897,9 +1897,36 @@ void CHLClient::HudProcessInput( bool bActive )
 // Purpose: Called when shared data gets changed, allows dll to modify data
 // Input  : bActive - 
 //-----------------------------------------------------------------------------
+#if defined( IOS )
+// The team selection screen is Scaleform, which is stubbed out on iOS, so a
+// player would stay unassigned (spectating) forever. Join like the menu would:
+// "joingame" unlocks jointeam on the server, team 0 means auto-assign.
+static ConVar cl_ios_autojoin( "cl_ios_autojoin", "1", FCVAR_ARCHIVE, "Automatically join a team when connected (no team menu on iOS)" );
+
+static void IOS_AutoJoinTeam( void )
+{
+	static double s_flNextTry = 0.0;
+	if ( !cl_ios_autojoin.GetBool() || !engine->IsInGame() || Plat_FloatTime() < s_flNextTry )
+		return;
+
+	ACTIVE_SPLITSCREEN_PLAYER_GUARD( 0 );
+	C_BasePlayer *pPlayer = C_BasePlayer::GetLocalPlayer();
+	if ( !pPlayer || pPlayer->GetTeamNumber() != TEAM_UNASSIGNED )
+		return;
+
+	s_flNextTry = Plat_FloatTime() + 3.0;
+	engine->ClientCmd_Unrestricted( "joingame" );
+	engine->ClientCmd_Unrestricted( "jointeam 0 1" );
+}
+#endif
+
 void CHLClient::HudUpdate( bool bActive )
 {
 	float frametime = gpGlobals->frametime;
+
+#if defined( IOS )
+	IOS_AutoJoinTeam();
+#endif
 
 	GetClientVoiceMgr()->Frame( frametime );
 

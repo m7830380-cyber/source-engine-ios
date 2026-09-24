@@ -149,6 +149,7 @@ public:
 	void Create( vgui::VPANEL parent )
 	{
 		touchPanel = new CTouchPanel( parent );
+		printf( "[touch] panel created, parent %p\n", (void *)(uintp)parent );
 	}
 
 	void Destroy( void )

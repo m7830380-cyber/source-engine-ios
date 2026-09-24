@@ -275,12 +275,13 @@ void ScaleformUIImpl::SetSlotViewport( int slot, int x, int y, int width, int he
 
 #if defined( SF_USE_ANGLE )
 extern int SF_DebugFrameLog;
-extern int SF_IOSBlendDirect, SF_IOSTextOnly;
+extern int SF_IOSBlendDirect, SF_IOSTextOnly, SF_IOSFilters;
 extern int SF_StatPrimitives, SF_StatText, SF_StatComplex, SF_StatBlendPush,
            SF_StatBlendTargets, SF_StatRenderTargets, SF_StatFilters, SF_StatMasks;
 
 // iOS Scaleform switches, changeable from the console without a rebuild
 ConVar sf_ios_blend_direct( "sf_ios_blend_direct", "1", 0, "iOS: draw offscreen blend-mode content (layer/multiply/...) directly instead of compositing it" );
+ConVar sf_ios_filters( "sf_ios_filters", "0", 0, "iOS: render Scaleform filters (glow/drop shadow/blur); 0 draws filtered content unfiltered" );
 ConVar sf_ios_text_only( "sf_ios_text_only", "0", 0, "iOS visual test: draw only text primitives" );
 ConVar sf_ios_record_frames( "sf_ios_record_frames", "0", 0, "iOS: record the draw order of the next N menu frames to the log" );
 #endif
@@ -393,11 +394,12 @@ void ScaleformUIImpl::RenderSlot( int slot )
 #if defined( SF_USE_ANGLE )
 	SF_IOSBlendDirect = sf_ios_blend_direct.GetBool() ? 1 : 0;
 	SF_IOSTextOnly = sf_ios_text_only.GetBool() ? 1 : 0;
+	SF_IOSFilters = sf_ios_filters.GetBool() ? 1 : 0;
 
 	// record the draw order of menu frames: automatically at ~10s, 20s and 40s
 	// of menu rendering, and on request (sf_ios_record_frames N)
 	bool bRecord = false;
-	if ( slot == 0 )
+	if ( slot == 1 )	// the main menu movie renders in slot 1
 	{
 		if ( nSlotRender == 600 || nSlotRender == 1200 || nSlotRender == 2400 )
 			bRecord = true;
@@ -423,9 +425,9 @@ void ScaleformUIImpl::RenderSlot( int slot )
 #if defined( SF_USE_ANGLE )
 	if ( SF_DebugFrameLog || ( nSlotRender % 600 ) == 0 )
 	{
-		printf( "[sf-stats] slot %d render %d: primitives %d (text %d), shapes %d, blend modes %d (offscreen %d), render targets %d, filters %d, masks %d, blend direct %d, text only %d\n",
+		printf( "[sf-stats] slot %d render %d: primitives %d (text %d), shapes %d, blend modes %d (offscreen %d), render targets %d, filters %d, masks %d, blend direct %d, text only %d, filters on %d\n",
 				slot, nSlotRender, SF_StatPrimitives, SF_StatText, SF_StatComplex, SF_StatBlendPush, SF_StatBlendTargets,
-				SF_StatRenderTargets, SF_StatFilters, SF_StatMasks, SF_IOSBlendDirect, SF_IOSTextOnly );
+				SF_StatRenderTargets, SF_StatFilters, SF_StatMasks, SF_IOSBlendDirect, SF_IOSTextOnly, SF_IOSFilters );
 		if ( SF_DebugFrameLog )
 			printf( "[sf-frame] ===== end =====\n" );
 		fflush( stdout );

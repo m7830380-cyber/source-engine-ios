@@ -24,7 +24,7 @@ otherwise accompanies this software in either electronic or hard copy form.
 #if defined(SF_USE_ANGLE)
 #include <stdio.h>
 extern int SF_DebugFrameLog;
-extern int SF_IOSBlendDirect, SF_IOSTextOnly;
+extern int SF_IOSBlendDirect, SF_IOSTextOnly, SF_IOSFilters;
 extern int SF_StatPrimitives, SF_StatText, SF_StatComplex, SF_StatBlendPush,
            SF_StatBlendTargets, SF_StatRenderTargets, SF_StatFilters, SF_StatMasks;
 #define SF_FRAMELOG(...) do { if (SF_DebugFrameLog) { printf("[sf-frame] " __VA_ARGS__); printf("\n"); } } while (0)

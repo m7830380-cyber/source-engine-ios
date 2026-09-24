@@ -33,7 +33,7 @@ extern int SF_DebugTextDraw;
 #if defined(SF_USE_ANGLE)
 #include <stdio.h>
 extern int SF_DebugFrameLog;
-extern int SF_IOSBlendDirect, SF_IOSTextOnly;
+extern int SF_IOSBlendDirect, SF_IOSTextOnly, SF_IOSFilters;
 extern int SF_StatPrimitives, SF_StatText, SF_StatComplex, SF_StatBlendPush,
            SF_StatBlendTargets, SF_StatRenderTargets, SF_StatFilters, SF_StatMasks;
 #define SF_FRAMELOG(...) do { if (SF_DebugFrameLog) { printf("[sf-frame] " __VA_ARGS__); printf("\n"); } } while (0)
@@ -1438,7 +1438,13 @@ const ShaderObject* HAL::GetStaticShader( ShaderDesc::ShaderType shaderType )
 
 bool HAL::shouldRenderFilters(const FilterPrimitive*) const
 {
+#if defined(SF_USE_ANGLE)
+    // iOS/ANGLE: filtered content (glow/drop shadow, mostly on text) came out
+    // as dark blocks over the text; draw it unfiltered unless sf_ios_filters 1.
+    return SF_IOSFilters != 0;
+#else
     return true;
+#endif
 }
 
 // Simply sets a quad vertex buffer and draws.

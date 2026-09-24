@@ -508,14 +508,24 @@ otherwise accompanies this software in either electronic or hard copy form.
 #include <stdio.h>
 inline void SF_GLReportError(const char* where, const char* when)
 {
-    static int reports = 0;
+    // each (call site, when, error) combination is reported once
+    static const char* seenWhere[512];
+    static const char* seenWhen[512];
+    static GLenum seenErr[512];
+    static int seenCount = 0;
     GLenum err = glGetError();
-    if (err != GL_NO_ERROR && reports < 400)
+    if (err == GL_NO_ERROR)
+        return;
+    for (int i = 0; i < seenCount; ++i)
+        if (seenWhere[i] == where && seenWhen[i] == when && seenErr[i] == err)
+            return;
+    if (seenCount < 512)
     {
-        ++reports;
-        printf("[sf-gl] error 0x%x %s %s\n", err, when, where);
-        fflush(stdout);
+        seenWhere[seenCount] = where; seenWhen[seenCount] = when; seenErr[seenCount] = err;
+        ++seenCount;
     }
+    printf("[sf-gl] error 0x%x %s %s\n", err, when, where);
+    fflush(stdout);
 }
 #define SF_GLPRE(where)   SF_GLReportError(where, "pending before")
 #define SF_GLCHECK(where) SF_GLReportError(where, "from")

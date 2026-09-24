@@ -240,11 +240,11 @@ void ShaderObject::ApplyShader() const
 {
     if (Separated)
     {
-        glBindProgramPipeline(Pipeline);
+        { SF_GLPRE("GL_Shader.cpp:243 glBindProgramPipeline"); glBindProgramPipeline(Pipeline); SF_GLCHECK("GL_Shader.cpp:243 glBindProgramPipeline"); }
     }
     else
     {
-        glUseProgram(StagePrograms[ShaderStage_Vertex]);
+        { SF_GLPRE("GL_Shader.cpp:247 glUseProgram"); glUseProgram(StagePrograms[ShaderStage_Vertex]); SF_GLCHECK("GL_Shader.cpp:247 glUseProgram"); }
     }
 }
 
@@ -306,17 +306,17 @@ GLuint ShaderObject::createShaderOrProgram(ShaderStages stage, const char* shade
     if (!separable)
     {
         GLuint shader = glCreateShader(type);
-        glShaderSource(shader, sourceCount, sources, 0);
-        glCompileShader(shader);
-        glGetShaderiv(shader, GL_COMPILE_STATUS, &result);
+        { SF_GLPRE("GL_Shader.cpp:309 glShaderSource"); glShaderSource(shader, sourceCount, sources, 0); SF_GLCHECK("GL_Shader.cpp:309 glShaderSource"); }
+        { SF_GLPRE("GL_Shader.cpp:310 glCompileShader"); glCompileShader(shader); SF_GLCHECK("GL_Shader.cpp:310 glCompileShader"); }
+        { SF_GLPRE("GL_Shader.cpp:311 glGetShaderiv"); glGetShaderiv(shader, GL_COMPILE_STATUS, &result); SF_GLCHECK("GL_Shader.cpp:311 glGetShaderiv"); }
         if (!result)
         {
-            glGetShaderInfoLog(shader, sizeof(msg), 0, msg);
+            { SF_GLPRE("GL_Shader.cpp:314 glGetShaderInfoLog"); glGetShaderInfoLog(shader, sizeof(msg), 0, msg); SF_GLCHECK("GL_Shader.cpp:314 glGetShaderInfoLog"); }
 #if defined(SF_USE_ANGLE)
             printf("[sf] GL shader/program failed: %s\n", msg);
 #endif
             SF_DEBUG_ERROR2(!testCompilation, "%s:\n%s\n", msg, shaderCode);
-            glDeleteShader(shader);
+            { SF_GLPRE("GL_Shader.cpp:319 glDeleteShader"); glDeleteShader(shader); SF_GLCHECK("GL_Shader.cpp:319 glDeleteShader"); }
             return 0;
         }
         return shader;
@@ -329,54 +329,54 @@ GLuint ShaderObject::createShaderOrProgram(ShaderStages stage, const char* shade
         GLuint shader = glCreateShader(type);
         if (shader) 
         {
-            glShaderSource(shader, sourceCount, sources, 0);
-            glCompileShader(shader);
+            { SF_GLPRE("GL_Shader.cpp:332 glShaderSource"); glShaderSource(shader, sourceCount, sources, 0); SF_GLCHECK("GL_Shader.cpp:332 glShaderSource"); }
+            { SF_GLPRE("GL_Shader.cpp:333 glCompileShader"); glCompileShader(shader); SF_GLCHECK("GL_Shader.cpp:333 glCompileShader"); }
             const GLuint program = glCreateProgram();
             if (program) 
             {
                 int compiled = GL_FALSE;
-                glGetShaderiv(shader, GL_COMPILE_STATUS, &compiled);
+                { SF_GLPRE("GL_Shader.cpp:338 glGetShaderiv"); glGetShaderiv(shader, GL_COMPILE_STATUS, &compiled); SF_GLCHECK("GL_Shader.cpp:338 glGetShaderiv"); }
 
                 // Bind the vertex attribute locations.
                 if (stage == ShaderStage_Vertex)
                 {
                     for (int i = 0; i < pVDesc->NumAttribs; i++)
-                        glBindAttribLocation(program, i, pVDesc->Attributes[i].Name);
+                        { SF_GLPRE("GL_Shader.cpp:344 glBindAttribLocation"); glBindAttribLocation(program, i, pVDesc->Attributes[i].Name); SF_GLCHECK("GL_Shader.cpp:344 glBindAttribLocation"); }
                 }
 
-                glProgramParameteri(program, GL_PROGRAM_SEPARABLE, GL_TRUE);
+                { SF_GLPRE("GL_Shader.cpp:347 glProgramParameteri"); glProgramParameteri(program, GL_PROGRAM_SEPARABLE, GL_TRUE); SF_GLCHECK("GL_Shader.cpp:347 glProgramParameteri"); }
 #if !defined(SF_USE_GLES_ANY) && defined(SF_GL_BINARY_SHADER)
                 // In OpenGL, we must set the retrievable hint, otherwise, it won't generate a binary format we can save.
                 if (pHal->Caps & Cap_BinaryShaders)
-                    glProgramParameteri(program, GL_PROGRAM_BINARY_RETRIEVABLE_HINT, GL_TRUE);
+                    { SF_GLPRE("GL_Shader.cpp:351 glProgramParameteri"); glProgramParameteri(program, GL_PROGRAM_BINARY_RETRIEVABLE_HINT, GL_TRUE); SF_GLCHECK("GL_Shader.cpp:351 glProgramParameteri"); }
 #endif
 
                 if (compiled) 
                 {
-                    glAttachShader(program, shader);
-                    glLinkProgram(program);
+                    { SF_GLPRE("GL_Shader.cpp:356 glAttachShader"); glAttachShader(program, shader); SF_GLCHECK("GL_Shader.cpp:356 glAttachShader"); }
+                    { SF_GLPRE("GL_Shader.cpp:357 glLinkProgram"); glLinkProgram(program); SF_GLCHECK("GL_Shader.cpp:357 glLinkProgram"); }
                 }
                 else
                 {
-                    glGetShaderInfoLog(shader, sizeof(msg), 0, msg);
+                    { SF_GLPRE("GL_Shader.cpp:361 glGetShaderInfoLog"); glGetShaderInfoLog(shader, sizeof(msg), 0, msg); SF_GLCHECK("GL_Shader.cpp:361 glGetShaderInfoLog"); }
 #if defined(SF_USE_ANGLE)
                     printf("[sf] GL shader/program failed: %s\n", msg);
 #endif
                     SF_DEBUG_ERROR2(!testCompilation, "%s:\n%s\n", msg, shaderCode);
-                    glDeleteShader(shader);
+                    { SF_GLPRE("GL_Shader.cpp:366 glDeleteShader"); glDeleteShader(shader); SF_GLCHECK("GL_Shader.cpp:366 glDeleteShader"); }
                     return 0;
                 }
             }
-            glDeleteShader(shader);
-            glGetProgramiv(program, GL_LINK_STATUS, &result);
+            { SF_GLPRE("GL_Shader.cpp:370 glDeleteShader"); glDeleteShader(shader); SF_GLCHECK("GL_Shader.cpp:370 glDeleteShader"); }
+            { SF_GLPRE("GL_Shader.cpp:371 glGetProgramiv"); glGetProgramiv(program, GL_LINK_STATUS, &result); SF_GLCHECK("GL_Shader.cpp:371 glGetProgramiv"); }
             if (!result)
             {
-                glGetProgramInfoLog(program, sizeof(msg), 0, msg);
+                { SF_GLPRE("GL_Shader.cpp:374 glGetProgramInfoLog"); glGetProgramInfoLog(program, sizeof(msg), 0, msg); SF_GLCHECK("GL_Shader.cpp:374 glGetProgramInfoLog"); }
 #if defined(SF_USE_ANGLE)
                 printf("[sf] GL shader/program failed: %s\n", msg);
 #endif
                 SF_DEBUG_ERROR2(!testCompilation, "%s:\n%s\n", msg, shaderCode);
-                glDeleteProgram(program);
+                { SF_GLPRE("GL_Shader.cpp:379 glDeleteProgram"); glDeleteProgram(program); SF_GLCHECK("GL_Shader.cpp:379 glDeleteProgram"); }
                 return 0;
             }
             return program;
@@ -402,7 +402,7 @@ bool ShaderObject::createProgramOrPipeline( ShaderHashEntry* shaders, bool separ
         {
             if (shaders[stage].Program)
             {
-                glAttachShader(StagePrograms[ShaderStage_Vertex], shaders[stage].Program);
+                { SF_GLPRE("GL_Shader.cpp:405 glAttachShader"); glAttachShader(StagePrograms[ShaderStage_Vertex], shaders[stage].Program); SF_GLCHECK("GL_Shader.cpp:405 glAttachShader"); }
 
                 // If the stage exists, copy the uber-program to that stage program.
                 StagePrograms[stage] = StagePrograms[ShaderStage_Vertex];
@@ -411,13 +411,13 @@ bool ShaderObject::createProgramOrPipeline( ShaderHashEntry* shaders, bool separ
     }
     else
     {
-        glGenProgramPipelines(1, &Pipeline);
-        glBindProgramPipeline(Pipeline);
+        { SF_GLPRE("GL_Shader.cpp:414 glGenProgramPipelines"); glGenProgramPipelines(1, &Pipeline); SF_GLCHECK("GL_Shader.cpp:414 glGenProgramPipelines"); }
+        { SF_GLPRE("GL_Shader.cpp:415 glBindProgramPipeline"); glBindProgramPipeline(Pipeline); SF_GLCHECK("GL_Shader.cpp:415 glBindProgramPipeline"); }
 
         for (unsigned stage = ShaderStage_Vertex; stage < ShaderStage_Count; ++stage)
         {
             if (shaders[stage].Program)
-                glUseProgramStages(Pipeline, getShaderBitForStage((ShaderStages)stage), shaders[stage].Program);
+                { SF_GLPRE("GL_Shader.cpp:420 glUseProgramStages"); glUseProgramStages(Pipeline, getShaderBitForStage((ShaderStages)stage), shaders[stage].Program); SF_GLCHECK("GL_Shader.cpp:420 glUseProgramStages"); }
 
             StagePrograms[stage] = shaders[stage].Program;
         }
@@ -435,22 +435,22 @@ bool ShaderObject::createProgramOrPipeline( ShaderHashEntry* shaders, bool separ
     if (ShaderVer == ShaderDesc::ShaderVersion_GLSL150)
     {
         SF_DEBUG_ASSERT(pHal->CheckGLVersion(3,0) || pHal->CheckExtension("GL_EXT_gpu_shader4"), "Must have glBindFragDataLocation if using GLSL 1.5.");
-        glBindFragDataLocation(StagePrograms[ShaderStage_Frag], 0, "fcolor");
+        { SF_GLPRE("GL_Shader.cpp:438 glBindFragDataLocation"); glBindFragDataLocation(StagePrograms[ShaderStage_Frag], 0, "fcolor"); SF_GLCHECK("GL_Shader.cpp:438 glBindFragDataLocation"); }
     }
 #endif   
 
     if (!separable)
     {
         for (int i = 0; i < pVDesc->NumAttribs; i++)
-            glBindAttribLocation(StagePrograms[ShaderStage_Vertex], i, pVDesc->Attributes[i].Name);
+            { SF_GLPRE("GL_Shader.cpp:445 glBindAttribLocation"); glBindAttribLocation(StagePrograms[ShaderStage_Vertex], i, pVDesc->Attributes[i].Name); SF_GLCHECK("GL_Shader.cpp:445 glBindAttribLocation"); }
 
 #if !defined(SF_USE_GLES_ANY) && defined(SF_GL_BINARY_SHADER)
         // In OpenGL, we must set the retrievable hint, otherwise, it won't generate a binary format we can save.
         if (pHal->Caps & Cap_BinaryShaders)
-            glProgramParameteri(StagePrograms[ShaderStage_Vertex], GL_PROGRAM_BINARY_RETRIEVABLE_HINT, GL_TRUE);
+            { SF_GLPRE("GL_Shader.cpp:450 glProgramParameteri"); glProgramParameteri(StagePrograms[ShaderStage_Vertex], GL_PROGRAM_BINARY_RETRIEVABLE_HINT, GL_TRUE); SF_GLCHECK("GL_Shader.cpp:450 glProgramParameteri"); }
 #endif
 
-        glLinkProgram(StagePrograms[ShaderStage_Vertex]);
+        { SF_GLPRE("GL_Shader.cpp:453 glLinkProgram"); glLinkProgram(StagePrograms[ShaderStage_Vertex]); SF_GLCHECK("GL_Shader.cpp:453 glLinkProgram"); }
 
         // The shaders will not actually be deleted until the program is destroyed.
         // We check the status of deletion, because some platforms (iOS) generate 
@@ -460,18 +460,18 @@ bool ShaderObject::createProgramOrPipeline( ShaderHashEntry* shaders, bool separ
         {
             if (!shaders[stage].Program)
                 continue;
-            glGetShaderiv(shaders[stage].Program, GL_DELETE_STATUS, &status);
+            { SF_GLPRE("GL_Shader.cpp:463 glGetShaderiv"); glGetShaderiv(shaders[stage].Program, GL_DELETE_STATUS, &status); SF_GLCHECK("GL_Shader.cpp:463 glGetShaderiv"); }
             if (status == GL_FALSE)
-                glDeleteShader(shaders[stage].Program);
+                { SF_GLPRE("GL_Shader.cpp:465 glDeleteShader"); glDeleteShader(shaders[stage].Program); SF_GLCHECK("GL_Shader.cpp:465 glDeleteShader"); }
         }
 
         // Check to see that the program linking succeeded.
         GLint result;
-        glGetProgramiv(StagePrograms[ShaderStage_Vertex], GL_LINK_STATUS, &result);
+        { SF_GLPRE("GL_Shader.cpp:470 glGetProgramiv"); glGetProgramiv(StagePrograms[ShaderStage_Vertex], GL_LINK_STATUS, &result); SF_GLCHECK("GL_Shader.cpp:470 glGetProgramiv"); }
         if (!result)
         {
             GLchar msg[512];
-            glGetProgramInfoLog(StagePrograms[ShaderStage_Vertex], sizeof(msg), 0, msg);
+            { SF_GLPRE("GL_Shader.cpp:474 glGetProgramInfoLog"); glGetProgramInfoLog(StagePrograms[ShaderStage_Vertex], sizeof(msg), 0, msg); SF_GLCHECK("GL_Shader.cpp:474 glGetProgramInfoLog"); }
             SF_DEBUG_ERROR1(1, "link: %s\n", msg);
             return false;
         }
@@ -674,7 +674,7 @@ void ShaderObject::releasePrograms()
     // a single ShaderObject, so they should be deleted.
     if (Separated && Pipeline != 0)
     {
-        glDeleteProgramPipelines(1, &Pipeline);
+        { SF_GLPRE("GL_Shader.cpp:677 glDeleteProgramPipelines"); glDeleteProgramPipelines(1, &Pipeline); SF_GLCHECK("GL_Shader.cpp:677 glDeleteProgramPipelines"); }
         Pipeline = 0;
     }
     memset(StagePrograms, 0, sizeof(StagePrograms));
@@ -687,7 +687,7 @@ void ShaderObject::dumpUniforms(unsigned shader)
     if (shader != 0)
     {
         GLint uniformCount;
-            glGetProgramiv(shader, GL_ACTIVE_UNIFORMS, &uniformCount);
+            { SF_GLPRE("GL_Shader.cpp:690 glGetProgramiv"); glGetProgramiv(shader, GL_ACTIVE_UNIFORMS, &uniformCount); SF_GLCHECK("GL_Shader.cpp:690 glGetProgramiv"); }
             SF_DEBUG_MESSAGE2(1, "Shader program %d has %d uniforms:", shader, uniformCount);
         for ( int uniform = 0; uniform < uniformCount; ++uniform)
         {
@@ -695,7 +695,7 @@ void ShaderObject::dumpUniforms(unsigned shader)
             GLsizei length;
             GLint size;
             GLenum type;
-                glGetActiveUniform(shader, uniform, 128, &length, &size, &type, uniformName);
+                { SF_GLPRE("GL_Shader.cpp:698 glGetActiveUniform"); glGetActiveUniform(shader, uniform, 128, &length, &size, &type, uniformName); SF_GLCHECK("GL_Shader.cpp:698 glGetActiveUniform"); }
             SF_DEBUG_MESSAGE3(1,"\t%16s (size=%d, type=%d)", uniformName, size, type);
         }
     }
@@ -815,24 +815,24 @@ void ShaderInterface::Finish(unsigned batchCount)
                 switch (uniformDef.ElementCount)
                 {
                 case 16:
-                        glUniformMatrix4fv(pCurShader->Uniforms[var].Location, size, false /* transpose */,
-                            UniformData + uniformDef.ShadowOffset);
+                        { SF_GLPRE("GL_Shader.cpp:818 glUniformMatrix4fv"); glUniformMatrix4fv(pCurShader->Uniforms[var].Location, size, false /* transpose */,
+                            UniformData + uniformDef.ShadowOffset); SF_GLCHECK("GL_Shader.cpp:818 glUniformMatrix4fv"); }
                     break;
                 case 4:
-                        glUniform4fv(pCurShader->Uniforms[var].Location, size,
-                            UniformData + uniformDef.ShadowOffset);
+                        { SF_GLPRE("GL_Shader.cpp:822 glUniform4fv"); glUniform4fv(pCurShader->Uniforms[var].Location, size,
+                            UniformData + uniformDef.ShadowOffset); SF_GLCHECK("GL_Shader.cpp:822 glUniform4fv"); }
                     break;
                 case 3:
-                        glUniform3fv(pCurShader->Uniforms[var].Location, size,
-                            UniformData + uniformDef.ShadowOffset);
+                        { SF_GLPRE("GL_Shader.cpp:826 glUniform3fv"); glUniform3fv(pCurShader->Uniforms[var].Location, size,
+                            UniformData + uniformDef.ShadowOffset); SF_GLCHECK("GL_Shader.cpp:826 glUniform3fv"); }
                     break;
                 case 2:
-                        glUniform2fv(pCurShader->Uniforms[var].Location, size,
-                            UniformData + uniformDef.ShadowOffset);
+                        { SF_GLPRE("GL_Shader.cpp:830 glUniform2fv"); glUniform2fv(pCurShader->Uniforms[var].Location, size,
+                            UniformData + uniformDef.ShadowOffset); SF_GLCHECK("GL_Shader.cpp:830 glUniform2fv"); }
                     break;
                 case 1:
-                        glUniform1fv(pCurShader->Uniforms[var].Location, size,
-                            UniformData + uniformDef.ShadowOffset);
+                        { SF_GLPRE("GL_Shader.cpp:834 glUniform1fv"); glUniform1fv(pCurShader->Uniforms[var].Location, size,
+                            UniformData + uniformDef.ShadowOffset); SF_GLCHECK("GL_Shader.cpp:834 glUniform1fv"); }
                     break;
 
                 default:
@@ -845,8 +845,8 @@ void ShaderInterface::Finish(unsigned batchCount)
                     if ( TextureUniforms[tu].UniformVar < 0 )
                         break;
 
-                    glUniform1iv( pCurShader->Uniforms[TextureUniforms[tu].UniformVar].Location, 
-                        TextureUniforms[tu].StagesUsed, TextureUniforms[tu].SamplerStages );
+                    { SF_GLPRE("GL_Shader.cpp:848 glUniform1iv"); glUniform1iv( pCurShader->Uniforms[TextureUniforms[tu].UniformVar].Location, 
+                        TextureUniforms[tu].StagesUsed, TextureUniforms[tu].SamplerStages ); SF_GLCHECK("GL_Shader.cpp:848 glUniform1iv"); }
                 }
             }
             else
@@ -857,24 +857,24 @@ void ShaderInterface::Finish(unsigned batchCount)
                 switch (uniformDef.ElementCount)
                 {
                 case 16:
-                    glProgramUniformMatrix4fv(program, pCurShader->Uniforms[var].Location, size, false /* transpose */,
-                        UniformData + uniformDef.ShadowOffset);
+                    { SF_GLPRE("GL_Shader.cpp:860 glProgramUniformMatrix4fv"); glProgramUniformMatrix4fv(program, pCurShader->Uniforms[var].Location, size, false /* transpose */,
+                        UniformData + uniformDef.ShadowOffset); SF_GLCHECK("GL_Shader.cpp:860 glProgramUniformMatrix4fv"); }
                     break;
                 case 4:
-                    glProgramUniform4fv(program, pCurShader->Uniforms[var].Location, size,
-                        UniformData + uniformDef.ShadowOffset);
+                    { SF_GLPRE("GL_Shader.cpp:864 glProgramUniform4fv"); glProgramUniform4fv(program, pCurShader->Uniforms[var].Location, size,
+                        UniformData + uniformDef.ShadowOffset); SF_GLCHECK("GL_Shader.cpp:864 glProgramUniform4fv"); }
                     break;
                 case 3:
-                    glProgramUniform3fv(program, pCurShader->Uniforms[var].Location, size,
-                        UniformData + uniformDef.ShadowOffset);
+                    { SF_GLPRE("GL_Shader.cpp:868 glProgramUniform3fv"); glProgramUniform3fv(program, pCurShader->Uniforms[var].Location, size,
+                        UniformData + uniformDef.ShadowOffset); SF_GLCHECK("GL_Shader.cpp:868 glProgramUniform3fv"); }
                     break;
                 case 2:
-                    glProgramUniform2fv(program, pCurShader->Uniforms[var].Location, size,
-                        UniformData + uniformDef.ShadowOffset);
+                    { SF_GLPRE("GL_Shader.cpp:872 glProgramUniform2fv"); glProgramUniform2fv(program, pCurShader->Uniforms[var].Location, size,
+                        UniformData + uniformDef.ShadowOffset); SF_GLCHECK("GL_Shader.cpp:872 glProgramUniform2fv"); }
                     break;
                 case 1:
-                    glProgramUniform1fv(program, pCurShader->Uniforms[var].Location, size,
-                        UniformData + uniformDef.ShadowOffset);
+                    { SF_GLPRE("GL_Shader.cpp:876 glProgramUniform1fv"); glProgramUniform1fv(program, pCurShader->Uniforms[var].Location, size,
+                        UniformData + uniformDef.ShadowOffset); SF_GLCHECK("GL_Shader.cpp:876 glProgramUniform1fv"); }
                     break;
 
                 default:
@@ -889,8 +889,8 @@ void ShaderInterface::Finish(unsigned batchCount)
 
                     GLuint gProgram = pCurShader->GetUniformVariableProgram(TextureUniforms[tu].UniformVar);                    
                     SF_UNUSED(gProgram); // if GL_EXT_separate_shaderObjects is not available.
-                    glProgramUniform1iv( gProgram, pCurShader->Uniforms[TextureUniforms[tu].UniformVar].Location, 
-                    TextureUniforms[tu].StagesUsed, TextureUniforms[tu].SamplerStages );
+                    { SF_GLPRE("GL_Shader.cpp:892 glProgramUniform1iv"); glProgramUniform1iv( gProgram, pCurShader->Uniforms[TextureUniforms[tu].UniformVar].Location, 
+                    TextureUniforms[tu].StagesUsed, TextureUniforms[tu].SamplerStages ); SF_GLCHECK("GL_Shader.cpp:892 glProgramUniform1iv"); }
                 }
             }
         }
@@ -1115,9 +1115,9 @@ bool ShaderManager::Initialize(HAL* phal, unsigned vmcFlags)
         // release its resources. 
 #if defined(SF_USE_GLES2)
         GLint hasShaderCompiler;
-        glGetIntegerv(GL_SHADER_COMPILER, &hasShaderCompiler);
+        { SF_GLPRE("GL_Shader.cpp:1118 glGetIntegerv"); glGetIntegerv(GL_SHADER_COMPILER, &hasShaderCompiler); SF_GLCHECK("GL_Shader.cpp:1118 glGetIntegerv"); }
         if (hasShaderCompiler)
-            glReleaseShaderCompiler();
+            { SF_GLPRE("GL_Shader.cpp:1120 glReleaseShaderCompiler"); glReleaseShaderCompiler(); SF_GLCHECK("GL_Shader.cpp:1120 glReleaseShaderCompiler"); }
 #endif
     }
 
@@ -1201,7 +1201,7 @@ void ShaderManager::Reset()
     {
         const ShaderHashEntry& e = it->Second;
         if (e.Program && glIsProgram(e.Program))
-            glDeleteProgram(e.Program);
+            { SF_GLPRE("GL_Shader.cpp:1204 glDeleteProgram"); glDeleteProgram(e.Program); SF_GLCHECK("GL_Shader.cpp:1204 glDeleteProgram"); }
     }
     CompiledShaderHash.Clear();
 
@@ -1215,7 +1215,7 @@ void ShaderManager::BeginScene()
     // If we are using separated pipelines, make sure the current program is 0, otherwise it will
     // override any shader pipelines used with glBindProgramPipeline.
     if (SeparablePipelines)
-        glUseProgram(0);
+        { SF_GLPRE("GL_Shader.cpp:1218 glUseProgram"); glUseProgram(0); SF_GLCHECK("GL_Shader.cpp:1218 glUseProgram"); }
 }
 
 void ShaderManager::saveBinaryShaders()
@@ -1245,7 +1245,7 @@ void ShaderManager::saveBinaryShaders()
             if (it->Second.BinarySize == 0)
             {
                 GLint size;
-                glGetProgramiv(program, GL_PROGRAM_BINARY_LENGTH, &size);
+                { SF_GLPRE("GL_Shader.cpp:1248 glGetProgramiv"); glGetProgramiv(program, GL_PROGRAM_BINARY_LENGTH, &size); SF_GLCHECK("GL_Shader.cpp:1248 glGetProgramiv"); }
                 maximumBinarySize = Alg::Max(maximumBinarySize, size);
                     SF_BINARYSHADER_DEBUG_MESSAGE3(1, "\tShader requires saving (hash=0x%08x, oldsize=%6d, newsize=%6d)\n", 
                         it->First, it->Second.BinarySize, size);
@@ -1445,29 +1445,29 @@ bool ShaderManager::loadBinaryShaders()
                     // if it matches our current setup (whether we were able to modify it or not). If it does not match, fail loading 
                     // this binary.
                     if (SeparablePipelines)
-                        glProgramParameteri(entry.Program, GL_PROGRAM_SEPARABLE, GL_TRUE);
+                        { SF_GLPRE("GL_Shader.cpp:1448 glProgramParameteri"); glProgramParameteri(entry.Program, GL_PROGRAM_SEPARABLE, GL_TRUE); SF_GLCHECK("GL_Shader.cpp:1448 glProgramParameteri"); }
                 }
 
                 // Load the binary shader.
-                glProgramBinary(entry.Program, format, buffer, size);
+                { SF_GLPRE("GL_Shader.cpp:1452 glProgramBinary"); glProgramBinary(entry.Program, format, buffer, size); SF_GLCHECK("GL_Shader.cpp:1452 glProgramBinary"); }
 
                 if (SeparablePipelineExtension)
                 {
                     GLint separableFlag;
-                    glGetProgramiv(entry.Program, GL_PROGRAM_SEPARABLE, &separableFlag);
+                    { SF_GLPRE("GL_Shader.cpp:1457 glGetProgramiv"); glGetProgramiv(entry.Program, GL_PROGRAM_SEPARABLE, &separableFlag); SF_GLCHECK("GL_Shader.cpp:1457 glGetProgramiv"); }
                     if ((separableFlag == GL_TRUE) != SeparablePipelines)
                     {
                         SF_BINARYSHADER_DEBUG_MESSAGE2(1, "Loaded shader program's GL_PROGRAM_SEPARABLE value does not "
                             "match current state (hash=0x%08x, separable=%d). This shader will be ignored.\n",
                             hashCode, SeparablePipelines ? 1 : 0);
-                        glDeleteProgram(entry.Program);
+                        { SF_GLPRE("GL_Shader.cpp:1463 glDeleteProgram"); glDeleteProgram(entry.Program); SF_GLCHECK("GL_Shader.cpp:1463 glDeleteProgram"); }
                         continue;
                     }
                 }
 
                 // Check to see if glProgramBinary failed, for instance because the driver has changed.
                 GLint linkStatus;
-                glGetProgramiv(entry.Program, GL_LINK_STATUS, &linkStatus);
+                { SF_GLPRE("GL_Shader.cpp:1470 glGetProgramiv"); glGetProgramiv(entry.Program, GL_LINK_STATUS, &linkStatus); SF_GLCHECK("GL_Shader.cpp:1470 glGetProgramiv"); }
                 if (linkStatus != GL_TRUE)
                 {
                     SF_DEBUG_WARNONCE(1, "Binary shader program failed. This might indicate a driver change since the last binary shader saving - recompiling.");
@@ -1677,58 +1677,58 @@ const BlurFilterShader* ShaderInterface::GetBlurShader(const BlurFilterShaderKey
 
     GLuint vp = glCreateShader(GL_VERTEX_SHADER);
     GLint result;
-    glShaderSource(vp, 1, &pvsource, 0);
-    glCompileShader(vp);
-    glGetShaderiv(vp, GL_COMPILE_STATUS, &result);
+    { SF_GLPRE("GL_Shader.cpp:1680 glShaderSource"); glShaderSource(vp, 1, &pvsource, 0); SF_GLCHECK("GL_Shader.cpp:1680 glShaderSource"); }
+    { SF_GLPRE("GL_Shader.cpp:1681 glCompileShader"); glCompileShader(vp); SF_GLCHECK("GL_Shader.cpp:1681 glCompileShader"); }
+    { SF_GLPRE("GL_Shader.cpp:1682 glGetShaderiv"); glGetShaderiv(vp, GL_COMPILE_STATUS, &result); SF_GLCHECK("GL_Shader.cpp:1682 glGetShaderiv"); }
     if (!result)
     {
         GLchar msg[512];
-        glGetShaderInfoLog(vp, sizeof(msg), 0, msg);
+        { SF_GLPRE("GL_Shader.cpp:1686 glGetShaderInfoLog"); glGetShaderInfoLog(vp, sizeof(msg), 0, msg); SF_GLCHECK("GL_Shader.cpp:1686 glGetShaderInfoLog"); }
         SF_DEBUG_ERROR2(1, "%s: %s\n", pvsource, msg);
-        glDeleteShader(vp);
+        { SF_GLPRE("GL_Shader.cpp:1688 glDeleteShader"); glDeleteShader(vp); SF_GLCHECK("GL_Shader.cpp:1688 glDeleteShader"); }
         return 0;
     }
     GLint prog = glCreateProgram();
-    glAttachShader(prog, vp);
+    { SF_GLPRE("GL_Shader.cpp:1692 glAttachShader"); glAttachShader(prog, vp); SF_GLCHECK("GL_Shader.cpp:1692 glAttachShader"); }
     GLuint fp = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fp, 1, &pfsource, 0);
-    glCompileShader(fp);
-    glGetShaderiv(fp, GL_COMPILE_STATUS, &result);
+    { SF_GLPRE("GL_Shader.cpp:1694 glShaderSource"); glShaderSource(fp, 1, &pfsource, 0); SF_GLCHECK("GL_Shader.cpp:1694 glShaderSource"); }
+    { SF_GLPRE("GL_Shader.cpp:1695 glCompileShader"); glCompileShader(fp); SF_GLCHECK("GL_Shader.cpp:1695 glCompileShader"); }
+    { SF_GLPRE("GL_Shader.cpp:1696 glGetShaderiv"); glGetShaderiv(fp, GL_COMPILE_STATUS, &result); SF_GLCHECK("GL_Shader.cpp:1696 glGetShaderiv"); }
     if (!result)
     {
         GLchar msg[1512];
-        glGetShaderInfoLog(fp, sizeof(msg), 0, msg);
+        { SF_GLPRE("GL_Shader.cpp:1700 glGetShaderInfoLog"); glGetShaderInfoLog(fp, sizeof(msg), 0, msg); SF_GLCHECK("GL_Shader.cpp:1700 glGetShaderInfoLog"); }
         SF_DEBUG_ERROR2(1, "%s: %s\n", pfsource, msg);
-        glDeleteShader(fp);
-        glDeleteProgram(prog);
+        { SF_GLPRE("GL_Shader.cpp:1702 glDeleteShader"); glDeleteShader(fp); SF_GLCHECK("GL_Shader.cpp:1702 glDeleteShader"); }
+        { SF_GLPRE("GL_Shader.cpp:1703 glDeleteProgram"); glDeleteProgram(prog); SF_GLCHECK("GL_Shader.cpp:1703 glDeleteProgram"); }
         prog = 0;
         return 0;
     }
-    glAttachShader(prog, fp);
+    { SF_GLPRE("GL_Shader.cpp:1707 glAttachShader"); glAttachShader(prog, fp); SF_GLCHECK("GL_Shader.cpp:1707 glAttachShader"); }
 
-    glBindAttribLocation(prog, 0, "pos");
+    { SF_GLPRE("GL_Shader.cpp:1709 glBindAttribLocation"); glBindAttribLocation(prog, 0, "pos"); SF_GLCHECK("GL_Shader.cpp:1709 glBindAttribLocation"); }
     for (int i = 0; i < params.TotalTCs; i++)
     {
         char tc[16];
         SPrintF(tc, "intc%d", i);
-        glBindAttribLocation(prog, 1+i, tc);
+        { SF_GLPRE("GL_Shader.cpp:1714 glBindAttribLocation"); glBindAttribLocation(prog, 1+i, tc); SF_GLCHECK("GL_Shader.cpp:1714 glBindAttribLocation"); }
     }
 
-    glLinkProgram(prog);
+    { SF_GLPRE("GL_Shader.cpp:1717 glLinkProgram"); glLinkProgram(prog); SF_GLCHECK("GL_Shader.cpp:1717 glLinkProgram"); }
     GLint fstatus, vstatus;
-    glGetShaderiv(fp, GL_DELETE_STATUS, &fstatus);
-    glGetShaderiv(vp, GL_DELETE_STATUS, &vstatus);
+    { SF_GLPRE("GL_Shader.cpp:1719 glGetShaderiv"); glGetShaderiv(fp, GL_DELETE_STATUS, &fstatus); SF_GLCHECK("GL_Shader.cpp:1719 glGetShaderiv"); }
+    { SF_GLPRE("GL_Shader.cpp:1720 glGetShaderiv"); glGetShaderiv(vp, GL_DELETE_STATUS, &vstatus); SF_GLCHECK("GL_Shader.cpp:1720 glGetShaderiv"); }
     if (fstatus == GL_FALSE)
-        glDeleteShader(fp);
+        { SF_GLPRE("GL_Shader.cpp:1722 glDeleteShader"); glDeleteShader(fp); SF_GLCHECK("GL_Shader.cpp:1722 glDeleteShader"); }
     if (vstatus == GL_FALSE)
-        glDeleteShader(vp);
-    glGetProgramiv(prog, GL_LINK_STATUS, &result);
+        { SF_GLPRE("GL_Shader.cpp:1724 glDeleteShader"); glDeleteShader(vp); SF_GLCHECK("GL_Shader.cpp:1724 glDeleteShader"); }
+    { SF_GLPRE("GL_Shader.cpp:1725 glGetProgramiv"); glGetProgramiv(prog, GL_LINK_STATUS, &result); SF_GLCHECK("GL_Shader.cpp:1725 glGetProgramiv"); }
     if (!result)
     {
         GLchar msg[512];
-        glGetProgramInfoLog(prog, sizeof(msg), 0, msg);
+        { SF_GLPRE("GL_Shader.cpp:1729 glGetProgramInfoLog"); glGetProgramInfoLog(prog, sizeof(msg), 0, msg); SF_GLCHECK("GL_Shader.cpp:1729 glGetProgramInfoLog"); }
         SF_DEBUG_ERROR3(1, "link:\n%s\n%s %s\n", pvsource, pfsource, msg);
-        glDeleteProgram(prog);
+        { SF_GLPRE("GL_Shader.cpp:1731 glDeleteProgram"); glDeleteProgram(prog); SF_GLCHECK("GL_Shader.cpp:1731 glDeleteProgram"); }
         return 0;
     }
 

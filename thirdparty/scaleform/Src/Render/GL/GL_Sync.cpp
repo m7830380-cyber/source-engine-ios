@@ -31,7 +31,7 @@ namespace Scaleform { namespace Render { namespace GL {
 void RenderSync::KickOffFences( FenceType waitType )
 {
     SF_UNUSED(waitType);
-    glFlush();
+    { SF_GLPRE("GL_Sync.cpp:34 glFlush"); glFlush(); SF_GLCHECK("GL_Sync.cpp:34 glFlush"); }
 }
 
 Scaleform::UInt64 RenderSync::SetFence()
@@ -46,7 +46,7 @@ bool RenderSync::IsPending( FenceType waitType, UInt64 handle, const FenceFrame&
     GLsync  sync = reinterpret_cast<GLsync>(handle);
     GLsizei length;
     GLint   status;
-    glGetSynciv(sync, GL_SYNC_STATUS, 4, &length, &status);
+    { SF_GLPRE("GL_Sync.cpp:49 glGetSynciv"); glGetSynciv(sync, GL_SYNC_STATUS, 4, &length, &status); SF_GLCHECK("GL_Sync.cpp:49 glGetSynciv"); }
     SF_UNUSED3(sync, length, status); // fix warning if glGetSynciv is a no-op.
     return (status == GL_UNSIGNALED);
 }
@@ -65,7 +65,7 @@ void RenderSync::WaitFence( FenceType waitType, UInt64 handle, const FenceFrame&
 void RenderSync::ReleaseFence( UInt64 handle )
 {
     GLsync  sync = reinterpret_cast<GLsync>(handle);
-    glDeleteSync(sync);
+    { SF_GLPRE("GL_Sync.cpp:68 glDeleteSync"); glDeleteSync(sync); SF_GLCHECK("GL_Sync.cpp:68 glDeleteSync"); }
     // fix warning if glDeleteSync is a no-op.
     SF_UNUSED(sync);
 }

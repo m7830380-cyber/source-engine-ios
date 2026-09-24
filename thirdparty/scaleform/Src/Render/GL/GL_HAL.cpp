@@ -154,9 +154,9 @@ bool HAL::InitHAL(const GL::HALInitParams& params)
     {
         if (CheckExtension("GL_ARB_debug_output") || CheckExtension("GL_KHR_debug"))
         {
-            glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
-            glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, 0, true);
-            glDebugMessageCallback((GLDEBUGPROC)DebugMessageCallback, 0);
+            { SF_GLPRE("GL_HAL.cpp:157 glEnable"); glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS); SF_GLCHECK("GL_HAL.cpp:157 glEnable"); }
+            { SF_GLPRE("GL_HAL.cpp:158 glDebugMessageControl"); glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, 0, true); SF_GLCHECK("GL_HAL.cpp:158 glDebugMessageControl"); }
+            { SF_GLPRE("GL_HAL.cpp:159 glDebugMessageCallback"); glDebugMessageCallback((GLDEBUGPROC)DebugMessageCallback, 0); SF_GLCHECK("GL_HAL.cpp:159 glDebugMessageCallback"); }
         }
         else
         {
@@ -168,10 +168,10 @@ bool HAL::InitHAL(const GL::HALInitParams& params)
     GLint maxUniforms = 128;
 #if defined(SF_USE_GLES2)
     #if defined(GL_MAX_VERTEX_UNIFORM_VECTORS)
-        glGetIntegerv(GL_MAX_VERTEX_UNIFORM_VECTORS, &maxUniforms);
+        { SF_GLPRE("GL_HAL.cpp:171 glGetIntegerv"); glGetIntegerv(GL_MAX_VERTEX_UNIFORM_VECTORS, &maxUniforms); SF_GLCHECK("GL_HAL.cpp:171 glGetIntegerv"); }
     #endif
 #else
-    glGetIntegerv(GL_MAX_VERTEX_UNIFORM_COMPONENTS, &maxUniforms);
+    { SF_GLPRE("GL_HAL.cpp:174 glGetIntegerv"); glGetIntegerv(GL_MAX_VERTEX_UNIFORM_COMPONENTS, &maxUniforms); SF_GLCHECK("GL_HAL.cpp:174 glGetIntegerv"); }
 #endif
 
 #if defined(SF_OS_ANDROID)
@@ -193,7 +193,7 @@ bool HAL::InitHAL(const GL::HALInitParams& params)
     SManager.SetBinaryShaderPath(params.BinaryShaderPath);
 
     GLint maxAttributes;
-    glGetIntegerv(GL_MAX_VERTEX_ATTRIBS, &maxAttributes);
+    { SF_GLPRE("GL_HAL.cpp:196 glGetIntegerv"); glGetIntegerv(GL_MAX_VERTEX_ATTRIBS, &maxAttributes); SF_GLCHECK("GL_HAL.cpp:196 glGetIntegerv"); }
 
     SF_DEBUG_MESSAGE1(1, "GL_VENDOR                   = %s\n", (const char*)glGetString(GL_VENDOR));
     SF_DEBUG_MESSAGE1(1, "GL_VERSION                  = %s\n", (const char*)glGetString(GL_VERSION));
@@ -206,12 +206,12 @@ bool HAL::InitHAL(const GL::HALInitParams& params)
     // In GLES 2.0, print out the plane bit-depths.
 #if defined(SF_USE_GLES2)
     GLint rgbaBits[4], stencilBits, depthBits;
-    glGetIntegerv(GL_RED_BITS, &rgbaBits[0]);
-    glGetIntegerv(GL_GREEN_BITS, &rgbaBits[1]);
-    glGetIntegerv(GL_BLUE_BITS, &rgbaBits[2]);
-    glGetIntegerv(GL_ALPHA_BITS, &rgbaBits[3]);
-    glGetIntegerv(GL_STENCIL_BITS, &stencilBits);
-    glGetIntegerv(GL_DEPTH_BITS, &depthBits);
+    { SF_GLPRE("GL_HAL.cpp:209 glGetIntegerv"); glGetIntegerv(GL_RED_BITS, &rgbaBits[0]); SF_GLCHECK("GL_HAL.cpp:209 glGetIntegerv"); }
+    { SF_GLPRE("GL_HAL.cpp:210 glGetIntegerv"); glGetIntegerv(GL_GREEN_BITS, &rgbaBits[1]); SF_GLCHECK("GL_HAL.cpp:210 glGetIntegerv"); }
+    { SF_GLPRE("GL_HAL.cpp:211 glGetIntegerv"); glGetIntegerv(GL_BLUE_BITS, &rgbaBits[2]); SF_GLCHECK("GL_HAL.cpp:211 glGetIntegerv"); }
+    { SF_GLPRE("GL_HAL.cpp:212 glGetIntegerv"); glGetIntegerv(GL_ALPHA_BITS, &rgbaBits[3]); SF_GLCHECK("GL_HAL.cpp:212 glGetIntegerv"); }
+    { SF_GLPRE("GL_HAL.cpp:213 glGetIntegerv"); glGetIntegerv(GL_STENCIL_BITS, &stencilBits); SF_GLCHECK("GL_HAL.cpp:213 glGetIntegerv"); }
+    { SF_GLPRE("GL_HAL.cpp:214 glGetIntegerv"); glGetIntegerv(GL_DEPTH_BITS, &depthBits); SF_GLCHECK("GL_HAL.cpp:214 glGetIntegerv"); }
     SF_DEBUG_MESSAGE6(1, "GL_x_BITS                   = R%dG%dB%dA%d, D%dS%d\n", rgbaBits[0], rgbaBits[1], rgbaBits[2], rgbaBits[3], depthBits, stencilBits);
 #endif
 
@@ -326,13 +326,13 @@ bool HAL::BeginScene()
     if ( !Render::HAL::BeginScene())
         return false;
 
-    glDisable(GL_CULL_FACE);
-    glDisable(GL_DEPTH_TEST);
-    glStencilMask(0xffffffff);
+    { SF_GLPRE("GL_HAL.cpp:329 glDisable"); glDisable(GL_CULL_FACE); SF_GLCHECK("GL_HAL.cpp:329 glDisable"); }
+    { SF_GLPRE("GL_HAL.cpp:330 glDisable"); glDisable(GL_DEPTH_TEST); SF_GLCHECK("GL_HAL.cpp:330 glDisable"); }
+    { SF_GLPRE("GL_HAL.cpp:331 glStencilMask"); glStencilMask(0xffffffff); SF_GLCHECK("GL_HAL.cpp:331 glStencilMask"); }
 
 #if defined(GL_ALPHA_TEST)
     if (!CheckGLVersion(3,0))
-        glDisable(GL_ALPHA_TEST);
+        { SF_GLPRE("GL_HAL.cpp:335 glDisable"); glDisable(GL_ALPHA_TEST); SF_GLCHECK("GL_HAL.cpp:335 glDisable"); }
 #endif
 
     BlendEnable = -1;
@@ -342,9 +342,9 @@ bool HAL::BeginScene()
         // Reset vertex array usage (in case it changed between frames).
         EnabledVertexArrays = -1;
         GLint va;
-        glGetIntegerv(GL_MAX_VERTEX_ATTRIBS, &va);
+        { SF_GLPRE("GL_HAL.cpp:345 glGetIntegerv"); glGetIntegerv(GL_MAX_VERTEX_ATTRIBS, &va); SF_GLCHECK("GL_HAL.cpp:345 glGetIntegerv"); }
         for (int i = 0; i < va; i++)
-            glDisableVertexAttribArray(i);
+            { SF_GLPRE("GL_HAL.cpp:347 glDisableVertexAttribArray"); glDisableVertexAttribArray(i); SF_GLCHECK("GL_HAL.cpp:347 glDisableVertexAttribArray"); }
     }
     return true;
 }
@@ -357,12 +357,12 @@ bool HAL::EndScene()
     // Unbind the current VAO, so it doesn't get modified if this is an index buffer.
     if (ShouldUseVAOs())
     {
-        glBindVertexArray(0);
+        { SF_GLPRE("GL_HAL.cpp:360 glBindVertexArray"); glBindVertexArray(0); SF_GLCHECK("GL_HAL.cpp:360 glBindVertexArray"); }
     }
 
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
-    glUseProgram(0);
+    { SF_GLPRE("GL_HAL.cpp:363 glBindBuffer"); glBindBuffer(GL_ARRAY_BUFFER, 0); SF_GLCHECK("GL_HAL.cpp:363 glBindBuffer"); }
+    { SF_GLPRE("GL_HAL.cpp:364 glBindBuffer"); glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0); SF_GLCHECK("GL_HAL.cpp:364 glBindBuffer"); }
+    { SF_GLPRE("GL_HAL.cpp:365 glUseProgram"); glUseProgram(0); SF_GLCHECK("GL_HAL.cpp:365 glUseProgram"); }
 
     return true;
 }
@@ -370,7 +370,7 @@ bool HAL::EndScene()
 
 void HAL::beginDisplay(BeginDisplayData* data)
 {
-    glDisable(GL_STENCIL_TEST);
+    { SF_GLPRE("GL_HAL.cpp:373 glDisable"); glDisable(GL_STENCIL_TEST); SF_GLCHECK("GL_HAL.cpp:373 glDisable"); }
 
     Render::HAL::beginDisplay(data);
 }
@@ -394,8 +394,8 @@ void HAL::updateViewport()
 
         if ( HALState & HS_InRenderTarget )
         {
-            glViewport(VP.Left, VP.Top, VP.Width, VP.Height);
-            glDisable(GL_SCISSOR_TEST);
+            { SF_GLPRE("GL_HAL.cpp:397 glViewport"); glViewport(VP.Left, VP.Top, VP.Width, VP.Height); SF_GLCHECK("GL_HAL.cpp:397 glViewport"); }
+            { SF_GLPRE("GL_HAL.cpp:398 glDisable"); glDisable(GL_SCISSOR_TEST); SF_GLCHECK("GL_HAL.cpp:398 glDisable"); }
         }
         else
         {
@@ -405,21 +405,21 @@ void HAL::updateViewport()
             vp.Width    = ViewRect.Width();
             vp.Height   = ViewRect.Height();
             vp.SetStereoViewport(Matrices->S3DDisplay);
-            glViewport(vp.Left, VP.BufferHeight-vp.Top-vp.Height, vp.Width, vp.Height);
+            { SF_GLPRE("GL_HAL.cpp:408 glViewport"); glViewport(vp.Left, VP.BufferHeight-vp.Top-vp.Height, vp.Width, vp.Height); SF_GLCHECK("GL_HAL.cpp:408 glViewport"); }
             if (VP.Flags & Viewport::View_UseScissorRect)
             {
-                glEnable(GL_SCISSOR_TEST);
-                glScissor(VP.ScissorLeft, VP.BufferHeight-VP.ScissorTop-VP.ScissorHeight, VP.ScissorWidth, VP.ScissorHeight);
+                { SF_GLPRE("GL_HAL.cpp:411 glEnable"); glEnable(GL_SCISSOR_TEST); SF_GLCHECK("GL_HAL.cpp:411 glEnable"); }
+                { SF_GLPRE("GL_HAL.cpp:412 glScissor"); glScissor(VP.ScissorLeft, VP.BufferHeight-VP.ScissorTop-VP.ScissorHeight, VP.ScissorWidth, VP.ScissorHeight); SF_GLCHECK("GL_HAL.cpp:412 glScissor"); }
             }
             else
             {
-                glDisable(GL_SCISSOR_TEST);
+                { SF_GLPRE("GL_HAL.cpp:416 glDisable"); glDisable(GL_SCISSOR_TEST); SF_GLCHECK("GL_HAL.cpp:416 glDisable"); }
             }
         }
     }
     else
     {
-        glViewport(0,0,0,0);
+        { SF_GLPRE("GL_HAL.cpp:422 glViewport"); glViewport(0,0,0,0); SF_GLCHECK("GL_HAL.cpp:422 glViewport"); }
     }
 
     // Workaround: it appears that when changing FBOs, the Tegra 3 will lose the current shader program
@@ -442,7 +442,7 @@ void   HAL::MapVertexFormat(PrimitiveFillType fill, const VertexFormat* sourceFo
 void HAL::FinishFrame()
 {
 #if defined(SF_USE_GLES_ANY)
-    glFinish();
+    { SF_GLPRE("GL_HAL.cpp:445 glFinish"); glFinish(); SF_GLCHECK("GL_HAL.cpp:445 glFinish"); }
 #endif
 }
 
@@ -476,24 +476,24 @@ void HAL::applyDepthStencilMode(DepthStencilMode mode, unsigned stencilRef)
     if (oldState.ColorWriteEnable != newState.ColorWriteEnable)
     {
         if (newState.ColorWriteEnable)
-            glColorMask(1,1,1,1);
+            { SF_GLPRE("GL_HAL.cpp:479 glColorMask"); glColorMask(1,1,1,1); SF_GLCHECK("GL_HAL.cpp:479 glColorMask"); }
         else
-            glColorMask(0,0,0,0);
+            { SF_GLPRE("GL_HAL.cpp:481 glColorMask"); glColorMask(0,0,0,0); SF_GLCHECK("GL_HAL.cpp:481 glColorMask"); }
     }
 
     if (oldState.StencilEnable != newState.StencilEnable)
     {
         if (newState.StencilEnable)
-            glEnable(GL_STENCIL_TEST);
+            { SF_GLPRE("GL_HAL.cpp:487 glEnable"); glEnable(GL_STENCIL_TEST); SF_GLCHECK("GL_HAL.cpp:487 glEnable"); }
         else
-            glDisable(GL_STENCIL_TEST);
+            { SF_GLPRE("GL_HAL.cpp:489 glDisable"); glDisable(GL_STENCIL_TEST); SF_GLCHECK("GL_HAL.cpp:489 glDisable"); }
     }
 
     // Only need to set stencil pass/fail ops if stenciling is actually enabled.
     if (newState.StencilEnable)
     {
         // No redundancy checking on stencil ref/write mask.
-        glStencilFunc(DepthStencilCompareFunctions[newState.StencilFunction], stencilRef, 0XFF);
+        { SF_GLPRE("GL_HAL.cpp:496 glStencilFunc"); glStencilFunc(DepthStencilCompareFunctions[newState.StencilFunction], stencilRef, 0XFF); SF_GLCHECK("GL_HAL.cpp:496 glStencilFunc"); }
 
         if ((oldState.StencilFailOp != newState.StencilFailOp &&
             newState.StencilFailOp != HAL::StencilOp_Ignore) ||
@@ -502,7 +502,7 @@ void HAL::applyDepthStencilMode(DepthStencilMode mode, unsigned stencilRef)
             (oldState.StencilZFailOp != newState.StencilZFailOp &&
             newState.StencilZFailOp != HAL::StencilOp_Ignore))
         {
-            glStencilOp(StencilOps[newState.StencilFailOp], StencilOps[newState.StencilZFailOp], StencilOps[newState.StencilPassOp]);
+            { SF_GLPRE("GL_HAL.cpp:505 glStencilOp"); glStencilOp(StencilOps[newState.StencilFailOp], StencilOps[newState.StencilZFailOp], StencilOps[newState.StencilPassOp]); SF_GLCHECK("GL_HAL.cpp:505 glStencilOp"); }
         }
     }
 
@@ -511,9 +511,9 @@ void HAL::applyDepthStencilMode(DepthStencilMode mode, unsigned stencilRef)
         (newState.DepthTestEnable || newState.DepthWriteEnable))
     {
         if ((newState.DepthTestEnable || newState.DepthWriteEnable))
-            glEnable(GL_DEPTH_TEST);
+            { SF_GLPRE("GL_HAL.cpp:514 glEnable"); glEnable(GL_DEPTH_TEST); SF_GLCHECK("GL_HAL.cpp:514 glEnable"); }
         else
-            glDisable(GL_DEPTH_TEST);
+            { SF_GLPRE("GL_HAL.cpp:516 glDisable"); glDisable(GL_DEPTH_TEST); SF_GLCHECK("GL_HAL.cpp:516 glDisable"); }
 
         // Only need to set the function, if depth testing is enabled.
         if (newState.DepthTestEnable)
@@ -521,14 +521,14 @@ void HAL::applyDepthStencilMode(DepthStencilMode mode, unsigned stencilRef)
             if (oldState.DepthFunction != newState.DepthFunction &&
                 newState.DepthFunction != HAL::DepthStencilFunction_Ignore)
             {
-                glDepthFunc(DepthStencilCompareFunctions[newState.DepthFunction]);
+                { SF_GLPRE("GL_HAL.cpp:524 glDepthFunc"); glDepthFunc(DepthStencilCompareFunctions[newState.DepthFunction]); SF_GLCHECK("GL_HAL.cpp:524 glDepthFunc"); }
             }
         }
     }
 
     if (oldState.DepthWriteEnable != newState.DepthWriteEnable)
     {
-        glDepthMask(newState.DepthWriteEnable ? GL_TRUE : GL_FALSE);
+        { SF_GLPRE("GL_HAL.cpp:531 glDepthMask"); glDepthMask(newState.DepthWriteEnable ? GL_TRUE : GL_FALSE); SF_GLCHECK("GL_HAL.cpp:531 glDepthMask"); }
     }
 
     CurrentDepthStencilState = mode;
@@ -539,12 +539,12 @@ bool HAL::checkDepthStencilBufferCaps()
     if (!StencilChecked)
     {
         GLint currentFBO;
-        glGetIntegerv(GL_FRAMEBUFFER_BINDING, &currentFBO);
+        { SF_GLPRE("GL_HAL.cpp:542 glGetIntegerv"); glGetIntegerv(GL_FRAMEBUFFER_BINDING, &currentFBO); SF_GLCHECK("GL_HAL.cpp:542 glGetIntegerv"); }
 
         if (currentFBO != 0)
         {
             GLint stencilType, stencilBits;
-            glGetFramebufferAttachmentParameteriv(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE, &stencilType);
+            { SF_GLPRE("GL_HAL.cpp:547 glGetFramebufferAttachmentParameteriv"); glGetFramebufferAttachmentParameteriv(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE, &stencilType); SF_GLCHECK("GL_HAL.cpp:547 glGetFramebufferAttachmentParameteriv"); }
             if (stencilType == GL_NONE)
             {
                 stencilBits = 0;
@@ -552,13 +552,13 @@ bool HAL::checkDepthStencilBufferCaps()
             else
             {
                 GLint stencilName;
-                glGetFramebufferAttachmentParameteriv(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME, &stencilName);
-                glBindRenderbuffer(GL_RENDERBUFFER, stencilName);
+                { SF_GLPRE("GL_HAL.cpp:555 glGetFramebufferAttachmentParameteriv"); glGetFramebufferAttachmentParameteriv(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME, &stencilName); SF_GLCHECK("GL_HAL.cpp:555 glGetFramebufferAttachmentParameteriv"); }
+                { SF_GLPRE("GL_HAL.cpp:556 glBindRenderbuffer"); glBindRenderbuffer(GL_RENDERBUFFER, stencilName); SF_GLCHECK("GL_HAL.cpp:556 glBindRenderbuffer"); }
                 if (stencilType == GL_RENDERBUFFER)
-                    glGetRenderbufferParameteriv(GL_RENDERBUFFER, GL_RENDERBUFFER_STENCIL_SIZE, &stencilBits);
+                    { SF_GLPRE("GL_HAL.cpp:558 glGetRenderbufferParameteriv"); glGetRenderbufferParameteriv(GL_RENDERBUFFER, GL_RENDERBUFFER_STENCIL_SIZE, &stencilBits); SF_GLCHECK("GL_HAL.cpp:558 glGetRenderbufferParameteriv"); }
                 else
                     stencilBits = 8;
-                glBindRenderbuffer(GL_RENDERBUFFER, 0);
+                { SF_GLPRE("GL_HAL.cpp:561 glBindRenderbuffer"); glBindRenderbuffer(GL_RENDERBUFFER, 0); SF_GLCHECK("GL_HAL.cpp:561 glBindRenderbuffer"); }
             }
 
             if (stencilBits > 0)
@@ -569,7 +569,7 @@ bool HAL::checkDepthStencilBufferCaps()
 
             // Check for depth buffer.
             GLint depthType, depthBits;
-            glGetFramebufferAttachmentParameteriv(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE, &depthType);
+            { SF_GLPRE("GL_HAL.cpp:572 glGetFramebufferAttachmentParameteriv"); glGetFramebufferAttachmentParameteriv(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE, &depthType); SF_GLCHECK("GL_HAL.cpp:572 glGetFramebufferAttachmentParameteriv"); }
             if (depthType == GL_NONE)
             {
                 depthBits = 0;
@@ -577,13 +577,13 @@ bool HAL::checkDepthStencilBufferCaps()
             else
             {
                 GLint depthName;
-                glGetFramebufferAttachmentParameteriv(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME, &depthName);
-                glBindRenderbuffer(GL_RENDERBUFFER, depthName);
+                { SF_GLPRE("GL_HAL.cpp:580 glGetFramebufferAttachmentParameteriv"); glGetFramebufferAttachmentParameteriv(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME, &depthName); SF_GLCHECK("GL_HAL.cpp:580 glGetFramebufferAttachmentParameteriv"); }
+                { SF_GLPRE("GL_HAL.cpp:581 glBindRenderbuffer"); glBindRenderbuffer(GL_RENDERBUFFER, depthName); SF_GLCHECK("GL_HAL.cpp:581 glBindRenderbuffer"); }
                 if (depthType == GL_RENDERBUFFER)
-                    glGetRenderbufferParameteriv(GL_RENDERBUFFER, GL_RENDERBUFFER_DEPTH_SIZE, &depthBits);
+                    { SF_GLPRE("GL_HAL.cpp:583 glGetRenderbufferParameteriv"); glGetRenderbufferParameteriv(GL_RENDERBUFFER, GL_RENDERBUFFER_DEPTH_SIZE, &depthBits); SF_GLCHECK("GL_HAL.cpp:583 glGetRenderbufferParameteriv"); }
                 else
                     depthBits = 8;
-                glBindRenderbuffer(GL_RENDERBUFFER, 0);
+                { SF_GLPRE("GL_HAL.cpp:586 glBindRenderbuffer"); glBindRenderbuffer(GL_RENDERBUFFER, 0); SF_GLCHECK("GL_HAL.cpp:586 glBindRenderbuffer"); }
             }
             DepthBufferAvailable = (depthBits >= 1);
         }
@@ -595,6 +595,11 @@ bool HAL::checkDepthStencilBufferCaps()
             MultiBitStencil = true;
         }
         StencilChecked = 1;
+#if defined(SF_USE_ANGLE)
+        printf("[sf-gl] mask buffers: FBO %d, stencil %d (multi-bit %d), depth %d\n",
+               (int)currentFBO, StencilAvailable ? 1 : 0, MultiBitStencil ? 1 : 0, DepthBufferAvailable ? 1 : 0);
+        fflush(stdout);
+#endif
     }   
 
     SF_DEBUG_WARNONCE(!StencilAvailable && !DepthBufferAvailable, 
@@ -625,7 +630,7 @@ void HAL::applyRasterModeImpl(RasterModeType mode)
         case RasterMode_Wireframe:  fillMode = GL_LINE; break;
         case RasterMode_Point:      fillMode = GL_POINT; break;
     }
-    glPolygonMode(GL_FRONT_AND_BACK, fillMode);
+    { SF_GLPRE("GL_HAL.cpp:628 glPolygonMode"); glPolygonMode(GL_FRONT_AND_BACK, fillMode); SF_GLCHECK("GL_HAL.cpp:628 glPolygonMode"); }
 #else
     SF_UNUSED(mode);
 #endif
@@ -641,25 +646,25 @@ void HAL::clearSolidRectangle(const Rect<int>& r, Color color, bool blend)
     {
         ScopedRenderEvent GPUEvent(GetEvent(Event_Clear), "HAL::clearSolidRectangle"); // NOTE: inside scope, base impl has its own profile.
 
-        glEnable(GL_SCISSOR_TEST);
+        { SF_GLPRE("GL_HAL.cpp:644 glEnable"); glEnable(GL_SCISSOR_TEST); SF_GLCHECK("GL_HAL.cpp:644 glEnable"); }
 
         PointF tl((float)(VP.Left + r.x1), (float)(VP.Top + r.y1));
         PointF br((float)(VP.Left + r.x2), (float)(VP.Top + r.y2));
         tl = Matrices->Orient2D * tl;
         br = Matrices->Orient2D * br;
         Rect<int> scissor((int)Alg::Min(tl.x, br.x), (int)Alg::Min(tl.y,br.y), (int)Alg::Max(tl.x,br.x), (int)Alg::Max(tl.y,br.y));
-        glScissor(scissor.x1, scissor.y1, scissor.Width(), scissor.Height());
-        glClearColor(color.GetRed() * 1.f/255.f, color.GetGreen() * 1.f/255.f, color.GetBlue() * 1.f/255.f, color.GetAlpha() * 1.f/255.f);
-        glClear(GL_COLOR_BUFFER_BIT);
+        { SF_GLPRE("GL_HAL.cpp:651 glScissor"); glScissor(scissor.x1, scissor.y1, scissor.Width(), scissor.Height()); SF_GLCHECK("GL_HAL.cpp:651 glScissor"); }
+        { SF_GLPRE("GL_HAL.cpp:652 glClearColor"); glClearColor(color.GetRed() * 1.f/255.f, color.GetGreen() * 1.f/255.f, color.GetBlue() * 1.f/255.f, color.GetAlpha() * 1.f/255.f); SF_GLCHECK("GL_HAL.cpp:652 glClearColor"); }
+        { SF_GLPRE("GL_HAL.cpp:653 glClear"); glClear(GL_COLOR_BUFFER_BIT); SF_GLCHECK("GL_HAL.cpp:653 glClear"); }
 
         if (VP.Flags & Viewport::View_UseScissorRect)
         {
-            glEnable(GL_SCISSOR_TEST);
-            glScissor(VP.ScissorLeft, VP.BufferHeight-VP.ScissorTop-VP.ScissorHeight, VP.ScissorWidth, VP.ScissorHeight);
+            { SF_GLPRE("GL_HAL.cpp:657 glEnable"); glEnable(GL_SCISSOR_TEST); SF_GLCHECK("GL_HAL.cpp:657 glEnable"); }
+            { SF_GLPRE("GL_HAL.cpp:658 glScissor"); glScissor(VP.ScissorLeft, VP.BufferHeight-VP.ScissorTop-VP.ScissorHeight, VP.ScissorWidth, VP.ScissorHeight); SF_GLCHECK("GL_HAL.cpp:658 glScissor"); }
         }
         else
         {
-            glDisable(GL_SCISSOR_TEST);
+            { SF_GLPRE("GL_HAL.cpp:662 glDisable"); glDisable(GL_SCISSOR_TEST); SF_GLCHECK("GL_HAL.cpp:662 glDisable"); }
         }
     }
     else
@@ -703,23 +708,23 @@ void HAL::applyBlendModeImpl(BlendMode mode, bool sourceAc, bool forceAc)
 
     if (VP.Flags & Viewport::View_AlphaComposite || forceAc)
     {
-        glBlendFuncSeparate(sourceColor, BlendFactors[BlendModeTable[mode].DestColor], 
-            BlendFactors[BlendModeTable[mode].SourceAlpha], BlendFactors[BlendModeTable[mode].DestAlpha]);
-        glBlendEquationSeparate(BlendOps[BlendModeTable[mode].Operator], BlendOps[BlendModeTable[mode].AlphaOperator]);
+        { SF_GLPRE("GL_HAL.cpp:706 glBlendFuncSeparate"); glBlendFuncSeparate(sourceColor, BlendFactors[BlendModeTable[mode].DestColor], 
+            BlendFactors[BlendModeTable[mode].SourceAlpha], BlendFactors[BlendModeTable[mode].DestAlpha]); SF_GLCHECK("GL_HAL.cpp:706 glBlendFuncSeparate"); }
+        { SF_GLPRE("GL_HAL.cpp:708 glBlendEquationSeparate"); glBlendEquationSeparate(BlendOps[BlendModeTable[mode].Operator], BlendOps[BlendModeTable[mode].AlphaOperator]); SF_GLCHECK("GL_HAL.cpp:708 glBlendEquationSeparate"); }
     }
     else
     {
-        glBlendFunc(sourceColor, BlendFactors[BlendModeTable[mode].DestColor]);
-        glBlendEquation(BlendOps[BlendModeTable[mode].Operator]);
+        { SF_GLPRE("GL_HAL.cpp:712 glBlendFunc"); glBlendFunc(sourceColor, BlendFactors[BlendModeTable[mode].DestColor]); SF_GLCHECK("GL_HAL.cpp:712 glBlendFunc"); }
+        { SF_GLPRE("GL_HAL.cpp:713 glBlendEquation"); glBlendEquation(BlendOps[BlendModeTable[mode].Operator]); SF_GLCHECK("GL_HAL.cpp:713 glBlendEquation"); }
     }
 }
 
 void HAL::applyBlendModeEnableImpl(bool enabled)
 {
     if (enabled)
-        glEnable(GL_BLEND);
+        { SF_GLPRE("GL_HAL.cpp:720 glEnable"); glEnable(GL_BLEND); SF_GLCHECK("GL_HAL.cpp:720 glEnable"); }
     else
-        glDisable(GL_BLEND);
+        { SF_GLPRE("GL_HAL.cpp:722 glDisable"); glDisable(GL_BLEND); SF_GLCHECK("GL_HAL.cpp:722 glDisable"); }
 }
 
 RenderTarget* HAL::CreateRenderTarget(GLuint fbo)
@@ -753,17 +758,17 @@ RenderTarget* HAL::CreateRenderTarget(Render::Texture* texture, bool needsStenci
     SF_ASSERT(pt->TextureCount == 1); 
     GLuint colorID = pt->pTextures[0].TexId;
 
-    glGenFramebuffers(1, &fboID);
-    glBindFramebuffer(GL_FRAMEBUFFER, fboID);
+    { SF_GLPRE("GL_HAL.cpp:756 glGenFramebuffers"); glGenFramebuffers(1, &fboID); SF_GLCHECK("GL_HAL.cpp:756 glGenFramebuffers"); }
+    { SF_GLPRE("GL_HAL.cpp:757 glBindFramebuffer"); glBindFramebuffer(GL_FRAMEBUFFER, fboID); SF_GLCHECK("GL_HAL.cpp:757 glBindFramebuffer"); }
     ++AccumulatedStats.RTChanges;
 
 #if defined(GL_ES_VERSION_2_0)
     // If on GLES2, and it has NPOT limitations, then we need to ensure that the texture
     // uses clamping mode without mipmapping, otherwise the glCheckFramebufferStatus will 
     // return that the target is unsupported.
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
+    { SF_GLPRE("GL_HAL.cpp:764 glTexParameteri"); glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE); SF_GLCHECK("GL_HAL.cpp:764 glTexParameteri"); }
+    { SF_GLPRE("GL_HAL.cpp:765 glTexParameteri"); glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE); SF_GLCHECK("GL_HAL.cpp:765 glTexParameteri"); }
+    { SF_GLPRE("GL_HAL.cpp:766 glTexParameteri"); glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR ); SF_GLCHECK("GL_HAL.cpp:766 glTexParameteri"); }
 #endif
 
     // Bind the color buffer.
@@ -797,18 +802,18 @@ RenderTarget* HAL::CreateTempRenderTarget(const ImageSize& size, bool needsStenc
     if ( phd )
         fboID = phd->FBOID;
     else
-        glGenFramebuffers(1, &fboID);
+        { SF_GLPRE("GL_HAL.cpp:800 glGenFramebuffers"); glGenFramebuffers(1, &fboID); SF_GLCHECK("GL_HAL.cpp:800 glGenFramebuffers"); }
 
-    glBindFramebuffer(GL_FRAMEBUFFER, fboID);
+    { SF_GLPRE("GL_HAL.cpp:802 glBindFramebuffer"); glBindFramebuffer(GL_FRAMEBUFFER, fboID); SF_GLCHECK("GL_HAL.cpp:802 glBindFramebuffer"); }
     ++AccumulatedStats.RTChanges;
 
 #if defined(GL_ES_VERSION_2_0)
     // If on GLES2, and it has NPOT limitations, then we need to ensure that the texture
     // uses clamping mode without mipmapping, otherwise the glCheckFramebufferStatus will 
     // return that the target is unsupported.
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
+    { SF_GLPRE("GL_HAL.cpp:809 glTexParameteri"); glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE); SF_GLCHECK("GL_HAL.cpp:809 glTexParameteri"); }
+    { SF_GLPRE("GL_HAL.cpp:810 glTexParameteri"); glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE); SF_GLCHECK("GL_HAL.cpp:810 glTexParameteri"); }
+    { SF_GLPRE("GL_HAL.cpp:811 glTexParameteri"); glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR ); SF_GLCHECK("GL_HAL.cpp:811 glTexParameteri"); }
 #endif
 
     // Bind the color buffer
@@ -837,7 +842,7 @@ bool HAL::SetRenderTarget(RenderTarget* ptarget, bool setState)
     if ( setState )
     {
         RenderTargetData* phd = (RenderTargetData*)ptarget->GetRenderTargetData();
-        glBindFramebuffer(GL_FRAMEBUFFER, phd->FBOID);
+        { SF_GLPRE("GL_HAL.cpp:840 glBindFramebuffer"); glBindFramebuffer(GL_FRAMEBUFFER, phd->FBOID); SF_GLCHECK("GL_HAL.cpp:840 glBindFramebuffer"); }
     }
 
     entry.pRenderTarget = ptarget;
@@ -872,19 +877,19 @@ void HAL::PushRenderTarget(const RectF& frameRect, RenderTarget* prt, unsigned f
         return;
     }
     RenderTargetData* phd = (GL::RenderTargetData*)prt->GetRenderTargetData();
-    glBindFramebuffer(GL_FRAMEBUFFER, phd->FBOID);
+    { SF_GLPRE("GL_HAL.cpp:875 glBindFramebuffer"); glBindFramebuffer(GL_FRAMEBUFFER, phd->FBOID); SF_GLCHECK("GL_HAL.cpp:875 glBindFramebuffer"); }
     StencilChecked = false;
     ++AccumulatedStats.RTChanges;
 
-    glDisable(GL_SCISSOR_TEST);
+    { SF_GLPRE("GL_HAL.cpp:879 glDisable"); glDisable(GL_SCISSOR_TEST); SF_GLCHECK("GL_HAL.cpp:879 glDisable"); }
 
     // Clear, if not specifically excluded
     if ( (flags & PRT_NoClear) == 0 )
     {
         float clear[4];
         clearColor.GetRGBAFloat(clear);
-        glClearColor(clear[0], clear[1], clear[2], clear[3]);
-        glClear(GL_COLOR_BUFFER_BIT);
+        { SF_GLPRE("GL_HAL.cpp:886 glClearColor"); glClearColor(clear[0], clear[1], clear[2], clear[3]); SF_GLCHECK("GL_HAL.cpp:886 glClearColor"); }
+        { SF_GLPRE("GL_HAL.cpp:887 glClear"); glClear(GL_COLOR_BUFFER_BIT); SF_GLCHECK("GL_HAL.cpp:887 glClear"); }
     }
 
     // Setup viewport.
@@ -918,7 +923,7 @@ void HAL::PopRenderTarget(unsigned flags)
         GL::RenderTargetData* plasthd = (GL::RenderTargetData*)prt->GetRenderTargetData();
         if ( plasthd->pDepthStencilBuffer )
         {
-            glBindFramebuffer(GL_FRAMEBUFFER, plasthd->FBOID);
+            { SF_GLPRE("GL_HAL.cpp:921 glBindFramebuffer"); glBindFramebuffer(GL_FRAMEBUFFER, plasthd->FBOID); SF_GLCHECK("GL_HAL.cpp:921 glBindFramebuffer"); }
             ++AccumulatedStats.RTChanges;
             { SF_GLPRE("GL_HAL.cpp:923 FramebufferRenderbuffer"); glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, 0); SF_GLCHECK("GL_HAL.cpp:923 FramebufferRenderbuffer"); }
         }
@@ -944,7 +949,7 @@ void HAL::PopRenderTarget(unsigned flags)
     // Restore the old render target.
     if ((flags & PRT_NoSet) == 0)
     {
-        glBindFramebuffer(GL_FRAMEBUFFER, fboID);
+        { SF_GLPRE("GL_HAL.cpp:947 glBindFramebuffer"); glBindFramebuffer(GL_FRAMEBUFFER, fboID); SF_GLCHECK("GL_HAL.cpp:947 glBindFramebuffer"); }
         ++AccumulatedStats.RTChanges;
 
         // Reset the viewport to the last render target on the stack.
@@ -965,7 +970,7 @@ bool HAL::CheckExtension(const char *name)
         else
         {
             GLint extCount;
-            glGetIntegerv(GL_NUM_EXTENSIONS, &extCount);
+            { SF_GLPRE("GL_HAL.cpp:968 glGetIntegerv"); glGetIntegerv(GL_NUM_EXTENSIONS, &extCount); SF_GLCHECK("GL_HAL.cpp:968 glGetIntegerv"); }
             for (int extIndex = 0; extIndex < extCount; ++extIndex)
             {
                 const char* ext = (const char*)glGetStringi(GL_EXTENSIONS, extIndex);
@@ -996,10 +1001,10 @@ bool HAL::CheckGLVersion(unsigned reqMajor, unsigned reqMinor)
 
 ImageSize HAL::getFboInfo(GLint fbo, GLint& currentFBO, bool useCurrent)
 {
-    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &currentFBO);
+    { SF_GLPRE("GL_HAL.cpp:999 glGetIntegerv"); glGetIntegerv(GL_FRAMEBUFFER_BINDING, &currentFBO); SF_GLCHECK("GL_HAL.cpp:999 glGetIntegerv"); }
     if (!useCurrent)
     {
-        glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+        { SF_GLPRE("GL_HAL.cpp:1002 glBindFramebuffer"); glBindFramebuffer(GL_FRAMEBUFFER, fbo); SF_GLCHECK("GL_HAL.cpp:1002 glBindFramebuffer"); }
         ++AccumulatedStats.RTChanges;
     }
 
@@ -1009,25 +1014,25 @@ ImageSize HAL::getFboInfo(GLint fbo, GLint& currentFBO, bool useCurrent)
 
     if ( validFBO )
     {
-        glGetFramebufferAttachmentParameteriv(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE, &type );
-        glGetFramebufferAttachmentParameteriv(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME, &id );
+        { SF_GLPRE("GL_HAL.cpp:1012 glGetFramebufferAttachmentParameteriv"); glGetFramebufferAttachmentParameteriv(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE, &type ); SF_GLCHECK("GL_HAL.cpp:1012 glGetFramebufferAttachmentParameteriv"); }
+        { SF_GLPRE("GL_HAL.cpp:1013 glGetFramebufferAttachmentParameteriv"); glGetFramebufferAttachmentParameteriv(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME, &id ); SF_GLCHECK("GL_HAL.cpp:1013 glGetFramebufferAttachmentParameteriv"); }
         switch(type)
         {
         case GL_TEXTURE:
             {
 #ifdef GL_TEXTURE_WIDTH
-                glBindTexture(GL_TEXTURE_2D, id );
-                glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &width );
-                glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &height );
+                { SF_GLPRE("GL_HAL.cpp:1019 glBindTexture"); glBindTexture(GL_TEXTURE_2D, id ); SF_GLCHECK("GL_HAL.cpp:1019 glBindTexture"); }
+                { SF_GLPRE("GL_HAL.cpp:1020 glGetTexLevelParameteriv"); glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &width ); SF_GLCHECK("GL_HAL.cpp:1020 glGetTexLevelParameteriv"); }
+                { SF_GLPRE("GL_HAL.cpp:1021 glGetTexLevelParameteriv"); glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &height ); SF_GLCHECK("GL_HAL.cpp:1021 glGetTexLevelParameteriv"); }
 #endif
                 break;
             }
         case GL_RENDERBUFFER:
             if ( !glIsRenderbuffer( id ) )
                 break;
-            glBindRenderbuffer(GL_RENDERBUFFER, id);
-            glGetRenderbufferParameteriv(GL_RENDERBUFFER, GL_RENDERBUFFER_WIDTH, &width );
-            glGetRenderbufferParameteriv(GL_RENDERBUFFER, GL_RENDERBUFFER_HEIGHT, &height );
+            { SF_GLPRE("GL_HAL.cpp:1028 glBindRenderbuffer"); glBindRenderbuffer(GL_RENDERBUFFER, id); SF_GLCHECK("GL_HAL.cpp:1028 glBindRenderbuffer"); }
+            { SF_GLPRE("GL_HAL.cpp:1029 glGetRenderbufferParameteriv"); glGetRenderbufferParameteriv(GL_RENDERBUFFER, GL_RENDERBUFFER_WIDTH, &width ); SF_GLCHECK("GL_HAL.cpp:1029 glGetRenderbufferParameteriv"); }
+            { SF_GLPRE("GL_HAL.cpp:1030 glGetRenderbufferParameteriv"); glGetRenderbufferParameteriv(GL_RENDERBUFFER, GL_RENDERBUFFER_HEIGHT, &height ); SF_GLCHECK("GL_HAL.cpp:1030 glGetRenderbufferParameteriv"); }
             break;
         }
     }
@@ -1036,14 +1041,14 @@ ImageSize HAL::getFboInfo(GLint fbo, GLint& currentFBO, bool useCurrent)
     {
         // Get the dimensions of the framerect from glViewport.
         GLfloat viewport[4];
-        glGetFloatv(GL_VIEWPORT, viewport);
+        { SF_GLPRE("GL_HAL.cpp:1039 glGetFloatv"); glGetFloatv(GL_VIEWPORT, viewport); SF_GLCHECK("GL_HAL.cpp:1039 glGetFloatv"); }
         width = (GLint)viewport[2];
         height = (GLint)viewport[3];
     }
 
     if (!useCurrent)
     {
-        glBindFramebuffer(GL_FRAMEBUFFER, currentFBO);
+        { SF_GLPRE("GL_HAL.cpp:1046 glBindFramebuffer"); glBindFramebuffer(GL_FRAMEBUFFER, currentFBO); SF_GLCHECK("GL_HAL.cpp:1046 glBindFramebuffer"); }
         ++AccumulatedStats.RTChanges;
     }
 
@@ -1169,7 +1174,7 @@ RenderTargetData::~RenderTargetData()
 
         // If the texture manager isn't present, just try deleting it immediately.
         if (!pmgr)
-            glDeleteFramebuffers(1, &FBOID);
+            { SF_GLPRE("GL_HAL.cpp:1172 glDeleteFramebuffers"); glDeleteFramebuffers(1, &FBOID); SF_GLCHECK("GL_HAL.cpp:1172 glDeleteFramebuffers"); }
         else
             pmgr->DestroyFBO(FBOID);
     }
@@ -1211,8 +1216,8 @@ public:
         pHal(phal), Stride(stride), VertexOffset(vertOffset)
     {
         // Bind the vertex buffer and the index buffer immediately.
-        glBindBuffer(GL_ARRAY_BUFFER, vbuffer);
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibuffer);
+        { SF_GLPRE("GL_HAL.cpp:1214 glBindBuffer"); glBindBuffer(GL_ARRAY_BUFFER, vbuffer); SF_GLCHECK("GL_HAL.cpp:1214 glBindBuffer"); }
+        { SF_GLPRE("GL_HAL.cpp:1215 glBindBuffer"); glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibuffer); SF_GLCHECK("GL_HAL.cpp:1215 glBindBuffer"); }
     }
 
     HAL* GetHAL() { return pHal; }
@@ -1225,7 +1230,7 @@ public:
 
         if ( pHal->EnabledVertexArrays < vi )
         {
-            glEnableVertexAttribArray(vi);
+            { SF_GLPRE("GL_HAL.cpp:1228 glEnableVertexAttribArray"); glEnableVertexAttribArray(vi); SF_GLCHECK("GL_HAL.cpp:1228 glEnableVertexAttribArray"); }
             pHal->EnabledVertexArrays++;
         }
 
@@ -1235,7 +1240,7 @@ public:
         if (vet == GL_UNSIGNED_BYTE && ac < 4)
             ac = 4;
 
-        glVertexAttribPointer(vi, ac, vet, norm, Stride, VertexOffset + offset);
+        { SF_GLPRE("GL_HAL.cpp:1238 glVertexAttribPointer"); glVertexAttribPointer(vi, ac, vet, norm, Stride, VertexOffset + offset); SF_GLCHECK("GL_HAL.cpp:1238 glVertexAttribPointer"); }
     }
 
     void Finish(int vi)
@@ -1243,7 +1248,7 @@ public:
         int newEnabledCount = vi-1;
         for (int i = vi; i < pHal->EnabledVertexArrays; i++)
         {
-            glDisableVertexAttribArray(i);
+            { SF_GLPRE("GL_HAL.cpp:1246 glDisableVertexAttribArray"); glDisableVertexAttribArray(i); SF_GLCHECK("GL_HAL.cpp:1246 glDisableVertexAttribArray"); }
         }
         pHal->EnabledVertexArrays = newEnabledCount;
     }
@@ -1266,8 +1271,8 @@ public:
         if (pMesh->VAOFormat != pformat || pMesh->VAOOffset != VertexOffset || pMesh->VAO == 0)
         {
             if (pMesh->VAO)
-                glDeleteVertexArrays(1, &pMesh->VAO);
-            glGenVertexArrays(1, &pMesh->VAO);
+                { SF_GLPRE("GL_HAL.cpp:1269 glDeleteVertexArrays"); glDeleteVertexArrays(1, &pMesh->VAO); SF_GLCHECK("GL_HAL.cpp:1269 glDeleteVertexArrays"); }
+            { SF_GLPRE("GL_HAL.cpp:1270 glGenVertexArrays"); glGenVertexArrays(1, &pMesh->VAO); SF_GLCHECK("GL_HAL.cpp:1270 glGenVertexArrays"); }
 
             // Store the vertex offset, and indicate that we need to generate the contents of the VAO.
             pMesh->VAOOffset = VertexOffset;
@@ -1276,15 +1281,15 @@ public:
         }
 
         // Bind the VAO.
-        glBindVertexArray(pMesh->VAO);        
+        { SF_GLPRE("GL_HAL.cpp:1279 glBindVertexArray"); glBindVertexArray(pMesh->VAO); SF_GLCHECK("GL_HAL.cpp:1279 glBindVertexArray"); }
 
         // If need to generate the VAO, bind the VB/IB now
         if (NeedsGeneration)
         {
             GLuint vbuffer = pmesh->pVertexBuffer->GetBuffer();
             GLuint ibuffer = pmesh->pIndexBuffer->GetBuffer();
-            glBindBuffer(GL_ARRAY_BUFFER, vbuffer);
-            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibuffer);
+            { SF_GLPRE("GL_HAL.cpp:1286 glBindBuffer"); glBindBuffer(GL_ARRAY_BUFFER, vbuffer); SF_GLCHECK("GL_HAL.cpp:1286 glBindBuffer"); }
+            { SF_GLPRE("GL_HAL.cpp:1287 glBindBuffer"); glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibuffer); SF_GLCHECK("GL_HAL.cpp:1287 glBindBuffer"); }
         }
     }
 
@@ -1306,8 +1311,8 @@ public:
         if (vet == GL_UNSIGNED_BYTE && ac < 4)
             ac = 4;
 
-        glEnableVertexAttribArray(vi);
-        glVertexAttribPointer(vi, ac, vet, norm, Stride, VertexOffset + offset);
+        { SF_GLPRE("GL_HAL.cpp:1309 glEnableVertexAttribArray"); glEnableVertexAttribArray(vi); SF_GLCHECK("GL_HAL.cpp:1309 glEnableVertexAttribArray"); }
+        { SF_GLPRE("GL_HAL.cpp:1310 glVertexAttribPointer"); glVertexAttribPointer(vi, ac, vet, norm, Stride, VertexOffset + offset); SF_GLCHECK("GL_HAL.cpp:1310 glVertexAttribPointer"); }
     }
 
     void Finish(int)
@@ -1350,7 +1355,7 @@ void HAL::setVertexArray(const VertexFormat* pFormat, GLuint buffer, GLuint vao)
     if (ShouldUseVAOs())
     {
         // Immediately bind the VAO, it must be constructed already.
-        glBindVertexArray(vao);
+        { SF_GLPRE("GL_HAL.cpp:1353 glBindVertexArray"); glBindVertexArray(vao); SF_GLCHECK("GL_HAL.cpp:1353 glBindVertexArray"); }
         return;
     }
 
@@ -1414,25 +1419,25 @@ void    HAL::drawFilter(const Matrix2F& mvp, const Cxform & cx, const Filter* fi
         Rect<int> srcrect = targets[Target_Source]->GetRect();
         Rect<int> destrect = Rect<int>(0,0,1,1);
 
-        glUseProgram(pShader->Shader);
+        { SF_GLPRE("GL_HAL.cpp:1417 glUseProgram"); glUseProgram(pShader->Shader); SF_GLCHECK("GL_HAL.cpp:1417 glUseProgram"); }
 
         if (pass != passCount-1)
         {
             BlendEnable = 1;
-            glEnable(GL_BLEND);
-            glBlendFunc(GL_ONE, GL_ONE);
-            glBlendEquation(GL_FUNC_ADD);
+            { SF_GLPRE("GL_HAL.cpp:1422 glEnable"); glEnable(GL_BLEND); SF_GLCHECK("GL_HAL.cpp:1422 glEnable"); }
+            { SF_GLPRE("GL_HAL.cpp:1423 glBlendFunc"); glBlendFunc(GL_ONE, GL_ONE); SF_GLCHECK("GL_HAL.cpp:1423 glBlendFunc"); }
+            { SF_GLPRE("GL_HAL.cpp:1424 glBlendEquation"); glBlendEquation(GL_FUNC_ADD); SF_GLCHECK("GL_HAL.cpp:1424 glBlendEquation"); }
         }
         // else do nothing, dest blend mode was set before calling drawFilter
 
-        glUniform4fv(pShader->mvp, 2, &mvp.M[0][0]);
+        { SF_GLPRE("GL_HAL.cpp:1428 glUniform4fv"); glUniform4fv(pShader->mvp, 2, &mvp.M[0][0]); SF_GLCHECK("GL_HAL.cpp:1428 glUniform4fv"); }
 
         if (pShader->cxadd >= 0)
         {
             float cxform[2][4];
             cx.GetAsFloat2x4(cxform);
-            glUniform4fv(pShader->cxmul, 1, cxform[0]);
-            glUniform4fv(pShader->cxadd, 1, cxform[1]);
+            { SF_GLPRE("GL_HAL.cpp:1434 glUniform4fv"); glUniform4fv(pShader->cxmul, 1, cxform[0]); SF_GLCHECK("GL_HAL.cpp:1434 glUniform4fv"); }
+            { SF_GLPRE("GL_HAL.cpp:1435 glUniform4fv"); glUniform4fv(pShader->cxadd, 1, cxform[1]); SF_GLCHECK("GL_HAL.cpp:1435 glUniform4fv"); }
         }
 
         for (int i = 0; i < 2; i++)
@@ -1440,12 +1445,12 @@ void    HAL::drawFilter(const Matrix2F& mvp, const Cxform & cx, const Filter* fi
             {
                 float color[4];
                 leBlur.CurPass->Colors[i].GetRGBAFloat(color);
-                glUniform4fv(pShader->scolor[i], 1, color);
+                { SF_GLPRE("GL_HAL.cpp:1443 glUniform4fv"); glUniform4fv(pShader->scolor[i], 1, color); SF_GLCHECK("GL_HAL.cpp:1443 glUniform4fv"); }
             }
 
         if (pShader->samples >= 0)
         {
-            glUniform1f(pShader->samples, 1.0f/leBlur.Samples);
+            { SF_GLPRE("GL_HAL.cpp:1448 glUniform1f"); glUniform1f(pShader->samples, 1.0f/leBlur.Samples); SF_GLCHECK("GL_HAL.cpp:1448 glUniform1f"); }
         }
 
         if (pShader->tex[1] >= 0)
@@ -1453,34 +1458,34 @@ void    HAL::drawFilter(const Matrix2F& mvp, const Cxform & cx, const Filter* fi
             GL::Texture *ptexture = (GL::Texture*) targets[Target_Original]->GetTexture();
             GL::TextureManager* pmanager = (GL::TextureManager*)ptexture->GetTextureManager();
             pmanager->ApplyTexture(1, ptexture->pTextures[0].TexId);
-            glUniform1i(pShader->tex[1], 1);
-            glUniform2f(pShader->texscale[1], 1.0f/ptexture->GetSize().Width, 1.0f/ptexture->GetSize().Height);
+            { SF_GLPRE("GL_HAL.cpp:1456 glUniform1i"); glUniform1i(pShader->tex[1], 1); SF_GLCHECK("GL_HAL.cpp:1456 glUniform1i"); }
+            { SF_GLPRE("GL_HAL.cpp:1457 glUniform2f"); glUniform2f(pShader->texscale[1], 1.0f/ptexture->GetSize().Width, 1.0f/ptexture->GetSize().Height); SF_GLCHECK("GL_HAL.cpp:1457 glUniform2f"); }
         }
 
         GL::Texture *ptexture = (GL::Texture*) targets[Target_Source]->GetTexture();
         GL::TextureManager* pmanager = (GL::TextureManager*)ptexture->GetTextureManager();
         pmanager->ApplyTexture(0, ptexture->pTextures[0].TexId);
-        glUniform1i(pShader->tex[0], 0);
-        glUniform2f(pShader->texscale[0], 1.0f/ptexture->GetSize().Width, 1.0f/ptexture->GetSize().Height);
+        { SF_GLPRE("GL_HAL.cpp:1463 glUniform1i"); glUniform1i(pShader->tex[0], 0); SF_GLCHECK("GL_HAL.cpp:1463 glUniform1i"); }
+        { SF_GLPRE("GL_HAL.cpp:1464 glUniform2f"); glUniform2f(pShader->texscale[0], 1.0f/ptexture->GetSize().Width, 1.0f/ptexture->GetSize().Height); SF_GLCHECK("GL_HAL.cpp:1464 glUniform2f"); }
 
         float* pvertices = (float*) alloca(sizeof(float) * leBlur.GetVertexBufferSize());
         VertexFunc_Buffer vout (pvertices);
         leBlur.GetVertices(srcrect, destrect, vout);
         int vbstride = leBlur.VertexAttrs * 2 * sizeof(float);
 
-        glBindBuffer(GL_ARRAY_BUFFER, 0);
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+        { SF_GLPRE("GL_HAL.cpp:1471 glBindBuffer"); glBindBuffer(GL_ARRAY_BUFFER, 0); SF_GLCHECK("GL_HAL.cpp:1471 glBindBuffer"); }
+        { SF_GLPRE("GL_HAL.cpp:1472 glBindBuffer"); glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0); SF_GLCHECK("GL_HAL.cpp:1472 glBindBuffer"); }
         if (EnabledVertexArrays < 0)
-            glEnableVertexAttribArray(0);
-        glVertexAttribPointer(0, 2, GL_FLOAT, 0, vbstride, pvertices);
+            { SF_GLPRE("GL_HAL.cpp:1474 glEnableVertexAttribArray"); glEnableVertexAttribArray(0); SF_GLCHECK("GL_HAL.cpp:1474 glEnableVertexAttribArray"); }
+        { SF_GLPRE("GL_HAL.cpp:1475 glVertexAttribPointer"); glVertexAttribPointer(0, 2, GL_FLOAT, 0, vbstride, pvertices); SF_GLCHECK("GL_HAL.cpp:1475 glVertexAttribPointer"); }
         for (int i = 0; i < leBlur.TotalTCs; i++)
         {
             if (EnabledVertexArrays < i + 1)
-                glEnableVertexAttribArray(i + 1);
-            glVertexAttribPointer(i + 1, 2, GL_FLOAT, 0, vbstride, pvertices+(2+i*2));
+                { SF_GLPRE("GL_HAL.cpp:1479 glEnableVertexAttribArray"); glEnableVertexAttribArray(i + 1); SF_GLCHECK("GL_HAL.cpp:1479 glEnableVertexAttribArray"); }
+            { SF_GLPRE("GL_HAL.cpp:1480 glVertexAttribPointer"); glVertexAttribPointer(i + 1, 2, GL_FLOAT, 0, vbstride, pvertices+(2+i*2)); SF_GLCHECK("GL_HAL.cpp:1480 glVertexAttribPointer"); }
         }
         for (int i = leBlur.TotalTCs+2; i < EnabledVertexArrays; i++)
-           glDisableVertexAttribArray(i);
+           { SF_GLPRE("GL_HAL.cpp:1483 glDisableVertexAttribArray"); glDisableVertexAttribArray(i); SF_GLCHECK("GL_HAL.cpp:1483 glDisableVertexAttribArray"); }
         EnabledVertexArrays = leBlur.TotalTCs;
 
         drawPrimitive(6 * leBlur.Quads, leBlur.Quads);

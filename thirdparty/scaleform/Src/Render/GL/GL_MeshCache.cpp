@@ -40,7 +40,7 @@ GLuint MeshBuffer::CurrentBuffer;
 MeshBuffer::~MeshBuffer()
 {
     if (Buffer)
-        glDeleteBuffers(1, &Buffer);
+        { SF_GLPRE("GL_MeshCache.cpp:43 glDeleteBuffers"); glDeleteBuffers(1, &Buffer); SF_GLCHECK("GL_MeshCache.cpp:43 glDeleteBuffers"); }
     if ( BufferData )
         SF_FREE(BufferData);
 }
@@ -55,12 +55,12 @@ bool MeshBuffer::DoMap(UPInt offset, UPInt size)
 #if !defined(SF_USE_GLES)
             // Unbind the current VAO, so it doesn't get modified if this is an index buffer.
             if (GetHAL()->ShouldUseVAOs())
-                glBindVertexArray(0);
+                { SF_GLPRE("GL_MeshCache.cpp:58 glBindVertexArray"); glBindVertexArray(0); SF_GLCHECK("GL_MeshCache.cpp:58 glBindVertexArray"); }
 #endif
 
             //if (Buffer != MeshBuffer::CurrentBuffer)
             {
-                glBindBuffer(Type, Buffer);
+                { SF_GLPRE("GL_MeshCache.cpp:63 glBindBuffer"); glBindBuffer(Type, Buffer); SF_GLCHECK("GL_MeshCache.cpp:63 glBindBuffer"); }
                 MeshBuffer::CurrentBuffer = Buffer;
             }
 
@@ -105,12 +105,12 @@ void MeshBuffer::Unmap()
     {
 #if !defined(SF_USE_GLES)
         if (GetHAL()->ShouldUseVAOs())
-            glBindVertexArray(0);
+            { SF_GLPRE("GL_MeshCache.cpp:108 glBindVertexArray"); glBindVertexArray(0); SF_GLCHECK("GL_MeshCache.cpp:108 glBindVertexArray"); }
 #endif
 
         //if (Buffer != MeshBuffer::CurrentBuffer)
         {
-            glBindBuffer(Type, Buffer);
+            { SF_GLPRE("GL_MeshCache.cpp:113 glBindBuffer"); glBindBuffer(Type, Buffer); SF_GLCHECK("GL_MeshCache.cpp:113 glBindBuffer"); }
             MeshBuffer::CurrentBuffer = Buffer;
         }
         
@@ -122,7 +122,7 @@ void MeshBuffer::Unmap()
             {
                 const MeshBufferUpdateEntry& e = MeshBufferUpdates[i];
                 SF_UNUSED(e); // warning if glFlushMappedBufferRange is a no-op.
-                glFlushMappedBufferRange(Type, e.Offset, e.Size);
+                { SF_GLPRE("GL_MeshCache.cpp:125 glFlushMappedBufferRange"); glFlushMappedBufferRange(Type, e.Offset, e.Size); SF_GLCHECK("GL_MeshCache.cpp:125 glFlushMappedBufferRange"); }
             }
         }
 #endif
@@ -139,7 +139,7 @@ void MeshBuffer::Unmap()
             for (unsigned i =0; i < MeshBufferUpdates.GetSize(); ++i)
             {
                 const MeshBufferUpdateEntry& e = MeshBufferUpdates[i];
-                glBufferSubData(Type, e.Offset, e.Size, ((char*)pData) +e.Offset);
+                { SF_GLPRE("GL_MeshCache.cpp:142 glBufferSubData"); glBufferSubData(Type, e.Offset, e.Size, ((char*)pData) +e.Offset); SF_GLCHECK("GL_MeshCache.cpp:142 glBufferSubData"); }
             }
         }
     }
@@ -157,26 +157,26 @@ bool MeshBuffer::allocBuffer()
 {
     MeshCache::BufferUpdateType updateType = pHal->GetMeshCache().GetBufferUpdateType();
     if (Buffer)
-        glDeleteBuffers(1, &Buffer);
+        { SF_GLPRE("GL_MeshCache.cpp:160 glDeleteBuffers"); glDeleteBuffers(1, &Buffer); SF_GLCHECK("GL_MeshCache.cpp:160 glDeleteBuffers"); }
 
 #if !defined(SF_USE_GLES)
     // Unbind the current VAO, so it doesn't get modified if this is an index buffer.
     if (GetHAL()->ShouldUseVAOs())
-        glBindVertexArray(0);
+        { SF_GLPRE("GL_MeshCache.cpp:165 glBindVertexArray"); glBindVertexArray(0); SF_GLCHECK("GL_MeshCache.cpp:165 glBindVertexArray"); }
 #endif
 
     if (updateType != MeshCache::BufferUpdate_ClientBuffers)
     {
-        glGenBuffers(1, &Buffer);
+        { SF_GLPRE("GL_MeshCache.cpp:170 glGenBuffers"); glGenBuffers(1, &Buffer); SF_GLCHECK("GL_MeshCache.cpp:170 glGenBuffers"); }
 
         // Binding to the array or element target at creation is supposed to let drivers that need
         // separate vertex/index storage to know what the buffer will be used for.
         //if (Buffer != MeshBuffer::CurrentBuffer)
         {
             MeshBuffer::CurrentBuffer = Buffer;
-            glBindBuffer(Type, Buffer);
+            { SF_GLPRE("GL_MeshCache.cpp:177 glBindBuffer"); glBindBuffer(Type, Buffer); SF_GLCHECK("GL_MeshCache.cpp:177 glBindBuffer"); }
         }
-        glBufferData(Type, Size, 0, GL_DYNAMIC_DRAW);
+        { SF_GLPRE("GL_MeshCache.cpp:179 glBufferData"); glBufferData(Type, Size, 0, GL_DYNAMIC_DRAW); SF_GLCHECK("GL_MeshCache.cpp:179 glBufferData"); }
     }
     return 1;
 }
@@ -291,10 +291,10 @@ void MeshCache::Reset(bool lost)
     {
         destroyBuffers(MeshBuffer::AT_None, lost);
         if (MaskEraseBatchVertexBuffer)
-            glDeleteBuffers(1, &MaskEraseBatchVertexBuffer);
+            { SF_GLPRE("GL_MeshCache.cpp:294 glDeleteBuffers"); glDeleteBuffers(1, &MaskEraseBatchVertexBuffer); SF_GLCHECK("GL_MeshCache.cpp:294 glDeleteBuffers"); }
 #if !defined(SF_USE_GLES)
         if (MaskEraseBatchVAO)
-            glDeleteVertexArrays(1, &MaskEraseBatchVAO);
+            { SF_GLPRE("GL_MeshCache.cpp:297 glDeleteVertexArrays"); glDeleteVertexArrays(1, &MaskEraseBatchVAO); SF_GLCHECK("GL_MeshCache.cpp:297 glDeleteVertexArrays"); }
 #endif
 
         MaskEraseBatchVAO = 0;
@@ -531,31 +531,31 @@ bool MeshCache::createMaskEraseBatchVertexBuffer()
     VertexXY16iInstance pbuffer[6 * SF_RENDER_MAX_BATCHES];
     fillMaskEraseVertexBuffer<VertexXY16iAlpha>(reinterpret_cast<VertexXY16iAlpha*>(pbuffer), SF_RENDER_MAX_BATCHES);
 
-    glGenBuffers(1, &MaskEraseBatchVertexBuffer);
+    { SF_GLPRE("GL_MeshCache.cpp:534 glGenBuffers"); glGenBuffers(1, &MaskEraseBatchVertexBuffer); SF_GLCHECK("GL_MeshCache.cpp:534 glGenBuffers"); }
 #if !defined(SF_USE_GLES)
     if (GetHAL()->ShouldUseVAOs())
     {
-        glGenVertexArrays(1, &MaskEraseBatchVAO);
-        glBindVertexArray(MaskEraseBatchVAO);
+        { SF_GLPRE("GL_MeshCache.cpp:538 glGenVertexArrays"); glGenVertexArrays(1, &MaskEraseBatchVAO); SF_GLCHECK("GL_MeshCache.cpp:538 glGenVertexArrays"); }
+        { SF_GLPRE("GL_MeshCache.cpp:539 glBindVertexArray"); glBindVertexArray(MaskEraseBatchVAO); SF_GLCHECK("GL_MeshCache.cpp:539 glBindVertexArray"); }
     }
 #endif
 
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
-    glBindBuffer(GL_ARRAY_BUFFER, MaskEraseBatchVertexBuffer);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(pbuffer), pbuffer, GL_STATIC_DRAW);
+    { SF_GLPRE("GL_MeshCache.cpp:543 glBindBuffer"); glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0); SF_GLCHECK("GL_MeshCache.cpp:543 glBindBuffer"); }
+    { SF_GLPRE("GL_MeshCache.cpp:544 glBindBuffer"); glBindBuffer(GL_ARRAY_BUFFER, MaskEraseBatchVertexBuffer); SF_GLCHECK("GL_MeshCache.cpp:544 glBindBuffer"); }
+    { SF_GLPRE("GL_MeshCache.cpp:545 glBufferData"); glBufferData(GL_ARRAY_BUFFER, sizeof(pbuffer), pbuffer, GL_STATIC_DRAW); SF_GLCHECK("GL_MeshCache.cpp:545 glBufferData"); }
 
 #if !defined(SF_USE_GLES)
     if (GetHAL()->ShouldUseVAOs())
     {
         // Fill out the VAO now.
-        glEnableVertexAttribArray(0);
-        glEnableVertexAttribArray(1);
-        glVertexAttribPointer(0, 2, GL_SHORT, false, VertexXY16iInstance::Format.Size, 0);
-        glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, false, VertexXY16iInstance::Format.Size, (GLvoid*)4);
-        glBindVertexArray(0);
+        { SF_GLPRE("GL_MeshCache.cpp:551 glEnableVertexAttribArray"); glEnableVertexAttribArray(0); SF_GLCHECK("GL_MeshCache.cpp:551 glEnableVertexAttribArray"); }
+        { SF_GLPRE("GL_MeshCache.cpp:552 glEnableVertexAttribArray"); glEnableVertexAttribArray(1); SF_GLCHECK("GL_MeshCache.cpp:552 glEnableVertexAttribArray"); }
+        { SF_GLPRE("GL_MeshCache.cpp:553 glVertexAttribPointer"); glVertexAttribPointer(0, 2, GL_SHORT, false, VertexXY16iInstance::Format.Size, 0); SF_GLCHECK("GL_MeshCache.cpp:553 glVertexAttribPointer"); }
+        { SF_GLPRE("GL_MeshCache.cpp:554 glVertexAttribPointer"); glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, false, VertexXY16iInstance::Format.Size, (GLvoid*)4); SF_GLCHECK("GL_MeshCache.cpp:554 glVertexAttribPointer"); }
+        { SF_GLPRE("GL_MeshCache.cpp:555 glBindVertexArray"); glBindVertexArray(0); SF_GLCHECK("GL_MeshCache.cpp:555 glBindVertexArray"); }
     }
 #endif
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    { SF_GLPRE("GL_MeshCache.cpp:558 glBindBuffer"); glBindBuffer(GL_ARRAY_BUFFER, 0); SF_GLCHECK("GL_MeshCache.cpp:558 glBindBuffer"); }
 
     return true;
 }
@@ -639,7 +639,7 @@ UPInt MeshCache::Evict(Render::MeshCacheItem* pbatch, AllocAddr* pallocator, Mes
     // If we are using VAOs, then destroy the VAO now, it will not be used again.
 #if !defined(SF_USE_GLES)
         if (GetHAL()->ShouldUseVAOs() && p->VAO != 0)
-            glDeleteVertexArrays(1, &p->VAO);
+            { SF_GLPRE("GL_MeshCache.cpp:642 glDeleteVertexArrays"); glDeleteVertexArrays(1, &p->VAO); SF_GLCHECK("GL_MeshCache.cpp:642 glDeleteVertexArrays"); }
 #endif
         p->VAO = 0;
 

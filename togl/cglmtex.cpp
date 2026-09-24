@@ -3838,7 +3838,27 @@ void CGLMTex::WriteTexels( GLMTexLockDesc *desc, bool writeWholeSlice, bool noDa
 			}
 			else
 			{
-				convert_texture(intformat, m_layout->m_slices[ desc->m_sliceIndex ].m_xSize, m_layout->m_slices[ desc->m_sliceIndex ].m_ySize, glDataFormat, glDataType, noDataWrite ? NULL : sliceAddress);				
+#if defined( TOGLES )
+				// GLES has no BGRA volume textures and convert_texture only relabels
+				// GL_BGRA as GL_RGBA, which swaps red and blue. The color correction
+				// lookup (BGRX8888) came out with R/B swapped (dust2 looked negated).
+				// Swizzle a copy; the backing store must keep D3D's layout.
+				char *pSwizzled = NULL;
+				if ( glDataFormat == GL_BGRA && ( glDataType == GL_UNSIGNED_INT_8_8_8_8_REV || glDataType == GL_UNSIGNED_BYTE ) &&
+					 !noDataWrite && sliceAddress && format->m_bytesPerSquareChunk == 4 )
+				{
+					pSwizzled = (char *)malloc( slice->m_storageSize );
+					memcpy( pSwizzled, sliceAddress, slice->m_storageSize );
+					for ( int i = 0; i + 3 < slice->m_storageSize; i += 4 )
+					{
+						char c = pSwizzled[i];
+						pSwizzled[i] = pSwizzled[i + 2];
+						pSwizzled[i + 2] = c;
+					}
+					sliceAddress = pSwizzled;
+				}
+#endif
+				convert_texture(intformat, m_layout->m_slices[ desc->m_sliceIndex ].m_xSize, m_layout->m_slices[ desc->m_sliceIndex ].m_ySize, glDataFormat, glDataType, noDataWrite ? NULL : sliceAddress);
 				gGL->glTexImage3D(			target,						// target
 										desc->m_req.m_mip,			// level
 										intformat,					// internalformat
@@ -3849,6 +3869,10 @@ void CGLMTex::WriteTexels( GLMTexLockDesc *desc, bool writeWholeSlice, bool noDa
 										glDataFormat,				// dataformat
 										glDataType,					// datatype
 										noDataWrite ? NULL : sliceAddress );	// data (optionally suppressed in case ResetSRGB desires)
+#if defined( TOGLES )
+				if ( pSwizzled )
+					free( pSwizzled );
+#endif
 			}
 		}
 		break;

@@ -15,6 +15,7 @@
 #include "collisionutils.h"
 #include "econ_entity.h"
 #include "econ_item_view.h"
+#include "game_item_schema.h"
 
 #if !defined( CLIENT_DLL )
 
@@ -3386,14 +3387,48 @@ END_NETWORK_TABLE()
 // 	return GetWpnData().GetAttributeBool( szAttribClassName, GetEconItemView() );
 // }
 
+// This source stubbed weapon econ data out (weapons derive from
+// CBaseAnimating, not CEconEntity), so every attribute lookup fell back to
+// the weapon scripts. Since 2016 those no longer carry values such as
+// "primary reserve ammo max" (they moved to items_game.txt prefabs), so
+// weapons got 0 reserve ammo and could not reload. Hand out a default item
+// view for the weapon's definition, as retail does for unowned weapons. The
+// views only hold static schema data, so one per definition is shared.
+static CEconItemView *GetDefaultItemViewForWeapon( const CBaseCombatWeapon *pWeapon )
+{
+	static CUtlMap< item_definition_index_t, CEconItemView * > s_mapViews( DefLessFunc( item_definition_index_t ) );
+
+	GameItemSchema_t *pSchema = GetItemSchema();
+	if ( !pSchema )
+		return nullptr;
+
+	const char *pszClassName = pWeapon->GetWpnData().szClassName;
+	if ( !pszClassName || !pszClassName[0] )
+		return nullptr;
+
+	const CEconItemDefinition *pDef = pSchema->GetItemDefinitionByName( pszClassName );
+	if ( !pDef )
+		return nullptr;
+
+	item_definition_index_t nDefIndex = pDef->GetDefinitionIndex();
+	int i = s_mapViews.Find( nDefIndex );
+	if ( i == s_mapViews.InvalidIndex() )
+	{
+		CEconItemView *pView = new CEconItemView;
+		pView->Init( nDefIndex, AE_NORMAL, 1 );
+		i = s_mapViews.Insert( nDefIndex, pView );
+	}
+	return s_mapViews[i];
+}
+
 const CEconItemView* CBaseCombatWeapon::GetEconItemView( void ) const
 {
-	return nullptr;
+	return GetDefaultItemViewForWeapon( this );
 }
 
 CEconItemView* CBaseCombatWeapon::GetEconItemView( void )
 {
-	return nullptr;
+	return GetDefaultItemViewForWeapon( this );
 }
 
 int CBaseCombatWeapon::GetReserveAmmoCount( AmmoPosition_t nAmmoPosition, CBaseCombatCharacter * pForcedOwner/* = NULL*/  )

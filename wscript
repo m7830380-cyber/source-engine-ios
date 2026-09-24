@@ -508,7 +508,9 @@ def build_scaleform(bld):
 	sources = _scaleform_sources('libgfx') + _scaleform_sources('libgfx_as2') + \
 		_scaleform_sources('libgfxrender_gl') + [SCALEFORM_DIR + '/Src/Kernel/SF_ThreadsPthread.cpp',
 		# desktop GLSL 1.10 shader tables, run as GLSL ES 1.00 on ANGLE (see GL_Shader.cpp)
-		SCALEFORM_DIR + '/Src/Render/GL/GL_ShaderDescs.cpp', SCALEFORM_DIR + '/Src/Render/GL/GL_ShaderSource.cpp']
+		SCALEFORM_DIR + '/Src/Render/GL/GL_ShaderDescs.cpp', SCALEFORM_DIR + '/Src/Render/GL/GL_ShaderSource.cpp',
+		# GPU fences for the renderer (not in the SDK's GL list)
+		SCALEFORM_DIR + '/Src/Render/GL/GL_Sync.cpp']
 	sources = sorted(set(sources))
 	env = bld.env.derive()
 	# this Scaleform tree targets C++20 (later -std wins over the global gnu++11)

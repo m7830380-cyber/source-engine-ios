@@ -1901,7 +1901,7 @@ void CHLClient::HudProcessInput( bool bActive )
 // The team selection screen is Scaleform, which is stubbed out on iOS, so a
 // player would stay unassigned (spectating) forever. Join like the menu would:
 // "joingame" unlocks jointeam on the server, team 0 means auto-assign.
-static ConVar cl_ios_autojoin( "cl_ios_autojoin", "1", FCVAR_ARCHIVE, "Automatically join a team when connected (no team menu on iOS)" );
+static ConVar cl_ios_autojoin( "cl_ios_autojointeam", "0", FCVAR_NONE, "Automatically join a team when connected (the Scaleform team menu now works)" );
 
 static void IOS_AutoJoinTeam( void )
 {

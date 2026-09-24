@@ -282,6 +282,8 @@ extern int SF_StatPrimitives, SF_StatText, SF_StatComplex, SF_StatBlendPush,
 // iOS Scaleform switches, changeable from the console without a rebuild
 ConVar sf_ios_blend_direct( "sf_ios_blend_direct", "0", 0, "iOS: draw offscreen blend-mode content (layer/multiply/...) directly instead of compositing it" );
 ConVar sf_ios_filters( "sf_ios_filters", "1", 0, "iOS: render Scaleform filters (glow/drop shadow/blur); 0 draws filtered content unfiltered" );
+ConVar sf_ios_flip_menu( "sf_ios_flip_menu", "1", FCVAR_ARCHIVE, "iOS: menu orientation, 0 none, 1 flip vertical, 2 flip horizontal, 3 both" );
+ConVar sf_ios_flip_hud( "sf_ios_flip_hud", "1", FCVAR_ARCHIVE, "iOS: in-game HUD orientation, 0 none, 1 flip vertical, 2 flip horizontal, 3 both" );
 ConVar sf_ios_text_only( "sf_ios_text_only", "0", 0, "iOS visual test: draw only text primitives" );
 ConVar sf_ios_record_frames( "sf_ios_record_frames", "0", 0, "iOS: record the draw order of the next N menu frames to the log" );
 
@@ -440,7 +442,25 @@ void ScaleformUIImpl::RenderSlot( int slot )
 			m_bClearMeshCacheQueued = false;
 		}
 
-#ifdef DX_TO_GL_ABSTRACTION
+#if defined( SF_USE_ANGLE )
+		// iOS: orientation per slot, switchable on the device
+		// (bit 0 flips vertically like Linux, bit 1 flips horizontally)
+		{
+			int nFlip = ( slot == SF_FULL_SCREEN_SLOT || slot == SF_RESERVED_CURSOR_SLOT ) ? sf_ios_flip_menu.GetInt() : sf_ios_flip_hud.GetInt();
+			SF::Render::Matrix2F matrix;
+			if ( nFlip & 1 )
+			{
+				matrix.Sy() = -1.0f;
+				matrix.Ty() = m_iScreenHeight;
+			}
+			if ( nFlip & 2 )
+			{
+				matrix.Sx() = -1.0f;
+				matrix.Tx() = m_iScreenWidth;
+			}
+			m_pRenderHAL->SetUserMatrix(matrix);
+		}
+#elif defined( DX_TO_GL_ABSTRACTION )
 		// On Linux, we have to flip the display.
 		SF::Render::Matrix2F matrix;
 		matrix.Sy() = -1.0f;

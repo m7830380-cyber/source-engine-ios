@@ -95,6 +95,11 @@ CEconItemSystem::~CEconItemSystem( void )
 //-----------------------------------------------------------------------------
 void CEconItemSystem::Init( void )
 {
+	// The leaked source never loads the item schema (ParseItemSchemaFile had
+	// no callers), so every weapon had a NULL item definition. Retail loads
+	// items_game.txt from disk and lets the GC update it later.
+	ParseItemSchemaFile( "scripts/items/items_game.txt" );
+
 #ifdef CLIENT_DLL
 	IGameEvent *event = gameeventmanager->CreateEvent( "item_schema_initialized" );
 	if ( event )

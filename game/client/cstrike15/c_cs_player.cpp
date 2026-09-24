@@ -3643,7 +3643,7 @@ void C_CSPlayer::RecordAmmoForRound( void )
 		// PRIMARY WEAPON
 		pWeapon = Weapon_GetSlot( WEAPON_SLOT_RIFLE );
 
-		if ( pWeapon )
+		if ( pWeapon && pWeapon->GetEconItemView() && pWeapon->GetEconItemView()->GetItemDefinition() )
 		{
 			m_roundEndAmmoCount.nPrimaryWeaponDefIndex = pWeapon->GetEconItemView()->GetItemDefinition()->GetDefinitionIndex();
 			m_roundEndAmmoCount.nPrimaryWeaponAmmoCount = pWeapon->Clip1() + pWeapon->GetReserveAmmoCount( AMMO_POSITION_PRIMARY );
@@ -3651,7 +3651,7 @@ void C_CSPlayer::RecordAmmoForRound( void )
 
 		// SECONDARY WEAPON
 		pWeapon = Weapon_GetSlot( WEAPON_SLOT_PISTOL );
-		if ( pWeapon )
+		if ( pWeapon && pWeapon->GetEconItemView() && pWeapon->GetEconItemView()->GetItemDefinition() )
 		{
 			m_roundEndAmmoCount.nSecondaryWeaponDefIndex = pWeapon->GetEconItemView()->GetItemDefinition()->GetDefinitionIndex();
 			m_roundEndAmmoCount.nSecondaryWeaponAmmoCount = pWeapon->Clip1() + pWeapon->GetReserveAmmoCount( AMMO_POSITION_PRIMARY );

@@ -493,7 +493,7 @@ void ScaleformUIImpl::RenderSlot( int slot )
 	// record the draw order of menu frames: automatically at ~10s, 20s and 40s
 	// of menu rendering, and on request (sf_ios_record_frames N)
 	bool bRecord = false;
-	if ( slot == 1 )	// the main menu movie renders in slot 1
+	if ( slot == 1 || slot == 2 )	// main menu movie is slot 1, the HUD slot 2
 	{
 		if ( nSlotRender == 600 || nSlotRender == 1200 || nSlotRender == 2400 )
 			bRecord = true;
@@ -532,6 +532,26 @@ void ScaleformUIImpl::RenderSlot( int slot )
 	{
 		MovieView_Display( ToSFMOVIE( pslot->m_pMovieView ) );
 	}
+
+#if defined( SF_USE_ANGLE )
+	if ( m_pRenderHAL && slot >= 0 && slot < 64 )
+	{
+		static int s_nLastFlip[64] = { -1, -1, -1, -1, -1, -1, -1, -1 };
+		int nFlip = ( slot == SF_FULL_SCREEN_SLOT || slot == SF_RESERVED_CURSOR_SLOT ) ? sf_ios_flip_menu.GetInt() : sf_ios_flip_hud.GetInt();
+		if ( nFlip != s_nLastFlip[slot] || ( nSlotRender % 600 ) == 0 )
+		{
+			s_nLastFlip[slot] = nFlip;
+			const SF::Render::MatrixState *pm = m_pRenderHAL->GetMatrices();
+			printf( "[sf-orient] slot %d flip %d: user [%.2f %.2f %.0f / %.2f %.2f %.0f], view [%.5f %.5f %.3f / %.5f %.5f %.3f], orient [%.2f %.2f / %.2f %.2f], final [%.5f %.5f %.3f / %.5f %.5f %.3f]\n",
+					slot, nFlip,
+					pm->User.Sx(), pm->User.Shx(), pm->User.Tx(), pm->User.Shy(), pm->User.Sy(), pm->User.Ty(),
+					pm->View2D.Sx(), pm->View2D.Shx(), pm->View2D.Tx(), pm->View2D.Shy(), pm->View2D.Sy(), pm->View2D.Ty(),
+					pm->Orient2D.Sx(), pm->Orient2D.Shx(), pm->Orient2D.Shy(), pm->Orient2D.Sy(),
+					pm->UserView.Sx(), pm->UserView.Shx(), pm->UserView.Tx(), pm->UserView.Shy(), pm->UserView.Sy(), pm->UserView.Ty() );
+			fflush( stdout );
+		}
+	}
+#endif
 
 #if defined( SF_USE_ANGLE )
 	if ( SF_DebugFrameLog || ( nSlotRender % 600 ) == 0 )

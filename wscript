@@ -452,7 +452,63 @@ CRYPTOPP_EXCLUDE = set(['bench.cpp', 'bench2.cpp', 'test.cpp', 'validat1.cpp',
 	'validat2.cpp', 'validat3.cpp', 'adhoc.cpp', 'datatest.cpp', 'regtest.cpp',
 	'fipsalgt.cpp', 'dlltest.cpp'])
 
+SCALEFORM_DIR = 'thirdparty/scaleform'
+
+def _scaleform_sources(listname):
+	# Scaleform's make lists: files below a "[plat,...]" header only build on
+	# those platforms, "[-plat,...]" means all but those. iOS is in none of the
+	# positive lists, so take the unconditional part plus the negated sections.
+	path = os.path.join(SCALEFORM_DIR, 'Projects', listname + '.txt')
+	sources, include = [], True
+	for line in open(path).read().splitlines():
+		line = line.strip()
+		if not line:
+			continue
+		if line.startswith('['):
+			include = line.startswith('[-')
+			continue
+		if include and line.endswith(('.cpp', '.c')) and '/AMP/' not in line:
+			src = os.path.join(SCALEFORM_DIR, line)
+			if os.path.exists(src):
+				sources.append(src)
+	return sources
+
+SCALEFORM_DEFINES = [
+	'SF_USE_GLES2',  # GL renderer in GLES2 mode, on ANGLE (GLES 3.0)
+	'SF_USE_ANGLE',  # ANGLE's GLES2 headers, not the OpenGLES framework
+	'SF_USE_EGL',    # load GL extension entry points via eglGetProcAddress
+	'SF_BUILD_SHIPPING', 'NDEBUG',
+]
+
+def build_scaleform(bld):
+	# Scaleform GFx 4.x (CS:GO shipped 4.2.23): Kernel, Render, GFx core with
+	# the AS2 VM (CS:GO's menus/HUD are ActionScript 2) and the GL renderer.
+	sources = _scaleform_sources('libgfx') + _scaleform_sources('libgfx_as2') + \
+		_scaleform_sources('libgfxrender_gl') + [SCALEFORM_DIR + '/Src/Kernel/SF_ThreadsPthread.cpp',
+		# desktop GLSL 1.10 shader tables, run as GLSL ES 1.00 on ANGLE (see GL_Shader.cpp)
+		SCALEFORM_DIR + '/Src/Render/GL/GL_ShaderDescs.cpp', SCALEFORM_DIR + '/Src/Render/GL/GL_ShaderSource.cpp']
+	sources = sorted(set(sources))
+	env = bld.env.derive()
+	# this Scaleform tree targets C++20 (later -std wins over the global gnu++11)
+	env.append_value('CXXFLAGS', ['-std=gnu++20', '-w'])
+	env.append_value('CFLAGS', ['-w'])
+	bld(
+		features = 'c cxx cstlib cxxstlib',
+		source   = sources,
+		env      = env,
+		target   = 'gfx',
+		name     = 'gfx',
+		install_path = None, # static; linked into scaleformui
+		includes = [SCALEFORM_DIR + '/Include', SCALEFORM_DIR + '/Src'],
+		export_includes = [SCALEFORM_DIR + '/Include', SCALEFORM_DIR + '/Src'],
+		defines  = SCALEFORM_DEFINES,
+		export_defines = SCALEFORM_DEFINES,
+		use      = ['GLES', 'ZLIB', 'PNG', 'JPEG'],
+	)
+
 def build_custom_projects(bld):
+	build_scaleform(bld)
+
 	# loaded by the launcher as scaleformui.dylib
 	env = bld.env.derive()
 	env.cxxshlib_PATTERN = '%s.dylib'

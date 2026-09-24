@@ -1425,14 +1425,21 @@ void CSDLMgr::OnFrameRendered()
 #if defined( DX_TO_GL_ABSTRACTION )
 #if defined( IOS )
 // Diagnostics: write the presented frame to Documents/frame_N.tga a few times
-// (every 600 presents from 600 to 3600, half resolution), so what is on the
+// (every 10 seconds of presenting, 6 times, half resolution), so what is on the
 // screen can be inspected without a device screenshot. Reads the bound read framebuffer.
 static void IOS_MaybeCaptureFrame( int width, int height )
 {
 	static int s_nPresents = 0;
+	static int s_nCaptures = 0;
+	static double s_flNextCapture = 0.0;
 	++s_nPresents;
-	if ( ( s_nPresents % 600 ) != 0 || s_nPresents > 3600 || width <= 0 || height <= 0 )
+	double flNow = Plat_FloatTime();
+	if ( s_flNextCapture == 0.0 )
+		s_flNextCapture = flNow + 10.0;
+	if ( flNow < s_flNextCapture || s_nCaptures >= 6 || width <= 0 || height <= 0 )
 		return;
+	s_flNextCapture = flNow + 10.0;
+	++s_nCaptures;
 
 	const char *pDocs = getenv( "VALVE_GAME_PATH" );
 	if ( !pDocs )
@@ -1447,7 +1454,7 @@ static void IOS_MaybeCaptureFrame( int width, int height )
 
 	int outW = width / 2, outH = height / 2;
 	char path[1024];
-	snprintf( path, sizeof( path ), "%s/frame_%d.tga", pDocs, s_nPresents / 600 );
+	snprintf( path, sizeof( path ), "%s/frame_%d.tga", pDocs, s_nCaptures );
 	FILE *fp = fopen( path, "wb" );
 	if ( fp )
 	{

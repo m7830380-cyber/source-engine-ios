@@ -502,4 +502,26 @@ otherwise accompanies this software in either electronic or hard copy form.
 
 #endif
 
+// Diagnostics (iOS/ANGLE): report GL errors around texture, framebuffer and
+// draw calls with their call site. Limited to the first 400 reports.
+#if defined(SF_USE_ANGLE)
+#include <stdio.h>
+inline void SF_GLReportError(const char* where, const char* when)
+{
+    static int reports = 0;
+    GLenum err = glGetError();
+    if (err != GL_NO_ERROR && reports < 400)
+    {
+        ++reports;
+        printf("[sf-gl] error 0x%x %s %s\n", err, when, where);
+        fflush(stdout);
+    }
+}
+#define SF_GLPRE(where)   SF_GLReportError(where, "pending before")
+#define SF_GLCHECK(where) SF_GLReportError(where, "from")
+#else
+#define SF_GLPRE(where)
+#define SF_GLCHECK(where)
+#endif
+
 #endif

@@ -767,7 +767,7 @@ RenderTarget* HAL::CreateRenderTarget(Render::Texture* texture, bool needsStenci
 #endif
 
     // Bind the color buffer.
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, colorID, 0);
+    { SF_GLPRE("GL_HAL.cpp:770 FramebufferTexture2D"); glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, colorID, 0); SF_GLCHECK("GL_HAL.cpp:770 FramebufferTexture2D"); }
 
     // Create (and bind) the depth/stencil buffers if required.
     if ( needsStencil )
@@ -812,7 +812,7 @@ RenderTarget* HAL::CreateTempRenderTarget(const ImageSize& size, bool needsStenc
 #endif
 
     // Bind the color buffer
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, colorID, 0);
+    { SF_GLPRE("GL_HAL.cpp:815 FramebufferTexture2D"); glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, colorID, 0); SF_GLCHECK("GL_HAL.cpp:815 FramebufferTexture2D"); }
 
     // Create (and bind) the depth/stencil buffers if required.
     Ptr<DepthStencilBuffer> pdsb = 0;
@@ -920,7 +920,7 @@ void HAL::PopRenderTarget(unsigned flags)
         {
             glBindFramebuffer(GL_FRAMEBUFFER, plasthd->FBOID);
             ++AccumulatedStats.RTChanges;
-            glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, 0);
+            { SF_GLPRE("GL_HAL.cpp:923 FramebufferRenderbuffer"); glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, 0); SF_GLCHECK("GL_HAL.cpp:923 FramebufferRenderbuffer"); }
         }
         plasthd->pDepthStencilBuffer = 0;
     }
@@ -1061,11 +1061,11 @@ DepthStencilBuffer* HAL::createCompatibleDepthStencil(const ImageSize& size, boo
     DepthStencilSurface* pdss = (DepthStencilSurface*)pdsb->GetSurface();
     dsbID = pdss->RenderBufferID;
 
-    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, dsbID);
+    { SF_GLPRE("GL_HAL.cpp:1064 FramebufferRenderbuffer"); glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, dsbID); SF_GLCHECK("GL_HAL.cpp:1064 FramebufferRenderbuffer"); }
 
     // Some devices require that the depth buffer be attached, even if we don't use it.
     if (GL::DepthStencilSurface::CurrentFormatHasDepth())
-        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, dsbID);
+        { SF_GLPRE("GL_HAL.cpp:1068 FramebufferRenderbuffer"); glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, dsbID); SF_GLCHECK("GL_HAL.cpp:1068 FramebufferRenderbuffer"); }
 
     // If this check fails, it means that the stencil format and color format are incompatible.
     // In this case, we will need to try another depth stencil format combination.
@@ -1075,7 +1075,7 @@ DepthStencilBuffer* HAL::createCompatibleDepthStencil(const ImageSize& size, boo
         if (!GL::DepthStencilSurface::SetNextGLFormatIndex())
         {
             SF_DEBUG_WARNING(1, "No compatible depth stencil formats available. Masking in filter will be disabled");
-            glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, 0);
+            { SF_GLPRE("GL_HAL.cpp:1078 FramebufferRenderbuffer"); glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, 0); SF_GLCHECK("GL_HAL.cpp:1078 FramebufferRenderbuffer"); }
             pdsb = 0;
             break;
         }
@@ -1083,14 +1083,14 @@ DepthStencilBuffer* HAL::createCompatibleDepthStencil(const ImageSize& size, boo
         pdsb = pRenderBufferManager->CreateDepthStencilBuffer(size, temporary && DeterminedDepthStencilFormat);
         DepthStencilSurface* dpdss = (DepthStencilSurface*)pdsb->GetSurface();
         dsbID = dpdss->RenderBufferID;        
-        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, dsbID);
+        { SF_GLPRE("GL_HAL.cpp:1086 FramebufferRenderbuffer"); glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, dsbID); SF_GLCHECK("GL_HAL.cpp:1086 FramebufferRenderbuffer"); }
 
         // Some devices require that the depth buffer be attached, even if we don't use it. If it was previously attached,
         // and now our format does not have depth, we must remove it.
         if (GL::DepthStencilSurface::CurrentFormatHasDepth())
-            glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, dsbID);
+            { SF_GLPRE("GL_HAL.cpp:1091 FramebufferRenderbuffer"); glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, dsbID); SF_GLCHECK("GL_HAL.cpp:1091 FramebufferRenderbuffer"); }
         else
-            glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, 0);
+            { SF_GLPRE("GL_HAL.cpp:1093 FramebufferRenderbuffer"); glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, 0); SF_GLCHECK("GL_HAL.cpp:1093 FramebufferRenderbuffer"); }
     }
 
     // If a complete framebuffer was found, then indicate that the depth/stencil format has been determined.
@@ -1507,7 +1507,7 @@ void HAL::setBatchUnitSquareVertexStream()
 
 void HAL::drawPrimitive(unsigned indexCount, unsigned meshCount)
 {
-    glDrawArrays(GL_TRIANGLES, 0, indexCount);
+    { SF_GLPRE("GL_HAL.cpp:1510 DrawArrays"); glDrawArrays(GL_TRIANGLES, 0, indexCount); SF_GLCHECK("GL_HAL.cpp:1510 DrawArrays"); }
 
     SF_UNUSED(meshCount);
 #if !defined(SF_BUILD_SHIPPING)
@@ -1519,7 +1519,7 @@ void HAL::drawPrimitive(unsigned indexCount, unsigned meshCount)
 
 void HAL::drawIndexedPrimitive(unsigned indexCount, unsigned vertexCount, unsigned meshCount, UPInt indexPtr, UPInt vertexOffset )
 {
-    glDrawElements(GL_TRIANGLES, indexCount, GL_UNSIGNED_SHORT, reinterpret_cast<const GLvoid*>(indexPtr*sizeof(IndexType)));
+    { SF_GLPRE("GL_HAL.cpp:1522 DrawElements"); glDrawElements(GL_TRIANGLES, indexCount, GL_UNSIGNED_SHORT, reinterpret_cast<const GLvoid*>(indexPtr*sizeof(IndexType))); SF_GLCHECK("GL_HAL.cpp:1522 DrawElements"); }
 
     SF_UNUSED3(meshCount, vertexCount, vertexOffset);
 #if !defined(SF_BUILD_SHIPPING)
@@ -1533,7 +1533,7 @@ void HAL::drawIndexedInstanced(unsigned indexCount, unsigned vertexCount, unsign
 {
     SF_UNUSED2(vertexCount, vertexOffset);
 #if !defined (SF_USE_GLES_ANY)
-    glDrawElementsInstanced(GL_TRIANGLES, indexCount, GL_UNSIGNED_SHORT, reinterpret_cast<const GLvoid*>(indexPtr*sizeof(IndexType)), meshCount);
+    { SF_GLPRE("GL_HAL.cpp:1536 DrawElementsInstanced"); glDrawElementsInstanced(GL_TRIANGLES, indexCount, GL_UNSIGNED_SHORT, reinterpret_cast<const GLvoid*>(indexPtr*sizeof(IndexType)), meshCount); SF_GLCHECK("GL_HAL.cpp:1536 DrawElementsInstanced"); }
 #else
     SF_DEBUG_ASSERT(0, "Instancing not supported on GLES platforms.");
 #endif

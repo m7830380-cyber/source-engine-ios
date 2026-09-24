@@ -154,6 +154,21 @@ bool Texture::Initialize()
         }
     }
 
+#if defined(SF_USE_ANGLE)
+    {
+        static int textureLogs = 0;
+        if (textureLogs < 60 || format == Image_A8)
+        {
+            ++textureLogs;
+            const TextureFormat::Mapping* plogmapping = GetTextureFormatMapping();
+            printf("[sf-gl] texture: format %d, %ux%u, use 0x%x, mips %u (alloc %u, gen %d), GL internal 0x%x format 0x%x, from image %d\n",
+                   (int)format, pTextures[0].Size.Width, pTextures[0].Size.Height, Use, (unsigned)MipLevels, allocMipLevels,
+                   genMipmaps ? 1 : 0, plogmapping ? plogmapping->GLColors : 0, plogmapping ? plogmapping->GLFormat : 0, pImage ? 1 : 0);
+            fflush(stdout);
+        }
+    }
+#endif
+
     // Create textures
     for (itex = 0; itex < TextureCount; itex++)
     {
@@ -177,7 +192,7 @@ bool Texture::Initialize()
         if (!ImageData::IsFormatCompressed(format))
         {
             const TextureFormat::Mapping* pmapping = GetTextureFormatMapping();
-            glTexImage2D(GL_TEXTURE_2D, 0, pmapping->GLColors, tdesc.Size.Width, tdesc.Size.Height, 0, pmapping->GLFormat, pmapping->GLData, 0);
+            { SF_GLPRE("GL_Texture.cpp:180 TexImage2D"); glTexImage2D(GL_TEXTURE_2D, 0, pmapping->GLColors, tdesc.Size.Width, tdesc.Size.Height, 0, pmapping->GLFormat, pmapping->GLData, 0); SF_GLCHECK("GL_Texture.cpp:180 TexImage2D"); }
 
             unsigned width = tdesc.Size.Width;
             unsigned height = tdesc.Size.Height;
@@ -189,14 +204,14 @@ bool Texture::Initialize()
                     width = 1;
                 if (height < 1)
                     height = 1;
-                glTexImage2D(GL_TEXTURE_2D, i, pmapping->GLColors, width, height, 0, pmapping->GLFormat, pmapping->GLData, 0);
+                { SF_GLPRE("GL_Texture.cpp:192 TexImage2D"); glTexImage2D(GL_TEXTURE_2D, i, pmapping->GLColors, width, height, 0, pmapping->GLFormat, pmapping->GLData, 0); SF_GLCHECK("GL_Texture.cpp:192 TexImage2D"); }
             }
         }
     }
 
     if (genMipmaps)
     {
-        glGenerateMipmap(GL_TEXTURE_2D);
+        { SF_GLPRE("GL_Texture.cpp:199 GenerateMipmap"); glGenerateMipmap(GL_TEXTURE_2D); SF_GLCHECK("GL_Texture.cpp:199 GenerateMipmap"); }
     }
 
     // If we have lost the text, but have a backing image, the contents should be able to be restored.
@@ -312,7 +327,7 @@ bool Texture::Upload(unsigned itex, unsigned level, const ImagePlane& plane)
         // The plane's DataSize member contains the size of the buffer remaining, not the actual size of
         // the texture's mip level. Compute that, and pass it in.
         UPInt levelSize = ImageData::GetMipLevelSize(pmapping->ConvFormat, plane.GetSize(), itex);
-        glCompressedTexImage2D(GL_TEXTURE_2D, level, pmapping->GLFormat, plane.Width, plane.Height, 0, (GLsizei)levelSize, plane.pData);
+        { SF_GLPRE("GL_Texture.cpp:315 CompressedTexImage2D"); glCompressedTexImage2D(GL_TEXTURE_2D, level, pmapping->GLFormat, plane.Width, plane.Height, 0, (GLsizei)levelSize, plane.pData); SF_GLCHECK("GL_Texture.cpp:315 CompressedTexImage2D"); }
         
         // For certain formats (PVRTC), mip levels that are too small generate errors, and do not function correctly.
         // In this case, artibrarily reduce the miplevel count.
@@ -335,9 +350,9 @@ bool Texture::Upload(unsigned itex, unsigned level, const ImagePlane& plane)
     if (plane.Width * pmapping->BytesPerPixel == plane.Pitch)
     {
         if (plane.Width == pTextures[itex].Size.Width && plane.Height == pTextures[itex].Size.Height)
-            glTexImage2D(GL_TEXTURE_2D, level, GetTextureFormatMapping()->GLColors, plane.Width, plane.Height, 0, pmapping->GLFormat, pmapping->GLData, plane.pData);
+            { SF_GLPRE("GL_Texture.cpp:338 TexImage2D"); glTexImage2D(GL_TEXTURE_2D, level, GetTextureFormatMapping()->GLColors, plane.Width, plane.Height, 0, pmapping->GLFormat, pmapping->GLData, plane.pData); SF_GLCHECK("GL_Texture.cpp:338 TexImage2D"); }
         else
-            glTexSubImage2D(GL_TEXTURE_2D, level, 0,0, plane.Width, plane.Height, pmapping->GLFormat, pmapping->GLData, plane.pData);
+            { SF_GLPRE("GL_Texture.cpp:340 TexSubImage2D"); glTexSubImage2D(GL_TEXTURE_2D, level, 0,0, plane.Width, plane.Height, pmapping->GLFormat, pmapping->GLData, plane.pData); SF_GLCHECK("GL_Texture.cpp:340 TexSubImage2D"); }
     }
 #if (defined(GL_UNPACK_ROW_LENGTH) && defined(GL_UNPACK_ALIGNMENT))
     else if (plane.Pitch == ((3 + plane.Width * pmapping->BytesPerPixel) & ~3))
@@ -346,9 +361,9 @@ bool Texture::Upload(unsigned itex, unsigned level, const ImagePlane& plane)
         glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
 
         if (plane.Width == pTextures[itex].Size.Width && plane.Height == pTextures[itex].Size.Height)
-            glTexImage2D(GL_TEXTURE_2D, level, GetTextureFormatMapping()->GLColors, plane.Width, plane.Height, 0, pmapping->GLFormat, pmapping->GLData, plane.pData);
+            { SF_GLPRE("GL_Texture.cpp:349 TexImage2D"); glTexImage2D(GL_TEXTURE_2D, level, GetTextureFormatMapping()->GLColors, plane.Width, plane.Height, 0, pmapping->GLFormat, pmapping->GLData, plane.pData); SF_GLCHECK("GL_Texture.cpp:349 TexImage2D"); }
         else
-            glTexSubImage2D(GL_TEXTURE_2D, level, 0,0, plane.Width, plane.Height, pmapping->GLFormat, pmapping->GLData, plane.pData);
+            { SF_GLPRE("GL_Texture.cpp:351 TexSubImage2D"); glTexSubImage2D(GL_TEXTURE_2D, level, 0,0, plane.Width, plane.Height, pmapping->GLFormat, pmapping->GLData, plane.pData); SF_GLCHECK("GL_Texture.cpp:351 TexSubImage2D"); }
 
         glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
         glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
@@ -467,8 +482,8 @@ bool Texture::UpdateRenderTargetData(Render::RenderTargetData*, Render::HAL*)
     {
         ImagePlane plane;
         BackingData.GetPlane(mip, &plane);
-        glTexImage2D(GL_TEXTURE_2D, mip, pmapping->GLFormat, pTextures[0].Size.Width,
-            pTextures[0].Size.Height, 0, pmapping->GLFormat, GL_UNSIGNED_BYTE, plane.pData );
+        { SF_GLPRE("GL_Texture.cpp:470 TexImage2D"); glTexImage2D(GL_TEXTURE_2D, mip, pmapping->GLFormat, pTextures[0].Size.Width,
+            pTextures[0].Size.Height, 0, pmapping->GLFormat, GL_UNSIGNED_BYTE, plane.pData ); SF_GLCHECK("GL_Texture.cpp:470 TexImage2D"); }
     }
     return true;
 #else
@@ -563,9 +578,9 @@ domap:
             glPixelStorei(GL_UNPACK_ROW_LENGTH, splane.Width);
             glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
-            glTexSubImage2D(GL_TEXTURE_2D, mipLevel,
+            { SF_GLPRE("GL_Texture.cpp:566 TexSubImage2D"); glTexSubImage2D(GL_TEXTURE_2D, mipLevel,
                 desc.DestRect.x1, desc.DestRect.y1, desc.DestRect.Width(), desc.DestRect.Height(),
-                pmapping->GLFormat, pmapping->GLData, splane.pData);
+                pmapping->GLFormat, pmapping->GLData, splane.pData); SF_GLCHECK("GL_Texture.cpp:566 TexSubImage2D"); }
 
             glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
         }
@@ -574,9 +589,9 @@ domap:
             glPixelStorei(GL_UNPACK_ROW_LENGTH, splane.Width);
             glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
 
-            glTexSubImage2D(GL_TEXTURE_2D, mipLevel,
+            { SF_GLPRE("GL_Texture.cpp:577 TexSubImage2D"); glTexSubImage2D(GL_TEXTURE_2D, mipLevel,
                 desc.DestRect.x1, desc.DestRect.y1, desc.DestRect.Width(), desc.DestRect.Height(),
-                pmapping->GLFormat, pmapping->GLData, splane.pData);
+                pmapping->GLFormat, pmapping->GLData, splane.pData); SF_GLCHECK("GL_Texture.cpp:577 TexSubImage2D"); }
 
             glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
             glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
@@ -585,9 +600,9 @@ domap:
 #endif
         if (!convert && splane.Pitch == desc.DestRect.Width() * pmapping->BytesPerPixel)
         {
-            glTexSubImage2D(GL_TEXTURE_2D, mipLevel,
+            { SF_GLPRE("GL_Texture.cpp:588 TexSubImage2D"); glTexSubImage2D(GL_TEXTURE_2D, mipLevel,
                 desc.DestRect.x1, desc.DestRect.y1, desc.DestRect.Width(), desc.DestRect.Height(),
-                pmapping->GLFormat, pmapping->GLData, splane.pData);
+                pmapping->GLFormat, pmapping->GLData, splane.pData); SF_GLCHECK("GL_Texture.cpp:588 TexSubImage2D"); }
         }
         else
         {
@@ -764,7 +779,7 @@ bool DepthStencilSurface::Initialize()
 
     do 
     {
-        glRenderbufferStorage(GL_RENDERBUFFER, GLStencilFormats[GLFormatIndex], Size.Width, Size.Height);
+        { SF_GLPRE("GL_Texture.cpp:767 RenderbufferStorage"); glRenderbufferStorage(GL_RENDERBUFFER, GLStencilFormats[GLFormatIndex], Size.Width, Size.Height); SF_GLCHECK("GL_Texture.cpp:767 RenderbufferStorage"); }
         glError = glGetError();
     } while ( glError != GL_NO_ERROR && SetNextGLFormatIndex());
 

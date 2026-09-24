@@ -568,6 +568,24 @@ void HAL::endDisplay()
         applyBlendMode(Blend_Normal, true, true);
         Render::Texture* ptex = rte.pRenderTarget->GetTexture();
         Matrix2F fullViewportMatrix = Matrices->GetFullViewportMatrix(ptex->GetSize());
+#if defined(SF_USE_ANGLE)
+        // iOS: the scene inside the full-scene blend target was drawn without the
+        // user matrix (render targets reset it), so apply its flips when copying
+        // the target back, like directly drawn content gets them (togl flips the
+        // whole frame at present; without this the HUD came out upside down).
+        if (Matrices->User.Sy() < 0)
+        {
+            fullViewportMatrix.Shy() = -fullViewportMatrix.Shy();
+            fullViewportMatrix.Sy()  = -fullViewportMatrix.Sy();
+            fullViewportMatrix.Ty()  = -fullViewportMatrix.Ty();
+        }
+        if (Matrices->User.Sx() < 0)
+        {
+            fullViewportMatrix.Sx()  = -fullViewportMatrix.Sx();
+            fullViewportMatrix.Shx() = -fullViewportMatrix.Shx();
+            fullViewportMatrix.Tx()  = -fullViewportMatrix.Tx();
+        }
+#endif
         Matrix2F texgen(Matrix2F::Identity);
         texgen.AppendScaling(SizeF(rte.pRenderTarget->GetRect().GetSize()) / SizeF(ptex->GetSize()));
         texgen.AppendScaling(1.0f, -GetViewportScaling());

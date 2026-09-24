@@ -888,6 +888,16 @@ FSReturnCode_t FileSystem_LoadSearchPaths( CFSSearchPathsInit &initInfo )
 		initInfo.m_pFileSystem->AddSearchPath( initInfo.m_ModPath, "DEFAULT_WRITE_PATH", PATH_ADD_TO_TAIL );
 	}
 
+#if defined( IOS )
+	// extras_dir.vpk ships in the app bundle (touch control textures). The
+	// launcher exports its path; mount it with the game's search paths.
+	const char *pExtrasVPK = getenv( "EXTRAS_VPK_PATH" );
+	if ( pExtrasVPK && pExtrasVPK[0] )
+	{
+		initInfo.m_pFileSystem->AddVPKFile( pExtrasVPK, PATH_ADD_TO_TAIL );
+	}
+#endif
+
 #if defined( _DEBUG ) || defined( IOS )
 	initInfo.m_pFileSystem->PrintSearchPaths();
 #endif

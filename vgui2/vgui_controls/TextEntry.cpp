@@ -34,6 +34,12 @@
 #include <vgui_controls/TextEntry.h>
 #include <vgui_controls/Controls.h>
 #include <vgui_controls/MenuItem.h>
+
+#if defined( IOS )
+// on-screen keyboard: shown while a text entry (e.g. the console line) has focus
+extern "C" void SDL_StartTextInput( void );
+extern "C" void SDL_StopTextInput( void );
+#endif
 // memdbgon must be the last include file in a .cpp file!!!
 #include <tier0/memdbgon.h>
 
@@ -192,6 +198,10 @@ void TextEntry::OnKillFocus()
 {
 	m_szComposition[ 0 ] = L'\0';
 	HideIMECandidates();
+
+#if defined( IOS )
+	SDL_StopTextInput();
+#endif
 
 	if (_dataChanged)
 	{
@@ -3858,7 +3868,11 @@ void TextEntry::SelectAllOnFocusAlways( bool status )
 // Purpose: called when the text entry receives focus
 //-----------------------------------------------------------------------------
 void TextEntry::OnSetFocus()
-{ 
+{
+#if defined( IOS )
+	if ( IsEditable() && IsEnabled() )
+		SDL_StartTextInput();
+#endif
 	// see if we should highlight all on selection
     if (_selectAllOnFirstFocus)
 	{

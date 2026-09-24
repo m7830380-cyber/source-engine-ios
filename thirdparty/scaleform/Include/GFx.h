@@ -78,8 +78,12 @@ otherwise accompanies this software in either electronic or hard copy form.
 #include "../Src/GFx/AS2/AS2_Value.h" 		
 #include "../Src/GFx/AS2/IME/AS2_IMEManager.h" 		
 #include "../Src/GFx/AS2/IME/GASIme.h" 		
+#if !defined(SF_USE_ANGLE) // AS2-only build
 #include "../Src/GFx/AS3/Abc/AS3_Abc_Type.h" 		
+#endif
+#if !defined(SF_USE_ANGLE) // AS2-only build
 #include "../Src/GFx/AS3/IME/AS3_IMEManager.h" 		
+#endif
 #include "../Src/GFx/Audio/GFx_Sound.h" 		
 #include "../Src/GFx/Audio/GFx_SoundResource.h" 		
 #include "../Src/GFx/Text/Text_EditorKit.h" 		

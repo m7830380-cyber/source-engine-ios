@@ -1920,12 +1920,34 @@ static void IOS_AutoJoinTeam( void )
 }
 #endif
 
+#if defined( IOS )
+// Scaleform menus are driven by the mouse: let a finger act as the mouse while
+// no match is running or while a full-screen menu takes input (pause menu,
+// dialogs, team select). In matches the fingers stay on the touch controls.
+static void IOS_UpdateTouchMouse( void )
+{
+	static ConVarRef touch_mouse_events( "touch_mouse_events" );
+	if ( !touch_mouse_events.IsValid() )
+		return;
+
+	bool bMenu = !engine->IsInGame() ||
+		( g_pScaleformUI && g_pScaleformUI->SlotDeniesInputToGame( SF_FULL_SCREEN_SLOT ) );
+	if ( bMenu != touch_mouse_events.GetBool() )
+	{
+		touch_mouse_events.SetValue( bMenu ? 1 : 0 );
+		printf( "[touch] fingers as mouse: %s\n", bMenu ? "on (menu)" : "off (game)" );
+		fflush( stdout );
+	}
+}
+#endif
+
 void CHLClient::HudUpdate( bool bActive )
 {
 	float frametime = gpGlobals->frametime;
 
 #if defined( IOS )
 	IOS_AutoJoinTeam();
+	IOS_UpdateTouchMouse();
 #endif
 
 	GetClientVoiceMgr()->Frame( frametime );
@@ -4879,6 +4901,8 @@ void CHLClient::EngineGotvSyncPacket( const CEngineGotvSyncPacket *pPkt )
 #if defined( IOS )
 void CHLClient::IN_TouchEvent( int type, int fingerId, int x, int y )
 {
+	IOS_UpdateTouchMouse();
+
 	if ( fingerId < 0 || fingerId >= 10 )
 		return;
 

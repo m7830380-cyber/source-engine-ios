@@ -4,6 +4,10 @@
 //
 //=============================================================================//
 #include "cbase.h"
+#if defined( IOS )
+#include <execinfo.h>
+#include <stdio.h>
+#endif
 
 #if defined( INCLUDE_SCALEFORM )
 #include "basepanel.h"
@@ -59,6 +63,15 @@ bool CMessageBoxScaleform::IsPriorityMessageOpen()
 	return false;
 }
 
+#if defined( IOS )
+CON_COMMAND( sf_ios_close_dialogs, "iOS: close all open Scaleform message boxes" )
+{
+	printf( "[msgbox] closing all dialogs\n" );
+	fflush( stdout );
+	CMessageBoxScaleform::UnloadAllDialogs( true );
+}
+#endif
+
 void CMessageBoxScaleform::LoadDialog( char const *pszTitle, char const *pszMessage, const char *pszButtonLegend, DWORD dwFlags, IMessageBoxEventCallback *pEventCallback, CMessageBoxScaleform** ppMessageBoxInstance, wchar_t const *pszWideMessage )
 {
 	LoadDialogInSlot( SF_FULL_SCREEN_SLOT, pszTitle, pszMessage, pszButtonLegend, dwFlags, pEventCallback, ppMessageBoxInstance, pszWideMessage );
@@ -85,6 +98,23 @@ void CMessageBoxScaleform::LoadDialogInSlot( int slot, char const *pszTitle, cha
 			sSwfAliasString.AppendFormat( "%.*s", pchHash - szAlias, szAlias );
 		}
 	}
+
+#if defined( IOS )
+	{
+		// which dialogs open (they are modal and block the menu underneath)
+		char szWide[256] = "";
+		if ( pszWideMessage )
+			V_UnicodeToUTF8( pszWideMessage, szWide, sizeof( szWide ) );
+		printf( "[msgbox] open in slot %d: swf '%s', title '%s', message '%s'%s%s, buttons '%s', flags 0x%x, callback %p\n",
+				slot, sSwfAliasString.Access(), pszTitle ? pszTitle : "(null)", pszMessage ? pszMessage : "(null)",
+				pszWideMessage ? ", wide message " : "", szWide, pszButtonLegend ? pszButtonLegend : "(null)",
+				(unsigned)dwFlags, (void *)pEventCallback );
+		void *frames[16];
+		int nFrames = backtrace( frames, 16 );
+		backtrace_symbols_fd( frames, nFrames, 1 );
+		fflush( stdout );
+	}
+#endif
 
 	CMessageBoxScaleform* presult = new CMessageBoxScaleform( pszTitle, pszMessage, pszButtonLegend, dwFlags, pEventCallback, pszWideMessage );
 	SFUI_REQUEST_ELEMENT_SWFALIAS( slot, g_pScaleformUI, CMessageBoxScaleform, presult, MessageBox, sSwfAliasString.Access() );

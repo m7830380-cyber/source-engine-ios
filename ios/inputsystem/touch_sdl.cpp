@@ -10,6 +10,7 @@
 #include "../../inputsystem/inputsystem.h"
 #include "tier0/icommandline.h"
 #include "SDL.h"
+#include "tier1/convar.h"
 
 // NOTE: This has to be the last file included!
 #include "tier0/memdbgon.h"
@@ -72,6 +73,16 @@ static int TouchSDLWatcher( void *userInfo, SDL_Event *event )
 	return 1;
 }
 
+// Menus (Scaleform) take the mouse: while this is 1, SDL also turns a finger into
+// mouse movement and left clicks. The client turns it on outside of matches and
+// while the game menu is open.
+static void TouchMouseEventsChanged( IConVar *pVar, const char *pOldValue, float flOldValue )
+{
+	ConVarRef var( pVar );
+	SDL_SetHint( SDL_HINT_TOUCH_MOUSE_EVENTS, var.GetBool() ? "1" : "0" );
+}
+ConVar touch_mouse_events( "touch_mouse_events", "0", FCVAR_NONE, "Also send touches as mouse movement/clicks (menus)", TouchMouseEventsChanged );
+
 void CInputSystem::InitializeTouch( void )
 {
 	if ( m_bTouchInitialized )
@@ -82,7 +93,7 @@ void CInputSystem::InitializeTouch( void )
 
 	// Touches are handled as touches; SDL would otherwise also turn every
 	// finger into mouse clicks and mouse-look.
-	SDL_SetHint( SDL_HINT_TOUCH_MOUSE_EVENTS, "0" );
+	SDL_SetHint( SDL_HINT_TOUCH_MOUSE_EVENTS, touch_mouse_events.GetBool() ? "1" : "0" );
 
 	memset( s_Fingers, 0, sizeof( s_Fingers ) );
 	SDL_AddEventWatch( TouchSDLWatcher, this );

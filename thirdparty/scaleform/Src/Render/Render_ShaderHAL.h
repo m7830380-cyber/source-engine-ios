@@ -486,6 +486,23 @@ inline void ShaderHAL<ShaderManagerType, ShaderInterfaceType>::PushBlendMode(Ble
         return;
 
     BlendStackEntry& e = BlendModeStack.Back();
+#if defined(SF_USE_ANGLE)
+    // iOS/ANGLE: blend modes that render their content offscreen and composite
+    // it back hide everything under them (text included). Draw that content
+    // straight to the current target with normal blending instead; alpha/erase
+    // (which only edit a layer's offscreen alpha) have no layer to act on.
+    if (BlendState::IsTargetAllocationNeededForBlendMode(mode))
+    {
+        applyBlendMode(Blend_Normal, false, (HALState& HS_InRenderTarget) != 0 );
+        return;
+    }
+    if (mode == Blend_Alpha || mode == Blend_Erase)
+    {
+        e.NoLayerParent = true;
+        applyBlendMode(Blend_Ignore, false, (HALState& HS_InRenderTarget) != 0 );
+        return;
+    }
+#endif
     if (BlendState::IsTargetAllocationNeededForBlendMode(prim->GetBlendMode()))
     {
         if (prim->GetCacheState() == CacheablePrimitive::Cache_Uncached)

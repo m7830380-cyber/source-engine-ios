@@ -366,6 +366,33 @@ void CTouchControls::GetTouchDelta( float yaw, float pitch, float *dx, float *dy
 
 // CS:GO layout: move stick on the left half, look pad on the right half,
 // action buttons along the right edge and weapon switching on the left.
+// Buttons for the (Scaleform) menus: buy menu, pause menu, scoreboard, team
+// menu, chat. Along the top edge, clear of the movement and look areas' buttons.
+// Returns how many were added.
+static int AddMenuButtons( rgba_t color, bool bOnlyMissing )
+{
+	struct MenuButton_t { const char *name, *texture, *command; float x1, y1, x2, y2; };
+	static const MenuButton_t s_MenuButtons[] =
+	{
+		{ "scores",   "vgui/touch/changeclass",  "+showscores",     0.090000, 0.000000, 0.170000, 0.142222 },
+		{ "teammenu", "vgui/touch/changeteam",   "teammenu",        0.180000, 0.000000, 0.260000, 0.142222 },
+		{ "chat",     "vgui/touch/chat",         "messagemode",     0.270000, 0.000000, 0.350000, 0.142222 },
+		{ "buymenu",  "vgui/touch/show_weapons", "buymenu",         0.790000, 0.000000, 0.870000, 0.142222 },
+		{ "pause",    "vgui/touch/menu",         "gameui_activate", 0.900000, 0.000000, 0.980000, 0.142222 },
+	};
+
+	int nAdded = 0;
+	for ( int i = 0; i < ARRAYSIZE( s_MenuButtons ); i++ )
+	{
+		const MenuButton_t &b = s_MenuButtons[i];
+		if ( bOnlyMissing && gTouch.FindButton( b.name ) )
+			continue;
+		gTouch.AddButton( b.name, b.texture, b.command, b.x1, b.y1, b.x2, b.y2, color );
+		++nAdded;
+	}
+	return nAdded;
+}
+
 static void AddDefaultButtons( rgba_t color )
 {
 	gTouch.AddButton( "look", "", "_look", 0.5, 0, 1, 1, color, 0, 0, 0 );
@@ -383,6 +410,7 @@ static void AddDefaultButtons( rgba_t color )
 	gTouch.AddButton( "drop", "vgui/touch/back", "drop", 0.680000, 0.000000, 0.760000, 0.142222, color );
 	gTouch.AddButton( "console", "vgui/touch/showconsole", "toggleconsole", 0.000000, 0.000000, 0.080000, 0.142222, color );
 	gTouch.AddButton( "edit", "vgui/touch/settings", "touch_enableedit", 0.420000, 0.000000, 0.500000, 0.151486, color );
+	AddMenuButtons( color, false );
 }
 
 void CTouchControls::ResetToDefaults()
@@ -450,6 +478,10 @@ void CTouchControls::Init()
 	}
 	else
 		ResetToDefaults();
+
+	// Layouts saved before the menus worked have no menu buttons; add them
+	if ( AddMenuButtons( color, true ) > 0 )
+		WriteConfig();
 
 	// Configs saved by earlier builds use invnext/invprev, which go through
 	// CS:GO's Scaleform weapon selection HUD and do nothing here.

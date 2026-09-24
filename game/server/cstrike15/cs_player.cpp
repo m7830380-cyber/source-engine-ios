@@ -5863,7 +5863,7 @@ void CCSPlayer::AddAccountAward( PlayerCashAward::Type reason, int amount, const
 		if ( pWeapon && ( amount != cash_player_killed_enemy_default.GetInt() ))
 		{
 			szWeaponName = ( pWeapon->GetEconItemView() && pWeapon->GetEconItemView()->GetItemDefinition() )
-				? pWeapon->GetEconItemView()->GetItemDefinition()->GetItemBaseName() : pWeapon->GetClassname();
+				? pWeapon->GetEconItemView()->GetItemDefinition()->GetItemBaseName() : const_cast< CWeaponCSBase * >( pWeapon )->GetClassname();
 			awardReasonToken = "#Player_Cash_Award_Killed_Enemy";
 		}
 

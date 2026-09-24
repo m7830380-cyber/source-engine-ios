@@ -322,6 +322,27 @@ bool Texture::Upload(unsigned itex, unsigned level, const ImagePlane& plane)
     glBindTexture(GL_TEXTURE_2D, pTextures[itex].TexId);
 
     const TextureFormat::Mapping* pmapping = GetTextureFormatMapping();
+#if defined(SF_USE_ANGLE)
+    if (pmapping->Format == Image_A8)
+    {
+        static int a8Uploads = 0;
+        if (a8Uploads < 30)
+        {
+            ++a8Uploads;
+            unsigned nonZero = 0;
+            for (unsigned y = 0; y < plane.Height; ++y)
+            {
+                const UByte* row = plane.pData + (UPInt)y * plane.Pitch;
+                for (unsigned x = 0; x < plane.Width; ++x)
+                    if (row[x]) ++nonZero;
+            }
+            printf("[sf-gl] A8 upload: tex %u, level %u, %ux%u pitch %u, %u non-zero bytes, texture size %ux%u\n",
+                   pTextures[itex].TexId, level, plane.Width, plane.Height, (unsigned)plane.Pitch, nonZero,
+                   pTextures[itex].Size.Width, pTextures[itex].Size.Height);
+            fflush(stdout);
+        }
+    }
+#endif
     if (ImageData::IsFormatCompressed(pmapping->Format))
     {
         // The plane's DataSize member contains the size of the buffer remaining, not the actual size of

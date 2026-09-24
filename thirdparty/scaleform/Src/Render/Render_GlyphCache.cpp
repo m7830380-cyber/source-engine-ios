@@ -179,6 +179,17 @@ bool GlyphTextureMapper::Unmap()
         if (Mapped)
         {
             ret = pTexImg->Unmap();
+#if defined(SF_USE_ANGLE)
+            {
+                static int unmapLogs = 0;
+                if (unmapLogs < 20)
+                {
+                    ++unmapLogs;
+                    printf("[sf-text] glyph texture unmapped (upload), result %d\n", ret ? 1 : 0);
+                    fflush(stdout);
+                }
+            }
+#endif
             Mapped = false;
         }
         break;

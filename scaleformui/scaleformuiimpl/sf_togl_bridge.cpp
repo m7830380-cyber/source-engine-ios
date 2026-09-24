@@ -51,6 +51,13 @@ void SFTogl_SaveGLState( IDirect3DDevice9 *pDevice )
 	for ( int i = 0; i < 16; i++ )
 		gGL->glDisableVertexAttribArray( i );
 
+	// togl binds sampler objects to its texture units; a bound sampler overrides
+	// the filter/wrap parameters Scaleform sets on its textures. togl marks its
+	// samplers dirty in RestoreGLState (ForceFlushStates) and rebinds them.
+	for ( int i = 0; i < 16; i++ )
+		gGL->glBindSampler( i, 0 );
+	gGL->glActiveTexture( GL_TEXTURE0 );
+
 	gGL->glDisable( GL_SCISSOR_TEST );
 	gGL->glDisable( GL_DEPTH_TEST );
 	gGL->glDisable( GL_STENCIL_TEST );

@@ -384,7 +384,7 @@ void ScaleformUIImpl::RenderSlot( int slot )
 
 #if defined( SF_USE_ANGLE )
 	// record the draw order of one menu frame
-	SF_DebugFrameLog = ( slot == 0 && nSlotRender == 300 ) ? 1 : 0;
+	SF_DebugFrameLog = ( slot == 0 && ( nSlotRender == 1200 || nSlotRender == 2400 ) ) ? 1 : 0;
 	if ( SF_DebugFrameLog )
 		printf( "[sf-frame] ===== slot %d render %d =====\n", slot, nSlotRender );
 #endif

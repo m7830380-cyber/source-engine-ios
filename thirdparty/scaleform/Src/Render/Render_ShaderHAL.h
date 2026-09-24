@@ -472,7 +472,7 @@ inline void ShaderHAL<ShaderManagerType, ShaderInterfaceType>::drawFilter(const 
 template<class ShaderManagerType, class ShaderInterfaceType>
 inline void ShaderHAL<ShaderManagerType, ShaderInterfaceType>::PushBlendMode(BlendPrimitive* prim)
 {
-    SF_FRAMELOG("push blend mode");
+    SF_FRAMELOG("push blend mode %d", prim ? (int)prim->GetBlendMode() : -1);
     if (!checkState(HS_InDisplay, __FUNCTION__))
         return;
 

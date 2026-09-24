@@ -175,6 +175,19 @@ void ScaleformTranslatorAdapter::Translate( TranslateInfo* tinfo )
 
 		const wchar_t* translated = SFINST.Translate( asciiString, &isHTML );
 
+#if defined( SF_USE_ANGLE )
+		static int s_nTranslateLogs = 0;
+		if ( s_nTranslateLogs < 40 )
+		{
+			++s_nTranslateLogs;
+			char szResult[128] = "(null)";
+			if ( translated )
+				V_UnicodeToUTF8( translated, szResult, sizeof( szResult ) );
+			printf( "[sf] translate '%s' -> %d chars '%s'\n", asciiString, translated ? (int)Q_wcslen( translated ) : -1, szResult );
+			fflush( stdout );
+		}
+#endif
+
 		tinfo->SetResultHtml( translated );
 	}
 }

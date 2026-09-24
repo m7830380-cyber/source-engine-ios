@@ -22,6 +22,10 @@ otherwise accompanies this software in either electronic or hard copy form.
 #include "Render_Viewport.h"
 #include "Renderer2DImpl.h"
 
+#if defined(SF_USE_ANGLE)
+#include <stdio.h>
+#endif
+
 namespace Scaleform { namespace Render {
 
 
@@ -1214,6 +1218,18 @@ bool TextMeshProvider::GetData(MeshBase *mesh, VertexOutput* verOut, unsigned me
     // but prevents from having degenerate matrices. It's important for 3D to eliminate  
     // visual EdgeAA artifacts.
     Matrix2F mtx = Matrix2F::Scaling(HeightRatio);
+
+#if defined(SF_USE_ANGLE)
+    {
+        static int layerLogs = 0;
+        if (layerLogs < 40)
+        {
+            ++layerLogs;
+            printf("[sf-text] mesh layer type %d, %u entries, height ratio %.3f\n", (int)layer.Type, (unsigned)layer.Count, HeightRatio);
+            fflush(stdout);
+        }
+    }
+#endif
 
     switch(layer.Type)
     {

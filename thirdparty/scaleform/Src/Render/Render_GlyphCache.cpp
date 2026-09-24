@@ -26,6 +26,15 @@ otherwise accompanies this software in either electronic or hard copy form.
 #include "Kernel/SF_HeapNew.h"
 #include "Kernel/SF_AmpInterface.h"
 
+#if defined(SF_USE_ANGLE)
+#include <stdio.h>
+// Diagnostics (iOS/ANGLE): limited logging of the glyph rasterizer.
+static int SF_GlyphLogCount = 0;
+#define SF_GLYPH_LOG(...) do { if (SF_GlyphLogCount < 60) { ++SF_GlyphLogCount; printf(__VA_ARGS__); fflush(stdout); } } while (0)
+#else
+#define SF_GLYPH_LOG(...) do { } while (0)
+#endif
+
 namespace Scaleform { namespace Render {
 
 
@@ -1727,17 +1736,20 @@ GlyphNode* GlyphCache::RasterizeGlyph(GlyphRunData& data, TextMeshProvider* tm, 
 {
     if (MaxNumTextures == 0)
     {
+        SF_GLYPH_LOG("[sf-text] RasterizeGlyph: no raster cache (MaxNumTextures 0)\n");
         Result = Res_NoRasterCache;
         return 0;
     }
 
     if (data.RasterSize)
     {
+        SF_GLYPH_LOG("[sf-text] RasterizeGlyph: prerasterized glyph\n");
         return getPrerasterizedGlyph(data, tm, gp);
     }
 
     if (data.pShape == 0)
     {
+        SF_GLYPH_LOG("[sf-text] RasterizeGlyph: shape not found\n");
         Result = Res_ShapeNotFound;
         return 0;
     }
@@ -1774,6 +1786,7 @@ GlyphNode* GlyphCache::RasterizeGlyph(GlyphRunData& data, TextMeshProvider* tm, 
 
     if (h >= MaxSlotHeight)
     {
+        SF_GLYPH_LOG("[sf-text] RasterizeGlyph: too big (h %u, max slot %u)\n", h, MaxSlotHeight);
         Result = Res_ShapeIsTooBig;
         return 0;
     }
@@ -1853,6 +1866,15 @@ GlyphNode* GlyphCache::RasterizeGlyph(GlyphRunData& data, TextMeshProvider* tm, 
         ++numSl;
     }
 
+#if defined(SF_USE_ANGLE)
+    {
+        unsigned ink = 0;
+        for (unsigned p = 0; p < imgW * imgH; ++p)
+            if (RasterData[p]) ++ink;
+        SF_GLYPH_LOG("[sf-text] RasterizeGlyph: font size %.1f, %ux%u, %u scanlines, %u inked pixels, method %u\n",
+                     gp.GetFontSize(), imgW, imgH, numSl, ink, (unsigned)Method);
+    }
+#endif
     updateTextureGlyph(node); 
     ++RasterizationCount;
 

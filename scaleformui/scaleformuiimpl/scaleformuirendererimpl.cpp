@@ -179,10 +179,14 @@ void ScaleformUIImpl::SetRenderingDevice( IDirect3DDevice9 *pDevice, D3DPRESENT_
 	NOTE_UNUSED( hWnd );
 #endif
 
+#if defined( SF_USE_ANGLE )
+	SFTogl_GetViewportSize( pDevice, &m_iScreenWidth, &m_iScreenHeight );
+#else
 	D3DVIEWPORT9 viewport;
 	pDevice->GetViewport( &viewport );
 	m_iScreenWidth = viewport.Width;
 	m_iScreenHeight = viewport.Height;
+#endif
     
 	SetScreenSize( m_iScreenWidth, m_iScreenHeight );
 }

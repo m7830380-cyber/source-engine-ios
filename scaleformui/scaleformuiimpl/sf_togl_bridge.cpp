@@ -25,6 +25,15 @@ void SFTogl_RestoreGLState( IDirect3DDevice9 *pDevice )
 		pDevice->RestoreGLState();
 }
 
+void SFTogl_GetViewportSize( IDirect3DDevice9 *pDevice, int *pWidth, int *pHeight )
+{
+	D3DVIEWPORT9 viewport = {};
+	if ( pDevice )
+		pDevice->GetViewport( &viewport );
+	*pWidth = viewport.Width;
+	*pHeight = viewport.Height;
+}
+
 ILauncherMgr *SFTogl_GetLauncherMgr( CreateInterfaceFn factory )
 {
 	return (ILauncherMgr *)factory( SDLMGR_INTERFACE_VERSION, NULL );

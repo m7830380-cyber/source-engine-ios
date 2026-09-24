@@ -18,6 +18,7 @@ class ILauncherMgr;
 
 void SFTogl_SaveGLState( IDirect3DDevice9 *pDevice );
 void SFTogl_RestoreGLState( IDirect3DDevice9 *pDevice );
+void SFTogl_GetViewportSize( IDirect3DDevice9 *pDevice, int *pWidth, int *pHeight );
 
 ILauncherMgr *SFTogl_GetLauncherMgr( CreateInterfaceFn factory );
 void SFTogl_SetMouseVisible( ILauncherMgr *pLauncherMgr, bool bVisible );

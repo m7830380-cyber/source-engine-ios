@@ -20,6 +20,7 @@ otherwise accompanies this software in either electronic or hard copy form.
 #include "Render/GL/GL_Shader.h"
 #include "Render/GL/GL_HAL.h"
 #include "Kernel/SF_Debug.h"
+#include <stdio.h>
 
 #if defined(GL_ES_VERSION_2_0) && !defined(SF_USE_ANGLE)
 #include "Render/GL/GLES_ShaderDescs.h"
@@ -295,6 +296,9 @@ GLuint ShaderObject::createShaderOrProgram(ShaderStages stage, const char* shade
         if (!result)
         {
             glGetShaderInfoLog(shader, sizeof(msg), 0, msg);
+#if defined(SF_USE_ANGLE)
+            printf("[sf] GL shader/program failed: %s\n", msg);
+#endif
             SF_DEBUG_ERROR2(!testCompilation, "%s:\n%s\n", msg, shaderCode);
             glDeleteShader(shader);
             return 0;
@@ -339,6 +343,9 @@ GLuint ShaderObject::createShaderOrProgram(ShaderStages stage, const char* shade
                 else
                 {
                     glGetShaderInfoLog(shader, sizeof(msg), 0, msg);
+#if defined(SF_USE_ANGLE)
+                    printf("[sf] GL shader/program failed: %s\n", msg);
+#endif
                     SF_DEBUG_ERROR2(!testCompilation, "%s:\n%s\n", msg, shaderCode);
                     glDeleteShader(shader);
                     return 0;
@@ -349,6 +356,9 @@ GLuint ShaderObject::createShaderOrProgram(ShaderStages stage, const char* shade
             if (!result)
             {
                 glGetProgramInfoLog(program, sizeof(msg), 0, msg);
+#if defined(SF_USE_ANGLE)
+                printf("[sf] GL shader/program failed: %s\n", msg);
+#endif
                 SF_DEBUG_ERROR2(!testCompilation, "%s:\n%s\n", msg, shaderCode);
                 glDeleteProgram(program);
                 return 0;

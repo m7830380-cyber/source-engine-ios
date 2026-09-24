@@ -54,6 +54,17 @@ DEFINE_LOGGING_CHANNEL_NO_TAGS( LOG_SCALEFORM_AS, "ScaleformAS" );
 
 void ScaleformUILogging::LogMessageVarg( SF::LogMessageId messageId, const char* pfmt, va_list argList )
 {
+#if defined( SF_USE_ANGLE )
+	// iOS bring-up: always see what GFx reports
+	{
+		va_list args;
+		va_copy( args, argList );
+		printf( "[sf] " );
+		vprintf( pfmt, args );
+		va_end( args );
+		fflush( stdout );
+	}
+#endif
 	if ( !dev_scaleform_debug.GetBool() )
 		return;
 

@@ -281,6 +281,18 @@ void ScaleformUIImpl::RenderSlot( int slot )
 
 	MEM_ALLOC_CREDIT_FORMATF( "ScaleformUIImpl::RenderSlot%d", slot );
 
+#if defined( SF_USE_ANGLE )
+	{
+		static int s_nRenderCalls = 0;
+		if ( ( s_nRenderCalls++ % 600 ) == 0 )
+		{
+			printf( "[sf] RenderSlot %d (call %d), renderer2D %p, HAL %p, in frame %d\n", slot, s_nRenderCalls,
+					(void *)m_pRenderer2D.GetPtr(), (void *)m_pRenderHAL.GetPtr(), s_bScaleformInFrame ? 1 : 0 );
+			fflush( stdout );
+		}
+	}
+#endif
+
 	if (slot == SF_RESERVED_BEGINFRAME_SLOT)
 	{
 		m_pShaderAPI->ResetRenderState( false );

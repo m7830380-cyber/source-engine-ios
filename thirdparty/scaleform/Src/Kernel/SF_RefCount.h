@@ -677,12 +677,20 @@ public:
     WeakPtr()
     { }
 
+    // Note: the original form, pProxy(*(ptr ? ptr->CreateWeakProxy() : 0)),
+    // dereferences a null pointer when ptr is null; clang uses that UB to drop
+    // the null check and calls CreateWeakProxy() on null (iOS crash in
+    // new Color() with no target).
     SF_INLINE WeakPtr(C* ptr)
-        : pProxy(*(ptr ? ptr->CreateWeakProxy() : (WeakPtrProxy*)0))
-    {  }
+    {
+        if (ptr)
+            pProxy = *ptr->CreateWeakProxy();
+    }
     SF_INLINE WeakPtr(const Ptr<C>& ptr)
-        : pProxy(*(ptr.GetPtr() ? ptr->CreateWeakProxy() : (WeakPtrProxy*)0))
-    {  }
+    {
+        if (ptr.GetPtr())
+            pProxy = *ptr->CreateWeakProxy();
+    }
 
     // Default constructor and assignment from WeakPtr<C> are OK
     SF_INLINE void    operator = (C* ptr)

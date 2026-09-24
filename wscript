@@ -115,7 +115,7 @@ PROJECT_EXTRA_USES = {
 # Extra compiler flags per VPC project on iOS (appended after the global ones).
 PROJECT_EXTRA_CXXFLAGS = {
 	# Scaleform's headers in thirdparty/scaleform use C++17 library features
-	'scaleformui': ['-std=gnu++17', '-Wno-register', '-Wno-deprecated-register'],
+	'scaleformui': ['-std=gnu++17', '-Wno-register', '-Wno-deprecated-register', '-fno-delete-null-pointer-checks'],
 }
 
 # Extra sources per VPC project on iOS.
@@ -514,7 +514,9 @@ def build_scaleform(bld):
 	sources = sorted(set(sources))
 	env = bld.env.derive()
 	# this Scaleform tree targets C++20 (later -std wins over the global gnu++11)
-	env.append_value('CXXFLAGS', ['-std=gnu++20', '-w'])
+	# Scaleform relies on null-pointer idioms (e.g. *(p ? q : 0)) that clang would
+	# otherwise treat as proof of non-null and drop the checks
+	env.append_value('CXXFLAGS', ['-std=gnu++20', '-w', '-fno-delete-null-pointer-checks'])
 	env.append_value('CFLAGS', ['-w'])
 	bld(
 		features = 'c cxx cstlib cxxstlib',

@@ -1751,6 +1751,27 @@ void CSDLMgr::ShowPixels( CShowPixelsParams *params )
 
 	m_flPrevGLSwapWindowTime = tm.GetDurationInProgress().GetMillisecondsF();
 
+#if defined( IOS )
+	{
+		// Let the main run loop turn after every present. During level loading
+		// the engine presents the loading screen without returning to the run
+		// loop, so Core Animation never committed the presented drawables; each
+		// next present then waited ~1 s for a free drawable (minutes of loading)
+		// and iOS finally killed the unresponsive app.
+		SDL_PumpEvents();
+
+		static double s_flLastPresentEnd = 0.0;
+		double flNow = Plat_FloatTime();
+		if ( s_flLastPresentEnd > 0.0 && m_flPrevGLSwapWindowTime > 200.0f )
+		{
+			printf( "[present] slow swap: %.0f ms (%.0f ms since previous present)\n",
+					m_flPrevGLSwapWindowTime, ( flNow - s_flLastPresentEnd ) * 1000.0 );
+			fflush( stdout );
+		}
+		s_flLastPresentEnd = flNow;
+	}
+#endif
+
 #ifdef ANDROID
 	// ADRENO GPU MOMENT, SKIP 5 FRAMES
 	if( m_bResetVsync )

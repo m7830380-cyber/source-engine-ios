@@ -63,6 +63,7 @@ ROOT_PROJECTS = [
 	'vscript',
 	'vguimatsurface',
 	'vgui_dll',
+	'scaleformui', # the real CS:GO Scaleform integration, on thirdparty/scaleform
 	'localize',
 	'togl',
 	'scenefilecache',
@@ -89,6 +90,13 @@ EXTERNAL_LIBS = {
 	'zlib': 'ZLIB',
 	'steam_api': 'steam_api',
 	'libsteam_api': 'steam_api',
+	# Scaleform: CS:GO links the prebuilt GFx libraries; we build them as one
+	# static library from thirdparty/scaleform (build_scaleform)
+	'libgfx': 'gfx',
+	'libgfxplatform': 'gfx',
+	'libgfx_as2': 'gfx',
+	'libgfxrender_gl': 'gfx',
+	'libgfxexpat': 'gfx',
 }
 
 # Static libraries that CS:GO links as prebuilt binaries but whose sources
@@ -159,6 +167,12 @@ IOS_DEFINES = [
 ]
 
 # VPC include dirs replaced by the build's own copies.
+# VPC include dirs that point at paths we lay out differently.
+INCLUDE_REMAP = {
+	'thirdparty/scaleform/sdk42/Include': 'thirdparty/scaleform/Include',
+	'thirdparty/scaleform/sdk42/Src': 'thirdparty/scaleform/Src',
+}
+
 DROP_INCLUDES = set([
 	'thirdparty/SDL2',  # CS:GO's bundled SDL2 headers; we use the SDL we link
 ])
@@ -509,20 +523,8 @@ def build_scaleform(bld):
 def build_custom_projects(bld):
 	build_scaleform(bld)
 
-	# loaded by the launcher as scaleformui.dylib
-	env = bld.env.derive()
-	env.cxxshlib_PATTERN = '%s.dylib'
-	bld(
-		features = 'cxx cxxshlib',
-		source   = ['scaleformui/null/nullscaleformui.cpp', 'public/tier0/memoverride.cpp'],
-		target   = 'scaleformui',
-		name     = 'scaleformui',
-		includes = ['common', 'public', 'public/tier0', 'public/tier1'],
-		defines  = ['INCLUDE_SCALEFORM', 'MEMOVERRIDE_MODULE=scaleformui'],
-		use      = ['tier1', 'interfaces', 'tier0', 'vstdlib'],
-		env      = env,
-		install_path = bld.env.LIBDIR,
-	)
+	# scaleformui is now the real integration, built from scaleformui.vpc
+	# (ROOT_PROJECTS); scaleformui/null/ stays as a fallback.
 
 	env = bld.env.derive()
 	env.cxxshlib_PATTERN = 'lib%s.dylib'
@@ -614,7 +616,7 @@ def build(bld):
 		for s in missing:
 			Logs.warn('%s: missing source %s' % (name, s))
 
-		includes = [i for i in proj.includes if i not in DROP_INCLUDES]
+		includes = [INCLUDE_REMAP.get(i, i) for i in proj.includes if i not in DROP_INCLUDES]
 		use = _uses(proj.libs + proj.implibs) + PROJECT_EXTRA_USES.get(name, [])
 
 		env = bld.env.derive()

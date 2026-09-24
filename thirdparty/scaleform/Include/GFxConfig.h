@@ -58,12 +58,14 @@ otherwise accompanies this software in either electronic or hard copy form.
 // Enables multitouch support.
 //#define GFX_MULTITOUCH_SUPPORT_ENABLE
 
-#if defined(SF_OS_ANDROID) || defined(SF_OS_IPHONE) || defined(SF_OS_3DS) || defined(SF_OS_WINMETRO)
+// SF_USE_ANGLE: CS:GO on iOS drives GFx like the desktop build (mouse
+// events from the engine), without Scaleform's mobile app framework.
+#if (defined(SF_OS_ANDROID) || defined(SF_OS_IPHONE) || defined(SF_OS_3DS) || defined(SF_OS_WINMETRO)) && !defined(SF_USE_ANGLE)
 #define GFX_MULTITOUCH_SUPPORT_ENABLE
 #endif
 
 // Mobile app features, such as orientation and lifecycle events
-#if defined(SF_OS_ANDROID) || defined(SF_OS_IPHONE)
+#if (defined(SF_OS_ANDROID) || defined(SF_OS_IPHONE)) && !defined(SF_USE_ANGLE)
 
 // Initialize native gesture recognition (currently only available on iOS)
 #define NATIVE_GESTURE_RECOGNIZE

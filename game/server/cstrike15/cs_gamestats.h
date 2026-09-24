@@ -158,7 +158,7 @@ struct SWeaponShotData : public BaseStatData
 	{
 		Clear();
 
-		if ( pWeapon )
+		if ( pWeapon && pWeapon->GetEconItemView() )
 		{			
 			m_ui8WeaponID = (uint8)pWeapon->GetEconItemView()->GetItemIndex();
 		}

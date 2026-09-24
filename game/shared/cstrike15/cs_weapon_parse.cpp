@@ -1269,7 +1269,7 @@ void WeaponRecoilData::GenerateRecoilTable( RecoilData *data )
 	{
 		pWeaponInfo = GetWeaponInfo( CSWeaponID( data->iItemDefIndex ) );
 	}
-	if ( !pWeaponInfo && pEconItemDefinition->GetItemClass() )
+	if ( !pWeaponInfo && pEconItemDefinition && pEconItemDefinition->GetItemClass() )
 	{
 		char const *szItemClass = pEconItemDefinition->GetItemClass();
 		CSWeaponID wpnId = WeaponIdFromString( szItemClass );
@@ -1291,7 +1291,9 @@ void WeaponRecoilData::GenerateRecoilTable( RecoilData *data )
 		}
 	}
 
-	const CUtlVector< static_attrib_t > &arrAttributes = pEconItemDefinition->GetStaticAttributes();
+	// no definition when the item schema is missing: use weapon script values only
+	static const CUtlVector< static_attrib_t > s_NoAttributes;
+	const CUtlVector< static_attrib_t > &arrAttributes = pEconItemDefinition ? pEconItemDefinition->GetStaticAttributes() : s_NoAttributes;
 	Assert( pWeaponInfo || arrAttributes.Count() );
 	for ( int j = 0; j < arrAttributes.Count(); ++ j )
 	{
@@ -1394,7 +1396,11 @@ void WeaponRecoilData::GetRecoilOffsets( CWeaponCSBase *pWeapon, int iMode, int 
 	// Recoil offset tables are indexed by a weapon's definition index.
 	// Look for the existing table, otherwise generate it.
 
-	item_definition_index_t iDefIndex = pWeapon->GetEconItemView()->GetItemDefinition()->GetDefinitionIndex();
+	// Weapons carry no econ item view in this source (GetEconItemView() is
+	// NULL); CSWeaponID values are the item definition indices.
+	item_definition_index_t iDefIndex = ( pWeapon->GetEconItemView() && pWeapon->GetEconItemView()->GetItemDefinition() )
+		? pWeapon->GetEconItemView()->GetItemDefinition()->GetDefinitionIndex()
+		: (item_definition_index_t)pWeapon->GetCSWeaponID();
 
 	RecoilData *wepData = NULL;
 	CUtlMap< item_definition_index_t, RecoilData* >::IndexType_t iMapLocation = m_mapRecoilTables.Find( iDefIndex );

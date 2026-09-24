@@ -284,6 +284,80 @@ ConVar sf_ios_blend_direct( "sf_ios_blend_direct", "0", 0, "iOS: draw offscreen 
 ConVar sf_ios_filters( "sf_ios_filters", "1", 0, "iOS: render Scaleform filters (glow/drop shadow/blur); 0 draws filtered content unfiltered" );
 ConVar sf_ios_text_only( "sf_ios_text_only", "0", 0, "iOS visual test: draw only text primitives" );
 ConVar sf_ios_record_frames( "sf_ios_record_frames", "0", 0, "iOS: record the draw order of the next N menu frames to the log" );
+
+
+// Dump the display tree of the menu movie (names, visibility, alpha, position,
+// size) to see which clip covers the menu: once ~20 s into the menu and on
+// request (sf_ios_dump_ui). sf_ios_hide <path> hides a clip for testing.
+static bool s_bIOSDumpUIRequested = false;
+static char s_szIOSHidePath[256] = "";
+CON_COMMAND( sf_ios_dump_ui, "iOS: log the display tree of the menu movie" )
+{
+	s_bIOSDumpUIRequested = true;
+}
+CON_COMMAND( sf_ios_hide, "iOS: hide a menu movie clip, e.g. sf_ios_hide _level31.Panel" )
+{
+	if ( args.ArgC() < 2 )
+		return;
+	V_strncpy( s_szIOSHidePath, args[1], sizeof( s_szIOSHidePath ) );
+}
+
+class CIOSDisplayTreeVisitor : public SF::GFx::Value::ObjectVisitor
+{
+public:
+	CIOSDisplayTreeVisitor( int nDepth, int *pnLines ) : m_nDepth( nDepth ), m_pnLines( pnLines ) {}
+
+	virtual void Visit( const char *name, const SF::GFx::Value &val )
+	{
+		if ( !val.IsDisplayObject() || *m_pnLines >= 600 )
+			return;
+		if ( !V_strcmp( name, "_parent" ) || !V_strcmp( name, "_root" ) || !V_strcmp( name, "this" ) || !V_strncmp( name, "_level", 6 ) )
+			return;
+
+		SF::GFx::Value::DisplayInfo info;
+		val.GetDisplayInfo( &info );
+		SF::GFx::Value width, height;
+		val.GetMember( "_width", &width );
+		val.GetMember( "_height", &height );
+		++*m_pnLines;
+		printf( "[sf-ui] %*s%s: visible %d, alpha %.0f, at %.0f,%.0f, size %.0fx%.0f\n", m_nDepth * 2, "", name,
+				info.GetVisible() ? 1 : 0, info.GetAlpha(), info.GetX(), info.GetY(),
+				width.IsNumber() ? width.GetNumber() : -1.0, height.IsNumber() ? height.GetNumber() : -1.0 );
+
+		if ( m_nDepth < 3 && info.GetVisible() )
+		{
+			CIOSDisplayTreeVisitor child( m_nDepth + 1, m_pnLines );
+			val.VisitMembers( &child );
+		}
+	}
+
+private:
+	int m_nDepth;
+	int *m_pnLines;
+};
+
+static void IOS_DumpDisplayTree( SF::GFx::Movie *pMovie, int slot )
+{
+	if ( !pMovie )
+		return;
+	printf( "[sf-ui] ===== display tree of slot %d =====\n", slot );
+	int nLines = 0;
+	for ( int nLevel = 0; nLevel < 64; nLevel++ )
+	{
+		char szLevel[16];
+		V_snprintf( szLevel, sizeof( szLevel ), "_level%d", nLevel );
+		SF::GFx::Value level;
+		if ( !pMovie->GetVariable( &level, szLevel ) || !level.IsDisplayObject() )
+			continue;
+		SF::GFx::Value::DisplayInfo info;
+		level.GetDisplayInfo( &info );
+		printf( "[sf-ui] %s: visible %d, alpha %.0f\n", szLevel, info.GetVisible() ? 1 : 0, info.GetAlpha() );
+		CIOSDisplayTreeVisitor visitor( 1, &nLines );
+		level.VisitMembers( &visitor );
+	}
+	printf( "[sf-ui] ===== end (%d clips) =====\n", nLines );
+	fflush( stdout );
+}
 #endif
 
 static bool s_bScaleformInFrame = false;
@@ -415,6 +489,23 @@ void ScaleformUIImpl::RenderSlot( int slot )
 
 	SF_StatPrimitives = SF_StatText = SF_StatComplex = SF_StatBlendPush = 0;
 	SF_StatBlendTargets = SF_StatRenderTargets = SF_StatFilters = SF_StatMasks = 0;
+#endif
+
+#if defined( SF_USE_ANGLE )
+	if ( pslot && slot == 1 && s_szIOSHidePath[0] )
+	{
+		char szVar[300];
+		V_snprintf( szVar, sizeof( szVar ), "%s._visible", s_szIOSHidePath );
+		bool bOk = ( (SF::GFx::Movie *)pslot->m_pMovieView )->SetVariable( szVar, SF::GFx::Value( false ) );
+		printf( "[sf-ui] hide %s: %s\n", s_szIOSHidePath, bOk ? "done" : "not found" );
+		fflush( stdout );
+		s_szIOSHidePath[0] = 0;
+	}
+	if ( pslot && slot == 1 && ( nSlotRender == 1200 || s_bIOSDumpUIRequested ) )
+	{
+		s_bIOSDumpUIRequested = false;
+		IOS_DumpDisplayTree( (SF::GFx::Movie *)pslot->m_pMovieView, slot );
+	}
 #endif
 
 	if ( pslot )

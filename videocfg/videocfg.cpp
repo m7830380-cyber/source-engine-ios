@@ -1414,6 +1414,19 @@ void UpdateSystemLevel( int nCPULevel, int nGPULevel, int nMemLevel, int nGPUMem
 			}
 		}
 
+#if defined( IOS )
+		// iPhone GPUs cannot use the DXT textures, so every texture is expanded to
+		// RGBA8; full-size textures take ~3 GB on de_dust2 and iOS then throttles
+		// and kills the game. Keep the iOS texture budget (quarter size) no matter
+		// what the gpu/mem level config asks for.
+		if ( !V_stricmp( pCVarName, "mat_picmip" ) && pKey->GetInt() < 2 )
+		{
+			Warning( "UpdateSystemLevel: iOS keeps mat_picmip 2 (config asked for %s)\n", pKey->GetString() );
+			pConVar->SetValue( 2 );
+			continue;
+		}
+#endif
+
 		if ( pConVar->GetFlags() & ( FCVAR_ARCHIVE | FCVAR_ARCHIVE_GAMECONSOLE | FCVAR_CHEAT ) )
 		{
 			Warning( "UpdateSystemLevel: ConVar %s controlled by gpu_level/cpu_level must not be marked as FCVAR_ARCHIVE or FCVAR_CHEAT!\n", pCVarName );

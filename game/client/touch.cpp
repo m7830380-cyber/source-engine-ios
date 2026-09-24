@@ -12,6 +12,7 @@
 #include "tier0/icommandline.h"
 #include "vgui_controls/Button.h"
 #include "viewrender.h"
+#include "iinput.h"
 
 #define STB_RECT_PACK_IMPLEMENTATION
 #include "stb_rect_pack.h"
@@ -111,6 +112,51 @@ void CTouchPanel::ApplySchemeSettings(vgui::IScheme *pScheme)
 	gTouch.screen_w = ScreenWidth(); gTouch.screen_h = h;
 
 	SetBounds( 0, 0, w, h );
+}
+
+// Weapon cycling without a HUD: invnext/invprev are handled by CS:GO's
+// Scaleform weapon selection panel, which does not exist on iOS. Select the
+// weapon directly, the way the HUD does it (via the usercmd).
+static int WeaponSortKey( C_BaseCombatWeapon *pWeapon )
+{
+	return pWeapon->GetSlot() * 100 + pWeapon->GetPosition();
+}
+
+static void CycleWeapon( int nDir )
+{
+	C_BasePlayer *pPlayer = C_BasePlayer::GetLocalPlayer();
+	if ( !pPlayer || !pPlayer->IsAlive() )
+		return;
+
+	CUtlVector< C_BaseCombatWeapon * > weapons;
+	for ( int i = 0; i < pPlayer->WeaponCount(); i++ )
+	{
+		C_BaseCombatWeapon *pWeapon = pPlayer->GetWeapon( i );
+		if ( pWeapon && pWeapon->CanBeSelected() )
+		{
+			// insertion sort by HUD slot/position
+			int j = 0;
+			while ( j < weapons.Count() && WeaponSortKey( weapons[j] ) <= WeaponSortKey( pWeapon ) )
+				j++;
+			weapons.InsertBefore( j, pWeapon );
+		}
+	}
+	if ( weapons.Count() < 2 )
+		return;
+
+	int nActive = weapons.Find( pPlayer->GetActiveWeapon() );
+	int nNext = ( nActive < 0 ) ? 0 : ( nActive + nDir + weapons.Count() ) % weapons.Count();
+	::input->MakeWeaponSelection( weapons[nNext] );
+}
+
+CON_COMMAND( ios_weapnext, "select the next weapon (no weapon selection HUD on iOS)" )
+{
+	CycleWeapon( 1 );
+}
+
+CON_COMMAND( ios_weapprev, "select the previous weapon (no weapon selection HUD on iOS)" )
+{
+	CycleWeapon( -1 );
 }
 
 CON_COMMAND( touch_addbutton, "add native touch button" )
@@ -331,8 +377,8 @@ static void AddDefaultButtons( rgba_t color )
 	gTouch.AddButton( "duck", "vgui/touch/crouch", "+duck", 0.880000, 0.746667, 1.000000, 0.960000, color );
 	gTouch.AddButton( "speed", "vgui/touch/speed", "+speed", 0.180000, 0.568889, 0.280000, 0.746667, color );
 	gTouch.AddButton( "reload", "vgui/touch/reload", "+reload", 0.000000, 0.320000, 0.120000, 0.533333, color );
-	gTouch.AddButton( "invnext", "vgui/touch/next_weap", "invnext", 0.000000, 0.533333, 0.120000, 0.746667, color );
-	gTouch.AddButton( "invprev", "vgui/touch/prev_weap", "invprev", 0.000000, 0.071111, 0.120000, 0.284444, color );
+	gTouch.AddButton( "invnext", "vgui/touch/next_weap", "ios_weapnext", 0.000000, 0.533333, 0.120000, 0.746667, color );
+	gTouch.AddButton( "invprev", "vgui/touch/prev_weap", "ios_weapprev", 0.000000, 0.071111, 0.120000, 0.284444, color );
 	gTouch.AddButton( "drop", "vgui/touch/back", "drop", 0.680000, 0.000000, 0.760000, 0.142222, color );
 	gTouch.AddButton( "console", "vgui/touch/showconsole", "toggleconsole", 0.000000, 0.000000, 0.080000, 0.142222, color );
 	gTouch.AddButton( "edit", "vgui/touch/settings", "touch_enableedit", 0.420000, 0.000000, 0.500000, 0.151486, color );
@@ -403,6 +449,16 @@ void CTouchControls::Init()
 	}
 	else
 		ResetToDefaults();
+
+	// Configs saved by earlier builds use invnext/invprev, which go through
+	// CS:GO's Scaleform weapon selection HUD and do nothing here.
+	for( int i = 0; i < btns.Count(); i++ )
+	{
+		if( !Q_strcmp( btns[i]->command, "invnext" ) )
+			Q_strncpy( btns[i]->command, "ios_weapnext", sizeof( btns[i]->command ) );
+		else if( !Q_strcmp( btns[i]->command, "invprev" ) )
+			Q_strncpy( btns[i]->command, "ios_weapprev", sizeof( btns[i]->command ) );
+	}
 
 	CTouchTexture *texture = new CTouchTexture;
 	texture->isInAtlas = false;

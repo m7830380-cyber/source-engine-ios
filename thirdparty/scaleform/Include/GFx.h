@@ -18,7 +18,9 @@ otherwise accompanies this software in either electronic or hard copy form.
 #define INC_GFx_H 
  
 #include "../Src/GFx/GFx_AS2Support.h" 		
+#if !defined(SF_USE_ANGLE) // AS2-only build
 #include "../Src/GFx/GFx_AS3Support.h" 		
+#endif
 #include "../Src/GFx/GFx_ASIMEManager.h" 		
 #include "../Src/GFx/GFx_ASMovieRootBase.h" 		
 #include "../Src/GFx/GFx_ASSoundIntf.h" 		

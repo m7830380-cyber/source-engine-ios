@@ -503,7 +503,10 @@ otherwise accompanies this software in either electronic or hard copy form.
 // Defined if AS2 support is available, so you can create GFx::AS2Support class.
 #define GFX_AS2_SUPPORT
 // Defined if AS3 support is available, so you can create GFx::AS3Support class.
+// SF_USE_ANGLE (CS:GO iOS): only the AS2 VM is built; CS:GO's UI is AS2.
+#if !defined(SF_USE_ANGLE)
 #define GFX_AS3_SUPPORT
+#endif
 
 // Do not change this, as it's controlled by macros above.
 #if defined(GFX_AS2_SUPPORT) && defined(GFX_AS3_SUPPORT)

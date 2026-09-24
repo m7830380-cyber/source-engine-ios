@@ -112,6 +112,12 @@ PROJECT_EXTRA_USES = {
 	'engine': ['CURL'],
 }
 
+# Extra compiler flags per VPC project on iOS (appended after the global ones).
+PROJECT_EXTRA_CXXFLAGS = {
+	# Scaleform's headers in thirdparty/scaleform use C++17 library features
+	'scaleformui': ['-std=gnu++17', '-Wno-register', '-Wno-deprecated-register'],
+}
+
 # Extra sources per VPC project on iOS.
 PROJECT_EXTRA_SOURCES = {
 	# prebuilt libraries missing from the tree: Steam Datagram Relay, Steam Audio
@@ -620,6 +626,7 @@ def build(bld):
 		use = _uses(proj.libs + proj.implibs) + PROJECT_EXTRA_USES.get(name, [])
 
 		env = bld.env.derive()
+		env.append_value('CXXFLAGS', PROJECT_EXTRA_CXXFLAGS.get(name, []))
 		install_path = None
 		if proj.kind == 'lib':
 			features = 'c cxx cstlib cxxstlib'

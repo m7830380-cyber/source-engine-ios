@@ -82,7 +82,13 @@ static ConVar mem_level( "mem_level", "2", 0, "Memory Level - Default: High" );
 static ConVar gpu_mem_level( "gpu_mem_level", "2", 0, "Memory Level - Default: High" );
 #endif
 
+#if defined( IOS )
+// Textures are decompressed to RGBA8 (no BC support on iPhone GPUs); full size
+// maps run into the ~3 GB per-app memory limit. Override with +mat_picmip.
+static ConVar mat_picmip( "mat_picmip", "2", FCVAR_NONE, "", true, -10, true, 4 );
+#else
 static ConVar mat_picmip( "mat_picmip", "0", FCVAR_NONE, "", true, -10, true, 4 );
+#endif
 
 ConVar csm_quality_level( "csm_quality_level", "0", 0, "Cascaded shadow map quality level, [0,3], 0=VERY_LOW, 3=HIGHEST" );
 
@@ -4114,6 +4120,13 @@ void CMaterialSystem::EndFrame( void )
 	{
 		nextThreadMode = MATERIAL_SINGLE_THREADED;
 	}
+
+#if defined( IOS )
+	// togl's GL context lives on the main thread; queued (multithreaded)
+	// rendering made the render thread lock dynamic vertex buffers there,
+	// got NULL and crashed in CVertexBuffer::HandleLateCreation.
+	nextThreadMode = MATERIAL_SINGLE_THREADED;
+#endif
 
 #if !defined ( OSX )
 	if ( m_bForcedSingleThreaded )

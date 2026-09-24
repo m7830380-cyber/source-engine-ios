@@ -19,6 +19,8 @@ otherwise accompanies this software in either electronic or hard copy form.
 #include "Kernel/SF_File.h"
 #include "Kernel/SF_Debug.h"
 #include "Kernel/SF_HeapNew.h"
+#include <stdio.h>
+#include <string.h>
 #ifdef SF_OS_XBOX360
 #include <xgraphics.h>
 #endif
@@ -157,10 +159,13 @@ class DDSFileImageSource : public FileImageSource
 {
     UByte           ImageDesc; 
     DDSHeaderInfo   HeaderInfo;
+    bool            DecodeDXT;  // iOS: DXT data decoded to RGBA while reading
+
+    bool DecodeDXTData(ImageData* pdest, CopyScanlineFunc copyScanline, void* arg) const;
     
 public:
     DDSFileImageSource(File* file, ImageFormat format)
-        : FileImageSource(file,format), ImageDesc(0)
+        : FileImageSource(file,format), ImageDesc(0), DecodeDXT(false)
     {
     }
     virtual      ~DDSFileImageSource(){}
@@ -356,10 +361,156 @@ static bool ProcessUDDSData(UByte* buffer, UPInt size, ImageFormat format, const
     return true;
 }
 
+
+// ***** DXT decoding (iOS: the GPU has no BC/DXT texture support)
+
+static void DXT_DecodeColorBlock(const UByte* pblock, UByte* prgba, bool dxt1)
+{
+    UInt16 c0 = UInt16(pblock[0] | (pblock[1] << 8));
+    UInt16 c1 = UInt16(pblock[2] | (pblock[3] << 8));
+    UByte colors[4][4];
+    colors[0][0] = UByte(((c0 >> 11) & 31) * 255 / 31);
+    colors[0][1] = UByte(((c0 >> 5) & 63) * 255 / 63);
+    colors[0][2] = UByte((c0 & 31) * 255 / 31);
+    colors[0][3] = 255;
+    colors[1][0] = UByte(((c1 >> 11) & 31) * 255 / 31);
+    colors[1][1] = UByte(((c1 >> 5) & 63) * 255 / 63);
+    colors[1][2] = UByte((c1 & 31) * 255 / 31);
+    colors[1][3] = 255;
+    if (!dxt1 || c0 > c1)
+    {
+        for (int k = 0; k < 3; k++)
+        {
+            colors[2][k] = UByte((2 * colors[0][k] + colors[1][k]) / 3);
+            colors[3][k] = UByte((colors[0][k] + 2 * colors[1][k]) / 3);
+        }
+        colors[2][3] = colors[3][3] = 255;
+    }
+    else
+    {
+        for (int k = 0; k < 3; k++)
+        {
+            colors[2][k] = UByte((colors[0][k] + colors[1][k]) / 2);
+            colors[3][k] = 0;
+        }
+        colors[2][3] = 255;
+        colors[3][3] = 0;   // DXT1 1-bit alpha: transparent black
+    }
+    UInt32 bits = UInt32(pblock[4]) | (UInt32(pblock[5]) << 8) | (UInt32(pblock[6]) << 16) | (UInt32(pblock[7]) << 24);
+    for (int i = 0; i < 16; i++)
+    {
+        const UByte* pc = colors[(bits >> (2 * i)) & 3];
+        UByte* pd = prgba + i * 4;
+        pd[0] = pc[0]; pd[1] = pc[1]; pd[2] = pc[2]; pd[3] = pc[3];
+    }
+}
+
+// Decodes one 4x4 block into prgba (16 pixels, row-major, RGBA8).
+static void DXT_DecodeBlock(ImageFormat format, const UByte* pblock, UByte* prgba)
+{
+    if (format == Image_DXT1)
+    {
+        DXT_DecodeColorBlock(pblock, prgba, true);
+        return;
+    }
+    DXT_DecodeColorBlock(pblock + 8, prgba, false);
+    if (format == Image_DXT3)
+    {
+        for (int i = 0; i < 16; i++)
+        {
+            UByte a4 = UByte((pblock[i / 2] >> ((i & 1) * 4)) & 15);
+            prgba[i * 4 + 3] = UByte(a4 * 17);
+        }
+    }
+    else // DXT5
+    {
+        UByte a[8];
+        a[0] = pblock[0];
+        a[1] = pblock[1];
+        if (a[0] > a[1])
+            for (int k = 1; k < 7; k++) a[k + 1] = UByte(((7 - k) * a[0] + k * a[1]) / 7);
+        else
+        {
+            for (int k = 1; k < 5; k++) a[k + 1] = UByte(((5 - k) * a[0] + k * a[1]) / 5);
+            a[6] = 0;
+            a[7] = 255;
+        }
+        UInt64 abits = 0;
+        for (int k = 0; k < 6; k++)
+            abits |= UInt64(pblock[2 + k]) << (8 * k);
+        for (int i = 0; i < 16; i++)
+            prgba[i * 4 + 3] = a[(abits >> (3 * i)) & 7];
+    }
+}
+
+bool DDSFileImageSource::DecodeDXTData(ImageData* pdest, CopyScanlineFunc copyScanline, void* arg) const
+{
+    const ImageFormat dxtFormat = HeaderInfo.Format;
+    const unsigned blockBytes = (dxtFormat == Image_DXT1) ? 8 : 16;
+
+    unsigned mipWidth = Size.Width;
+    unsigned mipHeight = Size.Height;
+    for (unsigned m = 0; m < pdest->GetMipLevelCount(); m++)
+    {
+        ImagePlane mipPlane;
+        if (pdest->HasSeparateMipmaps())
+            pdest->GetMipLevelPlane(m, 0, &mipPlane);
+        else
+            pdest->GetPlaneRef().GetMipLevel(pdest->GetFormat(), m, &mipPlane);
+
+        const unsigned blocksW = (mipWidth + 3) / 4;
+        const unsigned blocksH = (mipHeight + 3) / 4;
+        const UPInt rowBytes = UPInt(blocksW) * blockBytes;
+        const UPInt outPitch = UPInt(blocksW) * 4 * 4;   // 4 pixels per block, RGBA
+        UByte* pblocks = (UByte*)SF_ALLOC(rowBytes, Stat_Default_Mem);
+        UByte* prows = (UByte*)SF_ALLOC(outPitch * 4, Stat_Default_Mem);
+        if (!pblocks || !prows)
+        {
+            if (pblocks) SF_FREE(pblocks);
+            if (prows) SF_FREE(prows);
+            return false;
+        }
+
+        bool ok = true;
+        for (unsigned by = 0; by < blocksH && ok; by++)
+        {
+            if (pFile->Read(pblocks, (int)rowBytes) != (int)rowBytes)
+            {
+                ok = false;
+                break;
+            }
+            UByte block[16 * 4];
+            for (unsigned bx = 0; bx < blocksW; bx++)
+            {
+                DXT_DecodeBlock(dxtFormat, pblocks + bx * blockBytes, block);
+                for (unsigned r = 0; r < 4; r++)
+                    memcpy(prows + r * outPitch + bx * 16, block + r * 16, 16);
+            }
+            for (unsigned r = 0; r < 4; r++)
+            {
+                unsigned y = by * 4 + r;
+                if (y < mipHeight)
+                    copyScanline(mipPlane.GetScanline(y), prows + r * outPitch, UPInt(mipWidth) * 4, 0, arg);
+            }
+        }
+        SF_FREE(pblocks);
+        SF_FREE(prows);
+        if (!ok)
+            return false;
+
+        mipWidth  = Alg::Max(1u, mipWidth / 2); 
+        mipHeight = Alg::Max(1u, mipHeight / 2); 
+    }
+    return true;
+}
+
 bool DDSFileImageSource::Decode( ImageData* pdest, CopyScanlineFunc copyScanline, void* arg ) const
 {
     if (!seekFileToDecodeStart())
         return false;
+
+    if (DecodeDXT)
+        return DecodeDXTData(pdest, copyScanline, arg);
 
     unsigned mipWidth = Size.Width;
     unsigned mipHeight = Size.Height;
@@ -429,6 +580,19 @@ bool DDSFileImageSource::ReadHeader()
 
     if (Format == Image_None)
         Format =  HeaderInfo.Format;
+#if defined(SF_USE_ANGLE)
+    // No DXT textures on iPhone GPUs: hand out RGBA and decode while reading.
+    if (HeaderInfo.Format == Image_DXT1 || HeaderInfo.Format == Image_DXT3 || HeaderInfo.Format == Image_DXT5)
+    {
+        DecodeDXT = true;
+        Format = Image_R8G8B8A8;
+    }
+#endif
+#if defined(SF_USE_ANGLE)
+    printf("[sf-dds] %ux%u, file format %d, mips %u, decoding DXT %d\n", HeaderInfo.Width, HeaderInfo.Height,
+           (int)HeaderInfo.Format, (unsigned)HeaderInfo.MipmapCount, DecodeDXT ? 1 : 0);
+    fflush(stdout);
+#endif
     Size = ImageSize(HeaderInfo.Width, HeaderInfo.Height);
     FilePos = pFile->LTell();
     return true;

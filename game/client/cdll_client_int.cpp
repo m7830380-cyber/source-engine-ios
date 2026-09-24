@@ -1924,20 +1924,24 @@ static void IOS_AutoJoinTeam( void )
 // Scaleform menus are driven by the mouse: let a finger act as the mouse while
 // no match is running or while a full-screen menu takes input (pause menu,
 // dialogs, team select). In matches the fingers stay on the touch controls.
-static void IOS_UpdateTouchMouse( void )
+// returns true while a menu has the input
+static bool IOS_UpdateTouchMouse( void )
 {
 	static ConVarRef touch_mouse_events( "touch_mouse_events" );
-	if ( !touch_mouse_events.IsValid() )
-		return;
 
+	// any Scaleform menu that takes input: main menu, team select (HUD slot),
+	// pause menu, dialogs
 	bool bMenu = !engine->IsInGame() ||
-		( g_pScaleformUI && g_pScaleformUI->SlotDeniesInputToGame( SF_FULL_SCREEN_SLOT ) );
+		( g_pScaleformUI && ( g_pScaleformUI->ConsumesInputEvents() || g_pScaleformUI->IsCursorVisible() ) );
+	if ( !touch_mouse_events.IsValid() )
+		return bMenu;
 	if ( bMenu != touch_mouse_events.GetBool() )
 	{
 		touch_mouse_events.SetValue( bMenu ? 1 : 0 );
 		printf( "[touch] fingers as mouse: %s\n", bMenu ? "on (menu)" : "off (game)" );
 		fflush( stdout );
 	}
+	return bMenu;
 }
 #endif
 
@@ -4901,7 +4905,7 @@ void CHLClient::EngineGotvSyncPacket( const CEngineGotvSyncPacket *pPkt )
 #if defined( IOS )
 void CHLClient::IN_TouchEvent( int type, int fingerId, int x, int y )
 {
-	IOS_UpdateTouchMouse();
+	bool bMenu = IOS_UpdateTouchMouse();
 
 	if ( fingerId < 0 || fingerId >= 10 )
 		return;
@@ -4927,6 +4931,11 @@ void CHLClient::IN_TouchEvent( int type, int fingerId, int x, int y )
 	}
 	s_flLastX[fingerId] = ev.x;
 	s_flLastY[fingerId] = ev.y;
+
+	// while a menu is open in a match the finger is the mouse; don't also press
+	// touch buttons (finger-up still goes through so nothing stays held)
+	if ( bMenu && engine->IsInGame() && type != IE_FingerUp )
+		return;
 
 	gTouch.ProcessEvent( &ev );
 }

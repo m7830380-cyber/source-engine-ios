@@ -48,6 +48,7 @@ ConVar touch_grid_enable( "touch_grid_enable", "1", FCVAR_ARCHIVE, "enable touch
 ConVar touch_precise_amount( "touch_precise_amount", "0.5", FCVAR_ARCHIVE, "sensitivity multiplier for precise-look" );
 
 ConVar touch_button_info( "touch_button_info", "0", FCVAR_ARCHIVE );
+ConVar touch_debug( "touch_debug", "1", FCVAR_NONE, "log touch presses and the buttons they hit" );
 
 #define boundmax( num, high ) ( (num) < (high) ? (num) : (high) )
 #define boundmin( num, low )  ( (num) >= (low) ? (num) : (low)  )
@@ -1135,9 +1136,15 @@ void CTouchControls::FingerPress(touch_event_t *ev)
 						btn->finger = look_finger;
 				}
 				else
+				{
 					engine->ClientCmd_Unrestricted( btn->command );
+					if( touch_debug.GetBool() )
+						printf( "[touch] button '%s' -> %s\n", btn->name, btn->command );
+				}
 			}
 		}
+		if( touch_debug.GetBool() )
+			printf( "[touch] finger %d down at %.3f %.3f (screen %.0fx%.0f)\n", ev->fingerid, x, y, screen_w, screen_h );
 	}
 	else if( ev->type == IE_FingerUp )
 	{

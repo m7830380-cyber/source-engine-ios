@@ -147,19 +147,6 @@ void ScaleformUIImpl::SetRenderingDevice( IDirect3DDevice9 *pDevice, D3DPRESENT_
 
 		m_pRenderer2D = *new Renderer2D( m_pRenderHAL.GetPtr() );
 
-#if defined( SF_USE_ANGLE )
-		// Bitmap (glyph cache) text rasterizes and uploads correctly but draws
-		// invisibly on ANGLE; render text as vector shapes, which draw fine.
-		if ( GlyphCacheConfig *pGlyphConfig = m_pRenderer2D->GetGlyphCacheConfig() )
-		{
-			GlyphCacheParams glyphParams = pGlyphConfig->GetParams();
-			glyphParams.NumTextures = 0;
-			pGlyphConfig->SetParams( glyphParams );
-			printf( "[sf] text rendered as vector glyphs (glyph cache disabled)\n" );
-			fflush( stdout );
-		}
-#endif
-
 		if ( m_pThreadCommandQueue )
 		{
 			m_pThreadCommandQueue->pR2D = m_pRenderer2D;

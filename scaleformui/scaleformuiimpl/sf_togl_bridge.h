@@ -19,6 +19,8 @@ class ILauncherMgr;
 void SFTogl_SaveGLState( IDirect3DDevice9 *pDevice );
 void SFTogl_RestoreGLState( IDirect3DDevice9 *pDevice );
 void SFTogl_GetViewportSize( IDirect3DDevice9 *pDevice, int *pWidth, int *pHeight );
+// diagnostics: print the bound framebuffer, viewport and pending GL error
+void SFTogl_LogGLState( const char *pszWhere, int nSlot );
 
 ILauncherMgr *SFTogl_GetLauncherMgr( CreateInterfaceFn factory );
 void SFTogl_SetMouseVisible( ILauncherMgr *pLauncherMgr, bool bVisible );

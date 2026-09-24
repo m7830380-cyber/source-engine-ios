@@ -363,11 +363,30 @@ void ScaleformUIImpl::RenderSlot( int slot )
 	}
 	
 	BaseSlot* pslot = LockSlotPtr( slot );
-	
+
+#if defined( SF_USE_ANGLE )
+	// per slot: the first 3 renders, then every 600th
+	static int s_nSlotRenders[64] = {};
+	int nSlotIndex = ( slot >= 0 && slot < 64 ) ? slot : 63;
+	int nSlotRender = s_nSlotRenders[nSlotIndex]++;
+	bool bLogSlot = nSlotRender < 3 || ( nSlotRender % 600 ) == 0;
+	if ( bLogSlot )
+	{
+		printf( "[sf] slot %d render %d: movie %p, screen %dx%d\n", slot, nSlotRender,
+				pslot ? (void *)pslot->m_pMovieView : NULL, m_iScreenWidth, m_iScreenHeight );
+		SFTogl_LogGLState( "before display", slot );
+	}
+#endif
+
 	if ( pslot )
 	{
 		MovieView_Display( ToSFMOVIE( pslot->m_pMovieView ) );
 	}
+
+#if defined( SF_USE_ANGLE )
+	if ( bLogSlot )
+		SFTogl_LogGLState( "after display", slot );
+#endif
 
 	UnlockSlotPtr( slot );
 	RestoreRenderingState();

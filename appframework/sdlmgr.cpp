@@ -1423,6 +1423,62 @@ void CSDLMgr::OnFrameRendered()
 }
 
 #if defined( DX_TO_GL_ABSTRACTION )
+#if defined( IOS )
+// Diagnostics: write the presented frame to Documents/frame_N.tga a few times
+// (every 600 presents from 600 to 3600, half resolution), so what is on the
+// screen can be inspected without a device screenshot. Reads the bound read framebuffer.
+static void IOS_MaybeCaptureFrame( int width, int height )
+{
+	static int s_nPresents = 0;
+	++s_nPresents;
+	if ( ( s_nPresents % 600 ) != 0 || s_nPresents > 3600 || width <= 0 || height <= 0 )
+		return;
+
+	const char *pDocs = getenv( "VALVE_GAME_PATH" );
+	if ( !pDocs )
+		return;
+
+	unsigned char *pPixels = (unsigned char *)malloc( (size_t)width * height * 4 );
+	if ( !pPixels )
+		return;
+	gGL->glPixelStorei( GL_PACK_ALIGNMENT, 4 );
+	gGL->glReadPixels( 0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pPixels );
+	GLenum err = gGL->glGetError();
+
+	int outW = width / 2, outH = height / 2;
+	char path[1024];
+	snprintf( path, sizeof( path ), "%s/frame_%d.tga", pDocs, s_nPresents / 600 );
+	FILE *fp = fopen( path, "wb" );
+	if ( fp )
+	{
+		// uncompressed 24-bit TGA, bottom-up rows like GL
+		unsigned char header[18] = {};
+		header[2] = 2;
+		header[12] = outW & 0xFF; header[13] = ( outW >> 8 ) & 0xFF;
+		header[14] = outH & 0xFF; header[15] = ( outH >> 8 ) & 0xFF;
+		header[16] = 24;
+		fwrite( header, 1, sizeof( header ), fp );
+		unsigned char *pRow = (unsigned char *)malloc( (size_t)outW * 3 );
+		for ( int y = 0; y < outH; y++ )
+		{
+			const unsigned char *pSrc = pPixels + (size_t)( y * 2 ) * width * 4;
+			for ( int x = 0; x < outW; x++ )
+			{
+				pRow[x * 3 + 0] = pSrc[x * 8 + 2];
+				pRow[x * 3 + 1] = pSrc[x * 8 + 1];
+				pRow[x * 3 + 2] = pSrc[x * 8 + 0];
+			}
+			fwrite( pRow, 1, (size_t)outW * 3, fp );
+		}
+		free( pRow );
+		fclose( fp );
+	}
+	printf( "[capture] present %d: %dx%d -> %s (glReadPixels err 0x%x, file %s)\n", s_nPresents, width, height, path, err, fp ? "ok" : "failed" );
+	fflush( stdout );
+	free( pPixels );
+}
+#endif
+
 void CSDLMgr::ShowPixels( CShowPixelsParams *params )
 {
 	SDLAPP_FUNC;
@@ -1670,6 +1726,16 @@ void CSDLMgr::ShowPixels( CShowPixelsParams *params )
 		gGL->glFinish();
 	}
 	CheckGLError( __LINE__ );
+
+#if defined( IOS )
+	{
+		// the frame has been blitted to the default framebuffer; read it before the swap
+		int nDrawW = 0, nDrawH = 0;
+		SDL_GetWindowSizeInPixels( m_Window, &nDrawW, &nDrawH );
+		gGL->glBindFramebuffer( GL_READ_FRAMEBUFFER, 0 );
+		IOS_MaybeCaptureFrame( nDrawW, nDrawH );
+	}
+#endif
 
 	CFastTimer tm;
 	tm.Start();

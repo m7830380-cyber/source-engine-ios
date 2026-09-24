@@ -5,6 +5,8 @@
 //
 //===========================================================================//
 
+#include <stdio.h>
+
 #include "togl/rendermechanism.h"
 #include "appframework/ilaunchermgr.h"
 
@@ -75,6 +77,21 @@ void SFTogl_GetViewportSize( IDirect3DDevice9 *pDevice, int *pWidth, int *pHeigh
 		pDevice->GetViewport( &viewport );
 	*pWidth = viewport.Width;
 	*pHeight = viewport.Height;
+}
+
+void SFTogl_LogGLState( const char *pszWhere, int nSlot )
+{
+	GLint nDrawFBO = 0, nReadFBO = 0, nProgram = 0;
+	GLint viewport[4] = {};
+	gGL->glGetIntegerv( GL_DRAW_FRAMEBUFFER_BINDING, &nDrawFBO );
+	gGL->glGetIntegerv( GL_READ_FRAMEBUFFER_BINDING, &nReadFBO );
+	gGL->glGetIntegerv( GL_VIEWPORT, viewport );
+	gGL->glGetIntegerv( GL_CURRENT_PROGRAM, &nProgram );
+	GLenum err = gGL->glGetError();
+	GLenum status = gGL->glCheckFramebufferStatus( GL_DRAW_FRAMEBUFFER );
+	printf( "[sf] %s slot %d: draw FBO %d (status 0x%x), read FBO %d, viewport %d,%d %dx%d, program %d, GL error 0x%x\n",
+			pszWhere, nSlot, nDrawFBO, status, nReadFBO, viewport[0], viewport[1], viewport[2], viewport[3], nProgram, err );
+	fflush( stdout );
 }
 
 ILauncherMgr *SFTogl_GetLauncherMgr( CreateInterfaceFn factory )

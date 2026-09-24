@@ -1852,6 +1852,36 @@ void CEngineVGui::SetProgressBias( float bias )
 	m_ProgressBias = bias;
 }
 
+#if defined( IOS )
+// On iOS every present during loading can wait a long time for a free drawable,
+// and the Scaleform loading screen asks for hundreds of redraws; cap them.
+static ConVar ios_loading_redraw_ms( "ios_loading_redraw_ms", "150", FCVAR_NONE, "iOS: minimum milliseconds between loading screen redraws (0 = every update)" );
+static double s_flIOSLastLoadingRender = 0.0;
+static int s_nIOSLoadingRenders = 0, s_nIOSLoadingSkipped = 0;
+static double s_flIOSLoadingRenderTime = 0.0;
+
+static void IOS_RenderLoadingScreen( bool bForce )
+{
+	double flStart = Plat_FloatTime();
+	if ( !bForce && ( flStart - s_flIOSLastLoadingRender ) * 1000.0 < ios_loading_redraw_ms.GetFloat() )
+	{
+		++s_nIOSLoadingSkipped;
+		return;
+	}
+	extern void V_RenderVGuiOnly();
+	V_RenderVGuiOnly();
+	double flEnd = Plat_FloatTime();
+	s_flIOSLastLoadingRender = flEnd;
+	s_flIOSLoadingRenderTime += flEnd - flStart;
+	if ( ( ++s_nIOSLoadingRenders % 25 ) == 0 )
+	{
+		printf( "[loading] %d redraws (%d skipped), %.1f s spent redrawing, last %.0f ms\n",
+				s_nIOSLoadingRenders, s_nIOSLoadingSkipped, s_flIOSLoadingRenderTime, ( flEnd - flStart ) * 1000.0 );
+		fflush( stdout );
+	}
+}
+#endif
+
 void CEngineVGui::UpdateProgressBar( float progress, const char *pDesc, bool showDialog )
 {
 	if ( !staticGameUIFuncs )
@@ -1860,10 +1890,17 @@ void CEngineVGui::UpdateProgressBar( float progress, const char *pDesc, bool sho
 	bool bUpdated = staticGameUIFuncs->UpdateProgressBar( progress, pDesc ? pDesc : "", showDialog );
 	if ( staticGameUIFuncs->LoadingProgressWantsIsolatedRender( false ) )
 	{
+#if defined( IOS )
+		double flLastIteration = Plat_FloatTime();
+#endif
 		while ( staticGameUIFuncs->LoadingProgressWantsIsolatedRender( true ) )
 		{
+#if defined( IOS )
+			IOS_RenderLoadingScreen( true );
+#else
 			extern void V_RenderVGuiOnly();
 			V_RenderVGuiOnly();
+#endif
 
 			if ( g_ClientGlobalVariables.frametime != 0.0f && g_ClientGlobalVariables.frametime != 0.1f)
 			{
@@ -1872,7 +1909,15 @@ void CEngineVGui::UpdateProgressBar( float progress, const char *pDesc, bool sho
 				if ( timeScale <= 0.0f )
 					timeScale = 1.0f;
 
-				g_pScaleformUI->RunFrame( g_ClientGlobalVariables.frametime / timeScale );
+				float flStep = g_ClientGlobalVariables.frametime;
+#if defined( IOS )
+				// advance the loading screen animation by the real time the
+				// (slow) redraw took, so it doesn't take one redraw per tick
+				double flNow = Plat_FloatTime();
+				flStep = MAX( flStep, (float)MIN( flNow - flLastIteration, 0.5 ) );
+				flLastIteration = flNow;
+#endif
+				g_pScaleformUI->RunFrame( flStep / timeScale );
 			}
 			else
 			{
@@ -1884,8 +1929,12 @@ void CEngineVGui::UpdateProgressBar( float progress, const char *pDesc, bool sho
 	{
 		g_pScaleformUI->RunFrame( 0 );
 		// re-render vgui on screen
+#if defined( IOS )
+		IOS_RenderLoadingScreen( false );
+#else
 		extern void V_RenderVGuiOnly();
 		V_RenderVGuiOnly();
+#endif
 	}
 }
 

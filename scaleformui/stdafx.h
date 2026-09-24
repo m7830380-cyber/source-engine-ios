@@ -7,7 +7,9 @@
 #pragma once
 #endif
 
-#if defined ( DX_TO_GL_ABSTRACTION )
+// SF_USE_ANGLE (iOS): togl's desktop GL headers clash with the GLES2 headers
+// Scaleform uses; this module only needs opaque IDirect3DDevice9 pointers.
+#if defined ( DX_TO_GL_ABSTRACTION ) && !defined( SF_USE_ANGLE )
 #include "togl/rendermechanism.h"
 #endif
 

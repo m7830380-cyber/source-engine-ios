@@ -786,10 +786,9 @@ public:
         // Special type for stage instances (MovieClips, Buttons, TextFields)
         VT_DisplayObject    = 0x0a,
 
-#ifdef GFX_AS3_SUPPORT
-        // A function closure reference
+        // A function closure reference (declared for AS2-only builds too:
+        // CS:GO's integration names it when marshaling values)
         VT_Closure          = 0x0b,
-#endif
 
         // Specify this type to request SetVariable/Invoke result to be converted 
         // to the specified type. After return of the function, the specified type

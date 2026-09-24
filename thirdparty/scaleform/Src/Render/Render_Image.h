@@ -1108,6 +1108,11 @@ public:
     // simply return true from this method.
     virtual bool             CanCreateTextureCurrentThread() const { return RenderThreadId == 0 || GetCurrentThreadId() == RenderThreadId; }
 
+    // GFx 4.2 API used by CS:GO's integration: bind/unbind the texture
+    // manager's render thread (textures are then created on that thread).
+    void                     SetRenderThreadIdToCurrentThread() { RenderThreadId = GetCurrentThreadId(); }
+    void                     ResetRenderThreadId()              { RenderThreadId = 0; }
+
     // Processes work queued up on other threads, including texture creation 
     // and image updates. This function should be called before each frame 
     // on the RenderThread (it is called by TextureManager::BeginFrame).

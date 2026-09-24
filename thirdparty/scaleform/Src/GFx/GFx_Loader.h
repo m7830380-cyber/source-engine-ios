@@ -991,6 +991,8 @@ public:
     virtual void Clear() {}
     virtual void ClearData(Formats format) {SF_UNUSED(format);}
 };
+// GFx 4.2 name of the clipboard state, used by CS:GO's integration
+typedef Clipboard TextClipboard;
 
 #ifdef GFX_ENABLE_TEXT_INPUT
 // ***** TextKeyMap
@@ -1379,6 +1381,8 @@ public:
     inline Ptr<TaskManager>     GetTaskManager() const;
 
     inline void                 SetClipboard(Clipboard *ptr) { SetState(State::State_Clipboard, ptr); }
+    // GFx 4.2 name, used by CS:GO's integration
+    inline void                 SetTextClipboard(Clipboard *ptr) { SetClipboard(ptr); }
     inline Ptr<Clipboard>       GetClipboard() const             { return *(Clipboard*) GetStateAddRef(State::State_Clipboard); }
 
     inline void                 SetTextKeyMap(TextKeyMap *ptr)       { SetState(State::State_TextKeyMap, ptr); }

@@ -63,6 +63,11 @@ class IShaderAPI;
 struct IDirect3DDevice9;
 struct D3DPRESENT_PARAMETERS;
 #endif
+#if defined( SF_USE_ANGLE )
+// togl is not included here (see sf_togl_bridge.h); match its declarations
+struct IDirect3DDevice9;
+typedef struct _D3DPRESENT_PARAMETERS_ D3DPRESENT_PARAMETERS;
+#endif
 
 enum CURSOR_IMAGE_TYPE
 {

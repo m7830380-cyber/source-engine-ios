@@ -280,8 +280,8 @@ extern int SF_StatPrimitives, SF_StatText, SF_StatComplex, SF_StatBlendPush,
            SF_StatBlendTargets, SF_StatRenderTargets, SF_StatFilters, SF_StatMasks;
 
 // iOS Scaleform switches, changeable from the console without a rebuild
-ConVar sf_ios_blend_direct( "sf_ios_blend_direct", "1", 0, "iOS: draw offscreen blend-mode content (layer/multiply/...) directly instead of compositing it" );
-ConVar sf_ios_filters( "sf_ios_filters", "0", 0, "iOS: render Scaleform filters (glow/drop shadow/blur); 0 draws filtered content unfiltered" );
+ConVar sf_ios_blend_direct( "sf_ios_blend_direct", "0", 0, "iOS: draw offscreen blend-mode content (layer/multiply/...) directly instead of compositing it" );
+ConVar sf_ios_filters( "sf_ios_filters", "1", 0, "iOS: render Scaleform filters (glow/drop shadow/blur); 0 draws filtered content unfiltered" );
 ConVar sf_ios_text_only( "sf_ios_text_only", "0", 0, "iOS visual test: draw only text primitives" );
 ConVar sf_ios_record_frames( "sf_ios_record_frames", "0", 0, "iOS: record the draw order of the next N menu frames to the log" );
 #endif

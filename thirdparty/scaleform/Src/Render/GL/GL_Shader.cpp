@@ -62,9 +62,9 @@ otherwise accompanies this software in either electronic or hard copy form.
 int SF_DebugTextDraw = 0;
 int SF_DebugFrameLog = 0;
 // iOS runtime switches (set every frame from scaleformui console variables)
-int SF_IOSBlendDirect = 1;   // sf_ios_blend_direct: draw offscreen blend-mode content directly
+int SF_IOSBlendDirect = 0;   // sf_ios_blend_direct: draw offscreen blend-mode content directly
 int SF_IOSTextOnly = 0;      // sf_ios_text_only: visual test, draw text primitives only
-int SF_IOSFilters = 0;       // sf_ios_filters: render Scaleform filters (glow/shadow/blur)
+int SF_IOSFilters = 1;       // sf_ios_filters: render Scaleform filters (glow/shadow/blur)
 // per-display draw statistics (reset by scaleformui)
 int SF_StatPrimitives = 0, SF_StatText = 0, SF_StatComplex = 0, SF_StatBlendPush = 0,
     SF_StatBlendTargets = 0, SF_StatRenderTargets = 0, SF_StatFilters = 0, SF_StatMasks = 0;

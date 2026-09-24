@@ -70,6 +70,12 @@ CON_COMMAND( sf_ios_close_dialogs, "iOS: close all open Scaleform message boxes"
 	fflush( stdout );
 	CMessageBoxScaleform::UnloadAllDialogs( true );
 }
+CON_COMMAND( closedialogs, "iOS: close all open Scaleform message boxes" )
+{
+	printf( "[msgbox] closing all dialogs\n" );
+	fflush( stdout );
+	CMessageBoxScaleform::UnloadAllDialogs( true );
+}
 #endif
 
 void CMessageBoxScaleform::LoadDialog( char const *pszTitle, char const *pszMessage, const char *pszButtonLegend, DWORD dwFlags, IMessageBoxEventCallback *pEventCallback, CMessageBoxScaleform** ppMessageBoxInstance, wchar_t const *pszWideMessage )

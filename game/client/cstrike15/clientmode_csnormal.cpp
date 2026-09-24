@@ -3902,8 +3902,16 @@ CEG_NOINLINE void ClientModeCSFullscreen::OnEvent( KeyValues *pEvent )
 		char const *szSuffix = "";
 		if ( ( CommandLine()->FindParm( "-insecure" ) && !CommandLine()->FindParm( "-insecure_forced_by_launcher" ) ) || CommandLine()->FindParm( "-tools" ) )
 			szSuffix = "_cmd";
+#if defined( IOS )
+		// iOS runs without Steam/VAC, so the engine reports "insecure" at startup;
+		// the "_init" strings of this dialog do not exist and it came up blank,
+		// covering the main menu. Nothing to tell the player here.
+		printf( "[msgbox] skipped insecure-client dialog (reason '%s')\n", pEvent->GetString( "reason" ) );
+		NOTE_UNUSED( szSuffix );
+#else
 		CCommandMsgBox::CreateAndShow( CFmtStr( "#SFUI_DisconnectReason_OnClientInsecureTitle_%s", pEvent->GetString( "reason" ) ),
 			CFmtStr( "#SFUI_DisconnectReason_OnClientInsecureBlocked_%s%s", pEvent->GetString( "reason" ), szSuffix ), true);
+#endif
 	}
 }
 

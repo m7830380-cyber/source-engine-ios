@@ -21,6 +21,7 @@ otherwise accompanies this software in either electronic or hard copy form.
 #include "Render/Render_HAL.h"
 #if defined(SF_USE_ANGLE)
 #include <stdio.h>
+extern int SF_DebugTextDraw;
 #endif
 
 namespace Scaleform { namespace Render {
@@ -783,6 +784,9 @@ inline void ShaderHAL<ShaderManagerType, ShaderInterfaceType>::DrawProcessedPrim
             if ( batchMeshCount > 0 )
                 fillFlags |= pprimitive->Meshes[0].M.Has3D() ? FF_3DProjection : 0;
 
+#if defined(SF_USE_ANGLE)
+            SF_DebugTextDraw = logText ? 1 : 0;
+#endif
             ShaderData.BeginPrimitive();
 
             const typename ShaderManagerType::Shader& pShader =
@@ -826,6 +830,9 @@ inline void ShaderHAL<ShaderManagerType, ShaderInterfaceType>::DrawProcessedPrim
                     drawIndexedInstanced(pmesh->IndexCount, pmesh->VertexCount, pbatch->GetMeshCount(), indexOffset, 0);
             }
 
+#if defined(SF_USE_ANGLE)
+            SF_DebugTextDraw = 0;
+#endif
             if (GetRenderSync())
                 pmesh->GPUFence = GetRenderSync()->InsertFence();
             pmesh->MoveToCacheListFront(MCL_ThisFrame);

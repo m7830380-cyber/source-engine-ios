@@ -26,6 +26,10 @@ otherwise accompanies this software in either electronic or hard copy form.
 #include "Render/GL/GL_HAL.h"
 #include "Render/GL/GL_Events.h"
 
+#if defined(SF_USE_ANGLE)
+extern int SF_DebugTextDraw;
+#endif
+
 namespace Scaleform { namespace Render { namespace GL {
 
 
@@ -1333,6 +1337,30 @@ UPInt HAL::setVertexArray(const ComplexMesh::FillRecord& fr, unsigned formatInde
 UPInt HAL::setVertexArray(const VertexFormat* pformat, Render::MeshCacheItem* pmeshBase, UPInt vboffset)
 {
     GL::MeshCacheItem* pmesh = reinterpret_cast<GL::MeshCacheItem*>(pmeshBase);
+#if defined(SF_USE_ANGLE)
+    if (SF_DebugTextDraw)
+    {
+        printf("[sf-text]   vertex format size %u:", pformat->Size);
+        for (const VertexElement* pe = pformat->pElements; pe->Attribute != VET_None; ++pe)
+            printf(" [attr 0x%x @%u]", (unsigned)pe->Attribute, (unsigned)pe->Offset);
+        printf("\n");
+        const UByte* pbase = pmesh->pVertexBuffer->GetBufferBase();
+        if (pbase)
+        {
+            pbase += pmesh->VBAllocOffset + vboffset;
+            for (unsigned v = 0; v < 4 && v < pmesh->VertexCount; ++v)
+            {
+                const float* pf = (const float*)(pbase + v * pformat->Size);
+                const UByte* pb = pbase + v * pformat->Size;
+                printf("[sf-text]   vertex %u: floats %.2f %.2f %.2f %.2f %.2f | bytes %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x\n",
+                       v, pf[0], pf[1], pf[2], pf[3], pf[4], pb[0], pb[1], pb[2], pb[3], pb[4], pb[5], pb[6], pb[7], pb[8], pb[9], pb[10], pb[11]);
+            }
+        }
+        else
+            printf("[sf-text]   vertex buffer is a GPU buffer (no client pointer)\n");
+        fflush(stdout);
+    }
+#endif
     if (ShouldUseVAOs())
     {
         VertexBuilder_Core30 vb (this, pformat, pmesh, vboffset);

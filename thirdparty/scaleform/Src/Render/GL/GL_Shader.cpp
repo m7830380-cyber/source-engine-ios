@@ -58,6 +58,10 @@ otherwise accompanies this software in either electronic or hard copy form.
     #define SF_BINARYSHADER_DEBUG_MESSAGE4(...)
 #endif
 
+#if defined(SF_USE_ANGLE)
+int SF_DebugTextDraw = 0;
+#endif
+
 namespace Scaleform { namespace Render { namespace GL {
 
 extern const char* ShaderUniformNames[Uniform::SU_Count];
@@ -805,6 +809,25 @@ void ShaderInterface::SetTexture(Shader sd, unsigned var, Render::Texture* ptex,
 
 void ShaderInterface::Finish(unsigned batchCount)
 {
+#if defined(SF_USE_ANGLE)
+    if (SF_DebugTextDraw)
+    {
+        const ShaderObject* pDbgShader = CurShader.pShaderObj;
+        for (int var = 0; var < Uniform::SU_Count; var++)
+        {
+            if (!UniformSet[var])
+                continue;
+            const UniformVar* pu = pDbgShader->GetUniformVariable(var);
+            if (!pu)
+                continue;
+            const float* pd = UniformData + pu->ShadowOffset;
+            printf("[sf-text]   uniform %d: location %d, size %d, batch %d: %.4f %.4f %.4f %.4f | %.4f %.4f %.4f %.4f\n",
+                   var, (int)pDbgShader->Uniforms[var].Location, (int)pu->Size, (int)pu->BatchSize,
+                   pd[0], pd[1], pd[2], pd[3], pd[4], pd[5], pd[6], pd[7]);
+        }
+        fflush(stdout);
+    }
+#endif
     ShaderInterfaceBase<Uniform,ShaderPair>::Finish(batchCount);
 
     SF_DEBUG_ASSERT(CurShader.pShaderObj->IsInitialized(), "Shader trying to update uniforms, but is uninitialized.");

@@ -408,6 +408,16 @@ void CGame::DispatchInputEvent( const InputEvent_t &event )
 		Key_Event( event );
 		break;
 
+#if defined( IOS )
+	// touch controls live in the client (game/client/touch.cpp)
+	case IE_FingerDown:
+	case IE_FingerUp:
+	case IE_FingerMotion:
+		if ( g_ClientDLL )
+			g_ClientDLL->IN_TouchEvent( event.m_nType, event.m_nData, event.m_nData2, event.m_nData3 );
+		break;
+#endif
+
 	// Broadcast analog values both to VGui & to GameUI
 	case IE_AnalogValueChanged:
 		{

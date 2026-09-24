@@ -221,6 +221,10 @@ InitReturnVal_t CInputSystem::Init()
 		if ( m_bXController )
 			joy_xcontroller_found.SetValue( 1 );
 
+#if defined( IOS )
+		InitializeTouch();
+#endif
+
 
 	}
 #elif defined( _GAMECONSOLE )
@@ -315,6 +319,10 @@ void CInputSystem::Shutdown()
 #endif
 
 	ShutdownCursors();
+
+#if defined( IOS )
+	ShutdownTouch();
+#endif
 
 	BaseClass::Shutdown();
 

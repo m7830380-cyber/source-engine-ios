@@ -16,6 +16,8 @@ mkdir -p "$APP/Frameworks"
 
 cp "$BUNDLE/Info.plist" "$APP/"
 cp "$BUNDLE/LaunchScreen.storyboard" "$APP/"
+# touch control textures (materials/vgui/touch/*), from the source-engine port
+cp "$BUNDLE/extras_dir.vpk" "$APP/"
 
 if [ -x /usr/libexec/PlistBuddy ]; then
 	/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $BUNDLE_ID" "$APP/Info.plist"

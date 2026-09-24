@@ -933,6 +933,14 @@ bool CSourceAppSystemGroup::PreInit()
 	{
 		fsInfo.m_pFileSystem->AddVPKFile( pVPKName );
 	}
+#if defined( IOS )
+	// extras_dir.vpk ships in the app bundle (touch control textures)
+	const char *pExtrasVPK = getenv( "EXTRAS_VPK_PATH" );
+	if ( pExtrasVPK && pExtrasVPK[0] )
+	{
+		fsInfo.m_pFileSystem->AddVPKFile( pExtrasVPK, PATH_ADD_TO_TAIL );
+	}
+#endif
 #endif
 
 	if ( IsPC() || !IsX360() )

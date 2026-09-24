@@ -44,6 +44,9 @@ vgui::IInputInternal *g_InputInternal = NULL;
 
 #include <vgui_controls/Controls.h>
 #include "cstrike15/gameui/cstrike15/steamoverlay/isteamoverlaymgr.h"
+#if defined( IOS )
+#include "touch.h"
+#endif
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
@@ -446,6 +449,9 @@ bool VGui_Startup( CreateInterfaceFn appSystemFactory )
 //-----------------------------------------------------------------------------
 void VGui_CreateGlobalPanels( void )
 {
+#if defined( IOS )
+	touch_panel->Create( enginevgui->GetPanel( PANEL_CLIENTDLL ) );
+#endif
 	VPANEL gameToolParent = enginevgui->GetPanel( PANEL_CLIENTDLL_TOOLS );
 	VPANEL toolParent = enginevgui->GetPanel( PANEL_TOOLS );
 #if defined( TRACK_BLOCKING_IO )

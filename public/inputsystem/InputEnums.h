@@ -1,4 +1,4 @@
-//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
+//===== Copyright ï¿½ 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -75,6 +75,11 @@ enum InputEventType_t
 	IE_ButtonReleased,		// m_nData contains a ButtonCode_t
 	IE_ButtonDoubleClicked,	// m_nData contains a ButtonCode_t
 	IE_AnalogValueChanged,	// m_nData contains an AnalogCode_t, m_nData2 contains the value
+
+	// touch: m_nData = finger index, m_nData2/m_nData3 = x/y as float bits (0..1)
+	IE_FingerDown,
+	IE_FingerUp,
+	IE_FingerMotion,
 
 	IE_FirstSystemEvent = 100,
 	IE_Quit = IE_FirstSystemEvent,

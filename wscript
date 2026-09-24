@@ -110,7 +110,11 @@ PROJECT_EXTRA_SOURCES = {
 	'engine': ['ios/engine/steamdatagram_null.cpp', 'ios/engine/phonon_null.cpp'],
 	# CSteamID::Render; Valve's engine compiles this in, matchmaking needs it too
 	'matchmaking': ['common/steamid.cpp'],
-	'client': ['common/steamid.cpp'],
+	'client': ['common/steamid.cpp',
+		# touch controls, from the source-engine port
+		'game/client/touch.cpp', 'game/client/in_touch.cpp'],
+	# SDL finger events -> IE_Finger* input events
+	'inputsystem': ['ios/inputsystem/touch_sdl.cpp'],
 	'server': ['common/steamid.cpp'],
 }
 

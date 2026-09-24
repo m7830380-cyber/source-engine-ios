@@ -413,6 +413,14 @@ public:
 	// Initializes joysticks
 	void InitializeJoysticks( void );
 
+#if defined( IOS )
+	// Touch (ios/inputsystem/touch_sdl.cpp)
+	void InitializeTouch( void );
+	void ShutdownTouch( void );
+	void FingerEvent( int eventType, int fingerId, float x, float y );
+	bool m_bTouchInitialized = false;
+#endif
+
 	// Samples the joystick
 	void PollJoystick( void );
 

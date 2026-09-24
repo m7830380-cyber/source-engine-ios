@@ -1212,6 +1212,11 @@ void CInput::ControllerMove( int nSlot, float frametime, CUserCmd *cmd )
 	JoyStickMove( frametime, cmd);
 
 	SteamControllerMove( frametime, cmd );
+
+#if defined( IOS )
+	if ( nSlot == in_forceuser.GetInt() )
+		TouchMove( cmd );
+#endif
 }
 
 //-----------------------------------------------------------------------------

@@ -1172,6 +1172,11 @@ public:
 	virtual void EngineGotvSyncPacket( const CEngineGotvSyncPacket *pPkt ) = 0; // Engine asking GC for a sync packet
 	virtual int GetInEyeEntity() const = 0;
 	virtual void OnTickPre( int tickcount ) = 0;
+
+#if defined( IOS )
+	// touch input from inputsystem: type is IE_Finger*, x/y are floats (0..1) passed as int bits
+	virtual void IN_TouchEvent( int type, int fingerId, int x, int y ) = 0;
+#endif
 };
 
 #define CLIENT_DLL_INTERFACE_VERSION		"VClient018"

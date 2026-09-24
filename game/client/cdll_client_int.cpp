@@ -210,6 +210,10 @@ extern void ProcessPortalTeleportations( void );
 #include "iloadingdisc.h"
 
 #include "bannedwords.h"
+#if defined( IOS )
+#include "touch.h"
+#include "inputsystem/InputEnums.h"
+#endif
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
@@ -1035,6 +1039,9 @@ public:
 	virtual void EngineGotvSyncPacket( const CEngineGotvSyncPacket *pPkt ) OVERRIDE;
 
 	virtual void OnTickPre( int tickcount ) OVERRIDE;
+#if defined( IOS )
+	virtual void IN_TouchEvent( int type, int fingerId, int x, int y ) OVERRIDE;
+#endif
 
 	virtual char const * GetRichPresenceStatusString();
 
@@ -1725,6 +1732,10 @@ CEG_NOINLINE void CHLClient::PostInit()
 
 	Init_GCVs();
 
+#if defined( IOS )
+	gTouch.Init();
+#endif
+
 	COM_TimestampedLog( "IGameSystem::PostInitAllSystems - Start" );
 	IGameSystem::PostInitAllSystems();
 	COM_TimestampedLog( "IGameSystem::PostInitAllSystems - Finish" );
@@ -1748,6 +1759,10 @@ CEG_NOINLINE void CHLClient::PostInit()
 //-----------------------------------------------------------------------------
 CEG_NOINLINE void CHLClient::Shutdown( void )
 {
+#if defined( IOS )
+	gTouch.Shutdown();
+#endif
+
 	if ( g_pRenderToRTHelper )
 	{
 		g_pRenderToRTHelper->Shutdown();
@@ -4833,6 +4848,38 @@ void CHLClient::EngineGotvSyncPacket( const CEngineGotvSyncPacket *pPkt )
 {
 	/* Removed for partner depot */
 }
+
+#if defined( IOS )
+void CHLClient::IN_TouchEvent( int type, int fingerId, int x, int y )
+{
+	if ( fingerId < 0 || fingerId >= 10 )
+		return;
+
+	// the engine forwards absolute positions; motion deltas come from the
+	// previous position of the same finger
+	static float s_flLastX[10], s_flLastY[10];
+
+	touch_event_t ev;
+	ev.type = type;
+	ev.fingerid = fingerId;
+	memcpy( &ev.x, &x, sizeof( ev.x ) );
+	memcpy( &ev.y, &y, sizeof( ev.y ) );
+
+	if ( type == IE_FingerMotion )
+	{
+		ev.dx = ev.x - s_flLastX[fingerId];
+		ev.dy = ev.y - s_flLastY[fingerId];
+	}
+	else
+	{
+		ev.dx = ev.dy = 0.f;
+	}
+	s_flLastX[fingerId] = ev.x;
+	s_flLastY[fingerId] = ev.y;
+
+	gTouch.ProcessEvent( &ev );
+}
+#endif
 
 void CHLClient::OnTickPre( int tickcount )
 {

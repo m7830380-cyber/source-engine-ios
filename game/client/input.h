@@ -151,6 +151,12 @@ protected:
 	void		ScaleMouse( int nSlot, float *x, float *y );
 	virtual void		ApplyMouse( int nSlot, QAngle& viewangles, CUserCmd *cmd, float mouse_x, float mouse_y );
 	void		MouseMove ( int nSlot, CUserCmd *cmd );
+#if defined( IOS )
+	// touch controls (game/client/in_touch.cpp, touch.cpp)
+	void		TouchMove( CUserCmd *cmd );
+	void		TouchScale( float &dx, float &dy );
+	void		ApplyTouch( QAngle &viewangles, CUserCmd *cmd, float dx, float dy );
+#endif
 	void		MotionControllerMove( float frametime, CUserCmd *cmd );
 	float		HandleMotionControllerInputSmoothing( float flDeadZonePct, float val );
 

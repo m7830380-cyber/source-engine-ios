@@ -19,6 +19,10 @@ otherwise accompanies this software in either electronic or hard copy form.
 #define INC_SF_Render_ShaderHAL_H
 
 #include "Render/Render_HAL.h"
+#if defined(SF_USE_ANGLE)
+#include <stdio.h>
+#endif
+
 namespace Scaleform { namespace Render {
 
 template <class ShaderManagerType, class ShaderInterfaceType>
@@ -757,6 +761,22 @@ inline void ShaderHAL<ShaderManagerType, ShaderInterfaceType>::DrawProcessedPrim
         unsigned       meshIndex = pbatch->GetMeshIndex();
         unsigned       batchMeshCount = pbatch->GetMeshCount();
 
+#if defined(SF_USE_ANGLE)
+        bool logText = false;
+        {
+            static int textPrimLogs = 0;
+            if (pprimitive->pFill && pprimitive->pFill->GetType() == PrimFill_UVTextureAlpha_VColor && textPrimLogs < 40)
+            {
+                ++textPrimLogs;
+                logText = true;
+                const Matrix2F& m = pprimitive->Meshes[meshIndex].M.GetMatrix2D();
+                printf("[sf-text] draw text batch: mesh %p, batch type %d, meshes %u, view valid %d, matrix [%.3f %.3f %.1f / %.3f %.3f %.1f]\n",
+                       (void*)pmesh, (int)pbatch->Type, batchMeshCount, (HALState & HS_ViewValid) ? 1 : 0,
+                       m.Sx(), m.Shx(), m.Tx(), m.Shy(), m.Sy(), m.Ty());
+                fflush(stdout);
+            }
+        }
+#endif
         if (pmesh)
         {
             unsigned fillFlags = FillFlags;
@@ -779,6 +799,14 @@ inline void ShaderHAL<ShaderManagerType, ShaderInterfaceType>::DrawProcessedPrim
 
             ShaderData.Finish(batchMeshCount);
 
+#if defined(SF_USE_ANGLE)
+            if (logText)
+            {
+                printf("[sf-text]   shader %s, fill flags 0x%x, indices %u, vertices %u\n",
+                       pShader ? "ok" : "NULL", fillFlags, (unsigned)pmesh->IndexCount, (unsigned)pmesh->VertexCount);
+                fflush(stdout);
+            }
+#endif
             if ((HALState & HS_ViewValid) && pShader) 
             {
                 SF_DEBUG_ASSERT((pbatch->Type != PrimitiveBatch::DP_Failed) &&

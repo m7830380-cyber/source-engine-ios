@@ -18,7 +18,9 @@
 #include "igameevents.h"
 #include "cdll_int.h"
 
-#if defined( USE_SDL ) || defined( OSX )
+#if defined( SF_USE_ANGLE )
+#include "sf_togl_bridge.h"
+#elif defined( USE_SDL ) || defined( OSX )
 #include "appframework/ilaunchermgr.h"
 #endif
 

@@ -73,7 +73,11 @@ void ScaleformUIImpl::SaveRenderingState( void )
 #elif defined( DX_TO_GL_ABSTRACTION )
 	if (m_pDevice)
 	{
+#if defined( SF_USE_ANGLE )
+		SFTogl_SaveGLState( m_pDevice );
+#else
 		m_pDevice->SaveGLState();
+#endif
 	}
 #endif
 }
@@ -96,7 +100,11 @@ void ScaleformUIImpl::RestoreRenderingState( void )
 #elif  defined( DX_TO_GL_ABSTRACTION )
 	if (m_pDevice)
 	{
+#if defined( SF_USE_ANGLE )
+		SFTogl_RestoreGLState( m_pDevice );
+#else
 		m_pDevice->RestoreGLState();
+#endif
 	}
 #endif
 }

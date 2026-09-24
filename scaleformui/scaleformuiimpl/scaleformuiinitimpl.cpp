@@ -135,7 +135,9 @@ bool ScaleformUIImpl::Connect( CreateInterfaceFn factory )
 
 	int result;
 
-#if defined( USE_SDL )
+#if defined( SF_USE_ANGLE )
+	m_pLauncherMgr = SFTogl_GetLauncherMgr( factory );
+#elif defined( USE_SDL )
 	m_pLauncherMgr = (ILauncherMgr *)factory( SDLMGR_INTERFACE_VERSION, NULL);
 #elif defined( OSX )
 	m_pLauncherMgr = (ILauncherMgr *)factory( COCOAMGR_INTERFACE_VERSION, NULL);

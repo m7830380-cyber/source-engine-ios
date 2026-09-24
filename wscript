@@ -127,6 +127,8 @@ PROJECT_EXTRA_SOURCES = {
 	'client': ['common/steamid.cpp',
 		# touch controls, from the source-engine port
 		'game/client/touch.cpp', 'game/client/in_touch.cpp'],
+	# togl/launcher calls without Scaleform's GLES headers in the same file
+	'scaleformui': ['scaleformui/scaleformuiimpl/sf_togl_bridge.cpp'],
 	# SDL finger events -> IE_Finger* input events
 	'inputsystem': ['ios/inputsystem/touch_sdl.cpp'],
 	'server': ['common/steamid.cpp'],

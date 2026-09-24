@@ -153,7 +153,9 @@ void ScaleformUIImpl::UpdateCursorLazyHide( float time )
 
 void ScaleformUIImpl::InnerShowCursor( void )
 {
-#if defined( USE_SDL ) || defined( OSX )
+#if defined( SF_USE_ANGLE )
+	SFTogl_SetMouseVisible( m_pLauncherMgr, true );
+#elif defined( USE_SDL ) || defined( OSX )
 	m_pLauncherMgr->SetMouseVisible( true );
 #endif
 	m_fCursorTimeUntilHide = sfcursortimeout.GetFloat();
@@ -175,7 +177,9 @@ void ScaleformUIImpl::InnerShowCursor( void )
 
 void ScaleformUIImpl::InnerHideCursor( void )
 {
-#if defined( USE_SDL ) || defined( OSX ) 
+#if defined( SF_USE_ANGLE )
+	SFTogl_SetMouseVisible( m_pLauncherMgr, false );
+#elif defined( USE_SDL ) || defined( OSX ) 
 	m_pLauncherMgr->SetMouseVisible( false );
 #endif
 	MouseEvent mevent( Event::MouseMove, 0, -100, -100 );

@@ -10,6 +10,14 @@
 
 #include "sf_togl_bridge.h"
 
+// togl's gGL is not exported from libtogl; its accessor is (and returns the
+// already created entry points)
+static COpenGLEntryPoints *SFTogl_GL()
+{
+	return GetOpenGLEntryPoints( NULL );
+}
+#define gGL SFTogl_GL()
+
 // NOTE: This has to be the last file included!
 #include "tier0/memdbgon.h"
 

@@ -187,13 +187,11 @@ CCSBuyMenuScaleform::~CCSBuyMenuScaleform()
 		m_bRegisteredEvents = false;
 	}
 
-	// Base class destruction begins
-	m_iSplitScreenSlot = 13;
-
-	// Release Scaleform movie if loaded
-	if ( m_bIsLoaded )
+	// Release the movie if it is still loaded (the restoration set the slot
+	// to 13 here, a value copied from disassembly, not a Scaleform slot)
+	if ( m_bIsLoaded && FlashAPIIsValid() )
 	{
-		g_pScaleformUI->RemoveElement( m_iSplitScreenSlot, m_FlashAPI );
+		g_pScaleformUI->RemoveElement( SF_SS_SLOT( m_iSplitScreenSlot ), m_FlashAPI );
 	}
 }
 
@@ -230,6 +228,12 @@ void CCSBuyMenuScaleform::FlashReady()
 	ListenForGameEvent( "item_equip" );
 
 	m_bLoading = false;
+
+	// The restoration uses m_bShowOnReady as "the movie is loaded" (money, time
+	// left and wheel selection updates are skipped without it) but never set it:
+	// the wheel always thought the player had $0.
+	m_bShowOnReady = true;
+	m_bIsLoaded = true;	// same story (hostage map setup)
 
 	if ( m_bVisible )
 	{
@@ -416,6 +420,9 @@ void CCSBuyMenuScaleform::CalculateBestStats()
 
 bool CCSBuyMenuScaleform::PreUnloadFlash()
 {
+	m_bShowOnReady = false;
+	m_bIsLoaded = false;
+
 	// WIP
 	return true;
 }

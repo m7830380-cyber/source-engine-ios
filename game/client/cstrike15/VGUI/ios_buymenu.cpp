@@ -87,7 +87,7 @@ class CIOSBuyMenu : public EditablePanel, public IViewPortPanel
 	DECLARE_CLASS_SIMPLE( CIOSBuyMenu, EditablePanel );
 
 public:
-	enum { MAX_ITEMS = 24 };
+	enum { kMaxBuyItems = 24 };
 
 	CIOSBuyMenu( IViewPort *pViewPort );
 
@@ -121,7 +121,7 @@ private:
 	Label		*m_pMoney;
 	Button		*m_pClose;
 	Button		*m_pCategories[BUYCAT_COUNT];
-	Button		*m_pItems[MAX_ITEMS];
+	Button		*m_pItems[kMaxBuyItems];
 	int			m_nItemCount;
 	int			m_nCategory;
 	int			m_nLastAccount;
@@ -155,7 +155,7 @@ CIOSBuyMenu::CIOSBuyMenu( IViewPort *pViewPort ) : BaseClass( NULL, PANEL_BUY )
 		m_pCategories[i] = new Button( this, "Category", s_pszCategoryNames[i], this, szCommand );
 	}
 
-	for ( int i = 0; i < MAX_ITEMS; i++ )
+	for ( int i = 0; i < kMaxBuyItems; i++ )
 	{
 		m_pItems[i] = new Button( this, "Item", "", this, "" );
 		m_pItems[i]->SetVisible( false );
@@ -177,7 +177,7 @@ void CIOSBuyMenu::ApplySchemeSettings( IScheme *pScheme )
 	StyleButton( m_pClose, false );
 	for ( int i = 0; i < BUYCAT_COUNT; i++ )
 		StyleButton( m_pCategories[i], i == m_nCategory );
-	for ( int i = 0; i < MAX_ITEMS; i++ )
+	for ( int i = 0; i < kMaxBuyItems; i++ )
 		StyleButton( m_pItems[i], false );
 }
 
@@ -227,7 +227,7 @@ void CIOSBuyMenu::PerformLayout()
 	const int tileW = ( gridW - margin * ( columns - 1 ) ) / columns;
 	const int rows = MAX( ( m_nItemCount + columns - 1 ) / columns, 4 );
 	const int tileH = MIN( catH, ( sh - headerH - margin * ( rows + 1 ) ) / rows );
-	for ( int i = 0; i < MAX_ITEMS; i++ )
+	for ( int i = 0; i < kMaxBuyItems; i++ )
 	{
 		int col = i % columns, row = i / columns;
 		m_pItems[i]->SetBounds( gridX + col * ( tileW + margin ), headerH + margin + row * ( tileH + margin ), tileW, tileH );
@@ -247,7 +247,7 @@ void CIOSBuyMenu::RebuildItems()
 		V_snwprintf( wszMoney, ARRAYSIZE( wszMoney ), L"$%d", nAccount );
 		m_pMoney->SetText( wszMoney );
 
-		for ( int i = WEAPON_FIRST; i < WEAPON_MAX && m_nItemCount < MAX_ITEMS; i++ )
+		for ( int i = WEAPON_FIRST; i < WEAPON_MAX && m_nItemCount < kMaxBuyItems; i++ )
 		{
 			CSWeaponID id = (CSWeaponID)i;
 			const CCSWeaponInfo *pInfo = GetWeaponInfo( id );
@@ -284,7 +284,7 @@ void CIOSBuyMenu::RebuildItems()
 		}
 	}
 
-	for ( int i = m_nItemCount; i < MAX_ITEMS; i++ )
+	for ( int i = m_nItemCount; i < kMaxBuyItems; i++ )
 		m_pItems[i]->SetVisible( false );
 	for ( int i = 0; i < BUYCAT_COUNT; i++ )
 		StyleButton( m_pCategories[i], i == m_nCategory );

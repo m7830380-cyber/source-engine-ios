@@ -2454,6 +2454,12 @@ bool ApplyIronSightScopeEffect( int x, int y, int w, int h, CViewSetup *pViewSet
 	C_BasePlayer *pPlayer = C_BasePlayer::GetLocalPlayer();
 	if (pPlayer)
 	{
+		// In killcam/spectator the dead player's m_flIronSightAmount may still be >0,
+		// but no viewmodel is drawn so the stencil lens shape is never written.
+		// RenderScopeEffect's STENCILFUNC_NOTEQUAL 1 would then match every pixel → full-screen white tint.
+		if ( !pPlayer->IsAlive() || pPlayer->GetObserverMode() != OBS_MODE_NONE )
+			return false;
+
 		C_WeaponCSBase *pWeapon = (C_WeaponCSBase *)pPlayer->GetActiveWeapon();
 		if (pWeapon)
 		{

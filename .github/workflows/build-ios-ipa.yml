@@ -2,7 +2,7 @@ name: Build iOS IPA
 
 on:
   push:
-    branches: [ master, main, csgo-ios, csgo-ios-fix ]
+    branches: [ master, main, csgo-ios, csgo-ios-fix, fix/ironsight-scope-tint ]
   pull_request:
   workflow_dispatch:
 

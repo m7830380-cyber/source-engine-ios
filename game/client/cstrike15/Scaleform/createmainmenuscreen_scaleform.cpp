@@ -139,6 +139,7 @@ CCreateMainMenuScreenScaleform::CCreateMainMenuScreenScaleform( void ) :
 	m_pConfirmDialog( NULL ),
 	m_bVisible( false ),
 	m_bHideOnLoad( false ),
+	m_bFlashReadyForBlog( false ),
 	m_bTrainingRequested( false ),
 	m_uiClientHelloRequestedTimestampMS( 0 ),
 	m_iPreviousPlayerLevel( -1 )
@@ -163,6 +164,8 @@ void CCreateMainMenuScreenScaleform::FlashReady( void )
 	g_pScaleformUI->AddDeviceDependentObject( m_pInstance );
 
 	g_pMatchFramework->GetEventsSubscription()->Subscribe( this );
+
+	m_bFlashReadyForBlog = true;
 
 	Show();
 
@@ -446,6 +449,23 @@ void CCreateMainMenuScreenScaleform::GetPreviousLevel( SCALEFORM_CALLBACK_ARGS_D
 void *g_pvPassedEngineArray = NULL; // this array gets passed from engine and should be reported to GC
 void CCreateMainMenuScreenScaleform::Tick()
 {
+#if defined( IOS )
+	// The main menu's Blog panel is an embedded Chromium page (the CS:GO blog);
+	// there is no browser here, so it only showed its frame (Operation Hydra
+	// art, empty text) over the menu. On PC the blog component hid it when
+	// needed; hide it once the movie's onLoaded (which turns it on) has run.
+	if ( m_bFlashReadyForBlog && FlashAPIIsValid() )
+	{
+		m_bFlashReadyForBlog = false;
+		WITH_SLOT_LOCKED
+		{
+			ScaleformUI()->Value_InvokeWithoutReturn( m_FlashAPI, "ScaleformComponent_Blog_HideBlog", NULL, 0 );
+		}
+		printf( "[mainmenu] blog panel hidden (no embedded browser)NL" );
+		fflush( stdout );
+	}
+#endif
+
 	// Check if we need to use saved reconnect data because we cannot talk to GC
 	if ( m_uiClientHelloRequestedTimestampMS &&
 		( int( Plat_MSTime() - m_uiClientHelloRequestedTimestampMS ) > 6000 ) )

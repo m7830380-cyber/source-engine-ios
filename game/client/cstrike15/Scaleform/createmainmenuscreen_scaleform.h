@@ -75,6 +75,7 @@ protected:
 	CMessageBoxScaleform* m_pConfirmDialog;
 	bool	m_bVisible;
 	bool	m_bHideOnLoad;
+	bool	m_bFlashReadyForBlog;	// iOS: the blog panel still has to be hidden
 	bool	m_bTrainingRequested;
 	uint32	m_uiClientHelloRequestedTimestampMS;
 	int		m_iPreviousPlayerLevel;

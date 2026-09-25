@@ -139,6 +139,7 @@ void CPauseMenuScreenScaleform::Hide()
 	WITH_SLOT_LOCKED
 	{
 		ScaleformUI()->Value_InvokeWithoutReturn( m_FlashAPI, "hidePanel", NULL, 0 );
+		ScaleformUI()->HideCursor();
 	}
 }
 

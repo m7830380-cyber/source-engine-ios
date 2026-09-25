@@ -22,9 +22,11 @@ float4 main( PS_INPUT i ) : COLOR
 	s2 = tex2D( TexSampler, i.coordTap2 );
 	s3 = tex2D( TexSampler, i.coordTap3 );
 
-	// store grayscale version of buffer in alpha
 	float4 vResult = ( s0 + s1 + s2 + s3 ) * 0.25f;
-	vResult.a = dot( float3( 0.3f, 0.59f, 0.11f ), vResult.rgb );
+	// Force alpha to 1.0: the original luminance write caused ANGLE/Metal to
+	// composite intermediate render targets against white when sampling them,
+	// producing a white tint around the IronSight scope.
+	vResult.a = 1.0f;
 
 	return vResult;
 }

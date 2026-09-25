@@ -308,6 +308,7 @@ void CCSBuyMenuScaleform::Hide()
 		SF_FORCE_SPLITSCREEN_PLAYER_GUARD( m_iSplitScreenSlot );
 
 		g_pScaleformUI->Value_InvokeWithoutReturn( m_FlashAPI, "hidePanel", nullptr, 0 );
+		g_pScaleformUI->HideCursor();
 
 		GetHud().EnableHud();
 	}

@@ -26,6 +26,7 @@ static ConVar ios_char_ambientreflection( "ios_char_ambientreflection", "1", 0, 
 static ConVar ios_char_masks1( "ios_char_masks1", "1", 0, "character shader: masks1 (rim/phong/metalness masks)" );
 static ConVar ios_char_masks2( "ios_char_masks2", "1", 0, "character shader: masks2" );
 static ConVar ios_char_phongwarp( "ios_char_phongwarp", "1", 0, "character shader: phong warp texture" );
+static ConVar ios_char_asvlg( "ios_char_asvlg", "0", 0, "render character materials with VertexLitGeneric instead" );
 #endif
 
 BEGIN_VS_SHADER( Character, "Help for Character Shader" )
@@ -543,6 +544,10 @@ BEGIN_VS_SHADER( Character, "Help for Character Shader" )
 
 	SHADER_FALLBACK
 	{
+#if defined( IOS )
+		if ( ios_char_asvlg.GetBool() )
+			return "VertexLitGeneric";
+#endif
 		return 0;
 	}
 

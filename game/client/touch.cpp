@@ -397,7 +397,7 @@ static int AddMenuButtons( rgba_t color, bool bOnlyMissing )
 // 1-6 from left to right; each toggles one character shader feature.
 static int AddCharDiagButtons( rgba_t color, bool bOnlyMissing )
 {
-	static const char *s_Features[] = { "envmap", "fakerim", "ambientreflection", "masks1", "masks2", "phongwarp" };
+	static const char *s_Features[] = { "envmap", "fakerim", "ambientreflection", "masks1", "masks2", "phongwarp", "asvlg" };
 	int nAdded = 0;
 	for ( int i = 0; i < ARRAYSIZE( s_Features ); i++ )
 	{

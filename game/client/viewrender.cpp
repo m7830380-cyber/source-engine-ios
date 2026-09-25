@@ -3404,6 +3404,14 @@ void CViewRender::RenderView( const CViewSetup &view, const CViewSetup &hudViewS
 		if ( m_FreezeParams[ slot ].m_bTakeFreezeFrame )
 		{
 			pRenderContext = materials->GetRenderContext();
+#if defined( IOS )
+			{
+				unsigned char rgba[4] = { 0, 0, 0, 0 };
+				pRenderContext->ReadPixels( view.x + view.width / 8, view.y + view.height / 2, 1, 1, rgba, IMAGE_FORMAT_RGBA8888 );
+				printf( "[freeze] snapshot: scene at %d,%d = %d %d %d a %d\n", view.x + view.width / 8, view.y + view.height / 2, rgba[0], rgba[1], rgba[2], rgba[3] );
+				fflush( stdout );
+			}
+#endif
 			if ( IsGameConsole() )
 			{
 				// 360 doesn't create the Fullscreen texture
@@ -7591,6 +7599,20 @@ void CFreezeFrameView::Draw( void )
 	pRenderContext->DrawScreenSpaceRectangle( m_pFreezeFrame, x, y, width, height,
 		m_nSubRect[ 0 ], m_nSubRect[ 1 ], m_nSubRect[ 0 ] + m_nSubRect[ 2 ] - 1, m_nSubRect[ 1 ] + m_nSubRect[ 3 ] - 1, m_nScreenSize[ 0 ], m_nScreenSize[ 1 ] );
 
+#if defined( IOS )
+	static double s_flNextFreezeProbe = 0.0;
+	bool bFreezeProbe = Plat_FloatTime() >= s_flNextFreezeProbe;
+	if ( bFreezeProbe )
+	{
+		s_flNextFreezeProbe = Plat_FloatTime() + 0.5;
+		unsigned char rgba[4] = { 0, 0, 0, 0 };
+		pRenderContext->ReadPixels( x + width / 8, y + height / 2, 1, 1, rgba, IMAGE_FORMAT_RGBA8888 );
+		printf( "[freeze] frozen frame drawn: at %d,%d = %d %d %d a %d (flash %.2fs left)\n", x + width / 8, y + height / 2,
+			rgba[0], rgba[1], rgba[2], rgba[3], g_flFreezeFlash[ m_nSlot ] - gpGlobals->curtime );
+		fflush( stdout );
+	}
+#endif
+
 	//Fake a fade during freezeframe view.
 	if ( g_flFreezeFlash[ m_nSlot ] >= gpGlobals->curtime && 
 		engine->IsTakingScreenshot() == false )
@@ -7608,6 +7630,16 @@ void CFreezeFrameView::Draw( void )
 		pMaterial->SetMaterialVarFlag( MATERIAL_VAR_IGNOREZ, true );
 
 		pRenderContext->DrawScreenSpaceRectangle( pMaterial, x, y, width, height, m_nSubRect[ 0 ], m_nSubRect[ 1 ], m_nSubRect[ 0 ] + m_nSubRect[ 2 ] - 1, m_nSubRect[ 1 ] + m_nSubRect[ 3 ] - 1, m_nScreenSize[ 0 ], m_nScreenSize[ 1 ] );
+
+#if defined( IOS )
+		if ( bFreezeProbe )
+		{
+			unsigned char rgba[4] = { 0, 0, 0, 0 };
+			pRenderContext->ReadPixels( x + width / 8, y + height / 2, 1, 1, rgba, IMAGE_FORMAT_RGBA8888 );
+			printf( "[freeze] after white flash (alpha %d): %d %d %d a %d\n", iFadeAlpha, rgba[0], rgba[1], rgba[2], rgba[3] );
+			fflush( stdout );
+		}
+#endif
 	}
 
 #if defined( _X360 )

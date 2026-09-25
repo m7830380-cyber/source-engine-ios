@@ -729,7 +729,7 @@ bool CCStrike15BasePanel::ShowLockInput( void )
 void CCStrike15BasePanel::OnOpenPauseMenu( void )
 {
 	// Scaleform pause menu (reconstructed); the VGUI game menu is the fallback
-	if ( !m_bScaleformPauseMenuEnabled )
+	if ( !IsScaleformPauseMenuEnabled() )
 	{
 		CBaseModPanel::OnOpenPauseMenu();
 	}
@@ -842,13 +842,13 @@ void CCStrike15BasePanel::DismissPauseMenu( void )
 
 void CCStrike15BasePanel::RestorePauseMenu( void )
 {
-	if ( m_bScaleformPauseMenuEnabled )
+	if ( IsScaleformPauseMenuEnabled() )
 		CPauseMenuScreenScaleform::RestorePanel();
 }
 
 void CCStrike15BasePanel::ShowScaleformPauseMenu( bool bShow )
 {
-	if ( !bShow || m_bScaleformPauseMenuEnabled )
+	if ( !bShow || IsScaleformPauseMenuEnabled() )
 		CPauseMenuScreenScaleform::ShowMenu( bShow );
 }
 
@@ -859,7 +859,7 @@ bool CCStrike15BasePanel::IsScaleformPauseMenuActive( void )
 
 bool CCStrike15BasePanel::IsScaleformPauseMenuVisible( void )
 {
-	return CPauseMenuScreenScaleform::IsActive();
+	return CPauseMenuScreenScaleform::IsVisible();
 }
 
 void CCStrike15BasePanel::OnOpenDisconnectConfirmationDialog( void )

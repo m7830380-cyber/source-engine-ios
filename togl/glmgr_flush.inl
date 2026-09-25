@@ -307,6 +307,33 @@ FORCEINLINE void GLMContext::FlushDrawStates( uint nStartIndex, uint nEndIndex, 
 
 				pTex->m_SamplingParams = m_samplers[nSamplerIndex].m_samp;
 
+#if defined( IOS )
+				// diagnostic only: without GL_EXT_texture_sRGB_decode a sampler's sRGB
+				// request is ignored here; log each texture sampled with a mode it isn't in
+				if ( !gGL->m_bHave_GL_EXT_texture_sRGB_decode )
+				{
+					bool texSRGB = ( pTex->m_layout->m_key.m_texFlags & kGLMTexSRGB ) != 0;
+					bool glSampSRGB = m_samplers[nSamplerIndex].m_samp.m_packed.m_srgb;
+					if ( texSRGB != glSampSRGB )
+					{
+						static const void *s_logged[128];
+						static int s_nLogged = 0;
+						const void *key = (const char *)pTex + ( glSampSRGB ? 1 : 0 );
+						bool bSeen = false;
+						for ( int i = 0; i < s_nLogged; i++ )
+							bSeen |= ( s_logged[i] == key );
+						if ( !bSeen && s_nLogged < 128 )
+						{
+							s_logged[s_nLogged++] = key;
+							printf( "[srgb] sampler wants srgb %d, tex '%s' %s is srgb %d (renderable %d) - ignored\n",
+								(int)glSampSRGB, pTex->m_debugLabel ? pTex->m_debugLabel : "-", pTex->m_layout->m_layoutSummary,
+								(int)texSRGB, ( pTex->m_layout->m_key.m_texFlags & kGLMTexRenderable ) ? 1 : 0 );
+							fflush( stdout );
+						}
+					}
+				}
+#endif
+
 #if (defined(OSX) && !defined(IOS))
 				if( pTex && !( gGL->m_bHave_GL_EXT_texture_sRGB_decode ) )
 				{

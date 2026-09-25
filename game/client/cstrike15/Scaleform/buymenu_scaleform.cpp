@@ -433,11 +433,13 @@ void CCSBuyMenuScaleform::SetHostageMatch( bool bHostageMatch )
 
 	if ( m_bIsLoaded )
 	{
-		SFVALUEARRAY args;
-
-		m_pScaleformUI->CreateValueArray( args, 1 );
-		m_pScaleformUI->ValueArray_SetElement( args, true, bHostageMatch );
-		g_pScaleformUI->Value_InvokeWithoutReturn( m_FlashAPI, "setIsHostageMatch", args, 1 );
+		// the restoration wrote element "true" (1) of a 1-element array, which
+		// is a fatal Error(), and never released the array
+		WITH_SFVALUEARRAY_SLOT_LOCKED( args, 1 )
+		{
+			m_pScaleformUI->ValueArray_SetElement( args, 0, bHostageMatch );
+			g_pScaleformUI->Value_InvokeWithoutReturn( m_FlashAPI, "setIsHostageMatch", args, 1 );
+		}
 	}
 }
 
@@ -2451,11 +2453,13 @@ bool CCSBuyMenuScaleform::UpdateTimeLeft(bool bForce)
 	{
 		m_nLastTimeLeft = nScaledTime;
 
-		SFVALUEARRAY args = g_pScaleformUI->CreateValueArray(1);
-
-		g_pScaleformUI->ValueArray_SetElement(args, 0, floorf(flTimeLeft));
-		//g_pScaleformUI->ValueArray_SetElement(args, 1, (nScaledTime % 5) < 3);
-		g_pScaleformUI->Value_InvokeWithoutReturn(m_FlashAPI, "setBuyTimeLeft", args, 1);
+		// (the restoration created a new array here every update and never
+		// released it)
+		WITH_SFVALUEARRAY_SLOT_LOCKED(args, 1)
+		{
+			g_pScaleformUI->ValueArray_SetElement(args, 0, floorf(flTimeLeft));
+			g_pScaleformUI->Value_InvokeWithoutReturn(m_FlashAPI, "setBuyTimeLeft", args, 1);
+		}
 	}
 
 	return bForce == false && flTimeLeft == 0;
@@ -2476,8 +2480,6 @@ void CCSBuyMenuScaleform::UpdatePlayerCash(bool bForce)
 
 	if (nAccount == m_nLastAccount && !bForce)
 		return;
-
-	SFVALUEARRAY args = g_pScaleformUI->CreateValueArray(1);
 
 	WITH_SFVALUEARRAY_SLOT_LOCKED(args, 1)
 	{

@@ -8,6 +8,7 @@
 #include "stdafx.h"
 #if defined( DX_TO_GL_ABSTRACTION )
 #include "tier1/keyvalues.h"
+#include "tier1/utlstring.h"
 #endif
 #include "shaderapi/ishaderapi.h"
  
@@ -292,7 +293,8 @@ ConVar sf_ios_record_frames( "sf_ios_record_frames", "0", 0, "iOS: record the dr
 // size) to see which clip covers the menu: once ~20 s into the menu and on
 // request (sf_ios_dump_ui). sf_ios_hide <path> hides a clip for testing.
 static bool s_bIOSDumpUIRequested = false;
-static char s_szIOSHidePath[256] = "";
+// clips kept hidden (re-applied every frame, so the movie can't show them again)
+static CUtlVector< CUtlString > s_IOSHiddenPaths;
 CON_COMMAND( sf_ios_dump_ui, "iOS: log the display tree of the menu movie" )
 {
 	s_bIOSDumpUIRequested = true;
@@ -301,7 +303,52 @@ CON_COMMAND( sf_ios_hide, "iOS: hide a menu movie clip, e.g. sf_ios_hide _level3
 {
 	if ( args.ArgC() < 2 )
 		return;
-	V_strncpy( s_szIOSHidePath, args[1], sizeof( s_szIOSHidePath ) );
+	for ( int i = 1; i < args.ArgC(); i++ )
+	{
+		s_IOSHiddenPaths.AddToTail( CUtlString( args[i] ) );
+		printf( "[sf-ui] will keep hidden: %s\n", args[i] );
+	}
+	fflush( stdout );
+}
+CON_COMMAND( sf_ios_unhide_all, "iOS: stop hiding the clips given to sf_ios_hide (they reappear when the menu shows them)" )
+{
+	s_IOSHiddenPaths.RemoveAll();
+}
+
+// main menu panels (mainmenu.swf), reported with position and size to find
+// which one covers the menu
+static const char *s_pszIOSMenuPanels[] =
+{
+	"Blog", "StreamPanel", "BannerPanel", "SelectPanel", "PlayerProfile", "FriendsListerPanel",
+	"OverwatchPanel", "MissionsPanel", "Warnings", "WarningsClientRestart", "NavDetect", "JournalPanel",
+	"InventoryPanel", "Guides", "StoreListerPanel", "WatchPanel", "MapVotePanel", "TooltipItem",
+	"TooltipCampaign", "TooltipItemPreview", "TooltipContextMenu",
+};
+static ConVar sf_ios_menu_root( "sf_ios_menu_root", "_level31.Panel", FCVAR_NONE, "iOS: path of the main menu's Panel clip for sf_ios_dump_ui" );
+
+static void IOS_ReportMenuPanels( SF::GFx::Movie *pMovie )
+{
+	printf( "[sf-ui] ===== main menu panels under %s =====\n", sf_ios_menu_root.GetString() );
+	for ( int i = 0; i < ARRAYSIZE( s_pszIOSMenuPanels ); i++ )
+	{
+		char szPath[256];
+		V_snprintf( szPath, sizeof( szPath ), "%s.%s", sf_ios_menu_root.GetString(), s_pszIOSMenuPanels[i] );
+		SF::GFx::Value clip;
+		if ( !pMovie->GetVariable( &clip, szPath ) || !clip.IsDisplayObject() )
+		{
+			printf( "[sf-ui]   %s: not found \n", s_pszIOSMenuPanels[i] );
+			continue;
+		}
+		SF::GFx::Value::DisplayInfo info;
+		clip.GetDisplayInfo( &info );
+		SF::GFx::Value width, height;
+		clip.GetMember( "_width", &width );
+		clip.GetMember( "_height", &height );
+		printf( "[sf-ui]   %s: visible %d, alpha %.0f, at %.0f,%.0f, size %.0fx%.0f\n", s_pszIOSMenuPanels[i],
+				info.GetVisible() ? 1 : 0, info.GetAlpha(), info.GetX(), info.GetY(),
+				width.IsNumber() ? width.GetNumber() : -1.0, height.IsNumber() ? height.GetNumber() : -1.0 );
+	}
+	fflush( stdout );
 }
 
 class CIOSDisplayTreeVisitor : public SF::GFx::Value::ObjectVisitor
@@ -512,19 +559,25 @@ void ScaleformUIImpl::RenderSlot( int slot )
 #endif
 
 #if defined( SF_USE_ANGLE )
-	if ( pslot && slot == 1 && s_szIOSHidePath[0] )
+	if ( pslot && slot == 1 )
 	{
-		char szVar[300];
-		V_snprintf( szVar, sizeof( szVar ), "%s._visible", s_szIOSHidePath );
-		bool bOk = ( (SF::GFx::Movie *)pslot->m_pMovieView )->SetVariable( szVar, SF::GFx::Value( false ) );
-		printf( "[sf-ui] hide %s: %s\n", s_szIOSHidePath, bOk ? "done" : "not found" );
-		fflush( stdout );
-		s_szIOSHidePath[0] = 0;
+		for ( int i = 0; i < s_IOSHiddenPaths.Count(); i++ )
+		{
+			char szVar[300];
+			V_snprintf( szVar, sizeof( szVar ), "%s._visible", s_IOSHiddenPaths[i].Get() );
+			bool bOk = ( (SF::GFx::Movie *)pslot->m_pMovieView )->SetVariable( szVar, SF::GFx::Value( false ) );
+			if ( ( nSlotRender % 300 ) == 0 )
+			{
+				printf( "[sf-ui] hiding %s: %s\n", s_IOSHiddenPaths[i].Get(), bOk ? "ok" : "not found" );
+				fflush( stdout );
+			}
+		}
 	}
 	if ( pslot && slot == 1 && ( nSlotRender == 1200 || s_bIOSDumpUIRequested ) )
 	{
 		s_bIOSDumpUIRequested = false;
 		IOS_DumpDisplayTree( (SF::GFx::Movie *)pslot->m_pMovieView, slot );
+		IOS_ReportMenuPanels( (SF::GFx::Movie *)pslot->m_pMovieView );
 	}
 #endif
 

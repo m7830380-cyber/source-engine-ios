@@ -123,6 +123,7 @@ protected:
 
 	bool				m_readyForLoading;
 	bool				m_bCreatedMapLoadingScreen;
+	bool				m_bCloseWhenReady;	// a close arrived before the movie was ready
 
 	bool				m_bCheckedForSWFAndFailed;
 };

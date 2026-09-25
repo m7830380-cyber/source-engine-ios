@@ -1946,9 +1946,16 @@ static void IOS_DiscardMouseMovement( bool bMenu )
 bool IOS_IsMenuActive()
 {
 	extern bool IOS_IsBuyMenuVisible();
+	// IsBuyMenuOpen() is set by CCSBuyMenuScaleform::Show/Hide on the C++ side and
+	// doesn't rely on the SWF calling AddInputConsumer, which it may skip on the
+	// second open (leaving ConsumesInputEvents() false and the cursor dead).
+	C_BasePlayer *pBasePlayer = C_BasePlayer::GetLocalPlayer();
+	bool bCSBuyMenuOpen = pBasePlayer &&
+		static_cast<C_CSPlayer *>( pBasePlayer )->IsBuyMenuOpen();
 	return !engine->IsInGame() ||
 		( g_pScaleformUI && ( g_pScaleformUI->ConsumesInputEvents() || g_pScaleformUI->IsCursorVisible() ) ) ||
-		IOS_IsBuyMenuVisible();
+		IOS_IsBuyMenuVisible() ||
+		bCSBuyMenuOpen;
 }
 
 static bool IOS_UpdateTouchMouse( void )

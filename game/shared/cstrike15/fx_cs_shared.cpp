@@ -1,4 +1,4 @@
-//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
+//========= Copyright ï¿½ 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -270,18 +270,24 @@ void FX_FireBullets(
 	}
 #endif
 
-	WEAPON_FILE_INFO_HANDLE	hWpnInfo = LookupWeaponInfoSlot( pItemDef->GetItemClass() );
-
-	if ( hWpnInfo == GetInvalidWeaponInfoHandle() )
+	// When nItemDefIndex is 0 (offline / no-econ mode) the schema returns the
+	// "default" knife entry whose single_shot is Weapon_DEagle.Single, making
+	// every weapon sound like a deagle.  Use the CS weapon ID to look up the
+	// correct weapon info directly from the weapon database instead.
+	CCSWeaponInfo *pWeaponInfo = NULL;
+	if ( nItemDefIndex == 0 )
 	{
-		DevMsg("FX_FireBullets: LookupWeaponInfoSlot failed for weapon %s\n", pItemDef->GetItemBaseName() );
-		return;
+		pWeaponInfo = const_cast<CCSWeaponInfo*>( GetWeaponInfo( iWeaponID ) );
 	}
-
-	CCSWeaponInfo *pWeaponInfo = static_cast< CCSWeaponInfo* >( GetFileWeaponInfoFromHandle( hWpnInfo ) );
+	else
+	{
+		WEAPON_FILE_INFO_HANDLE hWpnInfo = LookupWeaponInfoSlot( pItemDef->GetItemClass() );
+		if ( hWpnInfo != GetInvalidWeaponInfoHandle() )
+			pWeaponInfo = static_cast< CCSWeaponInfo* >( GetFileWeaponInfoFromHandle( hWpnInfo ) );
+	}
 	if ( !pWeaponInfo )
 	{
-		DevMsg( "FX_FireBullets: GetFileWeaponInfoFromHandle failed for weapon %s\n", pItemDef->GetItemBaseName() );
+		DevMsg( "FX_FireBullets: weapon info lookup failed for defindex %d / weaponID %d\n", nItemDefIndex, (int)iWeaponID );
 		return;
 	}
 

@@ -740,6 +740,22 @@ void CTouchControls::Frame()
 #endif
 }
 
+#if defined( IOS )
+static ConVar touch_show_in_menus( "touch_show_in_menus", "0", FCVAR_ARCHIVE, "Show all touch buttons in menus too (otherwise only the console button)" );
+
+// While a menu has the input only the console button is shown and pressable;
+// the rest of the controls are for playing.
+static bool TouchButtonAvailable( const CTouchButton *btn )
+{
+	extern bool IOS_IsMenuActive();
+	if ( touch_show_in_menus.GetBool() || !IOS_IsMenuActive() )
+		return true;
+	return !Q_strcmp( btn->command, "toggleconsole" );
+}
+#else
+static bool TouchButtonAvailable( const CTouchButton *btn ) { return true; }
+#endif
+
 void CTouchControls::Paint()
 {
 	if (!initialized)
@@ -789,7 +805,7 @@ void CTouchControls::Paint()
 	{
 		CTouchButton *btn = *it;
 
-		if( btn->texture != NULL && !(btn->flags & TOUCH_FL_HIDE) )
+		if( btn->texture != NULL && !(btn->flags & TOUCH_FL_HIDE) && ( state == state_edit || TouchButtonAvailable( btn ) ) )
 		{
 			CTouchTexture *t = btn->texture;
 
@@ -841,7 +857,7 @@ void CTouchControls::Paint()
 	{
 		CTouchButton *btn = *it;
 
-		if( btn->texture != NULL && !(btn->flags & TOUCH_FL_HIDE) && !btn->texture->textureID )
+		if( btn->texture != NULL && !(btn->flags & TOUCH_FL_HIDE) && !btn->texture->textureID && ( state == state_edit || TouchButtonAvailable( btn ) ) )
 		{
 			CTouchTexture *t = btn->texture;
 
@@ -1146,6 +1162,8 @@ void CTouchControls::FingerPress(touch_event_t *ev)
 			if(  x > btn->x1 && x < btn->x2 && y > btn->y1 && y < btn->y2 )
 			{
 				if( btn->flags & TOUCH_FL_HIDE )
+					continue;
+				if( !TouchButtonAvailable( btn ) )
 					continue;
 
 				btn->finger = ev->fingerid;

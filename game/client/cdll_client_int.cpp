@@ -1940,16 +1940,22 @@ static void IOS_DiscardMouseMovement( bool bMenu )
 }
 
 // returns true while a menu has the input
+// Is a menu taking the input (main menu, team select, pause menu, buy menu,
+// scoreboard, dialogs)? Used for the finger-as-mouse switch and to hide the
+// touch controls.
+bool IOS_IsMenuActive()
+{
+	extern bool IOS_IsBuyMenuVisible();
+	return !engine->IsInGame() ||
+		( g_pScaleformUI && ( g_pScaleformUI->ConsumesInputEvents() || g_pScaleformUI->IsCursorVisible() ) ) ||
+		IOS_IsBuyMenuVisible();
+}
+
 static bool IOS_UpdateTouchMouse( void )
 {
 	static ConVarRef touch_mouse_events( "touch_mouse_events" );
 
-	// any Scaleform menu that takes input: main menu, team select (HUD slot),
-	// pause menu, dialogs
-	extern bool IOS_IsBuyMenuVisible();
-	bool bMenu = !engine->IsInGame() ||
-		( g_pScaleformUI && ( g_pScaleformUI->ConsumesInputEvents() || g_pScaleformUI->IsCursorVisible() ) ) ||
-		IOS_IsBuyMenuVisible();
+	bool bMenu = IOS_IsMenuActive();
 	if ( !touch_mouse_events.IsValid() )
 		return bMenu;
 	if ( bMenu != touch_mouse_events.GetBool() )
@@ -4953,10 +4959,8 @@ void CHLClient::IN_TouchEvent( int type, int fingerId, int x, int y )
 	s_flLastX[fingerId] = ev.x;
 	s_flLastY[fingerId] = ev.y;
 
-	// while a menu is open in a match the finger is the mouse; don't also press
-	// touch buttons (finger-up still goes through so nothing stays held)
-	if ( bMenu && engine->IsInGame() && type != IE_FingerUp )
-		return;
+	// in menus the touch controls hide themselves (all but the console button)
+	NOTE_UNUSED( bMenu );
 
 	gTouch.ProcessEvent( &ev );
 }

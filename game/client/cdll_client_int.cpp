@@ -1931,8 +1931,10 @@ static bool IOS_UpdateTouchMouse( void )
 
 	// any Scaleform menu that takes input: main menu, team select (HUD slot),
 	// pause menu, dialogs
+	extern bool IOS_IsBuyMenuVisible();
 	bool bMenu = !engine->IsInGame() ||
-		( g_pScaleformUI && ( g_pScaleformUI->ConsumesInputEvents() || g_pScaleformUI->IsCursorVisible() ) );
+		( g_pScaleformUI && ( g_pScaleformUI->ConsumesInputEvents() || g_pScaleformUI->IsCursorVisible() ) ) ||
+		IOS_IsBuyMenuVisible();
 	if ( !touch_mouse_events.IsValid() )
 		return bMenu;
 	if ( bMenu != touch_mouse_events.GetBool() )

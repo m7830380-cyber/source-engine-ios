@@ -40,6 +40,9 @@
 #include "text_message.h"
 
 #include "teammenu_scaleform.h"
+#if defined( IOS )
+#include "ios_buymenu.h"
+#endif
 #include "chooseclass_scaleform.h"
 #include "Scaleform/HUD/sfhudinfopanel.h"
 #include "Scaleform/HUD/sfhudwinpanel.h"
@@ -281,6 +284,13 @@ IViewPortPanel* CounterStrikeViewport::CreatePanelByName( const char *szPanelNam
  		newpanel = new CCSTeamMenuScaleform( this );
  	}
 
+#if defined( IOS )
+	// CS:GO's Scaleform buy menu is not in this source; use the touch buy menu
+	else if ( Q_strcmp( PANEL_BUY, szPanelName ) == 0 )
+	{
+		newpanel = IOS_CreateBuyMenu( this );
+	}
+#endif
 	else
 	{
 		// create a generic base panel, don't add twice

@@ -1,3 +1,7 @@
+#if defined( IOS )
+#include "tier1/convar.h"
+extern ConVar ios_srgb_flip;
+#endif
 // BE VERY VERY CAREFUL what you do in these function. They are extremely hot, and calling the wrong GL API's in here will crush perf. (especially on NVidia threaded drivers).
 
 #include "togl/glmgr.h"
@@ -308,28 +312,23 @@ FORCEINLINE void GLMContext::FlushDrawStates( uint nStartIndex, uint nEndIndex, 
 				pTex->m_SamplingParams = m_samplers[nSamplerIndex].m_samp;
 
 #if defined( IOS )
-				// diagnostic only: without GL_EXT_texture_sRGB_decode a sampler's sRGB
-				// request is ignored here; log each texture sampled with a mode it isn't in
-				if ( !gGL->m_bHave_GL_EXT_texture_sRGB_decode )
+				// No GL_EXT_texture_sRGB_decode here, so a sampler's sRGB read request is only
+				// honoured by re-uploading the texture in the requested format (togl's path for
+				// such GPUs, using the host copy kept because of m_bTexClientStorage).
+				if ( !gGL->m_bHave_GL_EXT_texture_sRGB_decode && ios_srgb_flip.GetBool() )
 				{
 					bool texSRGB = ( pTex->m_layout->m_key.m_texFlags & kGLMTexSRGB ) != 0;
 					bool glSampSRGB = m_samplers[nSamplerIndex].m_samp.m_packed.m_srgb;
 					if ( texSRGB != glSampSRGB )
 					{
-						static const void *s_logged[128];
-						static int s_nLogged = 0;
-						const void *key = (const char *)pTex + ( glSampSRGB ? 1 : 0 );
-						bool bSeen = false;
-						for ( int i = 0; i < s_nLogged; i++ )
-							bSeen |= ( s_logged[i] == key );
-						if ( !bSeen && s_nLogged < 128 )
+						static int s_nLoggedFlips = 0;
+						if ( s_nLoggedFlips < 20 )
 						{
-							s_logged[s_nLogged++] = key;
-							printf( "[srgb] sampler wants srgb %d, tex '%s' %s is srgb %d (renderable %d) - ignored\n",
-								(int)glSampSRGB, pTex->m_debugLabel ? pTex->m_debugLabel : "-", pTex->m_layout->m_layoutSummary,
-								(int)texSRGB, ( pTex->m_layout->m_key.m_texFlags & kGLMTexRenderable ) ? 1 : 0 );
+							++s_nLoggedFlips;
+							printf( "[srgb] re-upload '%s' as srgb %d\n", pTex->m_debugLabel ? pTex->m_debugLabel : "-", (int)glSampSRGB );
 							fflush( stdout );
 						}
+						pTex->HandleSRGBMismatch( glSampSRGB, pTex->m_srgbFlipCount );
 					}
 				}
 #endif

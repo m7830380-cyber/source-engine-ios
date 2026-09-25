@@ -410,6 +410,13 @@ static int AddCharDiagButtons( rgba_t color, bool bOnlyMissing )
 		gTouch.AddButton( szName, "vgui/touch/settings", szCmd, x1, 0.86f, x1 + 0.06f, 0.99f, color );
 		++nAdded;
 	}
+	// 8: honour sRGB texture reads (re-upload textures as sRGB like togl does on Macs)
+	if ( !bOnlyMissing || !gTouch.FindButton( "chardiag8" ) )
+	{
+		float x1 = 0.30f + ARRAYSIZE( s_Features ) * 0.068f;
+		gTouch.AddButton( "chardiag8", "vgui/touch/settings", "toggle ios_srgb_flip", x1, 0.86f, x1 + 0.06f, 0.99f, color );
+		++nAdded;
+	}
 	return nAdded;
 }
 

@@ -1976,6 +1976,11 @@ void CHLClient::HudUpdate( bool bActive )
 {
 	float frametime = gpGlobals->frametime;
 
+#if defined( INCLUDE_SCALEFORM ) && defined( CSTRIKE15 )
+	extern void ScaleformComponentGameTypes_EnsureInstalled();
+	ScaleformComponentGameTypes_EnsureInstalled();
+#endif
+
 #if defined( IOS )
 	IOS_AutoJoinTeam();
 	IOS_DiscardMouseMovement( IOS_UpdateTouchMouse() );

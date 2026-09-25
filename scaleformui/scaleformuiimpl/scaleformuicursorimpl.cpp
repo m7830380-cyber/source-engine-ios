@@ -147,6 +147,11 @@ void ScaleformUIImpl::ControllerMoved( void )
 
 void ScaleformUIImpl::UpdateCursorLazyHide( float time )
 {
+#if defined( IOS )
+	// no hover on touch: never hide the cursor for inactivity while a menu wants it
+	if ( m_iWantCursorShown )
+		return;
+#endif
 	UpdateCursorWaitTime( m_fCursorTimeUntilHide - time );
 }
 
@@ -207,6 +212,13 @@ void ScaleformUIImpl::ShowCursor( void )
 	
 	ConVarRef cl_mouseenable( "cl_mouseenable" );
 	cl_mouseenable.SetValue( false );
+
+#if defined( IOS )
+	// The inactivity timeout may have hidden the cursor during play, which puts SDL in
+	// relative mouse mode; touches then never register as cursor movement, so a menu
+	// opened later would never get its cursor back. Always show it on request.
+	m_fCursorTimeUntilHide = sfcursortimeout.GetFloat();
+#endif
 
 	if ( m_iWantCursorShown && m_fCursorTimeUntilHide > 0 )
 	{

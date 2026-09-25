@@ -392,6 +392,21 @@ ConVar ironsight_laser_dot_render_tweak1("ironsight_laser_dot_render_tweak1", "6
 ConVar ironsight_laser_dot_render_tweak2("ironsight_laser_dot_render_tweak2", "64", FCVAR_DEVELOPMENTONLY | FCVAR_CHEAT);
 #endif
 
+#if defined( IOS )
+// Diagnostic for the white tint: read back one pixel of the current render target.
+static bool s_bScopeProbeThisFrame = false;
+static void ScopeProbe( const char *pszWhat, int px, int py )
+{
+	if ( !s_bScopeProbeThisFrame )
+		return;
+	CMatRenderContextPtr pRenderContext( materials );
+	unsigned char rgba[4] = { 0, 0, 0, 0 };
+	pRenderContext->ReadPixels( px, py, 1, 1, rgba, IMAGE_FORMAT_RGBA8888 );
+	printf( "[scope] %-28s at %4d,%4d = %3d %3d %3d a %3d\n", pszWhat, px, py, rgba[0], rgba[1], rgba[2], rgba[3] );
+	fflush( stdout );
+}
+#endif
+
 bool CIronSightController::PrepareScopeEffect( int x, int y, int w, int h, CViewSetup *pViewSetup )
 {
 #ifdef DEBUG
@@ -401,6 +416,19 @@ bool CIronSightController::PrepareScopeEffect( int x, int y, int w, int h, CView
 
 	if (!IsInIronSight())
 		return false;
+
+#if defined( IOS )
+	{
+		static double s_flNextProbe = 0.0;
+		s_bScopeProbeThisFrame = Plat_FloatTime() >= s_flNextProbe;
+		if ( s_bScopeProbeThisFrame )
+		{
+			s_flNextProbe = Plat_FloatTime() + 1.0;
+			printf( "[scope] ---- probe: ironsight amount %.2f, view %dx%d at %d,%d\n", GetIronSightAmount(), w, h, x, y );
+		}
+		ScopeProbe( "scene before effect", x + w / 8, y + h / 2 );
+	}
+#endif
 
 	Rect_t actualRect;
 	UpdateScreenEffectTexture(0, x, y, w, h, false, &actualRect);
@@ -420,6 +448,9 @@ bool CIronSightController::PrepareScopeEffect( int x, int y, int w, int h, CView
 	pRenderContext->DrawScreenSpaceRectangle(pMatDownsample, 0, 0, nSrcWidth / 4, nSrcHeight / 4,
 		0, 0, nSrcWidth - 4, nSrcHeight - 4,
 		pRtFullFrame->GetActualWidth(), pRtFullFrame->GetActualHeight());
+#if defined( IOS )
+	ScopeProbe( "_rt_SmallFB0 after downsample", nSrcWidth / 32, nSrcHeight / 8 );
+#endif
 
 	//horizontally blur pRtQuarterSize0 over to pRtQuarterSize1
 	IMaterial *pMatBlurX = materials->FindMaterial("dev/scope_blur_x", TEXTURE_GROUP_OTHER, true);
@@ -437,6 +468,11 @@ bool CIronSightController::PrepareScopeEffect( int x, int y, int w, int h, CView
 	pRenderContext->DrawScreenSpaceRectangle(pMatBlurY, 0, 0, nSrcWidth / 4, nSrcHeight / 4,
 		0, 0, nSrcWidth / 4 - 1, nSrcHeight / 4 - 1,
 		pRtQuarterSize0->GetActualWidth(), pRtQuarterSize0->GetActualHeight());
+#if defined( IOS )
+	ScopeProbe( "_rt_SmallFB0 after blur", nSrcWidth / 32, nSrcHeight / 8 );
+	if ( s_bScopeProbeThisFrame )
+		printf( "[scope] _rt_SmallFB0 is %dx%d, blur area %dx%d\n", pRtQuarterSize0->GetActualWidth(), pRtQuarterSize0->GetActualHeight(), nSrcWidth / 4, nSrcHeight / 4 );
+#endif
 
 	pRenderContext->PopRenderTargetAndViewport();
 
@@ -490,7 +526,15 @@ void CIronSightController::RenderScopeEffect( int x, int y, int w, int h, CViewS
 	{
 		pAlphaVar->SetFloatValue(Bias( GetIronSightAmount(), 0.2f));
 	}
+#if defined( IOS )
+	ScopeProbe( "screen before overlay", x + w / 8, y + h / 2 );
+	if ( s_bScopeProbeThisFrame )
+		printf( "[scope] overlay $alpha %.2f\n", pAlphaVar ? pAlphaVar->GetFloatValue() : -1.0f );
+#endif
 	pRenderContext->DrawScreenSpaceQuad(pBlurOverlayMaterial);
+#if defined( IOS )
+	ScopeProbe( "screen after overlay", x + w / 8, y + h / 2 );
+#endif
 
 
 	// now draw the laser dot, masked to ONLY render on the lens

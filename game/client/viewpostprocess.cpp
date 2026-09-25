@@ -2454,6 +2454,22 @@ bool ApplyIronSightScopeEffect( int x, int y, int w, int h, CViewSetup *pViewSet
 	C_BasePlayer *pPlayer = C_BasePlayer::GetLocalPlayer();
 	if (pPlayer)
 	{
+		// Dead or spectating (killcam): no viewmodel draws the lens into the stencil,
+		// so the overlay's NOTEQUAL stencil test would cover the whole screen.
+		if ( !pPlayer->IsAlive() || pPlayer->GetObserverMode() != OBS_MODE_NONE )
+		{
+#if defined( IOS )
+			static double s_flNextLog = 0.0;
+			if ( bPreparationStage && Plat_FloatTime() >= s_flNextLog )
+			{
+				s_flNextLog = Plat_FloatTime() + 2.0;
+				printf( "[scope] skipped: local player alive %d, observer mode %d\n", pPlayer->IsAlive() ? 1 : 0, pPlayer->GetObserverMode() );
+				fflush( stdout );
+			}
+#endif
+			return false;
+		}
+
 		C_WeaponCSBase *pWeapon = (C_WeaponCSBase *)pPlayer->GetActiveWeapon();
 		if (pWeapon)
 		{

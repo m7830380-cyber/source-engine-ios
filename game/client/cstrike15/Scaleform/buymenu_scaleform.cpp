@@ -505,7 +505,7 @@ void CCSBuyMenuScaleform::InitWeapon( SCALEFORM_CALLBACK_ARGS_DECL )
 					}
 					else
 					{
-						pItem = pInv->GetItemInLoadoutForTeam( team, loadoutSlot, false );
+						pItem = pInv->GetItemInLoadoutForTeam( team, loadoutSlot );
 					}
 				}
 			}
@@ -822,7 +822,7 @@ void CCSBuyMenuScaleform::GetWeaponShortNameFromPosition( SCALEFORM_CALLBACK_ARG
 		}
 		else
 		{
-			pItem = CSInventoryManager()->GetItemInLoadoutForTeam( iTeam, iLoadoutPosition, false );
+			pItem = CSInventoryManager()->GetItemInLoadoutForTeam( iTeam, iLoadoutPosition );
 		}
 	}
 

@@ -17,6 +17,17 @@
 
 //#define CHARACTER_LIMIT_LIGHTS_WITH_PHONGWARP 1
 
+#if defined( IOS )
+// Diagnostics for the white tint on agent models: turn one feature off, then
+// mat_reloadallmaterials, and see whether the tint goes away.
+static ConVar ios_char_envmap( "ios_char_envmap", "1", 0, "character shader: envmap reflection" );
+static ConVar ios_char_fakerim( "ios_char_fakerim", "1", 0, "character shader: fake rim light" );
+static ConVar ios_char_ambientreflection( "ios_char_ambientreflection", "1", 0, "character shader: ambient reflection" );
+static ConVar ios_char_masks1( "ios_char_masks1", "1", 0, "character shader: masks1 (rim/phong/metalness masks)" );
+static ConVar ios_char_masks2( "ios_char_masks2", "1", 0, "character shader: masks2" );
+static ConVar ios_char_phongwarp( "ios_char_phongwarp", "1", 0, "character shader: phong warp texture" );
+#endif
+
 BEGIN_VS_SHADER( Character, "Help for Character Shader" )
 	BEGIN_SHADER_PARAMS
 
@@ -641,6 +652,22 @@ BEGIN_VS_SHADER( Character, "Help for Character Shader" )
 		// Can't have both.
 			 bBaseAlphaEnvMask = bBaseAlphaEnvMask && !bBumpAlphaEnvMask;
 		bool bHasFakeRim = params[FAKERIMBOOST]->IsDefined() && ( params[FAKERIMBOOST]->GetFloatValue() > 0 );
+
+#if defined( IOS )
+		bHasFakeRim = bHasFakeRim && ios_char_fakerim.GetBool();
+		bHasPhongWarpTexture = bHasPhongWarpTexture && ios_char_phongwarp.GetBool();
+		bHasAmbientReflection = bHasAmbientReflection && ios_char_ambientreflection.GetBool();
+		bHasBounceColor = bHasBounceColor && bHasAmbientReflection;
+		bHasMasks1 = bHasMasks1 && ios_char_masks1.GetBool();
+		bHasMasks2 = bHasMasks2 && ios_char_masks2.GetBool();
+		if ( !ios_char_envmap.GetBool() )
+		{
+			bHasEnvmap = false;
+			bBaseAlphaEnvMask = false;
+			bBumpAlphaEnvMask = false;
+			bHasMasks2 = false;
+		}
+#endif
 
 		bool bPreview = params[PREVIEW]->IsDefined() && ( params[PREVIEW]->GetIntValue() > 0 );
 		bool bPattern = bPreview && IsTextureSet( PATTERN, params );

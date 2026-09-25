@@ -49,6 +49,7 @@ static float CEG_MIN_LOADING_RANGE = -1.f;
 static float CEG_MAX_LOADING_RANGE = -1.f;
 
 CLoadingScreenScaleform::CLoadingScreenScaleform() :	
+	m_bCloseWhenReady( false ),
 	m_serverInfoReady( false ),
 	m_pPendingKeyValues( NULL ),
 	m_flLoadStartTime( -1.0f ),
@@ -92,6 +93,16 @@ void CLoadingScreenScaleform::FlashReady( void )
 	CEG_MIN_LOADING_RANGE = RandomFloat( 0.3f, 0.7f );
 	CEG_MAX_LOADING_RANGE = fclamp( CEG_MIN_LOADING_RANGE + RandomFloat( 0.1f, 0.3f ), 0.5f, 0.9f );
 
+
+
+	if ( m_bCloseWhenReady )
+	{
+		m_bCloseWhenReady = false;
+		printf( "[loadingscreen] closing the loading screen that was closed while loading\n" );
+		fflush( stdout );
+		UnloadDialog();
+		return;
+	}
 
 	Show();
 }
@@ -1186,6 +1197,16 @@ void CLoadingScreenScaleform::CloseScreenUpdateScaleform( void )
 		{
 			g_pScaleformUI->Value_InvokeWithoutReturn( m_FlashAPI, "StartHide", NULL, 0 );
 		}
+	}
+	else
+	{
+		// The movie is still loading (e.g. the startup sound cache rebuild opens
+		// and closes the loading screen within moments); StartHide and
+		// RemoveFlashElement would both be dropped and the screen would then
+		// stay over the main menu. Close it as soon as it is ready.
+		m_bCloseWhenReady = true;
+		printf( "[loadingscreen] close requested before the movie was ready; deferring\n" );
+		fflush( stdout );
 	}
 }
 

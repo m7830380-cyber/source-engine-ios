@@ -23,10 +23,6 @@ extern "C" void IOS_ConfigureMetalLayer( void *layerPtr )
 	// BGRA8Unorm_sRGB here — that double-encodes and stays dark.
 	layer.pixelFormat = MTLPixelFormatBGRA8Unorm;
 	layer.framebufferOnly = YES;
-	// Prevent UIKit from alpha-compositing the game layer over its white background.
-	// Scene shaders do not guarantee alpha=1 (e.g. the IronSight downsample pass writes
-	// luminance into alpha), so any non-opaque layer would bleed white from behind.
-	layer.opaque = YES;
 
 	CGFloat scale = IOS_NativeScreenScale();
 	layer.contentsScale = scale;

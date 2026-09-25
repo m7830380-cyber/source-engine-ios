@@ -1,4 +1,4 @@
-//========= Copyright ï¿½ 1996-2005, Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Class to control 'aim-down-sights' aka "IronSight" weapon functionality
 //
@@ -490,15 +490,7 @@ void CIronSightController::RenderScopeEffect( int x, int y, int w, int h, CViewS
 	{
 		pAlphaVar->SetFloatValue(Bias( GetIronSightAmount(), 0.2f));
 	}
-
-	// The Downsample pass stores scene luminance in the alpha channel of _rt_SmallFB0.
-	// Rendering that alpha into the main framebuffer lets the Metal compositor
-	// bleed white from the CAMetalLayer background through semi-transparent pixels.
-	// Disable alpha writes so only RGB is composited and the framebuffer alpha (1.0
-	// from opaque scene geometry) is preserved.
-	pRenderContext->OverrideAlphaWriteEnable( true, false );
 	pRenderContext->DrawScreenSpaceQuad(pBlurOverlayMaterial);
-	pRenderContext->OverrideAlphaWriteEnable( false, false );
 
 
 	// now draw the laser dot, masked to ONLY render on the lens

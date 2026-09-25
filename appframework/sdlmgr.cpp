@@ -1747,20 +1747,6 @@ void CSDLMgr::ShowPixels( CShowPixelsParams *params )
 	CFastTimer tm;
 	tm.Start();
 
-#if defined( IOS )
-	// ANGLE's Metal presentation blit may alpha-composite the game frame against a
-	// white background, producing a white tint wherever the framebuffer alpha < 1.0
-	// (e.g. the IronSight downsample writes scene luminance into alpha).
-	// Force every pixel's alpha to 1.0 before the swap.
-	// glColorMask applies to glClear in GLES2, so this clears ONLY the alpha channel.
-	{
-		gGL->glColorMask( GL_FALSE, GL_FALSE, GL_FALSE, GL_TRUE );
-		gGL->glClearColor( 0.0f, 0.0f, 0.0f, 1.0f );
-		gGL->glClear( GL_COLOR_BUFFER_BIT );
-		gGL->glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
-	}
-#endif
-
 	SDL_GL_SwapWindow( m_Window );
 
 	m_flPrevGLSwapWindowTime = tm.GetDurationInProgress().GetMillisecondsF();

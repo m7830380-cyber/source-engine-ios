@@ -126,6 +126,8 @@ void CPauseMenuScreenScaleform::Show()
 	WITH_SLOT_LOCKED
 	{
 		ScaleformUI()->Value_InvokeWithoutReturn( m_FlashAPI, "showPanel", NULL, 0 );
+		// SWF may skip ShowCursor/AddInputConsumer on the second open; force the cursor visible from C++
+		ScaleformUI()->ShowCursor();
 	}
 }
 

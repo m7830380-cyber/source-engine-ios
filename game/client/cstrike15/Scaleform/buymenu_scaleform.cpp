@@ -277,6 +277,8 @@ void CCSBuyMenuScaleform::Show()
 #endif
 	{
 		g_pScaleformUI->Value_InvokeWithoutReturn( m_FlashAPI, "showPanel", 0, NULL );
+		// SWF may skip ShowCursor/AddInputConsumer on the second open; force the cursor visible from C++
+		g_pScaleformUI->ShowCursor();
 
 		m_iWheelSelection = -1;
 

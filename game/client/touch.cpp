@@ -377,7 +377,7 @@ static int AddMenuButtons( rgba_t color, bool bOnlyMissing )
 		{ "scores",   "vgui/touch/changeclass",  "+showscores",     0.090000, 0.000000, 0.170000, 0.142222 },
 		{ "teammenu", "vgui/touch/changeteam",   "teammenu",        0.180000, 0.000000, 0.260000, 0.142222 },
 		{ "chat",     "vgui/touch/chat",         "messagemode",     0.270000, 0.000000, 0.350000, 0.142222 },
-		{ "buymenu",  "vgui/touch/show_weapons", "buymenu",         0.790000, 0.000000, 0.870000, 0.142222 },
+		{ "buymenu",  "vgui/touch/show_weapons", "ios_buymenu_toggle", 0.790000, 0.000000, 0.870000, 0.142222 },
 		{ "pause",    "vgui/touch/menu",         "gameui_activate", 0.900000, 0.000000, 0.980000, 0.142222 },
 	};
 
@@ -487,7 +487,9 @@ void CTouchControls::Init()
 	// CS:GO's Scaleform weapon selection HUD and do nothing here.
 	for( int i = 0; i < btns.Count(); i++ )
 	{
-		if( !Q_strcmp( btns[i]->command, "invnext" ) )
+		if( !Q_strcmp( btns[i]->command, "buymenu" ) )
+			Q_strncpy( btns[i]->command, "ios_buymenu_toggle", sizeof( btns[i]->command ) );
+		else if( !Q_strcmp( btns[i]->command, "invnext" ) )
 			Q_strncpy( btns[i]->command, "ios_weapnext", sizeof( btns[i]->command ) );
 		else if( !Q_strcmp( btns[i]->command, "invprev" ) )
 			Q_strncpy( btns[i]->command, "ios_weapprev", sizeof( btns[i]->command ) );
@@ -750,7 +752,22 @@ static bool TouchButtonAvailable( const CTouchButton *btn )
 	extern bool IOS_IsMenuActive();
 	if ( touch_show_in_menus.GetBool() || !IOS_IsMenuActive() )
 		return true;
-	return !Q_strcmp( btn->command, "toggleconsole" );
+	if ( !Q_strcmp( btn->command, "toggleconsole" ) )
+		return true;
+	// the buy button stays while the buy menu is open, to close it again
+	extern bool IOS_IsBuyMenuVisible();
+	return !Q_strcmp( btn->command, "ios_buymenu_toggle" ) && IOS_IsBuyMenuVisible();
+}
+
+// Opens the buy menu, or closes it when it is actually open (the panel's own
+// state, not a press count, so a missed or doubled press can't desync it).
+CON_COMMAND( ios_buymenu_toggle, "Open the buy menu, or close it if it is open" )
+{
+	extern bool IOS_IsBuyMenuVisible();
+	bool bOpen = IOS_IsBuyMenuVisible();
+	engine->ClientCmd_Unrestricted( bOpen ? "buymenu 0" : "buymenu" );
+	if ( touch_debug.GetBool() )
+		printf( "[touch] buy menu toggle: %s\n", bOpen ? "close" : "open" );
 }
 #else
 static bool TouchButtonAvailable( const CTouchButton *btn ) { return true; }

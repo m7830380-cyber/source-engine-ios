@@ -19,7 +19,7 @@
 #include <vgui_controls/EditablePanel.h>
 #include <vgui_controls/Label.h>
 
-#include "iviewport.h"
+#include "game/client/iviewport.h"
 #include "viewport_panel_names.h"
 #include "c_cs_player.h"
 #include "cs_gamerules.h"

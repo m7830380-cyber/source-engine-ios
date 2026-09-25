@@ -1246,7 +1246,7 @@ void CCSBuyMenuScaleform::BuyWeapon( SCALEFORM_CALLBACK_ARGS_DECL )
 
 	const char *pszWeapon = "";
 
-	if ( m_pScaleformUI->Params_GetArgAsNumber( obj ) > 0 && m_pScaleformUI->Params_GetArgType( obj ) == IUIMarshalHelper::VT_String )
+	if ( m_pScaleformUI->Params_GetNumArgs( obj ) > 0 && m_pScaleformUI->Params_GetArgType( obj ) == IUIMarshalHelper::VT_String )
 	{
 		pszWeapon = m_pScaleformUI->Params_GetArgAsString( obj );
 	}
@@ -1295,7 +1295,7 @@ void CCSBuyMenuScaleform::CanAcquire( SCALEFORM_CALLBACK_ARGS_DECL )
 	// Optional weapon alias passed from Flash
 	const char *pszWeapon = "";
 
-	if ( m_pScaleformUI->Params_GetArgAsNumber( obj ) > 0 && m_pScaleformUI->Params_GetArgType( obj ) == IUIMarshalHelper::VT_String )
+	if ( m_pScaleformUI->Params_GetNumArgs( obj ) > 0 && m_pScaleformUI->Params_GetArgType( obj ) == IUIMarshalHelper::VT_String )
 	{
 		pszWeapon = m_pScaleformUI->Params_GetArgAsString( obj );
 	}

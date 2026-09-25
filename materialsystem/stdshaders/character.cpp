@@ -27,6 +27,8 @@ static ConVar ios_char_masks1( "ios_char_masks1", "1", 0, "character shader: mas
 static ConVar ios_char_masks2( "ios_char_masks2", "1", 0, "character shader: masks2" );
 static ConVar ios_char_phongwarp( "ios_char_phongwarp", "1", 0, "character shader: phong warp texture" );
 static ConVar ios_char_asvlg( "ios_char_asvlg", "0", 0, "render character materials with VertexLitGeneric instead" );
+static ConVar ios_char_phong( "ios_char_phong", "1", 0, "character shader: scale on $phongboost (specular highlights)" );
+static ConVar ios_char_rim( "ios_char_rim", "1", 0, "character shader: scale on $rimlightboost" );
 #endif
 
 BEGIN_VS_SHADER( Character, "Help for Character Shader" )
@@ -1046,6 +1048,9 @@ BEGIN_VS_SHADER( Character, "Help for Character Shader" )
 			SetPixelShaderConstant( 2, SHADOWSATURATIONBOUNDS );
 
 			vParams[0] = params[PHONGBOOST]->GetFloatValue();
+#if defined( IOS )
+			vParams[0] *= ios_char_phong.GetFloat();
+#endif
 			vParams[1] = params[PHONGALBEDOBOOST]->GetFloatValue();
 			vParams[2] = params[PHONGEXPONENT]->GetFloatValue();
 			vParams[3] = params[ANISOTROPYAMOUNT]->GetFloatValue();
@@ -1067,6 +1072,9 @@ BEGIN_VS_SHADER( Character, "Help for Character Shader" )
 			SetPixelShaderConstant( 104, ENVMAPTINT );
 
 			float fRimLightBoost = params[RIMLIGHTBOOST]->GetFloatValue();
+#if defined( IOS )
+			fRimLightBoost *= ios_char_rim.GetFloat();
+#endif
 			vParams[0] = params[RIMLIGHTEXPONENT]->GetFloatValue();
 			vParams[1] = fRimLightBoost;
 			vParams[2] = params[SELFILLUMBOOST]->GetFloatValue();

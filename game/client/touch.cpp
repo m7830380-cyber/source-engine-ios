@@ -397,7 +397,7 @@ static int AddMenuButtons( rgba_t color, bool bOnlyMissing )
 // 1-6 from left to right; each toggles one character shader feature.
 static int AddCharDiagButtons( rgba_t color, bool bOnlyMissing )
 {
-	static const char *s_Features[] = { "envmap", "fakerim", "ambientreflection", "masks1", "masks2", "phongwarp", "asvlg" };
+	static const char *s_Features[] = { "envmap", "fakerim", "ambientreflection", "masks1", "masks2", "phongwarp" };
 	int nAdded = 0;
 	for ( int i = 0; i < ARRAYSIZE( s_Features ); i++ )
 	{
@@ -410,11 +410,14 @@ static int AddCharDiagButtons( rgba_t color, bool bOnlyMissing )
 		gTouch.AddButton( szName, "vgui/touch/settings", szCmd, x1, 0.86f, x1 + 0.06f, 0.99f, color );
 		++nAdded;
 	}
-	// 8: honour sRGB texture reads (re-upload textures as sRGB like togl does on Macs)
-	if ( !bOnlyMissing || !gTouch.FindButton( "chardiag8" ) )
+	// 7: specular (phong) off/on, 8: rim light off/on; these apply instantly
+	static const char *s_Toggles[][2] = { { "chardiag7", "toggle ios_char_phong 1 0" }, { "chardiag8", "toggle ios_char_rim 1 0" } };
+	for ( int i = 0; i < ARRAYSIZE( s_Toggles ); i++ )
 	{
-		float x1 = 0.30f + ARRAYSIZE( s_Features ) * 0.068f;
-		gTouch.AddButton( "chardiag8", "vgui/touch/settings", "toggle ios_srgb_flip", x1, 0.86f, x1 + 0.06f, 0.99f, color );
+		if ( bOnlyMissing && gTouch.FindButton( s_Toggles[i][0] ) )
+			continue;
+		float x1 = 0.30f + ( ARRAYSIZE( s_Features ) + i ) * 0.068f;
+		gTouch.AddButton( s_Toggles[i][0], "vgui/touch/settings", s_Toggles[i][1], x1, 0.86f, x1 + 0.06f, 0.99f, color );
 		++nAdded;
 	}
 	return nAdded;
@@ -521,6 +524,11 @@ void CTouchControls::Init()
 			Q_strncpy( btns[i]->command, "ios_weapnext", sizeof( btns[i]->command ) );
 		else if( !Q_strcmp( btns[i]->command, "invprev" ) )
 			Q_strncpy( btns[i]->command, "ios_weapprev", sizeof( btns[i]->command ) );
+		// the diagnostic buttons 7 and 8 were repurposed
+		else if( !Q_strcmp( btns[i]->name, "chardiag7" ) )
+			Q_strncpy( btns[i]->command, "toggle ios_char_phong 1 0", sizeof( btns[i]->command ) );
+		else if( !Q_strcmp( btns[i]->name, "chardiag8" ) )
+			Q_strncpy( btns[i]->command, "toggle ios_char_rim 1 0", sizeof( btns[i]->command ) );
 	}
 
 	CTouchTexture *texture = new CTouchTexture;

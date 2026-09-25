@@ -1169,6 +1169,30 @@ void GLMContext::Blit2( CGLMTex *srcTex, GLMRect *srcRect, int srcFace, int srcM
 		filter = GL_NEAREST;
 	}
 	
+#if defined( IOS )
+	// Diagnostic for the whitish scope/freeze-cam copies: log one pixel before and
+	// after each distinct color blit into a texture, with both sides' sRGB flags.
+	static const void *s_blitLogged[32];
+	static int s_nBlitLogged = 0;
+	bool bLogBlit = false;
+	unsigned char srcPix[4] = { 0, 0, 0, 0 };
+	int logX = ( srcRect->xmin + srcRect->xmax ) / 2, logY = ( srcRect->ymin + srcRect->ymax ) / 2;
+	if ( formatClass == eColor && dstTex && s_nBlitLogged < 32 )
+	{
+		const void *key = (const char *)dstTex + ( (size_t)srcTex & 0xFFFF );
+		bLogBlit = true;
+		for ( int i = 0; i < s_nBlitLogged; i++ )
+			if ( s_blitLogged[i] == key )
+				bLogBlit = false;
+		if ( bLogBlit )
+		{
+			s_blitLogged[s_nBlitLogged++] = key;
+			if ( !blitResolves || blitTwoStep )	// can't read a multisampled buffer
+				gGL->glReadPixels( logX, logY, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, srcPix );
+		}
+	}
+#endif
+
 	// this is blit #1 or #2 depending on what took place above.
 	if (yflip)
 	{
@@ -1182,6 +1206,23 @@ void GLMContext::Blit2( CGLMTex *srcTex, GLMRect *srcRect, int srcFace, int srcM
 								dstRect->xmin, dstRect->ymin, dstRect->xmax, dstRect->ymax,
 								blitMask, filter );
 	}
+
+#if defined( IOS )
+	if ( bLogBlit )
+	{
+		unsigned char dstPix[4] = { 0, 0, 0, 0 };
+		int dx = dstRect->xmin + ( ( logX - srcRect->xmin ) * ( dstRect->xmax - dstRect->xmin ) ) / MAX( 1, srcRect->xmax - srcRect->xmin );
+		int dy = dstRect->ymin + ( ( logY - srcRect->ymin ) * ( dstRect->ymax - dstRect->ymin ) ) / MAX( 1, srcRect->ymax - srcRect->ymin );
+		BindFBOToCtx( dstTex->m_pBlitDstFBO, GL_READ_FRAMEBUFFER );
+		gGL->glReadPixels( dx, dy, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, dstPix );
+		printf( "[blit] '%s' (srgb %d) -> '%s' (srgb %d) %dx%d->%dx%d: src %d %d %d -> dst %d %d %d\n",
+			srcTex->m_debugLabel ? srcTex->m_debugLabel : "-", srcGamma ? 1 : 0,
+			dstTex->m_debugLabel ? dstTex->m_debugLabel : "-", dstGamma ? 1 : 0,
+			srcRect->xmax - srcRect->xmin, srcRect->ymax - srcRect->ymin, dstRect->xmax - dstRect->xmin, dstRect->ymax - dstRect->ymin,
+			srcPix[0], srcPix[1], srcPix[2], dstPix[0], dstPix[1], dstPix[2] );
+		fflush( stdout );
+	}
+#endif
 
 	//----------------------------------------------------------------- scrub READ and maybe DRAW FBO, and unbind
 

@@ -393,6 +393,26 @@ static int AddMenuButtons( rgba_t color, bool bOnlyMissing )
 	return nAdded;
 }
 
+// Temporary row of six diagnostic buttons along the bottom middle, numbered
+// 1-6 from left to right; each toggles one character shader feature.
+static int AddCharDiagButtons( rgba_t color, bool bOnlyMissing )
+{
+	static const char *s_Features[] = { "envmap", "fakerim", "ambientreflection", "masks1", "masks2", "phongwarp" };
+	int nAdded = 0;
+	for ( int i = 0; i < ARRAYSIZE( s_Features ); i++ )
+	{
+		char szName[32], szCmd[64];
+		Q_snprintf( szName, sizeof( szName ), "chardiag%d", i + 1 );
+		if ( bOnlyMissing && gTouch.FindButton( szName ) )
+			continue;
+		Q_snprintf( szCmd, sizeof( szCmd ), "ios_char_toggle %s", s_Features[i] );
+		float x1 = 0.30f + i * 0.068f;
+		gTouch.AddButton( szName, "vgui/touch/settings", szCmd, x1, 0.86f, x1 + 0.06f, 0.99f, color );
+		++nAdded;
+	}
+	return nAdded;
+}
+
 static void AddDefaultButtons( rgba_t color )
 {
 	gTouch.AddButton( "look", "", "_look", 0.5, 0, 1, 1, color, 0, 0, 0 );
@@ -411,6 +431,7 @@ static void AddDefaultButtons( rgba_t color )
 	gTouch.AddButton( "console", "vgui/touch/showconsole", "toggleconsole", 0.000000, 0.000000, 0.080000, 0.142222, color );
 	gTouch.AddButton( "edit", "vgui/touch/settings", "touch_enableedit", 0.420000, 0.000000, 0.500000, 0.151486, color );
 	AddMenuButtons( color, false );
+	AddCharDiagButtons( color, false );
 }
 
 void CTouchControls::ResetToDefaults()
@@ -480,7 +501,7 @@ void CTouchControls::Init()
 		ResetToDefaults();
 
 	// Layouts saved before the menus worked have no menu buttons; add them
-	if ( AddMenuButtons( color, true ) > 0 )
+	if ( AddMenuButtons( color, true ) + AddCharDiagButtons( color, true ) > 0 )
 		WriteConfig();
 
 	// Configs saved by earlier builds use invnext/invprev, which go through
@@ -761,6 +782,26 @@ static bool TouchButtonAvailable( const CTouchButton *btn )
 
 // Opens the buy menu, or closes it when it is actually open (the panel's own
 // state, not a press count, so a missed or doubled press can't desync it).
+// Diagnostic for the white tint on agent models: toggle one "character" shader
+// feature (ios_char_<name>) and reload the agent materials so it takes effect.
+CON_COMMAND( ios_char_toggle, "Toggle a character shader feature: envmap fakerim ambientreflection masks1 masks2 phongwarp" )
+{
+	if ( args.ArgC() < 2 )
+		return;
+	char szVar[64];
+	Q_snprintf( szVar, sizeof( szVar ), "ios_char_%s", args[1] );
+	ConVarRef var( szVar );
+	if ( !var.IsValid() )
+	{
+		printf( "[chardiag] unknown %s\n", szVar );
+		return;
+	}
+	var.SetValue( var.GetBool() ? 0 : 1 );
+	g_pMaterialSystem->ReloadMaterials( "models/player/custom_player" );
+	printf( "[chardiag] %s = %d (agent materials reloaded)\n", szVar, var.GetInt() );
+	fflush( stdout );
+}
+
 CON_COMMAND( ios_buymenu_toggle, "Open the buy menu, or close it if it is open" )
 {
 	extern bool IOS_IsBuyMenuVisible();

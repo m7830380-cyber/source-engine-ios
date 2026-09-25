@@ -65,6 +65,11 @@ void CPauseMenuScreenScaleform::UnloadDialog()
 {
 	if ( m_pInstance )
 	{
+		// hidePanel runs the movie's onHide, which pops its navigation layout
+		// (the one that shows the cursor and blocks game input); unloading
+		// without it left the cursor unlocked after Resume
+		if ( m_pInstance->m_bReady && m_pInstance->m_bVisible )
+			m_pInstance->Hide();
 		m_pInstance->m_bVisible = false;
 		m_pInstance->RemoveFlashElement();
 	}

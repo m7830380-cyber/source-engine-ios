@@ -61,7 +61,6 @@
 #include "vstdlib/jobthread.h"
 #include "gamerules_register.h"
 #include "game/client/iviewport.h"
-#include "input.h"
 #include "vgui_controls/AnimationController.h"
 #include "bitmap/tgawriter.h"
 #include "c_world.h"
@@ -1936,10 +1935,8 @@ static void IOS_DiscardMouseMovement( bool bMenu )
 	// only once the menu is gone: in a menu the cursor must follow the finger
 	if ( bMenu || Plat_FloatTime() >= g_flIOSDiscardMouseUntil || !::input )
 		return;
+	// recentre; CInput::MouseMove drops the accumulated movement meanwhile
 	::input->ResetMouse();
-	float mx, my;
-	for ( int nSlot = 0; nSlot < MAX_SPLITSCREEN_PLAYERS; nSlot++ )
-		static_cast< CInput * >( ::input )->GetAccumulatedMouseDeltasAndResetAccumulators( nSlot, &mx, &my );
 }
 
 // returns true while a menu has the input

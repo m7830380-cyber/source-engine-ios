@@ -61,6 +61,7 @@
 #include "vstdlib/jobthread.h"
 #include "gamerules_register.h"
 #include "game/client/iviewport.h"
+#include "input.h"
 #include "vgui_controls/AnimationController.h"
 #include "bitmap/tgawriter.h"
 #include "c_world.h"
@@ -1924,6 +1925,23 @@ static void IOS_AutoJoinTeam( void )
 // Scaleform menus are driven by the mouse: let a finger act as the mouse while
 // no match is running or while a full-screen menu takes input (pause menu,
 // dialogs, team select). In matches the fingers stay on the touch controls.
+// While a menu is open the finger moves the mouse cursor (e.g. onto Resume);
+// when the game takes the mouse back that offset from the window centre, and
+// touch-mouse events still in flight, would turn into one big mouse-look jump.
+// Recentre and drop accumulated mouse movement for a moment after menus close.
+double g_flIOSDiscardMouseUntil = 0.0;	// also checked in CInput::MouseMove
+
+static void IOS_DiscardMouseMovement( bool bMenu )
+{
+	// only once the menu is gone: in a menu the cursor must follow the finger
+	if ( bMenu || Plat_FloatTime() >= g_flIOSDiscardMouseUntil || !::input )
+		return;
+	::input->ResetMouse();
+	float mx, my;
+	for ( int nSlot = 0; nSlot < MAX_SPLITSCREEN_PLAYERS; nSlot++ )
+		static_cast< CInput * >( ::input )->GetAccumulatedMouseDeltasAndResetAccumulators( nSlot, &mx, &my );
+}
+
 // returns true while a menu has the input
 static bool IOS_UpdateTouchMouse( void )
 {
@@ -1943,6 +1961,10 @@ static bool IOS_UpdateTouchMouse( void )
 		printf( "[touch] fingers as mouse: %s\n", bMenu ? "on (menu)" : "off (game)" );
 		fflush( stdout );
 	}
+	// keep the discard window open while a menu is up, so it covers the first
+	// frames after it closes whatever order this runs in relative to CreateMove
+	if ( bMenu )
+		g_flIOSDiscardMouseUntil = Plat_FloatTime() + 0.25;
 	return bMenu;
 }
 #endif
@@ -1953,7 +1975,7 @@ void CHLClient::HudUpdate( bool bActive )
 
 #if defined( IOS )
 	IOS_AutoJoinTeam();
-	IOS_UpdateTouchMouse();
+	IOS_DiscardMouseMovement( IOS_UpdateTouchMouse() );
 #endif
 
 	GetClientVoiceMgr()->Frame( frametime );

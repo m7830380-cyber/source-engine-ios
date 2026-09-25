@@ -719,6 +719,12 @@ void CInput::MouseMove( int nSlot, CUserCmd *cmd )
 
 		// Latch accumulated mouse movements and reset accumulators
 		GetAccumulatedMouseDeltasAndResetAccumulators( nSlot, &mx, &my );
+#if defined( IOS )
+		// just out of a menu: the cursor's offset is not a look movement
+		extern double g_flIOSDiscardMouseUntil;
+		if ( Plat_FloatTime() < g_flIOSDiscardMouseUntil )
+			mx = my = 0.0f;
+#endif
 
 		// Filter, etc. the delta values and place into mouse_x and mouse_y
 		GetMouseDelta( nSlot, mx, my, &mouse_x, &mouse_y );

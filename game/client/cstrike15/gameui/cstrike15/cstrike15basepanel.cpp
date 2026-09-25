@@ -27,6 +27,7 @@
 #include "motion_calibration_scaleform.h"
 #include "howtoplaydialog_scaleform.h"
 #include "pausemenuscreen_scaleform.h"
+#include "singleplayergamedialog_scaleform.h"
 #include "medalstatsdialog_scaleform.h"
 #include "leaderboardsdialog_scaleform.h"
 #include "overwatchresolution_scaleform.h"
@@ -535,7 +536,8 @@ bool CCStrike15BasePanel::IsScaleformMainMenuActive( void )
 
 void CCStrike15BasePanel::OnOpenCreateSingleplayerGameDialog( bool bMatchmakingFilter )
 {
-	/* Removed for partner depot */
+	// "Offline with bots" (reconstructed; the original was removed from the leak)
+	CCreateSinglePlayerGameDialogScaleform::LoadDialog( bMatchmakingFilter, false, false );
 }
 
 void CCStrike15BasePanel::OnOpenCreateMultiplayerGameDialog( void )

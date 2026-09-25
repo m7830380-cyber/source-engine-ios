@@ -132,7 +132,9 @@ PROJECT_EXTRA_SOURCES = {
 		# CS:GO buy wheel glue, reconstructed (cstrike15-restoration)
 		'game/client/cstrike15/Scaleform/buymenu_scaleform.cpp',
 		# CS:GO pause menu glue, reconstructed (cstrike15-restoration)
-		'game/client/cstrike15/Scaleform/pausemenuscreen_scaleform.cpp'],
+		'game/client/cstrike15/Scaleform/pausemenuscreen_scaleform.cpp',
+		# offline with bots dialog glue (single-player.swf)
+		'game/client/cstrike15/Scaleform/singleplayergamedialog_scaleform.cpp'],
 	# togl/launcher calls without Scaleform's GLES headers in the same file
 	'scaleformui': ['scaleformui/scaleformuiimpl/sf_togl_bridge.cpp'],
 	# SDL finger events -> IE_Finger* input events

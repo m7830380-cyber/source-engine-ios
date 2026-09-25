@@ -163,6 +163,7 @@
 #include "Scaleform/options_scaleform.h"
 #include "Scaleform/loadingscreen_scaleform.h"
 #include "Scaleform/HUD/sfhud_deathnotice.h"
+#include "Scaleform/pausemenuscreen_scaleform.h"
 #endif
 
 #ifdef PORTAL
@@ -1946,16 +1947,22 @@ static void IOS_DiscardMouseMovement( bool bMenu )
 bool IOS_IsMenuActive()
 {
 	extern bool IOS_IsBuyMenuVisible();
-	// IsBuyMenuOpen() is set by CCSBuyMenuScaleform::Show/Hide on the C++ side and
-	// doesn't rely on the SWF calling AddInputConsumer, which it may skip on the
-	// second open (leaving ConsumesInputEvents() false and the cursor dead).
+	// IsBuyMenuOpen() / CPauseMenuScreenScaleform::IsVisible() are set on the C++
+	// side and don't rely on the SWF calling AddInputConsumer, which it may skip on
+	// subsequent opens (leaving ConsumesInputEvents() false and the cursor dead).
 	C_BasePlayer *pBasePlayer = C_BasePlayer::GetLocalPlayer();
 	bool bCSBuyMenuOpen = pBasePlayer &&
 		static_cast<C_CSPlayer *>( pBasePlayer )->IsBuyMenuOpen();
+#if defined( INCLUDE_SCALEFORM )
+	bool bPauseMenuVisible = CPauseMenuScreenScaleform::IsVisible();
+#else
+	bool bPauseMenuVisible = false;
+#endif
 	return !engine->IsInGame() ||
 		( g_pScaleformUI && ( g_pScaleformUI->ConsumesInputEvents() || g_pScaleformUI->IsCursorVisible() ) ) ||
 		IOS_IsBuyMenuVisible() ||
-		bCSBuyMenuOpen;
+		bCSBuyMenuOpen ||
+		bPauseMenuVisible;
 }
 
 static bool IOS_UpdateTouchMouse( void )

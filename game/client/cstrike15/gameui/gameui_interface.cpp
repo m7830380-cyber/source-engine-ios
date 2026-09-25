@@ -285,6 +285,8 @@ void CGameUI::Initialize( CreateInterfaceFn factory )
 	// load localization file
 #if !defined( CSTRIKE15 )
 	g_pVGuiLocalize->AddFile( "Resource/gameui_%language%.txt", "GAME", true );
+#else
+	g_pVGuiLocalize->AddFile( "resource/csgo_%language%.txt", "GAME", true );
 #endif
 
 	// load mod info

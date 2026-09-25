@@ -78,6 +78,12 @@ ConVar player_teamplayedlast( "player_teamplayedlast", "3", FCVAR_ARCHIVE | FCVA
 // for tracking whether the player dismissed the community server warning message
 ConVar player_nevershow_communityservermessage( "player_nevershow_communityservermessage", "0", FCVAR_ARCHIVE | FCVAR_ARCHIVE_GAMECONSOLE | FCVAR_SS );
 
+// Last-selected offline/training session settings (read and written by single-player.swf)
+ConVar player_maplast_s( "player_maplast_s", "", FCVAR_ARCHIVE | FCVAR_ARCHIVE_GAMECONSOLE | FCVAR_SS );
+ConVar player_gamemodelast_s( "player_gamemodelast_s", "", FCVAR_ARCHIVE | FCVAR_ARCHIVE_GAMECONSOLE | FCVAR_SS );
+ConVar player_gametypelast_s( "player_gametypelast_s", "", FCVAR_ARCHIVE | FCVAR_ARCHIVE_GAMECONSOLE | FCVAR_SS );
+ConVar player_botdifflast_s( "player_botdifflast_s", "", FCVAR_ARCHIVE | FCVAR_ARCHIVE_GAMECONSOLE | FCVAR_SS );
+
 static bool s_bSteamOverlayPositionNeedsToBeSet = true;
 static void FnSteamOverlayChangeCallback( IConVar *var, const char *pOldValue, float flOldValue )
 {

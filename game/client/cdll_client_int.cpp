@@ -1951,6 +1951,18 @@ bool IOS_IsMenuActive()
 		IOS_IsBuyMenuVisible();
 }
 
+static bool s_bIOSFingerDown[10];
+
+static bool IOS_AnyFingerDown( void )
+{
+	for ( int i = 0; i < ARRAYSIZE( s_bIOSFingerDown ); i++ )
+	{
+		if ( s_bIOSFingerDown[i] )
+			return true;
+	}
+	return false;
+}
+
 static bool IOS_UpdateTouchMouse( void )
 {
 	static ConVarRef touch_mouse_events( "touch_mouse_events" );
@@ -1958,6 +1970,12 @@ static bool IOS_UpdateTouchMouse( void )
 	bool bMenu = IOS_IsMenuActive();
 	if ( !touch_mouse_events.IsValid() )
 		return bMenu;
+	// SDL's touch-to-mouse emulation only forgets the finger it tracks when that
+	// finger lifts while emulation is on. Switching it off with a finger still down
+	// (e.g. the tap that closed the menu) leaves SDL stuck on that finger, and no
+	// touch becomes a mouse event in any later menu. Wait until the fingers lift.
+	if ( !bMenu && touch_mouse_events.GetBool() && IOS_AnyFingerDown() )
+		return true;
 	if ( bMenu != touch_mouse_events.GetBool() )
 	{
 		touch_mouse_events.SetValue( bMenu ? 1 : 0 );
@@ -4937,6 +4955,14 @@ void CHLClient::EngineGotvSyncPacket( const CEngineGotvSyncPacket *pPkt )
 #if defined( IOS )
 void CHLClient::IN_TouchEvent( int type, int fingerId, int x, int y )
 {
+	if ( fingerId >= 0 && fingerId < ARRAYSIZE( s_bIOSFingerDown ) )
+	{
+		if ( type == IE_FingerDown )
+			s_bIOSFingerDown[fingerId] = true;
+		else if ( type == IE_FingerUp )
+			s_bIOSFingerDown[fingerId] = false;
+	}
+
 	bool bMenu = IOS_UpdateTouchMouse();
 
 	if ( fingerId < 0 || fingerId >= 10 )

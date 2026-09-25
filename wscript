@@ -128,7 +128,9 @@ PROJECT_EXTRA_SOURCES = {
 		# touch controls, from the source-engine port
 		'game/client/touch.cpp', 'game/client/in_touch.cpp',
 		# touch buy menu (CS:GO's Scaleform one is not in the source)
-		'game/client/cstrike15/VGUI/ios_buymenu.cpp'],
+		'game/client/cstrike15/VGUI/ios_buymenu.cpp',
+		# CS:GO buy wheel glue, reconstructed (cstrike15-restoration)
+		'game/client/cstrike15/Scaleform/buymenu_scaleform.cpp'],
 	# togl/launcher calls without Scaleform's GLES headers in the same file
 	'scaleformui': ['scaleformui/scaleformuiimpl/sf_togl_bridge.cpp'],
 	# SDL finger events -> IE_Finger* input events

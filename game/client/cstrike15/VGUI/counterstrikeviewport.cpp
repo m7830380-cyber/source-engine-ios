@@ -42,6 +42,7 @@
 #include "teammenu_scaleform.h"
 #if defined( IOS )
 #include "ios_buymenu.h"
+#include "buymenu_scaleform.h"
 #endif
 #include "chooseclass_scaleform.h"
 #include "Scaleform/HUD/sfhudinfopanel.h"
@@ -285,10 +286,15 @@ IViewPortPanel* CounterStrikeViewport::CreatePanelByName( const char *szPanelNam
  	}
 
 #if defined( IOS )
-	// CS:GO's Scaleform buy menu is not in this source; use the touch buy menu
+	// CS:GO's Scaleform buy menu (buy-menu.swf) with the reconstructed glue;
+	// the touch VGUI menu stays available as a fallback
 	else if ( Q_strcmp( PANEL_BUY, szPanelName ) == 0 )
 	{
-		newpanel = IOS_CreateBuyMenu( this );
+		static ConVarRef ios_buymenu_vgui( "ios_buymenu_vgui" );
+		if ( ios_buymenu_vgui.IsValid() && ios_buymenu_vgui.GetBool() )
+			newpanel = IOS_CreateBuyMenu( this );
+		else
+			newpanel = new CCSBuyMenuScaleform( this );
 	}
 #endif
 	else

@@ -31,6 +31,7 @@
 
 using namespace vgui;
 
+static ConVar ios_buymenu_vgui( "ios_buymenu_vgui", "0", FCVAR_ARCHIVE, "Use the simple touch buy menu instead of the CS:GO buy wheel (takes effect on restart)" );
 static ConVar ios_buymenu_font( "ios_buymenu_font", "DefaultLarge", FCVAR_ARCHIVE, "Scheme font used by the touch buy menu" );
 
 enum BuyCategory_t

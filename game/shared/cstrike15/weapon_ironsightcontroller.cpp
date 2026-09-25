@@ -519,6 +519,26 @@ void CIronSightController::RenderScopeEffect( int x, int y, int w, int h, CViewS
 
 	// RENDER _rt_SmallFB0 to screen
 	IMaterial *pBlurOverlayMaterial = materials->FindMaterial("dev/scope_bluroverlay", TEXTURE_GROUP_OTHER, true);
+#if defined( IOS )
+	// _rt_SmallFB0 already reads back in display (gamma) space: GLES always decodes
+	// sRGB render targets. The material's sRGB read + sRGB write would encode it a
+	// second time, washing the blur out. Turn both off, once per material instance.
+	{
+		static IMaterial *s_pFixedOverlay = NULL;
+		if ( pBlurOverlayMaterial != s_pFixedOverlay )
+		{
+			s_pFixedOverlay = pBlurOverlayMaterial;
+			bool bFound = false;
+			IMaterialVar *pVar = pBlurOverlayMaterial->FindVar( "$gammacolorread", &bFound, false );
+			if ( pVar && bFound )
+				pVar->SetIntValue( 1 );
+			pVar = pBlurOverlayMaterial->FindVar( "$linearwrite", &bFound, false );
+			if ( pVar && bFound )
+				pVar->SetIntValue( 1 );
+			pBlurOverlayMaterial->RecomputeStateSnapshots();
+		}
+	}
+#endif
 
 	//set alpha to the amount of ironsightedness
 	IMaterialVar *pAlphaVar = pBlurOverlayMaterial->FindVar("$alpha", 0);

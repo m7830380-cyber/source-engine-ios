@@ -7578,6 +7578,13 @@ void CFreezeFrameView::Setup( const CViewSetup &shadowViewIn )
 	pVMTKeyValues->SetInt( "$nocull", 1 );
 	pVMTKeyValues->SetInt( "$nofog", 1 );
 	pVMTKeyValues->SetInt( "$ignorez", 1 );
+#if defined( IOS )
+	// The screen copy is already in display (gamma) space here: GLES always decodes
+	// sRGB render targets on read, so the sRGB read + sRGB write this material would
+	// do encodes it a second time and the frozen frame looks washed out.
+	pVMTKeyValues->SetInt( "$gammacolorread", 1 );
+	pVMTKeyValues->SetInt( "$linearwrite", 1 );
+#endif
 	m_pFreezeFrame.Init( "FreezeFrame_FullScreen", TEXTURE_GROUP_OTHER, pVMTKeyValues );
 	m_pFreezeFrame->Refresh();
 

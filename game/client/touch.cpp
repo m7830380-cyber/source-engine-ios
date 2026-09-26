@@ -367,7 +367,7 @@ void CTouchControls::GetTouchDelta( float yaw, float pitch, float *dx, float *dy
 // CS:GO layout: move stick on the left half, look pad on the right half,
 // action buttons along the right edge and weapon switching on the left.
 // Buttons for the (Scaleform) menus: buy menu, pause menu, scoreboard, team
-// menu, chat. Along the top edge, clear of the movement and look areas' buttons.
+// menu, chat; and weapon inspect. Along the top edge, clear of the movement and look areas' buttons.
 // Returns how many were added.
 static int AddMenuButtons( rgba_t color, bool bOnlyMissing )
 {
@@ -377,6 +377,7 @@ static int AddMenuButtons( rgba_t color, bool bOnlyMissing )
 		{ "scores",   "vgui/touch/changeclass",  "+showscores",     0.090000, 0.000000, 0.170000, 0.142222 },
 		{ "teammenu", "vgui/touch/changeteam",   "teammenu",        0.180000, 0.000000, 0.260000, 0.142222 },
 		{ "chat",     "vgui/touch/chat",         "messagemode",     0.270000, 0.000000, 0.350000, 0.142222 },
+		{ "inspect",  "vgui/touch/zoom",         "+lookatweapon",   0.580000, 0.000000, 0.660000, 0.142222 },
 		{ "buymenu",  "vgui/touch/show_weapons", "ios_buymenu_toggle", 0.790000, 0.000000, 0.870000, 0.142222 },
 		{ "pause",    "vgui/touch/menu",         "gameui_activate", 0.900000, 0.000000, 0.980000, 0.142222 },
 	};

@@ -139,6 +139,8 @@ PROJECT_EXTRA_SOURCES = {
 		'game/client/cstrike15/Scaleform/gametypes_component_scaleform.cpp',
 		# inventory/loadout/persona components for the main menu inventory screens
 		'game/client/cstrike15/Scaleform/inventory_components_scaleform.cpp',
+		# 3D item model over a menu panel (inventory Inspect, buy menu weapon view)
+		'game/client/cstrike15/Scaleform/flash_item_model_panel.cpp',
 		# -allskinsunlocked offline inventory
 		'game/shared/cstrike15/offline_inventory.cpp'],
 	# togl/launcher calls without Scaleform's GLES headers in the same file

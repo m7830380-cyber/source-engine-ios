@@ -26,6 +26,9 @@
 
 #include "c_cs_player.h"
 #include "cs_ammodef.h"
+#include "flash_item_model_panel.h"
+
+static CFlashItemModelPanel *s_pBuyMenuModelPanel = NULL;	// the weapon view, see SetShowWeaponModel
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
@@ -313,8 +316,8 @@ void CCSBuyMenuScaleform::Hide()
 	m_bVisible = false;
 
 	// Clear selected weapon model
-	//if ( m_pWeaponModelPanel )
-		//m_pWeaponModelPanel->SetWeapon( nullptr );
+	if ( s_pBuyMenuModelPanel )
+		s_pBuyMenuModelPanel->Hide();
 
 	{
 		SF_FORCE_SPLITSCREEN_PLAYER_GUARD( m_iSplitScreenSlot );
@@ -2566,9 +2569,99 @@ void CCSBuyMenuScaleform::ViewportThink( void )
 static ConVar cl_buymenu_closeonbuy( "cl_buymenu_closeonbuy", "0", FCVAR_ARCHIVE, "Close the buy menu after buying something" );
 
 // no 3D weapon preview: returning false makes the movie show the weapon icon
+// The weapon view: buy-menu.swf asks for the selected weapon's 3D model with
+// SetShowWeaponModel( position ) and, when we say no, falls back to an icon that
+// on iOS ended up in the panel's top-left corner. Draw the model instead, over the
+// box the icon was meant to fill: WeaponIcon.originalX/Y (its authored spot in
+// PanelWeapon) +-100x50, the half-size 400x200 icon loadComparisonIcon centers there.
+static CCSBuyMenuScaleform *s_pBuyMenuForModel = NULL;
+
+static float GetFlashNumberMember( SFVALUE obj, const char *pszName, float flDefault )
+{
+	SFVALUE v = obj ? g_pScaleformUI->Value_GetMember( obj, pszName ) : NULL;
+	float fl = flDefault;
+	if ( v )
+	{
+		if ( g_pScaleformUI->Value_GetType( v ) == IUIMarshalHelper::VT_Number )
+			fl = (float)g_pScaleformUI->Value_GetNumber( v );
+		else if ( g_pScaleformUI->Value_GetType( v ) == IUIMarshalHelper::VT_Boolean )
+			fl = g_pScaleformUI->Value_GetBool( v ) ? 1.0f : 0.0f;
+		g_pScaleformUI->ReleaseValue( v );
+	}
+	return fl;
+}
+
+static int GetBuyMenuModelPlacement( int &x, int &y, int &w, int &h )
+{
+	CCSBuyMenuScaleform *pMenu = s_pBuyMenuForModel;
+	if ( !pMenu || !pMenu->FlashAPIIsValid() || !g_pScaleformUI )
+		return -1;
+
+	int nResult = -1;
+	SFVALUE outer = g_pScaleformUI->Value_GetMember( pMenu->m_FlashAPI, "Panel" );
+	SFVALUE inner = outer ? g_pScaleformUI->Value_GetMember( outer, "Panel" ) : NULL;
+	SFVALUE panel = inner ? g_pScaleformUI->Value_GetMember( inner, "PanelWeapon" ) : NULL;
+	SFVALUE icon = panel ? g_pScaleformUI->Value_GetMember( panel, "WeaponIcon" ) : NULL;
+	if ( panel && icon && GetFlashNumberMember( panel, "_visible", 0.0f ) != 0.0f )
+	{
+		float ox = GetFlashNumberMember( icon, "originalX", GetFlashNumberMember( icon, "_x", 0.0f ) );
+		float oy = GetFlashNumberMember( icon, "originalY", GetFlashNumberMember( icon, "_y", 0.0f ) );
+		float x0, y0, x1, y1;
+		if ( GetFlashLocalRectOnScreen( panel, pMenu->m_iFlashSlot, ox - 100.0f, oy - 50.0f, ox + 100.0f, oy + 50.0f, x0, y0, x1, y1 ) )
+		{
+			x = (int)x0; y = (int)y0; w = (int)( x1 - x0 ); h = (int)( y1 - y0 );
+			nResult = 1;
+
+			static bool s_bLogged = false;
+			if ( !s_bLogged )
+			{
+				printf( "[buymenu] weapon view at %d,%d %dx%d (icon origin %.0f,%.0f in PanelWeapon)\n", x, y, w, h, ox, oy );
+				fflush( stdout );
+				s_bLogged = true;
+			}
+		}
+	}
+	if ( icon ) g_pScaleformUI->ReleaseValue( icon );
+	if ( panel ) g_pScaleformUI->ReleaseValue( panel );
+	if ( inner ) g_pScaleformUI->ReleaseValue( inner );
+	if ( outer ) g_pScaleformUI->ReleaseValue( outer );
+	return nResult;
+}
+
 void CCSBuyMenuScaleform::SetShowWeaponModel( SCALEFORM_CALLBACK_ARGS_DECL )
 {
-	m_pScaleformUI->Params_SetResult( obj, false );
+	int nPosition = (int)m_pScaleformUI->Params_GetArgAsNumber( obj, 0 );
+
+	C_EconItemView *pItem = NULL;
+	C_CSPlayer *pLocalPlayer = C_CSPlayer::GetLocalCSPlayer();
+	CCSPlayerInventory *pInventory = CSInventoryManager() ? CSInventoryManager()->GetLocalCSInventory() : NULL;
+	if ( pLocalPlayer && pInventory && nPosition >= 0 && nPosition < LOADOUT_POSITION_COUNT )
+	{
+		itemid_t itemID = m_PlayerBuyMenuLoadout.m_WeaponID[ nPosition ];
+		if ( itemID != INVALID_ITEM_ID )
+		{
+			pItem = pInventory->GetInventoryItemByItemID( itemID );
+			if ( !pItem || !pItem->GetStaticData() )
+			{
+				pItem = ( ( itemID >> 60 ) == 0xF ) ? CSInventoryManager()->FindOrCreateReferenceEconItem( itemID )
+													: CSInventoryManager()->GetItemInLoadoutForTeam( pLocalPlayer->GetTeamNumber(), nPosition );
+			}
+		}
+	}
+
+	if ( !pItem || !pItem->IsValid() )
+	{
+		if ( s_pBuyMenuModelPanel )
+			s_pBuyMenuModelPanel->Hide();
+		m_pScaleformUI->Params_SetResult( obj, false );
+		return;
+	}
+
+	s_pBuyMenuForModel = this;
+	if ( !s_pBuyMenuModelPanel )
+		s_pBuyMenuModelPanel = new CFlashItemModelPanel( "BuyMenuWeaponModel", GetBuyMenuModelPlacement, false, false );
+	s_pBuyMenuModelPanel->ShowItem( pItem );
+	m_pScaleformUI->Params_SetResult( obj, s_pBuyMenuModelPanel->IsVisible() );
 }
 
 // weapon (or item definition) id -> short name ("ak47"), used for icons

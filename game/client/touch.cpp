@@ -393,34 +393,22 @@ static int AddMenuButtons( rgba_t color, bool bOnlyMissing )
 	return nAdded;
 }
 
-// Temporary diagnostic buttons for the white tint on agent models, bottom middle:
-// left = specular (phong) off/on, right = rim light off/on. Both apply instantly.
-// Earlier builds added six more (chardiag1-6); those are removed from saved layouts.
-// Returns how many buttons were added or removed.
-static int AddCharDiagButtons( rgba_t color, bool bOnlyMissing )
+// Builds used for testing the agent model tint added buttons chardiag1-8;
+// take them out of saved layouts. Returns how many were removed.
+static int RemoveCharDiagButtons()
 {
-	int nChanged = 0;
-	for ( int i = 1; i <= 6; i++ )
+	int nRemoved = 0;
+	for ( int i = 1; i <= 8; i++ )
 	{
 		char szName[32];
 		Q_snprintf( szName, sizeof( szName ), "chardiag%d", i );
 		if ( gTouch.FindButton( szName ) )
 		{
 			gTouch.RemoveButton( szName );
-			++nChanged;
+			++nRemoved;
 		}
 	}
-
-	static const char *s_Toggles[][2] = { { "chardiag7", "toggle ios_char_phong 1 0" }, { "chardiag8", "toggle ios_char_rim 1 0" } };
-	for ( int i = 0; i < ARRAYSIZE( s_Toggles ); i++ )
-	{
-		if ( bOnlyMissing && gTouch.FindButton( s_Toggles[i][0] ) )
-			continue;
-		float x1 = 0.43f + i * 0.08f;
-		gTouch.AddButton( s_Toggles[i][0], "vgui/touch/settings", s_Toggles[i][1], x1, 0.86f, x1 + 0.06f, 0.99f, color );
-		++nChanged;
-	}
-	return nChanged;
+	return nRemoved;
 }
 
 static void AddDefaultButtons( rgba_t color )
@@ -441,7 +429,6 @@ static void AddDefaultButtons( rgba_t color )
 	gTouch.AddButton( "console", "vgui/touch/showconsole", "toggleconsole", 0.000000, 0.000000, 0.080000, 0.142222, color );
 	gTouch.AddButton( "edit", "vgui/touch/settings", "touch_enableedit", 0.420000, 0.000000, 0.500000, 0.151486, color );
 	AddMenuButtons( color, false );
-	AddCharDiagButtons( color, false );
 }
 
 void CTouchControls::ResetToDefaults()
@@ -511,7 +498,7 @@ void CTouchControls::Init()
 		ResetToDefaults();
 
 	// Layouts saved before the menus worked have no menu buttons; add them
-	if ( AddMenuButtons( color, true ) + AddCharDiagButtons( color, true ) > 0 )
+	if ( AddMenuButtons( color, true ) + RemoveCharDiagButtons() > 0 )
 		WriteConfig();
 
 	// Configs saved by earlier builds use invnext/invprev, which go through
@@ -524,11 +511,6 @@ void CTouchControls::Init()
 			Q_strncpy( btns[i]->command, "ios_weapnext", sizeof( btns[i]->command ) );
 		else if( !Q_strcmp( btns[i]->command, "invprev" ) )
 			Q_strncpy( btns[i]->command, "ios_weapprev", sizeof( btns[i]->command ) );
-		// the diagnostic buttons 7 and 8 were repurposed
-		else if( !Q_strcmp( btns[i]->name, "chardiag7" ) )
-			Q_strncpy( btns[i]->command, "toggle ios_char_phong 1 0", sizeof( btns[i]->command ) );
-		else if( !Q_strcmp( btns[i]->name, "chardiag8" ) )
-			Q_strncpy( btns[i]->command, "toggle ios_char_rim 1 0", sizeof( btns[i]->command ) );
 	}
 
 	CTouchTexture *texture = new CTouchTexture;
@@ -797,26 +779,6 @@ static bool TouchButtonAvailable( const CTouchButton *btn )
 
 // Opens the buy menu, or closes it when it is actually open (the panel's own
 // state, not a press count, so a missed or doubled press can't desync it).
-// Diagnostic for the white tint on agent models: toggle one "character" shader
-// feature (ios_char_<name>) and reload the agent materials so it takes effect.
-CON_COMMAND( ios_char_toggle, "Toggle a character shader feature: envmap fakerim ambientreflection masks1 masks2 phongwarp" )
-{
-	if ( args.ArgC() < 2 )
-		return;
-	char szVar[64];
-	Q_snprintf( szVar, sizeof( szVar ), "ios_char_%s", args[1] );
-	ConVarRef var( szVar );
-	if ( !var.IsValid() )
-	{
-		printf( "[chardiag] unknown %s\n", szVar );
-		return;
-	}
-	var.SetValue( var.GetBool() ? 0 : 1 );
-	g_pMaterialSystem->ReloadMaterials( "models/player/custom_player" );
-	printf( "[chardiag] %s = %d (agent materials reloaded)\n", szVar, var.GetInt() );
-	fflush( stdout );
-}
-
 CON_COMMAND( ios_buymenu_toggle, "Open the buy menu, or close it if it is open" )
 {
 	extern bool IOS_IsBuyMenuVisible();

@@ -1,9 +1,3 @@
-#if defined( IOS )
-#include "tier1/convar.h"
-#include "tier1/strtools.h"
-#include "tier0/platform.h"
-extern ConVar ios_srgb_flip;
-#endif
 // BE VERY VERY CAREFUL what you do in these function. They are extremely hot, and calling the wrong GL API's in here will crush perf. (especially on NVidia threaded drivers).
 
 #include "togl/glmgr.h"
@@ -313,28 +307,6 @@ FORCEINLINE void GLMContext::FlushDrawStates( uint nStartIndex, uint nEndIndex, 
 
 				pTex->m_SamplingParams = m_samplers[nSamplerIndex].m_samp;
 
-#if defined( IOS )
-				// No GL_EXT_texture_sRGB_decode here, so a sampler's sRGB read request is only
-				// honoured by re-uploading the texture in the requested format (togl's path for
-				// such GPUs, using the host copy kept because of m_bTexClientStorage).
-				if ( !gGL->m_bHave_GL_EXT_texture_sRGB_decode && ios_srgb_flip.GetBool() )
-				{
-					bool texSRGB = ( pTex->m_layout->m_key.m_texFlags & kGLMTexSRGB ) != 0;
-					bool glSampSRGB = m_samplers[nSamplerIndex].m_samp.m_packed.m_srgb;
-					if ( texSRGB != glSampSRGB )
-					{
-						static int s_nLoggedFlips = 0;
-						if ( s_nLoggedFlips < 20 )
-						{
-							++s_nLoggedFlips;
-							printf( "[srgb] re-upload '%s' as srgb %d\n", pTex->m_debugLabel ? pTex->m_debugLabel : "-", (int)glSampSRGB );
-							fflush( stdout );
-						}
-						pTex->HandleSRGBMismatch( glSampSRGB, pTex->m_srgbFlipCount );
-					}
-				}
-#endif
-
 #if (defined(OSX) && !defined(IOS))
 				if( pTex && !( gGL->m_bHave_GL_EXT_texture_sRGB_decode ) )
 				{
@@ -632,31 +604,6 @@ FORCEINLINE void GLMContext::FlushDrawStates( uint nStartIndex, uint nEndIndex, 
 
 		m_nNumSetVertexAttributes = nMaxVertexAttributesToCheck;
 	}
-
-#if defined( IOS )
-	// Diagnostic for the over-bright agent models: once a second, log the lighting
-	// constants going to a "character" draw and, for comparison, a vertexlit draw.
-	{
-		static double s_flNextLog[2] = { 0.0, 0.0 };
-		const char *pszName = m_drawingProgram[kGLMFragmentProgram]->m_shaderName;
-		int nKind = V_stristr( pszName, "character" ) ? 0 : ( V_stristr( pszName, "vertexlit" ) ? 1 : -1 );
-		if ( nKind >= 0 && Plat_FloatTime() >= s_flNextLog[nKind] )
-		{
-			s_flNextLog[nKind] = Plat_FloatTime() + 1.0;
-			const float (*pc)[4] = m_programParamsF[kGLMFragmentProgram].m_values;
-			const float (*vc)[4] = m_programParamsF[kGLMVertexProgram].m_values;
-			printf( "[light] %s / %s\n", m_drawingProgram[kGLMVertexProgram]->m_shaderName, pszName );
-			printf( "[light]   ps ambient c4-9:" );
-			for ( int r = 4; r <= 9; r++ ) printf( " (%.2f %.2f %.2f)", pc[r][0], pc[r][1], pc[r][2] );
-			printf( "\n[light]   ps lights c20-25:" );
-			for ( int r = 20; r <= 25; r++ ) printf( " (%.2f %.2f %.2f %.2f)", pc[r][0], pc[r][1], pc[r][2], pc[r][3] );
-			printf( "\n[light]   vs ambient c21-26:" );
-			for ( int r = 21; r <= 26; r++ ) printf( " (%.2f %.2f %.2f)", vc[r][0], vc[r][1], vc[r][2] );
-			printf( "\n[light]   ps c30 (tonemap) %.2f %.2f %.2f %.2f\n", pc[30][0], pc[30][1], pc[30][2], pc[30][3] );
-			fflush( stdout );
-		}
-	}
-#endif
 
 	// fragment stage --------------------------------------------------------------------
 	if ( m_programParamsF[kGLMFragmentProgram].m_dirtySlotHighWaterNonBone )

@@ -733,10 +733,6 @@ ConVar gl_rt_forcergba ( "gl_rt_forcergba", "1" );	// on teximage of a renderabl
 
 ConVar gl_minimize_rt_tex ( "gl_minimize_rt_tex", "0" );	// if 1, set the GL_TEXTURE_MINIMIZE_STORAGE_APPLE texture parameter to cut off mipmaps for RT's
 ConVar gl_minimize_all_tex ( "gl_minimize_all_tex", "1" );	// if 1, set the GL_TEXTURE_MINIMIZE_STORAGE_APPLE texture parameter to cut off mipmaps for textures which are unmipped
-#if defined( IOS )
-// Honour sampler sRGB reads by re-uploading textures as sRGB (no GL_EXT_texture_sRGB_decode on iOS).
-ConVar ios_srgb_flip( "ios_srgb_flip", "0", FCVAR_RELEASE, "Re-upload textures sampled with sRGB reads as sRGB, like togl does on GPUs without sRGB decode" );
-#endif
 ConVar gl_minimize_tex_log ( "gl_minimize_tex_log", "0" );	// if 1, printf the names of the tex that got minimized
 
 CGLMTex::CGLMTex( GLMContext *ctx, GLMTexLayout *layout, uint levels, const char *debugLabel )

@@ -393,34 +393,34 @@ static int AddMenuButtons( rgba_t color, bool bOnlyMissing )
 	return nAdded;
 }
 
-// Temporary row of six diagnostic buttons along the bottom middle, numbered
-// 1-6 from left to right; each toggles one character shader feature.
+// Temporary diagnostic buttons for the white tint on agent models, bottom middle:
+// left = specular (phong) off/on, right = rim light off/on. Both apply instantly.
+// Earlier builds added six more (chardiag1-6); those are removed from saved layouts.
+// Returns how many buttons were added or removed.
 static int AddCharDiagButtons( rgba_t color, bool bOnlyMissing )
 {
-	static const char *s_Features[] = { "envmap", "fakerim", "ambientreflection", "masks1", "masks2", "phongwarp" };
-	int nAdded = 0;
-	for ( int i = 0; i < ARRAYSIZE( s_Features ); i++ )
+	int nChanged = 0;
+	for ( int i = 1; i <= 6; i++ )
 	{
-		char szName[32], szCmd[64];
-		Q_snprintf( szName, sizeof( szName ), "chardiag%d", i + 1 );
-		if ( bOnlyMissing && gTouch.FindButton( szName ) )
-			continue;
-		Q_snprintf( szCmd, sizeof( szCmd ), "ios_char_toggle %s", s_Features[i] );
-		float x1 = 0.30f + i * 0.068f;
-		gTouch.AddButton( szName, "vgui/touch/settings", szCmd, x1, 0.86f, x1 + 0.06f, 0.99f, color );
-		++nAdded;
+		char szName[32];
+		Q_snprintf( szName, sizeof( szName ), "chardiag%d", i );
+		if ( gTouch.FindButton( szName ) )
+		{
+			gTouch.RemoveButton( szName );
+			++nChanged;
+		}
 	}
-	// 7: specular (phong) off/on, 8: rim light off/on; these apply instantly
+
 	static const char *s_Toggles[][2] = { { "chardiag7", "toggle ios_char_phong 1 0" }, { "chardiag8", "toggle ios_char_rim 1 0" } };
 	for ( int i = 0; i < ARRAYSIZE( s_Toggles ); i++ )
 	{
 		if ( bOnlyMissing && gTouch.FindButton( s_Toggles[i][0] ) )
 			continue;
-		float x1 = 0.30f + ( ARRAYSIZE( s_Features ) + i ) * 0.068f;
+		float x1 = 0.43f + i * 0.08f;
 		gTouch.AddButton( s_Toggles[i][0], "vgui/touch/settings", s_Toggles[i][1], x1, 0.86f, x1 + 0.06f, 0.99f, color );
-		++nAdded;
+		++nChanged;
 	}
-	return nAdded;
+	return nChanged;
 }
 
 static void AddDefaultButtons( rgba_t color )

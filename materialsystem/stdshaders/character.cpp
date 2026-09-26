@@ -849,7 +849,11 @@ BEGIN_VS_SHADER( Character, "Help for Character Shader" )
 			pShaderShadow->EnableAlphaWrites( bFullyOpaque );
 
 			PI_BeginCommandBuffer();
+#if !defined( IOS )
+			// iOS: the pixel shader adds this ambient cube on top of the vertex shader's
+			// ambient term (i.cAmbient), lighting agent bodies twice; send zeros instead.
 			PI_SetPixelShaderAmbientLightCube( PSREG_AMBIENT_CUBE );
+#endif
 			PI_SetVertexShaderAmbientLightCube();
 			PI_SetPixelShaderLocalLighting( PSREG_LIGHT_INFO_ARRAY );
 			PI_SetModulationPixelShaderDynamicState_LinearColorSpace( 1 );
@@ -859,6 +863,12 @@ BEGIN_VS_SHADER( Character, "Help for Character Shader" )
 		DYNAMIC_STATE
 		{
 			pShaderAPI->SetDefaultState();
+#if defined( IOS )
+			{
+				static const float s_vZeroAmbient[6][4] = { { 0 } };
+				pShaderAPI->SetPixelShaderConstant( PSREG_AMBIENT_CUBE, s_vZeroAmbient[0], 6 );
+			}
+#endif
 
 			bool bCSMEnabled = bSupportsCSM && pShaderAPI->IsCascadedShadowMapping();
 			// need to turn off some features for shadercompile to complete, otherwise it runs out of memory before all combos are compiled

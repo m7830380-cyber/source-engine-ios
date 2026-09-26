@@ -2074,7 +2074,7 @@ bool CCSBuyMenuScaleform::FillInPlayerLoadout( SFBuyLoadout &loadout )
 			if ( !pWeaponItem )
 				continue;
 
-			if ( pWeaponItem->GetStaticData()->GetDefinitionIndex() != loadoutDefIndex )
+			if ( !pWeaponItem->GetStaticData() || pWeaponItem->GetStaticData()->GetDefinitionIndex() != loadoutDefIndex )
 			{
 				continue;
 			}
@@ -2082,6 +2082,8 @@ bool CCSBuyMenuScaleform::FillInPlayerLoadout( SFBuyLoadout &loadout )
 			int weaponID = pWeapon->GetCSWeaponID();
 
 			const CCSWeaponInfo *pInfo = GetWeaponInfo(pWeapon->GetCSWeaponID());
+			if ( !pInfo )	// (crashed here for weapons whose id has no script info)
+				continue;
 
 			if ( pInfo->GetWeaponType() == WEAPONTYPE_PISTOL )
 			{
@@ -2572,8 +2574,8 @@ static ConVar cl_buymenu_closeonbuy( "cl_buymenu_closeonbuy", "0", FCVAR_ARCHIVE
 // The weapon view: buy-menu.swf asks for the selected weapon's 3D model with
 // SetShowWeaponModel( position ) and, when we say no, falls back to an icon that
 // on iOS ended up in the panel's top-left corner. Draw the model instead, over the
-// box the icon was meant to fill: WeaponIcon.originalX/Y (its authored spot in
-// PanelWeapon) +-100x50, the half-size 400x200 icon loadComparisonIcon centers there.
+// box Valve's client used for it (buymenu_itempanel_parent.res), while the menu's
+// weapon panel is showing.
 static CCSBuyMenuScaleform *s_pBuyMenuForModel = NULL;
 
 static float GetFlashNumberMember( SFVALUE obj, const char *pszName, float flDefault )
@@ -2597,35 +2599,35 @@ static int GetBuyMenuModelPlacement( int &x, int &y, int &w, int &h )
 	if ( !pMenu || !pMenu->FlashAPIIsValid() || !g_pScaleformUI )
 		return -1;
 
-	int nResult = -1;
+	// only while the weapon panel is showing
 	SFVALUE outer = g_pScaleformUI->Value_GetMember( pMenu->m_FlashAPI, "Panel" );
 	SFVALUE inner = outer ? g_pScaleformUI->Value_GetMember( outer, "Panel" ) : NULL;
 	SFVALUE panel = inner ? g_pScaleformUI->Value_GetMember( inner, "PanelWeapon" ) : NULL;
-	SFVALUE icon = panel ? g_pScaleformUI->Value_GetMember( panel, "WeaponIcon" ) : NULL;
-	if ( panel && icon && GetFlashNumberMember( panel, "_visible", 0.0f ) != 0.0f )
-	{
-		float ox = GetFlashNumberMember( icon, "originalX", GetFlashNumberMember( icon, "_x", 0.0f ) );
-		float oy = GetFlashNumberMember( icon, "originalY", GetFlashNumberMember( icon, "_y", 0.0f ) );
-		float x0, y0, x1, y1;
-		if ( GetFlashLocalRectOnScreen( panel, pMenu->m_iFlashSlot, ox - 100.0f, oy - 50.0f, ox + 100.0f, oy + 50.0f, x0, y0, x1, y1 ) )
-		{
-			x = (int)x0; y = (int)y0; w = (int)( x1 - x0 ); h = (int)( y1 - y0 );
-			nResult = 1;
-
-			static bool s_bLogged = false;
-			if ( !s_bLogged )
-			{
-				printf( "[buymenu] weapon view at %d,%d %dx%d (icon origin %.0f,%.0f in PanelWeapon)\n", x, y, w, h, ox, oy );
-				fflush( stdout );
-				s_bLogged = true;
-			}
-		}
-	}
-	if ( icon ) g_pScaleformUI->ReleaseValue( icon );
+	bool bVisible = panel && GetFlashNumberMember( panel, "_visible", 0.0f ) != 0.0f;
 	if ( panel ) g_pScaleformUI->ReleaseValue( panel );
 	if ( inner ) g_pScaleformUI->ReleaseValue( inner );
 	if ( outer ) g_pScaleformUI->ReleaseValue( outer );
-	return nResult;
+	if ( !bVisible )
+		return -1;
+
+	// Where Valve's client put the model: Resource/UI/econ/buymenu_itempanel_parent.res,
+	// "buymenu_itempanel": xpos c-20, ypos 94, wide 210, tall 158 (proportional, 480 tall)
+	int sw, sh;
+	vgui::surface()->GetScreenSize( sw, sh );
+	float flScale = sh / 480.0f;
+	x = (int)( sw * 0.5f - 20.0f * flScale );
+	y = (int)( 94.0f * flScale );
+	w = (int)( 210.0f * flScale );
+	h = (int)( 158.0f * flScale );
+
+	static bool s_bLogged = false;
+	if ( !s_bLogged )
+	{
+		printf( "[buymenu] weapon view at %d,%d %dx%d (screen %dx%d)\n", x, y, w, h, sw, sh );
+		fflush( stdout );
+		s_bLogged = true;
+	}
+	return 1;
 }
 
 void CCSBuyMenuScaleform::SetShowWeaponModel( SCALEFORM_CALLBACK_ARGS_DECL )

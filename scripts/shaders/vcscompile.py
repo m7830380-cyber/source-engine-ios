@@ -254,6 +254,11 @@ def translate_skip(expr, declared):
     """Perl-ish skip expression -> Python. Operators seen in practice: $VAR, &&,
     ||, !, ==, !=, <, >, parens, and perl's `defined`."""
     e = re.sub(r'\$(\w+)', r'\1', expr)
+    # Platform/profile tags left after the first one was stripped (e.g. the
+    # "[PC]" in "... [vs20] [PC]") are annotations, not part of the condition;
+    # left in, Python reads them as indexing ("TypeError: 'bool' object is not
+    # subscriptable").
+    e = re.sub(r'\[[^\[\]]*\]', '', e)
     # perl `defined $X` asks whether the var exists at all. After tag filtering a
     # var may legitimately not exist for this target, so resolve it to a constant
     # against the declared set rather than leaving a bare name to evaluate.

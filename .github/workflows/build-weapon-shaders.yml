@@ -1,14 +1,17 @@
 name: Weapon/skin shaders (.vcs)
 
-# Recompiles the shaders weapons and skins draw with from this tree's .fxc
-# sources (scripts/shaders/vcscompile.py: combo math from fxctmp9/*.inc, one
-# fxc.exe run per combo, packed into Valve's .vcs format), one job per shader,
-# and packs them as platform/shaders/fxc/*.vcs in a single zip artifact.
+# Recompiles the skin shaders from this tree's .fxc sources
+# (scripts/shaders/vcscompile.py: combo math from fxctmp9/*.inc, one fxc.exe
+# run per combo, packed into Valve's .vcs format), one job per shader, and
+# packs them as platform/shaders/fxc/*.vcs in a single zip artifact.
 #
-#   customweapon                    - skin paint compositing
-#   weapondecal                     - stickers
-#   vertexlit_and_unlit_generic(_bump), phong - weapon/knife models
-#   customcharacter                 - glove paint compositing
+#   customweapon     - skin paint compositing
+#   weapondecal      - stickers
+#   customcharacter  - glove paint compositing
+#
+# The model shaders (phong, vertexlit_and_unlit_generic) are not here: they
+# have 10^8..10^10 combos, far beyond fxc-per-combo on a CI runner (Valve used
+# a compile farm), and the retail ones work.
 
 on:
   workflow_dispatch:
@@ -38,18 +41,6 @@ jobs:
           - { src: weapondecal_ps20b.fxc,                  target: weapondecal_ps30 }
           - { src: weapondecal_vs20.fxc,                   target: weapondecal_vs20 }
           - { src: weapondecal_vs20.fxc,                   target: weapondecal_vs30 }
-          - { src: phong_ps20b.fxc,                        target: phong_ps20b }
-          - { src: phong_ps20b.fxc,                        target: phong_ps30 }
-          - { src: phong_vs20.fxc,                         target: phong_vs20 }
-          - { src: phong_vs20.fxc,                         target: phong_vs30 }
-          - { src: vertexlit_and_unlit_generic_ps2x.fxc,   target: vertexlit_and_unlit_generic_ps20b }
-          - { src: vertexlit_and_unlit_generic_ps2x.fxc,   target: vertexlit_and_unlit_generic_ps30 }
-          - { src: vertexlit_and_unlit_generic_vs20.fxc,   target: vertexlit_and_unlit_generic_vs20 }
-          - { src: vertexlit_and_unlit_generic_vs20.fxc,   target: vertexlit_and_unlit_generic_vs30 }
-          - { src: vertexlit_and_unlit_generic_bump_ps2x.fxc, target: vertexlit_and_unlit_generic_bump_ps20b }
-          - { src: vertexlit_and_unlit_generic_bump_ps2x.fxc, target: vertexlit_and_unlit_generic_bump_ps30 }
-          - { src: vertexlit_and_unlit_generic_bump_vs20.fxc, target: vertexlit_and_unlit_generic_bump_vs20 }
-          - { src: vertexlit_and_unlit_generic_bump_vs20.fxc, target: vertexlit_and_unlit_generic_bump_vs30 }
           - { src: customcharacter_ps30.fxc,               target: customcharacter_ps30 }
           - { src: customcharacter_vs30.fxc,               target: customcharacter_vs30 }
     steps:
@@ -68,13 +59,16 @@ jobs:
           $fxc = $null
           try {
             Invoke-WebRequest -Uri "https://download.microsoft.com/download/A/E/7/AE743F1F-632B-4809-87A9-AA1BB3458E31/DXSDK_Jun10.exe" -OutFile dxsdk.exe
-            7z x dxsdk.exe -odxsdk -r -y fxc.exe "Jun2010_D3DCompiler_43_x86.cab" "Jun2010_D3DCompiler_43_x64.cab" | Out-Null
+            7z x dxsdk.exe -odxsdk -r -y fxc.exe "Jun2010_D3DCompiler_43_x86.cab" "Jun2010_D3DCompiler_43_x64.cab" "Jun2010_d3dx9_43_x86.cab" "Jun2010_d3dx9_43_x64.cab" | Out-Null
             foreach ($arch in @('x86', 'x64')) {
               $cand = Get-ChildItem dxsdk -Recurse -Filter fxc.exe | Where-Object { $_.FullName -match "\\$arch\\" } | Select-Object -First 1
               if (-not $cand) { Write-Host "no $arch fxc.exe in the SDK"; continue }
               $dir = $cand.DirectoryName
-              $cab = Get-ChildItem dxsdk -Recurse -Filter "Jun2010_D3DCompiler_43_$arch.cab" | Select-Object -First 1
-              if ($cab) { 7z e $cab.FullName "-o$dir" -y | Out-Null }
+              # fxc.exe needs D3DCompiler_43.dll and D3DX9_43.dll next to it
+              foreach ($name in @("Jun2010_D3DCompiler_43_$arch.cab", "Jun2010_d3dx9_43_$arch.cab")) {
+                $cab = Get-ChildItem dxsdk -Recurse -Filter $name | Select-Object -First 1
+                if ($cab) { 7z e $cab.FullName "-o$dir" -y *.dll | Out-Null }
+              }
               Write-Host "$arch fxc: $($cand.FullName)"
               Get-ChildItem $dir -Filter *.dll | ForEach-Object { Write-Host "  $($_.Name)" }
               # fxc /? exits nonzero; judge it by its banner

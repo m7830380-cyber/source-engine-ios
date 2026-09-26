@@ -452,8 +452,17 @@ public:
 		if ( pDef && pDef->GetDefaultLoadoutSlot() == LOADOUT_POSITION_MELEE && s_nKnifeNameLogs < 40 )
 		{
 			s_nKnifeNameLogs++;
-			char szName[256];
-			g_pVGuiLocalize->ConvertUnicodeToANSI( pwsz ? pwsz : L"", szName, sizeof( szName ) );
+			// ASCII as-is, anything else as \uXXXX, so the log shows exactly what the menu gets
+			char szName[512];
+			int nOut = 0;
+			for ( const wchar_t *pw = pwsz ? pwsz : L""; *pw && nOut < (int)sizeof( szName ) - 12; pw++ )
+			{
+				if ( *pw >= 32 && *pw < 127 )
+					szName[ nOut++ ] = (char)*pw;
+				else
+					nOut += V_snprintf( szName + nOut, sizeof( szName ) - nOut, "\\u%04X", (unsigned)*pw );
+			}
+			szName[ nOut ] = '\0';
 			printf( "[offline] name arg '%s' id %llu: def %d %s, paint %d, quality %d, base '%s' -> '%s'\n",
 				ArgString( pui, obj, 1 ), ullID, pDef->GetDefinitionIndex(), pDef->GetDefinitionName(), pItem->GetCustomPaintKitIndex(),
 				pItem->GetQuality(), pDef->GetItemBaseName(), szName );

@@ -27,6 +27,18 @@ ConVar mat_verbose_texture_gen( "mat_verbose_texture_gen", "0" );
 	} \
 	
 // NOTE: This has to be the last file included!
+// iOS: textures from disk are sampled without sRGB decode (no VTF carries
+// TEXTUREFLAGS_SRGB and there's no GL_EXT_texture_sRGB_decode), so composites
+// are stored and sampled the same way (gamma bytes, no decode)
+static inline bool IsPlatformIOS()
+{
+#if defined( IOS )
+	return true;
+#else
+	return false;
+#endif
+}
+
 #include "tier0/memdbgon.h"
 
 int CCompositeTexture::m_nTextureCount = 0;
@@ -285,6 +297,35 @@ void CCompositeTexture::GenerateComposite( void )
 				m_pCustomMaterialRT = NULL;
 			}
 			
+#if defined( IOS )
+			// togl makes every render target GL_SRGB8_ALPHA8, which the GPU encodes on
+			// write (there's no GL_EXT_sRGB_write_control to turn that off) and which
+			// ReadPixels returns as stored. Undo the encode so the bytes are what the
+			// compositing shader wrote, like a texture loaded from disk.
+			{
+				static unsigned char s_decode[256];
+				static bool s_bInit = false;
+				if ( !s_bInit )
+				{
+					for ( int i = 0; i < 256; i++ )
+					{
+						float c = i / 255.0f;
+						float l = ( c <= 0.04045f ) ? c / 12.92f : powf( ( c + 0.055f ) / 1.055f, 2.4f );
+						s_decode[i] = (unsigned char)clamp( (int)( l * 255.0f + 0.5f ), 0, 255 );
+					}
+					s_bInit = true;
+				}
+				unsigned char *pPixels = m_pScratchVTF->ImageData( 0, 0, 0 );
+				int nPixels = m_pScratchVTF->Width() * m_pScratchVTF->Height();
+				for ( int i = 0; i < nPixels; i++, pPixels += 4 )
+				{
+					pPixels[0] = s_decode[ pPixels[0] ];
+					pPixels[1] = s_decode[ pPixels[1] ];
+					pPixels[2] = s_decode[ pPixels[2] ];	// alpha is stored linearly
+				}
+			}
+#endif
+
 			{
 				TM_ZONE( TELEMETRY_LEVEL1, TMZF_NONE, "MipGen" );
 				m_pScratchVTF->GenerateMipmaps();
@@ -585,7 +626,7 @@ void CCompositeTexture::Finalize()
 	{
 		m_ResultTexture.m_pTexture = materials->CreateProceduralTexture( m_szTextureName, TEXTURE_GROUP_COMPOSITE, ( 1 << Size() ), ( 1 << Size() ), 
 																		 ( Format() == COMPOSITE_TEXTURE_FORMAT_DXT5 ) ? IMAGE_FORMAT_DXT5_RUNTIME : IMAGE_FORMAT_DXT1_RUNTIME, 
-																		 TEXTUREFLAGS_PROCEDURAL | TEXTUREFLAGS_SINGLECOPY | TEXTUREFLAGS_ANISOTROPIC | ( ( m_bSRGB ) ? TEXTUREFLAGS_SRGB : 0 ) | TEXTUREFLAGS_SKIP_INITIAL_DOWNLOAD );
+																		 TEXTUREFLAGS_PROCEDURAL | TEXTUREFLAGS_SINGLECOPY | TEXTUREFLAGS_ANISOTROPIC | ( ( m_bSRGB && !IsPlatformIOS() ) ? TEXTUREFLAGS_SRGB : 0 ) | TEXTUREFLAGS_SKIP_INITIAL_DOWNLOAD );
 		m_ResultTexture.m_pTexture->SetTextureRegenerator( &m_ResultTexture );
 	}
 

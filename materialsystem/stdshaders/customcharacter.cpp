@@ -451,7 +451,12 @@ SHADER_DRAW
 		pShaderShadow->EnableTexture( SHADER_SAMPLER15, true );
 
 		pShaderShadow->EnableAlphaWrites( true );
+#if defined( IOS )
+		// same as CustomWeapon: inputs aren't sRGB-decoded on iOS, so don't encode
+		pShaderShadow->EnableSRGBWrite( false );
+#else
 		pShaderShadow->EnableSRGBWrite( bGenerateBaseTexture );
+#endif
 
 		}
 		DYNAMIC_STATE

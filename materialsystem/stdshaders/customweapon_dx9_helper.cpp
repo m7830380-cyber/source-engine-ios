@@ -230,6 +230,13 @@ void DrawCustomWeapon(  CBaseVSShader *pShader, IMaterialVar** params, IShaderDy
 
 			pShaderShadow->EnableAlphaWrites( true );
 			bool bSRGBWrite = ( bPreview || !bExpMode );
+#if defined( IOS )
+			// On iOS the input textures aren't sRGB-decoded when sampled, so the paint
+			// result is already in gamma space; encoding it (togl's in-shader sRGB write,
+			// on top of the render target's hardware encode) washed skins out.
+			if ( !bPreview )
+				bSRGBWrite = false;
+#endif
 			pShaderShadow->EnableSRGBWrite( bSRGBWrite );
 
 			if ( bPreview )

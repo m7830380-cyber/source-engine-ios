@@ -12490,6 +12490,44 @@ CBaseEntity	*CCSPlayer::GiveNamedItem( const char *pchName, int iSubType /*= 0*/
 			pItem = ItemGeneration()->GenerateRandomItem( &criteria, GetAbsOrigin(), vec3_angle );
 		}
 	}
+#else
+	// The partner depot builds without the GC item generation above, so weapons were
+	// only ever created by entity name, never with their econ item: no paint kits, and
+	// names that are items rather than entity classes (weapon_cz75a, weapon_knife_t,
+	// the knives) failed outright. Create the item's entity class and attach the item.
+	if ( !pScriptItem || !pScriptItem->IsValid() )
+	{
+		// a plain item given by name: its schema definition, if it has one
+		const CEconItemDefinition *pDef = GetItemSchema()->GetItemDefinitionByName( pchName );
+		if ( pDef && pDef->GetItemClass() && V_stricmp( pDef->GetItemClass(), pchName ) )
+		{
+			static CEconItemView s_BaseItems[ 64 ];
+			static int s_nBaseItems = 0;
+			CEconItemView *pBase = NULL;
+			for ( int i = 0; i < s_nBaseItems && !pBase; i++ )
+			{
+				if ( s_BaseItems[i].GetItemDefinition() == pDef )
+					pBase = &s_BaseItems[i];
+			}
+			if ( !pBase && s_nBaseItems < ARRAYSIZE( s_BaseItems ) )
+			{
+				pBase = &s_BaseItems[ s_nBaseItems++ ];
+				pBase->Init( pDef->GetDefinitionIndex(), AE_NORMAL, 1 );
+			}
+			pScriptItem = pBase;
+		}
+	}
+	if ( pScriptItem && pScriptItem->IsValid() && pScriptItem->GetStaticData() )
+	{
+		const char *pszClass = pScriptItem->GetStaticData()->GetItemClass();
+		pItem = pszClass ? CreateEntityByName( pszClass ) : NULL;
+		IHasAttributes *pAttribs = dynamic_cast< IHasAttributes * >( pItem );
+		if ( pAttribs )
+			pAttribs->GetAttributeContainer()->SetItem( pScriptItem );
+		printf( "[offline] give '%s': entity %s, item %llu (%s)\n", pchName, pszClass ? pszClass : "?",
+			pScriptItem->GetItemID(), pScriptItem->GetItemDefinition()->GetDefinitionName() );
+		fflush( stdout );
+	}
 #endif
 	if ( pItem == NULL )
 	{

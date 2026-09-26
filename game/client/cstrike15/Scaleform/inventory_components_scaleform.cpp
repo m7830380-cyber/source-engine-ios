@@ -468,10 +468,12 @@ public:
 				pItem->GetQuality(), pDef->GetItemBaseName(), szName );
 			fflush( stdout );
 		}
-		if ( pwsz )
-			pui->Params_SetResult( obj, pwsz );
-		else
-			pui->Params_SetResult( obj, "" );
+		// UTF-8, Scaleform's own string format: the wide-string path garbled names
+		// with non-ASCII characters (the star on knives came out as boxes followed by
+		// leftover text from other strings)
+		char szUTF8[512];
+		V_UnicodeToUTF8( pwsz ? pwsz : L"", szUTF8, sizeof( szUTF8 ) );
+		pui->Params_SetResult( obj, szUTF8 );
 	}
 	void GetItemRarityColor( SCALEFORM_CALLBACK_ARGS_DECL )
 	{

@@ -15305,6 +15305,13 @@ void CShaderAPIDx8::ReadPixelsAsync( int x, int y, int width, int height, unsign
 
 				Assert( !IsX360() );
 
+#if defined( IOS )
+				if ( s_pSystemSurface )
+				{
+					printf( "[composite] ReadPixelsAsync: previous readback not collected yet (surface overwritten)\n" );
+					fflush( stdout );
+				}
+#endif
 				HRESULT hr = Dx9Device()->CreateOffscreenPlainSurface( surfaceDesc.Width, surfaceDesc.Height, surfaceDesc.Format, D3DPOOL_SYSTEMMEM, &s_pSystemSurface, NULL );
 				Assert( SUCCEEDED( hr ) );
 
@@ -15355,7 +15362,15 @@ void CShaderAPIDx8::ReadPixelsAsyncGetResult( int x, int y, int width, int heigh
 		
 		// Release the temporary surface
 		s_pSystemSurface->Release();
+		s_pSystemSurface = NULL;	// (was left dangling; a later call could reuse a released surface)
 	}
+#if defined( IOS )
+	else
+	{
+		printf( "[composite] ReadPixelsAsyncGetResult: no surface to read (result stays empty)\n" );
+		fflush( stdout );
+	}
+#endif
 
 	// if the caller gave us a thread event, then signal the event
 	if ( pGetResultEvent )

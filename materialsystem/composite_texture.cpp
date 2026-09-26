@@ -317,6 +317,29 @@ void CCompositeTexture::GenerateComposite( void )
 				}
 				unsigned char *pPixels = m_pScratchVTF->ImageData( 0, 0, 0 );
 				int nPixels = m_pScratchVTF->Width() * m_pScratchVTF->Height();
+
+				// diagnostics: what came back from the render target
+				double flSum[4] = { 0, 0, 0, 0 }, flSumDecoded[3] = { 0, 0, 0 };
+				int nZero = 0;
+				for ( int i = 0; i < nPixels; i++ )
+				{
+					const unsigned char *px = pPixels + i * 4;
+					for ( int c = 0; c < 4; c++ )
+						flSum[c] += px[c];
+					for ( int c = 0; c < 3; c++ )
+						flSumDecoded[c] += s_decode[ px[c] ];
+					if ( !px[0] && !px[1] && !px[2] )
+						nZero++;
+				}
+				if ( nPixels > 0 )
+				{
+					printf( "[composite] %s %dx%d srgb %d: read avg rgba %.0f %.0f %.0f %.0f, after decode %.0f %.0f %.0f, black %d%%\n",
+						m_szTextureName, m_pScratchVTF->Width(), m_pScratchVTF->Height(), (int)m_bSRGB,
+						flSum[0] / nPixels, flSum[1] / nPixels, flSum[2] / nPixels, flSum[3] / nPixels,
+						flSumDecoded[0] / nPixels, flSumDecoded[1] / nPixels, flSumDecoded[2] / nPixels, nZero * 100 / nPixels );
+					fflush( stdout );
+				}
+
 				for ( int i = 0; i < nPixels; i++, pPixels += 4 )
 				{
 					pPixels[0] = s_decode[ pPixels[0] ];

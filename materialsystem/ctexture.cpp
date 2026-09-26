@@ -4099,7 +4099,13 @@ IVTFTexture *CTexture::LoadTextureBitsFromData( char *pCacheFileName, void *pSou
 	else if ( IsPS3() )
 		nVersion = VTF_PS3_MAJOR_VERSION;
 
+	// VTFFileHeaderSize() is the largest possible header (room for 32 resource
+	// entries, ~336 bytes), so tiny files like the 4x4 paint kit texture
+	// anodized_multi/solid.vtf (136 bytes, 104-byte header) were rejected. Check
+	// against the header size the file itself declares.
 	int nHeaderSize = VTFFileHeaderSize( nVersion );
+	if ( nSourceDataSize >= (int)sizeof( VTFFileBaseHeader_t ) )
+		nHeaderSize = MIN( nHeaderSize, ( (const VTFFileBaseHeader_t *)pSourceData )->headerSize );
 	if ( nSourceDataSize < nHeaderSize )
 	{
 		Warning( "Error reading texture header \"%s\"\n", pCacheFileName );

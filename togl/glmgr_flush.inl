@@ -45,6 +45,8 @@ FORCEINLINE GLuint GLMContext::FindSamplerObject( const GLMTexSamplingParams &de
 #endif // !OSX
 
 // BE VERY CAREFUL WHAT YOU DO IN HERE. This is called on every batch, even seemingly simple changes can kill perf.
+extern ConVar gl_srgb_rt_single_encode;
+
 FORCEINLINE void GLMContext::FlushDrawStates( uint nStartIndex, uint nEndIndex, uint nBaseVertex )	// shadersOn = true for draw calls, false for clear calls
 {
 	Assert( m_drawingLang == kGLMGLSL ); // no support for ARB shaders right now (and NVidia reports that they aren't worth targeting under Windows/Linux for various reasons anyway)
@@ -494,6 +496,13 @@ FORCEINLINE void GLMContext::FlushDrawStates( uint nStartIndex, uint nEndIndex, 
 	if ( m_pBoundPair->m_locFragmentFakeSRGBEnable >= 0 )
 	{
 		float fakeSRGBEnable = m_FakeBlendEnableSRGB ? 1.0f : 0.0f;
+		if ( fakeSRGBEnable != 0.0f && gl_srgb_rt_single_encode.GetBool() && m_drawingFBO )
+		{
+			// the GPU already encodes into sRGB textures; don't encode twice (see gl_srgb_rt_single_encode)
+			CGLMTex *pTarget = m_drawingFBO->m_attach[ kAttColor0 ].m_tex;
+			if ( pTarget && ( pTarget->m_layout->m_key.m_texFlags & kGLMTexSRGB ) && !pTarget->m_bIsBackBuffer )
+				fakeSRGBEnable = 0.0f;
+		}
 		if ( fakeSRGBEnable != m_pBoundPair->m_fakeSRGBEnableValue )
 		{
 			gGL->glUniform1f( m_pBoundPair->m_locFragmentFakeSRGBEnable, fakeSRGBEnable );

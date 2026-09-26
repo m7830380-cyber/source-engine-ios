@@ -874,6 +874,15 @@ void glAttachTex2DtoFBO	( GLenum target, eBlitFormatClass formatClass, uint texN
 	}
 }
 
+// All render targets here are sRGB textures (the GPU encodes on write), and without
+// GL_EXT_sRGB_write_control togl also encodes in the shader whenever D3D's sRGB write
+// is on, so anything drawn into a render target that is later SAMPLED got encoded
+// twice and came out whitish (scope blur, freeze-cam, motion blur, skins, VGUI model
+// panels). 1: skip the in-shader encode when drawing into an sRGB texture that isn't
+// the backbuffer. The backbuffer keeps it: presenting it to the linear window decodes
+// once, which the world's look is built on.
+ConVar gl_srgb_rt_single_encode( "gl_srgb_rt_single_encode", "1", FCVAR_RELEASE | FCVAR_ARCHIVE, "iOS: encode sRGB once (in hardware) when drawing into sRGB render targets that get sampled" );
+
 ConVar gl_can_resolve_flipped("gl_can_resolve_flipped", "0" );
 ConVar gl_cannot_resolve_flipped("gl_cannot_resolve_flipped", "0" );
 

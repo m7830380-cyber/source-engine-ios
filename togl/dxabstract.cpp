@@ -2418,6 +2418,8 @@ HRESULT	IDirect3DDevice9::Create( IDirect3DDevice9Params *params )
 		// do not do an AddRef..
 
 	GLMPRINTF(("-X- IDirect3DDevice9::Create making color render target complete -> %08x", m_pDefaultColorSurface ));
+	if ( m_pDefaultColorSurface && m_pDefaultColorSurface->m_tex )
+		m_pDefaultColorSurface->m_tex->m_bIsBackBuffer = true;	// see gl_srgb_rt_single_encode
 
 	GLMPRINTF(("-X- IDirect3DDevice9::Create setting color render target..."));
 	result = this->SetRenderTarget(0, m_pDefaultColorSurface);
@@ -2636,6 +2638,8 @@ HRESULT IDirect3DDevice9::Reset(D3DPRESENT_PARAMETERS* pPresentationParameters)
 	// do not do an AddRef here..
 
 	GLMPRINTF(("-X- IDirect3DDevice9::Reset making color render target complete -> %08x", m_pDefaultColorSurface ));
+	if ( m_pDefaultColorSurface && m_pDefaultColorSurface->m_tex )
+		m_pDefaultColorSurface->m_tex->m_bIsBackBuffer = true;	// see gl_srgb_rt_single_encode
 
 	GLMPRINTF(("-X- IDirect3DDevice9::Reset setting color render target..."));
 	

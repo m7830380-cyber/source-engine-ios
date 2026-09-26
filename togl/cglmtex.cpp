@@ -801,6 +801,7 @@ CGLMTex::CGLMTex( GLMContext *ctx, GLMTexLayout *layout, uint levels, const char
 	//  This should only be true if we're running on OSX 10.6 or it was explicitly
 	//  enabled with -gl_texclientstorage on the command line.
 	m_texClientStorage = ctx->m_bTexClientStorage;
+	m_bIsBackBuffer = false;
 	
 	// flag that we have not yet been explicitly kicked into VRAM..
 	m_texPreloaded = false;

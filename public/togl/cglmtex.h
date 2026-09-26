@@ -540,6 +540,7 @@ protected:
 	
 	bool					m_texClientStorage;	// was CS selected for texture
 	bool					m_texPreloaded;		// has it been kicked into VRAM with GLMContext::PreloadTex yet
+	bool					m_bIsBackBuffer;	// the D3D default color surface (presented, never sampled)
 
 	int						m_srgbFlipCount;
 #if GLMDEBUG

@@ -1838,6 +1838,11 @@ IVisualsDataProcessor *CEconItemView::GetVisualsDataProcessorByName( const char*
 
 void CEconItemView::CreateCustomClothingMaterials( const char *pchSkinIdent, int nSlotId, int nTeam, bool bIgnorePicMip, CompositeTextureSize_t diffuseTextureSize )
 {
+#if defined( IOS )
+	// mat_picmip shrank skin textures to 128x128 on iOS (from 512/256), which made
+	// them look flat and blurry; skins are only built for equipped/inspected items
+	bIgnorePicMip = true;
+#endif
 	int nPaintKit = GetCustomPaintKitIndex();
 	if ( nPaintKit == 0 ) // default paintkit, no need to composite
 		return;
@@ -2365,6 +2370,11 @@ void CEconItemView::UpdateGeneratedMaterial( bool bIgnorePicMip, CompositeTextur
 
 void CEconItemView::CreateCustomWeaponMaterials( int nWeaponId, bool bIgnorePicMip, CompositeTextureSize_t diffuseTextureSize )
 {
+#if defined( IOS )
+	// mat_picmip shrank skin textures to 128x128 on iOS (from 512/256), which made
+	// them look flat and blurry; skins are only built for equipped/inspected items
+	bIgnorePicMip = true;
+#endif
 	if ( !GetWorldDisplayModel() )
 	{
 		AssertMsg1( false, "Failed to GetWorldDisplayModel for %s.", WeaponIdAsString((CSWeaponID)nWeaponId) );

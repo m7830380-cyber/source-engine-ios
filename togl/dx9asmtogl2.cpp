@@ -2916,6 +2916,14 @@ void D3DToGL::Handle_UnaryOp( uint32 nInstruction )
 	{
 		PrintToBufWithIndents( *m_pBufALUCode, "%s = abs( %s );\n", sParam1.String(), sParam2.String() );
 	}
+	else if ( nInstruction == D3DSIO_DSX )	// ddx(); the CustomCharacter (glove skin) shader uses these
+	{
+		PrintToBufWithIndents( *m_pBufALUCode, "%s = dFdx( %s );\n", sParam1.String(), sParam2.String() );
+	}
+	else if ( nInstruction == D3DSIO_DSY )	// ddy()
+	{
+		PrintToBufWithIndents( *m_pBufALUCode, "%s = dFdy( %s );\n", sParam1.String(), sParam2.String() );
+	}
 	else if ( nInstruction == D3DSIO_MOVA )
 	{
 		m_bDeclareAddressReg = true;
@@ -3398,9 +3406,13 @@ int D3DToGL::TranslateShader( uint32* code, CUtlBuffer *pBufDisassembledCode, bo
 			case D3DSIO_CALL:
 			case D3DSIO_LOOP:
 			case D3DSIO_BREAKP:
+				TranslationError();
+				break;
+
+			// screen-space derivatives (ddx/ddy): GLSL has them built in
 			case D3DSIO_DSX:
 			case D3DSIO_DSY:
-				TranslationError();
+				Handle_UnaryOp( nInstruction );
 				break;
 
 			case D3DSIO_IFC:

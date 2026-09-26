@@ -2326,6 +2326,12 @@ void CEconItemView::UpdateGeneratedMaterial( bool bIgnorePicMip, CompositeTextur
 			}
 			else if ( V_strcmp( pItemClass, "wearable_item" ) == 0 )
 			{
+#if defined( IOS )
+				// togl can't translate the CustomCharacter pixel shader these composites use
+				// ("D3DToGL: GLSL translation error!" is fatal), so equipping gloves crashed
+				// the menu. Gloves aren't applied in game on iOS yet anyway.
+				return;
+#endif
 				// clothing items
 				int nTeam = -1; // should remove this?  Will we do anything team specific?
 				int nSlotId = GetStaticData()->GetLoadoutSlot( nTeam );

@@ -424,9 +424,16 @@ void CEngine::Frame( void )
 	// yield the CPU for a little while when paused, minimized, or not the focus
 	// FIXME:  Move this to main windows message pump?
 	static ConVarRef cl_embedded_stream_video_playing( "cl_embedded_stream_video_playing" );
+#ifdef IOS
+	// Never throttle on iOS: the OS suspends the app when it's in the background, and
+	// while it's on screen a stray focus-lost event would cap it at ~10-15 fps
+	// (engine_no_focus_sleep sleeps 50ms a frame).
+	if ( false )
+#else
 	if ( IsPC() && !game->IsActiveApp() && !sv.IsDedicated()
 		&& !( cl_embedded_stream_video_playing.IsValid() && cl_embedded_stream_video_playing.GetBool() )
 		&& engine_no_focus_sleep.GetInt() > 0 )
+#endif
 	{
 		g_pInputSystem->SleepUntilInput( engine_no_focus_sleep.GetInt() );
 	}
@@ -441,6 +448,28 @@ void CEngine::Frame( void )
 		static int s_nFrames = 0;
 		static double s_flLastBeat = 0.0;
 		++s_nFrames;
+
+		// per-second frame rate, focus state and slowest frame, to see drops as they happen
+		static double s_flLastSecond = 0.0, s_flLastFrameTime = 0.0, s_flWorstFrame = 0.0;
+		static int s_nFramesAtSecond = 0, s_nInactiveFrames = 0;
+		if ( s_flLastFrameTime > 0.0 )
+			s_flWorstFrame = MAX( s_flWorstFrame, m_flCurrentTime - s_flLastFrameTime );
+		s_flLastFrameTime = m_flCurrentTime;
+		if ( !game->IsActiveApp() )
+			++s_nInactiveFrames;
+		if ( m_flCurrentTime - s_flLastSecond >= 1.0 )
+		{
+			if ( s_flLastSecond > 0.0 )
+			{
+				printf( "[fps] t=%.1f fps %.0f, slowest frame %.0f ms, inactive frames %d\n", m_flCurrentTime,
+						( s_nFrames - s_nFramesAtSecond ) / ( m_flCurrentTime - s_flLastSecond ), s_flWorstFrame * 1000.0, s_nInactiveFrames );
+				fflush( stdout );
+			}
+			s_flLastSecond = m_flCurrentTime;
+			s_nFramesAtSecond = s_nFrames;
+			s_flWorstFrame = 0.0;
+			s_nInactiveFrames = 0;
+		}
 		if ( m_flCurrentTime - s_flLastBeat >= 5.0 )
 		{
 			printf( "[heartbeat] frame %d, t=%.1f, active app %d, state %d, client signon %d, server active %d, loading %d\n",

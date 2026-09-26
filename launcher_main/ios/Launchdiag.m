@@ -925,6 +925,26 @@ void IOS_StartWatchdog( void )
 	for( size_t i = 0; i < sizeof( quietSignals ) / sizeof( quietSignals[0] ); i++ )
 		signal( quietSignals[i], IOS_FatalSignal );
 
+	// Crashes too: log the faulting thread's stack, then re-raise with the default
+	// action so iOS still writes its crash report. An alternate stack keeps this
+	// working for stack overflows.
+	static char s_altStack[ 64 * 1024 ];
+	stack_t ss;
+	ss.ss_sp = s_altStack;
+	ss.ss_size = sizeof( s_altStack );
+	ss.ss_flags = 0;
+	sigaltstack( &ss, NULL );
+	const int crashSignals[] = { SIGSEGV, SIGBUS, SIGILL, SIGFPE, SIGABRT, SIGTRAP };
+	for( size_t i = 0; i < sizeof( crashSignals ) / sizeof( crashSignals[0] ); i++ )
+	{
+		struct sigaction csa;
+		memset( &csa, 0, sizeof( csa ) );
+		csa.sa_handler = IOS_FatalSignal;
+		csa.sa_flags = SA_ONSTACK | SA_RESETHAND;
+		sigemptyset( &csa.sa_mask );
+		sigaction( crashSignals[i], &csa, NULL );
+	}
+
 	struct sigaction sa;
 	memset( &sa, 0, sizeof( sa ) );
 	sa.sa_handler = IOS_WatchdogSignal;

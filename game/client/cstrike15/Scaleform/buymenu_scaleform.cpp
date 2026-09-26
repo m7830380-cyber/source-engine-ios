@@ -2577,6 +2577,8 @@ static ConVar cl_buymenu_closeonbuy( "cl_buymenu_closeonbuy", "0", FCVAR_ARCHIVE
 // box Valve's client used for it (buymenu_itempanel_parent.res), while the menu's
 // weapon panel is showing.
 static CCSBuyMenuScaleform *s_pBuyMenuForModel = NULL;
+static ConVar ios_buymenu_model_scale( "ios_buymenu_model_scale", "0.7", FCVAR_RELEASE | FCVAR_ARCHIVE, "Buy menu weapon model size (1 = Valve's buymenu_itempanel box)" );
+static ConVar ios_buymenu_model_yofs( "ios_buymenu_model_yofs", "-50", FCVAR_RELEASE | FCVAR_ARCHIVE, "Buy menu weapon model vertical offset, in 480-tall units (negative = up)" );
 
 static float GetFlashNumberMember( SFVALUE obj, const char *pszName, float flDefault )
 {
@@ -2610,22 +2612,29 @@ static int GetBuyMenuModelPlacement( int &x, int &y, int &w, int &h )
 	if ( !bVisible )
 		return -1;
 
-	// Where Valve's client put the model: Resource/UI/econ/buymenu_itempanel_parent.res,
-	// "buymenu_itempanel": xpos c-20, ypos 94, wide 210, tall 158 (proportional, 480 tall)
+	// Based on where Valve's client put the model (Resource/UI/econ/buymenu_itempanel_parent.res,
+	// "buymenu_itempanel": xpos c-20, ypos 94, wide 210, tall 158, proportional to 480 tall),
+	// smaller and higher so it stays inside the menu's weapon preview window; tunable:
+	static ConVarRef ios_buymenu_model_scale( "ios_buymenu_model_scale" );
+	static ConVarRef ios_buymenu_model_yofs( "ios_buymenu_model_yofs" );
 	int sw, sh;
 	vgui::surface()->GetScreenSize( sw, sh );
 	float flScale = sh / 480.0f;
-	x = (int)( sw * 0.5f - 20.0f * flScale );
-	y = (int)( 94.0f * flScale );
-	w = (int)( 210.0f * flScale );
-	h = (int)( 158.0f * flScale );
+	float flSize = ios_buymenu_model_scale.IsValid() ? ios_buymenu_model_scale.GetFloat() : 0.7f;
+	float flYOfs = ios_buymenu_model_yofs.IsValid() ? ios_buymenu_model_yofs.GetFloat() : -50.0f;
+	float cx = sw * 0.5f + ( -20.0f + 105.0f ) * flScale;		// center of Valve's box
+	float cy = ( 94.0f + 79.0f + flYOfs ) * flScale;
+	w = (int)( 210.0f * flSize * flScale );
+	h = (int)( 158.0f * flSize * flScale );
+	x = (int)( cx - w * 0.5f );
+	y = (int)( cy - h * 0.5f );
 
-	static bool s_bLogged = false;
-	if ( !s_bLogged )
+	static int s_nLogged[4] = { -1, -1, -1, -1 };
+	if ( s_nLogged[0] != x || s_nLogged[1] != y || s_nLogged[2] != w || s_nLogged[3] != h )
 	{
-		printf( "[buymenu] weapon view at %d,%d %dx%d (screen %dx%d)\n", x, y, w, h, sw, sh );
+		printf( "[buymenu] weapon view at %d,%d %dx%d (screen %dx%d, scale %.2f, yofs %.0f)\n", x, y, w, h, sw, sh, flSize, flYOfs );
 		fflush( stdout );
-		s_bLogged = true;
+		s_nLogged[0] = x; s_nLogged[1] = y; s_nLogged[2] = w; s_nLogged[3] = h;
 	}
 	return 1;
 }

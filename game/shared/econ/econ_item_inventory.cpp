@@ -31,6 +31,7 @@
 
 #if defined( CSTRIKE15 )
 #include "cs_gamerules.h"
+#include "offline_inventory.h"
 #endif
 
 #if defined(TF_CLIENT_DLL) || defined(TF_DLL)
@@ -1821,6 +1822,10 @@ CEconItem *CPlayerInventory::GetSOCDataForItem( itemid_t iItemID )
 	if ( !m_pSOCache )
 	{
 		pData = GetEconItemFromStringTable( iItemID );
+#if defined( CSTRIKE15 )
+		if ( !pData )
+			pData = OfflineInventory_FindItem( iItemID );	// -allskinsunlocked items (no GC)
+#endif
 	}
 
 #ifdef CLIENT_DLL
@@ -1849,6 +1854,10 @@ const CEconItem *CPlayerInventory::GetSOCDataForItem( itemid_t iItemID ) const
 	if ( !m_pSOCache )
 	{
 		pData = GetEconItemFromStringTable( iItemID );
+#if defined( CSTRIKE15 )
+		if ( !pData )
+			pData = OfflineInventory_FindItem( iItemID );	// -allskinsunlocked items (no GC)
+#endif
 	}
 
 	if ( m_pSOCache && !pData )

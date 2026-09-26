@@ -7,6 +7,7 @@
 
 #include "cbase.h"
 #include "cs_player.h"
+#include "offline_inventory.h"
 #include "cs_gamerules.h"
 #include "trains.h"
 #include "vcollide_parse.h"
@@ -935,6 +936,30 @@ void CCSPlayer::Precache()
 	Vector mins( -13, -13, -10 );
 	Vector maxs( 13, 13, 75 );
 	bool bPreload = true;
+
+	// -allskinsunlocked: knives and gloves can be equipped at any time from the
+	// menu, so load their models with the map instead of on first use
+	if ( OfflineInventory_IsEnabled() )
+	{
+		CUtlVector< const char * > vecModels;
+		const CEconItemSchema::ItemDefinitionMap_t &mapDefs = GetItemSchema()->GetItemDefinitionMap();
+		FOR_EACH_MAP_FAST( mapDefs, i )
+		{
+			CCStrike15ItemDefinition *pDef = dynamic_cast< CCStrike15ItemDefinition * >( mapDefs[i] );
+			if ( !pDef || pDef->IsBaseItem() )
+				continue;
+			int nSlot = pDef->GetDefaultLoadoutSlot();
+			if ( nSlot != LOADOUT_POSITION_MELEE && nSlot != LOADOUT_POSITION_CLOTHING_HANDS )
+				continue;
+			vecModels.RemoveAll();
+			pDef->GeneratePrecacheModelStrings( false, &vecModels );
+			FOR_EACH_VEC( vecModels, j )
+			{
+				if ( vecModels[j] && vecModels[j][0] )
+					PrecacheModel( vecModels[j] );
+			}
+		}
+	}
 
 	PlayerModelInfo::GetPtr()->InitializeForCurrentMap();
 
@@ -12381,7 +12406,34 @@ void CCSPlayer::StockPlayerAmmo( CBaseCombatWeapon *pNewWeapon )
 
 void CCSPlayer::FindMatchingWeaponsForTeamLoadout( const char *pchName, int nTeam, bool bMustBeTeamSpecific, CUtlVector< CEconItemView* > &matchingWeapons )
 {
-	/** Removed for partner depot **/
+	// Valve's version was removed from the partner depot. This one serves the
+	// -allskinsunlocked inventory: a weapon given by name uses whatever item is
+	// equipped in that weapon's loadout slot, like CS:GO does (so the default
+	// P2000 becomes an equipped USP-S, an M4A4 an equipped M4A1-S, and the
+	// default knife the equipped knife).
+	if ( !OfflineInventory_IsEnabled() || !pchName || !pchName[0] || bMustBeTeamSpecific || IsBot() )
+		return;
+	if ( nTeam != TEAM_TERRORIST && nTeam != TEAM_CT )
+		return;
+
+	int nSlot = -1;
+	if ( !V_stricmp( pchName, "weapon_knife" ) || !V_stricmp( pchName, "weapon_knife_t" ) )
+	{
+		nSlot = LOADOUT_POSITION_MELEE;
+	}
+	else
+	{
+		const CCStrike15ItemDefinition *pDef = dynamic_cast< const CCStrike15ItemDefinition * >( GetItemSchema()->GetItemDefinitionByName( pchName ) );
+		if ( pDef )
+			nSlot = pDef->GetLoadoutSlot( nTeam );
+	}
+	if ( nSlot < 0 || nSlot >= LOADOUT_POSITION_COUNT )
+		return;
+
+	CEconItemView *pItem = Inventory()->GetItemInLoadout( nTeam, nSlot );
+	// only real unlocked items; base items keep the plain weapon path
+	if ( pItem && pItem->IsValid() && pItem->GetSOCData() )
+		matchingWeapons.AddToTail( pItem );
 }
 
 CBaseEntity	*CCSPlayer::GiveNamedItem( const char *pchName, int iSubType /*= 0*/, CEconItemView *pScriptItem /*= NULL*/, bool bForce /*= false*/ )
@@ -15837,6 +15889,16 @@ void CCSPlayer::UpdateInventory( bool bInit )
 	}
 	//m_Shared.SetLoadoutUnavailable( bInvalid );
 #endif
+
+	// -allskinsunlocked: no GC sends human players' inventories, build them from the
+	// schema and the loadout the client saved (refilled when that file changes)
+	if ( OfflineInventory_IsEnabled() && !IsFakeClient() && !IsBot() && OfflineInventory_NeedsRefill( &m_Inventory ) )
+	{
+		CSteamID steamIDForPlayer;
+		if ( !GetSteamID( &steamIDForPlayer ) || !steamIDForPlayer.IsValid() )
+			steamIDForPlayer = CSteamID( 1, k_EUniversePublic, k_EAccountTypeIndividual );	// the offline Steam user (stub_steam)
+		OfflineInventory_Fill( &m_Inventory, steamIDForPlayer );
+	}
 }
 
 //-----------------------------------------------------------------------------

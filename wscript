@@ -136,12 +136,16 @@ PROJECT_EXTRA_SOURCES = {
 		# offline with bots dialog glue (single-player.swf)
 		'game/client/cstrike15/Scaleform/singleplayergamedialog_scaleform.cpp',
 		# _global.CScaleformComponent_GameTypes (map group / game mode data for the SWFs)
-		'game/client/cstrike15/Scaleform/gametypes_component_scaleform.cpp'],
+		'game/client/cstrike15/Scaleform/gametypes_component_scaleform.cpp',
+		# inventory/loadout/persona components for the main menu inventory screens
+		'game/client/cstrike15/Scaleform/inventory_components_scaleform.cpp',
+		# -allskinsunlocked offline inventory
+		'game/shared/cstrike15/offline_inventory.cpp'],
 	# togl/launcher calls without Scaleform's GLES headers in the same file
 	'scaleformui': ['scaleformui/scaleformuiimpl/sf_togl_bridge.cpp'],
 	# SDL finger events -> IE_Finger* input events
 	'inputsystem': ['ios/inputsystem/touch_sdl.cpp'],
-	'server': ['common/steamid.cpp'],
+	'server': ['common/steamid.cpp', 'game/shared/cstrike15/offline_inventory.cpp'],
 }
 
 # VPC link dependencies whose source is not part of the leak. Code that

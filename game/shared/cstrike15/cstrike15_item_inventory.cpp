@@ -6,6 +6,7 @@
 
 #include "cbase.h"
 #include "cstrike15_item_inventory.h"
+#include "offline_inventory.h"
 #include "econ_entity_creation.h"
 #include "cstrike15_item_system.h"
 #include "vgui/ILocalize.h"
@@ -196,6 +197,14 @@ void CCSInventoryManager::PostInit( void )
 {
 	BaseClass::PostInit();
 	GenerateBaseItems();
+
+#ifdef CLIENT_DLL
+	// -allskinsunlocked: there is no GC to send the local inventory, build it here
+	if ( OfflineInventory_IsEnabled() && m_pLocalInventory && steamapicontext && steamapicontext->SteamUser() )
+	{
+		OfflineInventory_Fill( m_pLocalInventory, steamapicontext->SteamUser()->GetSteamID() );
+	}
+#endif
 }
 
 void CCSInventoryManager::Shutdown( void )
@@ -281,10 +290,28 @@ int g_nLoadoutActionBatchLastFrame = 0;
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
+#ifdef CLIENT_DLL
+// Saves the offline (-allskinsunlocked) loadout whenever an equip attempt finishes
+struct COfflineLoadoutSaver
+{
+	CCSPlayerInventory *m_pInventory;
+	explicit COfflineLoadoutSaver( CCSPlayerInventory *pInventory ) : m_pInventory( pInventory ) {}
+	~COfflineLoadoutSaver()
+	{
+		if ( m_pInventory && OfflineInventory_IsEnabled() )
+			OfflineInventory_SaveLoadout( m_pInventory );
+	}
+};
+#endif
+
 bool CCSInventoryManager::EquipItemInLoadout( int iTeam, int iSlot, itemid_t iItemID, bool bSwap /*= false*/ )
 {
 	if ( !steamapicontext || !steamapicontext->SteamUser() )
 		return false;
+
+#ifdef CLIENT_DLL
+	COfflineLoadoutSaver offlineSaver( m_pLocalInventory );
+#endif
 
 	if ( econ_debug_loadout_ui.GetBool() && g_nLoadoutActionBatchLastFrame != gpGlobals->framecount )
 	{

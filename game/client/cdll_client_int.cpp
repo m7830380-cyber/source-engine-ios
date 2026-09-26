@@ -1997,6 +1997,8 @@ void CHLClient::HudUpdate( bool bActive )
 #if defined( INCLUDE_SCALEFORM ) && defined( CSTRIKE15 )
 	extern void ScaleformComponentGameTypes_EnsureInstalled();
 	ScaleformComponentGameTypes_EnsureInstalled();
+	extern void ScaleformInventoryComponents_EnsureInstalled();
+	ScaleformInventoryComponents_EnsureInstalled();
 #endif
 
 #if defined( IOS )

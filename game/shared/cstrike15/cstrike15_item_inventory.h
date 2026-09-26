@@ -1,4 +1,4 @@
-//====== Copyright © Valve Corporation, All rights reserved. =======
+//====== Copyright ï¿½ Valve Corporation, All rights reserved. =======
 //
 // Purpose: Container that allows client & server access to data in player inventories & loadouts
 //
@@ -38,6 +38,10 @@ public:
 	virtual CEconItemView	*GetItemInLoadout( int iClass, int iSlot ) const;
 
 	CEconItemView* GetItemInLoadoutFilteredByProhibition( int iClass, int iSlot ) const;
+
+	// Raw loadout slot contents, used by the offline inventory (offline_inventory.cpp)
+	itemid_t			GetLoadoutItemID( int iClass, int iSlot ) const { return m_LoadoutItems[ iClass ][ iSlot ]; }
+	void				ResetLoadoutItemIDs( void ) { V_memset( m_LoadoutItems, 0, sizeof( m_LoadoutItems ) ); }
 
 
 #ifdef CLIENT_DLL

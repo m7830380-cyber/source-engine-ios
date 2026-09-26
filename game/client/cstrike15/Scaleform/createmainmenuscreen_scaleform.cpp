@@ -283,6 +283,9 @@ void CCreateMainMenuScreenScaleform::Show( void )
 		WITH_SLOT_LOCKED
 		{
 			ScaleformUI()->Value_InvokeWithoutReturn( m_FlashAPI, "showPanel", NULL, 0 );
+			// No GC announces the inventory: tell the movie it's there so it sets up
+			// (or refreshes) the inventory and loadout screens
+			ScaleformUI()->Value_InvokeWithoutReturn( m_FlashAPI, "ScaleformComponent_MyPersona_InventoryUpdated", NULL, 0 );
 		}
 
 		m_bVisible = true;
@@ -306,7 +309,17 @@ void CCreateMainMenuScreenScaleform::Show( void )
 
 void CCreateMainMenuScreenScaleform::OnEvent( KeyValues *pEvent )
 {
-	/* Removed for partner depot */
+	// Valve's version was removed from the partner depot. Forward the UI
+	// components' events ("ScaleformComponent_<Category>_<Event>") to the movie,
+	// which defines a handler of that name for each one it cares about.
+	const char *szEvent = pEvent ? pEvent->GetName() : NULL;
+	if ( szEvent && StringHasPrefix( szEvent, "ScaleformComponent_" ) && FlashAPIIsValid() )
+	{
+		WITH_SLOT_LOCKED
+		{
+			ScaleformUI()->Value_InvokeWithoutReturn( m_FlashAPI, szEvent, NULL, 0 );
+		}
+	}
 }
 
 void CCreateMainMenuScreenScaleform::Hide( void )

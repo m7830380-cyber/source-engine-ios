@@ -3853,14 +3853,33 @@ void CWeaponCSBase::SaveCustomMaterialsTextures( )
 	/** Removed for partner depot **/
 }
 
+// Valve's versions were removed from the partner depot. The econ item builds the
+// painted (composite) materials; the weapon uses them, and its view model and
+// world model copy them from the weapon when they draw.
 void CWeaponCSBase::UpdateCustomMaterial( void )
 {
-	/** Removed for partner depot **/
+	ClearCustomMaterials();
+
+	CEconItemView *pItem = GetEconItemView();
+	if ( !pItem || !pItem->IsValid() || pItem->GetCustomPaintKitIndex() <= 0 )
+		return;
+
+	// starts the generation; each material becomes valid once its textures are built,
+	// and draws use the stock material until then
+	pItem->UpdateGeneratedMaterial();
+	for ( int i = 0; i < pItem->GetCustomMaterialCount(); i++ )
+		SetCustomMaterial( pItem->GetCustomMaterial( i ), i );
+
+	printf( "[offline] weapon %s item %llu paint %d: %d custom materials\n", GetClassname(), pItem->GetItemID(),
+		pItem->GetCustomPaintKitIndex(), pItem->GetCustomMaterialCount() );
+	fflush( stdout );
 }
 
 void CWeaponCSBase::CheckCustomMaterial( void )
 {
-	/** Removed for partner depot **/
+	CEconItemView *pItem = GetEconItemView();
+	if ( pItem && pItem->IsValid() && pItem->GetCustomPaintKitIndex() > 0 && pItem->GetCustomMaterialCount() != GetCustomMaterialCount() )
+		UpdateCustomMaterial();
 }
 
 #endif // CLIENT_DLL

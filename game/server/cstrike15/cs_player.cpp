@@ -12524,6 +12524,10 @@ CBaseEntity	*CCSPlayer::GiveNamedItem( const char *pchName, int iSubType /*= 0*/
 		IHasAttributes *pAttribs = dynamic_cast< IHasAttributes * >( pItem );
 		if ( pAttribs )
 			pAttribs->GetAttributeContainer()->SetItem( pScriptItem );
+		// weapons in this port aren't econ entities; they carry the unlocked item's ID
+		CBaseCombatWeapon *pGivenWeapon = dynamic_cast< CBaseCombatWeapon * >( pItem );
+		if ( pGivenWeapon && OfflineInventory_FindItem( pScriptItem->GetItemID() ) )
+			pGivenWeapon->SetOfflineItemID( pScriptItem->GetItemID() );
 		printf( "[offline] give '%s': entity %s, item %llu (%s)\n", pchName, pszClass ? pszClass : "?",
 			pScriptItem->GetItemID(), pScriptItem->GetItemDefinition()->GetDefinitionName() );
 		fflush( stdout );

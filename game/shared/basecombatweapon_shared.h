@@ -231,6 +231,19 @@ public:
 	const CEconItemView*	GetEconItemView( void ) const;
 	CEconItemView*			GetEconItemView( void );
 
+#if defined( CSTRIKE15 )
+	// -allskinsunlocked: the offline inventory item this weapon was given (0 = none).
+	// Networked, so the client sees the same item (and its paint kit).
+	void					SetOfflineItemID( uint64 ullItemID );
+	uint64					GetOfflineItemID( void ) const { return ( uint64( (uint32)m_nOfflineItemIDHigh ) << 32 ) | (uint32)m_nOfflineItemIDLow; }
+private:
+	CEconItemView			*GetOfflineItemView( void ) const;
+	CNetworkVar( int, m_nOfflineItemIDLow );
+	CNetworkVar( int, m_nOfflineItemIDHigh );
+	mutable CEconItemView	*m_pOfflineItemView;
+public:
+#endif
+
 	virtual bool			IsBaseCombatWeapon( void ) const { return true; }
 	virtual CBaseCombatWeapon *MyCombatWeaponPointer( void ) { return this; }
 

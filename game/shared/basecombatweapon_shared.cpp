@@ -33,6 +33,10 @@
 
 #endif
 
+#if defined( CSTRIKE15 )
+#include "offline_inventory.h"
+#endif
+
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
 
@@ -541,6 +545,12 @@ CBaseCombatWeapon::CBaseCombatWeapon()
 	// Constructor must call this
 	// CONSTRUCT_PREDICTABLE( CBaseCombatWeapon );
 
+#if defined( CSTRIKE15 )
+	m_nOfflineItemIDLow = 0;
+	m_nOfflineItemIDHigh = 0;
+	m_pOfflineItemView = NULL;
+#endif
+
 	// Some default values.  There should be set in the particular weapon classes
 	m_fMinRange1		= 65;
 	m_fMinRange2		= 65;
@@ -585,6 +595,10 @@ CBaseCombatWeapon::CBaseCombatWeapon()
 //-----------------------------------------------------------------------------
 CBaseCombatWeapon::~CBaseCombatWeapon( void )
 {
+#if defined( CSTRIKE15 )
+	delete m_pOfflineItemView;
+	m_pOfflineItemView = NULL;
+#endif
 #if !defined( CLIENT_DLL )
 	//Remove our constraint, if we have one
 	if ( m_pConstraint != NULL )
@@ -3354,6 +3368,10 @@ BEGIN_NETWORK_TABLE(CBaseCombatWeapon, DT_BaseCombatWeapon)
 	SendPropInt( SENDINFO( m_iSecondaryReserveAmmoCount), 10),	
 	SendPropEHandle( SENDINFO(m_hWeaponWorldModel) ),
 	SendPropInt( SENDINFO( m_iNumEmptyAttacks ), 8 ),
+#if defined( CSTRIKE15 )
+	SendPropInt( SENDINFO( m_nOfflineItemIDLow ), 32, SPROP_UNSIGNED ),
+	SendPropInt( SENDINFO( m_nOfflineItemIDHigh ), 32, SPROP_UNSIGNED ),
+#endif
 #else
 	RecvPropDataTable("LocalWeaponData", 0, 0, &REFERENCE_RECV_TABLE(DT_LocalWeaponData)),
 	RecvPropDataTable("LocalActiveWeaponData", 0, 0, &REFERENCE_RECV_TABLE(DT_LocalActiveWeaponData)),
@@ -3368,6 +3386,10 @@ BEGIN_NETWORK_TABLE(CBaseCombatWeapon, DT_BaseCombatWeapon)
 	RecvPropInt( RECVINFO( m_iSecondaryReserveAmmoCount)),	
 	RecvPropEHandle( RECVINFO(m_hWeaponWorldModel) ),
 	RecvPropInt( RECVINFO( m_iNumEmptyAttacks )),
+#if defined( CSTRIKE15 )
+	RecvPropInt( RECVINFO( m_nOfflineItemIDLow ) ),
+	RecvPropInt( RECVINFO( m_nOfflineItemIDHigh ) ),
+#endif
 #endif
 END_NETWORK_TABLE()
 
@@ -3421,13 +3443,52 @@ static CEconItemView *GetDefaultItemViewForWeapon( const CBaseCombatWeapon *pWea
 	return s_mapViews[i];
 }
 
+#if defined( CSTRIKE15 )
+void CBaseCombatWeapon::SetOfflineItemID( uint64 ullItemID )
+{
+	m_nOfflineItemIDLow = (int)(uint32)( ullItemID & 0xFFFFFFFF );
+	m_nOfflineItemIDHigh = (int)(uint32)( ullItemID >> 32 );
+}
+
+// A view of the -allskinsunlocked item this weapon was given. The item's data (paint
+// kit, wear, seed) comes straight from the offline inventory, which builds the same
+// items with the same IDs in the client and the server.
+CEconItemView *CBaseCombatWeapon::GetOfflineItemView( void ) const
+{
+	uint64 ullItemID = GetOfflineItemID();
+	if ( !ullItemID )
+		return NULL;
+
+	if ( !m_pOfflineItemView || m_pOfflineItemView->GetItemID() != ullItemID )
+	{
+		CEconItem *pItem = OfflineInventory_FindItem( ullItemID );
+		if ( !pItem )
+			return NULL;
+		if ( !m_pOfflineItemView )
+			m_pOfflineItemView = new CEconItemView;
+		m_pOfflineItemView->Init( pItem->GetDefinitionIndex(), pItem->GetQuality(), pItem->GetItemLevel(), pItem->GetAccountID() );
+		m_pOfflineItemView->SetItemID( ullItemID );
+		m_pOfflineItemView->SetNonSOEconItem( pItem );
+	}
+	return m_pOfflineItemView;
+}
+#endif
+
 const CEconItemView* CBaseCombatWeapon::GetEconItemView( void ) const
 {
+#if defined( CSTRIKE15 )
+	if ( CEconItemView *pOfflineItem = GetOfflineItemView() )
+		return pOfflineItem;
+#endif
 	return GetDefaultItemViewForWeapon( this );
 }
 
 CEconItemView* CBaseCombatWeapon::GetEconItemView( void )
 {
+#if defined( CSTRIKE15 )
+	if ( CEconItemView *pOfflineItem = GetOfflineItemView() )
+		return pOfflineItem;
+#endif
 	return GetDefaultItemViewForWeapon( this );
 }
 

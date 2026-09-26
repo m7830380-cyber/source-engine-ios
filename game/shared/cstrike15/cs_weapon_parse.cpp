@@ -93,6 +93,7 @@ WeaponNameInfo s_weaponNameInfo[] =
 	{ WEAPON_TASER,				"weapon_taser" },
 
 	{ WEAPON_HKP2000,			"weapon_hkp2000" },
+	{ WEAPON_HKP2000, "weapon_usp_silencer" },	// buy menu short names come from item definition names
 	{ WEAPON_MP7,				"weapon_mp7" },
 	{ WEAPON_MP9,				"weapon_mp9" },
 	{ WEAPON_NOVA,				"weapon_nova" },

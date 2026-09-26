@@ -98,7 +98,12 @@ void CCreateMainMenuScreenScaleform::LoadDialog( void )
 		//  Do NOT dump the heap if we have a priority message open, or the user will miss this dialog box
 		if ( g_bEnteredMainMenuOnce && !CMessageBoxScaleform::IsPriorityMessageOpen() )
 		{
+#if !defined( IOS )
+			// On iOS nothing creates the full-screen slot again after this (the engine only
+			// does it once at startup), so releasing it left a black screen when leaving a
+			// match for the main menu. The components installed into it stay valid too.
 			ScaleformReleaseFullScreenAndCursor( g_pScaleformUI );
+#endif
 
 			// Force the UI tint convar to reset now, so the main menu picks it up
 			static ConVarRef sf_ui_tint( "sf_ui_tint" );

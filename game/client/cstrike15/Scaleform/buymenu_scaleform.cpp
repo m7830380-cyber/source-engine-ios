@@ -843,7 +843,13 @@ void CCSBuyMenuScaleform::GetWeaponShortNameFromPosition( SCALEFORM_CALLBACK_ARG
 	if ( !pDef )
 		return;
 
-	const char *pszClass = pDef->GetItemClass();
+	// The definition name, not the item class: variants share their base weapon's
+	// class (R8 Revolver is weapon_deagle, CZ75 weapon_p250, USP-S weapon_hkp2000),
+	// which showed the base weapon's icon for them. iconlib has icons by definition
+	// name ("weapon_revolver" -> icon-revolver).
+	const char *pszClass = pDef->GetDefinitionName();
+	if ( !pszClass || !IsWeaponClassname( pszClass ) )
+		pszClass = pDef->GetItemClass();
 
 	// Preferred path:
 	// "weapon_ak47" -> "ak47"
@@ -2586,7 +2592,30 @@ void CCSBuyMenuScaleform::GetWeaponShortNameFromID( SCALEFORM_CALLBACK_ARGS_DECL
 // loadout position -> localized weapon name
 void CCSBuyMenuScaleform::GetWeaponName( SCALEFORM_CALLBACK_ARGS_DECL )
 {
-	const CCSWeaponInfo *pInfo = GetWeaponInfoForPosition( (int)m_pScaleformUI->Params_GetArgAsNumber( obj, 0 ) );
+	// Name the item in the slot, not its weapon script: the R8 Revolver's script is
+	// the Deagle's, so the slot said "Desert Eagle" while it bought the R8.
+	int nPosition = (int)m_pScaleformUI->Params_GetArgAsNumber( obj, 0 );
+	C_CSPlayer *pLocalPlayer = C_CSPlayer::GetLocalCSPlayer();
+	CCSPlayerInventory *pInventory = CSInventoryManager() ? CSInventoryManager()->GetLocalCSInventory() : NULL;
+	if ( pLocalPlayer && pInventory && nPosition >= 0 && nPosition < LOADOUT_POSITION_COUNT )
+	{
+		itemid_t itemID = m_PlayerBuyMenuLoadout.m_WeaponID[ nPosition ];
+		C_EconItemView *pItem = ( itemID != INVALID_ITEM_ID ) ? pInventory->GetInventoryItemByItemID( itemID ) : NULL;
+		if ( ( !pItem || !pItem->GetStaticData() ) && itemID != INVALID_ITEM_ID )
+		{
+			pItem = ( ( itemID >> 60 ) == 0xF ) ? CSInventoryManager()->FindOrCreateReferenceEconItem( itemID )
+												: CSInventoryManager()->GetItemInLoadoutForTeam( pLocalPlayer->GetTeamNumber(), nPosition );
+		}
+		const char *pszBaseName = ( pItem && pItem->GetStaticData() ) ? pItem->GetStaticData()->GetItemBaseName() : NULL;
+		const wchar_t *pwszItemName = ( pszBaseName && pszBaseName[0] ) ? g_pVGuiLocalize->Find( pszBaseName ) : NULL;
+		if ( pwszItemName )
+		{
+			m_pScaleformUI->Params_SetResult( obj, pwszItemName );
+			return;
+		}
+	}
+
+	const CCSWeaponInfo *pInfo = GetWeaponInfoForPosition( nPosition );
 	if ( !pInfo || !pInfo->szPrintName[0] )
 		return;
 	const wchar_t *pwszName = g_pVGuiLocalize->Find( pInfo->szPrintName );

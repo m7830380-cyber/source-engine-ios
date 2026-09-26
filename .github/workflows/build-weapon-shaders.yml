@@ -1,0 +1,140 @@
+name: Weapon/skin shaders (.vcs)
+
+# Recompiles the shaders weapons and skins draw with from this tree's .fxc
+# sources (scripts/shaders/vcscompile.py: combo math from fxctmp9/*.inc, one
+# fxc.exe run per combo, packed into Valve's .vcs format), one job per shader,
+# and packs them as platform/shaders/fxc/*.vcs in a single zip artifact.
+#
+#   customweapon                    - skin paint compositing
+#   weapondecal                     - stickers
+#   vertexlit_and_unlit_generic(_bump), phong - weapon/knife models
+#   customcharacter                 - glove paint compositing
+
+on:
+  workflow_dispatch:
+    inputs:
+      jobs_per_shader:
+        description: "Parallel fxc.exe processes per shader job"
+        required: true
+        default: "4"
+  push:
+    paths:
+      - 'scripts/shaders/**'
+      - '.github/workflows/build-weapon-shaders.yml'
+
+jobs:
+  compile:
+    runs-on: windows-latest
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { src: customweapon_ps20b.fxc,                 target: customweapon_ps20 }
+          - { src: customweapon_ps20b.fxc,                 target: customweapon_ps20b }
+          - { src: customweapon_ps20b.fxc,                 target: customweapon_ps30 }
+          - { src: customweapon_vs20.fxc,                  target: customweapon_vs20 }
+          - { src: customweapon_vs20.fxc,                  target: customweapon_vs30 }
+          - { src: weapondecal_ps20b.fxc,                  target: weapondecal_ps20b }
+          - { src: weapondecal_ps20b.fxc,                  target: weapondecal_ps30 }
+          - { src: weapondecal_vs20.fxc,                   target: weapondecal_vs20 }
+          - { src: weapondecal_vs20.fxc,                   target: weapondecal_vs30 }
+          - { src: phong_ps20b.fxc,                        target: phong_ps20b }
+          - { src: phong_ps20b.fxc,                        target: phong_ps30 }
+          - { src: phong_vs20.fxc,                         target: phong_vs20 }
+          - { src: phong_vs20.fxc,                         target: phong_vs30 }
+          - { src: vertexlit_and_unlit_generic_ps2x.fxc,   target: vertexlit_and_unlit_generic_ps20 }
+          - { src: vertexlit_and_unlit_generic_ps2x.fxc,   target: vertexlit_and_unlit_generic_ps20b }
+          - { src: vertexlit_and_unlit_generic_ps2x.fxc,   target: vertexlit_and_unlit_generic_ps30 }
+          - { src: vertexlit_and_unlit_generic_vs20.fxc,   target: vertexlit_and_unlit_generic_vs20 }
+          - { src: vertexlit_and_unlit_generic_vs20.fxc,   target: vertexlit_and_unlit_generic_vs30 }
+          - { src: vertexlit_and_unlit_generic_bump_ps2x.fxc, target: vertexlit_and_unlit_generic_bump_ps20 }
+          - { src: vertexlit_and_unlit_generic_bump_ps2x.fxc, target: vertexlit_and_unlit_generic_bump_ps20b }
+          - { src: vertexlit_and_unlit_generic_bump_ps2x.fxc, target: vertexlit_and_unlit_generic_bump_ps30 }
+          - { src: vertexlit_and_unlit_generic_bump_vs20.fxc, target: vertexlit_and_unlit_generic_bump_vs20 }
+          - { src: vertexlit_and_unlit_generic_bump_vs20.fxc, target: vertexlit_and_unlit_generic_bump_vs30 }
+          - { src: customcharacter_ps30.fxc,               target: customcharacter_ps30 }
+          - { src: customcharacter_vs30.fxc,               target: customcharacter_vs30 }
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # The DirectX SDK (June 2010) fxc.exe is the compiler Valve's shaders were
+      # built with. If it can't be fetched, fall back to the Windows SDK's fxc
+      # in backwards-compatibility mode.
+      - name: Get fxc.exe
+        shell: pwsh
+        run: |
+          $fxc = $null
+          try {
+            Invoke-WebRequest -Uri "https://download.microsoft.com/download/A/E/7/AE743F1F-632B-4809-87A9-AA1BB3458E31/DXSDK_Jun10.exe" -OutFile dxsdk.exe
+            7z x dxsdk.exe -odxsdk -r -y fxc.exe D3DCompiler_43.dll d3dx9_43.dll "Jun2010_D3DCompiler_43_x86.cab" | Out-Null
+            $cand = Get-ChildItem dxsdk -Recurse -Filter fxc.exe | Where-Object { $_.FullName -match '\\x86\\' } | Select-Object -First 1
+            if ($cand) {
+              $dir = $cand.DirectoryName
+              if (-not (Test-Path (Join-Path $dir 'D3DCompiler_43.dll'))) {
+                $dll = Get-ChildItem dxsdk -Recurse -Filter D3DCompiler_43.dll | Where-Object { $_.FullName -match 'x86' } | Select-Object -First 1
+                if ($dll) { Copy-Item $dll.FullName $dir }
+                else {
+                  $cab = Get-ChildItem dxsdk -Recurse -Filter 'Jun2010_D3DCompiler_43_x86.cab' | Select-Object -First 1
+                  if ($cab) { 7z e $cab.FullName "-o$dir" -y | Out-Null }
+                }
+              }
+              & $cand.FullName /? | Out-Null
+              if ($LASTEXITCODE -eq 0 -or $LASTEXITCODE -eq 1) { $fxc = $cand.FullName }
+            }
+          } catch { Write-Host "DirectX SDK fxc unavailable: $_" }
+
+          if (-not $fxc) {
+            $cand = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Recurse -Filter fxc.exe |
+                    Where-Object { $_.FullName -match '\\x64\\' } | Sort-Object FullName -Descending | Select-Object -First 1
+            $fxc = $cand.FullName
+            "VCS_FXC_EXTRA=/Gec" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+            Write-Host "Using Windows SDK fxc with /Gec"
+          }
+          Write-Host "fxc: $fxc"
+          "FXC_EXE=$fxc" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Compile ${{ matrix.target }}
+        shell: pwsh
+        run: |
+          $jobs = "${{ github.event.inputs.jobs_per_shader }}"
+          if (-not $jobs) { $jobs = "4" }
+          python scripts/shaders/vcscompile.py compile "${{ matrix.src }}" "${{ matrix.target }}" --fxc "$env:FXC_EXE" --jobs $jobs --out shaderout
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          python scripts/shaders/vcscompile.py verify "shaderout/shaders/fxc/${{ matrix.target }}.vcs"
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vcs-${{ matrix.target }}
+          path: shaderout/shaders/fxc/${{ matrix.target }}.vcs
+          if-no-files-found: error
+
+  pack:
+    needs: compile
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: vcs-*
+          path: parts
+          merge-multiple: true
+
+      - name: Lay out as platform/shaders/fxc
+        run: |
+          mkdir -p out/platform/shaders/fxc
+          cp parts/*.vcs out/platform/shaders/fxc/
+          ls -la out/platform/shaders/fxc
+
+      # The downloaded artifact is the zip: extract it over the game folder
+      # (the one that has platform/ and csgo/ in it).
+      - uses: actions/upload-artifact@v4
+        with:
+          name: weapon-skin-shaders
+          path: out
+          if-no-files-found: error

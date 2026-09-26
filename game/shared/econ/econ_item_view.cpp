@@ -2308,6 +2308,10 @@ void CEconItemView::GenerateStickerMaterials( void )
 
 }
 
+#if defined( IOS )
+ConVar cl_ios_glove_skins( "cl_ios_glove_skins", "1", FCVAR_RELEASE | FCVAR_ARCHIVE, "Build glove skin (clothing) materials. Turn off if the glove shader crashes." );
+#endif
+
 void CEconItemView::UpdateGeneratedMaterial( bool bIgnorePicMip, CompositeTextureSize_t diffuseTextureSize )
 {
 	if ( diffuseTextureSize != COMPOSITE_TEXTURE_SIZE_512 )
@@ -2327,10 +2331,13 @@ void CEconItemView::UpdateGeneratedMaterial( bool bIgnorePicMip, CompositeTextur
 			else if ( V_strcmp( pItemClass, "wearable_item" ) == 0 )
 			{
 #if defined( IOS )
-				// togl can't translate the CustomCharacter pixel shader these composites use
-				// ("D3DToGL: GLSL translation error!" is fatal), so equipping gloves crashed
-				// the menu. Gloves aren't applied in game on iOS yet anyway.
-				return;
+				// togl couldn't translate the retail CustomCharacter pixel shader these
+				// composites use ("D3DToGL: GLSL translation error!" is fatal), so equipping
+				// gloves crashed the menu. With the recompiled shader installed this can stay
+				// on; "+cl_ios_glove_skins 0" in the launch options turns it off again.
+				static ConVarRef cl_ios_glove_skins( "cl_ios_glove_skins" );
+				if ( cl_ios_glove_skins.IsValid() && !cl_ios_glove_skins.GetBool() )
+					return;
 #endif
 				// clothing items
 				int nTeam = -1; // should remove this?  Will we do anything team specific?

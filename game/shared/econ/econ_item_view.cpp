@@ -3227,11 +3227,56 @@ extern const char *g_EffectTypes[NUM_EFFECT_TYPES];
 // Purpose:
 //-----------------------------------------------------------------------------
 #ifdef CLIENT_DLL
+// Valve's version was removed from the partner depot. This builds the CS:GO
+// style name: "[quality ]<weapon>[ | <finish>]", e.g. "(star) Karambit | Doppler".
+static void LocalizeItemToken( const char *pszToken, wchar_t *pwszOut, int nOutBytes )
+{
+	pwszOut[0] = L'\0';
+	if ( !pszToken || !pszToken[0] )
+		return;
+	const wchar_t *pwszLoc = g_pVGuiLocalize ? g_pVGuiLocalize->Find( pszToken ) : NULL;
+	if ( pwszLoc )
+		V_wcsncpy( pwszOut, pwszLoc, nOutBytes );
+	else if ( g_pVGuiLocalize )
+		g_pVGuiLocalize->ConvertANSIToUnicode( pszToken[0] == '#' ? pszToken + 1 : pszToken, pwszOut, nOutBytes );
+}
+
 const wchar_t *CEconItemView::GetItemName( bool bUncustomized /*= false*/ ) const
 {
 	static const wchar_t *pwzDefaultName = L"";
-	/** Removed for partner depot **/
-	return pwzDefaultName;
+	const CEconItemDefinition *pDef = GetItemDefinition();
+	if ( !IsValid() || !pDef )
+		return pwzDefaultName;
+
+	// Names only depend on these, so each distinct one is built once and kept
+	int nPaintKit = GetCustomPaintKitIndex();
+	int nQuality = GetQuality();
+	uint64 ullKey = uint64( pDef->GetDefinitionIndex() & 0xFFFF ) | ( uint64( nPaintKit & 0xFFFF ) << 16 ) | ( uint64( nQuality & 0xFF ) << 32 );
+	static CUtlMap< uint64, wchar_t * > s_mapNames( DefLessFunc( uint64 ) );
+	unsigned short iName = s_mapNames.Find( ullKey );
+	if ( s_mapNames.IsValidIndex( iName ) )
+		return s_mapNames[ iName ];
+
+	wchar_t wszBase[128], wszPaint[128], wszQuality[64];
+	LocalizeItemToken( pDef->GetItemBaseName(), wszBase, sizeof( wszBase ) );
+
+	const CPaintKit *pPaintKit = nPaintKit > 0 ? GetItemSchema()->GetPaintKitDefinition( nPaintKit ) : NULL;
+	LocalizeItemToken( pPaintKit ? pPaintKit->sDescriptionTag.String() : NULL, wszPaint, sizeof( wszPaint ) );
+
+	// star for knives/gloves, StatTrak, Souvenir; normal/unique have no prefix
+	wszQuality[0] = L'\0';
+	if ( nQuality == AE_UNUSUAL || nQuality == AE_STRANGE || nQuality == AE_TOURNAMENT )
+		LocalizeItemToken( CFmtStr( "#%s", EconQuality_GetQualityString( EEconItemQuality( nQuality ) ) ), wszQuality, sizeof( wszQuality ) );
+
+	wchar_t wszName[320];
+	V_snwprintf( wszName, ARRAYSIZE( wszName ), PRI_WS_FOR_WS PRI_WS_FOR_WS PRI_WS_FOR_WS PRI_WS_FOR_WS PRI_WS_FOR_WS,
+		wszQuality, wszQuality[0] ? L" " : L"", wszBase, wszPaint[0] ? L" | " : L"", wszPaint );
+
+	int nLen = V_wcslen( wszName ) + 1;
+	wchar_t *pwszCached = new wchar_t[ nLen ];
+	V_wcsncpy( pwszCached, wszName, nLen * sizeof( wchar_t ) );
+	s_mapNames.Insert( ullKey, pwszCached );
+	return pwszCached;
 }
 #endif
 

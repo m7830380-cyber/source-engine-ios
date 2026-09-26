@@ -695,6 +695,13 @@ public:
 		if ( nSlot < 0 )
 			nSlot = ItemSlot( FindItem( ullID ), iTeam );
 		bool bOK = nSlot >= 0 && CSInventoryManager()->EquipItemInLoadout( iTeam, nSlot, ullID );
+		CEconItemView *pItem = FindItem( ullID );
+		const CCStrike15ItemDefinition *pDef = ItemDef( pItem );
+		printf( "[offline] equip team %d id %llu slot '%s'->%d: %s (item %s, def slot %d/%d, now in slot %llu, equipped %d)\n",
+			iTeam, ullID, ArgString( pui, obj, 2 ), nSlot, bOK ? "ok" : "FAILED", pDef ? pDef->GetDefinitionName() : "NOT FOUND",
+			pDef ? pDef->GetDefaultLoadoutSlot() : -1, pDef ? pDef->GetLoadoutSlot( iTeam ) : -1,
+			LoadoutItemID( iTeam, nSlot ), pItem ? (int)IsItemEquipped( pItem, iTeam ) : -1 );
+		fflush( stdout );
 		pui->Params_SetResult( obj, bOK );
 	}
 

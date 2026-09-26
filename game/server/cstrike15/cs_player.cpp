@@ -12428,9 +12428,16 @@ void CCSPlayer::FindMatchingWeaponsForTeamLoadout( const char *pchName, int nTea
 			nSlot = pDef->GetLoadoutSlot( nTeam );
 	}
 	if ( nSlot < 0 || nSlot >= LOADOUT_POSITION_COUNT )
+	{
+		printf( "[offline] give '%s' team %d: no loadout slot\n", pchName, nTeam );
 		return;
+	}
 
 	CEconItemView *pItem = Inventory()->GetItemInLoadout( nTeam, nSlot );
+	printf( "[offline] give '%s' team %d slot %d: loadout item %llu (%s), soc %d\n", pchName, nTeam, nSlot,
+		pItem ? pItem->GetItemID() : 0ull, ( pItem && pItem->IsValid() ) ? pItem->GetItemDefinition()->GetDefinitionName() : "none",
+		( pItem && pItem->GetSOCData() ) ? 1 : 0 );
+	fflush( stdout );
 	// only real unlocked items; base items keep the plain weapon path
 	if ( pItem && pItem->IsValid() && pItem->GetSOCData() )
 		matchingWeapons.AddToTail( pItem );

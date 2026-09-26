@@ -14,6 +14,12 @@
 #include "tier1/fmtstr.h"
 #include "tier1/utlmap.h"
 
+#ifdef CLIENT_DLL
+#define OFFLINE_SIDE "client"
+#else
+#define OFFLINE_SIDE "server"
+#endif
+
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
 
@@ -177,13 +183,17 @@ void OfflineInventory_Fill( CCSPlayerInventory *pInventory, const CSteamID &owne
 		for ( int iTeam = 0; iTeam < LOADOUT_COUNT; iTeam++ )
 			s_vecItems[i]->UpdateEquippedState( iTeam, INVALID_EQUIPPED_SLOT );
 	}
+	int nEquipped = 0;
 	for ( int iTeam = 0; iTeam < LOADOUT_COUNT; iTeam++ )
 	{
 		for ( int iSlot = 0; iSlot < LOADOUT_POSITION_COUNT; iSlot++ )
 		{
 			CEconItem *pItem = OfflineInventory_FindItem( pKV->GetUint64( CFmtStr( "item_%d_%d", iTeam, iSlot ), 0 ) );
 			if ( pItem )
+			{
 				pItem->UpdateEquippedState( iTeam, iSlot );
+				nEquipped++;
+			}
 		}
 	}
 
@@ -204,6 +214,11 @@ void OfflineInventory_Fill( CCSPlayerInventory *pInventory, const CSteamID &owne
 	}
 
 	s_mapFilledFileTime.InsertOrReplace( pInventory, LoadoutFileTime() );
+
+	printf( "[offline] " OFFLINE_SIDE " fill: owner %llu, %d items, %d equipped from %s (exists %d, time %ld)\n",
+		owner.ConvertToUint64(), pInventory->GetItemCount(), nEquipped, k_pszLoadoutFile,
+		(int)g_pFullFileSystem->FileExists( k_pszLoadoutFile, k_pszLoadoutPathID ), LoadoutFileTime() );
+	fflush( stdout );
 }
 
 void OfflineInventory_SaveLoadout( CCSPlayerInventory *pInventory )
@@ -213,6 +228,7 @@ void OfflineInventory_SaveLoadout( CCSPlayerInventory *pInventory )
 
 	KeyValues *pKV = new KeyValues( "OfflineLoadout" );
 	KeyValues::AutoDelete autodelete( pKV );
+	int nSaved = 0;
 
 	for ( int iTeam = 0; iTeam < LOADOUT_COUNT; iTeam++ )
 	{
@@ -220,7 +236,10 @@ void OfflineInventory_SaveLoadout( CCSPlayerInventory *pInventory )
 		{
 			itemid_t ullID = pInventory->GetLoadoutItemID( iTeam, iSlot );
 			if ( ullID != LOADOUT_SLOT_USE_BASE_ITEM && OfflineInventory_FindItem( ullID ) )
+			{
 				pKV->SetUint64( CFmtStr( "item_%d_%d", iTeam, iSlot ), ullID );
+				nSaved++;
+			}
 
 			CEconItemView *pDefault = pInventory->FindDefaultEquippedDefinitionItemBySlot( iTeam, iSlot );
 			if ( pDefault && pDefault->IsValid() )
@@ -229,7 +248,11 @@ void OfflineInventory_SaveLoadout( CCSPlayerInventory *pInventory )
 	}
 
 	g_pFullFileSystem->CreateDirHierarchy( "cfg", k_pszLoadoutPathID );
-	pKV->SaveToFile( g_pFullFileSystem, k_pszLoadoutFile, k_pszLoadoutPathID );
+	bool bSaved = pKV->SaveToFile( g_pFullFileSystem, k_pszLoadoutFile, k_pszLoadoutPathID );
+	char szFullPath[MAX_PATH] = "";
+	g_pFullFileSystem->RelativePathToFullPath( k_pszLoadoutFile, k_pszLoadoutPathID, szFullPath, sizeof( szFullPath ) );
+	printf( "[offline] " OFFLINE_SIDE " saved loadout: %d items, write %s, path '%s'\n", nSaved, bSaved ? "ok" : "FAILED", szFullPath );
+	fflush( stdout );
 
 	// this inventory already matches the file it just wrote
 	s_mapFilledFileTime.InsertOrReplace( pInventory, LoadoutFileTime() );

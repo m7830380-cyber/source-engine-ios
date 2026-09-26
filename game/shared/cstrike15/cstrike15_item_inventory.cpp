@@ -628,13 +628,17 @@ int	CCSInventoryManager::GetAllUsableItemsForSlot( int iTeam, int iSlot, unsigne
 CEconItemView *CCSInventoryManager::GetItemInLoadoutForTeam( int iTeam, int iSlot, CSteamID *pID )
 {
 #ifdef CLIENT_DLL
+	// declared out here: pID keeps pointing at it after the block (it used to be
+	// block-local, a dangling pointer that made optimized builds miss the local
+	// inventory and return the base item for every slot)
+	CSteamID localSteamID;
 	if ( !pID )
 	{
 		// If they didn't specify a steamID, use the local player
 		if ( !steamapicontext || !steamapicontext->SteamUser() )
 			return NULL;
 
-		CSteamID localSteamID = steamapicontext->SteamUser()->GetSteamID();
+		localSteamID = steamapicontext->SteamUser()->GetSteamID();
 		pID = &localSteamID;
 	}
 #endif

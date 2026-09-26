@@ -443,8 +443,22 @@ public:
 	// ( xuid, itemid ) item queries
 	void GetItemName( SCALEFORM_CALLBACK_ARGS_DECL )
 	{
-		CEconItemView *pItem = FindItem( ArgItemID( pui, obj, 1 ) );
+		uint64 ullID = ArgItemID( pui, obj, 1 );
+		CEconItemView *pItem = FindItem( ullID );
 		const wchar_t *pwsz = pItem ? pItem->GetItemName() : NULL;
+		// diagnostics: knife names
+		static int s_nKnifeNameLogs = 0;
+		const CCStrike15ItemDefinition *pDef = ItemDef( pItem );
+		if ( pDef && pDef->GetDefaultLoadoutSlot() == LOADOUT_POSITION_MELEE && s_nKnifeNameLogs < 40 )
+		{
+			s_nKnifeNameLogs++;
+			char szName[256];
+			g_pVGuiLocalize->ConvertUnicodeToANSI( pwsz ? pwsz : L"", szName, sizeof( szName ) );
+			printf( "[offline] name arg '%s' id %llu: def %d %s, paint %d, quality %d, base '%s' -> '%s'\n",
+				ArgString( pui, obj, 1 ), ullID, pDef->GetDefinitionIndex(), pDef->GetDefinitionName(), pItem->GetCustomPaintKitIndex(),
+				pItem->GetQuality(), pDef->GetItemBaseName(), szName );
+			fflush( stdout );
+		}
 		if ( pwsz )
 			pui->Params_SetResult( obj, pwsz );
 		else

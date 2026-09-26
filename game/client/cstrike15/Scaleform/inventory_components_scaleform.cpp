@@ -26,6 +26,9 @@
 #include "cs_shareddefs.h"
 #include "tier1/fmtstr.h"
 #include "vgui/ILocalize.h"
+#include "vgui/ISurface.h"
+#include "ienginevgui.h"
+#include "matsys_controls/mdlpanel.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include <tier0/memdbgon.h>
@@ -226,6 +229,102 @@ static const char *RarityHexColor( int nRarity )
 // CScaleformComponent_Inventory
 //-----------------------------------------------------------------------------
 static const char *s_pszSortMethods[] = { "newest", "oldest", "alphaascend", "alphadescend", "mostrare", "leastrare", "equipped", "slot", "collection", "unsorted" };
+
+//-----------------------------------------------------------------------------
+// Inventory "Inspect": the preview dialog (tooltips.swf) shows the name and
+// rarity and calls LaunchWeaponPreviewPanel( path ) for the 3D model, which the
+// client drew. This panel draws the item's model (with its painted materials)
+// slowly turning, over the middle of the preview dialog (VGUI paints after the
+// Scaleform menu). It takes no input, so the dialog's buttons keep working.
+//-----------------------------------------------------------------------------
+class CInventoryInspectPanel : public CMDLPanel
+{
+	DECLARE_CLASS_SIMPLE( CInventoryInspectPanel, CMDLPanel );
+public:
+	CInventoryInspectPanel() : BaseClass( NULL, "InventoryInspectPanel" )
+	{
+		SetParent( enginevgui->GetPanel( PANEL_ROOT ) );
+		SetMouseInputEnabled( false );
+		SetKeyBoardInputEnabled( false );
+		SetVisible( false );
+		SetBackgroundColor( Color( 22, 25, 29, 255 ) );
+		SetCameraFOV( 40.0f );
+		m_vecCenter.Init();
+		m_flRadius = 1.0f;
+		m_flYaw = 0.0f;
+		m_flLastTime = 0.0;
+	}
+
+	void ShowItem( CEconItemView *pItem )
+	{
+		const char *pszModel = pItem ? pItem->GetWorldDisplayModel() : NULL;
+		if ( !pszModel || !pszModel[0] )
+		{
+			SetVisible( false );
+			return;
+		}
+
+		// starts building the painted materials; they show once ready
+		pItem->UpdateGeneratedMaterial();
+		SetMDL( pszModel, pItem );
+
+		int sw, sh;
+		vgui::surface()->GetScreenSize( sw, sh );
+		SetBounds( sw * 30 / 100, sh * 28 / 100, sw * 40 / 100, sh * 44 / 100 );
+
+		// frame the model's bounding sphere (model space: identity transform first)
+		SetModelAnglesAndPosition( vec3_angle, vec3_origin );
+		if ( !GetBoundingSphere( m_vecCenter, m_flRadius ) )
+		{
+			m_vecCenter.Init();
+			m_flRadius = 16.0f;
+		}
+		LookAt( vec3_origin, m_flRadius );
+
+		m_flYaw = 0.0f;
+		m_flLastTime = Plat_FloatTime();
+		UpdateModelTransform();
+
+		SetVisible( true );
+		MoveToFront();
+	}
+
+	virtual void OnThink()
+	{
+		BaseClass::OnThink();
+		if ( !IsVisible() )
+			return;
+		if ( engine->IsConnected() )	// never over a game
+		{
+			SetVisible( false );
+			return;
+		}
+		double flNow = Plat_FloatTime();
+		m_flYaw = fmodf( m_flYaw + 40.0f * (float)( flNow - m_flLastTime ), 360.0f );
+		m_flLastTime = flNow;
+		UpdateModelTransform();
+	}
+
+private:
+	// turn about the model's own center, kept at the camera's pivot
+	void UpdateModelTransform()
+	{
+		QAngle ang( 0.0f, m_flYaw, 0.0f );
+		matrix3x4_t mat;
+		AngleMatrix( ang, mat );
+		Vector vecRotatedCenter;
+		VectorRotate( m_vecCenter, mat, vecRotatedCenter );
+		SetModelAnglesAndPosition( ang, -vecRotatedCenter );
+	}
+
+	Vector	m_vecCenter;
+	float	m_flRadius;
+	float	m_flYaw;
+	double	m_flLastTime;
+};
+
+static CInventoryInspectPanel *s_pInspectPanel = NULL;
+static uint64 s_ullInspectItemID = 0;
 
 class CScaleformComponentInventory : public ScaleformUIFunctionHandlerObject
 {
@@ -573,6 +672,33 @@ public:
 	// kill eater, season access, deployment date...: offline items have none
 	void GetItemAttributeValue( SCALEFORM_CALLBACK_ARGS_DECL ) { pui->Params_SetResult( obj, 0 ); }
 
+	// The preview dialog asks for the certificate of the item it's opening just
+	// before it asks for the model; that's where the item ID comes from.
+	// No certificates offline ("" hides the button).
+	void GetItemCertificateInfo( SCALEFORM_CALLBACK_ARGS_DECL )
+	{
+		s_ullInspectItemID = ArgItemID( pui, obj, 1 );
+		pui->Params_SetResult( obj, "" );
+	}
+
+	// LaunchWeaponPreviewPanel( path ): show the item being previewed; "" closes it
+	void LaunchWeaponPreviewPanel( SCALEFORM_CALLBACK_ARGS_DECL )
+	{
+		const char *pszPath = ArgString( pui, obj, 0 );
+		if ( !pszPath[0] )
+		{
+			if ( s_pInspectPanel )
+				s_pInspectPanel->SetVisible( false );
+			return;
+		}
+		CEconItemView *pItem = FindItem( s_ullInspectItemID );
+		if ( !pItem )
+			return;
+		if ( !s_pInspectPanel )
+			s_pInspectPanel = new CInventoryInspectPanel();
+		s_pInspectPanel->ShowItem( pItem );
+	}
+
 	// Things with no offline backend: empty/false/zero
 	void ReturnZero( SCALEFORM_CALLBACK_ARGS_DECL ) { pui->Params_SetResult( obj, 0 ); }
 	void ReturnFalse( SCALEFORM_CALLBACK_ARGS_DECL ) { pui->Params_SetResult( obj, false ); }
@@ -669,7 +795,7 @@ public:
 			SFUI_DECL_METHOD_AS( ReturnEmpty, "GetTradeUpContractItemID" ),
 			SFUI_DECL_METHOD_AS( ReturnEmpty, "GetCampaignForSeason" ),
 			SFUI_DECL_METHOD_AS( ReturnEmpty, "GetCampaignName" ),
-			SFUI_DECL_METHOD_AS( ReturnEmpty, "GetItemCertificateInfo" ),
+			SFUI_DECL_METHOD( GetItemCertificateInfo ),
 			SFUI_DECL_METHOD_AS( ReturnEmpty, "GetSet" ),
 			SFUI_DECL_METHOD_AS( ReturnEmpty, "GetItemSet" ),
 			SFUI_DECL_METHOD_AS( ReturnEmpty, "GetItemDescription" ),
@@ -685,7 +811,7 @@ public:
 			SFUI_DECL_METHOD_AS( ReturnZero, "GetMusicIDForPlayer" ),
 			SFUI_DECL_METHOD_AS( DoNothing, "AcknowledgeNewItems" ),
 			SFUI_DECL_METHOD_AS( DoNothing, "AcknowledgeNewItembyItemID" ),
-			SFUI_DECL_METHOD_AS( DoNothing, "LaunchWeaponPreviewPanel" ),
+			SFUI_DECL_METHOD( LaunchWeaponPreviewPanel ),
 			SFUI_DECL_METHOD_AS( DoNothing, "PlayAudioFile" ),
 			SFUI_DECL_METHOD_AS( DoNothing, "SetDefaultMusicVolume" ),
 			SFUI_DECL_METHOD_AS( DoNothing, "SellItem" ),

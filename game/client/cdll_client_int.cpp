@@ -1952,6 +1952,7 @@ bool IOS_IsMenuActive()
 }
 
 static bool s_bIOSFingerDown[10];
+static float s_flIOSFingerX[10], s_flIOSFingerY[10];	// normalized 0..1
 
 static bool IOS_AnyFingerDown( void )
 {
@@ -1959,6 +1960,22 @@ static bool IOS_AnyFingerDown( void )
 	{
 		if ( s_bIOSFingerDown[i] )
 			return true;
+	}
+	return false;
+}
+
+// Position of the first finger that is down (normalized 0..1), for panels that
+// take drags while Scaleform owns the menu input (inventory Inspect)
+bool IOS_GetTouch( float &x, float &y )
+{
+	for ( int i = 0; i < ARRAYSIZE( s_bIOSFingerDown ); i++ )
+	{
+		if ( s_bIOSFingerDown[i] )
+		{
+			x = s_flIOSFingerX[i];
+			y = s_flIOSFingerY[i];
+			return true;
+		}
 	}
 	return false;
 }
@@ -4991,6 +5008,8 @@ void CHLClient::IN_TouchEvent( int type, int fingerId, int x, int y )
 	}
 	s_flLastX[fingerId] = ev.x;
 	s_flLastY[fingerId] = ev.y;
+	s_flIOSFingerX[fingerId] = ev.x;
+	s_flIOSFingerY[fingerId] = ev.y;
 
 	// in menus the touch controls hide themselves (all but the console button)
 	NOTE_UNUSED( bMenu );

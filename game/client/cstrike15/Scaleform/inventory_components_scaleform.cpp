@@ -29,6 +29,7 @@
 #include "vgui/ISurface.h"
 #include "ienginevgui.h"
 #include "matsys_controls/mdlpanel.h"
+#include "createmainmenuscreen_scaleform.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include <tier0/memdbgon.h>
@@ -234,9 +235,78 @@ static const char *s_pszSortMethods[] = { "newest", "oldest", "alphaascend", "al
 // Inventory "Inspect": the preview dialog (tooltips.swf) shows the name and
 // rarity and calls LaunchWeaponPreviewPanel( path ) for the 3D model, which the
 // client drew. This panel draws the item's model (with its painted materials)
-// slowly turning, over the middle of the preview dialog (VGUI paints after the
-// Scaleform menu). It takes no input, so the dialog's buttons keep working.
+// over the preview dialog (VGUI paints after the Scaleform menu), placed from
+// the dialog's own on-screen bounds. Drag a finger over it to turn the model;
+// until then it turns slowly by itself. It takes no VGUI input (Scaleform owns
+// the menu input), so the dialog's buttons keep working.
 //-----------------------------------------------------------------------------
+#if defined( IOS )
+extern bool IOS_GetTouch( float &x, float &y );
+#endif
+
+// Screen rect of a Flash movie clip. The menu movie is SM_NoScale/TopLeft, so
+// stage coordinates are screen pixels.
+static bool GetFlashClipScreenRect( SFVALUE clip, float &x0, float &y0, float &x1, float &y1 )
+{
+	IScaleformUI *pui = g_pScaleformUI;
+	if ( !pui || !clip )
+		return false;
+
+	SFVALUE bounds = pui->Value_Invoke( clip, "getBounds", clip, 1 );	// in its own space
+	if ( !bounds )
+		return false;
+	float b[4] = { 0, 0, 0, 0 };
+	static const char *s_pszKeys[4] = { "xMin", "yMin", "xMax", "yMax" };
+	for ( int i = 0; i < 4; i++ )
+	{
+		SFVALUE v = pui->Value_GetMember( bounds, s_pszKeys[i] );
+		if ( v )
+		{
+			b[i] = (float)pui->Value_GetNumber( v );
+			pui->ReleaseValue( v );
+		}
+	}
+	pui->ReleaseValue( bounds );
+	if ( b[2] <= b[0] || b[3] <= b[1] )
+		return false;
+
+	float out[4];
+	for ( int corner = 0; corner < 2; corner++ )
+	{
+		SFVALUE pt = pui->CreateNewObject( SF_FULL_SCREEN_SLOT );
+		if ( !pt )
+			return false;
+		pui->Value_SetMember( pt, "x", b[ corner * 2 ] );
+		pui->Value_SetMember( pt, "y", b[ corner * 2 + 1 ] );
+		pui->Value_InvokeWithoutReturn( clip, "localToGlobal", pt, 1 );
+		SFVALUE vx = pui->Value_GetMember( pt, "x" ), vy = pui->Value_GetMember( pt, "y" );
+		out[ corner * 2 ] = vx ? (float)pui->Value_GetNumber( vx ) : 0.0f;
+		out[ corner * 2 + 1 ] = vy ? (float)pui->Value_GetNumber( vy ) : 0.0f;
+		if ( vx ) pui->ReleaseValue( vx );
+		if ( vy ) pui->ReleaseValue( vy );
+		pui->ReleaseValue( pt );
+	}
+	x0 = out[0]; y0 = out[1]; x1 = out[2]; y1 = out[3];
+	return x1 > x0 && y1 > y0;
+}
+
+// The preview dialog: MainMenu.swf's Panel.TooltipItemPreview
+static bool GetInspectDialogRect( float &x0, float &y0, float &x1, float &y1 )
+{
+	CCreateMainMenuScreenScaleform *pMenu = CCreateMainMenuScreenScaleform::GetInstance();
+	if ( !pMenu || !pMenu->FlashAPIIsValid() || !g_pScaleformUI )
+		return false;
+	SFVALUE panel = g_pScaleformUI->Value_GetMember( pMenu->m_FlashAPI, "Panel" );
+	if ( !panel )
+		return false;
+	SFVALUE dialog = g_pScaleformUI->Value_GetMember( panel, "TooltipItemPreview" );
+	bool bOK = dialog && GetFlashClipScreenRect( dialog, x0, y0, x1, y1 );
+	if ( dialog )
+		g_pScaleformUI->ReleaseValue( dialog );
+	g_pScaleformUI->ReleaseValue( panel );
+	return bOK;
+}
+
 class CInventoryInspectPanel : public CMDLPanel
 {
 	DECLARE_CLASS_SIMPLE( CInventoryInspectPanel, CMDLPanel );
@@ -251,8 +321,11 @@ public:
 		SetCameraFOV( 40.0f );
 		m_vecCenter.Init();
 		m_flRadius = 1.0f;
-		m_flYaw = 0.0f;
+		m_flYaw = m_flPitch = 0.0f;
 		m_flLastTime = 0.0;
+		m_bDragging = m_bUserTurned = false;
+		m_flDragX = m_flDragY = 0.0f;
+		m_bLoggedRect = false;
 	}
 
 	void ShowItem( CEconItemView *pItem )
@@ -268,21 +341,19 @@ public:
 		pItem->UpdateGeneratedMaterial();
 		SetMDL( pszModel, pItem );
 
-		int sw, sh;
-		vgui::surface()->GetScreenSize( sw, sh );
-		SetBounds( sw * 30 / 100, sh * 28 / 100, sw * 40 / 100, sh * 44 / 100 );
-
-		// frame the model's bounding sphere (model space: identity transform first)
+		// bounding sphere in model space (identity transform first)
 		SetModelAnglesAndPosition( vec3_angle, vec3_origin );
 		if ( !GetBoundingSphere( m_vecCenter, m_flRadius ) )
 		{
 			m_vecCenter.Init();
 			m_flRadius = 16.0f;
 		}
-		LookAt( vec3_origin, m_flRadius );
 
-		m_flYaw = 0.0f;
+		m_flYaw = m_flPitch = 0.0f;
+		m_bDragging = m_bUserTurned = false;
+		m_bLoggedRect = false;
 		m_flLastTime = Plat_FloatTime();
+		UpdatePlacement();
 		UpdateModelTransform();
 
 		SetVisible( true );
@@ -299,17 +370,94 @@ public:
 			SetVisible( false );
 			return;
 		}
+
+		// follows the dialog (it animates in)
+		UpdatePlacement();
+
 		double flNow = Plat_FloatTime();
-		m_flYaw = fmodf( m_flYaw + 40.0f * (float)( flNow - m_flLastTime ), 360.0f );
+		float flDelta = (float)( flNow - m_flLastTime );
 		m_flLastTime = flNow;
+
+		int x, y, w, h;
+		GetBounds( x, y, w, h );
+		int sw, sh;
+		vgui::surface()->GetScreenSize( sw, sh );
+
+		float tx, ty;
+		bool bTouch = false;
+#if defined( IOS )
+		bTouch = IOS_GetTouch( tx, ty );
+#endif
+		if ( bTouch )
+		{
+			float px = tx * sw, py = ty * sh;
+			if ( !m_bDragging )
+			{
+				// a drag starts on the model
+				if ( px >= x && px < x + w && py >= y && py < y + h )
+				{
+					m_bDragging = true;
+					m_bUserTurned = true;
+				}
+			}
+			else
+			{
+				float flScale = 360.0f / MAX( w, 1 );	// a panel-width drag turns it once around
+				m_flYaw = fmodf( m_flYaw + ( px - m_flDragX ) * flScale, 360.0f );
+				m_flPitch = clamp( m_flPitch + ( py - m_flDragY ) * flScale * 0.5f, -60.0f, 60.0f );
+			}
+			m_flDragX = px;
+			m_flDragY = py;
+		}
+		else
+		{
+			m_bDragging = false;
+		}
+
+		if ( !m_bUserTurned )
+			m_flYaw = fmodf( m_flYaw + 30.0f * flDelta, 360.0f );
+
 		UpdateModelTransform();
 	}
 
 private:
+	// Over the middle of the dialog, clear of its title (top) and buttons (bottom);
+	// centered on the screen if the dialog can't be found
+	void UpdatePlacement()
+	{
+		int sw, sh;
+		vgui::surface()->GetScreenSize( sw, sh );
+		int nx = sw * 30 / 100, ny = sh * 28 / 100, nw = sw * 40 / 100, nh = sh * 44 / 100;
+
+		float x0, y0, x1, y1;
+		if ( GetInspectDialogRect( x0, y0, x1, y1 ) )
+		{
+			float dw = x1 - x0, dh = y1 - y0;
+			nx = (int)( x0 + dw * 0.06f );
+			nw = (int)( dw * 0.88f );
+			ny = (int)( y0 + dh * 0.16f );
+			nh = (int)( dh * 0.62f );
+			if ( !m_bLoggedRect )
+			{
+				printf( "[inspect] dialog %.0f,%.0f - %.0f,%.0f (screen %dx%d) -> panel %d,%d %dx%d\n", x0, y0, x1, y1, sw, sh, nx, ny, nw, nh );
+				fflush( stdout );
+				m_bLoggedRect = true;
+			}
+		}
+
+		int ox, oy, ow, oh;
+		GetBounds( ox, oy, ow, oh );
+		if ( ox != nx || oy != ny || ow != nw || oh != nh )
+		{
+			SetBounds( nx, ny, nw, nh );
+			LookAt( vec3_origin, m_flRadius );	// refit to the new size
+		}
+	}
+
 	// turn about the model's own center, kept at the camera's pivot
 	void UpdateModelTransform()
 	{
-		QAngle ang( 0.0f, m_flYaw, 0.0f );
+		QAngle ang( m_flPitch, m_flYaw, 0.0f );
 		matrix3x4_t mat;
 		AngleMatrix( ang, mat );
 		Vector vecRotatedCenter;
@@ -319,8 +467,11 @@ private:
 
 	Vector	m_vecCenter;
 	float	m_flRadius;
-	float	m_flYaw;
+	float	m_flYaw, m_flPitch;
 	double	m_flLastTime;
+	bool	m_bDragging, m_bUserTurned;
+	float	m_flDragX, m_flDragY;
+	bool	m_bLoggedRect;
 };
 
 static CInventoryInspectPanel *s_pInspectPanel = NULL;

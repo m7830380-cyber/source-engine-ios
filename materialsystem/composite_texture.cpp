@@ -624,7 +624,10 @@ void CCompositeTexture::Finalize()
 	{
 		m_ResultTexture.m_pTexture = materials->CreateProceduralTexture( m_szTextureName, TEXTURE_GROUP_COMPOSITE, ( 1 << Size() ), ( 1 << Size() ), 
 																		 ( Format() == COMPOSITE_TEXTURE_FORMAT_DXT5 ) ? IMAGE_FORMAT_DXT5_RUNTIME : IMAGE_FORMAT_DXT1_RUNTIME, 
-																		 TEXTUREFLAGS_PROCEDURAL | TEXTUREFLAGS_SINGLECOPY | TEXTUREFLAGS_ANISOTROPIC | ( ( m_bSRGB && !IsPlatformIOS() ) ? TEXTUREFLAGS_SRGB : 0 ) | TEXTUREFLAGS_SKIP_INITIAL_DOWNLOAD );
+																		 TEXTUREFLAGS_PROCEDURAL | TEXTUREFLAGS_SINGLECOPY | TEXTUREFLAGS_ANISOTROPIC | ( ( m_bSRGB && !IsPlatformIOS() ) ? TEXTUREFLAGS_SRGB : 0 ) | TEXTUREFLAGS_SKIP_INITIAL_DOWNLOAD |
+																		 // mat_picmip would otherwise shrink the texture below the composite's size, and
+																		 // RegenerateTextureBits then forces a regenerate on the size mismatch, forever
+																		 ( m_bIgnorePicMip ? TEXTUREFLAGS_NOLOD : 0 ) );
 		m_ResultTexture.m_pTexture->SetTextureRegenerator( &m_ResultTexture );
 	}
 

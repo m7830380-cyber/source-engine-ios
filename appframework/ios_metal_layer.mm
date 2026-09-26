@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include <QuartzCore/CAMetalLayer.h>
 #include <CoreGraphics/CoreGraphics.h>
 #include <Metal/Metal.h>
@@ -25,6 +26,26 @@ extern "C" void IOS_ConfigureMetalLayer( void *layerPtr )
 	layer.framebufferOnly = YES;
 
 	CGFloat scale = IOS_NativeScreenScale();
+
+	// -renderscale <0.5..1>: render at a fraction of the native resolution and let
+	// Core Animation scale it up. The native 3x retina (2796x1290 on a Pro Max) is
+	// the biggest GPU cost, and the heat it makes is what throttles the frame rate.
+	NSArray<NSString *> *args = [NSProcessInfo processInfo].arguments;
+	NSUInteger iArg = [args indexOfObject:@"-renderscale"];
+	if ( iArg != NSNotFound && iArg + 1 < args.count )
+	{
+		double flRenderScale = [args[ iArg + 1 ] doubleValue];
+		if ( flRenderScale >= 0.5 && flRenderScale < 1.0 )
+		{
+			scale *= flRenderScale;
+			printf( "[render] -renderscale %.2f: contents scale %.2f\n", flRenderScale, (double)scale );
+		}
+	}
+	// Set it on the view as well: SDL computes the window's pixel size (which sizes the
+	// engine's backbuffer) from the view's contentScaleFactor, and the Metal drawable
+	// from the layer; the two must agree or the frame presents into a corner.
+	if ( [layer.delegate isKindOfClass:[UIView class]] )
+		((UIView *)layer.delegate).contentScaleFactor = scale;
 	layer.contentsScale = scale;
 
 	CGSize points = CGSizeZero;

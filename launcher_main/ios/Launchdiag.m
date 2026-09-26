@@ -868,9 +868,16 @@ static void IOS_LogMemoryHeadroom( int seconds )
 	if( __builtin_available( iOS 13.0, * ) )
 		avail = os_proc_available_memory();
 
-	char msg[160];
-	int len = snprintf( msg, sizeof( msg ), "[memory] t=%ds footprint %llu MB, available %llu MB\n",
-						seconds, footprint >> 20, avail >> 20 );
+	// thermal state: iOS lowers CPU/GPU clocks as it rises (the usual reason a
+	// game runs at full speed right after it was in the background, then drops)
+	static const char *s_thermal[] = { "nominal", "fair", "serious", "critical" };
+	NSInteger thermal = [NSProcessInfo processInfo].thermalState;
+	BOOL lowPower = [NSProcessInfo processInfo].lowPowerModeEnabled;
+
+	char msg[224];
+	int len = snprintf( msg, sizeof( msg ), "[memory] t=%ds footprint %llu MB, available %llu MB, thermal %s, low power %d\n",
+						seconds, footprint >> 20, avail >> 20,
+						( thermal >= 0 && thermal < 4 ) ? s_thermal[ thermal ] : "?", lowPower ? 1 : 0 );
 	write( STDOUT_FILENO, msg, len );
 }
 

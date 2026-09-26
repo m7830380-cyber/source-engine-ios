@@ -111,6 +111,28 @@ static CCSPlayerInventory *LocalInventory()
 	return CSInventoryManager() ? CSInventoryManager()->GetLocalCSInventory() : NULL;
 }
 
+// UTF-8 by hand: V_UnicodeToUTF8 is wcstombs on POSIX, which fails in the C
+// locale on iOS for anything non-ASCII (and then leaves nothing)
+static void WideToUTF8( const wchar_t *pwsz, char *pszOut, int nOutBytes )
+{
+	int n = 0;
+	for ( ; *pwsz; pwsz++ )
+	{
+		uint32 c = (uint32)*pwsz;
+		char buf[4];
+		int nLen;
+		if ( c < 0x80 )			{ buf[0] = (char)c; nLen = 1; }
+		else if ( c < 0x800 )	{ buf[0] = (char)( 0xC0 | ( c >> 6 ) ); buf[1] = (char)( 0x80 | ( c & 0x3F ) ); nLen = 2; }
+		else if ( c < 0x10000 )	{ buf[0] = (char)( 0xE0 | ( c >> 12 ) ); buf[1] = (char)( 0x80 | ( ( c >> 6 ) & 0x3F ) ); buf[2] = (char)( 0x80 | ( c & 0x3F ) ); nLen = 3; }
+		else					{ buf[0] = (char)( 0xF0 | ( c >> 18 ) ); buf[1] = (char)( 0x80 | ( ( c >> 12 ) & 0x3F ) ); buf[2] = (char)( 0x80 | ( ( c >> 6 ) & 0x3F ) ); buf[3] = (char)( 0x80 | ( c & 0x3F ) ); nLen = 4; }
+		if ( n + nLen >= nOutBytes )
+			break;
+		for ( int i = 0; i < nLen; i++ )
+			pszOut[ n++ ] = buf[i];
+	}
+	pszOut[ n ] = '\0';
+}
+
 static uint64 GetLocalXuid()
 {
 	return ( steamapicontext && steamapicontext->SteamUser() ) ? steamapicontext->SteamUser()->GetSteamID().ConvertToUint64() : 0;
@@ -307,7 +329,7 @@ public:
 		{
 			char szName[256];
 			const wchar_t *pwszName = pItem->GetItemName();
-			g_pVGuiLocalize->ConvertUnicodeToANSI( pwszName ? pwszName : L"", szName, sizeof( szName ) );
+			WideToUTF8( pwszName ? pwszName : L"", szName, sizeof( szName ) );
 			if ( !V_stristr( szName, pszText ) && !V_stristr( pDef->GetDefinitionName(), pszText ) )
 				return false;
 		}
@@ -375,7 +397,7 @@ public:
 				e.m_ullID = pItem->GetItemID();
 				e.m_nOrder = i;
 				e.m_nRank = SortRank( pszSort, pItem );
-				g_pVGuiLocalize->ConvertUnicodeToANSI( pItem->GetItemName() ? pItem->GetItemName() : L"", e.m_szName, sizeof( e.m_szName ) );
+				WideToUTF8( pItem->GetItemName() ? pItem->GetItemName() : L"", e.m_szName, sizeof( e.m_szName ) );
 			}
 
 			// The loadout lists the plain versions of the weapons that fit the slot too,
@@ -396,7 +418,7 @@ public:
 					e.m_ullID = ullID;
 					e.m_nOrder = pInv->GetItemCount() + 100000;	// defaults first under "newest"
 					e.m_nRank = SortRank( pszSort, pItem );
-					g_pVGuiLocalize->ConvertUnicodeToANSI( pItem->GetItemName() ? pItem->GetItemName() : L"", e.m_szName, sizeof( e.m_szName ) );
+					WideToUTF8( pItem->GetItemName() ? pItem->GetItemName() : L"", e.m_szName, sizeof( e.m_szName ) );
 				}
 			}
 		}
@@ -472,7 +494,7 @@ public:
 		// with non-ASCII characters (the star on knives came out as boxes followed by
 		// leftover text from other strings)
 		char szUTF8[512];
-		V_UnicodeToUTF8( pwsz ? pwsz : L"", szUTF8, sizeof( szUTF8 ) );
+		WideToUTF8( pwsz ? pwsz : L"", szUTF8, sizeof( szUTF8 ) );
 		pui->Params_SetResult( obj, szUTF8 );
 	}
 	void GetItemRarityColor( SCALEFORM_CALLBACK_ARGS_DECL )

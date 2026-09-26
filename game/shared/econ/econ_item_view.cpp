@@ -9,6 +9,9 @@
 #include "econ_item_system.h"
 #include "econ_item_description.h"
 #include "econ_item_inventory.h"
+#if defined( CSTRIKE15 )
+#include "offline_inventory.h"
+#endif
 
 #include "econ_gcmessages.h"
 
@@ -1007,9 +1010,19 @@ CEconItem *CEconItemView::GetSOCData( void ) const
 	Assert( !pInventory || pInventory == InventoryManager()->GetLocalInventory() );
 #endif
 	if ( pInventory )
-		return pInventory->GetSOCDataForItem( GetItemID() );
+	{
+		CEconItem *pData = pInventory->GetSOCDataForItem( GetItemID() );
+		if ( pData )
+			return pData;
+	}
 
+#if defined( CSTRIKE15 )
+	// -allskinsunlocked: item IDs are the same in the client and server builds of the
+	// offline inventory, so a weapon's networked item can always be found there
+	return OfflineInventory_FindItem( GetItemID() );
+#else
 	return NULL;
+#endif
 }
 
 itemid_t CEconItemView::GetFauxItemIDFromDefinitionIndex( void ) const
@@ -3237,8 +3250,14 @@ static void LocalizeItemToken( const char *pszToken, wchar_t *pwszOut, int nOutB
 	const wchar_t *pwszLoc = g_pVGuiLocalize ? g_pVGuiLocalize->Find( pszToken ) : NULL;
 	if ( pwszLoc )
 		V_wcsncpy( pwszOut, pwszLoc, nOutBytes );
-	else if ( g_pVGuiLocalize )
-		g_pVGuiLocalize->ConvertANSIToUnicode( pszToken[0] == '#' ? pszToken + 1 : pszToken, pwszOut, nOutBytes );
+	else
+	{
+		const char *psz = pszToken[0] == '#' ? pszToken + 1 : pszToken;
+		int nMax = nOutBytes / sizeof( wchar_t ) - 1, n = 0;
+		for ( ; psz[n] && n < nMax; n++ )
+			pwszOut[n] = (unsigned char)psz[n];
+		pwszOut[n] = L'\0';
+	}
 }
 
 const wchar_t *CEconItemView::GetItemName( bool bUncustomized /*= false*/ ) const
@@ -3268,9 +3287,17 @@ const wchar_t *CEconItemView::GetItemName( bool bUncustomized /*= false*/ ) cons
 	if ( nQuality == AE_UNUSUAL || nQuality == AE_STRANGE || nQuality == AE_TOURNAMENT )
 		LocalizeItemToken( CFmtStr( "#%s", EconQuality_GetQualityString( EEconItemQuality( nQuality ) ) ), wszQuality, sizeof( wszQuality ) );
 
+	// Plain concatenation: the swprintf family fails on non-ASCII characters (the
+	// star) in the C locale on Apple platforms and leaves the buffer as stack garbage.
 	wchar_t wszName[320];
-	V_snwprintf( wszName, ARRAYSIZE( wszName ), PRI_WS_FOR_WS PRI_WS_FOR_WS PRI_WS_FOR_WS PRI_WS_FOR_WS PRI_WS_FOR_WS,
-		wszQuality, wszQuality[0] ? L" " : L"", wszBase, wszPaint[0] ? L" | " : L"", wszPaint );
+	const wchar_t *ppwszParts[] = { wszQuality, wszQuality[0] ? L" " : L"", wszBase, wszPaint[0] ? L" | " : L"", wszPaint };
+	int nName = 0;
+	for ( int iPart = 0; iPart < ARRAYSIZE( ppwszParts ); iPart++ )
+	{
+		for ( const wchar_t *pw = ppwszParts[ iPart ]; *pw && nName < ARRAYSIZE( wszName ) - 1; pw++ )
+			wszName[ nName++ ] = *pw;
+	}
+	wszName[ nName ] = L'\0';
 
 	int nLen = V_wcslen( wszName ) + 1;
 	wchar_t *pwszCached = new wchar_t[ nLen ];

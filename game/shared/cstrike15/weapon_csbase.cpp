@@ -3862,7 +3862,13 @@ void CWeaponCSBase::UpdateCustomMaterial( void )
 
 	CEconItemView *pItem = GetEconItemView();
 	if ( !pItem || !pItem->IsValid() || pItem->GetCustomPaintKitIndex() <= 0 )
+	{
+		printf( "[offline] weapon %s: no paint (item %s, valid %d, id %llu, account %u, def %d, soc %d, paint %d)\n", GetClassname(),
+			pItem ? "yes" : "no", pItem ? (int)pItem->IsValid() : 0, pItem ? pItem->GetItemID() : 0ull, pItem ? pItem->GetAccountID() : 0u,
+			pItem ? (int)pItem->GetItemIndex() : 0, ( pItem && pItem->GetSOCData() ) ? 1 : 0, pItem ? pItem->GetCustomPaintKitIndex() : 0 );
+		fflush( stdout );
 		return;
+	}
 
 	// starts the generation; each material becomes valid once its textures are built,
 	// and draws use the stock material until then

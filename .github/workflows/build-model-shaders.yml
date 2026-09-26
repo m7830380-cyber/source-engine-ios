@@ -1,0 +1,143 @@
+name: Model shaders (.vcs)
+
+# The retail 2017 .vcs for these pixel shaders don't match this engine's combo
+# layout (fxctmp9/*.inc): e.g. phong_ps30 is 160 dynamic combos in retail but 3200
+# here, so on High shader detail every draw picked the wrong variant (weapon and
+# agent shading). Rebuild them from this tree's .fxc so the files match the engine.
+#
+# plan    counts each target's live combos and splits them into shards
+# compile one Windows job per shard (DirectX SDK June 2010 fxc, cached)
+# merge   joins the shards per target, verifies, packs platform/shaders/fxc/*.vcs
+
+on:
+  workflow_dispatch:
+    inputs:
+      per_shard:
+        description: "fxc invocations per compile job"
+        required: true
+        default: "25000"
+  push:
+    paths:
+      - '.github/workflows/build-model-shaders.yml'
+
+env:
+  TARGETS: >-
+    phong_ps20b.fxc:phong_ps30
+    vertexlit_and_unlit_generic_ps2x.fxc:vertexlit_and_unlit_generic_ps30
+    vertexlit_and_unlit_generic_bump_ps2x.fxc:vertexlit_and_unlit_generic_bump_ps30
+    character_ps20b.fxc:character_ps20b
+    vertexlit_and_unlit_generic_bump_vs20.fxc:vertexlit_and_unlit_generic_bump_vs20
+    vertexlit_and_unlit_generic_bump_vs20.fxc:vertexlit_and_unlit_generic_bump_vs30
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install numpy
+      - id: plan
+        run: |
+          per="${{ github.event.inputs.per_shard }}"
+          [ -z "$per" ] && per=25000
+          echo "matrix=$(python scripts/shaders/plan_shards.py $per $TARGETS)" >> "$GITHUB_OUTPUT"
+
+  compile:
+    needs: plan
+    runs-on: windows-latest
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - run: python -m pip install numpy
+
+      - name: Cache fxc.exe
+        id: fxccache
+        uses: actions/cache@v4
+        with:
+          path: fxcbin
+          key: dxsdk-jun2010-fxc-x86-v1
+
+      # the DirectX SDK June 2010 compiler (Valve's), with the two DLLs it imports
+      - name: Get fxc.exe
+        if: steps.fxccache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri "https://download.microsoft.com/download/A/E/7/AE743F1F-632B-4809-87A9-AA1BB3458E31/DXSDK_Jun10.exe" -OutFile dxsdk.exe
+          7z x dxsdk.exe -odxsdk -r -y fxc.exe "Jun2010_D3DCompiler_43_x86.cab" "Jun2010_d3dx9_43_x86.cab" | Out-Null
+          New-Item -ItemType Directory -Force -Path fxcbin | Out-Null
+          $fxc = Get-ChildItem dxsdk -Recurse -Filter fxc.exe | Where-Object { $_.FullName -match '\\x86\\' } | Select-Object -First 1
+          Copy-Item $fxc.FullName fxcbin\
+          foreach ( $name in @( "Jun2010_D3DCompiler_43_x86.cab", "Jun2010_d3dx9_43_x86.cab" ) ) {
+            $cab = Get-ChildItem dxsdk -Recurse -Filter $name | Select-Object -First 1
+            7z e $cab.FullName "-ofxcbin" -y *.dll | Out-Null
+          }
+          Get-ChildItem fxcbin
+          exit 0
+
+      - name: Compile ${{ matrix.target }} (${{ matrix.shard }}/${{ matrix.shards }})
+        shell: pwsh
+        run: |
+          $banner = ( & .\fxcbin\fxc.exe /? 2>&1 | Out-String )
+          if ( $banner -notmatch 'Shader Compiler' ) { Write-Host "fxc.exe does not run: $banner"; exit 1 }
+          python scripts/shaders/vcscompile.py compile "${{ matrix.src }}" "${{ matrix.target }}" --fxc fxcbin\fxc.exe --jobs 4 --shard ${{ matrix.shard }} --shards ${{ matrix.shards }} --allow-errors --out shaderout
+          if ( $LASTEXITCODE -ne 0 ) { exit 1 }
+          exit 0
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: part-${{ matrix.target }}-${{ matrix.shard }}
+          path: shaderout
+          if-no-files-found: error
+          retention-days: 3
+
+  merge:
+    needs: compile
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: part-*
+          path: shaderout
+          merge-multiple: true
+
+      - name: Merge, verify and lay out as platform/shaders/fxc
+        run: |
+          mkdir -p out/platform/shaders/fxc
+          for spec in $TARGETS; do
+            target="${spec##*:}"
+            parts=$(ls shaderout/parts/${target}.part* 2>/dev/null || true)
+            if [ -n "$parts" ]; then
+              python scripts/shaders/vcscompile.py merge $parts --out merged || exit 1
+              vcs="merged/shaders/fxc/${target}.vcs"
+            else
+              vcs="shaderout/shaders/fxc/${target}.vcs"
+            fi
+            if [ ! -f "$vcs" ]; then echo "MISSING $target"; continue; fi
+            python scripts/shaders/vcscompile.py verify "$vcs" || exit 1
+            cp "$vcs" out/platform/shaders/fxc/
+          done
+          ls -la out/platform/shaders/fxc
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: model-shaders
+          path: out
+          if-no-files-found: error

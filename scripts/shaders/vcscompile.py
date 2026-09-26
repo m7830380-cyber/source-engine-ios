@@ -319,6 +319,130 @@ def combo_index(vars_, mults, values):
     return idx
 
 
+def _skip_vars(expr, declared):
+    py = translate_skip(expr, declared)
+    names = set(re.findall(r'\b([A-Za-z_]\w*)\b', py))
+    names -= {'and', 'or', 'not', 'True', 'False'}
+    return py, names
+
+
+def enumerate_live_fast(c):
+    """Same result as enumerate_live, vectorized with numpy so shaders with 1e8..1e10
+    raw combos (phong, vertexlit_and_unlit_generic) can be enumerated. Each SKIP only
+    touches a few variables: it is evaluated once per value combination of those
+    variables, and every combo index with those values is marked at once."""
+    import numpy as np
+    import itertools
+    dyn_mult, num_dyn, stat_mult, total = compute_multipliers(c)
+    num_stat = total // num_dyn
+    static_names = [n for (n, lo, hi) in c.statics]
+    dynamic_names = [n for (n, lo, hi) in c.dynamics]
+    declared = set(static_names) | set(dynamic_names)
+    # a name can be declared twice (per-platform lines, e.g. NUM_LIGHTS 0..2 and 0..0);
+    # like iter_combos' dict, SKIPs see the FIRST declaration's value
+    ranges = {}
+    for (n, lo, hi) in c.statics + c.dynamics:
+        ranges.setdefault(n, (lo, hi))
+
+    # Enumerate over UNIQUE variable names (a duplicated name is one value), then map
+    # to the engine's ids the way its .inc GetIndex() does: every declaration adds
+    # mult * m_nNAME, so a duplicated name contributes through each of its entries.
+    def space(decls, mults, div):
+        names, rng = [], []
+        for (n, lo, hi) in decls:
+            if n not in names:
+                names.append(n); rng.append((lo, hi))
+        size = 1
+        for (lo, hi) in rng:
+            size *= (hi - lo + 1)
+        idx = np.arange(size, dtype=np.int64)
+        vals = {}
+        step = 1
+        for n, (lo, hi) in zip(names, rng):
+            vals[n] = ((idx // step) % (hi - lo + 1) + lo).astype(np.int64)
+            step *= (hi - lo + 1)
+        ids = np.zeros(size, dtype=np.int64)
+        for (n, lo, hi), m in zip(decls, mults):
+            ids += ( m // div ) * vals[n]
+        return size, vals, ids
+
+    n_stat_space, s_val, s_ids = space(c.statics, stat_mult, num_dyn)
+    n_dyn_space, d_val, d_ids = space(c.dynamics, dyn_mult, 1)
+    num_stat = n_stat_space
+    static_skips, mixed_skips = [], []
+    all_names = set(declared)
+    for expr in c.skips:
+        py, names = _skip_vars(expr, declared)
+        all_names |= names
+        code = compile(py, '<skip>', 'eval')
+        sv = sorted(n for n in names if n in s_val)
+        dv = sorted(n for n in names if n in d_val)
+        if dv:
+            mixed_skips.append((code, sv, dv))
+        else:
+            static_skips.append((code, sv))
+
+    def env_for(pairs):
+        env = dict((n, 0) for n in all_names)   # undefined-is-zero, like fxc_prep.pl
+        env.update(pairs)
+        return env
+
+    def value_product(vars_):
+        return itertools.product(*[range(ranges[v][0], ranges[v][1] + 1) for v in vars_])
+
+    dead = np.zeros(num_stat, dtype=bool)
+    for code, sv in static_skips:
+        for vals in value_product(sv):
+            if eval(code, {}, env_for(zip(sv, vals))):
+                mask = np.ones(num_stat, dtype=bool)
+                for v, x in zip(sv, vals):
+                    mask &= ( s_val[v] == x )
+                dead |= mask
+    live_static = np.nonzero(~dead)[0]
+
+    # group live statics by the static variables the mixed skips look at
+    key_vars = sorted(set(v for (_, sv, _) in mixed_skips for v in sv))
+    groups = {}
+    if key_vars:
+        keys = np.zeros(len(live_static), dtype=np.int64)
+        for v in key_vars:
+            lo, hi = ranges[v]
+            keys = keys * (hi - lo + 1) + ( s_val[v][live_static] - lo )
+        order = np.argsort(keys, kind='stable')
+        uniq, starts = np.unique(keys[order], return_index=True)
+        bounds = list(starts) + [len(order)]
+        for gi in range(len(uniq)):
+            groups[gi] = order[bounds[gi]:bounds[gi + 1]]
+    else:
+        groups[0] = np.arange(len(live_static))
+
+    live = []
+    n_inv = 0
+    for gi, members in groups.items():
+        if not len(members):
+            continue
+        sid0 = live_static[members[0]]
+        senv = dict((v, int(s_val[v][sid0])) for v in key_vars)
+        ddead = np.zeros(n_dyn_space, dtype=bool)
+        for code, sv, dv in mixed_skips:
+            for vals in value_product(dv):
+                env = env_for(senv.items())
+                env.update(zip(dv, vals))
+                if eval(code, {}, env):
+                    mask = np.ones(n_dyn_space, dtype=bool)
+                    for v, x in zip(dv, vals):
+                        mask &= ( d_val[v] == x )
+                    ddead |= mask
+        live_dyn = sorted(set(int(x) for x in d_ids[np.nonzero(~ddead)[0]]))
+        if not live_dyn:
+            continue
+        for mi in members:
+            live.append((int(s_ids[live_static[mi]]), live_dyn))
+        n_inv += len(live_dyn) * len(members)
+    live.sort(key=lambda e: e[0])
+    return live, num_dyn, n_inv
+
+
 def enumerate_live(c, verbose=False):
     """Return (live_static, num_dynamic, total_invocations).
     live_static: list of (static_combo_id, [live dynamic ids])"""
@@ -554,9 +678,18 @@ def cmd_compile(args):
 
     print("compiling %s (%s) from %s" % (args.target, stype, args.src))
     t0 = time.time()
-    live, num_dyn, n_inv = enumerate_live(c)
+    try:
+        import numpy  # noqa: F401
+        live, num_dyn, n_inv = enumerate_live_fast(c)
+    except ImportError:
+        live, num_dyn, n_inv = enumerate_live(c)
     print("  live static combos=%d  fxc invocations=%d  (enumerated in %.1fs)"
           % (len(live), n_inv, time.time() - t0))
+    if getattr(args, 'shards', 1) > 1:
+        # every N-th live static combo from K; 'merge' puts the parts back together
+        live = [e for i, e in enumerate(live) if i % args.shards == args.shard]
+        n_inv = sum(len(d) for (sd, d) in live)
+        print("  shard %d/%d: %d static combos (%d invocations)" % (args.shard, args.shards, len(live), n_inv))
     if args.limit:
         live = live[:args.limit]
         n_inv = sum(len(d) for (s, d) in live)
@@ -622,7 +755,20 @@ def cmd_compile(args):
         print("  %d compile errors; first:" % len(errors))
         for (sid, did, err) in errors[:3]:
             print("    static=%d dynamic=%d:\n%s" % (sid, did, (err or '')[:400]))
-        return 1
+        if not getattr(args, 'allow_errors', False):
+            return 1
+        print("  --allow-errors: packing the combos that did compile")
+
+    if getattr(args, 'shards', 1) > 1:
+        import pickle
+        partdir = os.path.join(args.out, 'parts')
+        os.makedirs(partdir, exist_ok=True)
+        partfile = os.path.join(partdir, '%s.part%03d' % (args.target, args.shard))
+        with open(partfile, 'wb') as f:
+            pickle.dump({'target': args.target, 'num_dyn': num_dyn, 'total': total,
+                         'centroid': c.centroid_mask, 'results': results}, f, protocol=4)
+        print("  wrote %s (%d static combos) in %.0fs" % (partfile, len(results), time.time() - t0))
+        return 0
 
     outdir = os.path.join(args.out, 'shaders', 'fxc')
     os.makedirs(outdir, exist_ok=True)
@@ -779,13 +925,45 @@ def cmd_verify(args):
     return 0
 
 
+def cmd_merge(args):
+    """Combine 'compile --shards' parts into one .vcs."""
+    import pickle
+    results, meta = [], None
+    for path in args.parts:
+        with open(path, 'rb') as f:
+            part = pickle.load(f)
+        m = (part['target'], part['num_dyn'], part['total'], part['centroid'])
+        if meta is None:
+            meta = m
+        elif m != meta:
+            print("FAIL: %s is from a different target/layout" % path)
+            return 1
+        results += part['results']
+    if meta is None:
+        print("FAIL: no parts")
+        return 1
+    target, num_dyn, total, centroid = meta
+    results.sort(key=lambda e: e[0])
+    outdir = os.path.join(args.out, 'shaders', 'fxc')
+    os.makedirs(outdir, exist_ok=True)
+    outfile = os.path.join(outdir, target + '.vcs')
+    size, nuniq, nalias = write_vcs(outfile, num_dyn, total, centroid, results, compress=True)
+    print("merged %d parts -> %s (%d bytes): %d static combos, %d unique blocks + %d aliases"
+          % (len(args.parts), outfile, size, len(results), nuniq, nalias))
+    return 0
+
+
 def cmd_count(args):
     import time
     fxc = os.path.join(STDSHADERS, args.src)
     c = parse_fxc(fxc, args.target)
     dyn_mult, num_dyn, stat_mult, total = compute_multipliers(c)
     t0 = time.time()
-    live, num_dyn, n_inv = enumerate_live(c)
+    try:
+        import numpy  # noqa: F401
+        live, num_dyn, n_inv = enumerate_live_fast(c)
+    except ImportError:
+        live, num_dyn, n_inv = enumerate_live(c)
     dt = time.time() - t0
     print("%s" % args.target)
     print("  static space      : %d" % (total // num_dyn))
@@ -830,6 +1008,11 @@ def main():
     p = sub.add_parser("verify")
     p.add_argument("path")
     p.set_defaults(func=cmd_verify)
+    p = sub.add_parser("merge")
+    p.add_argument("parts", nargs="+")
+    p.add_argument("--out", default="shaderout")
+    p.set_defaults(func=cmd_merge)
+
     p = sub.add_parser("compile")
     p.add_argument("src")
     p.add_argument("target")
@@ -839,6 +1022,9 @@ def main():
     p.add_argument("--jobs", type=int, default=8)
     p.add_argument("--limit", type=int, default=0,
                    help="only compile the first N static combos (smoke test)")
+    p.add_argument("--shard", type=int, default=0, help="this job's part (with --shards)")
+    p.add_argument("--shards", type=int, default=1, help="split the static combos over N jobs")
+    p.add_argument("--allow-errors", action="store_true", help="pack what compiled even if some combos failed")
     p.add_argument("--no-compress", action="store_true",
                    help="write uncompressed blocks (much larger; for debugging)")
     p.set_defaults(func=cmd_compile)

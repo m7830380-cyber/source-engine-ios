@@ -30,7 +30,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { src: customweapon_ps20b.fxc,                 target: customweapon_ps20 }
           - { src: customweapon_ps20b.fxc,                 target: customweapon_ps20b }
           - { src: customweapon_ps20b.fxc,                 target: customweapon_ps30 }
           - { src: customweapon_vs20.fxc,                  target: customweapon_vs20 }
@@ -43,12 +42,10 @@ jobs:
           - { src: phong_ps20b.fxc,                        target: phong_ps30 }
           - { src: phong_vs20.fxc,                         target: phong_vs20 }
           - { src: phong_vs20.fxc,                         target: phong_vs30 }
-          - { src: vertexlit_and_unlit_generic_ps2x.fxc,   target: vertexlit_and_unlit_generic_ps20 }
           - { src: vertexlit_and_unlit_generic_ps2x.fxc,   target: vertexlit_and_unlit_generic_ps20b }
           - { src: vertexlit_and_unlit_generic_ps2x.fxc,   target: vertexlit_and_unlit_generic_ps30 }
           - { src: vertexlit_and_unlit_generic_vs20.fxc,   target: vertexlit_and_unlit_generic_vs20 }
           - { src: vertexlit_and_unlit_generic_vs20.fxc,   target: vertexlit_and_unlit_generic_vs30 }
-          - { src: vertexlit_and_unlit_generic_bump_ps2x.fxc, target: vertexlit_and_unlit_generic_bump_ps20 }
           - { src: vertexlit_and_unlit_generic_bump_ps2x.fxc, target: vertexlit_and_unlit_generic_bump_ps20b }
           - { src: vertexlit_and_unlit_generic_bump_ps2x.fxc, target: vertexlit_and_unlit_generic_bump_ps30 }
           - { src: vertexlit_and_unlit_generic_bump_vs20.fxc, target: vertexlit_and_unlit_generic_bump_vs20 }
@@ -71,25 +68,19 @@ jobs:
           $fxc = $null
           try {
             Invoke-WebRequest -Uri "https://download.microsoft.com/download/A/E/7/AE743F1F-632B-4809-87A9-AA1BB3458E31/DXSDK_Jun10.exe" -OutFile dxsdk.exe
-            7z x dxsdk.exe -odxsdk -r -y fxc.exe D3DCompiler_43.dll d3dx9_43.dll "Jun2010_D3DCompiler_43_x86.cab" | Out-Null
-            $cand = Get-ChildItem dxsdk -Recurse -Filter fxc.exe | Where-Object { $_.FullName -match '\\x86\\' } | Select-Object -First 1
-            if ($cand) {
+            7z x dxsdk.exe -odxsdk -r -y fxc.exe "Jun2010_D3DCompiler_43_x86.cab" "Jun2010_D3DCompiler_43_x64.cab" | Out-Null
+            foreach ($arch in @('x86', 'x64')) {
+              $cand = Get-ChildItem dxsdk -Recurse -Filter fxc.exe | Where-Object { $_.FullName -match "\\$arch\\" } | Select-Object -First 1
+              if (-not $cand) { Write-Host "no $arch fxc.exe in the SDK"; continue }
               $dir = $cand.DirectoryName
-              if (-not (Test-Path (Join-Path $dir 'D3DCompiler_43.dll'))) {
-                $dll = Get-ChildItem dxsdk -Recurse -Filter D3DCompiler_43.dll | Where-Object { $_.FullName -match 'x86' } | Select-Object -First 1
-                if ($dll) { Copy-Item $dll.FullName $dir }
-                else {
-                  $cab = Get-ChildItem dxsdk -Recurse -Filter 'Jun2010_D3DCompiler_43_x86.cab' | Select-Object -First 1
-                  if ($cab) { 7z e $cab.FullName "-o$dir" -y | Out-Null }
-                }
-              }
+              $cab = Get-ChildItem dxsdk -Recurse -Filter "Jun2010_D3DCompiler_43_$arch.cab" | Select-Object -First 1
+              if ($cab) { 7z e $cab.FullName "-o$dir" -y | Out-Null }
+              Write-Host "$arch fxc: $($cand.FullName)"
               Get-ChildItem $dir -Filter *.dll | ForEach-Object { Write-Host "  $($_.Name)" }
               # fxc /? exits nonzero; judge it by its banner
               $banner = (& $cand.FullName /? 2>&1 | Out-String)
-              Write-Host ($banner.Split("`n") | Select-Object -First 2)
-              if ($banner -match 'Shader Compiler') { $fxc = $cand.FullName }
-            } else {
-              Write-Host "fxc.exe not found in the DirectX SDK download"
+              Write-Host "  exit code $LASTEXITCODE; banner: $(($banner.Trim() -split "`n")[0])"
+              if ($banner -match 'Shader Compiler') { $fxc = $cand.FullName; break }
             }
           } catch { Write-Host "DirectX SDK fxc unavailable: $_" }
 

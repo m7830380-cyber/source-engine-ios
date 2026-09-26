@@ -83,8 +83,13 @@ jobs:
                   if ($cab) { 7z e $cab.FullName "-o$dir" -y | Out-Null }
                 }
               }
-              & $cand.FullName /? | Out-Null
-              if ($LASTEXITCODE -eq 0 -or $LASTEXITCODE -eq 1) { $fxc = $cand.FullName }
+              Get-ChildItem $dir -Filter *.dll | ForEach-Object { Write-Host "  $($_.Name)" }
+              # fxc /? exits nonzero; judge it by its banner
+              $banner = (& $cand.FullName /? 2>&1 | Out-String)
+              Write-Host ($banner.Split("`n") | Select-Object -First 2)
+              if ($banner -match 'Shader Compiler') { $fxc = $cand.FullName }
+            } else {
+              Write-Host "fxc.exe not found in the DirectX SDK download"
             }
           } catch { Write-Host "DirectX SDK fxc unavailable: $_" }
 
@@ -97,6 +102,8 @@ jobs:
           }
           Write-Host "fxc: $fxc"
           "FXC_EXE=$fxc" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          # pwsh steps otherwise exit with the last native command's exit code
+          exit 0
 
       - name: Compile ${{ matrix.target }}
         shell: pwsh

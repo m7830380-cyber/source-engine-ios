@@ -354,7 +354,8 @@ ICustomMaterial * CCustomMaterialManager::GetOrCreateCustomMaterial( KeyValues *
 
 	FOR_EACH_VEC( vecTextureInfos, i )
 	{
-		ICompositeTexture *pTexture = g_pMaterialSystem->GetCompositeTextureGenerator()->GetCompositeTexture( vecTextureInfos[ i ] );
+		// pass bIgnorePicMip on (it was dropped, so composites always got mat_picmip applied)
+		ICompositeTexture *pTexture = g_pMaterialSystem->GetCompositeTextureGenerator()->GetCompositeTexture( vecTextureInfos[ i ], bIgnorePicMip );
 		if ( pTexture )
 		{
 			pMaterial->AddTexture( pTexture );

@@ -43,12 +43,22 @@ BEGIN_VS_SHADER_FLAGS( MotionBlur_dx9, "Motion Blur", SHADER_NOT_EDITABLE )
 	SHADER_DRAW
 	{
 		bool bForceSRGBReadsAndWrites = IsOSXOpenGL() && g_pHardwareConfig->CanDoSRGBReadFromRTs();
+#if defined( IOS )
+		// Like the scope blur: _rt_FullFrameFB is an sRGB texture (sampling decodes it)
+		// and every render target encodes on write, so togl's forced in-shader sRGB
+		// write encoded twice and whitened everything but the viewmodel (motion blur
+		// runs before it is drawn) as soon as motion blur was turned on.
+		bForceSRGBReadsAndWrites = false;
+#endif
 		SHADOW_STATE
 		{
 			pShaderShadow->VertexShaderVertexFormat( VERTEX_POSITION, 1, 0, 0 );
 
 			// On OSX OpenGL, we must do sRGB reads and writes since these render targets are tagged as such
 			bool bForceSRGBReadsAndWrites = IsOSX() && g_pHardwareConfig->CanDoSRGBReadFromRTs();
+#if defined( IOS )
+			bForceSRGBReadsAndWrites = false;	// see above
+#endif
 			
 			// NOTE: sRGB is disabled because of the NV8800 brokenness
 			pShaderShadow->EnableTexture( SHADER_SAMPLER0, true );

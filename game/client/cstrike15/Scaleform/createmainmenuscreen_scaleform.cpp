@@ -110,6 +110,14 @@ void CCreateMainMenuScreenScaleform::LoadDialog( void )
 		g_bEnteredMainMenuOnce = true;
 
 		m_pInstance = new CCreateMainMenuScreenScaleform( );
+#if defined( IOS )
+		// The menu SWFs read component values (e.g. MyPersona.GetXuid) once at load
+		// time, so the components have to exist before MainMenu.swf is requested.
+		extern void ScaleformComponentGameTypes_EnsureInstalled();
+		ScaleformComponentGameTypes_EnsureInstalled();
+		extern void ScaleformInventoryComponents_EnsureInstalled();
+		ScaleformInventoryComponents_EnsureInstalled();
+#endif
 		SFUI_REQUEST_ELEMENT( SF_FULL_SCREEN_SLOT, g_pScaleformUI, CCreateMainMenuScreenScaleform, m_pInstance, MainMenu );		
 
 		m_pInstance->m_bVisible = true;

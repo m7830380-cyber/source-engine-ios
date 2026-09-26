@@ -175,7 +175,10 @@ static bool IsItemEquipped( CEconItemView *pItem, int iTeam )
 		return false;
 	if ( iTeam == 0 )
 	{
+		// only team-less items (flair, music kits, sprays) equip in the noteam loadout
 		const CCStrike15ItemDefinition *pDef = ItemDef( pItem );
+		if ( !pDef || pDef->CanBeUsedByTeam( TEAM_CT ) || pDef->CanBeUsedByTeam( TEAM_TERRORIST ) )
+			return false;
 		int nSlot = pDef ? pDef->GetDefaultLoadoutSlot() : -1;
 		return nSlot >= 0 && LoadoutItemID( 0, nSlot ) == ullID;
 	}

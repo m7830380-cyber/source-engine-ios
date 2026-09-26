@@ -2574,11 +2574,9 @@ static ConVar cl_buymenu_closeonbuy( "cl_buymenu_closeonbuy", "0", FCVAR_ARCHIVE
 // The weapon view: buy-menu.swf asks for the selected weapon's 3D model with
 // SetShowWeaponModel( position ) and, when we say no, falls back to an icon that
 // on iOS ended up in the panel's top-left corner. Draw the model instead, over the
-// box Valve's client used for it (buymenu_itempanel_parent.res), while the menu's
-// weapon panel is showing.
+// weapon panel's display area (see kBuyMenuModelLocal), while the panel is showing.
 static CCSBuyMenuScaleform *s_pBuyMenuForModel = NULL;
-static ConVar ios_buymenu_model_scale( "ios_buymenu_model_scale", "0.7", FCVAR_RELEASE | FCVAR_ARCHIVE, "Buy menu weapon model size (1 = Valve's buymenu_itempanel box)" );
-static ConVar ios_buymenu_model_yofs( "ios_buymenu_model_yofs", "-50", FCVAR_RELEASE | FCVAR_ARCHIVE, "Buy menu weapon model vertical offset, in 480-tall units (negative = up)" );
+
 
 static float GetFlashNumberMember( SFVALUE obj, const char *pszName, float flDefault )
 {
@@ -2595,48 +2593,44 @@ static float GetFlashNumberMember( SFVALUE obj, const char *pszName, float flDef
 	return fl;
 }
 
+// The weapon's display area in buy-menu.swf's Panel.Panel.PanelWeapon, in its local
+// coordinates (read from the SWF): the panel background spans x 478..722; the weapon
+// name (Text.WeaponName) ends at y ~128.7 and the sticker row (Stickers) starts at
+// y 203.8, with the stat bars below. The model goes in that band.
+static const float kBuyMenuModelLocal[4] = { 478.0f, 129.0f, 722.0f, 204.0f };
+
 static int GetBuyMenuModelPlacement( int &x, int &y, int &w, int &h )
 {
 	CCSBuyMenuScaleform *pMenu = s_pBuyMenuForModel;
 	if ( !pMenu || !pMenu->FlashAPIIsValid() || !g_pScaleformUI )
 		return -1;
 
-	// only while the weapon panel is showing
+	int nResult = -1;
 	SFVALUE outer = g_pScaleformUI->Value_GetMember( pMenu->m_FlashAPI, "Panel" );
 	SFVALUE inner = outer ? g_pScaleformUI->Value_GetMember( outer, "Panel" ) : NULL;
 	SFVALUE panel = inner ? g_pScaleformUI->Value_GetMember( inner, "PanelWeapon" ) : NULL;
-	bool bVisible = panel && GetFlashNumberMember( panel, "_visible", 0.0f ) != 0.0f;
+	if ( panel && GetFlashNumberMember( panel, "_visible", 0.0f ) != 0.0f )
+	{
+		float x0, y0, x1, y1;
+		if ( GetFlashLocalRectOnScreen( panel, pMenu->m_iFlashSlot, kBuyMenuModelLocal[0], kBuyMenuModelLocal[1],
+										kBuyMenuModelLocal[2], kBuyMenuModelLocal[3], x0, y0, x1, y1 ) )
+		{
+			x = (int)x0; y = (int)y0; w = (int)( x1 - x0 ); h = (int)( y1 - y0 );
+			nResult = 1;
+
+			static int s_nLogged[4] = { -1, -1, -1, -1 };
+			if ( s_nLogged[0] != x || s_nLogged[1] != y || s_nLogged[2] != w || s_nLogged[3] != h )
+			{
+				printf( "[buymenu] weapon view at %d,%d %dx%d\n", x, y, w, h );
+				fflush( stdout );
+				s_nLogged[0] = x; s_nLogged[1] = y; s_nLogged[2] = w; s_nLogged[3] = h;
+			}
+		}
+	}
 	if ( panel ) g_pScaleformUI->ReleaseValue( panel );
 	if ( inner ) g_pScaleformUI->ReleaseValue( inner );
 	if ( outer ) g_pScaleformUI->ReleaseValue( outer );
-	if ( !bVisible )
-		return -1;
-
-	// Based on where Valve's client put the model (Resource/UI/econ/buymenu_itempanel_parent.res,
-	// "buymenu_itempanel": xpos c-20, ypos 94, wide 210, tall 158, proportional to 480 tall),
-	// smaller and higher so it stays inside the menu's weapon preview window; tunable:
-	static ConVarRef ios_buymenu_model_scale( "ios_buymenu_model_scale" );
-	static ConVarRef ios_buymenu_model_yofs( "ios_buymenu_model_yofs" );
-	int sw, sh;
-	vgui::surface()->GetScreenSize( sw, sh );
-	float flScale = sh / 480.0f;
-	float flSize = ios_buymenu_model_scale.IsValid() ? ios_buymenu_model_scale.GetFloat() : 0.7f;
-	float flYOfs = ios_buymenu_model_yofs.IsValid() ? ios_buymenu_model_yofs.GetFloat() : -50.0f;
-	float cx = sw * 0.5f + ( -20.0f + 105.0f ) * flScale;		// center of Valve's box
-	float cy = ( 94.0f + 79.0f + flYOfs ) * flScale;
-	w = (int)( 210.0f * flSize * flScale );
-	h = (int)( 158.0f * flSize * flScale );
-	x = (int)( cx - w * 0.5f );
-	y = (int)( cy - h * 0.5f );
-
-	static int s_nLogged[4] = { -1, -1, -1, -1 };
-	if ( s_nLogged[0] != x || s_nLogged[1] != y || s_nLogged[2] != w || s_nLogged[3] != h )
-	{
-		printf( "[buymenu] weapon view at %d,%d %dx%d (screen %dx%d, scale %.2f, yofs %.0f)\n", x, y, w, h, sw, sh, flSize, flYOfs );
-		fflush( stdout );
-		s_nLogged[0] = x; s_nLogged[1] = y; s_nLogged[2] = w; s_nLogged[3] = h;
-	}
-	return 1;
+	return nResult;
 }
 
 void CCSBuyMenuScaleform::SetShowWeaponModel( SCALEFORM_CALLBACK_ARGS_DECL )

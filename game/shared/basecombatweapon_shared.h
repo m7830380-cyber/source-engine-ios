@@ -240,7 +240,6 @@ private:
 	CEconItemView			*GetOfflineItemView( void ) const;
 	CNetworkVar( int, m_nOfflineItemIDLow );
 	CNetworkVar( int, m_nOfflineItemIDHigh );
-	mutable CEconItemView	*m_pOfflineItemView;
 public:
 #endif
 

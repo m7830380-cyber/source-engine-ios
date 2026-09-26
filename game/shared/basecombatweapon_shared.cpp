@@ -15,6 +15,7 @@
 #include "collisionutils.h"
 #include "econ_entity.h"
 #include "econ_item_view.h"
+#include "econ_item_inventory.h"
 #include "game_item_schema.h"
 
 #if !defined( CLIENT_DLL )
@@ -548,7 +549,6 @@ CBaseCombatWeapon::CBaseCombatWeapon()
 #if defined( CSTRIKE15 )
 	m_nOfflineItemIDLow = 0;
 	m_nOfflineItemIDHigh = 0;
-	m_pOfflineItemView = NULL;
 #endif
 
 	// Some default values.  There should be set in the particular weapon classes
@@ -595,10 +595,6 @@ CBaseCombatWeapon::CBaseCombatWeapon()
 //-----------------------------------------------------------------------------
 CBaseCombatWeapon::~CBaseCombatWeapon( void )
 {
-#if defined( CSTRIKE15 )
-	delete m_pOfflineItemView;
-	m_pOfflineItemView = NULL;
-#endif
 #if !defined( CLIENT_DLL )
 	//Remove our constraint, if we have one
 	if ( m_pConstraint != NULL )
@@ -3450,27 +3446,22 @@ void CBaseCombatWeapon::SetOfflineItemID( uint64 ullItemID )
 	m_nOfflineItemIDHigh = (int)(uint32)( ullItemID >> 32 );
 }
 
-// A view of the -allskinsunlocked item this weapon was given. The item's data (paint
-// kit, wear, seed) comes straight from the offline inventory, which builds the same
-// items with the same IDs in the client and the server.
+// The inventory's own view of the -allskinsunlocked item this weapon was given (the
+// same object the menus and the loadout use), looked up by ID on every call so it
+// can't go stale when an inventory is refilled. The offline inventory builds the
+// same items with the same IDs in the client and the server.
 CEconItemView *CBaseCombatWeapon::GetOfflineItemView( void ) const
 {
 	uint64 ullItemID = GetOfflineItemID();
 	if ( !ullItemID )
 		return NULL;
 
-	if ( !m_pOfflineItemView || m_pOfflineItemView->GetItemID() != ullItemID )
-	{
-		CEconItem *pItem = OfflineInventory_FindItem( ullItemID );
-		if ( !pItem )
-			return NULL;
-		if ( !m_pOfflineItemView )
-			m_pOfflineItemView = new CEconItemView;
-		m_pOfflineItemView->Init( pItem->GetDefinitionIndex(), pItem->GetQuality(), pItem->GetItemLevel(), pItem->GetAccountID() );
-		m_pOfflineItemView->SetItemID( ullItemID );
-		m_pOfflineItemView->SetNonSOEconItem( pItem );
-	}
-	return m_pOfflineItemView;
+	CEconItem *pItem = OfflineInventory_FindItem( ullItemID );
+	if ( !pItem || !InventoryManager() )
+		return NULL;
+
+	CPlayerInventory *pInventory = InventoryManager()->GetInventoryForAccount( pItem->GetAccountID() );
+	return pInventory ? pInventory->GetInventoryItemByItemID( ullItemID ) : NULL;
 }
 #endif
 

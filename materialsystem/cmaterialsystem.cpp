@@ -4404,6 +4404,13 @@ void CMaterialSystem::EndFrame( void )
 			}
 		}
 
+#if defined( IOS )
+		if ( m_ThreadMode != nextThreadMode )
+		{
+			printf( "[matsys] thread mode %d -> %d (0 single, 1 queued single, 2 queued with render thread)\n", (int)m_ThreadMode, (int)nextThreadMode );
+			fflush( stdout );
+		}
+#endif
 		m_ThreadMode = nextThreadMode;
 #ifndef DX_TO_GL_ABSTRACTION
 		Assert( g_MatSysMutex.GetOwnerId() == 0 );

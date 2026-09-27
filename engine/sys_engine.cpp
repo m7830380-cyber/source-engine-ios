@@ -447,45 +447,6 @@ void CEngine::Frame( void )
 	// Get current time
 	m_flCurrentTime	= Sys_FloatTime();
 
-#ifdef IOS
-	// Heartbeat for the launch log: tells a running-but-blank main loop apart
-	// from a hang, and shows whether the game thinks it has focus.
-	{
-		static int s_nFrames = 0;
-		static double s_flLastBeat = 0.0;
-		++s_nFrames;
-
-		// per-second frame rate, focus state and slowest frame, to see drops as they happen
-		static double s_flLastSecond = 0.0, s_flLastFrameTime = 0.0, s_flWorstFrame = 0.0;
-		static int s_nFramesAtSecond = 0, s_nInactiveFrames = 0;
-		if ( s_flLastFrameTime > 0.0 )
-			s_flWorstFrame = MAX( s_flWorstFrame, m_flCurrentTime - s_flLastFrameTime );
-		s_flLastFrameTime = m_flCurrentTime;
-		if ( !game->IsActiveApp() )
-			++s_nInactiveFrames;
-		if ( m_flCurrentTime - s_flLastSecond >= 1.0 )
-		{
-			if ( s_flLastSecond > 0.0 )
-			{
-				printf( "[fps] t=%.1f fps %.0f, slowest frame %.0f ms, inactive frames %d\n", m_flCurrentTime,
-						( s_nFrames - s_nFramesAtSecond ) / ( m_flCurrentTime - s_flLastSecond ), s_flWorstFrame * 1000.0, s_nInactiveFrames );
-				fflush( stdout );
-			}
-			s_flLastSecond = m_flCurrentTime;
-			s_nFramesAtSecond = s_nFrames;
-			s_flWorstFrame = 0.0;
-			s_nInactiveFrames = 0;
-		}
-		if ( m_flCurrentTime - s_flLastBeat >= 5.0 )
-		{
-			printf( "[heartbeat] frame %d, t=%.1f, active app %d, state %d, client signon %d, server active %d, loading %d\n",
-					s_nFrames, m_flCurrentTime, game->IsActiveApp() ? 1 : 0, (int)m_nDLLState,
-					GetBaseLocalClient().m_nSignonState, sv.IsActive() ? 1 : 0, scr_disabled_for_loading ? 1 : 0 );
-			fflush( stdout );
-			s_flLastBeat = m_flCurrentTime;
-		}
-	}
-#endif
 
 	// Watch for data from the CPU frequency monitoring system and print it to the console.
 	const CPUFrequencyResults frequency = GetCPUFrequencyResults();
@@ -554,6 +515,48 @@ void CEngine::Frame( void )
 		m_flFilteredTime += dt;
 		return;
 	}
+
+#ifdef IOS
+	// Heartbeat for the launch log: tells a running-but-blank main loop apart
+	// from a hang, and shows whether the game thinks it has focus. Counted after
+	// the fps_max filter, so "fps" is frames that actually ran (the calls the
+	// limiter sends back to sleep used to be counted too).
+	{
+		static int s_nFrames = 0;
+		static double s_flLastBeat = 0.0;
+		++s_nFrames;
+
+		// per-second frame rate, focus state and slowest frame, to see drops as they happen
+		static double s_flLastSecond = 0.0, s_flLastFrameTime = 0.0, s_flWorstFrame = 0.0;
+		static int s_nFramesAtSecond = 0, s_nInactiveFrames = 0;
+		if ( s_flLastFrameTime > 0.0 )
+			s_flWorstFrame = MAX( s_flWorstFrame, m_flCurrentTime - s_flLastFrameTime );
+		s_flLastFrameTime = m_flCurrentTime;
+		if ( !game->IsActiveApp() )
+			++s_nInactiveFrames;
+		if ( m_flCurrentTime - s_flLastSecond >= 1.0 )
+		{
+			if ( s_flLastSecond > 0.0 )
+			{
+				printf( "[fps] t=%.1f fps %.0f, slowest frame %.0f ms, inactive frames %d\n", m_flCurrentTime,
+						( s_nFrames - s_nFramesAtSecond ) / ( m_flCurrentTime - s_flLastSecond ), s_flWorstFrame * 1000.0, s_nInactiveFrames );
+				fflush( stdout );
+			}
+			s_flLastSecond = m_flCurrentTime;
+			s_nFramesAtSecond = s_nFrames;
+			s_flWorstFrame = 0.0;
+			s_nInactiveFrames = 0;
+		}
+		if ( m_flCurrentTime - s_flLastBeat >= 5.0 )
+		{
+			printf( "[heartbeat] frame %d, t=%.1f, active app %d, state %d, client signon %d, server active %d, loading %d\n",
+					s_nFrames, m_flCurrentTime, game->IsActiveApp() ? 1 : 0, (int)m_nDLLState,
+					GetBaseLocalClient().m_nSignonState, sv.IsActive() ? 1 : 0, scr_disabled_for_loading ? 1 : 0 );
+			fflush( stdout );
+			s_flLastBeat = m_flCurrentTime;
+		}
+	}
+#endif
 
     TM_ZONE( TELEMETRY_LEVEL0, TMZF_NONE, "%s", __PRETTY_FUNCTION__ );
 

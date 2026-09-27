@@ -1151,7 +1151,13 @@ void ReadyToJoinGameProceedToMotdAndTeamSelect()
 	//CCSTeamMenuScaleform* pTeamMenu = (CCSTeamMenuScaleform*)GetViewPortInterface()->FindPanelByName( PANEL_TEAM );
 
 
-	if ( sv_disable_motd.GetBool() || engine->IsClientLocalToActiveServer() || !pHTMLPanel->HasMotd() || ( CSGameRules() && CSGameRules()->IsQueuedMatchmaking() ) )
+	bool bSkipMotd = false;
+#if defined( IOS )
+	// No web view on iOS to show the server's (HTML) message of the day, and its
+	// VGUI window's button took no touch input: joining a LAN game stuck there.
+	bSkipMotd = true;
+#endif
+	if ( bSkipMotd || sv_disable_motd.GetBool() || engine->IsClientLocalToActiveServer() || !pHTMLPanel->HasMotd() || ( CSGameRules() && CSGameRules()->IsQueuedMatchmaking() ) )
 	{
 		DevMsg( "CLoadingScreenScaleform::CloseLoadingScreen-doing(joingame)\n" );
 		GetViewPortInterface()->ShowPanel( PANEL_INFO, false );	

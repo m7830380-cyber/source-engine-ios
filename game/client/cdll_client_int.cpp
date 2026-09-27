@@ -1946,9 +1946,12 @@ static void IOS_DiscardMouseMovement( bool bMenu )
 bool IOS_IsMenuActive()
 {
 	extern bool IOS_IsBuyMenuVisible();
+	// VGUI viewport windows (e.g. a server's message of the day) need the finger as the mouse too
+	IViewPortPanel *pInfo = GetViewPortInterface() ? GetViewPortInterface()->FindPanelByName( PANEL_INFO ) : NULL;
 	return !engine->IsInGame() ||
 		( g_pScaleformUI && ( g_pScaleformUI->ConsumesInputEvents() || g_pScaleformUI->IsCursorVisible() ) ) ||
-		IOS_IsBuyMenuVisible();
+		IOS_IsBuyMenuVisible() ||
+		( pInfo && pInfo->IsVisible() );
 }
 
 static bool s_bIOSFingerDown[10];

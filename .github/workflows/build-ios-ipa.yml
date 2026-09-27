@@ -9,6 +9,9 @@ on:
 jobs:
   build-ios-ipa:
     runs-on: macos-14
+    permissions:
+      contents: read
+      actions: read
     timeout-minutes: 300
     env:
       CCACHE_DIR: ${{ github.workspace }}/.ccache
@@ -19,6 +22,23 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+
+      # Release ANGLE from the newest successful "ANGLE for iOS (release)" run;
+      # without one, scripts/ios/build-angle.sh falls back to the reference IPA's
+      # (Debug) frameworks.
+      - name: Use the release ANGLE build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          id=$(gh run list -R "${{ github.repository }}" -w build-angle.yml --status success -L 1 --json databaseId -q '.[0].databaseId' 2>/dev/null || true)
+          if [ -n "$id" ]; then
+            mkdir -p build/ios
+            gh run download "$id" -R "${{ github.repository }}" -n angle-ios-release -D build/ios
+            cat build/ios/ANGLE_COMMIT.txt || true
+            ls -la build/ios
+          else
+            echo "No release ANGLE build yet; using the reference IPA's frameworks"
+          fi
 
       - name: Install ccache
         run: brew install ccache

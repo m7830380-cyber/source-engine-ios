@@ -1,0 +1,102 @@
+name: ANGLE for iOS (release)
+
+# The ANGLE frameworks we shipped came from a reference IPA and are a Debug
+# build (unoptimized, ANGLE_ENABLE_ASSERTS: "Assert failed in", out/Debug
+# paths, 14 MB). Every GL call the game makes goes through them on the one
+# CPU core the game already saturates. Build release frameworks from upstream
+# ANGLE, Metal backend only; Build iOS IPA picks up the newest successful run.
+
+on:
+  workflow_dispatch:
+    inputs:
+      angle_ref:
+        description: "ANGLE commit or branch"
+        required: true
+        default: "main"
+  push:
+    paths:
+      - '.github/workflows/build-angle.yml'
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 360
+    steps:
+      - name: Xcode
+        run: |
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+
+      - name: depot_tools
+        run: |
+          git clone --depth 1 https://chromium.googlesource.com/chromium/tools/depot_tools.git "$HOME/depot_tools"
+          echo "$HOME/depot_tools" >> "$GITHUB_PATH"
+
+      - name: Fetch ANGLE and its dependencies
+        env:
+          DEPOT_TOOLS_UPDATE: "0"
+        run: |
+          ref="${{ github.event.inputs.angle_ref }}"
+          [ -z "$ref" ] && ref=main
+          git clone https://chromium.googlesource.com/angle/angle angle
+          cd angle
+          git checkout "$ref"
+          git log -1 --format='ANGLE %H (%cd)'
+          python3 scripts/bootstrap.py
+          # iOS toolchain and SDK helpers are only synced for this target_os
+          echo "target_os = ['ios']" >> .gclient
+          gclient sync -j 16 --no-history --shallow
+
+      - name: Configure (release, Metal only)
+        working-directory: angle
+        run: |
+          gn gen out/Release --args='
+            target_os = "ios"
+            target_cpu = "arm64"
+            target_environment = "device"
+            is_debug = false
+            is_component_build = false
+            symbol_level = 0
+            enable_dsyms = false
+            ios_enable_code_signing = false
+            ios_deployment_target = "16.0"
+            angle_enable_metal = true
+            angle_enable_gl = false
+            angle_enable_vulkan = false
+            angle_enable_swiftshader = false
+            angle_enable_null = false
+            angle_enable_wgpu = false
+            angle_enable_cl = false
+            angle_build_tests = false
+          '
+          gn args out/Release --list --short --overrides-only
+
+      - name: Build libEGL and libGLESv2
+        working-directory: angle
+        run: autoninja -C out/Release libEGL libGLESv2
+
+      - name: Collect frameworks
+        working-directory: angle
+        run: |
+          mkdir -p ../dist
+          for fw in libEGL libGLESv2; do
+            cp -R "out/Release/$fw.framework" ../dist/
+            strip -x "../dist/$fw.framework/$fw"
+            # the game links @rpath/<name>; createipa.sh rewrites to the framework path
+            install_name_tool -id "@rpath/$fw" "../dist/$fw.framework/$fw"
+            ls -la "../dist/$fw.framework"
+            otool -L "../dist/$fw.framework/$fw"
+            otool -l "../dist/$fw.framework/$fw" | grep -A4 LC_BUILD_VERSION || true
+          done
+          git log -1 --format='%H %cd' > ../dist/ANGLE_COMMIT.txt
+          # release builds must not carry ANGLE's assertion strings
+          if strings -a ../dist/libGLESv2.framework/libGLESv2 | grep -q "Assert failed in"; then
+            echo "libGLESv2 still has ANGLE assertions: not a release build"; exit 1
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: angle-ios-release
+          path: dist
+          if-no-files-found: error
+          retention-days: 90

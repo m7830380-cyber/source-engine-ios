@@ -4121,14 +4121,9 @@ void CMaterialSystem::EndFrame( void )
 		nextThreadMode = MATERIAL_SINGLE_THREADED;
 	}
 
-#if defined( IOS )
-	// Single-threaded unless mat_queue_mode is set explicitly (mat_queue_mode 2 =
-	// render thread). Queued mode used to crash in CVertexBuffer::HandleLateCreation
-	// because the EGL context handoff to the render thread failed (fixed in
-	// CSDLMgr::MakeContextCurrent); opt-in until it's proven on device.
-	if ( iConVarThreadMode < 0 )
-		nextThreadMode = MATERIAL_SINGLE_THREADED;
-#endif
+	// iOS: the render thread (queued threaded) is the default, as on PC. It used to
+	// be forced off because the EGL context handoff to it failed (fixed in
+	// CSDLMgr::MakeContextCurrent, 525d622b). mat_queue_mode 0 turns it off.
 
 #if !defined ( OSX )
 	if ( m_bForcedSingleThreaded )

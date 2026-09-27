@@ -13,6 +13,7 @@
 #include "vgui_controls/Button.h"
 #include "viewrender.h"
 #include "iinput.h"
+#include "iclientmode.h"
 
 #define STB_RECT_PACK_IMPLEMENTATION
 #include "stb_rect_pack.h"
@@ -374,7 +375,7 @@ static int AddMenuButtons( rgba_t color, bool bOnlyMissing )
 	struct MenuButton_t { const char *name, *texture, *command; float x1, y1, x2, y2; };
 	static const MenuButton_t s_MenuButtons[] =
 	{
-		{ "scores",   "vgui/touch/changeclass",  "+showscores",     0.090000, 0.000000, 0.170000, 0.142222 },
+		{ "scores",   "vgui/touch/scoreboard",   "+showscores",     0.090000, 0.000000, 0.170000, 0.142222 },
 		{ "teammenu", "vgui/touch/changeteam",   "teammenu",        0.180000, 0.000000, 0.260000, 0.142222 },
 		{ "chat",     "vgui/touch/chat",         "messagemode",     0.270000, 0.000000, 0.350000, 0.142222 },
 		{ "inspect",  "vgui/touch/zoom",         "+lookatweapon",   0.580000, 0.000000, 0.660000, 0.142222 },
@@ -512,6 +513,10 @@ void CTouchControls::Init()
 			Q_strncpy( btns[i]->command, "ios_weapnext", sizeof( btns[i]->command ) );
 		else if( !Q_strcmp( btns[i]->command, "invprev" ) )
 			Q_strncpy( btns[i]->command, "ios_weapprev", sizeof( btns[i]->command ) );
+
+		// the scoreboard button used the port's "change class" icon
+		if( !Q_strcmp( btns[i]->command, "+showscores" ) && !Q_strcmp( btns[i]->texturefile, "vgui/touch/changeclass" ) )
+			RebindTexture( btns[i], "vgui/touch/scoreboard" );
 	}
 
 	CTouchTexture *texture = new CTouchTexture;
@@ -780,6 +785,20 @@ static bool TouchButtonAvailable( const CTouchButton *btn )
 
 // Opens the buy menu, or closes it when it is actually open (the panel's own
 // state, not a press count, so a missed or doubled press can't desync it).
+// "messagemode" is not a command: ClientModeShared::KeyInput catches it in key
+// bindings. The touch chat button runs it as a command ("Unknown command"), so
+// register it (and the team version) to open the chat the same way.
+CON_COMMAND( messagemode, "Open chat" )
+{
+	if ( GetClientMode() )
+		GetClientMode()->StartMessageMode( MM_SAY );
+}
+CON_COMMAND( messagemode2, "Open team chat" )
+{
+	if ( GetClientMode() )
+		GetClientMode()->StartMessageMode( MM_SAY_TEAM );
+}
+
 CON_COMMAND( ios_buymenu_toggle, "Open the buy menu, or close it if it is open" )
 {
 	extern bool IOS_IsBuyMenuVisible();
@@ -1009,6 +1028,27 @@ void CTouchControls::HideButton(const char *name)
 	CTouchButton *btn =	FindButton( name );
 	if( btn )
 		btn->flags |= TOUCH_FL_HIDE;
+}
+
+// Point a button at another icon (AddButton binds the texture by name once).
+void CTouchControls::RebindTexture( CTouchButton *btn, const char *file )
+{
+	Q_strncpy( btn->texturefile, file, sizeof( btn->texturefile ) );
+	for( int i = 0; i < textureList.Count(); i++ )
+	{
+		if( !strcmp( textureList[i]->szName, file ) )
+		{
+			btn->texture = textureList[i];
+			return;
+		}
+	}
+	CTouchTexture *texture = new CTouchTexture;
+	texture->isInAtlas = false;
+	texture->textureID = 0;
+	texture->X0 = 0; texture->X1 = 0; texture->Y0 = 0; texture->Y1 = 0;
+	Q_strncpy( texture->szName, file, sizeof( texture->szName ) );
+	textureList.AddToTail( texture );
+	btn->texture = texture;
 }
 
 void CTouchControls::SetTexture(const char *name, const char *file)

@@ -31,10 +31,10 @@ jobs:
         run: |
           git clone --depth 1 https://chromium.googlesource.com/chromium/tools/depot_tools.git "$HOME/depot_tools"
           echo "$HOME/depot_tools" >> "$GITHUB_PATH"
+          # one-time bootstrap (bundled python etc.); the gn/gclient wrappers need it
+          "$HOME/depot_tools/ensure_bootstrap"
 
       - name: Fetch ANGLE and its dependencies
-        env:
-          DEPOT_TOOLS_UPDATE: "0"
         run: |
           ref="${{ github.event.inputs.angle_ref }}"
           [ -z "$ref" ] && ref=main

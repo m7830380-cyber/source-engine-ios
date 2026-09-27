@@ -938,8 +938,18 @@ bool IsValidSampleRate( int rate )
 }
 
 
+#if defined( IOS )
+extern IVAudio *IOS_CreateMP3VAudio();
+#endif
+
 void VAudioInit()
 {
+#if defined( IOS )
+	// no vaudio_miles on iOS: decode MP3s in-engine (snd_wave_mixer_mp3.cpp)
+	if ( !vaudio )
+		vaudio = IOS_CreateMP3VAudio();
+	return;
+#endif
 	if ( IsPC() && !g_pVAudioModule )
 	{
 		if ( !IsPosix() )

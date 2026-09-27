@@ -10,6 +10,172 @@
 #include "snd_mp3_source.h"
 #include "vaudio/ivaudio.h"
 
+
+#if defined( IOS )
+//-----------------------------------------------------------------------------
+// iOS MP3 decoding. The engine gets MP3 decoders from vaudio_miles (the Miles
+// Sound System), which doesn't exist on iOS: vaudio stayed NULL, every MP3
+// (menu and round music) failed with "Can't create mixer" and the main menu
+// retried its music ~60 times a second. This IVAudio decodes with minimp3
+// (thirdparty/minimp3, CC0).
+//-----------------------------------------------------------------------------
+#define MINIMP3_IMPLEMENTATION
+#include "../../../thirdparty/minimp3/minimp3.h"
+
+class CMiniMP3Stream : public IAudioStream
+{
+public:
+	CMiniMP3Stream( IAudioStreamEvent *pEvent ) : m_pEvent( pEvent )
+	{
+		mp3dec_init( &m_dec );
+		Reset( 0 );
+		m_nRate = 0;
+		m_nChannels = 0;
+		// the mixer asks for channels and rate right after creation: decode the
+		// first frame now and keep its samples for the first Decode()
+		DecodeFrame();
+	}
+
+	virtual int Decode( void *pBuffer, unsigned int bufferSize )
+	{
+		unsigned int nOut = 0;
+		while ( nOut + 1 < bufferSize )
+		{
+			if ( m_nPCMPos >= m_nPCMBytes && !DecodeFrame() )
+				break;
+			unsigned int nCopy = MIN( bufferSize - nOut, (unsigned int)( m_nPCMBytes - m_nPCMPos ) );
+			nCopy &= ~1u;	// whole 16-bit samples
+			memcpy( (char *)pBuffer + nOut, (char *)m_pcm + m_nPCMPos, nCopy );
+			nOut += nCopy;
+			m_nPCMPos += nCopy;
+		}
+		return (int)nOut;
+	}
+
+	virtual int GetOutputBits() { return 16; }
+	virtual int GetOutputRate() { return m_nRate ? m_nRate : 44100; }
+	virtual int GetOutputChannels() { return m_nChannels ? m_nChannels : 2; }
+	virtual unsigned int GetPosition() { return m_nSourcePos; }
+	virtual void SetPosition( unsigned int position )
+	{
+		mp3dec_init( &m_dec );
+		Reset( position );
+	}
+
+private:
+	void Reset( unsigned int nSourcePos )
+	{
+		m_nInBytes = m_nInPos = 0;
+		m_nPCMBytes = m_nPCMPos = 0;
+		m_bEOF = false;
+		m_nSourcePos = nSourcePos;
+		m_nNextRequestOffset = (int)nSourcePos;	// offset 0 lets the mixer skip an ID3 tag
+	}
+
+	void Fill()
+	{
+		if ( m_nInPos > 0 )
+		{
+			memmove( m_in, m_in + m_nInPos, m_nInBytes - m_nInPos );
+			m_nInBytes -= m_nInPos;
+			m_nInPos = 0;
+		}
+		int nWant = (int)sizeof( m_in ) - m_nInBytes;
+		if ( nWant <= 0 )
+			return;
+		int nRead = m_pEvent->StreamRequestData( m_in + m_nInBytes, nWant, m_nNextRequestOffset );
+		m_nNextRequestOffset = -1;
+		if ( nRead <= 0 )
+			m_bEOF = true;
+		else
+			m_nInBytes += nRead;
+	}
+
+	bool DecodeFrame()
+	{
+		m_nPCMBytes = m_nPCMPos = 0;
+		for ( int nTries = 0; nTries < 64; nTries++ )
+		{
+			// keep at least a few frames of input buffered
+			if ( !m_bEOF && m_nInBytes - m_nInPos < 8192 )
+				Fill();
+			int nAvail = m_nInBytes - m_nInPos;
+			if ( nAvail <= 0 )
+				return false;
+
+			mp3dec_frame_info_t info;
+			int nSamples = mp3dec_decode_frame( &m_dec, m_in + m_nInPos, nAvail, m_pcm, &info );
+			if ( info.frame_bytes <= 0 )
+			{
+				// no frame in what we have: need more data, or the stream is done
+				if ( m_bEOF )
+					return false;
+				if ( m_nInPos == 0 && m_nInBytes == (int)sizeof( m_in ) )
+					m_nInPos = m_nInBytes;	// a buffer of garbage: drop it
+				Fill();
+				continue;
+			}
+			m_nInPos += info.frame_bytes;
+			m_nSourcePos += info.frame_bytes;
+			if ( nSamples <= 0 )
+				continue;	// skipped data (tag, bad frame)
+
+			if ( !m_nRate )
+			{
+				m_nRate = info.hz;
+				m_nChannels = info.channels;
+			}
+			if ( info.channels != m_nChannels )
+			{
+				// keep the channel count the mixer was created with
+				if ( info.channels == 2 && m_nChannels == 1 )
+				{
+					for ( int i = 0; i < nSamples; i++ )
+						m_pcm[i] = (short)( ( m_pcm[i * 2] + m_pcm[i * 2 + 1] ) / 2 );
+				}
+				else if ( info.channels == 1 && m_nChannels == 2 )
+				{
+					for ( int i = nSamples - 1; i >= 0; i-- )
+						m_pcm[i * 2] = m_pcm[i * 2 + 1] = m_pcm[i];
+				}
+			}
+			m_nPCMBytes = nSamples * m_nChannels * (int)sizeof( short );
+			return true;
+		}
+		return false;
+	}
+
+	IAudioStreamEvent	*m_pEvent;
+	mp3dec_t			m_dec;
+	unsigned char		m_in[ 16 * 1024 ];
+	int					m_nInBytes, m_nInPos;
+	short				m_pcm[ MINIMP3_MAX_SAMPLES_PER_FRAME ];
+	int					m_nPCMBytes, m_nPCMPos;
+	int					m_nRate, m_nChannels;
+	bool				m_bEOF;
+	unsigned int		m_nSourcePos;
+	int					m_nNextRequestOffset;
+};
+
+class CMiniMP3VAudio : public IVAudio
+{
+public:
+	virtual IAudioStream *CreateMP3StreamDecoder( IAudioStreamEvent *pEventHandler )
+	{
+		CMiniMP3Stream *pStream = new CMiniMP3Stream( pEventHandler );
+		return pStream;
+	}
+	virtual void DestroyMP3StreamDecoder( IAudioStream *pDecoder ) { delete pDecoder; }
+	virtual void *CreateMilesAudioEngine() { return NULL; }
+	virtual void DestroyMilesAudioEngine( void *pEngine ) {}
+};
+
+IVAudio *IOS_CreateMP3VAudio()
+{
+	return new CMiniMP3VAudio;
+}
+#endif // IOS
+
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
 

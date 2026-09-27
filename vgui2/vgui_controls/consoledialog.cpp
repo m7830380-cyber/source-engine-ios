@@ -31,6 +31,12 @@
 #include "xbox/xbox_win32stubs.h"
 #endif
 
+#if defined( IOS )
+// on-screen keyboard (TextEntry shows it on focus and hides it on focus loss)
+extern "C" void SDL_StartTextInput( void );
+extern "C" void SDL_StopTextInput( void );
+#endif
+
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
 
@@ -1067,6 +1073,11 @@ void CConsolePanel::OnMenuItemSelected(const char *command)
 
 void CConsolePanel::Hide()
 {
+#if defined( IOS )
+	// hiding the console doesn't take focus from its input line, so TextEntry's
+	// OnKillFocus never ran and the keyboard stayed up after closing it
+	SDL_StopTextInput();
+#endif
 	OnClose();
 	m_iNextCompletion = 0;
 	RebuildCompletionList("");
@@ -1293,6 +1304,10 @@ void CConsoleDialog::Activate()
 {
 	BaseClass::Activate();
 	m_pConsolePanel->m_pEntry->RequestFocus();
+#if defined( IOS )
+	// the input line may still have focus from last time (no OnSetFocus then)
+	SDL_StartTextInput();
+#endif
 
 	static ConVarRef cv_vguipanel_active( "vgui_panel_active" );
 	static ConVarRef cv_console_window_open( "console_window_open" );

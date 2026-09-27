@@ -962,6 +962,15 @@ void SFHudRadar::LevelInit( void )
 		SFUI_REQUEST_ELEMENT( SF_SS_SLOT( GET_ACTIVE_SPLITSCREEN_SLOT() ), g_pScaleformUI, SFHudRadar, this, Radar );
 	}
 
+	// The map used to come only from game_newmap, which the server fires while the
+	// level loads: before a joining client connects, and before even the host's own
+	// client is signed on. So the radar never loaded its map image (black) or the
+	// overview's origin and scale. Take it from the level being loaded instead
+	// (FlashReady loads it if the movie isn't ready yet).
+	char szMap[MAX_PATH];
+	V_FileBase( engine->GetLevelName(), szMap, sizeof( szMap ) );
+	if ( szMap[0] )
+		SetMap( szMap );
 }
 
 void SFHudRadar::LevelShutdown( void )
@@ -1335,6 +1344,9 @@ void SFHudRadar::SetMap( const char* pMapName )
 	KeyValues* pSections = MapKeyValues->FindKey( "verticalsections" );
 	if ( pSections )
 	{
+		// SetMap runs from LevelInit and again on game_newmap
+		m_vecRadarVerticalSections.Purge();
+
 		int nIndex = 0;
 		for ( KeyValues *kSection = pSections->GetFirstSubKey(); kSection != NULL; kSection = kSection->GetNextKey() )
 		{

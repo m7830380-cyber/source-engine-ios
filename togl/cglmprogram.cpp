@@ -979,10 +979,32 @@ bool CGLMShaderPair::SetProgramPair( CGLMProgram *vp, CGLMProgram *fp )
 #endif
 
 		// now link
+#if defined( IOS )
+		const double flLinkStart = Plat_FloatTime();
+#endif
 		gGL->glLinkProgram( m_program );
 
 		GLint isLinked = 0;
 		gGL->glGetProgramiv(m_program, GL_LINK_STATUS, &isLinked);
+#if defined( IOS )
+		{
+			// "[shader]": what linking costs on the main thread (the status query
+			// above waits for it). A program cache hit shows up as a fast link.
+			static int s_nLinks = 0, s_nSlow = 0;
+			static double s_flTotal = 0.0, s_flSlowest = 0.0;
+			const double flMs = ( Plat_FloatTime() - flLinkStart ) * 1000.0;
+			++s_nLinks;
+			s_flTotal += flMs;
+			s_flSlowest = MAX( s_flSlowest, flMs );
+			if ( flMs >= 30.0 )
+			{
+				++s_nSlow;
+				printf( "[shader] slow link %.0f ms: %s + %s\n", flMs, vp->m_shaderName, fp->m_shaderName );
+			}
+			if ( ( s_nLinks % 50 ) == 0 )
+				printf( "[shader] %d links, %.0f ms total, %d over 30 ms, slowest %.0f ms\n", s_nLinks, s_flTotal, s_nSlow, s_flSlowest );
+		}
+#endif
 		if(isLinked == GL_FALSE)
 		{
 			GLint maxLength = 0;

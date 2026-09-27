@@ -754,6 +754,141 @@ InitReturnVal_t CSDLMgr::Init()
 	return INIT_OK;
 }
 
+
+#if defined( IOS ) && defined( ANGLE )
+//-----------------------------------------------------------------------------
+// ANGLE program cache on disk (EGL_ANDROID_blob_cache). ANGLE hands us each
+// linked program (translated shaders + link results) keyed by a hash of its
+// sources; we keep them in Library/Caches/angle_programs and give them back on
+// later launches, so shaders seen before don't get translated and linked again
+// mid-match (the 100-600 ms first-use hitches). Delete the folder to reset.
+//-----------------------------------------------------------------------------
+#include <sys/stat.h>
+#include <dirent.h>
+#include <pthread.h>
+
+typedef long IOS_EGLsizeiANDROID;	// EGLsizeiANDROID = khronos_ssize_t = signed long on 64-bit iOS
+typedef void ( *IOS_EGLSetBlobFunc )( const void *key, IOS_EGLsizeiANDROID keySize, const void *value, IOS_EGLsizeiANDROID valueSize );
+typedef IOS_EGLsizeiANDROID ( *IOS_EGLGetBlobFunc )( const void *key, IOS_EGLsizeiANDROID keySize, void *value, IOS_EGLsizeiANDROID valueSize );
+typedef void ( *IOS_PFNEGLSETBLOBCACHEFUNCSANDROID )( EGLDisplay dpy, IOS_EGLSetBlobFunc set, IOS_EGLGetBlobFunc get );
+
+static char s_szBlobDir[ 1024 ];
+static volatile long long s_nBlobDirBytes = 0;
+static const long long kBlobDirMaxBytes = 512ll * 1024 * 1024;
+static volatile int s_nBlobHits = 0, s_nBlobMisses = 0, s_nBlobStores = 0;
+
+static void IOS_BlobPath( const void *key, IOS_EGLsizeiANDROID keySize, char *pszOut, size_t nOut )
+{
+	static const char s_hex[] = "0123456789abcdef";
+	int n = snprintf( pszOut, nOut, "%s/", s_szBlobDir );
+	const unsigned char *k = (const unsigned char *)key;
+	for ( IOS_EGLsizeiANDROID i = 0; i < keySize && n + 3 < (int)nOut; i++ )
+	{
+		pszOut[ n++ ] = s_hex[ k[i] >> 4 ];
+		pszOut[ n++ ] = s_hex[ k[i] & 15 ];
+	}
+	pszOut[ n ] = 0;
+}
+
+static void IOS_BlobLogStats( const char *pszWhy )
+{
+	printf( "[shadercache] %s: %d hits, %d misses, %d stored, %lld MB on disk\n", pszWhy,
+		s_nBlobHits, s_nBlobMisses, s_nBlobStores, s_nBlobDirBytes / ( 1024 * 1024 ) );
+	fflush( stdout );
+}
+
+static void IOS_BlobSet( const void *key, IOS_EGLsizeiANDROID keySize, const void *value, IOS_EGLsizeiANDROID valueSize )
+{
+	if ( valueSize <= 0 || s_nBlobDirBytes + valueSize > kBlobDirMaxBytes )
+		return;
+	char szPath[ 1100 ], szTmp[ 1200 ];
+	IOS_BlobPath( key, keySize, szPath, sizeof( szPath ) );
+	snprintf( szTmp, sizeof( szTmp ), "%s.%p.tmp", szPath, (void *)pthread_self() );
+	FILE *f = fopen( szTmp, "wb" );
+	if ( !f )
+		return;
+	bool bOk = fwrite( value, 1, valueSize, f ) == (size_t)valueSize;
+	fclose( f );
+	if ( !bOk || rename( szTmp, szPath ) != 0 )
+	{
+		remove( szTmp );
+		return;
+	}
+	__sync_fetch_and_add( &s_nBlobDirBytes, (long long)valueSize );
+	if ( ( __sync_add_and_fetch( &s_nBlobStores, 1 ) % 100 ) == 0 )
+		IOS_BlobLogStats( "stored" );
+}
+
+static IOS_EGLsizeiANDROID IOS_BlobGet( const void *key, IOS_EGLsizeiANDROID keySize, void *value, IOS_EGLsizeiANDROID valueSize )
+{
+	char szPath[ 1100 ];
+	IOS_BlobPath( key, keySize, szPath, sizeof( szPath ) );
+	struct stat st;
+	if ( stat( szPath, &st ) != 0 || st.st_size <= 0 )
+	{
+		if ( ( __sync_add_and_fetch( &s_nBlobMisses, 1 ) % 200 ) == 0 )
+			IOS_BlobLogStats( "misses" );
+		return 0;
+	}
+	// ANGLE asks for the size first (valueSize 0), then for the data
+	if ( valueSize < st.st_size || !value )
+		return (IOS_EGLsizeiANDROID)st.st_size;
+	FILE *f = fopen( szPath, "rb" );
+	if ( !f )
+		return 0;
+	size_t nRead = fread( value, 1, st.st_size, f );
+	fclose( f );
+	if ( nRead != (size_t)st.st_size )
+		return 0;
+	int nHits = __sync_add_and_fetch( &s_nBlobHits, 1 );
+	if ( nHits == 1 || ( nHits % 200 ) == 0 )
+		IOS_BlobLogStats( "hits" );
+	return (IOS_EGLsizeiANDROID)st.st_size;
+}
+
+static void IOS_InstallProgramCache( EGLDisplay display )
+{
+	const char *pszHome = getenv( "HOME" );
+	if ( !pszHome || CommandLine()->FindParm( "-noshadercache" ) )
+	{
+		printf( "[shadercache] off\n" );
+		return;
+	}
+	snprintf( s_szBlobDir, sizeof( s_szBlobDir ), "%s/Library/Caches/angle_programs", pszHome );
+	mkdir( s_szBlobDir, 0755 );
+
+	long long nBytes = 0;
+	int nFiles = 0;
+	if ( DIR *pDir = opendir( s_szBlobDir ) )
+	{
+		while ( struct dirent *pEnt = readdir( pDir ) )
+		{
+			if ( pEnt->d_name[0] == '.' )
+				continue;
+			char szPath[ 1400 ];
+			snprintf( szPath, sizeof( szPath ), "%s/%s", s_szBlobDir, pEnt->d_name );
+			struct stat st;
+			if ( strstr( pEnt->d_name, ".tmp" ) )
+				remove( szPath );	// left over from an interrupted write
+			else if ( stat( szPath, &st ) == 0 )
+			{
+				nBytes += st.st_size;
+				++nFiles;
+			}
+		}
+		closedir( pDir );
+	}
+	s_nBlobDirBytes = nBytes;
+
+	IOS_PFNEGLSETBLOBCACHEFUNCSANDROID pSet = (IOS_PFNEGLSETBLOBCACHEFUNCSANDROID)eglGetProcAddress( "eglSetBlobCacheFuncsANDROID" );
+	if ( pSet )
+		pSet( display, IOS_BlobSet, IOS_BlobGet );
+	printf( "[shadercache] %s, %d programs (%lld MB) in %s\n", pSet ? "installed" : "eglSetBlobCacheFuncsANDROID NOT available",
+		nFiles, nBytes / ( 1024 * 1024 ), s_szBlobDir );
+	fflush( stdout );
+}
+#endif
+
 bool CSDLMgr::Connect( CreateInterfaceFn factory )
 {
 	SDLAPP_FUNC;
@@ -947,6 +1082,9 @@ bool CSDLMgr::CreateHiddenGameWindow( const char *pTitle, int width, int height 
     {
         printf("Failed to initialize EGL\n");
     }
+#if defined( IOS )
+	IOS_InstallProgramCache( native_display );
+#endif
 
 	EGLint attribs[] = {
     EGL_RENDERABLE_TYPE, EGL_OPENGL_ES3_BIT,

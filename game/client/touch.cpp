@@ -85,7 +85,7 @@ void CTouchPanel::Paint()
 	{
 		int x, y, w, h;
 		GetBounds( x, y, w, h );
-		printf( "[touch] panel paint #%d, bounds %d %d %d %d, gameui visible %d, touch_enable %d\n",
+		VERBOSE_PRINTF( "[touch] panel paint #%d, bounds %d %d %d %d, gameui visible %d, touch_enable %d\n",
 				s_nPaints, x, y, w, h, enginevgui->IsGameUIVisible() ? 1 : 0, touch_enable.GetInt() );
 	}
 	gTouch.Frame();
@@ -786,7 +786,7 @@ CON_COMMAND( ios_buymenu_toggle, "Open the buy menu, or close it if it is open" 
 	bool bOpen = IOS_IsBuyMenuVisible();
 	engine->ClientCmd_Unrestricted( bOpen ? "buymenu 0" : "buymenu" );
 	if ( touch_debug.GetBool() )
-		printf( "[touch] buy menu toggle: %s\n", bOpen ? "close" : "open" );
+		VERBOSE_PRINTF( "[touch] buy menu toggle: %s\n", bOpen ? "close" : "open" );
 }
 #else
 static bool TouchButtonAvailable( const CTouchButton *btn ) { return true; }
@@ -1225,12 +1225,12 @@ void CTouchControls::FingerPress(touch_event_t *ev)
 				{
 					engine->ClientCmd_Unrestricted( btn->command );
 					if( touch_debug.GetBool() )
-						printf( "[touch] button '%s' -> %s\n", btn->name, btn->command );
+						VERBOSE_PRINTF( "[touch] button '%s' -> %s\n", btn->name, btn->command );
 				}
 			}
 		}
 		if( touch_debug.GetBool() )
-			printf( "[touch] finger %d down at %.3f %.3f (screen %.0fx%.0f)\n", ev->fingerid, x, y, screen_w, screen_h );
+			VERBOSE_PRINTF( "[touch] finger %d down at %.3f %.3f (screen %.0fx%.0f)\n", ev->fingerid, x, y, screen_w, screen_h );
 	}
 	else if( ev->type == IE_FingerUp )
 	{

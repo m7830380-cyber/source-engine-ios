@@ -856,7 +856,7 @@ void NET_SendLoopPacket (int sock, int length, const unsigned char *data )
 	static int s_nSent[2] = {};
 	if ( s_nSent[sock]++ < 10 )
 	{
-		printf( "[net] loop send from %s, %d bytes, first byte 0x%02x\n", sock == NS_CLIENT ? "client" : "server", length, length > 4 ? data[4] : 0 );
+		VERBOSE_PRINTF( "[net] loop send from %s, %d bytes, first byte 0x%02x\n", sock == NS_CLIENT ? "client" : "server", length, length > 4 ? data[4] : 0 );
 		fflush( stdout );
 	}
 #endif
@@ -1359,7 +1359,7 @@ bool NET_GetLoopPacket ( netpacket_t * packet )
 	static int s_nGot[2] = {};
 	if ( s_nGot[packet->source]++ < 10 )
 	{
-		printf( "[net] loop receive on %s, %d bytes\n", packet->source == NS_CLIENT ? "client" : "server", loop->datalen );
+		VERBOSE_PRINTF( "[net] loop receive on %s, %d bytes\n", packet->source == NS_CLIENT ? "client" : "server", loop->datalen );
 		fflush( stdout );
 	}
 #endif

@@ -143,7 +143,7 @@ void C_ColorCorrection::Update( C_BasePlayer *pPlayer, float ccScale )
 		}
 		if ( gpGlobals->framecount == s_nLogFrame )
 		{
-			printf( "[cc] ent %d '%s' enabled %d clientside %d master %d exclusive %d weight srv %.3f cli %.3f max %.3f falloff %.0f..%.0f dist %.0f fade in %.2f out %.2f\n",
+			VERBOSE_PRINTF( "[cc] ent %d '%s' enabled %d clientside %d master %d exclusive %d weight srv %.3f cli %.3f max %.3f falloff %.0f..%.0f dist %.0f fade in %.2f out %.2f\n",
 					entindex(), m_netLookupFilename, bEnabled ? 1 : 0, IsClientSide() ? 1 : 0, m_bMaster ? 1 : 0, m_bExclusive ? 1 : 0,
 					m_flCurWeight, m_flCurWeightOnClient[nSlot], m_flMaxWeight, m_minFalloff, m_maxFalloff,
 					( pPlayer->GetAbsOrigin() - m_vecOrigin ).Length(), m_flFadeInDuration, m_flFadeOutDuration );

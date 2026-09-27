@@ -98,7 +98,7 @@ void CLoadingScreenScaleform::FlashReady( void )
 	if ( m_bCloseWhenReady )
 	{
 		m_bCloseWhenReady = false;
-		printf( "[loadingscreen] closing the loading screen that was closed while loading\n" );
+		VERBOSE_PRINTF( "[loadingscreen] closing the loading screen that was closed while loading\n" );
 		fflush( stdout );
 		UnloadDialog();
 		return;
@@ -1205,7 +1205,7 @@ void CLoadingScreenScaleform::CloseScreenUpdateScaleform( void )
 		// RemoveFlashElement would both be dropped and the screen would then
 		// stay over the main menu. Close it as soon as it is ready.
 		m_bCloseWhenReady = true;
-		printf( "[loadingscreen] close requested before the movie was ready; deferring\n" );
+		VERBOSE_PRINTF( "[loadingscreen] close requested before the movie was ready; deferring\n" );
 		fflush( stdout );
 	}
 }

@@ -1996,7 +1996,7 @@ static bool IOS_UpdateTouchMouse( void )
 	if ( bMenu != touch_mouse_events.GetBool() )
 	{
 		touch_mouse_events.SetValue( bMenu ? 1 : 0 );
-		printf( "[touch] fingers as mouse: %s\n", bMenu ? "on (menu)" : "off (game)" );
+		VERBOSE_PRINTF( "[touch] fingers as mouse: %s\n", bMenu ? "on (menu)" : "off (game)" );
 		fflush( stdout );
 	}
 	// keep the discard window open while a menu is up, so it covers the first

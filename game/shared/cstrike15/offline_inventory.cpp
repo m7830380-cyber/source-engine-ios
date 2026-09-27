@@ -215,7 +215,7 @@ void OfflineInventory_Fill( CCSPlayerInventory *pInventory, const CSteamID &owne
 
 	s_mapFilledFileTime.InsertOrReplace( pInventory, LoadoutFileTime() );
 
-	printf( "[offline] " OFFLINE_SIDE " fill: owner %llu, %d items, %d equipped from %s (exists %d, time %ld)\n",
+	VERBOSE_PRINTF( "[offline] " OFFLINE_SIDE " fill: owner %llu, %d items, %d equipped from %s (exists %d, time %ld)\n",
 		owner.ConvertToUint64(), pInventory->GetItemCount(), nEquipped, k_pszLoadoutFile,
 		(int)g_pFullFileSystem->FileExists( k_pszLoadoutFile, k_pszLoadoutPathID ), LoadoutFileTime() );
 	fflush( stdout );
@@ -251,7 +251,7 @@ void OfflineInventory_SaveLoadout( CCSPlayerInventory *pInventory )
 	bool bSaved = pKV->SaveToFile( g_pFullFileSystem, k_pszLoadoutFile, k_pszLoadoutPathID );
 	char szFullPath[MAX_PATH] = "";
 	g_pFullFileSystem->RelativePathToFullPath( k_pszLoadoutFile, k_pszLoadoutPathID, szFullPath, sizeof( szFullPath ) );
-	printf( "[offline] " OFFLINE_SIDE " saved loadout: %d items, write %s, path '%s'\n", nSaved, bSaved ? "ok" : "FAILED", szFullPath );
+	VERBOSE_PRINTF( "[offline] " OFFLINE_SIDE " saved loadout: %d items, write %s, path '%s'\n", nSaved, bSaved ? "ok" : "FAILED", szFullPath );
 	fflush( stdout );
 
 	// this inventory already matches the file it just wrote

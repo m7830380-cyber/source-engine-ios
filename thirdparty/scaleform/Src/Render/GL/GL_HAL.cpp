@@ -17,6 +17,7 @@ otherwise accompanies this software in either electronic or hard copy form.
 #if !defined(SF_USE_GLES)   // Do not compile under GLES 1.1
 
 #include "Kernel/SF_Debug.h"
+#include "Render/SF_IOSVerbose.h"
 #include "Kernel/SF_Random.h"
 #include "Kernel/SF_HeapNew.h"  
 #include "Kernel/SF_Debug.h"
@@ -36,7 +37,7 @@ extern int SF_DebugFrameLog;
 extern int SF_IOSBlendDirect, SF_IOSTextOnly, SF_IOSFilters;
 extern int SF_StatPrimitives, SF_StatText, SF_StatComplex, SF_StatBlendPush,
            SF_StatBlendTargets, SF_StatRenderTargets, SF_StatFilters, SF_StatMasks;
-#define SF_FRAMELOG(...) do { if (SF_DebugFrameLog) { printf("[sf-frame] " __VA_ARGS__); printf("\n"); } } while (0)
+#define SF_FRAMELOG(...) do { if (SF_DebugFrameLog) { VERBOSE_PRINTF("[sf-frame] " __VA_ARGS__); printf("\n"); } } while (0)
 #else
 #define SF_FRAMELOG(...) do { } while (0)
 #endif
@@ -611,7 +612,7 @@ bool HAL::checkDepthStencilBufferCaps()
         }
         StencilChecked = 1;
 #if defined(SF_USE_ANGLE)
-        printf("[sf-gl] mask buffers: FBO %d, stencil %d (multi-bit %d), depth %d\n",
+        VERBOSE_PRINTF("[sf-gl] mask buffers: FBO %d, stencil %d (multi-bit %d), depth %d\n",
                (int)currentFBO, StencilAvailable ? 1 : 0, MultiBitStencil ? 1 : 0, DepthBufferAvailable ? 1 : 0);
         fflush(stdout);
 #endif
@@ -1357,10 +1358,10 @@ UPInt HAL::setVertexArray(const VertexFormat* pformat, Render::MeshCacheItem* pm
 #if defined(SF_USE_ANGLE)
     if (SF_DebugTextDraw)
     {
-        printf("[sf-text]   vertex format size %u:", pformat->Size);
+        VERBOSE_PRINTF("[sf-text]   vertex format size %u:", pformat->Size);
         for (const VertexElement* pe = pformat->pElements; pe->Attribute != VET_None; ++pe)
-            printf(" [attr 0x%x @%u]", (unsigned)pe->Attribute, (unsigned)pe->Offset);
-        printf("\n");
+            VERBOSE_PRINTF(" [attr 0x%x @%u]", (unsigned)pe->Attribute, (unsigned)pe->Offset);
+        VERBOSE_PRINTF("\n");
         const UByte* pbase = pmesh->pVertexBuffer->GetBufferBase();
         if (pbase)
         {
@@ -1369,12 +1370,12 @@ UPInt HAL::setVertexArray(const VertexFormat* pformat, Render::MeshCacheItem* pm
             {
                 const float* pf = (const float*)(pbase + v * pformat->Size);
                 const UByte* pb = pbase + v * pformat->Size;
-                printf("[sf-text]   vertex %u: floats %.2f %.2f %.2f %.2f %.2f | bytes %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x\n",
+                VERBOSE_PRINTF("[sf-text]   vertex %u: floats %.2f %.2f %.2f %.2f %.2f | bytes %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x\n",
                        v, pf[0], pf[1], pf[2], pf[3], pf[4], pb[0], pb[1], pb[2], pb[3], pb[4], pb[5], pb[6], pb[7], pb[8], pb[9], pb[10], pb[11]);
             }
         }
         else
-            printf("[sf-text]   vertex buffer is a GPU buffer (no client pointer)\n");
+            VERBOSE_PRINTF("[sf-text]   vertex buffer is a GPU buffer (no client pointer)\n");
         fflush(stdout);
     }
 #endif

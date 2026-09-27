@@ -15,6 +15,7 @@ otherwise accompanies this software in either electronic or hard copy form.
 **************************************************************************/
 
 #include "Render_HAL.h"
+#include "Render/SF_IOSVerbose.h"
 #include "Kernel/SF_Debug.h"
 #include "Render/Render_Bundle.h"
 #include "Render/Render_Queue.h"
@@ -27,7 +28,7 @@ extern int SF_DebugFrameLog;
 extern int SF_IOSBlendDirect, SF_IOSTextOnly, SF_IOSFilters;
 extern int SF_StatPrimitives, SF_StatText, SF_StatComplex, SF_StatBlendPush,
            SF_StatBlendTargets, SF_StatRenderTargets, SF_StatFilters, SF_StatMasks;
-#define SF_FRAMELOG(...) do { if (SF_DebugFrameLog) { printf("[sf-frame] " __VA_ARGS__); printf("\n"); } } while (0)
+#define SF_FRAMELOG(...) do { if (SF_DebugFrameLog) { VERBOSE_PRINTF("[sf-frame] " __VA_ARGS__); printf("\n"); } } while (0)
 #else
 #define SF_FRAMELOG(...) do { } while (0)
 #endif

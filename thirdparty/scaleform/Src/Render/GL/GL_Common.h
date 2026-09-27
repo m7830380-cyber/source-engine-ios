@@ -18,6 +18,7 @@ otherwise accompanies this software in either electronic or hard copy form.
 #define INC_SF_Render_GL_Common_H
 
 #include "Kernel/SF_Types.h"
+#include "Render/SF_IOSVerbose.h"
 
 // SF_USE_ANGLE: iOS build on ANGLE (GLES 3.0 over Metal) uses the generic
 // GLES2 headers below instead of the deprecated OpenGLES framework.
@@ -508,6 +509,9 @@ otherwise accompanies this software in either electronic or hard copy form.
 #include <stdio.h>
 inline void SF_GLReportError(const char* where, const char* when)
 {
+    // two glGetError() calls around every GL call: only with -verbose
+    if (!Plat_IsVerboseLogging())
+        return;
     // each (call site, when, error) combination is reported once
     static const char* seenWhere[512];
     static const char* seenWhen[512];
@@ -524,7 +528,7 @@ inline void SF_GLReportError(const char* where, const char* when)
         seenWhere[seenCount] = where; seenWhen[seenCount] = when; seenErr[seenCount] = err;
         ++seenCount;
     }
-    printf("[sf-gl] error 0x%x %s %s\n", err, when, where);
+    VERBOSE_PRINTF("[sf-gl] error 0x%x %s %s\n", err, when, where);
     fflush(stdout);
 }
 #define SF_GLPRE(where)   SF_GLReportError(where, "pending before")

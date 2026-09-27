@@ -15,6 +15,7 @@ otherwise accompanies this software in either electronic or hard copy form.
 **************************************************************************/
 
 #include "Render_TextMeshProvider.h"
+#include "Render/SF_IOSVerbose.h"
 #include "Render_TextPrimitiveBundle.h"
 #include "Render_GlyphCache.h"
 #include "Render_TessCurves.h"
@@ -1225,7 +1226,7 @@ bool TextMeshProvider::GetData(MeshBase *mesh, VertexOutput* verOut, unsigned me
         if (layerLogs < 40)
         {
             ++layerLogs;
-            printf("[sf-text] mesh layer type %d, %u entries, height ratio %.3f\n", (int)layer.Type, (unsigned)layer.Count, HeightRatio);
+            VERBOSE_PRINTF("[sf-text] mesh layer type %d, %u entries, height ratio %.3f\n", (int)layer.Type, (unsigned)layer.Count, HeightRatio);
             fflush(stdout);
         }
     }

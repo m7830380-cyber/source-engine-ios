@@ -12429,12 +12429,12 @@ void CCSPlayer::FindMatchingWeaponsForTeamLoadout( const char *pchName, int nTea
 	}
 	if ( nSlot < 0 || nSlot >= LOADOUT_POSITION_COUNT )
 	{
-		printf( "[offline] give '%s' team %d: no loadout slot\n", pchName, nTeam );
+		VERBOSE_PRINTF( "[offline] give '%s' team %d: no loadout slot\n", pchName, nTeam );
 		return;
 	}
 
 	CEconItemView *pItem = Inventory()->GetItemInLoadout( nTeam, nSlot );
-	printf( "[offline] give '%s' team %d slot %d: loadout item %llu (%s), soc %d\n", pchName, nTeam, nSlot,
+	VERBOSE_PRINTF( "[offline] give '%s' team %d slot %d: loadout item %llu (%s), soc %d\n", pchName, nTeam, nSlot,
 		pItem ? pItem->GetItemID() : 0ull, ( pItem && pItem->IsValid() ) ? pItem->GetItemDefinition()->GetDefinitionName() : "none",
 		( pItem && pItem->GetSOCData() ) ? 1 : 0 );
 	fflush( stdout );
@@ -12528,7 +12528,7 @@ CBaseEntity	*CCSPlayer::GiveNamedItem( const char *pchName, int iSubType /*= 0*/
 		CBaseCombatWeapon *pGivenWeapon = dynamic_cast< CBaseCombatWeapon * >( pItem );
 		if ( pGivenWeapon && OfflineInventory_FindItem( pScriptItem->GetItemID() ) )
 			pGivenWeapon->SetOfflineItemID( pScriptItem->GetItemID() );
-		printf( "[offline] give '%s': entity %s, item %llu (%s)\n", pchName, pszClass ? pszClass : "?",
+		VERBOSE_PRINTF( "[offline] give '%s': entity %s, item %llu (%s)\n", pchName, pszClass ? pszClass : "?",
 			pScriptItem->GetItemID(), pScriptItem->GetItemDefinition()->GetDefinitionName() );
 		fflush( stdout );
 	}

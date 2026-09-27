@@ -999,10 +999,10 @@ bool CGLMShaderPair::SetProgramPair( CGLMProgram *vp, CGLMProgram *fp )
 			if ( flMs >= 30.0 )
 			{
 				++s_nSlow;
-				printf( "[shader] slow link %.0f ms: %s + %s\n", flMs, vp->m_shaderName, fp->m_shaderName );
+				VERBOSE_PRINTF( "[shader] slow link %.0f ms: %s + %s\n", flMs, vp->m_shaderName, fp->m_shaderName );
 			}
 			if ( ( s_nLinks % 50 ) == 0 )
-				printf( "[shader] %d links, %.0f ms total, %d over 30 ms, slowest %.0f ms\n", s_nLinks, s_flTotal, s_nSlow, s_flSlowest );
+				VERBOSE_PRINTF( "[shader] %d links, %.0f ms total, %d over 30 ms, slowest %.0f ms\n", s_nLinks, s_flTotal, s_nSlow, s_flSlowest );
 		}
 #endif
 		if(isLinked == GL_FALSE)

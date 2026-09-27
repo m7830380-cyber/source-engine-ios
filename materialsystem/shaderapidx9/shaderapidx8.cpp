@@ -15308,7 +15308,7 @@ void CShaderAPIDx8::ReadPixelsAsync( int x, int y, int width, int height, unsign
 #if defined( IOS )
 				if ( s_pSystemSurface )
 				{
-					printf( "[composite] ReadPixelsAsync: previous readback not collected yet (surface overwritten)\n" );
+					VERBOSE_PRINTF( "[composite] ReadPixelsAsync: previous readback not collected yet (surface overwritten)\n" );
 					fflush( stdout );
 				}
 #endif
@@ -15367,7 +15367,7 @@ void CShaderAPIDx8::ReadPixelsAsyncGetResult( int x, int y, int width, int heigh
 #if defined( IOS )
 	else
 	{
-		printf( "[composite] ReadPixelsAsyncGetResult: no surface to read (result stays empty)\n" );
+		VERBOSE_PRINTF( "[composite] ReadPixelsAsyncGetResult: no surface to read (result stays empty)\n" );
 		fflush( stdout );
 	}
 #endif

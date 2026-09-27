@@ -264,7 +264,7 @@ static int GetInspectModelPlacement( int &x, int &y, int &w, int &h )
 	static bool s_bLogged = false;
 	if ( !s_bLogged )
 	{
-		printf( "[inspect] dialog %.0f,%.0f - %.0f,%.0f -> panel %d,%d %dx%d\n", x0, y0, x1, y1, x, y, w, h );
+		VERBOSE_PRINTF( "[inspect] dialog %.0f,%.0f - %.0f,%.0f -> panel %d,%d %dx%d\n", x0, y0, x1, y1, x, y, w, h );
 		fflush( stdout );
 		s_bLogged = true;
 	}
@@ -532,7 +532,7 @@ public:
 					nOut += V_snprintf( szName + nOut, sizeof( szName ) - nOut, "\\u%04X", (unsigned)*pw );
 			}
 			szName[ nOut ] = '\0';
-			printf( "[offline] name arg '%s' id %llu: def %d %s, paint %d, quality %d, base '%s' -> '%s'\n",
+			VERBOSE_PRINTF( "[offline] name arg '%s' id %llu: def %d %s, paint %d, quality %d, base '%s' -> '%s'\n",
 				ArgString( pui, obj, 1 ), ullID, pDef->GetDefinitionIndex(), pDef->GetDefinitionName(), pItem->GetCustomPaintKitIndex(),
 				pItem->GetQuality(), pDef->GetItemBaseName(), szName );
 			fflush( stdout );
@@ -818,7 +818,7 @@ public:
 		bool bOK = nSlot >= 0 && CSInventoryManager()->EquipItemInLoadout( iTeam, nSlot, ullID );
 		CEconItemView *pItem = FindItem( ullID );
 		const CCStrike15ItemDefinition *pDef = ItemDef( pItem );
-		printf( "[offline] equip team %d id %llu slot '%s'->%d: %s (item %s, def slot %d/%d, now in slot %llu, equipped %d)\n",
+		VERBOSE_PRINTF( "[offline] equip team %d id %llu slot '%s'->%d: %s (item %s, def slot %d/%d, now in slot %llu, equipped %d)\n",
 			iTeam, ullID, ArgString( pui, obj, 2 ), nSlot, bOK ? "ok" : "FAILED", pDef ? pDef->GetDefinitionName() : "NOT FOUND",
 			pDef ? pDef->GetDefaultLoadoutSlot() : -1, pDef ? pDef->GetLoadoutSlot( iTeam ) : -1,
 			LoadoutItemID( iTeam, nSlot ), pItem ? (int)IsItemEquipped( pItem, iTeam ) : -1 );
@@ -1047,7 +1047,7 @@ void ScaleformInventoryComponents_EnsureInstalled()
 		g_pScaleformUI->InstallGlobalObject( SF_FULL_SCREEN_SLOT, s_Components[i].m_pszName, s_Components[i].m_pObject, s_Components[i].m_pTable, &s_Components[i].m_hValue );
 
 	s_bInstalled = true;
-	printf( "[sf] installed inventory/loadout components\n" );
+	VERBOSE_PRINTF( "[sf] installed inventory/loadout components\n" );
 	fflush( stdout );
 }
 

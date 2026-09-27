@@ -1197,6 +1197,12 @@ PLATFORM_INTERFACE void Plat_DebugString( const tchar * );
 
 PLATFORM_INTERFACE bool Plat_IsInDebugSession();
 
+// True when the game was started with -verbose: per-frame and per-event diagnostic
+// logging (the "[sf-gl]", "[sf-frame]", "[touch]", ... lines). Cached; cheap to call.
+PLATFORM_INTERFACE bool Plat_IsVerboseLogging();
+// printf only with -verbose; an expression, so it drops in for printf anywhere
+#define VERBOSE_PRINTF( ... ) ( Plat_IsVerboseLogging() ? printf( __VA_ARGS__ ) : 0 )
+
 #define	DebuggerBreakIfDebugging() if ( !Plat_IsInDebugSession() ) ; else DebuggerBreak()
 
 //-----------------------------------------------------------------------------

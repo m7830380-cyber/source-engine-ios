@@ -61,7 +61,7 @@ void CCreateSinglePlayerGameDialogScaleform::LoadDialog( bool bUsingMatchmaking,
 	{
 		m_pInstance = new CCreateSinglePlayerGameDialogScaleform( bUsingMatchmaking, bTeamLobbyMode, bTrainingMode );
 		SFUI_REQUEST_ELEMENT( SF_FULL_SCREEN_SLOT, g_pScaleformUI, CCreateSinglePlayerGameDialogScaleform, m_pInstance, StartSinglePlayer );
-		printf( "[offline] dialog load (matchmaking %d, team lobby %d, training %d)\n", bUsingMatchmaking, bTeamLobbyMode, bTrainingMode );
+		VERBOSE_PRINTF( "[offline] dialog load (matchmaking %d, team lobby %d, training %d)\n", bUsingMatchmaking, bTeamLobbyMode, bTrainingMode );
 		fflush( stdout );
 	}
 }
@@ -136,7 +136,7 @@ void CCreateSinglePlayerGameDialogScaleform::PostUnloadFlash()
 
 	if ( m_szMatchmakingQuery[0] )
 	{
-		printf( "[offline] starting: %s\n", m_szMatchmakingQuery );
+		VERBOSE_PRINTF( "[offline] starting: %s\n", m_szMatchmakingQuery );
 		fflush( stdout );
 
 		KeyValues *pSettings = KeyValues::FromString( "Settings", m_szMatchmakingQuery );
@@ -154,7 +154,7 @@ void CCreateSinglePlayerGameDialogScaleform::PostUnloadFlash()
 	}
 	else
 	{
-		printf( "[offline] dialog closed without starting a game\n" );
+		VERBOSE_PRINTF( "[offline] dialog closed without starting a game\n" );
 		fflush( stdout );
 		BasePanel()->RestoreMainMenuScreen();
 	}

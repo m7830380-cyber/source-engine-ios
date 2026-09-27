@@ -316,7 +316,7 @@ void CCompositeTexture::GenerateComposite( void )
 				}
 				if ( nPixels > 0 )
 				{
-					printf( "[composite] %s %dx%d srgb %d: read avg rgba %.0f %.0f %.0f %.0f, black %d%%\n",
+					VERBOSE_PRINTF( "[composite] %s %dx%d srgb %d: read avg rgba %.0f %.0f %.0f %.0f, black %d%%\n",
 						m_szTextureName, m_pScratchVTF->Width(), m_pScratchVTF->Height(), (int)m_bSRGB,
 						flSum[0] / nPixels, flSum[1] / nPixels, flSum[2] / nPixels, flSum[3] / nPixels, nZero * 100 / nPixels );
 					fflush( stdout );

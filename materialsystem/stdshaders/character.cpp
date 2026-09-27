@@ -17,15 +17,6 @@
 
 //#define CHARACTER_LIMIT_LIGHTS_WITH_PHONGWARP 1
 
-#if defined( IOS )
-static void ios_character_pixel_ambient_changed( IConVar *var, const char *pOldValue, float flOldValue )
-{
-	g_pMaterialSystem->ReloadMaterials( NULL );
-}
-static ConVar ios_char_debug( "ios_char_debug", "0", FCVAR_RELEASE, "agents: 1 = rim lights off, 2 = specular off, 4 = reflections off (add to combine)" );
-static ConVar ios_character_pixel_ambient( "ios_character_pixel_ambient", "1", FCVAR_RELEASE,
-	"agents: 1 = Valve's behavior (default), 0 = old iOS workaround (no pixel-shader ambient cube)", ios_character_pixel_ambient_changed );
-#endif
 
 BEGIN_VS_SHADER( Character, "Help for Character Shader" )
 	BEGIN_SHADER_PARAMS
@@ -828,11 +819,6 @@ BEGIN_VS_SHADER( Character, "Help for Character Shader" )
 			pShaderShadow->EnableAlphaWrites( bFullyOpaque );
 
 			PI_BeginCommandBuffer();
-#if defined( IOS )
-			// ios_character_pixel_ambient 0: the old iOS workaround (16585e15) that sends zeros
-			// instead of the pixel shader's ambient cube; 1 (default): Valve's behavior.
-			if ( ios_character_pixel_ambient.GetBool() )
-#endif
 			PI_SetPixelShaderAmbientLightCube( PSREG_AMBIENT_CUBE );
 			PI_SetVertexShaderAmbientLightCube();
 			PI_SetPixelShaderLocalLighting( PSREG_LIGHT_INFO_ARRAY );
@@ -843,13 +829,6 @@ BEGIN_VS_SHADER( Character, "Help for Character Shader" )
 		DYNAMIC_STATE
 		{
 			pShaderAPI->SetDefaultState();
-#if defined( IOS )
-			if ( !ios_character_pixel_ambient.GetBool() )
-			{
-				static const float s_vZeroAmbient[6][4] = { { 0 } };
-				pShaderAPI->SetPixelShaderConstant( PSREG_AMBIENT_CUBE, s_vZeroAmbient[0], 6 );
-			}
-#endif
 
 			bool bCSMEnabled = bSupportsCSM && pShaderAPI->IsCascadedShadowMapping();
 			// need to turn off some features for shadercompile to complete, otherwise it runs out of memory before all combos are compiled
@@ -1079,38 +1058,6 @@ BEGIN_VS_SHADER( Character, "Help for Character Shader" )
 			vParams[3] = clamp( 1.0f - params[SHADOWCONTRAST]->GetFloatValue(), 0.0f, 1.0f );
 			pShaderAPI->SetPixelShaderConstant( 107, vParams, 1 );
 
-#if defined( IOS )
-			// ios_char_debug bits, applied per draw (no reload): 1 = rim lights off,
-			// 2 = specular off, 4 = reflections off.
-			const int nCharDebug = ios_char_debug.GetInt();
-			if ( nCharDebug & 1 )
-			{
-				float v105[4] = { params[RIMLIGHTEXPONENT]->GetFloatValue(), 0.0f, params[SELFILLUMBOOST]->GetFloatValue(), params[WARPINDEX]->GetFloatValue() };
-				pShaderAPI->SetPixelShaderConstant( 105, v105, 1 );
-				float v106[4] = { 0, 0, 0, 0 };
-				params[RIMLIGHTTINT]->GetVecValue( v106, 3 );
-				v106[3] = 0.0f;
-				pShaderAPI->SetPixelShaderConstant( 106, v106, 1 );
-				float v11[4] = { 0, 0, 0, 0 };
-				params[PHONGTINT]->GetVecValue( v11, 3 );
-				pShaderAPI->SetPixelShaderConstant( 11, v11, 1 );
-				float v107[4] = { 0, 0, 0, clamp( 1.0f - params[SHADOWCONTRAST]->GetFloatValue(), 0.0f, 1.0f ) };
-				pShaderAPI->SetPixelShaderConstant( 107, v107, 1 );
-			}
-			if ( nCharDebug & 2 )
-			{
-				float v10[4] = { 0.0f, 0.0f, params[PHONGEXPONENT]->GetFloatValue(), params[ANISOTROPYAMOUNT]->GetFloatValue() };
-				pShaderAPI->SetPixelShaderConstant( 10, v10, 1 );
-			}
-			if ( nCharDebug & 4 )
-			{
-				float v0[4] = { 0, 0, 0, 0 };
-				params[AMBIENTREFLECTIONBOUNCECOLOR]->GetVecValue( v0, 3 );
-				pShaderAPI->SetPixelShaderConstant( 0, v0, 1 );
-				static const float s_vZero[4] = { 0, 0, 0, 0 };
-				pShaderAPI->SetPixelShaderConstant( 104, s_vZero, 1 );
-			}
-#endif
 
 			//20-25 used
 

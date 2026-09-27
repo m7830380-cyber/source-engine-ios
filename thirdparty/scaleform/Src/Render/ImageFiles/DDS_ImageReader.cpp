@@ -15,6 +15,7 @@ otherwise accompanies this software in either electronic or hard copy form.
 **************************************************************************/
 
 #include "DDS_ImageFile.h"
+#include "Render/SF_IOSVerbose.h"
 #include "Render_ImageFileUtil.h"
 #include "Kernel/SF_File.h"
 #include "Kernel/SF_Debug.h"
@@ -589,7 +590,7 @@ bool DDSFileImageSource::ReadHeader()
     }
 #endif
 #if defined(SF_USE_ANGLE)
-    printf("[sf-dds] %ux%u, file format %d, mips %u, decoding DXT %d\n", HeaderInfo.Width, HeaderInfo.Height,
+    VERBOSE_PRINTF("[sf-dds] %ux%u, file format %d, mips %u, decoding DXT %d\n", HeaderInfo.Width, HeaderInfo.Height,
            (int)HeaderInfo.Format, (unsigned)HeaderInfo.MipmapCount, DecodeDXT ? 1 : 0);
     fflush(stdout);
 #endif

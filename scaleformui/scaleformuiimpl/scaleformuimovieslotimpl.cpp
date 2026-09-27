@@ -306,7 +306,7 @@ CON_COMMAND( sf_ios_hide, "iOS: hide a menu movie clip, e.g. sf_ios_hide _level3
 	for ( int i = 1; i < args.ArgC(); i++ )
 	{
 		s_IOSHiddenPaths.AddToTail( CUtlString( args[i] ) );
-		printf( "[sf-ui] will keep hidden: %s\n", args[i] );
+		VERBOSE_PRINTF( "[sf-ui] will keep hidden: %s\n", args[i] );
 	}
 	fflush( stdout );
 }
@@ -328,7 +328,7 @@ static ConVar sf_ios_menu_root( "sf_ios_menu_root", "_level31.Panel", FCVAR_NONE
 
 static void IOS_ReportMenuPanels( SF::GFx::Movie *pMovie )
 {
-	printf( "[sf-ui] ===== main menu panels under %s =====\n", sf_ios_menu_root.GetString() );
+	VERBOSE_PRINTF( "[sf-ui] ===== main menu panels under %s =====\n", sf_ios_menu_root.GetString() );
 	for ( int i = 0; i < ARRAYSIZE( s_pszIOSMenuPanels ); i++ )
 	{
 		char szPath[256];
@@ -336,7 +336,7 @@ static void IOS_ReportMenuPanels( SF::GFx::Movie *pMovie )
 		SF::GFx::Value clip;
 		if ( !pMovie->GetVariable( &clip, szPath ) || !clip.IsDisplayObject() )
 		{
-			printf( "[sf-ui]   %s: not found \n", s_pszIOSMenuPanels[i] );
+			VERBOSE_PRINTF( "[sf-ui]   %s: not found \n", s_pszIOSMenuPanels[i] );
 			continue;
 		}
 		SF::GFx::Value::DisplayInfo info;
@@ -344,7 +344,7 @@ static void IOS_ReportMenuPanels( SF::GFx::Movie *pMovie )
 		SF::GFx::Value width, height;
 		clip.GetMember( "_width", &width );
 		clip.GetMember( "_height", &height );
-		printf( "[sf-ui]   %s: visible %d, alpha %.0f, at %.0f,%.0f, size %.0fx%.0f\n", s_pszIOSMenuPanels[i],
+		VERBOSE_PRINTF( "[sf-ui]   %s: visible %d, alpha %.0f, at %.0f,%.0f, size %.0fx%.0f\n", s_pszIOSMenuPanels[i],
 				info.GetVisible() ? 1 : 0, info.GetAlpha(), info.GetX(), info.GetY(),
 				width.IsNumber() ? width.GetNumber() : -1.0, height.IsNumber() ? height.GetNumber() : -1.0 );
 	}
@@ -369,7 +369,7 @@ public:
 		val.GetMember( "_width", &width );
 		val.GetMember( "_height", &height );
 		++*m_pnLines;
-		printf( "[sf-ui] %*s%s: visible %d, alpha %.0f, at %.0f,%.0f, size %.0fx%.0f\n", m_nDepth * 2, "", name,
+		VERBOSE_PRINTF( "[sf-ui] %*s%s: visible %d, alpha %.0f, at %.0f,%.0f, size %.0fx%.0f\n", m_nDepth * 2, "", name,
 				info.GetVisible() ? 1 : 0, info.GetAlpha(), info.GetX(), info.GetY(),
 				width.IsNumber() ? width.GetNumber() : -1.0, height.IsNumber() ? height.GetNumber() : -1.0 );
 
@@ -389,7 +389,7 @@ static void IOS_DumpDisplayTree( SF::GFx::Movie *pMovie, int slot )
 {
 	if ( !pMovie )
 		return;
-	printf( "[sf-ui] ===== display tree of slot %d =====\n", slot );
+	VERBOSE_PRINTF( "[sf-ui] ===== display tree of slot %d =====\n", slot );
 	int nLines = 0;
 	for ( int nLevel = 0; nLevel < 64; nLevel++ )
 	{
@@ -400,11 +400,11 @@ static void IOS_DumpDisplayTree( SF::GFx::Movie *pMovie, int slot )
 			continue;
 		SF::GFx::Value::DisplayInfo info;
 		level.GetDisplayInfo( &info );
-		printf( "[sf-ui] %s: visible %d, alpha %.0f\n", szLevel, info.GetVisible() ? 1 : 0, info.GetAlpha() );
+		VERBOSE_PRINTF( "[sf-ui] %s: visible %d, alpha %.0f\n", szLevel, info.GetVisible() ? 1 : 0, info.GetAlpha() );
 		CIOSDisplayTreeVisitor visitor( 1, &nLines );
 		level.VisitMembers( &visitor );
 	}
-	printf( "[sf-ui] ===== end (%d clips) =====\n", nLines );
+	VERBOSE_PRINTF( "[sf-ui] ===== end (%d clips) =====\n", nLines );
 	fflush( stdout );
 }
 #endif
@@ -422,7 +422,7 @@ void ScaleformUIImpl::RenderSlot( int slot )
 		static int s_nRenderCalls = 0;
 		if ( ( s_nRenderCalls++ % 600 ) == 0 )
 		{
-			printf( "[sf] RenderSlot %d (call %d), renderer2D %p, HAL %p, in frame %d\n", slot, s_nRenderCalls,
+			VERBOSE_PRINTF( "[sf] RenderSlot %d (call %d), renderer2D %p, HAL %p, in frame %d\n", slot, s_nRenderCalls,
 					(void *)m_pRenderer2D.GetPtr(), (void *)m_pRenderHAL.GetPtr(), s_bScaleformInFrame ? 1 : 0 );
 			fflush( stdout );
 		}
@@ -526,7 +526,7 @@ void ScaleformUIImpl::RenderSlot( int slot )
 	bool bLogSlot = nSlotRender < 3 || ( nSlotRender % 600 ) == 0;
 	if ( bLogSlot )
 	{
-		printf( "[sf] slot %d render %d: movie %p, screen %dx%d\n", slot, nSlotRender,
+		VERBOSE_PRINTF( "[sf] slot %d render %d: movie %p, screen %dx%d\n", slot, nSlotRender,
 				pslot ? (void *)pslot->m_pMovieView : NULL, m_iScreenWidth, m_iScreenHeight );
 		SFTogl_LogGLState( "before display", slot );
 	}
@@ -552,7 +552,7 @@ void ScaleformUIImpl::RenderSlot( int slot )
 	}
 	SF_DebugFrameLog = bRecord ? 1 : 0;
 	if ( SF_DebugFrameLog )
-		printf( "[sf-frame] ===== slot %d render %d (blend direct %d, text only %d) =====\n", slot, nSlotRender, SF_IOSBlendDirect, SF_IOSTextOnly );
+		VERBOSE_PRINTF( "[sf-frame] ===== slot %d render %d (blend direct %d, text only %d) =====\n", slot, nSlotRender, SF_IOSBlendDirect, SF_IOSTextOnly );
 
 	SF_StatPrimitives = SF_StatText = SF_StatComplex = SF_StatBlendPush = 0;
 	SF_StatBlendTargets = SF_StatRenderTargets = SF_StatFilters = SF_StatMasks = 0;
@@ -568,7 +568,7 @@ void ScaleformUIImpl::RenderSlot( int slot )
 			bool bOk = ( (SF::GFx::Movie *)pslot->m_pMovieView )->SetVariable( szVar, SF::GFx::Value( false ) );
 			if ( ( nSlotRender % 300 ) == 0 )
 			{
-				printf( "[sf-ui] hiding %s: %s\n", s_IOSHiddenPaths[i].Get(), bOk ? "ok" : "not found" );
+				VERBOSE_PRINTF( "[sf-ui] hiding %s: %s\n", s_IOSHiddenPaths[i].Get(), bOk ? "ok" : "not found" );
 				fflush( stdout );
 			}
 		}
@@ -595,7 +595,7 @@ void ScaleformUIImpl::RenderSlot( int slot )
 		{
 			s_nLastFlip[slot] = nFlip;
 			const SF::Render::MatrixState *pm = m_pRenderHAL->GetMatrices();
-			printf( "[sf-orient] slot %d flip %d: user [%.2f %.2f %.0f / %.2f %.2f %.0f], view [%.5f %.5f %.3f / %.5f %.5f %.3f], orient [%.2f %.2f / %.2f %.2f], final [%.5f %.5f %.3f / %.5f %.5f %.3f]\n",
+			VERBOSE_PRINTF( "[sf-orient] slot %d flip %d: user [%.2f %.2f %.0f / %.2f %.2f %.0f], view [%.5f %.5f %.3f / %.5f %.5f %.3f], orient [%.2f %.2f / %.2f %.2f], final [%.5f %.5f %.3f / %.5f %.5f %.3f]\n",
 					slot, nFlip,
 					pm->User.Sx(), pm->User.Shx(), pm->User.Tx(), pm->User.Shy(), pm->User.Sy(), pm->User.Ty(),
 					pm->View2D.Sx(), pm->View2D.Shx(), pm->View2D.Tx(), pm->View2D.Shy(), pm->View2D.Sy(), pm->View2D.Ty(),
@@ -609,11 +609,11 @@ void ScaleformUIImpl::RenderSlot( int slot )
 #if defined( SF_USE_ANGLE )
 	if ( SF_DebugFrameLog || ( nSlotRender % 600 ) == 0 )
 	{
-		printf( "[sf-stats] slot %d render %d: primitives %d (text %d), shapes %d, blend modes %d (offscreen %d), render targets %d, filters %d, masks %d, blend direct %d, text only %d, filters on %d\n",
+		VERBOSE_PRINTF( "[sf-stats] slot %d render %d: primitives %d (text %d), shapes %d, blend modes %d (offscreen %d), render targets %d, filters %d, masks %d, blend direct %d, text only %d, filters on %d\n",
 				slot, nSlotRender, SF_StatPrimitives, SF_StatText, SF_StatComplex, SF_StatBlendPush, SF_StatBlendTargets,
 				SF_StatRenderTargets, SF_StatFilters, SF_StatMasks, SF_IOSBlendDirect, SF_IOSTextOnly, SF_IOSFilters );
 		if ( SF_DebugFrameLog )
-			printf( "[sf-frame] ===== end =====\n" );
+			VERBOSE_PRINTF( "[sf-frame] ===== end =====\n" );
 		fflush( stdout );
 	}
 	SF_DebugFrameLog = 0;

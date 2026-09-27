@@ -52,7 +52,7 @@ void CPauseMenuScreenScaleform::LoadDialog()
 	{
 		m_pInstance = new CPauseMenuScreenScaleform();
 		SFUI_REQUEST_ELEMENT( SF_FULL_SCREEN_SLOT, g_pScaleformUI, CPauseMenuScreenScaleform, m_pInstance, PauseMenu );
-		printf( "[pausemenu] load\n" );
+		VERBOSE_PRINTF( "[pausemenu] load\n" );
 		fflush( stdout );
 	}
 	else
@@ -112,7 +112,7 @@ void CPauseMenuScreenScaleform::FlashReady()
 
 void CPauseMenuScreenScaleform::PostUnloadFlash()
 {
-	printf( "[pausemenu] unloaded\n" );
+	VERBOSE_PRINTF( "[pausemenu] unloaded\n" );
 	fflush( stdout );
 	m_pInstance = NULL;
 	delete this;
@@ -147,7 +147,7 @@ void CPauseMenuScreenScaleform::BasePanelRunCommand( SCALEFORM_CALLBACK_ARGS_DEC
 	char szCommand[1024];
 	V_strncpy( szCommand, pui->Params_GetArgAsString( obj, 0 ), sizeof( szCommand ) );
 
-	printf( "[pausemenu] command %s\n", szCommand );
+	VERBOSE_PRINTF( "[pausemenu] command %s\n", szCommand );
 	fflush( stdout );
 
 	if ( pui->Params_GetNumArgs( obj ) >= 2 )

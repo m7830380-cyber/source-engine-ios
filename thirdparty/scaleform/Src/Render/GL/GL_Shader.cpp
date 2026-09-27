@@ -18,6 +18,7 @@ otherwise accompanies this software in either electronic or hard copy form.
 
 
 #include "Render/GL/GL_Shader.h"
+#include "Render/SF_IOSVerbose.h"
 #include "Render/GL/GL_HAL.h"
 #include "Kernel/SF_Debug.h"
 #include <stdio.h>
@@ -326,7 +327,7 @@ GLuint ShaderObject::createShaderOrProgram(ShaderStages stage, const char* shade
         {
             { SF_GLPRE("GL_Shader.cpp:314 glGetShaderInfoLog"); glGetShaderInfoLog(shader, sizeof(msg), 0, msg); SF_GLCHECK("GL_Shader.cpp:314 glGetShaderInfoLog"); }
 #if defined(SF_USE_ANGLE)
-            printf("[sf] GL shader/program failed: %s\n", msg);
+            VERBOSE_PRINTF("[sf] GL shader/program failed: %s\n", msg);
 #endif
             SF_DEBUG_ERROR2(!testCompilation, "%s:\n%s\n", msg, shaderCode);
             { SF_GLPRE("GL_Shader.cpp:319 glDeleteShader"); glDeleteShader(shader); SF_GLCHECK("GL_Shader.cpp:319 glDeleteShader"); }
@@ -373,7 +374,7 @@ GLuint ShaderObject::createShaderOrProgram(ShaderStages stage, const char* shade
                 {
                     { SF_GLPRE("GL_Shader.cpp:361 glGetShaderInfoLog"); glGetShaderInfoLog(shader, sizeof(msg), 0, msg); SF_GLCHECK("GL_Shader.cpp:361 glGetShaderInfoLog"); }
 #if defined(SF_USE_ANGLE)
-                    printf("[sf] GL shader/program failed: %s\n", msg);
+                    VERBOSE_PRINTF("[sf] GL shader/program failed: %s\n", msg);
 #endif
                     SF_DEBUG_ERROR2(!testCompilation, "%s:\n%s\n", msg, shaderCode);
                     { SF_GLPRE("GL_Shader.cpp:366 glDeleteShader"); glDeleteShader(shader); SF_GLCHECK("GL_Shader.cpp:366 glDeleteShader"); }
@@ -386,7 +387,7 @@ GLuint ShaderObject::createShaderOrProgram(ShaderStages stage, const char* shade
             {
                 { SF_GLPRE("GL_Shader.cpp:374 glGetProgramInfoLog"); glGetProgramInfoLog(program, sizeof(msg), 0, msg); SF_GLCHECK("GL_Shader.cpp:374 glGetProgramInfoLog"); }
 #if defined(SF_USE_ANGLE)
-                printf("[sf] GL shader/program failed: %s\n", msg);
+                VERBOSE_PRINTF("[sf] GL shader/program failed: %s\n", msg);
 #endif
                 SF_DEBUG_ERROR2(!testCompilation, "%s:\n%s\n", msg, shaderCode);
                 { SF_GLPRE("GL_Shader.cpp:379 glDeleteProgram"); glDeleteProgram(program); SF_GLCHECK("GL_Shader.cpp:379 glDeleteProgram"); }
@@ -813,7 +814,7 @@ void ShaderInterface::Finish(unsigned batchCount)
             if (!pu)
                 continue;
             const float* pd = UniformData + pu->ShadowOffset;
-            printf("[sf-text]   uniform %d: location %d, size %d, batch %d: %.4f %.4f %.4f %.4f | %.4f %.4f %.4f %.4f\n",
+            VERBOSE_PRINTF("[sf-text]   uniform %d: location %d, size %d, batch %d: %.4f %.4f %.4f %.4f | %.4f %.4f %.4f %.4f\n",
                    var, (int)pDbgShader->Uniforms[var].Location, (int)pu->Size, (int)pu->BatchSize,
                    pd[0], pd[1], pd[2], pd[3], pd[4], pd[5], pd[6], pd[7]);
         }

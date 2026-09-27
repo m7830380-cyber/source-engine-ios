@@ -133,7 +133,7 @@ void ScaleformUIImpl::SetRenderingDevice( IDirect3DDevice9 *pDevice, D3DPRESENT_
 #endif
 		m_pRenderHAL->InitHAL( GL::HALInitParams( GL::HALConfig_DisableBinaryShaders | GL::HALConfig_DisableShaderPipelines, SF::ThreadId(), SF::String(), true ) );
 #if defined( SF_USE_ANGLE )
-		printf( "[sf] SetRenderingDevice: device %p, GL HAL init %s\n", (void *)pDevice, bHALOk ? "ok" : "FAILED" );
+		VERBOSE_PRINTF( "[sf] SetRenderingDevice: device %p, GL HAL init %s\n", (void *)pDevice, bHALOk ? "ok" : "FAILED" );
 		fflush( stdout );
 #endif
 

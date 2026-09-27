@@ -487,7 +487,7 @@ void CCreateMainMenuScreenScaleform::Tick()
 		{
 			ScaleformUI()->Value_InvokeWithoutReturn( m_FlashAPI, "ScaleformComponent_Blog_HideBlog", NULL, 0 );
 		}
-		printf( "[mainmenu] blog panel hidden (no embedded browser)\n" );
+		VERBOSE_PRINTF( "[mainmenu] blog panel hidden (no embedded browser)\n" );
 		fflush( stdout );
 	}
 #endif

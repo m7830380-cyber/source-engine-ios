@@ -55,7 +55,10 @@ DEFINE_LOGGING_CHANNEL_NO_TAGS( LOG_SCALEFORM_AS, "ScaleformAS" );
 void ScaleformUILogging::LogMessageVarg( SF::LogMessageId messageId, const char* pfmt, va_list argList )
 {
 #if defined( SF_USE_ANGLE )
-	// iOS bring-up: always see what GFx reports
+	// iOS: GFx warnings and errors always reach the log; plain messages (ActionScript
+	// trace() output, ~10/s in menus) only with -verbose.
+	const SF::LogMessageType eSFType = messageId.GetMessageType();
+	if ( eSFType == SF::LogMessage_Warning || eSFType == SF::LogMessage_Error || Plat_IsVerboseLogging() )
 	{
 		va_list args;
 		va_copy( args, argList );
@@ -183,7 +186,7 @@ void ScaleformTranslatorAdapter::Translate( TranslateInfo* tinfo )
 			char szResult[128] = "(null)";
 			if ( translated )
 				V_UnicodeToUTF8( translated, szResult, sizeof( szResult ) );
-			printf( "[sf] translate '%s' -> %d chars '%s'\n", asciiString, translated ? (int)Q_wcslen( translated ) : -1, szResult );
+			VERBOSE_PRINTF( "[sf] translate '%s' -> %d chars '%s'\n", asciiString, translated ? (int)Q_wcslen( translated ) : -1, szResult );
 			fflush( stdout );
 		}
 #endif

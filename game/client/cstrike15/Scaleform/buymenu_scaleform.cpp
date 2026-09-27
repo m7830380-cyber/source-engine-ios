@@ -2621,7 +2621,7 @@ static int GetBuyMenuModelPlacement( int &x, int &y, int &w, int &h )
 			static int s_nLogged[4] = { -1, -1, -1, -1 };
 			if ( s_nLogged[0] != x || s_nLogged[1] != y || s_nLogged[2] != w || s_nLogged[3] != h )
 			{
-				printf( "[buymenu] weapon view at %d,%d %dx%d\n", x, y, w, h );
+				VERBOSE_PRINTF( "[buymenu] weapon view at %d,%d %dx%d\n", x, y, w, h );
 				fflush( stdout );
 				s_nLogged[0] = x; s_nLogged[1] = y; s_nLogged[2] = w; s_nLogged[3] = h;
 			}

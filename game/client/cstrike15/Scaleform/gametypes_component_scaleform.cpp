@@ -150,7 +150,7 @@ void ScaleformComponentGameTypes_EnsureInstalled()
 
 	if ( s_installed )
 	{
-		printf( "[sf] installed CScaleformComponent_GameTypes\n" );
+		VERBOSE_PRINTF( "[sf] installed CScaleformComponent_GameTypes\n" );
 		fflush( stdout );
 	}
 }

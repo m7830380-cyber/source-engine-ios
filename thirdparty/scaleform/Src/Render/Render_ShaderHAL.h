@@ -19,6 +19,7 @@ otherwise accompanies this software in either electronic or hard copy form.
 #define INC_SF_Render_ShaderHAL_H
 
 #include "Render/Render_HAL.h"
+#include "Render/SF_IOSVerbose.h"
 #if defined(SF_USE_ANGLE)
 #include <stdio.h>
 extern int SF_DebugTextDraw;
@@ -30,7 +31,7 @@ extern int SF_DebugFrameLog;
 extern int SF_IOSBlendDirect, SF_IOSTextOnly, SF_IOSFilters;
 extern int SF_StatPrimitives, SF_StatText, SF_StatComplex, SF_StatBlendPush,
            SF_StatBlendTargets, SF_StatRenderTargets, SF_StatFilters, SF_StatMasks;
-#define SF_FRAMELOG(...) do { if (SF_DebugFrameLog) { printf("[sf-frame] " __VA_ARGS__); printf("\n"); } } while (0)
+#define SF_FRAMELOG(...) do { if (SF_DebugFrameLog) { VERBOSE_PRINTF("[sf-frame] " __VA_ARGS__); printf("\n"); } } while (0)
 #else
 #define SF_FRAMELOG(...) do { } while (0)
 #endif
@@ -816,7 +817,7 @@ inline void ShaderHAL<ShaderManagerType, ShaderInterfaceType>::DrawProcessedPrim
                 ++textPrimLogs;
                 logText = true;
                 const Matrix2F& m = pprimitive->Meshes[meshIndex].M.GetMatrix2D();
-                printf("[sf-text] draw text batch: mesh %p, batch type %d, meshes %u, view valid %d, matrix [%.3f %.3f %.1f / %.3f %.3f %.1f]\n",
+                VERBOSE_PRINTF("[sf-text] draw text batch: mesh %p, batch type %d, meshes %u, view valid %d, matrix [%.3f %.3f %.1f / %.3f %.3f %.1f]\n",
                        (void*)pmesh, (int)pbatch->Type, batchMeshCount, (HALState & HS_ViewValid) ? 1 : 0,
                        m.Sx(), m.Shx(), m.Tx(), m.Shy(), m.Sy(), m.Ty());
                 fflush(stdout);
@@ -857,7 +858,7 @@ inline void ShaderHAL<ShaderManagerType, ShaderInterfaceType>::DrawProcessedPrim
 #if defined(SF_USE_ANGLE)
             if (logText)
             {
-                printf("[sf-text]   shader %s, fill flags 0x%x, indices %u, vertices %u\n",
+                VERBOSE_PRINTF("[sf-text]   shader %s, fill flags 0x%x, indices %u, vertices %u\n",
                        pShader ? "ok" : "NULL", fillFlags, (unsigned)pmesh->IndexCount, (unsigned)pmesh->VertexCount);
                 fflush(stdout);
             }

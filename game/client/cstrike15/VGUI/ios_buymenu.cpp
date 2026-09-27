@@ -317,7 +317,7 @@ void CIOSBuyMenu::ShowPanel( bool bShow )
 	if ( pPlayer )
 		pPlayer->SetBuyMenuOpen( bShow );
 
-	printf( "[buymenu] %s\n", bShow ? "open" : "closed" );
+	VERBOSE_PRINTF( "[buymenu] %s\n", bShow ? "open" : "closed" );
 	fflush( stdout );
 }
 
@@ -344,7 +344,7 @@ void CIOSBuyMenu::OnCommand( const char *command )
 	}
 	if ( !Q_strnicmp( command, "buy ", 4 ) )
 	{
-		printf( "[buymenu] %s\n", command );
+		VERBOSE_PRINTF( "[buymenu] %s\n", command );
 		fflush( stdout );
 		engine->ClientCmd_Unrestricted( command );
 		// money and owned items come back from the server; refresh shortly

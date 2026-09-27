@@ -96,7 +96,7 @@ void SFTogl_LogGLState( const char *pszWhere, int nSlot )
 	gGL->glGetIntegerv( GL_CURRENT_PROGRAM, &nProgram );
 	GLenum err = gGL->glGetError();
 	GLenum status = gGL->glCheckFramebufferStatus( GL_DRAW_FRAMEBUFFER );
-	printf( "[sf] %s slot %d: draw FBO %d (status 0x%x), read FBO %d, viewport %d,%d %dx%d, program %d, GL error 0x%x\n",
+	VERBOSE_PRINTF( "[sf] %s slot %d: draw FBO %d (status 0x%x), read FBO %d, viewport %d,%d %dx%d, program %d, GL error 0x%x\n",
 			pszWhere, nSlot, nDrawFBO, status, nReadFBO, viewport[0], viewport[1], viewport[2], viewport[3], nProgram, err );
 	fflush( stdout );
 }

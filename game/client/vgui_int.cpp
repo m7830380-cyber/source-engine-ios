@@ -452,7 +452,7 @@ void VGui_CreateGlobalPanels( void )
 #if defined( IOS )
 	// PANEL_CLIENTDLL is not painted in CS:GO here (its HUD is Scaleform),
 	// so the controls hang off the root panel, which always is.
-	printf( "[touch] PANEL_CLIENTDLL visible %d, PANEL_ROOT visible %d\n",
+	VERBOSE_PRINTF( "[touch] PANEL_CLIENTDLL visible %d, PANEL_ROOT visible %d\n",
 			vgui::ipanel()->IsVisible( enginevgui->GetPanel( PANEL_CLIENTDLL ) ) ? 1 : 0,
 			vgui::ipanel()->IsVisible( enginevgui->GetPanel( PANEL_ROOT ) ) ? 1 : 0 );
 	touch_panel->Create( enginevgui->GetPanel( PANEL_ROOT ) );

@@ -39,14 +39,6 @@ static ConVar r_shader_srgbread( "r_shader_srgbread", "0", 0, "1 = use shader sr
 
 static ConVar r_csm_viewmodelquality( "r_csm_viewmodelquality", "1" );
 
-// Isolates the parts of the phong shader on device (High shader detail shading bug).
-// 1 = no specular (diffuse lighting only), 2 = fixed specular exponent instead of $phongexponenttexture.
-static void ios_phong_debug_changed( IConVar *var, const char *pOldValue, float flOldValue )
-{
-	g_pMaterialSystem->ReloadMaterials( NULL );
-}
-static ConVar ios_phong_debug( "ios_phong_debug", "0", FCVAR_RELEASE, "phong shader debug: 1 = no specular, 2 = fixed specular exponent", ios_phong_debug_changed );
-
 // Textures may be bound to the following samplers:
 //	SHADER_SAMPLER0	 Base (Albedo) / Gloss in alpha
 //	SHADER_SAMPLER1	 Specular warp (including iridescence)
@@ -768,8 +760,6 @@ void DrawPhong_DX9( CBaseVSShader *pShader, IMaterialVar** params, IShaderDynami
 				}
 			}
 
-			if ( ( ios_phong_debug.GetInt() & 1 ) && !phongInfo.m_bHasDetailTexture )
-				flBlendFactorOrPhongAlbedoBoost = 0.0f;
 			pContextData->m_SemiStaticCmdsOut.SetPixelShaderConstant_W( PSREG_SELFILLUMTINT, info.m_nSelfIllumTint, flBlendFactorOrPhongAlbedoBoost );
 			bool bInvertPhongMask = ( info.m_nInvertPhongMask != -1 ) && ( params[info.m_nInvertPhongMask]->GetIntValue() != 0 );
 			float fInvertPhongMask = bInvertPhongMask ? 1 : 0;
@@ -964,10 +954,6 @@ void DrawPhong_DX9( CBaseVSShader *pShader, IMaterialVar** params, IShaderDynami
 				vShaderControls2[3] = 0.0f;
 			}
 
-			if ( ios_phong_debug.GetInt() & 1 )
-				vFresnelRanges_SpecBoost[3] = 0.0f;
-			if ( ios_phong_debug.GetInt() & 2 )
-				vShaderControls2[2] = 20.0f;
 			pContextData->m_SemiStaticCmdsOut.SetPixelShaderConstant( PSREG_FRESNEL_SPEC_PARAMS, vFresnelRanges_SpecBoost, 1 );
 			pContextData->m_SemiStaticCmdsOut.SetPixelShaderConstant( PSREG_FLASHLIGHT_POSITION_RIM_BOOST, vRimBoost, 1 );	// Rim boost in w on non-flashlight pass
 			pContextData->m_SemiStaticCmdsOut.SetPixelShaderConstant( PSREG_SPEC_RIM_PARAMS, vSpecularTint, 1 );

@@ -15,6 +15,7 @@ otherwise accompanies this software in either electronic or hard copy form.
 **************************************************************************/
 
 #include "Render_GlyphCache.h"
+#include "Render/SF_IOSVerbose.h"
 #include "Render_HAL.h"
 #include "Render_Image.h"
 #include "Render_FontCacheHandle.h"
@@ -30,7 +31,7 @@ otherwise accompanies this software in either electronic or hard copy form.
 #include <stdio.h>
 // Diagnostics (iOS/ANGLE): limited logging of the glyph rasterizer.
 static int SF_GlyphLogCount = 0;
-#define SF_GLYPH_LOG(...) do { if (SF_GlyphLogCount < 60) { ++SF_GlyphLogCount; printf(__VA_ARGS__); fflush(stdout); } } while (0)
+#define SF_GLYPH_LOG(...) do { if (SF_GlyphLogCount < 60 && Plat_IsVerboseLogging()) { ++SF_GlyphLogCount; printf(__VA_ARGS__); fflush(stdout); } } while (0)
 #else
 #define SF_GLYPH_LOG(...) do { } while (0)
 #endif
@@ -185,7 +186,7 @@ bool GlyphTextureMapper::Unmap()
                 if (unmapLogs < 20)
                 {
                     ++unmapLogs;
-                    printf("[sf-text] glyph texture unmapped (upload), result %d\n", ret ? 1 : 0);
+                    VERBOSE_PRINTF("[sf-text] glyph texture unmapped (upload), result %d\n", ret ? 1 : 0);
                     fflush(stdout);
                 }
             }

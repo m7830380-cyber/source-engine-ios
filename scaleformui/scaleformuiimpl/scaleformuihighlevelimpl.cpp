@@ -606,7 +606,7 @@ bool ScaleformUIImpl::HandleInputEvent( const InputEvent_t &event )
 	// iOS: finger taps arrive as mouse events; log what the menu does with them
 	if ( ( event.m_nType == IE_ButtonPressed || event.m_nType == IE_ButtonReleased ) && IsMouseCode( ( ButtonCode_t )event.m_nData ) )
 	{
-		printf( "[sf-input] mouse %d %s at %d,%d: consumes %d, want cursor %d, console %d, hit %d\n",
+		VERBOSE_PRINTF( "[sf-input] mouse %d %s at %d,%d: consumes %d, want cursor %d, console %d, hit %d\n",
 				(int)event.m_nData, event.m_nType == IE_ButtonPressed ? "down" : "up", m_iLastMouseX, m_iLastMouseY,
 				consumesEvents ? 1 : 0, m_iWantCursorShown, m_pEngine->Con_IsVisible() ? 1 : 0,
 				HitTest( m_iLastMouseX, m_iLastMouseY ) ? 1 : 0 );

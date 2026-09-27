@@ -1585,6 +1585,9 @@ void CSDLMgr::OnFrameRendered()
 // screen can be inspected without a device screenshot. Reads the bound read framebuffer.
 static void IOS_MaybeCaptureFrame( int width, int height )
 {
+	// full-frame readbacks every 10 s stall the GPU: only with -verbose
+	if ( !Plat_IsVerboseLogging() )
+		return;
 	static int s_nPresents = 0;
 	static int s_nCaptures = 0;
 	static double s_flNextCapture = 0.0;

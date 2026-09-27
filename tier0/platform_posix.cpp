@@ -10,6 +10,7 @@
 #include "tier0/memalloc.h"
 #include "tier0/dbg.h"
 #include "tier0/threadtools.h"
+#include "tier0/icommandline.h"
 
 #include <sys/time.h>
 #include <unistd.h>
@@ -353,6 +354,14 @@ PLATFORM_INTERFACE bool Is64BitOS()
 	return false;
 }
 
+
+bool Plat_IsVerboseLogging()
+{
+	static int s_nVerbose = -1;
+	if ( s_nVerbose < 0 )
+		s_nVerbose = ( CommandLine()->FindParm( "-verbose" ) != 0 ) ? 1 : 0;
+	return s_nVerbose != 0;
+}
 
 bool Plat_IsInDebugSession()
 {

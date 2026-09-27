@@ -3863,7 +3863,7 @@ void CWeaponCSBase::UpdateCustomMaterial( void )
 	CEconItemView *pItem = GetEconItemView();
 	if ( !pItem || !pItem->IsValid() || pItem->GetCustomPaintKitIndex() <= 0 )
 	{
-		printf( "[offline] weapon %s: no paint (item %s, valid %d, id %llu, account %u, def %d, soc %d, paint %d)\n", GetClassname(),
+		VERBOSE_PRINTF( "[offline] weapon %s: no paint (item %s, valid %d, id %llu, account %u, def %d, soc %d, paint %d)\n", GetClassname(),
 			pItem ? "yes" : "no", pItem ? (int)pItem->IsValid() : 0, pItem ? pItem->GetItemID() : 0ull, pItem ? pItem->GetAccountID() : 0u,
 			pItem ? (int)pItem->GetItemIndex() : 0, ( pItem && pItem->GetSOCData() ) ? 1 : 0, pItem ? pItem->GetCustomPaintKitIndex() : 0 );
 		fflush( stdout );
@@ -3876,7 +3876,7 @@ void CWeaponCSBase::UpdateCustomMaterial( void )
 	for ( int i = 0; i < pItem->GetCustomMaterialCount(); i++ )
 		SetCustomMaterial( pItem->GetCustomMaterial( i ), i );
 
-	printf( "[offline] weapon %s item %llu paint %d: %d custom materials\n", GetClassname(), pItem->GetItemID(),
+	VERBOSE_PRINTF( "[offline] weapon %s item %llu paint %d: %d custom materials\n", GetClassname(), pItem->GetItemID(),
 		pItem->GetCustomPaintKitIndex(), pItem->GetCustomMaterialCount() );
 	fflush( stdout );
 }

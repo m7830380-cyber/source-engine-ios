@@ -15,6 +15,7 @@ otherwise accompanies this software in either electronic or hard copy form.
 **************************************************************************/
 
 #include "GL_Texture.h"
+#include "Render/SF_IOSVerbose.h"
 #include "Render/Render_TextureUtil.h"
 #include "Kernel/SF_Debug.h"
 
@@ -161,7 +162,7 @@ bool Texture::Initialize()
         {
             ++textureLogs;
             const TextureFormat::Mapping* plogmapping = GetTextureFormatMapping();
-            printf("[sf-gl] texture: format %d, %ux%u, use 0x%x, mips %u (alloc %u, gen %d), GL internal 0x%x format 0x%x, from image %d\n",
+            VERBOSE_PRINTF("[sf-gl] texture: format %d, %ux%u, use 0x%x, mips %u (alloc %u, gen %d), GL internal 0x%x format 0x%x, from image %d\n",
                    (int)format, pTextures[0].Size.Width, pTextures[0].Size.Height, Use, (unsigned)MipLevels, allocMipLevels,
                    genMipmaps ? 1 : 0, plogmapping ? plogmapping->GLColors : 0, plogmapping ? plogmapping->GLFormat : 0, pImage ? 1 : 0);
             fflush(stdout);
@@ -336,7 +337,7 @@ bool Texture::Upload(unsigned itex, unsigned level, const ImagePlane& plane)
                 for (unsigned x = 0; x < plane.Width; ++x)
                     if (row[x]) ++nonZero;
             }
-            printf("[sf-gl] A8 upload: tex %u, level %u, %ux%u pitch %u, %u non-zero bytes, texture size %ux%u\n",
+            VERBOSE_PRINTF("[sf-gl] A8 upload: tex %u, level %u, %ux%u pitch %u, %u non-zero bytes, texture size %ux%u\n",
                    pTextures[itex].TexId, level, plane.Width, plane.Height, (unsigned)plane.Pitch, nonZero,
                    pTextures[itex].Size.Width, pTextures[itex].Size.Height);
             fflush(stdout);

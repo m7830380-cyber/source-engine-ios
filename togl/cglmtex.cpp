@@ -3568,6 +3568,27 @@ void CompressedTexImage2D(GLenum target, GLint level, GLenum internalformat,
 // TexSubImage should work properly on every driver stack and GPU--enabling by default.
 ConVar	gl_enabletexsubimage( "gl_enabletexsubimage", "1" );
 
+#if defined( TOGLES )
+// convert_texture relabels GL_BGRA as GL_RGBA (GLES has no BGRA upload here), which
+// swaps red and blue unless the bytes are swizzled too. Returns a swizzled copy of
+// the slice to upload (caller frees), or NULL when no swizzle is needed.
+static char *TOGLES_SwizzleBGRA( GLenum glDataFormat, GLenum glDataType, const GLMTexFormatDesc *format, const char *pData, int nBytes )
+{
+	if ( glDataFormat != GL_BGRA || !pData || format->m_bytesPerSquareChunk != 4 ||
+		 ( glDataType != GL_UNSIGNED_INT_8_8_8_8_REV && glDataType != GL_UNSIGNED_BYTE ) )
+		return NULL;
+	char *pSwizzled = (char *)malloc( nBytes );
+	memcpy( pSwizzled, pData, nBytes );
+	for ( int i = 0; i + 3 < nBytes; i += 4 )
+	{
+		char c = pSwizzled[i];
+		pSwizzled[i] = pSwizzled[i + 2];
+		pSwizzled[i + 2] = c;
+	}
+	return pSwizzled;
+}
+#endif
+
 void CGLMTex::WriteTexels( GLMTexLockDesc *desc, bool writeWholeSlice, bool noDataWrite )
 {
 	//if ( m_nBindlessHashNumEntries )
@@ -3755,6 +3776,11 @@ void CGLMTex::WriteTexels( GLMTexLockDesc *desc, bool writeWholeSlice, bool noDa
 						gGL->glPixelStorei( GL_UNPACK_SKIP_PIXELS, writeBox.xmin );		// in pixels
 						gGL->glPixelStorei( GL_UNPACK_SKIP_ROWS, writeBox.ymin );		// in pixels
 
+#if defined( TOGLES )
+						char *pSwizzledSub = TOGLES_SwizzleBGRA( glDataFormat, glDataType, format, (const char *)sliceAddress, slice->m_storageSize );
+						if ( pSwizzledSub )
+							sliceAddress = pSwizzledSub;
+#endif
 						convert_texture(intformat, writeBox.xmax - writeBox.xmin, writeBox.ymax - writeBox.ymin, glDataFormat, glDataType, sliceAddress);
 
 						gGL->glTexSubImage2D(	target,
@@ -3771,6 +3797,10 @@ void CGLMTex::WriteTexels( GLMTexLockDesc *desc, bool writeWholeSlice, bool noDa
 						gGL->glPixelStorei( GL_UNPACK_ROW_LENGTH, 0 );
 						gGL->glPixelStorei( GL_UNPACK_SKIP_PIXELS, 0 );
 						gGL->glPixelStorei( GL_UNPACK_SKIP_ROWS, 0 );
+#if defined( TOGLES )
+						if ( pSwizzledSub )
+							free( pSwizzledSub );
+#endif
 					}
 					else
 					{
@@ -3792,6 +3822,13 @@ void CGLMTex::WriteTexels( GLMTexLockDesc *desc, bool writeWholeSlice, bool noDa
 				{					
 					// uncompressed path
 					// http://www.opengl.org/documentation/specs/man_pages/hardcopy/GL/html/gl/teximage2d.html
+#if defined( TOGLES )
+					// e.g. the engine's flat normal map (BGRX 127,127,255) read back as
+					// (255,127,127): phong built its per-pixel normal from the tangent.
+					char *pSwizzledFull = noDataWrite ? NULL : TOGLES_SwizzleBGRA( glDataFormat, glDataType, format, (const char *)sliceAddress, slice->m_storageSize );
+					if ( pSwizzledFull )
+						sliceAddress = pSwizzledFull;
+#endif
 					convert_texture(intformat, m_layout->m_slices[ desc->m_sliceIndex ].m_xSize, m_layout->m_slices[ desc->m_sliceIndex ].m_ySize, glDataFormat, glDataType, noDataWrite ? NULL : sliceAddress);
 					
 					gGL->glTexImage2D(			target,						// target
@@ -3803,6 +3840,10 @@ void CGLMTex::WriteTexels( GLMTexLockDesc *desc, bool writeWholeSlice, bool noDa
 											glDataFormat,				// dataformat
 											glDataType,					// datatype
 											noDataWrite ? NULL : sliceAddress );	// data (optionally suppressed in case ResetSRGB desires)
+#if defined( TOGLES )
+					if ( pSwizzledFull )
+						free( pSwizzledFull );
+#endif
 
 					if (m_layout->m_key.m_texFlags & kGLMTexMultisampled)
 					{

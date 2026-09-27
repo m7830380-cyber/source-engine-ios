@@ -590,7 +590,7 @@ bool DDSFileImageSource::ReadHeader()
     }
 #endif
 #if defined(SF_USE_ANGLE)
-    VERBOSE_PRINTF("[sf-dds] %ux%u, file format %d, mips %u, decoding DXT %d\n", HeaderInfo.Width, HeaderInfo.Height,
+    printf("[sf-dds] %ux%u, file format %d, mips %u, decoding DXT %d\n", HeaderInfo.Width, HeaderInfo.Height,
            (int)HeaderInfo.Format, (unsigned)HeaderInfo.MipmapCount, DecodeDXT ? 1 : 0);
     fflush(stdout);
 #endif

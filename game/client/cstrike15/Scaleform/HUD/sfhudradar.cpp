@@ -1336,6 +1336,7 @@ void SFHudRadar::SetMap( const char* pMapName )
 	if ( !MapKeyValues->LoadFromFile( g_pFullFileSystem, tempfile, "GAME" ) )
 	{
 		DevMsg( 1, "Error! CMapOverview::SetMap: couldn't load file %s.\n", tempfile );
+		Msg( "[radar] SetMap %s: no %s\n", pMapName, tempfile );
 		m_MapOrigin.x = 0;
 		m_MapOrigin.y = 0;
 		return;
@@ -1399,6 +1400,9 @@ void SFHudRadar::SetMap( const char* pMapName )
 
 	m_fWorldToRadarScale = m_fWorldToPixelScale * m_fPixelToRadarScale;
 
+	Msg( "[radar] SetMap %s: origin %.0f %.0f, scale %.3f, %d layers, flash ready %d\n", pMapName,
+		m_MapOrigin.x, m_MapOrigin.y, m_fWorldToPixelScale, m_vecRadarVerticalSections.Count(), m_bFlashReady ? 1 : 0 );
+
 	MapKeyValues->deleteThis();
 
 }
@@ -1411,6 +1415,7 @@ void SFHudRadar::FlashLoadMap( const char* pMapName )
 	if ( V_strcmp( pMapToLoad, m_cLoadedMapName ) )
 	{
 		V_strcpy_safe( m_cDesiredMapName, pMapToLoad );
+		Msg( "[radar] load map '%s' (flash ready %d, %d layers)\n", pMapToLoad, m_bFlashReady ? 1 : 0, m_vecRadarVerticalSections.Count() );
 
 		if ( m_bFlashReady )
 		{
@@ -1458,6 +1463,8 @@ void SFHudRadar::FlashUpdateMapLayer( int layerIdx )
 
 void SFHudRadar::MapLoaded( SCALEFORM_CALLBACK_ARGS_DECL )
 {
+	Msg( "[radar] flash loaded the map image for '%s' (%.3f, %.1f)\n", m_cDesiredMapName,
+		pui->Params_GetNumArgs( obj ) > 0 ? pui->Params_GetArgAsNumber( obj, 0 ) : -1.0, pui->Params_GetNumArgs( obj ) > 1 ? pui->Params_GetArgAsNumber( obj, 1 ) : -1.0 );
 	// flash passes in the scaledsize / image size
 	m_fMapSize = 320; //radar_mapsize.GetInt();//( float )pui->Params_GetArgAsNumber( obj, 0 );
 

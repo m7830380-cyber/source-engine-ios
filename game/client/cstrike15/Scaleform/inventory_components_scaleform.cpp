@@ -30,6 +30,7 @@
 #include "ienginevgui.h"
 #include "flash_item_model_panel.h"
 #include "createmainmenuscreen_scaleform.h"
+#include "ios_lan.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include <tier0/memdbgon.h>
@@ -1000,6 +1001,13 @@ public:
 	void GetFriendName( SCALEFORM_CALLBACK_ARGS_DECL )
 	{
 		uint64 xuid = ArgItemID( pui, obj, 0 );
+#if defined( IOS )
+		if ( const LanGame_t *pGame = LanBrowser_FindByXuid( xuid ) )
+		{
+			pui->Params_SetResult( obj, pGame->m_szName );
+			return;
+		}
+#endif
 		if ( IsLocalXuid( xuid ) )
 		{
 			pui->Params_SetResult( obj, profile_name.GetString() );
@@ -1027,6 +1035,79 @@ public:
 		LocalInt( pui, obj, cv.GetInt() );
 	}
 	void ReturnZero( SCALEFORM_CALLBACK_ARGS_DECL ) { pui->Params_SetResult( obj, 0 ); }
+	void ReturnFalse( SCALEFORM_CALLBACK_ARGS_DECL ) { pui->Params_SetResult( obj, false ); }
+	void DoNothing( SCALEFORM_CALLBACK_ARGS_DECL ) {}
+
+	// The friends tab lists LAN games (iOS): each is a "friend" named after the
+	// host, playing CS:GO, joinable. There are no Steam friends offline.
+	void GetCount( SCALEFORM_CALLBACK_ARGS_DECL )
+	{
+#if defined( IOS )
+		pui->Params_SetResult( obj, LanBrowser_Count() );
+#else
+		pui->Params_SetResult( obj, 0 );
+#endif
+	}
+	void GetXuidByIndex( SCALEFORM_CALLBACK_ARGS_DECL )
+	{
+#if defined( IOS )
+		const LanGame_t *pGame = LanBrowser_Get( ArgInt( pui, obj, 0 ) );
+		ResultItemID( pui, obj, pGame ? pGame->m_ullXuid : 0 );
+#else
+		ResultItemID( pui, obj, 0 );
+#endif
+	}
+	void GetFriendStatus( SCALEFORM_CALLBACK_ARGS_DECL )
+	{
+#if defined( IOS )
+		// "Mirage - 2/10 players" (the host counts only human slots)
+		if ( const LanGame_t *pGame = LanBrowser_FindByXuid( ArgItemID( pui, obj, 0 ) ) )
+		{
+			wchar_t wszMap[64];
+			const wchar_t *pwszMap = g_pVGuiLocalize ? g_pVGuiLocalize->Find( CFmtStr( "#SFUI_Map_%s", pGame->m_szMap ) ) : NULL;
+			if ( !pwszMap )
+			{
+				V_UTF8ToUnicode( pGame->m_szMap, wszMap, sizeof( wszMap ) );
+				pwszMap = wszMap;
+			}
+			wchar_t wszStatus[128];
+			V_snwprintf( wszStatus, ARRAYSIZE( wszStatus ), L"%ls - %d/%d players", pwszMap, pGame->m_nHumans, pGame->m_nMax );
+			pui->Params_SetResult( obj, wszStatus );
+			return;
+		}
+#endif
+		pui->Params_SetResult( obj, "" );
+	}
+	void GetFriendStatusBucket( SCALEFORM_CALLBACK_ARGS_DECL )
+	{
+#if defined( IOS )
+		if ( LanBrowser_FindByXuid( ArgItemID( pui, obj, 0 ) ) )
+		{
+			pui->Params_SetResult( obj, "PlayingCSGO" );		// green, "in game"
+			return;
+		}
+#endif
+		pui->Params_SetResult( obj, "Offline" );
+	}
+	void IsFriendJoinable( SCALEFORM_CALLBACK_ARGS_DECL )
+	{
+#if defined( IOS )
+		pui->Params_SetResult( obj, LanBrowser_FindByXuid( ArgItemID( pui, obj, 0 ) ) != NULL );
+#else
+		pui->Params_SetResult( obj, false );
+#endif
+	}
+	void GetFriendRelationship( SCALEFORM_CALLBACK_ARGS_DECL )
+	{
+		// not "friend": the context menu would add Message and Remove Friend
+		pui->Params_SetResult( obj, "none" );
+	}
+	void ActionJoinFriendSession( SCALEFORM_CALLBACK_ARGS_DECL )
+	{
+#if defined( IOS )
+		LanBrowser_Join( LanBrowser_FindByXuid( ArgItemID( pui, obj, 0 ) ) );
+#endif
+	}
 
 private:
 	void LocalInt( IUIMarshalHelper *pui, SFPARAMS obj, int nValue )
@@ -1054,7 +1135,20 @@ public:
 			SFUI_DECL_METHOD_AS( ReturnZero, "GetFriendMedalRankByType" ),
 			SFUI_DECL_METHOD_AS( ReturnZero, "GetFriendDisplayItemDefCount" ),
 			SFUI_DECL_METHOD_AS( ReturnZero, "GetFriendDisplayItemDefFeatured" ),
-			SFUI_DECL_METHOD_AS( ReturnZero, "GetCount" ),
+			SFUI_DECL_METHOD( GetCount ),
+			SFUI_DECL_METHOD( GetXuidByIndex ),
+			SFUI_DECL_METHOD( GetFriendStatus ),
+			SFUI_DECL_METHOD( GetFriendStatusBucket ),
+			SFUI_DECL_METHOD( IsFriendJoinable ),
+			SFUI_DECL_METHOD( GetFriendRelationship ),
+			SFUI_DECL_METHOD( ActionJoinFriendSession ),
+			SFUI_DECL_METHOD_AS( ReturnFalse, "IsFriendInvited" ),
+			SFUI_DECL_METHOD_AS( ReturnFalse, "IsFriendWatchable" ),
+			SFUI_DECL_METHOD_AS( ReturnFalse, "IsFriendPlayingCSGO" ),
+			SFUI_DECL_METHOD_AS( ReturnZero, "GetFriendRequestsCount" ),
+			SFUI_DECL_METHOD_AS( DoNothing, "ActionInviteFriend" ),
+			SFUI_DECL_METHOD_AS( DoNothing, "ActionWatchFriendSession" ),
+			SFUI_DECL_METHOD_AS( DoNothing, "ActionShowCSGOProfile" ),
 			{ NULL, NULL }
 		};
 		return table;
@@ -1070,6 +1164,7 @@ public:
 	void ReturnZero( SCALEFORM_CALLBACK_ARGS_DECL ) { pui->Params_SetResult( obj, 0 ); }
 	void ReturnMinusOne( SCALEFORM_CALLBACK_ARGS_DECL ) { pui->Params_SetResult( obj, -1 ); }
 	void ReturnFalse( SCALEFORM_CALLBACK_ARGS_DECL ) { pui->Params_SetResult( obj, false ); }
+	void ReturnTrue( SCALEFORM_CALLBACK_ARGS_DECL ) { pui->Params_SetResult( obj, true ); }
 	void ReturnEmpty( SCALEFORM_CALLBACK_ARGS_DECL ) { pui->Params_SetResult( obj, "" ); }
 	void Return730( SCALEFORM_CALLBACK_ARGS_DECL ) { pui->Params_SetResult( obj, 730 ); }
 	void DoNothing( SCALEFORM_CALLBACK_ARGS_DECL ) {}
@@ -1154,6 +1249,10 @@ STUB_TABLE( Store,
 
 STUB_TABLE( SteamOverlay,
 	SFUI_DECL_METHOD_AS( ReturnFalse, "IsEnabled" ),
+	// the friends panel shows "you're offline" otherwise; its friends tab lists LAN games
+	SFUI_DECL_METHOD_AS( ReturnTrue, "BSignedInToFriends" ),
+	SFUI_DECL_METHOD_AS( DoNothing, "InteractWithUser" ),
+	SFUI_DECL_METHOD_AS( DoNothing, "StartChatWithUser" ),
 	SFUI_DECL_METHOD_AS( Return730, "GetAppID" ),
 	SFUI_DECL_METHOD_AS( ReturnEmpty, "GetSteamCommunityURL" ),
 	SFUI_DECL_METHOD_AS( DoNothing, "OpenURL" ),
@@ -1235,6 +1334,18 @@ void ScaleformInventoryComponents_EnsureInstalled()
 		g_pScaleformUI->InstallGlobalObject( SF_FULL_SCREEN_SLOT, s_Components[i].m_pszName, s_Components[i].m_pObject, s_Components[i].m_pTable, &s_Components[i].m_hValue );
 
 	s_bInstalled = true;
+
+#if defined( IOS )
+	// the friends panel's friends tab is the LAN game list
+	if ( g_pVGuiLocalize )
+	{
+		static wchar_t s_wszTitle[] = L"LAN Games";
+		static wchar_t s_wszEmpty[] = L"No LAN games found. Games hosted on this Wi-Fi (Play > Offline with bots) show up here; tap one to join.";
+		g_pVGuiLocalize->AddString( "SFUI_Lobby_FriendsListerTitle", s_wszTitle, NULL );
+		g_pVGuiLocalize->AddString( "SFUI_Friends_Play", s_wszEmpty, NULL );
+	}
+#endif
+
 	VERBOSE_PRINTF( "[sf] installed inventory/loadout components\n" );
 	fflush( stdout );
 }

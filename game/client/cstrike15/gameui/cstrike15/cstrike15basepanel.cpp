@@ -68,6 +68,10 @@ static int s_nPs3TrophyStorageSizeKB = 0;
 #include "clientmode_csnormal.h"
 #include "c_cs_playerresource.h"
 
+#if defined( IOS )
+#include "ios_lan.h"
+#endif
+
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
 
@@ -1248,6 +1252,16 @@ void CCStrike15BasePanel::RunFrame( void )
 
 	// Handles making sure pupups get the proper updates.  Usually just dealing with showing and hiding.
 	PopupManager::Update();
+
+#if defined( IOS )
+	// LAN games for the main menu's friends panel (its friends tab lists them)
+	if ( !engine->IsConnected() && CCreateMainMenuScreenScaleform::IsActive() && LanBrowser_Frame() )
+	{
+		KeyValues *pEvent = new KeyValues( "ScaleformComponent_FriendsList_RebuildFriendsList" );
+		CCreateMainMenuScreenScaleform::GetInstance()->OnEvent( pEvent );
+		pEvent->deleteThis();
+	}
+#endif
 
 	CBaseModPanel::RunFrame();
 

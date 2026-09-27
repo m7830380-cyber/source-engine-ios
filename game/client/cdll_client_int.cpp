@@ -5143,14 +5143,12 @@ EXPOSE_SINGLE_INTERFACE_GLOBALVAR( CClientMaterialSystem, IClientMaterialSystem,
 #include <unistd.h>
 #include <errno.h>
 
-struct LanGame_t
-{
-	char m_szAddress[64];
-	char m_szName[64];
-	char m_szMap[64];
-	int m_nHumans, m_nBots, m_nMax;
-};
-static CUtlVector< LanGame_t > s_LanGames;
+#include <fcntl.h>
+#include "ios_lan.h"
+#include "tier1/checksum_crc.h"
+
+static CUtlVector< LanGame_t > s_LanGames;		// the last lan_find
+static CUtlVector< LanGame_t > s_LanBrowse;		// the background browser
 
 static void LanReadString( const unsigned char *&p, const unsigned char *pEnd, char *pszOut, int nOut )
 {
@@ -5166,6 +5164,151 @@ static void LanReadString( const unsigned char *&p, const unsigned char *pEnd, c
 		++p;	// the terminator
 }
 
+// broadcast the query to the ports hosts listen on; false if nothing went out
+static bool LanSendQuery( int s, int *pnErr )
+{
+	static const unsigned char s_Query[] = { 0xFF, 0xFF, 0xFF, 0xFF, 'g', 'I', 'O', 'S', 'L', 'A', 'N', '1', 0 };
+	int nSent = 0;
+	for ( int nPort = 27015; nPort <= 27020; nPort++ )
+	{
+		sockaddr_in to = {};
+		to.sin_family = AF_INET;
+		to.sin_port = htons( nPort );
+		to.sin_addr.s_addr = htonl( INADDR_BROADCAST );
+		if ( sendto( s, s_Query, sizeof( s_Query ), 0, (sockaddr *)&to, sizeof( to ) ) > 0 )
+			++nSent;
+		else if ( pnErr )
+			*pnErr = errno;
+	}
+	return nSent > 0;
+}
+
+// one reply packet -> game; false if it isn't an IOSLAN1 answer
+static bool LanParseReply( const unsigned char *buf, int n, const sockaddr_in &from, LanGame_t &game )
+{
+	if ( n < 5 + 8 || buf[0] != 0xFF || buf[1] != 0xFF || buf[2] != 0xFF || buf[3] != 0xFF || buf[4] != 'h' )
+		return false;
+
+	const unsigned char *p = buf + 5, *pEnd = buf + n;
+	char szTag[16];
+	LanReadString( p, pEnd, szTag, sizeof( szTag ) );
+	if ( V_strcmp( szTag, "IOSLAN1" ) )
+		return false;
+	V_memset( &game, 0, sizeof( game ) );
+	LanReadString( p, pEnd, game.m_szName, sizeof( game.m_szName ) );
+	LanReadString( p, pEnd, game.m_szMap, sizeof( game.m_szMap ) );
+	if ( pEnd - p < 5 )
+		return false;
+	game.m_nHumans = p[0];
+	game.m_nBots = p[1];
+	game.m_nMax = p[2];
+	int nPort = p[3] | ( p[4] << 8 );
+	V_snprintf( game.m_szAddress, sizeof( game.m_szAddress ), "%s:%d", inet_ntoa( from.sin_addr ), nPort );
+	// an individual Steam ID whose account ID (high bit set, unlike real ones
+	// in practice) comes from the address, so it stays the same between queries
+	CRC32_t crc = CRC32_ProcessSingleBuffer( game.m_szAddress, V_strlen( game.m_szAddress ) );
+	game.m_ullXuid = 0x0110000100000000ull | ( 0x80000000u | ( crc & 0x7FFFFFFFu ) );
+	return true;
+}
+
+bool LanBrowser_Frame()
+{
+	static int s_nSocket = -1;
+	static double s_flNextQuery = 0.0;
+
+	if ( s_nSocket < 0 )
+	{
+		s_nSocket = socket( AF_INET, SOCK_DGRAM, IPPROTO_UDP );
+		if ( s_nSocket < 0 )
+			return false;
+		int one = 1;
+		setsockopt( s_nSocket, SOL_SOCKET, SO_BROADCAST, &one, sizeof( one ) );
+		fcntl( s_nSocket, F_SETFL, fcntl( s_nSocket, F_GETFL, 0 ) | O_NONBLOCK );
+	}
+
+	double flNow = Plat_FloatTime();
+	if ( flNow >= s_flNextQuery )
+	{
+		s_flNextQuery = flNow + 2.0;
+		LanSendQuery( s_nSocket, NULL );
+	}
+
+	bool bChanged = false;
+	for ( int nPackets = 0; nPackets < 64; nPackets++ )
+	{
+		unsigned char buf[1400];
+		sockaddr_in from = {};
+		socklen_t fromlen = sizeof( from );
+		int n = recvfrom( s_nSocket, buf, sizeof( buf ), 0, (sockaddr *)&from, &fromlen );
+		if ( n <= 0 )
+			break;
+
+		LanGame_t game;
+		if ( !LanParseReply( buf, n, from, game ) )
+			continue;
+		game.m_flLastSeen = flNow;
+
+		int iFound = -1;
+		FOR_EACH_VEC( s_LanBrowse, i )
+		{
+			if ( !V_strcmp( s_LanBrowse[i].m_szAddress, game.m_szAddress ) )
+				iFound = i;
+		}
+		if ( iFound < 0 )
+		{
+			s_LanBrowse.AddToTail( game );
+			bChanged = true;
+		}
+		else
+		{
+			LanGame_t &old = s_LanBrowse[iFound];
+			if ( V_strcmp( old.m_szName, game.m_szName ) || V_strcmp( old.m_szMap, game.m_szMap ) ||
+				 old.m_nHumans != game.m_nHumans || old.m_nBots != game.m_nBots || old.m_nMax != game.m_nMax )
+				bChanged = true;
+			old = game;
+		}
+	}
+
+	// games that stopped answering (three queries missed)
+	FOR_EACH_VEC_BACK( s_LanBrowse, i )
+	{
+		if ( flNow - s_LanBrowse[i].m_flLastSeen > 7.0 )
+		{
+			s_LanBrowse.Remove( i );
+			bChanged = true;
+		}
+	}
+	return bChanged;
+}
+
+int LanBrowser_Count()
+{
+	return s_LanBrowse.Count();
+}
+
+const LanGame_t *LanBrowser_Get( int i )
+{
+	return s_LanBrowse.IsValidIndex( i ) ? &s_LanBrowse[i] : NULL;
+}
+
+const LanGame_t *LanBrowser_FindByXuid( uint64 ullXuid )
+{
+	FOR_EACH_VEC( s_LanBrowse, i )
+	{
+		if ( s_LanBrowse[i].m_ullXuid == ullXuid )
+			return &s_LanBrowse[i];
+	}
+	return NULL;
+}
+
+void LanBrowser_Join( const LanGame_t *pGame )
+{
+	if ( !pGame )
+		return;
+	Msg( "Joining %s (%s)...\n", pGame->m_szName, pGame->m_szAddress );
+	engine->ClientCmd_Unrestricted( CFmtStr( "connect %s\n", pGame->m_szAddress ) );
+}
+
 CON_COMMAND( lan_find, "List LAN games (other devices hosting an offline match)" )
 {
 	int s = socket( AF_INET, SOCK_DGRAM, IPPROTO_UDP );
@@ -5177,20 +5320,8 @@ CON_COMMAND( lan_find, "List LAN games (other devices hosting an offline match)"
 	int one = 1;
 	setsockopt( s, SOL_SOCKET, SO_BROADCAST, &one, sizeof( one ) );
 
-	static const unsigned char s_Query[] = { 0xFF, 0xFF, 0xFF, 0xFF, 'g', 'I', 'O', 'S', 'L', 'A', 'N', '1', 0 };
-	int nSent = 0, nErr = 0;
-	for ( int nPort = 27015; nPort <= 27020; nPort++ )
-	{
-		sockaddr_in to = {};
-		to.sin_family = AF_INET;
-		to.sin_port = htons( nPort );
-		to.sin_addr.s_addr = htonl( INADDR_BROADCAST );
-		if ( sendto( s, s_Query, sizeof( s_Query ), 0, (sockaddr *)&to, sizeof( to ) ) > 0 )
-			++nSent;
-		else
-			nErr = errno;
-	}
-	if ( !nSent )
+	int nErr = 0;
+	if ( !LanSendQuery( s, &nErr ) )
 	{
 		Msg( "lan_find: couldn't broadcast (error %d). Allow \"Local Network\" for this app in iOS Settings > Privacy.\n", nErr );
 		close( s );
@@ -5215,24 +5346,9 @@ CON_COMMAND( lan_find, "List LAN games (other devices hosting an offline match)"
 		sockaddr_in from = {};
 		socklen_t fromlen = sizeof( from );
 		int n = recvfrom( s, buf, sizeof( buf ), 0, (sockaddr *)&from, &fromlen );
-		if ( n < 5 + 8 || buf[0] != 0xFF || buf[1] != 0xFF || buf[2] != 0xFF || buf[3] != 0xFF || buf[4] != 'h' )
+		LanGame_t game;
+		if ( n <= 0 || !LanParseReply( buf, n, from, game ) )
 			continue;
-
-		const unsigned char *p = buf + 5, *pEnd = buf + n;
-		char szTag[16];
-		LanReadString( p, pEnd, szTag, sizeof( szTag ) );
-		if ( V_strcmp( szTag, "IOSLAN1" ) )
-			continue;
-		LanGame_t game = {};
-		LanReadString( p, pEnd, game.m_szName, sizeof( game.m_szName ) );
-		LanReadString( p, pEnd, game.m_szMap, sizeof( game.m_szMap ) );
-		if ( pEnd - p < 5 )
-			continue;
-		game.m_nHumans = p[0];
-		game.m_nBots = p[1];
-		game.m_nMax = p[2];
-		int nPort = p[3] | ( p[4] << 8 );
-		V_snprintf( game.m_szAddress, sizeof( game.m_szAddress ), "%s:%d", inet_ntoa( from.sin_addr ), nPort );
 
 		bool bDup = false;
 		FOR_EACH_VEC( s_LanGames, i )

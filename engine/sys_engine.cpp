@@ -61,7 +61,13 @@ int Sys_InitGame( CreateInterfaceFn appSystemFactory,
 ConVar engine_no_focus_sleep( "engine_no_focus_sleep", "50", FCVAR_ARCHIVE );
 
 
+#if defined( IOS )
+// Uncapped (300) on a 120 Hz phone spent power on frames past 60, which is what
+// drives the thermal throttling; fps_max 120 still works from the console.
+#define DEFAULT_FPS_MAX	60
+#else
 #define DEFAULT_FPS_MAX	300
+#endif
 static int s_nDesiredFPSMax = DEFAULT_FPS_MAX;
 static bool s_bFPSMaxDrivenByPowerSavings = false;
 

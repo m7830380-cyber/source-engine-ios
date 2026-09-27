@@ -1689,6 +1689,12 @@ CEG_NOINLINE void CServerGameDLL::CreateNetworkStringTables( void )
 	g_pStringTableInfoPanel = networkstringtable->CreateStringTable( "InfoPanel", MAX_INFOPANEL_STRINGS );
 	g_pStringTableClientSideChoreoScenes = networkstringtable->CreateStringTable( "Scenes", MAX_CHOREO_SCENES_STRINGS, 0, 0, NSF_DICTIONARY_ENABLED );
 	g_pStringTableMovies = networkstringtable->CreateStringTable( "Movies", MAX_MOVIE_STRINGS, 0, 0, NSF_DICTIONARY_ENABLED );
+#if defined( IOS )
+	// LAN profile pictures: key = the player's account ID, user data = 64x64 RGB
+	// (see "ios_avatar" in cs_player.cpp); every client gets them, late joiners too
+	extern INetworkStringTable *g_pStringTableIOSAvatars;
+	g_pStringTableIOSAvatars = networkstringtable->CreateStringTable( "IOSAvatars", 64 );
+#endif
 
 	Assert( g_pStringTableParticleEffectNames &&
 			g_pStringTableEffectDispatch &&

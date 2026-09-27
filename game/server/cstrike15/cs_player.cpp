@@ -8894,6 +8894,12 @@ bool CCSPlayer::ShouldRunRateLimitedCommand( const CCommand &args )
 	}
 }
 
+#if defined( IOS )
+#include "ios_avatar_share.h"
+INetworkStringTable *g_pStringTableIOSAvatars = NULL;
+static CUtlString s_IOSAvatarPending[ MAX_PLAYERS + 1 ];
+#endif
+
 bool CCSPlayer::ClientCommand( const CCommand &args )
 {
 	const char *pcmd = args[0];
@@ -8950,6 +8956,47 @@ bool CCSPlayer::ClientCommand( const CCommand &args )
 		}
 		return true;
 	}
+
+#if defined( IOS )
+	// LAN profile pictures: begin / data <base64url chunk> ... / end. The client
+	// sends its profile_avatar as 64x64 RGB; it goes into the IOSAvatars string
+	// table under the player's account ID, which every client receives.
+	if ( FStrEq( pcmd, "ios_avatar" ) )
+	{
+		if ( IsBot() || args.ArgC() < 2 || !g_pStringTableIOSAvatars )
+			return true;
+		CUtlString &strPending = s_IOSAvatarPending[ entindex() ];
+		const char *pszOp = args[1];
+		if ( FStrEq( pszOp, "begin" ) )
+		{
+			strPending.Clear();
+		}
+		else if ( FStrEq( pszOp, "data" ) && args.ArgC() >= 3 )
+		{
+			if ( strPending.Length() + V_strlen( args[2] ) <= IOS_AVATAR_BASE64_MAX )
+				strPending += args[2];
+		}
+		else if ( FStrEq( pszOp, "end" ) )
+		{
+			static unsigned char s_Pixels[ IOS_AVATAR_BYTES + 4 ];
+			int nBytes = IOSAvatar_Base64Decode( strPending.Get(), s_Pixels, sizeof( s_Pixels ) );
+			strPending.Clear();
+			CSteamID steamID;
+			if ( nBytes == IOS_AVATAR_BYTES && GetSteamID( &steamID ) && steamID.GetAccountID() )
+			{
+				char szKey[16];
+				V_snprintf( szKey, sizeof( szKey ), "%u", steamID.GetAccountID() );
+				int nIndex = g_pStringTableIOSAvatars->FindStringIndex( szKey );
+				if ( nIndex == INVALID_STRING_INDEX )
+					g_pStringTableIOSAvatars->AddString( true, szKey, nBytes, s_Pixels );
+				else
+					g_pStringTableIOSAvatars->SetStringUserData( nIndex, nBytes, s_Pixels );
+				Msg( "[avatar] %s sent their profile picture\n", GetPlayerName() );
+			}
+		}
+		return true;
+	}
+#endif
 
 	static ConVarRef sv_mmqueue_reservation( "sv_mmqueue_reservation" );
 	const bool cbIsMatchmaking = sv_mmqueue_reservation.GetString()[ 0 ] == 'Q';

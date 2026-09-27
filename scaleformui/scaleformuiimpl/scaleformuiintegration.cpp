@@ -392,6 +392,19 @@ Image*  CScaleformImageCreator::LoadProtocolImage(const ImageCreateInfo& info, c
 				Warning( "profile_avatar: couldn't load '%s'\n", pszAvatar );
 			}
 		}
+		// LAN: other players' profile pictures, received through the IOSAvatars
+		// string table and stored by account ID (game/client/cstrike15/ios_avatar_share.cpp)
+		if ( xuid )
+		{
+			char szFile[MAX_PATH], chFullPath[ 2 * MAX_PATH + 1 ] = {};
+			V_snprintf( szFile, sizeof( szFile ), "cache/avatars/%u.tga", (uint32)( (uint64)xuid & 0xFFFFFFFFull ) );
+			if ( g_pFullFileSystem->FileExists( szFile, "MOD" ) &&
+				 g_pFullFileSystem->RelativePathToFullPath( szFile, "MOD", chFullPath, Q_ARRAYSIZE( chFullPath ) - 1 ) )
+			{
+				if ( Image *pImage = ( ( ScaleformUIImpl* )m_pScaleformUI )->CreateImageFromFile( chFullPath, info, 0, 0 ) )
+					return pImage;
+			}
+		}
 #endif
 		ScaleformUIAvatarImage* pAvatarImage = ( ( ScaleformUIImpl* )m_pScaleformUI )->GetAvatarImage( xuid );
 		if ( pAvatarImage )

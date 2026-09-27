@@ -26,6 +26,7 @@
 #include "gametypes.h"
 #include "vgui/ILocalize.h"
 #include "gameui_util.h"
+#include "ios_avatar_share.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include <tier0/memdbgon.h>
@@ -75,7 +76,8 @@ CCSScoreboardScaleform::CCSScoreboardScaleform( CounterStrikeViewport *pViewPort
 	m_bLoading( false ),
 	m_flNextUpdate( 0.0f ),
 	m_nSelectedIndex( 0 ),
-	m_SelectedXuid( 0 )
+	m_SelectedXuid( 0 ),
+	m_nAvatarVersion( 0 )
 {
 	m_iSplitScreenSlot = GET_ACTIVE_SPLITSCREEN_SLOT();
 	V_memset( m_RowXuids, 0xFF, sizeof( m_RowXuids ) );
@@ -332,6 +334,15 @@ void CCSScoreboardScaleform::UpdateData( void )
 		return;
 
 	SF_FORCE_SPLITSCREEN_PLAYER_GUARD( m_iSplitScreenSlot );
+
+#if defined( IOS )
+	// a LAN player's profile picture arrived: show the avatars again
+	if ( m_nAvatarVersion != IOSAvatar_GetVersion() )
+	{
+		m_nAvatarVersion = IOSAvatar_GetVersion();
+		V_memset( m_RowXuids, 0xFF, sizeof( m_RowXuids ) );
+	}
+#endif
 
 	WITH_SLOT_LOCKED
 	{

@@ -94,6 +94,7 @@ private:
 	float m_flNextUpdate;
 	int m_nSelectedIndex;
 	XUID m_SelectedXuid;
+	int m_nAvatarVersion;		// IOSAvatar_GetVersion() the row avatars were shown at
 	XUID m_RowXuids[2][12];		// per team (T, CT) and row, what the row's avatar shows
 };
 

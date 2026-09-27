@@ -117,6 +117,7 @@
 
 // NOTE: This has to be the last file included!
 #include "offline_inventory.h"
+#include "ios_avatar_share.h"
 #include "tier0/memdbgon.h"
 
 static Vector WALL_MIN(-WALL_OFFSET,-WALL_OFFSET,-WALL_OFFSET );
@@ -5315,7 +5316,12 @@ void C_CSPlayer::OnDataChanged( DataUpdateType_t type )
 		// -allskinsunlocked: give the server (possibly another device's, on LAN)
 		// our loadout, so it hands us our own skins
 		if ( IsLocalPlayer() )
+		{
 			OfflineInventory_SendLoadoutToServer();
+#if defined( IOS )
+			IOSAvatar_SendLocal();	// LAN: our profile picture for the other players
+#endif
+		}
 	}
 
 	C_CSPlayer *player = C_CSPlayer::GetLocalCSPlayer();

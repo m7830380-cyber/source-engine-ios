@@ -830,7 +830,12 @@ FSReturnCode_t FileSystem_LoadSearchPaths( CFSSearchPathsInit &initInfo )
 	V_ComposeFileName( baseDir, "platform", pPlatformPath, sizeof(pPlatformPath) );
 	initInfo.m_pFileSystem->AddSearchPath( pPlatformPath, "GAME", PATH_ADD_TO_TAIL );
 
-	// these specialized tool paths are not used on 360 and cause a costly constant perf tax, so inhibited
+	// these specialized tool paths are not used on 360 and cause a costly constant perf tax, so inhibited.
+	// iOS: only Valve's content tools read CONTENT, and there is no content folder. Building
+	// these paths joins the game folder with each search path relative to it; under
+	// LiveContainer's longer, nested folders that passes MAX_PATH and V_AppendSlash
+	// fails fatally at startup.
+#ifndef IOS
 	if ( IsPC() )
 	{
 		// Create a content search path based on the game search path
@@ -875,6 +880,7 @@ FSReturnCode_t FileSystem_LoadSearchPaths( CFSSearchPathsInit &initInfo )
 		// when people forget to specify a search path.
 		initInfo.m_pFileSystem->MarkPathIDByRequestOnly( "content", true );
 	}
+#endif
 
 	// Also, mark specific path IDs as "by request only". That way, we won't waste time searching in them
 	// when people forget to specify a search path.

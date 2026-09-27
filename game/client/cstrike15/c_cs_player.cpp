@@ -116,6 +116,7 @@
 #include "model_types.h"
 
 // NOTE: This has to be the last file included!
+#include "offline_inventory.h"
 #include "tier0/memdbgon.h"
 
 static Vector WALL_MIN(-WALL_OFFSET,-WALL_OFFSET,-WALL_OFFSET );
@@ -5310,6 +5311,11 @@ void C_CSPlayer::OnDataChanged( DataUpdateType_t type )
 		SetNextClientThink( CLIENT_THINK_ALWAYS );
 
 		m_freezeCamSpotLightTexture.Init( "effects/flashlight_freezecam", TEXTURE_GROUP_OTHER, true );
+
+		// -allskinsunlocked: give the server (possibly another device's, on LAN)
+		// our loadout, so it hands us our own skins
+		if ( IsLocalPlayer() )
+			OfflineInventory_SendLoadoutToServer();
 	}
 
 	C_CSPlayer *player = C_CSPlayer::GetLocalCSPlayer();

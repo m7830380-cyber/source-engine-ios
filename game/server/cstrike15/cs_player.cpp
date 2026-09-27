@@ -632,6 +632,11 @@ ConCommand cc_CreatePredictionError( "CreatePredictionError", cc_CreatePredictio
 // -------------------------------------------------------------------------------- //
 CCSPlayer::CCSPlayer()
 {
+	m_pOfflineLoadout = NULL;
+	m_pOfflineLoadoutPending = NULL;
+	m_nOfflineLoadoutSerial = 0;
+	m_nOfflineLoadoutFilledSerial = -1;
+
 	m_PlayerAnimState = CreatePlayerAnimState( this, this, LEGANIM_9WAY, true );
 	m_PlayerAnimStateCSGO = CreateCSGOPlayerAnimstate( this );
 
@@ -921,6 +926,11 @@ CCSPlayer::~CCSPlayer()
 
 	delete m_pPersonaDataPublic;
 	m_pPersonaDataPublic = NULL;
+
+	if ( m_pOfflineLoadout )
+		m_pOfflineLoadout->deleteThis();
+	if ( m_pOfflineLoadoutPending )
+		m_pOfflineLoadoutPending->deleteThis();
 }
 
 
@@ -8902,6 +8912,40 @@ bool CCSPlayer::ClientCommand( const CCommand &args )
 		}
 	}
 */
+	// -allskinsunlocked: the client's loadout, so LAN players get their own skins
+	// (begin / set <key> <value> ... / end; see OfflineInventory_SendLoadoutToServer)
+	if ( FStrEq( pcmd, "ios_offline_loadout" ) )
+	{
+		if ( !OfflineInventory_IsEnabled() || IsBot() || args.ArgC() < 2 )
+			return true;
+		const char *pszOp = args[1];
+		if ( FStrEq( pszOp, "begin" ) )
+		{
+			if ( m_pOfflineLoadoutPending )
+				m_pOfflineLoadoutPending->deleteThis();
+			m_pOfflineLoadoutPending = new KeyValues( "OfflineLoadout" );
+		}
+		else if ( FStrEq( pszOp, "set" ) && m_pOfflineLoadoutPending )
+		{
+			for ( int i = 2; i + 1 < args.ArgC() && i < 2 + 2 * 32; i += 2 )
+			{
+				// only loadout keys, a bounded number of them
+				if ( ( StringHasPrefix( args[i], "item_" ) || StringHasPrefix( args[i], "def_" ) ) && V_strlen( args[i] ) < 16 )
+					m_pOfflineLoadoutPending->SetString( args[i], args[i + 1] );
+			}
+		}
+		else if ( FStrEq( pszOp, "end" ) && m_pOfflineLoadoutPending )
+		{
+			if ( m_pOfflineLoadout )
+				m_pOfflineLoadout->deleteThis();
+			m_pOfflineLoadout = m_pOfflineLoadoutPending;
+			m_pOfflineLoadoutPending = NULL;
+			++m_nOfflineLoadoutSerial;
+			Msg( "[offline] %s sent their loadout\n", GetPlayerName() );
+		}
+		return true;
+	}
+
 	static ConVarRef sv_mmqueue_reservation( "sv_mmqueue_reservation" );
 	const bool cbIsMatchmaking = sv_mmqueue_reservation.GetString()[ 0 ] == 'Q';
 
@@ -15941,12 +15985,35 @@ void CCSPlayer::UpdateInventory( bool bInit )
 
 	// -allskinsunlocked: no GC sends human players' inventories, build them from the
 	// schema and the loadout the client saved (refilled when that file changes)
-	if ( OfflineInventory_IsEnabled() && !IsFakeClient() && !IsBot() && OfflineInventory_NeedsRefill( &m_Inventory ) )
+	// LAN games: each player's own loadout (sent by their client); until it
+	// arrives, the listen server's own player uses the saved file and everyone
+	// else gets no equips (default weapons) rather than the host's skins.
+	if ( OfflineInventory_IsEnabled() && !IsFakeClient() && !IsBot() )
 	{
 		CSteamID steamIDForPlayer;
 		if ( !GetSteamID( &steamIDForPlayer ) || !steamIDForPlayer.IsValid() )
 			steamIDForPlayer = CSteamID( 1, k_EUniversePublic, k_EAccountTypeIndividual );	// the offline Steam user (stub_steam)
-		OfflineInventory_Fill( &m_Inventory, steamIDForPlayer );
+
+		if ( m_pOfflineLoadout )
+		{
+			if ( m_nOfflineLoadoutFilledSerial != m_nOfflineLoadoutSerial )
+			{
+				OfflineInventory_Fill( &m_Inventory, steamIDForPlayer, m_pOfflineLoadout );
+				m_nOfflineLoadoutFilledSerial = m_nOfflineLoadoutSerial;
+			}
+		}
+		else if ( this == UTIL_GetListenServerHost() )
+		{
+			if ( OfflineInventory_NeedsRefill( &m_Inventory ) )
+				OfflineInventory_Fill( &m_Inventory, steamIDForPlayer );
+		}
+		else if ( m_nOfflineLoadoutFilledSerial != 0 )
+		{
+			KeyValues *pEmpty = new KeyValues( "OfflineLoadout" );
+			OfflineInventory_Fill( &m_Inventory, steamIDForPlayer, pEmpty );
+			pEmpty->deleteThis();
+			m_nOfflineLoadoutFilledSerial = 0;
+		}
 	}
 }
 

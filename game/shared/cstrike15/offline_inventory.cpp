@@ -160,7 +160,7 @@ bool OfflineInventory_NeedsRefill( CCSPlayerInventory *pInventory )
 	return !s_mapFilledFileTime.IsValidIndex( i ) || pInventory->GetItemCount() == 0 || s_mapFilledFileTime[i] != LoadoutFileTime();
 }
 
-void OfflineInventory_Fill( CCSPlayerInventory *pInventory, const CSteamID &owner )
+void OfflineInventory_Fill( CCSPlayerInventory *pInventory, const CSteamID &owner, KeyValues *pLoadout )
 {
 	if ( !pInventory )
 		return;
@@ -173,9 +173,15 @@ void OfflineInventory_Fill( CCSPlayerInventory *pInventory, const CSteamID &owne
 	pInventory->SOClear();
 	pInventory->ResetLoadoutItemIDs();
 
-	KeyValues *pKV = new KeyValues( "OfflineLoadout" );
-	KeyValues::AutoDelete autodelete( pKV );
-	pKV->LoadFromFile( g_pFullFileSystem, k_pszLoadoutFile, k_pszLoadoutPathID );
+	KeyValues *pFileKV = NULL;
+	KeyValues *pKV = pLoadout;
+	if ( !pKV )
+	{
+		pFileKV = new KeyValues( "OfflineLoadout" );
+		pFileKV->LoadFromFile( g_pFullFileSystem, k_pszLoadoutFile, k_pszLoadoutPathID );
+		pKV = pFileKV;
+	}
+	KeyValues::AutoDelete autodelete( pFileKV );
 
 	// Equipped state lives on the items; start clean, then apply the file
 	FOR_EACH_VEC( s_vecItems, i )
@@ -213,7 +219,8 @@ void OfflineInventory_Fill( CCSPlayerInventory *pInventory, const CSteamID &owne
 		}
 	}
 
-	s_mapFilledFileTime.InsertOrReplace( pInventory, LoadoutFileTime() );
+	if ( !pLoadout )
+		s_mapFilledFileTime.InsertOrReplace( pInventory, LoadoutFileTime() );
 
 	VERBOSE_PRINTF( "[offline] " OFFLINE_SIDE " fill: owner %llu, %d items, %d equipped from %s (exists %d, time %ld)\n",
 		owner.ConvertToUint64(), pInventory->GetItemCount(), nEquipped, k_pszLoadoutFile,
@@ -256,7 +263,59 @@ void OfflineInventory_SaveLoadout( CCSPlayerInventory *pInventory )
 
 	// this inventory already matches the file it just wrote
 	s_mapFilledFileTime.InsertOrReplace( pInventory, LoadoutFileTime() );
+
+#ifdef CLIENT_DLL
+	OfflineInventory_SendLoadoutToServer();
+#endif
 }
+
+#ifdef CLIENT_DLL
+void OfflineInventory_SendLoadoutToServer()
+{
+	if ( !OfflineInventory_IsEnabled() || !engine->IsConnected() )
+		return;
+
+	KeyValues *pKV = new KeyValues( "OfflineLoadout" );
+	KeyValues::AutoDelete autodelete( pKV );
+	pKV->LoadFromFile( g_pFullFileSystem, k_pszLoadoutFile, k_pszLoadoutPathID );
+
+	// begin / set <key> <value> ... (several per command, well under the command
+	// length limit) / end: the server swaps in the whole loadout at "end"
+	engine->ServerCmd( "ios_offline_loadout begin\n", true );
+	CUtlString strCmd;
+	int nSent = 0;
+	for ( KeyValues *pSub = pKV->GetFirstValue(); pSub; pSub = pSub->GetNextValue() )
+	{
+		const char *pszKey = pSub->GetName();
+		// item IDs are 64-bit: GetString() gives nothing for a TYPE_UINT64 value
+		char szValue[64];
+		switch ( pSub->GetDataType() )
+		{
+		case KeyValues::TYPE_UINT64:	V_snprintf( szValue, sizeof( szValue ), "%llu", pSub->GetUint64() ); break;
+		case KeyValues::TYPE_INT:		V_snprintf( szValue, sizeof( szValue ), "%d", pSub->GetInt() ); break;
+		case KeyValues::TYPE_STRING:	V_strncpy( szValue, pSub->GetString(), sizeof( szValue ) ); break;
+		default:						szValue[0] = 0; break;
+		}
+		const char *pszValue = szValue;
+		if ( !pszKey[0] || !pszValue[0] || V_strlen( pszKey ) > 32 || V_strlen( pszValue ) > 32 )
+			continue;
+		if ( strCmd.IsEmpty() )
+			strCmd = "ios_offline_loadout set";
+		strCmd += CFmtStr( " %s %s", pszKey, pszValue ).Access();
+		if ( strCmd.Length() > 180 )
+		{
+			engine->ServerCmd( CFmtStr( "%s\n", strCmd.Get() ), true );
+			strCmd.Clear();
+		}
+		++nSent;
+	}
+	if ( !strCmd.IsEmpty() )
+		engine->ServerCmd( CFmtStr( "%s\n", strCmd.Get() ), true );
+	engine->ServerCmd( "ios_offline_loadout end\n", true );
+
+	Msg( "[offline] sent loadout to the server: %d entries\n", nSent );
+}
+#endif
 
 #ifdef CLIENT_DLL
 //-----------------------------------------------------------------------------

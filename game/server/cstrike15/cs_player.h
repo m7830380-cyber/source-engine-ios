@@ -1701,6 +1701,12 @@ public:
 
 private:
 	CCSPlayerInventory	m_Inventory;
+	// -allskinsunlocked LAN games: the loadout this player's client sent
+	// ("ios_offline_loadout"); used instead of the host's saved loadout file
+	KeyValues			*m_pOfflineLoadout;
+	KeyValues			*m_pOfflineLoadoutPending;
+	int					m_nOfflineLoadoutSerial;
+	int					m_nOfflineLoadoutFilledSerial;
 	// Items that have been equipped on this player instance (the inventory loadout may have changed)
 	itemid_t				m_EquippedLoadoutItemIndices[LOADOUT_POSITION_COUNT];
 

@@ -8941,7 +8941,12 @@ bool CCSPlayer::ClientCommand( const CCommand &args )
 			m_pOfflineLoadout = m_pOfflineLoadoutPending;
 			m_pOfflineLoadoutPending = NULL;
 			++m_nOfflineLoadoutSerial;
-			Msg( "[offline] %s sent their loadout\n", GetPlayerName() );
+			int nKeys = 0;
+			for ( KeyValues *pSub = m_pOfflineLoadout->GetFirstValue(); pSub; pSub = pSub->GetNextValue() )
+				++nKeys;
+			Msg( "[offline] %s sent their loadout: %d entries\n", GetPlayerName(), nKeys );
+			// apply it now, not at the next spawn: weapons given or bought from here on use it
+			UpdateInventory( false );
 		}
 		return true;
 	}
@@ -16000,6 +16005,18 @@ void CCSPlayer::UpdateInventory( bool bInit )
 			{
 				OfflineInventory_Fill( &m_Inventory, steamIDForPlayer, m_pOfflineLoadout );
 				m_nOfflineLoadoutFilledSerial = m_nOfflineLoadoutSerial;
+				int nEquipped = 0;
+				for ( int iTeam = TEAM_TERRORIST; iTeam <= TEAM_CT; iTeam++ )
+				{
+					for ( int iSlot = 0; iSlot < LOADOUT_POSITION_COUNT; iSlot++ )
+					{
+						CEconItemView *pItem = m_Inventory.GetItemInLoadout( iTeam, iSlot );
+						if ( pItem && pItem->IsValid() && pItem->GetSOCData() )
+							++nEquipped;
+					}
+				}
+				Msg( "[offline] %s: inventory filled from their loadout, %d skins equipped (steamid %llu)\n",
+					GetPlayerName(), nEquipped, steamIDForPlayer.ConvertToUint64() );
 			}
 		}
 		else if ( this == UTIL_GetListenServerHost() )

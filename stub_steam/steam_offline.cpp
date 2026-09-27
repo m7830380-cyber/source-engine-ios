@@ -11,6 +11,7 @@
 //
 //===========================================================================//
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -26,10 +27,56 @@ namespace
 
 const uint32 k_unOfflineAppID = 730;
 
-// a stable local identity; account ID 1 is never a real CS:GO player
+// A stable local identity per device. Each device needs its own ID for LAN games (names, scoreboard, the server's
+// per-player data). A random account ID, created once and kept in the app's
+// Documents folder; 1 if that fails (the old fixed ID).
+static uint32 OfflineAccountID()
+{
+	static uint32 s_unAccount = 0;
+	if ( s_unAccount )
+		return s_unAccount;
+
+	char szPath[1024] = "";
+	const char *pszHome = getenv( "HOME" );
+	if ( pszHome )
+		snprintf( szPath, sizeof( szPath ), "%s/Documents/offline_steamid.txt", pszHome );
+
+	if ( szPath[0] )
+	{
+		if ( FILE *f = fopen( szPath, "r" ) )
+		{
+			unsigned long ul = 0;
+			if ( fscanf( f, "%lu", &ul ) == 1 && ul > 1 && ul < 0x80000000ul )
+				s_unAccount = (uint32)ul;
+			fclose( f );
+		}
+		if ( !s_unAccount )
+		{
+			uint32 un = 0;
+#if defined( __APPLE__ )
+			while ( un <= 1 )
+				un = arc4random() & 0x7FFFFFFF;
+#else
+			srand( (unsigned)time( NULL ) ^ (unsigned)clock() );
+			while ( un <= 1 )
+				un = ( ( (uint32)rand() << 16 ) ^ (uint32)rand() ) & 0x7FFFFFFF;
+#endif
+			if ( FILE *f = fopen( szPath, "w" ) )
+			{
+				fprintf( f, "%u\n", un );
+				fclose( f );
+				s_unAccount = un;
+			}
+		}
+	}
+	if ( !s_unAccount )
+		s_unAccount = 1;
+	return s_unAccount;
+}
+
 CSteamID OfflineSteamID()
 {
-	return CSteamID( 1, k_EUniversePublic, k_EAccountTypeIndividual );
+	return CSteamID( OfflineAccountID(), k_EUniversePublic, k_EAccountTypeIndividual );
 }
 
 const char *OfflinePersonaName()

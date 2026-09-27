@@ -39,6 +39,7 @@ public:
 	void OnCancel( SCALEFORM_CALLBACK_ARGS_DECL );
 
 	bool ChatRaised( void );
+	void CloseChat( void );
 	void AddStringToHistory( const wchar_t *string );
 
 	void ClearHistory();

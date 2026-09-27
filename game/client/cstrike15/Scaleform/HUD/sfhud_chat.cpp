@@ -16,6 +16,12 @@
 #include "sfhud_chat.h"
 #include "sfhudfreezepanel.h"
 
+#if defined( IOS )
+// the on-screen keyboard (the console and VGUI text entries do the same)
+extern "C" void SDL_StartTextInput( void );
+extern "C" void SDL_StopTextInput( void );
+#endif
+
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
 
@@ -154,6 +160,28 @@ bool SFHudChat::ChatRaised( void )
 	return m_iMode != MM_NONE;
 }
 
+void SFHudChat::CloseChat( void )
+{
+	m_iMode = MM_NONE;
+	ShowPanel( false, false );
+}
+
+#if defined( IOS )
+// for the touch chat button, which toggles the chat like the buy button does the buy menu
+bool IOS_IsChatOpen()
+{
+	SFHudChat *pChat = GET_HUDELEMENT( SFHudChat );
+	return pChat && pChat->ChatRaised();
+}
+
+void IOS_CloseChat()
+{
+	SFHudChat *pChat = GET_HUDELEMENT( SFHudChat );
+	if ( pChat )
+		pChat->CloseChat();
+}
+#endif
+
 
 void SFHudChat::ShowPanel( bool bShow, bool force )
 {
@@ -167,6 +195,9 @@ void SFHudChat::ShowPanel( bool bShow, bool force )
 			{
 				g_pScaleformUI->SetIMEFocus( SF_SS_SLOT( 0 ) );
 				g_pScaleformUI->SetIMEEnabled( true );
+#if defined( IOS )
+				SDL_StartTextInput();
+#endif
 
 				ListenForGameEvent( "cs_handle_ime_event" );
 				UpdateHistory();
@@ -176,6 +207,9 @@ void SFHudChat::ShowPanel( bool bShow, bool force )
 			else
 			{
 				g_pScaleformUI->SetIMEEnabled( false );
+#if defined( IOS )
+				SDL_StopTextInput();
+#endif
 
 				StopListeningForAllEvents();
 				WITH_SLOT_LOCKED

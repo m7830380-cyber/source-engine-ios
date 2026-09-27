@@ -778,6 +778,10 @@ static bool TouchButtonAvailable( const CTouchButton *btn )
 		return true;
 	if ( !Q_strcmp( btn->command, "toggleconsole" ) )
 		return true;
+	// the chat button stays while the chat is open, to close it again
+	extern bool IOS_IsChatOpen();
+	if ( ( !Q_strcmp( btn->command, "messagemode" ) || !Q_strcmp( btn->command, "messagemode2" ) ) && IOS_IsChatOpen() )
+		return true;
 	// the buy button stays while the buy menu is open, to close it again
 	extern bool IOS_IsBuyMenuVisible();
 	return !Q_strcmp( btn->command, "ios_buymenu_toggle" ) && IOS_IsBuyMenuVisible();
@@ -788,14 +792,21 @@ static bool TouchButtonAvailable( const CTouchButton *btn )
 // "messagemode" is not a command: ClientModeShared::KeyInput catches it in key
 // bindings. The touch chat button runs it as a command ("Unknown command"), so
 // register it (and the team version) to open the chat the same way.
-CON_COMMAND( messagemode, "Open chat" )
+// A second press closes the chat again, like the buy button.
+extern bool IOS_IsChatOpen();
+extern void IOS_CloseChat();
+CON_COMMAND( messagemode, "Open chat (or close it if it is open)" )
 {
-	if ( GetClientMode() )
+	if ( IOS_IsChatOpen() )
+		IOS_CloseChat();
+	else if ( GetClientMode() )
 		GetClientMode()->StartMessageMode( MM_SAY );
 }
-CON_COMMAND( messagemode2, "Open team chat" )
+CON_COMMAND( messagemode2, "Open team chat (or close it if it is open)" )
 {
-	if ( GetClientMode() )
+	if ( IOS_IsChatOpen() )
+		IOS_CloseChat();
+	else if ( GetClientMode() )
 		GetClientMode()->StartMessageMode( MM_SAY_TEAM );
 }
 

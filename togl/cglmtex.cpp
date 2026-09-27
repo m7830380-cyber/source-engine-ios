@@ -1208,6 +1208,22 @@ GLubyte *CGLMTex::ReadTexels( GLMTexLockDesc *desc, bool readWholeSlice, bool re
 
 					convert_texture(fmt, 0, 0, fmt, dataType, NULL);
 					gGL->glReadPixels(0, 0, m_layout->m_slices[ desc->m_sliceIndex ].m_xSize, m_layout->m_slices[ desc->m_sliceIndex ].m_ySize, fmt, dataType, data);
+#if defined( TOGLES )
+					// convert_texture read GL_RGBA where the texture's layout is D3D's B,G,R,A
+					// (the caller converts from that), so red and blue came back swapped:
+					// weapon skins are composited on the GPU and read back through here.
+					if ( format->m_glDataFormat == GL_BGRA && format->m_bytesPerSquareChunk == 4 &&
+						 ( format->m_glDataType == GL_UNSIGNED_INT_8_8_8_8_REV || format->m_glDataType == GL_UNSIGNED_BYTE ) )
+					{
+						const int nBytes = m_layout->m_slices[ desc->m_sliceIndex ].m_xSize * m_layout->m_slices[ desc->m_sliceIndex ].m_ySize * 4;
+						for ( int i = 0; i + 3 < nBytes; i += 4 )
+						{
+							GLubyte c = data[i];
+							data[i] = data[i + 2];
+							data[i + 2] = c;
+						}
+					}
+#endif
 
 					gGL->glBindFramebuffer(GL_READ_FRAMEBUFFER, Rfbo);
 					gGL->glBindFramebuffer(GL_DRAW_FRAMEBUFFER, Dfbo);

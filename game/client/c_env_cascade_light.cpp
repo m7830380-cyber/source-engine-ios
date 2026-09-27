@@ -1511,6 +1511,21 @@ Vector CCascadeLightManager::GetShadowDirection()
 // bSetup indicates whether to execute once per frame setup code, do this in the buildlist (1st pass) pass only
 // Needed since this will get called twice on PS3 if 2 pass drawing is on
 // bSetup = true otherwise
+#if defined( IOS )
+// "[csm]" once every few seconds: are cascaded sun shadows actually rendered?
+static void IOS_LogCSMState( bool bActive, const char *pszWhy )
+{
+	static double s_flNext = 0;
+	const double flNow = Plat_FloatTime();
+	if ( flNow < s_flNext )
+		return;
+	s_flNext = flNow + 3.0;
+	printf( "[csm] active %d, quality %d, viewmodel shadows %d: %s\n", bActive ? 1 : 0,
+		(int)g_CascadeLightManager.GetCSMQualityMode(), cl_csm_viewmodel_shadows.GetBool() ? 1 : 0, pszWhy );
+	fflush( stdout );
+}
+#endif
+
 void CCascadeLightManager::ComputeShadowDepthTextures( const CViewSetup &viewSetup, bool bSetup )
 {
 	m_bStateIsValid = false;
@@ -1526,6 +1541,9 @@ void CCascadeLightManager::ComputeShadowDepthTextures( const CViewSetup &viewSet
 		)
 	{
 		cl_csm_enabled.SetValue( 0 );
+#if defined( IOS )
+		IOS_LogCSMState( false, "disabled (unsupported or cl_csm_enabled 0)" );
+#endif
 
 		if ( m_bRenderTargetsAllocated )
 		{
@@ -1661,6 +1679,9 @@ void CCascadeLightManager::ComputeShadowDepthTextures( const CViewSetup &viewSet
 	}
 
 	m_bStateIsValid = m_bCSMIsActive;
+#if defined( IOS )
+	IOS_LogCSMState( m_bCSMIsActive, C_CascadeLight::Get() ? "cascade light present" : "no env_cascade_light" );
+#endif
 }
 
 void CCascadeLightManager::UnlockAllShadowDepthTextures()

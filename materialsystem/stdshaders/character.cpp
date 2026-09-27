@@ -17,6 +17,15 @@
 
 //#define CHARACTER_LIMIT_LIGHTS_WITH_PHONGWARP 1
 
+#if defined( IOS )
+static void ios_character_pixel_ambient_changed( IConVar *var, const char *pOldValue, float flOldValue )
+{
+	g_pMaterialSystem->ReloadMaterials( NULL );
+}
+static ConVar ios_character_pixel_ambient( "ios_character_pixel_ambient", "0", FCVAR_RELEASE,
+	"agents: 0 = old iOS workaround (no pixel-shader ambient cube), 1 = Valve's behavior", ios_character_pixel_ambient_changed );
+#endif
+
 BEGIN_VS_SHADER( Character, "Help for Character Shader" )
 	BEGIN_SHADER_PARAMS
 
@@ -815,11 +824,12 @@ BEGIN_VS_SHADER( Character, "Help for Character Shader" )
 			pShaderShadow->EnableAlphaWrites( bFullyOpaque );
 
 			PI_BeginCommandBuffer();
-#if !defined( IOS )
-			// iOS: the pixel shader adds this ambient cube on top of the vertex shader's
-			// ambient term (i.cAmbient), lighting agent bodies twice; send zeros instead.
-			PI_SetPixelShaderAmbientLightCube( PSREG_AMBIENT_CUBE );
+#if defined( IOS )
+			// ios_character_pixel_ambient 0 (default): the old iOS workaround that sends zeros
+			// instead of the pixel shader's ambient cube; 1: Valve's behavior.
+			if ( ios_character_pixel_ambient.GetBool() )
 #endif
+			PI_SetPixelShaderAmbientLightCube( PSREG_AMBIENT_CUBE );
 			PI_SetVertexShaderAmbientLightCube();
 			PI_SetPixelShaderLocalLighting( PSREG_LIGHT_INFO_ARRAY );
 			PI_SetModulationPixelShaderDynamicState_LinearColorSpace( 1 );
@@ -830,6 +840,7 @@ BEGIN_VS_SHADER( Character, "Help for Character Shader" )
 		{
 			pShaderAPI->SetDefaultState();
 #if defined( IOS )
+			if ( !ios_character_pixel_ambient.GetBool() )
 			{
 				static const float s_vZeroAmbient[6][4] = { { 0 } };
 				pShaderAPI->SetPixelShaderConstant( PSREG_AMBIENT_CUBE, s_vZeroAmbient[0], 6 );

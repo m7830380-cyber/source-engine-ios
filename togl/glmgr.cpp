@@ -910,7 +910,7 @@ void GLMContext::DumpDrawForDebug()
 			printf( "[dump] %s label: %.*s\n", pr == vp ? "vs" : "ps", pEnd ? (int)( pEnd - pLabel ) : 120, pLabel );
 		}
 	}
-	const int nPS = MIN( 64, (int)fp->m_descs[kGLMGLSL].m_highWater );
+	const int nPS = MIN( 128, (int)fp->m_descs[kGLMGLSL].m_highWater );
 	for ( int i = 0; i < nPS; i++ )
 	{
 		const float *f = m_programParamsF[kGLMFragmentProgram].m_values[i];

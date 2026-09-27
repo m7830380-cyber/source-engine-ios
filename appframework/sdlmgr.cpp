@@ -1355,8 +1355,26 @@ bool CSDLMgr::MakeContextCurrent( PseudoGLContextPtr hContext )
 {
 	SDLAPP_FUNC;
 
-	// We only ever have one GL context on Linux at the moment, so don't spam these calls.
-	return eglMakeCurrent( native_display, surface, surface, hContext ) == 0;
+	// EGL returns EGL_TRUE on success (the SDL version this was copied from returns
+	// 0), and releasing needs EGL_NO_SURFACE: with the window surface and a NULL
+	// context eglMakeCurrent fails (EGL_BAD_MATCH), so the main thread kept the
+	// context and the render thread ran GL without one when the material system
+	// went queued (NULL buffer maps, crash in CVertexBuffer::HandleLateCreation).
+	EGLBoolean bOk;
+	if ( hContext )
+		bOk = eglMakeCurrent( native_display, surface, surface, (EGLContext)hContext );
+	else
+		bOk = eglMakeCurrent( native_display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT );
+	if ( bOk != EGL_TRUE )
+	{
+		static int s_nFailures = 0;
+		if ( s_nFailures++ < 10 )
+		{
+			printf( "[egl] eglMakeCurrent(%s) failed: 0x%x\n", hContext ? "context" : "release", eglGetError() );
+			fflush( stdout );
+		}
+	}
+	return bOk == EGL_TRUE;
 }
 
 
@@ -1873,6 +1891,11 @@ void CSDLMgr::ShowPixels( CShowPixelsParams *params )
 	CheckGLError( __LINE__ );
 
 #if defined( IOS )
+	// With the queued material system this runs on the render thread; UIKit
+	// (drawable size, event pump) stays on the main thread, which pumps events
+	// every frame anyway.
+	const bool bIOSMainThread = pthread_main_np() != 0;
+	if ( bIOSMainThread )
 	{
 		// the frame has been blitted to the default framebuffer; read it before the swap
 		int nDrawW = 0, nDrawH = 0;
@@ -1896,7 +1919,8 @@ void CSDLMgr::ShowPixels( CShowPixelsParams *params )
 		// loop, so Core Animation never committed the presented drawables; each
 		// next present then waited ~1 s for a free drawable (minutes of loading)
 		// and iOS finally killed the unresponsive app.
-		SDL_PumpEvents();
+		if ( bIOSMainThread )
+			SDL_PumpEvents();
 
 		static double s_flLastPresentEnd = 0.0;
 		double flNow = Plat_FloatTime();

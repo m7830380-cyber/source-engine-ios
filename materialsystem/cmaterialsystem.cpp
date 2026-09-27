@@ -4122,10 +4122,12 @@ void CMaterialSystem::EndFrame( void )
 	}
 
 #if defined( IOS )
-	// togl's GL context lives on the main thread; queued (multithreaded)
-	// rendering made the render thread lock dynamic vertex buffers there,
-	// got NULL and crashed in CVertexBuffer::HandleLateCreation.
-	nextThreadMode = MATERIAL_SINGLE_THREADED;
+	// Single-threaded unless mat_queue_mode is set explicitly (mat_queue_mode 2 =
+	// render thread). Queued mode used to crash in CVertexBuffer::HandleLateCreation
+	// because the EGL context handoff to the render thread failed (fixed in
+	// CSDLMgr::MakeContextCurrent); opt-in until it's proven on device.
+	if ( iConVarThreadMode < 0 )
+		nextThreadMode = MATERIAL_SINGLE_THREADED;
 #endif
 
 #if !defined ( OSX )

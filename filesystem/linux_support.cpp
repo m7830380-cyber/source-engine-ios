@@ -6,6 +6,8 @@
 //=============================================================================//
 
 #include <dirent.h>
+#include <sys/stat.h>
+#include <strings.h>
 
 #include "tier1/strtools.h"
 #include "tier0/memdbgoff.h"
@@ -193,69 +195,104 @@ bool FindClose(HANDLE handle)
 
 
 
-static char fileName[MAX_PATH];
-
-#if defined(OSX) && !defined(MAC_OS_X_VERSION_10_9)
-int CheckName(struct dirent *dir)
-#else
-int CheckName(const struct dirent *dir)
-#endif
+// Case-insensitive lookup for case-sensitive file systems (Linux, iOS app
+// containers). Returns the path as it exists on disk in pFileNameOut
+// (MAX_PATH), or NULL if there is no such file.
+//
+// The old version only matched the last component (scandir of the parent,
+// which had to exist with the right case) and otherwise lowercased the whole
+// path, so "csgo/Resource/valve_english.txt" (the file is resource/...) failed
+// and absolute paths got broken; it also passed the name to scandir's filter
+// through a static, which isn't thread-safe.
+static bool FindEntryCaseInsensitive( const char *pszDir, const char *pszName, char *pszOut, size_t nOut )
 {
-	return !strcasecmp( dir->d_name, fileName );
+	DIR *pDir = opendir( pszDir[0] ? pszDir : "." );
+	if ( !pDir )
+		return false;
+	bool bFound = false;
+	while ( struct dirent *pEnt = readdir( pDir ) )
+	{
+		if ( !strcasecmp( pEnt->d_name, pszName ) )
+		{
+			Q_strncpy( pszOut, pEnt->d_name, nOut );
+			bFound = true;
+			break;
+		}
+	}
+	closedir( pDir );
+	return bFound;
 }
-
 
 const char *findFileInDirCaseInsensitive(const char *file, char *pFileNameOut)
 {
-
-	const char *dirSep = strrchr(file,'/');
-	if( !dirSep )
-	{
-		dirSep=strrchr(file,'\\');
-		if( !dirSep ) 
-		{
-			return NULL;
-		}
-	}
-
-	char *dirName = static_cast<char *>( alloca( ( dirSep - file ) +1 ) ); 
-	if( !dirName )
+	if ( !file || !file[0] )
 		return NULL;
 
-	strncpy( dirName , file, dirSep - file );
-	dirName[ dirSep - file ] = '\0';
-
-	struct dirent **namelist = NULL;
-
-	strncpy( fileName, dirSep + 1, MAX_PATH );
-
-
-	int n = scandir( dirName , &namelist, CheckName, alphasort );
-
-	// Free all entries beyond the first one, we don't care about them
-	while ( n > 1 )
+	char szPath[MAX_PATH];
+	Q_strncpy( szPath, file, sizeof( szPath ) );
+	for ( char *p = szPath; *p; ++p )
 	{
-		-- n;
-		free( namelist[n] );
-	}
-	
-	if ( n > 0 )
-	{
-		Q_snprintf( pFileNameOut, sizeof( fileName ), "%s/%s", dirName, namelist[0]->d_name );
-		free( namelist[0] );
-		n = 0;
-	}
-	else
-	{
-		Q_strncpy( pFileNameOut, file, MAX_PATH );
-		Q_strlower( pFileNameOut );
+		if ( *p == '\\' )
+			*p = '/';
 	}
 
-	if ( ( n >= 0 ) && namelist )
+	struct stat st;
+	char szEntry[MAX_PATH];
+
+	// fast path: the directory exists as written, only the file name's case is off
+	char *pSlash = strrchr( szPath, '/' );
+	if ( pSlash && pSlash != szPath )
 	{
-		free( namelist );
+		*pSlash = 0;
+		bool bDirExists = stat( szPath, &st ) == 0;
+		if ( bDirExists )
+		{
+			bool bFound = FindEntryCaseInsensitive( szPath, pSlash + 1, szEntry, sizeof( szEntry ) );
+			if ( bFound )
+				Q_snprintf( pFileNameOut, MAX_PATH, "%s/%s", szPath, szEntry );
+			*pSlash = '/';
+			return bFound ? pFileNameOut : NULL;
+		}
+		*pSlash = '/';
 	}
 
+	// walk the path, fixing the case of each component that doesn't exist as written
+	char szOut[MAX_PATH];
+	szOut[0] = 0;
+	const char *p = szPath;
+	if ( *p == '/' )
+	{
+		Q_strncpy( szOut, "/", sizeof( szOut ) );
+		++p;
+	}
+	while ( *p )
+	{
+		const char *pEnd = strchr( p, '/' );
+		size_t nLen = pEnd ? (size_t)( pEnd - p ) : strlen( p );
+		if ( nLen > 0 && nLen < sizeof( szEntry ) )
+		{
+			memcpy( szEntry, p, nLen );
+			szEntry[nLen] = 0;
+
+			size_t nOutLen = strlen( szOut );
+			const char *pszSep = ( nOutLen && szOut[nOutLen - 1] != '/' ) ? "/" : "";
+			char szCandidate[MAX_PATH];
+			Q_snprintf( szCandidate, sizeof( szCandidate ), "%s%s%s", szOut, pszSep, szEntry );
+			if ( stat( szCandidate, &st ) != 0 )
+			{
+				char szReal[MAX_PATH];
+				if ( !FindEntryCaseInsensitive( szOut, szEntry, szReal, sizeof( szReal ) ) )
+					return NULL;
+				Q_snprintf( szCandidate, sizeof( szCandidate ), "%s%s%s", szOut, pszSep, szReal );
+			}
+			Q_strncpy( szOut, szCandidate, sizeof( szOut ) );
+		}
+		if ( !pEnd )
+			break;
+		p = pEnd + 1;
+	}
+
+	Q_strncpy( pFileNameOut, szOut, MAX_PATH );
 	return pFileNameOut;
 }
 

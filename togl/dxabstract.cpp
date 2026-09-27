@@ -3843,6 +3843,21 @@ static int ShadowDepthSamplerMaskFromName( const char *pName )
 	{
 		return (1<<14);
 	}
+	// CS:GO shaders that postdate this list. Without an entry the translator declares
+	// the depth map a plain sampler2D and the shader reads raw depth as "how lit", so the
+	// sun was never shadowed on agents (sampler declarations from the .fxc files).
+	else if ( V_stristr( pName, "character_ps" ) && !V_stristr( pName, "customcharacter" ) )
+	{
+		return (1<<8) | (1<<11);	// CSMDepthAtlasSampler, ShadowDepthSampler
+	}
+	else if ( V_stristr( pName, "lightmapped_4wayblend_ps" ) )
+	{
+		return (1<<14) | (1<<15);	// ShadowDepthSampler, CSMDepthAtlasSampler
+	}
+	else if ( V_stristr( pName, "cs_grass_ps" ) || V_stristr( pName, "customclothing_ps" ) || V_stristr( pName, "weapondecal_ps" ) )
+	{
+		return (1<<15);				// CSMDepthAtlasSampler
+	}
 
 	// This shader doesn't have a shadow depth map sampler
 	return 0;

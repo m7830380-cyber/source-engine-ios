@@ -131,6 +131,8 @@ PROJECT_EXTRA_SOURCES = {
 		'game/client/cstrike15/VGUI/ios_buymenu.cpp',
 		# CS:GO buy wheel glue, reconstructed (cstrike15-restoration)
 		'game/client/cstrike15/Scaleform/buymenu_scaleform.cpp',
+		# CS:GO scoreboard glue, reconstructed from scoreboard.swf
+		'game/client/cstrike15/Scaleform/scoreboard_scaleform.cpp',
 		# CS:GO pause menu glue, reconstructed (cstrike15-restoration)
 		'game/client/cstrike15/Scaleform/pausemenuscreen_scaleform.cpp',
 		# offline with bots dialog glue (single-player.swf)

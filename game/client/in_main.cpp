@@ -763,11 +763,20 @@ void IN_Impulse( const CCommand &args )
 void IN_ScoreDown( const CCommand &args )
 {
 	KeyDown( &in_score, args[1] );
+#if defined( IOS )
+	// the Scaleform scoreboard is shown while the key (or touch button) is held
+	if ( GetViewPortInterface() )
+		GetViewPortInterface()->ShowPanel( PANEL_SCOREBOARD, true );
+#endif
 }
 
 void IN_ScoreUp( const CCommand &args )
 {
 	KeyUp( &in_score, args[1] );
+#if defined( IOS )
+	if ( GetViewPortInterface() )
+		GetViewPortInterface()->ShowPanel( PANEL_SCOREBOARD, false );
+#endif
 }
 
 void IN_LookSpinDown( const CCommand &args ) {KeyDown( &in_lookspin, args[1] );}

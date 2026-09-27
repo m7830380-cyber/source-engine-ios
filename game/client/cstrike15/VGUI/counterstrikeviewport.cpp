@@ -43,6 +43,7 @@
 #if defined( IOS )
 #include "ios_buymenu.h"
 #include "buymenu_scaleform.h"
+#include "scoreboard_scaleform.h"
 #endif
 #include "chooseclass_scaleform.h"
 #include "Scaleform/HUD/sfhudinfopanel.h"
@@ -295,6 +296,12 @@ IViewPortPanel* CounterStrikeViewport::CreatePanelByName( const char *szPanelNam
 			newpanel = IOS_CreateBuyMenu( this );
 		else
 			newpanel = new CCSBuyMenuScaleform( this );
+	}
+	// CS:GO's Scaleform scoreboard (scoreboard.swf) with the reconstructed glue,
+	// instead of the old VGUI one
+	else if ( Q_strcmp( PANEL_SCOREBOARD, szPanelName ) == 0 )
+	{
+		newpanel = new CCSScoreboardScaleform( this );
 	}
 #endif
 	else

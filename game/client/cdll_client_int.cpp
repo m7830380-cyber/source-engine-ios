@@ -5118,3 +5118,187 @@ static CClientMaterialSystem s_ClientMaterialSystem;
 IClientMaterialSystem *g_pClientMaterialSystem = &s_ClientMaterialSystem;
 EXPOSE_SINGLE_INTERFACE_GLOBALVAR( CClientMaterialSystem, IClientMaterialSystem, VCLIENTMATERIALSYSTEM_INTERFACE_VERSION, s_ClientMaterialSystem );
 
+
+#if defined( IOS )
+//-----------------------------------------------------------------------------
+// LAN games (iOS): no Steam server browser offline, so a tiny discovery
+// protocol of our own. Hosts are ordinary offline matches (listen servers,
+// bots make room for joining players); the host engine answers the query
+// (CBaseServer::ProcessConnectionlessPacket, 'g' "IOSLAN1").
+//
+//   lan_find          list LAN games (broadcast, 1 s)
+//   lan_join <n>      join game n from the last lan_find
+//   lan_join <ip[:port]>
+//   lan_ip            this device's LAN address (for others to join you)
+//-----------------------------------------------------------------------------
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <ifaddrs.h>
+#include <net/if.h>
+#include <sys/select.h>
+#include <unistd.h>
+#include <errno.h>
+
+struct LanGame_t
+{
+	char m_szAddress[64];
+	char m_szName[64];
+	char m_szMap[64];
+	int m_nHumans, m_nBots, m_nMax;
+};
+static CUtlVector< LanGame_t > s_LanGames;
+
+static void LanReadString( const unsigned char *&p, const unsigned char *pEnd, char *pszOut, int nOut )
+{
+	int n = 0;
+	while ( p < pEnd && *p )
+	{
+		if ( n < nOut - 1 )
+			pszOut[n++] = (char)*p;
+		++p;
+	}
+	pszOut[n] = 0;
+	if ( p < pEnd )
+		++p;	// the terminator
+}
+
+CON_COMMAND( lan_find, "List LAN games (other devices hosting an offline match)" )
+{
+	int s = socket( AF_INET, SOCK_DGRAM, IPPROTO_UDP );
+	if ( s < 0 )
+	{
+		Msg( "lan_find: no socket (%d)\n", errno );
+		return;
+	}
+	int one = 1;
+	setsockopt( s, SOL_SOCKET, SO_BROADCAST, &one, sizeof( one ) );
+
+	static const unsigned char s_Query[] = { 0xFF, 0xFF, 0xFF, 0xFF, 'g', 'I', 'O', 'S', 'L', 'A', 'N', '1', 0 };
+	int nSent = 0, nErr = 0;
+	for ( int nPort = 27015; nPort <= 27020; nPort++ )
+	{
+		sockaddr_in to = {};
+		to.sin_family = AF_INET;
+		to.sin_port = htons( nPort );
+		to.sin_addr.s_addr = htonl( INADDR_BROADCAST );
+		if ( sendto( s, s_Query, sizeof( s_Query ), 0, (sockaddr *)&to, sizeof( to ) ) > 0 )
+			++nSent;
+		else
+			nErr = errno;
+	}
+	if ( !nSent )
+	{
+		Msg( "lan_find: couldn't broadcast (error %d). Allow \"Local Network\" for this app in iOS Settings > Privacy.\n", nErr );
+		close( s );
+		return;
+	}
+
+	s_LanGames.RemoveAll();
+	double flEnd = Plat_FloatTime() + 1.0;
+	for ( ;; )
+	{
+		double flLeft = flEnd - Plat_FloatTime();
+		if ( flLeft <= 0 )
+			break;
+		fd_set fds;
+		FD_ZERO( &fds );
+		FD_SET( s, &fds );
+		timeval tv = { 0, (int)( flLeft * 1000000.0 ) };
+		if ( select( s + 1, &fds, NULL, NULL, &tv ) <= 0 )
+			break;
+
+		unsigned char buf[1400];
+		sockaddr_in from = {};
+		socklen_t fromlen = sizeof( from );
+		int n = recvfrom( s, buf, sizeof( buf ), 0, (sockaddr *)&from, &fromlen );
+		if ( n < 5 + 8 || buf[0] != 0xFF || buf[1] != 0xFF || buf[2] != 0xFF || buf[3] != 0xFF || buf[4] != 'h' )
+			continue;
+
+		const unsigned char *p = buf + 5, *pEnd = buf + n;
+		char szTag[16];
+		LanReadString( p, pEnd, szTag, sizeof( szTag ) );
+		if ( V_strcmp( szTag, "IOSLAN1" ) )
+			continue;
+		LanGame_t game = {};
+		LanReadString( p, pEnd, game.m_szName, sizeof( game.m_szName ) );
+		LanReadString( p, pEnd, game.m_szMap, sizeof( game.m_szMap ) );
+		if ( pEnd - p < 5 )
+			continue;
+		game.m_nHumans = p[0];
+		game.m_nBots = p[1];
+		game.m_nMax = p[2];
+		int nPort = p[3] | ( p[4] << 8 );
+		V_snprintf( game.m_szAddress, sizeof( game.m_szAddress ), "%s:%d", inet_ntoa( from.sin_addr ), nPort );
+
+		bool bDup = false;
+		FOR_EACH_VEC( s_LanGames, i )
+			bDup |= !V_strcmp( s_LanGames[i].m_szAddress, game.m_szAddress );
+		if ( !bDup )
+			s_LanGames.AddToTail( game );
+	}
+	close( s );
+
+	if ( !s_LanGames.Count() )
+	{
+		Msg( "No LAN games found. The host starts an offline match; both devices need the same Wi-Fi.\n" );
+		return;
+	}
+	Msg( "LAN games:\n" );
+	FOR_EACH_VEC( s_LanGames, i )
+	{
+		const LanGame_t &g = s_LanGames[i];
+		Msg( "  %d) %s  -  %s  (%d players, %d bots, max %d)  %s\n", i + 1, g.m_szName, g.m_szMap, g.m_nHumans, g.m_nBots, g.m_nMax, g.m_szAddress );
+	}
+	Msg( "Join with: lan_join <number>\n" );
+}
+
+CON_COMMAND( lan_join, "Join a LAN game: lan_join <number from lan_find> or lan_join <ip[:port]>" )
+{
+	if ( args.ArgC() < 2 )
+	{
+		Msg( "Usage: lan_join <number from lan_find> | <ip[:port]>\n" );
+		return;
+	}
+	const char *pszArg = args.ArgS();
+	char szAddress[64];
+	int nIndex = V_atoi( pszArg );
+	if ( nIndex >= 1 && !strchr( pszArg, '.' ) )
+	{
+		if ( nIndex > s_LanGames.Count() )
+		{
+			Msg( "lan_join: no game %d (run lan_find first)\n", nIndex );
+			return;
+		}
+		V_strncpy( szAddress, s_LanGames[nIndex - 1].m_szAddress, sizeof( szAddress ) );
+	}
+	else
+	{
+		V_strncpy( szAddress, pszArg, sizeof( szAddress ) );
+	}
+	Msg( "Joining %s...\n", szAddress );
+	engine->ClientCmd_Unrestricted( CFmtStr( "connect %s\n", szAddress ) );
+}
+
+CON_COMMAND( lan_ip, "Show this device's LAN address (for others to lan_join)" )
+{
+	ifaddrs *pAddrs = NULL;
+	if ( getifaddrs( &pAddrs ) != 0 )
+	{
+		Msg( "lan_ip: couldn't read network interfaces\n" );
+		return;
+	}
+	static ConVarRef hostport( "hostport" );
+	bool bAny = false;
+	for ( ifaddrs *a = pAddrs; a; a = a->ifa_next )
+	{
+		if ( !a->ifa_addr || a->ifa_addr->sa_family != AF_INET || ( a->ifa_flags & IFF_LOOPBACK ) || !( a->ifa_flags & IFF_UP ) )
+			continue;
+		Msg( "  %s: %s:%d\n", a->ifa_name, inet_ntoa( ( (sockaddr_in *)a->ifa_addr )->sin_addr ), hostport.IsValid() ? hostport.GetInt() : 27015 );
+		bAny = true;
+	}
+	freeifaddrs( pAddrs );
+	if ( !bAny )
+		Msg( "lan_ip: not on a network\n" );
+}
+#endif // IOS

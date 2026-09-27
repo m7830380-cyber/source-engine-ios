@@ -39,6 +39,8 @@
 		<integer>1</integer>
 		<integer>2</integer>
 	</array>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Find and join LAN games with other devices on your Wi-Fi.</string>
 	<key>UIFileSharingEnabled</key>
 	<true/>
 	<key>LSSupportsOpeningDocumentsInPlace</key>

@@ -945,6 +945,30 @@ bool CBaseServer::ProcessConnectionlessPacket(netpacket_t * packet)
 		case A2A_ACK :		ConMsg ("A2A_ACK from %s\n", ns_address_render( packet->from ).String() );
 							break;
 
+#if defined( IOS )
+		case 'g':
+			{
+				// LAN game discovery for the iOS port ("lan_find" broadcasts this;
+				// Steam's server queries aren't available offline).
+				// query: 'g' "IOSLAN1"   reply: 'h' "IOSLAN1" name map humans bots maxplayers port
+				char szTag[16];
+				if ( !msg.ReadString( szTag, sizeof( szTag ) ) || V_strcmp( szTag, "IOSLAN1" ) || IsHLTV() )
+					break;
+				CUtlBuffer buf;
+				buf.PutUnsignedInt( LittleDWord( CONNECTIONLESS_HEADER ) );
+				buf.PutUnsignedChar( 'h' );
+				buf.PutString( "IOSLAN1" );
+				buf.PutString( GetName() );
+				buf.PutString( GetMapName() );
+				buf.PutUnsignedChar( MAX( 0, GetNumClients() - GetNumFakeClients() ) );
+				buf.PutUnsignedChar( GetNumFakeClients() );
+				buf.PutUnsignedChar( GetMaxClients() );
+				buf.PutShort( LittleWord( GetUDPPort() ) );
+				NET_SendPacket( NULL, m_Socket, packet->from, (unsigned char *)buf.Base(), buf.TellPut() );
+			}
+			break;
+#endif
+
 
 		case A2S_GETCHALLENGE :  
 #if !defined(NO_STEAM)

@@ -4,5 +4,8 @@
 <dict>
 	<key>get-task-allow</key>
 	<true/>
+	<!-- LAN games: lan_find broadcasts and hosts receive the broadcast -->
+	<key>com.apple.developer.networking.multicast</key>
+	<true/>
 </dict>
 </plist>

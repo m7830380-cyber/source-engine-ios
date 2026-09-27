@@ -1364,6 +1364,7 @@ class GLMContext
 		// If lazyUnbinding is true, unbound samplers will not actually be unbound to the GL device.
 		FORCEINLINE void FlushDrawStates( uint nStartIndex, uint nEndIndex, uint nBaseVertex );				// pushes all drawing state - samplers, tex, programs, etc.
 		void FlushDrawStatesNoShaders();
+		void DumpDrawForDebug();	// ios_dump_draws
 				
 		// drawing
 #if 1 //ifndef OSX

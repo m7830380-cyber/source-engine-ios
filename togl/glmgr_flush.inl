@@ -46,6 +46,9 @@ FORCEINLINE GLuint GLMContext::FindSamplerObject( const GLMTexSamplingParams &de
 
 // BE VERY CAREFUL WHAT YOU DO IN HERE. This is called on every batch, even seemingly simple changes can kill perf.
 extern ConVar gl_srgb_rt_single_encode;
+extern ConVar ios_dump_draws;
+extern ConVar ios_dump_match;
+extern ConVar ios_dump_tex;
 
 FORCEINLINE void GLMContext::FlushDrawStates( uint nStartIndex, uint nEndIndex, uint nBaseVertex )	// shadersOn = true for draw calls, false for clear calls
 {
@@ -644,6 +647,11 @@ FORCEINLINE void GLMContext::FlushDrawStates( uint nStartIndex, uint nEndIndex, 
 			m_programParamsF[kGLMFragmentProgram].m_dirtySlotHighWaterNonBone = 0;
 		}
 	}
+
+	// ios_dump_draws N: log everything the GPU gets for the next N draws whose pixel shader
+	// name contains ios_dump_match (and, if set, whose sampler 0 texture contains ios_dump_tex).
+	if ( ios_dump_draws.GetInt() > 0 )
+		DumpDrawForDebug();
 
 	return;
 

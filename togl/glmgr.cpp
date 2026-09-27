@@ -883,6 +883,68 @@ void glAttachTex2DtoFBO	( GLenum target, eBlitFormatClass formatClass, uint texN
 // once, which the world's look is built on.
 ConVar gl_srgb_rt_single_encode( "gl_srgb_rt_single_encode", "1", FCVAR_RELEASE | FCVAR_ARCHIVE, "iOS: encode sRGB once (in hardware) when drawing into sRGB render targets that get sampled" );
 
+ConVar ios_dump_draws( "ios_dump_draws", "0", FCVAR_RELEASE, "log shader constants, bools and textures for the next N matching draws" );
+ConVar ios_dump_match( "ios_dump_match", "phong_ps", FCVAR_RELEASE, "ios_dump_draws: pixel shader name substring" );
+ConVar ios_dump_tex( "ios_dump_tex", "", FCVAR_RELEASE, "ios_dump_draws: sampler 0 texture name substring (empty = any)" );
+
+void GLMContext::DumpDrawForDebug()
+{
+	CGLMProgram *vp = m_drawingProgram[kGLMVertexProgram];
+	CGLMProgram *fp = m_drawingProgram[kGLMFragmentProgram];
+	if ( !vp || !fp || !V_stristr( fp->m_shaderName, ios_dump_match.GetString() ) )
+		return;
+	CGLMTex *pTex0 = m_samplers[0].m_pBoundTex;
+	const char *pszTex0 = ( pTex0 && pTex0->m_debugLabel ) ? pTex0->m_debugLabel : "";
+	if ( ios_dump_tex.GetString()[0] && !V_stristr( pszTex0, ios_dump_tex.GetString() ) )
+		return;
+
+	static CGLMProgram *s_pLastTextDumped = NULL;
+	printf( "[dump] ===== draw: vs '%s' ps '%s' tex0 '%s'\n", vp->m_shaderName, fp->m_shaderName, pszTex0 );
+	// the translator's label line names the file, index and combo
+	for ( CGLMProgram *pr = vp; pr; pr = ( pr == vp ) ? fp : NULL )
+	{
+		const char *pLabel = pr->m_text ? V_strstr( pr->m_text, "trans#" ) : NULL;
+		if ( pLabel )
+		{
+			const char *pEnd = strchr( pLabel, '\n' );
+			printf( "[dump] %s label: %.*s\n", pr == vp ? "vs" : "ps", pEnd ? (int)( pEnd - pLabel ) : 120, pLabel );
+		}
+	}
+	const int nPS = MIN( 64, (int)fp->m_descs[kGLMGLSL].m_highWater );
+	for ( int i = 0; i < nPS; i++ )
+	{
+		const float *f = m_programParamsF[kGLMFragmentProgram].m_values[i];
+		printf( "[dump] pc[%d] = %g %g %g %g\n", i, f[0], f[1], f[2], f[3] );
+	}
+	const int *b = m_programParamsB[kGLMVertexProgram].m_values;
+	printf( "[dump] vs bools %d %d %d %d, i0 %d %d %d %d; ps bools %d %d %d %d\n", b[0], b[1], b[2], b[3],
+		m_programParamsI[kGLMVertexProgram].m_values[0][0], m_programParamsI[kGLMVertexProgram].m_values[0][1],
+		m_programParamsI[kGLMVertexProgram].m_values[0][2], m_programParamsI[kGLMVertexProgram].m_values[0][3],
+		m_programParamsB[kGLMFragmentProgram].m_values[0], m_programParamsB[kGLMFragmentProgram].m_values[1],
+		m_programParamsB[kGLMFragmentProgram].m_values[2], m_programParamsB[kGLMFragmentProgram].m_values[3] );
+	for ( int i = 0; i < 58; i++ )	// everything below the bone matrices
+	{
+		const float *f = m_programParamsF[kGLMVertexProgram].m_values[i];
+		printf( "[dump] vc[%d] = %g %g %g %g\n", i, f[0], f[1], f[2], f[3] );
+	}
+	for ( int i = 0; i < 16; i++ )
+	{
+		CGLMTex *t = m_samplers[i].m_pBoundTex;
+		if ( !t )
+			continue;
+		printf( "[dump] sampler %d: '%s' %s texflags 0x%lx srgbread %d\n", i, t->m_debugLabel ? t->m_debugLabel : "-",
+			t->m_layout && t->m_layout->m_layoutSummary ? t->m_layout->m_layoutSummary : "-",
+			t->m_layout ? t->m_layout->m_key.m_texFlags : 0, (int)m_samplers[i].m_samp.m_packed.m_srgb );
+	}
+	if ( s_pLastTextDumped != fp )
+	{
+		s_pLastTextDumped = fp;
+		printf( "[dump] ps glsl:\n%s\n[dump] end glsl\n", fp->m_text ? fp->m_text : "" );
+	}
+	fflush( stdout );
+	ios_dump_draws.SetValue( ios_dump_draws.GetInt() - 1 );
+}
+
 ConVar gl_can_resolve_flipped("gl_can_resolve_flipped", "0" );
 ConVar gl_cannot_resolve_flipped("gl_cannot_resolve_flipped", "0" );
 

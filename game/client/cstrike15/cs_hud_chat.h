@@ -65,6 +65,14 @@ public:
 	virtual Color	GetClientColor( int clientIndex );
 
 	virtual int GetFilterForString( const char *pString );
+
+private:
+	// chat, radio and server text messages (the binding was missing in this source)
+	CUserMessageBinder m_UMCMsgSayText;
+	CUserMessageBinder m_UMCMsgSayText2;
+	CUserMessageBinder m_UMCMsgTextMsg;
+	CUserMessageBinder m_UMCMsgRadioText;
+	CUserMessageBinder m_UMCMsgRawAudio;
 };
 
 #endif	//CS_HUD_CHAT_H

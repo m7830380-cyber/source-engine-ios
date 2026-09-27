@@ -79,6 +79,12 @@ void CHudChat::CreateChatLines( void )
 void CHudChat::Init( void )
 {
 	BaseClass::Init();
+
+	m_UMCMsgSayText.Bind< CS_UM_SayText, CCSUsrMsg_SayText >( UtlMakeDelegate( this, static_cast< bool ( CBaseHudChat::* )( const CCSUsrMsg_SayText & ) >( &CBaseHudChat::MsgFunc_SayText ) ) );
+	m_UMCMsgSayText2.Bind< CS_UM_SayText2, CCSUsrMsg_SayText2 >( UtlMakeDelegate( this, &CHudChat::MsgFunc_SayText2 ) );
+	m_UMCMsgTextMsg.Bind< CS_UM_TextMsg, CCSUsrMsg_TextMsg >( UtlMakeDelegate( this, static_cast< bool ( CBaseHudChat::* )( const CCSUsrMsg_TextMsg & ) >( &CBaseHudChat::MsgFunc_TextMsg ) ) );
+	m_UMCMsgRadioText.Bind< CS_UM_RadioText, CCSUsrMsg_RadioText >( UtlMakeDelegate( this, &CHudChat::MsgFunc_RadioText ) );
+	m_UMCMsgRawAudio.Bind< CS_UM_RawAudio, CCSUsrMsg_RawAudio >( UtlMakeDelegate( this, &CHudChat::MsgFunc_RawAudio ) );
 }
 
 //-----------------------------------------------------------------------------

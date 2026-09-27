@@ -80,15 +80,55 @@ static const char *gBugTokenTable[] = {
 };
 
 
-// [jason] Forward Printf messages to the Scaleform voicestatus panel
+// [jason] Forward Printf messages to the Scaleform chat.
+// The original bodies were "Removed for partner depot": chat, radio text and
+// server text messages never reached the screen. Rebuilt on SFHudChat's
+// history (shown by chat.swf as HTML, so markup characters are escaped and
+// the color control bytes that Printf/ChatPrintf embed are dropped).
 #if defined ( CSTRIKE15 )
-inline void CS15ForwardStatusMsg( const char* text, int clientid )
-{
-	/* Removed for partner depot */
-}
+#include "Scaleform/HUD/sfhud_chat.h"
+
 inline void CS15ForwardStatusMsg( const wchar_t* text, int clientid )
 {
-	/* Removed for partner depot */
+	SFHudChat *pChat = GET_HUDELEMENT( SFHudChat );
+	if ( !pChat || !text )
+		return;
+
+	wchar_t wszOut[ 1024 ];
+	int nOut = 0;
+	const int nMax = ARRAYSIZE( wszOut ) - 8;
+	for ( const wchar_t *p = text; *p && nOut < nMax; ++p )
+	{
+		if ( *p > 0 && *p < COLOR_MAX )
+			continue;	// COLOR_* markup
+		if ( *p == L'\n' || *p == L'\r' )
+		{
+			if ( p[1] )
+				wszOut[ nOut++ ] = L' ';
+			continue;
+		}
+		const wchar_t *pszEntity = ( *p == L'<' ) ? L"&lt;" : ( *p == L'>' ) ? L"&gt;" : ( *p == L'&' ) ? L"&amp;" : NULL;
+		if ( pszEntity )
+		{
+			for ( ; *pszEntity && nOut < nMax; ++pszEntity )
+				wszOut[ nOut++ ] = *pszEntity;
+		}
+		else
+		{
+			wszOut[ nOut++ ] = *p;
+		}
+	}
+	wszOut[ nOut ] = 0;
+	if ( nOut )
+		pChat->AddStringToHistory( wszOut );
+}
+inline void CS15ForwardStatusMsg( const char* text, int clientid )
+{
+	if ( !text )
+		return;
+	wchar_t wszText[ 1024 ];
+	g_pVGuiLocalize->ConvertANSIToUnicode( text, wszText, sizeof( wszText ) );
+	CS15ForwardStatusMsg( wszText, clientid );
 }
 #endif // CSTRIKE15
 

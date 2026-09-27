@@ -540,8 +540,13 @@ void CCSScoreboardScaleform::UpdateTeam( int nTeam )
 		for ( int k = 0; k < ARRAYSIZE( s_pszHidden ); k++ )
 			SetVisible( row, s_pszHidden[k], false );
 
-		// avatar: only when the player in the row changes
-		XUID xuid = bBot ? 0 : g_PR->GetXuid( i );
+		// avatar: only when the player in the row changes. From player info: the
+		// player resource keeps a XUID only once Steam's avatar image for it
+		// exists, which never happens offline (it gave 0, the team icon)
+		XUID xuid = 0;
+		player_info_t info;
+		if ( !bBot && engine->GetPlayerInfo( i, &info ) )
+			xuid = info.xuid;
 		if ( m_RowXuids[nTeamIdx][iRow] != xuid )
 		{
 			m_RowXuids[nTeamIdx][iRow] = xuid;

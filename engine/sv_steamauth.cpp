@@ -874,7 +874,22 @@ CBaseClient *CSteam3Server::ClientFindFromSteamID( CSteamID & steamIDFind )
 bool CSteam3Server::NotifyClientConnect( CBaseClient *client, uint32 unUserID, const ns_address & adr, const void *pvCookie, uint32 ucbCookie )
 {
 	if ( !BIsActive() ) 
+	{
+#if defined( IOS )
+		// Offline (no Steam game server): nothing validates the ticket, but the
+		// SteamID the client put in front of it is still who the player is.
+		// Without it every player's SteamID stayed invalid, so their XUID was 0
+		// (no avatars, team icons instead) and GetSteamID() failed on the server.
+		if ( client && !client->IsFakeClient() && pvCookie && ucbCookie >= sizeof( uint64 ) )
+		{
+			CUtlBuffer buffer( pvCookie, ucbCookie, CUtlBuffer::READ_ONLY );
+			CSteamID steamID( (uint64)LittleQWord( buffer.GetInt64() ) );
+			if ( steamID.IsValid() && steamID.BIndividualAccount() )
+				client->SetSteamID( steamID );
+		}
+#endif
 		return true;
+	}
 
 	if ( !client || client->IsFakeClient() )
 		return false;

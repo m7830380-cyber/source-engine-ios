@@ -558,6 +558,9 @@ void CCSScoreboardScaleform::UpdateTeam( int nTeam )
 		player_info_t info;
 		if ( !bBot && engine->GetPlayerInfo( i, &info ) )
 			xuid = info.xuid;
+		// our own row: the avatar loader knows our Steam ID (profile_avatar)
+		if ( !xuid && bLocal && steamapicontext && steamapicontext->SteamUser() )
+			xuid = steamapicontext->SteamUser()->GetSteamID().ConvertToUint64();
 		if ( m_RowXuids[nTeamIdx][iRow] != xuid )
 		{
 			m_RowXuids[nTeamIdx][iRow] = xuid;

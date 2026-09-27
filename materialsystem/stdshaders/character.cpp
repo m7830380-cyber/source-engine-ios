@@ -547,7 +547,10 @@ BEGIN_VS_SHADER( Character, "Help for Character Shader" )
 
 	SHADER_INIT
 	{
-		LoadTexture( BASETEXTURE );
+		// Textures sampled with TEXTURE_BINDFLAGS_SRGBREAD must be created sRGB: on GL
+		// (togl) sRGB decode needs an sRGB texture format, it isn't a sampler state as
+		// in D3D. Without it CT agents came out washed out / white-tinted on iOS.
+		LoadTexture( BASETEXTURE, TEXTUREFLAGS_SRGB );
 
 		if ( params[BUMPMAP]->IsDefined() )
 		{
@@ -561,7 +564,7 @@ BEGIN_VS_SHADER( Character, "Help for Character Shader" )
 
 		if ( params[PHONGWARPTEXTURE]->IsDefined() )
 		{
-			LoadTexture( PHONGWARPTEXTURE );
+			LoadTexture( PHONGWARPTEXTURE, TEXTUREFLAGS_SRGB );
 		}
 
 		if ( params[FRESNELRANGESTEXTURE]->IsDefined() )
@@ -593,7 +596,7 @@ BEGIN_VS_SHADER( Character, "Help for Character Shader" )
 
 		if ( bPreview && params[GRUNGE]->IsDefined() )
 		{
-			LoadTexture( GRUNGE );
+			LoadTexture( GRUNGE, TEXTUREFLAGS_SRGB );
 		}
 
 		if ( bPreview && params[DETAIL]->IsDefined() )

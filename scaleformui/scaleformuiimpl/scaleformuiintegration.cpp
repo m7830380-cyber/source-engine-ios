@@ -374,6 +374,25 @@ Image*  CScaleformImageCreator::LoadProtocolImage(const ImageCreateInfo& info, c
 	else if ( char const *szAvatarXuid = StringAfterPrefix( url, "img://avatar_" ) )
 	{
 		int64 xuid = Q_atoi64( szAvatarXuid );
+#if defined( IOS )
+		// offline profile avatar (cfg/user.cfg: profile_avatar) for the local player
+		{
+			static ConVarRef profile_avatar( "profile_avatar" );
+			extern CSteamAPIContext *steamapicontext;
+			const char *pszAvatar = profile_avatar.IsValid() ? profile_avatar.GetString() : "";
+			uint64 ullLocal = ( steamapicontext && steamapicontext->SteamUser() ) ? steamapicontext->SteamUser()->GetSteamID().ConvertToUint64() : 0;
+			if ( pszAvatar && pszAvatar[0] && ullLocal && ( (uint64)xuid & 0xFFFFFFFFull ) == ( ullLocal & 0xFFFFFFFFull ) )
+			{
+				char chLocalPath[ 2 * MAX_PATH + 1 ] = {};
+				const char *pchFullImgPath = V_IsAbsolutePath( pszAvatar ) ? pszAvatar :
+					g_pFullFileSystem->RelativePathToFullPath( pszAvatar, "GAME", chLocalPath, Q_ARRAYSIZE( chLocalPath ) - 1 );
+				Image *pImage = pchFullImgPath ? ( ( ScaleformUIImpl* )m_pScaleformUI )->CreateImageFromFile( pchFullImgPath, info, 0, 0 ) : NULL;
+				if ( pImage )
+					return pImage;
+				Warning( "profile_avatar: couldn't load '%s'\n", pszAvatar );
+			}
+		}
+#endif
 		ScaleformUIAvatarImage* pAvatarImage = ( ( ScaleformUIImpl* )m_pScaleformUI )->GetAvatarImage( xuid );
 		if ( pAvatarImage )
 		{

@@ -864,10 +864,86 @@ public:
 //-----------------------------------------------------------------------------
 // CScaleformComponent_MyPersona
 //-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+// Offline profile: cfg/user.cfg (in the csgo folder) sets what the menus and the
+// scoreboard show for you. Created with defaults on first run; edit and restart.
+// The rank/level/wins/commends convars are userinfo so the (local) server can
+// put them in the player resource for the scoreboard.
+//-----------------------------------------------------------------------------
+static void ProfileNameChanged( IConVar *var, const char *pOldValue, float flOldValue );
+static ConVar profile_name( "profile_name", "Player", FCVAR_RELEASE, "Your name (also sets 'name')", ProfileNameChanged );
+static ConVar profile_avatar( "profile_avatar", "", FCVAR_RELEASE, "Avatar image in the csgo folder (PNG or JPG, square), e.g. avatar.png; empty = default" );
+static ConVar profile_level( "profile_level", "1", FCVAR_RELEASE | FCVAR_USERINFO, "Profile rank (level) 1-40", true, 1, true, 40 );
+static ConVar profile_xp( "profile_xp", "1", FCVAR_RELEASE, "XP towards the next level (0-4999)", true, 0, true, 4999 );
+static ConVar profile_rank( "profile_rank", "1", FCVAR_RELEASE | FCVAR_USERINFO, "Competitive skill group: 0 none, 1 Silver I ... 18 Global Elite", true, 0, true, 18 );
+static ConVar profile_wins( "profile_wins", "1", FCVAR_RELEASE | FCVAR_USERINFO, "Competitive wins", true, 0, false, 0 );
+static ConVar profile_commend_friendly( "profile_commend_friendly", "1", FCVAR_RELEASE | FCVAR_USERINFO, "Commendations: friendly", true, 0, false, 0 );
+static ConVar profile_commend_teaching( "profile_commend_teaching", "1", FCVAR_RELEASE | FCVAR_USERINFO, "Commendations: teacher", true, 0, false, 0 );
+static ConVar profile_commend_leader( "profile_commend_leader", "1", FCVAR_RELEASE | FCVAR_USERINFO, "Commendations: leader", true, 0, false, 0 );
+
+static void ProfileNameChanged( IConVar *var, const char *pOldValue, float flOldValue )
+{
+	const char *pszName = profile_name.GetString();
+	if ( !pszName || !pszName[0] )
+		return;
+	// the offline Steam stub answers persona name queries from this
+	setenv( "STEAM_PERSONA_NAME", pszName, 1 );
+	static ConVarRef name( "name" );
+	if ( name.IsValid() && V_strcmp( name.GetString(), pszName ) )
+		name.SetValue( pszName );
+}
+
+static const char s_szDefaultUserCfg[] =
+	"// Your offline profile. Edit the values and restart the game.\n"
+	"\n"
+	"profile_name \"Player\"          // your name\n"
+	"profile_avatar \"\"              // avatar: a PNG or JPG in the csgo folder, e.g. \"avatar.png\" (square, 184x184 or 64x64 looks best)\n"
+	"profile_level 1                // profile rank (level), 1-40\n"
+	"profile_xp 1                   // XP towards the next level, 0-4999\n"
+	"profile_rank 1                 // skill group: 0 none, 1 Silver I, 2 Silver II, 3 Silver III, 4 Silver IV,\n"
+	"                               //   5 Silver Elite, 6 Silver Elite Master, 7-10 Gold Nova I-Master,\n"
+	"                               //   11 Master Guardian I, 12 MG II, 13 MG Elite, 14 DMG,\n"
+	"                               //   15 Legendary Eagle, 16 LEM, 17 Supreme, 18 Global Elite\n"
+	"profile_wins 1                 // competitive wins\n"
+	"profile_commend_friendly 1\n"
+	"profile_commend_teaching 1\n"
+	"profile_commend_leader 1\n";
+
+static void LoadUserProfile()
+{
+	static bool s_bLoaded = false;
+	if ( s_bLoaded )
+		return;
+	s_bLoaded = true;
+
+	if ( !g_pFullFileSystem->FileExists( "cfg/user.cfg", "MOD" ) )
+	{
+		g_pFullFileSystem->CreateDirHierarchy( "cfg", "MOD" );
+		FileHandle_t f = g_pFullFileSystem->Open( "cfg/user.cfg", "wb", "MOD" );
+		if ( f )
+		{
+			g_pFullFileSystem->Write( s_szDefaultUserCfg, V_strlen( s_szDefaultUserCfg ), f );
+			g_pFullFileSystem->Close( f );
+		}
+	}
+	engine->ExecuteClientCmd( "exec user.cfg" );
+	ProfileNameChanged( NULL, NULL, 0.0f );
+}
+
+static uint64 GetLocalXuid();
+
+static bool IsLocalXuid( uint64 xuid )
+{
+	uint64 ullLocal = GetLocalXuid();
+	// the UI passes full 64-bit Steam IDs; compare account IDs
+	return xuid && ullLocal && ( xuid & 0xFFFFFFFFull ) == ( ullLocal & 0xFFFFFFFFull );
+}
+
 class CScaleformComponentMyPersona : public ScaleformUIFunctionHandlerObject
 {
 public:
 	void GetXuid( SCALEFORM_CALLBACK_ARGS_DECL ) { ResultItemID( pui, obj, GetLocalXuid() ); }
+	void ReturnXpPerLevel( SCALEFORM_CALLBACK_ARGS_DECL ) { pui->Params_SetResult( obj, 5000 ); }
 	void IsInventoryValid( SCALEFORM_CALLBACK_ARGS_DECL ) { pui->Params_SetResult( obj, LocalInventory() != NULL ); }
 	void ReturnZero( SCALEFORM_CALLBACK_ARGS_DECL ) { pui->Params_SetResult( obj, 0 ); }
 	void ReturnFalse( SCALEFORM_CALLBACK_ARGS_DECL ) { pui->Params_SetResult( obj, false ); }
@@ -900,13 +976,85 @@ public:
 			SFUI_DECL_METHOD_AS( ReturnZero, "GetMyClanCount" ),
 			SFUI_DECL_METHOD_AS( ReturnZero, "GetMyMedalRankByType" ),
 			SFUI_DECL_METHOD_AS( ReturnZero, "GetTimePlayedConsecutively" ),
-			SFUI_DECL_METHOD_AS( ReturnZero, "GetXpPerLevel" ),
+			SFUI_DECL_METHOD_AS( ReturnXpPerLevel, "GetXpPerLevel" ),
 			SFUI_DECL_METHOD_AS( ReturnZero, "GetElevatedState" ),
 			SFUI_DECL_METHOD_AS( ReturnZero, "GetElevatedTime" ),
 			SFUI_DECL_METHOD_AS( ReturnFalse, "HasPrestige" ),
 			SFUI_DECL_METHOD_AS( ReturnFalse, "IsVacBanned" ),
 			SFUI_DECL_METHOD_AS( DoNothing, "ActionAcknowledgeNotifications" ),
 			SFUI_DECL_METHOD_AS( DoNothing, "ActionElevate" ),
+			{ NULL, NULL }
+		};
+		return table;
+	}
+};
+
+//-----------------------------------------------------------------------------
+// FriendsList: the profile panels ask it about you (by your XUID). Other XUIDs
+// get their in-game name if they're in the game; anything else stays undefined,
+// as before this component existed, so the panels keep their own fallbacks.
+//-----------------------------------------------------------------------------
+class CScaleformComponentFriendsList : public ScaleformUIFunctionHandlerObject
+{
+public:
+	void GetFriendName( SCALEFORM_CALLBACK_ARGS_DECL )
+	{
+		uint64 xuid = ArgItemID( pui, obj, 0 );
+		if ( IsLocalXuid( xuid ) )
+		{
+			pui->Params_SetResult( obj, profile_name.GetString() );
+			return;
+		}
+		for ( int i = 1; i <= gpGlobals->maxClients; i++ )
+		{
+			player_info_t pi;
+			if ( engine->GetPlayerInfo( i, &pi ) && pi.xuid && ( pi.xuid & 0xFFFFFFFFull ) == ( xuid & 0xFFFFFFFFull ) )
+			{
+				pui->Params_SetResult( obj, pi.name );
+				return;
+			}
+		}
+	}
+	void GetFriendLevel( SCALEFORM_CALLBACK_ARGS_DECL ) { LocalInt( pui, obj, profile_level.GetInt() ); }
+	void GetFriendXp( SCALEFORM_CALLBACK_ARGS_DECL ) { LocalInt( pui, obj, profile_xp.GetInt() ); }
+	void GetFriendCompetitiveRank( SCALEFORM_CALLBACK_ARGS_DECL ) { LocalInt( pui, obj, profile_rank.GetInt() ); }
+	void GetFriendCompetitiveWins( SCALEFORM_CALLBACK_ARGS_DECL ) { LocalInt( pui, obj, profile_wins.GetInt() ); }
+	void GetFriendCommendations( SCALEFORM_CALLBACK_ARGS_DECL )
+	{
+		const char *pszType = ArgString( pui, obj, 1 );
+		const ConVar &cv = !V_stricmp( pszType, "teaching" ) ? profile_commend_teaching :
+						   !V_stricmp( pszType, "leader" ) ? profile_commend_leader : profile_commend_friendly;
+		LocalInt( pui, obj, cv.GetInt() );
+	}
+	void ReturnZero( SCALEFORM_CALLBACK_ARGS_DECL ) { pui->Params_SetResult( obj, 0 ); }
+
+private:
+	void LocalInt( IUIMarshalHelper *pui, SFPARAMS obj, int nValue )
+	{
+		if ( IsLocalXuid( ArgItemID( pui, obj, 0 ) ) )
+			pui->Params_SetResult( obj, nValue );
+		else
+			pui->Params_SetResult( obj, 0 );
+	}
+};
+
+class CScaleformComponentFriendsList_Table : public IScaleformUIFunctionHandlerDefinitionTable
+{
+public:
+	virtual const ScaleformUIFunctionHandlerDefinition *GetTable( void ) const
+	{
+		typedef CScaleformComponentFriendsList T;
+		static const ScaleformUIFunctionHandlerDefinition table[] = {
+			SFUI_DECL_METHOD( GetFriendName ),
+			SFUI_DECL_METHOD( GetFriendLevel ),
+			SFUI_DECL_METHOD( GetFriendXp ),
+			SFUI_DECL_METHOD( GetFriendCompetitiveRank ),
+			SFUI_DECL_METHOD( GetFriendCompetitiveWins ),
+			SFUI_DECL_METHOD( GetFriendCommendations ),
+			SFUI_DECL_METHOD_AS( ReturnZero, "GetFriendMedalRankByType" ),
+			SFUI_DECL_METHOD_AS( ReturnZero, "GetFriendDisplayItemDefCount" ),
+			SFUI_DECL_METHOD_AS( ReturnZero, "GetFriendDisplayItemDefFeatured" ),
+			SFUI_DECL_METHOD_AS( ReturnZero, "GetCount" ),
 			{ NULL, NULL }
 		};
 		return table;
@@ -925,6 +1073,39 @@ public:
 	void ReturnEmpty( SCALEFORM_CALLBACK_ARGS_DECL ) { pui->Params_SetResult( obj, "" ); }
 	void Return730( SCALEFORM_CALLBACK_ARGS_DECL ) { pui->Params_SetResult( obj, 730 ); }
 	void DoNothing( SCALEFORM_CALLBACK_ARGS_DECL ) {}
+};
+
+//-----------------------------------------------------------------------------
+// CompetitiveMatch: never installed, so every call returned undefined and the
+// main menu's warnings panel read GetCooldownSecondsRemaining() != 0 (undefined
+// isn't 0 in ActionScript) as a matchmaking ban. Offline: no cooldown, no match.
+//-----------------------------------------------------------------------------
+class CScaleformComponentCompetitiveMatch_Table : public IScaleformUIFunctionHandlerDefinitionTable
+{
+public:
+	virtual const ScaleformUIFunctionHandlerDefinition *GetTable( void ) const
+	{
+		typedef CScaleformComponentStub T;
+		static const ScaleformUIFunctionHandlerDefinition table[] = {
+			SFUI_DECL_METHOD_AS( ReturnFalse, "HasOngoingMatch" ),
+			SFUI_DECL_METHOD_AS( ReturnZero, "GetCooldownSecondsRemaining" ),
+			SFUI_DECL_METHOD_AS( ReturnZero, "GetCooldownType" ),
+			SFUI_DECL_METHOD_AS( ReturnZero, "GetCooldownReason" ),
+			SFUI_DECL_METHOD_AS( ReturnZero, "GetTournamentStageCount" ),
+			SFUI_DECL_METHOD_AS( ReturnZero, "GetTournamentTeamCount" ),
+			SFUI_DECL_METHOD_AS( ReturnEmpty, "GetTournamentStageNameByIndex" ),
+			SFUI_DECL_METHOD_AS( ReturnEmpty, "GetTournamentTeamNameByID" ),
+			SFUI_DECL_METHOD_AS( ReturnEmpty, "GetTournamentTeamNameByIndex" ),
+			SFUI_DECL_METHOD_AS( ReturnEmpty, "GetTournamentTeamTagByID" ),
+			SFUI_DECL_METHOD_AS( ReturnEmpty, "GetTournamentTeamTagByIndex" ),
+			SFUI_DECL_METHOD_AS( DoNothing, "ActionAbandonOngoingMatch" ),
+			SFUI_DECL_METHOD_AS( DoNothing, "ActionAcknowledgePenalty" ),
+			SFUI_DECL_METHOD_AS( DoNothing, "ActionReconnectToOngoingMatch" ),
+			SFUI_DECL_METHOD_AS( DoNothing, "ActionMatchmaking" ),
+			{ NULL, NULL }
+		};
+		return table;
+	}
 };
 
 #define STUB_TABLE( name, ... ) \
@@ -1004,6 +1185,9 @@ static CScaleformComponentInventory g_ComponentInventory;
 static CScaleformComponentLoadout g_ComponentLoadout;
 static CScaleformComponentMyPersona g_ComponentMyPersona;
 static CScaleformComponentStub g_ComponentStub;
+static CScaleformComponentFriendsList g_ComponentFriendsList;
+static CScaleformComponentFriendsList_Table g_ComponentFriendsListTable;
+static CScaleformComponentCompetitiveMatch_Table g_ComponentCompetitiveMatchTable;
 
 static CScaleformComponentInventory_Table g_ComponentInventoryTable;
 static CScaleformComponentLoadout_Table g_ComponentLoadoutTable;
@@ -1023,6 +1207,8 @@ void ScaleformInventoryComponents_EnsureInstalled()
 	if ( s_bInstalled || !g_pScaleformUI )
 		return;
 
+	LoadUserProfile();
+
 	struct Component_t { const char *m_pszName; ScaleformUIFunctionHandlerObject *m_pObject; const IScaleformUIFunctionHandlerDefinitionTable *m_pTable; SFVALUE m_hValue; };
 	static Component_t s_Components[] =
 	{
@@ -1037,6 +1223,8 @@ void ScaleformInventoryComponents_EnsureInstalled()
 		{ "CScaleformComponent_News", &g_ComponentStub, &g_ComponentNewsTable, NULL },
 		{ "CScaleformComponent_MatchList", &g_ComponentStub, &g_ComponentMatchListTable, NULL },
 		{ "CScaleformComponent_Predictions", &g_ComponentStub, &g_ComponentPredictionsTable, NULL },
+		{ "CScaleformComponent_FriendsList", &g_ComponentFriendsList, &g_ComponentFriendsListTable, NULL },
+		{ "CScaleformComponent_CompetitiveMatch", &g_ComponentStub, &g_ComponentCompetitiveMatchTable, NULL },
 	};
 
 	// install into the full-screen slot once it exists (the first try succeeds or none do)

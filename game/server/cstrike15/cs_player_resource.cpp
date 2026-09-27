@@ -138,6 +138,15 @@ void CCSPlayerResource::UpdatePlayerData( void )
 				m_nPersonaDataPublicCommendsTeacher.Set( i, pPublic->Obj().commendation().cmd_teaching() );
 				m_nPersonaDataPublicCommendsFriendly.Set( i, pPublic->Obj().commendation().cmd_friendly() );
 			}
+			else if ( !pPlayer->IsBot() )
+			{
+				// Offline (no GC persona data): the player's cfg/user.cfg profile,
+				// sent as userinfo convars (see profile_* on the client)
+				m_nPersonaDataPublicLevel.Set( i, V_atoi( engine->GetClientConVarValue( i, "profile_level" ) ) );
+				m_nPersonaDataPublicCommendsLeader.Set( i, V_atoi( engine->GetClientConVarValue( i, "profile_commend_leader" ) ) );
+				m_nPersonaDataPublicCommendsTeacher.Set( i, V_atoi( engine->GetClientConVarValue( i, "profile_commend_teaching" ) ) );
+				m_nPersonaDataPublicCommendsFriendly.Set( i, V_atoi( engine->GetClientConVarValue( i, "profile_commend_friendly" ) ) );
+			}
 			else
 			{
 				m_nPersonaDataPublicLevel.Set( i, -1 );
@@ -172,6 +181,14 @@ void CCSPlayerResource::UpdatePlayerData( void )
 					nTotalPlayingPlayers++;
 			
 				SetPlayerTeammateColor( i, false );
+			}
+
+			if ( !bSetValidRanking && !pPlayer->IsBot() && !( CSGameRules() && CSGameRules()->IsQueuedMatchmaking() ) )
+			{
+				// offline: skill group and wins from the player's profile (userinfo)
+				m_iCompetitiveRanking.Set( i, V_atoi( engine->GetClientConVarValue( i, "profile_rank" ) ) );
+				m_iCompetitiveWins.Set( i, V_atoi( engine->GetClientConVarValue( i, "profile_wins" ) ) );
+				bSetValidRanking = true;
 			}
 
 			if ( CSGameRules() && CSGameRules()->IsQueuedMatchmaking() )

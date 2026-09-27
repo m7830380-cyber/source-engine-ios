@@ -1891,16 +1891,33 @@ void CEngineVGui::UpdateProgressBar( float progress, const char *pDesc, bool sho
 	if ( staticGameUIFuncs->LoadingProgressWantsIsolatedRender( false ) )
 	{
 #if defined( IOS )
-		double flLastIteration = Plat_FloatTime();
+		// Don't block loading on the loading screen's animations. The map picture's
+		// unblur (Loading.swf: blur 50 -> 0..5, -0.33 every 400 ms) kept this loop
+		// spinning ~18 s of a 25 s mirage load with nothing loading. Instead advance
+		// the animation by the real time since the last progress update, redraw
+		// (still capped by ios_loading_redraw_ms) and carry on loading.
+		static double s_flLastLoadingAnimAdvance = 0.0;
+		double flNow = Plat_FloatTime();
+		if ( flNow - s_flLastLoadingAnimAdvance > 2.0 )
+			s_flLastLoadingAnimAdvance = flNow;	// first update of this load
+		if ( staticGameUIFuncs->LoadingProgressWantsIsolatedRender( true ) )
+		{
+			static ConVarRef host_timescale( "host_timescale" );
+			float timeScale = host_timescale.GetFloat() * sv.GetTimescale();
+			if ( timeScale <= 0.0f )
+				timeScale = 1.0f;
+			float flStep = (float)MIN( flNow - s_flLastLoadingAnimAdvance, 1.0 );
+			s_flLastLoadingAnimAdvance = flNow;
+			if ( flStep > 0.0f )
+				g_pScaleformUI->RunFrame( flStep / timeScale );
+			IOS_RenderLoadingScreen( false );
+		}
+		if ( false )
 #endif
 		while ( staticGameUIFuncs->LoadingProgressWantsIsolatedRender( true ) )
 		{
-#if defined( IOS )
-			IOS_RenderLoadingScreen( true );
-#else
 			extern void V_RenderVGuiOnly();
 			V_RenderVGuiOnly();
-#endif
 
 			if ( g_ClientGlobalVariables.frametime != 0.0f && g_ClientGlobalVariables.frametime != 0.1f)
 			{
@@ -1910,13 +1927,6 @@ void CEngineVGui::UpdateProgressBar( float progress, const char *pDesc, bool sho
 					timeScale = 1.0f;
 
 				float flStep = g_ClientGlobalVariables.frametime;
-#if defined( IOS )
-				// advance the loading screen animation by the real time the
-				// (slow) redraw took, so it doesn't take one redraw per tick
-				double flNow = Plat_FloatTime();
-				flStep = MAX( flStep, (float)MIN( flNow - flLastIteration, 0.5 ) );
-				flLastIteration = flNow;
-#endif
 				g_pScaleformUI->RunFrame( flStep / timeScale );
 			}
 			else

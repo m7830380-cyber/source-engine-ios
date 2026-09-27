@@ -1034,7 +1034,14 @@ TextureFormat::Mapping TextureFormatMapping[] =
 #endif
 
     // Compressed formats.
-#if defined(GL_COMPRESSED_RGBA_S3TC_DXT1_EXT)
+#if defined(GL_COMPRESSED_RGBA_S3TC_DXT1_EXT) && defined(SF_USE_ANGLE)
+    // ANGLE exposes the same formats under its own extension names (and not
+    // EXT_texture_compression_s3tc), so DDS images such as the radar overviews
+    // had no texture format and drew nothing.
+    { Image_DXT1,     Image_DXT1,     GL_COMPRESSED_RGBA_S3TC_DXT1_EXT, GL_COMPRESSED_RGBA_S3TC_DXT1_EXT, GL_UNSIGNED_BYTE, 0, "GL_EXT_texture_compression_dxt1",   &Image::CopyScanlineDefault, &Image::CopyScanlineDefault },
+    { Image_DXT3,     Image_DXT3,     GL_COMPRESSED_RGBA_S3TC_DXT3_EXT, GL_COMPRESSED_RGBA_S3TC_DXT3_EXT, GL_UNSIGNED_BYTE, 0, "GL_ANGLE_texture_compression_dxt3", &Image::CopyScanlineDefault, &Image::CopyScanlineDefault },
+    { Image_DXT5,     Image_DXT5,     GL_COMPRESSED_RGBA_S3TC_DXT5_EXT, GL_COMPRESSED_RGBA_S3TC_DXT5_EXT, GL_UNSIGNED_BYTE, 0, "GL_ANGLE_texture_compression_dxt5", &Image::CopyScanlineDefault, &Image::CopyScanlineDefault },
+#elif defined(GL_COMPRESSED_RGBA_S3TC_DXT1_EXT)
     { Image_DXT1,     Image_DXT1,     GL_COMPRESSED_RGBA_S3TC_DXT1_EXT, GL_COMPRESSED_RGBA_S3TC_DXT1_EXT, GL_UNSIGNED_BYTE, 0, "EXT_texture_compression_s3tc",   &Image::CopyScanlineDefault, &Image::CopyScanlineDefault },
     { Image_DXT3,     Image_DXT3,     GL_COMPRESSED_RGBA_S3TC_DXT3_EXT, GL_COMPRESSED_RGBA_S3TC_DXT3_EXT, GL_UNSIGNED_BYTE, 0, "EXT_texture_compression_s3tc",   &Image::CopyScanlineDefault, &Image::CopyScanlineDefault },
     { Image_DXT5,     Image_DXT5,     GL_COMPRESSED_RGBA_S3TC_DXT5_EXT, GL_COMPRESSED_RGBA_S3TC_DXT5_EXT, GL_UNSIGNED_BYTE, 0, "EXT_texture_compression_s3tc",   &Image::CopyScanlineDefault, &Image::CopyScanlineDefault },

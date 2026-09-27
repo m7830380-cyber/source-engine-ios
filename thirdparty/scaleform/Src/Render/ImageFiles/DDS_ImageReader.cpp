@@ -451,7 +451,12 @@ bool DDSFileImageSource::DecodeDXTData(ImageData* pdest, CopyScanlineFunc copySc
 
     unsigned mipWidth = Size.Width;
     unsigned mipHeight = Size.Height;
-    for (unsigned m = 0; m < pdest->GetMipLevelCount(); m++)
+    // Only the levels the file has: a DDS without mipmaps (most radar images)
+    // is decoded into a texture that asks for a full chain (it generates the
+    // rest), and reading past the file's last level failed the whole decode,
+    // which leaves the texture empty (black radar).
+    const unsigned mipCount = Alg::Min(pdest->GetMipLevelCount(), Alg::Max(1u, (unsigned)HeaderInfo.MipmapCount));
+    for (unsigned m = 0; m < mipCount; m++)
     {
         ImagePlane mipPlane;
         if (pdest->HasSeparateMipmaps())
@@ -497,7 +502,10 @@ bool DDSFileImageSource::DecodeDXTData(ImageData* pdest, CopyScanlineFunc copySc
         SF_FREE(pblocks);
         SF_FREE(prows);
         if (!ok)
+        {
+            printf("[sf-dds] decode failed at mip %u of %u\n", m, mipCount);
             return false;
+        }
 
         mipWidth  = Alg::Max(1u, mipWidth / 2); 
         mipHeight = Alg::Max(1u, mipHeight / 2); 
@@ -515,7 +523,9 @@ bool DDSFileImageSource::Decode( ImageData* pdest, CopyScanlineFunc copyScanline
 
     unsigned mipWidth = Size.Width;
     unsigned mipHeight = Size.Height;
-    for (unsigned m = 0; m < pdest->GetMipLevelCount(); m++)
+    // as in DecodeDXTData: only the levels the file has
+    const unsigned fileMipCount = Alg::Min(pdest->GetMipLevelCount(), Alg::Max(1u, (unsigned)HeaderInfo.MipmapCount));
+    for (unsigned m = 0; m < fileMipCount; m++)
     {
         ImagePlane mipPlane;
         if (pdest->HasSeparateMipmaps())

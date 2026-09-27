@@ -1765,6 +1765,14 @@ void TextField::ProcessImageTags(Text::StyledText::HTMLImageTagInfoArray& imageI
                 else
                     screenHeight = (float)PixelsToTwips(dimr.Height());
 
+                // Only one of width/height given (CS:GO's HUD uses height='16' for the
+                // killfeed and team counter icons): keep the image's aspect ratio, like
+                // Flash does, instead of squashing it to the native width.
+                if (imgTagInfo.Height && !imgTagInfo.Width && origHeight > 0)
+                    screenWidth = screenHeight * origWidth / origHeight;
+                else if (imgTagInfo.Width && !imgTagInfo.Height && origWidth > 0)
+                    screenHeight = screenWidth * origHeight / origWidth;
+
                 float baseLineY = PixelsToTwips(origHeight);
                 baseLineY += imgTagInfo.VSpace;
                 imgTagInfo.pTextImageDesc->ScreenWidth  = screenWidth;

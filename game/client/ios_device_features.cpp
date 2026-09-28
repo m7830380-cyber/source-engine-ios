@@ -5,7 +5,8 @@
 //   ios_gyro / ios_gyro_sensitivity / ios_gyro_invert_pitch
 //       gyro aiming, added to the view like the touch look area (off by default)
 //   ios_haptics
-//       taps on shots, hits, damage taken and kills (off by default)
+//       taps on shots, hits, damage taken and kills (off by default); shots
+//       come from the gun's fire code (IOS_HapticLocalShot), the rest from events
 //   ios_thermal_scale
 //       as the phone heats up, render the 3D view at a lower resolution
 //       (mat_viewportscale; the HUD stays sharp) instead of losing frame rate
@@ -21,6 +22,7 @@
 #include "igamesystem.h"
 #include "GameEventListener.h"
 #include "c_baseplayer.h"
+#include "prediction.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
@@ -80,12 +82,7 @@ public:
 		int nUser = event->GetInt( "userid" ), nAttacker = event->GetInt( "attacker" );
 
 		int nKind = -1;
-		if ( !V_strcmp( pszName, "weapon_fire" ) )
-		{
-			if ( nUser == nLocal )
-				nKind = 0;		// light tap per shot
-		}
-		else if ( !V_strcmp( pszName, "player_death" ) )
+		if ( !V_strcmp( pszName, "player_death" ) )
 		{
 			if ( nAttacker == nLocal && nUser != nLocal )
 				nKind = 2;		// heavy: a kill
@@ -108,9 +105,9 @@ public:
 	}
 
 private:
+	// (shots don't come from here: IOS_HapticLocalShot, from the gun's fire code)
 	void ListenForEvents()
 	{
-		ListenForGameEvent( "weapon_fire" );
 		ListenForGameEvent( "player_hurt" );
 		ListenForGameEvent( "player_death" );
 	}
@@ -213,5 +210,16 @@ private:
 };
 
 static CIOSDeviceFeatures s_IOSDeviceFeatures;
+
+// light tap per shot of the local player's gun (CWeaponCSBaseGun::CSBaseGunFire).
+// Only the first prediction of a shot: re-simulated commands run it again.
+void IOS_HapticLocalShot( C_BasePlayer *pPlayer )
+{
+	if ( !ios_haptics.GetBool() || !pPlayer || !pPlayer->IsLocalPlayer() )
+		return;
+	if ( prediction->InPrediction() && !prediction->IsFirstTimePredicted() )
+		return;
+	IOS_Haptic( 0 );
+}
 
 #endif // IOS

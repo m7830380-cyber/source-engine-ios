@@ -507,6 +507,19 @@ bool DDSFileImageSource::DecodeDXTData(ImageData* pdest, CopyScanlineFunc copySc
             return false;
         }
 
+        if (m == 0)
+        {
+            // what actually went in: the destination and a few pixels from the middle rows
+            const UByte* pmid = mipPlane.GetScanline(mipHeight / 2);
+            const UByte* pq = mipPlane.GetScanline(mipHeight / 4);
+            printf("[sf-dds] decoded mip 0 of %u (dest levels %u, dest format %d, pitch %u, %ux%u): mid %02x%02x%02x%02x %02x%02x%02x%02x quarter %02x%02x%02x%02x\n",
+                   mipCount, pdest->GetMipLevelCount(), (int)pdest->GetFormat(), (unsigned)mipPlane.Pitch, mipWidth, mipHeight,
+                   pmid[(mipWidth / 2) * 4], pmid[(mipWidth / 2) * 4 + 1], pmid[(mipWidth / 2) * 4 + 2], pmid[(mipWidth / 2) * 4 + 3],
+                   pmid[(mipWidth / 3) * 4], pmid[(mipWidth / 3) * 4 + 1], pmid[(mipWidth / 3) * 4 + 2], pmid[(mipWidth / 3) * 4 + 3],
+                   pq[(mipWidth / 2) * 4], pq[(mipWidth / 2) * 4 + 1], pq[(mipWidth / 2) * 4 + 2], pq[(mipWidth / 2) * 4 + 3]);
+            fflush(stdout);
+        }
+
         mipWidth  = Alg::Max(1u, mipWidth / 2); 
         mipHeight = Alg::Max(1u, mipHeight / 2); 
     }

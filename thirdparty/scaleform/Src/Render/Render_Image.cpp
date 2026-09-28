@@ -1926,6 +1926,11 @@ bool Texture::Update()
             // Note: if decoding failed, still return true, but do not apply the update.
             // This doesn't necessarily mean there is an issue with the image, for instance,
             // with video, a new frame might not be available immediately.
+#if defined(SF_USE_ANGLE)
+            printf("[sf] texture %ux%u (format %d): image decode failed, texture left empty\n",
+                   ImgSize.Width, ImgSize.Height, (int)format);
+            fflush(stdout);
+#endif
             if (pdecodeTarget == &pMap->Data)
                 pmanager->unmapTexture(this, false);
             return true;

@@ -307,15 +307,17 @@ void IOS_HapticViewModelSound( C_BasePlayer *pOwner, const char *pszSound )
 	const char *pszPart = V_strrchr( pszSound, '.' );
 	pszPart = pszPart ? pszPart + 1 : pszSound;
 
-	if ( !V_stricmp( pszPart, "Clipin" ) || !V_stricmp( pszPart, "Boxin" ) || !V_stricmp( pszPart, "Cliphit" ) )
-		IOS_HapticPulse( 0.7f, 0.7f, 0.07f );		// mag seated: a solid click
-	else if ( !V_stricmp( pszPart, "Insertshell" ) )
-		IOS_HapticPulse( 0.45f, 0.6f, 0.0f );		// a shell
-	else if ( !V_stricmp( pszPart, "Boltforward" ) || !V_stricmp( pszPart, "Slideforward" ) || !V_stricmp( pszPart, "Sliderelease" ) ||
-			  !V_stricmp( pszPart, "Siderelease" ) || !V_stricmp( pszPart, "Boltrelease" ) || !V_stricmp( pszPart, "Boltpull" ) || !V_stricmp( pszPart, "Pump" ) )
-		IOS_HapticPulse( 0.55f, 0.85f, 0.04f );	// chambering: sharp
-	else if ( !V_stricmp( pszPart, "Clipout" ) || !V_stricmp( pszPart, "Boxout" ) || !V_stricmp( pszPart, "Boltback" ) || !V_stricmp( pszPart, "Slideback" ) )
-		IOS_HapticPulse( 0.3f, 0.6f, 0.0f );		// mag out, bolt back: light
+	// names as the viewmodel animations play them (every v_ model checked)
+	static const char *s_pszSeated[] = { "Clipin", "Lclipin", "Rclipin", "Boxin", "Cliphit", "Coverdown" };
+	static const char *s_pszChamber[] = { "Boltforward", "Slideforward", "Sliderelease", "Siderelease", "Boltrelease", "Boltpull", "Pump", "PumpForward" };
+	static const char *s_pszLight[] = { "Clipout", "Cliprelease", "Boxout", "Coverup", "Chain", "Boltback", "Slideback", "Sideback", "PumpBack", "BarrelRoll" };
+	for ( int i = 0; i < ARRAYSIZE( s_pszSeated ); ++i )
+		if ( !V_stricmp( pszPart, s_pszSeated[i] ) ) { IOS_HapticPulse( 0.7f, 0.7f, 0.07f ); return; }		// mag / box seated: a solid click
+	if ( !V_stricmp( pszPart, "Insertshell" ) ) { IOS_HapticPulse( 0.45f, 0.6f, 0.0f ); return; }			// a shell
+	for ( int i = 0; i < ARRAYSIZE( s_pszChamber ); ++i )
+		if ( !V_stricmp( pszPart, s_pszChamber[i] ) ) { IOS_HapticPulse( 0.55f, 0.85f, 0.04f ); return; }	// chambering: sharp
+	for ( int i = 0; i < ARRAYSIZE( s_pszLight ); ++i )
+		if ( !V_stricmp( pszPart, s_pszLight[i] ) ) { IOS_HapticPulse( 0.3f, 0.6f, 0.0f ); return; }		// mag out, bolt back, cover up: light
 }
 
 #endif // IOS

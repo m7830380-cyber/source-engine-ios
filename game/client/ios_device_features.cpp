@@ -74,6 +74,7 @@ public:
 			UpdateThermalScale( flNow );
 		}
 		UpdateShaderSave( flNow );
+		UpdateTimedTaps( flNow );
 	}
 
 	virtual void FireGameEvent( IGameEvent *event )
@@ -255,6 +256,42 @@ private:
 	float m_flAppliedScale;
 	double m_flNextShaderSave;
 	int m_nHapticLogs;
+
+public:
+	// taps timed into a sound that has several hits in one recording (the
+	// butterfly knife's handle clacks); dropped if the weapon changes
+	void QueueTap( double flWhen, float flIntensity, float flSharpness )
+	{
+		C_BasePlayer *pLocal = C_BasePlayer::GetLocalPlayer();
+		m_hTapWeapon = pLocal ? pLocal->GetActiveWeapon() : NULL;
+		TimedTap_t tap = { flWhen, flIntensity, flSharpness };
+		m_TimedTaps.AddToTail( tap );
+	}
+
+private:
+	struct TimedTap_t { double m_flWhen; float m_flIntensity, m_flSharpness; };
+	CUtlVector< TimedTap_t > m_TimedTaps;
+	CHandle< C_BaseCombatWeapon > m_hTapWeapon;
+
+	void UpdateTimedTaps( double flNow )
+	{
+		if ( !m_TimedTaps.Count() )
+			return;
+		C_BasePlayer *pLocal = C_BasePlayer::GetLocalPlayer();
+		if ( !pLocal || !pLocal->IsAlive() || pLocal->GetActiveWeapon() != m_hTapWeapon.Get() || !ios_haptics.GetBool() )
+		{
+			m_TimedTaps.RemoveAll();
+			return;
+		}
+		for ( int i = m_TimedTaps.Count() - 1; i >= 0; --i )
+		{
+			if ( flNow >= m_TimedTaps[i].m_flWhen )
+			{
+				IOS_HapticPulse( m_TimedTaps[i].m_flIntensity, m_TimedTaps[i].m_flSharpness, 0.0f );
+				m_TimedTaps.Remove( i );
+			}
+		}
+	}
 };
 
 static CIOSDeviceFeatures s_IOSDeviceFeatures;
@@ -300,10 +337,37 @@ void IOS_HapticLanding( C_BasePlayer *pPlayer, float flFallVelocity )
 // "too real hapteekz!!!": reload parts, from the sounds the viewmodel's
 // animation plays at those frames (C_BaseViewModel::FireEvent), e.g.
 // "Weapon_AK47.Clipin" when the mag goes in
+// The butterfly knife's inspects and draws: each sound is one recording of
+// several flips. Times (s) and relative loudness of the handle clacks, found
+// as sharp high-frequency onsets in sound/weapons/bknife/*.wav.
+struct KnifeClacks_t { const char *m_pszSound; int m_nCount; float m_flTime[8]; float m_flLoud[8]; };
+static const KnifeClacks_t s_KnifeClacks[] =
+{
+	{ "ButterflyKnife.look01_a", 5, { 0.045f, 0.315f, 0.645f, 0.705f, 0.915f }, { 0.72f, 0.39f, 1.00f, 0.45f, 0.49f } },
+	{ "ButterflyKnife.look01_b", 5, { 0.035f, 0.240f, 0.520f, 0.575f, 0.755f }, { 0.56f, 0.88f, 0.94f, 0.89f, 1.00f } },
+	{ "ButterflyKnife.look02_a", 6, { 0.035f, 0.290f, 0.550f, 0.830f, 0.885f, 1.150f }, { 0.94f, 0.96f, 1.00f, 0.82f, 0.99f, 0.63f } },
+	{ "ButterflyKnife.look02_b", 4, { 0.035f, 0.325f, 0.400f, 0.615f }, { 0.48f, 0.73f, 1.00f, 0.71f } },
+	{ "ButterflyKnife.look03_a", 8, { 0.030f, 0.210f, 0.370f, 0.675f, 0.950f, 1.175f, 1.255f, 1.555f }, { 0.68f, 0.59f, 0.52f, 0.28f, 0.51f, 1.00f, 0.81f, 0.39f } },
+	{ "ButterflyKnife.look03_b", 4, { 0.025f, 0.155f, 0.645f, 0.710f }, { 0.44f, 0.68f, 1.00f, 0.55f } },
+	{ "ButterflyKnife.draw01", 4, { 0.245f, 0.390f, 0.575f, 0.640f }, { 0.62f, 0.43f, 1.00f, 0.50f } },
+	{ "ButterflyKnife.draw02", 1, { 0.355f }, { 1.00f } },
+};
+
 void IOS_HapticViewModelSound( C_BasePlayer *pOwner, const char *pszSound )
 {
 	if ( !ios_haptics.GetBool() || !ios_haptics_real.GetBool() || !pOwner || !pOwner->IsLocalPlayer() || !pszSound )
 		return;
+
+	for ( int i = 0; i < ARRAYSIZE( s_KnifeClacks ); ++i )
+	{
+		if ( V_stricmp( pszSound, s_KnifeClacks[i].m_pszSound ) )
+			continue;
+		// metal on metal: short and sharp, by how loud the clack is
+		double flNow = Plat_FloatTime();
+		for ( int j = 0; j < s_KnifeClacks[i].m_nCount; ++j )
+			s_IOSDeviceFeatures.QueueTap( flNow + s_KnifeClacks[i].m_flTime[j], 0.25f + 0.45f * s_KnifeClacks[i].m_flLoud[j], 0.95f );
+		return;
+	}
 	const char *pszPart = V_strrchr( pszSound, '.' );
 	pszPart = pszPart ? pszPart + 1 : pszSound;
 

@@ -2266,6 +2266,14 @@ void CBaseClientState::HandleDeferredConnection()
 				|| ( s_bAllowLanWhitelist && dc.m_adrServerAddress.IsReservedAdr() )			// LAN RFC 1918
 				;
 		}
+
+#if defined( IOS )
+		// There is no game coordinator to get a server cookie from, so the path below
+		// (ask the GC) always ends in "restricted to LAN connections only". Connect
+		// directly to any address: VPN addresses like Tailscale's 100.x aren't RFC 1918.
+		// The host still decides who may join (ip_host / sv_ip_host).
+		bCanSendConnectPacketRightNow = true;
+#endif
 		
 		// If we determined that client is good to go then just follow up with a real connect packet
 		if ( bCanSendConnectPacketRightNow )

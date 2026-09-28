@@ -966,7 +966,20 @@ bool CBaseServer::ProcessConnectionlessPacket(netpacket_t * packet)
 				buf.PutUnsignedInt( LittleDWord( CONNECTIONLESS_HEADER ) );
 				buf.PutUnsignedChar( 'h' );
 				buf.PutString( "IOSLAN1" );
-				buf.PutString( GetName() );
+				// the host's player name (its own client, connected over loopback);
+				// the server's hostname is set when the match starts, not the player name
+				const char *pszHostName = GetName();
+				for ( int i = 0; i < m_Clients.Count(); i++ )
+				{
+					CBaseClient *pClient = m_Clients[i];
+					if ( pClient && pClient->IsConnected() && !pClient->IsFakeClient() && pClient->GetNetChannel() &&
+						 pClient->GetNetChannel()->IsLoopback() && pClient->GetClientName()[0] )
+					{
+						pszHostName = pClient->GetClientName();
+						break;
+					}
+				}
+				buf.PutString( pszHostName );
 				buf.PutString( GetMapName() );
 				buf.PutUnsignedChar( MAX( 0, GetNumClients() - GetNumFakeClients() ) );
 				buf.PutUnsignedChar( GetNumFakeClients() );

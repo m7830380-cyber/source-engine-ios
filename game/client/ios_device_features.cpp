@@ -308,11 +308,12 @@ void IOS_HapticViewModelSound( C_BasePlayer *pOwner, const char *pszSound )
 	pszPart = pszPart ? pszPart + 1 : pszSound;
 
 	// names as the viewmodel animations play them (every v_ model checked)
-	static const char *s_pszSeated[] = { "Clipin", "Lclipin", "Rclipin", "Boxin", "Cliphit", "Coverdown" };
+	static const char *s_pszSeated[] = { "Clipin", "Lclipin", "Rclipin", "Boxin", "Coverdown" };
 	static const char *s_pszChamber[] = { "Boltforward", "Slideforward", "Sliderelease", "Siderelease", "Boltrelease", "Boltpull", "Pump", "PumpForward" };
 	static const char *s_pszLight[] = { "Clipout", "Cliprelease", "Boxout", "Coverup", "Chain", "Boltback", "Slideback", "Sideback", "PumpBack", "BarrelRoll" };
 	for ( int i = 0; i < ARRAYSIZE( s_pszSeated ); ++i )
 		if ( !V_stricmp( pszPart, s_pszSeated[i] ) ) { IOS_HapticPulse( 0.7f, 0.7f, 0.07f ); return; }		// mag / box seated: a solid click
+	if ( !V_stricmp( pszPart, "Cliphit" ) ) { IOS_HapticPulse( 0.18f, 0.5f, 0.0f ); return; }				// palm slap on the mag: just a little one
 	if ( !V_stricmp( pszPart, "Insertshell" ) ) { IOS_HapticPulse( 0.45f, 0.6f, 0.0f ); return; }			// a shell
 	for ( int i = 0; i < ARRAYSIZE( s_pszChamber ); ++i )
 		if ( !V_stricmp( pszPart, s_pszChamber[i] ) ) { IOS_HapticPulse( 0.55f, 0.85f, 0.04f ); return; }	// chambering: sharp

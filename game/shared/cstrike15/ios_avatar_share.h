@@ -13,7 +13,9 @@
 #define IOS_AVATAR_SIZE			64									// pixels, square
 #define IOS_AVATAR_BYTES		( IOS_AVATAR_SIZE * IOS_AVATAR_SIZE * 3 )	// RGB, rows top to bottom
 #define IOS_AVATAR_BASE64_MAX	( ( IOS_AVATAR_BYTES + 2 ) / 3 * 4 )
-#define IOS_AVATAR_CHUNK		480									// base64 chars per command (512 max per command)
+// base64 chars per command: engine->ServerCmd formats "cmd <command>" into a
+// 255-char buffer, so longer commands were cut short (and every upload failed)
+#define IOS_AVATAR_CHUNK		200
 
 // base64url ('-' '_', no padding): no characters the command parser treats specially
 static const char s_szIOSAvatarBase64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";

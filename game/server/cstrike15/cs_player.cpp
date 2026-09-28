@@ -8993,6 +8993,10 @@ bool CCSPlayer::ClientCommand( const CCommand &args )
 					g_pStringTableIOSAvatars->SetStringUserData( nIndex, nBytes, s_Pixels );
 				Msg( "[avatar] %s sent their profile picture\n", GetPlayerName() );
 			}
+			else
+			{
+				Msg( "[avatar] %s: profile picture not stored (%d bytes, expected %d)\n", GetPlayerName(), nBytes, IOS_AVATAR_BYTES );
+			}
 		}
 		return true;
 	}

@@ -42,7 +42,10 @@ static bool LoadAvatarPixels( unsigned char *pOut )
 	static ConVarRef profile_avatar( "profile_avatar" );
 	const char *pszFile = profile_avatar.IsValid() ? profile_avatar.GetString() : "";
 	if ( !pszFile || !pszFile[0] )
+	{
+		Msg( "[avatar] no profile_avatar set (cfg/user.cfg), not sending a picture\n" );
 		return false;
+	}
 
 	CUtlBuffer buf;
 	if ( !g_pFullFileSystem->ReadFile( pszFile, "GAME", buf ) )
@@ -110,6 +113,7 @@ void IOSAvatar_SendLocal()
 		s_AvatarCommands.AddToTail( CUtlString( CFmtStr( "ios_avatar data %s\n", szChunk ) ) );
 	}
 	s_AvatarCommands.AddToTail( CUtlString( "ios_avatar end\n" ) );
+	Msg( "[avatar] sending our profile picture to the server (%d commands)\n", s_AvatarCommands.Count() );
 }
 
 // A PNG (RGBA, uncompressed deflate): the format Scaleform turns into a texture
@@ -221,10 +225,10 @@ public:
 
 		double flNow = Plat_FloatTime();
 
-		// upload: 10 commands a second, well under the server's limit (40)
+		// upload: 20 commands a second, well under the server's limit (40)
 		if ( s_AvatarCommands.Count() && flNow >= m_flNextSend )
 		{
-			m_flNextSend = flNow + 0.1;
+			m_flNextSend = flNow + 0.05;
 			engine->ServerCmd( s_AvatarCommands[0].Get(), true );
 			s_AvatarCommands.Remove( 0 );
 		}
@@ -258,6 +262,7 @@ private:
 
 			WriteAvatarPNG( pszKey, pData );
 			m_Stored[ pszKey ] = crc;
+			Msg( "[avatar] received the profile picture of account %s\n", pszKey );
 			s_nAvatarVersion++;
 		}
 	}

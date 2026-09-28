@@ -988,21 +988,30 @@ void C_BaseViewModel::UpdateAllViewmodelAddons( void )
 	// Equipped gloves (not in this source: arms always got the player model's default
 	// gloves). Our own from the local inventory's loadout; others keep the default.
 	CEconItemView *pGloves = NULL;
+	const char *pszEquippedGloveModel = NULL;
 	if ( pPlayer->IsLocalPlayer() && CSInventoryManager() && CSInventoryManager()->GetLocalCSInventory() )
 	{
 		int nTeam = pPlayer->GetTeamNumber();
 		CEconItemView *pItem = ( nTeam == TEAM_TERRORIST || nTeam == TEAM_CT ) ?
 			CSInventoryManager()->GetLocalCSInventory()->GetItemInLoadout( nTeam, LOADOUT_POSITION_CLOTHING_HANDS ) : NULL;
-		if ( pItem && pItem->IsValid() && pItem->GetItemDefinition() && !pItem->GetItemDefinition()->IsDefaultSlotItem() &&
-			 pItem->GetStaticData()->GetPlayerDisplayModel( nTeam ) && pItem->GetStaticData()->GetPlayerDisplayModel( nTeam )[0] &&
-			 modelinfo->GetModelIndex( pItem->GetStaticData()->GetPlayerDisplayModel( nTeam ) ) != -1 )
+		if ( pItem && pItem->IsValid() && pItem->GetItemDefinition() && !pItem->GetItemDefinition()->IsDefaultSlotItem() )
 		{
-			pGloves = pItem;
+			// per-team models are only set with model_player_per_class; gloves have just
+			// model_player, which the schema keeps in slot 0
+			const char *pszModel = pItem->GetStaticData()->GetPlayerDisplayModel( nTeam );
+			if ( !pszModel || !pszModel[0] )
+				pszModel = pItem->GetStaticData()->GetPlayerDisplayModel( 0 );
+			if ( pszModel && pszModel[0] && modelinfo->GetModelIndex( pszModel ) != -1 )
+			{
+				pGloves = pItem;
+				pszEquippedGloveModel = pszModel;
+			}
 		}
 	}
 	uint64 nGlovesItemID = pGloves ? pGloves->GetItemID() : 0;
 	if ( nGlovesItemID != m_nViewmodelGlovesItemID )
 	{
+		VERBOSE_PRINTF( "[gloves] viewmodel gloves: %s (item %llu)\n", pszEquippedGloveModel ? pszEquippedGloveModel : "default", nGlovesItemID );
 		// gloves changed (equipped from the menu mid-match): rebuild the arms
 		RemoveViewmodelArmModels();
 		m_nViewmodelGlovesItemID = nGlovesItemID;
@@ -1012,7 +1021,7 @@ void C_BaseViewModel::UpdateAllViewmodelAddons( void )
 	if ( pPlayer->m_pViewmodelArmConfig != NULL && m_vecViewmodelArmModels.Count() == 0 )
 	{
 		{
-			const char *pszGloveModel = pGloves ? pGloves->GetStaticData()->GetPlayerDisplayModel( pPlayer->GetTeamNumber() ) : pPlayer->m_pViewmodelArmConfig->szAssociatedGloveModel;
+			const char *pszGloveModel = pGloves ? pszEquippedGloveModel : pPlayer->m_pViewmodelArmConfig->szAssociatedGloveModel;
 			C_ViewmodelAttachmentModel *pGloveModel = AddViewmodelArmModel( pszGloveModel, atoi(pPlayer->m_pViewmodelArmConfig->szSkintoneIndex) );
 			if ( pGloveModel && pGloves )
 			{

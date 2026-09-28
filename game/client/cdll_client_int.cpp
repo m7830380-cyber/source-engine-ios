@@ -5165,6 +5165,48 @@ static void LanReadString( const unsigned char *&p, const unsigned char *pEnd, c
 }
 
 // broadcast the query to the ports hosts listen on; false if nothing went out
+// Without the multicast entitlement (most sideloading signatures and LiveContainer
+// don't carry it) iOS refuses broadcasts with EHOSTUNREACH (65), even with Local
+// Network allowed. Plain unicast only needs Local Network, so then ask every
+// address of the Wi-Fi's subnet directly, on the ports hosts use first.
+static int LanSendSubnetSweep( int s, const unsigned char *pQuery, int nQuery )
+{
+	int nSent = 0;
+	ifaddrs *pAddrs = NULL;
+	if ( getifaddrs( &pAddrs ) != 0 )
+		return 0;
+	for ( ifaddrs *a = pAddrs; a; a = a->ifa_next )
+	{
+		if ( !a->ifa_addr || a->ifa_addr->sa_family != AF_INET || !a->ifa_netmask || ( a->ifa_flags & IFF_LOOPBACK ) || !( a->ifa_flags & IFF_UP ) )
+			continue;
+		// Wi-Fi and the personal hotspot bridge, not cellular (pdp_ip) or VPN (utun)
+		if ( V_strncmp( a->ifa_name, "en", 2 ) && V_strncmp( a->ifa_name, "bridge", 6 ) )
+			continue;
+		uint32 ip = ntohl( ( (sockaddr_in *)a->ifa_addr )->sin_addr.s_addr );
+		uint32 mask = ntohl( ( (sockaddr_in *)a->ifa_netmask )->sin_addr.s_addr );
+		// home networks are /24; cap bigger ones to the /22 around us (1022 hosts)
+		if ( ~mask > 0x3FF )
+			mask = 0xFFFFFC00;
+		uint32 net = ip & mask, bcast = net | ~mask;
+		for ( uint32 host = net + 1; host < bcast; host++ )
+		{
+			if ( host == ip )
+				continue;
+			for ( int nPort = 27015; nPort <= 27016; nPort++ )
+			{
+				sockaddr_in to = {};
+				to.sin_family = AF_INET;
+				to.sin_port = htons( nPort );
+				to.sin_addr.s_addr = htonl( host );
+				if ( sendto( s, pQuery, nQuery, 0, (sockaddr *)&to, sizeof( to ) ) > 0 )
+					++nSent;
+			}
+		}
+	}
+	freeifaddrs( pAddrs );
+	return nSent;
+}
+
 static bool LanSendQuery( int s, int *pnErr )
 {
 	static const unsigned char s_Query[] = { 0xFF, 0xFF, 0xFF, 0xFF, 'g', 'I', 'O', 'S', 'L', 'A', 'N', '1', 0 };
@@ -5180,7 +5222,18 @@ static bool LanSendQuery( int s, int *pnErr )
 		else if ( pnErr )
 			*pnErr = errno;
 	}
-	return nSent > 0;
+	if ( nSent > 0 )
+		return true;
+
+	static bool s_bLogged = false;
+	int nSwept = LanSendSubnetSweep( s, s_Query, sizeof( s_Query ) );
+	if ( !s_bLogged )
+	{
+		s_bLogged = true;
+		Msg( "[lan] broadcast refused (error %d, no multicast entitlement in this signature?); asking %d addresses directly instead\n",
+			 pnErr ? *pnErr : 0, nSwept );
+	}
+	return nSwept > 0;
 }
 
 // one reply packet -> game; false if it isn't an IOSLAN1 answer
@@ -5323,7 +5376,7 @@ CON_COMMAND( lan_find, "List LAN games (other devices hosting an offline match)"
 	int nErr = 0;
 	if ( !LanSendQuery( s, &nErr ) )
 	{
-		Msg( "lan_find: couldn't broadcast (error %d). Allow \"Local Network\" for this app in iOS Settings > Privacy.\n", nErr );
+		Msg( "lan_find: couldn't send the search (error %d). Check \"Local Network\" for this app (or LiveContainer) in iOS Settings > Privacy & Security, and that you're on Wi-Fi.\n", nErr );
 		close( s );
 		return;
 	}
@@ -5397,6 +5450,71 @@ CON_COMMAND( lan_join, "Join a LAN game: lan_join <number from lan_find> or lan_
 	}
 	Msg( "Joining %s...\n", szAddress );
 	engine->ClientCmd_Unrestricted( CFmtStr( "connect %s\n", szAddress ) );
+}
+
+//-----------------------------------------------------------------------------
+// Hosting by IP address: no LAN search needed (it relies on broadcasts, which
+// iOS refuses without the multicast entitlement). The host starts an offline
+// match and runs "ip_host"; friends run "ip_join <address>". Also over Tailscale
+// or other VPNs, whose addresses the server otherwise rejects as not local.
+//-----------------------------------------------------------------------------
+static void IOS_PrintHostAddresses( void )
+{
+	static ConVarRef hostport( "hostport" );
+	int nPort = hostport.IsValid() ? hostport.GetInt() : 27015;
+	ifaddrs *pAddrs = NULL;
+	if ( getifaddrs( &pAddrs ) != 0 )
+	{
+		Msg( "  (couldn't read this device's network addresses)\n" );
+		return;
+	}
+	bool bAny = false;
+	for ( ifaddrs *a = pAddrs; a; a = a->ifa_next )
+	{
+		if ( !a->ifa_addr || a->ifa_addr->sa_family != AF_INET || ( a->ifa_flags & IFF_LOOPBACK ) || !( a->ifa_flags & IFF_UP ) )
+			continue;
+		const char *pszKind = !V_strncmp( a->ifa_name, "en", 2 ) ? "Wi-Fi" :
+							  !V_strncmp( a->ifa_name, "utun", 4 ) ? "VPN / Tailscale" :
+							  !V_strncmp( a->ifa_name, "bridge", 6 ) ? "hotspot" :
+							  !V_strncmp( a->ifa_name, "pdp_ip", 6 ) ? "cellular (usually not reachable)" : a->ifa_name;
+		Msg( "  ip_join %s:%d      (%s)\n", inet_ntoa( ( (sockaddr_in *)a->ifa_addr )->sin_addr ), nPort, pszKind );
+		bAny = true;
+	}
+	freeifaddrs( pAddrs );
+	if ( !bAny )
+		Msg( "  (no network: connect to Wi-Fi or a VPN)\n" );
+}
+
+CON_COMMAND( ip_host, "Open your offline match to players joining by IP address (ip_host 0 to close it again)" )
+{
+	static ConVarRef sv_ip_host( "sv_ip_host" );
+	if ( !sv_ip_host.IsValid() )
+		return;
+	if ( args.ArgC() >= 2 && !V_atoi( args[1] ) )
+	{
+		sv_ip_host.SetValue( 0 );
+		Msg( "ip_host: closed, only players on this network can join\n" );
+		return;
+	}
+	if ( !engine->IsConnected() || !engine->IsClientLocalToActiveServer() )
+	{
+		Msg( "ip_host: start an offline match first (Play > Offline with bots), then run ip_host in it\n" );
+		return;
+	}
+	sv_ip_host.SetValue( 1 );
+	Msg( "ip_host: players can join by IP now. Give them one of these, whichever network they share with you:\n" );
+	IOS_PrintHostAddresses();
+}
+
+CON_COMMAND( ip_join, "Join a game by IP address: ip_join <address[:port]> (the host runs ip_host)" )
+{
+	if ( args.ArgC() < 2 )
+	{
+		Msg( "Usage: ip_join <address[:port]>   (the host's ip_host shows it)\n" );
+		return;
+	}
+	Msg( "Joining %s...\n", args.ArgS() );
+	engine->ClientCmd_Unrestricted( CFmtStr( "connect %s\n", args.ArgS() ) );
 }
 
 CON_COMMAND( lan_ip, "Show this device's LAN address (for others to lan_join)" )

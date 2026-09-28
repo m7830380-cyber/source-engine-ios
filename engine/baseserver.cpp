@@ -193,6 +193,11 @@ ConVar			sv_region( "sv_region","-1", FCVAR_NONE | FCVAR_RELEASE, "The region of
 static ConVar	sv_instancebaselines( "sv_instancebaselines", "1", FCVAR_DEVELOPMENTONLY, "Enable instanced baselines. Saves network overhead." );
 static ConVar	sv_stats( "sv_stats", "1", 0, "Collect CPU usage stats" );
 static ConVar	sv_enableoldqueries( "sv_enableoldqueries", "0", 0, "Enable support for old style (HL1) server queries" );
+#if defined( IOS )
+// "ip_host" (client command): let players join from any address, e.g. over
+// Tailscale (100.x) or another VPN, not only from this Wi-Fi's private range
+static ConVar	sv_ip_host( "sv_ip_host", "0", FCVAR_RELEASE, "iOS: accept players from any address (set by ip_host), not only this network's" );
+#endif
 
 static ConVar	sv_reservation_tickrate_adjustment( "sv_reservation_tickrate_adjustment", "0", FCVAR_RELEASE, "Adjust server tickrate upon reservation" );
 
@@ -2827,6 +2832,11 @@ bool CBaseServer::CheckIPRestrictions( const ns_address &adr, int nAuthProtocol 
 	// X360TBD: network
 	if ( IsX360() )
 		return true;
+
+#if defined( IOS )
+	if ( sv_ip_host.GetBool() )
+		return true;
+#endif
 
 	// allow other users if they're on the same ip range
 	if ( Steam3Server().BLanOnly() )

@@ -135,6 +135,8 @@ PROJECT_EXTRA_SOURCES = {
 		'game/client/cstrike15/Scaleform/scoreboard_scaleform.cpp',
 		# LAN profile pictures: upload, and the IOSAvatars string table -> avatar files
 		'game/client/cstrike15/ios_avatar_share.cpp',
+		# gyro aiming, haptics, heat-aware render scale (CoreMotion / UIKit side, and the game side)
+		'game/client/ios_device.mm', 'game/client/ios_device_features.cpp',
 		# CS:GO pause menu glue, reconstructed (cstrike15-restoration)
 		'game/client/cstrike15/Scaleform/pausemenuscreen_scaleform.cpp',
 		# offline with bots dialog glue (single-player.swf)

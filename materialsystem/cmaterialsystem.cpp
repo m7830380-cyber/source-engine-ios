@@ -5683,6 +5683,20 @@ void CMaterialSystem::SpinPresent( uint nFrames )
 }
 
 
+#if defined( IOS )
+// togl saves the list of linked shader pairs (glshaders.cfg, precompiled at the
+// next launch) only on a map change or a clean shutdown, and iOS apps get killed
+// instead of shutting down, so the shaders of a session's only map were never
+// kept. The client runs this every couple of minutes in game. On GL the purge
+// just saves the list (it never purges).
+CON_COMMAND( mat_save_glshaders, "Save the list of compiled GL shaders (glshaders.cfg), precompiled at the next launch" )
+{
+	MaterialLock_t hLock = g_MaterialSystem.Lock();
+	g_pShaderAPI->PurgeUnusedVertexAndPixelShaders();
+	g_MaterialSystem.Unlock( hLock );
+}
+#endif
+
 CON_COMMAND( mat_hdr_enabled, "Report if HDR is enabled for debugging" )
 {
 	if( HardwareConfig() && HardwareConfig()->GetHDREnabled() )

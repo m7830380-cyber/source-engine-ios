@@ -959,6 +959,29 @@ void COptionsScaleform::ReadOptionsFromFile( const char * szFileName )
 	KeyValues *pOptionKeys = new KeyValues( "options" );
 	bool bResult = pOptionKeys->LoadFromFile( g_pFullFileSystem, szFileName, NULL );
 
+#if defined( IOS )
+	// iPhone options in Settings > Game (game/client/ios_device_features.cpp); the
+	// movie lists whatever the file gives, so no change to the SWF is needed
+	if ( bResult && V_stristr( szFileName, "game_options" ) )
+	{
+		static const char s_szIOSOptions[] =
+			"\"options\"\n{\n"
+			"	\"iOS Gyro\"\n	{\n		\"name\" \"Gyro aiming\"\n		\"tooltip\" \"Aim by moving the phone\"\n		\"convar\" \"ios_gyro\"\n		\"priority\" \"0010\"\n		\"type\" \"choice\"\n		\"choices\" { \"#GameUI_No\" \"0\" \"#GameUI_Yes\" \"1\" }\n	}\n"
+			"	\"iOS Gyro Sensitivity\"\n	{\n		\"name\" \"Gyro sensitivity\"\n		\"convar\" \"ios_gyro_sensitivity\"\n		\"priority\" \"0011\"\n		\"type\" \"slider\"\n	}\n"
+			"	\"iOS Gyro Invert\"\n	{\n		\"name\" \"Gyro invert up/down\"\n		\"convar\" \"ios_gyro_invert_pitch\"\n		\"priority\" \"0012\"\n		\"type\" \"choice\"\n		\"choices\" { \"#GameUI_No\" \"0\" \"#GameUI_Yes\" \"1\" }\n	}\n"
+			"	\"iOS Haptics\"\n	{\n		\"name\" \"Vibration (haptics)\"\n		\"tooltip\" \"Vibrate on shots, hits, damage taken and kills\"\n		\"convar\" \"ios_haptics\"\n		\"priority\" \"0013\"\n		\"type\" \"choice\"\n		\"choices\" { \"#GameUI_No\" \"0\" \"#GameUI_Yes\" \"1\" }\n	}\n"
+			"	\"iOS Thermal Scale\"\n	{\n		\"name\" \"Lower resolution when hot\"\n		\"tooltip\" \"Keep the frame rate when the phone heats up by rendering the 3D view at a lower resolution\"\n		\"convar\" \"ios_thermal_scale\"\n		\"priority\" \"0014\"\n		\"type\" \"choice\"\n		\"choices\" { \"#GameUI_No\" \"0\" \"#GameUI_Yes\" \"1\" }\n	}\n"
+			"}\n";
+		KeyValues *pIOSOptions = new KeyValues( "options" );
+		if ( pIOSOptions->LoadFromBuffer( "ios_options", s_szIOSOptions ) )
+		{
+			for ( KeyValues *pSub = pIOSOptions->GetFirstTrueSubKey(); pSub; pSub = pSub->GetNextTrueSubKey() )
+				pOptionKeys->AddSubKey( pSub->MakeCopy() );
+		}
+		pIOSOptions->deleteThis();
+	}
+#endif
+
 	bool bDevMode = !IsCert() && !IsRetail();
 	
 	if ( bResult )

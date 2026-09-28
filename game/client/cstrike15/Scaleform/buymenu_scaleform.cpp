@@ -590,6 +590,11 @@ void CCSBuyMenuScaleform::InitWeapon( SCALEFORM_CALLBACK_ARGS_DECL )
 			break;
 
 		case WEAPONTYPE_C4:
+		// kevlar, kevlar + helmet, defuser / rescue kit: the movie prices "equipment"
+		// by weapon ID (GetWeaponPriceFromIDScript); as "primary" it asked
+		// GetWeaponPriceScript for the inventory item in that loadout slot, which
+		// gear doesn't have, and showed -1
+		case WEAPONTYPE_EQUIPMENT:
 			m_pScaleformUI->Value_SetMember( weaponData, "weaponType", "equipment" );
 			break;
 

@@ -312,7 +312,7 @@ void IOS_HapticViewModelSound( C_BasePlayer *pOwner, const char *pszSound )
 	else if ( !V_stricmp( pszPart, "Insertshell" ) )
 		IOS_HapticPulse( 0.45f, 0.6f, 0.0f );		// a shell
 	else if ( !V_stricmp( pszPart, "Boltforward" ) || !V_stricmp( pszPart, "Slideforward" ) || !V_stricmp( pszPart, "Sliderelease" ) ||
-			  !V_stricmp( pszPart, "Siderelease" ) || !V_stricmp( pszPart, "Boltrelease" ) || !V_stricmp( pszPart, "Pump" ) )
+			  !V_stricmp( pszPart, "Siderelease" ) || !V_stricmp( pszPart, "Boltrelease" ) || !V_stricmp( pszPart, "Boltpull" ) || !V_stricmp( pszPart, "Pump" ) )
 		IOS_HapticPulse( 0.55f, 0.85f, 0.04f );	// chambering: sharp
 	else if ( !V_stricmp( pszPart, "Clipout" ) || !V_stricmp( pszPart, "Boxout" ) || !V_stricmp( pszPart, "Boltback" ) || !V_stricmp( pszPart, "Slideback" ) )
 		IOS_HapticPulse( 0.3f, 0.6f, 0.0f );		// mag out, bolt back: light

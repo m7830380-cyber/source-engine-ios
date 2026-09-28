@@ -889,6 +889,12 @@ static void IOS_InstallProgramCache( EGLDisplay display )
 }
 #endif
 
+#if defined( IOS )
+#define IOS_PLATFORM_TOUCH 1
+#else
+#define IOS_PLATFORM_TOUCH 0
+#endif
+
 bool CSDLMgr::Connect( CreateInterfaceFn factory )
 {
 	SDLAPP_FUNC;
@@ -1562,6 +1568,15 @@ void CSDLMgr::OnFrameRendered()
 
 			bRelativeMouseMode = SDL_FALSE;
 		}
+#if defined( IOS )
+		// Touch is absolute: the mouse is SDL's touch emulation in menus, and looking
+		// around in game comes from the touch look area, not the mouse. In relative
+		// mode SDL builds the position from summed deltas clamped to the window, so any
+		// clamped move left the menu cursor offset from the finger for good (seen in
+		// Scaleform menus, whose own cursor keeps the engine's hidden).
+		bWindowGrab = SDL_FALSE;
+		bRelativeMouseMode = SDL_FALSE;
+#endif
 
 		SDL_SetWindowGrab( m_Window, bWindowGrab );
 		SDL_SetRelativeMouseMode( bRelativeMouseMode );
@@ -2296,7 +2311,9 @@ void CSDLMgr::PumpWindowsMessageLoop()
 				m_nMouseXDelta += event.motion.xrel;
 				m_nMouseYDelta += event.motion.yrel;
 
-				if ( !m_bRawInput && !m_bCursorVisible &&
+				// (not on iOS: warping the touch-emulated mouse moves the cursor away
+				// from the finger)
+				if ( !IOS_PLATFORM_TOUCH && !m_bRawInput && !m_bCursorVisible &&
 					(event.motion.x < m_nMouseTargetX - m_nWarpDelta ||
 					 event.motion.x > m_nMouseTargetX + m_nWarpDelta ||
 					 event.motion.y < m_nMouseTargetY - m_nWarpDelta ||

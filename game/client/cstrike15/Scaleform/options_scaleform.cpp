@@ -761,7 +761,7 @@ void COptionsScaleform::OnLayoutComplete( SCALEFORM_CALLBACK_ARGS_DECL )
 
 void COptionsScaleform::DisableConditionalWidgets()
 {
-#ifndef POSIX
+#if !defined( POSIX ) || defined( IOS )
 	SF_FORCE_SPLITSCREEN_PLAYER_GUARD( m_iSplitScreenSlot );
 
 	for ( int iOption = m_nScrollPos; iOption < m_vecOptions.Count(); ++iOption )
@@ -802,6 +802,14 @@ void COptionsScaleform::HandleDisableConditionalWidgets( Option_t * pOption, int
 			SplitScreenConVarRef m_customaccel( "m_customaccel" );
 			bDisableOut = !m_customaccel.GetBool( m_iSplitScreenSlot );
 		}
+#if defined( IOS )
+		// "too real hapteekz!!!" only does anything with Vibration on
+		else if ( !V_strcmp( pOption->m_szConVar, "ios_haptics_real" ) )
+		{
+			static ConVarRef ios_haptics( "ios_haptics" );
+			bDisableOut = !ios_haptics.GetBool();
+		}
+#endif
 	}
 }
 
@@ -970,7 +978,8 @@ void COptionsScaleform::ReadOptionsFromFile( const char * szFileName )
 			"	\"iOS Gyro Sensitivity\"\n	{\n		\"name\" \"Gyro sensitivity\"\n		\"convar\" \"ios_gyro_sensitivity\"\n		\"priority\" \"0011\"\n		\"type\" \"slider\"\n	}\n"
 			"	\"iOS Gyro Invert\"\n	{\n		\"name\" \"Gyro invert up/down\"\n		\"convar\" \"ios_gyro_invert_pitch\"\n		\"priority\" \"0012\"\n		\"type\" \"choice\"\n		\"choices\" { \"#GameUI_No\" \"0\" \"#GameUI_Yes\" \"1\" }\n	}\n"
 			"	\"iOS Haptics\"\n	{\n		\"name\" \"Vibration (haptics)\"\n		\"tooltip\" \"Vibrate on shots, hits, damage taken and kills\"\n		\"convar\" \"ios_haptics\"\n		\"priority\" \"0013\"\n		\"type\" \"choice\"\n		\"choices\" { \"#GameUI_No\" \"0\" \"#GameUI_Yes\" \"1\" }\n	}\n"
-			"	\"iOS Thermal Scale\"\n	{\n		\"name\" \"Lower resolution when hot\"\n		\"tooltip\" \"Keep the frame rate when the phone heats up by rendering the 3D view at a lower resolution\"\n		\"convar\" \"ios_thermal_scale\"\n		\"priority\" \"0014\"\n		\"type\" \"choice\"\n		\"choices\" { \"#GameUI_No\" \"0\" \"#GameUI_Yes\" \"1\" }\n	}\n"
+			"	\"iOS Haptics Real\"\n	{\n		\"name\" \"too real hapteekz!!!\"\n		\"tooltip\" \"Also vibrate when you land (harder the further you fell) and on reload parts: mag in, bolt, pump. Needs Vibration on\"\n		\"convar\" \"ios_haptics_real\"\n		\"priority\" \"0014\"\n		\"type\" \"choice\"\n		\"choices\" { \"#GameUI_No\" \"0\" \"#GameUI_Yes\" \"1\" }\n	}\n"
+			"	\"iOS Thermal Scale\"\n	{\n		\"name\" \"Lower resolution when hot\"\n		\"tooltip\" \"Keep the frame rate when the phone heats up by rendering the 3D view at a lower resolution\"\n		\"convar\" \"ios_thermal_scale\"\n		\"priority\" \"0015\"\n		\"type\" \"choice\"\n		\"choices\" { \"#GameUI_No\" \"0\" \"#GameUI_Yes\" \"1\" }\n	}\n"
 			"}\n";
 		KeyValues *pIOSOptions = new KeyValues( "options" );
 		if ( pIOSOptions->LoadFromBuffer( "ios_options", s_szIOSOptions ) )

@@ -2571,6 +2571,10 @@ void CCSPlayer::OnJump( float fImpulse )
 
 void CCSPlayer::OnLand( float fVelocity )
 {
+#if defined( CLIENT_DLL ) && defined( IOS )
+	extern void IOS_HapticLanding( C_BasePlayer *pPlayer, float flFallVelocity );
+	IOS_HapticLanding( this, fVelocity );
+#endif
 
 	CWeaponCSBase* pActiveWeapon = GetActiveCSWeapon();
 	if (pActiveWeapon != NULL)
@@ -2999,6 +3003,10 @@ int CCSPlayer::GetWeaponPrice( CSWeaponID weaponId, const CEconItemView *pWepVie
 
 		return iCost;
 	}
+
+	// no weapon script for these either (the server charges this constant)
+	if ( weaponId == ITEM_DEFUSER || weaponId == ITEM_CUTTERS )
+		return ITEM_PRICE_DEFUSEKIT;
 
 //	if ( weaponId == ITEM_EXOSUIT )
 //	{

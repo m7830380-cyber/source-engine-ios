@@ -280,6 +280,10 @@ void C_BaseViewModel::FireEvent( const Vector& origin, const QAngle& angles, int
 				CLocalPlayerFilter filter;
 				EmitSound( filter, GetOwner()->GetSoundSourceIndex(), options, &GetAbsOrigin() );
 				SetPreviousSoundStr( options );
+#if defined( IOS )
+				extern void IOS_HapticViewModelSound( C_BasePlayer *pOwner, const char *pszSound );
+				IOS_HapticViewModelSound( ToBasePlayer( GetOwner() ), options );
+#endif
 			}
 			ResetTimeSincePreviousSound();
 			return;

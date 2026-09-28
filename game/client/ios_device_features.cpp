@@ -40,6 +40,7 @@ ConVar ios_gyro( "ios_gyro", "0", FCVAR_ARCHIVE | FCVAR_RELEASE, "Aim by moving 
 ConVar ios_gyro_sensitivity( "ios_gyro_sensitivity", "1.0", FCVAR_ARCHIVE | FCVAR_RELEASE, "Gyro aiming sensitivity (1 = the view turns as much as the phone)", true, 0.2f, true, 4.0f );
 ConVar ios_gyro_invert_pitch( "ios_gyro_invert_pitch", "0", FCVAR_ARCHIVE | FCVAR_RELEASE, "Invert gyro up/down" );
 ConVar ios_haptics( "ios_haptics", "0", FCVAR_ARCHIVE | FCVAR_RELEASE, "Vibrate on shots, hits, damage taken and kills" );
+ConVar ios_haptics_real( "ios_haptics_real", "0", FCVAR_ARCHIVE | FCVAR_RELEASE, "With ios_haptics: also landings (harder the further you fell) and reload parts (mag in, bolt, pump)" );
 ConVar ios_thermal_scale( "ios_thermal_scale", "1", FCVAR_ARCHIVE | FCVAR_RELEASE, "Lower the 3D resolution as the phone heats up, instead of the frame rate" );
 
 class CIOSDeviceFeatures : public CAutoGameSystemPerFrame, public CGameEventListener
@@ -279,6 +280,42 @@ void IOS_HapticLocalShot( C_BasePlayer *pPlayer, float flDamage, int nBullets, b
 	if ( bFullAuto && flCycleTime > 0.0f )
 		flDuration = MIN( flDuration, flCycleTime * 1.3f );
 	IOS_HapticPulse( flIntensity, flSharpness, flDuration );
+}
+
+// "too real hapteekz!!!" (ios_haptics_real): landing, by fall speed (CCSPlayer::OnLand).
+// A plain jump lands at ~300 u/s: a small bump; the safe limit (580) is solid;
+// 1100 (fatal) the most. Only the first prediction.
+void IOS_HapticLanding( C_BasePlayer *pPlayer, float flFallVelocity )
+{
+	if ( !ios_haptics.GetBool() || !ios_haptics_real.GetBool() || !pPlayer || !pPlayer->IsLocalPlayer() )
+		return;
+	if ( prediction->InPrediction() && !prediction->IsFirstTimePredicted() )
+		return;
+	if ( flFallVelocity < 200.0f )
+		return;
+	float n = clamp( ( flFallVelocity - 200.0f ) / 900.0f, 0.0f, 1.0f );
+	IOS_HapticPulse( 0.3f + 0.7f * n, 0.5f - 0.35f * n, 0.04f + 0.5f * n );
+}
+
+// "too real hapteekz!!!": reload parts, from the sounds the viewmodel's
+// animation plays at those frames (C_BaseViewModel::FireEvent), e.g.
+// "Weapon_AK47.Clipin" when the mag goes in
+void IOS_HapticViewModelSound( C_BasePlayer *pOwner, const char *pszSound )
+{
+	if ( !ios_haptics.GetBool() || !ios_haptics_real.GetBool() || !pOwner || !pOwner->IsLocalPlayer() || !pszSound )
+		return;
+	const char *pszPart = V_strrchr( pszSound, '.' );
+	pszPart = pszPart ? pszPart + 1 : pszSound;
+
+	if ( !V_stricmp( pszPart, "Clipin" ) || !V_stricmp( pszPart, "Boxin" ) || !V_stricmp( pszPart, "Cliphit" ) )
+		IOS_HapticPulse( 0.7f, 0.7f, 0.07f );		// mag seated: a solid click
+	else if ( !V_stricmp( pszPart, "Insertshell" ) )
+		IOS_HapticPulse( 0.45f, 0.6f, 0.0f );		// a shell
+	else if ( !V_stricmp( pszPart, "Boltforward" ) || !V_stricmp( pszPart, "Slideforward" ) || !V_stricmp( pszPart, "Sliderelease" ) ||
+			  !V_stricmp( pszPart, "Siderelease" ) || !V_stricmp( pszPart, "Boltrelease" ) || !V_stricmp( pszPart, "Pump" ) )
+		IOS_HapticPulse( 0.55f, 0.85f, 0.04f );	// chambering: sharp
+	else if ( !V_stricmp( pszPart, "Clipout" ) || !V_stricmp( pszPart, "Boxout" ) || !V_stricmp( pszPart, "Boltback" ) || !V_stricmp( pszPart, "Slideback" ) )
+		IOS_HapticPulse( 0.3f, 0.6f, 0.0f );		// mag out, bolt back: light
 }
 
 #endif // IOS

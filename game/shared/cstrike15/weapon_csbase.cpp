@@ -3832,7 +3832,20 @@ void CWeaponCSBase::OnLand( float fVelocity )
 
 void CWeaponCSBase::Recoil( CSWeaponMode weaponMode )
 {
-	/** Removed for partner depot **/
+	// (the partner depot shipped this empty: guns had no recoil at all)
+	CCSPlayer *pPlayer = GetPlayerOwner();
+	if ( !pPlayer )
+		return;
+
+	// the per-shot kick comes from the weapon's seeded recoil pattern;
+	// weapon_recoil_scale is applied when the aim punch is read
+	float fAngle, fMagnitude;
+	if ( weapon_legacy_recoiltable.GetBool() )
+		GetCSWpnData().GetRecoilOffsets( weaponMode, (int)m_flRecoilIndex, fAngle, fMagnitude );
+	else
+		g_WeaponRecoilData.GetRecoilOffsets( this, weaponMode, (int)m_flRecoilIndex, fAngle, fMagnitude );
+
+	pPlayer->KickBack( fAngle, fMagnitude );
 }
 
 #ifdef CLIENT_DLL

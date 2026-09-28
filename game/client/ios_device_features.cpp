@@ -42,14 +42,20 @@ class CIOSDeviceFeatures : public CAutoGameSystemPerFrame, public CGameEventList
 public:
 	CIOSDeviceFeatures() : CAutoGameSystemPerFrame( "CIOSDeviceFeatures" ),
 		m_bGyroOn( false ), m_flNextThermal( 0.0 ), m_nThermalLevel( 0 ), m_nPendingLevel( 0 ),
-		m_flPendingSince( 0.0 ), m_flAppliedScale( 1.0f ), m_flNextShaderSave( 0.0 ) {}
+		m_flPendingSince( 0.0 ), m_flAppliedScale( 1.0f ), m_flNextShaderSave( 0.0 ), m_nHapticLogs( 0 ) {}
 
 	virtual bool Init()
 	{
-		ListenForGameEvent( "weapon_fire" );
-		ListenForGameEvent( "player_hurt" );
-		ListenForGameEvent( "player_death" );
+		ListenForEvents();
 		return true;
+	}
+
+	// again on every map: registering at client init can come before the
+	// event list is loaded (AddListener then fails with "unknown")
+	virtual void LevelInitPostEntity()
+	{
+		ListenForEvents();
+		m_nHapticLogs = 0;
 	}
 
 	virtual void Update( float frametime )
@@ -66,8 +72,6 @@ public:
 
 	virtual void FireGameEvent( IGameEvent *event )
 	{
-		if ( !ios_haptics.GetBool() )
-			return;
 		C_BasePlayer *pLocal = C_BasePlayer::GetLocalPlayer();
 		if ( !pLocal )
 			return;
@@ -75,24 +79,42 @@ public:
 		const char *pszName = event->GetName();
 		int nUser = event->GetInt( "userid" ), nAttacker = event->GetInt( "attacker" );
 
+		int nKind = -1;
 		if ( !V_strcmp( pszName, "weapon_fire" ) )
 		{
 			if ( nUser == nLocal )
-				IOS_Haptic( 0 );		// light tap per shot
+				nKind = 0;		// light tap per shot
 		}
 		else if ( !V_strcmp( pszName, "player_death" ) )
 		{
 			if ( nAttacker == nLocal && nUser != nLocal )
-				IOS_Haptic( 2 );		// heavy: a kill
+				nKind = 2;		// heavy: a kill
 		}
 		else if ( !V_strcmp( pszName, "player_hurt" ) )
 		{
 			if ( ( nAttacker == nLocal && nUser != nLocal ) || nUser == nLocal )
-				IOS_Haptic( 1 );		// medium: we hit someone, or got hit
+				nKind = 1;		// medium: we hit someone, or got hit
 		}
+
+		// the first few per map, so a log shows whether events arrive
+		if ( m_nHapticLogs < 6 )
+		{
+			++m_nHapticLogs;
+			Msg( "[haptics] %s userid %d attacker %d (local %d) -> %s\n", pszName, nUser, nAttacker, nLocal,
+				nKind < 0 ? "not ours" : ios_haptics.GetBool() ? "vibrate" : "off (ios_haptics 0)" );
+		}
+		if ( nKind >= 0 && ios_haptics.GetBool() )
+			IOS_Haptic( nKind );
 	}
 
 private:
+	void ListenForEvents()
+	{
+		ListenForGameEvent( "weapon_fire" );
+		ListenForGameEvent( "player_hurt" );
+		ListenForGameEvent( "player_death" );
+	}
+
 	void UpdateGyro()
 	{
 		bool bWant = ios_gyro.GetBool() && engine->IsInGame() && !IOS_IsMenuActive();
@@ -187,6 +209,7 @@ private:
 	double m_flPendingSince;
 	float m_flAppliedScale;
 	double m_flNextShaderSave;
+	int m_nHapticLogs;
 };
 
 static CIOSDeviceFeatures s_IOSDeviceFeatures;

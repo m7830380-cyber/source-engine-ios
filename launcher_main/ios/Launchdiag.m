@@ -44,6 +44,11 @@
 #include <mach/mach.h>
 
 #import "Launchdiag.h"
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <ifaddrs.h>
+#include <net/if.h>
 
 #ifndef IOS_DEFAULT_GAME
 #define IOS_DEFAULT_GAME "hl2"
@@ -965,4 +970,63 @@ void IOS_StartWatchdog( void )
 		pthread_detach( t );
 		IOS_Log( "watchdog: main thread stack dumps every 20s after 40s" );
 	}
+}
+
+
+// iOS asks for Local Network access the first time the app sends something onto
+// the local network, which used to be the first LAN game search in the main menu.
+// Do it at launch instead: one LAN query ("IOSLAN1", what lan_find sends; hosts
+// just answer it) to the router of the Wi-Fi we're on (a plain unicast, which
+// needs no multicast entitlement) and as a broadcast.
+void IOS_RequestLocalNetworkAccess( void )
+{
+	dispatch_async( dispatch_get_global_queue( QOS_CLASS_UTILITY, 0 ), ^{
+		static const unsigned char s_Query[] = { 0xFF, 0xFF, 0xFF, 0xFF, 'g', 'I', 'O', 'S', 'L', 'A', 'N', '1', 0 };
+		int s = socket( AF_INET, SOCK_DGRAM, IPPROTO_UDP );
+		if ( s < 0 )
+			return;
+		int one = 1;
+		setsockopt( s, SOL_SOCKET, SO_BROADCAST, &one, sizeof( one ) );
+
+		int nSent = 0;
+		struct ifaddrs *pAddrs = NULL;
+		if ( getifaddrs( &pAddrs ) == 0 )
+		{
+			for ( struct ifaddrs *a = pAddrs; a; a = a->ifa_next )
+			{
+				if ( !a->ifa_addr || a->ifa_addr->sa_family != AF_INET || ( a->ifa_flags & IFF_LOOPBACK ) || !( a->ifa_flags & IFF_UP ) || !a->ifa_netmask )
+					continue;
+				// the Wi-Fi / hotspot interfaces
+				if ( strncmp( a->ifa_name, "en", 2 ) && strncmp( a->ifa_name, "bridge", 6 ) )
+					continue;
+				uint32_t ip = ntohl( ( (struct sockaddr_in *)a->ifa_addr )->sin_addr.s_addr );
+				uint32_t mask = ntohl( ( (struct sockaddr_in *)a->ifa_netmask )->sin_addr.s_addr );
+				uint32_t router = ( ip & mask ) | 1;
+				if ( router == ip )
+					router = ( ip & mask ) | 2;
+				struct sockaddr_in to;
+				memset( &to, 0, sizeof( to ) );
+				to.sin_family = AF_INET;
+				to.sin_port = htons( 27015 );
+				to.sin_addr.s_addr = htonl( router );
+				if ( sendto( s, s_Query, sizeof( s_Query ), 0, (struct sockaddr *)&to, sizeof( to ) ) > 0 )
+					nSent++;
+			}
+			freeifaddrs( pAddrs );
+		}
+
+		struct sockaddr_in bc;
+		memset( &bc, 0, sizeof( bc ) );
+		bc.sin_family = AF_INET;
+		bc.sin_port = htons( 27015 );
+		bc.sin_addr.s_addr = htonl( INADDR_BROADCAST );
+		int nBroadcast = sendto( s, s_Query, sizeof( s_Query ), 0, (struct sockaddr *)&bc, sizeof( bc ) ) > 0 ? 1 : 0;
+		int nErr = nBroadcast ? 0 : errno;
+		close( s );
+
+		char msg[160];
+		int len = snprintf( msg, sizeof( msg ), "[lan] local network probe at launch: %d unicast sent, broadcast %s (errno %d)\n",
+							nSent, nBroadcast ? "sent" : "refused", nErr );
+		write( STDOUT_FILENO, msg, len );
+	});
 }

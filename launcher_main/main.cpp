@@ -680,6 +680,7 @@ int main( int argc, char *argv[] )
 	IOS_LogDeviceInfo();
 	IOS_RaiseFileLimit();
 	IOS_StartWatchdog();
+	IOS_RequestLocalNetworkAccess();	// the Local Network prompt now, not at the first LAN search
 
 	IOS_LaunchDialog();
 

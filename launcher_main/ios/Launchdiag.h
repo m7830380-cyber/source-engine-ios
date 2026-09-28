@@ -31,6 +31,7 @@ void IOS_ProbeDylibs( void );
 void IOS_LogGameContent( void );
 void IOS_RaiseFileLimit( void );
 void IOS_StartWatchdog( void );
+void IOS_RequestLocalNetworkAccess( void );
 void IOS_ShowOnScreenLog( void );
 
 // Reports the failure on screen and spins the runloop forever. Never returns.

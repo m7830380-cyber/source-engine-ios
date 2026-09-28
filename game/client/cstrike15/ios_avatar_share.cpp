@@ -5,7 +5,7 @@
 //   upload:   profile_avatar (PNG/JPG in the csgo folder) -> center square ->
 //             64x64 RGB -> base64url -> "ios_avatar begin/data/end", a few
 //             commands per second (the server kicks above 40 string commands/s)
-//   download: the IOSAvatars string table -> cache/avatars/<account ID>.tga,
+//   download: the IOSAvatars string table -> cache/avatars/<account ID>.png,
 //             which the Scaleform avatar loader ("img://avatar_<xuid>") shows
 //
 //=============================================================================//
@@ -112,28 +112,98 @@ void IOSAvatar_SendLocal()
 	s_AvatarCommands.AddToTail( CUtlString( "ios_avatar end\n" ) );
 }
 
-// 24-bit uncompressed TGA, top-left origin (Scaleform reads TGA)
-static void WriteAvatarTGA( const char *pszKey, const unsigned char *pRGB )
+// A PNG (RGBA, uncompressed deflate): the format Scaleform turns into a texture
+// like any other picture. A 24-bit TGA decoded to B8G8R8, whose GLES upload
+// path drew a red square.
+static uint32 PNG_Crc( uint32 crc, const unsigned char *p, int n )
 {
-	CUtlBuffer buf;
-	unsigned char header[18] = {};
-	header[2] = 2;											// uncompressed true-color
-	header[12] = IOS_AVATAR_SIZE & 0xFF; header[13] = IOS_AVATAR_SIZE >> 8;
-	header[14] = IOS_AVATAR_SIZE & 0xFF; header[15] = IOS_AVATAR_SIZE >> 8;
-	header[16] = 24;
-	header[17] = 0x20;										// rows top to bottom
-	buf.Put( header, sizeof( header ) );
-	for ( int i = 0; i < IOS_AVATAR_SIZE * IOS_AVATAR_SIZE; i++ )
+	static uint32 s_Table[256];
+	static bool s_bInit = false;
+	if ( !s_bInit )
 	{
-		const unsigned char *p = pRGB + i * 3;
-		unsigned char bgr[3] = { p[2], p[1], p[0] };
-		buf.Put( bgr, 3 );
+		for ( uint32 i = 0; i < 256; i++ )
+		{
+			uint32 c = i;
+			for ( int k = 0; k < 8; k++ )
+				c = ( c & 1 ) ? 0xEDB88320u ^ ( c >> 1 ) : c >> 1;
+			s_Table[i] = c;
+		}
+		s_bInit = true;
 	}
+	for ( int i = 0; i < n; i++ )
+		crc = s_Table[ ( crc ^ p[i] ) & 0xFF ] ^ ( crc >> 8 );
+	return crc;
+}
+
+static void PNG_PutBE32( CUtlBuffer &buf, uint32 v )
+{
+	unsigned char b[4] = { (unsigned char)( v >> 24 ), (unsigned char)( v >> 16 ), (unsigned char)( v >> 8 ), (unsigned char)v };
+	buf.Put( b, 4 );
+}
+
+static void PNG_PutChunk( CUtlBuffer &buf, const char *pszType, const unsigned char *pData, int nLen )
+{
+	PNG_PutBE32( buf, nLen );
+	buf.Put( pszType, 4 );
+	if ( nLen )
+		buf.Put( pData, nLen );
+	uint32 crc = PNG_Crc( 0xFFFFFFFFu, (const unsigned char *)pszType, 4 );
+	crc = PNG_Crc( crc, pData, nLen );
+	PNG_PutBE32( buf, crc ^ 0xFFFFFFFFu );
+}
+
+static void WriteAvatarPNG( const char *pszKey, const unsigned char *pRGB )
+{
+	// raw scanlines: filter byte 0, then RGBA
+	const int nRow = 1 + IOS_AVATAR_SIZE * 4;
+	const int nRaw = nRow * IOS_AVATAR_SIZE;
+	CUtlBuffer raw;
+	raw.EnsureCapacity( nRaw );
+	for ( int y = 0; y < IOS_AVATAR_SIZE; y++ )
+	{
+		raw.PutUnsignedChar( 0 );
+		for ( int x = 0; x < IOS_AVATAR_SIZE; x++ )
+		{
+			const unsigned char *p = pRGB + ( y * IOS_AVATAR_SIZE + x ) * 3;
+			unsigned char rgba[4] = { p[0], p[1], p[2], 255 };
+			raw.Put( rgba, 4 );
+		}
+	}
+
+	// zlib stream with stored (uncompressed) deflate blocks, then Adler-32
+	CUtlBuffer z;
+	z.PutUnsignedChar( 0x78 );
+	z.PutUnsignedChar( 0x01 );
+	const unsigned char *pRaw = (const unsigned char *)raw.Base();
+	for ( int nOff = 0; nOff < nRaw; )
+	{
+		int nBlock = MIN( 65535, nRaw - nOff );
+		z.PutUnsignedChar( ( nOff + nBlock == nRaw ) ? 1 : 0 );
+		unsigned char len[4] = { (unsigned char)( nBlock & 0xFF ), (unsigned char)( nBlock >> 8 ), (unsigned char)( ~nBlock & 0xFF ), (unsigned char)( ( ~nBlock >> 8 ) & 0xFF ) };
+		z.Put( len, 4 );
+		z.Put( pRaw + nOff, nBlock );
+		nOff += nBlock;
+	}
+	uint32 a = 1, b = 0;
+	for ( int i = 0; i < nRaw; i++ )
+	{
+		a = ( a + pRaw[i] ) % 65521;
+		b = ( b + a ) % 65521;
+	}
+	PNG_PutBE32( z, ( b << 16 ) | a );
+
+	CUtlBuffer png;
+	static const unsigned char s_Sig[8] = { 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A };
+	png.Put( s_Sig, 8 );
+	unsigned char ihdr[13] = { 0, 0, 0, IOS_AVATAR_SIZE, 0, 0, 0, IOS_AVATAR_SIZE, 8, 6, 0, 0, 0 };	// 8-bit RGBA
+	PNG_PutChunk( png, "IHDR", ihdr, sizeof( ihdr ) );
+	PNG_PutChunk( png, "IDAT", (const unsigned char *)z.Base(), z.TellPut() );
+	PNG_PutChunk( png, "IEND", NULL, 0 );
 
 	g_pFullFileSystem->CreateDirHierarchy( "cache/avatars", "MOD" );
 	char szFile[MAX_PATH];
-	V_snprintf( szFile, sizeof( szFile ), "cache/avatars/%s.tga", pszKey );
-	g_pFullFileSystem->WriteFile( szFile, "MOD", buf );
+	V_snprintf( szFile, sizeof( szFile ), "cache/avatars/%s.png", pszKey );
+	g_pFullFileSystem->WriteFile( szFile, "MOD", png );
 }
 
 class CIOSAvatarShare : public CAutoGameSystemPerFrame
@@ -186,7 +256,7 @@ private:
 			if ( m_Stored.Defined( pszKey ) && m_Stored[ pszKey ] == crc )
 				continue;
 
-			WriteAvatarTGA( pszKey, pData );
+			WriteAvatarPNG( pszKey, pData );
 			m_Stored[ pszKey ] = crc;
 			s_nAvatarVersion++;
 		}

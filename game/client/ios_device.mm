@@ -119,9 +119,9 @@ IOS_EXPORT void IOS_GyroTakeDelta( float *pflYaw, float *pflPitch )
 // in the foreground scene). The generators are the fallback.
 // this file builds without ARC
 #if __has_feature( objc_arc )
-#define IOS_AUTORELEASE( x ) ( x )
+#define IOS_AUTORELEASE( ... ) ( __VA_ARGS__ )
 #else
-#define IOS_AUTORELEASE( x ) [( x ) autorelease]
+#define IOS_AUTORELEASE( ... ) [( __VA_ARGS__ ) autorelease]
 #endif
 
 static CHHapticEngine *s_pHapticEngine = nil;

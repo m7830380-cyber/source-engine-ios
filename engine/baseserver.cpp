@@ -611,6 +611,9 @@ IClient *CBaseServer::ConnectClient ( const ns_address &adr, int protocol, int c
 		// LAN servers restrict to class b IP addresses
 		if ( !CheckIPRestrictions( adr, authProtocol ) )
 		{
+#if defined( IOS )
+			Msg( "[ip] refused %s: not on this network. Type ip_host in the console to let players join by IP (VPN / Tailscale).\n", ns_address_render( adr ).String() );
+#endif
 			RejectConnection( adr, "#Valve_Reject_LAN_Game");
 			return NULL;
 		}

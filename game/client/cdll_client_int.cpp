@@ -5496,13 +5496,12 @@ CON_COMMAND( ip_host, "Open your offline match to players joining by IP address 
 		Msg( "ip_host: closed, only players on this network can join\n" );
 		return;
 	}
-	if ( !engine->IsConnected() || !engine->IsClientLocalToActiveServer() )
-	{
-		Msg( "ip_host: start an offline match first (Play > Offline with bots), then run ip_host in it\n" );
-		return;
-	}
+	// on for the rest of the session, whether or not a match is running yet
 	sv_ip_host.SetValue( 1 );
-	Msg( "ip_host: players can join by IP now. Give them one of these, whichever network they share with you:\n" );
+	if ( engine->IsConnected() && engine->IsClientLocalToActiveServer() )
+		Msg( "ip_host: players can join your match by IP now. Give them one of these, whichever network they share with you:\n" );
+	else
+		Msg( "ip_host: on. Start an offline match (Play > Offline with bots); players can then join it with one of these:\n" );
 	IOS_PrintHostAddresses();
 }
 

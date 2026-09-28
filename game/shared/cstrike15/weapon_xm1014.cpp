@@ -152,6 +152,8 @@ void CWeaponXM1014::PrimaryAttack( void )
 	// update accuracy
 	m_fAccuracyPenalty += weaponInfo.GetInaccuracyFire( GetEconItemView(), Primary_Mode );
 
+	ShotFired( Primary_Mode );
+
 	// table driven recoil
 	Recoil( Primary_Mode );
 

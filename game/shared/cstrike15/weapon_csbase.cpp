@@ -3848,6 +3848,38 @@ void CWeaponCSBase::Recoil( CSWeaponMode weaponMode )
 	pPlayer->KickBack( fAngle, fMagnitude );
 }
 
+// A gun (or shotgun) shot: the weapon_fire event on the server, which bots hear
+// gunfire through (missing from the partner depot along with Recoil()), and
+// on iOS the shot haptics on the client, the moment the shot is predicted.
+void CWeaponCSBase::ShotFired( CSWeaponMode weaponMode )
+{
+	CCSPlayer *pPlayer = GetPlayerOwner();
+	if ( !pPlayer )
+		return;
+
+#ifndef CLIENT_DLL
+	IGameEvent * event = gameeventmanager->CreateEvent( "weapon_fire" );
+	if ( event )
+	{
+		const char *weaponName = STRING( m_iClassname );
+		if ( IsWeaponClassname( weaponName ) )
+		{
+			weaponName += WEAPON_CLASSNAME_PREFIX_LENGTH;
+		}
+
+		event->SetInt( "userid", pPlayer->GetUserID() );
+		event->SetString( "weapon", weaponName );
+		event->SetBool( "silenced", HasSilencer() && IsSilenced() );
+		gameeventmanager->FireEvent( event );
+	}
+#elif defined( IOS )
+	extern void IOS_HapticLocalShot( C_BasePlayer *pPlayer, float flDamage, int nBullets, bool bSilenced, float flCycleTime, bool bFullAuto );
+	const CCSWeaponInfo &weaponInfo = GetCSWpnData();
+	IOS_HapticLocalShot( pPlayer, weaponInfo.GetDamage( GetEconItemView() ), weaponInfo.GetBullets( GetEconItemView() ),
+		HasSilencer() && IsSilenced(), GetCycleTime( weaponMode ), IsFullAuto() );
+#endif
+}
+
 #ifdef CLIENT_DLL
 
 void WeaponSaveCustomTextures( void )

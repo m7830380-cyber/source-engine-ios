@@ -397,6 +397,7 @@ protected:
 
 	float CalculateNextAttackTime( float flCycleTime );
 	void Recoil( CSWeaponMode weaponMode );
+	void ShotFired( CSWeaponMode weaponMode );	// weapon_fire event (server), shot haptics (iOS client)
 
 	bool m_bCanBePickedUp;
 

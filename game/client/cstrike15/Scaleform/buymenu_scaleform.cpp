@@ -478,6 +478,40 @@ void CCSBuyMenuScaleform::OnCancel( SCALEFORM_CALLBACK_ARGS_DECL )
 	CSGameRules()->CloseBuyMenu( nUserID );
 }
 
+// The gear slots (armor, defuser / rescue kit; not the Zeus) aren't inventory
+// items and have no weapon script: looked up through the loadout they fall back
+// to the knife ("Knife", priced -1). Their ID and name by slot instead.
+static CSWeaponID GearIDForPosition( int nPosition )
+{
+	switch ( nPosition )
+	{
+	case LOADOUT_POSITION_EQUIPMENT0: return CSGameRules() && CSGameRules()->IsPlayingCoopMission() ? ITEM_ASSAULTSUIT : ITEM_KEVLAR;
+	case LOADOUT_POSITION_EQUIPMENT1: return CSGameRules() && CSGameRules()->IsPlayingCoopMission() ? ITEM_HEAVYASSAULTSUIT : ITEM_ASSAULTSUIT;
+	case LOADOUT_POSITION_EQUIPMENT3: return CSGameRules() && CSGameRules()->IsHostageRescueMap() ? ITEM_CUTTERS : ITEM_DEFUSER;
+	}
+	return WEAPON_NONE;
+}
+
+static const wchar_t *GearName( CSWeaponID nGear )
+{
+	const char *pszToken = NULL, *pszEnglish = NULL;
+	switch ( nGear )
+	{
+	case ITEM_KEVLAR:			pszToken = "#SFUI_WPNHUD_KEVLAR";				pszEnglish = "Kevlar Vest"; break;
+	case ITEM_ASSAULTSUIT:		pszToken = "#SFUI_WPNHUD_ASSAULTSUIT";			pszEnglish = "Kevlar + Helmet"; break;
+	case ITEM_HEAVYASSAULTSUIT:	pszToken = "#SFUI_WPNHUD_HEAVYASSAULTSUIT";	pszEnglish = "Heavy Armor"; break;
+	case ITEM_DEFUSER:			pszToken = "#SFUI_WPNHUD_DEFUSER";				pszEnglish = "Defuse Kit"; break;
+	case ITEM_CUTTERS:			pszToken = "#SFUI_WPNHUD_CUTTERS";				pszEnglish = "Rescue Kit"; break;
+	default: return NULL;
+	}
+	const wchar_t *pwsz = g_pVGuiLocalize ? g_pVGuiLocalize->Find( pszToken ) : NULL;
+	if ( pwsz )
+		return pwsz;
+	static wchar_t s_wszName[64];
+	V_UTF8ToUnicode( pszEnglish, s_wszName, sizeof( s_wszName ) );
+	return s_wszName;
+}
+
 void CCSBuyMenuScaleform::InitWeapon( SCALEFORM_CALLBACK_ARGS_DECL )
 {
 	SF_FORCE_SPLITSCREEN_PLAYER_GUARD( m_iSplitScreenSlot );
@@ -550,6 +584,28 @@ void CCSBuyMenuScaleform::InitWeapon( SCALEFORM_CALLBACK_ARGS_DECL )
 	// priced -1 by the movie) were used for them. Only the Zeus is a real item.
 	if ( weaponID != WEAPON_NONE && weaponID != WEAPON_TASER )
 		pItem = nullptr;
+
+	CSWeaponID nGear = GearIDForPosition( loadoutSlot );
+	if ( nGear != WEAPON_NONE )
+	{
+		// no weapon script for gear (this returned nothing, and the movie priced
+		// the slot's knife): "equipment" is priced by wepid (GetWeaponPriceFromIDScript)
+		int nObj = 0;
+		SFVALUE gearData = m_pScaleformUI->CreateNewObject( nObj );
+		SFVALUE gearName = m_pScaleformUI->CreateNewString( nObj, GearName( nGear ) );
+		m_pScaleformUI->Value_SetMember( gearData, "weaponType", "equipment" );
+		m_pScaleformUI->Value_SetMember( gearData, "maxCarry", 1 );
+		m_pScaleformUI->Value_SetMember( gearData, "itemid", "18446744073709551615" );
+		m_pScaleformUI->Value_SetMember( gearData, "wepid", nGear );
+		m_pScaleformUI->Value_SetMember( gearData, "price", pPlayer->GetWeaponPrice( nGear ) );
+		m_pScaleformUI->Value_SetMember( gearData, "name", gearName );
+		m_pScaleformUI->Value_SetMember( gearData, "clipSize", 0 );
+		m_pScaleformUI->Value_SetMember( gearData, "maxRounds", 0 );
+		m_pScaleformUI->Params_SetResult( obj, gearData );
+		SafeReleaseSFVALUE( gearName );
+		SafeReleaseSFVALUE( gearData );
+		return;
+	}
 
 	const CCSWeaponInfo* pWeaponInfo = GetWeaponInfo( weaponID );
 
@@ -727,6 +783,13 @@ void CCSBuyMenuScaleform::GetWeaponPriceScript( SCALEFORM_CALLBACK_ARGS_DECL )
 		return;
 
 	int nLoadoutPos = ( int )pui->Params_GetArgAsNumber( obj );
+
+	CSWeaponID nGear = GearIDForPosition( nLoadoutPos );
+	if ( nGear != WEAPON_NONE )
+	{
+		m_pScaleformUI->Params_SetResult( obj, pPlayer->GetWeaponPrice( nGear ) );
+		return;
+	}
 
 	int nWeaponID = WEAPON_NONE;
 	bool bInvalid = true;
@@ -2717,6 +2780,11 @@ void CCSBuyMenuScaleform::GetWeaponName( SCALEFORM_CALLBACK_ARGS_DECL )
 	// Name the item in the slot, not its weapon script: the R8 Revolver's script is
 	// the Deagle's, so the slot said "Desert Eagle" while it bought the R8.
 	int nPosition = (int)m_pScaleformUI->Params_GetArgAsNumber( obj, 0 );
+	if ( const wchar_t *pwszGear = GearName( GearIDForPosition( nPosition ) ) )
+	{
+		m_pScaleformUI->Params_SetResult( obj, pwszGear );
+		return;
+	}
 	C_CSPlayer *pLocalPlayer = C_CSPlayer::GetLocalCSPlayer();
 	CCSPlayerInventory *pInventory = CSInventoryManager() ? CSInventoryManager()->GetLocalCSInventory() : NULL;
 	if ( pLocalPlayer && pInventory && nPosition >= 0 && nPosition < LOADOUT_POSITION_COUNT )

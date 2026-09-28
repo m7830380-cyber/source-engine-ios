@@ -747,29 +747,7 @@ bool CWeaponCSBaseGun::CSBaseGunFire( float flCycleTime, CSWeaponMode weaponMode
 
 	DoFireEffects();
 
-#ifndef CLIENT_DLL
-	// (missing from the partner depot along with Recoil(): bots hear gunfire
-	// through this event, the same one grenade throws send)
-	IGameEvent * event = gameeventmanager->CreateEvent( "weapon_fire" );
-	if ( event )
-	{
-		const char *weaponName = STRING( m_iClassname );
-		if ( IsWeaponClassname( weaponName ) )
-		{
-			weaponName += WEAPON_CLASSNAME_PREFIX_LENGTH;
-		}
-
-		event->SetInt( "userid", pPlayer->GetUserID() );
-		event->SetString( "weapon", weaponName );
-		event->SetBool( "silenced", HasSilencer() && IsSilenced() );
-		gameeventmanager->FireEvent( event );
-	}
-#elif defined( IOS )
-	// shot haptics on the client, the moment the shot is predicted
-	extern void IOS_HapticLocalShot( C_BasePlayer *pPlayer, float flDamage, int nBullets, bool bSilenced, float flCycleTime, bool bFullAuto );
-	IOS_HapticLocalShot( pPlayer, weaponInfo.GetDamage( GetEconItemView() ), weaponInfo.GetBullets( GetEconItemView() ),
-		HasSilencer() && IsSilenced(), flCycleTime, IsFullAuto() );
-#endif
+	ShotFired( weaponMode );
 
 #ifdef IRONSIGHT
 #ifdef CLIENT_DLL

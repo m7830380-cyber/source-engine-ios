@@ -188,6 +188,14 @@ static int ItemSlot( CEconItemView *pItem, int iTeam )
 	return nSlot;
 }
 
+// items shown with a rendered icon: painted weapons, knives and gloves
+static bool IsRenderedIconItem( CEconItemView *pItem )
+{
+	if ( !pItem || !pItem->IsValid() || !pItem->GetSOCData() || pItem->GetCustomPaintKitIndex() <= 0 )
+		return false;
+	return pItem->CanGenerateInventoryImageRgba();
+}
+
 static uint64 LoadoutItemID( int iTeam, int iSlot )
 {
 	if ( iSlot < 0 || iSlot >= LOADOUT_POSITION_COUNT )
@@ -584,6 +592,14 @@ public:
 		CEconItemView *pItem = FindItem( ArgItemID( pui, obj, 1 ) );
 		pui->Params_SetResult( obj, pItem ? IsItemEquipped( pItem, TeamFromString( ArgString( pui, obj, 2 ) ) ) : false );
 	}
+	// Skins get icons rendered by the game (the weapon model with its paint kit,
+	// CEconItemView::GetInventoryImageRgba -> img://inventory_<id>); plain items
+	// keep their shipped PNG from GetItemInventoryImage.
+	void IsInventoryImageCachable( SCALEFORM_CALLBACK_ARGS_DECL )
+	{
+		CEconItemView *pItem = FindItem( ArgItemID( pui, obj, 1 ) );
+		pui->Params_SetResult( obj, IsRenderedIconItem( pItem ) );
+	}
 	void GetItemInventoryImage( SCALEFORM_CALLBACK_ARGS_DECL )
 	{
 		// per-skin icons came from Steam's CDN; show the weapon's own icon
@@ -689,7 +705,7 @@ public:
 			SFUI_DECL_METHOD( GetWear ),
 			SFUI_DECL_METHOD( GetItemAttributeValue ),
 			// no backend offline
-			SFUI_DECL_METHOD_AS( ReturnFalse, "IsInventoryImageCachable" ),
+			SFUI_DECL_METHOD( IsInventoryImageCachable ),
 			SFUI_DECL_METHOD_AS( ReturnFalse, "IsTool" ),
 			SFUI_DECL_METHOD_AS( ReturnFalse, "IsMarketable" ),
 			SFUI_DECL_METHOD_AS( ReturnFalse, "IsDeletable" ),
@@ -1215,10 +1231,47 @@ public: \
 	} \
 };
 
-STUB_TABLE( ImageCache,
-	SFUI_DECL_METHOD_AS( DoNothing, "EnsureInventoryImageCached" ),
-	SFUI_DECL_METHOD_AS( DoNothing, "EnsureItemDataImageCached" ),
-	SFUI_DECL_METHOD_AS( DoNothing, "EnsureAvatarCached" ) )
+// ImageCache: EnsureInventoryImageCached registers the item with Scaleform's
+// inventory images (img://inventory_<id>), which starts the icon render; the image
+// is transparent until the render is done, then updates in place.
+class CScaleformComponentImageCache : public ScaleformUIFunctionHandlerObject
+{
+public:
+	void EnsureInventoryImageCached( SCALEFORM_CALLBACK_ARGS_DECL )
+	{
+		extern IScaleformInventoryImageProvider *g_pIScaleformInventoryImageProvider;
+		uint64 ullID = ArgItemID( pui, obj, 0 );
+		if ( !ullID || !g_pScaleformUI || !g_pIScaleformInventoryImageProvider )
+			return;
+		// one reference per item for the session: the icons stay cached while you browse
+		if ( m_Cached.Find( ullID ) != m_Cached.InvalidIndex() )
+			return;
+		if ( !IsRenderedIconItem( FindItem( ullID ) ) )
+			return;
+		if ( g_pScaleformUI->InventoryImageAddRef( ullID, g_pIScaleformInventoryImageProvider ) )
+			m_Cached.Insert( ullID );
+	}
+	void DoNothing( SCALEFORM_CALLBACK_ARGS_DECL ) {}
+
+private:
+	CUtlRBTree< uint64 > m_Cached{ DefLessFunc( uint64 ) };
+};
+
+class CScaleformComponentImageCache_Table : public IScaleformUIFunctionHandlerDefinitionTable
+{
+public:
+	virtual const ScaleformUIFunctionHandlerDefinition *GetTable( void ) const
+	{
+		typedef CScaleformComponentImageCache T;
+		static const ScaleformUIFunctionHandlerDefinition table[] = {
+			SFUI_DECL_METHOD( EnsureInventoryImageCached ),
+			SFUI_DECL_METHOD_AS( DoNothing, "EnsureItemDataImageCached" ),
+			SFUI_DECL_METHOD_AS( DoNothing, "EnsureAvatarCached" ),
+			{ NULL, NULL }
+		};
+		return table;
+	}
+};
 
 STUB_TABLE( ItemData,
 	SFUI_DECL_METHOD_AS( ReturnEmpty, "GetItemName" ),
@@ -1291,6 +1344,7 @@ static CScaleformComponentCompetitiveMatch_Table g_ComponentCompetitiveMatchTabl
 static CScaleformComponentInventory_Table g_ComponentInventoryTable;
 static CScaleformComponentLoadout_Table g_ComponentLoadoutTable;
 static CScaleformComponentMyPersona_Table g_ComponentMyPersonaTable;
+static CScaleformComponentImageCache g_ComponentImageCache;
 static CScaleformComponentImageCache_Table g_ComponentImageCacheTable;
 static CScaleformComponentItemData_Table g_ComponentItemDataTable;
 static CScaleformComponentStore_Table g_ComponentStoreTable;
@@ -1314,7 +1368,7 @@ void ScaleformInventoryComponents_EnsureInstalled()
 		{ "CScaleformComponent_Inventory", &g_ComponentInventory, &g_ComponentInventoryTable, NULL },
 		{ "CScaleformComponent_Loadout", &g_ComponentLoadout, &g_ComponentLoadoutTable, NULL },
 		{ "CScaleformComponent_MyPersona", &g_ComponentMyPersona, &g_ComponentMyPersonaTable, NULL },
-		{ "CScaleformComponent_ImageCache", &g_ComponentStub, &g_ComponentImageCacheTable, NULL },
+		{ "CScaleformComponent_ImageCache", &g_ComponentImageCache, &g_ComponentImageCacheTable, NULL },
 		{ "CScaleformComponent_ItemData", &g_ComponentStub, &g_ComponentItemDataTable, NULL },
 		{ "CScaleformComponent_Store", &g_ComponentStub, &g_ComponentStoreTable, NULL },
 		{ "CScaleformComponent_SteamOverlay", &g_ComponentStub, &g_ComponentSteamOverlayTable, NULL },

@@ -1045,7 +1045,7 @@ Image* ImageSource::CreateCompatibleImage(const ImageCreateArgs& args)
         {
             if ((textureCaps & ImageUse_NoDataLoss))
             {
-                if ( args.pManager->CanCreateTextureCurrentThread() )
+                if ( args.pManager->CanCreateTextureCurrentThread() && args.pManager->IsBoundRenderThread() )
                 {
                     // If texture can't be lost 
                     unsigned textureUse = imageUse|ImageUse_InitOnly;

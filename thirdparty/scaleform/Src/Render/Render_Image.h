@@ -1106,13 +1106,16 @@ public:
     // if using a multi-threaded renderer, and the platform requires that textures be created on the 
     // render thread (default implementation). If a platform does not have these restrictions, it could
     // simply return true from this method.
-    // Only on the render thread. ScaleformUIImpl::SetSingleThreadedMode(false) resets
-    // RenderThreadId "so that textures are not created on the main thread" until the
-    // render thread binds itself again; treating 0 as "any thread" did the opposite:
-    // images loaded meanwhile (the radar's DDS at map load) got GL textures made on a
-    // thread without the GL context, which stayed empty (black minimap). With no render
-    // thread known, images decode to RawImages that the render thread uploads later.
-    virtual bool             CanCreateTextureCurrentThread() const { return RenderThreadId != 0 && GetCurrentThreadId() == RenderThreadId; }
+    // RenderThreadId 0 (the integration's multithreaded mode) means any thread: texture
+    // work then goes through CScaleFormThreadCommandQueue, which runs it on the calling
+    // thread under materials->Lock(), where GL is usable.
+    virtual bool             CanCreateTextureCurrentThread() const { return RenderThreadId == 0 || GetCurrentThreadId() == RenderThreadId; }
+    // True only on the bound render thread, which owns GL without taking the material
+    // lock. Image loads (ImageSource::CreateCompatibleImage) create textures directly
+    // only there; elsewhere they make a RawImage, turned into a texture later under
+    // the lock. Creating it directly from the loading thread (no lock, no GL context)
+    // left the radar's texture empty: a black minimap.
+    bool                     IsBoundRenderThread() const { return RenderThreadId != 0 && GetCurrentThreadId() == RenderThreadId; }
 
     // GFx 4.2 API used by CS:GO's integration: bind/unbind the texture
     // manager's render thread (textures are then created on that thread).

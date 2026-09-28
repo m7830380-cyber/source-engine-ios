@@ -10,6 +10,7 @@
                                  phone is tilted), pitch around the screen's
                                  horizontal axis (either landscape side)
    IOS_Haptic( kind )            0 light, 1 medium, 2 heavy, 3 success
+   IOS_HapticPulse( i, s, t )    a hit then a fading rumble: strength, sharpness 0..1, seconds
    IOS_ThermalState()            0 nominal, 1 fair, 2 serious, 3 critical
  */
 
@@ -168,24 +169,36 @@ static bool IOS_HapticEngineReady( void )
 	return true;
 }
 
-static bool IOS_HapticPlayCore( int nKind )
+// One pulse: a sharp hit at the start, then a rumble that fades out over the
+// duration (shots, explosions). flIntensity/flSharpness 0..1, duration in s.
+static bool IOS_HapticPlayCore( float flIntensity, float flSharpness, float flDuration )
 {
 	if ( !IOS_HapticEngineReady() )
 		return false;
 
-	static const float s_flIntensity[] = { 0.45f, 0.75f, 1.0f, 0.9f };
-	static const float s_flSharpness[] = { 0.6f, 0.5f, 0.35f, 0.7f };
-	int i = nKind < 0 ? 0 : nKind > 3 ? 3 : nKind;
-
-	CHHapticEventParameter *pIntensity = IOS_AUTORELEASE( [[CHHapticEventParameter alloc] initWithParameterID:CHHapticEventParameterIDHapticIntensity value:s_flIntensity[i]] );
-	CHHapticEventParameter *pSharpness = IOS_AUTORELEASE( [[CHHapticEventParameter alloc] initWithParameterID:CHHapticEventParameterIDHapticSharpness value:s_flSharpness[i]] );
+	CHHapticEventParameter *pHitIntensity = IOS_AUTORELEASE( [[CHHapticEventParameter alloc] initWithParameterID:CHHapticEventParameterIDHapticIntensity value:flIntensity] );
+	CHHapticEventParameter *pHitSharpness = IOS_AUTORELEASE( [[CHHapticEventParameter alloc] initWithParameterID:CHHapticEventParameterIDHapticSharpness value:flSharpness] );
 	NSMutableArray *events = [NSMutableArray arrayWithObject:
-		IOS_AUTORELEASE( [[CHHapticEvent alloc] initWithEventType:CHHapticEventTypeHapticTransient parameters:@[ pIntensity, pSharpness ] relativeTime:0] )];
-	if ( i == 3 )	// "success": a second tap
-		[events addObject:IOS_AUTORELEASE( [[CHHapticEvent alloc] initWithEventType:CHHapticEventTypeHapticTransient parameters:@[ pIntensity, pSharpness ] relativeTime:0.1] )];
+		IOS_AUTORELEASE( [[CHHapticEvent alloc] initWithEventType:CHHapticEventTypeHapticTransient parameters:@[ pHitIntensity, pHitSharpness ] relativeTime:0] )];
+	NSMutableArray *curves = [NSMutableArray array];
+
+	if ( flDuration > 0.05f )
+	{
+		// the rumble: a little duller than the hit, fading to nothing
+		CHHapticEventParameter *pIntensity = IOS_AUTORELEASE( [[CHHapticEventParameter alloc] initWithParameterID:CHHapticEventParameterIDHapticIntensity value:flIntensity] );
+		CHHapticEventParameter *pSharpness = IOS_AUTORELEASE( [[CHHapticEventParameter alloc] initWithParameterID:CHHapticEventParameterIDHapticSharpness value:flSharpness * 0.6f] );
+		[events addObject:IOS_AUTORELEASE( [[CHHapticEvent alloc] initWithEventType:CHHapticEventTypeHapticContinuous parameters:@[ pIntensity, pSharpness ] relativeTime:0 duration:flDuration] )];
+
+		NSArray *points = @[
+			IOS_AUTORELEASE( [[CHHapticParameterCurveControlPoint alloc] initWithRelativeTime:0 value:1.0f] ),
+			IOS_AUTORELEASE( [[CHHapticParameterCurveControlPoint alloc] initWithRelativeTime:flDuration * 0.25f value:0.55f] ),
+			IOS_AUTORELEASE( [[CHHapticParameterCurveControlPoint alloc] initWithRelativeTime:flDuration * 0.6f value:0.2f] ),
+			IOS_AUTORELEASE( [[CHHapticParameterCurveControlPoint alloc] initWithRelativeTime:flDuration value:0.0f] ) ];
+		[curves addObject:IOS_AUTORELEASE( [[CHHapticParameterCurve alloc] initWithParameterID:CHHapticDynamicParameterIDHapticIntensityControl controlPoints:points relativeTime:0] )];
+	}
 
 	NSError *err = nil;
-	CHHapticPattern *pattern = IOS_AUTORELEASE( [[CHHapticPattern alloc] initWithEvents:events parameters:@[] error:&err] );
+	CHHapticPattern *pattern = IOS_AUTORELEASE( [[CHHapticPattern alloc] initWithEvents:events parameterCurves:curves error:&err] );
 	id<CHHapticPatternPlayer> player = pattern ? [s_pHapticEngine createPlayerWithPattern:pattern error:&err] : nil;
 	if ( !player || ![player startAtTime:CHHapticTimeImmediate error:&err] )
 	{
@@ -204,37 +217,36 @@ static bool IOS_HapticPlayCore( int nKind )
 	return true;
 }
 
-static void IOS_HapticPlayUIKit( int nKind )
+static void IOS_HapticPlayUIKit( float flIntensity, float flDuration )
 {
-	static UIImpactFeedbackGenerator *s_pLight = nil, *s_pMedium = nil, *s_pHeavy = nil;
-	static UINotificationFeedbackGenerator *s_pNotify = nil;
+	static UIImpactFeedbackGenerator *s_pLight = nil, *s_pHeavy = nil;
 	if ( !s_pLight )
 	{
 		s_pLight = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
-		s_pMedium = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleMedium];
 		s_pHeavy = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleHeavy];
-		s_pNotify = [[UINotificationFeedbackGenerator alloc] init];
 	}
-	switch ( nKind )
-	{
-	case 0: [s_pLight impactOccurred]; [s_pLight prepare]; break;
-	case 1: [s_pMedium impactOccurred]; [s_pMedium prepare]; break;
-	case 2: [s_pHeavy impactOccurred]; [s_pHeavy prepare]; break;
-	default: [s_pNotify notificationOccurred:UINotificationFeedbackTypeSuccess]; break;
-	}
+	UIImpactFeedbackGenerator *pGen = ( flIntensity > 0.6f || flDuration > 0.3f ) ? s_pHeavy : s_pLight;
+	if ( @available( iOS 13.0, * ) )
+		[pGen impactOccurredWithIntensity:flIntensity];
+	else
+		[pGen impactOccurred];
+	[pGen prepare];
 }
 
-IOS_EXPORT void IOS_Haptic( int nKind )
+IOS_EXPORT void IOS_HapticPulse( float flIntensity, float flSharpness, float flDuration )
 {
+	flIntensity = fminf( fmaxf( flIntensity, 0.0f ), 1.0f );
+	flSharpness = fminf( fmaxf( flSharpness, 0.0f ), 1.0f );
+	flDuration = fminf( fmaxf( flDuration, 0.0f ), 2.0f );
 	dispatch_block_t work = ^{
 		@autoreleasepool {
-			bool bCore = IOS_HapticPlayCore( nKind );
+			bool bCore = IOS_HapticPlayCore( flIntensity, flSharpness, flDuration );
 			if ( !bCore )
-				IOS_HapticPlayUIKit( nKind );
+				IOS_HapticPlayUIKit( flIntensity, flDuration );
 			if ( s_nHapticLogs < 10 )
 			{
 				++s_nHapticLogs;
-				printf( "[haptics] played kind %d via %s\n", nKind, bCore ? "Core Haptics" : "UIKit" );
+				printf( "[haptics] played %.2f strength, %.2f sharpness, %.2f s via %s\n", flIntensity, flSharpness, flDuration, bCore ? "Core Haptics" : "UIKit" );
 				fflush( stdout );
 			}
 		}
@@ -244,6 +256,17 @@ IOS_EXPORT void IOS_Haptic( int nKind )
 		work();
 	else
 		dispatch_async( dispatch_get_main_queue(), work );
+}
+
+IOS_EXPORT void IOS_Haptic( int nKind )
+{
+	switch ( nKind )
+	{
+	case 0: IOS_HapticPulse( 0.45f, 0.6f, 0.0f ); break;	// light tap
+	case 1: IOS_HapticPulse( 0.75f, 0.5f, 0.12f ); break;	// medium
+	case 2: IOS_HapticPulse( 1.0f, 0.35f, 0.3f ); break;	// heavy
+	default: IOS_HapticPulse( 0.9f, 0.7f, 0.15f ); break;
+	}
 }
 
 IOS_EXPORT int IOS_ThermalState( void )

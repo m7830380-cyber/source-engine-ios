@@ -5,8 +5,9 @@
 //   ios_gyro / ios_gyro_sensitivity / ios_gyro_invert_pitch
 //       gyro aiming, added to the view like the touch look area (off by default)
 //   ios_haptics
-//       taps on shots, hits, damage taken and kills (off by default); shots
-//       come from the gun's fire code (IOS_HapticLocalShot), the rest from events
+//       shots (by how hard the gun hits), hits, damage taken, kills, and
+//       explosions nearby (off by default); shots come from the gun's fire
+//       code (IOS_HapticLocalShot), the rest from events
 //   ios_thermal_scale
 //       as the phone heats up, render the 3D view at a lower resolution
 //       (mat_viewportscale; the HUD stays sharp) instead of losing frame rate
@@ -23,6 +24,7 @@
 #include "GameEventListener.h"
 #include "c_baseplayer.h"
 #include "prediction.h"
+#include "c_plantedc4.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
@@ -30,6 +32,7 @@
 extern "C" void IOS_GyroSetEnabled( int bOn );
 extern "C" void IOS_GyroTakeDelta( float *pflYaw, float *pflPitch );
 extern "C" void IOS_Haptic( int nKind );
+extern "C" void IOS_HapticPulse( float flIntensity, float flSharpness, float flDuration );
 extern "C" int IOS_ThermalState( void );
 extern bool IOS_IsMenuActive();
 
@@ -93,6 +96,25 @@ public:
 				nKind = 1;		// medium: we hit someone, or got hit
 		}
 
+		else if ( !V_strcmp( pszName, "hegrenade_detonate" ) || !V_strcmp( pszName, "flashbang_detonate" ) ||
+				  !V_strcmp( pszName, "inferno_startburn" ) )
+		{
+			Vector vecPos( event->GetFloat( "x" ), event->GetFloat( "y" ), event->GetFloat( "z" ) );
+			float flRadius, flScale;
+			if ( pszName[0] == 'h' )		{ flRadius = 1200.0f; flScale = 1.0f; }		// HE
+			else if ( pszName[0] == 'f' )	{ flRadius = 900.0f; flScale = 0.55f; }		// flash: a pop
+			else							{ flRadius = 600.0f; flScale = 0.45f; }		// molotov catching
+			ExplosionPulse( pLocal, vecPos, flRadius, flScale, pszName );
+			return;
+		}
+		else if ( !V_strcmp( pszName, "bomb_exploded" ) )
+		{
+			// no position in the event: the planted bomb is still there
+			if ( g_PlantedC4s.Count() > 0 && g_PlantedC4s[0] )
+				ExplosionPulse( pLocal, g_PlantedC4s[0]->GetAbsOrigin(), 3000.0f, 1.6f, pszName );
+			return;
+		}
+
 		// the first few per map, so a log shows whether events arrive
 		if ( m_nHapticLogs < 6 )
 		{
@@ -110,6 +132,31 @@ private:
 	{
 		ListenForGameEvent( "player_hurt" );
 		ListenForGameEvent( "player_death" );
+		ListenForGameEvent( "hegrenade_detonate" );
+		ListenForGameEvent( "flashbang_detonate" );
+		ListenForGameEvent( "inferno_startburn" );
+		ListenForGameEvent( "bomb_exploded" );
+	}
+
+	// stronger, longer and duller the closer it is; nothing past flRadius.
+	// flScale > 1 (the bomb) lengthens it past what 1 gives
+	void ExplosionPulse( C_BasePlayer *pLocal, const Vector &vecPos, float flRadius, float flScale, const char *pszName )
+	{
+		if ( !pLocal->IsAlive() )
+			return;
+		float flDist = ( pLocal->EyePosition() - vecPos ).Length();
+		float n = 1.0f - flDist / flRadius;
+		bool bFelt = n > 0.0f && ios_haptics.GetBool();
+		if ( m_nHapticLogs < 6 )
+		{
+			++m_nHapticLogs;
+			Msg( "[haptics] %s %.0f units away -> %s\n", pszName, flDist, !ios_haptics.GetBool() ? "off (ios_haptics 0)" : bFelt ? "rumble" : "too far" );
+		}
+		if ( !bFelt )
+			return;
+		n = n * n;	// falls off quickly: close ones are the big ones
+		float flStrength = MIN( 1.0f, n * flScale );
+		IOS_HapticPulse( 0.3f + 0.7f * flStrength, 0.25f - 0.15f * flStrength, ( 0.25f + 0.75f * n ) * MAX( flScale, 0.6f ) );
 	}
 
 	void UpdateGyro()
@@ -211,15 +258,27 @@ private:
 
 static CIOSDeviceFeatures s_IOSDeviceFeatures;
 
-// light tap per shot of the local player's gun (CWeaponCSBaseGun::CSBaseGunFire).
-// Only the first prediction of a shot: re-simulated commands run it again.
-void IOS_HapticLocalShot( C_BasePlayer *pPlayer )
+// a shot of the local player's gun (CWeaponCSBaseGun::CSBaseGunFire), felt by
+// how hard the gun hits: damage x pellets, less with a silencer. A USP-S is a
+// short light tap, a Deagle a solid kick with a fading rumble, an AWP or a
+// shotgun the most. Full-auto guns are cut to their fire rate so a spray
+// stays separate shots. Only the first prediction of a shot: re-simulated
+// commands run it again.
+void IOS_HapticLocalShot( C_BasePlayer *pPlayer, float flDamage, int nBullets, bool bSilenced, float flCycleTime, bool bFullAuto )
 {
 	if ( !ios_haptics.GetBool() || !pPlayer || !pPlayer->IsLocalPlayer() )
 		return;
 	if ( prediction->InPrediction() && !prediction->IsFirstTimePredicted() )
 		return;
-	IOS_Haptic( 0 );
+
+	float flPower = flDamage * MAX( nBullets, 1 ) * ( bSilenced ? 0.55f : 1.0f );
+	float n = clamp( flPower / 110.0f, 0.12f, 1.0f );		// 110: an AWP
+	float flIntensity = 0.35f + 0.65f * n;
+	float flSharpness = 0.75f - 0.45f * n;					// big guns: deeper
+	float flDuration = 0.06f + 0.6f * n;
+	if ( bFullAuto && flCycleTime > 0.0f )
+		flDuration = MIN( flDuration, flCycleTime * 1.3f );
+	IOS_HapticPulse( flIntensity, flSharpness, flDuration );
 }
 
 #endif // IOS

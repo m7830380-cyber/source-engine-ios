@@ -766,8 +766,9 @@ bool CWeaponCSBaseGun::CSBaseGunFire( float flCycleTime, CSWeaponMode weaponMode
 	}
 #elif defined( IOS )
 	// shot haptics on the client, the moment the shot is predicted
-	extern void IOS_HapticLocalShot( C_BasePlayer *pPlayer );
-	IOS_HapticLocalShot( pPlayer );
+	extern void IOS_HapticLocalShot( C_BasePlayer *pPlayer, float flDamage, int nBullets, bool bSilenced, float flCycleTime, bool bFullAuto );
+	IOS_HapticLocalShot( pPlayer, weaponInfo.GetDamage( GetEconItemView() ), weaponInfo.GetBullets( GetEconItemView() ),
+		HasSilencer() && IsSilenced(), flCycleTime, IsFullAuto() );
 #endif
 
 #ifdef IRONSIGHT

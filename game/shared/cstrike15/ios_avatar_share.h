@@ -70,6 +70,8 @@ inline int IOSAvatar_Base64Decode( const char *pszIn, unsigned char *pOut, int n
 void IOSAvatar_SendLocal();
 // Bumped whenever a received picture was stored; panels showing avatars reload them.
 int IOSAvatar_GetVersion();
+// Stores a received picture (IOS_AVATAR_BYTES of RGB) as that account's avatar.
+void IOSAvatar_StorePicture( uint32 unAccount, const unsigned char *pRGB );
 #endif
 
 #endif // IOS_AVATAR_SHARE_H

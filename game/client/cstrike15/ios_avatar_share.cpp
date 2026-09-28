@@ -210,6 +210,15 @@ static void WriteAvatarPNG( const char *pszKey, const unsigned char *pRGB )
 	g_pFullFileSystem->WriteFile( szFile, "MOD", png );
 }
 
+void IOSAvatar_StorePicture( uint32 unAccount, const unsigned char *pRGB )
+{
+	char szKey[16];
+	V_snprintf( szKey, sizeof( szKey ), "%u", unAccount );
+	WriteAvatarPNG( szKey, pRGB );
+	s_nAvatarVersion++;
+	Msg( "[avatar] got the LAN host's profile picture (account %s)\n", szKey );
+}
+
 class CIOSAvatarShare : public CAutoGameSystemPerFrame
 {
 public:

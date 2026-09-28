@@ -17,7 +17,10 @@ struct LanGame_t
 	char m_szName[64];		// the host's server name (its player name)
 	char m_szMap[64];
 	int m_nHumans, m_nBots, m_nMax;
-	uint64 m_ullXuid;		// stable made-up ID for this address, for the friends list
+	uint64 m_ullXuid;		// the host's Steam ID (older hosts: a made-up ID for this address)
+	uint32 m_unHostAccount;	// the host player's account ID, 0 if the host didn't send it
+	uint32 m_unIP;			// host byte order
+	uint16 m_nPort;
 	double m_flLastSeen;
 };
 

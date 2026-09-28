@@ -5145,6 +5145,7 @@ EXPOSE_SINGLE_INTERFACE_GLOBALVAR( CClientMaterialSystem, IClientMaterialSystem,
 
 #include <fcntl.h>
 #include "ios_lan.h"
+#include "ios_avatar_share.h"
 #include "tier1/checksum_crc.h"
 
 static CUtlVector< LanGame_t > s_LanGames;		// the last lan_find
@@ -5256,12 +5257,117 @@ static bool LanParseReply( const unsigned char *buf, int n, const sockaddr_in &f
 	game.m_nBots = p[1];
 	game.m_nMax = p[2];
 	int nPort = p[3] | ( p[4] << 8 );
+	if ( pEnd - p >= 9 )
+		game.m_unHostAccount = (uint32)p[5] | ( (uint32)p[6] << 8 ) | ( (uint32)p[7] << 16 ) | ( (uint32)p[8] << 24 );
+	game.m_unIP = ntohl( from.sin_addr.s_addr );
+	game.m_nPort = (uint16)nPort;
 	V_snprintf( game.m_szAddress, sizeof( game.m_szAddress ), "%s:%d", inet_ntoa( from.sin_addr ), nPort );
-	// an individual Steam ID whose account ID (high bit set, unlike real ones
-	// in practice) comes from the address, so it stays the same between queries
-	CRC32_t crc = CRC32_ProcessSingleBuffer( game.m_szAddress, V_strlen( game.m_szAddress ) );
-	game.m_ullXuid = 0x0110000100000000ull | ( 0x80000000u | ( crc & 0x7FFFFFFFu ) );
+	if ( game.m_unHostAccount )
+	{
+		// the host player's own Steam ID: its avatar (and name) are that player's
+		game.m_ullXuid = 0x0110000100000000ull | game.m_unHostAccount;
+	}
+	else
+	{
+		// older hosts: an individual Steam ID whose account ID (high bit set, unlike
+		// real ones in practice) comes from the address, stable between queries
+		CRC32_t crc = CRC32_ProcessSingleBuffer( game.m_szAddress, V_strlen( game.m_szAddress ) );
+		game.m_ullXuid = 0x0110000100000000ull | ( 0x80000000u | ( crc & 0x7FFFFFFFu ) );
+	}
 	return true;
+}
+
+// The hosts' profile pictures for the LAN list: asked for in 1 KB pieces
+// ('g' "IOSAVA1" offset), answered from the host's IOSAvatars string table.
+#define LAN_AVATAR_PIECE	1024
+struct LanAvatarFetch_t
+{
+	uint32 m_unAccount;
+	unsigned char m_Data[ IOS_AVATAR_BYTES ];
+	bool m_bHave[ ( IOS_AVATAR_BYTES + LAN_AVATAR_PIECE - 1 ) / LAN_AVATAR_PIECE ];
+	double m_flNextRequest;
+	int m_nTries;
+	bool m_bDone;
+};
+static CUtlVector< LanAvatarFetch_t * > s_LanAvatarFetches;
+
+static LanAvatarFetch_t *LanAvatarFetchFor( uint32 unAccount )
+{
+	FOR_EACH_VEC( s_LanAvatarFetches, i )
+	{
+		if ( s_LanAvatarFetches[i]->m_unAccount == unAccount )
+			return s_LanAvatarFetches[i];
+	}
+	LanAvatarFetch_t *pFetch = new LanAvatarFetch_t;
+	V_memset( pFetch, 0, sizeof( *pFetch ) );
+	pFetch->m_unAccount = unAccount;
+	s_LanAvatarFetches.AddToTail( pFetch );
+	return pFetch;
+}
+
+// a piece of a host's picture; true when that picture just became complete
+static bool LanHandleAvatarReply( const unsigned char *buf, int n )
+{
+	if ( n < 5 + 8 || buf[0] != 0xFF || buf[1] != 0xFF || buf[2] != 0xFF || buf[3] != 0xFF || buf[4] != 'h' )
+		return false;
+	const unsigned char *p = buf + 5, *pEnd = buf + n;
+	char szTag[16];
+	LanReadString( p, pEnd, szTag, sizeof( szTag ) );
+	if ( V_strcmp( szTag, "IOSAVA1" ) || pEnd - p < 10 )
+		return false;
+	uint32 unAccount = (uint32)p[0] | ( (uint32)p[1] << 8 ) | ( (uint32)p[2] << 16 ) | ( (uint32)p[3] << 24 );
+	int nOffset = p[4] | ( p[5] << 8 ), nTotal = p[6] | ( p[7] << 8 ), nLen = p[8] | ( p[9] << 8 );
+	p += 10;
+	if ( !unAccount || nTotal != IOS_AVATAR_BYTES || nOffset % LAN_AVATAR_PIECE || nLen <= 0 || nOffset + nLen > nTotal || pEnd - p < nLen )
+		return false;
+	LanAvatarFetch_t *pFetch = LanAvatarFetchFor( unAccount );
+	if ( pFetch->m_bDone )
+		return false;
+	V_memcpy( pFetch->m_Data + nOffset, p, nLen );
+	pFetch->m_bHave[ nOffset / LAN_AVATAR_PIECE ] = true;
+	for ( int i = 0; i < ARRAYSIZE( pFetch->m_bHave ); i++ )
+	{
+		if ( !pFetch->m_bHave[i] )
+			return false;
+	}
+	pFetch->m_bDone = true;
+	IOSAvatar_StorePicture( unAccount, pFetch->m_Data );
+	return true;
+}
+
+// ask the hosts in the list for the pieces of their picture we don't have yet
+static void LanRequestAvatars( int s, double flNow )
+{
+	FOR_EACH_VEC( s_LanBrowse, i )
+	{
+		const LanGame_t &game = s_LanBrowse[i];
+		if ( !game.m_unHostAccount )
+			continue;
+		LanAvatarFetch_t *pFetch = LanAvatarFetchFor( game.m_unHostAccount );
+		// a host without a picture never answers: stop after a few rounds
+		if ( pFetch->m_bDone || pFetch->m_nTries >= 10 || flNow < pFetch->m_flNextRequest )
+			continue;
+		pFetch->m_flNextRequest = flNow + 1.0;
+		pFetch->m_nTries++;
+		sockaddr_in to = {};
+		to.sin_family = AF_INET;
+		to.sin_port = htons( game.m_nPort );
+		to.sin_addr.s_addr = htonl( game.m_unIP );
+		for ( int nPiece = 0; nPiece < ARRAYSIZE( pFetch->m_bHave ); nPiece++ )
+		{
+			if ( pFetch->m_bHave[ nPiece ] )
+				continue;
+			unsigned char query[32];
+			int nQuery = 0;
+			const unsigned char s_Head[] = { 0xFF, 0xFF, 0xFF, 0xFF, 'g', 'I', 'O', 'S', 'A', 'V', 'A', '1', 0 };
+			V_memcpy( query, s_Head, sizeof( s_Head ) );
+			nQuery = sizeof( s_Head );
+			int nOffset = nPiece * LAN_AVATAR_PIECE;
+			query[nQuery++] = (unsigned char)( nOffset & 0xFF );
+			query[nQuery++] = (unsigned char)( nOffset >> 8 );
+			sendto( s, query, nQuery, 0, (sockaddr *)&to, sizeof( to ) );
+		}
+	}
 }
 
 bool LanBrowser_Frame()
@@ -5296,6 +5402,13 @@ bool LanBrowser_Frame()
 		if ( n <= 0 )
 			break;
 
+		// a piece of a host's picture: the list shows it once complete
+		if ( LanHandleAvatarReply( buf, n ) )
+		{
+			bChanged = true;
+			continue;
+		}
+
 		LanGame_t game;
 		if ( !LanParseReply( buf, n, from, game ) )
 			continue;
@@ -5321,6 +5434,8 @@ bool LanBrowser_Frame()
 			old = game;
 		}
 	}
+
+	LanRequestAvatars( s_nSocket, flNow );
 
 	// games that stopped answering (three queries missed)
 	FOR_EACH_VEC_BACK( s_LanBrowse, i )

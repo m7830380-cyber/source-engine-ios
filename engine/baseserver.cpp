@@ -958,33 +958,65 @@ bool CBaseServer::ProcessConnectionlessPacket(netpacket_t * packet)
 			{
 				// LAN game discovery for the iOS port ("lan_find" broadcasts this;
 				// Steam's server queries aren't available offline).
-				// query: 'g' "IOSLAN1"   reply: 'h' "IOSLAN1" name map humans bots maxplayers port
+				// query: 'g' "IOSLAN1"   reply: 'h' "IOSLAN1" name map humans bots maxplayers port hostaccount
+				// query: 'g' "IOSAVA1" offset   reply: 'h' "IOSAVA1" hostaccount offset total length data
+				//   (the host's profile picture from the IOSAvatars string table, in pieces)
 				char szTag[16];
-				if ( !msg.ReadString( szTag, sizeof( szTag ) ) || V_strcmp( szTag, "IOSLAN1" ) || IsHLTV() )
+				if ( !msg.ReadString( szTag, sizeof( szTag ) ) || IsHLTV() )
 					break;
-				CUtlBuffer buf;
-				buf.PutUnsignedInt( LittleDWord( CONNECTIONLESS_HEADER ) );
-				buf.PutUnsignedChar( 'h' );
-				buf.PutString( "IOSLAN1" );
-				// the host's player name (its own client, connected over loopback);
-				// the server's hostname is set when the match starts, not the player name
+				bool bInfo = !V_strcmp( szTag, "IOSLAN1" ), bAvatar = !V_strcmp( szTag, "IOSAVA1" );
+				if ( !bInfo && !bAvatar )
+					break;
+
+				// the host's own client (loopback): its name and account
 				const char *pszHostName = GetName();
+				uint32 unHostAccount = 0;
 				for ( int i = 0; i < m_Clients.Count(); i++ )
 				{
 					CBaseClient *pClient = m_Clients[i];
 					if ( pClient && pClient->IsConnected() && !pClient->IsFakeClient() && pClient->GetNetChannel() &&
-						 pClient->GetNetChannel()->IsLoopback() && pClient->GetClientName()[0] )
+						 pClient->GetNetChannel()->IsLoopback() )
 					{
-						pszHostName = pClient->GetClientName();
+						if ( pClient->GetClientName()[0] )
+							pszHostName = pClient->GetClientName();
+						unHostAccount = (uint32)( pClient->GetClientXuid() & 0xFFFFFFFFull );
 						break;
 					}
 				}
-				buf.PutString( pszHostName );
-				buf.PutString( GetMapName() );
-				buf.PutUnsignedChar( MAX( 0, GetNumClients() - GetNumFakeClients() ) );
-				buf.PutUnsignedChar( GetNumFakeClients() );
-				buf.PutUnsignedChar( GetMaxClients() );
-				buf.PutShort( LittleWord( GetUDPPort() ) );
+
+				CUtlBuffer buf;
+				buf.PutUnsignedInt( LittleDWord( CONNECTIONLESS_HEADER ) );
+				buf.PutUnsignedChar( 'h' );
+				if ( bInfo )
+				{
+					buf.PutString( "IOSLAN1" );
+					buf.PutString( pszHostName );
+					buf.PutString( GetMapName() );
+					buf.PutUnsignedChar( MAX( 0, GetNumClients() - GetNumFakeClients() ) );
+					buf.PutUnsignedChar( GetNumFakeClients() );
+					buf.PutUnsignedChar( GetMaxClients() );
+					buf.PutShort( LittleWord( GetUDPPort() ) );
+					buf.PutUnsignedInt( LittleDWord( unHostAccount ) );
+				}
+				else
+				{
+					int nOffset = (unsigned short)msg.ReadShort();
+					INetworkStringTable *pTable = m_StringTables ? m_StringTables->FindTable( "IOSAvatars" ) : NULL;
+					char szKey[16];
+					V_snprintf( szKey, sizeof( szKey ), "%u", unHostAccount );
+					int nIndex = ( pTable && unHostAccount ) ? pTable->FindStringIndex( szKey ) : INVALID_STRING_INDEX;
+					int nTotal = 0;
+					const unsigned char *pData = ( nIndex != INVALID_STRING_INDEX ) ? (const unsigned char *)pTable->GetStringUserData( nIndex, &nTotal ) : NULL;
+					if ( !pData || nTotal <= 0 || nOffset >= nTotal )
+						break;
+					int nLen = MIN( 1024, nTotal - nOffset );
+					buf.PutString( "IOSAVA1" );
+					buf.PutUnsignedInt( LittleDWord( unHostAccount ) );
+					buf.PutShort( LittleWord( (short)nOffset ) );
+					buf.PutShort( LittleWord( (short)nTotal ) );
+					buf.PutShort( LittleWord( (short)nLen ) );
+					buf.Put( pData + nOffset, nLen );
+				}
 				NET_SendPacket( NULL, m_Socket, packet->from, (unsigned char *)buf.Base(), buf.TellPut() );
 			}
 			break;

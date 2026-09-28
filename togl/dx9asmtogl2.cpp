@@ -271,20 +271,18 @@ void GetParamNameWithoutSwizzle( const char *pParam, char *pOut, int nOutLen )
 {
 	char *pParamStart = (char *) pParam;
 	const char *pDot = GetSwizzleDot( pParam );			// dot followed by valid swizzle characters
-	bool bAbsWrapper = false;
+	const char *pClosingParen = NULL;
 
 	// Check for abs() or -abs() wrapper and strip it off during the fixup
 	if ( !V_strncmp( pParam, "abs(", 4 ) || !V_strncmp( pParam, "-abs(", 5 ) )
 	{
 		const char *pOpenParen = strchr( pParam, '(' );		// FIRST opening paren
-		const char *pClosingParen = strrchr( pParam, ')' ); // LAST closing paren
+		pClosingParen = strrchr( pParam, ')' );				// LAST closing paren
 
 		Assert ( pOpenParen && pClosingParen );
-		pClosingParen; // hush compiler
 
 		pParamStart = (char *) pOpenParen;
 		pParamStart++;
-		bAbsWrapper = true;
 	}
 
 	if ( pDot  )
@@ -293,9 +291,20 @@ void GetParamNameWithoutSwizzle( const char *pParam, char *pOut, int nOutLen )
 		memcpy( pOut, pParamStart, nToCopy );
 		pOut[nToCopy] = 0;
 	}
+	else if ( pClosingParen && pClosingParen > pParamStart )
+	{
+		// "abs(r20)" / "-abs(r20)" with no swizzle: the name ends at the closing paren.
+		// (This used strncpy with nOutLen - 1 to drop the ')', which only works when
+		// the output buffer is exactly that size; otherwise "-abs(r20)" came out as
+		// "-abs(r20).x)" in per-component CMP code, a GLSL compile error that broke
+		// the glove (customcharacter) shaders.)
+		int nToCopy = MIN( nOutLen-1, (int)( pClosingParen - pParamStart ) );
+		memcpy( pOut, pParamStart, nToCopy );
+		pOut[nToCopy] = 0;
+	}
 	else
 	{
-		V_strncpy( pOut, pParamStart, bAbsWrapper ? nOutLen - 1 : nOutLen );
+		V_strncpy( pOut, pParamStart, nOutLen );
 	}
 }
 

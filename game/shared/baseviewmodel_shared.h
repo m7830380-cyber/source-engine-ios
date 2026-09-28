@@ -262,6 +262,7 @@ private:
 #endif
 
 	CUtlVector< CHandle< C_ViewmodelAttachmentModel > > m_vecViewmodelArmModels; // gloves, sleeves, etc
+	uint64					m_nViewmodelGlovesItemID;	// equipped gloves the arm models were made for (0 = default)
 	CHandle< C_ViewmodelAttachmentModel > m_viewmodelStatTrakAddon;
 	CHandle< C_ViewmodelAttachmentModel > m_viewmodelUidAddon;
 	int						m_iAddOnPlayerClass;

@@ -27,6 +27,7 @@
 
 #include "weapon_csbase.h"
 #include "weapon_basecsgrenade.h"
+#include "cstrike15_item_inventory.h"
 #include "iclientmode.h"
 
 #include "platforminputdevice.h"
@@ -984,11 +985,44 @@ void C_BaseViewModel::UpdateAllViewmodelAddons( void )
 		}
 	}
 	
+	// Equipped gloves (not in this source: arms always got the player model's default
+	// gloves). Our own from the local inventory's loadout; others keep the default.
+	CEconItemView *pGloves = NULL;
+	if ( pPlayer->IsLocalPlayer() && CSInventoryManager() && CSInventoryManager()->GetLocalCSInventory() )
+	{
+		int nTeam = pPlayer->GetTeamNumber();
+		CEconItemView *pItem = ( nTeam == TEAM_TERRORIST || nTeam == TEAM_CT ) ?
+			CSInventoryManager()->GetLocalCSInventory()->GetItemInLoadout( nTeam, LOADOUT_POSITION_CLOTHING_HANDS ) : NULL;
+		if ( pItem && pItem->IsValid() && pItem->GetItemDefinition() && !pItem->GetItemDefinition()->IsDefaultSlotItem() &&
+			 pItem->GetStaticData()->GetPlayerDisplayModel( nTeam ) && pItem->GetStaticData()->GetPlayerDisplayModel( nTeam )[0] &&
+			 modelinfo->GetModelIndex( pItem->GetStaticData()->GetPlayerDisplayModel( nTeam ) ) != -1 )
+		{
+			pGloves = pItem;
+		}
+	}
+	uint64 nGlovesItemID = pGloves ? pGloves->GetItemID() : 0;
+	if ( nGlovesItemID != m_nViewmodelGlovesItemID )
+	{
+		// gloves changed (equipped from the menu mid-match): rebuild the arms
+		RemoveViewmodelArmModels();
+		m_nViewmodelGlovesItemID = nGlovesItemID;
+	}
+
 	// add gloves and sleeves
 	if ( pPlayer->m_pViewmodelArmConfig != NULL && m_vecViewmodelArmModels.Count() == 0 )
 	{
 		{
-			AddViewmodelArmModel( pPlayer->m_pViewmodelArmConfig->szAssociatedGloveModel, atoi(pPlayer->m_pViewmodelArmConfig->szSkintoneIndex) );
+			const char *pszGloveModel = pGloves ? pGloves->GetStaticData()->GetPlayerDisplayModel( pPlayer->GetTeamNumber() ) : pPlayer->m_pViewmodelArmConfig->szAssociatedGloveModel;
+			C_ViewmodelAttachmentModel *pGloveModel = AddViewmodelArmModel( pszGloveModel, atoi(pPlayer->m_pViewmodelArmConfig->szSkintoneIndex) );
+			if ( pGloveModel && pGloves )
+			{
+				// the glove skin: composite materials, built in the background; the model
+				// draws with its stock material until they are ready (like weapon skins)
+				pGloves->UpdateGeneratedMaterial();
+				pGloveModel->ClearCustomMaterials();
+				for ( int i = 0; i < pGloves->GetCustomMaterialCount(); i++ )
+					pGloveModel->SetCustomMaterial( pGloves->GetCustomMaterial( i ), i );
+			}
 			AddViewmodelArmModel( pPlayer->m_pViewmodelArmConfig->szAssociatedSleeveModel );
 		}
 	}

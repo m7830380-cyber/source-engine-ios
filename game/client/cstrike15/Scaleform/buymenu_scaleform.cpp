@@ -545,6 +545,12 @@ void CCSBuyMenuScaleform::InitWeapon( SCALEFORM_CALLBACK_ARGS_DECL )
 		break;
 	}
 
+	// Armor and defuser / rescue kit aren't inventory items: the lookup above falls
+	// back to a base item (the knife), whose name and type ("Knife", not equipment,
+	// priced -1 by the movie) were used for them. Only the Zeus is a real item.
+	if ( weaponID != WEAPON_NONE && weaponID != WEAPON_TASER )
+		pItem = nullptr;
+
 	const CCSWeaponInfo* pWeaponInfo = GetWeaponInfo( weaponID );
 
 	if ( !pWeaponInfo )
@@ -566,7 +572,20 @@ void CCSBuyMenuScaleform::InitWeapon( SCALEFORM_CALLBACK_ARGS_DECL )
 	//	localizedName = pItem->GetItemName();
 
 	/*SFVALUE nameValue = m_pScaleformUI->CreateNewString( weaponObj, localizedName );*/
-	SFVALUE nameValue = m_pScaleformUI->CreateNewString( weaponObj, pItem->GetItemName() );
+	const wchar_t *pwszName = pItem ? pItem->GetItemName() : NULL;
+	wchar_t wszPrintName[128];
+	if ( !pwszName )
+	{
+		// gear: the weapon script's print name ("#Cstrike_..." token, or plain text)
+		pwszName = g_pVGuiLocalize ? g_pVGuiLocalize->Find( pWeaponInfo->szPrintName ) : NULL;
+		if ( !pwszName )
+		{
+			const char *pszPrint = pWeaponInfo->szPrintName;
+			V_UTF8ToUnicode( pszPrint[0] == '#' ? pszPrint + 1 : pszPrint, wszPrintName, sizeof( wszPrintName ) );
+			pwszName = wszPrintName;
+		}
+	}
+	SFVALUE nameValue = m_pScaleformUI->CreateNewString( weaponObj, pwszName );
 
 	// Weapon type string
 	m_pScaleformUI->Value_SetMember( weaponData, "maxCarry", 1 );

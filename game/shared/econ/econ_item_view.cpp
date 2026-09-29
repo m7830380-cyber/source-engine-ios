@@ -3309,6 +3309,21 @@ const wchar_t *CEconItemView::GetItemName( bool bUncustomized /*= false*/ ) cons
 	wszQuality[0] = L'\0';
 	if ( nQuality == AE_UNUSUAL || nQuality == AE_STRANGE || nQuality == AE_TOURNAMENT )
 		LocalizeItemToken( CFmtStr( "#%s", EconQuality_GetQualityString( EEconItemQuality( nQuality ) ) ), wszQuality, sizeof( wszQuality ) );
+	// StatTrak knives keep their star, as in "(star) StatTrak(TM) Karambit"
+	if ( nQuality == AE_STRANGE && ( GetItemDefinition()->GetDefaultLoadoutSlot() == LOADOUT_POSITION_MELEE || GetItemDefinition()->GetDefaultLoadoutSlot() == LOADOUT_POSITION_CLOTHING_HANDS ) && wszQuality[0] )
+	{
+		wchar_t wszStar[32], wszStrange[64];
+		LocalizeItemToken( CFmtStr( "#%s", EconQuality_GetQualityString( AE_UNUSUAL ) ), wszStar, sizeof( wszStar ) );
+		V_wcsncpy( wszStrange, wszQuality, sizeof( wszStrange ) );
+		int n = 0;
+		for ( const wchar_t *p = wszStar; *p && n < 30; ++p )
+			wszQuality[n++] = *p;
+		if ( n )
+			wszQuality[n++] = L' ';
+		for ( const wchar_t *p = wszStrange; *p && n < 63; ++p )
+			wszQuality[n++] = *p;
+		wszQuality[n] = 0;
+	}
 
 	// Plain concatenation: the swprintf family fails on non-ASCII characters (the
 	// star) in the C locale on Apple platforms and leaves the buffer as stack garbage.

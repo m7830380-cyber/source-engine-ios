@@ -26,6 +26,27 @@
 static const char *k_pszLoadoutFile = "cfg/offline_loadout.txt";
 static const char *k_pszLoadoutPathID = "MOD";
 
+#ifdef CLIENT_DLL
+// StatTrak: the unlocked skins and knives come as StatTrak versions, counting
+// your kills (bots too: offline there's hardly anyone else) into
+// cfg/offline_stattrak.txt, keyed by item ID. The server has no say in it: CS:GO
+// kept the count on Valve's item server; here your own game counts from the
+// kill event, which names the item that made the kill (weapon_itemid).
+ConVar ios_stattrak( "ios_stattrak", "1", FCVAR_ARCHIVE | FCVAR_RELEASE, "Skins and knives are StatTrak versions counting your kills (after a restart)" );
+static const char *k_pszStatTrakFile = "cfg/offline_stattrak.txt";
+static KeyValues *s_pStatTrakCounts = NULL;
+
+static KeyValues *StatTrakCounts()
+{
+	if ( !s_pStatTrakCounts )
+	{
+		s_pStatTrakCounts = new KeyValues( "OfflineStatTrak" );
+		s_pStatTrakCounts->LoadFromFile( g_pFullFileSystem, k_pszStatTrakFile, k_pszLoadoutPathID );
+	}
+	return s_pStatTrakCounts;
+}
+#endif
+
 bool OfflineInventory_IsEnabled()
 {
 	static int s_nEnabled = -1;
@@ -92,6 +113,23 @@ static void AddItem( int nDefIndex, int nPaintKit, uint32 unAccountID )
 	pItem->SetFlags( 0 );
 	// backpack position 1..N: an acknowledged item (0 or the unacked bit would show "new item" popups)
 	pItem->SetInventoryToken( ( s_vecItems.Count() + 1 ) & kBackendPositionMask_Position );
+
+#ifdef CLIENT_DLL
+	// StatTrak versions of the skins and knives: the kill counter attributes
+	// (both stored as integers) with the saved count
+	if ( ( pPaintKit || bStar ) && nSlot != LOADOUT_POSITION_CLOTHING_HANDS && ios_stattrak.GetBool() )
+	{
+		static CSchemaAttributeDefHandle pAttr_KillEater( "kill eater" );
+		static CSchemaAttributeDefHandle pAttr_KillEaterType( "kill eater score type" );
+		if ( pAttr_KillEater && pAttr_KillEaterType )
+		{
+			pItem->SetQuality( AE_STRANGE );
+			uint32 unKills = (uint32)StatTrakCounts()->GetInt( CFmtStr( "%llu", ullID ), 0 );
+			pItem->SetDynamicAttributeValue( pAttr_KillEater, unKills );
+			pItem->SetDynamicAttributeValue( pAttr_KillEaterType, (uint32)0 );	// kills
+		}
+	}
+#endif
 
 	if ( pPaintKit )
 	{
@@ -363,4 +401,56 @@ CON_COMMAND_F( offline_equip, "Equip an unlocked item by id (see offline_list) f
 		}
 	}
 }
+#endif
+
+#ifdef CLIENT_DLL
+//-----------------------------------------------------------------------------
+// StatTrak counting: a kill by the local player on an enemy, with a StatTrak
+// item (player_death's weapon_itemid), adds one and saves the file
+//-----------------------------------------------------------------------------
+#include "GameEventListener.h"
+#include "c_playerresource.h"
+
+class COfflineStatTrak : public CAutoGameSystem, public CGameEventListener
+{
+public:
+	COfflineStatTrak() : CAutoGameSystem( "COfflineStatTrak" ) {}
+
+	// the event list isn't loaded at client init: listen once a map is up
+	virtual void LevelInitPostEntity()
+	{
+		if ( OfflineInventory_IsEnabled() )
+			ListenForGameEvent( "player_death" );
+	}
+
+	virtual void FireGameEvent( IGameEvent *event )
+	{
+		C_BasePlayer *pLocal = C_BasePlayer::GetLocalPlayer();
+		if ( !pLocal || event->GetInt( "attacker" ) != pLocal->GetUserID() || event->GetInt( "userid" ) == pLocal->GetUserID() )
+			return;
+
+		// enemies only (team kills don't count)
+		int nVictim = engine->GetPlayerForUserID( event->GetInt( "userid" ) );
+		if ( g_PR && nVictim > 0 && g_PR->GetTeam( nVictim ) == g_PR->GetTeam( pLocal->entindex() ) )
+			return;
+
+		uint64 ullItemID = V_atoui64( event->GetString( "weapon_itemid" ) );
+		CEconItem *pItem = ullItemID ? OfflineInventory_FindItem( ullItemID ) : NULL;
+		static CSchemaAttributeDefHandle pAttr_KillEater( "kill eater" );
+		if ( !pItem || pItem->GetQuality() != AE_STRANGE || !pAttr_KillEater )
+			return;
+
+		uint32 unKills = 0;
+		pItem->FindAttribute( pAttr_KillEater, &unKills );
+		unKills++;
+		pItem->SetDynamicAttributeValue( pAttr_KillEater, unKills );
+		pItem->SetSOUpdateFrame( gpGlobals->framecount + 1 );	// views re-read it (their value is cached per update)
+
+		KeyValues *pCounts = StatTrakCounts();
+		pCounts->SetInt( CFmtStr( "%llu", ullItemID ), (int)unKills );
+		pCounts->SaveToFile( g_pFullFileSystem, k_pszStatTrakFile, k_pszLoadoutPathID );
+		VERBOSE_PRINTF( "[stattrak] %s: %u kills\n", event->GetString( "weapon" ), unKills );
+	}
+};
+static COfflineStatTrak s_OfflineStatTrak;
 #endif

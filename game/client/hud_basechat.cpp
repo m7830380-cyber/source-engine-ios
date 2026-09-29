@@ -120,7 +120,12 @@ inline void CS15ForwardStatusMsg( const wchar_t* text, int clientid )
 	}
 	wszOut[ nOut ] = 0;
 	if ( nOut )
+	{
 		pChat->AddStringToHistory( wszOut );
+		// and shown for a while without the chat open (hudvoicestatus.swf)
+		extern void IOS_VoiceStatusAddNotice( const wchar_t *pwszHtml );
+		IOS_VoiceStatusAddNotice( wszOut );
+	}
 }
 inline void CS15ForwardStatusMsg( const char* text, int clientid )
 {

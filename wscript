@@ -138,6 +138,8 @@ PROJECT_EXTRA_SOURCES = {
 		'game/client/cstrike15/Scaleform/buymenu_scaleform.cpp',
 		# CS:GO scoreboard glue, reconstructed from scoreboard.swf
 		'game/client/cstrike15/Scaleform/scoreboard_scaleform.cpp',
+		# voice status: talking players and the recent chat lines (hudvoicestatus.swf)
+		'game/client/cstrike15/Scaleform/HUD/sfhudvoicestatus.cpp',
 		# LAN profile pictures: upload, and the IOSAvatars string table -> avatar files
 		'game/client/cstrike15/ios_avatar_share.cpp',
 		# gyro aiming, haptics, heat-aware render scale (CoreMotion / UIKit side, and the game side)

@@ -154,6 +154,55 @@ static KeyValues *StatTrakCounts()
 }
 #endif
 
+#ifdef CLIENT_DLL
+//-----------------------------------------------------------------------------
+// Customizations of our items (name tags so far): cfg/offline_custom.txt, by
+// item ID: "<id>" { "name" "..." }. Only this game shows them (your viewmodel,
+// your inventory); the ID stays what the item looks like underneath.
+//-----------------------------------------------------------------------------
+static const char *k_pszCustomFile = "cfg/offline_custom.txt";
+static KeyValues *s_pCustom = NULL;
+
+static KeyValues *Customizations()
+{
+	if ( !s_pCustom )
+	{
+		s_pCustom = new KeyValues( "OfflineCustom" );
+		s_pCustom->LoadFromFile( g_pFullFileSystem, k_pszCustomFile, k_pszPathID );
+	}
+	return s_pCustom;
+}
+
+static void SaveCustomizations()
+{
+	g_pFullFileSystem->CreateDirHierarchy( "cfg", k_pszPathID );
+	Customizations()->SaveToFile( g_pFullFileSystem, k_pszCustomFile, k_pszPathID );
+}
+
+static void ApplyCustomizations( CEconItem *pItem )
+{
+	KeyValues *pKV = Customizations()->FindKey( CFmtStr( "%llu", pItem->GetItemID() ) );
+	const char *pszName = pKV ? pKV->GetString( "name", "" ) : "";
+	pItem->SetCustomName( pszName[0] ? pszName : NULL );
+}
+#endif
+
+static int NameTagDef()
+{
+	static int s_nDef = -1;
+	if ( s_nDef < 0 )
+	{
+		const CEconItemDefinition *pDef = GetItemSchema()->GetItemDefinitionByName( "Name Tag" );
+		s_nDef = pDef ? pDef->GetDefinitionIndex() : 0;
+	}
+	return s_nDef;
+}
+
+bool OfflineItem_IsNameTag( uint64 ullItemID )
+{
+	return OfflineID_IsOffline( ullItemID ) && OfflineID_Kind( ullItemID ) == OFFLINE_KIND_TOOL && NameTagDef() && OfflineID_Def( ullItemID ) == NameTagDef();
+}
+
 //-----------------------------------------------------------------------------
 // Building an item from its ID
 //-----------------------------------------------------------------------------
@@ -320,12 +369,14 @@ CEconItemView *OfflineInventory_FindView( uint64 ullItemID )
 static const char *k_pszItemsFile = "cfg/offline_items.txt";
 static uint64 s_ullNextSerial = 1;
 static bool s_bBuilt = false;
+static const int k_nUnlockAllNameTags = 10;
 static uint32 s_unLocalAccount = 0;
 
 extern void OfflineCase_Build();
 
 static void AddLocal( CEconItem *pItem )
 {
+	ApplyCustomizations( pItem );
 	s_mapItems.InsertOrReplace( pItem->GetItemID(), pItem );
 	s_vecItems.AddToTail( pItem );
 }
@@ -373,6 +424,10 @@ static void BuildCatalog()
 
 	// the weapon cases (with contents among the skins above)
 	OfflineCase_Build();
+
+	// name tags (Item Giver)
+	if ( NameTagDef() && OfflineInventory_IsGiverMode() )
+		AddCatalog( OfflineID_MakeOther( OFFLINE_KIND_TOOL, NameTagDef() ) );
 }
 
 static void LoadOwned()
@@ -396,6 +451,8 @@ static void LoadOwned()
 
 static void SaveOwned()
 {
+	if ( !OfflineInventory_IsGiverMode() )
+		return;		// -allskinsunlocked: nothing kept (name tags come back each launch)
 	KeyValues *pKV = new KeyValues( "OfflineItems" );
 	KeyValues::AutoDelete autodelete( pKV );
 	pKV->SetUint64( "next_serial", s_ullNextSerial );
@@ -437,6 +494,16 @@ static void BuildLocal( uint32 unAccountID )
 			AddLocal( pItem );
 		}
 		s_vecCatalog.Purge();
+
+		// name tags: used up like in CS:GO, a fresh set each launch
+		if ( NameTagDef() )
+		{
+			for ( int i = 1; i <= k_nUnlockAllNameTags; i++ )
+			{
+				if ( CEconItem *pItem = CreateItem( OfflineID_MakeOther( OFFLINE_KIND_TOOL, NameTagDef(), i ), unAccountID ) )
+					AddLocal( pItem );
+			}
+		}
 		Msg( "[offline inventory] %d items unlocked\n", s_vecItems.Count() );
 	}
 }
@@ -491,7 +558,7 @@ uint64 OfflineGiver_Receive( uint64 ullCatalogID )
 	return ullID;
 }
 
-// a received item used up (a case opened)
+// a received item used up (a case opened, a name tag used) or deleted
 static void RemoveOwned( uint64 ullID )
 {
 	unsigned short i = s_mapItems.Find( ullID );
@@ -504,8 +571,142 @@ static void RemoveOwned( uint64 ullID )
 	// rebuild the inventory without it (and with the loadout re-applied)
 	CCSPlayerInventory *pInventory = CSInventoryManager() ? CSInventoryManager()->GetLocalCSInventory() : NULL;
 	if ( pInventory && steamapicontext && steamapicontext->SteamUser() )
+	{
 		OfflineInventory_Fill( pInventory, steamapicontext->SteamUser()->GetSteamID() );
+		OfflineInventory_SaveLoadout( pInventory );	// without it, if it was equipped
+	}
 	// the item object may still be referenced by a view this frame: keep it
+}
+
+//-----------------------------------------------------------------------------
+// Name tags
+//-----------------------------------------------------------------------------
+static bool IsOwned( uint64 ullID )
+{
+	return s_mapItems.Find( ullID ) != s_mapItems.InvalidIndex();
+}
+
+// weapons and knives take a name; gloves don't (as in CS:GO)
+bool OfflineItem_CanBeNamed( uint64 ullItemID )
+{
+	if ( !IsOwned( ullItemID ) || OfflineID_Kind( ullItemID ) != OFFLINE_KIND_SKIN )
+		return false;
+	const CCStrike15ItemDefinition *pDef = CSDef( OfflineID_Def( ullItemID ) );
+	return pDef && pDef->GetDefaultLoadoutSlot() != LOADOUT_POSITION_CLOTHING_HANDS;
+}
+
+void OfflineNameTag_GetOwned( CUtlVector< uint64 > &vecTags )
+{
+	vecTags.RemoveAll();
+	FOR_EACH_VEC( s_vecItems, i )
+	{
+		if ( OfflineItem_IsNameTag( s_vecItems[i]->GetItemID() ) )
+			vecTags.AddToTail( s_vecItems[i]->GetItemID() );
+	}
+}
+
+void OfflineItem_GetNameable( CUtlVector< uint64 > &vecItems )
+{
+	vecItems.RemoveAll();
+	FOR_EACH_VEC( s_vecItems, i )
+	{
+		if ( OfflineItem_CanBeNamed( s_vecItems[i]->GetItemID() ) )
+			vecItems.AddToTail( s_vecItems[i]->GetItemID() );
+	}
+}
+
+// what the viewmodel's name plate can show: printable ASCII (its font has
+// nothing else), up to 20 characters, not only spaces; no quotes or
+// backslashes (the file keeps them as KeyValues strings)
+bool OfflineNameTag_IsValidName( const char *pszName )
+{
+	if ( !pszName )
+		return false;
+	int nLen = V_strlen( pszName );
+	if ( nLen < 1 || nLen > 20 )		// NUM_UID_CHARS
+		return false;
+	bool bVisible = false;
+	for ( const char *p = pszName; *p; p++ )
+	{
+		unsigned char c = (unsigned char)*p;
+		if ( c < 32 || c > 126 || c == '"' || c == '\\' )
+			return false;
+		bVisible |= ( c != ' ' );
+	}
+	return bVisible;
+}
+
+const char *OfflineItem_GetCustomName( uint64 ullItemID )
+{
+	unsigned short i = s_mapItems.Find( ullItemID );
+	return s_mapItems.IsValidIndex( i ) ? s_mapItems[i]->GetCustomName() : NULL;
+}
+
+static void SetCustomName( uint64 ullItemID, const char *pszName )
+{
+	unsigned short i = s_mapItems.Find( ullItemID );
+	if ( !s_mapItems.IsValidIndex( i ) )
+		return;
+	CEconItem *pItem = s_mapItems[i];
+	pItem->SetCustomName( ( pszName && pszName[0] ) ? pszName : NULL );
+	pItem->SetSOUpdateFrame( gpGlobals->framecount + 1 );	// views re-read it
+
+	KeyValues *pAll = Customizations();
+	CFmtStr strID( "%llu", ullItemID );
+	KeyValues *pKV = pAll->FindKey( strID, true );
+	if ( pszName && pszName[0] )
+		pKV->SetString( "name", pszName );
+	else
+	{
+		if ( KeyValues *pName = pKV->FindKey( "name" ) )
+		{
+			pKV->RemoveSubKey( pName );
+			pName->deleteThis();
+		}
+		if ( !pKV->GetFirstSubKey() )
+		{
+			pAll->RemoveSubKey( pKV );
+			pKV->deleteThis();
+		}
+	}
+	SaveCustomizations();
+}
+
+bool OfflineNameTag_Apply( uint64 ullTag, uint64 ullItemID, const char *pszName )
+{
+	if ( !OfflineItem_IsNameTag( ullTag ) || !IsOwned( ullTag ) || !OfflineItem_CanBeNamed( ullItemID ) || !OfflineNameTag_IsValidName( pszName ) )
+		return false;
+	SetCustomName( ullItemID, pszName );
+	RemoveOwned( ullTag );		// used up
+	Msg( "[name tag] %llu is now \"%s\"\n", ullItemID, pszName );
+	return true;
+}
+
+void OfflineItem_ClearCustomName( uint64 ullItemID )
+{
+	if ( OfflineItem_GetCustomName( ullItemID ) )
+	{
+		SetCustomName( ullItemID, NULL );
+		Msg( "[name tag] %llu name removed\n", ullItemID );
+	}
+}
+
+//-----------------------------------------------------------------------------
+// Deleting: what the Item Giver gave can be thrown away again
+//-----------------------------------------------------------------------------
+bool OfflineItem_IsDeletable( uint64 ullItemID )
+{
+	return OfflineInventory_IsGiverMode() && IsOwned( ullItemID );
+}
+
+void OfflineItem_Delete( uint64 ullItemID )
+{
+	if ( !OfflineItem_IsDeletable( ullItemID ) )
+		return;
+	if ( OfflineItem_GetCustomName( ullItemID ) )
+		SetCustomName( ullItemID, NULL );
+	RemoveOwned( ullItemID );
+	Msg( "[offline inventory] deleted %llu\n", ullItemID );
 }
 #endif
 

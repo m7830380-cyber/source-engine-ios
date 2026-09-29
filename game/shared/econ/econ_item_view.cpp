@@ -3290,6 +3290,26 @@ const wchar_t *CEconItemView::GetItemName( bool bUncustomized /*= false*/ ) cons
 	if ( !IsValid() || !pDef )
 		return pwzDefaultName;
 
+	// a name tag's name, in quotes as CS:GO shows it (printable ASCII: see
+	// OfflineNameTag_IsValidName); each distinct one built once and kept
+	const char *pszCustom = bUncustomized ? NULL : GetCustomName();
+	if ( pszCustom && pszCustom[0] )
+	{
+		static CUtlDict< wchar_t *, unsigned short > s_dictCustomNames;
+		unsigned short iCustom = s_dictCustomNames.Find( pszCustom );
+		if ( s_dictCustomNames.IsValidIndex( iCustom ) )
+			return s_dictCustomNames[ iCustom ];
+		int nCustom = V_strlen( pszCustom );
+		wchar_t *pwszCustom = new wchar_t[ nCustom + 3 ];
+		pwszCustom[0] = L'"';
+		for ( int i = 0; i < nCustom; i++ )
+			pwszCustom[ i + 1 ] = (unsigned char)pszCustom[i];
+		pwszCustom[ nCustom + 1 ] = L'"';
+		pwszCustom[ nCustom + 2 ] = L'\0';
+		s_dictCustomNames.Insert( pszCustom, pwszCustom );
+		return pwszCustom;
+	}
+
 	// Names only depend on these, so each distinct one is built once and kept
 	int nPaintKit = GetCustomPaintKitIndex();
 	int nQuality = GetQuality();

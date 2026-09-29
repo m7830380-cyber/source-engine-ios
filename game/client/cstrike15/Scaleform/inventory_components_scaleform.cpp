@@ -309,6 +309,7 @@ public:
 		bool m_bNotDefaultEquipped;
 		bool m_bEquippedOnly;
 		bool m_bMatchNothing;
+		uint64 m_ullNameableWith;	// "nameable:<id>": what goes with that name tag / item
 	};
 
 	static bool IsCategoryToken( const char *psz )
@@ -325,6 +326,7 @@ public:
 		f.m_iTeam = 0;
 		f.m_nSlot = -1;
 		f.m_bIncludeBaseItems = f.m_bNotBaseItem = f.m_bNotDefaultEquipped = f.m_bEquippedOnly = f.m_bMatchNothing = false;
+		f.m_ullNameableWith = 0;
 
 		CUtlStringList vecTokens;
 		V_SplitString( pszFilter, ",", vecTokens );
@@ -343,6 +345,8 @@ public:
 				f.m_bNotDefaultEquipped = true;
 			else if ( !V_stricmp( psz, "equipped" ) )
 				f.m_bEquippedOnly = true;
+			else if ( StringHasPrefix( psz, "nameable:" ) )
+				f.m_ullNameableWith = V_atoui64( psz + V_strlen( "nameable:" ) );
 			else if ( IsCategoryToken( psz ) )
 				f.m_vecCategories.AddToTail( psz );
 			else if ( SlotFromString( psz ) >= 0 && V_strlen( psz ) > 1 && V_isdigit( psz[ V_strlen( psz ) - 1 ] ) )
@@ -373,6 +377,8 @@ public:
 		const CCStrike15ItemDefinition *pDef = ItemDef( pItem );
 		if ( !pDef )
 			return false;
+		if ( f.m_ullNameableWith )
+			return NameableWith( f.m_ullNameableWith, pItem->GetItemID() );
 		if ( f.m_iTeam && !pDef->CanBeUsedByTeam( f.m_iTeam ) )
 			return false;
 		int nSlot = ItemSlot( pItem, f.m_iTeam );
@@ -383,9 +389,9 @@ public:
 			bool bAny = false;
 			FOR_EACH_VEC( f.m_vecCategories, i )
 			{
-				// "Other": what isn't gear, which offline is the cases
+				// "Other": what isn't gear, which offline is the cases and name tags
 				if ( !V_stricmp( f.m_vecCategories[i], "not_equipment" ) )
-					bAny |= OfflineCase_IsCase( pItem->GetItemID() );
+					bAny |= OfflineCase_IsCase( pItem->GetItemID() ) || OfflineItem_IsNameTag( pItem->GetItemID() );
 				else
 					bAny |= CategoryMatches( f.m_vecCategories[i], nSlot );
 			}
@@ -635,15 +641,83 @@ public:
 		const CCStrike15ItemDefinition *pDef = ItemDef( FindItem( ArgItemID( pui, obj, 1 ) ) );
 		pui->Params_SetResult( obj, pDef && ( pDef->GetDefaultLoadoutSlot() == LOADOUT_POSITION_MELEE || pDef->GetDefaultLoadoutSlot() == LOADOUT_POSITION_CLOTHING_HANDS ) );
 	}
+	// what an item can do (the context menu): cases open ("decodable"); name
+	// tags, and weapons while there's a name tag to use on them, "nameable"
+	static const char *ItemCapability( uint64 ullID )
+	{
+		if ( OfflineCase_IsCase( ullID ) )
+			return "decodable";
+		if ( OfflineItem_IsNameTag( ullID ) )
+			return "nameable";
+		if ( OfflineItem_CanBeNamed( ullID ) )
+		{
+			CUtlVector< uint64 > vecTags;
+			OfflineNameTag_GetOwned( vecTags );
+			if ( vecTags.Count() )
+				return "nameable";
+		}
+		return NULL;
+	}
 	void GetItemCapabilitiesCount( SCALEFORM_CALLBACK_ARGS_DECL )
 	{
-		pui->Params_SetResult( obj, OfflineCase_IsCase( ArgItemID( pui, obj, 1 ) ) ? 1 : 0 );
+		pui->Params_SetResult( obj, ItemCapability( ArgItemID( pui, obj, 1 ) ) ? 1 : 0 );
 	}
 	void GetItemCapabilityByIndex( SCALEFORM_CALLBACK_ARGS_DECL )
 	{
-		bool bCase = OfflineCase_IsCase( ArgItemID( pui, obj, 1 ) ) && pui->Params_GetArgAsNumber( obj, 2 ) == 0.0;
-		pui->Params_SetResult( obj, bCase ? "decodable" : "" );
+		const char *pszCap = ItemCapability( ArgItemID( pui, obj, 1 ) );
+		pui->Params_SetResult( obj, ( pszCap && pui->Params_GetArgAsNumber( obj, 2 ) == 0.0 ) ? pszCap : "" );
 	}
+	void IsTool( SCALEFORM_CALLBACK_ARGS_DECL ) { pui->Params_SetResult( obj, OfflineItem_IsNameTag( ArgItemID( pui, obj, 1 ) ) ); }
+
+	// ---- name tags ------------------------------------------------------------
+	// A name tag goes with the weapons; a weapon with the name tags
+	static bool NameableWith( uint64 ullSelected, uint64 ullOther )
+	{
+		if ( OfflineItem_IsNameTag( ullSelected ) )
+			return OfflineItem_CanBeNamed( ullOther );
+		return OfflineItem_CanBeNamed( ullSelected ) && OfflineItem_IsNameTag( ullOther );
+	}
+	static void ChosenActionItems( uint64 ullID, const char *pszCap, CUtlVector< uint64 > &vecItems )
+	{
+		vecItems.RemoveAll();
+		if ( V_stricmp( pszCap, "nameable" ) )
+			return;
+		if ( OfflineItem_IsNameTag( ullID ) )
+			OfflineItem_GetNameable( vecItems );
+		else if ( OfflineItem_CanBeNamed( ullID ) )
+			OfflineNameTag_GetOwned( vecItems );
+	}
+	// ( xuid, item, capability )
+	void GetChosenActionItemsCount( SCALEFORM_CALLBACK_ARGS_DECL )
+	{
+		CUtlVector< uint64 > vecItems;
+		ChosenActionItems( ArgItemID( pui, obj, 1 ), ArgString( pui, obj, 2 ), vecItems );
+		pui->Params_SetResult( obj, vecItems.Count() );
+	}
+	// ( xuid, item, capability, index )
+	void GetChosenActionItemIDByIndex( SCALEFORM_CALLBACK_ARGS_DECL )
+	{
+		CUtlVector< uint64 > vecItems;
+		ChosenActionItems( ArgItemID( pui, obj, 1 ), ArgString( pui, obj, 2 ), vecItems );
+		int i = ArgInt( pui, obj, 3 );
+		if ( vecItems.IsValidIndex( i ) )
+			ResultItemID( pui, obj, vecItems[i] );
+		else
+			pui->Params_SetResult( obj, "" );
+	}
+	// SetNameToolString( name ): the rename panel's text; true if it can be used
+	CUtlString m_strNameToolString;
+	void SetNameToolString( SCALEFORM_CALLBACK_ARGS_DECL )
+	{
+		m_strNameToolString = ArgString( pui, obj, 0 );
+		pui->Params_SetResult( obj, OfflineNameTag_IsValidName( m_strNameToolString.Get() ) );
+	}
+	void HasCustomName( SCALEFORM_CALLBACK_ARGS_DECL ) { pui->Params_SetResult( obj, OfflineItem_GetCustomName( ArgItemID( pui, obj, 1 ) ) != NULL ); }
+	void ClearCustomName( SCALEFORM_CALLBACK_ARGS_DECL ) { OfflineItem_ClearCustomName( ArgItemID( pui, obj, 0 ) ); }
+
+	// ---- deleting (received items) -------------------------------------------
+	void IsDeletable( SCALEFORM_CALLBACK_ARGS_DECL ) { pui->Params_SetResult( obj, OfflineItem_IsDeletable( ArgItemID( pui, obj, 1 ) ) ); }
+	void DeleteItem( SCALEFORM_CALLBACK_ARGS_DECL ) { OfflineItem_Delete( ArgItemID( pui, obj, 1 ) ); }
 	// the contents, then "0" for the exceedingly rare (star) slot
 	void GetLootListItemsCount( SCALEFORM_CALLBACK_ARGS_DECL )
 	{
@@ -673,8 +747,6 @@ public:
 		const char *psz = pKV ? pKV->GetString( pszKey, "" ) : "";
 		pui->Params_SetResult( obj, psz[0] ? psz : pszDefault );
 	}
-	// UseTool( xuid, tool, item ): a keyless case open; the panel's reel stops on
-	// the item the CrateOpened event names (mainmenu.swf -> SetItemThatCameFromOpeningCrate)
 	// ---- Item Giver ---------------------------------------------------------
 	void IsItemGiverAvailable( SCALEFORM_CALLBACK_ARGS_DECL ) { pui->Params_SetResult( obj, OfflineInventory_IsGiverMode() ); }
 	void IsItemGiverMode( SCALEFORM_CALLBACK_ARGS_DECL ) { pui->Params_SetResult( obj, s_bItemGiverMode && OfflineInventory_IsGiverMode() ); }
@@ -691,8 +763,17 @@ public:
 		pui->Params_SetResult( obj, ullID ? CFmtStr( "%llu", ullID ).Access() : "" );
 	}
 
+	// UseTool( xuid, tool, item ): a name tag on a weapon (the name from
+	// SetNameToolString), or a keyless case open: the panel's reel stops on the
+	// item the CrateOpened event names (mainmenu.swf -> SetItemThatCameFromOpeningCrate)
 	void UseTool( SCALEFORM_CALLBACK_ARGS_DECL )
 	{
+		uint64 ullTool = ArgItemID( pui, obj, 1 );
+		if ( OfflineItem_IsNameTag( ullTool ) )
+		{
+			OfflineNameTag_Apply( ullTool, ArgItemID( pui, obj, 2 ), m_strNameToolString.Get() );
+			return;
+		}
 		uint64 ullCase = ArgItemID( pui, obj, 2 );
 		uint64 ullItem = OfflineCase_Open( ullCase );
 		if ( !ullItem )
@@ -814,11 +895,11 @@ public:
 			SFUI_DECL_METHOD( GetItemAttributeValue ),
 			// no backend offline
 			SFUI_DECL_METHOD( IsInventoryImageCachable ),
-			SFUI_DECL_METHOD_AS( ReturnFalse, "IsTool" ),
+			SFUI_DECL_METHOD( IsTool ),
 			SFUI_DECL_METHOD_AS( ReturnFalse, "IsMarketable" ),
-			SFUI_DECL_METHOD_AS( ReturnFalse, "IsDeletable" ),
+			SFUI_DECL_METHOD( IsDeletable ),
 			SFUI_DECL_METHOD_AS( ReturnFalse, "CanTradeUp" ),
-			SFUI_DECL_METHOD_AS( ReturnFalse, "HasCustomName" ),
+			SFUI_DECL_METHOD( HasCustomName ),
 			SFUI_DECL_METHOD_AS( ReturnFalse, "HasMusic" ),
 			SFUI_DECL_METHOD( IsItemUnusual ),
 			SFUI_DECL_METHOD_AS( ReturnFalse, "IsCouponCrate" ),
@@ -826,12 +907,12 @@ public:
 			SFUI_DECL_METHOD_AS( ReturnFalse, "DoesUserOwnQuest" ),
 			SFUI_DECL_METHOD_AS( ReturnFalse, "IsItemStickerAtExtremeWear" ),
 			SFUI_DECL_METHOD_AS( ReturnFalse, "SetStickerToolSlot" ),
-			SFUI_DECL_METHOD_AS( ReturnFalse, "SetNameToolString" ),
+			SFUI_DECL_METHOD( SetNameToolString ),
 			SFUI_DECL_METHOD_AS( ReturnFalse, "IsCraftReady" ),
 			SFUI_DECL_METHOD_AS( ReturnFalse, "ItemHasScorecardValues" ),
 			SFUI_DECL_METHOD_AS( ReturnTrue, "TestMusicVolume" ),
 			SFUI_DECL_METHOD( GetItemCapabilitiesCount ),
-			SFUI_DECL_METHOD_AS( ReturnZero, "GetChosenActionItemsCount" ),
+			SFUI_DECL_METHOD( GetChosenActionItemsCount ),
 			SFUI_DECL_METHOD_AS( ReturnZero, "GetItemStickerCount" ),
 			SFUI_DECL_METHOD_AS( ReturnZero, "GetItemStickerSlotCount" ),
 			SFUI_DECL_METHOD_AS( ReturnZero, "GetAssociatedItemsCount" ),
@@ -851,7 +932,7 @@ public:
 			SFUI_DECL_METHOD_AS( ReturnMinusOne, "GetActiveSeasonCoinItemId" ),
 			SFUI_DECL_METHOD( GetItemCapabilityByIndex ),
 			SFUI_DECL_METHOD_AS( ReturnEmpty, "GetItemCapabilityDisabledMessageByIndex" ),
-			SFUI_DECL_METHOD_AS( ReturnEmpty, "GetChosenActionItemIDByIndex" ),
+			SFUI_DECL_METHOD( GetChosenActionItemIDByIndex ),
 			SFUI_DECL_METHOD_AS( ReturnEmpty, "GetItemStickerImageByIndex" ),
 			SFUI_DECL_METHOD_AS( ReturnEmpty, "GetItemStickerImageBySlot" ),
 			SFUI_DECL_METHOD_AS( ReturnEmpty, "GetItemStickerNameByIndex" ),
@@ -888,13 +969,13 @@ public:
 			SFUI_DECL_METHOD_AS( DoNothing, "PlayAudioFile" ),
 			SFUI_DECL_METHOD_AS( DoNothing, "SetDefaultMusicVolume" ),
 			SFUI_DECL_METHOD_AS( DoNothing, "SellItem" ),
-			SFUI_DECL_METHOD_AS( DoNothing, "DeleteItem" ),
+			SFUI_DECL_METHOD( DeleteItem ),
 			SFUI_DECL_METHOD( UseTool ),
 			SFUI_DECL_METHOD( IsItemGiverAvailable ),
 			SFUI_DECL_METHOD( IsItemGiverMode ),
 			SFUI_DECL_METHOD( SetItemGiverMode ),
 			SFUI_DECL_METHOD( ReceiveItem ),
-			SFUI_DECL_METHOD_AS( DoNothing, "ClearCustomName" ),
+			SFUI_DECL_METHOD( ClearCustomName ),
 			SFUI_DECL_METHOD_AS( DoNothing, "HighlightStickerBySlot" ),
 			SFUI_DECL_METHOD_AS( DoNothing, "PreviewStickerInModelPanel" ),
 			SFUI_DECL_METHOD_AS( DoNothing, "PeelEffectStickerBySlot" ),

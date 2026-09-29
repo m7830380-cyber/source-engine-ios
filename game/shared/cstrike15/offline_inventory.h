@@ -8,6 +8,8 @@
 //                         tab (Receive), each one rolled like a case drop, and
 //                         are kept in cfg/offline_items.txt
 //
+//          Name tags rename weapons and knives (cfg/offline_custom.txt).
+//
 //          Item IDs carry what an item looks like (weapon, paint kit, pattern,
 //          wear, StatTrak), so any game that sees one - the LAN host, other
 //          players - can rebuild the item from the ID alone. The equipped
@@ -104,6 +106,22 @@ uint64 OfflineGiver_Receive( uint64 ullCatalogID );
 bool OfflineCase_IsCase( uint64 ullItemID );
 void OfflineCase_GetContents( uint64 ullCaseID, CUtlVector< uint64 > &vecItems, bool &bRareSpecial );
 uint64 OfflineCase_Open( uint64 ullCaseID );
+
+// Name tags: used up when applied (-allskinsunlocked gives a fresh set each
+// launch). Names are kept in cfg/offline_custom.txt by item ID.
+bool OfflineItem_CanBeNamed( uint64 ullItemID );
+void OfflineNameTag_GetOwned( CUtlVector< uint64 > &vecTags );
+void OfflineItem_GetNameable( CUtlVector< uint64 > &vecItems );
+bool OfflineNameTag_IsValidName( const char *pszName );
+bool OfflineNameTag_Apply( uint64 ullTag, uint64 ullItemID, const char *pszName );
+const char *OfflineItem_GetCustomName( uint64 ullItemID );
+void OfflineItem_ClearCustomName( uint64 ullItemID );
+
+// Deleting received items (item giver mode)
+bool OfflineItem_IsDeletable( uint64 ullItemID );
+void OfflineItem_Delete( uint64 ullItemID );
 #endif
+
+bool OfflineItem_IsNameTag( uint64 ullItemID );
 
 #endif // OFFLINE_INVENTORY_H

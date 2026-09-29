@@ -26,6 +26,13 @@
 #include "c_baseplayer.h"
 #include "prediction.h"
 #include "c_plantedc4.h"
+#include "createmainmenuscreen_scaleform.h"
+#include "pausemenuscreen_scaleform.h"
+#include <ifaddrs.h>
+#include <net/if.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <stdlib.h>
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
@@ -35,6 +42,11 @@ extern "C" void IOS_GyroTakeDelta( float *pflYaw, float *pflPitch );
 extern "C" void IOS_Haptic( int nKind );
 extern "C" void IOS_HapticPulse( float flIntensity, float flSharpness, float flDuration );
 extern "C" void IOS_HapticCrackle( float flDuration, float flIntensity );
+extern "C" void IOS_QRSetButton( int nKind );
+extern "C" int IOS_QRTakeButtonTap( void );
+extern "C" void IOS_QRShow( const char *pszText, const char *pszCaption );
+extern "C" void IOS_QRScanStart( void );
+extern "C" int IOS_QRTakeScanned( char *pszOut, int nOutSize );
 extern "C" int IOS_ThermalState( void );
 extern bool IOS_IsMenuActive();
 
@@ -87,6 +99,7 @@ public:
 		}
 		UpdateShaderSave( flNow );
 		UpdateTimedTaps( flNow );
+		UpdateQR();
 	}
 
 	virtual void FireGameEvent( IGameEvent *event )
@@ -310,6 +323,145 @@ private:
 	struct TimedTap_t { double m_flWhen; float m_flIntensity, m_flSharpness, m_flDuration; };
 	CUtlVector< TimedTap_t > m_TimedTaps;
 	CHandle< C_BaseCombatWeapon > m_hTapWeapon;
+
+	// ---- joining by QR code -----------------------------------------------
+	// Main menu: "Join by QR" opens the camera. Hosting, in the pause menu:
+	// "Show join QR" shows csgoios://join/<address:port>,... with this phone's
+	// Wi-Fi / hotspot / VPN addresses (and opens the match to joiners by IP).
+	// The joiner connects to the address on a network it shares with the host.
+	// The same link from the Camera app arrives as IOS_PENDING_URL (sdlmgr).
+	void UpdateQR()
+	{
+		int nKind = 0;
+		if ( !engine->IsConnected() && CCreateMainMenuScreenScaleform::IsActive() )
+			nKind = 1;
+		else if ( engine->IsInGame() && engine->IsClientLocalToActiveServer() && CPauseMenuScreenScaleform::IsActive() )
+			nKind = 2;
+		IOS_QRSetButton( nKind );
+
+		if ( IOS_QRTakeButtonTap() )
+		{
+			if ( nKind == 1 )
+				IOS_QRScanStart();
+			else if ( nKind == 2 )
+				ShowHostQR();
+		}
+
+		char szText[512];
+		if ( IOS_QRTakeScanned( szText, sizeof( szText ) ) )
+			JoinFromLink( szText );
+		if ( const char *pszURL = getenv( "IOS_PENDING_URL" ) )
+		{
+			V_strncpy( szText, pszURL, sizeof( szText ) );
+			unsetenv( "IOS_PENDING_URL" );
+			JoinFromLink( szText );
+		}
+	}
+
+	// IPv4 addresses of this phone's usable interfaces (not cellular)
+	static int LocalAddresses( uint32 *pAddrs, uint32 *pMasks, bool *pbVPN, int nMax )
+	{
+		int n = 0;
+		ifaddrs *pList = NULL;
+		if ( getifaddrs( &pList ) != 0 )
+			return 0;
+		for ( ifaddrs *a = pList; a && n < nMax; a = a->ifa_next )
+		{
+			if ( !a->ifa_addr || a->ifa_addr->sa_family != AF_INET || ( a->ifa_flags & IFF_LOOPBACK ) || !( a->ifa_flags & IFF_UP ) )
+				continue;
+			bool bVPN = !V_strncmp( a->ifa_name, "utun", 4 );
+			if ( V_strncmp( a->ifa_name, "en", 2 ) && V_strncmp( a->ifa_name, "bridge", 6 ) && !bVPN )
+				continue;
+			pAddrs[n] = ntohl( ( (sockaddr_in *)a->ifa_addr )->sin_addr.s_addr );
+			pMasks[n] = a->ifa_netmask ? ntohl( ( (sockaddr_in *)a->ifa_netmask )->sin_addr.s_addr ) : 0xFFFFFF00u;
+			pbVPN[n] = bVPN;
+			n++;
+		}
+		freeifaddrs( pList );
+		return n;
+	}
+
+	static bool IsTailscale( uint32 unAddr ) { return ( unAddr & 0xFFC00000u ) == 0x64400000u; }	// 100.64.0.0/10
+
+	void ShowHostQR()
+	{
+		static ConVarRef hostport( "hostport" );
+		static ConVarRef sv_ip_host( "sv_ip_host" );
+		int nPort = hostport.IsValid() ? hostport.GetInt() : 27015;
+		uint32 unAddrs[8], unMasks[8];
+		bool bVPN[8];
+		int n = LocalAddresses( unAddrs, unMasks, bVPN, ARRAYSIZE( unAddrs ) );
+		if ( !n )
+		{
+			IOS_QRShow( "csgoios://join/", "This phone isn't on Wi-Fi, a hotspot or a VPN, so nobody can join it." );
+			return;
+		}
+		// someone joining by QR may come in over the VPN: accept joins by IP
+		if ( sv_ip_host.IsValid() )
+			sv_ip_host.SetValue( 1 );
+
+		char szLink[512] = "csgoios://join/";
+		char szCaption[512] = "Scan with the other phone (Join by QR in its main menu, or the Camera app)\n";
+		for ( int i = 0; i < n; i++ )
+		{
+			in_addr a;
+			a.s_addr = htonl( unAddrs[i] );
+			const char *pszAddr = inet_ntoa( a );
+			V_strncat( szLink, CFmtStr( "%s%s:%d", i ? "," : "", pszAddr, nPort ), sizeof( szLink ) );
+			V_strncat( szCaption, CFmtStr( "%s%s:%d", i ? "   " : "", pszAddr, nPort ), sizeof( szCaption ) );
+		}
+		IOS_QRShow( szLink, szCaption );
+	}
+
+	void JoinFromLink( const char *pszText )
+	{
+		const char *pszPrefix = "csgoios://join/";
+		if ( V_strnicmp( pszText, pszPrefix, V_strlen( pszPrefix ) ) )
+		{
+			Msg( "[qr] not a join code: %s\n", pszText );
+			return;
+		}
+		uint32 unAddrs[8], unMasks[8];
+		bool bVPN[8];
+		int nLocal = LocalAddresses( unAddrs, unMasks, bVPN, ARRAYSIZE( unAddrs ) );
+
+		// the host's addresses; pick one on a network we're on too: the same
+		// subnet (Wi-Fi, hotspot), else Tailscale on both, else the first
+		CUtlStringList vecHost;
+		V_SplitString( pszText + V_strlen( pszPrefix ), ",", vecHost );
+		int nBest = -1, nBestRank = 0;
+		for ( int h = 0; h < vecHost.Count(); h++ )
+		{
+			char szIP[64];
+			V_strncpy( szIP, vecHost[h], sizeof( szIP ) );
+			if ( char *pColon = strchr( szIP, ':' ) )
+				*pColon = 0;
+			in_addr a;
+			if ( !inet_aton( szIP, &a ) )
+				continue;
+			uint32 unHost = ntohl( a.s_addr );
+			int nRank = 1;
+			for ( int l = 0; l < nLocal; l++ )
+			{
+				if ( !bVPN[l] && ( unHost & unMasks[l] ) == ( unAddrs[l] & unMasks[l] ) )
+					nRank = MAX( nRank, 3 );
+				else if ( IsTailscale( unHost ) && IsTailscale( unAddrs[l] ) )
+					nRank = MAX( nRank, 2 );
+			}
+			if ( nRank > nBestRank )
+			{
+				nBestRank = nRank;
+				nBest = h;
+			}
+		}
+		if ( nBest < 0 )
+		{
+			Msg( "[qr] no address in the code: %s\n", pszText );
+			return;
+		}
+		Msg( "[qr] joining %s (%s)\n", vecHost[nBest], nBestRank == 3 ? "same network" : nBestRank == 2 ? "Tailscale" : "no shared network found, trying it" );
+		engine->ClientCmd_Unrestricted( CFmtStr( "ip_join %s\n", vecHost[nBest] ) );
+	}
 
 	void UpdateTimedTaps( double flNow )
 	{

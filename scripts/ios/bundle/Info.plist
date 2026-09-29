@@ -30,6 +30,19 @@
 	<true/>
 	<key>MinimumOSVersion</key>
 	<string>12.0</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>join</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>csgoios</string>
+			</array>
+		</dict>
+	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>Scan the host's QR code to join their game.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Microphone permissions are required for voice chat</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
@@ -53,8 +66,6 @@
 	</array>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>Voice chat with the players in your LAN game, while you hold the voice button.</string>
 	<key>UIRequiresFullScreen</key>
 	<true/>
 	<key>UIStatusBarStyle</key>

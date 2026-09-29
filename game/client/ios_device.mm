@@ -13,12 +13,19 @@
    IOS_HapticPulse( i, s, t )    a hit then a fading rumble: strength, sharpness 0..1, seconds
    IOS_HapticCrackle( t, i )     getting tased: an electric crackle
    IOS_ThermalState()            0 nominal, 1 fair, 2 serious, 3 critical
+   IOS_QRSetButton( kind )       the native QR button: 0 none, 1 "Join by QR", 2 "Show join QR"
+   IOS_QRTakeButtonTap()         1 once after the button was tapped
+   IOS_QRShow( text, caption )   a QR code over the game, tap to close
+   IOS_QRScanStart()             the camera, looking for a QR code
+   IOS_QRTakeScanned( buf, n )   1 and the text once a code was read
  */
 
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 #import <CoreMotion/CoreMotion.h>
 #import <CoreHaptics/CoreHaptics.h>
+#import <AVFoundation/AVFoundation.h>
+#import <CoreImage/CoreImage.h>
 #include <pthread.h>
 #include <math.h>
 #include <stdio.h>
@@ -328,3 +335,296 @@ IOS_EXPORT int IOS_ThermalState( void )
 {
 	return (int)[NSProcessInfo processInfo].thermalState;
 }
+
+// ---------------------------------------------------------------------------
+// QR codes: joining a game by scanning the host's screen
+// ---------------------------------------------------------------------------
+
+static UIViewController *IOS_GameViewController( void )
+{
+	UIWindow *pWindow = nil;
+	if ( @available( iOS 13.0, * ) )
+	{
+		for ( UIScene *scene in [UIApplication sharedApplication].connectedScenes )
+		{
+			if ( ![scene isKindOfClass:[UIWindowScene class]] )
+				continue;
+			for ( UIWindow *w in ((UIWindowScene *)scene).windows )
+			{
+				if ( w.isKeyWindow )
+					pWindow = w;
+			}
+		}
+	}
+	if ( !pWindow )
+		pWindow = [UIApplication sharedApplication].keyWindow;
+	UIViewController *pVC = pWindow.rootViewController;
+	while ( pVC.presentedViewController )
+		pVC = pVC.presentedViewController;
+	return pVC;
+}
+
+static pthread_mutex_t s_QRLock = PTHREAD_MUTEX_INITIALIZER;
+static char s_szScanned[512];
+static int s_bScanned = 0;
+static int s_bButtonTapped = 0;
+
+@interface IOSQRTarget : NSObject
+@end
+@implementation IOSQRTarget
+- (void)buttonTapped:(id)sender { s_bButtonTapped = 1; }
+- (void)overlayTapped:(UITapGestureRecognizer *)g { [g.view removeFromSuperview]; }
+@end
+static IOSQRTarget *s_pQRTarget = nil;
+static UIButton *s_pQRButton = nil;
+static int s_nQRButtonKind = 0;
+
+IOS_EXPORT void IOS_QRSetButton( int nKind )
+{
+	if ( nKind == s_nQRButtonKind )
+		return;
+	s_nQRButtonKind = nKind;
+	@autoreleasepool
+	{
+		if ( !s_pQRTarget )
+			s_pQRTarget = [[IOSQRTarget alloc] init];
+		if ( !nKind )
+		{
+			[s_pQRButton removeFromSuperview];
+			return;
+		}
+		if ( !s_pQRButton )
+		{
+			s_pQRButton = [[UIButton buttonWithType:UIButtonTypeSystem] retain];
+			s_pQRButton.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.6];
+			s_pQRButton.layer.cornerRadius = 8;
+			s_pQRButton.layer.borderWidth = 1;
+			s_pQRButton.layer.borderColor = [UIColor colorWithWhite:1.0 alpha:0.35].CGColor;
+			s_pQRButton.titleLabel.font = [UIFont boldSystemFontOfSize:15];
+			[s_pQRButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+			s_pQRButton.contentEdgeInsets = UIEdgeInsetsMake( 8, 14, 8, 14 );
+			[s_pQRButton addTarget:s_pQRTarget action:@selector(buttonTapped:) forControlEvents:UIControlEventTouchUpInside];
+		}
+		[s_pQRButton setTitle:( nKind == 1 ? @"Join by QR" : @"Show join QR" ) forState:UIControlStateNormal];
+		[s_pQRButton sizeToFit];
+
+		UIView *pView = IOS_GameViewController().view;
+		if ( !pView )
+			return;
+		// bottom left, clear of the safe area; the menus keep that corner free
+		UIEdgeInsets inset = UIEdgeInsetsZero;
+		if ( @available( iOS 11.0, * ) )
+			inset = pView.safeAreaInsets;
+		CGRect r = s_pQRButton.frame;
+		r.origin.x = inset.left + 12;
+		r.origin.y = pView.bounds.size.height - inset.bottom - r.size.height - 12;
+		s_pQRButton.frame = r;
+		s_pQRButton.autoresizingMask = UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleRightMargin;
+		[pView addSubview:s_pQRButton];
+	}
+}
+
+IOS_EXPORT int IOS_QRTakeButtonTap( void )
+{
+	int b = s_bButtonTapped;
+	s_bButtonTapped = 0;
+	return b;
+}
+
+IOS_EXPORT void IOS_QRShow( const char *pszText, const char *pszCaption )
+{
+	@autoreleasepool
+	{
+		UIView *pView = IOS_GameViewController().view;
+		if ( !pView || !pszText )
+			return;
+
+		CIFilter *pFilter = [CIFilter filterWithName:@"CIQRCodeGenerator"];
+		[pFilter setValue:[[NSString stringWithUTF8String:pszText] dataUsingEncoding:NSUTF8StringEncoding] forKey:@"inputMessage"];
+		[pFilter setValue:@"M" forKey:@"inputCorrectionLevel"];
+		CIImage *pCode = pFilter.outputImage;
+		if ( !pCode )
+			return;
+
+		CGFloat flSide = MIN( pView.bounds.size.width, pView.bounds.size.height ) * 0.62;
+		// crisp modules: scale by a whole factor, then render to a bitmap
+		CGFloat flScale = floor( flSide / pCode.extent.size.width );
+		CIImage *pScaled = [pCode imageByApplyingTransform:CGAffineTransformMakeScale( flScale, flScale )];
+		CIContext *pContext = [CIContext contextWithOptions:nil];
+		CGImageRef cg = [pContext createCGImage:pScaled fromRect:pScaled.extent];
+		UIImage *pImage = [UIImage imageWithCGImage:cg];
+		CGImageRelease( cg );
+
+		UIView *pOverlay = [[[UIView alloc] initWithFrame:pView.bounds] autorelease];
+		pOverlay.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+		pOverlay.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.8];
+
+		CGFloat flCard = pImage.size.width + 32;
+		UIView *pCard = [[[UIView alloc] initWithFrame:CGRectMake( 0, 0, flCard, flCard )] autorelease];
+		pCard.backgroundColor = [UIColor whiteColor];
+		pCard.layer.cornerRadius = 12;
+		pCard.center = CGPointMake( pView.bounds.size.width * 0.5, pView.bounds.size.height * 0.45 );
+		pCard.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleRightMargin | UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleBottomMargin;
+		UIImageView *pQR = [[[UIImageView alloc] initWithImage:pImage] autorelease];
+		pQR.frame = CGRectMake( 16, 16, pImage.size.width, pImage.size.height );
+		pQR.layer.magnificationFilter = kCAFilterNearest;
+		[pCard addSubview:pQR];
+		[pOverlay addSubview:pCard];
+
+		UILabel *pLabel = [[[UILabel alloc] initWithFrame:CGRectMake( 20, CGRectGetMaxY( pCard.frame ) + 10, pView.bounds.size.width - 40, 60 )] autorelease];
+		pLabel.text = [NSString stringWithFormat:@"%s\nTap anywhere to close", pszCaption ? pszCaption : ""];
+		pLabel.textColor = [UIColor whiteColor];
+		pLabel.font = [UIFont systemFontOfSize:14];
+		pLabel.textAlignment = NSTextAlignmentCenter;
+		pLabel.numberOfLines = 0;
+		pLabel.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleBottomMargin;
+		[pOverlay addSubview:pLabel];
+
+		if ( !s_pQRTarget )
+			s_pQRTarget = [[IOSQRTarget alloc] init];
+		UITapGestureRecognizer *pTap = [[[UITapGestureRecognizer alloc] initWithTarget:s_pQRTarget action:@selector(overlayTapped:)] autorelease];
+		[pOverlay addGestureRecognizer:pTap];
+		[pView addSubview:pOverlay];
+		printf( "[qr] showing %s\n", pszText );
+	}
+}
+
+// the camera, landscape like the game, until a QR code is read or Cancel
+@interface IOSQRScanController : UIViewController <AVCaptureMetadataOutputObjectsDelegate>
+@property (nonatomic, retain) AVCaptureSession *session;
+@property (nonatomic, retain) AVCaptureVideoPreviewLayer *preview;
+@end
+
+@implementation IOSQRScanController
+- (UIInterfaceOrientationMask)supportedInterfaceOrientations { return UIInterfaceOrientationMaskLandscape; }
+- (BOOL)prefersStatusBarHidden { return YES; }
+
+- (void)viewDidLoad
+{
+	[super viewDidLoad];
+	self.view.backgroundColor = [UIColor blackColor];
+
+	AVCaptureDevice *pCamera = [AVCaptureDevice defaultDeviceWithMediaType:AVMediaTypeVideo];
+	NSError *pErr = nil;
+	AVCaptureDeviceInput *pInput = pCamera ? [AVCaptureDeviceInput deviceInputWithDevice:pCamera error:&pErr] : nil;
+	if ( pInput )
+	{
+		self.session = [[[AVCaptureSession alloc] init] autorelease];
+		[self.session addInput:pInput];
+		AVCaptureMetadataOutput *pOutput = [[[AVCaptureMetadataOutput alloc] init] autorelease];
+		[self.session addOutput:pOutput];
+		[pOutput setMetadataObjectsDelegate:self queue:dispatch_get_main_queue()];
+		if ( [pOutput.availableMetadataObjectTypes containsObject:AVMetadataObjectTypeQRCode] )
+			pOutput.metadataObjectTypes = @[ AVMetadataObjectTypeQRCode ];
+		self.preview = [AVCaptureVideoPreviewLayer layerWithSession:self.session];
+		self.preview.videoGravity = AVLayerVideoGravityResizeAspectFill;
+		[self.view.layer addSublayer:self.preview];
+	}
+	else
+		printf( "[qr] no camera: %s\n", pErr ? pErr.localizedDescription.UTF8String : "?" );
+
+	UILabel *pHint = [[[UILabel alloc] init] autorelease];
+	pHint.text = pInput ? @"Point the camera at the host's QR code" : @"The camera isn't available (Settings > Privacy > Camera)";
+	pHint.textColor = [UIColor whiteColor];
+	pHint.backgroundColor = [UIColor colorWithWhite:0 alpha:0.5];
+	pHint.textAlignment = NSTextAlignmentCenter;
+	pHint.tag = 1;
+	[self.view addSubview:pHint];
+
+	UIButton *pCancel = [UIButton buttonWithType:UIButtonTypeSystem];
+	[pCancel setTitle:@"Cancel" forState:UIControlStateNormal];
+	pCancel.titleLabel.font = [UIFont boldSystemFontOfSize:17];
+	[pCancel setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+	pCancel.backgroundColor = [UIColor colorWithWhite:0 alpha:0.5];
+	pCancel.layer.cornerRadius = 8;
+	pCancel.tag = 2;
+	[pCancel addTarget:self action:@selector(cancel) forControlEvents:UIControlEventTouchUpInside];
+	[self.view addSubview:pCancel];
+}
+
+- (void)viewDidLayoutSubviews
+{
+	[super viewDidLayoutSubviews];
+	CGRect b = self.view.bounds;
+	self.preview.frame = b;
+	AVCaptureConnection *pConn = self.preview.connection;
+	if ( pConn.isVideoOrientationSupported )
+	{
+		UIInterfaceOrientation o = UIInterfaceOrientationLandscapeRight;
+		if ( @available( iOS 13.0, * ) )
+			o = self.view.window.windowScene.interfaceOrientation;
+		pConn.videoOrientation = ( o == UIInterfaceOrientationLandscapeLeft ) ? AVCaptureVideoOrientationLandscapeLeft : AVCaptureVideoOrientationLandscapeRight;
+	}
+	[self.view viewWithTag:1].frame = CGRectMake( 0, 20, b.size.width, 36 );
+	[self.view viewWithTag:2].frame = CGRectMake( b.size.width - 130, b.size.height - 64, 110, 44 );
+}
+
+- (void)viewDidAppear:(BOOL)animated
+{
+	[super viewDidAppear:animated];
+	AVCaptureSession *pSession = self.session;
+	dispatch_async( dispatch_get_global_queue( QOS_CLASS_USER_INITIATED, 0 ), ^{ [pSession startRunning]; } );
+}
+
+- (void)finish
+{
+	[self.session stopRunning];
+	[self dismissViewControllerAnimated:YES completion:nil];
+}
+
+- (void)cancel { [self finish]; }
+
+- (void)captureOutput:(AVCaptureOutput *)output didOutputMetadataObjects:(NSArray *)objects fromConnection:(AVCaptureConnection *)connection
+{
+	for ( AVMetadataObject *pObj in objects )
+	{
+		if ( ![pObj isKindOfClass:[AVMetadataMachineReadableCodeObject class]] )
+			continue;
+		NSString *pText = ((AVMetadataMachineReadableCodeObject *)pObj).stringValue;
+		if ( !pText )
+			continue;
+		pthread_mutex_lock( &s_QRLock );
+		strlcpy( s_szScanned, pText.UTF8String, sizeof( s_szScanned ) );
+		s_bScanned = 1;
+		pthread_mutex_unlock( &s_QRLock );
+		printf( "[qr] scanned %s\n", s_szScanned );
+		[self finish];
+		return;
+	}
+}
+
+- (void)dealloc
+{
+	[_session release];
+	[_preview release];
+	[super dealloc];
+}
+@end
+
+IOS_EXPORT void IOS_QRScanStart( void )
+{
+	@autoreleasepool
+	{
+		UIViewController *pVC = IOS_GameViewController();
+		if ( !pVC )
+			return;
+		IOSQRScanController *pScan = [[[IOSQRScanController alloc] init] autorelease];
+		pScan.modalPresentationStyle = UIModalPresentationFullScreen;
+		[pVC presentViewController:pScan animated:YES completion:nil];
+	}
+}
+
+IOS_EXPORT int IOS_QRTakeScanned( char *pszOut, int nOutSize )
+{
+	int b = 0;
+	pthread_mutex_lock( &s_QRLock );
+	if ( s_bScanned )
+	{
+		strlcpy( pszOut, s_szScanned, nOutSize );
+		s_bScanned = 0;
+		b = 1;
+	}
+	pthread_mutex_unlock( &s_QRLock );
+	return b;
+}
+

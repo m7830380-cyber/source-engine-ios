@@ -2516,6 +2516,20 @@ void CSDLMgr::PumpWindowsMessageLoop()
 				}
 				break;
 			}
+#if defined( IOS )
+			case SDL_DROPFILE:
+			{
+				// a csgoios:// link opened the app (a join QR scanned with the Camera
+				// app): the client picks it up (ios_device_features.cpp)
+				if ( event.drop.file )
+				{
+					if ( !V_strnicmp( event.drop.file, "csgoios://", 10 ) )
+						setenv( "IOS_PENDING_URL", event.drop.file, 1 );
+					SDL_free( event.drop.file );
+				}
+				break;
+			}
+#endif
 			case SDL_QUIT:
 			{
 				CCocoaEvent theEvent;

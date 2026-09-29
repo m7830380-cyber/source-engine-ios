@@ -219,7 +219,7 @@ DROP_INCLUDES = set([
 IOS_FRAMEWORKS = [
 	'Foundation', 'CoreFoundation', 'UIKit', 'QuartzCore', 'CoreGraphics',
 	'CoreAudio', 'AudioToolbox', 'AVFoundation', 'OpenAL', 'GameController',
-	'CoreMotion', 'CoreHaptics', 'Metal', 'SystemConfiguration', 'CFNetwork',
+	'CoreMotion', 'CoreHaptics', 'Metal', 'SystemConfiguration', 'CFNetwork', 'CoreImage',
 	'Security',
 ]
 

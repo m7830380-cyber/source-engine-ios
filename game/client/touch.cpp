@@ -482,6 +482,12 @@ void CTouchControls::Init()
 
 	m_bCutScene = false;
 	showtexture = hidetexture = resettexture = closetexture = joytexture = 0;
+	textfont = 0;
+	m_bToolbarTop = false;
+	m_nPinchFinger = -1;
+	m_flEditFontTall = 0.f;
+	m_flEditMessageUntil = 0.f;
+	m_szEditMessage[0] = 0;
 	configchanged = false;
 
 	rgba_t color(255, 255, 255, 155);
@@ -683,6 +689,8 @@ void CTouchControls::Shutdown( )
 
 void CTouchControls::RemoveButtons()
 {
+	selection = NULL;
+	m_nPinchFinger = -1;
 	btns.PurgeAndDeleteElements();	
 }
 
@@ -833,20 +841,27 @@ void CTouchControls::Paint()
 
 	if( state == state_edit )
 	{
-		vgui::surface()->DrawSetColor(gridcolor.r, gridcolor.g, gridcolor.b, gridcolor.a*3); // 255, 0, 0, 200 <- default here
-		float x,y;
+		// dim the game behind the editor a little
+		vgui::surface()->DrawSetColor( 0, 0, 0, 90 );
+		vgui::surface()->DrawFilledRect( 0, 0, screen_w, screen_h );
 
-		for( x = 0.0f; x < 1.0f; x += GRID_X )
-			vgui::surface()->DrawLine( screen_w*x, 0, screen_w*x, screen_h );
+		if( touch_grid_enable.GetBool() )
+		{
+			vgui::surface()->DrawSetColor(gridcolor.r, gridcolor.g, gridcolor.b, gridcolor.a*3); // 255, 0, 0, 200 <- default here
+			float x,y;
 
-		for( y = 0.0f; y < 1.0f; y += GRID_Y )
-			vgui::surface()->DrawLine( 0, screen_h*y, screen_w, screen_h*y );
+			for( x = 0.0f; x < 1.0f; x += GRID_X )
+				vgui::surface()->DrawLine( screen_w*x, 0, screen_w*x, screen_h );
+
+			for( y = 0.0f; y < 1.0f; y += GRID_Y )
+				vgui::surface()->DrawLine( 0, screen_h*y, screen_w, screen_h*y );
+		}
 
 		for( it = btns.begin(); it != btns.end(); it++ )
 		{
 			CTouchButton *btn = *it;
 
-			if( !(btn->flags & TOUCH_FL_NOEDIT) )
+			if( EditableButton( btn ) )
 			{
 				if( touch_button_info.GetInt() )
 				{
@@ -857,7 +872,10 @@ void CTouchControls::Paint()
 					g_pMatSystemSurface->DrawColoredText( 2, btn->x1*screen_w, btn->y1*screen_h+40, 255, 255, 255, 255, "RGBA: %d %d %d %d", btn->color.r, btn->color.g, btn->color.b, btn->color.a );// color
 				}
 
-				vgui::surface()->DrawSetColor(buttonEditClr.r, buttonEditClr.g, buttonEditClr.b, buttonEditClr.a); // 255, 0, 0, 50 <- default here
+				if( btn->flags & TOUCH_FL_HIDE )
+					vgui::surface()->DrawSetColor( 160, 40, 40, 60 );		// hidden: shown faint and red while editing
+				else
+					vgui::surface()->DrawSetColor(buttonEditClr.r, buttonEditClr.g, buttonEditClr.b, buttonEditClr.a); // 255, 0, 0, 50 <- default here
 				vgui::surface()->DrawFilledRect( btn->x1*screen_w, btn->y1*screen_h, btn->x2*screen_w, btn->y2*screen_h );
 			}
 		}
@@ -871,7 +889,7 @@ void CTouchControls::Paint()
 	{
 		CTouchButton *btn = *it;
 
-		if( btn->texture != NULL && !(btn->flags & TOUCH_FL_HIDE) && ( state == state_edit || TouchButtonAvailable( btn ) ) )
+		if( btn->texture != NULL && ( !(btn->flags & TOUCH_FL_HIDE) || state == state_edit ) && ( state == state_edit || TouchButtonAvailable( btn ) ) )
 		{
 			CTouchTexture *t = btn->texture;
 
@@ -882,6 +900,8 @@ void CTouchControls::Paint()
 				meshBuilder.Begin( m_pMesh, MATERIAL_QUADS, 1 );
 
 				int alpha = (btn->color.a > MIN_ALPHA_IN_CUTSCENE) ? max(MIN_ALPHA_IN_CUTSCENE, btn->color.a-m_AlphaDiff) : btn->color.a;
+				if( btn->flags & TOUCH_FL_HIDE )
+					alpha = 50;		// hidden, shown only while editing
 				rgba_t color(btn->color.r, btn->color.g, btn->color.b, alpha);
 
 				meshBuilder.Position3f( btn->x1*screen_w, btn->y1*screen_h, 0 );
@@ -923,11 +943,13 @@ void CTouchControls::Paint()
 	{
 		CTouchButton *btn = *it;
 
-		if( btn->texture != NULL && !(btn->flags & TOUCH_FL_HIDE) && !btn->texture->textureID && ( state == state_edit || TouchButtonAvailable( btn ) ) )
+		if( btn->texture != NULL && ( !(btn->flags & TOUCH_FL_HIDE) || state == state_edit ) && !btn->texture->textureID && ( state == state_edit || TouchButtonAvailable( btn ) ) )
 		{
 			CTouchTexture *t = btn->texture;
 
 			int alpha = (btn->color.a > MIN_ALPHA_IN_CUTSCENE) ? max(MIN_ALPHA_IN_CUTSCENE, btn->color.a-m_AlphaDiff) : btn->color.a;
+			if( btn->flags & TOUCH_FL_HIDE )
+				alpha = 50;		// hidden, shown only while editing
 			rgba_t color(btn->color.r, btn->color.g, btn->color.b, alpha);
 
 			meshBuilder.Position3f( btn->x1*screen_w, btn->y1*screen_h, 0 );
@@ -954,6 +976,9 @@ void CTouchControls::Paint()
 
 	meshBuilder.End();
 	m_pMesh->Draw();
+
+	if( state == state_edit )
+		PaintEditor();
 
 
 	if( m_flHideTouch < gpGlobals->curtime )
@@ -1099,6 +1124,8 @@ void CTouchControls::RemoveButton( const char *name )
 	{
 		if( Q_strncmp( btns[i]->name, name, sizeof(btns[i]->name)) == 0 )
 		{
+			if( btns[i] == selection )
+				selection = NULL;
 			delete btns[i];
 			btns.Remove(i);
 			i--;
@@ -1141,36 +1168,52 @@ void CTouchControls::EditEvent(touch_event_t *ev)
 	const float x = ev->x;
 	const float y = ev->y;
 
-	//CUtlVector<CTouchButton*>::iterator it;
-	
 	if( ev->type == IE_FingerDown )
-	{		
-		//for( it = btns.end(); it != btns.begin(); it-- ) unexpected, doesn't work
-		for( int i = btns.Count()-1; i >= 0; i-- )
+	{
+		// the toolbar first
+		int nTool = ToolAt( x, y );
+		if( nTool != tool_none )
 		{
-			CTouchButton *btn = btns[i];
-			if( x > btn->x1 && x < btn->x2 && y > btn->y1 && y < btn->y2 )
+			UseTool( nTool );
+			return;
+		}
+
+		if( move_finger == -1 )
+		{
+			// pick the topmost button under the finger (hidden ones too, to show
+			// them again); nothing there deselects
+			selection = NULL;
+			for( int i = btns.Count()-1; i >= 0; i-- )
 			{
-				if( btn->flags & TOUCH_FL_HIDE )
+				CTouchButton *btn = btns[i];
+				if( !( x > btn->x1 && x < btn->x2 && y > btn->y1 && y < btn->y2 ) )
 					continue;
-				
 				if( btn->flags & TOUCH_FL_NOEDIT )
 				{
 					engine->ClientCmd_Unrestricted( btn->command );
+					return;
+				}
+				if( !EditableButton( btn ) )
 					continue;
-				}
-
-				if( move_finger == -1 )
-				{
-					move_finger = ev->fingerid;
-					selection = btn;
-					break;
-				}
-				else if( resize_finger == -1 )
-				{
-					resize_finger = ev->fingerid;
-				}
+				selection = btn;
+				move_finger = ev->fingerid;
+				m_flFingerX[0] = x;
+				m_flFingerY[0] = y;
+				break;
 			}
+		}
+		else if( selection && m_nPinchFinger == -1 && ev->fingerid != move_finger )
+		{
+			// a second finger anywhere: pinch to resize
+			m_nPinchFinger = ev->fingerid;
+			m_flFingerX[1] = x;
+			m_flFingerY[1] = y;
+			float dx = ( m_flFingerX[1] - m_flFingerX[0] ) * screen_w, dy = ( m_flFingerY[1] - m_flFingerY[0] ) * screen_h;
+			m_flPinchStartDist = sqrtf( dx*dx + dy*dy );
+			m_flPinchStartMidX = ( m_flFingerX[0] + m_flFingerX[1] ) * 0.5f;
+			m_flPinchStartMidY = ( m_flFingerY[0] + m_flFingerY[1] ) * 0.5f;
+			m_flPinchStartRect[0] = selection->x1; m_flPinchStartRect[1] = selection->y1;
+			m_flPinchStartRect[2] = selection->x2; m_flPinchStartRect[3] = selection->y2;
 		}
 	}
 	else if( ev->type == IE_FingerUp )
@@ -1178,29 +1221,297 @@ void CTouchControls::EditEvent(touch_event_t *ev)
 		if( ev->fingerid == move_finger )
 		{
 			move_finger = -1;
-			IN_CheckCoords( &selection->x1, &selection->y1, &selection->x2, &selection->y2 );
-			selection = nullptr;
+			m_nPinchFinger = -1;
+			if( selection )
+				IN_CheckCoords( &selection->x1, &selection->y1, &selection->x2, &selection->y2 );
 		}
-		else if( ev->fingerid == resize_finger )
-			resize_finger = -1;
+		else if( ev->fingerid == m_nPinchFinger )
+			m_nPinchFinger = -1;
 	}
 	else // IE_FingerMotion
 	{
 		if( !selection )
 			return;
 
-		if( move_finger == ev->fingerid )
+		bool bPinchMoved = false;
+		if( ev->fingerid == move_finger )
 		{
-			selection->x1 += ev->dx;
-			selection->x2 += ev->dx;
-			selection->y1 += ev->dy;
-			selection->y2 += ev->dy;
+			m_flFingerX[0] = x;
+			m_flFingerY[0] = y;
+			if( m_nPinchFinger == -1 )
+			{
+				selection->x1 += ev->dx;
+				selection->x2 += ev->dx;
+				selection->y1 += ev->dy;
+				selection->y2 += ev->dy;
+			}
+			else
+				bPinchMoved = true;
 		}
-		else if( resize_finger == ev->fingerid )
+		else if( ev->fingerid == m_nPinchFinger )
 		{
-			selection->x2 += ev->dx;
-			selection->y2 += ev->dy;
+			m_flFingerX[1] = x;
+			m_flFingerY[1] = y;
+			bPinchMoved = true;
 		}
+
+		if( bPinchMoved && m_flPinchStartDist > 10.f )
+		{
+			// size by how far apart the fingers are now, centred where they are
+			float dx = ( m_flFingerX[1] - m_flFingerX[0] ) * screen_w, dy = ( m_flFingerY[1] - m_flFingerY[0] ) * screen_h;
+			float flRatio = sqrtf( dx*dx + dy*dy ) / m_flPinchStartDist;
+			float w = ( m_flPinchStartRect[2] - m_flPinchStartRect[0] ) * flRatio;
+			float h = ( m_flPinchStartRect[3] - m_flPinchStartRect[1] ) * flRatio;
+			// between a small square and half the screen wide
+			float flMinW = 0.04f, flMaxW = 0.5f;
+			if( w < flMinW ) { h *= flMinW / w; w = flMinW; }
+			if( w > flMaxW ) { h *= flMaxW / w; w = flMaxW; }
+			float cx = ( m_flPinchStartRect[0] + m_flPinchStartRect[2] ) * 0.5f + ( m_flFingerX[0] + m_flFingerX[1] ) * 0.5f - m_flPinchStartMidX;
+			float cy = ( m_flPinchStartRect[1] + m_flPinchStartRect[3] ) * 0.5f + ( m_flFingerY[0] + m_flFingerY[1] ) * 0.5f - m_flPinchStartMidY;
+			selection->x1 = cx - w * 0.5f; selection->x2 = cx + w * 0.5f;
+			selection->y1 = cy - h * 0.5f; selection->y2 = cy + h * 0.5f;
+		}
+	}
+}
+
+// buttons the editor can pick up: not the invisible look / move halves of the screen
+bool CTouchControls::EditableButton( const CTouchButton *btn ) const
+{
+	return btn->type == touch_command && btn->texture != NULL && !( btn->flags & TOUCH_FL_NOEDIT );
+}
+
+static const wchar_t *TouchButtonFriendlyName( const char *pszName, wchar_t *pwszBuf, int nBufBytes )
+{
+	static const char *s_pszNames[][2] =
+	{
+		{ "attack", "Fire" }, { "attack2", "Scope / alt fire" }, { "jump", "Jump" }, { "duck", "Crouch" },
+		{ "use", "Use" }, { "speed", "Walk" }, { "reload", "Reload" }, { "invnext", "Next weapon" },
+		{ "invprev", "Previous weapon" }, { "drop", "Drop weapon" }, { "console", "Console" },
+		{ "edit", "Edit controls" }, { "scores", "Scoreboard" }, { "teammenu", "Team" }, { "chat", "Chat" },
+		{ "inspect", "Inspect" }, { "buymenu", "Buy menu" }, { "pause", "Menu" },
+	};
+	const char *pszFriendly = pszName;
+	for( int i = 0; i < ARRAYSIZE( s_pszNames ); i++ )
+	{
+		if( !Q_strcmp( pszName, s_pszNames[i][0] ) )
+		{
+			pszFriendly = s_pszNames[i][1];
+			break;
+		}
+	}
+	V_UTF8ToUnicode( pszFriendly, pwszBuf, nBufBytes );
+	return pwszBuf;
+}
+
+// the toolbar: one row, bottom centre (or top, "Bar up")
+void CTouchControls::GetToolRect( int nTool, float &x1, float &y1, float &x2, float &y2 ) const
+{
+	const float flLeft = 0.14f, flRight = 0.86f, flGap = 0.006f;
+	float w = ( flRight - flLeft ) / tool_count;
+	x1 = flLeft + w * nTool + flGap * 0.5f;
+	x2 = flLeft + w * ( nTool + 1 ) - flGap * 0.5f;
+	y1 = m_bToolbarTop ? 0.015f : 0.885f;
+	y2 = m_bToolbarTop ? 0.115f : 0.985f;
+}
+
+int CTouchControls::ToolAt( float x, float y ) const
+{
+	for( int i = 0; i < tool_count; i++ )
+	{
+		float x1, y1, x2, y2;
+		GetToolRect( i, x1, y1, x2, y2 );
+		if( x >= x1 && x <= x2 && y >= y1 && y <= y2 )
+			return i;
+	}
+	return tool_none;
+}
+
+// grow / shrink around the centre, keeping it on screen
+void CTouchControls::ScaleButton( CTouchButton *btn, float flScale )
+{
+	float w = ( btn->x2 - btn->x1 ) * flScale, h = ( btn->y2 - btn->y1 ) * flScale;
+	if( w < 0.04f || w > 0.5f )
+		return;
+	float cx = ( btn->x1 + btn->x2 ) * 0.5f, cy = ( btn->y1 + btn->y2 ) * 0.5f;
+	btn->x1 = cx - w * 0.5f; btn->x2 = cx + w * 0.5f;
+	btn->y1 = cy - h * 0.5f; btn->y2 = cy + h * 0.5f;
+	if( btn->x1 < 0 ) { btn->x2 -= btn->x1; btn->x1 = 0; }
+	if( btn->y1 < 0 ) { btn->y2 -= btn->y1; btn->y1 = 0; }
+	if( btn->x2 > 1 ) { btn->x1 -= btn->x2 - 1; btn->x2 = 1; }
+	if( btn->y2 > 1 ) { btn->y1 -= btn->y2 - 1; btn->y2 = 1; }
+}
+
+void CTouchControls::UseTool( int nTool )
+{
+	m_szEditMessage[0] = 0;
+
+	switch( nTool )
+	{
+	case tool_done:
+		ExitTouchEdit( true );
+		return;
+
+	case tool_cancel:
+		ExitTouchEdit( false );
+		return;
+
+	case tool_reset:
+	{
+		RemoveButtons();
+		char buf[MAX_PATH];
+		Q_snprintf( buf, sizeof( buf ), "cfg/%s", TOUCH_DEFAULT_CFG );
+		if( filesystem->FileExists( buf ) )
+		{
+			Q_snprintf( buf, sizeof( buf ), "exec %s\n", TOUCH_DEFAULT_CFG );
+			engine->ExecuteClientCmd( buf );
+		}
+		else
+			AddDefaultButtons( rgba_t( 255, 255, 255, 155 ) );
+		Q_strncpy( m_szEditMessage, "Default layout. Done keeps it, Cancel goes back to yours", sizeof( m_szEditMessage ) );
+		break;
+	}
+
+	case tool_hide:
+		if( !selection )
+			Q_strncpy( m_szEditMessage, "Tap a button first", sizeof( m_szEditMessage ) );
+		else if( !Q_strcmp( selection->name, "edit" ) && !( selection->flags & TOUCH_FL_HIDE ) )
+			Q_strncpy( m_szEditMessage, "The edit button can't be hidden (you'd have no way back here)", sizeof( m_szEditMessage ) );
+		else
+			selection->flags ^= TOUCH_FL_HIDE;
+		break;
+
+	case tool_fade:
+	case tool_opaque:
+	{
+		// the selected button, or with none selected all of them
+		int nDelta = ( nTool == tool_fade ) ? -25 : 25;
+		for( int i = 0; i < btns.Count(); i++ )
+		{
+			CTouchButton *btn = btns[i];
+			if( !EditableButton( btn ) || ( selection && btn != selection ) )
+				continue;
+			btn->color.a = (unsigned char)clamp( (int)btn->color.a + nDelta, 30, 255 );
+		}
+		break;
+	}
+
+	case tool_smaller:
+	case tool_bigger:
+		if( selection )
+			ScaleButton( selection, nTool == tool_bigger ? 1.1f : 1.f / 1.1f );
+		else
+			Q_strncpy( m_szEditMessage, "Tap a button first (or pinch it with two fingers)", sizeof( m_szEditMessage ) );
+		break;
+
+	case tool_grid:
+		touch_grid_enable.SetValue( !touch_grid_enable.GetBool() );
+		break;
+
+	case tool_bar:
+		m_bToolbarTop = !m_bToolbarTop;
+		break;
+	}
+
+	if( m_szEditMessage[0] )
+		m_flEditMessageUntil = Plat_FloatTime() + 3.0;
+}
+
+void CTouchControls::EditText( int x, int y, const wchar_t *pwsz, int r, int g, int b, int a, bool bCenter )
+{
+	int tw = 0, th = 0;
+	vgui::surface()->GetTextSize( textfont, pwsz, tw, th );
+	if( bCenter )
+		x -= tw / 2;
+	vgui::surface()->DrawSetTextFont( textfont );
+	vgui::surface()->DrawSetTextColor( 0, 0, 0, a );		// a shadow, readable over anything
+	vgui::surface()->DrawSetTextPos( x + 2, y + 2 );
+	vgui::surface()->DrawPrintText( pwsz, V_wcslen( pwsz ) );
+	vgui::surface()->DrawSetTextColor( r, g, b, a );
+	vgui::surface()->DrawSetTextPos( x, y );
+	vgui::surface()->DrawPrintText( pwsz, V_wcslen( pwsz ) );
+}
+
+void CTouchControls::PaintEditor()
+{
+	// a screen-sized font (any family name matches a system font on iOS)
+	float flTall = screen_h * 0.032f;
+	if( !textfont || m_flEditFontTall != flTall )
+	{
+		if( !textfont )
+			textfont = vgui::surface()->CreateFont();
+		vgui::surface()->SetFontGlyphSet( textfont, "Arial", (int)flTall, 700, 0, 0, FONTFLAG_ANTIALIAS );
+		m_flEditFontTall = flTall;
+	}
+	int nLineTall = vgui::surface()->GetFontTall( textfont );
+	wchar_t wszBuf[256], wszName[64];
+	char szBuf[256];
+
+	// the selected button: a thick outline, its name and opacity above it
+	if( selection )
+	{
+		int x1 = selection->x1 * screen_w, y1 = selection->y1 * screen_h, x2 = selection->x2 * screen_w, y2 = selection->y2 * screen_h;
+		vgui::surface()->DrawSetColor( 255, 200, 0, 255 );
+		for( int i = 0; i < 3; i++ )
+			vgui::surface()->DrawOutlinedRect( x1 - i, y1 - i, x2 + i, y2 + i );
+
+		TouchButtonFriendlyName( selection->name, wszName, sizeof( wszName ) );
+		V_snwprintf( wszBuf, ARRAYSIZE( wszBuf ), L"%ls  %d%%%ls", wszName, ( selection->color.a * 100 + 127 ) / 255,
+			( selection->flags & TOUCH_FL_HIDE ) ? L"  (hidden)" : L"" );
+		int ty = y1 - nLineTall - 6;
+		if( ty < 0 )
+			ty = y2 + 6;
+		EditText( ( x1 + x2 ) / 2, ty, wszBuf, 255, 220, 80, 255, true );
+	}
+
+	// the hint / message line, then the toolbar
+	float bx1, by1, bx2, by2;
+	GetToolRect( 0, bx1, by1, bx2, by2 );
+	const char *pszLine;
+	if( m_szEditMessage[0] && Plat_FloatTime() < m_flEditMessageUntil )
+		pszLine = m_szEditMessage;
+	else if( selection )
+		pszLine = "Drag to move. Put a second finger down anywhere and pinch to resize";
+	else
+		pszLine = "Tap a button to edit it. Fainter / Bolder with nothing selected change all buttons";
+	V_UTF8ToUnicode( pszLine, wszBuf, sizeof( wszBuf ) );
+	int nLineY = m_bToolbarTop ? (int)( by2 * screen_h ) + 8 : (int)( by1 * screen_h ) - nLineTall - 8;
+	EditText( screen_w / 2, nLineY, wszBuf, 255, 255, 255, 255, true );
+
+	for( int i = 0; i < tool_count; i++ )
+	{
+		float fx1, fy1, fx2, fy2;
+		GetToolRect( i, fx1, fy1, fx2, fy2 );
+		int x1 = fx1 * screen_w, y1 = fy1 * screen_h, x2 = fx2 * screen_w, y2 = fy2 * screen_h;
+
+		const char *pszLabel = "";
+		bool bActive = true;
+		switch( i )
+		{
+		case tool_done:		pszLabel = "Done"; break;
+		case tool_cancel:	pszLabel = "Cancel"; break;
+		case tool_reset:	pszLabel = "Reset"; break;
+		case tool_hide:		pszLabel = ( selection && ( selection->flags & TOUCH_FL_HIDE ) ) ? "Show" : "Hide"; bActive = selection != NULL; break;
+		case tool_fade:		pszLabel = "Fainter"; break;
+		case tool_opaque:	pszLabel = "Bolder"; break;
+		case tool_smaller:	pszLabel = "Smaller"; bActive = selection != NULL; break;
+		case tool_bigger:	pszLabel = "Bigger"; bActive = selection != NULL; break;
+		case tool_grid:		pszLabel = touch_grid_enable.GetBool() ? "Grid: on" : "Grid: off"; break;
+		case tool_bar:		pszLabel = m_bToolbarTop ? "Bar down" : "Bar up"; break;
+		}
+
+		if( i == tool_done )
+			vgui::surface()->DrawSetColor( 40, 140, 60, 230 );
+		else if( i == tool_cancel )
+			vgui::surface()->DrawSetColor( 150, 50, 45, 230 );
+		else
+			vgui::surface()->DrawSetColor( 30, 30, 34, bActive ? 225 : 150 );
+		vgui::surface()->DrawFilledRect( x1, y1, x2, y2 );
+		vgui::surface()->DrawSetColor( 255, 255, 255, 90 );
+		vgui::surface()->DrawOutlinedRect( x1, y1, x2, y2 );
+
+		Q_strncpy( szBuf, pszLabel, sizeof( szBuf ) );
+		V_UTF8ToUnicode( szBuf, wszBuf, sizeof( wszBuf ) );
+		EditText( ( x1 + x2 ) / 2, ( y1 + y2 ) / 2 - nLineTall / 2, wszBuf, 255, 255, 255, bActive ? 255 : 120, true );
 	}
 }
 
@@ -1320,21 +1631,65 @@ void CTouchControls::EnableTouchEdit(bool enable)
 {
 	if( enable )
 	{
+		if( state == state_edit )
+			return;
+
+		// let go of anything held (a held +attack would stay down while editing)
+		for( int i = 0; i < btns.Count(); i++ )
+		{
+			CTouchButton *btn = btns[i];
+			if( btn->finger != -1 && btn->command[0] == '+' )
+			{
+				char cmd[256];
+				Q_snprintf( cmd, sizeof( cmd ), "%s", btn->command );
+				cmd[0] = '-';
+				engine->ClientCmd_Unrestricted( cmd );
+			}
+			btn->finger = -1;
+		}
+		forward = side = 0;
+
 		state = state_edit;
 		resize_finger = move_finger = look_finger = wheel_finger = -1;
+		m_nPinchFinger = -1;
 		move_button = NULL;
+		selection = NULL;
 		configchanged = true;
-		AddButton( "close_edit", "vgui/touch/back", "touch_disableedit", 0.020000, 0.800000, 0.100000, 0.977778, rgba_t(255,255,255,255), 0, 1.f, TOUCH_FL_NOEDIT );
+		RemoveButton( "close_edit" );	// older builds' editor exit button
 	}
 	else
+		ExitTouchEdit( true );
+}
+
+void CTouchControls::ExitTouchEdit( bool bSave )
+{
+	if( state != state_edit )
+		return;
+
+	state = state_none;
+	resize_finger = move_finger = look_finger = wheel_finger = -1;
+	m_nPinchFinger = -1;
+	move_button = NULL;
+	selection = NULL;
+	configchanged = false;
+	RemoveButton( "close_edit" );
+
+	if( bSave )
 	{
-		state = state_none;
-		resize_finger = move_finger = look_finger = wheel_finger = -1;
-		move_button = NULL;
-		configchanged = false;
-		RemoveButton("close_edit");
 		WriteConfig();
+		return;
 	}
+
+	// Cancel: back to the saved layout
+	char buf[256];
+	Q_snprintf( buf, sizeof( buf ), "cfg/%s", touch_config_file.GetString() );
+	if( filesystem->FileExists( buf, "MOD" ) )
+	{
+		Q_snprintf( buf, sizeof( buf ), "exec %s\n", touch_config_file.GetString() );
+		engine->ExecuteClientCmd( buf );
+	}
+	else
+		ResetToDefaults();
 }
 
 void CTouchControls::WriteConfig()

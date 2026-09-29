@@ -203,6 +203,7 @@ public:
 	void GetTouchDelta( float yaw, float pitch, float *dx, float *dy );
 	void EditEvent( touch_event_t *ev );
 	void EnableTouchEdit(bool enable);
+	void ExitTouchEdit( bool bSave );		// Done (save) / Cancel (reload the saved layout)
 	void CreateAtlasTexture();
 
 	CTouchPanel *touchPanel;
@@ -222,6 +223,24 @@ private:
 
 	float move_start_x, move_start_y;
 	float m_flPreviousYaw, m_flPreviousPitch;
+
+	// the layout editor (edit mode): toolbar, selection, pinch to resize
+	enum EEditTool { tool_none = -1, tool_done, tool_cancel, tool_reset, tool_hide, tool_fade, tool_opaque, tool_smaller, tool_bigger, tool_grid, tool_bar, tool_count };
+	bool EditableButton( const CTouchButton *btn ) const;
+	void GetToolRect( int nTool, float &x1, float &y1, float &x2, float &y2 ) const;
+	int ToolAt( float x, float y ) const;
+	void UseTool( int nTool );
+	void ScaleButton( CTouchButton *btn, float flScale );
+	void PaintEditor();
+	void EditText( int x, int y, const wchar_t *pwsz, int r, int g, int b, int a, bool bCenter );
+	bool m_bToolbarTop;
+	int m_nPinchFinger;
+	float m_flFingerX[2], m_flFingerY[2];		// [0] the move finger, [1] the pinch finger
+	float m_flPinchStartDist, m_flPinchStartMidX, m_flPinchStartMidY;
+	float m_flPinchStartRect[4];
+	float m_flEditFontTall;
+	float m_flEditMessageUntil;
+	char m_szEditMessage[128];
 
 	int touchTextureID;
 	IMesh* m_pMesh;

@@ -1322,10 +1322,6 @@ STUB_TABLE( News,
 	SFUI_DECL_METHOD_AS( ReturnZero, "GetActiveTournamentEventID" ),
 	SFUI_DECL_METHOD_AS( ReturnFalse, "IsNewClientAvailable" ) )
 
-STUB_TABLE( MatchList,
-	SFUI_DECL_METHOD_AS( DoNothing, "Refresh" ),
-	SFUI_DECL_METHOD_AS( ReturnZero, "GetCount" ) )
-
 STUB_TABLE( Predictions,
 	SFUI_DECL_METHOD_AS( ReturnMinusOne, "GetMyPredictionItemIDEventSectionIndex" ),
 	SFUI_DECL_METHOD_AS( ReturnZero, "GetEventSectionsCount" ) )
@@ -1351,7 +1347,6 @@ static CScaleformComponentStore_Table g_ComponentStoreTable;
 static CScaleformComponentSteamOverlay_Table g_ComponentSteamOverlayTable;
 static CScaleformComponentPartyList_Table g_ComponentPartyListTable;
 static CScaleformComponentNews_Table g_ComponentNewsTable;
-static CScaleformComponentMatchList_Table g_ComponentMatchListTable;
 static CScaleformComponentPredictions_Table g_ComponentPredictionsTable;
 
 void ScaleformInventoryComponents_EnsureInstalled()
@@ -1374,11 +1369,21 @@ void ScaleformInventoryComponents_EnsureInstalled()
 		{ "CScaleformComponent_SteamOverlay", &g_ComponentStub, &g_ComponentSteamOverlayTable, NULL },
 		{ "CScaleformComponent_PartyList", &g_ComponentStub, &g_ComponentPartyListTable, NULL },
 		{ "CScaleformComponent_News", &g_ComponentStub, &g_ComponentNewsTable, NULL },
-		{ "CScaleformComponent_MatchList", &g_ComponentStub, &g_ComponentMatchListTable, NULL },
+		// match history for the Watch panel (matchhistory_scaleform.cpp): filled below
+		{ "CScaleformComponent_MatchList", NULL, NULL, NULL },
+		{ "CScaleformComponent_MatchInfo", NULL, NULL, NULL },
 		{ "CScaleformComponent_Predictions", &g_ComponentStub, &g_ComponentPredictionsTable, NULL },
 		{ "CScaleformComponent_FriendsList", &g_ComponentFriendsList, &g_ComponentFriendsListTable, NULL },
 		{ "CScaleformComponent_CompetitiveMatch", &g_ComponentStub, &g_ComponentCompetitiveMatchTable, NULL },
 	};
+
+	extern void MatchHistory_GetComponents( ScaleformUIFunctionHandlerObject **ppMatchList, const IScaleformUIFunctionHandlerDefinitionTable **ppMatchListTable,
+		ScaleformUIFunctionHandlerObject **ppMatchInfo, const IScaleformUIFunctionHandlerDefinitionTable **ppMatchInfoTable );
+	for ( int i = 0; i < ARRAYSIZE( s_Components ); i++ )
+	{
+		if ( !V_strcmp( s_Components[i].m_pszName, "CScaleformComponent_MatchList" ) )
+			MatchHistory_GetComponents( &s_Components[i].m_pObject, &s_Components[i].m_pTable, &s_Components[i + 1].m_pObject, &s_Components[i + 1].m_pTable );
+	}
 
 	// install into the full-screen slot once it exists (the first try succeeds or none do)
 	g_pScaleformUI->InstallGlobalObject( SF_FULL_SCREEN_SLOT, s_Components[0].m_pszName, s_Components[0].m_pObject, s_Components[0].m_pTable, &s_Components[0].m_hValue );

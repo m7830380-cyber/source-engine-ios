@@ -138,6 +138,8 @@ PROJECT_EXTRA_SOURCES = {
 		'game/client/cstrike15/Scaleform/buymenu_scaleform.cpp',
 		# CS:GO scoreboard glue, reconstructed from scoreboard.swf
 		'game/client/cstrike15/Scaleform/scoreboard_scaleform.cpp',
+		# match history for Watch > Your Matches (MatchList / MatchInfo components)
+		'game/client/cstrike15/Scaleform/matchhistory_scaleform.cpp',
 		# voice status: talking players and the recent chat lines (hudvoicestatus.swf)
 		'game/client/cstrike15/Scaleform/HUD/sfhudvoicestatus.cpp',
 		# LAN profile pictures: upload, and the IOSAvatars string table -> avatar files

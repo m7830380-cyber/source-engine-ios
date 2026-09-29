@@ -974,6 +974,16 @@ void COptionsScaleform::ReadOptionsFromFile( const char * szFileName )
 	{
 		static const char s_szIOSOptions[] =
 			"\"options\"\n{\n"
+			"	\"iOS Crosshair Size\"\n	{\n		\"name\" \"Crosshair size\"\n		\"convar\" \"cl_crosshairsize\"\n		\"priority\" \"0511\"\n		\"type\" \"slider\"\n		\"customrange\" \"1\"\n		\"minvalue\" \"0.5\"\n		\"maxvalue\" \"10\"\n	}\n"
+			"	\"iOS Crosshair Gap\"\n	{\n		\"name\" \"Crosshair gap\"\n		\"convar\" \"cl_crosshairgap\"\n		\"priority\" \"0512\"\n		\"type\" \"slider\"\n		\"customrange\" \"1\"\n		\"minvalue\" \"-5\"\n		\"maxvalue\" \"5\"\n	}\n"
+			"	\"iOS Crosshair Thickness\"\n	{\n		\"name\" \"Crosshair thickness\"\n		\"convar\" \"cl_crosshairthickness\"\n		\"priority\" \"0513\"\n		\"type\" \"slider\"\n		\"customrange\" \"1\"\n		\"minvalue\" \"0.5\"\n		\"maxvalue\" \"3\"\n	}\n"
+			"	\"iOS Crosshair Dot\"\n	{\n		\"name\" \"Crosshair centre dot\"\n		\"convar\" \"cl_crosshairdot\"\n		\"priority\" \"0514\"\n		\"type\" \"choice\"\n		\"choices\" { \"#GameUI_No\" \"0\" \"#GameUI_Yes\" \"1\" }\n	}\n"
+			"	\"iOS Crosshair Outline\"\n	{\n		\"name\" \"Crosshair outline\"\n		\"convar\" \"cl_crosshair_drawoutline\"\n		\"priority\" \"0515\"\n		\"type\" \"choice\"\n		\"choices\" { \"#GameUI_No\" \"0\" \"#GameUI_Yes\" \"1\" }\n	}\n"
+			"	\"iOS Crosshair Outline Thickness\"\n	{\n		\"name\" \"Crosshair outline thickness\"\n		\"convar\" \"cl_crosshair_outlinethickness\"\n		\"priority\" \"0516\"\n		\"type\" \"slider\"\n		\"customrange\" \"1\"\n		\"minvalue\" \"0\"\n		\"maxvalue\" \"3\"\n	}\n"
+			"	\"iOS Crosshair Alpha\"\n	{\n		\"name\" \"Crosshair opacity\"\n		\"convar\" \"cl_crosshairalpha\"\n		\"priority\" \"0517\"\n		\"type\" \"slider\"\n		\"customrange\" \"1\"\n		\"minvalue\" \"50\"\n		\"maxvalue\" \"255\"\n	}\n"
+			"	\"iOS Crosshair Red\"\n	{\n		\"name\" \"Crosshair custom colour: red\"\n		\"convar\" \"cl_crosshaircolor_r\"\n		\"priority\" \"0518\"\n		\"type\" \"slider\"\n		\"customrange\" \"1\"\n		\"minvalue\" \"0\"\n		\"maxvalue\" \"255\"\n	}\n"
+			"	\"iOS Crosshair Green\"\n	{\n		\"name\" \"Crosshair custom colour: green\"\n		\"convar\" \"cl_crosshaircolor_g\"\n		\"priority\" \"0519\"\n		\"type\" \"slider\"\n		\"customrange\" \"1\"\n		\"minvalue\" \"0\"\n		\"maxvalue\" \"255\"\n	}\n"
+			"	\"iOS Crosshair Blue\"\n	{\n		\"name\" \"Crosshair custom colour: blue\"\n		\"convar\" \"cl_crosshaircolor_b\"\n		\"priority\" \"0520\"\n		\"type\" \"slider\"\n		\"customrange\" \"1\"\n		\"minvalue\" \"0\"\n		\"maxvalue\" \"255\"\n	}\n"
 			"	\"iOS Gyro\"\n	{\n		\"name\" \"Gyro aiming\"\n		\"tooltip\" \"Aim by moving the phone\"\n		\"convar\" \"ios_gyro\"\n		\"priority\" \"0010\"\n		\"type\" \"choice\"\n		\"choices\" { \"#GameUI_No\" \"0\" \"#GameUI_Yes\" \"1\" }\n	}\n"
 			"	\"iOS Gyro Sensitivity\"\n	{\n		\"name\" \"Gyro sensitivity\"\n		\"convar\" \"ios_gyro_sensitivity\"\n		\"priority\" \"0011\"\n		\"type\" \"slider\"\n	}\n"
 			"	\"iOS Gyro Invert\"\n	{\n		\"name\" \"Gyro invert up/down\"\n		\"convar\" \"ios_gyro_invert_pitch\"\n		\"priority\" \"0012\"\n		\"type\" \"choice\"\n		\"choices\" { \"#GameUI_No\" \"0\" \"#GameUI_Yes\" \"1\" }\n	}\n"
@@ -989,6 +999,20 @@ void COptionsScaleform::ReadOptionsFromFile( const char * szFileName )
 				pOptionKeys->AddSubKey( pSub->MakeCopy() );
 		}
 		pIOSOptions->deleteThis();
+
+		// the crosshair colour list stops at light blue: the game also has red (0)
+		// and a custom colour (5, from the red / green / blue sliders)
+		for ( KeyValues *pSub = pOptionKeys->GetFirstTrueSubKey(); pSub; pSub = pSub->GetNextTrueSubKey() )
+		{
+			if ( V_stricmp( pSub->GetString( "convar" ), "cl_crosshaircolor" ) )
+				continue;
+			KeyValues *pList = pSub->FindKey( "dropdown" );
+			if ( pList && !pList->FindKey( "Red" ) )
+			{
+				pList->SetString( "Red", "0" );
+				pList->SetString( "Custom (RGB sliders)", "5" );
+			}
+		}
 	}
 #endif
 

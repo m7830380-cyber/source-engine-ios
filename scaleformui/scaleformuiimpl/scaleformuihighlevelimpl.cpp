@@ -1611,8 +1611,10 @@ ScaleformUIChromeHTMLImage* ScaleformUIImpl::GetChromeHTMLImage( uint64 imageID 
 
 #if defined( IOS )
 // iOS has no keyboard until one is asked for: bring it up while a Flash text
-// field that takes typing (not read-only) has focus in any slot (the
-// inventory search, rename, text filters...), and put it away when none does.
+// field that takes typing has focus in any slot, and put it away when none
+// does. That's an editable field, or sharedlib.swf's filter panel (inventory
+// search, the name tag's rename box, loadout search...): its "FilterText" is
+// read-only and the panel's script does the typing from key and IME events.
 // Only a keyboard opened here is put away (chat and the console open their own).
 void ScaleformUIImpl::UpdateIOSTextInput( void )
 {
@@ -1628,7 +1630,8 @@ void ScaleformUIImpl::UpdateIOSTextInput( void )
 			SF::GFx::MovieImpl *pMovie = static_cast< SF::GFx::MovieImpl * >( pSlot->m_pMovieView );
 			SF::Ptr< SF::GFx::InteractiveObject > pFocus = pMovie->GetFocusedCharacter( 0 );
 			if ( pFocus && pFocus->GetType() == SF::GFx::CharacterDef::TextField &&
-				 !static_cast< SF::GFx::TextField * >( pFocus.GetPtr() )->IsReadOnly() )
+				 ( !static_cast< SF::GFx::TextField * >( pFocus.GetPtr() )->IsReadOnly() ||
+				   !V_strcmp( pFocus->GetName().ToCStr(), "FilterText" ) ) )
 			{
 				bWant = true;
 				pField = pFocus.GetPtr();

@@ -684,6 +684,11 @@ int main( int argc, char *argv[] )
 
 	IOS_LaunchDialog();
 
+	// landscape only for the game window too (SDL_HINT_ORIENTATIONS; SDL reads
+	// hints from the environment): without it SDL works the allowed
+	// orientations out from the window, and newer iOS let it turn upright
+	setenv( "SDL_IOS_ORIENTATIONS", "LandscapeLeft LandscapeRight", 1 );
+
 	argc = IOS_GetArgs( &argv );
 	if ( argc <= 0 || argv == NULL )
 	{

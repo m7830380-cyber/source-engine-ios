@@ -70,6 +70,31 @@
 @end
 
 // ---------------------------------------------------------------------------
+// Landscape only. A plain UIViewController allows portrait on iPhone, and on
+// newer iOS any window's controller can turn the scene upright (the touch
+// and cursor mapping then break). Info.plist says landscape too, but a host
+// like LiveContainer uses its own plist, so it's enforced here as well.
+// ---------------------------------------------------------------------------
+
+@interface IOSLandscapeViewController : UIViewController
+@end
+
+@implementation IOSLandscapeViewController
+- (UIInterfaceOrientationMask)supportedInterfaceOrientations
+{
+	return UIInterfaceOrientationMaskLandscape;
+}
+- (UIInterfaceOrientation)preferredInterfaceOrientationForPresentation
+{
+	return UIInterfaceOrientationLandscapeRight;
+}
+- (BOOL)shouldAutorotate
+{
+	return YES;
+}
+@end
+
+// ---------------------------------------------------------------------------
 // Globals
 // ---------------------------------------------------------------------------
 
@@ -601,7 +626,7 @@ void IOS_ShowOnScreenLog( void )
 void IOS_PrepareView( void )
 {
 	g_window = [[UIWindow alloc] initWithFrame:[[UIScreen mainScreen] bounds]];
-	g_controller = [[UIViewController alloc] init];
+	g_controller = [[IOSLandscapeViewController alloc] init];
 
 	// Grey, as before: this is the pre-engine placeholder. Once the engine
 	// takes over it draws into its own layer. Keeping the original colour so

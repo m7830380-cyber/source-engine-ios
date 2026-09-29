@@ -40,6 +40,16 @@ CEconItem *OfflineInventory_FindItem( uint64 ullItemID );
 // Sends the saved loadout to the server we're connected to, so on LAN games the
 // host gives us our own skins (see CCSPlayer::ClientCommand "ios_offline_loadout").
 void OfflineInventory_SendLoadoutToServer();
+
+#ifdef CLIENT_DLL
+// Cases (client): every weapon case with contents in the unlocked items is in
+// the inventory, and opens without a key, as often as you like
+bool OfflineCase_IsCase( uint64 ullItemID );
+// the contents, best first; bRareSpecial: the "exceedingly rare" (star) slot
+void OfflineCase_GetContents( uint64 ullCaseID, CUtlVector< uint64 > &vecItems, bool &bRareSpecial );
+// what the case gives, with CS:GO's odds; 0 if it isn't a case
+uint64 OfflineCase_Open( uint64 ullCaseID );
+#endif
 #endif
 
 #endif // OFFLINE_INVENTORY_H

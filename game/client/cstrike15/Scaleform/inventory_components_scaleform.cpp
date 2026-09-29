@@ -31,6 +31,7 @@
 #include "flash_item_model_panel.h"
 #include "createmainmenuscreen_scaleform.h"
 #include "ios_lan.h"
+#include "offline_inventory.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include <tier0/memdbgon.h>
@@ -600,6 +601,69 @@ public:
 		CEconItemView *pItem = FindItem( ArgItemID( pui, obj, 1 ) );
 		pui->Params_SetResult( obj, IsRenderedIconItem( pItem ) );
 	}
+	// ---- cases (offline_inventory.cpp): opened without a key ----------------
+	void IsItemUnusual( SCALEFORM_CALLBACK_ARGS_DECL )
+	{
+		const CCStrike15ItemDefinition *pDef = ItemDef( FindItem( ArgItemID( pui, obj, 1 ) ) );
+		pui->Params_SetResult( obj, pDef && ( pDef->GetDefaultLoadoutSlot() == LOADOUT_POSITION_MELEE || pDef->GetDefaultLoadoutSlot() == LOADOUT_POSITION_CLOTHING_HANDS ) );
+	}
+	void GetItemCapabilitiesCount( SCALEFORM_CALLBACK_ARGS_DECL )
+	{
+		pui->Params_SetResult( obj, OfflineCase_IsCase( ArgItemID( pui, obj, 1 ) ) ? 1 : 0 );
+	}
+	void GetItemCapabilityByIndex( SCALEFORM_CALLBACK_ARGS_DECL )
+	{
+		bool bCase = OfflineCase_IsCase( ArgItemID( pui, obj, 1 ) ) && pui->Params_GetArgAsNumber( obj, 2 ) == 0.0;
+		pui->Params_SetResult( obj, bCase ? "decodable" : "" );
+	}
+	// the contents, then "0" for the exceedingly rare (star) slot
+	void GetLootListItemsCount( SCALEFORM_CALLBACK_ARGS_DECL )
+	{
+		CUtlVector< uint64 > vecItems;
+		bool bRare;
+		OfflineCase_GetContents( ArgItemID( pui, obj, 1 ), vecItems, bRare );
+		pui->Params_SetResult( obj, vecItems.Count() + ( bRare ? 1 : 0 ) );
+	}
+	void GetLootListItemIdByIndex( SCALEFORM_CALLBACK_ARGS_DECL )
+	{
+		CUtlVector< uint64 > vecItems;
+		bool bRare;
+		OfflineCase_GetContents( ArgItemID( pui, obj, 1 ), vecItems, bRare );
+		int i = (int)pui->Params_GetArgAsNumber( obj, 2 );
+		char szID[32] = "0";
+		if ( i >= 0 && i < vecItems.Count() )
+			V_snprintf( szID, sizeof( szID ), "%llu", vecItems[i] );
+		pui->Params_SetResult( obj, szID );
+	}
+	// the case's own "exceedingly rare item" picture and name (weapon_case_base's by default)
+	void GetLootListUnusualItemImage( SCALEFORM_CALLBACK_ARGS_DECL ) { CaseRawString( pui, obj, "image_unusual_item", "econ/weapon_cases/default_rare_item" ); }
+	void GetLootListUnusualItemName( SCALEFORM_CALLBACK_ARGS_DECL ) { CaseRawString( pui, obj, "loot_list_rare_item_name", "#Exceedingly_Rare_Item" ); }
+	void CaseRawString( SCALEFORM_CALLBACK_ARGS_DECL, const char *pszKey, const char *pszDefault )
+	{
+		const CCStrike15ItemDefinition *pDef = ItemDef( FindItem( ArgItemID( pui, obj, 1 ) ) );
+		KeyValues *pKV = pDef ? pDef->GetRawDefinition() : NULL;
+		const char *psz = pKV ? pKV->GetString( pszKey, "" ) : "";
+		pui->Params_SetResult( obj, psz[0] ? psz : pszDefault );
+	}
+	// UseTool( xuid, tool, item ): a keyless case open; the panel's reel stops on
+	// the item the CrateOpened event names (mainmenu.swf -> SetItemThatCameFromOpeningCrate)
+	void UseTool( SCALEFORM_CALLBACK_ARGS_DECL )
+	{
+		uint64 ullCase = ArgItemID( pui, obj, 2 );
+		uint64 ullItem = OfflineCase_Open( ullCase );
+		if ( !ullItem )
+			return;
+		CEconItemView *pWon = FindItem( ullItem );
+		Msg( "[case] opened %llu: %s\n", ullCase, pWon && pWon->GetItemDefinition() ? pWon->GetItemDefinition()->GetDefinitionName() : "?" );
+		if ( CCreateMainMenuScreenScaleform::IsActive() )
+		{
+			KeyValues *pEvent = new KeyValues( "ScaleformComponent_Inventory_CrateOpened" );
+			pEvent->SetString( "itemid", CFmtStr( "%llu", ullItem ) );
+			CCreateMainMenuScreenScaleform::GetInstance()->OnEvent( pEvent );
+			pEvent->deleteThis();
+		}
+	}
+
 	void GetItemInventoryImage( SCALEFORM_CALLBACK_ARGS_DECL )
 	{
 		// per-skin icons came from Steam's CDN; show the weapon's own icon
@@ -712,7 +776,7 @@ public:
 			SFUI_DECL_METHOD_AS( ReturnFalse, "CanTradeUp" ),
 			SFUI_DECL_METHOD_AS( ReturnFalse, "HasCustomName" ),
 			SFUI_DECL_METHOD_AS( ReturnFalse, "HasMusic" ),
-			SFUI_DECL_METHOD_AS( ReturnFalse, "IsItemUnusual" ),
+			SFUI_DECL_METHOD( IsItemUnusual ),
 			SFUI_DECL_METHOD_AS( ReturnFalse, "IsCouponCrate" ),
 			SFUI_DECL_METHOD_AS( ReturnFalse, "CheckCampaignOwnership" ),
 			SFUI_DECL_METHOD_AS( ReturnFalse, "DoesUserOwnQuest" ),
@@ -722,12 +786,12 @@ public:
 			SFUI_DECL_METHOD_AS( ReturnFalse, "IsCraftReady" ),
 			SFUI_DECL_METHOD_AS( ReturnFalse, "ItemHasScorecardValues" ),
 			SFUI_DECL_METHOD_AS( ReturnTrue, "TestMusicVolume" ),
-			SFUI_DECL_METHOD_AS( ReturnZero, "GetItemCapabilitiesCount" ),
+			SFUI_DECL_METHOD( GetItemCapabilitiesCount ),
 			SFUI_DECL_METHOD_AS( ReturnZero, "GetChosenActionItemsCount" ),
 			SFUI_DECL_METHOD_AS( ReturnZero, "GetItemStickerCount" ),
 			SFUI_DECL_METHOD_AS( ReturnZero, "GetItemStickerSlotCount" ),
 			SFUI_DECL_METHOD_AS( ReturnZero, "GetAssociatedItemsCount" ),
-			SFUI_DECL_METHOD_AS( ReturnZero, "GetLootListItemsCount" ),
+			SFUI_DECL_METHOD( GetLootListItemsCount ),
 			SFUI_DECL_METHOD_AS( ReturnZero, "GetNumItemsNeededToTradeUp" ),
 			SFUI_DECL_METHOD_AS( ReturnZero, "GetUnacknowledgeItemsCount" ),
 			SFUI_DECL_METHOD_AS( ReturnZero, "GetSprayChargesAsBaseline" ),
@@ -741,7 +805,7 @@ public:
 			SFUI_DECL_METHOD_AS( ReturnZero, "GetMaxLevel" ),
 			SFUI_DECL_METHOD_AS( ReturnZero, "GetActiveQuest" ),
 			SFUI_DECL_METHOD_AS( ReturnMinusOne, "GetActiveSeasonCoinItemId" ),
-			SFUI_DECL_METHOD_AS( ReturnEmpty, "GetItemCapabilityByIndex" ),
+			SFUI_DECL_METHOD( GetItemCapabilityByIndex ),
 			SFUI_DECL_METHOD_AS( ReturnEmpty, "GetItemCapabilityDisabledMessageByIndex" ),
 			SFUI_DECL_METHOD_AS( ReturnEmpty, "GetChosenActionItemIDByIndex" ),
 			SFUI_DECL_METHOD_AS( ReturnEmpty, "GetItemStickerImageByIndex" ),
@@ -754,9 +818,9 @@ public:
 			SFUI_DECL_METHOD_AS( ReturnEmpty, "GetItemTypeFromEnum" ),
 			SFUI_DECL_METHOD_AS( ReturnEmpty, "GetUnacknowledgeItemByIndex" ),
 			SFUI_DECL_METHOD_AS( ReturnEmpty, "GetAssociatedItemIdByIndex" ),
-			SFUI_DECL_METHOD_AS( ReturnEmpty, "GetLootListItemIdByIndex" ),
-			SFUI_DECL_METHOD_AS( ReturnEmpty, "GetLootListUnusualItemImage" ),
-			SFUI_DECL_METHOD_AS( ReturnEmpty, "GetLootListUnusualItemName" ),
+			SFUI_DECL_METHOD( GetLootListItemIdByIndex ),
+			SFUI_DECL_METHOD( GetLootListUnusualItemImage ),
+			SFUI_DECL_METHOD( GetLootListUnusualItemName ),
 			SFUI_DECL_METHOD_AS( ReturnEmpty, "GetTradeUpContractItemID" ),
 			SFUI_DECL_METHOD_AS( ReturnEmpty, "GetCampaignForSeason" ),
 			SFUI_DECL_METHOD_AS( ReturnEmpty, "GetCampaignName" ),
@@ -781,7 +845,7 @@ public:
 			SFUI_DECL_METHOD_AS( DoNothing, "SetDefaultMusicVolume" ),
 			SFUI_DECL_METHOD_AS( DoNothing, "SellItem" ),
 			SFUI_DECL_METHOD_AS( DoNothing, "DeleteItem" ),
-			SFUI_DECL_METHOD_AS( DoNothing, "UseTool" ),
+			SFUI_DECL_METHOD( UseTool ),
 			SFUI_DECL_METHOD_AS( DoNothing, "ClearCustomName" ),
 			SFUI_DECL_METHOD_AS( DoNothing, "HighlightStickerBySlot" ),
 			SFUI_DECL_METHOD_AS( DoNothing, "PreviewStickerInModelPanel" ),

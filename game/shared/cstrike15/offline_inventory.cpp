@@ -179,6 +179,12 @@ static void BuildItems( uint32 unAccountID )
 			AddItem( pDef->GetDefinitionIndex(), 0, unAccountID );
 	}
 
+#ifdef CLIENT_DLL
+	// the weapon cases whose contents are among the unlocked items
+	extern void OfflineCase_Build( uint32 unAccountID );
+	OfflineCase_Build( unAccountID );
+#endif
+
 	Msg( "[offline inventory] %d items unlocked\n", s_vecItems.Count() );
 }
 
@@ -453,4 +459,190 @@ public:
 	}
 };
 static COfflineStatTrak s_OfflineStatTrak;
+#endif
+
+#ifdef CLIENT_DLL
+//-----------------------------------------------------------------------------
+// Cases: a case's contents come from its loot list (items_game client_loot_lists,
+// found through its "set supply crate series" and revolving_loot_lists): one
+// nested list per rarity, plus an "unusual" entry for the star items. Opening
+// rolls CS:GO's odds: Mil-Spec 79.92%, Restricted 15.98%, Classified 3.2%,
+// Covert 0.64%, star 0.26%; the star item is a random knife (gloves for the
+// glove cases) from the unlocked items.
+//-----------------------------------------------------------------------------
+struct OfflineCase_t
+{
+	uint64 m_ullID;
+	CUtlVector< uint64 > m_vecItems;
+	bool m_bRareSpecial;
+};
+static CUtlVector< OfflineCase_t * > s_vecCases;
+
+static const OfflineCase_t *FindCase( uint64 ullID )
+{
+	FOR_EACH_VEC( s_vecCases, i )
+	{
+		if ( s_vecCases[i]->m_ullID == ullID )
+			return s_vecCases[i];
+	}
+	return NULL;
+}
+
+static void CollectLoot( const CEconLootListDefinition *pList, OfflineCase_t *pCase, int nDepth )
+{
+	if ( !pList || nDepth > 4 )
+		return;
+	const CUtlVector< item_list_entry_t > &vecEntries = pList->GetLootListContents();
+	FOR_EACH_VEC( vecEntries, i )
+	{
+		const item_list_entry_t &entry = vecEntries[i];
+		if ( entry.m_bIsUnusualList )
+		{
+			pCase->m_bRareSpecial = true;
+			continue;
+		}
+		if ( entry.m_bIsNestedList )
+		{
+			CollectLoot( GetItemSchema()->GetLootListByIndex( entry.m_nItemDef ), pCase, nDepth + 1 );
+			continue;
+		}
+		if ( entry.m_nItemDef > 0 && entry.m_nPaintKit > 0 )
+		{
+			uint64 ullItem = MakeItemID( entry.m_nItemDef, entry.m_nPaintKit );
+			if ( OfflineInventory_FindItem( ullItem ) && pCase->m_vecItems.Find( ullItem ) == pCase->m_vecItems.InvalidIndex() )
+				pCase->m_vecItems.AddToTail( ullItem );
+		}
+	}
+}
+
+static int ItemRarity( uint64 ullID )
+{
+	CEconItem *pItem = OfflineInventory_FindItem( ullID );
+	return pItem ? pItem->GetRarity() : 0;
+}
+
+void OfflineCase_Build( uint32 unAccountID )
+{
+	if ( s_vecCases.Count() )
+		return;
+	static CSchemaAttributeDefHandle pAttr_Series( "set supply crate series" );
+	if ( !pAttr_Series )
+		return;
+
+	const CEconItemSchema::ItemDefinitionMap_t &mapDefs = GetItemSchema()->GetItemDefinitionMap();
+	FOR_EACH_MAP_FAST( mapDefs, i )
+	{
+		const CEconItemDefinition *pDef = mapDefs[i];
+		if ( !pDef || !pDef->GetEconTool() || V_strcmp( pDef->GetEconTool()->GetTypeName(), "supply_crate" ) )
+			continue;
+		attrib_value_t unSeries = 0;
+		if ( !FindAttribute_UnsafeBitwiseCast< attrib_value_t >( pDef, pAttr_Series, &unSeries ) )
+			continue;
+		const CEconItemSchema::RevolvingLootListDefinitionMap_t &mapSeries = GetItemSchema()->GetRevolvingLootLists();
+		int iSeries = mapSeries.Find( (int)unSeries );
+		if ( !mapSeries.IsValidIndex( iSeries ) )
+			continue;
+
+		OfflineCase_t *pCase = new OfflineCase_t;
+		pCase->m_ullID = MakeItemID( pDef->GetDefinitionIndex(), 0 );
+		pCase->m_bRareSpecial = false;
+		CollectLoot( GetItemSchema()->GetLootListByName( mapSeries[iSeries] ), pCase, 0 );
+		if ( !pCase->m_vecItems.Count() )
+		{
+			delete pCase;		// souvenir packages, sticker capsules: nothing we unlock
+			continue;
+		}
+		// best first, like CS:GO's case contents
+		for ( int a = 1; a < pCase->m_vecItems.Count(); a++ )
+		{
+			for ( int b = a; b > 0 && ItemRarity( pCase->m_vecItems[b] ) > ItemRarity( pCase->m_vecItems[b - 1] ); b-- )
+			{
+				uint64 t = pCase->m_vecItems[b]; pCase->m_vecItems[b] = pCase->m_vecItems[b - 1]; pCase->m_vecItems[b - 1] = t;
+			}
+		}
+		s_vecCases.AddToTail( pCase );
+
+		// the case itself, in the inventory
+		CEconItem *pItem = new CEconItem();
+		pItem->SetItemID( pCase->m_ullID );
+		pItem->SetAccountID( unAccountID );
+		pItem->SetDefinitionIndex( pDef->GetDefinitionIndex() );
+		pItem->SetItemLevel( 1 );
+		pItem->SetQuality( AE_UNIQUE );
+		pItem->SetRarity( pDef->GetRarity() );
+		pItem->SetFlags( 0 );
+		pItem->SetInventoryToken( ( s_vecItems.Count() + 1 ) & kBackendPositionMask_Position );
+		s_vecItems.AddToTail( pItem );
+		s_mapItems.Insert( pCase->m_ullID, pItem );
+	}
+	Msg( "[offline inventory] %d cases\n", s_vecCases.Count() );
+}
+
+bool OfflineCase_IsCase( uint64 ullItemID )
+{
+	return FindCase( ullItemID ) != NULL;
+}
+
+void OfflineCase_GetContents( uint64 ullCaseID, CUtlVector< uint64 > &vecItems, bool &bRareSpecial )
+{
+	vecItems.RemoveAll();
+	bRareSpecial = false;
+	if ( const OfflineCase_t *pCase = FindCase( ullCaseID ) )
+	{
+		vecItems.AddVectorToTail( pCase->m_vecItems );
+		bRareSpecial = pCase->m_bRareSpecial;
+	}
+}
+
+uint64 OfflineCase_Open( uint64 ullCaseID )
+{
+	const OfflineCase_t *pCase = FindCase( ullCaseID );
+	if ( !pCase )
+		return 0;
+
+	// the tier, by CS:GO's published odds (percent)
+	float flRoll = RandomFloat( 0.0f, 100.0f );
+	int nRarity;
+	if ( pCase->m_bRareSpecial && flRoll < 0.26f )
+		nRarity = 99;
+	else if ( flRoll < 0.26f + 0.64f )
+		nRarity = 6;
+	else if ( flRoll < 0.26f + 0.64f + 3.2f )
+		nRarity = 5;
+	else if ( flRoll < 0.26f + 0.64f + 3.2f + 15.98f )
+		nRarity = 4;
+	else
+		nRarity = 3;
+
+	if ( nRarity == 99 )
+	{
+		// a star item: gloves from the glove cases, knives from the rest
+		const CEconItemDefinition *pCaseDef = GetItemSchema()->GetItemDefinition( int( ( ullCaseID >> 16 ) & 0xFFFF ) );
+		bool bGloves = pCaseDef && V_stristr( pCaseDef->GetDefinitionName(), "glove" );
+		CUtlVector< uint64 > vecStar;
+		FOR_EACH_VEC( s_vecItems, i )
+		{
+			const CCStrike15ItemDefinition *pDef = dynamic_cast< const CCStrike15ItemDefinition * >( s_vecItems[i]->GetItemDefinition() );
+			if ( pDef && pDef->GetDefaultLoadoutSlot() == ( bGloves ? LOADOUT_POSITION_CLOTHING_HANDS : LOADOUT_POSITION_MELEE ) )
+				vecStar.AddToTail( s_vecItems[i]->GetItemID() );
+		}
+		if ( vecStar.Count() )
+			return vecStar[ RandomInt( 0, vecStar.Count() - 1 ) ];
+		nRarity = 6;
+	}
+
+	// that tier's items (or the nearest tier below that the case has)
+	for ( ; nRarity >= 0; nRarity-- )
+	{
+		CUtlVector< uint64 > vecTier;
+		FOR_EACH_VEC( pCase->m_vecItems, i )
+		{
+			if ( ItemRarity( pCase->m_vecItems[i] ) == nRarity )
+				vecTier.AddToTail( pCase->m_vecItems[i] );
+		}
+		if ( vecTier.Count() )
+			return vecTier[ RandomInt( 0, vecTier.Count() - 1 ) ];
+	}
+	return pCase->m_vecItems[ RandomInt( 0, pCase->m_vecItems.Count() - 1 ) ];
+}
 #endif

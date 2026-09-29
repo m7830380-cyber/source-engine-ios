@@ -13,8 +13,6 @@
    IOS_HapticPulse( i, s, t )    a hit then a fading rumble: strength, sharpness 0..1, seconds
    IOS_HapticCrackle( t, i )     getting tased: an electric crackle
    IOS_ThermalState()            0 nominal, 1 fair, 2 serious, 3 critical
-   IOS_QRSetButton( kind )       the native QR button: 0 none, 1 "Join by QR", 2 "Show join QR"
-   IOS_QRTakeButtonTap()         1 once after the button was tapped
    IOS_QRShow( text, caption )   a QR code over the game, tap to close
    IOS_QRScanStart()             the camera, looking for a QR code
    IOS_QRTakeScanned( buf, n )   1 and the text once a code was read
@@ -367,70 +365,13 @@ static UIViewController *IOS_GameViewController( void )
 static pthread_mutex_t s_QRLock = PTHREAD_MUTEX_INITIALIZER;
 static char s_szScanned[512];
 static int s_bScanned = 0;
-static int s_bButtonTapped = 0;
 
 @interface IOSQRTarget : NSObject
 @end
 @implementation IOSQRTarget
-- (void)buttonTapped:(id)sender { s_bButtonTapped = 1; }
 - (void)overlayTapped:(UITapGestureRecognizer *)g { [g.view removeFromSuperview]; }
 @end
 static IOSQRTarget *s_pQRTarget = nil;
-static UIButton *s_pQRButton = nil;
-static int s_nQRButtonKind = 0;
-
-IOS_EXPORT void IOS_QRSetButton( int nKind )
-{
-	if ( nKind == s_nQRButtonKind )
-		return;
-	s_nQRButtonKind = nKind;
-	@autoreleasepool
-	{
-		if ( !s_pQRTarget )
-			s_pQRTarget = [[IOSQRTarget alloc] init];
-		if ( !nKind )
-		{
-			[s_pQRButton removeFromSuperview];
-			return;
-		}
-		if ( !s_pQRButton )
-		{
-			s_pQRButton = [[UIButton buttonWithType:UIButtonTypeSystem] retain];
-			s_pQRButton.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.6];
-			s_pQRButton.layer.cornerRadius = 8;
-			s_pQRButton.layer.borderWidth = 1;
-			s_pQRButton.layer.borderColor = [UIColor colorWithWhite:1.0 alpha:0.35].CGColor;
-			s_pQRButton.titleLabel.font = [UIFont boldSystemFontOfSize:15];
-			[s_pQRButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-			s_pQRButton.contentEdgeInsets = UIEdgeInsetsMake( 8, 14, 8, 14 );
-			[s_pQRButton addTarget:s_pQRTarget action:@selector(buttonTapped:) forControlEvents:UIControlEventTouchUpInside];
-		}
-		[s_pQRButton setTitle:( nKind == 1 ? @"Join by QR" : @"Show join QR" ) forState:UIControlStateNormal];
-		[s_pQRButton sizeToFit];
-
-		UIView *pView = IOS_GameViewController().view;
-		if ( !pView )
-			return;
-		// bottom left, clear of the safe area; the menus keep that corner free
-		UIEdgeInsets inset = UIEdgeInsetsZero;
-		if ( @available( iOS 11.0, * ) )
-			inset = pView.safeAreaInsets;
-		CGRect r = s_pQRButton.frame;
-		r.origin.x = inset.left + 12;
-		r.origin.y = pView.bounds.size.height - inset.bottom - r.size.height - 12;
-		s_pQRButton.frame = r;
-		s_pQRButton.autoresizingMask = UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleRightMargin;
-		[pView addSubview:s_pQRButton];
-	}
-}
-
-IOS_EXPORT int IOS_QRTakeButtonTap( void )
-{
-	int b = s_bButtonTapped;
-	s_bButtonTapped = 0;
-	return b;
-}
-
 IOS_EXPORT void IOS_QRShow( const char *pszText, const char *pszCaption )
 {
 	@autoreleasepool

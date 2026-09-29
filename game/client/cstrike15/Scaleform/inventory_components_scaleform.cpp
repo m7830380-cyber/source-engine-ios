@@ -1254,6 +1254,29 @@ public:
 	void ReturnEmpty( SCALEFORM_CALLBACK_ARGS_DECL ) { pui->Params_SetResult( obj, "" ); }
 	void Return730( SCALEFORM_CALLBACK_ARGS_DECL ) { pui->Params_SetResult( obj, 730 ); }
 	void DoNothing( SCALEFORM_CALLBACK_ARGS_DECL ) {}
+#if defined( IOS )
+	// SteamOverlay: the join QR code. The friends panel's "Join by QR code"
+	// (friendslisterpanel.swf patched: OpenOnline -> OpenURL('csgoios://scan'))
+	// opens the camera; the pause menu's "Invite by QR code" (Invite Friends)
+	// shows this match's code.
+	void OpenURL( SCALEFORM_CALLBACK_ARGS_DECL )
+	{
+		const char *pszURL = ArgString( pui, obj, 0 );
+		if ( !V_stricmp( pszURL, "csgoios://scan" ) )
+		{
+			extern void IOS_QRStartScan();
+			IOS_QRStartScan();
+		}
+	}
+	void OpenInviteFriends( SCALEFORM_CALLBACK_ARGS_DECL )
+	{
+		extern void IOS_QRShowHost();
+		IOS_QRShowHost();
+	}
+#else
+	void OpenURL( SCALEFORM_CALLBACK_ARGS_DECL ) {}
+	void OpenInviteFriends( SCALEFORM_CALLBACK_ARGS_DECL ) {}
+#endif
 };
 
 //-----------------------------------------------------------------------------
@@ -1378,7 +1401,8 @@ STUB_TABLE( SteamOverlay,
 	SFUI_DECL_METHOD_AS( DoNothing, "StartChatWithUser" ),
 	SFUI_DECL_METHOD_AS( Return730, "GetAppID" ),
 	SFUI_DECL_METHOD_AS( ReturnEmpty, "GetSteamCommunityURL" ),
-	SFUI_DECL_METHOD_AS( DoNothing, "OpenURL" ),
+	SFUI_DECL_METHOD( OpenURL ),
+	SFUI_DECL_METHOD( OpenInviteFriends ),
 	SFUI_DECL_METHOD_AS( DoNothing, "OpenExternalBrowserURL" ),
 	SFUI_DECL_METHOD_AS( DoNothing, "ShowUserProfilePage" ) )
 
@@ -1469,7 +1493,12 @@ void ScaleformInventoryComponents_EnsureInstalled()
 	if ( g_pVGuiLocalize )
 	{
 		static wchar_t s_wszTitle[] = L"LAN Games";
-		static wchar_t s_wszEmpty[] = L"No LAN games found. Games hosted on this Wi-Fi (Play > Offline with bots) show up here; tap one to join.";
+		static wchar_t s_wszEmpty[] = L"No LAN games found. Games hosted on this Wi-Fi (Play > Offline with bots) show up here; tap one to join. Somewhere else (Tailscale, a hotspot)? The host opens Invite by QR code in the pause menu, and you scan it:";
+		// the friends tab's button (friendslisterpanel.swf patched to open the camera) and the pause menu's Invite Friends
+		static wchar_t s_wszScan[] = L"Join by QR code";
+		static wchar_t s_wszInvite[] = L"Invite by QR code";
+		g_pVGuiLocalize->AddString( "SFUI_Friend_Open_Casual", s_wszScan, NULL );
+		g_pVGuiLocalize->AddString( "SFUI_PauseMenu_InviteFriendsButton", s_wszInvite, NULL );
 		g_pVGuiLocalize->AddString( "SFUI_Lobby_FriendsListerTitle", s_wszTitle, NULL );
 		g_pVGuiLocalize->AddString( "SFUI_Friends_Play", s_wszEmpty, NULL );
 	}

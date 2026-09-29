@@ -180,7 +180,12 @@ void CPauseMenuScreenScaleform::IsMultiplayer( SCALEFORM_CALLBACK_ARGS_DECL )
 
 void CPauseMenuScreenScaleform::NeedsInviteFriends( SCALEFORM_CALLBACK_ARGS_DECL )
 {
+#if defined( IOS )
+	// "Invite by QR code" (SteamOverlay.OpenInviteFriends) when this phone hosts
+	m_pScaleformUI->Params_SetResult( obj, engine->IsClientLocalToActiveServer() && gpGlobals->maxClients > 1 );
+#else
 	m_pScaleformUI->Params_SetResult( obj, false );
+#endif
 }
 
 void CPauseMenuScreenScaleform::IsTraining( SCALEFORM_CALLBACK_ARGS_DECL )

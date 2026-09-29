@@ -26,8 +26,6 @@
 #include "c_baseplayer.h"
 #include "prediction.h"
 #include "c_plantedc4.h"
-#include "createmainmenuscreen_scaleform.h"
-#include "pausemenuscreen_scaleform.h"
 #include <ifaddrs.h>
 #include <net/if.h>
 #include <netinet/in.h>
@@ -42,8 +40,6 @@ extern "C" void IOS_GyroTakeDelta( float *pflYaw, float *pflPitch );
 extern "C" void IOS_Haptic( int nKind );
 extern "C" void IOS_HapticPulse( float flIntensity, float flSharpness, float flDuration );
 extern "C" void IOS_HapticCrackle( float flDuration, float flIntensity );
-extern "C" void IOS_QRSetButton( int nKind );
-extern "C" int IOS_QRTakeButtonTap( void );
 extern "C" void IOS_QRShow( const char *pszText, const char *pszCaption );
 extern "C" void IOS_QRScanStart( void );
 extern "C" int IOS_QRTakeScanned( char *pszOut, int nOutSize );
@@ -325,27 +321,15 @@ private:
 	CHandle< C_BaseCombatWeapon > m_hTapWeapon;
 
 	// ---- joining by QR code -----------------------------------------------
-	// Main menu: "Join by QR" opens the camera. Hosting, in the pause menu:
-	// "Show join QR" shows csgoios://join/<address:port>,... with this phone's
-	// Wi-Fi / hotspot / VPN addresses (and opens the match to joiners by IP).
+	// The friends panel's "Join by QR code" opens the camera; the pause menu's
+	// "Invite by QR code" (when hosting) shows csgoios://join/<address:port>,...
+	// with this phone's Wi-Fi / hotspot / VPN addresses and opens the match to
+	// joiners by IP (both through SteamOverlay, inventory_components_scaleform.cpp).
 	// The joiner connects to the address on a network it shares with the host.
 	// The same link from the Camera app arrives as IOS_PENDING_URL (sdlmgr).
+public:
 	void UpdateQR()
 	{
-		int nKind = 0;
-		if ( !engine->IsConnected() && CCreateMainMenuScreenScaleform::IsActive() )
-			nKind = 1;
-		else if ( engine->IsInGame() && engine->IsClientLocalToActiveServer() && CPauseMenuScreenScaleform::IsActive() )
-			nKind = 2;
-		IOS_QRSetButton( nKind );
-
-		if ( IOS_QRTakeButtonTap() )
-		{
-			if ( nKind == 1 )
-				IOS_QRScanStart();
-			else if ( nKind == 2 )
-				ShowHostQR();
-		}
 
 		char szText[512];
 		if ( IOS_QRTakeScanned( szText, sizeof( szText ) ) )
@@ -385,6 +369,8 @@ private:
 
 	void ShowHostQR()
 	{
+		if ( !engine->IsClientLocalToActiveServer() )
+			return;
 		static ConVarRef hostport( "hostport" );
 		static ConVarRef sv_ip_host( "sv_ip_host" );
 		int nPort = hostport.IsValid() ? hostport.GetInt() : 27015;
@@ -463,6 +449,7 @@ private:
 		engine->ClientCmd_Unrestricted( CFmtStr( "ip_join %s\n", vecHost[nBest] ) );
 	}
 
+private:
 	void UpdateTimedTaps( double flNow )
 	{
 		if ( !m_TimedTaps.Count() )
@@ -485,6 +472,10 @@ private:
 };
 
 static CIOSDeviceFeatures s_IOSDeviceFeatures;
+
+// the menus' QR entries (inventory_components_scaleform.cpp, SteamOverlay)
+void IOS_QRStartScan() { IOS_QRScanStart(); }
+void IOS_QRShowHost() { s_IOSDeviceFeatures.ShowHostQR(); }
 
 // a shot of the local player's gun (CWeaponCSBaseGun::CSBaseGunFire), felt by
 // how hard the gun hits: damage x pellets, less with a silencer. A USP-S is a

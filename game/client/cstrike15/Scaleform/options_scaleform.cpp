@@ -1263,6 +1263,14 @@ void COptionsScaleform::ReadOptionsFromFile( const char * szFileName )
 		}
 
 		m_vecOptions.Sort( SortByPriority );
+
+		// never more rows than the slot arrays hold
+		while ( m_vecOptions.Count() > SF_OPTIONS_SLOTS_COUNT_MAX )
+		{
+			Warning( "Options: %s has more than %d options, dropping %s\n", szFileName, SF_OPTIONS_SLOTS_COUNT_MAX, m_vecOptions.Tail()->m_szConVar );
+			delete m_vecOptions.Tail();
+			m_vecOptions.RemoveMultipleFromTail( 1 );
+		}
 	}
 	else
 	{
@@ -1425,7 +1433,7 @@ void COptionsScaleform::LayoutDialog( const int nVecOptionsOffset, const bool bI
 	{
 		int nWidgetIndex = 0;
 
-		for ( int nOptionID = 0; nOptionID < ( nSize ? nSize : SF_OPTIONS_SLOTS_COUNT_MAX ); nOptionID++ )
+		for ( int nOptionID = 0; nOptionID < ( nSize ? MIN( nSize, SF_OPTIONS_SLOTS_COUNT_MAX ) : SF_OPTIONS_SLOTS_COUNT_MAX ); nOptionID++ )
 		{
 			UpdateWidget( nWidgetIndex, m_vecOptions[nOptionID] );
 			m_rgOptionsBySlot[nWidgetIndex] = m_vecOptions[nOptionID];

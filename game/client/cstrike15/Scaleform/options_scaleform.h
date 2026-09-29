@@ -19,7 +19,9 @@
 #define SF_OPTIONS_MAX 64
 #define SF_OPTIONS_TOOLTIP_MAX 1024
 #define SF_OPTIONS_SLOTS_COUNT 20
-#define SF_OPTIONS_SLOTS_COUNT_MAX 60
+// rows a screen can have (the movie makes one per option); the iOS options push
+// Settings > Game past CS:GO's 60, which overran the slot arrays and crashed
+#define SF_OPTIONS_SLOTS_COUNT_MAX 128
 
 typedef ScaleformFlashInterfaceMixin<CGameEventListener> CControlsFlashBaseClass;
 

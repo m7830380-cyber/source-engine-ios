@@ -43,6 +43,16 @@ ConVar ios_gyro_sensitivity( "ios_gyro_sensitivity", "1.0", FCVAR_ARCHIVE | FCVA
 ConVar ios_gyro_invert_pitch( "ios_gyro_invert_pitch", "0", FCVAR_ARCHIVE | FCVAR_RELEASE, "Invert gyro up/down" );
 ConVar ios_haptics( "ios_haptics", "0", FCVAR_ARCHIVE | FCVAR_RELEASE, "Vibrate on shots, hits, damage taken and kills" );
 ConVar ios_haptics_real( "ios_haptics_real", "0", FCVAR_ARCHIVE | FCVAR_RELEASE, "With ios_haptics: also landings, reload parts, knife inspects, bomb keys, grenade pin and throw, scope clicks" );
+// The frame rate limit, saved (fps_max itself isn't): 60 / 90 / 120 on a
+// ProMotion screen, 0 unlimited. Above 60 needs CADisableMinimumFrameDurationOnPhone
+// in Info.plist, or iOS holds the app at 60 Hz.
+static void ios_fps_max_changed( IConVar *pVar, const char *pOldValue, float flOldValue )
+{
+	static ConVarRef fps_max( "fps_max" );
+	if ( fps_max.IsValid() )
+		fps_max.SetValue( ( (ConVar *)pVar )->GetInt() );
+}
+ConVar ios_fps_max( "ios_fps_max", "60", FCVAR_ARCHIVE | FCVAR_RELEASE, "Frame rate limit (60, 90, 120; 0 = unlimited)", ios_fps_max_changed );
 ConVar ios_thermal_scale( "ios_thermal_scale", "1", FCVAR_ARCHIVE | FCVAR_RELEASE, "Lower the 3D resolution as the phone heats up, instead of the frame rate" );
 
 class CIOSDeviceFeatures : public CAutoGameSystemPerFrame, public CGameEventListener

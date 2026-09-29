@@ -51,6 +51,8 @@
 	<array>
 		<string>arm64</string>
 	</array>
+	<key>CADisableMinimumFrameDurationOnPhone</key>
+	<true/>
 	<key>UIRequiresFullScreen</key>
 	<true/>
 	<key>UIStatusBarStyle</key>

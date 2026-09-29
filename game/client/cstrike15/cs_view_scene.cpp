@@ -223,7 +223,24 @@ void CCSViewRender::PerformFlashbangEffect( const CViewSetup &view )
 			srcRect.width = nScreenWidth;
 			srcRect.height = nScreenHeight;
 			m_BaseTextureVar->SetTextureValue( m_pFlashTexture );
-			pRenderContext->CopyRenderTargetToTextureEx( m_pFlashTexture, 0, &srcRect, NULL );
+
+			// With the 3D view scaled down (mat_viewportscale < 1, the iOS heat
+			// setting) the picture is only in that part of the buffer: stretch just
+			// that over the texture, or the after-image lands shrunk into the corner
+			static ConVarRef mat_viewportscale( "mat_viewportscale" );
+			if ( mat_viewportscale.IsValid() && mat_viewportscale.GetFloat() < 1.0f )
+			{
+				Rect_t dstRect = srcRect;
+				srcRect.x = view.x;
+				srcRect.y = view.y;
+				srcRect.width = view.width;
+				srcRect.height = view.height;
+				pRenderContext->CopyRenderTargetToTextureEx( m_pFlashTexture, 0, &srcRect, &dstRect );
+			}
+			else
+			{
+				pRenderContext->CopyRenderTargetToTextureEx( m_pFlashTexture, 0, &srcRect, NULL );
+			}
 			pRenderContext->SetFrameBufferCopyTexture( m_pFlashTexture );
 
 			pFlashBangPlayer->m_bFlashScreenshotHasBeenGrabbed = true;

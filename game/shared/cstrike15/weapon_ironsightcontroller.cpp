@@ -510,7 +510,21 @@ void CIronSightController::RenderScopeEffect( int x, int y, int w, int h, CViewS
 	{
 		pAlphaVar->SetFloatValue(Bias( GetIronSightAmount(), 0.2f));
 	}
-	pRenderContext->DrawScreenSpaceQuad(pBlurOverlayMaterial);
+	// With the 3D view scaled down (mat_viewportscale < 1, the iOS heat setting)
+	// the blur only fills the top-left part of _rt_SmallFB0: draw that part, not
+	// the whole texture, or the blur lands shrunk into the corner once the view
+	// is scaled back up
+	static ConVarRef mat_viewportscale( "mat_viewportscale" );
+	if ( mat_viewportscale.IsValid() && mat_viewportscale.GetFloat() < 1.0f )
+	{
+		ITexture *pRtSmall = materials->FindTexture( "_rt_SmallFB0", TEXTURE_GROUP_RENDER_TARGET );
+		pRenderContext->DrawScreenSpaceRectangle( pBlurOverlayMaterial, 0, 0, w, h,
+			0, 0, w / 4 - 1, h / 4 - 1, pRtSmall->GetActualWidth(), pRtSmall->GetActualHeight() );
+	}
+	else
+	{
+		pRenderContext->DrawScreenSpaceQuad(pBlurOverlayMaterial);
+	}
 
 
 	// now draw the laser dot, masked to ONLY render on the lens

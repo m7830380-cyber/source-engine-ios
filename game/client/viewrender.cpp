@@ -7595,8 +7595,18 @@ void CFreezeFrameView::Draw( void )
 	pRenderContext->PushVertexShaderGPRAllocation( 16 ); //max out pixel shader threads
 #endif
 
+	// The frame was grabbed before the scaled-down 3D view is scaled back up
+	// (mat_viewportscale < 1, the iOS heat setting): the picture is only in
+	// that part of the grab, so read just that, or it lands shrunk into the corner
+	int nSubRect[ 4 ] = { m_nSubRect[ 0 ], m_nSubRect[ 1 ], m_nSubRect[ 2 ], m_nSubRect[ 3 ] };
+	if ( mat_viewportupscale.GetBool() && mat_viewportscale.GetFloat() < 1.0f )
+	{
+		float flScale = mat_viewportscale.GetFloat();
+		for ( int i = 0; i < 4; ++i )
+			nSubRect[ i ] = (int)( nSubRect[ i ] * flScale );
+	}
 	pRenderContext->DrawScreenSpaceRectangle( m_pFreezeFrame, x, y, width, height,
-		m_nSubRect[ 0 ], m_nSubRect[ 1 ], m_nSubRect[ 0 ] + m_nSubRect[ 2 ] - 1, m_nSubRect[ 1 ] + m_nSubRect[ 3 ] - 1, m_nScreenSize[ 0 ], m_nScreenSize[ 1 ] );
+		nSubRect[ 0 ], nSubRect[ 1 ], nSubRect[ 0 ] + nSubRect[ 2 ] - 1, nSubRect[ 1 ] + nSubRect[ 3 ] - 1, m_nScreenSize[ 0 ], m_nScreenSize[ 1 ] );
 
 	//Fake a fade during freezeframe view.
 	if ( g_flFreezeFlash[ m_nSlot ] >= gpGlobals->curtime && 

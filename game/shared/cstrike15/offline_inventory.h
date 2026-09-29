@@ -23,6 +23,10 @@ class KeyValues;
 
 bool OfflineInventory_IsEnabled();
 
+// item IDs: ( 1 << 40 ) | ( def << 16 ) | paint kit, plus this bit for the
+// StatTrak version of a skin or knife
+#define OFFLINE_STATTRAK_BIT	( 1ull << 41 )
+
 // (Re)fills an inventory with every unlocked item and applies a loadout: pLoadout
 // (a LAN player's, sent by their client) or else the saved cfg/offline_loadout.txt.
 void OfflineInventory_Fill( CCSPlayerInventory *pInventory, const CSteamID &owner, KeyValues *pLoadout = NULL );

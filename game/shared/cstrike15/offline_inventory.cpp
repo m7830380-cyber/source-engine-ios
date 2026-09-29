@@ -27,12 +27,12 @@ static const char *k_pszLoadoutFile = "cfg/offline_loadout.txt";
 static const char *k_pszLoadoutPathID = "MOD";
 
 #ifdef CLIENT_DLL
-// StatTrak: the unlocked skins and knives come as StatTrak versions, counting
-// your kills (bots too: offline there's hardly anyone else) into
-// cfg/offline_stattrak.txt, keyed by item ID. The server has no say in it: CS:GO
-// kept the count on Valve's item server; here your own game counts from the
-// kill event, which names the item that made the kill (weapon_itemid).
-ConVar ios_stattrak( "ios_stattrak", "1", FCVAR_ARCHIVE | FCVAR_RELEASE, "Skins and knives are StatTrak versions counting your kills (after a restart)" );
+// StatTrak: every skin and knife also comes as a separate StatTrak version
+// (its own item ID, OFFLINE_STATTRAK_BIT), counting your kills (bots too:
+// offline there's hardly anyone else) into cfg/offline_stattrak.txt, keyed by
+// item ID. The server has no say in it: CS:GO kept the count on Valve's item
+// server; here your own game counts from the kill event, which names the item
+// that made the kill (weapon_itemid).
 static const char *k_pszStatTrakFile = "cfg/offline_stattrak.txt";
 static KeyValues *s_pStatTrakCounts = NULL;
 
@@ -65,9 +65,9 @@ static CUtlMap< uint64, CEconItem * > s_mapItems( DefLessFunc( uint64 ) );
 // Deterministic, so the client and server builds of this module agree on IDs
 // (the client finds a weapon's paint kit by the item ID the server gives it).
 // Well below the 0xF000... range used for "base item" pseudo IDs.
-static uint64 MakeItemID( int nDefIndex, int nPaintKit )
+static uint64 MakeItemID( int nDefIndex, int nPaintKit, bool bStatTrak = false )
 {
-	return ( 1ull << 40 ) | ( uint64( nDefIndex & 0xFFFF ) << 16 ) | uint64( nPaintKit & 0xFFFF );
+	return ( 1ull << 40 ) | ( bStatTrak ? OFFLINE_STATTRAK_BIT : 0 ) | ( uint64( nDefIndex & 0xFFFF ) << 16 ) | uint64( nPaintKit & 0xFFFF );
 }
 
 CEconItem *OfflineInventory_FindItem( uint64 ullItemID )
@@ -87,9 +87,16 @@ static bool IsVanillaKnife( const CCStrike15ItemDefinition *pDef )
 	return pszModel && pszModel[0];
 }
 
-static void AddItem( int nDefIndex, int nPaintKit, uint32 unAccountID )
+// skins and knives have a StatTrak version (gloves don't, as in CS:GO)
+static bool CanBeStatTrak( const CCStrike15ItemDefinition *pDef, int nPaintKit )
 {
-	uint64 ullID = MakeItemID( nDefIndex, nPaintKit );
+	int nSlot = pDef->GetDefaultLoadoutSlot();
+	return nSlot != LOADOUT_POSITION_CLOTHING_HANDS && ( nPaintKit || nSlot == LOADOUT_POSITION_MELEE );
+}
+
+static void AddItem( int nDefIndex, int nPaintKit, uint32 unAccountID, bool bStatTrak = false )
+{
+	uint64 ullID = MakeItemID( nDefIndex, nPaintKit, bStatTrak );
 	if ( OfflineInventory_FindItem( ullID ) )
 		return;
 
@@ -114,22 +121,27 @@ static void AddItem( int nDefIndex, int nPaintKit, uint32 unAccountID )
 	// backpack position 1..N: an acknowledged item (0 or the unacked bit would show "new item" popups)
 	pItem->SetInventoryToken( ( s_vecItems.Count() + 1 ) & kBackendPositionMask_Position );
 
-#ifdef CLIENT_DLL
-	// StatTrak versions of the skins and knives: the kill counter attributes
-	// (both stored as integers) with the saved count
-	if ( ( pPaintKit || bStar ) && nSlot != LOADOUT_POSITION_CLOTHING_HANDS && ios_stattrak.GetBool() )
+	// the StatTrak version: the kill counter attributes (both stored as integers)
+	if ( bStatTrak )
 	{
 		static CSchemaAttributeDefHandle pAttr_KillEater( "kill eater" );
 		static CSchemaAttributeDefHandle pAttr_KillEaterType( "kill eater score type" );
-		if ( pAttr_KillEater && pAttr_KillEaterType )
+		if ( !pAttr_KillEater || !pAttr_KillEaterType )
 		{
-			pItem->SetQuality( AE_STRANGE );
-			uint32 unKills = (uint32)StatTrakCounts()->GetInt( CFmtStr( "%llu", ullID ), 0 );
-			pItem->SetDynamicAttributeValue( pAttr_KillEater, unKills );
-			pItem->SetDynamicAttributeValue( pAttr_KillEaterType, (uint32)0 );	// kills
+			delete pItem;
+			return;
 		}
-	}
+		pItem->SetQuality( AE_STRANGE );
+		uint32 unKills = 0;
+#ifdef CLIENT_DLL
+		// the saved count; counts from before StatTrak had its own versions are
+		// under the plain item's ID
+		KeyValues *pCounts = StatTrakCounts();
+		unKills = (uint32)pCounts->GetInt( CFmtStr( "%llu", ullID ), pCounts->GetInt( CFmtStr( "%llu", MakeItemID( nDefIndex, nPaintKit ) ), 0 ) );
 #endif
+		pItem->SetDynamicAttributeValue( pAttr_KillEater, unKills );
+		pItem->SetDynamicAttributeValue( pAttr_KillEaterType, (uint32)0 );	// kills
+	}
 
 	if ( pPaintKit )
 	{
@@ -146,6 +158,13 @@ static void AddItem( int nDefIndex, int nPaintKit, uint32 unAccountID )
 
 	s_vecItems.AddToTail( pItem );
 	s_mapItems.Insert( ullID, pItem );
+}
+
+static void AddStatTrak( int nDefIndex, int nPaintKit, uint32 unAccountID )
+{
+	const CCStrike15ItemDefinition *pDef = dynamic_cast< const CCStrike15ItemDefinition * >( GetItemSchema()->GetItemDefinition( nDefIndex ) );
+	if ( pDef && CanBeStatTrak( pDef, nPaintKit ) )
+		AddItem( nDefIndex, nPaintKit, unAccountID, true );
 }
 
 static void BuildItems( uint32 unAccountID )
@@ -167,7 +186,10 @@ static void BuildItems( uint32 unAccountID )
 		int nDefIndex = int( ullKey >> 16 );
 		int nPaintKit = int( ( ullKey & 0xFFFF ) >> 2 );
 		if ( nPaintKit )
+		{
 			AddItem( nDefIndex, nPaintKit, unAccountID );
+			AddStatTrak( nDefIndex, nPaintKit, unAccountID );
+		}
 	}
 
 	// Plain ("vanilla") versions of every knife
@@ -176,7 +198,10 @@ static void BuildItems( uint32 unAccountID )
 	{
 		const CCStrike15ItemDefinition *pDef = dynamic_cast< const CCStrike15ItemDefinition * >( mapDefs[i] );
 		if ( pDef && IsVanillaKnife( pDef ) )
+		{
 			AddItem( pDef->GetDefinitionIndex(), 0, unAccountID );
+			AddStatTrak( pDef->GetDefinitionIndex(), 0, unAccountID );
+		}
 	}
 
 #ifdef CLIENT_DLL
@@ -596,6 +621,15 @@ void OfflineCase_GetContents( uint64 ullCaseID, CUtlVector< uint64 > &vecItems, 
 	}
 }
 
+// one in ten comes out StatTrak, as in CS:GO (the star items' list has both already)
+static uint64 MaybeStatTrak( uint64 ullID )
+{
+	if ( ullID & OFFLINE_STATTRAK_BIT )
+		return ullID;
+	uint64 ullStatTrak = ullID | OFFLINE_STATTRAK_BIT;
+	return ( RandomInt( 0, 9 ) == 0 && OfflineInventory_FindItem( ullStatTrak ) ) ? ullStatTrak : ullID;
+}
+
 uint64 OfflineCase_Open( uint64 ullCaseID )
 {
 	const OfflineCase_t *pCase = FindCase( ullCaseID );
@@ -625,11 +659,11 @@ uint64 OfflineCase_Open( uint64 ullCaseID )
 		FOR_EACH_VEC( s_vecItems, i )
 		{
 			const CCStrike15ItemDefinition *pDef = dynamic_cast< const CCStrike15ItemDefinition * >( s_vecItems[i]->GetItemDefinition() );
-			if ( pDef && pDef->GetDefaultLoadoutSlot() == ( bGloves ? LOADOUT_POSITION_CLOTHING_HANDS : LOADOUT_POSITION_MELEE ) )
+			if ( pDef && pDef->GetDefaultLoadoutSlot() == ( bGloves ? LOADOUT_POSITION_CLOTHING_HANDS : LOADOUT_POSITION_MELEE ) && !( s_vecItems[i]->GetItemID() & OFFLINE_STATTRAK_BIT ) )
 				vecStar.AddToTail( s_vecItems[i]->GetItemID() );
 		}
 		if ( vecStar.Count() )
-			return vecStar[ RandomInt( 0, vecStar.Count() - 1 ) ];
+			return MaybeStatTrak( vecStar[ RandomInt( 0, vecStar.Count() - 1 ) ] );
 		nRarity = 6;
 	}
 
@@ -643,8 +677,8 @@ uint64 OfflineCase_Open( uint64 ullCaseID )
 				vecTier.AddToTail( pCase->m_vecItems[i] );
 		}
 		if ( vecTier.Count() )
-			return vecTier[ RandomInt( 0, vecTier.Count() - 1 ) ];
+			return MaybeStatTrak( vecTier[ RandomInt( 0, vecTier.Count() - 1 ) ] );
 	}
-	return pCase->m_vecItems[ RandomInt( 0, pCase->m_vecItems.Count() - 1 ) ];
+	return MaybeStatTrak( pCase->m_vecItems[ RandomInt( 0, pCase->m_vecItems.Count() - 1 ) ] );
 }
 #endif

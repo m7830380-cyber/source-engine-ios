@@ -463,6 +463,11 @@ void CWeaponCSBaseGun::SecondaryAttack()
 		*/
 #endif
 
+#if defined( CLIENT_DLL ) && defined( IOS )
+		extern void IOS_HapticZoom( C_BasePlayer *pPlayer );
+		IOS_HapticZoom( pPlayer );
+#endif
+
 #ifndef CLIENT_DLL
 
 		

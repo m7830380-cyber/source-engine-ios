@@ -11,6 +11,7 @@
                                  horizontal axis (either landscape side)
    IOS_Haptic( kind )            0 light, 1 medium, 2 heavy, 3 success
    IOS_HapticPulse( i, s, t )    a hit then a fading rumble: strength, sharpness 0..1, seconds
+   IOS_HapticCrackle( t, i )     getting tased: an electric crackle
    IOS_ThermalState()            0 nominal, 1 fair, 2 serious, 3 critical
  */
 
@@ -237,7 +238,7 @@ IOS_EXPORT void IOS_HapticPulse( float flIntensity, float flSharpness, float flD
 {
 	flIntensity = fminf( fmaxf( flIntensity, 0.0f ), 1.0f );
 	flSharpness = fminf( fmaxf( flSharpness, 0.0f ), 1.0f );
-	flDuration = fminf( fmaxf( flDuration, 0.0f ), 2.0f );
+	flDuration = fminf( fmaxf( flDuration, 0.0f ), 6.0f );
 	dispatch_block_t work = ^{
 		@autoreleasepool {
 			bool bCore = IOS_HapticPlayCore( flIntensity, flSharpness, flDuration );
@@ -252,6 +253,60 @@ IOS_EXPORT void IOS_HapticPulse( float flIntensity, float flSharpness, float flD
 		}
 	};
 	// the game runs on the main thread: play right away, don't wait for the run loop
+	if ( [NSThread isMainThread] )
+		work();
+	else
+		dispatch_async( dispatch_get_main_queue(), work );
+}
+
+// Getting tased: an electric crackle, a sharp buzz under irregular jolts,
+// fading at the end
+IOS_EXPORT void IOS_HapticCrackle( float flDuration, float flIntensity )
+{
+	flDuration = fminf( fmaxf( flDuration, 0.1f ), 3.0f );
+	flIntensity = fminf( fmaxf( flIntensity, 0.0f ), 1.0f );
+	dispatch_block_t work = ^{
+		@autoreleasepool {
+			if ( !IOS_HapticEngineReady() )
+			{
+				IOS_HapticPlayUIKit( flIntensity, flDuration );
+				return;
+			}
+			NSMutableArray *events = [NSMutableArray array];
+			CHHapticEventParameter *pBuzzI = IOS_AUTORELEASE( [[CHHapticEventParameter alloc] initWithParameterID:CHHapticEventParameterIDHapticIntensity value:flIntensity * 0.55f] );
+			CHHapticEventParameter *pBuzzS = IOS_AUTORELEASE( [[CHHapticEventParameter alloc] initWithParameterID:CHHapticEventParameterIDHapticSharpness value:1.0f] );
+			[events addObject:IOS_AUTORELEASE( [[CHHapticEvent alloc] initWithEventType:CHHapticEventTypeHapticContinuous parameters:@[ pBuzzI, pBuzzS ] relativeTime:0 duration:flDuration] )];
+
+			// the jolts: every 25-60 ms, random strength, weaker toward the end
+			unsigned int nSeed = 12345;
+			for ( float t = 0.0f; t < flDuration; )
+			{
+				nSeed = nSeed * 1103515245u + 12345u;
+				float r = (float)( ( nSeed >> 16 ) & 0x7fff ) / 32767.0f;
+				float flFade = 1.0f - 0.6f * ( t / flDuration );
+				CHHapticEventParameter *pI = IOS_AUTORELEASE( [[CHHapticEventParameter alloc] initWithParameterID:CHHapticEventParameterIDHapticIntensity value:flIntensity * flFade * ( 0.5f + 0.5f * r )] );
+				CHHapticEventParameter *pS = IOS_AUTORELEASE( [[CHHapticEventParameter alloc] initWithParameterID:CHHapticEventParameterIDHapticSharpness value:0.8f + 0.2f * r] );
+				[events addObject:IOS_AUTORELEASE( [[CHHapticEvent alloc] initWithEventType:CHHapticEventTypeHapticTransient parameters:@[ pI, pS ] relativeTime:t] )];
+				t += 0.025f + 0.035f * r;
+			}
+
+			NSArray *points = @[
+				IOS_AUTORELEASE( [[CHHapticParameterCurveControlPoint alloc] initWithRelativeTime:0 value:1.0f] ),
+				IOS_AUTORELEASE( [[CHHapticParameterCurveControlPoint alloc] initWithRelativeTime:flDuration * 0.7f value:0.8f] ),
+				IOS_AUTORELEASE( [[CHHapticParameterCurveControlPoint alloc] initWithRelativeTime:flDuration value:0.0f] ) ];
+			NSArray *curves = @[ IOS_AUTORELEASE( [[CHHapticParameterCurve alloc] initWithParameterID:CHHapticDynamicParameterIDHapticIntensityControl controlPoints:points relativeTime:0] ) ];
+
+			NSError *err = nil;
+			CHHapticPattern *pattern = IOS_AUTORELEASE( [[CHHapticPattern alloc] initWithEvents:events parameterCurves:curves error:&err] );
+			id<CHHapticPatternPlayer> player = pattern ? [s_pHapticEngine createPlayerWithPattern:pattern error:&err] : nil;
+			if ( !player || ![player startAtTime:CHHapticTimeImmediate error:&err] )
+			{
+				NSError *e = nil;
+				if ( ![s_pHapticEngine startAndReturnError:&e] || !player || ![player startAtTime:CHHapticTimeImmediate error:&err] )
+					printf( "[haptics] crackle failed: %s\n", err ? err.localizedDescription.UTF8String : "?" );
+			}
+		}
+	};
 	if ( [NSThread isMainThread] )
 		work();
 	else

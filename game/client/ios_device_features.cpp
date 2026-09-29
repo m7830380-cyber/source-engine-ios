@@ -5,8 +5,9 @@
 //   ios_gyro / ios_gyro_sensitivity / ios_gyro_invert_pitch
 //       gyro aiming, added to the view like the touch look area (off by default)
 //   ios_haptics
-//       shots (by how hard the gun hits), hits, damage taken, kills, and
-//       explosions nearby (off by default); shots come from the gun's fire
+//       shots (by how hard the gun hits), hits, damage taken (a headshot
+//       harder, a Zeus as a crackle), kills, being flashed, and explosions
+//       nearby (off by default); shots come from the gun's fire
 //       code (IOS_HapticLocalShot), the rest from events
 //   ios_thermal_scale
 //       as the phone heats up, render the 3D view at a lower resolution
@@ -33,6 +34,7 @@ extern "C" void IOS_GyroSetEnabled( int bOn );
 extern "C" void IOS_GyroTakeDelta( float *pflYaw, float *pflPitch );
 extern "C" void IOS_Haptic( int nKind );
 extern "C" void IOS_HapticPulse( float flIntensity, float flSharpness, float flDuration );
+extern "C" void IOS_HapticCrackle( float flDuration, float flIntensity );
 extern "C" int IOS_ThermalState( void );
 extern bool IOS_IsMenuActive();
 
@@ -40,7 +42,7 @@ ConVar ios_gyro( "ios_gyro", "0", FCVAR_ARCHIVE | FCVAR_RELEASE, "Aim by moving 
 ConVar ios_gyro_sensitivity( "ios_gyro_sensitivity", "1.0", FCVAR_ARCHIVE | FCVAR_RELEASE, "Gyro aiming sensitivity (1 = the view turns as much as the phone)", true, 0.2f, true, 4.0f );
 ConVar ios_gyro_invert_pitch( "ios_gyro_invert_pitch", "0", FCVAR_ARCHIVE | FCVAR_RELEASE, "Invert gyro up/down" );
 ConVar ios_haptics( "ios_haptics", "0", FCVAR_ARCHIVE | FCVAR_RELEASE, "Vibrate on shots, hits, damage taken and kills" );
-ConVar ios_haptics_real( "ios_haptics_real", "0", FCVAR_ARCHIVE | FCVAR_RELEASE, "With ios_haptics: also landings (harder the further you fell) and reload parts (mag in, bolt, pump)" );
+ConVar ios_haptics_real( "ios_haptics_real", "0", FCVAR_ARCHIVE | FCVAR_RELEASE, "With ios_haptics: also landings, reload parts, knife inspects, bomb keys, grenade pin and throw, scope clicks" );
 ConVar ios_thermal_scale( "ios_thermal_scale", "1", FCVAR_ARCHIVE | FCVAR_RELEASE, "Lower the 3D resolution as the phone heats up, instead of the frame rate" );
 
 class CIOSDeviceFeatures : public CAutoGameSystemPerFrame, public CGameEventListener
@@ -94,8 +96,33 @@ public:
 		}
 		else if ( !V_strcmp( pszName, "player_hurt" ) )
 		{
-			if ( ( nAttacker == nLocal && nUser != nLocal ) || nUser == nLocal )
+			if ( nUser == nLocal && nAttacker != nLocal && !V_stricmp( event->GetString( "weapon" ), "taser" ) )
+			{
+				// zapped: an electric crackle
+				if ( ios_haptics.GetBool() )
+					IOS_HapticCrackle( 1.0f, 1.0f );
+				nKind = 99;
+			}
+			else if ( nUser == nLocal && event->GetInt( "hitgroup" ) == HITGROUP_HEAD )
+			{
+				// taking a headshot: a hard, sharp jolt
+				if ( ios_haptics.GetBool() )
+					IOS_HapticPulse( 1.0f, 0.95f, 0.45f );
+				nKind = 99;
+			}
+			else if ( ( nAttacker == nLocal && nUser != nLocal ) || nUser == nLocal )
 				nKind = 1;		// medium: we hit someone, or got hit
+		}
+		else if ( !V_strcmp( pszName, "player_blind" ) )
+		{
+			if ( nUser == nLocal )
+			{
+				// flashed: a dull buzz fading out as the sight comes back
+				float flBlind = event->GetFloat( "blind_duration" );
+				if ( ios_haptics.GetBool() && flBlind > 0.1f )
+					IOS_HapticPulse( 0.45f + 0.55f * clamp( flBlind / 3.0f, 0.0f, 1.0f ), 0.15f, MIN( flBlind, 5.0f ) );
+				nKind = 99;
+			}
 		}
 
 		else if ( !V_strcmp( pszName, "hegrenade_detonate" ) || !V_strcmp( pszName, "flashbang_detonate" ) ||
@@ -124,7 +151,7 @@ public:
 			Msg( "[haptics] %s userid %d attacker %d (local %d) -> %s\n", pszName, nUser, nAttacker, nLocal,
 				nKind < 0 ? "not ours" : ios_haptics.GetBool() ? "vibrate" : "off (ios_haptics 0)" );
 		}
-		if ( nKind >= 0 && ios_haptics.GetBool() )
+		if ( nKind >= 0 && nKind < 99 && ios_haptics.GetBool() )
 			IOS_Haptic( nKind );
 	}
 
@@ -134,6 +161,7 @@ private:
 	{
 		ListenForGameEvent( "player_hurt" );
 		ListenForGameEvent( "player_death" );
+		ListenForGameEvent( "player_blind" );
 		ListenForGameEvent( "hegrenade_detonate" );
 		ListenForGameEvent( "flashbang_detonate" );
 		ListenForGameEvent( "inferno_startburn" );
@@ -337,20 +365,49 @@ void IOS_HapticLanding( C_BasePlayer *pPlayer, float flFallVelocity )
 // "too real hapteekz!!!": reload parts, from the sounds the viewmodel's
 // animation plays at those frames (C_BaseViewModel::FireEvent), e.g.
 // "Weapon_AK47.Clipin" when the mag goes in
+// "too real hapteekz!!!": a grenade leaving the hand (CBaseCSGrenade), and the
+// scope clicking in or out (CWeaponCSBaseGun zoom). Only the first prediction.
+static bool IOS_TooRealFor( C_BasePlayer *pPlayer )
+{
+	if ( !ios_haptics.GetBool() || !ios_haptics_real.GetBool() || !pPlayer || !pPlayer->IsLocalPlayer() )
+		return false;
+	return !prediction->InPrediction() || prediction->IsFirstTimePredicted();
+}
+
+void IOS_HapticGrenadeThrow( C_BasePlayer *pPlayer )
+{
+	if ( IOS_TooRealFor( pPlayer ) )
+		IOS_HapticPulse( 0.4f, 0.3f, 0.08f );		// a soft push
+}
+
+void IOS_HapticZoom( C_BasePlayer *pPlayer )
+{
+	if ( IOS_TooRealFor( pPlayer ) )
+		IOS_HapticPulse( 0.25f, 0.9f, 0.0f );		// a small click
+}
+
 // The butterfly knife's inspects and draws: each sound is one recording of
 // several flips. Times (s) and relative loudness of the handle clacks, found
 // as sharp high-frequency onsets in sound/weapons/bknife/*.wav.
-struct KnifeClacks_t { const char *m_pszSound; int m_nCount; float m_flTime[8]; float m_flLoud[8]; };
+struct KnifeClacks_t { const char *m_pszSound; int m_nCount; float m_flTime[8]; float m_flLoud[8]; float m_flSharpness; };
 static const KnifeClacks_t s_KnifeClacks[] =
 {
-	{ "ButterflyKnife.look01_a", 5, { 0.045f, 0.315f, 0.645f, 0.705f, 0.915f }, { 0.72f, 0.39f, 1.00f, 0.45f, 0.49f } },
-	{ "ButterflyKnife.look01_b", 5, { 0.035f, 0.240f, 0.520f, 0.575f, 0.755f }, { 0.56f, 0.88f, 0.94f, 0.89f, 1.00f } },
-	{ "ButterflyKnife.look02_a", 6, { 0.035f, 0.290f, 0.550f, 0.830f, 0.885f, 1.150f }, { 0.94f, 0.96f, 1.00f, 0.82f, 0.99f, 0.63f } },
-	{ "ButterflyKnife.look02_b", 4, { 0.035f, 0.325f, 0.400f, 0.615f }, { 0.48f, 0.73f, 1.00f, 0.71f } },
-	{ "ButterflyKnife.look03_a", 8, { 0.030f, 0.210f, 0.370f, 0.675f, 0.950f, 1.175f, 1.255f, 1.555f }, { 0.68f, 0.59f, 0.52f, 0.28f, 0.51f, 1.00f, 0.81f, 0.39f } },
-	{ "ButterflyKnife.look03_b", 4, { 0.025f, 0.155f, 0.645f, 0.710f }, { 0.44f, 0.68f, 1.00f, 0.55f } },
-	{ "ButterflyKnife.draw01", 4, { 0.245f, 0.390f, 0.575f, 0.640f }, { 0.62f, 0.43f, 1.00f, 0.50f } },
-	{ "ButterflyKnife.draw02", 1, { 0.355f }, { 1.00f } },
+	{ "ButterflyKnife.look01_a", 5, { 0.045f, 0.315f, 0.645f, 0.705f, 0.915f }, { 0.72f, 0.39f, 1.00f, 0.45f, 0.49f }, 0.95f },
+	{ "ButterflyKnife.look01_b", 5, { 0.035f, 0.240f, 0.520f, 0.575f, 0.755f }, { 0.56f, 0.88f, 0.94f, 0.89f, 1.00f }, 0.95f },
+	{ "ButterflyKnife.look02_a", 6, { 0.035f, 0.290f, 0.550f, 0.830f, 0.885f, 1.150f }, { 0.94f, 0.96f, 1.00f, 0.82f, 0.99f, 0.63f }, 0.95f },
+	{ "ButterflyKnife.look02_b", 4, { 0.035f, 0.325f, 0.400f, 0.615f }, { 0.48f, 0.73f, 1.00f, 0.71f }, 0.95f },
+	{ "ButterflyKnife.look03_a", 8, { 0.030f, 0.210f, 0.370f, 0.675f, 0.950f, 1.175f, 1.255f, 1.555f }, { 0.68f, 0.59f, 0.52f, 0.28f, 0.51f, 1.00f, 0.81f, 0.39f }, 0.95f },
+	{ "ButterflyKnife.look03_b", 4, { 0.025f, 0.155f, 0.645f, 0.710f }, { 0.44f, 0.68f, 1.00f, 0.55f }, 0.95f },
+	{ "ButterflyKnife.draw01", 4, { 0.245f, 0.390f, 0.575f, 0.640f }, { 0.62f, 0.43f, 1.00f, 0.50f }, 0.95f },
+	{ "ButterflyKnife.draw02", 1, { 0.355f }, { 1.00f }, 0.95f },
+	// the other knives with inspect sounds of their own: the blade / handle
+	// knocking in the hand as it's twirled, and the Falchion's catch
+	{ "KnifeFalchion.inspect", 7, { 0.300f, 0.345f, 0.455f, 0.510f, 0.640f, 0.745f, 0.925f }, { 0.45f, 0.56f, 1.00f, 0.30f, 0.74f, 0.44f, 0.72f }, 0.8f },
+	{ "KnifeFalchion.Catch", 2, { 0.185f, 0.370f }, { 0.40f, 1.00f }, 0.5f },
+	{ "KnifePush.LookAtStart", 3, { 0.275f, 0.350f, 0.475f }, { 0.54f, 0.45f, 1.00f }, 0.8f },
+	{ "KnifePush.LookAtEnd", 5, { 0.205f, 0.250f, 0.335f, 0.480f, 0.605f }, { 0.36f, 0.48f, 0.40f, 1.00f, 0.70f }, 0.8f },
+	{ "KnifeBowie.LookAtStart", 3, { 0.060f, 0.195f, 0.260f }, { 0.49f, 1.00f, 0.43f }, 0.75f },
+	{ "KnifeBowie.LookAtEnd", 2, { 0.395f, 0.665f }, { 0.29f, 1.00f }, 0.75f },
 };
 
 void IOS_HapticViewModelSound( C_BasePlayer *pOwner, const char *pszSound )
@@ -362,14 +419,25 @@ void IOS_HapticViewModelSound( C_BasePlayer *pOwner, const char *pszSound )
 	{
 		if ( V_stricmp( pszSound, s_KnifeClacks[i].m_pszSound ) )
 			continue;
-		// metal on metal: short and sharp, by how loud the clack is
+		// short taps by how loud each hit is (metal on metal: sharp)
 		double flNow = Plat_FloatTime();
 		for ( int j = 0; j < s_KnifeClacks[i].m_nCount; ++j )
-			s_IOSDeviceFeatures.QueueTap( flNow + s_KnifeClacks[i].m_flTime[j], 0.25f + 0.45f * s_KnifeClacks[i].m_flLoud[j], 0.95f );
+			s_IOSDeviceFeatures.QueueTap( flNow + s_KnifeClacks[i].m_flTime[j], 0.25f + 0.45f * s_KnifeClacks[i].m_flLoud[j], s_KnifeClacks[i].m_flSharpness );
 		return;
 	}
 	const char *pszPart = V_strrchr( pszSound, '.' );
 	pszPart = pszPart ? pszPart + 1 : pszSound;
+
+	if ( !V_stricmp( pszSound, "c4.keypressquiet" ) )
+	{
+		IOS_HapticPulse( 0.18f, 0.8f, 0.0f );		// planting: a little tick per key
+		return;
+	}
+	if ( !V_stricmp( pszPart, "PullPin_Grenade" ) )
+	{
+		IOS_HapticPulse( 0.4f, 0.85f, 0.0f );		// the pin pops out
+		return;
+	}
 
 	// names as the viewmodel animations play them (every v_ model checked)
 	static const char *s_pszSeated[] = { "Clipin", "Lclipin", "Rclipin", "Boxin", "Coverdown" };

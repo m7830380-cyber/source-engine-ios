@@ -424,6 +424,10 @@ void CBaseCSGrenade::ItemPostFrame()
 
 #else
 		RumbleEffect( XBX_GetUserId( pPlayer->GetSplitScreenPlayerSlot() ), RUMBLE_CROWBAR_SWING, 0, RUMBLE_FLAG_RESTART );
+#if defined( IOS )
+		extern void IOS_HapticGrenadeThrow( C_BasePlayer *pPlayer );
+		IOS_HapticGrenadeThrow( pPlayer );
+#endif
 #endif
 	}
 	else if ((m_fThrowTime > 0) && (m_fThrowTime < gpGlobals->curtime))

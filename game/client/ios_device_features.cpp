@@ -288,16 +288,16 @@ private:
 public:
 	// taps timed into a sound that has several hits in one recording (the
 	// butterfly knife's handle clacks); dropped if the weapon changes
-	void QueueTap( double flWhen, float flIntensity, float flSharpness )
+	void QueueTap( double flWhen, float flIntensity, float flSharpness, float flDuration = 0.0f )
 	{
 		C_BasePlayer *pLocal = C_BasePlayer::GetLocalPlayer();
 		m_hTapWeapon = pLocal ? pLocal->GetActiveWeapon() : NULL;
-		TimedTap_t tap = { flWhen, flIntensity, flSharpness };
+		TimedTap_t tap = { flWhen, flIntensity, flSharpness, flDuration };
 		m_TimedTaps.AddToTail( tap );
 	}
 
 private:
-	struct TimedTap_t { double m_flWhen; float m_flIntensity, m_flSharpness; };
+	struct TimedTap_t { double m_flWhen; float m_flIntensity, m_flSharpness, m_flDuration; };
 	CUtlVector< TimedTap_t > m_TimedTaps;
 	CHandle< C_BaseCombatWeapon > m_hTapWeapon;
 
@@ -315,7 +315,7 @@ private:
 		{
 			if ( flNow >= m_TimedTaps[i].m_flWhen )
 			{
-				IOS_HapticPulse( m_TimedTaps[i].m_flIntensity, m_TimedTaps[i].m_flSharpness, 0.0f );
+				IOS_HapticPulse( m_TimedTaps[i].m_flIntensity, m_TimedTaps[i].m_flSharpness, m_TimedTaps[i].m_flDuration );
 				m_TimedTaps.Remove( i );
 			}
 		}
@@ -386,28 +386,46 @@ void IOS_HapticZoom( C_BasePlayer *pPlayer )
 		IOS_HapticPulse( 0.25f, 0.9f, 0.0f );		// a small click
 }
 
+// the knife hitting a wall or anything that isn't a player (CKnife::SwingOrStab;
+// hitting a player comes from player_hurt): a solid thunk, harder for a stab
+void IOS_HapticKnifeWall( C_BasePlayer *pPlayer, bool bStab )
+{
+	if ( !ios_haptics.GetBool() || !pPlayer || !pPlayer->IsLocalPlayer() )
+		return;
+	if ( prediction->InPrediction() && !prediction->IsFirstTimePredicted() )
+		return;
+	IOS_HapticPulse( bStab ? 0.85f : 0.65f, 0.55f, bStab ? 0.12f : 0.08f );
+}
+
 // The butterfly knife's inspects and draws: each sound is one recording of
 // several flips. Times (s) and relative loudness of the handle clacks, found
 // as sharp high-frequency onsets in sound/weapons/bknife/*.wav.
-struct KnifeClacks_t { const char *m_pszSound; int m_nCount; float m_flTime[8]; float m_flLoud[8]; float m_flSharpness; };
+struct KnifeClacks_t { const char *m_pszSound; int m_nCount; float m_flTime[8]; float m_flLoud[8]; float m_flSharpness; float m_flScale; };
 static const KnifeClacks_t s_KnifeClacks[] =
 {
-	{ "ButterflyKnife.look01_a", 5, { 0.045f, 0.315f, 0.645f, 0.705f, 0.915f }, { 0.72f, 0.39f, 1.00f, 0.45f, 0.49f }, 0.95f },
-	{ "ButterflyKnife.look01_b", 5, { 0.035f, 0.240f, 0.520f, 0.575f, 0.755f }, { 0.56f, 0.88f, 0.94f, 0.89f, 1.00f }, 0.95f },
-	{ "ButterflyKnife.look02_a", 6, { 0.035f, 0.290f, 0.550f, 0.830f, 0.885f, 1.150f }, { 0.94f, 0.96f, 1.00f, 0.82f, 0.99f, 0.63f }, 0.95f },
-	{ "ButterflyKnife.look02_b", 4, { 0.035f, 0.325f, 0.400f, 0.615f }, { 0.48f, 0.73f, 1.00f, 0.71f }, 0.95f },
-	{ "ButterflyKnife.look03_a", 8, { 0.030f, 0.210f, 0.370f, 0.675f, 0.950f, 1.175f, 1.255f, 1.555f }, { 0.68f, 0.59f, 0.52f, 0.28f, 0.51f, 1.00f, 0.81f, 0.39f }, 0.95f },
-	{ "ButterflyKnife.look03_b", 4, { 0.025f, 0.155f, 0.645f, 0.710f }, { 0.44f, 0.68f, 1.00f, 0.55f }, 0.95f },
-	{ "ButterflyKnife.draw01", 4, { 0.245f, 0.390f, 0.575f, 0.640f }, { 0.62f, 0.43f, 1.00f, 0.50f }, 0.95f },
-	{ "ButterflyKnife.draw02", 1, { 0.355f }, { 1.00f }, 0.95f },
+	{ "ButterflyKnife.look01_a", 5, { 0.045f, 0.315f, 0.645f, 0.705f, 0.915f }, { 0.72f, 0.39f, 1.00f, 0.45f, 0.49f }, 0.95f, 1.0f },
+	{ "ButterflyKnife.look01_b", 5, { 0.035f, 0.240f, 0.520f, 0.575f, 0.755f }, { 0.56f, 0.88f, 0.94f, 0.89f, 1.00f }, 0.95f, 1.0f },
+	{ "ButterflyKnife.look02_a", 6, { 0.035f, 0.290f, 0.550f, 0.830f, 0.885f, 1.150f }, { 0.94f, 0.96f, 1.00f, 0.82f, 0.99f, 0.63f }, 0.95f, 1.0f },
+	{ "ButterflyKnife.look02_b", 4, { 0.035f, 0.325f, 0.400f, 0.615f }, { 0.48f, 0.73f, 1.00f, 0.71f }, 0.95f, 1.0f },
+	{ "ButterflyKnife.look03_a", 8, { 0.030f, 0.210f, 0.370f, 0.675f, 0.950f, 1.175f, 1.255f, 1.555f }, { 0.68f, 0.59f, 0.52f, 0.28f, 0.51f, 1.00f, 0.81f, 0.39f }, 0.95f, 1.0f },
+	{ "ButterflyKnife.look03_b", 4, { 0.025f, 0.155f, 0.645f, 0.710f }, { 0.44f, 0.68f, 1.00f, 0.55f }, 0.95f, 1.0f },
+	{ "ButterflyKnife.draw01", 4, { 0.245f, 0.390f, 0.575f, 0.640f }, { 0.62f, 0.43f, 1.00f, 0.50f }, 0.95f, 1.0f },
+	{ "ButterflyKnife.draw02", 1, { 0.355f }, { 1.00f }, 0.95f, 1.0f },
 	// the other knives with inspect sounds of their own: the blade / handle
 	// knocking in the hand as it's twirled, and the Falchion's catch
-	{ "KnifeFalchion.inspect", 7, { 0.300f, 0.345f, 0.455f, 0.510f, 0.640f, 0.745f, 0.925f }, { 0.45f, 0.56f, 1.00f, 0.30f, 0.74f, 0.44f, 0.72f }, 0.8f },
-	{ "KnifeFalchion.Catch", 2, { 0.185f, 0.370f }, { 0.40f, 1.00f }, 0.5f },
-	{ "KnifePush.LookAtStart", 3, { 0.275f, 0.350f, 0.475f }, { 0.54f, 0.45f, 1.00f }, 0.8f },
-	{ "KnifePush.LookAtEnd", 5, { 0.205f, 0.250f, 0.335f, 0.480f, 0.605f }, { 0.36f, 0.48f, 0.40f, 1.00f, 0.70f }, 0.8f },
-	{ "KnifeBowie.LookAtStart", 3, { 0.060f, 0.195f, 0.260f }, { 0.49f, 1.00f, 0.43f }, 0.75f },
-	{ "KnifeBowie.LookAtEnd", 2, { 0.395f, 0.665f }, { 0.29f, 1.00f }, 0.75f },
+	{ "KnifeFalchion.inspect", 7, { 0.300f, 0.345f, 0.455f, 0.510f, 0.640f, 0.745f, 0.925f }, { 0.45f, 0.56f, 1.00f, 0.30f, 0.74f, 0.44f, 0.72f }, 0.8f, 1.0f },
+	{ "KnifeFalchion.Catch", 2, { 0.185f, 0.370f }, { 0.40f, 1.00f }, 0.5f, 1.0f },
+	{ "KnifePush.LookAtStart", 3, { 0.275f, 0.350f, 0.475f }, { 0.54f, 0.45f, 1.00f }, 0.8f, 1.0f },
+	{ "KnifePush.LookAtEnd", 5, { 0.205f, 0.250f, 0.335f, 0.480f, 0.605f }, { 0.36f, 0.48f, 0.40f, 1.00f, 0.70f }, 0.8f, 1.0f },
+	{ "KnifeBowie.LookAtStart", 3, { 0.060f, 0.195f, 0.260f }, { 0.49f, 1.00f, 0.43f }, 0.75f, 1.0f },
+	{ "KnifeBowie.LookAtEnd", 2, { 0.395f, 0.665f }, { 0.29f, 1.00f }, 0.75f, 1.0f },
+	// pulling a knife out: just a little. Most knives share Weapon_Knife.Deploy
+	// (the blade out at 0.075 s); the Bowie's spin is a soft whirr (0.06-0.26 s,
+	// added below) between the pull and the catch
+	{ "Weapon_Knife.Deploy", 1, { 0.075f }, { 1.00f }, 0.8f, 0.55f },
+	{ "KnifeFalchion.draw", 1, { 0.495f }, { 1.00f }, 0.8f, 0.55f },
+	{ "KnifePush.Draw", 3, { 0.390f, 0.520f, 0.595f }, { 0.60f, 1.00f, 0.95f }, 0.8f, 0.55f },
+	{ "KnifeBowie.draw", 2, { 0.000f, 0.255f }, { 0.60f, 1.00f }, 0.75f, 0.55f },
 };
 
 void IOS_HapticViewModelSound( C_BasePlayer *pOwner, const char *pszSound )
@@ -422,7 +440,9 @@ void IOS_HapticViewModelSound( C_BasePlayer *pOwner, const char *pszSound )
 		// short taps by how loud each hit is (metal on metal: sharp)
 		double flNow = Plat_FloatTime();
 		for ( int j = 0; j < s_KnifeClacks[i].m_nCount; ++j )
-			s_IOSDeviceFeatures.QueueTap( flNow + s_KnifeClacks[i].m_flTime[j], 0.25f + 0.45f * s_KnifeClacks[i].m_flLoud[j], s_KnifeClacks[i].m_flSharpness );
+			s_IOSDeviceFeatures.QueueTap( flNow + s_KnifeClacks[i].m_flTime[j], ( 0.25f + 0.45f * s_KnifeClacks[i].m_flLoud[j] ) * s_KnifeClacks[i].m_flScale, s_KnifeClacks[i].m_flSharpness );
+		if ( !V_stricmp( pszSound, "KnifeBowie.draw" ) )
+			s_IOSDeviceFeatures.QueueTap( flNow + 0.06, 0.22f, 0.35f, 0.2f );	// the spin: a soft whirr
 		return;
 	}
 	const char *pszPart = V_strrchr( pszSound, '.' );

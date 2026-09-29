@@ -481,6 +481,10 @@ bool CKnife::SwingOrStab( CSWeaponMode weaponMode )
 			else
 			{
 				EmitSound( filter, entindex(), "Weapon_Knife.HitWall" );
+#if defined( CLIENT_DLL ) && defined( IOS )
+				extern void IOS_HapticKnifeWall( C_BasePlayer *pPlayer, bool bStab );
+				IOS_HapticKnifeWall( pPlayer, weaponMode == Secondary_Mode );
+#endif
 			}
 		}
 

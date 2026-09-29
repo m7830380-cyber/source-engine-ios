@@ -42,6 +42,11 @@ public:
 	virtual void ProcessInput( void );
 	virtual void FlashReady( void );
 	virtual bool PreUnloadFlash( void );
+	// the default is a fatal Error(); a missing voice / chat HUD shouldn't end the game
+	virtual void FlashLoadError( IScaleformUI *pui, SFPARAMS params )
+	{
+		Warning( "[voicestatus] HudVoiceStatus.swf didn't load: %s\n", pui->Params_GetNumArgs( params ) > 1 ? pui->Params_GetArgAsString( params, 1 ) : "?" );
+	}
 
 	void SetConfig( SCALEFORM_CALLBACK_ARGS_DECL );
 
@@ -74,7 +79,7 @@ DECLARE_HUDELEMENT( SFHudVoiceStatus );
 
 SFUI_BEGIN_GAME_API_DEF
 	SFUI_DECL_METHOD( SetConfig ),
-SFUI_END_GAME_API_DEF( SFHudVoiceStatus, HudVoiceStatus );
+SFUI_END_GAME_API_DEF( SFHudVoiceStatus, VoiceStatus );	// the root movie's name for HudVoiceStatus.swf
 
 SFHudVoiceStatus::SFHudVoiceStatus( const char *value ) : SFHudFlashInterface( value ),
 	m_nNotices( 0 ), m_flMaxHeight( 0 ), m_flScrollInTime( 0.1f ), m_flFadeOutTime( 0.5f ), m_flLifetime( 15.0f ),
@@ -91,7 +96,7 @@ SFHudVoiceStatus::SFHudVoiceStatus( const char *value ) : SFHudFlashInterface( v
 void SFHudVoiceStatus::LevelInit( void )
 {
 	if ( !FlashAPIIsValid() )
-		SFUI_REQUEST_ELEMENT( SF_SS_SLOT( GET_ACTIVE_SPLITSCREEN_SLOT() ), g_pScaleformUI, SFHudVoiceStatus, this, HudVoiceStatus );
+		SFUI_REQUEST_ELEMENT( SF_SS_SLOT( GET_ACTIVE_SPLITSCREEN_SLOT() ), g_pScaleformUI, SFHudVoiceStatus, this, VoiceStatus );
 }
 
 void SFHudVoiceStatus::LevelShutdown( void )

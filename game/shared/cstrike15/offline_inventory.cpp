@@ -532,8 +532,10 @@ void OfflineCase_Build( uint32 unAccountID )
 	const CEconItemSchema::ItemDefinitionMap_t &mapDefs = GetItemSchema()->GetItemDefinitionMap();
 	FOR_EACH_MAP_FAST( mapDefs, i )
 	{
-		const CEconItemDefinition *pDef = mapDefs[i];
-		if ( !pDef || !pDef->GetEconTool() || V_strcmp( pDef->GetEconTool()->GetTypeName(), "supply_crate" ) )
+		// item_class supply_crate (GetEconTool() is always NULL here: the schema's
+		// tool factory, CreateEconToolImpl, is a stub in this source)
+		const CCStrike15ItemDefinition *pDef = dynamic_cast< const CCStrike15ItemDefinition * >( mapDefs[i] );
+		if ( !pDef || !pDef->IsSupplyCrate() )
 			continue;
 		attrib_value_t unSeries = 0;
 		if ( !FindAttribute_UnsafeBitwiseCast< attrib_value_t >( pDef, pAttr_Series, &unSeries ) )

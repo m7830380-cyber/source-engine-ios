@@ -307,7 +307,7 @@ public:
 
 	static bool IsCategoryToken( const char *psz )
 	{
-		static const char *s_pszCategories[] = { "all", "only_weapons", "heavy", "secondary", "rifle", "smg", "melee", "clothing", "gloves", "grenade", "equipment" };
+		static const char *s_pszCategories[] = { "all", "only_weapons", "heavy", "secondary", "rifle", "smg", "melee", "clothing", "gloves", "grenade", "equipment", "not_equipment" };
 		for ( int i = 0; i < ARRAYSIZE( s_pszCategories ); i++ )
 			if ( !V_stricmp( psz, s_pszCategories[i] ) )
 				return true;
@@ -376,7 +376,13 @@ public:
 		{
 			bool bAny = false;
 			FOR_EACH_VEC( f.m_vecCategories, i )
-				bAny |= CategoryMatches( f.m_vecCategories[i], nSlot );
+			{
+				// "Other": what isn't gear, which offline is the cases
+				if ( !V_stricmp( f.m_vecCategories[i], "not_equipment" ) )
+					bAny |= OfflineCase_IsCase( pItem->GetItemID() );
+				else
+					bAny |= CategoryMatches( f.m_vecCategories[i], nSlot );
+			}
 			if ( !bAny )
 				return false;
 		}

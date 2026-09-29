@@ -19,6 +19,13 @@
 // NOTE: This must be the last file included!!!
 #include "tier0/memdbgon.h"
 
+#if defined( IOS )
+#include "GFx/GFx_PlayerImpl.h"
+#include "GFx/GFx_TextField.h"
+extern "C" void SDL_StartTextInput( void );
+extern "C" void SDL_StopTextInput( void );
+#endif
+
 using namespace SF::GFx;
 using namespace SF::Render;
 
@@ -386,6 +393,10 @@ void ScaleformUIImpl::RunFrame( float time )
 	UpdateCursorLazyHide( m_fTime );
 
 	UpdateAvatarImages();
+
+#if defined( IOS )
+	UpdateIOSTextInput();
+#endif
 
 	// Removed advance slot from RunFrame. AdvanceSlot is now called just before rendering (fix hud element lagging)
 }
@@ -1597,3 +1608,46 @@ ScaleformUIChromeHTMLImage* ScaleformUIImpl::GetChromeHTMLImage( uint64 imageID 
 
 	return pImage;
 }
+
+#if defined( IOS )
+// iOS has no keyboard until one is asked for: bring it up while a Flash text
+// field that takes typing (not read-only) has focus in any slot (the
+// inventory search, rename, text filters...), and put it away when none does.
+// Only a keyboard opened here is put away (chat and the console open their own).
+void ScaleformUIImpl::UpdateIOSTextInput( void )
+{
+	static bool s_bOpenedHere = false;
+	static void *s_pOpenedFor = NULL;	// the field it was opened for: another one opens it again
+	bool bWant = false;
+	void *pField = NULL;
+	for ( int iSlot = 0; iSlot < MAX_SLOTS && !bWant; iSlot++ )
+	{
+		BaseSlot *pSlot = LockSlotPtr( iSlot );
+		if ( pSlot && pSlot->m_pMovieView )
+		{
+			SF::GFx::MovieImpl *pMovie = static_cast< SF::GFx::MovieImpl * >( pSlot->m_pMovieView );
+			SF::Ptr< SF::GFx::InteractiveObject > pFocus = pMovie->GetFocusedCharacter( 0 );
+			if ( pFocus && pFocus->GetType() == SF::GFx::CharacterDef::TextField &&
+				 !static_cast< SF::GFx::TextField * >( pFocus.GetPtr() )->IsReadOnly() )
+			{
+				bWant = true;
+				pField = pFocus.GetPtr();
+			}
+		}
+		UnlockSlotPtr( iSlot );
+	}
+
+	if ( bWant && pField != s_pOpenedFor )
+	{
+		SDL_StartTextInput();
+		s_bOpenedHere = true;
+		s_pOpenedFor = pField;
+	}
+	else if ( !bWant && s_bOpenedHere )
+	{
+		SDL_StopTextInput();
+		s_bOpenedHere = false;
+		s_pOpenedFor = NULL;
+	}
+}
+#endif

@@ -468,6 +468,10 @@ public:
 	//	virtual void Render();
 	virtual void SetSingleThreadedMode( bool bSingleThreded );
 	virtual void RunFrame( float time );
+#if defined( IOS )
+	// the on-screen keyboard while a Flash text field that takes typing has focus
+	void UpdateIOSTextInput( void );
+#endif
 	void AdvanceSlot( int slot );
 	virtual bool HandleInputEvent( const InputEvent_t &event );
 	virtual bool HandleIMEEvent( size_t hwnd, unsigned int uMsg, unsigned int wParam, long lParam );

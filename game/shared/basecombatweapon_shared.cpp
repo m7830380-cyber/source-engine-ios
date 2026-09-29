@@ -3446,20 +3446,30 @@ void CBaseCombatWeapon::SetOfflineItemID( uint64 ullItemID )
 	m_nOfflineItemIDHigh = (int)(uint32)( ullItemID >> 32 );
 }
 
-// The inventory's own view of the -allskinsunlocked item this weapon was given (the
-// same object the menus and the loadout use), looked up by ID on every call so it
-// can't go stale when an inventory is refilled. The offline inventory builds the
-// same items with the same IDs in the client and the server.
+// The view of the offline item this weapon was given, looked up by ID on every
+// call so it can't go stale when an inventory is refilled: the owner's own
+// inventory first (the server keeps each player's equipped items, the client
+// its own), else the item rebuilt from its ID (the ID says what it looks like),
+// which the offline inventory keeps in an inventory of its own.
 CEconItemView *CBaseCombatWeapon::GetOfflineItemView( void ) const
 {
 	uint64 ullItemID = GetOfflineItemID();
-	if ( !ullItemID )
+	if ( !ullItemID || !InventoryManager() )
 		return NULL;
+
+	CBasePlayer *pOwner = ToBasePlayer( GetOwner() );
+	CSteamID steamID;
+	if ( pOwner && pOwner->GetSteamID( &steamID ) && steamID.IsValid() )
+	{
+		CPlayerInventory *pInventory = InventoryManager()->GetInventoryForAccount( steamID.GetAccountID() );
+		CEconItemView *pView = pInventory ? pInventory->GetInventoryItemByItemID( ullItemID ) : NULL;
+		if ( pView )
+			return pView;
+	}
 
 	CEconItem *pItem = OfflineInventory_FindItem( ullItemID );
-	if ( !pItem || !InventoryManager() )
+	if ( !pItem )
 		return NULL;
-
 	CPlayerInventory *pInventory = InventoryManager()->GetInventoryForAccount( pItem->GetAccountID() );
 	return pInventory ? pInventory->GetInventoryItemByItemID( ullItemID ) : NULL;
 }

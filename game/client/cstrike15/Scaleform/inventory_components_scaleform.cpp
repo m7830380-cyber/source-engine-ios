@@ -152,8 +152,14 @@ static CEconItemView *FindItem( uint64 ullID )
 	if ( CombinedItemIdIsDefIndexAndPaint( ullID ) )
 		return InventoryManager()->FindOrCreateReferenceEconItem( ullID );
 	CCSPlayerInventory *pInv = LocalInventory();
-	return pInv ? pInv->GetInventoryItemByItemID( ullID ) : NULL;
+	CEconItemView *pView = pInv ? pInv->GetInventoryItemByItemID( ullID ) : NULL;
+	// the Item Giver's catalog, or an item rebuilt from its ID
+	return pView ? pView : OfflineInventory_FindView( ullID );
 }
+
+// Item Giver (-unlockitemgivermenu): while its tab is open the inventory lists the
+// catalog instead (inventorypanelmaster.swf / inventorypanel.swf patched)
+static bool s_bItemGiverMode = false;
 
 static uint64 ItemIDForView( CEconItemView *pItem )
 {
@@ -449,11 +455,27 @@ public:
 
 		CUtlVector< SortEntry_t > vecEntries;
 		CCSPlayerInventory *pInv = LocalInventory();
-		if ( pInv && !f.m_bMatchNothing )
+		// what's listed: the inventory, or the Item Giver's catalog
+		CUtlVector< CEconItemView * > vecSource;
+		if ( s_bItemGiverMode && OfflineInventory_IsGiverMode() )
+		{
+			const CUtlVector< uint64 > &vecCatalog = OfflineGiver_GetCatalog();
+			FOR_EACH_VEC( vecCatalog, i )
+			{
+				if ( CEconItemView *pView = OfflineInventory_FindView( vecCatalog[i] ) )
+					vecSource.AddToTail( pView );
+			}
+		}
+		else if ( pInv )
 		{
 			for ( int i = 0; i < pInv->GetItemCount(); i++ )
+				vecSource.AddToTail( pInv->GetItem( i ) );
+		}
+		if ( pInv && !f.m_bMatchNothing )
+		{
+			for ( int i = 0; i < vecSource.Count(); i++ )
 			{
-				CEconItemView *pItem = pInv->GetItem( i );
+				CEconItemView *pItem = vecSource[i];
 				if ( !pItem || !pItem->IsValid() || !ItemMatches( pItem, f, pszText ) )
 					continue;
 				SortEntry_t &e = vecEntries[ vecEntries.AddToTail() ];
@@ -465,7 +487,7 @@ public:
 
 			// The loadout lists the plain versions of the weapons that fit the slot too,
 			// so a default (e.g. USP-S vs P2000) can be chosen
-			if ( f.m_bIncludeBaseItems && !f.m_bNotBaseItem && f.m_nSlot >= 0 )
+			if ( f.m_bIncludeBaseItems && !f.m_bNotBaseItem && f.m_nSlot >= 0 && !s_bItemGiverMode )
 			{
 				const CEconItemSchema::ItemDefinitionMap_t &mapDefs = GetItemSchema()->GetItemDefinitionMap();
 				FOR_EACH_MAP_FAST( mapDefs, i )
@@ -653,6 +675,22 @@ public:
 	}
 	// UseTool( xuid, tool, item ): a keyless case open; the panel's reel stops on
 	// the item the CrateOpened event names (mainmenu.swf -> SetItemThatCameFromOpeningCrate)
+	// ---- Item Giver ---------------------------------------------------------
+	void IsItemGiverAvailable( SCALEFORM_CALLBACK_ARGS_DECL ) { pui->Params_SetResult( obj, OfflineInventory_IsGiverMode() ); }
+	void IsItemGiverMode( SCALEFORM_CALLBACK_ARGS_DECL ) { pui->Params_SetResult( obj, s_bItemGiverMode && OfflineInventory_IsGiverMode() ); }
+	void SetItemGiverMode( SCALEFORM_CALLBACK_ARGS_DECL ) { s_bItemGiverMode = pui->Params_GetArgAsBool( obj, 0 ); }
+	// ReceiveItem( xuid, catalog item ): a copy of it, rolled like a case drop
+	void ReceiveItem( SCALEFORM_CALLBACK_ARGS_DECL )
+	{
+		uint64 ullID = OfflineGiver_Receive( ArgItemID( pui, obj, 1 ) );
+		CEconItemView *pView = ullID ? FindItem( ullID ) : NULL;
+		char szName[256] = "";
+		if ( pView && pView->GetItemName() )
+			WideToUTF8( pView->GetItemName(), szName, sizeof( szName ) );
+		Msg( "[item giver] received %llu: %s (pattern %d, wear %.6f)\n", ullID, szName, OfflineID_Seed( ullID ), OfflineID_Wear( ullID ) );
+		pui->Params_SetResult( obj, ullID ? CFmtStr( "%llu", ullID ).Access() : "" );
+	}
+
 	void UseTool( SCALEFORM_CALLBACK_ARGS_DECL )
 	{
 		uint64 ullCase = ArgItemID( pui, obj, 2 );
@@ -852,6 +890,10 @@ public:
 			SFUI_DECL_METHOD_AS( DoNothing, "SellItem" ),
 			SFUI_DECL_METHOD_AS( DoNothing, "DeleteItem" ),
 			SFUI_DECL_METHOD( UseTool ),
+			SFUI_DECL_METHOD( IsItemGiverAvailable ),
+			SFUI_DECL_METHOD( IsItemGiverMode ),
+			SFUI_DECL_METHOD( SetItemGiverMode ),
+			SFUI_DECL_METHOD( ReceiveItem ),
 			SFUI_DECL_METHOD_AS( DoNothing, "ClearCustomName" ),
 			SFUI_DECL_METHOD_AS( DoNothing, "HighlightStickerBySlot" ),
 			SFUI_DECL_METHOD_AS( DoNothing, "PreviewStickerInModelPanel" ),
@@ -1498,6 +1540,11 @@ void ScaleformInventoryComponents_EnsureInstalled()
 		static wchar_t s_wszScan[] = L"Join by QR code";
 		static wchar_t s_wszInvite[] = L"Invite by QR code";
 		g_pVGuiLocalize->AddString( "SFUI_Friend_Open_Casual", s_wszScan, NULL );
+		// the inventory's Market tab is the Item Giver (-unlockitemgivermenu; inventorypanel*.swf patched)
+		static wchar_t s_wszGiver[] = L"Item Giver";
+		static wchar_t s_wszReceive[] = L"Receive";
+		g_pVGuiLocalize->AddString( "SFUI_InvPanel_Market_Title", s_wszGiver, NULL );
+		g_pVGuiLocalize->AddString( "SFUI_InvContextMenu_receive", s_wszReceive, NULL );
 		g_pVGuiLocalize->AddString( "SFUI_PauseMenu_InviteFriendsButton", s_wszInvite, NULL );
 		g_pVGuiLocalize->AddString( "SFUI_Lobby_FriendsListerTitle", s_wszTitle, NULL );
 		g_pVGuiLocalize->AddString( "SFUI_Friends_Play", s_wszEmpty, NULL );

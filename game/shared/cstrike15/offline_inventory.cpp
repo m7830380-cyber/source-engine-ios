@@ -1,6 +1,6 @@
 //========= Copyright Valve Corporation, All rights reserved. ============//
 //
-// Purpose: Offline inventory for the -allskinsunlocked launch option.
+// Purpose: Offline inventory (-allskinsunlocked / -unlockitemgivermenu).
 //          See offline_inventory.h.
 //
 //===========================================================================//
@@ -15,6 +15,8 @@
 #include "tier1/utlmap.h"
 
 #ifdef CLIENT_DLL
+#include "GameEventListener.h"
+#include "c_playerresource.h"
 #define OFFLINE_SIDE "client"
 #else
 #define OFFLINE_SIDE "server"
@@ -24,56 +26,81 @@
 #include "tier0/memdbgon.h"
 
 static const char *k_pszLoadoutFile = "cfg/offline_loadout.txt";
-static const char *k_pszLoadoutPathID = "MOD";
+static const char *k_pszPathID = "MOD";
 
-#ifdef CLIENT_DLL
-// StatTrak: every skin and knife also comes as a separate StatTrak version
-// (its own item ID, OFFLINE_STATTRAK_BIT), counting your kills (bots too:
-// offline there's hardly anyone else) into cfg/offline_stattrak.txt, keyed by
-// item ID. The server has no say in it: CS:GO kept the count on Valve's item
-// server; here your own game counts from the kill event, which names the item
-// that made the kill (weapon_itemid).
-static const char *k_pszStatTrakFile = "cfg/offline_stattrak.txt";
-static KeyValues *s_pStatTrakCounts = NULL;
-
-static KeyValues *StatTrakCounts()
+//-----------------------------------------------------------------------------
+// Modes
+//-----------------------------------------------------------------------------
+bool OfflineInventory_IsGiverMode()
 {
-	if ( !s_pStatTrakCounts )
-	{
-		s_pStatTrakCounts = new KeyValues( "OfflineStatTrak" );
-		s_pStatTrakCounts->LoadFromFile( g_pFullFileSystem, k_pszStatTrakFile, k_pszLoadoutPathID );
-	}
-	return s_pStatTrakCounts;
+	static int s_nGiver = -1;
+	if ( s_nGiver < 0 )
+		s_nGiver = CommandLine()->FindParm( "-unlockitemgivermenu" ) ? 1 : 0;
+	return s_nGiver != 0;
 }
-#endif
+
+// -unlockitemgivermenu wins if both are given: the inventory starts empty
+static bool IsUnlockAll()
+{
+	static int s_nAll = -1;
+	if ( s_nAll < 0 )
+		s_nAll = CommandLine()->FindParm( "-allskinsunlocked" ) ? 1 : 0;
+	return s_nAll != 0 && !OfflineInventory_IsGiverMode();
+}
 
 bool OfflineInventory_IsEnabled()
 {
-	static int s_nEnabled = -1;
-	if ( s_nEnabled < 0 )
-		s_nEnabled = CommandLine()->FindParm( "-allskinsunlocked" ) ? 1 : 0;
-	return s_nEnabled != 0;
+	return IsUnlockAll() || OfflineInventory_IsGiverMode();
 }
 
 //-----------------------------------------------------------------------------
-// The item list: one CEconItem per unlocked weapon/paint combination. Owned
-// here for the life of the module; inventories only reference them.
+// IDs from before items carried their look: ( 1 << 40 ) | ( def << 16 ) | paint,
+// plus 1 << 41 for StatTrak. Loadouts and StatTrak counts saved with them are
+// moved over to the equivalent -allskinsunlocked item.
 //-----------------------------------------------------------------------------
-static CUtlVector< CEconItem * > s_vecItems;
-static CUtlMap< uint64, CEconItem * > s_mapItems( DefLessFunc( uint64 ) );
-
-// Deterministic, so the client and server builds of this module agree on IDs
-// (the client finds a weapon's paint kit by the item ID the server gives it).
-// Well below the 0xF000... range used for "base item" pseudo IDs.
-static uint64 MakeItemID( int nDefIndex, int nPaintKit, bool bStatTrak = false )
+// Item IDs in KeyValues: as decimal strings. They use all 64 bits, and
+// KeyValues::GetUint64 reads strings as signed (%lld); keep to the unsigned parser.
+static uint64 ReadID( KeyValues *pKV, const char *pszKey )
 {
-	return ( 1ull << 40 ) | ( bStatTrak ? OFFLINE_STATTRAK_BIT : 0 ) | ( uint64( nDefIndex & 0xFFFF ) << 16 ) | uint64( nPaintKit & 0xFFFF );
+	KeyValues *pSub = pKV->FindKey( pszKey );
+	if ( !pSub )
+		return 0;
+	if ( pSub->GetDataType() == KeyValues::TYPE_UINT64 )
+		return pSub->GetUint64();
+	const char *psz = pSub->GetString();
+	return ( psz && psz[0] ) ? V_atoui64( psz ) : 0;
 }
 
-CEconItem *OfflineInventory_FindItem( uint64 ullItemID )
+static bool IsOldID( uint64 ullID )
 {
-	unsigned short i = s_mapItems.Find( ullItemID );
-	return s_mapItems.IsValidIndex( i ) ? s_mapItems[i] : NULL;
+	return ( ullID >> 42 ) == 0 && ( ullID & ( 1ull << 40 ) );
+}
+
+static const CCStrike15ItemDefinition *CSDef( int nDef )
+{
+	return dynamic_cast< const CCStrike15ItemDefinition * >( GetItemSchema()->GetItemDefinition( nDef ) );
+}
+
+// the look -allskinsunlocked gives a skin: its cleanest wear, pattern 0
+static uint64 DefaultSkinID( int nDef, int nPaint, bool bStatTrak )
+{
+	const CPaintKit *pPaintKit = nPaint ? GetItemSchema()->GetPaintKitDefinition( nPaint ) : NULL;
+	float flWear = pPaintKit ? MAX( pPaintKit->flWearRemapMin, 0.0001f ) : 0.0f;
+	return OfflineID_MakeSkin( nDef, nPaint, 0, flWear, bStatTrak );
+}
+
+static uint64 MigrateID( uint64 ullID )
+{
+	if ( !IsOldID( ullID ) )
+		return ullID;
+	return DefaultSkinID( int( ( ullID >> 16 ) & 0xFFFF ), int( ullID & 0xFFFF ), ( ullID & ( 1ull << 41 ) ) != 0 );
+}
+
+// skins and knives have a StatTrak version (gloves don't, as in CS:GO)
+static bool CanBeStatTrak( const CCStrike15ItemDefinition *pDef, int nPaintKit )
+{
+	int nSlot = pDef->GetDefaultLoadoutSlot();
+	return nSlot != LOADOUT_POSITION_CLOTHING_HANDS && ( nPaintKit || nSlot == LOADOUT_POSITION_MELEE );
 }
 
 static bool IsVanillaKnife( const CCStrike15ItemDefinition *pDef )
@@ -87,61 +114,89 @@ static bool IsVanillaKnife( const CCStrike15ItemDefinition *pDef )
 	return pszModel && pszModel[0];
 }
 
-// skins and knives have a StatTrak version (gloves don't, as in CS:GO)
-static bool CanBeStatTrak( const CCStrike15ItemDefinition *pDef, int nPaintKit )
+#ifdef CLIENT_DLL
+//-----------------------------------------------------------------------------
+// StatTrak counts: cfg/offline_stattrak.txt, by item ID. The server has no say:
+// CS:GO kept the count on Valve's item server; here your own game counts from
+// the kill event, which names the item that made the kill (weapon_itemid).
+//-----------------------------------------------------------------------------
+static const char *k_pszStatTrakFile = "cfg/offline_stattrak.txt";
+static KeyValues *s_pStatTrakCounts = NULL;
+
+static KeyValues *StatTrakCounts()
 {
-	int nSlot = pDef->GetDefaultLoadoutSlot();
-	return nSlot != LOADOUT_POSITION_CLOTHING_HANDS && ( nPaintKit || nSlot == LOADOUT_POSITION_MELEE );
+	if ( !s_pStatTrakCounts )
+	{
+		s_pStatTrakCounts = new KeyValues( "OfflineStatTrak" );
+		s_pStatTrakCounts->LoadFromFile( g_pFullFileSystem, k_pszStatTrakFile, k_pszPathID );
+
+		// counts saved under old IDs go to the -allskinsunlocked StatTrak version
+		CUtlVector< KeyValues * > vecOld;
+		for ( KeyValues *p = s_pStatTrakCounts->GetFirstValue(); p; p = p->GetNextValue() )
+		{
+			if ( IsOldID( V_atoui64( p->GetName() ) ) )
+				vecOld.AddToTail( p );
+		}
+		FOR_EACH_VEC( vecOld, i )
+		{
+			uint64 ullOld = V_atoui64( vecOld[i]->GetName() );
+			uint64 ullNew = DefaultSkinID( int( ( ullOld >> 16 ) & 0xFFFF ), int( ullOld & 0xFFFF ), true );
+			CFmtStr strNew( "%llu", ullNew );
+			if ( !s_pStatTrakCounts->FindKey( strNew ) )
+				s_pStatTrakCounts->SetInt( strNew, vecOld[i]->GetInt() );
+			s_pStatTrakCounts->RemoveSubKey( vecOld[i] );
+			vecOld[i]->deleteThis();
+		}
+		if ( vecOld.Count() )
+			s_pStatTrakCounts->SaveToFile( g_pFullFileSystem, k_pszStatTrakFile, k_pszPathID );
+	}
+	return s_pStatTrakCounts;
 }
+#endif
 
-static void AddItem( int nDefIndex, int nPaintKit, uint32 unAccountID, bool bStatTrak = false )
+//-----------------------------------------------------------------------------
+// Building an item from its ID
+//-----------------------------------------------------------------------------
+static int s_nNextToken = 1;
+
+static CEconItem *CreateItem( uint64 ullID, uint32 unAccountID )
 {
-	uint64 ullID = MakeItemID( nDefIndex, nPaintKit, bStatTrak );
-	if ( OfflineInventory_FindItem( ullID ) )
-		return;
+	if ( !OfflineID_IsOffline( ullID ) )
+		return NULL;
 
-	const CCStrike15ItemDefinition *pDef = dynamic_cast< const CCStrike15ItemDefinition * >( GetItemSchema()->GetItemDefinition( nDefIndex ) );
+	int nKind = OfflineID_Kind( ullID );
+	int nDef = OfflineID_Def( ullID );
+	const CCStrike15ItemDefinition *pDef = ( nKind == OFFLINE_KIND_SKIN || nKind == OFFLINE_KIND_TOOL ) ? CSDef( nDef ) : NULL;
 	if ( !pDef )
-		return;
-	const CPaintKit *pPaintKit = nPaintKit ? GetItemSchema()->GetPaintKitDefinition( nPaintKit ) : NULL;
-	if ( nPaintKit && !pPaintKit )
-		return;
-
-	int nSlot = pDef->GetDefaultLoadoutSlot();
-	bool bStar = ( nSlot == LOADOUT_POSITION_MELEE || nSlot == LOADOUT_POSITION_CLOTHING_HANDS );
+		return NULL;	// stickers and music kits: not yet
 
 	CEconItem *pItem = new CEconItem();
 	pItem->SetItemID( ullID );
 	pItem->SetAccountID( unAccountID );
-	pItem->SetDefinitionIndex( nDefIndex );
+	pItem->SetDefinitionIndex( nDef );
 	pItem->SetItemLevel( 1 );
-	pItem->SetQuality( bStar ? AE_UNUSUAL : AE_UNIQUE );
-	pItem->SetRarity( pPaintKit ? EconRarity_CombinedItemAndPaintRarity( pDef->GetRarity(), pPaintKit->nRarity ) : pDef->GetRarity() );
 	pItem->SetFlags( 0 );
 	// backpack position 1..N: an acknowledged item (0 or the unacked bit would show "new item" popups)
-	pItem->SetInventoryToken( ( s_vecItems.Count() + 1 ) & kBackendPositionMask_Position );
+	pItem->SetInventoryToken( ( s_nNextToken++ ) & kBackendPositionMask_Position );
 
-	// the StatTrak version: the kill counter attributes (both stored as integers)
-	if ( bStatTrak )
+	if ( nKind == OFFLINE_KIND_TOOL )
 	{
-		static CSchemaAttributeDefHandle pAttr_KillEater( "kill eater" );
-		static CSchemaAttributeDefHandle pAttr_KillEaterType( "kill eater score type" );
-		if ( !pAttr_KillEater || !pAttr_KillEaterType )
-		{
-			delete pItem;
-			return;
-		}
-		pItem->SetQuality( AE_STRANGE );
-		uint32 unKills = 0;
-#ifdef CLIENT_DLL
-		// the saved count; counts from before StatTrak had its own versions are
-		// under the plain item's ID
-		KeyValues *pCounts = StatTrakCounts();
-		unKills = (uint32)pCounts->GetInt( CFmtStr( "%llu", ullID ), pCounts->GetInt( CFmtStr( "%llu", MakeItemID( nDefIndex, nPaintKit ) ), 0 ) );
-#endif
-		pItem->SetDynamicAttributeValue( pAttr_KillEater, unKills );
-		pItem->SetDynamicAttributeValue( pAttr_KillEaterType, (uint32)0 );	// kills
+		pItem->SetQuality( AE_UNIQUE );
+		pItem->SetRarity( pDef->GetRarity() );
+		return pItem;
 	}
+
+	int nPaint = OfflineID_Paint( ullID );
+	const CPaintKit *pPaintKit = nPaint ? GetItemSchema()->GetPaintKitDefinition( nPaint ) : NULL;
+	if ( nPaint && !pPaintKit )
+	{
+		delete pItem;
+		return NULL;
+	}
+	int nSlot = pDef->GetDefaultLoadoutSlot();
+	bool bStar = ( nSlot == LOADOUT_POSITION_MELEE || nSlot == LOADOUT_POSITION_CLOTHING_HANDS );
+	pItem->SetQuality( bStar ? AE_UNUSUAL : AE_UNIQUE );
+	pItem->SetRarity( pPaintKit ? EconRarity_CombinedItemAndPaintRarity( pDef->GetRarity(), pPaintKit->nRarity ) : pDef->GetRarity() );
 
 	if ( pPaintKit )
 	{
@@ -149,69 +204,310 @@ static void AddItem( int nDefIndex, int nPaintKit, uint32 unAccountID, bool bSta
 		static CSchemaAttributeDefHandle pAttr_PaintKitSeed( "set item texture seed" );
 		static CSchemaAttributeDefHandle pAttr_PaintKitWear( "set item texture wear" );
 		if ( pAttr_PaintKit )
-			pItem->AddOrSetCustomAttribute( pAttr_PaintKit->GetDefinitionIndex(), nPaintKit );
+			pItem->AddOrSetCustomAttribute( pAttr_PaintKit->GetDefinitionIndex(), nPaint );
 		if ( pAttr_PaintKitSeed )
-			pItem->AddOrSetCustomAttribute( pAttr_PaintKitSeed->GetDefinitionIndex(), 0 );
-		if ( pAttr_PaintKitWear )	// the cleanest wear this paint kit allows
-			pItem->AddOrSetCustomAttribute( pAttr_PaintKitWear->GetDefinitionIndex(), MAX( pPaintKit->flWearRemapMin, 0.0001f ) );
+			pItem->AddOrSetCustomAttribute( pAttr_PaintKitSeed->GetDefinitionIndex(), OfflineID_Seed( ullID ) );
+		if ( pAttr_PaintKitWear )
+			pItem->AddOrSetCustomAttribute( pAttr_PaintKitWear->GetDefinitionIndex(), MAX( OfflineID_Wear( ullID ), 0.0001f ) );
 	}
 
+	// StatTrak: the kill counter attributes (both stored as integers)
+	if ( OfflineID_IsStatTrak( ullID ) )
+	{
+		static CSchemaAttributeDefHandle pAttr_KillEater( "kill eater" );
+		static CSchemaAttributeDefHandle pAttr_KillEaterType( "kill eater score type" );
+		if ( pAttr_KillEater && pAttr_KillEaterType )
+		{
+			pItem->SetQuality( AE_STRANGE );
+			uint32 unKills = 0;
+#ifdef CLIENT_DLL
+			unKills = (uint32)StatTrakCounts()->GetInt( CFmtStr( "%llu", ullID ), 0 );
+#endif
+			pItem->SetDynamicAttributeValue( pAttr_KillEater, unKills );
+			pItem->SetDynamicAttributeValue( pAttr_KillEaterType, (uint32)0 );	// kills
+		}
+	}
+	return pItem;
+}
+
+//-----------------------------------------------------------------------------
+// Items: ours (s_mapItems: the client's inventory contents), and ones rebuilt
+// from IDs we were only told about (s_mapDecoded). The client keeps the latter,
+// and the Item Giver's catalog, in inventories of their own so they have views.
+//-----------------------------------------------------------------------------
+static CUtlMap< uint64, CEconItem * > s_mapItems( DefLessFunc( uint64 ) );
+static CUtlVector< CEconItem * > s_vecItems;
+static CUtlMap< uint64, CEconItem * > s_mapDecoded( DefLessFunc( uint64 ) );
+
+#ifdef CLIENT_DLL
+static const uint32 k_unRemoteAccount = 0x7FFFFFF0;		// other players' items
+static const uint32 k_unCatalogAccount = 0x7FFFFFF1;	// the Item Giver's catalog
+static CCSPlayerInventory *s_pRemoteInventory = NULL;
+static CCSPlayerInventory *s_pCatalogInventory = NULL;
+static CUtlMap< uint64, CEconItem * > s_mapCatalog( DefLessFunc( uint64 ) );
+static CUtlVector< uint64 > s_vecCatalog;
+
+static CCSPlayerInventory *HiddenInventory( CCSPlayerInventory *&pInventory, uint32 unAccount )
+{
+	if ( !pInventory && InventoryManager() )
+	{
+		pInventory = new CCSPlayerInventory();
+		InventoryManager()->SteamRequestInventory( pInventory, CSteamID( unAccount, k_EUniversePublic, k_EAccountTypeIndividual ) );
+	}
+	return pInventory;
+}
+#endif
+
+CEconItem *OfflineInventory_FindItem( uint64 ullItemID )
+{
+	if ( !ullItemID )
+		return NULL;
+	ullItemID = MigrateID( ullItemID );
+
+	unsigned short i = s_mapItems.Find( ullItemID );
+	if ( s_mapItems.IsValidIndex( i ) )
+		return s_mapItems[i];
+#ifdef CLIENT_DLL
+	i = s_mapCatalog.Find( ullItemID );
+	if ( s_mapCatalog.IsValidIndex( i ) )
+		return s_mapCatalog[i];
+#endif
+	i = s_mapDecoded.Find( ullItemID );
+	if ( s_mapDecoded.IsValidIndex( i ) )
+		return s_mapDecoded[i];
+
+	// someone else's item: rebuild it from its ID
+#ifdef CLIENT_DLL
+	CEconItem *pItem = CreateItem( ullItemID, k_unRemoteAccount );
+#else
+	CEconItem *pItem = CreateItem( ullItemID, 0 );
+#endif
+	if ( !pItem )
+		return NULL;
+	s_mapDecoded.Insert( ullItemID, pItem );
+#ifdef CLIENT_DLL
+	if ( CCSPlayerInventory *pRemote = HiddenInventory( s_pRemoteInventory, k_unRemoteAccount ) )
+		pRemote->AddEconItem( pItem, false, false, false );
+#endif
+	return pItem;
+}
+
+#ifdef CLIENT_DLL
+CEconItemView *OfflineInventory_FindView( uint64 ullItemID )
+{
+	ullItemID = MigrateID( ullItemID );
+	if ( !OfflineInventory_FindItem( ullItemID ) )
+		return NULL;
+	CCSPlayerInventory *pInventories[] = { CSInventoryManager() ? CSInventoryManager()->GetLocalCSInventory() : NULL, s_pCatalogInventory, s_pRemoteInventory };
+	for ( int i = 0; i < ARRAYSIZE( pInventories ); i++ )
+	{
+		CEconItemView *pView = pInventories[i] ? pInventories[i]->GetInventoryItemByItemID( ullItemID ) : NULL;
+		if ( pView )
+			return pView;
+	}
+	return NULL;
+}
+#endif
+
+//-----------------------------------------------------------------------------
+// The client's items: the catalog (every skin, knife and glove + paint kit pair
+// the game has an icon for, a normal and a StatTrak version; the cases), which
+// is the inventory with -allskinsunlocked and the Item Giver's list with
+// -unlockitemgivermenu; there the inventory is what was received
+// (cfg/offline_items.txt).
+//-----------------------------------------------------------------------------
+#ifdef CLIENT_DLL
+static const char *k_pszItemsFile = "cfg/offline_items.txt";
+static uint64 s_ullNextSerial = 1;
+static bool s_bBuilt = false;
+static uint32 s_unLocalAccount = 0;
+
+extern void OfflineCase_Build();
+
+static void AddLocal( CEconItem *pItem )
+{
+	s_mapItems.InsertOrReplace( pItem->GetItemID(), pItem );
 	s_vecItems.AddToTail( pItem );
-	s_mapItems.Insert( ullID, pItem );
 }
 
-static void AddStatTrak( int nDefIndex, int nPaintKit, uint32 unAccountID )
+static void AddCatalog( uint64 ullID )
 {
-	const CCStrike15ItemDefinition *pDef = dynamic_cast< const CCStrike15ItemDefinition * >( GetItemSchema()->GetItemDefinition( nDefIndex ) );
-	if ( pDef && CanBeStatTrak( pDef, nPaintKit ) )
-		AddItem( nDefIndex, nPaintKit, unAccountID, true );
-}
-
-static void BuildItems( uint32 unAccountID )
-{
-	if ( s_vecItems.Count() )
+	if ( s_mapCatalog.Find( ullID ) != s_mapCatalog.InvalidIndex() )
 		return;
+	CEconItem *pItem = CreateItem( ullID, OfflineInventory_IsGiverMode() ? k_unCatalogAccount : s_unLocalAccount );
+	if ( !pItem )
+		return;
+	s_mapCatalog.Insert( ullID, pItem );
+	s_vecCatalog.AddToTail( ullID );
+}
 
-	// Every weapon/knife/glove + paint kit pair the game has an icon for is a
-	// real combination (alternate_icons2/weapon_icons in items_game.txt), keyed
-	// ( def << 16 ) + ( paint << 2 ) + wear bucket. Sticker keys have bit 32 set.
+static void BuildCatalog()
+{
+	// ( def << 16 ) + ( paint << 2 ) + wear bucket keys; sticker keys have bit 32 set
 	CEconItemSchema::AlternateIconsMap_t &mapIcons = GetItemSchema()->GetAlternateIconsMap();
 	FOR_EACH_MAP_FAST( mapIcons, i )
 	{
 		uint64 ullKey = mapIcons.Key( i );
-		if ( ullKey >> 32 )
+		if ( ( ullKey >> 32 ) || ( ullKey & 3 ) != 0 )
 			continue;
-		if ( ( ullKey & 3 ) != 0 )	// one entry per wear bucket; keep the first
+		int nDef = int( ullKey >> 16 ), nPaint = int( ( ullKey & 0xFFFF ) >> 2 );
+		const CCStrike15ItemDefinition *pDef = CSDef( nDef );
+		if ( !pDef || !nPaint )
 			continue;
-		int nDefIndex = int( ullKey >> 16 );
-		int nPaintKit = int( ( ullKey & 0xFFFF ) >> 2 );
-		if ( nPaintKit )
-		{
-			AddItem( nDefIndex, nPaintKit, unAccountID );
-			AddStatTrak( nDefIndex, nPaintKit, unAccountID );
-		}
+		AddCatalog( DefaultSkinID( nDef, nPaint, false ) );
+		if ( CanBeStatTrak( pDef, nPaint ) )
+			AddCatalog( DefaultSkinID( nDef, nPaint, true ) );
 	}
 
-	// Plain ("vanilla") versions of every knife
+	// plain ("vanilla") versions of every knife
 	const CEconItemSchema::ItemDefinitionMap_t &mapDefs = GetItemSchema()->GetItemDefinitionMap();
 	FOR_EACH_MAP_FAST( mapDefs, i )
 	{
 		const CCStrike15ItemDefinition *pDef = dynamic_cast< const CCStrike15ItemDefinition * >( mapDefs[i] );
 		if ( pDef && IsVanillaKnife( pDef ) )
 		{
-			AddItem( pDef->GetDefinitionIndex(), 0, unAccountID );
-			AddStatTrak( pDef->GetDefinitionIndex(), 0, unAccountID );
+			AddCatalog( DefaultSkinID( pDef->GetDefinitionIndex(), 0, false ) );
+			AddCatalog( DefaultSkinID( pDef->GetDefinitionIndex(), 0, true ) );
 		}
 	}
 
-#ifdef CLIENT_DLL
-	// the weapon cases whose contents are among the unlocked items
-	extern void OfflineCase_Build( uint32 unAccountID );
-	OfflineCase_Build( unAccountID );
-#endif
-
-	Msg( "[offline inventory] %d items unlocked\n", s_vecItems.Count() );
+	// the weapon cases (with contents among the skins above)
+	OfflineCase_Build();
 }
+
+static void LoadOwned()
+{
+	KeyValues *pKV = new KeyValues( "OfflineItems" );
+	KeyValues::AutoDelete autodelete( pKV );
+	pKV->LoadFromFile( g_pFullFileSystem, k_pszItemsFile, k_pszPathID );
+	s_ullNextSerial = MAX( pKV->GetUint64( "next_serial", 1 ), (uint64)1 );
+	if ( KeyValues *pList = pKV->FindKey( "items" ) )
+	{
+		for ( KeyValues *p = pList->GetFirstValue(); p; p = p->GetNextValue() )
+		{
+			uint64 ullID = V_atoui64( p->GetString() );
+			if ( !ullID || s_mapItems.Find( ullID ) != s_mapItems.InvalidIndex() )
+				continue;
+			if ( CEconItem *pItem = CreateItem( ullID, s_unLocalAccount ) )
+				AddLocal( pItem );
+		}
+	}
+}
+
+static void SaveOwned()
+{
+	KeyValues *pKV = new KeyValues( "OfflineItems" );
+	KeyValues::AutoDelete autodelete( pKV );
+	pKV->SetUint64( "next_serial", s_ullNextSerial );
+	KeyValues *pList = pKV->FindKey( "items", true );
+	FOR_EACH_VEC( s_vecItems, i )
+		pList->SetString( CFmtStr( "%d", i + 1 ), CFmtStr( "%llu", s_vecItems[i]->GetItemID() ) );
+	g_pFullFileSystem->CreateDirHierarchy( "cfg", k_pszPathID );
+	pKV->SaveToFile( g_pFullFileSystem, k_pszItemsFile, k_pszPathID );
+}
+
+static void BuildLocal( uint32 unAccountID )
+{
+	if ( s_bBuilt )
+		return;
+	s_bBuilt = true;
+	s_unLocalAccount = unAccountID;
+
+	BuildCatalog();
+
+	if ( OfflineInventory_IsGiverMode() )
+	{
+		// the catalog lives in its own inventory (views for the Item Giver tab)
+		if ( CCSPlayerInventory *pCatalog = HiddenInventory( s_pCatalogInventory, k_unCatalogAccount ) )
+		{
+			FOR_EACH_VEC( s_vecCatalog, i )
+				pCatalog->AddEconItem( s_mapCatalog[ s_mapCatalog.Find( s_vecCatalog[i] ) ], false, false, false );
+		}
+		LoadOwned();
+		Msg( "[offline inventory] item giver: %d in the catalog, %d received\n", s_vecCatalog.Count(), s_vecItems.Count() );
+	}
+	else
+	{
+		// -allskinsunlocked: the catalog is the inventory
+		FOR_EACH_VEC( s_vecCatalog, i )
+		{
+			unsigned short iItem = s_mapCatalog.Find( s_vecCatalog[i] );
+			CEconItem *pItem = s_mapCatalog[iItem];
+			s_mapCatalog.RemoveAt( iItem );
+			AddLocal( pItem );
+		}
+		s_vecCatalog.Purge();
+		Msg( "[offline inventory] %d items unlocked\n", s_vecItems.Count() );
+	}
+}
+
+const CUtlVector< uint64 > &OfflineGiver_GetCatalog()
+{
+	return s_vecCatalog;
+}
+
+static void AddToLocalInventory( CEconItem *pItem )
+{
+	CCSPlayerInventory *pInventory = CSInventoryManager() ? CSInventoryManager()->GetLocalCSInventory() : NULL;
+	if ( pInventory )
+		pInventory->AddEconItem( pItem, false, false, false );
+}
+
+// a received skin: the look rolled like a case drop (pattern 0-1000, wear
+// within the paint kit's range); vanilla knives have neither
+static uint64 RollSkin( uint64 ullCatalogID )
+{
+	int nDef = OfflineID_Def( ullCatalogID ), nPaint = OfflineID_Paint( ullCatalogID );
+	bool bStatTrak = OfflineID_IsStatTrak( ullCatalogID );
+	const CPaintKit *pPaintKit = nPaint ? GetItemSchema()->GetPaintKitDefinition( nPaint ) : NULL;
+	for ( int nTry = 0; nTry < 16; nTry++ )
+	{
+		int nSeed = pPaintKit ? RandomInt( 0, 1000 ) : 0;
+		float flWear = pPaintKit ? RandomFloat( pPaintKit->flWearRemapMin, pPaintKit->flWearRemapMax ) : 0.0f;
+		uint64 ullID = OfflineID_MakeSkin( nDef, nPaint, nSeed, flWear, bStatTrak );
+		if ( s_mapItems.Find( ullID ) == s_mapItems.InvalidIndex() )
+			return ullID;
+	}
+	return 0;
+}
+
+uint64 OfflineGiver_Receive( uint64 ullCatalogID )
+{
+	if ( !OfflineInventory_IsGiverMode() || s_mapCatalog.Find( ullCatalogID ) == s_mapCatalog.InvalidIndex() )
+		return 0;
+
+	uint64 ullID = 0;
+	if ( OfflineID_Kind( ullCatalogID ) == OFFLINE_KIND_SKIN )
+		ullID = RollSkin( ullCatalogID );
+	else
+		ullID = OfflineID_MakeOther( OfflineID_Kind( ullCatalogID ), OfflineID_Def( ullCatalogID ), s_ullNextSerial++ );
+	CEconItem *pItem = ullID ? CreateItem( ullID, s_unLocalAccount ) : NULL;
+	if ( !pItem )
+		return 0;
+
+	AddLocal( pItem );
+	AddToLocalInventory( pItem );
+	SaveOwned();
+	return ullID;
+}
+
+// a received item used up (a case opened)
+static void RemoveOwned( uint64 ullID )
+{
+	unsigned short i = s_mapItems.Find( ullID );
+	if ( !s_mapItems.IsValidIndex( i ) )
+		return;
+	CEconItem *pItem = s_mapItems[i];
+	s_mapItems.RemoveAt( i );
+	s_vecItems.FindAndRemove( pItem );
+	SaveOwned();
+	// rebuild the inventory without it (and with the loadout re-applied)
+	CCSPlayerInventory *pInventory = CSInventoryManager() ? CSInventoryManager()->GetLocalCSInventory() : NULL;
+	if ( pInventory && steamapicontext && steamapicontext->SteamUser() )
+		OfflineInventory_Fill( pInventory, steamapicontext->SteamUser()->GetSteamID() );
+	// the item object may still be referenced by a view this frame: keep it
+}
+#endif
 
 //-----------------------------------------------------------------------------
 // Loadout file
@@ -220,21 +516,28 @@ static CUtlMap< CCSPlayerInventory *, long > s_mapFilledFileTime( DefLessFunc( C
 
 static long LoadoutFileTime()
 {
-	return g_pFullFileSystem->FileExists( k_pszLoadoutFile, k_pszLoadoutPathID ) ? g_pFullFileSystem->GetFileTime( k_pszLoadoutFile, k_pszLoadoutPathID ) : 0;
+	return g_pFullFileSystem->FileExists( k_pszLoadoutFile, k_pszPathID ) ? g_pFullFileSystem->GetFileTime( k_pszLoadoutFile, k_pszPathID ) : 0;
 }
 
 bool OfflineInventory_NeedsRefill( CCSPlayerInventory *pInventory )
 {
 	unsigned short i = s_mapFilledFileTime.Find( pInventory );
-	return !s_mapFilledFileTime.IsValidIndex( i ) || pInventory->GetItemCount() == 0 || s_mapFilledFileTime[i] != LoadoutFileTime();
+	return !s_mapFilledFileTime.IsValidIndex( i ) || s_mapFilledFileTime[i] != LoadoutFileTime();
 }
+
+#ifndef CLIENT_DLL
+// the server's own copies of the items equipped in each inventory
+static CUtlMap< CCSPlayerInventory *, CUtlVector< CEconItem * > * > s_mapServerCopies( DefLessFunc( CCSPlayerInventory * ) );
+#endif
 
 void OfflineInventory_Fill( CCSPlayerInventory *pInventory, const CSteamID &owner, KeyValues *pLoadout )
 {
 	if ( !pInventory )
 		return;
 
-	BuildItems( owner.GetAccountID() );
+#ifdef CLIENT_DLL
+	BuildLocal( owner.GetAccountID() );
+#endif
 
 	// Sets the owner and registers the inventory so lookups by account ID find it
 	InventoryManager()->SteamRequestInventory( pInventory, owner );
@@ -247,36 +550,71 @@ void OfflineInventory_Fill( CCSPlayerInventory *pInventory, const CSteamID &owne
 	if ( !pKV )
 	{
 		pFileKV = new KeyValues( "OfflineLoadout" );
-		pFileKV->LoadFromFile( g_pFullFileSystem, k_pszLoadoutFile, k_pszLoadoutPathID );
+		pFileKV->LoadFromFile( g_pFullFileSystem, k_pszLoadoutFile, k_pszPathID );
 		pKV = pFileKV;
 	}
 	KeyValues::AutoDelete autodelete( pFileKV );
 
+	int nEquipped = 0;
+#ifdef CLIENT_DLL
 	// Equipped state lives on the items; start clean, then apply the file
 	FOR_EACH_VEC( s_vecItems, i )
 	{
 		for ( int iTeam = 0; iTeam < LOADOUT_COUNT; iTeam++ )
 			s_vecItems[i]->UpdateEquippedState( iTeam, INVALID_EQUIPPED_SLOT );
 	}
-	int nEquipped = 0;
 	for ( int iTeam = 0; iTeam < LOADOUT_COUNT; iTeam++ )
 	{
 		for ( int iSlot = 0; iSlot < LOADOUT_POSITION_COUNT; iSlot++ )
 		{
-			CEconItem *pItem = OfflineInventory_FindItem( pKV->GetUint64( CFmtStr( "item_%d_%d", iTeam, iSlot ), 0 ) );
-			if ( pItem )
+			uint64 ullID = MigrateID( ReadID( pKV, CFmtStr( "item_%d_%d", iTeam, iSlot ) ) );
+			unsigned short iItem = s_mapItems.Find( ullID );
+			if ( s_mapItems.IsValidIndex( iItem ) )
 			{
-				pItem->UpdateEquippedState( iTeam, iSlot );
+				s_mapItems[iItem]->UpdateEquippedState( iTeam, iSlot );
 				nEquipped++;
 			}
 		}
 	}
-
 	// ItemHasBeenUpdated() puts each equipped item into the loadout slots
 	FOR_EACH_VEC( s_vecItems, i )
-	{
 		pInventory->AddEconItem( s_vecItems[i], false, false, false );
+#else
+	// the server: copies of just the equipped items, this inventory's own (each
+	// player equips their own; the IDs say what the items look like)
+	unsigned short iCopies = s_mapServerCopies.Find( pInventory );
+	if ( !s_mapServerCopies.IsValidIndex( iCopies ) )
+		iCopies = s_mapServerCopies.Insert( pInventory, new CUtlVector< CEconItem * > );
+	CUtlVector< CEconItem * > &vecCopies = *s_mapServerCopies[iCopies];
+	vecCopies.PurgeAndDeleteElements();
+
+	for ( int iTeam = 0; iTeam < LOADOUT_COUNT; iTeam++ )
+	{
+		for ( int iSlot = 0; iSlot < LOADOUT_POSITION_COUNT; iSlot++ )
+		{
+			uint64 ullID = MigrateID( ReadID( pKV, CFmtStr( "item_%d_%d", iTeam, iSlot ) ) );
+			if ( !ullID )
+				continue;
+			CEconItem *pItem = NULL;
+			FOR_EACH_VEC( vecCopies, i )
+			{
+				if ( vecCopies[i]->GetItemID() == ullID )
+					pItem = vecCopies[i];
+			}
+			if ( !pItem )
+			{
+				pItem = CreateItem( ullID, owner.GetAccountID() );
+				if ( !pItem )
+					continue;
+				vecCopies.AddToTail( pItem );
+			}
+			pItem->UpdateEquippedState( iTeam, iSlot );
+			nEquipped++;
+		}
 	}
+	FOR_EACH_VEC( vecCopies, i )
+		pInventory->AddEconItem( vecCopies[i], false, false, false );
+#endif
 
 	for ( int iTeam = 0; iTeam < LOADOUT_COUNT; iTeam++ )
 	{
@@ -292,8 +630,8 @@ void OfflineInventory_Fill( CCSPlayerInventory *pInventory, const CSteamID &owne
 		s_mapFilledFileTime.InsertOrReplace( pInventory, LoadoutFileTime() );
 
 	VERBOSE_PRINTF( "[offline] " OFFLINE_SIDE " fill: owner %llu, %d items, %d equipped from %s (exists %d, time %ld)\n",
-		owner.ConvertToUint64(), pInventory->GetItemCount(), nEquipped, k_pszLoadoutFile,
-		(int)g_pFullFileSystem->FileExists( k_pszLoadoutFile, k_pszLoadoutPathID ), LoadoutFileTime() );
+		owner.ConvertToUint64(), pInventory->GetItemCount(), nEquipped, pLoadout ? "their loadout" : k_pszLoadoutFile,
+		(int)g_pFullFileSystem->FileExists( k_pszLoadoutFile, k_pszPathID ), LoadoutFileTime() );
 	fflush( stdout );
 }
 
@@ -311,9 +649,9 @@ void OfflineInventory_SaveLoadout( CCSPlayerInventory *pInventory )
 		for ( int iSlot = 0; iSlot < LOADOUT_POSITION_COUNT; iSlot++ )
 		{
 			itemid_t ullID = pInventory->GetLoadoutItemID( iTeam, iSlot );
-			if ( ullID != LOADOUT_SLOT_USE_BASE_ITEM && OfflineInventory_FindItem( ullID ) )
+			if ( ullID != LOADOUT_SLOT_USE_BASE_ITEM && OfflineID_IsOffline( ullID ) && OfflineInventory_FindItem( ullID ) )
 			{
-				pKV->SetUint64( CFmtStr( "item_%d_%d", iTeam, iSlot ), ullID );
+				pKV->SetString( CFmtStr( "item_%d_%d", iTeam, iSlot ), CFmtStr( "%llu", ullID ) );
 				nSaved++;
 			}
 
@@ -323,10 +661,10 @@ void OfflineInventory_SaveLoadout( CCSPlayerInventory *pInventory )
 		}
 	}
 
-	g_pFullFileSystem->CreateDirHierarchy( "cfg", k_pszLoadoutPathID );
-	bool bSaved = pKV->SaveToFile( g_pFullFileSystem, k_pszLoadoutFile, k_pszLoadoutPathID );
+	g_pFullFileSystem->CreateDirHierarchy( "cfg", k_pszPathID );
+	bool bSaved = pKV->SaveToFile( g_pFullFileSystem, k_pszLoadoutFile, k_pszPathID );
 	char szFullPath[MAX_PATH] = "";
-	g_pFullFileSystem->RelativePathToFullPath( k_pszLoadoutFile, k_pszLoadoutPathID, szFullPath, sizeof( szFullPath ) );
+	g_pFullFileSystem->RelativePathToFullPath( k_pszLoadoutFile, k_pszPathID, szFullPath, sizeof( szFullPath ) );
 	VERBOSE_PRINTF( "[offline] " OFFLINE_SIDE " saved loadout: %d items, write %s, path '%s'\n", nSaved, bSaved ? "ok" : "FAILED", szFullPath );
 	fflush( stdout );
 
@@ -346,7 +684,7 @@ void OfflineInventory_SendLoadoutToServer()
 
 	KeyValues *pKV = new KeyValues( "OfflineLoadout" );
 	KeyValues::AutoDelete autodelete( pKV );
-	pKV->LoadFromFile( g_pFullFileSystem, k_pszLoadoutFile, k_pszLoadoutPathID );
+	pKV->LoadFromFile( g_pFullFileSystem, k_pszLoadoutFile, k_pszPathID );
 
 	// begin / set <key> <value> ... (several per command, well under the command
 	// length limit) / end: the server swaps in the whole loadout at "end"
@@ -360,9 +698,14 @@ void OfflineInventory_SendLoadoutToServer()
 		char szValue[64];
 		switch ( pSub->GetDataType() )
 		{
-		case KeyValues::TYPE_UINT64:	V_snprintf( szValue, sizeof( szValue ), "%llu", pSub->GetUint64() ); break;
+		case KeyValues::TYPE_UINT64:	V_snprintf( szValue, sizeof( szValue ), "%llu", MigrateID( pSub->GetUint64() ) ); break;
 		case KeyValues::TYPE_INT:		V_snprintf( szValue, sizeof( szValue ), "%d", pSub->GetInt() ); break;
-		case KeyValues::TYPE_STRING:	V_strncpy( szValue, pSub->GetString(), sizeof( szValue ) ); break;
+		case KeyValues::TYPE_STRING:
+			if ( StringHasPrefix( pszKey, "item_" ) )
+				V_snprintf( szValue, sizeof( szValue ), "%llu", MigrateID( V_atoui64( pSub->GetString() ) ) );
+			else
+				V_strncpy( szValue, pSub->GetString(), sizeof( szValue ) );
+			break;
 		default:						szValue[0] = 0; break;
 		}
 		const char *pszValue = szValue;
@@ -384,31 +727,29 @@ void OfflineInventory_SendLoadoutToServer()
 
 	Msg( "[offline] sent loadout to the server: %d entries\n", nSent );
 }
-#endif
 
-#ifdef CLIENT_DLL
 //-----------------------------------------------------------------------------
-// Console access, handy until the inventory screens work:
-//   offline_list [filter]                 lists unlocked items
+// Console access:
+//   offline_list [filter]                 lists the items
 //   offline_equip <item id>               equips an item for every team that can use it
 //-----------------------------------------------------------------------------
-CON_COMMAND_F( offline_list, "List unlocked items (with -allskinsunlocked). Optional name filter.", FCVAR_RELEASE )
+CON_COMMAND_F( offline_list, "List the offline inventory's items. Optional name filter.", FCVAR_RELEASE )
 {
 	const char *pszFilter = args.ArgC() > 1 ? args[1] : NULL;
 	FOR_EACH_VEC( s_vecItems, i )
 	{
-		CEconItem *pItem = s_vecItems[i];
-		const CEconItemDefinition *pDef = GetItemSchema()->GetItemDefinition( pItem->GetDefinitionIndex() );
-		const CPaintKit *pPaintKit = GetItemSchema()->GetPaintKitDefinition( int( pItem->GetItemID() & 0xFFFF ) );
+		uint64 ullID = s_vecItems[i]->GetItemID();
+		const CEconItemDefinition *pDef = GetItemSchema()->GetItemDefinition( s_vecItems[i]->GetDefinitionIndex() );
+		const CPaintKit *pPaintKit = OfflineID_Kind( ullID ) == OFFLINE_KIND_SKIN ? GetItemSchema()->GetPaintKitDefinition( OfflineID_Paint( ullID ) ) : NULL;
 		const char *pszDef = pDef ? pDef->GetDefinitionName() : "?";
-		const char *pszPaint = pPaintKit ? pPaintKit->sName.String() : "vanilla";
+		const char *pszPaint = pPaintKit ? pPaintKit->sName.String() : "-";
 		if ( pszFilter && !V_stristr( pszDef, pszFilter ) && !V_stristr( pszPaint, pszFilter ) )
 			continue;
-		Msg( "%llu  %s  %s\n", pItem->GetItemID(), pszDef, pszPaint );
+		Msg( "%llu  %s  %s  pattern %d  wear %.4f%s\n", ullID, pszDef, pszPaint, OfflineID_Seed( ullID ), OfflineID_Wear( ullID ), OfflineID_IsStatTrak( ullID ) ? "  StatTrak" : "" );
 	}
 }
 
-CON_COMMAND_F( offline_equip, "Equip an unlocked item by id (see offline_list) for every team that can use it", FCVAR_RELEASE )
+CON_COMMAND_F( offline_equip, "Equip an offline item by id (see offline_list) for every team that can use it", FCVAR_RELEASE )
 {
 	if ( args.ArgC() < 2 )
 		return;
@@ -419,7 +760,7 @@ CON_COMMAND_F( offline_equip, "Equip an unlocked item by id (see offline_list) f
 		Msg( "offline_equip: no item %s\n", args[1] );
 		return;
 	}
-	const CCStrike15ItemDefinition *pDef = dynamic_cast< const CCStrike15ItemDefinition * >( GetItemSchema()->GetItemDefinition( pItem->GetDefinitionIndex() ) );
+	const CCStrike15ItemDefinition *pDef = CSDef( pItem->GetDefinitionIndex() );
 	for ( int iTeam = TEAM_TERRORIST; iTeam <= TEAM_CT; iTeam++ )
 	{
 		if ( !pDef || !pDef->CanBeUsedByTeam( iTeam ) )
@@ -432,16 +773,11 @@ CON_COMMAND_F( offline_equip, "Equip an unlocked item by id (see offline_list) f
 		}
 	}
 }
-#endif
 
-#ifdef CLIENT_DLL
 //-----------------------------------------------------------------------------
 // StatTrak counting: a kill by the local player on an enemy, with a StatTrak
 // item (player_death's weapon_itemid), adds one and saves the file
 //-----------------------------------------------------------------------------
-#include "GameEventListener.h"
-#include "c_playerresource.h"
-
 class COfflineStatTrak : public CAutoGameSystem, public CGameEventListener
 {
 public:
@@ -466,9 +802,10 @@ public:
 			return;
 
 		uint64 ullItemID = V_atoui64( event->GetString( "weapon_itemid" ) );
-		CEconItem *pItem = ullItemID ? OfflineInventory_FindItem( ullItemID ) : NULL;
+		unsigned short i = s_mapItems.Find( ullItemID );		// ours only
+		CEconItem *pItem = s_mapItems.IsValidIndex( i ) ? s_mapItems[i] : NULL;
 		static CSchemaAttributeDefHandle pAttr_KillEater( "kill eater" );
-		if ( !pItem || pItem->GetQuality() != AE_STRANGE || !pAttr_KillEater )
+		if ( !pItem || !OfflineID_IsStatTrak( ullItemID ) || !pAttr_KillEater )
 			return;
 
 		uint32 unKills = 0;
@@ -479,25 +816,25 @@ public:
 
 		KeyValues *pCounts = StatTrakCounts();
 		pCounts->SetInt( CFmtStr( "%llu", ullItemID ), (int)unKills );
-		pCounts->SaveToFile( g_pFullFileSystem, k_pszStatTrakFile, k_pszLoadoutPathID );
+		pCounts->SaveToFile( g_pFullFileSystem, k_pszStatTrakFile, k_pszPathID );
 		VERBOSE_PRINTF( "[stattrak] %s: %u kills\n", event->GetString( "weapon" ), unKills );
 	}
 };
 static COfflineStatTrak s_OfflineStatTrak;
-#endif
 
-#ifdef CLIENT_DLL
 //-----------------------------------------------------------------------------
 // Cases: a case's contents come from its loot list (items_game client_loot_lists,
 // found through its "set supply crate series" and revolving_loot_lists): one
 // nested list per rarity, plus an "unusual" entry for the star items. Opening
 // rolls CS:GO's odds: Mil-Spec 79.92%, Restricted 15.98%, Classified 3.2%,
 // Covert 0.64%, star 0.26%; the star item is a random knife (gloves for the
-// glove cases) from the unlocked items.
+// glove cases); one in ten comes out StatTrak. Contents are listed as the
+// catalog's items (cleanest wear); a case opened in item giver mode gives a
+// rolled item, like Receive, and is used up.
 //-----------------------------------------------------------------------------
 struct OfflineCase_t
 {
-	uint64 m_ullID;
+	int m_nDef;
 	CUtlVector< uint64 > m_vecItems;
 	bool m_bRareSpecial;
 };
@@ -505,12 +842,20 @@ static CUtlVector< OfflineCase_t * > s_vecCases;
 
 static const OfflineCase_t *FindCase( uint64 ullID )
 {
+	if ( !OfflineID_IsOffline( ullID ) || OfflineID_Kind( ullID ) != OFFLINE_KIND_TOOL )
+		return NULL;
+	int nDef = OfflineID_Def( ullID );
 	FOR_EACH_VEC( s_vecCases, i )
 	{
-		if ( s_vecCases[i]->m_ullID == ullID )
+		if ( s_vecCases[i]->m_nDef == nDef )
 			return s_vecCases[i];
 	}
 	return NULL;
+}
+
+static bool InCatalog( uint64 ullID )
+{
+	return s_mapCatalog.Find( ullID ) != s_mapCatalog.InvalidIndex();
 }
 
 static void CollectLoot( const CEconLootListDefinition *pList, OfflineCase_t *pCase, int nDepth )
@@ -533,8 +878,8 @@ static void CollectLoot( const CEconLootListDefinition *pList, OfflineCase_t *pC
 		}
 		if ( entry.m_nItemDef > 0 && entry.m_nPaintKit > 0 )
 		{
-			uint64 ullItem = MakeItemID( entry.m_nItemDef, entry.m_nPaintKit );
-			if ( OfflineInventory_FindItem( ullItem ) && pCase->m_vecItems.Find( ullItem ) == pCase->m_vecItems.InvalidIndex() )
+			uint64 ullItem = DefaultSkinID( entry.m_nItemDef, entry.m_nPaintKit, false );
+			if ( InCatalog( ullItem ) && pCase->m_vecItems.Find( ullItem ) == pCase->m_vecItems.InvalidIndex() )
 				pCase->m_vecItems.AddToTail( ullItem );
 		}
 	}
@@ -546,10 +891,8 @@ static int ItemRarity( uint64 ullID )
 	return pItem ? pItem->GetRarity() : 0;
 }
 
-void OfflineCase_Build( uint32 unAccountID )
+void OfflineCase_Build()
 {
-	if ( s_vecCases.Count() )
-		return;
 	static CSchemaAttributeDefHandle pAttr_Series( "set supply crate series" );
 	if ( !pAttr_Series )
 		return;
@@ -571,12 +914,12 @@ void OfflineCase_Build( uint32 unAccountID )
 			continue;
 
 		OfflineCase_t *pCase = new OfflineCase_t;
-		pCase->m_ullID = MakeItemID( pDef->GetDefinitionIndex(), 0 );
+		pCase->m_nDef = pDef->GetDefinitionIndex();
 		pCase->m_bRareSpecial = false;
 		CollectLoot( GetItemSchema()->GetLootListByName( mapSeries[iSeries] ), pCase, 0 );
 		if ( !pCase->m_vecItems.Count() )
 		{
-			delete pCase;		// souvenir packages, sticker capsules: nothing we unlock
+			delete pCase;		// souvenir packages, sticker capsules: nothing we have
 			continue;
 		}
 		// best first, like CS:GO's case contents
@@ -588,19 +931,7 @@ void OfflineCase_Build( uint32 unAccountID )
 			}
 		}
 		s_vecCases.AddToTail( pCase );
-
-		// the case itself, in the inventory
-		CEconItem *pItem = new CEconItem();
-		pItem->SetItemID( pCase->m_ullID );
-		pItem->SetAccountID( unAccountID );
-		pItem->SetDefinitionIndex( pDef->GetDefinitionIndex() );
-		pItem->SetItemLevel( 1 );
-		pItem->SetQuality( AE_UNIQUE );
-		pItem->SetRarity( pDef->GetRarity() );
-		pItem->SetFlags( 0 );
-		pItem->SetInventoryToken( ( s_vecItems.Count() + 1 ) & kBackendPositionMask_Position );
-		s_vecItems.AddToTail( pItem );
-		s_mapItems.Insert( pCase->m_ullID, pItem );
+		AddCatalog( OfflineID_MakeOther( OFFLINE_KIND_TOOL, pCase->m_nDef ) );
 	}
 	Msg( "[offline inventory] %d cases\n", s_vecCases.Count() );
 }
@@ -621,21 +952,15 @@ void OfflineCase_GetContents( uint64 ullCaseID, CUtlVector< uint64 > &vecItems, 
 	}
 }
 
-// one in ten comes out StatTrak, as in CS:GO (the star items' list has both already)
+// the drop, as a catalog item: one in ten comes out StatTrak, as in CS:GO
 static uint64 MaybeStatTrak( uint64 ullID )
 {
-	if ( ullID & OFFLINE_STATTRAK_BIT )
-		return ullID;
-	uint64 ullStatTrak = ullID | OFFLINE_STATTRAK_BIT;
+	uint64 ullStatTrak = DefaultSkinID( OfflineID_Def( ullID ), OfflineID_Paint( ullID ), true );
 	return ( RandomInt( 0, 9 ) == 0 && OfflineInventory_FindItem( ullStatTrak ) ) ? ullStatTrak : ullID;
 }
 
-uint64 OfflineCase_Open( uint64 ullCaseID )
+static uint64 RollCaseDrop( const OfflineCase_t *pCase, uint64 ullCaseID )
 {
-	const OfflineCase_t *pCase = FindCase( ullCaseID );
-	if ( !pCase )
-		return 0;
-
 	// the tier, by CS:GO's published odds (percent)
 	float flRoll = RandomFloat( 0.0f, 100.0f );
 	int nRarity;
@@ -653,14 +978,23 @@ uint64 OfflineCase_Open( uint64 ullCaseID )
 	if ( nRarity == 99 )
 	{
 		// a star item: gloves from the glove cases, knives from the rest
-		const CEconItemDefinition *pCaseDef = GetItemSchema()->GetItemDefinition( int( ( ullCaseID >> 16 ) & 0xFFFF ) );
+		const CEconItemDefinition *pCaseDef = GetItemSchema()->GetItemDefinition( pCase->m_nDef );
 		bool bGloves = pCaseDef && V_stristr( pCaseDef->GetDefinitionName(), "glove" );
-		CUtlVector< uint64 > vecStar;
-		FOR_EACH_VEC( s_vecItems, i )
+		// the skins to pick from: the catalog (item giver) or the inventory
+		CUtlVector< uint64 > vecAll, vecStar;
+		if ( OfflineInventory_IsGiverMode() )
+			vecAll.AddVectorToTail( s_vecCatalog );
+		else
 		{
-			const CCStrike15ItemDefinition *pDef = dynamic_cast< const CCStrike15ItemDefinition * >( s_vecItems[i]->GetItemDefinition() );
-			if ( pDef && pDef->GetDefaultLoadoutSlot() == ( bGloves ? LOADOUT_POSITION_CLOTHING_HANDS : LOADOUT_POSITION_MELEE ) && !( s_vecItems[i]->GetItemID() & OFFLINE_STATTRAK_BIT ) )
-				vecStar.AddToTail( s_vecItems[i]->GetItemID() );
+			FOR_EACH_VEC( s_vecItems, i )
+				vecAll.AddToTail( s_vecItems[i]->GetItemID() );
+		}
+		FOR_EACH_VEC( vecAll, i )
+		{
+			const CCStrike15ItemDefinition *pDef = CSDef( OfflineID_Def( vecAll[i] ) );
+			if ( OfflineID_Kind( vecAll[i] ) == OFFLINE_KIND_SKIN && !OfflineID_IsStatTrak( vecAll[i] ) && pDef &&
+				 pDef->GetDefaultLoadoutSlot() == ( bGloves ? LOADOUT_POSITION_CLOTHING_HANDS : LOADOUT_POSITION_MELEE ) )
+				vecStar.AddToTail( vecAll[i] );
 		}
 		if ( vecStar.Count() )
 			return MaybeStatTrak( vecStar[ RandomInt( 0, vecStar.Count() - 1 ) ] );
@@ -680,5 +1014,21 @@ uint64 OfflineCase_Open( uint64 ullCaseID )
 			return MaybeStatTrak( vecTier[ RandomInt( 0, vecTier.Count() - 1 ) ] );
 	}
 	return MaybeStatTrak( pCase->m_vecItems[ RandomInt( 0, pCase->m_vecItems.Count() - 1 ) ] );
+}
+
+uint64 OfflineCase_Open( uint64 ullCaseID )
+{
+	const OfflineCase_t *pCase = FindCase( ullCaseID );
+	if ( !pCase )
+		return 0;
+	uint64 ullDrop = RollCaseDrop( pCase, ullCaseID );
+	if ( !OfflineInventory_IsGiverMode() )
+		return ullDrop;		// -allskinsunlocked: already in the inventory
+
+	// item giver mode: the drop is received (rolled look), the case used up
+	uint64 ullID = OfflineGiver_Receive( ullDrop );
+	if ( ullID )
+		RemoveOwned( ullCaseID );
+	return ullID;
 }
 #endif

@@ -71,6 +71,7 @@ ROOT_PROJECTS = [
 	'server',
 	'matchmaking',
 	'serverbrowser',
+	'vaudio_speex', # voice codec (sv_voicecodec on iOS); loaded by name
 ]
 
 # VPC link names that differ from their projects.vgc project name.
@@ -108,6 +109,8 @@ CUSTOM_LIBS = set([
 
 # Extra link dependencies per VPC project on iOS.
 PROJECT_EXTRA_USES = {
+	# libspeex (its prebuilt .a line in the VPC doesn't resolve)
+	'vaudio_speex': ['speex'],
 	'vguimatsurface': ['fontconfig', 'FT2', 'PNG', 'ZLIB'], # linuxfont.cpp font lookup
 	'engine': ['CURL'],
 }
@@ -121,7 +124,9 @@ PROJECT_EXTRA_CXXFLAGS = {
 # Extra sources per VPC project on iOS.
 PROJECT_EXTRA_SOURCES = {
 	# prebuilt libraries missing from the tree: Steam Datagram Relay, Steam Audio
-	'engine': ['ios/engine/steamdatagram_null.cpp', 'ios/engine/phonon_null.cpp'],
+	'engine': ['ios/engine/steamdatagram_null.cpp', 'ios/engine/phonon_null.cpp',
+		# voice recording with AVAudioEngine
+		'ios/engine/voice_record_ios.mm'],
 	# CSteamID::Render; Valve's engine compiles this in, matchmaking needs it too
 	'matchmaking': ['common/steamid.cpp'],
 	'client': ['common/steamid.cpp',
@@ -583,6 +588,23 @@ def build_custom_projects(bld):
 		name     = 'fontconfig',
 		install_path = None, # static; linked into the modules
 		use      = ['FT2'],
+	)
+
+	# libspeex for the vaudio_speex voice codec (the sources of its libspeex.a)
+	SPEEX_DIR = 'engine/voice_codecs/speex/source/libspeex'
+	bld(
+		features = 'c cstlib',
+		source   = [SPEEX_DIR + '/' + f for f in ['nb_celp.c', 'sb_celp.c', 'lpc.c', 'ltp.c', 'lsp.c',
+			'quant_lsp.c', 'lsp_tables_nb.c', 'gain_table.c', 'gain_table_lbr.c', 'cb_search.c',
+			'filters.c', 'bits.c', 'modes.c', 'vq.c', 'high_lsp_tables.c', 'vbr.c', 'hexc_table.c',
+			'exc_5_256_table.c', 'exc_5_64_table.c', 'exc_8_128_table.c', 'exc_10_32_table.c',
+			'exc_10_16_table.c', 'exc_20_32_table.c', 'hexc_10_32_table.c', 'misc.c', 'speex_header.c',
+			'speex_callbacks.c', 'math_approx.c', 'stereo.c']],
+		target   = 'speex',
+		name     = 'speex',
+		install_path = None, # static; linked into vaudio_speex
+		includes = [SPEEX_DIR],
+		export_includes = [SPEEX_DIR],
 	)
 
 	# GC SDK subset plus the steammessages protobuf it builds on

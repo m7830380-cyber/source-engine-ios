@@ -381,6 +381,8 @@ static int AddMenuButtons( rgba_t color, bool bOnlyMissing )
 		{ "inspect",  "vgui/touch/zoom",         "+lookatweapon",   0.580000, 0.000000, 0.660000, 0.142222 },
 		{ "buymenu",  "vgui/touch/show_weapons", "ios_buymenu_toggle", 0.790000, 0.000000, 0.870000, 0.142222 },
 		{ "pause",    "vgui/touch/menu",         "gameui_activate", 0.900000, 0.000000, 0.980000, 0.142222 },
+		// voice chat: hold to talk (LAN games)
+		{ "voice",    "vgui/touch/voice_chat",   "+voicerecord",    0.180000, 0.300000, 0.260000, 0.442222 },
 	};
 
 	int nAdded = 0;
@@ -1288,7 +1290,7 @@ static const wchar_t *TouchButtonFriendlyName( const char *pszName, wchar_t *pws
 		{ "use", "Use" }, { "speed", "Walk" }, { "reload", "Reload" }, { "invnext", "Next weapon" },
 		{ "invprev", "Previous weapon" }, { "drop", "Drop weapon" }, { "console", "Console" },
 		{ "edit", "Edit controls" }, { "scores", "Scoreboard" }, { "teammenu", "Team" }, { "chat", "Chat" },
-		{ "inspect", "Inspect" }, { "buymenu", "Buy menu" }, { "pause", "Menu" },
+		{ "inspect", "Inspect" }, { "buymenu", "Buy menu" }, { "pause", "Menu" }, { "voice", "Voice chat (hold)" },
 	};
 	const char *pszFriendly = pszName;
 	for( int i = 0; i < ARRAYSIZE( s_pszNames ); i++ )

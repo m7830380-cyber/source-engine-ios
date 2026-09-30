@@ -15306,16 +15306,6 @@ void CShaderAPIDx8::ReadPixelsAsync( int x, int y, int width, int height, unsign
 				Assert( !IsX360() );
 
 #if defined( IOS )
-				// Convert from the surface's real format, not the one the render target
-				// asked for: an RGBA8888 target is D3DFMT_A8R8G8B8 on togl (no A8B8G8R8)
-				// and its readback comes back in that B,G,R,A order. Converting it as
-				// RGBA8888 swapped red and blue in every weapon skin (the Dragon Lore's
-				// gold came out cyan) and in their phong exponent maps.
-				{
-					ImageFormat surfaceFormat = ImageLoader::D3DFormatToImageFormat( surfaceDesc.Format );
-					if ( surfaceFormat != IMAGE_FORMAT_UNKNOWN )
-						s_format = surfaceFormat;
-				}
 				if ( s_pSystemSurface )
 				{
 					VERBOSE_PRINTF( "[composite] ReadPixelsAsync: previous readback not collected yet (surface overwritten)\n" );

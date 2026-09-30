@@ -769,7 +769,9 @@ static long LoadoutFileTime()
 bool OfflineInventory_NeedsRefill( CCSPlayerInventory *pInventory )
 {
 	unsigned short i = s_mapFilledFileTime.Find( pInventory );
-	return !s_mapFilledFileTime.IsValidIndex( i ) || s_mapFilledFileTime[i] != LoadoutFileTime();
+	// an empty inventory too: a new player (map change) can get the address of the
+	// last one, whose entry would say it is already filled
+	return !s_mapFilledFileTime.IsValidIndex( i ) || pInventory->GetItemCount() == 0 || s_mapFilledFileTime[i] != LoadoutFileTime();
 }
 
 #ifndef CLIENT_DLL

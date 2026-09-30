@@ -13,6 +13,7 @@
 #include "tier0/icommandline.h"
 #include "tier1/fmtstr.h"
 #include "tier1/utlmap.h"
+#include "tier1/utlbuffer.h"
 
 #ifdef CLIENT_DLL
 #include "GameEventListener.h"
@@ -58,17 +59,62 @@ bool OfflineInventory_IsEnabled()
 // plus 1 << 41 for StatTrak. Loadouts and StatTrak counts saved with them are
 // moved over to the equivalent -allskinsunlocked item.
 //-----------------------------------------------------------------------------
-// Item IDs in KeyValues: as decimal strings. They use all 64 bits, and
-// KeyValues::GetUint64 reads strings as signed (%lld); keep to the unsigned parser.
-static uint64 ReadID( KeyValues *pKV, const char *pszKey )
+// Item IDs in files: written as decimal strings, but KeyValues' parser types a
+// digits-only value with strtol, which on 64-bit iOS (64-bit long) takes the
+// whole ID without overflow and then keeps it as a 32-bit int: every saved ID
+// came back truncated (no equips in matches, received items lost). Files that
+// hold IDs are loaded through LoadIDFile, which turns long decimal values into
+// the "0x" + 16 hex digits form KeyValues reads as a uint64.
+static bool LoadIDFile( KeyValues *pKV, const char *pszFile )
 {
-	KeyValues *pSub = pKV->FindKey( pszKey );
+	CUtlBuffer bufIn;
+	if ( !g_pFullFileSystem->ReadFile( pszFile, k_pszPathID, bufIn ) )
+		return false;
+	const char *pIn = (const char *)bufIn.Base();
+	int nIn = bufIn.TellPut();
+	CUtlVector< char > vecOut;
+	for ( int i = 0; i < nIn; )
+	{
+		if ( pIn[i] == '"' )
+		{
+			int j = i + 1;
+			while ( j < nIn && pIn[j] >= '0' && pIn[j] <= '9' )
+				j++;
+			int nDigits = j - i - 1;
+			if ( j < nIn && pIn[j] == '"' && nDigits >= 10 && nDigits <= 20 )
+			{
+				char szDigits[24];
+				V_strncpy( szDigits, pIn + i + 1, nDigits + 1 );
+				char szHex[32];
+				V_snprintf( szHex, sizeof( szHex ), "\"0x%016llX\"", V_atoui64( szDigits ) );
+				vecOut.AddMultipleToTail( V_strlen( szHex ), szHex );
+				i = j + 1;
+				continue;
+			}
+		}
+		vecOut.AddToTail( pIn[i++] );
+	}
+	vecOut.AddToTail( 0 );
+	return pKV->LoadFromBuffer( pszFile, vecOut.Base() );
+}
+
+// an ID value: TYPE_UINT64 from LoadIDFile, or a decimal string (set in memory,
+// e.g. a LAN player's loadout)
+static uint64 ReadIDValue( KeyValues *pSub )
+{
 	if ( !pSub )
 		return 0;
 	if ( pSub->GetDataType() == KeyValues::TYPE_UINT64 )
 		return pSub->GetUint64();
+	if ( pSub->GetDataType() != KeyValues::TYPE_STRING )
+		return 0;	// a truncated int: not an ID
 	const char *psz = pSub->GetString();
 	return ( psz && psz[0] ) ? V_atoui64( psz ) : 0;
+}
+
+static uint64 ReadID( KeyValues *pKV, const char *pszKey )
+{
+	return ReadIDValue( pKV->FindKey( pszKey ) );
 }
 
 static bool IsOldID( uint64 ullID )
@@ -434,13 +480,13 @@ static void LoadOwned()
 {
 	KeyValues *pKV = new KeyValues( "OfflineItems" );
 	KeyValues::AutoDelete autodelete( pKV );
-	pKV->LoadFromFile( g_pFullFileSystem, k_pszItemsFile, k_pszPathID );
+	LoadIDFile( pKV, k_pszItemsFile );
 	s_ullNextSerial = MAX( pKV->GetUint64( "next_serial", 1 ), (uint64)1 );
 	if ( KeyValues *pList = pKV->FindKey( "items" ) )
 	{
 		for ( KeyValues *p = pList->GetFirstValue(); p; p = p->GetNextValue() )
 		{
-			uint64 ullID = V_atoui64( p->GetString() );
+			uint64 ullID = ReadIDValue( p );
 			if ( !ullID || s_mapItems.Find( ullID ) != s_mapItems.InvalidIndex() )
 				continue;
 			if ( CEconItem *pItem = CreateItem( ullID, s_unLocalAccount ) )
@@ -751,7 +797,7 @@ void OfflineInventory_Fill( CCSPlayerInventory *pInventory, const CSteamID &owne
 	if ( !pKV )
 	{
 		pFileKV = new KeyValues( "OfflineLoadout" );
-		pFileKV->LoadFromFile( g_pFullFileSystem, k_pszLoadoutFile, k_pszPathID );
+		LoadIDFile( pFileKV, k_pszLoadoutFile );
 		pKV = pFileKV;
 	}
 	KeyValues::AutoDelete autodelete( pFileKV );
@@ -885,7 +931,7 @@ void OfflineInventory_SendLoadoutToServer()
 
 	KeyValues *pKV = new KeyValues( "OfflineLoadout" );
 	KeyValues::AutoDelete autodelete( pKV );
-	pKV->LoadFromFile( g_pFullFileSystem, k_pszLoadoutFile, k_pszPathID );
+	LoadIDFile( pKV, k_pszLoadoutFile );
 
 	// begin / set <key> <value> ... (several per command, well under the command
 	// length limit) / end: the server swaps in the whole loadout at "end"

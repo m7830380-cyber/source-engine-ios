@@ -4343,6 +4343,23 @@ void CGLMTex::HandleSRGBMismatch( bool srgb, int &srgbFlipCount )
 		}
 #endif
 
+#if defined( IOS )
+		// Diagnostics for skin colors: which textures get re-created in (or out of)
+		// sRGB mode for a sampler, and whether their texels can still be re-sent
+		// (the host copy is freed after upload, then the re-upload sends nothing)
+		{
+			static int s_nFlipLogs = 0;
+			if ( m_srgbFlipCount == 1 && s_nFlipLogs < 400 )
+			{
+				s_nFlipLogs++;
+				printf( "[srgb] tex '%s' %s -> srgb %d, texels to re-send: %s\n", texname,
+					m_layout->m_layoutSummary ? m_layout->m_layoutSummary : "?", (int)srgb,
+					m_mapped ? "mapped" : ( m_backing ? "host copy" : "NONE" ) );
+				fflush( stdout );
+			}
+		}
+#endif
+
 		// re-submit the tex unless we're stifling it
 		static bool s_nosrgbflips = CommandLine()->FindParm( "-glmnosrgbflips" );
 		if ( !s_nosrgbflips )

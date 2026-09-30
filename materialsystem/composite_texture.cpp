@@ -14,7 +14,7 @@
 #include "texturemanager.h"
 
 //#define WRITE_OUT_VTF_PRE_COMPRESS
-#ifdef WRITE_OUT_VTF_PRE_COMPRESS
+#if defined( WRITE_OUT_VTF_PRE_COMPRESS ) || defined( IOS )
 #include "filesystem.h"
 #endif
 
@@ -46,6 +46,51 @@ int CCompositeTexture::m_nTextureCount = 0;
 int s_nCompositeMaterialIndex = 0;
 
 static ConVar *s_mat_picmip = NULL;
+
+#if defined( IOS )
+// Diagnostics for skin colors: writes every composite as read back from the
+// render target to composite_dumps/<name>.tga (Documents/csgo) and logs its
+// average color, so the result can be compared with the source textures.
+static ConVar mat_ios_dump_composites( "mat_ios_dump_composites", "0", FCVAR_RELEASE, "Save generated skin textures to composite_dumps/*.tga" );
+
+static void DumpCompositeTGA( const char *pszName, const unsigned char *pRGBA, int nWide, int nTall )
+{
+	char szFile[MAX_PATH];
+	V_snprintf( szFile, sizeof( szFile ), "composite_dumps/%s.tga", pszName );
+	for ( char *p = szFile + V_strlen( "composite_dumps/" ); *p; p++ )
+	{
+		if ( *p == '/' || *p == '\\' || *p == ':' || *p == ' ' )
+			*p = '_';
+	}
+	g_pFullFileSystem->CreateDirHierarchy( "composite_dumps", "MOD" );
+	FileHandle_t f = g_pFullFileSystem->Open( szFile, "wb", "MOD" );
+	if ( !f )
+		return;
+	unsigned char header[18] = { 0 };
+	header[2] = 2;		// uncompressed true color
+	header[12] = nWide & 0xFF; header[13] = nWide >> 8;
+	header[14] = nTall & 0xFF; header[15] = nTall >> 8;
+	header[16] = 32;
+	header[17] = 0x28;	// top-left origin, 8 alpha bits
+	g_pFullFileSystem->Write( header, sizeof( header ), f );
+	CUtlVector< unsigned char > row;
+	row.SetCount( nWide * 4 );
+	for ( int y = 0; y < nTall; y++ )
+	{
+		const unsigned char *pSrc = pRGBA + y * nWide * 4;
+		for ( int x = 0; x < nWide; x++ )
+		{
+			row[ x * 4 + 0 ] = pSrc[ x * 4 + 2 ];
+			row[ x * 4 + 1 ] = pSrc[ x * 4 + 1 ];
+			row[ x * 4 + 2 ] = pSrc[ x * 4 + 0 ];
+			row[ x * 4 + 3 ] = pSrc[ x * 4 + 3 ];
+		}
+		g_pFullFileSystem->Write( row.Base(), row.Count(), f );
+	}
+	g_pFullFileSystem->Close( f );
+	Msg( "[composite] saved %s\n", szFile );
+}
+#endif
 
 int GetMatPicMip()
 {
@@ -316,10 +361,18 @@ void CCompositeTexture::GenerateComposite( void )
 				}
 				if ( nPixels > 0 )
 				{
-					VERBOSE_PRINTF( "[composite] %s %dx%d srgb %d: read avg rgba %.0f %.0f %.0f %.0f, black %d%%\n",
-						m_szTextureName, m_pScratchVTF->Width(), m_pScratchVTF->Height(), (int)m_bSRGB,
-						flSum[0] / nPixels, flSum[1] / nPixels, flSum[2] / nPixels, flSum[3] / nPixels, nZero * 100 / nPixels );
+					bool bDump = mat_ios_dump_composites.GetBool();
+					if ( bDump )
+						Msg( "[composite] %s %dx%d srgb %d: read avg rgba %.0f %.0f %.0f %.0f, black %d%%\n",
+							m_szTextureName, m_pScratchVTF->Width(), m_pScratchVTF->Height(), (int)m_bSRGB,
+							flSum[0] / nPixels, flSum[1] / nPixels, flSum[2] / nPixels, flSum[3] / nPixels, nZero * 100 / nPixels );
+					else
+						VERBOSE_PRINTF( "[composite] %s %dx%d srgb %d: read avg rgba %.0f %.0f %.0f %.0f, black %d%%\n",
+							m_szTextureName, m_pScratchVTF->Width(), m_pScratchVTF->Height(), (int)m_bSRGB,
+							flSum[0] / nPixels, flSum[1] / nPixels, flSum[2] / nPixels, flSum[3] / nPixels, nZero * 100 / nPixels );
 					fflush( stdout );
+					if ( bDump )
+						DumpCompositeTGA( m_szTextureName, pPixels, m_pScratchVTF->Width(), m_pScratchVTF->Height() );
 				}
 			}
 #endif

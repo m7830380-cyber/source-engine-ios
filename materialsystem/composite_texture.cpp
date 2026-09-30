@@ -27,17 +27,6 @@ ConVar mat_verbose_texture_gen( "mat_verbose_texture_gen", "0" );
 	} \
 	
 // NOTE: This has to be the last file included!
-// iOS: textures from disk are sampled without sRGB decode (no VTF carries
-// TEXTUREFLAGS_SRGB and there's no GL_EXT_texture_sRGB_decode), so composites
-// are stored and sampled the same way (gamma bytes, no decode)
-static inline bool IsPlatformIOS()
-{
-#if defined( IOS )
-	return true;
-#else
-	return false;
-#endif
-}
 
 #include "tier0/memdbgon.h"
 
@@ -677,7 +666,7 @@ void CCompositeTexture::Finalize()
 	{
 		m_ResultTexture.m_pTexture = materials->CreateProceduralTexture( m_szTextureName, TEXTURE_GROUP_COMPOSITE, ( 1 << Size() ), ( 1 << Size() ), 
 																		 ( Format() == COMPOSITE_TEXTURE_FORMAT_DXT5 ) ? IMAGE_FORMAT_DXT5_RUNTIME : IMAGE_FORMAT_DXT1_RUNTIME, 
-																		 TEXTUREFLAGS_PROCEDURAL | TEXTUREFLAGS_SINGLECOPY | TEXTUREFLAGS_ANISOTROPIC | ( ( m_bSRGB && !IsPlatformIOS() ) ? TEXTUREFLAGS_SRGB : 0 ) | TEXTUREFLAGS_SKIP_INITIAL_DOWNLOAD |
+																		 TEXTUREFLAGS_PROCEDURAL | TEXTUREFLAGS_SINGLECOPY | TEXTUREFLAGS_ANISOTROPIC | ( ( m_bSRGB ) ? TEXTUREFLAGS_SRGB : 0 ) | TEXTUREFLAGS_SKIP_INITIAL_DOWNLOAD |
 																		 // mat_picmip would otherwise shrink the texture below the composite's size, and
 																		 // RegenerateTextureBits then forces a regenerate on the size mismatch, forever
 																		 ( m_bIgnorePicMip ? TEXTUREFLAGS_NOLOD : 0 ) );

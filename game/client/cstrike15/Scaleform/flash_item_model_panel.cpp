@@ -18,7 +18,10 @@
 
 #if defined( IOS )
 extern bool IOS_GetTouch( float &x, float &y );
+extern int IOS_GetTouches( float *px, float *py, int nMax );
 #endif
+
+static const float k_flMinZoom = 0.7f, k_flMaxZoom = 4.0f;
 
 bool GetFlashLocalRectOnScreen( SFVALUE clip, int nSlot, float lx0, float ly0, float lx1, float ly1, float &x0, float &y0, float &x1, float &y1 )
 {
@@ -94,6 +97,9 @@ CFlashItemModelPanel::CFlashItemModelPanel( const char *pszName, PlacementFn_t p
 	m_bDragging = m_bUserTurned = false;
 	m_flDragX = m_flDragY = 0.0f;
 	m_bStickerOverride = false;
+	m_flZoom = 1.0f;
+	m_bPinching = m_bWaitRelease = false;
+	m_flPinchStartDist = m_flPinchStartZoom = 1.0f;
 }
 
 void CFlashItemModelPanel::ShowItem( CEconItemView *pItem )
@@ -184,11 +190,13 @@ void CFlashItemModelPanel::ShowModel( const char *pszModel, CEconItemView *pItem
 	{
 		m_flYaw = m_flPitch = 0.0f;
 		m_bDragging = m_bUserTurned = false;
+		m_flZoom = 1.0f;
 	}
 	m_flLastTime = Plat_FloatTime();
 	SetVisible( true );
 	if ( !UpdatePlacement() )
 		return;
+	ApplyZoom();	// this model's size (and the kept zoom)
 	UpdateModelTransform();
 	MoveToFront();
 }
@@ -221,7 +229,14 @@ void CFlashItemModelPanel::OnThink()
 	bool bTouch = false;
 #if defined( IOS )
 	if ( m_bTouchToTurn )
-		bTouch = IOS_GetTouch( tx, ty );
+	{
+		if ( UpdatePinch( x, y, w, h, sw, sh ) )
+		{
+			UpdateModelTransform();
+			return;
+		}
+		bTouch = !m_bWaitRelease && IOS_GetTouch( tx, ty );
+	}
 #endif
 	if ( bTouch )
 	{
@@ -278,9 +293,59 @@ bool CFlashItemModelPanel::UpdatePlacement()
 	if ( ox != nx || oy != ny || ow != nw || oh != nh )
 	{
 		SetBounds( nx, ny, nw, nh );
-		LookAt( vec3_origin, m_flRadius );	// refit to the new size
+		ApplyZoom();	// refit to the new size
 	}
 	return true;
+}
+
+void CFlashItemModelPanel::ApplyZoom()
+{
+	LookAt( vec3_origin, m_flRadius / m_flZoom );
+}
+
+// Two fingers on the model zoom (their spread against where it started); the
+// model doesn't turn during a pinch or until every finger has lifted after it
+bool CFlashItemModelPanel::UpdatePinch( int x, int y, int w, int h, int sw, int sh )
+{
+#if defined( IOS )
+	float fx[2], fy[2];
+	int nTouches = IOS_GetTouches( fx, fy, 2 );
+	if ( nTouches == 0 )
+		m_bWaitRelease = false;
+	if ( nTouches < 2 )
+	{
+		if ( m_bPinching )
+		{
+			m_bPinching = false;
+			m_bWaitRelease = true;
+			m_bDragging = false;
+		}
+		return false;
+	}
+
+	float x0 = fx[0] * sw, y0 = fy[0] * sh, x1 = fx[1] * sw, y1 = fy[1] * sh;
+	float flDist = MAX( sqrtf( ( x1 - x0 ) * ( x1 - x0 ) + ( y1 - y0 ) * ( y1 - y0 ) ), 1.0f );
+	if ( !m_bPinching )
+	{
+		// a pinch starts with both fingers' midpoint on the model
+		float mx = ( x0 + x1 ) * 0.5f, my = ( y0 + y1 ) * 0.5f;
+		if ( mx < x || mx >= x + w || my < y || my >= y + h )
+			return false;
+		m_bPinching = true;
+		m_bUserTurned = true;	// stop the idle spin while looking closely
+		m_flPinchStartDist = flDist;
+		m_flPinchStartZoom = m_flZoom;
+	}
+	float flZoom = clamp( m_flPinchStartZoom * flDist / m_flPinchStartDist, k_flMinZoom, k_flMaxZoom );
+	if ( flZoom != m_flZoom )
+	{
+		m_flZoom = flZoom;
+		ApplyZoom();
+	}
+	return true;
+#else
+	return false;
+#endif
 }
 
 // turn about the model's own center, kept at the camera's pivot

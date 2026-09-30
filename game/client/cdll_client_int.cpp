@@ -1983,6 +1983,23 @@ bool IOS_GetTouch( float &x, float &y )
 	return false;
 }
 
+// All fingers that are down (normalized 0..1), up to nMax: the item panels'
+// two-finger zoom
+int IOS_GetTouches( float *px, float *py, int nMax )
+{
+	int n = 0;
+	for ( int i = 0; i < ARRAYSIZE( s_bIOSFingerDown ) && n < nMax; i++ )
+	{
+		if ( s_bIOSFingerDown[i] )
+		{
+			px[n] = s_flIOSFingerX[i];
+			py[n] = s_flIOSFingerY[i];
+			n++;
+		}
+	}
+	return n;
+}
+
 static bool IOS_UpdateTouchMouse( void )
 {
 	static ConVarRef touch_mouse_events( "touch_mouse_events" );

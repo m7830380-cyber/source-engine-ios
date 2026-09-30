@@ -48,6 +48,8 @@ private:
 	void ShowModel( const char *pszModel, CEconItemView *pItem, bool bKeepView );
 	bool UpdatePlacement();	// false: hidden
 	void UpdateModelTransform();
+	void ApplyZoom();		// camera distance for the model's size and m_flZoom
+	bool UpdatePinch( int x, int y, int w, int h, int sw, int sh );	// true while two fingers zoom
 
 	struct StickerMerge_t
 	{
@@ -66,6 +68,9 @@ private:
 	double	m_flLastTime;
 	bool	m_bDragging, m_bUserTurned;
 	float	m_flDragX, m_flDragY;
+	float	m_flZoom;						// 1 = the whole model fits
+	bool	m_bPinching, m_bWaitRelease;	// after a pinch, no turning until the fingers lift
+	float	m_flPinchStartDist, m_flPinchStartZoom;
 };
 
 #endif // FLASH_ITEM_MODEL_PANEL_H

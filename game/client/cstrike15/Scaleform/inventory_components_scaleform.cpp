@@ -369,7 +369,7 @@ static void ShowStickerPreview( uint64 ullItemID, int nKit, int nSlot )
 		if ( attrID && attrWear )
 		{
 			s_pPreviewItem->SetDynamicAttributeValue( attrID, (uint32)nKit );
-			s_pPreviewItem->SetDynamicAttributeValue( attrWear, 0.0f );
+			s_pPreviewItem->AddOrSetCustomAttribute( attrWear->GetDefinitionIndex(), 0.0f );	// float bits (see ApplyCustomizations)
 		}
 	}
 	s_pPreviewView->Init( pItem->GetItemDefinition()->GetDefinitionIndex(), pItem->GetQuality(), 1, pSOC->GetAccountID() );

@@ -245,7 +245,9 @@ static void ApplyCustomizations( CEconItem *pItem )
 		if ( nKit > 0 )
 		{
 			pItem->SetDynamicAttributeValue( attrID, (uint32)nKit );
-			pItem->SetDynamicAttributeValue( attrWear, pKV->GetFloat( CFmtStr( "sticker%d_wear", nSlot ), 0.0f ) );
+			// the wear attribute is the default (uint32) type, read back as float bits:
+			// SetDynamicAttributeValue<float> finds no float type and stores nothing
+			pItem->AddOrSetCustomAttribute( attrWear->GetDefinitionIndex(), pKV->GetFloat( CFmtStr( "sticker%d_wear", nSlot ), 0.0f ) );
 		}
 		else
 		{

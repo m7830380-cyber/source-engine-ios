@@ -230,6 +230,29 @@ static void ApplyCustomizations( CEconItem *pItem )
 	KeyValues *pKV = Customizations()->FindKey( CFmtStr( "%llu", pItem->GetItemID() ) );
 	const char *pszName = pKV ? pKV->GetString( "name", "" ) : "";
 	pItem->SetCustomName( pszName[0] ? pszName : NULL );
+
+	// stickers on weapons: "sticker<slot>" kit, "sticker<slot>_wear" (a sticker
+	// item's own kit is its slot 0 attribute: leave that alone)
+	if ( OfflineID_Kind( pItem->GetItemID() ) != OFFLINE_KIND_SKIN )
+		return;
+	for ( int nSlot = 0; nSlot < g_nNumStickerAttrs; nSlot++ )
+	{
+		const CSchemaAttributeDefHandle &attrID = GetStickerAttributeDefHandle( nSlot, k_EStickerAttribute_ID );
+		const CSchemaAttributeDefHandle &attrWear = GetStickerAttributeDefHandle( nSlot, k_EStickerAttribute_Wear );
+		if ( !attrID || !attrWear )
+			continue;
+		int nKit = pKV ? pKV->GetInt( CFmtStr( "sticker%d", nSlot ), 0 ) : 0;
+		if ( nKit > 0 )
+		{
+			pItem->SetDynamicAttributeValue( attrID, (uint32)nKit );
+			pItem->SetDynamicAttributeValue( attrWear, pKV->GetFloat( CFmtStr( "sticker%d_wear", nSlot ), 0.0f ) );
+		}
+		else
+		{
+			pItem->RemoveDynamicAttribute( attrID );
+			pItem->RemoveDynamicAttribute( attrWear );
+		}
+	}
 }
 #endif
 
@@ -242,6 +265,27 @@ static int NameTagDef()
 		s_nDef = pDef ? pDef->GetDefinitionIndex() : 0;
 	}
 	return s_nDef;
+}
+
+// the "sticker" item definition every sticker item uses (the kit says which one)
+static int StickerDef()
+{
+	static int s_nDef = -1;
+	if ( s_nDef < 0 )
+	{
+		const CEconItemDefinition *pDef = GetItemSchema()->GetItemDefinitionByName( "sticker" );
+		s_nDef = pDef ? pDef->GetDefinitionIndex() : 0;
+	}
+	return s_nDef;
+}
+
+// real stickers: a material to draw, and not graffiti (sprays share the kits)
+static const CStickerKit *UsableStickerKit( int nKit )
+{
+	const CStickerKit *pKit = nKit > 0 ? GetItemSchema()->GetStickerKitDefinition( nKit ) : NULL;
+	if ( !pKit || pKit->sMaterialPath.IsEmpty() || StringHasPrefix( pKit->sName.String(), "spray_" ) )
+		return NULL;
+	return pKit;
 }
 
 bool OfflineItem_IsNameTag( uint64 ullItemID )
@@ -261,9 +305,17 @@ static CEconItem *CreateItem( uint64 ullID, uint32 unAccountID )
 
 	int nKind = OfflineID_Kind( ullID );
 	int nDef = OfflineID_Def( ullID );
-	const CCStrike15ItemDefinition *pDef = ( nKind == OFFLINE_KIND_SKIN || nKind == OFFLINE_KIND_TOOL ) ? CSDef( nDef ) : NULL;
+	const CStickerKit *pStickerKit = NULL;
+	if ( nKind == OFFLINE_KIND_STICKER )
+	{
+		pStickerKit = UsableStickerKit( nDef );
+		if ( !pStickerKit )
+			return NULL;
+		nDef = StickerDef();
+	}
+	const CCStrike15ItemDefinition *pDef = ( nKind != OFFLINE_KIND_MUSIC ) ? CSDef( nDef ) : NULL;
 	if ( !pDef )
-		return NULL;	// stickers and music kits: not yet
+		return NULL;	// music kits: not yet
 
 	CEconItem *pItem = new CEconItem();
 	pItem->SetItemID( ullID );
@@ -278,6 +330,15 @@ static CEconItem *CreateItem( uint64 ullID, uint32 unAccountID )
 	{
 		pItem->SetQuality( AE_UNIQUE );
 		pItem->SetRarity( pDef->GetRarity() );
+		return pItem;
+	}
+	if ( pStickerKit )
+	{
+		pItem->SetQuality( AE_UNIQUE );
+		pItem->SetRarity( pStickerKit->nRarity );
+		const CSchemaAttributeDefHandle &attrID = GetStickerAttributeDefHandle( 0, k_EStickerAttribute_ID );
+		if ( attrID )
+			pItem->SetDynamicAttributeValue( attrID, (uint32)pStickerKit->nID );
 		return pItem;
 	}
 
@@ -474,6 +535,16 @@ static void BuildCatalog()
 	// name tags (Item Giver)
 	if ( NameTagDef() && OfflineInventory_IsGiverMode() )
 		AddCatalog( OfflineID_MakeOther( OFFLINE_KIND_TOOL, NameTagDef() ) );
+
+	// one of every sticker (kit IDs fit the ID's 16-bit value)
+	if ( StickerDef() )
+	{
+		for ( int nKit = 1; nKit <= 0xFFFF; nKit++ )
+		{
+			if ( UsableStickerKit( nKit ) )
+				AddCatalog( OfflineID_MakeOther( OFFLINE_KIND_STICKER, nKit ) );
+		}
+	}
 }
 
 static void LoadOwned()
@@ -749,10 +820,166 @@ void OfflineItem_Delete( uint64 ullItemID )
 {
 	if ( !OfflineItem_IsDeletable( ullItemID ) )
 		return;
-	if ( OfflineItem_GetCustomName( ullItemID ) )
-		SetCustomName( ullItemID, NULL );
+	// its name and stickers go with it
+	if ( KeyValues *pKV = Customizations()->FindKey( CFmtStr( "%llu", ullItemID ) ) )
+	{
+		Customizations()->RemoveSubKey( pKV );
+		pKV->deleteThis();
+		SaveCustomizations();
+	}
 	RemoveOwned( ullItemID );
 	Msg( "[offline inventory] deleted %llu\n", ullItemID );
+}
+
+//-----------------------------------------------------------------------------
+// Stickers
+//-----------------------------------------------------------------------------
+static const float k_flStickerScrape = 0.1f;	// wear added per scrape
+
+bool OfflineItem_IsSticker( uint64 ullItemID )
+{
+	return OfflineID_IsOffline( ullItemID ) && OfflineID_Kind( ullItemID ) == OFFLINE_KIND_STICKER;
+}
+
+int OfflineSticker_GetKit( uint64 ullItemID )
+{
+	return OfflineItem_IsSticker( ullItemID ) ? OfflineID_Def( ullItemID ) : 0;
+}
+
+int OfflineItem_GetStickerSlotCount( uint64 ullItemID )
+{
+	if ( !OfflineID_IsOffline( ullItemID ) || OfflineID_Kind( ullItemID ) != OFFLINE_KIND_SKIN )
+		return 0;
+	const CCStrike15ItemDefinition *pDef = CSDef( OfflineID_Def( ullItemID ) );
+	return pDef ? MIN( pDef->GetNumSupportedStickerSlots(), g_nNumStickerAttrs ) : 0;
+}
+
+int OfflineItem_GetStickerKit( uint64 ullItemID, int nSlot )
+{
+	if ( nSlot < 0 || nSlot >= OfflineItem_GetStickerSlotCount( ullItemID ) )
+		return 0;
+	KeyValues *pKV = Customizations()->FindKey( CFmtStr( "%llu", ullItemID ) );
+	int nKit = pKV ? pKV->GetInt( CFmtStr( "sticker%d", nSlot ), 0 ) : 0;
+	return UsableStickerKit( nKit ) ? nKit : 0;
+}
+
+float OfflineItem_GetStickerWear( uint64 ullItemID, int nSlot )
+{
+	KeyValues *pKV = Customizations()->FindKey( CFmtStr( "%llu", ullItemID ) );
+	return pKV ? pKV->GetFloat( CFmtStr( "sticker%d_wear", nSlot ), 0.0f ) : 0.0f;
+}
+
+bool OfflineItem_CanTakeSticker( uint64 ullItemID )
+{
+	if ( !IsOwned( ullItemID ) )
+		return false;
+	int nSlots = OfflineItem_GetStickerSlotCount( ullItemID );
+	for ( int nSlot = 0; nSlot < nSlots; nSlot++ )
+	{
+		if ( !OfflineItem_GetStickerKit( ullItemID, nSlot ) )
+			return true;
+	}
+	return false;
+}
+
+void OfflineSticker_GetOwned( CUtlVector< uint64 > &vecStickers )
+{
+	vecStickers.RemoveAll();
+	FOR_EACH_VEC( s_vecItems, i )
+	{
+		if ( OfflineItem_IsSticker( s_vecItems[i]->GetItemID() ) )
+			vecStickers.AddToTail( s_vecItems[i]->GetItemID() );
+	}
+}
+
+void OfflineItem_GetStickerable( CUtlVector< uint64 > &vecItems )
+{
+	vecItems.RemoveAll();
+	FOR_EACH_VEC( s_vecItems, i )
+	{
+		if ( OfflineItem_CanTakeSticker( s_vecItems[i]->GetItemID() ) )
+			vecItems.AddToTail( s_vecItems[i]->GetItemID() );
+	}
+}
+
+// puts a sticker (nKit 0: none) in a slot of one of our items: saved, the item's
+// attributes updated and its view's sticker materials rebuilt
+static void SetSticker( uint64 ullItemID, int nSlot, int nKit, float flWear )
+{
+	unsigned short i = s_mapItems.Find( ullItemID );
+	if ( !s_mapItems.IsValidIndex( i ) )
+		return;
+
+	KeyValues *pAll = Customizations();
+	KeyValues *pKV = pAll->FindKey( CFmtStr( "%llu", ullItemID ), true );
+	CFmtStr strKit( "sticker%d", nSlot ), strWear( "sticker%d_wear", nSlot );
+	if ( nKit > 0 )
+	{
+		pKV->SetInt( strKit, nKit );
+		pKV->SetFloat( strWear, flWear );
+	}
+	else
+	{
+		const char *pszKeys[] = { strKit.Access(), strWear.Access() };
+		for ( int k = 0; k < ARRAYSIZE( pszKeys ); k++ )
+		{
+			if ( KeyValues *pSub = pKV->FindKey( pszKeys[k] ) )
+			{
+				pKV->RemoveSubKey( pSub );
+				pSub->deleteThis();
+			}
+		}
+	}
+	if ( !pKV->GetFirstSubKey() )
+	{
+		pAll->RemoveSubKey( pKV );
+		pKV->deleteThis();
+	}
+	SaveCustomizations();
+
+	CEconItem *pItem = s_mapItems[i];
+	ApplyCustomizations( pItem );
+	pItem->SetSOUpdateFrame( gpGlobals->framecount + 1 );
+	CCSPlayerInventory *pInventory = CSInventoryManager() ? CSInventoryManager()->GetLocalCSInventory() : NULL;
+	if ( CEconItemView *pView = pInventory ? pInventory->GetInventoryItemByItemID( ullItemID ) : NULL )
+		pView->GenerateStickerMaterials();
+}
+
+bool OfflineSticker_Apply( uint64 ullSticker, uint64 ullItemID, int nSlot )
+{
+	int nKit = OfflineSticker_GetKit( ullSticker );
+	if ( !nKit || !IsOwned( ullSticker ) || !IsOwned( ullItemID ) )
+		return false;
+	if ( nSlot < 0 || nSlot >= OfflineItem_GetStickerSlotCount( ullItemID ) || OfflineItem_GetStickerKit( ullItemID, nSlot ) )
+		return false;
+	SetSticker( ullItemID, nSlot, nKit, 0.0f );
+	RemoveOwned( ullSticker );		// used up
+	Msg( "[sticker] kit %d on %llu, slot %d\n", nKit, ullItemID, nSlot );
+	return true;
+}
+
+// the next scrape takes it off
+bool OfflineItem_IsStickerAtExtremeWear( uint64 ullItemID, int nSlot )
+{
+	return OfflineItem_GetStickerKit( ullItemID, nSlot ) && OfflineItem_GetStickerWear( ullItemID, nSlot ) + k_flStickerScrape > 1.0f - 0.001f;
+}
+
+void OfflineItem_ScrapeSticker( uint64 ullItemID, int nSlot )
+{
+	int nKit = OfflineItem_GetStickerKit( ullItemID, nSlot );
+	if ( !nKit || !IsOwned( ullItemID ) )
+		return;
+	if ( OfflineItem_IsStickerAtExtremeWear( ullItemID, nSlot ) )
+	{
+		SetSticker( ullItemID, nSlot, 0, 0.0f );
+		Msg( "[sticker] scraped off %llu slot %d\n", ullItemID, nSlot );
+	}
+	else
+	{
+		float flWear = OfflineItem_GetStickerWear( ullItemID, nSlot ) + k_flStickerScrape;
+		SetSticker( ullItemID, nSlot, nKit, flWear );
+		Msg( "[sticker] %llu slot %d wear %.2f\n", ullItemID, nSlot, flWear );
+	}
 }
 #endif
 

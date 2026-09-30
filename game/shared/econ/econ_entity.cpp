@@ -873,7 +873,14 @@ int C_ViewmodelAttachmentModel::InternalDrawModel( int flags, const RenderableIn
 		pRenderContext->CullMode( MATERIAL_CULLMODE_CW );
 #endif
 
+	bool bSticker = m_StickerMaterial.IsValid() && !m_StickerMaterial->IsErrorMaterial();
+	if ( bSticker )
+		modelrender->ForcedMaterialOverride( m_StickerMaterial );
+
 	int r = BaseClass::InternalDrawModel( flags, instance );
+
+	if ( bSticker )
+		modelrender->ForcedMaterialOverride( NULL );
 
 #if defined(TF_CLIENT_DLL) || defined( CSTRIKE15 )
 	pRenderContext->CullMode( MATERIAL_CULLMODE_CCW );

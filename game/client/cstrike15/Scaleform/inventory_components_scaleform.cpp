@@ -290,6 +290,96 @@ static int GetInspectModelPlacement( int &x, int &y, int &w, int &h )
 static CFlashItemModelPanel *s_pInspectPanel = NULL;
 static uint64 s_ullInspectItemID = 0;
 
+//-----------------------------------------------------------------------------
+// Sticker panel: inventorypanel.swf's ItemUsePanel.StickerPanel asks for the
+// weapon's model ("<tile image>?stickers") and then for a sticker in a slot
+// (PreviewStickerInModelPanel). The weapon's viewmodel with its stickers is
+// drawn over StickerPanel.Bg, the open area above the sticker buttons.
+//-----------------------------------------------------------------------------
+static SFVALUE GetFlashPath( SFVALUE root, const char *pszPath )
+{
+	CUtlStringList vecParts;
+	V_SplitString( pszPath, ".", vecParts );
+	SFVALUE cur = root;
+	FOR_EACH_VEC( vecParts, i )
+	{
+		SFVALUE next = cur ? g_pScaleformUI->Value_GetMember( cur, vecParts[i] ) : NULL;
+		if ( cur != root && cur )
+			g_pScaleformUI->ReleaseValue( cur );
+		cur = next;
+		if ( !cur )
+			return NULL;
+	}
+	return cur != root ? cur : NULL;
+}
+
+static int GetStickerModelPlacement( int &x, int &y, int &w, int &h )
+{
+	CCreateMainMenuScreenScaleform *pMenu = CCreateMainMenuScreenScaleform::GetInstance();
+	if ( !pMenu || !pMenu->FlashAPIIsValid() || !g_pScaleformUI )
+		return 0;
+	SFVALUE bg = GetFlashPath( pMenu->m_FlashAPI, "Panel.InventoryPanel.Inventory.ItemUsePanel.StickerPanel.Bg" );
+	float x0, y0, x1, y1;
+	bool bOK = bg && GetFlashClipScreenRect( bg, SF_FULL_SCREEN_SLOT, x0, y0, x1, y1 );
+	if ( bg )
+		g_pScaleformUI->ReleaseValue( bg );
+	if ( !bOK )
+		return 0;
+
+	float dw = x1 - x0, dh = y1 - y0;
+	x = (int)( x0 + dw * 0.04f );
+	w = (int)( dw * 0.92f );
+	y = (int)( y0 + dh * 0.04f );
+	h = (int)( dh * 0.92f );
+
+	static bool s_bLogged = false;
+	if ( !s_bLogged )
+	{
+		Msg( "[sticker] panel bg %.0f,%.0f - %.0f,%.0f -> model %d,%d %dx%d\n", x0, y0, x1, y1, x, y, w, h );
+		s_bLogged = true;
+	}
+	return 1;
+}
+
+static CFlashItemModelPanel *s_pStickerPanel = NULL;
+static uint64 s_ullStickerTarget = 0;		// the weapon the sticker panel is about
+
+// the weapon with its stickers, plus nKit in nSlot to preview one (nKit 0: none):
+// a copy of the item carries the preview sticker, the real one the paint
+static void ShowStickerPreview( uint64 ullItemID, int nKit, int nSlot )
+{
+	CCSPlayerInventory *pInv = CSInventoryManager() ? CSInventoryManager()->GetLocalCSInventory() : NULL;
+	CEconItemView *pItem = pInv ? pInv->GetInventoryItemByItemID( ullItemID ) : NULL;
+	CEconItem *pSOC = pItem ? pItem->GetSOCData() : NULL;
+	if ( !pSOC )
+		return;
+
+	static CEconItem *s_pPreviewItem = NULL;
+	static CEconItemView *s_pPreviewView = NULL;
+	if ( !s_pPreviewItem )
+	{
+		s_pPreviewItem = new CEconItem;
+		s_pPreviewView = new CEconItemView;
+	}
+	*s_pPreviewItem = *pSOC;
+	if ( nKit > 0 && nSlot >= 0 && nSlot < g_nNumStickerAttrs )
+	{
+		const CSchemaAttributeDefHandle &attrID = GetStickerAttributeDefHandle( nSlot, k_EStickerAttribute_ID );
+		const CSchemaAttributeDefHandle &attrWear = GetStickerAttributeDefHandle( nSlot, k_EStickerAttribute_Wear );
+		if ( attrID && attrWear )
+		{
+			s_pPreviewItem->SetDynamicAttributeValue( attrID, (uint32)nKit );
+			s_pPreviewItem->SetDynamicAttributeValue( attrWear, 0.0f );
+		}
+	}
+	s_pPreviewView->Init( pItem->GetItemDefinition()->GetDefinitionIndex(), pItem->GetQuality(), 1, pSOC->GetAccountID() );
+	s_pPreviewView->SetNonSOEconItem( s_pPreviewItem );
+
+	if ( !s_pStickerPanel )
+		s_pStickerPanel = new CFlashItemModelPanel( "InventoryStickerPanel", GetStickerModelPlacement, true, true );
+	s_pStickerPanel->ShowItemWithStickers( pItem, s_pPreviewView );
+}
+
 class CScaleformComponentInventory : public ScaleformUIFunctionHandlerObject
 {
 public:
@@ -297,7 +387,7 @@ public:
 	CUtlString m_strSavedFilter;
 	CUtlString m_strSavedSort;
 
-	CScaleformComponentInventory() : m_strSavedFilter( "all" ), m_strSavedSort( "newest" ) {}
+	CScaleformComponentInventory() : m_strSavedFilter( "all" ), m_strSavedSort( "newest" ), m_nStickerToolSlot( -1 ) {}
 
 	struct Filter_t
 	{
@@ -309,7 +399,9 @@ public:
 		bool m_bNotDefaultEquipped;
 		bool m_bEquippedOnly;
 		bool m_bMatchNothing;
-		uint64 m_ullNameableWith;	// "nameable:<id>": what goes with that name tag / item
+		CUtlString m_strActionCap;	// "nameable:<id>", "can_sticker:<id>": what goes with that tool / item
+		uint64 m_ullActionWith;
+		CUtlString m_strDefinition;	// "item_definition:sticker"
 	};
 
 	static bool IsCategoryToken( const char *psz )
@@ -326,7 +418,7 @@ public:
 		f.m_iTeam = 0;
 		f.m_nSlot = -1;
 		f.m_bIncludeBaseItems = f.m_bNotBaseItem = f.m_bNotDefaultEquipped = f.m_bEquippedOnly = f.m_bMatchNothing = false;
-		f.m_ullNameableWith = 0;
+		f.m_ullActionWith = 0;
 
 		CUtlStringList vecTokens;
 		V_SplitString( pszFilter, ",", vecTokens );
@@ -345,8 +437,14 @@ public:
 				f.m_bNotDefaultEquipped = true;
 			else if ( !V_stricmp( psz, "equipped" ) )
 				f.m_bEquippedOnly = true;
-			else if ( StringHasPrefix( psz, "nameable:" ) )
-				f.m_ullNameableWith = V_atoui64( psz + V_strlen( "nameable:" ) );
+			else if ( StringHasPrefix( psz, "nameable:" ) || StringHasPrefix( psz, "can_sticker:" ) )
+			{
+				const char *pszColon = V_strstr( psz, ":" );
+				f.m_strActionCap.SetDirect( psz, pszColon - psz );
+				f.m_ullActionWith = V_atoui64( pszColon + 1 );
+			}
+			else if ( StringHasPrefix( psz, "item_definition:" ) )
+				f.m_strDefinition = psz + V_strlen( "item_definition:" );
 			else if ( IsCategoryToken( psz ) )
 				f.m_vecCategories.AddToTail( psz );
 			else if ( SlotFromString( psz ) >= 0 && V_strlen( psz ) > 1 && V_isdigit( psz[ V_strlen( psz ) - 1 ] ) )
@@ -377,8 +475,10 @@ public:
 		const CCStrike15ItemDefinition *pDef = ItemDef( pItem );
 		if ( !pDef )
 			return false;
-		if ( f.m_ullNameableWith )
-			return NameableWith( f.m_ullNameableWith, pItem->GetItemID() );
+		if ( f.m_ullActionWith )
+			return ActionWith( f.m_strActionCap.Get(), f.m_ullActionWith, pItem->GetItemID() );
+		if ( !f.m_strDefinition.IsEmpty() && V_stricmp( pDef->GetDefinitionName(), f.m_strDefinition.Get() ) )
+			return false;
 		if ( f.m_iTeam && !pDef->CanBeUsedByTeam( f.m_iTeam ) )
 			return false;
 		int nSlot = ItemSlot( pItem, f.m_iTeam );
@@ -642,50 +742,81 @@ public:
 		pui->Params_SetResult( obj, pDef && ( pDef->GetDefaultLoadoutSlot() == LOADOUT_POSITION_MELEE || pDef->GetDefaultLoadoutSlot() == LOADOUT_POSITION_CLOTHING_HANDS ) );
 	}
 	// what an item can do (the context menu): cases open ("decodable"); name
-	// tags, and weapons while there's a name tag to use on them, "nameable"
-	static const char *ItemCapability( uint64 ullID )
+	// tags, and weapons while there's a name tag to use on them, "nameable";
+	// stickers, and weapons with sticker slots, "can_sticker" (the menu itself
+	// offers applying only while a sticker fits, and scraping those on it)
+	static void ItemCapabilities( uint64 ullID, CUtlVector< const char * > &vecCaps )
 	{
+		vecCaps.RemoveAll();
 		if ( OfflineCase_IsCase( ullID ) )
-			return "decodable";
+			vecCaps.AddToTail( "decodable" );
 		if ( OfflineItem_IsNameTag( ullID ) )
-			return "nameable";
+			vecCaps.AddToTail( "nameable" );
 		if ( OfflineItem_CanBeNamed( ullID ) )
 		{
 			CUtlVector< uint64 > vecTags;
 			OfflineNameTag_GetOwned( vecTags );
 			if ( vecTags.Count() )
-				return "nameable";
+				vecCaps.AddToTail( "nameable" );
 		}
-		return NULL;
+		if ( OfflineItem_IsSticker( ullID ) || OfflineItem_GetStickerSlotCount( ullID ) > 0 )
+			vecCaps.AddToTail( "can_sticker" );
 	}
 	void GetItemCapabilitiesCount( SCALEFORM_CALLBACK_ARGS_DECL )
 	{
-		pui->Params_SetResult( obj, ItemCapability( ArgItemID( pui, obj, 1 ) ) ? 1 : 0 );
+		CUtlVector< const char * > vecCaps;
+		ItemCapabilities( ArgItemID( pui, obj, 1 ), vecCaps );
+		pui->Params_SetResult( obj, vecCaps.Count() );
 	}
 	void GetItemCapabilityByIndex( SCALEFORM_CALLBACK_ARGS_DECL )
 	{
-		const char *pszCap = ItemCapability( ArgItemID( pui, obj, 1 ) );
-		pui->Params_SetResult( obj, ( pszCap && pui->Params_GetArgAsNumber( obj, 2 ) == 0.0 ) ? pszCap : "" );
+		CUtlVector< const char * > vecCaps;
+		ItemCapabilities( ArgItemID( pui, obj, 1 ), vecCaps );
+		int i = ArgInt( pui, obj, 2 );
+		pui->Params_SetResult( obj, vecCaps.IsValidIndex( i ) ? vecCaps[i] : "" );
 	}
-	void IsTool( SCALEFORM_CALLBACK_ARGS_DECL ) { pui->Params_SetResult( obj, OfflineItem_IsNameTag( ArgItemID( pui, obj, 1 ) ) ); }
+	void IsTool( SCALEFORM_CALLBACK_ARGS_DECL )
+	{
+		uint64 ullID = ArgItemID( pui, obj, 1 );
+		pui->Params_SetResult( obj, OfflineItem_IsNameTag( ullID ) || OfflineItem_IsSticker( ullID ) );
+	}
 
 	// ---- name tags ------------------------------------------------------------
-	// A name tag goes with the weapons; a weapon with the name tags
-	static bool NameableWith( uint64 ullSelected, uint64 ullOther )
+	// A name tag goes with the weapons, a weapon with the name tags; a sticker
+	// with the weapons it fits on, a weapon with the stickers
+	static bool ActionWith( const char *pszCap, uint64 ullSelected, uint64 ullOther )
 	{
-		if ( OfflineItem_IsNameTag( ullSelected ) )
-			return OfflineItem_CanBeNamed( ullOther );
-		return OfflineItem_CanBeNamed( ullSelected ) && OfflineItem_IsNameTag( ullOther );
+		if ( !V_stricmp( pszCap, "nameable" ) )
+		{
+			if ( OfflineItem_IsNameTag( ullSelected ) )
+				return OfflineItem_CanBeNamed( ullOther );
+			return OfflineItem_CanBeNamed( ullSelected ) && OfflineItem_IsNameTag( ullOther );
+		}
+		if ( !V_stricmp( pszCap, "can_sticker" ) )
+		{
+			if ( OfflineItem_IsSticker( ullSelected ) )
+				return OfflineItem_CanTakeSticker( ullOther );
+			return OfflineItem_CanTakeSticker( ullSelected ) && OfflineItem_IsSticker( ullOther );
+		}
+		return false;
 	}
 	static void ChosenActionItems( uint64 ullID, const char *pszCap, CUtlVector< uint64 > &vecItems )
 	{
 		vecItems.RemoveAll();
-		if ( V_stricmp( pszCap, "nameable" ) )
-			return;
-		if ( OfflineItem_IsNameTag( ullID ) )
-			OfflineItem_GetNameable( vecItems );
-		else if ( OfflineItem_CanBeNamed( ullID ) )
-			OfflineNameTag_GetOwned( vecItems );
+		if ( !V_stricmp( pszCap, "nameable" ) )
+		{
+			if ( OfflineItem_IsNameTag( ullID ) )
+				OfflineItem_GetNameable( vecItems );
+			else if ( OfflineItem_CanBeNamed( ullID ) )
+				OfflineNameTag_GetOwned( vecItems );
+		}
+		else if ( !V_stricmp( pszCap, "can_sticker" ) )
+		{
+			if ( OfflineItem_IsSticker( ullID ) )
+				OfflineItem_GetStickerable( vecItems );
+			else if ( OfflineItem_CanTakeSticker( ullID ) )
+				OfflineSticker_GetOwned( vecItems );
+		}
 	}
 	// ( xuid, item, capability )
 	void GetChosenActionItemsCount( SCALEFORM_CALLBACK_ARGS_DECL )
@@ -714,6 +845,100 @@ public:
 	}
 	void HasCustomName( SCALEFORM_CALLBACK_ARGS_DECL ) { pui->Params_SetResult( obj, OfflineItem_GetCustomName( ArgItemID( pui, obj, 1 ) ) != NULL ); }
 	void ClearCustomName( SCALEFORM_CALLBACK_ARGS_DECL ) { OfflineItem_ClearCustomName( ArgItemID( pui, obj, 0 ) ); }
+
+	// ---- stickers -------------------------------------------------------------
+	// counts and pictures of what's on a weapon: by index (the filled slots in
+	// order) or by slot; pictures are "econ/stickers/..." without the extension
+	static int FilledStickerSlot( uint64 ullID, int nIndex )
+	{
+		int nSlots = OfflineItem_GetStickerSlotCount( ullID );
+		for ( int nSlot = 0; nSlot < nSlots; nSlot++ )
+		{
+			if ( OfflineItem_GetStickerKit( ullID, nSlot ) && nIndex-- == 0 )
+				return nSlot;
+		}
+		return -1;
+	}
+	static const CStickerKit *StickerKitIn( uint64 ullID, int nSlot )
+	{
+		int nKit = nSlot >= 0 ? OfflineItem_GetStickerKit( ullID, nSlot ) : 0;
+		return nKit ? GetItemSchema()->GetStickerKitDefinition( nKit ) : NULL;
+	}
+	void GetItemStickerSlotCount( SCALEFORM_CALLBACK_ARGS_DECL )
+	{
+		uint64 ullID = ArgItemID( pui, obj, 1 );
+		int nSlots = OfflineItem_GetStickerSlotCount( ullID );
+		if ( nSlots > 0 )
+			s_ullStickerTarget = ullID;
+		pui->Params_SetResult( obj, nSlots );
+	}
+	void GetItemStickerCount( SCALEFORM_CALLBACK_ARGS_DECL )
+	{
+		uint64 ullID = ArgItemID( pui, obj, 1 );
+		int nCount = 0;
+		while ( FilledStickerSlot( ullID, nCount ) >= 0 )
+			nCount++;
+		pui->Params_SetResult( obj, nCount );
+	}
+	void GetItemStickerImageByIndex( SCALEFORM_CALLBACK_ARGS_DECL )
+	{
+		uint64 ullID = ArgItemID( pui, obj, 1 );
+		const CStickerKit *pKit = StickerKitIn( ullID, FilledStickerSlot( ullID, ArgInt( pui, obj, 2 ) ) );
+		pui->Params_SetResult( obj, pKit ? pKit->GetInventoryImage() : "" );
+	}
+	void GetItemStickerImageBySlot( SCALEFORM_CALLBACK_ARGS_DECL )
+	{
+		const CStickerKit *pKit = StickerKitIn( ArgItemID( pui, obj, 1 ), ArgInt( pui, obj, 2 ) );
+		pui->Params_SetResult( obj, pKit ? pKit->GetInventoryImage() : "" );
+	}
+	void GetItemStickerNameByIndex( SCALEFORM_CALLBACK_ARGS_DECL )
+	{
+		uint64 ullID = ArgItemID( pui, obj, 1 );
+		const CStickerKit *pKit = StickerKitIn( ullID, FilledStickerSlot( ullID, ArgInt( pui, obj, 2 ) ) );
+		const wchar_t *pwsz = ( pKit && g_pVGuiLocalize ) ? g_pVGuiLocalize->Find( pKit->sItemName.String() ) : NULL;
+		char szName[256] = "";
+		if ( pwsz )
+			WideToUTF8( pwsz, szName, sizeof( szName ) );
+		pui->Params_SetResult( obj, szName );
+	}
+	// SetStickerToolSlot( xuid, item, slot ) just before UseTool( xuid, sticker, item )
+	int m_nStickerToolSlot;
+	void SetStickerToolSlot( SCALEFORM_CALLBACK_ARGS_DECL )
+	{
+		uint64 ullID = ArgItemID( pui, obj, 1 );
+		m_nStickerToolSlot = ArgInt( pui, obj, 2 );
+		bool bOK = m_nStickerToolSlot >= 0 && m_nStickerToolSlot < OfflineItem_GetStickerSlotCount( ullID ) && !OfflineItem_GetStickerKit( ullID, m_nStickerToolSlot );
+		pui->Params_SetResult( obj, bOK );
+	}
+	void IsItemStickerAtExtremeWear( SCALEFORM_CALLBACK_ARGS_DECL )
+	{
+		pui->Params_SetResult( obj, OfflineItem_IsStickerAtExtremeWear( ArgItemID( pui, obj, 1 ), ArgInt( pui, obj, 2 ) ) );
+	}
+	// WearItemSticker( xuid, item, slot ): one scrape. The panel's scrape
+	// animation runs until the inventory update (CallbackStickerWearApplied)
+	void WearItemSticker( SCALEFORM_CALLBACK_ARGS_DECL )
+	{
+		uint64 ullID = ArgItemID( pui, obj, 1 );
+		OfflineItem_ScrapeSticker( ullID, ArgInt( pui, obj, 2 ) );
+		if ( s_pStickerPanel && s_pStickerPanel->IsVisible() )
+			ShowStickerPreview( ullID, 0, -1 );
+		if ( CCreateMainMenuScreenScaleform::IsActive() )
+		{
+			KeyValues *pEvent = new KeyValues( "ScaleformComponent_MyPersona_InventoryUpdated" );
+			CCreateMainMenuScreenScaleform::GetInstance()->OnEvent( pEvent );
+			pEvent->deleteThis();
+		}
+	}
+	// PreviewStickerInModelPanel( xuid, sticker, slot ), or ( xuid, "stickercamera", 0 )
+	// in scrape mode: the weapon with the sticker placed / as it is
+	void PreviewStickerInModelPanel( SCALEFORM_CALLBACK_ARGS_DECL )
+	{
+		if ( !s_ullStickerTarget )
+			return;
+		const char *pszSticker = ArgString( pui, obj, 1 );
+		int nKit = V_stricmp( pszSticker, "stickercamera" ) ? OfflineSticker_GetKit( ArgItemID( pui, obj, 1 ) ) : 0;
+		ShowStickerPreview( s_ullStickerTarget, nKit, ArgInt( pui, obj, 2 ) );
+	}
 
 	// ---- deleting (received items) -------------------------------------------
 	void IsDeletable( SCALEFORM_CALLBACK_ARGS_DECL ) { pui->Params_SetResult( obj, OfflineItem_IsDeletable( ArgItemID( pui, obj, 1 ) ) ); }
@@ -774,6 +999,11 @@ public:
 			OfflineNameTag_Apply( ullTool, ArgItemID( pui, obj, 2 ), m_strNameToolString.Get() );
 			return;
 		}
+		if ( OfflineItem_IsSticker( ullTool ) )
+		{
+			OfflineSticker_Apply( ullTool, ArgItemID( pui, obj, 2 ), m_nStickerToolSlot );
+			return;
+		}
 		uint64 ullCase = ArgItemID( pui, obj, 2 );
 		uint64 ullItem = OfflineCase_Open( ullCase );
 		if ( !ullItem )
@@ -791,8 +1021,16 @@ public:
 
 	void GetItemInventoryImage( SCALEFORM_CALLBACK_ARGS_DECL )
 	{
+		// stickers: their own picture (resource/flash/econ/stickers)
+		uint64 ullID = ArgItemID( pui, obj, 1 );
+		if ( int nKit = OfflineSticker_GetKit( ullID ) )
+		{
+			const CStickerKit *pKit = GetItemSchema()->GetStickerKitDefinition( nKit );
+			pui->Params_SetResult( obj, pKit ? pKit->GetInventoryImage() : "" );
+			return;
+		}
 		// per-skin icons came from Steam's CDN; show the weapon's own icon
-		const CCStrike15ItemDefinition *pDef = ItemDef( FindItem( ArgItemID( pui, obj, 1 ) ) );
+		const CCStrike15ItemDefinition *pDef = ItemDef( FindItem( ullID ) );
 		const char *psz = pDef ? pDef->GetInventoryImage() : NULL;
 		pui->Params_SetResult( obj, psz ? psz : "" );
 	}
@@ -843,6 +1081,19 @@ public:
 		{
 			if ( s_pInspectPanel )
 				s_pInspectPanel->SetVisible( false );
+			if ( s_pStickerPanel )
+				s_pStickerPanel->SetVisible( false );
+			return;
+		}
+		// the sticker panel: "<tile image>?stickers", img://inventory_<id> for skins
+		if ( V_stristr( pszPath, "?stickers" ) )
+		{
+			if ( const char *pszID = V_stristr( pszPath, "inventory_" ) )
+				s_ullStickerTarget = V_atoui64( pszID + V_strlen( "inventory_" ) );
+			if ( s_pInspectPanel )
+				s_pInspectPanel->SetVisible( false );
+			if ( s_ullStickerTarget )
+				ShowStickerPreview( s_ullStickerTarget, 0, -1 );
 			return;
 		}
 		CEconItemView *pItem = FindItem( s_ullInspectItemID );
@@ -905,16 +1156,16 @@ public:
 			SFUI_DECL_METHOD_AS( ReturnFalse, "IsCouponCrate" ),
 			SFUI_DECL_METHOD_AS( ReturnFalse, "CheckCampaignOwnership" ),
 			SFUI_DECL_METHOD_AS( ReturnFalse, "DoesUserOwnQuest" ),
-			SFUI_DECL_METHOD_AS( ReturnFalse, "IsItemStickerAtExtremeWear" ),
-			SFUI_DECL_METHOD_AS( ReturnFalse, "SetStickerToolSlot" ),
+			SFUI_DECL_METHOD( IsItemStickerAtExtremeWear ),
+			SFUI_DECL_METHOD( SetStickerToolSlot ),
 			SFUI_DECL_METHOD( SetNameToolString ),
 			SFUI_DECL_METHOD_AS( ReturnFalse, "IsCraftReady" ),
 			SFUI_DECL_METHOD_AS( ReturnFalse, "ItemHasScorecardValues" ),
 			SFUI_DECL_METHOD_AS( ReturnTrue, "TestMusicVolume" ),
 			SFUI_DECL_METHOD( GetItemCapabilitiesCount ),
 			SFUI_DECL_METHOD( GetChosenActionItemsCount ),
-			SFUI_DECL_METHOD_AS( ReturnZero, "GetItemStickerCount" ),
-			SFUI_DECL_METHOD_AS( ReturnZero, "GetItemStickerSlotCount" ),
+			SFUI_DECL_METHOD( GetItemStickerCount ),
+			SFUI_DECL_METHOD( GetItemStickerSlotCount ),
 			SFUI_DECL_METHOD_AS( ReturnZero, "GetAssociatedItemsCount" ),
 			SFUI_DECL_METHOD( GetLootListItemsCount ),
 			SFUI_DECL_METHOD_AS( ReturnZero, "GetNumItemsNeededToTradeUp" ),
@@ -933,9 +1184,9 @@ public:
 			SFUI_DECL_METHOD( GetItemCapabilityByIndex ),
 			SFUI_DECL_METHOD_AS( ReturnEmpty, "GetItemCapabilityDisabledMessageByIndex" ),
 			SFUI_DECL_METHOD( GetChosenActionItemIDByIndex ),
-			SFUI_DECL_METHOD_AS( ReturnEmpty, "GetItemStickerImageByIndex" ),
-			SFUI_DECL_METHOD_AS( ReturnEmpty, "GetItemStickerImageBySlot" ),
-			SFUI_DECL_METHOD_AS( ReturnEmpty, "GetItemStickerNameByIndex" ),
+			SFUI_DECL_METHOD( GetItemStickerImageByIndex ),
+			SFUI_DECL_METHOD( GetItemStickerImageBySlot ),
+			SFUI_DECL_METHOD( GetItemStickerNameByIndex ),
 			SFUI_DECL_METHOD_AS( ReturnEmpty, "GetItemGifterXuid" ),
 			SFUI_DECL_METHOD_AS( ReturnEmpty, "GetItemPickupMethod" ),
 			SFUI_DECL_METHOD_AS( ReturnEmpty, "GetSprayTintColorCode" ),
@@ -977,9 +1228,9 @@ public:
 			SFUI_DECL_METHOD( ReceiveItem ),
 			SFUI_DECL_METHOD( ClearCustomName ),
 			SFUI_DECL_METHOD_AS( DoNothing, "HighlightStickerBySlot" ),
-			SFUI_DECL_METHOD_AS( DoNothing, "PreviewStickerInModelPanel" ),
+			SFUI_DECL_METHOD( PreviewStickerInModelPanel ),
 			SFUI_DECL_METHOD_AS( DoNothing, "PeelEffectStickerBySlot" ),
-			SFUI_DECL_METHOD_AS( DoNothing, "WearItemSticker" ),
+			SFUI_DECL_METHOD( WearItemSticker ),
 			SFUI_DECL_METHOD_AS( DoNothing, "PlayItemPreviewMusic" ),
 			SFUI_DECL_METHOD_AS( DoNothing, "StopItemPreviewMusic" ),
 			SFUI_DECL_METHOD_AS( DoNothing, "CancelQuestAudio" ),

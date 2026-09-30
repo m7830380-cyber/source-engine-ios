@@ -57,6 +57,7 @@ CBaseViewModel::CBaseViewModel()
 	m_flStatTrakGlowMultiplier = 0.0f;
 	m_flStatTrakGlowMultiplierIdeal = 0.0f;
 	m_nViewmodelGlovesItemID = 0;
+	m_pStickerAddonItem = NULL;
 	m_szLastSound[0] = '\0';
 	m_flLastSoundTime = 0.0f;
 

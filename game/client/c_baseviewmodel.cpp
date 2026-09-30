@@ -1217,9 +1217,46 @@ bool C_BaseViewModel::ViewmodelStickersAreValid( int nWeaponID )
 	return true;
 }
 
+// Valve's version was removed from the partner depot. Each sticker slot has a
+// mesh (the item's "viewmodel_geometry") bone-merged onto the viewmodel and drawn
+// with that slot's sticker material (CEconItemView::GenerateStickerMaterials).
 void C_BaseViewModel::AddViewmodelStickers( CEconItemView *pItem, int nWeaponID )
 {
-	/* Removed for partner depot */
+	if ( !pItem || !pItem->ItemHasAnyStickersApplied() )
+	{
+		RemoveViewmodelStickers();
+		return;
+	}
+	// kept while it's the same item (another weapon, or the inventory refilled: rebuilt)
+	if ( m_pStickerAddonItem == pItem && ViewmodelStickersAreValid( nWeaponID ) )
+		return;
+
+	RemoveViewmodelStickers();
+	m_pStickerAddonItem = pItem;
+	for ( int i = 0; i < pItem->GetNumSupportedStickerSlots(); i++ )
+	{
+		IMaterial *pMaterial = pItem->GetStickerIMaterialBySlotIndex( i, false );
+		const char *pszModel = pItem->GetStickerSlotModelBySlotIndex( i );
+		if ( !pMaterial || pMaterial->IsErrorMaterial() || !pszModel || !pszModel[0] )
+			continue;
+
+		C_ViewmodelAttachmentModel *pSticker = new class C_ViewmodelAttachmentModel;
+		if ( !pSticker->InitializeAsClientEntity( pszModel, true ) )
+		{
+			pSticker->Release();
+			continue;
+		}
+		m_hStickerModelAddons.AddToTail( pSticker );
+		pSticker->SetParent( this );
+		pSticker->SetLocalOrigin( vec3_origin );
+		pSticker->UpdatePartitionListEntry();
+		pSticker->CollisionProp()->MarkPartitionHandleDirty();
+		pSticker->UpdateVisibility();
+		pSticker->SetViewmodel( this );
+		pSticker->SetUseParentLightingOrigin( true );
+		pSticker->SetStickerMaterial( pMaterial );
+		RemoveEffects( EF_NODRAW );
+	}
 }
 
 void C_BaseViewModel::RemoveViewmodelArmModels( void )

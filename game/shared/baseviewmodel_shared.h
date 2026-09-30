@@ -26,6 +26,7 @@ class CBaseCombatCharacter;
 class CVGuiScreen;
 
 #if defined( CLIENT_DLL )
+#include "materialsystem/MaterialSystemUtil.h"
 class C_ViewmodelAttachmentModel;
 class C_CSPlayer;
 #define CBaseViewModel C_BaseViewModel
@@ -46,8 +47,12 @@ public:
 	void SetViewmodel( C_BaseViewModel *pVM );
 	virtual int InternalDrawModel( int flags, const RenderableInstance_t &instance );
 
+	// a sticker mesh draws with its sticker's material
+	void SetStickerMaterial( IMaterial *pMaterial ) { m_StickerMaterial.Init( pMaterial ); }
+
 private:
 	CHandle< C_BaseViewModel > m_hViewmodel;
+	CMaterialReference m_StickerMaterial;
 };
 
 #endif
@@ -273,6 +278,7 @@ private:
 	//stickers
 	typedef CHandle<C_ViewmodelAttachmentModel>	StickerHandle_t;
 	CUtlVector<StickerHandle_t>	m_hStickerModelAddons;
+	const CEconItemView		*m_pStickerAddonItem;	// the item the sticker meshes were made for (only compared)
 	CBaseAnimating* m_pMaterialPreviewShape;
 
 	char					m_szLastSound[64];

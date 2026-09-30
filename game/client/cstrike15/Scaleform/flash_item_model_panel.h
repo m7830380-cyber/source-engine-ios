@@ -32,13 +32,31 @@ public:
 	CFlashItemModelPanel( const char *pszName, PlacementFn_t pfnPlacement, bool bTouchToTurn, bool bHideInGame );
 
 	void ShowItem( CEconItemView *pItem );
+	// the weapon's viewmodel with its sticker meshes, each drawn with the sticker
+	// material pStickers built for that slot (pItem's own, or a preview copy with
+	// one more sticker); the view is kept while the model stays the same
+	void ShowItemWithStickers( CEconItemView *pItem, CEconItemView *pStickers );
 	void Hide() { SetVisible( false ); }
 
 	virtual void OnThink();
 
+protected:
+	virtual void OnModelDrawPassStart( int iPass, CStudioHdr *pStudioHdr, int &nFlags ) OVERRIDE;
+	virtual void OnModelDrawPassFinished( int iPass, CStudioHdr *pStudioHdr, int &nFlags ) OVERRIDE;
+
 private:
+	void ShowModel( const char *pszModel, CEconItemView *pItem, bool bKeepView );
 	bool UpdatePlacement();	// false: hidden
 	void UpdateModelTransform();
+
+	struct StickerMerge_t
+	{
+		const studiohdr_t *m_pHdr;
+		CMaterialReference m_Material;
+	};
+	CUtlVector< StickerMerge_t > m_vecStickerMerges;
+	bool	m_bStickerOverride;
+	CUtlString m_strModel;
 
 	PlacementFn_t m_pfnPlacement;
 	bool	m_bTouchToTurn, m_bHideInGame;

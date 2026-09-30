@@ -2040,6 +2040,13 @@ void CEconItemView::GenerateStickerMaterials( void )
 
 	m_pStickerMaterials.RemoveAll();
 
+#if defined( IOS )
+	// the WeaponDecal shader: a way out if it fails on the device
+	static ConVarRef cl_ios_stickers( "cl_ios_stickers" );
+	if ( cl_ios_stickers.IsValid() && !cl_ios_stickers.GetBool() )
+		return;
+#endif
+
 	for ( int i=0; i<nSupportedStickerSlots; i++ )
 	{
 		
@@ -2314,6 +2321,7 @@ void CEconItemView::GenerateStickerMaterials( void )
 }
 
 #if defined( IOS )
+ConVar cl_ios_stickers( "cl_ios_stickers", "1", FCVAR_RELEASE | FCVAR_ARCHIVE, "Draw stickers on weapons. Turn off if the sticker shader crashes." );
 ConVar cl_ios_glove_skins( "cl_ios_glove_skins", "1", FCVAR_RELEASE | FCVAR_ARCHIVE, "Build glove skin (clothing) materials. Turn off if the glove shader crashes." );
 #endif
 
@@ -3313,7 +3321,13 @@ const wchar_t *CEconItemView::GetItemName( bool bUncustomized /*= false*/ ) cons
 	// Names only depend on these, so each distinct one is built once and kept
 	int nPaintKit = GetCustomPaintKitIndex();
 	int nQuality = GetQuality();
-	uint64 ullKey = uint64( pDef->GetDefinitionIndex() & 0xFFFF ) | ( uint64( nPaintKit & 0xFFFF ) << 16 ) | ( uint64( nQuality & 0xFF ) << 32 );
+	// sticker items: "Sticker | <kit>"
+	int nStickerKit = 0;
+	if ( !V_stricmp( pDef->GetDefinitionName(), "sticker" ) )
+		nStickerKit = (int)GetStickerAttributeBySlotIndexInt( 0, k_EStickerAttribute_ID, 0 );
+	const CStickerKit *pStickerKit = nStickerKit > 0 ? GetItemSchema()->GetStickerKitDefinition( nStickerKit ) : NULL;
+	uint64 ullKey = uint64( pDef->GetDefinitionIndex() & 0xFFFF ) | ( uint64( nPaintKit & 0xFFFF ) << 16 ) | ( uint64( nQuality & 0xFF ) << 32 ) |
+		( uint64( pStickerKit ? nStickerKit & 0xFFFF : 0 ) << 40 );
 	static CUtlMap< uint64, wchar_t * > s_mapNames( DefLessFunc( uint64 ) );
 	unsigned short iName = s_mapNames.Find( ullKey );
 	if ( s_mapNames.IsValidIndex( iName ) )
@@ -3323,7 +3337,7 @@ const wchar_t *CEconItemView::GetItemName( bool bUncustomized /*= false*/ ) cons
 	LocalizeItemToken( pDef->GetItemBaseName(), wszBase, sizeof( wszBase ) );
 
 	const CPaintKit *pPaintKit = nPaintKit > 0 ? GetItemSchema()->GetPaintKitDefinition( nPaintKit ) : NULL;
-	LocalizeItemToken( pPaintKit ? pPaintKit->sDescriptionTag.String() : NULL, wszPaint, sizeof( wszPaint ) );
+	LocalizeItemToken( pPaintKit ? pPaintKit->sDescriptionTag.String() : ( pStickerKit ? pStickerKit->sItemName.String() : NULL ), wszPaint, sizeof( wszPaint ) );
 
 	// star for knives/gloves, StatTrak, Souvenir; normal/unique have no prefix
 	wszQuality[0] = L'\0';

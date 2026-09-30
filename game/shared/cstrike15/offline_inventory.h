@@ -125,6 +125,22 @@ void OfflineItem_ClearCustomName( uint64 ullItemID );
 // Deleting received items (item giver mode)
 bool OfflineItem_IsDeletable( uint64 ullItemID );
 void OfflineItem_Delete( uint64 ullItemID );
+
+// Stickers: sticker items (kind STICKER, the value is the sticker kit) go on
+// weapons with sticker slots, used up when applied (-allskinsunlocked has one of
+// each, a fresh set each launch). What's on a weapon is kept with its custom
+// name in cfg/offline_custom.txt and shows in this game only.
+bool OfflineItem_IsSticker( uint64 ullItemID );
+int OfflineSticker_GetKit( uint64 ullItemID );
+int OfflineItem_GetStickerSlotCount( uint64 ullItemID );		// 0: takes no stickers
+bool OfflineItem_CanTakeSticker( uint64 ullItemID );			// has slots and one is free
+void OfflineSticker_GetOwned( CUtlVector< uint64 > &vecStickers );
+void OfflineItem_GetStickerable( CUtlVector< uint64 > &vecItems );
+int OfflineItem_GetStickerKit( uint64 ullItemID, int nSlot );	// 0: empty
+float OfflineItem_GetStickerWear( uint64 ullItemID, int nSlot );
+bool OfflineSticker_Apply( uint64 ullSticker, uint64 ullItemID, int nSlot );
+bool OfflineItem_IsStickerAtExtremeWear( uint64 ullItemID, int nSlot );
+void OfflineItem_ScrapeSticker( uint64 ullItemID, int nSlot );	// the last scrape removes it
 #endif
 
 bool OfflineItem_IsNameTag( uint64 ullItemID );

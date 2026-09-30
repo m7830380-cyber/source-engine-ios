@@ -10,6 +10,8 @@
 #include "econ_item_view.h"
 #include "vgui/ISurface.h"
 #include "ienginevgui.h"
+#include "istudiorender.h"
+#include "datacache/imdlcache.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include <tier0/memdbgon.h>
@@ -91,13 +93,76 @@ CFlashItemModelPanel::CFlashItemModelPanel( const char *pszName, PlacementFn_t p
 	m_flLastTime = 0.0;
 	m_bDragging = m_bUserTurned = false;
 	m_flDragX = m_flDragY = 0.0f;
+	m_bStickerOverride = false;
 }
 
 void CFlashItemModelPanel::ShowItem( CEconItemView *pItem )
 {
-	const char *pszModel = pItem ? pItem->GetWorldDisplayModel() : NULL;
-	if ( !pszModel || !pszModel[0] )
+	ClearMergeMDLs();
+	m_vecStickerMerges.RemoveAll();
+	ShowModel( pItem ? pItem->GetWorldDisplayModel() : NULL, pItem, false );
+}
+
+void CFlashItemModelPanel::ShowItemWithStickers( CEconItemView *pItem, CEconItemView *pStickers )
+{
+	const CEconItemDefinition *pDef = pItem ? pItem->GetItemDefinition() : NULL;
+	const char *pszModel = pDef ? pDef->GetBasePlayerDisplayModel() : NULL;
+	bool bKeepView = pszModel && IsVisible() && !V_stricmp( m_strModel.Get(), pszModel );
+
+	ClearMergeMDLs();
+	m_vecStickerMerges.RemoveAll();
+	ShowModel( pszModel, pItem, bKeepView );
+	if ( !pStickers || !IsVisible() )
+		return;
+
+	pStickers->GenerateStickerMaterials();
+	for ( int i = 0; i < pStickers->GetNumSupportedStickerSlots(); i++ )
 	{
+		IMaterial *pMaterial = pStickers->GetStickerIMaterialBySlotIndex( i, false );
+		const char *pszSticker = pStickers->GetStickerSlotModelBySlotIndex( i );
+		if ( !pMaterial || pMaterial->IsErrorMaterial() || !pszSticker || !pszSticker[0] )
+			continue;
+		MDLHandle_t hSticker = SetMergeMDL( pszSticker );
+		const studiohdr_t *pHdr = hSticker != MDLHANDLE_INVALID ? g_pMDLCache->GetStudioHdr( hSticker ) : NULL;
+		if ( !pHdr )
+			continue;
+		StickerMerge_t &merge = m_vecStickerMerges[ m_vecStickerMerges.AddToTail() ];
+		merge.m_pHdr = pHdr;
+		merge.m_Material.Init( pMaterial );
+	}
+}
+
+// the sticker meshes draw with their sticker's material
+void CFlashItemModelPanel::OnModelDrawPassStart( int iPass, CStudioHdr *pStudioHdr, int &nFlags )
+{
+	BaseClass::OnModelDrawPassStart( iPass, pStudioHdr, nFlags );
+	m_bStickerOverride = false;
+	FOR_EACH_VEC( m_vecStickerMerges, i )
+	{
+		if ( pStudioHdr && m_vecStickerMerges[i].m_pHdr == pStudioHdr->GetRenderHdr() )
+		{
+			g_pStudioRender->ForcedMaterialOverride( m_vecStickerMerges[i].m_Material );
+			m_bStickerOverride = true;
+			break;
+		}
+	}
+}
+
+void CFlashItemModelPanel::OnModelDrawPassFinished( int iPass, CStudioHdr *pStudioHdr, int &nFlags )
+{
+	if ( m_bStickerOverride )
+	{
+		g_pStudioRender->ForcedMaterialOverride( NULL );
+		m_bStickerOverride = false;
+	}
+	BaseClass::OnModelDrawPassFinished( iPass, pStudioHdr, nFlags );
+}
+
+void CFlashItemModelPanel::ShowModel( const char *pszModel, CEconItemView *pItem, bool bKeepView )
+{
+	if ( !pszModel || !pszModel[0] || !pItem )
+	{
+		m_strModel.Clear();
 		SetVisible( false );
 		return;
 	}
@@ -105,6 +170,7 @@ void CFlashItemModelPanel::ShowItem( CEconItemView *pItem )
 	// starts building the painted materials; they show once ready
 	pItem->UpdateGeneratedMaterial();
 	SetMDL( pszModel, pItem );
+	m_strModel = pszModel;
 
 	// bounding sphere in model space (identity transform first)
 	SetModelAnglesAndPosition( vec3_angle, vec3_origin );
@@ -114,8 +180,11 @@ void CFlashItemModelPanel::ShowItem( CEconItemView *pItem )
 		m_flRadius = 16.0f;
 	}
 
-	m_flYaw = m_flPitch = 0.0f;
-	m_bDragging = m_bUserTurned = false;
+	if ( !bKeepView )
+	{
+		m_flYaw = m_flPitch = 0.0f;
+		m_bDragging = m_bUserTurned = false;
+	}
 	m_flLastTime = Plat_FloatTime();
 	SetVisible( true );
 	if ( !UpdatePlacement() )

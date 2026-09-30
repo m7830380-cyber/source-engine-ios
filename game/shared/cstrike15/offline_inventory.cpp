@@ -776,8 +776,27 @@ bool OfflineInventory_NeedsRefill( CCSPlayerInventory *pInventory )
 
 #ifndef CLIENT_DLL
 // the server's own copies of the items equipped in each inventory
-static CUtlMap< CCSPlayerInventory *, CUtlVector< CEconItem * > * > s_mapServerCopies( DefLessFunc( CCSPlayerInventory * ) );
+static CUtlMap< const CPlayerInventory *, CUtlVector< CEconItem * > * > s_mapServerCopies( DefLessFunc( const CPlayerInventory * ) );
 #endif
+
+CEconItem *OfflineInventory_FindItemIn( const CPlayerInventory *pInventory, uint64 ullItemID )
+{
+#ifndef CLIENT_DLL
+	// the inventory's own copy: it carries the equipped state (one rebuilt from
+	// the ID wouldn't, and the loadout would come out empty)
+	unsigned short iCopies = s_mapServerCopies.Find( pInventory );
+	if ( s_mapServerCopies.IsValidIndex( iCopies ) )
+	{
+		CUtlVector< CEconItem * > &vecCopies = *s_mapServerCopies[iCopies];
+		FOR_EACH_VEC( vecCopies, i )
+		{
+			if ( vecCopies[i]->GetItemID() == ullItemID )
+				return vecCopies[i];
+		}
+	}
+#endif
+	return OfflineInventory_FindItem( ullItemID );
+}
 
 void OfflineInventory_Fill( CCSPlayerInventory *pInventory, const CSteamID &owner, KeyValues *pLoadout )
 {

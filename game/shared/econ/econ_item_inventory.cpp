@@ -1824,7 +1824,7 @@ CEconItem *CPlayerInventory::GetSOCDataForItem( itemid_t iItemID )
 		pData = GetEconItemFromStringTable( iItemID );
 #if defined( CSTRIKE15 )
 		if ( !pData )
-			pData = OfflineInventory_FindItem( iItemID );	// -allskinsunlocked items (no GC)
+			pData = OfflineInventory_FindItemIn( this, iItemID );	// offline items (no GC)
 #endif
 	}
 
@@ -1856,7 +1856,7 @@ const CEconItem *CPlayerInventory::GetSOCDataForItem( itemid_t iItemID ) const
 		pData = GetEconItemFromStringTable( iItemID );
 #if defined( CSTRIKE15 )
 		if ( !pData )
-			pData = OfflineInventory_FindItem( iItemID );	// -allskinsunlocked items (no GC)
+			pData = OfflineInventory_FindItemIn( this, iItemID );	// offline items (no GC)
 #endif
 	}
 

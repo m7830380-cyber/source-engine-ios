@@ -23,6 +23,7 @@
 #endif
 
 class CCSPlayerInventory;
+class CPlayerInventory;
 class CEconItem;
 class CEconItemView;
 class CSteamID;
@@ -84,6 +85,10 @@ void OfflineInventory_SaveLoadout( CCSPlayerInventory *pInventory );
 // The item with this ID: one of ours, or one rebuilt from the ID (another
 // player's, a LAN joiner's). NULL for IDs that aren't offline items.
 CEconItem *OfflineInventory_FindItem( uint64 ullItemID );
+
+// The same, but an inventory's own item first (the server keeps a copy of each
+// player's equipped items per inventory).
+CEconItem *OfflineInventory_FindItemIn( const CPlayerInventory *pInventory, uint64 ullItemID );
 
 #ifdef CLIENT_DLL
 // Sends the saved loadout to the server we're connected to, so on LAN games the

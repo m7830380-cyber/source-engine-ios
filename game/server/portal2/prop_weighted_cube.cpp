@@ -56,6 +56,8 @@ public:
 
 	CPropWeightedCube()
 	{
+		m_bActivated = false;
+		m_bTouchedByPlayer = false;
 	}
 
 	bool CreateVPhysics()
@@ -101,6 +103,13 @@ private:
 	COutputEvent m_OnPhysGunDrop;
 
 	COutputEvent m_OnFizzled;
+
+	void SetActivated( bool bState ) { m_bActivated = bState; }
+	bool WasTouchedByPlayer( void ) const { return m_bTouchedByPlayer; }
+
+private:
+	bool m_bActivated;
+	bool m_bTouchedByPlayer;
 };
 
 LINK_ENTITY_TO_CLASS(prop_weighted_cube, CPropWeightedCube);
@@ -299,4 +308,17 @@ void CPropWeightedCube::OnPhysGunPickup(CBasePlayer *pPhysGunUser, PhysGunPickup
 void CPropWeightedCube::OnPhysGunDrop(CBasePlayer *pPhysGunUser, PhysGunDrop_t reason)
 {
 	m_OnPhysGunDrop.FireOutput(pPhysGunUser, this);
+}
+
+void PropWeightedCube_SetActivated( CBaseEntity *pEnt, bool bState )
+{
+	CPropWeightedCube *pCube = dynamic_cast<CPropWeightedCube *>( pEnt );
+	if ( pCube )
+		pCube->SetActivated( bState );
+}
+
+bool PropWeightedCube_WasTouchedByPlayer( CBaseEntity *pEnt )
+{
+	CPropWeightedCube *pCube = dynamic_cast<CPropWeightedCube *>( pEnt );
+	return pCube ? pCube->WasTouchedByPlayer() : false;
 }

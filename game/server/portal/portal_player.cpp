@@ -934,6 +934,7 @@ void CPortal_Player::SetupBones( matrix3x4_t *pBoneToWorld, int boneMask )
 	}
 
 	CBaseAnimating *pParent = dynamic_cast< CBaseAnimating* >( GetMoveParent() );
+#if !defined( PORTAL2 )
 	if ( pParent )
 	{
 		CBoneCache *pParentCache = pParent->GetBoneCache();
@@ -959,8 +960,9 @@ void CPortal_Player::SetupBones( matrix3x4_t *pBoneToWorld, int boneMask )
 			return;
 		}
 	}
+#endif
 
-	Studio_BuildMatrices( 
+	Studio_BuildMatrices(
 		pStudioHdr, 
 		m_PlayerAnimState->GetRenderAngles(),
 		adjOrigin, 

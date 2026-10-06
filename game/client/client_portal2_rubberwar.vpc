@@ -13,7 +13,6 @@ $Include "$SRCDIR\game\client\client_base.vpc"
 $Project
 {
 	-$File "vgui_fpspanel.cpp"
-	$File "$SRCDIR\common\imageutils.cpp"
 	$File "$SRCDIR\public\XUnzip.cpp"
 	$File "portal2\portal2_ios_link_stubs.cpp"
 }

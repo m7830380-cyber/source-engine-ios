@@ -58,6 +58,7 @@
 	#if defined( PORTAL )
 		#include "portal_player.h"
 		#include "portal_util_shared.h"
+		#include "prop_portal.h"
 		#include "physicsshadowclone.h"
 	#endif
 
@@ -3149,7 +3150,7 @@ void CBasePlayer::VPhysicsShadowUpdate( IPhysicsObject *pPhysics )
 		{
 #if defined( PORTAL ) && defined( GAME_DLL )
 			CPortal_Player *pPortalPlayer = (CPortal_Player *)this;
-			CPortal_Base2D *pPortalEnvironment = pPortalPlayer->m_hPortalEnvironment.Get();
+			CProp_Portal *pPortalEnvironment = (CProp_Portal *)pPortalPlayer->m_hPortalEnvironment.Get();
 			if( pPortalEnvironment != NULL )
 			{
 				trace_t trace;

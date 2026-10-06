@@ -7,7 +7,7 @@
 #include "cbase.h"
 #include "props.h"
 #include "triggers.h"
-#include "prop_weightedcube.h"
+#include "prop_weighted_cube.h"
 #include "portal_mp_gamerules.h"
 #include "prop_monster_box.h"
 
@@ -376,7 +376,7 @@ void CPropFloorButton::OnPressed( CBaseEntity* pActivator )
 		Assert( pCube );
 		if ( pCube )
 		{
-			if ( pCube->WasTouchedByPlayer() == false )
+			if ( PropWeightedCube_WasTouchedByPlayer( pActivator ) == false )
 			{
 				// HACK: this delay is a guess at how long it takes to be sure the box has setteled... 
 				SetContextThink( &CPropFloorButton::PressingBoxHasSetteledThink, gpGlobals->curtime + 2.0f, s_pszPressingBoxHasSetteledThinkContext );
@@ -483,11 +483,7 @@ void CPortalButtonTrigger::StartTouch(CBaseEntity *pOther)
 		if ( PassesTriggerFilters( pOther ) )
 		{
 			//Set the cube to activate
-			CPropWeightedCube* pCube = assert_cast<CPropWeightedCube*>( pOther );
-			if( pCube )
-			{
-				pCube->SetActivated( true );
-			}
+			PropWeightedCube_SetActivated( pOther, true );
 		}
 	}
 
@@ -501,11 +497,7 @@ void CPortalButtonTrigger::EndTouch(CBaseEntity *pOther)
 		if ( PassesTriggerFilters( pOther ) )
 		{
 			//Set the cube to deactivate
-			CPropWeightedCube* pCube = assert_cast<CPropWeightedCube*>( pOther );
-			if( pCube )
-			{
-				pCube->SetActivated( false );
-			}
+			PropWeightedCube_SetActivated( pOther, false );
 		}
 	}
 
@@ -535,11 +527,10 @@ bool CPortalButtonTrigger::PassesTriggerFilters(CBaseEntity *pOther)
 	// did a cube touch me?
 	if ( FClassnameIs( pOther, "prop_weighted_cube") || FClassnameIs( pOther, "prop_monster_box") )
 	{
-		CPropWeightedCube *pCube = static_cast<CPropWeightedCube*>( pOther );
-		bool bIsBall = pCube && pCube->GetCubeType() == CUBE_SPHERE;
+		const bool bIsBall = false;
 
-		if ( ( bIsBall && m_pOwnerButton->AcceptsBall() ) || //If the button accepts balls and this is a ball ( floor, under and ball buttons )
-		   ( !bIsBall && !m_pOwnerButton->OnlyAcceptBall() ) ) //If the button doesn't only accept balls and this is not a ball ( cube buttons )
+		if ( ( bIsBall && m_pOwnerButton->AcceptsBall() ) ||
+		   ( !bIsBall && !m_pOwnerButton->OnlyAcceptBall() ) )
 		{
 			return true;
 		}

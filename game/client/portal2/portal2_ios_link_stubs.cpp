@@ -41,8 +41,8 @@ const char *GameModeGetDefaultDifficulty( const char *pszMode )
 }
 
 void PrecacheLoadingTipIcons() {}
-void InitHudAllowTextChatFlag() {}
-void InitUiAllowProperTintFlag() {}
+DWORD InitHudAllowTextChatFlag( void ) { return 0; }
+DWORD InitUiAllowProperTintFlag( void ) { return 0; }
 
 float CL_GetHltvReplayDelay()
 {

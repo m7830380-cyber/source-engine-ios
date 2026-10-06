@@ -8,18 +8,32 @@
 $Macro SRCDIR		"..\.."
 $Macro GAMENAME 			"portal2"
 
-$Include "$SRCDIR\game\client\client_base.vpc"
+$Include "$SRCDIR\game\client\client_portal_base.vpc"
 
 $Project
 {
 	-$File "vgui_fpspanel.cpp"
 	$File "$SRCDIR\public\XUnzip.cpp"
 	$File "portal2\portal2_ios_link_stubs.cpp"
+	$File "portal2\portal2_achievements_client_stub.cpp"
+	-$File "portal\c_portal_base2d.cpp"
+	-$File "portal\c_portal_base2d.h"
+	-$File "portal\portalrenderable_flatbasic.cpp"
+	-$File "portal\portalrenderable_flatbasic.h"
+	$File "$SRCDIR\common\imageutils.cpp"
+	$File "$SRCDIR\common\imageutils.h"
+	$File "$SRCDIR\game\shared\bannedwords.cpp"
+	$File "$SRCDIR\game\shared\bannedwords.h"
+	$File "hltvreplaysystem.cpp"
+	$File "hltvreplaysystem.h"
+	$File "steamworks_gamestats_client.cpp"
+	$File "steamworks_gamestats_client.h"
 }
 
 // iOS: CS:GO engine protobuf user messages; Portal 2 legacy messages as protobufs.
 $include "$SRCDIR\game\shared\cstrike15\cstrike15_gcmessages_include.vpc" [$IOS]
 $include "$SRCDIR\game\shared\cstrike15\cstrike15_usermessages_include.vpc" [$IOS]
+$include "$SRCDIR\game\shared\base_gcmessages_include.vpc" [$IOS]
 
 $Project
 {
@@ -60,27 +74,17 @@ $Project "Client (Portal 2)"
 			}
 		}
 
-		$File	"c_team_objectiveresource.cpp"
-		$File	"c_team_objectiveresource.h"
-
 		$Folder	"HL2 DLL"
 		{
-			$File	"hl2\c_prop_combine_ball.cpp"
-			$File	"hl2\c_prop_combine_ball.h"
+			$File	"death.cpp"
 			$File	"hl2\c_te_concussiveexplosion.cpp"
 			$File	"hl2\c_te_flare.cpp"
-			$File	"death.cpp"
-			$File	"hl2\fx_hl2_impacts.cpp"
-			$File	"hl2\fx_hl2_tracers.cpp"
 		}
 
-		$Folder	"Multiplayer"
+		$Folder	"Portal (RubberWar)"
 		{
-			$File	"multiplayer\basenetworkedplayer_cl.cpp"
-			$File	"multiplayer\basenetworkedragdoll_cl.cpp"
-			$File	"$SRCDIR\game\shared\multiplayer\basenetworkedplayer_gamemove.cpp"
-			$File	"$SRCDIR\game\shared\multiplayer\basenetworkedplayer_shared.cpp"
-			$File	"$SRCDIR\game\shared\multiplayer\multiplayer_animstate.cpp"
+			$File	"$SRCDIR\game\shared\portal\portal_gamerules.cpp"
+			$File	"$SRCDIR\game\shared\portal\portal_gamerules.h"
 		}
 
 		$Folder "Portal 2"
@@ -95,8 +99,8 @@ $Project "Client (Portal 2)"
 
 			$Folder	"VGUI"
 			{
-				-$File	"portal2\vgui\nb_button.cpp"
-				-$File	"portal2\vgui\nb_header_footer.cpp"
+				$File	"portal2\vgui\nb_button.cpp"
+				$File	"portal2\vgui\nb_header_footer.cpp"
 				-$File	"portal2\vgui\nb_horiz_list.cpp"
 				-$File	"portal2\vgui\nb_select_level_entry.cpp"
 				-$File	"portal2\vgui\nb_select_level_panel.cpp"
@@ -108,8 +112,8 @@ $Project "Client (Portal 2)"
 
 			$Folder	"Radial Menu"
 			{
-				-$File	"portal2\radialmenu.cpp"
-				-$File	"portal2\radialmenu.h"
+				$File	"portal2\radialmenu.cpp"
+				$File	"portal2\radialmenu.h"
 				-$File	"portal2\radialmenu_taunt.cpp"
 				-$File	"portal2\radialmenu_taunt.h"
 			}
@@ -118,6 +122,9 @@ $Project "Client (Portal 2)"
 			{
 				$File	"portal2\gameui\gameui_interface.cpp" \
 						"portal2\gameui\gameconsole.cpp" \
+						"portal2\gameui\gameconsoledialog.cpp" \
+						"portal2\gameui\loadingdialog.cpp" \
+						"portal2\gameui\loadingtippanel.cpp" \
 						"portal2\gameui\gameui_util.cpp" \
 						"portal2\gameui\rungameengine.cpp" \
 						"portal2\gameui\sys_utils.cpp" \
@@ -134,6 +141,8 @@ $Project "Client (Portal 2)"
 						"portal2\gameui\portal2\vjukebox.cpp" \
 						"portal2\gameui\portal2\vmenubackground.cpp" \
 						"portal2\gameui\portal2\vingamemainmenu.cpp" \
+						"portal2\gameui\portal2\vflyoutmenu.cpp" \
+						"portal2\gameui\portal2\vvideo.cpp" \
 						"portal2\gameui\modinfo.cpp"
 				{
 					$Configuration
@@ -144,85 +153,6 @@ $Project "Client (Portal 2)"
 						}
 					}
 				}
-			}
-		}
-
-		$Folder	"Portal"
-		{
-			-$File	"$SRCDIR\game\shared\portal\achievements_portal.cpp"
-			$File	"portal\c_env_lightraill_endpoint.cpp"
-			$File	"portal\c_env_portal_path_track.cpp"
-			-$File	"portal\c_func_liquidportal.cpp"
-			-$File	"portal\c_func_liquidportal.h"
-			$File	"portal\c_func_noportal_volume.cpp"
-			$File	"portal\c_func_noportal_volume.h"
-			$File	"portal\c_neurotoxin_countdown.cpp"
-			$File	"portal\c_neurotoxin_countdown.h"
-			$File	"portal\c_npc_portal_turret_floor.cpp"
-			$File	"portal\c_npc_rocket_turret.cpp"
-			$File	"portal\c_portal_player.cpp"
-			$File	"portal\c_portal_player.h"
-			$File	"portal\C_PortalGhostRenderable.cpp"
-			$File	"portal\C_PortalGhostRenderable.h"
-			$File	"portal\c_prop_energy_ball.cpp"
-			$File	"portal\c_prop_portal.cpp"
-			$File	"portal\c_prop_portal.h"
-			$File	"portal\c_prop_portal_stats_display.cpp"
-			$File	"portal\c_prop_portal_stats_display.h"
-			$File	"portal\clientmode_portal.cpp"
-			$File	"portal\clientmode_portal.h"
-			$File	"$SRCDIR\game\shared\portal\env_lightrail_endpoint_shared.h"
-			$File	"$SRCDIR\game\shared\portal\env_portal_path_track_shared.h"
-			$File	"portal\fx_portal.cpp"
-			$File	"portal\hud_quickinfo.cpp"
-			$File	"portal\MaterialProxy_Portal_PickAlphaMask.cpp"
-			$File	"portal\materialproxy_portalstatic.cpp"
-			$File	"$SRCDIR\game\shared\portal\portal_collideable_enumerator.cpp"
-			$File	"$SRCDIR\game\shared\portal\portal_collideable_enumerator.h"
-			-$File	"portal\portal_credits.cpp"
-			$File	"portal\Portal_DynamicMeshRenderingUtils.cpp"
-			$File	"portal\Portal_DynamicMeshRenderingUtils.h"
-			$File	"$SRCDIR\game\shared\portal\portal_gamemovement.cpp"
-			$File	"$SRCDIR\game\shared\portal\portal_gamerules.cpp"
-			$File	"$SRCDIR\game\shared\portal\portal_gamerules.h"
-			$File	"portal\portal_hud_crosshair.cpp"
-			$File	"portal\portal_hud_crosshair.h"
-			$File	"$SRCDIR\game\shared\portal\portal_player_shared.cpp"
-			$File	"$SRCDIR\game\shared\portal\portal_player_shared.h"
-			$File	"$SRCDIR\game\shared\portal\portal_playeranimstate.cpp"
-			$File	"$SRCDIR\game\shared\portal\portal_playeranimstate.h"
-			$File	"portal\portal_render_targets.cpp"
-			$File	"portal\portal_render_targets.h"
-			$File	"$SRCDIR\game\shared\portal\portal_shareddefs.cpp"
-			$File	"$SRCDIR\game\shared\portal\portal_shareddefs.h"
-			$File	"$SRCDIR\game\shared\portal\portal_usermessages.cpp"
-			$File	"$SRCDIR\game\shared\portal\portal_util_shared.cpp"
-			$File	"$SRCDIR\game\shared\portal\portal_util_shared.h"
-			$File	"$SRCDIR\game\shared\portal\prop_portal_shared.cpp"
-			$File	"$SRCDIR\game\shared\portal\prop_portal_shared.h"
-			$File	"$SRCDIR\game\shared\portal\PortalSimulation.cpp"
-			$File	"$SRCDIR\game\shared\portal\PortalSimulation.h"
-			$File	"$SRCDIR\game\shared\portal\StaticCollisionPolyhedronCache.cpp"
-			$File	"$SRCDIR\game\shared\portal\StaticCollisionPolyhedronCache.h"
-			$File	"$SRCDIR\game\shared\portal\portal_base2d_shared.cpp"
-			$File	"portal\PortalRender.cpp"
-			$File	"portal\PortalRender.h"
-			-$File	"portal\portalrenderable_flatbasic.cpp"
-			-$File	"portal\portalrenderable_flatbasic.h"
-			$File	"portal\vgui_portal_stats_display_screen.cpp"
-			$File	"portal\vgui_neurotoxin_countdown_screen.cpp"
-
-			$Folder	"Weapons"
-			{
-				$File	"portal\c_weapon_physcannon.cpp"
-				$File	"portal\c_weapon_portalgun.cpp"
-				$File	"portal\c_weapon_portalgun.h"
-				$File	"$SRCDIR\game\shared\portal\weapon_portalbase.cpp"
-				$File	"$SRCDIR\game\shared\portal\weapon_portalbase.h"
-				$File	"$SRCDIR\game\shared\portal\weapon_portalbasecombatweapon.cpp"
-				$File	"$SRCDIR\game\shared\portal\weapon_portalbasecombatweapon.h"
-				$File	"$SRCDIR\game\shared\portal\weapon_portalgun_shared.cpp"
-				$File	"$SRCDIR\game\shared\portal\weapon_portalgun_shared.h"
 			}
 		}
 	}

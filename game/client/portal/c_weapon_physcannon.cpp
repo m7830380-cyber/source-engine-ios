@@ -39,6 +39,9 @@ IMPLEMENT_CLIENTCLASS_DT( C_WeaponPhysCannon, DT_WeaponPhysCannon, CWeaponPhysCa
 	RecvPropBool( RECVINFO( m_bIsCurrentlyUpgrading ) ),
 END_RECV_TABLE()
 
+BEGIN_PREDICTION_DATA( C_WeaponPhysCannon )
+END_PREDICTION_DATA()
+
 LINK_ENTITY_TO_CLASS( weapon_physcannon, C_WeaponPhysCannon );
 
 //-----------------------------------------------------------------------------

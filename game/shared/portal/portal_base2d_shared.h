@@ -7,7 +7,6 @@
 #include "prop_portal_shared.h"
 
 #if defined( PORTAL2 )
-class CProp_Portal;
 #define CPortal_Base2D CProp_Portal
 #else
 typedef CProp_Portal CPortal_Base2D;

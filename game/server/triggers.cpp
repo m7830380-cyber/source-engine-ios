@@ -37,7 +37,9 @@
 #if defined ( PORTAL2 )
 #include "portal_player.h"
 #endif
+#if !defined( PORTAL2 )
 #include "weapon_c4.h"
+#endif
 
 #ifdef HL2_DLL
 #include "hl2_player.h"

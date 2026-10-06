@@ -1,4 +1,4 @@
-//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
+//========= Copyright ù 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -1040,7 +1040,11 @@ void UTIL_Portal_TraceEntity( CBaseEntity *pEntity, const Vector &vecAbsStart, c
 				{
 
 #ifndef CLIENT_DLL
+#if !defined( PORTAL2 )
 					if( sv_use_transformed_collideables.GetBool() ) //if this never gets turned off, it should be removed before release
+#else
+					if( false )
+#endif
 					{
 						//moving entities near the remote portal
 						CBaseEntity *pEnts[1024];
@@ -1773,6 +1777,20 @@ void CC_Debug_FixMyPosition( void )
 }
 
 static ConCommand debug_fixmyposition("debug_fixmyposition", CC_Debug_FixMyPosition, "Runs FindsClosestPassableSpace() on player.", FCVAR_CHEAT );
+#endif
+
+#if defined( PORTAL2 ) && defined( GAME_DLL )
+bool UTIL_FindClosestPassableSpace_InPortal_CenterMustStayInFront( CPSCollisionEntity *pPortalEnvironment, const Vector &vCenter, const Vector &vExtents, const Vector &vPlaneNormal, ITraceFilter *pFilter, unsigned int mask, float dist, Vector &vOutCenter )
+{
+	(void)pPortalEnvironment; (void)vCenter; (void)vExtents; (void)vPlaneNormal; (void)pFilter; (void)mask; (void)dist; (void)vOutCenter;
+	return false;
+}
+
+bool UTIL_FindClosestPassableSpace_CenterMustStayInFrontOfPlane( const Vector &vCenter, const Vector &vExtents, const Vector &vPush, ITraceFilter *pFilter, unsigned int mask, float dist, Vector &vOutCenter, VPlane &plane )
+{
+	(void)vCenter; (void)vExtents; (void)vPush; (void)pFilter; (void)mask; (void)dist; (void)vOutCenter; (void)plane;
+	return false;
+}
 #endif
 
 void UTIL_Portal_VectorToGlobalTransforms( const Vector &vSoundOrigin, CUtlVector<Vector> *pMultiOrigins )

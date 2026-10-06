@@ -153,6 +153,10 @@ public:
 	CProp_Portal *GetHeldObjectPortal( void ) { return m_pHeldObjectPortal; }
 	void SetHeldObjectPortal( CProp_Portal *pPortal ) { m_pHeldObjectPortal = pPortal; }
 	bool IsUsingVMGrab( void ) const { return false; }
+	const Vector &GetHullMins( void ) const { return VEC_HULL_MIN; }
+	const Vector &GetHullMaxs( void ) const { return VEC_HULL_MAX; }
+	bool IsZoomed( void ) const { return false; }
+	void ZoomOut( void ) {}
 
 	void SetStuckOnPortalCollisionObject( void ) { m_bStuckOnPortalCollisionObject = true; }
 

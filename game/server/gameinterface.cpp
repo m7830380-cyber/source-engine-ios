@@ -3395,12 +3395,12 @@ int TestAreaPortalVisibilityThroughPortals ( CFuncAreaPortalBase* pAreaPortal, e
 	for ( int i = 0; i != iPortalCount; ++i )
 	{
 		CPortal_Base2D* pLocalPortal = pPortals[ i ];
-		if ( pLocalPortal && pLocalPortal->IsActive() )
+		if ( pLocalPortal && pLocalPortal->IsActivedAndLinked() )
 		{
 			CPortal_Base2D* pRemotePortal = pLocalPortal->m_hLinkedPortal.Get();
 
 			// Make sure this portal's linked portal is in the PVS before we add what it can see
-			if ( pRemotePortal && pRemotePortal->IsActive() && pRemotePortal->NetworkProp() && 
+			if ( pRemotePortal && pRemotePortal->IsActivedAndLinked() && pRemotePortal->NetworkProp() &&
 				pRemotePortal->NetworkProp()->IsInPVS( pViewEntity, pvs, pvssize ) )
 			{
 				bool bIsOpenOnClient = true;
@@ -3718,6 +3718,11 @@ void CServerGameClients::ClientEarPosition( edict_t *pEdict, Vector *pEarOrigin 
 
 bool CServerGameClients::ClientReplayEvent( edict_t *pEdict, const ClientReplayEventParams_t &params )
 {
+#if defined( PORTAL2 )
+	(void)pEdict;
+	(void)params;
+	return false;
+#else
 	CCSPlayer *pPlayer = ( CCSPlayer * )CBaseEntity::Instance( pEdict );
 	if ( pPlayer )
 	{
@@ -3727,6 +3732,7 @@ bool CServerGameClients::ClientReplayEvent( edict_t *pEdict, const ClientReplayE
 	{
 		return 0.0f;
 	}
+#endif
 }
 
 
@@ -4147,6 +4153,10 @@ void CServerGameTags::GetTaggedConVarList( KeyValues *pCvarTagList )
 }
 
 #if defined(PORTAL2)
+static int g_nPortal2PromoFlags = 0;
+#ifndef PORTAL2_PROMO_HELMETS
+#define PORTAL2_PROMO_HELMETS 1
+#endif
 CON_COMMAND_F( give_promo_helmet, "Gives the gamestop promo helmets for coop bots. Requires a respawn or changelevel to start showing.", FCVAR_DEVELOPMENTONLY )
 {
 	g_nPortal2PromoFlags |= PORTAL2_PROMO_HELMETS;

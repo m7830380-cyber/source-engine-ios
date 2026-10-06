@@ -97,6 +97,13 @@ void UTIL_Portal_NDebugOverlay( const CProp_Portal *pPortal, int r, int g, int b
 
 bool FindClosestPassableSpace( CBaseEntity *pEntity, const Vector &vIndecisivePush, unsigned int fMask = MASK_SOLID ); //assumes the object is already in a mostly passable space
 
+#if defined( PORTAL2 ) && defined( GAME_DLL )
+class CPSCollisionEntity;
+struct VPlane;
+bool UTIL_FindClosestPassableSpace_InPortal_CenterMustStayInFront( CPSCollisionEntity *pPortalEnvironment, const Vector &vCenter, const Vector &vExtents, const Vector &vPlaneNormal, ITraceFilter *pFilter, unsigned int mask, float dist, Vector &vOutCenter );
+bool UTIL_FindClosestPassableSpace_CenterMustStayInFrontOfPlane( const Vector &vCenter, const Vector &vExtents, const Vector &vPush, ITraceFilter *pFilter, unsigned int mask, float dist, Vector &vOutCenter, VPlane &plane );
+#endif
+
 #ifdef CLIENT_DLL
 void UTIL_TransformInterpolatedAngle( CInterpolatedVar< QAngle > &qInterped, matrix3x4_t matTransform, bool bSkipNewest );
 void UTIL_TransformInterpolatedPosition( CInterpolatedVar< Vector > &vInterped, VMatrix matTransform, bool bSkipNewest );

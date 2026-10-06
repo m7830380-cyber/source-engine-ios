@@ -34,7 +34,7 @@ IterationRetval_t CPortalCollideableEnumerator::EnumElement( IHandleEntity *pHan
 {
 	CBaseHandle hRef = pHandleEntity->GetRefEHandle();
 #ifdef CLIENT_DLL
-	CBaseEntity *pEnt = ClientEntityList().GetBaseEntity( hRef );
+	C_BaseEntity *pEnt = ClientEntityList().GetBaseEntityFromHandle( hRef );
 #else
 	CBaseEntity *pEnt = gEntList.GetBaseEntity( hRef );
 #endif

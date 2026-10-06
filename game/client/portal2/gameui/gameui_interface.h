@@ -58,7 +58,7 @@ public:
 	virtual void OnDisconnectFromServer_OLD( uint8 eSteamLoginFailure, const char *username ) { OnDisconnectFromServer( eSteamLoginFailure ); }
 
 	// progress
-	virtual bool UpdateProgressBar(float progress, const char *statusText);
+	virtual bool UpdateProgressBar(float progress, const char *statusText, bool showDialog = true);
 	// Shows progress desc, returns previous setting... (used with custom progress bars )
 	virtual bool SetShowProgressText( bool show );
 

@@ -80,14 +80,14 @@ END_DATADESC()
 CPortalPlayerLocalData::CPortalPlayerLocalData()
 {
 	m_PaintedPowerType = NO_POWER;
-	m_StickNormal.Init( 0, 0, 1 );
-	m_OldStickNormal.Init( 0, 0, 1 );
-	m_Up.Init( 0, 0, 1 );
-	m_vLocalUp.Init( 0, 0, 1 );
-	m_vStickRotationAxis.Init( 0, 0, 1 );
-	m_vEyeOffset.Init();
-	m_qQuaternionPunch.Init();
-	m_vPreUpdateVelocity.Init();
+	m_StickNormal = Vector( 0, 0, 1 );
+	m_OldStickNormal = Vector( 0, 0, 1 );
+	m_Up = Vector( 0, 0, 1 );
+	m_vLocalUp = Vector( 0, 0, 1 );
+	m_vStickRotationAxis = Vector( 0, 0, 1 );
+	m_vEyeOffset = vec3_origin;
+	m_qQuaternionPunch = vec3_angle;
+	m_vPreUpdateVelocity = vec3_origin;
 	m_StandHullMin = VEC_HULL_MIN;
 	m_StandHullMax = VEC_HULL_MAX;
 	m_DuckHullMin = VEC_DUCK_HULL_MIN;

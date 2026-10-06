@@ -269,7 +269,7 @@ BaseClass( parent, panelName, false, true )
 	m_GplTrackList->SetSortColumn( s_nLastSortColumn );
 	m_GplTrackList->SetMultiselectEnabled( true );
 	m_GplTrackList->SetColumnHeaderHeight( ScreenHeight()*0.04 );
-	m_GplTrackList->SetVScrollBarTextures( "scroll_up", "scroll_down", "scroll_line", "scroll_box" );
+	// m_GplTrackList->SetVScrollBarTextures( "scroll_up", "scroll_down", "scroll_line", "scroll_box" );
 
 	m_pAddTrackButton = new CNB_Button( this, "AddTrackButton", "", this, "AddTrackButton" );
 	m_pRemoveTrackButton = new CNB_Button( this, "RemoveTrackButton", "", this, "RemoveTrackButton" );

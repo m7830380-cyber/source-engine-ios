@@ -35,6 +35,11 @@ extern class IMatchExtSwarm *g_pMatchExtSwarm;
 extern class IMatchExtSwarm *g_pMatchExtSwarm;
 #endif
 
+#if defined( PORTAL2 ) && !defined( SWARM_DLL ) && !defined( SDK_DLL )
+#include "matchmaking/swarm/imatchext_swarm.h"
+extern class IMatchExtSwarm *g_pMatchExtSwarm;
+#endif
+
 // engine interface singleton accessors
 extern IVEngineClient *engine;
 extern class IBik *bik;

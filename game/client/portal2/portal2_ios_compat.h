@@ -22,6 +22,10 @@ inline char *itoa( int value, char *buffer, int radix )
 #define null NULL
 #endif
 
+#ifndef _atoi64
+#define _atoi64 V_atoi64
+#endif
+
 namespace vgui
 {
 	class Frame;

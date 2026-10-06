@@ -2700,12 +2700,16 @@ void CTriggerBombReset::Spawn(void)
 
 void CTriggerBombReset::Touch(CBaseEntity *pOther)
 {
+#if !defined( PORTAL2 )
 	// If the bomb touches this trigger, tell it to reset to its last known valid position.
 	CC4 *pC4 = dynamic_cast< CC4* > (pOther);
 	if (pC4)
 	{
 		pC4->ResetToLastValidPlayerHeldPosition();
 	}
+#else
+	(void)pOther;
+#endif
 }
 
 //-----------------------------------------------------------------------------

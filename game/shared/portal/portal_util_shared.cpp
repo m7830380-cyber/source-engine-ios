@@ -1780,7 +1780,7 @@ static ConCommand debug_fixmyposition("debug_fixmyposition", CC_Debug_FixMyPosit
 #endif
 
 #if defined( PORTAL2 ) && defined( GAME_DLL )
-bool UTIL_FindClosestPassableSpace_InPortal_CenterMustStayInFront( CPSCollisionEntity *pPortalEnvironment, const Vector &vCenter, const Vector &vExtents, const Vector &vPlaneNormal, ITraceFilter *pFilter, unsigned int mask, float dist, Vector &vOutCenter )
+bool UTIL_FindClosestPassableSpace_InPortal_CenterMustStayInFront( CPortal_Base2D *pPortalEnvironment, const Vector &vCenter, const Vector &vExtents, const Vector &vPlaneNormal, ITraceFilter *pFilter, unsigned int mask, float dist, Vector &vOutCenter )
 {
 	(void)pPortalEnvironment; (void)vCenter; (void)vExtents; (void)vPlaneNormal; (void)pFilter; (void)mask; (void)dist; (void)vOutCenter;
 	return false;

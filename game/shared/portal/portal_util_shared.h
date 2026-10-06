@@ -98,9 +98,9 @@ void UTIL_Portal_NDebugOverlay( const CProp_Portal *pPortal, int r, int g, int b
 bool FindClosestPassableSpace( CBaseEntity *pEntity, const Vector &vIndecisivePush, unsigned int fMask = MASK_SOLID ); //assumes the object is already in a mostly passable space
 
 #if defined( PORTAL2 ) && defined( GAME_DLL )
-class CPSCollisionEntity;
+class CPortal_Base2D;
 struct VPlane;
-bool UTIL_FindClosestPassableSpace_InPortal_CenterMustStayInFront( CPSCollisionEntity *pPortalEnvironment, const Vector &vCenter, const Vector &vExtents, const Vector &vPlaneNormal, ITraceFilter *pFilter, unsigned int mask, float dist, Vector &vOutCenter );
+bool UTIL_FindClosestPassableSpace_InPortal_CenterMustStayInFront( CPortal_Base2D *pPortalEnvironment, const Vector &vCenter, const Vector &vExtents, const Vector &vPlaneNormal, ITraceFilter *pFilter, unsigned int mask, float dist, Vector &vOutCenter );
 bool UTIL_FindClosestPassableSpace_CenterMustStayInFrontOfPlane( const Vector &vCenter, const Vector &vExtents, const Vector &vPush, ITraceFilter *pFilter, unsigned int mask, float dist, Vector &vOutCenter, VPlane &plane );
 #endif
 

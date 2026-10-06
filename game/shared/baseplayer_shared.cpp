@@ -57,6 +57,7 @@
 
 	#if defined( PORTAL )
 		#include "portal_player.h"
+		#include "portal_util_shared.h"
 		#include "physicsshadowclone.h"
 	#endif
 
@@ -3210,7 +3211,6 @@ void CBasePlayer::VPhysicsShadowUpdate( IPhysicsObject *pPhysics )
 									SetAbsOrigin( vNewCenter - vOriginToCenter );
 								}
 							}
-						}
 						}
 					}
 				}

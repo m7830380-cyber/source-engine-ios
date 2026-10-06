@@ -1,4 +1,4 @@
-//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
+//===== Copyright  1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -619,6 +619,7 @@ void CBaseAnimatingOverlay::GetSkeleton( CStudioHdr *pStudioHdr, BoneVector pos[
 
 	if ( this->IsPlayer() )
 	{
+#if defined( CSTRIKE15 ) && !defined( PORTAL2 )
 		CCSPlayer *pPlayer = ToCSPlayer(this);
 		if ( pPlayer && pPlayer->m_bUseNewAnimstate )
 		{
@@ -642,6 +643,7 @@ void CBaseAnimatingOverlay::GetSkeleton( CStudioHdr *pStudioHdr, BoneVector pos[
 				}
 			}
 		}
+#endif
 	}
 	
 	if ( bDoWeaponSetup )

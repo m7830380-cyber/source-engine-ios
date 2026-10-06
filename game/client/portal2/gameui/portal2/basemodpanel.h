@@ -178,6 +178,11 @@ namespace BaseModUI
 
 		void SafeNavigateTo( Panel *pExpectedFrom, Panel *pDesiredTo, bool bAllowStealFocus );
 
+		void SetupPartnerInScience( void ) {}
+		vgui::IImage *GetPartnerImage( void ) { return NULL; }
+		CUtlString GetPartnerName( void ) { return CUtlString(); }
+		const char *GetPartnerDescKey( void ) { return ""; }
+
 #if defined( _X360 ) && defined( _DEMO )
 		void OnDemoTimeout();
 #endif

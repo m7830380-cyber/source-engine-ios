@@ -4,4 +4,6 @@
 #pragma once
 #endif
 
+#define IOS_AVATAR_BYTES 4096
+
 #endif

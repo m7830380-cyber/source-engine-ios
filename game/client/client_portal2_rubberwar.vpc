@@ -10,6 +10,11 @@ $Macro GAMENAME 			"portal2"
 
 $Include "$SRCDIR\game\client\client_base.vpc"
 
+$Project
+{
+	-$File "vgui_fpspanel.cpp"
+}
+
 // iOS: CS:GO engine protobuf user messages; Portal 2 legacy messages as protobufs.
 $include "$SRCDIR\game\shared\cstrike15\cstrike15_gcmessages_include.vpc" [$IOS]
 $include "$SRCDIR\game\shared\cstrike15\cstrike15_usermessages_include.vpc" [$IOS]
@@ -87,15 +92,15 @@ $Project "Client (Portal 2)"
 
 			$Folder	"VGUI"
 			{
-				$File	"portal2\vgui\nb_button.cpp"
-				$File	"portal2\vgui\nb_header_footer.cpp"
-				$File	"portal2\vgui\nb_horiz_list.cpp"
-				$File	"portal2\vgui\nb_select_level_entry.cpp"
-				$File	"portal2\vgui\nb_select_level_panel.cpp"
-				$File	"portal2\vgui\sdk_hud_chat.cpp"
+				-$File	"portal2\vgui\nb_button.cpp"
+				-$File	"portal2\vgui\nb_header_footer.cpp"
+				-$File	"portal2\vgui\nb_horiz_list.cpp"
+				-$File	"portal2\vgui\nb_select_level_entry.cpp"
+				-$File	"portal2\vgui\nb_select_level_panel.cpp"
+				-$File	"portal2\vgui\sdk_hud_chat.cpp"
 				$File	"portal2\vgui\sdk_loading_panel.cpp"
-				$File	"portal2\vgui\sdk_logo_panel.cpp"
-				$File	"portal2\vgui\sdk_vgui_music_importer.cpp"
+				-$File	"portal2\vgui\sdk_logo_panel.cpp"
+				-$File	"portal2\vgui\sdk_vgui_music_importer.cpp"
 			}
 
 			$Folder	"Radial Menu"
@@ -122,7 +127,6 @@ $Project "Client (Portal 2)"
 						"portal2\gameui\portal2\vmultiplayer.cpp" \
 						"portal2\gameui\portal2\vaudio.cpp" \
 						"portal2\gameui\portal2\vcloud.cpp" \
-						"portal2\gameui\portal2\vaddons.cpp" \
 						"portal2\gameui\portal2\vjukebox.cpp" \
 						"portal2\gameui\portal2\vmenubackground.cpp" \
 						"portal2\gameui\portal2\vingamemainmenu.cpp"

@@ -11,9 +11,13 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <stdio.h>
+#if defined( _WIN32 ) && !defined( _X360 )
 #include <io.h>
-#include <tier0/dbg.h>
 #include <direct.h>
+#else
+#include <unistd.h>
+#endif
+#include <tier0/dbg.h>
 
 #ifdef SendMessage
 #undef SendMessage

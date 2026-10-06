@@ -198,6 +198,8 @@ extern void ProcessPortalTeleportations( void );
 
 #include "clientsteamcontext.h"
 
+#include "fmtstr.h"
+
 #include "tier1/utldict.h"
 #include "keybindinglistener.h"
 

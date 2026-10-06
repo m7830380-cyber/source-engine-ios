@@ -3351,8 +3351,7 @@ void CPhysicsProp::VPhysicsUpdate( IPhysicsObject *pPhysics )
 	}
 
 #ifdef PORTAL2
-
-	const float	FUNNEL_MIN_VELOCITY_THRESHOLD = 64.0f;
+#if 0 // Retail base2d prop funnel — not used on RubberWar iOS (prop_portal only).
 	const float FUNNEL_MIN_DIST_THRESHOLD = 128.0f;
 
 	static float g_flLastPropFunnelTime = 0.0f;
@@ -3488,6 +3487,7 @@ void CPhysicsProp::VPhysicsUpdate( IPhysicsObject *pPhysics )
 			g_flLastPropFunnelTime = 0.0f;
 		}
 	}
+#endif
 #endif // PORTAL2
 }
 

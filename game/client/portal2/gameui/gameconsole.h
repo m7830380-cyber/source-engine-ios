@@ -42,6 +42,8 @@ public:
 
 	void SetParent( int parent );
 
+	virtual void Shutdown( void );
+
 	static void OnCmdCondump();
 private:
 

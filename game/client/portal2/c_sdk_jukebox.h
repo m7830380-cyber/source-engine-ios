@@ -6,6 +6,7 @@
 #ifndef _DEFINED_C_SDK_JUKEBOX_H
 #define _DEFINED_C_SDK_JUKEBOX_H
 
+#include "portal2/portal2_ios_compat.h"
 #include "igamesystem.h"
 #include "GameEventListener.h"
 #include "utlvector.h"

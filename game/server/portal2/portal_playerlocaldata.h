@@ -15,6 +15,8 @@
 #include "networkvar.h"
 #include "simtimer.h"
 #include "portal_player_shared.h"
+#include "portal2/portal2_paint_defs.h"
+#include "portal2/trigger_tractorbeam.h"
 
 class CTrigger_TractorBeam;
 
@@ -60,7 +62,7 @@ public:
 	CNetworkVar( float, m_flAirControlSupressionTime );
 
 	// excursion funnels
-	CNetworkHandle( CTrigger_TractorBeam, m_hTractorBeam );
+	CNetworkHandle( CTriggerTractorBeam, m_hTractorBeam );
 	CNetworkVar( int, m_nTractorBeamCount );
 
 	// zoom, slow time, view finder

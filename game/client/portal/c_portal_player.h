@@ -1,4 +1,4 @@
-//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
+//===== Copyright  1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -20,6 +20,10 @@
 //=============================================================================
 // >> Portal_Player
 //=============================================================================
+#ifdef PORTAL2
+#include "portal2/c_portal_playerlocaldata.h"
+#endif
+
 class C_Portal_Player : public C_BaseNetworkedPlayer
 {
 public:
@@ -199,6 +203,12 @@ public:
 
 	CHandle<C_Prop_Portal>	m_hPortalEnvironment; //a portal whose environment the player is currently in, should be invalid most of the time
 	CHandle<C_Func_LiquidPortal>	m_hSurroundingLiquidPortal; //a liquid portal whose volume the player is standing in
+
+#ifdef PORTAL2
+	C_PortalPlayerLocalData m_PortalLocal;
+	const C_PortalPlayerLocalData &GetPortalPlayerLocalData() const { return m_PortalLocal; }
+	C_PortalPlayerLocalData &GetPortalPlayerLocalData() { return m_PortalLocal; }
+#endif
 };
 
 inline C_Portal_Player *ToPortalPlayer( CBaseEntity *pEntity )

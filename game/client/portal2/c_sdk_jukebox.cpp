@@ -1,4 +1,5 @@
 #include "cbase.h"
+#include "portal2/portal2_ios_compat.h"
 #include "c_sdk_jukebox.h"
 #include "soundenvelope.h"
 #include "filesystem.h"

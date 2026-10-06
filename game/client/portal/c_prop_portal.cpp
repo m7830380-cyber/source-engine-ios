@@ -1,4 +1,4 @@
-//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
+//===== Copyright  1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -39,15 +39,15 @@
 #endif
 
 #include "debugoverlay_shared.h"
-
-
-LINK_ENTITY_TO_CLASS( prop_portal, C_Prop_Portal );
+#include "usermessages.h"
 
 IMPLEMENT_CLIENTCLASS_DT( C_Prop_Portal, DT_Prop_Portal, CProp_Portal )
 	RecvPropEHandle( RECVINFO(m_hLinkedPortal) ),
 	RecvPropBool( RECVINFO(m_bActivated) ),
 	RecvPropBool( RECVINFO(m_bIsPortal2) ),
 END_RECV_TABLE()
+
+LINK_ENTITY_TO_CLASS( prop_portal, C_Prop_Portal );
 
 
 void __MsgFunc_EntityPortalled(bf_read &msg)
@@ -168,8 +168,7 @@ class C_PortalInitHelper : public CAutoGameSystem
 {
 	virtual bool Init()
 	{
-		//HOOK_MESSAGE( PlayerPortalled );
-		HOOK_MESSAGE( EntityPortalled );
+		usermessages->HookMessage( "EntityPortalled", __MsgFunc_EntityPortalled );
 		if ( portal_demohack.GetBool() )
 		{
 			ConVarRef demo_legacy_rollback_ref( "demo_legacy_rollback" );

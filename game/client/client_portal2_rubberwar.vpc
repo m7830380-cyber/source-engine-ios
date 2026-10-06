@@ -31,7 +31,7 @@ $Configuration
 {
 	$Compiler
 	{
-		$AdditionalIncludeDirectories	"$BASE;$SRCDIR\game\client\portal2;$SRCDIR\game\client\portal2\gameui;$SRCDIR\game\shared\portal2;.\hl2;.\portal;.\portal\vgui;.\portal2;.\portal2\vgui;$SRCDIR\game\shared\portal;$SRCDIR\game\shared\multiplayer;$SRCDIR\game\shared\hl2"
+		$AdditionalIncludeDirectories	"$BASE;$SRCDIR\game\client\portal2;$SRCDIR\game\client\portal2\gameui;$SRCDIR\game\shared\portal2;.\hl2;.\portal;.\portal\vgui;.\portal2;.\portal2\vgui;.\vgui;$SRCDIR\game\shared\portal;$SRCDIR\game\shared\multiplayer;$SRCDIR\game\shared\hl2"
 		$PreprocessorDefinitions		"$BASE;PORTAL;PORTAL2;GAMEUI_EMBEDDED;GAMEUI_EXPORTS"
 		$PreprocessorDefinitions		"$BASE;NO_STEAM_GAMECOORDINATOR"					[ $IOS ]
 	}
@@ -112,7 +112,7 @@ $Project "Client (Portal 2)"
 						"portal2\gameui\basesavegamedialog.cpp" \
 						"portal2\gameui\bitmapimagepanel.cpp" \
 						"portal2\gameui\commandcheckbutton.cpp" \
-						"portal2\gameui\contentcontroldialog.cpp" \
+						-"portal2\gameui\contentcontroldialog.cpp" \
 						"portal2\gameui\createmultiplayergamebotpage.cpp" \
 						"portal2\gameui\createmultiplayergamedialog.cpp" \
 						"portal2\gameui\createmultiplayergamegameplaypage.cpp" \
@@ -255,7 +255,7 @@ $Project "Client (Portal 2)"
 			$File	"portal\materialproxy_portalstatic.cpp"
 			$File	"$SRCDIR\game\shared\portal\portal_collideable_enumerator.cpp"
 			$File	"$SRCDIR\game\shared\portal\portal_collideable_enumerator.h"
-			$File	"portal\portal_credits.cpp"
+			-$File	"portal\portal_credits.cpp"
 			$File	"portal\Portal_DynamicMeshRenderingUtils.cpp"
 			$File	"portal\Portal_DynamicMeshRenderingUtils.h"
 			$File	"$SRCDIR\game\shared\portal\portal_gamemovement.cpp"
@@ -280,10 +280,11 @@ $Project "Client (Portal 2)"
 			$File	"$SRCDIR\game\shared\portal\PortalSimulation.h"
 			$File	"$SRCDIR\game\shared\portal\StaticCollisionPolyhedronCache.cpp"
 			$File	"$SRCDIR\game\shared\portal\StaticCollisionPolyhedronCache.h"
+			$File	"$SRCDIR\game\shared\portal\portal_base2d_shared.cpp"
 			$File	"portal\PortalRender.cpp"
 			$File	"portal\PortalRender.h"
-			$File	"portal\portalrenderable_flatbasic.cpp"
-			$File	"portal\portalrenderable_flatbasic.h"
+			-$File	"portal\portalrenderable_flatbasic.cpp"
+			-$File	"portal\portalrenderable_flatbasic.h"
 			$File	"portal\vgui_portal_stats_display_screen.cpp"
 			$File	"portal\vgui_neurotoxin_countdown_screen.cpp"
 

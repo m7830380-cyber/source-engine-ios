@@ -150,6 +150,18 @@ void CGameConsole::SetParent( int parent )
 #endif
 }
 
+void CGameConsole::Shutdown( void )
+{
+#ifndef _XBOX
+	if ( m_pConsole )
+	{
+		m_pConsole->MarkForDeletion();
+		m_pConsole = NULL;
+	}
+	m_bInitialized = false;
+#endif
+}
+
 //-----------------------------------------------------------------------------
 // Purpose: static command handler
 //-----------------------------------------------------------------------------

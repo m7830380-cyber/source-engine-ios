@@ -15,6 +15,8 @@
 #include "dt_recv.h"
 #include "simtimer.h"
 #include "portal_player_shared.h"
+#include "portal2/portal2_paint_defs.h"
+#include "portal2/c_trigger_tractorbeam.h"
 
 class C_Trigger_TractorBeam;
 

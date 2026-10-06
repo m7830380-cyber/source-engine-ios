@@ -1,4 +1,4 @@
-//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
+//========= Copyright ù 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -22,6 +22,10 @@ class CPortal_Player;
 #include "in_buttons.h"
 #include "func_liquidportal.h"
 #include "ai_speech.h"			// For expresser host
+
+#ifdef PORTAL2
+#include "portal2/portal_playerlocaldata.h"
+#endif
 
 struct PortalPlayerStatistics_t
 {
@@ -220,6 +224,12 @@ public:
 	CNetworkVar( bool, m_bPitchReorientation );
 	CNetworkHandle( CProp_Portal, m_hPortalEnvironment ); //if the player is in a portal environment, this is the associated portal
 	CNetworkHandle( CFunc_LiquidPortal, m_hSurroundingLiquidPortal ); //if the player is standing in a liquid portal, this will point to it
+
+#ifdef PORTAL2
+	CPortalPlayerLocalData m_PortalLocal;
+	const CPortalPlayerLocalData &GetPortalPlayerLocalData() const { return m_PortalLocal; }
+	CPortalPlayerLocalData &GetPortalPlayerLocalData() { return m_PortalLocal; }
+#endif
 
 	friend class CProp_Portal;
 

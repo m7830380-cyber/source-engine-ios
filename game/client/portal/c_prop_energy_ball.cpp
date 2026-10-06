@@ -1,4 +1,4 @@
-//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
+//========= Copyright ù 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 //	c_prop_energy_ball.cpp
 // 
@@ -36,8 +36,6 @@ protected:
 	float	m_fCurAlpha;				// The amount of alpha to apply at DrawModel, to simulate a decaying energy ball
 };
 
-LINK_ENTITY_TO_CLASS( prop_energy_ball, C_PropEnergyBall );
-
 // precache our different materials for the infinite life energy balls
 PRECACHE_REGISTER_BEGIN( GLOBAL, PrecacheEffectEnergyBall )
 
@@ -61,6 +59,8 @@ BEGIN_PREDICTION_DATA( C_PropEnergyBall )
 	DEFINE_PRED_FIELD( m_fTimeTillDeath, FIELD_FLOAT, FTYPEDESC_INSENDTABLE ),
 
 END_PREDICTION_DATA()
+
+LINK_ENTITY_TO_CLASS( prop_energy_ball, C_PropEnergyBall );
 
 //-----------------------------------------------------------------------------
 // Purpose: 

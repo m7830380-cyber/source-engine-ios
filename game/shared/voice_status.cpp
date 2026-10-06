@@ -1,4 +1,4 @@
-//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
+//========= Copyright ù 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -31,7 +31,7 @@
 #include <vgui/IPanel.h>
 #include "con_nprint.h"
 
-#if defined(PORTAL2)
+#if 0
 #include "c_portal_gamestats.h"
 #endif
 

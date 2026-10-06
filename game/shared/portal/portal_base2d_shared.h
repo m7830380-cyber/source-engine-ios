@@ -6,7 +6,9 @@
 
 #include "prop_portal_shared.h"
 
+#if !defined( PORTAL2 )
 typedef CProp_Portal CPortal_Base2D;
+#endif
 #define CPortal_Base2D_Shared CProp_Portal_Shared
 
 inline float UTIL_Portal_DistanceThroughPortalSqr( const CPortal_Base2D *pPortal, const Vector &vPoint1, const Vector &vPoint2 );

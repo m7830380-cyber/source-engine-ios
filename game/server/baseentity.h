@@ -44,7 +44,12 @@ class CRecipientFilter;
 
 #ifdef PORTAL
 #include "portal_shareddefs.h"
+#if defined( PORTAL2 )
+class CProp_Portal;
+#define CPortal_Base2D CProp_Portal
+#else
 class CPortal_Base2D;
+#endif
 #endif // PORTAL 
 
 

@@ -1,4 +1,4 @@
-//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
+//========= Copyright  1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Special handling for Portal usable ladders
 //
@@ -29,7 +29,11 @@
 #include "tier0/memdbgon.h"
 
 ConVar sv_player_trace_through_portals("sv_player_trace_through_portals", "1", FCVAR_REPLICATED | FCVAR_CHEAT, "Causes player movement traces to trace through portals." );
-ConVar sv_player_funnel_into_portals("sv_player_funnel_into_portals", "1", FCVAR_REPLICATED | FCVAR_ARCHIVE | FCVAR_ARCHIVE_XBOX, "Causes the player to auto correct toward the center of floor portals." ); 
+ConVar sv_player_funnel_into_portals("sv_player_funnel_into_portals", "1", FCVAR_REPLICATED | FCVAR_ARCHIVE
+#if defined( _X360 )
+	| FCVAR_ARCHIVE_XBOX
+#endif
+	, "Causes the player to auto correct toward the center of floor portals." ); 
 
 class CReservePlayerSpot;
 
@@ -132,7 +136,7 @@ void CPortalGameMovement::ProcessMovement( CBasePlayer *pPlayer, CMoveData *pMov
 	// Cropping movement speed scales mv->m_fForwardSpeed etc. globally
 	// Once we crop, we don't want to recursively crop again, so we set the crop
 	//  flag globally here once per usercmd cycle.
-	m_bSpeedCropped = false;
+	m_iSpeedCropped = 0;
 
 	player = pPlayer;
 	mv = pMove;
@@ -734,12 +738,12 @@ CBaseHandle CPortalGameMovement::TestPlayerPosition( const Vector& pos, int coll
 		CPortal_Player *pPortalPlayer = (CPortal_Player *)((CBaseEntity *)mv->m_nPlayerHandle.Get());
 		pPortalPlayer->SetStuckOnPortalCollisionObject();
 
-		return INVALID_EHANDLE_INDEX;
+		return CBaseHandle( INVALID_EHANDLE_INDEX );
 	}
 #endif
 	else
 	{	
-		return INVALID_EHANDLE_INDEX;
+		return CBaseHandle( INVALID_EHANDLE_INDEX );
 	}
 }
 

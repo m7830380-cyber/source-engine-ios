@@ -3378,7 +3378,7 @@ bool DoImageSpaceMotionBlur( const CViewSetup &view )
 	//engine->Con_NPrintf( 6, "Final values: { %6.2f%%, %6.2f%%, %6.2f%%, %6.2f%% }", g_vMotionBlurValues[0]*100.0f, g_vMotionBlurValues[1]*100.0f, g_vMotionBlurValues[2]*100.0f, g_vMotionBlurValues[3]*100.0f );
 
 #if defined ( PORTAL2 )
-	C_Portal_Player* pLocalPlayer = C_Portal_Player::GetLocalPortalPlayer( GET_ACTIVE_SPLITSCREEN_SLOT() );
+	C_Portal_Player* pLocalPlayer = C_Portal_Player::GetLocalPortalPlayer();
 	if ( pLocalPlayer && pLocalPlayer->GetMotionBlurAmount() > 0.0f )
 	{
 		g_vMotionBlurValues[2] = pLocalPlayer->GetMotionBlurAmount();

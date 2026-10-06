@@ -1,4 +1,4 @@
-//===== Copyright  1996-2005, Valve Corporation, All rights reserved. ======//
+//===== Copyright ? 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: Implements all the functions exported by the GameUI dll
 //
@@ -386,9 +386,13 @@ void CGameUI::PlayGameStartupSound()
 	// did we find any?
 	if ( fileNames.Count() > 0 )
 	{
+#if defined( _WIN32 ) && !defined( _X360 )
 		SYSTEMTIME SystemTime;
 		GetSystemTime( &SystemTime );
 		int index = SystemTime.wMilliseconds % fileNames.Count();
+#else
+		int index = 0;
+#endif
 
 		if ( fileNames.IsValidIndex( index ) && fileNames[index] )
 		{
@@ -439,11 +443,11 @@ void CGameUI::Start()
 
 	if ( IsPC() )
 	{
+#if defined( _WIN32 ) && !defined( _X360 )
 		g_hMutex = Sys_CreateMutex( "ValvePlatformUIMutex" );
 		g_hWaitMutex = Sys_CreateMutex( "ValvePlatformWaitMutex" );
 		if ( g_hMutex == NULL || g_hWaitMutex == NULL || Sys_GetLastError() == SYS_ERROR_INVALID_HANDLE )
 		{
-			// error, can't get handle to mutex
 			if (g_hMutex)
 			{
 				Sys_ReleaseMutex(g_hMutex);
@@ -460,14 +464,13 @@ void CGameUI::Start()
 		unsigned int waitResult = Sys_WaitForSingleObject(g_hMutex, 0);
 		if (!(waitResult == SYS_WAIT_OBJECT_0 || waitResult == SYS_WAIT_ABANDONED))
 		{
-			// mutex locked, need to deactivate Steam (so we have the Friends/ServerBrowser data files)
-			// get the wait mutex, so that Steam.exe knows that we're trying to acquire ValveTrackerMutex
 			waitResult = Sys_WaitForSingleObject(g_hWaitMutex, 0);
 			if (waitResult == SYS_WAIT_OBJECT_0 || waitResult == SYS_WAIT_ABANDONED)
 			{
 				Sys_EnumWindows(SendShutdownMsgFunc, 1);
 			}
 		}
+#endif
 
 		// Delay playing the startup music until two frames
 		// this allows cbuf commands that occur on the first frame that may start a map
@@ -499,9 +502,10 @@ bool CGameUI::FindPlatformDirectory(char *platformDir, int bufferSize)
 		// we're not under steam, so setup using path relative to game
 		if ( IsPC() )
 		{
+#if defined( _WIN32 ) && !defined( _X360 )
 			if ( ::GetModuleFileName( ( HINSTANCE )GetModuleHandle( NULL ), platformDir, bufferSize ) )
 			{
-				char *lastslash = strrchr(platformDir, '\\'); // this should be just before the filename
+				char *lastslash = strrchr(platformDir, '\\');
 				if ( lastslash )
 				{
 					*lastslash = 0;
@@ -509,6 +513,20 @@ bool CGameUI::FindPlatformDirectory(char *platformDir, int bufferSize)
 					return true;
 				}
 			}
+#else
+			if ( g_pFullFileSystem->GetSearchPath( "PLATFORM", false, platformDir, bufferSize ) )
+			{
+				char *pSeperator = strchr( platformDir, ';' );
+				if ( pSeperator )
+					*pSeperator = '\0';
+				V_FixSlashes( platformDir );
+				if ( platformDir[ Q_strlen( platformDir ) - 1 ] != CORRECT_PATH_SEPARATOR )
+				{
+					Q_strncat( platformDir, "platform", bufferSize, COPY_ALL_CHARACTERS );
+				}
+				return true;
+			}
+#endif
 		}
 		else
 		{

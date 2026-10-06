@@ -2475,6 +2475,9 @@ void CEnvGunfire::FireBullet(
 	const char *pszTracerName
 	)
 {
+#if defined( PORTAL2 )
+	return;
+#else
 	CCSPlayer *pPlayer = NULL;
 	for ( int i = 1; i <= MAX_PLAYERS; i++ )
 	{
@@ -2797,6 +2800,7 @@ void CEnvGunfire::FireBullet(
 		}
 	}
 //#endif
+#endif // !PORTAL2
 }
 
 //-----------------------------------------------------------------------------

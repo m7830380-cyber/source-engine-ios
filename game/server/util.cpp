@@ -1,4 +1,4 @@
-//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
+//========= Copyright  1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Utility code.
 //
@@ -39,6 +39,7 @@
 
 #ifdef PORTAL
 #include "portal_base2d_shared.h"
+#include "portal/prop_portal.h"
 #endif
 
 #include "CegClientWrapper.h"
@@ -2231,13 +2232,13 @@ static int UTIL_GetNewCheckClient( int check )
 
 #if defined ( PORTAL )
 			// Add in any clusters seen by portals.
-			int iPortalCount = CPortal_Base2D_Shared::AllPortals.Count();
+			int iPortalCount = CProp_Portal_Shared::AllPortals.Count();
 			if( iPortalCount > 0 )
 			{
-				CPortal_Base2D **pPortals = CPortal_Base2D_Shared::AllPortals.Base();
+				CProp_Portal **pPortals = CProp_Portal_Shared::AllPortals.Base();
 				for( int i = 0; i != iPortalCount; ++i )
 				{
-					CPortal_Base2D *pPortal = pPortals[i];
+					CProp_Portal *pPortal = pPortals[i];
 					if ( pPortal && pPortal->IsActivedAndLinked() )
 					{
 						// add only portals visible in the new cluster the client check ent just moved into.

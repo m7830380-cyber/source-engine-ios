@@ -152,6 +152,7 @@ public:
 	bool IsHeldObjectOnOppositeSideOfPortal( void ) { return m_bHeldObjectOnOppositeSideOfPortal; }
 	CProp_Portal *GetHeldObjectPortal( void ) { return m_pHeldObjectPortal; }
 	void SetHeldObjectPortal( CProp_Portal *pPortal ) { m_pHeldObjectPortal = pPortal; }
+	bool IsUsingVMGrab( void ) const { return false; }
 
 	void SetStuckOnPortalCollisionObject( void ) { m_bStuckOnPortalCollisionObject = true; }
 

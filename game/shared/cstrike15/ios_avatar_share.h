@@ -71,7 +71,9 @@ void IOSAvatar_SendLocal();
 // Bumped whenever a received picture was stored; panels showing avatars reload them.
 int IOSAvatar_GetVersion();
 // Stores a received picture (IOS_AVATAR_BYTES of RGB) as that account's avatar.
+#if defined( PORTAL2 )
+inline void IOSAvatar_StorePicture( uint32 unAccount, const unsigned char *pRGB ) { (void)unAccount; (void)pRGB; }
+#else
 void IOSAvatar_StorePicture( uint32 unAccount, const unsigned char *pRGB );
 #endif
-
 #endif // IOS_AVATAR_SHARE_H

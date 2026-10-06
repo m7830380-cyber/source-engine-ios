@@ -895,7 +895,7 @@ bool CServerGameDLL::DLLInit( CreateInterfaceFn appSystemFactory,
 	g_pGameSaveRestoreBlockSet->AddBlockHandler( GetEventQueueSaveRestoreBlockHandler() );
 	g_pGameSaveRestoreBlockSet->AddBlockHandler( GetVScriptSaveRestoreBlockHandler() );
 
-#if defined( PORTAL2 )
+#if 0 // retail Portal 2 paint save/load not used in RubberWar iOS build
 	g_pGameSaveRestoreBlockSet->AddBlockHandler( GetPaintSaveRestoreBlockHandler() );
 #endif
 
@@ -977,7 +977,7 @@ void CServerGameDLL::DLLShutdown( void )
 	// Due to dependencies, these are not autogamesystems
 	ModelSoundsCacheShutdown();
 
-#ifdef PORTAL2
+#if 0
 	g_pGameSaveRestoreBlockSet->RemoveBlockHandler( GetPaintSaveRestoreBlockHandler() );
 #endif
 
@@ -2121,6 +2121,9 @@ bool CServerGameDLL::IsValveDS()
 
 KeyValues*	CServerGameDLL::GetExtendedServerInfoForNewClient()
 {
+#if defined( PORTAL2 )
+	return NULL;
+#elif defined( CSTRIKE15 )
 	static KeyValues *s_pExtendedServerInfo = NULL;
 	static char s_szExtendedHashKey[256] = {0};
 
@@ -2205,6 +2208,9 @@ KeyValues*	CServerGameDLL::GetExtendedServerInfoForNewClient()
 		KeyValuesDumpAsDevMsg( s_pExtendedServerInfo, 1, 1 );
 	}
 	return s_pExtendedServerInfo;
+#else
+	return NULL;
+#endif
 }
 
 void CServerGameDLL::GetMatchmakingTags( char *buf, size_t bufSize )

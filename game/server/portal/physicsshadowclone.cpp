@@ -1,4 +1,4 @@
-//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
+//========= Copyright  1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Clones a physics object (usually with a matrix transform applied)
 //
@@ -831,7 +831,7 @@ int	CPhysicsShadowClone::ObjectCaps( void )
 
 void CPhysicsShadowClone::SetCloneTransformationMatrix( const matrix3x4_t &sourceMatrix )
 {
-	m_matrixShadowTransform = sourceMatrix;
+	m_matrixShadowTransform = VMatrix( sourceMatrix );
 	m_bShadowTransformIsIdentity = m_matrixShadowTransform.IsIdentity();
 
 	if( m_matrixShadowTransform.InverseGeneral( m_matrixShadowTransform_Inverse ) == false )
@@ -980,7 +980,7 @@ CPhysicsShadowClone *CPhysicsShadowClone::CreateShadowClone( IPhysicsEnvironment
 
 	if( pTransformationMatrix )
 	{
-		pClone->m_matrixShadowTransform = *pTransformationMatrix;
+		pClone->m_matrixShadowTransform = VMatrix( *pTransformationMatrix );
 		pClone->m_bShadowTransformIsIdentity = pClone->m_matrixShadowTransform.IsIdentity();
 
 		if( !pClone->m_bShadowTransformIsIdentity )

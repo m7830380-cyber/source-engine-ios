@@ -6,7 +6,9 @@
 
 #include "prop_portal.h"
 
+#if !defined( PORTAL2 )
 typedef CProp_Portal CPortal_Base2D;
+#endif
 
 void AddPortalVisibilityToPVS( CPortal_Base2D *pPortal, int pvssize, unsigned char *pvs );
 bool IsPlayerNearTargetPortal( CPortal_Base2D *pPortal );

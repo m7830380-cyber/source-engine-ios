@@ -88,7 +88,7 @@ $Project "Client (Portal 2)"
 			$File	"portal2\portal2_input.cpp"
 			$File	"portal2\portal2_prediction.cpp"
 			$File	"portal2\vgui_rootpanel_portal2.cpp"
-			$File	"$SRCDIR\game\shared\predicted_viewmodel.cpp"
+			-$File	"$SRCDIR\game\shared\predicted_viewmodel.cpp"
 
 			$Folder	"VGUI"
 			{
@@ -144,7 +144,7 @@ $Project "Client (Portal 2)"
 
 		$Folder	"Portal"
 		{
-			$File	"$SRCDIR\game\shared\portal\achievements_portal.cpp"
+			-$File	"$SRCDIR\game\shared\portal\achievements_portal.cpp"
 			$File	"portal\c_env_lightraill_endpoint.cpp"
 			$File	"portal\c_env_portal_path_track.cpp"
 			-$File	"portal\c_func_liquidportal.cpp"

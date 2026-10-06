@@ -1,4 +1,4 @@
-//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
+//========= Copyright ù 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Base combat character with no AI
 //
@@ -48,6 +48,7 @@
 	#include "portal_util_shared.h"
 	#include "portal_base2d_shared.h"
 	#include "portal_shareddefs.h"
+	#include "portal/prop_portal.h"
 #endif
 
 // memdbgon must be the last include file in a .cpp file!!!
@@ -452,6 +453,7 @@ void CBaseCombatCharacter::ResetVisibilityCache( CBaseCombatCharacter *pBCC )
 #ifdef PORTAL
 bool CBaseCombatCharacter::FVisibleThroughPortal( const CPortal_Base2D *pPortal, CBaseEntity *pEntity, int traceMask, CBaseEntity **ppBlocker )
 {
+	const CProp_Portal *pPropPortal = static_cast<const CProp_Portal *>( pPortal );
 	VPROF( "CBaseCombatCharacter::FVisible" );
 
 	if ( pPortal && IsPlayerNearTargetPortal( pPortal->m_hLinkedPortal.Get() ) == false )
@@ -467,7 +469,7 @@ bool CBaseCombatCharacter::FVisibleThroughPortal( const CPortal_Base2D *pPortal,
 	CTraceFilterLOS traceFilter( this, COLLISION_GROUP_NONE, pEntity );
 
 	Vector vecTranslatedTargetOrigin;
-	UTIL_Portal_PointTransform( pPortal->m_hLinkedPortal->MatrixThisToLinked(), vecTargetOrigin, vecTranslatedTargetOrigin );
+	UTIL_Portal_PointTransform( pPropPortal->m_hLinkedPortal->MatrixThisToLinked(), vecTargetOrigin, vecTranslatedTargetOrigin );
 	Ray_t ray;
 	ray.Init( vecLookerOrigin, vecTranslatedTargetOrigin );
 
@@ -479,7 +481,7 @@ bool CBaseCombatCharacter::FVisibleThroughPortal( const CPortal_Base2D *pPortal,
 		traceMask = MASK_BLOCKLOS_AND_NPCS;
 	}
 
-	UTIL_Portal_TraceRay_Bullets( pPortal, ray, traceMask, &traceFilter, &tr );
+	UTIL_Portal_TraceRay_Bullets( pPropPortal, ray, traceMask, &traceFilter, &tr );
 
 	if (tr.fraction != 1.0 || tr.startsolid )
 	{
@@ -551,21 +553,21 @@ CPortal_Base2D* CBaseCombatCharacter::FInViewConeThroughPortal( CBaseEntity *pEn
 //=========================================================
 CPortal_Base2D* CBaseCombatCharacter::FInViewConeThroughPortal( const Vector &vecSpot )
 {
-	int iPortalCount = CPortal_Base2D_Shared::AllPortals.Count();
+	int iPortalCount = CProp_Portal_Shared::AllPortals.Count();
 	if( iPortalCount == 0 )
 		return NULL;
 
 	const Vector ptEyePosition = EyePosition();
 
 	float fDistToBeat = 1e20; //arbitrarily high number
-	CPortal_Base2D *pBestPortal = NULL;
+	CProp_Portal *pBestPortal = NULL;
 
-	CPortal_Base2D **pPortals = CPortal_Base2D_Shared::AllPortals.Base();
+	CProp_Portal **pPortals = CProp_Portal_Shared::AllPortals.Base();
 
 	// Check through both portals
 	for ( int iPortal = 0; iPortal < iPortalCount; ++iPortal )
 	{
-		CPortal_Base2D *pPortal = pPortals[iPortal];
+		CProp_Portal *pPortal = pPortals[iPortal];
 
 		// Check if this portal is active, linked, and in the view cone
 		if( pPortal->IsActivedAndLinked() && FInViewCone( pPortal ) )

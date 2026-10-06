@@ -1541,7 +1541,7 @@ void CMultiPlayerAnimState::ConvergeYawAngles( float flGoalYaw, float flYawRate,
 //-----------------------------------------------------------------------------
 const QAngle& CMultiPlayerAnimState::GetRenderAngles()
 {
-#if defined( PORTAL ) && defined( CLIENT_DLL )
+#if defined( PORTAL ) && defined( CLIENT_DLL ) && !defined( PORTAL2 )
 	C_Portal_Player *pPlayer = (C_Portal_Player *)GetBasePlayer();
 	
 	if( pPlayer )

@@ -1,4 +1,4 @@
-//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
+//========= Copyright  1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Contains entities for implementing/changing game rules dynamically within each BSP.
 //
@@ -12,7 +12,7 @@
 #include "entitylist.h"
 #include "ai_hull.h"
 #include "entityoutput.h"
-#if defined( CSTRIKE15 )
+#if defined( CSTRIKE15 ) && !defined( PORTAL2 )
 #include "weapon_csbase.h"
 #include "cs_weapon_parse.h"
 #include "cs_shareddefs.h"
@@ -116,7 +116,7 @@ public:
 	inline	void	SetPoints( int points ) { m_Score = points; }
 
 	void InputApplyScore( inputdata_t &inputdata );
-#if defined( CSTRIKE15 )
+#if defined( CSTRIKE15 ) && !defined( PORTAL2 )
 	void InputAddScoreTerrorist( inputdata_t &inputdata );
 	void InputAddScoreCT( inputdata_t &inputdata );
 #endif
@@ -129,8 +129,10 @@ LINK_ENTITY_TO_CLASS( game_score, CGameScore );
 BEGIN_DATADESC( CGameScore )
 	// Inputs
 	DEFINE_INPUTFUNC( FIELD_VOID, "ApplyScore", InputApplyScore ),
+#if defined( CSTRIKE15 ) && !defined( PORTAL2 )
 	DEFINE_INPUTFUNC( FIELD_VOID, "AddScoreTerrorist", InputAddScoreTerrorist ),
 	DEFINE_INPUTFUNC( FIELD_VOID, "AddScoreCT", InputAddScoreCT ),
+#endif
 END_DATADESC()
 
 void CGameScore::Spawn( void )
@@ -177,7 +179,7 @@ void CGameScore::InputApplyScore( inputdata_t &inputdata )
 	}
 }
 
-#if defined( CSTRIKE15 )
+#if defined( CSTRIKE15 ) && !defined( PORTAL2 )
 void CGameScore::InputAddScoreTerrorist( inputdata_t &inputdata )
 {
 	CCSMatch* match = CSGameRules()->GetMatch();
@@ -248,10 +250,14 @@ bool CGameCoopMissionManager::KeyValue( const char *szKeyName, const char *szVal
 
 int	CGameCoopMissionManager::GetWaveNumber( void )
 {
+#if defined( PORTAL2 )
+	return 0;
+#else
 	if ( !CSGameRules() )
 		return 0;
 
 	return CSGameRules()->GetCoopWaveNumber();
+#endif
 }
 
 void CGameCoopMissionManager::SetWaveCompleted( void )
@@ -315,7 +321,7 @@ void CGameCoopMissionManager::SetMissionCompleted( void )
 // }
 
 
-#if defined( CSTRIKE15 )
+#if defined( CSTRIKE15 ) && !defined( PORTAL2 )
 // CGameMoney / game_money	-- award money to player / team 
 
 class CGameMoney : public CRulePointEntity
@@ -438,7 +444,7 @@ void CGameEnd::Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useT
 	g_pGameRules->EndMultiplayerGame();
 }
 
-#if defined( CSTRIKE15 )
+#if defined( CSTRIKE15 ) && !defined( PORTAL2 )
 // CGameEnd / game_round_end	-- Ends the round in MP
 
 class CGameRoundEnd : public CRulePointEntity , public CGameEventListener

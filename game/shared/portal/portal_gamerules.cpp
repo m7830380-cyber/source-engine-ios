@@ -1,4 +1,4 @@
-//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
+//========= Copyright ù 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: The Half-Life 2 game rules, such as the relationship tables and ammo
 //			damage cvars.
@@ -42,7 +42,6 @@ BEGIN_NETWORK_TABLE_NOBASE( CPortalGameRules, DT_PortalGameRules )
 END_NETWORK_TABLE()
 
 
-LINK_ENTITY_TO_CLASS_ALIASED( portal_gamerules, PortalGameRulesProxy );
 IMPLEMENT_NETWORKCLASS_ALIASED( PortalGameRulesProxy, DT_PortalGameRulesProxy )
 
 
@@ -1312,3 +1311,5 @@ CAmmoDef *GetAmmoDef()
 
 	return &def;
 }
+
+LINK_ENTITY_TO_CLASS_ALIASED( portal_gamerules, PortalGameRulesProxy );

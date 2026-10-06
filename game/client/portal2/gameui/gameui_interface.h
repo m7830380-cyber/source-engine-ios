@@ -57,20 +57,8 @@ public:
 	virtual void OnLevelLoadingFinished( bool bError, const char *failureReason, const char *extendedReason );
 	virtual void OnDisconnectFromServer_OLD( uint8 eSteamLoginFailure, const char *username ) { OnDisconnectFromServer( eSteamLoginFailure ); }
 
-	// loading screens the CS:GO engine asks for (IGameUI)
-	virtual void StartLoadingScreenForCommand( const char* command );
-	virtual void StartLoadingScreenForKeyValues( KeyValues* keyValues );
-
 	// progress
-	virtual bool UpdateProgressBar(float progress, const char *statusText, bool showDialog = true );
-	virtual bool UpdateSecondaryProgressBar(float progress, const wchar_t *desc );
-
-	// message boxes
-	virtual void ShowMessageDialog( const uint nType, vgui::Panel *pOwner );
-	virtual void ShowMessageDialog( const char* messageID, const char* titleID );
-	virtual void CreateCommandMsgBox( const char* pszTitle, const char* pszMessage, bool showOk = true, bool showCancel = false, const char* okCommand = NULL, const char* cancelCommand = NULL, const char* closedCommand = NULL, const char* pszLegend = NULL );
-	virtual void CreateCommandMsgBoxInSlot( ECommandMsgBoxSlot slot, const char* pszTitle, const char* pszMessage, bool showOk = true, bool showCancel = false, const char* okCommand = NULL, const char* cancelCommand = NULL, const char* closedCommand = NULL, const char* pszLegend = NULL );
-	virtual void RestoreTopLevelMenu();
+	virtual bool UpdateProgressBar(float progress, const char *statusText);
 	// Shows progress desc, returns previous setting... (used with custom progress bars )
 	virtual bool SetShowProgressText( bool show );
 
@@ -83,12 +71,12 @@ public:
 
  	virtual void SetProgressOnStart();
  
-#if defined( _GAMECONSOLE ) && defined( _DEMO )
+#if defined( _X360 ) && defined( _DEMO )
 	virtual void OnDemoTimeout();
 #endif
 
  	// state
- 	virtual bool IsInLevel();
+ 	bool IsInLevel();
  	bool IsInBackgroundLevel();
  	bool IsInMultiplayer();
  	bool IsConsoleUI();
@@ -98,12 +86,6 @@ public:
  	void ShowLoadingBackgroundDialog();
 	void HideLoadingBackgroundDialog();
 	bool HasLoadingBackgroundDialog();
-
-	virtual bool LoadingProgressWantsIsolatedRender( bool bContextValid );
-
-	virtual bool IsPlayingFullScreenVideo();
-
-	virtual bool IsTransitionEffectEnabled();
 
 private:
 	void SendConnectedToGameMessage();

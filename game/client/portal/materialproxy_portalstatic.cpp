@@ -10,9 +10,11 @@
 #include "materialsystem/IMaterial.h"
 #include "portalrenderable_flatbasic.h"
 #include "c_prop_portal.h"
+#include "toolframework_client.h"
+#include "FunctionProxy.h"
+#include "imaterialproxydict.h"
 #include <KeyValues.h>
 
-#include "imaterialproxydict.h"
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
 
@@ -26,6 +28,8 @@ public:
 	virtual void Release( void ) { delete this; }
 
 	virtual IMaterial *	GetMaterial() { return ( m_StaticOutput ) ? m_StaticOutput->GetOwningMaterial() : NULL; }
+
+	float ComputeStaticAmount( CPortalRenderable_FlatBasic *pPortal );
 };
 
 bool CPortalStaticProxy::Init( IMaterial *pMaterial, KeyValues *pKeyValues )
@@ -39,12 +43,30 @@ bool CPortalStaticProxy::Init( IMaterial *pMaterial, KeyValues *pKeyValues )
 	if( !foundVar )
 		return false;
 
-	if ( !Q_stricmp( pszResultVar, "$alpha" ) )
-	{
-		pMaterial->SetMaterialVarFlag( MATERIAL_VAR_ALPHA_MODIFIED_BY_PROXY, true );
-	}
-
 	return true;
+}
+
+float CPortalStaticProxy::ComputeStaticAmount( CPortalRenderable_FlatBasic *pFlatBasic )
+{
+	float flStaticAmount = pFlatBasic->m_fStaticAmount;
+
+	if ( !pFlatBasic->GetLinkedPortal() )
+	{
+		flStaticAmount = 1.0f;
+	}
+	if ( pFlatBasic->WillUseDepthDoublerThisDraw() )
+	{
+		flStaticAmount = 0.0f;
+	}
+	else if ( g_pPortalRender->GetRemainingPortalViewDepth() == 0 ) //end of the line, no more views
+	{
+		flStaticAmount = 1.0f;
+	}
+	else if ( (g_pPortalRender->GetRemainingPortalViewDepth() == 1) && (pFlatBasic->m_fSecondaryStaticAmount > flStaticAmount) ) //fading in from no views to another view (player just walked through it)
+	{
+		flStaticAmount = pFlatBasic->m_fSecondaryStaticAmount;
+	}
+	return flStaticAmount;
 }
 
 void CPortalStaticProxy::OnBind( void *pBind )
@@ -58,26 +80,32 @@ void CPortalStaticProxy::OnBind( void *pBind )
 
 	if ( pRecordedPortal )
 	{
-		C_Prop_Portal *pRecordedFlatBasic = dynamic_cast<C_Prop_Portal *>(pRecordedPortal);
+		CPortalRenderable_FlatBasic *pRecordedFlatBasic = dynamic_cast<CPortalRenderable_FlatBasic *>(pRecordedPortal);
 		if ( !pRecordedFlatBasic )
 			return;
 
-		flStaticAmount = pRecordedFlatBasic->ComputeStaticAmountForRendering();
+		flStaticAmount = ComputeStaticAmount( pRecordedFlatBasic );
 	}
 	else
 	{
-		C_Prop_Portal *pFlatBasic = dynamic_cast<C_Prop_Portal*>( pRenderable );
+		CPortalRenderable_FlatBasic *pFlatBasic = dynamic_cast<CPortalRenderable_FlatBasic*>( pRenderable );
 		if ( !pFlatBasic )
 			return;
 
-		flStaticAmount = pFlatBasic->ComputeStaticAmountForRendering();
+		flStaticAmount = ComputeStaticAmount( pFlatBasic );
 	}
 
 	m_StaticOutput->SetFloatValue( flStaticAmount );
+
+	/*
+	if ( ToolsEnabled() )
+	{
+		ToolFramework_RecordMaterialParams( GetMaterial() );
+	}
+	*/
 }
 
-EXPOSE_MATERIAL_PROXY( CPortalStaticProxy, PortalStaticModel );
-
+EXPOSE_MATERIAL_PROXY(CPortalStaticProxy, PortalStaticModel);
 
 class CPortalStaticPortalProxy : public CPortalStaticProxy
 {
@@ -93,11 +121,11 @@ void CPortalStaticPortalProxy::OnBind( void *pBind )
 	IClientRenderable *pRenderable = (IClientRenderable*)( pBind );
 	C_Prop_Portal *pPortal = (C_Prop_Portal *)pRenderable;
 
-	float flStaticAmount = pPortal->ComputeStaticAmountForRendering();
+	float flStaticAmount = ComputeStaticAmount( pPortal );
 	m_StaticOutput->SetFloatValue( flStaticAmount );
 }
 
-EXPOSE_MATERIAL_PROXY( CPortalStaticPortalProxy, PortalStatic );
+EXPOSE_MATERIAL_PROXY(CPortalStaticPortalProxy, PortalStatic);
 
 
 class CPortalOpenAmountProxy : public CPortalStaticProxy
@@ -117,6 +145,5 @@ void CPortalOpenAmountProxy::OnBind( void *pBind )
 	m_StaticOutput->SetFloatValue( pPortal->m_fOpenAmount );
 }
 
-EXPOSE_MATERIAL_PROXY( CPortalOpenAmountProxy, PortalOpenAmount );
-
+EXPOSE_MATERIAL_PROXY(CPortalOpenAmountProxy, PortalOpenAmount);
 

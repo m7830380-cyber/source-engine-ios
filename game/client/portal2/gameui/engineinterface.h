@@ -27,18 +27,12 @@
 
 #ifdef SWARM_DLL
 #include "matchmaking/swarm/imatchext_swarm.h"
-extern class IMatchExtSwarm *g_pMatchExt;
+extern class IMatchExtSwarm *g_pMatchExtSwarm;
 #endif
 
-#ifdef PORTAL2
-class IMatchExtPortal2
-{
-public:
-	inline KeyValues * GetAllMissions() { return NULL; }
-	inline KeyValues * GetMapInfoByBspName( KeyValues *, char const *, KeyValues ** = NULL ) { return NULL; }
-	inline KeyValues * GetMapInfo( KeyValues *, KeyValues ** = NULL ) { return NULL; }
-};
-extern class IMatchExtPortal2 *g_pMatchExt;
+#ifdef SDK_DLL
+#include "matchmaking/swarm/imatchext_swarm.h"
+extern class IMatchExtSwarm *g_pMatchExtSwarm;
 #endif
 
 // engine interface singleton accessors
@@ -48,13 +42,10 @@ extern class IEngineVGui *enginevguifuncs;
 extern class IGameUIFuncs *gameuifuncs;
 extern class IEngineSound *enginesound;
 extern class IXboxSystem  *xboxsystem;
-#ifdef _GAMECONSOLE
+#ifdef _X360
 extern class IXOnline  *xonline;
 #endif
+extern class IAchievementMgr *achievementmgr; 
 extern class CSteamAPIContext *steamapicontext;
-#ifdef _PS3
-#include "ps3/saverestore_ps3_api_ui.h"
-extern class IPS3SaveRestoreToUI *ps3saveuiapi;
-#endif
 
 #endif // ENGINEINTERFACE_H

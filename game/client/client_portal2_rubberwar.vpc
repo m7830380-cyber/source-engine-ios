@@ -31,7 +31,7 @@ $Configuration
 {
 	$Compiler
 	{
-		$AdditionalIncludeDirectories	"$BASE;$SRCDIR\game\client\portal2\gameui;$SRCDIR\game\shared\portal2;.\hl2;.\portal;.\portal\vgui;$SRCDIR\game\shared\portal;$SRCDIR\game\shared\multiplayer;$SRCDIR\game\shared\hl2"
+		$AdditionalIncludeDirectories	"$BASE;$SRCDIR\game\client\portal2\gameui;$SRCDIR\game\shared\portal2;.\hl2;.\portal;.\portal\vgui;.\portal2\vgui;$SRCDIR\game\shared\portal;$SRCDIR\game\shared\multiplayer;$SRCDIR\game\shared\hl2"
 		$PreprocessorDefinitions		"$BASE;PORTAL;PORTAL2;GAMEUI_EMBEDDED;GAMEUI_EXPORTS"
 		$PreprocessorDefinitions		"$BASE;NO_STEAM_GAMECOORDINATOR"					[ $IOS ]
 	}
@@ -92,13 +92,18 @@ $Project "Client (Portal 2)"
 				$File	"portal2\vgui\nb_horiz_list.cpp"
 				$File	"portal2\vgui\nb_select_level_entry.cpp"
 				$File	"portal2\vgui\nb_select_level_panel.cpp"
-				$File	"portal2\vgui\sdk_hud_ammo.cpp"
 				$File	"portal2\vgui\sdk_hud_chat.cpp"
-				$File	"portal2\vgui\sdk_hud_health.cpp"
-				$File	"portal2\vgui\sdk_hud_weaponselection.cpp"
 				$File	"portal2\vgui\sdk_loading_panel.cpp"
 				$File	"portal2\vgui\sdk_logo_panel.cpp"
 				$File	"portal2\vgui\sdk_vgui_music_importer.cpp"
+			}
+
+			$Folder	"Radial Menu"
+			{
+				$File	"portal2\radialmenu.cpp"
+				$File	"portal2\radialmenu.h"
+				$File	"portal2\radialmenu_taunt.cpp"
+				$File	"portal2\radialmenu_taunt.h"
 			}
 
 			$Folder	"GameUI"

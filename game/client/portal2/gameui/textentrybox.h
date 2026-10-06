@@ -16,9 +16,9 @@
 #include "KeyValues.h"
 #include <vgui_controls/QueryBox.h>
 
-namespace vgui { class Frame; }
-namespace vgui { class TextEntry; }
-namespace vgui { class Panel; }
+class vgui::Frame;
+class vgui::TextEntry;
+class vgui::Panel;
 class CCvarTextEntry;
 
 //--------------------------------------------------------------------------------------------------------------

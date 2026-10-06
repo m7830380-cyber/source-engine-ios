@@ -7,9 +7,6 @@
 #ifndef __BASEMOD360UI_H__
 #define __BASEMOD360UI_H__
 
-// GameUI (like the console versions) works with the primary user id
-#undef XBX_GetPrimaryUserId
-
 #include "basemodpanel.h"
 #include "basemodframe.h"
 #include "UIGameData.h"

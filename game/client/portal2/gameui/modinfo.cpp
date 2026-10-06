@@ -66,7 +66,12 @@ bool CModInfo::IsMultiplayerOnly()
 //-----------------------------------------------------------------------------
 bool CModInfo::IsSinglePlayerOnly()
 {
+#ifndef _XBOX
 	return (stricmp(m_pModData->GetString("type", ""), "singleplayer_only") == 0);
+#else
+	// xboxissue - no support for disparate mounted content
+	return true;
+#endif
 }
 
 //-----------------------------------------------------------------------------

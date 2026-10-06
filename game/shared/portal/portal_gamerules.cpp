@@ -42,7 +42,7 @@ BEGIN_NETWORK_TABLE_NOBASE( CPortalGameRules, DT_PortalGameRules )
 END_NETWORK_TABLE()
 
 
-LINK_ENTITY_TO_CLASS( portal_gamerules, CPortalGameRulesProxy );
+LINK_ENTITY_TO_CLASS_ALIASED( portal_gamerules, PortalGameRulesProxy );
 IMPLEMENT_NETWORKCLASS_ALIASED( PortalGameRulesProxy, DT_PortalGameRulesProxy )
 
 

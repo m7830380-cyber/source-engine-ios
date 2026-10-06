@@ -1,4 +1,4 @@
-//========= Copyright © 1996-2006, Valve Corporation, All rights reserved. ============//
+//========= Copyright ù 1996-2006, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -141,16 +141,25 @@ void CStaticCollisionPolyhedronCache::Update( void )
 	//brushes
 	{
 		int iBrush = 0;
-		CUtlVector<BrushSideInfo_t> brushsides;
-
 		float fStackPlanes[4 * 400]; //400 is a crapload of planes in my opinion
 
-		while( enginetrace->GetBrushInfo( iBrush, &brushsides, NULL ) )
+		for (;;)
 		{
-			int iPlaneCount = brushsides.Count();
+			int brushContents = 0;
+			BrushSideInfo_t sides[400];
+			const int iSideCount = enginetrace->GetBrushInfo( iBrush, brushContents, sides, ARRAYSIZE( sides ) );
+			if ( iSideCount == 0 )
+				break;
+			if ( iSideCount < 0 )
+			{
+				++iBrush;
+				continue;
+			}
+
+			const int iPlaneCount = iSideCount;
 			AssertMsg( iPlaneCount != 0, "A brush with no planes???????" );
 
-			const BrushSideInfo_t *pReturnedPlanes = brushsides.Base();
+			const BrushSideInfo_t *pReturnedPlanes = sides;
 
 			CPolyhedron *pTempPolyhedron;
 
@@ -161,10 +170,10 @@ void CStaticCollisionPolyhedronCache::Update( void )
 
 				for( int i = 0; i != iPlaneCount; ++i )
 				{
-					pNonstackPlanes[(i * 4) + 0] = pReturnedPlanes[i].plane.x;
-					pNonstackPlanes[(i * 4) + 1] = pReturnedPlanes[i].plane.y;
-					pNonstackPlanes[(i * 4) + 2] = pReturnedPlanes[i].plane.z;
-					pNonstackPlanes[(i * 4) + 3] = pReturnedPlanes[i].plane.w;
+					pNonstackPlanes[(i * 4) + 0] = pReturnedPlanes[i].plane.normal.x;
+					pNonstackPlanes[(i * 4) + 1] = pReturnedPlanes[i].plane.normal.y;
+					pNonstackPlanes[(i * 4) + 2] = pReturnedPlanes[i].plane.normal.z;
+					pNonstackPlanes[(i * 4) + 3] = pReturnedPlanes[i].plane.dist;
 				}
 
 				pTempPolyhedron = GeneratePolyhedronFromPlanes( pNonstackPlanes, iPlaneCount, 0.01f, true );
@@ -175,10 +184,10 @@ void CStaticCollisionPolyhedronCache::Update( void )
 			{
 				for( int i = 0; i != iPlaneCount; ++i )
 				{
-					fStackPlanes[(i * 4) + 0] = pReturnedPlanes[i].plane.x;
-					fStackPlanes[(i * 4) + 1] = pReturnedPlanes[i].plane.y;
-					fStackPlanes[(i * 4) + 2] = pReturnedPlanes[i].plane.z;
-					fStackPlanes[(i * 4) + 3] = pReturnedPlanes[i].plane.w;
+					fStackPlanes[(i * 4) + 0] = pReturnedPlanes[i].plane.normal.x;
+					fStackPlanes[(i * 4) + 1] = pReturnedPlanes[i].plane.normal.y;
+					fStackPlanes[(i * 4) + 2] = pReturnedPlanes[i].plane.normal.z;
+					fStackPlanes[(i * 4) + 3] = pReturnedPlanes[i].plane.dist;
 				}
 
 				pTempPolyhedron = GeneratePolyhedronFromPlanes( fStackPlanes, iPlaneCount, 0.01f, true );
@@ -303,7 +312,7 @@ void CStaticCollisionPolyhedronCache::Update( void )
 
 				if( pCollide != NULL )
 				{
-					VMatrix matToWorldPosition = pProp->CollisionToWorldTransform();
+					VMatrix matToWorldPosition( pProp->CollisionToWorldTransform() );
 
 					for( int i = 0; i != pCollide->solidCount; ++i )
 					{

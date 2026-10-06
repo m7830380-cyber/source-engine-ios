@@ -11,11 +11,7 @@
 
 FileWeaponInfo_t* CreateWeaponInfo()
 {
-#ifdef PORTAL2
-	return new FileWeaponInfo_t;
-#else
 	return new CPortalSWeaponInfo;
-#endif
 }
 
 

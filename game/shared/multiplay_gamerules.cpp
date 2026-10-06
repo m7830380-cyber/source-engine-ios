@@ -1187,6 +1187,7 @@ CMultiplayRules::CMultiplayRules()
 		}
 
 		const char* nextMapName = NULL;
+#if defined( CSTRIKE15 )
 		if ( bRandom )
 		{	
 			nextMapName = g_pGameTypes->GetRandomMap( mapGroupName );
@@ -1222,6 +1223,7 @@ CMultiplayRules::CMultiplayRules()
 			V_strncpy( pszNextMap, nextMapName, bufsize );
 			return;
 		}
+#endif // CSTRIKE15
 
 		// we were not given a mapgroup name or we were given a mapname that was not in the mapgroup, so we fall back to the old method of cycling maps
 

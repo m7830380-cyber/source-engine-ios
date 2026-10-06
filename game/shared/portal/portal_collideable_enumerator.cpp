@@ -6,12 +6,12 @@
 //=============================================================================//
 
 #include "cbase.h"
-#include "portal_base2d_shared.h"
+#include "prop_portal_shared.h"
 #include "portal_collideable_enumerator.h"
 
 #define PORTAL_TELEPORTATION_PLANE_OFFSET 7.0f
 
-CPortalCollideableEnumerator::CPortalCollideableEnumerator( const CPortal_Base2D *pAssociatedPortal )
+CPortalCollideableEnumerator::CPortalCollideableEnumerator( const CProp_Portal *pAssociatedPortal )
 {
 	Assert( pAssociatedPortal );
 	m_hTestPortal = pAssociatedPortal;
@@ -29,8 +29,7 @@ CPortalCollideableEnumerator::CPortalCollideableEnumerator( const CPortal_Base2D
 
 IterationRetval_t CPortalCollideableEnumerator::EnumElement( IHandleEntity *pHandleEntity )
 {
-	EHANDLE hEnt;
-	hEnt.Set( EntityFromEntityHandle( pHandleEntity ) );
+	EHANDLE hEnt = pHandleEntity->GetRefEHandle();
 	
 	CBaseEntity *pEnt = hEnt.Get();
 	if( pEnt == NULL ) //I really never thought this would be necessary
@@ -61,9 +60,6 @@ IterationRetval_t CPortalCollideableEnumerator::EnumElement( IHandleEntity *pHan
 		//not a static prop, w00t
 		CCollisionProperty *pEntityCollision = pEnt->CollisionProp();
 
-		// Ignore 'projected_wall_entity' objects for partial front/behind checks
-		bool bIsProjectedWallEntity = FClassnameIs( pEnt, "projected_wall_entity" );
-
 		if( !pEntityCollision->IsSolid() )
 			return ITERATION_CONTINUE; //not solid
 
@@ -72,10 +68,10 @@ IterationRetval_t CPortalCollideableEnumerator::EnumElement( IHandleEntity *pHan
 		float fBoundRadius = pEntityCollision->BoundingRadius();
 		float fPtPlaneDist = m_vPlaneNormal.Dot( ptEntCenter ) - m_fPlaneDist;
 
-		if( fPtPlaneDist < -fBoundRadius && !bIsProjectedWallEntity )
+		if( fPtPlaneDist < -fBoundRadius )
 			return ITERATION_CONTINUE; //object wholly behind the portal
 
-		if( !(fPtPlaneDist > fBoundRadius) && (fPtPlaneDist > -fBoundRadius) && !bIsProjectedWallEntity ) //object is not wholly in front of the portal, but could be partially in front, do more checks
+		if( !(fPtPlaneDist > fBoundRadius) && (fPtPlaneDist > -fBoundRadius) ) //object is not wholly in front of the portal, but could be partially in front, do more checks
 		{
 			Vector ptNearest;
 			pEntityCollision->CalcNearestPoint( m_ptForward1000, &ptNearest );

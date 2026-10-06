@@ -28,7 +28,37 @@ class CPortal_Player;
 // MIKETODO: this should use indexing instead of searching and strcmp()'ing all the time.
 bool IsAmmoType( int iAmmoType, const char *pAmmoName );
 
-#include "weapons_portal.h"
+typedef enum
+{
+	WEAPON_NONE = 0,
+
+	//Melee
+	WEAPON_CROWBAR,
+
+	//Special
+	WEAPON_PORTALGUN,
+	WEAPON_PHYSCANNON,
+
+	//Pistols
+	WEAPON_PISTOL,
+	WEAPON_357,	
+
+	//Machineguns
+	WEAPON_SMG,
+	WEAPON_AR2,
+
+	//Grenades
+	WEAPON_FRAG,
+	WEAPON_BUGBAIT,
+	
+	//Other
+	WEAPON_SHOTGUN,
+	WEAPON_CROSSBOW,
+	WEAPON_RPG,
+
+	//WEAPON_MAX,		// number of weapons weapon index
+
+} PortalWeaponID;
 
 class CWeaponPortalBase : public CBaseCombatWeapon
 {
@@ -60,15 +90,14 @@ public:
 	
 	CPortalSWeaponInfo const	&GetPortalWpnData() const;
 
+
 	virtual void FireBullets( const FireBulletsInfo_t &info );
 	
-	virtual int ObjectCaps( void ) { return BaseClass::ObjectCaps() | FCAP_FORCE_TRANSITION; }
-
 public:
 	#if defined( CLIENT_DLL )
 	
-		virtual IClientModelRenderable*	GetClientModelRenderable();
-		virtual int		DrawModel( int flags, const RenderableInstance_t &instance );
+		virtual int		DrawModel( int flags, const RenderableInstance_t& instance );
+		virtual bool	ShouldDraw( void );
 		virtual bool	ShouldDrawCrosshair( void ) { return true; }
 		virtual bool	ShouldPredict();
 		virtual void	OnDataChanged( DataUpdateType_t type );

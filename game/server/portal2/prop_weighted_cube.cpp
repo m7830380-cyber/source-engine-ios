@@ -84,6 +84,10 @@ public:
 	//void Pickup(void);
 	void OnPhysGunPickup(CBasePlayer *pPhysGunUser, PhysGunPickup_t reason);
 	void OnPhysGunDrop(CBasePlayer *pPhysGunUser, PhysGunDrop_t reason);
+
+	void SetActivated( bool bState ) { m_bActivated = bState; }
+	bool WasTouchedByPlayer( void ) const { return m_bTouchedByPlayer; }
+
 private:
 	int	m_cubeType;
 	int m_skinType;
@@ -103,9 +107,6 @@ private:
 	COutputEvent m_OnPhysGunDrop;
 
 	COutputEvent m_OnFizzled;
-
-	void SetActivated( bool bState ) { m_bActivated = bState; }
-	bool WasTouchedByPlayer( void ) const { return m_bTouchedByPlayer; }
 
 private:
 	bool m_bActivated;
@@ -321,4 +322,9 @@ bool PropWeightedCube_WasTouchedByPlayer( CBaseEntity *pEnt )
 {
 	CPropWeightedCube *pCube = dynamic_cast<CPropWeightedCube *>( pEnt );
 	return pCube ? pCube->WasTouchedByPlayer() : false;
+}
+
+bool UTIL_IsWeightedCube( CBaseEntity *pEntity )
+{
+	return ( pEntity != NULL ) && FClassnameIs( pEntity, "prop_weighted_cube" );
 }

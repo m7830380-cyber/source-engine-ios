@@ -10,6 +10,20 @@
 #include "prop_weighted_cube.h"
 #include "portal_mp_gamerules.h"
 #include "prop_monster_box.h"
+#include "portal2/portal2_server_compat.h"
+
+#if defined( PORTAL2 )
+#ifndef RANDOM_CEG_TEST_SECRET
+#define RANDOM_CEG_TEST_SECRET 0
+#endif
+#ifndef CEG_NOINLINE
+#define CEG_NOINLINE
+#endif
+#ifndef CEG_PROTECT_MEMBER_FUNCTION
+#define CEG_PROTECT_MEMBER_FUNCTION( x ) (void)( x );
+#endif
+static int CPropFloorButton_Press( void ) { return 0; }
+#endif
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
@@ -370,17 +384,11 @@ void CPropFloorButton::OnPressed( CBaseEntity* pActivator )
 	}
 
 	// If this button was pressed without touching the player, fire the special output used for the 'hole in one' achievement.
-	if ( UTIL_IsWeightedCube( pActivator ) )
+	if ( pActivator && UTIL_IsWeightedCube( pActivator ) )
 	{
-		CPropWeightedCube *pCube = (CPropWeightedCube*)pActivator;
-		Assert( pCube );
-		if ( pCube )
+		if ( PropWeightedCube_WasTouchedByPlayer( pActivator ) == false )
 		{
-			if ( PropWeightedCube_WasTouchedByPlayer( pActivator ) == false )
-			{
-				// HACK: this delay is a guess at how long it takes to be sure the box has setteled... 
-				SetContextThink( &CPropFloorButton::PressingBoxHasSetteledThink, gpGlobals->curtime + 2.0f, s_pszPressingBoxHasSetteledThinkContext );
-			}
+			SetContextThink( &CPropFloorButton::PressingBoxHasSetteledThink, gpGlobals->curtime + 2.0f, s_pszPressingBoxHasSetteledThinkContext );
 		}
 	}
 

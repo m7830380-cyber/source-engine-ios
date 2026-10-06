@@ -3180,11 +3180,17 @@ void CBasePlayer::VPhysicsShadowUpdate( IPhysicsObject *pPhysics )
 						}
 						else
 						{
+#if defined( PORTAL2 )
+							newPosition += ( pPortalEnvironment->GetAbsOrigin() - WorldSpaceCenter() ) * 0.1f;
+							SetAbsOrigin( newPosition );
+							CTakeDamageInfo info( this, this, vec3_origin, vec3_origin, 1, DMG_CRUSH );
+							OnTakeDamage( info );
+#else
 							Vector vNewCenter = vec3_origin;
 							Vector vExtents = (pPortalPlayer->GetHullMaxs() - pPortalPlayer->GetHullMins()) * 0.5f;
 							Vector vOriginToCenter = (pPortalPlayer->GetHullMaxs() + pPortalPlayer->GetHullMins()) * 0.5f;
 							
-							if( UTIL_FindClosestPassableSpace_InPortal_CenterMustStayInFront( pPortalEnvironment, GetAbsOrigin() + vOriginToCenter, vExtents, pPortalEnvironment->m_plane_Origin.normal, &traceFilter, MASK_PLAYERSOLID, 100, vNewCenter ) &&
+							if( UTIL_FindClosestPassableSpace_InPortal_CenterMustStayInFront( pPortalEnvironment, GetAbsOrigin() + vOriginToCenter, vExtents, pPortalEnvironment->m_plane_Origin.normal, &traceFilter, MASK_PLAYERSOLID, 100.0f, vNewCenter ) &&
 								(pPortalEnvironment->m_plane_Origin.normal.Dot( vNewCenter ) - pPortalEnvironment->m_plane_Origin.dist) >= 0.0f )
 							{
 								SetAbsOrigin( vNewCenter - vOriginToCenter );
@@ -3194,16 +3200,11 @@ void CBasePlayer::VPhysicsShadowUpdate( IPhysicsObject *pPhysics )
 								VPlane stayInFrontOfPlane;
 								stayInFrontOfPlane.m_Normal = pPortalEnvironment->m_plane_Origin.normal;
 								stayInFrontOfPlane.m_Dist = pPortalEnvironment->m_plane_Origin.dist;
-								if( !(UTIL_FindClosestPassableSpace_CenterMustStayInFrontOfPlane( GetAbsOrigin() + vOriginToCenter, vExtents, newPosition - GetAbsOrigin(), &traceFilter, MASK_PLAYERSOLID, 100, vNewCenter, stayInFrontOfPlane ) &&
+								if( !(UTIL_FindClosestPassableSpace_CenterMustStayInFrontOfPlane( GetAbsOrigin() + vOriginToCenter, vExtents, newPosition - GetAbsOrigin(), &traceFilter, MASK_PLAYERSOLID, 100.0f, vNewCenter, stayInFrontOfPlane ) &&
 									(pPortalEnvironment->m_plane_Origin.normal.Dot( vNewCenter ) - pPortalEnvironment->m_plane_Origin.dist) >= 0.0f) )
 								{
-									// Try moving the player closer to the center of the portal
 									newPosition += ( pPortalEnvironment->GetAbsOrigin() - WorldSpaceCenter() ) * 0.1f;
 									SetAbsOrigin( newPosition );
-
-									DevMsg( "Hurting the player for FindClosestPassableSpaceFailure!\n" );
-
-									// Deal 1 damage per frame... this will kill a player very fast, but allow for the above correction to fix some cases
 									CTakeDamageInfo info( this, this, vec3_origin, vec3_origin, 1, DMG_CRUSH );
 									OnTakeDamage( info );
 								}
@@ -3212,6 +3213,7 @@ void CBasePlayer::VPhysicsShadowUpdate( IPhysicsObject *pPhysics )
 									SetAbsOrigin( vNewCenter - vOriginToCenter );
 								}
 							}
+#endif
 						}
 					}
 				}

@@ -73,4 +73,11 @@ void IOS_HapticViewModelSound( C_BasePlayer *pPlayer, const char *pszSound )
 	(void)pszSound;
 }
 
+void CS_FreezePanel_OnHltvReplayButtonStateChanged() {}
+void CS_FreezePanel_ResetDamageText( int iPlayerIndexKiller, int iPlayerIndexVictim )
+{
+	(void)iPlayerIndexKiller;
+	(void)iPlayerIndexVictim;
+}
+
 #endif

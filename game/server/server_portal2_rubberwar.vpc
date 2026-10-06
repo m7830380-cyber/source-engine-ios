@@ -55,8 +55,7 @@ $Project "Server (Portal 2)"
 			$File	"$SRCDIR\game\shared\portal\portal_gamerules.h"
 			$File	"$SRCDIR\game\shared\portal2\player_pickup.cpp"
 			$File	"$SRCDIR\game\shared\portal2\player_pickup.h"
-			$File	"$SRCDIR\game\shared\cstrike15\basecsgrenade_projectile.cpp"
-			$File	"$SRCDIR\game\shared\cstrike15\basecsgrenade_projectile.h"
+			$File	"portal2\portal2_cs_grenade_server_stub.cpp"
 		}
 
 		$Folder	"Portal 2"

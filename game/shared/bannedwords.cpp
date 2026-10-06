@@ -12,7 +12,7 @@
 //
 // Custom implementations for sharing code verbatim between Steam Client and the game branch
 //
-#ifdef CSTRIKE15
+#if defined( CSTRIKE15 ) || defined( PORTAL2 )
 static bool BannedWords_LoadFileIntoBuffer( char const *szFilename, CUtlBuffer &buf )
 {
 	return g_pFullFileSystem->ReadFile( szFilename, "MOD", buf );

@@ -4,7 +4,9 @@
 #pragma once
 #endif
 
+#ifndef CLIENT_DLL
 class CProp_Portal;
+#endif
 class ITraceFilter;
 struct CPortalCornerFitData;
 

@@ -905,8 +905,10 @@ void CNPC_RocketTurret::SyncPoseToAimAngles ( void )
 //-----------------------------------------------------------------------------
 float CNPC_RocketTurret::UpdateFacing( void )
 {
-	Quaternion qtCurrent ( m_vecCurrentAngles.Get() );
-	Quaternion qtGoal ( m_vecGoalAngles );
+	Quaternion qtCurrent;
+	Quaternion qtGoal;
+	AngleQuaternion( m_vecCurrentAngles, qtCurrent );
+	AngleQuaternion( m_vecGoalAngles, qtGoal );
 	Quaternion qtOut;
 
 	float flDiff = QuaternionAngleDiff( qtCurrent, qtGoal );

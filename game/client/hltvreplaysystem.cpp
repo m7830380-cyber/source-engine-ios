@@ -2,11 +2,15 @@
 #include "cbase.h"
 #include "hltvreplaysystem.h"
 #include "hltvcamera.h"
+#if !defined( PORTAL2 )
 #include "cs_gamerules.h"
+#endif
 #include "iviewrender.h"
 #include "engine/IEngineSound.h"
 #include "netmessages.h"
+#if !defined( PORTAL2 )
 #include "cstrike15/c_cs_player.h"
+#endif
 #include "ihltv.h"
 
 ConVar snd_deathcam_replay_mix( "snd_deathcam_replay_mix", "0", 0, "When set to non-0, client switches to DeathCam_Replay_Mix mixgroup during deathcam replay" );

@@ -2,7 +2,7 @@ name: Build Portal 2 iOS IPA
 
 on:
   push:
-    branches: [ portal2-ios ]
+    branches: [ portal2-ios, portal2-rubberwar-ios ]
   workflow_dispatch:
 
 jobs:

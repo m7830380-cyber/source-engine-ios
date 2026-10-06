@@ -1,0 +1,76 @@
+//-----------------------------------------------------------------------------
+//	SERVER_PORTAL2_RUBBERWAR.VPC
+//
+//	RubberWar/Portal-2 game code on the CS:GO engine. See
+//	https://github.com/RubberWar/Portal-2
+//-----------------------------------------------------------------------------
+
+$Macro GAMENAME 	"portal2"
+$Macro SRVSRCDIR	"."
+
+$Include "server_portal_base.vpc"
+
+$include "$SRCDIR\game\shared\cstrike15\cstrike15_gcmessages_include.vpc" [$IOS]
+$include "$SRCDIR\game\shared\cstrike15\cstrike15_usermessages_include.vpc" [$IOS]
+
+$Project
+{
+	$Folder "Protobuf Files" [$IOS]
+	{
+		$File "$SRCDIR\gcsdk\steammessages.proto"
+		$File "$SRCDIR\game\shared\portal2\portal2_usermessages.proto"
+		$DynamicFile "$GENERATED_PROTO_DIR\portal2_usermessages.pb.cc"
+		$File "$SRCDIR\game\shared\portal2\legacy_usermessages.cpp"
+		-$File "$SRVSRCDIR\te_playerdecal.cpp"
+		$File "portal2\te_playerdecal_portal2.cpp"
+	}
+}
+
+$Configuration
+{
+	$Compiler
+	{
+		$AdditionalIncludeDirectories	"$BASE;$SRCDIR\game\shared\portal2;.\portal2"
+		$PreprocessorDefinitions		"$BASE;PORTAL2;USES_SAVERESTORE;PORTAL"
+		$PreprocessorDefinitions		"$BASE;NO_STEAM_GAMECOORDINATOR"					[ $IOS ]
+	}
+}
+
+$Project "Server (Portal 2)"
+{
+	$Folder	"Source Files"
+	{
+		$Folder	"Portal 2"
+		{
+			$File	"portal2\npc_personality_core.cpp"
+			$File	"portal2\npc_wheatley_boss.cpp"
+			$File	"portal2\player_pickup_controller.cpp"
+			$File	"portal2\player_pickup_controller.h"
+			$File	"portal2\prop_button.cpp"
+			$File	"portal2\prop_button_base.cpp"
+			$File	"portal2\prop_button_base.h"
+			$File	"portal2\prop_floor_button.cpp"
+			$File	"portal2\prop_floor_button_base.cpp"
+			$File	"portal2\prop_floor_button_base.h"
+			$File	"portal2\prop_floor_button_under.cpp"
+			$File	"portal2\prop_testchamber_door.cpp"
+			$File	"portal2\prop_under_button.cpp"
+			$File	"portal2\prop_weighted_cube.cpp"
+			$File	"portal2\portal2_eventlog.cpp"
+			$File	"portal2\portal2_gamemove.cpp"
+			$File	"portal2\portal_playerlocaldata.cpp"
+			$File	"portal2\prop_linked_portal_door.cpp"
+			$File	"portal2\te_playerdecal_portal2.cpp"
+			$File	"$SRCDIR\game\shared\predicted_viewmodel.cpp"
+		}
+
+		$Folder	"Multiplayer"
+		{
+			$File	"multiplayer\basenetworkedplayer.cpp"
+			$File	"multiplayer\basenetworkedragdoll.cpp"
+			$File	"$SRCDIR\game\shared\multiplayer\basenetworkedplayer_gamemove.cpp"
+			$File	"$SRCDIR\game\shared\multiplayer\basenetworkedplayer_shared.cpp"
+			$File	"$SRCDIR\game\shared\multiplayer\multiplayer_animstate.cpp"
+		}
+	}
+}

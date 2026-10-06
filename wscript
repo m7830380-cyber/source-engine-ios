@@ -46,6 +46,8 @@ VPC_MACROS = {
 	'PLATFORM': 'osx64',
 	'PLATSUBDIR': '/osx64',
 	'GAMENAME': 'csgo',
+	# server_base.vpc lists $SRVSRCDIR\*.nut; CS:GO sets this in server_cstrike15.vpc
+	'SRVSRCDIR': '.',
 }
 
 # The runtime modules (loaded with dlopen by the launcher/engine) plus the
@@ -86,8 +88,9 @@ PROJECT_OVERRIDES = {
 # with the files the leak lacks restored from RubberWar's ASW-based Portal 2
 # recreation or rebuilt under game/*/portal2.
 PORTAL2_PROJECTS = {
-	'client': 'game/client/client_portal2.vpc',
-	'server': 'game/server/server_portal2.vpc',
+	# RubberWar/Portal-2 game modules on the CS:GO engine (not Valve's full retail VPC).
+	'client': 'game/client/client_portal2_rubberwar.vpc',
+	'server': 'game/server/server_portal2_rubberwar.vpc',
 	'matchmaking': 'matchmaking/matchmaking_portal2.vpc',
 }
 
@@ -511,6 +514,9 @@ def _gen_nuts(proj):
 	# Valve's devtools/bin/texttoarray.pl: embed a squirrel script as a
 	# NUL-terminated byte array named g_Script_<name>, next to the script.
 	for nut in proj.nuts:
+		if not os.path.isfile(nut):
+			Logs.warn('%s: missing nut script %s' % (proj.name or 'project', nut))
+			continue
 		base = os.path.splitext(os.path.basename(nut))[0]
 		out = os.path.join(os.path.dirname(nut), base + '_nut.h')
 		with open(nut, 'rb') as f:

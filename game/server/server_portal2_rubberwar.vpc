@@ -2,6 +2,7 @@
 //	SERVER_PORTAL2_RUBBERWAR.VPC — RubberWar/Portal-2 server on the CS:GO engine
 //-----------------------------------------------------------------------------
 
+$Macro SRCDIR		"..\.."
 $Macro GAMENAME 	"portal2"
 $Macro SRVSRCDIR	"."
 

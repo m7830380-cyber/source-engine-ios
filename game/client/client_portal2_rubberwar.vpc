@@ -5,6 +5,7 @@
 //	the mod's Portal 2 / GameUI sources). See https://github.com/RubberWar/Portal-2
 //-----------------------------------------------------------------------------
 
+$Macro SRCDIR		"..\.."
 $Macro GAMENAME 			"portal2"
 
 $Include "$SRCDIR\game\client\client_base.vpc"

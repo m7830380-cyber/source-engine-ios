@@ -16,7 +16,7 @@
 #endif
 
 // == MANAGED_CLASS_DECLARATIONS_START: Do not edit by hand ==
-class vgui::Label;
+namespace vgui { class Label; }
 // == MANAGED_CLASS_DECLARATIONS_END ==
 class HUDVideoPanel;
 class CNB_Gradient_Bar;

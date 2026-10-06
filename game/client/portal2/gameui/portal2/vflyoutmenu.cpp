@@ -363,10 +363,9 @@ void FlyoutMenu::LoadControlSettings( const char *dialogResourceName, const char
 		}
 		if ( bSuccess )
 		{
-			if ( IsX360() )
-			{
-				rDat->ProcessResolutionKeys( surface()->GetResolutionKey() );
-			}
+#if defined( _X360 )
+			rDat->ProcessResolutionKeys( surface()->GetResolutionKey() );
+#endif
 		}
 
 

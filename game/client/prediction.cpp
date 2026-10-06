@@ -1045,7 +1045,11 @@ void CPrediction::RunCommand( C_BasePlayer *player, CUserCmd *ucmd, IMoveHelper 
 #endif
 
 #ifdef PORTAL2
-	assert_cast<CPortal_Player*>( player )->PreventCrouchJump( ucmd );
+#ifdef CLIENT_DLL
+	static_cast<C_Portal_Player *>( player )->PreventCrouchJump( ucmd );
+#else
+	static_cast<CPortal_Player *>( player )->PreventCrouchJump( ucmd );
+#endif
 #endif
 
 	StartCommand( player, ucmd );

@@ -10,7 +10,7 @@
 // == MANAGED_CLASS_DECLARATIONS_START: Do not edit by hand ==
 class CNB_Header_Footer;
 class CNB_Horiz_List;
-class vgui::Button;
+namespace vgui { class Button; }
 // == MANAGED_CLASS_DECLARATIONS_END ==
 class CNB_Button;
 struct ASW_Mission_Chooser_Mission;

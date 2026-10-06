@@ -1,10 +1,11 @@
 #ifndef _DEFINED_SDK_VGUI_MUSIC_IMPORTER_H
 #define _DEFINED_SDK_VGUI_MUSIC_IMPORTER_H
 
+#include "portal2_ios_compat.h"
 #include <vgui/VGUI.h>
 #include "vgui_controls/FileOpenDialog.h"
 
-class vgui::IScheme;
+namespace vgui { class IScheme; }
 
 //--------------------------------------------------------
 // Information about the mp3 file being loaded (artist, genre, etc.)

@@ -1,4 +1,4 @@
-//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
+//===== Copyright ù 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: Implements all the functions exported by the GameUI dll
 //
@@ -66,6 +66,37 @@
 typedef BaseModUI::CBaseModPanel UI_BASEMOD_PANEL_CLASS;
 inline UI_BASEMOD_PANEL_CLASS & GetUiBaseModPanelClass() { return UI_BASEMOD_PANEL_CLASS::GetSingleton(); }
 inline UI_BASEMOD_PANEL_CLASS & ConstructUiBaseModPanelClass() { return * new UI_BASEMOD_PANEL_CLASS(); }
+#include "matchmaking/swarm/imatchext_swarm.h"
+
+#if defined( PORTAL2 ) && !defined( SWARM_DLL ) && !defined( SDK_DLL )
+class CMatchExtSwarmPortal2Stub : public IMatchExtSwarm
+{
+public:
+	CMatchExtSwarmPortal2Stub() : m_kvMissions( "Missions" ) {}
+
+	virtual KeyValues *GetAllMissions() { return &m_kvMissions; }
+	virtual KeyValues *GetMapInfo( KeyValues *pSettings, KeyValues **ppMissionInfo = NULL )
+	{
+		if ( ppMissionInfo )
+			*ppMissionInfo = NULL;
+		(void)pSettings;
+		return NULL;
+	}
+	virtual KeyValues *GetMapInfoByBspName( KeyValues *pSettings, char const *szBspMapName, KeyValues **ppMissionInfo = NULL )
+	{
+		if ( ppMissionInfo )
+			*ppMissionInfo = NULL;
+		(void)pSettings;
+		(void)szBspMapName;
+		return NULL;
+	}
+
+private:
+	KeyValues m_kvMissions;
+};
+static CMatchExtSwarmPortal2Stub s_MatchExtPortal2Stub;
+#endif
+
 class IMatchExtSwarm *g_pMatchExtSwarm = NULL;
 
 #ifdef _X360
@@ -199,6 +230,9 @@ void CGameUI::Initialize( CreateInterfaceFn factory )
 #ifdef SDK_DLL
 	g_pMatchExtSwarm = ( IMatchExtSwarm * ) factory( IMATCHEXT_SWARM_INTERFACE, NULL );
 #endif
+#if defined( PORTAL2 ) && !defined( SWARM_DLL ) && !defined( SDK_DLL )
+	g_pMatchExtSwarm = &s_MatchExtPortal2Stub;
+#endif
 	bFailed = !enginesurfacefuncs || !gameuifuncs || !enginevguifuncs ||
 		!xboxsystem ||
 #ifdef _X360
@@ -208,6 +242,9 @@ void CGameUI::Initialize( CreateInterfaceFn factory )
 		!g_pMatchExtSwarm ||
 #endif
 #ifdef SDK_DLL
+		!g_pMatchExtSwarm ||
+#endif
+#if defined( PORTAL2 ) && !defined( SWARM_DLL ) && !defined( SDK_DLL )
 		!g_pMatchExtSwarm ||
 #endif
 		!g_pMatchFramework;

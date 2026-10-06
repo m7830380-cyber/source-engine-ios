@@ -9,7 +9,7 @@
 
 // == MANAGED_CLASS_DECLARATIONS_START: Do not edit by hand ==
 class CBitmapButton;
-class vgui::Label;
+namespace vgui { class Label; }
 // == MANAGED_CLASS_DECLARATIONS_END ==
 
 class CNB_Select_Level_Entry : public vgui::EditablePanel

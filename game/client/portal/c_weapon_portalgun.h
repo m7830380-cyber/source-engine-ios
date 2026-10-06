@@ -1,4 +1,4 @@
-//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
+//========= Copyright ù 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -97,6 +97,8 @@ private:
 	Beam_t	*m_pBeam;
 
 	float	m_fBrightness;
+	bool	m_bDrawInMainRender;
+	bool	m_bDrawInPortalRender;
 };
 
 
@@ -256,7 +258,7 @@ protected:
 public:
 
 	virtual int		DrawModel( int flags, const RenderableInstance_t& instance );
-	virtual void	ViewModelDrawn( C_BaseViewModel *pBaseViewModel );
+	virtual void	ViewModelDrawn( int nFlags, C_BaseViewModel *pBaseViewModel );
 	virtual void	OnPreDataChanged( DataUpdateType_t updateType );
 	virtual void	OnDataChanged( DataUpdateType_t updateType );
 	virtual void	ClientThink( void );

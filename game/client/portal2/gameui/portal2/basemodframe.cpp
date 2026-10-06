@@ -606,10 +606,9 @@ void CBaseModFrame::LoadControlSettings( const char *dialogResourceName, const c
 		}
 		if ( bSuccess )
 		{
-			if ( IsX360() )
-			{
-				rDat->ProcessResolutionKeys( surface()->GetResolutionKey() );
-			}
+#if defined( _X360 )
+			rDat->ProcessResolutionKeys( surface()->GetResolutionKey() );
+#endif
 			if ( pConditions && pConditions->GetFirstSubKey() )
 			{
 				GetBuildGroup()->ProcessConditionalKeys( rDat, pConditions );

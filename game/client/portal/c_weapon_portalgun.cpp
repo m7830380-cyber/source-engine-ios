@@ -1,4 +1,4 @@
-//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
+//========= Copyright  1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -47,7 +47,9 @@ PRECACHE_REGISTER_END()
 
 CPortalgunEffectBeam::CPortalgunEffectBeam( void ) 
 	: m_pBeam( NULL ), 
-	  m_fBrightness( 255.0f )
+	  m_fBrightness( 255.0f ),
+	  m_bDrawInMainRender( false ),
+	  m_bDrawInPortalRender( false )
 {}
 
 CPortalgunEffectBeam::~CPortalgunEffectBeam( void )
@@ -114,8 +116,8 @@ void CPortalgunEffectBeam::Init( int startAttachment, int endAttachment, CBaseEn
 
 	if ( m_pBeam )
 	{
-		m_pBeam->m_bDrawInMainRender = false;
-		m_pBeam->m_bDrawInPortalRender = false;
+		m_bDrawInMainRender = false;
+		m_bDrawInPortalRender = false;
 	}
 }
 
@@ -124,7 +126,7 @@ void CPortalgunEffectBeam::SetVisibleViewModel( bool visible /*= true*/ )
 	if ( m_pBeam == NULL )
 		return;
 
-	m_pBeam->m_bDrawInMainRender = visible;
+	m_bDrawInMainRender = visible;
 }
 
 int CPortalgunEffectBeam::IsVisibleViewModel( void ) const
@@ -132,7 +134,7 @@ int CPortalgunEffectBeam::IsVisibleViewModel( void ) const
 	if ( m_pBeam == NULL )
 		return false;
 
-	return m_pBeam->m_bDrawInMainRender;
+	return m_bDrawInMainRender;
 }
 
 void CPortalgunEffectBeam::SetVisible3rdPerson( bool visible /*= true*/ )
@@ -140,7 +142,7 @@ void CPortalgunEffectBeam::SetVisible3rdPerson( bool visible /*= true*/ )
 	if ( m_pBeam == NULL )
 		return;
 
-	m_pBeam->m_bDrawInPortalRender = visible;
+	m_bDrawInPortalRender = visible;
 }
 
 int CPortalgunEffectBeam::SetVisible3rdPerson( void ) const
@@ -148,7 +150,7 @@ int CPortalgunEffectBeam::SetVisible3rdPerson( void ) const
 	if ( m_pBeam == NULL )
 		return false;
 
-	return m_pBeam->m_bDrawInPortalRender;
+	return m_bDrawInPortalRender;
 }
 
 void CPortalgunEffectBeam::SetBrightness( float fBrightness )
@@ -985,13 +987,13 @@ int C_WeaponPortalgun::DrawModel( int flags, const RenderableInstance_t& instanc
 //-----------------------------------------------------------------------------
 // Purpose: First-person function call after viewmodel has been drawn
 //-----------------------------------------------------------------------------
-void C_WeaponPortalgun::ViewModelDrawn( C_BaseViewModel *pBaseViewModel )
+void C_WeaponPortalgun::ViewModelDrawn( int nFlags, C_BaseViewModel *pBaseViewModel )
 {
 	// Render our effects
 	DrawEffects( false );
 
 	// Pass this back up
-	BaseClass::ViewModelDrawn( pBaseViewModel );
+	BaseClass::ViewModelDrawn( nFlags, pBaseViewModel );
 }
 
 void UpdatePoseParameter( C_BaseAnimating *pBaseAnimating, int iPose, float fValue )

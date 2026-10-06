@@ -7,6 +7,7 @@
 #ifndef __BASEMOD360UI_H__
 #define __BASEMOD360UI_H__
 
+#include "portal2_ios_compat.h"
 #include "basemodpanel.h"
 #include "basemodframe.h"
 #include "UIGameData.h"

@@ -938,7 +938,7 @@ Panel* Audio::NavigateBack()
 
 void Audio::UseSelectedLanguage()
 {
-	m_pchUpdatedAudioLanguage = GetLanguageName( m_nSelectedAudioLanguage );
+	m_pchUpdatedAudioLanguage = GetLanguageShortName( m_nSelectedAudioLanguage );
 }
 
 void Audio::ResetLanguage()

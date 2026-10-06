@@ -33,7 +33,7 @@
 #include "nb_button.h"
 #include "cdll_util.h"
 #include "sdk_vgui_music_importer.h"
-#include "c_sdk_jukebox.h"
+#include "portal2/c_sdk_jukebox.h"
 #include <vgui_controls/ListPanel.h>
 
 // memdbgon must be the last include file in a .cpp file!!!

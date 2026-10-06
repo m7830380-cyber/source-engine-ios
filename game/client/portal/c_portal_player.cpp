@@ -1,4 +1,4 @@
-//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
+//===== Copyright ù 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose:		Player for .
 //
@@ -232,8 +232,6 @@ void C_PortalRagdoll::OnDataChanged( DataUpdateType_t type )
 }
 
 
-LINK_ENTITY_TO_CLASS( player, C_Portal_Player );
-
 IMPLEMENT_CLIENTCLASS_DT(C_Portal_Player, DT_Portal_Player, CPortal_Player)
 RecvPropFloat( RECVINFO( m_angEyeAngles[0] ) ),
 RecvPropFloat( RECVINFO( m_angEyeAngles[1] ) ),
@@ -250,6 +248,8 @@ END_RECV_TABLE()
 
 BEGIN_PREDICTION_DATA( C_Portal_Player )
 END_PREDICTION_DATA()
+
+LINK_ENTITY_TO_CLASS( player, C_Portal_Player );
 
 static ConVar cl_playermodel( "cl_playermodel", "none", FCVAR_USERINFO | FCVAR_ARCHIVE | FCVAR_SERVER_CAN_EXECUTE, "Default Player Model");
 
@@ -1154,7 +1154,7 @@ Vector C_Portal_Player::GetAutoaimVector( float flDelta )
 {
 	// Never autoaim a predicted weapon (for now)
 	Vector	forward;
-	AngleVectors( EyeAngles() + m_Local.m_vecPunchAngle, &forward );
+	AngleVectors( EyeAngles() + m_Local.m_viewPunchAngle, &forward );
 	return	forward;
 }
 

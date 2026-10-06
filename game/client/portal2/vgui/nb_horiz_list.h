@@ -9,10 +9,10 @@
 #include "vgui_controls/phandle.h"
 
 // == MANAGED_CLASS_DECLARATIONS_START: Do not edit by hand ==
-class vgui::ImagePanel;
+namespace vgui { class ImagePanel; }
 class CBitmapButton;
 // == MANAGED_CLASS_DECLARATIONS_END ==
-class vgui::ScrollBar;
+namespace vgui { class ScrollBar; }
 
 class CNB_Horiz_List : public vgui::EditablePanel
 {

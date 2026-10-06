@@ -1,4 +1,4 @@
-//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
+//========= Copyright ù 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -766,6 +766,7 @@ void CInput::CAM_CameraThirdThink( void )
 		CTraceFilterSkipTwoEntities filter( pLocalPlayer, NULL );
 
 #ifdef PORTAL2
+#ifndef CSTRIKE15
 		C_Portal_Player *pPortalPlayer = static_cast< C_Portal_Player* >( pLocalPlayer );
 		if ( pPortalPlayer->GetTeamTauntState() >= TEAM_TAUNT_HAS_PARTNER )
 		{
@@ -781,7 +782,8 @@ void CInput::CAM_CameraThirdThink( void )
 				return;
 			}
 		}
-#endif
+#endif // !CSTRIKE15
+#endif // PORTAL2
 
 		trace_t trace;
 		UTIL_TraceHull( vecOrigin, vecOrigin - ( vecForward * vecCamOffset[DIST] ), user.m_pCameraThirdData->m_vecHullMin, user.m_pCameraThirdData->m_vecHullMax, MASK_SOLID, &filter, &trace );

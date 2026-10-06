@@ -22,16 +22,14 @@ void CProp_Portal_Shared::UpdatePortalTransformationMatrix( const matrix3x4_t &l
 {
 	VMatrix matPortal1ToWorldInv, matPortal2ToWorld, matRotation;
 
-	//inverse of this
-	MatrixInverseTR( localToWorld, matPortal1ToWorldInv );
+	MatrixInverseTR( VMatrix( localToWorld ), matPortal1ToWorldInv );
 
 	//180 degree rotation about up
 	matRotation.Identity();
 	matRotation.m[0][0] = -1.0f;
 	matRotation.m[1][1] = -1.0f;
 
-	//final
-	matPortal2ToWorld = remoteToWorld;	
+	matPortal2ToWorld = VMatrix( remoteToWorld );
 	*pMatrix = matPortal2ToWorld * matRotation * matPortal1ToWorldInv;
 }
 

@@ -79,6 +79,7 @@ public:
 	virtual void			PostDataUpdate( DataUpdateType_t updateType );
 	virtual void			GetStepSoundVelocities( float *velwalk, float *velrun );
 	virtual void			PlayStepSound( Vector &vecOrigin, surfacedata_t *psurface, float fvol, bool force );
+	void					PreventCrouchJump( CUserCmd *ucmd ) { (void)ucmd; }
 	virtual void			PreThink( void );
 	virtual void			DoImpactEffect( trace_t &tr, int nDamageType );
 

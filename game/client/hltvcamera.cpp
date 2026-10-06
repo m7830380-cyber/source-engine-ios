@@ -22,10 +22,32 @@
 #include "view_shared.h"
 #include "view.h"
 #include "ivrenderview.h"
+#if defined( CSTRIKE15 )
 #include "c_plantedc4.h"
 #include "basecsgrenade_projectile.h"
-#include "ivieweffects.h"
 #include "cs_hud_chat.h"
+#endif
+#include "ivieweffects.h"
+#include "iinput.h"
+#include "tier1/fmtstr.h"
+#include "hud_basechat.h"
+#include "c_team.h"
+#if defined( CSTRIKE15 )
+#define HLTV_IS_GRENADE( pEnt )		( dynamic_cast< CBaseCSGrenadeProjectile* >( pEnt ) != NULL )
+#define HLTV_IS_FOCUS_ENT( pEnt )	( dynamic_cast<C_CSPlayer*>(pEnt) || dynamic_cast<C_PlantedC4*>(pEnt) || HLTV_IS_GRENADE( pEnt ) )
+#define HLTV_DEFAULT_FOV()			( CSGameRules()->DefaultFOV() )
+#define HLTV_IS_FREEZE_PERIOD()		( CSGameRules() && CSGameRules()->IsFreezePeriod() )
+#define HLTV_HAS_TEAM_SCORES()		( CSGameRules() != NULL )
+#else
+// the spectator code below names CS:GO's two playing teams
+#define TEAM_TERRORIST	FIRST_GAME_TEAM
+#define TEAM_CT			( FIRST_GAME_TEAM + 1 )
+#define HLTV_IS_GRENADE( pEnt )		false
+#define HLTV_IS_FOCUS_ENT( pEnt )	( (pEnt)->IsPlayer() )
+#define HLTV_DEFAULT_FOV()			( 90.0f )
+#define HLTV_IS_FREEZE_PERIOD()		false
+#define HLTV_HAS_TEAM_SCORES()		false
+#endif
 #include "in_buttons.h"
 #include <vgui/IInput.h>
 #include "vgui_controls/Controls.h"
@@ -241,7 +263,11 @@ void C_HLTVCamera::CalcChaseCamView( Vector& eyeOrigin, QAngle& eyeAngles, float
 	}
 #endif*/
 
+#if defined( CSTRIKE15 )
 	CBaseCSGrenadeProjectile *pGrenade = dynamic_cast< CBaseCSGrenadeProjectile* >( target1 );
+#else
+	struct NoGrenade_t { int m_nBounces; Vector GetLocalVelocity() const { return vec3_origin; } } *pGrenade = NULL;
+#endif
 
 	if ( pGrenade )
 	{
@@ -463,7 +489,7 @@ Vector C_HLTVCamera::CalcIdealOverviewPosition( Vector vecStartPos, Vector vOldO
 	for ( int i = 0; i < count; i++ )
 	{
 		CBaseEntity *pOther = pEntList[i];
-		if ( dynamic_cast<C_CSPlayer*>(pOther) || dynamic_cast<C_PlantedC4*>(pOther) || dynamic_cast<CBaseCSGrenadeProjectile*>(pOther) )
+		if ( HLTV_IS_FOCUS_ENT( pOther ) )
 		{
 			pFocusEnts[focusCount] = pOther;
 			focusCount++;
@@ -497,7 +523,7 @@ Vector C_HLTVCamera::CalcIdealOverviewPosition( Vector vecStartPos, Vector vOldO
 int C_HLTVCamera::GetMode()
 {
 	// hacky....
-	if ( dynamic_cast< C_BaseCSGrenadeProjectile* >( GetPrimaryTarget() ) )
+	if ( HLTV_IS_GRENADE( GetPrimaryTarget() ) )
 	{
 		m_bIsFollowingGrenade = true;
 		return OBS_MODE_CHASE;
@@ -514,6 +540,7 @@ int C_HLTVCamera::GetMode()
 	// to get here, our target is not a grenade, but we think we're still folowing one
  	if ( m_bIsFollowingGrenade == true )
  	{
+#if defined( CSTRIKE15 )
  		if ( C_CSPlayer::GetLocalCSPlayer() )	
  		{
  			// if we're the cameraman and we're holding the shift key after a grenade has exired, 
@@ -525,6 +552,9 @@ int C_HLTVCamera::GetMode()
  			// otherwise, we're not following a grenade anymore
  			m_bIsFollowingGrenade = false;
  		}
+#else
+		m_bIsFollowingGrenade = false;
+#endif
  	}
 
 	return m_nCameraMode;	
@@ -549,7 +579,7 @@ C_BaseEntity* C_HLTVCamera::GetPrimaryTarget()
 
 	C_BaseEntity* target = ClientEntityList().GetEnt( m_iTarget1 );
 
-	if ( !target || (m_bIsFollowingGrenade && dynamic_cast< CBaseCSGrenadeProjectile* >( target ) == NULL) )
+	if ( !target || (m_bIsFollowingGrenade && !HLTV_IS_GRENADE( target )) )
 	{
 		C_BaseEntity* oldTarget = ClientEntityList().GetEnt( m_iLastTarget1 );
 		if ( oldTarget )
@@ -569,7 +599,7 @@ C_BasePlayer *C_HLTVCamera::GetCameraMan()
 
 void C_HLTVCamera::CalcInEyeCamView( Vector& eyeOrigin, QAngle& eyeAngles, float& fov )
 {
-	C_BasePlayer *pPlayer = dynamic_cast<C_CSPlayer*>(GetPrimaryTarget());
+	C_BasePlayer *pPlayer = ToBasePlayer( GetPrimaryTarget() );
 
 	if ( !pPlayer )
 		return;
@@ -577,9 +607,11 @@ void C_HLTVCamera::CalcInEyeCamView( Vector& eyeOrigin, QAngle& eyeAngles, float
 	if ( !pPlayer->IsAlive() )
 	{
 		// if dead, show from 3rd person
+#if defined( CSTRIKE15 )
 		C_CSPlayer *pCSPlayer =	static_cast<C_CSPlayer*>( pPlayer );
 		if ( pCSPlayer && pCSPlayer->GetLastKillerIndex() )
 			m_iTarget2 = pCSPlayer->GetLastKillerIndex();
+#endif
 
 		CalcChaseCamView( eyeOrigin, eyeAngles, fov );
 		return;
@@ -700,15 +732,17 @@ extern ConVar fov_cs_debug;
 // movement code is a copy of CGameMovement::FullNoClipMove()
 void C_HLTVCamera::CalcRoamingView(Vector& eyeOrigin, QAngle& eyeAngles, float& fov)
 {
+#if defined( CSTRIKE15 )
 	if ( !CSGameRules() )
 		return;
+#endif
 
 	if ( m_bIsSpecLerping )
 	{
 		eyeOrigin = m_vCamOrigin;
 		eyeAngles = m_aCamAngle;
 		//fov = m_flFOV;
-		fov = fov_cs_debug.GetInt() > 0 ? m_flFOV : CSGameRules()->DefaultFOV();
+		fov = fov_cs_debug.GetInt() > 0 ? m_flFOV : HLTV_DEFAULT_FOV();
 
 		if ( (m_vecSpecLerpIdealPos == m_vCamOrigin && m_angSpecLerpIdealAng == m_aCamAngle) || m_flSpecLerpEndTime <= gpGlobals->curtime )
 		{
@@ -819,7 +853,7 @@ void C_HLTVCamera::CalcRoamingView(Vector& eyeOrigin, QAngle& eyeAngles, float& 
 	eyeOrigin = m_vCamOrigin;
 	eyeAngles = m_aCamAngle;
 	//fov = m_flFOV;
-	fov = fov_cs_debug.GetInt() > 0 ? m_flFOV : CSGameRules()->DefaultFOV();
+	fov = fov_cs_debug.GetInt() > 0 ? m_flFOV : HLTV_DEFAULT_FOV();
 }
 
 void C_HLTVCamera::CalcFixedView(Vector& eyeOrigin, QAngle& eyeAngles, float& fov)
@@ -1144,7 +1178,11 @@ void C_HLTVCamera::SetPrimaryTarget( int nEntity )
 	IGameEvent *event = gameeventmanager->CreateEvent( "hltv_changed_target" );
 	if ( event )
 	{
+#if defined( CSTRIKE15 )
 		event->SetInt("userid", pLocalPlayer->GetUserID() );
+#else
+		event->SetInt("userid", C_BasePlayer::GetLocalPlayer() ? C_BasePlayer::GetLocalPlayer()->GetUserID() : 0 );
+#endif
 		event->SetInt( "mode", m_nCameraMode );
 		event->SetInt( "old_target", m_iLastTarget1 );
 		event->SetInt( "obs_target", m_iTarget1 );
@@ -1314,7 +1352,7 @@ void C_HLTVCamera::Update()
 		int numFastForwardTicks = 0;
 
 		// Get the team score
-		if ( CSGameRules() )
+		if ( HLTV_HAS_TEAM_SCORES() )
 		{
 			C_Team *tTeam = GetGlobalTeam( TEAM_TERRORIST );
 			C_Team *ctTeam = GetGlobalTeam( TEAM_CT );
@@ -1355,7 +1393,7 @@ void C_HLTVCamera::Update()
 								( player->GetFlags() & FL_FROZEN ) || // skip freezetime
 								( player->IsObserver() ) ||
 								( player->GetTeamNumber() == TEAM_SPECTATOR ) ||
-								( CSGameRules() && CSGameRules()->IsFreezePeriod() ) )
+								HLTV_IS_FREEZE_PERIOD() )
 								break; // break to skip some ticks
 
 							bLockedToRequestedAccount = true;
@@ -1729,6 +1767,7 @@ void C_HLTVCamera::SetAutoDirector( AutodirectorState_t eState )
 				// is this played the selected cameraman
 				if ( ( uint32 )( spec_autodirector_cameraman.GetInt() ) == compareSteamID.GetAccountID() )
 				{
+#if defined( CSTRIKE15 )
 					// validate that they are a tournament caster
 					for ( int j = 0; j < MAX_TOURNAMENT_ACTIVE_CASTER_COUNT; j++ )
 					{
@@ -1750,6 +1789,7 @@ void C_HLTVCamera::SetAutoDirector( AutodirectorState_t eState )
 							}
 						}
 					}
+#endif
 				}
 				if ( m_iCameraMan )
 					break;
@@ -1772,6 +1812,7 @@ void C_HLTVCamera::SetAutoDirector( AutodirectorState_t eState )
 	}
 	else // OFF or PAUSED
 	{
+#if defined( CSTRIKE15 )
 		C_CSPlayer *pLocalPlayer = C_CSPlayer::GetLocalCSPlayer();
 		CBaseHudChat *hudChat = ( CBaseHudChat * )GET_HUDELEMENT( CHudChat );
 		if ( hudChat && pLocalPlayer && m_iCameraMan != 0 && IsAutoDirectorOn() )
@@ -1780,6 +1821,7 @@ void C_HLTVCamera::SetAutoDirector( AutodirectorState_t eState )
 			
 			pLocalPlayer->EmitSound("UI.ButtonRolloverLarge");		
 		}
+#endif
 
 		spec_autodirector.SetValue( 0 );
 		m_iCameraMan = 0;

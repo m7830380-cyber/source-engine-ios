@@ -23,6 +23,7 @@
 #include "vgui_int.h"
 #include "ienginevgui.h"
 #include "inputsystem/iinputsystem.h"
+#include "steam/steam_api.h"
 
 
 // memdbgon must be the last include file in a .cpp file!!!

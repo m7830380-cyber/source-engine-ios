@@ -126,6 +126,7 @@ ConVar	spec_freeze_time( "spec_freeze_time", "4.0",  FCVAR_CHEAT | FCVAR_REPLICA
 ConVar	spec_freeze_traveltime( "spec_freeze_traveltime", "0.4", FCVAR_CHEAT | FCVAR_REPLICATED, "Time taken to zoom in to frame a target in observer freeze cam.", true, 0.01, false, 0 );
 ConVar	spec_freeze_distance_min( "spec_freeze_distance_min", "96", FCVAR_CHEAT, "Minimum random distance from the target to stop when framing them in observer freeze cam." );
 ConVar	spec_freeze_distance_max( "spec_freeze_distance_max", "200", FCVAR_CHEAT, "Maximum random distance from the target to stop when framing them in observer freeze cam." );
+ConVar  spec_freeze_panel_extended_time( "spec_freeze_panel_extended_time", "0.0", FCVAR_REPLICATED, "Time spent with the freeze panel still up after observer freeze cam is done." );
 #endif
 
 ConVar	cl_player_fullupdate_predicted_origin_fix( "cl_player_fullupdate_predicted_origin_fix", "1" );
@@ -558,7 +559,11 @@ C_BasePlayer::C_BasePlayer() : m_iv_vecViewOffset( "C_BasePlayer::m_iv_vecViewOf
 	m_AimDirection.Init();
 
 	m_flDuckAmount = 0.0f;
+#if defined( CSTRIKE15 )
 	m_flDuckSpeed = CS_PLAYER_DUCK_SPEED_IDEAL;
+#else
+	m_flDuckSpeed = 8.0f;
+#endif
 	m_vecLastPositionAtFullCrouchSpeed = vec2_origin;
 
 	m_bHasWalkMovedSinceLastJump = false;
@@ -999,6 +1004,7 @@ void C_BasePlayer::ClientThink()
 
 		if ( GetObserverTarget( ) && ( GetObserverMode( ) == OBS_MODE_IN_EYE || GetObserverMode( ) == OBS_MODE_CHASE ) )
 		{
+#if defined( CSTRIKE15 )
 			C_CSPlayer *pPlayer = dynamic_cast< C_CSPlayer* >( GetObserverTarget( ) );
 
 			if ( pPlayer )
@@ -1011,6 +1017,7 @@ void C_BasePlayer::ClientThink()
 					bSwitchTargets = false;
 				}
 			}
+#endif
 		}
 
 		if ( bSwitchTargets )
@@ -1211,6 +1218,7 @@ void C_BasePlayer::PostDataUpdate( DataUpdateType_t updateType )
 			bHideFreezePanel = true;
 			m_bWasFreezePanelExtended = false;
 		}
+#if defined( CSTRIKE15 )
 		else if ( IsAlive() )
 		{
 			SFHudFreezePanel *pPanel = GET_HUDELEMENT( SFHudFreezePanel );
@@ -1220,6 +1228,7 @@ void C_BasePlayer::PostDataUpdate( DataUpdateType_t updateType )
 				bHideFreezePanel = true;
 			}	
 		}
+#endif
 		
 		if ( bHideFreezePanel && !g_HltvReplaySystem.GetHltvReplayDelay() && !g_HltvReplaySystem.IsDelayedReplayRequestPending() )
 		{
@@ -2061,6 +2070,8 @@ void C_BasePlayer::CalcChaseCamView(Vector& eyeOrigin, QAngle& eyeAngles, float&
 
 #ifdef CSTRIKE_DLL
 	CBaseCSGrenadeProjectile *pGrenade = dynamic_cast< CBaseCSGrenadeProjectile* >( target );
+#else
+	C_BaseEntity *pGrenade = NULL;
 #endif
 
 	// QAngle tmpangles;
@@ -3765,11 +3776,13 @@ void C_BasePlayer::OnTimeJumpAllPlayers()
 {
 	for ( int i = 1; i <= MAX_PLAYERS; i++ )
 	{
+#if defined( CSTRIKE15 )
 		C_CSPlayer *pPlayer = ToCSPlayer( UTIL_PlayerByIndex( i ) );
 		if ( pPlayer )
 		{
 			pPlayer->OnTimeJump();
 		}
+#endif
 	}
 }
 

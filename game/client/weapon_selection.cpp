@@ -660,6 +660,7 @@ void CBaseHudWeaponSelection::SelectWeapon( void )
 	
 		engine->ClientCmd( "cancelselect\n" );
 
+#if defined( CSTRIKE15 )
 		if (player->GetTeamNumber() == TEAM_CT)
 		{
 			// Play the "weapon selected" sound
@@ -671,6 +672,7 @@ void CBaseHudWeaponSelection::SelectWeapon( void )
 			// Play the "weapon selected" sound
 			player->EmitSound("Player.WeaponSelected_T");
 		}
+#endif
 		
 	}
 }
@@ -696,6 +698,7 @@ void CBaseHudWeaponSelection::CancelWeaponSelection( void )
 		// Play the "close weapon selection" sound based on faction
 		//player->EmitSound( "Player.WeaponSelectionClose" );
 
+#if defined( CSTRIKE15 )
 		if (player->GetTeamNumber() == TEAM_CT)
 		{
 			// Play the CT Suit sound
@@ -707,6 +710,7 @@ void CBaseHudWeaponSelection::CancelWeaponSelection( void )
 			// Play the T Suit sound
 			player->EmitSound("Player.WeaponSelectionClose_T");
 		}
+#endif
 
 	}
 	else

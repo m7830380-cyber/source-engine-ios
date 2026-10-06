@@ -128,7 +128,9 @@ public:
 
 #if defined ( CLIENT_DLL )
 	C_ViewmodelAttachmentModel *AddViewmodelArmModel( const char *pszModel, int nSkintoneIndex = -1 );
+#if defined( CSTRIKE15 )
 	C_ViewmodelAttachmentModel* FindArmModelForLoadoutPosition( loadout_positions_t nPosition ) const;
+#endif
 #endif
 	void					AddViewmodelLabel( CEconItemView *pItem );
 	void					AddViewmodelStatTrak( CEconItemView *pItem, int nStatTrakType, int nWeaponID, AccountID_t holderAcctId );

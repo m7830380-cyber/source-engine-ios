@@ -27,10 +27,12 @@
 #include "hltvcamera.h"
 #include "hud.h"
 #include "hud_element_helper.h"
+#if defined( CSTRIKE15 )
 #include "Scaleform/HUD/sfhud_chat.h"
 #include "Scaleform/HUD/sfhudfreezepanel.h"
 #include "Scaleform/HUD/sfhud_teamcounter.h"
 #include "Scaleform/mapoverview.h"
+#endif
 #include "hltvreplaysystem.h"
 #include "netmessages.h"
 #if defined( REPLAY_ENABLED )
@@ -44,12 +46,15 @@
 #include "c_playerresource.h"
 #include <localize/ilocalize.h>
 #include "gameui_interface.h"
+#include "vgui/ILocalize.h"
 #include "menu.h" // CHudMenu
 #if defined( _X360 )
 #include "xbox/xbox_console.h"
 #endif
 #include "matchmaking/imatchframework.h"
+#if defined( CSTRIKE15 )
 #include "clientmode_csnormal.h"
+#endif
 
 
 #ifdef PORTAL2
@@ -667,6 +672,7 @@ int ClientModeShared::HudElementKeyInput( int down, ButtonCode_t keynum, const c
 		!GetFullscreenClientMode()->HudElementKeyInput( down, keynum, pszCurrentBinding ) )
 		return 0;
 
+#if defined( CSTRIKE15 )
 	if ( CSGameRules() && CSGameRules()->IsEndMatchVotingForNextMap() )
 	{
 		// this looks messy, but essentially, if the convar is set to true, use the bindings, if not use the raw keys
@@ -715,6 +721,7 @@ int ClientModeShared::HudElementKeyInput( int down, ButtonCode_t keynum, const c
 			return 0;
 		}
 	}
+#endif
 
 	if ( down && pszCurrentBinding && ContainsBinding( pszCurrentBinding, "radio1" ) )
 	{
@@ -756,7 +763,11 @@ void ClientModeShared::StartMessageMode( int iMessageModeType )
 		return;
 	}
 
+#if defined( CSTRIKE15 )
 	SFHudChat* pChat = GET_HUDELEMENT( SFHudChat );
+#else
+	CBaseHudChat *pChat = CBaseHudChat::GetHudChat();
+#endif
 	if ( pChat )
 	{
 		pChat->StartMessageMode( iMessageModeType );
@@ -1082,7 +1093,9 @@ void ClientModeShared::FireGameEvent( IGameEvent *event )
 	{
 		CLocalPlayerFilter filter;
 		C_BaseEntity::EmitSound( filter, SOUND_FROM_LOCAL_PLAYER, "Music.StopMenuMusic" );
+#if defined( CSTRIKE15 )
 		GameUI().SetBackgroundMusicDesired( false );
+#endif
 	}
 	else if ( Q_strcmp( "player_disconnect", eventname ) == 0 )
 	{
@@ -1098,8 +1111,10 @@ void ClientModeShared::FireGameEvent( IGameEvent *event )
 		C_BasePlayer *pPlayer = USERID2PLAYER( userID );
 
 		// don't show disconnects for bots in coop
+#if defined( CSTRIKE15 )
 		if ( CSGameRules() && CSGameRules()->IsPlayingCooperativeGametype() && (pPlayer && pPlayer->IsBot()) )
 			return;
+#endif
 
 		if ( !hudChat || !pPlayer )
 			return;

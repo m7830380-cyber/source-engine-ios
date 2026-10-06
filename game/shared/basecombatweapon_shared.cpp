@@ -13,10 +13,12 @@
 #include "datacache/imdlcache.h"
 #include "tier0/vprof.h"
 #include "collisionutils.h"
+#if defined( CSTRIKE15 )
 #include "econ_entity.h"
 #include "econ_item_view.h"
 #include "econ_item_inventory.h"
 #include "game_item_schema.h"
+#endif
 
 #if !defined( CLIENT_DLL )
 
@@ -904,9 +906,11 @@ const char *CBaseCombatWeapon::GetAnimPrefix( void ) const
 //-----------------------------------------------------------------------------
 const char *CBaseCombatWeapon::GetPrintName( void ) const
 {
+#if defined( CSTRIKE15 )
 	if ( GetEconItemView( ) )
 		return GetEconItemView( )->GetItemDefinition()->GetItemBaseName();
 	else
+#endif
 		return GetWpnData().szPrintName;
 }
 
@@ -3412,6 +3416,7 @@ END_NETWORK_TABLE()
 // weapons got 0 reserve ammo and could not reload. Hand out a default item
 // view for the weapon's definition, as retail does for unowned weapons. The
 // views only hold static schema data, so one per definition is shared.
+#if defined( CSTRIKE15 )
 static CEconItemView *GetDefaultItemViewForWeapon( const CBaseCombatWeapon *pWeapon )
 {
 	static CUtlMap< item_definition_index_t, CEconItemView * > s_mapViews( DefLessFunc( item_definition_index_t ) );
@@ -3438,6 +3443,7 @@ static CEconItemView *GetDefaultItemViewForWeapon( const CBaseCombatWeapon *pWea
 	}
 	return s_mapViews[i];
 }
+#endif
 
 #if defined( CSTRIKE15 )
 void CBaseCombatWeapon::SetOfflineItemID( uint64 ullItemID )
@@ -3480,8 +3486,10 @@ const CEconItemView* CBaseCombatWeapon::GetEconItemView( void ) const
 #if defined( CSTRIKE15 )
 	if ( CEconItemView *pOfflineItem = GetOfflineItemView() )
 		return pOfflineItem;
-#endif
 	return GetDefaultItemViewForWeapon( this );
+#else
+	return NULL; // no item economy
+#endif
 }
 
 CEconItemView* CBaseCombatWeapon::GetEconItemView( void )
@@ -3489,8 +3497,10 @@ CEconItemView* CBaseCombatWeapon::GetEconItemView( void )
 #if defined( CSTRIKE15 )
 	if ( CEconItemView *pOfflineItem = GetOfflineItemView() )
 		return pOfflineItem;
-#endif
 	return GetDefaultItemViewForWeapon( this );
+#else
+	return NULL; // no item economy
+#endif
 }
 
 int CBaseCombatWeapon::GetReserveAmmoCount( AmmoPosition_t nAmmoPosition, CBaseCombatCharacter * pForcedOwner/* = NULL*/  )

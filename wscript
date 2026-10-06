@@ -79,6 +79,21 @@ PROJECT_OVERRIDES = {
 	'vgui2': 'vgui2/src/vgui_dll.vpc',
 }
 
+# --build-games=portal2: Portal 2 game modules on the CS:GO engine. The
+# engine, materialsystem and the other runtime modules are the same CS:GO
+# build; only the game DLLs (and the title-specific matchmaking) change.
+# Valve's own Portal 2 project scripts from the cstrike15 tree drive them,
+# with the files the leak lacks restored from RubberWar's ASW-based Portal 2
+# recreation or rebuilt under game/*/portal2.
+PORTAL2_PROJECTS = {
+	'client': 'game/client/client_portal2.vpc',
+	'server': 'game/server/server_portal2.vpc',
+	'matchmaking': 'matchmaking/matchmaking_portal2.vpc',
+}
+
+# CS:GO-only defines that must not reach the Portal 2 game modules.
+PORTAL2_DROP_DEFINES = set(['CSTRIKE15', 'CSTRIKE_REL_BUILD', 'CSTRIKE_DLL', 'CSTRIKE'])
+
 # VPC link names that are not VPC projects -> waf task/uselib names.
 EXTERNAL_LIBS = {
 	'sdl2': 'SDL2',
@@ -165,10 +180,21 @@ PROJECT_EXTRA_SOURCES = {
 	'server': ['common/steamid.cpp', 'game/shared/cstrike15/offline_inventory.cpp'],
 }
 
+# Extra sources for the Portal 2 game modules (replace the CS:GO entries).
+PORTAL2_EXTRA_SOURCES = {
+	'client': ['common/steamid.cpp',
+		# touch controls, from the source-engine port
+		'game/client/touch.cpp', 'game/client/in_touch.cpp'],
+	'server': ['common/steamid.cpp'],
+}
+
 # VPC link dependencies whose source is not part of the leak. Code that
 # needs them is compiled out or stubbed.
 MISSING_LIBS = set([
 	'steamdatagramlib',
+	# Portal 2: paint blob metaballs and the Puzzle Maker (not in the leak)
+	'blobulator',
+	'puzzlemaker_lib',
 	'libcef',
 	'tcmalloc',
 	'vtune',
@@ -251,7 +277,7 @@ def options(opt):
 		help = 'accepted for compatibility with the CI script [default: %default]')
 
 	grp.add_option('--build-games', action = 'store', dest = 'GAMES', type = 'string', default = 'csgo',
-		help = 'accepted for compatibility with the CI script [default: %default]')
+		help = 'game modules to build: csgo or portal2 [default: %default]')
 
 	grp.add_option('--projects', action = 'store', dest = 'PROJECTS', type = 'string', default = '',
 		help = 'comma separated root projects to build instead of the full game [default: all]')
@@ -276,6 +302,9 @@ def configure(conf):
 
 	conf.env.IOS = 1
 	conf.env.ANGLE = conf.options.ANGLE
+	conf.env.GAME = conf.options.GAMES
+	if conf.env.GAME not in ('csgo', 'portal2'):
+		conf.fatal('--build-games: csgo or portal2')
 	conf.env.PROJECTS = conf.options.PROJECTS
 
 	protoc = conf.options.PROTOC or os.environ.get('PROTOC', '')
@@ -285,6 +314,9 @@ def configure(conf):
 		conf.find_program('protoc', var = 'PROTOC')
 
 	defines = PLATFORM_DEFINES + IOS_DEFINES
+	if conf.env.GAME != 'csgo':
+		defines = [d for d in defines if not d.startswith('IOS_DEFAULT_GAME=')]
+		defines += ['IOS_DEFAULT_GAME="%s"' % conf.env.GAME]
 	if conf.options.ANGLE:
 		defines += ['ANGLE=1']
 	defines += ['DEBUG', '_DEBUG'] if conf.options.DEBUG_ENGINE else ['NDEBUG']
@@ -413,9 +445,20 @@ def _project_map(vpc):
 		projects[k] = v
 	return projects
 
-def _load_projects(roots):
+def _game_conditionals(game, name):
+	'''VPC conditionals for one project: the game DLLs of a non-CS:GO title
+	see that title's conditional instead of $CSGO'''
+	conds = dict(VPC_CONDITIONALS)
+	if game == 'portal2' and name in PORTAL2_PROJECTS:
+		del conds['CSGO']
+		conds['PORTAL2'] = 1
+	return conds
+
+def _load_projects(roots, game = 'csgo'):
 	vpc = _vpc()
 	pmap = _project_map(vpc)
+	if game == 'portal2':
+		pmap.update(PORTAL2_PROJECTS)
 	parsed = {}
 	order = []
 	todo = list(roots)
@@ -430,7 +473,9 @@ def _load_projects(roots):
 			continue
 		macros = dict(VPC_MACROS)
 		macros['PROJECTNAME'] = name
-		proj = vpc.parse('.', path, VPC_CONDITIONALS, macros)
+		if game == 'portal2' and name in PORTAL2_PROJECTS:
+			macros['GAMENAME'] = 'portal2'
+		proj = vpc.parse('.', path, _game_conditionals(game, name), macros)
 		parsed[name] = proj
 		order.append(name)
 		for dep in proj.libs + proj.implibs:
@@ -489,11 +534,11 @@ def _uses(names):
 		out.append(EXTERNAL_LIBS.get(low, low))
 	return out
 
-def _defines(proj):
+def _defines(proj, drop = DROP_DEFINES):
 	out = []
 	for d in proj.defines:
 		key = d.split('=')[0]
-		if key in DROP_DEFINES or '$' in d:
+		if key in drop or '$' in d:
 			continue
 		out.append(d)
 	out.append('MEMOVERRIDE_MODULE=%s' % proj.macros.get('PROJECTNAME', proj.name))
@@ -654,7 +699,12 @@ def build(bld):
 	build_custom_projects(bld)
 
 	roots = [p for p in bld.env.PROJECTS.split(',') if p] if bld.env.PROJECTS else ROOT_PROJECTS
-	projects = _load_projects(roots)
+	game = bld.env.GAME or 'csgo'
+	projects = _load_projects(roots, game)
+	extra_sources = PROJECT_EXTRA_SOURCES
+	if game == 'portal2':
+		extra_sources = dict(PROJECT_EXTRA_SOURCES)
+		extra_sources.update(PORTAL2_EXTRA_SOURCES)
 
 	# Shared libraries other modules link against (VPC $ImpLib: tier0,
 	# vstdlib, togl, ...) get Valve's POSIX "lib" prefix so -l<name> finds
@@ -671,7 +721,7 @@ def build(bld):
 		_gen_protos(bld, proj)
 		_gen_nuts(proj)
 
-		sources = [s for s in proj.sources if os.path.exists(s)] + PROJECT_EXTRA_SOURCES.get(name, [])
+		sources = [s for s in proj.sources if os.path.exists(s)] + extra_sources.get(name, [])
 		missing = [s for s in proj.sources if not os.path.exists(s)]
 		for s in missing:
 			Logs.warn('%s: missing source %s' % (name, s))
@@ -681,6 +731,8 @@ def build(bld):
 
 		env = bld.env.derive()
 		env.append_value('CXXFLAGS', PROJECT_EXTRA_CXXFLAGS.get(name, []))
+		if game == 'portal2' and name in PORTAL2_PROJECTS:
+			env.DEFINES = [d for d in env.DEFINES if d.split('=')[0] not in PORTAL2_DROP_DEFINES]
 		install_path = None
 		if proj.kind == 'lib':
 			features = 'c cxx cstlib cxxstlib'
@@ -703,7 +755,7 @@ def build(bld):
 			target   = target,
 			name     = name,
 			includes = includes,
-			defines  = _defines(proj),
+			defines  = _defines(proj, PORTAL2_DROP_DEFINES | DROP_DEFINES if game == 'portal2' and name in PORTAL2_PROJECTS else DROP_DEFINES),
 			use      = use,
 			env      = env,
 			# no idx: waf numbers task generators itself, which keeps object

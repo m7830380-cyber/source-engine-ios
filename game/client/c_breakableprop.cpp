@@ -71,6 +71,10 @@ QAngle C_BreakableProp::PreferredCarryAngles( void )
 }
 
 
+#ifdef PORTAL2
+#include "portal_grabcontroller_shared.h"
+#endif
+
 bool C_BreakableProp::ShouldPredict( void )
 {
 #ifdef PORTAL

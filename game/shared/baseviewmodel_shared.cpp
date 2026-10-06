@@ -8,7 +8,9 @@
 #include "baseviewmodel_shared.h"
 #include "datacache/imdlcache.h"
 
+#if defined( CSTRIKE15 )
 #include "cs_shareddefs.h"
+#endif
 
 #if defined( CLIENT_DLL )
 #include "iprediction.h"

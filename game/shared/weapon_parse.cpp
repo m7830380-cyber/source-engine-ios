@@ -12,7 +12,9 @@
 #include "ammodef.h"
 #include "util_shared.h"
 #include "weapon_parse.h"
+#if defined( CSTRIKE15 )
 #include "econ_item_view.h"
+#endif
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
@@ -386,6 +388,7 @@ void FileWeaponInfo_t::Parse( KeyValues *pKeyValuesData, const char *szWeaponNam
 
 const char* FileWeaponInfo_t::GetWorldModel( const CEconItemView* pWepView, int iTeam ) const
 {
+#if defined( CSTRIKE15 )
 	if ( pWepView && pWepView->IsValid() )
 	{
 		const char *pchWorldOverride = pWepView->GetStaticData()->GetEntityOverrideModel();
@@ -400,10 +403,14 @@ const char* FileWeaponInfo_t::GetWorldModel( const CEconItemView* pWepView, int 
 	{
 		return szWorldModel;
 	}
+#else
+	return szWorldModel;
+#endif
 }
 
 const char* FileWeaponInfo_t::GetViewModel( const CEconItemView* pWepView, int iTeam ) const
 {
+#if defined( CSTRIKE15 )
 	if ( pWepView && pWepView->IsValid() )
 	{
 		const char *pchViewOverride = pWepView->GetStaticData()->GetViewOverrideModel();
@@ -418,10 +425,14 @@ const char* FileWeaponInfo_t::GetViewModel( const CEconItemView* pWepView, int i
 	{
 		return szViewModel;
 	}
+#else
+	return szViewModel;
+#endif
 }
 
 const char* FileWeaponInfo_t::GetWorldDroppedModel( const CEconItemView* pWepView, int iTeam ) const
 {
+#if defined( CSTRIKE15 )
 	if ( pWepView && pWepView->IsValid() )
 	{
 		const char *pchWorldDroppedModel = pWepView->GetItemDefinition()->GetWorldDroppedModel();
@@ -432,10 +443,14 @@ const char* FileWeaponInfo_t::GetWorldDroppedModel( const CEconItemView* pWepVie
 	}
 	
 	return szWorldDroppedModel;
+#else
+	return szWorldDroppedModel;
+#endif
 }
 
 const char* FileWeaponInfo_t::GetPrimaryAmmo( const CEconItemView* pWepView ) const
 {
+#if defined( CSTRIKE15 )
 
 	if ( pWepView && pWepView->IsValid() )
 	{
@@ -449,11 +464,15 @@ const char* FileWeaponInfo_t::GetPrimaryAmmo( const CEconItemView* pWepView ) co
 	}
 
 	return szAmmo1;
+#else
+	return szAmmo1;
+#endif
 }
 
 
 int FileWeaponInfo_t::GetPrimaryAmmoType( const CEconItemView* pWepView ) const
 {
+#if defined( CSTRIKE15 )
 
 	if ( pWepView && pWepView->IsValid() )
 	{
@@ -467,6 +486,9 @@ int FileWeaponInfo_t::GetPrimaryAmmoType( const CEconItemView* pWepView ) const
 	}
 
 	return iAmmoType;
+#else
+	return iAmmoType;
+#endif
 }
 
 

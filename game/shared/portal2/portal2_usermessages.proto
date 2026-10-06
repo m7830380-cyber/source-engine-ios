@@ -1,0 +1,19 @@
+//====== Portal 2 on the CS:GO engine (iOS) ======
+//
+// The CS:GO engine only carries protobuf user messages
+// (IVEngineServer::SendUserMessage / IBaseClientDLL::DispatchUserMessage).
+// Portal 2's game code writes its own messages with bf_write
+// (UserMessageBegin/WRITE_*/MessageEnd); each one travels as a
+// CP2UsrMsg_Legacy holding the message name and the written bits.
+//
+//==================================================
+
+option optimize_for = SPEED;
+option cc_generic_services = false;
+
+message CP2UsrMsg_Legacy
+{
+	optional string name = 1;
+	optional bytes data = 2;
+	optional int32 bits = 3;	// bits written (data is padded to whole bytes)
+}

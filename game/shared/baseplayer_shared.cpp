@@ -76,6 +76,10 @@
 #include "sixense/in_sixense.h"
 #endif
 
+#if defined( PORTAL2 )
+#include "portal_grabcontroller_shared.h"
+#endif
+
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
 
@@ -926,6 +930,7 @@ void CBasePlayer::PlayStepSound( Vector &vecOrigin, surfacedata_t *psurface, flo
 
 	EmitSound( filter, entindex(), ep );
 
+#if defined( CSTRIKE15 )
 	// Step Suit
 	if (CCSPlayer *pThisCsPlayer = dynamic_cast<CCSPlayer *>(this))
 	{
@@ -955,7 +960,7 @@ void CBasePlayer::PlayStepSound( Vector &vecOrigin, surfacedata_t *psurface, flo
 	epSuitSound.m_nSoundEntryVersion = paramsSuitSound.m_nSoundEntryVersion;
 
 	EmitSound(filter, entindex(), epSuitSound);
-
+#endif
 }
 
 void CBasePlayer::UpdateButtonState( int nUserCmdButtonMask )
@@ -2443,7 +2448,11 @@ void CBasePlayer::SharedSpawn()
 	m_hUseEntity = NULL;
 
 	m_flDuckAmount = 0;
+#if defined( CSTRIKE15 )
 	m_flDuckSpeed = CS_PLAYER_DUCK_SPEED_IDEAL;
+#else
+	m_flDuckSpeed = 8.0f;
+#endif
 }
 
 

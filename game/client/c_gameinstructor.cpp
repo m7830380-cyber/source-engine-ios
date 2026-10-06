@@ -29,6 +29,13 @@
 #include "matchmaking/cstrike15/imatchext_cstrike15.h"
 #endif
 
+// Portal 2 keeps the instructor's lesson counts in its first title data block
+#ifdef PORTAL2
+#define GAMEINSTRUCTOR_TITLEDATA	TitleData1
+#else
+#define GAMEINSTRUCTOR_TITLEDATA	TitleData3
+#endif
+
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
 
@@ -877,7 +884,7 @@ bool C_GameInstructor::ReadSaveData( void )
 			continue;
 		}
 
-		TitleData3::GameInstructorData_t::LessonInfo_t li;
+		GAMEINSTRUCTOR_TITLEDATA::GameInstructorData_t::LessonInfo_t li;
 		li.u8dummy = TitleDataFieldsDescriptionGetValue<uint8>( fdKey, pPlayer );
 		
 		pLesson->SetDisplayCount( li.display );
@@ -930,7 +937,7 @@ void C_GameInstructor::KeyValueBuilder( KeyValues *pKeyValues )
 	for ( int i = 0; i < m_Lessons.Count();++i )
 	{
 		CBaseLesson *pLesson = m_Lessons[ i ];
-		TitleData3::GameInstructorData_t::LessonInfo_t li;
+		GAMEINSTRUCTOR_TITLEDATA::GameInstructorData_t::LessonInfo_t li;
 		li.u8dummy = 0;
 		li.display = pLesson->GetDisplayCount() & 0xF;
 		li.success = pLesson->GetSuccessCount() & 0xF;

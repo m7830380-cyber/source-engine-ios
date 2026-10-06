@@ -12,7 +12,9 @@
 //=============================================================================//
 #include "cbase.h"
 #include "c_basecombatcharacter.h"
+#if defined( CSTRIKE15 )
 #include "c_cs_player.h"
+#endif
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
 
@@ -129,6 +131,7 @@ void C_BaseCombatCharacter::OnDataChanged( DataUpdateType_t updateType )
 			}
 		}
 
+#if defined( CSTRIKE15 )
 		C_CSPlayer *pCSPlayer = C_CSPlayer::GetLocalCSPlayer();
 		if ( pCSPlayer == this )
 		{
@@ -144,6 +147,7 @@ void C_BaseCombatCharacter::OnDataChanged( DataUpdateType_t updateType )
 				}
 			}
 		}
+#endif
 
 		if ( nNumWorldWeapons )
 		{

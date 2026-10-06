@@ -244,10 +244,12 @@ void C_Team::ClientThink()
 
 int C_Team::GetGGLeader( int nTeam )
 {
+#if defined( CSTRIKE15 )
 	if ( nTeam == TEAM_CT )
 		return m_nGGLeaderEntIndex_CT;
 	else if ( nTeam == TEAM_TERRORIST )
 		return m_nGGLeaderEntIndex_T;
+#endif
 
 	return -1;
 }

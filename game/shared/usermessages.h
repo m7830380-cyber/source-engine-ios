@@ -25,6 +25,11 @@
 
 #include "cstrike15_usermessages.pb.h"
 
+#ifdef PORTAL2
+// Portal 2's named bf_write messages (usermessages->, USER_MESSAGE_REGISTER)
+#include "legacy_usermessages.h"
+#endif
+
 //-----------------------------------------------------------------------------
 class IUserMessageBinder;
 

@@ -140,7 +140,7 @@ void CCommunityCoop::CheckHasMapMsgReceived( PublishedFileId_t fileID )
 //	CCommunityCoop *pCommunityCoop = static_cast<CCommunityCoop*>( BASEMODPANEL_SINGLETON.GetWindow( WT_COMMUNITYCOOP ) );
 //	pCommunityCoop->CheckHasMapMsgReceived();
 //}
-//USER_MESSAGE_REGISTER( CheckHasCommunityCoopMap );
+//LEGACY_USER_MESSAGE_REGISTER( CheckHasCommunityCoopMap );
 
 
 void cc_cm_show_friend_invite_screen( const CCommand &args )

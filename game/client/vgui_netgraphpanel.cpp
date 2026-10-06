@@ -28,7 +28,12 @@
 #include "materialsystem/imaterial.h"
 #include "matchmaking/imatchframework.h"
 
+#if defined( CSTRIKE15 )
 #include "cs_gamerules.h"
+static inline bool NetGraph_IsValveDS() { return CSGameRules() && CSGameRules()->IsValveDS(); }
+#else
+static inline bool NetGraph_IsValveDS() { return false; }
+#endif
 
 #ifdef _PS3
 #include "ps3/ps3_core.h"
@@ -1196,7 +1201,7 @@ void CNetGraphPanel::DrawServerType( int xright, int y )
 		bool bP2P = ( netadr_t( pInfo ? pInfo->GetAddress() : "127.0.0.1" ).GetPort() == 1 );
 		if ( engine->IsHLTV() )
 		{
-			if ( CSGameRules() && CSGameRules()->IsValveDS() )
+			if ( NetGraph_IsValveDS() )
 				psz = bLiveBroadcast ? "Official GOTV+" : "Official GOTV";
 			else if ( bP2P )
 				psz = bLiveBroadcast ? "P2P GOTV+" : "P2P GOTV";
@@ -1205,7 +1210,7 @@ void CNetGraphPanel::DrawServerType( int xright, int y )
 		}
 		else
 		{
-			if ( CSGameRules() && CSGameRules()->IsValveDS() )
+			if ( NetGraph_IsValveDS() )
 				psz = "Official DS";
 			else if ( bP2P )
 				psz = "P2P";

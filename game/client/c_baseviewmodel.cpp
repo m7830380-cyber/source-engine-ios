@@ -22,12 +22,14 @@
 #include "dlight.h"
 #include "clientalphaproperty.h"
 #include "iinput.h"
+#if defined( CSTRIKE15 )
 #include "cs_shareddefs.h"
 #include "c_cs_player.h"
 
 #include "weapon_csbase.h"
 #include "weapon_basecsgrenade.h"
 #include "cstrike15_item_inventory.h"
+#endif
 #include "iclientmode.h"
 
 #include "platforminputdevice.h"
@@ -187,6 +189,7 @@ void C_BaseViewModel::UpdateParticles( int nSlot )
 	if ( !pWeapon )
 		return;
 
+#if defined( CSTRIKE15 )
 	CWeaponCSBase *pCSWeapon = ( CWeaponCSBase* )pPlayer->GetActiveWeapon();
 	if ( !pCSWeapon )
 		return;
@@ -234,6 +237,7 @@ void C_BaseViewModel::UpdateParticles( int nSlot )
 			m_viewmodelParticleEffect = NULL;
 		}
 	}
+#endif
 }
 
 bool C_BaseViewModel::Simulate( void )
@@ -768,6 +772,7 @@ int C_BaseViewModel::DrawModel( int flags, const RenderableInstance_t &instance 
 	}
 
 
+#if defined( CSTRIKE15 )
 	if ( flags && vm_draw_addon.GetBool() 
 #ifdef IRONSIGHT
 		&& (GetScopeStencilMaskMode() == false) 
@@ -804,6 +809,7 @@ int C_BaseViewModel::DrawModel( int flags, const RenderableInstance_t &instance 
 			m_viewmodelUidAddon->DrawModel( flags | STUDIO_DONOTMODIFYSTENCILSTATE, instance );
 		}
 	}
+#endif
 	
 #ifdef IRONSIGHT
 	//Scope stencil mask mode is automatically turned off after rendering. It needs to be explicitly enabled before each draw.
@@ -937,6 +943,7 @@ void C_BaseViewModel::GetBoneControllers(float controllers[MAXSTUDIOBONECTRLS])
 
 void C_BaseViewModel::UpdateAllViewmodelAddons( void )
 {
+#if defined( CSTRIKE15 )
 	C_CSPlayer *pPlayer = ToCSPlayer( GetOwner() );
 
 	// Remove any view model add ons if we're spectating.
@@ -1081,17 +1088,21 @@ void C_BaseViewModel::UpdateAllViewmodelAddons( void )
 	}
 #endif
 
+#endif
 }
 
+#if defined( CSTRIKE15 )
 C_ViewmodelAttachmentModel* C_BaseViewModel::FindArmModelForLoadoutPosition( loadout_positions_t nPosition ) const
 {
 	/* Removed for partner depot */
 	return NULL;
 }
+#endif
 
 //--------------------------------------------------------------------------------------------------------
 C_ViewmodelAttachmentModel* C_BaseViewModel::AddViewmodelArmModel( const char *pszArmsModel, int nSkintoneIndex )
 {
+#if defined( CSTRIKE15 )
 	if ( pszArmsModel == NULL || pszArmsModel[ 0 ] == '\0' || modelinfo->GetModelIndex( pszArmsModel ) == -1 )
 	{
 		//pszArmsModel = //g_pGameTypes->GetCTViewModelArmsForMap( engine->GetLevelNameShort() );
@@ -1124,10 +1135,14 @@ C_ViewmodelAttachmentModel* C_BaseViewModel::AddViewmodelArmModel( const char *p
 	}	
 
 	return NULL;
+#else
+	return NULL;
+#endif
 }
 
 void C_BaseViewModel::AddViewmodelLabel( CEconItemView *pItem )
 {
+#if defined( CSTRIKE15 )
 	if ( !pItem || !pItem->GetCustomName() )
 	{
 		RemoveViewmodelLabel();
@@ -1158,10 +1173,12 @@ void C_BaseViewModel::AddViewmodelLabel( CEconItemView *pItem )
 	
 		RemoveEffects( EF_NODRAW );
 	}
+#endif
 }
 
 void C_BaseViewModel::AddViewmodelStatTrak( CEconItemView *pItem, int nStatTrakType, int nWeaponID, AccountID_t holderAcctId )
 {
+#if defined( CSTRIKE15 )
 	if ( m_viewmodelStatTrakAddon && m_viewmodelStatTrakAddon.Get() && m_viewmodelStatTrakAddon->GetMoveParent() )
 		return;
 
@@ -1198,6 +1215,7 @@ void C_BaseViewModel::AddViewmodelStatTrak( CEconItemView *pItem, int nStatTrakT
 
 		RemoveEffects( EF_NODRAW );
 	}
+#endif
 }
 
 bool C_BaseViewModel::ViewmodelStickersAreValid( int nWeaponID )
@@ -1222,6 +1240,7 @@ bool C_BaseViewModel::ViewmodelStickersAreValid( int nWeaponID )
 // with that slot's sticker material (CEconItemView::GenerateStickerMaterials).
 void C_BaseViewModel::AddViewmodelStickers( CEconItemView *pItem, int nWeaponID )
 {
+#if defined( CSTRIKE15 )
 	if ( !pItem || !pItem->ItemHasAnyStickersApplied() )
 	{
 		RemoveViewmodelStickers();
@@ -1257,6 +1276,7 @@ void C_BaseViewModel::AddViewmodelStickers( CEconItemView *pItem, int nWeaponID 
 		pSticker->SetStickerMaterial( pMaterial );
 		RemoveEffects( EF_NODRAW );
 	}
+#endif
 }
 
 void C_BaseViewModel::RemoveViewmodelArmModels( void )

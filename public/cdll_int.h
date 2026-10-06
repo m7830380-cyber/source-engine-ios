@@ -1102,7 +1102,9 @@ public:
 	virtual void			GetStatus( char *buffer, int bufsize ) = 0;
 
 	// find out if the chat display is up
-#if defined ( CSTRIKE15 )
+	// (PORTAL2: the iOS Portal 2 client runs on the CS:GO engine, which
+	// expects these slots in the vtable)
+#if defined ( CSTRIKE15 ) || defined( PORTAL2 )
 	virtual bool			IsChatRaised( void ) = 0;
 	virtual bool			IsRadioPanelRaised( void ) = 0;
 	virtual bool			IsBindMenuRaised( void ) = 0;

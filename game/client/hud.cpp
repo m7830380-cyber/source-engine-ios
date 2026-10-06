@@ -875,11 +875,16 @@ bool CHud::IsHidden( int iHudFlags )
 	if ( !m_bEngineIsInGame )
 		return true;
 
+#if defined( CSTRIKE15 )
 	// Grab the local or observed player
 	C_BasePlayer *pPlayer = GetHudPlayer();
 
 	// Grab the local player
 	C_CSPlayer *localPlayer = C_CSPlayer::GetLocalCSPlayer();
+#else
+	C_BasePlayer *pPlayer = C_BasePlayer::GetLocalPlayer();
+	C_BasePlayer *localPlayer = pPlayer;
+#endif
 
 	if ( !pPlayer )
 		return true;

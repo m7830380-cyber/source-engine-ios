@@ -9,6 +9,8 @@
 #include "c_team.h"
 #include "gamestringpool.h"
 #include "hltvreplaysystem.h"
+#include "vgui/ILocalize.h"
+#include "tier1/fmtstr.h"
 
 #if !defined( _X360 )
 #include "xbox/xboxstubs.h"
@@ -96,7 +98,9 @@ C_PlayerResource::C_PlayerResource()
 
 	g_PR = this;
 
+#if defined( INCLUDE_SCALEFORM )
 	g_pScaleformUI->AddDeviceDependentObject( this );
+#endif
 }
 
 //-----------------------------------------------------------------------------
@@ -108,13 +112,17 @@ C_PlayerResource::~C_PlayerResource()
 	{
 		if ( m_Xuids[i] != INVALID_XUID )
 		{
+#if defined( INCLUDE_SCALEFORM )
 			g_pScaleformUI->AvatarImageRelease( m_Xuids[i] );
+#endif
 		}
 	}
 
 	g_PR = NULL;
 
+#if defined( INCLUDE_SCALEFORM )
 	g_pScaleformUI->RemoveDeviceDependentObject( this );
+#endif
 }
 
 void C_PlayerResource::OnDataChanged(DataUpdateType_t updateType)
@@ -160,12 +168,18 @@ void C_PlayerResource::UpdateXuids( void )
 
 			if ( m_Xuids[i] != INVALID_XUID )
 			{
+#if defined( INCLUDE_SCALEFORM )
 				g_pScaleformUI->AvatarImageRelease( m_Xuids[i] );
+#endif
 			}
 
 			if ( newXuid != INVALID_XUID )
 			{
+#if defined( INCLUDE_SCALEFORM )
 				bAddRefSuccess = g_pScaleformUI->AvatarImageAddRef( newXuid );
+#else
+				bAddRefSuccess = true;
+#endif
 			}
 
 			if ( bAddRefSuccess || ( newXuid == INVALID_XUID ) )
@@ -693,7 +707,9 @@ void C_PlayerResource::DeviceLost( void )
 	{
 		if ( m_Xuids[i] != INVALID_XUID )
 		{
+#if defined( INCLUDE_SCALEFORM )
 			g_pScaleformUI->AvatarImageRelease( m_Xuids[i] );
+#endif
 			m_Xuids[i] = INVALID_XUID;
 		}
 	}

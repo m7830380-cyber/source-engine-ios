@@ -20,7 +20,12 @@
 #include <keyvalues.h>
 #include "ienginevgui.h"
 #include "c_playerresource.h"
+#if defined( CSTRIKE15 )
 #include "cstrike15/c_cs_playerresource.h"
+#else
+#include "c_playerresource.h"
+#define MAX_DECORATED_PLAYER_NAME_LENGTH ( ( MAX_NETWORKID_LENGTH * 10 ) + 20 )
+#endif
 #include "ihudlcd.h"
 #include "vgui/IInput.h"
 #include "vgui/ILocalize.h"
@@ -332,10 +337,17 @@ wchar_t* ReadChatTextString( const char *szString, wchar_t *pOut, int outSize, b
 	if ( const char *pszEntIndex = StringAfterPrefix( szString, "#ENTNAME[" ) )
 	{
 		int iEntIndex = V_atoi( pszEntIndex );
+#if defined( CSTRIKE15 )
 		if ( C_CS_PlayerResource *pCSPR = ( C_CS_PlayerResource* ) GameResources() )
 		{
 			pCSPR->GetDecoratedPlayerName( iEntIndex, pOut, outSize, ( EDecoratedPlayerNameFlag_t ) ( k_EDecoratedPlayerNameFlag_DontUseNameOfControllingPlayer | k_EDecoratedPlayerNameFlag_DontUseAssassinationTargetName ) );
 		}
+#else
+		if ( g_PR && g_PR->IsConnected( iEntIndex ) )
+		{
+			g_pVGuiLocalize->ConvertANSIToUnicode( g_PR->GetPlayerName( iEntIndex ), pOut, outSize );
+		}
+#endif
 		if ( !pOut[0] )
 		{
 			if ( const char *pszCloseBracket = V_strnchr( pszEntIndex, ']', 64 ) )
@@ -1062,10 +1074,17 @@ bool CBaseHudChat::MsgFunc_TextMsg( const CCSUsrMsg_TextMsg &msg )
 		{
 			int iEntIndex = V_atoi( pszEntIndex );
 			wchar_t wszPlayerName[MAX_DECORATED_PLAYER_NAME_LENGTH] = {};
+#if defined( CSTRIKE15 )
 			if ( C_CS_PlayerResource *pCSPR = ( C_CS_PlayerResource* ) GameResources() )
 			{
 				pCSPR->GetDecoratedPlayerName( iEntIndex, wszPlayerName, sizeof( wszPlayerName ), ( EDecoratedPlayerNameFlag_t ) ( k_EDecoratedPlayerNameFlag_DontUseNameOfControllingPlayer | k_EDecoratedPlayerNameFlag_DontUseAssassinationTargetName ) );
 			}
+#else
+			if ( g_PR && g_PR->IsConnected( iEntIndex ) )
+			{
+				g_pVGuiLocalize->ConvertANSIToUnicode( g_PR->GetPlayerName( iEntIndex ), wszPlayerName, sizeof( wszPlayerName ) );
+			}
+#endif
 			if ( wszPlayerName[0] )
 			{
 				szString[0] = 0;

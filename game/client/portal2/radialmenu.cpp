@@ -2853,4 +2853,4 @@ static void __MsgFunc_AddLocator( bf_read &msg )
 	AddLocator( pTarget, vPosition, vNormal, nPlayerIndex, iconName, fDisplayTime );
 }
 
-USER_MESSAGE_REGISTER( AddLocator );
+LEGACY_USER_MESSAGE_REGISTER( AddLocator );

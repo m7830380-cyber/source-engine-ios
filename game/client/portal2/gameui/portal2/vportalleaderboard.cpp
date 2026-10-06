@@ -1560,7 +1560,7 @@ static void __MsgFunc_ScoreboardTempUpdate( bf_read &msg )
 
 	CPortalLeaderboardManager::SetTempScoresMap( engine->GetLevelNameShort() );
 }
-USER_MESSAGE_REGISTER( ScoreboardTempUpdate );
+LEGACY_USER_MESSAGE_REGISTER( ScoreboardTempUpdate );
 
 
 static void ChallengeModeCheatsOKCallback()
@@ -1597,7 +1597,7 @@ static void __MsgFunc_ChallengeModeCheatSession( bf_read& /*msg*/ )
 
 	GameUI().ActivateGameUI();
 }
-USER_MESSAGE_REGISTER( ChallengeModeCheatSession );
+LEGACY_USER_MESSAGE_REGISTER( ChallengeModeCheatSession );
 
 
 static void __MsgFunc_ChallengeModeCloseAllUI( bf_read& /*msg*/ )
@@ -1618,7 +1618,7 @@ static void __MsgFunc_ChallengeModeCloseAllUI( bf_read& /*msg*/ )
 	GameUI().HideGameUI();
 	CBaseModPanel::GetSingleton().CloseAllWindows();
 }
-USER_MESSAGE_REGISTER( ChallengeModeCloseAllUI );
+LEGACY_USER_MESSAGE_REGISTER( ChallengeModeCloseAllUI );
 
 
 

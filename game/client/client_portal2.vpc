@@ -5,10 +5,29 @@
 //-----------------------------------------------------------------------------
 
 $Macro GAMENAME 			"portal2"
-$Macro GENERATED_PROTO_DIR	"$SRCDIR\game\client\portal2\generated_proto"
 
 $Include "client_portal_base.vpc"
-$Include "client_econ_base.vpc"		[ ($WIN32 || $OSXALL ) && !$NO_STEAM ]
+// iOS: the CS:GO engine carries protobuf user messages only; the base game
+// code uses CS:GO's set; Portal 2's own bf_write messages travel as
+// CP2UsrMsg_Legacy protobufs (game/shared/portal2/legacy_usermessages.*)
+$include "$SRCDIR\game\shared\cstrike15\cstrike15_gcmessages_include.vpc" [$IOS]
+$include "$SRCDIR\game\shared\cstrike15\cstrike15_usermessages_include.vpc" [$IOS]
+
+$Project
+{
+	$Folder "Protobuf Files" [$IOS]
+	{
+		// headers only: steammessages.pb.cc is built into gcsdk
+		$File "$SRCDIR\gcsdk\steammessages.proto"
+		$File "$SRCDIR\game\shared\portal2\portal2_usermessages.proto"
+		$DynamicFile "$GENERATED_PROTO_DIR\portal2_usermessages.pb.cc"
+		$File "$SRCDIR\game\shared\portal2\legacy_usermessages.cpp"
+		// CS:GO graffiti (econ sprays); see c_te_playerdecal_portal2.cpp
+		-$File "c_te_playerdecal.cpp"
+		$File "portal2\c_te_playerdecal_portal2.cpp"
+	}
+}
+$Include "client_econ_base.vpc"		[ ($WIN32 || $OSXALL ) && !$NO_STEAM && !$IOS ]
 
 $Configuration
 {
@@ -22,7 +41,9 @@ $Configuration
 		// The PuzzleMaker is loaded as a DLL during development (on WIN32), but for public builds it is linked as a static LIB:
 		// Always link as a static library in this branch
 		// $PreprocessorDefinitions		"$BASE;PUZZLEMAKER_DLL_IMPORT"				[ $WIN32 ]
-		$PreprocessorDefinitions		"$BASE;PORTAL2_PUZZLEMAKER"					[ $WIN32 ||  $OSXALL ]
+		$PreprocessorDefinitions		"$BASE;PORTAL2_PUZZLEMAKER"					[ ($WIN32 ||  $OSXALL) && !$IOS ]
+		// iOS: no Steam game coordinator (Portal 2 items / inventory)
+		$PreprocessorDefinitions		"$BASE;NO_STEAM_GAMECOORDINATOR"					[ $IOS ]
 	}
 
 	$Linker
@@ -163,7 +184,7 @@ $Project "Client (Portal 2)"
 			$File	"$SRCDIR\game\shared\portal\portal_mp_gamerules.cpp"
 			$File	"$SRCDIR\game\shared\portal\portal_mp_gamerules.h"
 
-			$Folder "Economy"	[ ($WIN32 || $OSXALL ) && !$NO_STEAM ]
+			$Folder "Economy"	[ ($WIN32 || $OSXALL ) && !$NO_STEAM && !$IOS ]
 			{
 				$File	"portal2\portal2_econ_ui.cpp"
 				$File	"portal2\portal2_playermodelpanel.cpp"
@@ -785,7 +806,7 @@ $Project "Client (Portal 2)"
 		}
 	}
 
-	$Folder "Protobuf Files"	[ ( $WIN32 || $OSXALL ) && !$NO_STEAM]
+	$Folder "Protobuf Files"	[ ( $WIN32 || $OSXALL ) && !$NO_STEAM && !$IOS]
 	{
 		$DynamicFile "$GENERATED_PROTO_DIR\steammessages.pb.cc"
 		{
@@ -810,6 +831,6 @@ $Project "Client (Portal 2)"
 
 		// The PuzzleMaker is loaded as a DLL during development (on WIN32), but for public builds it is linked as a static LIB:
 		// $Lib	"$LIBCOMMON\puzzlemaker_dll"		[  $WIN32 ]
-		$Lib	"$LIBCOMMON\puzzlemaker_lib"		[ $WIN32 || $OSXALL ]
+		$Lib	"$LIBCOMMON\puzzlemaker_lib"		[ ($WIN32 || $OSXALL) && !$IOS ]
 	}
 }

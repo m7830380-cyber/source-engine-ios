@@ -25,12 +25,18 @@
 
 #include <game/client/iviewport.h>
 
+#if defined( CSTRIKE15 )
 #include "cs_gamerules.h"
+static inline bool TextWindow_IsQueuedMatchmaking() { return CSGameRules() && CSGameRules()->IsQueuedMatchmaking(); }
+#else
+static inline bool TextWindow_IsQueuedMatchmaking() { return false; }
+#endif
 
 #include "matchmaking/imatchframework.h"
 #include "tier1/netadr.h"
 
 #include "gametypes/igametypes.h"
+#include "tier1/fmtstr.h"
 #include "gameui_interface.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
@@ -415,7 +421,7 @@ void CTextWindow::ShowFile( const char *filename )
 
 		char buffer[2048];
 			
-		int size = min( g_pFullFileSystem->Size( f ), sizeof(buffer)-1 ); // just allow 2KB
+		int size = MIN( g_pFullFileSystem->Size( f ), sizeof(buffer)-1 ); // just allow 2KB
 
 		g_pFullFileSystem->Read( buffer, size, f );
 		g_pFullFileSystem->Close( f );
@@ -468,6 +474,9 @@ void CTextWindow::Update( void )
 
 int CTextWindow::GetNumSecondsRequiredByServer() const
 {
+#if !defined( CSTRIKE15 )
+	return 0;
+#else
 	if ( !g_pGameTypes )
 		return 0;
 
@@ -478,6 +487,7 @@ int CTextWindow::GetNumSecondsRequiredByServer() const
 	if ( numSecondsRequired > 35 )
 		numSecondsRequired = 35; // never allow > 35 second ads
 	return numSecondsRequired;
+#endif
 }
 
 int CTextWindow::GetNumSecondsSponsorRequiredRemaining() const
@@ -659,7 +669,7 @@ void CTextWindow::ShowPanel( bool bShow )
 
 void CTextWindow::ShowPanel2( bool bShow )
 {
-	if ( (CSGameRules() && CSGameRules()->IsQueuedMatchmaking()) || sv_disable_motd.GetBool() )
+	if ( (TextWindow_IsQueuedMatchmaking()) || sv_disable_motd.GetBool() )
 		bShow = false;
 
 	g_pInputSystem->SetSteamControllerMode( bShow ? "MenuControls" : NULL, this );
@@ -699,7 +709,7 @@ void CTextWindow::PaintBackground()
 	BaseClass::PaintBackground();
 
 	if ( m_uiTimestampStarted && IsVisible() &&
-		CSGameRules() && CSGameRules()->IsQueuedMatchmaking() &&
+		TextWindow_IsQueuedMatchmaking() &&
 		( int( Plat_MSTime() - m_uiTimestampStarted ) > 1000*cl_motd_competitive_timeout.GetInt() ) )
 	{
 		m_bForcingWindowCloseRegardlessOfTime = true;

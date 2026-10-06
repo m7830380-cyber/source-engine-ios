@@ -19,6 +19,7 @@
 #include "utlmultilist.h"
 #include "tier1/callqueue.h"
 #include "engine/ivdebugoverlay.h"
+#include "basegrenade_shared.h"
 
 #ifdef PORTAL
 	#include "portal_util_shared.h"

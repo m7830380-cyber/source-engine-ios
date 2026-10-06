@@ -25,7 +25,22 @@
 
 #endif
 
+#if defined( CSTRIKE15 )
 #include "cs_shareddefs.h"
+#else
+// cs_shareddefs.h names for the base grenade (CS:GO's base code uses them)
+#define GRENADE_DEFAULT_SIZE 2.0
+enum GrenadeType_t
+{
+	GRENADE_TYPE_EXPLOSIVE,
+	GRENADE_TYPE_FLASH,
+	GRENADE_TYPE_FIRE,
+	GRENADE_TYPE_DECOY,
+	GRENADE_TYPE_SMOKE,
+	GRENADE_TYPE_SENSOR,
+	GRENADE_TYPE_TOTAL,
+};
+#endif
 
 #define BASEGRENADE_EXPLOSION_VOLUME	1024
 

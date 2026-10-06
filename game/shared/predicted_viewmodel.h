@@ -71,13 +71,13 @@ private:
 
 	CPredictedViewModel( const CPredictedViewModel & ); // not defined, not accessible
 
-#if defined( CSTRIKE15 )
 protected:
+#if defined( CSTRIKE15 )
 	BobState_t		m_BobState;		// view model head bob state
+#endif //CSTRIKE15
 	QAngle m_vLoweredWeaponOffset;
 	float m_flInaccuracyTilt;
 	float m_flOldAccuracyDiffSmoothed;
-#endif //CSTRIKE15
 
 #endif
 };

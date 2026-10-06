@@ -89,6 +89,10 @@
 #include "toolframework_client.h"
 #include "hltvcamera.h"
 #include "hltvreplaysystem.h"
+#ifdef PORTAL2
+#include "soundinfo.h"
+#include "portal_util_shared.h"
+#endif
 #if defined( REPLAY_ENABLED )
 #include "replaycamera.h"
 #include "replay_ragdoll.h"
@@ -982,7 +986,7 @@ public:
 
 	virtual void			GetStatus( char *buffer, int bufsize );
 
-#if defined ( CSTRIKE15 )
+#if defined ( CSTRIKE15 ) || defined( PORTAL2 )
 	virtual bool			IsChatRaised( void );
 	virtual bool			IsRadioPanelRaised( void );
 	virtual bool			IsBindMenuRaised( void );
@@ -3814,6 +3818,7 @@ bool CHLClient::CanRecordDemo( char *errorMsg, int length ) const
 
 bool CHLClient::CanStopRecordDemo( char *errorMsg, int length ) const
 {
+#if defined( CSTRIKE15 )
 	if ( CSGameRules() )
 	{
 		if ( CSGameRules()->IsWarmupPeriod() )
@@ -3835,6 +3840,7 @@ bool CHLClient::CanStopRecordDemo( char *errorMsg, int length ) const
 		CSGameRules()->MarkClientStopRecordAtRoundEnd( true );
 		return false;
 	}
+#endif
 
 	return true;
 }
@@ -3851,11 +3857,13 @@ void CHLClient::OnDemoRecordStart( char const* pDemoBaseName )
 	}
 #endif
 
+#if defined( CSTRIKE15 )
 	if ( CSGameRules() )
 	{
 		// If client was previously marked to stop recording at round end then mark it now as not requiring to stop
 		CSGameRules()->MarkClientStopRecordAtRoundEnd( false );
 	}
+#endif
 }
 
 void CHLClient::OnDemoRecordStop()
@@ -4147,7 +4155,13 @@ int CHLClient::GetSpectatorTarget( ClientDLLObserverMode_t* pObserverMode )
 		*pObserverMode = CLIENT_DLL_OBSERVER_NONE;
 	}
 
+#if defined( CSTRIKE15 )
 	C_CSPlayer *pPlayer = GetLocalOrInEyeCSPlayer();
+#else
+	C_BasePlayer *pPlayer = C_BasePlayer::GetLocalPlayer();
+	if ( pPlayer && pPlayer->GetObserverMode() == OBS_MODE_IN_EYE && pPlayer->GetObserverTarget() && pPlayer->GetObserverTarget()->IsPlayer() )
+		pPlayer = ToBasePlayer( pPlayer->GetObserverTarget() );
+#endif
 
 	if ( pPlayer != NULL )
 	{
@@ -4401,6 +4415,14 @@ bool CHLClient::IsLoadingScreenRaised( void )
 	return CLoadingScreenScaleform::IsOpen();
 }
 
+#elif defined( PORTAL2 )
+// The CS:GO engine asks for these (keys.cpp routes input with them); Portal 2's
+// chat and menus are VGUI panels that take keyboard focus themselves.
+bool CHLClient::IsChatRaised( void ) { return false; }
+bool CHLClient::IsRadioPanelRaised( void ) { return false; }
+bool CHLClient::IsBindMenuRaised( void ) { return false; }
+bool CHLClient::IsTeamMenuRaised( void ) { return false; }
+bool CHLClient::IsLoadingScreenRaised( void ) { return false; }
 #endif // CSTRIKE15
 
 #if defined(_PS3)
@@ -4524,8 +4546,12 @@ void CHLClient::OnDemoPlaybackTimeJump()
 // Inventory access
 float CHLClient::FindInventoryItemWithMaxAttributeValue( char const *szItemType, char const *szAttrClass )
 {
+#if defined( CSTRIKE15 )
 	CCSPlayerInventory *pLocalInv = CSInventoryManager()->GetLocalCSInventory();
 	return pLocalInv ? pLocalInv->FindInventoryItemWithMaxAttributeValue( szItemType, szAttrClass ) : -1.0f;
+#else
+	return -1.0f;
+#endif
 }
 
 void CHLClient::DetermineSubscriptionKvToAdvertise( KeyValues *kvLocalPlayer )
@@ -4546,6 +4572,7 @@ public:
 
 char const * CHLClient::GetRichPresenceStatusString()
 {
+#if defined( CSTRIKE15 )
 	ISteamFriends *pf = steamapicontext->SteamFriends();
 	if ( !pf )
 		return "";
@@ -4925,11 +4952,20 @@ char const * CHLClient::GetRichPresenceStatusString()
 	}
 
 	return sRichPresence.Get();
+#else
+	return "";
+#endif
 }
 
 int CHLClient::GetInEyeEntity() const
 {
+#if defined( CSTRIKE15 )
 	C_CSPlayer* player = GetLocalOrInEyeCSPlayer();
+#else
+	C_BasePlayer* player = C_BasePlayer::GetLocalPlayer();
+	if ( player && player->GetObserverMode() == OBS_MODE_IN_EYE && player->GetObserverTarget() && player->GetObserverTarget()->IsPlayer() )
+		player = ToBasePlayer( player->GetObserverTarget() );
+#endif
 	if (player != nullptr)
 	{
 		return player->entindex();
@@ -4964,7 +5000,11 @@ IScaleformSlotInitController * CHLClient::GetScaleformSlotInitController()
 
 bool CHLClient::IsConnectedUserInfoChangeAllowed( IConVar *pCvar )
 {
+#if defined( CSTRIKE15 )
 	return CSGameRules() ? CSGameRules()->IsConnectedUserInfoChangeAllowed( NULL ) : true;
+#else
+	return true;
+#endif
 }
 
 void CHLClient::OnCommandDuringPlayback( char const *cmd )
@@ -5047,6 +5087,7 @@ void CHLClient::OnTickPre( int tickcount )
 #endif
 }
 
+#if defined( CSTRIKE15 )
 class ClientJob_EMsgGCCStrike15_GotvSyncPacket : public GCSDK::CGCClientJob
 {
 public:
@@ -5061,6 +5102,7 @@ public:
 	}
 };
 GC_REG_CLIENT_JOB( ClientJob_EMsgGCCStrike15_GotvSyncPacket, k_EMsgGCCStrike15_v2_GotvSyncPacket );
+#endif
 
 
 

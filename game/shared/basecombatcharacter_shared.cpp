@@ -256,6 +256,7 @@ CBaseCombatWeapon *CBaseCombatCharacter::Weapon_GetPosition( int position ) cons
 	{
 		if ( m_hMyWeapons[ i ].Get() != NULL )
 		{
+#if defined( CSTRIKE15 )
 			CEconItemView * pItem = m_hMyWeapons[ i ]->GetEconItemView() ;
 			if ( !pItem )
 				continue;
@@ -265,6 +266,11 @@ CBaseCombatWeapon *CBaseCombatCharacter::Weapon_GetPosition( int position ) cons
 			// If the slots match, it's already occupied
 			if ( unItemPos == position )
 				return m_hMyWeapons[ i ];
+#else
+			// If the slots match, it's already occupied
+			if ( m_hMyWeapons[ i ]->GetSlot() == position )
+				return m_hMyWeapons[ i ];
+#endif
 		}
 	}
 

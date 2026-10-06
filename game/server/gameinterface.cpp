@@ -149,6 +149,11 @@
 
 #include "CegClientWrapper.h"
 
+#ifdef PORTAL2
+#include "legacy_usermessages.h"
+#include "portal2_usermessages.pb.h"
+#endif
+
 extern IToolFrameworkServer *g_pToolFrameworkServer;
 extern IParticleSystemQuery *g_pParticleSystemQuery;
 
@@ -3857,9 +3862,52 @@ void EntityMessageBegin( CBaseEntity * entity, bool reliable /*= false*/ )
 	g_pMsgBuffer = engine->EntityMessageBegin( entity->entindex(), entity->GetServerClass(), reliable );
 }
 
+#ifdef PORTAL2
+// Portal 2's named bf_write user messages, sent as CP2UsrMsg_Legacy
+// protobufs (game/shared/portal2/legacy_usermessages.h)
+static IRecipientFilter *g_pLegacyMsgFilter = NULL;
+static char g_szLegacyMsgName[ 64 ];
+static uint8 g_LegacyMsgData[ P2_LEGACY_USERMSG_MAX ];
+static bf_write g_LegacyMsgBuffer;
+
+bf_write *UserMessageBegin( IRecipientFilter& filter, const char *messagename )
+{
+	Assert( !g_pMsgBuffer );
+
+	g_pLegacyMsgFilter = &filter;
+	V_strncpy( g_szLegacyMsgName, messagename, sizeof( g_szLegacyMsgName ) );
+	g_LegacyMsgBuffer.StartWriting( g_LegacyMsgData, sizeof( g_LegacyMsgData ) );
+	g_LegacyMsgBuffer.SetDebugName( messagename );
+
+	g_pMsgBuffer = &g_LegacyMsgBuffer;
+	return g_pMsgBuffer;
+}
+#endif
+
 void MessageEnd( void )
 {
 	Assert( g_pMsgBuffer );
+
+#ifdef PORTAL2
+	if ( g_pMsgBuffer == &g_LegacyMsgBuffer )
+	{
+		if ( g_LegacyMsgBuffer.IsOverflowed() )
+		{
+			Warning( "MessageEnd: user message %s overflowed\n", g_szLegacyMsgName );
+		}
+		else
+		{
+			CP2UsrMsg_Legacy msg;
+			msg.set_name( g_szLegacyMsgName );
+			msg.set_data( g_LegacyMsgData, g_LegacyMsgBuffer.GetNumBytesWritten() );
+			msg.set_bits( g_LegacyMsgBuffer.GetNumBitsWritten() );
+			SendUserMessage( *g_pLegacyMsgFilter, P2_UM_Legacy, msg );
+		}
+		g_pLegacyMsgFilter = NULL;
+		g_pMsgBuffer = NULL;
+		return;
+	}
+#endif
 
 	engine->MessageEnd();
 

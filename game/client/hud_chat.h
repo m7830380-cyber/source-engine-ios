@@ -1,8 +1,9 @@
-//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
+//========= Copyright (c) 1996-2005, Valve Corporation, All rights reserved. ============//
 //
-// Purpose: 
+// Purpose: HUD chat for games without their own (Portal 2 on the CS:GO engine:
+//			the SayText/SayText2/TextMsg user messages are CS:GO's protobufs,
+//			handled by CBaseHudChat).
 //
-// $NoKeywords: $
 //=============================================================================//
 
 #ifndef HUD_CHAT_H
@@ -22,9 +23,10 @@ public:
 
 	virtual void	Init( void );
 
-	void			MsgFunc_SayText(bf_read &msg);
-	void			MsgFunc_SayText2( bf_read &msg );
-	void			MsgFunc_TextMsg(bf_read &msg);
+private:
+	CUserMessageBinder m_UMCMsgSayText;
+	CUserMessageBinder m_UMCMsgSayText2;
+	CUserMessageBinder m_UMCMsgTextMsg;
 };
 
 #endif	//HUD_CHAT_H

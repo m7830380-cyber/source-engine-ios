@@ -107,6 +107,10 @@ const char *GetEffectNameFromIndex( int nIndex );
 
 class IRecipientFilter;
 void EntityMessageBegin( CBaseEntity * entity, bool reliable = false );
+#ifdef PORTAL2
+// Portal 2's named bf_write user messages (game/shared/portal2/legacy_usermessages.h)
+bf_write *UserMessageBegin( IRecipientFilter& filter, const char *messagename );
+#endif
 void MessageEnd( void );
 
 // bytewise

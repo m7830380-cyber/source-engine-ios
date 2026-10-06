@@ -18,7 +18,9 @@
 #ifdef CLIENT_DLL
 #include "achievement_notification_panel.h"
 #include "c_playerresource.h"
+#if defined( CSTRIKE15 )
 #include "c_cs_player.h"
+#endif
 #ifdef TF_CLIENT_DLL
 #include "item_inventory.h"
 #endif //TF_CLIENT_DLL
@@ -31,7 +33,9 @@
 #include "steam/isteamfriends.h"
 #include "steam/isteamutils.h"
 #endif
+#if defined( CSTRIKE15 )
 #include "cs_gamerules.h"
+#endif
 #include "tier3/tier3.h"
 #include "vgui/ILocalize.h"
 
@@ -54,8 +58,10 @@
 
 #include "matchmaking/imatchframework.h"
 #include "tier0/vprof.h"
+#if defined( CSTRIKE15 )
 #include "cs_weapon_parse.h"
 #include "achievements_cs.h"
+#endif
 
 // NOTE: This has to be the last file included!
 #include "tier0/memdbgon.h"
@@ -820,6 +826,7 @@ void CAchievementMgr::SaveGlobalStateIfDirty( )
 
 bool CAchievementMgr::IsAchievementAllowedInGame( int iAchievementID )
 {
+#if defined( CSTRIKE15 )
 	// Offline modes with trivial bots disable ALL achievements
 	if ( CSGameRules() && !CSGameRules()->IsAwardsProgressAllowedForBotDifficulty() )
 		return false;
@@ -888,6 +895,9 @@ bool CAchievementMgr::IsAchievementAllowedInGame( int iAchievementID )
 		// Other achievements are valid for all game types.
 		return true;
 	}
+#else
+	return true;
+#endif
 }
 
 //-----------------------------------------------------------------------------
@@ -900,10 +910,12 @@ void CAchievementMgr::AwardAchievement( int iAchievementID, int nUserSlot )
 
 #ifdef CLIENT_DLL
 	C_BasePlayer *pPlayerLocal = C_BasePlayer::GetLocalPlayer();
+#if defined( CSTRIKE15 )
 	C_CSPlayer* pPlayer = ToCSPlayer(pPlayerLocal);
 
 	if( ( pPlayer && pPlayer->IsControllingBot() ) ) // if we're controlling a bot, no achievements for us!
 		return;
+#endif
 
 	CBaseAchievement *pAchievement = GetAchievementByID( iAchievementID, nUserSlot );
 	Assert( pAchievement );
@@ -1533,17 +1545,21 @@ void CAchievementMgr::PrintAchievementStatus()
 		CFailableAchievement *pFailableAchievement = dynamic_cast<CFailableAchievement *>( pAchievement );
 		if ( pAchievement->IsAchieved() )
 		{
+#if defined( CSTRIKE15 )
 			CCSBaseAchievement* pCSAchievement = dynamic_cast<CCSBaseAchievement*>(pAchievement);
+#endif
 
 			// Assign the award date text
 			char dateBuffer[32] = "";
 			int year, month, day, hour, minute, second;
+#if defined( CSTRIKE15 )
 			if ( pCSAchievement && pCSAchievement->GetAwardTime(year, month, day, hour, minute, second) )
 			{
 				Q_snprintf( dateBuffer, sizeof(dateBuffer), "ACHIEVED %4d-%02d-%02d %2d:%02d:%02d", year, month, day, hour, minute, second );
 				Msg( "%-30s", dateBuffer );
 			}
 			else
+#endif
 			{
 				Msg( "%-30s", "ACHIEVED" );
 			}

@@ -16,7 +16,9 @@
 // NOTE: This has to be the last file included!
 #include "tier0/memdbgon.h"
 
+#if defined( CSTRIKE15 )
 #include "c_cs_player.h" // for grenades
+#endif
 
 class CEntityOriginMaterialProxy : public CEntityMaterialProxy
 {

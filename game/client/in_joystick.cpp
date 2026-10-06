@@ -1558,6 +1558,7 @@ float CInput::HandleMotionControllerInputSmoothing( float flDeadZonePct, float v
 //-----------------------------------------------------------------------------
 void CInput::MotionControllerMove( float frametime, CUserCmd *cmd )
 {
+#if defined( CSTRIKE15 )
 	int nSlot = GET_ACTIVE_SPLITSCREEN_SLOT();
 
 	C_CSPlayer* pPlayer = C_CSPlayer::GetLocalCSPlayer();
@@ -1822,6 +1823,7 @@ void CInput::MotionControllerMove( float frametime, CUserCmd *cmd )
 	cmd->aimdirection = pPlayer->GetAimDirection();
 	cmd->mousedx = deltaYaw;
 	cmd->mousedy = deltaPitch;
+#endif
 }
 
 //-----------------------------------------------------------------------------

@@ -13,6 +13,7 @@
 
 
 #include "vgui_controls/PHandle.h"
+#include "steam/isteamcontroller.h"
 
 
 #define MAX_LOCATOR_BINDINGS_SHOWN	8

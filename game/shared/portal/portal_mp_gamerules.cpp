@@ -2366,7 +2366,7 @@ static void __MsgFunc_MPMapCompleted( bf_read &msg )
 	pRules->SetMapComplete( 0, nBranch, nLevel );
 	pRules->SetMapComplete( 1, nBranch, nLevel );
 }
-USER_MESSAGE_REGISTER( MPMapCompleted );
+LEGACY_USER_MESSAGE_REGISTER( MPMapCompleted );
 
 static void __MsgFunc_MPMapIncomplete( bf_read &msg )
 {
@@ -2381,7 +2381,7 @@ static void __MsgFunc_MPMapIncomplete( bf_read &msg )
 	pRules->SetMapComplete( 0, nBranch, nLevel, false );
 	pRules->SetMapComplete( 1, nBranch, nLevel, false );
 }
-USER_MESSAGE_REGISTER( MPMapIncomplete );
+LEGACY_USER_MESSAGE_REGISTER( MPMapIncomplete );
 
 static void __MsgFunc_MPMapCompletedData( bf_read &msg )
 {
@@ -2421,7 +2421,7 @@ static void __MsgFunc_MPMapCompletedData( bf_read &msg )
 		}
 	}
 }
-USER_MESSAGE_REGISTER( MPMapCompletedData );
+LEGACY_USER_MESSAGE_REGISTER( MPMapCompletedData );
 
 
 void CPortalMPGameRules::LoadMapCompleteData( void )
@@ -2517,7 +2517,7 @@ static void __MsgFunc_MPTauntEarned( bf_read &msg )
 		}
 	}
 }
-USER_MESSAGE_REGISTER( MPTauntEarned );
+LEGACY_USER_MESSAGE_REGISTER( MPTauntEarned );
 
 static void __MsgFunc_MPTauntLocked( bf_read &msg )
 {
@@ -2526,13 +2526,13 @@ static void __MsgFunc_MPTauntLocked( bf_read &msg )
 
 	GetClientMenuManagerTaunt().SetTauntLocked( szTaunt );
 }
-USER_MESSAGE_REGISTER( MPTauntLocked );
+LEGACY_USER_MESSAGE_REGISTER( MPTauntLocked );
 
 static void __MsgFunc_MPAllTauntsLocked( bf_read& /*msg*/ )
 {
 	GetClientMenuManagerTaunt().SetAllTauntsLocked();
 }
-USER_MESSAGE_REGISTER( MPAllTauntsLocked );
+LEGACY_USER_MESSAGE_REGISTER( MPAllTauntsLocked );
 
 #endif // #ifdef CLIENT_DLL
 

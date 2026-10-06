@@ -12,12 +12,16 @@
 #include "materialsystem/itexture.h"
 #include "materialsystem/imaterialsystem.h"
 #include "functionproxy.h"
+#if defined( CSTRIKE15 )
 #include "c_cs_player.h"
 #include "weapon_csbase.h"
 #include "predicted_viewmodel.h"
 #include "cs_client_gamestats.h"
 #include "econ/econ_item_schema.h"
 #include "cstrike15_gcconstants.h"
+#else
+#include "predicted_viewmodel.h"
+#endif
 
 #include "imaterialproxydict.h"
 // memdbgon must be the last include file in a .cpp file!!!
@@ -293,6 +297,7 @@ void CEntityRandomProxy::OnBind( void *pC_BaseEntity )
 EXPOSE_MATERIAL_PROXY( CEntityRandomProxy, EntityRandom );
 
 #include "utlrbtree.h"
+#if defined( CSTRIKE15 )
 
 //-----------------------------------------------------------------------------
 // StatTrak 'kill odometer' support: given a numerical value expressed as a string, pick a texture frame to represent a given digit
@@ -806,3 +811,4 @@ void CEconInspectPreviewTimeProxy::OnBind( void *pC_BaseEntity )
 
 EXPOSE_MATERIAL_PROXY( CEconInspectPreviewTimeProxy, EconInspectPreviewTime );
 
+#endif

@@ -511,6 +511,7 @@ int C_BaseCombatWeapon::DrawModel( int flags, const RenderableInstance_t &instan
 
 void C_BaseCombatWeapon::ApplyThirdPersonStickers( C_BaseAnimating *pWeaponModelTargetOverride )
 {
+#if defined( CSTRIKE15 )
 #ifdef _DEBUG
 	if (stickers_enabled_thirdperson.GetBool() == 0)
 		return;
@@ -647,6 +648,7 @@ void C_BaseCombatWeapon::ApplyThirdPersonStickers( C_BaseAnimating *pWeaponModel
 
 	//Msg( "Applied stickers to: %s\n", this->GetName() );
 	
+#endif
 }
 
 //-----------------------------------------------------------------------------

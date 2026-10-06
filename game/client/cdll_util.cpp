@@ -31,10 +31,13 @@
 #include <vgui_controls/EditablePanel.h>
 #include "vgui_int.h"
 #include "cdll_client_int.h"
+#include "iinput.h"
+#if defined( CSTRIKE15 )
 #include "c_cs_playerresource.h"
 #include "c_cs_player.h"
 #include "cs_gamerules.h"
 #include "weapon_c4.h"
+#endif
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
@@ -133,6 +136,7 @@ int GetSpectatorTarget( void )
 // TODO: Fix this so it ACTUALLY calls CanControlBot, there are bugs otherwise (and will be more) do to them being different functions
 bool CanControlSpectatedTarget( void )
 {
+#if defined( CSTRIKE15 )
 	C_CSPlayer * player = ( C_CSPlayer* )C_BasePlayer::GetLocalPlayer();
 
     if ( !player || ( player->GetPendingTeamNumber() != player->GetTeamNumber() ) )
@@ -172,6 +176,9 @@ bool CanControlSpectatedTarget( void )
 		return false;
 
 	return  true;	
+#else
+	return false;
+#endif
 }
 
 bool CanSeeSpectatorOnlyTools( void )
@@ -185,11 +192,13 @@ bool CanSeeSpectatorOnlyTools( void )
 
 	if ( pPlayer->IsSpectator() )
 	{
+#if defined( CSTRIKE15 )
 		if ( sv_competitive_official_5v5.GetBool() )
 			return true;
 
 		if ( CSGameRules() && CSGameRules()->IsQueuedMatchmaking() )
 			return true;
+#endif
 	}
 		
 	return false;

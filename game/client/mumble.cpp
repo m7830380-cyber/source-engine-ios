@@ -170,7 +170,11 @@ void CMumbleSystem::PostRender()
 	C_BasePlayer *pPlayer = C_BasePlayer::GetLocalPlayer();
 	if ( pPlayer )
 	{
+#if defined( CSTRIKE15 )
 		bool bIsOnTeam = pPlayer->GetTeamNumber() == TEAM_TERRORIST || pPlayer->GetTeamNumber() == TEAM_CT;
+#else
+		bool bIsOnTeam = pPlayer->GetTeamNumber() >= FIRST_GAME_TEAM;
+#endif
 		if ( pPlayer->IsAlive() && bIsOnTeam )
 		{
 			vecOriginPlayer = pPlayer->EyePosition();

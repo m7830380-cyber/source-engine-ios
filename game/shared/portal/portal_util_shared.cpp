@@ -2851,10 +2851,14 @@ void UTIL_Portal_ComputeMatrix( CPortal_Base2D *pLocalPortal, CPortal_Base2D *pR
 
 CEG_NOINLINE bool UTIL_IsPaintableSurface( const csurface_t& surface )
 {
+#if defined( CSTRIKE15 )
 	CEG_GCV_PRE();
 	static const unsigned short CEG_SURF_NO_PAINT_FLAG = CEG_GET_CONSTANT_VALUE( SurfNoPaintFlag );
 	CEG_GCV_POST();
 	return !( surface.flags & CEG_SURF_NO_PAINT_FLAG );
+#else
+	return true;
+#endif
 }
 
 

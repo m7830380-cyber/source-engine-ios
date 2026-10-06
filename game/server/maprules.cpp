@@ -1019,6 +1019,7 @@ void CGamePlayerEquip::EquipPlayer( CBaseEntity *pEntity, const char *szWeapon )
 		if ( szWeapon == NULL )
 			weaponName = STRING( m_weaponNames[i] );
 
+#ifdef CSTRIKE15
 		CSWeaponID weaponID = WeaponIdFromString( weaponName );
 
 		CCSPlayer *pCSPlayer = static_cast<CCSPlayer*>( pPlayer );	
@@ -1078,6 +1079,12 @@ void CGamePlayerEquip::EquipPlayer( CBaseEntity *pEntity, const char *szWeapon )
 				pPlayer->GiveAmmo( m_weaponCount[ i ], nType );
 			}
 		}
+#else
+		if ( weaponName && weaponName[0] )
+		{
+			pPlayer->GiveNamedItem( weaponName );
+		}
+#endif
 	}
 }
 

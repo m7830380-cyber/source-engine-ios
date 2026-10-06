@@ -1,4 +1,4 @@
-//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
+//========= Copyright ù 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Team management class. Contains all the details for a specific team
 //
@@ -149,12 +149,15 @@ void CTeam::ResetTeamLeaders()
 //-----------------------------------------------------------------------------
 void CTeam::Think( void )
 {
+#ifdef CSTRIKE15
 	if ( m_flLastPlayerSortTime + 0.025f < gpGlobals->curtime )
 	{
 		DetermineGGLeaderAndSort();
 	}
+#endif
 }
 
+#ifdef CSTRIKE15
 void CTeam::DetermineGGLeaderAndSort( void )
 {
 	CUtlVector< CCSPlayer* >	playerList_CT;
@@ -270,6 +273,7 @@ int CTeam::TeamGGSortFunction( CCSPlayer* const *entry1, CCSPlayer* const *entry
 
 	return 0;
 }
+#endif // CSTRIKE15
 
 //-----------------------------------------------------------------------------
 // Purpose: Teams are always transmitted to clients

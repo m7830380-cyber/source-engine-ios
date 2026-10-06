@@ -1,6 +1,8 @@
 #ifndef PORTAL2_IOS_COMPAT_H
 #define PORTAL2_IOS_COMPAT_H
 
+#include "tier1/strtools.h"
+
 #if !defined( _WIN32 ) && !defined( itoa )
 inline char *itoa( int value, char *buffer, int radix )
 {

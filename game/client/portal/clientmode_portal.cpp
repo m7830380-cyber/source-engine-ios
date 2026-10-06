@@ -22,6 +22,7 @@
 #include "soundenvelope.h"
 #include "ivmodemanager.h"
 #include "voice_status.h"
+#include "glow_outline_effect.h"
 #include "PanelMetaClassMgr.h"
 #include "vgui/sdk_loading_panel.h"
 #include "vgui/sdk_logo_panel.h"
@@ -140,7 +141,7 @@ void CSDKModeManager::Init()
 
 	PanelMetaClassMgr()->LoadMetaClassDefinitionFile(SCREEN_FILE);
 
-	GetClientVoiceMgr()->SetHeadLabelOffset(40);
+	// GetClientVoiceMgr()->SetHeadLabelOffset(40);
 }
 
 void CSDKModeManager::LevelInit(const char *newmap)
@@ -278,7 +279,7 @@ public:
 		// Load up the combine control panel scheme
 		if (!g_hVGuiCombineScheme)
 		{
-			g_hVGuiCombineScheme = vgui::scheme()->LoadSchemeFromFileEx(enginevgui->GetPanel(PANEL_CLIENTDLL), IsXbox() ? "resource/ClientScheme.res" : "resource/CombinePanelScheme.res", "CombineScheme");
+			g_hVGuiCombineScheme = vgui::scheme()->LoadSchemeFromFileEx(enginevgui->GetPanel(PANEL_CLIENTDLL), "resource/CombinePanelScheme.res", "CombineScheme");
 			if (!g_hVGuiCombineScheme)
 			{
 				Warning("Couldn't load combine panel scheme!\n");
@@ -464,7 +465,7 @@ void ClientModePortal::SDK_CloseAllWindowsFrom(vgui::Panel* pPanel)
 void ClientModePortal::Update(void)
 {
 	UpdatePostProcessingEffects();
-	engine->SetMouseWindowLock( /*ASWGameRules() && ASWGameRules()->GetGameState() == ASW_GS_INGAME &&*/ !enginevgui->IsGameUIVisible());
+	// engine->SetMouseWindowLock( !enginevgui->IsGameUIVisible() );
 }
 
 void ClientModePortal::DoPostScreenSpaceEffects(const CViewSetup *pSetup)
@@ -480,7 +481,7 @@ void ClientModePortal::DoPostScreenSpaceEffects(const CViewSetup *pSetup)
 
 	// Render object glows and selectively-bloomed objects (under sniper scope)
 	g_bRenderingGlows = true;
-	g_GlowObjectManager.RenderGlowEffects(pSetup, GetSplitScreenPlayerSlot());
+	GlowObjectManager().RenderGlowEffects(pSetup, GetSplitScreenPlayerSlot());
 	g_bRenderingGlows = false;
 
 }

@@ -1,4 +1,4 @@
-//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
+//===== Copyright  1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -792,7 +792,8 @@ void CPortalRender::DrawPortalsToTextures(CViewRender *pViewRender, const CViewS
 	Vector ptCameraOrigin = cameraView.origin;
 
 	//an extraneous push to update the frustum
-	render->Push3DView(cameraView, 0, NULL, pViewRender->GetFrustum());
+	CMatRenderContextPtr pRenderContext( materials );
+	render->Push3DView( pRenderContext, cameraView, 0, NULL, pViewRender->GetFrustum() );
 
 	for (int i = 0; i != iNumRenderablePortals; ++i)
 	{
@@ -822,7 +823,7 @@ void CPortalRender::DrawPortalsToTextures(CViewRender *pViewRender, const CViewS
 		m_PortalViewIDNodeChain[m_iViewRecursionLevel + 1] = NULL;
 	}
 
-	render->PopView(pViewRender->GetFrustum());
+	render->PopView( pRenderContext, pViewRender->GetFrustum() );
 
 	m_iRemainingPortalViewDepth = 1;
 	m_iViewRecursionLevel = 0;

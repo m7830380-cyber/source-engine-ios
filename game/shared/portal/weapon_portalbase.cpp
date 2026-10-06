@@ -1,4 +1,4 @@
-//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
+//========= Copyright  1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -80,9 +80,6 @@ END_NETWORK_TABLE()
 BEGIN_PREDICTION_DATA( CWeaponPortalBase ) 
 END_PREDICTION_DATA()
 
-LINK_ENTITY_TO_CLASS( weapon_portal_base, CWeaponPortalBase );
-
-
 #ifdef GAME_DLL
 
 	BEGIN_DATADESC( CWeaponPortalBase )
@@ -163,7 +160,7 @@ int CWeaponPortalBase::DrawModel( int flags, const RenderableInstance_t& instanc
 	int iOriginalIndex = GetModelIndex();
 	bool bChangeModelBack = false;
 
-	int iWorldModelIndex = GetWorldModelIndex();
+	int iWorldModelIndex = GetModelIndex();
 	if( iOriginalIndex != iWorldModelIndex )
 	{
 		SetModelIndex( iWorldModelIndex );
@@ -225,7 +222,7 @@ void CWeaponPortalBase::DrawCrosshair()
 	}
 
 	// Find out if this weapon's auto-aimed onto a target
-	bool bOnTarget = ( m_iState == WEAPON_IS_ONTARGET );
+	bool bOnTarget = false;
 
 	if ( player->GetFOV() >= 90 )
 	{ 
@@ -443,4 +440,6 @@ void UTIL_ClipPunchAngleOffset( QAngle &in, const QAngle &punch, const QAngle &c
 }
 
 #endif
+
+LINK_ENTITY_TO_CLASS_ALIASED( weapon_portal_base, WeaponPortalBase );
 

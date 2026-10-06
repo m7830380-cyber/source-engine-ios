@@ -901,7 +901,7 @@ void CTouchControls::Paint()
 
 				meshBuilder.Begin( m_pMesh, MATERIAL_QUADS, 1 );
 
-				int alpha = (btn->color.a > MIN_ALPHA_IN_CUTSCENE) ? max(MIN_ALPHA_IN_CUTSCENE, btn->color.a-m_AlphaDiff) : btn->color.a;
+				int alpha = (btn->color.a > MIN_ALPHA_IN_CUTSCENE) ? MAX( MIN_ALPHA_IN_CUTSCENE, btn->color.a-m_AlphaDiff) : btn->color.a;
 				if( btn->flags & TOUCH_FL_HIDE )
 					alpha = 50;		// hidden, shown only while editing
 				rgba_t color(btn->color.r, btn->color.g, btn->color.b, alpha);
@@ -949,7 +949,7 @@ void CTouchControls::Paint()
 		{
 			CTouchTexture *t = btn->texture;
 
-			int alpha = (btn->color.a > MIN_ALPHA_IN_CUTSCENE) ? max(MIN_ALPHA_IN_CUTSCENE, btn->color.a-m_AlphaDiff) : btn->color.a;
+			int alpha = (btn->color.a > MIN_ALPHA_IN_CUTSCENE) ? MAX( MIN_ALPHA_IN_CUTSCENE, btn->color.a-m_AlphaDiff) : btn->color.a;
 			if( btn->flags & TOUCH_FL_HIDE )
 				alpha = 50;		// hidden, shown only while editing
 			rgba_t color(btn->color.r, btn->color.g, btn->color.b, alpha);

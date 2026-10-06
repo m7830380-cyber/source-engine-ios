@@ -765,26 +765,6 @@ void CInput::CAM_CameraThirdThink( void )
 		// Collision trace and move the camera closer if we hit something.
 		CTraceFilterSkipTwoEntities filter( pLocalPlayer, NULL );
 
-#ifdef PORTAL2
-#ifndef CSTRIKE15
-		C_Portal_Player *pPortalPlayer = static_cast< C_Portal_Player* >( pLocalPlayer );
-		if ( pPortalPlayer->GetTeamTauntState() >= TEAM_TAUNT_HAS_PARTNER )
-		{
-			for( int i = 1; i <= gpGlobals->maxClients; ++i )
-			{
-				C_Portal_Player *pOtherPlayer = ToPortalPlayer( UTIL_PlayerByIndex( i ) );
-
-				//If the other player does not exist or if the other player is the local player
-				if( pOtherPlayer == NULL || pOtherPlayer == pPortalPlayer )
-					continue;
-
-				filter.SetPassEntity2( pOtherPlayer );
-				return;
-			}
-		}
-#endif // !CSTRIKE15
-#endif // PORTAL2
-
 		trace_t trace;
 		UTIL_TraceHull( vecOrigin, vecOrigin - ( vecForward * vecCamOffset[DIST] ), user.m_pCameraThirdData->m_vecHullMin, user.m_pCameraThirdData->m_vecHullMax, MASK_SOLID, &filter, &trace );
 

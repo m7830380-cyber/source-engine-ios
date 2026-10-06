@@ -80,6 +80,7 @@ public:
 	virtual void			GetStepSoundVelocities( float *velwalk, float *velrun );
 	virtual void			PlayStepSound( Vector &vecOrigin, surfacedata_t *psurface, float fvol, bool force );
 	void					PreventCrouchJump( CUserCmd *ucmd ) { (void)ucmd; }
+	bool					ShouldSkipRenderingViewpointPlayerForThisView( void ) { return false; }
 	virtual void			PreThink( void );
 	virtual void			DoImpactEffect( trace_t &tr, int nDamageType );
 

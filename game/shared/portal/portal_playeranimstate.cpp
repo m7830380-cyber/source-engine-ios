@@ -115,7 +115,7 @@ Activity CPortalPlayerAnimState::TranslateActivity( Activity actDesired )
 
 	if ( GetPortalPlayer()->GetActiveWeapon() )
 	{
-		translateActivity = GetPortalPlayer()->GetActiveWeapon()->ActivityOverride( translateActivity, false );
+		translateActivity = GetPortalPlayer()->GetActiveWeapon()->ActivityOverride( translateActivity, (bool *)NULL );
 	}
 
 	return translateActivity;

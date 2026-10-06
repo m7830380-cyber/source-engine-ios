@@ -145,5 +145,6 @@ void CHudPortalCrosshair::SetCrosshair( CHudTexture *texture, Color& clr )
 //-----------------------------------------------------------------------------
 void CHudPortalCrosshair::ResetCrosshair()
 {
-	SetCrosshair( m_pDefaultCrosshair, Color(255, 255, 255, 255) );
+	Color white( 255, 255, 255, 255 );
+	SetCrosshair( m_pDefaultCrosshair, white );
 }

@@ -227,6 +227,9 @@ public:
 	// tests if the parameter ID is being used by portal pixel vis queries
 	bool IsPortalViewID( view_id_t id );
 	
+	float GetCurrentPortalDistanceBias( void ) const { return 0.0f; }
+	void DrawEarlyZPortals( CViewRender *pViewRender ) { (void)pViewRender; }
+	
 private:
 	mutable ShaderStencilState_t state;
 	struct RecordedPortalInfo_t

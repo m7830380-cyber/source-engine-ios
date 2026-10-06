@@ -20,6 +20,11 @@ enum InAirState
 	ON_GROUND = 0,
 };
 
+enum PaintScreenSpaceEffect_t
+{
+	PAINT_SCREEN_SPACE_EFFECT = 0,
+};
+
 struct CachedPaintPowerChoiceResult
 {
 	void Initialize() {}

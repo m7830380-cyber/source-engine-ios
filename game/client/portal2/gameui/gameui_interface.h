@@ -87,6 +87,19 @@ public:
 	void HideLoadingBackgroundDialog();
 	bool HasLoadingBackgroundDialog();
 
+	virtual bool LoadingProgressWantsIsolatedRender( bool bContextValid ) { (void)bContextValid; return false; }
+	virtual bool IsPlayingFullScreenVideo() { return false; }
+	virtual bool IsTransitionEffectEnabled() { return true; }
+	virtual void RestoreTopLevelMenu() { }
+	virtual void StartLoadingScreenForCommand( const char* command ) { (void)command; }
+	virtual void StartLoadingScreenForKeyValues( KeyValues* keyValues ) { (void)keyValues; }
+	virtual bool UpdateProgressBar(float progress, const char *statusText, bool showDialog = true );
+	virtual bool UpdateSecondaryProgressBar(float progress, const wchar_t *desc ) { (void)progress; (void)desc; return false; }
+	virtual void ShowMessageDialog( const uint nType, vgui::Panel *pOwner ) { (void)nType; (void)pOwner; }
+	virtual void ShowMessageDialog( const char* messageID, const char* titleID ) { (void)messageID; (void)titleID; }
+	virtual void CreateCommandMsgBox( const char* pszTitle, const char* pszMessage, bool showOk = true, bool showCancel = false, const char* okCommand = NULL, const char* cancelCommand = NULL, const char* closedCommand = NULL, const char* pszLegend = NULL ) { (void)pszTitle; (void)pszMessage; (void)showOk; (void)showCancel; (void)okCommand; (void)cancelCommand; (void)closedCommand; (void)pszLegend; }
+	virtual void CreateCommandMsgBoxInSlot( ECommandMsgBoxSlot slot, const char* pszTitle, const char* pszMessage, bool showOk = true, bool showCancel = false, const char* okCommand = NULL, const char* cancelCommand = NULL, const char* closedCommand = NULL, const char* pszLegend = NULL ) { (void)slot; (void)pszTitle; (void)pszMessage; (void)showOk; (void)showCancel; (void)okCommand; (void)cancelCommand; (void)closedCommand; (void)pszLegend; }
+
 private:
 	void SendConnectedToGameMessage();
 

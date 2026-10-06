@@ -15,6 +15,10 @@
 #include "saverestore_utlvector.h"
 
 #ifdef PORTAL
+#include "portal_base2d_shared.h"
+#endif
+
+#ifdef PORTAL
 	#include "portal_util_shared.h"
 #endif
 

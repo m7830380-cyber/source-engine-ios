@@ -122,6 +122,7 @@ public:
 	bool ScreenSpacePaintEffectIsActive( void ) const { return false; }
 	void SetScreenSpacePaintEffectColors( class IMaterialVar *pColor1, class IMaterialVar *pColor2 ) const { (void)pColor1; (void)pColor2; }
 	static void RenderLocalScreenSpaceEffect( int nEffect, class IMatRenderContext *pRenderContext, int x, int y, int w, int h ) { (void)nEffect; (void)pRenderContext; (void)x; (void)y; (void)w; (void)h; }
+	float GetMotionBlurAmount( void ) const { return 0.0f; }
 
 private:
 

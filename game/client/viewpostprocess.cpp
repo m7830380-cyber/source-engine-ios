@@ -25,6 +25,7 @@
 
 #ifdef PORTAL2
 #include "c_portal_player.h"
+#include "portal2/portal2_paint_defs.h"
 #endif
 
 #ifdef CSTRIKE15

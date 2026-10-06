@@ -188,7 +188,7 @@ public:
 
 	virtual void				FlashlightTurnOn( void );
 	virtual void				FlashlightTurnOff( void );
-	virtual CBaseEntity	*CHL2_Player::GetHeldObject( void );
+	virtual CBaseEntity	*GetHeldObject( void );
 
 	// Walking
 	void StartWalking( void );

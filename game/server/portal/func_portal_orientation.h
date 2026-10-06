@@ -14,6 +14,8 @@
 
 #include "cbase.h"
 
+class CProp_Portal;
+
 class CFuncPortalOrientation : public CBaseEntity
 {
 public:

@@ -34,7 +34,9 @@
 #include "pushentity.h"
 #include "igamemovement.h"
 #include "tier0/cache_hints.h"
-#include "basecsgrenade_projectile.h"
+#if defined( CSTRIKE15 )
+#include "cstrike15/basecsgrenade_projectile.h"
+#endif
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
 
@@ -65,6 +67,7 @@ static void Physics_TraceEntity( CBaseEntity* pBaseEntity, const Vector &vecAbsS
 	{
 		UTIL_TraceEntity( pBaseEntity, vecAbsStart, vecAbsEnd, mask, ptr );
 
+#if defined( CSTRIKE15 )
 		// perform an additional trace if this is a grenade projectile hitting a player
 		CBaseCSGrenadeProjectile* pGrenadeProjectile = dynamic_cast<CBaseCSGrenadeProjectile*>( pBaseEntity );
 
@@ -84,6 +87,7 @@ static void Physics_TraceEntity( CBaseEntity* pBaseEntity, const Vector &vecAbsS
 			//why does traceline respect hitmoxes in the mask param but traceentity and tracehull do not?
 			UTIL_TraceLine( vecAbsStart, vecAbsEnd, mask, pBaseEntity, pBaseEntity->GetCollisionGroup(), ptr );
 		}
+#endif
 	}
 }
 
@@ -1471,7 +1475,7 @@ void CBaseEntity::PhysicsPushEntity( const Vector& push, trace_t *pTrace )
 	// if the sweep check starts inside a solid surface, try once more from the last origin
 	if ( pTrace->startsolid )
 	{
-
+#if defined( CSTRIKE15 )
 		CBaseCSGrenadeProjectile* pGrenadeProjectile = dynamic_cast<CBaseCSGrenadeProjectile*>( this );
 		if ( pGrenadeProjectile )
 		{
@@ -1479,6 +1483,7 @@ void CBaseEntity::PhysicsPushEntity( const Vector& push, trace_t *pTrace )
 			UTIL_TraceLine( prevOrigin - push, prevOrigin + push, (CONTENTS_GRENADECLIP|CONTENTS_SOLID|CONTENTS_MOVEABLE|CONTENTS_WINDOW|CONTENTS_GRATE), this, COLLISION_GROUP_INTERACTIVE_DEBRIS, pTrace );
 		}
 		else
+#endif
 		{
 			::PhysicsCheckSweep( this, prevOrigin - push, push, pTrace );
 		}

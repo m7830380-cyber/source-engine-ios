@@ -10,7 +10,7 @@
 #include "portal_player_shared.h"
 //#include "portal_playeranimstate.h"
 #include "debugoverlay_shared.h"
-#include "mesh.h"
+#include "meshutils/mesh.h"
 #include "in_buttons.h"
 #include "portal_base2d_shared.h"
 #include "movevars_shared.h"

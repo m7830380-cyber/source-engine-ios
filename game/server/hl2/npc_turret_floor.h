@@ -249,7 +249,7 @@ protected:
 	COutputEvent m_OnPhysGunDrop;
 
 	bool	m_bHackedByAlyx;
-	HSOUNDSCRIPTHANDLE			m_ShotSounds;
+	HSOUNDSCRIPTHASH			m_ShotSounds;
 
 	DECLARE_DATADESC();
 	DEFINE_CUSTOM_AI;

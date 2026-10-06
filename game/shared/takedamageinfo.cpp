@@ -9,7 +9,7 @@
 #include "takedamageinfo.h"
 #include "ammodef.h"
 
-#ifdef GAME_DLL
+#if defined( GAME_DLL ) && defined( CSTRIKE15 )
 #include "cs_player.h"
 #endif
 

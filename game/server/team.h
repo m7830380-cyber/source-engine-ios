@@ -13,7 +13,9 @@
 
 #include "shareddefs.h"
 #include "utlvector.h"
+#ifdef CSTRIKE15
 #include "cs_player.h"
+#endif
 
 class CBasePlayer;
 class CTeamSpawnPoint;

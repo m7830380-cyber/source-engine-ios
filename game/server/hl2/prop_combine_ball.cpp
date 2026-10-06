@@ -100,11 +100,11 @@ CBasePlayer *CPropCombineBall::HasPhysicsAttacker( float dt )
 {
 	// Must have an owner
 	if ( GetOwnerEntity() == NULL )
-		return false;
+		return NULL;
 
 	// Must be a player
 	if ( GetOwnerEntity()->IsPlayer() == false )
-		return false;
+		return NULL;
 
 	// We don't care about the time passed in
 	return static_cast<CBasePlayer *>(GetOwnerEntity());

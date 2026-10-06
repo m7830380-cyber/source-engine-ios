@@ -457,11 +457,14 @@ def _game_conditionals(game, name):
 		conds['PORTAL2'] = 1
 	return conds
 
-def _load_projects(roots, game = 'csgo'):
+def _load_projects(roots, game = 'csgo', ios = False):
 	vpc = _vpc()
 	pmap = _project_map(vpc)
 	if game == 'portal2':
 		pmap.update(PORTAL2_PROJECTS)
+		# Portal 2 Xbox SPA/title data is not in the tree; CS:GO matchmaking is enough for iOS.
+		if ios:
+			pmap['matchmaking'] = 'matchmaking/matchmaking_cstrike15.vpc'
 	parsed = {}
 	order = []
 	todo = list(roots)
@@ -706,7 +709,7 @@ def build(bld):
 
 	roots = [p for p in bld.env.PROJECTS.split(',') if p] if bld.env.PROJECTS else ROOT_PROJECTS
 	game = bld.env.GAME or 'csgo'
-	projects = _load_projects(roots, game)
+	projects = _load_projects(roots, game, ios=bool(bld.env.IOS))
 	extra_sources = PROJECT_EXTRA_SOURCES
 	if game == 'portal2':
 		extra_sources = dict(PROJECT_EXTRA_SOURCES)

@@ -44,11 +44,6 @@ void PrecacheLoadingTipIcons() {}
 DWORD InitHudAllowTextChatFlag( void ) { return 0; }
 DWORD InitUiAllowProperTintFlag( void ) { return 0; }
 
-float CL_GetHltvReplayDelay()
-{
-	return 0.0f;
-}
-
 class C_BaseEntity;
 C_BaseEntity *GetPlayerHoldingEntity( const C_BaseEntity *pHeld )
 {

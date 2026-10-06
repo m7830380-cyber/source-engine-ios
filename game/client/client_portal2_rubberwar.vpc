@@ -28,8 +28,7 @@ $Project
 	$File "$SRCDIR\common\imageutils.h"
 	$File "$SRCDIR\game\shared\bannedwords.cpp"
 	$File "$SRCDIR\game\shared\bannedwords.h"
-	$File "hltvreplaysystem.cpp"
-	$File "hltvreplaysystem.h"
+	$File "portal2\portal2_hltv_replay_client_stub.cpp"
 	$File "steamworks_gamestats_client.cpp"
 	$File "steamworks_gamestats_client.h"
 }

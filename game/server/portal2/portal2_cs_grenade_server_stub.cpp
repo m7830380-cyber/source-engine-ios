@@ -1,5 +1,5 @@
 #include "cbase.h"
-#include "basecsgrenade_projectile.h"
+#include "cstrike15/basecsgrenade_projectile.h"
 
 #if defined( PORTAL2 ) && defined( GAME_DLL )
 

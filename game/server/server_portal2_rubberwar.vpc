@@ -39,7 +39,7 @@ $Configuration
 {
 	$Compiler
 	{
-		$AdditionalIncludeDirectories	"$BASE;$SRCDIR\game\shared\portal;$SRCDIR\game\shared\portal2;.\hl2;.\episodic;$SRCDIR\game\shared\multiplayer;$SRCDIR\game\shared\hl2;.\portal;.\portal2"
+		$AdditionalIncludeDirectories	"$BASE;$SRCDIR\game\shared\portal;$SRCDIR\game\shared\portal2;.\hl2;.\episodic;$SRCDIR\game\shared\multiplayer;$SRCDIR\game\shared\hl2;.\portal;.\portal2;$SRCDIR\game\shared\cstrike15"
 		$PreprocessorDefinitions		"$BASE;PORTAL2;PORTAL;USES_SAVERESTORE"
 		$PreprocessorDefinitions		"$BASE;NO_STEAM_GAMECOORDINATOR"					[ $IOS ]
 	}

@@ -80,6 +80,7 @@ class IMatchExtSwarm *g_pMatchExt = NULL;
 
 #include "portal2/basemodpanel.h"
 #include "portal2/basemodui.h"
+#include "portal2/vgenericconfirmation.h"
 typedef BaseModUI::CBaseModPanel UI_BASEMOD_PANEL_CLASS;
 inline UI_BASEMOD_PANEL_CLASS & GetUiBaseModPanelClass() { return UI_BASEMOD_PANEL_CLASS::GetSingleton(); }
 inline UI_BASEMOD_PANEL_CLASS & ConstructUiBaseModPanelClass() { return * new UI_BASEMOD_PANEL_CLASS(); }
@@ -817,9 +818,87 @@ void CGameUI::OnLevelLoadingFinished(bool bError, const char *failureReason, con
 // Purpose: Updates progress bar
 // Output : Returns true if screen should be redrawn
 //-----------------------------------------------------------------------------
-bool CGameUI::UpdateProgressBar(float progress, const char *statusText)
+bool CGameUI::UpdateProgressBar(float progress, const char *statusText, bool showDialog )
 {
 	return GetUiBaseModPanelClass().UpdateProgressBar(progress, statusText);
+}
+
+//-----------------------------------------------------------------------------
+// CS:GO engine IGameUI entry points Portal 2's GameUI did not have
+//-----------------------------------------------------------------------------
+bool CGameUI::UpdateSecondaryProgressBar( float progress, const wchar_t *desc )
+{
+	SetSecondaryProgressBar( progress );
+	return false;
+}
+
+void CGameUI::StartLoadingScreenForCommand( const char* command )
+{
+	// Portal 2 brings its loading screen up from OnLevelLoadingStarted
+}
+
+void CGameUI::StartLoadingScreenForKeyValues( KeyValues* keyValues )
+{
+}
+
+void CGameUI::ShowMessageDialog( const uint nType, vgui::Panel *pOwner )
+{
+	DevMsg( "CGameUI::ShowMessageDialog( %u )\n", nType );
+}
+
+void CGameUI::ShowMessageDialog( const char* messageID, const char* titleID )
+{
+	CreateCommandMsgBox( titleID, messageID );
+}
+
+#if defined( PORTAL2 )
+// commands the engine's message box runs when it closes
+static CUtlString s_strMsgBoxOkCommand;
+static CUtlString s_strMsgBoxCancelCommand;
+static void MsgBoxRunCommand( CUtlString &str )
+{
+	if ( !str.IsEmpty() )
+	{
+		engine->ClientCmd_Unrestricted( str.Get() );
+	}
+	s_strMsgBoxOkCommand.Clear();
+	s_strMsgBoxCancelCommand.Clear();
+}
+static void MsgBoxOkCallback() { MsgBoxRunCommand( s_strMsgBoxOkCommand ); }
+static void MsgBoxCancelCallback() { MsgBoxRunCommand( s_strMsgBoxCancelCommand ); }
+#endif
+
+void CGameUI::CreateCommandMsgBox( const char* pszTitle, const char* pszMessage, bool showOk, bool showCancel, const char* okCommand, const char* cancelCommand, const char* closedCommand, const char* pszLegend )
+{
+#if defined( PORTAL2 )
+	BaseModUI::GenericConfirmation *pConfirmation = static_cast< BaseModUI::GenericConfirmation * >(
+		BaseModUI::CBaseModPanel::GetSingleton().OpenWindow( BaseModUI::WT_GENERICCONFIRMATION, NULL, false ) );
+	if ( !pConfirmation )
+		return;
+
+	s_strMsgBoxOkCommand = okCommand ? okCommand : ( closedCommand ? closedCommand : "" );
+	s_strMsgBoxCancelCommand = cancelCommand ? cancelCommand : ( closedCommand ? closedCommand : "" );
+
+	BaseModUI::GenericConfirmation::Data_t data;
+	data.pWindowTitle = pszTitle ? pszTitle : "";
+	data.pMessageText = pszMessage ? pszMessage : "";
+	data.bOkButtonEnabled = showOk;
+	data.pfnOkCallback = &MsgBoxOkCallback;
+	data.bCancelButtonEnabled = showCancel;
+	data.pfnCancelCallback = &MsgBoxCancelCallback;
+	pConfirmation->SetUsageData( data );
+#else
+	Msg( "%s: %s\n", pszTitle ? pszTitle : "", pszMessage ? pszMessage : "" );
+#endif
+}
+
+void CGameUI::CreateCommandMsgBoxInSlot( ECommandMsgBoxSlot slot, const char* pszTitle, const char* pszMessage, bool showOk, bool showCancel, const char* okCommand, const char* cancelCommand, const char* closedCommand, const char* pszLegend )
+{
+	CreateCommandMsgBox( pszTitle, pszMessage, showOk, showCancel, okCommand, cancelCommand, closedCommand, pszLegend );
+}
+
+void CGameUI::RestoreTopLevelMenu()
+{
 }
 
 

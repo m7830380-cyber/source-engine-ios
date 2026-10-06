@@ -83,6 +83,19 @@ private:
 
 #define LEGACY_USER_MESSAGE_REGISTER( msgName ) \
 	static CLegacyUserMessageRegister legacyUserMessageRegister_##msgName( #msgName, __MsgFunc_##msgName );
+
+// HUD elements with void MsgFunc_<msg>( bf_read &msg ) handlers (hud_macros.h's
+// DECLARE_HUD_MESSAGE/HOOK_HUD_MESSAGE are for CS:GO's protobuf messages)
+#define DECLARE_LEGACY_HUD_MESSAGE( y, x ) static void __MsgFunc_##y##_##x( bf_read &msg ) \
+	{																\
+		CHudElement *pElement = GetHud().FindElement( #y );			\
+		if ( pElement )												\
+		{															\
+			((y *)pElement)->MsgFunc_##x( msg );					\
+		}															\
+	}
+#define HOOK_LEGACY_HUD_MESSAGE( y, x ) usermessages->HookMessage( #x, __MsgFunc_##y##_##x )
+#define HOOK_LEGACY_MESSAGE( x ) usermessages->HookMessage( #x, __MsgFunc_##x )
 #endif
 
 #endif // LEGACY_USERMESSAGES_H

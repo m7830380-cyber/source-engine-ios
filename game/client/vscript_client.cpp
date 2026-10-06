@@ -231,7 +231,8 @@ class CSetMixLayerTriggerHelper : public CAutoGameSystem
 		for( int i = 0; i < MAX_SPLITSCREEN_PLAYERS; ++i )
 		{
 			ACTIVE_SPLITSCREEN_PLAYER_GUARD( i );
-			HOOK_MESSAGE( SetMixLayerTriggerFactor );
+			// a Portal 2 bf_write message (legacy_usermessages.h)
+			usermessages->HookMessage( "SetMixLayerTriggerFactor", __MsgFunc_SetMixLayerTriggerFactor );
 		}
 		return true;
 	}

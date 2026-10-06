@@ -1,0 +1,84 @@
+name: Build Portal 2 iOS IPA
+
+on:
+  push:
+    branches: [ portal2-ios ]
+  workflow_dispatch:
+
+jobs:
+  build-portal2-ipa:
+    runs-on: macos-14
+    permissions:
+      contents: read
+      actions: read
+    timeout-minutes: 300
+    env:
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_MAXSIZE: 4G
+      CCACHE_SLOPPINESS: time_macros,include_file_mtime,include_file_ctime
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      # Release ANGLE from the newest successful "ANGLE for iOS (release)" run;
+      # without one, scripts/ios/build-angle.sh falls back to the reference IPA's
+      # (Debug) frameworks.
+      - name: Use the release ANGLE build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          id=$(gh run list -R "${{ github.repository }}" -w build-angle.yml --status success -L 1 --json databaseId -q '.[0].databaseId' 2>/dev/null || true)
+          if [ -n "$id" ]; then
+            mkdir -p build/ios
+            gh run download "$id" -R "${{ github.repository }}" -n angle-ios-release -D build/ios
+            cat build/ios/ANGLE_COMMIT.txt || true
+            ls -la build/ios
+          else
+            echo "No release ANGLE build yet; using the reference IPA's frameworks"
+          fi
+
+      - name: Install ccache
+        run: brew install ccache
+
+      - name: Restore compiler cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .ccache
+          key: ccache-portal2-ios-${{ github.sha }}
+          restore-keys: |
+            ccache-portal2-ios-
+            ccache-csgo-ios-
+
+      - name: Build unsigned IPA
+        env:
+          IOS_BUNDLE_ID: com.sourceengine.portal2
+          IOS_DISPLAY_NAME: Portal 2
+          IOS_APP_BUNDLE: portal2.app
+          IOS_IPA_NAME: portal2-ios-arm64.ipa
+          # keep going after errors so each run reports every failing file
+          WAF_BUILD_FLAGS: -k
+        run: |
+          chmod +x scripts/build-ios-arm64.sh scripts/ios/*.sh
+          ./scripts/build-ios-arm64.sh --use-ccache --build-games=portal2
+
+      - name: Compiler cache stats
+        if: always()
+        run: ccache -s || true
+
+      # saved even when the build fails, so the next iteration only
+      # recompiles what changed
+      - name: Save compiler cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .ccache
+          key: ccache-portal2-ios-${{ github.sha }}
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: portal2-ios-arm64
+          path: artifacts/portal2-ios-arm64.ipa
+          if-no-files-found: error

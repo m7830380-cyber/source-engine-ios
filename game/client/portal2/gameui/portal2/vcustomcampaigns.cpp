@@ -27,6 +27,8 @@
 
 // use the JPEGLIB_USE_STDIO define so that we can read in jpeg's from outside the game directory tree.  For Spray Import.
 #define JPEGLIB_USE_STDIO
+// INT32 already comes from CegClientWrapper.h (int32); keep jmorecfg.h from redefining it as long
+#define _BASETSD_H
 #include "jpeglib/jpeglib.h"
 #undef JPEGLIB_USE_STDIO
 #include <setjmp.h>

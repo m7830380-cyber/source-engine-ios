@@ -57,8 +57,20 @@ public:
 	virtual void OnLevelLoadingFinished( bool bError, const char *failureReason, const char *extendedReason );
 	virtual void OnDisconnectFromServer_OLD( uint8 eSteamLoginFailure, const char *username ) { OnDisconnectFromServer( eSteamLoginFailure ); }
 
+	// loading screens the CS:GO engine asks for (IGameUI)
+	virtual void StartLoadingScreenForCommand( const char* command );
+	virtual void StartLoadingScreenForKeyValues( KeyValues* keyValues );
+
 	// progress
-	virtual bool UpdateProgressBar(float progress, const char *statusText);
+	virtual bool UpdateProgressBar(float progress, const char *statusText, bool showDialog = true );
+	virtual bool UpdateSecondaryProgressBar(float progress, const wchar_t *desc );
+
+	// message boxes
+	virtual void ShowMessageDialog( const uint nType, vgui::Panel *pOwner );
+	virtual void ShowMessageDialog( const char* messageID, const char* titleID );
+	virtual void CreateCommandMsgBox( const char* pszTitle, const char* pszMessage, bool showOk = true, bool showCancel = false, const char* okCommand = NULL, const char* cancelCommand = NULL, const char* closedCommand = NULL, const char* pszLegend = NULL );
+	virtual void CreateCommandMsgBoxInSlot( ECommandMsgBoxSlot slot, const char* pszTitle, const char* pszMessage, bool showOk = true, bool showCancel = false, const char* okCommand = NULL, const char* cancelCommand = NULL, const char* closedCommand = NULL, const char* pszLegend = NULL );
+	virtual void RestoreTopLevelMenu();
 	// Shows progress desc, returns previous setting... (used with custom progress bars )
 	virtual bool SetShowProgressText( bool show );
 
@@ -76,7 +88,7 @@ public:
 #endif
 
  	// state
- 	bool IsInLevel();
+ 	virtual bool IsInLevel();
  	bool IsInBackgroundLevel();
  	bool IsInMultiplayer();
  	bool IsConsoleUI();

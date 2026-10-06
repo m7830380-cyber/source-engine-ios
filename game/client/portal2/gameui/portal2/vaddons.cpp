@@ -33,6 +33,8 @@
 
 // use the JPEGLIB_USE_STDIO define so that we can read in jpeg's from outside the game directory tree.  For Spray Import.
 #define JPEGLIB_USE_STDIO
+// INT32 already comes from CegClientWrapper.h (int32); keep jmorecfg.h from redefining it as long
+#define _BASETSD_H
 #include "jpeglib/jpeglib.h"
 #undef JPEGLIB_USE_STDIO
 #include <setjmp.h>
@@ -926,7 +928,8 @@ void Addons::ExtractAddonMetadata( const char *pcAddonDir )
 
 	// Construct path to the VPK and create the object
 	V_snprintf( szAddonVPKFullPath, sizeof( szAddonVPKFullPath ), "%s%s%c%s.vpk", szModPath, ADDONS_DIRNAME, CORRECT_PATH_SEPARATOR, pcAddonDir );
-	CPackedStore mypack( szAddonVPKFullPath, g_pFullFileSystem );
+	char szAddonVPKFName[MAX_PATH];
+	CPackedStore mypack( szAddonVPKFullPath, szAddonVPKFName, g_pFullFileSystem );
 	
 	// Construct the output path for the addoninfo.txt and write it out
 	V_snprintf( szAddonInfoFullPath, sizeof( szAddonInfoFullPath ), "%s%s%c%s", szModPath, ADDONS_DIRNAME, CORRECT_PATH_SEPARATOR, ADDONINFO_FILENAME );

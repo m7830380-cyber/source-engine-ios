@@ -16,6 +16,10 @@
 #include "materialsystem/materialsystem_config.h"
 #include "ConfigManager.h"
 
+#ifndef STEAMREMOTESTORAGE_CLOUD_SPRAY
+#define STEAMREMOTESTORAGE_CLOUD_SPRAY		(1<<1)	// Portal 2 (ConfigManager.h in later trees has only CONFIG)
+#endif
+
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
 

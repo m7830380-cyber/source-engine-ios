@@ -42,6 +42,9 @@ public:
 
 	void SetParent( int parent );
 
+	// hides and deletes the panel (IGameConsole on the CS:GO engine)
+	virtual void Shutdown( void );
+
 	static void OnCmdCondump();
 private:
 

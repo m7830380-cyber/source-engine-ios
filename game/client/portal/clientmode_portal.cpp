@@ -243,7 +243,7 @@ void ClientModePortalNormal::Init()
 {
 	BaseClass::Init();
 
-	HOOK_MESSAGE( TransitionFade );
+	HOOK_LEGACY_MESSAGE( TransitionFade );
 
 	InitRadialMenuHudElement();
 }

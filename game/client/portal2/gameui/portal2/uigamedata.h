@@ -7,6 +7,9 @@
 #ifndef __UIGAMEDATA_H__
 #define __UIGAMEDATA_H__
 
+// GameUI (like the console versions) works with the primary user id
+#undef XBX_GetPrimaryUserId
+
 #include "vgui_controls/Panel.h"
 #include "vgui_controls/Frame.h"
 #include "vgui_controls/Button.h"

@@ -39,7 +39,6 @@ BEGIN_NETWORK_TABLE_NOBASE( CHalfLife2, DT_HL2GameRules )
 END_NETWORK_TABLE()
 
 
-LINK_ENTITY_TO_CLASS( hl2_gamerules, CHalfLife2Proxy );
 IMPLEMENT_NETWORKCLASS_ALIASED( HalfLife2Proxy, DT_HalfLife2Proxy )
 
 
@@ -87,7 +86,7 @@ ConVar	sk_dmg_take_scale2( "sk_dmg_take_scale2", "1.00", FCVAR_REPLICATED );
 	ConVar	sk_dmg_take_scale3( "sk_dmg_take_scale3", "1.50", FCVAR_REPLICATED );
 #endif//HL2_EPISODIC
 
-ConVar	sk_allow_autoaim( "sk_allow_autoaim", "1", FCVAR_REPLICATED | FCVAR_ARCHIVE_XBOX );
+ConVar	sk_allow_autoaim( "sk_allow_autoaim", "1", FCVAR_REPLICATED | FCVAR_ARCHIVE_GAMECONSOLE );
 
 // Autoaim scale
 ConVar	sk_autoaim_scale1( "sk_autoaim_scale1", "1.0", FCVAR_REPLICATED );
@@ -348,7 +347,7 @@ CHalfLife2::~CHalfLife2()
 		SendPropInt( SENDINFO(m_nReferencePlayer), 10, SPROP_UNSIGNED )
 	END_SEND_TABLE()
 
-	LINK_ENTITY_TO_CLASS( bodyque, CCorpse );
+	LINK_ENTITY_TO_CLASS_ALIASED( bodyque, Corpse );
 
 
 	CCorpse		*g_pBodyQueueHead;
@@ -1911,3 +1910,6 @@ CAmmoDef *GetAmmoDef()
 
 #endif
 #endif
+
+// (moved after the class implementation: CS:GO's client LINK_ENTITY_TO_CLASS needs its ClientClass)
+LINK_ENTITY_TO_CLASS_ALIASED( hl2_gamerules, HalfLife2Proxy );

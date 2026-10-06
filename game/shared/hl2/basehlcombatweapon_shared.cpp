@@ -12,7 +12,6 @@
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
 
-LINK_ENTITY_TO_CLASS( basehlcombatweapon, CBaseHLCombatWeapon );
 
 IMPLEMENT_NETWORKCLASS_ALIASED( BaseHLCombatWeapon , DT_BaseHLCombatWeapon )
 
@@ -429,3 +428,6 @@ const WeaponProficiencyInfo_t *CBaseHLCombatWeapon::GetDefaultProficiencyValues(
 }
 
 #endif
+
+// (moved after the class implementation: CS:GO's client LINK_ENTITY_TO_CLASS needs its ClientClass)
+LINK_ENTITY_TO_CLASS_ALIASED( basehlcombatweapon, BaseHLCombatWeapon );

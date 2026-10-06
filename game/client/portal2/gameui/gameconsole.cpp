@@ -142,6 +142,20 @@ void CGameConsole::OnCmdCondump()
 	g_GameConsole.m_pConsole->DumpConsoleTextToFile();
 }
 
+//-----------------------------------------------------------------------------
+// Purpose: hides and deletes the console panel
+//-----------------------------------------------------------------------------
+void CGameConsole::Shutdown( void )
+{
+	if ( m_pConsole && m_bInitialized )
+	{
+		m_pConsole->Hide();
+		m_pConsole->MarkForDeletion();
+		m_pConsole = NULL;
+		m_bInitialized = false;
+	}
+}
+
 CON_COMMAND( condump, "dump the text currently in the console to condumpXX.log" )
 {
 	g_GameConsole.OnCmdCondump();

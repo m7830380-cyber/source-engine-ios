@@ -16,6 +16,15 @@
 #include "fmtstr.h"
 #include "steamworks_gamestats.h"
 
+// Portal 2 had one shared uploader; this tree splits it per side
+#ifdef CLIENT_DLL
+#include "steamworks_gamestats_client.h"
+inline CSteamWorksGameStatsUploader& GetSteamWorksSGameStatsUploader() { return GetSteamWorksGameStatsClient(); }
+#else
+#include "steamworks_gamestats_server.h"
+inline CSteamWorksGameStatsUploader& GetSteamWorksSGameStatsUploader() { return GetSteamWorksGameStatsServer(); }
+#endif
+
 //=============================================================================
 //
 // Helper functions for creating key values
@@ -43,6 +52,7 @@ void AddStringDataToKV( KeyValues* pKV, const char* name, const char *data );
 
 //=============================================================================
 
+#if !defined( CLIENT_DLL ) // the client gets these from steamworks_gamestats_client.h
 // Macros to ease the creation of SendData method for stats structs/classes
 #define BEGIN_STAT_TABLE( tableName ) \
 	static const char* GetStatTableName( void ) { return tableName; } \
@@ -262,5 +272,6 @@ struct BaseStatData
 	uint64	TimeSubmitted;
 
 };
+#endif
 //=============================================================================
 #endif // PORTAL_GAMESTATS_SHARED_H

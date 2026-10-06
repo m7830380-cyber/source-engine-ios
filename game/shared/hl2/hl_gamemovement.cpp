@@ -136,7 +136,7 @@ void CReservePlayerSpot::Spawn()
 	AddEffects( EF_NODRAW );
 }
 
-LINK_ENTITY_TO_CLASS( reserved_spot, CReservePlayerSpot );
+LINK_ENTITY_TO_CLASS_ALIASED( reserved_spot, ReservePlayerSpot );
 
 #endif
 //-----------------------------------------------------------------------------

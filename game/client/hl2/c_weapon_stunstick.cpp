@@ -179,9 +179,10 @@ void RecvProxy_StunActive( const CRecvProxyData *pData, void *pStruct, void *pOu
 	*(bool *)pOut = state;
 }
 
-STUB_WEAPON_CLASS_IMPLEMENT( weapon_stunstick, C_WeaponStunStick );
 
 IMPLEMENT_CLIENTCLASS_DT( C_WeaponStunStick, DT_WeaponStunStick, CWeaponStunStick )
 	RecvPropInt( RECVINFO(m_bActive), 0, RecvProxy_StunActive ),
 END_RECV_TABLE()
 
+// (moved after the class implementation: CS:GO's client LINK_ENTITY_TO_CLASS needs its ClientClass)
+STUB_WEAPON_CLASS_IMPLEMENT( weapon_stunstick, C_WeaponStunStick );

@@ -203,7 +203,7 @@ void C_AR2Explosion::Start(CParticleMgr *pParticleMgr, IPrototypeArgAccess *pArg
 	// Center of explosion.
 	Vector vCenter = GetAbsOrigin(); // HACKHACK.. when the engine bug is fixed, use origin.
 
-	if ( IsXbox() )
+	if ( IsGameConsole() )
 	{
 		m_ParticleEffect.SetBBox( vCenter-Vector(300,300,300), vCenter+Vector(300,300,300) );
 	}
@@ -446,7 +446,7 @@ void C_AR2Explosion::RenderParticles( CParticleRenderIterator *pIterator )
 				alpha = AR2_DUST_ALPHA * ( 1.0f - lifetimePercent );
 			}
 
-			alpha *= GetAlphaDistanceFade( tPos, IsXbox() ? 100 : 50, IsXbox() ? 200 : 150 );
+			alpha *= GetAlphaDistanceFade( tPos, IsGameConsole() ? 100 : 50, IsGameConsole() ? 200 : 150 );
 
 			RenderParticle_ColorSizeAngle(
 				pIterator->GetParticleDraw(),

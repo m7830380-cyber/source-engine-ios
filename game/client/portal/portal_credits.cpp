@@ -236,8 +236,8 @@ void CHudPortalCredits::PrepareCredits( const char *pKeyName )
 using namespace vgui;
 
 DECLARE_HUDELEMENT( CHudPortalCredits );
-DECLARE_HUD_MESSAGE( CHudPortalCredits, CreditsPortalMsg );
-DECLARE_HUD_MESSAGE( CHudPortalCredits, LogoTimeMsg );
+DECLARE_LEGACY_HUD_MESSAGE( CHudPortalCredits, CreditsPortalMsg );
+DECLARE_LEGACY_HUD_MESSAGE( CHudPortalCredits, LogoTimeMsg );
 
 //-----------------------------------------------------------------------------
 // Purpose: Constructor
@@ -268,8 +268,8 @@ void CHudPortalCredits::Clear( void )
 //-----------------------------------------------------------------------------
 void CHudPortalCredits::Init()
 {
-	HOOK_HUD_MESSAGE( CHudPortalCredits, CreditsPortalMsg );
-	HOOK_HUD_MESSAGE( CHudPortalCredits, LogoTimeMsg );
+	HOOK_LEGACY_HUD_MESSAGE( CHudPortalCredits, CreditsPortalMsg );
+	HOOK_LEGACY_HUD_MESSAGE( CHudPortalCredits, LogoTimeMsg );
 	SetActive( false );
 }
 
@@ -1171,7 +1171,7 @@ void CHudPortalCredits::DrawLogo( void )
 
 	char szLogoFont[64];
 
-	if ( IsXbox() )
+	if ( IsGameConsole() )
 	{
 		Q_snprintf( szLogoFont, sizeof( szLogoFont ), "WeaponIcons_Small" );
 	}

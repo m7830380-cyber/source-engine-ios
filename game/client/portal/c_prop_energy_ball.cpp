@@ -36,7 +36,6 @@ protected:
 	float	m_fCurAlpha;				// The amount of alpha to apply at DrawModel, to simulate a decaying energy ball
 };
 
-LINK_ENTITY_TO_CLASS( prop_energy_ball, C_PropEnergyBall );
 
 // precache our different materials for the infinite life energy balls
 PRECACHE_REGISTER_BEGIN( GLOBAL, PrecacheEffectEnergyBall )
@@ -131,3 +130,6 @@ bool C_PropEnergyBall::InitMaterials()
 
 	return bRetVal;
 }
+
+// (moved after the class implementation: CS:GO's client LINK_ENTITY_TO_CLASS needs its ClientClass)
+LINK_ENTITY_TO_CLASS( prop_energy_ball, C_PropEnergyBall );

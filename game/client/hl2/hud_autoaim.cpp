@@ -78,7 +78,7 @@ DECLARE_HUDELEMENT( CHUDAutoAim );
 CHUDAutoAim::CHUDAutoAim( const char *pElementName ) :
 	CHudElement( pElementName ), BaseClass( NULL, "HUDAutoAim" )
 {
-	vgui::Panel *pParent = g_pClientMode->GetViewport();
+	vgui::Panel *pParent = GetClientMode()->GetViewport();
 	SetParent( pParent );
 	SetHiddenBits( HIDEHUD_CROSSHAIR );
 }
@@ -420,7 +420,7 @@ void CHUDAutoAim::Paint()
 		vert[3].Init( Vector2D( xCenter + xMod, yCenter - yMod ), uv22 );
 
 		Color	clr;
-		clr = gHUD.m_clrNormal;
+		clr = GetHud().m_clrNormal;
 		int r,g,b,a;
 		clr.GetColor( r,g,b,a );
 

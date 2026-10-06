@@ -6,6 +6,7 @@
 
 #include "cbase.h"
 #include "portal_mp_gamerules.h"
+#include "portal2/portal2_server_compat.h"
 
 #include "cvisibilitymonitor.h"
 

@@ -525,12 +525,12 @@ void CVoiceStatus::UpdateSpeakerStatus(int entindex, int iSsSlot, bool bTalking)
 		}
 		else 
 		{
-#if defined( PORTAL2 ) && !defined( _GAMECONSOLE )
+#if defined( PORTAL2 ) && !defined( _GAMECONSOLE ) && 0
 			if ( m_flTalkTime[ iClient ] > 0.0f )
 			{
 				g_PortalGameStats.Event_MicUsage( entindex, m_flTalkTime[ iClient ], gpGlobals->curtime - m_flTalkTime[ iClient ] );
 			}
-#endif //!defined( _GAMECONSOLE )
+#endif
 			m_flTalkTime[ iClient ] = 0.0f;
 		}
 		m_flTimeLastUpdate[ iClient ] = gpGlobals->curtime;
@@ -721,11 +721,16 @@ bool CVoiceStatus::IsPlayerBlocked(int iPlayer)
 
 bool IsPartyMember( XUID xuidPlayer )
 {
+#if defined( PORTAL2 )
+	(void)xuidPlayer;
+	return false;
+#else
 	if ( IMatchSession *pMatchSession = g_pMatchFramework->GetMatchSession() )
 	{
 		return SessionMembersFindPlayer( pMatchSession->GetSessionSettings(), xuidPlayer ) != NULL;
 	}
 	return false;
+#endif
 }
 
 

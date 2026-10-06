@@ -49,6 +49,7 @@
 	#include "portal_base2d_shared.h"
 	#include "portal_shareddefs.h"
 	#include "portal/prop_portal.h"
+	#include "portal/portal_base2d.h"
 #endif
 
 // memdbgon must be the last include file in a .cpp file!!!

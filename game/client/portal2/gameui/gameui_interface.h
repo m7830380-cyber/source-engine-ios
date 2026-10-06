@@ -93,7 +93,6 @@ public:
 	virtual void RestoreTopLevelMenu() { }
 	virtual void StartLoadingScreenForCommand( const char* command ) { (void)command; }
 	virtual void StartLoadingScreenForKeyValues( KeyValues* keyValues ) { (void)keyValues; }
-	virtual bool UpdateProgressBar(float progress, const char *statusText, bool showDialog = true );
 	virtual bool UpdateSecondaryProgressBar(float progress, const wchar_t *desc ) { (void)progress; (void)desc; return false; }
 	virtual void ShowMessageDialog( const uint nType, vgui::Panel *pOwner ) { (void)nType; (void)pOwner; }
 	virtual void ShowMessageDialog( const char* messageID, const char* titleID ) { (void)messageID; (void)titleID; }

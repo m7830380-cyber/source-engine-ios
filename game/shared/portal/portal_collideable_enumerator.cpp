@@ -1,4 +1,4 @@
-//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
+//========= Copyright  1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -8,6 +8,9 @@
 #include "cbase.h"
 #include "prop_portal_shared.h"
 #include "portal_collideable_enumerator.h"
+#ifdef CLIENT_DLL
+#include "cliententitylist.h"
+#endif
 
 #define PORTAL_TELEPORTATION_PLANE_OFFSET 7.0f
 
@@ -29,14 +32,17 @@ CPortalCollideableEnumerator::CPortalCollideableEnumerator( const CProp_Portal *
 
 IterationRetval_t CPortalCollideableEnumerator::EnumElement( IHandleEntity *pHandleEntity )
 {
-	EHANDLE hEnt( pHandleEntity->GetRefEHandle() );
-	
-	CBaseEntity *pEnt = hEnt.Get();
-	if( pEnt == NULL ) //I really never thought this would be necessary
+	CBaseHandle hRef = pHandleEntity->GetRefEHandle();
+#ifdef CLIENT_DLL
+	CBaseEntity *pEnt = ClientEntityList().GetBaseEntity( hRef );
+#else
+	CBaseEntity *pEnt = gEntList.GetBaseEntity( hRef );
+#endif
+	if( pEnt == NULL )
 		return ITERATION_CONTINUE;
 	
-	if( hEnt == m_hTestPortal )
-		return ITERATION_CONTINUE; //ignore this portal
+	if( pEnt == m_hTestPortal.Get() )
+		return ITERATION_CONTINUE;
 
 	/*if( staticpropmgr->IsStaticProp( pHandleEntity ) )
 	{

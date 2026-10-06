@@ -12,6 +12,8 @@ $Project
 {
 	-$File "$SRVSRCDIR\logic_playerproxy.cpp"
 	-$File "$SRVSRCDIR\logic_playerproxy.h"
+	-$File "$SRCDIR\game\server\vote_controller.cpp"
+	$File	"vote_controller_portal2_stub.cpp"
 }
 
 $include "$SRCDIR\game\shared\cstrike15\cstrike15_gcmessages_include.vpc" [$IOS]
@@ -136,7 +138,7 @@ $Project "Server (Portal 2)"
 			$File	"portal\func_portal_orientation.h"
 			$File	"portal\neurotoxin_countdown.cpp"
 			$File	"portal\npc_portal_turret_floor.cpp"
-			$File	"portal\npc_portal_turret_ground.cpp"
+			-$File	"portal\npc_portal_turret_ground.cpp"
 			$File	"portal\npc_security_camera.cpp"
 			$File	"portal\npc_security_camera.h"
 			$File	"portal\PhysicsCloneArea.cpp"

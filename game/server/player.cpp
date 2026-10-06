@@ -80,6 +80,7 @@
 
 #ifdef PORTAL2
 #include "weapon_portalgun.h"
+#include "portal2/portal2_server_compat.h"
 #endif
 
 #ifdef HL2_DLL
@@ -5540,6 +5541,7 @@ void CBasePlayer::NotifyNearbyRadiationSource( float flRange )
 
 void CBasePlayer::AllowImmediateDecalPainting()
 {
+#if defined( CSTRIKE15 ) && !defined( PORTAL2 )
 	// No decal expediting during warmup
 	if ( CSGameRules() )
 	{
@@ -5549,6 +5551,7 @@ void CBasePlayer::AllowImmediateDecalPainting()
 			!CSGameRules()->IsPlayingGunGameTRBomb() )
 			return;
 	}
+#endif
 
 	// CS:GO ensures a minimal ratelimit
 	if ( !m_bNextDecalTimeExpedited && ( m_flNextDecalTime > 0 ) )

@@ -738,12 +738,12 @@ CBaseHandle CPortalGameMovement::TestPlayerPosition( const Vector& pos, int coll
 		CPortal_Player *pPortalPlayer = (CPortal_Player *)((CBaseEntity *)mv->m_nPlayerHandle.Get());
 		pPortalPlayer->SetStuckOnPortalCollisionObject();
 
-		return CBaseHandle( INVALID_EHANDLE_INDEX );
+		return INVALID_EHANDLE;
 	}
 #endif
 	else
 	{	
-		return CBaseHandle( INVALID_EHANDLE_INDEX );
+		return INVALID_EHANDLE;
 	}
 }
 

@@ -13,6 +13,7 @@ $Include "$SRCDIR\game\client\client_base.vpc"
 $Project
 {
 	-$File "vgui_fpspanel.cpp"
+	-$File "$SRCDIR\game\shared\voice_status.cpp"
 }
 
 // iOS: CS:GO engine protobuf user messages; Portal 2 legacy messages as protobufs.

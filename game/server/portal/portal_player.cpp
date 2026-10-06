@@ -1,4 +1,4 @@
-//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
+//========= Copyright ù 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose:		Player for Portal.
 //
@@ -27,6 +27,7 @@
 #include "vphysics/player_controller.h"
 #include "datacache/imdlcache.h"
 #include "bone_setup.h"
+#include "bone_merge_cache.h"
 #include "portal_gamestats.h"
 #include "physicsshadowclone.h"
 #include "physics_prop_ragdoll.h"
@@ -515,7 +516,8 @@ void CPortal_Player::UpdateExpression( void )
 
 	ClearExpression();
 	AI_Response result; 
-	FindResponse(result, CAI_Concept(g_pszChellConcepts[iConcept]));
+	CAI_Concept concept( g_pszChellConcepts[iConcept] );
+	FindResponse( result, concept );
 
 	if ( result.IsEmpty() )
 	{
@@ -934,19 +936,25 @@ void CPortal_Player::SetupBones( matrix3x4_t *pBoneToWorld, int boneMask )
 	CBaseAnimating *pParent = dynamic_cast< CBaseAnimating* >( GetMoveParent() );
 	if ( pParent )
 	{
-		// We're doing bone merging, so do special stuff here.
 		CBoneCache *pParentCache = pParent->GetBoneCache();
 		if ( pParentCache )
 		{
-			BuildMatricesWithBoneMerge( 
-				pStudioHdr, 
+			if ( !m_pBoneMergeCache )
+			{
+				m_pBoneMergeCache = new CBoneMergeCache;
+				m_pBoneMergeCache->Init( this );
+			}
+
+			m_pBoneMergeCache->BuildMatricesWithBoneMerge(
+				pStudioHdr,
 				m_PlayerAnimState->GetRenderAngles(),
-				adjOrigin, 
-				pos, 
-				q, 
-				pBoneToWorld, 
-				pParent, 
-				pParentCache );
+				adjOrigin,
+				pos,
+				q,
+				pBoneToWorld,
+				pParent,
+				pParentCache,
+				boneMask );
 
 			return;
 		}
@@ -1108,19 +1116,19 @@ void CPortal_Player::VPhysicsShadowUpdate( IPhysicsObject *pPhysics )
 			{
 				// I'm currently stuck inside a moving object, so allow vphysics to 
 				// apply velocity to the player in order to separate these objects
-				m_touchedPhysObject = true;
+				m_bTouchedPhysObject = true;
 			}
 		}
 	}
 
 	if ( m_pPhysicsController->IsInContact() || (m_afPhysicsFlags & PFLAG_VPHYSICS_MOTIONCONTROLLER) )
 	{
-		m_touchedPhysObject = true;
+		m_bTouchedPhysObject = true;
 	}
 
 	if ( IsFollowingPhysics() )
 	{
-		m_touchedPhysObject = true;
+		m_bTouchedPhysObject = true;
 	}
 
 	if ( GetMoveType() == MOVETYPE_NOCLIP )
@@ -1146,7 +1154,7 @@ void CPortal_Player::VPhysicsShadowUpdate( IPhysicsObject *pPhysics )
 
 
 	Vector tmp = GetAbsOrigin() - newPosition;
-	if ( !m_touchedPhysObject && !(GetFlags() & FL_ONGROUND) )
+	if ( !m_bTouchedPhysObject && !(GetFlags() & FL_ONGROUND) )
 	{
 		tmp.z *= 0.5f;	// don't care about z delta as much
 	}
@@ -1162,9 +1170,9 @@ void CPortal_Player::VPhysicsShadowUpdate( IPhysicsObject *pPhysics )
 		maxVelErrorSqr *= 0.25;
 	}
 
-	if ( dist >= maxDistErrorSqr || deltaV >= maxVelErrorSqr || (pPhysGround && !m_touchedPhysObject) )
+	if ( dist >= maxDistErrorSqr || deltaV >= maxVelErrorSqr || (pPhysGround && !m_bTouchedPhysObject) )
 	{
-		if ( m_touchedPhysObject || pPhysGround )
+		if ( m_bTouchedPhysObject || pPhysGround )
 		{
 			// BUGBUG: Rewrite this code using fixed timestep
 			if ( deltaV >= maxVelErrorSqr )
@@ -1249,7 +1257,7 @@ void CPortal_Player::VPhysicsShadowUpdate( IPhysicsObject *pPhysics )
 	}
 	else
 	{
-		if ( m_touchedPhysObject )
+		if ( m_bTouchedPhysObject )
 		{
 			// check my position (physics object could have simulated into my position
 			// physics is not very far away, check my position

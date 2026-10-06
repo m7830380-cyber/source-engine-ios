@@ -1,0 +1,76 @@
+#include "cbase.h"
+#include "tier1/strtools.h"
+
+#if defined( PORTAL2 ) && defined( CLIENT_DLL )
+
+#include "vgui/IPanel.h"
+
+class CSDK_Background_Movie;
+
+bool IsRadialMenuOpen( void )
+{
+	return false;
+}
+
+CSDK_Background_Movie *SDKBackgroundMovie()
+{
+	return NULL;
+}
+
+void IOS_CloseChat() {}
+bool IOS_IsChatOpen() { return false; }
+bool IOS_IsBuyMenuVisible() { return false; }
+
+void OpenGammaDialog( vgui::VPANEL parent )
+{
+	(void)parent;
+}
+
+void LoadEquipmentData() {}
+
+bool GameModeHasDifficulty( const char *pszMode )
+{
+	(void)pszMode;
+	return false;
+}
+
+const char *GameModeGetDefaultDifficulty( const char *pszMode )
+{
+	(void)pszMode;
+	return "normal";
+}
+
+void PrecacheLoadingTipIcons() {}
+void InitHudAllowTextChatFlag() {}
+void InitUiAllowProperTintFlag() {}
+
+float CL_GetHltvReplayDelay()
+{
+	return 0.0f;
+}
+
+class C_BaseEntity;
+C_BaseEntity *GetPlayerHoldingEntity( const C_BaseEntity *pHeld )
+{
+	(void)pHeld;
+	return NULL;
+}
+
+Vector Pickup_DefaultPhysGunLaunchVelocity( const Vector &vecForward, float flMass )
+{
+	(void)flMass;
+	return vecForward * 200.0f;
+}
+
+void MoveUnpredictedPhysicsNearPlayerToNetworkedPosition( C_BasePlayer *pPlayer )
+{
+	(void)pPlayer;
+}
+
+void IOS_HapticViewModelSound( C_BasePlayer *pPlayer, const char *pszSound )
+{
+	(void)pPlayer;
+	(void)pszSound;
+}
+
+#endif

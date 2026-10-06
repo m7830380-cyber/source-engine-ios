@@ -13,7 +13,9 @@ $Include "$SRCDIR\game\client\client_base.vpc"
 $Project
 {
 	-$File "vgui_fpspanel.cpp"
-	-$File "$SRCDIR\game\shared\voice_status.cpp"
+	$File "$SRCDIR\common\imageutils.cpp"
+	$File "$SRCDIR\public\XUnzip.cpp"
+	$File "portal2\portal2_ios_link_stubs.cpp"
 }
 
 // iOS: CS:GO engine protobuf user messages; Portal 2 legacy messages as protobufs.
@@ -27,6 +29,7 @@ $Project
 		$File "$SRCDIR\gcsdk\steammessages.proto"
 		$File "$SRCDIR\game\shared\portal2\portal2_usermessages.proto"
 		$DynamicFile "$GENERATED_PROTO_DIR\portal2_usermessages.pb.cc"
+		$DynamicFile "$GENERATED_PROTO_DIR\steammessages.pb.cc"
 		$File "$SRCDIR\game\shared\portal2\legacy_usermessages.cpp"
 		-$File "c_te_playerdecal.cpp"
 		$File "portal2\c_te_playerdecal_portal2.cpp"
@@ -115,6 +118,7 @@ $Project "Client (Portal 2)"
 			$Folder	"GameUI"
 			{
 				$File	"portal2\gameui\gameui_interface.cpp" \
+						"portal2\gameui\gameconsole.cpp" \
 						"portal2\gameui\gameui_util.cpp" \
 						"portal2\gameui\rungameengine.cpp" \
 						"portal2\gameui\sys_utils.cpp" \
@@ -130,7 +134,8 @@ $Project "Client (Portal 2)"
 						"portal2\gameui\portal2\vcloud.cpp" \
 						"portal2\gameui\portal2\vjukebox.cpp" \
 						"portal2\gameui\portal2\vmenubackground.cpp" \
-						"portal2\gameui\portal2\vingamemainmenu.cpp"
+						"portal2\gameui\portal2\vingamemainmenu.cpp" \
+						"portal2\gameui\modinfo.cpp"
 				{
 					$Configuration
 					{

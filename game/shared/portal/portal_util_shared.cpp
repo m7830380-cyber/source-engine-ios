@@ -1042,9 +1042,6 @@ void UTIL_Portal_TraceEntity( CBaseEntity *pEntity, const Vector &vecAbsStart, c
 #ifndef CLIENT_DLL
 #if !defined( PORTAL2 )
 					if( sv_use_transformed_collideables.GetBool() ) //if this never gets turned off, it should be removed before release
-#else
-					if( false )
-#endif
 					{
 						//moving entities near the remote portal
 						CBaseEntity *pEnts[1024];
@@ -1062,15 +1059,14 @@ void UTIL_Portal_TraceEntity( CBaseEntity *pEntity, const Vector &vecAbsStart, c
 							transformedCollideable.m_pWrappedCollideable = pRemoteEntity->GetCollideable();
 							Assert( transformedCollideable.m_pWrappedCollideable != NULL );
 	                        						
-							//enginetrace->ClipRayToCollideable( entRay, mask, &transformedCollideable, pTrace );
-
 							enginetrace->ClipRayToCollideable( entRay, mask, &transformedCollideable, &tempTrace );
 							if( tempTrace.startsolid || (tempTrace.fraction < pTrace->fraction) )
-							{
+						 {
 								*pTrace = tempTrace;
 							}
 						}
 					}
+#endif
 #endif //#ifndef CLIENT_DLL
 				}
 			}

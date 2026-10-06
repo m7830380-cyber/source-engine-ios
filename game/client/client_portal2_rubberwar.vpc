@@ -100,117 +100,32 @@ $Project "Client (Portal 2)"
 
 			$Folder	"Radial Menu"
 			{
-				$File	"portal2\radialmenu.cpp"
-				$File	"portal2\radialmenu.h"
-				$File	"portal2\radialmenu_taunt.cpp"
-				$File	"portal2\radialmenu_taunt.h"
+				-$File	"portal2\radialmenu.cpp"
+				-$File	"portal2\radialmenu.h"
+				-$File	"portal2\radialmenu_taunt.cpp"
+				-$File	"portal2\radialmenu_taunt.h"
 			}
 
 			$Folder	"GameUI"
 			{
-				$File	"portal2\gameui\backgroundmenubutton.cpp" \
-						"portal2\gameui\basesavegamedialog.cpp" \
-						"portal2\gameui\bitmapimagepanel.cpp" \
-						"portal2\gameui\commandcheckbutton.cpp" \
-						-"portal2\gameui\contentcontroldialog.cpp" \
-						"portal2\gameui\createmultiplayergamebotpage.cpp" \
-						"portal2\gameui\createmultiplayergamedialog.cpp" \
-						"portal2\gameui\createmultiplayergamegameplaypage.cpp" \
-						"portal2\gameui\createmultiplayergameserverpage.cpp" \
-						"portal2\gameui\customtabexplanationdialog.cpp" \
-						"portal2\gameui\cvarnegatecheckbutton.cpp" \
-						"portal2\gameui\cvarslider.cpp" \
-						"portal2\gameui\cvartextentry.cpp" \
-						"portal2\gameui\cvartogglecheckbutton.cpp" \
-						"portal2\gameui\gameconsole.cpp" \
-						"portal2\gameui\gameconsoledialog.cpp" \
-						"portal2\gameui\gameui_interface.cpp" \
+				$File	"portal2\gameui\gameui_interface.cpp" \
 						"portal2\gameui\gameui_util.cpp" \
-						"portal2\gameui\keytogglecheckbutton.cpp" \
-						"portal2\gameui\labeledcommandcombobox.cpp" \
-						"portal2\gameui\loadingdialog.cpp" \
-						"portal2\gameui\loadingtippanel.cpp" \
-						"portal2\gameui\logofile.cpp" \
-						"portal2\gameui\modinfo.cpp" \
-						"portal2\gameui\mousemessageforwardingpanel.cpp" \
-						"portal2\gameui\multiplayeradvanceddialog.cpp" \
-						"portal2\gameui\optionsdialog.cpp" \
-						"portal2\gameui\optionssubaudio.cpp" \
-						"portal2\gameui\optionssubdifficulty.cpp" \
-						"portal2\gameui\optionssubgame.cpp" \
-						"portal2\gameui\optionssubkeyboard.cpp" \
-						"portal2\gameui\optionssubmouse.cpp" \
-						"portal2\gameui\optionssubmultiplayer.cpp" \
-						"portal2\gameui\optionssubportal.cpp" \
-						"portal2\gameui\optionssubvideo.cpp" \
-						"portal2\gameui\optionssubvoice.cpp" \
-						"portal2\gameui\panellistpanel.cpp" \
-						"portal2\gameui\playerlistdialog.cpp" \
 						"portal2\gameui\rungameengine.cpp" \
-						"portal2\gameui\scriptobject.cpp" \
+						"portal2\gameui\sys_utils.cpp" \
 						"portal2\gameui\portal2\basemodframe.cpp" \
 						"portal2\gameui\portal2\basemodpanel.cpp" \
-						"portal2\gameui\portal2\gamemodes.cpp" \
-						"portal2\gameui\portal2\uiavatarimage.cpp" \
-						"portal2\gameui\portal2\uigamedata.cpp" \
-						"portal2\gameui\portal2\uigamedata_invite.cpp" \
-						"portal2\gameui\portal2\uigamedata_storage.cpp" \
-						"portal2\gameui\portal2\vachievements.cpp" \
-						"portal2\gameui\portal2\vaddonassociation.cpp" \
-						"portal2\gameui\portal2\vaddons.cpp" \
-						"portal2\gameui\portal2\vattractscreen.cpp" \
-						"portal2\gameui\portal2\vaudio.cpp" \
-						"portal2\gameui\portal2\vaudiovideo.cpp" \
-						"portal2\gameui\portal2\vcloud.cpp" \
-						"portal2\gameui\portal2\vcontrolleroptions.cpp" \
-						"portal2\gameui\portal2\vcontrolleroptionsbuttons.cpp" \
-						"portal2\gameui\portal2\vcontrolleroptionssticks.cpp" \
-						"portal2\gameui\portal2\vcustomcampaigns.cpp" \
-						"portal2\gameui\portal2\vdownloadcampaign.cpp" \
-						"portal2\gameui\portal2\vdownloads.cpp" \
-						"portal2\gameui\portal2\vdropdownmenu.cpp" \
-						"portal2\gameui\portal2\vflyoutmenu.cpp" \
-						"portal2\gameui\portal2\vfooterpanel.cpp" \
-						"portal2\gameui\portal2\vfoundgames.cpp" \
-						"portal2\gameui\portal2\vfoundgroupgames.cpp" \
-						"portal2\gameui\portal2\vfoundpublicgames.cpp" \
-						"portal2\gameui\portal2\vgamelobby.cpp" \
-						"portal2\gameui\portal2\vgamelobbychat.cpp" \
-						"portal2\gameui\portal2\vgameoptions.cpp" \
-						"portal2\gameui\portal2\vgamesettings.cpp" \
-						"portal2\gameui\portal2\vgenericconfirmation.cpp" \
-						"portal2\gameui\portal2\vgenericpanellist.cpp" \
-						"portal2\gameui\portal2\vgenericwaitscreen.cpp" \
-						"portal2\gameui\portal2\vgetlegacydata.cpp" \
-						"portal2\gameui\portal2\vhybridbutton.cpp" \
-						"portal2\gameui\portal2\vingamechapterselect.cpp" \
-						"portal2\gameui\portal2\vingamedifficultyselect.cpp" \
-						"portal2\gameui\portal2\vingamekickplayerlist.cpp" \
-						"portal2\gameui\portal2\vingamemainmenu.cpp" \
-						"portal2\gameui\portal2\vjukebox.cpp" \
-						"portal2\gameui\portal2\vkeyboard.cpp" \
-						"portal2\gameui\portal2\vkeyboardmouse.cpp" \
-						"portal2\gameui\portal2\vleaderboard.cpp" \
-						"portal2\gameui\portal2\vloadingprogress.cpp" \
 						"portal2\gameui\portal2\vmainmenu.cpp" \
-						"portal2\gameui\portal2\vmenubackground.cpp" \
+						"portal2\gameui\portal2\vloadingprogress.cpp" \
+						"portal2\gameui\portal2\vgenericwaitscreen.cpp" \
+						"portal2\gameui\portal2\vfooterpanel.cpp" \
+						"portal2\gameui\portal2\vhybridbutton.cpp" \
 						"portal2\gameui\portal2\vmultiplayer.cpp" \
-						"portal2\gameui\portal2\voptions.cpp" \
-						"portal2\gameui\portal2\vpasswordentry.cpp" \
-						"portal2\gameui\portal2\vquickjoin.cpp" \
-						"portal2\gameui\portal2\vquickjoingroups.cpp" \
-						"portal2\gameui\portal2\vsignindialog.cpp" \
-						"portal2\gameui\portal2\vslidercontrol.cpp" \
-						"portal2\gameui\portal2\vspinnercontrol.cpp" \
-						"portal2\gameui\portal2\vsteamcloudconfirmation.cpp" \
-						"portal2\gameui\portal2\vtransitionscreen.cpp" \
-						"portal2\gameui\portal2\vvideo.cpp" \
-						"portal2\gameui\portal2\vvoteoptions.cpp" \
-						"portal2\gameui\sys_utils.cpp" \
-						"portal2\gameui\textentrybox.cpp" \
-						"portal2\gameui\urlbutton.cpp" \
-						"portal2\gameui\vcontrolslistpanel.cpp" \
-						"portal2\gameui\vguisystemmoduleloader.cpp"
+						"portal2\gameui\portal2\vaudio.cpp" \
+						"portal2\gameui\portal2\vcloud.cpp" \
+						"portal2\gameui\portal2\vaddons.cpp" \
+						"portal2\gameui\portal2\vjukebox.cpp" \
+						"portal2\gameui\portal2\vmenubackground.cpp" \
+						"portal2\gameui\portal2\vingamemainmenu.cpp"
 				{
 					$Configuration
 					{

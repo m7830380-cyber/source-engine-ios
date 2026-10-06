@@ -47,7 +47,7 @@ public:
 #if defined( CSTRIKE15 )
 		return false;
 #else
-		return BaseClass::ShouldDraw();
+		return CHudElement::ShouldDraw();
 #endif
 	}
 

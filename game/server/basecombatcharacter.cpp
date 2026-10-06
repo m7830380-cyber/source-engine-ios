@@ -48,7 +48,7 @@
 	#include "portal_util_shared.h"
 	#include "portal_base2d_shared.h"
 	#include "portal_shareddefs.h"
-	#include "npc_portal_turret_floor.h"
+	#include "portal/npc_portal_turret_floor.h"
 #endif
 
 // memdbgon must be the last include file in a .cpp file!!!

@@ -20,7 +20,9 @@
 
 #include "toolframework/itoolframework.h"
 
+#if defined( CSTRIKE15 ) && !defined( PORTAL2 )
 #include "cs_player.h"
+#endif
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"

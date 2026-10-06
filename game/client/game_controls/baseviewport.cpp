@@ -51,6 +51,9 @@
 #include "vgui_int.h"
 
 #ifdef PORTAL2
+#ifndef SFDevMsg
+#define SFDevMsg DevMsg
+#endif
 #include "radialmenu.h"
 #include "vgui/portal_stats_panel.h"
 #endif // PORTAL2

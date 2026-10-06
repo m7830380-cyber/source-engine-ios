@@ -1774,3 +1774,11 @@ void CC_Debug_FixMyPosition( void )
 
 static ConCommand debug_fixmyposition("debug_fixmyposition", CC_Debug_FixMyPosition, "Runs FindsClosestPassableSpace() on player.", FCVAR_CHEAT );
 #endif
+
+void UTIL_Portal_VectorToGlobalTransforms( const Vector &vSoundOrigin, CUtlVector<Vector> *pMultiOrigins )
+{
+	if ( pMultiOrigins )
+	{
+		pMultiOrigins->AddToTail( vSoundOrigin );
+	}
+}

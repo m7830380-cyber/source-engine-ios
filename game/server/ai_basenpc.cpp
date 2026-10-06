@@ -96,6 +96,7 @@
 
 #ifdef PORTAL
 	#include "portal_base2d_shared.h"
+	#include "portal/prop_portal.h"
 #endif
 
 #include "env_debughistory.h"

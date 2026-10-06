@@ -17,7 +17,9 @@
 #include "isaverestore.h"
 #include "sceneentity.h"
 #include "ai_speechqueue.h"
+#if defined( CSTRIKE15 ) && !defined( PORTAL2 )
 #include "cs_gamerules.h"
+#endif
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include <tier0/memdbgon.h>

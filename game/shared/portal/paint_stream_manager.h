@@ -8,7 +8,14 @@
 class CPaintStreamManager
 {
 public:
-	static CPaintStreamManager *GetInstance() { return NULL; }
+	static CPaintStreamManager &Instance()
+	{
+		static CPaintStreamManager s_Instance;
+		return s_Instance;
+	}
+	void AllocatePaintBlobPool( int nMaxBlobCount ) { (void)nMaxBlobCount; }
 };
+
+#define PaintStreamManager ( CPaintStreamManager::Instance() )
 
 #endif

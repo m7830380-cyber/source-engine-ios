@@ -1,4 +1,4 @@
-//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
+//========= Copyright ù 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -104,5 +104,6 @@ void UTIL_TransformInterpolatedPosition( CInterpolatedVar< Vector > &vInterped, 
 
 bool UTIL_Portal_EntityIsInPortalHole( const CProp_Portal *pPortal, CBaseEntity *pEntity );
 
-#endif //#ifndef PORTAL_UTIL_SHARED_H
+void UTIL_Portal_VectorToGlobalTransforms( const Vector &vSoundOrigin, CUtlVector<Vector> *pMultiOrigins );
 
+#endif //#ifndef PORTAL_UTIL_SHARED_H

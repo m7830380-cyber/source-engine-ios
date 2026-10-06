@@ -8,6 +8,12 @@ $Macro SRVSRCDIR	"."
 
 $Include "$SRCDIR\game\server\server_base.vpc"
 
+$Project
+{
+	-$File "$SRVSRCDIR\logic_playerproxy.cpp"
+	-$File "$SRVSRCDIR\logic_playerproxy.h"
+}
+
 $include "$SRCDIR\game\shared\cstrike15\cstrike15_gcmessages_include.vpc" [$IOS]
 $include "$SRCDIR\game\shared\cstrike15\cstrike15_usermessages_include.vpc" [$IOS]
 

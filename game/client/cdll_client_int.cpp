@@ -1953,7 +1953,9 @@ bool IOS_IsMenuActive()
 	// VGUI viewport windows (e.g. a server's message of the day) need the finger as the mouse too
 	IViewPortPanel *pInfo = GetViewPortInterface() ? GetViewPortInterface()->FindPanelByName( PANEL_INFO ) : NULL;
 	return !engine->IsInGame() ||
+#if defined( CSTRIKE15 ) && !defined( PORTAL2 )
 		( g_pScaleformUI && ( g_pScaleformUI->ConsumesInputEvents() || g_pScaleformUI->IsCursorVisible() ) ) ||
+#endif
 		IOS_IsBuyMenuVisible() ||
 		( pInfo && pInfo->IsVisible() );
 }
@@ -2153,9 +2155,6 @@ bool CHLClient::GetSoundSpatialization(  SpatializationInfo_t& info )
 		VectorCopy( info.info.vOrigin, vSoundOrigin );
 	}
 	UTIL_Portal_VectorToGlobalTransforms( vSoundOrigin, info.m_pUtlVecMultiOrigins );
-	
-
-// 	// portal2
 // 	Vector vListenerOrigin, vSoundOrigin;
 // 
 // 	VectorCopy( info.info.vListenerOrigin, vListenerOrigin );

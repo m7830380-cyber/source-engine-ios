@@ -26,6 +26,7 @@
 #ifdef PORTAL
 	#include "prop_portal_shared.h"
 	#include "portal_util_shared.h"
+	#include "portal/prop_portal.h"
 #endif
 
 // memdbgon must be the last include file in a .cpp file!!!

@@ -14,7 +14,7 @@
 
 #if defined( PORTAL2 )
 #ifndef RANDOM_CEG_TEST_SECRET
-#define RANDOM_CEG_TEST_SECRET 0
+#define RANDOM_CEG_TEST_SECRET() ((void)0)
 #endif
 #ifndef CEG_NOINLINE
 #define CEG_NOINLINE

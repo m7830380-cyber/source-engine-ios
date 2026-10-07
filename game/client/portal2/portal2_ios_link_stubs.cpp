@@ -21,18 +21,6 @@ void OpenGammaDialog( vgui::VPANEL parent )
 
 void LoadEquipmentData() {}
 
-bool GameModeHasDifficulty( const char *pszMode )
-{
-	(void)pszMode;
-	return false;
-}
-
-const char *GameModeGetDefaultDifficulty( const char *pszMode )
-{
-	(void)pszMode;
-	return "normal";
-}
-
 void PrecacheLoadingTipIcons() {}
 DWORD InitHudAllowTextChatFlag( void ) { return 0; }
 DWORD InitUiAllowProperTintFlag( void ) { return 0; }

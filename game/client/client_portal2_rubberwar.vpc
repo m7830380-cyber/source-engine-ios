@@ -24,6 +24,8 @@ $Project
 	$File "portal2\portal2_gameui_ios_stubs.cpp"
 	$File "portal2\portal2_achievements_client_stub.cpp"
 	-$File "portal\portalrenderable_flatbasic.cpp"
+	-$File "c_mod_lesson_stubs.cpp"
+	-$File "hl2\vgui_rootpanel_hl2.cpp"
 	-$File "portal\c_portal_base2d.cpp"
 	-$File "portal\c_portal_base2d.h"
 	-$File "portal\portal_credits.cpp"
@@ -101,7 +103,6 @@ $Project "Client (Portal 2)"
 			$File	"multiplayer\basenetworkedragdoll_cl.cpp"
 			$File	"$SRCDIR\game\shared\multiplayer\basenetworkedplayer_gamemove.cpp"
 			$File	"$SRCDIR\game\shared\multiplayer\basenetworkedplayer_shared.cpp"
-			$File	"$SRCDIR\game\shared\multiplayer\multiplayer_animstate.cpp"
 		}
 
 		$Folder "Portal 2"

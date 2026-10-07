@@ -14,14 +14,7 @@ void IOS_CloseChat() {}
 bool IOS_IsChatOpen() { return false; }
 bool IOS_IsBuyMenuVisible() { return false; }
 
-void OpenGammaDialog( vgui::VPANEL parent )
-{
-	(void)parent;
-}
-
 void LoadEquipmentData() {}
-
-void PrecacheLoadingTipIcons() {}
 DWORD InitHudAllowTextChatFlag( void ) { return 0; }
 DWORD InitUiAllowProperTintFlag( void ) { return 0; }
 

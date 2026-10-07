@@ -21,6 +21,10 @@ $Project
 	$File "$SRCDIR\public\XUnzip.cpp"
 	-$File "portal\portal_base2d.cpp"
 	-$File "portal\portal_base2d.h"
+	-$File "hl2\func_tank.cpp"
+	-$File "hl2\func_tank.h"
+	-$File "$SRVSRCDIR\func_tank.cpp"
+	-$File "$SRVSRCDIR\func_tank.h"
 	$File "portal\portal_base2d.cpp"
 	$File "portal\portal_client.cpp"
 	$File "portal\portal_placement.cpp"
@@ -73,7 +77,6 @@ $Project "Server (Portal 2)"
 			$File	"multiplayer\basenetworkedragdoll.cpp"
 			$File	"$SRCDIR\game\shared\multiplayer\basenetworkedplayer_gamemove.cpp"
 			$File	"$SRCDIR\game\shared\multiplayer\basenetworkedplayer_shared.cpp"
-			$File	"$SRCDIR\game\shared\multiplayer\multiplayer_animstate.cpp"
 		}
 
 		$Folder	"Portal 2"

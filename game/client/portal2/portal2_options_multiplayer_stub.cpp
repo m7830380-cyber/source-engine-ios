@@ -8,4 +8,27 @@ COptionsSubMultiplayer::COptionsSubMultiplayer( vgui::Panel *parent )
 {
 }
 
+COptionsSubMultiplayer::~COptionsSubMultiplayer()
+{
+}
+
+vgui::Panel *COptionsSubMultiplayer::CreateControlByName( const char *controlName )
+{
+	(void)controlName;
+	return NULL;
+}
+
+void COptionsSubMultiplayer::OnResetData()
+{
+}
+
+void COptionsSubMultiplayer::OnApplyChanges()
+{
+}
+
+void COptionsSubMultiplayer::OnCommand( const char *command )
+{
+	(void)command;
+}
+
 #endif

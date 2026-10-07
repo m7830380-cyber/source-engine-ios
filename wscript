@@ -191,6 +191,10 @@ PORTAL2_EXTRA_SOURCES = {
 	'server': ['common/steamid.cpp'],
 }
 
+PORTAL2_EXTRA_USES = {
+	'client': ['JPEG'],  # common/imageutils.cpp in client_portal2_rubberwar.vpc
+}
+
 # VPC link dependencies whose source is not part of the leak. Code that
 # needs them is compiled out or stubbed.
 MISSING_LIBS = set([
@@ -737,6 +741,8 @@ def build(bld):
 
 		includes = [INCLUDE_REMAP.get(i, i) for i in proj.includes if i not in DROP_INCLUDES]
 		use = _uses(proj.libs + proj.implibs) + PROJECT_EXTRA_USES.get(name, [])
+		if game == 'portal2':
+			use += PORTAL2_EXTRA_USES.get(name, [])
 
 		env = bld.env.derive()
 		env.append_value('CXXFLAGS', PROJECT_EXTRA_CXXFLAGS.get(name, []))

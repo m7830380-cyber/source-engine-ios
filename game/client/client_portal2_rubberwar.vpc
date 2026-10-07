@@ -117,9 +117,9 @@ $Project "Client (Portal 2)"
 			{
 				$File	"portal2\vgui\nb_button.cpp"
 				$File	"portal2\vgui\nb_header_footer.cpp"
-				-$File	"portal2\vgui\nb_horiz_list.cpp"
-				-$File	"portal2\vgui\nb_select_level_entry.cpp"
-				-$File	"portal2\vgui\nb_select_level_panel.cpp"
+				$File	"portal2\vgui\nb_horiz_list.cpp"
+				$File	"portal2\vgui\nb_select_level_entry.cpp"
+				$File	"portal2\vgui\nb_select_level_panel.cpp"
 				-$File	"portal2\vgui\sdk_hud_chat.cpp"
 				$File	"portal2\vgui\sdk_loading_panel.cpp"
 				$File	"portal2\vgui\sdk_logo_panel.cpp"
@@ -207,7 +207,16 @@ $Project "Client (Portal 2)"
 						"portal2\gameui\portal2\vaudiovideo.cpp" \
 						"portal2\gameui\portal2\vsteamcloudconfirmation.cpp" \
 						"portal2\gameui\portal2\vdownloadcampaign.cpp" \
-						"portal2\gameui\portal2\vdialoglistbutton.cpp"
+						"portal2\gameui\portal2\vdialoglistbutton.cpp" \
+						"portal2\gameui\portal2\uiavatarimage.cpp" \
+						"portal2\gameui\portal2\uigamedata_invite.cpp" \
+						"portal2\gameui\portal2\vachievements.cpp" \
+						"portal2\gameui\portal2\vaddonassociation.cpp" \
+						"portal2\gameui\portal2\vaddons.cpp" \
+						"portal2\gameui\portal2\vcustomcampaigns.cpp" \
+						"portal2\gameui\portal2\vgamelobbychat.cpp" \
+						"portal2\gameui\portal2\vquickjoin.cpp" \
+						"portal2\gameui\portal2\vspinnercontrol.cpp"
 				{
 					$Configuration
 					{

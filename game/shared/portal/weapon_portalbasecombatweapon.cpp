@@ -203,8 +203,13 @@ void CBasePortalCombatWeapon::WeaponIdle( void )
 #define	HL2_BOB			0.002f
 #define	HL2_BOB_UP		0.5f
 
+#ifndef PORTAL2
 float	g_lateralBob;
 float	g_verticalBob;
+#else
+extern float g_lateralBob;
+extern float g_verticalBob;
+#endif
 
 static ConVar	cl_bobcycle( "cl_bobcycle","0.8" );
 static ConVar	cl_bob( "cl_bob","0.002" );

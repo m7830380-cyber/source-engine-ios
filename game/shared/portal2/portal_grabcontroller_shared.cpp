@@ -1,4 +1,4 @@
-//===== Copyright © Valve Corporation, All rights reserved. ======//
+//===== Copyright ù Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -15,15 +15,19 @@
 #include "c_portal_player.h"
 #include "prediction.h"
 #include "c_breakableprop.h"
+#if !defined( PORTAL2 )
 #include "c_npc_portal_turret_floor.h"
 typedef C_NPC_Portal_FloorTurret CNPC_Portal_FloorTurret;
+#endif
 #else
 #include "player_pickup.h"
 #include "portal_player.h"
 #include "props.h"
 #include "physics_saverestore.h"
 #include "weapon_portalgun.h"
+#if !defined( PORTAL2 )
 #include "npc_portal_turret_floor.h"
+#endif
 #endif // CLIENT_DLL
 
 bool TestIntersectionVsHeldObjectCollide( CBaseEntity *pHeldObject, Vector vHeldObjectTestOrigin, CBaseEntity *pOther );
@@ -1459,10 +1463,12 @@ float CGrabController::GetObjectOffset( CBaseEntity *pEntity ) const
 		{																		
 			return player_held_object_offset_up_cube_vm.GetFloat();
 		}
+#if !defined( PORTAL2 )
 		else if ( dynamic_cast<CNPC_Portal_FloorTurret*>( pEntity ) != NULL )
 		{
 			return player_held_object_offset_up_turret_vm.GetFloat();
 		}
+#endif
 		else
 		{
 			return 0.0f;

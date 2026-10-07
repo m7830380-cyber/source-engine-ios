@@ -68,4 +68,15 @@ void CS_FreezePanel_ResetDamageText( int iPlayerIndexKiller, int iPlayerIndexVic
 	(void)iPlayerIndexVictim;
 }
 
+#include "portal_grabcontroller_shared.h"
+
+bool CPlayerPickupController::UsePickupController( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value )
+{
+	(void)pActivator;
+	(void)pCaller;
+	(void)useType;
+	(void)value;
+	return false;
+}
+
 #endif

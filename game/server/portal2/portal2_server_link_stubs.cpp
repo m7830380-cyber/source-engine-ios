@@ -80,6 +80,7 @@ void SetLaserDotTarget( CBaseEntity *pLaser, CBaseEntity *pTarget )
 }
 
 #include "portal/portal_base2d.h"
+#include "portal_grabcontroller_shared.h"
 
 void AddPortalVisibilityToPVS( CProp_Portal *pPortal, int pvssize, unsigned char *pvs )
 {
@@ -93,6 +94,15 @@ bool IsPlayerNearTargetPortal( CProp_Portal *pPortal )
 
 void CHL2_Player::StopSprinting( void )
 {
+}
+
+bool CPlayerPickupController::UsePickupController( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value )
+{
+	(void)pActivator;
+	(void)pCaller;
+	(void)useType;
+	(void)value;
+	return false;
 }
 
 static CDedicatedServerWorkshopManager g_Portal2DedicatedServerWorkshopManager;

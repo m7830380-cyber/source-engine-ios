@@ -65,8 +65,6 @@ $Project "Server (Portal 2)"
 			$File	"$SRCDIR\game\shared\portal2\player_pickup.cpp"
 			$File	"$SRCDIR\game\shared\portal2\player_pickup.h"
 			$File	"portal2\portal2_cs_grenade_server_stub.cpp"
-			$File	"$SRCDIR\game\shared\portal2\portal_grabcontroller_shared.cpp"
-			$File	"$SRCDIR\game\shared\portal2\portal_grabcontroller_shared.h"
 		}
 
 		$Folder	"Multiplayer"

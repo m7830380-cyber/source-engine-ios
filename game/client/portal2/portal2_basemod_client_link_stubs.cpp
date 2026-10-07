@@ -88,7 +88,8 @@ Achievements::Achievements( vgui::Panel *parent, const char *panelName )
 }
 
 GameSettings::GameSettings( vgui::Panel *parent, const char *panelName )
-	: BaseClass( parent, panelName )
+	: BaseClass( parent, panelName ),
+	  m_autodelete_pSettings( NULL )
 {
 }
 
@@ -184,7 +185,16 @@ Downloads::Downloads( vgui::Panel *parent, const char *panelName )
 }
 
 GameLobby::GameLobby( vgui::Panel *parent, const char *panelName )
-	: BaseClass( parent, panelName )
+	: BaseClass( parent, panelName ),
+	  m_autodelete_pLobbyDetailsLayout( NULL ),
+	  m_pSettings( NULL ),
+	  m_pLobbyDetailsLayout( NULL ),
+	  m_bNoCommandHandling( false ),
+	  m_bSubscribedForEvents( false ),
+	  m_flLastLobbyActivityTime( 0.0f ),
+	  m_nMsgBoxId( 0 ),
+	  m_xuidPlayerFlyout( 0 ),
+	  m_pPlayersList( NULL )
 {
 }
 
@@ -256,16 +266,17 @@ void SliderControl::Reset()
 {
 }
 
-unsigned short GenericPanelList::GetPanelItemIndex( vgui::Panel *pPanel, unsigned short &index )
+bool GenericPanelList::GetPanelItemIndex( vgui::Panel *pPanel, unsigned short &index )
 {
 	(void)pPanel;
 	index = 0;
-	return 0;
+	return false;
 }
 
-void GenericConfirmation::SetUsageData( Data_t const &data )
+int GenericConfirmation::SetUsageData( Data_t const &data )
 {
 	(void)data;
+	return 0;
 }
 
 GenericConfirmation::Data_t::Data_t()

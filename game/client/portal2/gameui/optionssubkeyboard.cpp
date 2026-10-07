@@ -1,4 +1,4 @@
-//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
+//===== Copyright  1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -124,7 +124,9 @@ void COptionsSubKeyboard::CreateKeyBindingList()
 {
 	// Create the control
 	m_pKeyBindList = new VControlsListPanel(this, "listpanel_keybindlist");
+#ifndef PORTAL2
 	m_pKeyBindList->GetScrollBar()->UseImages( "scroll_up", "scroll_down", "scroll_line", "scroll_box" );
+#endif
 }
 
 //-----------------------------------------------------------------------------
@@ -774,7 +776,9 @@ void COptionsSubKeyboard::OnThink()
 {
 	BaseClass::OnThink();
 
+#ifndef PORTAL2
 	m_pKeyBindList->GetScrollBar()->UseImages( "scroll_up", "scroll_down", "scroll_line", "scroll_box" );
+#endif
 
 	if ( m_pKeyBindList->IsCapturing() )
 	{

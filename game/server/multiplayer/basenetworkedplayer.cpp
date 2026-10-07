@@ -137,7 +137,11 @@ void CBaseNetworkedPlayer::PostThink()
 	angles[PITCH] = 0;
 	SetLocalAngles(angles);
 
-	m_angEyeAngles = EyeAngles();
+	QAngle eyeAngles = EyeAngles();
+	Vector &angEyeAngles = m_angEyeAngles.GetForModify();
+	angEyeAngles.x = eyeAngles.x;
+	angEyeAngles.y = eyeAngles.y;
+	angEyeAngles.z = eyeAngles.z;
 
 	m_PlayerAnimState->Update( m_angEyeAngles[YAW], m_angEyeAngles[PITCH] );
 }

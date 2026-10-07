@@ -1,4 +1,4 @@
-//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
+//========= Copyright  1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -120,6 +120,7 @@ bool CBaseHLCombatWeapon::Deploy( void )
 	// We have to ask the player if the last time it checked, the weapon was lowered
 	if ( GetOwner() && GetOwner()->IsPlayer() )
 	{
+#if !defined( PORTAL2 )
 		CHL2_Player *pPlayer = assert_cast<CHL2_Player*>( GetOwner() );
 		if ( pPlayer->IsWeaponLowered() )
 		{
@@ -137,6 +138,7 @@ bool CBaseHLCombatWeapon::Deploy( void )
 				}
 			}
 		}
+#endif
 	}
 
 	m_bLowered = false;
@@ -190,7 +192,7 @@ void CBaseHLCombatWeapon::WeaponIdle( void )
 	//See if we should idle high or low
 	if ( WeaponShouldBeLowered() )
 	{
-#if !defined( CLIENT_DLL )
+#if !defined( CLIENT_DLL ) && !defined( PORTAL2 )
 		CHL2_Player *pPlayer = dynamic_cast<CHL2_Player*>(GetOwner());
 
 		if( pPlayer )

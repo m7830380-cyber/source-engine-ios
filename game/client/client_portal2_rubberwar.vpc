@@ -15,8 +15,9 @@ $Project
 	-$File "vgui_fpspanel.cpp"
 	$File "$SRCDIR\public\XUnzip.cpp"
 	$File "portal2\portal2_ios_link_stubs.cpp"
+	$File "portal2\portal2_ios_client_convars.cpp"
+	$File "portal2\portal2_options_multiplayer_stub.cpp"
 	$File "portal2\portal2_ios_vgui_link_stubs.cpp"
-	$File "portal2\portal2_basemod_client_link_stubs.cpp"
 	$File "portal2\portal2_portal_renderable_client_stub.cpp"
 	$File "portal2\portal2_radialmenu_client_stub.cpp"
 	$File "portal2\portal2_liquidportal_client_stub.cpp"
@@ -61,7 +62,7 @@ $Configuration
 	{
 		$AdditionalIncludeDirectories	"$BASE;$SRCDIR\game\client\portal2;$SRCDIR\game\client\portal2\gameui;$SRCDIR\game\shared\portal2;.\hl2;.\portal;.\portal\vgui;.\portal2;.\portal2\vgui;.\vgui;$SRCDIR\game\shared\portal;$SRCDIR\game\shared\multiplayer;$SRCDIR\game\shared\hl2"
 		$PreprocessorDefinitions		"$BASE;PORTAL;PORTAL2;GAMEUI_EMBEDDED;GAMEUI_EXPORTS"
-		$PreprocessorDefinitions		"$BASE;NO_STEAM_GAMECOORDINATOR"					[ $IOS ]
+		$PreprocessorDefinitions		"$BASE;NO_STEAM_GAMECOORDINATOR;NO_STEAM"					[ $IOS ]
 	}
 }
 
@@ -157,6 +158,7 @@ $Project "Client (Portal 2)"
 						"portal2\gameui\rungameengine.cpp" \
 						"portal2\gameui\sys_utils.cpp" \
 						"portal2\gameui\vguisystemmoduleloader.cpp" \
+						"portal2\gameui\urlbutton.cpp" \
 						"portal2\gameui\modinfo.cpp" \
 						"portal2\gameui\portal2\basemodframe.cpp" \
 						"portal2\gameui\portal2\basemodpanel.cpp" \
@@ -172,7 +174,40 @@ $Project "Client (Portal 2)"
 						"portal2\gameui\portal2\vmenubackground.cpp" \
 						"portal2\gameui\portal2\vingamemainmenu.cpp" \
 						"portal2\gameui\portal2\vflyoutmenu.cpp" \
-						"portal2\gameui\portal2\vvideo.cpp"
+						"portal2\gameui\portal2\vvideo.cpp" \
+						"portal2\gameui\portal2\gamemodes.cpp" \
+						"portal2\gameui\portal2\uigamedata.cpp" \
+						"portal2\gameui\portal2\uigamedata_storage.cpp" \
+						"portal2\gameui\portal2\vdropdownmenu.cpp" \
+						"portal2\gameui\portal2\vslidercontrol.cpp" \
+						"portal2\gameui\portal2\vgenericpanellist.cpp" \
+						"portal2\gameui\portal2\vgenericconfirmation.cpp" \
+						"portal2\gameui\portal2\vfoundgames.cpp" \
+						"portal2\gameui\portal2\vfoundgroupgames.cpp" \
+						"portal2\gameui\portal2\vfoundpublicgames.cpp" \
+						"portal2\gameui\portal2\vgameoptions.cpp" \
+						"portal2\gameui\portal2\vgamesettings.cpp" \
+						"portal2\gameui\portal2\vgamelobby.cpp" \
+						"portal2\gameui\portal2\vleaderboard.cpp" \
+						"portal2\gameui\portal2\vvoteoptions.cpp" \
+						"portal2\gameui\portal2\vpasswordentry.cpp" \
+						"portal2\gameui\portal2\vsignindialog.cpp" \
+						"portal2\gameui\portal2\vgetlegacydata.cpp" \
+						"portal2\gameui\portal2\vattractscreen.cpp" \
+						"portal2\gameui\portal2\vcontrolleroptions.cpp" \
+						"portal2\gameui\portal2\vcontrolleroptionsbuttons.cpp" \
+						"portal2\gameui\portal2\vcontrolleroptionssticks.cpp" \
+						"portal2\gameui\portal2\vtransitionscreen.cpp" \
+						"portal2\gameui\portal2\vingamechapterselect.cpp" \
+						"portal2\gameui\portal2\vingamedifficultyselect.cpp" \
+						"portal2\gameui\portal2\vingamekickplayerlist.cpp" \
+						"portal2\gameui\portal2\voptions.cpp" \
+						"portal2\gameui\portal2\vdownloads.cpp" \
+						"portal2\gameui\portal2\vkeyboard.cpp" \
+						"portal2\gameui\portal2\vaudiovideo.cpp" \
+						"portal2\gameui\portal2\vsteamcloudconfirmation.cpp" \
+						"portal2\gameui\portal2\vdownloadcampaign.cpp" \
+						"portal2\gameui\portal2\vdialoglistbutton.cpp"
 				{
 					$Configuration
 					{

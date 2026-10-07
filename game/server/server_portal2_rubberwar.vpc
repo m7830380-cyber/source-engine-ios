@@ -15,7 +15,6 @@ $Project
 	$File	"portal2\portal2_server_link_stubs.cpp"
 	$File	"portal2\portal2_server_gameinterface_stub.cpp"
 	$File	"portal2\portal2_cmisile_server_stub.cpp"
-	$File	"portal2\portal2_hl2_player_server_stub.cpp"
 	$File	"portal2\portal2_achievements_server_stub.cpp"
 	$File "$SRCDIR\common\platforminputdevice.cpp"
 	$File "$SRCDIR\common\platforminputdevice.h"

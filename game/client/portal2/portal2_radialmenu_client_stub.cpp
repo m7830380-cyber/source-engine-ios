@@ -15,4 +15,9 @@ CRadialMenuPanel::CRadialMenuPanel( IViewPort *pViewPort )
 	SetPaintBackgroundEnabled( false );
 }
 
+void CRadialMenuPanel::ShowPanel( bool bShow )
+{
+	SetVisible( bShow );
+}
+
 #endif

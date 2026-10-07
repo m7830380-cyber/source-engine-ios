@@ -5640,7 +5640,8 @@ void Host_Init( bool bDedicated )
 		// NOTE: This depends on the mod search path being set up
 		TRACEINIT( InitMaterialSystem(), ShutdownMaterialSystem() );
 
-#if defined( INCLUDE_SCALEFORM )
+#if defined( INCLUDE_SCALEFORM ) && !defined( PORTAL2 )
+		// CS:GO main-menu Scaleform; Portal 2 uses VGUI (BaseModPanel), not MainUIRootMovie.swf.
 		extern IScaleformSlotInitController *g_pIScaleformSlotInitControllerEngineImpl;
 		TRACEINIT( ScaleformInitFullScreenAndCursor(g_pScaleformUI, g_szDefaultScaleformMovieName, g_szDefaultScaleformCursorName, g_pIScaleformSlotInitControllerEngineImpl ), ScaleformReleaseFullScreenAndCursor( g_pScaleformUI ) );
 #endif

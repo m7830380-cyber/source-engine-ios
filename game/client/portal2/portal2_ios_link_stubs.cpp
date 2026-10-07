@@ -37,8 +37,7 @@ void PrecacheLoadingTipIcons() {}
 DWORD InitHudAllowTextChatFlag( void ) { return 0; }
 DWORD InitUiAllowProperTintFlag( void ) { return 0; }
 
-class C_BaseEntity;
-C_BaseEntity *GetPlayerHoldingEntity( const C_BaseEntity *pHeld )
+C_BasePlayer *GetPlayerHoldingEntity( const C_BaseEntity *pHeld )
 {
 	(void)pHeld;
 	return NULL;

@@ -13,7 +13,6 @@
 #include "portal2/gameui/portal2/vleaderboard.h"
 #include "portal2/gameui/portal2/vvoteoptions.h"
 #include "portal2/gameui/portal2/vachievements.h"
-#include "portal2/gameui/portal2/vgamesettings.h"
 #include "portal2/gameui/portal2/vsignindialog.h"
 #include "portal2/gameui/portal2/vgetlegacydata.h"
 #include "portal2/gameui/portal2/vpasswordentry.h"
@@ -30,7 +29,6 @@
 #include "portal2/gameui/portal2/vaddons.h"
 #include "portal2/gameui/portal2/voptions.h"
 #include "portal2/gameui/portal2/vdownloads.h"
-#include "portal2/gameui/portal2/vgamelobby.h"
 #include "portal2/gameui/portal2/vkeyboard.h"
 #include "portal2/gameui/portal2/vingamechapterselect.h"
 #include "portal2/gameui/portal2/vingamekickplayerlist.h"
@@ -84,12 +82,6 @@ VoteOptions::VoteOptions( vgui::Panel *parent, const char *panelName )
 
 Achievements::Achievements( vgui::Panel *parent, const char *panelName )
 	: BaseClass( parent, panelName )
-{
-}
-
-GameSettings::GameSettings( vgui::Panel *parent, const char *panelName )
-	: BaseClass( parent, panelName ),
-	  m_autodelete_pSettings( NULL )
 {
 }
 
@@ -181,20 +173,6 @@ Options::Options( vgui::Panel *parent, const char *panelName )
 
 Downloads::Downloads( vgui::Panel *parent, const char *panelName )
 	: BaseClass( parent, panelName )
-{
-}
-
-GameLobby::GameLobby( vgui::Panel *parent, const char *panelName )
-	: BaseClass( parent, panelName ),
-	  m_autodelete_pLobbyDetailsLayout( NULL ),
-	  m_pSettings( NULL ),
-	  m_pLobbyDetailsLayout( NULL ),
-	  m_bNoCommandHandling( false ),
-	  m_bSubscribedForEvents( false ),
-	  m_flLastLobbyActivityTime( 0.0f ),
-	  m_nMsgBoxId( 0 ),
-	  m_xuidPlayerFlyout( 0 ),
-	  m_pPlayersList( NULL )
 {
 }
 

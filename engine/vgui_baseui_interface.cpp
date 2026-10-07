@@ -989,7 +989,13 @@ void CEngineVGui::Init()
 	}
 		
 	// Make sure that these materials are in the materials cache
+#if defined( IOS ) && defined( PORTAL2 )
+	// Portal 2 on iOS still links CS:GO VGUI/econ materials. Eager precache hits
+	// vertexlit combos (e.g. SFM+FLASHLIGHT) that TOGLES cannot translate yet.
+	Warning( "iOS Portal 2: skipping CacheUsedMaterials during EngineVGui::Init\n" );
+#else
 	materials->CacheUsedMaterials();
+#endif
 
 	COM_TimestampedLog( "g_pVGuiLocalize->AddFile" );
 

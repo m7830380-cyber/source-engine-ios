@@ -441,6 +441,19 @@ void IOS_LogGameContent( void )
 		IOS_Log( "  dirs: %s", [[[dirs sortedArrayUsingSelector:@selector(compare:)]
 								  componentsJoinedByString:@" "] UTF8String] );
 		IOS_Log( "--- end game content ---" );
+
+		NSString *csgo = [[NSString stringWithUTF8String:IOS_GetDocsDir()]
+						  stringByAppendingPathComponent:@"csgo"];
+		if( [fm fileExistsAtPath:csgo isDirectory:&isDir] && isDir )
+		{
+			NSDictionary *gi = [fm attributesOfItemAtPath:[csgo stringByAppendingPathComponent:@"gameinfo.txt"] error:nil];
+			IOS_Log( "optional Documents/csgo: present%s",
+					 gi ? "" : " (gameinfo.txt missing)" );
+		}
+		else
+		{
+			IOS_Log( "optional Documents/csgo: not present (not on -game portal2 search path unless gameinfo mounts it)" );
+		}
 	}
 }
 

@@ -18,7 +18,9 @@
 #include "portal2/gameui/portal2/vpasswordentry.h"
 #include "portal2/gameui/portal2/vattractscreen.h"
 #include "portal2/gameui/portal2/vcustomcampaigns.h"
+#include "portal2/gameui/portal2/vfoundgames.h"
 #include "portal2/gameui/portal2/vfoundgroupgames.h"
+#include "portal2/gameui/portal2/vaudiovideo.h"
 #include "portal2/gameui/portal2/vaddonassociation.h"
 #include "portal2/gameui/portal2/vdownloadcampaign.h"
 #include "portal2/gameui/portal2/vfoundpublicgames.h"
@@ -50,6 +52,20 @@ void CUIGameData::RunFrame()
 
 void CUIGameData::Shutdown()
 {
+}
+
+const char *CUIGameData::GetPlayerName( uint64 xuid, const char *pszFallback )
+{
+	(void)xuid;
+	return pszFallback ? pszFallback : "";
+}
+
+void CUIGameData::OpenWaitScreen( const char *msg, float minDisplayTime, KeyValues *pSettings, float timeout )
+{
+	(void)msg;
+	(void)minDisplayTime;
+	(void)pSettings;
+	(void)timeout;
 }
 
 bool CUIGameData::CheckAndDisplayErrorIfOffline( CBaseModFrame *pCallerFrame, char const *szMsg )
@@ -112,6 +128,20 @@ void CAttractScreen::SetAttractMode( AttractMode_t mode, int iPlaylist )
 }
 
 CustomCampaigns::CustomCampaigns( vgui::Panel *parent, const char *panelName )
+	: BaseClass( parent, panelName )
+{
+}
+
+FoundGames::FoundGames( vgui::Panel *parent, const char *panelName )
+	: BaseClass( parent, panelName )
+{
+}
+
+FoundGames::~FoundGames()
+{
+}
+
+AudioVideo::AudioVideo( vgui::Panel *parent, const char *panelName )
 	: BaseClass( parent, panelName )
 {
 }

@@ -150,6 +150,8 @@ $Project "Client (Portal 2)"
 						"portal2\gameui\optionssubvideo.cpp" \
 						"portal2\gameui\optionssubvoice.cpp" \
 						"portal2\gameui\cvarslider.cpp" \
+						"portal2\gameui\cvarnegatecheckbutton.cpp" \
+						"portal2\gameui\cvartogglecheckbutton.cpp" \
 						"portal2\gameui\vcontrolslistpanel.cpp" \
 						"portal2\gameui\gameui_util.cpp" \
 						"portal2\gameui\rungameengine.cpp" \

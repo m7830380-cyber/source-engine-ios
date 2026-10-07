@@ -429,5 +429,15 @@ const WeaponProficiencyInfo_t *CBaseHLCombatWeapon::GetDefaultProficiencyValues(
 
 #endif
 
+bool CBaseHLCombatWeapon::SendWeaponAnim( int iActivity )
+{
+	return BaseClass::SendWeaponAnim( iActivity );
+}
+
+bool CBaseHLCombatWeapon::IsSpecialSuitAbility( void )
+{
+	return false;
+}
+
 // (moved after the class implementation: CS:GO's client LINK_ENTITY_TO_CLASS needs its ClientClass)
 LINK_ENTITY_TO_CLASS_ALIASED( basehlcombatweapon, BaseHLCombatWeapon );

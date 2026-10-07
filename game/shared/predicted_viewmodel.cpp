@@ -85,3 +85,17 @@ void CPredictedViewModel::CalcViewModelLag( Vector& origin, QAngle& angles, QAng
 	origin += m_vPredictedOffset;
 #endif
 }
+
+void CPredictedViewModel::AddViewModelBob( CBasePlayer *owner, Vector &eyePosition, QAngle &eyeAngles )
+{
+	(void)owner;
+	(void)eyePosition;
+	(void)eyeAngles;
+}
+
+void CPredictedViewModel::ApplyViewModelPitchAndDip( CBasePlayer *owner, Vector &origin, QAngle &angles )
+{
+	(void)owner;
+	(void)origin;
+	(void)angles;
+}

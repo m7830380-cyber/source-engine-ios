@@ -398,7 +398,7 @@ void MusicImporterDialog::OpenImportDialog( Panel *pParent )
 {
 	if (g_hMusicImportDialog.Get() == NULL)
 	{
-		g_hMusicImportDialog = new MusicImporterDialog( NULL, "#asw_music_import_dialog", vgui::FOD_OPEN_MULTIPLE, NULL);
+		g_hMusicImportDialog = new MusicImporterDialog( NULL, "#asw_music_import_dialog", vgui::FOD_OPEN, NULL);
 		g_hMusicImportDialog->AddFilter("*.mp3", "#asw_music_types", true);
 	}
 	if( pParent )

@@ -240,7 +240,7 @@ END_SEND_TABLE()
 //-----------------------------------------------------------------------------
 // Gets at the spawner
 //-----------------------------------------------------------------------------
-inline CFuncCombineBallSpawner *CPropCombineBall::GetSpawner()
+CFuncCombineBallSpawner *CPropCombineBall::GetSpawner()
 {
 	return m_hSpawner;
 }

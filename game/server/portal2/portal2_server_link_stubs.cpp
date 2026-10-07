@@ -59,10 +59,6 @@ CBasePlayer *GetPlayerHoldingEntity( const CBaseEntity *pEntity )
 	return GetPlayerHoldingEntity( const_cast<CBaseEntity *>( pEntity ) );
 }
 
-void CMissile::DumbFire( void )
-{
-}
-
 CBaseEntity *CreateLaserDot( const Vector &origin, CBaseEntity *pOwner, bool bVisibleDot )
 {
 	(void)origin;
@@ -96,40 +92,6 @@ bool IsPlayerNearTargetPortal( CProp_Portal *pPortal )
 }
 
 void CHL2_Player::StopSprinting( void )
-{
-}
-
-unsigned int CMissile::PhysicsSolidMaskForEntity( void ) const
-{
-	return BaseClass::PhysicsSolidMaskForEntity();
-}
-
-CAPCMissile *CAPCMissile::Create( const Vector &vecOrigin, const QAngle &vecAngles, const Vector &vecVelocity, CBaseEntity *pOwner )
-{
-	(void)vecOrigin;
-	(void)vecAngles;
-	(void)vecVelocity;
-	(void)pOwner;
-	return NULL;
-}
-
-CAPCMissile::CAPCMissile()
-{
-}
-
-CAPCMissile::~CAPCMissile()
-{
-}
-
-void CAPCMissile::IgniteDelay()
-{
-}
-
-void CAPCMissile::AugerDelay( float )
-{
-}
-
-void CAPCMissile::ExplodeDelay( float )
 {
 }
 

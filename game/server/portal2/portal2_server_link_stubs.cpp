@@ -83,6 +83,18 @@ void SetLaserDotTarget( CBaseEntity *pLaser, CBaseEntity *pTarget )
 	(void)pTarget;
 }
 
+#include "portal/portal_base2d.h"
+
+void AddPortalVisibilityToPVS( CProp_Portal *pPortal, int pvssize, unsigned char *pvs )
+{
+	AddPortalVisibilityToPVS( static_cast<CPortal_Base2D *>( pPortal ), pvssize, pvs );
+}
+
+bool IsPlayerNearTargetPortal( CProp_Portal *pPortal )
+{
+	return IsPlayerNearTargetPortal( static_cast<CPortal_Base2D *>( pPortal ) );
+}
+
 void CHL2_Player::StopSprinting( void )
 {
 }

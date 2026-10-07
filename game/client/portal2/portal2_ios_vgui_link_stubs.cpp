@@ -3,7 +3,7 @@
 
 #if defined( PORTAL2 ) && defined( CLIENT_DLL )
 
-#include "iviewport.h"
+class IViewPort;
 
 class CRadialMenuPanel : public vgui::Panel
 {
@@ -13,6 +13,15 @@ public:
 		: BaseClass( NULL, "RadialMenu" )
 	{
 		(void)pViewPort;
+	}
+};
+
+class MusicImporterDialog
+{
+public:
+	static void OpenImportDialog( vgui::Panel *parent )
+	{
+		(void)parent;
 	}
 };
 

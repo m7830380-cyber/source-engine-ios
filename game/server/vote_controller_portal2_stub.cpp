@@ -14,6 +14,27 @@ END_DATADESC()
 
 LINK_ENTITY_TO_CLASS( vote_controller, CVoteController );
 
+CVoteController::~CVoteController()
+{
+}
+
+void CVoteController::Spawn( void )
+{
+	BaseClass::Spawn();
+}
+
+int CVoteController::UpdateTransmitState( void )
+{
+	return SetTransmitState( FL_EDICT_ALWAYS );
+}
+
+CVoteController::TryCastVoteResult CVoteController::TryCastVote( int iEntIndex, const char *pszVoteString )
+{
+	(void)iEntIndex;
+	(void)pszVoteString;
+	return CAST_FAIL_SERVER_DISABLE;
+}
+
 CVoteController *g_voteControllerGlobal = NULL;
 CVoteController *g_voteControllerCT = NULL;
 CVoteController *g_voteControllerT = NULL;

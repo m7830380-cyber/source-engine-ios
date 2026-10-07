@@ -52,4 +52,18 @@ void CServerGameDLL::ApplyGameSettings( KeyValues * )
 {
 }
 
+bool CServerGameDLL::ShouldHoldGameServerReservation( float )
+{
+	return false;
+}
+
+void CServerGameDLL::OnPureServerFileValidationFailure( edict_t *, const char *, const char *, uint32, int32, int32, int, int )
+{
+}
+
+char const *CServerGameDLL::ClientConnectionValidatePreNetChan( bool, char const *, int, uint64 )
+{
+	return NULL;
+}
+
 #endif

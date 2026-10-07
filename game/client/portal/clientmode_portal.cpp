@@ -38,6 +38,10 @@
 #include "nb_header_footer.h"
 #include "glow_outline_effect.h"
 
+#if defined( IOS ) && defined( PORTAL2 )
+#include "gameui_interface.h"
+#endif
+
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
 
@@ -248,12 +252,14 @@ public:
 	}
 	virtual void Init()
 	{
+#if defined( IOS ) && defined( PORTAL2 )
+		IGameUI *pGameUI = &GameUI();
+#else
 		CreateInterfaceFn gameUIFactory = g_GameUI.GetFactory();
-		if (gameUIFactory)
+		IGameUI *pGameUI = gameUIFactory ? (IGameUI *)gameUIFactory( GAMEUI_INTERFACE_VERSION, NULL ) : NULL;
+#endif
+		if ( pGameUI )
 		{
-			IGameUI *pGameUI = (IGameUI *)gameUIFactory(GAMEUI_INTERFACE_VERSION, NULL);
-			if (NULL != pGameUI)
-			{
 				// insert stats summary panel as the loading background dialog
 				CSDK_Loading_Panel *pPanel = GSDKLoadingPanel();
 				pPanel->InvalidateLayout(false, true);
@@ -266,7 +272,6 @@ public:
 				vgui::VPANEL GameUIRoot = enginevgui->GetPanel(PANEL_GAMEUIDLL);
 				pLogo->SetParent(GameUIRoot);
 				g_hLogoPanel = pLogo;
-			}
 		}
 
 		// 

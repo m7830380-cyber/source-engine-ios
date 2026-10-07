@@ -260,6 +260,12 @@ bool C_GameInstructor::Init( void )
 
 	ACTIVE_SPLITSCREEN_PLAYER_GUARD( m_nSplitScreenSlot );
 
+#if defined( IOS ) && defined( PORTAL2 )
+	// Phone build runs one local player; skip duplicate instructor state on slot 1.
+	if ( m_nSplitScreenSlot != 0 )
+		return true;
+#endif
+
 #if defined( CSTRIKE15 )
 	if ( (!gameinstructor_enable.GetBool() || sv_gameinstructor_disable.GetBool()) && !(CSGameRules() && CSGameRules()->IsPlayingTraining()) )
 #else

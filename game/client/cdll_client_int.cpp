@@ -1290,7 +1290,13 @@ CEG_NOINLINE bool InitGameSystems( CreateInterfaceFn appSystemFactory )
 	// Load the ClientScheme just once
 	vgui::scheme()->LoadSchemeFromFileEx( VGui_GetFullscreenRootVPANEL(), "resource/ClientScheme.res", "ClientScheme");
 
-	for ( int hh = 0; hh < MAX_SPLITSCREEN_PLAYERS; ++hh )
+#if defined( IOS ) && defined( PORTAL2 )
+	const int nClientInitSplitScreens = 1;
+#else
+	const int nClientInitSplitScreens = MAX_SPLITSCREEN_PLAYERS;
+#endif
+
+	for ( int hh = 0; hh < nClientInitSplitScreens; ++hh )
 	{
 		ACTIVE_SPLITSCREEN_PLAYER_GUARD_VGUI( hh );
 		GetClientMode()->InitViewport();
@@ -1301,13 +1307,13 @@ CEG_NOINLINE bool InitGameSystems( CreateInterfaceFn appSystemFactory )
 		}
 	}
 
-	for ( int hh = 0; hh < MAX_SPLITSCREEN_PLAYERS; ++hh )
+	for ( int hh = 0; hh < nClientInitSplitScreens; ++hh )
 	{
 		ACTIVE_SPLITSCREEN_PLAYER_GUARD_VGUI( hh );
 		GetHud().Init();
 	}
 
-	for ( int hh = 0; hh < MAX_SPLITSCREEN_PLAYERS; ++hh )
+	for ( int hh = 0; hh < nClientInitSplitScreens; ++hh )
 	{
 		ACTIVE_SPLITSCREEN_PLAYER_GUARD_VGUI( hh );
 		GetClientMode()->Init();
@@ -1321,7 +1327,7 @@ CEG_NOINLINE bool InitGameSystems( CreateInterfaceFn appSystemFactory )
 	if ( !IGameSystem::InitAllSystems() )
 		return false;
 
-	for ( int hh = 0; hh < MAX_SPLITSCREEN_PLAYERS; ++hh )
+	for ( int hh = 0; hh < nClientInitSplitScreens; ++hh )
 	{
 		ACTIVE_SPLITSCREEN_PLAYER_GUARD_VGUI( hh );
 		GetClientMode()->Enable();
@@ -1340,7 +1346,7 @@ CEG_NOINLINE bool InitGameSystems( CreateInterfaceFn appSystemFactory )
 	}
 
 	view->Init();
-	for ( int hh = 0; hh < MAX_SPLITSCREEN_PLAYERS; ++hh )
+	for ( int hh = 0; hh < nClientInitSplitScreens; ++hh )
 	{
 		ACTIVE_SPLITSCREEN_PLAYER_GUARD_VGUI( hh );
 		GetViewEffects()->Init();
@@ -1355,7 +1361,7 @@ CEG_NOINLINE bool InitGameSystems( CreateInterfaceFn appSystemFactory )
 	InitSmokeFogOverlay();
 
 	// Register user messages..
-	for ( int hh = 0; hh < MAX_SPLITSCREEN_PLAYERS; ++hh )
+	for ( int hh = 0; hh < nClientInitSplitScreens; ++hh )
 	{
 		ACTIVE_SPLITSCREEN_PLAYER_GUARD( hh );
 		CUserMessageRegisterBase::RegisterAll();

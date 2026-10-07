@@ -62,7 +62,7 @@ $Configuration
 	{
 		$AdditionalIncludeDirectories	"$BASE;$SRCDIR\game\client\portal2;$SRCDIR\game\client\portal2\gameui;$SRCDIR\game\shared\portal2;.\hl2;.\portal;.\portal\vgui;.\portal2;.\portal2\vgui;.\vgui;$SRCDIR\game\shared\portal;$SRCDIR\game\shared\multiplayer;$SRCDIR\game\shared\hl2"
 		$PreprocessorDefinitions		"$BASE;PORTAL;PORTAL2;GAMEUI_EMBEDDED;GAMEUI_EXPORTS"
-		$PreprocessorDefinitions		"$BASE;NO_STEAM_GAMECOORDINATOR;NO_STEAM"					[ $IOS ]
+		$PreprocessorDefinitions		"$BASE;NO_STEAM_GAMECOORDINATOR"					[ $IOS ]
 	}
 }
 

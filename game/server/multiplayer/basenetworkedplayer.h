@@ -38,7 +38,7 @@ protected:
 	CMultiPlayerAnimState* m_PlayerAnimState;
 	const char* ragdoll_ent_name;
 
-	CNetworkQAngle( m_angEyeAngles );
+	CNetworkVectorXYZ( m_angEyeAngles );
 	CNetworkVar( bool, m_bSpawnInterpCounter );
 	CNetworkHandle( CBaseEntity, m_hRagdoll );
 };

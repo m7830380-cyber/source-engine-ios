@@ -3166,7 +3166,7 @@ unsigned int CL_GetStartupIndex()
 //-----------------------------------------------------------------------------
 void CL_GetStartupImage( char *pOutBuffer, int nOutBufferSize )
 {
-#if defined( CSTRIKE15)
+#if defined( CSTRIKE15 ) && !defined( PORTAL2 )
 	// CStrike15 uses a specific startup image instead of the random image.
 	// CSGO always uses a widescreen format image, regardless of the screen resolution,
 	// to match how the Scaleform background is drawn.  CVideoMode_Common::DrawStartupGraphic

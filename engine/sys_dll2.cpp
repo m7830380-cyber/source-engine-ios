@@ -1993,6 +1993,18 @@ static bool ParseSteamInfFile( const char *szFileName, AppId_t &unSteamAppID )
 		}
 	}
 
+#if defined( IOS )
+	// Portal 2 retail steam.inf is often minimal: PatchVersion, ProductName, appID only.
+	if ( gotKeys >= 3 && unSteamAppID > 0 && sHostVersion != 0 )
+	{
+		if ( sClientVersion == 0 )
+			sClientVersion = sHostVersion;
+		if ( sServerVersion == 0 )
+			sServerVersion = sHostVersion;
+		return true;
+	}
+#endif
+
 	return gotKeys == numKeysExpected;
 }
 
@@ -2043,6 +2055,37 @@ static bool ParsePerforceInfFile( const char *szFileName, uint64 &unFileSystemMa
 	return false;
 }
 
+#if defined( IOS )
+static void Sys_ApplyIOSVersionFallback()
+{
+	if ( sHostVersion == 0 )
+		sHostVersion = VerToInt( g_sVersionString.String() );
+	if ( sHostVersion == 0 )
+		sHostVersion = VerToInt( VERSION_STRING );
+	if ( sClientVersion == 0 )
+		sClientVersion = sHostVersion;
+	if ( sServerVersion == 0 )
+		sServerVersion = sHostVersion;
+
+	if ( g_unSteamAppID == k_uAppIdInvalid || g_unSteamAppID == 0 )
+	{
+		KeyValues *modinfo = new KeyValues( "ModInfo" );
+		if ( g_pFileSystem && modinfo->LoadFromFile( g_pFileSystem, "gameinfo.txt" ) )
+		{
+			const int nAppId = modinfo->GetInt( "FileSystem/SteamAppId", 0 );
+			if ( nAppId > 0 )
+				g_unSteamAppID = nAppId;
+		}
+		modinfo->deleteThis();
+	}
+
+	if ( g_sProductString.IsEmpty() )
+		g_sProductString = PRODUCT_STRING;
+
+	Warning( "IOS: steam.inf missing or incomplete; using AppID %u and engine version defaults\n", g_unSteamAppID );
+}
+#endif
+
 
 void Sys_Version( bool bDedicated )
 {
@@ -2061,7 +2104,15 @@ void Sys_Version( bool bDedicated )
 
 	if ( !ParseSteamInfFile( "steam.inf", g_unSteamAppID ) )
 	{
+#if defined( IOS )
+		Sys_ApplyIOSVersionFallback();
+		if ( sHostVersion == 0 || g_unSteamAppID == k_uAppIdInvalid || g_unSteamAppID == 0 )
+		{
+			Sys_Error( "Unable to load version from steam.inf" );
+		}
+#else
 		Sys_Error( "Unable to load version from steam.inf" );
+#endif
 	}
 
 	// if we aren't launched by Steam try reading a local perforce inf file

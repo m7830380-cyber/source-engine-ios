@@ -748,6 +748,8 @@ def build(bld):
 		env.append_value('CXXFLAGS', PROJECT_EXTRA_CXXFLAGS.get(name, []))
 		if game == 'portal2' and name in PORTAL2_PROJECTS:
 			env.DEFINES = [d for d in env.DEFINES if d.split('=')[0] not in PORTAL2_DROP_DEFINES]
+		if game == 'portal2' and name == 'engine':
+			env.append_value('DEFINES', 'PORTAL2=1')
 		install_path = None
 		if proj.kind == 'lib':
 			features = 'c cxx cstlib cxxstlib'

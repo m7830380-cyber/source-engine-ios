@@ -401,16 +401,18 @@ void IOS_LogGameContent( void )
 {
 	@autoreleasepool {
 		NSFileManager *fm = [NSFileManager defaultManager];
+		NSString *modName = [NSString stringWithUTF8String:IOS_DEFAULT_GAME];
 		NSString *game = [[NSString stringWithUTF8String:IOS_GetDocsDir()]
-						  stringByAppendingPathComponent:@"csgo"];
+						  stringByAppendingPathComponent:modName];
 		BOOL isDir = NO;
 		if( ![fm fileExistsAtPath:game isDirectory:&isDir] || !isDir )
 		{
-			IOS_Log( "game content: Documents/csgo MISSING -- copy the csgo folder from the CS:GO depots into the app's Documents" );
+			IOS_Log( "game content: Documents/%s MISSING -- copy the %s folder from your Steam install into the app's Documents",
+					 [modName UTF8String], [modName UTF8String] );
 			return;
 		}
 
-		IOS_Log( "--- game content (Documents/csgo) ---" );
+		IOS_Log( "--- game content (Documents/%s) ---", [modName UTF8String] );
 		for( NSString *name in @[ @"gameinfo.txt", @"gamemodes.txt", @"pak01_dir.vpk" ] )
 		{
 			NSDictionary *a = [fm attributesOfItemAtPath:[game stringByAppendingPathComponent:name] error:nil];

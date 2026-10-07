@@ -441,7 +441,7 @@ void Sys_Error_Internal( bool bMinidump, const char *error, va_list argsList )
 
 #if !defined( _X360 )
 
-#if !defined(NO_STEAM) && !defined(DEDICATED) && !defined(LINUX)
+#if !defined(NO_STEAM) && !defined(DEDICATED) && !defined(LINUX) && !defined(IOS)
 	Status_Update();
 	BuildMinidumpComment( text );
 	g_bUpdateMinidumpComment = false;
@@ -1163,7 +1163,7 @@ int Sys_InitGame( CreateInterfaceFn appSystemFactory, const char* pBaseDir, void
 
 	MapReslistGenerator_BuildMapList();
 
-#if !defined(NO_STEAM) && !defined(DEDICATED) && !defined(LINUX)
+#if !defined(NO_STEAM) && !defined(DEDICATED) && !defined(LINUX) && !defined(IOS)
 	Status_Update();
 	BuildMinidumpComment( NULL );
 #endif

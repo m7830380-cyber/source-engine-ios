@@ -31,4 +31,23 @@ void COptionsSubMultiplayer::OnCommand( const char *command )
 	(void)command;
 }
 
+void COptionsSubMultiplayer::OnTextChanged( vgui::Panel *panel )
+{
+	(void)panel;
+}
+
+void COptionsSubMultiplayer::OnSliderMoved( KeyValues *data )
+{
+	(void)data;
+}
+
+void COptionsSubMultiplayer::OnApplyButtonEnable()
+{
+}
+
+void COptionsSubMultiplayer::OnFileSelected( const char *fullpath )
+{
+	(void)fullpath;
+}
+
 #endif

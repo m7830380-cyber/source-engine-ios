@@ -78,6 +78,11 @@ void Achievements::ToggleDisplayType( bool bDisplayType )
 	(void)bDisplayType;
 }
 
+void Achievements::ApplySchemeSettings( vgui::IScheme *pScheme )
+{
+	BaseClass::ApplySchemeSettings( pScheme );
+}
+
 Addons::Addons( vgui::Panel *parent, const char *panelName )
 	: BaseClass( parent, panelName )
 {
@@ -110,6 +115,11 @@ void Addons::OnThink()
 	BaseClass::OnThink();
 }
 
+void Addons::ApplySchemeSettings( vgui::IScheme *pScheme )
+{
+	BaseClass::ApplySchemeSettings( pScheme );
+}
+
 AddonAssociation::AddonAssociation( vgui::Panel *parent, const char *panelName )
 	: BaseClass( parent, panelName )
 {
@@ -127,6 +137,16 @@ AddonAssociation::EAssociation AddonAssociation::VPKAssociation()
 bool AddonAssociation::CheckAndSeeIfShouldShow()
 {
 	return false;
+}
+
+void AddonAssociation::OnCommand( const char *command )
+{
+	BaseClass::OnCommand( command );
+}
+
+void AddonAssociation::OnThink()
+{
+	BaseClass::OnThink();
 }
 
 #endif

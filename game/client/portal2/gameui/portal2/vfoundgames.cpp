@@ -39,10 +39,13 @@
 using namespace vgui;
 using namespace BaseModUI;
 
+namespace BaseModUI
+{
 ConVar ui_foundgames_spinner_time( "ui_foundgames_spinner_time", "1", FCVAR_DEVELOPMENTONLY );
 ConVar ui_foundgames_update_time( "ui_foundgames_update_time", "1", FCVAR_DEVELOPMENTONLY );
 ConVar ui_foundgames_fake_content( "ui_foundgames_fake_content", "0", FCVAR_DEVELOPMENTONLY );
 ConVar ui_foundgames_fake_count( "ui_foundgames_fake_count", "0", FCVAR_DEVELOPMENTONLY );
+}
 
 void Demo_DisableButton( Button *pButton );
 

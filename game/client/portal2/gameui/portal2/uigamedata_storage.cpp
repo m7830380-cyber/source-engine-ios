@@ -1,4 +1,4 @@
-//========= Copyright © 1996-2008, Valve Corporation, All rights reserved. ============//
+//========= Copyright ù 1996-2008, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -405,6 +405,8 @@ private:
 	int	m_nChainCtrlr;
 };
 
+namespace BaseModUI
+{
 void OnStorageDevicesChangedSelectNewDevice()
 {
 #ifdef _X360
@@ -434,6 +436,8 @@ void OnStorageDevicesChangedSelectNewDevice()
 	}
 #endif // _X360
 }
+
+} // namespace BaseModUI
 
 void CUIGameData::RunFrame_Storage()
 {

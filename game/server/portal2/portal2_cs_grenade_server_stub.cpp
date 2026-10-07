@@ -17,4 +17,9 @@ void CBaseCSGrenadeProjectile::Spawn()
 	BaseClass::Spawn();
 }
 
+unsigned int CBaseCSGrenadeProjectile::PhysicsSolidMaskForEntity( void ) const
+{
+	return BaseClass::PhysicsSolidMaskForEntity();
+}
+
 #endif

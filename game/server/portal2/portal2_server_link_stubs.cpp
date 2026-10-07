@@ -5,6 +5,7 @@
 #include "player.h"
 #include "pushentity.h"
 #include "hl2/weapon_rpg.h"
+#include "hl2/HL2_Player.h"
 #include "dedicated_server_ugc_manager.h"
 #include "networkstringtabledefs.h"
 
@@ -80,6 +81,44 @@ void SetLaserDotTarget( CBaseEntity *pLaser, CBaseEntity *pTarget )
 {
 	(void)pLaser;
 	(void)pTarget;
+}
+
+void CHL2_Player::StopSprinting( void )
+{
+}
+
+unsigned int CMissile::PhysicsSolidMaskForEntity( void ) const
+{
+	return BaseClass::PhysicsSolidMaskForEntity();
+}
+
+CAPCMissile *CAPCMissile::Create( const Vector &vecOrigin, const QAngle &vecAngles, const Vector &vecVelocity, CBaseEntity *pOwner )
+{
+	(void)vecOrigin;
+	(void)vecAngles;
+	(void)vecVelocity;
+	(void)pOwner;
+	return NULL;
+}
+
+CAPCMissile::CAPCMissile()
+{
+}
+
+CAPCMissile::~CAPCMissile()
+{
+}
+
+void CAPCMissile::IgniteDelay()
+{
+}
+
+void CAPCMissile::AugerDelay( float )
+{
+}
+
+void CAPCMissile::ExplodeDelay( float )
+{
 }
 
 static CDedicatedServerWorkshopManager g_Portal2DedicatedServerWorkshopManager;

@@ -5,16 +5,9 @@
 
 #include "vgui/IPanel.h"
 
-class CSDK_Background_Movie;
-
 bool IsRadialMenuOpen( void )
 {
 	return false;
-}
-
-CSDK_Background_Movie *SDKBackgroundMovie()
-{
-	return NULL;
 }
 
 void IOS_CloseChat() {}

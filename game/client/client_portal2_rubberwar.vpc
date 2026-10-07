@@ -15,6 +15,7 @@ $Project
 	-$File "vgui_fpspanel.cpp"
 	$File "$SRCDIR\public\XUnzip.cpp"
 	$File "portal2\portal2_ios_link_stubs.cpp"
+	$File "portal2\portal2_ios_vgui_link_stubs.cpp"
 	$File "portal2\portal2_achievements_client_stub.cpp"
 	-$File "portal\c_portal_base2d.cpp"
 	-$File "portal\c_portal_base2d.h"
@@ -22,13 +23,13 @@ $Project
 	-$File "portal\portal_credits.cpp"
 	-$File "portal2\radialmenu.cpp"
 	-$File "portal2\radialmenu.h"
-	-$File "portal2\vgui\nb_button.cpp"
-	-$File "portal2\vgui\nb_header_footer.cpp"
 	$File "$SRCDIR\common\imageutils.cpp"
 	$File "$SRCDIR\common\imageutils.h"
 	$File "$SRCDIR\game\shared\bannedwords.cpp"
 	$File "$SRCDIR\game\shared\bannedwords.h"
 	$File "portal2\portal2_hltv_replay_client_stub.cpp"
+	$File "$SRCDIR\common\platforminputdevice.cpp"
+	$File "$SRCDIR\common\platforminputdevice.h"
 	$File "steamworks_gamestats_client.cpp"
 	$File "steamworks_gamestats_client.h"
 }
@@ -90,6 +91,15 @@ $Project "Client (Portal 2)"
 			$File	"$SRCDIR\game\shared\portal\portal_gamerules.h"
 		}
 
+		$Folder	"Multiplayer"
+		{
+			$File	"multiplayer\basenetworkedplayer_cl.cpp"
+			$File	"multiplayer\basenetworkedragdoll_cl.cpp"
+			$File	"$SRCDIR\game\shared\multiplayer\basenetworkedplayer_gamemove.cpp"
+			$File	"$SRCDIR\game\shared\multiplayer\basenetworkedplayer_shared.cpp"
+			$File	"$SRCDIR\game\shared\multiplayer\multiplayer_animstate.cpp"
+		}
+
 		$Folder "Portal 2"
 		{
 			$File	"portal2\c_portal2_lesson.cpp"
@@ -102,15 +112,15 @@ $Project "Client (Portal 2)"
 
 			$Folder	"VGUI"
 			{
-				-$File	"portal2\vgui\nb_button.cpp"
-				-$File	"portal2\vgui\nb_header_footer.cpp"
+				$File	"portal2\vgui\nb_button.cpp"
+				$File	"portal2\vgui\nb_header_footer.cpp"
 				-$File	"portal2\vgui\nb_horiz_list.cpp"
 				-$File	"portal2\vgui\nb_select_level_entry.cpp"
 				-$File	"portal2\vgui\nb_select_level_panel.cpp"
 				-$File	"portal2\vgui\sdk_hud_chat.cpp"
 				$File	"portal2\vgui\sdk_loading_panel.cpp"
-				-$File	"portal2\vgui\sdk_logo_panel.cpp"
-				-$File	"portal2\vgui\sdk_vgui_music_importer.cpp"
+				$File	"portal2\vgui\sdk_logo_panel.cpp"
+				$File	"portal2\vgui\sdk_vgui_music_importer.cpp"
 			}
 
 			$Folder	"Radial Menu"
@@ -128,6 +138,8 @@ $Project "Client (Portal 2)"
 						"portal2\gameui\gameconsoledialog.cpp" \
 						"portal2\gameui\loadingdialog.cpp" \
 						"portal2\gameui\loadingtippanel.cpp" \
+						"portal2\gameui\optionsdialog.cpp" \
+						"portal2\gameui\optionssubvideo.cpp" \
 						"portal2\gameui\gameui_util.cpp" \
 						"portal2\gameui\rungameengine.cpp" \
 						"portal2\gameui\sys_utils.cpp" \

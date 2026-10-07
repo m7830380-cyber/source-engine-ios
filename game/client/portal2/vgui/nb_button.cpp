@@ -1,6 +1,7 @@
 #include "cbase.h"
 #include "nb_button.h"
 #include "vgui/ISurface.h"
+#include "vgui_controls/Button.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
@@ -55,7 +56,7 @@ void CNB_Button::Paint()
 	if ( !ShouldPaint() )
 		return; 
 
-	BaseClass::BaseClass::Paint();  // skip drawing regular vgui::Button's focus border
+	Button::Paint();
 }
 
 void CNB_Button::DrawRoundedBox( int x, int y, int wide, int tall, Color color, float normalizedAlpha, bool bHighlightGradient, Color highlightCenterColor )

@@ -13,9 +13,13 @@ $Project
 	-$File "$SRCDIR\game\server\vote_controller.cpp"
 	$File	"vote_controller_portal2_stub.cpp"
 	$File	"portal2\portal2_server_link_stubs.cpp"
+	$File	"portal2\portal2_server_gameinterface_stub.cpp"
 	$File "$SRCDIR\public\XUnzip.cpp"
 	-$File "portal\portal_base2d.cpp"
 	-$File "portal\portal_base2d.h"
+	$File "portal\portal_base2d.cpp"
+	$File "portal\portal_client.cpp"
+	$File "portal\portal_placement.cpp"
 }
 
 $include "$SRCDIR\game\shared\cstrike15\cstrike15_gcmessages_include.vpc" [$IOS]
@@ -29,6 +33,7 @@ $Project
 		$File "$SRCDIR\gcsdk\steammessages.proto"
 		$File "$SRCDIR\game\shared\portal2\portal2_usermessages.proto"
 		$DynamicFile "$GENERATED_PROTO_DIR\portal2_usermessages.pb.cc"
+		$DynamicFile "$GENERATED_PROTO_DIR\steammessages.pb.cc"
 		$File "$SRCDIR\game\shared\portal2\legacy_usermessages.cpp"
 		-$File "$SRVSRCDIR\te_playerdecal.cpp"
 		$File "portal2\te_playerdecal_portal2.cpp"
@@ -56,6 +61,15 @@ $Project "Server (Portal 2)"
 			$File	"$SRCDIR\game\shared\portal2\player_pickup.cpp"
 			$File	"$SRCDIR\game\shared\portal2\player_pickup.h"
 			$File	"portal2\portal2_cs_grenade_server_stub.cpp"
+		}
+
+		$Folder	"Multiplayer"
+		{
+			$File	"multiplayer\basenetworkedplayer.cpp"
+			$File	"multiplayer\basenetworkedragdoll.cpp"
+			$File	"$SRCDIR\game\shared\multiplayer\basenetworkedplayer_gamemove.cpp"
+			$File	"$SRCDIR\game\shared\multiplayer\basenetworkedplayer_shared.cpp"
+			$File	"$SRCDIR\game\shared\multiplayer\multiplayer_animstate.cpp"
 		}
 
 		$Folder	"Portal 2"

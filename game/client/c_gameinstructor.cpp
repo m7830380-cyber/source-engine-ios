@@ -172,14 +172,18 @@ void CGameInstructorUserNotificationsListener::RefCount( int nDelta )
 	if ( !g_pMatchFramework )
 		return;
 
+	IMatchEventsSubscription *pEvents = g_pMatchFramework->GetEventsSubscription();
+	if ( !pEvents )
+		return;
+
 	if ( m_nRefCount <= 0 && nDelta > 0 )
 	{
-		g_pMatchFramework->GetEventsSubscription()->Subscribe( this );
+		pEvents->Subscribe( this );
 	}
 
 	if ( m_nRefCount > 0 && m_nRefCount - nDelta <= 0 )
 	{
-		g_pMatchFramework->GetEventsSubscription()->Unsubscribe( this );
+		pEvents->Unsubscribe( this );
 	}
 
 	m_nRefCount = MAX( 0, m_nRefCount + nDelta );

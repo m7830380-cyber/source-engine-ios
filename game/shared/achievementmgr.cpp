@@ -222,7 +222,20 @@ bool CAchievementMgr::Init()
 	ListenForGameEvent( "teamplay_round_win" );
 #endif // TF_CLIENT_DLL
 
-	g_pMatchFramework->GetEventsSubscription()->Subscribe( this );
+	if ( g_pMatchFramework )
+	{
+		IMatchEventsSubscription *pEvents = g_pMatchFramework->GetEventsSubscription();
+		if ( pEvents )
+		{
+			pEvents->Subscribe( this );
+		}
+#if defined( IOS ) && defined( PORTAL2 )
+		else
+		{
+			Warning( "CAchievementMgr: match events subscription unavailable on iOS Portal 2\n" );
+		}
+#endif
+	}
 
 	return true;
 }
@@ -330,7 +343,14 @@ void CAchievementMgr::Shutdown()
 		m_AchievementsAwardedDuringCurrentGame[i].RemoveAll();
 	}
 
-	g_pMatchFramework->GetEventsSubscription()->Unsubscribe( this );
+	if ( g_pMatchFramework )
+	{
+		IMatchEventsSubscription *pEvents = g_pMatchFramework->GetEventsSubscription();
+		if ( pEvents )
+		{
+			pEvents->Unsubscribe( this );
+		}
+	}
 }
 
 //-----------------------------------------------------------------------------

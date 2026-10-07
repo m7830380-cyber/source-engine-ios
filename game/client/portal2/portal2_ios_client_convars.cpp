@@ -11,7 +11,6 @@ ConVar sv_coaching_enabled( "sv_coaching_enabled", "0", FCVAR_REPLICATED | FCVAR
 ConVar sv_disable_motd( "sv_disable_motd", "0", FCVAR_REPLICATED | FCVAR_DEVELOPMENTONLY | FCVAR_CHEAT );
 ConVar sv_max_allowed_net_graph( "sv_max_allowed_net_graph", "1", FCVAR_REPLICATED | FCVAR_RELEASE );
 
-extern ConVar fps;
 ConVar fps( "fps", "0", FCVAR_RELEASE );
 
 bool g_bShowGhostedPortals = false;

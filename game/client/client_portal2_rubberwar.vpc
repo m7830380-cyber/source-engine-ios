@@ -21,6 +21,7 @@ $Project
 	$File "portal2\portal2_portal_renderable_client_stub.cpp"
 	$File "portal2\portal2_radialmenu_client_stub.cpp"
 	$File "portal2\portal2_liquidportal_client_stub.cpp"
+	$File "portal2\portal2_gameui_ios_stubs.cpp"
 	$File "portal2\portal2_achievements_client_stub.cpp"
 	-$File "portal\portalrenderable_flatbasic.cpp"
 	-$File "portal\c_portal_base2d.cpp"
@@ -208,11 +209,7 @@ $Project "Client (Portal 2)"
 						"portal2\gameui\portal2\vsteamcloudconfirmation.cpp" \
 						"portal2\gameui\portal2\vdownloadcampaign.cpp" \
 						"portal2\gameui\portal2\vdialoglistbutton.cpp" \
-						"portal2\gameui\portal2\uiavatarimage.cpp" \
 						"portal2\gameui\portal2\uigamedata_invite.cpp" \
-						"portal2\gameui\portal2\vachievements.cpp" \
-						"portal2\gameui\portal2\vaddonassociation.cpp" \
-						"portal2\gameui\portal2\vaddons.cpp" \
 						"portal2\gameui\portal2\vcustomcampaigns.cpp" \
 						"portal2\gameui\portal2\vgamelobbychat.cpp" \
 						"portal2\gameui\portal2\vquickjoin.cpp" \

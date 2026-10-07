@@ -19,7 +19,6 @@ int g_interactionCombineBash = 0;
 ConVar sv_coaching_enabled( "sv_coaching_enabled", "0", FCVAR_REPLICATED | FCVAR_RELEASE );
 ConVar sv_deadtalk( "sv_deadtalk", "0", FCVAR_REPLICATED | FCVAR_RELEASE );
 ConVar sv_alternateticks( "sv_alternateticks", "0", FCVAR_REPLICATED | FCVAR_RELEASE );
-ConVar sv_robust_explosions( "sv_robust_explosions", "0", FCVAR_REPLICATED | FCVAR_RELEASE );
 ConVar sv_server_graphic1( "sv_server_graphic1", "", FCVAR_REPLICATED | FCVAR_RELEASE );
 ConVar sv_server_graphic2( "sv_server_graphic2", "", FCVAR_REPLICATED | FCVAR_RELEASE );
 ConVar mp_verbose_changelevel_spew( "mp_verbose_changelevel_spew", "0", FCVAR_RELEASE );

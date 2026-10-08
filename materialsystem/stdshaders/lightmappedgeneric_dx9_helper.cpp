@@ -581,7 +581,14 @@ void DrawLightmappedGeneric_DX9( CBaseVSShader *pShader, IMaterialVar** params, 
 						staticCmdsBuf.BindStandardTexture( SHADER_SAMPLER0, SRGBReadMask( !bShaderSrgbRead ), TEXTURE_WHITE );
 					}
 				}
-				staticCmdsBuf.BindStandardTexture( SHADER_SAMPLER1, bHDR ? TEXTURE_BINDFLAGS_NONE : TEXTURE_BINDFLAGS_SRGBREAD, TEXTURE_LIGHTMAP );
+				// iOS: lightmap uses GL_RGBA8 (no SRGB flag) so bind without sRGB decode.
+			// TEXTURE_BINDFLAGS_SRGBREAD on a non-sRGB texture triggers HandleSRGBMismatch
+			// which would flip it back to GL_SRGB8_ALPHA8 and re-introduce the decode.
+#if defined( IOS )
+			staticCmdsBuf.BindStandardTexture( SHADER_SAMPLER1, TEXTURE_BINDFLAGS_NONE, TEXTURE_LIGHTMAP );
+#else
+			staticCmdsBuf.BindStandardTexture( SHADER_SAMPLER1, bHDR ? TEXTURE_BINDFLAGS_NONE : TEXTURE_BINDFLAGS_SRGBREAD, TEXTURE_LIGHTMAP );
+#endif // IOS
 
 				if ( bSeamlessMapping )
 				{

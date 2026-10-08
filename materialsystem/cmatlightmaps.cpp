@@ -487,7 +487,14 @@ void CMatLightmaps::AllocateLightmapTexture( int lightmap )
 	case HDR_TYPE_NONE:
 #if !defined( _X360 )
 		imageFormat = IMAGE_FORMAT_RGBA8888;
+#if !defined( IOS )
+		// iOS/ANGLE: lightmap bytes are gamma-encoded by g_LinearToVertex (pow(x,1/2.2)).
+		// GL_SRGB8_ALPHA8 would apply a second sRGB->linear decode on sample, crushing
+		// dark/medium areas to near-zero and making the world appear black.  Use a plain
+		// linear GL_RGBA8 texture so the bytes are read as-is and the shader's overbright
+		// multiply (g_TintValuesTimesLightmapScale * 2) restores the correct luminance.
 		flags |= TEXTURE_CREATE_SRGB;
+#endif // !IOS
 #else
 		imageFormat = IMAGE_FORMAT_LINEAR_RGBA8888;
 #endif

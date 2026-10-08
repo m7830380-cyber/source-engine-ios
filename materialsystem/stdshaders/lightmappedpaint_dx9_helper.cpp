@@ -100,7 +100,12 @@ void DrawLightmappedPaint_DX9( CBaseVSShader *pShader, IMaterialVar** params, IS
 				}
 #endif
 
-				staticCmdsBuf.BindStandardTexture( SHADER_SAMPLER1, bHDR ? TEXTURE_BINDFLAGS_NONE : TEXTURE_BINDFLAGS_SRGBREAD, TEXTURE_LIGHTMAP );
+				// iOS: lightmap is GL_RGBA8 (no sRGB); avoid SRGBREAD which triggers HandleSRGBMismatch.
+#if defined( IOS )
+			staticCmdsBuf.BindStandardTexture( SHADER_SAMPLER1, TEXTURE_BINDFLAGS_NONE, TEXTURE_LIGHTMAP );
+#else
+			staticCmdsBuf.BindStandardTexture( SHADER_SAMPLER1, bHDR ? TEXTURE_BINDFLAGS_NONE : TEXTURE_BINDFLAGS_SRGBREAD, TEXTURE_LIGHTMAP );
+#endif
 
 				//noise
 				staticCmdsBuf.BindStandardTexture( SHADER_SAMPLER6, TEXTURE_BINDFLAGS_NONE, TEXTURE_SHADOW_NOISE_2D );

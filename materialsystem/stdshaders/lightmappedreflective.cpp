@@ -199,7 +199,12 @@ BEGIN_VS_SHADER( LightmappedReflective_DX90, "Help for Lightmapped Reflective" )
 			if ( params[BASETEXTURE]->IsTexture() )
 			{
 				BindTexture( SHADER_SAMPLER1, TEXTURE_BINDFLAGS_SRGBREAD, BASETEXTURE, FRAME );
-				pShaderAPI->BindStandardTexture( SHADER_SAMPLER3, ( g_pHardwareConfig->GetHDRType() == HDR_TYPE_NONE ) ? TEXTURE_BINDFLAGS_SRGBREAD : TEXTURE_BINDFLAGS_NONE, TEXTURE_LIGHTMAP );
+				// iOS: lightmap is GL_RGBA8 (no sRGB); avoid SRGBREAD.
+#if defined( IOS )
+			pShaderAPI->BindStandardTexture( SHADER_SAMPLER3, TEXTURE_BINDFLAGS_NONE, TEXTURE_LIGHTMAP );
+#else
+			pShaderAPI->BindStandardTexture( SHADER_SAMPLER3, ( g_pHardwareConfig->GetHDRType() == HDR_TYPE_NONE ) ? TEXTURE_BINDFLAGS_SRGBREAD : TEXTURE_BINDFLAGS_NONE, TEXTURE_LIGHTMAP );
+#endif
 				SetVertexShaderTextureTransform( VERTEX_SHADER_SHADER_SPECIFIC_CONST_3, BASETEXTURETRANSFORM );
 
 				if ( params[ENVMAPMASK]->IsTexture() )

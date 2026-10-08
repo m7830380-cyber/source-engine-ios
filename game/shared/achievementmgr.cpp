@@ -204,7 +204,12 @@ bool CAchievementMgr::Init()
 	ListenForGameEvent( "player_stats_updated" );
 	ListenForGameEvent( "achievement_write_failed" );
 	ListenForGameEvent( "user_data_downloaded" );
-	for ( int hh = 0; hh < MAX_SPLITSCREEN_PLAYERS; ++hh )
+#if defined( IOS ) && defined( PORTAL2 )
+	const int nAchievementInitSplitScreens = 1;
+#else
+	const int nAchievementInitSplitScreens = MAX_SPLITSCREEN_PLAYERS;
+#endif
+	for ( int hh = 0; hh < nAchievementInitSplitScreens; ++hh )
 	{
 		ACTIVE_SPLITSCREEN_PLAYER_GUARD( hh );
 		m_UMCMsgAchievementEvent.Bind< CS_UM_AchievementEvent, CCSUsrMsg_AchievementEvent >( UtlMakeDelegate( MsgFunc_AchievementEvent ) );
@@ -222,6 +227,7 @@ bool CAchievementMgr::Init()
 	ListenForGameEvent( "teamplay_round_win" );
 #endif // TF_CLIENT_DLL
 
+#if !defined( IOS ) || !defined( PORTAL2 )
 	if ( g_pMatchFramework )
 	{
 		IMatchEventsSubscription *pEvents = g_pMatchFramework->GetEventsSubscription();
@@ -229,13 +235,8 @@ bool CAchievementMgr::Init()
 		{
 			pEvents->Subscribe( this );
 		}
-#if defined( IOS ) && defined( PORTAL2 )
-		else
-		{
-			Warning( "CAchievementMgr: match events subscription unavailable on iOS Portal 2\n" );
-		}
-#endif
 	}
+#endif
 
 	return true;
 }

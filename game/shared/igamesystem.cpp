@@ -223,14 +223,14 @@ bool IGameSystem::InitAllSystems()
 
 		IGameSystem *sys = s_GameSystems[i];
 
-#if defined( _GAMECONSOLE )
+#if defined( _GAMECONSOLE ) || ( defined( IOS ) && defined( PORTAL2 ) )
 		char sz[128];
 		Q_snprintf( sz, sizeof( sz ), "%s->Init():Start", sys->Name() );
 		COM_TimestampedLog( sz );
 #endif
 		bool valid = sys->Init();
 
-#if defined( _GAMECONSOLE )
+#if defined( _GAMECONSOLE ) || ( defined( IOS ) && defined( PORTAL2 ) )
 		Q_snprintf( sz, sizeof( sz ), "%s->Init():Finish", sys->Name() );
 		COM_TimestampedLog( sz );
 #endif

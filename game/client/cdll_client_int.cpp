@@ -1327,6 +1327,10 @@ CEG_NOINLINE bool InitGameSystems( CreateInterfaceFn appSystemFactory )
 	if ( !IGameSystem::InitAllSystems() )
 		return false;
 
+#if defined( IOS ) && defined( PORTAL2 )
+	COM_TimestampedLog( "InitGameSystems: after InitAllSystems" );
+#endif
+
 	for ( int hh = 0; hh < nClientInitSplitScreens; ++hh )
 	{
 		ACTIVE_SPLITSCREEN_PLAYER_GUARD_VGUI( hh );
@@ -1336,7 +1340,11 @@ CEG_NOINLINE bool InitGameSystems( CreateInterfaceFn appSystemFactory )
 		{
 			GetFullscreenClientMode()->EnableWithRootPanel( VGui_GetFullscreenRootVPANEL() );
 		}
-	}	
+	}
+
+#if defined( IOS ) && defined( PORTAL2 )
+	COM_TimestampedLog( "InitGameSystems: after client mode Enable" );
+#endif
 
 	// Each mod is required to implement this
 	view = GetViewRenderInstance();
@@ -1354,8 +1362,14 @@ CEG_NOINLINE bool InitGameSystems( CreateInterfaceFn appSystemFactory )
 
 	C_BaseTempEntity::PrecacheTempEnts();
 
+#if defined( IOS ) && defined( PORTAL2 )
+	COM_TimestampedLog( "InitGameSystems: before input->Init_All" );
+#endif
 	input->Init_All();
 
+#if defined( IOS ) && defined( PORTAL2 )
+	COM_TimestampedLog( "InitGameSystems: before VGui_CreateGlobalPanels" );
+#endif
 	VGui_CreateGlobalPanels();
 
 	InitSmokeFogOverlay();

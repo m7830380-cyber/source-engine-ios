@@ -265,9 +265,8 @@ bool C_GameInstructor::Init( void )
 	ACTIVE_SPLITSCREEN_PLAYER_GUARD( m_nSplitScreenSlot );
 
 #if defined( IOS ) && defined( PORTAL2 )
-	// Phone build runs one local player; skip duplicate instructor state on slot 1.
-	if ( m_nSplitScreenSlot != 0 )
-		return true;
+	// Portal 2 phone build: CS instructor / title-data save path is unused.
+	return true;
 #endif
 
 #if defined( CSTRIKE15 )

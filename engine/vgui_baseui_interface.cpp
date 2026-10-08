@@ -945,6 +945,7 @@ void CEngineVGui::Init()
 	COM_TimestampedLog( "Building Panels (console, entity report, drawtree, texturelist, vprof)" );
 
 	// Create engine vgui panels
+#if !defined( IOS )
 	if ( IsPC() )
 	{
 #ifdef IHV_DEMO
@@ -960,6 +961,7 @@ void CEngineVGui::Init()
 		CL_CreateTextureListPanel( staticEngineToolsPanel );
 		CreateVProfPanels( staticEngineToolsPanel );
 	}
+#endif
 #ifndef _CERT
 	else if ( IsGameConsole() )
 	{

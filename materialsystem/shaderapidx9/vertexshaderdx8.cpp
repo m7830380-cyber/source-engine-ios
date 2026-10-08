@@ -4039,6 +4039,7 @@ VertexShader_t CShaderManager::CreateVertexShader( const char *pFileName, int nS
 		shader = m_VertexShaderDict.AddToTail( lookup );
 		if ( !LoadAndCreateShaders( m_VertexShaderDict[shader], true, debugLabel ) )
 		{
+			m_VertexShaderDict.Remove( shader );
 			return INVALID_SHADER;
 		}
 	}
@@ -4068,6 +4069,7 @@ PixelShader_t CShaderManager::CreatePixelShader( const char *pFileName, int nSta
 		shader = m_PixelShaderDict.AddToTail( lookup );
 		if ( !LoadAndCreateShaders( m_PixelShaderDict[shader], false, debugLabel ) )
 		{
+			m_PixelShaderDict.Remove( shader );
 			return INVALID_SHADER;
 		}
 	}

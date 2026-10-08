@@ -944,7 +944,7 @@ void CEngineVGui::Init()
 
 	COM_TimestampedLog( "Building Panels (console, entity report, drawtree, texturelist, vprof)" );
 
-	// Create engine vgui panels
+	// Create engine vgui panels (skipped entirely on iOS — IsPC() is true there)
 #if !defined( IOS )
 	if ( IsPC() )
 	{
@@ -961,7 +961,6 @@ void CEngineVGui::Init()
 		CL_CreateTextureListPanel( staticEngineToolsPanel );
 		CreateVProfPanels( staticEngineToolsPanel );
 	}
-#endif
 #ifndef _CERT
 	else if ( IsGameConsole() )
 	{
@@ -974,6 +973,7 @@ void CEngineVGui::Init()
 		}
 	}
 #endif // !_CERT
+#endif // IOS
 
 
 

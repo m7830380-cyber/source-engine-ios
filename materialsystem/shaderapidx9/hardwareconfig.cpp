@@ -672,7 +672,17 @@ int CHardwareConfig::MaxTextureDepth() const
 
 int CHardwareConfig::GetDXSupportLevel() const
 {
+#if defined( IOS )
+	// Portal 2 iOS ships a CS:GO-derived PLATFORM shader pack whose ps30 VCS
+	// static combo ids don't match what stdshaders request (see launch_log:
+	// "static combo N missing; using VCS combo id 0"). Binding the wrong
+	// combo draws black while audio/sim keep running. Cap at 92 so we stay
+	// on the ps20b path that ShouldAlwaysUseShaderModel2bShaders() intends
+	// for OpenGL, and CSM (needs 95) stays off.
+	return Min( m_Caps.m_nDXSupportLevel, 92 );
+#else
 	return m_Caps.m_nDXSupportLevel;
+#endif
 }
 
 const char *CHardwareConfig::GetShaderDLLName() const

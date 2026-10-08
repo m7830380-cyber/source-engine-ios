@@ -1769,12 +1769,24 @@ void CL_FullyConnected( void )
 	// background maps are for main menu UI, QMS not needed or used, easier context
 	if ( !engineClient->IsLevelMainMenuBackground() )
 	{
+#if defined( IOS )
+		// Queued matsys (mode 2) + ANGLE/Metal has been flaky right after connect
+		// (black 3D with audio). Keep single-threaded draws on iOS for now.
+		ConVarRef mat_queue_mode( "mat_queue_mode" );
+		if ( mat_queue_mode.IsValid() )
+			mat_queue_mode.SetValue( 0 );
+		Host_AllowQueuedMaterialSystem( false );
+		ConVarRef mat_hdr_level( "mat_hdr_level" );
+		if ( mat_hdr_level.IsValid() && mat_hdr_level.GetInt() != 0 )
+			mat_hdr_level.SetValue( 0 );
+#else
 		// map load complete, safe to allow QMS
 		ConVarRef mat_queue_mode( "mat_queue_mode" );
 		if ( mat_queue_mode.GetInt() != 0 )
 		{
 			Host_AllowQueuedMaterialSystem( true );
 		}
+#endif
 	}
 
 	// This is a Hack, but we need to suppress rendering for a bit in single player to let values settle on the client

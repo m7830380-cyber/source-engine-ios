@@ -248,7 +248,16 @@ public:
 	// Backward compat for stdshaders
 #if defined ( STDSHADER_DBG_DLL_EXPORT ) || defined( STDSHADER_DX9_DLL_EXPORT )
 	inline bool SupportsPixelShaders_2_b() const { return GetDXSupportLevel() >= 92; }
-	inline bool SupportsPixelShaders_3_0() const { return GetDXSupportLevel() >= 95; }
+	// iOS: never take ps30 — PLATFORM VCS combo ids mismatch Portal 2 materials
+	// (black screen with audio). GetDXSupportLevel() is also capped to 92 on iOS.
+	inline bool SupportsPixelShaders_3_0() const
+	{
+#if defined( IOS )
+		return false;
+#else
+		return GetDXSupportLevel() >= 95;
+#endif
+	}
 #endif
 
 	inline bool ShouldAlwaysUseShaderModel2bShaders() const { return IsOpenGL(); }

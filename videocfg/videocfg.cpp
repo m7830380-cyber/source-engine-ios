@@ -1425,6 +1425,20 @@ void UpdateSystemLevel( int nCPULevel, int nGPULevel, int nMemLevel, int nGPUMem
 			pConVar->SetValue( 2 );
 			continue;
 		}
+		// HDR/bloom tonemap + mismatched GLES RTs have produced near-black frames
+		// after map connect; force LDR until postprocess is proven on ANGLE/Metal.
+		if ( !V_stricmp( pCVarName, "mat_hdr_level" ) && pKey->GetInt() > 0 )
+		{
+			Warning( "UpdateSystemLevel: iOS keeps mat_hdr_level 0 (config asked for %s)\n", pKey->GetString() );
+			pConVar->SetValue( 0 );
+			continue;
+		}
+		if ( !V_stricmp( pCVarName, "csm_quality_level" ) && pKey->GetInt() > 0 )
+		{
+			Warning( "UpdateSystemLevel: iOS keeps csm_quality_level 0 (config asked for %s)\n", pKey->GetString() );
+			pConVar->SetValue( 0 );
+			continue;
+		}
 #endif
 
 		if ( pConVar->GetFlags() & ( FCVAR_ARCHIVE | FCVAR_ARCHIVE_GAMECONSOLE | FCVAR_CHEAT ) )

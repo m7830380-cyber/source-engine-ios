@@ -83,7 +83,11 @@ bool g_bFlashlightIsOn = false;
 // hdr parameters
 ConVar mat_bloomscale( "mat_bloomscale", "1", FCVAR_CHEAT | FCVAR_DEVELOPMENTONLY );
 
+#if defined( IOS )
+ConVar mat_hdr_level( "mat_hdr_level", "0", FCVAR_DEVELOPMENTONLY ); // GLES/ANGLE: HDR tonemap has been near-black after connect
+#else
 ConVar mat_hdr_level( "mat_hdr_level", "2", FCVAR_DEVELOPMENTONLY );
+#endif
 ConVar mat_bloomamount_rate( "mat_bloomamount_rate", "0.05f", FCVAR_CHEAT );
 static ConVar debug_postproc( "mat_debug_postprocessing_effects", "0", FCVAR_CHEAT, "0 = off, 1 = show post-processing passes in quadrants of the screen, 2 = only apply post-processing to the centre of the screen" );
 static ConVar mat_dynamic_tonemapping( "mat_dynamic_tonemapping", "1", FCVAR_CHEAT );

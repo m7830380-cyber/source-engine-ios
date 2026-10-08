@@ -130,6 +130,12 @@ void V_RenderVGuiOnly_NoSwap()
 	CMatRenderContextPtr pRenderContext( materials );
 	
 	pRenderContext->AntiAliasingHint( AA_HINT_MENU ); // would be better to do "Disable MLAA" here
+
+#if defined( IOS )
+	// Distinct clear so a dead present (pure black) is distinguishable from
+	// "UI painted nothing on top of a cleared buffer" (dark blue).
+	pRenderContext->ClearColor4ub( 12, 24, 64, 255 );
+#endif
 		   
 	pRenderContext->ClearBuffers( true, true );
 

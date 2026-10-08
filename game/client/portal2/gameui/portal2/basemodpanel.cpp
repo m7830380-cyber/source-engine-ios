@@ -1081,24 +1081,35 @@ void CBaseModPanel::RunFrame()
 	if ( m_DelayActivation )
 	{
 		m_DelayActivation--;
-		if ( !m_LevelLoading && !m_DelayActivation )
+		if ( !m_DelayActivation )
 		{
 #if defined( IOS )
-			Msg( "[Portal2 iOS] delayed GameUI activation → OpenFrontScreen\n" );
+			Msg( "[Portal2 iOS] delayed GameUI activation (loading=%d) → OpenFrontScreen\n", (int)m_LevelLoading );
 #endif
 			if ( UI_IsDebug() )
 			{
 				Msg( "[GAMEUI] Executing delayed UI activation\n");
 			}
+			// Don't require !m_LevelLoading — sound-cache rebuild can hold
+			// loading true across the 3-frame delay and skip the menu forever.
 			OnGameUIActivated();
 #if defined( IOS )
-			// Belt-and-suspenders: ensure main menu opens even if activation
-			// path early-outs (IsPC quirks / connected-state races).
 			if ( GetActiveWindowType() == WT_NONE && !engine->IsConnected() )
 				OpenFrontScreen();
 #endif
 		}
 	}
+#if defined( IOS )
+	else if ( !engine->IsConnected() && GetActiveWindowType() == WT_NONE && !m_LevelLoading )
+	{
+		static int s_nForceFront = 0;
+		if ( ( ++s_nForceFront % 60 ) == 1 )
+		{
+			Msg( "[Portal2 iOS] forcing OpenFrontScreen (still WT_NONE)\n" );
+			OpenFrontScreen();
+		}
+	}
+#endif
 
 	bool bDoBlur = true;
 	WINDOW_TYPE wt = GetActiveWindowType();
@@ -1840,7 +1851,8 @@ void CBaseModPanel::ApplySchemeSettings(IScheme *pScheme)
 	surface()->GetScreenSize( screenWide, screenTall );
 
 	char filename[MAX_PATH];
-	V_snprintf( filename, sizeof( filename ), "console/%s_widescreen.vtf", "portal2_product_1" ); // TODO: engine->GetStartupImage( filename, sizeof( filename ), screenWide, screenTall );
+	// VGUI FindMaterial path must NOT include .vtf (same as console/startup_loading).
+	V_snprintf( filename, sizeof( filename ), "console/%s_widescreen", "portal2_product_1" ); // TODO: engine->GetStartupImage( filename, sizeof( filename ), screenWide, screenTall );
 	m_iBackgroundImageID = surface()->CreateNewTextureID();
 	surface()->DrawSetTextureFile( m_iBackgroundImageID, filename, true, false );
 #if defined( IOS )
@@ -2003,6 +2015,32 @@ void CBaseModPanel::DrawCopyStats()
 //=============================================================================
 void CBaseModPanel::PaintBackground()
 {
+#if defined( IOS ) && defined( PORTAL2 )
+	// Always draw something when the panel paints — proves traverse works even
+	// if m_LevelLoading / IsInLevel guards would otherwise skip the menu art.
+	{
+		int wide, tall;
+		GetSize( wide, tall );
+		static int s_nPaintLog = 0;
+		if ( ( s_nPaintLog++ % 120 ) == 0 )
+		{
+			Msg( "[Portal2 iOS] PaintBackground size=%dx%d loading=%d inlevel=%d win=%d visible=%d\n",
+				wide, tall, (int)m_LevelLoading, GameUI().IsInLevel() ? 1 : 0,
+				(int)GetActiveWindowType(), IsVisible() ? 1 : 0 );
+		}
+		if ( wide > 0 && tall > 0 )
+		{
+			surface()->DrawSetColor( 12, 24, 64, 255 );
+			surface()->DrawFilledRect( 0, 0, wide, tall );
+			if ( m_iBackgroundImageID >= 0 )
+			{
+				surface()->DrawSetColor( 255, 255, 255, 255 );
+				surface()->DrawSetTexture( m_iBackgroundImageID );
+				surface()->DrawTexturedRect( 0, 0, wide, tall );
+			}
+		}
+	}
+#endif
 	if ( !m_LevelLoading &&
 		!GameUI().IsInLevel() &&
 		!GameUI().IsInBackgroundLevel() )
@@ -2025,19 +2063,7 @@ void CBaseModPanel::PaintBackground()
 			ActivateBackgroundEffects();
 
 #if defined( IOS ) && defined( PORTAL2 )
-			// Phone build: skip Bink menu movies (not available / g_pBIK unreliable).
-			// White modulate so console/portal2_product_1_widescreen actually shows.
-			if ( m_iBackgroundImageID >= 0 )
-			{
-				surface()->DrawSetColor( 255, 255, 255, 255 );
-				surface()->DrawSetTexture( m_iBackgroundImageID );
-				surface()->DrawTexturedRect( 0, 0, wide, tall );
-			}
-			else
-			{
-				surface()->DrawSetColor( 20, 20, 24, 255 );
-				surface()->DrawFilledRect( 0, 0, wide, tall );
-			}
+			// Already drew fill+texture above; keep ActivateBackgroundEffects.
 #else
 			if ( SDKBackgroundMovie() )
 			{

@@ -2401,6 +2401,15 @@ void CEngineVGui::Paint( PaintMode_t mode )
 #if defined( TOOLFRAMEWORK_VGUI_REFACTOR )
 	helper.AddUIPanel( staticGameUIPanel->GetVPanel() );
 #endif
+#if defined( IOS )
+	// Ensure GameUI stays visible at the front screen (HideGameUI / load races
+	// can leave it off → permanent black). Engine is not built with PORTAL2.
+	if ( staticGameUIPanel && engineClient && !engineClient->IsConnected() )
+	{
+		if ( !staticGameUIPanel->IsVisible() )
+			staticGameUIPanel->SetVisible( true );
+	}
+#endif
 	helper.AddUIPanel( staticClientDLLToolsPanel->GetVPanel() );
 
 	// Prevent Steam Overlay from rendering prematurely

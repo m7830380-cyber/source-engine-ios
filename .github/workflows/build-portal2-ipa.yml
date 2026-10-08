@@ -9,7 +9,7 @@ jobs:
   build-portal2-ipa:
     runs-on: macos-14
     permissions:
-      contents: read
+      contents: write
       actions: read
     timeout-minutes: 300
     env:
@@ -76,9 +76,38 @@ jobs:
           path: .ccache
           key: ccache-portal2-ios-${{ github.sha }}
 
+      # Prefer Actions artifacts; quota-full / upload failures must not fail the job.
       - name: Upload IPA artifact
+        id: upload-artifact
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: portal2-ios-arm64
           path: artifacts/portal2-ios-arm64.ipa
           if-no-files-found: error
+
+      # Always publish a rolling release so the IPA stays downloadable when
+      # artifact storage quota is exhausted.
+      - name: Publish IPA to GitHub Release
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          IPA="artifacts/portal2-ios-arm64.ipa"
+          test -f "$IPA"
+          TAG="portal2-ios-latest"
+          TITLE="Portal 2 iOS IPA (latest)"
+          NOTES="Unsigned Portal 2 iOS IPA from \`${{ github.sha }}\` on \`${{ github.ref_name }}\`.
+
+          Workflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+          Artifact upload: ${{ steps.upload-artifact.outcome }} (release is the fallback when Actions artifact quota is full)."
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$IPA" --clobber
+            gh release edit "$TAG" --title "$TITLE" --notes "$NOTES"
+          else
+            gh release create "$TAG" "$IPA" --title "$TITLE" --notes "$NOTES" --latest=false
+          fi
+          echo "Release: ${{ github.server_url }}/${{ github.repository }}/releases/tag/$TAG"

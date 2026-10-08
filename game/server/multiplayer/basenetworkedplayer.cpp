@@ -26,7 +26,10 @@ void TE_PlayerAnimEvent( CBasePlayer* pPlayer, PlayerAnimEvent_t event, int nDat
 
 //* *************** CBaseNetworkedPlayer *******************
 
-#ifndef PORTAL2_DLL
+// Portal 2 / RubberWar already LINK_ENTITY_TO_CLASS(player, CPortal_Player).
+// A second factory for the same classname makes CreatePlayer's C-style cast lie
+// and ClientActive's dynamic_cast return NULL → SIGSEGV on InitialSpawn.
+#if !defined( PORTAL2_DLL ) && !defined( PORTAL2 )
 LINK_ENTITY_TO_CLASS( player, CBaseNetworkedPlayer );
 #endif
 

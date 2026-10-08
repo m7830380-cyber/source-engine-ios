@@ -53,7 +53,12 @@ void ClientPutInServer( edict_t *pEdict, const char *playername )
 void ClientActive( edict_t *pEdict, bool bLoadGame )
 {
 	CPortal_Player *pPlayer = dynamic_cast< CPortal_Player* >( CBaseEntity::Instance( pEdict ) );
-	Assert( pPlayer );
+	if ( !pPlayer )
+	{
+		Warning( "ClientActive: edict is not a CPortal_Player (entity factory registered wrong player class?)\n" );
+		Assert( pPlayer );
+		return;
+	}
 
 	pPlayer->InitialSpawn();
 

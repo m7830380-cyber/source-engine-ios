@@ -449,12 +449,21 @@ bool VGui_Startup( CreateInterfaceFn appSystemFactory )
 //-----------------------------------------------------------------------------
 void VGui_CreateGlobalPanels( void )
 {
+#if defined( IOS ) && defined( PORTAL2 )
+	const int nGlobalVGuiSplitScreens = 1;
+#else
+	const int nGlobalVGuiSplitScreens = MAX_SPLITSCREEN_PLAYERS;
+#endif
+
 #if defined( IOS )
 	// PANEL_CLIENTDLL is not painted in CS:GO here (its HUD is Scaleform),
 	// so the controls hang off the root panel, which always is.
 	VERBOSE_PRINTF( "[touch] PANEL_CLIENTDLL visible %d, PANEL_ROOT visible %d\n",
 			vgui::ipanel()->IsVisible( enginevgui->GetPanel( PANEL_CLIENTDLL ) ) ? 1 : 0,
 			vgui::ipanel()->IsVisible( enginevgui->GetPanel( PANEL_ROOT ) ) ? 1 : 0 );
+#if defined( PORTAL2 )
+	Msg( "[Portal2 iOS] VGui_CreateGlobalPanels: touch_panel\n" );
+#endif
 	touch_panel->Create( enginevgui->GetPanel( PANEL_ROOT ) );
 #endif
 	VPANEL gameToolParent = enginevgui->GetPanel( PANEL_CLIENTDLL_TOOLS );
@@ -463,15 +472,25 @@ void VGui_CreateGlobalPanels( void )
 	VPANEL gameDLLPanel = enginevgui->GetPanel( PANEL_GAMEDLL );
 #endif
 	// Part of game
-	for ( int hh = 0; hh < MAX_SPLITSCREEN_PLAYERS; ++hh )
+#if defined( IOS ) && defined( PORTAL2 )
+	Msg( "[Portal2 iOS] VGui_CreateGlobalPanels: centerprint\n" );
+#endif
+	for ( int hh = 0; hh < nGlobalVGuiSplitScreens; ++hh )
 	{
 		ACTIVE_SPLITSCREEN_PLAYER_GUARD_VGUI( hh );
 		VPANEL root = VGui_GetClientDLLRootPanel();
 		GetCenterPrint()->Create( root );
 	}
+#if defined( IOS ) && defined( PORTAL2 )
+	Msg( "[Portal2 iOS] VGui_CreateGlobalPanels: loadingdisc\n" );
+#endif
 	loadingdisc->Create( gameToolParent );
 	messagechars->Create( gameToolParent );
 
+#if defined( IOS ) && defined( PORTAL2 )
+	// RubberWar VPC omits vgui_fpspanel; skip CS debug overlays on phone boot.
+	Msg( "[Portal2 iOS] VGui_CreateGlobalPanels: done (minimal)\n" );
+#else
 	// Debugging or related tool
 	fps->Create( toolParent );
 #if defined( TRACK_BLOCKING_IO )
@@ -483,6 +502,7 @@ void VGui_CreateGlobalPanels( void )
 #ifndef _GAMECONSOLE
 	// Create mp3 player off of tool parent panel
 	MP3Player_Create( toolParent );
+#endif
 #endif
 
 	// Create Steam overlay

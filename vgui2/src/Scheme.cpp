@@ -1395,6 +1395,16 @@ void CScheme::LoadBorders()
 
 			IBorder *border = NULL;
 			const char *pszBorderType = kv->GetString( "bordertype", NULL );
+#if defined( IOS )
+			// Image borders precache VGUI materials during scheme load (CHLClient::Init) and can
+			// SIGSEGV in the GLES shader path before the menu is up. Plain borders still get insets/colors.
+			if ( pszBorderType && pszBorderType[0] &&
+				( !stricmp( pszBorderType, "image" ) || !stricmp( pszBorderType, "scalable_image" ) ) )
+			{
+				border = new Border();
+			}
+			else
+#endif
 			if ( pszBorderType && pszBorderType[0] )
 			{
 				if ( !stricmp(pszBorderType,"image") )

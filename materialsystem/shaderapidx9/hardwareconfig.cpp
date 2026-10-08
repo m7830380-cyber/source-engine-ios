@@ -789,16 +789,11 @@ int CHardwareConfig::GetMaxVertexTextureDimension() const
 HDRType_t CHardwareConfig::GetHDRType() const
 {
 #if defined( IOS )
-	// Portal 2 iOS: mat_hdr_level defaults to 0 (LDR). The OpenGL path below
-	// used to slam SetHDREnabled(true) every call — INTEGER HDR + engine_post
-	// then crushed the frame to black after RenderView cleared (log 107:
-	// red-orange clear logged, user still saw black; VGUI/console still worked).
-	static ConVarRef s_mat_hdr_level( "mat_hdr_level" );
-	if ( !s_mat_hdr_level.IsValid() || s_mat_hdr_level.GetInt() < 1 )
-	{
-		const_cast<CHardwareConfig*>( this )->SetHDREnabled( false );
-		return HDR_TYPE_NONE;
-	}
+	// Portal 2 iOS: always LDR. Log 108 still reported hdrType=1 because a
+	// duplicate mat_hdr_level ConVar in shaderdevicedx8 defaulted to "2" and
+	// INTEGER HDR + tonemap left the presented frame black (cyan VGUI OK).
+	const_cast<CHardwareConfig*>( this )->SetHDREnabled( false );
+	return HDR_TYPE_NONE;
 #elif defined( DX_TO_GL_ABSTRACTION )
 	// On MacOS, this value comes down from the engine, which read it from the registry...which doesn't exist on Mac, so we're slamming to true here
 	if ( IsOpenGL() )
@@ -913,7 +908,10 @@ ImageFormat CHardwareConfig::GetNullTextureFormat( void ) const
 
 bool CHardwareConfig::SupportsCascadedShadowMapping( void ) const
 {
-#if defined(_PS3) 
+#if defined( IOS )
+	// CSM static combos are absent/mismatched in the PLATFORM VCS pack → black world.
+	return false;
+#elif defined(_PS3) 
 	return m_Caps.m_bSupportsCascadedShadowMapping;
 #elif defined(_X360)
 	return m_Caps.m_bSupportsCascadedShadowMapping;

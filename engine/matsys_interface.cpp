@@ -563,8 +563,12 @@ void InitMaterialSystemConfig( bool bInEditMode )
 	OverrideMaterialSystemConfig( config );
 	
 	// now, set default hdr state
+#if defined( IOS )
+	g_pMaterialSystemHardwareConfig->SetHDREnabled( false );
+#else
 	bool bEnableHDR = ( mat_hdr_level.GetInt() >= 2 );
 	g_pMaterialSystemHardwareConfig->SetHDREnabled( bEnableHDR );
+#endif
 
 #if defined( IOS )
 	// Drop leftover CS:GO mode-switch saves before any map load can re-trigger them.

@@ -2500,6 +2500,13 @@ static ConVar mat_postprocess_enable( "mat_postprocess_enable", "1", FCVAR_CHEAT
 
 bool DoEnginePostProcessing( int x, int y, int w, int h, bool bFlashlightIsOn, bool bPostVGui )
 {
+#if defined( IOS )
+	// Log 108: hdrType stayed INTEGER and tonemap/post ran after the diagnostic
+	// clear — keep the LDR backbuffer untouched on iOS.
+	NOTE_UNUSED( x ); NOTE_UNUSED( y ); NOTE_UNUSED( w ); NOTE_UNUSED( h );
+	NOTE_UNUSED( bFlashlightIsOn ); NOTE_UNUSED( bPostVGui );
+	return false;
+#endif
 	// don't do this if disabled or in alt-tab
 	if ( s_bOverridePostProcessingDisable || w <=0 || h <= 0 )
 	{

@@ -1328,7 +1328,7 @@ CEG_NOINLINE bool InitGameSystems( CreateInterfaceFn appSystemFactory )
 		return false;
 
 #if defined( IOS ) && defined( PORTAL2 )
-	COM_TimestampedLog( "InitGameSystems: after InitAllSystems" );
+	Msg( "[Portal2 iOS] InitGameSystems: after InitAllSystems\n" );
 #endif
 
 	for ( int hh = 0; hh < nClientInitSplitScreens; ++hh )
@@ -1343,7 +1343,7 @@ CEG_NOINLINE bool InitGameSystems( CreateInterfaceFn appSystemFactory )
 	}
 
 #if defined( IOS ) && defined( PORTAL2 )
-	COM_TimestampedLog( "InitGameSystems: after client mode Enable" );
+	Msg( "[Portal2 iOS] InitGameSystems: after client mode Enable\n" );
 #endif
 
 	// Each mod is required to implement this
@@ -1354,6 +1354,9 @@ CEG_NOINLINE bool InitGameSystems( CreateInterfaceFn appSystemFactory )
 	}
 
 	view->Init();
+#if defined( IOS ) && defined( PORTAL2 )
+	Msg( "[Portal2 iOS] InitGameSystems: after view->Init\n" );
+#endif
 	for ( int hh = 0; hh < nClientInitSplitScreens; ++hh )
 	{
 		ACTIVE_SPLITSCREEN_PLAYER_GUARD_VGUI( hh );
@@ -1363,14 +1366,17 @@ CEG_NOINLINE bool InitGameSystems( CreateInterfaceFn appSystemFactory )
 	C_BaseTempEntity::PrecacheTempEnts();
 
 #if defined( IOS ) && defined( PORTAL2 )
-	COM_TimestampedLog( "InitGameSystems: before input->Init_All" );
+	Msg( "[Portal2 iOS] InitGameSystems: before input->Init_All\n" );
 #endif
 	input->Init_All();
 
 #if defined( IOS ) && defined( PORTAL2 )
-	COM_TimestampedLog( "InitGameSystems: before VGui_CreateGlobalPanels" );
+	Msg( "[Portal2 iOS] InitGameSystems: before VGui_CreateGlobalPanels\n" );
 #endif
 	VGui_CreateGlobalPanels();
+#if defined( IOS ) && defined( PORTAL2 )
+	Msg( "[Portal2 iOS] InitGameSystems: after VGui_CreateGlobalPanels\n" );
+#endif
 
 	InitSmokeFogOverlay();
 

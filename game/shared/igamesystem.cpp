@@ -227,12 +227,18 @@ bool IGameSystem::InitAllSystems()
 		char sz[128];
 		Q_snprintf( sz, sizeof( sz ), "%s->Init():Start", sys->Name() );
 		COM_TimestampedLog( sz );
+#if defined( IOS ) && defined( PORTAL2 )
+		Msg( "[Portal2 iOS] %s\n", sz );
+#endif
 #endif
 		bool valid = sys->Init();
 
 #if defined( _GAMECONSOLE ) || ( defined( IOS ) && defined( PORTAL2 ) )
 		Q_snprintf( sz, sizeof( sz ), "%s->Init():Finish", sys->Name() );
 		COM_TimestampedLog( sz );
+#if defined( IOS ) && defined( PORTAL2 )
+		Msg( "[Portal2 iOS] %s\n", sz );
+#endif
 #endif
 		if ( !valid )
 		{

@@ -885,7 +885,12 @@ void ClientModeShared::Layout( bool bForce /*= false*/)
 		m_pViewport->SetBounds(0, 0, wide, tall);
 		if ( changed || bForce )
 		{
+#if defined( IOS ) && defined( PORTAL2 )
+			m_nRootSize[ 0 ] = wide;
+			m_nRootSize[ 1 ] = tall;
+#else
 			ReloadSchemeWithRoot( pRoot );
+#endif
 		}
 	}
 }

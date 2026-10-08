@@ -199,17 +199,16 @@ bool CAchievementMgr::Init()
 #ifdef GAME_DLL
 	ListenForGameEvent( "entity_killed" );
 	ListenForGameEvent( "game_init" );
+#else // CLIENT_DLL
+#if defined( IOS ) && defined( PORTAL2 )
+	// CS:GO title-data / profile / usermessage achievement path is not used on phone Portal 2.
+	Msg( "[Portal2 iOS] CAchievementMgr::Init done (minimal)\n" );
 #else
 	ListenForGameEvent( "player_death" );
 	ListenForGameEvent( "player_stats_updated" );
 	ListenForGameEvent( "achievement_write_failed" );
 	ListenForGameEvent( "user_data_downloaded" );
-#if defined( IOS ) && defined( PORTAL2 )
-	const int nAchievementInitSplitScreens = 1;
-#else
-	const int nAchievementInitSplitScreens = MAX_SPLITSCREEN_PLAYERS;
-#endif
-	for ( int hh = 0; hh < nAchievementInitSplitScreens; ++hh )
+	for ( int hh = 0; hh < MAX_SPLITSCREEN_PLAYERS; ++hh )
 	{
 		ACTIVE_SPLITSCREEN_PLAYER_GUARD( hh );
 		m_UMCMsgAchievementEvent.Bind< CS_UM_AchievementEvent, CCSUsrMsg_AchievementEvent >( UtlMakeDelegate( MsgFunc_AchievementEvent ) );
@@ -218,7 +217,8 @@ bool CAchievementMgr::Init()
 	ListenForGameEvent( "write_game_titledata" );
 	ListenForGameEvent( "reset_game_titledata" ); 
 	ListenForGameEvent( "write_profile_data" );
-#endif // CLIENT_DLL
+#endif
+#endif // GAME_DLL
 
 #ifdef TF_CLIENT_DLL
 	ListenForGameEvent( "localplayer_changeclass" );

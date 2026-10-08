@@ -766,6 +766,17 @@ void CVideoMode_Common::DrawStartupGraphic()
         return;
 	}
 
+#if defined( IOS )
+	// Portal 2 on iOS: UnlitGeneric startup splashes still compile vertexlit combos; TOGLES
+	// can Error() during ModInit before the client is up (see launch_log GLSL translation).
+	const char *pGame = CommandLine()->ParmValue( "-game", "" );
+	if ( pGame && !Q_stricmp( pGame, "portal2" ) )
+	{
+		Msg( "iOS Portal 2: skipping DrawStartupGraphic during video mode init\n" );
+		return;
+	}
+#endif
+
 	if ( !SetupStartupGraphic() )
         return;
 

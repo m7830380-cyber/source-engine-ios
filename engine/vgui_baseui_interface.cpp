@@ -837,11 +837,13 @@ void CEngineVGui::Init()
 
 	// This panel has it's own animation controller, which makes it 1.1Mb to instance
 	//  which is too much on the console which doesn't support plugins anyway.
+#if !defined( IOS )
 	if ( IsPC() )
 	{
 		COM_TimestampedLog( "Building Panels (CreateAskConnectPanel)" );
 		CreateAskConnectPanel( staticPanel->GetVPanel() );
 	}
+#endif
 
 	COM_TimestampedLog( "Building Panels (staticClientDLLToolsPanel)" );
 	staticClientDLLToolsPanel = new CEnginePanel( staticPanel, "staticClientDLLToolsPanel" );

@@ -1850,8 +1850,8 @@ void D3DToGL::Handle_DCL()
 		}
 		else if ( GetRegType( dwRegToken ) == D3DSPR_SAMPLER )
 		{
-			// We can support vertex texturing if necessary, but I can't find a use case in any branch. (HW morphing in L4D2 isn't enabled, and the comments indicate that r_hwmorph isn't compatible with mat_queue_mode anyway, and CS:GO/DoTA don't use vertex shader texturing.)
-			TranslationError();
+			// Vertex shader samplers are uncommon but appear in shipped VCS (e.g. Portal 2 menu
+			// materials on iOS). Record the declaration; do not fatal the translator here.
 
 			int nRegNum = dwRegToken & D3DSP_REGNUM_MASK;
 			switch ( TextureType( dwToken ) )

@@ -448,13 +448,12 @@ bool CClientState::SVCMsg_ClassInfo( const CSVCMsg_ClassInfo& msg )
 
 	if ( !demoplayer->IsPlayingBack() )
 	{
-#if defined( IOS )
-		// InitFastCopy null-derefs when a decoder's prop map was left empty after a mismatch.
-		if ( bDecodersOk )
+#if !defined( IOS )
+		// iOS: skip — LocalTransfer_TransferEntity / SendProxy_* crash on mismatched Portal/CS prop offsets.
+		CLocalNetworkBackdoor::InitFastCopy();
+#else
+		(void)bDecodersOk;
 #endif
-		{
-			CLocalNetworkBackdoor::InitFastCopy();
-		}
 	}
 
 	return true;

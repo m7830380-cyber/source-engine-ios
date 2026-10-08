@@ -2939,6 +2939,20 @@ void CViewRender::RenderView( const CViewSetup &view, const CViewSetup &hudViewS
 
 	CMatRenderContextPtr pRenderContext( materials );
 
+#if defined( IOS )
+	// Prove the present path: if the user still sees pure black after this, the
+	// backbuffer is not being shown (or GameUI covers it). If they see red-orange,
+	// world shaders are failing to write color on top of a working clear.
+	static bool s_bIOSLoggedClear = false;
+	if ( !s_bIOSLoggedClear )
+	{
+		s_bIOSLoggedClear = true;
+		Msg( "[Portal2 iOS] RenderView: clearing 3D target to diagnostic red-orange\n" );
+	}
+	pRenderContext->ClearColor4ub( 220, 60, 20, 255 );
+	nClearFlags |= VIEW_CLEAR_COLOR | VIEW_CLEAR_DEPTH;
+#endif
+
 #if defined(_PS3)
 	pRenderContext->AntiAliasingHint( AA_HINT_MESHES );
 

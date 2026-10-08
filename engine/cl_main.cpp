@@ -1778,11 +1778,26 @@ void CL_FullyConnected( void )
 		Host_AllowQueuedMaterialSystem( false );
 		// Do NOT SetValue mat_hdr_level here — engine callback used to clamp to 2
 		// and issue "save/load modeswitchsave", which looped map loads on iOS.
-		// Temporary visibility probe: mismatched PLATFORM shaders / lighting often
-		// present as a black 3D view with audio; fullbright proves the mesh path.
+		// Visibility probe: fullbright only takes effect after UpdateConfig copies
+		// the convar into MaterialSystem_Config_t::nFullbright (log 106 stayed black
+		// with SetValue alone). Also kill flashlight (broken FLASHLIGHT=1 ps30 combos)
+		// and purge intro screen fades that can stick black.
+		ConVarRef sv_cheats( "sv_cheats" );
+		if ( sv_cheats.IsValid() )
+			sv_cheats.SetValue( 1 );
 		ConVarRef mat_fullbright( "mat_fullbright" );
 		if ( mat_fullbright.IsValid() )
 			mat_fullbright.SetValue( 1 );
+		ConVarRef r_flashlightdepthtexture( "r_flashlightdepthtexture" );
+		if ( r_flashlightdepthtexture.IsValid() )
+			r_flashlightdepthtexture.SetValue( 0 );
+		UpdateMaterialSystemConfig();
+		Cbuf_AddText( Cbuf_GetCurrentPlayer(), "fadein 0\n" );
+		EngineVGui()->HideGameUI();
+		Msg( "[Portal2 iOS] post-connect: fullbright=%d queue=%d flashlightDepth=%d\n",
+			mat_fullbright.IsValid() ? mat_fullbright.GetInt() : -1,
+			mat_queue_mode.IsValid() ? mat_queue_mode.GetInt() : -1,
+			r_flashlightdepthtexture.IsValid() ? r_flashlightdepthtexture.GetInt() : -1 );
 #else
 		// map load complete, safe to allow QMS
 		ConVarRef mat_queue_mode( "mat_queue_mode" );

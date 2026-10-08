@@ -107,8 +107,16 @@ CFlashlightEffect::~CFlashlightEffect()
 //-----------------------------------------------------------------------------
 void CFlashlightEffect::TurnOn()
 {
+#if defined( IOS )
+	// Portal 2 intro uses projected flashlight; PLATFORM ps30 FLASHLIGHT combos
+	// are missing and paint black (invalid combo vertexlit_and_unlit_generic_ps30).
+	// Keep the effect off until a matching shader pack is shipped.
+	m_bIsOn = false;
+	return;
+#else
 	m_bIsOn = true;
 	m_flCurrentPullBackDist = 1.0f;
+#endif
 }
 
 

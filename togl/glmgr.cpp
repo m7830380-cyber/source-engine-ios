@@ -2357,6 +2357,23 @@ void GLMContext::Present( CGLMTex *tex )
 			{
 				// blit to GL_BACK done here, not in CocoaMgr, this lets us do resolve directly if conditions are right
 
+#if defined( IOS )
+				// On iOS/ANGLE the Metal back-end already reconciles the OpenGL bottom-up /
+				// Metal top-down y-axis difference internally.  Blit2 applies an explicit
+				// y-flip (blitFlips=blitToBack) that double-flips on ANGLE, producing a
+				// corrupt or black present.  Skip Blit2 entirely; ShowPixels will perform a
+				// direct no-flip glBlitFramebuffer from the game texture straight to the EGL
+				// default framebuffer (FBO 0).
+				static bool s_bLoggedSkipBlit2 = false;
+				if ( !s_bLoggedSkipBlit2 )
+				{
+					s_bLoggedSkipBlit2 = true;
+					Msg( "[Portal2 iOS] Present: skipping Blit2 Y-flip — ShowPixels will blit tex=%u directly to EGL surface\n",
+						 (unsigned)tex->m_texName );
+				}
+				// Leave showparams.m_noBlit = 0 so ShowPixels knows to perform the blit.
+				showparams.m_noBlit = false;
+#else
 				GLMRect	srcRect, dstRect;
 			
 				uint dstWidth,dstHeight;
@@ -2381,6 +2398,7 @@ void GLMContext::Present( CGLMTex *tex )
 
 				// we set showparams.m_noBlit, and just let CocoaMgr handle the swap (flushbuffer / page flip)
 				showparams.m_noBlit = true;
+#endif // !IOS
 
 				BindFBOToCtx( NULL, GL_FRAMEBUFFER );
 			}

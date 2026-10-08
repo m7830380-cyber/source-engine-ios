@@ -1909,6 +1909,51 @@ void CSDLMgr::ShowPixels( CShowPixelsParams *params )
 	CheckGLError( __LINE__ );
 
 #if defined( IOS )
+	// ---- iOS/ANGLE present fix -----------------------------------------------
+	// GLMContext::Present skips Blit2 on iOS because Blit2 applies an explicit
+	// Y-flip that double-flips with ANGLE's internal OpenGL→Metal coordinate
+	// transform, producing a corrupt / black present.  Blit the game render
+	// texture directly to the EGL window surface (FBO 0) here, without any
+	// Y-flip; ANGLE reconciles the coordinate difference natively on SwapBuffers.
+	if ( !params->m_onlySyncView && !params->m_noBlit &&
+	     params->m_srcTexName && m_readFBO )
+	{
+		static bool s_bLoggedIOSBlit = false;
+		if ( !s_bLoggedIOSBlit )
+		{
+			s_bLoggedIOSBlit = true;
+			printf( "[Portal2 iOS] ShowPixels: iOS ANGLE no-flip blit "
+			        "tex=%u  %dx%d  readFBO=%u  sysFBO=%u\n",
+			        (unsigned)params->m_srcTexName,
+			        params->m_width, params->m_height,
+			        (unsigned)m_readFBO,
+			        (unsigned)gGL->m_nSystemFramebufferID );
+			fflush( stdout );
+		}
+
+		// Attach game texture to our scratch read FBO
+		gGL->glBindFramebuffer( GL_READ_FRAMEBUFFER, m_readFBO );
+		gGL->glFramebufferTexture2D( GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+		                              GL_TEXTURE_2D, params->m_srcTexName, 0 );
+		gGL->glReadBuffer( GL_COLOR_ATTACHMENT0 );
+
+		// Target: EGL window surface (FBO 0)
+		gGL->glBindFramebuffer( GL_DRAW_FRAMEBUFFER, gGL->m_nSystemFramebufferID );
+		GLenum drawBuf = GL_BACK;
+		gGL->glDrawBuffers( 1, &drawBuf );
+
+		// No Y-flip — ANGLE handles OpenGL bottom-up / Metal top-down natively
+		gGL->glBlitFramebuffer(
+		    0, 0, params->m_width, params->m_height,
+		    0, 0, params->m_width, params->m_height,
+		    GL_COLOR_BUFFER_BIT, GL_NEAREST );
+
+		// Leave FBO 0 bound so IOS_MaybeCaptureFrame reads the blitted content
+		gGL->glBindFramebuffer( GL_FRAMEBUFFER, gGL->m_nSystemFramebufferID );
+		gGL->glBindFramebuffer( GL_READ_FRAMEBUFFER, gGL->m_nSystemFramebufferID );
+	}
+	// ---- end iOS present fix -------------------------------------------------
+
 	// With the queued material system this runs on the render thread; UIKit
 	// (drawable size, event pump) stays on the main thread, which pumps events
 	// every frame anyway.

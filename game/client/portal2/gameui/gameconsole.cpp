@@ -38,6 +38,10 @@ EXPOSE_SINGLE_INTERFACE_GLOBALVAR(CGameConsole, IGameConsole, GAMECONSOLE_INTERF
 CGameConsole::CGameConsole()
 {
 	m_bInitialized = false;
+#if defined( IOS )
+	m_nDeferredParent = 0;
+	m_bHasDeferredParent = false;
+#endif
 }
 
 //-----------------------------------------------------------------------------
@@ -48,11 +52,44 @@ CGameConsole::~CGameConsole()
 	m_bInitialized = false;
 }
 
+#if defined( IOS )
+void CGameConsole::CreateConsolePanelIfNeeded()
+{
+#ifndef _XBOX
+	if ( m_bInitialized )
+		return;
+
+	m_pConsole = vgui::SETUP_PANEL( new CGameConsoleDialog() );
+
+	int swide, stall;
+	vgui::surface()->GetScreenSize( swide, stall );
+	int offset = vgui::scheme()->GetProportionalScaledValue( 16 );
+
+	m_pConsole->SetBounds(
+		swide / 2 - ( offset * 4 ),
+		offset,
+		( swide / 2 ) + ( offset * 3 ),
+		stall - ( offset * 8 ) );
+
+	if ( m_bHasDeferredParent )
+	{
+		m_pConsole->SetParent( static_cast<vgui::VPANEL>( m_nDeferredParent ) );
+	}
+
+	m_bInitialized = true;
+#endif
+}
+#endif
+
 //-----------------------------------------------------------------------------
 // Purpose: sets up the console for use
 //-----------------------------------------------------------------------------
 void CGameConsole::Initialize()
 {
+#if defined( IOS )
+	// Defer VGUI/material work until the user opens the console (Host_Init must not SIGSEGV on GLES).
+	return;
+#endif
 #ifndef _XBOX
 	m_pConsole = vgui::SETUP_PANEL( new CGameConsoleDialog() ); // we add text before displaying this so set it up now!
 
@@ -77,6 +114,9 @@ void CGameConsole::Initialize()
 void CGameConsole::Activate()
 {
 #ifndef _XBOX
+#if defined( IOS )
+	CreateConsolePanelIfNeeded();
+#endif
 	if (!m_bInitialized)
 		return;
 
@@ -143,6 +183,12 @@ void CGameConsole::ActivateDelayed(float time)
 void CGameConsole::SetParent( int parent )
 {	
 #ifndef _XBOX
+#if defined( IOS )
+	m_nDeferredParent = parent;
+	m_bHasDeferredParent = true;
+	if ( !m_bInitialized )
+		return;
+#endif
 	if (!m_bInitialized)
 		return;
 

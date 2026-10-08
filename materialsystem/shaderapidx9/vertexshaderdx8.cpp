@@ -322,7 +322,7 @@ static HardwareShader_t CreateD3DVertexShader( DWORD *pByteCode, int numBytes, c
 	}
 
 	// Compute the vertex specification
-	HardwareShader_t hShader;
+	HardwareShader_t hShader = INVALID_HARDWARE_SHADER;
 
 	#if defined( _PS3 )
 		HRESULT hr = Dx9Device()->CreateVertexShader( pByteCode, (IDirect3DVertexShader9 **)&hShader, debugLabel );
@@ -345,8 +345,11 @@ static HardwareShader_t CreateD3DVertexShader( DWORD *pByteCode, int numBytes, c
 	RECORD_INT( numBytes );
 	RECORD_STRUCT( pByteCode, numBytes );
 
-	if ( FAILED( hr ) )
+	if ( FAILED( hr ) || !hShader )
 	{
+#if defined( IOS )
+		DevWarning( "CreateD3DVertexShader failed for %s\n", pShaderName ? pShaderName : "?" );
+#endif
 		Assert( 0 );
 		hShader = INVALID_HARDWARE_SHADER;
 	}
@@ -436,7 +439,7 @@ static HardwareShader_t CreateD3DPixelShader( DWORD *pByteCode, unsigned int nCe
 		PatchPixelShaderForAtiMsaaHack( pByteCode, nCentroidMask );
 	}
 
-	HardwareShader_t shader;
+	HardwareShader_t shader = INVALID_HARDWARE_SHADER;
 	#if defined( DX_TO_GL_ABSTRACTION ) 
 		#if defined( OSX ) 
 			HRESULT hr = Dx9Device()->CreatePixelShader( pByteCode, ( IDirect3DPixelShader ** )&shader, pShaderName, debugLabel );
@@ -458,8 +461,14 @@ static HardwareShader_t CreateD3DPixelShader( DWORD *pByteCode, unsigned int nCe
 	RECORD_INT( numBytes );
 	RECORD_STRUCT( pByteCode, numBytes );
 	
-	if ( FAILED( hr ) )
+	if ( FAILED( hr ) || !shader )
 	{
+#if defined( IOS )
+		if ( debugLabel )
+			DevWarning( "CreateD3DPixelShader failed for %s (%s)\n", pShaderName ? pShaderName : "?", debugLabel );
+		else
+			DevWarning( "CreateD3DPixelShader failed for %s\n", pShaderName ? pShaderName : "?" );
+#endif
 		Assert(0);
 		shader = INVALID_HARDWARE_SHADER;
 	}

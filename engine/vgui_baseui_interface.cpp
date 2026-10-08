@@ -1065,6 +1065,7 @@ void CEngineVGui::Init()
 	COM_TimestampedLog( "ActivateGameUI()" );
 	ActivateGameUI();
 
+#if !defined( IOS )
 	if ( staticGameConsole && 
 		!CommandLine()->CheckParm( "-forcestartupmenu" ) && 
 		!CommandLine()->CheckParm( "-hideconsole" ) &&
@@ -1073,6 +1074,7 @@ void CEngineVGui::Init()
 		// activate the console
 		staticGameConsole->Activate();
 	}
+#endif
 
 	m_bNoShaderAPI = CommandLine()->FindParm( "-noshaderapi" ) ? true : false;
 }

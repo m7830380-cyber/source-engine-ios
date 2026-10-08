@@ -162,6 +162,9 @@ CBaseModPanel::CBaseModPanel(): BaseClass(0, "CBaseModPanel"),
 #endif
 
 	MakePopup( false );
+#if defined( IOS )
+	SetPostChildPaintEnabled( true );
+#endif
 
 	Assert(m_CFactoryBasePanel == 0);
 	m_CFactoryBasePanel = this;
@@ -2052,16 +2055,11 @@ void CBaseModPanel::PaintBackground()
 		}
 		if ( wide > 0 && tall > 0 )
 		{
-			surface()->DrawSetTexture( -1 );
+			// Product art is dark-blue and looked like "no UI" while fills were
+			// invisible (broken vertex color). Skip it until fills work; cyan is
+			// unambiguous proof of GameUI paint.
 			surface()->DrawSetColor( 0, 200, 220, 255 );
 			surface()->DrawFilledRect( 0, 0, wide, tall );
-			if ( m_iBackgroundImageID >= 0 )
-			{
-				surface()->DrawSetColor( 255, 255, 255, 255 );
-				surface()->DrawSetTexture( m_iBackgroundImageID );
-				surface()->DrawTexturedRect( 0, 0, wide, tall );
-				surface()->DrawSetTexture( -1 );
-			}
 		}
 	}
 #endif

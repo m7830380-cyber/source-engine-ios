@@ -1095,8 +1095,37 @@ void CMatSystemSurface::EnsureIOSSolidWhiteTexture()
 	m_nIOSSolidWhiteTexture = CreateNewTextureID( true );
 	unsigned char rgba[4] = { 255, 255, 255, 255 };
 	DrawSetTextureRGBA( m_nIOSSolidWhiteTexture, rgba, 1, 1 );
-	Msg( "[Portal2 iOS] VGUI solid-white procedural texid=%d (DrawFilledRect textured path)\n",
+	Msg( "[Portal2 iOS] VGUI solid-color procedural texid=%d (bake RGBA into 1x1; vertex color broken)\n",
 		m_nIOSSolidWhiteTexture );
+}
+
+// UnlitGeneric combo fallback drops vertex color under ANGLE/Metal, so white*tint
+// is invisible. Bake the draw color into a 1x1 texture and modulate with opaque white
+// (same path that successfully shows portal2_product_1_widescreen).
+void CMatSystemSurface::IOSDrawFilledRect( int x0, int y0, int x1, int y1, unsigned char const *pColor )
+{
+	if ( !pColor || pColor[3] == 0 )
+		return;
+
+	EnsureIOSSolidWhiteTexture();
+
+	unsigned char rgba[4] = { pColor[0], pColor[1], pColor[2], pColor[3] };
+	DrawSetTextureRGBA( m_nIOSSolidWhiteTexture, rgba, 1, 1 );
+
+	Vertex_t rect[2];
+	Vertex_t clippedRect[2];
+	InitVertex( rect[0], x0, y0, 0, 0 );
+	InitVertex( rect[1], x1, y1, 1, 1 );
+	if ( !ClipRect( rect[0], rect[1], &clippedRect[0], &clippedRect[1] ) )
+		return;
+
+	IMaterial *pMaterial = TextureDictionary()->GetTextureMaterial( m_nIOSSolidWhiteTexture );
+	if ( !pMaterial )
+		pMaterial = m_pWhite;
+	InternalSetMaterial( pMaterial );
+
+	unsigned char white[4] = { 255, 255, 255, 255 };
+	DrawQuad( clippedRect[0], clippedRect[1], white );
 }
 #endif
 
@@ -1104,12 +1133,6 @@ void CMatSystemSurface::InternalSetMaterial( IMaterial *pMaterial )
 {
 	if (!pMaterial)
 	{
-#if defined( IOS )
-		// Prefer procedural textured white — proven visible path on ANGLE/Metal.
-		EnsureIOSSolidWhiteTexture();
-		pMaterial = TextureDictionary()->GetTextureMaterial( m_nIOSSolidWhiteTexture );
-		if ( !pMaterial )
-#endif
 		pMaterial = m_pWhite;
 	}
 
@@ -1423,6 +1446,11 @@ void CMatSystemSurface::DrawFilledRect( int x0, int y0, int x1, int y1 )
 	if( m_DrawColor[3]==0 )
 		return;
 
+#if defined( IOS )
+	IOSDrawFilledRect( x0, y0, x1, y1, m_DrawColor );
+	return;
+#endif
+
 	Vertex_t rect[2];
 	Vertex_t clippedRect[2];
 	InitVertex( rect[0], x0, y0, 0, 0 );
@@ -1547,6 +1575,14 @@ void CMatSystemSurface::DrawFilledRectFade( int x0, int y0, int x1, int y1, unsi
 	// Don't even bother drawing fully transparent junk
 	if ( alpha0 == 0 && alpha1 == 0 )
 		return;
+
+#if defined( IOS )
+	// Gradients need vertex alpha; bake a solid with the stronger alpha instead.
+	unsigned char solid[4] = { m_DrawColor[0], m_DrawColor[1], m_DrawColor[2],
+		(unsigned char)MAX( alpha0, alpha1 ) };
+	IOSDrawFilledRect( x0, y0, x1, y1, solid );
+	return;
+#endif
 
 	Vertex_t rect[2];
 	Vertex_t clippedRect[2];

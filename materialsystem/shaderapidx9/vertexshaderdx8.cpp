@@ -3406,6 +3406,33 @@ bool CShaderManager::LoadAndCreateShaders( ShaderLookup_t &lookup, bool bVertexS
 					g_pFullFileSystem->Read( pFileCache->m_StaticComboDupRecords.Base(), nNumDups * sizeof( StaticComboAliasRecord_t ), hFile );
 				}
 			}
+#if defined( IOS )
+			// Inventory Documents/platform combos once per key shader so we can
+			// stop guessing which static ids exist (log 114/115).
+			{
+				const char *pBase = V_UnqualifiedFileName( filename );
+				if ( V_stristr( pBase, "lightmappedgeneric_ps20b" ) ||
+					 V_stristr( pBase, "lightmappedgeneric_vs20" ) ||
+					 V_stristr( pBase, "vertexlit_and_unlit_generic_ps20b" ) ||
+					 V_stristr( pBase, "vertexlit_and_unlit_generic_vs20" ) )
+				{
+					const int nRec = pFileCache->m_StaticComboRecords.Count();
+					const int nDump = MIN( nRec, 24 );
+					Msg( "[iOS] VCS %s: ver=%d dyn=%d staticRecords=%d aliases=%d\n",
+						pBase, pHeader->m_nVersion, pHeader->m_nDynamicCombos,
+						nRec, pFileCache->m_StaticComboDupRecords.Count() );
+					for ( int r = 0; r < nDump; ++r )
+					{
+						const StaticComboRecord_t &rec = pFileCache->m_StaticComboRecords[r];
+						if ( rec.m_nStaticComboID == 0xffffffff )
+							break;
+						Msg( "[iOS]   staticId=%u off=%u\n", rec.m_nStaticComboID, rec.m_nFileOffset );
+					}
+					if ( nRec > nDump )
+						Msg( "[iOS]   ... %d more static records\n", nRec - nDump );
+				}
+			}
+#endif
 
 		}
 	}

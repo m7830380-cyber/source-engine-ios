@@ -3315,11 +3315,15 @@ void CViewRender::RenderView( const CViewSetup &view, const CViewSetup &hudViewS
 		}
 		#endif
 
-		RenderSmokeOverlay( true );
-		DrawViewModels( view, whatToDraw & RENDERVIEW_DRAWVIEWMODEL );
-		RenderSmokeOverlay( false );
-		
-		DrawUnderwaterOverlay();
+#if defined( IOS )
+		if ( !r_ios_skip_world.GetBool() )
+#endif
+		{
+			RenderSmokeOverlay( true );
+			DrawViewModels( view, whatToDraw & RENDERVIEW_DRAWVIEWMODEL );
+			RenderSmokeOverlay( false );
+			DrawUnderwaterOverlay();
+		}
 		
 		PixelVisibility_EndScene();
 
@@ -3464,6 +3468,22 @@ void CViewRender::RenderView( const CViewSetup &view, const CViewSetup &hudViewS
 
 		pRenderContext = materials->GetRenderContext();
 		pRenderContext->SetRenderTarget( saveRenderTarget );
+#if defined( IOS )
+		// Final present proof: clear the restored target AFTER all 3D work.
+		// If this still isn't visible, the backbuffer Present path is wrong
+		// (not world shaders). If it IS visible, shaders were painting black.
+		if ( r_ios_skip_world.GetBool() )
+		{
+			pRenderContext->ClearColor4ub( 220, 60, 20, 255 );
+			pRenderContext->ClearBuffers( true, true, true );
+			static bool s_bLoggedFinalClear = false;
+			if ( !s_bLoggedFinalClear )
+			{
+				s_bLoggedFinalClear = true;
+				Msg( "[Portal2 iOS] r_ios_skip_world=1: FINAL backbuffer clear to red-orange (post-3D)\n" );
+			}
+		}
+#endif
 		pRenderContext.SafeRelease();
 
 		// Draw the overlay

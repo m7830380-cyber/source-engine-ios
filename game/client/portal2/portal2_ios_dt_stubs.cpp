@@ -19,7 +19,7 @@ BEGIN_NETWORK_TABLE( CBaseCSGrenadeProjectile, DT_BaseCSGrenadeProjectile )
 	RecvPropInt( RECVINFO( m_nBounces ) )
 END_NETWORK_TABLE()
 
-LINK_ENTITY_TO_CLASS( basecsgrenade_projectile, CBaseCSGrenadeProjectile );
+LINK_ENTITY_TO_CLASS_ALIASED( basecsgrenade_projectile, BaseCSGrenadeProjectile );
 
 CBaseCSGrenadeProjectile::~CBaseCSGrenadeProjectile()
 {

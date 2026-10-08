@@ -205,7 +205,10 @@ VPANEL CMatEmbeddedPanel::IsWithinTraverse(int x, int y, bool traversePopups)
 //-----------------------------------------------------------------------------
 CMatSystemSurface::CMatSystemSurface() : m_pEmbeddedPanel(NULL), m_pWhite(NULL), m_ContextAbsPos( 0, 0, ContextAbsPos_t::Less )
 {
-	m_iBoundTexture = -1; 
+	m_iBoundTexture = -1;
+#if defined( IOS )
+	m_nIOSSolidWhiteTexture = -1;
+#endif
 	m_nCurrReferenceValue = 0;
 	m_bIn3DPaintMode = false;
 	m_bDrawingIn3DWorld = false;
@@ -404,6 +407,14 @@ InitReturnVal_t CMatSystemSurface::Init( void )
 	pVMTKeyValues->SetInt( "$ignorez", 1 );
 	pVMTKeyValues->SetInt( "$no_fullbright", 1 );
 	pVMTKeyValues->SetInt( "$nocull", 1 );
+#if defined( IOS )
+	// Vertex-color-only UnlitGeneric is invisible under ANGLE→Metal; textured
+	// UnlitGeneric works (missing-material black quads were visible). Prefer a
+	// real basetexture when present; DrawFilledRect also falls back to a
+	// procedural 1x1 white if needed.
+	pVMTKeyValues->SetString( "$basetexture", "vgui/white" );
+	pVMTKeyValues->SetInt( "$translucent", 1 );
+#endif
 	m_pWhite.Init( "VGUI_White", TEXTURE_GROUP_OTHER, pVMTKeyValues );
 
 	InitFullScreenBuffer( MODEL_PANEL_RT_NAME );
@@ -1076,10 +1087,29 @@ void CMatSystemSurface::DrawClearApparentDepth()
 //-----------------------------------------------------------------------------
 // material Setting methods 
 //-----------------------------------------------------------------------------
+#if defined( IOS )
+void CMatSystemSurface::EnsureIOSSolidWhiteTexture()
+{
+	if ( m_nIOSSolidWhiteTexture >= 0 )
+		return;
+	m_nIOSSolidWhiteTexture = CreateNewTextureID( true );
+	unsigned char rgba[4] = { 255, 255, 255, 255 };
+	DrawSetTextureRGBA( m_nIOSSolidWhiteTexture, rgba, 1, 1 );
+	Msg( "[Portal2 iOS] VGUI solid-white procedural texid=%d (DrawFilledRect textured path)\n",
+		m_nIOSSolidWhiteTexture );
+}
+#endif
+
 void CMatSystemSurface::InternalSetMaterial( IMaterial *pMaterial )
 {
 	if (!pMaterial)
 	{
+#if defined( IOS )
+		// Prefer procedural textured white — proven visible path on ANGLE/Metal.
+		EnsureIOSSolidWhiteTexture();
+		pMaterial = TextureDictionary()->GetTextureMaterial( m_nIOSSolidWhiteTexture );
+		if ( !pMaterial )
+#endif
 		pMaterial = m_pWhite;
 	}
 

@@ -505,6 +505,12 @@ private:
 
 	// White material used for drawing non-textured things
 	CMaterialReference m_pWhite;
+#if defined( IOS )
+	// ANGLE/Metal: vertex-color-only UnlitGeneric draws invisible. Use a 1x1
+	// white texture so DrawFilledRect takes the textured path.
+	int m_nIOSSolidWhiteTexture;
+	void EnsureIOSSolidWhiteTexture();
+#endif
 
 	// Used for 3D-rendered images
 	CTextureReference m_FullScreenBuffer;

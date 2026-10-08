@@ -92,6 +92,10 @@ static inline bool WantsPhongShaderInternal( IMaterialVar** params, const Vertex
 
 static inline bool WantsPhongShader( IMaterialVar** params, const VertexLitGeneric_DX9_Vars_t &info )
 {
+#if defined( IOS )
+	// PLATFORM VCS only ships combo-0 vertexlit; phong bytecode is mismatched.
+	return false;
+#endif
 	if ( !mat_phong.GetBool() )
 	{
 		// If mat_phong is disabled (because the GPU level is too low), check to see if the material uses Phong and wants to force Phong on anyway.
@@ -497,6 +501,10 @@ static void DrawVertexLitGeneric_DX9_Internal( CBaseVSShader *pShader, IMaterial
 	bool bSFM = ( ToolsEnabled() && IsPlatformWindowsPC() && bSupportsSM3 ) ? true : false;
 
 	bool bHasBump = IsTextureSet( info.m_nBumpmap, params );
+#if defined( IOS )
+	// Route bump materials through combo-0 vertexlit (matching bundled VCS).
+	bHasBump = false;
+#endif
 #if !defined( _GAMECONSOLE )
 	bool bIsDecal = IS_FLAG_SET( MATERIAL_VAR_DECAL );
 #endif
@@ -513,6 +521,9 @@ static void DrawVertexLitGeneric_DX9_Internal( CBaseVSShader *pShader, IMaterial
 
 	bool bIsAlphaTested = IS_FLAG_SET( MATERIAL_VAR_ALPHATEST ) != 0;
 	bool bHasDiffuseWarp = (!bHasFlashlight || bSinglePassFlashlight) && hasDiffuseLighting && (info.m_nDiffuseWarpTexture != -1) && params[info.m_nDiffuseWarpTexture]->IsTexture();
+#if defined( IOS )
+	bHasDiffuseWarp = false;
+#endif
 
 	bool bHasDecalTexture = IsTextureSet( info.m_nDecalTexture, params );
 	bool bHasTintMaskTexture = IsTextureSet( info.m_nTintMaskTexture, params );
@@ -1123,7 +1134,8 @@ bool bDistanceAlphaFromDetail = false;
 						SET_STATIC_PIXEL_SHADER_COMBO( SELFILLUM_ENVMAPMASK_ALPHA, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( DETAILTEXTURE, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( CUBEMAP, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( DIFFUSELIGHTING, 0 );
+						// GetIndex bit 128 — must exist in bundled platform/shaders/fxc VCS.
+						SET_STATIC_PIXEL_SHADER_COMBO( DIFFUSELIGHTING, 1 );
 						SET_STATIC_PIXEL_SHADER_COMBO( ENVMAPMASK, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( BASEALPHAENVMAPMASK, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( ENVMAPFRESNEL, 0 );

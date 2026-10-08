@@ -98,6 +98,11 @@ def parse_fxc(fxc_path, basename, x360=False):
             line = ''
         if (not x360) and '[XBOX]' in line:
             line = ''
+        # iOS/PC builds must not keep CONSOLE/PS3-only combo lines; those
+        # duplicates inflate num_dyn and desync .vcs headers from fxctmp9/*.inc.
+        if (not x360) and re.search(r'\[(CONSOLE|SONYPS3)\]', line, re.I) \
+                and not re.search(r'\[PC\]', line, re.I):
+            line = ''
         if psver and re.search(r'\[ps\d+\w?\]', line, re.I) \
                 and not re.search(r'\[ps%s\]' % re.escape(psver), line, re.I):
             line = ''
@@ -694,6 +699,17 @@ def cmd_compile(args):
         live = live[:args.limit]
         n_inv = sum(len(d) for (s, d) in live)
         print("  --limit: restricted to %d static combos (%d invocations)" % (len(live), n_inv))
+    if getattr(args, 'static_ids', None):
+        want = set(int(x.strip()) for x in args.static_ids.split(',') if x.strip() != '')
+        live = [e for e in live if e[0] in want]
+        n_inv = sum(len(d) for (s, d) in live)
+        missing = sorted(want - set(e[0] for e in live))
+        print("  --static-ids: %d static combos (%d invocations)%s" % (
+            len(live), n_inv,
+            (" missing=%s" % missing) if missing else ""))
+        if not live:
+            print("no matching live static combos for --static-ids")
+            return 1
 
     # Reverse the index math so a combo id can be turned back into /D defines.
     def defines_for(sid, did):
@@ -1022,6 +1038,8 @@ def main():
     p.add_argument("--jobs", type=int, default=8)
     p.add_argument("--limit", type=int, default=0,
                    help="only compile the first N static combos (smoke test)")
+    p.add_argument("--static-ids", default="",
+                   help="comma-separated static combo ids to compile (e.g. 0,128)")
     p.add_argument("--shard", type=int, default=0, help="this job's part (with --shards)")
     p.add_argument("--shards", type=int, default=1, help="split the static combos over N jobs")
     p.add_argument("--allow-errors", action="store_true", help="pack what compiled even if some combos failed")

@@ -19,6 +19,17 @@ cp "$BUNDLE/LaunchScreen.storyboard" "$APP/"
 # touch control textures (materials/vgui/touch/*), from the source-engine port
 cp "$BUNDLE/extras_dir.vpk" "$APP/"
 
+# Matching stdshader .vcs (compiled by build-portal2-core-shaders / IPA job).
+# Launcher mounts $APP/platform as PLATFORM head so these beat Documents/platform.
+if [ -d "$BUNDLE/platform/shaders/fxc" ]; then
+	mkdir -p "$APP/platform/shaders/fxc"
+	cp -R "$BUNDLE/platform/shaders/fxc/." "$APP/platform/shaders/fxc/"
+	echo "Bundled platform shaders:"
+	ls -la "$APP/platform/shaders/fxc" || true
+else
+	echo "WARNING: no $BUNDLE/platform/shaders/fxc — world/model lighting will use Documents/platform VCS" >&2
+fi
+
 if [ -x /usr/libexec/PlistBuddy ]; then
 	/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $BUNDLE_ID" "$APP/Info.plist"
 	/usr/libexec/PlistBuddy -c "Set :CFBundleName $DISPLAY_NAME" "$APP/Info.plist"

@@ -1778,16 +1778,14 @@ void CL_FullyConnected( void )
 		Host_AllowQueuedMaterialSystem( false );
 		// Do NOT SetValue mat_hdr_level here — engine callback used to clamp to 2
 		// and issue "save/load modeswitchsave", which looped map loads on iOS.
-		// Visibility probe: fullbright only takes effect after UpdateConfig copies
-		// the convar into MaterialSystem_Config_t::nFullbright (log 106 stayed black
-		// with SetValue alone). Also kill flashlight (broken FLASHLIGHT=1 ps30 combos)
-		// and purge intro screen fades that can stick black.
+		// Present works; use real lightmaps (fullbright was a black-screen probe).
+		// Keep flashlight depth off — FLASHLIGHT combos still mismatch PLATFORM VCS.
 		ConVarRef sv_cheats( "sv_cheats" );
 		if ( sv_cheats.IsValid() )
 			sv_cheats.SetValue( 1 );
 		ConVarRef mat_fullbright( "mat_fullbright" );
 		if ( mat_fullbright.IsValid() )
-			mat_fullbright.SetValue( 1 );
+			mat_fullbright.SetValue( 0 );
 		ConVarRef r_flashlightdepthtexture( "r_flashlightdepthtexture" );
 		if ( r_flashlightdepthtexture.IsValid() )
 			r_flashlightdepthtexture.SetValue( 0 );

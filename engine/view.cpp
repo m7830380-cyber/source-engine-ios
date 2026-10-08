@@ -132,10 +132,9 @@ void V_RenderVGuiOnly_NoSwap()
 	pRenderContext->AntiAliasingHint( AA_HINT_MENU ); // would be better to do "Disable MLAA" here
 
 #if defined( IOS )
-	// Hot magenta — if the user still reports "dark blue", they are not on this
-	// build or a later path is clearing over VGUI. UnlitGeneric VCS combo
-	// fallback makes material quads invisible; only clears reliably present.
-	pRenderContext->ClearColor4ub( 255, 0, 255, 255 );
+	// Black while UI panels paint (loading / menu). Magenta was a debug probe
+	// and contributed to the cyan↔black flash with GameUI clears.
+	pRenderContext->ClearColor4ub( 0, 0, 0, 255 );
 #endif
 		   
 	pRenderContext->ClearBuffers( true, true );

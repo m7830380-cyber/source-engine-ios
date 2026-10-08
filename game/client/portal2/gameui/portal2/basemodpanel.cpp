@@ -2041,8 +2041,10 @@ void CBaseModPanel::DrawCopyStats()
 void CBaseModPanel::PaintBackground()
 {
 #if defined( IOS ) && defined( PORTAL2 )
-	// UnlitGeneric quads are invisible (bad VCS combo). Engine clear is magenta;
-	// overwrite the whole color buffer with cyan here via ClearBuffers — no mesh.
+	// UnlitGeneric quads are invisible (bad VCS combo). Only clear the menu
+	// framebuffer — never while loading / in-level (that fought the engine clear
+	// and flashed cyan↔black during map load).
+	if ( !m_LevelLoading && !GameUI().IsInLevel() && !GameUI().IsInBackgroundLevel() )
 	{
 		int wide, tall;
 		GetSize( wide, tall );
@@ -2058,7 +2060,6 @@ void CBaseModPanel::PaintBackground()
 		pRenderContext->ClearBuffers( true, false, false );
 		if ( wide > 0 && tall > 0 )
 		{
-			// Orange PLAY also uses scissor-clear DrawFilledRect (see MatSystemSurface).
 			surface()->DrawSetColor( 0, 200, 220, 255 );
 			surface()->DrawFilledRect( 0, 0, wide, tall );
 		}

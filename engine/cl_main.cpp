@@ -1776,9 +1776,8 @@ void CL_FullyConnected( void )
 		if ( mat_queue_mode.IsValid() )
 			mat_queue_mode.SetValue( 0 );
 		Host_AllowQueuedMaterialSystem( false );
-		ConVarRef mat_hdr_level( "mat_hdr_level" );
-		if ( mat_hdr_level.IsValid() && mat_hdr_level.GetInt() != 0 )
-			mat_hdr_level.SetValue( 0 );
+		// Do NOT SetValue mat_hdr_level here — engine callback used to clamp to 2
+		// and issue "save/load modeswitchsave", which looped map loads on iOS.
 		// Temporary visibility probe: mismatched PLATFORM shaders / lighting often
 		// present as a black 3D view with audio; fullbright proves the mesh path.
 		ConVarRef mat_fullbright( "mat_fullbright" );

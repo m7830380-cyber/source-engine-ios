@@ -177,14 +177,39 @@ static ConVar mat_resolveFullFrameDepth( "mat_resolveFullFrameDepth", "0", FCVAR
 
 static void NukeModeSwitchSaveGames( void )
 {
-	if( g_pFileSystem->FileExists( "SAVE\\modeswitchsave.sav" ) )
+	static const char *const s_pszModeSwitchNames[] =
 	{
-		g_pFileSystem->RemoveFile( "SAVE\\modeswitchsave.sav" );
-	}
-	if( g_pFileSystem->FileExists( "SAVE\\modeswitchsave.tga" ) )
+		"SAVE\\modeswitchsave.sav",
+		"SAVE\\modeswitchsave.tga",
+		"SAVE/modeswitchsave.sav",
+		"SAVE/modeswitchsave.tga",
+	};
+	for ( int i = 0; i < ARRAYSIZE( s_pszModeSwitchNames ); ++i )
 	{
-		g_pFileSystem->RemoveFile( "SAVE\\modeswitchsave.tga" );
+		if ( g_pFileSystem->FileExists( s_pszModeSwitchNames[i] ) )
+			g_pFileSystem->RemoveFile( s_pszModeSwitchNames[i] );
 	}
+#if defined( IOS )
+	// Portal 2 iOS also writes under SAVE/<steamid>/ (see launch_log 105).
+	FileFindHandle_t hFind = FILESYSTEM_INVALID_FIND_HANDLE;
+	const char *pszDir = g_pFileSystem->FindFirst( "SAVE/*", &hFind );
+	while ( pszDir )
+	{
+		if ( pszDir[0] != '.' && g_pFileSystem->FindIsDirectory( hFind ) )
+		{
+			char szSav[MAX_PATH], szTga[MAX_PATH];
+			V_snprintf( szSav, sizeof( szSav ), "SAVE/%s/modeswitchsave.sav", pszDir );
+			V_snprintf( szTga, sizeof( szTga ), "SAVE/%s/modeswitchsave.tga", pszDir );
+			if ( g_pFileSystem->FileExists( szSav ) )
+				g_pFileSystem->RemoveFile( szSav );
+			if ( g_pFileSystem->FileExists( szTga ) )
+				g_pFileSystem->RemoveFile( szTga );
+		}
+		pszDir = g_pFileSystem->FindNext( hFind );
+	}
+	if ( hFind != FILESYSTEM_INVALID_FIND_HANDLE )
+		g_pFileSystem->FindClose( hFind );
+#endif
 }
 
 
@@ -196,6 +221,12 @@ void mat_hdr_level_Callback( IConVar *var, const char *pOldString, float flOldVa
 		return;
 	}
 
+#if defined( IOS )
+	// Portal 2 iOS: allow LDR (0). The CS:GO clamp-to-2 + modeswitchsave reload
+	// looped Host_NewGame (cyan/black flash) whenever anything touched this cvar
+	// after connect — see launch_log 105.
+	return;
+#else
 	// CSGO doesn't support any values other than 2.
 	mat_hdr_level.SetValue( clamp( mat_hdr_level.GetInt(), 2, 2 ) );
 
@@ -214,12 +245,20 @@ void mat_hdr_level_Callback( IConVar *var, const char *pOldString, float flOldVa
 		Cbuf_AddText( Cbuf_GetCurrentPlayer(), "save modeswitchsave;wait;load modeswitchsave\n" );
 	}
 #endif
+#endif
 }
 
 // Convar range change to [2,2] since CS:GO does not support any other setting.
+// iOS Portal 2: default LDR — HDR tonemap + modeswitchsave were unstable.
+#if defined( IOS )
+ConVar mat_hdr_level( "mat_hdr_level", "0", FCVAR_DEVELOPMENTONLY, 
+					  "Set to 0 for no HDR, 1 for LDR+bloom on HDR maps, and 2 for full HDR on HDR maps.",
+					  mat_hdr_level_Callback );
+#else
 ConVar mat_hdr_level( "mat_hdr_level", "2", FCVAR_DEVELOPMENTONLY, 
 					  "Set to 0 for no HDR, 1 for LDR+bloom on HDR maps, and 2 for full HDR on HDR maps.",
 					  mat_hdr_level_Callback );
+#endif
 
 MaterialSystem_SortInfo_t *materialSortInfoArray = 0;
 static bool s_bConfigLightingChanged = false;
@@ -526,6 +565,11 @@ void InitMaterialSystemConfig( bool bInEditMode )
 	// now, set default hdr state
 	bool bEnableHDR = ( mat_hdr_level.GetInt() >= 2 );
 	g_pMaterialSystemHardwareConfig->SetHDREnabled( bEnableHDR );
+
+#if defined( IOS )
+	// Drop leftover CS:GO mode-switch saves before any map load can re-trigger them.
+	NukeModeSwitchSaveGames();
+#endif
 
 	UpdateMaterialSystemConfig();
 }

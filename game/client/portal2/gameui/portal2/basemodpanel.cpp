@@ -2007,6 +2007,12 @@ void CBaseModPanel::PaintBackground()
 		{
 			ActivateBackgroundEffects();
 
+#if defined( IOS ) && defined( PORTAL2 )
+			// Phone build: skip Bink menu movies (not available / g_pBIK unreliable).
+			surface()->DrawSetColor( 0, 0, 0, 255 );
+			surface()->DrawSetTexture( m_iBackgroundImageID );
+			surface()->DrawTexturedRect( 0, 0, wide, tall );
+#else
 			if ( SDKBackgroundMovie() )
 			{
 				SDKBackgroundMovie()->Update();
@@ -2040,6 +2046,7 @@ void CBaseModPanel::PaintBackground()
 					}
 				}
 			}
+#endif
 		}
 	}
 

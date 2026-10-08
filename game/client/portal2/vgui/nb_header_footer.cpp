@@ -43,9 +43,19 @@ CSDK_Background_Movie::~CSDK_Background_Movie()
 
 void CSDK_Background_Movie::SetCurrentMovie( const char *szFilename )
 {
+	if ( !szFilename || !szFilename[0] )
+	{
+		return;
+	}
+
 	if ( Q_strcmp( m_szCurrentMovie, szFilename ) )
 	{
 #ifdef ASW_BINK_MOVIES
+		if ( !g_pBIK )
+		{
+			return;
+		}
+
 		if ( m_nBIKMaterial != BIKMATERIAL_INVALID )
 		{
 			// FIXME: Make sure the m_pMaterial is actually destroyed at this point!
@@ -56,7 +66,7 @@ void CSDK_Background_Movie::SetCurrentMovie( const char *szFilename )
 
 		char szMaterialName[ MAX_PATH ];
 		Q_snprintf( szMaterialName, sizeof( szMaterialName ), "BackgroundBIKMaterial%i", g_pBIK->GetGlobalMaterialAllocationNumber() );
-		m_nBIKMaterial = bik->CreateMaterial( szMaterialName, szFilename, "GAME", BIK_LOOP );
+		m_nBIKMaterial = g_pBIK->CreateMaterial( szMaterialName, szFilename, "GAME", BIK_LOOP );
 #else
 		if ( m_nAVIMaterial != AVIMATERIAL_INVALID )
 		{
@@ -128,6 +138,11 @@ ConVar portal2_current_act("portal2_current_act", "1", FCVAR_CLIENTDLL | FCVAR_N
 
 void CSDK_Background_Movie::Update()
 {
+	if ( !g_pBIK )
+	{
+		return;
+	}
+
 	switch (portal2_current_act.GetInt())
 	{
 	case 1:

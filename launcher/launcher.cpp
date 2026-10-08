@@ -937,18 +937,9 @@ bool CSourceAppSystemGroup::PreInit()
 
 	if ( IsPC() || !IsX360() )
 	{
-#if defined( IOS )
-		// Matching stdshader .vcs ships in the .app (see createipa.sh). Prefer it
-		// over Documents/platform so CS:GO-derived packs stop winning the lookup.
-		const char *pAppLib = getenv( "APP_LIB_PATH" );
-		if ( pAppLib && pAppLib[0] )
-		{
-			char szBundlePlatform[MAX_PATH];
-			V_ComposeFileName( pAppLib, "platform", szBundlePlatform, sizeof( szBundlePlatform ) );
-			fsInfo.m_pFileSystem->AddSearchPath( szBundlePlatform, "PLATFORM", PATH_ADD_TO_HEAD );
-			Msg( "[Portal2 iOS] PLATFORM head: %s\n", szBundlePlatform );
-		}
-#endif
+		// iOS: do NOT prefer app-bundled .vcs. Fresh fxc packs from this tree
+		// translate worse through TOGL/ANGLE than the Documents/platform retail
+		// pack (log 115). Keep Documents/platform as the only PLATFORM root.
 		fsInfo.m_pFileSystem->AddSearchPath( "platform", "PLATFORM" );
 	}
 	else

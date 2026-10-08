@@ -6,70 +6,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  core-shaders:
-    runs-on: windows-latest
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: Install numpy
-        run: pip install numpy
-      - name: Get fxc.exe
-        shell: pwsh
-        run: |
-          $fxc = $null
-          try {
-            Invoke-WebRequest -Uri "https://download.microsoft.com/download/A/E/7/AE743F1F-632B-4809-87A9-AA1BB3458E31/DXSDK_Jun10.exe" -OutFile dxsdk.exe
-            7z x dxsdk.exe -odxsdk -r -y fxc.exe "Jun2010_D3DCompiler_43_x86.cab" "Jun2010_D3DCompiler_43_x64.cab" "Jun2010_d3dx9_43_x86.cab" "Jun2010_d3dx9_43_x64.cab" | Out-Null
-            foreach ($arch in @('x86', 'x64')) {
-              $cand = Get-ChildItem dxsdk -Recurse -Filter fxc.exe | Where-Object { $_.FullName -match "\\$arch\\" } | Select-Object -First 1
-              if (-not $cand) { continue }
-              $dir = $cand.DirectoryName
-              foreach ($name in @("Jun2010_D3DCompiler_43_$arch.cab", "Jun2010_d3dx9_43_$arch.cab")) {
-                $cab = Get-ChildItem dxsdk -Recurse -Filter $name | Select-Object -First 1
-                if ($cab) { 7z e $cab.FullName "-o$dir" -y *.dll | Out-Null }
-              }
-              $banner = (& $cand.FullName /? 2>&1 | Out-String)
-              if ($banner -match 'Shader Compiler') { $fxc = $cand.FullName; break }
-            }
-          } catch { Write-Host "DirectX SDK fxc unavailable: $_" }
-          if (-not $fxc) {
-            $cand = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Recurse -Filter fxc.exe |
-                    Where-Object { $_.FullName -match '\\x64\\' } | Sort-Object FullName -Descending | Select-Object -First 1
-            $fxc = $cand.FullName
-            "VCS_FXC_EXTRA=/Gec" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          }
-          "FXC_EXE=$fxc" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          Write-Host "fxc: $fxc"
-          exit 0
-      - name: Compile core shaders
-        shell: pwsh
-        run: |
-          $targets = @(
-            @{ src='lightmappedgeneric_ps2x.fxc'; tgt='lightmappedgeneric_ps20b'; ids='0' },
-            @{ src='lightmappedgeneric_vs20.fxc';  tgt='lightmappedgeneric_vs20';  ids='0' },
-            # DIFFUSELIGHTING=1 → Static GetIndex 128 / num_dyn 32 → VCS id 4
-            @{ src='vertexlit_and_unlit_generic_ps2x.fxc'; tgt='vertexlit_and_unlit_generic_ps20b'; ids='0,4' },
-            @{ src='vertexlit_and_unlit_generic_vs20.fxc';  tgt='vertexlit_and_unlit_generic_vs20';  ids='0' },
-            @{ src='depthwrite_ps2x.fxc'; tgt='depthwrite_ps20b'; ids='0' },
-            @{ src='depthwrite_vs20.fxc'; tgt='depthwrite_vs20'; ids='0' }
-          )
-          foreach ($t in $targets) {
-            python scripts/shaders/vcscompile.py compile $t.src $t.tgt --fxc "$env:FXC_EXE" --jobs 8 --out shaderout --static-ids $t.ids
-            if ($LASTEXITCODE -ne 0) { exit 1 }
-            python scripts/shaders/vcscompile.py verify "shaderout/shaders/fxc/$($t.tgt).vcs"
-            if ($LASTEXITCODE -ne 0) { exit 1 }
-          }
-      - uses: actions/upload-artifact@v4
-        with:
-          name: portal2-core-shaders
-          path: shaderout/shaders/fxc/*.vcs
-          if-no-files-found: error
-
   build-portal2-ipa:
-    needs: core-shaders
     runs-on: macos-14
     permissions:
       contents: write
@@ -84,15 +21,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
-
-      - name: Fetch matching core shaders
-        uses: actions/download-artifact@v4
-        with:
-          name: portal2-core-shaders
-          path: scripts/ios/bundle/platform/shaders/fxc
-
-      - name: List bundled shaders
-        run: ls -la scripts/ios/bundle/platform/shaders/fxc
 
       # Release ANGLE from the newest successful "ANGLE for iOS (release)" run;
       # without one, scripts/ios/build-angle.sh falls back to the reference IPA's

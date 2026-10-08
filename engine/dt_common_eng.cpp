@@ -36,26 +36,32 @@ bool DataTable_SetupReceiveTableFromSendTable( SendTable *sendTable, bool bNeeds
 	// Create a decoder for it if necessary.
 	if ( bNeedsDecoder )
 	{
-		// Make a decoder for it.
-		CRecvDecoder *pDecoder = new CRecvDecoder;
-		g_RecvDecoders.AddToTail( pDecoder );
-		
 		RecvTable *pRecvTable = FindRecvTable( pTable->m_pNetTableName );
 		if ( !pRecvTable )
 		{
 			DataTable_Warning( "No matching RecvTable for SendTable '%s'.\n", pTable->m_pNetTableName );
+#if defined( IOS )
+			// Portal 2 iOS: skip decoder for unmatched SendTables instead of failing connect.
+#else
 			return false;
+#endif
 		}
+		else
+		{
+			// Make a decoder for it.
+			CRecvDecoder *pDecoder = new CRecvDecoder;
+			g_RecvDecoders.AddToTail( pDecoder );
 
-		pRecvTable->m_pDecoder = pDecoder;
-		pDecoder->m_pTable = pRecvTable;
+			pRecvTable->m_pDecoder = pDecoder;
+			pDecoder->m_pTable = pRecvTable;
 
-		pDecoder->m_pClientSendTable = pClientSendTable;
-		pDecoder->m_Precalc.m_pSendTable = pClientSendTable->GetSendTable();
-		pClientSendTable->GetSendTable()->m_pPrecalc = &pDecoder->m_Precalc;
+			pDecoder->m_pClientSendTable = pClientSendTable;
+			pDecoder->m_Precalc.m_pSendTable = pClientSendTable->GetSendTable();
+			pClientSendTable->GetSendTable()->m_pPrecalc = &pDecoder->m_Precalc;
 
-		// Initialize array properties.
-		SetupArrayProps_R<RecvTable, RecvTable::PropType>( pRecvTable );
+			// Initialize array properties.
+			SetupArrayProps_R<RecvTable, RecvTable::PropType>( pRecvTable );
+		}
 	}
 
 	// Read the property list.

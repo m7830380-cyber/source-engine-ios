@@ -431,10 +431,18 @@ bool CClientState::SVCMsg_ClassInfo( const CSVCMsg_ClassInfo& msg )
 	}
 	
 	bool bAllowMismatches = ( g_pClientDemoPlayer && g_pClientDemoPlayer->IsPlayingBack() );
+#if defined( IOS )
+	// Portal 2 iOS: keep map session alive if a SendTable still lacks a RecvTable.
+	bAllowMismatches = true;
+#endif
 	if ( !RecvTable_CreateDecoders( serverGameDLL->GetStandardSendProxies(), bAllowMismatches ) ) // create receive table decoders
 	{
+#if defined( IOS )
+		Warning( "CL_ParseClassInfo_EndClasses: CreateDecoders failed (continuing on iOS).\n" );
+#else
 		Host_EndGame( true, "CL_ParseClassInfo_EndClasses: CreateDecoders failed.\n" );
 		return false;
+#endif
 	}
 
 	if ( !demoplayer->IsPlayingBack() )

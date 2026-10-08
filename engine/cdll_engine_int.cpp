@@ -2773,6 +2773,7 @@ void ClientDLL_Init( void )
 				bFailed = true;
 			}
 #ifdef CSTRIKE15
+#if !defined( IOS )
 			// CS:GO requires CSM support for fairness. (This is primarily here in case the user is hacking/copying their moddefaults.txt or dxsupport.cfg from another product).
 			else if ( !g_pMaterialSystemHardwareConfig->SupportsCascadedShadowMapping() )
 			{
@@ -2783,6 +2784,12 @@ void ClientDLL_Init( void )
 
 				bFailed = true;
 			}
+#else
+			// Portal 2 iOS: DX level is capped at 92 so we stay on ps20b (mismatched
+			// ps30 VCS combos drew black). That makes SupportsCascadedShadowMapping()
+			// false — do not Sys_Error; CSM stays off by design on this port.
+			(void)0;
+#endif
 #endif
 			// Allow the user to disable this check when testing internally (but not on steam public), typically when using remote desktop.
 			// FIXME: Don't ship this

@@ -1,4 +1,4 @@
-//========= Copyright © 1996-2008, Valve Corporation, All rights reserved. ============//
+//========= Copyright ù 1996-2008, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -351,6 +351,14 @@ void BaseModHybridButton::PaintButtonEx()
 	// due to vertical resizing, center within the control
 	y = ( tall - m_originalTall ) / 2;
 	tall = m_originalTall;
+#if defined( IOS )
+	// Font/layout can leave m_originalTall at 0 ù fall back to full control height.
+	if ( tall <= 0 )
+	{
+		GetSize( wide, tall );
+		y = 0;
+	}
+#endif
 
 	if ( m_nStyle == BUTTON_GAMEMODE )
 	{
@@ -460,6 +468,14 @@ void BaseModHybridButton::PaintButtonEx()
 
 	// assume drawn, unless otherwise shortened with ellipsis
 	int iLabelCharsDrawn = len;
+
+#if defined( IOS )
+	// Solid backing so buttons are visible even when bitmap fonts fail to upload.
+	surface()->DrawSetColor( Color( 40, 40, 40, 220 ) );
+	surface()->DrawFilledRect( x, y, x + wide, y + tall );
+	col.SetColor( 255, 255, 255, 255 );
+	bDrawText = true;
+#endif
 
 	// draw the text
 	if ( bDrawText )

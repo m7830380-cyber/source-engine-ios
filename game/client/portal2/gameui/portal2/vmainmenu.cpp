@@ -1,4 +1,4 @@
-//========= Copyright © 1996-2008, Valve Corporation, All rights reserved. ============//
+//========= Copyright ù 1996-2008, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -35,6 +35,7 @@
 #include "ienginevgui.h"
 #include "basepanel.h"
 #include "vgui/ISurface.h"
+#include "vgui/IInput.h"
 #include "tier0/icommandline.h"
 #include "fmtstr.h"
 
@@ -883,6 +884,24 @@ void MainMenu::OnThink()
 }
 
 //=============================================================================
+void MainMenu::OnMousePressed( vgui::MouseCode code )
+{
+#if defined( IOS )
+	// MainMenu is fullscreen on top of BaseModPanel ù forward emergency PLAY taps.
+	if ( code == MOUSE_LEFT )
+	{
+		int mx, my;
+		vgui::input()->GetCursorPos( mx, my );
+		int px, py;
+		CBaseModPanel::GetSingleton().GetPos( px, py );
+		if ( CBaseModPanel::GetSingleton().TryIOSEmergencyPlayTap( mx - px, my - py ) )
+			return;
+	}
+#endif
+	BaseClass::OnMousePressed( code );
+}
+
+//=============================================================================
 void MainMenu::OnOpen()
 {
 	if ( IsPC() && connect_lobby.GetString()[0] )
@@ -981,7 +1000,7 @@ void MainMenu::ApplySchemeSettings( IScheme *pScheme )
 
 	const char *pSettings = "Resource/UI/BaseModUI/MainMenu.res";
 
-#if !defined( _X360 )
+#if !defined( _X360 ) && !defined( IOS )
 	if ( !g_pMatchFramework->GetMatchSystem() )
 	{
 		Msg( "BAD!\n" );
@@ -994,6 +1013,12 @@ void MainMenu::ApplySchemeSettings( IScheme *pScheme )
 	{
 		pSettings = "Resource/UI/BaseModUI/MainMenuStub.res";
 	}
+#endif
+#if defined( IOS )
+	// No Steam local player on iOS ù MainMenuStub only shows "NO STEAM".
+	// Always load the real single-player menu.
+	pSettings = "Resource/UI/BaseModUI/MainMenu.res";
+	Msg( "[Portal2 iOS] loading MainMenu.res (skipping Steam stub)\n" );
 #endif
 
 	LoadControlSettings( pSettings );

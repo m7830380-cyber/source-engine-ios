@@ -19,6 +19,7 @@
 #include "FileSystem.h"
 #include "filesystem/IXboxInstaller.h"
 #include "tier2/renderutils.h"
+#include "vgui/IInput.h"
 
 #ifdef _X360
 	#include "xbox/xbox_launch.h"
@@ -207,6 +208,10 @@ CBaseModPanel::CBaseModPanel(): BaseClass(0, "CBaseModPanel"),
 
 	m_iBackgroundImageID = -1;
 	m_iProductImageID = -1;
+
+#if defined( IOS )
+	m_nIOSPlayX0 = m_nIOSPlayY0 = m_nIOSPlayX1 = m_nIOSPlayY1 = 0;
+#endif
 
 	m_backgroundMusic = "Misc.MainUI";
 	m_nBackgroundMusicGUID = 0;
@@ -1851,8 +1856,13 @@ void CBaseModPanel::ApplySchemeSettings(IScheme *pScheme)
 	surface()->GetScreenSize( screenWide, screenTall );
 
 	char filename[MAX_PATH];
-	// VGUI FindMaterial path must NOT include .vtf (same as console/startup_loading).
-	V_snprintf( filename, sizeof( filename ), "console/%s_widescreen", "portal2_product_1" ); // TODO: engine->GetStartupImage( filename, sizeof( filename ), screenWide, screenTall );
+	// Prefer background_menu_widescreen VMT (ships with portal2); fall back to product art.
+	// VGUI texture path must NOT include .vtf.
+#if defined( IOS )
+	V_strncpy( filename, "console/background_menu_widescreen", sizeof( filename ) );
+#else
+	V_snprintf( filename, sizeof( filename ), "console/%s_widescreen", "portal2_product_1" );
+#endif
 	m_iBackgroundImageID = surface()->CreateNewTextureID();
 	surface()->DrawSetTextureFile( m_iBackgroundImageID, filename, true, false );
 #if defined( IOS )
@@ -2018,25 +2028,44 @@ void CBaseModPanel::PaintBackground()
 #if defined( IOS ) && defined( PORTAL2 )
 	// Always draw something when the panel paints — proves traverse works even
 	// if m_LevelLoading / IsInLevel guards would otherwise skip the menu art.
+	// Clear is dark blue (12,24,64); fill is cyan so a new build is unambiguous.
 	{
 		int wide, tall;
 		GetSize( wide, tall );
 		static int s_nPaintLog = 0;
 		if ( ( s_nPaintLog++ % 120 ) == 0 )
 		{
-			Msg( "[Portal2 iOS] PaintBackground size=%dx%d loading=%d inlevel=%d win=%d visible=%d\n",
+			Msg( "[Portal2 iOS] PaintBackground size=%dx%d loading=%d inlevel=%d win=%d visible=%d font=%d\n",
 				wide, tall, (int)m_LevelLoading, GameUI().IsInLevel() ? 1 : 0,
-				(int)GetActiveWindowType(), IsVisible() ? 1 : 0 );
+				(int)GetActiveWindowType(), IsVisible() ? 1 : 0, (int)m_hDefaultFont );
 		}
 		if ( wide > 0 && tall > 0 )
 		{
-			surface()->DrawSetColor( 12, 24, 64, 255 );
+			surface()->DrawSetColor( 0, 200, 220, 255 );
 			surface()->DrawFilledRect( 0, 0, wide, tall );
 			if ( m_iBackgroundImageID >= 0 )
 			{
 				surface()->DrawSetColor( 255, 255, 255, 255 );
 				surface()->DrawSetTexture( m_iBackgroundImageID );
 				surface()->DrawTexturedRect( 0, 0, wide, tall );
+			}
+
+			// Emergency PLAY tap target — solid rects work even if fonts/VTF fail.
+			m_nIOSPlayX0 = wide / 8;
+			m_nIOSPlayY0 = tall / 2;
+			m_nIOSPlayX1 = wide - wide / 8;
+			m_nIOSPlayY1 = m_nIOSPlayY0 + MAX( 72, tall / 10 );
+			surface()->DrawSetColor( 255, 180, 0, 255 );
+			surface()->DrawFilledRect( m_nIOSPlayX0, m_nIOSPlayY0, m_nIOSPlayX1, m_nIOSPlayY1 );
+			surface()->DrawSetColor( 255, 255, 255, 255 );
+			surface()->DrawFilledRect( m_nIOSPlayX0 + 4, m_nIOSPlayY0 + 4, m_nIOSPlayX1 - 4, m_nIOSPlayY1 - 4 );
+			surface()->DrawSetColor( 255, 120, 0, 255 );
+			surface()->DrawFilledRect( m_nIOSPlayX0 + 8, m_nIOSPlayY0 + 8, m_nIOSPlayX1 - 8, m_nIOSPlayY1 - 8 );
+
+			if ( m_hDefaultFont )
+			{
+				DrawColoredText( m_hDefaultFont, m_nIOSPlayX0 + 24, m_nIOSPlayY0 + 20,
+					0x000000ff, "TAP TO PLAY — SINGLEPLAYER" );
 			}
 		}
 	}
@@ -2322,6 +2351,38 @@ void CBaseModPanel::DrawStartupGraphic( float flNormalizedAlpha )
 	int width_at_ratio = h * (16.0f / 9.0f);
 	int x = ( w * 0.5f ) - ( width_at_ratio * 0.5f );
 	DrawScreenSpaceRectangleAlpha( m_pBackgroundMaterial, x, 0, width_at_ratio, h, 8, 8, tw-8, th-8, tw, th, NULL,1,1,depth,flNormalizedAlpha );
+}
+
+#if defined( IOS )
+bool CBaseModPanel::TryIOSEmergencyPlayTap( int localX, int localY )
+{
+	if ( m_LevelLoading || GameUI().IsInLevel() )
+		return false;
+	if ( localX >= m_nIOSPlayX0 && localX <= m_nIOSPlayX1 &&
+		 localY >= m_nIOSPlayY0 && localY <= m_nIOSPlayY1 )
+	{
+		Msg( "[Portal2 iOS] PLAY tapped → map sp_a1_intro1\n" );
+		engine->ClientCmd_Unrestricted( "map sp_a1_intro1\n" );
+		return true;
+	}
+	return false;
+}
+#endif
+
+void CBaseModPanel::OnMousePressed( vgui::MouseCode code )
+{
+#if defined( IOS ) && defined( PORTAL2 )
+	if ( code == MOUSE_LEFT )
+	{
+		int mx, my;
+		vgui::input()->GetCursorPos( mx, my );
+		int px, py;
+		GetPos( px, py );
+		if ( TryIOSEmergencyPlayTap( mx - px, my - py ) )
+			return;
+	}
+#endif
+	BaseClass::OnMousePressed( code );
 }
 
 void CBaseModPanel::OnCommand(const char *command)

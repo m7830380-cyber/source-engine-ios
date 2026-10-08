@@ -1,4 +1,4 @@
-//========= Copyright © 1996-2008, Valve Corporation, All rights reserved. ============//
+//========= Copyright ù 1996-2008, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -187,6 +187,11 @@ namespace BaseModUI
 		void OnDemoTimeout();
 #endif
 
+#if defined( IOS )
+		// Returns true if cursor (panel-local) hits the emergency PLAY rect and starts the map.
+		bool TryIOSEmergencyPlayTap( int localX, int localY );
+#endif
+
 	protected:
 		CBaseModPanel(const CBaseModPanel&);
 		CBaseModPanel& operator=(const CBaseModPanel&);
@@ -196,10 +201,14 @@ namespace BaseModUI
 
 		void OnCommand(const char *command);
 		void OnSetFocus();
+		virtual void OnMousePressed( vgui::MouseCode code );
 
 		MESSAGE_FUNC( OnMovedPopupToFront, "OnMovedPopupToFront" );
 
 	private:
+#if defined( IOS )
+		int m_nIOSPlayX0, m_nIOSPlayY0, m_nIOSPlayX1, m_nIOSPlayY1;
+#endif
 		void DrawColoredText( vgui::HFont hFont, int x, int y, unsigned int color, const char *pAnsiText );
 		void DrawCopyStats();
 		void OnEngineLevelLoadingSession( KeyValues *pEvent );

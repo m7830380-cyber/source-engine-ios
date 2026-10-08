@@ -37,6 +37,7 @@ protected:
 	virtual void ApplySchemeSettings(vgui::IScheme *pScheme);
 	virtual void OnCommand(const char *command);
 	virtual void OnKeyCodePressed(vgui::KeyCode code);
+	virtual void OnMousePressed(vgui::MouseCode code);
 	virtual void OnThink();
 	virtual void OnOpen();
 	virtual void RunFrame();

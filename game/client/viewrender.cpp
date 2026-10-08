@@ -111,6 +111,13 @@ ConVar r_deferopaquefastclipped( "r_deferopaquefastclipped", "1" );
 // Matches the version in the engine
 static ConVar r_drawopaqueworld( "r_drawopaqueworld", "1", FCVAR_CHEAT );
 static ConVar r_drawtranslucentworld( "r_drawtranslucentworld", "1", FCVAR_CHEAT );
+#if defined( IOS )
+// Skip the world/entity draw entirely and let the diagnostic red-orange clear show through.
+// Default 1 = proof mode: user should see a red-orange 3D background with VGUI/HUD on top.
+// Set to 0 to re-enable world draws and test shader output.
+static ConVar r_ios_skip_world( "r_ios_skip_world", "1", 0,
+	"iOS diagnostic: skip ViewDrawScene (1) or draw normally (0)" );
+#endif
 static ConVar r_3dsky( "r_3dsky","1", 0, "Enable the rendering of 3d sky boxes" );
 static ConVar r_skybox( "r_skybox","1", FCVAR_CHEAT, "Enable the rendering of sky boxes" );
 ConVar r_drawviewmodel( "r_drawviewmodel","1", FCVAR_CHEAT );
@@ -3178,12 +3185,32 @@ void CViewRender::RenderView( const CViewSetup &view, const CViewSetup &hudViewS
 			{
 				// Single pass
 
-				g_viewBuilder.SetPassFlags( PASS_BUILDLISTS | PASS_DRAWLISTS );
-				g_viewBuilder.SetBuildWRThreaded( true );
+#if defined( IOS )
+				if ( r_ios_skip_world.GetBool() )
+				{
+					// Proof mode: skip all world/entity draws so the diagnostic
+					// red-orange clear (set ~40 lines above) reaches the screen.
+					// If the user sees a red/orange 3D world background, the present
+					// path is confirmed good and the black output is purely a shader
+					// problem.  Set r_ios_skip_world 0 in the console to re-enable
+					// world draws and test the shader fix.
+					static bool s_bLoggedSkip = false;
+					if ( !s_bLoggedSkip )
+					{
+						s_bLoggedSkip = true;
+						Msg( "[Portal2 iOS] r_ios_skip_world=1: skipping ViewDrawScene — expect red-orange background\n" );
+					}
+				}
+				else
+#endif
+				{
+					g_viewBuilder.SetPassFlags( PASS_BUILDLISTS | PASS_DRAWLISTS );
+					g_viewBuilder.SetBuildWRThreaded( true );
 
-				ViewDrawScene( bDrew3dSkybox, nSkyboxVisible, view, nClearFlags, VIEW_MAIN, whatToDraw & RENDERVIEW_DRAWVIEWMODEL );
+					ViewDrawScene( bDrew3dSkybox, nSkyboxVisible, view, nClearFlags, VIEW_MAIN, whatToDraw & RENDERVIEW_DRAWVIEWMODEL );
 
-				g_viewBuilder.SetBuildWRThreaded( false );
+					g_viewBuilder.SetBuildWRThreaded( false );
+				}
 
 			}
 

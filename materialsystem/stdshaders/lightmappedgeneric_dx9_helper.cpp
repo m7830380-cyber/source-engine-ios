@@ -1489,7 +1489,11 @@ void DrawLightmappedGeneric_DX9( CBaseVSShader *pShader, IMaterialVar** params, 
 
 			DECLARE_DYNAMIC_PIXEL_SHADER( lightmappedgeneric_ps20b );
 #if defined( IOS )
-			SET_DYNAMIC_PIXEL_SHADER_COMBO( FASTPATH, 1 );
+			// Use dyn=0 (all combos off) so the index is identical regardless of
+			// whether the CS:GO platform VCS has FASTPATH at the same bit position.
+			// Previously FASTPATH=1 (dyn=1) was used, but in CS:GO's VCS layout
+			// dyn=1 may map to WRITE_DEPTH_TO_DESTALPHA=1, outputting depth→black.
+			SET_DYNAMIC_PIXEL_SHADER_COMBO( FASTPATH, 0 );
 			SET_DYNAMIC_PIXEL_SHADER_COMBO( FASTPATHENVMAPCONTRAST, 0 );
 			SET_DYNAMIC_PIXEL_SHADER_COMBO( WRITE_DEPTH_TO_DESTALPHA, 0 );
 			SET_DYNAMIC_PIXEL_SHADER_COMBO( WRITEWATERFOGTODESTALPHA, 0 );

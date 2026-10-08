@@ -1856,18 +1856,30 @@ void CBaseModPanel::ApplySchemeSettings(IScheme *pScheme)
 	surface()->GetScreenSize( screenWide, screenTall );
 
 	char filename[MAX_PATH];
-	// Prefer background_menu_widescreen VMT (ships with portal2); fall back to product art.
 	// VGUI texture path must NOT include .vtf.
-#if defined( IOS )
-	V_strncpy( filename, "console/background_menu_widescreen", sizeof( filename ) );
-#else
+	// On iOS Documents the console/*.vmt may be absent — never bind a missing
+	// material (error mat paints opaque black over the whole panel).
 	V_snprintf( filename, sizeof( filename ), "console/%s_widescreen", "portal2_product_1" );
-#endif
 	m_iBackgroundImageID = surface()->CreateNewTextureID();
 	surface()->DrawSetTextureFile( m_iBackgroundImageID, filename, true, false );
 #if defined( IOS )
-	Msg( "[Portal2 iOS] menu background '%s' texid=%d screen=%dx%d\n",
-		filename, m_iBackgroundImageID, screenWide, screenTall );
+	{
+		int tw = 0, th = 0;
+		surface()->DrawGetTextureSize( m_iBackgroundImageID, tw, th );
+		// Missing VGUI materials report size 0 (or bind an opaque black error mat).
+		if ( tw <= 1 || th <= 1 )
+		{
+			Msg( "[Portal2 iOS] menu background '%s' MISSING (size=%dx%d) — solid fill only\n",
+				filename, tw, th );
+			surface()->DestroyTextureID( m_iBackgroundImageID );
+			m_iBackgroundImageID = -1;
+		}
+		else
+		{
+			Msg( "[Portal2 iOS] menu background '%s' texid=%d size=%dx%d screen=%dx%d\n",
+				filename, m_iBackgroundImageID, tw, th, screenWide, screenTall );
+		}
+	}
 #endif
 
 	m_iProductImageID = surface()->CreateNewTextureID();
@@ -2026,21 +2038,21 @@ void CBaseModPanel::DrawCopyStats()
 void CBaseModPanel::PaintBackground()
 {
 #if defined( IOS ) && defined( PORTAL2 )
-	// Always draw something when the panel paints — proves traverse works even
-	// if m_LevelLoading / IsInLevel guards would otherwise skip the menu art.
-	// Clear is dark blue (12,24,64); fill is cyan so a new build is unambiguous.
+	// Clear is dark blue (12,24,64); fill is cyan so paint vs clear is unambiguous.
+	// Never DrawTexturedRect with a missing/error material — it paints opaque black.
 	{
 		int wide, tall;
 		GetSize( wide, tall );
 		static int s_nPaintLog = 0;
 		if ( ( s_nPaintLog++ % 120 ) == 0 )
 		{
-			Msg( "[Portal2 iOS] PaintBackground size=%dx%d loading=%d inlevel=%d win=%d visible=%d font=%d\n",
+			Msg( "[Portal2 iOS] PaintBackground size=%dx%d loading=%d inlevel=%d win=%d visible=%d font=%d bgtex=%d\n",
 				wide, tall, (int)m_LevelLoading, GameUI().IsInLevel() ? 1 : 0,
-				(int)GetActiveWindowType(), IsVisible() ? 1 : 0, (int)m_hDefaultFont );
+				(int)GetActiveWindowType(), IsVisible() ? 1 : 0, (int)m_hDefaultFont, m_iBackgroundImageID );
 		}
 		if ( wide > 0 && tall > 0 )
 		{
+			surface()->DrawSetTexture( -1 );
 			surface()->DrawSetColor( 0, 200, 220, 255 );
 			surface()->DrawFilledRect( 0, 0, wide, tall );
 			if ( m_iBackgroundImageID >= 0 )
@@ -2048,24 +2060,7 @@ void CBaseModPanel::PaintBackground()
 				surface()->DrawSetColor( 255, 255, 255, 255 );
 				surface()->DrawSetTexture( m_iBackgroundImageID );
 				surface()->DrawTexturedRect( 0, 0, wide, tall );
-			}
-
-			// Emergency PLAY tap target — solid rects work even if fonts/VTF fail.
-			m_nIOSPlayX0 = wide / 8;
-			m_nIOSPlayY0 = tall / 2;
-			m_nIOSPlayX1 = wide - wide / 8;
-			m_nIOSPlayY1 = m_nIOSPlayY0 + MAX( 72, tall / 10 );
-			surface()->DrawSetColor( 255, 180, 0, 255 );
-			surface()->DrawFilledRect( m_nIOSPlayX0, m_nIOSPlayY0, m_nIOSPlayX1, m_nIOSPlayY1 );
-			surface()->DrawSetColor( 255, 255, 255, 255 );
-			surface()->DrawFilledRect( m_nIOSPlayX0 + 4, m_nIOSPlayY0 + 4, m_nIOSPlayX1 - 4, m_nIOSPlayY1 - 4 );
-			surface()->DrawSetColor( 255, 120, 0, 255 );
-			surface()->DrawFilledRect( m_nIOSPlayX0 + 8, m_nIOSPlayY0 + 8, m_nIOSPlayX1 - 8, m_nIOSPlayY1 - 8 );
-
-			if ( m_hDefaultFont )
-			{
-				DrawColoredText( m_hDefaultFont, m_nIOSPlayX0 + 24, m_nIOSPlayY0 + 20,
-					0x000000ff, "TAP TO PLAY — SINGLEPLAYER" );
+				surface()->DrawSetTexture( -1 );
 			}
 		}
 	}
@@ -2083,16 +2078,19 @@ void CBaseModPanel::PaintBackground()
 			// the loading progress is about to take over in a few frames
 			// this keeps us from flashing a different graphic
 			// DrawSetColor modulates the texture — use white, not black.
-			surface()->DrawSetColor( 255, 255, 255, 255 );
-			surface()->DrawSetTexture( m_iBackgroundImageID );
-			surface()->DrawTexturedRect( 0, 0, wide, tall );
+			if ( m_iBackgroundImageID >= 0 )
+			{
+				surface()->DrawSetColor( 255, 255, 255, 255 );
+				surface()->DrawSetTexture( m_iBackgroundImageID );
+				surface()->DrawTexturedRect( 0, 0, wide, tall );
+			}
 		}
 		else
 		{
 			ActivateBackgroundEffects();
 
 #if defined( IOS ) && defined( PORTAL2 )
-			// Already drew fill+texture above; keep ActivateBackgroundEffects.
+			// Already drew fill (+optional texture) above; keep ActivateBackgroundEffects.
 #else
 			if ( SDKBackgroundMovie() )
 			{
@@ -2135,6 +2133,40 @@ void CBaseModPanel::PaintBackground()
 	if ( !m_LevelLoading && !GameUI().IsInLevel() && xbox_install_status.GetBool() )
 	{
 		DrawCopyStats();
+	}
+#endif
+}
+
+void CBaseModPanel::PostChildPaint()
+{
+	BaseClass::PostChildPaint();
+#if defined( IOS ) && defined( PORTAL2 )
+	// Draw PLAY above MainMenu children so nothing can cover it.
+	if ( m_LevelLoading || GameUI().IsInLevel() )
+		return;
+
+	int wide, tall;
+	GetSize( wide, tall );
+	if ( wide <= 0 || tall <= 0 )
+		return;
+
+	m_nIOSPlayX0 = wide / 8;
+	m_nIOSPlayY0 = tall / 2;
+	m_nIOSPlayX1 = wide - wide / 8;
+	m_nIOSPlayY1 = m_nIOSPlayY0 + MAX( 72, tall / 10 );
+
+	surface()->DrawSetTexture( -1 );
+	surface()->DrawSetColor( 255, 180, 0, 255 );
+	surface()->DrawFilledRect( m_nIOSPlayX0, m_nIOSPlayY0, m_nIOSPlayX1, m_nIOSPlayY1 );
+	surface()->DrawSetColor( 255, 255, 255, 255 );
+	surface()->DrawFilledRect( m_nIOSPlayX0 + 4, m_nIOSPlayY0 + 4, m_nIOSPlayX1 - 4, m_nIOSPlayY1 - 4 );
+	surface()->DrawSetColor( 255, 120, 0, 255 );
+	surface()->DrawFilledRect( m_nIOSPlayX0 + 8, m_nIOSPlayY0 + 8, m_nIOSPlayX1 - 8, m_nIOSPlayY1 - 8 );
+
+	if ( m_hDefaultFont )
+	{
+		DrawColoredText( m_hDefaultFont, m_nIOSPlayX0 + 24, m_nIOSPlayY0 + 20,
+			0x000000ff, "TAP TO PLAY — SINGLEPLAYER" );
 	}
 #endif
 }

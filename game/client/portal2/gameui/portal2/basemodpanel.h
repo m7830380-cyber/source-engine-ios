@@ -198,6 +198,7 @@ namespace BaseModUI
 
 		void ApplySchemeSettings(vgui::IScheme *pScheme);
 		void PaintBackground();
+		virtual void PostChildPaint();
 
 		void OnCommand(const char *command);
 		void OnSetFocus();

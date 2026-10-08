@@ -133,9 +133,16 @@ BEGIN_VS_SHADER_FLAGS( DepthWrite, "Help for Depth Write", SHADER_NOT_EDITABLE )
 #endif
 			{
 				DECLARE_STATIC_VERTEX_SHADER( depthwrite_vs20 );
+#if defined( IOS )
+				// Log 113: depthwrite_vs combo 12 / ps combo 2 (COLOR_DEPTH). Pin to 0.
+				SET_STATIC_VERTEX_SHADER_COMBO( ONLY_PROJECT_POSITION, 0 );
+				SET_STATIC_VERTEX_SHADER_COMBO( COLOR_DEPTH, 0 );
+				SET_STATIC_VERTEX_SHADER_COMBO( TREESWAY, 0 );
+#else
 				SET_STATIC_VERTEX_SHADER_COMBO( ONLY_PROJECT_POSITION, !bAlphaClip && IsX360() && !nColorDepth ); //360 needs to know if it *shouldn't* output texture coordinates to avoid shader patches
 				SET_STATIC_VERTEX_SHADER_COMBO( COLOR_DEPTH, nColorDepth );
 				SET_STATIC_VERTEX_SHADER_COMBO( TREESWAY, nTreeSwayMode );
+#endif
 				SET_STATIC_VERTEX_SHADER( depthwrite_vs20 );
 
 				if ( bAlphaClip || g_pHardwareConfig->PlatformRequiresNonNullPixelShaders() || nColorDepth )
@@ -146,7 +153,11 @@ BEGIN_VS_SHADER_FLAGS( DepthWrite, "Help for Depth Write", SHADER_NOT_EDITABLE )
 					if( g_pHardwareConfig->SupportsPixelShaders_2_b() )
 					{
 						DECLARE_STATIC_PIXEL_SHADER( depthwrite_ps20b );
+#if defined( IOS )
+						SET_STATIC_PIXEL_SHADER_COMBO( COLOR_DEPTH, 0 );
+#else
 						SET_STATIC_PIXEL_SHADER_COMBO( COLOR_DEPTH, nColorDepth );
+#endif
 						SET_STATIC_PIXEL_SHADER( depthwrite_ps20b );
 					}
 					else

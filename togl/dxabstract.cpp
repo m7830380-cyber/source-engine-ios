@@ -3945,6 +3945,14 @@ HRESULT IDirect3DDevice9::CreatePixelShader(CONST DWORD* pFunction,IDirect3DPixe
 			newprog->m_pixSamplerTypes = 0;
 					
 			newprog->m_pixProgram = m_ctx->NewProgram( kGLMFragmentProgram, (char *)transbuf.Base(), pShaderName ? pShaderName : "?" ) ;
+			if ( !newprog->m_pixProgram )
+			{
+#if defined( IOS )
+				Warning( "CreatePixelShader: GLES compile/link failed (%s)\n", pDebugLabel ? pDebugLabel : ( pShaderName ? pShaderName : "?" ) );
+#endif
+				delete newprog;
+				return D3DERR_INVALIDCALL;
+			}
 			newprog->m_pixProgram->m_nCentroidMask = nCentroidMask;
 			newprog->m_pixProgram->m_nShadowDepthSamplerMask = nShadowDepthSamplerMask;
 			
@@ -4225,6 +4233,14 @@ HRESULT IDirect3DDevice9::CreateVertexShader(CONST DWORD* pFunction, IDirect3DVe
 			newprog->m_device = this;
 					
 			newprog->m_vtxProgram = m_ctx->NewProgram( kGLMVertexProgram, (char *)transbuf.Base(), pShaderName ? pShaderName : "?" ) ;
+			if ( !newprog->m_vtxProgram )
+			{
+#if defined( IOS )
+				Warning( "CreateVertexShader: GLES compile/link failed (%s)\n", pDebugLabel ? pDebugLabel : ( pShaderName ? pShaderName : "?" ) );
+#endif
+				delete newprog;
+				return D3DERR_INVALIDCALL;
+			}
 			newprog->m_vtxProgram->m_nCentroidMask = nCentroidMask;
 
 			newprog->m_vtxProgram->m_bTranslatedProgram = true;

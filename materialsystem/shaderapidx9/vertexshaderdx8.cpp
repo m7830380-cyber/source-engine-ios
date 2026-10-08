@@ -4161,6 +4161,10 @@ void* CShaderManager::GetCurrentPixelShader()
 //-----------------------------------------------------------------------------
 void CShaderManager::SetVertexShaderState_Internal( HardwareShader_t shader, DataCacheHandle_t hCachedShader )
 {
+#if defined( IOS )
+	if ( !shader )
+		return;
+#endif
 	if ( m_HardwareVertexShader != shader )
 	{
 	RECORD_COMMAND( DX8_SET_VERTEX_SHADER, 1 );
@@ -4298,6 +4302,12 @@ void CShaderManager::SetVertexShader( VertexShader_t shader )
 //-----------------------------------------------------------------------------
 void CShaderManager::SetPixelShaderState_Internal( HardwareShader_t shader, DataCacheHandle_t hCachedShader )
 {
+#if defined( IOS )
+	if ( !shader && s_pIllegalMaterialPS != INVALID_HARDWARE_SHADER )
+		shader = s_pIllegalMaterialPS;
+	if ( !shader )
+		return;
+#endif
 	if ( m_HardwarePixelShader != shader )
 	{		
 	VPROF_INCREMENT_GROUP_COUNTER( "pixel shader change", COUNTER_GROUP_DEFAULT, 1 );
@@ -4430,8 +4440,14 @@ void CShaderManager::SetPixelShader( PixelShader_t shader )
 			DevWarning( "Shader: %s static: %d dynamic: %d\n", m_ShaderSymbolTable.String( pshLookup.m_Name ), pshLookup.m_nStaticIndex, m_nPixelShaderIndex );
 			BitchAboutSkippedCombo( m_ShaderSymbolTable.String( pshLookup.m_Name ), pshLookup.m_nStaticIndex, m_nPixelShaderIndex );
 			DevWarning( "*************************************************\n" );
+#if !defined( IOS )
 			Assert( 0 );
+#endif
 		}
+#if defined( IOS )
+		if ( s_pIllegalMaterialPS != INVALID_HARDWARE_SHADER )
+			dxshader = s_pIllegalMaterialPS;
+#endif
 	}
 
 	SetPixelShaderState( dxshader );

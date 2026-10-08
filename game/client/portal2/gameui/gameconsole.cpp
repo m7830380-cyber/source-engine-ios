@@ -53,9 +53,6 @@ CGameConsole::~CGameConsole()
 //-----------------------------------------------------------------------------
 void CGameConsole::Initialize()
 {
-#if defined( IOS )
-	return;
-#endif
 #ifndef _XBOX
 	m_pConsole = vgui::SETUP_PANEL( new CGameConsoleDialog() ); // we add text before displaying this so set it up now!
 

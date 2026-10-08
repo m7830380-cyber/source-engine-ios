@@ -3126,7 +3126,10 @@ static int ResolveStaticComboRecordIndex( ShaderFileCache_t *pFileCache, int nLo
 		{
 			if ( i != 0 || ( nDyn > 0 && candidates[i] != (uint32)( nLookupStaticIndex / nDyn ) ) )
 			{
-				static CUtlMap<CUtlSymbol, bool> s_Warned;
+				// Must pass DefLessFunc: default CUtlMap LessFunc is null. Empty-tree
+				// Find/Insert survive once; the second shader that needs a fallback
+				// calls through null and SIGSEGVs (PC=0) — that was log 88.
+				static CUtlMap<CUtlSymbol, bool> s_Warned( 0, 0, DefLessFunc( CUtlSymbol ) );
 				if ( s_Warned.Find( pFileCache->m_Name ) == s_Warned.InvalidIndex() )
 				{
 					s_Warned.Insert( pFileCache->m_Name, true );
@@ -3147,7 +3150,7 @@ static int ResolveStaticComboRecordIndex( ShaderFileCache_t *pFileCache, int nLo
 
 static bool IOS_ShouldSpewFailedShaderBind( CUtlSymbol shaderName )
 {
-	static CUtlMap<CUtlSymbol, double> s_LastSpew;
+	static CUtlMap<CUtlSymbol, double> s_LastSpew( 0, 0, DefLessFunc( CUtlSymbol ) );
 	double flNow = Plat_FloatTime();
 	int idx = s_LastSpew.Find( shaderName );
 	if ( idx == s_LastSpew.InvalidIndex() || flNow - s_LastSpew[idx] > 2.0 )

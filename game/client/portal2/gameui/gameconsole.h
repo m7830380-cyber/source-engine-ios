@@ -47,6 +47,12 @@ public:
 	static void OnCmdCondump();
 private:
 
+#if defined( IOS )
+	void CreateConsolePanelIfNeeded();
+	int m_nDeferredParent;
+	bool m_bHasDeferredParent;
+#endif
+
 	bool m_bInitialized;
 	CGameConsoleDialog *m_pConsole;
 };

@@ -1423,6 +1423,10 @@ void CVideoMode_Common::AdjustWindow( int nWidth, int nHeight, int nBPP, bool bW
 	// information, and so it thinks everything worked great. We need to get the resolution of the desktop
 	// back from the firehose, and calling into the material system from sdlmgr would insert a dependency
 	// on materialsystem into every dll we build (since sdlmgr lives in appframework).
+	// iOS: GetDisplayMode often reports UIKit points while nWidth/nHeight are
+	// Metal pixels (e.g. 932x430 vs 2097x967). Retrying SetWindowFullScreen
+	// every mismatch thrashes the GL surface → black screen. Skip on iOS.
+#if !defined( IOS )
 	if ( IsOSX() && !bWindowed && !bNoWindowBorder )
 	{
 		// Did we set the size correctly?
@@ -1445,6 +1449,7 @@ void CVideoMode_Common::AdjustWindow( int nWidth, int nHeight, int nBPP, bool bW
 			g_pLauncherMgr->SetWindowFullScreen( true, nWidth, nHeight, bNoWindowBorder );
 		}
 	}
+#endif
 
 	CenterEngineWindow( game->GetMainWindow(),
 		WindowRect.right - WindowRect.left,

@@ -1057,6 +1057,9 @@ void CBaseModPanel::OpenFrontScreen()
 		{
 			CloseAllWindows();
 			OpenWindow( frontWindow, NULL );
+#if defined( IOS )
+			Msg( "[Portal2 iOS] OpenFrontScreen → window type %d\n", (int)frontWindow );
+#endif
 		}
 	}
 }
@@ -1080,11 +1083,20 @@ void CBaseModPanel::RunFrame()
 		m_DelayActivation--;
 		if ( !m_LevelLoading && !m_DelayActivation )
 		{
+#if defined( IOS )
+			Msg( "[Portal2 iOS] delayed GameUI activation → OpenFrontScreen\n" );
+#endif
 			if ( UI_IsDebug() )
 			{
 				Msg( "[GAMEUI] Executing delayed UI activation\n");
 			}
 			OnGameUIActivated();
+#if defined( IOS )
+			// Belt-and-suspenders: ensure main menu opens even if activation
+			// path early-outs (IsPC quirks / connected-state races).
+			if ( GetActiveWindowType() == WT_NONE && !engine->IsConnected() )
+				OpenFrontScreen();
+#endif
 		}
 	}
 
@@ -1831,6 +1843,10 @@ void CBaseModPanel::ApplySchemeSettings(IScheme *pScheme)
 	V_snprintf( filename, sizeof( filename ), "console/%s_widescreen.vtf", "portal2_product_1" ); // TODO: engine->GetStartupImage( filename, sizeof( filename ), screenWide, screenTall );
 	m_iBackgroundImageID = surface()->CreateNewTextureID();
 	surface()->DrawSetTextureFile( m_iBackgroundImageID, filename, true, false );
+#if defined( IOS )
+	Msg( "[Portal2 iOS] menu background '%s' texid=%d screen=%dx%d\n",
+		filename, m_iBackgroundImageID, screenWide, screenTall );
+#endif
 
 	m_iProductImageID = surface()->CreateNewTextureID();
 	surface()->DrawSetTextureFile( m_iProductImageID, "console/startup_loading", true, false );
@@ -1999,7 +2015,8 @@ void CBaseModPanel::PaintBackground()
 			// ensure the background is clear
 			// the loading progress is about to take over in a few frames
 			// this keeps us from flashing a different graphic
-			surface()->DrawSetColor( 0, 0, 0, 255 );
+			// DrawSetColor modulates the texture — use white, not black.
+			surface()->DrawSetColor( 255, 255, 255, 255 );
 			surface()->DrawSetTexture( m_iBackgroundImageID );
 			surface()->DrawTexturedRect( 0, 0, wide, tall );
 		}
@@ -2009,9 +2026,18 @@ void CBaseModPanel::PaintBackground()
 
 #if defined( IOS ) && defined( PORTAL2 )
 			// Phone build: skip Bink menu movies (not available / g_pBIK unreliable).
-			surface()->DrawSetColor( 0, 0, 0, 255 );
-			surface()->DrawSetTexture( m_iBackgroundImageID );
-			surface()->DrawTexturedRect( 0, 0, wide, tall );
+			// White modulate so console/portal2_product_1_widescreen actually shows.
+			if ( m_iBackgroundImageID >= 0 )
+			{
+				surface()->DrawSetColor( 255, 255, 255, 255 );
+				surface()->DrawSetTexture( m_iBackgroundImageID );
+				surface()->DrawTexturedRect( 0, 0, wide, tall );
+			}
+			else
+			{
+				surface()->DrawSetColor( 20, 20, 24, 255 );
+				surface()->DrawFilledRect( 0, 0, wide, tall );
+			}
 #else
 			if ( SDKBackgroundMovie() )
 			{

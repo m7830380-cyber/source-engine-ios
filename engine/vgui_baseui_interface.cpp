@@ -645,6 +645,8 @@ CEngineVGui::CEngineVGui()
 	
 #ifdef VPROF_ENABLED
 	m_pVProfPanel = NULL;
+	m_pBudgetPanel = NULL;
+	m_pTextureBudgetPanel = NULL;
 #endif
 
 	m_bShowProgressDialog = false;
@@ -1128,10 +1130,13 @@ void CEngineVGui::HideVProfPanels()
 #endif
 
 #ifdef VPROF_ENABLED
-	m_pVProfPanel->SetVisible( false );
-	m_pBudgetPanel->SetVisible( false );
+	if ( m_pVProfPanel )
+		m_pVProfPanel->SetVisible( false );
+	if ( m_pBudgetPanel )
+		m_pBudgetPanel->SetVisible( false );
 	HideVProfGraphPanel();
-	m_pTextureBudgetPanel->SetVisible( false );
+	if ( m_pTextureBudgetPanel )
+		m_pTextureBudgetPanel->SetVisible( false );
 #endif
 }
 

@@ -3668,10 +3668,24 @@ void CViewRender::RenderView( const CViewSetup &view, const CViewSetup &hudViewS
 	// away players positioning when players are in or behind
 	// smoke.
 	//
+	// iOS: skip this. PLATFORM VCS for the clearalpha / UnlitGeneric path
+	// draws a black fullscreen quad (log 111: FINAL red-orange clear runs,
+	// then this wipe paints over it → pure black while VGUI still works).
+#if !defined( IOS )
 	if ( IMaterial *pMaterialClearAlpha = materials->FindMaterial( "dev/clearalpha", TEXTURE_GROUP_OTHER, true ) )
 	{
 		pRenderContext->DrawScreenSpaceQuad( pMaterialClearAlpha );
 	}
+#else
+	{
+		static bool s_bLoggedSkipClearAlpha = false;
+		if ( !s_bLoggedSkipClearAlpha )
+		{
+			s_bLoggedSkipClearAlpha = true;
+			Msg( "[Portal2 iOS] skipping dev/clearalpha fullscreen wipe (was painting black over 3D)\n" );
+		}
+	}
+#endif
 
 	pRenderContext.SafeRelease();
 

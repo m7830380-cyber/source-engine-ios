@@ -3079,6 +3079,63 @@ bool CShaderManager::DoesShaderCRCMatchSourceCode( const char *pShaderName, uint
 }
 #endif
 
+#if defined( IOS )
+// Portal 2 content + a CS:GO-derived PLATFORM shader pack often disagree on static combo
+// ids; try several encodings before giving up so materials can still link on GLES.
+static int ResolveStaticComboRecordIndex( ShaderFileCache_t *pFileCache, int nLookupStaticIndex, const char *pShaderName )
+{
+	const int nDyn = pFileCache->m_Header.m_nDynamicCombos;
+	uint32 candidates[3];
+	int nCandidates = 0;
+
+	if ( nDyn > 0 )
+		candidates[nCandidates++] = (uint32)( nLookupStaticIndex / nDyn );
+	candidates[nCandidates++] = (uint32)nLookupStaticIndex;
+	candidates[nCandidates++] = 0;
+
+	for ( int i = 0; i < nCandidates; ++i )
+	{
+		int idx = pFileCache->FindCombo( candidates[i] );
+		if ( idx != -1 )
+		{
+			if ( i != 0 || ( nDyn > 0 && candidates[i] != (uint32)( nLookupStaticIndex / nDyn ) ) )
+			{
+				static CUtlMap<CUtlSymbol, bool> s_Warned;
+				if ( s_Warned.Find( pFileCache->m_Name ) == s_Warned.InvalidIndex() )
+				{
+					s_Warned.Insert( pFileCache->m_Name, true );
+					DevWarning( "[iOS] Shader '%s': static combo %d missing; using VCS combo id %u (dyn=%d).\n",
+						pShaderName, nLookupStaticIndex, candidates[i], nDyn );
+					DevWarning( "[iOS] Prefer Portal 2 platform/shaders/fxc in Documents/platform if visuals look wrong.\n" );
+				}
+			}
+			return idx;
+		}
+	}
+
+	if ( pFileCache->m_StaticComboRecords.Count() > 0 )
+		return 0;
+
+	return -1;
+}
+
+static bool IOS_ShouldSpewFailedShaderBind( CUtlSymbol shaderName )
+{
+	static CUtlMap<CUtlSymbol, double> s_LastSpew;
+	double flNow = Plat_FloatTime();
+	int idx = s_LastSpew.Find( shaderName );
+	if ( idx == s_LastSpew.InvalidIndex() || flNow - s_LastSpew[idx] > 2.0 )
+	{
+		if ( idx == s_LastSpew.InvalidIndex() )
+			s_LastSpew.Insert( shaderName, flNow );
+		else
+			s_LastSpew[idx] = flNow;
+		return true;
+	}
+	return false;
+}
+#endif
+
 // Convert from a static combo/dynamic combo back into the combo values and spew.
 void BitchAboutSkippedCombo( const char *pShaderName, int nStaticComboID, int nDynamicComboID )
 {
@@ -3391,13 +3448,16 @@ bool CShaderManager::LoadAndCreateShaders( ShaderLookup_t &lookup, bool bVertexS
 	}
 	else
 	{
+		const char *pShaderName = m_ShaderSymbolTable.String( pFileCache->m_Filename );
+#if defined( IOS )
+		int nStaticComboIdx = ResolveStaticComboRecordIndex( pFileCache, lookup.m_nStaticIndex, pShaderName );
+#else
 		int nStaticComboIdx = pFileCache->FindCombo( lookup.m_nStaticIndex / pFileCache->m_Header.m_nDynamicCombos );
+#endif
 		if ( nStaticComboIdx == -1 )
 		{
 			g_pFullFileSystem->Close( hFile );
 			lookup.m_Flags |= SHADER_FAILED_LOAD;
-			const char *pShaderName;
-			pShaderName = m_ShaderSymbolTable.String( pFileCache->m_Filename );
 			DevWarning( "*************************************************\n" );
 			DevWarning( "Shader '%s' - Couldn't load combo %d of shader (dyn=%d)\n", pShaderName, lookup.m_nStaticIndex, pFileCache->m_Header.m_nDynamicCombos );
 			BitchAboutSkippedCombo( pShaderName, lookup.m_nStaticIndex / pFileCache->m_Header.m_nDynamicCombos, -1 );
@@ -4156,6 +4216,13 @@ void CShaderManager::SetVertexShader( VertexShader_t shader )
 	if ( vshLookup.m_Flags & SHADER_FAILED_LOAD )
 	{
 		Assert( 0 );
+#if defined( IOS )
+		if ( IOS_ShouldSpewFailedShaderBind( vshLookup.m_Name ) )
+		{
+			DevWarning( "***** Trying to set a vertex shader (%s) that failed loading!\n",
+				m_ShaderSymbolTable.String( vshLookup.m_Name ) );
+		}
+#endif
 		return;
 	}
 #ifdef _DEBUG
@@ -4293,7 +4360,15 @@ void CShaderManager::SetPixelShader( PixelShader_t shader )
 	if ( pshLookup.m_Flags & SHADER_FAILED_LOAD )
 	{
 		Assert( 0 );
+#if defined( IOS )
+		if ( IOS_ShouldSpewFailedShaderBind( pshLookup.m_Name ) )
+		{
+			DevWarning( "***** Trying to set a pixel shader (%s) that failed loading!\n",
+				m_ShaderSymbolTable.String( pshLookup.m_Name ) );
+		}
+#else
 		DevWarning( "***** Trying to set a pixel shader (%s) that failed loading!\n", m_ShaderSymbolTable.String( pshLookup.m_Name ) );
+#endif
 		return;
 	}
 	#ifdef _DEBUG

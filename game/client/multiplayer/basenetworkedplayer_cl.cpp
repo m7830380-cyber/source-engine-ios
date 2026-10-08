@@ -27,6 +27,7 @@ void C_TEPlayerAnimEvent::PostDataUpdate( DataUpdateType_t updateType )
 BEGIN_RECV_TABLE_NOBASE( C_BaseNetworkedPlayer, DT_BaseNetworkedPlayerExclusive )
 	RecvPropVector( RECVINFO_NAME( m_vecNetworkOrigin, m_vecOrigin ) ), // RECVINFO_NAME redirects the received var to m_vecNetworkOrigin for interpolation purposes
 	RecvPropFloat( RECVINFO( m_angEyeAngles[0] ) ),
+	RecvPropFloat( RECVINFO( m_angEyeAngles[1] ) ),
 END_RECV_TABLE()
 
 BEGIN_RECV_TABLE_NOBASE( C_BaseNetworkedPlayer, DT_BaseNetworkedPlayerNonLocalExclusive )

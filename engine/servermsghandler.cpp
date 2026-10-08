@@ -435,7 +435,8 @@ bool CClientState::SVCMsg_ClassInfo( const CSVCMsg_ClassInfo& msg )
 	// Portal 2 iOS: keep map session alive if a SendTable still lacks a RecvTable.
 	bAllowMismatches = true;
 #endif
-	if ( !RecvTable_CreateDecoders( serverGameDLL->GetStandardSendProxies(), bAllowMismatches ) ) // create receive table decoders
+	bool bDecodersOk = RecvTable_CreateDecoders( serverGameDLL->GetStandardSendProxies(), bAllowMismatches ); // create receive table decoders
+	if ( !bDecodersOk )
 	{
 #if defined( IOS )
 		Warning( "CL_ParseClassInfo_EndClasses: CreateDecoders failed (continuing on iOS).\n" );
@@ -447,7 +448,13 @@ bool CClientState::SVCMsg_ClassInfo( const CSVCMsg_ClassInfo& msg )
 
 	if ( !demoplayer->IsPlayingBack() )
 	{
-		CLocalNetworkBackdoor::InitFastCopy();
+#if defined( IOS )
+		// InitFastCopy null-derefs when a decoder's prop map was left empty after a mismatch.
+		if ( bDecodersOk )
+#endif
+		{
+			CLocalNetworkBackdoor::InitFastCopy();
+		}
 	}
 
 	return true;

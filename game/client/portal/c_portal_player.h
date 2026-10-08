@@ -114,7 +114,7 @@ public:
 	void ToggleHeldObjectOnOppositeSideOfPortal( void ) { m_bHeldObjectOnOppositeSideOfPortal = !m_bHeldObjectOnOppositeSideOfPortal; }
 	void SetHeldObjectOnOppositeSideOfPortal( bool p_bHeldObjectOnOppositeSideOfPortal ) { m_bHeldObjectOnOppositeSideOfPortal = p_bHeldObjectOnOppositeSideOfPortal; }
 	bool IsHeldObjectOnOppositeSideOfPortal( void ) { return m_bHeldObjectOnOppositeSideOfPortal; }
-	CProp_Portal *GetHeldObjectPortal( void ) { return m_pHeldObjectPortal; }
+	CProp_Portal *GetHeldObjectPortal( void ) { return m_pHeldObjectPortal.Get(); }
 
 	Activity TranslateActivity( Activity baseAct, bool *pRequired = NULL );
 	CWeaponPortalBase* GetActivePortalWeapon() const;
@@ -163,7 +163,8 @@ private:
 	int	  m_iPlayerSoundType;
 
 	bool  m_bHeldObjectOnOppositeSideOfPortal;
-	CProp_Portal *m_pHeldObjectPortal;
+	// Must be CHandle (4 bytes / DPT_Int), not a raw pointer — arm64 pointers are DPT_Int64 and break CreateDecoders.
+	CHandle<CProp_Portal> m_pHeldObjectPortal;
 
 	int	m_iForceNoDrawInPortalSurface; //only valid for one frame, used to temp disable drawing of the player model in a surface because of freaky artifacts
 

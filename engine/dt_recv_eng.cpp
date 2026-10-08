@@ -314,14 +314,21 @@ static bool MatchRecvPropsToSendProps_R( CUtlRBTree< MatchingProp_t, unsigned sh
 			if ( !CompareRecvPropToSendProp( pRecvProp, pSendProp ) )
 			{
 				Warning( "RecvProp type doesn't match server type for %s/%s\n", pSendTable->GetName(), pSendProp->GetName() );
-				return false;
+				if ( !bAllowMismatches )
+					return false;
+				if ( pAnyMismatches )
+					*pAnyMismatches = true;
+				pRecvProp = NULL; // skip this prop; keep building the rest of the decoder
 			}
 
-			MatchingProp_t info;
-			info.m_pProp = pSendProp;
-			info.m_pMatchingRecvProp = pRecvProp;
+			if ( pRecvProp )
+			{
+				MatchingProp_t info;
+				info.m_pProp = pSendProp;
+				info.m_pMatchingRecvProp = pRecvProp;
 
-			lookup.Insert( info );
+				lookup.Insert( info );
+			}
 		}
 		else
 		{

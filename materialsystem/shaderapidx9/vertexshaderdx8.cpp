@@ -2821,9 +2821,13 @@ bool CShaderManager::CreateDynamicCombos_Ver4( void *pContext, uint8 *pComboBuff
 
 			if ( hardwareShader == INVALID_HARDWARE_SHADER )
 			{
+#if defined( IOS )
+				// Leave slot INVALID; keep loading other combos.
+#else
 				Assert( 0 );
 				bOK = false;
 				break;
+#endif
 			}
 		}
 		pLookup->m_ShaderStaticCombos.m_pHardwareShaders[i] = hardwareShader;
@@ -3018,9 +3022,15 @@ bool CShaderManager::CreateDynamicCombos_Ver5( void *pContext, uint8 *pComboBuff
 				if ( hardwareShader == INVALID_HARDWARE_SHADER )
 				{
 					DevWarning( "failed to create shader\n" );
+#if defined( IOS )
+					// Keep loading remaining combos; leave this slot INVALID (bind path falls back).
+					pReadPtr += nShaderSize;
+					continue;
+#else
 					Assert( 0 );
 					bOK = false;
 					break;
+#endif
 				}
 
 				pLookup->m_ShaderStaticCombos.m_nNumDynamicCombosAfterSkips++;

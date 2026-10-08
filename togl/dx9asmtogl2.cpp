@@ -36,6 +36,10 @@
 
 #include "materialsystem/IShader.h"
 
+#if defined( IOS )
+#include <setjmp.h>
+#endif
+
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
 
@@ -425,12 +429,28 @@ CUtlString EnsureNumSwizzleComponents( const char *pSrcRegisterName, int nCompon
 	return szReg;	
 }
 
+#if defined( IOS )
+static jmp_buf s_translationJmpBuf;
+static bool s_bInTranslateShader = false;
+#endif
+
 static void TranslationError()
 {
 	GLMDebugPrintf( "D3DToGL: GLSL translation error!\n" );
+#if defined( IOS )
+	// Error()->Plat_ExitProcess(100) intentionally SIGSEGVs (null write) for minidumps.
+	// That looks identical to our shader null-call crashes and aborts Host_Init.
+	// Soft-fail: longjmp back to TranslateShader and return DISASM_ERROR instead.
+	Warning( "D3DToGL: GLSL translation error (iOS soft-fail)\n" );
+	if ( s_bInTranslateShader )
+	{
+		longjmp( s_translationJmpBuf, 1 );
+	}
+	return;
+#else
 	DebuggerBreakIfDebugging();
-	
 	Error( "D3DToGL: GLSL translation error!\n" );
+#endif
 }
 
 D3DToGL::D3DToGL()
@@ -3209,6 +3229,24 @@ int D3DToGL::TranslateShader( uint32* code, CUtlBuffer *pBufDisassembledCode, bo
 	uint32 i, dwToken, nInstruction, nNumTokensToSkip;
 	char buff[256];
 
+#if defined( IOS )
+	m_pBufAttribCode = NULL;
+	m_pBufParamCode = NULL;
+	m_pBufALUCode = NULL;
+	s_bInTranslateShader = true;
+	if ( setjmp( s_translationJmpBuf ) != 0 )
+	{
+		s_bInTranslateShader = false;
+		delete m_pBufAttribCode;
+		delete m_pBufParamCode;
+		delete m_pBufALUCode;
+		m_pBufAttribCode = m_pBufParamCode = m_pBufALUCode = NULL;
+		if ( bVertexShader )
+			*bVertexShader = m_bVertexShader;
+		return DISASM_ERROR;
+	}
+#endif
+
 	// obey options
 	m_bUseEnvParams = (options & D3DToGL_OptionUseEnvParams) != 0;
 	m_bDoFixupZ = (options & D3DToGL_OptionDoFixupZ) != 0;
@@ -3327,7 +3365,8 @@ int D3DToGL::TranslateShader( uint32* code, CUtlBuffer *pBufDisassembledCode, bo
 		V_snprintf( (char *)m_pBufHeaderCode->Base(), m_pBufHeaderCode->Size(), GLSL_VERSION "precision highp float;\n#define attribute in\n#define varying out\n%s//ATTRIBMAP-xx-xx-xx-xx-xx-xx-xx-xx-xx-xx-xx-xx-xx-xx-xx-xx\n", glslExtText );
 
 		// find that first '-xx' which is where the attrib map will be written later.
-		pAttribMapStart = strstr( (char *)m_pBufHeaderCode->Base(), "-xx" ) + 1;
+		char *pXx = strstr( (char *)m_pBufHeaderCode->Base(), "-xx" );
+		pAttribMapStart = pXx ? ( pXx + 1 ) : NULL;
 
 		m_bVertexShader = true;
 	}
@@ -3896,7 +3935,7 @@ int D3DToGL::TranslateShader( uint32* code, CUtlBuffer *pBufDisassembledCode, bo
 	{
 		char temp[5000];
 
-		if ( m_bVertexShader )
+		if ( m_bVertexShader && pAttribMapStart )
 		{
 			// write attrib map into the text starting at pAttribMapStart - two hex digits per attrib
 			for( int i=0; i<16; i++ )
@@ -3989,5 +4028,8 @@ int D3DToGL::TranslateShader( uint32* code, CUtlBuffer *pBufDisassembledCode, bo
 		printf("\n************* translation complete\n\n " );
 	}
 
+#if defined( IOS )
+	s_bInTranslateShader = false;
+#endif
 	return DISASM_OK;
 }

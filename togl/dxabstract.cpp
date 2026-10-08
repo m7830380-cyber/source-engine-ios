@@ -3923,8 +3923,15 @@ HRESULT IDirect3DDevice9::CreatePixelShader(CONST DWORD* pFunction,IDirect3DPixe
 			}
 		}
 
-		g_D3DToOpenGLTranslatorGLSL.TranslateShader( (uint32 *) pFunction, &tempbuf, &bVertexShader, glslPixelShaderOptions, nShadowDepthSamplerMask, nCentroidMask, pDebugLabel );
-			
+		int nTranslate = g_D3DToOpenGLTranslatorGLSL.TranslateShader( (uint32 *) pFunction, &tempbuf, &bVertexShader, glslPixelShaderOptions, nShadowDepthSamplerMask, nCentroidMask, pDebugLabel );
+		if ( nTranslate != DISASM_OK || !tempbuf.Base() )
+		{
+#if defined( IOS )
+			Warning( "CreatePixelShader: GLSL translate failed (%s)\n", pDebugLabel ? pDebugLabel : ( pShaderName ? pShaderName : "?" ) );
+#endif
+			return D3DERR_INVALIDCALL;
+		}
+
 		transbuf.PutString( (char*)tempbuf.Base() );
 		transbuf.PutString( "\n\n" );	// whitespace
 				
@@ -4213,8 +4220,15 @@ HRESULT IDirect3DDevice9::CreateVertexShader(CONST DWORD* pFunction, IDirect3DVe
 			glslVertexShaderOptions |= D3DToGL_OptionGenerateBoneUniformBuffer;
 		}
 
-		g_D3DToOpenGLTranslatorGLSL.TranslateShader( (uint32 *) pFunction, &tempbuf, &bVertexShader, glslVertexShaderOptions, -1, nCentroidMask, pDebugLabel );
-			
+		int nTranslate = g_D3DToOpenGLTranslatorGLSL.TranslateShader( (uint32 *) pFunction, &tempbuf, &bVertexShader, glslVertexShaderOptions, -1, nCentroidMask, pDebugLabel );
+		if ( nTranslate != DISASM_OK || !tempbuf.Base() )
+		{
+#if defined( IOS )
+			Warning( "CreateVertexShader: GLSL translate failed (%s)\n", pDebugLabel ? pDebugLabel : ( pShaderName ? pShaderName : "?" ) );
+#endif
+			return D3DERR_INVALIDCALL;
+		}
+
 		transbuf.PutString( (char*)tempbuf.Base() );
 		transbuf.PutString( "\n\n" );	// whitespace
 				

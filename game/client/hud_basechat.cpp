@@ -847,7 +847,13 @@ CBaseHudChat::CBaseHudChat( const char *pElementName )
 
 	CreateChatLines();
 	CreateChatInputLine();
+#if defined( IOS )
+	// Defer filter-panel scheme apply: InvalidateLayout(true,true) loads VGUI materials
+	// during CHLClient::Init and was SIGSEGV'ing in CreateVertexShader on GLES.
+	// Panel is still created on first GetChatFilterPanel() use.
+#else
 	GetChatFilterPanel();
+#endif
 
 	m_iFilterFlags = cl_chatfilters.GetInt();
 }

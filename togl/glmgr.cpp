@@ -1867,11 +1867,34 @@ CGLMProgram	*GLMContext::NewProgram( EGLMProgramType type, char *progString, con
 {
 	//hushed GLM_FUNC;
 
+	if ( !progString || !progString[0] )
+	{
+#if defined( IOS )
+		Warning( "NewProgram: empty GLSL for '%s'\n", pShaderName ? pShaderName : "?" );
+#endif
+		return NULL;
+	}
+
 	CGLMProgram *prog = new CGLMProgram( this, type );
 	
 	prog->SetProgramText( progString );
 	prog->SetShaderName( pShaderName );
 	prog->CompileActiveSources();
+
+#if defined( IOS )
+	// Previously always returned non-null even when GLES compile failed.
+	if ( prog->m_descs[kGLMGLSL].m_textPresent && prog->m_descs[kGLMGLSL].m_object.glsl )
+	{
+		GLint isCompiled = GL_TRUE;
+		gGL->glGetShaderiv( prog->m_descs[kGLMGLSL].m_object.glsl, GL_COMPILE_STATUS, &isCompiled );
+		if ( isCompiled == GL_FALSE )
+		{
+			Warning( "NewProgram: GLES compile failed for '%s'\n", pShaderName ? pShaderName : "?" );
+			delete prog;
+			return NULL;
+		}
+	}
+#endif
 
 	return prog;
 }

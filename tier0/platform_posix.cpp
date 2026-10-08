@@ -409,10 +409,16 @@ void Plat_ExitProcess( int nCode )
 	fflush( stdout );
 	if ( nCode != 0 )
 	{
+#if defined( IOS )
+		// Do NOT null-deref: that produces SIGSEGV at addr 0 and looks identical
+		// to real shader/TOGL null-call bugs, which made crash triage impossible.
+		abort();
+#else
 		// Right now we want a non-zero exit code to cause a hard crash so
 		// that we trigger minidump.
 		int* x = NULL;
 		*x = 1;
+#endif
 	}
 	_exit( nCode );
 }

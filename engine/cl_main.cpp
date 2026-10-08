@@ -105,7 +105,12 @@ ConVar sv_unlockedchapters( "sv_unlockedchapters", "1", FCVAR_ARCHIVE, "Highest 
 
 static ConVar tv_nochat	( "tv_nochat", "0", FCVAR_ARCHIVE | FCVAR_USERINFO, "Don't receive chat messages from other GOTV spectators" );
 // ZOID:  Disabled cl_LocalNetworkBackdoor from the cell optimization code, Dussault is going to fix this later
+// Portal 2 iOS: fast-copy offsets are wrong across CS:GO/Portal RecvTables → SIGSEGV in SendProxy_* during PackEntities.
+#if defined( IOS )
+static ConVar cl_LocalNetworkBackdoor( "cl_localnetworkbackdoor", "0", 0, "Enable network optimizations for single player games." );
+#else
 static ConVar cl_LocalNetworkBackdoor( "cl_localnetworkbackdoor", "1", 0, "Enable network optimizations for single player games." );
+#endif
 static ConVar cl_ignorepackets( "cl_ignorepackets", "0", FCVAR_CHEAT, "Force client to ignore packets (for debugging)." );
 static ConVar cl_playback_screenshots( "cl_playback_screenshots", "0", 0, "Allows the client to playback screenshot and jpeg commands in demos." );
 
@@ -369,6 +374,9 @@ void CL_CheckClientState( void )
 						!demorecorder->IsRecording() &&
 						!demoplayer->IsPlayingBack() &&
 						Host_IsSinglePlayerGame();
+#if defined( IOS )
+	useBackdoor = false;
+#endif
 
 	CL_SetupLocalNetworkBackDoor( useBackdoor );
 }

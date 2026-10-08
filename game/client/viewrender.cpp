@@ -112,10 +112,9 @@ ConVar r_deferopaquefastclipped( "r_deferopaquefastclipped", "1" );
 static ConVar r_drawopaqueworld( "r_drawopaqueworld", "1", FCVAR_CHEAT );
 static ConVar r_drawtranslucentworld( "r_drawtranslucentworld", "1", FCVAR_CHEAT );
 #if defined( IOS )
-// Skip the world/entity draw entirely and let the diagnostic red-orange clear show through.
-// Default 1 = proof mode: user should see a red-orange 3D background with VGUI/HUD on top.
-// Set to 0 to re-enable world draws and test shader output.
-static ConVar r_ios_skip_world( "r_ios_skip_world", "1", 0,
+// Diagnostic: skip ViewDrawScene so the clear color is what Present shows.
+// Default 0 — present path confirmed (log 111 clearalpha wipe was the black screen).
+static ConVar r_ios_skip_world( "r_ios_skip_world", "0", 0,
 	"iOS diagnostic: skip ViewDrawScene (1) or draw normally (0)" );
 #endif
 static ConVar r_3dsky( "r_3dsky","1", 0, "Enable the rendering of 3d sky boxes" );
@@ -2947,17 +2946,18 @@ void CViewRender::RenderView( const CViewSetup &view, const CViewSetup &hudViewS
 	CMatRenderContextPtr pRenderContext( materials );
 
 #if defined( IOS )
-	// Prove the present path: if the user still sees pure black after this, the
-	// backbuffer is not being shown (or GameUI covers it). If they see red-orange,
-	// world shaders are failing to write color on top of a working clear.
-	static bool s_bIOSLoggedClear = false;
-	if ( !s_bIOSLoggedClear )
+	// Orange clear only in skip-world proof mode. Otherwise let fog/sky clear.
+	if ( r_ios_skip_world.GetBool() )
 	{
-		s_bIOSLoggedClear = true;
-		Msg( "[Portal2 iOS] RenderView: clearing 3D target to diagnostic red-orange\n" );
+		static bool s_bIOSLoggedClear = false;
+		if ( !s_bIOSLoggedClear )
+		{
+			s_bIOSLoggedClear = true;
+			Msg( "[Portal2 iOS] RenderView: clearing 3D target to diagnostic red-orange\n" );
+		}
+		pRenderContext->ClearColor4ub( 220, 60, 20, 255 );
+		nClearFlags |= VIEW_CLEAR_COLOR | VIEW_CLEAR_DEPTH;
 	}
-	pRenderContext->ClearColor4ub( 220, 60, 20, 255 );
-	nClearFlags |= VIEW_CLEAR_COLOR | VIEW_CLEAR_DEPTH;
 #endif
 
 #if defined(_PS3)

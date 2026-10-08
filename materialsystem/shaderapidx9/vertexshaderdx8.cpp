@@ -3016,6 +3016,13 @@ bool CShaderManager::CreateDynamicCombos_Ver5( void *pContext, uint8 *pComboBuff
 
 				pLookup->m_ShaderStaticCombos.m_nNumDynamicCombosAfterSkips++;
 			}
+			if ( iIndex < 0 || iIndex >= pLookup->m_ShaderStaticCombos.m_nCount )
+			{
+				DevWarning( "Shader '%s': dynamic combo index %d out of range (max %d)\n",
+					m_ShaderSymbolTable.String( pLookup->m_Name ), iIndex, pLookup->m_ShaderStaticCombos.m_nCount );
+				pReadPtr += nShaderSize;
+				continue;
+			}
 			pLookup->m_ShaderStaticCombos.m_pHardwareShaders[iIndex] = hardwareShader;
 			pReadPtr += nShaderSize;
 		}

@@ -879,6 +879,9 @@ void CEngineVGui::Init()
 	staticEngineToolsPanel->SetKeyBoardInputEnabled( false );	// popups in the game DLL can enable this.
 	staticEngineToolsPanel->SetMouseInputEnabled( false );	// popups in the game DLL can enable this.
 
+#if !defined( IOS )
+	// iOS defines IsPC() but is not a desktop OS; these panels load materials during .res
+	// setup and have taken down Portal 2 on GLES (TxViewPanel, AskConnect, etc.).
 	if ( IsPC() )
 	{
 		COM_TimestampedLog( "Building Panels (staticDebugSystemPanel)" );
@@ -914,6 +917,7 @@ void CEngineVGui::Init()
 		colorcorrectiontools->InstallColorCorrectionUI( staticEngineToolsPanel );
 		colorcorrectiontools->Init();
 	}
+#endif
 
 	COM_TimestampedLog( "Building Panels (staticTransitionPanel)" );
 

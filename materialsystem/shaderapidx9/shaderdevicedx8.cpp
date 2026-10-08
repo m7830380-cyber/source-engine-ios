@@ -733,7 +733,13 @@ bool CShaderDeviceMgrDx8::ComputeCapsFromD3D( HardwareCaps_t *pCaps, int nAdapte
 
 	if ( IsOpenGL() )
 	{
+#if defined( IOS )
+		// Portal 2 iOS: PLATFORM VCS combos for ps30 don't match stdshaders
+		// (combo-0 fallback → black world). Stay on ps20b like vertexlit does.
+		pCaps->m_SupportsShaderModel_3_0 = false;
+#else
         pCaps->m_SupportsShaderModel_3_0 = true;
+#endif
 	}
 
 #if 0
@@ -1149,6 +1155,14 @@ bool CShaderDeviceMgrDx8::ComputeCapsFromD3D( HardwareCaps_t *pCaps, int nAdapte
 		if ( bSupportsIntegerHDR )
 			pCaps->m_MaxHDRType = HDR_TYPE_INTEGER;
 		
+#if defined( IOS )
+	if ( mat_hdr_level.GetInt() < 1 )
+	{
+		pCaps->m_HDRType = HDR_TYPE_NONE;
+		pCaps->m_MaxHDRType = HDR_TYPE_NONE;
+	}
+	else
+#endif
 	if ( bSupportsFloatHDR  && ( mat_hdr_level.GetInt() == 3 ) )
 	{
 		pCaps->m_HDRType = HDR_TYPE_FLOAT;

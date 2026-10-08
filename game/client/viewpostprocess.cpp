@@ -2492,7 +2492,11 @@ static ConVar r_queued_post_processing( "r_queued_post_processing", "0" );
 // This has really marginal effects, but 4x1 does seem vaguely better for post-processing
 static ConVar mat_postprocess_x( "mat_postprocess_x", "4" );
 static ConVar mat_postprocess_y( "mat_postprocess_y", "1" );
+#if defined( IOS )
+static ConVar mat_postprocess_enable( "mat_postprocess_enable", "0", FCVAR_CHEAT ); // HDR/engine_post crushed in-game frames to black
+#else
 static ConVar mat_postprocess_enable( "mat_postprocess_enable", "1", FCVAR_CHEAT );
+#endif
 
 bool DoEnginePostProcessing( int x, int y, int w, int h, bool bFlashlightIsOn, bool bPostVGui )
 {

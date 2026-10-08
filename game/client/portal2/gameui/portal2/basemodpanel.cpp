@@ -2041,10 +2041,9 @@ void CBaseModPanel::DrawCopyStats()
 void CBaseModPanel::PaintBackground()
 {
 #if defined( IOS ) && defined( PORTAL2 )
-	// UnlitGeneric quads are invisible (bad VCS combo). Only clear the menu
-	// framebuffer — never while loading / in-level (that fought the engine clear
-	// and flashed cyan↔black during map load).
-	if ( !m_LevelLoading && !GameUI().IsInLevel() && !GameUI().IsInBackgroundLevel() )
+	// UnlitGeneric quads are invisible (bad VCS combo). Menu + loading use
+	// scissor fills. In-level: leave the 3D backbuffer alone.
+	if ( !GameUI().IsInLevel() && !GameUI().IsInBackgroundLevel() )
 	{
 		int wide, tall;
 		GetSize( wide, tall );

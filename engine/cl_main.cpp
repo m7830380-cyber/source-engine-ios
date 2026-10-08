@@ -1791,13 +1791,18 @@ void CL_FullyConnected( void )
 		ConVarRef r_flashlightdepthtexture( "r_flashlightdepthtexture" );
 		if ( r_flashlightdepthtexture.IsValid() )
 			r_flashlightdepthtexture.SetValue( 0 );
+		ConVarRef mat_postprocess_enable( "mat_postprocess_enable" );
+		if ( mat_postprocess_enable.IsValid() )
+			mat_postprocess_enable.SetValue( 0 );
 		UpdateMaterialSystemConfig();
 		Cbuf_AddText( Cbuf_GetCurrentPlayer(), "fadein 0\n" );
 		EngineVGui()->HideGameUI();
-		Msg( "[Portal2 iOS] post-connect: fullbright=%d queue=%d flashlightDepth=%d\n",
+		Msg( "[Portal2 iOS] post-connect: fullbright=%d queue=%d flashlightDepth=%d post=%d hdrType=%d\n",
 			mat_fullbright.IsValid() ? mat_fullbright.GetInt() : -1,
 			mat_queue_mode.IsValid() ? mat_queue_mode.GetInt() : -1,
-			r_flashlightdepthtexture.IsValid() ? r_flashlightdepthtexture.GetInt() : -1 );
+			r_flashlightdepthtexture.IsValid() ? r_flashlightdepthtexture.GetInt() : -1,
+			mat_postprocess_enable.IsValid() ? mat_postprocess_enable.GetInt() : -1,
+			g_pMaterialSystemHardwareConfig ? (int)g_pMaterialSystemHardwareConfig->GetHDRType() : -1 );
 #else
 		// map load complete, safe to allow QMS
 		ConVarRef mat_queue_mode( "mat_queue_mode" );

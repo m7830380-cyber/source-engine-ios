@@ -506,6 +506,10 @@ void VGui_DrawHierarchy( void )
 	if ( IsGameConsole() )
 		return;
 
+	// iOS skips VGui_CreateDrawTreePanel (IsPC tools panels); don't touch null.
+	if ( !g_pDrawTreeFrame )
+		return;
+
 	if ( vgui_drawtree.GetInt() <= 0 )
 	{
 		g_pDrawTreeFrame->SetVisible( false );

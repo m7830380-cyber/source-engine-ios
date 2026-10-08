@@ -2190,11 +2190,13 @@ void CEngineVGui::Simulate()
 			ivgui()->RunFrame();
 		}
 
-		// Some debugging helpers
+		// Some debugging helpers (drawtree/texturelist panels are not created on iOS)
+#if !defined( IOS )
 		DrawMouseFocus();
 		DrawKeyFocus();
 		VGui_UpdateDrawTreePanel();
 		VGui_UpdateTextureListPanel();
+#endif
 
 		VGui_ActivateMouse();
 	}

@@ -739,6 +739,8 @@ void CEngineVGui::Init()
 		Error( "Could not get IGameUI interface %s from %s\n", GAMEUI_INTERFACE_VERSION, szDllName );
 	}
 
+#if !defined( IOS )
+	// iOS reports IsPC() but has no dev console UI; scheme apply loads materials/shaders GLES cannot compile.
 	if ( IsPC() )
 	{
 		staticGameConsole = (IGameConsole *)m_GameUIFactory(GAMECONSOLE_INTERFACE_VERSION, NULL);
@@ -747,6 +749,7 @@ void CEngineVGui::Init()
 			Sys_Error( "Could not get IGameConsole interface %s from %s\n", GAMECONSOLE_INTERFACE_VERSION, szDllName );
 		}
 	}
+#endif
 
 	// Create UI Input contexts
 	// NOTE: The GameUI context may or may not be used by the client

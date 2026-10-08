@@ -132,9 +132,10 @@ void V_RenderVGuiOnly_NoSwap()
 	pRenderContext->AntiAliasingHint( AA_HINT_MENU ); // would be better to do "Disable MLAA" here
 
 #if defined( IOS )
-	// Distinct clear so a dead present (pure black) is distinguishable from
-	// "UI painted nothing on top of a cleared buffer" (dark blue).
-	pRenderContext->ClearColor4ub( 12, 24, 64, 255 );
+	// Hot magenta — if the user still reports "dark blue", they are not on this
+	// build or a later path is clearing over VGUI. UnlitGeneric VCS combo
+	// fallback makes material quads invisible; only clears reliably present.
+	pRenderContext->ClearColor4ub( 255, 0, 255, 255 );
 #endif
 		   
 	pRenderContext->ClearBuffers( true, true );

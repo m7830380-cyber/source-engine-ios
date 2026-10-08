@@ -1099,33 +1099,44 @@ void CMatSystemSurface::EnsureIOSSolidWhiteTexture()
 		m_nIOSSolidWhiteTexture );
 }
 
-// UnlitGeneric combo fallback drops vertex color under ANGLE/Metal, so white*tint
-// is invisible. Bake the draw color into a 1x1 texture and modulate with opaque white
-// (same path that successfully shows portal2_product_1_widescreen).
+// UnlitGeneric VCS combo fallback makes ALL material quads invisible on this
+// device (only ClearBuffers and error-mats ever showed). Paint solids by
+// scissored color clears — no vertex shader required.
 void CMatSystemSurface::IOSDrawFilledRect( int x0, int y0, int x1, int y1, unsigned char const *pColor )
 {
 	if ( !pColor || pColor[3] == 0 )
 		return;
+	if ( x1 <= x0 || y1 <= y0 )
+		return;
 
-	EnsureIOSSolidWhiteTexture();
-
-	unsigned char rgba[4] = { pColor[0], pColor[1], pColor[2], pColor[3] };
-	DrawSetTextureRGBA( m_nIOSSolidWhiteTexture, rgba, 1, 1 );
+	DrawFlushText();
 
 	Vertex_t rect[2];
 	Vertex_t clippedRect[2];
-	InitVertex( rect[0], x0, y0, 0, 0 );
-	InitVertex( rect[1], x1, y1, 1, 1 );
+	InitVertex( rect[0], x0, y0, 0, 0 ); // applies m_nTranslate*
+	InitVertex( rect[1], x1, y1, 0, 0 );
 	if ( !ClipRect( rect[0], rect[1], &clippedRect[0], &clippedRect[1] ) )
 		return;
 
-	IMaterial *pMaterial = TextureDictionary()->GetTextureMaterial( m_nIOSSolidWhiteTexture );
-	if ( !pMaterial )
-		pMaterial = m_pWhite;
-	InternalSetMaterial( pMaterial );
+	int left = (int)clippedRect[0].m_Position.x;
+	int top = (int)clippedRect[0].m_Position.y;
+	int right = (int)clippedRect[1].m_Position.x;
+	int bottom = (int)clippedRect[1].m_Position.y;
+	if ( right <= left || bottom <= top )
+		return;
 
-	unsigned char white[4] = { 255, 255, 255, 255 };
-	DrawQuad( clippedRect[0], clippedRect[1], white );
+	static int s_nFillLog = 0;
+	if ( ( s_nFillLog++ % 180 ) == 0 )
+	{
+		Msg( "[Portal2 iOS] scissor-fill rgba=%d,%d,%d,%d rect=%d,%d-%d,%d\n",
+			pColor[0], pColor[1], pColor[2], pColor[3], left, top, right, bottom );
+	}
+
+	CMatRenderContextPtr pRenderContext( g_pMaterialSystem );
+	pRenderContext->ClearColor4ub( pColor[0], pColor[1], pColor[2], pColor[3] );
+	pRenderContext->PushScissorRect( left, top, right, bottom );
+	pRenderContext->ClearBuffers( true, false, false );
+	pRenderContext->PopScissorRect();
 }
 #endif
 

@@ -2041,23 +2041,24 @@ void CBaseModPanel::DrawCopyStats()
 void CBaseModPanel::PaintBackground()
 {
 #if defined( IOS ) && defined( PORTAL2 )
-	// Clear is dark blue (12,24,64); fill is cyan so paint vs clear is unambiguous.
-	// Never DrawTexturedRect with a missing/error material — it paints opaque black.
+	// UnlitGeneric quads are invisible (bad VCS combo). Engine clear is magenta;
+	// overwrite the whole color buffer with cyan here via ClearBuffers — no mesh.
 	{
 		int wide, tall;
 		GetSize( wide, tall );
 		static int s_nPaintLog = 0;
 		if ( ( s_nPaintLog++ % 120 ) == 0 )
 		{
-			Msg( "[Portal2 iOS] PaintBackground size=%dx%d loading=%d inlevel=%d win=%d visible=%d font=%d bgtex=%d\n",
+			Msg( "[Portal2 iOS] PaintBackground size=%dx%d loading=%d inlevel=%d win=%d visible=%d font=%d — framebuffer cyan clear\n",
 				wide, tall, (int)m_LevelLoading, GameUI().IsInLevel() ? 1 : 0,
-				(int)GetActiveWindowType(), IsVisible() ? 1 : 0, (int)m_hDefaultFont, m_iBackgroundImageID );
+				(int)GetActiveWindowType(), IsVisible() ? 1 : 0, (int)m_hDefaultFont );
 		}
+		CMatRenderContextPtr pRenderContext( g_pMaterialSystem );
+		pRenderContext->ClearColor4ub( 0, 200, 220, 255 );
+		pRenderContext->ClearBuffers( true, false, false );
 		if ( wide > 0 && tall > 0 )
 		{
-			// Product art is dark-blue and looked like "no UI" while fills were
-			// invisible (broken vertex color). Skip it until fills work; cyan is
-			// unambiguous proof of GameUI paint.
+			// Orange PLAY also uses scissor-clear DrawFilledRect (see MatSystemSurface).
 			surface()->DrawSetColor( 0, 200, 220, 255 );
 			surface()->DrawFilledRect( 0, 0, wide, tall );
 		}

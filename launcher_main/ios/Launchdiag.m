@@ -960,6 +960,7 @@ static void IOS_FatalSignal( int sig )
 	char msg[96];
 	snprintf( msg, sizeof( msg ), "\n[signal] terminating signal %d received, stack:\n", sig );
 	IOS_LogStack( msg );
+	fsync( STDOUT_FILENO );
 	signal( sig, SIG_DFL );
 	raise( sig );
 }

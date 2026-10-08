@@ -3519,6 +3519,17 @@ bool CShaderManager::LoadAndCreateShaders( ShaderLookup_t &lookup, bool bVertexS
 	if ( !bOK )
 	{
 		lookup.m_Flags |= SHADER_FAILED_LOAD;
+#if defined( IOS )
+		DevWarning(
+			"[iOS] Shader load failed after reading VCS (D3D bytecode -> GLES): shader '%s' staticIndex=%d vcsVer=%d numStatic=%d dyn=%d path '%s'\n",
+			m_ShaderSymbolTable.String( lookup.m_Name ),
+			lookup.m_nStaticIndex,
+			pFileCache->m_Header.m_nVersion,
+			pFileCache->m_Header.m_nNumStaticCombos,
+			pFileCache->m_Header.m_nDynamicCombos,
+			m_ShaderSymbolTable.String( pFileCache->m_Filename ) );
+		DevWarning( "[iOS] Look above for 'Couldn't load combo', 'failed to create shader', 'GLSL translation', or BZIP/LZMA errors.\n" );
+#endif
 	}
 
 	return bOK;

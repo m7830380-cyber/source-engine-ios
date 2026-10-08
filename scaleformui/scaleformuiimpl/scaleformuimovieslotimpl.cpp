@@ -190,6 +190,18 @@ void ScaleformUIImpl::InitSlot( int slotID, const char* rootMovie, IScaleformSlo
 
 		slotptr->Init( rootMovie, slotID );
 
+#if defined( IOS )
+		// Init soft-fails when flash is missing; drop the empty slot so render
+		// paths do not dereference a null movie view.
+		if ( !slotptr->GetMovieView() )
+		{
+			Warning( "[Portal2 iOS] Scaleform InitSlot(%d, %s) aborted — no movie\n", slotID, rootMovie ? rootMovie : "?" );
+			delete slotptr;
+			m_SlotPtrs[slotID] = NULL;
+			return;
+		}
+#endif
+
 		if ( pController )
 			pController->ConfigureNewSlotPostInit( slotID );
 	}

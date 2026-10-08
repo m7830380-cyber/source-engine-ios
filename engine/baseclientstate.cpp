@@ -2631,11 +2631,15 @@ bool CBaseClientState::SVCMsg_ServerInfo( const CSVCMsg_ServerInfo& msg )
 	splitscreen->AddBaseUser( 0, msg.player_slot() + 1 );
 
 #if defined( INCLUDE_SCALEFORM )
+#if defined( IOS )
+	// Portal 2 iOS: BaseModUI only — do not InitSlot GameUIRootMovie.swf (not shipped).
+#else
 	if ( g_pScaleformUI )
 	{
 		extern IScaleformSlotInitController *g_pIScaleformSlotInitControllerEngineImpl;
 		g_pScaleformUI->InitSlot( SF_SS_SLOT( 0 ), g_szDefaultScaleformClientMovieName, g_pIScaleformSlotInitControllerEngineImpl );
 	}
+#endif
 #endif
 
 #endif
@@ -3353,7 +3357,7 @@ bool CBaseClientState::SVCMsg_SplitScreen( const CSVCMsg_SplitScreen& msg )
 	case MSG_SPLITSCREEN_ADDUSER:
 		{
 			splitscreen->AddSplitScreenUser( msg.slot(), msg.player_index() );
-#if defined( INCLUDE_SCALEFORM )
+#if defined( INCLUDE_SCALEFORM ) && !defined( IOS )
 			extern IScaleformSlotInitController *g_pIScaleformSlotInitControllerEngineImpl;
 			g_pScaleformUI->InitSlot( SF_SS_SLOT( msg.slot() ), g_szDefaultScaleformClientMovieName, g_pIScaleformSlotInitControllerEngineImpl );
 #endif

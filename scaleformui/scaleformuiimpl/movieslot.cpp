@@ -1242,7 +1242,13 @@ void BaseSlot::Init( const char* movieName, int slot )
 	else
 	{
 		// Movie is corrupt or signature mismatch (pcbeta rel)
+#if defined( IOS )
+		// Portal 2 iOS ships BaseModUI, not CS:GO Scaleform flash. Missing
+		// GameUIRootMovie.swf must not Sys_Error on map connect.
+		Warning( "[Portal2 iOS] Scaleform movie missing (skipped): %s\n", movieName );
+#else
 		Error( "Error loading %s!\n", movieName );
+#endif
 	}
 }
 

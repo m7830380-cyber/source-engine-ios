@@ -1779,6 +1779,11 @@ void CL_FullyConnected( void )
 		ConVarRef mat_hdr_level( "mat_hdr_level" );
 		if ( mat_hdr_level.IsValid() && mat_hdr_level.GetInt() != 0 )
 			mat_hdr_level.SetValue( 0 );
+		// Temporary visibility probe: mismatched PLATFORM shaders / lighting often
+		// present as a black 3D view with audio; fullbright proves the mesh path.
+		ConVarRef mat_fullbright( "mat_fullbright" );
+		if ( mat_fullbright.IsValid() )
+			mat_fullbright.SetValue( 1 );
 #else
 		// map load complete, safe to allow QMS
 		ConVarRef mat_queue_mode( "mat_queue_mode" );

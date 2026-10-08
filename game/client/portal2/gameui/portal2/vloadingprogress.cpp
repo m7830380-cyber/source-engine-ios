@@ -237,6 +237,31 @@ void LoadingProgress::PaintBackground()
 	int screenWide, screenTall;
 	surface()->GetScreenSize( screenWide, screenTall );
 
+#if defined( IOS )
+	// Textured VGUI (UnlitGeneric) can SIGABRT on ANGLE/Metal when the PLATFORM
+	// VCS combo pack mismatches — parent already did a scissor color clear.
+	// Drive progress with filled rects only; never bind mesh shaders here.
+	if ( !m_pProTotalProgress )
+		return;
+	float fIOS = clamp( m_pProTotalProgress->GetProgress(), 0.0f, 1.0f );
+	UpdateBackground( ceil( fIOS / 0.25f ) );
+	if ( m_bDrawProgress )
+	{
+		int loadedDots = (int)floor( fIOS * 15 );
+		int x = screenWide - ( 16 * 26 );
+		int y = (int)( 0.95f * screenTall );
+		for ( int i = 0; i < 15; i++ )
+		{
+			int offsetX = i * 26;
+			if ( i <= loadedDots )
+				surface()->DrawSetColor( Color( 255, 200, 80, 255 ) );
+			else
+				surface()->DrawSetColor( Color( 60, 60, 70, 255 ) );
+			surface()->DrawFilledRect( x + offsetX, y, x + 20 + offsetX, y + 20 );
+		}
+	}
+	return;
+#endif
 
 	if ( m_bDrawBackground && m_pBGImage )
 	{

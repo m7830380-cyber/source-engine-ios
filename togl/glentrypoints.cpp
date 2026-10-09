@@ -497,22 +497,14 @@ COpenGLEntryPoints::COpenGLEntryPoints()
 	}
 
 #if defined(IOS)
-	// sdlmgr.cpp calls glRequestExtensionANGLE before this ctor. Extension probes
-	// still report "DOES NOT support" DXT (log 144) even on A-series where BC
-	// upload works. M-series iPad can SIGABRT on BC — keep native upload iPhone-only.
-	const char *pRenderer = (const char *)glGetString( GL_RENDERER );
-	const bool bIPhoneGPU = pRenderer && V_strstr( pRenderer, "Apple A" ) != NULL;
-	g_bIOSNativeDXTAvailable = bIPhoneGPU;
-	// Never take the Mac/desktop GL compressed path on iOS; IOS_UseNativeDXT decides.
+	// Log 145: forcing native BC on A16 (no ext probe) → native DXT ON → black world.
+	// Stay on CPU decompress until upload is probed per-format. glRequestExtensionANGLE
+	// still runs in sdlmgr for a future safe enable path.
+	g_bIOSNativeDXTAvailable = false;
 	m_bHave_GL_EXT_texture_compression_s3tc = false;
 	m_bHave_GL_EXT_texture_compression_dxt1 = false;
 	m_bHave_GL_ANGLE_texture_compression_dxt3 = false;
 	m_bHave_GL_ANGLE_texture_compression_dxt5 = false;
-	if ( bIPhoneGPU )
-	{
-		printf( "[Portal2 iOS] BC/DXT native upload enabled for %s (ANGLE request, ignore ext probe)\n",
-			pRenderer ? pRenderer : "?" );
-	}
 #endif
 
 	printf( "GL_NV_bindless_texture: %s\n", m_bHave_GL_NV_bindless_texture ? "ENABLED" : "DISABLED" );

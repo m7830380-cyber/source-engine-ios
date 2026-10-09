@@ -3526,9 +3526,17 @@ static bool IOS_UseNativeDXT( GLenum internalformat )
 	}
 	if ( !s_nNative )
 		return false;
-	// sRGB BC uses the same ANGLE request path as linear BC on A-series (log 144:
-	// s3tc_srgb never appears in GL_EXTENSIONS but props/touch VTFs are sRGB DXT5).
-	return true;
+	if ( !isDXTcSRGB( internalformat ) )
+		return true;
+
+	static int s_nNativeSRGB = -1;
+	if ( s_nNativeSRGB < 0 )
+	{
+		const char *pExt = (const char *)gGL->glGetString( GL_EXTENSIONS );
+		s_nNativeSRGB = ( pExt && V_strstr( pExt, "GL_EXT_texture_compression_s3tc_srgb" ) ) ? 1 : 0;
+		printf( "togl: native sRGB DXT textures %s\n", s_nNativeSRGB ? "ON" : "off" );
+	}
+	return s_nNativeSRGB != 0;
 }
 #endif
 
@@ -3567,8 +3575,22 @@ void CompressedTexImage2D(GLenum target, GLint level, GLenum internalformat,
             }
         }
 
+#if defined( IOS )
+		// GLES has no GL_EXT_texture_sRGB_decode (log 144–145). SRGB8_ALPHA8 from
+		// decompress reads as ~black RGB with valid alpha; keep linear RGBA8.
+		if ( srgb )
+		{
+			static bool s_bLoggedSrgbDecompress = false;
+			if ( !s_bLoggedSrgbDecompress )
+			{
+				s_bLoggedSrgbDecompress = true;
+				Msg( "[Portal2 iOS] DXT decompress: sRGB VTF → GL_RGBA8 (no sRGB decode ext)\n" );
+			}
+		}
+#else
 		if( srgb )
 			intformat = GL_SRGB8_ALPHA8;
+#endif
 	}
 
 	gGL->glTexImage2D(target, level, intformat, width, height, border, format, type, pixels);

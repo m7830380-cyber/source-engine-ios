@@ -3587,9 +3587,7 @@ static void IOS_FixDecompressedDXTPixels( uint32_t *px, int nPixels, bool bSrgbS
 		}
 
 		if ( a > 0 && ( r + g + b ) < 4 )
-		{
 			r = g = b = a;
-		}
 
 		px[i] = (uint32_t)r | ( (uint32_t)g << 8 ) | ( (uint32_t)b << 16 ) | ( (uint32_t)a << 24 );
 	}
@@ -4328,6 +4326,15 @@ void CGLMTex::Unlock( GLMTexLockParams *params )
 
 void CGLMTex::HandleSRGBMismatch( bool srgb, int &srgbFlipCount )
 {
+#if defined( IOS )
+	// Log 149: first MainMenu Present → ProcessTextureDeletes → ~CGLMTex SIGTRAP.
+	// sRGB DXT is decompressed to linear GL_RGBA8; HandleSRGBMismatch → ResetSRGB
+	// re-layouts without backing (host copy freed) and can Assert on GLES/Metal.
+	(void)srgb;
+	(void)srgbFlipCount;
+	return;
+#endif
+
 	bool srgbCapableTex = false; // not yet known
 	bool renderableTex = false; // not yet known.
 
@@ -4456,6 +4463,12 @@ void CGLMTex::HandleSRGBMismatch( bool srgb, int &srgbFlipCount )
 
 void CGLMTex::ResetSRGB( bool srgb, bool noDataWrite )
 {
+#if defined( IOS )
+	(void)srgb;
+	(void)noDataWrite;
+	return;
+#endif
+
 	// see if requested SRGB state differs from the known one
 	bool			wasSRGB = (m_layout->m_key.m_texFlags & kGLMTexSRGB);
 	GLMTexLayout	*oldLayout = m_layout;	// need to m_ctx->m_texLayoutTable->DelLayoutRef on this one if we flip

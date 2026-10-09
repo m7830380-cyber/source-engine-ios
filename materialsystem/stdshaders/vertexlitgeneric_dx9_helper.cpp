@@ -656,6 +656,11 @@ static void DrawVertexLitGeneric_DX9_Internal( CBaseVSShader *pShader, IMaterial
 			// material can choose to support per-instance modulation via $allowdiffusemodulation
 			bool bAllowDiffuseModulation = ( info.m_nAllowDiffuseModulation == -1 ) ? true : ( params[info.m_nAllowDiffuseModulation]->GetIntValue() != 0 );
 
+#if defined( IOS )
+			// ps20b: diffuseLighting *= lerp(1, g_DiffuseModulation, saturate(baseColor.a + g_fInverseBlendTint)).
+			// Log 146: props/touch black RGB, alpha OK — modulation path zeroed albedo.
+			pShader->PI_SetModulationPixelShaderDynamicState_Identity( 1 );
+#else
 			if ( bAllowDiffuseModulation )
 			{
 				if ( ( info.m_nHDRColorScale != -1 ) && pShader->IsHDREnabled() )
@@ -677,6 +682,7 @@ static void DrawVertexLitGeneric_DX9_Internal( CBaseVSShader *pShader, IMaterial
 			{
 				pShader->PI_SetModulationPixelShaderDynamicState_Identity( 1 );
 			}
+#endif
 			pShader->PI_EndCommandBuffer();
 
 			bool hasBaseAlphaEnvmapMask = IS_FLAG_SET( MATERIAL_VAR_BASEALPHAENVMAPMASK );
@@ -812,6 +818,10 @@ static void DrawVertexLitGeneric_DX9_Internal( CBaseVSShader *pShader, IMaterial
 				else
 					bSampler0SrgbRead = !bShaderSrgbRead;
 			}
+#if defined( IOS )
+			// Decompressed DXT → GL_RGBA8 (ee08147c). GLES has no sRGB decode; sRGB sampler → black RGB.
+			bSampler0SrgbRead = false;
+#endif
 			pShaderShadow->EnableSRGBRead( SHADER_SAMPLER0, bSampler0SrgbRead );
 
 			if ( bHasEnvmap )
@@ -1152,7 +1162,7 @@ bool bDistanceAlphaFromDetail = false;
 						SET_STATIC_PIXEL_SHADER_COMBO( BASEALPHAENVMAPMASK, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( ENVMAPFRESNEL, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( SELFILLUM, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( VERTEXCOLOR, 0 );
+						SET_STATIC_PIXEL_SHADER_COMBO( VERTEXCOLOR, bVertexLitGeneric ? 0 : 1 );
 						SET_STATIC_PIXEL_SHADER_COMBO( FLASHLIGHT, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( DETAIL_BLEND_MODE, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( DECAL_BLEND_MODE, 0 );
@@ -1352,6 +1362,9 @@ bool bDistanceAlphaFromDetail = false;
 				else
 					bSampler0SrgbRead = !bShaderSrgbRead;
 			}
+#if defined( IOS )
+			bSampler0SrgbRead = false;
+#endif
 
 			if ( bHasBaseTexture )
 			{
@@ -2232,6 +2245,9 @@ bool bDistanceAlphaFromDetail = false;
 
 		// Controls for lerp-style paths through shader code (used by bump and non-bump)
 		float vShaderControls[4] = { IsBoolSet( info.m_nNoTint, params ) ? -1.0f : ( 1.0f - fBlendTintByBaseAlpha ), fWriteDepthToAlpha, fWriteWaterFogToDestAlpha, fVertexAlpha };
+#if defined( IOS )
+		vShaderControls[0] = -1.0f;
+#endif
 		
 		if ( bHasBump )
 		{
@@ -2497,6 +2513,9 @@ void DrawVertexLitGeneric_DX9_Internal_ExecuteFastPath( int *vsDynIndex, int *ps
 
 	// Controls for lerp-style paths through shader code (used by bump and non-bump)
 	float vShaderControls[4] = { IsBoolSet( info.m_nNoTint, params ) ? -1.0f : ( 1.0f - fBlendTintByBaseAlpha ), fWriteDepthToAlpha, fWriteWaterFogToDestAlpha, fVertexAlpha };
+#if defined( IOS )
+	vShaderControls[0] = -1.0f;
+#endif
 	if ( bHasBump )
 	{
 		// Bump shader doesn't use vertex alpha

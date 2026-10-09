@@ -3587,6 +3587,22 @@ void CompressedTexImage2D(GLenum target, GLint level, GLenum internalformat,
 				Msg( "[Portal2 iOS] DXT decompress: sRGB VTF → GL_RGBA8 (no sRGB decode ext)\n" );
 			}
 		}
+		if ( pixels )
+		{
+			const int pw = ( width + 3 ) & ~3;
+			const int ph = ( height + 3 ) & ~3;
+			uint32_t *px = (uint32_t *)pixels;
+			for ( int i = 0, n = pw * ph; i < n; ++i )
+			{
+				const uint32_t p = px[i];
+				const uint8_t r = (uint8_t)( p & 0xff );
+				const uint8_t g = (uint8_t)( ( p >> 8 ) & 0xff );
+				const uint8_t b = (uint8_t)( ( p >> 16 ) & 0xff );
+				const uint8_t a = (uint8_t)( ( p >> 24 ) & 0xff );
+				if ( a > 0 && ( r + g + b ) < 4 )
+					px[i] = (uint32_t)a | ( (uint32_t)a << 8 ) | ( (uint32_t)a << 16 ) | ( (uint32_t)a << 24 );
+			}
+		}
 #else
 		if( srgb )
 			intformat = GL_SRGB8_ALPHA8;

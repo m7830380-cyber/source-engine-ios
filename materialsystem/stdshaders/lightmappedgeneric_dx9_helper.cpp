@@ -650,6 +650,13 @@ void DrawLightmappedGeneric_DX9( CBaseVSShader *pShader, IMaterialVar** params, 
 				{
 					nDetailBlendMode = DETAIL_BLEND_MODE_MASK_BASE_BY_DETAIL_ALPHA;
 				}
+#if defined( IOS )
+				// log 120: detail mode 12 → packed 7077888 → wrong static id (589824 * 12).
+				if ( nDetailBlendMode < 0 )
+					nDetailBlendMode = 0;
+				if ( nDetailBlendMode > 9 )
+					nDetailBlendMode = 9;
+#endif
 				
 				if( hasFlashlight && ( IsX360() || IsPS3() ) )
 				{

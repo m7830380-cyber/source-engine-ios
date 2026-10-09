@@ -3143,6 +3143,78 @@ static int GetIncDynamicComboProduct( const char *pShaderName )
 	return nDyn;
 }
 
+#if defined( IOS )
+static bool IOS_TryStaticComboRecord( ShaderFileCache_t *pFileCache, uint32 nStaticId, int *pOutRecordIndex )
+{
+	const int idx = pFileCache->FindCombo( nStaticId );
+	if ( idx != -1 )
+	{
+		*pOutRecordIndex = idx;
+		return true;
+	}
+	return false;
+}
+
+// When packed GetIndex() does not exist in Documents VCS, pick a nearby id that does
+// (log 120: ps packed 41945088 → bogus id 0; walls ps 7077888 → id 221184).
+static int IOS_FallbackStaticComboRecordIndex( ShaderFileCache_t *pFileCache, const char *pShaderName, int nLookupStaticIndex )
+{
+	char baseName[MAX_PATH];
+	V_strncpy( baseName, pShaderName, MAX_PATH );
+	V_FileBase( baseName, baseName, MAX_PATH );
+
+	int idx = -1;
+
+	if ( V_stristr( baseName, "vertexlit_and_unlit_generic_ps20b" ) )
+	{
+		static const uint32 s_diffuseIds[] = { 21, 22, 23, 20, 17, 16, 11, 10, 4, 1, 0 };
+		static const uint32 s_unlitIds[] = { 0, 1, 4, 10, 11 };
+		const uint32 *pIds = ( nLookupStaticIndex & 128 ) ? s_diffuseIds : s_unlitIds;
+		const int nIds = ( nLookupStaticIndex & 128 ) ? ARRAYSIZE( s_diffuseIds ) : ARRAYSIZE( s_unlitIds );
+		for ( int i = 0; i < nIds; ++i )
+		{
+			if ( IOS_TryStaticComboRecord( pFileCache, pIds[i], &idx ) )
+			{
+				DevWarning( "[iOS] Shader '%s': static packed %d → fallback staticId %u.\n",
+					pShaderName, nLookupStaticIndex, pIds[i] );
+				return idx;
+			}
+		}
+	}
+	else if ( V_stristr( baseName, "lightmappedgeneric_ps20b" ) )
+	{
+		static const uint32 s_ids[] = { 4, 3, 2, 1, 0, 8, 9, 10, 11, 12 };
+		for ( int i = 0; i < ARRAYSIZE( s_ids ); ++i )
+		{
+			if ( IOS_TryStaticComboRecord( pFileCache, s_ids[i], &idx ) )
+			{
+				DevWarning( "[iOS] Shader '%s': static packed %d → fallback staticId %u.\n",
+					pShaderName, nLookupStaticIndex, s_ids[i] );
+				return idx;
+			}
+		}
+	}
+	else if ( V_stristr( baseName, "vertexlit_and_unlit_generic_vs20" ) )
+	{
+		static const uint32 s_ids[] = { 48, 32, 24, 16, 8, 4, 1, 0 };
+		for ( int i = 0; i < ARRAYSIZE( s_ids ); ++i )
+		{
+			if ( IOS_TryStaticComboRecord( pFileCache, s_ids[i], &idx ) )
+			{
+				DevWarning( "[iOS] Shader '%s': static packed %d → fallback staticId %u.\n",
+					pShaderName, nLookupStaticIndex, s_ids[i] );
+				return idx;
+			}
+		}
+	}
+
+	if ( pFileCache->m_StaticComboRecords.Count() > 0 )
+		return 0;
+
+	return -1;
+}
+#endif
+
 // Portal 2 content + a CS:GO-derived PLATFORM shader pack often disagree on static combo
 // ids; try several encodings before giving up so materials can still link on GLES.
 // VCS files index static records by (packedStatic / m_nDynamicCombos) from the file
@@ -3154,13 +3226,22 @@ static int ResolveStaticComboRecordIndex( ShaderFileCache_t *pFileCache, int nLo
 	uint32 candidates[8];
 	int nCandidates = 0;
 
-	uint32 rawCandidates[4];
+	uint32 rawCandidates[6];
 	int nRaw = 0;
 	if ( nVcsDyn > 0 )
-		rawCandidates[nRaw++] = (uint32)( nLookupStaticIndex / nVcsDyn );
+	{
+		const uint32 vcsId = (uint32)( nLookupStaticIndex / nVcsDyn );
+		if ( vcsId <= 65535 )
+			rawCandidates[nRaw++] = vcsId;
+	}
 	if ( nIncDyn > 0 && nIncDyn != nVcsDyn )
-		rawCandidates[nRaw++] = (uint32)( nLookupStaticIndex / nIncDyn );
-	rawCandidates[nRaw++] = (uint32)nLookupStaticIndex;
+	{
+		const uint32 incId = (uint32)( nLookupStaticIndex / nIncDyn );
+		if ( incId <= 65535 )
+			rawCandidates[nRaw++] = incId;
+	}
+	if ( nLookupStaticIndex >= 0 && nLookupStaticIndex < 4096 )
+		rawCandidates[nRaw++] = (uint32)nLookupStaticIndex;
 	rawCandidates[nRaw++] = 0;
 
 	for ( int r = 0; r < nRaw; ++r )
@@ -3223,10 +3304,14 @@ static int ResolveStaticComboRecordIndex( ShaderFileCache_t *pFileCache, int nLo
 		}
 	}
 
+#if defined( IOS )
+	return IOS_FallbackStaticComboRecordIndex( pFileCache, pShaderName, nLookupStaticIndex );
+#else
 	if ( pFileCache->m_StaticComboRecords.Count() > 0 )
 		return 0;
 
 	return -1;
+#endif
 }
 
 // Clamp dynamic index into the VCS slot range.

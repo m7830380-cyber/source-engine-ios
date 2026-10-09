@@ -8579,6 +8579,45 @@ void CShaderAPIDx8::ExecuteInstanceCommandBuffer( const unsigned char *pCmdBuf, 
 		case CBICMD_SETVERTEXSHADERAMBIENTLIGHTCUBE:
 			{
 				pCmdBuf += sizeof( int );
+#if defined( IOS )
+				// Log 129/130: props black. AmbientLight() samples this cube, but
+				// instance lighting is often NULL/empty (missing lighting origins).
+				// Prior comments claimed a "forced white cube" — it was never written.
+				{
+					bool bFill = false;
+					if ( instance.m_pLightingState )
+					{
+						if ( !pInfo->m_bAmbientCubeCompiled )
+						{
+							CompileAmbientCube( pCompiledState, instance.m_pLightingState->m_nLocalLightCount, instance.m_pLightingState );
+							pInfo->m_bAmbientCubeCompiled = true;
+						}
+						if ( GetAmbientLightCubeLuminance( instance.m_pLightingState ) < 0.05f )
+							bFill = true;
+					}
+					else
+					{
+						bFill = true;
+					}
+					if ( bFill )
+					{
+						static CompiledLightingState_t s_iosFillAmbient;
+						static bool s_bInit = false;
+						if ( !s_bInit )
+						{
+							for ( int i = 0; i < 6; ++i )
+								s_iosFillAmbient.m_AmbientLightCube[i].Init( 0.45f, 0.45f, 0.45f, 1.0f );
+							s_bInit = true;
+						}
+						SetVertexShaderStateAmbientLightCube( VERTEX_SHADER_AMBIENT_LIGHT, &s_iosFillAmbient );
+					}
+					else
+					{
+						SetVertexShaderStateAmbientLightCube( VERTEX_SHADER_AMBIENT_LIGHT, pCompiledState );
+					}
+					bConstantsChanged = true;
+				}
+#else
 				if ( instance.m_pLightingState )
 				{
 					if ( !pInfo->m_bAmbientCubeCompiled )
@@ -8590,6 +8629,7 @@ void CShaderAPIDx8::ExecuteInstanceCommandBuffer( const unsigned char *pCmdBuf, 
 					SetVertexShaderStateAmbientLightCube( VERTEX_SHADER_AMBIENT_LIGHT, pCompiledState );
 					bConstantsChanged = true;
 				}
+#endif
 			}
 			break;
 
@@ -9655,8 +9695,43 @@ void CShaderAPIDx8::ExecuteInstanceCommandBuffer( const unsigned char *pCmdBuf, 
 
 		case CBICMD_SETVERTEXSHADERAMBIENTLIGHTCUBE:
 			{
-
 				pCmdBuf += sizeof( int );
+#if defined( IOS )
+				{
+					bool bFill = false;
+					if ( instance.m_pLightingState )
+					{
+						if ( !pInfo->m_bAmbientCubeCompiled )
+						{
+							CompileAmbientCube( pCompiledState, instance.m_pLightingState->m_nLocalLightCount, instance.m_pLightingState );
+							pInfo->m_bAmbientCubeCompiled = true;
+						}
+						if ( GetAmbientLightCubeLuminance( instance.m_pLightingState ) < 0.05f )
+							bFill = true;
+					}
+					else
+					{
+						bFill = true;
+					}
+					if ( bFill )
+					{
+						static CompiledLightingState_t s_iosFillAmbient2;
+						static bool s_bInit2 = false;
+						if ( !s_bInit2 )
+						{
+							for ( int i = 0; i < 6; ++i )
+								s_iosFillAmbient2.m_AmbientLightCube[i].Init( 0.45f, 0.45f, 0.45f, 1.0f );
+							s_bInit2 = true;
+						}
+						SetVertexShaderStateAmbientLightCube( VERTEX_SHADER_AMBIENT_LIGHT, &s_iosFillAmbient2 );
+					}
+					else
+					{
+						SetVertexShaderStateAmbientLightCube( VERTEX_SHADER_AMBIENT_LIGHT, pCompiledState );
+					}
+					bConstantsChanged = true;
+				}
+#else
 				if ( instance.m_pLightingState )
 				{
 					if ( !pInfo->m_bAmbientCubeCompiled )
@@ -9668,13 +9743,12 @@ void CShaderAPIDx8::ExecuteInstanceCommandBuffer( const unsigned char *pCmdBuf, 
 					SetVertexShaderStateAmbientLightCube( VERTEX_SHADER_AMBIENT_LIGHT, pCompiledState );
 					bConstantsChanged = true;
 				}
+#endif
 			}
 			break;
 
 		case CBICMD_SETPIXELSHADERAMBIENTLIGHTCUBELUMINANCE:
 			{
-
-
 				int nReg = GetData<int>( pCmdBuf + sizeof( int ) );
 				pCmdBuf += 2 * sizeof( int );
 				float flLuminance = GetAmbientLightCubeLuminance( instance.m_pLightingState );
@@ -9686,7 +9760,6 @@ void CShaderAPIDx8::ExecuteInstanceCommandBuffer( const unsigned char *pCmdBuf, 
 
 		case CBICMD_SETPIXELSHADERGLINTDAMPING:
 			{
-
 				int nReg = GetData<int>( pCmdBuf + sizeof( int ) );
 				pCmdBuf += 2 * sizeof( int );
 				float fGlintDamping = GetAmbientLightCubeLuminance( instance.m_pLightingState );

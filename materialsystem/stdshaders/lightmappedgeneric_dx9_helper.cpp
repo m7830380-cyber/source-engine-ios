@@ -884,13 +884,6 @@ void DrawLightmappedGeneric_DX9( CBaseVSShader *pShader, IMaterialVar** params, 
 				// Also note that if the lightmap scale factor changes
 				// all shadow state blocks will be re-run, so that's ok
 				float flLScale = pShaderShadow->GetLightMapScaleFactor();
-#if defined( IOS )
-				// Log 130: walls washed out. Lightmap is GL_RGBA8 (no sRGB flag) so
-				// we bind without SRGBREAD — gamma-encoded texels are treated as
-				// linear and read ~2x too bright. Scale until Documents VCS can
-				// ship a real SHADER_SRGB_READ combo.
-				flLScale *= 0.35f;
-#endif
 				pShader->PI_BeginCommandBuffer();
 				
 				if ( g_pHardwareConfig->SupportsPixelShaders_3_0() )

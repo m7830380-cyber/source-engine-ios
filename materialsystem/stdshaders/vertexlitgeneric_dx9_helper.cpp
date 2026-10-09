@@ -646,9 +646,8 @@ static void DrawVertexLitGeneric_DX9_Internal( CBaseVSShader *pShader, IMaterial
 					pShader->PI_SetPixelShaderLocalLighting( 13 );
 				}
 				pShader->PI_SetVertexShaderAmbientLightCube();
-				// iOS: also force a bright cube in the dynamic path — Documents
-				// instance ambient is often empty, and AmbientLight() needs
-				// DYNAMIC_LIGHT=1 (set below) to actually sample the cube.
+				// iOS fill-ambient for NULL/black lighting state is applied in
+				// CBICMD_SETVERTEXSHADERAMBIENTLIGHTCUBE (shaderapidx8.cpp).
 			}
 			// material can choose to support per-instance modulation via $allowdiffusemodulation
 			bool bAllowDiffuseModulation = ( info.m_nAllowDiffuseModulation == -1 ) ? true : ( params[info.m_nAllowDiffuseModulation]->GetIntValue() != 0 );
@@ -828,17 +827,11 @@ static void DrawVertexLitGeneric_DX9_Internal( CBaseVSShader *pShader, IMaterial
 				pShaderShadow->EnableTexture( SHADER_SAMPLER7, true );	// Flashlight cookie
 				pShaderShadow->EnableSRGBRead( SHADER_SAMPLER7, true );
 			}
-#if defined( IOS )
-			// DETAILTEXTURE=1 pin needs sampler2 even when material has no $detail.
-			pShaderShadow->EnableTexture( SHADER_SAMPLER2, true );
-			pShaderShadow->EnableSRGBRead( SHADER_SAMPLER2, IsSRGBDetailTexture( nDetailBlendMode ) );
-#else
 			if ( bHasDetailTexture )
 			{
 				pShaderShadow->EnableTexture( SHADER_SAMPLER2, true );
 				pShaderShadow->EnableSRGBRead( SHADER_SAMPLER2, IsSRGBDetailTexture( nDetailBlendMode ) );
 			}
-#endif
 			if ( bHasBump || bHasDiffuseWarp )
 			{
 				pShaderShadow->EnableTexture( SHADER_SAMPLER3, true );
@@ -1142,16 +1135,15 @@ bool bDistanceAlphaFromDetail = false;
 					{
 						DECLARE_STATIC_PIXEL_SHADER( vertexlit_and_unlit_generic_ps20b );
 #if defined( IOS )
-						// Log 130: DIFFUSE=1 → black props (i.color lit, VS ambient dead).
-						// Log 131: CUBEMAP=1 id10 → invisible — PS samples cubemap with
-						// zero normals (VS CUBEMAP=0 + dyn0) → NaN. Use DETAILTEXTURE=1
-						// instead: packed 32 → id 5, DIFFUSE=0 keeps lighting=1 (albedo).
-						// Force detail blend factor 0 so TextureCombine is a no-op.
+						// Log 124/130 baseline: DIFFUSE=1 → packed 128 → id 21 (correct UVs).
+						// Log 131 CUBEMAP id10 = invisible (NaN). Log 132 DETAIL id5 =
+						// stretched UVs (PS/VS interpolator mismatch). Do NOT leave this
+						// pin — fix black props via ambient cube + dyn DYNAMIC_LIGHT bind.
 						SET_STATIC_PIXEL_SHADER_COMBO( SFM, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( SELFILLUM_ENVMAPMASK_ALPHA, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( DETAILTEXTURE, 1 );
+						SET_STATIC_PIXEL_SHADER_COMBO( DETAILTEXTURE, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( CUBEMAP, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( DIFFUSELIGHTING, 0 );
+						SET_STATIC_PIXEL_SHADER_COMBO( DIFFUSELIGHTING, 1 );
 						SET_STATIC_PIXEL_SHADER_COMBO( ENVMAPMASK, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( BASEALPHAENVMAPMASK, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( ENVMAPFRESNEL, 0 );
@@ -1377,13 +1369,6 @@ bool bDistanceAlphaFromDetail = false;
 			{
 				pContextData->m_SemiStaticCmdsOut.BindTexture( pShader, SHADER_SAMPLER2, IsSRGBDetailTexture( nDetailBlendMode ) ? TEXTURE_BINDFLAGS_SRGBREAD : TEXTURE_BINDFLAGS_NONE, info.m_nDetail, info.m_nDetailFrame );
 			}
-#if defined( IOS )
-			else
-			{
-				// DETAILTEXTURE pin with blend factor 0 — dummy bind only.
-				pContextData->m_SemiStaticCmdsOut.BindStandardTexture( SHADER_SAMPLER2, TEXTURE_BINDFLAGS_NONE, TEXTURE_WHITE );
-			}
-#endif
 			if ( bHasSelfIllum )
 			{
 				if ( bHasSelfIllumMask )												// Separate texture for self illum?
@@ -1800,10 +1785,6 @@ bool bDistanceAlphaFromDetail = false;
 				pContextData->m_SemiStaticCmdsOut.SetVertexShaderConstant( VERTEX_SHADER_SHADER_SPECIFIC_CONST_11, flParams );
 			}
 
-#if defined( IOS )
-			// DETAILTEXTURE pin: blend factor 0 → TextureCombine leaves albedo alone.
-			fBlendFactor = 0.0f;
-#endif
 			if ( bVertexLitGeneric )
 			{
 				if ( bDesaturateWithBaseAlpha )

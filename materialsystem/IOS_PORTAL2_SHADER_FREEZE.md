@@ -1,44 +1,43 @@
 # Portal 2 iOS — shader/UI freeze (do not thrash)
 
-Evidence: device `launch_log (117)`–`(127)` under Telegram Desktop dumps.
-Branch: `portal2-rubberwar-ios` (linear +127 from `portal2-ios`).
+Evidence: device `launch_log (117)`–`(132)` under Telegram Desktop dumps.
+Branch: `portal2-rubberwar-ios`.
 
-## Best device evidence
+## Hard lesson (log 130–132)
 
-| Rank | Log | Why |
-|------|-----|-----|
-| 1 | **124** | VL `9216→48` / PS `128→21`, LM `0→0`, Helvetica `font=63`, **no** invalid combo, signon 6 |
-| 2 | **117** | Pre-remap clean playable room, `fullbright=0`, cyan menu, `font=0` |
-| worst | **127** | Cyan-only menu (mesh fills), never stable signon 6 |
+Do **not** chase black props by swapping VL static pins (CUBEMAP id10, DETAIL id5).
+Those broke UVs / made props invisible. Black props were **ambient + dyn bind**, not the wrong static id.
 
-Do **not** optimize against 125–126 (VERTEXCOLOR→fallback id 1, black/cyan scissor floods).
-**Log 128:** VL/LM remaps matched 124, but orange in-game ClearBuffers ticks (1173 log lines) and `flashlight_ps20b→2304` were new regressions — kill in-game ticks; reject flashlight preferred>64; hard-pin LM statics to id 0.
+| Log | VL remap | Symptom | Real cause |
+|-----|----------|---------|------------|
+| **124** | VS `9216→48`, PS `128→21` | Best baseline | — |
+| 130 | same 21 | Props **black**, walls bright | Empty ambient cube; “force white” was a comment only |
+| 131 | PS `64→10` CUBEMAP | Props **invisible** | PS cubemap + zero VS normals → NaN |
+| 132 | PS `32→5` DETAIL | Stretched UVs + fullbright look | PS/VS interpolator mismatch |
 
-## Frozen pins (log 130 update)
+## Frozen pins (match log 124)
 
-- **Remapper:** `staticId = packed / vcsHeader.m_nDynamicCombos` only. Never `.inc` dyn first (log 118: 128/32→id 4 black).
-- **VL PS (log 131):** `DETAILTEXTURE=1`, `DIFFUSELIGHTING=0`, `CUBEMAP=0` → packed **32** → id **5**, detail blend factor **0**. DIFFUSE=1 (id 21) → black props; CUBEMAP id 10 → invisible (PS cubemap + zero VS normals → NaN). Never packed 0.
-- **VL VS:** `FLATTEN_STATIC_CONTROL_FLOW=1`, `VERTEXCOLOR=0` → packed 9216 → id **48**.
-- **LM PS/VS:** `FASTPATH=0` (117/124 era; FASTPATH=1 correlated with white flash). Lightmap bind **without** SRGBREAD; `flLScale *= 0.5` (log 130 wash).
-- **Ambient:** force white cube; **`DYNAMIC_LIGHT=1`** with `NUM_LIGHTS=0` (still set; less critical once DIFFUSE=0).
-- **VGUI solids:** `IOSDrawFilledRect` → scissor `ClearBuffers` (mesh UnlitGeneric invisible — log 127).
-- **In-game touch paint:** corner ticks only (full ClearBuffers punches world — log 126).
-- **Fonts:** Helvetica scheme fallback (`font=63`); PLAY block letters until matching `.vcs` gives real VERTEXCOLOR.
+- **Remapper:** `staticId = packed / vcsHeader.m_nDynamicCombos` only. Never `.inc` dyn first.
+- **VL PS:** `DIFFUSELIGHTING=1`, `VERTEXCOLOR=0`, `CUBEMAP=0`, `DETAILTEXTURE=0` → packed **128** → id **21**.
+- **VL VS:** `FLATTEN_STATIC_CONTROL_FLOW=1`, `VERTEXCOLOR=0` → packed **9216** → id **48**.
+- **VL lighting (real fix, not a pin):**
+  - Keep `DYNAMIC_LIGHT=1`. Dyn fallback must **prefer slots with bit1 set** (DYNAMIC_LIGHT), not dyn0.
+  - `CBICMD_SETVERTEXSHADERAMBIENTLIGHTCUBE`: if lighting state NULL or luminance &lt; 0.05, write fill cube **0.45**.
+- **LM PS/VS:** static id 0, `FASTPATH=0`. Lightmap bind without SRGBREAD (format mismatch). **No** flLScale thrash.
+- **VGUI solids:** ClearBuffers. In-game touch: corner ticks only.
+- **Fonts:** Helvetica `font=63`.
 
-## Hard stop — do not change without a new named log
+## Hard stop — do not change without a new named log + root-cause writeup
 
-- Re-enable mesh `DrawFilledRect` / Unlit VERTEXCOLOR chase
+- CUBEMAP=1 / DETAILTEXTURE=1 / DIFFUSE=0 “unlit albedo” experiments on VL PS
 - Flip LM FASTPATH to 1
-- Set VL PS back to DIFFUSE=1 (id 21) or illegal static 0
-- Set VL VS FLATTEN=0 (id 0 skipped → rainbow)
+- VL VS FLATTEN=0
 - Prefer `.inc` dyn in `ResolveStaticComboRecordIndex`
-- Nest `SET_STATIC_PIXEL_SHADER_COMBO` in extra `{ }` (CI undeclared forgot_to_set)
+- Nest `SET_STATIC_*` in extra `{ }` (CI undeclared forgot_to_set)
+- Blind `flLScale *= k` without proving lightmap sample path
 
-## Next real work (not pin churn)
+## Next real work
 
-1. Device-verify IPA from restore commits (`79987530` / `aa8ab3ca`+) against **log-124** symptoms:
-   - remaps `9216→48`, `128→21`, LM `0→0`, Helvetica `font=63`, no invalid combo, signon 6.
-2. **Portal product (done in `2d38dd75`):** restored `portalrenderable_flatbasic.cpp` + `portal_gamemovement.cpp` (CS:GO `Push3DView`/`PopView` port). Device still needs stencil + Documents portal mats to prove linked views.
-3. Matching Documents `vertexlit_and_unlit_generic_{vs20,ps20b}.vcs` so VERTEXCOLOR is a distinct static (today 9216 and 9360 both → 48).
-4. **Hypothesis (do not ship blind):** mesh fills may work on id 21 if `$vertexcolor` is **off** and color comes from `$color` / texture bake — log 127 invisibility was VERTEXCOLOR→fallback id 1, not “all meshes dead”. Prove with a tiny in-game tick experiment only; keep menu on ClearBuffers until a named log confirms.
-5. Real GameUI on top of a frozen shader baseline — separate track.
+1. Device-verify: remap `128→21`, props textured (not stretched), not black.
+2. If walls still washed: fix lightmap sRGB at **texture create** time, not scale hacks.
+3. Matching Documents `.vcs` with real VERTEXCOLOR static for mesh UI.

@@ -3167,11 +3167,10 @@ static int IOS_FallbackStaticComboRecordIndex( ShaderFileCache_t *pFileCache, co
 
 	if ( V_stristr( baseName, "vertexlit_and_unlit_generic_ps20b" ) )
 	{
-		// bit 128 = DIFFUSE, bit 64 = CUBEMAP, bit 32 = DETAIL (.inc fxctmp9).
-		// Log 131: CUBEMAP id 10 → invisible (NaN normals). Prefer DETAIL id 5
-		// (packed 32, DIFFUSE=0) — albedo with blend factor 0.
-		static const uint32 s_diffuseIds[] = { 21, 22, 23, 20, 17, 16, 11, 10, 5, 4, 1, 0 };
-		static const uint32 s_unlitIds[] = { 5, 10, 11, 4, 1, 0 };
+		// bit 128 = DIFFUSELIGHTING (.inc fxctmp9). Prefer id 21 (log 124/130 UVs OK).
+		// Log 131 CUBEMAP id10 invisible; log 132 DETAIL id5 stretched UVs — do not prefer.
+		static const uint32 s_diffuseIds[] = { 21, 22, 23, 20, 17, 16, 11, 10, 4, 1, 0 };
+		static const uint32 s_unlitIds[] = { 1, 4, 10, 11, 0 };
 		const bool bWantDiffuse = ( nLookupStaticIndex & 128 ) != 0 || nLookupStaticIndex > 4096;
 		const uint32 *pIds = bWantDiffuse ? s_diffuseIds : s_unlitIds;
 		const int nIds = bWantDiffuse ? ARRAYSIZE( s_diffuseIds ) : ARRAYSIZE( s_unlitIds );
@@ -3241,9 +3240,8 @@ static int IOS_FallbackStaticComboRecordIndex( ShaderFileCache_t *pFileCache, co
 //   correct is 128/6→id21). Dyn bind indexes [0, vcsDyn); skipped slots are INVALID.
 //
 // Known Documents maps:
-//   VL ps DETAIL=1 packed 32 → id 5 (log 131+: unlit albedo; CUBEMAP id10 was NaN)
-//   VL ps CUBEMAP=1 packed 64 → id 10 (log 131 invisible — do not use alone)
-//   VL ps DIFFUSE=1 packed 128 → id 21 (log 124 OK walls/UI; log 130 black props)
+//   VL ps DIFFUSE=1 packed 128 → id 21 (log 124/130 correct UVs; black was ambient/dyn)
+//   VL ps CUBEMAP id10 / DETAIL id5 — log 131/132 regressions, do not use
 //   VL vs FLATTEN=1 packed 9216 → id 48
 //   VL ps VCOL=1 packed 2048 → preferred 341 (often missing) → unlit fallback id 1
 //   VL ps DIFFUSE=0+CUBEMAP=0 packed 0 → id 0 SKIPPED/illegal
@@ -3375,7 +3373,12 @@ static int IOS_ClampDynamicShaderIndex( int nIndex, int nCount, CUtlSymbol shade
 // If the requested dynamic slot was skipped in the VCS, try dyn 0 then the first
 // loaded slot in THIS static combo only (same material). Scanning other statics
 // caused rainbow (log 119); leaving INVALID caused purple illegal PS (log 121).
-static int IOS_FallbackDynamicIndex( HardwareShader_t *pShaders, int nCount, int nPreferred )
+//
+// bPreferDynamicLight: vertexlit_and_unlit_generic_vs20 packs DYNAMIC_LIGHT at
+// weight 2. Falling back to dyn0 (DYNAMIC_LIGHT=0) skips AmbientLight() → black
+// props (log 129/130). Prefer any loaded slot with bit1 set before dyn0.
+static int IOS_FallbackDynamicIndex( HardwareShader_t *pShaders, int nCount, int nPreferred,
+	bool bPreferDynamicLight = false, const char *pShaderNameForLog = NULL )
 {
 	if ( !pShaders || nCount <= 0 )
 		return 0;
@@ -3388,13 +3391,53 @@ static int IOS_FallbackDynamicIndex( HardwareShader_t *pShaders, int nCount, int
 	if ( pShaders[nPreferred] != INVALID_HARDWARE_SHADER )
 		return nPreferred;
 
+	if ( bPreferDynamicLight )
+	{
+		// Prefer DYNAMIC_LIGHT=1 slots (index & 2). Match skinning/compressed if possible.
+		const int nSkinCompMask = nPreferred & ~2; // clear DYNAMIC_LIGHT bit
+		for ( int i = 0; i < nCount; ++i )
+		{
+			if ( ( i & 2 ) == 0 )
+				continue;
+			if ( ( i & ~2 ) != nSkinCompMask )
+				continue;
+			if ( pShaders[i] != INVALID_HARDWARE_SHADER )
+			{
+				if ( pShaderNameForLog )
+					DevWarning( "[iOS] '%s': dyn %d INVALID → dyn %d (keep DYNAMIC_LIGHT).\n",
+						pShaderNameForLog, nPreferred, i );
+				return i;
+			}
+		}
+		for ( int i = 0; i < nCount; ++i )
+		{
+			if ( ( i & 2 ) == 0 )
+				continue;
+			if ( pShaders[i] != INVALID_HARDWARE_SHADER )
+			{
+				if ( pShaderNameForLog )
+					DevWarning( "[iOS] '%s': dyn %d INVALID → dyn %d (any DYNAMIC_LIGHT).\n",
+						pShaderNameForLog, nPreferred, i );
+				return i;
+			}
+		}
+	}
+
 	if ( nPreferred != 0 && pShaders[0] != INVALID_HARDWARE_SHADER )
+	{
+		if ( pShaderNameForLog )
+			DevWarning( "[iOS] '%s': dyn %d INVALID → dyn 0.\n", pShaderNameForLog, nPreferred );
 		return 0;
+	}
 
 	for ( int i = 1; i < nCount; ++i )
 	{
 		if ( pShaders[i] != INVALID_HARDWARE_SHADER )
+		{
+			if ( pShaderNameForLog )
+				DevWarning( "[iOS] '%s': dyn %d INVALID → dyn %d.\n", pShaderNameForLog, nPreferred, i );
 			return i;
+		}
 	}
 	return nPreferred;
 }
@@ -4512,10 +4555,14 @@ void CShaderManager::SetVertexShader( VertexShader_t shader )
 #if defined( IOS )
 	vshIndex = IOS_ClampDynamicShaderIndex(
 		vshIndex, vshLookup.m_ShaderStaticCombos.m_nCount, vshLookup.m_Name, false );
-	vshIndex = IOS_FallbackDynamicIndex(
-		vshLookup.m_ShaderStaticCombos.m_pHardwareShaders,
-		vshLookup.m_ShaderStaticCombos.m_nCount,
-		vshIndex );
+	{
+		const char *pVshName = m_ShaderSymbolTable.String( vshLookup.m_Name );
+		const bool bVL = ( V_stristr( pVshName, "vertexlit_and_unlit_generic_vs20" ) != NULL );
+		vshIndex = IOS_FallbackDynamicIndex(
+			vshLookup.m_ShaderStaticCombos.m_pHardwareShaders,
+			vshLookup.m_ShaderStaticCombos.m_nCount,
+			vshIndex, bVL, bVL ? pVshName : NULL );
+	}
 #endif
 //	DevWarning( "vsh: %s static: %d dynamic: %d\n", m_ShaderSymbolTable.String( vshLookup.m_Name ),
 //		vshLookup.m_nStaticIndex, m_nVertexShaderIndex );

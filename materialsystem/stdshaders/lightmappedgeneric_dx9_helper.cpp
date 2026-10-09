@@ -698,53 +698,9 @@ void DrawLightmappedGeneric_DX9( CBaseVSShader *pShader, IMaterialVar** params, 
 				if ( !g_pHardwareConfig->SupportsPixelShaders_3_0() )
 				#endif
 				{
-#if defined( IOS )
-					// PLATFORM VCS static combo ids disagree with Portal 2 stdshaders
-					// (log 108: lightmappedgeneric_ps20b combo 68419584 → fallback 0 → black).
-					// Request GetIndex()==0 so FindCombo hits the real all-features-off entry.
-					DECLARE_STATIC_VERTEX_SHADER( lightmappedgeneric_vs20 );
-					SET_STATIC_VERTEX_SHADER_COMBO( ENVMAP_MASK, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( TANGENTSPACE, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( BUMPMAP, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( VERTEXCOLOR, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( VERTEXALPHATEXBLENDFACTOR, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( BUMPMASK, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( LIGHTING_PREVIEW, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( SEAMLESS, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( DETAILTEXTURE, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( FANCY_BLENDING, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( SELFILLUM, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( PAINT, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( ADDBUMPMAPS, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( DOPIXELFOG, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( HARDWAREFOGBLEND, 0 );
-					SET_STATIC_VERTEX_SHADER( lightmappedgeneric_vs20 );
-
-					DECLARE_STATIC_PIXEL_SHADER( lightmappedgeneric_ps20b );
-					SET_STATIC_PIXEL_SHADER_COMBO( BASETEXTURE2, 0 );
-					SET_STATIC_PIXEL_SHADER_COMBO( BUMPMAP, 0 );
-					SET_STATIC_PIXEL_SHADER_COMBO( BUMPMAP2, 0 );
-					SET_STATIC_PIXEL_SHADER_COMBO( BUMPMASK, 0 );
-					SET_STATIC_PIXEL_SHADER_COMBO( CUBEMAP, 0 );
-					SET_STATIC_PIXEL_SHADER_COMBO( ENVMAPMASK, 0 );
-					SET_STATIC_PIXEL_SHADER_COMBO( BASEALPHAENVMAPMASK, 0 );
-					SET_STATIC_PIXEL_SHADER_COMBO( SELFILLUM, 0 );
-					SET_STATIC_PIXEL_SHADER_COMBO( NORMALMAPALPHAENVMAPMASK, 0 );
-					SET_STATIC_PIXEL_SHADER_COMBO( FANCY_BLENDING, 0 );
-					SET_STATIC_PIXEL_SHADER_COMBO( SEAMLESS, 0 );
-					SET_STATIC_PIXEL_SHADER_COMBO( DETAIL_BLEND_MODE, 0 );
-					SET_STATIC_PIXEL_SHADER_COMBO( DETAIL2, 0 );
-					SET_STATIC_PIXEL_SHADER_COMBO( ENVMAPANISOTROPY, 0 );
-					SET_STATIC_PIXEL_SHADER_COMBO( ADDBUMPMAPS, 0 );
-					SET_STATIC_PIXEL_SHADER_COMBO( SHADER_SRGB_READ, 0 );
-					SET_STATIC_PIXEL_SHADER_COMBO( LIGHTING_PREVIEW, 0 );
-					SET_STATIC_PIXEL_SHADER_COMBO( CSM_BLENDING, 0 );
-					SET_STATIC_PIXEL_SHADER_COMBO( PHONG, 0 );
-					SET_STATIC_PIXEL_SHADER_COMBO( CASCADED_SHADOW_MAPPING, 0 );
-					SET_STATIC_PIXEL_SHADER_COMBO( CSM_MODE, 0 );
-					SET_STATIC_PIXEL_SHADER_COMBO( DOPIXELFOG, 0 );
-					SET_STATIC_PIXEL_SHADER( lightmappedgeneric_ps20b );
-#else
+					// log 116: Documents lightmappedgeneric_ps20b.vcs dyn=32 matches our
+					// .inc, with staticIds 0..5,8.. — use real material combos again.
+					// Missing ids still fall back via ResolveStaticComboRecordIndex.
 					DECLARE_STATIC_VERTEX_SHADER( lightmappedgeneric_vs20 );
 					SET_STATIC_VERTEX_SHADER_COMBO( ENVMAP_MASK,  hasEnvmapMask );
 					SET_STATIC_VERTEX_SHADER_COMBO( TANGENTSPACE,  params[info.m_nEnvmap]->IsTexture() );
@@ -759,6 +715,11 @@ void DrawLightmappedGeneric_DX9( CBaseVSShader *pShader, IMaterialVar** params, 
 					SET_STATIC_VERTEX_SHADER_COMBO( SELFILLUM,  hasSelfIllum );
 					SET_STATIC_VERTEX_SHADER_COMBO( PAINT, 0 );
 					SET_STATIC_VERTEX_SHADER_COMBO( ADDBUMPMAPS, bAddBumpMaps );
+#if defined( IOS )
+					// Keep fog/CSM bits off — those static ids are sparse in the pack.
+					SET_STATIC_VERTEX_SHADER_COMBO( DOPIXELFOG, 0 );
+					SET_STATIC_VERTEX_SHADER_COMBO( HARDWAREFOGBLEND, 0 );
+#endif
 					#if defined( _X360 ) || defined( _PS3 )
 						SET_STATIC_VERTEX_SHADER_COMBO( FLASHLIGHT, hasFlashlight);
 					#endif
@@ -788,8 +749,16 @@ void DrawLightmappedGeneric_DX9( CBaseVSShader *pShader, IMaterialVar** params, 
 						#endif
 						SET_STATIC_PIXEL_SHADER_COMBO( SHADER_SRGB_READ, bShaderSrgbRead );
 						SET_STATIC_PIXEL_SHADER_COMBO( LIGHTING_PREVIEW, nLightingPreviewMode );
+#if defined( IOS )
+						SET_STATIC_PIXEL_SHADER_COMBO( CSM_BLENDING, 0 );
+						SET_STATIC_PIXEL_SHADER_COMBO( PHONG, 0 );
+						SET_STATIC_PIXEL_SHADER_COMBO( CASCADED_SHADOW_MAPPING, 0 );
+						SET_STATIC_PIXEL_SHADER_COMBO( CSM_MODE, 0 );
+						SET_STATIC_PIXEL_SHADER_COMBO( DOPIXELFOG, 0 );
+#else
 						SET_STATIC_PIXEL_SHADER_COMBO( CSM_BLENDING, bCSMBlending );
 						SET_STATIC_PIXEL_SHADER_COMBO( PHONG, false );
+#endif
 						SET_STATIC_PIXEL_SHADER( lightmappedgeneric_ps20b );
 					}
 					else
@@ -816,7 +785,6 @@ void DrawLightmappedGeneric_DX9( CBaseVSShader *pShader, IMaterialVar** params, 
 						SET_STATIC_PIXEL_SHADER_COMBO( PHONG, false );
 						SET_STATIC_PIXEL_SHADER( lightmappedgeneric_ps20 );
 					}
-#endif // !IOS
 				}
 				#if !defined( _X360 ) && !defined( _PS3 )
 				else // Shader model 3.0, PC only

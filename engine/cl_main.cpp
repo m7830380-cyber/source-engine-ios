@@ -1778,16 +1778,14 @@ void CL_FullyConnected( void )
 		Host_AllowQueuedMaterialSystem( false );
 		// Do NOT SetValue mat_hdr_level here — engine callback used to clamp to 2
 		// and issue "save/load modeswitchsave", which looped map loads on iOS.
-		// Lightmaps still wrong with Documents/platform combo-0 (log 114). Force
-		// fullbright so albedo/textures are readable while we inventory VCS combos
-		// and fix the lightmap path — this is a deliberate interim, not a probe.
+		// log 116: Documents lightmappedgeneric dyn matches — use real lightmaps again.
 		// Keep flashlight depth off — FLASHLIGHT combos still mismatch PLATFORM VCS.
 		ConVarRef sv_cheats( "sv_cheats" );
 		if ( sv_cheats.IsValid() )
 			sv_cheats.SetValue( 1 );
 		ConVarRef mat_fullbright( "mat_fullbright" );
 		if ( mat_fullbright.IsValid() )
-			mat_fullbright.SetValue( 1 );
+			mat_fullbright.SetValue( 0 );
 		ConVarRef r_flashlightdepthtexture( "r_flashlightdepthtexture" );
 		if ( r_flashlightdepthtexture.IsValid() )
 			r_flashlightdepthtexture.SetValue( 0 );

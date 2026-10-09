@@ -3189,12 +3189,29 @@ static int IOS_FallbackStaticComboRecordIndex( ShaderFileCache_t *pFileCache, co
 
 	if ( V_stristr( baseName, "vertexlit_and_unlit_generic_ps20b" ) )
 	{
-		// DIFFUSE=1 → id 21 (log 135 HIT). Never id0 (illegal) or id1 (black props).
+		// Packed weights: DIFFUSELIGHTING=64, ENVMAPMASK=128, VERTEXCOLOR=1024 (not 128!).
+		// Log 137: touch packed 1024/2048 fell through to id21 (DIFFUSE) → black squares.
+		static const uint32 s_vcolIds[] = { 42, 85, 32, 47, 23, 22, 4, 11, 16, 17 };
 		static const uint32 s_diffuseIds[] = { 21, 22, 23, 20, 17, 16, 11, 4 };
-		static const uint32 s_unlitIds[] = { 21, 4, 11, 16, 17, 20 };
-		const bool bWantDiffuse = ( nLookupStaticIndex & 128 ) != 0;
-		const uint32 *pIds = bWantDiffuse ? s_diffuseIds : s_unlitIds;
-		const int nIds = bWantDiffuse ? ARRAYSIZE( s_diffuseIds ) : ARRAYSIZE( s_unlitIds );
+		static const uint32 s_detailIds[] = { 5, 4, 7, 6, 3, 2, 11 };
+		static const uint32 s_otherIds[] = { 4, 3, 2, 11, 16, 17, 20 };
+		const uint32 *pIds = s_otherIds;
+		int nIds = ARRAYSIZE( s_otherIds );
+		if ( nLookupStaticIndex & 1024 )
+		{
+			pIds = s_vcolIds;
+			nIds = ARRAYSIZE( s_vcolIds );
+		}
+		else if ( nLookupStaticIndex & 64 )
+		{
+			pIds = s_diffuseIds;
+			nIds = ARRAYSIZE( s_diffuseIds );
+		}
+		else if ( nLookupStaticIndex & 16 )
+		{
+			pIds = s_detailIds;
+			nIds = ARRAYSIZE( s_detailIds );
+		}
 		for ( int i = 0; i < nIds; ++i )
 		{
 			if ( IOS_TryStaticComboRecord( pFileCache, pIds[i], &idx ) )

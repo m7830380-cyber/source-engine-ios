@@ -827,7 +827,11 @@ static void DrawVertexLitGeneric_DX9_Internal( CBaseVSShader *pShader, IMaterial
 				pShaderShadow->EnableTexture( SHADER_SAMPLER7, true );	// Flashlight cookie
 				pShaderShadow->EnableSRGBRead( SHADER_SAMPLER7, true );
 			}
-			if ( bHasDetailTexture )
+			if ( bHasDetailTexture
+#if defined( IOS )
+				|| bVertexLitGeneric
+#endif
+				)
 			{
 				pShaderShadow->EnableTexture( SHADER_SAMPLER2, true );
 				pShaderShadow->EnableSRGBRead( SHADER_SAMPLER2, IsSRGBDetailTexture( nDetailBlendMode ) );
@@ -1135,13 +1139,14 @@ bool bDistanceAlphaFromDetail = false;
 					{
 						DECLARE_STATIC_PIXEL_SHADER( vertexlit_and_unlit_generic_ps20b );
 #if defined( IOS )
-						// Props black = VS id48 VCOL alias (packed 9360) × PS DIFFUSE id21.
-						// Fix VS static resolve (skip id48 for VL lit); keep DIFFUSE=1 + id21.
-						SET_STATIC_PIXEL_SHADER_COMBO( SFM, 0 );
+						// Log 137: id49 VS + PS id21 still black; touch 1024/2048→fallback id21.
+						// VL: DETAIL packed 32→id5 (log 132 visible) + blend 0; Unlit: VCOL PS.
+						// SFM+DETAIL → packed 32 → id 5 (Documents VCS; log 132).
+						SET_STATIC_PIXEL_SHADER_COMBO( SFM, bVertexLitGeneric ? 1 : 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( SELFILLUM_ENVMAPMASK_ALPHA, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( DETAILTEXTURE, 0 );
+						SET_STATIC_PIXEL_SHADER_COMBO( DETAILTEXTURE, bVertexLitGeneric ? 1 : 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( CUBEMAP, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( DIFFUSELIGHTING, bVertexLitGeneric ? 1 : 0 );
+						SET_STATIC_PIXEL_SHADER_COMBO( DIFFUSELIGHTING, bVertexLitGeneric ? 0 : 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( ENVMAPMASK, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( BASEALPHAENVMAPMASK, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( ENVMAPFRESNEL, 0 );
@@ -1367,6 +1372,12 @@ bool bDistanceAlphaFromDetail = false;
 			{
 				pContextData->m_SemiStaticCmdsOut.BindTexture( pShader, SHADER_SAMPLER2, IsSRGBDetailTexture( nDetailBlendMode ) ? TEXTURE_BINDFLAGS_SRGBREAD : TEXTURE_BINDFLAGS_NONE, info.m_nDetail, info.m_nDetailFrame );
 			}
+#if defined( IOS )
+			else if ( bVertexLitGeneric )
+			{
+				pContextData->m_SemiStaticCmdsOut.BindStandardTexture( SHADER_SAMPLER2, TEXTURE_BINDFLAGS_NONE, TEXTURE_WHITE );
+			}
+#endif
 			if ( bHasSelfIllum )
 			{
 				if ( bHasSelfIllumMask )												// Separate texture for self illum?
@@ -1784,6 +1795,9 @@ bool bDistanceAlphaFromDetail = false;
 
 			if ( bVertexLitGeneric )
 			{
+#if defined( IOS )
+				pContextData->m_SemiStaticCmdsOut.SetPixelShaderConstant4( 4, 1.0f, 1.0f, 1.0f, 0.0f );
+#else
 				if ( bDesaturateWithBaseAlpha )
 				{
 					pContextData->m_SemiStaticCmdsOut.SetPixelShaderConstant_W( 4, info.m_nDesaturateWithBaseAlpha, fBlendFactor );
@@ -1792,6 +1806,7 @@ bool bDistanceAlphaFromDetail = false;
 				{
 					pContextData->m_SemiStaticCmdsOut.SetPixelShaderConstant_W( 4, info.m_nSelfIllumTint, fBlendFactor );
 				}
+#endif
 			}
 			else
 			{

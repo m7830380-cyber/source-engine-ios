@@ -3218,10 +3218,22 @@ static int IOS_FallbackStaticComboRecordIndex( ShaderFileCache_t *pFileCache, co
 }
 #endif
 
-// Portal 2 content + a CS:GO-derived PLATFORM shader pack often disagree on static combo
-// ids; try several encodings before giving up so materials can still link on GLES.
-// VCS files index static records by (packedStatic / m_nDynamicCombos) from the file
-// header — not the .inc dynamic product (log 118: inc-first id 4 black props; id 21 ok).
+// Portal 2 content + CS:GO PLATFORM .vcs disagree on combo space.
+//
+// Authoritative rule (do not regress):
+//   staticId = packedStatic / vcsHeader.m_nDynamicCombos
+//   NEVER divide by .inc dyn product when it differs (log 118: 128/32→id4 black;
+//   correct is 128/6→id21). Dyn bind indexes [0, vcsDyn); skipped slots are INVALID.
+//
+// Known Documents maps:
+//   VL ps DIFFUSE=1 packed 128 → id 21 | VL vs FLATTEN=1 packed 9216 → id 48
+//   VL ps VCOL=1 packed 2048 → preferred 341 (often missing) → unlit fallback id 1
+//   VL ps DIFFUSE=0+VCOL=0 packed 0 → id 0 SKIPPED/illegal
+//   VS VERTEXCOLOR bit is lost under /192 (9216 and 9360 both → 48) — mesh UI
+//   cannot modulate vertex color until matching .vcs ships; use ClearBuffers fills.
+//
+// Best playable evidence: launch_log 117 (commit era a9c6bb09). Later pin churn
+// and scissor floods caused white/grey/cyan-only regressions (logs 125–127).
 static int ResolveStaticComboRecordIndex( ShaderFileCache_t *pFileCache, int nLookupStaticIndex, const char *pShaderName )
 {
 	const int nVcsDyn = pFileCache->m_Header.m_nDynamicCombos;

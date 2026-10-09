@@ -3476,6 +3476,9 @@ GLvoid *uncompressDXTc(GLsizei width, GLsizei height, GLenum format, GLsizei ima
         case GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT:
             blocksize = 16;
             break;
+        default:
+            free( pixels );
+            return NULL;
     }
     uintptr_t src = (uintptr_t) data;
     for (int y=0; y<height; y+=4) {
@@ -3523,17 +3526,9 @@ static bool IOS_UseNativeDXT( GLenum internalformat )
 	}
 	if ( !s_nNative )
 		return false;
-	if ( !isDXTcSRGB( internalformat ) )
-		return true;
-
-	static int s_nNativeSRGB = -1;
-	if ( s_nNativeSRGB < 0 )
-	{
-		const char *pExt = (const char *)gGL->glGetString( GL_EXTENSIONS );
-		s_nNativeSRGB = ( pExt && V_strstr( pExt, "GL_EXT_texture_compression_s3tc_srgb" ) ) ? 1 : 0;
-		printf( "togl: native sRGB DXT textures %s\n", s_nNativeSRGB ? "ON" : "off" );
-	}
-	return s_nNativeSRGB != 0;
+	// sRGB BC uses the same ANGLE request path as linear BC on A-series (log 144:
+	// s3tc_srgb never appears in GL_EXTENSIONS but props/touch VTFs are sRGB DXT5).
+	return true;
 }
 #endif
 

@@ -12,6 +12,7 @@ Branch: `portal2-rubberwar-ios` (linear +127 from `portal2-ios`).
 | worst | **127** | Cyan-only menu (mesh fills), never stable signon 6 |
 
 Do **not** optimize against 125–126 (VERTEXCOLOR→fallback id 1, black/cyan scissor floods).
+**Log 128:** VL/LM remaps matched 124, but orange in-game ClearBuffers ticks (1173 log lines) and `flashlight_ps20b→2304` were new regressions — kill in-game ticks; reject flashlight preferred>64; hard-pin LM statics to id 0.
 
 ## Frozen pins (match log 124)
 

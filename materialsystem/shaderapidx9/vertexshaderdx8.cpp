@@ -3210,6 +3210,20 @@ static int IOS_FallbackStaticComboRecordIndex( ShaderFileCache_t *pFileCache, co
 			}
 		}
 	}
+	else if ( V_stristr( baseName, "flashlight" ) )
+	{
+		// Log 128: flashlight_ps20b packed 9216 → preferred 2304 (garbage). Stay low.
+		static const uint32 s_ids[] = { 0, 1, 2, 4, 8, 16 };
+		for ( int i = 0; i < ARRAYSIZE( s_ids ); ++i )
+		{
+			if ( IOS_TryStaticComboRecord( pFileCache, s_ids[i], &idx ) )
+			{
+				DevWarning( "[iOS] Shader '%s': static packed %d → fallback staticId %u.\n",
+					pShaderName, nLookupStaticIndex, s_ids[i] );
+				return idx;
+			}
+		}
+	}
 
 	if ( pFileCache->m_StaticComboRecords.Count() > 0 )
 		return 0;
@@ -3256,6 +3270,10 @@ static int ResolveStaticComboRecordIndex( ShaderFileCache_t *pFileCache, int nLo
 		preferred = (uint32)( nLookupStaticIndex / nIncDyn );
 		bHavePreferred = true;
 	}
+
+	// Log 128: flashlight_ps20b packed 9216 → preferred 2304 — never take that.
+	if ( bHavePreferred && V_stristr( pShaderName, "flashlight" ) && preferred > 64 )
+		bHavePreferred = false;
 
 	uint32 rawCandidates[6];
 	int nRaw = 0;

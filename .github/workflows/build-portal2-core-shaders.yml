@@ -7,6 +7,7 @@ name: Portal 2 core shaders (.vcs)
 on:
   workflow_dispatch:
   push:
+    branches: [ portal2-ios, portal2-rubberwar-ios ]
     paths:
       - 'scripts/shaders/**'
       - 'materialsystem/stdshaders/**/*.fxc'

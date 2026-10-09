@@ -1,29 +1,32 @@
-# Portal 2 iOS — log 137 autopsy
+# Portal 2 iOS — stop remapping; ship tree .vcs
 
-## Why 137 looked identical to 136 visually
+## Log 138 (why remaps change nothing)
 
-| Line | Meaning |
-|------|---------|
-| `9360 → id 49` | Same VL VS as 136 (skip-48 remap) |
-| `packed 128 → id 21` | Props still on **DIFFUSE PS id21** (× black `i.color`) |
-| `packed 2048 → fallback id 21` | **Touch killer** — Unlit VCOL packed 1024/2048 must not bind id21 |
-| No `invalid shader combo` | 3819f196 fix worked; **wrong shaders**, not illegal dyn3 |
+- Still loading **Documents/platform** CS:GO `.vcs` (`dyn=192` vs20, `dyn=6` ps).
+- `packed 2048 → fallback staticId 4` / `packed 64 → id 10` — retail aliases, not engine `fxctmp9/*.inc` combos.
+- `9360 → id 49` remap does not fix bytecode: id49 in retail ≠ combo the C++ requests.
 
-## Fallback bug (fixed in tree)
+**Root cause:** engine C++ and `fxctmp9/*.inc` are one combo space; Documents retail `.vcs` is another. Runtime id5/id21/id49 roulette cannot fix that.
 
-`IOS_FallbackStaticComboRecordIndex` used `(packed & 128)` for “DIFFUSE”. On ps20b **128 = ENVMAPMASK**, **DIFFUSE = 64**, **VERTEXCOLOR = 1024**.
+## Fix (in tree)
 
-Unlit touch (VCOL=1) → packed **1024** or **2048** → fell into “unlit” list starting with **id 21** (DIFFUSE lit).
+1. **`vcscompile.py`** compiles `.fxc` → `.vcs` with the same combo math as `.inc` (see `scripts/shaders/vcscompile.py` header).
+2. **IPA CI** (`build-portal2-ipa.yml`): `compile-shaders` job (Windows) → bundle `platform/shaders/fxc/*.vcs` into `.app`.
+3. **Launcher**: `APP_LIB_PATH/platform` on **PLATFORM** search path **before** Documents `platform`.
+4. **Removed** iOS static combo pins in `vertexlitgeneric_dx9_helper.cpp` (stock material combos again).
 
-## In-tree changes
+Keep (for now): iOS dynamic pins (`DYNAMIC_LIGHT`, `COMPRESSED_VERTS=0`), ambient fill, lightmap scale — not static-id hacks.
 
-1. PS fallback: **1024 bit → vcol ids (42, 85, …)**; **64 → diffuse**; **16 → detail id5**.
-2. VL PS: **SFM+DETAIL → packed 32 → id 5**, DIFFUSE=0, detail blend **0**, white sampler.
-3. Unlit PS: **VERTEXCOLOR=1**, DIFFUSE=0 (unchanged intent).
-4. Keep: FLATTEN=1, COMPRESSED_VERTS=0, VS skip id48→49.
+## Pass bar (log 139+)
 
-## Pass bar (log 138)
+```
+[iOS] VCS vertexlit_and_unlit_generic_ps20b.vcs: ver=6 dyn=<matches inc, NOT retail 6 with wrong bytecode>
+```
 
-- `packed 2048` or `1024` → **not** `fallback staticId 21`
-- VL PS: `packed 32 → id 5` (or direct hit)
-- Touch visible; props textured (may be flat-lit until real VS lighting)
+- No `fallback staticId` for normal prop/touch draws if combo exists in bundled file.
+- `Bundled N PLATFORM shader(s)` in CI packaging log.
+- Props textured; touch not black squares.
+
+## If still broken
+
+Run `python scripts/shaders/vcscompile.py count vertexlit_and_unlit_generic_ps2x.fxc vertexlit_and_unlit_generic_ps20b` and add missing static ids to CI `--static-ids` list — do **not** add another runtime remap.

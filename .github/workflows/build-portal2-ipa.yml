@@ -6,7 +6,80 @@ on:
   workflow_dispatch:
 
 jobs:
+  compile-shaders:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install numpy
+        run: pip install numpy
+
+      - name: Get fxc.exe
+        shell: pwsh
+        run: |
+          $fxc = $null
+          try {
+            Invoke-WebRequest -Uri "https://download.microsoft.com/download/A/E/7/AE743F1F-632B-4809-87A9-AA1BB3458E31/DXSDK_Jun10.exe" -OutFile dxsdk.exe
+            7z x dxsdk.exe -odxsdk -r -y fxc.exe "Jun2010_D3DCompiler_43_x86.cab" "Jun2010_D3DCompiler_43_x64.cab" "Jun2010_d3dx9_43_x86.cab" "Jun2010_d3dx9_43_x64.cab" | Out-Null
+            foreach ($arch in @('x86', 'x64')) {
+              $cand = Get-ChildItem dxsdk -Recurse -Filter fxc.exe | Where-Object { $_.FullName -match "\\$arch\\" } | Select-Object -First 1
+              if (-not $cand) { continue }
+              $dir = $cand.DirectoryName
+              foreach ($name in @("Jun2010_D3DCompiler_43_$arch.cab", "Jun2010_d3dx9_43_$arch.cab")) {
+                $cab = Get-ChildItem dxsdk -Recurse -Filter $name | Select-Object -First 1
+                if ($cab) { 7z e $cab.FullName "-o$dir" -y *.dll | Out-Null }
+              }
+              $banner = (& $cand.FullName /? 2>&1 | Out-String)
+              if ($banner -match 'Shader Compiler') { $fxc = $cand.FullName; break }
+            }
+          } catch { Write-Host "DirectX SDK fxc unavailable: $_" }
+
+          if (-not $fxc) {
+            $cand = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Recurse -Filter fxc.exe |
+                    Where-Object { $_.FullName -match '\\x64\\' } | Sort-Object FullName -Descending | Select-Object -First 1
+            $fxc = $cand.FullName
+            "VCS_FXC_EXTRA=/Gec" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          }
+          "FXC_EXE=$fxc" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Validate fxctmp9 combo math
+        run: python scripts/shaders/vcscompile.py validate-inc
+
+      - name: Compile Portal 2 PLATFORM shaders (tree .fxc → .vcs)
+        shell: pwsh
+        run: |
+          $jobs = 8
+          $targets = @(
+            @{ src='lightmappedgeneric_ps2x.fxc'; tgt='lightmappedgeneric_ps20b'; ids='0,4' },
+            @{ src='lightmappedgeneric_vs20.fxc';  tgt='lightmappedgeneric_vs20';  ids='0' },
+            @{ src='vertexlit_and_unlit_generic_ps2x.fxc'; tgt='vertexlit_and_unlit_generic_ps20b';
+               ids='0,1,2,3,4,5,6,7,10,11,14,15,16,17,18,19,20,21,22,23,32,33,34,35,42,47' },
+            @{ src='vertexlit_and_unlit_generic_vs20.fxc'; tgt='vertexlit_and_unlit_generic_vs20';
+               ids='0,1,2,3,4,8,16,24,32,48,49,50' },
+            @{ src='depthwrite_ps2x.fxc'; tgt='depthwrite_ps20b'; ids='0' },
+            @{ src='depthwrite_vs20.fxc'; tgt='depthwrite_vs20'; ids='0' }
+          )
+          foreach ($t in $targets) {
+            python scripts/shaders/vcscompile.py compile $t.src $t.tgt --fxc "$env:FXC_EXE" --jobs $jobs --out shaderout --static-ids $t.ids
+            if ($LASTEXITCODE -ne 0) { exit 1 }
+            python scripts/shaders/vcscompile.py verify "shaderout/shaders/fxc/$($t.tgt).vcs"
+            if ($LASTEXITCODE -ne 0) { exit 1 }
+          }
+          Get-ChildItem shaderout/shaders/fxc | Format-Table Name, Length
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: portal2-core-shaders
+          path: shaderout/shaders/fxc/*.vcs
+          if-no-files-found: error
+
   build-portal2-ipa:
+    needs: compile-shaders
     runs-on: macos-14
     permissions:
       contents: write
@@ -22,9 +95,11 @@ jobs:
         with:
           submodules: recursive
 
-      # Release ANGLE from the newest successful "ANGLE for iOS (release)" run;
-      # without one, scripts/ios/build-angle.sh falls back to the reference IPA's
-      # (Debug) frameworks.
+      - uses: actions/download-artifact@v4
+        with:
+          name: portal2-core-shaders
+          path: build/ios/shaders/fxc
+
       - name: Use the release ANGLE build
         env:
           GH_TOKEN: ${{ github.token }}
@@ -57,18 +132,16 @@ jobs:
           IOS_DISPLAY_NAME: Portal 2
           IOS_APP_BUNDLE: portal2.app
           IOS_IPA_NAME: portal2-ios-arm64.ipa
-          # keep going after errors so each run reports every failing file
           WAF_BUILD_FLAGS: -k
         run: |
           chmod +x scripts/build-ios-arm64.sh scripts/ios/*.sh
+          ls -la build/ios/shaders/fxc
           ./scripts/build-ios-arm64.sh --use-ccache --build-games=portal2
 
       - name: Compiler cache stats
         if: always()
         run: ccache -s || true
 
-      # saved even when the build fails, so the next iteration only
-      # recompiles what changed
       - name: Save compiler cache
         if: always()
         uses: actions/cache/save@v4
@@ -76,7 +149,6 @@ jobs:
           path: .ccache
           key: ccache-portal2-ios-${{ github.sha }}
 
-      # Prefer Actions artifacts; quota-full / upload failures must not fail the job.
       - name: Upload IPA artifact
         id: upload-artifact
         continue-on-error: true
@@ -86,8 +158,6 @@ jobs:
           path: artifacts/portal2-ios-arm64.ipa
           if-no-files-found: error
 
-      # Always publish a rolling release so the IPA stays downloadable when
-      # artifact storage quota is exhausted.
       - name: Publish IPA to GitHub Release
         if: success()
         env:
@@ -100,9 +170,9 @@ jobs:
           TITLE="Portal 2 iOS IPA (latest)"
           NOTES="Unsigned Portal 2 iOS IPA from \`${{ github.sha }}\` on \`${{ github.ref_name }}\`.
 
-          Workflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          Includes tree-compiled PLATFORM .vcs (fxctmp9-matched). Workflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
-          Artifact upload: ${{ steps.upload-artifact.outcome }} (release is the fallback when Actions artifact quota is full)."
+          Artifact upload: ${{ steps.upload-artifact.outcome }}"
 
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "$IPA" --clobber

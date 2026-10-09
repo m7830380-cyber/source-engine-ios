@@ -827,11 +827,7 @@ static void DrawVertexLitGeneric_DX9_Internal( CBaseVSShader *pShader, IMaterial
 				pShaderShadow->EnableTexture( SHADER_SAMPLER7, true );	// Flashlight cookie
 				pShaderShadow->EnableSRGBRead( SHADER_SAMPLER7, true );
 			}
-			if ( bHasDetailTexture
-#if defined( IOS )
-				|| bVertexLitGeneric
-#endif
-				)
+			if ( bHasDetailTexture )
 			{
 				pShaderShadow->EnableTexture( SHADER_SAMPLER2, true );
 				pShaderShadow->EnableSRGBRead( SHADER_SAMPLER2, IsSRGBDetailTexture( nDetailBlendMode ) );
@@ -1092,30 +1088,6 @@ bool bDistanceAlphaFromDetail = false;
 				#endif
 				{
 					DECLARE_STATIC_VERTEX_SHADER( vertexlit_and_unlit_generic_vs20 );
-#if defined( IOS )
-					// Log 134: UnlitGeneric shares this helper. Pinning VL CUBEMAP→id49
-					// also forced touch/VGUI off VERTEXCOLOR → transparent black squares.
-					// Gate on bVertexLitGeneric. VL lighting color stays black on device
-					// (id48 and id49); PS must not multiply by i.color (see PS pin).
-					SET_STATIC_VERTEX_SHADER_COMBO( SFM, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( VERTEXCOLOR, bVertexLitGeneric ? 0 : 1 );
-					SET_STATIC_VERTEX_SHADER_COMBO( CUBEMAP, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( HALFLAMBERT, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( FLASHLIGHT, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( SEAMLESS_BASE, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( SEAMLESS_DETAIL, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( SEPARATE_DETAIL_UVS, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( LIGHTING_PREVIEW, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( TREESWAY, 0 );
-					// Log 136: FLATTEN=0 made packed static 0 → id0 + INVALID dyn3 (black props).
-					SET_STATIC_VERTEX_SHADER_COMBO( FLATTEN_STATIC_CONTROL_FLOW, 1 );
-					SET_STATIC_VERTEX_SHADER_COMBO( DECAL, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( CASCADED_SHADOW_MAPPING, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( CSM_BLENDING, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( DOPIXELFOG, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( HARDWAREFOGBLEND, 0 );
-					bool bCSMBlending = false;
-#else
 					SET_STATIC_VERTEX_SHADER_COMBO( SFM, bSFM );
 					SET_STATIC_VERTEX_SHADER_COMBO( VERTEXCOLOR,  bHasVertexColor || bHasVertexAlpha );
 					SET_STATIC_VERTEX_SHADER_COMBO( CUBEMAP,  bHasEnvmap );
@@ -1132,47 +1104,11 @@ bool bDistanceAlphaFromDetail = false;
 					bool bCSMBlending = g_pHardwareConfig->GetCSMAccurateBlending();
 					SET_STATIC_VERTEX_SHADER_COMBO( CASCADED_SHADOW_MAPPING, bCSMEnabled_ps2b );
 					SET_STATIC_VERTEX_SHADER_COMBO( CSM_BLENDING, bCSMBlending );
-#endif
 					SET_STATIC_VERTEX_SHADER( vertexlit_and_unlit_generic_vs20 );
 				
 					if ( g_pHardwareConfig->SupportsPixelShaders_2_b() || g_pHardwareConfig->ShouldAlwaysUseShaderModel2bShaders() ) // Always send OpenGL this way
 					{
 						DECLARE_STATIC_PIXEL_SHADER( vertexlit_and_unlit_generic_ps20b );
-#if defined( IOS )
-						// Log 137: id49 VS + PS id21 still black; touch 1024/2048→fallback id21.
-						// VL: DETAIL packed 32→id5 (log 132 visible) + blend 0; Unlit: VCOL PS.
-						// SFM+DETAIL → packed 32 → id 5 (Documents VCS; log 132).
-						SET_STATIC_PIXEL_SHADER_COMBO( SFM, bVertexLitGeneric ? 1 : 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( SELFILLUM_ENVMAPMASK_ALPHA, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( DETAILTEXTURE, bVertexLitGeneric ? 1 : 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( CUBEMAP, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( DIFFUSELIGHTING, bVertexLitGeneric ? 0 : 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( ENVMAPMASK, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( BASEALPHAENVMAPMASK, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( ENVMAPFRESNEL, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( SELFILLUM, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( VERTEXCOLOR, bVertexLitGeneric ? 0 : 1 );
-						SET_STATIC_PIXEL_SHADER_COMBO( FLASHLIGHT, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( DETAIL_BLEND_MODE, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( DECAL_BLEND_MODE, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( TINTMASKTEXTURE, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( SEAMLESS_BASE, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( SEAMLESS_DETAIL, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( DISTANCEALPHA, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( DISTANCEALPHAFROMDETAIL, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( SOFT_MASK, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( OUTLINE, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( OUTER_GLOW, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( FLASHLIGHTDEPTHFILTERMODE, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( SHADER_SRGB_READ, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( DESATURATEWITHBASEALPHA, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( LIGHTING_PREVIEW, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( SRGB_INPUT_ADAPTER, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( CASCADED_SHADOW_MAPPING, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( CSM_MODE, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( CSM_BLENDING, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( DOPIXELFOG, 0 );
-#else
 						SET_STATIC_PIXEL_SHADER_COMBO( SFM, bSFM );
 						SET_STATIC_PIXEL_SHADER_COMBO( SELFILLUM_ENVMAPMASK_ALPHA, bHasSelfIllumInEnvMapMask ); 
 						SET_STATIC_PIXEL_SHADER_COMBO( DETAILTEXTURE,  bHasDetailTexture );
@@ -1204,7 +1140,6 @@ bool bDistanceAlphaFromDetail = false;
 						SET_STATIC_PIXEL_SHADER_COMBO( CASCADED_SHADOW_MAPPING, g_pHardwareConfig->SupportsCascadedShadowMapping() && !bSFM && !bHasFlashlight && !bDisableCSMLookup );
 						SET_STATIC_PIXEL_SHADER_COMBO( CSM_MODE, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( CSM_BLENDING, bCSMBlending );
-#endif
 						SET_STATIC_PIXEL_SHADER( vertexlit_and_unlit_generic_ps20b );
 					}
 					else // ps_2_0
@@ -1372,12 +1307,6 @@ bool bDistanceAlphaFromDetail = false;
 			{
 				pContextData->m_SemiStaticCmdsOut.BindTexture( pShader, SHADER_SAMPLER2, IsSRGBDetailTexture( nDetailBlendMode ) ? TEXTURE_BINDFLAGS_SRGBREAD : TEXTURE_BINDFLAGS_NONE, info.m_nDetail, info.m_nDetailFrame );
 			}
-#if defined( IOS )
-			else if ( bVertexLitGeneric )
-			{
-				pContextData->m_SemiStaticCmdsOut.BindStandardTexture( SHADER_SAMPLER2, TEXTURE_BINDFLAGS_NONE, TEXTURE_WHITE );
-			}
-#endif
 			if ( bHasSelfIllum )
 			{
 				if ( bHasSelfIllumMask )												// Separate texture for self illum?
@@ -1795,9 +1724,6 @@ bool bDistanceAlphaFromDetail = false;
 
 			if ( bVertexLitGeneric )
 			{
-#if defined( IOS )
-				pContextData->m_SemiStaticCmdsOut.SetPixelShaderConstant4( 4, 1.0f, 1.0f, 1.0f, 0.0f );
-#else
 				if ( bDesaturateWithBaseAlpha )
 				{
 					pContextData->m_SemiStaticCmdsOut.SetPixelShaderConstant_W( 4, info.m_nDesaturateWithBaseAlpha, fBlendFactor );
@@ -1806,7 +1732,6 @@ bool bDistanceAlphaFromDetail = false;
 				{
 					pContextData->m_SemiStaticCmdsOut.SetPixelShaderConstant_W( 4, info.m_nSelfIllumTint, fBlendFactor );
 				}
-#endif
 			}
 			else
 			{

@@ -3351,24 +3351,6 @@ static int ResolveStaticComboRecordIndex( ShaderFileCache_t *pFileCache, int nLo
 		int idx = pFileCache->FindCombo( candidates[i] );
 		if ( idx != -1 )
 		{
-			if ( V_stristr( pShaderName, "vertexlit_and_unlit_generic_vs20" )
-				&& candidates[i] == 48
-				&& IOS_IsVertexLitVsPackedLightingCombo( nLookupStaticIndex ) )
-			{
-				const int litIdx = IOS_TryVertexLitVsLightingStaticId( pFileCache, nLookupStaticIndex );
-				if ( litIdx != -1 )
-				{
-					static CUtlMap<CUtlSymbol, bool> s_Vs48Remap( 0, 0, DefLessFunc( CUtlSymbol ) );
-					if ( s_Vs48Remap.Find( pFileCache->m_Name ) == s_Vs48Remap.InvalidIndex() )
-					{
-						s_Vs48Remap.Insert( pFileCache->m_Name, true );
-						const uint32 litId = pFileCache->m_StaticComboRecords[litIdx].m_nStaticComboID;
-						Msg( "[iOS] Shader '%s': static packed %d → id %u (VL lit; skip VCOL alias id 48).\n",
-							pShaderName, nLookupStaticIndex, litId );
-					}
-					return litIdx;
-				}
-			}
 			if ( bHavePreferred && candidates[i] == preferred )
 			{
 				static CUtlMap<CUtlSymbol, bool> s_RemapNote( 0, 0, DefLessFunc( CUtlSymbol ) );

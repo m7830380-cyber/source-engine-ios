@@ -937,9 +937,17 @@ bool CSourceAppSystemGroup::PreInit()
 
 	if ( IsPC() || !IsX360() )
 	{
-		// iOS: do NOT prefer app-bundled .vcs. Fresh fxc packs from this tree
-		// translate worse through TOGL/ANGLE than the Documents/platform retail
-		// pack (log 115). Keep Documents/platform as the only PLATFORM root.
+#if defined( IOS )
+		// Tree-compiled .vcs in the app bundle match fxctmp9/*.inc combo math.
+		// Documents/platform (CS:GO retail) aliases static ids → black props / touch.
+		const char *pBundle = getenv( "APP_LIB_PATH" );
+		if ( pBundle && pBundle[0] )
+		{
+			char bundlePlatform[MAX_PATH];
+			V_snprintf( bundlePlatform, sizeof( bundlePlatform ), "%s/platform", pBundle );
+			fsInfo.m_pFileSystem->AddSearchPath( bundlePlatform, "PLATFORM", PATH_ADD_TO_HEAD );
+		}
+#endif
 		fsInfo.m_pFileSystem->AddSearchPath( "platform", "PLATFORM" );
 	}
 	else

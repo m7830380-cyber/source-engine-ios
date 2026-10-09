@@ -19,6 +19,16 @@ cp "$BUNDLE/LaunchScreen.storyboard" "$APP/"
 # touch control textures (materials/vgui/touch/*), from the source-engine port
 cp "$BUNDLE/extras_dir.vpk" "$APP/"
 
+# Tree-compiled vertexlit/lightmapped .vcs (CI job compile-shaders).
+if [ -d "$ROOT/build/ios/shaders/fxc" ]; then
+	mkdir -p "$APP/platform/shaders/fxc"
+	cp "$ROOT/build/ios/shaders/fxc/"*.vcs "$APP/platform/shaders/fxc/" 2>/dev/null || {
+		echo "Packaging failed: no .vcs in build/ios/shaders/fxc" >&2
+		exit 1
+	}
+	echo "Bundled $(ls -1 "$APP/platform/shaders/fxc"/*.vcs | wc -l | tr -d ' ') PLATFORM shader(s)"
+fi
+
 if [ -x /usr/libexec/PlistBuddy ]; then
 	/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $BUNDLE_ID" "$APP/Info.plist"
 	/usr/libexec/PlistBuddy -c "Set :CFBundleName $DISPLAY_NAME" "$APP/Info.plist"

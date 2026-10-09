@@ -27,6 +27,15 @@ if [ -d "$ROOT/build/ios/shaders/fxc" ]; then
 		exit 1
 	}
 	echo "Bundled $(ls -1 "$APP/platform/shaders/fxc"/*.vcs | wc -l | tr -d ' ') PLATFORM shader(s)"
+	ls -la "$APP/platform/shaders/fxc/"vertexlit_and_unlit_generic_*.vcs 2>/dev/null || true
+	python3 "$ROOT/scripts/shaders/vcscompile.py" verify "$APP/platform/shaders/fxc/vertexlit_and_unlit_generic_ps20b.vcs" || {
+		echo "Packaging failed: bundled vertexlit PS is not tree-compiled (expect dyn=32)" >&2
+		exit 1
+	}
+	python3 "$ROOT/scripts/shaders/vcscompile.py" verify "$APP/platform/shaders/fxc/vertexlit_and_unlit_generic_vs20.vcs" || {
+		echo "Packaging failed: bundled vertexlit VS verify" >&2
+		exit 1
+	}
 fi
 
 if [ -x /usr/libexec/PlistBuddy ]; then

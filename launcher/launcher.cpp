@@ -939,7 +939,6 @@ bool CSourceAppSystemGroup::PreInit()
 	{
 #if defined( IOS )
 		// Tree-compiled .vcs in the app bundle match fxctmp9/*.inc combo math.
-		// Documents/platform (CS:GO retail) aliases static ids → black props / touch.
 		const char *pBundle = getenv( "APP_LIB_PATH" );
 		if ( pBundle && pBundle[0] )
 		{

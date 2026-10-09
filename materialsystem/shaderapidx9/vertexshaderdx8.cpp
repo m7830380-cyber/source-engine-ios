@@ -2655,6 +2655,23 @@ FileHandle_t CShaderManager::OpenFileAndLoadHeader( const char *pFileName, Shade
 		return FILESYSTEM_INVALID_HANDLE;
 	}
 
+#if defined( IOS )
+	if ( pHeader && V_stristr( pFileName, "vertexlit_and_unlit_generic" ) )
+	{
+		char fullPath[MAX_PATH];
+		if ( g_pFullFileSystem->RelativePathToFullPath( pFileName, "PLATFORM", fullPath, sizeof( fullPath ) ) )
+		{
+			static CUtlMap<CUtlSymbol, bool> s_LoggedVcsPath( 0, 0, DefLessFunc( CUtlSymbol ) );
+			CUtlSymbol sym( pFileName );
+			if ( s_LoggedVcsPath.Find( sym ) == s_LoggedVcsPath.InvalidIndex() )
+			{
+				s_LoggedVcsPath.Insert( sym, true );
+				Msg( "[iOS] VCS load path: %s\n", fullPath );
+			}
+		}
+	}
+#endif
+
 	if ( pHeader )
 	{
 		// read the header 
@@ -3756,6 +3773,11 @@ bool CShaderManager::LoadAndCreateShaders( ShaderLookup_t &lookup, bool bVertexS
 					Msg( "[iOS] VCS %s: ver=%d dyn=%d staticRecords=%d aliases=%d\n",
 						pBase, pHeader->m_nVersion, pHeader->m_nDynamicCombos,
 						nRec, pFileCache->m_StaticComboDupRecords.Count() );
+					if ( V_stristr( pBase, "vertexlit_and_unlit_generic_ps20b" ) &&
+						 pHeader->m_nDynamicCombos == 6 )
+					{
+						DevWarning( "[iOS] vertexlit PS .vcs has dyn=6 (CS:GO retail) — bundled tree shader (dyn=32) was not loaded. UV/props will break.\n" );
+					}
 					for ( int r = 0; r < nDump; ++r )
 					{
 						const StaticComboRecord_t &rec = pFileCache->m_StaticComboRecords[r];

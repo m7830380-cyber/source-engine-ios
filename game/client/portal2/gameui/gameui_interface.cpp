@@ -436,7 +436,9 @@ void CGameUI::Start()
 		// user dialog configuration
 		vgui::system()->SetUserConfigFile("InGameDialogConfig.vdf", "CONFIG");
 
+#if !defined( IOS )
 		g_pFullFileSystem->AddSearchPath( "platform", "PLATFORM" );
+#endif
 	}
 
 	// localization

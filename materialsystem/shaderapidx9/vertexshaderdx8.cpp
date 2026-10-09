@@ -2644,38 +2644,79 @@ bool CShaderManager::LoadAndCreateShaders_Dynamic( ShaderLookup_t &lookup, bool 
 }
 #endif
 
+#if defined( IOS )
+static bool IOS_IsBundledTreeVcs( const char *pFileName )
+{
+	return V_stristr( pFileName, "vertexlit_and_unlit_generic" ) != NULL ||
+		   V_stristr( pFileName, "lightmappedgeneric_" ) != NULL ||
+		   V_stristr( pFileName, "depthwrite_" ) != NULL;
+}
+#endif
+
 //-----------------------------------------------------------------------------
 // Open the shader file, optionally gets the header
 //-----------------------------------------------------------------------------
 FileHandle_t CShaderManager::OpenFileAndLoadHeader( const char *pFileName, ShaderHeader_t *pHeader )
 {
-	FileHandle_t fp = g_pFullFileSystem->Open( pFileName, "rb", "PLATFORM" );
-	if ( fp == FILESYSTEM_INVALID_HANDLE )
+	FileHandle_t fp = FILESYSTEM_INVALID_HANDLE;
+#if defined( IOS )
+	char iosAbsPath[MAX_PATH] = { 0 };
+	if ( IOS_IsBundledTreeVcs( pFileName ) )
 	{
-		return FILESYSTEM_INVALID_HANDLE;
+		if ( V_IsAbsolutePath( pFileName ) )
+		{
+			V_strncpy( iosAbsPath, pFileName, sizeof( iosAbsPath ) );
+			V_FixSlashes( iosAbsPath, '/' );
+			fp = g_pFullFileSystem->Open( iosAbsPath, "rb", NULL );
+		}
+		else
+		{
+			const char *pApp = getenv( "APP_LIB_PATH" );
+			if ( pApp && pApp[0] )
+			{
+				char rel[MAX_PATH];
+				V_strncpy( rel, pFileName, sizeof( rel ) );
+				V_FixSlashes( rel, '/' );
+				V_snprintf( iosAbsPath, sizeof( iosAbsPath ), "%s/platform/%s", pApp, rel );
+				fp = g_pFullFileSystem->Open( iosAbsPath, "rb", NULL );
+			}
+		}
+		if ( fp == FILESYSTEM_INVALID_HANDLE )
+		{
+			DevWarning( "[iOS] Bundled tree VCS not found (will not use Documents retail): %s\n",
+				iosAbsPath[0] ? iosAbsPath : pFileName );
+			return FILESYSTEM_INVALID_HANDLE;
+		}
+	}
+	else
+#endif
+	{
+		fp = g_pFullFileSystem->Open( pFileName, "rb", "PLATFORM" );
+		if ( fp == FILESYSTEM_INVALID_HANDLE )
+		{
+			return FILESYSTEM_INVALID_HANDLE;
+		}
 	}
 
-#if defined( IOS )
-	if ( pHeader && V_stristr( pFileName, "vertexlit_and_unlit_generic" ) )
+	if ( pHeader )
 	{
-		char fullPath[MAX_PATH];
-		if ( g_pFullFileSystem->RelativePathToFullPath( pFileName, "PLATFORM", fullPath, sizeof( fullPath ) ) )
+		// read the header 
+		g_pFullFileSystem->Read( pHeader, sizeof( ShaderHeader_t ), fp );
+
+#if defined( IOS )
+		if ( IOS_IsBundledTreeVcs( pFileName ) && iosAbsPath[0] )
 		{
 			static CUtlMap<CUtlSymbol, bool> s_LoggedVcsPath( 0, 0, DefLessFunc( CUtlSymbol ) );
 			CUtlSymbol sym( pFileName );
 			if ( s_LoggedVcsPath.Find( sym ) == s_LoggedVcsPath.InvalidIndex() )
 			{
 				s_LoggedVcsPath.Insert( sym, true );
-				Msg( "[iOS] VCS load path: %s\n", fullPath );
+				const int nBytes = g_pFullFileSystem->Size( fp );
+				Msg( "[iOS] VCS load path: %s (%d bytes) hdr dyn=%d static=%u\n",
+					iosAbsPath, nBytes, pHeader->m_nDynamicCombos, pHeader->m_nNumStaticCombos );
 			}
 		}
-	}
 #endif
-
-	if ( pHeader )
-	{
-		// read the header 
-		g_pFullFileSystem->Read( pHeader, sizeof( ShaderHeader_t ), fp );
 
 		switch ( pHeader->m_nVersion )
 		{
@@ -3398,6 +3439,16 @@ static int ResolveStaticComboRecordIndex( ShaderFileCache_t *pFileCache, int nLo
 	}
 
 #if defined( IOS )
+	// Tree-compiled PLATFORM .vcs (dyn=32 PS / dyn=144+ VS): never bind CS:GO retail fallbacks.
+	if ( ( V_stristr( pShaderName, "vertexlit_and_unlit_generic_ps20b" ) &&
+		   pFileCache->m_Header.m_nDynamicCombos >= 32 ) ||
+		 ( V_stristr( pShaderName, "vertexlit_and_unlit_generic_vs20" ) &&
+		   pFileCache->m_Header.m_nDynamicCombos >= 144 ) )
+	{
+		DevWarning( "[iOS] Shader '%s': static packed %d missing in tree VCS (dyn=%d); not using retail fallback.\n",
+			pShaderName, nLookupStaticIndex, pFileCache->m_Header.m_nDynamicCombos );
+		return -1;
+	}
 	return IOS_FallbackStaticComboRecordIndex( pFileCache, pShaderName, nLookupStaticIndex );
 #else
 	if ( pFileCache->m_StaticComboRecords.Count() > 0 )
@@ -3729,7 +3780,29 @@ bool CShaderManager::LoadAndCreateShaders( ShaderLookup_t &lookup, bool bVertexS
 		lookup.m_Flags = pHeader->m_nFlags;
 
 		pFileCache->m_Name = lookup.m_Name;
-		pFileCache->m_Filename = m_ShaderSymbolTable.AddString( filename );
+#if defined( IOS )
+		if ( IOS_IsBundledTreeVcs( filename ) )
+		{
+			const char *pApp = getenv( "APP_LIB_PATH" );
+			if ( pApp && pApp[0] )
+			{
+				char rel[MAX_PATH];
+				char absPath[MAX_PATH];
+				V_strncpy( rel, filename, sizeof( rel ) );
+				V_FixSlashes( rel, '/' );
+				V_snprintf( absPath, sizeof( absPath ), "%s/platform/%s", pApp, rel );
+				pFileCache->m_Filename = m_ShaderSymbolTable.AddString( absPath );
+			}
+			else
+			{
+				pFileCache->m_Filename = m_ShaderSymbolTable.AddString( filename );
+			}
+		}
+		else
+#endif
+		{
+			pFileCache->m_Filename = m_ShaderSymbolTable.AddString( filename );
+		}
 		pFileCache->m_bVertexShader = bVertexShader;
 
 		if ( pFileCache->IsOldVersion() )

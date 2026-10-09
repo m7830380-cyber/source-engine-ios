@@ -3167,11 +3167,12 @@ static int IOS_FallbackStaticComboRecordIndex( ShaderFileCache_t *pFileCache, co
 
 	if ( V_stristr( baseName, "vertexlit_and_unlit_generic_ps20b" ) )
 	{
-		// bit 128 = DIFFUSELIGHTING (.inc fxctmp9). Prefer id 21 (log 124/130 UVs OK).
-		// Log 131 CUBEMAP id10 invisible; log 132 DETAIL id5 stretched UVs — do not prefer.
-		static const uint32 s_diffuseIds[] = { 21, 22, 23, 20, 17, 16, 11, 10, 4, 1, 0 };
-		static const uint32 s_unlitIds[] = { 1, 4, 10, 11, 0 };
-		const bool bWantDiffuse = ( nLookupStaticIndex & 128 ) != 0 || nLookupStaticIndex > 4096;
+		// bit 128 = DIFFUSE. VL: SELFILLUM+DIFFUSE=0 → packed 1024 → id 170
+		// (log 125: packed 0 static/dyn 0 INVALID — never prefer id 0).
+		// Never prefer CUBEMAP id10 / DETAIL id5 (log 131–132).
+		static const uint32 s_diffuseIds[] = { 21, 22, 23, 20, 17, 16, 11, 4, 1 };
+		static const uint32 s_unlitIds[] = { 170, 171, 169, 1, 4, 11 };
+		const bool bWantDiffuse = ( nLookupStaticIndex & 128 ) != 0;
 		const uint32 *pIds = bWantDiffuse ? s_diffuseIds : s_unlitIds;
 		const int nIds = bWantDiffuse ? ARRAYSIZE( s_diffuseIds ) : ARRAYSIZE( s_unlitIds );
 		for ( int i = 0; i < nIds; ++i )
@@ -3199,8 +3200,9 @@ static int IOS_FallbackStaticComboRecordIndex( ShaderFileCache_t *pFileCache, co
 	}
 	else if ( V_stristr( baseName, "vertexlit_and_unlit_generic_vs20" ) )
 	{
-		// 49 = CUBEMAP+FLATTEN (no VCOL alias). 48 aliases VERTEXCOLOR → black props.
-		static const uint32 s_ids[] = { 49, 48, 32, 24, 16, 8, 4, 1, 0 };
+		// Log 134: id49 did not fix black props and broke Unlit/touch (shared helper).
+		// Prefer id48 (empirically VCOL — touch OK). VL props fixed via PS DIFFUSE=0.
+		static const uint32 s_ids[] = { 48, 49, 32, 24, 16, 8, 4, 1, 0 };
 		for ( int i = 0; i < ARRAYSIZE( s_ids ); ++i )
 		{
 			if ( IOS_TryStaticComboRecord( pFileCache, s_ids[i], &idx ) )
@@ -3240,14 +3242,13 @@ static int IOS_FallbackStaticComboRecordIndex( ShaderFileCache_t *pFileCache, co
 //   NEVER divide by .inc dyn product when it differs (log 118: 128/32→id4 black;
 //   correct is 128/6→id21). Dyn bind indexes [0, vcsDyn); skipped slots are INVALID.
 //
-// Known Documents maps:
-//   VL ps DIFFUSE=1 packed 128 → id 21
-//   VL vs CUBEMAP+FLATTEN packed 9504 → id 49 (log 133: id 48 aliases VCOL → black)
-//   VL vs FLATTEN alone packed 9216 → id 48 (VCOL collision — avoid)
-//   VL ps VCOL=1 packed 2048 → preferred 341 (often missing) → unlit fallback id 1
-//   VL ps DIFFUSE=0+CUBEMAP=0 packed 0 → id 0 SKIPPED/illegal
-//   VS VERTEXCOLOR bit is lost under /192 (9216 and 9360 both → 48) — mesh UI
-//   cannot modulate vertex color until matching .vcs ships; use ClearBuffers fills.
+// Known Documents maps (log 134):
+//   VL/Unlit vs FLATTEN±VCOL packed 9216|9360 → id 48 (VCOL bit lost under /192)
+//   VL vs CUBEMAP+FLATTEN packed 9504 → id 49 (log 134: props still black; broke touch)
+//   VL ps DIFFUSE=1 packed 128 → id 21 (UVs OK, × black i.color → black props)
+//   VL ps DIFFUSE=0 packed 0 → id 0 (albedo×1; do not use CUBEMAP/DETAIL unlit)
+//   Unlit ps VCOL=1 DIFFUSE=0 packed 2048 → id 341
+//   VS id48 is shared by VL+Unlit; gate PS pins on bVertexLitGeneric.
 //
 // Best playable evidence: launch_log 117 (commit era a9c6bb09). Later pin churn
 // and scissor floods caused white/grey/cyan-only regressions (logs 125–127).
@@ -3725,6 +3726,27 @@ bool CShaderManager::LoadAndCreateShaders( ShaderLookup_t &lookup, bool bVertexS
 					}
 					if ( nRec > nDump )
 						Msg( "[iOS]   ... %d more static records\n", nRec - nDump );
+					// Round-2: prove key ids exist before we bet on them (log 134 guesswork).
+					if ( V_stristr( pBase, "vertexlit_and_unlit_generic_ps20b" ) )
+					{
+						static const uint32 s_probe[] = { 0, 1, 5, 10, 21, 42, 85, 170, 171, 341, 682 };
+						for ( int p = 0; p < (int)ARRAYSIZE( s_probe ); ++p )
+						{
+							const int found = pFileCache->FindCombo( s_probe[p] );
+							Msg( "[iOS]   probe staticId=%u %s\n", s_probe[p],
+								found != -1 ? "HIT" : "MISS" );
+						}
+					}
+					if ( V_stristr( pBase, "vertexlit_and_unlit_generic_vs20" ) )
+					{
+						static const uint32 s_probeVs[] = { 0, 48, 49, 50, 64, 65, 66 };
+						for ( int p = 0; p < (int)ARRAYSIZE( s_probeVs ); ++p )
+						{
+							const int found = pFileCache->FindCombo( s_probeVs[p] );
+							Msg( "[iOS]   probe staticId=%u %s\n", s_probeVs[p],
+								found != -1 ? "HIT" : "MISS" );
+						}
+					}
 				}
 			}
 #endif

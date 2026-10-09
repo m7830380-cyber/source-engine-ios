@@ -858,7 +858,12 @@ static void DrawVertexLitGeneric_DX9_Internal( CBaseVSShader *pShader, IMaterial
 				pShaderShadow->EnableTexture( SHADER_SAMPLER9, true );	// Diffuse warp texture
 			}
 
-			if( bHasSelfIllum )
+			if( bHasSelfIllum
+#if defined( IOS )
+				// VL iOS pin forces SELFILLUM PS combo — sampler must be legal to fetch.
+				|| bVertexLitGeneric
+#endif
+				)
 			{
 				pShaderShadow->EnableTexture( SHADER_SAMPLER11, true );	// self illum mask
 			}
@@ -1089,15 +1094,13 @@ bool bDistanceAlphaFromDetail = false;
 				{
 					DECLARE_STATIC_VERTEX_SHADER( vertexlit_and_unlit_generic_vs20 );
 #if defined( IOS )
-					// Documents VCS dyn=192: FLATTEN=1 alone → packed 9216 → id 48.
-					// VERTEXCOLOR=1 is +144 → 9360 → ALSO id 48 (alias). Log 133: white
-					// VS ambient was already forced yet props stay black — id 48 binary is
-					// the VCOL variant (skips DoLighting; reads missing color stream = 0).
-					// CUBEMAP+FLATTEN → 9504 → id 49: that bucket cannot hold VCOL
-					// (9648→id50). Lighting path runs; PS stays CUBEMAP=0 (safe).
+					// Log 134: UnlitGeneric shares this helper. Pinning VL CUBEMAP→id49
+					// also forced touch/VGUI off VERTEXCOLOR → transparent black squares.
+					// Gate on bVertexLitGeneric. VL lighting color stays black on device
+					// (id48 and id49); PS must not multiply by i.color (see PS pin).
 					SET_STATIC_VERTEX_SHADER_COMBO( SFM, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( VERTEXCOLOR, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( CUBEMAP, 1 );
+					SET_STATIC_VERTEX_SHADER_COMBO( VERTEXCOLOR, bVertexLitGeneric ? 0 : 1 );
+					SET_STATIC_VERTEX_SHADER_COMBO( CUBEMAP, 0 );
 					SET_STATIC_VERTEX_SHADER_COMBO( HALFLAMBERT, 0 );
 					SET_STATIC_VERTEX_SHADER_COMBO( FLASHLIGHT, 0 );
 					SET_STATIC_VERTEX_SHADER_COMBO( SEAMLESS_BASE, 0 );
@@ -1136,19 +1139,20 @@ bool bDistanceAlphaFromDetail = false;
 					{
 						DECLARE_STATIC_PIXEL_SHADER( vertexlit_and_unlit_generic_ps20b );
 #if defined( IOS )
-						// Log 124/130 baseline: DIFFUSE=1 → packed 128 → id 21 (correct UVs).
-						// Log 131 CUBEMAP id10 = invisible (NaN). Log 132 DETAIL id5 =
-						// stretched UVs (PS/VS interpolator mismatch). Do NOT leave this
-						// pin — fix black props via ambient cube + dyn DYNAMIC_LIGHT bind.
+						// Round-2 debate: DIFFUSE=1×black i.color (133–134); packed 0
+						// INVALID (125/126); CUBEMAP/DETAIL bad (131/132). SELFILLUM=1 is
+						// packing only → 1024→id170; g_flSelfIllumScale forced 0 below so
+						// the selfillum lerp is a no-op (albedo×1 remains). Unlit: DIFFUSE=1
+						// id21 + VS VCOL (touch OK on 133, broke on id49 in 134).
 						SET_STATIC_PIXEL_SHADER_COMBO( SFM, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( SELFILLUM_ENVMAPMASK_ALPHA, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( DETAILTEXTURE, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( CUBEMAP, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( DIFFUSELIGHTING, 1 );
+						SET_STATIC_PIXEL_SHADER_COMBO( DIFFUSELIGHTING, bVertexLitGeneric ? 0 : 1 );
 						SET_STATIC_PIXEL_SHADER_COMBO( ENVMAPMASK, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( BASEALPHAENVMAPMASK, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( ENVMAPFRESNEL, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( SELFILLUM, 0 );
+						SET_STATIC_PIXEL_SHADER_COMBO( SELFILLUM, bVertexLitGeneric ? 1 : 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( VERTEXCOLOR, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( FLASHLIGHT, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( DETAIL_BLEND_MODE, 0 );
@@ -1370,7 +1374,11 @@ bool bDistanceAlphaFromDetail = false;
 			{
 				pContextData->m_SemiStaticCmdsOut.BindTexture( pShader, SHADER_SAMPLER2, IsSRGBDetailTexture( nDetailBlendMode ) ? TEXTURE_BINDFLAGS_SRGBREAD : TEXTURE_BINDFLAGS_NONE, info.m_nDetail, info.m_nDetailFrame );
 			}
-			if ( bHasSelfIllum )
+			if ( bHasSelfIllum
+#if defined( IOS )
+				|| bVertexLitGeneric
+#endif
+				)
 			{
 				if ( bHasSelfIllumMask )												// Separate texture for self illum?
 				{
@@ -1638,7 +1646,12 @@ bool bDistanceAlphaFromDetail = false;
 				vSelfIllumScale[0] = IS_PARAM_DEFINED( info.m_nSelfIllumMaskScale ) ? params[info.m_nSelfIllumMaskScale]->GetFloatValue() : 1.0f;
 				vSelfIllumScale[ 1 ] = bIsDecal ? 1.0f : 0.0f;
 				vSelfIllumScale[2] = vSelfIllumScale[3] = 0.0f;
-
+#if defined( IOS )
+				// SELFILLUM static bit is only to escape illegal packed-0. Zero the
+				// lerp weight so diffuseComponent stays albedo×1 (round-2 analysis).
+				if ( bVertexLitGeneric )
+					vSelfIllumScale[0] = 0.0f;
+#endif
 				pContextData->m_SemiStaticCmdsOut.SetPixelShaderConstant( 11, vSelfIllumScale );
 			}
 

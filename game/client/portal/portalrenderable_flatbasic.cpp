@@ -1,4 +1,4 @@
-//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
+//===== Copyright  1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
 //
@@ -82,8 +82,8 @@ static CAutoInitFlatBasicPortalDrawingMaterials s_FlatBasicPortalDrawingMaterial
 const FlatBasicPortalRenderingMaterials_t& CPortalRenderable_FlatBasic::m_Materials = s_FlatBasicPortalDrawingMaterials.m_Materials;
 
 
-LINK_ENTITY_TO_CLASS( prop_portal_flatbasic, CPortalRenderable_FlatBasic );
-
+// Not a spawnable entity  C_Prop_Portal inherits this mixin. CS:GO clientclass
+// macros require DECLARE_CLIENTCLASS; keep this as a pure base (matches stub era).
 
 CPortalRenderable_FlatBasic::CPortalRenderable_FlatBasic( void ) 
 : m_pLinkedPortal( NULL ),
@@ -492,7 +492,7 @@ void CPortalRenderable_FlatBasic::RenderPortalViewToBackBuffer( CViewRender *pVi
 	{
 		ViewCustomVisibility_t customVisibility;
 		m_pLinkedPortal->AddToVisAsExitPortal( &customVisibility );
-		render->Push3DView( portalView, 0, NULL, pViewRender->GetFrustum() );		
+		render->Push3DView( pRenderContext, portalView, 0, NULL, pViewRender->GetFrustum() );		
 		{
 			if( bUseSeeThroughFrustum)
 				memcpy( pViewRender->GetFrustum(), seeThroughFrustum, sizeof( Frustum ) );
@@ -519,7 +519,7 @@ void CPortalRenderable_FlatBasic::RenderPortalViewToBackBuffer( CViewRender *pVi
 
 			SetViewRecursionLevel( g_pPortalRender->GetViewRecursionLevel() - 1 );
 		}
-		render->PopView( pViewRender->GetFrustum() );
+		render->PopView( pRenderContext, pViewRender->GetFrustum() );
 
 		//restore old frustum
 		memcpy( pViewRender->GetFrustum(), FrustumBackup, sizeof( Frustum ) );

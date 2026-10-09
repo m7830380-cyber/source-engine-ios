@@ -3237,13 +3237,27 @@ static int IOS_TryVertexLitVsLightingStaticId( ShaderFileCache_t *pFileCache, in
 
 // When packed GetIndex() does not exist in Documents VCS, pick a nearby id that does
 // (log 120: ps packed 41945088 → bogus id 0; walls ps 7077888 → id 221184).
-// Log 141: props request packed 9360 (FLATTEN=0) but tree only ships sid 64 (FLATTEN=1, packed 9216).
+// Tree vs20: FLATTEN=1 VCOL=0 → sid 64 (packed 9216, props); VCOL=1 → sid 65 (packed 9360, touch/UI).
 static int IOS_TryTreeVertexLitVsStaticIndex( ShaderFileCache_t *pFileCache, const char *pShaderName, int nLookupStaticIndex )
 {
 	const int nVcsDyn = pFileCache->m_Header.m_nDynamicCombos;
 	int idx = -1;
-	static const uint32 s_ids[] = { 64, 48, 49, 50, 32, 0 };
-	if ( nLookupStaticIndex == 9360 || nLookupStaticIndex == 9216 )
+	static const uint32 s_ids[] = { 64, 65, 48, 49, 50, 32, 0 };
+	if ( nLookupStaticIndex == 9360 )
+	{
+		if ( IOS_TryStaticComboRecord( pFileCache, 65, &idx ) )
+		{
+			static CUtlMap<CUtlSymbol, bool> s_Note( 0, 0, DefLessFunc( CUtlSymbol ) );
+			if ( s_Note.Find( pFileCache->m_Name ) == s_Note.InvalidIndex() )
+			{
+				s_Note.Insert( pFileCache->m_Name, true );
+				Msg( "[iOS] Shader '%s': static packed %d → tree staticId 65 (Unlit VCOL, dyn=%d).\n",
+					pShaderName, nLookupStaticIndex, nVcsDyn );
+			}
+			return idx;
+		}
+	}
+	if ( nLookupStaticIndex == 9216 )
 	{
 		if ( IOS_TryStaticComboRecord( pFileCache, 64, &idx ) )
 		{
@@ -3251,7 +3265,7 @@ static int IOS_TryTreeVertexLitVsStaticIndex( ShaderFileCache_t *pFileCache, con
 			if ( s_Note.Find( pFileCache->m_Name ) == s_Note.InvalidIndex() )
 			{
 				s_Note.Insert( pFileCache->m_Name, true );
-				Msg( "[iOS] Shader '%s': static packed %d → tree staticId 64 (FLATTEN remap, dyn=%d).\n",
+				Msg( "[iOS] Shader '%s': static packed %d → tree staticId 64 (VL FLATTEN, dyn=%d).\n",
 					pShaderName, nLookupStaticIndex, nVcsDyn );
 			}
 			return idx;

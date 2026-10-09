@@ -599,7 +599,7 @@ void CPortalRenderable_FlatBasic::RenderPortalViewToTexture( CViewRender *pViewR
 	pRenderContext->PushCustomClipPlane( fCustomClipPlane );
 
 	{
-		render->Push3DView( portalView, VIEW_CLEAR_DEPTH, pRenderTarget, pViewRender->GetFrustum() );
+		render->Push3DView( pRenderContext, portalView, VIEW_CLEAR_DEPTH, pRenderTarget, pViewRender->GetFrustum() );
 
 		{
 			ViewCustomVisibility_t customVisibility;
@@ -639,7 +639,7 @@ void CPortalRenderable_FlatBasic::RenderPortalViewToTexture( CViewRender *pViewR
 			render->OverrideViewFrustum( pViewRender->GetFrustum() );
 		}
 
-		render->PopView( pViewRender->GetFrustum() );
+		render->PopView( pRenderContext, pViewRender->GetFrustum() );
 	}
 
 	pRenderContext->PopCustomClipPlane();

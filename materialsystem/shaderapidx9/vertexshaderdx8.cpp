@@ -3167,10 +3167,11 @@ static int IOS_FallbackStaticComboRecordIndex( ShaderFileCache_t *pFileCache, co
 
 	if ( V_stristr( baseName, "vertexlit_and_unlit_generic_ps20b" ) )
 	{
-		// Prefer diffuse-lit statics for props/UI; bit 128 = DIFFUSELIGHTING in .inc.
-		// Huge packed indices (DECAL_BLEND_MODE=2) lose that bit — still prefer diffuse.
+		// bit 128 = DIFFUSELIGHTING, bit 64 = CUBEMAP (.inc fxctmp9).
+		// Log 130: DIFFUSE=1 (id 21) → black props (i.color lit). Prefer unlit
+		// CUBEMAP static id 10 (packed 64) which keeps PS lighting=1 → albedo.
 		static const uint32 s_diffuseIds[] = { 21, 22, 23, 20, 17, 16, 11, 10, 4, 1, 0 };
-		static const uint32 s_unlitIds[] = { 1, 4, 10, 11, 0 };
+		static const uint32 s_unlitIds[] = { 10, 11, 4, 1, 0 };
 		const bool bWantDiffuse = ( nLookupStaticIndex & 128 ) != 0 || nLookupStaticIndex > 4096;
 		const uint32 *pIds = bWantDiffuse ? s_diffuseIds : s_unlitIds;
 		const int nIds = bWantDiffuse ? ARRAYSIZE( s_diffuseIds ) : ARRAYSIZE( s_unlitIds );
@@ -3240,9 +3241,11 @@ static int IOS_FallbackStaticComboRecordIndex( ShaderFileCache_t *pFileCache, co
 //   correct is 128/6→id21). Dyn bind indexes [0, vcsDyn); skipped slots are INVALID.
 //
 // Known Documents maps:
-//   VL ps DIFFUSE=1 packed 128 → id 21 | VL vs FLATTEN=1 packed 9216 → id 48
+//   VL ps CUBEMAP=1 packed 64 → id 10 (log 130+: unlit albedo; DIFFUSE=0)
+//   VL ps DIFFUSE=1 packed 128 → id 21 (log 124 OK walls/UI; log 130 black props)
+//   VL vs FLATTEN=1 packed 9216 → id 48
 //   VL ps VCOL=1 packed 2048 → preferred 341 (often missing) → unlit fallback id 1
-//   VL ps DIFFUSE=0+VCOL=0 packed 0 → id 0 SKIPPED/illegal
+//   VL ps DIFFUSE=0+CUBEMAP=0 packed 0 → id 0 SKIPPED/illegal
 //   VS VERTEXCOLOR bit is lost under /192 (9216 and 9360 both → 48) — mesh UI
 //   cannot modulate vertex color until matching .vcs ships; use ClearBuffers fills.
 //

@@ -14,13 +14,13 @@ Branch: `portal2-rubberwar-ios` (linear +127 from `portal2-ios`).
 Do **not** optimize against 125–126 (VERTEXCOLOR→fallback id 1, black/cyan scissor floods).
 **Log 128:** VL/LM remaps matched 124, but orange in-game ClearBuffers ticks (1173 log lines) and `flashlight_ps20b→2304` were new regressions — kill in-game ticks; reject flashlight preferred>64; hard-pin LM statics to id 0.
 
-## Frozen pins (match log 124)
+## Frozen pins (log 130 update)
 
 - **Remapper:** `staticId = packed / vcsHeader.m_nDynamicCombos` only. Never `.inc` dyn first (log 118: 128/32→id 4 black).
-- **VL PS:** `DIFFUSELIGHTING=1`, `VERTEXCOLOR=0` → packed 128 → id **21**.
+- **VL PS (log 130):** `CUBEMAP=1`, `DIFFUSELIGHTING=0`, `VERTEXCOLOR=0` → packed **64** → id **10**. DIFFUSE=1 (id 21) multiplies by black `i.color` when VS lighting fails → black props. DIFFUSE=0 keeps PS lighting=1 (albedo). Never packed 0.
 - **VL VS:** `FLATTEN_STATIC_CONTROL_FLOW=1`, `VERTEXCOLOR=0` → packed 9216 → id **48**.
-- **LM PS/VS:** `FASTPATH=0` (117/124 era; FASTPATH=1 correlated with white flash).
-- **Ambient:** force white cube; **`DYNAMIC_LIGHT=1`** with `NUM_LIGHTS=0` (AmbientLight() is gated on DYNAMIC_LIGHT — log 129 black props when it was 0).
+- **LM PS/VS:** `FASTPATH=0` (117/124 era; FASTPATH=1 correlated with white flash). Lightmap bind **without** SRGBREAD; `flLScale *= 0.5` (log 130 wash).
+- **Ambient:** force white cube; **`DYNAMIC_LIGHT=1`** with `NUM_LIGHTS=0` (still set; less critical once DIFFUSE=0).
 - **VGUI solids:** `IOSDrawFilledRect` → scissor `ClearBuffers` (mesh UnlitGeneric invisible — log 127).
 - **In-game touch paint:** corner ticks only (full ClearBuffers punches world — log 126).
 - **Fonts:** Helvetica scheme fallback (`font=63`); PLAY block letters until matching `.vcs` gives real VERTEXCOLOR.
@@ -29,7 +29,7 @@ Do **not** optimize against 125–126 (VERTEXCOLOR→fallback id 1, black/cyan s
 
 - Re-enable mesh `DrawFilledRect` / Unlit VERTEXCOLOR chase
 - Flip LM FASTPATH to 1
-- Set VL PS DIFFUSE=0 or illegal static 0
+- Set VL PS back to DIFFUSE=1 (id 21) or illegal static 0
 - Set VL VS FLATTEN=0 (id 0 skipped → rainbow)
 - Prefer `.inc` dyn in `ResolveStaticComboRecordIndex`
 - Nest `SET_STATIC_PIXEL_SHADER_COMBO` in extra `{ }` (CI undeclared forgot_to_set)

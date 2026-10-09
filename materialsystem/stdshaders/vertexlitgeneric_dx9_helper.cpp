@@ -645,11 +645,10 @@ static void DrawVertexLitGeneric_DX9_Internal( CBaseVSShader *pShader, IMaterial
 					pShader->PI_SetPixelShaderAmbientLightCube( 5 );
 					pShader->PI_SetPixelShaderLocalLighting( 13 );
 				}
-#if !defined( IOS )
 				pShader->PI_SetVertexShaderAmbientLightCube();
-#endif
-				// iOS: instance ambient is often empty with NUM_LIGHTS pinned 0 →
-				// black props. Fixed grey cube is set in the dynamic path instead.
+				// iOS: also force a bright cube in the dynamic path — Documents
+				// instance ambient is often empty, and AmbientLight() needs
+				// DYNAMIC_LIGHT=1 (set below) to actually sample the cube.
 			}
 			// material can choose to support per-instance modulation via $allowdiffusemodulation
 			bool bAllowDiffuseModulation = ( info.m_nAllowDiffuseModulation == -1 ) ? true : ( params[info.m_nAllowDiffuseModulation]->GetIntValue() != 0 );
@@ -812,6 +811,14 @@ static void DrawVertexLitGeneric_DX9_Internal( CBaseVSShader *pShader, IMaterial
 			}
 			pShaderShadow->EnableSRGBRead( SHADER_SAMPLER0, bSampler0SrgbRead );
 
+#if defined( IOS )
+			// CUBEMAP=1 pin needs sampler1 even when material has no $envmap.
+			pShaderShadow->EnableTexture( SHADER_SAMPLER1, true );
+			if( g_pHardwareConfig->GetHDRType() == HDR_TYPE_NONE )
+			{
+				pShaderShadow->EnableSRGBRead( SHADER_SAMPLER1, true );
+			}
+#else
 			if ( bHasEnvmap )
 			{
 				pShaderShadow->EnableTexture( SHADER_SAMPLER1, true );
@@ -820,6 +827,7 @@ static void DrawVertexLitGeneric_DX9_Internal( CBaseVSShader *pShader, IMaterial
 					pShaderShadow->EnableSRGBRead( SHADER_SAMPLER1, true );
 				}
 			}
+#endif
 			if ( bHasFlashlight )
 			{
 				pShaderShadow->EnableTexture( SHADER_SAMPLER8, true );	// Depth texture
@@ -1137,15 +1145,17 @@ bool bDistanceAlphaFromDetail = false;
 					{
 						DECLARE_STATIC_PIXEL_SHADER( vertexlit_and_unlit_generic_ps20b );
 #if defined( IOS )
-						// Log 117 / a9c6bb09 baseline: DIFFUSE=1 → packed 128 / vcsDyn=6 → id 21.
-						// Never DIFFUSE=0+VERTEXCOLOR=0 (illegal, log 125/126). Do not chase
-						// Unlit VERTEXCOLOR=1 for fonts — VS id 48 has no VCOL (aliased);
-						// menu solids use ClearBuffers. Keep ALL materials on id 21.
+						// Log 130: DIFFUSE=1 replaces PS lighting with i.color (VS lit).
+						// VS lighting stays black (AmbientLight dyn slot often missing) →
+						// black props. With DIFFUSE=0 the PS keeps diffuseLighting=1 and
+						// shows albedo (vertexlit_and_unlit_generic_ps2x.fxc). Avoid packed
+						// 0 (illegal id 0): CUBEMAP=1 → packed 64 / dyn6 → id 10. Tint
+						// cubemap to 0 so it does not add. Menu still ClearBuffers.
 						SET_STATIC_PIXEL_SHADER_COMBO( SFM, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( SELFILLUM_ENVMAPMASK_ALPHA, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( DETAILTEXTURE, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( CUBEMAP, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( DIFFUSELIGHTING, 1 );
+						SET_STATIC_PIXEL_SHADER_COMBO( CUBEMAP, 1 );
+						SET_STATIC_PIXEL_SHADER_COMBO( DIFFUSELIGHTING, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( ENVMAPMASK, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( BASEALPHAENVMAPMASK, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( ENVMAPFRESNEL, 0 );
@@ -1823,6 +1833,14 @@ bool bDistanceAlphaFromDetail = false;
 			bool bHdr = ( g_pHardwareConfig->GetHDRType() != HDR_TYPE_NONE );
 			DynamicCmdsOut.BindEnvCubemapTexture( pShader, SHADER_SAMPLER1, bHdr ? TEXTURE_BINDFLAGS_NONE : TEXTURE_BINDFLAGS_SRGBREAD, info.m_nEnvmap, info.m_nEnvmapFrame );
 		}
+#if defined( IOS )
+		else
+		{
+			// iOS pins CUBEMAP=1 for legal static id 10; tint c0 is already 0 when
+			// !bHasEnvmap — bind a real cubemap so sampler1 type matches.
+			DynamicCmdsOut.BindStandardTexture( SHADER_SAMPLER1, TEXTURE_BINDFLAGS_NONE, TEXTURE_NORMALIZATION_CUBEMAP_SIGNED );
+		}
+#endif
 
 		bool bFlashlightShadows = false;
 		bool bUberlight = false;

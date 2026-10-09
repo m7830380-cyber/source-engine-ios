@@ -3106,25 +3106,83 @@ bool CShaderManager::DoesShaderCRCMatchSourceCode( const char *pShaderName, uint
 #endif
 
 #if defined( IOS )
+// Product of dynamic combo ranges from the .inc registered with AddShaderComboInformation.
+// GetIndex() packs static bits with this stride — NOT the VCS header dyn count.
+static int GetIncDynamicComboProduct( const char *pShaderName )
+{
+	if ( !pShaderName || !pShaderName[0] )
+		return 0;
+
+	char path[MAX_PATH];
+	V_strncpy( path, pShaderName, MAX_PATH );
+	V_FileBase( path, path, MAX_PATH );
+	// shaders/fxc/foo.vcs → foo; also strip a second extension if present.
+	if ( V_stristr( path, ".vcs" ) )
+		V_FileBase( path, path, MAX_PATH );
+
+	CUtlSymbol symbol = s_ShaderComboInfoByName.Find( path );
+	if ( symbol == ( CUtlSymbol )UTL_INVAL_SYMBOL )
+		return 0;
+
+	const ShaderComboSemantics_t *pSemantics = s_ShaderComboInfoByName[symbol];
+	if ( !pSemantics || pSemantics->nDynamicShaderComboArrayCount <= 0 )
+		return 0;
+
+	int nDyn = 1;
+	for ( int i = 0; i < pSemantics->nDynamicShaderComboArrayCount; i++ )
+	{
+		const int comboSize = pSemantics->pDynamicShaderComboArray[i].m_nComboMax
+			- pSemantics->pDynamicShaderComboArray[i].m_nComboMin + 1;
+		if ( comboSize > 0 )
+			nDyn *= comboSize;
+	}
+	return nDyn;
+}
+
 // Portal 2 content + a CS:GO-derived PLATFORM shader pack often disagree on static combo
 // ids; try several encodings before giving up so materials can still link on GLES.
+// Prefer .inc dyn stride first: Documents vertexlit ps20b has VCS dyn=6 while .inc dyn=32,
+// so 128/6=21 (wrong but present) vs 128/32=4 (DIFFUSELIGHTING) — log 117 cyan props.
 static int ResolveStaticComboRecordIndex( ShaderFileCache_t *pFileCache, int nLookupStaticIndex, const char *pShaderName )
 {
-	const int nDyn = pFileCache->m_Header.m_nDynamicCombos;
-	uint32 candidates[3];
+	const int nVcsDyn = pFileCache->m_Header.m_nDynamicCombos;
+	const int nIncDyn = GetIncDynamicComboProduct( pShaderName );
+	uint32 candidates[8];
 	int nCandidates = 0;
 
-	if ( nDyn > 0 )
-		candidates[nCandidates++] = (uint32)( nLookupStaticIndex / nDyn );
-	candidates[nCandidates++] = (uint32)nLookupStaticIndex;
-	candidates[nCandidates++] = 0;
+	uint32 rawCandidates[4];
+	int nRaw = 0;
+	if ( nIncDyn > 0 )
+		rawCandidates[nRaw++] = (uint32)( nLookupStaticIndex / nIncDyn );
+	if ( nVcsDyn > 0 )
+		rawCandidates[nRaw++] = (uint32)( nLookupStaticIndex / nVcsDyn );
+	rawCandidates[nRaw++] = (uint32)nLookupStaticIndex;
+	rawCandidates[nRaw++] = 0;
+
+	for ( int r = 0; r < nRaw; ++r )
+	{
+		bool bDup = false;
+		for ( int i = 0; i < nCandidates; ++i )
+		{
+			if ( candidates[i] == rawCandidates[r] )
+			{
+				bDup = true;
+				break;
+			}
+		}
+		if ( !bDup && nCandidates < (int)ARRAYSIZE( candidates ) )
+			candidates[nCandidates++] = rawCandidates[r];
+	}
 
 	for ( int i = 0; i < nCandidates; ++i )
 	{
 		int idx = pFileCache->FindCombo( candidates[i] );
 		if ( idx != -1 )
 		{
-			if ( i != 0 || ( nDyn > 0 && candidates[i] != (uint32)( nLookupStaticIndex / nDyn ) ) )
+			const uint32 preferred = ( nIncDyn > 0 )
+				? (uint32)( nLookupStaticIndex / nIncDyn )
+				: ( nVcsDyn > 0 ? (uint32)( nLookupStaticIndex / nVcsDyn ) : 0 );
+			if ( candidates[i] != preferred )
 			{
 				// Must pass DefLessFunc: default CUtlMap LessFunc is null. Empty-tree
 				// Find/Insert survive once; the second shader that needs a fallback
@@ -3133,9 +3191,18 @@ static int ResolveStaticComboRecordIndex( ShaderFileCache_t *pFileCache, int nLo
 				if ( s_Warned.Find( pFileCache->m_Name ) == s_Warned.InvalidIndex() )
 				{
 					s_Warned.Insert( pFileCache->m_Name, true );
-					DevWarning( "[iOS] Shader '%s': static combo %d missing; using VCS combo id %u (dyn=%d).\n",
-						pShaderName, nLookupStaticIndex, candidates[i], nDyn );
-					DevWarning( "[iOS] Prefer Portal 2 platform/shaders/fxc in Documents/platform if visuals look wrong.\n" );
+					DevWarning( "[iOS] Shader '%s': static packed %d → id %u (incDyn=%d vcsDyn=%d preferred=%u).\n",
+						pShaderName, nLookupStaticIndex, candidates[i], nIncDyn, nVcsDyn, preferred );
+				}
+			}
+			else if ( nIncDyn > 0 && nVcsDyn > 0 && nIncDyn != nVcsDyn )
+			{
+				static CUtlMap<CUtlSymbol, bool> s_RemapNote( 0, 0, DefLessFunc( CUtlSymbol ) );
+				if ( s_RemapNote.Find( pFileCache->m_Name ) == s_RemapNote.InvalidIndex() )
+				{
+					s_RemapNote.Insert( pFileCache->m_Name, true );
+					Msg( "[iOS] Shader '%s': static packed %d → id %u via .inc dyn=%d (VCS dyn=%d).\n",
+						pShaderName, nLookupStaticIndex, candidates[i], nIncDyn, nVcsDyn );
 				}
 			}
 			return idx;
@@ -3146,6 +3213,28 @@ static int ResolveStaticComboRecordIndex( ShaderFileCache_t *pFileCache, int nLo
 		return 0;
 
 	return -1;
+}
+
+// Clamp dynamic index into the VCS slot range. Do not remap INVALID slots here —
+// on-demand create still needs the original in-range index.
+static int IOS_ClampDynamicShaderIndex( int nIndex, int nCount, CUtlSymbol shaderName, bool bPixel )
+{
+	if ( nCount <= 0 )
+		return 0;
+	if ( nIndex < 0 )
+		nIndex = 0;
+	if ( nIndex >= nCount )
+	{
+		static CUtlMap<CUtlSymbol, bool> s_Warned( 0, 0, DefLessFunc( CUtlSymbol ) );
+		if ( s_Warned.Find( shaderName ) == s_Warned.InvalidIndex() )
+		{
+			s_Warned.Insert( shaderName, true );
+			DevWarning( "[iOS] %s dynamic index %d >= count %d; clamping to 0.\n",
+				bPixel ? "pixel" : "vertex", nIndex, nCount );
+		}
+		return 0;
+	}
+	return nIndex;
 }
 
 static bool IOS_ShouldSpewFailedShaderBind( CUtlSymbol shaderName )
@@ -3504,7 +3593,7 @@ bool CShaderManager::LoadAndCreateShaders( ShaderLookup_t &lookup, bool bVertexS
 	}
 	else
 	{
-		const char *pShaderName = m_ShaderSymbolTable.String( pFileCache->m_Filename );
+		const char *pShaderName = m_ShaderSymbolTable.String( lookup.m_Name );
 #if defined( IOS )
 		int nStaticComboIdx = ResolveStaticComboRecordIndex( pFileCache, lookup.m_nStaticIndex, pShaderName );
 #else
@@ -4252,6 +4341,10 @@ void CShaderManager::SetVertexShader( VertexShader_t shader )
 	}
 
 	ShaderLookup_t &vshLookup = m_VertexShaderDict[shader];
+#if defined( IOS )
+	vshIndex = IOS_ClampDynamicShaderIndex(
+		vshIndex, vshLookup.m_ShaderStaticCombos.m_nCount, vshLookup.m_Name, false );
+#endif
 //	DevWarning( "vsh: %s static: %d dynamic: %d\n", m_ShaderSymbolTable.String( vshLookup.m_Name ),
 //		vshLookup.m_nStaticIndex, m_nVertexShaderIndex );
 
@@ -4338,8 +4431,18 @@ void CShaderManager::SetVertexShader( VertexShader_t shader )
 			DevWarning( "Shader: %s static: %d dynamic: %d\n", m_ShaderSymbolTable.String( vshLookup.m_Name ), vshLookup.m_nStaticIndex, m_nVertexShaderIndex );
 			BitchAboutSkippedCombo( m_ShaderSymbolTable.String( vshLookup.m_Name ), vshLookup.m_nStaticIndex, m_nVertexShaderIndex );
 			DevWarning( "*************************************************\n" );
+#if !defined( IOS )
 			Assert( 0 );
+#endif
 		}
+#if defined( IOS )
+		if ( vshLookup.m_ShaderStaticCombos.m_pHardwareShaders &&
+			 vshLookup.m_ShaderStaticCombos.m_nCount > 0 &&
+			 vshLookup.m_ShaderStaticCombos.m_pHardwareShaders[0] != INVALID_HARDWARE_SHADER )
+		{
+			dxshader = vshLookup.m_ShaderStaticCombos.m_pHardwareShaders[0];
+		}
+#endif
 	}
 #endif
 
@@ -4398,6 +4501,12 @@ void CShaderManager::SetPixelShader( PixelShader_t shader )
 	int pshIndex = m_nPixelShaderIndex;
 	Assert( pshIndex >= 0 );
 	ShaderLookup_t &pshLookup = m_PixelShaderDict[shader];
+#if defined( IOS )
+	// Documents vertexlit ps20b dyn=6; .inc PIXELFOGTYPE alone yields index 16 → was
+	// clearing the PS (illegal cyan). Clamp to dyn 0 instead.
+	pshIndex = IOS_ClampDynamicShaderIndex(
+		pshIndex, pshLookup.m_ShaderStaticCombos.m_nCount, pshLookup.m_Name, true );
+#else
 	if ( pshIndex > pshLookup.m_ShaderStaticCombos.m_nCount )
 	{
 		SetPixelShaderState( 0 );
@@ -4405,6 +4514,7 @@ void CShaderManager::SetPixelShader( PixelShader_t shader )
 		Assert( 0 );
 		return;
 	}
+#endif
 	
 //	DevWarning( "psh: %s static: %d dynamic: %d\n", m_ShaderSymbolTable.String( lookup.m_Name ),
 //		lookup.m_nStaticIndex, m_nPixelShaderIndex );
@@ -4494,8 +4604,17 @@ void CShaderManager::SetPixelShader( PixelShader_t shader )
 #endif
 		}
 #if defined( IOS )
-		if ( s_pIllegalMaterialPS != INVALID_HARDWARE_SHADER )
+		// Prefer dyn=0 over the illegal-material error PS (cyan / black-grid flash).
+		if ( pshLookup.m_ShaderStaticCombos.m_pHardwareShaders &&
+			 pshLookup.m_ShaderStaticCombos.m_nCount > 0 &&
+			 pshLookup.m_ShaderStaticCombos.m_pHardwareShaders[0] != INVALID_HARDWARE_SHADER )
+		{
+			dxshader = pshLookup.m_ShaderStaticCombos.m_pHardwareShaders[0];
+		}
+		else if ( s_pIllegalMaterialPS != INVALID_HARDWARE_SHADER )
+		{
 			dxshader = s_pIllegalMaterialPS;
+		}
 #endif
 	}
 

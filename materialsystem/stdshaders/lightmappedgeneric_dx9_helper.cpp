@@ -1350,7 +1350,14 @@ void DrawLightmappedGeneric_DX9( CBaseVSShader *pShader, IMaterialVar** params, 
 #endif
 		{
 			DECLARE_DYNAMIC_VERTEX_SHADER( lightmappedgeneric_vs20 );
+#if defined( IOS )
+			// DOWATERFOG comes from the .inc ctor via fog mode; pin so motion/fog
+			// doesn't flip into a skipped VS combo (walls flash black while moving).
+			SET_DYNAMIC_VERTEX_SHADER_COMBO( FASTPATH, 0 );
+			SET_DYNAMIC_VERTEX_SHADER_COMBO( DOWATERFOG, 0 );
+#else
 			SET_DYNAMIC_VERTEX_SHADER_COMBO( FASTPATH,  bVertexShaderFastPath );
+#endif
 			SET_DYNAMIC_VERTEX_SHADER_CMD( DynamicCmdsOut, lightmappedgeneric_vs20 );
 		}
 

@@ -1,42 +1,37 @@
-# Portal 2 iOS — stop PS static-id roulette
+# Portal 2 iOS — log 136 autopsy
 
-## Root cause (log 135, not another PS remap)
+## What broke (136 vs “repeat” builds)
 
 ```
-vertexlit_and_unlit_generic_vs20: static packed 9360 → id 48
-vertexlit_and_unlit_generic_ps20b: static packed 128 → id 21 (DIFFUSE=1)
+!!!!!Using invalid shader combo!!!!!
+vertexlit_and_unlit_generic_vs20 static: 0 dynamic: 3
+static: … FLATTEN_STATIC_CONTROL_FLOW=0 VERTEXCOLOR=0 …
+dynamic: COMPRESSED_VERTS=1 DYNAMIC_LIGHT=1 … NUM_LIGHTS=0
 ```
 
-Black props = **wrong VS bytecode at id 48** (Documents VCS **VCOL alias**), not missing PS combo.
+| Bug | Effect |
+|-----|--------|
+| **FLATTEN=0 on VL** | All other iOS static pins are 0 → **packed static 0 → id 0** (not 9360/49) |
+| **dyn = 3** | COMPRESSED_VERTS(1) + DYNAMIC_LIGHT(2) = **skipped slot** on that static |
+| **PS VERTEXCOLOR=0 for Unlit** | Touch/VGUI lost vertex-color path → **transparent black squares** |
 
-- PS `DIFFUSE=1` multiplies albedo by `i.color`.
-- id **48** bytecode behaves like **Unlit VERTEXCOLOR** → `i.color` ≈ 0 on props.
-- White ambient + `DYNAMIC_LIGHT=1` did not help while id48 was bound.
+First-load line `9360 → id 49` is only the **one-time** VCS spew; **in-game props used static id 0** per invalid-combo dump.
 
-`VERTEXCOLOR` adds **16** to packed static index. After `/192` both VL and Unlit collapse to **id 48**.
+## Fix in tree
 
-Discriminant (before divide): **`packed % 32 == 16`** ⇒ VL lit pin; **`== 0`** ⇒ Unlit VCOL (touch).
+1. **FLATTEN=1** again (restores nonzero packed / id 49 remap path).
+2. **VS dyn: COMPRESSED_VERTS=0** on iOS (dyn **2** = DYNAMIC_LIGHT only).
+3. **PS gate**: VL `DIFFUSE=1` + `VERTEXCOLOR=0`; Unlit `DIFFUSE=0` + `VERTEXCOLOR=1` (touch).
+4. Keep **skip id48 → id49** for VL lit (`packed % 32 == 16`).
 
-## Fix in tree (no id5 / id170 / DETAIL hack)
+## Pass bar (log 137)
 
-1. **VS resolve**: when packed is VL lit and lookup hits id 48, bind **id 49** (then 50, 47…) — log line: `skip VCOL alias id 48`.
-2. **VS pin**: `FLATTEN_STATIC_CONTROL_FLOW = 0` for `bVertexLitGeneric` only (Unlit keeps 1).
-3. **PS pin**: restore **`DIFFUSE=1` → packed 128 → id 21** (correct UVs + lighting).
-4. **Ambient fill**: when instance lighting is empty, force **1.0** cube (was 0.45).
+- **No** `invalid shader combo` for `vertexlit_and_unlit_generic_vs20`
+- VS `packed 9360 → id 49` (or skip-48 msg); **not** props drawing at `static: 0`
+- Unlit/touch: VS packed with **VERTEXCOLOR** (e.g. 9376) → **id 48**; PS **VERTEXCOLOR=1**
+- Props: not black (if still black with **valid** dyn2/id49 → lighting path, not illegal combo)
 
-## Pass bar (next log)
+## Do not
 
-| Check | Pass |
-|-------|------|
-| VS | `packed 9360` → **id 49** (or lit remap msg), **not** bare `→ id 48` |
-| PS | `packed 128 → id 21` |
-| Props | Textured, not black |
-| Touch | Still uses id 48 path (`packed % 32 == 0`) |
-
-## If still black
-
-Do **not** loop PS static ids. Next: TOGL varying / `SetVertexShaderStateAmbientLightCube` register layout, or ship corrected `.vcs` for vs20.
-
-## Walls / shadows (unchanged)
-
-`flLScale=1.0` only. CSM/flashlight still off on iOS pins.
+- FLATTEN=0 on VL (collapses packed to 0).
+- PS `VERTEXCOLOR=0` on Unlit (kills touch).

@@ -20,7 +20,7 @@ Do **not** optimize against 125–126 (VERTEXCOLOR→fallback id 1, black/cyan s
 - **VL PS:** `DIFFUSELIGHTING=1`, `VERTEXCOLOR=0` → packed 128 → id **21**.
 - **VL VS:** `FLATTEN_STATIC_CONTROL_FLOW=1`, `VERTEXCOLOR=0` → packed 9216 → id **48**.
 - **LM PS/VS:** `FASTPATH=0` (117/124 era; FASTPATH=1 correlated with white flash).
-- **Ambient:** force white cube while `NUM_LIGHTS` pinned 0 (else black props).
+- **Ambient:** force white cube; **`DYNAMIC_LIGHT=1`** with `NUM_LIGHTS=0` (AmbientLight() is gated on DYNAMIC_LIGHT — log 129 black props when it was 0).
 - **VGUI solids:** `IOSDrawFilledRect` → scissor `ClearBuffers` (mesh UnlitGeneric invisible — log 127).
 - **In-game touch paint:** corner ticks only (full ClearBuffers punches world — log 126).
 - **Fonts:** Helvetica scheme fallback (`font=63`); PLAY block letters until matching `.vcs` gives real VERTEXCOLOR.

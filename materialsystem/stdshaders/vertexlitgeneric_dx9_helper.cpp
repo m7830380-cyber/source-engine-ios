@@ -2081,9 +2081,12 @@ bool bDistanceAlphaFromDetail = false;
 
 				DECLARE_DYNAMIC_VERTEX_SHADER( vertexlit_and_unlit_generic_vs20 );
 #if defined( IOS )
-				// Keep dyn index in the common low slots; STATICLIGHT3/NUM_LIGHTS blow
-				// the index into skipped VCS entries (log 123 black/rainbow props).
-				SET_DYNAMIC_VERTEX_SHADER_COMBO( DYNAMIC_LIGHT, 0 );
+				// STATICLIGHT3/NUM_LIGHTS>0 blow dyn into skipped VCS slots (log 123).
+				// But AmbientLight() in the VS only runs when DYNAMIC_LIGHT=1
+				// (common_vs_fxc.h DoLighting*) — pinning it 0 left o.color black
+				// even with a forced white ambient cube (log 129 black props).
+				// DYNAMIC_LIGHT=1 + NUM_LIGHTS=0 → ambient only, dyn index +2 (safe).
+				SET_DYNAMIC_VERTEX_SHADER_COMBO( DYNAMIC_LIGHT, 1 );
 				SET_DYNAMIC_VERTEX_SHADER_COMBO( STATICLIGHT3, 0 );
 				SET_DYNAMIC_VERTEX_SHADER_COMBO( SKINNING, numBones > 0 );
 				SET_DYNAMIC_VERTEX_SHADER_COMBO( COMPRESSED_VERTS, (int)vertexCompression );

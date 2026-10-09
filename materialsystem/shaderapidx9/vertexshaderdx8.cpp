@@ -4566,7 +4566,8 @@ void CShaderManager::SetVertexShader( VertexShader_t shader )
 
 			DevWarning( "*************************************************\n" );
 			DevWarning( "!!!!!Using invalid shader combo!!!!!  Consult a programmer and tell them to build debug materialsystem.dll and stdshader*.dll.  Run with \"mat_bufferprimitives 0\" and look for CMaterial in the call stack and see what m_pDebugName is.  You are likely using a shader combo that has been skipped.\n" );
-			DevWarning( "Shader: %s static: %d dynamic: %d\n", m_ShaderSymbolTable.String( vshLookup.m_Name ), vshLookup.m_nStaticIndex, m_nVertexShaderIndex );
+			DevWarning( "Shader: %s static: %d dynamic: %d (resolved dyn=%d)\n",
+				m_ShaderSymbolTable.String( vshLookup.m_Name ), vshLookup.m_nStaticIndex, m_nVertexShaderIndex, vshIndex );
 			BitchAboutSkippedCombo( m_ShaderSymbolTable.String( vshLookup.m_Name ), vshLookup.m_nStaticIndex, m_nVertexShaderIndex );
 			DevWarning( "*************************************************\n" );
 #if !defined( IOS )
@@ -4574,24 +4575,26 @@ void CShaderManager::SetVertexShader( VertexShader_t shader )
 #endif
 		}
 #if defined( IOS )
-		if ( vshLookup.m_ShaderStaticCombos.m_pHardwareShaders &&
-			 vshLookup.m_ShaderStaticCombos.m_nCount > 0 &&
-			 vshLookup.m_ShaderStaticCombos.m_pHardwareShaders[0] != INVALID_HARDWARE_SHADER )
+		// Prefer any loaded dyn in this static over leaving a stale lightmapped VS bound
+		// (log 123: lightmapped VS + vertexlit PS → rainbow).
+		if ( vshLookup.m_ShaderStaticCombos.m_pHardwareShaders )
 		{
-			dxshader = vshLookup.m_ShaderStaticCombos.m_pHardwareShaders[0];
+			for ( int i = 0; i < vshLookup.m_ShaderStaticCombos.m_nCount; ++i )
+			{
+				if ( vshLookup.m_ShaderStaticCombos.m_pHardwareShaders[i] != INVALID_HARDWARE_SHADER )
+				{
+					dxshader = vshLookup.m_ShaderStaticCombos.m_pHardwareShaders[i];
+					break;
+				}
+			}
 		}
 #endif
 	}
 #endif
 
 #if defined( IOS )
-	// Do not NULL the device shaders on failure — that paints black flashes (log 122).
-	// Leave prior bind; skip PS via s_bIOSVertexShaderBindOk.
 	if ( !dxshader )
 		return;
-#endif
-
-#if defined( IOS )
 	s_bIOSVertexShaderBindOk = true;
 #endif
 	SetVertexShaderState( dxshader );

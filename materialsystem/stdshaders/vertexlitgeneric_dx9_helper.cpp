@@ -1087,9 +1087,9 @@ bool bDistanceAlphaFromDetail = false;
 				{
 					DECLARE_STATIC_VERTEX_SHADER( vertexlit_and_unlit_generic_vs20 );
 #if defined( IOS )
-					// One known-good Documents VCS static for all props/UI (log 116–117).
-					// Per-material bits remapped via .inc dyn≠VCS dyn → wrong ids (log 122
-					// VERTEXCOLOR packed 2048 → id 64; static 0 dyn 0 skipped → invisible).
+					// staticId 0 dyn 0 is SKIPPED in Documents VCS (log 123) → VS bind fails,
+					// stale lightmapped VS + vertexlit PS → rainbow. FLATTEN=1 → packed 9216
+					// → VCS staticId 48 (proven loaded in earlier logs).
 					SET_STATIC_VERTEX_SHADER_COMBO( SFM, 0 );
 					SET_STATIC_VERTEX_SHADER_COMBO( VERTEXCOLOR, 0 );
 					SET_STATIC_VERTEX_SHADER_COMBO( CUBEMAP, 0 );
@@ -1100,7 +1100,7 @@ bool bDistanceAlphaFromDetail = false;
 					SET_STATIC_VERTEX_SHADER_COMBO( SEPARATE_DETAIL_UVS, 0 );
 					SET_STATIC_VERTEX_SHADER_COMBO( LIGHTING_PREVIEW, 0 );
 					SET_STATIC_VERTEX_SHADER_COMBO( TREESWAY, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( FLATTEN_STATIC_CONTROL_FLOW, 0 );
+					SET_STATIC_VERTEX_SHADER_COMBO( FLATTEN_STATIC_CONTROL_FLOW, 1 );
 					SET_STATIC_VERTEX_SHADER_COMBO( DECAL, 0 );
 					SET_STATIC_VERTEX_SHADER_COMBO( CASCADED_SHADOW_MAPPING, 0 );
 					SET_STATIC_VERTEX_SHADER_COMBO( CSM_BLENDING, 0 );
@@ -2071,14 +2071,23 @@ bool bDistanceAlphaFromDetail = false;
 				int staticLight3VSCombo = (lightState.m_bStaticLight && bStaticLight3Streams) ? ( ( lightState.m_bStaticLightIndirectOnly )? 2 : 1) : 0;
 
 				DECLARE_DYNAMIC_VERTEX_SHADER( vertexlit_and_unlit_generic_vs20 );
+#if defined( IOS )
+				// Keep dyn index in the common low slots; STATICLIGHT3/NUM_LIGHTS blow
+				// the index into skipped VCS entries (log 123 black/rainbow props).
+				SET_DYNAMIC_VERTEX_SHADER_COMBO( DYNAMIC_LIGHT, 0 );
+				SET_DYNAMIC_VERTEX_SHADER_COMBO( STATICLIGHT3, 0 );
+				SET_DYNAMIC_VERTEX_SHADER_COMBO( SKINNING, numBones > 0 );
+				SET_DYNAMIC_VERTEX_SHADER_COMBO( COMPRESSED_VERTS, (int)vertexCompression );
+				SET_DYNAMIC_VERTEX_SHADER_COMBO( TESSELLATION, 0 );
+				SET_DYNAMIC_VERTEX_SHADER_COMBO( NUM_LIGHTS, 0 );
+				SET_DYNAMIC_VERTEX_SHADER_COMBO( DOWATERFOG, 0 );
+#else
 				SET_DYNAMIC_VERTEX_SHADER_COMBO( DYNAMIC_LIGHT, lightState.HasDynamicLight() );
 				SET_DYNAMIC_VERTEX_SHADER_COMBO( STATICLIGHT3, staticLight3VSCombo );
 				SET_DYNAMIC_VERTEX_SHADER_COMBO( SKINNING,  numBones > 0 );
 				SET_DYNAMIC_VERTEX_SHADER_COMBO( COMPRESSED_VERTS, (int)vertexCompression );
 				SET_DYNAMIC_VERTEX_SHADER_COMBO( TESSELLATION, 0 );
 				SET_DYNAMIC_VERTEX_SHADER_COMBO( NUM_LIGHTS, bUseStaticControlFlow ? 0 : lightState.m_nNumLights );
-#if defined( IOS )
-				SET_DYNAMIC_VERTEX_SHADER_COMBO( DOWATERFOG, 0 );
 #endif
 				SET_DYNAMIC_VERTEX_SHADER_CMD( DynamicCmdsOut, vertexlit_and_unlit_generic_vs20 );
 

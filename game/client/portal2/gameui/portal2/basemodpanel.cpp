@@ -191,6 +191,27 @@ CBaseModPanel::CBaseModPanel(): BaseClass(0, "CBaseModPanel"),
 	// Precache critical font characters for the 360, dampens severity of these runtime i/o hitches
 	IScheme *pScheme = vgui::scheme()->GetIScheme( m_UIScheme );
 	m_hDefaultFont = pScheme->GetFont( "Default", true );
+#if defined( IOS )
+	// SwarmSchemeNew.res often has no "Default" alias with Portal 2 Documents content
+	// → font=0 and every DrawColoredText is skipped (log 123 invisible TAP TO PLAY).
+	if ( !m_hDefaultFont )
+		m_hDefaultFont = pScheme->GetFont( "DefaultLarge", true );
+	if ( !m_hDefaultFont )
+		m_hDefaultFont = pScheme->GetFont( "DefaultBold", true );
+	if ( !m_hDefaultFont )
+		m_hDefaultFont = pScheme->GetFont( "FrameTitle", true );
+	if ( !m_hDefaultFont )
+	{
+		m_hDefaultFont = surface()->CreateFont();
+		surface()->SetFontGlyphSet( m_hDefaultFont, "Helvetica", 32, 0, 0, 0, FONTFLAG_ANTIALIAS );
+		Msg( "[Portal2 iOS] scheme fonts missing — created Helvetica fallback hfont=%d\n",
+			(int)m_hDefaultFont );
+	}
+	else
+	{
+		Msg( "[Portal2 iOS] menu default font hfont=%d\n", (int)m_hDefaultFont );
+	}
+#endif
 	vgui::surface()->PrecacheFontCharacters( m_hDefaultFont, NULL );
 	vgui::surface()->PrecacheFontCharacters( pScheme->GetFont( "DefaultBold", true ), NULL );
 	vgui::surface()->PrecacheFontCharacters( pScheme->GetFont( "DefaultLarge", true ), NULL );
@@ -1852,6 +1873,24 @@ extern ConVar portal2_current_act;
 void CBaseModPanel::ApplySchemeSettings(IScheme *pScheme)
 {
 	BaseClass::ApplySchemeSettings(pScheme);
+
+#if defined( IOS )
+	// Scheme finishes loading here — refresh in case constructor ran too early.
+	if ( !m_hDefaultFont && pScheme )
+	{
+		m_hDefaultFont = pScheme->GetFont( "Default", true );
+		if ( !m_hDefaultFont )
+			m_hDefaultFont = pScheme->GetFont( "DefaultLarge", true );
+		if ( !m_hDefaultFont )
+			m_hDefaultFont = pScheme->GetFont( "FrameTitle", true );
+		if ( m_hDefaultFont )
+		{
+			surface()->PrecacheFontCharacters( m_hDefaultFont, NULL );
+			Msg( "[Portal2 iOS] menu font resolved in ApplySchemeSettings hfont=%d\n",
+				(int)m_hDefaultFont );
+		}
+	}
+#endif
 
 	SetBgColor(pScheme->GetColor("Blank", Color(0, 0, 0, 0)));
 

@@ -42,10 +42,14 @@ jobs:
           if (-not $fxc) {
             $cand = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Recurse -Filter fxc.exe |
                     Where-Object { $_.FullName -match '\\x64\\' } | Sort-Object FullName -Descending | Select-Object -First 1
+            if (-not $cand) { throw "fxc.exe not found (DXSDK and Windows SDK)" }
             $fxc = $cand.FullName
             "VCS_FXC_EXTRA=/Gec" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+            Write-Host "Using Windows SDK fxc with /Gec"
           }
+          Write-Host "fxc: $fxc"
           "FXC_EXE=$fxc" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          exit 0
 
       - name: Validate fxctmp9 combo math
         run: python scripts/shaders/vcscompile.py validate-inc

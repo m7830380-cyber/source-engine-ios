@@ -2201,38 +2201,11 @@ void CBaseModPanel::PostChildPaint()
 	surface()->DrawSetColor( 255, 120, 0, 255 );
 	surface()->DrawFilledRect( m_nIOSPlayX0 + 8, m_nIOSPlayY0 + 8, m_nIOSPlayX1 - 8, m_nIOSPlayY1 - 8 );
 
-	// Font textures use UnlitGeneric (invisible on bad VCS). Block-letter
-	// "PLAY" via scissor fills so the target is readable without shaders.
+	// log 125: VERTEXCOLOR UnlitGeneric fonts work (packed 2048 → id 1).
+	if ( m_hDefaultFont )
 	{
-		const int btnH = m_nIOSPlayY1 - m_nIOSPlayY0;
-		const int letterH = MAX( 28, btnH / 2 );
-		const int letterW = letterH * 3 / 5;
-		const int thick = MAX( 4, letterH / 6 );
-		const int gap = letterW / 3;
-		int x = ( m_nIOSPlayX0 + m_nIOSPlayX1 - ( 4 * letterW + 3 * gap ) ) / 2;
-		const int y = m_nIOSPlayY0 + ( btnH - letterH ) / 2;
-		surface()->DrawSetColor( 0, 0, 0, 255 );
-		// P
-		surface()->DrawFilledRect( x, y, x + thick, y + letterH );
-		surface()->DrawFilledRect( x, y, x + letterW, y + thick );
-		surface()->DrawFilledRect( x, y + letterH / 2 - thick / 2, x + letterW, y + letterH / 2 + thick / 2 );
-		surface()->DrawFilledRect( x + letterW - thick, y, x + letterW, y + letterH / 2 );
-		x += letterW + gap;
-		// L
-		surface()->DrawFilledRect( x, y, x + thick, y + letterH );
-		surface()->DrawFilledRect( x, y + letterH - thick, x + letterW, y + letterH );
-		x += letterW + gap;
-		// A
-		surface()->DrawFilledRect( x, y, x + thick, y + letterH );
-		surface()->DrawFilledRect( x + letterW - thick, y, x + letterW, y + letterH );
-		surface()->DrawFilledRect( x, y, x + letterW, y + thick );
-		surface()->DrawFilledRect( x, y + letterH / 2 - thick / 2, x + letterW, y + letterH / 2 + thick / 2 );
-		x += letterW + gap;
-		// Y
-		surface()->DrawFilledRect( x, y, x + thick, y + letterH / 2 );
-		surface()->DrawFilledRect( x + letterW - thick, y, x + letterW, y + letterH / 2 );
-		surface()->DrawFilledRect( x, y + letterH / 2 - thick / 2, x + letterW, y + letterH / 2 + thick / 2 );
-		surface()->DrawFilledRect( x + letterW / 2 - thick / 2, y + letterH / 2, x + letterW / 2 + thick / 2, y + letterH );
+		DrawColoredText( m_hDefaultFont, m_nIOSPlayX0 + 24, m_nIOSPlayY0 + 20,
+			0x000000ff, "TAP TO PLAY — SINGLEPLAYER" );
 	}
 #endif
 }

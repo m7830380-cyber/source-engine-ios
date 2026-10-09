@@ -884,6 +884,14 @@ void DrawLightmappedGeneric_DX9( CBaseVSShader *pShader, IMaterialVar** params, 
 				// Also note that if the lightmap scale factor changes
 				// all shadow state blocks will be re-run, so that's ok
 				float flLScale = pShaderShadow->GetLightMapScaleFactor();
+#if defined( IOS )
+				// PC returns GammaToLinearFullRange(2)≈4.59 — overbright assuming
+				// sRGB-decoded linear lightmap samples. iOS binds lightmaps as
+				// raw RGBA8 (no SRGBREAD; format isn't sRGB). Applying 4.59 to
+				// gamma-encoded samples blows walls to fullbright (log 130–133).
+				// Scale 1.0 matches "no overbright without sRGB path".
+				flLScale = 1.0f;
+#endif
 				pShader->PI_BeginCommandBuffer();
 				
 				if ( g_pHardwareConfig->SupportsPixelShaders_3_0() )

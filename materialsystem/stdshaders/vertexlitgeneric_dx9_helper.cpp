@@ -1089,14 +1089,15 @@ bool bDistanceAlphaFromDetail = false;
 				{
 					DECLARE_STATIC_VERTEX_SHADER( vertexlit_and_unlit_generic_vs20 );
 #if defined( IOS )
-					// Documents VCS: dyn=192. packed/192 → staticId.
-					// FLATTEN=0 → packed 0 → id 0 is SKIPPED at dyn0 (log 123 rainbow).
-					// FLATTEN=1 → packed 9216 → id 48 (loaded). VERTEXCOLOR bit (+144) still
-					// floors to id 48 — mesh VGUI/fonts CANNOT get real vertex color until
-					// a matching .vcs ships. UI must use ClearBuffers (MatSystemSurface).
+					// Documents VCS dyn=192: FLATTEN=1 alone → packed 9216 → id 48.
+					// VERTEXCOLOR=1 is +144 → 9360 → ALSO id 48 (alias). Log 133: white
+					// VS ambient was already forced yet props stay black — id 48 binary is
+					// the VCOL variant (skips DoLighting; reads missing color stream = 0).
+					// CUBEMAP+FLATTEN → 9504 → id 49: that bucket cannot hold VCOL
+					// (9648→id50). Lighting path runs; PS stays CUBEMAP=0 (safe).
 					SET_STATIC_VERTEX_SHADER_COMBO( SFM, 0 );
 					SET_STATIC_VERTEX_SHADER_COMBO( VERTEXCOLOR, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( CUBEMAP, 0 );
+					SET_STATIC_VERTEX_SHADER_COMBO( CUBEMAP, 1 );
 					SET_STATIC_VERTEX_SHADER_COMBO( HALFLAMBERT, 0 );
 					SET_STATIC_VERTEX_SHADER_COMBO( FLASHLIGHT, 0 );
 					SET_STATIC_VERTEX_SHADER_COMBO( SEAMLESS_BASE, 0 );

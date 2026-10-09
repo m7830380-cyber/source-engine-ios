@@ -3,41 +3,37 @@
 Evidence: device `launch_log (117)`–`(132)` under Telegram Desktop dumps.
 Branch: `portal2-rubberwar-ios`.
 
-## Hard lesson (log 130–132)
+## Hard lesson (log 130–133)
 
-Do **not** chase black props by swapping VL static pins (CUBEMAP id10, DETAIL id5).
-Those broke UVs / made props invisible. Black props were **ambient + dyn bind**, not the wrong static id.
+| Log | Change | Symptom | Actual root cause |
+|-----|--------|---------|-------------------|
+| 131–132 | PS CUBEMAP/DETAIL unlit | invisible / stretched UV | PS/VS combo mismatch — **do not** |
+| 133 | restore PS id21 + ambient fill | props **still black**, walls fullbright | See below |
 
-| Log | VL remap | Symptom | Real cause |
-|-----|----------|---------|------------|
-| **124** | VS `9216→48`, PS `128→21` | Best baseline | — |
-| 130 | same 21 | Props **black**, walls bright | Empty ambient cube; “force white” was a comment only |
-| 131 | PS `64→10` CUBEMAP | Props **invisible** | PS cubemap + zero VS normals → NaN |
-| 132 | PS `32→5` DETAIL | Stretched UVs + fullbright look | PS/VS interpolator mismatch |
+### Props black (log 133) — real cause
+- iOS forces `bHasBump=false` → non-bump VL.
+- White VS ambient was **already** forced in helper — still black ⇒ `AmbientLight()` never runs.
+- VS `FLATTEN` packed 9216 → id **48**; `VERTEXCOLOR` +144 → 9360 → **same id 48** (dyn=192 alias).
+- Documents id 48 is the **VCOL** binary: skips DoLighting, reads color stream.
+- VertexLitGeneric snapshot does **not** enable `VERTEX_COLOR` → attribute = 0 → black.
+- Fix: VS `CUBEMAP+FLATTEN` packed **9504 → id 49** (VCOL cannot live in that bucket).
 
-## Frozen pins (match log 124)
+### Walls fullbright — real cause
+- `GetLightMapScaleFactor()` = `GammaToLinearFullRange(2)` ≈ **4.59** (PC overbright for **sRGB-decoded** lightmaps).
+- iOS binds lightmap as raw RGBA8 (no SRGBREAD).
+- 4.59 × gamma samples → blowout. Fix: **`flLScale = 1.0`** on iOS (not a random shrink).
 
-- **Remapper:** `staticId = packed / vcsHeader.m_nDynamicCombos` only. Never `.inc` dyn first.
-- **VL PS:** `DIFFUSELIGHTING=1`, `VERTEXCOLOR=0`, `CUBEMAP=0`, `DETAILTEXTURE=0` → packed **128** → id **21**.
-- **VL VS:** `FLATTEN_STATIC_CONTROL_FLOW=1`, `VERTEXCOLOR=0` → packed **9216** → id **48**.
-- **VL lighting (real fix, not a pin):**
-  - Keep `DYNAMIC_LIGHT=1`. Dyn fallback must **prefer slots with bit1 set** (DYNAMIC_LIGHT), not dyn0.
-  - `CBICMD_SETVERTEXSHADERAMBIENTLIGHTCUBE`: if lighting state NULL or luminance &lt; 0.05, write fill cube **0.45**.
-- **LM PS/VS:** static id 0, `FASTPATH=0`. Lightmap bind without SRGBREAD (format mismatch). **No** flLScale thrash.
-- **VGUI solids:** ClearBuffers. In-game touch: corner ticks only.
-- **Fonts:** Helvetica `font=63`.
+## Frozen pins (log 133+)
 
-## Hard stop — do not change without a new named log + root-cause writeup
+- **VL PS:** DIFFUSE=1 → packed 128 → id **21** (UVs OK).
+- **VL VS:** CUBEMAP=1 + FLATTEN=1 → packed **9504** → id **49**. Not id 48.
+- **LM:** static 0, FASTPATH=0, no SRGBREAD bind, **`flLScale = 1.0`** on iOS.
+- Keep DYNAMIC_LIGHT=1 + ambient fill as belt-and-suspenders.
+- VGUI: ClearBuffers. Fonts: Helvetica.
 
-- CUBEMAP=1 / DETAILTEXTURE=1 / DIFFUSE=0 “unlit albedo” experiments on VL PS
-- Flip LM FASTPATH to 1
-- VL VS FLATTEN=0
-- Prefer `.inc` dyn in `ResolveStaticComboRecordIndex`
-- Nest `SET_STATIC_*` in extra `{ }` (CI undeclared forgot_to_set)
-- Blind `flLScale *= k` without proving lightmap sample path
+## Hard stop
 
-## Next real work
-
-1. Device-verify: remap `128→21`, props textured (not stretched), not black.
-2. If walls still washed: fix lightmap sRGB at **texture create** time, not scale hacks.
-3. Matching Documents `.vcs` with real VERTEXCOLOR static for mesh UI.
+- PS CUBEMAP/DETAIL “unlit” experiments
+- Blind `flLScale *= 0.35/0.5`
+- VL VS back to id 48 without proving Documents VCOL alias is gone
+- Nest `SET_STATIC_*` in extra `{ }`

@@ -3199,7 +3199,8 @@ static int IOS_FallbackStaticComboRecordIndex( ShaderFileCache_t *pFileCache, co
 	}
 	else if ( V_stristr( baseName, "vertexlit_and_unlit_generic_vs20" ) )
 	{
-		static const uint32 s_ids[] = { 48, 32, 24, 16, 8, 4, 1, 0 };
+		// 49 = CUBEMAP+FLATTEN (no VCOL alias). 48 aliases VERTEXCOLOR → black props.
+		static const uint32 s_ids[] = { 49, 48, 32, 24, 16, 8, 4, 1, 0 };
 		for ( int i = 0; i < ARRAYSIZE( s_ids ); ++i )
 		{
 			if ( IOS_TryStaticComboRecord( pFileCache, s_ids[i], &idx ) )
@@ -3240,9 +3241,9 @@ static int IOS_FallbackStaticComboRecordIndex( ShaderFileCache_t *pFileCache, co
 //   correct is 128/6→id21). Dyn bind indexes [0, vcsDyn); skipped slots are INVALID.
 //
 // Known Documents maps:
-//   VL ps DIFFUSE=1 packed 128 → id 21 (log 124/130 correct UVs; black was ambient/dyn)
-//   VL ps CUBEMAP id10 / DETAIL id5 — log 131/132 regressions, do not use
-//   VL vs FLATTEN=1 packed 9216 → id 48
+//   VL ps DIFFUSE=1 packed 128 → id 21
+//   VL vs CUBEMAP+FLATTEN packed 9504 → id 49 (log 133: id 48 aliases VCOL → black)
+//   VL vs FLATTEN alone packed 9216 → id 48 (VCOL collision — avoid)
 //   VL ps VCOL=1 packed 2048 → preferred 341 (often missing) → unlit fallback id 1
 //   VL ps DIFFUSE=0+CUBEMAP=0 packed 0 → id 0 SKIPPED/illegal
 //   VS VERTEXCOLOR bit is lost under /192 (9216 and 9360 both → 48) — mesh UI

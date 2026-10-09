@@ -1091,12 +1091,13 @@ bool bDistanceAlphaFromDetail = false;
 				{
 					DECLARE_STATIC_VERTEX_SHADER( vertexlit_and_unlit_generic_vs20 );
 #if defined( IOS )
-					// staticId 0 dyn 0 is SKIPPED in Documents VCS (log 123) → VS bind fails,
-					// stale lightmapped VS + vertexlit PS → rainbow. FLATTEN=1 → packed 9216
-					// → VCS staticId 48. Match PS: Unlit without $vertexcolor still needs
-					// VERTEXCOLOR=1 so we never pair with illegal DIFFUSE=0+VCOL=0 PS.
+					// Documents VCS: dyn=192. packed/192 → staticId.
+					// FLATTEN=0 → packed 0 → id 0 is SKIPPED at dyn0 (log 123 rainbow).
+					// FLATTEN=1 → packed 9216 → id 48 (loaded). VERTEXCOLOR bit (+144) still
+					// floors to id 48 — mesh VGUI/fonts CANNOT get real vertex color until
+					// a matching .vcs ships. UI must use ClearBuffers (MatSystemSurface).
 					SET_STATIC_VERTEX_SHADER_COMBO( SFM, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( VERTEXCOLOR, ( hasDiffuseLighting ? 0 : 1 ) );
+					SET_STATIC_VERTEX_SHADER_COMBO( VERTEXCOLOR, 0 );
 					SET_STATIC_VERTEX_SHADER_COMBO( CUBEMAP, 0 );
 					SET_STATIC_VERTEX_SHADER_COMBO( HALFLAMBERT, 0 );
 					SET_STATIC_VERTEX_SHADER_COMBO( FLASHLIGHT, 0 );
@@ -1136,24 +1137,20 @@ bool bDistanceAlphaFromDetail = false;
 					{
 						DECLARE_STATIC_PIXEL_SHADER( vertexlit_and_unlit_generic_ps20b );
 #if defined( IOS )
-						// log 125/126: DIFFUSE=0+VERTEXCOLOR=0 is SKIPPED (illegal PS).
-						// VertexLit → DIFFUSE=1 (id 21). Unlit → VERTEXCOLOR=1 (id 1).
-						// Never allow 0+0. Do not wrap SET_* in a block — the forgot_to_set
-						// flags must stay in scope for SET_STATIC_PIXEL_SHADER (CI fail).
-						int nDiffuse = hasDiffuseLighting ? 1 : 0;
-						int nVCol = ( bHasVertexColor || bHasVertexAlpha ) ? 1 : 0;
-						if ( nDiffuse == 0 && nVCol == 0 )
-							nVCol = 1;
+						// Log 117 / a9c6bb09 baseline: DIFFUSE=1 → packed 128 / vcsDyn=6 → id 21.
+						// Never DIFFUSE=0+VERTEXCOLOR=0 (illegal, log 125/126). Do not chase
+						// Unlit VERTEXCOLOR=1 for fonts — VS id 48 has no VCOL (aliased);
+						// menu solids use ClearBuffers. Keep ALL materials on id 21.
 						SET_STATIC_PIXEL_SHADER_COMBO( SFM, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( SELFILLUM_ENVMAPMASK_ALPHA, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( DETAILTEXTURE, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( CUBEMAP, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( DIFFUSELIGHTING, nDiffuse );
+						SET_STATIC_PIXEL_SHADER_COMBO( DIFFUSELIGHTING, 1 );
 						SET_STATIC_PIXEL_SHADER_COMBO( ENVMAPMASK, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( BASEALPHAENVMAPMASK, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( ENVMAPFRESNEL, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( SELFILLUM, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( VERTEXCOLOR, nVCol );
+						SET_STATIC_PIXEL_SHADER_COMBO( VERTEXCOLOR, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( FLASHLIGHT, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( DETAIL_BLEND_MODE, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( DECAL_BLEND_MODE, 0 );
@@ -2251,16 +2248,16 @@ bool bDistanceAlphaFromDetail = false;
 		//*/
 
 #if defined( IOS )
-		// Last in the buffer so nothing else stomps it. Mid-grey ambient keeps
-		// DIFFUSELIGHTING=1 (staticId 21) from rendering props black.
+		// NUM_LIGHTS pinned 0 (dyn slots skip). Force bright ambient so id-21
+		// DIFFUSE path still shows albedo (log 124 black props without this).
 		if ( bVertexLitGeneric )
 		{
 			float amb[24];
 			for ( int iAmb = 0; iAmb < 6; iAmb++ )
 			{
-				amb[iAmb * 4 + 0] = 0.55f;
-				amb[iAmb * 4 + 1] = 0.55f;
-				amb[iAmb * 4 + 2] = 0.55f;
+				amb[iAmb * 4 + 0] = 1.0f;
+				amb[iAmb * 4 + 1] = 1.0f;
+				amb[iAmb * 4 + 2] = 1.0f;
 				amb[iAmb * 4 + 3] = 1.0f;
 			}
 			DynamicCmdsOut.SetVertexShaderConstant( VERTEX_SHADER_AMBIENT_LIGHT, amb, 6 );
@@ -2273,15 +2270,14 @@ bool bDistanceAlphaFromDetail = false;
 #endif
 		ShaderApiFast( pShaderAPI )->ExecuteCommandBuffer( DynamicCmdsOut.Base() );
 #if defined( IOS )
-		// Instance cmds can overwrite ambient during Draw(); set again on the API.
 		if ( bVertexLitGeneric )
 		{
 			float amb[24];
 			for ( int iAmb = 0; iAmb < 6; iAmb++ )
 			{
-				amb[iAmb * 4 + 0] = 0.55f;
-				amb[iAmb * 4 + 1] = 0.55f;
-				amb[iAmb * 4 + 2] = 0.55f;
+				amb[iAmb * 4 + 0] = 1.0f;
+				amb[iAmb * 4 + 1] = 1.0f;
+				amb[iAmb * 4 + 2] = 1.0f;
 				amb[iAmb * 4 + 3] = 1.0f;
 			}
 			ShaderApiFast( pShaderAPI )->SetVertexShaderConstant( VERTEX_SHADER_AMBIENT_LIGHT, amb, 6 );

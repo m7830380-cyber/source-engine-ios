@@ -1476,11 +1476,11 @@ void DrawLightmappedGeneric_DX9( CBaseVSShader *pShader, IMaterialVar** params, 
 
 			DECLARE_DYNAMIC_PIXEL_SHADER( lightmappedgeneric_ps20b );
 #if defined( IOS )
-			// log 125: FASTPATH=0 → full-white world. FASTPATH=1 samples lightmaps
-			// (log 124 could see walls). Keep every other dyn bit pinned so motion
-			// doesn't hop into a skipped combo.
+			// Log 117 / a9c6bb09: PS FASTPATH=0 — walls OK when still. Log 125 "white
+			// world" was confounders (illegal VL combo + white scissor flood), not this
+			// pin alone. Keep other dyn bits 0 so motion does not hop skipped slots.
 			SET_DYNAMIC_PIXEL_SHADER_COMBO( FASTPATHENVMAPCONTRAST, 0 );
-			SET_DYNAMIC_PIXEL_SHADER_COMBO( FASTPATH, 1 );
+			SET_DYNAMIC_PIXEL_SHADER_COMBO( FASTPATH, 0 );
 			SET_DYNAMIC_PIXEL_SHADER_COMBO( WRITE_DEPTH_TO_DESTALPHA, 0 );
 			SET_DYNAMIC_PIXEL_SHADER_COMBO( WRITEWATERFOGTODESTALPHA, 0 );
 			SET_DYNAMIC_PIXEL_SHADER_COMBO( FLASHLIGHTSHADOWS, 0 );

@@ -886,6 +886,28 @@ void CTouchControls::Paint()
 	CMatRenderContextPtr pRenderContext( g_pMaterialSystem );
 	int meshCount = 0;
 
+#if defined( IOS )
+	// UnlitGeneric textured quads are invisible when VCS combos are wrong
+	// (log 124). Always paint a solid scissor-fill so controls stay visible;
+	// textured icons draw on top if the material path ever works.
+	for( it = btns.begin(); it != btns.end(); it++ )
+	{
+		CTouchButton *btn = *it;
+		if( ( btn->flags & TOUCH_FL_HIDE ) && state != state_edit )
+			continue;
+		if( state != state_edit && !TouchButtonAvailable( btn ) )
+			continue;
+		int alpha = (btn->color.a > MIN_ALPHA_IN_CUTSCENE) ? MAX( MIN_ALPHA_IN_CUTSCENE, btn->color.a-m_AlphaDiff) : btn->color.a;
+		if( btn->flags & TOUCH_FL_HIDE )
+			alpha = 50;
+		if( alpha <= 0 )
+			continue;
+		vgui::surface()->DrawSetColor( btn->color.r, btn->color.g, btn->color.b, MAX( alpha, 140 ) );
+		vgui::surface()->DrawFilledRect( (int)(btn->x1*screen_w), (int)(btn->y1*screen_h),
+			(int)(btn->x2*screen_w), (int)(btn->y2*screen_h) );
+	}
+#endif
+
 	// Draw non-atlas touch textures
 	for( it = btns.begin(); it != btns.end(); it++ )
 	{

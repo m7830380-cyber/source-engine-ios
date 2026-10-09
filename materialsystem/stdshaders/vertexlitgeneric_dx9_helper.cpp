@@ -1089,9 +1089,10 @@ bool bDistanceAlphaFromDetail = false;
 #if defined( IOS )
 					// staticId 0 dyn 0 is SKIPPED in Documents VCS (log 123) → VS bind fails,
 					// stale lightmapped VS + vertexlit PS → rainbow. FLATTEN=1 → packed 9216
-					// → VCS staticId 48 (proven loaded in earlier logs).
+					// → VCS staticId 48 (proven loaded). VERTEXCOLOR must follow the material
+					// so UnlitGeneric fonts/touch ($vertexcolor) aren't forced off.
 					SET_STATIC_VERTEX_SHADER_COMBO( SFM, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( VERTEXCOLOR, 0 );
+					SET_STATIC_VERTEX_SHADER_COMBO( VERTEXCOLOR, ( bHasVertexColor || bHasVertexAlpha ) ? 1 : 0 );
 					SET_STATIC_VERTEX_SHADER_COMBO( CUBEMAP, 0 );
 					SET_STATIC_VERTEX_SHADER_COMBO( HALFLAMBERT, 0 );
 					SET_STATIC_VERTEX_SHADER_COMBO( FLASHLIGHT, 0 );
@@ -1131,17 +1132,20 @@ bool bDistanceAlphaFromDetail = false;
 					{
 						DECLARE_STATIC_PIXEL_SHADER( vertexlit_and_unlit_generic_ps20b );
 #if defined( IOS )
-						// GetIndex 128 → Documents VCS staticId 21 (dyn=6). Stable for props+UI.
+						// log 124: DIFFUSELIGHTING=1 + NUM_LIGHTS=0 → i.color lighting is
+						// black → black props. DIFFUSE=0 keeps diffuseLighting=1 (albedo).
+						// VERTEXCOLOR follows material so UnlitGeneric fonts/touch work
+						// (packed 2048 → id ~341; props stay packed 0 → id 0).
 						SET_STATIC_PIXEL_SHADER_COMBO( SFM, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( SELFILLUM_ENVMAPMASK_ALPHA, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( DETAILTEXTURE, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( CUBEMAP, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( DIFFUSELIGHTING, 1 );
+						SET_STATIC_PIXEL_SHADER_COMBO( DIFFUSELIGHTING, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( ENVMAPMASK, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( BASEALPHAENVMAPMASK, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( ENVMAPFRESNEL, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( SELFILLUM, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( VERTEXCOLOR, 0 );
+						SET_STATIC_PIXEL_SHADER_COMBO( VERTEXCOLOR, ( bHasVertexColor || bHasVertexAlpha ) ? 1 : 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( FLASHLIGHT, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( DETAIL_BLEND_MODE, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( DECAL_BLEND_MODE, 0 );

@@ -1476,11 +1476,10 @@ void DrawLightmappedGeneric_DX9( CBaseVSShader *pShader, IMaterialVar** params, 
 
 			DECLARE_DYNAMIC_PIXEL_SHADER( lightmappedgeneric_ps20b );
 #if defined( IOS )
-			// .inc: FASTPATH weight=2 → dyn index 2 (dyn 1 is FASTPATHENVMAPCONTRAST).
-			// dyn=0 looked fullbright on Documents VCS/ANGLE (log 123). FASTPATH=1
-			// samples the lightmap in the simplified path.
+			// log 124: FASTPATH=1 → walls flash white while moving. Keep dyn 0
+			// (fullbright-ish on Documents VCS) — stable, no motion flash.
 			SET_DYNAMIC_PIXEL_SHADER_COMBO( FASTPATHENVMAPCONTRAST, 0 );
-			SET_DYNAMIC_PIXEL_SHADER_COMBO( FASTPATH, 1 );
+			SET_DYNAMIC_PIXEL_SHADER_COMBO( FASTPATH, 0 );
 			SET_DYNAMIC_PIXEL_SHADER_COMBO( WRITE_DEPTH_TO_DESTALPHA, 0 );
 			SET_DYNAMIC_PIXEL_SHADER_COMBO( WRITEWATERFOGTODESTALPHA, 0 );
 			SET_DYNAMIC_PIXEL_SHADER_COMBO( FLASHLIGHTSHADOWS, 0 );

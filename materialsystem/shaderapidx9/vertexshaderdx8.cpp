@@ -3141,8 +3141,8 @@ static int GetIncDynamicComboProduct( const char *pShaderName )
 
 // Portal 2 content + a CS:GO-derived PLATFORM shader pack often disagree on static combo
 // ids; try several encodings before giving up so materials can still link on GLES.
-// Prefer .inc dyn stride first: Documents vertexlit ps20b has VCS dyn=6 while .inc dyn=32,
-// so 128/6=21 (wrong but present) vs 128/32=4 (DIFFUSELIGHTING) — log 117 cyan props.
+// VCS files index static records by (packedStatic / m_nDynamicCombos) from the file
+// header — not the .inc dynamic product (log 118: inc-first id 4 black props; id 21 ok).
 static int ResolveStaticComboRecordIndex( ShaderFileCache_t *pFileCache, int nLookupStaticIndex, const char *pShaderName )
 {
 	const int nVcsDyn = pFileCache->m_Header.m_nDynamicCombos;
@@ -3152,10 +3152,10 @@ static int ResolveStaticComboRecordIndex( ShaderFileCache_t *pFileCache, int nLo
 
 	uint32 rawCandidates[4];
 	int nRaw = 0;
-	if ( nIncDyn > 0 )
-		rawCandidates[nRaw++] = (uint32)( nLookupStaticIndex / nIncDyn );
 	if ( nVcsDyn > 0 )
 		rawCandidates[nRaw++] = (uint32)( nLookupStaticIndex / nVcsDyn );
+	if ( nIncDyn > 0 && nIncDyn != nVcsDyn )
+		rawCandidates[nRaw++] = (uint32)( nLookupStaticIndex / nIncDyn );
 	rawCandidates[nRaw++] = (uint32)nLookupStaticIndex;
 	rawCandidates[nRaw++] = 0;
 
@@ -3179,9 +3179,9 @@ static int ResolveStaticComboRecordIndex( ShaderFileCache_t *pFileCache, int nLo
 		int idx = pFileCache->FindCombo( candidates[i] );
 		if ( idx != -1 )
 		{
-			const uint32 preferred = ( nIncDyn > 0 )
-				? (uint32)( nLookupStaticIndex / nIncDyn )
-				: ( nVcsDyn > 0 ? (uint32)( nLookupStaticIndex / nVcsDyn ) : 0 );
+			const uint32 preferred = ( nVcsDyn > 0 )
+				? (uint32)( nLookupStaticIndex / nVcsDyn )
+				: ( nIncDyn > 0 ? (uint32)( nLookupStaticIndex / nIncDyn ) : 0 );
 			if ( candidates[i] != preferred )
 			{
 				// Must pass DefLessFunc: default CUtlMap LessFunc is null. Empty-tree
@@ -3215,8 +3215,7 @@ static int ResolveStaticComboRecordIndex( ShaderFileCache_t *pFileCache, int nLo
 	return -1;
 }
 
-// Clamp dynamic index into the VCS slot range. Do not remap INVALID slots here —
-// on-demand create still needs the original in-range index.
+// Clamp dynamic index into the VCS slot range.
 static int IOS_ClampDynamicShaderIndex( int nIndex, int nCount, CUtlSymbol shaderName, bool bPixel )
 {
 	if ( nCount <= 0 )
@@ -3235,6 +3234,28 @@ static int IOS_ClampDynamicShaderIndex( int nIndex, int nCount, CUtlSymbol shade
 		return 0;
 	}
 	return nIndex;
+}
+
+// Skipped combos leave INVALID_HARDWARE_SHADER slots; pick a nearby loaded variant.
+static int IOS_PickLoadedDynamicIndex( HardwareShader_t *pShaders, int nCount, int nPreferred )
+{
+	if ( !pShaders || nCount <= 0 )
+		return 0;
+
+	if ( nPreferred < 0 )
+		nPreferred = 0;
+	if ( nPreferred >= nCount )
+		nPreferred = nCount - 1;
+
+	if ( pShaders[nPreferred] != INVALID_HARDWARE_SHADER )
+		return nPreferred;
+
+	for ( int i = 0; i < nCount; ++i )
+	{
+		if ( pShaders[i] != INVALID_HARDWARE_SHADER )
+			return i;
+	}
+	return nPreferred;
 }
 
 static bool IOS_ShouldSpewFailedShaderBind( CUtlSymbol shaderName )
@@ -4344,6 +4365,10 @@ void CShaderManager::SetVertexShader( VertexShader_t shader )
 #if defined( IOS )
 	vshIndex = IOS_ClampDynamicShaderIndex(
 		vshIndex, vshLookup.m_ShaderStaticCombos.m_nCount, vshLookup.m_Name, false );
+	vshIndex = IOS_PickLoadedDynamicIndex(
+		vshLookup.m_ShaderStaticCombos.m_pHardwareShaders,
+		vshLookup.m_ShaderStaticCombos.m_nCount,
+		vshIndex );
 #endif
 //	DevWarning( "vsh: %s static: %d dynamic: %d\n", m_ShaderSymbolTable.String( vshLookup.m_Name ),
 //		vshLookup.m_nStaticIndex, m_nVertexShaderIndex );
@@ -4506,6 +4531,10 @@ void CShaderManager::SetPixelShader( PixelShader_t shader )
 	// clearing the PS (illegal cyan). Clamp to dyn 0 instead.
 	pshIndex = IOS_ClampDynamicShaderIndex(
 		pshIndex, pshLookup.m_ShaderStaticCombos.m_nCount, pshLookup.m_Name, true );
+	pshIndex = IOS_PickLoadedDynamicIndex(
+		pshLookup.m_ShaderStaticCombos.m_pHardwareShaders,
+		pshLookup.m_ShaderStaticCombos.m_nCount,
+		pshIndex );
 #else
 	if ( pshIndex > pshLookup.m_ShaderStaticCombos.m_nCount )
 	{

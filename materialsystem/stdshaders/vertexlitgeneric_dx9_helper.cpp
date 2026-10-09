@@ -1951,19 +1951,13 @@ bool bDistanceAlphaFromDetail = false;
 			#endif
 			{
 				DECLARE_DYNAMIC_VERTEX_SHADER( vertexlit_and_unlit_generic_bump_vs20 );
-#if defined( IOS )
-				SET_DYNAMIC_VERTEX_SHADER_COMBO( SKINNING, numBones > 0 );
-				SET_DYNAMIC_VERTEX_SHADER_COMBO( COMPRESSED_VERTS, (int)vertexCompression );
-				SET_DYNAMIC_VERTEX_SHADER_COMBO( TESSELLATION, 0 );
-				SET_DYNAMIC_VERTEX_SHADER_COMBO( NUM_LIGHTS, 0 );
-				SET_DYNAMIC_VERTEX_SHADER_COMBO( STATICLIGHT3, 0 );
-				SET_DYNAMIC_VERTEX_SHADER_COMBO( DOWATERFOG, 0 );
-#else
 				SET_DYNAMIC_VERTEX_SHADER_COMBO( SKINNING,  numBones > 0 );
 				SET_DYNAMIC_VERTEX_SHADER_COMBO( COMPRESSED_VERTS, (int)vertexCompression );
 				SET_DYNAMIC_VERTEX_SHADER_COMBO( TESSELLATION, 0 );
 				SET_DYNAMIC_VERTEX_SHADER_COMBO( NUM_LIGHTS, bUseStaticControlFlow ? 0 : ( lightState.m_nNumLights ) );
 				SET_DYNAMIC_VERTEX_SHADER_COMBO( STATICLIGHT3, nStaticLightVsCombo );
+#if defined( IOS )
+				SET_DYNAMIC_VERTEX_SHADER_COMBO( DOWATERFOG, 0 );
 #endif
 				SET_DYNAMIC_VERTEX_SHADER_CMD( DynamicCmdsOut, vertexlit_and_unlit_generic_bump_vs20 );
 
@@ -1987,21 +1981,14 @@ bool bDistanceAlphaFromDetail = false;
 					}
 
 					DECLARE_DYNAMIC_PIXEL_SHADER( vertexlit_and_unlit_generic_bump_ps20b );
-#if defined( IOS )
-					SET_DYNAMIC_PIXEL_SHADER_COMBO( NUM_LIGHTS, 0 );
-					SET_DYNAMIC_PIXEL_SHADER_COMBO( AMBIENT_LIGHT, 0 );
-					SET_DYNAMIC_PIXEL_SHADER_COMBO( FLASHLIGHTSHADOWS, 0 );
-					SET_DYNAMIC_PIXEL_SHADER_COMBO( WRITEWATERFOGTODESTALPHA, 0 );
-					SET_DYNAMIC_PIXEL_SHADER_COMBO( CASCADE_SIZE, 0 );
-					SET_DYNAMIC_PIXEL_SHADER_COMBO( STATICLIGHT3, 0 );
-					SET_DYNAMIC_PIXEL_SHADER_COMBO( PIXELFOGTYPE, 0 );
-#else
 					SET_DYNAMIC_PIXEL_SHADER_COMBO( NUM_LIGHTS, ( IsPS3() ) ? MIN( 2, lightState.m_nNumLights ) : lightState.m_nNumLights );
 					SET_DYNAMIC_PIXEL_SHADER_COMBO( AMBIENT_LIGHT, lightState.m_bAmbientLight && !bStaticLight3 );
 					SET_DYNAMIC_PIXEL_SHADER_COMBO( FLASHLIGHTSHADOWS, bFlashlightShadows );
 					SET_DYNAMIC_PIXEL_SHADER_COMBO( WRITEWATERFOGTODESTALPHA, bWriteWaterFogToAlpha );
 					SET_DYNAMIC_PIXEL_SHADER_COMBO( CASCADE_SIZE, ( IsGameConsole() ) ? ( bCSMEnabled ? 1 : 0 ) : 0 );
 					SET_DYNAMIC_PIXEL_SHADER_COMBO( STATICLIGHT3, bStaticLight3 );
+#if defined( IOS )
+					SET_DYNAMIC_PIXEL_SHADER_COMBO( PIXELFOGTYPE, 0 );
 #endif
 					SET_DYNAMIC_PIXEL_SHADER_CMD( DynamicCmdsOut, vertexlit_and_unlit_generic_bump_ps20b );
 				}
@@ -2083,22 +2070,14 @@ bool bDistanceAlphaFromDetail = false;
 				int staticLight3VSCombo = (lightState.m_bStaticLight && bStaticLight3Streams) ? ( ( lightState.m_bStaticLightIndirectOnly )? 2 : 1) : 0;
 
 				DECLARE_DYNAMIC_VERTEX_SHADER( vertexlit_and_unlit_generic_vs20 );
-#if defined( IOS )
-				// Documents vs20 dyn layout ≠ .inc; fog bit alone is +72 and skipped slots flash black.
-				SET_DYNAMIC_VERTEX_SHADER_COMBO( DYNAMIC_LIGHT, 0 );
-				SET_DYNAMIC_VERTEX_SHADER_COMBO( STATICLIGHT3, 0 );
-				SET_DYNAMIC_VERTEX_SHADER_COMBO( SKINNING, numBones > 0 );
-				SET_DYNAMIC_VERTEX_SHADER_COMBO( COMPRESSED_VERTS, (int)vertexCompression );
-				SET_DYNAMIC_VERTEX_SHADER_COMBO( TESSELLATION, 0 );
-				SET_DYNAMIC_VERTEX_SHADER_COMBO( NUM_LIGHTS, 0 );
-				SET_DYNAMIC_VERTEX_SHADER_COMBO( DOWATERFOG, 0 );
-#else
 				SET_DYNAMIC_VERTEX_SHADER_COMBO( DYNAMIC_LIGHT, lightState.HasDynamicLight() );
 				SET_DYNAMIC_VERTEX_SHADER_COMBO( STATICLIGHT3, staticLight3VSCombo );
 				SET_DYNAMIC_VERTEX_SHADER_COMBO( SKINNING,  numBones > 0 );
 				SET_DYNAMIC_VERTEX_SHADER_COMBO( COMPRESSED_VERTS, (int)vertexCompression );
 				SET_DYNAMIC_VERTEX_SHADER_COMBO( TESSELLATION, 0 );
 				SET_DYNAMIC_VERTEX_SHADER_COMBO( NUM_LIGHTS, bUseStaticControlFlow ? 0 : lightState.m_nNumLights );
+#if defined( IOS )
+				SET_DYNAMIC_VERTEX_SHADER_COMBO( DOWATERFOG, 0 );
 #endif
 				SET_DYNAMIC_VERTEX_SHADER_CMD( DynamicCmdsOut, vertexlit_and_unlit_generic_vs20 );
 
@@ -2122,18 +2101,12 @@ bool bDistanceAlphaFromDetail = false;
 					}
 
 					DECLARE_DYNAMIC_PIXEL_SHADER( vertexlit_and_unlit_generic_ps20b );
-#if defined( IOS )
-					// VCS dyn=6; .inc PIXELFOGTYPE=1 → index 16 (illegal cyan PS).
-					SET_DYNAMIC_PIXEL_SHADER_COMBO( SMOKEGRENADEBLEND, 0 );
-					SET_DYNAMIC_PIXEL_SHADER_COMBO( FLASHLIGHTSHADOWS, 0 );
-					SET_DYNAMIC_PIXEL_SHADER_COMBO( WRITEWATERFOGTODESTALPHA, 0 );
-					SET_DYNAMIC_PIXEL_SHADER_COMBO( CASCADE_SIZE, 0 );
-					SET_DYNAMIC_PIXEL_SHADER_COMBO( PIXELFOGTYPE, 0 );
-#else
 					SET_DYNAMIC_PIXEL_SHADER_COMBO( SMOKEGRENADEBLEND, bBlendWithSmokeGrenade );
 					SET_DYNAMIC_PIXEL_SHADER_COMBO( FLASHLIGHTSHADOWS, bFlashlightShadows );
 					SET_DYNAMIC_PIXEL_SHADER_COMBO( WRITEWATERFOGTODESTALPHA, bWriteWaterFogToAlpha );
 					SET_DYNAMIC_PIXEL_SHADER_COMBO( CASCADE_SIZE, ( IsGameConsole() ) ? ( bCSMEnabled ? 1 : 0 ) : 0 );
+#if defined( IOS )
+					SET_DYNAMIC_PIXEL_SHADER_COMBO( PIXELFOGTYPE, 0 );
 #endif
 					SET_DYNAMIC_PIXEL_SHADER_CMD( DynamicCmdsOut, vertexlit_and_unlit_generic_ps20b );
 				}

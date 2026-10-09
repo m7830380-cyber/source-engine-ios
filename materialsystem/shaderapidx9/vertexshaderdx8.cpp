@@ -1132,6 +1132,10 @@ void CShaderManager::DestroyPixelShader( PixelShaderHandle_t hShader )
 // Globals
 //-----------------------------------------------------------------------------
 HardwareShader_t s_pIllegalMaterialPS = INVALID_HARDWARE_SHADER;
+#if defined( IOS )
+// ApplyShaderState sets VS then PS; if VS bind fails, do not bind a mismatched PS.
+static bool s_bIOSVertexShaderBindOk = true;
+#endif
 
 //-----------------------------------------------------------------------------
 // Static methods
@@ -3195,7 +3199,7 @@ static int ResolveStaticComboRecordIndex( ShaderFileCache_t *pFileCache, int nLo
 						pShaderName, nLookupStaticIndex, candidates[i], nIncDyn, nVcsDyn, preferred );
 				}
 			}
-			else if ( nIncDyn > 0 && nVcsDyn > 0 && nIncDyn != nVcsDyn )
+			else if ( nIncDyn > 0 && nVcsDyn > 0 && nIncDyn != nVcsDyn && candidates[i] == (uint32)( nLookupStaticIndex / nIncDyn ) )
 			{
 				static CUtlMap<CUtlSymbol, bool> s_RemapNote( 0, 0, DefLessFunc( CUtlSymbol ) );
 				if ( s_RemapNote.Find( pFileCache->m_Name ) == s_RemapNote.InvalidIndex() )
@@ -3203,6 +3207,16 @@ static int ResolveStaticComboRecordIndex( ShaderFileCache_t *pFileCache, int nLo
 					s_RemapNote.Insert( pFileCache->m_Name, true );
 					Msg( "[iOS] Shader '%s': static packed %d → id %u via .inc dyn=%d (VCS dyn=%d).\n",
 						pShaderName, nLookupStaticIndex, candidates[i], nIncDyn, nVcsDyn );
+				}
+			}
+			else if ( nVcsDyn > 0 && candidates[i] == (uint32)( nLookupStaticIndex / nVcsDyn ) )
+			{
+				static CUtlMap<CUtlSymbol, bool> s_RemapNote( 0, 0, DefLessFunc( CUtlSymbol ) );
+				if ( s_RemapNote.Find( pFileCache->m_Name ) == s_RemapNote.InvalidIndex() )
+				{
+					s_RemapNote.Insert( pFileCache->m_Name, true );
+					Msg( "[iOS] Shader '%s': static packed %d → id %u (VCS dyn=%d).\n",
+						pShaderName, nLookupStaticIndex, candidates[i], nVcsDyn );
 				}
 			}
 			return idx;
@@ -3236,8 +3250,9 @@ static int IOS_ClampDynamicShaderIndex( int nIndex, int nCount, CUtlSymbol shade
 	return nIndex;
 }
 
-// Skipped combos leave INVALID_HARDWARE_SHADER slots; pick a nearby loaded variant.
-static int IOS_PickLoadedDynamicIndex( HardwareShader_t *pShaders, int nCount, int nPreferred )
+// If the requested dynamic slot was skipped in the VCS, try dyn 0 only — never jump to
+// an unrelated index (log 119: PickLoaded caused rainbow / transparent props).
+static int IOS_FallbackDynamicIndex( HardwareShader_t *pShaders, int nCount, int nPreferred )
 {
 	if ( !pShaders || nCount <= 0 )
 		return 0;
@@ -3250,11 +3265,9 @@ static int IOS_PickLoadedDynamicIndex( HardwareShader_t *pShaders, int nCount, i
 	if ( pShaders[nPreferred] != INVALID_HARDWARE_SHADER )
 		return nPreferred;
 
-	for ( int i = 0; i < nCount; ++i )
-	{
-		if ( pShaders[i] != INVALID_HARDWARE_SHADER )
-			return i;
-	}
+	if ( nPreferred != 0 && pShaders[0] != INVALID_HARDWARE_SHADER )
+		return 0;
+
 	return nPreferred;
 }
 
@@ -4347,10 +4360,16 @@ void CShaderManager::BindVertexShader( VertexShaderHandle_t hVertexShader )
 //-----------------------------------------------------------------------------
 void CShaderManager::SetVertexShader( VertexShader_t shader )
 {
+#if defined( IOS )
+	s_bIOSVertexShaderBindOk = false;
+#endif
 	// Determine which vertex shader to use...
 	if ( shader == INVALID_SHADER )
 	{
 		SetVertexShaderState( 0 );
+#if defined( IOS )
+		s_bIOSVertexShaderBindOk = true;
+#endif
 		return;
 	}
 
@@ -4365,7 +4384,7 @@ void CShaderManager::SetVertexShader( VertexShader_t shader )
 #if defined( IOS )
 	vshIndex = IOS_ClampDynamicShaderIndex(
 		vshIndex, vshLookup.m_ShaderStaticCombos.m_nCount, vshLookup.m_Name, false );
-	vshIndex = IOS_PickLoadedDynamicIndex(
+	vshIndex = IOS_FallbackDynamicIndex(
 		vshLookup.m_ShaderStaticCombos.m_pHardwareShaders,
 		vshLookup.m_ShaderStaticCombos.m_nCount,
 		vshIndex );
@@ -4471,6 +4490,22 @@ void CShaderManager::SetVertexShader( VertexShader_t shader )
 	}
 #endif
 
+#if defined( IOS )
+	// Do not leave a world VS (e.g. lightmapped) bound with a prop PS — causes
+	// oT1 mismatch / rainbow garbage (log 119).
+	if ( !dxshader )
+	{
+		m_HardwareVertexShader = (HardwareShader_t)-1;
+		m_HardwarePixelShader = (HardwareShader_t)-1;
+		Dx9Device()->SetVertexShader( NULL );
+		Dx9Device()->SetPixelShader( NULL );
+		return;
+	}
+#endif
+
+#if defined( IOS )
+	s_bIOSVertexShaderBindOk = true;
+#endif
 	SetVertexShaderState( dxshader );
 }
 
@@ -4531,7 +4566,7 @@ void CShaderManager::SetPixelShader( PixelShader_t shader )
 	// clearing the PS (illegal cyan). Clamp to dyn 0 instead.
 	pshIndex = IOS_ClampDynamicShaderIndex(
 		pshIndex, pshLookup.m_ShaderStaticCombos.m_nCount, pshLookup.m_Name, true );
-	pshIndex = IOS_PickLoadedDynamicIndex(
+	pshIndex = IOS_FallbackDynamicIndex(
 		pshLookup.m_ShaderStaticCombos.m_pHardwareShaders,
 		pshLookup.m_ShaderStaticCombos.m_nCount,
 		pshIndex );
@@ -4633,7 +4668,6 @@ void CShaderManager::SetPixelShader( PixelShader_t shader )
 #endif
 		}
 #if defined( IOS )
-		// Prefer dyn=0 over the illegal-material error PS (cyan / black-grid flash).
 		if ( pshLookup.m_ShaderStaticCombos.m_pHardwareShaders &&
 			 pshLookup.m_ShaderStaticCombos.m_nCount > 0 &&
 			 pshLookup.m_ShaderStaticCombos.m_pHardwareShaders[0] != INVALID_HARDWARE_SHADER )
@@ -4643,6 +4677,10 @@ void CShaderManager::SetPixelShader( PixelShader_t shader )
 		else if ( s_pIllegalMaterialPS != INVALID_HARDWARE_SHADER )
 		{
 			dxshader = s_pIllegalMaterialPS;
+		}
+		if ( !dxshader || !s_bIOSVertexShaderBindOk )
+		{
+			return;
 		}
 #endif
 	}

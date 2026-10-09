@@ -1086,6 +1086,28 @@ bool bDistanceAlphaFromDetail = false;
 				#endif
 				{
 					DECLARE_STATIC_VERTEX_SHADER( vertexlit_and_unlit_generic_vs20 );
+#if defined( IOS )
+					// One known-good Documents VCS static for all props/UI (log 116–117).
+					// Per-material bits remapped via .inc dyn≠VCS dyn → wrong ids (log 122
+					// VERTEXCOLOR packed 2048 → id 64; static 0 dyn 0 skipped → invisible).
+					SET_STATIC_VERTEX_SHADER_COMBO( SFM, 0 );
+					SET_STATIC_VERTEX_SHADER_COMBO( VERTEXCOLOR, 0 );
+					SET_STATIC_VERTEX_SHADER_COMBO( CUBEMAP, 0 );
+					SET_STATIC_VERTEX_SHADER_COMBO( HALFLAMBERT, 0 );
+					SET_STATIC_VERTEX_SHADER_COMBO( FLASHLIGHT, 0 );
+					SET_STATIC_VERTEX_SHADER_COMBO( SEAMLESS_BASE, 0 );
+					SET_STATIC_VERTEX_SHADER_COMBO( SEAMLESS_DETAIL, 0 );
+					SET_STATIC_VERTEX_SHADER_COMBO( SEPARATE_DETAIL_UVS, 0 );
+					SET_STATIC_VERTEX_SHADER_COMBO( LIGHTING_PREVIEW, 0 );
+					SET_STATIC_VERTEX_SHADER_COMBO( TREESWAY, 0 );
+					SET_STATIC_VERTEX_SHADER_COMBO( FLATTEN_STATIC_CONTROL_FLOW, 0 );
+					SET_STATIC_VERTEX_SHADER_COMBO( DECAL, 0 );
+					SET_STATIC_VERTEX_SHADER_COMBO( CASCADED_SHADOW_MAPPING, 0 );
+					SET_STATIC_VERTEX_SHADER_COMBO( CSM_BLENDING, 0 );
+					SET_STATIC_VERTEX_SHADER_COMBO( DOPIXELFOG, 0 );
+					SET_STATIC_VERTEX_SHADER_COMBO( HARDWAREFOGBLEND, 0 );
+					bool bCSMBlending = false;
+#else
 					SET_STATIC_VERTEX_SHADER_COMBO( SFM, bSFM );
 					SET_STATIC_VERTEX_SHADER_COMBO( VERTEXCOLOR,  bHasVertexColor || bHasVertexAlpha );
 					SET_STATIC_VERTEX_SHADER_COMBO( CUBEMAP,  bHasEnvmap );
@@ -1100,13 +1122,6 @@ bool bDistanceAlphaFromDetail = false;
 					SET_STATIC_VERTEX_SHADER_COMBO( DECAL, bIsDecal );
 					bool bCSMEnabled_ps2b = false;
 					bool bCSMBlending = g_pHardwareConfig->GetCSMAccurateBlending();
-#if defined( IOS )
-					bCSMBlending = false;
-					SET_STATIC_VERTEX_SHADER_COMBO( CASCADED_SHADOW_MAPPING, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( CSM_BLENDING, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( DOPIXELFOG, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( HARDWAREFOGBLEND, 0 );
-#else
 					SET_STATIC_VERTEX_SHADER_COMBO( CASCADED_SHADOW_MAPPING, bCSMEnabled_ps2b );
 					SET_STATIC_VERTEX_SHADER_COMBO( CSM_BLENDING, bCSMBlending );
 #endif
@@ -1115,23 +1130,20 @@ bool bDistanceAlphaFromDetail = false;
 					if ( g_pHardwareConfig->SupportsPixelShaders_2_b() || g_pHardwareConfig->ShouldAlwaysUseShaderModel2bShaders() ) // Always send OpenGL this way
 					{
 						DECLARE_STATIC_PIXEL_SHADER( vertexlit_and_unlit_generic_ps20b );
-						SET_STATIC_PIXEL_SHADER_COMBO( SFM, bSFM );
-						SET_STATIC_PIXEL_SHADER_COMBO( SELFILLUM_ENVMAPMASK_ALPHA, bHasSelfIllumInEnvMapMask ); 
-						SET_STATIC_PIXEL_SHADER_COMBO( DETAILTEXTURE,  bHasDetailTexture );
-						SET_STATIC_PIXEL_SHADER_COMBO( CUBEMAP,  bHasEnvmap );
-						SET_STATIC_PIXEL_SHADER_COMBO( DIFFUSELIGHTING,  hasDiffuseLighting );
-						SET_STATIC_PIXEL_SHADER_COMBO( ENVMAPMASK,  bHasEnvmapMask && ( bHasEnvmap || bHasSelfIllumInEnvMapMask ) );
-						SET_STATIC_PIXEL_SHADER_COMBO( BASEALPHAENVMAPMASK,  hasBaseAlphaEnvmapMask && bHasEnvmap );
-						SET_STATIC_PIXEL_SHADER_COMBO( ENVMAPFRESNEL,  bHasEnvMapFresnel && bHasEnvmap );
-						SET_STATIC_PIXEL_SHADER_COMBO( SELFILLUM,  bHasSelfIllum );
-						SET_STATIC_PIXEL_SHADER_COMBO( VERTEXCOLOR,  bHasVertexColor );
-						SET_STATIC_PIXEL_SHADER_COMBO( FLASHLIGHT,  bHasFlashlight );
-						ClampDetailBlendModeAndWarn( nDetailBlendMode, 0, 9 );
-						SET_STATIC_PIXEL_SHADER_COMBO( DETAIL_BLEND_MODE, nDetailBlendMode );
-						ClampDecalBlendModeAndWarn( nDecalBlendMode, 0, 1 );
 #if defined( IOS )
-						// PC uses DECAL_BLEND_MODE=2 for "no decal" → GetIndex 41943040
-						// (log 121 purple illegal PS). Documents VCS has no such static id.
+						// GetIndex 128 → Documents VCS staticId 21 (dyn=6). Stable for props+UI.
+						SET_STATIC_PIXEL_SHADER_COMBO( SFM, 0 );
+						SET_STATIC_PIXEL_SHADER_COMBO( SELFILLUM_ENVMAPMASK_ALPHA, 0 );
+						SET_STATIC_PIXEL_SHADER_COMBO( DETAILTEXTURE, 0 );
+						SET_STATIC_PIXEL_SHADER_COMBO( CUBEMAP, 0 );
+						SET_STATIC_PIXEL_SHADER_COMBO( DIFFUSELIGHTING, 1 );
+						SET_STATIC_PIXEL_SHADER_COMBO( ENVMAPMASK, 0 );
+						SET_STATIC_PIXEL_SHADER_COMBO( BASEALPHAENVMAPMASK, 0 );
+						SET_STATIC_PIXEL_SHADER_COMBO( ENVMAPFRESNEL, 0 );
+						SET_STATIC_PIXEL_SHADER_COMBO( SELFILLUM, 0 );
+						SET_STATIC_PIXEL_SHADER_COMBO( VERTEXCOLOR, 0 );
+						SET_STATIC_PIXEL_SHADER_COMBO( FLASHLIGHT, 0 );
+						SET_STATIC_PIXEL_SHADER_COMBO( DETAIL_BLEND_MODE, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( DECAL_BLEND_MODE, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( TINTMASKTEXTURE, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( SEAMLESS_BASE, 0 );
@@ -1151,6 +1163,20 @@ bool bDistanceAlphaFromDetail = false;
 						SET_STATIC_PIXEL_SHADER_COMBO( CSM_BLENDING, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( DOPIXELFOG, 0 );
 #else
+						SET_STATIC_PIXEL_SHADER_COMBO( SFM, bSFM );
+						SET_STATIC_PIXEL_SHADER_COMBO( SELFILLUM_ENVMAPMASK_ALPHA, bHasSelfIllumInEnvMapMask ); 
+						SET_STATIC_PIXEL_SHADER_COMBO( DETAILTEXTURE,  bHasDetailTexture );
+						SET_STATIC_PIXEL_SHADER_COMBO( CUBEMAP,  bHasEnvmap );
+						SET_STATIC_PIXEL_SHADER_COMBO( DIFFUSELIGHTING,  hasDiffuseLighting );
+						SET_STATIC_PIXEL_SHADER_COMBO( ENVMAPMASK,  bHasEnvmapMask && ( bHasEnvmap || bHasSelfIllumInEnvMapMask ) );
+						SET_STATIC_PIXEL_SHADER_COMBO( BASEALPHAENVMAPMASK,  hasBaseAlphaEnvmapMask && bHasEnvmap );
+						SET_STATIC_PIXEL_SHADER_COMBO( ENVMAPFRESNEL,  bHasEnvMapFresnel && bHasEnvmap );
+						SET_STATIC_PIXEL_SHADER_COMBO( SELFILLUM,  bHasSelfIllum );
+						SET_STATIC_PIXEL_SHADER_COMBO( VERTEXCOLOR,  bHasVertexColor );
+						SET_STATIC_PIXEL_SHADER_COMBO( FLASHLIGHT,  bHasFlashlight );
+						ClampDetailBlendModeAndWarn( nDetailBlendMode, 0, 9 );
+						SET_STATIC_PIXEL_SHADER_COMBO( DETAIL_BLEND_MODE, nDetailBlendMode );
+						ClampDecalBlendModeAndWarn( nDecalBlendMode, 0, 1 );
 						SET_STATIC_PIXEL_SHADER_COMBO( DECAL_BLEND_MODE, bHasDecalTexture ? nDecalBlendMode : 2 );
 						SET_STATIC_PIXEL_SHADER_COMBO( TINTMASKTEXTURE, bHasTintMaskTexture );
 						SET_STATIC_PIXEL_SHADER_COMBO( SEAMLESS_BASE, bSeamlessBase );

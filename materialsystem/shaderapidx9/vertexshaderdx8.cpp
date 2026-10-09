@@ -3249,12 +3249,8 @@ static int ResolveStaticComboRecordIndex( ShaderFileCache_t *pFileCache, int nLo
 	int nRaw = 0;
 	if ( bHavePreferred && preferred <= nMaxPlausibleStaticId )
 		rawCandidates[nRaw++] = preferred;
-	if ( nIncDyn > 0 && nIncDyn != nVcsDyn )
-	{
-		const uint32 incId = (uint32)( nLookupStaticIndex / nIncDyn );
-		if ( incId <= nMaxPlausibleStaticId )
-			rawCandidates[nRaw++] = incId;
-	}
+	// Never divide by .inc dyn when it disagrees with VCS dyn — log 122 remapped
+	// VERTEXCOLOR packed 2048 → staticId 64 (inc) instead of 341 (vcs) / heuristic.
 	if ( nLookupStaticIndex >= 0 && nLookupStaticIndex < 4096 )
 		rawCandidates[nRaw++] = (uint32)nLookupStaticIndex;
 	// Do NOT append staticId 0 here when preferred is missing/huge — that was log 121
@@ -4589,16 +4585,10 @@ void CShaderManager::SetVertexShader( VertexShader_t shader )
 #endif
 
 #if defined( IOS )
-	// Do not leave a world VS (e.g. lightmapped) bound with a prop PS — causes
-	// oT1 mismatch / rainbow garbage (log 119).
+	// Do not NULL the device shaders on failure — that paints black flashes (log 122).
+	// Leave prior bind; skip PS via s_bIOSVertexShaderBindOk.
 	if ( !dxshader )
-	{
-		m_HardwareVertexShader = (HardwareShader_t)-1;
-		m_HardwarePixelShader = (HardwareShader_t)-1;
-		Dx9Device()->SetVertexShader( NULL );
-		Dx9Device()->SetPixelShader( NULL );
 		return;
-	}
 #endif
 
 #if defined( IOS )

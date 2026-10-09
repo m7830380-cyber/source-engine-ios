@@ -3167,11 +3167,11 @@ static int IOS_FallbackStaticComboRecordIndex( ShaderFileCache_t *pFileCache, co
 
 	if ( V_stristr( baseName, "vertexlit_and_unlit_generic_ps20b" ) )
 	{
-		// bit 128 = DIFFUSELIGHTING, bit 64 = CUBEMAP (.inc fxctmp9).
-		// Log 130: DIFFUSE=1 (id 21) → black props (i.color lit). Prefer unlit
-		// CUBEMAP static id 10 (packed 64) which keeps PS lighting=1 → albedo.
-		static const uint32 s_diffuseIds[] = { 21, 22, 23, 20, 17, 16, 11, 10, 4, 1, 0 };
-		static const uint32 s_unlitIds[] = { 10, 11, 4, 1, 0 };
+		// bit 128 = DIFFUSE, bit 64 = CUBEMAP, bit 32 = DETAIL (.inc fxctmp9).
+		// Log 131: CUBEMAP id 10 → invisible (NaN normals). Prefer DETAIL id 5
+		// (packed 32, DIFFUSE=0) — albedo with blend factor 0.
+		static const uint32 s_diffuseIds[] = { 21, 22, 23, 20, 17, 16, 11, 10, 5, 4, 1, 0 };
+		static const uint32 s_unlitIds[] = { 5, 10, 11, 4, 1, 0 };
 		const bool bWantDiffuse = ( nLookupStaticIndex & 128 ) != 0 || nLookupStaticIndex > 4096;
 		const uint32 *pIds = bWantDiffuse ? s_diffuseIds : s_unlitIds;
 		const int nIds = bWantDiffuse ? ARRAYSIZE( s_diffuseIds ) : ARRAYSIZE( s_unlitIds );
@@ -3241,7 +3241,8 @@ static int IOS_FallbackStaticComboRecordIndex( ShaderFileCache_t *pFileCache, co
 //   correct is 128/6→id21). Dyn bind indexes [0, vcsDyn); skipped slots are INVALID.
 //
 // Known Documents maps:
-//   VL ps CUBEMAP=1 packed 64 → id 10 (log 130+: unlit albedo; DIFFUSE=0)
+//   VL ps DETAIL=1 packed 32 → id 5 (log 131+: unlit albedo; CUBEMAP id10 was NaN)
+//   VL ps CUBEMAP=1 packed 64 → id 10 (log 131 invisible — do not use alone)
 //   VL ps DIFFUSE=1 packed 128 → id 21 (log 124 OK walls/UI; log 130 black props)
 //   VL vs FLATTEN=1 packed 9216 → id 48
 //   VL ps VCOL=1 packed 2048 → preferred 341 (often missing) → unlit fallback id 1

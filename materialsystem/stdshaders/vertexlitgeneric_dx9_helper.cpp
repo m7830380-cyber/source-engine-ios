@@ -811,14 +811,6 @@ static void DrawVertexLitGeneric_DX9_Internal( CBaseVSShader *pShader, IMaterial
 			}
 			pShaderShadow->EnableSRGBRead( SHADER_SAMPLER0, bSampler0SrgbRead );
 
-#if defined( IOS )
-			// CUBEMAP=1 pin needs sampler1 even when material has no $envmap.
-			pShaderShadow->EnableTexture( SHADER_SAMPLER1, true );
-			if( g_pHardwareConfig->GetHDRType() == HDR_TYPE_NONE )
-			{
-				pShaderShadow->EnableSRGBRead( SHADER_SAMPLER1, true );
-			}
-#else
 			if ( bHasEnvmap )
 			{
 				pShaderShadow->EnableTexture( SHADER_SAMPLER1, true );
@@ -827,7 +819,6 @@ static void DrawVertexLitGeneric_DX9_Internal( CBaseVSShader *pShader, IMaterial
 					pShaderShadow->EnableSRGBRead( SHADER_SAMPLER1, true );
 				}
 			}
-#endif
 			if ( bHasFlashlight )
 			{
 				pShaderShadow->EnableTexture( SHADER_SAMPLER8, true );	// Depth texture
@@ -837,11 +828,17 @@ static void DrawVertexLitGeneric_DX9_Internal( CBaseVSShader *pShader, IMaterial
 				pShaderShadow->EnableTexture( SHADER_SAMPLER7, true );	// Flashlight cookie
 				pShaderShadow->EnableSRGBRead( SHADER_SAMPLER7, true );
 			}
+#if defined( IOS )
+			// DETAILTEXTURE=1 pin needs sampler2 even when material has no $detail.
+			pShaderShadow->EnableTexture( SHADER_SAMPLER2, true );
+			pShaderShadow->EnableSRGBRead( SHADER_SAMPLER2, IsSRGBDetailTexture( nDetailBlendMode ) );
+#else
 			if ( bHasDetailTexture )
 			{
 				pShaderShadow->EnableTexture( SHADER_SAMPLER2, true );
 				pShaderShadow->EnableSRGBRead( SHADER_SAMPLER2, IsSRGBDetailTexture( nDetailBlendMode ) );
 			}
+#endif
 			if ( bHasBump || bHasDiffuseWarp )
 			{
 				pShaderShadow->EnableTexture( SHADER_SAMPLER3, true );
@@ -1145,16 +1142,15 @@ bool bDistanceAlphaFromDetail = false;
 					{
 						DECLARE_STATIC_PIXEL_SHADER( vertexlit_and_unlit_generic_ps20b );
 #if defined( IOS )
-						// Log 130: DIFFUSE=1 replaces PS lighting with i.color (VS lit).
-						// VS lighting stays black (AmbientLight dyn slot often missing) →
-						// black props. With DIFFUSE=0 the PS keeps diffuseLighting=1 and
-						// shows albedo (vertexlit_and_unlit_generic_ps2x.fxc). Avoid packed
-						// 0 (illegal id 0): CUBEMAP=1 → packed 64 / dyn6 → id 10. Tint
-						// cubemap to 0 so it does not add. Menu still ClearBuffers.
+						// Log 130: DIFFUSE=1 → black props (i.color lit, VS ambient dead).
+						// Log 131: CUBEMAP=1 id10 → invisible — PS samples cubemap with
+						// zero normals (VS CUBEMAP=0 + dyn0) → NaN. Use DETAILTEXTURE=1
+						// instead: packed 32 → id 5, DIFFUSE=0 keeps lighting=1 (albedo).
+						// Force detail blend factor 0 so TextureCombine is a no-op.
 						SET_STATIC_PIXEL_SHADER_COMBO( SFM, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( SELFILLUM_ENVMAPMASK_ALPHA, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( DETAILTEXTURE, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( CUBEMAP, 1 );
+						SET_STATIC_PIXEL_SHADER_COMBO( DETAILTEXTURE, 1 );
+						SET_STATIC_PIXEL_SHADER_COMBO( CUBEMAP, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( DIFFUSELIGHTING, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( ENVMAPMASK, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( BASEALPHAENVMAPMASK, 0 );
@@ -1381,6 +1377,13 @@ bool bDistanceAlphaFromDetail = false;
 			{
 				pContextData->m_SemiStaticCmdsOut.BindTexture( pShader, SHADER_SAMPLER2, IsSRGBDetailTexture( nDetailBlendMode ) ? TEXTURE_BINDFLAGS_SRGBREAD : TEXTURE_BINDFLAGS_NONE, info.m_nDetail, info.m_nDetailFrame );
 			}
+#if defined( IOS )
+			else
+			{
+				// DETAILTEXTURE pin with blend factor 0 — dummy bind only.
+				pContextData->m_SemiStaticCmdsOut.BindStandardTexture( SHADER_SAMPLER2, TEXTURE_BINDFLAGS_NONE, TEXTURE_WHITE );
+			}
+#endif
 			if ( bHasSelfIllum )
 			{
 				if ( bHasSelfIllumMask )												// Separate texture for self illum?
@@ -1797,6 +1800,10 @@ bool bDistanceAlphaFromDetail = false;
 				pContextData->m_SemiStaticCmdsOut.SetVertexShaderConstant( VERTEX_SHADER_SHADER_SPECIFIC_CONST_11, flParams );
 			}
 
+#if defined( IOS )
+			// DETAILTEXTURE pin: blend factor 0 → TextureCombine leaves albedo alone.
+			fBlendFactor = 0.0f;
+#endif
 			if ( bVertexLitGeneric )
 			{
 				if ( bDesaturateWithBaseAlpha )
@@ -1833,14 +1840,6 @@ bool bDistanceAlphaFromDetail = false;
 			bool bHdr = ( g_pHardwareConfig->GetHDRType() != HDR_TYPE_NONE );
 			DynamicCmdsOut.BindEnvCubemapTexture( pShader, SHADER_SAMPLER1, bHdr ? TEXTURE_BINDFLAGS_NONE : TEXTURE_BINDFLAGS_SRGBREAD, info.m_nEnvmap, info.m_nEnvmapFrame );
 		}
-#if defined( IOS )
-		else
-		{
-			// iOS pins CUBEMAP=1 for legal static id 10; tint c0 is already 0 when
-			// !bHasEnvmap — bind a real cubemap so sampler1 type matches.
-			DynamicCmdsOut.BindStandardTexture( SHADER_SAMPLER1, TEXTURE_BINDFLAGS_NONE, TEXTURE_NORMALIZATION_CUBEMAP_SIGNED );
-		}
-#endif
 
 		bool bFlashlightShadows = false;
 		bool bUberlight = false;

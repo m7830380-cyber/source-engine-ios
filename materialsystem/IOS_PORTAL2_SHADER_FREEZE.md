@@ -17,7 +17,7 @@ Do **not** optimize against 125–126 (VERTEXCOLOR→fallback id 1, black/cyan s
 ## Frozen pins (log 130 update)
 
 - **Remapper:** `staticId = packed / vcsHeader.m_nDynamicCombos` only. Never `.inc` dyn first (log 118: 128/32→id 4 black).
-- **VL PS (log 130):** `CUBEMAP=1`, `DIFFUSELIGHTING=0`, `VERTEXCOLOR=0` → packed **64** → id **10**. DIFFUSE=1 (id 21) multiplies by black `i.color` when VS lighting fails → black props. DIFFUSE=0 keeps PS lighting=1 (albedo). Never packed 0.
+- **VL PS (log 131):** `DETAILTEXTURE=1`, `DIFFUSELIGHTING=0`, `CUBEMAP=0` → packed **32** → id **5**, detail blend factor **0**. DIFFUSE=1 (id 21) → black props; CUBEMAP id 10 → invisible (PS cubemap + zero VS normals → NaN). Never packed 0.
 - **VL VS:** `FLATTEN_STATIC_CONTROL_FLOW=1`, `VERTEXCOLOR=0` → packed 9216 → id **48**.
 - **LM PS/VS:** `FASTPATH=0` (117/124 era; FASTPATH=1 correlated with white flash). Lightmap bind **without** SRGBREAD; `flLScale *= 0.5` (log 130 wash).
 - **Ambient:** force white cube; **`DYNAMIC_LIGHT=1`** with `NUM_LIGHTS=0` (still set; less critical once DIFFUSE=0).

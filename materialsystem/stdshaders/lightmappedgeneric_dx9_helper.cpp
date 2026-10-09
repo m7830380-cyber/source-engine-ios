@@ -889,7 +889,7 @@ void DrawLightmappedGeneric_DX9( CBaseVSShader *pShader, IMaterialVar** params, 
 				// we bind without SRGBREAD — gamma-encoded texels are treated as
 				// linear and read ~2x too bright. Scale until Documents VCS can
 				// ship a real SHADER_SRGB_READ combo.
-				flLScale *= 0.5f;
+				flLScale *= 0.35f;
 #endif
 				pShader->PI_BeginCommandBuffer();
 				

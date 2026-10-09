@@ -37,6 +37,7 @@ Do **not** optimize against 125–126 (VERTEXCOLOR→fallback id 1, black/cyan s
 
 1. Device-verify IPA from restore commits (`79987530` / `aa8ab3ca`+) against **log-124** symptoms:
    - remaps `9216→48`, `128→21`, LM `0→0`, Helvetica `font=63`, no invalid combo, signon 6.
-2. Matching Documents `vertexlit_and_unlit_generic_{vs20,ps20b}.vcs` so VERTEXCOLOR is a distinct static (today 9216 and 9360 both → 48).
-3. **Hypothesis (do not ship blind):** mesh fills may work on id 21 if `$vertexcolor` is **off** and color comes from `$color` / texture bake — log 127 invisibility was VERTEXCOLOR→fallback id 1, not “all meshes dead”. Prove with a tiny in-game tick experiment only; keep menu on ClearBuffers until a named log confirms.
-4. Real GameUI on top of a frozen shader baseline — separate track.
+2. **Portal product (not shaders):** restore `portalrenderable_flatbasic.cpp` + `portal_gamemovement.cpp` (rubberwar had empty stubs / VPC excludes — portals never drew linked views).
+3. Matching Documents `vertexlit_and_unlit_generic_{vs20,ps20b}.vcs` so VERTEXCOLOR is a distinct static (today 9216 and 9360 both → 48).
+4. **Hypothesis (do not ship blind):** mesh fills may work on id 21 if `$vertexcolor` is **off** and color comes from `$color` / texture bake — log 127 invisibility was VERTEXCOLOR→fallback id 1, not “all meshes dead”. Prove with a tiny in-game tick experiment only; keep menu on ClearBuffers until a named log confirms.
+5. Real GameUI on top of a frozen shader baseline — separate track.

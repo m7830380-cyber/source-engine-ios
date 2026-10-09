@@ -25,7 +25,7 @@ $Project
 	-$File "hl2\func_tank.h"
 	-$File "hl2\hl_playermove.cpp"
 	-$File "hl2\hl2_eventlog.cpp"
-	-$File "$SRCDIR\game\shared\portal\portal_gamemovement.cpp"
+	// portal_gamemovement.cpp comes from server_portal_base.vpc — do not exclude.
 	$File "portal\portal_base2d.cpp"
 	$File "portal\portal_client.cpp"
 	$File "portal\portal_placement.cpp"

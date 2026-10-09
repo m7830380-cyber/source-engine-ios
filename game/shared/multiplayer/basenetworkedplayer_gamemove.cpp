@@ -1,7 +1,9 @@
 #include "cbase.h"
 #include "multiplayer/basenetworkedplayer_gamemove.h"
 
-#ifndef PORTAL2_DLL
+// Portal builds expose IGameMovement from portal_gamemovement.cpp instead.
+// Rubberwar defines PORTAL2 (not always PORTAL2_DLL) — gate on both.
+#if !defined( PORTAL2_DLL ) && !defined( PORTAL2 )
 static CNetworkedPlayerMovement g_GameMovement;
 IGameMovement* g_pGameMovement = (IGameMovement*)&g_GameMovement;
 

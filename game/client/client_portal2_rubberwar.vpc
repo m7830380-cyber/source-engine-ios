@@ -18,18 +18,18 @@ $Project
 	$File "portal2\portal2_ios_client_convars.cpp"
 	$File "portal2\portal2_options_multiplayer_stub.cpp"
 	$File "portal2\portal2_ios_vgui_link_stubs.cpp"
-	$File "portal2\portal2_portal_renderable_client_stub.cpp"
 	$File "portal2\portal2_radialmenu_client_stub.cpp"
 	$File "portal2\portal2_liquidportal_client_stub.cpp"
 	$File "portal2\portal2_gameui_ios_stubs.cpp"
 	$File "portal2\portal2_achievements_client_stub.cpp"
 	$File "portal2\portal2_ios_dt_stubs.cpp"
-	-$File "portal\portalrenderable_flatbasic.cpp"
+	// Restore real portal mesh/stencil (was stubbed for early link bring-up).
+	// Keep radial/liquid stubs — those are UI polish, not SP portal views.
 	-$File "c_mod_lesson_stubs.cpp"
 	-$File "hl2\vgui_rootpanel_hl2.cpp"
 	-$File "hl2\hl_prediction.cpp"
 	-$File "hl2\hl_in_main.cpp"
-	-$File "$SRCDIR\game\shared\portal\portal_gamemovement.cpp"
+	// portal_gamemovement.cpp comes from client_portal_base.vpc — do not exclude.
 	-$File "portal\c_portal_base2d.cpp"
 	-$File "portal\c_portal_base2d.h"
 	-$File "portal\portal_credits.cpp"

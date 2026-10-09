@@ -64,11 +64,12 @@ jobs:
         run: |
           $jobs = 8
           $targets = @(
-            @{ src='lightmappedgeneric_ps2x.fxc'; tgt='lightmappedgeneric_ps20b'; ids='0' },
+            @{ src='lightmappedgeneric_ps2x.fxc'; tgt='lightmappedgeneric_ps20b'; ids='0,4' },
             @{ src='lightmappedgeneric_vs20.fxc';  tgt='lightmappedgeneric_vs20';  ids='0' },
-            # DIFFUSELIGHTING=1 → Static GetIndex 128 / num_dyn 32 → VCS id 4
-            @{ src='vertexlit_and_unlit_generic_ps2x.fxc'; tgt='vertexlit_and_unlit_generic_ps20b'; ids='0,4' },
-            @{ src='vertexlit_and_unlit_generic_vs20.fxc';  tgt='vertexlit_and_unlit_generic_vs20';  ids='0' },
+            @{ src='vertexlit_and_unlit_generic_ps2x.fxc'; tgt='vertexlit_and_unlit_generic_ps20b';
+               ids='0,1,2,3,4,5,6,7,10,11,14,15,16,17,18,19,20,21,22,23,32,33,34,35,42,47,64,85,170' },
+            @{ src='vertexlit_and_unlit_generic_vs20.fxc'; tgt='vertexlit_and_unlit_generic_vs20';
+               ids='0,1,2,3,4,8,16,24,32,48,49,50' },
             @{ src='depthwrite_ps2x.fxc'; tgt='depthwrite_ps20b'; ids='0' },
             @{ src='depthwrite_vs20.fxc'; tgt='depthwrite_vs20'; ids='0' }
           )

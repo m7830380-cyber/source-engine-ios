@@ -497,6 +497,10 @@ static void DrawVertexLitGeneric_DX9_Internal( CBaseVSShader *pShader, IMaterial
 	bool bAvgStaticLightStreams = r_staticlight_mode.GetInt() == 1;
 	bool bUseStaticControlFlow = g_pHardwareConfig->SupportsStaticControlFlow() && ( !bAvgStaticLightStreams );
 	bool bSupportsSM3 = g_pHardwareConfig->SupportsPixelShaders_3_0() && ( !bAvgStaticLightStreams );
+#if defined( IOS )
+	// Bundled vertexlit .vcs are vs20/ps20b only; SM3 init would pin FLATTEN=0 → packed 9360 (log 141).
+	bSupportsSM3 = false;
+#endif
 
 	bool bSFM = ( ToolsEnabled() && IsPlatformWindowsPC() && bSupportsSM3 ) ? true : false;
 

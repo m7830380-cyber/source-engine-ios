@@ -3237,6 +3237,46 @@ static int IOS_TryVertexLitVsLightingStaticId( ShaderFileCache_t *pFileCache, in
 
 // When packed GetIndex() does not exist in Documents VCS, pick a nearby id that does
 // (log 120: ps packed 41945088 → bogus id 0; walls ps 7077888 → id 221184).
+// Log 141: props request packed 9360 (FLATTEN=0) but tree only ships sid 64 (FLATTEN=1, packed 9216).
+static int IOS_TryTreeVertexLitVsStaticIndex( ShaderFileCache_t *pFileCache, const char *pShaderName, int nLookupStaticIndex )
+{
+	const int nVcsDyn = pFileCache->m_Header.m_nDynamicCombos;
+	int idx = -1;
+	static const uint32 s_ids[] = { 64, 48, 49, 50, 32, 0 };
+	if ( nLookupStaticIndex == 9360 || nLookupStaticIndex == 9216 )
+	{
+		if ( IOS_TryStaticComboRecord( pFileCache, 64, &idx ) )
+		{
+			static CUtlMap<CUtlSymbol, bool> s_Note( 0, 0, DefLessFunc( CUtlSymbol ) );
+			if ( s_Note.Find( pFileCache->m_Name ) == s_Note.InvalidIndex() )
+			{
+				s_Note.Insert( pFileCache->m_Name, true );
+				Msg( "[iOS] Shader '%s': static packed %d → tree staticId 64 (FLATTEN remap, dyn=%d).\n",
+					pShaderName, nLookupStaticIndex, nVcsDyn );
+			}
+			return idx;
+		}
+	}
+	const uint32 preferred = ( nVcsDyn > 0 ) ? (uint32)( nLookupStaticIndex / nVcsDyn ) : 0u;
+	if ( preferred <= 4096 && IOS_TryStaticComboRecord( pFileCache, preferred, &idx ) )
+		return idx;
+	for ( int i = 0; i < (int)ARRAYSIZE( s_ids ); ++i )
+	{
+		if ( IOS_TryStaticComboRecord( pFileCache, s_ids[i], &idx ) )
+		{
+			static CUtlMap<CUtlSymbol, bool> s_Note( 0, 0, DefLessFunc( CUtlSymbol ) );
+			if ( s_Note.Find( pFileCache->m_Name ) == s_Note.InvalidIndex() )
+			{
+				s_Note.Insert( pFileCache->m_Name, true );
+				Msg( "[iOS] Shader '%s': static packed %d → tree staticId %u (dyn=%d).\n",
+					pShaderName, nLookupStaticIndex, s_ids[i], nVcsDyn );
+			}
+			return idx;
+		}
+	}
+	return -1;
+}
+
 static int IOS_FallbackStaticComboRecordIndex( ShaderFileCache_t *pFileCache, const char *pShaderName, int nLookupStaticIndex )
 {
 	char baseName[MAX_PATH];
@@ -3440,12 +3480,20 @@ static int ResolveStaticComboRecordIndex( ShaderFileCache_t *pFileCache, int nLo
 
 #if defined( IOS )
 	// Tree-compiled PLATFORM .vcs (dyn=32 PS / dyn=144+ VS): never bind CS:GO retail fallbacks.
-	if ( ( V_stristr( pShaderName, "vertexlit_and_unlit_generic_ps20b" ) &&
-		   pFileCache->m_Header.m_nDynamicCombos >= 32 ) ||
-		 ( V_stristr( pShaderName, "vertexlit_and_unlit_generic_vs20" ) &&
-		   pFileCache->m_Header.m_nDynamicCombos >= 144 ) )
+	if ( V_stristr( pShaderName, "vertexlit_and_unlit_generic_vs20" ) &&
+		 pFileCache->m_Header.m_nDynamicCombos >= 144 )
 	{
-		DevWarning( "[iOS] Shader '%s': static packed %d missing in tree VCS (dyn=%d); not using retail fallback.\n",
+		const int treeIdx = IOS_TryTreeVertexLitVsStaticIndex( pFileCache, pShaderName, nLookupStaticIndex );
+		if ( treeIdx != -1 )
+			return treeIdx;
+		DevWarning( "[iOS] Shader '%s': static packed %d missing in tree VS VCS (dyn=%d).\n",
+			pShaderName, nLookupStaticIndex, pFileCache->m_Header.m_nDynamicCombos );
+		return -1;
+	}
+	if ( V_stristr( pShaderName, "vertexlit_and_unlit_generic_ps20b" ) &&
+		 pFileCache->m_Header.m_nDynamicCombos >= 32 )
+	{
+		DevWarning( "[iOS] Shader '%s': static packed %d missing in tree PS VCS (dyn=%d).\n",
 			pShaderName, nLookupStaticIndex, pFileCache->m_Header.m_nDynamicCombos );
 		return -1;
 	}

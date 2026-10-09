@@ -3587,7 +3587,7 @@ void CompressedTexImage2D(GLenum target, GLint level, GLenum internalformat,
 				Msg( "[Portal2 iOS] DXT decompress: sRGB VTF → GL_RGBA8 (no sRGB decode ext)\n" );
 			}
 		}
-		if ( pixels )
+		if ( pixels && ( simpleAlpha || complexAlpha ) )
 		{
 			const int pw = ( width + 3 ) & ~3;
 			const int ph = ( height + 3 ) & ~3;

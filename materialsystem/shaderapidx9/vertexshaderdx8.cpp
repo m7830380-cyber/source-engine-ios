@@ -3235,6 +3235,75 @@ static int IOS_TryVertexLitVsLightingStaticId( ShaderFileCache_t *pFileCache, in
 	return -1;
 }
 
+// Tree ps20b (dyn=32): never use packed/nDyn when it equals VS-only ids (log 147:
+// touch VERTEXCOLOR packed 2048 → 2048/32=64, same number as VL props VS sid 64).
+static int IOS_TryTreeVertexLitPsStaticIndex( ShaderFileCache_t *pFileCache, const char *pShaderName, int nLookupStaticIndex )
+{
+	if ( !V_stristr( pShaderName, "vertexlit_and_unlit_generic_ps20b" ) )
+		return -1;
+	if ( pFileCache->m_Header.m_nDynamicCombos < 32 )
+		return -1;
+
+	int idx = -1;
+	const int nVcsDyn = pFileCache->m_Header.m_nDynamicCombos;
+
+	if ( nLookupStaticIndex == 0 )
+	{
+		if ( IOS_TryStaticComboRecord( pFileCache, 0, &idx ) )
+		{
+			static CUtlMap<CUtlSymbol, bool> s_Note( 0, 0, DefLessFunc( CUtlSymbol ) );
+			if ( s_Note.Find( pFileCache->m_Name ) == s_Note.InvalidIndex() )
+			{
+				s_Note.Insert( pFileCache->m_Name, true );
+				Msg( "[iOS] Shader '%s': static packed 0 → tree PS staticId 0 (dyn=%d).\n",
+					pShaderName, nVcsDyn );
+			}
+			return idx;
+		}
+	}
+
+	// .inc: VERTEXCOLOR weight 2048 (SELFILLUM is 1024).
+	if ( ( nLookupStaticIndex & 2048 ) && !( nLookupStaticIndex & 128 ) )
+	{
+		static const uint32 s_vcolIds[] = { 42, 32, 47, 23, 22, 4, 11, 16, 17, 0 };
+		for ( int i = 0; i < ARRAYSIZE( s_vcolIds ); ++i )
+		{
+			if ( IOS_TryStaticComboRecord( pFileCache, s_vcolIds[i], &idx ) )
+			{
+				static CUtlMap<CUtlSymbol, bool> s_Note( 0, 0, DefLessFunc( CUtlSymbol ) );
+				if ( s_Note.Find( pFileCache->m_Name ) == s_Note.InvalidIndex() )
+				{
+					s_Note.Insert( pFileCache->m_Name, true );
+					Msg( "[iOS] Shader '%s': static packed %d → tree PS staticId %u (VCOL, dyn=%d).\n",
+						pShaderName, nLookupStaticIndex, s_vcolIds[i], nVcsDyn );
+				}
+				return idx;
+			}
+		}
+	}
+
+	if ( nLookupStaticIndex & 128 )
+	{
+		static const uint32 s_diffuseIds[] = { 4, 3, 2, 11, 16, 17, 0 };
+		for ( int i = 0; i < ARRAYSIZE( s_diffuseIds ); ++i )
+		{
+			if ( IOS_TryStaticComboRecord( pFileCache, s_diffuseIds[i], &idx ) )
+			{
+				static CUtlMap<CUtlSymbol, bool> s_Note( 0, 0, DefLessFunc( CUtlSymbol ) );
+				if ( s_Note.Find( pFileCache->m_Name ) == s_Note.InvalidIndex() )
+				{
+					s_Note.Insert( pFileCache->m_Name, true );
+					Msg( "[iOS] Shader '%s': static packed %d → tree PS staticId %u (DIFFUSE, dyn=%d).\n",
+						pShaderName, nLookupStaticIndex, s_diffuseIds[i], nVcsDyn );
+				}
+				return idx;
+			}
+		}
+	}
+
+	return -1;
+}
+
 // When packed GetIndex() does not exist in Documents VCS, pick a nearby id that does
 // (log 120: ps packed 41945088 → bogus id 0; walls ps 7077888 → id 221184).
 // Tree vs20: FLATTEN=1 VCOL=0 → sid 64 (packed 9216, props); VCOL=1 → sid 65 (packed 9360, touch/UI).
@@ -3301,20 +3370,19 @@ static int IOS_FallbackStaticComboRecordIndex( ShaderFileCache_t *pFileCache, co
 
 	if ( V_stristr( baseName, "vertexlit_and_unlit_generic_ps20b" ) )
 	{
-		// Packed weights: DIFFUSELIGHTING=64, ENVMAPMASK=128, VERTEXCOLOR=1024 (not 128!).
-		// Log 137: touch packed 1024/2048 fell through to id21 (DIFFUSE) → black squares.
+		// .inc weights: CUBEMAP=64, DIFFUSELIGHTING=128, SELFILLUM=1024, VERTEXCOLOR=2048.
 		static const uint32 s_vcolIds[] = { 42, 85, 32, 47, 23, 22, 4, 11, 16, 17 };
 		static const uint32 s_diffuseIds[] = { 21, 22, 23, 20, 17, 16, 11, 4 };
 		static const uint32 s_detailIds[] = { 5, 4, 7, 6, 3, 2, 11 };
 		static const uint32 s_otherIds[] = { 4, 3, 2, 11, 16, 17, 20 };
 		const uint32 *pIds = s_otherIds;
 		int nIds = ARRAYSIZE( s_otherIds );
-		if ( nLookupStaticIndex & 1024 )
+		if ( nLookupStaticIndex & 2048 )
 		{
 			pIds = s_vcolIds;
 			nIds = ARRAYSIZE( s_vcolIds );
 		}
-		else if ( nLookupStaticIndex & 64 )
+		else if ( nLookupStaticIndex & 128 )
 		{
 			pIds = s_diffuseIds;
 			nIds = ARRAYSIZE( s_diffuseIds );
@@ -3407,6 +3475,17 @@ static int ResolveStaticComboRecordIndex( ShaderFileCache_t *pFileCache, int nLo
 {
 	const int nVcsDyn = pFileCache->m_Header.m_nDynamicCombos;
 	const int nIncDyn = GetIncDynamicComboProduct( pShaderName );
+
+#if defined( IOS )
+	if ( V_stristr( pShaderName, "vertexlit_and_unlit_generic_ps20b" ) &&
+		 pFileCache->m_Header.m_nDynamicCombos >= 32 )
+	{
+		const int treePs = IOS_TryTreeVertexLitPsStaticIndex( pFileCache, pShaderName, nLookupStaticIndex );
+		if ( treePs != -1 )
+			return treePs;
+	}
+#endif
+
 	uint32 candidates[8];
 	int nCandidates = 0;
 
@@ -3428,6 +3507,11 @@ static int ResolveStaticComboRecordIndex( ShaderFileCache_t *pFileCache, int nLo
 
 	// Log 128: flashlight_ps20b packed 9216 → preferred 2304 — never take that.
 	if ( bHavePreferred && V_stristr( pShaderName, "flashlight" ) && preferred > 64 )
+		bHavePreferred = false;
+
+	// Log 147: vertexlit PS touch packed 2048 → bogus preferred 64 (VS props sid).
+	if ( bHavePreferred && V_stristr( pShaderName, "vertexlit_and_unlit_generic_ps20b" ) &&
+		 nVcsDyn >= 32 && preferred == 64 && ( nLookupStaticIndex & 2048 ) )
 		bHavePreferred = false;
 
 	uint32 rawCandidates[6];

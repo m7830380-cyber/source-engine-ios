@@ -645,7 +645,11 @@ static void DrawVertexLitGeneric_DX9_Internal( CBaseVSShader *pShader, IMaterial
 					pShader->PI_SetPixelShaderAmbientLightCube( 5 );
 					pShader->PI_SetPixelShaderLocalLighting( 13 );
 				}
+#if !defined( IOS )
 				pShader->PI_SetVertexShaderAmbientLightCube();
+#endif
+				// iOS: instance ambient is often empty with NUM_LIGHTS pinned 0 →
+				// black props. Fixed grey cube is set in the dynamic path instead.
 			}
 			// material can choose to support per-instance modulation via $allowdiffusemodulation
 			bool bAllowDiffuseModulation = ( info.m_nAllowDiffuseModulation == -1 ) ? true : ( params[info.m_nAllowDiffuseModulation]->GetIntValue() != 0 );
@@ -1132,15 +1136,15 @@ bool bDistanceAlphaFromDetail = false;
 					{
 						DECLARE_STATIC_PIXEL_SHADER( vertexlit_and_unlit_generic_ps20b );
 #if defined( IOS )
-						// log 124: DIFFUSELIGHTING=1 + NUM_LIGHTS=0 → i.color lighting is
-						// black → black props. DIFFUSE=0 keeps diffuseLighting=1 (albedo).
-						// VERTEXCOLOR follows material so UnlitGeneric fonts/touch work
-						// (packed 2048 → id ~341; props stay packed 0 → id 0).
+						// log 125: DIFFUSE=0+VERTEXCOLOR=0 → packed 0 → id 0 is SKIPPED
+						// ("invalid pixel shader combo") → white world. Props must use
+						// DIFFUSE=1 → packed 128 → id 21. UnlitGeneric fonts keep
+						// DIFFUSE=0+VERTEXCOLOR=1 → packed 2048 → id 1 (text visible).
 						SET_STATIC_PIXEL_SHADER_COMBO( SFM, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( SELFILLUM_ENVMAPMASK_ALPHA, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( DETAILTEXTURE, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( CUBEMAP, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( DIFFUSELIGHTING, 0 );
+						SET_STATIC_PIXEL_SHADER_COMBO( DIFFUSELIGHTING, hasDiffuseLighting ? 1 : 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( ENVMAPMASK, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( BASEALPHAENVMAPMASK, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( ENVMAPFRESNEL, 0 );
@@ -2242,11 +2246,43 @@ bool bDistanceAlphaFromDetail = false;
 		DynamicCmdsOut.SetPixelShaderConstant( 25, vTimeConst, 1 );
 		//*/
 
+#if defined( IOS )
+		// Last in the buffer so nothing else stomps it. Mid-grey ambient keeps
+		// DIFFUSELIGHTING=1 (staticId 21) from rendering props black.
+		if ( bVertexLitGeneric )
+		{
+			float amb[24];
+			for ( int iAmb = 0; iAmb < 6; iAmb++ )
+			{
+				amb[iAmb * 4 + 0] = 0.55f;
+				amb[iAmb * 4 + 1] = 0.55f;
+				amb[iAmb * 4 + 2] = 0.55f;
+				amb[iAmb * 4 + 3] = 1.0f;
+			}
+			DynamicCmdsOut.SetVertexShaderConstant( VERTEX_SHADER_AMBIENT_LIGHT, amb, 6 );
+		}
+#endif
+
 		DynamicCmdsOut.End();
 #ifdef _PS3
 		ShaderApiFast( pShaderAPI )->SetPixelShaderFogParams( 21 );
 #endif
 		ShaderApiFast( pShaderAPI )->ExecuteCommandBuffer( DynamicCmdsOut.Base() );
+#if defined( IOS )
+		// Instance cmds can overwrite ambient during Draw(); set again on the API.
+		if ( bVertexLitGeneric )
+		{
+			float amb[24];
+			for ( int iAmb = 0; iAmb < 6; iAmb++ )
+			{
+				amb[iAmb * 4 + 0] = 0.55f;
+				amb[iAmb * 4 + 1] = 0.55f;
+				amb[iAmb * 4 + 2] = 0.55f;
+				amb[iAmb * 4 + 3] = 1.0f;
+			}
+			ShaderApiFast( pShaderAPI )->SetVertexShaderConstant( VERTEX_SHADER_AMBIENT_LIGHT, amb, 6 );
+		}
+#endif
 	}
 	pShader->Draw();
 }

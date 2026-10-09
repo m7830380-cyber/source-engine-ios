@@ -887,9 +887,9 @@ void CTouchControls::Paint()
 	int meshCount = 0;
 
 #if defined( IOS )
-	// UnlitGeneric textured quads are invisible when VCS combos are wrong
-	// (log 124). Always paint a solid scissor-fill so controls stay visible;
-	// textured icons draw on top if the material path ever works.
+	// UnlitGeneric textured quads are often invisible. Scissor-fill hit targets.
+	// log 125: btn->color is white (255,255,255,155) → white blobs. Use a dark
+	// panel + orange rim so controls stay visible without washing the 3D view.
 	for( it = btns.begin(); it != btns.end(); it++ )
 	{
 		CTouchButton *btn = *it;
@@ -897,14 +897,17 @@ void CTouchControls::Paint()
 			continue;
 		if( state != state_edit && !TouchButtonAvailable( btn ) )
 			continue;
-		int alpha = (btn->color.a > MIN_ALPHA_IN_CUTSCENE) ? MAX( MIN_ALPHA_IN_CUTSCENE, btn->color.a-m_AlphaDiff) : btn->color.a;
-		if( btn->flags & TOUCH_FL_HIDE )
-			alpha = 50;
-		if( alpha <= 0 )
+		int x0 = (int)(btn->x1*screen_w), y0 = (int)(btn->y1*screen_h);
+		int x1 = (int)(btn->x2*screen_w), y1 = (int)(btn->y2*screen_h);
+		if( x1 <= x0 || y1 <= y0 )
 			continue;
-		vgui::surface()->DrawSetColor( btn->color.r, btn->color.g, btn->color.b, MAX( alpha, 140 ) );
-		vgui::surface()->DrawFilledRect( (int)(btn->x1*screen_w), (int)(btn->y1*screen_h),
-			(int)(btn->x2*screen_w), (int)(btn->y2*screen_h) );
+		vgui::surface()->DrawSetColor( 30, 30, 36, 160 );
+		vgui::surface()->DrawFilledRect( x0, y0, x1, y1 );
+		vgui::surface()->DrawSetColor( 255, 140, 40, 220 );
+		vgui::surface()->DrawFilledRect( x0, y0, x1, y0 + 3 );
+		vgui::surface()->DrawFilledRect( x0, y1 - 3, x1, y1 );
+		vgui::surface()->DrawFilledRect( x0, y0, x0 + 3, y1 );
+		vgui::surface()->DrawFilledRect( x1 - 3, y0, x1, y1 );
 	}
 #endif
 

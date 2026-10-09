@@ -887,9 +887,8 @@ void CTouchControls::Paint()
 	int meshCount = 0;
 
 #if defined( IOS )
-	// UnlitGeneric textured quads are often invisible. Scissor-fill hit targets.
-	// log 125: btn->color is white (255,255,255,155) → white blobs. Use a dark
-	// panel + orange rim so controls stay visible without washing the 3D view.
+	// Fallback panels if textures stay invisible. Mesh fills (not ClearBuffers —
+	// log 126 punched the 3D view into grey). Dark translucent + orange rim.
 	for( it = btns.begin(); it != btns.end(); it++ )
 	{
 		CTouchButton *btn = *it;
@@ -901,13 +900,10 @@ void CTouchControls::Paint()
 		int x1 = (int)(btn->x2*screen_w), y1 = (int)(btn->y2*screen_h);
 		if( x1 <= x0 || y1 <= y0 )
 			continue;
-		vgui::surface()->DrawSetColor( 30, 30, 36, 160 );
+		vgui::surface()->DrawSetColor( 20, 20, 28, 120 );
 		vgui::surface()->DrawFilledRect( x0, y0, x1, y1 );
-		vgui::surface()->DrawSetColor( 255, 140, 40, 220 );
-		vgui::surface()->DrawFilledRect( x0, y0, x1, y0 + 3 );
-		vgui::surface()->DrawFilledRect( x0, y1 - 3, x1, y1 );
-		vgui::surface()->DrawFilledRect( x0, y0, x0 + 3, y1 );
-		vgui::surface()->DrawFilledRect( x1 - 3, y0, x1, y1 );
+		vgui::surface()->DrawSetColor( 255, 140, 40, 200 );
+		vgui::surface()->DrawOutlinedRect( x0, y0, x1, y1 );
 	}
 #endif
 

@@ -1457,10 +1457,9 @@ void CMatSystemSurface::DrawFilledRect( int x0, int y0, int x1, int y1 )
 	if( m_DrawColor[3]==0 )
 		return;
 
-#if defined( IOS )
-	IOSDrawFilledRect( x0, y0, x1, y1, m_DrawColor );
-	return;
-#endif
+	// log 126: iOS used ClearBuffers scissor-fills which punched grey holes through
+	// the 3D view (orange touch outlines on a dead framebuffer). UnlitGeneric with
+	// VERTEXCOLOR=1 is a valid Documents combo again — draw real quads.
 
 	Vertex_t rect[2];
 	Vertex_t clippedRect[2];
@@ -1588,10 +1587,11 @@ void CMatSystemSurface::DrawFilledRectFade( int x0, int y0, int x1, int y1, unsi
 		return;
 
 #if defined( IOS )
-	// Gradients need vertex alpha; bake a solid with the stronger alpha instead.
-	unsigned char solid[4] = { m_DrawColor[0], m_DrawColor[1], m_DrawColor[2],
-		(unsigned char)MAX( alpha0, alpha1 ) };
-	IOSDrawFilledRect( x0, y0, x1, y1, solid );
+	// Gradients need vertex alpha; bake a solid with the stronger alpha (mesh, not ClearBuffers).
+	unsigned char saveA = m_DrawColor[3];
+	m_DrawColor[3] = (unsigned char)MAX( alpha0, alpha1 );
+	DrawFilledRect( x0, y0, x1, y1 );
+	m_DrawColor[3] = saveA;
 	return;
 #endif
 

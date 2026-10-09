@@ -1140,18 +1140,19 @@ bool bDistanceAlphaFromDetail = false;
 					{
 						DECLARE_STATIC_PIXEL_SHADER( vertexlit_and_unlit_generic_ps20b );
 #if defined( IOS )
-						// Tree VCS (dyn=32): props DIFFUSE=1 → sid 4 (packed 128); touch VCOL=1 → sid 64 (2048).
-						// SFM+DETAIL pins were not live combos → black props (log 142).
+						// Log 143: RGB black but alpha OK on props + touch → PS multiplies albedo by
+						// i.color.rgb (DIFFUSELIGHTING or VERTEXCOLOR) while that interpolant is 0 on GLES.
+						// Sid 0: diffuseLighting stays 1; albedo/tex alpha drive the image (tree dyn=32).
 						SET_STATIC_PIXEL_SHADER_COMBO( SFM, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( SELFILLUM_ENVMAPMASK_ALPHA, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( DETAILTEXTURE, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( CUBEMAP, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( DIFFUSELIGHTING, bVertexLitGeneric ? 1 : 0 );
+						SET_STATIC_PIXEL_SHADER_COMBO( DIFFUSELIGHTING, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( ENVMAPMASK, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( BASEALPHAENVMAPMASK, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( ENVMAPFRESNEL, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( SELFILLUM, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( VERTEXCOLOR, bVertexLitGeneric ? 0 : 1 );
+						SET_STATIC_PIXEL_SHADER_COMBO( VERTEXCOLOR, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( FLASHLIGHT, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( DETAIL_BLEND_MODE, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( DECAL_BLEND_MODE, 0 );
@@ -2265,6 +2266,10 @@ bool bDistanceAlphaFromDetail = false;
 				amb[iAmb * 4 + 3] = 1.0f;
 			}
 			DynamicCmdsOut.SetVertexShaderConstant( VERTEX_SHADER_AMBIENT_LIGHT, amb, 6 );
+		}
+		{
+			float diffuseMod[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+			DynamicCmdsOut.SetPixelShaderConstant( 1, diffuseMod, 1 );
 		}
 #endif
 

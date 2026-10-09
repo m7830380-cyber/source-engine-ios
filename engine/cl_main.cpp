@@ -1789,6 +1789,13 @@ void CL_FullyConnected( void )
 		ConVarRef r_flashlightdepthtexture( "r_flashlightdepthtexture" );
 		if ( r_flashlightdepthtexture.IsValid() )
 			r_flashlightdepthtexture.SetValue( 0 );
+		// Log 128: flashlight_ps20b remapped to garbage static 2304 — disable path.
+		ConVarRef mat_supportflashlight( "mat_supportflashlight" );
+		if ( mat_supportflashlight.IsValid() )
+			mat_supportflashlight.SetValue( 0 );
+		ConVarRef r_flashlightrender( "r_flashlightrender" );
+		if ( r_flashlightrender.IsValid() )
+			r_flashlightrender.SetValue( 0 );
 		ConVarRef mat_postprocess_enable( "mat_postprocess_enable" );
 		if ( mat_postprocess_enable.IsValid() )
 			mat_postprocess_enable.SetValue( 0 );

@@ -827,11 +827,7 @@ static void DrawVertexLitGeneric_DX9_Internal( CBaseVSShader *pShader, IMaterial
 				pShaderShadow->EnableTexture( SHADER_SAMPLER7, true );	// Flashlight cookie
 				pShaderShadow->EnableSRGBRead( SHADER_SAMPLER7, true );
 			}
-			if ( bHasDetailTexture
-#if defined( IOS )
-				|| bVertexLitGeneric
-#endif
-				)
+			if ( bHasDetailTexture )
 			{
 				pShaderShadow->EnableTexture( SHADER_SAMPLER2, true );
 				pShaderShadow->EnableSRGBRead( SHADER_SAMPLER2, IsSRGBDetailTexture( nDetailBlendMode ) );
@@ -1107,7 +1103,8 @@ bool bDistanceAlphaFromDetail = false;
 					SET_STATIC_VERTEX_SHADER_COMBO( SEPARATE_DETAIL_UVS, 0 );
 					SET_STATIC_VERTEX_SHADER_COMBO( LIGHTING_PREVIEW, 0 );
 					SET_STATIC_VERTEX_SHADER_COMBO( TREESWAY, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( FLATTEN_STATIC_CONTROL_FLOW, 1 );
+					// VL: FLATTEN=0 uses DoLighting() branches; FLATTEN=1 shares id48 VCOL alias.
+					SET_STATIC_VERTEX_SHADER_COMBO( FLATTEN_STATIC_CONTROL_FLOW, bVertexLitGeneric ? 0 : 1 );
 					SET_STATIC_VERTEX_SHADER_COMBO( DECAL, 0 );
 					SET_STATIC_VERTEX_SHADER_COMBO( CASCADED_SHADOW_MAPPING, 0 );
 					SET_STATIC_VERTEX_SHADER_COMBO( CSM_BLENDING, 0 );
@@ -1138,17 +1135,13 @@ bool bDistanceAlphaFromDetail = false;
 					{
 						DECLARE_STATIC_PIXEL_SHADER( vertexlit_and_unlit_generic_ps20b );
 #if defined( IOS )
-						// Log 135: SELFILLUM packed 1024→id170 MISS → fallback id1 →
-						// props still black. id170 does not exist in Documents VCS.
-						// Log 132: DETAIL packed 32→id5 HIT and props were VISIBLE
-						// (stretched). Mode0 combine is base*=lerp(1,2*detail,factor);
-						// factor 0 ⇒ identity. Force factor 0 + white detail ⇒ DIFFUSE=0
-						// albedo×1 without detail distort. Unlit stays DIFFUSE id21+VCOL.
+						// Props black = VS id48 VCOL alias (packed 9360) × PS DIFFUSE id21.
+						// Fix VS static resolve (skip id48 for VL lit); keep DIFFUSE=1 + id21.
 						SET_STATIC_PIXEL_SHADER_COMBO( SFM, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( SELFILLUM_ENVMAPMASK_ALPHA, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( DETAILTEXTURE, bVertexLitGeneric ? 1 : 0 );
+						SET_STATIC_PIXEL_SHADER_COMBO( DETAILTEXTURE, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( CUBEMAP, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( DIFFUSELIGHTING, bVertexLitGeneric ? 0 : 1 );
+						SET_STATIC_PIXEL_SHADER_COMBO( DIFFUSELIGHTING, 1 );
 						SET_STATIC_PIXEL_SHADER_COMBO( ENVMAPMASK, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( BASEALPHAENVMAPMASK, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( ENVMAPFRESNEL, 0 );
@@ -1374,13 +1367,6 @@ bool bDistanceAlphaFromDetail = false;
 			{
 				pContextData->m_SemiStaticCmdsOut.BindTexture( pShader, SHADER_SAMPLER2, IsSRGBDetailTexture( nDetailBlendMode ) ? TEXTURE_BINDFLAGS_SRGBREAD : TEXTURE_BINDFLAGS_NONE, info.m_nDetail, info.m_nDetailFrame );
 			}
-#if defined( IOS )
-			else if ( bVertexLitGeneric )
-			{
-				// DETAIL static forced for id5; white + blend factor 0 ⇒ no visual detail.
-				pContextData->m_SemiStaticCmdsOut.BindStandardTexture( SHADER_SAMPLER2, TEXTURE_BINDFLAGS_NONE, TEXTURE_WHITE );
-			}
-#endif
 			if ( bHasSelfIllum )
 			{
 				if ( bHasSelfIllumMask )												// Separate texture for self illum?
@@ -1798,10 +1784,6 @@ bool bDistanceAlphaFromDetail = false;
 
 			if ( bVertexLitGeneric )
 			{
-#if defined( IOS )
-				// Log 135/132: g_DetailBlendFactor in .w; 0 disables mode0 mod2x detail.
-				pContextData->m_SemiStaticCmdsOut.SetPixelShaderConstant4( 4, 1.0f, 1.0f, 1.0f, 0.0f );
-#else
 				if ( bDesaturateWithBaseAlpha )
 				{
 					pContextData->m_SemiStaticCmdsOut.SetPixelShaderConstant_W( 4, info.m_nDesaturateWithBaseAlpha, fBlendFactor );
@@ -1810,7 +1792,6 @@ bool bDistanceAlphaFromDetail = false;
 				{
 					pContextData->m_SemiStaticCmdsOut.SetPixelShaderConstant_W( 4, info.m_nSelfIllumTint, fBlendFactor );
 				}
-#endif
 			}
 			else
 			{

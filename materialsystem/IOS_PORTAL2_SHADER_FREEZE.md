@@ -1,64 +1,42 @@
-# Portal 2 iOS — log 135 autopsy (no more guessing)
+# Portal 2 iOS — stop PS static-id roulette
 
-## What log 135 proved (≥99%)
+## Root cause (log 135, not another PS remap)
 
 ```
-probe staticId=170 MISS
-probe staticId=171 MISS
-probe staticId=341 MISS
-probe staticId=682 MISS
-… HIT: 0,1,5,10,21,42,85
-vertexlit_and_unlit_generic_ps20b: static packed 1024 → fallback staticId 1
+vertexlit_and_unlit_generic_vs20: static packed 9360 → id 48
+vertexlit_and_unlit_generic_ps20b: static packed 128 → id 21 (DIFFUSE=1)
 ```
 
-| Intent | Actual | Result |
-|--------|--------|--------|
-| VL PS SELFILLUM→id170 | **170 does not exist** | fallback **id 1** |
-| id 1 = “unlit” | **props still black** | id1 behaves like DIFFUSE×black (or equivalent) |
-| Unlit VS VCOL | packed 9360→id48 | touch path OK (not the complaint) |
-| Walls flLScale=1.0 | brightness better | **no CSM / no flashlight shadows** (still forced off) |
+Black props = **wrong VS bytecode at id 48** (Documents VCS **VCOL alias**), not missing PS combo.
 
-Round-2 pass bar said: if `170 MISS`, stop. We shipped anyway. That was the failure.
+- PS `DIFFUSE=1` multiplies albedo by `i.color`.
+- id **48** bytecode behaves like **Unlit VERTEXCOLOR** → `i.color` ≈ 0 on props.
+- White ambient + `DYNAMIC_LIGHT=1` did not help while id48 was bound.
 
-## Why props stay black (mechanism unchanged)
+`VERTEXCOLOR` adds **16** to packed static index. After `/192` both VL and Unlit collapse to **id 48**.
 
-PS `DIFFUSE=1` ⇒ `diffuseLighting = i.color`. VS id48 VCOL ⇒ prop color stream 0 ⇒ black.
-id49 lighting + white ambient still black (134). So we **must** use a PS with `DIFFUSE=0` that **exists**.
+Discriminant (before divide): **`packed % 32 == 16`** ⇒ VL lit pin; **`== 0`** ⇒ Unlit VCOL (touch).
 
-## Existing DIFFUSE=0 statics (device evidence)
+## Fix in tree (no id5 / id170 / DETAIL hack)
 
-| id | packed | Log | Visual |
-|----|--------|-----|--------|
-| 0 | 0 | 125/126 | **INVALID** dyn0 |
-| 5 | 32 DETAIL | **132** | **VISIBLE** but UV stretch |
-| 10 | 64 CUBEMAP | 131 | invisible NaN |
-| 170 | 1024 SELFILLUM | **135** | **MISS** |
+1. **VS resolve**: when packed is VL lit and lookup hits id 48, bind **id 49** (then 50, 47…) — log line: `skip VCOL alias id 48`.
+2. **VS pin**: `FLATTEN_STATIC_CONTROL_FLOW = 0` for `bVertexLitGeneric` only (Unlit keeps 1).
+3. **PS pin**: restore **`DIFFUSE=1` → packed 128 → id 21** (correct UVs + lighting).
+4. **Ambient fill**: when instance lighting is empty, force **1.0** cube (was 0.45).
 
-Only **id 5** is a known-good DIFFUSE=0 binary that draws.
+## Pass bar (next log)
 
-## Why 132 stretched (revised)
+| Check | Pass |
+|-------|------|
+| VS | `packed 9360` → **id 49** (or lit remap msg), **not** bare `→ id 48` |
+| PS | `packed 128 → id 21` |
+| Props | Textured, not black |
+| Touch | Still uses id 48 path (`packed % 32 == 0`) |
 
-`DETAIL_BLEND_MODE=0` = `base *= lerp(1, 2*detail, factor)`.
-Default **factor=1** + unbound/garbage detail ⇒ looks like stretched/wrong albedo.
-**factor=0** ⇒ `base *= 1` (identity). Detail sample irrelevant.
+## If still black
 
-## Next pin (in tree, not CI until you say)
+Do **not** loop PS static ids. Next: TOGL varying / `SetVertexShaderStateAmbientLightCube` register layout, or ship corrected `.vcs` for vs20.
 
-- VL PS: `DETAIL=1 DIFFUSE=0` → packed **32 → id 5** (HIT)
-- Force `g_DetailBlendFactor=0`, bind `TEXTURE_WHITE` on sampler 2
-- Unlit unchanged: DIFFUSE id21 + VS VCOL
-- Fallback list: prefer **5**, never **1** or **0** or **10**
+## Walls / shadows (unchanged)
 
-Expected log: `packed 32 → id 5`, props textured. If UVs still stretch with factor 0 ⇒ interpolator mismatch (then separate fight). If props visible with good UVs ⇒ win.
-
-## Walls / shadows (separate)
-
-`flLScale=1.0` fixed overbright wash. Shadows still gone because iOS pins **CSM=0**, flashlight path disabled, FASTPATH=0. Baked lightmap darkening should still appear if LM samples; user “no shadows” may mean dynamic/CSM. Do **not** couple shadow work into the VL pin ship.
-
-## Hard stop
-
-- Betting on MISS static ids (170/341/682)
-- Falling back to id **1** for “unlit”
-- packed 0 / id 0
-- CUBEMAP id10
-- Blind flLScale thrash with VL
+`flLScale=1.0` only. CSM/flashlight still off on iOS pins.

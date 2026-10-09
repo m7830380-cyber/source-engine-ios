@@ -3155,6 +3155,28 @@ static bool IOS_TryStaticComboRecord( ShaderFileCache_t *pFileCache, uint32 nSta
 	return false;
 }
 
+// Documents VCS aliases collapse VL (VERTEXCOLOR=0) and Unlit (VERTEXCOLOR=1) into
+// the same staticId 48 (log 135: packed 9360→48, props black with PS DIFFUSE×i.color).
+// VERTEXCOLOR adds 16 to packed; (packed % 32)==16 ⇒ VL lit, ==0 ⇒ Unlit VCOL/touch.
+static bool IOS_IsVertexLitVsPackedLightingCombo( int nLookupStaticIndex )
+{
+	return ( nLookupStaticIndex % 32 ) == 16;
+}
+
+static int IOS_TryVertexLitVsLightingStaticId( ShaderFileCache_t *pFileCache, int nLookupStaticIndex )
+{
+	if ( !IOS_IsVertexLitVsPackedLightingCombo( nLookupStaticIndex ) )
+		return -1;
+	static const uint32 s_litIds[] = { 49, 50, 47, 32, 24 };
+	for ( int i = 0; i < ARRAYSIZE( s_litIds ); ++i )
+	{
+		int idx = -1;
+		if ( IOS_TryStaticComboRecord( pFileCache, s_litIds[i], &idx ) )
+			return idx;
+	}
+	return -1;
+}
+
 // When packed GetIndex() does not exist in Documents VCS, pick a nearby id that does
 // (log 120: ps packed 41945088 → bogus id 0; walls ps 7077888 → id 221184).
 static int IOS_FallbackStaticComboRecordIndex( ShaderFileCache_t *pFileCache, const char *pShaderName, int nLookupStaticIndex )
@@ -3167,13 +3189,12 @@ static int IOS_FallbackStaticComboRecordIndex( ShaderFileCache_t *pFileCache, co
 
 	if ( V_stristr( baseName, "vertexlit_and_unlit_generic_ps20b" ) )
 	{
-		// Log 135: id170 MISS; fallback id1 kept props black (id1≈DIFFUSE). Prefer
-		// id5 (DETAIL packed 32 — log 132 VISIBLE). Never id0 (invalid) or id10 (NaN).
+		// DIFFUSE=1 → id 21 (log 135 HIT). Never id0 (illegal) or id1 (black props).
 		static const uint32 s_diffuseIds[] = { 21, 22, 23, 20, 17, 16, 11, 4 };
-		static const uint32 s_detailUnlitIds[] = { 5, 4, 7, 6, 3, 2, 11 };
+		static const uint32 s_unlitIds[] = { 21, 4, 11, 16, 17, 20 };
 		const bool bWantDiffuse = ( nLookupStaticIndex & 128 ) != 0;
-		const uint32 *pIds = bWantDiffuse ? s_diffuseIds : s_detailUnlitIds;
-		const int nIds = bWantDiffuse ? ARRAYSIZE( s_diffuseIds ) : ARRAYSIZE( s_detailUnlitIds );
+		const uint32 *pIds = bWantDiffuse ? s_diffuseIds : s_unlitIds;
+		const int nIds = bWantDiffuse ? ARRAYSIZE( s_diffuseIds ) : ARRAYSIZE( s_unlitIds );
 		for ( int i = 0; i < nIds; ++i )
 		{
 			if ( IOS_TryStaticComboRecord( pFileCache, pIds[i], &idx ) )
@@ -3199,10 +3220,12 @@ static int IOS_FallbackStaticComboRecordIndex( ShaderFileCache_t *pFileCache, co
 	}
 	else if ( V_stristr( baseName, "vertexlit_and_unlit_generic_vs20" ) )
 	{
-		// Log 134: id49 did not fix black props and broke Unlit/touch (shared helper).
-		// Prefer id48 (empirically VCOL — touch OK). VL props fixed via PS DIFFUSE=0.
-		static const uint32 s_ids[] = { 48, 49, 32, 24, 16, 8, 4, 1, 0 };
-		for ( int i = 0; i < ARRAYSIZE( s_ids ); ++i )
+		static const uint32 s_vcolIds[] = { 48, 49, 32, 24, 16, 8, 4, 1, 0 };
+		static const uint32 s_litIds[] = { 49, 50, 47, 48, 32, 24, 16, 8, 4, 1, 0 };
+		const uint32 *s_ids = IOS_IsVertexLitVsPackedLightingCombo( nLookupStaticIndex ) ? s_litIds : s_vcolIds;
+		const int nIdCount = IOS_IsVertexLitVsPackedLightingCombo( nLookupStaticIndex )
+			? ARRAYSIZE( s_litIds ) : ARRAYSIZE( s_vcolIds );
+		for ( int i = 0; i < nIdCount; ++i )
 		{
 			if ( IOS_TryStaticComboRecord( pFileCache, s_ids[i], &idx ) )
 			{
@@ -3311,6 +3334,24 @@ static int ResolveStaticComboRecordIndex( ShaderFileCache_t *pFileCache, int nLo
 		int idx = pFileCache->FindCombo( candidates[i] );
 		if ( idx != -1 )
 		{
+			if ( V_stristr( pShaderName, "vertexlit_and_unlit_generic_vs20" )
+				&& candidates[i] == 48
+				&& IOS_IsVertexLitVsPackedLightingCombo( nLookupStaticIndex ) )
+			{
+				const int litIdx = IOS_TryVertexLitVsLightingStaticId( pFileCache, nLookupStaticIndex );
+				if ( litIdx != -1 )
+				{
+					static CUtlMap<CUtlSymbol, bool> s_Vs48Remap( 0, 0, DefLessFunc( CUtlSymbol ) );
+					if ( s_Vs48Remap.Find( pFileCache->m_Name ) == s_Vs48Remap.InvalidIndex() )
+					{
+						s_Vs48Remap.Insert( pFileCache->m_Name, true );
+						const uint32 litId = pFileCache->m_StaticComboRecords[litIdx].m_nStaticComboID;
+						Msg( "[iOS] Shader '%s': static packed %d → id %u (VL lit; skip VCOL alias id 48).\n",
+							pShaderName, nLookupStaticIndex, litId );
+					}
+					return litIdx;
+				}
+			}
 			if ( bHavePreferred && candidates[i] == preferred )
 			{
 				static CUtlMap<CUtlSymbol, bool> s_RemapNote( 0, 0, DefLessFunc( CUtlSymbol ) );

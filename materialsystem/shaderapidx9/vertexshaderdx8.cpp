@@ -3167,14 +3167,13 @@ static int IOS_FallbackStaticComboRecordIndex( ShaderFileCache_t *pFileCache, co
 
 	if ( V_stristr( baseName, "vertexlit_and_unlit_generic_ps20b" ) )
 	{
-		// bit 128 = DIFFUSE. VL: SELFILLUM+DIFFUSE=0 → packed 1024 → id 170
-		// (log 125: packed 0 static/dyn 0 INVALID — never prefer id 0).
-		// Never prefer CUBEMAP id10 / DETAIL id5 (log 131–132).
-		static const uint32 s_diffuseIds[] = { 21, 22, 23, 20, 17, 16, 11, 4, 1 };
-		static const uint32 s_unlitIds[] = { 170, 171, 169, 1, 4, 11 };
+		// Log 135: id170 MISS; fallback id1 kept props black (id1≈DIFFUSE). Prefer
+		// id5 (DETAIL packed 32 — log 132 VISIBLE). Never id0 (invalid) or id10 (NaN).
+		static const uint32 s_diffuseIds[] = { 21, 22, 23, 20, 17, 16, 11, 4 };
+		static const uint32 s_detailUnlitIds[] = { 5, 4, 7, 6, 3, 2, 11 };
 		const bool bWantDiffuse = ( nLookupStaticIndex & 128 ) != 0;
-		const uint32 *pIds = bWantDiffuse ? s_diffuseIds : s_unlitIds;
-		const int nIds = bWantDiffuse ? ARRAYSIZE( s_diffuseIds ) : ARRAYSIZE( s_unlitIds );
+		const uint32 *pIds = bWantDiffuse ? s_diffuseIds : s_detailUnlitIds;
+		const int nIds = bWantDiffuse ? ARRAYSIZE( s_diffuseIds ) : ARRAYSIZE( s_detailUnlitIds );
 		for ( int i = 0; i < nIds; ++i )
 		{
 			if ( IOS_TryStaticComboRecord( pFileCache, pIds[i], &idx ) )
@@ -3729,12 +3728,20 @@ bool CShaderManager::LoadAndCreateShaders( ShaderLookup_t &lookup, bool bVertexS
 					// Round-2: prove key ids exist before we bet on them (log 134 guesswork).
 					if ( V_stristr( pBase, "vertexlit_and_unlit_generic_ps20b" ) )
 					{
-						static const uint32 s_probe[] = { 0, 1, 5, 10, 21, 42, 85, 170, 171, 341, 682 };
+						static const uint32 s_probe[] = { 0, 1, 2, 3, 4, 5, 6, 7, 10, 11, 14, 21, 32, 42, 85, 170 };
 						for ( int p = 0; p < (int)ARRAYSIZE( s_probe ); ++p )
 						{
 							const int found = pFileCache->FindCombo( s_probe[p] );
 							Msg( "[iOS]   probe staticId=%u %s\n", s_probe[p],
 								found != -1 ? "HIT" : "MISS" );
+						}
+						// Also list every canonical id < 64 so we stop guessing.
+						for ( int r = 0; r < nRec; ++r )
+						{
+							const uint32 id = pFileCache->m_StaticComboRecords[r].m_nStaticComboID;
+							if ( id == 0xffffffff || id >= 64 )
+								break;
+							Msg( "[iOS]   catalog staticId=%u\n", id );
 						}
 					}
 					if ( V_stristr( pBase, "vertexlit_and_unlit_generic_vs20" ) )

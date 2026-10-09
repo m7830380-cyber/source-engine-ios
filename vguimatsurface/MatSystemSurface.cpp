@@ -1457,9 +1457,14 @@ void CMatSystemSurface::DrawFilledRect( int x0, int y0, int x1, int y1 )
 	if( m_DrawColor[3]==0 )
 		return;
 
-	// log 126: iOS used ClearBuffers scissor-fills which punched grey holes through
-	// the 3D view (orange touch outlines on a dead framebuffer). UnlitGeneric with
-	// VERTEXCOLOR=1 is a valid Documents combo again — draw real quads.
+#if defined( IOS )
+	// log 127: mesh UnlitGeneric quads are still invisible — only ClearBuffers
+	// scissor-fills show (cyan clear + orange PLAY in earlier logs). Mesh path
+	// made the menu a blank cyan screen. Keep ClearBuffers for VGUI solids.
+	// Callers that sit on the 3D view (in-game touch) must not fill large rects.
+	IOSDrawFilledRect( x0, y0, x1, y1, m_DrawColor );
+	return;
+#endif
 
 	Vertex_t rect[2];
 	Vertex_t clippedRect[2];
@@ -1587,11 +1592,9 @@ void CMatSystemSurface::DrawFilledRectFade( int x0, int y0, int x1, int y1, unsi
 		return;
 
 #if defined( IOS )
-	// Gradients need vertex alpha; bake a solid with the stronger alpha (mesh, not ClearBuffers).
-	unsigned char saveA = m_DrawColor[3];
-	m_DrawColor[3] = (unsigned char)MAX( alpha0, alpha1 );
-	DrawFilledRect( x0, y0, x1, y1 );
-	m_DrawColor[3] = saveA;
+	unsigned char solid[4] = { m_DrawColor[0], m_DrawColor[1], m_DrawColor[2],
+		(unsigned char)MAX( alpha0, alpha1 ) };
+	IOSDrawFilledRect( x0, y0, x1, y1, solid );
 	return;
 #endif
 

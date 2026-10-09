@@ -887,23 +887,34 @@ void CTouchControls::Paint()
 	int meshCount = 0;
 
 #if defined( IOS )
-	// Fallback panels if textures stay invisible. Mesh fills (not ClearBuffers —
-	// log 126 punched the 3D view into grey). Dark translucent + orange rim.
-	for( it = btns.begin(); it != btns.end(); it++ )
+	// ClearBuffers fills are the only visible VGUI solids (log 127), but they
+	// punch out the 3D view (log 126). Only draw tiny corner ticks while playing;
+	// never fill button interiors over the world.
+	extern bool IOS_IsMenuActive();
+	if ( !IOS_IsMenuActive() )
 	{
-		CTouchButton *btn = *it;
-		if( ( btn->flags & TOUCH_FL_HIDE ) && state != state_edit )
-			continue;
-		if( state != state_edit && !TouchButtonAvailable( btn ) )
-			continue;
-		int x0 = (int)(btn->x1*screen_w), y0 = (int)(btn->y1*screen_h);
-		int x1 = (int)(btn->x2*screen_w), y1 = (int)(btn->y2*screen_h);
-		if( x1 <= x0 || y1 <= y0 )
-			continue;
-		vgui::surface()->DrawSetColor( 20, 20, 28, 120 );
-		vgui::surface()->DrawFilledRect( x0, y0, x1, y1 );
-		vgui::surface()->DrawSetColor( 255, 140, 40, 200 );
-		vgui::surface()->DrawOutlinedRect( x0, y0, x1, y1 );
+		for( it = btns.begin(); it != btns.end(); it++ )
+		{
+			CTouchButton *btn = *it;
+			if( ( btn->flags & TOUCH_FL_HIDE ) && state != state_edit )
+				continue;
+			if( state != state_edit && !TouchButtonAvailable( btn ) )
+				continue;
+			int x0 = (int)(btn->x1*screen_w), y0 = (int)(btn->y1*screen_h);
+			int x1 = (int)(btn->x2*screen_w), y1 = (int)(btn->y2*screen_h);
+			if( x1 <= x0 || y1 <= y0 )
+				continue;
+			const int t = 3;
+			vgui::surface()->DrawSetColor( 255, 140, 40, 255 );
+			vgui::surface()->DrawFilledRect( x0, y0, x0 + t * 3, y0 + t );
+			vgui::surface()->DrawFilledRect( x0, y0, x0 + t, y0 + t * 3 );
+			vgui::surface()->DrawFilledRect( x1 - t * 3, y0, x1, y0 + t );
+			vgui::surface()->DrawFilledRect( x1 - t, y0, x1, y0 + t * 3 );
+			vgui::surface()->DrawFilledRect( x0, y1 - t, x0 + t * 3, y1 );
+			vgui::surface()->DrawFilledRect( x0, y1 - t * 3, x0 + t, y1 );
+			vgui::surface()->DrawFilledRect( x1 - t * 3, y1 - t, x1, y1 );
+			vgui::surface()->DrawFilledRect( x1 - t, y1 - t * 3, x1, y1 );
+		}
 	}
 #endif
 

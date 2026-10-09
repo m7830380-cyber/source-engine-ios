@@ -3167,10 +3167,13 @@ static int IOS_FallbackStaticComboRecordIndex( ShaderFileCache_t *pFileCache, co
 
 	if ( V_stristr( baseName, "vertexlit_and_unlit_generic_ps20b" ) )
 	{
+		// Prefer diffuse-lit statics for props/UI; bit 128 = DIFFUSELIGHTING in .inc.
+		// Huge packed indices (DECAL_BLEND_MODE=2) lose that bit — still prefer diffuse.
 		static const uint32 s_diffuseIds[] = { 21, 22, 23, 20, 17, 16, 11, 10, 4, 1, 0 };
-		static const uint32 s_unlitIds[] = { 0, 1, 4, 10, 11 };
-		const uint32 *pIds = ( nLookupStaticIndex & 128 ) ? s_diffuseIds : s_unlitIds;
-		const int nIds = ( nLookupStaticIndex & 128 ) ? ARRAYSIZE( s_diffuseIds ) : ARRAYSIZE( s_unlitIds );
+		static const uint32 s_unlitIds[] = { 1, 4, 10, 11, 0 };
+		const bool bWantDiffuse = ( nLookupStaticIndex & 128 ) != 0 || nLookupStaticIndex > 4096;
+		const uint32 *pIds = bWantDiffuse ? s_diffuseIds : s_unlitIds;
+		const int nIds = bWantDiffuse ? ARRAYSIZE( s_diffuseIds ) : ARRAYSIZE( s_unlitIds );
 		for ( int i = 0; i < nIds; ++i )
 		{
 			if ( IOS_TryStaticComboRecord( pFileCache, pIds[i], &idx ) )
@@ -3226,23 +3229,38 @@ static int ResolveStaticComboRecordIndex( ShaderFileCache_t *pFileCache, int nLo
 	uint32 candidates[8];
 	int nCandidates = 0;
 
-	uint32 rawCandidates[6];
-	int nRaw = 0;
+	// Documents VCS static ids for our key shaders sit in a small range (vertexlit
+	// ps ≤ ~100, lightmapped ≤ ~200). Anything larger is a packing mismatch.
+	const uint32 nMaxPlausibleStaticId = 4096;
+	uint32 preferred = 0;
+	bool bHavePreferred = false;
 	if ( nVcsDyn > 0 )
 	{
-		const uint32 vcsId = (uint32)( nLookupStaticIndex / nVcsDyn );
-		if ( vcsId <= 65535 )
-			rawCandidates[nRaw++] = vcsId;
+		preferred = (uint32)( nLookupStaticIndex / nVcsDyn );
+		bHavePreferred = true;
 	}
+	else if ( nIncDyn > 0 )
+	{
+		preferred = (uint32)( nLookupStaticIndex / nIncDyn );
+		bHavePreferred = true;
+	}
+
+	uint32 rawCandidates[6];
+	int nRaw = 0;
+	if ( bHavePreferred && preferred <= nMaxPlausibleStaticId )
+		rawCandidates[nRaw++] = preferred;
 	if ( nIncDyn > 0 && nIncDyn != nVcsDyn )
 	{
 		const uint32 incId = (uint32)( nLookupStaticIndex / nIncDyn );
-		if ( incId <= 65535 )
+		if ( incId <= nMaxPlausibleStaticId )
 			rawCandidates[nRaw++] = incId;
 	}
 	if ( nLookupStaticIndex >= 0 && nLookupStaticIndex < 4096 )
 		rawCandidates[nRaw++] = (uint32)nLookupStaticIndex;
-	rawCandidates[nRaw++] = 0;
+	// Do NOT append staticId 0 here when preferred is missing/huge — that was log 121
+	// purple (illegal PS): packed 41945088 silently bound id 0 then failed at draw.
+	if ( !bHavePreferred || preferred == 0 )
+		rawCandidates[nRaw++] = 0;
 
 	for ( int r = 0; r < nRaw; ++r )
 	{
@@ -3264,33 +3282,7 @@ static int ResolveStaticComboRecordIndex( ShaderFileCache_t *pFileCache, int nLo
 		int idx = pFileCache->FindCombo( candidates[i] );
 		if ( idx != -1 )
 		{
-			const uint32 preferred = ( nVcsDyn > 0 )
-				? (uint32)( nLookupStaticIndex / nVcsDyn )
-				: ( nIncDyn > 0 ? (uint32)( nLookupStaticIndex / nIncDyn ) : 0 );
-			if ( candidates[i] != preferred )
-			{
-				// Must pass DefLessFunc: default CUtlMap LessFunc is null. Empty-tree
-				// Find/Insert survive once; the second shader that needs a fallback
-				// calls through null and SIGSEGVs (PC=0) — that was log 88.
-				static CUtlMap<CUtlSymbol, bool> s_Warned( 0, 0, DefLessFunc( CUtlSymbol ) );
-				if ( s_Warned.Find( pFileCache->m_Name ) == s_Warned.InvalidIndex() )
-				{
-					s_Warned.Insert( pFileCache->m_Name, true );
-					DevWarning( "[iOS] Shader '%s': static packed %d → id %u (incDyn=%d vcsDyn=%d preferred=%u).\n",
-						pShaderName, nLookupStaticIndex, candidates[i], nIncDyn, nVcsDyn, preferred );
-				}
-			}
-			else if ( nIncDyn > 0 && nVcsDyn > 0 && nIncDyn != nVcsDyn && candidates[i] == (uint32)( nLookupStaticIndex / nIncDyn ) )
-			{
-				static CUtlMap<CUtlSymbol, bool> s_RemapNote( 0, 0, DefLessFunc( CUtlSymbol ) );
-				if ( s_RemapNote.Find( pFileCache->m_Name ) == s_RemapNote.InvalidIndex() )
-				{
-					s_RemapNote.Insert( pFileCache->m_Name, true );
-					Msg( "[iOS] Shader '%s': static packed %d → id %u via .inc dyn=%d (VCS dyn=%d).\n",
-						pShaderName, nLookupStaticIndex, candidates[i], nIncDyn, nVcsDyn );
-				}
-			}
-			else if ( nVcsDyn > 0 && candidates[i] == (uint32)( nLookupStaticIndex / nVcsDyn ) )
+			if ( bHavePreferred && candidates[i] == preferred )
 			{
 				static CUtlMap<CUtlSymbol, bool> s_RemapNote( 0, 0, DefLessFunc( CUtlSymbol ) );
 				if ( s_RemapNote.Find( pFileCache->m_Name ) == s_RemapNote.InvalidIndex() )
@@ -3298,6 +3290,21 @@ static int ResolveStaticComboRecordIndex( ShaderFileCache_t *pFileCache, int nLo
 					s_RemapNote.Insert( pFileCache->m_Name, true );
 					Msg( "[iOS] Shader '%s': static packed %d → id %u (VCS dyn=%d).\n",
 						pShaderName, nLookupStaticIndex, candidates[i], nVcsDyn );
+				}
+			}
+			else if ( bHavePreferred && preferred > nMaxPlausibleStaticId )
+			{
+				// Preferred is nonsense; keep searching / fall through to heuristic.
+				continue;
+			}
+			else
+			{
+				static CUtlMap<CUtlSymbol, bool> s_Warned( 0, 0, DefLessFunc( CUtlSymbol ) );
+				if ( s_Warned.Find( pFileCache->m_Name ) == s_Warned.InvalidIndex() )
+				{
+					s_Warned.Insert( pFileCache->m_Name, true );
+					DevWarning( "[iOS] Shader '%s': static packed %d → id %u (incDyn=%d vcsDyn=%d preferred=%u).\n",
+						pShaderName, nLookupStaticIndex, candidates[i], nIncDyn, nVcsDyn, preferred );
 				}
 			}
 			return idx;
@@ -3335,8 +3342,9 @@ static int IOS_ClampDynamicShaderIndex( int nIndex, int nCount, CUtlSymbol shade
 	return nIndex;
 }
 
-// If the requested dynamic slot was skipped in the VCS, try dyn 0 only — never jump to
-// an unrelated index (log 119: PickLoaded caused rainbow / transparent props).
+// If the requested dynamic slot was skipped in the VCS, try dyn 0 then the first
+// loaded slot in THIS static combo only (same material). Scanning other statics
+// caused rainbow (log 119); leaving INVALID caused purple illegal PS (log 121).
 static int IOS_FallbackDynamicIndex( HardwareShader_t *pShaders, int nCount, int nPreferred )
 {
 	if ( !pShaders || nCount <= 0 )
@@ -3353,6 +3361,11 @@ static int IOS_FallbackDynamicIndex( HardwareShader_t *pShaders, int nCount, int
 	if ( nPreferred != 0 && pShaders[0] != INVALID_HARDWARE_SHADER )
 		return 0;
 
+	for ( int i = 1; i < nCount; ++i )
+	{
+		if ( pShaders[i] != INVALID_HARDWARE_SHADER )
+			return i;
+	}
 	return nPreferred;
 }
 

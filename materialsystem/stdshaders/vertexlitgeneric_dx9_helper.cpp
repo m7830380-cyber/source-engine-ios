@@ -1130,7 +1130,11 @@ bool bDistanceAlphaFromDetail = false;
 						SET_STATIC_PIXEL_SHADER_COMBO( DETAIL_BLEND_MODE, nDetailBlendMode );
 						ClampDecalBlendModeAndWarn( nDecalBlendMode, 0, 1 );
 						SET_STATIC_PIXEL_SHADER_COMBO( DECAL_BLEND_MODE, bHasDecalTexture ? nDecalBlendMode : 2 );
+#if defined( IOS )
+						SET_STATIC_PIXEL_SHADER_COMBO( TINTMASKTEXTURE, 0 );
+#else
 						SET_STATIC_PIXEL_SHADER_COMBO( TINTMASKTEXTURE, bHasTintMaskTexture );
+#endif
 						SET_STATIC_PIXEL_SHADER_COMBO( SEAMLESS_BASE, bSeamlessBase );
 						SET_STATIC_PIXEL_SHADER_COMBO( SEAMLESS_DETAIL, bSeamlessDetail );
 						SET_STATIC_PIXEL_SHADER_COMBO( DISTANCEALPHA, bDistanceAlpha );
@@ -1148,8 +1152,6 @@ bool bDistanceAlphaFromDetail = false;
 						SET_STATIC_PIXEL_SHADER_COMBO( CSM_MODE, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( CSM_BLENDING, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( DOPIXELFOG, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( TINTMASKTEXTURE, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( LIGHTING_PREVIEW, 0 );
 #else
 						SET_STATIC_PIXEL_SHADER_COMBO( CASCADED_SHADOW_MAPPING, g_pHardwareConfig->SupportsCascadedShadowMapping() && !bSFM && !bHasFlashlight && !bDisableCSMLookup );
 						SET_STATIC_PIXEL_SHADER_COMBO( CSM_MODE, 0 );

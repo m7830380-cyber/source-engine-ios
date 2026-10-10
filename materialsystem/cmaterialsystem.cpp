@@ -867,7 +867,7 @@ bool CMaterialSystem::Connect( CreateInterfaceFn factory )
 #endif
 
 #if defined( IOS )
-	Msg( "[Portal2 iOS] render-fix R15: Unlit PS sid0 (VCOL off); tint c1+DrawModulated (log 163)\n" );
+	Msg( "[Portal2 iOS] render-fix R16: PS 2048→sid64; alpha-mask RGB from c1 (log 164)\n" );
 #endif
 	return g_pShaderDeviceMgr->Connect( ShaderFactory );	
 }

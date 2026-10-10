@@ -140,9 +140,14 @@ HALF3 IOS_FixZeroInterpolantColor( HALF3 lit )
 }
 HALF4 IOS_FixAlphaOnlyTexture( HALF4 c )
 {
-	// VGUI/font DXT5 often stores glyph in alpha with RGB=0 (Khronos DXT1 note).
+	// Alpha-masked UI (DXT5 / sid 0 log 164): RGB=0 reads black; use c1 tint (log 148 grey via mod).
 	if ( c.a > 1e-3h && dot( c.rgb, c.rgb ) < 1e-4h )
-		c.rgb = HALF3( 1.0h, 1.0h, 1.0h );
+	{
+		HALF3 tint = (HALF3)g_DiffuseModulation.rgb;
+		if ( dot( tint, tint ) < 1e-4h )
+			tint = HALF3( 1.0h, 1.0h, 1.0h );
+		c.rgb = tint;
+	}
 	return c;
 }
 HALF IOS_ApplyVertexAlpha( HALF texAlpha, HALF vertAlpha, HALF vertexAlphaScale )

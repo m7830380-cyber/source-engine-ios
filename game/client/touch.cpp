@@ -47,37 +47,12 @@ static void IOS_FixAlphaMaskRGBA( unsigned char *rgba, int pixelCount )
 	}
 }
 
-static void IOS_DrawTexturedTouchQuad( IMesh *pMesh, CMeshBuilder &mb,
-	float x0, float y0, float x1, float y1, float u0, float v0, float u1, float v1, const rgba_t &color )
+static void IOS_DrawTouchTexturedSubRect( int textureId, int x0, int y0, int x1, int y1,
+	float u0, float v0, float u1, float v1, const rgba_t &color )
 {
-	unsigned char meshColor[4] = { 255, 255, 255, color.a };
-	mb.Begin( pMesh, MATERIAL_QUADS, 1 );
-
-	mb.Position3f( x0, y0, 0 );
-	mb.Color4ubv( meshColor );
-	mb.TexCoord2f( 0, u0, v0 );
-	mb.AdvanceVertexF<VTX_HAVEPOS | VTX_HAVECOLOR, 1>();
-
-	mb.Position3f( x1, y0, 0 );
-	mb.Color4ubv( meshColor );
-	mb.TexCoord2f( 0, u1, v0 );
-	mb.AdvanceVertexF<VTX_HAVEPOS | VTX_HAVECOLOR, 1>();
-
-	mb.Position3f( x1, y1, 0 );
-	mb.Color4ubv( meshColor );
-	mb.TexCoord2f( 0, u1, v1 );
-	mb.AdvanceVertexF<VTX_HAVEPOS | VTX_HAVECOLOR, 1>();
-
-	mb.Position3f( x0, y1, 0 );
-	mb.Color4ubv( meshColor );
-	mb.TexCoord2f( 0, u0, v1 );
-	mb.AdvanceVertexF<VTX_HAVEPOS | VTX_HAVECOLOR, 1>();
-
-	mb.End();
-
-	const float inv = 1.0f / 255.0f;
-	Vector4D mod( color.r * inv, color.g * inv, color.b * inv, color.a * inv );
-	pMesh->DrawModulated( mod );
+	vgui::surface()->DrawSetTexture( textureId );
+	vgui::surface()->DrawSetColor( color.r, color.g, color.b, color.a );
+	vgui::surface()->DrawTexturedSubRect( x0, y0, x1, y1, u0, v0, u1, v1 );
 }
 #endif
 
@@ -956,18 +931,18 @@ void CTouchControls::Paint()
 
 			if( t->textureID )
 			{
-				m_pMesh = pRenderContext->GetDynamicMesh( true, NULL, NULL, g_pMatSystemSurface->DrawGetTextureMaterial(t->textureID) );
-
 				int alpha = (btn->color.a > MIN_ALPHA_IN_CUTSCENE) ? MAX( MIN_ALPHA_IN_CUTSCENE, btn->color.a-m_AlphaDiff) : btn->color.a;
 				if( btn->flags & TOUCH_FL_HIDE )
 					alpha = 50;		// hidden, shown only while editing
 				rgba_t color(btn->color.r, btn->color.g, btn->color.b, alpha);
 
 #if defined( IOS )
-				IOS_DrawTexturedTouchQuad( m_pMesh, meshBuilder,
-					btn->x1 * screen_w, btn->y1 * screen_h, btn->x2 * screen_w, btn->y2 * screen_h,
-					0, 0, 1, 1, color );
+				IOS_DrawTouchTexturedSubRect( t->textureID,
+					(int)( btn->x1 * screen_w ), (int)( btn->y1 * screen_h ),
+					(int)( btn->x2 * screen_w ), (int)( btn->y2 * screen_h ),
+					0.0f, 0.0f, 1.0f, 1.0f, color );
 #else
+				m_pMesh = pRenderContext->GetDynamicMesh( true, NULL, NULL, g_pMatSystemSurface->DrawGetTextureMaterial(t->textureID) );
 				meshBuilder.Begin( m_pMesh, MATERIAL_QUADS, 1 );
 
 				meshBuilder.Position3f( btn->x1*screen_w, btn->y1*screen_h, 0 );
@@ -1017,9 +992,9 @@ void CTouchControls::Paint()
 				alpha = 50;
 			rgba_t color(btn->color.r, btn->color.g, btn->color.b, alpha);
 
-			m_pMesh = pRenderContext->GetDynamicMesh( true, NULL, NULL, g_pMatSystemSurface->DrawGetTextureMaterial( touchTextureID ) );
-			IOS_DrawTexturedTouchQuad( m_pMesh, meshBuilder,
-				btn->x1 * screen_w, btn->y1 * screen_h, btn->x2 * screen_w, btn->y2 * screen_h,
+			IOS_DrawTouchTexturedSubRect( touchTextureID,
+				(int)( btn->x1 * screen_w ), (int)( btn->y1 * screen_h ),
+				(int)( btn->x2 * screen_w ), (int)( btn->y2 * screen_h ),
 				t->X0, t->Y0, t->X1, t->Y1, color );
 		}
 	}

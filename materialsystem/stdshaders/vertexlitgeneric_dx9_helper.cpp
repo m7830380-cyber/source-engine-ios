@@ -67,8 +67,10 @@ static void r_staticlight_mode_changed( IConVar *var, const char *pOldValue, flo
 ConVar r_staticlight_mode( "r_staticlight_mode", "0", FCVAR_DEVELOPMENTONLY, "0 - support three color streams, 1 - use avg of three streams, 2 - single color stream", r_staticlight_mode_changed );
 
 #if defined( IOS )
-static void IOS_ApplyDrawLightingConstants( IShaderDynamicAPI *pShaderAPI )
+static void IOS_ApplyDrawLightingConstants( IShaderDynamicAPI *pShaderAPI, bool bVertexLitGeneric )
 {
+	if ( !bVertexLitGeneric )
+		return;
 	float amb[24];
 	for ( int i = 0; i < 6; ++i )
 	{
@@ -1173,8 +1175,8 @@ bool bDistanceAlphaFromDetail = false;
 						SET_STATIC_PIXEL_SHADER_COMBO( BASEALPHAENVMAPMASK, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( ENVMAPFRESNEL, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( SELFILLUM, 0 );
-						// Unlit UI: PS VCOL=0 → packed 0 / sid 0 (log 164 good alpha). RGB from tex×c1 after CPU DXT mask fix.
-						SET_STATIC_PIXEL_SHADER_COMBO( VERTEXCOLOR, 0 );
+						// Must match VS VCOL (log 167: VS 9360→65 but PS packed 0→sid 0 = broken UI).
+						SET_STATIC_PIXEL_SHADER_COMBO( VERTEXCOLOR, bVertexLitGeneric ? 0 : 1 );
 						SET_STATIC_PIXEL_SHADER_COMBO( FLASHLIGHT, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( DETAIL_BLEND_MODE, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( DECAL_BLEND_MODE, 0 );
@@ -2299,7 +2301,7 @@ bool bDistanceAlphaFromDetail = false;
 #endif
 		ShaderApiFast( pShaderAPI )->ExecuteCommandBuffer( DynamicCmdsOut.Base() );
 #if defined( IOS )
-		IOS_ApplyDrawLightingConstants( pShaderAPI );
+		IOS_ApplyDrawLightingConstants( pShaderAPI, bVertexLitGeneric );
 #endif
 	}
 	pShader->Draw();

@@ -867,7 +867,7 @@ bool CMaterialSystem::Connect( CreateInterfaceFn factory )
 #endif
 
 #if defined( IOS )
-	Msg( "[Portal2 iOS] render-fix R18: touch atlas+VGUI RGBA alpha-mask fix (log 166)\n" );
+	Msg( "[Portal2 iOS] render-fix R19: PS VCOL=1 sid64 + unlit c1 + touch VGUI path (log 167)\n" );
 #endif
 	return g_pShaderDeviceMgr->Connect( ShaderFactory );	
 }

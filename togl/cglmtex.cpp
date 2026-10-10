@@ -3544,39 +3544,11 @@ static bool IOS_UseNativeDXT( GLenum internalformat )
 #endif
 
 #if defined( IOS )
-static uint8_t IOS_SrgbByteToLinear( uint8_t c )
-{
-	// Built once; uncompressDXTc lays out rows with stride == width (not block-padded pw).
-	static uint8_t s_lut[256];
-	static bool s_bInit = false;
-	if ( !s_bInit )
-	{
-		for ( int i = 0; i < 256; ++i )
-		{
-			const float s = i * ( 1.0f / 255.0f );
-			const float lin = ( s <= 0.04045f ) ? ( s / 12.92f ) : powf( ( s + 0.055f ) / 1.055f, 2.4f );
-			int v = (int)( lin * 255.0f + 0.5f );
-			if ( v < 0 )
-				v = 0;
-			if ( v > 255 )
-				v = 255;
-			s_lut[i] = (uint8_t)v;
-		}
-		s_bInit = true;
-	}
-	return s_lut[c];
-}
-
 static void IOS_FixDecompressedDXTPixels( uint32_t *pixels, int width, int height, bool bSrgbSource )
 {
-	static bool s_bLoggedLinearize = false;
-	if ( bSrgbSource && !s_bLoggedLinearize )
-	{
-		s_bLoggedLinearize = true;
-		Msg( "[Portal2 iOS] DXT decompress: apply sRGB→linear on RGBA8 (props/albedo)\n" );
-	}
-
 	// Log 150: pw*ph flat loop scribbled past malloc stride (row pitch = width) → heap abort in ANGLE.
+	// Keep RGB as decompressed sRGB bytes in RGBA8 (log 148 baseline); GLES has no sRGB decode ext.
+	(void)bSrgbSource;
 	for ( int y = 0; y < height; ++y )
 	{
 		uint32_t *row = pixels + y * width;
@@ -3592,13 +3564,6 @@ static void IOS_FixDecompressedDXTPixels( uint32_t *pixels, int width, int heigh
 			{
 				row[x] = 0;
 				continue;
-			}
-
-			if ( bSrgbSource )
-			{
-				r = IOS_SrgbByteToLinear( r );
-				g = IOS_SrgbByteToLinear( g );
-				b = IOS_SrgbByteToLinear( b );
 			}
 
 			if ( a > 0 && ( r + g + b ) < 4 )

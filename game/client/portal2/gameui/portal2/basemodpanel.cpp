@@ -2201,33 +2201,14 @@ void CBaseModPanel::PostChildPaint()
 	surface()->DrawSetColor( 255, 120, 0, 255 );
 	surface()->DrawFilledRect( m_nIOSPlayX0 + 8, m_nIOSPlayY0 + 8, m_nIOSPlayX1 - 8, m_nIOSPlayY1 - 8 );
 
-	// Font glyph quads are still unreliable; ClearBuffers block letters always show.
+	if ( m_hDefaultFont )
 	{
-		const int btnH = m_nIOSPlayY1 - m_nIOSPlayY0;
-		const int letterH = MAX( 28, btnH / 2 );
-		const int letterW = letterH * 3 / 5;
-		const int thick = MAX( 4, letterH / 6 );
-		const int gap = letterW / 3;
-		int x = ( m_nIOSPlayX0 + m_nIOSPlayX1 - ( 4 * letterW + 3 * gap ) ) / 2;
-		const int y = m_nIOSPlayY0 + ( btnH - letterH ) / 2;
-		surface()->DrawSetColor( 0, 0, 0, 255 );
-		surface()->DrawFilledRect( x, y, x + thick, y + letterH );
-		surface()->DrawFilledRect( x, y, x + letterW, y + thick );
-		surface()->DrawFilledRect( x, y + letterH / 2 - thick / 2, x + letterW, y + letterH / 2 + thick / 2 );
-		surface()->DrawFilledRect( x + letterW - thick, y, x + letterW, y + letterH / 2 );
-		x += letterW + gap;
-		surface()->DrawFilledRect( x, y, x + thick, y + letterH );
-		surface()->DrawFilledRect( x, y + letterH - thick, x + letterW, y + letterH );
-		x += letterW + gap;
-		surface()->DrawFilledRect( x, y, x + thick, y + letterH );
-		surface()->DrawFilledRect( x + letterW - thick, y, x + letterW, y + letterH );
-		surface()->DrawFilledRect( x, y, x + letterW, y + thick );
-		surface()->DrawFilledRect( x, y + letterH / 2 - thick / 2, x + letterW, y + letterH / 2 + thick / 2 );
-		x += letterW + gap;
-		surface()->DrawFilledRect( x, y, x + thick, y + letterH / 2 );
-		surface()->DrawFilledRect( x + letterW - thick, y, x + letterW, y + letterH / 2 );
-		surface()->DrawFilledRect( x, y + letterH / 2 - thick / 2, x + letterW, y + letterH / 2 + thick / 2 );
-		surface()->DrawFilledRect( x + letterW / 2 - thick / 2, y + letterH / 2, x + letterW / 2 + thick / 2, y + letterH );
+		const char *pszPlay = "PLAY";
+		int textW, textH;
+		surface()->GetTextSize( m_hDefaultFont, pszPlay, textW, textH );
+		const int tx = ( m_nIOSPlayX0 + m_nIOSPlayX1 - textW ) / 2;
+		const int ty = m_nIOSPlayY0 + ( ( m_nIOSPlayY1 - m_nIOSPlayY0 ) - textH ) / 2;
+		DrawColoredText( m_hDefaultFont, tx, ty, 0x000000ff, pszPlay );
 	}
 #endif
 }

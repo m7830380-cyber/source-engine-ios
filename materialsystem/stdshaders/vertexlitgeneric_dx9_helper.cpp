@@ -1150,9 +1150,8 @@ bool bDistanceAlphaFromDetail = false;
 					{
 						DECLARE_STATIC_PIXEL_SHADER( vertexlit_and_unlit_generic_ps20b );
 #if defined( IOS )
-						// Log 143: RGB black but alpha OK on props + touch → PS multiplies albedo by
-						// i.color.rgb (DIFFUSELIGHTING or VERTEXCOLOR) while that interpolant is 0 on GLES.
-						// Sid 0: diffuseLighting stays 1; albedo/tex alpha drive the image (tree dyn=32).
+						// Match tree VCS: props VL → PS packed 0 (sid 0); Unlit/touch/fonts → PS packed 2048 (sid 42).
+						// Log 151 regressed by pinning VERTEXCOLOR=0 for everything (no 2048→42 compile).
 						SET_STATIC_PIXEL_SHADER_COMBO( SFM, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( SELFILLUM_ENVMAPMASK_ALPHA, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( DETAILTEXTURE, 0 );
@@ -1162,9 +1161,7 @@ bool bDistanceAlphaFromDetail = false;
 						SET_STATIC_PIXEL_SHADER_COMBO( BASEALPHAENVMAPMASK, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( ENVMAPFRESNEL, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( SELFILLUM, 0 );
-						// PS VERTEXCOLOR forces diffuseLighting=i.color.rgb (ps2x) — GLES UI verts
-						// often carry zero/black; keep albedo from texture (log 148: grey + black holes).
-						SET_STATIC_PIXEL_SHADER_COMBO( VERTEXCOLOR, 0 );
+						SET_STATIC_PIXEL_SHADER_COMBO( VERTEXCOLOR, bVertexLitGeneric ? 0 : 1 );
 						SET_STATIC_PIXEL_SHADER_COMBO( FLASHLIGHT, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( DETAIL_BLEND_MODE, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( DECAL_BLEND_MODE, 0 );

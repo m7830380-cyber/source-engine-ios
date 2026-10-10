@@ -726,6 +726,18 @@ void CMatSystemTexture::SetSubTextureRGBAEx( int drawX, int drawY, unsigned cons
 
 	Assert( rgba );
 
+#if defined( IOS )
+	{
+		const int nPix = subTextureWide * subTextureTall;
+		unsigned char *p = (unsigned char *)rgba;
+		for ( int i = 0; i < nPix; ++i, p += 4 )
+		{
+			if ( p[3] > 0 && ( p[0] + p[1] + p[2] ) < 4 )
+				p[0] = p[1] = p[2] = 255;
+		}
+	}
+#endif
+
 	Rect_t subRect;
 	subRect.x = drawX;
 	subRect.y = drawY;

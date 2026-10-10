@@ -867,7 +867,7 @@ bool CMaterialSystem::Connect( CreateInterfaceFn factory )
 #endif
 
 #if defined( IOS )
-	Msg( "[Portal2 iOS] render-fix R17: DXT mask→white RGB; Unlit PS sid0 (log 165)\n" );
+	Msg( "[Portal2 iOS] render-fix R18: touch atlas+VGUI RGBA alpha-mask fix (log 166)\n" );
 #endif
 	return g_pShaderDeviceMgr->Connect( ShaderFactory );	
 }

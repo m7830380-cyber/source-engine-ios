@@ -37,6 +37,16 @@ extern ConVar sensitivity;
 #define MIN_ALPHA_IN_CUTSCENE 20
 
 #if defined( IOS )
+static void IOS_FixAlphaMaskRGBA( unsigned char *rgba, int pixelCount )
+{
+	for ( int i = 0; i < pixelCount; ++i )
+	{
+		unsigned char *p = rgba + i * 4;
+		if ( p[3] > 0 && ( p[0] + p[1] + p[2] ) < 4 )
+			p[0] = p[1] = p[2] = 255;
+	}
+}
+
 static void IOS_DrawTexturedTouchQuad( IMesh *pMesh, CMeshBuilder &mb,
 	float x0, float y0, float x1, float y1, float u0, float v0, float u1, float v1, const rgba_t &color )
 {
@@ -708,6 +718,14 @@ void CTouchControls::CreateAtlasTexture()
 		rectCount++;
 
 		DestroyVTFTexture(t->vtf);
+	}
+
+	IOS_FixAlphaMaskRGBA( dest, atlasHeight * atlasHeight );
+	static bool s_bLoggedTouchAtlasFix = false;
+	if ( !s_bLoggedTouchAtlasFix )
+	{
+		s_bLoggedTouchAtlasFix = true;
+		Msg( "[Portal2 iOS] touch atlas: alpha-mask texels RGB→white before VGUI upload (log 166)\n" );
 	}
 
 	touchTextureID = vgui::surface()->CreateNewTextureID( true );

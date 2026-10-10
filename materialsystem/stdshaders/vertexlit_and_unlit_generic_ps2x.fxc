@@ -534,9 +534,11 @@ float4_color_return_type main( PS_INPUT i ) : COLOR
 	#if ( DIFFUSELIGHTING || VERTEXCOLOR && !( VERTEXCOLOR && DIFFUSELIGHTING ) )
 	{
 #if defined( IOS ) && ( VERTEXCOLOR && !DIFFUSELIGHTING )
-		// Unlit touch/fonts (PS packed 2048 → sid 42/64): GLES poisons COLOR0 rgb and
-		// multiplies albedo → grey icons with black soft-alpha halos (log 148/160).
-		diffuseLighting = HALF3( 1.0h, 1.0h, 1.0h );
+		// Unlit touch/fonts (PS packed 2048 → sid 64): ignore poisoned COLOR0 rgb;
+		// tint from c1 / DrawModulated (log 168 grey OK, halos from blend).
+		diffuseLighting = (HALF3)g_DiffuseModulation.rgb;
+		if ( dot( diffuseLighting, diffuseLighting ) < 1e-4h )
+			diffuseLighting = HALF3( 1.0h, 1.0h, 1.0h );
 #else
 		diffuseLighting = (HALF3)i.color.rgb;
 #if defined( IOS )
@@ -766,6 +768,11 @@ float4_color_return_type main( PS_INPUT i ) : COLOR
 	#endif
 
 	HALF3 result = diffuseComponent + specularLighting;
+
+#if defined( IOS ) && ( VERTEXCOLOR && !DIFFUSELIGHTING )
+	// ANGLE/Metal: fringe texels keep rgb=0 with a>0 → black halos under SRC_ALPHA (log 148/168).
+	result.rgb *= saturate( alpha );
+#endif
 	
 #if ( SMOKEGRENADEBLEND )
 	float flSmokeDistance = length( i.vWorldPos_csmXform0z.xyz - g_GlowColor.rgb ) * 0.0008f;

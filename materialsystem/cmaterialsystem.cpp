@@ -867,7 +867,7 @@ bool CMaterialSystem::Connect( CreateInterfaceFn factory )
 #endif
 
 #if defined( IOS )
-	Msg( "[Portal2 iOS] render-fix R19: PS VCOL=1 sid64 + unlit c1 + touch VGUI path (log 167)\n" );
+	Msg( "[Portal2 iOS] render-fix R20: unlit VCOL premul alpha + ONE/INVSRCALPHA blend (log 168)\n" );
 #endif
 	return g_pShaderDeviceMgr->Connect( ShaderFactory );	
 }

@@ -867,7 +867,7 @@ bool CMaterialSystem::Connect( CreateInterfaceFn factory )
 #endif
 
 #if defined( IOS )
-	Msg( "[Portal2 iOS] render-fix R10: IOS PS alpha-only tex + zero VCOL fallback (web/sRGB)\n" );
+	Msg( "[Portal2 iOS] render-fix R11: log148 touch (PS 42/64) + DXT5 alpha + IOS_ApplyVertexAlpha\n" );
 #endif
 	return g_pShaderDeviceMgr->Connect( ShaderFactory );	
 }

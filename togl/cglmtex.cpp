@@ -3566,10 +3566,10 @@ static uint8_t IOS_SrgbByteToLinear( uint8_t c )
 	return s_lut[c];
 }
 
-static void IOS_FixDecompressedDXTPixels( uint32_t *pixels, int width, int height, bool bSrgbSource, bool bHardAlphaCutout )
+static void IOS_FixDecompressedDXTPixels( uint32_t *pixels, int width, int height, bool bSrgbSource, bool bHardAlphaCutout, bool bComplexAlpha )
 {
 	static bool s_bLoggedLinearize = false;
-	if ( bSrgbSource && !s_bLoggedLinearize )
+	if ( bSrgbSource && !bComplexAlpha && !s_bLoggedLinearize )
 	{
 		s_bLoggedLinearize = true;
 		Msg( "[Portal2 iOS] DXT decompress: apply sRGB→linear on RGBA8 (prop/world albedo)\n" );
@@ -3593,7 +3593,8 @@ static void IOS_FixDecompressedDXTPixels( uint32_t *pixels, int width, int heigh
 				continue;
 			}
 
-			if ( bSrgbSource )
+			// Log 148 baseline: touch atlas is DXT5 — keep sRGB bytes, no CPU linearize (soft alpha halos).
+			if ( bSrgbSource && !bComplexAlpha )
 			{
 				r = IOS_SrgbByteToLinear( r );
 				g = IOS_SrgbByteToLinear( g );
@@ -3660,7 +3661,8 @@ void CompressedTexImage2D(GLenum target, GLint level, GLenum internalformat,
 		if ( pixels )
 		{
 			const bool bHardCutout = ( simpleAlpha != 0 ) && ( complexAlpha == 0 );
-			IOS_FixDecompressedDXTPixels( (uint32_t *)pixels, width, height, srgb != 0, bHardCutout );
+			const bool bComplexAlpha = ( complexAlpha != 0 );
+			IOS_FixDecompressedDXTPixels( (uint32_t *)pixels, width, height, srgb != 0, bHardCutout, bComplexAlpha );
 		}
 #else
 		if( srgb )

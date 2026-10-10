@@ -3265,7 +3265,8 @@ static int IOS_TryTreeVertexLitPsStaticIndex( ShaderFileCache_t *pFileCache, con
 	// .inc: VERTEXCOLOR weight 2048 (SELFILLUM is 1024).
 	if ( ( nLookupStaticIndex & 2048 ) && !( nLookupStaticIndex & 128 ) )
 	{
-		static const uint32 s_vcolIds[] = { 64 };
+		// Log 148: sid 42 = grey touch/menu art; sid 64 = tree CI fallback (same packed 2048).
+		static const uint32 s_vcolIds[] = { 42, 64 };
 		for ( int i = 0; i < ARRAYSIZE( s_vcolIds ); ++i )
 		{
 			if ( IOS_TryStaticComboRecord( pFileCache, s_vcolIds[i], &idx ) )
@@ -3372,7 +3373,7 @@ static int IOS_FallbackStaticComboRecordIndex( ShaderFileCache_t *pFileCache, co
 	if ( V_stristr( baseName, "vertexlit_and_unlit_generic_ps20b" ) )
 	{
 		// .inc weights: CUBEMAP=64, DIFFUSELIGHTING=128, SELFILLUM=1024, VERTEXCOLOR=2048.
-		static const uint32 s_vcolIds[] = { 64, 42, 85, 32, 47, 23, 22, 4, 11, 16, 17 };
+		static const uint32 s_vcolIds[] = { 42, 64, 85, 32, 47, 23, 22, 4, 11, 16, 17 };
 		static const uint32 s_diffuseIds[] = { 21, 22, 23, 20, 17, 16, 11, 4 };
 		static const uint32 s_detailIds[] = { 5, 4, 7, 6, 3, 2, 11 };
 		static const uint32 s_otherIds[] = { 4, 3, 2, 11, 16, 17, 20 };

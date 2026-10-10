@@ -36,6 +36,41 @@ extern ConVar sensitivity;
 #define TOUCH_DEFAULT_CFG "touch_default.cfg"
 #define MIN_ALPHA_IN_CUTSCENE 20
 
+#if defined( IOS )
+static void IOS_DrawTexturedTouchQuad( IMesh *pMesh, CMeshBuilder &mb,
+	float x0, float y0, float x1, float y1, float u0, float v0, float u1, float v1, const rgba_t &color )
+{
+	unsigned char meshColor[4] = { 255, 255, 255, color.a };
+	mb.Begin( pMesh, MATERIAL_QUADS, 1 );
+
+	mb.Position3f( x0, y0, 0 );
+	mb.Color4ubv( meshColor );
+	mb.TexCoord2f( 0, u0, v0 );
+	mb.AdvanceVertexF<VTX_HAVEPOS | VTX_HAVECOLOR, 1>();
+
+	mb.Position3f( x1, y0, 0 );
+	mb.Color4ubv( meshColor );
+	mb.TexCoord2f( 0, u1, v0 );
+	mb.AdvanceVertexF<VTX_HAVEPOS | VTX_HAVECOLOR, 1>();
+
+	mb.Position3f( x1, y1, 0 );
+	mb.Color4ubv( meshColor );
+	mb.TexCoord2f( 0, u1, v1 );
+	mb.AdvanceVertexF<VTX_HAVEPOS | VTX_HAVECOLOR, 1>();
+
+	mb.Position3f( x0, y1, 0 );
+	mb.Color4ubv( meshColor );
+	mb.TexCoord2f( 0, u0, v1 );
+	mb.AdvanceVertexF<VTX_HAVEPOS | VTX_HAVECOLOR, 1>();
+
+	mb.End();
+
+	const float inv = 1.0f / 255.0f;
+	Vector4D mod( color.r * inv, color.g * inv, color.b * inv, color.a * inv );
+	pMesh->DrawModulated( mod );
+}
+#endif
+
 ConVar touch_enable( "touch_enable", TOUCH_DEFAULT, FCVAR_ARCHIVE );
 ConVar touch_draw( "touch_draw", "1", FCVAR_ARCHIVE );
 ConVar touch_filter( "touch_filter", "0", FCVAR_ARCHIVE );
@@ -905,12 +940,17 @@ void CTouchControls::Paint()
 			{
 				m_pMesh = pRenderContext->GetDynamicMesh( true, NULL, NULL, g_pMatSystemSurface->DrawGetTextureMaterial(t->textureID) );
 
-				meshBuilder.Begin( m_pMesh, MATERIAL_QUADS, 1 );
-
 				int alpha = (btn->color.a > MIN_ALPHA_IN_CUTSCENE) ? MAX( MIN_ALPHA_IN_CUTSCENE, btn->color.a-m_AlphaDiff) : btn->color.a;
 				if( btn->flags & TOUCH_FL_HIDE )
 					alpha = 50;		// hidden, shown only while editing
 				rgba_t color(btn->color.r, btn->color.g, btn->color.b, alpha);
+
+#if defined( IOS )
+				IOS_DrawTexturedTouchQuad( m_pMesh, meshBuilder,
+					btn->x1 * screen_w, btn->y1 * screen_h, btn->x2 * screen_w, btn->y2 * screen_h,
+					0, 0, 1, 1, color );
+#else
+				meshBuilder.Begin( m_pMesh, MATERIAL_QUADS, 1 );
 
 				meshBuilder.Position3f( btn->x1*screen_w, btn->y1*screen_h, 0 );
 				meshBuilder.Color4ubv( color );
@@ -935,6 +975,7 @@ void CTouchControls::Paint()
 				meshBuilder.End();
 
 				m_pMesh->Draw();
+#endif
 			}
 			else if( !btn->texture->isInAtlas )
 				CreateAtlasTexture();
@@ -944,6 +985,27 @@ void CTouchControls::Paint()
 		}
 	}
 
+#if defined( IOS )
+	for( it = btns.begin(); it != btns.end(); it++ )
+	{
+		CTouchButton *btn = *it;
+
+		if( btn->texture != NULL && ( !(btn->flags & TOUCH_FL_HIDE) || state == state_edit ) && !btn->texture->textureID && ( state == state_edit || TouchButtonAvailable( btn ) ) )
+		{
+			CTouchTexture *t = btn->texture;
+
+			int alpha = (btn->color.a > MIN_ALPHA_IN_CUTSCENE) ? MAX( MIN_ALPHA_IN_CUTSCENE, btn->color.a-m_AlphaDiff) : btn->color.a;
+			if( btn->flags & TOUCH_FL_HIDE )
+				alpha = 50;
+			rgba_t color(btn->color.r, btn->color.g, btn->color.b, alpha);
+
+			m_pMesh = pRenderContext->GetDynamicMesh( true, NULL, NULL, g_pMatSystemSurface->DrawGetTextureMaterial( touchTextureID ) );
+			IOS_DrawTexturedTouchQuad( m_pMesh, meshBuilder,
+				btn->x1 * screen_w, btn->y1 * screen_h, btn->x2 * screen_w, btn->y2 * screen_h,
+				t->X0, t->Y0, t->X1, t->Y1, color );
+		}
+	}
+#else
 	m_pMesh = pRenderContext->GetDynamicMesh( true, NULL, NULL, g_pMatSystemSurface->DrawGetTextureMaterial(touchTextureID) );
 	meshBuilder.Begin( m_pMesh, MATERIAL_QUADS, meshCount );
 
@@ -984,6 +1046,7 @@ void CTouchControls::Paint()
 
 	meshBuilder.End();
 	m_pMesh->Draw();
+#endif
 
 	if( state == state_edit )
 		PaintEditor();

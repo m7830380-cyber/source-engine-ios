@@ -145,6 +145,15 @@ HALF4 IOS_FixAlphaOnlyTexture( HALF4 c )
 		c.rgb = HALF3( 1.0h, 1.0h, 1.0h );
 	return c;
 }
+HALF IOS_ApplyVertexAlpha( HALF texAlpha, HALF vertAlpha, HALF vertexAlphaScale )
+{
+	if ( vertexAlphaScale < 1e-3h )
+		return texAlpha;
+	// Log 148: ANGLE drops COLOR0.a on touch quads → premul black fringe; keep tex alpha.
+	if ( vertAlpha < 1e-3h && texAlpha > 1e-3h )
+		return texAlpha;
+	return lerp( texAlpha, texAlpha * vertAlpha, vertexAlphaScale );
+}
 #endif
 const float4 g_ShadowTweaks						: register( c2 );
 const float4 g_EnvmapParams					: register( c19 );
@@ -673,7 +682,11 @@ float4_color_return_type main( PS_INPUT i ) : COLOR
 	}
 	#endif
 
+#if defined( IOS )
+	alpha = IOS_ApplyVertexAlpha( alpha, (HALF)i.color.a, (HALF)g_fVertexAlpha );
+#else
 	alpha = lerp( alpha, alpha * (HALF)i.color.a, (HALF)g_fVertexAlpha );
+#endif
 
 	HALF3 diffuseComponent = albedo * diffuseLighting;
 

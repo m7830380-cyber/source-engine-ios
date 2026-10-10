@@ -2245,6 +2245,11 @@ bool bDistanceAlphaFromDetail = false;
 		float fWriteDepthToAlpha = bWriteDepthToAlpha && IsPC() ? 1.0f : 0.0f;
 		float fWriteWaterFogToDestAlpha = bWriteWaterFogToAlpha ? 1.0f : 0.0f;
 		float fVertexAlpha = bHasVertexAlpha ? 1.0f : 0.0f;
+#if defined( IOS )
+		// UnlitGeneric VGUI/touch: vertex alpha on GLES poisons soft edges (log 162).
+		if ( !bVertexLitGeneric )
+			fVertexAlpha = 0.0f;
+#endif
 		float fBlendTintByBaseAlpha = IsBoolSet( info.m_nBlendTintByBaseAlpha, params ) ? 1.0f : 0.0f;
 		fBlendTintByBaseAlpha = bHasTintMaskTexture ? 1.0f : fBlendTintByBaseAlpha;	// This is needed to make the shader math work out in the tint texture case
 
@@ -2494,6 +2499,10 @@ void DrawVertexLitGeneric_DX9_Internal_ExecuteFastPath( int *vsDynIndex, int *ps
 	float fWriteDepthToAlpha = bWriteDepthToAlpha? 1.0f : 0.0f;
 	float fWriteWaterFogToDestAlpha = bWriteWaterFogToAlpha? 1.0f : 0.0f;
 	float fVertexAlpha = bHasVertexAlpha ? 1.0f : 0.0f;
+#if defined( IOS )
+	if ( !bVertexLitGeneric )
+		fVertexAlpha = 0.0f;
+#endif
 	float fBlendTintByBaseAlpha = IsBoolSet( info.m_nBlendTintByBaseAlpha, params ) ? 1.0f : 0.0f;
 	bool bHasTintMaskTexture = IsTextureSet( info.m_nTintMaskTexture, params );
 	fBlendTintByBaseAlpha = bHasTintMaskTexture ? 1.0f : fBlendTintByBaseAlpha;	// This is needed to make the shader math work out in the tint texture case

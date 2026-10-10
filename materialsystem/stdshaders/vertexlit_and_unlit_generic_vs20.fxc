@@ -315,8 +315,14 @@ VS_OUTPUT main( const VS_INPUT v )
 		#if ( VERTEXCOLOR )
 		{
 			// Assume that this is unlitgeneric if you are using vertex color.
+#if defined( IOS )
+			// ANGLE→Metal drops COLOR0 rgb before PS; tint via g_DiffuseModulation (log 148–162).
+			o.color.rgb = float3( 1.0f, 1.0f, 1.0f );
+			o.color.a = v.vColor.a;
+#else
 			o.color.rgb = GammaToLinear( v.vColor.rgb );
 			o.color.a = v.vColor.a;
+#endif
 		}
 		#else
 		{

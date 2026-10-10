@@ -3593,8 +3593,8 @@ static void IOS_FixDecompressedDXTPixels( uint32_t *pixels, int width, int heigh
 				continue;
 			}
 
-			// Log 148 baseline: touch atlas is DXT5 — keep sRGB bytes, no CPU linearize (soft alpha halos).
-			if ( bSrgbSource && !bComplexAlpha )
+			// UI/touch atlases: never CPU-linearize decompressed DXT (GLES has no sRGB decode; log 148–162 halos).
+			if ( bSrgbSource && !bComplexAlpha && !bHardAlphaCutout )
 			{
 				r = IOS_SrgbByteToLinear( r );
 				g = IOS_SrgbByteToLinear( g );

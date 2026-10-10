@@ -2396,12 +2396,14 @@ inline void CBaseMeshDX8::DrawMesh( const Vector4D *pVecDiffuseModulation )
 	{
 		instance.m_DiffuseModulation = *pVecDiffuseModulation;
 
+#if !defined( IOS )
 		Vector4D matModulation;
 		IMaterialInternal *pMaterial = ShaderAPI()->GetBoundMaterial();
 		pMaterial->GetColorModulation( &matModulation[0], &matModulation[1], &matModulation[2] );
 		matModulation[3] = pMaterial->GetAlphaModulation();
 
 		instance.m_DiffuseModulation *= matModulation;
+#endif
 	}
 	else
 	{

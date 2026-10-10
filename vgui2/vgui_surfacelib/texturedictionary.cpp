@@ -517,8 +517,11 @@ void CMatSystemTexture::SetTextureRGBA( const char *rgba, int wide, int tall, Im
 		++s_nTextureId;
 
 		int nFlags = TEXTUREFLAGS_CLAMPS | TEXTUREFLAGS_CLAMPT | 
-			TEXTUREFLAGS_NOMIP | TEXTUREFLAGS_NOLOD | TEXTUREFLAGS_SRGB |
+			TEXTUREFLAGS_NOMIP | TEXTUREFLAGS_NOLOD |
 			TEXTUREFLAGS_PROCEDURAL | TEXTUREFLAGS_SINGLECOPY;
+#if !defined( IOS )
+		nFlags |= TEXTUREFLAGS_SRGB;
+#endif
 
 		if ( eScaling == k_ETextureScalingPointSample )
 			nFlags |= TEXTUREFLAGS_POINTSAMPLE;

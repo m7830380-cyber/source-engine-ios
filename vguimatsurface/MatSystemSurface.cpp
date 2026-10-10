@@ -1386,7 +1386,6 @@ void CMatSystemSurface::DrawQuadArray( int quadCount, Vertex_t *pVerts, unsigned
 		iosDrawMod.Init( pColor[0] * inv, pColor[1] * inv, pColor[2] * inv, pColor[3] * inv );
 	}
 	IOS_MeshVertexColor( pColor, meshColor );
-	IOS_ApplyMaterialColorModulation( pColor );
 	pColor = meshColor;
 #endif
 

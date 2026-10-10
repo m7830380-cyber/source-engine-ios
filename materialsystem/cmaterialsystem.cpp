@@ -867,7 +867,7 @@ bool CMaterialSystem::Connect( CreateInterfaceFn factory )
 #endif
 
 #if defined( IOS )
-	Msg( "[Portal2 iOS] render-fix R13: unlit VCOL alpha once; font flush uses text mod (log 161)\n" );
+	Msg( "[Portal2 iOS] render-fix R14: VS white VCOL; no vtx alpha on UnlitGeneric; VGUI mod once (log 162)\n" );
 #endif
 	return g_pShaderDeviceMgr->Connect( ShaderFactory );	
 }

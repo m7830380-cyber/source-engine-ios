@@ -3601,9 +3601,12 @@ static void IOS_FixDecompressedDXTPixels( uint32_t *pixels, int width, int heigh
 				b = IOS_SrgbByteToLinear( b );
 			}
 
-			// DXT1 cutout only — on DXT5 soft alpha this painted black halos on touch icons (log 148).
-			if ( bHardAlphaCutout && a > 0 && ( r + g + b ) < 4 )
-				r = g = b = a;
+			// Touch/menu DXT: mask often lives in alpha with RGB=0 → GLES draws black RGB + OK alpha
+			// (logs 143–165). Bake white RGB; tint via PS c1 / DrawModulated (never rgb=a cutout halos).
+			if ( a > 0 && ( r + g + b ) < 4 && ( bComplexAlpha || bHardAlphaCutout ) )
+			{
+				r = g = b = 255;
+			}
 
 			row[x] = (uint32_t)r | ( (uint32_t)g << 8 ) | ( (uint32_t)b << 16 ) | ( (uint32_t)a << 24 );
 		}

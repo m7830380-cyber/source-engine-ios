@@ -1173,8 +1173,8 @@ bool bDistanceAlphaFromDetail = false;
 						SET_STATIC_PIXEL_SHADER_COMBO( BASEALPHAENVMAPMASK, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( ENVMAPFRESNEL, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( SELFILLUM, 0 );
-						// Unlit: PS VCOL=1 → packed 2048 → tree sid 64 (not 42). IOS PS skips i.color (log 148/164).
-						SET_STATIC_PIXEL_SHADER_COMBO( VERTEXCOLOR, bVertexLitGeneric ? 0 : 1 );
+						// Unlit UI: PS VCOL=0 → packed 0 / sid 0 (log 164 good alpha). RGB from tex×c1 after CPU DXT mask fix.
+						SET_STATIC_PIXEL_SHADER_COMBO( VERTEXCOLOR, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( FLASHLIGHT, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( DETAIL_BLEND_MODE, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( DECAL_BLEND_MODE, 0 );

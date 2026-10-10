@@ -810,6 +810,9 @@ static void DrawVertexLitGeneric_DX9_Internal( CBaseVSShader *pShader, IMaterial
 				else
 					bSampler0SrgbRead = !bShaderSrgbRead;
 			}
+#if defined( IOS )
+			bSampler0SrgbRead = false;
+#endif
 			pShaderShadow->EnableSRGBRead( SHADER_SAMPLER0, bSampler0SrgbRead );
 
 			if ( bHasEnvmap )
@@ -1094,6 +1097,27 @@ bool bDistanceAlphaFromDetail = false;
 				#endif
 				{
 					DECLARE_STATIC_VERTEX_SHADER( vertexlit_and_unlit_generic_vs20 );
+#if defined( IOS )
+					// Bundled tree .vcs only ships a small static-id set; stock PC combos
+					// (e.g. packed 104859648) miss bytecode and draw purple (log 152).
+					SET_STATIC_VERTEX_SHADER_COMBO( SFM, 0 );
+					SET_STATIC_VERTEX_SHADER_COMBO( VERTEXCOLOR, bVertexLitGeneric ? 0 : 1 );
+					SET_STATIC_VERTEX_SHADER_COMBO( CUBEMAP, 0 );
+					SET_STATIC_VERTEX_SHADER_COMBO( HALFLAMBERT, 0 );
+					SET_STATIC_VERTEX_SHADER_COMBO( FLASHLIGHT, 0 );
+					SET_STATIC_VERTEX_SHADER_COMBO( SEAMLESS_BASE, 0 );
+					SET_STATIC_VERTEX_SHADER_COMBO( SEAMLESS_DETAIL, 0 );
+					SET_STATIC_VERTEX_SHADER_COMBO( SEPARATE_DETAIL_UVS, 0 );
+					SET_STATIC_VERTEX_SHADER_COMBO( LIGHTING_PREVIEW, 0 );
+					SET_STATIC_VERTEX_SHADER_COMBO( TREESWAY, 0 );
+					SET_STATIC_VERTEX_SHADER_COMBO( FLATTEN_STATIC_CONTROL_FLOW, 1 );
+					SET_STATIC_VERTEX_SHADER_COMBO( DECAL, 0 );
+					SET_STATIC_VERTEX_SHADER_COMBO( CASCADED_SHADOW_MAPPING, 0 );
+					SET_STATIC_VERTEX_SHADER_COMBO( CSM_BLENDING, 0 );
+					SET_STATIC_VERTEX_SHADER_COMBO( DOPIXELFOG, 0 );
+					SET_STATIC_VERTEX_SHADER_COMBO( HARDWAREFOGBLEND, 0 );
+					bool bCSMBlending = false;
+#else
 					SET_STATIC_VERTEX_SHADER_COMBO( SFM, bSFM );
 					SET_STATIC_VERTEX_SHADER_COMBO( VERTEXCOLOR,  bHasVertexColor || bHasVertexAlpha );
 					SET_STATIC_VERTEX_SHADER_COMBO( CUBEMAP,  bHasEnvmap );
@@ -1110,11 +1134,44 @@ bool bDistanceAlphaFromDetail = false;
 					bool bCSMBlending = g_pHardwareConfig->GetCSMAccurateBlending();
 					SET_STATIC_VERTEX_SHADER_COMBO( CASCADED_SHADOW_MAPPING, bCSMEnabled_ps2b );
 					SET_STATIC_VERTEX_SHADER_COMBO( CSM_BLENDING, bCSMBlending );
+#endif
 					SET_STATIC_VERTEX_SHADER( vertexlit_and_unlit_generic_vs20 );
 				
 					if ( g_pHardwareConfig->SupportsPixelShaders_2_b() || g_pHardwareConfig->ShouldAlwaysUseShaderModel2bShaders() ) // Always send OpenGL this way
 					{
 						DECLARE_STATIC_PIXEL_SHADER( vertexlit_and_unlit_generic_ps20b );
+#if defined( IOS )
+						SET_STATIC_PIXEL_SHADER_COMBO( SFM, 0 );
+						SET_STATIC_PIXEL_SHADER_COMBO( SELFILLUM_ENVMAPMASK_ALPHA, 0 );
+						SET_STATIC_PIXEL_SHADER_COMBO( DETAILTEXTURE, 0 );
+						SET_STATIC_PIXEL_SHADER_COMBO( CUBEMAP, 0 );
+						SET_STATIC_PIXEL_SHADER_COMBO( DIFFUSELIGHTING, bVertexLitGeneric ? 1 : 0 );
+						SET_STATIC_PIXEL_SHADER_COMBO( ENVMAPMASK, 0 );
+						SET_STATIC_PIXEL_SHADER_COMBO( BASEALPHAENVMAPMASK, 0 );
+						SET_STATIC_PIXEL_SHADER_COMBO( ENVMAPFRESNEL, 0 );
+						SET_STATIC_PIXEL_SHADER_COMBO( SELFILLUM, 0 );
+						SET_STATIC_PIXEL_SHADER_COMBO( VERTEXCOLOR, bVertexLitGeneric ? 0 : 1 );
+						SET_STATIC_PIXEL_SHADER_COMBO( FLASHLIGHT, 0 );
+						SET_STATIC_PIXEL_SHADER_COMBO( DETAIL_BLEND_MODE, 0 );
+						SET_STATIC_PIXEL_SHADER_COMBO( DECAL_BLEND_MODE, 0 );
+						SET_STATIC_PIXEL_SHADER_COMBO( TINTMASKTEXTURE, 0 );
+						SET_STATIC_PIXEL_SHADER_COMBO( SEAMLESS_BASE, 0 );
+						SET_STATIC_PIXEL_SHADER_COMBO( SEAMLESS_DETAIL, 0 );
+						SET_STATIC_PIXEL_SHADER_COMBO( DISTANCEALPHA, 0 );
+						SET_STATIC_PIXEL_SHADER_COMBO( DISTANCEALPHAFROMDETAIL, 0 );
+						SET_STATIC_PIXEL_SHADER_COMBO( SOFT_MASK, 0 );
+						SET_STATIC_PIXEL_SHADER_COMBO( OUTLINE, 0 );
+						SET_STATIC_PIXEL_SHADER_COMBO( OUTER_GLOW, 0 );
+						SET_STATIC_PIXEL_SHADER_COMBO( FLASHLIGHTDEPTHFILTERMODE, 0 );
+						SET_STATIC_PIXEL_SHADER_COMBO( SHADER_SRGB_READ, 0 );
+						SET_STATIC_PIXEL_SHADER_COMBO( DESATURATEWITHBASEALPHA, 0 );
+						SET_STATIC_PIXEL_SHADER_COMBO( LIGHTING_PREVIEW, 0 );
+						SET_STATIC_PIXEL_SHADER_COMBO( SRGB_INPUT_ADAPTER, 0 );
+						SET_STATIC_PIXEL_SHADER_COMBO( CASCADED_SHADOW_MAPPING, 0 );
+						SET_STATIC_PIXEL_SHADER_COMBO( CSM_MODE, 0 );
+						SET_STATIC_PIXEL_SHADER_COMBO( CSM_BLENDING, 0 );
+						SET_STATIC_PIXEL_SHADER_COMBO( DOPIXELFOG, 0 );
+#else
 						SET_STATIC_PIXEL_SHADER_COMBO( SFM, bSFM );
 						SET_STATIC_PIXEL_SHADER_COMBO( SELFILLUM_ENVMAPMASK_ALPHA, bHasSelfIllumInEnvMapMask ); 
 						SET_STATIC_PIXEL_SHADER_COMBO( DETAILTEXTURE,  bHasDetailTexture );
@@ -1146,6 +1203,7 @@ bool bDistanceAlphaFromDetail = false;
 						SET_STATIC_PIXEL_SHADER_COMBO( CASCADED_SHADOW_MAPPING, g_pHardwareConfig->SupportsCascadedShadowMapping() && !bSFM && !bHasFlashlight && !bDisableCSMLookup );
 						SET_STATIC_PIXEL_SHADER_COMBO( CSM_MODE, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( CSM_BLENDING, bCSMBlending );
+#endif
 						SET_STATIC_PIXEL_SHADER( vertexlit_and_unlit_generic_ps20b );
 					}
 					else // ps_2_0
@@ -1292,6 +1350,9 @@ bool bDistanceAlphaFromDetail = false;
 				else
 					bSampler0SrgbRead = !bShaderSrgbRead;
 			}
+#if defined( IOS )
+			bSampler0SrgbRead = false;
+#endif
 
 			if ( bHasBaseTexture )
 			{
@@ -2021,12 +2082,22 @@ bool bDistanceAlphaFromDetail = false;
 				int staticLight3VSCombo = (lightState.m_bStaticLight && bStaticLight3Streams) ? ( ( lightState.m_bStaticLightIndirectOnly )? 2 : 1) : 0;
 
 				DECLARE_DYNAMIC_VERTEX_SHADER( vertexlit_and_unlit_generic_vs20 );
+#if defined( IOS )
+				SET_DYNAMIC_VERTEX_SHADER_COMBO( DYNAMIC_LIGHT, 1 );
+				SET_DYNAMIC_VERTEX_SHADER_COMBO( STATICLIGHT3, 0 );
+				SET_DYNAMIC_VERTEX_SHADER_COMBO( SKINNING, numBones > 0 );
+				SET_DYNAMIC_VERTEX_SHADER_COMBO( COMPRESSED_VERTS, 0 );
+				SET_DYNAMIC_VERTEX_SHADER_COMBO( TESSELLATION, 0 );
+				SET_DYNAMIC_VERTEX_SHADER_COMBO( NUM_LIGHTS, 0 );
+				SET_DYNAMIC_VERTEX_SHADER_COMBO( DOWATERFOG, 0 );
+#else
 				SET_DYNAMIC_VERTEX_SHADER_COMBO( DYNAMIC_LIGHT, lightState.HasDynamicLight() );
 				SET_DYNAMIC_VERTEX_SHADER_COMBO( STATICLIGHT3, staticLight3VSCombo );
 				SET_DYNAMIC_VERTEX_SHADER_COMBO( SKINNING,  numBones > 0 );
 				SET_DYNAMIC_VERTEX_SHADER_COMBO( COMPRESSED_VERTS, (int)vertexCompression );
 				SET_DYNAMIC_VERTEX_SHADER_COMBO( TESSELLATION, 0 );
 				SET_DYNAMIC_VERTEX_SHADER_COMBO( NUM_LIGHTS, bUseStaticControlFlow ? 0 : lightState.m_nNumLights );
+#endif
 				SET_DYNAMIC_VERTEX_SHADER_CMD( DynamicCmdsOut, vertexlit_and_unlit_generic_vs20 );
 
 				// Bind ps_2_b shader so we can get shadow mapping

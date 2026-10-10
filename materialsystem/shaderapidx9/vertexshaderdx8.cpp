@@ -3476,6 +3476,16 @@ static int ResolveStaticComboRecordIndex( ShaderFileCache_t *pFileCache, int nLo
 	const int nVcsDyn = pFileCache->m_Header.m_nDynamicCombos;
 	const int nIncDyn = GetIncDynamicComboProduct( pShaderName );
 
+#if defined( IOS )
+	if ( V_stristr( pShaderName, "vertexlit_and_unlit_generic_ps20b" ) &&
+		 pFileCache->m_Header.m_nDynamicCombos >= 32 )
+	{
+		const int treePs = IOS_TryTreeVertexLitPsStaticIndex( pFileCache, pShaderName, nLookupStaticIndex );
+		if ( treePs != -1 )
+			return treePs;
+	}
+#endif
+
 	uint32 candidates[8];
 	int nCandidates = 0;
 
@@ -3581,6 +3591,9 @@ static int ResolveStaticComboRecordIndex( ShaderFileCache_t *pFileCache, int nLo
 	if ( V_stristr( pShaderName, "vertexlit_and_unlit_generic_ps20b" ) &&
 		 pFileCache->m_Header.m_nDynamicCombos >= 32 )
 	{
+		const int fb = IOS_FallbackStaticComboRecordIndex( pFileCache, pShaderName, nLookupStaticIndex );
+		if ( fb != -1 )
+			return fb;
 		DevWarning( "[iOS] Shader '%s': static packed %d missing in tree PS VCS (dyn=%d).\n",
 			pShaderName, nLookupStaticIndex, pFileCache->m_Header.m_nDynamicCombos );
 		return -1;

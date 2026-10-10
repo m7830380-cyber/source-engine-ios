@@ -866,6 +866,9 @@ bool CMaterialSystem::Connect( CreateInterfaceFn factory )
 	g_pScaleformUI = ( IScaleformUI* ) factory( SCALEFORMUI_INTERFACE_VERSION, 0 );
 #endif
 
+#if defined( IOS )
+	Msg( "[Portal2 iOS] render-fix R4: vertexlit PS static packed 0 (albedo), VS VCOL=0, gamma DXT\n" );
+#endif
 	return g_pShaderDeviceMgr->Connect( ShaderFactory );	
 }
 

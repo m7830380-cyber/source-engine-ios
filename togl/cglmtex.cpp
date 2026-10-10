@@ -3572,7 +3572,7 @@ static void IOS_FixDecompressedDXTPixels( uint32_t *pixels, int width, int heigh
 	if ( bSrgbSource && !s_bLoggedLinearize )
 	{
 		s_bLoggedLinearize = true;
-		Msg( "[Portal2 iOS] DXT decompress: apply sRGB→linear on RGBA8 (prop/world albedo)\n" );
+		Msg( "[Portal2 iOS] DXT decompress: keep gamma RGBA8 (no CPU linearize; SHADER_SRGB_READ off)\n" );
 	}
 
 	// Log 150: pw*ph flat loop scribbled past malloc stride (row pitch = width) → heap abort in ANGLE.
@@ -3591,13 +3591,6 @@ static void IOS_FixDecompressedDXTPixels( uint32_t *pixels, int width, int heigh
 			{
 				row[x] = 0;
 				continue;
-			}
-
-			if ( bSrgbSource )
-			{
-				r = IOS_SrgbByteToLinear( r );
-				g = IOS_SrgbByteToLinear( g );
-				b = IOS_SrgbByteToLinear( b );
 			}
 
 			// DXT1 cutout only — on DXT5 soft alpha this painted black halos on touch icons (log 148).

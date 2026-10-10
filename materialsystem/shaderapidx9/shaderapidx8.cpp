@@ -8602,7 +8602,7 @@ void CShaderAPIDx8::ExecuteInstanceCommandBuffer( const unsigned char *pCmdBuf, 
 						if ( !s_bInitMinAmb )
 						{
 							for ( int i = 0; i < 6; ++i )
-								s_iosMinAmbient.m_AmbientLightCube[i].Init( 0.4f, 0.4f, 0.4f, 1.0f );
+								s_iosMinAmbient.m_AmbientLightCube[i].Init( 1.0f, 1.0f, 1.0f, 1.0f );
 							s_bInitMinAmb = true;
 						}
 						SetVertexShaderStateAmbientLightCube( VERTEX_SHADER_AMBIENT_LIGHT, &s_iosMinAmbient );
@@ -9711,7 +9711,7 @@ void CShaderAPIDx8::ExecuteInstanceCommandBuffer( const unsigned char *pCmdBuf, 
 						if ( !s_bInitMinAmb )
 						{
 							for ( int i = 0; i < 6; ++i )
-								s_iosMinAmbient.m_AmbientLightCube[i].Init( 0.4f, 0.4f, 0.4f, 1.0f );
+								s_iosMinAmbient.m_AmbientLightCube[i].Init( 1.0f, 1.0f, 1.0f, 1.0f );
 							s_bInitMinAmb = true;
 						}
 						SetVertexShaderStateAmbientLightCube( VERTEX_SHADER_AMBIENT_LIGHT, &s_iosMinAmbient );

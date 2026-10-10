@@ -3265,8 +3265,7 @@ static int IOS_TryTreeVertexLitPsStaticIndex( ShaderFileCache_t *pFileCache, con
 	// .inc: VERTEXCOLOR weight 2048 (SELFILLUM is 1024).
 	if ( ( nLookupStaticIndex & 2048 ) && !( nLookupStaticIndex & 128 ) )
 	{
-		// Log 157: sid 64 PS still uses i.color.rgb (zero on ANGLE). Prefer unlit sid 0 + g_DiffuseModulation.
-		static const uint32 s_vcolIds[] = { 0, 64 };
+		static const uint32 s_vcolIds[] = { 64 };
 		for ( int i = 0; i < ARRAYSIZE( s_vcolIds ); ++i )
 		{
 			if ( IOS_TryStaticComboRecord( pFileCache, s_vcolIds[i], &idx ) )
@@ -3275,7 +3274,7 @@ static int IOS_TryTreeVertexLitPsStaticIndex( ShaderFileCache_t *pFileCache, con
 				if ( s_Note.Find( pFileCache->m_Name ) == s_Note.InvalidIndex() )
 				{
 					s_Note.Insert( pFileCache->m_Name, true );
-					Msg( "[iOS] Shader '%s': static packed %d → tree PS staticId %u (font/UI PS, dyn=%d).\n",
+					Msg( "[iOS] Shader '%s': static packed %d → tree PS staticId %u (VCOL, dyn=%d).\n",
 						pShaderName, nLookupStaticIndex, s_vcolIds[i], nVcsDyn );
 				}
 				return idx;
@@ -3316,14 +3315,13 @@ static int IOS_TryTreeVertexLitVsStaticIndex( ShaderFileCache_t *pFileCache, con
 	static const uint32 s_ids[] = { 64, 65, 48, 49, 50, 32, 0 };
 	if ( nLookupStaticIndex == 9360 )
 	{
-		// Log 157: sid 65 = VS VERTEXCOLOR pass-through → black RGB on ANGLE; use FLATTEN sid 64.
-		if ( IOS_TryStaticComboRecord( pFileCache, 64, &idx ) )
+		if ( IOS_TryStaticComboRecord( pFileCache, 65, &idx ) )
 		{
 			static CUtlMap<CUtlSymbol, bool> s_Note( 0, 0, DefLessFunc( CUtlSymbol ) );
 			if ( s_Note.Find( pFileCache->m_Name ) == s_Note.InvalidIndex() )
 			{
 				s_Note.Insert( pFileCache->m_Name, true );
-				Msg( "[iOS] Shader '%s': static packed %d → tree staticId 64 (UI VS no VCOL, dyn=%d).\n",
+				Msg( "[iOS] Shader '%s': static packed %d → tree staticId 65 (Unlit VCOL, dyn=%d).\n",
 					pShaderName, nLookupStaticIndex, nVcsDyn );
 			}
 			return idx;

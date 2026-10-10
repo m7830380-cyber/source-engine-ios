@@ -8769,8 +8769,10 @@ void CShaderAPIDx8::ExecuteInstanceCommandBuffer( const unsigned char *pCmdBuf, 
 				pCmdBuf += sizeof( int ); // skip register
 
 #if defined( IOS )
-				// Log 157: identity ignored render/draw tint; VGUI ColorModulate hits instance modulation.
-				SetPixelShaderConstantInternal( nReg, instance.m_DiffuseModulation.Base() );
+				Vector4D color = instance.m_DiffuseModulation;
+				if ( color.x + color.y + color.z < 0.01f )
+					color.Init( 1.0f, 1.0f, 1.0f, color.w );
+				SetPixelShaderConstantInternal( nReg, color.Base() );
 #else
 				Vector4D color( 1.0f, 1.0f, 1.0f, instance.m_DiffuseModulation[3] );
 				SetPixelShaderConstantInternal( nReg, color.Base() );
@@ -9900,7 +9902,10 @@ void CShaderAPIDx8::ExecuteInstanceCommandBuffer( const unsigned char *pCmdBuf, 
 				pCmdBuf += sizeof( int ); // skip register
 
 #if defined( IOS )
-				SetPixelShaderConstantInternal( nReg, instance.m_DiffuseModulation.Base() );
+				Vector4D color = instance.m_DiffuseModulation;
+				if ( color.x + color.y + color.z < 0.01f )
+					color.Init( 1.0f, 1.0f, 1.0f, color.w );
+				SetPixelShaderConstantInternal( nReg, color.Base() );
 #else
 				Vector4D color( 1.0f, 1.0f, 1.0f, instance.m_DiffuseModulation[3] );
 				SetPixelShaderConstantInternal( nReg, color.Base() );

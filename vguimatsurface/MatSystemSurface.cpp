@@ -1329,7 +1329,19 @@ void CMatSystemSurface::DrawQuad( const Vertex_t &ul, const Vertex_t &lr, unsign
 	meshBuilder.AdvanceVertexF<VTX_HAVEPOS | VTX_HAVECOLOR, 1>();
 
 	meshBuilder.End();
+#if defined( IOS )
+	if ( pColor )
+	{
+		Vector4D mod( pColor[0] / 255.0f, pColor[1] / 255.0f, pColor[2] / 255.0f, pColor[3] / 255.0f );
+		m_pMesh->DrawModulated( mod );
+	}
+	else
+	{
+		m_pMesh->Draw();
+	}
+#else
 	m_pMesh->Draw();
+#endif
 }
 
 
@@ -1462,7 +1474,15 @@ void CMatSystemSurface::DrawQuadArray( int quadCount, Vertex_t *pVerts, unsigned
 		}
 
 		meshBuilder.End();
+#if defined( IOS )
+		{
+			Vector4D mod( m_DrawColor[0] / 255.0f, m_DrawColor[1] / 255.0f,
+				m_DrawColor[2] / 255.0f, m_DrawColor[3] / 255.0f );
+			m_pMesh->DrawModulated( mod );
+		}
+#else
 		m_pMesh->Draw();
+#endif
 
 		nFirstQuad += quadCount;
 		nQuadsRemaining -= quadCount;

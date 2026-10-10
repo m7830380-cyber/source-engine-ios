@@ -129,6 +129,16 @@
 
 const float4 g_EnvmapTint_SPF					: register( c0 ); //SPF=Single Pass Flashlight, stored in previously unused alpha.
 const float4 g_DiffuseModulation				: register( c1 );
+
+// Portal2 iOS / ANGLE: COLOR0 RGB often 0 while alpha is valid (logs 157–158).
+#if IOS
+HALF3 IOS_FixZeroInterpolantColor( HALF3 lit )
+{
+	if ( dot( lit, lit ) < 1e-4h )
+		return max( (HALF3)g_DiffuseModulation.rgb, HALF3( 1.0h, 1.0h, 1.0h ) );
+	return lit;
+}
+#endif
 const float4 g_ShadowTweaks						: register( c2 );
 const float4 g_EnvmapParams					: register( c19 );
 #define g_EnvmapContrast g_EnvmapParams.x
@@ -500,6 +510,9 @@ float4_color_return_type main( PS_INPUT i ) : COLOR
 	#if ( DIFFUSELIGHTING || VERTEXCOLOR && !( VERTEXCOLOR && DIFFUSELIGHTING ) )
 	{
 		diffuseLighting = (HALF3)i.color.rgb;
+#if IOS
+		diffuseLighting = IOS_FixZeroInterpolantColor( diffuseLighting );
+#endif
 
 		diffuseLighting.rgb += i.directionalLightingColor_flShadowDimScalar.rgb * flDirectionalShadow;
 
@@ -642,7 +655,11 @@ float4_color_return_type main( PS_INPUT i ) : COLOR
 
 	#if ( VERTEXCOLOR && DIFFUSELIGHTING )
 	{
-		albedo *= (HALF)i.color.rgb;
+		HALF3 vcol = (HALF)i.color.rgb;
+#if IOS
+		vcol = IOS_FixZeroInterpolantColor( vcol );
+#endif
+		albedo *= vcol;
 	}
 	#endif
 

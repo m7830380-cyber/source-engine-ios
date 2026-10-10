@@ -732,7 +732,7 @@ def cmd_compile(args):
 
     common = [('TOTALSHADERCOMBOS', total), ('CENTROIDMASK', c.centroid_mask),
               ('NUMDYNAMICCOMBOS', num_dyn), ('FLAGS', '0x0'),
-              ('SHADER_MODEL_' + stype.upper(), 1)]
+              ('SHADER_MODEL_' + stype.upper(), 1), ('IOS', 1)]
 
     global _obj_seq
     import itertools

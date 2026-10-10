@@ -867,7 +867,7 @@ bool CMaterialSystem::Connect( CreateInterfaceFn factory )
 #endif
 
 #if defined( IOS )
-	Msg( "[Portal2 iOS] render-fix R7: PS 2048→sid64, VGUI $color mod, prop ambient guard\n" );
+	Msg( "[Portal2 iOS] render-fix R8: no VCOL/DIFFUSE PS pins; UI VS→sid64; PS tint from instance\n" );
 #endif
 	return g_pShaderDeviceMgr->Connect( ShaderFactory );	
 }

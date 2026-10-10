@@ -1047,6 +1047,7 @@ public:
 	virtual void OnTickPre( int tickcount ) OVERRIDE;
 #if defined( IOS )
 	virtual void IN_TouchEvent( int type, int fingerId, int x, int y ) OVERRIDE;
+	virtual int IOS_PortalStencilViewRecursionLevel() const OVERRIDE;
 #endif
 
 	virtual char const * GetRichPresenceStatusString();
@@ -5059,6 +5060,15 @@ void CHLClient::EngineGotvSyncPacket( const CEngineGotvSyncPacket *pPkt )
 }
 
 #if defined( IOS )
+int CHLClient::IOS_PortalStencilViewRecursionLevel() const
+{
+#ifdef PORTAL
+	if ( g_pPortalRender && g_pPortalRender->ShouldUseStencilsToRenderPortals() )
+		return g_pPortalRender->GetViewRecursionLevel();
+#endif
+	return 0;
+}
+
 void CHLClient::IN_TouchEvent( int type, int fingerId, int x, int y )
 {
 	if ( fingerId >= 0 && fingerId < ARRAYSIZE( s_bIOSFingerDown ) )

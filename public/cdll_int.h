@@ -1178,6 +1178,8 @@ public:
 #if defined( IOS )
 	// touch input from inputsystem: type is IE_Finger*, x/y are floats (0..1) passed as int bits
 	virtual void IN_TouchEvent( int type, int fingerId, int x, int y ) = 0;
+	// Portal stencil recursive views: engine skips displacement draws while depth > 0.
+	virtual int IOS_PortalStencilViewRecursionLevel() const = 0;
 #endif
 };
 

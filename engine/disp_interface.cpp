@@ -9,7 +9,7 @@
 #include "decal_private.h"
 #include "disp_defs.h"
 #include "disp.h"
-#include "engine/ios_portal_disp.h"
+#include "cdll_engine_int.h"
 #include "gl_model_private.h"
 #include "gl_matsysiface.h"
 #include "gl_cvars.h"
@@ -1403,7 +1403,7 @@ void DispInfo_RenderListWorld( IMatRenderContext *pRenderContext, int nSortGroup
 #ifndef DEDICATED
 #if defined( IOS )
 	// Portal stencil skybox/world pass hits a GLES displacement crash (log 170?171).
-	if ( g_iPortalStencilViewRecursionLevel > 0 )
+	if ( g_ClientDLL && g_ClientDLL->IOS_PortalStencilViewRecursionLevel() > 0 )
 		return;
 #endif
 	if( !r_DrawDisp.GetInt() || !listCount || !( flags & DRAWWORLDLISTS_DRAW_WORLD_GEOMETRY ) )

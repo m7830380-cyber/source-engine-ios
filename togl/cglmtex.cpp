@@ -3546,17 +3546,28 @@ static bool IOS_UseNativeDXT( GLenum internalformat )
 #if defined( IOS )
 static uint8_t IOS_SrgbByteToLinear( uint8_t c )
 {
-	const float s = c * ( 1.0f / 255.0f );
-	const float lin = ( s <= 0.04045f ) ? ( s / 12.92f ) : powf( ( s + 0.055f ) / 1.055f, 2.4f );
-	int v = (int)( lin * 255.0f + 0.5f );
-	if ( v < 0 )
-		v = 0;
-	if ( v > 255 )
-		v = 255;
-	return (uint8_t)v;
+	// Built once; uncompressDXTc lays out rows with stride == width (not block-padded pw).
+	static uint8_t s_lut[256];
+	static bool s_bInit = false;
+	if ( !s_bInit )
+	{
+		for ( int i = 0; i < 256; ++i )
+		{
+			const float s = i * ( 1.0f / 255.0f );
+			const float lin = ( s <= 0.04045f ) ? ( s / 12.92f ) : powf( ( s + 0.055f ) / 1.055f, 2.4f );
+			int v = (int)( lin * 255.0f + 0.5f );
+			if ( v < 0 )
+				v = 0;
+			if ( v > 255 )
+				v = 255;
+			s_lut[i] = (uint8_t)v;
+		}
+		s_bInit = true;
+	}
+	return s_lut[c];
 }
 
-static void IOS_FixDecompressedDXTPixels( uint32_t *px, int nPixels, bool bSrgbSource )
+static void IOS_FixDecompressedDXTPixels( uint32_t *pixels, int width, int height, bool bSrgbSource )
 {
 	static bool s_bLoggedLinearize = false;
 	if ( bSrgbSource && !s_bLoggedLinearize )
@@ -3565,31 +3576,36 @@ static void IOS_FixDecompressedDXTPixels( uint32_t *px, int nPixels, bool bSrgbS
 		Msg( "[Portal2 iOS] DXT decompress: apply sRGB→linear on RGBA8 (props/albedo)\n" );
 	}
 
-	for ( int i = 0; i < nPixels; ++i )
+	// Log 150: pw*ph flat loop scribbled past malloc stride (row pitch = width) → heap abort in ANGLE.
+	for ( int y = 0; y < height; ++y )
 	{
-		uint32_t p = px[i];
-		uint8_t r = (uint8_t)( p & 0xff );
-		uint8_t g = (uint8_t)( ( p >> 8 ) & 0xff );
-		uint8_t b = (uint8_t)( ( p >> 16 ) & 0xff );
-		uint8_t a = (uint8_t)( ( p >> 24 ) & 0xff );
-
-		if ( a == 0 && ( r + g + b ) < 4 )
+		uint32_t *row = pixels + y * width;
+		for ( int x = 0; x < width; ++x )
 		{
-			px[i] = 0;
-			continue;
+			uint32_t p = row[x];
+			uint8_t r = (uint8_t)( p & 0xff );
+			uint8_t g = (uint8_t)( ( p >> 8 ) & 0xff );
+			uint8_t b = (uint8_t)( ( p >> 16 ) & 0xff );
+			uint8_t a = (uint8_t)( ( p >> 24 ) & 0xff );
+
+			if ( a == 0 && ( r + g + b ) < 4 )
+			{
+				row[x] = 0;
+				continue;
+			}
+
+			if ( bSrgbSource )
+			{
+				r = IOS_SrgbByteToLinear( r );
+				g = IOS_SrgbByteToLinear( g );
+				b = IOS_SrgbByteToLinear( b );
+			}
+
+			if ( a > 0 && ( r + g + b ) < 4 )
+				r = g = b = a;
+
+			row[x] = (uint32_t)r | ( (uint32_t)g << 8 ) | ( (uint32_t)b << 16 ) | ( (uint32_t)a << 24 );
 		}
-
-		if ( bSrgbSource )
-		{
-			r = IOS_SrgbByteToLinear( r );
-			g = IOS_SrgbByteToLinear( g );
-			b = IOS_SrgbByteToLinear( b );
-		}
-
-		if ( a > 0 && ( r + g + b ) < 4 )
-			r = g = b = a;
-
-		px[i] = (uint32_t)r | ( (uint32_t)g << 8 ) | ( (uint32_t)b << 16 ) | ( (uint32_t)a << 24 );
 	}
 }
 #endif
@@ -3643,9 +3659,7 @@ void CompressedTexImage2D(GLenum target, GLint level, GLenum internalformat,
 		}
 		if ( pixels )
 		{
-			const int pw = ( width + 3 ) & ~3;
-			const int ph = ( height + 3 ) & ~3;
-			IOS_FixDecompressedDXTPixels( (uint32_t *)pixels, pw * ph, srgb != 0 );
+			IOS_FixDecompressedDXTPixels( (uint32_t *)pixels, width, height, srgb != 0 );
 		}
 #else
 		if( srgb )

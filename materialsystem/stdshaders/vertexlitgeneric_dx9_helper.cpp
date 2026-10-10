@@ -649,7 +649,9 @@ static void DrawVertexLitGeneric_DX9_Internal( CBaseVSShader *pShader, IMaterial
 					pShader->PI_SetPixelShaderAmbientLightCube( 5 );
 					pShader->PI_SetPixelShaderLocalLighting( 13 );
 				}
+#if !defined( IOS )
 				pShader->PI_SetVertexShaderAmbientLightCube();
+#endif
 			}
 			// material can choose to support per-instance modulation via $allowdiffusemodulation
 			bool bAllowDiffuseModulation = ( info.m_nAllowDiffuseModulation == -1 ) ? true : ( params[info.m_nAllowDiffuseModulation]->GetIntValue() != 0 );
@@ -2255,11 +2257,41 @@ bool bDistanceAlphaFromDetail = false;
 		DynamicCmdsOut.SetPixelShaderConstant( 25, vTimeConst, 1 );
 		//*/
 
+#if defined( IOS )
+		// log 125 white-tint fix: DIFFUSE=1 → staticId 21 needs non-zero ambient (not black props).
+		if ( bVertexLitGeneric )
+		{
+			float amb[24];
+			for ( int iAmb = 0; iAmb < 6; iAmb++ )
+			{
+				amb[iAmb * 4 + 0] = 0.55f;
+				amb[iAmb * 4 + 1] = 0.55f;
+				amb[iAmb * 4 + 2] = 0.55f;
+				amb[iAmb * 4 + 3] = 1.0f;
+			}
+			DynamicCmdsOut.SetVertexShaderConstant( VERTEX_SHADER_AMBIENT_LIGHT, amb, 6 );
+		}
+#endif
+
 		DynamicCmdsOut.End();
 #ifdef _PS3
 		ShaderApiFast( pShaderAPI )->SetPixelShaderFogParams( 21 );
 #endif
 		ShaderApiFast( pShaderAPI )->ExecuteCommandBuffer( DynamicCmdsOut.Base() );
+#if defined( IOS )
+		if ( bVertexLitGeneric )
+		{
+			float amb[24];
+			for ( int iAmb = 0; iAmb < 6; iAmb++ )
+			{
+				amb[iAmb * 4 + 0] = 0.55f;
+				amb[iAmb * 4 + 1] = 0.55f;
+				amb[iAmb * 4 + 2] = 0.55f;
+				amb[iAmb * 4 + 3] = 1.0f;
+			}
+			ShaderApiFast( pShaderAPI )->SetVertexShaderConstant( VERTEX_SHADER_AMBIENT_LIGHT, amb, 6 );
+		}
+#endif
 	}
 	pShader->Draw();
 }

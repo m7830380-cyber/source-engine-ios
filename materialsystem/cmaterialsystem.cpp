@@ -866,6 +866,9 @@ bool CMaterialSystem::Connect( CreateInterfaceFn factory )
 	g_pScaleformUI = ( IScaleformUI* ) factory( SCALEFORMUI_INTERFACE_VERSION, 0 );
 #endif
 
+#if defined( IOS )
+	Msg( "[Portal2 iOS] render-fix R5: log125 PS 128→21 / 2048→1 (revert R4 illegal PS0)\n" );
+#endif
 	return g_pShaderDeviceMgr->Connect( ShaderFactory );	
 }
 

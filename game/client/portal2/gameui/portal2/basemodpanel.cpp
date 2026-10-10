@@ -2204,8 +2204,10 @@ void CBaseModPanel::PostChildPaint()
 	if ( m_hDefaultFont )
 	{
 		const char *pszPlay = "PLAY";
+		wchar_t wszPlay[8];
+		g_pVGuiLocalize->ConvertANSIToUnicode( pszPlay, wszPlay, sizeof( wszPlay ) );
 		int textW, textH;
-		surface()->GetTextSize( m_hDefaultFont, pszPlay, textW, textH );
+		surface()->GetTextSize( m_hDefaultFont, wszPlay, textW, textH );
 		const int tx = ( m_nIOSPlayX0 + m_nIOSPlayX1 - textW ) / 2;
 		const int ty = m_nIOSPlayY0 + ( ( m_nIOSPlayY1 - m_nIOSPlayY0 ) - textH ) / 2;
 		DrawColoredText( m_hDefaultFont, tx, ty, 0x000000ff, pszPlay );

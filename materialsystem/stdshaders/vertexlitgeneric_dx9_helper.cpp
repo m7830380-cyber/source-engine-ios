@@ -654,6 +654,10 @@ static void DrawVertexLitGeneric_DX9_Internal( CBaseVSShader *pShader, IMaterial
 			// material can choose to support per-instance modulation via $allowdiffusemodulation
 			bool bAllowDiffuseModulation = ( info.m_nAllowDiffuseModulation == -1 ) ? true : ( params[info.m_nAllowDiffuseModulation]->GetIntValue() != 0 );
 
+#if defined( IOS )
+			// Log 146/153: GLES linear albedo + tint lerp zeros RGB while alpha survives.
+			pShader->PI_SetModulationPixelShaderDynamicState_Identity( 1 );
+#else
 			if ( bAllowDiffuseModulation )
 			{
 				if ( ( info.m_nHDRColorScale != -1 ) && pShader->IsHDREnabled() )
@@ -675,6 +679,7 @@ static void DrawVertexLitGeneric_DX9_Internal( CBaseVSShader *pShader, IMaterial
 			{
 				pShader->PI_SetModulationPixelShaderDynamicState_Identity( 1 );
 			}
+#endif
 			pShader->PI_EndCommandBuffer();
 
 			bool hasBaseAlphaEnvmapMask = IS_FLAG_SET( MATERIAL_VAR_BASEALPHAENVMAPMASK );
@@ -2227,6 +2232,9 @@ bool bDistanceAlphaFromDetail = false;
 
 		// Controls for lerp-style paths through shader code (used by bump and non-bump)
 		float vShaderControls[4] = { IsBoolSet( info.m_nNoTint, params ) ? -1.0f : ( 1.0f - fBlendTintByBaseAlpha ), fWriteDepthToAlpha, fWriteWaterFogToDestAlpha, fVertexAlpha };
+#if defined( IOS )
+		vShaderControls[0] = -1.0f;
+#endif
 		
 		if ( bHasBump )
 		{

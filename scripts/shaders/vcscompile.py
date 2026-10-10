@@ -626,6 +626,10 @@ def write_vcs(path, num_dyn, total_combos, centroid_mask, static_payloads, compr
     up in the main dictionary, and both searches are binary, so both tables must be
     sorted by static combo id.
     """
+    # Portal2 iOS: FXC sometimes emits byte-identical blobs for static 4 (DIFFUSE)
+    # and 64 (VERTEXCOLOR). Aliasing 64→4 makes FindCombo(64) run the wrong combo.
+    _FORBID_ALIAS = frozenset({(64, 4), (4, 64)})
+
     canon = {}          # payload -> canonical sid
     aliases = []        # (sid, source_sid)
     unique = []         # (sid, payload)
@@ -633,6 +637,8 @@ def write_vcs(path, num_dyn, total_combos, centroid_mask, static_payloads, compr
         prev = canon.get(payload)
         if prev is None:
             canon[payload] = sid
+            unique.append((sid, payload))
+        elif (sid, prev) in _FORBID_ALIAS:
             unique.append((sid, payload))
         else:
             aliases.append((sid, prev))

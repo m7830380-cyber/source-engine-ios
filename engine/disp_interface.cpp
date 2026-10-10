@@ -1,4 +1,4 @@
-//========= Copyright © 1996-2007, Valve Corporation, All rights reserved. ============//
+//========= Copyright ù 1996-2007, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -623,6 +623,9 @@ void DispInfo_BuildPrimLists( int nSortGroup, SurfaceHandle_t *pList, int listCo
 	nVisibleDisps = 0;
 	for( int i = 0; i < listCount; i++ )
 	{
+		if ( !pList[i] || !pList[i]->pDispInfo )
+			continue;
+
 		CDispInfo *pDisp = static_cast<CDispInfo*>( pList[i]->pDispInfo );
 		if( !pDisp->Render( pDisp->m_pMesh, false ) )
 			continue;
@@ -671,7 +674,10 @@ void DispInfo_DrawPrimLists( IMatRenderContext *pRenderContext, ERenderDepthMode
 	for( int iGroup=0; iGroup < nDispGroupsSize; iGroup++ )
 	{
 		CDispGroup *pGroup = g_DispGroups[iGroup];
-		if( pGroup->m_nVisible == 0 )
+		if( !pGroup || pGroup->m_nVisible == 0 )
+			continue;
+
+		if ( !pGroup->m_pMaterial )
 			continue;
 
 		if ( DepthMode != DEPTH_MODE_NORMAL )
@@ -690,6 +696,9 @@ void DispInfo_DrawPrimLists( IMatRenderContext *pRenderContext, ERenderDepthMode
 			{
 				pDepthWriteMaterial = g_pMaterialSSAODepthWrite[ nAlphaTest ][ nNoCull ];
 			}
+
+			if ( !pDepthWriteMaterial )
+				continue;
 
 			if ( nAlphaTest == 1 )
 			{
@@ -753,7 +762,10 @@ void DispInfo_DrawPrimLists( IMatRenderContext *pRenderContext, ERenderDepthMode
 		for( int iMesh=0; iMesh < nMeshesSize; iMesh++ )
 		{
 			CGroupMesh *pMesh = pGroup->m_Meshes[iMesh];
-			if( pMesh->m_nVisible == 0 )
+			if( !pMesh || pMesh->m_nVisible == 0 )
+				continue;
+
+			if ( !pMesh->m_pMesh )
 				continue;
 
 			if ( disp_dynamic.GetInt() )

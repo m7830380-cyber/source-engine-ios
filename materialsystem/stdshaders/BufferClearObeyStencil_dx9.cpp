@@ -49,6 +49,8 @@ BEGIN_VS_SHADER_FLAGS( BufferClearObeyStencil_DX9, "", SHADER_NOT_EDITABLE )
 
 		bool bUsesColor = bEnableColorWrites || bEnableAlphaWrites;
 		bool bReloadZcull = ( IsPS3() && params[RELOADZCULL]->GetIntValue() != 0 ) ? true : false;
+		// OpenGL/ANGLE always binds a PS here; VS must pass COLOR0 or GLES link fails (log 170 portal stencil).
+		const bool bVertexUsesColor = bUsesColor || g_pHardwareConfig->PlatformRequiresNonNullPixelShaders();
 
 		SHADOW_STATE
 		{
@@ -62,7 +64,7 @@ BEGIN_VS_SHADER_FLAGS( BufferClearObeyStencil_DX9, "", SHADER_NOT_EDITABLE )
 			pShaderShadow->VertexShaderVertexFormat( VERTEX_POSITION|VERTEX_COLOR, 1, NULL, 0 );
 
 			DECLARE_STATIC_VERTEX_SHADER( bufferclearobeystencil_vs20 );
-			SET_STATIC_VERTEX_SHADER_COMBO( USESCOLOR, bUsesColor );
+			SET_STATIC_VERTEX_SHADER_COMBO( USESCOLOR, bVertexUsesColor );
 			SET_STATIC_VERTEX_SHADER( bufferclearobeystencil_vs20 );
 
 			//avoid setting a pixel shader when only doing depth/stencil operations, as recommended by PIX

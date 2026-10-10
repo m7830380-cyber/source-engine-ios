@@ -783,14 +783,6 @@ static void DrawVertexLitGeneric_DX9_Internal( CBaseVSShader *pShader, IMaterial
 				bSetBlendingShadowStateCalled = true;
 			}
 
-#if defined( IOS )
-			// Premultiplied RGB in PS for unlit VCOL (sid 64); match blend (log 168 halos).
-			if ( bSetBlendingShadowStateCalled && !bVertexLitGeneric && nBlendType == BT_BLEND )
-			{
-				pShader->EnableAlphaBlending( SHADER_BLEND_ONE, SHADER_BLEND_ONE_MINUS_SRC_ALPHA );
-			}
-#endif
-
 			// Fence render state override
 			if ( bSetBlendingShadowStateCalled )
 			{
@@ -1183,8 +1175,8 @@ bool bDistanceAlphaFromDetail = false;
 						SET_STATIC_PIXEL_SHADER_COMBO( BASEALPHAENVMAPMASK, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( ENVMAPFRESNEL, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( SELFILLUM, 0 );
-						// Must match VS VCOL (log 167: VS 9360→65 but PS packed 0→sid 0 = broken UI).
-						SET_STATIC_PIXEL_SHADER_COMBO( VERTEXCOLOR, bVertexLitGeneric ? 0 : 1 );
+						// Unlit VGUI: PS VCOL=0 → sid 0 (log 164/169 good alpha); RGB via IOS unlit fastpath in PS.
+						SET_STATIC_PIXEL_SHADER_COMBO( VERTEXCOLOR, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( FLASHLIGHT, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( DETAIL_BLEND_MODE, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( DECAL_BLEND_MODE, 0 );

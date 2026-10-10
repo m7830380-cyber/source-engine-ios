@@ -867,7 +867,7 @@ bool CMaterialSystem::Connect( CreateInterfaceFn factory )
 #endif
 
 #if defined( IOS )
-	Msg( "[Portal2 iOS] render-fix R20: unlit VCOL premul alpha + ONE/INVSRCALPHA blend (log 168)\n" );
+	Msg( "[Portal2 iOS] render-fix R21: IOS unlit PS fastpath tex*c1, PS sid0 (log 169)\n" );
 #endif
 	return g_pShaderDeviceMgr->Connect( ShaderFactory );	
 }

@@ -534,11 +534,7 @@ float4_color_return_type main( PS_INPUT i ) : COLOR
 	#if ( DIFFUSELIGHTING || VERTEXCOLOR && !( VERTEXCOLOR && DIFFUSELIGHTING ) )
 	{
 #if defined( IOS ) && ( VERTEXCOLOR && !DIFFUSELIGHTING )
-		// Unlit touch/fonts (PS packed 2048 → sid 64): ignore poisoned COLOR0 rgb;
-		// tint from c1 / DrawModulated (log 168 grey OK, halos from blend).
-		diffuseLighting = (HALF3)g_DiffuseModulation.rgb;
-		if ( dot( diffuseLighting, diffuseLighting ) < 1e-4h )
-			diffuseLighting = HALF3( 1.0h, 1.0h, 1.0h );
+		diffuseLighting = HALF3( 1.0h, 1.0h, 1.0h );
 #else
 		diffuseLighting = (HALF3)i.color.rgb;
 #if defined( IOS )
@@ -695,15 +691,20 @@ float4_color_return_type main( PS_INPUT i ) : COLOR
 	}
 	#endif
 
-#if defined( IOS ) && ( VERTEXCOLOR && !DIFFUSELIGHTING )
-	; // alpha already includes g_DiffuseModulation.a (avoid double-mod + vtx halos, log 161).
-#elif defined( IOS )
+#if defined( IOS )
 	alpha = IOS_ApplyVertexAlpha( alpha, (HALF)i.color.a, (HALF)g_fVertexAlpha );
 #else
 	alpha = lerp( alpha, alpha * (HALF)i.color.a, (HALF)g_fVertexAlpha );
 #endif
 
 	HALF3 diffuseComponent = albedo * diffuseLighting;
+
+#if defined( IOS ) && !DIFFUSELIGHTING
+	HALF3 iosTint = (HALF3)g_DiffuseModulation.rgb;
+	if ( dot( iosTint, iosTint ) < 1e-4h )
+		iosTint = HALF3( 1.0h, 1.0h, 1.0h );
+	HALF3 iosUnlitRgb = albedo * iosTint;
+#endif
 
 	#if ( DECAL_BLEND_MODE != 2 )
 		float4 decalColor = tex2D( DecalSampler, float2(i.baseTexCoord_baseTexCoord2u.w, i.detailTexCoord_baseTexCoord2v.w ) );
@@ -767,11 +768,10 @@ float4_color_return_type main( PS_INPUT i ) : COLOR
 	}
 	#endif
 
+#if defined( IOS ) && !DIFFUSELIGHTING
+	HALF3 result = iosUnlitRgb;
+#else
 	HALF3 result = diffuseComponent + specularLighting;
-
-#if defined( IOS ) && ( VERTEXCOLOR && !DIFFUSELIGHTING )
-	// ANGLE/Metal: fringe texels keep rgb=0 with a>0 → black halos under SRC_ALPHA (log 148/168).
-	result.rgb *= saturate( alpha );
 #endif
 	
 #if ( SMOKEGRENADEBLEND )

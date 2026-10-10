@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""CI gate: bundled vertexlit PS .vcs must contain props (4) and font (64) static ids."""
+"""CI gate: bundled vertexlit PS .vcs must contain props (4) and unlit UI (0) static ids."""
 import struct
 import sys
 
 
 def main():
     path = sys.argv[1] if len(sys.argv) > 1 else "shaderout/shaders/fxc/vertexlit_and_unlit_generic_ps20b.vcs"
-    need = {4, 64}
+    need = {0, 4}
     data = open(path, "rb").read()
     if len(data) < 28:
         print("FAIL: %s shorter than VCS header" % path)
@@ -34,7 +34,7 @@ def main():
         return 1
     miss = need - record_ids
     if miss:
-        print("FAIL: %s missing static id records %s (fonts need 64, props need 4)" % (path, sorted(miss)))
+        print("FAIL: %s missing static id records %s (fonts/touch need 0, props need 4)" % (path, sorted(miss)))
         return 1
     print("OK: %s has required vertexlit PS static id records %s" % (path, sorted(need)))
     return 0

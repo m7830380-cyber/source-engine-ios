@@ -650,17 +650,10 @@ static void DrawVertexLitGeneric_DX9_Internal( CBaseVSShader *pShader, IMaterial
 					pShader->PI_SetPixelShaderLocalLighting( 13 );
 				}
 				pShader->PI_SetVertexShaderAmbientLightCube();
-				// iOS fill-ambient for NULL/black lighting state is applied in
-				// CBICMD_SETVERTEXSHADERAMBIENTLIGHTCUBE (shaderapidx8.cpp).
 			}
 			// material can choose to support per-instance modulation via $allowdiffusemodulation
 			bool bAllowDiffuseModulation = ( info.m_nAllowDiffuseModulation == -1 ) ? true : ( params[info.m_nAllowDiffuseModulation]->GetIntValue() != 0 );
 
-#if defined( IOS )
-			// ps20b: diffuseLighting *= lerp(1, g_DiffuseModulation, saturate(baseColor.a + g_fInverseBlendTint)).
-			// Log 146: props/touch black RGB, alpha OK — modulation path zeroed albedo.
-			pShader->PI_SetModulationPixelShaderDynamicState_Identity( 1 );
-#else
 			if ( bAllowDiffuseModulation )
 			{
 				if ( ( info.m_nHDRColorScale != -1 ) && pShader->IsHDREnabled() )
@@ -682,7 +675,6 @@ static void DrawVertexLitGeneric_DX9_Internal( CBaseVSShader *pShader, IMaterial
 			{
 				pShader->PI_SetModulationPixelShaderDynamicState_Identity( 1 );
 			}
-#endif
 			pShader->PI_EndCommandBuffer();
 
 			bool hasBaseAlphaEnvmapMask = IS_FLAG_SET( MATERIAL_VAR_BASEALPHAENVMAPMASK );
@@ -818,10 +810,6 @@ static void DrawVertexLitGeneric_DX9_Internal( CBaseVSShader *pShader, IMaterial
 				else
 					bSampler0SrgbRead = !bShaderSrgbRead;
 			}
-#if defined( IOS )
-			// Decompressed DXT → GL_RGBA8 (ee08147c). GLES has no sRGB decode; sRGB sampler → black RGB.
-			bSampler0SrgbRead = false;
-#endif
 			pShaderShadow->EnableSRGBRead( SHADER_SAMPLER0, bSampler0SrgbRead );
 
 			if ( bHasEnvmap )
@@ -1106,27 +1094,6 @@ bool bDistanceAlphaFromDetail = false;
 				#endif
 				{
 					DECLARE_STATIC_VERTEX_SHADER( vertexlit_and_unlit_generic_vs20 );
-#if defined( IOS )
-					// Log 139: dropping pins + retail PS (dyn=6) → packed 83088 → VS fallback 49 = UV stretch.
-					// Keep FLATTEN=1 and gate VERTEXCOLOR for Unlit/touch (log 134).
-					SET_STATIC_VERTEX_SHADER_COMBO( SFM, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( VERTEXCOLOR, bVertexLitGeneric ? 0 : 1 );
-					SET_STATIC_VERTEX_SHADER_COMBO( CUBEMAP, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( HALFLAMBERT, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( FLASHLIGHT, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( SEAMLESS_BASE, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( SEAMLESS_DETAIL, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( SEPARATE_DETAIL_UVS, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( LIGHTING_PREVIEW, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( TREESWAY, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( FLATTEN_STATIC_CONTROL_FLOW, 1 );
-					SET_STATIC_VERTEX_SHADER_COMBO( DECAL, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( CASCADED_SHADOW_MAPPING, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( CSM_BLENDING, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( DOPIXELFOG, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( HARDWAREFOGBLEND, 0 );
-					bool bCSMBlending = false;
-#else
 					SET_STATIC_VERTEX_SHADER_COMBO( SFM, bSFM );
 					SET_STATIC_VERTEX_SHADER_COMBO( VERTEXCOLOR,  bHasVertexColor || bHasVertexAlpha );
 					SET_STATIC_VERTEX_SHADER_COMBO( CUBEMAP,  bHasEnvmap );
@@ -1143,47 +1110,11 @@ bool bDistanceAlphaFromDetail = false;
 					bool bCSMBlending = g_pHardwareConfig->GetCSMAccurateBlending();
 					SET_STATIC_VERTEX_SHADER_COMBO( CASCADED_SHADOW_MAPPING, bCSMEnabled_ps2b );
 					SET_STATIC_VERTEX_SHADER_COMBO( CSM_BLENDING, bCSMBlending );
-#endif
 					SET_STATIC_VERTEX_SHADER( vertexlit_and_unlit_generic_vs20 );
 				
 					if ( g_pHardwareConfig->SupportsPixelShaders_2_b() || g_pHardwareConfig->ShouldAlwaysUseShaderModel2bShaders() ) // Always send OpenGL this way
 					{
 						DECLARE_STATIC_PIXEL_SHADER( vertexlit_and_unlit_generic_ps20b );
-#if defined( IOS )
-						// Unlit/touch/fonts: PS packed 2048 → tree sid 42 (pair VS 65).
-						// Vertex-lit props: PS DIFFUSELIGHTING → packed 128 → tree sid 4 (pair VS 64);
-						// sid 0 albedo-only never showed prop RGB on GLES (logs 134–151).
-						SET_STATIC_PIXEL_SHADER_COMBO( SFM, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( SELFILLUM_ENVMAPMASK_ALPHA, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( DETAILTEXTURE, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( CUBEMAP, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( DIFFUSELIGHTING, bVertexLitGeneric ? 1 : 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( ENVMAPMASK, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( BASEALPHAENVMAPMASK, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( ENVMAPFRESNEL, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( SELFILLUM, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( VERTEXCOLOR, bVertexLitGeneric ? 0 : 1 );
-						SET_STATIC_PIXEL_SHADER_COMBO( FLASHLIGHT, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( DETAIL_BLEND_MODE, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( DECAL_BLEND_MODE, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( TINTMASKTEXTURE, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( SEAMLESS_BASE, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( SEAMLESS_DETAIL, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( DISTANCEALPHA, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( DISTANCEALPHAFROMDETAIL, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( SOFT_MASK, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( OUTLINE, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( OUTER_GLOW, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( FLASHLIGHTDEPTHFILTERMODE, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( SHADER_SRGB_READ, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( DESATURATEWITHBASEALPHA, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( LIGHTING_PREVIEW, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( SRGB_INPUT_ADAPTER, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( CASCADED_SHADOW_MAPPING, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( CSM_MODE, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( CSM_BLENDING, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( DOPIXELFOG, 0 );
-#else
 						SET_STATIC_PIXEL_SHADER_COMBO( SFM, bSFM );
 						SET_STATIC_PIXEL_SHADER_COMBO( SELFILLUM_ENVMAPMASK_ALPHA, bHasSelfIllumInEnvMapMask ); 
 						SET_STATIC_PIXEL_SHADER_COMBO( DETAILTEXTURE,  bHasDetailTexture );
@@ -1215,7 +1146,6 @@ bool bDistanceAlphaFromDetail = false;
 						SET_STATIC_PIXEL_SHADER_COMBO( CASCADED_SHADOW_MAPPING, g_pHardwareConfig->SupportsCascadedShadowMapping() && !bSFM && !bHasFlashlight && !bDisableCSMLookup );
 						SET_STATIC_PIXEL_SHADER_COMBO( CSM_MODE, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( CSM_BLENDING, bCSMBlending );
-#endif
 						SET_STATIC_PIXEL_SHADER( vertexlit_and_unlit_generic_ps20b );
 					}
 					else // ps_2_0
@@ -1362,9 +1292,6 @@ bool bDistanceAlphaFromDetail = false;
 				else
 					bSampler0SrgbRead = !bShaderSrgbRead;
 			}
-#if defined( IOS )
-			bSampler0SrgbRead = false;
-#endif
 
 			if ( bHasBaseTexture )
 			{
@@ -2094,28 +2021,12 @@ bool bDistanceAlphaFromDetail = false;
 				int staticLight3VSCombo = (lightState.m_bStaticLight && bStaticLight3Streams) ? ( ( lightState.m_bStaticLightIndirectOnly )? 2 : 1) : 0;
 
 				DECLARE_DYNAMIC_VERTEX_SHADER( vertexlit_and_unlit_generic_vs20 );
-#if defined( IOS )
-				// STATICLIGHT3/NUM_LIGHTS>0 blow dyn into skipped VCS slots (log 123).
-				// But AmbientLight() in the VS only runs when DYNAMIC_LIGHT=1
-				// (common_vs_fxc.h DoLighting*) — pinning it 0 left o.color black
-				// even with a forced white ambient cube (log 129 black props).
-				// DYNAMIC_LIGHT=1 + NUM_LIGHTS=0 → ambient only, dyn index +2 (safe).
-				SET_DYNAMIC_VERTEX_SHADER_COMBO( DYNAMIC_LIGHT, 1 );
-				SET_DYNAMIC_VERTEX_SHADER_COMBO( STATICLIGHT3, 0 );
-				SET_DYNAMIC_VERTEX_SHADER_COMBO( SKINNING, numBones > 0 );
-				// Log 136: COMPRESSED_VERTS=1 → dyn 3 INVALID on static id0/49.
-				SET_DYNAMIC_VERTEX_SHADER_COMBO( COMPRESSED_VERTS, 0 );
-				SET_DYNAMIC_VERTEX_SHADER_COMBO( TESSELLATION, 0 );
-				SET_DYNAMIC_VERTEX_SHADER_COMBO( NUM_LIGHTS, 0 );
-				SET_DYNAMIC_VERTEX_SHADER_COMBO( DOWATERFOG, 0 );
-#else
 				SET_DYNAMIC_VERTEX_SHADER_COMBO( DYNAMIC_LIGHT, lightState.HasDynamicLight() );
 				SET_DYNAMIC_VERTEX_SHADER_COMBO( STATICLIGHT3, staticLight3VSCombo );
 				SET_DYNAMIC_VERTEX_SHADER_COMBO( SKINNING,  numBones > 0 );
 				SET_DYNAMIC_VERTEX_SHADER_COMBO( COMPRESSED_VERTS, (int)vertexCompression );
 				SET_DYNAMIC_VERTEX_SHADER_COMBO( TESSELLATION, 0 );
 				SET_DYNAMIC_VERTEX_SHADER_COMBO( NUM_LIGHTS, bUseStaticControlFlow ? 0 : lightState.m_nNumLights );
-#endif
 				SET_DYNAMIC_VERTEX_SHADER_CMD( DynamicCmdsOut, vertexlit_and_unlit_generic_vs20 );
 
 				// Bind ps_2_b shader so we can get shadow mapping
@@ -2245,9 +2156,6 @@ bool bDistanceAlphaFromDetail = false;
 
 		// Controls for lerp-style paths through shader code (used by bump and non-bump)
 		float vShaderControls[4] = { IsBoolSet( info.m_nNoTint, params ) ? -1.0f : ( 1.0f - fBlendTintByBaseAlpha ), fWriteDepthToAlpha, fWriteWaterFogToDestAlpha, fVertexAlpha };
-#if defined( IOS )
-		vShaderControls[0] = -1.0f;
-#endif
 		
 		if ( bHasBump )
 		{
@@ -2268,46 +2176,11 @@ bool bDistanceAlphaFromDetail = false;
 		DynamicCmdsOut.SetPixelShaderConstant( 25, vTimeConst, 1 );
 		//*/
 
-#if defined( IOS )
-		// NUM_LIGHTS pinned 0 (dyn slots skip). Force bright ambient so id-21
-		// DIFFUSE path still shows albedo (log 124 black props without this).
-		if ( bVertexLitGeneric )
-		{
-			float amb[24];
-			for ( int iAmb = 0; iAmb < 6; iAmb++ )
-			{
-				amb[iAmb * 4 + 0] = 1.0f;
-				amb[iAmb * 4 + 1] = 1.0f;
-				amb[iAmb * 4 + 2] = 1.0f;
-				amb[iAmb * 4 + 3] = 1.0f;
-			}
-			DynamicCmdsOut.SetVertexShaderConstant( VERTEX_SHADER_AMBIENT_LIGHT, amb, 6 );
-		}
-		{
-			float diffuseMod[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
-			DynamicCmdsOut.SetPixelShaderConstant( 1, diffuseMod, 1 );
-		}
-#endif
-
 		DynamicCmdsOut.End();
 #ifdef _PS3
 		ShaderApiFast( pShaderAPI )->SetPixelShaderFogParams( 21 );
 #endif
 		ShaderApiFast( pShaderAPI )->ExecuteCommandBuffer( DynamicCmdsOut.Base() );
-#if defined( IOS )
-		if ( bVertexLitGeneric )
-		{
-			float amb[24];
-			for ( int iAmb = 0; iAmb < 6; iAmb++ )
-			{
-				amb[iAmb * 4 + 0] = 1.0f;
-				amb[iAmb * 4 + 1] = 1.0f;
-				amb[iAmb * 4 + 2] = 1.0f;
-				amb[iAmb * 4 + 3] = 1.0f;
-			}
-			ShaderApiFast( pShaderAPI )->SetVertexShaderConstant( VERTEX_SHADER_AMBIENT_LIGHT, amb, 6 );
-		}
-#endif
 	}
 	pShader->Draw();
 }

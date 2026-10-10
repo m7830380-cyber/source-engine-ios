@@ -8592,6 +8592,18 @@ void CShaderAPIDx8::ExecuteInstanceCommandBuffer( const unsigned char *pCmdBuf, 
 						}
 						if ( GetAmbientLightCubeLuminance( instance.m_pLightingState ) >= 0.05f )
 							bUseCompiled = true;
+						// log 156: compiled cube can be valid luminance but still ~black RGB on props.
+						if ( bUseCompiled )
+						{
+							float fMax = 0.0f;
+							for ( int i = 0; i < 6; ++i )
+							{
+								const Vector &c = instance.m_pLightingState->m_vecAmbientCube[i];
+								fMax = MAX( fMax, MAX( c.x, MAX( c.y, c.z ) ) );
+							}
+							if ( fMax < 0.15f )
+								bUseCompiled = false;
+						}
 					}
 					if ( bUseCompiled )
 						SetVertexShaderStateAmbientLightCube( VERTEX_SHADER_AMBIENT_LIGHT, pCompiledState );
@@ -8602,7 +8614,7 @@ void CShaderAPIDx8::ExecuteInstanceCommandBuffer( const unsigned char *pCmdBuf, 
 						if ( !s_bInitMinAmb )
 						{
 							for ( int i = 0; i < 6; ++i )
-								s_iosMinAmbient.m_AmbientLightCube[i].Init( 0.4f, 0.4f, 0.4f, 1.0f );
+								s_iosMinAmbient.m_AmbientLightCube[i].Init( 1.0f, 1.0f, 1.0f, 1.0f );
 							s_bInitMinAmb = true;
 						}
 						SetVertexShaderStateAmbientLightCube( VERTEX_SHADER_AMBIENT_LIGHT, &s_iosMinAmbient );
@@ -9701,6 +9713,18 @@ void CShaderAPIDx8::ExecuteInstanceCommandBuffer( const unsigned char *pCmdBuf, 
 						}
 						if ( GetAmbientLightCubeLuminance( instance.m_pLightingState ) >= 0.05f )
 							bUseCompiled = true;
+						// log 156: compiled cube can be valid luminance but still ~black RGB on props.
+						if ( bUseCompiled )
+						{
+							float fMax = 0.0f;
+							for ( int i = 0; i < 6; ++i )
+							{
+								const Vector &c = instance.m_pLightingState->m_vecAmbientCube[i];
+								fMax = MAX( fMax, MAX( c.x, MAX( c.y, c.z ) ) );
+							}
+							if ( fMax < 0.15f )
+								bUseCompiled = false;
+						}
 					}
 					if ( bUseCompiled )
 						SetVertexShaderStateAmbientLightCube( VERTEX_SHADER_AMBIENT_LIGHT, pCompiledState );
@@ -9711,7 +9735,7 @@ void CShaderAPIDx8::ExecuteInstanceCommandBuffer( const unsigned char *pCmdBuf, 
 						if ( !s_bInitMinAmb )
 						{
 							for ( int i = 0; i < 6; ++i )
-								s_iosMinAmbient.m_AmbientLightCube[i].Init( 0.4f, 0.4f, 0.4f, 1.0f );
+								s_iosMinAmbient.m_AmbientLightCube[i].Init( 1.0f, 1.0f, 1.0f, 1.0f );
 							s_bInitMinAmb = true;
 						}
 						SetVertexShaderStateAmbientLightCube( VERTEX_SHADER_AMBIENT_LIGHT, &s_iosMinAmbient );

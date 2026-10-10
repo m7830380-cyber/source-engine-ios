@@ -3266,7 +3266,7 @@ static int IOS_TryTreeVertexLitPsStaticIndex( ShaderFileCache_t *pFileCache, con
 	if ( ( nLookupStaticIndex & 2048 ) && !( nLookupStaticIndex & 128 ) )
 	{
 		// log 156: sid 1 = DETAILTEXTURE (black fonts). packed 2048 → fxc sid 64 (VERTEXCOLOR=1).
-		static const uint32 s_vcolIds[] = { 64, 42, 32, 47, 23, 22, 4, 11, 16, 17, 0 };
+		static const uint32 s_vcolIds[] = { 64 };
 		for ( int i = 0; i < ARRAYSIZE( s_vcolIds ); ++i )
 		{
 			if ( IOS_TryStaticComboRecord( pFileCache, s_vcolIds[i], &idx ) )
@@ -3491,6 +3491,7 @@ static int ResolveStaticComboRecordIndex( ShaderFileCache_t *pFileCache, int nLo
 			int idx64 = pFileCache->FindCombo( 64 );
 			if ( idx64 != -1 )
 				return idx64;
+			Warning( "[iOS] vertexlit PS packed 2048: staticId 64 missing in bundled VCS — fonts will be black until CI ships sid 64.\n" );
 		}
 	}
 #endif

@@ -1336,12 +1336,41 @@ void CMatSystemSurface::DrawQuad( const Vertex_t &ul, const Vertex_t &lr, unsign
 //-----------------------------------------------------------------------------
 // Purpose: Draws an array of quads
 //-----------------------------------------------------------------------------
+#if defined( IOS )
+static void IOS_ApplyMaterialColorModulation( unsigned char const *pColor )
+{
+	if ( !pColor || !g_pMaterialSystem )
+		return;
+	CMatRenderContextPtr pRenderContext( g_pMaterialSystem );
+	IMaterial *pMat = pRenderContext->GetCurrentMaterial();
+	if ( !pMat )
+		return;
+	const float inv = 1.0f / 255.0f;
+	pMat->ColorModulate( pColor[0] * inv, pColor[1] * inv, pColor[2] * inv );
+	pMat->AlphaModulate( pColor[3] * inv );
+}
+
+static void IOS_MeshVertexColor( unsigned char const *pColor, unsigned char out[4] )
+{
+	// ANGLE→Metal often drops RGB in COLOR0; keep alpha, drive RGB via $color → PS c1.
+	out[0] = out[1] = out[2] = 255;
+	out[3] = pColor ? pColor[3] : 255;
+}
+#endif
+
 void CMatSystemSurface::DrawQuadArray( int quadCount, Vertex_t *pVerts, unsigned char *pColor, bool bShouldClip )
 {
 	Assert( !m_bIn3DPaintMode );
 
 	if ( !m_pMesh )
 		return;
+
+#if defined( IOS )
+	unsigned char meshColor[4];
+	IOS_MeshVertexColor( pColor, meshColor );
+	IOS_ApplyMaterialColorModulation( pColor );
+	pColor = meshColor;
+#endif
 
 	vgui::Vertex_t ulc;
 	vgui::Vertex_t lrc;

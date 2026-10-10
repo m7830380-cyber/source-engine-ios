@@ -66,6 +66,22 @@ static void r_staticlight_mode_changed( IConVar *var, const char *pOldValue, flo
 }
 ConVar r_staticlight_mode( "r_staticlight_mode", "0", FCVAR_DEVELOPMENTONLY, "0 - support three color streams, 1 - use avg of three streams, 2 - single color stream", r_staticlight_mode_changed );
 
+#if defined( IOS )
+static void IOS_ApplyDrawLightingConstants( IShaderDynamicAPI *pShaderAPI )
+{
+	float amb[24];
+	for ( int i = 0; i < 6; ++i )
+	{
+		amb[i * 4 + 0] = 1.0f;
+		amb[i * 4 + 1] = 1.0f;
+		amb[i * 4 + 2] = 1.0f;
+		amb[i * 4 + 3] = 1.0f;
+	}
+	ShaderApiFast( pShaderAPI )->SetVertexShaderConstant( VERTEX_SHADER_AMBIENT_LIGHT, amb, 6 );
+	const float whiteMod[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+	ShaderApiFast( pShaderAPI )->SetPixelShaderConstant( 1, whiteMod, 1 );
+}
+#endif
 
 static inline bool WantsPhongShaderInternal( IMaterialVar** params, const VertexLitGeneric_DX9_Vars_t &info )
 {
@@ -2258,8 +2274,6 @@ bool bDistanceAlphaFromDetail = false;
 		//*/
 
 #if defined( IOS )
-		// log 125 white-tint fix: DIFFUSE=1 → staticId 21 needs non-zero ambient (not black props).
-		if ( bVertexLitGeneric )
 		{
 			float amb[24];
 			for ( int iAmb = 0; iAmb < 6; iAmb++ )
@@ -2279,18 +2293,7 @@ bool bDistanceAlphaFromDetail = false;
 #endif
 		ShaderApiFast( pShaderAPI )->ExecuteCommandBuffer( DynamicCmdsOut.Base() );
 #if defined( IOS )
-		if ( bVertexLitGeneric )
-		{
-			float amb[24];
-			for ( int iAmb = 0; iAmb < 6; iAmb++ )
-			{
-				amb[iAmb * 4 + 0] = 1.0f;
-				amb[iAmb * 4 + 1] = 1.0f;
-				amb[iAmb * 4 + 2] = 1.0f;
-				amb[iAmb * 4 + 3] = 1.0f;
-			}
-			ShaderApiFast( pShaderAPI )->SetVertexShaderConstant( VERTEX_SHADER_AMBIENT_LIGHT, amb, 6 );
-		}
+		IOS_ApplyDrawLightingConstants( pShaderAPI );
 #endif
 	}
 	pShader->Draw();

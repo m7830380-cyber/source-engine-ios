@@ -66,22 +66,6 @@ static void r_staticlight_mode_changed( IConVar *var, const char *pOldValue, flo
 }
 ConVar r_staticlight_mode( "r_staticlight_mode", "0", FCVAR_DEVELOPMENTONLY, "0 - support three color streams, 1 - use avg of three streams, 2 - single color stream", r_staticlight_mode_changed );
 
-#if defined( IOS )
-static void IOS_ForceAlbedoDrawConstants( IShaderDynamicAPI *pShaderAPI )
-{
-	float whiteAmb[24];
-	for ( int i = 0; i < 6; ++i )
-	{
-		whiteAmb[i * 4 + 0] = 1.0f;
-		whiteAmb[i * 4 + 1] = 1.0f;
-		whiteAmb[i * 4 + 2] = 1.0f;
-		whiteAmb[i * 4 + 3] = 1.0f;
-	}
-	ShaderApiFast( pShaderAPI )->SetVertexShaderConstant( VERTEX_SHADER_AMBIENT_LIGHT, whiteAmb, 6 );
-	const float whiteMod[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
-	ShaderApiFast( pShaderAPI )->SetPixelShaderConstant( 1, whiteMod, 1 );
-}
-#endif
 
 static inline bool WantsPhongShaderInternal( IMaterialVar** params, const VertexLitGeneric_DX9_Vars_t &info )
 {
@@ -1122,8 +1106,7 @@ bool bDistanceAlphaFromDetail = false;
 					// Bundled tree .vcs only ships a small static-id set; stock PC combos
 					// (e.g. packed 104859648) miss bytecode and draw purple (log 152).
 					SET_STATIC_VERTEX_SHADER_COMBO( SFM, 0 );
-					// GLES/Metal: mesh vertex color is broken (see MatSystemSurface); use VS sid 64 for all.
-					SET_STATIC_VERTEX_SHADER_COMBO( VERTEXCOLOR, 0 );
+					SET_STATIC_VERTEX_SHADER_COMBO( VERTEXCOLOR, bVertexLitGeneric ? 0 : 1 );
 					SET_STATIC_VERTEX_SHADER_COMBO( CUBEMAP, 0 );
 					SET_STATIC_VERTEX_SHADER_COMBO( HALFLAMBERT, 0 );
 					SET_STATIC_VERTEX_SHADER_COMBO( FLASHLIGHT, 0 );
@@ -1167,13 +1150,12 @@ bool bDistanceAlphaFromDetail = false;
 						SET_STATIC_PIXEL_SHADER_COMBO( SELFILLUM_ENVMAPMASK_ALPHA, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( DETAILTEXTURE, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( CUBEMAP, 0 );
-						// Albedo-only PS (packed 0 → tree staticId 0); DIFFUSE/VCOL multiply was black RGB (log 153–154).
-						SET_STATIC_PIXEL_SHADER_COMBO( DIFFUSELIGHTING, 0 );
+						SET_STATIC_PIXEL_SHADER_COMBO( DIFFUSELIGHTING, bVertexLitGeneric ? 1 : 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( ENVMAPMASK, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( BASEALPHAENVMAPMASK, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( ENVMAPFRESNEL, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( SELFILLUM, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( VERTEXCOLOR, 0 );
+						SET_STATIC_PIXEL_SHADER_COMBO( VERTEXCOLOR, bVertexLitGeneric ? 0 : 1 );
 						SET_STATIC_PIXEL_SHADER_COMBO( FLASHLIGHT, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( DETAIL_BLEND_MODE, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( DECAL_BLEND_MODE, 0 );
@@ -2106,8 +2088,7 @@ bool bDistanceAlphaFromDetail = false;
 
 				DECLARE_DYNAMIC_VERTEX_SHADER( vertexlit_and_unlit_generic_vs20 );
 #if defined( IOS )
-				// Props need DYNAMIC_LIGHT for AmbientLight(); Unlit/touch use mesh vertex color (log 153 black icons).
-				SET_DYNAMIC_VERTEX_SHADER_COMBO( DYNAMIC_LIGHT, bVertexLitGeneric ? 1 : 0 );
+				SET_DYNAMIC_VERTEX_SHADER_COMBO( DYNAMIC_LIGHT, 1 );
 				SET_DYNAMIC_VERTEX_SHADER_COMBO( STATICLIGHT3, 0 );
 				SET_DYNAMIC_VERTEX_SHADER_COMBO( SKINNING, numBones > 0 );
 				SET_DYNAMIC_VERTEX_SHADER_COMBO( COMPRESSED_VERTS, 0 );
@@ -2279,9 +2260,6 @@ bool bDistanceAlphaFromDetail = false;
 		ShaderApiFast( pShaderAPI )->SetPixelShaderFogParams( 21 );
 #endif
 		ShaderApiFast( pShaderAPI )->ExecuteCommandBuffer( DynamicCmdsOut.Base() );
-#if defined( IOS )
-		IOS_ForceAlbedoDrawConstants( pShaderAPI );
-#endif
 	}
 	pShader->Draw();
 }

@@ -3265,8 +3265,8 @@ static int IOS_TryTreeVertexLitPsStaticIndex( ShaderFileCache_t *pFileCache, con
 	// .inc: VERTEXCOLOR weight 2048 (SELFILLUM is 1024).
 	if ( ( nLookupStaticIndex & 2048 ) && !( nLookupStaticIndex & 128 ) )
 	{
-		// Log 148: sid 42 = grey touch/menu art; sid 64 = tree CI fallback (same packed 2048).
-		static const uint32 s_vcolIds[] = { 42, 64 };
+		// Prefer sid 64 (true VCOL combo in tree); sid 42 was log-148 grey but wrong alpha (freeze doc).
+		static const uint32 s_vcolIds[] = { 64, 42 };
 		for ( int i = 0; i < ARRAYSIZE( s_vcolIds ); ++i )
 		{
 			if ( IOS_TryStaticComboRecord( pFileCache, s_vcolIds[i], &idx ) )

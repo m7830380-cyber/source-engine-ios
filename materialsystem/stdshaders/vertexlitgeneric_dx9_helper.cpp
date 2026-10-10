@@ -1150,13 +1150,14 @@ bool bDistanceAlphaFromDetail = false;
 					{
 						DECLARE_STATIC_PIXEL_SHADER( vertexlit_and_unlit_generic_ps20b );
 #if defined( IOS )
-						// Match tree VCS: props VL → PS packed 0 (sid 0); Unlit/touch/fonts → PS packed 2048 (sid 42).
-						// Log 151 regressed by pinning VERTEXCOLOR=0 for everything (no 2048→42 compile).
+						// Unlit/touch/fonts: PS packed 2048 → tree sid 42 (pair VS 65).
+						// Vertex-lit props: PS DIFFUSELIGHTING → packed 128 → tree sid 4 (pair VS 64);
+						// sid 0 albedo-only never showed prop RGB on GLES (logs 134–151).
 						SET_STATIC_PIXEL_SHADER_COMBO( SFM, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( SELFILLUM_ENVMAPMASK_ALPHA, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( DETAILTEXTURE, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( CUBEMAP, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( DIFFUSELIGHTING, 0 );
+						SET_STATIC_PIXEL_SHADER_COMBO( DIFFUSELIGHTING, bVertexLitGeneric ? 1 : 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( ENVMAPMASK, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( BASEALPHAENVMAPMASK, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( ENVMAPFRESNEL, 0 );

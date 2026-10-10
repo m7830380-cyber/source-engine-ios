@@ -555,6 +555,9 @@ bool DispInfoRenderDebugModes()
 bool CDispInfo::Render( CGroupMesh *pGroup, bool bAllowDebugModes )
 {
 #ifndef DEDICATED
+	if( !pGroup || !pGroup->m_pGroup )
+		return false;
+
 	if( !m_pMesh )
 	{
 		Assert( !"CDispInfo::Render: m_pMesh == NULL" );

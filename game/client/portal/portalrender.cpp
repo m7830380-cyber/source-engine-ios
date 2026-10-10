@@ -208,6 +208,7 @@ CPortalRender::CPortalRender()
 {
 	m_iRemainingPortalViewDepth = 1; //let's portals know that they should do "end of the line" kludges to cover up that portals don't go infinitely recursive
 	m_iViewRecursionLevel = 0;
+	IOS_SetPortalStencilViewRecursionLevel( 0 );
 	m_pRenderingViewForPortal = NULL;
 	m_pRenderingViewExitPortal = NULL;
 
@@ -713,6 +714,7 @@ bool CPortalRender::DrawPortalsUsingStencils(CViewRender *pViewRender)
 		Assert(m_pRenderingViewExitPortal == NULL);
 		m_pRenderingViewExitPortal = NULL;
 		m_pRenderingViewForPortal = NULL;
+		IOS_SetPortalStencilViewRecursionLevel( 0 );
 
 		state.m_bEnable = false;
 		state.m_CompareFunc = SHADER_STENCILFUNC_NEVER;
@@ -774,6 +776,7 @@ void CPortalRender::DrawPortalsToTextures(CViewRender *pViewRender, const CViewS
 
 	m_iRemainingPortalViewDepth = 1;
 	m_iViewRecursionLevel = 0;
+	IOS_SetPortalStencilViewRecursionLevel( 0 );
 	m_pRenderingViewForPortal = NULL;
 	m_pRenderingViewExitPortal = NULL;
 
@@ -827,6 +830,7 @@ void CPortalRender::DrawPortalsToTextures(CViewRender *pViewRender, const CViewS
 
 	m_iRemainingPortalViewDepth = 1;
 	m_iViewRecursionLevel = 0;
+	IOS_SetPortalStencilViewRecursionLevel( 0 );
 
 	Assert(m_pRenderingViewForPortal == NULL);
 	Assert(m_pRenderingViewExitPortal == NULL);

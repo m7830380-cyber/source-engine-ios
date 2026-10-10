@@ -1,4 +1,4 @@
-//========= Copyright  1996-2007, Valve Corporation, All rights reserved. ============//
+//========= Copyright ? 1996-2007, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -9,6 +9,7 @@
 #include "decal_private.h"
 #include "disp_defs.h"
 #include "disp.h"
+#include "engine/ios_portal_disp.h"
 #include "gl_model_private.h"
 #include "gl_matsysiface.h"
 #include "gl_cvars.h"
@@ -1400,6 +1401,11 @@ void DispInfo_RenderListDebug( IMatRenderContext *pRenderContext, SurfaceHandle_
 void DispInfo_RenderListWorld( IMatRenderContext *pRenderContext, int nSortGroup, SurfaceHandle_t *pList, int listCount, bool bOrtho, unsigned long flags, int DepthMode )
 {
 #ifndef DEDICATED
+#if defined( IOS )
+	// Portal stencil skybox/world pass hits a GLES displacement crash (log 170?171).
+	if ( g_iPortalStencilViewRecursionLevel > 0 )
+		return;
+#endif
 	if( !r_DrawDisp.GetInt() || !listCount || !( flags & DRAWWORLDLISTS_DRAW_WORLD_GEOMETRY ) )
 		return;
 

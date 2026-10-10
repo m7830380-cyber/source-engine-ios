@@ -528,9 +528,15 @@ float4_color_return_type main( PS_INPUT i ) : COLOR
 	HALF3 diffuseLighting = HALF3( 1.0f, 1.0f, 1.0f );
 	#if ( DIFFUSELIGHTING || VERTEXCOLOR && !( VERTEXCOLOR && DIFFUSELIGHTING ) )
 	{
+#if defined( IOS ) && ( VERTEXCOLOR && !DIFFUSELIGHTING )
+		// Unlit touch/fonts (PS packed 2048 → sid 42/64): GLES poisons COLOR0 rgb and
+		// multiplies albedo → grey icons with black soft-alpha halos (log 148/160).
+		diffuseLighting = HALF3( 1.0h, 1.0h, 1.0h );
+#else
 		diffuseLighting = (HALF3)i.color.rgb;
 #if defined( IOS )
 		diffuseLighting = IOS_FixZeroInterpolantColor( diffuseLighting );
+#endif
 #endif
 
 		diffuseLighting.rgb += i.directionalLightingColor_flShadowDimScalar.rgb * flDirectionalShadow;
@@ -682,7 +688,10 @@ float4_color_return_type main( PS_INPUT i ) : COLOR
 	}
 	#endif
 
-#if defined( IOS )
+#if defined( IOS ) && ( VERTEXCOLOR && !DIFFUSELIGHTING )
+	// Same unlit UI path — vertex alpha is unreliable; tint via c1 only.
+	alpha *= (HALF)g_DiffuseModulation.a;
+#elif defined( IOS )
 	alpha = IOS_ApplyVertexAlpha( alpha, (HALF)i.color.a, (HALF)g_fVertexAlpha );
 #else
 	alpha = lerp( alpha, alpha * (HALF)i.color.a, (HALF)g_fVertexAlpha );

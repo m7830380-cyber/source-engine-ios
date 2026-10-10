@@ -867,7 +867,7 @@ bool CMaterialSystem::Connect( CreateInterfaceFn factory )
 #endif
 
 #if defined( IOS )
-	Msg( "[Portal2 iOS] render-fix R9: IOS fxc zero-VCOL fallback; restore VCOL/DIFFUSE pins\n" );
+	Msg( "[Portal2 iOS] render-fix R10: IOS PS alpha-only tex + zero VCOL fallback (web/sRGB)\n" );
 #endif
 	return g_pShaderDeviceMgr->Connect( ShaderFactory );	
 }

@@ -130,13 +130,20 @@
 const float4 g_EnvmapTint_SPF					: register( c0 ); //SPF=Single Pass Flashlight, stored in previously unused alpha.
 const float4 g_DiffuseModulation				: register( c1 );
 
-// Portal2 iOS / ANGLE: COLOR0 RGB often 0 while alpha is valid (logs 157–158).
-#if IOS
+// Portal2 iOS (ANGLE/Metal, no GL_EXT_texture_sRGB_decode): logs 157–159 black RGB + good alpha.
+#if defined( IOS )
 HALF3 IOS_FixZeroInterpolantColor( HALF3 lit )
 {
 	if ( dot( lit, lit ) < 1e-4h )
 		return max( (HALF3)g_DiffuseModulation.rgb, HALF3( 1.0h, 1.0h, 1.0h ) );
 	return lit;
+}
+HALF4 IOS_FixAlphaOnlyTexture( HALF4 c )
+{
+	// VGUI/font DXT5 often stores glyph in alpha with RGB=0 (Khronos DXT1 note).
+	if ( c.a > 1e-3h && dot( c.rgb, c.rgb ) < 1e-4h )
+		c.rgb = HALF3( 1.0h, 1.0h, 1.0h );
+	return c;
 }
 #endif
 const float4 g_ShadowTweaks						: register( c2 );
@@ -362,6 +369,9 @@ float4_color_return_type main( PS_INPUT i ) : COLOR
 			baseColor.rgb = GammaToLinear( baseColor.rgb );
 		}
 		#endif
+#if defined( IOS )
+		baseColor = IOS_FixAlphaOnlyTexture( baseColor );
+#endif
 	}
 	#endif
 
@@ -510,7 +520,7 @@ float4_color_return_type main( PS_INPUT i ) : COLOR
 	#if ( DIFFUSELIGHTING || VERTEXCOLOR && !( VERTEXCOLOR && DIFFUSELIGHTING ) )
 	{
 		diffuseLighting = (HALF3)i.color.rgb;
-#if IOS
+#if defined( IOS )
 		diffuseLighting = IOS_FixZeroInterpolantColor( diffuseLighting );
 #endif
 
@@ -656,7 +666,7 @@ float4_color_return_type main( PS_INPUT i ) : COLOR
 	#if ( VERTEXCOLOR && DIFFUSELIGHTING )
 	{
 		HALF3 vcol = (HALF)i.color.rgb;
-#if IOS
+#if defined( IOS )
 		vcol = IOS_FixZeroInterpolantColor( vcol );
 #endif
 		albedo *= vcol;

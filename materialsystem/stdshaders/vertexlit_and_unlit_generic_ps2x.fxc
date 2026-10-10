@@ -689,8 +689,7 @@ float4_color_return_type main( PS_INPUT i ) : COLOR
 	#endif
 
 #if defined( IOS ) && ( VERTEXCOLOR && !DIFFUSELIGHTING )
-	// Same unlit UI path — vertex alpha is unreliable; tint via c1 only.
-	alpha *= (HALF)g_DiffuseModulation.a;
+	; // alpha already includes g_DiffuseModulation.a (avoid double-mod + vtx halos, log 161).
 #elif defined( IOS )
 	alpha = IOS_ApplyVertexAlpha( alpha, (HALF)i.color.a, (HALF)g_fVertexAlpha );
 #else

@@ -1379,6 +1379,12 @@ void CMatSystemSurface::DrawQuadArray( int quadCount, Vertex_t *pVerts, unsigned
 
 #if defined( IOS )
 	unsigned char meshColor[4];
+	Vector4D iosDrawMod( 1.0f, 1.0f, 1.0f, 1.0f );
+	if ( pColor )
+	{
+		const float inv = 1.0f / 255.0f;
+		iosDrawMod.Init( pColor[0] * inv, pColor[1] * inv, pColor[2] * inv, pColor[3] * inv );
+	}
 	IOS_MeshVertexColor( pColor, meshColor );
 	IOS_ApplyMaterialColorModulation( pColor );
 	pColor = meshColor;
@@ -1475,11 +1481,7 @@ void CMatSystemSurface::DrawQuadArray( int quadCount, Vertex_t *pVerts, unsigned
 
 		meshBuilder.End();
 #if defined( IOS )
-		{
-			Vector4D mod( m_DrawColor[0] / 255.0f, m_DrawColor[1] / 255.0f,
-				m_DrawColor[2] / 255.0f, m_DrawColor[3] / 255.0f );
-			m_pMesh->DrawModulated( mod );
-		}
+		m_pMesh->DrawModulated( iosDrawMod );
 #else
 		m_pMesh->Draw();
 #endif

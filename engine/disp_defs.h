@@ -26,6 +26,9 @@
 
 
 extern ConVar				r_DrawDisp;
+#if defined( IOS )
+extern ConVar				r_ios_portal_view_depth;
+#endif
 
 
 class CDispInfo;

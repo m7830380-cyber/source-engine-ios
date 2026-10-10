@@ -1402,7 +1402,9 @@ void DispInfo_RenderListWorld( IMatRenderContext *pRenderContext, int nSortGroup
 {
 #ifndef DEDICATED
 #if defined( IOS )
-	// Portal stencil skybox/world pass hits a GLES displacement crash (log 170?171).
+	// Portal stencil skybox/world pass hits a GLES displacement crash (log 170?172).
+	if ( r_ios_portal_view_depth.GetInt() > 0 )
+		return;
 	if ( g_ClientDLL && g_ClientDLL->IOS_PortalStencilViewRecursionLevel() > 0 )
 		return;
 #endif

@@ -18,6 +18,10 @@
 #include "shaderapi/ishaderapi.h"
 #define MAX_PORTAL_RECURSIVE_VIEWS 11 //maximum number of recursions we allow when drawing views through portals. Seeing as how 5 is extremely choppy under best conditions and is barely visible, 10 is a safe limit. Adding one because 0 tends to be the primary view in most arrays of this size
 
+#if defined( IOS )
+void PortalRender_IOS_SyncDispSkipDepth( int iViewRecursionLevel );
+#endif
+
 class CPortalRenderable
 {
 public:
@@ -321,6 +325,9 @@ inline void CPortalRenderable::ViewDrawScene( CViewRender *pViewRender, bool bDr
 inline void CPortalRenderable::SetViewRecursionLevel( int iViewRecursionLevel )
 {
 	g_pPortalRender->m_iViewRecursionLevel = iViewRecursionLevel;
+#if defined( IOS )
+	PortalRender_IOS_SyncDispSkipDepth( iViewRecursionLevel );
+#endif
 }
 
 inline void CPortalRenderable::SetRemainingViewDepth( int iRemainingViewDepth )

@@ -54,6 +54,7 @@
 #endif
 #include "paint.h"
 #include "disp.h"
+#include "disp_defs.h"
 #include "mathlib/volumeculler.h"
 #include "vstdlib/jobthread.h"
 
@@ -1964,6 +1965,13 @@ static void Shader_DrawChains( IMatRenderContext *pRenderContext, const CWorldRe
 static void Shader_DrawDispChain( IMatRenderContext *pRenderContext, int nSortGroup, const CMSurfaceSortList &list, unsigned long flags, ERenderDepthMode_t DepthMode )
 {
 	VPROF_BUDGET( "Shader_DrawDispChain", VPROF_BUDGETGROUP_DISPLACEMENT_RENDERING );
+#if defined( IOS )
+	if ( r_ios_portal_view_depth.GetInt() > 0 )
+		return;
+	extern IBaseClientDLL *g_ClientDLL;
+	if ( g_ClientDLL && g_ClientDLL->IOS_PortalStencilViewRecursionLevel() > 0 )
+		return;
+#endif
 	int count = 0;
 	msurface2_t **pList;
 	MSL_FOREACH_GROUP_BEGIN( list, nSortGroup, group )

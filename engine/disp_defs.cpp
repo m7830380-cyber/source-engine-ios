@@ -36,5 +36,8 @@ CUtlVector<CDispGroup*>		g_DispGroups;
 bool						g_bDispOrthoRender = false;
 
 ConVar						r_DrawDisp( "r_DrawDisp", "1", FCVAR_CHEAT, "Toggles rendering of displacment maps" );
+#if defined( IOS )
+ConVar						r_ios_portal_view_depth( "r_ios_portal_view_depth", "0", FCVAR_HIDDEN, "Portal stencil recursion depth; engine skips disp draws while >0 (log 172)" );
+#endif
 ConVar						r_DispWalkable( "r_DispWalkable", "0", FCVAR_CHEAT );
 ConVar						r_DispBuildable( "r_DispBuildable", "0", FCVAR_CHEAT );

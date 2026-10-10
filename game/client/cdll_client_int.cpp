@@ -5060,11 +5060,30 @@ void CHLClient::EngineGotvSyncPacket( const CEngineGotvSyncPacket *pPkt )
 }
 
 #if defined( IOS )
+static int s_iIOSPortalDispSkipDepth = 0;
+
+void ClientDLL_IOS_SetPortalDispSkipDepth( int iViewRecursionLevel )
+{
+	s_iIOSPortalDispSkipDepth = iViewRecursionLevel;
+
+	static ConVar *s_pIOSPortalViewDepth = NULL;
+	if ( !s_pIOSPortalViewDepth && g_pCVar )
+		s_pIOSPortalViewDepth = g_pCVar->FindVar( "r_ios_portal_view_depth" );
+	if ( s_pIOSPortalViewDepth )
+		s_pIOSPortalViewDepth->SetValue( iViewRecursionLevel );
+}
+
 int CHLClient::IOS_PortalStencilViewRecursionLevel() const
 {
+	if ( s_iIOSPortalDispSkipDepth > 0 )
+		return s_iIOSPortalDispSkipDepth;
+
 #ifdef PORTAL
-	if ( g_pPortalRender && g_pPortalRender->ShouldUseStencilsToRenderPortals() )
-		return g_pPortalRender->GetViewRecursionLevel();
+	if ( !g_pPortalRender )
+		return 0;
+	if ( g_pPortalRender->IsRenderingPortal() )
+		return ( g_pPortalRender->GetViewRecursionLevel() > 0 ) ? g_pPortalRender->GetViewRecursionLevel() : 1;
+	return g_pPortalRender->GetViewRecursionLevel();
 #endif
 	return 0;
 }

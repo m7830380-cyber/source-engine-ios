@@ -498,11 +498,11 @@ void CPortalRenderable_FlatBasic::RenderPortalViewToBackBuffer( CViewRender *pVi
 				memcpy( pViewRender->GetFrustum(), seeThroughFrustum, sizeof( Frustum ) );
 
 			render->OverrideViewFrustum( pViewRender->GetFrustum() );
-			SetViewRecursionLevel( g_pPortalRender->GetViewRecursionLevel() + 1 );
 
 			CPortalRenderable *pRenderingViewForPortalBackup = g_pPortalRender->GetCurrentViewEntryPortal();
 			CPortalRenderable *pRenderingViewExitPortalBackup = g_pPortalRender->GetCurrentViewExitPortal();
 			SetViewEntranceAndExitPortals( this, m_pLinkedPortal );
+			SetViewRecursionLevel( g_pPortalRender->GetViewRecursionLevel() + 1 );
 
 			//DRAW!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 			ViewDrawScene_PortalStencil( pViewRender, portalView, &customVisibility );

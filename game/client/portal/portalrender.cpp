@@ -19,6 +19,15 @@
 #include "viewrender.h"
 #include "vprof.h"
 
+#if defined( IOS )
+void ClientDLL_IOS_SetPortalDispSkipDepth( int iViewRecursionLevel );
+
+void PortalRender_IOS_SyncDispSkipDepth( int iViewRecursionLevel )
+{
+	ClientDLL_IOS_SetPortalDispSkipDepth( iViewRecursionLevel );
+}
+#endif
+
 PRECACHE_REGISTER_BEGIN(GLOBAL, PrecachePortalDrawingMaterials)
 PRECACHE(MATERIAL, "shadertest/wireframe")
 PRECACHE(MATERIAL, "engine/writez_model")

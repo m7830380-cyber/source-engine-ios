@@ -870,6 +870,7 @@ bool CMaterialSystem::Connect( CreateInterfaceFn factory )
 	Msg( "[Portal2 iOS] render-fix R21: IOS unlit PS fastpath tex*c1, PS sid0 (log 169)\n" );
 	Msg( "[Portal2 iOS] gameplay-fix R22: bufferclearobeystencil GLES COLOR0 + disp null guards (log 170)\n" );
 	Msg( "[Portal2 iOS] gameplay-fix R23: skip disp in portal stencil views (log 171)\n" );
+	Msg( "[Portal2 iOS] gameplay-fix R24: r_ios_portal_view_depth + Shader_DrawDispChain skip (log 172)\n" );
 #endif
 	return g_pShaderDeviceMgr->Connect( ShaderFactory );	
 }

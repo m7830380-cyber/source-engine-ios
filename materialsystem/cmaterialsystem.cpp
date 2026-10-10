@@ -867,7 +867,7 @@ bool CMaterialSystem::Connect( CreateInterfaceFn factory )
 #endif
 
 #if defined( IOS )
-	Msg( "[Portal2 iOS] render-fix R5: log125 PS 128→21 / 2048→1 (revert R4 illegal PS0)\n" );
+	Msg( "[Portal2 iOS] render-fix R6: PS packed 2048→fxc sid 64 (not sid 1 DETAIL); props 128→sid 4\n" );
 #endif
 	return g_pShaderDeviceMgr->Connect( ShaderFactory );	
 }

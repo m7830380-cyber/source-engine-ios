@@ -3265,8 +3265,8 @@ static int IOS_TryTreeVertexLitPsStaticIndex( ShaderFileCache_t *pFileCache, con
 	// .inc: VERTEXCOLOR weight 2048 (SELFILLUM is 1024).
 	if ( ( nLookupStaticIndex & 2048 ) && !( nLookupStaticIndex & 128 ) )
 	{
-		// log 125 / Documents: packed 2048 → staticId 1 (visible fonts); 42 black RGB.
-		static const uint32 s_vcolIds[] = { 1, 42, 32, 47, 23, 22, 4, 11, 16, 17, 0 };
+		// log 156: sid 1 = DETAILTEXTURE (black fonts). packed 2048 → fxc sid 64 (VERTEXCOLOR=1).
+		static const uint32 s_vcolIds[] = { 64, 42, 32, 47, 23, 22, 4, 11, 16, 17, 0 };
 		for ( int i = 0; i < ARRAYSIZE( s_vcolIds ); ++i )
 		{
 			if ( IOS_TryStaticComboRecord( pFileCache, s_vcolIds[i], &idx ) )
@@ -3285,8 +3285,8 @@ static int IOS_TryTreeVertexLitPsStaticIndex( ShaderFileCache_t *pFileCache, con
 
 	if ( nLookupStaticIndex & 128 )
 	{
-		// log 125: 128/32→4 black props; Documents/tree staticId 21 is the playable diffuse path.
-		static const uint32 s_diffuseIds[] = { 21, 4, 3, 2, 11, 16, 17, 0 };
+		// fxc tree: DIFFUSE=1 → sid 4 (128/32). sid 21 is DETAIL+DIFFUSE, not in IPA.
+		static const uint32 s_diffuseIds[] = { 4, 22, 3, 2, 11, 16, 17, 0 };
 		for ( int i = 0; i < ARRAYSIZE( s_diffuseIds ); ++i )
 		{
 			if ( IOS_TryStaticComboRecord( pFileCache, s_diffuseIds[i], &idx ) )
@@ -3373,7 +3373,7 @@ static int IOS_FallbackStaticComboRecordIndex( ShaderFileCache_t *pFileCache, co
 	if ( V_stristr( baseName, "vertexlit_and_unlit_generic_ps20b" ) )
 	{
 		// .inc weights: CUBEMAP=64, DIFFUSELIGHTING=128, SELFILLUM=1024, VERTEXCOLOR=2048.
-		static const uint32 s_vcolIds[] = { 1, 42, 85, 32, 47, 23, 22, 4, 11, 16, 17 };
+		static const uint32 s_vcolIds[] = { 64, 42, 85, 32, 47, 23, 22, 4, 11, 16, 17 };
 		static const uint32 s_diffuseIds[] = { 21, 22, 23, 20, 17, 16, 11, 4 };
 		static const uint32 s_detailIds[] = { 5, 4, 7, 6, 3, 2, 11 };
 		static const uint32 s_otherIds[] = { 4, 3, 2, 11, 16, 17, 20 };
@@ -3486,18 +3486,11 @@ static int ResolveStaticComboRecordIndex( ShaderFileCache_t *pFileCache, int nLo
 		if ( treePs != -1 )
 			return treePs;
 
-		// log 125: bundled fxc dyn=32 maps 128→4 / 2048→64; playable bytecode is 21 / 1.
-		if ( ( nLookupStaticIndex & 128 ) && !( nLookupStaticIndex & 2048 ) )
-		{
-			int idx21 = pFileCache->FindCombo( 21 );
-			if ( idx21 != -1 )
-				return idx21;
-		}
 		if ( ( nLookupStaticIndex & 2048 ) && !( nLookupStaticIndex & 128 ) )
 		{
-			int idx1 = pFileCache->FindCombo( 1 );
-			if ( idx1 != -1 )
-				return idx1;
+			int idx64 = pFileCache->FindCombo( 64 );
+			if ( idx64 != -1 )
+				return idx64;
 		}
 	}
 #endif
@@ -3525,10 +3518,7 @@ static int ResolveStaticComboRecordIndex( ShaderFileCache_t *pFileCache, int nLo
 	if ( bHavePreferred && V_stristr( pShaderName, "flashlight" ) && preferred > 64 )
 		bHavePreferred = false;
 
-	// Log 147: vertexlit PS touch packed 2048 → bogus preferred 64 (VS props sid).
-	if ( bHavePreferred && V_stristr( pShaderName, "vertexlit_and_unlit_generic_ps20b" ) &&
-		 nVcsDyn >= 32 && preferred == 64 && ( nLookupStaticIndex & 2048 ) )
-		bHavePreferred = false;
+	// log 156: PS packed 2048 / dyn=32 → preferred 64 is correct VERTEXCOLOR bytecode (not VS sid).
 
 	uint32 rawCandidates[6];
 	int nRaw = 0;

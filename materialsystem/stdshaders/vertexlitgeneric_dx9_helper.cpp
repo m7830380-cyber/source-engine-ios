@@ -2264,9 +2264,9 @@ bool bDistanceAlphaFromDetail = false;
 			float amb[24];
 			for ( int iAmb = 0; iAmb < 6; iAmb++ )
 			{
-				amb[iAmb * 4 + 0] = 0.55f;
-				amb[iAmb * 4 + 1] = 0.55f;
-				amb[iAmb * 4 + 2] = 0.55f;
+				amb[iAmb * 4 + 0] = 1.0f;
+				amb[iAmb * 4 + 1] = 1.0f;
+				amb[iAmb * 4 + 2] = 1.0f;
 				amb[iAmb * 4 + 3] = 1.0f;
 			}
 			DynamicCmdsOut.SetVertexShaderConstant( VERTEX_SHADER_AMBIENT_LIGHT, amb, 6 );
@@ -2284,9 +2284,9 @@ bool bDistanceAlphaFromDetail = false;
 			float amb[24];
 			for ( int iAmb = 0; iAmb < 6; iAmb++ )
 			{
-				amb[iAmb * 4 + 0] = 0.55f;
-				amb[iAmb * 4 + 1] = 0.55f;
-				amb[iAmb * 4 + 2] = 0.55f;
+				amb[iAmb * 4 + 0] = 1.0f;
+				amb[iAmb * 4 + 1] = 1.0f;
+				amb[iAmb * 4 + 2] = 1.0f;
 				amb[iAmb * 4 + 3] = 1.0f;
 			}
 			ShaderApiFast( pShaderAPI )->SetVertexShaderConstant( VERTEX_SHADER_AMBIENT_LIGHT, amb, 6 );

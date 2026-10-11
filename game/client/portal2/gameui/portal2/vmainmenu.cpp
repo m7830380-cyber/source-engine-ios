@@ -886,18 +886,6 @@ void MainMenu::OnThink()
 //=============================================================================
 void MainMenu::OnMousePressed( vgui::MouseCode code )
 {
-#if defined( IOS )
-	// MainMenu is fullscreen on top of BaseModPanel  forward emergency PLAY taps.
-	if ( code == MOUSE_LEFT )
-	{
-		int mx, my;
-		vgui::input()->GetCursorPos( mx, my );
-		int px, py;
-		CBaseModPanel::GetSingleton().GetPos( px, py );
-		if ( CBaseModPanel::GetSingleton().TryIOSEmergencyPlayTap( mx - px, my - py ) )
-			return;
-	}
-#endif
 	BaseClass::OnMousePressed( code );
 }
 

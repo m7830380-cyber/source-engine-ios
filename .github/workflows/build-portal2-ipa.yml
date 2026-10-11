@@ -155,6 +155,9 @@ jobs:
 
   build-portal2-ipa:
     needs: shader-pack
+    # 'shaders' is skipped on a cache hit, and a skipped job further up the chain
+    # would otherwise skip this one too
+    if: ${{ !cancelled() && needs.shader-pack.result == 'success' }}
     runs-on: macos-14
     permissions:
       contents: write

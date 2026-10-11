@@ -372,7 +372,14 @@ static ConVar r_2PassBuildDraw( "r_2PassBuildDraw", "0", FCVAR_DEVELOPMENTONLY )
 #else
 static ConVar r_2PassBuildDraw( "r_2PassBuildDraw", "1", FCVAR_DEVELOPMENTONLY );
 #endif
+#if defined( PORTAL )
+// Off for Portal too: the threaded build runs every view's jobs as one sequential chain,
+// so a portal view drawn inside another view queues behind the outer view's unfinished
+// job while the outer view waits on it, and the main thread deadlocks.
+static ConVar r_threaded_buildWRlist( "r_threaded_buildWRlist", "0", FCVAR_DEVELOPMENTONLY, "Threaded BuildWorldList and BuildRenderables list" );
+#else
 static ConVar r_threaded_buildWRlist( "r_threaded_buildWRlist", "1", FCVAR_DEVELOPMENTONLY, "Threaded BuildWorldList and BuildRenderables list" );
+#endif
 
 CON_COMMAND_F( toggleThreadedBuildRWList, "toggleThreadedBuildRWList", FCVAR_DEVELOPMENTONLY )
 {

@@ -2007,6 +2007,14 @@ CAudioSource *Audio_CreateStreamedWave( CSfxTable *pSfx )
 	{
 		return Audio_CreateStreamedMP3( pSfx );
 	}
+
+	// In case the WAV file is actually an MP3 file (Portal 2 ships its dialogue that
+	// way, see CAudioSourceWave::GetCacheData); same check as Audio_CreateMemoryWave.
+	CAudioSourceCachedInfo *pInfo = audiosourcecache->GetInfo( CAudioSource::AUDIO_SOURCE_WAV, pSfx->IsPrecachedSound(), pSfx );
+	if ( pInfo && pInfo->Type() == CAudioSource::AUDIO_SOURCE_MP3 )
+	{
+		return Audio_CreateStreamedMP3( pSfx );
+	}
 #endif
 
 	return CreateWave( pSfx, true );
@@ -2146,6 +2154,15 @@ static float Audio_GetWaveDuration( char const *pName )
 	{
 		return 0.0f;
 	}
+
+#if defined( MP3_SUPPORT )
+	// A .wav that is really an MP3 (Portal 2's dialogue); scenes and scripts time their
+	// lines with this, so returning 0 would make every one of them finish instantly.
+	if ( pInfo->Type() == CAudioSource::AUDIO_SOURCE_MP3 )
+	{
+		return Audio_GetMP3Duration( pName );
+	}
+#endif
 
 	int nFormat = pInfo->Format();
 	int nSampleCount = pInfo->SampleCount();

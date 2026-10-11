@@ -814,6 +814,21 @@ void CGameUI::OnLevelLoadingFinished(bool bError, const char *failureReason, con
 	g_VModuleLoader.PostMessageToAllModules( new KeyValues( "LoadingFinished" ) );
 
 	HideLoadingBackgroundDialog();
+
+	// The engine only broadcasts OnEngineLevelLoadingFinished for level loads.
+	// Progress that isn't one (the sound cache rebuilt at startup) ends here,
+	// so close the loading screen ourselves or it stays up at 100% for good.
+	if ( !engine->IsConnected() && GetUiBaseModPanelClass().IsLevelLoading() )
+	{
+		KeyValues *kvEvent = new KeyValues( "OnEngineLevelLoadingFinished" );
+		if ( bError )
+		{
+			kvEvent->SetInt( "error", 1 );
+			kvEvent->SetString( "reason", failureReason ? failureReason : "" );
+		}
+		GetUiBaseModPanelClass().OnLevelLoadingFinished( kvEvent );
+		kvEvent->deleteThis();
+	}
 }
 
 //-----------------------------------------------------------------------------

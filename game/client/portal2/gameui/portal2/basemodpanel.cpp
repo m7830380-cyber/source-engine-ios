@@ -2152,7 +2152,8 @@ CEG_NOINLINE void CBaseModPanel::OnLevelLoadingFinished( KeyValues *kvEvent )
 	{
 		// if we are loading into the front-end, then activate the main menu (or attract screen, depending on state)
 		// or if a message box is pending force open game ui
-		if ( GameUI().IsInBackgroundLevel() || pFrame )
+		// (also when no level was loaded, e.g. after the startup sound cache build)
+		if ( GameUI().IsInBackgroundLevel() || pFrame || !engine->IsConnected() )
 		{
 			GameUI().OnGameUIHidden();		// force re-activation
 			GameUI().OnGameUIActivated();

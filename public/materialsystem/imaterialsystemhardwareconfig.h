@@ -248,7 +248,13 @@ public:
 	// Backward compat for stdshaders
 #if defined ( STDSHADER_DBG_DLL_EXPORT ) || defined( STDSHADER_DX9_DLL_EXPORT )
 	inline bool SupportsPixelShaders_2_b() const { return GetDXSupportLevel() >= 92; }
+	// iOS: the app bundles only the ps20b/vs20 .vcs set (build-portal2-ipa.yml), so keep
+	// every shader on its ps20b path, which is also the lighter one for mobile GPUs.
+#if defined( IOS )
+	inline bool SupportsPixelShaders_3_0() const { return false; }
+#else
 	inline bool SupportsPixelShaders_3_0() const { return GetDXSupportLevel() >= 95; }
+#endif
 #endif
 
 	inline bool ShouldAlwaysUseShaderModel2bShaders() const { return IsOpenGL(); }

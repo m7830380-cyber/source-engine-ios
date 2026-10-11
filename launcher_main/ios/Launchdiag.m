@@ -35,6 +35,7 @@
 #include <sys/resource.h>
 #include <pthread.h>
 #include <signal.h>
+#include <sys/ucontext.h>
 #include <execinfo.h>
 #include <mach/mach.h>
 #include <os/proc.h>
@@ -901,13 +902,37 @@ void IOS_RaiseFileLimit( void )
 // redirected there). Only async-signal-safe calls are used in the handler.
 static pthread_t g_mainThread;
 
-static void IOS_WatchdogSignal( int sig )
+static void IOS_WatchdogSignal( int sig, siginfo_t *info, void *uc )
 {
 	(void)sig;
+	(void)info;
 	void *frames[64];
 	int n = backtrace( frames, 64 );
 	static const char header[] = "\n[watchdog] main thread stack:\n";
 	write( STDOUT_FILENO, header, sizeof( header ) - 1 );
+
+	// backtrace() walks frame records, so it never shows the instruction the
+	// main thread was actually on; take pc/lr from the interrupted context
+	if( uc )
+	{
+		ucontext_t *ctx = (ucontext_t *)uc;
+		void *regs[2] = { (void *)__darwin_arm_thread_state64_get_pc( ctx->uc_mcontext->__ss ),
+						  (void *)__darwin_arm_thread_state64_get_lr( ctx->uc_mcontext->__ss ) };
+		static const char *s_names[2] = { "pc", "lr" };
+		for( int i = 0; i != 2; ++i )
+		{
+			Dl_info dl;
+			char line[256];
+			int len;
+			if( dladdr( regs[i], &dl ) && dl.dli_sname )
+				len = snprintf( line, sizeof( line ), "[watchdog] %s %p %s + %ld\n", s_names[i], regs[i], dl.dli_sname, (long)( (char *)regs[i] - (char *)dl.dli_saddr ) );
+			else
+				len = snprintf( line, sizeof( line ), "[watchdog] %s %p\n", s_names[i], regs[i] );
+			if( len > 0 )
+				write( STDOUT_FILENO, line, len < (int)sizeof( line ) ? len : (int)sizeof( line ) - 1 );
+		}
+	}
+
 	backtrace_symbols_fd( frames, n, STDOUT_FILENO );
 }
 
@@ -1013,8 +1038,8 @@ void IOS_StartWatchdog( void )
 
 	struct sigaction sa;
 	memset( &sa, 0, sizeof( sa ) );
-	sa.sa_handler = IOS_WatchdogSignal;
-	sa.sa_flags = SA_RESTART;
+	sa.sa_sigaction = IOS_WatchdogSignal;
+	sa.sa_flags = SA_RESTART | SA_SIGINFO;
 	sigemptyset( &sa.sa_mask );
 	sigaction( SIGUSR2, &sa, NULL );
 

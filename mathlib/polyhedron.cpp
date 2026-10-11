@@ -540,6 +540,8 @@ CPolyhedron *ClipPolyhedron( const CPolyhedron *pExistingPolyhedron, const float
 	//go back to point line links so we can circularly link them as well as order them now that every point has all its line links
 	for( int i = 0; i != pExistingPolyhedron->iVertexCount; ++i )
 	{
+		int iPointLinkCount = 0;
+
 		//interlink the points
 		{
 			GeneratePolyhedronFromPlanes_LineLL *pLastVisitedLink = pPoints[i].point.pConnectedLines;
@@ -550,6 +552,7 @@ CPolyhedron *ClipPolyhedron( const CPolyhedron *pExistingPolyhedron, const float
 				pCurrentLink->pPrev = pLastVisitedLink;
 				pLastVisitedLink = pCurrentLink;
 				pCurrentLink = pCurrentLink->pNext;
+				++iPointLinkCount;
 			} while( pCurrentLink );
 
 			//circular link
@@ -564,13 +567,33 @@ CPolyhedron *ClipPolyhedron( const CPolyhedron *pExistingPolyhedron, const float
 		GeneratePolyhedronFromPlanes_LineLL *pSearchLink;
 		GeneratePolyhedronFromPlanes_Polygon *pLookingForPolygon;
 		Assert( pFirstLink->pNext != pFirstLink );
+		int iOrderSteps = 0;
 		do
 		{
 			pLookingForPolygon = pWorkLink->pLine->pPolygons[1 - pWorkLink->iReferenceIndex]; //grab pointer to left polygon
 			pSearchLink = pWorkLink->pPrev;
 
+			// A polyhedron whose faces don't close around this point never finds the
+			// polygon and spun here forever (sp_a1_intro3 froze on the first portal shot).
+			// Give up on it instead; callers already handle a NULL result.
 			while( pSearchLink->pLine->pPolygons[pSearchLink->iReferenceIndex] != pLookingForPolygon )
+			{
 				pSearchLink = pSearchLink->pPrev;
+				if( pSearchLink == pWorkLink )
+					break;
+			}
+
+			if( (pSearchLink == pWorkLink) || (++iOrderSteps > iPointLinkCount) )
+			{
+				static int s_iBrokenPolyhedronWarnings = 0;
+				if( s_iBrokenPolyhedronWarnings < 20 )
+				{
+					++s_iBrokenPolyhedronWarnings;
+					Warning( "ClipPolyhedron: polyhedron has a point whose polygons don't close (%d verts, %d lines, %d polygons, point %d, %d links), skipping it\n",
+						pExistingPolyhedron->iVertexCount, pExistingPolyhedron->iLineCount, pExistingPolyhedron->iPolygonCount, i, iPointLinkCount );
+				}
+				return NULL;
+			}
 
 			Assert( pSearchLink->pLine->pPolygons[pSearchLink->iReferenceIndex] == pWorkLink->pLine->pPolygons[1 - pWorkLink->iReferenceIndex] );
 

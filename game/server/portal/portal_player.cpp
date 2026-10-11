@@ -1120,6 +1120,9 @@ void CPortal_Player::Spawn(void)
 #if !defined( _GAMECONSOLE )
 	g_Portal2ResearchDataTracker.SetPlayerName( this );
 #endif // !defined( _GAMECONSOLE ) && !defined( NO_STEAM )
+#if defined( IOS ) && defined( PORTAL2 )
+	Msg( "[player] spawned at %.0f %.0f %.0f, t=%.2f\n", GetAbsOrigin().x, GetAbsOrigin().y, GetAbsOrigin().z, gpGlobals->curtime );
+#endif
 }
 
 void CPortal_Player::Activate( void )

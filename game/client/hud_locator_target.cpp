@@ -342,6 +342,9 @@ bool CLocatorTarget::IsVisible( void )
 
 void CLocatorTarget::SetCaptionText( const char *pszText, const char *pszParam )
 {
+#if defined( IOS ) && defined( PORTAL2 )
+	Msg( "[locator] caption \"%s\" param \"%s\"\n", pszText ? pszText : "", pszParam ? pszParam : "" );
+#endif
 	wchar_t outbuf[ 256 ];
 	outbuf[ 0 ] = L'\0';
 
@@ -1121,6 +1124,32 @@ void CLocatorPanel::ApplySchemeSettings( vgui::IScheme *pScheme )
 {
 	BaseClass::ApplySchemeSettings( pScheme );
 	LoadControlSettings( "resource/UI/Locator.res" );
+
+#if defined( IOS ) && defined( PORTAL2 )
+	// A hint whose fonts don't resolve draws its icon and arrow but no caption or
+	// key binding; fall back to fonts the scheme does have and say what was used.
+	struct LocatorFont_t { vgui::HFont *pFont; const char *pszName; };
+	LocatorFont_t fonts[] = {
+		{ &m_hCaptionFont, "InstructorTitle" }, { &m_hCaptionFont_ss, "InstructorTitle_ss" },
+		{ &m_hButtonFont, "InstructorButtons" }, { &m_hButtonFont_ss, "InstructorButtons_ss" },
+		{ &m_hKeysFont, "InstructorKeyBindings" }, { &m_hKeysFontSmall, "InstructorKeyBindingsSmall" },
+	};
+	static const char *s_pszFallbacks[] = { "InstructorTitle", "HudHintTextLarge", "HudHintTextSmall", "DefaultLarge", "Default" };
+	for ( int i = 0; i < ARRAYSIZE( fonts ); ++i )
+	{
+		vgui::HFont &hFont = *fonts[ i ].pFont;
+		const char *pszUsed = fonts[ i ].pszName;
+		for ( int j = -1; j < (int)ARRAYSIZE( s_pszFallbacks ) && ( hFont == vgui::INVALID_FONT || vgui::surface()->GetFontTall( hFont ) <= 0 ); ++j )
+		{
+			pszUsed = ( j < 0 ) ? fonts[ i ].pszName : s_pszFallbacks[ j ];
+			hFont = pScheme->GetFont( pszUsed, true );
+			if ( hFont == vgui::INVALID_FONT || vgui::surface()->GetFontTall( hFont ) <= 0 )
+				hFont = pScheme->GetFont( pszUsed, false );
+		}
+		Msg( "[locator] font %s -> %s (handle %lu, tall %d)\n", fonts[ i ].pszName, pszUsed,
+			 (unsigned long)hFont, hFont != vgui::INVALID_FONT ? vgui::surface()->GetFontTall( hFont ) : 0 );
+	}
+#endif
 }
 
 //-----------------------------------------------------------------------------

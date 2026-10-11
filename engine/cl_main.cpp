@@ -1800,7 +1800,6 @@ void CL_FullyConnected( void )
 		if ( mat_postprocess_enable.IsValid() )
 			mat_postprocess_enable.SetValue( 0 );
 		UpdateMaterialSystemConfig();
-		Cbuf_AddText( Cbuf_GetCurrentPlayer(), "fadein 0\n" );
 		EngineVGui()->HideGameUI();
 		Msg( "[Portal2 iOS] post-connect: fullbright=%d queue=%d flashlightDepth=%d post=%d hdrType=%d\n",
 			mat_fullbright.IsValid() ? mat_fullbright.GetInt() : -1,

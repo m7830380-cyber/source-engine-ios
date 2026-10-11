@@ -442,6 +442,19 @@ void IOS_LogGameContent( void )
 								  componentsJoinedByString:@" "] UTF8String] );
 		IOS_Log( "--- end game content ---" );
 
+		// Portal 2's gameinfo mounts these ahead of portal2/; they hold Valve's newer files
+		NSArray *docs = [fm contentsOfDirectoryAtPath:[NSString stringWithUTF8String:IOS_GetDocsDir()] error:nil];
+		IOS_Log( "Documents: %s", [[[docs sortedArrayUsingSelector:@selector(compare:)]
+								   componentsJoinedByString:@" "] UTF8String] );
+		NSString *gameinfo = [NSString stringWithContentsOfFile:[game stringByAppendingPathComponent:@"gameinfo.txt"]
+													   encoding:NSUTF8StringEncoding error:nil];
+		for( NSString *line in [gameinfo componentsSeparatedByString:@"\n"] )
+		{
+			NSString *trimmed = [line stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+			if( [trimmed hasPrefix:@"Game"] || [trimmed hasPrefix:@"\"Game\""] || [trimmed hasPrefix:@"game+"] || [trimmed hasPrefix:@"mod+"] )
+				IOS_Log( "  gameinfo search path: %s", [trimmed UTF8String] );
+		}
+
 		NSString *csgo = [[NSString stringWithUTF8String:IOS_GetDocsDir()]
 						  stringByAppendingPathComponent:@"csgo"];
 		if( [fm fileExistsAtPath:csgo isDirectory:&isDir] && isDir )

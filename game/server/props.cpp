@@ -2331,6 +2331,9 @@ void CDynamicProp::AnimThink( void )
 			if ( !m_bAnimationDone )
 			{
 				m_bAnimationDone = true;
+#if defined( IOS ) && defined( PORTAL2 )
+				Msg( "[prop] '%s' animation done, t=%.2f\n", GetDebugName(), gpGlobals->curtime );
+#endif
 				m_pOutputAnimOver.FireOutput(NULL,this);
 			}
 
@@ -2441,6 +2444,10 @@ inline const color24 CDynamicProp::GetGlowColor() const
 //------------------------------------------------------------------------------
 void CDynamicProp::InputSetAnimation( inputdata_t &inputdata )
 {
+#if defined( IOS ) && defined( PORTAL2 )
+	Msg( "[prop] '%s' (%s) SetAnimation %s -> sequence %d, t=%.2f\n", GetDebugName(), STRING( GetModelName() ),
+		 inputdata.value.String(), LookupSequence( inputdata.value.String() ), gpGlobals->curtime );
+#endif
 	PropSetAnim( inputdata.value.String() );
 }
 

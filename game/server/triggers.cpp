@@ -469,6 +469,18 @@ void CBaseTrigger::StartTouch(CBaseEntity *pOther)
 {
 	if (PassesTriggerFilters(pOther) )
 	{
+#if defined( IOS ) && defined( PORTAL2 )
+		{
+			// which entity sets off a trigger, and where (Portal 2 intro triggers firing at spawn)
+			Vector vecMins, vecMaxs;
+			CollisionProp()->WorldSpaceAABB( &vecMins, &vecMaxs );
+			const Vector &vecOther = pOther->GetAbsOrigin();
+			Msg( "[trigger] %s '%s' (%.0f %.0f %.0f .. %.0f %.0f %.0f) touched by %s '%s' #%d at %.0f %.0f %.0f, flags 0x%x, t=%.2f\n",
+				 GetClassname(), GetDebugName(), vecMins.x, vecMins.y, vecMins.z, vecMaxs.x, vecMaxs.y, vecMaxs.z,
+				 pOther->GetClassname(), pOther->GetDebugName(), pOther->entindex(), vecOther.x, vecOther.y, vecOther.z,
+				 pOther->GetFlags(), gpGlobals->curtime );
+		}
+#endif
 		EHANDLE hOther;
 		hOther = pOther;
 		
@@ -3519,6 +3531,11 @@ void CTriggerCamera::FindAttachment()
 //-----------------------------------------------------------------------------
 void CTriggerCamera::Enable( void )
 {
+#if defined( IOS ) && defined( PORTAL2 )
+	Msg( "[camera] %s '%s' at %.0f %.0f %.0f, parent '%s' attachment %d, t=%.2f\n", "enable", GetDebugName(),
+		 GetAbsOrigin().x, GetAbsOrigin().y, GetAbsOrigin().z, GetMoveParent() ? GetMoveParent()->GetDebugName() : "",
+		 GetParentAttachment(), gpGlobals->curtime );
+#endif
 	m_state = USE_ON;
 
 	if ( !m_hPlayer || !m_hPlayer->IsPlayer() )
@@ -3728,6 +3745,11 @@ void CTriggerCamera::ScriptSetFov( int iFOV, float fovSpeed )
 //-----------------------------------------------------------------------------
 void CTriggerCamera::Disable( void )
 {
+#if defined( IOS ) && defined( PORTAL2 )
+	Msg( "[camera] %s '%s' at %.0f %.0f %.0f, parent '%s' attachment %d, t=%.2f\n", "disable", GetDebugName(),
+		 GetAbsOrigin().x, GetAbsOrigin().y, GetAbsOrigin().z, GetMoveParent() ? GetMoveParent()->GetDebugName() : "",
+		 GetParentAttachment(), gpGlobals->curtime );
+#endif
 	if ( m_hPlayer )
 	{
 		CBasePlayer *pBasePlayer = (CBasePlayer*)m_hPlayer.Get();

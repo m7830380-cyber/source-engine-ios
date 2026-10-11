@@ -2721,7 +2721,10 @@ bool CAudioSourceCache::Init( unsigned int memSize )
 	bool bSuccess = LoadMasterCache( m_szCurrentLanguage, false );
 	if ( !bSuccess && Q_stricmp( m_szCurrentLanguage, "" ) )
 	{
-		bSuccess = LoadMasterCache( "", true );
+		// Don't accept an empty English cache as the fallback: the master cache
+		// never checks disk, so every sound would resolve to an empty entry and
+		// fail to load (all audio silent with -language russian). Rebuild instead.
+		bSuccess = LoadMasterCache( "", false );
 	}
 
 	if ( !bSuccess )

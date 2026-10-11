@@ -157,7 +157,7 @@ void DrawSolidEnergy(  CBaseVSShader *pShader, IMaterialVar** params, IShaderDyn
 
 			// Vertex Shader
 #if !defined( _GAMECONSOLE )
-			if ( g_pHardwareConfig->GetDXSupportLevel() < 95 )
+			if ( !g_pHardwareConfig->SupportsPixelShaders_3_0() )
 #endif
 			{
 				DECLARE_STATIC_VERTEX_SHADER( solidenergy_vs20 );
@@ -189,7 +189,7 @@ void DrawSolidEnergy(  CBaseVSShader *pShader, IMaterialVar** params, IShaderDyn
 
 			// Pixel Shader
 #if !defined( _GAMECONSOLE )
-			if ( g_pHardwareConfig->GetDXSupportLevel() < 95 )
+			if ( !g_pHardwareConfig->SupportsPixelShaders_3_0() )
 #endif
 			{
 				DECLARE_STATIC_PIXEL_SHADER( solidenergy_ps20b );
@@ -422,7 +422,7 @@ void DrawSolidEnergy(  CBaseVSShader *pShader, IMaterialVar** params, IShaderDyn
 
 		// VERTEX SHADER SETUP
 #if !defined( _GAMECONSOLE )
-		if ( g_pHardwareConfig->GetDXSupportLevel() < 95 )
+		if ( !g_pHardwareConfig->SupportsPixelShaders_3_0() )
 #endif
 		{
 			DECLARE_DYNAMIC_VERTEX_SHADER( solidenergy_vs20 );
@@ -481,7 +481,7 @@ void DrawSolidEnergy(  CBaseVSShader *pShader, IMaterialVar** params, IShaderDyn
 		// PIXEL SHADER SETUP
 
 #if !defined( _GAMECONSOLE )
-		if ( g_pHardwareConfig->GetDXSupportLevel() < 95 )
+		if ( !g_pHardwareConfig->SupportsPixelShaders_3_0() )
 #endif
 		{
 			DECLARE_DYNAMIC_PIXEL_SHADER( solidenergy_ps20b );

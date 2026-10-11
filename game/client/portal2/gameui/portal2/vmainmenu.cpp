@@ -248,7 +248,8 @@ void MainMenu::OnCommand( const char *command )
 	}
 	else if ( !Q_strcmp( command, "SoloPlay" ) )
 	{
-		engine->ClientCmd_Unrestricted("map sp_a1_intro2");
+		// A new single player game starts at the first chamber, like retail Portal 2.
+		engine->ClientCmd_Unrestricted("map sp_a1_intro1");
 	}
 	else if ( !Q_strcmp( command, "DeveloperCommentary" ) )
 	{

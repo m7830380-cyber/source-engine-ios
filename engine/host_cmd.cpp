@@ -1314,7 +1314,9 @@ void Host_Map_Helper( const CCommand &args, EMapFlags flags )
 #else
 	// Stop demo loop
 	GetBaseLocalClient().demonum = -1;
-	if ( GetBaseLocalClient().m_nMaxClients == 0 || sv.IsDedicated() )
+	// A local single player game (Portal 2) must also restart: multiplayer servers
+	// were forwarded to changelevel above, so otherwise 'map' silently does nothing.
+	if ( GetBaseLocalClient().m_nMaxClients == 0 || sv.IsDedicated() || ( sv.IsActive() && sv.IsSinglePlayerGame() ) )
 #endif
 	{
 		Host_Disconnect( false );	// stop old game

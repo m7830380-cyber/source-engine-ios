@@ -23,21 +23,6 @@ ConVar sv_server_graphic1( "sv_server_graphic1", "", FCVAR_REPLICATED | FCVAR_RE
 ConVar sv_server_graphic2( "sv_server_graphic2", "", FCVAR_REPLICATED | FCVAR_RELEASE );
 ConVar mp_verbose_changelevel_spew( "mp_verbose_changelevel_spew", "0", FCVAR_RELEASE );
 
-const char *ChangeLevel_DestinationMapName( void )
-{
-	return "";
-}
-
-const char *ChangeLevel_OriginMapName( void )
-{
-	return "";
-}
-
-const char *ChangeLevel_GetLandmarkName( void )
-{
-	return "";
-}
-
 void LoadEquipmentData( void )
 {
 }

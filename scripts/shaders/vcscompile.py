@@ -816,32 +816,29 @@ def cmd_compile(args):
 # ---------------------------------------------------------------------------
 
 def list_targets(exclude=None):
-    """(src.fxc, target) for every ps20b/vs20 shader the stdshader C++ includes a
-    fxctmp9 .inc for -- i.e. every .vcs the shader DLL can ask for on GL, where
-    ShouldAlwaysUseShaderModel2bShaders() keeps everything on ps20b/vs20."""
-    files = dict((f.lower(), f) for f in os.listdir(STDSHADERS))
-    incs = set()
-    for f in sorted(files.values()):
-        if not f.lower().endswith(('.cpp', '.h')):
-            continue
-        with open(os.path.join(STDSHADERS, f), 'r', errors='replace') as fp:
-            text = fp.read()
-        for m in re.finditer(r'#\s*include\s+"(?:[^"]*/)?([^"/]+_(?:ps20b|vs20))\.inc"', text):
-            incs.add(m.group(1).lower())
+    """(src.fxc, target) for every ps20/ps20b/vs20 shader that can be built from the
+    .fxc sources in stdshaders. That is a superset of what the shader C++ includes:
+    materials also name shaders directly (screenspace_general's $pixshader, e.g.
+    constant_color_ps20b), and some code asks for the plain ps20 variants. On GL,
+    ShouldAlwaysUseShaderModel2bShaders() keeps everything else off ps30/vs30."""
     out = []
-    for tgt in sorted(incs):
-        if exclude and re.search(exclude, tgt, re.I):
+    for f in sorted(os.listdir(STDSHADERS), key=lambda x: x.lower()):
+        base = f[:-4].lower() if f.lower().endswith('.fxc') else None
+        if not base:
             continue
-        base = re.sub(r'_(ps20b|vs20)$', '', tgt)
-        if tgt.endswith('_ps20b'):
-            cands = [base + '_ps2x.fxc', base + '_ps20b.fxc', base + '_ps20.fxc']
+        if base.endswith('_ps2x'):
+            targets = [base[:-5] + '_ps20', base[:-5] + '_ps20b']
+        elif base.endswith('_vsxx'):
+            targets = [base[:-5] + '_vs20']
+        elif re.search(r'_(ps20b|ps20|vs20)$', base):
+            targets = [base]
         else:
-            cands = [base + '_vs20.fxc', base + '_vsxx.fxc']
-        src = next((files[x] for x in cands if x in files), None)
-        if src:
-            out.append((src, tgt))
-        else:
-            print("  no .fxc source for %s, skipping" % tgt, file=sys.stderr)
+            continue
+        for tgt in targets:
+            if exclude and re.search(exclude, tgt, re.I):
+                continue
+            if tgt not in [t for (_, t) in out]:
+                out.append((f, tgt))
     return out
 
 

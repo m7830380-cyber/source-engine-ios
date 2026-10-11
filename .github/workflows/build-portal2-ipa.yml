@@ -2,12 +2,12 @@ name: Build Portal 2 iOS IPA
 
 # The shader DLL in this tree only matches .vcs compiled from this tree's own
 # stdshaders (retail .vcs from a game install use other combo layouts), so the
-# IPA bundles a full ps20b/vs20 set built by scripts/shaders/vcscompile.py:
+# IPA bundles a full ps20b/vs20 set built by scripts/shaders/vcscompile.py.
 #
-#   shader-plan    hash the shader sources; reuse the cached .vcs set if present
-#   shaders        otherwise compile it, split over SHADER_SHARDS Windows runners
-#   shader-pack    merge + verify the parts, save them to the cache
-#   build-portal2-ipa
+# That set changes only when the shader sources do, so it is compiled once and
+# kept as the portal2-shaders.zip asset of the "portal2-shaders" release; every
+# build just downloads it. Run this workflow by hand with rebuild_shaders to
+# recompile it (split over SHADER_SHARDS Windows runners) and replace the asset.
 #
 # SHADER_PINS holds static combos that can't be selected on iOS at one value
 # (no cascaded shadow maps, fixed shadow filter mode, no lighting preview); the
@@ -17,6 +17,11 @@ on:
   push:
     branches: [ portal2-ios, portal2-rubberwar-ios, portal2-p2asw-ios ]
   workflow_dispatch:
+    inputs:
+      rebuild_shaders:
+        description: "Recompile the .vcs shader set and replace the portal2-shaders release asset"
+        type: boolean
+        default: false
 
 env:
   SHADER_PINS: CASCADED_SHADOW_MAPPING=0,CSM_BLENDING=0,CSM_MODE=0,FLASHLIGHTDEPTHFILTERMODE=0,LIGHTING_PREVIEW=0,SFM=0
@@ -24,27 +29,8 @@ env:
   SHADER_EXCLUDE: 4wayblend|customhero
 
 jobs:
-  shader-plan:
-    runs-on: ubuntu-latest
-    outputs:
-      key: ${{ steps.key.outputs.key }}
-      hit: ${{ steps.lookup.outputs.cache-hit }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - id: key
-        run: echo "key=portal2-vcs-v1-${{ hashFiles('materialsystem/stdshaders/**', 'scripts/shaders/vcscompile.py') }}-$(echo "$SHADER_PINS $SHADER_EXCLUDE" | sha1sum | cut -c1-8)" >> "$GITHUB_OUTPUT"
-
-      - id: lookup
-        uses: actions/cache/restore@v4
-        with:
-          path: vcs-cache
-          key: ${{ steps.key.outputs.key }}
-          lookup-only: true
-
   shaders:
-    needs: shader-plan
-    if: needs.shader-plan.outputs.hit != 'true'
+    if: github.event_name == 'workflow_dispatch' && inputs.rebuild_shaders
     runs-on: windows-latest
     timeout-minutes: 300
     strategy:
@@ -113,51 +99,32 @@ jobs:
           retention-days: 3
 
   shader-pack:
-    needs: [ shader-plan, shaders ]
-    if: always() && needs.shader-plan.result == 'success' && (needs.shader-plan.outputs.hit == 'true' || needs.shaders.result == 'success')
+    needs: shaders
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
-      - name: Restore cached shaders
-        if: needs.shader-plan.outputs.hit == 'true'
-        uses: actions/cache/restore@v4
-        with:
-          path: vcs-cache
-          key: ${{ needs.shader-plan.outputs.key }}
-          fail-on-cache-miss: true
-
       - uses: actions/download-artifact@v4
-        if: needs.shader-plan.outputs.hit != 'true'
         with:
           pattern: vcs-parts-*
           path: parts
 
-      - name: Merge and verify
-        if: needs.shader-plan.outputs.hit != 'true'
+      - name: Merge, verify and publish
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          python3 scripts/shaders/vcscompile.py merge-all parts --out vcs-cache
-          ls -la vcs-cache/shaders/fxc | head -n 20
-          echo "$(ls vcs-cache/shaders/fxc | wc -l) .vcs, $(du -sh vcs-cache | cut -f1)"
-
-      - name: Save shader cache
-        if: needs.shader-plan.outputs.hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: vcs-cache
-          key: ${{ needs.shader-plan.outputs.key }}
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: portal2-shaders
-          path: vcs-cache/shaders/fxc/*.vcs
-          if-no-files-found: error
+          set -euo pipefail
+          python3 scripts/shaders/vcscompile.py merge-all parts --out vcs
+          (cd vcs/shaders && zip -q -r ../../portal2-shaders.zip fxc)
+          echo "$(ls vcs/shaders/fxc | wc -l) .vcs, $(du -sh vcs | cut -f1)"
+          gh release upload portal2-shaders portal2-shaders.zip --clobber
 
   build-portal2-ipa:
-    needs: shader-pack
-    # 'shaders' is skipped on a cache hit, and a skipped job further up the chain
-    # would otherwise skip this one too
-    if: ${{ !cancelled() && needs.shader-pack.result == 'success' }}
+    needs: [ shaders, shader-pack ]
+    # runs after a shader rebuild, or straight away when there is none (skipped)
+    if: ${{ !cancelled() && needs.shaders.result != 'failure' && needs.shader-pack.result != 'failure' }}
     runs-on: macos-14
     permissions:
       contents: write
@@ -173,10 +140,13 @@ jobs:
         with:
           submodules: recursive
 
-      - uses: actions/download-artifact@v4
-        with:
-          name: portal2-shaders
-          path: build/ios/shaders/fxc
+      - name: Get the shader set
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download portal2-shaders -R "${{ github.repository }}" -p portal2-shaders.zip -D build/ios
+          unzip -q -o build/ios/portal2-shaders.zip -d build/ios/shaders
+          echo "$(ls build/ios/shaders/fxc | wc -l) .vcs from the portal2-shaders release"
 
       - name: Use the release ANGLE build
         env:

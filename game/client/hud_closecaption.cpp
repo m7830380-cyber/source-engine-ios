@@ -2881,7 +2881,10 @@ bool CHudCloseCaption::AddFileToCaptionDictionary( const char *filename )
 		char fullpath[MAX_PATH];
 		Q_snprintf( fullpath, sizeof( fullpath ), "%s%s", path, filename );
 		Q_FixSlashes( fullpath );
+#if !defined( IOS )
+		// iOS paths are case sensitive (.../Containers/Data/.../Documents/)
 		Q_strlower( fullpath );
+#endif
 
 		if ( IsGameConsole() )
 		{
@@ -2902,6 +2905,19 @@ bool CHudCloseCaption::AddFileToCaptionDictionary( const char *filename )
 			bAddedCaptions = true;
 		}
 	}
+
+#if defined( IOS )
+	// the file can also live inside a VPK, which the loose-path loop above can't open
+	if ( !bAddedCaptions )
+	{
+		int idx = m_AsyncCaptions.AddToTail();
+		if ( m_AsyncCaptions[ idx ].LoadFromFile( filename ) )
+			bAddedCaptions = true;
+		else
+			m_AsyncCaptions.Remove( idx );
+	}
+	Msg( "[cc] client caption file %s: %s\n", filename, bAddedCaptions ? "loaded" : "NOT FOUND" );
+#endif
 
 	return bAddedCaptions;
 }

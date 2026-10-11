@@ -165,13 +165,14 @@ bool CAudioSDL::Init( const audio_device_init_params_t &params )
 	desired.callback = AudioCallback;
 	desired.userdata = this;
 
-	m_nDeviceID = SDL_OpenAudioDevice( m_nDeviceIndex == -1 ? NULL : SDL_GetAudioDeviceName( m_nDeviceIndex, 0 ), 0, &desired, &m_deviceSpec, SDL_AUDIO_ALLOW_ANY_CHANGE );
+	m_nDeviceID = SDL_OpenAudioDevice( m_nDeviceIndex == -1 ? NULL : SDL_GetAudioDeviceName( m_nDeviceIndex, 0 ), 0, &desired, &m_deviceSpec, 0 );
 
 	const char *pDeviceNameUTF8 = m_nDeviceIndex == -1 ? DEFAULT_DEVICE_NAME : SDL_GetAudioDeviceName( m_nDeviceIndex, 0 );
 	Q_UTF8ToWString( pDeviceNameUTF8, m_deviceID, sizeof( m_deviceID ) );
 
-	// UNDONE: Have the device report MIX_DEFAULT_SAMPLING_RATE to the outside world
-	// and build an SDL_AudioCVT to convert from the engine's mix to the SDL device's audio output?
+	// No allowed changes: SDL converts the engine's 44.1 kHz stereo mix to whatever the
+	// hardware runs at. With SDL_AUDIO_ALLOW_ANY_CHANGE iOS opened at 48 kHz while the
+	// engine kept mixing at 44.1 kHz, so every sound played ~9% fast and high pitched.
 
 	// BUGBUG: Assert this for now
 	Assert( m_deviceSpec.channels == 2 );

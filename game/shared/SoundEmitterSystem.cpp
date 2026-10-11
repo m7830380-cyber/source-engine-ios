@@ -352,6 +352,9 @@ public:
 #if !defined( CLIENT_DLL )
 	void AddCaptionFile( const char *filename )
 	{
+#if defined( IOS )
+		int nBefore = m_ServerCaptions.Count();
+#endif
 		int searchPathLen = filesystem->GetSearchPath( "GAME", true, NULL, 0 );
 		char *searchPaths = (char *)stackalloc( searchPathLen + 1 );
 		filesystem->GetSearchPath( "GAME", true, searchPaths, searchPathLen );
@@ -367,7 +370,10 @@ public:
 			char fullpath[MAX_PATH];
 			Q_snprintf( fullpath, sizeof( fullpath ), "%s%s", path, filename );
 			Q_FixSlashes( fullpath );
+#if !defined( IOS )
+			// iOS paths are case sensitive (.../Containers/Data/.../Documents/)
 			Q_strlower( fullpath );
+#endif
 
 			if ( IsGameConsole() )
 			{
@@ -387,6 +393,17 @@ public:
 				DevMsg( "Server: added caption file: %s\n", fullpath );
 			}
 		}
+
+#if defined( IOS )
+		// the file can also live inside a VPK, which the loose-path loop above can't open
+		if ( m_ServerCaptions.Count() == nBefore )
+		{
+			int idx = m_ServerCaptions.AddToTail();
+			if ( !m_ServerCaptions[ idx ].LoadFromFile( filename ) )
+				m_ServerCaptions.Remove( idx );
+		}
+		Msg( "[cc] server caption file %s: %s\n", filename, m_ServerCaptions.Count() > nBefore ? "loaded" : "NOT FOUND" );
+#endif
 	}
 #endif
 

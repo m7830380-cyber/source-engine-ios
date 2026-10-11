@@ -1461,3 +1461,47 @@ bool UTIL_IsDedicatedServer( void )
 	return false;
 }
 
+
+//-----------------------------------------------------------------------------
+// Purpose: Screen-space bounds of a world-space box (P2ASW radial menu)
+//-----------------------------------------------------------------------------
+bool UTIL_WorldSpaceToScreensSpaceBounds( const Vector &vecCenter, const Vector &mins, const Vector &maxs, Vector2D *pMins, Vector2D *pMaxs )
+{
+	int nMinX = ScreenWidth(), nMinY = ScreenHeight();
+	int nMaxX = 0, nMaxY = 0;
+	for ( int i = 0; i < 8; ++i )
+	{
+		Vector vecCorner( ( i & 1 ) ? maxs.x : mins.x, ( i & 2 ) ? maxs.y : mins.y, ( i & 4 ) ? maxs.z : mins.z );
+		int nX, nY;
+		GetVectorInScreenSpace( vecCenter + vecCorner, nX, nY );
+		nMinX = MIN( nMinX, nX );
+		nMinY = MIN( nMinY, nY );
+		nMaxX = MAX( nMaxX, nX );
+		nMaxY = MAX( nMaxY, nY );
+	}
+
+	if ( pMins )
+		pMins->Init( nMinX, nMinY );
+	if ( pMaxs )
+		pMaxs->Init( nMaxX, nMaxY );
+	return true;
+}
+
+bool UTIL_EntityBoundsToSizes( C_BaseEntity *pTarget, int *pMinX, int *pMinY, int *pMaxX, int *pMaxY )
+{
+	Vector vecMins, vecMaxs;
+	Vector vecOrigin = pTarget->GetAbsOrigin();
+	pTarget->CollisionProp()->WorldSpaceSurroundingBounds( &vecMins, &vecMaxs );
+
+	Vector2D mins, maxs;
+	UTIL_WorldSpaceToScreensSpaceBounds( vecOrigin, vecMins - vecOrigin, vecMaxs - vecOrigin, &mins, &maxs );
+	if ( pMinX )
+		*pMinX = mins.x;
+	if ( pMinY )
+		*pMinY = mins.y;
+	if ( pMaxX )
+		*pMaxX = maxs.x;
+	if ( pMaxY )
+		*pMaxY = maxs.y;
+	return true;
+}

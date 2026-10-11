@@ -462,6 +462,12 @@ void OnStorageDevicesChangedSelectNewDevice()
 
 } // namespace BaseModUI
 
+// uigamedata.cpp refers to the global one
+void OnStorageDevicesChangedSelectNewDevice()
+{
+	BaseModUI::OnStorageDevicesChangedSelectNewDevice();
+}
+
 void CUIGameData::RunFrame_Storage()
 {
 	// Check to see if a pending async task has already finished

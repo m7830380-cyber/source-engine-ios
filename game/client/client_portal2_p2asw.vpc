@@ -299,6 +299,7 @@ $Project
 {
 	$Folder	"P2ASW menus"
 	{
+		$File	"portal2\gameui\mousemessageforwardingpanel.cpp"
 		$File	"portal2\gameui\portal2\transitionpanel.cpp"
 		$File	"portal2\gameui\portal2\vadvancedvideo.cpp"
 		$File	"portal2\gameui\portal2\vautosavenotice.cpp"

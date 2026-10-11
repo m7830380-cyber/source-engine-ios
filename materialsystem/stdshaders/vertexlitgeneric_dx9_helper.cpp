@@ -66,24 +66,6 @@ static void r_staticlight_mode_changed( IConVar *var, const char *pOldValue, flo
 }
 ConVar r_staticlight_mode( "r_staticlight_mode", "0", FCVAR_DEVELOPMENTONLY, "0 - support three color streams, 1 - use avg of three streams, 2 - single color stream", r_staticlight_mode_changed );
 
-#if defined( IOS )
-static void IOS_ApplyDrawLightingConstants( IShaderDynamicAPI *pShaderAPI, bool bVertexLitGeneric )
-{
-	if ( !bVertexLitGeneric )
-		return;
-	float amb[24];
-	for ( int i = 0; i < 6; ++i )
-	{
-		amb[i * 4 + 0] = 1.0f;
-		amb[i * 4 + 1] = 1.0f;
-		amb[i * 4 + 2] = 1.0f;
-		amb[i * 4 + 3] = 1.0f;
-	}
-	ShaderApiFast( pShaderAPI )->SetVertexShaderConstant( VERTEX_SHADER_AMBIENT_LIGHT, amb, 6 );
-	const float whiteMod[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
-	ShaderApiFast( pShaderAPI )->SetPixelShaderConstant( 1, whiteMod, 1 );
-}
-#endif
 
 static inline bool WantsPhongShaderInternal( IMaterialVar** params, const VertexLitGeneric_DX9_Vars_t &info )
 {
@@ -110,10 +92,6 @@ static inline bool WantsPhongShaderInternal( IMaterialVar** params, const Vertex
 
 static inline bool WantsPhongShader( IMaterialVar** params, const VertexLitGeneric_DX9_Vars_t &info )
 {
-#if defined( IOS )
-	// PLATFORM VCS only ships combo-0 vertexlit; phong bytecode is mismatched.
-	return false;
-#endif
 	if ( !mat_phong.GetBool() )
 	{
 		// If mat_phong is disabled (because the GPU level is too low), check to see if the material uses Phong and wants to force Phong on anyway.
@@ -515,18 +493,10 @@ static void DrawVertexLitGeneric_DX9_Internal( CBaseVSShader *pShader, IMaterial
 	bool bAvgStaticLightStreams = r_staticlight_mode.GetInt() == 1;
 	bool bUseStaticControlFlow = g_pHardwareConfig->SupportsStaticControlFlow() && ( !bAvgStaticLightStreams );
 	bool bSupportsSM3 = g_pHardwareConfig->SupportsPixelShaders_3_0() && ( !bAvgStaticLightStreams );
-#if defined( IOS )
-	// Bundled vertexlit .vcs are vs20/ps20b only; SM3 init would pin FLATTEN=0 → packed 9360 (log 141).
-	bSupportsSM3 = false;
-#endif
 
 	bool bSFM = ( ToolsEnabled() && IsPlatformWindowsPC() && bSupportsSM3 ) ? true : false;
 
 	bool bHasBump = IsTextureSet( info.m_nBumpmap, params );
-#if defined( IOS )
-	// Route bump materials through combo-0 vertexlit (matching bundled VCS).
-	bHasBump = false;
-#endif
 #if !defined( _GAMECONSOLE )
 	bool bIsDecal = IS_FLAG_SET( MATERIAL_VAR_DECAL );
 #endif
@@ -543,9 +513,6 @@ static void DrawVertexLitGeneric_DX9_Internal( CBaseVSShader *pShader, IMaterial
 
 	bool bIsAlphaTested = IS_FLAG_SET( MATERIAL_VAR_ALPHATEST ) != 0;
 	bool bHasDiffuseWarp = (!bHasFlashlight || bSinglePassFlashlight) && hasDiffuseLighting && (info.m_nDiffuseWarpTexture != -1) && params[info.m_nDiffuseWarpTexture]->IsTexture();
-#if defined( IOS )
-	bHasDiffuseWarp = false;
-#endif
 
 	bool bHasDecalTexture = IsTextureSet( info.m_nDecalTexture, params );
 	bool bHasTintMaskTexture = IsTextureSet( info.m_nTintMaskTexture, params );
@@ -667,17 +634,11 @@ static void DrawVertexLitGeneric_DX9_Internal( CBaseVSShader *pShader, IMaterial
 					pShader->PI_SetPixelShaderAmbientLightCube( 5 );
 					pShader->PI_SetPixelShaderLocalLighting( 13 );
 				}
-#if !defined( IOS )
 				pShader->PI_SetVertexShaderAmbientLightCube();
-#endif
 			}
 			// material can choose to support per-instance modulation via $allowdiffusemodulation
 			bool bAllowDiffuseModulation = ( info.m_nAllowDiffuseModulation == -1 ) ? true : ( params[info.m_nAllowDiffuseModulation]->GetIntValue() != 0 );
 
-#if defined( IOS )
-			// Log 146/153: GLES linear albedo + tint lerp zeros RGB while alpha survives.
-			pShader->PI_SetModulationPixelShaderDynamicState_Identity( 1 );
-#else
 			if ( bAllowDiffuseModulation )
 			{
 				if ( ( info.m_nHDRColorScale != -1 ) && pShader->IsHDREnabled() )
@@ -699,7 +660,6 @@ static void DrawVertexLitGeneric_DX9_Internal( CBaseVSShader *pShader, IMaterial
 			{
 				pShader->PI_SetModulationPixelShaderDynamicState_Identity( 1 );
 			}
-#endif
 			pShader->PI_EndCommandBuffer();
 
 			bool hasBaseAlphaEnvmapMask = IS_FLAG_SET( MATERIAL_VAR_BASEALPHAENVMAPMASK );
@@ -835,9 +795,6 @@ static void DrawVertexLitGeneric_DX9_Internal( CBaseVSShader *pShader, IMaterial
 				else
 					bSampler0SrgbRead = !bShaderSrgbRead;
 			}
-#if defined( IOS )
-			bSampler0SrgbRead = false;
-#endif
 			pShaderShadow->EnableSRGBRead( SHADER_SAMPLER0, bSampler0SrgbRead );
 
 			if ( bHasEnvmap )
@@ -857,11 +814,7 @@ static void DrawVertexLitGeneric_DX9_Internal( CBaseVSShader *pShader, IMaterial
 				pShaderShadow->EnableTexture( SHADER_SAMPLER7, true );	// Flashlight cookie
 				pShaderShadow->EnableSRGBRead( SHADER_SAMPLER7, true );
 			}
-			if ( bHasDetailTexture
-#if defined( IOS )
-				|| bVertexLitGeneric
-#endif
-				)
+			if ( bHasDetailTexture )
 			{
 				pShaderShadow->EnableTexture( SHADER_SAMPLER2, true );
 				pShaderShadow->EnableSRGBRead( SHADER_SAMPLER2, IsSRGBDetailTexture( nDetailBlendMode ) );
@@ -948,17 +901,6 @@ static void DrawVertexLitGeneric_DX9_Internal( CBaseVSShader *pShader, IMaterial
 				#endif
 				{
 					DECLARE_STATIC_VERTEX_SHADER( vertexlit_and_unlit_generic_bump_vs20 );
-#if defined( IOS )
-					// Log 113: bump_vs combo 1584 (USE_WITH_2B+FLATTEN+DOPIXELFOG). Pin to 0.
-					SET_STATIC_VERTEX_SHADER_COMBO( SFM, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( HALFLAMBERT, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( USE_WITH_2B, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( WORLD_NORMAL, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( FLATTEN_STATIC_CONTROL_FLOW, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( CASCADED_SHADOW_MAPPING, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( DOPIXELFOG, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( HARDWAREFOGBLEND, 0 );
-#else
 					SET_STATIC_VERTEX_SHADER_COMBO( SFM, bSFM );
 					SET_STATIC_VERTEX_SHADER_COMBO( HALFLAMBERT,  bHalfLambert);
 					SET_STATIC_VERTEX_SHADER_COMBO( USE_WITH_2B,  g_pHardwareConfig->SupportsPixelShaders_2_b() );
@@ -969,34 +911,11 @@ static void DrawVertexLitGeneric_DX9_Internal( CBaseVSShader *pShader, IMaterial
 					SET_STATIC_VERTEX_SHADER_COMBO( FLATTEN_STATIC_CONTROL_FLOW, !bUseStaticControlFlow );
 					bool bCSMEnabled_ps2b = false;
 					SET_STATIC_VERTEX_SHADER_COMBO( CASCADED_SHADOW_MAPPING, bCSMEnabled_ps2b );
-#endif
 					SET_STATIC_VERTEX_SHADER( vertexlit_and_unlit_generic_bump_vs20 );
 				
 					if ( g_pHardwareConfig->SupportsPixelShaders_2_b() || g_pHardwareConfig->ShouldAlwaysUseShaderModel2bShaders() ) // Always send OpenGL this way
 					{
 						DECLARE_STATIC_PIXEL_SHADER( vertexlit_and_unlit_generic_bump_ps20b );
-#if defined( IOS )
-						// Log 113: bump_ps combo 15729024 (DECAL=2+DOPIXELFOG+DIFFUSE). Pin to 0.
-						SET_STATIC_PIXEL_SHADER_COMBO( SFM, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( CUBEMAP, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( DIFFUSELIGHTING, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( LIGHTWARPTEXTURE, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( SELFILLUM, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( SELFILLUMFRESNEL, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( NORMALMAPALPHAENVMAPMASK, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( HALFLAMBERT, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( FLASHLIGHT, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( DETAILTEXTURE, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( DETAIL_BLEND_MODE, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( DECAL_BLEND_MODE, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( TINTMASKTEXTURE, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( FLASHLIGHTDEPTHFILTERMODE, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( SHADER_SRGB_READ, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( WORLD_NORMAL, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( CASCADED_SHADOW_MAPPING, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( CSM_MODE, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( DOPIXELFOG, 0 );
-#else
 						SET_STATIC_PIXEL_SHADER_COMBO( SFM, bSFM );
 						SET_STATIC_PIXEL_SHADER_COMBO( CUBEMAP,  bHasEnvmap );
 						SET_STATIC_PIXEL_SHADER_COMBO( DIFFUSELIGHTING,  hasDiffuseLighting );
@@ -1017,7 +936,6 @@ static void DrawVertexLitGeneric_DX9_Internal( CBaseVSShader *pShader, IMaterial
 						SET_STATIC_PIXEL_SHADER_COMBO( WORLD_NORMAL, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( CASCADED_SHADOW_MAPPING, g_pHardwareConfig->SupportsCascadedShadowMapping() && !bSFM && !bHasFlashlight && !bDisableCSMLookup );
 						SET_STATIC_PIXEL_SHADER_COMBO( CSM_MODE, 0 );
-#endif
 						SET_STATIC_PIXEL_SHADER( vertexlit_and_unlit_generic_bump_ps20b );
 					}
 					else // ps_2_0
@@ -1122,27 +1040,6 @@ bool bDistanceAlphaFromDetail = false;
 				#endif
 				{
 					DECLARE_STATIC_VERTEX_SHADER( vertexlit_and_unlit_generic_vs20 );
-#if defined( IOS )
-					// Bundled tree .vcs only ships a small static-id set; stock PC combos
-					// (e.g. packed 104859648) miss bytecode and draw purple (log 152).
-					SET_STATIC_VERTEX_SHADER_COMBO( SFM, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( VERTEXCOLOR, bVertexLitGeneric ? 0 : 1 );
-					SET_STATIC_VERTEX_SHADER_COMBO( CUBEMAP, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( HALFLAMBERT, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( FLASHLIGHT, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( SEAMLESS_BASE, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( SEAMLESS_DETAIL, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( SEPARATE_DETAIL_UVS, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( LIGHTING_PREVIEW, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( TREESWAY, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( FLATTEN_STATIC_CONTROL_FLOW, 1 );
-					SET_STATIC_VERTEX_SHADER_COMBO( DECAL, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( CASCADED_SHADOW_MAPPING, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( CSM_BLENDING, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( DOPIXELFOG, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( HARDWAREFOGBLEND, 0 );
-					bool bCSMBlending = false;
-#else
 					SET_STATIC_VERTEX_SHADER_COMBO( SFM, bSFM );
 					SET_STATIC_VERTEX_SHADER_COMBO( VERTEXCOLOR,  bHasVertexColor || bHasVertexAlpha );
 					SET_STATIC_VERTEX_SHADER_COMBO( CUBEMAP,  bHasEnvmap );
@@ -1159,45 +1056,11 @@ bool bDistanceAlphaFromDetail = false;
 					bool bCSMBlending = g_pHardwareConfig->GetCSMAccurateBlending();
 					SET_STATIC_VERTEX_SHADER_COMBO( CASCADED_SHADOW_MAPPING, bCSMEnabled_ps2b );
 					SET_STATIC_VERTEX_SHADER_COMBO( CSM_BLENDING, bCSMBlending );
-#endif
 					SET_STATIC_VERTEX_SHADER( vertexlit_and_unlit_generic_vs20 );
 				
 					if ( g_pHardwareConfig->SupportsPixelShaders_2_b() || g_pHardwareConfig->ShouldAlwaysUseShaderModel2bShaders() ) // Always send OpenGL this way
 					{
 						DECLARE_STATIC_PIXEL_SHADER( vertexlit_and_unlit_generic_ps20b );
-#if defined( IOS )
-						SET_STATIC_PIXEL_SHADER_COMBO( SFM, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( SELFILLUM_ENVMAPMASK_ALPHA, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( DETAILTEXTURE, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( CUBEMAP, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( DIFFUSELIGHTING, bVertexLitGeneric ? 1 : 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( ENVMAPMASK, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( BASEALPHAENVMAPMASK, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( ENVMAPFRESNEL, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( SELFILLUM, 0 );
-						// Unlit VGUI: PS VCOL=0 → sid 0 (log 164/169 good alpha); RGB via IOS unlit fastpath in PS.
-						SET_STATIC_PIXEL_SHADER_COMBO( VERTEXCOLOR, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( FLASHLIGHT, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( DETAIL_BLEND_MODE, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( DECAL_BLEND_MODE, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( TINTMASKTEXTURE, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( SEAMLESS_BASE, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( SEAMLESS_DETAIL, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( DISTANCEALPHA, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( DISTANCEALPHAFROMDETAIL, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( SOFT_MASK, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( OUTLINE, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( OUTER_GLOW, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( FLASHLIGHTDEPTHFILTERMODE, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( SHADER_SRGB_READ, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( DESATURATEWITHBASEALPHA, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( LIGHTING_PREVIEW, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( SRGB_INPUT_ADAPTER, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( CASCADED_SHADOW_MAPPING, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( CSM_MODE, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( CSM_BLENDING, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( DOPIXELFOG, 0 );
-#else
 						SET_STATIC_PIXEL_SHADER_COMBO( SFM, bSFM );
 						SET_STATIC_PIXEL_SHADER_COMBO( SELFILLUM_ENVMAPMASK_ALPHA, bHasSelfIllumInEnvMapMask ); 
 						SET_STATIC_PIXEL_SHADER_COMBO( DETAILTEXTURE,  bHasDetailTexture );
@@ -1229,7 +1092,6 @@ bool bDistanceAlphaFromDetail = false;
 						SET_STATIC_PIXEL_SHADER_COMBO( CASCADED_SHADOW_MAPPING, g_pHardwareConfig->SupportsCascadedShadowMapping() && !bSFM && !bHasFlashlight && !bDisableCSMLookup );
 						SET_STATIC_PIXEL_SHADER_COMBO( CSM_MODE, 0 );
 						SET_STATIC_PIXEL_SHADER_COMBO( CSM_BLENDING, bCSMBlending );
-#endif
 						SET_STATIC_PIXEL_SHADER( vertexlit_and_unlit_generic_ps20b );
 					}
 					else // ps_2_0
@@ -1376,9 +1238,6 @@ bool bDistanceAlphaFromDetail = false;
 				else
 					bSampler0SrgbRead = !bShaderSrgbRead;
 			}
-#if defined( IOS )
-			bSampler0SrgbRead = false;
-#endif
 
 			if ( bHasBaseTexture )
 			{
@@ -1668,6 +1527,7 @@ bool bDistanceAlphaFromDetail = false;
 				vSelfIllumScale[0] = IS_PARAM_DEFINED( info.m_nSelfIllumMaskScale ) ? params[info.m_nSelfIllumMaskScale]->GetFloatValue() : 1.0f;
 				vSelfIllumScale[ 1 ] = bIsDecal ? 1.0f : 0.0f;
 				vSelfIllumScale[2] = vSelfIllumScale[3] = 0.0f;
+
 				pContextData->m_SemiStaticCmdsOut.SetPixelShaderConstant( 11, vSelfIllumScale );
 			}
 
@@ -1994,9 +1854,6 @@ bool bDistanceAlphaFromDetail = false;
 				SET_DYNAMIC_VERTEX_SHADER_COMBO( TESSELLATION, 0 );
 				SET_DYNAMIC_VERTEX_SHADER_COMBO( NUM_LIGHTS, bUseStaticControlFlow ? 0 : ( lightState.m_nNumLights ) );
 				SET_DYNAMIC_VERTEX_SHADER_COMBO( STATICLIGHT3, nStaticLightVsCombo );
-#if defined( IOS )
-				SET_DYNAMIC_VERTEX_SHADER_COMBO( DOWATERFOG, 0 );
-#endif
 				SET_DYNAMIC_VERTEX_SHADER_CMD( DynamicCmdsOut, vertexlit_and_unlit_generic_bump_vs20 );
 
 				// Bind ps_2_b shader so we can get shadow mapping...
@@ -2025,9 +1882,6 @@ bool bDistanceAlphaFromDetail = false;
 					SET_DYNAMIC_PIXEL_SHADER_COMBO( WRITEWATERFOGTODESTALPHA, bWriteWaterFogToAlpha );
 					SET_DYNAMIC_PIXEL_SHADER_COMBO( CASCADE_SIZE, ( IsGameConsole() ) ? ( bCSMEnabled ? 1 : 0 ) : 0 );
 					SET_DYNAMIC_PIXEL_SHADER_COMBO( STATICLIGHT3, bStaticLight3 );
-#if defined( IOS )
-					SET_DYNAMIC_PIXEL_SHADER_COMBO( PIXELFOGTYPE, 0 );
-#endif
 					SET_DYNAMIC_PIXEL_SHADER_CMD( DynamicCmdsOut, vertexlit_and_unlit_generic_bump_ps20b );
 				}
 				else
@@ -2108,22 +1962,12 @@ bool bDistanceAlphaFromDetail = false;
 				int staticLight3VSCombo = (lightState.m_bStaticLight && bStaticLight3Streams) ? ( ( lightState.m_bStaticLightIndirectOnly )? 2 : 1) : 0;
 
 				DECLARE_DYNAMIC_VERTEX_SHADER( vertexlit_and_unlit_generic_vs20 );
-#if defined( IOS )
-				SET_DYNAMIC_VERTEX_SHADER_COMBO( DYNAMIC_LIGHT, 1 );
-				SET_DYNAMIC_VERTEX_SHADER_COMBO( STATICLIGHT3, 0 );
-				SET_DYNAMIC_VERTEX_SHADER_COMBO( SKINNING, numBones > 0 );
-				SET_DYNAMIC_VERTEX_SHADER_COMBO( COMPRESSED_VERTS, 0 );
-				SET_DYNAMIC_VERTEX_SHADER_COMBO( TESSELLATION, 0 );
-				SET_DYNAMIC_VERTEX_SHADER_COMBO( NUM_LIGHTS, 0 );
-				SET_DYNAMIC_VERTEX_SHADER_COMBO( DOWATERFOG, 0 );
-#else
 				SET_DYNAMIC_VERTEX_SHADER_COMBO( DYNAMIC_LIGHT, lightState.HasDynamicLight() );
 				SET_DYNAMIC_VERTEX_SHADER_COMBO( STATICLIGHT3, staticLight3VSCombo );
 				SET_DYNAMIC_VERTEX_SHADER_COMBO( SKINNING,  numBones > 0 );
 				SET_DYNAMIC_VERTEX_SHADER_COMBO( COMPRESSED_VERTS, (int)vertexCompression );
 				SET_DYNAMIC_VERTEX_SHADER_COMBO( TESSELLATION, 0 );
 				SET_DYNAMIC_VERTEX_SHADER_COMBO( NUM_LIGHTS, bUseStaticControlFlow ? 0 : lightState.m_nNumLights );
-#endif
 				SET_DYNAMIC_VERTEX_SHADER_CMD( DynamicCmdsOut, vertexlit_and_unlit_generic_vs20 );
 
 				// Bind ps_2_b shader so we can get shadow mapping
@@ -2150,9 +1994,6 @@ bool bDistanceAlphaFromDetail = false;
 					SET_DYNAMIC_PIXEL_SHADER_COMBO( FLASHLIGHTSHADOWS, bFlashlightShadows );
 					SET_DYNAMIC_PIXEL_SHADER_COMBO( WRITEWATERFOGTODESTALPHA, bWriteWaterFogToAlpha );
 					SET_DYNAMIC_PIXEL_SHADER_COMBO( CASCADE_SIZE, ( IsGameConsole() ) ? ( bCSMEnabled ? 1 : 0 ) : 0 );
-#if defined( IOS )
-					SET_DYNAMIC_PIXEL_SHADER_COMBO( PIXELFOGTYPE, 0 );
-#endif
 					SET_DYNAMIC_PIXEL_SHADER_CMD( DynamicCmdsOut, vertexlit_and_unlit_generic_ps20b );
 				}
 				else
@@ -2248,19 +2089,11 @@ bool bDistanceAlphaFromDetail = false;
 		float fWriteDepthToAlpha = bWriteDepthToAlpha && IsPC() ? 1.0f : 0.0f;
 		float fWriteWaterFogToDestAlpha = bWriteWaterFogToAlpha ? 1.0f : 0.0f;
 		float fVertexAlpha = bHasVertexAlpha ? 1.0f : 0.0f;
-#if defined( IOS )
-		// UnlitGeneric VGUI/touch: vertex alpha on GLES poisons soft edges (log 162).
-		if ( !bVertexLitGeneric )
-			fVertexAlpha = 0.0f;
-#endif
 		float fBlendTintByBaseAlpha = IsBoolSet( info.m_nBlendTintByBaseAlpha, params ) ? 1.0f : 0.0f;
 		fBlendTintByBaseAlpha = bHasTintMaskTexture ? 1.0f : fBlendTintByBaseAlpha;	// This is needed to make the shader math work out in the tint texture case
 
 		// Controls for lerp-style paths through shader code (used by bump and non-bump)
 		float vShaderControls[4] = { IsBoolSet( info.m_nNoTint, params ) ? -1.0f : ( 1.0f - fBlendTintByBaseAlpha ), fWriteDepthToAlpha, fWriteWaterFogToDestAlpha, fVertexAlpha };
-#if defined( IOS )
-		vShaderControls[0] = -1.0f;
-#endif
 		
 		if ( bHasBump )
 		{
@@ -2281,28 +2114,11 @@ bool bDistanceAlphaFromDetail = false;
 		DynamicCmdsOut.SetPixelShaderConstant( 25, vTimeConst, 1 );
 		//*/
 
-#if defined( IOS )
-		{
-			float amb[24];
-			for ( int iAmb = 0; iAmb < 6; iAmb++ )
-			{
-				amb[iAmb * 4 + 0] = 1.0f;
-				amb[iAmb * 4 + 1] = 1.0f;
-				amb[iAmb * 4 + 2] = 1.0f;
-				amb[iAmb * 4 + 3] = 1.0f;
-			}
-			DynamicCmdsOut.SetVertexShaderConstant( VERTEX_SHADER_AMBIENT_LIGHT, amb, 6 );
-		}
-#endif
-
 		DynamicCmdsOut.End();
 #ifdef _PS3
 		ShaderApiFast( pShaderAPI )->SetPixelShaderFogParams( 21 );
 #endif
 		ShaderApiFast( pShaderAPI )->ExecuteCommandBuffer( DynamicCmdsOut.Base() );
-#if defined( IOS )
-		IOS_ApplyDrawLightingConstants( pShaderAPI, bVertexLitGeneric );
-#endif
 	}
 	pShader->Draw();
 }
@@ -2502,19 +2318,12 @@ void DrawVertexLitGeneric_DX9_Internal_ExecuteFastPath( int *vsDynIndex, int *ps
 	float fWriteDepthToAlpha = bWriteDepthToAlpha? 1.0f : 0.0f;
 	float fWriteWaterFogToDestAlpha = bWriteWaterFogToAlpha? 1.0f : 0.0f;
 	float fVertexAlpha = bHasVertexAlpha ? 1.0f : 0.0f;
-#if defined( IOS )
-	if ( !bVertexLitGeneric )
-		fVertexAlpha = 0.0f;
-#endif
 	float fBlendTintByBaseAlpha = IsBoolSet( info.m_nBlendTintByBaseAlpha, params ) ? 1.0f : 0.0f;
 	bool bHasTintMaskTexture = IsTextureSet( info.m_nTintMaskTexture, params );
 	fBlendTintByBaseAlpha = bHasTintMaskTexture ? 1.0f : fBlendTintByBaseAlpha;	// This is needed to make the shader math work out in the tint texture case
 
 	// Controls for lerp-style paths through shader code (used by bump and non-bump)
 	float vShaderControls[4] = { IsBoolSet( info.m_nNoTint, params ) ? -1.0f : ( 1.0f - fBlendTintByBaseAlpha ), fWriteDepthToAlpha, fWriteWaterFogToDestAlpha, fVertexAlpha };
-#if defined( IOS )
-	vShaderControls[0] = -1.0f;
-#endif
 	if ( bHasBump )
 	{
 		// Bump shader doesn't use vertex alpha

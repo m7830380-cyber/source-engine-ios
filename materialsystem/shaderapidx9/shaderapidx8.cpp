@@ -8579,49 +8579,6 @@ void CShaderAPIDx8::ExecuteInstanceCommandBuffer( const unsigned char *pCmdBuf, 
 		case CBICMD_SETVERTEXSHADERAMBIENTLIGHTCUBE:
 			{
 				pCmdBuf += sizeof( int );
-#if defined( IOS )
-				// DYNAMIC_LIGHT=1 + DIFFUSE PS: zero ambient/instance lighting → black prop RGB (log 153).
-				{
-					bool bUseCompiled = false;
-					if ( instance.m_pLightingState )
-					{
-						if ( !pInfo->m_bAmbientCubeCompiled )
-						{
-							CompileAmbientCube( pCompiledState, instance.m_pLightingState->m_nLocalLightCount, instance.m_pLightingState );
-							pInfo->m_bAmbientCubeCompiled = true;
-						}
-						if ( GetAmbientLightCubeLuminance( instance.m_pLightingState ) >= 0.05f )
-							bUseCompiled = true;
-						// log 156: compiled cube can be valid luminance but still ~black RGB on props.
-						if ( bUseCompiled )
-						{
-							float fMax = 0.0f;
-							for ( int i = 0; i < 6; ++i )
-							{
-								const Vector &c = instance.m_pLightingState->m_vecAmbientCube[i];
-								fMax = MAX( fMax, MAX( c.x, MAX( c.y, c.z ) ) );
-							}
-							if ( fMax < 0.15f )
-								bUseCompiled = false;
-						}
-					}
-					if ( bUseCompiled )
-						SetVertexShaderStateAmbientLightCube( VERTEX_SHADER_AMBIENT_LIGHT, pCompiledState );
-					else
-					{
-						static CompiledLightingState_t s_iosMinAmbient;
-						static bool s_bInitMinAmb = false;
-						if ( !s_bInitMinAmb )
-						{
-							for ( int i = 0; i < 6; ++i )
-								s_iosMinAmbient.m_AmbientLightCube[i].Init( 1.0f, 1.0f, 1.0f, 1.0f );
-							s_bInitMinAmb = true;
-						}
-						SetVertexShaderStateAmbientLightCube( VERTEX_SHADER_AMBIENT_LIGHT, &s_iosMinAmbient );
-					}
-					bConstantsChanged = true;
-				}
-#else
 				if ( instance.m_pLightingState )
 				{
 					if ( !pInfo->m_bAmbientCubeCompiled )
@@ -8633,7 +8590,6 @@ void CShaderAPIDx8::ExecuteInstanceCommandBuffer( const unsigned char *pCmdBuf, 
 					SetVertexShaderStateAmbientLightCube( VERTEX_SHADER_AMBIENT_LIGHT, pCompiledState );
 					bConstantsChanged = true;
 				}
-#endif
 			}
 			break;
 
@@ -8768,15 +8724,8 @@ void CShaderAPIDx8::ExecuteInstanceCommandBuffer( const unsigned char *pCmdBuf, 
 				int nReg = GetData<int>( pCmdBuf ); 
 				pCmdBuf += sizeof( int ); // skip register
 
-#if defined( IOS )
-				Vector4D color = instance.m_DiffuseModulation;
-				if ( color.x + color.y + color.z < 0.01f )
-					color.Init( 1.0f, 1.0f, 1.0f, color.w );
-				SetPixelShaderConstantInternal( nReg, color.Base() );
-#else
 				Vector4D color( 1.0f, 1.0f, 1.0f, instance.m_DiffuseModulation[3] );
 				SetPixelShaderConstantInternal( nReg, color.Base() );
-#endif
 			}
 			break;
 
@@ -9706,50 +9655,8 @@ void CShaderAPIDx8::ExecuteInstanceCommandBuffer( const unsigned char *pCmdBuf, 
 
 		case CBICMD_SETVERTEXSHADERAMBIENTLIGHTCUBE:
 			{
+
 				pCmdBuf += sizeof( int );
-#if defined( IOS )
-				// DYNAMIC_LIGHT=1 + DIFFUSE PS: zero ambient/instance lighting → black prop RGB (log 153).
-				{
-					bool bUseCompiled = false;
-					if ( instance.m_pLightingState )
-					{
-						if ( !pInfo->m_bAmbientCubeCompiled )
-						{
-							CompileAmbientCube( pCompiledState, instance.m_pLightingState->m_nLocalLightCount, instance.m_pLightingState );
-							pInfo->m_bAmbientCubeCompiled = true;
-						}
-						if ( GetAmbientLightCubeLuminance( instance.m_pLightingState ) >= 0.05f )
-							bUseCompiled = true;
-						// log 156: compiled cube can be valid luminance but still ~black RGB on props.
-						if ( bUseCompiled )
-						{
-							float fMax = 0.0f;
-							for ( int i = 0; i < 6; ++i )
-							{
-								const Vector &c = instance.m_pLightingState->m_vecAmbientCube[i];
-								fMax = MAX( fMax, MAX( c.x, MAX( c.y, c.z ) ) );
-							}
-							if ( fMax < 0.15f )
-								bUseCompiled = false;
-						}
-					}
-					if ( bUseCompiled )
-						SetVertexShaderStateAmbientLightCube( VERTEX_SHADER_AMBIENT_LIGHT, pCompiledState );
-					else
-					{
-						static CompiledLightingState_t s_iosMinAmbient;
-						static bool s_bInitMinAmb = false;
-						if ( !s_bInitMinAmb )
-						{
-							for ( int i = 0; i < 6; ++i )
-								s_iosMinAmbient.m_AmbientLightCube[i].Init( 1.0f, 1.0f, 1.0f, 1.0f );
-							s_bInitMinAmb = true;
-						}
-						SetVertexShaderStateAmbientLightCube( VERTEX_SHADER_AMBIENT_LIGHT, &s_iosMinAmbient );
-					}
-					bConstantsChanged = true;
-				}
-#else
 				if ( instance.m_pLightingState )
 				{
 					if ( !pInfo->m_bAmbientCubeCompiled )
@@ -9761,12 +9668,13 @@ void CShaderAPIDx8::ExecuteInstanceCommandBuffer( const unsigned char *pCmdBuf, 
 					SetVertexShaderStateAmbientLightCube( VERTEX_SHADER_AMBIENT_LIGHT, pCompiledState );
 					bConstantsChanged = true;
 				}
-#endif
 			}
 			break;
 
 		case CBICMD_SETPIXELSHADERAMBIENTLIGHTCUBELUMINANCE:
 			{
+
+
 				int nReg = GetData<int>( pCmdBuf + sizeof( int ) );
 				pCmdBuf += 2 * sizeof( int );
 				float flLuminance = GetAmbientLightCubeLuminance( instance.m_pLightingState );
@@ -9778,6 +9686,7 @@ void CShaderAPIDx8::ExecuteInstanceCommandBuffer( const unsigned char *pCmdBuf, 
 
 		case CBICMD_SETPIXELSHADERGLINTDAMPING:
 			{
+
 				int nReg = GetData<int>( pCmdBuf + sizeof( int ) );
 				pCmdBuf += 2 * sizeof( int );
 				float fGlintDamping = GetAmbientLightCubeLuminance( instance.m_pLightingState );
@@ -9901,15 +9810,8 @@ void CShaderAPIDx8::ExecuteInstanceCommandBuffer( const unsigned char *pCmdBuf, 
 				int nReg = GetData<int>( pCmdBuf ); 
 				pCmdBuf += sizeof( int ); // skip register
 
-#if defined( IOS )
-				Vector4D color = instance.m_DiffuseModulation;
-				if ( color.x + color.y + color.z < 0.01f )
-					color.Init( 1.0f, 1.0f, 1.0f, color.w );
-				SetPixelShaderConstantInternal( nReg, color.Base() );
-#else
 				Vector4D color( 1.0f, 1.0f, 1.0f, instance.m_DiffuseModulation[3] );
 				SetPixelShaderConstantInternal( nReg, color.Base() );
-#endif
 			}
 			break;
 

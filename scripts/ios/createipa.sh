@@ -19,23 +19,22 @@ cp "$BUNDLE/LaunchScreen.storyboard" "$APP/"
 # touch control textures (materials/vgui/touch/*), from the source-engine port
 cp "$BUNDLE/extras_dir.vpk" "$APP/"
 
-# Tree-compiled vertexlit/lightmapped .vcs (CI job compile-shaders).
+# The .vcs set compiled from this tree's stdshaders (build-portal2-ipa.yml);
+# on iOS the shader manager only loads shaders from <app>/platform/shaders/fxc.
 if [ -d "$ROOT/build/ios/shaders/fxc" ]; then
 	mkdir -p "$APP/platform/shaders/fxc"
 	cp "$ROOT/build/ios/shaders/fxc/"*.vcs "$APP/platform/shaders/fxc/" 2>/dev/null || {
 		echo "Packaging failed: no .vcs in build/ios/shaders/fxc" >&2
 		exit 1
 	}
-	echo "Bundled $(ls -1 "$APP/platform/shaders/fxc"/*.vcs | wc -l | tr -d ' ') PLATFORM shader(s)"
-	ls -la "$APP/platform/shaders/fxc/"vertexlit_and_unlit_generic_*.vcs 2>/dev/null || true
-	python3 "$ROOT/scripts/shaders/vcscompile.py" verify "$APP/platform/shaders/fxc/vertexlit_and_unlit_generic_ps20b.vcs" || {
-		echo "Packaging failed: bundled vertexlit PS is not tree-compiled (expect dyn=32)" >&2
-		exit 1
-	}
-	python3 "$ROOT/scripts/shaders/vcscompile.py" verify "$APP/platform/shaders/fxc/vertexlit_and_unlit_generic_vs20.vcs" || {
-		echo "Packaging failed: bundled vertexlit VS verify" >&2
-		exit 1
-	}
+	for vcs in "$APP/platform/shaders/fxc/"*.vcs; do
+		python3 "$ROOT/scripts/shaders/vcscompile.py" verify "$vcs" >/dev/null || {
+			echo "Packaging failed: $vcs does not verify" >&2
+			python3 "$ROOT/scripts/shaders/vcscompile.py" verify "$vcs" >&2 || true
+			exit 1
+		}
+	done
+	echo "Bundled $(ls -1 "$APP/platform/shaders/fxc"/*.vcs | wc -l | tr -d ' ') shaders ($(du -sh "$APP/platform/shaders/fxc" | cut -f1))"
 fi
 
 if [ -x /usr/libexec/PlistBuddy ]; then

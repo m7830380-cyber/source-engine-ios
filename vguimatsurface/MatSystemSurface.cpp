@@ -205,10 +205,7 @@ VPANEL CMatEmbeddedPanel::IsWithinTraverse(int x, int y, bool traversePopups)
 //-----------------------------------------------------------------------------
 CMatSystemSurface::CMatSystemSurface() : m_pEmbeddedPanel(NULL), m_pWhite(NULL), m_ContextAbsPos( 0, 0, ContextAbsPos_t::Less )
 {
-	m_iBoundTexture = -1;
-#if defined( IOS )
-	m_nIOSSolidWhiteTexture = -1;
-#endif
+	m_iBoundTexture = -1; 
 	m_nCurrReferenceValue = 0;
 	m_bIn3DPaintMode = false;
 	m_bDrawingIn3DWorld = false;
@@ -407,14 +404,6 @@ InitReturnVal_t CMatSystemSurface::Init( void )
 	pVMTKeyValues->SetInt( "$ignorez", 1 );
 	pVMTKeyValues->SetInt( "$no_fullbright", 1 );
 	pVMTKeyValues->SetInt( "$nocull", 1 );
-#if defined( IOS )
-	// Vertex-color-only UnlitGeneric is invisible under ANGLE→Metal; textured
-	// UnlitGeneric works (missing-material black quads were visible). Prefer a
-	// real basetexture when present; DrawFilledRect also falls back to a
-	// procedural 1x1 white if needed.
-	pVMTKeyValues->SetString( "$basetexture", "vgui/white" );
-	pVMTKeyValues->SetInt( "$translucent", 1 );
-#endif
 	m_pWhite.Init( "VGUI_White", TEXTURE_GROUP_OTHER, pVMTKeyValues );
 
 	InitFullScreenBuffer( MODEL_PANEL_RT_NAME );
@@ -1087,59 +1076,6 @@ void CMatSystemSurface::DrawClearApparentDepth()
 //-----------------------------------------------------------------------------
 // material Setting methods 
 //-----------------------------------------------------------------------------
-#if defined( IOS )
-void CMatSystemSurface::EnsureIOSSolidWhiteTexture()
-{
-	if ( m_nIOSSolidWhiteTexture >= 0 )
-		return;
-	m_nIOSSolidWhiteTexture = CreateNewTextureID( true );
-	unsigned char rgba[4] = { 255, 255, 255, 255 };
-	DrawSetTextureRGBA( m_nIOSSolidWhiteTexture, rgba, 1, 1 );
-	Msg( "[Portal2 iOS] VGUI solid-color procedural texid=%d (bake RGBA into 1x1; vertex color broken)\n",
-		m_nIOSSolidWhiteTexture );
-}
-
-// UnlitGeneric VCS combo fallback makes ALL material quads invisible on this
-// device (only ClearBuffers and error-mats ever showed). Paint solids by
-// scissored color clears — no vertex shader required.
-void CMatSystemSurface::IOSDrawFilledRect( int x0, int y0, int x1, int y1, unsigned char const *pColor )
-{
-	if ( !pColor || pColor[3] == 0 )
-		return;
-	if ( x1 <= x0 || y1 <= y0 )
-		return;
-
-	DrawFlushText();
-
-	Vertex_t rect[2];
-	Vertex_t clippedRect[2];
-	InitVertex( rect[0], x0, y0, 0, 0 ); // applies m_nTranslate*
-	InitVertex( rect[1], x1, y1, 0, 0 );
-	if ( !ClipRect( rect[0], rect[1], &clippedRect[0], &clippedRect[1] ) )
-		return;
-
-	int left = (int)clippedRect[0].m_Position.x;
-	int top = (int)clippedRect[0].m_Position.y;
-	int right = (int)clippedRect[1].m_Position.x;
-	int bottom = (int)clippedRect[1].m_Position.y;
-	if ( right <= left || bottom <= top )
-		return;
-
-	static int s_nFillLog = 0;
-	if ( ( s_nFillLog++ % 180 ) == 0 )
-	{
-		Msg( "[Portal2 iOS] scissor-fill rgba=%d,%d,%d,%d rect=%d,%d-%d,%d\n",
-			pColor[0], pColor[1], pColor[2], pColor[3], left, top, right, bottom );
-	}
-
-	CMatRenderContextPtr pRenderContext( g_pMaterialSystem );
-	pRenderContext->ClearColor4ub( pColor[0], pColor[1], pColor[2], pColor[3] );
-	pRenderContext->PushScissorRect( left, top, right, bottom );
-	pRenderContext->ClearBuffers( true, false, false );
-	pRenderContext->PopScissorRect();
-}
-#endif
-
 void CMatSystemSurface::InternalSetMaterial( IMaterial *pMaterial )
 {
 	if (!pMaterial)
@@ -1329,66 +1265,19 @@ void CMatSystemSurface::DrawQuad( const Vertex_t &ul, const Vertex_t &lr, unsign
 	meshBuilder.AdvanceVertexF<VTX_HAVEPOS | VTX_HAVECOLOR, 1>();
 
 	meshBuilder.End();
-#if defined( IOS )
-	if ( pColor )
-	{
-		Vector4D mod( pColor[0] / 255.0f, pColor[1] / 255.0f, pColor[2] / 255.0f, pColor[3] / 255.0f );
-		m_pMesh->DrawModulated( mod );
-	}
-	else
-	{
-		m_pMesh->Draw();
-	}
-#else
 	m_pMesh->Draw();
-#endif
 }
 
 
 //-----------------------------------------------------------------------------
 // Purpose: Draws an array of quads
 //-----------------------------------------------------------------------------
-#if defined( IOS )
-static void IOS_ApplyMaterialColorModulation( unsigned char const *pColor )
-{
-	if ( !pColor || !g_pMaterialSystem )
-		return;
-	CMatRenderContextPtr pRenderContext( g_pMaterialSystem );
-	IMaterial *pMat = pRenderContext->GetCurrentMaterial();
-	if ( !pMat )
-		return;
-	const float inv = 1.0f / 255.0f;
-	pMat->ColorModulate( pColor[0] * inv, pColor[1] * inv, pColor[2] * inv );
-	pMat->AlphaModulate( pColor[3] * inv );
-}
-
-static void IOS_MeshVertexColor( unsigned char const *pColor, unsigned char out[4] )
-{
-	// ANGLE→Metal often drops RGB in COLOR0; keep alpha, drive RGB via $color → PS c1.
-	out[0] = out[1] = out[2] = 255;
-	out[3] = pColor ? pColor[3] : 255;
-}
-#endif
-
 void CMatSystemSurface::DrawQuadArray( int quadCount, Vertex_t *pVerts, unsigned char *pColor, bool bShouldClip )
 {
 	Assert( !m_bIn3DPaintMode );
 
 	if ( !m_pMesh )
 		return;
-
-#if defined( IOS )
-	unsigned char meshColor[4];
-	Vector4D iosDrawMod( 1.0f, 1.0f, 1.0f, 1.0f );
-	if ( pColor )
-	{
-		const float inv = 1.0f / 255.0f;
-		iosDrawMod.Init( pColor[0] * inv, pColor[1] * inv, pColor[2] * inv, pColor[3] * inv );
-	}
-	IOS_MeshVertexColor( pColor, meshColor );
-	IOS_ApplyMaterialColorModulation( pColor );
-	pColor = meshColor;
-#endif
 
 	vgui::Vertex_t ulc;
 	vgui::Vertex_t lrc;
@@ -1480,11 +1369,7 @@ void CMatSystemSurface::DrawQuadArray( int quadCount, Vertex_t *pVerts, unsigned
 		}
 
 		meshBuilder.End();
-#if defined( IOS )
-		m_pMesh->DrawModulated( iosDrawMod );
-#else
 		m_pMesh->Draw();
-#endif
 
 		nFirstQuad += quadCount;
 		nQuadsRemaining -= quadCount;
@@ -1507,15 +1392,6 @@ void CMatSystemSurface::DrawFilledRect( int x0, int y0, int x1, int y1 )
 	// Don't even bother drawing fully transparent junk
 	if( m_DrawColor[3]==0 )
 		return;
-
-#if defined( IOS )
-	// log 127: mesh UnlitGeneric quads are still invisible — only ClearBuffers
-	// scissor-fills show (cyan clear + orange PLAY in earlier logs). Mesh path
-	// made the menu a blank cyan screen. Keep ClearBuffers for VGUI solids.
-	// Callers that sit on the 3D view (in-game touch) must not fill large rects.
-	IOSDrawFilledRect( x0, y0, x1, y1, m_DrawColor );
-	return;
-#endif
 
 	Vertex_t rect[2];
 	Vertex_t clippedRect[2];
@@ -1641,13 +1517,6 @@ void CMatSystemSurface::DrawFilledRectFade( int x0, int y0, int x1, int y1, unsi
 	// Don't even bother drawing fully transparent junk
 	if ( alpha0 == 0 && alpha1 == 0 )
 		return;
-
-#if defined( IOS )
-	unsigned char solid[4] = { m_DrawColor[0], m_DrawColor[1], m_DrawColor[2],
-		(unsigned char)MAX( alpha0, alpha1 ) };
-	IOSDrawFilledRect( x0, y0, x1, y1, solid );
-	return;
-#endif
 
 	Vertex_t rect[2];
 	Vertex_t clippedRect[2];

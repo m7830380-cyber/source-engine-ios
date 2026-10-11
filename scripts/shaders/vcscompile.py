@@ -331,11 +331,15 @@ def _skip_vars(expr, declared):
     return py, names
 
 
-def enumerate_live_fast(c):
+def enumerate_live_fast(c, pins=None):
     """Same result as enumerate_live, vectorized with numpy so shaders with 1e8..1e10
     raw combos (phong, vertexlit_and_unlit_generic) can be enumerated. Each SKIP only
     touches a few variables: it is evaluated once per value combination of those
-    variables, and every combo index with those values is marked at once."""
+    variables, and every combo index with those values is marked at once.
+
+    pins: {STATIC_NAME: value} -- drop every static combo where that variable has any
+    other value. The index layout is unchanged (ids still match fxctmp9/*.inc); the
+    engine's nearest-combo fallback covers a pinned-out combo if one is ever asked for."""
     import numpy as np
     import itertools
     dyn_mult, num_dyn, stat_mult, total = compute_multipliers(c)
@@ -403,6 +407,9 @@ def enumerate_live_fast(c):
                 for v, x in zip(sv, vals):
                     mask &= ( s_val[v] == x )
                 dead |= mask
+    for n, x in (pins or {}).items():
+        if n in s_val:
+            dead |= ( s_val[n] != x )
     live_static = np.nonzero(~dead)[0]
 
     # group live statics by the static variables the mixed skips look at
@@ -446,6 +453,16 @@ def enumerate_live_fast(c):
         n_inv += len(live_dyn) * len(members)
     live.sort(key=lambda e: e[0])
     return live, num_dyn, n_inv
+
+
+def parse_pins(text):
+    """'A=0,B=1' -> {'A': 0, 'B': 1}"""
+    pins = {}
+    for item in (text or '').split(','):
+        if '=' in item:
+            k, v = item.split('=', 1)
+            pins[k.strip()] = int(v)
+    return pins
 
 
 def enumerate_live(c, verbose=False):
@@ -626,10 +643,6 @@ def write_vcs(path, num_dyn, total_combos, centroid_mask, static_payloads, compr
     up in the main dictionary, and both searches are binary, so both tables must be
     sorted by static combo id.
     """
-    # Portal2 iOS: FXC sometimes emits byte-identical blobs for static 4 (DIFFUSE)
-    # and 64 (VERTEXCOLOR). Aliasing 64→4 makes FindCombo(64) run the wrong combo.
-    _FORBID_ALIAS = frozenset({(64, 4), (4, 64)})
-
     canon = {}          # payload -> canonical sid
     aliases = []        # (sid, source_sid)
     unique = []         # (sid, payload)
@@ -637,8 +650,6 @@ def write_vcs(path, num_dyn, total_combos, centroid_mask, static_payloads, compr
         prev = canon.get(payload)
         if prev is None:
             canon[payload] = sid
-            unique.append((sid, payload))
-        elif (sid, prev) in _FORBID_ALIAS:
             unique.append((sid, payload))
         else:
             aliases.append((sid, prev))
@@ -689,11 +700,8 @@ def cmd_compile(args):
 
     print("compiling %s (%s) from %s" % (args.target, stype, args.src))
     t0 = time.time()
-    try:
-        import numpy  # noqa: F401
-        live, num_dyn, n_inv = enumerate_live_fast(c)
-    except ImportError:
-        live, num_dyn, n_inv = enumerate_live(c)
+    import numpy  # noqa: F401  (required: --pin and the big shaders need it)
+    live, num_dyn, n_inv = enumerate_live_fast(c, parse_pins(args.pin))
     print("  live static combos=%d  fxc invocations=%d  (enumerated in %.1fs)"
           % (len(live), n_inv, time.time() - t0))
     if getattr(args, 'shards', 1) > 1:
@@ -732,7 +740,7 @@ def cmd_compile(args):
 
     common = [('TOTALSHADERCOMBOS', total), ('CENTROIDMASK', c.centroid_mask),
               ('NUMDYNAMICCOMBOS', num_dyn), ('FLAGS', '0x0'),
-              ('SHADER_MODEL_' + stype.upper(), 1), ('IOS', 1)]
+              ('SHADER_MODEL_' + stype.upper(), 1)]
 
     global _obj_seq
     import itertools
@@ -801,6 +809,174 @@ def cmd_compile(args):
     print("  %d static combos -> %d unique blocks + %d aliases, dyn=%d"
           % (len(results), nuniq, nalias, num_dyn))
     return 0
+
+
+# ---------------------------------------------------------------------------
+# whole shader set: targets / compile-all / merge-all
+# ---------------------------------------------------------------------------
+
+def list_targets(exclude=None):
+    """(src.fxc, target) for every ps20b/vs20 shader the stdshader C++ includes a
+    fxctmp9 .inc for -- i.e. every .vcs the shader DLL can ask for on GL, where
+    ShouldAlwaysUseShaderModel2bShaders() keeps everything on ps20b/vs20."""
+    files = dict((f.lower(), f) for f in os.listdir(STDSHADERS))
+    incs = set()
+    for f in sorted(files.values()):
+        if not f.lower().endswith(('.cpp', '.h')):
+            continue
+        with open(os.path.join(STDSHADERS, f), 'r', errors='replace') as fp:
+            text = fp.read()
+        for m in re.finditer(r'#\s*include\s+"(?:[^"]*/)?([^"/]+_(?:ps20b|vs20))\.inc"', text):
+            incs.add(m.group(1).lower())
+    out = []
+    for tgt in sorted(incs):
+        if exclude and re.search(exclude, tgt, re.I):
+            continue
+        base = re.sub(r'_(ps20b|vs20)$', '', tgt)
+        if tgt.endswith('_ps20b'):
+            cands = [base + '_ps2x.fxc', base + '_ps20b.fxc', base + '_ps20.fxc']
+        else:
+            cands = [base + '_vs20.fxc', base + '_vsxx.fxc']
+        src = next((files[x] for x in cands if x in files), None)
+        if src:
+            out.append((src, tgt))
+        else:
+            print("  no .fxc source for %s, skipping" % tgt, file=sys.stderr)
+    return out
+
+
+def cmd_targets(args):
+    for (src, tgt) in list_targets(args.exclude):
+        print("%s %s" % (src, tgt))
+    return 0
+
+
+def cmd_compile_all(args):
+    """Compile shard K of N of every target. Work is split by fxc invocation count
+    with a greedy assignment that every shard computes identically, so the shards
+    need no coordination; 'merge-all' reassembles the parts."""
+    import time
+    import pickle
+    import itertools
+    import tempfile
+    import shutil
+    from concurrent.futures import ThreadPoolExecutor
+
+    fxc_exe = os.path.abspath(args.fxc)
+    if not os.path.exists(fxc_exe):
+        print("fxc.exe not found: %s" % fxc_exe)
+        return 1
+    pins = parse_pins(args.pin)
+
+    # enumerate everything (cheap) and split it into shards
+    shaders = []
+    items = []
+    for (src, tgt) in list_targets(args.exclude):
+        c = parse_fxc(os.path.join(STDSHADERS, src), tgt)
+        dyn_mult, num_dyn, stat_mult, total = compute_multipliers(c)
+        live, num_dyn, n_inv = enumerate_live_fast(c, pins)
+        ti = len(shaders)
+        shaders.append((src, tgt, c, dyn_mult, num_dyn, stat_mult, total))
+        for (sid, dyn_ids) in live:
+            items.append((ti, sid, dyn_ids))
+    load = [0] * args.shards
+    mine = []
+    for (ti, sid, dyn_ids) in sorted(items, key=lambda e: (-len(e[2]), e[0], e[1])):
+        k = min(range(args.shards), key=lambda i: (load[i], i))
+        load[k] += len(dyn_ids)
+        if k == args.shard:
+            mine.append((ti, sid, dyn_ids))
+    n_inv = sum(len(d) for (t, s, d) in mine)
+    print("%d shaders, %d static combos, %d fxc invocations in total; shard %d/%d: %d static combos, %d invocations"
+          % (len(shaders), len(items), sum(load), args.shard, args.shards, len(mine), n_inv))
+
+    def defines_for(ti, sid, did):
+        (src, tgt, c, dyn_mult, num_dyn, stat_mult, total) = shaders[ti]
+        out = [('TOTALSHADERCOMBOS', total), ('CENTROIDMASK', c.centroid_mask),
+               ('NUMDYNAMICCOMBOS', num_dyn), ('FLAGS', '0x0'),
+               ('SHADER_MODEL_' + shader_type_for(tgt).upper(), 1)]
+        rem = did
+        for ((name, lo, hi), m) in zip(c.dynamics, dyn_mult):
+            out.append((name, (rem // m) % (hi - lo + 1) + lo))
+        rem = sid * num_dyn
+        for ((name, lo, hi), m) in zip(c.statics, stat_mult):
+            out.append((name, (rem // m) % (hi - lo + 1) + lo))
+        return out
+
+    global _obj_seq
+    _obj_seq = itertools.count()
+    workroot = tempfile.mkdtemp(prefix='vcs_')
+    errors = {}
+    counter = [0]
+    t0 = time.time()
+
+    def do_static(item):
+        (ti, sid, dyn_ids) = item
+        src = os.path.join(STDSHADERS, shaders[ti][0])
+        stype = shader_type_for(shaders[ti][1])
+        entries = []
+        for did in dyn_ids:
+            code, err = run_fxc(fxc_exe, src, stype, defines_for(ti, sid, did), workroot)
+            counter[0] += 1
+            if code is None:
+                errors.setdefault(ti, []).append((sid, did, err))
+                continue
+            entries.append((did, code))
+        return (ti, sid, build_payload(entries) if entries else None)
+
+    results = {}
+    try:
+        with ThreadPoolExecutor(max_workers=args.jobs) as ex:
+            for i, (ti, sid, payload) in enumerate(ex.map(do_static, mine)):
+                if payload:
+                    results.setdefault(ti, []).append((sid, payload))
+                if (i % 500) == 0 and i:
+                    el = time.time() - t0
+                    print("    %d/%d static combos, %d fxc calls, %.0f/s, %.0fs elapsed"
+                          % (i, len(mine), counter[0], counter[0] / max(el, 0.001), el))
+                    sys.stdout.flush()
+    finally:
+        shutil.rmtree(workroot, ignore_errors=True)
+
+    # A combo that doesn't compile is left out; the engine falls back to the nearest
+    # one that exists. Report them so a broken shader doesn't go unnoticed.
+    for ti, errs in sorted(errors.items()):
+        print("  %s: %d fxc failures, e.g. static=%d dynamic=%d:\n%s"
+              % (shaders[ti][1], len(errs), errs[0][0], errs[0][1], (errs[0][2] or '')[:600]))
+
+    partdir = os.path.join(args.out, 'parts')
+    os.makedirs(partdir, exist_ok=True)
+    for ti, res in sorted(results.items()):
+        (src, tgt, c, dyn_mult, num_dyn, stat_mult, total) = shaders[ti]
+        with open(os.path.join(partdir, '%s.part%03d' % (tgt, args.shard)), 'wb') as f:
+            pickle.dump({'target': tgt, 'num_dyn': num_dyn, 'total': total,
+                         'centroid': c.centroid_mask, 'results': res}, f, protocol=4)
+    print("shard %d done: %d fxc calls (%d failed) in %.0fs"
+          % (args.shard, counter[0], sum(len(e) for e in errors.values()), time.time() - t0))
+    return 0
+
+
+def cmd_merge_all(args):
+    """Merge every <target>.partNNN under the given directories into lowercase
+    <out>/shaders/fxc/<target>.vcs and verify each file."""
+    import glob
+    byname = {}
+    for d in args.dirs:
+        for path in glob.glob(os.path.join(d, '**', '*.part[0-9][0-9][0-9]'), recursive=True):
+            byname.setdefault(os.path.basename(path).rsplit('.part', 1)[0].lower(), []).append(path)
+    if not byname:
+        print("FAIL: no parts found")
+        return 1
+    failed = 0
+    for tgt in sorted(byname):
+        sub = argparse.Namespace(parts=sorted(byname[tgt]), out=args.out)
+        if cmd_merge(sub) != 0:
+            failed += 1
+            continue
+        if cmd_verify(argparse.Namespace(path=os.path.join(args.out, 'shaders', 'fxc', tgt + '.vcs'))) != 0:
+            failed += 1
+    print("merged %d shaders, %d failed" % (len(byname), failed))
+    return 1 if failed else 0
 
 
 def lzma_unpack_check(data, p):
@@ -981,11 +1157,7 @@ def cmd_count(args):
     c = parse_fxc(fxc, args.target)
     dyn_mult, num_dyn, stat_mult, total = compute_multipliers(c)
     t0 = time.time()
-    try:
-        import numpy  # noqa: F401
-        live, num_dyn, n_inv = enumerate_live_fast(c)
-    except ImportError:
-        live, num_dyn, n_inv = enumerate_live(c)
+    live, num_dyn, n_inv = enumerate_live_fast(c, parse_pins(args.pin))
     dt = time.time() - t0
     print("%s" % args.target)
     print("  static space      : %d" % (total // num_dyn))
@@ -1026,6 +1198,7 @@ def main():
     p = sub.add_parser("count")
     p.add_argument("src")
     p.add_argument("target")
+    p.add_argument("--pin", default="", help="NAME=VAL,... static combos to hold fixed")
     p.set_defaults(func=cmd_count)
     p = sub.add_parser("verify")
     p.add_argument("path")
@@ -1034,6 +1207,23 @@ def main():
     p.add_argument("parts", nargs="+")
     p.add_argument("--out", default="shaderout")
     p.set_defaults(func=cmd_merge)
+
+    p = sub.add_parser("targets")
+    p.add_argument("--exclude", default="", help="regex of targets to leave out")
+    p.set_defaults(func=cmd_targets)
+    p = sub.add_parser("compile-all")
+    p.add_argument("--fxc", required=True)
+    p.add_argument("--out", default="shaderout")
+    p.add_argument("--jobs", type=int, default=8)
+    p.add_argument("--shard", type=int, default=0)
+    p.add_argument("--shards", type=int, default=1)
+    p.add_argument("--pin", default="", help="NAME=VAL,... static combos to hold fixed")
+    p.add_argument("--exclude", default="", help="regex of targets to leave out")
+    p.set_defaults(func=cmd_compile_all)
+    p = sub.add_parser("merge-all")
+    p.add_argument("dirs", nargs="+", help="directories holding <target>.partNNN files")
+    p.add_argument("--out", default="shaderout")
+    p.set_defaults(func=cmd_merge_all)
 
     p = sub.add_parser("compile")
     p.add_argument("src")
@@ -1044,6 +1234,7 @@ def main():
     p.add_argument("--jobs", type=int, default=8)
     p.add_argument("--limit", type=int, default=0,
                    help="only compile the first N static combos (smoke test)")
+    p.add_argument("--pin", default="", help="NAME=VAL,... static combos to hold fixed")
     p.add_argument("--static-ids", default="",
                    help="comma-separated static combo ids to compile (e.g. 0,128)")
     p.add_argument("--shard", type=int, default=0, help="this job's part (with --shards)")

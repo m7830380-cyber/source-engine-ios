@@ -497,10 +497,14 @@ COpenGLEntryPoints::COpenGLEntryPoints()
 	}
 
 #if defined(IOS)
-	// Log 145: forcing native BC on A16 (no ext probe) → native DXT ON → black world.
-	// Stay on CPU decompress until upload is probed per-format. glRequestExtensionANGLE
-	// still runs in sdlmgr for a future safe enable path.
-	g_bIOSNativeDXTAvailable = false;
+	// ANGLE Metal advertises S3TC/DXT on Apple GPU (especially M-series iPad).
+	// Uploading those formats calls MTLTextureDescriptor setPixelFormat with an
+	// unsupported compressed format and SIGABRTs in MTLDebugValidateMTLPixelFormat.
+	// Force the CPU decompress path in CGLMTex::WriteTexels instead.
+	// What ANGLE really offers is kept for IOS_UseNativeDXT (cglmtex.cpp),
+	// which re-enables native upload on iPhone GPUs only.
+	g_bIOSNativeDXTAvailable = m_bHave_GL_EXT_texture_compression_dxt1 &&
+		m_bHave_GL_ANGLE_texture_compression_dxt3 && m_bHave_GL_ANGLE_texture_compression_dxt5;
 	m_bHave_GL_EXT_texture_compression_s3tc = false;
 	m_bHave_GL_EXT_texture_compression_dxt1 = false;
 	m_bHave_GL_ANGLE_texture_compression_dxt3 = false;

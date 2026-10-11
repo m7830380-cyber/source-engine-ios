@@ -381,12 +381,7 @@ END_SHADER_PARAMS
 
 			//			if( hasLightmap )
 			{
-				// iOS: lightmap is GL_RGBA8 (no sRGB); avoid SRGBREAD which triggers HandleSRGBMismatch.
-#if defined( IOS )
-			ShaderApiFast( pShaderAPI )->BindStandardTexture( SHADER_SAMPLER1, TEXTURE_BINDFLAGS_NONE, TEXTURE_LIGHTMAP );
-#else
-			ShaderApiFast( pShaderAPI )->BindStandardTexture( SHADER_SAMPLER1, ( g_pHardwareConfig->GetHDRType() == HDR_TYPE_NONE ) ? TEXTURE_BINDFLAGS_SRGBREAD : TEXTURE_BINDFLAGS_NONE, TEXTURE_LIGHTMAP );
-#endif
+				ShaderApiFast( pShaderAPI )->BindStandardTexture( SHADER_SAMPLER1, ( g_pHardwareConfig->GetHDRType() == HDR_TYPE_NONE ) ? TEXTURE_BINDFLAGS_SRGBREAD : TEXTURE_BINDFLAGS_NONE, TEXTURE_LIGHTMAP );
 			}
 
 			bool bFlashlightShadows = false;

@@ -111,12 +111,6 @@ ConVar r_deferopaquefastclipped( "r_deferopaquefastclipped", "1" );
 // Matches the version in the engine
 static ConVar r_drawopaqueworld( "r_drawopaqueworld", "1", FCVAR_CHEAT );
 static ConVar r_drawtranslucentworld( "r_drawtranslucentworld", "1", FCVAR_CHEAT );
-#if defined( IOS )
-// Diagnostic: skip ViewDrawScene so the clear color is what Present shows.
-// Default 0 — present path confirmed (log 111 clearalpha wipe was the black screen).
-static ConVar r_ios_skip_world( "r_ios_skip_world", "0", 0,
-	"iOS diagnostic: skip ViewDrawScene (1) or draw normally (0)" );
-#endif
 static ConVar r_3dsky( "r_3dsky","1", 0, "Enable the rendering of 3d sky boxes" );
 static ConVar r_skybox( "r_skybox","1", FCVAR_CHEAT, "Enable the rendering of sky boxes" );
 ConVar r_drawviewmodel( "r_drawviewmodel","1", FCVAR_CHEAT );
@@ -2945,21 +2939,6 @@ void CViewRender::RenderView( const CViewSetup &view, const CViewSetup &hudViewS
 
 	CMatRenderContextPtr pRenderContext( materials );
 
-#if defined( IOS )
-	// Orange clear only in skip-world proof mode. Otherwise let fog/sky clear.
-	if ( r_ios_skip_world.GetBool() )
-	{
-		static bool s_bIOSLoggedClear = false;
-		if ( !s_bIOSLoggedClear )
-		{
-			s_bIOSLoggedClear = true;
-			Msg( "[Portal2 iOS] RenderView: clearing 3D target to diagnostic red-orange\n" );
-		}
-		pRenderContext->ClearColor4ub( 220, 60, 20, 255 );
-		nClearFlags |= VIEW_CLEAR_COLOR | VIEW_CLEAR_DEPTH;
-	}
-#endif
-
 #if defined(_PS3)
 	pRenderContext->AntiAliasingHint( AA_HINT_MESHES );
 
@@ -3185,24 +3164,6 @@ void CViewRender::RenderView( const CViewSetup &view, const CViewSetup &hudViewS
 			{
 				// Single pass
 
-#if defined( IOS )
-				if ( r_ios_skip_world.GetBool() )
-				{
-					// Proof mode: skip all world/entity draws so the diagnostic
-					// red-orange clear (set ~40 lines above) reaches the screen.
-					// If the user sees a red/orange 3D world background, the present
-					// path is confirmed good and the black output is purely a shader
-					// problem.  Set r_ios_skip_world 0 in the console to re-enable
-					// world draws and test the shader fix.
-					static bool s_bLoggedSkip = false;
-					if ( !s_bLoggedSkip )
-					{
-						s_bLoggedSkip = true;
-						Msg( "[Portal2 iOS] r_ios_skip_world=1: skipping ViewDrawScene — expect red-orange background\n" );
-					}
-				}
-				else
-#endif
 				{
 					g_viewBuilder.SetPassFlags( PASS_BUILDLISTS | PASS_DRAWLISTS );
 					g_viewBuilder.SetBuildWRThreaded( true );
@@ -3315,9 +3276,6 @@ void CViewRender::RenderView( const CViewSetup &view, const CViewSetup &hudViewS
 		}
 		#endif
 
-#if defined( IOS )
-		if ( !r_ios_skip_world.GetBool() )
-#endif
 		{
 			RenderSmokeOverlay( true );
 			DrawViewModels( view, whatToDraw & RENDERVIEW_DRAWVIEWMODEL );
@@ -3468,22 +3426,6 @@ void CViewRender::RenderView( const CViewSetup &view, const CViewSetup &hudViewS
 
 		pRenderContext = materials->GetRenderContext();
 		pRenderContext->SetRenderTarget( saveRenderTarget );
-#if defined( IOS )
-		// Final present proof: clear the restored target AFTER all 3D work.
-		// If this still isn't visible, the backbuffer Present path is wrong
-		// (not world shaders). If it IS visible, shaders were painting black.
-		if ( r_ios_skip_world.GetBool() )
-		{
-			pRenderContext->ClearColor4ub( 220, 60, 20, 255 );
-			pRenderContext->ClearBuffers( true, true, true );
-			static bool s_bLoggedFinalClear = false;
-			if ( !s_bLoggedFinalClear )
-			{
-				s_bLoggedFinalClear = true;
-				Msg( "[Portal2 iOS] r_ios_skip_world=1: FINAL backbuffer clear to red-orange (post-3D)\n" );
-			}
-		}
-#endif
 		pRenderContext.SafeRelease();
 
 		// Draw the overlay

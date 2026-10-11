@@ -404,6 +404,12 @@ bool CHardwareConfig::IsUnsupported() const
 
 ShadowFilterMode_t CHardwareConfig::GetShadowFilterMode( bool bForceLowQualityShadows, bool bPS30 ) const
 {
+#if defined( IOS )
+	// The bundled .vcs only carry FLASHLIGHTDEPTHFILTERMODE=0 (see
+	// .github/workflows/build-portal2-ipa.yml), so always ask for that one.
+	return SHADOWFILTERMODE_DEFAULT;
+#endif
+
 #if PLATFORM_POSIX || !defined( PLATFORM_X360 )
 	static ConVarRef gpu_level( "gpu_level" );
 	int nGPULevel = gpu_level.GetInt();
@@ -788,19 +794,11 @@ int CHardwareConfig::GetMaxVertexTextureDimension() const
 
 HDRType_t CHardwareConfig::GetHDRType() const
 {
-#if defined( IOS )
-	// Portal 2 iOS: always LDR. Log 108 still reported hdrType=1 because a
-	// duplicate mat_hdr_level ConVar in shaderdevicedx8 defaulted to "2" and
-	// INTEGER HDR + tonemap left the presented frame black (cyan VGUI OK).
-	const_cast<CHardwareConfig*>( this )->SetHDREnabled( false );
-	return HDR_TYPE_NONE;
-#elif defined( DX_TO_GL_ABSTRACTION )
 	// On MacOS, this value comes down from the engine, which read it from the registry...which doesn't exist on Mac, so we're slamming to true here
 	if ( IsOpenGL() )
 	{
 		g_pHardwareConfig->SetHDREnabled( true );
 	}
-#endif
 
 	bool enabled = m_bHDREnabled;
 	int dxlev = GetDXSupportLevel();
@@ -909,7 +907,8 @@ ImageFormat CHardwareConfig::GetNullTextureFormat( void ) const
 bool CHardwareConfig::SupportsCascadedShadowMapping( void ) const
 {
 #if defined( IOS )
-	// CSM static combos are absent/mismatched in the PLATFORM VCS pack → black world.
+	// No CSM on iOS: Portal 2 maps have no env_cascade_light, and the bundled
+	// .vcs are compiled with CASCADED_SHADOW_MAPPING=0.
 	return false;
 #elif defined(_PS3) 
 	return m_Caps.m_bSupportsCascadedShadowMapping;

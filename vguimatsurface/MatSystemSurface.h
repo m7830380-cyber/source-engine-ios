@@ -505,13 +505,6 @@ private:
 
 	// White material used for drawing non-textured things
 	CMaterialReference m_pWhite;
-#if defined( IOS )
-	// ANGLE/Metal: UnlitGeneric combo fallback drops vertex color. Bake RGBA
-	// into a 1x1 texture and draw with opaque-white modulate instead.
-	int m_nIOSSolidWhiteTexture;
-	void EnsureIOSSolidWhiteTexture();
-	void IOSDrawFilledRect( int x0, int y0, int x1, int y1, unsigned char const *pColor );
-#endif
 
 	// Used for 3D-rendered images
 	CTextureReference m_FullScreenBuffer;

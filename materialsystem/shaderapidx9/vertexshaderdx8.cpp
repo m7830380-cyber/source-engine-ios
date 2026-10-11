@@ -322,7 +322,7 @@ static HardwareShader_t CreateD3DVertexShader( DWORD *pByteCode, int numBytes, c
 	}
 
 	// Compute the vertex specification
-	HardwareShader_t hShader = INVALID_HARDWARE_SHADER;
+	HardwareShader_t hShader;
 
 	#if defined( _PS3 )
 		HRESULT hr = Dx9Device()->CreateVertexShader( pByteCode, (IDirect3DVertexShader9 **)&hShader, debugLabel );
@@ -345,11 +345,8 @@ static HardwareShader_t CreateD3DVertexShader( DWORD *pByteCode, int numBytes, c
 	RECORD_INT( numBytes );
 	RECORD_STRUCT( pByteCode, numBytes );
 
-	if ( FAILED( hr ) || !hShader )
+	if ( FAILED( hr ) )
 	{
-#if defined( IOS )
-		DevWarning( "CreateD3DVertexShader failed for %s\n", pShaderName ? pShaderName : "?" );
-#endif
 		Assert( 0 );
 		hShader = INVALID_HARDWARE_SHADER;
 	}
@@ -439,7 +436,7 @@ static HardwareShader_t CreateD3DPixelShader( DWORD *pByteCode, unsigned int nCe
 		PatchPixelShaderForAtiMsaaHack( pByteCode, nCentroidMask );
 	}
 
-	HardwareShader_t shader = INVALID_HARDWARE_SHADER;
+	HardwareShader_t shader;
 	#if defined( DX_TO_GL_ABSTRACTION ) 
 		#if defined( OSX ) 
 			HRESULT hr = Dx9Device()->CreatePixelShader( pByteCode, ( IDirect3DPixelShader ** )&shader, pShaderName, debugLabel );
@@ -461,14 +458,8 @@ static HardwareShader_t CreateD3DPixelShader( DWORD *pByteCode, unsigned int nCe
 	RECORD_INT( numBytes );
 	RECORD_STRUCT( pByteCode, numBytes );
 	
-	if ( FAILED( hr ) || !shader )
+	if ( FAILED( hr ) )
 	{
-#if defined( IOS )
-		if ( debugLabel )
-			DevWarning( "CreateD3DPixelShader failed for %s (%s)\n", pShaderName ? pShaderName : "?", debugLabel );
-		else
-			DevWarning( "CreateD3DPixelShader failed for %s\n", pShaderName ? pShaderName : "?" );
-#endif
 		Assert(0);
 		shader = INVALID_HARDWARE_SHADER;
 	}
@@ -1132,10 +1123,6 @@ void CShaderManager::DestroyPixelShader( PixelShaderHandle_t hShader )
 // Globals
 //-----------------------------------------------------------------------------
 HardwareShader_t s_pIllegalMaterialPS = INVALID_HARDWARE_SHADER;
-#if defined( IOS )
-// ApplyShaderState sets VS then PS; if VS bind fails, do not bind a mismatched PS.
-static bool s_bIOSVertexShaderBindOk = true;
-#endif
 
 //-----------------------------------------------------------------------------
 // Static methods
@@ -2644,79 +2631,39 @@ bool CShaderManager::LoadAndCreateShaders_Dynamic( ShaderLookup_t &lookup, bool 
 }
 #endif
 
-#if defined( IOS )
-static bool IOS_IsBundledTreeVcs( const char *pFileName )
-{
-	return V_stristr( pFileName, "vertexlit_and_unlit_generic" ) != NULL ||
-		   V_stristr( pFileName, "lightmappedgeneric_" ) != NULL ||
-		   V_stristr( pFileName, "depthwrite_" ) != NULL;
-}
-#endif
-
 //-----------------------------------------------------------------------------
 // Open the shader file, optionally gets the header
 //-----------------------------------------------------------------------------
 FileHandle_t CShaderManager::OpenFileAndLoadHeader( const char *pFileName, ShaderHeader_t *pHeader )
 {
-	FileHandle_t fp = FILESYSTEM_INVALID_HANDLE;
 #if defined( IOS )
-	char iosAbsPath[MAX_PATH] = { 0 };
-	if ( IOS_IsBundledTreeVcs( pFileName ) )
+	// iOS only uses the .vcs compiled from this tree's stdshaders and bundled in the app
+	// (<app>/platform/shaders/fxc, lowercase names). Retail .vcs from a game install were
+	// built from other shader sources, so their static combo layouts don't match the
+	// C++ in this shader DLL and every material would get the wrong variant.
+	FileHandle_t fp = FILESYSTEM_INVALID_HANDLE;
+	const char *pBundle = getenv( "APP_LIB_PATH" );
+	if ( pBundle && pBundle[0] )
 	{
-		if ( V_IsAbsolutePath( pFileName ) )
-		{
-			V_strncpy( iosAbsPath, pFileName, sizeof( iosAbsPath ) );
-			V_FixSlashes( iosAbsPath, '/' );
-			fp = g_pFullFileSystem->Open( iosAbsPath, "rb", NULL );
-		}
-		else
-		{
-			const char *pApp = getenv( "APP_LIB_PATH" );
-			if ( pApp && pApp[0] )
-			{
-				char rel[MAX_PATH];
-				V_strncpy( rel, pFileName, sizeof( rel ) );
-				V_FixSlashes( rel, '/' );
-				V_snprintf( iosAbsPath, sizeof( iosAbsPath ), "%s/platform/%s", pApp, rel );
-				fp = g_pFullFileSystem->Open( iosAbsPath, "rb", NULL );
-			}
-		}
-		if ( fp == FILESYSTEM_INVALID_HANDLE )
-		{
-			DevWarning( "[iOS] Bundled tree VCS not found (will not use Documents retail): %s\n",
-				iosAbsPath[0] ? iosAbsPath : pFileName );
-			return FILESYSTEM_INVALID_HANDLE;
-		}
+		char path[MAX_PATH];
+		int nPrefix = V_snprintf( path, sizeof( path ), "%s/platform/", pBundle );
+		V_strncpy( path + nPrefix, pFileName, sizeof( path ) - nPrefix );
+		V_strlower( path + nPrefix );
+		V_FixSlashes( path, '/' );
+		fp = g_pFullFileSystem->Open( path, "rb" );
 	}
-	else
+#else
+	FileHandle_t fp = g_pFullFileSystem->Open( pFileName, "rb", "PLATFORM" );
 #endif
+	if ( fp == FILESYSTEM_INVALID_HANDLE )
 	{
-		fp = g_pFullFileSystem->Open( pFileName, "rb", "PLATFORM" );
-		if ( fp == FILESYSTEM_INVALID_HANDLE )
-		{
-			return FILESYSTEM_INVALID_HANDLE;
-		}
+		return FILESYSTEM_INVALID_HANDLE;
 	}
 
 	if ( pHeader )
 	{
 		// read the header 
 		g_pFullFileSystem->Read( pHeader, sizeof( ShaderHeader_t ), fp );
-
-#if defined( IOS )
-		if ( IOS_IsBundledTreeVcs( pFileName ) && iosAbsPath[0] )
-		{
-			static CUtlMap<CUtlSymbol, bool> s_LoggedVcsPath( 0, 0, DefLessFunc( CUtlSymbol ) );
-			CUtlSymbol sym( pFileName );
-			if ( s_LoggedVcsPath.Find( sym ) == s_LoggedVcsPath.InvalidIndex() )
-			{
-				s_LoggedVcsPath.Insert( sym, true );
-				const int nBytes = g_pFullFileSystem->Size( fp );
-				Msg( "[iOS] VCS load path: %s (%d bytes) hdr dyn=%d static=%u\n",
-					iosAbsPath, nBytes, pHeader->m_nDynamicCombos, pHeader->m_nNumStaticCombos );
-			}
-		}
-#endif
 
 		switch ( pHeader->m_nVersion )
 		{
@@ -2883,13 +2830,9 @@ bool CShaderManager::CreateDynamicCombos_Ver4( void *pContext, uint8 *pComboBuff
 
 			if ( hardwareShader == INVALID_HARDWARE_SHADER )
 			{
-#if defined( IOS )
-				// Leave slot INVALID; keep loading other combos.
-#else
 				Assert( 0 );
 				bOK = false;
 				break;
-#endif
 			}
 		}
 		pLookup->m_ShaderStaticCombos.m_pHardwareShaders[i] = hardwareShader;
@@ -3084,25 +3027,12 @@ bool CShaderManager::CreateDynamicCombos_Ver5( void *pContext, uint8 *pComboBuff
 				if ( hardwareShader == INVALID_HARDWARE_SHADER )
 				{
 					DevWarning( "failed to create shader\n" );
-#if defined( IOS )
-					// Keep loading remaining combos; leave this slot INVALID (bind path falls back).
-					pReadPtr += nShaderSize;
-					continue;
-#else
 					Assert( 0 );
 					bOK = false;
 					break;
-#endif
 				}
 
 				pLookup->m_ShaderStaticCombos.m_nNumDynamicCombosAfterSkips++;
-			}
-			if ( iIndex < 0 || iIndex >= pLookup->m_ShaderStaticCombos.m_nCount )
-			{
-				DevWarning( "Shader '%s': dynamic combo index %d out of range (max %d)\n",
-					m_ShaderSymbolTable.String( pLookup->m_Name ), iIndex, pLookup->m_ShaderStaticCombos.m_nCount );
-				pReadPtr += nShaderSize;
-				continue;
 			}
 			pLookup->m_ShaderStaticCombos.m_pHardwareShaders[iIndex] = hardwareShader;
 			pReadPtr += nShaderSize;
@@ -3163,563 +3093,6 @@ bool CShaderManager::DoesShaderCRCMatchSourceCode( const char *pShaderName, uint
 		}
 	}
 	DevWarning( "***** CRC mismatch for %s 0x%x 0x%x\n", pShaderName, sourceCRC, crc32 );
-	return false;
-}
-#endif
-
-#if defined( IOS )
-// Product of dynamic combo ranges from the .inc registered with AddShaderComboInformation.
-// GetIndex() packs static bits with this stride — NOT the VCS header dyn count.
-static int GetIncDynamicComboProduct( const char *pShaderName )
-{
-	if ( !pShaderName || !pShaderName[0] )
-		return 0;
-
-	char path[MAX_PATH];
-	V_strncpy( path, pShaderName, MAX_PATH );
-	V_FileBase( path, path, MAX_PATH );
-	// shaders/fxc/foo.vcs → foo; also strip a second extension if present.
-	if ( V_stristr( path, ".vcs" ) )
-		V_FileBase( path, path, MAX_PATH );
-
-	CUtlSymbol symbol = s_ShaderComboInfoByName.Find( path );
-	if ( symbol == ( CUtlSymbol )UTL_INVAL_SYMBOL )
-		return 0;
-
-	const ShaderComboSemantics_t *pSemantics = s_ShaderComboInfoByName[symbol];
-	if ( !pSemantics || pSemantics->nDynamicShaderComboArrayCount <= 0 )
-		return 0;
-
-	int nDyn = 1;
-	for ( int i = 0; i < pSemantics->nDynamicShaderComboArrayCount; i++ )
-	{
-		const int comboSize = pSemantics->pDynamicShaderComboArray[i].m_nComboMax
-			- pSemantics->pDynamicShaderComboArray[i].m_nComboMin + 1;
-		if ( comboSize > 0 )
-			nDyn *= comboSize;
-	}
-	return nDyn;
-}
-
-#if defined( IOS )
-static bool IOS_TryStaticComboRecord( ShaderFileCache_t *pFileCache, uint32 nStaticId, int *pOutRecordIndex )
-{
-	const int idx = pFileCache->FindCombo( nStaticId );
-	if ( idx != -1 )
-	{
-		*pOutRecordIndex = idx;
-		return true;
-	}
-	return false;
-}
-
-// Documents VCS aliases collapse VL (VERTEXCOLOR=0) and Unlit (VERTEXCOLOR=1) into
-// the same staticId 48 (log 135: packed 9360→48, props black with PS DIFFUSE×i.color).
-// VERTEXCOLOR adds 16 to packed; (packed % 32)==16 ⇒ VL lit, ==0 ⇒ Unlit VCOL/touch.
-static bool IOS_IsVertexLitVsPackedLightingCombo( int nLookupStaticIndex )
-{
-	return ( nLookupStaticIndex % 32 ) == 16;
-}
-
-static int IOS_TryVertexLitVsLightingStaticId( ShaderFileCache_t *pFileCache, int nLookupStaticIndex )
-{
-	if ( !IOS_IsVertexLitVsPackedLightingCombo( nLookupStaticIndex ) )
-		return -1;
-	static const uint32 s_litIds[] = { 49, 50, 47, 32, 24 };
-	for ( int i = 0; i < ARRAYSIZE( s_litIds ); ++i )
-	{
-		int idx = -1;
-		if ( IOS_TryStaticComboRecord( pFileCache, s_litIds[i], &idx ) )
-			return idx;
-	}
-	return -1;
-}
-
-// Tree ps20b (dyn=32): never use packed/nDyn when it equals VS-only ids (log 147:
-// touch VERTEXCOLOR packed 2048 → 2048/32=64, same number as VL props VS sid 64).
-static int IOS_TryTreeVertexLitPsStaticIndex( ShaderFileCache_t *pFileCache, const char *pShaderName, int nLookupStaticIndex )
-{
-	if ( !V_stristr( pShaderName, "vertexlit_and_unlit_generic_ps20b" ) )
-		return -1;
-	if ( pFileCache->m_Header.m_nDynamicCombos < 32 )
-		return -1;
-
-	int idx = -1;
-	const int nVcsDyn = pFileCache->m_Header.m_nDynamicCombos;
-
-	if ( nLookupStaticIndex == 0 )
-	{
-		if ( IOS_TryStaticComboRecord( pFileCache, 0, &idx ) )
-		{
-			static CUtlMap<CUtlSymbol, bool> s_Note( 0, 0, DefLessFunc( CUtlSymbol ) );
-			if ( s_Note.Find( pFileCache->m_Name ) == s_Note.InvalidIndex() )
-			{
-				s_Note.Insert( pFileCache->m_Name, true );
-				Msg( "[iOS] Shader '%s': static packed 0 → tree PS staticId 0 (dyn=%d).\n",
-					pShaderName, nVcsDyn );
-			}
-			return idx;
-		}
-	}
-
-	// .inc: VERTEXCOLOR weight 2048 (SELFILLUM is 1024).
-	if ( ( nLookupStaticIndex & 2048 ) && !( nLookupStaticIndex & 128 ) )
-	{
-		// IOS_PORTAL2_SHADER_FREEZE: packed 2048 → sid 64 only (42 = wrong combo, bad alpha; 0 = log 164 black RGB).
-		static const uint32 s_vcolIds[] = { 64 };
-		for ( int i = 0; i < ARRAYSIZE( s_vcolIds ); ++i )
-		{
-			if ( IOS_TryStaticComboRecord( pFileCache, s_vcolIds[i], &idx ) )
-			{
-				static CUtlMap<CUtlSymbol, bool> s_Note( 0, 0, DefLessFunc( CUtlSymbol ) );
-				if ( s_Note.Find( pFileCache->m_Name ) == s_Note.InvalidIndex() )
-				{
-					s_Note.Insert( pFileCache->m_Name, true );
-					Msg( "[iOS] Shader '%s': static packed %d → tree PS staticId %u (VCOL, dyn=%d).\n",
-						pShaderName, nLookupStaticIndex, s_vcolIds[i], nVcsDyn );
-				}
-				return idx;
-			}
-		}
-	}
-
-	if ( nLookupStaticIndex & 128 )
-	{
-		// fxc tree: DIFFUSE=1 → sid 4 (128/32). sid 21 is DETAIL+DIFFUSE, not in IPA.
-		static const uint32 s_diffuseIds[] = { 4, 22, 3, 2, 11, 16, 17, 0 };
-		for ( int i = 0; i < ARRAYSIZE( s_diffuseIds ); ++i )
-		{
-			if ( IOS_TryStaticComboRecord( pFileCache, s_diffuseIds[i], &idx ) )
-			{
-				static CUtlMap<CUtlSymbol, bool> s_Note( 0, 0, DefLessFunc( CUtlSymbol ) );
-				if ( s_Note.Find( pFileCache->m_Name ) == s_Note.InvalidIndex() )
-				{
-					s_Note.Insert( pFileCache->m_Name, true );
-					Msg( "[iOS] Shader '%s': static packed %d → tree PS staticId %u (DIFFUSE, dyn=%d).\n",
-						pShaderName, nLookupStaticIndex, s_diffuseIds[i], nVcsDyn );
-				}
-				return idx;
-			}
-		}
-	}
-
-	return -1;
-}
-
-// When packed GetIndex() does not exist in Documents VCS, pick a nearby id that does
-// (log 120: ps packed 41945088 → bogus id 0; walls ps 7077888 → id 221184).
-// Tree vs20: FLATTEN=1 VCOL=0 → sid 64 (packed 9216, props); VCOL=1 → sid 65 (packed 9360, touch/UI).
-static int IOS_TryTreeVertexLitVsStaticIndex( ShaderFileCache_t *pFileCache, const char *pShaderName, int nLookupStaticIndex )
-{
-	const int nVcsDyn = pFileCache->m_Header.m_nDynamicCombos;
-	int idx = -1;
-	static const uint32 s_ids[] = { 64, 65, 48, 49, 50, 32, 0 };
-	if ( nLookupStaticIndex == 9360 )
-	{
-		if ( IOS_TryStaticComboRecord( pFileCache, 65, &idx ) )
-		{
-			static CUtlMap<CUtlSymbol, bool> s_Note( 0, 0, DefLessFunc( CUtlSymbol ) );
-			if ( s_Note.Find( pFileCache->m_Name ) == s_Note.InvalidIndex() )
-			{
-				s_Note.Insert( pFileCache->m_Name, true );
-				Msg( "[iOS] Shader '%s': static packed %d → tree staticId 65 (Unlit VCOL, dyn=%d).\n",
-					pShaderName, nLookupStaticIndex, nVcsDyn );
-			}
-			return idx;
-		}
-	}
-	if ( nLookupStaticIndex == 9216 )
-	{
-		if ( IOS_TryStaticComboRecord( pFileCache, 64, &idx ) )
-		{
-			static CUtlMap<CUtlSymbol, bool> s_Note( 0, 0, DefLessFunc( CUtlSymbol ) );
-			if ( s_Note.Find( pFileCache->m_Name ) == s_Note.InvalidIndex() )
-			{
-				s_Note.Insert( pFileCache->m_Name, true );
-				Msg( "[iOS] Shader '%s': static packed %d → tree staticId 64 (VL FLATTEN, dyn=%d).\n",
-					pShaderName, nLookupStaticIndex, nVcsDyn );
-			}
-			return idx;
-		}
-	}
-	const uint32 preferred = ( nVcsDyn > 0 ) ? (uint32)( nLookupStaticIndex / nVcsDyn ) : 0u;
-	if ( preferred <= 4096 && IOS_TryStaticComboRecord( pFileCache, preferred, &idx ) )
-		return idx;
-	for ( int i = 0; i < (int)ARRAYSIZE( s_ids ); ++i )
-	{
-		if ( IOS_TryStaticComboRecord( pFileCache, s_ids[i], &idx ) )
-		{
-			static CUtlMap<CUtlSymbol, bool> s_Note( 0, 0, DefLessFunc( CUtlSymbol ) );
-			if ( s_Note.Find( pFileCache->m_Name ) == s_Note.InvalidIndex() )
-			{
-				s_Note.Insert( pFileCache->m_Name, true );
-				Msg( "[iOS] Shader '%s': static packed %d → tree staticId %u (dyn=%d).\n",
-					pShaderName, nLookupStaticIndex, s_ids[i], nVcsDyn );
-			}
-			return idx;
-		}
-	}
-	return -1;
-}
-
-static int IOS_FallbackStaticComboRecordIndex( ShaderFileCache_t *pFileCache, const char *pShaderName, int nLookupStaticIndex )
-{
-	char baseName[MAX_PATH];
-	V_strncpy( baseName, pShaderName, MAX_PATH );
-	V_FileBase( baseName, baseName, MAX_PATH );
-
-	int idx = -1;
-
-	if ( V_stristr( baseName, "vertexlit_and_unlit_generic_ps20b" ) )
-	{
-		// .inc weights: CUBEMAP=64, DIFFUSELIGHTING=128, SELFILLUM=1024, VERTEXCOLOR=2048.
-		static const uint32 s_vcolIds[] = { 42, 64, 85, 32, 47, 23, 22, 4, 11, 16, 17 };
-		static const uint32 s_diffuseIds[] = { 21, 22, 23, 20, 17, 16, 11, 4 };
-		static const uint32 s_detailIds[] = { 5, 4, 7, 6, 3, 2, 11 };
-		static const uint32 s_otherIds[] = { 4, 3, 2, 11, 16, 17, 20 };
-		const uint32 *pIds = s_otherIds;
-		int nIds = ARRAYSIZE( s_otherIds );
-		if ( nLookupStaticIndex & 2048 )
-		{
-			pIds = s_vcolIds;
-			nIds = ARRAYSIZE( s_vcolIds );
-		}
-		else if ( nLookupStaticIndex & 128 )
-		{
-			pIds = s_diffuseIds;
-			nIds = ARRAYSIZE( s_diffuseIds );
-		}
-		else if ( nLookupStaticIndex & 16 )
-		{
-			pIds = s_detailIds;
-			nIds = ARRAYSIZE( s_detailIds );
-		}
-		for ( int i = 0; i < nIds; ++i )
-		{
-			if ( IOS_TryStaticComboRecord( pFileCache, pIds[i], &idx ) )
-			{
-				DevWarning( "[iOS] Shader '%s': static packed %d → fallback staticId %u.\n",
-					pShaderName, nLookupStaticIndex, pIds[i] );
-				return idx;
-			}
-		}
-	}
-	else if ( V_stristr( baseName, "lightmappedgeneric_ps20b" ) )
-	{
-		static const uint32 s_ids[] = { 4, 3, 2, 1, 0, 8, 9, 10, 11, 12 };
-		for ( int i = 0; i < ARRAYSIZE( s_ids ); ++i )
-		{
-			if ( IOS_TryStaticComboRecord( pFileCache, s_ids[i], &idx ) )
-			{
-				DevWarning( "[iOS] Shader '%s': static packed %d → fallback staticId %u.\n",
-					pShaderName, nLookupStaticIndex, s_ids[i] );
-				return idx;
-			}
-		}
-	}
-	else if ( V_stristr( baseName, "vertexlit_and_unlit_generic_vs20" ) )
-	{
-		static const uint32 s_vcolIds[] = { 48, 49, 32, 24, 16, 8, 4, 1, 0 };
-		static const uint32 s_litIds[] = { 49, 50, 47, 48, 32, 24, 16, 8, 4, 1, 0 };
-		const uint32 *s_ids = IOS_IsVertexLitVsPackedLightingCombo( nLookupStaticIndex ) ? s_litIds : s_vcolIds;
-		const int nIdCount = IOS_IsVertexLitVsPackedLightingCombo( nLookupStaticIndex )
-			? ARRAYSIZE( s_litIds ) : ARRAYSIZE( s_vcolIds );
-		for ( int i = 0; i < nIdCount; ++i )
-		{
-			if ( IOS_TryStaticComboRecord( pFileCache, s_ids[i], &idx ) )
-			{
-				DevWarning( "[iOS] Shader '%s': static packed %d → fallback staticId %u.\n",
-					pShaderName, nLookupStaticIndex, s_ids[i] );
-				return idx;
-			}
-		}
-	}
-	else if ( V_stristr( baseName, "flashlight" ) )
-	{
-		// Log 128: flashlight_ps20b packed 9216 → preferred 2304 (garbage). Stay low.
-		static const uint32 s_ids[] = { 0, 1, 2, 4, 8, 16 };
-		for ( int i = 0; i < ARRAYSIZE( s_ids ); ++i )
-		{
-			if ( IOS_TryStaticComboRecord( pFileCache, s_ids[i], &idx ) )
-			{
-				DevWarning( "[iOS] Shader '%s': static packed %d → fallback staticId %u.\n",
-					pShaderName, nLookupStaticIndex, s_ids[i] );
-				return idx;
-			}
-		}
-	}
-
-	if ( pFileCache->m_StaticComboRecords.Count() > 0 )
-		return 0;
-
-	return -1;
-}
-#endif
-
-// Portal 2 content + CS:GO PLATFORM .vcs disagree on combo space.
-//
-// Authoritative rule (do not regress):
-//   staticId = packedStatic / vcsHeader.m_nDynamicCombos
-//   NEVER divide by .inc dyn product when it differs (log 118: 128/32→id4 black;
-//   correct is 128/6→id21). Dyn bind indexes [0, vcsDyn); skipped slots are INVALID.
-//
-// Known Documents maps (log 134):
-//   VL/Unlit vs FLATTEN±VCOL packed 9216|9360 → id 48 (VCOL bit lost under /192)
-//   VL vs CUBEMAP+FLATTEN packed 9504 → id 49 (log 134: props still black; broke touch)
-//   VL ps DIFFUSE=1 packed 128 → id 21 (UVs OK, × black i.color → black props)
-//   VL ps DIFFUSE=0 packed 0 → id 0 (albedo×1; do not use CUBEMAP/DETAIL unlit)
-//   Unlit ps VCOL=1 DIFFUSE=0 packed 2048 → id 341
-//   VS id48 is shared by VL+Unlit; gate PS pins on bVertexLitGeneric.
-//
-// Best playable evidence: launch_log 117 (commit era a9c6bb09). Later pin churn
-// and scissor floods caused white/grey/cyan-only regressions (logs 125–127).
-static int ResolveStaticComboRecordIndex( ShaderFileCache_t *pFileCache, int nLookupStaticIndex, const char *pShaderName )
-{
-	const int nVcsDyn = pFileCache->m_Header.m_nDynamicCombos;
-	const int nIncDyn = GetIncDynamicComboProduct( pShaderName );
-
-#if defined( IOS )
-	if ( V_stristr( pShaderName, "vertexlit_and_unlit_generic_ps20b" ) &&
-		 pFileCache->m_Header.m_nDynamicCombos >= 32 )
-	{
-		const int treePs = IOS_TryTreeVertexLitPsStaticIndex( pFileCache, pShaderName, nLookupStaticIndex );
-		if ( treePs != -1 )
-			return treePs;
-
-		if ( ( nLookupStaticIndex & 2048 ) && !( nLookupStaticIndex & 128 ) )
-		{
-			int idx64 = pFileCache->FindCombo( 64 );
-			if ( idx64 != -1 )
-				return idx64;
-			Warning( "[iOS] vertexlit PS packed 2048: staticId 64 missing in bundled VCS — fonts will be black until CI ships sid 64.\n" );
-		}
-	}
-#endif
-
-	uint32 candidates[8];
-	int nCandidates = 0;
-
-	// Documents VCS static ids for our key shaders sit in a small range (vertexlit
-	// ps ≤ ~100, lightmapped ≤ ~200). Anything larger is a packing mismatch.
-	const uint32 nMaxPlausibleStaticId = 4096;
-	uint32 preferred = 0;
-	bool bHavePreferred = false;
-	if ( nVcsDyn > 0 )
-	{
-		preferred = (uint32)( nLookupStaticIndex / nVcsDyn );
-		bHavePreferred = true;
-	}
-	else if ( nIncDyn > 0 )
-	{
-		preferred = (uint32)( nLookupStaticIndex / nIncDyn );
-		bHavePreferred = true;
-	}
-
-	// Log 128: flashlight_ps20b packed 9216 → preferred 2304 — never take that.
-	if ( bHavePreferred && V_stristr( pShaderName, "flashlight" ) && preferred > 64 )
-		bHavePreferred = false;
-
-	// log 156: PS packed 2048 / dyn=32 → preferred 64 is correct VERTEXCOLOR bytecode (not VS sid).
-
-	uint32 rawCandidates[6];
-	int nRaw = 0;
-	if ( bHavePreferred && preferred <= nMaxPlausibleStaticId )
-		rawCandidates[nRaw++] = preferred;
-	// Never divide by .inc dyn when it disagrees with VCS dyn — log 122 remapped
-	// VERTEXCOLOR packed 2048 → staticId 64 (inc) instead of 341 (vcs) / heuristic.
-	if ( nLookupStaticIndex >= 0 && nLookupStaticIndex < 4096 )
-		rawCandidates[nRaw++] = (uint32)nLookupStaticIndex;
-	// Do NOT append staticId 0 here when preferred is missing/huge — that was log 121
-	// purple (illegal PS): packed 41945088 silently bound id 0 then failed at draw.
-	if ( !bHavePreferred || preferred == 0 )
-		rawCandidates[nRaw++] = 0;
-
-	for ( int r = 0; r < nRaw; ++r )
-	{
-		bool bDup = false;
-		for ( int i = 0; i < nCandidates; ++i )
-		{
-			if ( candidates[i] == rawCandidates[r] )
-			{
-				bDup = true;
-				break;
-			}
-		}
-		if ( !bDup && nCandidates < (int)ARRAYSIZE( candidates ) )
-			candidates[nCandidates++] = rawCandidates[r];
-	}
-
-	for ( int i = 0; i < nCandidates; ++i )
-	{
-		int idx = pFileCache->FindCombo( candidates[i] );
-		if ( idx != -1 )
-		{
-			if ( bHavePreferred && candidates[i] == preferred )
-			{
-				static CUtlMap<CUtlSymbol, bool> s_RemapNote( 0, 0, DefLessFunc( CUtlSymbol ) );
-				if ( s_RemapNote.Find( pFileCache->m_Name ) == s_RemapNote.InvalidIndex() )
-				{
-					s_RemapNote.Insert( pFileCache->m_Name, true );
-					Msg( "[iOS] Shader '%s': static packed %d → id %u (VCS dyn=%d).\n",
-						pShaderName, nLookupStaticIndex, candidates[i], nVcsDyn );
-				}
-			}
-			else if ( bHavePreferred && preferred > nMaxPlausibleStaticId )
-			{
-				// Preferred is nonsense; keep searching / fall through to heuristic.
-				continue;
-			}
-			else
-			{
-				static CUtlMap<CUtlSymbol, bool> s_Warned( 0, 0, DefLessFunc( CUtlSymbol ) );
-				if ( s_Warned.Find( pFileCache->m_Name ) == s_Warned.InvalidIndex() )
-				{
-					s_Warned.Insert( pFileCache->m_Name, true );
-					DevWarning( "[iOS] Shader '%s': static packed %d → id %u (incDyn=%d vcsDyn=%d preferred=%u).\n",
-						pShaderName, nLookupStaticIndex, candidates[i], nIncDyn, nVcsDyn, preferred );
-				}
-			}
-			return idx;
-		}
-	}
-
-#if defined( IOS )
-	// Tree-compiled PLATFORM .vcs (dyn=32 PS / dyn=144+ VS): never bind CS:GO retail fallbacks.
-	if ( V_stristr( pShaderName, "vertexlit_and_unlit_generic_vs20" ) &&
-		 pFileCache->m_Header.m_nDynamicCombos >= 144 )
-	{
-		const int treeIdx = IOS_TryTreeVertexLitVsStaticIndex( pFileCache, pShaderName, nLookupStaticIndex );
-		if ( treeIdx != -1 )
-			return treeIdx;
-		DevWarning( "[iOS] Shader '%s': static packed %d missing in tree VS VCS (dyn=%d).\n",
-			pShaderName, nLookupStaticIndex, pFileCache->m_Header.m_nDynamicCombos );
-		return -1;
-	}
-	if ( V_stristr( pShaderName, "vertexlit_and_unlit_generic_ps20b" ) &&
-		 pFileCache->m_Header.m_nDynamicCombos >= 32 )
-	{
-		const int fb = IOS_FallbackStaticComboRecordIndex( pFileCache, pShaderName, nLookupStaticIndex );
-		if ( fb != -1 )
-			return fb;
-		DevWarning( "[iOS] Shader '%s': static packed %d missing in tree PS VCS (dyn=%d).\n",
-			pShaderName, nLookupStaticIndex, pFileCache->m_Header.m_nDynamicCombos );
-		return -1;
-	}
-	return IOS_FallbackStaticComboRecordIndex( pFileCache, pShaderName, nLookupStaticIndex );
-#else
-	if ( pFileCache->m_StaticComboRecords.Count() > 0 )
-		return 0;
-
-	return -1;
-#endif
-}
-
-// Clamp dynamic index into the VCS slot range.
-static int IOS_ClampDynamicShaderIndex( int nIndex, int nCount, CUtlSymbol shaderName, bool bPixel )
-{
-	if ( nCount <= 0 )
-		return 0;
-	if ( nIndex < 0 )
-		nIndex = 0;
-	if ( nIndex >= nCount )
-	{
-		static CUtlMap<CUtlSymbol, bool> s_Warned( 0, 0, DefLessFunc( CUtlSymbol ) );
-		if ( s_Warned.Find( shaderName ) == s_Warned.InvalidIndex() )
-		{
-			s_Warned.Insert( shaderName, true );
-			DevWarning( "[iOS] %s dynamic index %d >= count %d; clamping to 0.\n",
-				bPixel ? "pixel" : "vertex", nIndex, nCount );
-		}
-		return 0;
-	}
-	return nIndex;
-}
-
-// If the requested dynamic slot was skipped in the VCS, try dyn 0 then the first
-// loaded slot in THIS static combo only (same material). Scanning other statics
-// caused rainbow (log 119); leaving INVALID caused purple illegal PS (log 121).
-//
-// bPreferDynamicLight: vertexlit_and_unlit_generic_vs20 packs DYNAMIC_LIGHT at
-// weight 2. Falling back to dyn0 (DYNAMIC_LIGHT=0) skips AmbientLight() → black
-// props (log 129/130). Prefer any loaded slot with bit1 set before dyn0.
-static int IOS_FallbackDynamicIndex( HardwareShader_t *pShaders, int nCount, int nPreferred,
-	bool bPreferDynamicLight = false, const char *pShaderNameForLog = NULL )
-{
-	if ( !pShaders || nCount <= 0 )
-		return 0;
-
-	if ( nPreferred < 0 )
-		nPreferred = 0;
-	if ( nPreferred >= nCount )
-		nPreferred = nCount - 1;
-
-	if ( pShaders[nPreferred] != INVALID_HARDWARE_SHADER )
-		return nPreferred;
-
-	if ( bPreferDynamicLight )
-	{
-		// Prefer DYNAMIC_LIGHT=1 slots (index & 2). Match skinning/compressed if possible.
-		const int nSkinCompMask = nPreferred & ~2; // clear DYNAMIC_LIGHT bit
-		for ( int i = 0; i < nCount; ++i )
-		{
-			if ( ( i & 2 ) == 0 )
-				continue;
-			if ( ( i & ~2 ) != nSkinCompMask )
-				continue;
-			if ( pShaders[i] != INVALID_HARDWARE_SHADER )
-			{
-				if ( pShaderNameForLog )
-					DevWarning( "[iOS] '%s': dyn %d INVALID → dyn %d (keep DYNAMIC_LIGHT).\n",
-						pShaderNameForLog, nPreferred, i );
-				return i;
-			}
-		}
-		for ( int i = 0; i < nCount; ++i )
-		{
-			if ( ( i & 2 ) == 0 )
-				continue;
-			if ( pShaders[i] != INVALID_HARDWARE_SHADER )
-			{
-				if ( pShaderNameForLog )
-					DevWarning( "[iOS] '%s': dyn %d INVALID → dyn %d (any DYNAMIC_LIGHT).\n",
-						pShaderNameForLog, nPreferred, i );
-				return i;
-			}
-		}
-	}
-
-	if ( nPreferred != 0 && pShaders[0] != INVALID_HARDWARE_SHADER )
-	{
-		if ( pShaderNameForLog )
-			DevWarning( "[iOS] '%s': dyn %d INVALID → dyn 0.\n", pShaderNameForLog, nPreferred );
-		return 0;
-	}
-
-	for ( int i = 1; i < nCount; ++i )
-	{
-		if ( pShaders[i] != INVALID_HARDWARE_SHADER )
-		{
-			if ( pShaderNameForLog )
-				DevWarning( "[iOS] '%s': dyn %d INVALID → dyn %d.\n", pShaderNameForLog, nPreferred, i );
-			return i;
-		}
-	}
-	return nPreferred;
-}
-
-static bool IOS_ShouldSpewFailedShaderBind( CUtlSymbol shaderName )
-{
-	static CUtlMap<CUtlSymbol, double> s_LastSpew( 0, 0, DefLessFunc( CUtlSymbol ) );
-	double flNow = Plat_FloatTime();
-	int idx = s_LastSpew.Find( shaderName );
-	if ( idx == s_LastSpew.InvalidIndex() || flNow - s_LastSpew[idx] > 2.0 )
-	{
-		if ( idx == s_LastSpew.InvalidIndex() )
-			s_LastSpew.Insert( shaderName, flNow );
-		else
-			s_LastSpew[idx] = flNow;
-		return true;
-	}
 	return false;
 }
 #endif
@@ -3846,6 +3219,103 @@ void PrintComboDesc( const char *pShaderName, int nStaticComboID, int nDynamicCo
 //-----------------------------------------------------------------------------
 // Loads all shaders
 //-----------------------------------------------------------------------------
+#if defined( IOS )
+// The bundled .vcs leave out static combos that can't be selected on iOS (CSM, the
+// non-default shadow filter modes, lighting preview; see build-portal2-ipa.yml) and
+// whatever the .fxc SKIPs. If a material still asks for a static combo that isn't in
+// the file, decompose it with the .inc's combo semantics and clear combo values -- the
+// ones listed here first, then the most significant ones -- until we hit a combo that
+// was compiled. Only static combos change, so the dynamic combo layout still matches.
+static const char *s_pIOSDropFirstCombos[] =
+{
+	"CASCADED_SHADOW_MAPPING", "CSM_MODE", "CSM_BLENDING", "FLASHLIGHTDEPTHFILTERMODE",
+	"LIGHTING_PREVIEW", "SFM", "SHADER_SRGB_READ", "DECAL_BLEND_MODE", "TINTMASKTEXTURE",
+	"DESATURATEWITHBASEALPHA", "SRGB_INPUT_ADAPTER", "ENVMAPFRESNEL",
+};
+
+static int IOS_FindNearestStaticCombo( ShaderFileCache_t *pFileCache, const char *pShaderName, uint32 nStaticComboID )
+{
+	char path[MAX_PATH];
+	V_strncpy( path, pShaderName, MAX_PATH );
+	V_FileBase( path, path, MAX_PATH );
+	CUtlSymbol symbol = s_ShaderComboInfoByName.Find( path );
+	if ( symbol == ( CUtlSymbol )UTL_INVAL_SYMBOL )
+		return -1;
+
+	const ShaderComboSemantics_t *pSemantics = s_ShaderComboInfoByName[symbol];
+	const int nCombos = pSemantics->nStaticShaderComboArrayCount;
+	if ( nCombos <= 0 || nCombos > 64 )
+		return -1;
+
+	// combo i contributes ( value * nMult[i] ) to the static combo id
+	uint32 nMult[64], nSize[64];
+	uint32 nRunning = 1;
+	for ( int i = 0; i < nCombos; i++ )
+	{
+		const ShaderComboInformation_t &info = pSemantics->pStaticShaderComboArray[i];
+		nSize[i] = info.m_nComboMax - info.m_nComboMin + 1;
+		nMult[i] = nRunning;
+		nRunning *= nSize[i];
+	}
+
+	// Order to try clearing combos in: the drop-first list, then most significant first.
+	int nOrder[64], nOrderCount = 0;
+	for ( int d = 0; d < ARRAYSIZE( s_pIOSDropFirstCombos ); d++ )
+	{
+		for ( int i = 0; i < nCombos; i++ )
+		{
+			if ( !V_stricmp( pSemantics->pStaticShaderComboArray[i].m_pComboName, s_pIOSDropFirstCombos[d] ) )
+				nOrder[nOrderCount++] = i;
+		}
+	}
+	for ( int i = nCombos - 1; i >= 0; i-- )
+	{
+		bool bListed = false;
+		for ( int j = 0; j < nOrderCount; j++ )
+			bListed |= ( nOrder[j] == i );
+		if ( !bListed )
+			nOrder[nOrderCount++] = i;
+	}
+
+	uint32 nCurrent = nStaticComboID;
+	for ( int nPass = 0; nPass < nCombos; nPass++ )
+	{
+		// Clearing a single combo value keeps as much of the material as possible.
+		int nFirstNonZero = -1;
+		for ( int j = 0; j < nOrderCount; j++ )
+		{
+			const int i = nOrder[j];
+			const uint32 nVal = ( nCurrent / nMult[i] ) % nSize[i];
+			if ( nVal == 0 )
+				continue;
+			if ( nFirstNonZero == -1 )
+				nFirstNonZero = i;
+			const uint32 nCandidate = nCurrent - nVal * nMult[i];
+			const int nIndex = pFileCache->FindCombo( nCandidate );
+			if ( nIndex != -1 )
+			{
+				DevWarning( "Shader '%s': static combo %u is not in the bundled .vcs, using %u (cleared %s)\n",
+					pShaderName, nStaticComboID, nCandidate, pSemantics->pStaticShaderComboArray[i].m_pComboName );
+				return nIndex;
+			}
+		}
+		if ( nFirstNonZero == -1 )
+			break;
+
+		// Nothing one step away exists: clear the least important combo and look again.
+		nCurrent -= ( ( nCurrent / nMult[nFirstNonZero] ) % nSize[nFirstNonZero] ) * nMult[nFirstNonZero];
+		const int nIndex = pFileCache->FindCombo( nCurrent );
+		if ( nIndex != -1 )
+		{
+			DevWarning( "Shader '%s': static combo %u is not in the bundled .vcs, using %u\n",
+				pShaderName, nStaticComboID, nCurrent );
+			return nIndex;
+		}
+	}
+	return -1;
+}
+#endif
+
 bool CShaderManager::LoadAndCreateShaders( ShaderLookup_t &lookup, bool bVertexShader, char *debugLabel )
 {
 	const char *pName = m_ShaderSymbolTable.String( lookup.m_Name );
@@ -3936,29 +3406,7 @@ bool CShaderManager::LoadAndCreateShaders( ShaderLookup_t &lookup, bool bVertexS
 		lookup.m_Flags = pHeader->m_nFlags;
 
 		pFileCache->m_Name = lookup.m_Name;
-#if defined( IOS )
-		if ( IOS_IsBundledTreeVcs( filename ) )
-		{
-			const char *pApp = getenv( "APP_LIB_PATH" );
-			if ( pApp && pApp[0] )
-			{
-				char rel[MAX_PATH];
-				char absPath[MAX_PATH];
-				V_strncpy( rel, filename, sizeof( rel ) );
-				V_FixSlashes( rel, '/' );
-				V_snprintf( absPath, sizeof( absPath ), "%s/platform/%s", pApp, rel );
-				pFileCache->m_Filename = m_ShaderSymbolTable.AddString( absPath );
-			}
-			else
-			{
-				pFileCache->m_Filename = m_ShaderSymbolTable.AddString( filename );
-			}
-		}
-		else
-#endif
-		{
-			pFileCache->m_Filename = m_ShaderSymbolTable.AddString( filename );
-		}
+		pFileCache->m_Filename = m_ShaderSymbolTable.AddString( filename );
 		pFileCache->m_bVertexShader = bVertexShader;
 
 		if ( pFileCache->IsOldVersion() )
@@ -3987,67 +3435,6 @@ bool CShaderManager::LoadAndCreateShaders( ShaderLookup_t &lookup, bool bVertexS
 					g_pFullFileSystem->Read( pFileCache->m_StaticComboDupRecords.Base(), nNumDups * sizeof( StaticComboAliasRecord_t ), hFile );
 				}
 			}
-#if defined( IOS )
-			// Inventory Documents/platform combos once per key shader so we can
-			// stop guessing which static ids exist (log 114/115).
-			{
-				const char *pBase = V_UnqualifiedFileName( filename );
-				if ( V_stristr( pBase, "lightmappedgeneric_ps20b" ) ||
-					 V_stristr( pBase, "lightmappedgeneric_vs20" ) ||
-					 V_stristr( pBase, "vertexlit_and_unlit_generic_ps20b" ) ||
-					 V_stristr( pBase, "vertexlit_and_unlit_generic_vs20" ) )
-				{
-					const int nRec = pFileCache->m_StaticComboRecords.Count();
-					const int nDump = MIN( nRec, 24 );
-					Msg( "[iOS] VCS %s: ver=%d dyn=%d staticRecords=%d aliases=%d\n",
-						pBase, pHeader->m_nVersion, pHeader->m_nDynamicCombos,
-						nRec, pFileCache->m_StaticComboDupRecords.Count() );
-					if ( V_stristr( pBase, "vertexlit_and_unlit_generic_ps20b" ) &&
-						 pHeader->m_nDynamicCombos == 6 )
-					{
-						DevWarning( "[iOS] vertexlit PS .vcs has dyn=6 (CS:GO retail) — bundled tree shader (dyn=32) was not loaded. UV/props will break.\n" );
-					}
-					for ( int r = 0; r < nDump; ++r )
-					{
-						const StaticComboRecord_t &rec = pFileCache->m_StaticComboRecords[r];
-						if ( rec.m_nStaticComboID == 0xffffffff )
-							break;
-						Msg( "[iOS]   staticId=%u off=%u\n", rec.m_nStaticComboID, rec.m_nFileOffset );
-					}
-					if ( nRec > nDump )
-						Msg( "[iOS]   ... %d more static records\n", nRec - nDump );
-					// Round-2: prove key ids exist before we bet on them (log 134 guesswork).
-					if ( V_stristr( pBase, "vertexlit_and_unlit_generic_ps20b" ) )
-					{
-						static const uint32 s_probe[] = { 0, 1, 2, 3, 4, 5, 6, 7, 10, 11, 14, 21, 32, 42, 85, 170 };
-						for ( int p = 0; p < (int)ARRAYSIZE( s_probe ); ++p )
-						{
-							const int found = pFileCache->FindCombo( s_probe[p] );
-							Msg( "[iOS]   probe staticId=%u %s\n", s_probe[p],
-								found != -1 ? "HIT" : "MISS" );
-						}
-						// Also list every canonical id < 64 so we stop guessing.
-						for ( int r = 0; r < nRec; ++r )
-						{
-							const uint32 id = pFileCache->m_StaticComboRecords[r].m_nStaticComboID;
-							if ( id == 0xffffffff || id >= 64 )
-								break;
-							Msg( "[iOS]   catalog staticId=%u\n", id );
-						}
-					}
-					if ( V_stristr( pBase, "vertexlit_and_unlit_generic_vs20" ) )
-					{
-						static const uint32 s_probeVs[] = { 0, 48, 49, 50, 64, 65, 66 };
-						for ( int p = 0; p < (int)ARRAYSIZE( s_probeVs ); ++p )
-						{
-							const int found = pFileCache->FindCombo( s_probeVs[p] );
-							Msg( "[iOS]   probe staticId=%u %s\n", s_probeVs[p],
-								found != -1 ? "HIT" : "MISS" );
-						}
-					}
-				}
-			}
-#endif
 
 		}
 	}
@@ -4119,16 +3506,20 @@ bool CShaderManager::LoadAndCreateShaders( ShaderLookup_t &lookup, bool bVertexS
 	}
 	else
 	{
-		const char *pShaderName = m_ShaderSymbolTable.String( lookup.m_Name );
-#if defined( IOS )
-		int nStaticComboIdx = ResolveStaticComboRecordIndex( pFileCache, lookup.m_nStaticIndex, pShaderName );
-#else
 		int nStaticComboIdx = pFileCache->FindCombo( lookup.m_nStaticIndex / pFileCache->m_Header.m_nDynamicCombos );
+#if defined( IOS )
+		if ( nStaticComboIdx == -1 )
+		{
+			nStaticComboIdx = IOS_FindNearestStaticCombo( pFileCache, m_ShaderSymbolTable.String( pFileCache->m_Filename ),
+				lookup.m_nStaticIndex / pFileCache->m_Header.m_nDynamicCombos );
+		}
 #endif
 		if ( nStaticComboIdx == -1 )
 		{
 			g_pFullFileSystem->Close( hFile );
 			lookup.m_Flags |= SHADER_FAILED_LOAD;
+			const char *pShaderName;
+			pShaderName = m_ShaderSymbolTable.String( pFileCache->m_Filename );
 			DevWarning( "*************************************************\n" );
 			DevWarning( "Shader '%s' - Couldn't load combo %d of shader (dyn=%d)\n", pShaderName, lookup.m_nStaticIndex, pFileCache->m_Header.m_nDynamicCombos );
 			BitchAboutSkippedCombo( pShaderName, lookup.m_nStaticIndex / pFileCache->m_Header.m_nDynamicCombos, -1 );
@@ -4190,17 +3581,6 @@ bool CShaderManager::LoadAndCreateShaders( ShaderLookup_t &lookup, bool bVertexS
 	if ( !bOK )
 	{
 		lookup.m_Flags |= SHADER_FAILED_LOAD;
-#if defined( IOS )
-		DevWarning(
-			"[iOS] Shader load failed after reading VCS (D3D bytecode -> GLES): shader '%s' staticIndex=%d vcsVer=%d numStatic=%d dyn=%d path '%s'\n",
-			m_ShaderSymbolTable.String( lookup.m_Name ),
-			lookup.m_nStaticIndex,
-			pFileCache->m_Header.m_nVersion,
-			pFileCache->m_Header.m_nNumStaticCombos,
-			pFileCache->m_Header.m_nDynamicCombos,
-			m_ShaderSymbolTable.String( pFileCache->m_Filename ) );
-		DevWarning( "[iOS] Look above for 'Couldn't load combo', 'failed to create shader', 'GLSL translation', or BZIP/LZMA errors.\n" );
-#endif
 	}
 
 	return bOK;
@@ -4703,7 +4083,6 @@ VertexShader_t CShaderManager::CreateVertexShader( const char *pFileName, int nS
 		shader = m_VertexShaderDict.AddToTail( lookup );
 		if ( !LoadAndCreateShaders( m_VertexShaderDict[shader], true, debugLabel ) )
 		{
-			m_VertexShaderDict.Remove( shader );
 			return INVALID_SHADER;
 		}
 	}
@@ -4733,7 +4112,6 @@ PixelShader_t CShaderManager::CreatePixelShader( const char *pFileName, int nSta
 		shader = m_PixelShaderDict.AddToTail( lookup );
 		if ( !LoadAndCreateShaders( m_PixelShaderDict[shader], false, debugLabel ) )
 		{
-			m_PixelShaderDict.Remove( shader );
 			return INVALID_SHADER;
 		}
 	}
@@ -4825,10 +4203,6 @@ void* CShaderManager::GetCurrentPixelShader()
 //-----------------------------------------------------------------------------
 void CShaderManager::SetVertexShaderState_Internal( HardwareShader_t shader, DataCacheHandle_t hCachedShader )
 {
-#if defined( IOS )
-	if ( !shader )
-		return;
-#endif
 	if ( m_HardwareVertexShader != shader )
 	{
 	RECORD_COMMAND( DX8_SET_VERTEX_SHADER, 1 );
@@ -4852,16 +4226,10 @@ void CShaderManager::BindVertexShader( VertexShaderHandle_t hVertexShader )
 //-----------------------------------------------------------------------------
 void CShaderManager::SetVertexShader( VertexShader_t shader )
 {
-#if defined( IOS )
-	s_bIOSVertexShaderBindOk = false;
-#endif
 	// Determine which vertex shader to use...
 	if ( shader == INVALID_SHADER )
 	{
 		SetVertexShaderState( 0 );
-#if defined( IOS )
-		s_bIOSVertexShaderBindOk = true;
-#endif
 		return;
 	}
 
@@ -4873,18 +4241,6 @@ void CShaderManager::SetVertexShader( VertexShader_t shader )
 	}
 
 	ShaderLookup_t &vshLookup = m_VertexShaderDict[shader];
-#if defined( IOS )
-	vshIndex = IOS_ClampDynamicShaderIndex(
-		vshIndex, vshLookup.m_ShaderStaticCombos.m_nCount, vshLookup.m_Name, false );
-	{
-		const char *pVshName = m_ShaderSymbolTable.String( vshLookup.m_Name );
-		const bool bVL = ( V_stristr( pVshName, "vertexlit_and_unlit_generic_vs20" ) != NULL );
-		vshIndex = IOS_FallbackDynamicIndex(
-			vshLookup.m_ShaderStaticCombos.m_pHardwareShaders,
-			vshLookup.m_ShaderStaticCombos.m_nCount,
-			vshIndex, bVL, bVL ? pVshName : NULL );
-	}
-#endif
 //	DevWarning( "vsh: %s static: %d dynamic: %d\n", m_ShaderSymbolTable.String( vshLookup.m_Name ),
 //		vshLookup.m_nStaticIndex, m_nVertexShaderIndex );
 
@@ -4922,13 +4278,6 @@ void CShaderManager::SetVertexShader( VertexShader_t shader )
 	if ( vshLookup.m_Flags & SHADER_FAILED_LOAD )
 	{
 		Assert( 0 );
-#if defined( IOS )
-		if ( IOS_ShouldSpewFailedShaderBind( vshLookup.m_Name ) )
-		{
-			DevWarning( "***** Trying to set a vertex shader (%s) that failed loading!\n",
-				m_ShaderSymbolTable.String( vshLookup.m_Name ) );
-		}
-#endif
 		return;
 	}
 #ifdef _DEBUG
@@ -4968,37 +4317,14 @@ void CShaderManager::SetVertexShader( VertexShader_t shader )
 
 			DevWarning( "*************************************************\n" );
 			DevWarning( "!!!!!Using invalid shader combo!!!!!  Consult a programmer and tell them to build debug materialsystem.dll and stdshader*.dll.  Run with \"mat_bufferprimitives 0\" and look for CMaterial in the call stack and see what m_pDebugName is.  You are likely using a shader combo that has been skipped.\n" );
-			DevWarning( "Shader: %s static: %d dynamic: %d (resolved dyn=%d)\n",
-				m_ShaderSymbolTable.String( vshLookup.m_Name ), vshLookup.m_nStaticIndex, m_nVertexShaderIndex, vshIndex );
+			DevWarning( "Shader: %s static: %d dynamic: %d\n", m_ShaderSymbolTable.String( vshLookup.m_Name ), vshLookup.m_nStaticIndex, m_nVertexShaderIndex );
 			BitchAboutSkippedCombo( m_ShaderSymbolTable.String( vshLookup.m_Name ), vshLookup.m_nStaticIndex, m_nVertexShaderIndex );
 			DevWarning( "*************************************************\n" );
-#if !defined( IOS )
 			Assert( 0 );
-#endif
 		}
-#if defined( IOS )
-		// Prefer any loaded dyn in this static over leaving a stale lightmapped VS bound
-		// (log 123: lightmapped VS + vertexlit PS → rainbow).
-		if ( vshLookup.m_ShaderStaticCombos.m_pHardwareShaders )
-		{
-			for ( int i = 0; i < vshLookup.m_ShaderStaticCombos.m_nCount; ++i )
-			{
-				if ( vshLookup.m_ShaderStaticCombos.m_pHardwareShaders[i] != INVALID_HARDWARE_SHADER )
-				{
-					dxshader = vshLookup.m_ShaderStaticCombos.m_pHardwareShaders[i];
-					break;
-				}
-			}
-		}
-#endif
 	}
 #endif
 
-#if defined( IOS )
-	if ( !dxshader )
-		return;
-	s_bIOSVertexShaderBindOk = true;
-#endif
 	SetVertexShaderState( dxshader );
 }
 
@@ -5007,12 +4333,6 @@ void CShaderManager::SetVertexShader( VertexShader_t shader )
 //-----------------------------------------------------------------------------
 void CShaderManager::SetPixelShaderState_Internal( HardwareShader_t shader, DataCacheHandle_t hCachedShader )
 {
-#if defined( IOS )
-	if ( !shader && s_pIllegalMaterialPS != INVALID_HARDWARE_SHADER )
-		shader = s_pIllegalMaterialPS;
-	if ( !shader )
-		return;
-#endif
 	if ( m_HardwarePixelShader != shader )
 	{		
 	VPROF_INCREMENT_GROUP_COUNTER( "pixel shader change", COUNTER_GROUP_DEFAULT, 1 );
@@ -5054,16 +4374,6 @@ void CShaderManager::SetPixelShader( PixelShader_t shader )
 	int pshIndex = m_nPixelShaderIndex;
 	Assert( pshIndex >= 0 );
 	ShaderLookup_t &pshLookup = m_PixelShaderDict[shader];
-#if defined( IOS )
-	// Documents vertexlit ps20b dyn=6; .inc PIXELFOGTYPE alone yields index 16 → was
-	// clearing the PS (illegal cyan). Clamp to dyn 0 instead.
-	pshIndex = IOS_ClampDynamicShaderIndex(
-		pshIndex, pshLookup.m_ShaderStaticCombos.m_nCount, pshLookup.m_Name, true );
-	pshIndex = IOS_FallbackDynamicIndex(
-		pshLookup.m_ShaderStaticCombos.m_pHardwareShaders,
-		pshLookup.m_ShaderStaticCombos.m_nCount,
-		pshIndex );
-#else
 	if ( pshIndex > pshLookup.m_ShaderStaticCombos.m_nCount )
 	{
 		SetPixelShaderState( 0 );
@@ -5071,7 +4381,6 @@ void CShaderManager::SetPixelShader( PixelShader_t shader )
 		Assert( 0 );
 		return;
 	}
-#endif
 	
 //	DevWarning( "psh: %s static: %d dynamic: %d\n", m_ShaderSymbolTable.String( lookup.m_Name ),
 //		lookup.m_nStaticIndex, m_nPixelShaderIndex );
@@ -5106,15 +4415,7 @@ void CShaderManager::SetPixelShader( PixelShader_t shader )
 	if ( pshLookup.m_Flags & SHADER_FAILED_LOAD )
 	{
 		Assert( 0 );
-#if defined( IOS )
-		if ( IOS_ShouldSpewFailedShaderBind( pshLookup.m_Name ) )
-		{
-			DevWarning( "***** Trying to set a pixel shader (%s) that failed loading!\n",
-				m_ShaderSymbolTable.String( pshLookup.m_Name ) );
-		}
-#else
 		DevWarning( "***** Trying to set a pixel shader (%s) that failed loading!\n", m_ShaderSymbolTable.String( pshLookup.m_Name ) );
-#endif
 		return;
 	}
 	#ifdef _DEBUG
@@ -5156,26 +4457,8 @@ void CShaderManager::SetPixelShader( PixelShader_t shader )
 			DevWarning( "Shader: %s static: %d dynamic: %d\n", m_ShaderSymbolTable.String( pshLookup.m_Name ), pshLookup.m_nStaticIndex, m_nPixelShaderIndex );
 			BitchAboutSkippedCombo( m_ShaderSymbolTable.String( pshLookup.m_Name ), pshLookup.m_nStaticIndex, m_nPixelShaderIndex );
 			DevWarning( "*************************************************\n" );
-#if !defined( IOS )
 			Assert( 0 );
-#endif
 		}
-#if defined( IOS )
-		if ( pshLookup.m_ShaderStaticCombos.m_pHardwareShaders &&
-			 pshLookup.m_ShaderStaticCombos.m_nCount > 0 &&
-			 pshLookup.m_ShaderStaticCombos.m_pHardwareShaders[0] != INVALID_HARDWARE_SHADER )
-		{
-			dxshader = pshLookup.m_ShaderStaticCombos.m_pHardwareShaders[0];
-		}
-		else if ( s_pIllegalMaterialPS != INVALID_HARDWARE_SHADER )
-		{
-			dxshader = s_pIllegalMaterialPS;
-		}
-		if ( !dxshader || !s_bIOSVertexShaderBindOk )
-		{
-			return;
-		}
-#endif
 	}
 
 	SetPixelShaderState( dxshader );

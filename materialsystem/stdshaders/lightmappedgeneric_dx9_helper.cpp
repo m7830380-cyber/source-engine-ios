@@ -581,14 +581,7 @@ void DrawLightmappedGeneric_DX9( CBaseVSShader *pShader, IMaterialVar** params, 
 						staticCmdsBuf.BindStandardTexture( SHADER_SAMPLER0, SRGBReadMask( !bShaderSrgbRead ), TEXTURE_WHITE );
 					}
 				}
-				// iOS: lightmap uses GL_RGBA8 (no SRGB flag) so bind without sRGB decode.
-			// TEXTURE_BINDFLAGS_SRGBREAD on a non-sRGB texture triggers HandleSRGBMismatch
-			// which would flip it back to GL_SRGB8_ALPHA8 and re-introduce the decode.
-#if defined( IOS )
-			staticCmdsBuf.BindStandardTexture( SHADER_SAMPLER1, TEXTURE_BINDFLAGS_NONE, TEXTURE_LIGHTMAP );
-#else
-			staticCmdsBuf.BindStandardTexture( SHADER_SAMPLER1, bHDR ? TEXTURE_BINDFLAGS_NONE : TEXTURE_BINDFLAGS_SRGBREAD, TEXTURE_LIGHTMAP );
-#endif // IOS
+				staticCmdsBuf.BindStandardTexture( SHADER_SAMPLER1, bHDR ? TEXTURE_BINDFLAGS_NONE : TEXTURE_BINDFLAGS_SRGBREAD, TEXTURE_LIGHTMAP );
 
 				if ( bSeamlessMapping )
 				{
@@ -650,11 +643,6 @@ void DrawLightmappedGeneric_DX9( CBaseVSShader *pShader, IMaterialVar** params, 
 				{
 					nDetailBlendMode = DETAIL_BLEND_MODE_MASK_BASE_BY_DETAIL_ALPHA;
 				}
-#if defined( IOS )
-				// log 121: detail mode 9 → packed 5308416 → preferred 165888 missing →
-				// silent staticId 0 (walls too bright). Keep detail off for Documents VCS.
-				nDetailBlendMode = 0;
-#endif
 				
 				if( hasFlashlight && ( IsX360() || IsPS3() ) )
 				{
@@ -703,30 +691,7 @@ void DrawLightmappedGeneric_DX9( CBaseVSShader *pShader, IMaterialVar** params, 
 				if ( !g_pHardwareConfig->SupportsPixelShaders_3_0() )
 				#endif
 				{
-					// log 116: Documents lightmappedgeneric_ps20b.vcs dyn=32 matches our
-					// .inc, with staticIds 0..5,8.. — use real material combos again.
-					// Missing ids still fall back via ResolveStaticComboRecordIndex.
 					DECLARE_STATIC_VERTEX_SHADER( lightmappedgeneric_vs20 );
-#if defined( IOS )
-					// Log 117/124/128: first LM remap is always packed 0 → id 0 (works).
-					// Bump/envmap statics silently remapped to sparse/missing ids — force
-					// the proven combo-0 wall path for every lightmapped material.
-					SET_STATIC_VERTEX_SHADER_COMBO( ENVMAP_MASK, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( TANGENTSPACE, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( BUMPMAP, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( VERTEXCOLOR, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( VERTEXALPHATEXBLENDFACTOR, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( BUMPMASK, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( LIGHTING_PREVIEW, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( SEAMLESS, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( DETAILTEXTURE, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( FANCY_BLENDING, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( SELFILLUM, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( PAINT, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( ADDBUMPMAPS, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( DOPIXELFOG, 0 );
-					SET_STATIC_VERTEX_SHADER_COMBO( HARDWAREFOGBLEND, 0 );
-#else
 					SET_STATIC_VERTEX_SHADER_COMBO( ENVMAP_MASK,  hasEnvmapMask );
 					SET_STATIC_VERTEX_SHADER_COMBO( TANGENTSPACE,  params[info.m_nEnvmap]->IsTexture() );
 					SET_STATIC_VERTEX_SHADER_COMBO( BUMPMAP,  hasBump );
@@ -740,7 +705,6 @@ void DrawLightmappedGeneric_DX9( CBaseVSShader *pShader, IMaterialVar** params, 
 					SET_STATIC_VERTEX_SHADER_COMBO( SELFILLUM,  hasSelfIllum );
 					SET_STATIC_VERTEX_SHADER_COMBO( PAINT, 0 );
 					SET_STATIC_VERTEX_SHADER_COMBO( ADDBUMPMAPS, bAddBumpMaps );
-#endif
 					#if defined( _X360 ) || defined( _PS3 )
 						SET_STATIC_VERTEX_SHADER_COMBO( FLASHLIGHT, hasFlashlight);
 					#endif
@@ -749,30 +713,6 @@ void DrawLightmappedGeneric_DX9( CBaseVSShader *pShader, IMaterialVar** params, 
 					if ( g_pHardwareConfig->SupportsPixelShaders_2_b() )
 					{
 						DECLARE_STATIC_PIXEL_SHADER( lightmappedgeneric_ps20b );
-#if defined( IOS )
-						SET_STATIC_PIXEL_SHADER_COMBO( BASETEXTURE2, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( BUMPMAP, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( BUMPMAP2, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( BUMPMASK, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( CUBEMAP, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( ENVMAPMASK, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( BASEALPHAENVMAPMASK, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( SELFILLUM, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( NORMALMAPALPHAENVMAPMASK, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( FANCY_BLENDING, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( SEAMLESS, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( DETAIL_BLEND_MODE, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( DETAIL2, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( ENVMAPANISOTROPY, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( ADDBUMPMAPS, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( SHADER_SRGB_READ, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( LIGHTING_PREVIEW, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( CSM_BLENDING, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( PHONG, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( CASCADED_SHADOW_MAPPING, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( CSM_MODE, 0 );
-						SET_STATIC_PIXEL_SHADER_COMBO( DOPIXELFOG, 0 );
-#else
 						SET_STATIC_PIXEL_SHADER_COMBO( BASETEXTURE2, hasBaseTexture2 );
 						SET_STATIC_PIXEL_SHADER_COMBO( BUMPMAP,  bumpmap_variant );
 						SET_STATIC_PIXEL_SHADER_COMBO( BUMPMAP2, hasBump2 );
@@ -796,7 +736,6 @@ void DrawLightmappedGeneric_DX9( CBaseVSShader *pShader, IMaterialVar** params, 
 						SET_STATIC_PIXEL_SHADER_COMBO( LIGHTING_PREVIEW, nLightingPreviewMode );
 						SET_STATIC_PIXEL_SHADER_COMBO( CSM_BLENDING, bCSMBlending );
 						SET_STATIC_PIXEL_SHADER_COMBO( PHONG, false );
-#endif
 						SET_STATIC_PIXEL_SHADER( lightmappedgeneric_ps20b );
 					}
 					else
@@ -884,14 +823,6 @@ void DrawLightmappedGeneric_DX9( CBaseVSShader *pShader, IMaterialVar** params, 
 				// Also note that if the lightmap scale factor changes
 				// all shadow state blocks will be re-run, so that's ok
 				float flLScale = pShaderShadow->GetLightMapScaleFactor();
-#if defined( IOS )
-				// PC returns GammaToLinearFullRange(2)≈4.59 — overbright assuming
-				// sRGB-decoded linear lightmap samples. iOS binds lightmaps as
-				// raw RGBA8 (no SRGBREAD; format isn't sRGB). Applying 4.59 to
-				// gamma-encoded samples blows walls to fullbright (log 130–133).
-				// Scale 1.0 matches "no overbright without sRGB path".
-				flLScale = 1.0f;
-#endif
 				pShader->PI_BeginCommandBuffer();
 				
 				if ( g_pHardwareConfig->SupportsPixelShaders_3_0() )
@@ -1396,14 +1327,7 @@ void DrawLightmappedGeneric_DX9( CBaseVSShader *pShader, IMaterialVar** params, 
 #endif
 		{
 			DECLARE_DYNAMIC_VERTEX_SHADER( lightmappedgeneric_vs20 );
-#if defined( IOS )
-			// DOWATERFOG comes from the .inc ctor via fog mode; pin so motion/fog
-			// doesn't flip into a skipped VS combo (walls flash black while moving).
-			SET_DYNAMIC_VERTEX_SHADER_COMBO( FASTPATH, 0 );
-			SET_DYNAMIC_VERTEX_SHADER_COMBO( DOWATERFOG, 0 );
-#else
 			SET_DYNAMIC_VERTEX_SHADER_COMBO( FASTPATH,  bVertexShaderFastPath );
-#endif
 			SET_DYNAMIC_VERTEX_SHADER_CMD( DynamicCmdsOut, lightmappedgeneric_vs20 );
 		}
 
@@ -1516,18 +1440,6 @@ void DrawLightmappedGeneric_DX9( CBaseVSShader *pShader, IMaterialVar** params, 
            }
 
 			DECLARE_DYNAMIC_PIXEL_SHADER( lightmappedgeneric_ps20b );
-#if defined( IOS )
-			// Log 117 / a9c6bb09: PS FASTPATH=0 — walls OK when still. Log 125 "white
-			// world" was confounders (illegal VL combo + white scissor flood), not this
-			// pin alone. Keep other dyn bits 0 so motion does not hop skipped slots.
-			SET_DYNAMIC_PIXEL_SHADER_COMBO( FASTPATHENVMAPCONTRAST, 0 );
-			SET_DYNAMIC_PIXEL_SHADER_COMBO( FASTPATH, 0 );
-			SET_DYNAMIC_PIXEL_SHADER_COMBO( WRITE_DEPTH_TO_DESTALPHA, 0 );
-			SET_DYNAMIC_PIXEL_SHADER_COMBO( WRITEWATERFOGTODESTALPHA, 0 );
-			SET_DYNAMIC_PIXEL_SHADER_COMBO( FLASHLIGHTSHADOWS, 0 );
-			SET_DYNAMIC_PIXEL_SHADER_COMBO( CASCADE_SIZE, 0 );
-			SET_DYNAMIC_PIXEL_SHADER_COMBO( PIXELFOGTYPE, 0 );
-#else
 			SET_DYNAMIC_PIXEL_SHADER_COMBO( FASTPATH, bFastPath );
 			SET_DYNAMIC_PIXEL_SHADER_COMBO( FASTPATHENVMAPCONTRAST, bPixelShaderFastPath && envmapContrast == 1.0f );
 
@@ -1535,7 +1447,6 @@ void DrawLightmappedGeneric_DX9( CBaseVSShader *pShader, IMaterialVar** params, 
 			SET_DYNAMIC_PIXEL_SHADER_COMBO( WRITE_DEPTH_TO_DESTALPHA, bWriteDepthToAlpha );
 			SET_DYNAMIC_PIXEL_SHADER_COMBO( WRITEWATERFOGTODESTALPHA, bWriteWaterFogToAlpha );
 			SET_DYNAMIC_PIXEL_SHADER_COMBO( FLASHLIGHTSHADOWS, bFlashlightShadows );
-#endif
 			SET_DYNAMIC_PIXEL_SHADER_CMD( DynamicCmdsOut, lightmappedgeneric_ps20b );
 		}
 		else

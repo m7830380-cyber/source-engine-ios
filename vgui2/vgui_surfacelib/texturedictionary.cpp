@@ -517,11 +517,8 @@ void CMatSystemTexture::SetTextureRGBA( const char *rgba, int wide, int tall, Im
 		++s_nTextureId;
 
 		int nFlags = TEXTUREFLAGS_CLAMPS | TEXTUREFLAGS_CLAMPT | 
-			TEXTUREFLAGS_NOMIP | TEXTUREFLAGS_NOLOD |
+			TEXTUREFLAGS_NOMIP | TEXTUREFLAGS_NOLOD | TEXTUREFLAGS_SRGB |
 			TEXTUREFLAGS_PROCEDURAL | TEXTUREFLAGS_SINGLECOPY;
-#if !defined( IOS )
-		nFlags |= TEXTUREFLAGS_SRGB;
-#endif
 
 		if ( eScaling == k_ETextureScalingPointSample )
 			nFlags |= TEXTUREFLAGS_POINTSAMPLE;
@@ -725,18 +722,6 @@ void CMatSystemTexture::SetSubTextureRGBAEx( int drawX, int drawY, unsigned cons
 	Assert( m_pRegen );
 
 	Assert( rgba );
-
-#if defined( IOS )
-	{
-		const int nPix = subTextureWide * subTextureTall;
-		unsigned char *p = (unsigned char *)rgba;
-		for ( int i = 0; i < nPix; ++i, p += 4 )
-		{
-			if ( p[3] > 0 && ( p[0] + p[1] + p[2] ) < 4 )
-				p[0] = p[1] = p[2] = 255;
-		}
-	}
-#endif
 
 	Rect_t subRect;
 	subRect.x = drawX;

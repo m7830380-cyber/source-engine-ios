@@ -268,7 +268,7 @@ void CGameUI::Initialize( CreateInterfaceFn factory )
 
 	factoryBasePanel.SetMouseInputEnabled( IsPC() );
 #if defined( IOS )
-	// IsPC() is true on iOS, but force mouse/touch for the emergency PLAY target.
+	// touches arrive as mouse input; make sure the menu takes them.
 	factoryBasePanel.SetMouseInputEnabled( true );
 #endif
 	// factoryBasePanel.SetKeyBoardInputEnabled( IsPC() );

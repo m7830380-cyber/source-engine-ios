@@ -162,10 +162,6 @@ CBaseModPanel::CBaseModPanel(): BaseClass(0, "CBaseModPanel"),
 #endif
 
 	MakePopup( false );
-#if defined( IOS )
-	SetPostChildPaintEnabled( true );
-#endif
-
 	Assert(m_CFactoryBasePanel == 0);
 	m_CFactoryBasePanel = this;
 
@@ -232,10 +228,6 @@ CBaseModPanel::CBaseModPanel(): BaseClass(0, "CBaseModPanel"),
 
 	m_iBackgroundImageID = -1;
 	m_iProductImageID = -1;
-
-#if defined( IOS )
-	m_nIOSPlayX0 = m_nIOSPlayY0 = m_nIOSPlayX1 = m_nIOSPlayY1 = 0;
-#endif
 
 	m_backgroundMusic = "Misc.MainUI";
 	m_nBackgroundMusicGUID = 0;
@@ -2079,30 +2071,6 @@ void CBaseModPanel::DrawCopyStats()
 //=============================================================================
 void CBaseModPanel::PaintBackground()
 {
-#if defined( IOS ) && defined( PORTAL2 )
-	// UnlitGeneric quads are invisible (bad VCS combo). Menu + loading use
-	// scissor fills. In-level: leave the 3D backbuffer alone.
-	if ( !GameUI().IsInLevel() && !GameUI().IsInBackgroundLevel() )
-	{
-		int wide, tall;
-		GetSize( wide, tall );
-		static int s_nPaintLog = 0;
-		if ( ( s_nPaintLog++ % 120 ) == 0 )
-		{
-			Msg( "[Portal2 iOS] PaintBackground size=%dx%d loading=%d inlevel=%d win=%d visible=%d font=%d — framebuffer cyan clear\n",
-				wide, tall, (int)m_LevelLoading, GameUI().IsInLevel() ? 1 : 0,
-				(int)GetActiveWindowType(), IsVisible() ? 1 : 0, (int)m_hDefaultFont );
-		}
-		CMatRenderContextPtr pRenderContext( g_pMaterialSystem );
-		pRenderContext->ClearColor4ub( 0, 200, 220, 255 );
-		pRenderContext->ClearBuffers( true, false, false );
-		if ( wide > 0 && tall > 0 )
-		{
-			surface()->DrawSetColor( 0, 200, 220, 255 );
-			surface()->DrawFilledRect( 0, 0, wide, tall );
-		}
-	}
-#endif
 	if ( !m_LevelLoading &&
 		!GameUI().IsInLevel() &&
 		!GameUI().IsInBackgroundLevel() )
@@ -2115,10 +2083,9 @@ void CBaseModPanel::PaintBackground()
 			// ensure the background is clear
 			// the loading progress is about to take over in a few frames
 			// this keeps us from flashing a different graphic
-			// DrawSetColor modulates the texture — use white, not black.
 			if ( m_iBackgroundImageID >= 0 )
 			{
-				surface()->DrawSetColor( 255, 255, 255, 255 );
+				surface()->DrawSetColor( 0, 0, 0, 255 );
 				surface()->DrawSetTexture( m_iBackgroundImageID );
 				surface()->DrawTexturedRect( 0, 0, wide, tall );
 			}
@@ -2127,14 +2094,13 @@ void CBaseModPanel::PaintBackground()
 		{
 			ActivateBackgroundEffects();
 
-#if defined( IOS ) && defined( PORTAL2 )
-			// Already drew fill (+optional texture) above; keep ActivateBackgroundEffects.
-#else
+			bool bDrewMovie = false;
 			if ( SDKBackgroundMovie() )
 			{
 				SDKBackgroundMovie()->Update();
 				if ( SDKBackgroundMovie()->SetTextureMaterial() != -1 )
 				{
+					bDrewMovie = true;
 					surface()->DrawSetColor( 255, 255, 255, 255 );
 					int x, y, w, h;
 					GetBounds( x, y, w, h );
@@ -2163,7 +2129,14 @@ void CBaseModPanel::PaintBackground()
 					}
 				}
 			}
-#endif
+
+			// No background movie (iOS has no Bink): show the static product art instead.
+			if ( !bDrewMovie && m_iBackgroundImageID >= 0 )
+			{
+				surface()->DrawSetColor( 255, 255, 255, 255 );
+				surface()->DrawSetTexture( m_iBackgroundImageID );
+				surface()->DrawTexturedRect( 0, 0, wide, tall );
+			}
 		}
 	}
 
@@ -2171,46 +2144,6 @@ void CBaseModPanel::PaintBackground()
 	if ( !m_LevelLoading && !GameUI().IsInLevel() && xbox_install_status.GetBool() )
 	{
 		DrawCopyStats();
-	}
-#endif
-}
-
-void CBaseModPanel::PostChildPaint()
-{
-	BaseClass::PostChildPaint();
-#if defined( IOS ) && defined( PORTAL2 )
-	// Draw PLAY above MainMenu children so nothing can cover it.
-	if ( m_LevelLoading || GameUI().IsInLevel() )
-		return;
-
-	int wide, tall;
-	GetSize( wide, tall );
-	if ( wide <= 0 || tall <= 0 )
-		return;
-
-	m_nIOSPlayX0 = wide / 8;
-	m_nIOSPlayY0 = tall / 2;
-	m_nIOSPlayX1 = wide - wide / 8;
-	m_nIOSPlayY1 = m_nIOSPlayY0 + MAX( 72, tall / 10 );
-
-	surface()->DrawSetTexture( -1 );
-	surface()->DrawSetColor( 255, 180, 0, 255 );
-	surface()->DrawFilledRect( m_nIOSPlayX0, m_nIOSPlayY0, m_nIOSPlayX1, m_nIOSPlayY1 );
-	surface()->DrawSetColor( 255, 255, 255, 255 );
-	surface()->DrawFilledRect( m_nIOSPlayX0 + 4, m_nIOSPlayY0 + 4, m_nIOSPlayX1 - 4, m_nIOSPlayY1 - 4 );
-	surface()->DrawSetColor( 255, 120, 0, 255 );
-	surface()->DrawFilledRect( m_nIOSPlayX0 + 8, m_nIOSPlayY0 + 8, m_nIOSPlayX1 - 8, m_nIOSPlayY1 - 8 );
-
-	if ( m_hDefaultFont )
-	{
-		const char *pszPlay = "PLAY";
-		wchar_t wszPlay[8];
-		g_pVGuiLocalize->ConvertANSIToUnicode( pszPlay, wszPlay, sizeof( wszPlay ) );
-		int textW, textH;
-		surface()->GetTextSize( m_hDefaultFont, wszPlay, textW, textH );
-		const int tx = ( m_nIOSPlayX0 + m_nIOSPlayX1 - textW ) / 2;
-		const int ty = m_nIOSPlayY0 + ( ( m_nIOSPlayY1 - m_nIOSPlayY0 ) - textH ) / 2;
-		DrawColoredText( m_hDefaultFont, tx, ty, 0x000000ff, pszPlay );
 	}
 #endif
 }
@@ -2429,37 +2362,6 @@ void CBaseModPanel::DrawStartupGraphic( float flNormalizedAlpha )
 	DrawScreenSpaceRectangleAlpha( m_pBackgroundMaterial, x, 0, width_at_ratio, h, 8, 8, tw-8, th-8, tw, th, NULL,1,1,depth,flNormalizedAlpha );
 }
 
-#if defined( IOS )
-bool CBaseModPanel::TryIOSEmergencyPlayTap( int localX, int localY )
-{
-	if ( m_LevelLoading || GameUI().IsInLevel() )
-		return false;
-	if ( localX >= m_nIOSPlayX0 && localX <= m_nIOSPlayX1 &&
-		 localY >= m_nIOSPlayY0 && localY <= m_nIOSPlayY1 )
-	{
-		Msg( "[Portal2 iOS] PLAY tapped → map sp_a1_intro1\n" );
-		engine->ClientCmd_Unrestricted( "map sp_a1_intro1\n" );
-		return true;
-	}
-	return false;
-}
-#endif
-
-void CBaseModPanel::OnMousePressed( vgui::MouseCode code )
-{
-#if defined( IOS ) && defined( PORTAL2 )
-	if ( code == MOUSE_LEFT )
-	{
-		int mx, my;
-		vgui::input()->GetCursorPos( mx, my );
-		int px, py;
-		GetPos( px, py );
-		if ( TryIOSEmergencyPlayTap( mx - px, my - py ) )
-			return;
-	}
-#endif
-	BaseClass::OnMousePressed( code );
-}
 
 void CBaseModPanel::OnCommand(const char *command)
 {

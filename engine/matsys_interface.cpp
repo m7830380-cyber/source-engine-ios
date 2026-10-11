@@ -221,14 +221,14 @@ void mat_hdr_level_Callback( IConVar *var, const char *pOldString, float flOldVa
 		return;
 	}
 
-#if defined( IOS )
-	// Portal 2 iOS: allow LDR (0). The CS:GO clamp-to-2 + modeswitchsave reload
-	// looped Host_NewGame (cyan/black flash) whenever anything touched this cvar
-	// after connect — see launch_log 105.
-	return;
-#else
 	// CSGO doesn't support any values other than 2.
 	mat_hdr_level.SetValue( clamp( mat_hdr_level.GetInt(), 2, 2 ) );
+
+#if defined( IOS )
+	// Portal 2 iOS: never do the modeswitchsave save/load reload below. Portal 2's
+	// configs touch this cvar after connect, and the reload looped Host_NewGame.
+	return;
+#endif
 
 	// Can do any reloading that is necessary here upon change.
 	// FIXME: should check if there is actually going to be a change here (ie. are we able to run in HDR
@@ -245,20 +245,12 @@ void mat_hdr_level_Callback( IConVar *var, const char *pOldString, float flOldVa
 		Cbuf_AddText( Cbuf_GetCurrentPlayer(), "save modeswitchsave;wait;load modeswitchsave\n" );
 	}
 #endif
-#endif
 }
 
 // Convar range change to [2,2] since CS:GO does not support any other setting.
-// iOS Portal 2: default LDR — HDR tonemap + modeswitchsave were unstable.
-#if defined( IOS )
-ConVar mat_hdr_level( "mat_hdr_level", "0", FCVAR_DEVELOPMENTONLY, 
-					  "Set to 0 for no HDR, 1 for LDR+bloom on HDR maps, and 2 for full HDR on HDR maps.",
-					  mat_hdr_level_Callback );
-#else
 ConVar mat_hdr_level( "mat_hdr_level", "2", FCVAR_DEVELOPMENTONLY, 
 					  "Set to 0 for no HDR, 1 for LDR+bloom on HDR maps, and 2 for full HDR on HDR maps.",
 					  mat_hdr_level_Callback );
-#endif
 
 MaterialSystem_SortInfo_t *materialSortInfoArray = 0;
 static bool s_bConfigLightingChanged = false;
@@ -563,12 +555,8 @@ void InitMaterialSystemConfig( bool bInEditMode )
 	OverrideMaterialSystemConfig( config );
 	
 	// now, set default hdr state
-#if defined( IOS )
-	g_pMaterialSystemHardwareConfig->SetHDREnabled( false );
-#else
 	bool bEnableHDR = ( mat_hdr_level.GetInt() >= 2 );
 	g_pMaterialSystemHardwareConfig->SetHDREnabled( bEnableHDR );
-#endif
 
 #if defined( IOS )
 	// Drop leftover CS:GO mode-switch saves before any map load can re-trigger them.

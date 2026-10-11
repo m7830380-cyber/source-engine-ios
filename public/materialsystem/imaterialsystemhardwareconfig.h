@@ -248,17 +248,7 @@ public:
 	// Backward compat for stdshaders
 #if defined ( STDSHADER_DBG_DLL_EXPORT ) || defined( STDSHADER_DX9_DLL_EXPORT )
 	inline bool SupportsPixelShaders_2_b() const { return GetDXSupportLevel() >= 92; }
-	// iOS: never take ps30 world/model paths — PLATFORM VCS static combo ids
-	// mismatch Portal 2 stdshaders (fallback combo 0 → black 3D; VGUI works
-	// only because solids use scissor clears, not UnlitGeneric meshes).
-	inline bool SupportsPixelShaders_3_0() const
-	{
-#if defined( IOS )
-		return false;
-#else
-		return GetDXSupportLevel() >= 95;
-#endif
-	}
+	inline bool SupportsPixelShaders_3_0() const { return GetDXSupportLevel() >= 95; }
 #endif
 
 	inline bool ShouldAlwaysUseShaderModel2bShaders() const { return IsOpenGL(); }

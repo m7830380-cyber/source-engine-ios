@@ -1909,53 +1909,6 @@ void CSDLMgr::ShowPixels( CShowPixelsParams *params )
 	CheckGLError( __LINE__ );
 
 #if defined( IOS )
-	// Present blits the game backbuffer texture to the EGL window (FBO 0).
-	// Must Y-flip like the desktop TOGLES path (dst y0/y1 swapped) — a no-flip
-	// blit left the image upside-down (log 112). Black frames were from
-	// clearalpha, not from this flip.
-	if ( !params->m_onlySyncView && !params->m_noBlit &&
-	     params->m_srcTexName && m_readFBO )
-	{
-		static bool s_bLoggedIOSBlit = false;
-		if ( !s_bLoggedIOSBlit )
-		{
-			s_bLoggedIOSBlit = true;
-			printf( "[Portal2 iOS] ShowPixels: iOS ANGLE Y-flip blit "
-			        "tex=%u  %dx%d  readFBO=%u  sysFBO=%u\n",
-			        (unsigned)params->m_srcTexName,
-			        params->m_width, params->m_height,
-			        (unsigned)m_readFBO,
-			        (unsigned)gGL->m_nSystemFramebufferID );
-			fflush( stdout );
-		}
-
-		int srcW = params->m_width;
-		int srcH = params->m_height;
-		int dstW = 0, dstH = 0;
-		SDL_GetWindowSizeInPixels( m_Window, &dstW, &dstH );
-		if ( dstW <= 0 ) dstW = srcW;
-		if ( dstH <= 0 ) dstH = srcH;
-
-		gGL->glBindFramebuffer( GL_READ_FRAMEBUFFER, m_readFBO );
-		gGL->glFramebufferTexture2D( GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-		                              GL_TEXTURE_2D, params->m_srcTexName, 0 );
-		gGL->glReadBuffer( GL_COLOR_ATTACHMENT0 );
-
-		gGL->glBindFramebuffer( GL_DRAW_FRAMEBUFFER, gGL->m_nSystemFramebufferID );
-		GLenum drawBuf = GL_BACK;
-		gGL->glDrawBuffers( 1, &drawBuf );
-
-		// Y-flip: src (0,0)-(w,h) → dst (0,h)-(w,0)
-		GLenum filter = ( srcW == dstW && srcH == dstH ) ? GL_NEAREST : GL_LINEAR;
-		gGL->glBlitFramebuffer(
-		    0, 0, srcW, srcH,
-		    0, dstH, dstW, 0,
-		    GL_COLOR_BUFFER_BIT, filter );
-
-		gGL->glBindFramebuffer( GL_FRAMEBUFFER, gGL->m_nSystemFramebufferID );
-		gGL->glBindFramebuffer( GL_READ_FRAMEBUFFER, gGL->m_nSystemFramebufferID );
-	}
-
 	// With the queued material system this runs on the render thread; UIKit
 	// (drawable size, event pump) stays on the main thread, which pumps events
 	// every frame anyway.

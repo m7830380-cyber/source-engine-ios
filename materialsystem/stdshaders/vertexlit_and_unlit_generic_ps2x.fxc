@@ -129,37 +129,6 @@
 
 const float4 g_EnvmapTint_SPF					: register( c0 ); //SPF=Single Pass Flashlight, stored in previously unused alpha.
 const float4 g_DiffuseModulation				: register( c1 );
-
-// Portal2 iOS (ANGLE/Metal, no GL_EXT_texture_sRGB_decode): logs 157–159 black RGB + good alpha.
-#if defined( IOS )
-HALF3 IOS_FixZeroInterpolantColor( HALF3 lit )
-{
-	if ( dot( lit, lit ) < 1e-4h )
-		return max( (HALF3)g_DiffuseModulation.rgb, HALF3( 1.0h, 1.0h, 1.0h ) );
-	return lit;
-}
-HALF4 IOS_FixAlphaOnlyTexture( HALF4 c )
-{
-	// Alpha-masked UI (DXT5 / sid 0 log 164): RGB=0 reads black; use c1 tint (log 148 grey via mod).
-	if ( c.a > 1e-3h && dot( c.rgb, c.rgb ) < 1e-4h )
-	{
-		HALF3 tint = (HALF3)g_DiffuseModulation.rgb;
-		if ( dot( tint, tint ) < 1e-4h )
-			tint = HALF3( 1.0h, 1.0h, 1.0h );
-		c.rgb = tint;
-	}
-	return c;
-}
-HALF IOS_ApplyVertexAlpha( HALF texAlpha, HALF vertAlpha, HALF vertexAlphaScale )
-{
-	if ( vertexAlphaScale < 1e-3h )
-		return texAlpha;
-	// Log 148: ANGLE drops COLOR0.a on touch quads → premul black fringe; keep tex alpha.
-	if ( vertAlpha < 1e-3h && texAlpha > 1e-3h )
-		return texAlpha;
-	return lerp( texAlpha, texAlpha * vertAlpha, vertexAlphaScale );
-}
-#endif
 const float4 g_ShadowTweaks						: register( c2 );
 const float4 g_EnvmapParams					: register( c19 );
 #define g_EnvmapContrast g_EnvmapParams.x
@@ -383,9 +352,6 @@ float4_color_return_type main( PS_INPUT i ) : COLOR
 			baseColor.rgb = GammaToLinear( baseColor.rgb );
 		}
 		#endif
-#if defined( IOS )
-		baseColor = IOS_FixAlphaOnlyTexture( baseColor );
-#endif
 	}
 	#endif
 
@@ -533,14 +499,7 @@ float4_color_return_type main( PS_INPUT i ) : COLOR
 	HALF3 diffuseLighting = HALF3( 1.0f, 1.0f, 1.0f );
 	#if ( DIFFUSELIGHTING || VERTEXCOLOR && !( VERTEXCOLOR && DIFFUSELIGHTING ) )
 	{
-#if defined( IOS ) && ( VERTEXCOLOR && !DIFFUSELIGHTING )
-		diffuseLighting = HALF3( 1.0h, 1.0h, 1.0h );
-#else
 		diffuseLighting = (HALF3)i.color.rgb;
-#if defined( IOS )
-		diffuseLighting = IOS_FixZeroInterpolantColor( diffuseLighting );
-#endif
-#endif
 
 		diffuseLighting.rgb += i.directionalLightingColor_flShadowDimScalar.rgb * flDirectionalShadow;
 
@@ -683,28 +642,13 @@ float4_color_return_type main( PS_INPUT i ) : COLOR
 
 	#if ( VERTEXCOLOR && DIFFUSELIGHTING )
 	{
-		HALF3 vcol = (HALF)i.color.rgb;
-#if defined( IOS )
-		vcol = IOS_FixZeroInterpolantColor( vcol );
-#endif
-		albedo *= vcol;
+		albedo *= (HALF)i.color.rgb;
 	}
 	#endif
 
-#if defined( IOS )
-	alpha = IOS_ApplyVertexAlpha( alpha, (HALF)i.color.a, (HALF)g_fVertexAlpha );
-#else
 	alpha = lerp( alpha, alpha * (HALF)i.color.a, (HALF)g_fVertexAlpha );
-#endif
 
 	HALF3 diffuseComponent = albedo * diffuseLighting;
-
-#if defined( IOS ) && !DIFFUSELIGHTING
-	HALF3 iosTint = (HALF3)g_DiffuseModulation.rgb;
-	if ( dot( iosTint, iosTint ) < 1e-4h )
-		iosTint = HALF3( 1.0h, 1.0h, 1.0h );
-	HALF3 iosUnlitRgb = albedo * iosTint;
-#endif
 
 	#if ( DECAL_BLEND_MODE != 2 )
 		float4 decalColor = tex2D( DecalSampler, float2(i.baseTexCoord_baseTexCoord2u.w, i.detailTexCoord_baseTexCoord2v.w ) );
@@ -768,11 +712,7 @@ float4_color_return_type main( PS_INPUT i ) : COLOR
 	}
 	#endif
 
-#if defined( IOS ) && !DIFFUSELIGHTING
-	HALF3 result = iosUnlitRgb;
-#else
 	HALF3 result = diffuseComponent + specularLighting;
-#endif
 	
 #if ( SMOKEGRENADEBLEND )
 	float flSmokeDistance = length( i.vWorldPos_csmXform0z.xyz - g_GlowColor.rgb ) * 0.0008f;

@@ -1867,34 +1867,11 @@ CGLMProgram	*GLMContext::NewProgram( EGLMProgramType type, char *progString, con
 {
 	//hushed GLM_FUNC;
 
-	if ( !progString || !progString[0] )
-	{
-#if defined( IOS )
-		Warning( "NewProgram: empty GLSL for '%s'\n", pShaderName ? pShaderName : "?" );
-#endif
-		return NULL;
-	}
-
 	CGLMProgram *prog = new CGLMProgram( this, type );
 	
 	prog->SetProgramText( progString );
 	prog->SetShaderName( pShaderName );
 	prog->CompileActiveSources();
-
-#if defined( IOS )
-	// Previously always returned non-null even when GLES compile failed.
-	if ( prog->m_descs[kGLMGLSL].m_textPresent && prog->m_descs[kGLMGLSL].m_object.glsl )
-	{
-		GLint isCompiled = GL_TRUE;
-		gGL->glGetShaderiv( prog->m_descs[kGLMGLSL].m_object.glsl, GL_COMPILE_STATUS, &isCompiled );
-		if ( isCompiled == GL_FALSE )
-		{
-			Warning( "NewProgram: GLES compile failed for '%s'\n", pShaderName ? pShaderName : "?" );
-			delete prog;
-			return NULL;
-		}
-	}
-#endif
 
 	return prog;
 }
@@ -2357,18 +2334,6 @@ void GLMContext::Present( CGLMTex *tex )
 			{
 				// blit to GL_BACK done here, not in CocoaMgr, this lets us do resolve directly if conditions are right
 
-#if defined( IOS )
-				// Blit in ShowPixels (with Y-flip). Skip Blit2 here so we have one
-				// present path; black frames were clearalpha, not this blit.
-				static bool s_bLoggedSkipBlit2 = false;
-				if ( !s_bLoggedSkipBlit2 )
-				{
-					s_bLoggedSkipBlit2 = true;
-					Msg( "[Portal2 iOS] Present: ShowPixels handles blit+Y-flip for tex=%u\n",
-						 (unsigned)tex->m_texName );
-				}
-				showparams.m_noBlit = false;
-#else
 				GLMRect	srcRect, dstRect;
 			
 				uint dstWidth,dstHeight;
@@ -2393,7 +2358,6 @@ void GLMContext::Present( CGLMTex *tex )
 
 				// we set showparams.m_noBlit, and just let CocoaMgr handle the swap (flushbuffer / page flip)
 				showparams.m_noBlit = true;
-#endif // !IOS
 
 				BindFBOToCtx( NULL, GL_FRAMEBUFFER );
 			}

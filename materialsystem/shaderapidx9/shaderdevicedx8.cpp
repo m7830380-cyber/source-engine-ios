@@ -615,11 +615,7 @@ void CShaderDeviceMgrDx8::CheckVendorDependentDepthResolveSupport( HardwareCaps_
 	Msg( "INTZ %sSUPPORTED!\n", pCaps->m_bSupportsINTZ ? "" : "NOT " );
 }
 
-#if defined( IOS )
-ConVar mat_hdr_level( "mat_hdr_level", "0" ); // must not win as "2" over engine LDR default
-#else
 ConVar mat_hdr_level( "mat_hdr_level", "2" );
-#endif
 
 #if defined( _PS3 )
 #define SHADOWMAP_SLOPESCALEDEPTHBIAS_D24	"5"
@@ -737,13 +733,7 @@ bool CShaderDeviceMgrDx8::ComputeCapsFromD3D( HardwareCaps_t *pCaps, int nAdapte
 
 	if ( IsOpenGL() )
 	{
-#if defined( IOS )
-		// Portal 2 iOS: PLATFORM VCS combos for ps30 don't match stdshaders
-		// (combo-0 fallback → black world). Stay on ps20b like vertexlit does.
-		pCaps->m_SupportsShaderModel_3_0 = false;
-#else
         pCaps->m_SupportsShaderModel_3_0 = true;
-#endif
 	}
 
 #if 0
@@ -1159,10 +1149,6 @@ bool CShaderDeviceMgrDx8::ComputeCapsFromD3D( HardwareCaps_t *pCaps, int nAdapte
 		if ( bSupportsIntegerHDR )
 			pCaps->m_MaxHDRType = HDR_TYPE_INTEGER;
 		
-#if defined( IOS )
-	pCaps->m_HDRType = HDR_TYPE_NONE;
-	pCaps->m_MaxHDRType = HDR_TYPE_NONE;
-#else
 	if ( bSupportsFloatHDR  && ( mat_hdr_level.GetInt() == 3 ) )
 	{
 		pCaps->m_HDRType = HDR_TYPE_FLOAT;
@@ -1175,7 +1161,6 @@ bool CShaderDeviceMgrDx8::ComputeCapsFromD3D( HardwareCaps_t *pCaps, int nAdapte
 	{
 		pCaps->m_HDRType = HDR_TYPE_NONE;
 	}
-#endif
 
 	Assert( caps.MaxStreams > 1 );
 	pCaps->m_bSupportsStreamOffset = ( caps.DevCaps2 & D3DDEVCAPS2_STREAMOFFSET );
@@ -1216,7 +1201,7 @@ bool CShaderDeviceMgrDx8::ComputeCapsFromD3D( HardwareCaps_t *pCaps, int nAdapte
 	// Note: dxsupport can only DISABLE CSM support, not enable it.
 	pCaps->m_nCSMQuality = CSMQUALITY_VERY_LOW;
 #if defined( IOS )
-	pCaps->m_bSupportsCascadedShadowMapping = false;
+	pCaps->m_bSupportsCascadedShadowMapping = false; // see CHardwareConfig::SupportsCascadedShadowMapping
 #else
 	pCaps->m_bSupportsCascadedShadowMapping = pCaps->m_bSupportsShadowDepthTextures;
 #endif

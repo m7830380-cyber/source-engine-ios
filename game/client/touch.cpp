@@ -36,26 +36,6 @@ extern ConVar sensitivity;
 #define TOUCH_DEFAULT_CFG "touch_default.cfg"
 #define MIN_ALPHA_IN_CUTSCENE 20
 
-#if defined( IOS )
-static void IOS_FixAlphaMaskRGBA( unsigned char *rgba, int pixelCount )
-{
-	for ( int i = 0; i < pixelCount; ++i )
-	{
-		unsigned char *p = rgba + i * 4;
-		if ( p[3] > 0 && ( p[0] + p[1] + p[2] ) < 4 )
-			p[0] = p[1] = p[2] = 255;
-	}
-}
-
-static void IOS_DrawTouchTexturedSubRect( int textureId, int x0, int y0, int x1, int y1,
-	float u0, float v0, float u1, float v1, const rgba_t &color )
-{
-	vgui::surface()->DrawSetTexture( textureId );
-	vgui::surface()->DrawSetColor( color.r, color.g, color.b, color.a );
-	vgui::surface()->DrawTexturedSubRect( x0, y0, x1, y1, u0, v0, u1, v1 );
-}
-#endif
-
 ConVar touch_enable( "touch_enable", TOUCH_DEFAULT, FCVAR_ARCHIVE );
 ConVar touch_draw( "touch_draw", "1", FCVAR_ARCHIVE );
 ConVar touch_filter( "touch_filter", "0", FCVAR_ARCHIVE );
@@ -695,14 +675,6 @@ void CTouchControls::CreateAtlasTexture()
 		DestroyVTFTexture(t->vtf);
 	}
 
-	IOS_FixAlphaMaskRGBA( dest, atlasHeight * atlasHeight );
-	static bool s_bLoggedTouchAtlasFix = false;
-	if ( !s_bLoggedTouchAtlasFix )
-	{
-		s_bLoggedTouchAtlasFix = true;
-		Msg( "[Portal2 iOS] touch atlas: alpha-mask texels RGB→white before VGUI upload (log 166)\n" );
-	}
-
 	touchTextureID = vgui::surface()->CreateNewTextureID( true );
 	vgui::surface()->DrawSetTextureRGBA( touchTextureID, dest, atlasHeight, atlasHeight );
 
@@ -914,12 +886,6 @@ void CTouchControls::Paint()
 	CMatRenderContextPtr pRenderContext( g_pMaterialSystem );
 	int meshCount = 0;
 
-#if defined( IOS )
-	// Log 128: corner-tick ClearBuffers logged 1173 orange fills (≈200k clears);
-	// log 124 (best playable) had ZERO. Hit-testing still uses full button rects —
-	// do not paint over the 3D view at all while in-game.
-#endif
-
 	// Draw non-atlas touch textures
 	for( it = btns.begin(); it != btns.end(); it++ )
 	{
@@ -931,19 +897,14 @@ void CTouchControls::Paint()
 
 			if( t->textureID )
 			{
+				m_pMesh = pRenderContext->GetDynamicMesh( true, NULL, NULL, g_pMatSystemSurface->DrawGetTextureMaterial(t->textureID) );
+
+				meshBuilder.Begin( m_pMesh, MATERIAL_QUADS, 1 );
+
 				int alpha = (btn->color.a > MIN_ALPHA_IN_CUTSCENE) ? MAX( MIN_ALPHA_IN_CUTSCENE, btn->color.a-m_AlphaDiff) : btn->color.a;
 				if( btn->flags & TOUCH_FL_HIDE )
 					alpha = 50;		// hidden, shown only while editing
 				rgba_t color(btn->color.r, btn->color.g, btn->color.b, alpha);
-
-#if defined( IOS )
-				IOS_DrawTouchTexturedSubRect( t->textureID,
-					(int)( btn->x1 * screen_w ), (int)( btn->y1 * screen_h ),
-					(int)( btn->x2 * screen_w ), (int)( btn->y2 * screen_h ),
-					0.0f, 0.0f, 1.0f, 1.0f, color );
-#else
-				m_pMesh = pRenderContext->GetDynamicMesh( true, NULL, NULL, g_pMatSystemSurface->DrawGetTextureMaterial(t->textureID) );
-				meshBuilder.Begin( m_pMesh, MATERIAL_QUADS, 1 );
 
 				meshBuilder.Position3f( btn->x1*screen_w, btn->y1*screen_h, 0 );
 				meshBuilder.Color4ubv( color );
@@ -968,7 +929,6 @@ void CTouchControls::Paint()
 				meshBuilder.End();
 
 				m_pMesh->Draw();
-#endif
 			}
 			else if( !btn->texture->isInAtlas )
 				CreateAtlasTexture();
@@ -978,27 +938,6 @@ void CTouchControls::Paint()
 		}
 	}
 
-#if defined( IOS )
-	for( it = btns.begin(); it != btns.end(); it++ )
-	{
-		CTouchButton *btn = *it;
-
-		if( btn->texture != NULL && ( !(btn->flags & TOUCH_FL_HIDE) || state == state_edit ) && !btn->texture->textureID && ( state == state_edit || TouchButtonAvailable( btn ) ) )
-		{
-			CTouchTexture *t = btn->texture;
-
-			int alpha = (btn->color.a > MIN_ALPHA_IN_CUTSCENE) ? MAX( MIN_ALPHA_IN_CUTSCENE, btn->color.a-m_AlphaDiff) : btn->color.a;
-			if( btn->flags & TOUCH_FL_HIDE )
-				alpha = 50;
-			rgba_t color(btn->color.r, btn->color.g, btn->color.b, alpha);
-
-			IOS_DrawTouchTexturedSubRect( touchTextureID,
-				(int)( btn->x1 * screen_w ), (int)( btn->y1 * screen_h ),
-				(int)( btn->x2 * screen_w ), (int)( btn->y2 * screen_h ),
-				t->X0, t->Y0, t->X1, t->Y1, color );
-		}
-	}
-#else
 	m_pMesh = pRenderContext->GetDynamicMesh( true, NULL, NULL, g_pMatSystemSurface->DrawGetTextureMaterial(touchTextureID) );
 	meshBuilder.Begin( m_pMesh, MATERIAL_QUADS, meshCount );
 
@@ -1039,7 +978,6 @@ void CTouchControls::Paint()
 
 	meshBuilder.End();
 	m_pMesh->Draw();
-#endif
 
 	if( state == state_edit )
 		PaintEditor();

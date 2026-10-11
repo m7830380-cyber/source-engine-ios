@@ -21,6 +21,8 @@ on:
         required: true
         default: "4"
   push:
+    # the Portal 2 branches build their own shader set in build-portal2-ipa.yml
+    branches-ignore: [ portal2-ios, portal2-rubberwar-ios ]
     paths:
       - 'scripts/shaders/**'
       - '.github/workflows/build-weapon-shaders.yml'

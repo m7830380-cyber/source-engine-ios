@@ -100,10 +100,7 @@ $Project "Client (Portal 2)"
 
 		$Folder	"Multiplayer"
 		{
-			$File	"multiplayer\basenetworkedplayer_cl.cpp"
 			$File	"multiplayer\basenetworkedragdoll_cl.cpp"
-			$File	"$SRCDIR\game\shared\multiplayer\basenetworkedplayer_gamemove.cpp"
-			$File	"$SRCDIR\game\shared\multiplayer\basenetworkedplayer_shared.cpp"
 		}
 
 		$Folder "Portal 2"
@@ -323,5 +320,16 @@ $Project
 		$File	"portal2\gameui\basesavegamedialog.cpp"
 		$File	"portal2\gameui\portal2\uiavatarimage.cpp"
 		$File	"portal2\gameui\portal2\uigamedata_storage.cpp"
+	}
+}
+
+$Project
+{
+	$Folder	"Source Files"
+	{
+		// CS:GO's steamworks_gamestats.cpp already has these key-value helpers
+		-$File	"$SRCDIR\game\shared\portal\portal_gamestats_shared.cpp"
+		// portal_weapon_parse.cpp provides CreateWeaponInfo
+		-$File	"$SRCDIR\game\shared\weapon_parse_default.cpp"
 	}
 }

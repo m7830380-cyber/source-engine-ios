@@ -17,7 +17,6 @@ ConVar sv_portal2_pickup_hint_range( "sv_portal2_pickup_hint_range", "350.0", FC
 ConVar sv_portal2_button_hint_range( "sv_portal2_button_hint_range", "350.0", FCVAR_CLIENTDLL );
 #endif
 
-bool g_bShowGhostedPortals = false;
 bool g_bUpsideDown = false;
 float g_fMaxViewModelLag = 0.0f;
 

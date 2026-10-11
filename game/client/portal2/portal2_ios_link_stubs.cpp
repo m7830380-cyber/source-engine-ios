@@ -5,11 +5,6 @@
 
 #include "vgui/IPanel.h"
 
-bool IsRadialMenuOpen( void )
-{
-	return false;
-}
-
 void IOS_CloseChat() {}
 bool IOS_IsChatOpen() { return false; }
 bool IOS_IsBuyMenuVisible() { return false; }
@@ -17,23 +12,6 @@ bool IOS_IsBuyMenuVisible() { return false; }
 void LoadEquipmentData() {}
 DWORD InitHudAllowTextChatFlag( void ) { return 0; }
 DWORD InitUiAllowProperTintFlag( void ) { return 0; }
-
-C_BasePlayer *GetPlayerHoldingEntity( const C_BaseEntity *pHeld )
-{
-	(void)pHeld;
-	return NULL;
-}
-
-Vector Pickup_DefaultPhysGunLaunchVelocity( const Vector &vecForward, float flMass )
-{
-	(void)flMass;
-	return vecForward * 200.0f;
-}
-
-void MoveUnpredictedPhysicsNearPlayerToNetworkedPosition( C_BasePlayer *pPlayer )
-{
-	(void)pPlayer;
-}
 
 void IOS_HapticViewModelSound( C_BasePlayer *pPlayer, const char *pszSound )
 {
@@ -46,17 +24,6 @@ void CS_FreezePanel_ResetDamageText( int iPlayerIndexKiller, int iPlayerIndexVic
 {
 	(void)iPlayerIndexKiller;
 	(void)iPlayerIndexVictim;
-}
-
-#include "portal_grabcontroller_shared.h"
-
-bool CPlayerPickupController::UsePickupController( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value )
-{
-	(void)pActivator;
-	(void)pCaller;
-	(void)useType;
-	(void)value;
-	return false;
 }
 
 #endif

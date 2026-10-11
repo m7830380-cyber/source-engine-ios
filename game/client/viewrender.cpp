@@ -364,7 +364,14 @@ BuildWorldRenderLists_PS3_Epilogue( bShadowDepth );\
 
 #else
 
+#if defined( PORTAL )
+// Portal views are rendered recursively from inside the draw pass, where nothing builds
+// their world lists (the through-portal 3D skybox drew a NULL world list and crashed), so
+// Portal builds and draws each view in a single pass.
+static ConVar r_2PassBuildDraw( "r_2PassBuildDraw", "0", FCVAR_DEVELOPMENTONLY );
+#else
 static ConVar r_2PassBuildDraw( "r_2PassBuildDraw", "1", FCVAR_DEVELOPMENTONLY );
+#endif
 static ConVar r_threaded_buildWRlist( "r_threaded_buildWRlist", "1", FCVAR_DEVELOPMENTONLY, "Threaded BuildWorldList and BuildRenderables list" );
 
 CON_COMMAND_F( toggleThreadedBuildRWList, "toggleThreadedBuildRWList", FCVAR_DEVELOPMENTONLY )

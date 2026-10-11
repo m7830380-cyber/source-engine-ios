@@ -152,7 +152,7 @@ int AddGlowToObject( C_BaseEntity *pObject, int nTeamNumber )
 	Vector vColor;
 	TeamPingColor( nTeamNumber, vColor );
 
-	return GlowObjectManager().RegisterGlowObject( pObject, vColor, GLOW_OUTLINE_ALPHA, GET_ACTIVE_SPLITSCREEN_SLOT() );
+	return GlowObjectManager().RegisterGlowObject( pObject, vColor, GLOW_OUTLINE_ALPHA, true, true, GET_ACTIVE_SPLITSCREEN_SLOT() ); // visible occluded and unoccluded
 }
 
 void RadialMenuMouseCallback( uint8* pData, size_t iSize )
@@ -1397,10 +1397,8 @@ int	CRadialMenu::KeyInput( int down, ButtonCode_t keynum, const char *pszCurrent
 
 	if ( !down )
 		return 1;
-#if 0 // Not Necessary in p2asw
 	ASSERT_LOCAL_PLAYER_RESOLVABLE();
-	int nSlot = GET_ACTIVE_SPLITSCREEN_SLOT();
-#endif
+	int nSlot = GET_ACTIVE_SPLITSCREEN_SLOT(); // for the engine's binding lookup below
 	int numIgnore = ARRAYSIZE( s_pszRadialMenuIgnoreActions );
 	for ( int i=0; i<numIgnore; ++i )
 	{

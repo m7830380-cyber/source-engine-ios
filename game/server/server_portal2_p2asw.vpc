@@ -73,10 +73,7 @@ $Project "Server (Portal 2)"
 
 		$Folder	"Multiplayer"
 		{
-			$File	"multiplayer\basenetworkedplayer.cpp"
 			$File	"multiplayer\basenetworkedragdoll.cpp"
-			$File	"$SRCDIR\game\shared\multiplayer\basenetworkedplayer_gamemove.cpp"
-			$File	"$SRCDIR\game\shared\multiplayer\basenetworkedplayer_shared.cpp"
 		}
 
 		$Folder	"Portal 2"
@@ -94,7 +91,6 @@ $Project "Server (Portal 2)"
 			$File	"portal2\prop_floor_button_under.cpp"
 			$File	"portal2\prop_testchamber_door.cpp"
 			-$File	"portal2\prop_under_button.cpp"
-			$File	"portal2\prop_weighted_cube.cpp"
 			$File	"portal2\portal2_eventlog.cpp"
 			$File	"portal2\portal2_gamemove.cpp"
 			$File	"portal2\portal_playerlocaldata.cpp"
@@ -175,5 +171,14 @@ $Project
 	$Folder	"Link Libraries"
 	{
 		$Lib			"meshutils"	// HullFromPlanes / CMesh (portal player brush contacts)
+	}
+}
+
+$Project
+{
+	$Folder	"Source Files"
+	{
+		// CS:GO's steamworks_gamestats.cpp already has these key-value helpers
+		-$File	"$SRCDIR\game\shared\portal\portal_gamestats_shared.cpp"
 	}
 }

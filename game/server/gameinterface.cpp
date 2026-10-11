@@ -4153,7 +4153,7 @@ void CServerGameTags::GetTaggedConVarList( KeyValues *pCvarTagList )
 }
 
 #if defined(PORTAL2)
-int g_nPortal2PromoFlags = 0; // extern in portal_shareddefs.h (P2ASW)
+// g_nPortal2PromoFlags is defined in portal_shareddefs.cpp (P2ASW)
 #ifndef PORTAL2_PROMO_HELMETS
 #define PORTAL2_PROMO_HELMETS 1
 #endif

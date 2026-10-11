@@ -148,6 +148,10 @@ jobs:
           unzip -q -o build/ios/portal2-shaders.zip -d build/ios/shaders
           echo "$(ls build/ios/shaders/fxc | wc -l) .vcs from the portal2-shaders release"
 
+      - name: Get the P2ASW content
+        if: github.ref_name == 'portal2-p2asw-ios'
+        run: ./scripts/ios/fetch_p2asw_content.sh build/ios/p2asw_content
+
       - name: Use the release ANGLE build
         env:
           GH_TOKEN: ${{ github.token }}

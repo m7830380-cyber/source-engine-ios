@@ -18,9 +18,9 @@ cp "$BUNDLE/Info.plist" "$APP/"
 cp "$BUNDLE/LaunchScreen.storyboard" "$APP/"
 # touch control textures (materials/vgui/touch/*), from the source-engine port
 cp "$BUNDLE/extras_dir.vpk" "$APP/"
-# P2ASW's menu and HUD layouts (scripts/ios/p2asw_content), mounted ahead of the game's VPKs
-if [ -d "$ROOT/scripts/ios/p2asw_content" ]; then
-	python3 "$ROOT/scripts/ios/pack_dir_vpk.py" "$ROOT/scripts/ios/p2asw_content" "$APP/p2asw_dir.vpk"
+# P2ASW's game content (scripts/ios/fetch_p2asw_content.sh), mounted ahead of the game's VPKs
+if [ -d "$BUILDDIR/p2asw_content" ]; then
+	python3 "$ROOT/scripts/ios/pack_dir_vpk.py" "$BUILDDIR/p2asw_content" "$APP/p2asw_dir.vpk"
 fi
 
 # The .vcs set compiled from this tree's stdshaders (build-portal2-ipa.yml);

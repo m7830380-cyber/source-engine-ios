@@ -903,8 +903,8 @@ FSReturnCode_t FileSystem_LoadSearchPaths( CFSSearchPathsInit &initInfo )
 		initInfo.m_pFileSystem->AddVPKFile( pExtrasVPK, PATH_ADD_TO_TAIL );
 	}
 
-	// p2asw_dir.vpk (P2ASW Portal 2 builds only) overrides the game's layouts,
-	// like P2ASW's own folder heading its gameinfo search paths.
+	// p2asw_dir.vpk (P2ASW Portal 2 builds only) holds P2ASW's game content, which
+	// overrides the game's own, like P2ASW's folder heading its gameinfo search paths.
 	const char *pAppDir = getenv( "APP_LIB_PATH" );
 	if ( pAppDir && pAppDir[0] )
 	{

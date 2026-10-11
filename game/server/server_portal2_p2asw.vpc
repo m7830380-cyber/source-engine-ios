@@ -29,7 +29,7 @@ $Project
 	// portal_gamemovement.cpp comes from server_portal_base.vpc — do not exclude.
 	$File "portal\portal_base2d.cpp"
 	$File "portal\portal_client.cpp"
-	$File "portal\portal_placement.cpp"
+	// P2ASW moved portal placement to shared\portal\portal_placement.cpp (server_portal_base.vpc)
 }
 
 $include "$SRCDIR\game\shared\cstrike15\cstrike15_gcmessages_include.vpc" [$IOS]

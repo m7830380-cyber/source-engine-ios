@@ -978,12 +978,12 @@ void ReadLeaderboard()
 	CFmtStrN<256> challenge_besttime( "challenge_besttime_%s", pszMapName );
 	KeyValues *pBestTimeKV = new KeyValues( challenge_besttime.Access() );
 	pBestTimeKV->SetInt( ":refresh", 1 );
-	pBestTimeKV->SetUint64( "besttime", 0xFFFFFFFFFFFFFFFFui64 );
+	pBestTimeKV->SetUint64( "besttime", 0xFFFFFFFFFFFFFFFFULL );
 
 	CFmtStrN<256> challenge_portals;( "challenge_portals_%s", pszMapName );
 	KeyValues *pPortalsKV = new KeyValues( challenge_portals.Access() );
 	pPortalsKV->SetInt( ":refresh", 1 );
-	pPortalsKV->SetUint64( "portals", 0xFFFFFFFFFFFFFFFFui64 );
+	pPortalsKV->SetUint64( "portals", 0xFFFFFFFFFFFFFFFFULL );
 	
 	KeyValues *pReadLeaderboardKV = new KeyValues( "read_leaderboard" );
 	pReadLeaderboardKV->AddSubKey( pBestTimeKV );

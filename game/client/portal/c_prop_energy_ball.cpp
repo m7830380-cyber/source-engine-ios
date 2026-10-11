@@ -62,7 +62,6 @@ BEGIN_PREDICTION_DATA( C_PropEnergyBall )
 
 END_PREDICTION_DATA()
 
-LINK_ENTITY_TO_CLASS( prop_energy_ball, C_PropEnergyBall );
 
 //-----------------------------------------------------------------------------
 // Purpose: 

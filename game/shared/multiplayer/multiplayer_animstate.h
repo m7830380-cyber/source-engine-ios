@@ -274,10 +274,6 @@ protected:
 	QAngle				m_angRender_InterpHistory; //discontinuous space handling
 #endif
 
-#if defined( PORTAL ) && defined( CLIENT_DLL )
-	QAngle				m_angRender_InterpHistory; //discontinuous space handling
-#endif
-
 	// Pose parameters.
 	bool						m_bPoseParameterInit;
 	MultiPlayerPoseData_t		m_PoseParameterData;

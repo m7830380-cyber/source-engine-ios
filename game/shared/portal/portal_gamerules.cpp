@@ -306,7 +306,6 @@ CAmmoDef *GetAmmoDef()
 	return &def;
 }
 
-LINK_ENTITY_TO_CLASS_ALIASED( portal_gamerules, PortalGameRulesProxy );
 
 ///////////////////////////////////////////////////////////////////////
 // Portal singleplayer specific global vscript functions

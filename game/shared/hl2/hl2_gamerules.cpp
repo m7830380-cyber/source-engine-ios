@@ -1921,4 +1921,3 @@ CAmmoDef *GetAmmoDef()
 #endif
 
 // (moved after the class implementation: CS:GO's client LINK_ENTITY_TO_CLASS needs its ClientClass)
-LINK_ENTITY_TO_CLASS_ALIASED( hl2_gamerules, HalfLife2Proxy );

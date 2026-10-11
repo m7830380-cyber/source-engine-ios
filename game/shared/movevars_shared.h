@@ -13,6 +13,9 @@
 #include "convar.h"
 
 extern ConVar sv_gravity;
+
+// Gravity in effect (Alien Swarm / Portal 2 code calls this instead of reading sv_gravity)
+float GetCurrentGravity( void );
 extern ConVar sv_stopspeed;
 extern ConVar sv_noclipaccelerate;
 extern ConVar sv_noclipspeed;

@@ -459,5 +459,4 @@ void UTIL_ClipPunchAngleOffset( QAngle &in, const QAngle &punch, const QAngle &c
 
 #endif
 
-LINK_ENTITY_TO_CLASS_ALIASED( weapon_portal_base, WeaponPortalBase );
 

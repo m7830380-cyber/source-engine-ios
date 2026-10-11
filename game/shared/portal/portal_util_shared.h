@@ -1,4 +1,4 @@
-//========= Copyright ù 1996-2005, Valve Corporation, All rights reserved. ============//
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -126,21 +126,12 @@ bool UTIL_FindClosestPassableSpace_CenterMustStayInFrontOfPlane( const Vector &v
 
 CPortal_Base2D *UTIL_PointIsOnPortalQuad( const Vector vPoint, float fOnPlaneEpsilon, CPortal_Base2D * const *pPortalsToCheck, int iArraySize );
 
-#if defined( PORTAL2 ) && defined( GAME_DLL )
-class CPortal_Base2D;
-struct VPlane;
-bool UTIL_FindClosestPassableSpace_InPortal_CenterMustStayInFront( CPortal_Base2D *pPortalEnvironment, const Vector &vCenter, const Vector &vExtents, const Vector &vPlaneNormal, ITraceFilter *pFilter, unsigned int mask, float dist, Vector &vOutCenter );
-bool UTIL_FindClosestPassableSpace_CenterMustStayInFrontOfPlane( const Vector &vCenter, const Vector &vExtents, const Vector &vPush, ITraceFilter *pFilter, unsigned int mask, float dist, Vector &vOutCenter, VPlane &plane );
-#endif
-
 #ifdef CLIENT_DLL
 void UTIL_TransformInterpolatedAngle( CInterpolatedVar< QAngle > &qInterped, matrix3x4_t matTransform, float fUpToTime );
 void UTIL_TransformInterpolatedPosition( CInterpolatedVar< Vector > &vInterped, const VMatrix& matTransform, float fUpToTime );
 #endif
 
 bool UTIL_Portal_EntityIsInPortalHole( const CPortal_Base2D *pPortal, const CBaseEntity *pEntity );
-
-void UTIL_Portal_VectorToGlobalTransforms( const Vector &vSoundOrigin, CUtlVector<Vector> *pMultiOrigins );
 
 extern const Vector UTIL_ProjectPointOntoPlane( const Vector& point, const cplane_t& plane );
 bool UTIL_PointIsNearPortal( const Vector& point, const CPortal_Base2D* pPortal2D, float planeDist, float radiusReduction = 0.0f );

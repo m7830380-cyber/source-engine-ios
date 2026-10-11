@@ -21,8 +21,8 @@ class CFuncPortalDetector : public CBaseEntity
 public:
 	DECLARE_CLASS( CFuncPortalDetector, CBaseEntity );
 
-	CFuncPortalDetector::CFuncPortalDetector();
-	CFuncPortalDetector::~CFuncPortalDetector();
+	CFuncPortalDetector();
+	~CFuncPortalDetector();
 
 	// Overloads from base entity
 	virtual void	Spawn( void );

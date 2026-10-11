@@ -1150,8 +1150,7 @@ CEG_NOINLINE void MainMenu::ApplySchemeSettings( IScheme *pScheme )
 #ifdef _PS3
 				::SteamRemoteStorage();
 #else
-				SteamClient()?(ISteamRemoteStorage *)SteamClient()->GetISteamGenericInterface(
-				SteamAPI_GetHSteamUser(), SteamAPI_GetHSteamPipe(), STEAMREMOTESTORAGE_INTERFACE_VERSION ):NULL;
+				steamapicontext ? steamapicontext->SteamRemoteStorage() : NULL;
 #endif
 
 			int32 availableBytes, totalBytes = 0;

@@ -14,7 +14,6 @@
 #include "tier0/memdbgon.h"
 
 IMPLEMENT_NETWORKCLASS_ALIASED( PredictedViewModel, DT_PredictedViewModel )
-LINK_ENTITY_TO_CLASS_ALIASED( predicted_viewmodel, PredictedViewModel );
 
 LINK_ENTITY_TO_CLASS_ALIASED( predicted_viewmodel, PredictedViewModel );
 

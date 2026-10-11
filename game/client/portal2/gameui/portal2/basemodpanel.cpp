@@ -2545,7 +2545,7 @@ void CBaseModPanel::OnEvent( KeyValues *pEvent )
 					CUIGameData::Get()->OpenWaitScreen( szWaitScreenText, 0.0f, pSettings );
 
 					KeyValues *kvParamsMigrate = new KeyValues( "MigrateHostToClient" );
-					kvParamsMigrate->SetUint64( "session", (uint64)(uint32)pIMatchSession );
+					kvParamsMigrate->SetUint64( "session", (uint64)(uintp)pIMatchSession );
 					kvParamsMigrate->SetUint64( "clxuid", clxuid );
 					this->PostMessage( this, kvParamsMigrate );
 					return;
@@ -2621,7 +2621,7 @@ void CBaseModPanel::OnKeyCodePressed( KeyCode code )
 void CBaseModPanel::MigrateHostToClient( KeyValues *params )
 {
 	IMatchSession *pIMatchSession = g_pMatchFramework->GetMatchSession();
-	if ( !pIMatchSession || ( (uint64)(uint32)pIMatchSession != params->GetUint64( "session" ) ) )
+	if ( !pIMatchSession || ( (uint64)(uintp)pIMatchSession != params->GetUint64( "session" ) ) )
 		return;
 
 	// Relinquish the host rights

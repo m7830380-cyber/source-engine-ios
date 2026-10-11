@@ -1,14 +1,3 @@
-#ifndef C_PAINTBLOB_H
-#define C_PAINTBLOB_H
-#pragma once
-
-#include "c_baseentity.h"
-
-class C_PaintBlob : public C_BaseEntity
-{
-	DECLARE_CLASS( C_PaintBlob, C_BaseEntity );
-};
-
-typedef C_PaintBlob CBasePaintBlob;
-
-#endif
+// The P2ASW paint/portal code lives in client/portal2/paint/c_paintblob.h; this name is kept for
+// existing includes (it was a stand-in while the RubberWar port had no gels).
+#include "paint/c_paintblob.h"

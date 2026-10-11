@@ -518,7 +518,7 @@ void CPortal_Base2D::TeleportTouchingEntity( CBaseEntity *pOther )
 				punchAngles.x = -punchMag;
 			}
 
-			pOtherAsPlayer->SetPunchAngle( punchAngles );
+			pOtherAsPlayer->SetViewPunchAngle( punchAngles );
 		}
 
 		// Reorient the velocity		

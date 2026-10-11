@@ -1,16 +1,3 @@
-#ifndef PAINT_DATABASE_H
-#define PAINT_DATABASE_H
-#pragma once
-
-#include "cbase.h"
-
-// Retail Portal 2 paint gel database (stub for RubberWar / iOS builds).
-class CPaintDatabase
-{
-public:
-	void RemovePaintedEntity( CBaseEntity * ) {}
-};
-
-extern CPaintDatabase PaintDatabase;
-
-#endif
+// The P2ASW paint/portal code lives in server/portal2/paint/paint_database.h; this name is kept for
+// existing includes (it was a stand-in while the RubberWar port had no gels).
+#include "paint/paint_database.h"

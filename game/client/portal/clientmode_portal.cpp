@@ -15,6 +15,7 @@
 #include "usermessages.h"
 #include "prediction.h"
 #include "hud_macros.h"
+#include "legacy_usermessages.h"
 #include "radialmenu.h"
 #include "glow_outline_effect.h"
 #include "portal2/portal_grabcontroller_shared.h"
@@ -245,7 +246,7 @@ void ClientModePortalNormal::Init()
 {
 	BaseClass::Init();
 
-	HOOK_MESSAGE( TransitionFade );
+	usermessages->HookMessage( "TransitionFade", __MsgFunc_TransitionFade ); // legacy Portal 2 message (legacy_usermessages.h)
 
 	InitRadialMenuHudElement();
 }
@@ -390,7 +391,7 @@ void ClientModePortalNormal::DoPostScreenSpaceEffects( const CViewSetup *pSetup 
 
 	MDLCACHE_CRITICAL_SECTION();
 
-	g_GlowObjectManager.RenderGlowEffects( pSetup, GetSplitScreenPlayerSlot() );
+	GlowObjectManager().RenderGlowEffects( pSetup, GetSplitScreenPlayerSlot() );
 
 	if ( m_BlurFadeScale )
 	{

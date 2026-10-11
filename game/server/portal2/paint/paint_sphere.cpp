@@ -5,6 +5,7 @@
 //=====================================================================================//
 
 #include "cbase.h"
+#include "portal2_paint_defs.h"
 
 #include "paint_sphere.h"
 #ifdef PORTAL2

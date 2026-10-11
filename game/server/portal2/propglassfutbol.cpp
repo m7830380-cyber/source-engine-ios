@@ -27,7 +27,7 @@ public:
 	DECLARE_CLASS(CFutbolCatcher, CBaseAnimating);
 	DECLARE_DATADESC();
 
-	CFutbolCatcher::CFutbolCatcher()
+	CFutbolCatcher()
 	{
 		m_vCatcherBoxHalfDiagonal = Vector(25.0f, 25.0f, 25.0f);
 		m_vecCatchBoxMins = vec3_origin;
@@ -78,7 +78,7 @@ public:
 	DECLARE_CLASS(CPropFutbolSpawner, CFutbolCatcher);
 	DECLARE_DATADESC();
 
-	CPropFutbolSpawner::CPropFutbolSpawner()
+	CPropFutbolSpawner()
 	{
 		m_bHasFutbol = false;
 		m_vCatcherBoxHalfDiagonal = Vector(7.0f, 7.0f, 7.0f);
@@ -103,7 +103,7 @@ public:
 	DECLARE_DATADESC();
 
 
-	CPropGlassFutbol::CPropGlassFutbol()
+	CPropGlassFutbol()
 	{
 		m_Holder = FUTBOL_HELD_BY_NONE;
 		m_vecThrowDirection = vec3_origin;

@@ -405,7 +405,7 @@ void CPortalGameMovement::ProcessMovement( CBasePlayer *pPlayer, CMoveData *pMov
 		// Cropping movement speed scales mv->m_fForwardSpeed etc. globally
 		// Once we crop, we don't want to recursively crop again, so we set the crop
 		// flag globally here once per usercmd cycle.
-		m_bSpeedCropped = false;
+		m_iSpeedCropped = SPEED_CROPPED_RESET;
 
 		m_bInPortalEnv = (((CPortal_Player *)pPlayer)->m_hPortalEnvironment != NULL);
 
@@ -2992,13 +2992,13 @@ void CPortalGameMovement::CheckParameters()
 		mv->m_flUpMove      = 0;
 	}
 
-	DecayPunchAngle();
+	DecayViewPunchAngle();
 
 	// Take angles from command.
 	if ( !IsDead() )
 	{
 		v_angle = mv->m_vecAngles;
-		v_angle = v_angle + player->m_Local.m_vecPunchAngle;
+		v_angle = v_angle + player->m_Local.m_viewPunchAngle;
 
 		// Now adjust roll angle
 		if ( player->GetMoveType() != MOVETYPE_ISOMETRIC  &&

@@ -4,6 +4,7 @@
 //
 //==========================================================================//
 #include "cbase.h"
+#include "portal2_paint_defs.h"
 #include "isaverestore.h"
 #include "paint_stream_manager.h"
 

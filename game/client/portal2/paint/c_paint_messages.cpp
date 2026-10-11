@@ -8,6 +8,7 @@
 #include "cbase.h"
 #include "igamesystem.h"
 #include "hud_macros.h" //HOOK_MESSAGE
+#include "legacy_usermessages.h"
 #include "paint/paint_color_manager.h"
 #include "c_world.h"
 #include "paint/paint_sprayer_shared.h"
@@ -132,16 +133,14 @@ class C_PaintInitHelper : public CAutoGameSystem
 {
 	virtual bool Init()
 	{
-		for ( int i = 0; i < MAX_SPLITSCREEN_PLAYERS; ++i )
-		{
-			ACTIVE_SPLITSCREEN_PLAYER_GUARD( i );
-			HOOK_MESSAGE( PaintWorld );
-			HOOK_MESSAGE( PaintEntity );
-			HOOK_MESSAGE( ChangePaintColor );
-			HOOK_MESSAGE( RemoveAllPaint );
-			HOOK_MESSAGE( PaintAllSurfaces );
-			HOOK_MESSAGE( RemovePaint );
-		}
+		// Portal 2's named paint messages go over the legacy user message bridge
+		// (legacy_usermessages.h); CS:GO's HOOK_MESSAGE only takes protobuf messages.
+		usermessages->HookMessage( "PaintWorld", __MsgFunc_PaintWorld );
+		usermessages->HookMessage( "PaintEntity", __MsgFunc_PaintEntity );
+		usermessages->HookMessage( "ChangePaintColor", __MsgFunc_ChangePaintColor );
+		usermessages->HookMessage( "RemoveAllPaint", __MsgFunc_RemoveAllPaint );
+		usermessages->HookMessage( "PaintAllSurfaces", __MsgFunc_PaintAllSurfaces );
+		usermessages->HookMessage( "RemovePaint", __MsgFunc_RemovePaint );
 
 		return true;
 	}

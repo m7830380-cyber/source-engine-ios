@@ -56,7 +56,7 @@ public:
 	
 	void GetHotspotBounds( int *minX, int *minY, int *maxX, int *maxY );
 		
-	void CRadialButton::PerformLayout( void );	
+	void PerformLayout( void );	
 	virtual void PaintBackground( void );
 	virtual void PaintBorder( void );
 	virtual void Paint( void );

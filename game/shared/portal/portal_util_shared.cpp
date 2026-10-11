@@ -6,6 +6,7 @@
 //=============================================================================//
 
 #include "cbase.h"
+#include "portal2_paint_defs.h"
 #include <algorithm>
 #include "portal_util_shared.h"
 #include "portal_base2d_shared.h"
@@ -2872,9 +2873,8 @@ float UTIL_PaintBrushEntity( CBaseEntity* pBrushEntity, const Vector& contactPoi
 	Vector vEntitySpaceContactPoint;
 	pBrushEntity->WorldToEntitySpace( contactPoint, &vEntitySpaceContactPoint );
 	
-	Color color = MapPowerToColor( power );
-
-	engine->PaintSurface( pBrushEntity->GetModel(), vEntitySpaceContactPoint, color, flPaintRadius );
+	// The CS:GO engine kept Portal 2's paint map, which stores the paint power index.
+	engine->SpherePaintSurface( pBrushEntity->GetModel(), vEntitySpaceContactPoint, (BYTE)power, flPaintRadius, flAlphaPercent );
 
 	return flPaintRadius;
 }
@@ -2922,15 +2922,33 @@ PaintPowerType UTIL_Paint_TracePower( CBaseEntity* pBrushEntity, const Vector& c
 		return NO_POWER;
 	}
 
-	CUtlVector<Color> color;
-
 	// Transform contact point from world to entity space
 	Vector vEntitySpaceContactPoint;
 	pBrushEntity->WorldToEntitySpace( contactPoint, &vEntitySpaceContactPoint );
-	
-	engine->TracePaintSurface( pBrushEntity->GetModel(), vEntitySpaceContactPoint, sv_paint_detection_sphere_radius.GetFloat(), color );
 
-	return MapColorToPower( GetAveragePaintColorFromVector( color ) );
+	// The engine's paint map returns the power index of each painted surface point in the sphere
+	CUtlVector<BYTE> surfPowers;
+	engine->SphereTracePaintSurface( pBrushEntity->GetModel(), vEntitySpaceContactPoint, vContactNormal, sv_paint_detection_sphere_radius.GetFloat(), surfPowers );
+
+	// Most common power wins; ties go to the higher-priority (lower) power, see paint_enum.h
+	int nCount[PAINT_POWER_TYPE_COUNT] = { 0 };
+	for ( int i = 0; i < surfPowers.Count(); ++i )
+	{
+		if ( surfPowers[i] < PAINT_POWER_TYPE_COUNT )
+			++nCount[ surfPowers[i] ];
+	}
+
+	PaintPowerType power = NO_POWER;
+	int nBest = 0;
+	for ( int i = 0; i < PAINT_POWER_TYPE_COUNT; ++i )
+	{
+		if ( nCount[i] > nBest )
+		{
+			nBest = nCount[i];
+			power = (PaintPowerType)i;
+		}
+	}
+	return power;
 
 }
 

@@ -26,14 +26,7 @@
 #define PLAYERDECALS_COOLDOWN_SECONDS 60.0f
 #endif
 
-class CPlayerPickupController : public CBaseEntity
-{
-public:
-	void UsePickupController( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value )
-	{
-		(void)pActivator; (void)pCaller; (void)useType; (void)value;
-	}
-};
+// CPlayerPickupController comes from P2ASW (portal_grabcontroller_shared.h).
 
 #endif // PORTAL2
 

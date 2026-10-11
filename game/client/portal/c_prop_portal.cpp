@@ -53,6 +53,7 @@
 #include "c_baseprojectedentity.h"
 
 #include "debugoverlay_shared.h"
+#include "legacy_usermessages.h"
 
 #undef CProp_Portal
 
@@ -181,7 +182,17 @@ void __MsgFunc_PortalFX_Surface(bf_read &msg)
 	pPortal->CreateFizzleEffect( pOwner, nEffect, vecOrigin, qAngle, nTeam, nPortalNum );
 }
 
-USER_MESSAGE_REGISTER( PortalFX_Surface );
+// Portal 2's named message over the legacy user message bridge (legacy_usermessages.h);
+// CS:GO's USER_MESSAGE_REGISTER only takes protobuf messages.
+class C_PortalFXSurfaceMessageHook : public CAutoGameSystem
+{
+	virtual bool Init()
+	{
+		usermessages->HookMessage( "PortalFX_Surface", __MsgFunc_PortalFX_Surface );
+		return true;
+	}
+};
+static C_PortalFXSurfaceMessageHook s_PortalFXSurfaceMessageHook;
 
 C_Prop_Portal::C_Prop_Portal( void )
 :	m_fStaticAmount( 0.0f ),

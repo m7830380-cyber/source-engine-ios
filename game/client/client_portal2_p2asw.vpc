@@ -271,7 +271,7 @@ $Project
 		$File	"$SRCDIR\game\client\portal2\vgui\vgui_indicator_panel.cpp"
 		$File	"$SRCDIR\game\shared\portal\achievements_portal.cpp"
 		$File	"$SRCDIR\game\shared\portal\baseprojectedentity_shared.cpp"
-		$File	"$SRCDIR\game\shared\portal\portal_mp_gamerules.cpp"
+		// portal_mp_gamerules.cpp (co-op rules) left out: single player first; it needs CS:GO equivalents of the coop user messages
 		$File	"$SRCDIR\game\shared\portal\portal_weapon_parse.cpp"
 		$File	"$SRCDIR\game\shared\portal\projectedwallentity_shared.cpp"
 		$File	"$SRCDIR\game\shared\portal\trigger_tractorbeam_shared.cpp"

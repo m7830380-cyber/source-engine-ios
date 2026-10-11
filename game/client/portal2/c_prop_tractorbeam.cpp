@@ -46,8 +46,8 @@ public:
 	DECLARE_CLIENTCLASS();
 	DECLARE_PREDICTABLE();
 
-	C_PropTractorBeamProjector::C_PropTractorBeamProjector();
-	C_PropTractorBeamProjector::~C_PropTractorBeamProjector();
+	C_PropTractorBeamProjector();
+	~C_PropTractorBeamProjector();
 	
 	virtual void Spawn();
 	virtual void ClientThink();

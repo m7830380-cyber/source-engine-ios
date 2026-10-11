@@ -1,21 +1,3 @@
-#ifndef PAINT_STREAM_MANAGER_H
-#define PAINT_STREAM_MANAGER_H
-#ifdef _WIN32
-#pragma once
-#endif
-
-// Retail Portal 2 paint; not used in RubberWar iOS build.
-class CPaintStreamManager
-{
-public:
-	static CPaintStreamManager &Instance()
-	{
-		static CPaintStreamManager s_Instance;
-		return s_Instance;
-	}
-	void AllocatePaintBlobPool( int nMaxBlobCount ) { (void)nMaxBlobCount; }
-};
-
-#define PaintStreamManager ( CPaintStreamManager::Instance() )
-
-#endif
+// The P2ASW paint/portal code lives in shared/portal2/paint/paint_stream_manager.h; this name is kept for
+// existing includes (it was a stand-in while the RubberWar port had no gels).
+#include "../portal2/paint/paint_stream_manager.h"

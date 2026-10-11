@@ -1196,7 +1196,7 @@ bool CPortalRender::DrawPortalsUsingStencils( CViewRender *pViewRender )
 				flMaxX = flViewportWidth * flMaxX + flViewportWidth + flViewportX;
 				flMinY = flViewportHeight * flMinY + flViewportHeight + flViewportY;
 				flMaxY = flViewportHeight * flMaxY + flViewportHeight + flViewportY;
-#if 0			// Portal 2
+#if 1			// Portal 2 (the CS:GO engine has the scissor stack Swarm lacked)
 				pRenderContext->PushScissorRect( int( flMinX ), int( flMinY ), int( flMaxX ), int( flMaxY ) );
 #else			// Swarm
 				pRenderContext->SetScissorRect( int( flMinX ), int( flMinY ), int( flMaxX ), int( flMaxY ), true );
@@ -1313,7 +1313,7 @@ bool CPortalRender::DrawPortalsUsingStencils( CViewRender *pViewRender )
 
 		if ( bPushedScissor )
 		{
-			//pRenderContext->PopScissorRect();
+			pRenderContext->PopScissorRect();
 		}
 	}
 
@@ -1787,84 +1787,6 @@ bool CPortalRender::DrawPortalsUsingStencils_Old( CViewRender *pViewRender )
 
 
 
-
-#ifdef _DEBUG
-extern bool g_bRenderingCameraView;
-#endif
-
-void CPortalRender::DrawPortalsToTextures(CViewRender *pViewRender, const CViewSetup &cameraView)
-{
-	if (ShouldUseStencilsToRenderPortals())
-		return;
-
-	/*if ( (pViewRender->GetDrawFlags() & DF_RENDER_REFLECTION) != 0 )
-	return;*/
-
-	m_iRemainingPortalViewDepth = 1;
-	m_iViewRecursionLevel = 0;
-	m_pRenderingViewForPortal = NULL;
-	m_pRenderingViewExitPortal = NULL;
-
-	m_RecursiveViewSetups[m_iViewRecursionLevel] = cameraView;
-
-	m_RecursiveViewComplexFrustums[0].RemoveAll(); //clear any garbage leftover in the complex frustums from last frame
-	m_RecursiveViewComplexFrustums[0].AddMultipleToTail(FRUSTUM_NUMPLANES, pViewRender->GetFrustum());
-
-
-#ifdef _DEBUG
-	g_bRenderingCameraView = true;
-#endif
-
-	int iNumRenderablePortals = g_pPortalRender->m_ActivePortals.Count();
-
-	Vector ptCameraOrigin = cameraView.origin;
-
-	//an extraneous push to update the frustum
-	CMatRenderContextPtr pRenderContext( materials );
-	render->Push3DView( pRenderContext, cameraView, 0, NULL, pViewRender->GetFrustum() );
-
-	for (int i = 0; i != iNumRenderablePortals; ++i)
-	{
-		CPortalRenderable *pCurrentPortal = g_pPortalRender->m_ActivePortals[i];
-
-		if ((pCurrentPortal->ShouldUpdatePortalView_BasedOnView(cameraView, m_RecursiveViewComplexFrustums[m_iViewRecursionLevel]) == false) ||
-			(pCurrentPortal->GetLinkedPortal() == NULL))
-		{
-			//can't see through the portal, free up it's view id node for use elsewhere
-			if (m_PortalViewIDNodeChain[m_iViewRecursionLevel]->ChildNodes[pCurrentPortal->m_iPortalViewIDNodeIndex] != NULL)
-			{
-				FreePortalViewIDNode(m_PortalViewIDNodeChain[m_iViewRecursionLevel]->ChildNodes[pCurrentPortal->m_iPortalViewIDNodeIndex]);
-				m_PortalViewIDNodeChain[m_iViewRecursionLevel]->ChildNodes[pCurrentPortal->m_iPortalViewIDNodeIndex] = NULL;
-			}
-			continue;
-		}
-
-		Assert(m_PortalViewIDNodeChain[m_iViewRecursionLevel]->ChildNodes.Count() > pCurrentPortal->m_iPortalViewIDNodeIndex);
-
-		if (m_PortalViewIDNodeChain[m_iViewRecursionLevel]->ChildNodes[pCurrentPortal->m_iPortalViewIDNodeIndex] == NULL)
-			m_PortalViewIDNodeChain[m_iViewRecursionLevel]->ChildNodes[pCurrentPortal->m_iPortalViewIDNodeIndex] = AllocPortalViewIDNode(m_HeadPortalViewIDNode.ChildNodes.Count());
-
-		m_PortalViewIDNodeChain[m_iViewRecursionLevel + 1] = m_PortalViewIDNodeChain[m_iViewRecursionLevel]->ChildNodes[pCurrentPortal->m_iPortalViewIDNodeIndex];
-
-		pCurrentPortal->RenderPortalViewToTexture(pViewRender, cameraView);
-
-		m_PortalViewIDNodeChain[m_iViewRecursionLevel + 1] = NULL;
-	}
-
-	render->PopView( pRenderContext, pViewRender->GetFrustum() );
-
-	m_iRemainingPortalViewDepth = 1;
-	m_iViewRecursionLevel = 0;
-
-	Assert(m_pRenderingViewForPortal == NULL);
-	Assert(m_pRenderingViewExitPortal == NULL);
-	m_pRenderingViewForPortal = NULL;
-	m_pRenderingViewExitPortal = NULL;
-
-#ifdef _DEBUG
-	g_bRenderingCameraView = false;
-#endif
-}
 
 void CPortalRender::AddPortal(CPortalRenderable *pPortal)
 {

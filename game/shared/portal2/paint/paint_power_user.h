@@ -6,6 +6,7 @@
 #ifndef PAINT_POWER_USER_H
 #define PAINT_POWER_USER_H
 
+#include "portal2_paint_defs.h"
 #include <utility>
 #include <algorithm>
 #include "gamestringpool.h"

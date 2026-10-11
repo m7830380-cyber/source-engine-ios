@@ -6,6 +6,7 @@
 #ifndef PROP_PAINT_POWER_USER_H
 #define PROP_PAINT_POWER_USER_H
 
+#include "portal2_paint_defs.h"
 #include "vphysics/friction.h"
 #include "vphysics/constraints.h"
 #ifdef GAME_DLL

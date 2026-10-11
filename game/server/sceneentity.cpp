@@ -1041,6 +1041,20 @@ void CSceneEntity::Precache( void )
 	if ( m_iszSceneFile == NULL_STRING )
 		return;
 
+	// Portal 2's LoadScene forced a .vcd extension, and the retail scripts rely on it:
+	// glados_scenetable_include_manual.nut creates "scenes/npc/sphere03/intro_ride07.wav"
+	// (sp_a1_intro1 brain damage talk). CS:GO dropped that Q_SetExtension because of dotted
+	// names, so only swap a sound extension here; without it the scene chain stops dead.
+	const char *pszExt = V_GetFileExtension( STRING( m_iszSceneFile ) );
+	if ( pszExt && ( !V_stricmp( pszExt, "wav" ) || !V_stricmp( pszExt, "mp3" ) ) )
+	{
+		char szFixed[MAX_PATH];
+		V_strncpy( szFixed, STRING( m_iszSceneFile ), sizeof( szFixed ) );
+		V_SetExtension( szFixed, ".vcd", sizeof( szFixed ) );
+		DevMsg( "Scene '%s' renamed to '%s'\n", STRING( m_iszSceneFile ), szFixed );
+		m_iszSceneFile = AllocPooledString( szFixed );
+	}
+
 	if ( m_iszResumeSceneFile != NULL_STRING )
 	{
 		PrecacheInstancedScene( STRING( m_iszResumeSceneFile ) );

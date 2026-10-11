@@ -2710,7 +2710,8 @@ bool CGameMovement::CheckJumpButton( void )
 	float flMul;
 	if ( g_bMovementOptimizations )
 	{
-#if defined(HL2_DLL) || defined(HL2_CLIENT_DLL)
+		// Portal 2 has HL2's gravity (600) and jump; CS:GO's constant below assumes 800.
+#if defined(HL2_DLL) || defined(HL2_CLIENT_DLL) || defined( PORTAL2 )
 		Assert( sv_gravity.GetFloat() == 600.0f );
 		flMul = 160.0f;	// approx. 21 units.
 #else

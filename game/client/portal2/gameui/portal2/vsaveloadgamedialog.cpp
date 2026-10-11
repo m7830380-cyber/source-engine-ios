@@ -1209,7 +1209,7 @@ void SaveLoadGameDialog::ScreenshotLoaded( const FileAsyncRequest_t &asyncReques
 
 void ScreenshotLoaded( const FileAsyncRequest_t &asyncRequest, int numReadBytes, FSAsyncStatus_t err )
 {
-	WINDOW_TYPE wt = (int)asyncRequest.pContext ? WT_SAVEGAME : WT_LOADGAME;
+	WINDOW_TYPE wt = asyncRequest.pContext ? WT_SAVEGAME : WT_LOADGAME;
 	SaveLoadGameDialog *pDialog = static_cast< SaveLoadGameDialog* >( CBaseModPanel::GetSingleton().GetWindow( wt ) );
 	if ( pDialog )
 	{

@@ -11,6 +11,10 @@
 
 // CGameUiAvatarImage is built from P2ASW's uiavatarimage.cpp
 
+#endif // !_X360
+
+using namespace BaseModUI;
+
 Achievements::Achievements( vgui::Panel *parent, const char *panelName )
 	: BaseClass( parent, panelName )
 {

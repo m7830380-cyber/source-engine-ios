@@ -65,7 +65,8 @@
 	ConVar sv_report_client_settings("sv_report_client_settings", "0", FCVAR_GAMEDLL | FCVAR_NOTIFY );
 
 	extern ConVar mp_dev_wait_for_other_player;
-	extern ConVar mp_chattime;
+	// Alien Swarm's CMultiplayRules defined this; the CS:GO one doesn't
+	ConVar mp_chattime( "mp_chattime", "10", FCVAR_NOTIFY, "amount of time players can chat after the game is over", true, 1, true, 120 );
 
 	#define WEAPON_MAX_DISTANCE_FROM_SPAWN 64
 

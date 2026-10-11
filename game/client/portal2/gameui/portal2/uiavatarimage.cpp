@@ -61,18 +61,18 @@ bool CGameUiAvatarImage::SetAvatarXUID( XUID xuid, AvatarSize_t nSize /*= MEDIUM
 		int iAvatar;
 		if ( nSize == SMALL )
 		{
-			iAvatar = steamapicontext->SteamFriends()->GetFriendAvatar( xuid, k_EAvatarSize32x32 );
+			iAvatar = steamapicontext->SteamFriends()->GetSmallFriendAvatar( xuid ) /* 32x32 */;
 			//iAvatar = steamapicontext->SteamFriends()->GetSmallFriendAvatar( xuid );
 		}
 		else if ( nSize == MEDIUM )
 		{
-			iAvatar = steamapicontext->SteamFriends()->GetFriendAvatar( xuid, k_EAvatarSize64x64 );
+			iAvatar = steamapicontext->SteamFriends()->GetMediumFriendAvatar( xuid ) /* 64x64 */;
 			//iAvatar = steamapicontext->SteamFriends()->GetMediumFriendAvatar( xuid );
 		}
 		else // nSize == LARGE
 		{
 			// Swarm doesn't have the large size available
-			iAvatar = steamapicontext->SteamFriends()->GetFriendAvatar( xuid, k_EAvatarSize64x64 );
+			iAvatar = steamapicontext->SteamFriends()->GetMediumFriendAvatar( xuid ) /* 64x64 */;
 			//iAvatar = steamapicontext->SteamFriends()->GetLargeFriendAvatar( xuid );
 		}
 

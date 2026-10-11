@@ -5,6 +5,7 @@
 #endif
 
 #include "radialmenu.h"
+#include "matchmaking/imatchtitle.h" // TitleDataFieldsDescription_t, used by iplayer.h on CS:GO
 #include "matchmaking/iplayer.h"
 
 struct TauntStatusData

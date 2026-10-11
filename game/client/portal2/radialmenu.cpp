@@ -5,6 +5,7 @@
 //================================================================//
 
 #include "cbase.h"
+#include "legacy_usermessages.h"
 #include <string.h>
 #include <stdio.h>
 #include <vgui_controls/ImagePanel.h>
@@ -151,7 +152,7 @@ int AddGlowToObject( C_BaseEntity *pObject, int nTeamNumber )
 	Vector vColor;
 	TeamPingColor( nTeamNumber, vColor );
 
-	return g_GlowObjectManager.RegisterGlowObject( pObject, vColor, GLOW_OUTLINE_ALPHA, GET_ACTIVE_SPLITSCREEN_SLOT() );
+	return GlowObjectManager().RegisterGlowObject( pObject, vColor, GLOW_OUTLINE_ALPHA, GET_ACTIVE_SPLITSCREEN_SLOT() );
 }
 
 void RadialMenuMouseCallback( uint8* pData, size_t iSize )
@@ -960,7 +961,7 @@ void CRadialMenu::SetArmedButtonDir( ButtonDir dir )
 		if ( m_buttons[m_armedButtonDir] )
 		{
 #ifdef OSX
-			if ( !m_buttons[m_armedButtonDir]->IsFakeArmed() )
+			if ( !m_buttons[m_armedButtonDir]->IsFakedArmed() )
 			{
 				m_buttons[m_armedButtonDir]->SetArmed( true );	
 				OnCursorEnteredButton( m_cursorX, m_cursorY, m_buttons[m_armedButtonDir] );
@@ -1407,11 +1408,8 @@ int	CRadialMenu::KeyInput( int down, ButtonCode_t keynum, const char *pszCurrent
 		ButtonCode_t key;
 		do 
 		{
-#if 0 // P2 Engine
-			key = (ButtonCode_t)engine->Key_CodeForBinding( s_pszRadialMenuIgnoreActions[i], nSlot, count, -1 );
-#else
-			key = UTIL_KeyCodeForBinding( s_pszRadialMenuIgnoreActions[i] );
-#endif
+			// the CS:GO engine has Portal 2's binding lookup (Swarm needed UTIL_KeyCodeForBinding)
+			key = (ButtonCode_t)engine->Key_CodeForBinding( s_pszRadialMenuIgnoreActions[i], nSlot, count );
 			if ( IsJoystickCode( key ) )
 			{
 				key = GetBaseButtonCode( key );
@@ -1705,7 +1703,7 @@ void CRadialMenu::ClearGlowEntity( void )
 	// Stop glowing if we're done
 	if ( m_nEntityGlowIndex != -1 )
 	{
-		g_GlowObjectManager.UnregisterGlowObject( m_nEntityGlowIndex );
+		GlowObjectManager().UnregisterGlowObject( m_nEntityGlowIndex );
 		m_nEntityGlowIndex = -1;
 	}
 }
@@ -2346,7 +2344,7 @@ public:
 					// Remove the glow
 					if ( m_Signifiers[itr].m_nGlowIndex != -1 )
 					{
-						g_GlowObjectManager.UnregisterGlowObject( m_Signifiers[itr].m_nGlowIndex );
+						GlowObjectManager().UnregisterGlowObject( m_Signifiers[itr].m_nGlowIndex );
 					}
 
 					Locator_RemoveTarget( m_Signifiers[itr].m_nLocatorIndex );
@@ -2363,7 +2361,7 @@ public:
 		{
 			if ( m_Signifiers[itr].m_nGlowIndex != -1 )
 			{
-				g_GlowObjectManager.UnregisterGlowObject( m_Signifiers[itr].m_nGlowIndex );
+				GlowObjectManager().UnregisterGlowObject( m_Signifiers[itr].m_nGlowIndex );
 			}
 		}
 
@@ -2409,7 +2407,7 @@ public:
 						// Remove the glow
 						if ( m_Signifiers[itr].m_nGlowIndex != -1 )
 						{
-							g_GlowObjectManager.UnregisterGlowObject( m_Signifiers[itr].m_nGlowIndex );
+							GlowObjectManager().UnregisterGlowObject( m_Signifiers[itr].m_nGlowIndex );
 						}
 
 						// Kill it
@@ -2459,7 +2457,7 @@ public:
 			Vector vColor;
 			TeamPingColor( pPingPlayer ? pPingPlayer->GetTeamNumber() : 0, vColor );
 
-			g_GlowObjectManager.SetColor( nGlowIndex, vColor );
+			GlowObjectManager().SetColor( nGlowIndex, vColor );
 		}
 
 		// Hold it
@@ -2857,4 +2855,14 @@ static void __MsgFunc_AddLocator( bf_read &msg )
 	AddLocator( pTarget, vPosition, vNormal, nPlayerIndex, iconName, fDisplayTime );
 }
 
-USER_MESSAGE_REGISTER( AddLocator );
+// Portal 2's named message over the legacy user message bridge (legacy_usermessages.h);
+// CS:GO's USER_MESSAGE_REGISTER only takes protobuf messages.
+class C_RadialMenuMessageHook : public CAutoGameSystem
+{
+	virtual bool Init()
+	{
+		usermessages->HookMessage( "AddLocator", __MsgFunc_AddLocator );
+		return true;
+	}
+};
+static C_RadialMenuMessageHook s_RadialMenuMessageHook;

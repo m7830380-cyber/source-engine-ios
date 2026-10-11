@@ -169,3 +169,11 @@ $Project
 		$File	"$SRCDIR\game\shared\portal2\trigger_catapult_shared.cpp"
 	}
 }
+
+$Project
+{
+	$Folder	"Link Libraries"
+	{
+		$Lib			"meshutils"	// HullFromPlanes / CMesh (portal player brush contacts)
+	}
+}

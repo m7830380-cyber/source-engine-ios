@@ -19,6 +19,7 @@
 #include <vgui/IInput.h>
 #include "tier0/vprof.h"
 #include "iclientmode.h"
+#include "ivieweffects.h"
 #include <vgui_controls/Panel.h>
 #include <keyvalues.h>
 #include "filesystem.h"
@@ -444,6 +445,50 @@ bool VGui_Startup( CreateInterfaceFn appSystemFactory )
 	return true;
 }
 
+#if defined( IOS ) && defined( PORTAL2 )
+//-----------------------------------------------------------------------------
+// Screen fades (env_fade: the intro's wake-up white, the fade at the bed) as a
+// full-screen VGUI fill. CS:GO only draws them in the post-process pass, which
+// iOS runs without, and the 3D overlay material comes out black on the iOS
+// unlit shader path, while VGUI fills draw their color correctly.
+//-----------------------------------------------------------------------------
+class CIOSScreenFadePanel : public vgui::Panel
+{
+	DECLARE_CLASS_SIMPLE( CIOSScreenFadePanel, vgui::Panel );
+public:
+	CIOSScreenFadePanel( vgui::VPANEL parent ) : BaseClass( NULL, "IOSScreenFade" )
+	{
+		SetParent( parent );
+		SetPaintBackgroundEnabled( false );
+		SetMouseInputEnabled( false );
+		SetKeyBoardInputEnabled( false );
+		SetZPos( -100 );	// under the HUD and hints, over the 3D view
+		SetVisible( true );
+		vgui::ivgui()->AddTickSignal( GetVPanel() );
+	}
+
+	virtual void OnTick()
+	{
+		int w, h;
+		vgui::surface()->GetScreenSize( w, h );
+		SetBounds( 0, 0, w, h );
+	}
+
+	virtual void Paint()
+	{
+		if ( !engine->IsInGame() || !GetViewEffects() )
+			return;
+		byte color[4];
+		bool bModulate;
+		GetViewEffects()->GetFadeParams( &color[0], &color[1], &color[2], &color[3], &bModulate );
+		if ( !color[3] )
+			return;
+		vgui::surface()->DrawSetColor( color[0], color[1], color[2], color[3] );
+		vgui::surface()->DrawFilledRect( 0, 0, GetWide(), GetTall() );
+	}
+};
+#endif
+
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
@@ -485,6 +530,9 @@ void VGui_CreateGlobalPanels( void )
 	Msg( "[Portal2 iOS] VGui_CreateGlobalPanels: loadingdisc\n" );
 #endif
 	loadingdisc->Create( gameToolParent );
+#if defined( IOS ) && defined( PORTAL2 )
+	new CIOSScreenFadePanel( VGui_GetClientDLLRootPanel() );
+#endif
 	messagechars->Create( gameToolParent );
 
 #if defined( IOS ) && defined( PORTAL2 )

@@ -3315,27 +3315,6 @@ void CViewRender::RenderView( const CViewSetup &view, const CViewSetup &hudViewS
 		// Store off color fade params to be applied in fullscreen postprocess pass
 		SetViewFadeParams( color[0], color[1], color[2], color[3], blend );
 
-#if defined( IOS )
-		// iOS runs with mat_postprocess_enable 0, and that pass is the only place CS:GO
-		// draws screen fades, so env_fade (Portal 2's wake-up white, the fade to black
-		// at the bed) never showed. Draw them here instead, as older Source did.
-		static ConVarRef s_mat_postprocess_enable( "mat_postprocess_enable" );
-		if ( color[3] && !s_mat_postprocess_enable.GetBool() )
-		{
-			static CMaterialReference s_FadeMaterial;
-			if ( !s_FadeMaterial.IsValid() )
-			{
-				KeyValues *pFadeKV = new KeyValues( "UnlitGeneric" );
-				pFadeKV->SetString( "$basetexture", "vgui/white" );
-				pFadeKV->SetInt( "$translucent", 1 );
-				pFadeKV->SetInt( "$ignorez", 1 );
-				pFadeKV->SetInt( "$nofog", 1 );
-				pFadeKV->SetInt( "$nocull", 1 );
-				s_FadeMaterial.Init( "__ios_screenfade", TEXTURE_GROUP_OTHER, pFadeKV );
-			}
-			render->ViewDrawFade( color, s_FadeMaterial );
-		}
-#endif
 
 		// Draw an overlay to make it even harder to see inside smoke particle systems.
 		DrawSmokeFogOverlay();

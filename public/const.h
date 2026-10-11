@@ -161,7 +161,10 @@
 
 // FIXME[HPE]: this won't actually work - we're out of bits. :(
 #ifdef PORTAL2
-#define FL_UNPAINTABLE			(1<<32) // Unpaintable entities!
+// (1<<32) doesn't fit m_fFlags: AddFlag( FL_UNPAINTABLE ) is undefined and on iOS
+// ORed register garbage into every prop_dynamic's flags, FL_CLIENT included, so
+// "clients only" triggers fired at map load. Portal 2 never sets FL_GRENADE.
+#define FL_UNPAINTABLE			FL_GRENADE // Unpaintable entities!
 #else
 #define FL_FREEZING				(1<<32) // We're becoming frozen!
 #endif

@@ -2913,6 +2913,27 @@ void CBaseFileSystem::AddSearchPath( const char *pPath, const char *pathID, Sear
 		pPath = tempSymlinkBuffer;
 	}
 
+#if defined( IOS )
+	// The game folder isn't always csgo (Portal 2: update, portal2_dlc2 and
+	// portal2_dlc1 sit next to portal2 and must be mounted ahead of it, as on PC);
+	// take the name from a path that holds a gameinfo.txt.
+	char szGameDirName[MAX_PATH];
+	{
+		char szGameInfo[MAX_PATH];
+		V_ComposeFileName( pPath, "gameinfo.txt", szGameInfo, sizeof( szGameInfo ) );
+		struct _stat gameinfoStat;
+		if ( FS_stat( szGameInfo, &gameinfoStat ) != -1 )
+		{
+			char szDir[MAX_PATH];
+			V_strncpy( szDir, pPath, sizeof( szDir ) );
+			V_StripTrailingSlash( szDir );
+			V_strncpy( szGameDirName, V_UnqualifiedFileName( szDir ), sizeof( szGameDirName ) );
+			if ( szGameDirName[0] )
+				pGameName = szGameDirName;
+		}
+	}
+#endif
+
 	if ( V_stristr( pPath, pGameName ) &&
 		( !Q_stricmp( pathID, "GAME" ) || !Q_stricmp( pathID, "MOD" ) || !Q_stricmp( pathID, "PLATFORM" ) ) )
 	{
@@ -2936,6 +2957,23 @@ void CBaseFileSystem::AddSearchPath( const char *pPath, const char *pathID, Sear
 		{
 			// found
 			AddSearchPathInternal( szUpdatePath, pathID, addType, true );
+#if defined( IOS ) && defined( SUPPORT_VPK )
+			// Portal 2's update folder ships its own pak01
+			if ( !Q_stricmp( pathID, "GAME" ) || !Q_stricmp( pathID, "MOD" ) )
+			{
+				for ( int i = 1; i < 99; i++ )
+				{
+					char newVPK[MAX_PATH];
+					V_snprintf( newVPK, sizeof( newVPK ), "%s/pak%02d_dir.vpk", szUpdatePath, i );
+					FILE *pstdiofile = fopen( newVPK, "rb" );
+					if ( !pstdiofile )
+						break;
+					fclose( pstdiofile );
+					V_snprintf( newVPK, sizeof( newVPK ), "%s/pak%02d.vpk", szUpdatePath, i );
+					AddVPKFile( newVPK );
+				}
+			}
+#endif
 		}
 
 		// followed by dlc

@@ -4264,6 +4264,17 @@ void CBaseModPanel::SelectBackgroundPresentation()
 
 	m_iBackgroundImageID = surface()->CreateNewTextureID();
 	surface()->DrawSetTextureFile( m_iBackgroundImageID, pFadeFilename, true, false );
+#if defined( IOS )
+	{
+		int nTexWide = 0, nTexTall = 0;
+		surface()->DrawGetTextureSize( m_iBackgroundImageID, nTexWide, nTexTall );
+		int nScreenWide, nScreenTall;
+		surface()->GetScreenSize( nScreenWide, nScreenTall );
+		Msg( "[menu] background image %s: id %d, %dx%d, screen %dx%d, proportional %d (scaled 480 -> %d)\n",
+			 (const char *)pFadeFilename, m_iBackgroundImageID, nTexWide, nTexTall, nScreenWide, nScreenTall,
+			 IsProportional() ? 1 : 0, vgui::scheme()->GetProportionalScaledValue( 480 ) );
+	}
+#endif
 
 	bool bUseMono = false;
 #if defined( _X360 )

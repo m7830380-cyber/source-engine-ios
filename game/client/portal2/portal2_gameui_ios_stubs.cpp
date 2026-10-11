@@ -9,43 +9,7 @@
 
 #ifndef _X360
 
-CGameUiAvatarImage::CGameUiAvatarImage( void )
-{
-	m_bValid = false;
-	m_flFetchedTime = 0.0f;
-	m_iTextureID = -1;
-	m_nX = m_nY = m_nWide = m_nTall = 0;
-	m_Color = Color( 255, 255, 255, 255 );
-}
-
-void CGameUiAvatarImage::ClearAvatarXUID( void )
-{
-	m_bValid = false;
-	m_flFetchedTime = 0.0f;
-}
-
-bool CGameUiAvatarImage::SetAvatarXUID( XUID xuid, AvatarSize_t nSize )
-{
-	(void)xuid;
-	(void)nSize;
-	ClearAvatarXUID();
-	return false;
-}
-
-void CGameUiAvatarImage::InitFromRGBA( const byte *rgba, int width, int height )
-{
-	(void)rgba;
-	(void)width;
-	(void)height;
-}
-
-void CGameUiAvatarImage::Paint( void )
-{
-}
-
-#endif // !_X360
-
-using namespace BaseModUI;
+// CGameUiAvatarImage is built from P2ASW's uiavatarimage.cpp
 
 Achievements::Achievements( vgui::Panel *parent, const char *panelName )
 	: BaseClass( parent, panelName )

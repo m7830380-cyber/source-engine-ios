@@ -6,6 +6,9 @@
 // $NoKeywords: $
 //=============================================================================//
 #include "cbase.h"
+#ifdef CLIENT_DLL
+#include "legacy_usermessages.h"
+#endif
 #include "portal_mp_gamerules.h"
 #include "viewport_panel_names.h"
 #include "gameeventdefs.h"
@@ -1053,7 +1056,8 @@ int CPortalMPGameRules::PlayerRelationship( CBaseEntity *pPlayer, CBaseEntity *p
 	if ( !pPlayer || !pTarget || !pTarget->IsPlayer() || IsTeamplay() == false )
 		return GR_NOTTEAMMATE;
 
-	if ( (*GetTeamID(pPlayer) != '\0') && (*GetTeamID(pTarget) != '\0') && !stricmp( GetTeamID(pPlayer), GetTeamID(pTarget) ) )
+	// (Alien Swarm compared GetTeamID() names; the CS:GO rules have team numbers)
+	if ( pPlayer->GetTeamNumber() != TEAM_UNASSIGNED && pPlayer->GetTeamNumber() == pTarget->GetTeamNumber() )
 	{
 		return GR_TEAMMATE;
 	}
@@ -2378,7 +2382,7 @@ static void __MsgFunc_MPMapCompleted( bf_read &msg )
 	pRules->SetMapComplete( 0, nBranch, nLevel );
 	pRules->SetMapComplete( 1, nBranch, nLevel );
 }
-USER_MESSAGE_REGISTER( MPMapCompleted );
+// MPMapCompleted: hooked through the legacy user message bridge below
 
 static void __MsgFunc_MPMapIncomplete( bf_read &msg )
 {
@@ -2393,7 +2397,7 @@ static void __MsgFunc_MPMapIncomplete( bf_read &msg )
 	pRules->SetMapComplete( 0, nBranch, nLevel, false );
 	pRules->SetMapComplete( 1, nBranch, nLevel, false );
 }
-USER_MESSAGE_REGISTER( MPMapIncomplete );
+// MPMapIncomplete: hooked through the legacy user message bridge below
 
 static void __MsgFunc_MPMapCompletedData( bf_read &msg )
 {
@@ -2433,7 +2437,7 @@ static void __MsgFunc_MPMapCompletedData( bf_read &msg )
 		}
 	}
 }
-USER_MESSAGE_REGISTER( MPMapCompletedData );
+// MPMapCompletedData: hooked through the legacy user message bridge below
 
 
 void CPortalMPGameRules::LoadMapCompleteData( void )
@@ -2531,7 +2535,7 @@ static void __MsgFunc_MPTauntEarned( bf_read &msg )
 	}
 	*/
 }
-USER_MESSAGE_REGISTER( MPTauntEarned );
+// MPTauntEarned: hooked through the legacy user message bridge below
 
 static void __MsgFunc_MPTauntLocked( bf_read &msg )
 {
@@ -2541,14 +2545,31 @@ static void __MsgFunc_MPTauntLocked( bf_read &msg )
 	// FIXME: - Wonderland_War
 	//GetClientMenuManagerTaunt().SetTauntLocked( szTaunt );
 }
-USER_MESSAGE_REGISTER( MPTauntLocked );
+// MPTauntLocked: hooked through the legacy user message bridge below
 
 static void __MsgFunc_MPAllTauntsLocked( bf_read& /*msg*/ )
 {
 	// FIXME: - Wonderland_War
 	//GetClientMenuManagerTaunt().SetAllTauntsLocked();
 }
-USER_MESSAGE_REGISTER( MPAllTauntsLocked );
+// MPAllTauntsLocked: hooked through the legacy user message bridge below
+
+// Portal 2's named co-op messages go over the legacy user message bridge
+// (legacy_usermessages.h); CS:GO's USER_MESSAGE_REGISTER only takes protobuf messages.
+class C_PortalMPMessageHooks : public CAutoGameSystem
+{
+	virtual bool Init()
+	{
+		usermessages->HookMessage( "MPMapCompleted", __MsgFunc_MPMapCompleted );
+		usermessages->HookMessage( "MPMapIncomplete", __MsgFunc_MPMapIncomplete );
+		usermessages->HookMessage( "MPMapCompletedData", __MsgFunc_MPMapCompletedData );
+		usermessages->HookMessage( "MPTauntEarned", __MsgFunc_MPTauntEarned );
+		usermessages->HookMessage( "MPTauntLocked", __MsgFunc_MPTauntLocked );
+		usermessages->HookMessage( "MPAllTauntsLocked", __MsgFunc_MPAllTauntsLocked );
+		return true;
+	}
+};
+static C_PortalMPMessageHooks s_PortalMPMessageHooks;
 
 #endif // #ifdef CLIENT_DLL
 

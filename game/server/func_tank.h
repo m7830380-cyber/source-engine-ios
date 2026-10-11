@@ -65,6 +65,8 @@ class CFuncTank : public CBaseEntity
 	DECLARE_CLASS( CFuncTank, CBaseEntity );
 
 public:
+	// Portal 2 (info_player_ping_detector), as in hl2/func_tank.h
+	void AimAtTargetPosition( const Vector &vecPos )	{ m_spawnflags |= SF_TANK_AIM_AT_POS; m_hTarget = NULL; m_vTargetPosition = vecPos; }
 
 			CFuncTank();
 			~CFuncTank();

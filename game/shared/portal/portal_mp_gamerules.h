@@ -260,6 +260,7 @@ private:
 	CUtlVector<EHANDLE> m_hRespawnableItemsAndWeapons;
 	float m_tmNextPeriodicThink;
 	float m_flRestartGameTime;
+	float m_flIntermissionEndTime; // CMultiplayRules had this on Alien Swarm; CS:GO's only has a start time
 	bool m_bCompleteReset;
 	bool m_bAwaitingReadyRestart;
 	bool m_bGladosJustBlewUp;

@@ -4,7 +4,7 @@
 //
 //=============================================================================//
 #include "cbase.h"
-#include "hl2/func_tank.h" // the build uses HL2's func_tank, not the server base copy
+#include "func_tank.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"

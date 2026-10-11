@@ -134,9 +134,6 @@ $Project "Client (Portal 2)"
 			$Folder	"Radial Menu"
 			{
 				$File	"portal2\radialmenu.h"
-				-$File	"portal2\radialmenu.cpp"
-				-$File	"portal2\radialmenu_taunt.cpp"
-				-$File	"portal2\radialmenu_taunt.h"
 			}
 
 			$Folder	"GameUI"
@@ -270,7 +267,7 @@ $Project
 		$File	"$SRCDIR\game\client\portal2\vgui\vgui_indicator_panel.cpp"
 		$File	"$SRCDIR\game\shared\portal\achievements_portal.cpp"
 		$File	"$SRCDIR\game\shared\portal\baseprojectedentity_shared.cpp"
-		// portal_mp_gamerules.cpp (co-op rules) left out: single player first; it needs CS:GO equivalents of the coop user messages
+		$File	"$SRCDIR\game\shared\portal\portal_mp_gamerules.cpp"
 		$File	"$SRCDIR\game\shared\portal\portal_weapon_parse.cpp"
 		$File	"$SRCDIR\game\shared\portal\projectedwallentity_shared.cpp"
 		$File	"$SRCDIR\game\shared\portal\trigger_tractorbeam_shared.cpp"
@@ -287,5 +284,43 @@ $Project
 		$File	"$SRCDIR\game\shared\portal2\paint\weapon_paintgun_shared.cpp"
 		$File	"$SRCDIR\game\shared\portal2\player_pickup.cpp"
 		$File	"$SRCDIR\game\shared\portal2\portal_grabcontroller_shared.cpp"
+	}
+}
+
+$Project
+{
+	$Folder	"Link Libraries"
+	{
+		$Lib			"meshutils"	// HullFromPlanes / CMesh (portal player brush contacts), as the CS:GO client links it
+	}
+}
+
+$Project
+{
+	$Folder	"P2ASW menus"
+	{
+		$File	"portal2\gameui\portal2\transitionpanel.cpp"
+		$File	"portal2\gameui\portal2\vadvancedvideo.cpp"
+		$File	"portal2\gameui\portal2\vautosavenotice.cpp"
+		$File	"portal2\gameui\portal2\vchallengemodedialog.cpp"
+		$File	"portal2\gameui\portal2\vcoopexitchoice.cpp"
+		$File	"portal2\gameui\portal2\vcoopmode.cpp"
+		$File	"portal2\gameui\portal2\vendingsplitscreen.cpp"
+		$File	"portal2\gameui\portal2\vextrasdialog.cpp"
+		$File	"portal2\gameui\portal2\vfadeoutstartgame.cpp"
+		$File	"portal2\gameui\portal2\vfadeouttoeconui.cpp"
+		$File	"portal2\gameui\portal2\vkeybindings.cpp"
+		$File	"portal2\gameui\portal2\vmovieplayer.cpp"
+		$File	"portal2\gameui\portal2\vnewgamedialog.cpp"
+		$File	"portal2\gameui\portal2\voptionscloud.cpp"
+		$File	"portal2\gameui\portal2\vpvplobby.cpp"
+		$File	"portal2\gameui\portal2\vsaveloadgamedialog.cpp"
+		$File	"portal2\gameui\portal2\vsingleplayer.cpp"
+		$File	"portal2\gameui\portal2\vsoundtest.cpp"
+		$File	"portal2\gameui\portal2\vstartcoopgame.cpp"
+		$File	"portal2\gameui\portal2\vxboxlive.cpp"
+		$File	"portal2\gameui\basesavegamedialog.cpp"
+		$File	"portal2\gameui\portal2\uiavatarimage.cpp"
+		$File	"portal2\gameui\portal2\uigamedata_storage.cpp"
 	}
 }

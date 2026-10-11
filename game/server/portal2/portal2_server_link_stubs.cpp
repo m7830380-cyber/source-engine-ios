@@ -36,11 +36,13 @@ CBaseEntity *FindPickerEntityClass( CBasePlayer *pPlayer, char *classname )
 	return pPlayer->FindPickerEntityClass( classname );
 }
 
-extern CBasePlayer *GetPlayerHoldingEntity( CBaseEntity *pEntity );
+// P2ASW defines the const version (portal_grabcontroller_shared.cpp); some callers
+// are declared against the non-const one.
+extern CBasePlayer *GetPlayerHoldingEntity( const CBaseEntity *pEntity );
 
-CBasePlayer *GetPlayerHoldingEntity( const CBaseEntity *pEntity )
+CBasePlayer *GetPlayerHoldingEntity( CBaseEntity *pEntity )
 {
-	return GetPlayerHoldingEntity( const_cast<CBaseEntity *>( pEntity ) );
+	return GetPlayerHoldingEntity( static_cast<const CBaseEntity *>( pEntity ) );
 }
 
 CBaseEntity *CreateLaserDot( const Vector &origin, CBaseEntity *pOwner, bool bVisibleDot )

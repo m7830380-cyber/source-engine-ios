@@ -287,7 +287,7 @@ void ClientModePortalNormal::LevelShutdown( void )
 
 void ClientModePortalNormal::OnColorCorrectionWeightsReset( void )
 {
-	BaseClass::OnColorCorrectionWeightsReset();
+	// (pure virtual in the CS:GO engine's IClientMode: no base implementation to call)
 
 	C_Portal_Player *pPlayer = C_Portal_Player::GetLocalPortalPlayer();
 	

@@ -30,8 +30,7 @@ rm -rf "$SRC/pak01_dir"
 # Voice lines come from the player's install, not P2ASW's PCM conversions
 # (Alien Swarm can't play Portal 2's MP3-in-.wav VO; this engine can).
 rm -rf "$SRC/sound/vo_converted"
-grep -rlZ "vo_converted" "$SRC/scripts" --include='*.txt' | xargs -0 -r sed -i.bak 's#vo_converted/#vo/#g'
-find "$SRC/scripts" -name '*.bak' -delete
+find "$SRC/scripts" -name '*.txt' -exec perl -pi -e 's#vo_converted/#vo/#g' {} +
 if grep -rq "vo_converted" "$SRC/scripts"; then
 	echo "P2ASW scripts still reference vo_converted" >&2
 	exit 1

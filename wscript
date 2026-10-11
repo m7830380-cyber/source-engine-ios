@@ -88,9 +88,9 @@ PROJECT_OVERRIDES = {
 # with the files the leak lacks restored from RubberWar's ASW-based Portal 2
 # recreation or rebuilt under game/*/portal2.
 PORTAL2_PROJECTS = {
-	# RubberWar/Portal-2 game modules on the CS:GO engine (not Valve's full retail VPC).
-	'client': 'game/client/client_portal2_rubberwar.vpc',
-	'server': 'game/server/server_portal2_rubberwar.vpc',
+	# P2ASW (EpicSentry/P2ASW) Portal 2 game modules on the CS:GO engine (not Valve's full retail VPC).
+	'client': 'game/client/client_portal2_p2asw.vpc',
+	'server': 'game/server/server_portal2_p2asw.vpc',
 	'matchmaking': 'matchmaking/matchmaking_portal2.vpc',
 }
 
@@ -192,7 +192,7 @@ PORTAL2_EXTRA_SOURCES = {
 }
 
 PORTAL2_EXTRA_USES = {
-	'client': ['JPEG'],  # common/imageutils.cpp in client_portal2_rubberwar.vpc
+	'client': ['JPEG'],  # common/imageutils.cpp in client_portal2_p2asw.vpc
 }
 
 # VPC link dependencies whose source is not part of the leak. Code that

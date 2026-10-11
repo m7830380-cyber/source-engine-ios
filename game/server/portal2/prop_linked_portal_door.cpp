@@ -616,6 +616,7 @@ protected:
 IMPLEMENT_SERVERCLASS_ST( CPropLinkedPortalDoor, DT_PropLinkedPortalDoor )
 END_SEND_TABLE()
 
+
 BEGIN_DATADESC( CPropLinkedPortalDoor )
 	
 	DEFINE_INPUTFUNC( FIELD_STRING, "SetPartner", InputSetPartner ),

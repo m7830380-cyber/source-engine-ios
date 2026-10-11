@@ -7,7 +7,7 @@
 
 #include "cbase.h"
 #include "c_prop_weightedcube.h"
-#include "portal_grabcontroller_shared.h"
+//#include "portal_grabcontroller_shared.h"
 #include "c_portal_player.h"
 
 
@@ -52,6 +52,7 @@ QAngle C_PropWeightedCube::PreferredCarryAngles( void )
 
 const Vector& C_PropWeightedCube::GetRenderOrigin( void )
 {
+#if 0
 	if( GetPredictable() )
 	{
 		C_Portal_Player *pPlayer = (C_Portal_Player *)GetPlayerHoldingEntity( this );
@@ -62,7 +63,7 @@ const Vector& C_PropWeightedCube::GetRenderOrigin( void )
 			return pPlayer->GetGrabController().GetHeldObjectRenderOrigin();
 		}
 	}
-
+#endif
 	return BaseClass::GetRenderOrigin();
 }
 

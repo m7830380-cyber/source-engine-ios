@@ -265,7 +265,7 @@ bool CCubeRotationController::Enabled( void )
 	return m_bEnabled;
 }
 
-CEG_NOINLINE CCubeRotationController * CCubeRotationController::CreateRotationController( CBaseEntity *pOwner )
+CCubeRotationController * CCubeRotationController::CreateRotationController( CBaseEntity *pOwner )
 {
 	if ( pOwner == NULL )
 		return NULL;
@@ -279,8 +279,6 @@ CEG_NOINLINE CCubeRotationController * CCubeRotationController::CreateRotationCo
 
 	return pController;
 }
-
-CEG_PROTECT_STATIC_MEMBER_FUNCTION( CCubeRotationController_CreateRotationController, CCubeRotationController::CreateRotationController );
 
 LINK_ENTITY_TO_CLASS( prop_weighted_cube, CPropWeightedCube );
 
@@ -353,7 +351,7 @@ CPropWeightedCube::CPropWeightedCube()
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-CEG_NOINLINE void CPropWeightedCube::Spawn( void )
+void CPropWeightedCube::Spawn( void )
 {
 	// Start out with nothing
 	m_vecCarryAngles.Init(0,0,0);
@@ -367,8 +365,6 @@ CEG_NOINLINE void CPropWeightedCube::Spawn( void )
 	m_bPickupDisabled = false;
 
 	SetCubeType();
-
-	CEG_PROTECT_VIRTUAL_FUNCTION( CPropWeightedCube_Spawn );
 
 	m_nBouncyMaterialIndex = physprops->GetSurfaceIndex( "WeightedCube_Bounce" );
 	SetInteraction( PROPINTER_PHYSGUN_ALLOW_OVERHEAD );
@@ -1011,6 +1007,7 @@ void CPropWeightedCube::OnPhysGunPickup( CBasePlayer *pPhysGunUser, PhysGunPicku
 		}
 	}
 
+	/*
 	if ( pPhysGunUser )
 	{
 		if ( pPhysGunUser->GetTeamNumber() == TEAM_RED )
@@ -1022,6 +1019,7 @@ void CPropWeightedCube::OnPhysGunPickup( CBasePlayer *pPhysGunUser, PhysGunPicku
 			m_OnBluePickUp.FireOutput( pPhysGunUser, this );
 		}
 	}
+	*/
 }
 
 //-----------------------------------------------------------------------------
@@ -1086,7 +1084,7 @@ void CPropWeightedCube::NotifySystemEvent(CBaseEntity *pNotify, notify_system_ev
 	// On teleport, we record a pointer to the portal we are arriving at
 	if ( eventType == NOTIFY_EVENT_TELEPORT )
 	{
-		CPortal_Base2D *pEnteredPortal = dynamic_cast<CPortal_Base2D*>( pNotify );
+		CProp_Portal *pEnteredPortal = dynamic_cast<CProp_Portal*>( pNotify );
 		if ( pEnteredPortal && m_pController )
 		{
 			Vector vecWorldAign = pEnteredPortal->m_matrixThisToLinked.ApplyRotation( m_pController->GetAlignmentVector() );
@@ -1379,7 +1377,7 @@ void CPropWeightedCube::SchrodingerThink( void )
 void CPropWeightedCube::DisabledThink( void )
 {
 	bool hasPaintPower = false;
-	if( engine->HasPaintmap() )
+	if( HASPAINTMAP )
 	{
 		if( GetPaintedPower() != NO_POWER )
 		{

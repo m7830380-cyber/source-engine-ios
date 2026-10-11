@@ -71,7 +71,7 @@ public:
 
  	virtual void SetProgressOnStart();
  
-#if defined( _X360 ) && defined( _DEMO )
+#if defined( _GAMECONSOLE ) && defined( _DEMO )
 	virtual void OnDemoTimeout();
 #endif
 
@@ -87,9 +87,11 @@ public:
 	void HideLoadingBackgroundDialog();
 	bool HasLoadingBackgroundDialog();
 
-	virtual bool LoadingProgressWantsIsolatedRender( bool bContextValid ) { (void)bContextValid; return false; }
-	virtual bool IsPlayingFullScreenVideo() { return false; }
-	virtual bool IsTransitionEffectEnabled() { return true; }
+	virtual bool LoadingProgressWantsIsolatedRender( bool bContextValid );
+
+	virtual bool IsPlayingFullScreenVideo();
+
+	virtual bool IsTransitionEffectEnabled();
 	virtual void RestoreTopLevelMenu() { }
 	virtual void StartLoadingScreenForCommand( const char* command ) { (void)command; }
 	virtual void StartLoadingScreenForKeyValues( KeyValues* keyValues ) { (void)keyValues; }

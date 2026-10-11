@@ -7,23 +7,11 @@
 #include "cbase.h"
 #include "props.h"
 #include "triggers.h"
-#include "prop_weighted_cube.h"
-#include "portal_mp_gamerules.h"
-#include "prop_monster_box.h"
-#include "portal2/portal2_server_compat.h"
+#include "prop_weightedcube.h"
 
-#if defined( PORTAL2 )
-#ifndef RANDOM_CEG_TEST_SECRET
-#define RANDOM_CEG_TEST_SECRET() ((void)0)
-#endif
-#ifndef CEG_NOINLINE
-#define CEG_NOINLINE
-#endif
-#ifndef CEG_PROTECT_MEMBER_FUNCTION
-#define CEG_PROTECT_MEMBER_FUNCTION( x ) (void)( x );
-#endif
-static int CPropFloorButton_Press( void ) { return 0; }
-#endif
+#include "portal_mp_gamerules.h"
+
+#include "prop_monster_box.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
@@ -275,12 +263,13 @@ void CPropFloorButton::AnimateThink( void )
  
 void CPropFloorButton::PressingBoxHasSetteledThink( void )
 {
+	/*
 	if ( gpGlobals->maxClients == 1 && (V_strcmp( gpGlobals->mapname.ToCStr(), "sp_a2_bts1" ) != 0) 
 									&& (V_strcmp( gpGlobals->mapname.ToCStr(), "mp_coop_catapult_1" ) != 0) )
 	{
 		UTIL_RecordAchievementEvent( "ACH.BOX_HOLE_IN_ONE" );
 	}
-
+	*/
 	SetContextThink( NULL, gpGlobals->curtime, s_pszPressingBoxHasSetteledThinkContext );
 }
 
@@ -312,7 +301,7 @@ const char *CPropFloorButton::GetButtonModelName()
 //-----------------------------------------------------------------------------
 // Purpose: Press the button
 //-----------------------------------------------------------------------------
-CEG_NOINLINE void CPropFloorButton::Press( CBaseEntity *pActivator )
+void CPropFloorButton::Press( CBaseEntity *pActivator )
 {
 	// play the down sequence
 	ResetSequence( m_DownSequence );
@@ -322,7 +311,6 @@ CEG_NOINLINE void CPropFloorButton::Press( CBaseEntity *pActivator )
 
 	// Change the skin
 	SetSkin( button_on_skin );
-	CEG_PROTECT_MEMBER_FUNCTION( CPropFloorButton_Press );
 
 	// call the function that fires the OnPressed output
 	OnPressed( pActivator );
@@ -384,11 +372,17 @@ void CPropFloorButton::OnPressed( CBaseEntity* pActivator )
 	}
 
 	// If this button was pressed without touching the player, fire the special output used for the 'hole in one' achievement.
-	if ( pActivator && UTIL_IsWeightedCube( pActivator ) )
+	if ( UTIL_IsWeightedCube( pActivator ) )
 	{
-		if ( PropWeightedCube_WasTouchedByPlayer( pActivator ) == false )
+		CPropWeightedCube *pCube = (CPropWeightedCube*)pActivator;
+		Assert( pCube );
+		if ( pCube )
 		{
-			SetContextThink( &CPropFloorButton::PressingBoxHasSetteledThink, gpGlobals->curtime + 2.0f, s_pszPressingBoxHasSetteledThinkContext );
+			if ( pCube->WasTouchedByPlayer() == false )
+			{
+				// HACK: this delay is a guess at how long it takes to be sure the box has setteled... 
+				SetContextThink( &CPropFloorButton::PressingBoxHasSetteledThink, gpGlobals->curtime + 2.0f, s_pszPressingBoxHasSetteledThinkContext );
+			}
 		}
 	}
 
@@ -400,12 +394,13 @@ void CPropFloorButton::OnPressed( CBaseEntity* pActivator )
 //-----------------------------------------------------------------------------
 void CPropFloorButton::OnUnPressed( CBaseEntity* pActivator )
 {
+#if 1
 	if( pActivator && FClassnameIs( pActivator, "prop_monster_box" ) )
 	{
 		CPropMonsterBox* pMonsterBox = static_cast<CPropMonsterBox*>( pActivator );
 		pMonsterBox->BecomeMonster( false );
 	}
-
+#endif
 
 	SetContextThink( NULL, gpGlobals->curtime, s_pszPressingBoxHasSetteledThinkContext );
 
@@ -491,7 +486,11 @@ void CPortalButtonTrigger::StartTouch(CBaseEntity *pOther)
 		if ( PassesTriggerFilters( pOther ) )
 		{
 			//Set the cube to activate
-			PropWeightedCube_SetActivated( pOther, true );
+			CPropWeightedCube* pCube = assert_cast<CPropWeightedCube*>( pOther );
+			if( pCube )
+			{
+				pCube->SetActivated( true );
+			}
 		}
 	}
 
@@ -505,7 +504,11 @@ void CPortalButtonTrigger::EndTouch(CBaseEntity *pOther)
 		if ( PassesTriggerFilters( pOther ) )
 		{
 			//Set the cube to deactivate
-			PropWeightedCube_SetActivated( pOther, false );
+			CPropWeightedCube* pCube = assert_cast<CPropWeightedCube*>( pOther );
+			if( pCube )
+			{
+				pCube->SetActivated( false );
+			}
 		}
 	}
 
@@ -535,10 +538,11 @@ bool CPortalButtonTrigger::PassesTriggerFilters(CBaseEntity *pOther)
 	// did a cube touch me?
 	if ( FClassnameIs( pOther, "prop_weighted_cube") || FClassnameIs( pOther, "prop_monster_box") )
 	{
-		const bool bIsBall = false;
+		CPropWeightedCube *pCube = static_cast<CPropWeightedCube*>( pOther );
+		bool bIsBall = pCube && pCube->GetCubeType() == CUBE_SPHERE;
 
-		if ( ( bIsBall && m_pOwnerButton->AcceptsBall() ) ||
-		   ( !bIsBall && !m_pOwnerButton->OnlyAcceptBall() ) )
+		if ( ( bIsBall && m_pOwnerButton->AcceptsBall() ) || //If the button accepts balls and this is a ball ( floor, under and ball buttons )
+		   ( !bIsBall && !m_pOwnerButton->OnlyAcceptBall() ) ) //If the button doesn't only accept balls and this is not a ball ( cube buttons )
 		{
 			return true;
 		}

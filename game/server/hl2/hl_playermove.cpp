@@ -11,7 +11,7 @@
 #include "hl_movedata.h"
 #include "ipredictionsystem.h"
 #include "iservervehicle.h"
-#include "hl2_player.h"
+#include "portal_player.h"
 #include "vehicle_base.h"
 #include "GameStats.h"
 
@@ -68,8 +68,10 @@ void CHLPlayerMove::SetupMove( CBasePlayer *player, CUserCmd *ucmd, IMoveHelper 
 	BaseClass::SetupMove( player, ucmd, pHelper, move );
 
 	// Convert to HL2 data.
-	CHL2_Player *pHLPlayer = static_cast<CHL2_Player*>( player );
+#ifdef DEBUG
+	CPortal_Player *pHLPlayer = static_cast<CPortal_Player*>(player);
 	Assert( pHLPlayer );
+#endif
 
 	CHLMoveData *pHLMove = static_cast<CHLMoveData*>( move );
 	Assert( pHLMove );
@@ -77,7 +79,7 @@ void CHLPlayerMove::SetupMove( CBasePlayer *player, CUserCmd *ucmd, IMoveHelper 
 	player->m_flForwardMove = ucmd->forwardmove;
 	player->m_flSideMove = ucmd->sidemove;
 
-	pHLMove->m_bIsSprinting = pHLPlayer->IsSprinting();
+	pHLMove->m_bIsSprinting = false;// pHLPlayer->IsSprinting();
 
 	if ( gpGlobals->frametime != 0 )
 	{
@@ -153,7 +155,7 @@ void CHLPlayerMove::FinishMove( CBasePlayer *player, CUserCmd *ucmd, CMoveData *
 		}
 		if ( distance > 0 )
 		{
-			gamestats->Event_PlayerTraveled( player, distance, pVehicle ? true : false, !pVehicle && static_cast< CHL2_Player * >( player )->IsSprinting() );
+			gamestats->Event_PlayerTraveled( player, distance, pVehicle ? true : false, !pVehicle && /*static_cast< CPortal_Player * >( player )->IsSprinting()*/ false );
 		}
 	}
 

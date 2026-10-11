@@ -1,4 +1,4 @@
-//===== Copyright ? 1996-2005, Valve Corporation, All rights reserved. ======//
+//===== Copyright (c) 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: Implements all the functions exported by the GameUI dll
 //
@@ -11,11 +11,9 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <stdio.h>
-#if defined( _WIN32 ) && !defined( _X360 )
+#if defined( WIN32 )
 #include <io.h>
 #include <direct.h>
-#else
-#include <unistd.h>
 #endif
 #include <tier0/dbg.h>
 
@@ -43,7 +41,6 @@
 #include "materialsystem/imaterialsystem.h"
 #include "matchmaking/imatchframework.h"
 #include "ixboxsystem.h"
-#include "iachievementmgr.h"
 #include "IGameUIFuncs.h"
 #include "IEngineVGUI.h"
 
@@ -61,51 +58,61 @@
 #include "vgui_controls/PHandle.h"
 #include "tier3/tier3.h"
 #include "matsys_controls/matsyscontrols.h"
+#ifndef NO_STEAM
 #include "steam/steam_api.h"
+#endif
 #include "protocol.h"
 
-#include "portal2/basemodpanel.h"
-#include "portal2/basemodui.h"
+#if !defined( NO_STEAM ) && !defined( NO_STEAM_GAMECOORDINATOR )
+	#include "econ_ui.h"
+#endif
 
+#if defined( SWARM_DLL )
+
+#include "swarm/basemodpanel.h"
+#include "swarm/basemodui.h"
 typedef BaseModUI::CBaseModPanel UI_BASEMOD_PANEL_CLASS;
 inline UI_BASEMOD_PANEL_CLASS & GetUiBaseModPanelClass() { return UI_BASEMOD_PANEL_CLASS::GetSingleton(); }
 inline UI_BASEMOD_PANEL_CLASS & ConstructUiBaseModPanelClass() { return * new UI_BASEMOD_PANEL_CLASS(); }
-#include "matchmaking/swarm/imatchext_swarm.h"
+class IMatchExtSwarm *g_pMatchExt = NULL;
 
-#if defined( PORTAL2 ) && !defined( SWARM_DLL ) && !defined( SDK_DLL )
-class CMatchExtSwarmPortal2Stub : public IMatchExtSwarm
-{
-public:
-	CMatchExtSwarmPortal2Stub() : m_kvMissions( "Missions" ) {}
+#elif defined( PORTAL2 )
 
-	virtual KeyValues *GetAllMissions() { return &m_kvMissions; }
-	virtual KeyValues *GetMapInfo( KeyValues *pSettings, KeyValues **ppMissionInfo = NULL )
-	{
-		if ( ppMissionInfo )
-			*ppMissionInfo = NULL;
-		(void)pSettings;
-		return NULL;
-	}
-	virtual KeyValues *GetMapInfoByBspName( KeyValues *pSettings, char const *szBspMapName, KeyValues **ppMissionInfo = NULL )
-	{
-		if ( ppMissionInfo )
-			*ppMissionInfo = NULL;
-		(void)pSettings;
-		(void)szBspMapName;
-		return NULL;
-	}
+#include "portal2/basemodpanel.h"
+#include "portal2/basemodui.h"
+typedef BaseModUI::CBaseModPanel UI_BASEMOD_PANEL_CLASS;
+inline UI_BASEMOD_PANEL_CLASS & GetUiBaseModPanelClass() { return UI_BASEMOD_PANEL_CLASS::GetSingleton(); }
+inline UI_BASEMOD_PANEL_CLASS & ConstructUiBaseModPanelClass() { return * new UI_BASEMOD_PANEL_CLASS(); }
+class IMatchExtPortal2 *g_pMatchExt = NULL;
 
-private:
-	KeyValues m_kvMissions;
-};
-static CMatchExtSwarmPortal2Stub s_MatchExtPortal2Stub;
+#elif defined( PORTAL2_UITEST_DLL )
+
+#include "portal2uitest/basemodpanel.h"
+#include "portal2uitest/basemodui.h"
+typedef BaseModUI::CBaseModPanel UI_BASEMOD_PANEL_CLASS;
+inline UI_BASEMOD_PANEL_CLASS & GetUiBaseModPanelClass() { return UI_BASEMOD_PANEL_CLASS::GetSingleton(); }
+inline UI_BASEMOD_PANEL_CLASS & ConstructUiBaseModPanelClass() { return * new UI_BASEMOD_PANEL_CLASS(); }
+IMatchExtPortal2 g_MatchExtPortal2;
+class IMatchExtPortal2 *g_pMatchExtPortal2 = &g_MatchExtPortal2;
+
+#else
+
+#include "BasePanel.h"
+typedef CBasePanel UI_BASEMOD_PANEL_CLASS;
+inline UI_BASEMOD_PANEL_CLASS & GetUiBaseModPanelClass() { return *BasePanel(); }
+inline UI_BASEMOD_PANEL_CLASS & ConstructUiBaseModPanelClass() { return *BasePanelSingleton(); }
+
 #endif
-
-class IMatchExtSwarm *g_pMatchExtSwarm = NULL;
 
 #ifdef _X360
 #include "xbox/xbox_win32stubs.h"
-#endif // _X360
+#endif // _GAMECONSOLE
+
+#ifdef _PS3
+#include "ps3/ps3_core.h"
+#include "ps3/ps3_win32stubs.h"
+#include "ps3/saverestore_ps3_api_ui.h"
+#endif // _GAMECONSOLE
 
 #include "tier0/dbg.h"
 #include "engine/IEngineSound.h"
@@ -117,9 +124,10 @@ class IMatchExtSwarm *g_pMatchExtSwarm = NULL;
 IEngineVGui *enginevguifuncs = NULL;
 #ifdef _X360
 IXOnline  *xonline = NULL;			// 360 only
+#elif defined( _PS3 )
+IPS3SaveRestoreToUI *ps3saveuiapi = NULL;
 #endif
 vgui::ISurface *enginesurfacefuncs = NULL;
-IAchievementMgr *achievementmgr = NULL;
 
 class CGameUI;
 CGameUI *g_pGameUI = NULL;
@@ -129,8 +137,11 @@ vgui::DHANDLE<CLoadingDialog> g_hLoadingDialog;
 vgui::VPANEL g_hLoadingBackgroundDialog = NULL;
 
 static CGameUI g_GameUI;
-static WHANDLE g_hMutex = NULL;
-static WHANDLE g_hWaitMutex = NULL;
+
+# if 0 // FIXME: Some video related things need to be ported
+extern void VGui_ClearTransitionVideoPanels();
+extern bool VGui_IsPlayingFullScreenVideo();
+#endif
 
 static IGameClientExports *g_pGameClientExports = NULL;
 IGameClientExports *GameClientExports()
@@ -199,10 +210,18 @@ void CGameUI::Initialize( CreateInterfaceFn factory )
 	enginesound = (IEngineSound *)factory(IENGINESOUND_CLIENT_INTERFACE_VERSION, NULL);
 	engine = (IVEngineClient *)factory( VENGINE_CLIENT_INTERFACE_VERSION, NULL );
 	bik = (IBik*)factory( BIK_INTERFACE_VERSION, NULL );
+#ifdef _PS3
+	ps3saveuiapi = (IPS3SaveRestoreToUI*)factory( IPS3SAVEUIAPI_VERSION_STRING, NULL );
+#endif
 
-#ifndef _X360
+#ifndef NO_STEAM
+
+	#ifndef _PS3
 	SteamAPI_InitSafe();
+	#endif
+
 	steamapicontext->Init();
+
 #endif
 
 	CGameUIConVarRef var( "gameui_xbox" );
@@ -229,13 +248,7 @@ void CGameUI::Initialize( CreateInterfaceFn factory )
 	xonline = (IXOnline *)factory( XONLINE_INTERFACE_VERSION, NULL );
 #endif
 #ifdef SWARM_DLL
-	g_pMatchExtSwarm = ( IMatchExtSwarm * ) factory( IMATCHEXT_SWARM_INTERFACE, NULL );
-#endif
-#ifdef SDK_DLL
-	g_pMatchExtSwarm = ( IMatchExtSwarm * ) factory( IMATCHEXT_SWARM_INTERFACE, NULL );
-#endif
-#if defined( PORTAL2 ) && !defined( SWARM_DLL ) && !defined( SDK_DLL )
-	g_pMatchExtSwarm = &s_MatchExtPortal2Stub;
+	g_pMatchExt = ( IMatchExtSwarm * ) factory( IMATCHEXT_SWARM_INTERFACE, NULL );
 #endif
 	bFailed = !enginesurfacefuncs || !gameuifuncs || !enginevguifuncs ||
 		!xboxsystem ||
@@ -243,13 +256,7 @@ void CGameUI::Initialize( CreateInterfaceFn factory )
 		!xonline ||
 #endif
 #ifdef SWARM_DLL
-		!g_pMatchExtSwarm ||
-#endif
-#ifdef SDK_DLL
-		!g_pMatchExtSwarm ||
-#endif
-#if defined( PORTAL2 ) && !defined( SWARM_DLL ) && !defined( SDK_DLL )
-		!g_pMatchExtSwarm ||
+		!g_pMatchExt ||
 #endif
 		!g_pMatchFramework;
 	if ( bFailed )
@@ -267,10 +274,6 @@ void CGameUI::Initialize( CreateInterfaceFn factory )
 	factoryBasePanel.SetVisible( true );
 
 	factoryBasePanel.SetMouseInputEnabled( IsPC() );
-#if defined( IOS )
-	// touches arrive as mouse input; make sure the menu takes them.
-	factoryBasePanel.SetMouseInputEnabled( true );
-#endif
 	// factoryBasePanel.SetKeyBoardInputEnabled( IsPC() );
 	factoryBasePanel.SetKeyBoardInputEnabled( true );
 
@@ -280,21 +283,21 @@ void CGameUI::Initialize( CreateInterfaceFn factory )
 
 void CGameUI::PostInit()
 {
-	if ( IsX360() )
+	if ( IsGameConsole() )
 	{
 		enginesound->PrecacheSound( "UI/buttonrollover.wav", true, true );
 		enginesound->PrecacheSound( "UI/buttonclick.wav", true, true );
 		enginesound->PrecacheSound( "UI/buttonclickrelease.wav", true, true );
-		enginesound->PrecacheSound( "player/suit_denydevice.wav", true, true );
-
 		enginesound->PrecacheSound( "UI/menu_accept.wav", true, true );
 		enginesound->PrecacheSound( "UI/menu_focus.wav", true, true );
 		enginesound->PrecacheSound( "UI/menu_invalid.wav", true, true );
 		enginesound->PrecacheSound( "UI/menu_back.wav", true, true );
 		enginesound->PrecacheSound( "UI/menu_countdown.wav", true, true );
+		enginesound->PrecacheSound( "UI/ui_menu_flip_single_01.wav", true, true );
+		enginesound->PrecacheSound( "UI/ui_menu_flip_single_02.wav", true, true );
 	}
 
-#ifdef SDK_CLIENT_DLL
+#ifdef GAMEUI_BASEMODPANEL_VGUI
 	// to know once client dlls have been loaded
 	BaseModUI::CUIGameData::Get()->OnGameUIPostInit();
 #endif
@@ -316,8 +319,6 @@ void CGameUI::SetLoadingBackgroundDialog( vgui::VPANEL panel )
 void CGameUI::Connect( CreateInterfaceFn gameFactory )
 {
 	g_pGameClientExports = (IGameClientExports *)gameFactory(GAMECLIENTEXPORTS_INTERFACE_VERSION, NULL);
-
-	achievementmgr = engine->GetAchievementMgr();
 
 	if (!g_pGameClientExports)
 	{
@@ -346,7 +347,7 @@ void CGameUI::PlayGameStartupSound()
 	return;
 #endif
 
-	if ( IsX360() )
+	if ( IsGameConsole() )
 		return;
 
 	if ( CommandLine()->FindParm( "-nostartupsound" ) )
@@ -390,13 +391,7 @@ void CGameUI::PlayGameStartupSound()
 	// did we find any?
 	if ( fileNames.Count() > 0 )
 	{
-#if defined( _WIN32 ) && !defined( _X360 )
-		SYSTEMTIME SystemTime;
-		GetSystemTime( &SystemTime );
-		int index = SystemTime.wMilliseconds % fileNames.Count();
-#else
-		int index = 0;
-#endif
+		int index = Plat_MSTime() % fileNames.Count();
 
 		if ( fileNames.IsValidIndex( index ) && fileNames[index] )
 		{
@@ -436,9 +431,7 @@ void CGameUI::Start()
 		// user dialog configuration
 		vgui::system()->SetUserConfigFile("InGameDialogConfig.vdf", "CONFIG");
 
-#if !defined( IOS )
 		g_pFullFileSystem->AddSearchPath( "platform", "PLATFORM" );
-#endif
 	}
 
 	// localization
@@ -449,34 +442,6 @@ void CGameUI::Start()
 
 	if ( IsPC() )
 	{
-#if defined( _WIN32 ) && !defined( _X360 )
-		g_hMutex = Sys_CreateMutex( "ValvePlatformUIMutex" );
-		g_hWaitMutex = Sys_CreateMutex( "ValvePlatformWaitMutex" );
-		if ( g_hMutex == NULL || g_hWaitMutex == NULL || Sys_GetLastError() == SYS_ERROR_INVALID_HANDLE )
-		{
-			if (g_hMutex)
-			{
-				Sys_ReleaseMutex(g_hMutex);
-			}
-			if (g_hWaitMutex)
-			{
-				Sys_ReleaseMutex(g_hWaitMutex);
-			}
-			g_hMutex = NULL;
-			g_hWaitMutex = NULL;
-			Error("Steam Error: Could not access Steam, bad mutex\n");
-			return;
-		}
-		unsigned int waitResult = Sys_WaitForSingleObject(g_hMutex, 0);
-		if (!(waitResult == SYS_WAIT_OBJECT_0 || waitResult == SYS_WAIT_ABANDONED))
-		{
-			waitResult = Sys_WaitForSingleObject(g_hWaitMutex, 0);
-			if (waitResult == SYS_WAIT_OBJECT_0 || waitResult == SYS_WAIT_ABANDONED)
-			{
-				Sys_EnumWindows(SendShutdownMsgFunc, 1);
-			}
-		}
-#endif
 
 		// Delay playing the startup music until two frames
 		// this allows cbuf commands that occur on the first frame that may start a map
@@ -508,31 +473,17 @@ bool CGameUI::FindPlatformDirectory(char *platformDir, int bufferSize)
 		// we're not under steam, so setup using path relative to game
 		if ( IsPC() )
 		{
-#if defined( _WIN32 ) && !defined( _X360 )
+#ifdef IS_WINDOWS_PC
 			if ( ::GetModuleFileName( ( HINSTANCE )GetModuleHandle( NULL ), platformDir, bufferSize ) )
-			{
-				char *lastslash = strrchr(platformDir, '\\');
-				if ( lastslash )
-				{
-					*lastslash = 0;
-					Q_strncat(platformDir, "\\platform\\", bufferSize, COPY_ALL_CHARACTERS );
-					return true;
-				}
-			}
 #else
-			if ( g_pFullFileSystem->GetSearchPath( "PLATFORM", false, platformDir, bufferSize ) )
+			if ( getcwd( platformDir, bufferSize ) )
+#endif
 			{
-				char *pSeperator = strchr( platformDir, ';' );
-				if ( pSeperator )
-					*pSeperator = '\0';
-				V_FixSlashes( platformDir );
-				if ( platformDir[ Q_strlen( platformDir ) - 1 ] != CORRECT_PATH_SEPARATOR )
-				{
-					Q_strncat( platformDir, "platform", bufferSize, COPY_ALL_CHARACTERS );
-				}
+				V_AppendSlash( platformDir, bufferSize );
+				Q_strncat(platformDir, "platform", bufferSize, COPY_ALL_CHARACTERS );
+				V_AppendSlash( platformDir, bufferSize );
 				return true;
 			}
-#endif
 		}
 		else
 		{
@@ -546,11 +497,11 @@ bool CGameUI::FindPlatformDirectory(char *platformDir, int bufferSize)
 				return true;
 			}
 		}
-
+	
 		Error( "Unable to determine platform directory\n" );
 		return false;
 	}
-
+	
 	return (platformDir[0] != 0);
 }
 
@@ -559,6 +510,10 @@ bool CGameUI::FindPlatformDirectory(char *platformDir, int bufferSize)
 //-----------------------------------------------------------------------------
 void CGameUI::Shutdown()
 {
+#ifdef GAMEUI_BASEMODPANEL_VGUI
+	BaseModUI::CUIGameData::Shutdown();
+#endif
+
 	// notify all the modules of Shutdown
 	g_VModuleLoader.ShutdownPlatformModules();
 
@@ -567,20 +522,8 @@ void CGameUI::Shutdown()
 
 	ModInfo().FreeModInfo();
 	
-	// release platform mutex
-	// close the mutex
-	if (g_hMutex)
-	{
-		Sys_ReleaseMutex(g_hMutex);
-	}
-	if (g_hWaitMutex)
-	{
-		Sys_ReleaseMutex(g_hWaitMutex);
-	}
-
+#ifndef NO_STEAM
 	steamapicontext->Clear();
-#ifndef _X360
-	// SteamAPI_Shutdown(); << Steam shutdown is controlled by engine
 #endif
 	
 	ConVar_Unregister();
@@ -630,6 +573,7 @@ void CGameUI::OnGameUIActivated()
 {
 	bool bWasActive = m_bActivatedUI;
 	m_bActivatedUI = true;
+	//materials->OnDebugEvent( "CGameUI::OnGameUIActivated" );
 
 	// Lock the UI to a particular player
 	if ( !bWasActive )
@@ -647,8 +591,10 @@ void CGameUI::OnGameUIActivated()
 	if ( ui.IsVisible() )
 	{
 		// Already visible, maybe don't need activation
-		if ( !IsInLevel() && IsInBackgroundLevel() )
+		if ( ( !IsInLevel() && IsInBackgroundLevel() ) || ( !IsGameConsole() && !IsInLevel() ) )
+		{
 			bNeedActivation = false;
+		}
 	}
 	if ( bNeedActivation )
 	{
@@ -669,6 +615,11 @@ void CGameUI::OnGameUIHidden()
 
 	GetUiBaseModPanelClass().OnGameUIHidden();
 
+#if !defined( NO_STEAM ) && !defined( NO_STEAM_GAMECOORDINATOR )
+	// Tell the econ UI to close
+	EconUI()->CloseEconUI();
+#endif
+
 	// Restore to default
 	if ( bWasActive )
 	{
@@ -681,7 +632,7 @@ void CGameUI::OnGameUIHidden()
 //-----------------------------------------------------------------------------
 void CGameUI::RunFrame()
 {
-	if ( IsX360() && m_bOpenProgressOnStart )
+	if ( IsGameConsole() && m_bOpenProgressOnStart )
 	{
 		StartProgressBar();
 		m_bOpenProgressOnStart = false;
@@ -717,47 +668,39 @@ void CGameUI::RunFrame()
 		}
 	}
 
-	if ( IsPC() && m_bTryingToLoadFriends && m_iFriendsLoadPauseFrames-- < 1 && g_hMutex && g_hWaitMutex )
+	if ( IsPC() && m_bTryingToLoadFriends && m_iFriendsLoadPauseFrames-- < 1  )
 	{
-		// try and load Steam platform files
-		unsigned int waitResult = Sys_WaitForSingleObject(g_hMutex, 0);
-		if (waitResult == SYS_WAIT_OBJECT_0 || waitResult == SYS_WAIT_ABANDONED)
+		// we got the mutex, so load Friends/Serverbrowser
+		// clear the loading flag
+		m_bTryingToLoadFriends = false;
+		g_VModuleLoader.LoadPlatformModules(&m_GameFactory, 1, false);
+
+		// notify the game of our game name
+		const char *fullGamePath = engine->GetGameDirectory();
+		const char *pathSep = strrchr( fullGamePath, '/' );
+		if ( !pathSep )
 		{
-			// we got the mutex, so load Friends/Serverbrowser
-			// clear the loading flag
-			m_bTryingToLoadFriends = false;
-			g_VModuleLoader.LoadPlatformModules(&m_GameFactory, 1, false);
-
-			// release the wait mutex
-			Sys_ReleaseMutex(g_hWaitMutex);
-
-			// notify the game of our game name
-			const char *fullGamePath = engine->GetGameDirectory();
-			const char *pathSep = strrchr( fullGamePath, '/' );
-			if ( !pathSep )
+			pathSep = strrchr( fullGamePath, '\\' );
+		}
+		if ( pathSep )
+		{
+			KeyValues *pKV = new KeyValues("ActiveGameName" );
+			pKV->SetString( "name", pathSep + 1 );
+			pKV->SetInt( "appid", engine->GetAppID() );
+			KeyValues *modinfo = new KeyValues("ModInfo");
+			if ( modinfo->LoadFromFile( g_pFullFileSystem, "gameinfo.txt" ) )
 			{
-				pathSep = strrchr( fullGamePath, '\\' );
+				pKV->SetString( "game", modinfo->GetString( "game", "" ) );
 			}
-			if ( pathSep )
-			{
-				KeyValues *pKV = new KeyValues("ActiveGameName" );
-				pKV->SetString( "name", pathSep + 1 );
-				pKV->SetInt( "appid", engine->GetAppID() );
-				KeyValues *modinfo = new KeyValues("ModInfo");
-				if ( modinfo->LoadFromFile( g_pFullFileSystem, "gameinfo.txt" ) )
-				{
-					pKV->SetString( "game", modinfo->GetString( "game", "" ) );
-				}
-				modinfo->deleteThis();
-				
-				g_VModuleLoader.PostMessageToAllModules( pKV );
-			}
+			modinfo->deleteThis();
+			
+			g_VModuleLoader.PostMessageToAllModules( pKV );
+		}
 
-			// notify the ui of a game connect if we're already in a game
-			if (m_iGameIP)
-			{
-				SendConnectedToGameMessage();
-			}
+		// notify the ui of a game connect if we're already in a game
+		if (m_iGameIP)
+		{
+			SendConnectedToGameMessage();
 		}
 	}
 }
@@ -807,6 +750,9 @@ void CGameUI::OnDisconnectFromServer( uint8 eSteamLoginFailure )
 	m_iGameIP = 0;
 	m_iGameConnectionPort = 0;
 	m_iGameQueryPort = 0;
+
+	// FIXME
+	//VGui_ClearTransitionVideoPanels();
 
 	if ( g_hLoadingBackgroundDialog )
 	{
@@ -867,19 +813,15 @@ void CGameUI::OnLevelLoadingFinished(bool bError, const char *failureReason, con
 	// notify all the modules
 	g_VModuleLoader.PostMessageToAllModules( new KeyValues( "LoadingFinished" ) );
 
-	GetUiBaseModPanelClass().OnLevelLoadingFinished( new KeyValues( "LoadingFinished" ) );
 	HideLoadingBackgroundDialog();
-
-
 }
 
 //-----------------------------------------------------------------------------
 // Purpose: Updates progress bar
 // Output : Returns true if screen should be redrawn
 //-----------------------------------------------------------------------------
-bool CGameUI::UpdateProgressBar(float progress, const char *statusText, bool showDialog)
+bool CGameUI::UpdateProgressBar(float progress, const char *statusText)
 {
-	(void)showDialog;
 	return GetUiBaseModPanelClass().UpdateProgressBar(progress, statusText);
 }
 
@@ -931,7 +873,7 @@ void CGameUI::StopProgressBar(bool bError, const char *failureReason, const char
 	if (!g_hLoadingDialog.Get())
 		return;
 
-	if ( !IsX360() && bError )
+	if ( !IsGameConsole() && bError )
 	{
 		// turn the dialog to error display mode
 		g_hLoadingDialog->DisplayGenericError(failureReason, extendedReason);
@@ -1101,14 +1043,14 @@ bool CGameUI::HasLoadingBackgroundDialog()
 
 void CGameUI::NeedConnectionProblemWaitScreen()
 {
-#ifdef SDK_CLIENT_DLL
+#ifdef GAMEUI_BASEMODPANEL_VGUI
 	BaseModUI::CUIGameData::Get()->NeedConnectionProblemWaitScreen();
 #endif
 }
 
 void CGameUI::ShowPasswordUI( char const *pchCurrentPW )
 {
-#ifdef SDK_CLIENT_DLL
+#ifdef GAMEUI_BASEMODPANEL_VGUI
 	BaseModUI::CUIGameData::Get()->ShowPasswordUI( pchCurrentPW );
 #endif
 }
@@ -1119,10 +1061,26 @@ void CGameUI::SetProgressOnStart()
 	m_bOpenProgressOnStart = true;
 }
 
-#if defined( _X360 ) && defined( _DEMO )
+#if defined( _GAMECONSOLE ) && defined( _DEMO )
 void CGameUI::OnDemoTimeout()
 {
 	GetUiBaseModPanelClass().OnDemoTimeout();
 }
 #endif
 
+bool CGameUI::LoadingProgressWantsIsolatedRender( bool bContextValid )
+{
+	return GetUiBaseModPanelClass().LoadingProgressWantsIsolatedRender( bContextValid );
+}
+
+bool CGameUI::IsPlayingFullScreenVideo()
+{
+	// FIXME
+	//return VGui_IsPlayingFullScreenVideo();
+	return false;
+}
+
+bool CGameUI::IsTransitionEffectEnabled()
+{
+	return GetUiBaseModPanelClass().IsTransitionEffectEnabled();
+}

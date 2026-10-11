@@ -1,13 +1,13 @@
-//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
+//========= Copyright Â© 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
 // $NoKeywords: $
 //=============================================================================//
 #include "cbase.h"
-#include "npc_turret_floor.h"
+#include "npc_portal_turret_floor.h"
 #include "portal_player.h"
-#include "weapon_physcannon.h"
+#include "portal_grabcontroller_shared.h"
 #include "basehlcombatweapon_shared.h"
 #include "ammodef.h"
 #include "ai_senses.h"
@@ -16,51 +16,19 @@
 #include "rope_shared.h"
 #include "prop_portal_shared.h"
 #include "sprite.h"
+#include "particle_parse.h"
 
-#define SF_FLOOR_TURRET_AUTOACTIVATE		0x00000020
-#define SF_FLOOR_TURRET_STARTINACTIVE		0x00000040
-#define SF_FLOOR_TURRET_OUT_OF_AMMO			0x00000100
+ConVar sv_portal_turret_fire_cone_z_tolerance("sv_portal_turret_fire_cone_z_tolerance", "45.0", FCVAR_CHEAT, "The max height of the turrets firing view cone (in degrees)", true, 0.0f, true, 180.0f);
+ConVar sv_portal_turret_burn_time_min("sv_portal_turret_burn_time_min", "1.0f", FCVAR_CHEAT, "The min time that the turret will burn for.");
+ConVar sv_portal_turret_burn_time_max("sv_portal_turret_burn_time_max", "1.5f", FCVAR_CHEAT, "The max time that the turret will burn for.");
+ConVar sv_portal_turret_shoot_at_death("sv_portal_turret_shoot_at_death", "1", FCVAR_CHEAT, "If the turrets should shoot after they die.");
+ConVar sv_portal_turret_shoot_through_portals_proximity("sv_portal_turret_shoot_through_portals_proximity", "36864", FCVAR_CHEAT, "Only allow turrets to shoot through portals at players this close to portals (in square units)");
 
-#define	FLOOR_TURRET_PORTAL_MODEL	"models/props/Turret_01.mdl"
-#define FLOOR_TURRET_GLOW_SPRITE	"sprites/glow1.vmt"
-#define FLOOR_TURRET_BC_YAW			"aim_yaw"
-#define FLOOR_TURRET_BC_PITCH		"aim_pitch"
-#define	PORTAL_FLOOR_TURRET_RANGE	1500
-#define	PORTAL_FLOOR_TURRET_MAX_SHOT_DELAY	2.5f
-#define	FLOOR_TURRET_MAX_WAIT		5
-#define FLOOR_TURRET_SHORT_WAIT		2.0f		// Used for FAST_RETIRE spawnflag
+extern ConVar player_held_object_collide_with_player;
 
-#define SF_FLOOR_TURRET_FASTRETIRE			0x00000080
-
-#define TURRET_FLOOR_DAMAGE_MULTIPLIER 3.0f
-#define TURRET_FLOOR_BULLET_FORCE_MULTIPLIER 0.4f
-#define TURRET_FLOOR_PHYSICAL_FORCE_MULTIPLIER 135.0f
-
-#define PORTAL_FLOOR_TURRET_NUM_ROPES 4
-
-//Turret states
-enum portalTurretState_e
-{
-	PORTAL_TURRET_DISABLED = TURRET_STATE_TOTAL,
-	PORTAL_TURRET_COLLIDE,
-	PORTAL_TURRET_PICKUP,
-	PORTAL_TURRET_SHOTAT,
-	PORTAL_TURRET_DISSOLVED,
-
-	PORTAL_TURRET_STATE_TOTAL
-};
-
-//Debug visualization
-extern ConVar	g_debug_turret;
-
-//Activities
-extern int ACT_FLOOR_TURRET_OPEN;
-extern int ACT_FLOOR_TURRET_CLOSE;
-extern int ACT_FLOOR_TURRET_OPEN_IDLE;
-extern int ACT_FLOOR_TURRET_CLOSED_IDLE;
-extern int ACT_FLOOR_TURRET_FIRE;
 int ACT_FLOOR_TURRET_FIRE2;
-
+int ACT_FLOOR_TURRET_DIE;
+int ACT_FLOOR_TURRET_DIE_IDLE;
 
 const char *g_TalkNames[] = 
 {
@@ -80,9 +48,11 @@ const char *g_PortalTalkNames[ PORTAL_TURRET_STATE_TOTAL - TURRET_STATE_TOTAL ] 
 	"NPC_FloorTurret.TalkCollide",
 	"NPC_FloorTurret.TalkPickup",
 	"NPC_FloorTurret.TalkShotAt",
-	"NPC_FloorTurret.TalkDissolved"
+	"NPC_FloorTurret.TalkDissolved",
+	"NPC_FloorTurret.TalkFlung",
+	"NPC_FloorTurret.TalkStartBurning",
+	"NPC_FloorTurret.TalkBurned"
 };
-
 
 const char* GetTurretTalkName( int iState )
 {
@@ -92,98 +62,14 @@ const char* GetTurretTalkName( int iState )
 	return g_PortalTalkNames[ iState - TURRET_STATE_TOTAL ];
 }
 
-
-class CNPC_Portal_FloorTurret : public CNPC_FloorTurret
-{
-	DECLARE_CLASS( CNPC_Portal_FloorTurret, CNPC_FloorTurret );
-	DECLARE_SERVERCLASS();
-	DECLARE_DATADESC();
-
-public:
-
-	CNPC_Portal_FloorTurret( void );
-
-	virtual void	Precache( void );
-	virtual void	Spawn( void );
-	virtual void	Activate( void );
-	virtual void	UpdateOnRemove( void );
-	virtual int		OnTakeDamage( const CTakeDamageInfo &info );
-
-	virtual bool	ShouldAttractAutoAim( CBaseEntity *pAimingEnt );
-	virtual float	GetAutoAimRadius();
-	virtual Vector	GetAutoAimCenter();
-
-	virtual void	OnPhysGunPickup( CBasePlayer *pPhysGunUser, PhysGunPickup_t reason );
-
-	virtual void	NotifySystemEvent( CBaseEntity *pNotify, notify_system_event_t eventType, const notify_system_event_params_t &params );
-
-	virtual bool	PreThink( turretState_e state );
-	virtual void	Shoot( const Vector &vecSrc, const Vector &vecDirToEnemy, bool bStrict = false );
-	virtual void	SetEyeState( eyeState_t state );
-
-	virtual bool	OnSide( void );
-
-	virtual float	GetAttackDamageScale( CBaseEntity *pVictim );
-	virtual Vector	GetAttackSpread( CBaseCombatWeapon *pWeapon, CBaseEntity *pTarget );
-
-	// Think functions
-	virtual void	Retire( void );
-	virtual void	Deploy( void );
-	virtual void	ActiveThink( void );
-	virtual void	SearchThink( void );
-	virtual void	AutoSearchThink( void );
-	virtual void	TippedThink( void );
-	virtual void	HeldThink( void );
-	virtual void	InactiveThink( void );
-	virtual void	SuppressThink( void );
-	virtual void	DisabledThink( void );
-	virtual void	HackFindEnemy( void );
-
-	virtual void	StartTouch( CBaseEntity *pOther );
-
-	bool	IsLaserOn( void ) { return m_bLaserOn; }
-	void	LaserOff( void );
-	void	LaserOn( void );
-	void	RopesOn();
-	void	RopesOff();
-
-	void	FireBullet( const char *pTargetName );
-
-	// Inputs
-	void	InputFireBullet( inputdata_t &inputdata );
-
-private:
-
-	CHandle<CRopeKeyframe>	m_hRopes[ PORTAL_FLOOR_TURRET_NUM_ROPES ];
-
-	CNetworkVar( bool, m_bOutOfAmmo );
-	CNetworkVar( bool, m_bLaserOn );
-	CNetworkVar( int, m_sLaserHaloSprite );
-
-	int		m_iBarrelAttachments[ 4 ];
-	bool	m_bShootWithBottomBarrels;
-	bool	m_bDamageForce;
-
-	float	m_fSearchSpeed;
-	float	m_fMovingTargetThreashold;
-	float	m_flDistToEnemy;
-
-	turretState_e	m_iLastState;
-	float			m_fNextTalk;
-	bool			m_bDelayTippedTalk;
-
-};
-
-
 LINK_ENTITY_TO_CLASS( npc_portal_turret_floor, CNPC_Portal_FloorTurret );
 
 //Datatable
 BEGIN_DATADESC( CNPC_Portal_FloorTurret )
 
-	DEFINE_ARRAY( m_hRopes, FIELD_EHANDLE, PORTAL_FLOOR_TURRET_NUM_ROPES ),
-
 	DEFINE_FIELD( m_bOutOfAmmo, FIELD_BOOLEAN ),
 	DEFINE_FIELD( m_bLaserOn, FIELD_BOOLEAN ),
+	DEFINE_FIELD( m_bIsFiring, FIELD_BOOLEAN ),
 	DEFINE_FIELD( m_sLaserHaloSprite, FIELD_INTEGER ),
 	DEFINE_FIELD( m_flDistToEnemy, FIELD_FLOAT ),
 
@@ -194,8 +80,18 @@ BEGIN_DATADESC( CNPC_Portal_FloorTurret )
 	DEFINE_FIELD( m_iLastState, FIELD_INTEGER ),
 	DEFINE_FIELD( m_fNextTalk, FIELD_FLOAT ),
 	DEFINE_FIELD( m_bDelayTippedTalk, FIELD_BOOLEAN ),
+	DEFINE_FIELD( m_bIsDead, FIELD_BOOLEAN ),
 
+	DEFINE_KEYFIELD( m_nModelIndex, FIELD_INTEGER, "ModelIndex" ),
 	DEFINE_KEYFIELD( m_bDamageForce, FIELD_BOOLEAN, "DamageForce" ),
+	DEFINE_KEYFIELD( m_bGagged, FIELD_BOOLEAN, "Gagged" ),
+	DEFINE_KEYFIELD( m_bUsedAsActor, FIELD_BOOLEAN, "UsedAsActor" ),
+	DEFINE_KEYFIELD( m_bPickupEnabled, FIELD_BOOLEAN, "PickupEnabled" ),
+	DEFINE_KEYFIELD( m_bDisableMotion, FIELD_BOOLEAN, "DisableMotion" ),
+	DEFINE_KEYFIELD( m_flTurretRange, FIELD_FLOAT, "TurretRange" ),
+	DEFINE_KEYFIELD( m_nCollisionType, FIELD_INTEGER, "CollisionType" ),
+	DEFINE_KEYFIELD( m_bUseSuperDamageScale, FIELD_BOOLEAN, "UseSuperDamageScale" ),
+	DEFINE_KEYFIELD( m_bLoadAlternativeModels, FIELD_BOOLEAN, "LoadAlternativeModels" ),
 
 	DEFINE_THINKFUNC( Retire ),
 	DEFINE_THINKFUNC( Deploy ),
@@ -205,11 +101,20 @@ BEGIN_DATADESC( CNPC_Portal_FloorTurret )
 	DEFINE_THINKFUNC( TippedThink ),
 	DEFINE_THINKFUNC( HeldThink ),
 	DEFINE_THINKFUNC( InactiveThink ),
+	DEFINE_THINKFUNC( DieThink ),
 	DEFINE_THINKFUNC( SuppressThink ),
 	DEFINE_THINKFUNC( DisabledThink ),
+	DEFINE_THINKFUNC( BreakThink ),
+	DEFINE_THINKFUNC( BurnThink ),
 
 	// Inputs
 	DEFINE_INPUTFUNC( FIELD_STRING, "FireBullet", InputFireBullet ),
+	DEFINE_INPUTFUNC( FIELD_VOID, "EnableGagging", InputEnableGagging),
+	DEFINE_INPUTFUNC( FIELD_VOID, "DisableGagging", InputDisableGagging),
+	DEFINE_INPUTFUNC( FIELD_VOID, "EnablePickup", InputEnablePickup),
+	DEFINE_INPUTFUNC( FIELD_VOID, "DisablePickup", InputDisablePickup),
+	DEFINE_INPUTFUNC( FIELD_VOID, "SelfDestructImmediately", InputSelfDestructImmediately),
+	DEFINE_INPUTFUNC( FIELD_INTEGER, "SetModel", InputSetModel),
 
 END_DATADESC()
 
@@ -227,19 +132,36 @@ CNPC_Portal_FloorTurret::CNPC_Portal_FloorTurret( void )
 	CNPC_FloorTurret::fMaxTipControllerVelocity = 100.0f * 100.0f;
 	CNPC_FloorTurret::fMaxTipControllerAngularVelocity = 30.0f * 30.0f;
 
+	m_nModelIndex = 0;
+	m_bUseSuperDamageScale = false;
+	m_flPreviousVelocity = 0.0f;
 	m_bDamageForce = true;
+	m_bPickupEnabled = true;
 }
 
 void CNPC_Portal_FloorTurret::Precache( void )
 {
-	SetModelName( MAKE_STRING( FLOOR_TURRET_PORTAL_MODEL ) );
-
+	if (m_bLoadAlternativeModels)
+	{
+		PrecacheModel(BOX_TURRET_MODEL);
+		PrecacheModel(BACKWARDS_TURRET_MODEL);
+		PrecacheModel(DEFECTIVE_TURRET_MODEL);
+	}
+	PrecacheGibsForModel(PrecacheModel(FLOOR_TURRET_PORTAL_MODEL));
 	BaseClass::Precache();
 
 	ADD_CUSTOM_ACTIVITY( CNPC_FloorTurret, ACT_FLOOR_TURRET_FIRE2 );
+	ADD_CUSTOM_ACTIVITY( CNPC_FloorTurret, ACT_FLOOR_TURRET_DIE);
+	ADD_CUSTOM_ACTIVITY( CNPC_FloorTurret, ACT_FLOOR_TURRET_DIE_IDLE);
 
+	PrecacheParticleSystem("turret_coop_explosion");
+	CRopeKeyframe::PrecacheShakeRopes();
 	m_sLaserHaloSprite = PrecacheModel( "sprites/redlaserglow.vmt" );
 	PrecacheModel("effects/redlaser1.vmt");
+	PrecacheModel("models/npcs/turret/turret_fx_fizzler.mdl");
+	PrecacheEffect("AR2Tracer");
+	PrecacheParticleSystem("burning_character");
+	PrecacheEffect("ShakeRopes");
 
 	for ( int iTalkScript = 0; iTalkScript < PORTAL_TURRET_STATE_TOTAL; ++iTalkScript )
 	{
@@ -255,6 +177,10 @@ void CNPC_Portal_FloorTurret::Precache( void )
 			PrecacheScriptSound( g_PortalTalkNames[ iTalkScript - TURRET_STATE_TOTAL ] );
 		}
 	}
+	PrecacheModel("cable/cable.vmt");
+	PrecacheMaterial("cable/rope_shadowdepth");
+	SetTurretType(GetModelIndex());
+
 }
 
 //-----------------------------------------------------------------------------
@@ -263,6 +189,10 @@ void CNPC_Portal_FloorTurret::Precache( void )
 void CNPC_Portal_FloorTurret::Spawn( void )
 { 
 	BaseClass::Spawn();
+
+	CAmmoDef* pAmmoDef = GetAmmoDef();
+	m_iAmmoType = pAmmoDef->Index("PortalTurretBullet");
+	AddFlag(FL_NPC);
 
 	m_iBarrelAttachments[ 0 ] = LookupAttachment( "LFT_Gun1_Muzzle" );
 	m_iBarrelAttachments[ 1 ] = LookupAttachment( "RT_Gun1_Muzzle" );
@@ -273,7 +203,30 @@ void CNPC_Portal_FloorTurret::Spawn( void )
 	m_fMovingTargetThreashold = 20.0f;
 
 	m_bNoAlarmSounds = true;
+
+	m_bIsFiring = false;
+
 	m_bOutOfAmmo = ( m_spawnflags & SF_FLOOR_TURRET_OUT_OF_AMMO ) != 0;
+
+	if (m_flTurretRange == 0.0f)
+		m_flTurretRange = 1024.0f;
+
+	SetMaxHealth(10);
+
+	m_bIsDead = false;
+
+	if (m_bDisableMotion)
+		if (m_pPhysicsObject)
+			m_pPhysicsObject->EnableMotion(false);
+
+	if (m_nCollisionType == COLLISION_GROUP_DEBRIS)
+		SetCollisionGroup(COLLISION_GROUP_DEBRIS_TRIGGER);
+
+	m_nSkin = m_iKeySkin;
+
+	AddEffects(EF_NOFLASHLIGHT);
+	SetFadeDistance(-1.0f, 0.0f);
+	SetGlobalFadeScale(0.0f);
 }
 
 //-----------------------------------------------------------------------------
@@ -310,13 +263,22 @@ void CNPC_Portal_FloorTurret::Activate( void )
 	m_iBarrelAttachments[ 3 ] = LookupAttachment( "RT_Gun2_Muzzle" );
 }
 
+void CNPC_Portal_FloorTurret::OnRestore(void)
+{
+	BaseClass::OnRestore();
+	if (m_pPhysicsObject)
+	{
+		if (m_pPhysicsObject->IsAsleep())
+		m_pPhysicsObject->Wake();
+	}
+}
+
 void CNPC_Portal_FloorTurret::UpdateOnRemove( void )
 {
-	if ( IsDissolving() )
+	if ( IsDissolving() && !m_bGagged )
 		EmitSound( GetTurretTalkName( PORTAL_TURRET_DISSOLVED ) );
 
 	LaserOff();
-	RopesOff();
 	BaseClass::UpdateOnRemove();
 }
 
@@ -330,7 +292,8 @@ int CNPC_Portal_FloorTurret::OnTakeDamage( const CTakeDamageInfo &info )
 	{
 		if ( gpGlobals->curtime > m_fNextTalk )
 		{
-			EmitSound( GetTurretTalkName( PORTAL_TURRET_SHOTAT ) );
+			if (!m_bGagged)
+				EmitSound( GetTurretTalkName( PORTAL_TURRET_SHOTAT ) );
 			m_fNextTalk = gpGlobals->curtime + 3.0f;
 		}
 	}
@@ -366,17 +329,11 @@ void CNPC_Portal_FloorTurret::OnPhysGunPickup( CBasePlayer *pPhysGunUser, PhysGu
 	}
 
 	BaseClass::OnPhysGunPickup( pPhysGunUser, reason );
+	EnableTipController(false);
 }
 
 void CNPC_Portal_FloorTurret::NotifySystemEvent(CBaseEntity *pNotify, notify_system_event_t eventType, const notify_system_event_params_t &params )
 {
-	// On teleport, we record a pointer to the portal we are arriving at
-	if ( eventType == NOTIFY_EVENT_TELEPORT )
-	{
-		RopesOff();
-		RopesOn();
-	}
-
 	BaseClass::NotifySystemEvent( pNotify, eventType, params );
 }
 
@@ -386,6 +343,31 @@ void CNPC_Portal_FloorTurret::NotifySystemEvent(CBaseEntity *pNotify, notify_sys
 //-----------------------------------------------------------------------------
 bool CNPC_Portal_FloorTurret::PreThink( turretState_e state )
 {
+	if (IsOnFire())
+	{
+		m_flBurnExplodeTime = random->RandomFloat(sv_portal_turret_burn_time_min.GetFloat(), sv_portal_turret_burn_time_max.GetFloat()) + gpGlobals->curtime;
+		
+		if (!random->RandomInt(0, 3))
+		{
+			if (!m_bGagged)
+				EmitSound(GetTurretTalkName(PORTAL_TURRET_STARTBURNING));
+			m_fNextTalk = gpGlobals->curtime + 1.0;
+		}
+		SetThink(&CNPC_Portal_FloorTurret::BurnThink);
+		SetNextThink(gpGlobals->curtime + 0.1f);
+		return false;
+	}
+
+	m_bIsFiring = state == TURRET_ACTIVE;
+
+	if ( IsMovingSuddenly() )
+	{
+		if ( !m_bGagged )
+			EmitSound( GetTurretTalkName( PORTAL_TURRET_FLUNG ) );
+
+		m_fNextTalk = gpGlobals->curtime + 1.0;
+	}
+
 	// Working 2 enums into one integer
 	int iNewState = state;
 
@@ -397,6 +379,9 @@ bool CNPC_Portal_FloorTurret::PreThink( turretState_e state )
 	if ( m_iLastState != iNewState && ( ( iNewState == TURRET_TIPPED && !m_bDelayTippedTalk ) || 
 										iNewState == TURRET_RETIRING || 
 										iNewState == PORTAL_TURRET_DISSOLVED || 
+										iNewState == PORTAL_TURRET_FLUNG ||
+										iNewState == PORTAL_TURRET_STARTBURNING ||
+										iNewState == PORTAL_TURRET_BURNED ||
 										iNewState == PORTAL_TURRET_PICKUP ) )
 	{
 		m_fNextTalk = gpGlobals->curtime -1.0f;
@@ -412,57 +397,68 @@ bool CNPC_Portal_FloorTurret::PreThink( turretState_e state )
 		switch ( iNewState )
 		{
 			case TURRET_SEARCHING:
-				EmitSound( pchScriptName );
+				TryEmitSound( pchScriptName );
 				m_fNextTalk = gpGlobals->curtime + 1.75f;
 				break;
 
 			case TURRET_AUTO_SEARCHING:
-				EmitSound( pchScriptName );
+				TryEmitSound( pchScriptName );
 				m_fNextTalk = gpGlobals->curtime + 1.75f;
 				break;
 
 			/*case TURRET_ACTIVE:
-				EmitSound( pchScriptName );
+				TryEmitSound( pchScriptName );
 				m_fNextTalk = gpGlobals->curtime + 2.5f;
 				break;*/
 
 			// Suppress is too fleeting for a message
 			/*case TURRET_SUPPRESSING:
-				EmitSound( pchScriptName );
+				TryEmitSound( pchScriptName );
 				m_fNextTalk = gpGlobals->curtime + 1.5f;
 				break;*/
 
 			case TURRET_DEPLOYING:
-				EmitSound( pchScriptName );
+				TryEmitSound( pchScriptName );
 				m_fNextTalk = gpGlobals->curtime + 1.75f;
 				break;
 
 			case TURRET_RETIRING:
-				EmitSound( pchScriptName );
+				TryEmitSound( pchScriptName );
 				m_fNextTalk = gpGlobals->curtime + 3.5f;
 				break;
 
 			case TURRET_TIPPED:
-				EmitSound( pchScriptName );
+				TryEmitSound( pchScriptName );
 				m_fNextTalk = gpGlobals->curtime + 1.15f;
 				break;
 
 			case PORTAL_TURRET_PICKUP:
-				EmitSound( GetTurretTalkName( PORTAL_TURRET_PICKUP ) );
+				TryEmitSound( GetTurretTalkName( PORTAL_TURRET_PICKUP ) );
 				m_fNextTalk = gpGlobals->curtime + 2.25f;
 				break;
 
 			case PORTAL_TURRET_DISSOLVED:
-				EmitSound( pchScriptName );
+				TryEmitSound( pchScriptName );
 				m_fNextTalk = gpGlobals->curtime + 10.0f;	// Never going to talk again
+				break;
+
+			case PORTAL_TURRET_STARTBURNING:
+				TryEmitSound( pchScriptName );
+				m_fNextTalk = gpGlobals->curtime + 1.0f;
+				break;
+			case PORTAL_TURRET_BURNED:
+				TryEmitSound( pchScriptName );
+				m_fNextTalk = gpGlobals->curtime + 1.0f;
 				break;
 		}
 	}
 
 	// New states are not supported by old turret code
-	if ( iNewState != TURRET_TIPPED && iNewState < TURRET_STATE_TOTAL )
+	if (!m_bUsedAsActor &&
+		iNewState != TURRET_TIPPED &&
+		iNewState < TURRET_STATE_TOTAL )
 		return BaseClass::PreThink( (turretState_e)iNewState );
-
+	
 	return true;
 }
 
@@ -505,6 +501,10 @@ void CNPC_Portal_FloorTurret::Shoot( const Vector &vecSrc, const Vector &vecDirT
 		info.m_iAmmoType = m_iAmmoType;
 	}
 
+	if (m_nModelIndex == 3)
+		info.m_vecDirShooting = info.m_vecDirShooting * Vector(-1.0f, -1.0f, -1.0f);
+		m_iNextShootingBarrel = 0;
+
 	info.m_flDamageForceScale = ( ( !m_bDamageForce ) ? ( 0.0f ) : ( TURRET_FLOOR_BULLET_FORCE_MULTIPLIER ) );
 
 	int iBarrelIndex = ( m_bShootWithBottomBarrels ) ? ( 2 ) : ( 0 );
@@ -534,7 +534,7 @@ void CNPC_Portal_FloorTurret::Shoot( const Vector &vecSrc, const Vector &vecDirT
 
 	EmitSound( "NPC_FloorTurret.ShotSounds" );
 	DoMuzzleFlash();
-
+	/*
 	// Make ropes shake if they exist
 	for ( int iRope = 0; iRope < PORTAL_FLOOR_TURRET_NUM_ROPES; ++iRope )
 	{
@@ -543,7 +543,7 @@ void CNPC_Portal_FloorTurret::Shoot( const Vector &vecSrc, const Vector &vecDirT
 			m_hRopes[ iRope ]->ShakeRopes( vecSrc, 32.0f, 5.0f );
 		}
 	}
-
+	*/
 	// If a turret is partially tipped the recoil with each shot so that it can knock itself over
 	Vector	up;
 	GetVectors( NULL, NULL, &up );
@@ -559,7 +559,8 @@ void CNPC_Portal_FloorTurret::Shoot( const Vector &vecSrc, const Vector &vecDirT
 
 	if ( m_iLastState == TURRET_ACTIVE && gpGlobals->curtime > m_fNextTalk )
 	{
-		EmitSound( GetTurretTalkName( m_iLastState ) );
+		if (!m_bGagged)
+			EmitSound( GetTurretTalkName( m_iLastState ) );
 		m_fNextTalk = gpGlobals->curtime + 2.5f;
 	}
 }
@@ -582,7 +583,7 @@ void CNPC_Portal_FloorTurret::SetEyeState( eyeState_t state )
 		m_hEyeGlow->SetAttachment( this, m_iEyeAttachment );
 	}
 
-	bool bNewState = ( m_iEyeState != state );
+//	bool bNewState = ( m_iEyeState != state );
 
 	m_iEyeState = state;
 
@@ -627,9 +628,6 @@ void CNPC_Portal_FloorTurret::SetEyeState( eyeState_t state )
 		m_hEyeGlow->SetColor( 255, 0, 0 );
 		m_hEyeGlow->SetScale( 0.1f, 3.0f );
 		m_hEyeGlow->SetBrightness( 0, 3.0f );
-
-		if ( bNewState )
-			m_nSkin = 1;
 		break;
 
 	case TURRET_EYE_DISABLED:
@@ -637,6 +635,38 @@ void CNPC_Portal_FloorTurret::SetEyeState( eyeState_t state )
 		m_hEyeGlow->SetScale( 0.1f, 1.0f );
 		m_hEyeGlow->SetBrightness( 0, 1.0f );
 		break;
+	}
+}
+
+void CNPC_Portal_FloorTurret::TryEmitSound(const char* soundname)
+{
+	if (!m_bGagged)
+		CBaseEntity::EmitSound(soundname);
+}
+
+void CNPC_Portal_FloorTurret::SetTurretType(int nType)
+{
+	m_nModelIndex = nType;
+	switch (nType)
+	{
+	case 0:
+		SetModelName(AllocPooledString(FLOOR_TURRET_PORTAL_MODEL));
+		SetModel(FLOOR_TURRET_PORTAL_MODEL);
+		break;
+	case 2:
+		SetModelName(AllocPooledString(BOX_TURRET_MODEL));
+		SetModel(BOX_TURRET_MODEL);
+		break;
+	case 3:
+		SetModelName(AllocPooledString(BACKWARDS_TURRET_MODEL));
+		SetModel(BACKWARDS_TURRET_MODEL);
+		break;
+	case 4:
+		SetModelName(AllocPooledString(DEFECTIVE_TURRET_MODEL));
+		SetModel(DEFECTIVE_TURRET_MODEL);
+		break;
+	default:
+		return;
 	}
 }
 
@@ -649,6 +679,11 @@ inline bool CNPC_Portal_FloorTurret::OnSide( void )
 	GetVectors( NULL, NULL, &up );
 
 	return ( DotProduct( up, Vector(0,0,1) ) < 0.5f );
+}
+
+void CNPC_Portal_FloorTurret::EnableTipController(bool bEnabled)
+{
+	m_pMotionController->Enable(bEnabled);
 }
 
 float CNPC_Portal_FloorTurret::GetAttackDamageScale( CBaseEntity *pVictim )
@@ -667,6 +702,9 @@ float CNPC_Portal_FloorTurret::GetAttackDamageScale( CBaseEntity *pVictim )
 			return TURRET_FLOOR_DAMAGE_MULTIPLIER;
 		}
 	}
+
+	if (m_bUseSuperDamageScale)
+		return TURRET_FLOOR_DAMAGE_MULTIPLIER * 4.0;
 
 	return BaseClass::GetAttackDamageScale( pVictim );
 }
@@ -693,11 +731,7 @@ Vector CNPC_Portal_FloorTurret::GetAttackSpread( CBaseCombatWeapon *pWeapon, CBa
 		}
 	}
 
-#ifndef PORTAL2_DLL
 	return VECTOR_CONE_4DEGREES * ((CBaseHLCombatWeapon::GetDefaultProficiencyValues())[ weaponProficiency ].spreadscale);
-#else
-	return VECTOR_CONE_4DEGREES;
-#endif
 }
 
 void CNPC_Portal_FloorTurret::Retire( void )
@@ -710,7 +744,6 @@ void CNPC_Portal_FloorTurret::Retire( void )
 void CNPC_Portal_FloorTurret::Deploy( void )
 {
 	LaserOn();
-	RopesOn();
 
 	BaseClass::Deploy();
 }
@@ -756,7 +789,7 @@ void CNPC_Portal_FloorTurret::ActiveThink( void )
 	m_flDistToEnemy = VectorNormalize( vecDirToEnemy );
 
 	// If the enemy isn't in the normal fov, check the fov through portals
-	CProp_Portal *pPortal = NULL;
+	CPortal_Base2D *pPortal = NULL;
 	if ( pEnemy->IsAlive() )
 	{
 		pPortal = FInViewConeThroughPortal( pEnemy );
@@ -829,7 +862,7 @@ void CNPC_Portal_FloorTurret::ActiveThink( void )
 	}
 
 	//Current enemy is not visible
-	if ( ( bEnemyVisible == false ) || ( m_flDistToEnemy > PORTAL_FLOOR_TURRET_RANGE ))
+	if ( ( bEnemyVisible == false ) || ( m_flDistToEnemy > m_flTurretRange ))
 	{
 		m_flLastSight = gpGlobals->curtime + 2.0f;
 
@@ -893,7 +926,7 @@ void CNPC_Portal_FloorTurret::ActiveThink( void )
 		}
 
 		//Fire the gun
-		if ( bCanShoot ) // 10 degree slop XY
+		if ( IsEnemyBehindGlass(pPortal, pEnemy, vecMuzzle, vecDirToEnemy, m_flDistToEnemy ) || bCanShoot ) // 10 degree slop XY
 		{
 			float dot3d = DotProduct( vecDirToEnemy, vecMuzzleDir );
 
@@ -991,7 +1024,7 @@ void CNPC_Portal_FloorTurret::SearchThink( void )
 		m_flDistToEnemy = VectorNormalize( vecDirToEnemy );
 
 		// If the enemy isn't in the normal fov, check the fov through portals
-		CProp_Portal *pPortal = NULL;
+		CPortal_Base2D *pPortal = NULL;
 		pPortal = FInViewConeThroughPortal( pEnemy );
 
 		if ( pPortal && FVisibleThroughPortal( pPortal, pEnemy ) )
@@ -1016,7 +1049,7 @@ void CNPC_Portal_FloorTurret::SearchThink( void )
 		}
 
 		// Give enemies that are farther away a longer grace period
-		float fDistanceRatio = m_flDistToEnemy / PORTAL_FLOOR_TURRET_RANGE;
+		float fDistanceRatio = m_flDistToEnemy / m_flTurretRange;
 		m_flShotTime = gpGlobals->curtime + fDistanceRatio * fDistanceRatio * PORTAL_FLOOR_TURRET_MAX_SHOT_DELAY;
 
 		m_flLastSight = 0;
@@ -1027,7 +1060,8 @@ void CNPC_Portal_FloorTurret::SearchThink( void )
 
 		if ( gpGlobals->curtime > m_flNextActivateSoundTime )
 		{
-			EmitSound( "NPC_FloorTurret.Activate" );
+			if (!m_bGagged)
+				EmitSound( "NPC_FloorTurret.Activate" );
 			m_flNextActivateSoundTime = gpGlobals->curtime + 3.0;
 		}
 		return;
@@ -1049,21 +1083,11 @@ void CNPC_Portal_FloorTurret::SearchThink( void )
 	//Turn and ping
 	UpdateFacing();
 	Ping();
-
-	// Update rope positions
-	for ( int iRope = 0; iRope < PORTAL_FLOOR_TURRET_NUM_ROPES; ++iRope )
-	{
-		if ( m_hRopes[ iRope ] )
-		{
-			m_hRopes[ iRope ]->EndpointsChanged();
-		}
-	}
 }
 
 void CNPC_Portal_FloorTurret::AutoSearchThink( void )
 {
 	LaserOn();
-	RopesOff();
 
 	BaseClass::AutoSearchThink();
 }
@@ -1087,7 +1111,6 @@ void CNPC_Portal_FloorTurret::TippedThink( void )
 	}
 
 	LaserOn();
-	RopesOn();
 
 	//See if we should continue to thrash
 	if ( gpGlobals->curtime < m_flThrashTime && !IsDissolving() )
@@ -1099,7 +1122,7 @@ void CNPC_Portal_FloorTurret::TippedThink( void )
 				SetActivity( (Activity) ACT_FLOOR_TURRET_OPEN_IDLE );
 				DryFire();
 			}
-			else
+			else if (sv_portal_turret_shoot_at_death.GetInt())
 			{
 				Vector vecMuzzle, vecMuzzleDir;
 				GetAttachment( m_iMuzzleAttachment, vecMuzzle, &vecMuzzleDir );
@@ -1133,13 +1156,19 @@ void CNPC_Portal_FloorTurret::TippedThink( void )
 			//If we're done moving to our desired facing, close up
 			if ( UpdateFacing() == false )
 			{
-				//Make any last death noises and anims
-				EmitSound( "NPC_FloorTurret.Die" );
-				EmitSound( GetTurretTalkName( PORTAL_TURRET_DISABLED ) );
+				if (!m_bGagged)
+				{
+					EmitSound("NPC_FloorTurret.Die");
+				}
+				if (!m_bGagged)
+				{
+					EmitSound(GetTurretTalkName(PORTAL_TURRET_DISABLED));
+				}
 				SpinDown();
 
 				SetActivity( (Activity) ACT_FLOOR_TURRET_CLOSE );
-				EmitSound( "NPC_FloorTurret.Retract" );
+				if (!m_bGagged)
+					EmitSound( "NPC_FloorTurret.Retract" );
 
 				CTakeDamageInfo	info;
 				info.SetDamage( 1 );
@@ -1171,7 +1200,6 @@ void CNPC_Portal_FloorTurret::TippedThink( void )
 				// Start thinking slowly to see if we're ever set upright somehow
 				SetThink( &CNPC_FloorTurret::InactiveThink );
 				SetNextThink( gpGlobals->curtime + 1.0f );
-				RopesOff();
 			}
 		}
 	}
@@ -1203,7 +1231,6 @@ void CNPC_Portal_FloorTurret::HeldThink( void )
 	}
 
 	LaserOn();
-	RopesOn();
 
 	//See if we should continue to thrash
 	if ( !IsDissolving() )
@@ -1227,7 +1254,6 @@ void CNPC_Portal_FloorTurret::HeldThink( void )
 void CNPC_Portal_FloorTurret::InactiveThink( void )
 {
 	LaserOff();
-	RopesOff();
 
 	// Update our PVS state
 	CheckPVSCondition();
@@ -1238,17 +1264,52 @@ void CNPC_Portal_FloorTurret::InactiveThink( void )
 	if ( !OnSide() && VPhysicsGetObject()->GetContactPoint( NULL, NULL ) && m_bEnabled )
 	{
 		// Never return to life!
-		SetCollisionGroup( COLLISION_GROUP_NONE );
+		MakeSolid();
 		//ReturnToLife();
+	}
+
+	if (IsOnFire())
+	{
+		MakeSolid();
+		ReturnToLife();
+		LaserOn();
+		PreThink( (turretState_e)PORTAL_TURRET_STARTBURNING );
+	}
+
+	if (m_pPhysicsObject->GetGameFlags() & FVPHYSICS_PLAYER_HELD)
+	{
+		if (player_held_object_collide_with_player.GetBool())
+		{
+			SetCollisionGroup(COLLISION_GROUP_NONE);
+		}
+		SetCollisionGroup(COLLISION_GROUP_PLAYER_HELD);
+	}
+
+	if (m_pPhysicsObject->IsAsleep())
+	{
+		SetCollisionGroup(COLLISION_GROUP_DEBRIS_TRIGGER);
+	}
+}
+
+void CNPC_Portal_FloorTurret::DieThink()
+{
+	LaserOff();
+
+	StudioFrameAdvance();
+	SetNextThink(gpGlobals->curtime + 0.1f);
+	m_bIsDead = true;
+	if (GetActivity() != ACT_FLOOR_TURRET_DIE)
+	{
+		if (IsActivityFinished())
+		{
+			SetActivity((Activity)ACT_FLOOR_TURRET_DIE_IDLE);
+			SetThink(&CNPC_Portal_FloorTurret::InactiveThink);
+			SetNextThink(gpGlobals->curtime + 1.0f);
+		}
 	}
 	else
 	{
-		IPhysicsObject *pTurretPhys = VPhysicsGetObject();
-
-		if ( !(pTurretPhys->GetGameFlags() & FVPHYSICS_PLAYER_HELD) && pTurretPhys->IsAsleep() )
-			SetCollisionGroup( COLLISION_GROUP_DEBRIS_TRIGGER );
-		else
-			SetCollisionGroup( COLLISION_GROUP_NONE );
+		SetActivity((Activity)ACT_FLOOR_TURRET_DIE);
 	}
 }
 
@@ -1262,20 +1323,91 @@ void CNPC_Portal_FloorTurret::SuppressThink( void )
 //-----------------------------------------------------------------------------
 // Purpose: The turret is not doing anything at all
 //-----------------------------------------------------------------------------
-void CNPC_Portal_FloorTurret::DisabledThink( void )
+void CNPC_Portal_FloorTurret::DisabledThink(void)
 {
-	LaserOff();
-	RopesOff();
+	float thinkTime;
 
-	SetNextThink( gpGlobals->curtime + 0.5 );
+	LaserOff();
+
+	if (m_bUsedAsActor)
+	{
+		NPCThink();
+		thinkTime = gpGlobals->curtime + 0.1;
+	}
+	else
+	{
+		thinkTime = gpGlobals->curtime + 0.5;
+	}
+
+	SetNextThink(thinkTime);
 	if ( OnSide() )
 	{
 		m_OnTipped.FireOutput( this, this );
 		SetEyeState( TURRET_EYE_DEAD );
-		//SetCollisionGroup( COLLISION_GROUP_DEBRIS_TRIGGER );
 		SetThink( NULL );
 	}
 
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: 
+//-----------------------------------------------------------------------------
+void CNPC_Portal_FloorTurret::BreakThink(void)
+{
+	Vector vecUp;
+	GetVectors(NULL, NULL, &vecUp);
+	Vector vecOrigin = WorldSpaceCenter() + (vecUp * 12.0f);
+
+	// K-boom
+	RadiusDamage(CTakeDamageInfo(this, this, 15.0f, DMG_BLAST), vecOrigin, (10 * 12), CLASS_NONE, this);
+
+	EmitSound("NPC_FloorTurret.Destruct");
+
+	if (g_pGameRules->IsMultiplayer())
+	{
+		DispatchParticleEffect("turret_coop_explosion", vecOrigin, GetAbsAngles(), PATTACH_ABSORIGIN, NULL);
+	}
+	else
+	{
+		breakablepropparams_t params(GetAbsOrigin(), GetAbsAngles(), vec3_origin, RandomAngularImpulse(-800.0f, 800.0f));
+		params.impactEnergyScale = 1.0f;
+		params.defCollisionGroup = COLLISION_GROUP_INTERACTIVE;
+
+		// no damage/damage force? set a burst of 100 for some movement
+		params.defBurstScale = 100;
+		PropBreakableCreateAll(GetModelIndex(), VPhysicsGetObject(), params, this, -1, true);
+
+		// Throw out some small chunks too obscure the explosion even more
+		CPVSFilter filter(vecOrigin);
+		Vector gibVelocity = RandomVector(-100, 100);
+		int iModelIndex = modelinfo->GetModelIndex(g_PropDataSystem.GetRandomChunkModel("MetalChunks"));
+		te->BreakModel(filter, 0.0, vecOrigin, GetAbsAngles(), Vector(40, 40, 40), gibVelocity, iModelIndex, 150, 4, 2.5, BREAK_METAL);
+	}
+	// We're done!
+	UTIL_Remove(this);
+}
+
+void CNPC_Portal_FloorTurret::BurnThink(void)
+{
+	if (gpGlobals->curtime <= m_flBurnExplodeTime)
+	{
+		if (gpGlobals->curtime > m_fNextTalk)
+		{
+			if (!m_bGagged)
+				EmitSound(GetTurretTalkName(PORTAL_TURRET_BURNED ) );
+			m_fNextTalk = random->RandomFloat(0.5f, 0.75f);
+		}
+		SetThink(&CNPC_Portal_FloorTurret::BurnThink);
+		SetNextThink(gpGlobals->curtime + 0.1f);
+	}
+	else
+	{
+		ExplosionCreate(WorldSpaceCenter(), GetAbsAngles(), this, 1000, 500, 1385);
+		UTIL_ScreenShake(WorldSpaceCenter(), 20.0f, 150.0f, 0.75f, 750.0f, SHAKE_START, false);
+		SetThink(&CNPC_Portal_FloorTurret::BreakThink);
+		SetNextThink(gpGlobals->curtime);
+		StopSound(GetTurretTalkName(PORTAL_TURRET_BURNED));
+	}
 }
 
 //-----------------------------------------------------------------------------
@@ -1288,48 +1420,8 @@ void CNPC_Portal_FloorTurret::HackFindEnemy( void )
 	// dead enemies are cleared out before new ones are added.
 	GetEnemies()->RefreshMemories();
 
-	GetSenses()->Look( PORTAL_FLOOR_TURRET_RANGE );
-	SetEnemy( BestEnemy() );
-
-	if ( GetEnemy() == NULL )
-	{
-		// Look through the list of sensed objects for possible targets
-		AISightIter_t iter;
-		CBaseEntity *pObject;
-		CBaseEntity	*pNearest = NULL;
-		float flClosestDistSqr = PORTAL_FLOOR_TURRET_RANGE * PORTAL_FLOOR_TURRET_RANGE;
-
-		for ( pObject = GetSenses()->GetFirstSeenEntity( &iter, SEEN_MISC ); pObject; pObject = GetSenses()->GetNextSeenEntity( &iter ) )
-		{
-			Vector vVelocity;
-			pObject->GetVelocity( &vVelocity );
-
-			// Ignore objects going too slowly
-			if ( vVelocity.LengthSqr() < m_fMovingTargetThreashold )
-				continue;
-
-			float flDistSqr = pObject->WorldSpaceCenter().DistToSqr( GetAbsOrigin() );
-			if ( flDistSqr < flClosestDistSqr )
-			{
-				flClosestDistSqr = flDistSqr;
-				pNearest = pObject;
-			}
-		}
-
-		if ( pNearest )
-		{
-			SetEnemy( pNearest );
-			m_fMovingTargetThreashold += gpGlobals->curtime * 15.0f;
-			if ( m_fMovingTargetThreashold > 800.0f )
-			{
-				m_fMovingTargetThreashold = 800.0f;
-			}
-		}
-	}
-	else
-	{
-		m_fMovingTargetThreashold = 20.0f;
-	}
+	GetSenses()->Look( m_flTurretRange );
+	SetEnemy(BestEnemy());
 }
 
 void CNPC_Portal_FloorTurret::StartTouch( CBaseEntity *pOther )
@@ -1420,47 +1512,11 @@ void CNPC_Portal_FloorTurret::LaserOff( void )
 
 void CNPC_Portal_FloorTurret::LaserOn( void )
 {
+	if (m_nModelIndex == 2)
+		m_bLaserOn = false;
+
 	m_bLaserOn = true;
 }
-
-void CNPC_Portal_FloorTurret::RopesOn( void )
-{
-	for ( int iRope = 0; iRope < PORTAL_FLOOR_TURRET_NUM_ROPES; ++iRope )
-	{
-		// Make a rope if it doesn't exist
-		if ( !m_hRopes[ iRope ] )
-		{
-			CFmtStr str;
-
-			int iStartIndex = LookupAttachment( str.sprintf( "Wire%i_start", iRope + 1 ) );
-			int iEndIndex = LookupAttachment( str.sprintf( "Wire%i_end", iRope + 1 ) );
-
-			m_hRopes[ iRope ] = CRopeKeyframe::Create( this, this, iStartIndex, iEndIndex );
-			if ( m_hRopes[ iRope ] )
-			{
-				m_hRopes[ iRope ]->m_Width = 0.7;
-				m_hRopes[ iRope ]->m_nSegments = ROPE_MAX_SEGMENTS;
-				m_hRopes[ iRope ]->EnableWind( false );
-				m_hRopes[ iRope ]->SetupHangDistance( 9.0f );
-				m_hRopes[ iRope ]->m_bConstrainBetweenEndpoints = true;;
-			}
-		}
-	}
-}
-
-void CNPC_Portal_FloorTurret::RopesOff( void )
-{
-	for ( int iRope = 0; iRope < PORTAL_FLOOR_TURRET_NUM_ROPES; ++iRope )
-	{
-		// Remove rope if it's alive
-		if ( m_hRopes[ iRope ] )
-		{
-			 UTIL_Remove( m_hRopes[ iRope ] );
-			 m_hRopes[ iRope ] = NULL;
-		}
-	}
-}
-
 void CNPC_Portal_FloorTurret::FireBullet( const char *pTargetName )
 {
 	CBaseEntity *pEnemy = gEntList.FindEntityByName( NULL, pTargetName );
@@ -1522,7 +1578,8 @@ void CNPC_Portal_FloorTurret::FireBullet( const char *pTargetName )
 		//Turn to face
 		UpdateFacing();
 
-		EmitSound( "NPC_FloorTurret.Alert" );
+		if(!m_bGagged)
+			EmitSound( "NPC_FloorTurret.Alert" );
 		SetThink( &CNPC_FloorTurret::SuppressThink );
 	}
 }
@@ -1533,4 +1590,121 @@ void CNPC_Portal_FloorTurret::FireBullet( const char *pTargetName )
 void CNPC_Portal_FloorTurret::InputFireBullet( inputdata_t &inputdata )
 {
 	FireBullet( inputdata.value.String() );
+}
+
+void CNPC_Portal_FloorTurret::InputEnableGagging(inputdata_t& inputdata)
+{
+	m_bGagged = true;
+}
+
+void CNPC_Portal_FloorTurret::InputDisableGagging(inputdata_t& inputdata)
+{
+	m_bGagged = false;
+}
+
+void CNPC_Portal_FloorTurret::InputEnablePickup(inputdata_t& inputdata)
+{
+	m_bPickupEnabled = true;
+}
+
+void CNPC_Portal_FloorTurret::InputDisablePickup(inputdata_t& inputdata)
+{
+	m_bPickupEnabled = false;
+}
+
+void CNPC_Portal_FloorTurret::InputSelfDestructImmediately(inputdata_t& inputdata)
+{
+	SetThink(&CNPC_Portal_FloorTurret::BreakThink);
+	SetNextThink(gpGlobals->curtime);
+}
+
+void CNPC_Portal_FloorTurret::InputSetModel(inputdata_t& inputdata)
+{
+	SetTurretType(inputdata.value.Int());
+	VPhysicsDestroyObject();
+	CreateVPhysics();
+}
+
+void CNPC_Portal_FloorTurret::Use(CBaseEntity* pActivator, CBaseEntity* pCaller, USE_TYPE useType, float value)
+{
+	CBasePlayer* pPlayer = ToBasePlayer(pActivator);
+
+	if ( m_bPickupEnabled && pActivator)
+		pPlayer->PickupObject(this, false);
+}
+
+float CNPC_Portal_FloorTurret::GetFireConeZTolerance()
+{
+	return sv_portal_turret_fire_cone_z_tolerance.GetFloat();
+}
+
+bool CNPC_Portal_FloorTurret::IsMovingSuddenly()
+{
+	Vector vVelocity;
+
+	if (m_pPhysicsObject)
+	{
+		if (m_pPhysicsObject->GetGameFlags() & FVPHYSICS_PLAYER_HELD)
+		{
+			m_pPhysicsObject->GetVelocity(&vVelocity, NULL);
+			m_flPreviousVelocity = (vVelocity.x * vVelocity.x + vVelocity.y * vVelocity.y + vVelocity.z * vVelocity.z);	
+		
+			if (200.0f < m_flPreviousVelocity)
+			{
+				return true;
+			}
+		}
+	}
+	
+	return false;
+}
+
+bool CNPC_Portal_FloorTurret::IsEnemyBehindGlass(CPortal_Base2D* pPortal, CBaseEntity* pEnemy, Vector& vecMuzzle, Vector& vecDirToEnemy, float flDistToEnemy)
+{
+	bool pTraceFilter;
+
+	Ray_t ray_to_enemy;
+	
+	ray_to_enemy.m_Start = vecMuzzle;
+	ray_to_enemy.m_Delta = vecDirToEnemy * m_flDistToEnemy;
+	ray_to_enemy.m_IsRay = true;
+
+	trace_t tr;
+
+	Vector target;
+
+	CTraceFilterSimple filter(this, COLLISION_GROUP_NONE);
+
+	pTraceFilter = UTIL_Portal_TraceRay_Bullets(pPortal, ray_to_enemy, CONTENTS_WINDOW, &filter, &tr);
+
+	if (g_debug_turret.GetBool())
+	{
+		NDebugOverlay::Line(tr.startpos, tr.endpos, 255, 0, 0, true, 1.0f);
+		if (pTraceFilter)
+		{
+			m_flDistToEnemy * pPortal->GetAbsOrigin() - vecMuzzle;
+			target = vecMuzzle + vecDirToEnemy * m_flDistToEnemy;
+			NDebugOverlay::Line(vecMuzzle, target, 0, 0, 255, true, 1.0f);
+		}
+		NDebugOverlay::Sphere(tr.endpos, 4.0f, 0, 255, 0, true, 1.0);
+	}
+
+	if ((tr.fraction < 1.0 || tr.allsolid) || (tr.startsolid))
+	{
+		return true;
+	}
+
+	return false;
+}
+
+void CNPC_Portal_FloorTurret::MakeSolid()
+{
+	if (!player_held_object_collide_with_player.GetBool() && m_pPhysicsObject->GetGameFlags() & FVPHYSICS_PLAYER_HELD)
+	{
+		SetCollisionGroup(COLLISION_GROUP_PLAYER_HELD);
+	}
+	else
+	{
+		SetCollisionGroup(COLLISION_GROUP_NONE);
+	}
 }

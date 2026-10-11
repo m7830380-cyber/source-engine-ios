@@ -11,7 +11,7 @@
 #include "ai_memory.h"
 #include "engine/IEngineSound.h"
 #include "ammodef.h"
-#include "hl2/hl2_player.h"
+#include "portal_player.h"
 #include "soundenvelope.h"
 #include "physics_saverestore.h"
 #include "IEffects.h"
@@ -593,7 +593,7 @@ bool CNPC_FloorTurret::OnAttemptPhysGunPickup( CBasePlayer *pPhysGunUser, PhysGu
 //-----------------------------------------------------------------------------
 bool CNPC_FloorTurret::HandleInteraction(int interactionType, void *data, CBaseCombatCharacter *sourceEnt)
 {
-#ifndef PORTAL2_DLL
+#ifndef PORTAL2
 	if ( interactionType == g_interactionCombineBash )
 	{
 		// We've been bashed by a combine soldier. Remember who it was, if we haven't got an active kicker
@@ -1191,7 +1191,7 @@ bool CNPC_FloorTurret::IsValidEnemy( CBaseEntity *pEnemy )
 #ifdef PORTAL
 	if ( !FInViewCone( pEnemy ) || !FVisible( pEnemy ) )
 	{
-		CProp_Portal *pPortal = static_cast<CProp_Portal *>( FInViewConeThroughPortal( pEnemy ) );
+		CPortal_Base2D *pPortal = FInViewConeThroughPortal( pEnemy );
 
 		if ( pPortal )
 		{
@@ -1516,6 +1516,8 @@ bool CNPC_FloorTurret::PreThink( turretState_e state )
 			//Stop being targetted
 			SetState( NPC_STATE_DEAD );
 			m_lifeState = LIFE_DEAD;
+
+			AssertMsg(m_pMotionController, "NOTE: If you get this assert then it means our Activate() function wasn't called, this also means you're about to crash.");
 
 			//Disable the tip controller
 			m_pMotionController->Enable( false );
@@ -1958,11 +1960,7 @@ Vector CNPC_FloorTurret::GetAttackSpread( CBaseCombatWeapon *pWeapon, CBaseEntit
 		}
 	}
 
-#ifndef PORTAL2_DLL
 	return VECTOR_CONE_10DEGREES * ((CBaseHLCombatWeapon::GetDefaultProficiencyValues())[ weaponProficiency ].spreadscale);
-#else
-	return VECTOR_CONE_10DEGREES;
-#endif
 
 }
 

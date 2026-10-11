@@ -164,6 +164,9 @@ void GameStartFrame( void )
 //=========================================================
 void InstallGameRules()
 {
-	CreateGameRulesObject( "CPortalGameRules" );
+	if (gpGlobals->maxClients == 1)
+		CreateGameRulesObject( "CPortalGameRules" );
+	else
+		CreateGameRulesObject( "CPortalMPGameRules" );
 }
 

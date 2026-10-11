@@ -1,45 +1,54 @@
-//========= Copyright (c) Valve Corporation, All rights reserved. ============//
-//
-// Purpose: Portal 2 player data sent only to the local player (client).
-//			(Reconstructed for the iOS port: the cstrike15 tree's Portal 2
-//			code uses it but does not include it.)
-//
-//=============================================================================//
+#ifndef PORTAL_PLAYER_LOCAL_DATA_H
+#define PORTAL_PLAYER_LOCAL_DATA_H
 
-#ifndef C_PORTAL_PLAYERLOCALDATA_H
-#define C_PORTAL_PLAYERLOCALDATA_H
-#ifdef _WIN32
-#pragma once
-#endif
-
-#include "dt_recv.h"
-#include "simtimer.h"
+#include "cbase.h"
 #include "portal_player_shared.h"
-#include "portal2/portal2_paint_defs.h"
-#include "portal2/c_trigger_tractorbeam.h"
+
+#define CPortalPlayerLocalData C_PortalPlayerLocalData
 
 class C_Trigger_TractorBeam;
-
-EXTERN_RECV_TABLE( DT_PortalLocal );
 
 class C_PortalPlayerLocalData
 {
 public:
-	DECLARE_PREDICTABLE();
+	
 	DECLARE_CLASS_NOBASE( C_PortalPlayerLocalData );
 	DECLARE_EMBEDDED_NETWORKVAR();
+	DECLARE_SIMPLE_DATADESC();
+	DECLARE_PREDICTABLE();
 
 	C_PortalPlayerLocalData();
 
+	StickCameraState m_nStickCameraState;
+	InAirState m_InAirState;
 	PaintPowerType m_PaintedPowerType;
+
+	int m_nLocatorEntityIndices;
+
+	bool m_bShowingViewFinder;
+	bool m_bPlacingPhoto;
+	bool m_bDoneStickInterp;
+	bool m_bDoneCorrectPitch;
+	bool m_bAttemptHullResize;
+	bool m_bJumpedThisFrame;
+	bool m_bBouncedThisFrame;
+	bool m_bDuckedInAir;
+	bool m_bZoomedIn;
+	bool m_bPreventedCrouchJumpThisFrame;
+
+	float m_flAirControlSupressionTime;
+	float m_flAirInputScale;
+	float m_flCurrentStickTime;
+	float m_fBouncedTime;
+
+	CountdownTimer m_PaintedPowerTimer;
+	CachedPaintPowerChoiceResult m_CachedPaintPowerChoiceResults[PAINT_POWER_TYPE_COUNT];
+
 	Vector m_StickNormal;
 	Vector m_OldStickNormal;
-	Vector m_Up;
-	Vector m_vLocalUp;
-	Vector m_vStickRotationAxis;
-	Vector m_vEyeOffset;
-	QAngle m_qQuaternionPunch;
 	Vector m_vPreUpdateVelocity;
+	Vector m_Up;
+	Vector m_vStickRotationAxis;
 	Vector m_StandHullMin;
 	Vector m_StandHullMax;
 	Vector m_DuckHullMin;
@@ -48,29 +57,29 @@ public:
 	Vector m_CachedStandHullMaxAttempt;
 	Vector m_CachedDuckHullMinAttempt;
 	Vector m_CachedDuckHullMaxAttempt;
-	StickCameraState m_nStickCameraState;
-	InAirState m_InAirState;
-	bool m_bAttemptHullResize;
-	bool m_bDoneStickInterp;
-	bool m_bDoneCorrectPitch;
-	bool m_bJumpedThisFrame;
-	bool m_bBouncedThisFrame;
-	bool m_bDuckedInAir;
-	bool m_bPreventedCrouchJumpThisFrame;
-	float m_fBouncedTime;
-	float m_flAirInputScale;
-	float m_flAirControlSupressionTime;
+	Vector m_vLocalUp;
+	Vector m_vEyeOffset;
+
+	QAngle m_qQuaternionPunch;
+
+#ifdef NO_TRACTOR_BEAM
+	EHANDLE m_hTractorBeam; // Was probably CHandle<> instead
+#else
+	CHandle<C_Trigger_TractorBeam> m_hTractorBeam;
+#endif
 	int m_nTractorBeamCount;
-	bool m_bZoomedIn;
-	bool m_bSlowingTime;
-	float m_flSlowTimeRemaining;
-	float m_flSlowTimeMaximum;
-	bool m_bShowingViewFinder;
 
-	CHandle< C_Trigger_TractorBeam > m_hTractorBeam;
+	// Client only
 
-	CountdownTimer m_PaintedPowerTimer;
-	CachedPaintPowerChoiceResult m_CachedPaintPowerChoiceResults[ PAINT_POWER_TYPE_COUNT ];
+	Vector m_PaintPowerHudInfoPosition[PAINT_POWER_TYPE_COUNT];
+	Vector m_PaintPowerHudInfoNormal[PAINT_POWER_TYPE_COUNT];
+
+	// Hard to tell what type this was.
+	bool m_PaintPowerHudInfoValidity[PAINT_POWER_TYPE_COUNT];
+
+
 };
 
-#endif // C_PORTAL_PLAYERLOCALDATA_H
+EXTERN_RECV_TABLE(DT_PortalLocal);
+
+#endif //PORTAL_PLAYER_LOCAL_DATA_H

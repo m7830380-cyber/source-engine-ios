@@ -17,7 +17,11 @@
 	#include "game.h"
 	#include "gamerules.h"
 	#include "teamplay_gamerules.h"
+#ifdef PORTAL2
+	#include "portal_player.h"
+#else
 	#include "hl2_player.h"
+#endif	
 	#include "voice_gamemgr.h"
 	#include "globalstate.h"
 	#include "ai_basenpc.h"
@@ -40,6 +44,7 @@ END_NETWORK_TABLE()
 
 
 IMPLEMENT_NETWORKCLASS_ALIASED( HalfLife2Proxy, DT_HalfLife2Proxy )
+LINK_ENTITY_TO_CLASS_ALIASED( hl2_gamerules, HalfLife2Proxy );
 
 
 #ifdef CLIENT_DLL
@@ -231,9 +236,11 @@ bool CHalfLife2::ClientCommand( CBaseEntity *pEdict, const CCommand &args )
 #ifndef CLIENT_DLL
 	if( BaseClass::ClientCommand( pEdict, args ) )
 		return true;
-
+#ifdef PORTAL2
+	CPortal_Player *pPlayer = (CPortal_Player *) pEdict;
+#else
 	CHL2_Player *pPlayer = (CHL2_Player *) pEdict;
-
+#endif
 	if ( pPlayer->ClientCommand( args ) )
 		return true;
 #endif
@@ -1423,6 +1430,7 @@ CHalfLife2::~CHalfLife2()
   	//-----------------------------------------------------------------------------
  	bool CHalfLife2::AllowDamage( CBaseEntity *pVictim, const CTakeDamageInfo &info )
   	{
+#ifndef PORTAL2
 #ifndef CLIENT_DLL
 	if( (info.GetDamageType() & DMG_CRUSH) && info.GetInflictor() && pVictim->MyNPCPointer() )
 	{
@@ -1456,6 +1464,7 @@ CHalfLife2::~CHalfLife2()
 		}
 	}
 #endif
+#endif // PORTAL2
   		return true;
   	}
 	//-----------------------------------------------------------------------------

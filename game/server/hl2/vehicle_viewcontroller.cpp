@@ -1,4 +1,4 @@
-//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
+//========= Copyright Â© 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: This is a bastardization of the vehicle code for the choreography
 //			group who want to have smooth view lerping code out of a keyframed
@@ -9,7 +9,6 @@
 
 #include "cbase.h"
 #include "vehicle_base.h"
-#include "hl2_player.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"

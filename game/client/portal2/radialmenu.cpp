@@ -1396,10 +1396,10 @@ int	CRadialMenu::KeyInput( int down, ButtonCode_t keynum, const char *pszCurrent
 
 	if ( !down )
 		return 1;
-
+#if 0 // Not Necessary in p2asw
 	ASSERT_LOCAL_PLAYER_RESOLVABLE();
 	int nSlot = GET_ACTIVE_SPLITSCREEN_SLOT();
-
+#endif
 	int numIgnore = ARRAYSIZE( s_pszRadialMenuIgnoreActions );
 	for ( int i=0; i<numIgnore; ++i )
 	{
@@ -1407,7 +1407,11 @@ int	CRadialMenu::KeyInput( int down, ButtonCode_t keynum, const char *pszCurrent
 		ButtonCode_t key;
 		do 
 		{
+#if 0 // P2 Engine
 			key = (ButtonCode_t)engine->Key_CodeForBinding( s_pszRadialMenuIgnoreActions[i], nSlot, count, -1 );
+#else
+			key = UTIL_KeyCodeForBinding( s_pszRadialMenuIgnoreActions[i] );
+#endif
 			if ( IsJoystickCode( key ) )
 			{
 				key = GetBaseButtonCode( key );
@@ -2853,4 +2857,4 @@ static void __MsgFunc_AddLocator( bf_read &msg )
 	AddLocator( pTarget, vPosition, vNormal, nPlayerIndex, iconName, fDisplayTime );
 }
 
-LEGACY_USER_MESSAGE_REGISTER( AddLocator );
+USER_MESSAGE_REGISTER( AddLocator );

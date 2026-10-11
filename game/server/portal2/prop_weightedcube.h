@@ -10,11 +10,11 @@
 #include "ai_utils.h"
 #include "physics_saverestore.h"
 #include "phys_controller.h"
-#include "portal_base2d.h"
+#include "prop_portal.h"
 #include "datacache/imdlcache.h"
 #include "func_portal_detector.h"
 
-#include "player_pickup_paint_power_user.h"
+#include "paint/player_pickup_paint_power_user.h"
 
 DECLARE_AUTO_LIST( IPropWeightedCubeAutoList );
 

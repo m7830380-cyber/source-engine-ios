@@ -1,104 +1,128 @@
-//========= Copyright Valve Corporation, All rights reserved. ============//
+﻿//===== Copyright � 1996-2005, Valve Corporation, All rights reserved. ======//
 //
-// Purpose: Portal 2's streamlined level transitions.
+//  Purpose: (IDA Pro + 2014 dev leak PDB = this file made from scratch)
 //
-// Maps end in an elevator whose script (transitions/sp_transition_list.nut)
-// fires "ChangeLevel <next map>" at the map's point_changelevel. The departure
-// elevator holds an info_landmark_exit and the arrival elevator of the next map
-// an info_landmark_entry; CChangeLevel::BuildChangeLevelList (triggers.cpp)
-// pairs them through the ChangeLevel_* names below, so the player and whatever
-// rides along keep their place relative to the elevator across the load.
-//
-// The leaked tree lists this file in server_portal2.vpc but doesn't contain it.
-//
-//=============================================================================//
+//============================================================================//
 
 #include "cbase.h"
+#include "baseentity.h"
+#include "eventqueue.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
 
-#define POINT_CHANGELEVEL_LANDMARK_NAME	"__p2_transition_landmark"
+#define PORTAL2_LANDMARK_NAME "__p2_landmark" // Custom define name
 
-ConVar sv_transition_landmark( "sv_transition_landmark", "1", FCVAR_NONE,
-	"Carry the player across Portal 2 level transitions with save/restore (0: plain changelevel)" );
-
-// Kept across the level change: the server DLL stays loaded, and the destination
-// map's BuildChangeLevelList needs the same names the origin map used.
-static char s_szOriginMapName[MAX_MAP_NAME];
-static char s_szDestinationMapName[MAX_MAP_NAME];
-
-const char *ChangeLevel_DestinationMapName( void )
+//-----------------------------------------------------------------------------
+// Purpose: Sets the exact location in the world for transitioning maps and is referenced via targetname
+//-----------------------------------------------------------------------------
+class CInfoLandmark : public CPointEntity
 {
-	return s_szDestinationMapName;
-}
-
-const char *ChangeLevel_OriginMapName( void )
-{
-	return s_szOriginMapName;
-}
-
-const char *ChangeLevel_GetLandmarkName( void )
-{
-	return POINT_CHANGELEVEL_LANDMARK_NAME;
-}
-
-class CPointChangelevel : public CServerOnlyPointEntity
-{
-	DECLARE_CLASS( CPointChangelevel, CServerOnlyPointEntity );
-	DECLARE_DATADESC();
-
 public:
-	void InputChangeLevel( inputdata_t &inputdata );
+    DECLARE_CLASS( CInfoLandmark, CPointEntity );
 
-private:
-	COutputEvent m_OnChangeLevel;
+    virtual void Activate();
 };
 
-BEGIN_DATADESC( CPointChangelevel )
-	DEFINE_INPUTFUNC( FIELD_STRING, "ChangeLevel", InputChangeLevel ),
-	DEFINE_OUTPUT( m_OnChangeLevel, "OnChangeLevel" ),
+//-----------------------------------------------------------------------------
+// Purpose: Completely restored
+//-----------------------------------------------------------------------------
+void CInfoLandmark::Activate()
+{
+    BaseClass::Activate();
+    SetName( AllocPooledString( PORTAL2_LANDMARK_NAME ) ); // Line 33
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: A simple class to prepare maps to change to new levels in Portal 2
+//-----------------------------------------------------------------------------
+class CPointChangelevel : public CPointEntity
+{
+public:
+    DECLARE_CLASS( CPointChangelevel, CPointEntity );
+    DECLARE_DATADESC();
+private:
+    void InputChangeLevel( inputdata_t &inputdata );
+    void InputChangeLevelPostFade( inputdata_t &inputdata );
+
+    COutputEvent m_OnChangeLevel;
+};
+
+static char st_szOriginMap[ 32 ]; // cchMapNameMost?
+static char st_szDestinationMap[ 32 ]; // cchMapNameMost?
+
+ConVar sv_transition_fade_time( "sv_transition_fade_time", "0.5", FCVAR_DEVELOPMENTONLY );
+
+LINK_ENTITY_TO_CLASS( info_landmark_entry, CInfoLandmark ); // Valve goes by classname to differentiate between the two possible landmark types
+LINK_ENTITY_TO_CLASS( info_landmark_exit, CInfoLandmark );  // See CChangeLevel::BuildChangeLevelList for the implementation
+
+BEGIN_DATADESC( CPointChangelevel ) // Line 59
+
+    DEFINE_INPUTFUNC( FIELD_STRING, "ChangeLevel", InputChangeLevel ),
+    DEFINE_INPUTFUNC( FIELD_STRING, "ChangeLevelPostFade", InputChangeLevelPostFade ),
+
+    DEFINE_OUTPUT( m_OnChangeLevel, "OnChangeLevel" )
+
 END_DATADESC()
 
 LINK_ENTITY_TO_CLASS( point_changelevel, CPointChangelevel );
 
-// The landmarks only mark a position; the transition code finds them by classname and
-// hands their edict to the engine, so like info_landmark (subs.cpp) they need one.
-LINK_ENTITY_TO_CLASS( info_landmark_entry, CPointEntity );
-LINK_ENTITY_TO_CLASS( info_landmark_exit, CPointEntity );
-
+//-----------------------------------------------------------------------------
+// Purpose: Completely restored
+//-----------------------------------------------------------------------------
 void CPointChangelevel::InputChangeLevel( inputdata_t &inputdata )
-{
-	const char *pszMapName = inputdata.value.String();
-	if ( !pszMapName || !pszMapName[0] )
-	{
-		Warning( "%s: ChangeLevel without a map name\n", GetDebugName() );
-		return;
-	}
+{ // Line 74
 
-	if ( !engine->IsMapValid( pszMapName ) )
-	{
-		Warning( "%s: ChangeLevel to missing map '%s'\n", GetDebugName(), pszMapName );
-		return;
-	}
 
-	m_OnChangeLevel.FireOutput( inputdata.pActivator, this );
+    float flFadeTime = sv_transition_fade_time.GetFloat(); // Line 77
 
-	// Only ride along when this map really has the departure landmark to measure from.
-	bool bLandmark = sv_transition_landmark.GetBool() &&
-		gEntList.FindEntityByClassname( NULL, "info_landmark_exit" ) != NULL;
+    CReliableBroadcastRecipientFilter allplayers;
 
-	if ( bLandmark )
-	{
-		V_strncpy( s_szOriginMapName, STRING( gpGlobals->mapname ), sizeof( s_szOriginMapName ) );
-		V_strncpy( s_szDestinationMapName, pszMapName, sizeof( s_szDestinationMapName ) );
-	}
-	else
-	{
-		s_szOriginMapName[0] = '\0';
-		s_szDestinationMapName[0] = '\0';
-	}
+    UserMessageBegin( allplayers, "TransitionFade" ); // Line 81
+        WRITE_FLOAT( flFadeTime );
+    MessageEnd(); // Line 83
 
-	DevMsg( "%s: changelevel to %s%s\n", GetDebugName(), pszMapName, bLandmark ? " (landmark transition)" : "" );
-	engine->ChangeLevel( pszMapName, bLandmark ? POINT_CHANGELEVEL_LANDMARK_NAME : NULL );
+    // Add the event to queue
+    g_EventQueue.AddEvent( this, "ChangeLevelPostFade", inputdata.value, flFadeTime, inputdata.pActivator, inputdata.pCaller, inputdata.nOutputID ); // Line 86
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: Completely restored
+// Input  : *pActivator - 
+//			*pCaller - 
+//			useType - 
+//			value - 
+//-----------------------------------------------------------------------------
+void CPointChangelevel::InputChangeLevelPostFade( inputdata_t &inputdata )
+{ // Line 98
+    // Fire entity output
+    m_OnChangeLevel.FireOutput( inputdata.pActivator, this ); // Line 100
+
+    // Update our map info
+    Q_strncpy( st_szOriginMap, STRING( gpGlobals->mapname ), sizeof( st_szOriginMap ) ); // Line 103
+    Q_strncpy( st_szDestinationMap, inputdata.value.String(), sizeof( st_szDestinationMap ) );
+
+    // Fire the base game logic now
+    GameRules()->OnBeginChangeLevel( st_szDestinationMap, NULL ); // Line 107
+    engine->ChangeLevel( st_szDestinationMap, PORTAL2_LANDMARK_NAME ); // Line 108
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: Funcs for triggers.cpp
+//-----------------------------------------------------------------------------
+const char *ChangeLevel_DestinationMapName( void ) // Purpose: Completely restored
+{ // Line 116
+    return st_szDestinationMap; // Line 117
+}
+
+const char *ChangeLevel_OriginMapName( void ) // Purpose: Completely restored
+{ // Line 121
+    return st_szOriginMap; // Line 122
+}
+
+const char *ChangeLevel_GetLandmarkName( void ) // Purpose: Completely restored
+{ // Line 126
+    return PORTAL2_LANDMARK_NAME; // Line 127
 }

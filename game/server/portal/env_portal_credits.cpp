@@ -65,6 +65,7 @@ void CPortalCredits::Spawn( void )
 
 static void CreditsDone_f( void )
 {
+	Msg("Credits done...");
 	CPortalCredits *pCredits = (CPortalCredits*)gEntList.FindEntityByClassname( NULL, "env_credits" );
 
 	if ( pCredits )

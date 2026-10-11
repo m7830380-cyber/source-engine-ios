@@ -15,7 +15,7 @@ name: Build Portal 2 iOS IPA
 
 on:
   push:
-    branches: [ portal2-ios, portal2-rubberwar-ios ]
+    branches: [ portal2-ios, portal2-rubberwar-ios, portal2-p2asw-ios ]
   workflow_dispatch:
 
 env:
@@ -244,8 +244,14 @@ jobs:
           set -euo pipefail
           IPA="artifacts/portal2-ios-arm64.ipa"
           test -f "$IPA"
-          TAG="portal2-ios-latest"
-          TITLE="Portal 2 iOS IPA (latest)"
+          # the P2ASW branch publishes separately so it never replaces the playable build
+          if [ "${{ github.ref_name }}" = "portal2-p2asw-ios" ]; then
+            TAG="portal2-p2asw-ios-latest"
+            TITLE="Portal 2 iOS IPA, P2ASW game code (latest)"
+          else
+            TAG="portal2-ios-latest"
+            TITLE="Portal 2 iOS IPA (latest)"
+          fi
           NOTES="Unsigned Portal 2 iOS IPA from \`${{ github.sha }}\` on \`${{ github.ref_name }}\`.
 
           Bundles the full ps20b/vs20 .vcs set compiled from this tree's stdshaders. Workflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}

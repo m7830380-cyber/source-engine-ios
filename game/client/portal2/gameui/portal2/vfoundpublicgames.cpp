@@ -3,11 +3,11 @@
 // Purpose: 
 //
 //=====================================================================================//
-#include "cbase.h"
+#include <tier0/platform.h>
 #ifdef IS_WINDOWS_PC
-#undef INVALID_HANDLE_VALUE
 #include "windows.h"
 #endif
+
 #include "tier1/fmtstr.h"
 #include "vgui/ILocalize.h"
 #include "EngineInterface.h"
@@ -18,14 +18,13 @@
 
 #include "vfoundpublicgames.h"
 
-#include "missionchooser/iasw_mission_chooser.h"
-#include "missionchooser/iasw_mission_chooser_source.h"
-
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
 
 using namespace vgui;
 using namespace BaseModUI;
+
+extern ConVar ui_foundgames_spinner_time;
 
 //=============================================================================
 static ConVar ui_public_lobby_filter_difficulty2( "ui_public_lobby_filter_difficulty2", "", FCVAR_ARCHIVE, "Filter type for difficulty on the public lobby display" );
@@ -42,7 +41,6 @@ FoundPublicGames::FoundPublicGames( Panel *parent, const char *panelName ) :
 	m_pSearchManager( NULL )
 {
 	m_drpDifficulty = NULL;
-	m_drpOnslaught = NULL;
 	m_drpGameStatus = NULL;
 	m_drpCampaign = NULL;
 	
@@ -97,7 +95,6 @@ void FoundPublicGames::ApplySchemeSettings( IScheme *pScheme )
 	BaseClass::ApplySchemeSettings( pScheme );
 
 	m_drpDifficulty = dynamic_cast< DropDownMenu* >( FindChildByName( "DrpFilterDifficulty" ) );
-	m_drpOnslaught = dynamic_cast< DropDownMenu* >( FindChildByName( "DrpFilterOnslaught" ) );
 	m_drpGameStatus = dynamic_cast< DropDownMenu* >( FindChildByName( "DrpFilterGameStatus" ) );
 	m_drpCampaign = dynamic_cast< DropDownMenu* >( FindChildByName( "DrpFilterCampaign" ) );
 	m_btnFilters = dynamic_cast< BaseModUI::BaseModHybridButton* >( FindChildByName( "BtnFilters" ) );
@@ -114,32 +111,10 @@ void FoundPublicGames::ApplySchemeSettings( IScheme *pScheme )
 	Activate();
 }
 
-void FoundPublicGames::UpdateTitle()
-{
-	const char *gameMode = m_pDataSettings->GetString( "game/mode", "campaign" );
-
-	wchar_t finalString[256] = L"";
-	if ( m_numCurrentPlayers )
-	{
-		const wchar_t *subtitleText = g_pVGuiLocalize->Find( CFmtStr( "#L4D360UI_FoundPublicGames_Subtitle_%s", gameMode ) );
-		if ( subtitleText )
-		{
-			wchar_t convertedString[13];
-			V_snwprintf( convertedString, ARRAYSIZE( convertedString ), L"%d", m_numCurrentPlayers );
-			g_pVGuiLocalize->ConstructString( finalString, sizeof( finalString ), subtitleText, 1, convertedString );
-		}
-	}
-
-	//BaseClass::DrawDialogBackground( CFmtStr( "#L4D360UI_FoundPublicGames_Title_%s", gameMode ), NULL, NULL, finalString, NULL );
-
-	m_pTitle->SetText( CFmtStr( "#L4D360UI_FoundPublicGames_Title_%s", gameMode ) );
-}
-
 //=============================================================================
 void FoundPublicGames::PaintBackground()
 {
-	/*
-	const char *gameMode = m_pDataSettings->GetString( "game/mode", "campaign" );
+	const char *gameMode = m_pDataSettings->GetString( "game/mode", "coop" );
 
 	wchar_t finalString[256] = L"";
 	if ( m_numCurrentPlayers )
@@ -154,7 +129,6 @@ void FoundPublicGames::PaintBackground()
 	}
 
 	BaseClass::DrawDialogBackground( CFmtStr( "#L4D360UI_FoundPublicGames_Title_%s", gameMode ), NULL, NULL, finalString, NULL );
-	*/
 }
 
 //=============================================================================
@@ -174,10 +148,6 @@ void FoundPublicGames::StartSearching( void )
 	if ( szDifficulty && *szDifficulty && GameModeHasDifficulty( szGameMode ) )
 		pKeyValuesSearch->SetString( "game/difficulty", szDifficulty );
 
-	char const *szOnslaught = ui_public_lobby_filter_onslaught.GetString();
-	if ( szOnslaught && *szOnslaught )
-		pKeyValuesSearch->SetInt( "game/onslaught", 1 );
-
 	char const *szStatus = ui_public_lobby_filter_status.GetString();
 	if ( szStatus && *szStatus )
 		pKeyValuesSearch->SetString( "game/state", szStatus );
@@ -195,44 +165,20 @@ void FoundPublicGames::StartSearching( void )
 //=============================================================================
 bool FoundPublicGames::ShouldShowPublicGame( KeyValues *pGameDetails )
 {
-	DevMsg( "FoundPublicGames::ShouldShowPublicGame\n" );
-	KeyValuesDumpAsDevMsg( pGameDetails );
+	char const *szCampaign = pGameDetails->GetString( "game/campaign", NULL );
+	char const *szWebsite = pGameDetails->GetString( "game/missioninfo/website", "" );
 
-#if 0
-	IASW_Mission_Chooser_Source *pSource = missionchooser ? missionchooser->LocalMissionSource() : NULL;
-	if ( !pSource )
+	KeyValues *pAllMissions = g_pMatchExt->GetAllMissions();
+	KeyValues *pInstalledMission = ( szCampaign && *szCampaign && pAllMissions ) ? pAllMissions->FindKey( szCampaign ) : NULL;
+
+	// if no mission and no website, skip it
+	if ( !pInstalledMission && !*szWebsite )
 		return false;
 
-	const char *szMode = pGameDetails->GetString( "game/mode", "campaign" );
-	if ( !Q_stricmp( szMode, "campaign" ) )
-	{
-		char const *szCampaign = pGameDetails->GetString( "game/campaign", NULL );
-		bool bCampaignInstalled = pSource->CampaignExists( szCampaign );
-
-		if ( !bCampaignInstalled &&
-			( !Q_stricmp( ui_public_lobby_filter_campaign.GetString(), "installedaddon" ) ||
-			!Q_stricmp( ui_public_lobby_filter_campaign.GetString(), "official" ) ) )
-			return false;
-	}
-	else if ( !Q_stricmp( szMode, "single_mission" ) )
-	{
-		char const *szMission = pGameDetails->GetString( "game/mission", NULL );
-		bool bMissionInstalled = pSource->MissionExists( szMission, false );
-
-		if ( !bMissionInstalled &&
-			( !Q_stricmp( ui_public_lobby_filter_campaign.GetString(), "installedaddon" ) ||
-			!Q_stricmp( ui_public_lobby_filter_campaign.GetString(), "official" ) ) )
-			return false;
-	}
-	
-	// TODO:
-	//char const *szWebsite = pGameDetails->GetString( "game/missioninfo/website", "" );
-	// if no mission and no website, skip it
-	//if ( !pInstalledMission && !*szWebsite )
-		//return false;
-#else
-	return false;
-#endif // 0
+	if ( !pInstalledMission &&
+		 ( !Q_stricmp( ui_public_lobby_filter_campaign.GetString(), "installedaddon" ) ||
+		   !Q_stricmp( ui_public_lobby_filter_campaign.GetString(), "official" ) ) )
+		return false;
 
 	return true;
 }
@@ -275,14 +221,9 @@ void FoundPublicGames::AddServersToList( void )
 		FoundGameListItem::Info fi;
 
 		fi.mInfoType = FoundGameListItem::FGT_PUBLICGAME;
-		char const *szGameMode = pGameDetails->GetString( "game/mode", "campaign" );
+		char const *szGameMode = pGameDetails->GetString( "game/mode", "coop" );
 		bool bGameModeChapters = GameModeIsSingleChapter( szGameMode );
-		const char *szDisplayName = pGameDetails->GetString( "game/missioninfo/displaytitle" );
-		if ( !szDisplayName || !szDisplayName[0] )
-		{
-			szDisplayName = "Unknown Mission";
-		}
-		Q_strncpy( fi.Name, szDisplayName, sizeof( fi.Name ) );
+		Q_strncpy( fi.Name, pGameDetails->GetString( "game/missioninfo/displaytitle", "#L4D360UI_CampaignName_Unknown" ), sizeof( fi.Name ) );
 
 		fi.mIsJoinable = item->IsJoinable();
 		fi.mbInGame = true;
@@ -303,11 +244,11 @@ void FoundPublicGames::AddServersToList( void )
 			fi.mpGameDetails->SetBool( "UI/nochapter", 1 );
 		}
 
-		if ( IsX360() )
+		if ( IsGameConsole() )
 		{
 			// For X360 titles do not transmit campaign display title, so client needs to resolve locally
 			KeyValues *pMissionInfo = NULL;
-			KeyValues *pChapterInfo = NULL; //GetMapInfoRespectingAnyChapter( fi.mpGameDetails, &pMissionInfo );
+			KeyValues *pChapterInfo = GetMapInfoRespectingAnyChapter( fi.mpGameDetails, &pMissionInfo );
 			if ( pMissionInfo && pChapterInfo )
 			{
 				if ( bGameModeChapters )
@@ -378,14 +319,6 @@ static int __cdecl FoundPublicGamesSortFunc( vgui::Panel* const *a, vgui::Panel*
 		return ( builtInA ? -1 : 1 );
 	}
 
-	// now by swarm state
-	const char *stateA = ia.mpGameDetails->GetString( "game/swarmstate", "" );
-	const char *stateB = ib.mpGameDetails->GetString( "game/swarmstate", "" );
-	if ( int iResult = Q_stricmp( stateA, stateB ) )
-	{
-		return iResult;
-	}
-
 	// now by campaign
 	const char *campaignNameA = ia.mpGameDetails->GetString( "game/missioninfo/displaytitle", "" );
 	const char *campaignNameB = ib.mpGameDetails->GetString( "game/missioninfo/displaytitle", "" );
@@ -415,59 +348,7 @@ void FoundPublicGames::SortListItems()
 //=============================================================================
 void FoundPublicGames::OnCommand( const char *command )
 {
-	if( V_strcmp( command, "CreateGame" ) == 0 )
-	{
-		if ( !CanCreateGame() )
-		{
-			CBaseModPanel::GetSingleton().PlayUISound( UISOUND_INVALID );
-			return;
-		}
-
-		KeyValues *pSettings = KeyValues::FromString(
-			"settings",
-			" system { "
-			" network LIVE "
-			" access friends "
-			" } "
-			" game { "
-			" mode = "
-			" campaign = "
-			" mission = "
-			" } "
-			" options { "
-			" action create "
-			" } "
-			);
-		KeyValues::AutoDelete autodelete( pSettings );
-
-		char const *szGameMode = "campaign";
-		pSettings->SetString( "game/mode", szGameMode );
-		pSettings->SetString( "game/campaign", "jacob" );
-		pSettings->SetString( "game/mission", "asi-jac1-landingbay_01" );
-
-		if ( !CUIGameData::Get()->SignedInToLive() )
-		{
-			pSettings->SetString( "system/network", "lan" );
-			pSettings->SetString( "system/access", "public" );
-		}
-
-		if ( StringHasPrefix( szGameMode, "team" ) )
-		{
-			pSettings->SetString( "system/netflag", "teamlobby" );
-		}
-		else if ( !Q_stricmp( "custommatch", m_pDataSettings->GetString( "options/action", "" ) ) )
-		{
-			pSettings->SetString( "system/access", "public" );
-		}
-
-		// TCR: We need to respect the default difficulty
-		pSettings->SetString( "game/difficulty", GameModeGetDefaultDifficulty( szGameMode ) );
-
-		CBaseModPanel::GetSingleton().PlayUISound( UISOUND_ACCEPT );
-		CBaseModPanel::GetSingleton().CloseAllWindows();
-		CBaseModPanel::GetSingleton().OpenWindow( WT_GAMESETTINGS, NULL, true, pSettings );
-	}
-	else if ( !Q_stricmp( command, "StartCustomMatchSearch" ) )
+	if ( !Q_stricmp( command, "StartCustomMatchSearch" ) )
 	{
 		if ( CheckAndDisplayErrorIfNotLoggedIn() ||
 			CUIGameData::Get()->CheckAndDisplayErrorIfNotSignedInToLive( this ) )
@@ -495,7 +376,7 @@ void FoundPublicGames::OnCommand( const char *command )
 
 		// Take ownership of allocated/copied keyvalues
 		KeyValues::AutoDelete autodelete( pSettings );
-		char const *szGameMode = m_pDataSettings->GetString( "game/mode", "campaign" );
+		char const *szGameMode = m_pDataSettings->GetString( "game/mode", "coop" );
 
 		pSettings->SetString( "system/network", "LIVE" );
 		pSettings->SetString( "system/access", "public" );
@@ -513,11 +394,6 @@ void FoundPublicGames::OnCommand( const char *command )
 	else if ( char const *filterDifficulty = StringAfterPrefix( command, "filter_difficulty_" ) )
 	{
 		ui_public_lobby_filter_difficulty2.SetValue( filterDifficulty );
-		StartSearching();
-	}
-	else if ( char const *filterOnslaught = StringAfterPrefix( command, "filter_onslaught_" ) )
-	{
-		ui_public_lobby_filter_onslaught.SetValue( filterOnslaught );
 		StartSearching();
 	}
 	else if ( char const *filterCampaign = StringAfterPrefix( command, "filter_campaign_" ) )
@@ -551,21 +427,12 @@ void FoundPublicGames::Activate()
 
 	if ( BaseModHybridButton *pWndCreateGame = dynamic_cast< BaseModHybridButton * >( FindChildByName( "DrpCreateGame" ) ) )
 	{
-		pWndCreateGame->SetVisible( CanCreateGame() );
-		pWndCreateGame->SetText( CFmtStr( "#L4D360UI_FoudGames_CreateNew_%s", m_pDataSettings->GetString( "game/mode", "" ) ) );
+		pWndCreateGame->SetText( CFmtStr( "#L4D360UI_FoudGames_CustomMatch_%s", m_pDataSettings->GetString( "game/mode", "" ) ) );
 	}
-
-	if ( Panel *pLabelX = FindChildByName( "LblPressX" ) )
-		pLabelX->SetVisible( CanCreateGame() );
 
 	if ( m_drpDifficulty )
 	{
 		m_drpDifficulty->SetCurrentSelection( CFmtStr( "filter_difficulty_%s", ui_public_lobby_filter_difficulty2.GetString() ) );
-	}
-
-	if ( m_drpOnslaught )
-	{
-		m_drpOnslaught->SetCurrentSelection( CFmtStr( "filter_onslaught_%s", ui_public_lobby_filter_onslaught.GetString() ) );
 	}
 
 	if ( m_drpGameStatus )
@@ -578,7 +445,7 @@ void FoundPublicGames::Activate()
 		m_drpCampaign->SetCurrentSelection( CFmtStr( "filter_campaign_%s", ui_public_lobby_filter_campaign.GetString() ) );
 	}
 
-#if !defined( _X360 ) && !defined( NO_STEAM )
+#if !defined( NO_STEAM )
 	if ( steamapicontext )
 	{
 		if ( ISteamUserStats *pSteamUserStats = steamapicontext->SteamUserStats() )
@@ -588,15 +455,6 @@ void FoundPublicGames::Activate()
 		}
 	}
 #endif
-}
-
-bool FoundPublicGames::CanCreateGame()
-{
-	//char const *szGameMode = m_pDataSettings->GetString( "game/mode", NULL );
-	bool bGroupServerList = !Q_stricmp( "groupserver", m_pDataSettings->GetString( "options/action", "" ) );
-
-	//return ( szGameMode && *szGameMode && !bGroupServerList );
-	return !bGroupServerList;
 }
 
 void FoundPublicGames::OnKeyCodePressed( vgui::KeyCode code )
@@ -628,7 +486,6 @@ void FoundPublicGames::OnEvent( KeyValues *pEvent )
 		char const *szUpdate = pEvent->GetString( "update", "" );
 		if ( !Q_stricmp( "searchstarted", szUpdate ) )
 		{
-			extern ConVar ui_foundgames_spinner_time;
 			m_flSearchStartedTime = Plat_FloatTime();
 			m_flSearchEndTime = m_flSearchStartedTime + ui_foundgames_spinner_time.GetFloat();
 			OnThink();
@@ -649,7 +506,7 @@ void FoundPublicGames::OnEvent( KeyValues *pEvent )
 //=============================================================================
 char const * FoundPublicGames::GetListHeaderText()
 {
-	bool bHasChapters = GameModeIsSingleChapter( m_pDataSettings->GetString( "game/mode", "campaign" ) );
+	bool bHasChapters = GameModeIsSingleChapter( m_pDataSettings->GetString( "game/mode", "coop" ) );
 
 	if ( bHasChapters )
 		return "#L4D360UI_FoundPublicGames_Header_Survival";
@@ -658,7 +515,7 @@ char const * FoundPublicGames::GetListHeaderText()
 }
 
 //=============================================================================
-#if !defined( _X360 ) && !defined( NO_STEAM )
+#if !defined( NO_STEAM )
 void FoundPublicGames::Steam_OnNumberOfCurrentPlayers( NumberOfCurrentPlayers_t *pResult, bool bError )
 {
 	if ( bError || !pResult->m_bSuccess )

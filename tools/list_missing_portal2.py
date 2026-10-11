@@ -17,8 +17,8 @@ VPC_MACROS = {
     '_SYM_EXT': '.dSYM', 'PLATFORM': 'osx64', 'PLATSUBDIR': '/osx64', 'GAMENAME': 'csgo',
 }
 PORTAL2_PROJECTS = {
-	'client': 'game/client/client_portal2_rubberwar.vpc',
-	'server': 'game/server/server_portal2_rubberwar.vpc',
+	'client': 'game/client/client_portal2_p2asw.vpc',
+	'server': 'game/server/server_portal2_p2asw.vpc',
 	'matchmaking': 'matchmaking/matchmaking_portal2.vpc',
 }
 ROOT_PROJECTS = [

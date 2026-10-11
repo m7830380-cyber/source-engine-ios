@@ -1,9 +1,8 @@
-//========= Copyright (c) Valve Corporation, All rights reserved. ============//
+//========= Copyright  1996-2005, Valve Corporation, All rights reserved. ============//
 //
-// Purpose: Portal 2 player data sent only to the local player.
-//			(Reconstructed for the iOS port: the cstrike15 tree's Portal 2
-//			code uses it but does not include it.)
+// Purpose: 
 //
+// $NoKeywords: $
 //=============================================================================//
 
 #ifndef PORTAL_PLAYERLOCALDATA_H
@@ -13,69 +12,90 @@
 #endif
 
 #include "networkvar.h"
-#include "simtimer.h"
-#include "portal_player_shared.h"
-#include "portal2/portal2_paint_defs.h"
-#include "portal2/trigger_tractorbeam.h"
 
-class CTrigger_TractorBeam;
+#include "portal_player_shared.h"   // PortalPlayerStatistics_t define
+#include "portal_shareddefs.h"      // USE_SLOWTIME define
+#include "trigger_tractorbeam_shared.h"
 
+//-----------------------------------------------------------------------------
+// Purpose: Player specific data for Portal ( sent only to local player, too )
+//-----------------------------------------------------------------------------
 class CPortalPlayerLocalData
 {
 public:
-	// Save/restore
-	DECLARE_SIMPLE_DATADESC();
+    // Save/restore
+    DECLARE_SIMPLE_DATADESC();
 	DECLARE_CLASS_NOBASE( CPortalPlayerLocalData );
 	DECLARE_EMBEDDED_NETWORKVAR();
 
-	CPortalPlayerLocalData();
+    CPortalPlayerLocalData();
 
-	// paint powers / wall stick movement (predicted)
-	CNetworkVar( PaintPowerType, m_PaintedPowerType );
-	CNetworkVar( Vector, m_StickNormal );
-	CNetworkVar( Vector, m_OldStickNormal );
-	CNetworkVar( Vector, m_Up );
-	CNetworkVar( Vector, m_vLocalUp );
-	CNetworkVar( Vector, m_vStickRotationAxis );
-	CNetworkVar( Vector, m_vEyeOffset );
-	CNetworkVar( QAngle, m_qQuaternionPunch );
-	CNetworkVar( Vector, m_vPreUpdateVelocity );
-	CNetworkVar( Vector, m_StandHullMin );
-	CNetworkVar( Vector, m_StandHullMax );
-	CNetworkVar( Vector, m_DuckHullMin );
-	CNetworkVar( Vector, m_DuckHullMax );
-	CNetworkVar( Vector, m_CachedStandHullMinAttempt );
-	CNetworkVar( Vector, m_CachedStandHullMaxAttempt );
-	CNetworkVar( Vector, m_CachedDuckHullMinAttempt );
-	CNetworkVar( Vector, m_CachedDuckHullMaxAttempt );
+#if USE_SLOWTIME
+    CNetworkVar( bool, m_bSlowingTime );
+    CNetworkVar( float, m_flSlowTimeRemaining );
+    CNetworkVar( float, m_flSlowTimeMaximum );
+#endif // USE_SLOWTIME
+
 	CNetworkVar( StickCameraState, m_nStickCameraState );
 	CNetworkVar( InAirState, m_InAirState );
-	CNetworkVar( bool, m_bAttemptHullResize );
+	CNetworkVar( PaintPowerType, m_PaintedPowerType );
+
+	CNetworkVar( int, m_nLocatorEntityIndices ); // FIXME: Needs to be array!
+
+	CNetworkVar( bool, m_bShowingViewFinder );
+	CNetworkVar( bool, m_bPlacingPhoto );
 	CNetworkVar( bool, m_bDoneStickInterp );
 	CNetworkVar( bool, m_bDoneCorrectPitch );
 	CNetworkVar( bool, m_bJumpedThisFrame );
 	CNetworkVar( bool, m_bBouncedThisFrame );
 	CNetworkVar( bool, m_bDuckedInAir );
-	CNetworkVar( bool, m_bPreventedCrouchJumpThisFrame );
-	CNetworkVar( float, m_fBouncedTime );
-	CNetworkVar( float, m_flAirInputScale );
-	CNetworkVar( float, m_flAirControlSupressionTime );
-
-	// excursion funnels
-	CNetworkHandle( CTriggerTractorBeam, m_hTractorBeam );
-	CNetworkVar( int, m_nTractorBeamCount );
-
-	// zoom, slow time, view finder
 	CNetworkVar( bool, m_bZoomedIn );
-	CNetworkVar( bool, m_bSlowingTime );
-	CNetworkVar( float, m_flSlowTimeRemaining );
-	CNetworkVar( float, m_flSlowTimeMaximum );
-	CNetworkVar( bool, m_bShowingViewFinder );
+	CNetworkVar( bool, m_bPreventedCrouchJumpThisFrame );
+
+	bool m_bAttemptHullResize;
+
+	CNetworkVar( float, m_flAirControlSupressionTime );
+	CNetworkVar( float, m_flAirInputScale );
+	CNetworkVar( float, m_flCurrentStickTime );
+	CNetworkVar( float, m_fBouncedTime );
+
+	// Fixme?
+	//CNetworkVar( CountdownTimer, m_PaintedPowerTimer );
 
 	CountdownTimer m_PaintedPowerTimer;
-	CachedPaintPowerChoiceResult m_CachedPaintPowerChoiceResults[ PAINT_POWER_TYPE_COUNT ];
+
+	CachedPaintPowerChoiceResult m_CachedPaintPowerChoiceResults[PAINT_POWER_TYPE_COUNT];
+	
+	CNetworkVector( m_StickNormal );
+	CNetworkVector( m_OldStickNormal );
+	CNetworkVector( m_vPreUpdateVelocity );
+	CNetworkVector( m_Up );
+	CNetworkVector( m_vStickRotationAxis );
+	
+	CNetworkVector( m_StandHullMin );
+	CNetworkVector( m_StandHullMax );
+	CNetworkVector( m_DuckHullMin );
+	CNetworkVector( m_DuckHullMax );
+	CNetworkVector( m_CachedStandHullMinAttempt );
+	CNetworkVector( m_CachedStandHullMaxAttempt );
+	CNetworkVector( m_CachedDuckHullMinAttempt );
+	CNetworkVector( m_CachedDuckHullMaxAttempt );
+	
+	CNetworkVector( m_vLocalUp );	
+	CNetworkVector( m_vEyeOffset );
+
+	CNetworkQAngle( m_qQuaternionPunch );
+	
+#ifndef NO_TRACTOR_BEAM
+	CNetworkHandle( CTrigger_TractorBeam, m_hTractorBeam )
+#else
+	CNetworkHandle( CBaseEntity, m_hTractorBeam ) // Change to CTrigger_TractorBeam when we're ready
+#endif
+
+    int m_nTractorBeamCount;
 };
 
-EXTERN_SEND_TABLE( DT_PortalLocal );
+EXTERN_SEND_TABLE(DT_PortalLocal);
+
 
 #endif // PORTAL_PLAYERLOCALDATA_H

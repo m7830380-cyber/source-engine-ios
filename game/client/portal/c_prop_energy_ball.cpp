@@ -53,6 +53,8 @@ IMPLEMENT_CLIENTCLASS_DT( C_PropEnergyBall, DT_PropEnergyBall, CPropEnergyBall )
 END_RECV_TABLE()
 
 
+LINK_ENTITY_TO_CLASS( prop_energy_ball, C_PropEnergyBall );
+
 BEGIN_PREDICTION_DATA( C_PropEnergyBall )
 
 	DEFINE_PRED_FIELD( m_bIsInfiniteLife, FIELD_BOOLEAN, FTYPEDESC_INSENDTABLE ),

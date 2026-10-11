@@ -1,13 +1,21 @@
-#ifndef I_STEAM_OVERLAY_MGR_PORTAL2_STUB_H
-#define I_STEAM_OVERLAY_MGR_PORTAL2_STUB_H
-#ifdef _WIN32
-#pragma once
-#endif
+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 
-class ISteamOverlayMgr
+#ifndef ISTEAMOVERLAYMGR_H
+#define ISTEAMOVERLAYMGR_H
+
+abstract_class ISteamOverlayManager
 {
 public:
-	virtual ~ISteamOverlayMgr() {}
+	virtual void		Create( vgui::VPANEL parent ) = 0;
+	virtual void		GameBootReady() = 0;
+	virtual void		SetEnhancedOverlayInput( bool bEnable ) = 0;
+	virtual void		Destroy( void ) = 0;
 };
 
+#ifdef _PS3
+extern ISteamOverlayManager *g_pISteamOverlayMgr;
+#else
+#define g_pISteamOverlayMgr ( ( ISteamOverlayManager * ) 0 )
 #endif
+
+#endif // ISTEAMOVERLAYMGR_H

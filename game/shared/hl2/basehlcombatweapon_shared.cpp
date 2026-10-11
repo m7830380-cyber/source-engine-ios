@@ -23,6 +23,8 @@ BEGIN_NETWORK_TABLE( CBaseHLCombatWeapon , DT_BaseHLCombatWeapon )
 #endif
 END_NETWORK_TABLE()
 
+LINK_ENTITY_TO_CLASS_ALIASED( basehlcombatweapon, BaseHLCombatWeapon );
+
 
 #if !defined( CLIENT_DLL )
 
@@ -116,6 +118,7 @@ bool CBaseHLCombatWeapon::Ready( void )
 //-----------------------------------------------------------------------------
 bool CBaseHLCombatWeapon::Deploy( void )
 {
+#ifndef PORTAL2
 	// If we should be lowered, deploy in the lowered position
 	// We have to ask the player if the last time it checked, the weapon was lowered
 	if ( GetOwner() && GetOwner()->IsPlayer() )
@@ -142,6 +145,7 @@ bool CBaseHLCombatWeapon::Deploy( void )
 	}
 
 	m_bLowered = false;
+#endif
 	return BaseClass::Deploy();
 }
 

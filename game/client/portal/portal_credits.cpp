@@ -108,6 +108,7 @@ private:
 	void DrawPortalOutroCreditsLyrics( void );
 	void DrawIntroCreditsName( void );
 	void DrawPortalAsciiArt( void );
+	void DrawTexture(const char *texturePath);
 	void DrawLogo( void );
 
 	void PrepareLogo( float flTime );
@@ -604,6 +605,7 @@ void CHudPortalCredits::DrawOutroCreditsName( void )
 						{
 							pCredit->bActive = false;
 							engine->ClientCmd( "creditsdone" );
+							Msg("Done credits\n");
 						}
 					}
 				}
@@ -899,6 +901,7 @@ void CHudPortalCredits::DrawPortalOutroCreditsLyrics( void )
 	if (m_bStartSong && flCurTime>= m_flSongStartTime)
 	{
 		surface()->PlaySound( "music/portal_still_alive.mp3" );
+		DrawTexture("vgui/screens/vgui_single_credits_screen_bg.vtf");
 		m_bStartSong=false;
 		//engine->ClientCmd( "play music/portal_still_alive.mp3" );
 	}
@@ -1106,6 +1109,16 @@ void CHudPortalCredits::DrawPortalOutroCreditsLyrics( void )
 	}
 }
 
+void CHudPortalCredits::DrawTexture(const char *texturePath)
+{
+	Msg("TODO!\n");
+	Msg("Overlaying texture: %s\n", texturePath);
+
+	// Get the screen size
+	int screenWidth, screenHeight;
+	GetHudSize(screenWidth, screenHeight);
+
+}
 
 void CHudPortalCredits::DrawLogo( void )
 {

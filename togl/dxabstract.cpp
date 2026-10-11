@@ -1403,8 +1403,17 @@ HRESULT IDirect3D9::CheckDeviceFormat(UINT Adapter,D3DDEVTYPE DeviceType,D3DFORM
 						// these come in from TestTextureFormat in ColorFormatDX8.cpp which is being driven by InitializeColorInformation...
 						// which is going to try all 8 combinations of (vertex texturable / render targetable / filterable ) on every image format it knows.
 
-						case D3DFMT_R8G8B8:			legalUsage	=	D3DUSAGE_DYNAMIC | D3DUSAGE_AUTOGENMIPMAP | D3DUSAGE_QUERY_FILTER;
+						case D3DFMT_R8G8B8:
+#if defined( IOS )
+													// GLES has no GL_BGR upload: these went up as RGBA8 + GL_RGB, which
+													// GLES rejects, leaving 24-bit textures (Portal 2's menu backgrounds
+													// and dialog tiles) black. Refuse it so the material system converts
+													// them to X8R8G8B8, which uploads with a BGRA swizzle.
+													legalUsage	=	0;
+#else
+													legalUsage	=	D3DUSAGE_DYNAMIC | D3DUSAGE_AUTOGENMIPMAP | D3DUSAGE_QUERY_FILTER;
 													legalUsage	|=	D3DUSAGE_QUERY_SRGBREAD;
+#endif
 						break;
 												
 						case D3DFMT_X8R8G8B8:		legalUsage	=	D3DUSAGE_DYNAMIC | D3DUSAGE_AUTOGENMIPMAP | D3DUSAGE_QUERY_FILTER;
@@ -1471,7 +1480,12 @@ HRESULT IDirect3D9::CheckDeviceFormat(UINT Adapter,D3DDEVTYPE DeviceType,D3DFORM
 						break;
 					}
 
+#if defined( IOS )
+					// legalUsage 0 means the format is refused outright, even for a query with no usage bits
+					if ( legalUsage && (Usage & legalUsage) == Usage )
+#else
 					if ((Usage & legalUsage) == Usage)
+#endif
 					{
 						result = S_OK;
 					}

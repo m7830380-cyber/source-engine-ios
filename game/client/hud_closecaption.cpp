@@ -2547,6 +2547,10 @@ void CHudCloseCaption::PlayRandomCaption()
 
 bool CHudCloseCaption::AddAsyncWork( char const *tokenstream, bool bIsStream, float duration, bool fromplayer, bool direct /*=false*/ )
 {
+#if defined( IOS ) && defined( PORTAL2 )
+	Msg( "[cc] '%s' %.1fs: closecaption %d, cc_subtitles %d, hud %s\n", tokenstream ? tokenstream : "", duration,
+		closecaption.GetInt(), cc_subtitles.GetInt(), IsVisible() ? "visible" : "hidden" );
+#endif
 	if ( !closecaption.GetBool() && !direct )
 		return false;
 	bool bret = true;
@@ -2596,6 +2600,10 @@ bool CHudCloseCaption::AddAsyncWork( char const *tokenstream, bool bIsStream, fl
 
 bool CHudCloseCaption::AddAsyncWorkByHash( unsigned int hash, float duration, bool fromplayer, bool direct /*=false*/ )
 {
+#if defined( IOS ) && defined( PORTAL2 )
+	Msg( "[cc] hash %08x %.1fs: closecaption %d, cc_subtitles %d, hud %s\n", hash, duration,
+		closecaption.GetInt(), cc_subtitles.GetInt(), IsVisible() ? "visible" : "hidden" );
+#endif
 	if ( !closecaption.GetBool() && !direct )
 		return false;
 	bool bret = true;

@@ -5,13 +5,6 @@
 // $NoKeywords: $
 //=============================================================================//
 
-#ifdef PORTAL2
-#ifndef TEAM_RED
-#define TEAM_RED 2
-#define TEAM_BLUE 3
-#endif
-#endif
-
 #include "cbase.h"
 #include "entitylist.h"
 #include "utlvector.h"

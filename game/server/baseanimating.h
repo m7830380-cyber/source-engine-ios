@@ -174,7 +174,7 @@ protected:
 	// save off your pose parameters in member variables in your derivation of this function:
 	virtual void	PopulatePoseParameters( void );
 
-private:
+protected: // Portal 2 player does its own bone merging (CPortal_Player::SetupBones)
 	CBoneMergeCache					*m_pBoneMergeCache;
 
 public:

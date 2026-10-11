@@ -103,7 +103,7 @@ C_PortalGhostRenderable::C_PortalGhostRenderable( C_Portal_Base2D *pOwningPortal
 	SetModelName( m_hGhostedRenderable->GetModelName() );
 
 	m_bCombatWeapon = (dynamic_cast<C_BaseCombatWeapon *>(pGhostSource) != NULL);
-	SetModelIndex( m_bCombatWeapon ? ((C_BaseCombatWeapon *)pGhostSource)->GetWorldModelIndex() : pGhostSource->GetModelIndex() );
+	SetModelIndex( m_bCombatWeapon ? ((C_BaseCombatWeapon *)pGhostSource)->m_iWorldModelIndex.Get() : pGhostSource->GetModelIndex() );
 
 	m_bCombatWeaponWorldClone = false; // Alien Swarm's C_CombatWeaponClone doesn't exist on the CS:GO engine
 
@@ -134,7 +134,7 @@ void C_PortalGhostRenderable::PerFrameUpdate( void )
 
 	SetModelName( pGhostedRenderable->GetModelName() );
 
-	SetModelIndex( m_bCombatWeapon ? ((C_BaseCombatWeapon *)pGhostedRenderable)->GetWorldModelIndex() : pGhostedRenderable->GetModelIndex() );
+	SetModelIndex( m_bCombatWeapon ? ((C_BaseCombatWeapon *)pGhostedRenderable)->m_iWorldModelIndex.Get() : pGhostedRenderable->GetModelIndex() );
 	SetEffects( pGhostedRenderable->GetEffects() | EF_NOINTERP );		
 	m_flAnimTime = pGhostedRenderable->m_flAnimTime;		
 
@@ -222,7 +222,7 @@ bool C_PortalGhostRenderable::SetupBones( matrix3x4a_t *pBoneToWorldOut, int nMa
 
 	int iOldModelIndex = 0, iWorldModelIndex = 0;
 	bool bChangeModelIndex = m_bCombatWeapon && 
-								((iOldModelIndex = ((C_BaseCombatWeapon *)pGhostedRenderable)->GetModelIndex()) != (iWorldModelIndex = ((C_BaseCombatWeapon *)pGhostedRenderable)->GetWorldModelIndex()));
+								((iOldModelIndex = ((C_BaseCombatWeapon *)pGhostedRenderable)->GetModelIndex()) != (iWorldModelIndex = ((C_BaseCombatWeapon *)pGhostedRenderable)->m_iWorldModelIndex.Get()));
 	
 	if( bChangeModelIndex )
 	{

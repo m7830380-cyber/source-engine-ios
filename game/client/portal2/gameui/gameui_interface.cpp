@@ -820,7 +820,7 @@ void CGameUI::OnLevelLoadingFinished(bool bError, const char *failureReason, con
 // Purpose: Updates progress bar
 // Output : Returns true if screen should be redrawn
 //-----------------------------------------------------------------------------
-bool CGameUI::UpdateProgressBar(float progress, const char *statusText)
+bool CGameUI::UpdateProgressBar(float progress, const char *statusText, bool showDialog)
 {
 	return GetUiBaseModPanelClass().UpdateProgressBar(progress, statusText);
 }

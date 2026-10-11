@@ -842,7 +842,8 @@ void CPortalStatsController::LevelEnd( float flDisplayTime )
 		flDisplayTime = 0.0;
 		goto EndSpot;
 	}
-	IMatchSession *pSession = g_pMatchFramework->GetMatchSession();
+	IMatchSession *pSession; // declared apart: the goto above jumps past it (clang)
+	pSession = g_pMatchFramework->GetMatchSession();
 	if (pSession)
 	{
 		KeyValues *pSettings = pSession->GetSessionSettings();

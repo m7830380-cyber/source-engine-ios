@@ -481,7 +481,7 @@ bool CPortal_Player::TestHitboxes( const Ray_t &ray, unsigned int fContentsMask,
 			return false;
 
 		mstudiobbox_t *pbox = set->pHitbox( tr.hitbox );
-		mstudiobone_t *pBone = pStudioHdr->pBone(pbox->bone);
+		const mstudiobone_t *pBone = pStudioHdr->pBone(pbox->bone);
 		tr.surface.name = "**studio**";
 		tr.surface.flags = SURF_HITBOX;
 		tr.surface.surfaceProps = pBone->GetSurfaceProp();
@@ -4600,7 +4600,8 @@ void ComputeAABBContactsWithBrushEntity_Old( ContactVector& contacts, const cpla
 			//cplane_t cur = brushSides[sideIndex].plane;
 			//cplane_t temp;
 			//MatrixTransformPlane( entityToWorld, cur, temp );
-			planes[sideIndex] = brushSides[sideIndex].plane;//Vector4D( temp.normal.x, temp.normal.y, temp.normal.z, temp.dist );
+			const cplane_t &plane = brushSides[sideIndex].plane; // a cplane_t on CS:GO (Vector4D on Alien Swarm)
+			planes[sideIndex].Init( plane.normal.x, plane.normal.y, plane.normal.z, plane.dist );
 		}
 
 		int iPlaneCount = iNumBrushSides;
@@ -4725,7 +4726,7 @@ void ComputeAABBContactsWithBrushEntity_SIMD( ContactVector& contacts, const cpl
 		const int NUMBER_OF_FLTX4 = brushSides.Count() + 6 /*bbox*/ + iClipPlaneCount;
 
 		fltx4 *planes = (fltx4 *)stackalloc( sizeof( fltx4 ) * ( NUMBER_OF_FLTX4 + 1 ) );		// +1 for VMX alignment
-		planes = (fltx4*)ALIGN_VALUE( (int)planes, sizeof(fltx4) );
+		planes = (fltx4*)ALIGN_VALUE( (uintp)planes, sizeof(fltx4) );
 #endif
 
 		//remove bevel planes
@@ -4746,8 +4747,7 @@ void ComputeAABBContactsWithBrushEntity_SIMD( ContactVector& contacts, const cpl
 		for( int sideIndex = 0; sideIndex < iNumBrushSides; ++sideIndex )
 		{
 #if 1
-			cplane_t planeConverted;
-			Vector4DPlane( brushSides[sideIndex].plane, &planeConverted );
+			cplane_t planeConverted = brushSides[sideIndex].plane; // already a cplane_t on CS:GO
 
 			cplane_t temp;
 			MatrixTransformPlane( entityToWorld, planeConverted, temp );		// Could be optimized further here...

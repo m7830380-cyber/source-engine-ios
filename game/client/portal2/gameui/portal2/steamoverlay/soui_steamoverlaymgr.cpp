@@ -70,7 +70,7 @@ CSteamOverlayPanel::CSteamOverlayPanel( vgui::VPANEL parent ) : BaseClass( NULL,
 {
 	SetParent( parent );
 	SetVisible( true );
-	SetCursor( null );
+	SetCursor( NULL );
 
 	int w, h;
 	materials->GetBackBufferDimensions( w, h );

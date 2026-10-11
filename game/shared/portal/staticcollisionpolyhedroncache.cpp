@@ -497,6 +497,15 @@ void CStaticCollisionPolyhedronCache::Update( void )
 
 
 
+void CStaticCollisionPolyhedronCache::ReleaseBrushPolyhedron( int iBrushNumber, const CPolyhedron *pPolyhedron )
+{
+	// only a polyhedron that isn't the cached one for this brush was built for the caller
+	if( pPolyhedron && ( (iBrushNumber < 0) || (iBrushNumber >= m_BrushPolyhedrons.Count()) || (pPolyhedron != m_BrushPolyhedrons[iBrushNumber]) ) )
+	{
+		((CPolyhedron *)pPolyhedron)->Release();
+	}
+}
+
 const CPolyhedron *CStaticCollisionPolyhedronCache::GetBrushPolyhedron( int iBrushNumber )
 {
 	Assert( iBrushNumber < m_BrushPolyhedrons.Count() );

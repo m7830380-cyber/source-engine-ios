@@ -1,7 +1,3 @@
-#ifndef IEXTPROPPORTALLOCATOR_H
-#define IEXTPROPPORTALLOCATOR_H
-#ifdef _WIN32
-#pragma once
-#endif
-
-#endif
+// The real header is P2ASW's shared/portal/iextpropportallocator.h; this name is kept for existing includes
+// (it was a stand-in in the RubberWar port).
+#include "../shared/portal/iextpropportallocator.h"

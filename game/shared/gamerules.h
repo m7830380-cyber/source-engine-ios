@@ -156,6 +156,9 @@ public:
 	virtual CBaseCombatWeapon *GetNextBestWeapon( CBaseCombatCharacter *pPlayer, CBaseCombatWeapon *pCurrentWeapon ); // I can't use this weapon anymore, get me the next best one.
 	virtual bool ShouldCollide( int collisionGroup0, int collisionGroup1 );
 
+	// Portal 2: maps and the rules can block saving (P2ASW calls this through CGameRules)
+	virtual bool IsSavingAllowed( void ) { return true; }
+
 	virtual int DefaultFOV( void ) { return 90; }
 
 	// This function is here for our CNetworkVars.

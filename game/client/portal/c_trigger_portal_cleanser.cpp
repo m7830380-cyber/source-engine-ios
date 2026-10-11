@@ -291,7 +291,8 @@ void C_TriggerPortalCleanser::UpdateParticles( void )
 			if ((float)(vecMaxs.z - vecMins.z) >= 32.0)
 			{
 
-				CNewParticleEffect *pCleanserFX = ParticleProp()->Create( "cleanser_scanline", PATTACH_CUSTOMORIGIN, -1, vec3_origin, 0 );
+				CNewParticleEffect *pCleanserFX; // declared apart: a goto above jumps past it (clang)
+				pCleanserFX = ParticleProp()->Create( "cleanser_scanline", PATTACH_CUSTOMORIGIN, -1, vec3_origin, 0 );
 			
 				if ( m_hCleanserFX != pCleanserFX )
 				{

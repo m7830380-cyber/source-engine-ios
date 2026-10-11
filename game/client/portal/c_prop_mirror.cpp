@@ -599,7 +599,7 @@ void C_Prop_Mirror::RenderPortalViewToBackBuffer( CViewRender *pViewRender, cons
 	{
 		ViewCustomVisibility_t customVisibility;
 		m_pLinkedPortal->AddToVisAsExitPortal( &customVisibility );
-		render->Push3DView( portalView, 0, NULL, pViewRender->GetFrustum() );		
+		render->Push3DView( pRenderContext, portalView, 0, NULL, pViewRender->GetFrustum() );		
 		{
 			if( bUseSeeThroughFrustum)
 				memcpy( pViewRender->GetFrustum(), seeThroughFrustum, sizeof( Frustum ) );
@@ -626,7 +626,7 @@ void C_Prop_Mirror::RenderPortalViewToBackBuffer( CViewRender *pViewRender, cons
 
 			SetViewRecursionLevel( g_pPortalRender->GetViewRecursionLevel() - 1 );
 		}
-		render->PopView( pViewRender->GetFrustum() );
+		render->PopView( pRenderContext, pViewRender->GetFrustum() );
 
 		//restore old frustum
 		memcpy( pViewRender->GetFrustum(), FrustumBackup, sizeof( Frustum ) );

@@ -265,7 +265,7 @@ void CInfoPlacementHelper::NotifyPortalEvent( PortalEvent_t nEventType, CPortal_
 
     if ( nEventType == PORTALEVENT_MOVED ) // Line 266
     {
-        Vector &vecDifference = pNotifier->GetAbsOrigin() - GetTargetOrigin(); // vecDifference is a custom var name (Written like this since these funcs are only called once each)
+        Vector vecDifference = pNotifier->GetAbsOrigin() - GetTargetOrigin(); // vecDifference is a custom var name (Written like this since these funcs are only called once each)
         if ( DotProduct( vecDifference, vecDifference ) < 4.0 ) // GetTargetOrigin() and vector logic called on line 269
             return;
     }

@@ -28,6 +28,17 @@ public:
 	const CPolyhedron *GetBrushPolyhedron( int iBrushNumber );
 	int GetStaticPropPolyhedrons( ICollideable *pStaticProp, CPolyhedron **pOutputPolyhedronArray, int iOutputArraySize );
 
+	// P2ASW's interface (its cache can also build polyhedrons on the fly, which callers
+	// hand back here). This cache only ever returns cached polyhedrons, so the releases
+	// only free what didn't come from it.
+	int GetStaticPropPolyhedrons( ICollideable *pStaticProp, const CPolyhedron **pOutputPolyhedronArray, int iOutputArraySize )
+	{
+		return GetStaticPropPolyhedrons( pStaticProp, (CPolyhedron **)pOutputPolyhedronArray, iOutputArraySize );
+	}
+	void ReleaseBrushPolyhedron( int iBrushNumber, const CPolyhedron *pPolyhedron );
+	void ReleaseStaticPropPolyhedrons( ICollideable *pStaticProp, const CPolyhedron **pPolyhedrons, int iPolyhedronCount ) {}
+	void ForceRefreshOnMapLoad( void ) {}
+
 private:
 	// See comments in LevelInitPreEntity for why these members are commented out
 //	CUtlString	m_CachedMap;

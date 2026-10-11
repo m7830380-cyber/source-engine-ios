@@ -175,7 +175,6 @@ $Project "Client (Portal 2)"
 						"portal2\gameui\portal2\vmultiplayer.cpp" \
 						"portal2\gameui\portal2\vaudio.cpp" \
 						"portal2\gameui\portal2\vcloud.cpp" \
-						"portal2\gameui\portal2\vjukebox.cpp" \
 						"portal2\gameui\portal2\vmenubackground.cpp" \
 						"portal2\gameui\portal2\vingamemainmenu.cpp" \
 						"portal2\gameui\portal2\vflyoutmenu.cpp" \
@@ -208,7 +207,7 @@ $Project "Client (Portal 2)"
 						"portal2\gameui\portal2\vingamekickplayerlist.cpp" \
 						"portal2\gameui\portal2\voptions.cpp" \
 						"portal2\gameui\portal2\vdownloads.cpp" \
-						"portal2\gameui\portal2\vkeyboard.cpp" \
+						"portal2\gameui\portal2\vkeyboardmouse.cpp" \
 						"portal2\gameui\portal2\vaudiovideo.cpp" \
 						"portal2\gameui\portal2\vsteamcloudconfirmation.cpp" \
 						"portal2\gameui\portal2\vdownloadcampaign.cpp" \

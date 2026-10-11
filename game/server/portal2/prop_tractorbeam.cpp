@@ -151,7 +151,7 @@ void CPropTractorBeamProjector::Project( void )
 	{
 		EmitSound_t ep;
 		ep.m_nSpeakerEntity = -1;
-		ep.m_hSoundScriptHandle = -1; // Was m_hSoundScriptHash, but Swarm uses m_hSoundScriptHandle instead.
+		ep.m_hSoundScriptHash = -1;
 		ep.m_nFlags = 0;
 		ep.m_nPitch = 100;
 		//memset(&ep.m_pOrigin, 0, 12);

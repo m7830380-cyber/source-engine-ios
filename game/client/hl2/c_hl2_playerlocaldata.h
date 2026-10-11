@@ -12,7 +12,7 @@
 #pragma once
 #endif
 
-#include "cbase.h"
+
 #include "dt_recv.h"
 
 #include "hl2/hl_movedata.h"
@@ -48,6 +48,7 @@ public:
 
 	// Ladder related data
 	EHANDLE			m_hLadder;
+	LadderMove_t	m_LadderMove;
 };
 
 

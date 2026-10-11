@@ -6,12 +6,6 @@
 
 #if defined( PORTAL2 )
 
-#ifndef TEAM_RED
-#define TEAM_RED 2
-#endif
-#ifndef TEAM_BLUE
-#define TEAM_BLUE 3
-#endif
 #ifndef TEAM_CT
 #define TEAM_CT 3
 #endif

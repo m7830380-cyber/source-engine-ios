@@ -36,7 +36,7 @@ public:
 
 	void ImportMusic( const char *szSrcFilename, const char *szDirectory );
 
-	static void OpenImportDialog( Panel *pParent = null );
+	static void OpenImportDialog( Panel *pParent = NULL );
 
 protected:
 	MESSAGE_FUNC_PARAMS( OnMusicItemSelected, "MultiFilesSelected", pInfo );

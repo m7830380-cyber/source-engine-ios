@@ -108,7 +108,7 @@ void CHUDPaintAmmo::OnTick( void )
 
 			if( cl_debug_paint_ammo_bar.GetBool() )
 			{
-				DevMsg( "Max: %d, Ammo: %d, Percent: %f\n",  paintgun_max_ammo, pPaintGun->GetPaintAmmo(), flAmmo );
+				DevMsg( "Max: %d, Ammo: %d, Percent: %f\n",  paintgun_max_ammo.GetInt(), pPaintGun->GetPaintAmmo(), flAmmo );
 			}
 
 			//GetHud().DrawProgressBar( 300, 300, 10, 100, flAmmo, Color( 255, 0, 255, 255 ), CHud::HUDPB_VERTICAL );

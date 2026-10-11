@@ -142,7 +142,9 @@ public:
 	virtual int				GetSolidFlags() const { return m_pWrappedCollideable->GetSolidFlags(); };
 	virtual IClientUnknown*	GetIClientUnknown() { return m_pWrappedCollideable->GetIClientUnknown(); };
 	virtual int				GetCollisionGroup() const { return m_pWrappedCollideable->GetCollisionGroup(); };
-	virtual bool			ShouldTouchTrigger( int triggerSolidFlags ) const { return m_pWrappedCollideable->ShouldTouchTrigger(triggerSolidFlags); };
+	// CS:GO's ICollideable (Alien Swarm had ShouldTouchTrigger instead)
+	virtual uint			GetRequiredTriggerFlags() const { return m_pWrappedCollideable->GetRequiredTriggerFlags(); }
+	virtual IPhysicsObject	*GetVPhysicsObject() const { return m_pWrappedCollideable->GetVPhysicsObject(); }
 
 	//slightly trickier functions
 	virtual void			WorldSpaceTriggerBounds( Vector *pVecWorldMins, Vector *pVecWorldMaxs ) const;

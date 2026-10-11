@@ -634,7 +634,7 @@ void CNPC_RocketTurret::FollowThink( void )
 	CTraceFilterSimple subfilter( this, COLLISION_GROUP_NONE );
 	CTraceFilterTranslateClones filter ( &subfilter );
 	float flRequiredParameter = 2.0f;
-	CProp_Portal* pFirstPortal = UTIL_Portal_FirstAlongRay( rayDmg, flRequiredParameter );
+	CPortal_Base2D* pFirstPortal = UTIL_Portal_FirstAlongRay( rayDmg, flRequiredParameter );
 	UTIL_Portal_TraceRay_Bullets( pFirstPortal, rayDmg, MASK_VISIBLE_AND_NPCS, &filter, &traceDmg, false );
 
 	if ( traceDmg.m_pEnt )
@@ -997,7 +997,7 @@ bool CNPC_RocketTurret::TestPortalsForLOS( Vector* pOutVec, bool bConsiderNonPor
 	{
 		CProp_Portal *pTempPortal = pPortals[i];
 
-		if( !pTempPortal->m_bActivated ||
+		if( !pTempPortal->IsActive() ||
 			(pTempPortal->m_hLinkedPortal.Get() == NULL) )
 		{
 			//portalAimPoints[i] = vec3_invalid;
@@ -1058,9 +1058,9 @@ bool CNPC_RocketTurret::TestPortalsForLOS( Vector* pOutVec, bool bConsiderNonPor
 //-----------------------------------------------------------------------------
 bool CNPC_RocketTurret::FindAimPointThroughPortal( const CProp_Portal* pPortal, Vector* pVecOut )
 { 
-	if ( pPortal && pPortal->m_bActivated )
+	if ( pPortal && pPortal->IsActive() )
 	{
-		CProp_Portal* pLinked = pPortal->m_hLinkedPortal.Get(); 
+		CPortal_Base2D* pLinked = pPortal->m_hLinkedPortal.Get(); 
 		CBaseEntity*  pTarget = GetEnemy();
 
 		// Require that the portal is facing towards the beam to test through it
@@ -1070,7 +1070,7 @@ bool CNPC_RocketTurret::FindAimPointThroughPortal( const CProp_Portal* pPortal, 
 		float fDot = DotProduct( vRocketToPortal, vPortalForward );
 
 		// Portal must be facing the turret, and have a linked partner
-		if ( fDot < 0.0f && pLinked && pLinked->m_bActivated && pTarget )
+		if ( fDot < 0.0f && pLinked && pLinked->IsActive() && pTarget )
 		{
 			VMatrix matToPortalView = pLinked->m_matrixThisToLinked;
 			Vector vTargetAimPoint = pTarget->GetAbsOrigin() + (pTarget->WorldAlignMins() + pTarget->WorldAlignMaxs()) * 0.5f;

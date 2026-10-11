@@ -213,7 +213,7 @@ IterationRetval_t CleanserVortexTraceEnum::EnumElement( IHandleEntity *pHandleEn
 	if (staticpropmgr->IsStaticProp( pHandleEntity ))
 		return ITERATION_CONTINUE;
 
-	EHANDLE hEntity = pHandleEntity->GetRefEHandle();
+	EHANDLE hEntity = static_cast<CBaseEntity *>( pHandleEntity ); // not a static prop (checked above)
 
 	if (!hEntity)
 		return ITERATION_CONTINUE;
@@ -466,7 +466,7 @@ void CTriggerPortalCleanser::SearchThink( void )
 			if (pEntity)
 			{
 				vortexObjectInfo.m_flDistanceSq = CollisionProp()->CalcSqrDistanceFromPoint( pEntity->WorldSpaceCenter() );
-				vortexObjectInfo.m_hEnt = pEntity->GetRefEHandle();
+				vortexObjectInfo.m_hEnt = pEntity;
 
 				vortexEntsSorted.InsertNoSort( vortexObjectInfo );
 				nSize = vortexEntsSorted.Count();

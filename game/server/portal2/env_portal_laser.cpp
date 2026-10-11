@@ -511,7 +511,7 @@ void CPortalLaser::FireLaser( Vector &vecStart, Vector &vecDirection, CPropWeigh
 				memset(&vecNewTermPoint, 0, sizeof(vecNewTermPoint));
 				//vec_t v43 = 0.0;
 				bAutoAimSuccess = false;
-				if ( pTracedTarget == TraceLaser( false, vecStart, vDir, flOtherBeamLength, tr, infoList, false ) )
+				if ( pTracedTarget == TraceLaser( false, vecStart, vDir, flOtherBeamLength, tr, infoList, NULL ) )
 				{
 					ray.Init( tr.startpos, tr.endpos );
 
@@ -1216,7 +1216,8 @@ bool CPortalLaser::StrikeEntitiesAlongLaser( Vector &vecStart, Vector &vecEnd, V
 							|| (v32 = pEntity->WorldSpaceCenter().z,
 							( (v32 + 8) - vecPlayerVelocity.z) < 0.0))
 						{
-							CPortal_Player *pPlayer = (CPortal_Player*)pEntity;
+							CPortal_Player *pPlayer; // declared apart: a goto above jumps past it (clang)
+							pPlayer = (CPortal_Player*)pEntity;
 
 							HullMaxs = pPlayer->GetHullMaxs();
 

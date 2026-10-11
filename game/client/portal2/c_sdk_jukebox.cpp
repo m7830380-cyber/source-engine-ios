@@ -12,11 +12,11 @@ const char *sz_PlaylistFilename = "scripts/jukebox_playlist.txt";
 CSDKJukeboxPlaylist g_SDKJukebox;
 
 TrackInfo_t::TrackInfo_t()
-: m_szHexname( null )
-, m_szFilename( null )
-, m_szAlbum( null )
-, m_szArtist( null )
-, m_szGenre( null )
+: m_szHexname( NULL )
+, m_szFilename( NULL )
+, m_szAlbum( NULL )
+, m_szArtist( NULL )
+, m_szGenre( NULL )
 , m_bIsMarkedForDeletion( false )
 {
 
@@ -140,12 +140,12 @@ void CSDKJukeboxPlaylist::FireGameEvent( IGameEvent *event )
 	}
 }
 
-void CSDKJukeboxPlaylist::PlayRandomTrack( float fadeInTime /*= 1.0f*/, const char *szDefaultTrack /*= null */ )
+void CSDKJukeboxPlaylist::PlayRandomTrack( float fadeInTime /*= 1.0f*/, const char *szDefaultTrack /*= NULL */ )
 {
 	// Choose a random track to play
 	int count = m_CombatMusicPlaylist.Count();
 	int index = 0;
-	CSoundPatch* pNewSound = null;
+	CSoundPatch* pNewSound = NULL;
 	CLocalPlayerFilter filter;
 	if( count == 0 )
 	{
@@ -240,7 +240,7 @@ void CSDKJukeboxPlaylist::SavePlaylist()
 const char * CSDKJukeboxPlaylist::GetTrackName( int index )
 {
 	if( index >= m_CombatMusicPlaylist.Count() )
-		return null;
+		return NULL;
 	else
 		return m_CombatMusicPlaylist[index].m_szFilename;
 }
@@ -248,7 +248,7 @@ const char * CSDKJukeboxPlaylist::GetTrackName( int index )
 const char * CSDKJukeboxPlaylist::GetTrackArtist( int index )
 {
 	if( index >= m_CombatMusicPlaylist.Count() )
-		return null;
+		return NULL;
 	else
 		return m_CombatMusicPlaylist[index].m_szArtist;
 }
@@ -256,7 +256,7 @@ const char * CSDKJukeboxPlaylist::GetTrackArtist( int index )
 const char * CSDKJukeboxPlaylist::GetTrackAlbum( int index )
 {
 	if( index >= m_CombatMusicPlaylist.Count() )
-		return null;
+		return NULL;
 	else
 		return m_CombatMusicPlaylist[index].m_szAlbum;
 }
@@ -264,7 +264,7 @@ const char * CSDKJukeboxPlaylist::GetTrackAlbum( int index )
 const char * CSDKJukeboxPlaylist::GetTrackGenre( int index )
 {
 	if( index >= m_CombatMusicPlaylist.Count() )
-		return null;
+		return NULL;
 	else
 		return m_CombatMusicPlaylist[index].m_szGenre;
 }

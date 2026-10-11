@@ -267,10 +267,10 @@ bool ID3Info_t::Deserialize( const byte *pBuffer, unsigned int unBufferSize )
 }
 
 ID3Info_t::ID3Info_t( void )
-: szAlbumName( null )
-, szArtistName( null )
-, szGenre( null )
-, szTrackName( null )
+: szAlbumName( NULL )
+, szArtistName( NULL )
+, szGenre( NULL )
+, szTrackName( NULL )
 {}
 
 MusicImporterDialog::MusicImporterDialog( Panel *parent, const char *title, vgui::FileOpenDialogType_t type, KeyValues *pContextKeyValues /*= 0 */ )
@@ -415,7 +415,7 @@ void MusicImporterDialog::ApplySchemeSettings( vgui::IScheme *pScheme )
 
 void sdk_open_music_dialog_f( void )
 {
-	MusicImporterDialog::OpenImportDialog( null );
+	MusicImporterDialog::OpenImportDialog( NULL );
 }
 
 ConCommand sdk_open_music_dialog( "sdk_open_music_dialog", sdk_open_music_dialog_f, "Shows a dialog for picking custom combat music", FCVAR_DEVELOPMENTONLY );

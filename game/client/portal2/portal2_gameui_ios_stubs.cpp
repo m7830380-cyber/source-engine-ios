@@ -18,16 +18,17 @@ CGameUiAvatarImage::CGameUiAvatarImage( void )
 	m_Color = Color( 255, 255, 255, 255 );
 }
 
-void CGameUiAvatarImage::ClearAvatarSteamID( void )
+void CGameUiAvatarImage::ClearAvatarXUID( void )
 {
 	m_bValid = false;
 	m_flFetchedTime = 0.0f;
 }
 
-bool CGameUiAvatarImage::SetAvatarSteamID( CSteamID steamIDUser )
+bool CGameUiAvatarImage::SetAvatarXUID( XUID xuid, AvatarSize_t nSize )
 {
-	(void)steamIDUser;
-	ClearAvatarSteamID();
+	(void)xuid;
+	(void)nSize;
+	ClearAvatarXUID();
 	return false;
 }
 
@@ -120,33 +121,6 @@ void Addons::ApplySchemeSettings( vgui::IScheme *pScheme )
 	BaseClass::ApplySchemeSettings( pScheme );
 }
 
-AddonAssociation::AddonAssociation( vgui::Panel *parent, const char *panelName )
-	: BaseClass( parent, panelName )
-{
-}
-
-AddonAssociation::~AddonAssociation()
-{
-}
-
-AddonAssociation::EAssociation AddonAssociation::VPKAssociation()
-{
-	return kAssociation_None;
-}
-
-bool AddonAssociation::CheckAndSeeIfShouldShow()
-{
-	return false;
-}
-
-void AddonAssociation::OnCommand( const char *command )
-{
-	BaseClass::OnCommand( command );
-}
-
-void AddonAssociation::OnThink()
-{
-	BaseClass::OnThink();
-}
+// AddonAssociation is built from P2ASW's vaddonassociation.cpp
 
 #endif

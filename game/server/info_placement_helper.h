@@ -1,13 +1,3 @@
-#ifndef INFO_PLACEMENT_HELPER_H
-#define INFO_PLACEMENT_HELPER_H
-#ifdef _WIN32
-#pragma once
-#endif
-
-class CInfoPlacementHelper : public CPointEntity
-{
-public:
-	DECLARE_CLASS( CInfoPlacementHelper, CPointEntity );
-};
-
-#endif
+// P2ASW's placement helper lives in portal2/; this name is kept for existing includes
+// (it was a stand-in while the RubberWar port had no placement helpers).
+#include "portal2/info_placement_helper.h"

@@ -2525,7 +2525,14 @@ void CPortal_Player::SetupBones( matrix3x4a_t *pBoneToWorld, int boneMask )
 		CBoneCache *pParentCache = pParent->GetBoneCache();
 		if ( pParentCache )
 		{
-			BuildMatricesWithBoneMerge(
+			// CS:GO does bone merging through the entity's bone merge cache
+			if ( !m_pBoneMergeCache )
+			{
+				m_pBoneMergeCache = new CBoneMergeCache;
+				m_pBoneMergeCache->Init( this );
+			}
+
+			m_pBoneMergeCache->BuildMatricesWithBoneMerge(
 				pStudioHdr,
 				m_PlayerAnimState->GetRenderAngles(),
 				adjOrigin,
@@ -2533,7 +2540,8 @@ void CPortal_Player::SetupBones( matrix3x4a_t *pBoneToWorld, int boneMask )
 				q,
 				pBoneToWorld,
 				pParent,
-				pParentCache );
+				pParentCache,
+				boneMask );
 
 			return;
 		}
@@ -3795,7 +3803,7 @@ void CPortal_Player::Break( CBaseEntity *pBreaker, const CTakeDamageInfo &info )
 	{
 	case MULTIPLAYER_BREAK_DEFAULT:		// default is to break client-side
 	case MULTIPLAYER_BREAK_CLIENTSIDE:
-		te->PhysicsProp( filter, -1, GetModelIndex(), m_nSkin, GetAbsOrigin(), GetAbsAngles(), velocity, true, GetEffects() );
+		te->PhysicsProp( filter, -1, GetModelIndex(), m_nSkin, GetAbsOrigin(), GetAbsAngles(), velocity, true, GetEffects(), GetRenderColor() );
 		break;
 	case MULTIPLAYER_BREAK_SERVERSIDE:	// server-side break
 		if ( m_PerformanceMode != PM_NO_GIBS || breakable_disable_gib_limit.GetBool() )
@@ -3804,7 +3812,7 @@ void CPortal_Player::Break( CBaseEntity *pBreaker, const CTakeDamageInfo &info )
 		}
 		break;
 	case MULTIPLAYER_BREAK_BOTH:	// pieces break from both dlls
-		te->PhysicsProp( filter, -1, GetModelIndex(), m_nSkin, GetAbsOrigin(), GetAbsAngles(), velocity, true, GetEffects() );
+		te->PhysicsProp( filter, -1, GetModelIndex(), m_nSkin, GetAbsOrigin(), GetAbsAngles(), velocity, true, GetEffects(), GetRenderColor() );
 		if ( m_PerformanceMode != PM_NO_GIBS || breakable_disable_gib_limit.GetBool() )
 		{
 			PropBreakableCreateAll( GetModelIndex(), pPhysics, params, this, -1, ( m_PerformanceMode == PM_FULL_GIBS ), false );
@@ -3819,7 +3827,7 @@ void CPortal_Player::Break( CBaseEntity *pBreaker, const CTakeDamageInfo &info )
 	}
 	*/
 
-	te->PhysicsProp( filter, -1, GetModelIndex(), m_nSkin, GetAbsOrigin(), GetAbsAngles(), velocity, true, GetEffects() );
+	te->PhysicsProp( filter, -1, GetModelIndex(), m_nSkin, GetAbsOrigin(), GetAbsAngles(), velocity, true, GetEffects(), GetRenderColor() );
 
 	//UTIL_Remove( this );
 }

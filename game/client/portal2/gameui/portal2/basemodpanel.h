@@ -581,6 +581,9 @@ namespace BaseModUI
 
 		void ApplySchemeSettings(vgui::IScheme *pScheme);
 		void PaintBackground();
+#if defined( IOS )
+		void IOS_LogMenuLayers( const char *pBackground );
+#endif
 		virtual void PostChildPaint();
 
 		void OnCommand(const char *command);

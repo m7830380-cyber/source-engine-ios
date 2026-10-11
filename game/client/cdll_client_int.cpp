@@ -1985,6 +1985,10 @@ bool IOS_IsMenuActive()
 #if defined( CSTRIKE15 ) && !defined( PORTAL2 )
 		( g_pScaleformUI && ( g_pScaleformUI->ConsumesInputEvents() || g_pScaleformUI->IsCursorVisible() ) ) ||
 #endif
+#if defined( PORTAL2 )
+		// Portal 2's pause menu is VGUI GameUI, not Scaleform
+		( enginevgui && enginevgui->IsGameUIVisible() ) ||
+#endif
 		IOS_IsBuyMenuVisible() ||
 		( pInfo && pInfo->IsVisible() );
 }

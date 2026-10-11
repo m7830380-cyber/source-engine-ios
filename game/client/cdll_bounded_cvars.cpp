@@ -103,7 +103,11 @@ class CBoundedCvar_Interp : public ConVar_ServerBounded
 public:
 	CBoundedCvar_Interp() :
 	  ConVar_ServerBounded( "cl_interp", 
+#ifdef PORTAL2
+		  "0.1",			// Portal 2's default: prop_dynamic only advances its cycle every 0.1s
+#else
 		  "0.03125",		// 2 / 102.4
+#endif
 		  FCVAR_USERINFO | FCVAR_NOT_CONNECTED, 
 		  "Sets the interpolation amount (bounded on low side by server interp ratio settings).", true, 0.0f, true, 0.5f )
 	  {
@@ -139,6 +143,11 @@ float GetClientInterpAmount()
 	{
 		// #define FIXME_INTERP_RATIO
 		float interp = cl_interp_ratio->GetFloat() / pUpdateRate->GetFloat();
+#ifdef PORTAL2
+		// Portal 2 honours cl_interp as a floor. Server-animated props think at 10Hz,
+		// so a 2/64s window makes their animations hold and jump.
+		interp = MAX( interp, cl_interp->GetFloat() );
+#endif
 		return interp;
 	}
 	else

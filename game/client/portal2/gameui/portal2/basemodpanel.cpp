@@ -3360,6 +3360,51 @@ bool CBaseModPanel::RenderMovie( BIKMaterial_t hBIKMaterial )
 	return true;
 }
 
+#if defined( IOS )
+// Every few seconds at the main menu: what the background drew and which panels
+// paint on top of it, to find what covers it with black.
+static void IOS_LogPanelTree( vgui::VPANEL vp, int nDepth, const char *pModule )
+{
+	if ( nDepth > 3 )
+		return;
+	vgui::IPanel *ip = vgui::ipanel();
+	for ( int i = 0; i < ip->GetChildCount( vp ); i++ )
+	{
+		vgui::VPANEL child = ip->GetChild( vp, i );
+		if ( !ip->IsVisible( child ) )
+			continue;
+		int x, y, w, h;
+		ip->GetPos( child, x, y );
+		ip->GetSize( child, w, h );
+		vgui::Panel *pPanel = ip->GetPanel( child, pModule );
+		Color bg = pPanel ? pPanel->GetBgColor() : Color( 0, 0, 0, 0 );
+		Msg( "[menu]   %*s%s (%s) %d,%d %dx%d z %d, bg %d %d %d %d\n", nDepth * 2, "",
+			ip->GetName( child ), ip->GetClassName( child ), x, y, w, h, ip->GetZPos( child ),
+			bg.r(), bg.g(), bg.b(), bg.a() );
+		IOS_LogPanelTree( child, nDepth + 1, pModule );
+	}
+}
+
+void CBaseModPanel::IOS_LogMenuLayers( const char *pBackground )
+{
+	static double s_flNextLog = 0;
+	if ( Plat_FloatTime() < s_flNextLog )
+		return;
+	s_flNextLog = Plat_FloatTime() + 10.0;
+
+	int iw = 0, it = 0;
+	if ( m_iBackgroundImageID != -1 )
+		surface()->DrawGetTextureSize( m_iBackgroundImageID, iw, it );
+	Msg( "[menu] background: %s, image id %d (%dx%d), panel %dx%d, transition %s, active window %d\n",
+		pBackground, m_iBackgroundImageID, iw, it, GetWide(), GetTall(),
+		( m_pTransitionPanel && m_pTransitionPanel->IsEffectActive() ) ? "running" : "idle", GetActiveWindowType() );
+	vgui::VPANEL root = GetVPanel();
+	while ( vgui::ipanel()->GetParent( root ) )
+		root = vgui::ipanel()->GetParent( root );
+	IOS_LogPanelTree( root, 0, GetModuleName() );
+}
+#endif
+
 //=============================================================================
 void CBaseModPanel::PaintBackground()
 {
@@ -3390,13 +3435,17 @@ void CBaseModPanel::PaintBackground()
 			if ( bDoBackgroundEffects )
 			{
 				// Render the background movie
-				if ( !RenderBackgroundMovie() )
+				bool bMovie = RenderBackgroundMovie();
+				if ( !bMovie )
 				{
 					// movie not yet started or failed, use the static substitute
 					surface()->DrawSetColor( 255, 255, 255, 255 );
 					surface()->DrawSetTexture( m_iBackgroundImageID );
 					surface()->DrawTexturedRect( 0, 0, wide, tall );
 				}
+#if defined( IOS )
+				IOS_LogMenuLayers( bMovie ? "movie" : "static image" );
+#endif
 			
 				if ( m_flMusicFadeInTime )
 				{

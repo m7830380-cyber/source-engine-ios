@@ -21,6 +21,9 @@
 
 #include "vgui_surfacelib/fontmanager.h"
 #include "FontEffects.h"
+#ifdef IOS
+#include FT_TRUETYPE_TABLES_H
+#endif
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
@@ -334,7 +337,34 @@ void CLinuxFont::InitMetrics()
 {
 	const MetricsTweaks_t metricTweaks = GetFontMetricsTweaks( m_szName );
 	
-	FT_Set_Pixel_Sizes( face, 0, m_iTall + metricTweaks.m_tallAdjust );
+	int nPixelSize = m_iTall + metricTweaks.m_tallAdjust;
+#ifdef IOS
+	// Scheme font sizes were tuned on Windows, where CreateFont treats a positive height as the
+	// cell height (usWinAscent + usWinDescent). FreeType's pixel size is the em height, which
+	// makes every font ~20-30% bigger than on PC. Convert the cell height to an em height.
+	if ( face->units_per_EM )
+	{
+		int nCellUnits = 0;
+		TT_OS2 *pOS2 = (TT_OS2 *)FT_Get_Sfnt_Table( face, FT_SFNT_OS2 );
+		if ( pOS2 && pOS2->version != 0xFFFF )
+		{
+			nCellUnits = pOS2->usWinAscent + pOS2->usWinDescent;
+		}
+		if ( nCellUnits <= 0 )
+		{
+			nCellUnits = face->ascender - face->descender;
+		}
+		if ( nCellUnits > 0 )
+		{
+			nPixelSize = MAX( 1, (int)( (float)nPixelSize * face->units_per_EM / nCellUnits + 0.5f ) );
+		}
+	}
+#endif
+	FT_Set_Pixel_Sizes( face, 0, nPixelSize );
+#ifdef IOS
+	Msg( "[font] %s (%s %s): tall %d -> %d px em\n", m_szName.String(),
+		face->family_name ? face->family_name : "?", face->style_name ? face->style_name : "?", m_iTall, nPixelSize );
+#endif
 
 	m_iAscent = FIXED6_2INT( face->size->metrics.ascender );
 	m_iMaxCharWidth = FIXED6_2INT( face->size->metrics.max_advance );

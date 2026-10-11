@@ -1281,6 +1281,22 @@ void CBaseModFrame::DrawDialogBackground( const char *pMajor, const wchar_t *pMa
 	int xpos, ypos;
 	GetPos( xpos, ypos );
 
+#if defined( IOS )
+	// once per dialog: the tile textures and the frame's size, for the black dialogs
+	static CUtlVector< int > s_LoggedWindows;
+	if ( s_LoggedWindows.Find( m_WindowType ) == -1 )
+	{
+		s_LoggedWindows.AddToTail( m_WindowType );
+		int iw = 0, it = 0;
+		int nTile = m_bUseAlternateTiles ? m_nAltTileImageId[MT_INTERIOR] : m_nTileImageId[MT_INTERIOR];
+		if ( nTile != -1 )
+			surface()->DrawGetTextureSize( nTile, iw, it );
+		Msg( "[menu] dialog %s (window %d) at %d,%d %dx%d, tile %dx%d, %s tiles, interior texture %d (%dx%d)\n",
+			GetName(), m_WindowType, xpos, ypos, wide, tall, m_nTileWidth, m_nTileHeight,
+			m_bUseAlternateTiles ? "alternate" : "normal", nTile, iw, it );
+	}
+#endif
+
 	// Setup our random seed to ensure proper drawing
 	m_RandomStream.SetSeed( m_nAltSeed );
 

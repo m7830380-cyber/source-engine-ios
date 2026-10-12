@@ -178,6 +178,17 @@ void CFuncBrush::TurnOff( void )
 	if ( !IsOn() )
 		return;
 
+#if defined( IOS ) && defined( PORTAL2 )
+	{
+		Vector vecPhys( 0, 0, 0 );
+		if ( VPhysicsGetObject() )
+			VPhysicsGetObject()->GetPosition( &vecPhys, NULL );
+		Msg( "[brush] '%s' TurnOff, solidity %d, abs %.1f %.1f %.1f phys %.1f %.1f %.1f, parent '%s' att %d, t=%.2f\n", GetDebugName(), m_iSolidity,
+			 GetAbsOrigin().x, GetAbsOrigin().y, GetAbsOrigin().z, vecPhys.x, vecPhys.y, vecPhys.z,
+			 GetMoveParent() ? GetMoveParent()->GetDebugName() : "", (int)GetParentAttachment(), gpGlobals->curtime );
+	}
+#endif
+
 	if ( m_iSolidity != BRUSHSOLID_ALWAYS )
 	{
 		AddSolidFlags( FSOLID_NOT_SOLID );
@@ -205,6 +216,17 @@ void CFuncBrush::TurnOn( void )
 {
 	if ( IsOn() )
 		return;
+
+#if defined( IOS ) && defined( PORTAL2 )
+	{
+		Vector vecPhys( 0, 0, 0 );
+		if ( VPhysicsGetObject() )
+			VPhysicsGetObject()->GetPosition( &vecPhys, NULL );
+		Msg( "[brush] '%s' TurnOn, solidity %d, abs %.1f %.1f %.1f phys %.1f %.1f %.1f, parent '%s' att %d, t=%.2f\n", GetDebugName(), m_iSolidity,
+			 GetAbsOrigin().x, GetAbsOrigin().y, GetAbsOrigin().z, vecPhys.x, vecPhys.y, vecPhys.z,
+			 GetMoveParent() ? GetMoveParent()->GetDebugName() : "", (int)GetParentAttachment(), gpGlobals->curtime );
+	}
+#endif
 
 	if ( m_iSolidity != BRUSHSOLID_NEVER )
 	{

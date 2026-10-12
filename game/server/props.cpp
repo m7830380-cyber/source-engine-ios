@@ -2287,6 +2287,29 @@ void CDynamicProp::NotifyPositionChanged( CBaseEntity *pEntity )
 	UpdateBoneFollowers();
 }
 
+#if defined( IOS ) && defined( PORTAL2 )
+// Diagnostic: where the server thinks a prop's attached children (and their physics shadows) are.
+static void IOS_LogPropChildren( CBaseEntity *pParent, const char *pszWhen, int nDepth = 1 )
+{
+	static int s_nLines = 0;
+	for ( CBaseEntity *pChild = pParent->FirstMoveChild(); pChild; pChild = pChild->NextMovePeer() )
+	{
+		if ( ++s_nLines > 600 )
+			return;
+		Vector vecAbs = pChild->GetAbsOrigin();
+		Vector vecPhys( 0, 0, 0 );
+		IPhysicsObject *pPhys = pChild->VPhysicsGetObject();
+		if ( pPhys )
+			pPhys->GetPosition( &vecPhys, NULL );
+		Msg( "[prop] %s %*s'%s' (%s) att %d abs %.1f %.1f %.1f phys%s %.1f %.1f %.1f solid %d coll %d\n",
+			 pszWhen, nDepth * 2, "", pChild->GetDebugName(), pChild->GetClassname(), (int)pChild->GetParentAttachment(),
+			 vecAbs.x, vecAbs.y, vecAbs.z, pPhys ? "" : "(none)", vecPhys.x, vecPhys.y, vecPhys.z,
+			 pChild->IsSolid() ? 1 : 0, ( pPhys && pPhys->IsCollisionEnabled() ) ? 1 : 0 );
+		IOS_LogPropChildren( pChild, pszWhen, nDepth + 1 );
+	}
+}
+#endif
+
 //------------------------------------------------------------------------------
 // Purpose:
 //------------------------------------------------------------------------------
@@ -2333,6 +2356,7 @@ void CDynamicProp::AnimThink( void )
 				m_bAnimationDone = true;
 #if defined( IOS ) && defined( PORTAL2 )
 				Msg( "[prop] '%s' animation done, t=%.2f\n", GetDebugName(), gpGlobals->curtime );
+				IOS_LogPropChildren( this, "done" );
 #endif
 				m_pOutputAnimOver.FireOutput(NULL,this);
 			}
@@ -2449,6 +2473,9 @@ void CDynamicProp::InputSetAnimation( inputdata_t &inputdata )
 		 inputdata.value.String(), LookupSequence( inputdata.value.String() ), gpGlobals->curtime );
 #endif
 	PropSetAnim( inputdata.value.String() );
+#if defined( IOS ) && defined( PORTAL2 )
+	IOS_LogPropChildren( this, "start" );
+#endif
 }
 
 //------------------------------------------------------------------------------

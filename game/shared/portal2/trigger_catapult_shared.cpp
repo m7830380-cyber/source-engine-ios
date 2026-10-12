@@ -153,6 +153,14 @@ Vector CTriggerCatapult::CalculateLaunchVectorPreserve( Vector vecInitialVelocit
 }
 
 
+#if defined( IOS ) && defined( PORTAL2 )
+#ifdef CLIENT_DLL
+#define IOS_CATAPULT_SIDE "CL"
+#else
+#define IOS_CATAPULT_SIDE "SV"
+#endif
+#endif
+
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
@@ -176,6 +184,17 @@ void CTriggerCatapult::LaunchByTarget( CBaseEntity *pVictim, CBaseEntity *pTarge
 	Vector vecVelocity = m_bUseExactVelocity ?
 		CalculateLaunchVectorPreserve( vecVictim, pVictim, pTarget ):
 		CalculateLaunchVector( pVictim, pTarget );
+
+#if defined( IOS ) && defined( PORTAL2 )
+	if ( pVictim->IsPlayer() )
+	{
+		Msg( "[catapult] %s '%s' launch player at target '%s' (%.0f %.0f %.0f) exact %d: in %.0f %.0f %.0f -> out %.0f %.0f %.0f, pos %.0f %.0f %.0f, t=%.3f\n",
+			 IOS_CATAPULT_SIDE, GetDebugName(), pTarget->GetDebugName(),
+			 pTarget->GetAbsOrigin().x, pTarget->GetAbsOrigin().y, pTarget->GetAbsOrigin().z, m_bUseExactVelocity ? 1 : 0,
+			 vecVictim.x, vecVictim.y, vecVictim.z, vecVelocity.x, vecVelocity.y, vecVelocity.z,
+			 pVictim->GetAbsOrigin().x, pVictim->GetAbsOrigin().y, pVictim->GetAbsOrigin().z, gpGlobals->curtime );
+	}
+#endif
 
 
 	// Handle a player
@@ -268,6 +287,11 @@ void CTriggerCatapult::LaunchByDirection( CBaseEntity *pVictim  )
 			pVictim->SetGroundChangeTime( gpGlobals->curtime + 0.5f );
 		}
 
+#if defined( IOS ) && defined( PORTAL2 )
+		Msg( "[catapult] %s '%s' launch player by direction: out %.0f %.0f %.0f, pos %.0f %.0f %.0f, t=%.3f\n",
+			 IOS_CATAPULT_SIDE, GetDebugName(), vecPush.x, vecPush.y, vecPush.z,
+			 pVictim->GetAbsOrigin().x, pVictim->GetAbsOrigin().y, pVictim->GetAbsOrigin().z, gpGlobals->curtime );
+#endif
 		pVictim->SetAbsVelocity( vecPush );
 		OnLaunchedVictim( pVictim );
 

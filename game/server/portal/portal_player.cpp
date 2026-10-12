@@ -2931,6 +2931,32 @@ void CPortal_Player::PlayerRunCommand(CUserCmd *ucmd, IMoveHelper *moveHelper)
 	}
 
 	BaseClass::PlayerRunCommand( ucmd, moveHelper );
+
+#if defined( IOS ) && defined( PORTAL2 )
+	// Diagnostic: log when the player loses most of their speed in mid-air and what they ran into.
+	{
+		static Vector s_vecPrevVel, s_vecPrevPos;
+		static bool s_bValid = false;
+		static int s_nLogged = 0;
+		Vector vecVel = GetAbsVelocity();
+		float flPrevSpeed = s_vecPrevVel.Length();
+		if ( s_bValid && !( GetFlags() & FL_ONGROUND ) && flPrevSpeed > 300.0f && vecVel.Length() < 0.5f * flPrevSpeed && s_nLogged < 40 )
+		{
+			++s_nLogged;
+			trace_t tr;
+			UTIL_TraceHull( s_vecPrevPos, s_vecPrevPos + s_vecPrevVel * 0.1f, CollisionProp()->OBBMins(), CollisionProp()->OBBMaxs(),
+							MASK_PLAYERSOLID, this, COLLISION_GROUP_PLAYER_MOVEMENT, &tr );
+			Msg( "[airstop] speed %.0f -> %.0f at %.0f %.0f %.0f, vel was %.0f %.0f %.0f, hit '%s' (%s) frac %.2f normal %.2f %.2f %.2f, t=%.2f\n",
+				 flPrevSpeed, vecVel.Length(), GetAbsOrigin().x, GetAbsOrigin().y, GetAbsOrigin().z,
+				 s_vecPrevVel.x, s_vecPrevVel.y, s_vecPrevVel.z,
+				 tr.m_pEnt ? tr.m_pEnt->GetDebugName() : "", tr.m_pEnt ? tr.m_pEnt->GetClassname() : "none", tr.fraction,
+				 tr.plane.normal.x, tr.plane.normal.y, tr.plane.normal.z, gpGlobals->curtime );
+		}
+		s_vecPrevVel = vecVel;
+		s_vecPrevPos = GetAbsOrigin();
+		s_bValid = true;
+	}
+#endif
 }
 
 //-----------------------------------------------------------------------------

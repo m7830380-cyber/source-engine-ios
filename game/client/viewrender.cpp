@@ -2936,6 +2936,37 @@ void CViewRender::RenderView( const CViewSetup &view, const CViewSetup &hudViewS
 	C_BaseAnimating::AutoAllowBoneAccess boneaccess( true, true );
 	VPROF( "CViewRender::RenderView" );
 
+	// iOS diagnostic for "the map is blank after loading until I jump": once a second for the
+	// first 20s of a map, log the view against the local player and the screen fade.
+	{
+		static char s_szLastLevel[MAX_PATH] = "";
+		static double s_flLevelStart = 0.0, s_flNextLog = 0.0;
+		double flNow = Plat_FloatTime();
+		const char *pszLevel = engine->GetLevelName();
+		if ( V_strcmp( pszLevel, s_szLastLevel ) != 0 )
+		{
+			V_strncpy( s_szLastLevel, pszLevel, sizeof( s_szLastLevel ) );
+			s_flLevelStart = flNow;
+			s_flNextLog = 0.0;
+		}
+		if ( ( flNow - s_flLevelStart ) < 20.0 && flNow >= s_flNextLog )
+		{
+			s_flNextLog = flNow + 1.0;
+			unsigned char fade[4] = { 0, 0, 0, 0 };
+			bool bFadeBlend = false;
+			GetViewEffects()->GetFadeParams( &fade[0], &fade[1], &fade[2], &fade[3], &bFadeBlend );
+			C_BasePlayer *pPlayer = C_BasePlayer::GetLocalPlayer();
+			Vector vPlayer = pPlayer ? pPlayer->GetAbsOrigin() : vec3_origin;
+			C_BaseEntity *pGround = pPlayer ? pPlayer->GetGroundEntity() : NULL;
+			Msg( "[view] t=%.1f view %.0f %.0f %.0f, player %.0f %.0f %.0f (%s, ground %s, observer %d), view entity %d, fade %d %d %d a=%d%s, draw 0x%x\n",
+				flNow - s_flLevelStart, view.origin.x, view.origin.y, view.origin.z,
+				vPlayer.x, vPlayer.y, vPlayer.z, pPlayer ? ( pPlayer->IsAlive() ? "alive" : "dead" ) : "no player",
+				pGround ? ( pGround->GetClassname() ? pGround->GetClassname() : "?" ) : "none",
+				pPlayer ? pPlayer->GetObserverMode() : -1, render->GetViewEntity(),
+				fade[0], fade[1], fade[2], fade[3], bFadeBlend ? " blend" : "", whatToDraw );
+		}
+	}
+
 	// Don't want CS:GO running less than SM3
 	// @wge: HACK FIXME - Not doing this on MacOSX for now...
 	if ( !IsGameConsole() && !IsOSX() && !IsOpenGL() && ( g_pMaterialSystemHardwareConfig->GetDXSupportLevel() < 95 ) )

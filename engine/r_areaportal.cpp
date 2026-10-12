@@ -584,6 +584,39 @@ void R_SetupAreaBits( int iForceViewLeaf /* = -1 */, const VisOverrideData_t* pV
 	{
 		R_SetupVisibleAreaFrustums();
 	}
+
+	// iOS diagnostic for "the map is blank after loading until I jump": once a second for the first
+	// 20s of a map, and whenever it changes, log what the main view's area flow started from.
+	if ( (iForceViewLeaf == -1) && (pVisData == NULL) )
+	{
+		static const model_t *s_pLastWorld = NULL;
+		static double s_flWorldStart = 0.0, s_flNextLog = 0.0;
+		static int s_iLastLeaf = -2, s_iLastVisibleAreas = -2;
+		static bool s_bLastSolid = false, s_bLastAreaBitsValid = false;
+		double flNow = Plat_FloatTime();
+		if ( host_state.worldmodel != s_pLastWorld )
+		{
+			s_pLastWorld = host_state.worldmodel;
+			s_flWorldStart = flNow;
+			s_flNextLog = 0.0;
+		}
+		bool bAreaBitsValid = GetBaseLocalClient().m_bAreaBitsValid;
+		int iVisibleAreas = g_bViewerInSolidSpace ? -1 : g_nVisibleAreas;
+		bool bChanged = (leaf != s_iLastLeaf) || (g_bViewerInSolidSpace != s_bLastSolid) || (bAreaBitsValid != s_bLastAreaBitsValid) || (iVisibleAreas != s_iLastVisibleAreas);
+		bool bEarly = (flNow - s_flWorldStart) < 20.0;
+		if ( bEarly && (bChanged || (flNow >= s_flNextLog)) )
+		{
+			s_flNextLog = flNow + 1.0;
+			const mleaf_t &viewLeaf = host_state.worldbrush->leafs[leaf];
+			Msg( "[areas] t=%.1f view %.0f %.0f %.0f leaf %d cluster %d area %d contents 0x%x, area bits %s, %s, visible areas %d\n",
+				flNow - s_flWorldStart, vVisOrigin.x, vVisOrigin.y, vVisOrigin.z, leaf, viewLeaf.cluster, viewLeaf.area, viewLeaf.contents,
+				bAreaBitsValid ? "valid" : "NOT valid", g_bViewerInSolidSpace ? "drawing all (solid/no bits)" : "flowing", iVisibleAreas );
+		}
+		s_iLastLeaf = leaf;
+		s_bLastSolid = g_bViewerInSolidSpace;
+		s_bLastAreaBitsValid = bAreaBitsValid;
+		s_iLastVisibleAreas = iVisibleAreas;
+	}
 }
 
 

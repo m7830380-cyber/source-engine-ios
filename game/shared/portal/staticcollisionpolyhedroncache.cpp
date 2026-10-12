@@ -41,6 +41,114 @@ static void *s_StaticPropPolyhedronMemory = NULL;
 
 CStaticCollisionPolyhedronCache g_StaticCollisionPolyhedronCache;
 
+// A closed convex polyhedron has V - E + F == 2, every point on 3+ lines and every line on
+// exactly 2 polygons. ClipPolyhedron can't order the lines around a point of anything else.
+static bool BrushPolyhedronIsClosed( const CPolyhedron *pPolyhedron )
+{
+	if( (pPolyhedron->iVertexCount - pPolyhedron->iLineCount + pPolyhedron->iPolygonCount) != 2 )
+		return false;
+
+	CUtlVector<int> pointLines, linePolygons;
+	pointLines.SetCount( pPolyhedron->iVertexCount );
+	linePolygons.SetCount( pPolyhedron->iLineCount );
+	for( int i = 0; i != pointLines.Count(); ++i )
+		pointLines[i] = 0;
+	for( int i = 0; i != linePolygons.Count(); ++i )
+		linePolygons[i] = 0;
+
+	for( int i = 0; i != pPolyhedron->iLineCount; ++i )
+	{
+		for( int j = 0; j != 2; ++j )
+		{
+			int iPoint = pPolyhedron->pLines[i].iPointIndices[j];
+			if( iPoint >= pPolyhedron->iVertexCount )
+				return false;
+			++pointLines[iPoint];
+		}
+	}
+
+	for( int i = 0; i != pPolyhedron->iPolygonCount; ++i )
+	{
+		const Polyhedron_IndexedPolygon_t &polygon = pPolyhedron->pPolygons[i];
+		for( int j = 0; j != polygon.iIndexCount; ++j )
+		{
+			int iIndex = polygon.iFirstIndex + j;
+			if( iIndex >= pPolyhedron->iIndexCount )
+				return false;
+			int iLine = pPolyhedron->pIndices[iIndex].iLineIndex;
+			if( iLine >= pPolyhedron->iLineCount )
+				return false;
+			++linePolygons[iLine];
+		}
+	}
+
+	for( int i = 0; i != pointLines.Count(); ++i )
+	{
+		if( pointLines[i] < 3 )
+			return false;
+	}
+	for( int i = 0; i != linePolygons.Count(); ++i )
+	{
+		if( linePolygons[i] != 2 )
+			return false;
+	}
+	return true;
+}
+
+// Builds a brush polyhedron, retrying with other on-plane epsilons when the result isn't closed
+// (sp_a1_intro3 had a wall brush come out as 8 points / 11 lines / 6 polygons, and portals placed
+// on it lost that wall's collision). 1/16 is what Portal 2's own cache uses.
+static CPolyhedron *GenerateClosedBrushPolyhedron( int iBrush, int iContents, const BrushSideInfo_t *pSides, const float *pPlanes, int iPlaneCount, int &iBrokenBrushes )
+{
+	static const float s_fEpsilons[] = { 0.01f, 1.0f / 16.0f, 0.1f, 0.001f };
+	static int s_iLoggedBrushes = 0;
+	bool bLog = false;
+
+	for( int iTry = 0; iTry != ARRAYSIZE( s_fEpsilons ); ++iTry )
+	{
+		CPolyhedron *pPolyhedron = GeneratePolyhedronFromPlanes( pPlanes, iPlaneCount, s_fEpsilons[iTry], true );
+		if( pPolyhedron == NULL )
+			return NULL;
+
+		if( BrushPolyhedronIsClosed( pPolyhedron ) )
+		{
+			if( bLog )
+				Msg( "CStaticCollisionPolyhedronCache: brush %d rebuilt closed with epsilon %g (%d verts, %d lines, %d polygons)\n",
+					iBrush, s_fEpsilons[iTry], pPolyhedron->iVertexCount, pPolyhedron->iLineCount, pPolyhedron->iPolygonCount );
+			return pPolyhedron;
+		}
+
+		if( (iTry == 0) && (s_iLoggedBrushes < 10) )
+		{
+			++s_iLoggedBrushes;
+			bLog = true;
+		}
+
+		if( bLog )
+		{
+			Warning( "CStaticCollisionPolyhedronCache: brush %d (contents 0x%x, %d sides) isn't closed with epsilon %g: %d verts, %d lines, %d polygons\n",
+				iBrush, iContents, iPlaneCount, s_fEpsilons[iTry], pPolyhedron->iVertexCount, pPolyhedron->iLineCount, pPolyhedron->iPolygonCount );
+			if( iTry == 0 )
+			{
+				for( int i = 0; i != iPlaneCount; ++i )
+				{
+					Warning( "    side %d: normal (%.9g %.9g %.9g) dist %.9g%s%s\n", i,
+						pPlanes[(i * 4) + 0], pPlanes[(i * 4) + 1], pPlanes[(i * 4) + 2], pPlanes[(i * 4) + 3],
+						pSides[i].bevel ? " bevel" : "", pSides[i].thin ? " thin" : "" );
+				}
+			}
+		}
+		pPolyhedron->Release();
+	}
+
+	if( bLog )
+	{
+		Warning( "CStaticCollisionPolyhedronCache: brush %d has no closed polyhedron, leaving it out of portal collision\n", iBrush );
+	}
+	++iBrokenBrushes;
+	return NULL;
+}
+
 typedef ICollideable *ICollideablePtr; //needed for key comparison function syntax
 static bool CollideablePtr_KeyCompareFunc( const ICollideablePtr &a, const ICollideablePtr &b )
 { 
@@ -142,6 +250,7 @@ void CStaticCollisionPolyhedronCache::Update( void )
 	
 
 	//brushes
+	int iBrokenBrushes = 0;
 	{
 		int iBrush = 0;
 		float fStackPlanes[4 * 400]; //400 is a crapload of planes in my opinion
@@ -155,6 +264,8 @@ void CStaticCollisionPolyhedronCache::Update( void )
 				break;
 			if ( iSideCount < 0 )
 			{
+				// more sides than fit; keep m_BrushPolyhedrons indexed by brush number
+				m_BrushPolyhedrons.AddToTail( NULL );
 				++iBrush;
 				continue;
 			}
@@ -179,7 +290,7 @@ void CStaticCollisionPolyhedronCache::Update( void )
 					pNonstackPlanes[(i * 4) + 3] = pReturnedPlanes[i].plane.dist;
 				}
 
-				pTempPolyhedron = GeneratePolyhedronFromPlanes( pNonstackPlanes, iPlaneCount, 0.01f, true );
+				pTempPolyhedron = GenerateClosedBrushPolyhedron( iBrush, brushContents, pReturnedPlanes, pNonstackPlanes, iPlaneCount, iBrokenBrushes );
 
 				delete []pNonstackPlanes;
 			}
@@ -193,7 +304,7 @@ void CStaticCollisionPolyhedronCache::Update( void )
 					fStackPlanes[(i * 4) + 3] = pReturnedPlanes[i].plane.dist;
 				}
 
-				pTempPolyhedron = GeneratePolyhedronFromPlanes( fStackPlanes, iPlaneCount, 0.01f, true );
+				pTempPolyhedron = GenerateClosedBrushPolyhedron( iBrush, brushContents, pReturnedPlanes, fStackPlanes, iPlaneCount, iBrokenBrushes );
 			}
 
 			if( pTempPolyhedron )
@@ -491,8 +602,8 @@ void CStaticCollisionPolyhedronCache::Update( void )
 		delete []workSpaceAllocations[i];
 	}
 
-	Msg( "CStaticCollisionPolyhedronCache: Update done (%d brushes, %d static-prop polyhedrons)\n",
-		m_BrushPolyhedrons.Count(), m_StaticPropPolyhedrons.Count() );
+	Msg( "CStaticCollisionPolyhedronCache: Update done (%d brushes, %d not closed, %d static-prop polyhedrons)\n",
+		m_BrushPolyhedrons.Count(), iBrokenBrushes, m_StaticPropPolyhedrons.Count() );
 }
 
 

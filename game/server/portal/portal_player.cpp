@@ -1870,6 +1870,27 @@ void CPortal_Player::PlayCoopPingEffect( void )
 //-----------------------------------------------------------------------------
 void CPortal_Player::PreThink( void )
 {
+#if defined( IOS ) && defined( PORTAL2 )
+	// once per fall: where the player was when they reached a long fall's speed, and whose
+	// portal collision they were in (the world is replaced by it near a portal)
+	{
+		static bool s_bLoggedFall = false;
+		if( GetGroundEntity() != NULL )
+		{
+			s_bLoggedFall = false;
+		}
+		else if( !s_bLoggedFall && (GetAbsVelocity().z < -2000.0f) )
+		{
+			s_bLoggedFall = true;
+			CPortal_Base2D *pEnvironment = m_hPortalEnvironment.Get();
+			Msg( "[fall] player falling at %.0f %.0f %.0f vel z %.0f, environment #%d%s%.0f %.0f %.0f, t=%.2f\n",
+				GetAbsOrigin().x, GetAbsOrigin().y, GetAbsOrigin().z, GetAbsVelocity().z,
+				pEnvironment ? pEnvironment->entindex() : -1, pEnvironment ? " at " : " ",
+				pEnvironment ? pEnvironment->GetAbsOrigin().x : 0.0f, pEnvironment ? pEnvironment->GetAbsOrigin().y : 0.0f, pEnvironment ? pEnvironment->GetAbsOrigin().z : 0.0f,
+				gpGlobals->curtime );
+		}
+	}
+#endif
 	QAngle vOldAngles = GetLocalAngles();
 	QAngle vTempAngles = GetLocalAngles();
 
@@ -4943,6 +4964,16 @@ void CPortal_Player::ApplyPortalTeleportation( const CPortal_Base2D *pEnteredPor
 
 	// Use a slightly expanded box to search for stick surfaces as the player leaves the portal.
 	m_flUsePostTeleportationBoxTime = sv_post_teleportation_box_time.GetFloat();
+#if defined( IOS ) && defined( PORTAL2 )
+	{
+		const CPortal_Base2D *pExitPortal = pEnteredPortal->m_hLinkedPortal.Get();
+		Msg( "[portal] player through portal #%d at %.0f %.0f %.0f -> #%d, now at %.0f %.0f %.0f vel %.0f %.0f %.0f, environment #%d, t=%.2f\n",
+			pEnteredPortal->entindex(), pEnteredPortal->GetAbsOrigin().x, pEnteredPortal->GetAbsOrigin().y, pEnteredPortal->GetAbsOrigin().z,
+			pExitPortal ? pExitPortal->entindex() : -1, pMove->GetAbsOrigin().x, pMove->GetAbsOrigin().y, pMove->GetAbsOrigin().z,
+			pMove->m_vecVelocity.x, pMove->m_vecVelocity.y, pMove->m_vecVelocity.z,
+			m_hPortalEnvironment.Get() ? m_hPortalEnvironment.Get()->entindex() : -1, gpGlobals->curtime );
+	}
+#endif
 	// FIXME:
 #if 0
 	m_nPortalsEnteredInAirFlags |= pEnteredPortal->m_nPortalColor;

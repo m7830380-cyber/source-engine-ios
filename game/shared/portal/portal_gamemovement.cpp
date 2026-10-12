@@ -42,6 +42,15 @@
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
 
+#if defined( IOS ) && defined( PORTAL2 ) && defined( GAME_DLL )
+// Portal 2 iOS diagnostic: velocity checkpoints, printed by CPortal_Player when the player loses speed in mid-air.
+extern void IOS_VelTrace( PRINTF_FORMAT_STRING const char *pszFmt, ... );
+#define IOS_VT( name ) IOS_VelTrace( "%s: mv vel %.0f %.0f %.0f pos %.0f %.0f %.0f", name, \
+	mv->m_vecVelocity.x, mv->m_vecVelocity.y, mv->m_vecVelocity.z, mv->GetAbsOrigin().x, mv->GetAbsOrigin().y, mv->GetAbsOrigin().z )
+#else
+#define IOS_VT( name )
+#endif
+
 ConVar sv_player_trace_through_portals("sv_player_trace_through_portals", "1", FCVAR_REPLICATED | FCVAR_CHEAT, "Causes player movement traces to trace through portals." );
 ConVar sv_player_funnel_into_portals("sv_player_funnel_into_portals", "1", FCVAR_REPLICATED, "Causes the player to auto correct toward the center of floor portals." ); 
 ConVar sv_player_funnel_snap_threshold("sv_player_funnel_snap_threshold", "10.f", FCVAR_REPLICATED);
@@ -441,10 +450,12 @@ void CPortalGameMovement::ProcessMovement( CBasePlayer *pPlayer, CMoveData *pMov
 
 		// Figure out paint power
 		pPlayer->SetInputVector( vWishVel );
+		IOS_VT( "pm start" );
 		pPlayer->UpdatePaintPowers();
 
 		// Using the paint power may change the velocity
 		mv->m_vecVelocity = player->GetAbsVelocity();
+		IOS_VT( "after UpdatePaintPowers" );
 
 		// The stick power may cause the abs origin and collision bounds to change
 #if defined( GAME_DLL )
@@ -465,7 +476,9 @@ void CPortalGameMovement::ProcessMovement( CBasePlayer *pPlayer, CMoveData *pMov
 
 		// Run the command.
 		PlayerMove();
+		IOS_VT( "after PlayerMove" );
 		HandlePortalling();
+		IOS_VT( "after HandlePortalling" );
 		FinishMove();
 
 		//if( gpGlobals->frametime != 0.0f )
@@ -3882,6 +3895,7 @@ void CPortalGameMovement::FullWalkMove()
 	{
 		StartGravity();
 	}
+	IOS_VT( player->GetWaterLevel() ? "after StartGravity (in water)" : "after StartGravity" );
 
 	// If we are leaping out of the water, just update the counters.
 	if (player->m_flWaterJumpTime)
@@ -3933,6 +3947,7 @@ void CPortalGameMovement::FullWalkMove()
 
 		// Perform regular water movement
 		WaterMove();
+		IOS_VT( "after WaterMove" );
 
 		// Redetermine position vars
 		CategorizePosition();
@@ -3967,11 +3982,13 @@ void CPortalGameMovement::FullWalkMove()
 
 		// Make sure velocity is valid.
 		CheckVelocity();
+		IOS_VT( "after jump/friction/CheckVelocity" );
 
 		CPortal_Player *pPortalPlayer = static_cast< CPortal_Player* >( player );
 		if ( pPortalPlayer->m_PortalLocal.m_hTractorBeam.Get() )
 		{
 			TBeamMove();
+			IOS_VT( "after TBeamMove (in tractor beam)" );
 		}
 		else
 		{
@@ -3988,12 +4005,14 @@ void CPortalGameMovement::FullWalkMove()
 #endif
 				AirMove();  // Take into account movement when in air.
 			}
+			IOS_VT( player->GetGroundEntity() ? "after WalkMove" : "after AirMove" );
 
 			CheckWallImpact( vecVel );
 		}
 
 		// Set final flags.
 		CategorizePosition();
+		IOS_VT( "after final CategorizePosition" );
 
 		// Make sure velocity is valid.
 		CheckVelocity();
@@ -4003,6 +4022,7 @@ void CPortalGameMovement::FullWalkMove()
 		{
 			FinishGravity();
 		}
+		IOS_VT( "after FinishGravity" );
 
 		// If we are on ground, no downward velocity.
 		if ( player->GetGroundEntity() != NULL )
@@ -4091,6 +4111,14 @@ int CPortalGameMovement::TryPlayerMove( Vector *pFirstDest, trace_t *pFirstTrace
 		}
 
 		allFraction += pm.fraction;
+#if defined( IOS ) && defined( PORTAL2 ) && defined( GAME_DLL )
+		if ( pm.fraction < 1.0f || pm.allsolid || pm.startsolid )
+		{
+			IOS_VelTrace( "  TryPlayerMove bump %d hit '%s' (%s) frac %.2f allsolid %d startsolid %d normal %.2f %.2f %.2f contents 0x%x", bumpcount,
+				pm.m_pEnt ? pm.m_pEnt->GetDebugName() : "", pm.m_pEnt ? pm.m_pEnt->GetClassname() : "none", pm.fraction, pm.allsolid ? 1 : 0, pm.startsolid ? 1 : 0,
+				pm.plane.normal.x, pm.plane.normal.y, pm.plane.normal.z, pm.contents );
+		}
+#endif
 
 		// If we started in a solid object, or we were in solid space
 		//  the whole way, zero out our velocity and return that we
@@ -5119,6 +5147,7 @@ void CPortalGameMovement::PlayerMove()
 	VPROF( "CPortalGameMovement::PlayerMove" );
 
 	CheckParameters();
+	IOS_VT( "after CheckParameters" );
 
 	// clear output applied velocity
 	mv->m_outWishVel.Init();
@@ -5142,6 +5171,7 @@ void CPortalGameMovement::PlayerMove()
 		{
 			if ( CheckStuck() )
 			{
+				IOS_VT( "STUCK, movement skipped" );
 				// Can't move, we're stuck
 				return;  
 			}
@@ -5163,6 +5193,7 @@ void CPortalGameMovement::PlayerMove()
 		}
 	}
 
+	IOS_VT( "after CategorizePosition" );
 	// Store off the starting water level
 	m_nOldWaterLevel = player->GetWaterLevel();
 
@@ -5178,6 +5209,7 @@ void CPortalGameMovement::PlayerMove()
 
 	UpdateDuckJumpEyeOffset();
 	Duck();
+	IOS_VT( "after Duck" );
 
 	// Don't run ladder code if dead on on a train
 	if ( !player->pl.deadflag && !(player->GetFlags() & FL_ONTRAIN) )
@@ -5200,6 +5232,7 @@ void CPortalGameMovement::PlayerMove()
 		}
 	}
 
+	IOS_VT( "after LadderMove" );
 	// Handle movement modes.
 	switch (player->GetMoveType())
 	{

@@ -72,6 +72,7 @@
 #include "portal_ui_controller.h"
 #include "portal_mp_stats.h"
 #include "pointsurvey.h"
+#include "trigger_tractorbeam_shared.h"
 #endif
 
 #if !defined(NO_STEAM) && !defined(_PS3)
@@ -2843,6 +2844,26 @@ void CPortal_Player::PlayerUse( void )
 
 extern ConVar sv_enableholdrotation;
 ConVar sv_holdrotationsensitivity( "sv_holdrotationsensitivity", "0.1", FCVAR_ARCHIVE );
+#if defined( IOS ) && defined( PORTAL2 )
+// Diagnostic: velocity checkpoints recorded while the player is airborne and fast during one command.
+// Player movement, the command runner and this file add entries; they are printed only when that command
+// takes most of the player's speed away.
+static bool s_bIOSVelTraceArmed = false;
+static int s_nIOSVelTrace = 0;
+static char s_szIOSVelTrace[48][200];
+
+void IOS_VelTrace( const char *pszFmt, ... )
+{
+	if ( !s_bIOSVelTraceArmed || s_nIOSVelTrace >= ARRAYSIZE( s_szIOSVelTrace ) )
+		return;
+	va_list args;
+	va_start( args, pszFmt );
+	Q_vsnprintf( s_szIOSVelTrace[s_nIOSVelTrace], sizeof( s_szIOSVelTrace[0] ), pszFmt, args );
+	va_end( args );
+	++s_nIOSVelTrace;
+}
+#endif
+
 void CPortal_Player::PlayerRunCommand(CUserCmd *ucmd, IMoveHelper *moveHelper)
 {
 	if ( sv_enableholdrotation.GetBool() && !IsUsingVMGrab() )
@@ -2932,6 +2953,15 @@ void CPortal_Player::PlayerRunCommand(CUserCmd *ucmd, IMoveHelper *moveHelper)
 
 #if defined( IOS ) && defined( PORTAL2 )
 	const Vector vecIOSVelBeforeMove = GetAbsVelocity();
+	s_nIOSVelTrace = 0;
+	s_bIOSVelTraceArmed = !( GetFlags() & FL_ONGROUND ) && vecIOSVelBeforeMove.Length() > 300.0f;
+	if ( s_bIOSVelTraceArmed )
+	{
+		CBaseEntity *pIOSBeam = m_PortalLocal.m_hTractorBeam.Get();
+		IOS_VelTrace( "state: tractor beam '%s', portal env '%s', air control suppressed %d, waterlevel %d, lagged movement %.2f, gravity %.2f",
+					  pIOSBeam ? pIOSBeam->GetDebugName() : "", m_hPortalEnvironment.Get() ? m_hPortalEnvironment->GetDebugName() : "",
+					  IsSuppressingAirControl() ? 1 : 0, GetWaterLevel(), GetLaggedMovementValue(), GetGravity() );
+	}
 #endif
 
 	BaseClass::PlayerRunCommand( ucmd, moveHelper );
@@ -2958,7 +2988,12 @@ void CPortal_Player::PlayerRunCommand(CUserCmd *ucmd, IMoveHelper *moveHelper)
 			Msg( "[airstop]   vel before this command %.0f %.0f %.0f, after %.0f %.0f %.0f, movetype %d, flags 0x%x, ground '%s'\n",
 				 vecIOSVelBeforeMove.x, vecIOSVelBeforeMove.y, vecIOSVelBeforeMove.z, vecVel.x, vecVel.y, vecVel.z,
 				 GetMoveType(), GetFlags(), GetGroundEntity() ? GetGroundEntity()->GetDebugName() : "" );
+			for ( int iStage = 0; iStage < s_nIOSVelTrace; ++iStage )
+			{
+				Msg( "[airstop]     %s\n", s_szIOSVelTrace[iStage] );
+			}
 		}
+		s_bIOSVelTraceArmed = false;
 		s_vecPrevVel = vecVel;
 		s_vecPrevPos = GetAbsOrigin();
 		s_bValid = true;

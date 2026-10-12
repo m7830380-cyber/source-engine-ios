@@ -18,6 +18,20 @@
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
 
+#if defined( IOS ) && defined( PORTAL2 )
+// Portal 2 iOS diagnostic: velocity checkpoints, printed by CPortal_Player when the player loses speed in mid-air.
+extern void IOS_VelTrace( PRINTF_FORMAT_STRING const char *pszFmt, ... );
+#define IOS_VT_PLAYER( name ) IOS_VelTrace( "%s: vel %.0f %.0f %.0f base %.0f %.0f %.0f pos %.0f %.0f %.0f", name, \
+	player->GetAbsVelocity().x, player->GetAbsVelocity().y, player->GetAbsVelocity().z, \
+	player->GetBaseVelocity().x, player->GetBaseVelocity().y, player->GetBaseVelocity().z, \
+	player->GetAbsOrigin().x, player->GetAbsOrigin().y, player->GetAbsOrigin().z )
+#define IOS_VT_MOVE( name ) IOS_VelTrace( "%s: mv vel %.0f %.0f %.0f", name, \
+	g_pMoveData->m_vecVelocity.x, g_pMoveData->m_vecVelocity.y, g_pMoveData->m_vecVelocity.z )
+#else
+#define IOS_VT_PLAYER( name )
+#define IOS_VT_MOVE( name )
+#endif
+
 extern IGameMovement *g_pGameMovement;
 extern CMoveData *g_pMoveData;	// This is a global because it is subclassed by each game.
 extern ConVar sv_noclipduringpause;
@@ -403,7 +417,9 @@ void CPlayerMove::RunCommand ( CBasePlayer *player, CUserCmd *ucmd, IMoveHelper 
 	player->UpdateButtonState( ucmd->buttons );
 	VPROF_SCOPE_END();
 
+	IOS_VT_PLAYER( "cmd start" );
 	CheckMovingGround( player, TICK_INTERVAL );
+	IOS_VT_PLAYER( "after CheckMovingGround" );
 
 	g_pMoveData->m_vecOldAngles = player->pl.v_angle;
 
@@ -426,12 +442,15 @@ void CPlayerMove::RunCommand ( CBasePlayer *player, CUserCmd *ucmd, IMoveHelper 
 
 	// Call standard client pre-think
 	RunPreThink( player );
+	IOS_VT_PLAYER( "after PreThink" );
 
 	// Call Think if one is set
 	RunThink( player, TICK_INTERVAL );
+	IOS_VT_PLAYER( "after Think" );
 
 	// Setup input.
 	SetupMove( player, ucmd, moveHelper, g_pMoveData );
+	IOS_VT_MOVE( "after SetupMove" );
 
 	// Let the game do the movement.
 	if ( !pVehicle )
@@ -447,7 +466,9 @@ void CPlayerMove::RunCommand ( CBasePlayer *player, CUserCmd *ucmd, IMoveHelper 
 	}
 			
 	// Copy output
+	IOS_VT_MOVE( "after ProcessMovement" );
 	FinishMove( player, ucmd, g_pMoveData );
+	IOS_VT_PLAYER( "after FinishMove" );
 
 	// If we have to restore the view angle then do so right now
 	if ( !player->IsBot() &&
@@ -463,11 +484,13 @@ void CPlayerMove::RunCommand ( CBasePlayer *player, CUserCmd *ucmd, IMoveHelper 
 	// Let server invoke any needed impact functions
 	VPROF_SCOPE_BEGIN( "moveHelper->ProcessImpacts" );
 	moveHelper->ProcessImpacts();
+	IOS_VT_PLAYER( "after ProcessImpacts" );
 	VPROF_SCOPE_END();
 	gpGlobals->curtime = playerCurTime;
 	gpGlobals->frametime = playerFrameTime;
 
 	RunPostThink( player );
+	IOS_VT_PLAYER( "after PostThink" );
 
 	g_pGameMovement->FinishTrackPredictionErrors( player );
 	g_pGameMovement->Reset();

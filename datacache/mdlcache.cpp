@@ -4003,6 +4003,23 @@ int CMDLCache::ProcessPendingAsync( intp iAsync )
 	pInfo = &info;
 	ClearAsync( pInfo->hModel, pInfo->type, pInfo->iAnimBlock );
 
+	// A model with no .phy never reaches ProcessDataIntoCache, so mark its vcollide
+	// as loaded here; otherwise every trace against it reopens the missing file.
+	if ( pInfo->type == MDLCACHE_VCOLLIDE && ( status != FSASYNC_OK || nBytesRead <= 0 ) )
+	{
+		studiodata_t *pStudioData = m_MDLDict[pInfo->hModel];
+		if ( pStudioData )
+		{
+			pStudioData->m_nFlags |= STUDIODATA_FLAGS_VCOLLISION_LOADED;
+			static int s_nMissingPhyLogged = 0;
+			if ( s_nMissingPhyLogged < 20 )
+			{
+				++s_nMissingPhyLogged;
+				Msg( "[mdlcache] no .phy for %s (status %d), not retrying\n", GetModelName( pInfo->hModel ), (int)status );
+			}
+		}
+	}
+
 	if( m_bFileNotFoundAllowed && status == FSASYNC_ERR_FILEOPEN )
 	{
 		// file not found here is valid so return complete

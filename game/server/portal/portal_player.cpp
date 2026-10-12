@@ -72,8 +72,8 @@
 #include "portal_ui_controller.h"
 #include "portal_mp_stats.h"
 #include "pointsurvey.h"
-#include "trigger_tractorbeam_shared.h"
 #endif
+#include "trigger_tractorbeam_shared.h"
 
 #if !defined(NO_STEAM) && !defined(_PS3)
 //#include "gc_serversystem.h"

@@ -7194,6 +7194,20 @@ int S_StartSound( StartSoundParams_t& params )
 		return 0;
 	}
 
+#if defined( PLATFORM_IOS ) || defined( __APPLE__ )
+	// Device diagnostics: name the first sounds after each map load and
+	// every voice line, so unexpected sounds can be traced in the log.
+	{
+		extern int g_nSndStartLogCount;
+		bool bVoice = V_stristr( pfn, "vo/" ) || V_stristr( pfn, "vo\\" ) || params.entchannel == CHAN_VOICE;
+		if ( bVoice || g_nSndStartLogCount < 120 )
+		{
+			++g_nSndStartLogCount;
+			printf( "[snd] start %s ent %d chan %d static %d\n", pfn, params.soundsource, params.entchannel, params.staticsound ? 1 : 0 );
+		}
+	}
+#endif
+
 	bool bReport = snd_report_start_sound.GetBool();
 	if ( bReport || IsPC() )
 	{
@@ -7868,8 +7882,11 @@ void S_GetActiveSounds( CUtlVector< SndInfo_t >& sndlist )
 	}
 }
 
+int g_nSndStartLogCount = 0;
+
 void S_StopAllSounds( bool bClear )
 {
+	g_nSndStartLogCount = 0;
 	THREAD_LOCK_SOUND();
 	int		i;
 

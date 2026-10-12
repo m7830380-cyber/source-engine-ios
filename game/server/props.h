@@ -322,6 +322,7 @@ public:
 	void InputGlowColorBlueValue( inputdata_t &inputdata );
 
 	void UpdateBoneFollowers( void );
+	void QueueChildUpdatesRecursive( CBaseEntity *pParent );
 
 	COutputEvent		m_pOutputAnimBegun;
 	COutputEvent		m_pOutputAnimOver;

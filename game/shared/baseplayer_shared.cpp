@@ -2918,10 +2918,42 @@ float CBasePlayer::GetHeldObjectMass( IPhysicsObject *pHeldObject )
 //-----------------------------------------------------------------------------
 // Purpose:
 //-----------------------------------------------------------------------------
+#if defined( IOS ) && defined( PORTAL2 ) && defined( GAME_DLL )
+// Diagnostic: report when the physics shadow update takes most of the player's speed away
+// or moves them, and whether it thought the player was touching a physics object.
+struct IOS_ShadowUpdateLog_t
+{
+	CBasePlayer *m_pPlayer;
+	Vector m_vecVel, m_vecPos;
+	IOS_ShadowUpdateLog_t( CBasePlayer *pPlayer ) : m_pPlayer( pPlayer ), m_vecVel( pPlayer->GetAbsVelocity() ), m_vecPos( pPlayer->GetAbsOrigin() ) {}
+	~IOS_ShadowUpdateLog_t()
+	{
+		static int s_nLogged = 0;
+		const Vector &vecVel = m_pPlayer->GetAbsVelocity();
+		const Vector &vecPos = m_pPlayer->GetAbsOrigin();
+		float flSpeed = m_vecVel.Length();
+		bool bSlowed = flSpeed > 300.0f && vecVel.Length() < 0.5f * flSpeed;
+		bool bMoved = ( vecPos - m_vecPos ).LengthSqr() > 4.0f * 4.0f;
+		if ( ( bSlowed || bMoved ) && s_nLogged < 60 )
+		{
+			++s_nLogged;
+			Msg( "[shadow] player vel %.0f %.0f %.0f -> %.0f %.0f %.0f, pos %.0f %.0f %.0f -> %.0f %.0f %.0f, ground '%s', t=%.2f\n",
+				 m_vecVel.x, m_vecVel.y, m_vecVel.z, vecVel.x, vecVel.y, vecVel.z,
+				 m_vecPos.x, m_vecPos.y, m_vecPos.z, vecPos.x, vecPos.y, vecPos.z,
+				 m_pPlayer->GetGroundEntity() ? m_pPlayer->GetGroundEntity()->GetDebugName() : "", gpGlobals->curtime );
+		}
+	}
+};
+#endif
+
 void CBasePlayer::VPhysicsShadowUpdate( IPhysicsObject *pPhysics )
 {
 	if ( sv_turbophysics.GetBool() )
 		return;
+
+#if defined( IOS ) && defined( PORTAL2 ) && defined( GAME_DLL )
+	IOS_ShadowUpdateLog_t iosShadowLog( this );
+#endif
 
 #if defined( DEBUG_MOTION_CONTROLLERS ) && defined( CLIENT_DLL ) 
 	GetVectors( NULL, &g_vShift, NULL );
@@ -2965,8 +2997,16 @@ void CBasePlayer::VPhysicsShadowUpdate( IPhysicsObject *pPhysics )
 		bCheckStuck = true;
 		m_afPhysicsFlags &= ~PFLAG_GAMEPHYSICS_ROTPUSH;
 	}
+#if defined( PORTAL2 )
+	// Portal 2 only counts contact with objects that physics actually simulates. CS:GO's
+	// contact state also counts game-controlled shadows (func_brush, doors, bone followers),
+	// and a shadow left behind by an animated parent then pulls the player back like a wall.
+	const uint32 nContactState = 0;
+	if ( m_pPhysicsController->IsInContact() || (m_afPhysicsFlags & PFLAG_VPHYSICS_MOTIONCONTROLLER) )
+#else
 	uint32 nContactState = m_pPhysicsController->GetContactState( FVPHYSICS_PUSH_PLAYER );
 	if ( (nContactState & PLAYER_CONTACT_PHYSICS) || (m_afPhysicsFlags & PFLAG_VPHYSICS_MOTIONCONTROLLER) )
+#endif
 	{
 		m_bTouchedPhysObject = true;
 	}

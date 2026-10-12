@@ -2930,6 +2930,10 @@ void CPortal_Player::PlayerRunCommand(CUserCmd *ucmd, IMoveHelper *moveHelper)
 		}
 	}
 
+#if defined( IOS ) && defined( PORTAL2 )
+	const Vector vecIOSVelBeforeMove = GetAbsVelocity();
+#endif
+
 	BaseClass::PlayerRunCommand( ucmd, moveHelper );
 
 #if defined( IOS ) && defined( PORTAL2 )
@@ -2951,6 +2955,9 @@ void CPortal_Player::PlayerRunCommand(CUserCmd *ucmd, IMoveHelper *moveHelper)
 				 s_vecPrevVel.x, s_vecPrevVel.y, s_vecPrevVel.z,
 				 tr.m_pEnt ? tr.m_pEnt->GetDebugName() : "", tr.m_pEnt ? tr.m_pEnt->GetClassname() : "none", tr.fraction,
 				 tr.plane.normal.x, tr.plane.normal.y, tr.plane.normal.z, gpGlobals->curtime );
+			Msg( "[airstop]   vel before this command %.0f %.0f %.0f, after %.0f %.0f %.0f, movetype %d, flags 0x%x, ground '%s'\n",
+				 vecIOSVelBeforeMove.x, vecIOSVelBeforeMove.y, vecIOSVelBeforeMove.z, vecVel.x, vecVel.y, vecVel.z,
+				 GetMoveType(), GetFlags(), GetGroundEntity() ? GetGroundEntity()->GetDebugName() : "" );
 		}
 		s_vecPrevVel = vecVel;
 		s_vecPrevPos = GetAbsOrigin();

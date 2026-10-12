@@ -2405,10 +2405,21 @@ void CDynamicProp::AnimThink( void )
 	UpdateBoneFollowers();
 
 	// Queue any SetParentAttached children to update at the end of the frame
-	for ( CBaseEntity *pChild = FirstMoveChild(); pChild; pChild = pChild->NextMovePeer() )
+	QueueChildUpdatesRecursive( this );
+}
+
+//------------------------------------------------------------------------------
+// Purpose: Queue every descendant, not just direct children. A brush parented to
+//			a brush on an animated arm (Portal 2's bts_panel_door ghost) otherwise
+//			keeps its physics shadow where the arm started.
+//------------------------------------------------------------------------------
+void CDynamicProp::QueueChildUpdatesRecursive( CBaseEntity *pParent )
+{
+	for ( CBaseEntity *pChild = pParent->FirstMoveChild(); pChild; pChild = pChild->NextMovePeer() )
 	{
 		g_pPushedEntities->QueueChildUpdate( pChild );
-	}		
+		QueueChildUpdatesRecursive( pChild );
+	}
 }
 
 //------------------------------------------------------------------------------

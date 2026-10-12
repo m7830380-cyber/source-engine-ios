@@ -1096,9 +1096,11 @@ void ClientModeShared::FireGameEvent( IGameEvent *event )
 	}
 	else if ( Q_strcmp( "player_connect_full", eventname ) == 0 )
 	{
+#if defined( CSTRIKE15 )
+		// CS:GO-only soundscript; Portal 2 has no Music.StopMenuMusic, so it fell back to
+		// the "Error" sound (Kleiner's "fiddlesticks") on every map load.
 		CLocalPlayerFilter filter;
 		C_BaseEntity::EmitSound( filter, SOUND_FROM_LOCAL_PLAYER, "Music.StopMenuMusic" );
-#if defined( CSTRIKE15 )
 		GameUI().SetBackgroundMusicDesired( false );
 #endif
 	}

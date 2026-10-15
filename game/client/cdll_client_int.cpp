@@ -5596,13 +5596,15 @@ void LanBrowser_Join( const LanGame_t *pGame )
 	engine->ClientCmd_Unrestricted( CFmtStr( "connect %s\n", pGame->m_szAddress ) );
 }
 
-CON_COMMAND( lan_find, "List LAN games (other devices hosting an offline match)" )
+// one blocking search (1 s) into s_LanGames; false if it couldn't be sent
+static bool LanFindGames( void )
 {
+	s_LanGames.RemoveAll();
 	int s = socket( AF_INET, SOCK_DGRAM, IPPROTO_UDP );
 	if ( s < 0 )
 	{
 		Msg( "lan_find: no socket (%d)\n", errno );
-		return;
+		return false;
 	}
 	int one = 1;
 	setsockopt( s, SOL_SOCKET, SO_BROADCAST, &one, sizeof( one ) );
@@ -5612,10 +5614,9 @@ CON_COMMAND( lan_find, "List LAN games (other devices hosting an offline match)"
 	{
 		Msg( "lan_find: couldn't send the search (error %d). Check \"Local Network\" for this app (or LiveContainer) in iOS Settings > Privacy & Security, and that you're on Wi-Fi.\n", nErr );
 		close( s );
-		return;
+		return false;
 	}
 
-	s_LanGames.RemoveAll();
 	double flEnd = Plat_FloatTime() + 1.0;
 	for ( ;; )
 	{
@@ -5644,6 +5645,13 @@ CON_COMMAND( lan_find, "List LAN games (other devices hosting an offline match)"
 			s_LanGames.AddToTail( game );
 	}
 	close( s );
+	return true;
+}
+
+CON_COMMAND( lan_find, "List LAN games (other devices hosting an offline match)" )
+{
+	if ( !LanFindGames() )
+		return;
 
 	if ( !s_LanGames.Count() )
 	{
@@ -5749,6 +5757,64 @@ CON_COMMAND( ip_join, "Join a game by IP address: ip_join <address[:port]> (the 
 	Msg( "Joining %s...\n", args.ArgS() );
 	engine->ClientCmd_Unrestricted( CFmtStr( "connect %s\n", args.ArgS() ) );
 }
+
+#if defined( PORTAL2 )
+//-----------------------------------------------------------------------------
+// Portal 2 co-op over LAN. The host starts a co-op map (its server gives
+// co-op maps 2 player slots), the partner finds it with the LAN search and
+// connects. Both devices need the same Portal 2 content.
+//   coop_host [map]   host (default mp_coop_lobby_3, the co-op hub)
+//   coop_join [ip]    join the co-op game on this Wi-Fi, or the one at ip
+//-----------------------------------------------------------------------------
+void IOS_CoopHost( const char *pszMap )
+{
+	if ( !pszMap || !pszMap[0] )
+		pszMap = "mp_coop_lobby_3";
+	Msg( "[coop] hosting %s. Your partner picks Co-op > Join, or types one of these:\n", pszMap );
+	IOS_PrintHostAddresses();
+	engine->ClientCmd_Unrestricted( CFmtStr( "map %s\n", pszMap ) );
+}
+
+// true if a game was found (and joining started); false: none on this Wi-Fi
+bool IOS_CoopJoin( void )
+{
+	if ( !LanFindGames() )
+		return false;
+
+	// co-op games first, then whatever has room
+	const LanGame_t *pBest = NULL;
+	FOR_EACH_VEC( s_LanGames, i )
+	{
+		const LanGame_t &g = s_LanGames[i];
+		Msg( "[coop] found %s - %s (%d/%d) %s\n", g.m_szName, g.m_szMap, g.m_nHumans, g.m_nMax, g.m_szAddress );
+		if ( g.m_nMax > 1 && g.m_nHumans < g.m_nMax && ( !pBest || ( V_stristr( g.m_szMap, "mp_coop_" ) && !V_stristr( pBest->m_szMap, "mp_coop_" ) ) ) )
+			pBest = &g;
+	}
+	if ( !pBest )
+	{
+		Msg( "[coop] no co-op game with a free slot on this Wi-Fi. The host picks Co-op > Host first; both devices need the same Wi-Fi and Local Network access for this app.\n" );
+		return false;
+	}
+	LanBrowser_Join( pBest );
+	return true;
+}
+
+CON_COMMAND( coop_host, "Host a Portal 2 co-op game on this Wi-Fi: coop_host [map] (default mp_coop_lobby_3)" )
+{
+	IOS_CoopHost( args.ArgC() >= 2 ? args[1] : NULL );
+}
+
+CON_COMMAND( coop_join, "Join a Portal 2 co-op game on this Wi-Fi: coop_join [ip[:port]]" )
+{
+	if ( args.ArgC() >= 2 )
+	{
+		Msg( "[coop] joining %s...\n", args.ArgS() );
+		engine->ClientCmd_Unrestricted( CFmtStr( "connect %s\n", args.ArgS() ) );
+		return;
+	}
+	IOS_CoopJoin();
+}
+#endif // PORTAL2
 
 CON_COMMAND( lan_ip, "Show this device's LAN address (for others to lan_join)" )
 {

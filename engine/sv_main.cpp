@@ -2877,6 +2877,11 @@ void CGameServer::ExecGameTypeCfg( const char *mapname )
         m_numGameSlots = numSlots;
 #ifdef PORTAL2	// HACK: PORTAL2 uses maxclients instead of GAMERULES
         SetMaxClients( numSlots );
+#elif defined( IOS )
+        // the CS:GO engine running Portal 2: its server picks 1 slot for single
+        // player and 2 for co-op maps, and its game rules follow maxclients
+        if ( !Q_stricmp( "portal2", COM_GetModDirectory() ) )
+            SetMaxClients( numSlots );
 #endif
     }
 }

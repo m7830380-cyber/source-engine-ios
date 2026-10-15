@@ -21,6 +21,50 @@
 using namespace vgui;
 using namespace BaseModUI;
 
+#if defined( IOS )
+// Co-op over LAN (cdll_client_int.cpp): Steam lobbies don't exist offline, so
+// one device hosts a co-op map and the other finds it on the same Wi-Fi.
+void IOS_CoopHost( const char *pszMap );
+bool IOS_CoopJoin( void );
+
+static void IOS_CoopHostCallback()
+{
+	IOS_CoopHost( NULL );
+}
+
+static void IOS_CoopJoinCallback()
+{
+	if ( IOS_CoopJoin() )
+		return;
+
+	GenericConfirmation *pConfirm = static_cast< GenericConfirmation * >( CBaseModPanel::GetSingleton().OpenWindow( WT_GENERICCONFIRMATION, NULL, false ) );
+	if ( !pConfirm )
+		return;
+	GenericConfirmation::Data_t data;
+	data.pWindowTitle = "#PORTAL2_CoopMode_Header";
+	data.pMessageText = "No co-op game found on this Wi-Fi.\n\nThe other device picks Co-op > Host first. Both need the same Wi-Fi and Local Network access for this app (iOS Settings > Privacy & Security > Local Network).";
+	data.bOkButtonEnabled = true;
+	pConfirm->SetUsageData( data );
+}
+
+static void IOS_OpenCoopLanChoice( CBaseModFrame *pCaller )
+{
+	GenericConfirmation *pConfirm = static_cast< GenericConfirmation * >( CBaseModPanel::GetSingleton().OpenWindow( WT_GENERICCONFIRMATION, pCaller, false ) );
+	if ( !pConfirm )
+		return;
+	GenericConfirmation::Data_t data;
+	data.pWindowTitle = "#PORTAL2_CoopMode_Header";
+	data.pMessageText = "Co-op on this Wi-Fi.\n\nHost: start the co-op hub on this device and wait for your partner.\nJoin: find the game the other device is hosting and join it.";
+	data.bOkButtonEnabled = true;
+	data.pOkButtonText = "Host";
+	data.pfnOkCallback = IOS_CoopHostCallback;
+	data.bCancelButtonEnabled = true;
+	data.pCancelButtonText = "Join";
+	data.pfnCancelCallback = IOS_CoopJoinCallback;
+	pConfirm->SetUsageData( data );
+}
+#endif
+
 
 CCoopMode::CCoopMode( vgui::Panel *pParent, const char *pPanelName ) : BaseClass( pParent, pPanelName, false, true )
 {
@@ -45,6 +89,10 @@ void CCoopMode::OnCommand( char const *pCommand )
 {
 	if ( !V_stricmp( pCommand, "OpenStandardCoopDialog" ) )
 	{
+#if defined( IOS )
+		IOS_OpenCoopLanChoice( this );
+		return;
+#endif
 #ifdef _GAMECONSOLE
 
 		KeyValues *pSettings = KeyValues::FromString(

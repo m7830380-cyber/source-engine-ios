@@ -1244,8 +1244,19 @@ void Host_Map_Helper( const CCommand &args, EMapFlags flags )
 		return;
 	}
 
-	if ( ( sv.IsActive() && !sv.IsSinglePlayerGame() && !sv.IsLevelMainMenuBackground() ) ||
-		 ( sv.IsActive() && sv.IsDedicated() ) )
+#if defined( IOS ) && !defined( DEDICATED )
+	// Portal 2 gives co-op maps 2 player slots and other maps 1 (its server's
+	// ApplyGameSettings, read when a new game starts). Going between the two
+	// must start a new game; a changelevel would keep the old slot count.
+	bool bPortal2SlotChange = sv.IsActive() && !sv.IsDedicated() && !Q_stricmp( "portal2", COM_GetModDirectory() ) &&
+		( V_stristr( args[1], "mp_coop_" ) != NULL ) != ( sv.GetMaxClients() > 1 );
+#else
+	bool bPortal2SlotChange = false;
+#endif
+
+	if ( !bPortal2SlotChange &&
+		 ( ( sv.IsActive() && !sv.IsSinglePlayerGame() && !sv.IsLevelMainMenuBackground() ) ||
+		   ( sv.IsActive() && sv.IsDedicated() ) ) )
 	{
 		// Using the 'map' command while in a map disconnects all players.
 		// Ease the pain of this common error by forwarding to the correct command.
@@ -1316,7 +1327,7 @@ void Host_Map_Helper( const CCommand &args, EMapFlags flags )
 	GetBaseLocalClient().demonum = -1;
 	// A local single player game (Portal 2) must also restart: multiplayer servers
 	// were forwarded to changelevel above, so otherwise 'map' silently does nothing.
-	if ( GetBaseLocalClient().m_nMaxClients == 0 || sv.IsDedicated() || ( sv.IsActive() && sv.IsSinglePlayerGame() ) )
+	if ( GetBaseLocalClient().m_nMaxClients == 0 || sv.IsDedicated() || ( sv.IsActive() && sv.IsSinglePlayerGame() ) || bPortal2SlotChange )
 #endif
 	{
 		Host_Disconnect( false );	// stop old game

@@ -127,7 +127,13 @@ extern ConVar breakable_disable_gib_limit;
 extern ConVar breakable_multiplayer;
 ConVar mp_server_player_team( "mp_server_player_team", "0", FCVAR_DEVELOPMENTONLY );
 ConVar mp_wait_for_other_player_timeout( "mp_wait_for_other_player_timeout", "100", FCVAR_CHEAT, "Maximum time that we wait in the transition loading screen for the other player." );
-ConVar mp_wait_for_other_player_notconnecting_timeout( "mp_wait_for_other_player_notconnecting_timeout", "10", FCVAR_CHEAT, "Maximum time that we wait in the transition loading screen after we fully loaded for partner to start loading." );
+#if defined( IOS )
+// LAN co-op: the host starts alone and the partner joins later, so don't hold
+// the host in the loading video long when nobody is connecting
+ConVar mp_wait_for_other_player_notconnecting_timeout( "mp_wait_for_other_player_notconnecting_timeout", "3",
+#else
+ConVar mp_wait_for_other_player_notconnecting_timeout( "mp_wait_for_other_player_notconnecting_timeout", "10",
+#endif FCVAR_CHEAT, "Maximum time that we wait in the transition loading screen after we fully loaded for partner to start loading." );
 ConVar mp_dev_wait_for_other_player( "mp_dev_wait_for_other_player", "1", FCVAR_CHEAT, "Force waiting for the other player." );
 
 extern ConVar sv_speed_normal;
@@ -1178,6 +1184,18 @@ void CPortal_Player::OnFullyConnected()
 		// Respawn
 		SetThink( &CPortal_Player::PlayerTransitionCompleteThink );
 		SetNextThink( gpGlobals->curtime + 1.0f );
+
+#if defined( IOS )
+		// Portal 2 asks the client for its co-op progress (Steam stats) and
+		// waits for the answer; there is no stats service here, so the player
+		// counts as answered (no maps completed yet) once fully connected
+		if ( PortalMPGameRules() )
+		{
+			KeyValues *pStats = new KeyValues( "read_stats" );
+			KeyValues::AutoDelete autodelete_pStats( pStats );
+			PortalMPGameRules()->ClientCommandKeyValues( edict(), pStats );
+		}
+#endif
 
 		if ( !PortalMPGameRules()->IsPlayerDataReceived( 0 ) || !PortalMPGameRules()->IsPlayerDataReceived( 1 ) )
 		{
@@ -2306,9 +2324,14 @@ void CPortal_Player::PlayerTransitionCompleteThink( void )
 		// We wanted to wait for the other player
 		if ( PortalMPGameRules() && ( !PortalMPGameRules()->IsPlayerDataReceived( 0 ) || !PortalMPGameRules()->IsPlayerDataReceived( 1 ) ) )
 		{
+#if defined( IOS )
+			// LAN co-op: the host plays alone until the partner joins
+			Msg( "[coop] no partner connected yet: playing alone until one joins\n" );
+#else
 			// Both players haven't sent their data, shut it down!
 			DevMsg( "Player transitioned with no partner!\n" );
 			engine->ClientCommand( this->edict(), "disconnect \"Partner disconnected\"" );
+#endif
 		}
 	}
 

@@ -70,6 +70,14 @@ void ClientActive( edict_t *pEdict, bool bLoadGame )
 
 void ClientFullyConnect(edict_t *pEntity)
 {
+#if defined( IOS )
+	// Portal 2's engine tells the player here; co-op waits on it (P2ASW never
+	// calls it): OnFullyConnected ends the looping "loading bot" transition
+	// video started in Spawn and respawns the player once the partner is in.
+	CPortal_Player *pPlayer = ToPortalPlayer( CBaseEntity::Instance( pEntity ) );
+	if ( pPlayer && g_pGameRules && g_pGameRules->IsMultiplayer() && !pPlayer->IsFullyConnected() )
+		pPlayer->OnFullyConnected();
+#endif
 }
 
 

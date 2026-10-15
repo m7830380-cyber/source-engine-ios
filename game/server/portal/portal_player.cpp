@@ -130,10 +130,11 @@ ConVar mp_wait_for_other_player_timeout( "mp_wait_for_other_player_timeout", "10
 #if defined( IOS )
 // LAN co-op: the host starts alone and the partner joins later, so don't hold
 // the host in the loading video long when nobody is connecting
-ConVar mp_wait_for_other_player_notconnecting_timeout( "mp_wait_for_other_player_notconnecting_timeout", "3",
+#define IOS_NOTCONNECTING_TIMEOUT "3"
 #else
-ConVar mp_wait_for_other_player_notconnecting_timeout( "mp_wait_for_other_player_notconnecting_timeout", "10",
-#endif FCVAR_CHEAT, "Maximum time that we wait in the transition loading screen after we fully loaded for partner to start loading." );
+#define IOS_NOTCONNECTING_TIMEOUT "10"
+#endif
+ConVar mp_wait_for_other_player_notconnecting_timeout( "mp_wait_for_other_player_notconnecting_timeout", IOS_NOTCONNECTING_TIMEOUT, FCVAR_CHEAT, "Maximum time that we wait in the transition loading screen after we fully loaded for partner to start loading." );
 ConVar mp_dev_wait_for_other_player( "mp_dev_wait_for_other_player", "1", FCVAR_CHEAT, "Force waiting for the other player." );
 
 extern ConVar sv_speed_normal;

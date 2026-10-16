@@ -152,6 +152,10 @@ void C_EnvProjectedTexture::OnDataChanged( DataUpdateType_t updateType )
 		Assert( m_SpotlightTexture.IsValid() == false );
 		m_SpotlightTexture.Init( m_SpotlightTextureName, TEXTURE_GROUP_OTHER, true );
 		m_ProjectedMaterial.Init( m_SpotlightTextureName, TEXTURE_GROUP_OTHER );
+#if defined( IOS ) && defined( PORTAL2 )
+		Msg( "[light] projected texture #%d \"%s\" on=%d simple=%d shadows=%d fov %.0f at %.0f %.0f %.0f\n", entindex(), m_SpotlightTextureName,
+			m_bState, m_bSimpleProjection, m_bEnableShadows, m_flLightFOV, XYZ( GetAbsOrigin() ) );
+#endif
 	}
 
 
@@ -431,6 +435,11 @@ void C_EnvProjectedTexture::UpdateLight( void )
 			{
 				m_LightHandle = g_pClientShadowMgr->CreateFlashlight( state );
 			}
+#if defined( IOS ) && defined( PORTAL2 )
+			static int s_nRefusedLogged = 0;
+			if ( m_LightHandle == CLIENTSHADOW_INVALID_HANDLE && s_nRefusedLogged++ < 10 )
+				Msg( "[light] projected texture #%d \"%s\": the shadow manager refused the light\n", entindex(), m_SpotlightTextureName );
+#endif
 
 			if ( m_LightHandle != CLIENTSHADOW_INVALID_HANDLE )
 			{

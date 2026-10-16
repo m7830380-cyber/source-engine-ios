@@ -20,6 +20,7 @@
 #include "datacache/iresourceaccesscontrol.h"
 #include "checksum_crc.h"
 #include "tier1/generichash.h"
+#include "tier1/utlstring.h"
 
 #if IsPlatformX360()
 #include "filesystem/IXboxInstaller.h"
@@ -230,6 +231,65 @@ bool CSoundEmitterSystemBase::LoadGameSoundManifest()
 #endif
 
 
+#if defined( IOS )
+	// P2ASW's manifest ships as game_sounds_manifest_p2asw.txt: under the usual
+	// name it would hide the DLC folders' manifests (P2ASW's content is mounted
+	// first), and with them the DLC sound scripts the co-op hub uses. Load
+	// P2ASW's list first (its sounds win, the first definition of a name is
+	// kept), then the stock manifest, skipping script files already loaded.
+	static const char *s_pszManifests[] = { "scripts/game_sounds_manifest_p2asw.txt", MANIFEST_FILE };
+	CUtlVector< CUtlString > loadedFiles;
+	bool bAnyManifest = false;
+	for ( int iManifest = 0; iManifest < (int)ARRAYSIZE( s_pszManifests ); ++iManifest )
+	{
+		const char *pszManifest = s_pszManifests[ iManifest ];
+		KeyValues *manifest = new KeyValues( pszManifest );
+		if ( !g_pFullFileSystem->LoadKeyValues( *manifest, IFileSystem::TYPE_SOUNDEMITTER, pszManifest, "GAME" ) )
+		{
+			manifest->deleteThis();
+			continue;
+		}
+		bAnyManifest = true;
+		AccumulateFileNameAndTimestampIntoChecksum( &crc, pszManifest );
+		int nFilesBefore = loadedFiles.Count();
+		int nSoundsBefore = m_Sounds.Count();
+
+		for ( KeyValues *sub = manifest->GetFirstSubKey(); sub != NULL; sub = sub->GetNextKey() )
+		{
+			bool bPreload = !Q_stricmp( sub->GetName(), "preload_file" );
+			bool bAutoCache = !Q_stricmp( sub->GetName(), "autocache_file" );
+			if ( !bPreload && !bAutoCache && Q_stricmp( sub->GetName(), "precache_file" ) )
+			{
+				if ( Q_stricmp( sub->GetName(), "new_sound_scripts_must_go_below_here" ) )
+					Warning( "CSoundEmitterSystemBase::BaseInit:  Manifest '%s' with bogus file type '%s', expecting 'declare_file' or 'precache_file'\n", pszManifest, sub->GetName() );
+				continue;
+			}
+
+			bool bLoaded = false;
+			FOR_EACH_VEC( loadedFiles, i )
+			{
+				if ( !Q_stricmp( loadedFiles[ i ].Get(), sub->GetString() ) )
+				{
+					bLoaded = true;
+					break;
+				}
+			}
+			if ( bLoaded )
+				continue;
+			loadedFiles.AddToTail( CUtlString( sub->GetString() ) );
+
+			AccumulateFileNameAndTimestampIntoChecksum( &crc, sub->GetString() );
+			AddSoundsFromFile( sub->GetString(), bPreload, bAutoCache );
+		}
+		manifest->deleteThis();
+
+		Msg( "[snd] %s: %d new script files, %d new sounds\n", pszManifest, loadedFiles.Count() - nFilesBefore, m_Sounds.Count() - nSoundsBefore );
+	}
+	if ( !bAnyManifest )
+	{
+		Error( "Unable to load manifest file '%s'\n", MANIFEST_FILE );
+	}
+#else
 	KeyValues *manifest = new KeyValues( MANIFEST_FILE );
 	if ( g_pFullFileSystem->LoadKeyValues( *manifest, IFileSystem::TYPE_SOUNDEMITTER, MANIFEST_FILE, "GAME" ) )
 	{
@@ -278,6 +338,7 @@ bool CSoundEmitterSystemBase::LoadGameSoundManifest()
 		}		
 	}
 	manifest->deleteThis();
+#endif
 
 	CRC32_Final( &crc );
 

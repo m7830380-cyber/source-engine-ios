@@ -141,7 +141,12 @@ void C_NPC_Personality_Core::OnDataChanged(DataUpdateType_t updateType)
 
 void C_NPC_Personality_Core::ClientThink()
 {
-	if (m_bFlashlightEnabled)
+	BaseClass::ClientThink();
+
+	// The light itself is the server's env_projectedtexture; this only adds
+	// the beam, once (it used to make a new effect every think and write
+	// through m_pELight, which is never allocated)
+	if (m_bFlashlightEnabled && !m_pFlashlightEffect)
 	{
 		QAngle angles;
 		Vector vecOrigin;
@@ -169,6 +174,8 @@ void C_NPC_Personality_Core::ClientThink()
 			m_pFlashlightEffect->SetControlPoint(2, tr.endpos);
 			m_pFlashlightEffect->SetControlPointForwardVector(1, vForward);
 			
+			if (m_pELight)
+			{
 			m_pELight->die = gpGlobals->curtime + 1e10;
 			m_pELight->flags = 1;
 			m_pELight->radius = 64.0f;
@@ -180,6 +187,7 @@ void C_NPC_Personality_Core::ClientThink()
 			m_pELight->color.exponent = 0;
 			m_pELight->origin = vForward * 2.0 + vecOrigin;
 			render->TouchLight(m_pELight);
+			}
 		}
 	}
 }

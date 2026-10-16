@@ -1268,9 +1268,10 @@ void InGameMainMenu::OnThink()
 	IMatchSession *pIMatchSession = g_pMatchFramework->GetMatchSession();
 	KeyValues *pGameSettings = pIMatchSession ? pIMatchSession->GetSessionSettings() : NULL;
 	
-	char const *szNetwork = pGameSettings->GetString( "system/network", "offline" );
-	char const *szGameMode = pGameSettings->GetString( "game/mode", "coop" );
-	char const *szGameState = pGameSettings->GetString( "game/state", "lobby" );
+	// No match session in a LAN/offline game: don't call into a NULL KeyValues
+	char const *szNetwork = pGameSettings ? pGameSettings->GetString( "system/network", "offline" ) : "offline";
+	char const *szGameMode = pGameSettings ? pGameSettings->GetString( "game/mode", "coop" ) : "coop";
+	char const *szGameState = pGameSettings ? pGameSettings->GetString( "game/state", "lobby" ) : "lobby";
 
 	bool bCanInvite = !Q_stricmp( "LIVE", szNetwork );
 	bool bInFinale = !Q_stricmp( "finale", szGameState );
@@ -1398,7 +1399,7 @@ void InGameMainMenu::PerformLayout( void )
 	IMatchSession *pIMatchSession = g_pMatchFramework->GetMatchSession();
 	KeyValues *pGameSettings = pIMatchSession ? pIMatchSession->GetSessionSettings() : NULL;
 
-	char const *szNetwork = pGameSettings->GetString( "system/network", "offline" );
+	char const *szNetwork = pGameSettings ? pGameSettings->GetString( "system/network", "offline" ) : "offline";
 
 	bool bPlayOffline = !Q_stricmp( "offline", szNetwork );
 

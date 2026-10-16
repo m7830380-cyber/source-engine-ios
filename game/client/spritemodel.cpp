@@ -247,6 +247,10 @@ bool CEngineSprite::Init( const char *pName )
 #if !defined( _GAMECONSOLE ) || defined( BINK_ENABLED_FOR_CONSOLE )
 	else if ( bIsBIK )
 	{
+		// No Bink service without BINK_VIDEO (iOS)
+		if ( !bik )
+			return false;
+
 		m_hBIKMaterial = bik->CreateMaterial( pName, pName, "GAME" );
 		if ( m_hBIKMaterial == BIKMATERIAL_INVALID )
 			return false;

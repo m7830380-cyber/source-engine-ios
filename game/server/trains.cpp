@@ -1879,6 +1879,12 @@ void CFuncTrackTrain::SoundUpdate( void )
 //-----------------------------------------------------------------------------
 void CFuncTrackTrain::ArriveAtNode( CPathTrack *pNode )
 {
+#if defined( IOS ) && defined( PORTAL2 )
+	// diagnostic: train orientation (moving panels in sp_a2_bts5 looked rotated)
+	Msg( "[train] %s at %s: origin %.0f %.0f %.0f, angles %.1f %.1f %.1f (node %.1f %.1f %.1f, orient %d/%d)\n",
+		GetDebugName(), pNode->GetDebugName(), XYZ( GetAbsOrigin() ), GetAbsAngles().x, GetAbsAngles().y, GetAbsAngles().z,
+		pNode->GetAbsAngles().x, pNode->GetAbsAngles().y, pNode->GetAbsAngles().z, (int)m_eOrientationType, (int)pNode->GetOrientationType() );
+#endif
 	// BUGBUG: This is wrong.  We need to fire all targets between the one we've passed and the one
 	// we've switched to.
 	FirePassInputs( pNode, pNode->GetNext(), true );

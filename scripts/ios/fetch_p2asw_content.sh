@@ -36,6 +36,11 @@ if grep -rq "vo_converted" "$SRC/scripts"; then
 	exit 1
 fi
 
+# Under its own name P2ASW's sound manifest would hide the DLC folders'
+# manifests (and the co-op hub's DLC sound scripts); the iOS sound emitter
+# loads it first under this name, then the stock manifest
+mv "$SRC/scripts/game_sounds_manifest.txt" "$SRC/scripts/game_sounds_manifest_p2asw.txt"
+
 rm -rf "$OUT"
 mkdir -p "$(dirname "$OUT")"
 mv "$SRC" "$OUT"

@@ -5539,7 +5539,7 @@ static void GetSpriteInfo( const char *pName, bool bIsAVI, bool bIsBIK, int &nWi
 		}
 	}
 #if !defined( _GAMECONSOLE ) || defined( BINK_ENABLED_FOR_CONSOLE )
-	else if ( bIsBIK )
+	else if ( bIsBIK && bik ) // no Bink service without BINK_VIDEO (iOS)
 	{
 		hBIKMaterial = bik->CreateMaterial( pName, pName, "GAME" );
 		if (hBIKMaterial != BIKMATERIAL_INVALID )

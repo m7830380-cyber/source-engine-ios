@@ -1789,21 +1789,23 @@ void CL_FullyConnected( void )
 		ConVarRef r_flashlightdepthtexture( "r_flashlightdepthtexture" );
 		if ( r_flashlightdepthtexture.IsValid() )
 			r_flashlightdepthtexture.SetValue( 0 );
-		// Log 128: flashlight_ps20b remapped to garbage static 2304 — disable path.
-		ConVarRef mat_supportflashlight( "mat_supportflashlight" );
-		if ( mat_supportflashlight.IsValid() )
-			mat_supportflashlight.SetValue( 0 );
-		ConVarRef r_flashlightrender( "r_flashlightrender" );
-		if ( r_flashlightrender.IsValid() )
-			r_flashlightrender.SetValue( 0 );
+		// Flashlights (env_projectedtexture spotlights, Wheatley's flashlight) stay
+		// on: the bundled .vcs set is compiled from the tree with its flashlight
+		// combos (flashlight_ps20b, lightmappedgeneric_flashlight_vs20, FLASHLIGHT=1
+		// vertexlit), which the old log 128 remap predates. Only their shadow
+		// depth textures stay off (above).
 		ConVarRef mat_postprocess_enable( "mat_postprocess_enable" );
 		if ( mat_postprocess_enable.IsValid() )
 			mat_postprocess_enable.SetValue( 0 );
 		UpdateMaterialSystemConfig();
 		EngineVGui()->HideGameUI();
-		Msg( "[Portal2 iOS] post-connect: fullbright=%d queue=%d flashlightDepth=%d post=%d hdrType=%d\n",
+		ConVarRef mat_supportflashlight( "mat_supportflashlight" );
+		ConVarRef r_flashlightrender( "r_flashlightrender" );
+		Msg( "[Portal2 iOS] post-connect: fullbright=%d queue=%d flashlight=%d/%d flashlightDepth=%d post=%d hdrType=%d\n",
 			mat_fullbright.IsValid() ? mat_fullbright.GetInt() : -1,
 			mat_queue_mode.IsValid() ? mat_queue_mode.GetInt() : -1,
+			mat_supportflashlight.IsValid() ? mat_supportflashlight.GetInt() : -1,
+			r_flashlightrender.IsValid() ? r_flashlightrender.GetInt() : -1,
 			r_flashlightdepthtexture.IsValid() ? r_flashlightdepthtexture.GetInt() : -1,
 			mat_postprocess_enable.IsValid() ? mat_postprocess_enable.GetInt() : -1,
 			g_pMaterialSystemHardwareConfig ? (int)g_pMaterialSystemHardwareConfig->GetHDRType() : -1 );

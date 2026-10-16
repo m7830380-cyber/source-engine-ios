@@ -1003,6 +1003,85 @@ static void IOS_FatalSignal( int sig )
 	raise( sig );
 }
 
+// One code address as "pc 0x... dylib symbol + off" (or "dylib + off" from the
+// image base when the symbol isn't exported). Return addresses carry pointer
+// authentication bits on arm64e; strip them first.
+static void IOS_LogCrashAddress( const char *tag, uintptr_t addr )
+{
+	addr &= 0x0000007FFFFFFFFFULL;
+	char line[320];
+	int len;
+	Dl_info dl;
+	if( addr && dladdr( (void *)addr, &dl ) && dl.dli_fname )
+	{
+		const char *image = strrchr( dl.dli_fname, '/' );
+		image = image ? image + 1 : dl.dli_fname;
+		if( dl.dli_sname )
+			len = snprintf( line, sizeof( line ), "[crash] %s 0x%lx %s %s + %ld\n", tag, (unsigned long)addr, image, dl.dli_sname, (long)( addr - (uintptr_t)dl.dli_saddr ) );
+		else
+			len = snprintf( line, sizeof( line ), "[crash] %s 0x%lx %s + 0x%lx\n", tag, (unsigned long)addr, image, (unsigned long)( addr - (uintptr_t)dl.dli_fbase ) );
+	}
+	else
+		len = snprintf( line, sizeof( line ), "[crash] %s 0x%lx\n", tag, (unsigned long)addr );
+	if( len > 0 )
+		write( STDOUT_FILENO, line, len < (int)sizeof( line ) ? len : (int)sizeof( line ) - 1 );
+}
+
+// Crashes: backtrace() from the handler shows nothing useful (it starts on the
+// alternate signal stack), so log the faulting thread's registers and walk its
+// frame records from the interrupted context, checked against the thread's stack.
+static void IOS_CrashSignal( int sig, siginfo_t *info, void *uc )
+{
+	char line[256];
+	pthread_t self = pthread_self();
+	uintptr_t stackHi = (uintptr_t)pthread_get_stackaddr_np( self );
+	uintptr_t stackLo = stackHi - pthread_get_stacksize_np( self );
+	char threadName[64] = "";
+	pthread_getname_np( self, threadName, sizeof( threadName ) );
+	int len = snprintf( line, sizeof( line ), "\n[crash] signal %d code %d fault address %p, %s thread '%s'\n",
+						sig, info ? info->si_code : 0, info ? info->si_addr : NULL,
+						pthread_main_np() ? "main" : "secondary", threadName );
+	write( STDOUT_FILENO, line, len );
+
+	if( uc )
+	{
+		ucontext_t *ctx = (ucontext_t *)uc;
+		uintptr_t pc = (uintptr_t)__darwin_arm_thread_state64_get_pc( ctx->uc_mcontext->__ss );
+		uintptr_t lr = (uintptr_t)__darwin_arm_thread_state64_get_lr( ctx->uc_mcontext->__ss );
+		uintptr_t sp = (uintptr_t)__darwin_arm_thread_state64_get_sp( ctx->uc_mcontext->__ss );
+		uintptr_t fp = (uintptr_t)__darwin_arm_thread_state64_get_fp( ctx->uc_mcontext->__ss );
+		len = snprintf( line, sizeof( line ), "[crash] sp 0x%lx fp 0x%lx, thread stack 0x%lx-0x%lx (%lu KB left)\n",
+						(unsigned long)sp, (unsigned long)fp, (unsigned long)stackLo, (unsigned long)stackHi,
+						(unsigned long)( sp > stackLo ? ( sp - stackLo ) >> 10 : 0 ) );
+		write( STDOUT_FILENO, line, len );
+		for( int i = 0; i < 29; i++ )
+		{
+			len = snprintf( line, sizeof( line ), "[crash] x%d 0x%llx\n", i, (unsigned long long)ctx->uc_mcontext->__ss.__x[i] );
+			write( STDOUT_FILENO, line, len );
+		}
+
+		IOS_LogCrashAddress( "pc", pc );
+		IOS_LogCrashAddress( "lr", lr );
+		for( int i = 0; i < 64; i++ )
+		{
+			if( fp < stackLo || fp + 16 > stackHi || ( fp & 7 ) )
+				break;
+			uintptr_t nextFp = ( (uintptr_t *)fp )[0];
+			uintptr_t ret = ( (uintptr_t *)fp )[1];
+			if( !ret )
+				break;
+			IOS_LogCrashAddress( "frame", ret );
+			if( nextFp <= fp )
+				break;
+			fp = nextFp;
+		}
+	}
+
+	fsync( STDOUT_FILENO );
+	signal( sig, SIG_DFL );
+	raise( sig );
+}
+
 void IOS_StartWatchdog( void )
 {
 	g_mainThread = pthread_self();
@@ -1030,8 +1109,8 @@ void IOS_StartWatchdog( void )
 	{
 		struct sigaction csa;
 		memset( &csa, 0, sizeof( csa ) );
-		csa.sa_handler = IOS_FatalSignal;
-		csa.sa_flags = SA_ONSTACK | SA_RESETHAND;
+		csa.sa_sigaction = IOS_CrashSignal;
+		csa.sa_flags = SA_ONSTACK | SA_RESETHAND | SA_SIGINFO;
 		sigemptyset( &csa.sa_mask );
 		sigaction( crashSignals[i], &csa, NULL );
 	}

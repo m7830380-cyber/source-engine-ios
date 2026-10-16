@@ -902,7 +902,9 @@ void CPortalStatsController::SetPlayersReady()
 
 void ChallengePlayersReady( void )
 {
-	g_pPlayerPortalStatsController->SetPlayersReady();
+	// No stats controller entity exists on most maps (e.g. co-op lobby)
+	if ( g_pPlayerPortalStatsController )
+		g_pPlayerPortalStatsController->SetPlayersReady();
 }
 
 void ShowPortalLeaderboard( float flTime )

@@ -1186,6 +1186,13 @@ inline void ComputePlanarDistances( GeneratePolyhedronFromPlanes_UnorderedPointL
 	} while( pPointWalk != NULL );
 }
 
+// Degenerate brushes (mp_coop_lobby_3 has at least one) can leave the linked geometry in a state
+// where one of the ring walks below never gets back to where it started, hanging the level load
+// in CStaticCollisionPolyhedronCache. Every loop spends from a budget far beyond what any real
+// convex needs, and the convex is given up on (NULL, like the other failure paths) when it runs out.
+#define POLYHEDRON_CLIP_WORK_LIMIT (1 << 23)
+#define POLYHEDRON_CLIP_WORK_EXHAUSTED( destructors ) ( --(destructors).iWorkLeft < 0 )
+
 class CClipLinkedGeometryDestructors
 {
 public:
@@ -1194,6 +1201,7 @@ public:
 	GeneratePolyhedronFromPlanes_UnorderedLineLL *&pAllLines;
 	GeneratePolyhedronFromPlanes_UnorderedPointLL *&pAllPoints;
 	GeneratePolyhedronFromPlanes_UnorderedPointLL *&pDeadPointCollection;	
+	int iWorkLeft; //loop iterations left before ClipLinkedGeometry gives up on this convex
 
 #ifdef ENABLE_DEBUG_POLYHEDRON_DUMPS
 	GeneratePolyhedronFromPlanes_UnorderedPolygonLL *&pDeadPolygonCollection;
@@ -1439,8 +1447,14 @@ void RemoveDegeneratePoints( GeneratePolyhedronFromPlanes_Polygon *pSearchPolygo
 	GeneratePolyhedronFromPlanes_LineLL *pWalkLine = pHeadLine;
 	do 
 	{
+		if( POLYHEDRON_CLIP_WORK_EXHAUSTED( destructors ) )
+			return;
+
 		while( true ) //inner loop to support retesting the same line over and over again( even if it's the head )
 		{
+			if( POLYHEDRON_CLIP_WORK_EXHAUSTED( destructors ) )
+				return;
+
 			GeneratePolyhedronFromPlanes_LineLL *pPointLineLink = &pWalkLine->pLine->PointLineLinks[1 - pWalkLine->iReferenceIndex];
 
 			Assert_DumpPolyhedron( (pPointLineLink->pLine->pPolygons[0]->pLines != pPointLineLink->pLine->pPolygons[0]->pLines->pNext) &&
@@ -2137,6 +2151,12 @@ void RecomputePolygonSurfaceNormal( GeneratePolyhedronFromPlanes_Polygon *pPolyg
 	pPolygon->vSurfaceNormal = vAggregateNormal;
 }
 
+static CPolyhedron *ClipWorkExhausted( int iPlaneCount, float fOnPlaneEpsilon )
+{
+	Warning( "ClipLinkedGeometry: gave up on a degenerate convex after %d steps (%d planes, epsilon %g)\n", POLYHEDRON_CLIP_WORK_LIMIT, iPlaneCount, fOnPlaneEpsilon );
+	return NULL;
+}
+
 CPolyhedron *ClipLinkedGeometry( GeneratePolyhedronFromPlanes_UnorderedPolygonLL *pAllPolygons, GeneratePolyhedronFromPlanes_UnorderedLineLL *pAllLines, GeneratePolyhedronFromPlanes_UnorderedPointLL *pAllPoints, int iPointCount, const fltx4 *pOutwardFacingPlanes, int iPlaneCount, float fOnPlaneEpsilon, bool bUseTemporaryMemory, fltx4 vShiftResultPositions )
 {
 	//const float fNegativeOnPlaneEpsilon = -fOnPlaneEpsilon;
@@ -2175,6 +2195,7 @@ CPolyhedron *ClipLinkedGeometry( GeneratePolyhedronFromPlanes_UnorderedPolygonLL
 #else
 	CClipLinkedGeometryDestructors destructors( iPointCount, pAllPolygons, polygonAllocator, pAllLines, lineAllocator, pAllPoints, pDeadPointCollection );
 #endif
+	destructors.iWorkLeft = POLYHEDRON_CLIP_WORK_LIMIT;
 
 	DBG_ONLY( destructors.DebugCutHistory.AddToTail( ConvertLinkedGeometryToPolyhedron( pAllPolygons, pAllLines, pAllPoints, false, vShiftResultPositions ) ) );
 	DBG_ONLY( destructors.DebugCutPlaneIndex.AddToTail( -1 ) );
@@ -2193,6 +2214,7 @@ CPolyhedron *ClipLinkedGeometry( GeneratePolyhedronFromPlanes_UnorderedPolygonLL
 			GeneratePolyhedronFromPlanes_UnorderedPolygonLL *pActivePolygonWalk = pAllPolygons;
 			do
 			{
+				if( POLYHEDRON_CLIP_WORK_EXHAUSTED( destructors ) ) return ClipWorkExhausted( iPlaneCount, fOnPlaneEpsilon );
 				pActivePolygonWalk->polygon.bDead = false;
 				pActivePolygonWalk->polygon.bHasNewPoints = false;
 				pActivePolygonWalk->polygon.bMovedExistingPoints = false;
@@ -2204,6 +2226,7 @@ CPolyhedron *ClipLinkedGeometry( GeneratePolyhedronFromPlanes_UnorderedPolygonLL
 			GeneratePolyhedronFromPlanes_UnorderedLineLL *pActiveLineWalk = pAllLines;
 			do
 			{
+				if( POLYHEDRON_CLIP_WORK_EXHAUSTED( destructors ) ) return ClipWorkExhausted( iPlaneCount, fOnPlaneEpsilon );
 				pActiveLineWalk->line.planarity = LINE_ALIVE;
 				pActiveLineWalk->line.bNewLengthThisPass = false;
 				DBG_ONLY( pActiveLineWalk->line.debugdata.Reset(); );
@@ -2214,6 +2237,7 @@ CPolyhedron *ClipLinkedGeometry( GeneratePolyhedronFromPlanes_UnorderedPolygonLL
 			GeneratePolyhedronFromPlanes_UnorderedPointLL *pActivePointWalk = pAllPoints;
 			do
 			{
+				if( POLYHEDRON_CLIP_WORK_EXHAUSTED( destructors ) ) return ClipWorkExhausted( iPlaneCount, fOnPlaneEpsilon );
 				pActivePointWalk->point.planarity = POINT_ALIVE;
 				DBG_ONLY( pActivePointWalk->point.debugdata.Reset(); );
 
@@ -2223,6 +2247,7 @@ CPolyhedron *ClipLinkedGeometry( GeneratePolyhedronFromPlanes_UnorderedPolygonLL
 		
 		while( pDeadPointCollection != NULL )
 		{
+			if( POLYHEDRON_CLIP_WORK_EXHAUSTED( destructors ) ) return ClipWorkExhausted( iPlaneCount, fOnPlaneEpsilon );
 			GeneratePolyhedronFromPlanes_UnorderedPointLL *pFree = pDeadPointCollection;
 			pDeadPointCollection = pDeadPointCollection->pNext;
 			pointAllocator.Free( pFree );
@@ -2231,6 +2256,7 @@ CPolyhedron *ClipLinkedGeometry( GeneratePolyhedronFromPlanes_UnorderedPolygonLL
 #ifdef ENABLE_DEBUG_POLYHEDRON_DUMPS
 		while( pDeadLineCollection != NULL )
 		{
+			if( POLYHEDRON_CLIP_WORK_EXHAUSTED( destructors ) ) return ClipWorkExhausted( iPlaneCount, fOnPlaneEpsilon );
 			GeneratePolyhedronFromPlanes_UnorderedLineLL *pFree = pDeadLineCollection;
 			pDeadLineCollection = pDeadLineCollection->pNext;
 			lineAllocator.Free( pFree );
@@ -2238,6 +2264,7 @@ CPolyhedron *ClipLinkedGeometry( GeneratePolyhedronFromPlanes_UnorderedPolygonLL
 
 		while( pDeadPolygonCollection != NULL )
 		{
+			if( POLYHEDRON_CLIP_WORK_EXHAUSTED( destructors ) ) return ClipWorkExhausted( iPlaneCount, fOnPlaneEpsilon );
 			GeneratePolyhedronFromPlanes_UnorderedPolygonLL *pFree = pDeadPolygonCollection;
 			pDeadPolygonCollection = pDeadPolygonCollection->pNext;
 			polygonAllocator.Free( pFree );
@@ -2260,6 +2287,7 @@ CPolyhedron *ClipLinkedGeometry( GeneratePolyhedronFromPlanes_UnorderedPolygonLL
 			GeneratePolyhedronFromPlanes_UnorderedPointLL *pActivePointWalk = pAllPoints->pNext;
 			do
 			{
+				if( POLYHEDRON_CLIP_WORK_EXHAUSTED( destructors ) ) return ClipWorkExhausted( iPlaneCount, fOnPlaneEpsilon );
 				if( pActivePointWalk->point.fPlaneDist > fMostDeadPointDist )
 				{
 					pMostDeadPoint = &pActivePointWalk->point;
@@ -2294,6 +2322,7 @@ CPolyhedron *ClipLinkedGeometry( GeneratePolyhedronFromPlanes_UnorderedPolygonLL
 				GeneratePolyhedronFromPlanes_UnorderedPointLL *pPointWalk = pAllPoints;
 				while( pPointWalk )
 				{
+					if( POLYHEDRON_CLIP_WORK_EXHAUSTED( destructors ) ) return ClipWorkExhausted( iPlaneCount, fOnPlaneEpsilon );
 					if( pPointWalk->point.planarity == POINT_ALIVE )
 					{
 						control.bAllPointsDead = false;
@@ -2309,6 +2338,7 @@ CPolyhedron *ClipLinkedGeometry( GeneratePolyhedronFromPlanes_UnorderedPolygonLL
 				GeneratePolyhedronFromPlanes_UnorderedPointLL *pActivePointWalk = pAllPoints->pNext;
 				do
 				{
+					if( POLYHEDRON_CLIP_WORK_EXHAUSTED( destructors ) ) return ClipWorkExhausted( iPlaneCount, fOnPlaneEpsilon );
 					Assert( pActivePointWalk->point.planarity != POINT_ALIVE );
 
 					pActivePointWalk = pActivePointWalk->pNext;
@@ -2330,6 +2360,7 @@ CPolyhedron *ClipLinkedGeometry( GeneratePolyhedronFromPlanes_UnorderedPolygonLL
 
 				while( pPolygonWalk )
 				{
+					if( POLYHEDRON_CLIP_WORK_EXHAUSTED( destructors ) ) return ClipWorkExhausted( iPlaneCount, fOnPlaneEpsilon );
 					if( &pPolygonWalk->polygon != control.pNewPolygon )
 					{
 						bool bDead = true;
@@ -2337,6 +2368,7 @@ CPolyhedron *ClipLinkedGeometry( GeneratePolyhedronFromPlanes_UnorderedPolygonLL
 						GeneratePolyhedronFromPlanes_LineLL *pWalkLine = pStartLine;
 						do 
 						{
+							if( POLYHEDRON_CLIP_WORK_EXHAUSTED( destructors ) ) return ClipWorkExhausted( iPlaneCount, fOnPlaneEpsilon );
 							Assert( pWalkLine->pLine->pPolygons[pWalkLine->iReferenceIndex] == &pPolygonWalk->polygon );
 							if( pWalkLine->pLine->planarity & LINE_ALIVE )
 							{
@@ -2449,6 +2481,7 @@ CPolyhedron *ClipLinkedGeometry( GeneratePolyhedronFromPlanes_UnorderedPolygonLL
 				GeneratePolyhedronFromPlanes_UnorderedLineLL *pLineWalk = pAllLines;
 				do 
 				{
+					if( POLYHEDRON_CLIP_WORK_EXHAUSTED( destructors ) ) return ClipWorkExhausted( iPlaneCount, fOnPlaneEpsilon );
 					Assert( pLineWalk->line.pPoints[0] != NULL && pLineWalk->line.pPoints[1] != NULL );
 					pLineWalk = pLineWalk->pNext;
 				} while (pLineWalk);
@@ -2466,6 +2499,7 @@ CPolyhedron *ClipLinkedGeometry( GeneratePolyhedronFromPlanes_UnorderedPolygonLL
 			GeneratePolyhedronFromPlanes_UnorderedLineLL *pActiveLineWalk = pAllLines;
 			do
 			{
+				if( POLYHEDRON_CLIP_WORK_EXHAUSTED( destructors ) ) return ClipWorkExhausted( iPlaneCount, fOnPlaneEpsilon );
 				if( pActiveLineWalk->line.planarity == LINE_DEAD )
 				{
 					UnlinkLine( pActiveLineWalk );
@@ -2485,6 +2519,7 @@ CPolyhedron *ClipLinkedGeometry( GeneratePolyhedronFromPlanes_UnorderedPolygonLL
 			GeneratePolyhedronFromPlanes_UnorderedPolygonLL *pActivePolygonWalk = pAllPolygons;
 			do
 			{
+				if( POLYHEDRON_CLIP_WORK_EXHAUSTED( destructors ) ) return ClipWorkExhausted( iPlaneCount, fOnPlaneEpsilon );
 				if( pActivePolygonWalk->polygon.bDead )
 				{
 					pActivePolygonWalk = DestructPolygon( pActivePolygonWalk, destructors );
@@ -2501,6 +2536,7 @@ CPolyhedron *ClipLinkedGeometry( GeneratePolyhedronFromPlanes_UnorderedPolygonLL
 			GeneratePolyhedronFromPlanes_UnorderedPointLL *pActivePointWalk = pAllPoints;
 			do
 			{
+				if( POLYHEDRON_CLIP_WORK_EXHAUSTED( destructors ) ) return ClipWorkExhausted( iPlaneCount, fOnPlaneEpsilon );
 				if( pActivePointWalk->point.planarity == POINT_DEAD )
 				{
 					pActivePointWalk = DestructPoint( pActivePointWalk, destructors );
@@ -2552,6 +2588,7 @@ CPolyhedron *ClipLinkedGeometry( GeneratePolyhedronFromPlanes_UnorderedPolygonLL
 			GeneratePolyhedronFromPlanes_UnorderedLineLL *pActiveLineWalk = pAllLines;
 			do
 			{
+				if( POLYHEDRON_CLIP_WORK_EXHAUSTED( destructors ) ) return ClipWorkExhausted( iPlaneCount, fOnPlaneEpsilon );
 				if( pActiveLineWalk->line.bNewLengthThisPass )
 				{
 					fltx4 vDiff = SubSIMD( pActiveLineWalk->line.pPoints[0]->ptPosition, pActiveLineWalk->line.pPoints[1]->ptPosition );
@@ -2576,6 +2613,7 @@ CPolyhedron *ClipLinkedGeometry( GeneratePolyhedronFromPlanes_UnorderedPolygonLL
 								GeneratePolyhedronFromPlanes_LineLL *pPointLineWalk = pPointLineWalkHead;
 								do
 								{
+									if( POLYHEDRON_CLIP_WORK_EXHAUSTED( destructors ) ) return ClipWorkExhausted( iPlaneCount, fOnPlaneEpsilon );
 									pPointLineWalk->pLine->pPoints[1- pPointLineWalk->iReferenceIndex] = pKeepPoint;
 									pPointLineWalk->pLine->pPolygons[pPointLineWalk->iReferenceIndex]->bMovedExistingPoints = true;//also inform touching polygons that we're changing their geometry
 									pPointLineWalk = pPointLineWalk->pNext;
@@ -2682,6 +2720,7 @@ CPolyhedron *ClipLinkedGeometry( GeneratePolyhedronFromPlanes_UnorderedPolygonLL
 				//for 3D polyhedrons, remove degenerate points and recompute normals
 				do
 				{
+					if( POLYHEDRON_CLIP_WORK_EXHAUSTED( destructors ) ) return ClipWorkExhausted( iPlaneCount, fOnPlaneEpsilon );
 					if( pActivePolygonWalk->polygon.bMovedExistingPoints || pActivePolygonWalk->polygon.bHasNewPoints )
 					{
 						RemoveDegeneratePoints( &pActivePolygonWalk->polygon, destructors );
@@ -2695,6 +2734,7 @@ CPolyhedron *ClipLinkedGeometry( GeneratePolyhedronFromPlanes_UnorderedPolygonLL
 				//for 2D polyhedrons, only recompute normals. RemoveDegeneratePoints() is not safe for 2D polyhedrons as it assumes the shape is 3 dimensional to avoid angle computations and checks
 				do
 				{
+					if( POLYHEDRON_CLIP_WORK_EXHAUSTED( destructors ) ) return ClipWorkExhausted( iPlaneCount, fOnPlaneEpsilon );
 					if( pActivePolygonWalk->polygon.bMovedExistingPoints || pActivePolygonWalk->polygon.bHasNewPoints )
 					{
 						RecomputePolygonSurfaceNormal( &pActivePolygonWalk->polygon );
@@ -2730,6 +2770,7 @@ CPolyhedron *ClipLinkedGeometry( GeneratePolyhedronFromPlanes_UnorderedPolygonLL
 			GeneratePolyhedronFromPlanes_UnorderedPolygonLL *pActivePolygonWalk = pAllPolygons;
 			do
 			{
+				if( POLYHEDRON_CLIP_WORK_EXHAUSTED( destructors ) ) return ClipWorkExhausted( iPlaneCount, fOnPlaneEpsilon );
 				if( pActivePolygonWalk->polygon.bHasNewPoints )
 				{
 					Vector vTestNormal = pActivePolygonWalk->polygon.vSurfaceNormal;
@@ -2742,6 +2783,7 @@ CPolyhedron *ClipLinkedGeometry( GeneratePolyhedronFromPlanes_UnorderedPolygonLL
 					vLastLine.Init( SubFloat( vLineTemp, 0 ), SubFloat( vLineTemp, 1 ), SubFloat( vLineTemp, 2 ) );
 					do 
 					{
+						if( POLYHEDRON_CLIP_WORK_EXHAUSTED( destructors ) ) return ClipWorkExhausted( iPlaneCount, fOnPlaneEpsilon );
 						vLineTemp = SubSIMD( pLineWalk->pLine->pPoints[pLineWalk->iReferenceIndex]->ptPosition, pLineWalk->pLine->pPoints[1 - pLineWalk->iReferenceIndex]->ptPosition );
 						Vector vThisLine( SubFloat( vLineTemp, 0 ), SubFloat( vLineTemp, 1 ), SubFloat( vLineTemp, 2 ) );
 						Vector vCross = vThisLine.Cross( vLastLine );
@@ -2766,6 +2808,7 @@ CPolyhedron *ClipLinkedGeometry( GeneratePolyhedronFromPlanes_UnorderedPolygonLL
 								GeneratePolyhedronFromPlanes_LineLL *pDebugLineWalk = pDebugLineWalkHead;
 								do
 								{
+									if( POLYHEDRON_CLIP_WORK_EXHAUSTED( destructors ) ) return ClipWorkExhausted( iPlaneCount, fOnPlaneEpsilon );
 									Assert( (pDebugLineWalk->pLine->pPolygons[0] == &pActivePolygonWalk->polygon) || 
 											(pDebugLineWalk->pLine->pPolygons[1] == &pActivePolygonWalk->polygon) || 
 											(pDebugLineWalk->pLine->pPolygons[0]->vSurfaceNormal.Dot( pDebugLineWalk->pLine->pPolygons[1]->vSurfaceNormal ) > 0.95f) );
@@ -2813,6 +2856,7 @@ CPolyhedron *ClipLinkedGeometry( GeneratePolyhedronFromPlanes_UnorderedPolygonLL
 							
 							do
 							{
+								if( POLYHEDRON_CLIP_WORK_EXHAUSTED( destructors ) ) return ClipWorkExhausted( iPlaneCount, fOnPlaneEpsilon );
 								if( pPatchWalk->pLine->pPoints[pPatchWalk->iReferenceIndex] == pProblemPoint )
 								{
 									//done walking this polygon, stitch it to the next
@@ -2888,6 +2932,7 @@ CPolyhedron *ClipLinkedGeometry( GeneratePolyhedronFromPlanes_UnorderedPolygonLL
 			GeneratePolyhedronFromPlanes_UnorderedPolygonLL *pDebugPolygonWalk = pAllPolygons;
 			do
 			{
+				if( POLYHEDRON_CLIP_WORK_EXHAUSTED( destructors ) ) return ClipWorkExhausted( iPlaneCount, fOnPlaneEpsilon );
 				GeneratePolyhedronFromPlanes_LineLL *pLineStart = pDebugPolygonWalk->polygon.pLines;
 				GeneratePolyhedronFromPlanes_LineLL *pLineWalk = pLineStart;
 				GeneratePolyhedronFromPlanes_Point *pCheckPoint = pLineWalk->pLine->pPoints[1 - pLineWalk->iReferenceIndex];
@@ -2896,6 +2941,7 @@ CPolyhedron *ClipLinkedGeometry( GeneratePolyhedronFromPlanes_UnorderedPolygonLL
 				//walk around the polygon according to its line links
 				do
 				{
+					if( POLYHEDRON_CLIP_WORK_EXHAUSTED( destructors ) ) return ClipWorkExhausted( iPlaneCount, fOnPlaneEpsilon );
 					Assert_DumpPolyhedron( pLineWalk->pLine->planarity != LINE_DEAD );
 					Assert_DumpPolyhedron( (pLineWalk->pLine->pPoints[0]->planarity != POINT_DEAD) && (pLineWalk->pLine->pPoints[1]->planarity != POINT_DEAD) );
 					AssertMsg_DumpPolyhedron( pLineWalk->pLine->pPoints[1 - pLineWalk->iReferenceIndex] == pCheckPoint, "Line endpoint mismatch" ); //last line's endpoint does not match up with this lines start point
@@ -2934,6 +2980,7 @@ CPolyhedron *ClipLinkedGeometry( GeneratePolyhedronFromPlanes_UnorderedPolygonLL
 				//walk around the polygon again using point traversal
 				do
 				{
+					if( POLYHEDRON_CLIP_WORK_EXHAUSTED( destructors ) ) return ClipWorkExhausted( iPlaneCount, fOnPlaneEpsilon );
 					AssertMsg_DumpPolyhedron( pLineWalk->pLine->pPolygons[pLineWalk->iReferenceIndex] == &pDebugPolygonWalk->polygon, "bad line/polygon linkage" );
 
 #if 0
@@ -2944,6 +2991,7 @@ CPolyhedron *ClipLinkedGeometry( GeneratePolyhedronFromPlanes_UnorderedPolygonLL
 						pConcavityWalk = pConcavityWalk->pNext;
 						while ( pConcavityWalk != pConcavityWalkStop )
 						{
+							if( POLYHEDRON_CLIP_WORK_EXHAUSTED( destructors ) ) return ClipWorkExhausted( iPlaneCount, fOnPlaneEpsilon );
 							fltx4 vLine = SubSIMD( pConcavityWalk->pLine->pPoints[pConcavityWalk->iReferenceIndex]->ptPosition, pConcavityWalk->pLine->pPoints[1 - pConcavityWalk->iReferenceIndex]->ptPosition );
 							fltx4 vMul = MulSIMD( vSurfaceNormal, vLine );
 							float fDot = SubFloat( vMul, 0 ) + SubFloat( vMul, 1 ) + SubFloat( vMul, 2 );
@@ -2965,6 +3013,7 @@ CPolyhedron *ClipLinkedGeometry( GeneratePolyhedronFromPlanes_UnorderedPolygonLL
 			GeneratePolyhedronFromPlanes_UnorderedPointLL *pDebugPointWalk = pAllPoints;
 			do
 			{
+				if( POLYHEDRON_CLIP_WORK_EXHAUSTED( destructors ) ) return ClipWorkExhausted( iPlaneCount, fOnPlaneEpsilon );
 				int iCount = 0;
 				AssertMsg_DumpPolyhedron( pDebugPointWalk->point.pConnectedLines, "Point connected to no lines after cut" );
 				GeneratePolyhedronFromPlanes_LineLL *pLineStart = pDebugPointWalk->point.pConnectedLines;
@@ -2972,6 +3021,7 @@ CPolyhedron *ClipLinkedGeometry( GeneratePolyhedronFromPlanes_UnorderedPolygonLL
 				GeneratePolyhedronFromPlanes_Point *pTestPoint = &pDebugPointWalk->point;
 				do
 				{
+					if( POLYHEDRON_CLIP_WORK_EXHAUSTED( destructors ) ) return ClipWorkExhausted( iPlaneCount, fOnPlaneEpsilon );
 					fltx4 f4Diff = SubSIMD( pTestPoint->ptPosition, pLineWalk->pLine->pPoints[pLineWalk->iReferenceIndex]->ptPosition );
 					Vector vDiff( SubFloat( f4Diff, 0 ), SubFloat( f4Diff, 1 ), SubFloat( f4Diff, 2 ) );
 					float fLengthSqr = vDiff.LengthSqr();
@@ -2981,6 +3031,7 @@ CPolyhedron *ClipLinkedGeometry( GeneratePolyhedronFromPlanes_UnorderedPolygonLL
 					GeneratePolyhedronFromPlanes_LineLL *pSubLineWalk = pLineWalk->pNext;
 					while( pSubLineWalk != pLineStart )
 					{
+						if( POLYHEDRON_CLIP_WORK_EXHAUSTED( destructors ) ) return ClipWorkExhausted( iPlaneCount, fOnPlaneEpsilon );
 						AssertMsg_DumpPolyhedron( (pLineWalk->pLine->pPolygons[pLineWalk->iReferenceIndex] != pSubLineWalk->pLine->pPolygons[pSubLineWalk->iReferenceIndex]) &&
 													(pLineWalk->pLine->pPolygons[1 - pLineWalk->iReferenceIndex] != pSubLineWalk->pLine->pPolygons[1 - pSubLineWalk->iReferenceIndex]), "Point connected to two other points on the same polygon" );
 
@@ -3000,6 +3051,7 @@ CPolyhedron *ClipLinkedGeometry( GeneratePolyhedronFromPlanes_UnorderedPolygonLL
 			GeneratePolyhedronFromPlanes_UnorderedLineLL *pDebugLineWalk = pAllLines;
 			do
 			{
+				if( POLYHEDRON_CLIP_WORK_EXHAUSTED( destructors ) ) return ClipWorkExhausted( iPlaneCount, fOnPlaneEpsilon );
 				AssertMsg_DumpPolyhedron( (pDebugLineWalk->line.pPolygons[0] != NULL) && (pDebugLineWalk->line.pPolygons[1] != NULL), "There's a polygon missing" );
 				AssertMsg_DumpPolyhedron( pDebugLineWalk->line.pPoints[0] && pDebugLineWalk->line.pPoints[1], "Line missing a point" );
 

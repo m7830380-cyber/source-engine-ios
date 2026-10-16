@@ -97,10 +97,10 @@ static bool BrushPolyhedronIsClosed( const CPolyhedron *pPolyhedron )
 
 // Builds a brush polyhedron, retrying with other on-plane epsilons when the result isn't closed
 // (sp_a1_intro3 had a wall brush come out as 8 points / 11 lines / 6 polygons, and portals placed
-// on it lost that wall's collision). 1/16 is what Portal 2's own cache uses.
+// on it lost that wall's collision). 1/16 is what Portal 2's own cache uses, so it goes first.
 static CPolyhedron *GenerateClosedBrushPolyhedron( int iBrush, int iContents, const BrushSideInfo_t *pSides, const float *pPlanes, int iPlaneCount, int &iBrokenBrushes )
 {
-	static const float s_fEpsilons[] = { 0.01f, 1.0f / 16.0f, 0.1f, 0.001f };
+	static const float s_fEpsilons[] = { 1.0f / 16.0f, 0.01f, 0.1f, 0.001f };
 	static int s_iLoggedBrushes = 0;
 	bool bLog = false;
 
@@ -249,8 +249,11 @@ void CStaticCollisionPolyhedronCache::Update( void )
 	++workSpacesAllocated;
 	
 
+	const double flUpdateStart = Plat_FloatTime();
+
 	//brushes
 	int iBrokenBrushes = 0;
+	int iNonSolidBrushes = 0;
 	{
 		int iBrush = 0;
 		float fStackPlanes[4 * 400]; //400 is a crapload of planes in my opinion
@@ -270,12 +273,23 @@ void CStaticCollisionPolyhedronCache::Update( void )
 				continue;
 			}
 
+			// Portal 2's cache only converts brushes that block players (ConvertBrushToPolyhedron's
+			// MASK_SOLID | CONTENTS_PLAYERCLIP | CONTENTS_MONSTERCLIP); water, windows and the like stay NULL
+			if( (brushContents & (MASK_SOLID | CONTENTS_PLAYERCLIP | CONTENTS_MONSTERCLIP)) == 0 )
+			{
+				m_BrushPolyhedrons.AddToTail( NULL );
+				++iNonSolidBrushes;
+				++iBrush;
+				continue;
+			}
+
 			const int iPlaneCount = iSideCount;
 			AssertMsg( iPlaneCount != 0, "A brush with no planes???????" );
 
 			const BrushSideInfo_t *pReturnedPlanes = sides;
 
 			CPolyhedron *pTempPolyhedron;
+			const double flBrushStart = Plat_FloatTime();
 
 			if( iPlaneCount > 400 )
 			{
@@ -305,6 +319,13 @@ void CStaticCollisionPolyhedronCache::Update( void )
 				}
 
 				pTempPolyhedron = GenerateClosedBrushPolyhedron( iBrush, brushContents, pReturnedPlanes, fStackPlanes, iPlaneCount, iBrokenBrushes );
+			}
+
+			const double flBrushTime = Plat_FloatTime() - flBrushStart;
+			if( flBrushTime > 0.1 )
+			{
+				Warning( "CStaticCollisionPolyhedronCache: brush %d (contents 0x%x, %d sides) took %.2fs%s\n",
+					iBrush, brushContents, iPlaneCount, flBrushTime, pTempPolyhedron ? "" : ", no polyhedron" );
 			}
 
 			if( pTempPolyhedron )
@@ -602,8 +623,8 @@ void CStaticCollisionPolyhedronCache::Update( void )
 		delete []workSpaceAllocations[i];
 	}
 
-	Msg( "CStaticCollisionPolyhedronCache: Update done (%d brushes, %d not closed, %d static-prop polyhedrons)\n",
-		m_BrushPolyhedrons.Count(), iBrokenBrushes, m_StaticPropPolyhedrons.Count() );
+	Msg( "CStaticCollisionPolyhedronCache: Update done in %.2fs (%d brushes, %d non-solid, %d not closed, %d static-prop polyhedrons)\n",
+		Plat_FloatTime() - flUpdateStart, m_BrushPolyhedrons.Count(), iNonSolidBrushes, iBrokenBrushes, m_StaticPropPolyhedrons.Count() );
 }
 
 

@@ -284,6 +284,13 @@ bool VideoPanel::BeginPlayback( const char *pFilename )
 
 #if !defined( _GAMECONSOLE ) || defined( BINK_ENABLED_FOR_CONSOLE )
 
+	// No Bink video service on this platform (bik/g_pBIK stay NULL without BINK_VIDEO)
+	if ( !bik || !g_pBIK )
+	{
+		Msg( "[video] no Bink video service, skipping \"%s\"\n", pFilename );
+		return false;
+	}
+
 	// Destroy any previously allocated video
 	if ( m_BIKHandle != BIKHANDLE_INVALID )
 	{
@@ -876,6 +883,13 @@ bool VideoPanel_Create( unsigned int nXPos, unsigned int nYPos,
 	if ( pVideoPanel->BeginPlayback( pVideoFilename ) == false )
 	{
 		delete pVideoPanel;
+#if defined( IOS )
+		// The video can't play, but whatever was waiting on it must still run
+		if ( pExitCommand && pExitCommand[0] )
+		{
+			engine->ClientCmd( pExitCommand );
+		}
+#endif
 		return false;
 	}
 

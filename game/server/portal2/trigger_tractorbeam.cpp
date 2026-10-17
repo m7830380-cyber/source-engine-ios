@@ -4,7 +4,6 @@
 #include "npc_portal_turret_floor.h"
 #include "particle_parse.h"
 #include "prop_tractorbeam.h"
-#include "touchlink.h"
 
 BEGIN_DATADESC( CProjectedTractorBeamEntity )
 
@@ -234,23 +233,25 @@ void CTrigger_TractorBeam::OnRestore( void )
 
 void CTrigger_TractorBeam::UpdateOnRemove( void )
 {
-	// When we're removed (funnel disabled with the player inside, sp_a4_finale1),
-	// PhysicsRemoveTouchedList only tells the other side, so our EndTouch never runs
-	// and players keep the beam's FLT_MIN gravity. End their touch ourselves.
-	touchlink_t *root = ( touchlink_t * )GetDataObject( TOUCHLINK );
-	if ( root )
+	// When we're removed (funnel disabled with the player inside, sp_a4_finale1) the
+	// physics trigger is destroyed without a leave event, so EndTouch never runs and
+	// players keep the beam's FLT_MIN gravity. Leave the beam for them, as the client does.
+	for ( int i = 1; i <= gpGlobals->maxClients; ++i )
 	{
-		for ( touchlink_t *link = root->nextLink; link && link != root; link = link->nextLink )
-		{
-			CBaseEntity *pTouched = link->entityTouched;
-			if ( ( link->flags & FTOUCHLINK_START_TOUCH ) && pTouched && pTouched->IsPlayer() )
-			{
+		CPortal_Player *pPlayer = ToPortalPlayer( UTIL_PlayerByIndex( i ) );
+		if ( !pPlayer || pPlayer->GetTractorBeam() != this )
+			continue;
+
 #if defined( IOS )
-				Msg( "[tbeam] beam removed with player inside, ending touch, t=%.2f\n", gpGlobals->curtime );
+		Msg( "[tbeam] beam removed with player inside (count %d), leaving it, t=%.2f\n",
+			(int)pPlayer->GetPortalPlayerLocalData().m_nTractorBeamCount, gpGlobals->curtime );
 #endif
-				EndTouch( pTouched );
-			}
+		// Any count still left with no other beam found belongs to us too.
+		do
+		{
+			pPlayer->SetLeaveTractorBeam( this, false );
 		}
+		while ( pPlayer->GetPortalPlayerLocalData().m_nTractorBeamCount > 0 && !pPlayer->GetTractorBeam() );
 	}
 
 	if ( m_pController )
@@ -314,8 +315,9 @@ void CTrigger_TractorBeam::StartTouch( CBaseEntity *pOther )
 	{
 		pPlayer->SetInTractorBeam( this );
 #if defined( IOS )
-		Msg( "[tbeam] player enters beam %.0f %.0f %.0f -> %.0f %.0f %.0f at %.0f %.0f %.0f, t=%.2f\n",
-			XYZ( GetStartPoint() ), XYZ( GetEndPoint() ), XYZ( pPlayer->GetAbsOrigin() ), gpGlobals->curtime );
+		Msg( "[tbeam] player enters beam %.0f %.0f %.0f -> %.0f %.0f %.0f at %.0f %.0f %.0f (count now %d), t=%.2f\n",
+			XYZ( GetStartPoint() ), XYZ( GetEndPoint() ), XYZ( pPlayer->GetAbsOrigin() ),
+			(int)pPlayer->GetPortalPlayerLocalData().m_nTractorBeamCount, gpGlobals->curtime );
 #endif
 		
 		CSoundEnvelopeController &controller = CSoundEnvelopeController::GetController();

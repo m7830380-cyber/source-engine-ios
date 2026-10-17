@@ -94,6 +94,10 @@ void CTrigger_TractorBeam::EndTouch( CBaseEntity *pOther )
 			}
 
 			pPlayer->SetLeaveTractorBeam( this, bTravelingToLinkedTBeam );
+#if defined( GAME_DLL ) && defined( IOS )
+			Msg( "[tbeam] player leaves beam (count now %d) at %.0f %.0f %.0f, t=%.2f\n",
+				(int)pPlayer->GetPortalPlayerLocalData().m_nTractorBeamCount, XYZ( pPlayer->GetAbsOrigin() ), gpGlobals->curtime );
+#endif
 		}
 
 #ifdef GAME_DLL

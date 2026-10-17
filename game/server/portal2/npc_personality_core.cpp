@@ -234,6 +234,10 @@ void CNPC_PersonalityCore::InputEnableMotion(inputdata_t& inputdata)
 {
 	EnableMotion();
 	CreateVPhysics();
+#if defined( IOS )
+	Msg("[core] %s EnableMotion at %.0f %.0f %.0f, parent '%s'\n",
+		GetDebugName(), XYZ(GetAbsOrigin()), GetMoveParent() ? GetMoveParent()->GetDebugName() : "");
+#endif
 }
 
 void CNPC_PersonalityCore::InputDisableMotion(inputdata_t& inputdata)
@@ -332,6 +336,22 @@ void CNPC_PersonalityCore::InputClearParent(inputdata_t& inputdata)
 {
 	BaseClass::InputClearParent(inputdata);
 	RemoveSolidFlags(FSOLID_NOT_SOLID);
+
+	// The physics object simulates on its own while we're parented (VPhysicsUpdate
+	// ignores it), so it can be far from where we are. Snap it back here, or the
+	// next VPhysicsUpdate drags the core to that stale spot.
+	IPhysicsObject* pPhysicsObject = VPhysicsGetObject();
+	if (pPhysicsObject)
+	{
+#if defined( IOS )
+		Vector vecPhys;
+		pPhysicsObject->GetPosition(&vecPhys, NULL);
+		Msg("[core] %s ClearParent at %.0f %.0f %.0f, phys was %.0f %.0f %.0f (motion %d, asleep %d)\n",
+			GetDebugName(), XYZ(GetAbsOrigin()), XYZ(vecPhys), pPhysicsObject->IsMotionEnabled(), pPhysicsObject->IsAsleep());
+#endif
+		pPhysicsObject->SetPosition(GetAbsOrigin(), GetAbsAngles(), true);
+		pPhysicsObject->SetVelocity(&vec3_origin, &vec3_origin);
+	}
 }
 
 int CNPC_PersonalityCore::OnTakeDamage_Alive(const CTakeDamageInfo& inputInfo)

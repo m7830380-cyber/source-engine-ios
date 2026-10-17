@@ -36,9 +36,18 @@ enum TrackOrientationType_t
 //-----------------------------------------------------------------------------
 // Paths!
 //-----------------------------------------------------------------------------
+// Portal 2 (P2ASW): path_track needs an edict. Maps parent tracks to moving brushes
+// (sp_a2_core corkscrew), and CBaseEntity::SetParent only moves edict entities into
+// parent space, so server-only tracks kept world origins as local ones.
+#if defined( PORTAL2 )
+class CPathTrack : public CPointEntity
+{
+	DECLARE_CLASS( CPathTrack, CPointEntity );
+#else
 class CPathTrack : public CServerOnlyPointEntity
 {
 	DECLARE_CLASS( CPathTrack, CServerOnlyPointEntity );
+#endif
 
 public:
 	CPathTrack();

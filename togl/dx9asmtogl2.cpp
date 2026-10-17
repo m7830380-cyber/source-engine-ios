@@ -3362,7 +3362,13 @@ int D3DToGL::TranslateShader( uint32* code, CUtlBuffer *pBufDisassembledCode, bo
 	else // vertex shader
 	{
 		m_bGenerateSRGBWriteSuffix = false;
-		V_snprintf( (char *)m_pBufHeaderCode->Base(), m_pBufHeaderCode->Size(), GLSL_VERSION "precision highp float;\n#define attribute in\n#define varying out\n%s//ATTRIBMAP-xx-xx-xx-xx-xx-xx-xx-xx-xx-xx-xx-xx-xx-xx-xx-xx\n", glslExtText );
+		V_snprintf( (char *)m_pBufHeaderCode->Base(), m_pBufHeaderCode->Size(), GLSL_VERSION "precision highp float;\n#define attribute in\n#define varying out\n%s//ATTRIBMAP-xx-xx-xx-xx-xx-xx-xx-xx-xx-xx-xx-xx-xx-xx-xx-xx\n"
+			// Multipass lighting (the flashlight's additive pass) redraws a surface
+			// with a different program and LESSEQUAL depth. D3D gives both passes
+			// the same depth; GLSL only does with invariant gl_Position, and without
+			// it Metal (under ANGLE) computes slightly different depths per program,
+			// so the extra pass flickers in blocks.
+			"invariant gl_Position;\n", glslExtText );
 
 		// find that first '-xx' which is where the attrib map will be written later.
 		char *pXx = strstr( (char *)m_pBufHeaderCode->Base(), "-xx" );

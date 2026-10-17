@@ -30,6 +30,7 @@
 #ifndef DEDICATED
 #include <vgui_controls/Controls.h>
 #include <vgui/ILocalize.h>
+#include "tier0/icommandline.h"
 #endif
 
 // memdbgon must be the last include file in a .cpp file!!!
@@ -388,7 +389,16 @@ bool CCvarUtilities::IsCommand( const CCommand &args, const int iSplitscreenSlot
 		return false;
 
 	// NOTE: Not checking for 'HIDDEN' here so we can actually set hidden convars
+#if defined( IOS )
+	// Release builds mark every cvar without FCVAR_RELEASE/ARCHIVE/CHEAT as
+	// development-only (CULL_ALL_CVARS_NOT_FCVAR_RELEASE), which hides most
+	// r_ / mat_ debug cvars from the command line and console. -devcvars lets
+	// them be set for on-device testing; without it nothing changes.
+	static const bool s_bDevCvars = CommandLine()->FindParm( "-devcvars" ) != 0;
+	if ( v->IsFlagSet(FCVAR_DEVELOPMENTONLY) && !s_bDevCvars )
+#else
 	if ( v->IsFlagSet(FCVAR_DEVELOPMENTONLY) )
+#endif
 		return false;
 
 	// perform a variable print or set

@@ -512,6 +512,13 @@ CBaseWeaponWorldModel* CBaseCombatWeapon::CreateWeaponWorldModel( void )
 {
 	MDLCACHE_CRITICAL_SECTION();
 
+#if defined( PORTAL2 )
+	// Portal 2's player models don't carry CS:GO's AE_WPN_UNHIDE deploy event
+	// (only CCSPlayer shows the world model again), so it would stay hidden
+	// for good and C_BaseCombatWeapon::ShouldDraw would hide the weapon too.
+	// Like Portal 2, the carried weapon draws itself, bone merged to its owner.
+	return NULL;
+#else
 	if ( !GetWeaponWorldModel() )
 	{
 		CBaseWeaponWorldModel *pWorldModel = dynamic_cast <CBaseWeaponWorldModel*> ( CreateEntityByName( "weaponworldmodel" ) );
@@ -527,6 +534,7 @@ CBaseWeaponWorldModel* CBaseCombatWeapon::CreateWeaponWorldModel( void )
 	{
 		return GetWeaponWorldModel();
 	}
+#endif
 }
 
 #else

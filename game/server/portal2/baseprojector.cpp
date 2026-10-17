@@ -5,7 +5,8 @@
 BEGIN_DATADESC( CBaseProjector )
 
 	DEFINE_FIELD( m_hFirstChild, FIELD_EHANDLE ),
-	DEFINE_FIELD( m_bEnabled, FIELD_BOOLEAN ),
+	// Maps set "StartEnabled" on prop_tractor_beam / prop_wall_projector (P2ASW never read it).
+	DEFINE_KEYFIELD( m_bEnabled, FIELD_BOOLEAN, "StartEnabled" ),
 	DEFINE_FIELD( m_bDisablePlacementHelper, FIELD_BOOLEAN ),
 
 	DEFINE_INPUTFUNC( FIELD_VOID, "Enable", InputEnable ),

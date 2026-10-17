@@ -137,6 +137,12 @@ void CProjectedTractorBeamEntity::OnProjected( void )
 		}
 		
 		m_hTractorBeamTrigger->UpdateBeam( GetStartPoint(), GetEndPoint(), GetLinearForce() );	
+#if defined( IOS )
+		Vector vMins, vMaxs;
+		m_hTractorBeamTrigger->CollisionProp()->WorldSpaceSurroundingBounds( &vMins, &vMaxs );
+		Msg( "[tbeam] %s projected %.0f %.0f %.0f -> %.0f %.0f %.0f, trigger bounds %.0f %.0f %.0f .. %.0f %.0f %.0f, t=%.2f\n",
+			GetOwnerEntity() ? GetOwnerEntity()->GetDebugName() : "?", XYZ( GetStartPoint() ), XYZ( GetEndPoint() ), XYZ( vMins ), XYZ( vMaxs ), gpGlobals->curtime );
+#endif
 	}
 }
 
@@ -287,6 +293,10 @@ void CTrigger_TractorBeam::StartTouch( CBaseEntity *pOther )
 	if ( pPlayer )
 	{
 		pPlayer->SetInTractorBeam( this );
+#if defined( IOS )
+		Msg( "[tbeam] player enters beam %.0f %.0f %.0f -> %.0f %.0f %.0f at %.0f %.0f %.0f, t=%.2f\n",
+			XYZ( GetStartPoint() ), XYZ( GetEndPoint() ), XYZ( pPlayer->GetAbsOrigin() ), gpGlobals->curtime );
+#endif
 		
 		CSoundEnvelopeController &controller = CSoundEnvelopeController::GetController();
 

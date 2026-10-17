@@ -6,6 +6,7 @@
 //===========================================================================//
 #include "cbase.h"
 #include "c_baseanimating.h"
+#include "tier0/icommandline.h"
 #include "c_sprite.h"
 #include "model_types.h"
 #include "bone_setup.h"
@@ -2150,7 +2151,8 @@ void C_BaseAnimating::StandardBlendingRules( CStudioHdr *hdr, BoneVector pos[], 
 #if 1 //_DEBUG
 	if (r_sequence_debug.GetInt() == entindex())
 	{
-		DevMsgRT( "%8.4f : %30s(%d) : %5.3f : %4.2f\n", currentTime, hdr->pSeqdesc( GetSequence() ).pszLabel(), GetSequence(), fCycle, 1.0 );
+		const Vector &vecOrigin = GetRenderOrigin();
+		DevMsgRT( "%8.4f : %30s(%d) : %5.3f : %4.2f : pos %.1f %.1f %.1f\n", currentTime, hdr->pSeqdesc( GetSequence() ).pszLabel(), GetSequence(), fCycle, 1.0, vecOrigin.x, vecOrigin.y, vecOrigin.z );
 	}
 #endif
 
@@ -6554,6 +6556,13 @@ void C_BaseAnimating::PostDataUpdate( DataUpdateType_t updateType )
 		}
 	}
 
+	if ( r_sequence_debug.GetInt() == entindex() )
+	{
+		DevMsgRT( "%8.4f : net %s(%d) cycle %.3f animtime %.3f simtime %.3f parity %d/%d rate %.2f\n", gpGlobals->curtime,
+			GetSequenceName( GetSequence() ), GetSequence(), GetCycle(), GetAnimTime(), GetSimulationTime(),
+			(int)m_nNewSequenceParity, (int)m_nPrevNewSequenceParity, GetPlaybackRate() );
+	}
+
 	// reset prev cycle if new sequence
 	if (m_nNewSequenceParity != m_nPrevNewSequenceParity)
 	{
@@ -8398,6 +8407,20 @@ void C_BaseAnimating::DoMuzzleFlash()
 //-----------------------------------------------------------------------------
 void DevMsgRT( PRINTF_FORMAT_STRING char const* pMsg, ... )
 {
+#ifdef PORTAL2
+	// -wheatleylog: the r_sequence_debug spew goes to the launch log whatever developer is
+	static const bool s_bAnimLog = CommandLine()->FindParm( "-wheatleylog" ) != 0;
+	if ( s_bAnimLog )
+	{
+		va_list argptr;
+		va_start( argptr, pMsg );
+		static char	string[1024];
+		Q_vsnprintf( string, sizeof( string ), pMsg, argptr );
+		va_end( argptr );
+		Msg( "[animlog] %s", string );
+		return;
+	}
+#endif
 	if (!engine->Con_IsVisible())
 	{
 		va_list argptr;

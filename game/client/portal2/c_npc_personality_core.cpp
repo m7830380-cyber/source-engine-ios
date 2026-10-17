@@ -4,6 +4,7 @@
 #include "functionproxy.h"
 #include "imaterialproxydict.h"
 #include "c_portal_player.h"
+#include "tier0/icommandline.h"
 
 
 // memdbgon must be the last include file in a .cpp file!!!
@@ -41,6 +42,21 @@ RecvPropBool( RECVINFO ( m_bFlashlightEnabled) ),
 END_RECV_TABLE()
 
 LINK_ENTITY_TO_CLASS(npc_personality_core, C_NPC_Personality_Core);
+
+extern ConVar r_sequence_debug;
+
+// -wheatleylog: point r_sequence_debug at the newest core so its animation
+// state (network updates, base sequence, transitions, layers) lands in the log
+static void WatchAnimationIfLogging( C_BaseAnimating *pAnimating )
+{
+	if ( !CommandLine()->FindParm( "-wheatleylog" ) )
+		return;
+
+	const char *pszModel = pAnimating->GetModel() ? modelinfo->GetModelName( pAnimating->GetModel() ) : NULL;
+	Msg( "[animlog] watching entindex %d (%s, %s)\n", pAnimating->entindex(), pAnimating->GetClassname(),
+		pszModel ? pszModel : "no model" );
+	r_sequence_debug.SetValue( pAnimating->entindex() );
+}
 
 // TODO: Find line placements for this class
 class C_NPC_Wheatley_Boss : public C_AI_BaseNPC
@@ -136,6 +152,7 @@ void C_NPC_Personality_Core::OnDataChanged(DataUpdateType_t updateType)
 		MouthInfo().ActivateEnvelope();
 		m_flMouthAmount = 0.0f;
 		m_flInvDim = 0.0f;
+		WatchAnimationIfLogging( this );
 	}
 }
 
@@ -212,6 +229,7 @@ void C_NPC_Wheatley_Boss::OnDataChanged(DataUpdateType_t updateType)
 		MouthInfo().ActivateEnvelope();
 		m_flMouthAmount = 0.0;
 		m_flInvDim = 0.0;
+		WatchAnimationIfLogging( this );
 	}
 }
 

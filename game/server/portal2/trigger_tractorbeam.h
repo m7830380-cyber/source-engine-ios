@@ -147,6 +147,10 @@ private:
 	CNetworkVar( bool, m_bDisablePlayerMove );
     
 	CSoundPatch *m_sndPlayerInBeam;
+
+	// Players counted into this beam. UpdateBeam rebuilds the physics trigger without a
+	// leave event, so the next enter for someone already here must not count again.
+	CUtlVector< EHANDLE > m_hPlayersInBeam;
 	
     int m_nLastUpdateFrame;
 };

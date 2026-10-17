@@ -239,20 +239,18 @@ void CTrigger_TractorBeam::UpdateOnRemove( void )
 	for ( int i = 1; i <= gpGlobals->maxClients; ++i )
 	{
 		CPortal_Player *pPlayer = ToPortalPlayer( UTIL_PlayerByIndex( i ) );
-		if ( !pPlayer || pPlayer->GetTractorBeam() != this )
+		if ( !pPlayer )
+			continue;
+		if ( m_hPlayersInBeam.Find( pPlayer ) == m_hPlayersInBeam.InvalidIndex() && pPlayer->GetTractorBeam() != this )
 			continue;
 
 #if defined( IOS )
 		Msg( "[tbeam] beam removed with player inside (count %d), leaving it, t=%.2f\n",
 			(int)pPlayer->GetPortalPlayerLocalData().m_nTractorBeamCount, gpGlobals->curtime );
 #endif
-		// Any count still left with no other beam found belongs to us too.
-		do
-		{
-			pPlayer->SetLeaveTractorBeam( this, false );
-		}
-		while ( pPlayer->GetPortalPlayerLocalData().m_nTractorBeamCount > 0 && !pPlayer->GetTractorBeam() );
+		pPlayer->SetLeaveTractorBeam( this, false );
 	}
+	m_hPlayersInBeam.RemoveAll();
 
 	if ( m_pController )
 	{
@@ -313,6 +311,16 @@ void CTrigger_TractorBeam::StartTouch( CBaseEntity *pOther )
 	CPortal_Player *pPlayer = ToPortalPlayer( pOther );
 	if ( pPlayer )
 	{
+		if ( m_hPlayersInBeam.Find( pPlayer ) != m_hPlayersInBeam.InvalidIndex() )
+		{
+			// Re-entered after UpdateBeam rebuilt the trigger: drop the old count first,
+			// staying afloat, so being in this one beam still counts once.
+			pPlayer->SetLeaveTractorBeam( this, true );
+		}
+		else
+		{
+			m_hPlayersInBeam.AddToTail( pPlayer );
+		}
 		pPlayer->SetInTractorBeam( this );
 #if defined( IOS )
 		Msg( "[tbeam] player enters beam %.0f %.0f %.0f -> %.0f %.0f %.0f at %.0f %.0f %.0f (count now %d), t=%.2f\n",

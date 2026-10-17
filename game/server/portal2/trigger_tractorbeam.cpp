@@ -4,6 +4,7 @@
 #include "npc_portal_turret_floor.h"
 #include "particle_parse.h"
 #include "prop_tractorbeam.h"
+#include "touchlink.h"
 
 BEGIN_DATADESC( CProjectedTractorBeamEntity )
 
@@ -233,6 +234,25 @@ void CTrigger_TractorBeam::OnRestore( void )
 
 void CTrigger_TractorBeam::UpdateOnRemove( void )
 {
+	// When we're removed (funnel disabled with the player inside, sp_a4_finale1),
+	// PhysicsRemoveTouchedList only tells the other side, so our EndTouch never runs
+	// and players keep the beam's FLT_MIN gravity. End their touch ourselves.
+	touchlink_t *root = ( touchlink_t * )GetDataObject( TOUCHLINK );
+	if ( root )
+	{
+		for ( touchlink_t *link = root->nextLink; link && link != root; link = link->nextLink )
+		{
+			CBaseEntity *pTouched = link->entityTouched;
+			if ( ( link->flags & FTOUCHLINK_START_TOUCH ) && pTouched && pTouched->IsPlayer() )
+			{
+#if defined( IOS )
+				Msg( "[tbeam] beam removed with player inside, ending touch, t=%.2f\n", gpGlobals->curtime );
+#endif
+				EndTouch( pTouched );
+			}
+		}
+	}
+
 	if ( m_pController )
 	{
 		int objectcount = m_pController->CountObjects();

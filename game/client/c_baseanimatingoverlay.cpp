@@ -477,6 +477,27 @@ void C_BaseAnimatingOverlay::AccumulateLayers( IBoneSetup &boneSetup, BoneVector
 		layer[i] = MAX_OVERLAYS;
 	}
 
+#if defined( PORTAL2 )
+	// Portal 2 (P2ASW): layer[order] = index. The CS:GO loop below assumes
+	// order == index, which only holds for CS:GO players; choreo gestures on
+	// NPCs (Wheatley) were applied twice or skipped at full weight.
+	for (i = 0; i < m_AnimOverlay.Count(); i++)
+	{
+		int nOrder = m_AnimOverlay[i].GetOrder();
+		if ( nOrder >= 0 && nOrder < MAX_OVERLAYS )
+		{
+			// hacky code until initialization of new layers is finished
+			if ( layer[nOrder] != MAX_OVERLAYS )
+			{
+				m_AnimOverlay[i].SetOrder( MAX_OVERLAYS );
+			}
+			else
+			{
+				layer[nOrder] = i;
+			}
+		}
+	}
+#else
 	for (i = 0; i < m_AnimOverlay.Count(); i++)
 	{
 		CAnimationLayer *pLayer = GetAnimOverlay( i );
@@ -485,6 +506,7 @@ void C_BaseAnimatingOverlay::AccumulateLayers( IBoneSetup &boneSetup, BoneVector
 			layer[i] = clamp( pLayer->GetOrder(), 0, MAX_OVERLAYS - 1 );
 		}
 	}
+#endif
 
 	CheckForLayerChanges( boneSetup.GetStudioHdr(), currentTime );
 

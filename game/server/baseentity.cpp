@@ -6935,7 +6935,15 @@ void CBaseEntity::SetLocalVelocity( const Vector &inVecVelocity )
 void CBaseEntity::SetLocalAngularVelocity( const QAngle &vecAngVelocity )
 {
 	// Safety check against NaN's or really huge numbers
+#if defined( PORTAL2 )
+	// Portal 2 has no spin cap: func_tracktrain snaps to each path_track's
+	// angles within one tick (sp_a2_bts5's panels ask for ~11520 deg/s), and
+	// CS:GO's 3600 deg/s limit dropped those turns, leaving the panels at
+	// their spawn angles. Only reject non-finite values.
+	if ( !vecAngVelocity.IsValid() )
+#else
 	if ( !IsEntityQAngleVelReasonable( vecAngVelocity ) )
+#endif
 	{
 		if ( CheckEmitReasonablePhysicsSpew() )
 		{

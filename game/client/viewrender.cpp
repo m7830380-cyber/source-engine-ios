@@ -2973,10 +2973,10 @@ void CViewRender::RenderView( const CViewSetup &view, const CViewSetup &hudViewS
 			CMatRenderContextPtr pIOSRenderContext( materials );
 			Vector vIOSTonemap = pIOSRenderContext->GetToneMappingScaleLinear();
 			pIOSRenderContext.SafeRelease();
-			Msg( "[view]   fog %d start %.0f end %.0f density %.2f color %.2f %.2f %.2f (ctrl %d, lerp %.1f), tonemap %.3f, cc weights %d\n",
+			Msg( "[view]   fog %d start %.0f end %.0f density %.2f color %.2f %.2f %.2f (controller %d, lerp %.1f), tonemap %.3f, cc weights %d\n",
 				pIOSFog ? GetFogEnable( pIOSFog ) : -1, pIOSFog ? GetFogStart( pIOSFog ) : 0.0f, pIOSFog ? GetFogEnd( pIOSFog ) : 0.0f,
 				pIOSFog ? GetFogMaxDensity( pIOSFog ) : 0.0f, flIOSFogColor[0], flIOSFogColor[1], flIOSFogColor[2],
-				pPlayer ? ( pPlayer->GetPlayerFog().m_hCtrl.IsValid() ? pPlayer->GetPlayerFog().m_hCtrl.GetEntryIndex() : 0 ) : -1,
+				pPlayer ? ( pPlayer->GetPlayerFog().m_hCtrl.Get() != NULL ? 1 : 0 ) : -1,
 				pIOSFog ? pIOSFog->lerptime - gpGlobals->curtime : 0.0f,
 				vIOSTonemap.x, g_pColorCorrectionMgr->HasNonZeroColorCorrectionWeights() ? 1 : 0 );
 		}

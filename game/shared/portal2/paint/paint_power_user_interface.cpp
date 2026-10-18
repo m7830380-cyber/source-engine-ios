@@ -61,6 +61,15 @@ void MapSurfaceToPower( PaintPowerInfo_t& info )
 			}
 			else
 			{
+#if defined( IOS ) && defined( GAME_DLL )
+				static float s_flIOSNoPaintLog;
+				if( gpGlobals->curtime - s_flIOSNoPaintLog > 1.0f || gpGlobals->curtime < s_flIOSNoPaintLog )
+				{
+					s_flIOSNoPaintLog = gpGlobals->curtime;
+					Msg( "[paint] contact on %s skipped: surface '%s' flags 0x%x is unpaintable (trace hit %s, fraction %.2f)\n", pEnt->GetClassname(),
+						 tr.surface.name ? tr.surface.name : "", (unsigned)tr.surface.flags, tr.m_pEnt ? tr.m_pEnt->GetClassname() : "nothing", tr.fraction );
+				}
+#endif
 				info.m_PaintPowerType = NO_POWER;
 			}
 		}

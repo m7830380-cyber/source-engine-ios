@@ -2293,6 +2293,39 @@ void CPortal_Player::ChooseActivePaintPowers( PaintPowerInfoVector& activePowers
 		}
 	}
 
+#if defined( IOS ) && defined( GAME_DLL )
+	// iOS diagnostics: what the player touches, and whether speed paint gets chosen
+	{
+		static float s_flIOSContactLog;
+		int nPainted = 0;
+		for( PaintPowerConstIter it = touchedPowerRange.first; it != touchedPowerRange.second; ++it )
+			nPainted += ( it->m_PaintPowerType < PAINT_POWER_TYPE_COUNT ) ? 1 : 0;
+		CBaseEntity *pIOSGround = GetGroundEntity();
+		const bool bIOSMovingGround = pIOSGround && !pIOSGround->IsWorld();
+		if( ( nPainted || bIOSMovingGround ) &&
+			( gpGlobals->curtime - s_flIOSContactLog > 1.0f || gpGlobals->curtime < s_flIOSContactLog ) )
+		{
+			s_flIOSContactLog = gpGlobals->curtime;
+			Msg( "[paint] contacts %d (%d painted), ground %s, stick normal %.2f %.2f %.2f, painted power %d, active %d, t=%.2f\n",
+				 (int)( touchedPowerRange.second - touchedPowerRange.first ), nPainted, pIOSGround ? pIOSGround->GetClassname() : "none",
+				 XYZ( m_PortalLocal.m_StickNormal ), (int)m_PortalLocal.m_PaintedPowerType, activePowers.Count(), gpGlobals->curtime );
+			int nIOSShown = 0;
+			for( PaintPowerConstIter it = touchedPowerRange.first; it != touchedPowerRange.second && nIOSShown < 4; ++it, ++nIOSShown )
+			{
+				IHandleEntity* pIOSHandle = it->m_HandleToOther.Get();
+				CBaseEntity* pIOSEnt = pIOSHandle != NULL ? EntityFromEntityHandle( pIOSHandle ) : NULL;
+				Msg( "[paint]   contact %s power %d normal %.2f %.2f %.2f at %.0f %.0f %.0f\n", pIOSEnt ? pIOSEnt->GetClassname() : "none",
+					 (int)it->m_PaintPowerType, XYZ( it->m_SurfaceNormal ), XYZ( it->m_ContactPoint ) );
+			}
+			if( SPEED_POWER < bestTouchedPowers.Count() && bestTouchedPowers[SPEED_POWER].pPaintPower )
+				Msg( "[paint]   speed picked, ignored %d, input cos %.2f, velocity cos %.2f\n", bestTouchedPowers[SPEED_POWER].bWasIgnored ? 1 : 0,
+					 bestTouchedPowers[SPEED_POWER].flInputCos, bestTouchedPowers[SPEED_POWER].flVelocityCos );
+			for( int i = 0; i < activePowers.Count(); ++i )
+				Msg( "[paint]   active %s, state %d\n", PowerTypeToString( activePowers[i] ), (int)GetPaintPower( activePowers[i].m_PaintPowerType ).m_State );
+		}
+	}
+#endif
+
 	if( show_player_paint_power_debug.GetBool() )
 	{
 		DevMsg( "Active Powers:\n" );

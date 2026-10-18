@@ -126,6 +126,14 @@ public:
 	void GetPaintmapDataRLE( CUtlVector< uint32 > &data ) const;
 	void LoadPaintmapDataRLE( const CUtlVector< uint32 > &data );
 
+	// Paint restored from a save reaches the engine in the server's LevelInitPostEntity, before the client
+	// renderer has (re)built the paintmaps for the map, so hold it until R_LoadWorldGeometry is done
+	void QueueRestoredPaintmapData( const CUtlVector< uint32 > &data, const char *pszMapName );
+	void ApplyQueuedPaintmapData( const char *pszMapName );
+
+	CUtlVector< uint32 > m_QueuedRestoreData;
+	char m_szQueuedRestoreMap[256];
+
 	CPaintTextureData *m_pPaintTextureDataArray;
 	int m_iPaintmaps;
 	bool m_bShouldRegister;

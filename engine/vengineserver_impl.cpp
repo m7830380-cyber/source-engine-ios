@@ -1846,7 +1846,9 @@ public:
 
 	virtual void LoadPaintmapDataRLE( const CUtlVector<uint32> &data )
 	{
-		g_PaintManager.LoadPaintmapDataRLE( data );
+		// The game calls this with restored save data from LevelInitPostEntity, before the local client has
+		// built the paintmaps for the map; R_LoadWorldGeometry applies it once they exist
+		g_PaintManager.QueueRestoredPaintmapData( data, host_state.worldmodel ? modelloader->GetName( host_state.worldmodel ) : "" );
 	}
 
 	virtual void RemovePaint( const model_t* pModel )

@@ -895,7 +895,7 @@ bool CServerGameDLL::DLLInit( CreateInterfaceFn appSystemFactory,
 	g_pGameSaveRestoreBlockSet->AddBlockHandler( GetEventQueueSaveRestoreBlockHandler() );
 	g_pGameSaveRestoreBlockSet->AddBlockHandler( GetVScriptSaveRestoreBlockHandler() );
 
-#if 0 // retail Portal 2 paint save/load not used in RubberWar iOS build
+#ifdef PORTAL2
 	g_pGameSaveRestoreBlockSet->AddBlockHandler( GetPaintSaveRestoreBlockHandler() );
 #endif
 
@@ -977,7 +977,7 @@ void CServerGameDLL::DLLShutdown( void )
 	// Due to dependencies, these are not autogamesystems
 	ModelSoundsCacheShutdown();
 
-#if 0
+#ifdef PORTAL2
 	g_pGameSaveRestoreBlockSet->RemoveBlockHandler( GetPaintSaveRestoreBlockHandler() );
 #endif
 

@@ -195,7 +195,11 @@ class CPaintSaveRestoreBlockHandler : public CDefSaveRestoreBlockHandler
 					const float flPaintRadius = ( type == NO_POWER ) ? sv_erase_surface_sphere_radius.GetFloat() : sv_paint_surface_sphere_radius.GetFloat();
 					const float flAlphaPercent = sv_paint_alpha_coat.GetFloat();
 
-					PaintDatabase.AddPaint( tr.m_pEnt, tr.endpos, tr.plane.normal, type, flPaintRadius, flAlphaPercent );
+					// keep reading the record even if the wall is gone so the rest of the block stays in sync
+					if ( pPaintedWall )
+					{
+						PaintDatabase.AddPaint( tr.m_pEnt, tr.endpos, tr.plane.normal, type, flPaintRadius, flAlphaPercent );
+					}
 #endif
 				}
 			}

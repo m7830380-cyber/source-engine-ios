@@ -104,6 +104,7 @@ CPaintmapDataManager g_PaintManager;
 CPaintmapDataManager::CPaintmapDataManager( void )
 	: m_pPaintTextureDataArray( NULL ), m_iPaintmaps( 0 ), m_bShouldRegister( false )
 {
+	m_szQueuedRestoreMap[0] = '\0';
 }
 
 CPaintmapDataManager::~CPaintmapDataManager( void )
@@ -1018,12 +1019,17 @@ void EncodeDataRLE( const uint32* pBuffer, uint32 nDwordCount, CUtlVector< uint3
 
 void CPaintmapDataManager::GetPaintmapDataRLE( CUtlVector< uint32 > &data ) const
 {
+	if ( !m_pPaintTextureDataArray || !materialSortInfoArray || !host_state.worldbrush )
+		return;
+
 	for ( int i=0; i< host_state.worldbrush->numsurfaces; ++i )
 	{
 		SurfaceHandle_t surfID = SurfaceHandleFromIndex( i );
 		if ( MSurf_Flags( surfID ) & SURFDRAW_PAINTED )
 		{
 			int lightmapID = materialSortInfoArray[MSurf_MaterialSortID( surfID )].lightmapPageID;
+			if ( lightmapID < 0 || lightmapID >= m_iPaintmaps )
+				continue;
 
 			// get paint data from a surface
 			CUtlVector< BYTE > surfPaintData;
@@ -1053,22 +1059,28 @@ void DecodeDataRLE( const uint32* pRLEStart, uint rleCount, SurfaceHandle_t surf
 	const uint32* pOutStart = pOutput;
 #endif
 
+	// a save from a different build of the map can't write past the surface or read past its record
+	const uint32 *pOutEnd = pOutput + nDwordCount;
+
 	while ( pRLE < pEndOfData )
 	{
 		int32 nCount = int32(*pRLE++);
 		if ( nCount < 0 ) // run, output repeated value nCount times
 		{
+			if ( pRLE >= pEndOfData )
+				break;
+
 			nCount = -nCount;
 			uint32 nRunVal = *pRLE++;
 
-			for ( int i = 0; i < nCount; i++ )
+			for ( int i = 0; i < nCount && pOutput < pOutEnd; i++ )
 			{
 				*pOutput++ = nRunVal;
 			}
 		}
 		else // copy raw dwords from input
 		{
-			for ( int i = 0; i < nCount; i++ )
+			for ( int i = 0; i < nCount && pOutput < pOutEnd && pRLE < pEndOfData; i++ )
 			{
 				*pOutput++ = *pRLE++;
 			}
@@ -1082,17 +1094,27 @@ void DecodeDataRLE( const uint32* pRLEStart, uint rleCount, SurfaceHandle_t surf
 
 void CPaintmapDataManager::LoadPaintmapDataRLE( const CUtlVector< uint32 > &data )
 {
+	if ( !m_pPaintTextureDataArray || !materialSortInfoArray || !host_state.worldbrush )
+		return;
+
 	const uint32* pCurrent = data.Base();
 	const uint32* pEnd = pCurrent + data.Count();
 
-	while ( pCurrent < pEnd )
+	while ( pEnd - pCurrent >= 2 )
 	{
 		// assumes that the surface index is always the same (it'll change if the map's changed)
 		int surfIndex = *pCurrent++;
+		uint nRLESize = *pCurrent++;
+		if ( surfIndex < 0 || surfIndex >= host_state.worldbrush->numsurfaces || nRLESize > (uint)( pEnd - pCurrent ) )
+			break;
+
 		SurfaceHandle_t surfID = SurfaceHandleFromIndex( surfIndex );
 		int lightmapID = materialSortInfoArray[MSurf_MaterialSortID( surfID )].lightmapPageID;
-
-		uint nRLESize = *pCurrent++;
+		if ( lightmapID < 0 || lightmapID >= m_iPaintmaps )
+		{
+			pCurrent += nRLESize;
+			continue;
+		}
 		
 		// alloc output. make sure the size is divisible by 4 to copy data from array of uint32
 		CUtlVector< BYTE > rawPaintData;
@@ -1102,6 +1124,7 @@ void CPaintmapDataManager::LoadPaintmapDataRLE( const CUtlVector< uint32 > &data
 		uint nAllocSize = nByteCount + ( ( 4 - ( nByteCount % 4 ) ) % 4 );
 		Assert( ( nAllocSize % 4 ) == 0 );
 		rawPaintData.SetCount( nAllocSize );
+		V_memset( rawPaintData.Base(), 0, nAllocSize );
 		uint nDWord = nAllocSize / 4;
 		DecodeDataRLE( pCurrent, nRLESize, surfID, (uint32*)rawPaintData.Base(), nDWord );
 		pCurrent += nRLESize;
@@ -1109,6 +1132,40 @@ void CPaintmapDataManager::LoadPaintmapDataRLE( const CUtlVector< uint32 > &data
 		m_pPaintTextureDataArray[lightmapID].SetSurfacePaintData( surfID, rawPaintData );
 	}
 }
+
+void CPaintmapDataManager::QueueRestoredPaintmapData( const CUtlVector< uint32 > &data, const char *pszMapName )
+{
+	m_QueuedRestoreData.CopyArray( data.Base(), data.Count() );
+	V_strncpy( m_szQueuedRestoreMap, pszMapName ? pszMapName : "", sizeof( m_szQueuedRestoreMap ) );
+#if defined( IOS )
+	Msg( "[paint] restore: queued %d dwords of saved paint for %s\n", m_QueuedRestoreData.Count(), m_szQueuedRestoreMap );
+#endif
+}
+
+
+void CPaintmapDataManager::ApplyQueuedPaintmapData( const char *pszMapName )
+{
+	if ( m_QueuedRestoreData.Count() == 0 )
+		return;
+
+	if ( V_stricmp( m_szQueuedRestoreMap, pszMapName ? pszMapName : "" ) == 0 )
+	{
+		LoadPaintmapDataRLE( m_QueuedRestoreData );
+#if defined( IOS )
+		Msg( "[paint] restore: applied %d dwords of saved paint to %s (%d paintmaps)\n", m_QueuedRestoreData.Count(), m_szQueuedRestoreMap, m_iPaintmaps );
+#endif
+	}
+#if defined( IOS )
+	else
+	{
+		Msg( "[paint] restore: dropped saved paint for %s, loaded map is %s\n", m_szQueuedRestoreMap, pszMapName ? pszMapName : "" );
+	}
+#endif
+
+	m_QueuedRestoreData.Purge();
+	m_szQueuedRestoreMap[0] = '\0';
+}
+
 
 void CPaintTextureData::AddDirtyRect( const Rect_t& rect )
 {

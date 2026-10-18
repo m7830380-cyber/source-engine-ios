@@ -248,6 +248,9 @@ void R_LoadWorldGeometry( bool bDXChange )
 	{
 		g_PaintManager.LoadPaintmapDataRLE( paintData );
 		paintData.Purge();
+
+		// paint restored from a save game, queued by the server before the paintmaps were rebuilt
+		g_PaintManager.ApplyQueuedPaintmapData( host_state.worldmodel ? modelloader->GetName( host_state.worldmodel ) : "" );
 	}
 }
 

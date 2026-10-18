@@ -696,7 +696,10 @@ void CPaintDatabase::SavePaintmapData( ISave* pSave )
 		return;
 
 	CUtlVector< uint32 > data;
-	//engine->GetPaintmapDataRLE( data );
+	engine->GetPaintmapDataRLE( data );
+#if defined( IOS )
+	Msg( "[paint] save: wrote %d dwords of paintmap data\n", data.Count() );
+#endif
 
 	pSave->StartBlock();
 	{
@@ -743,7 +746,7 @@ void CPaintDatabase::SendPaintDataToEngine()
 
 	if ( m_PaintRestoreData.m_PaintmapData.Count() > 0 )
 	{
-		//engine->LoadPaintmapDataRLE( m_PaintRestoreData.m_PaintmapData );
+		engine->LoadPaintmapDataRLE( m_PaintRestoreData.m_PaintmapData );
 	}
 
 	// clean up after load

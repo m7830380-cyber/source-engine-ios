@@ -1170,6 +1170,13 @@ void R_CheckForPaintmapChanges()
 		return;
 	}
 
+	// paint restored from a save after this level's paintmaps were already built (R_LoadWorldGeometry
+	// applies it when the queue arrives first); the map name check keeps it off another map's paintmaps
+	if ( g_RendererInLevel && g_PaintManager.m_QueuedRestoreData.Count() > 0 )
+	{
+		g_PaintManager.ApplyQueuedPaintmapData( host_state.worldmodel ? modelloader->GetName( host_state.worldmodel ) : "", false );
+	}
+
 	{
 		VPROF_BUDGET( "R_CheckForPaintmapChanges", "paint" );
 		g_PaintManager.UpdatePaintmapTextures();

@@ -1143,9 +1143,12 @@ void CPaintmapDataManager::QueueRestoredPaintmapData( const CUtlVector< uint32 >
 }
 
 
-void CPaintmapDataManager::ApplyQueuedPaintmapData( const char *pszMapName )
+void CPaintmapDataManager::ApplyQueuedPaintmapData( const char *pszMapName, bool bDropOnMismatch )
 {
 	if ( m_QueuedRestoreData.Count() == 0 )
+		return;
+
+	if ( !bDropOnMismatch && V_stricmp( m_szQueuedRestoreMap, pszMapName ? pszMapName : "" ) != 0 )
 		return;
 
 	if ( V_stricmp( m_szQueuedRestoreMap, pszMapName ? pszMapName : "" ) == 0 )

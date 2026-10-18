@@ -244,6 +244,11 @@ void R_LoadWorldGeometry( bool bDXChange )
 		OverlayMgr()->ReSortMaterials();
 	}
 
+#if defined( IOS )
+	Msg( "[paint] world geometry loaded: map paint %d, kept %d dwords, restore queue %d dwords\n",
+		g_PaintManager.m_bShouldRegister ? 1 : 0, paintData.Count(), g_PaintManager.m_QueuedRestoreData.Count() );
+#endif
+
 	if ( g_PaintManager.m_bShouldRegister )
 	{
 		g_PaintManager.LoadPaintmapDataRLE( paintData );

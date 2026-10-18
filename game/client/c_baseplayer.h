@@ -910,6 +910,10 @@ private:
 	//only works because we receive both the local and nonlocal representations of our origin on recreation. It just happens that the nonlocal wins out by default because it comes last
 	Vector m_vecHack_RecvProxy_LocalPlayerOrigin; 
 
+	// set by the non-local cell origin proxies, cleared in PostDataUpdate (see there)
+	bool m_bNonLocalCellOriginXYReceived;
+	bool m_bNonLocalCellOriginZReceived;
+
 
 private:
 	// Eye/angle offsets - used for TrackIR and motion controllers

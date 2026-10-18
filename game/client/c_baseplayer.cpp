@@ -543,6 +543,8 @@ C_BasePlayer::C_BasePlayer() : m_iv_vecViewOffset( "C_BasePlayer::m_iv_vecViewOf
 	m_bFiredWeapon = false;
 
 	m_vecHack_RecvProxy_LocalPlayerOrigin.Init( FLT_MAX, FLT_MAX, FLT_MAX );
+	m_bNonLocalCellOriginXYReceived = false;
+	m_bNonLocalCellOriginZReceived = false;
 	m_ignoreLadderJumpTime = 0.0f;
 
 	m_bPlayerIsTalkingOverVOIP = false;
@@ -1113,10 +1115,43 @@ void C_BasePlayer::PostDataUpdate( DataUpdateType_t updateType )
 
 	bool bForceEFNoInterp = ( m_ubOldEFNoInterpParity != m_ubEFNoInterpParity );
 
+	// In single player the update that creates the player carries the non-local (cell) origin too, before the
+	// player is known to be local. Its origin props are decoded before the cell props (priority 7/8 vs 32), so
+	// the proxies built the origin from cell 0 (-16384 + offset): the view sat outside the map until the player
+	// moved. The cells are all in now, so rebuild the origin from them; the hi-res local origin, if it came in
+	// this update, is applied over this below.
+	if ( m_bNonLocalCellOriginXYReceived || m_bNonLocalCellOriginZReceived )
+	{
+		Vector vecOrigin = GetNetworkOrigin();
+		if ( m_bNonLocalCellOriginXYReceived )
+		{
+			vecOrigin.x = CoordFromCell( m_cellwidth, m_cellX, m_vecCellOrigin.x );
+			vecOrigin.y = CoordFromCell( m_cellwidth, m_cellY, m_vecCellOrigin.y );
+		}
+		if ( m_bNonLocalCellOriginZReceived )
+		{
+			vecOrigin.z = CoordFromCell( m_cellwidth, m_cellZ, m_vecCellOrigin.z );
+		}
+#if defined( IOS )
+		if ( IsLocalPlayer( this ) )
+		{
+			Msg( "[view] local player got the non-local origin (update %d): %.0f %.0f %.0f -> %.0f %.0f %.0f, hi-res %s\n", (int)updateType,
+				GetNetworkOrigin().x, GetNetworkOrigin().y, GetNetworkOrigin().z, vecOrigin.x, vecOrigin.y, vecOrigin.z,
+				m_vecHack_RecvProxy_LocalPlayerOrigin.x != FLT_MAX ? "received" : "not received" );
+		}
+#endif
+		SetNetworkOrigin( vecOrigin );
+		m_bNonLocalCellOriginXYReceived = false;
+		m_bNonLocalCellOriginZReceived = false;
+	}
+
 	if ( IsLocalPlayer( this ) )
 	{
 		if ( (updateType == DATA_UPDATE_CREATED) &&
+#if !defined( IOS )
+			// single player has the same problem (see above), so the hi-res origin is used there too
 			g_pGameRules->IsMultiplayer() && 
+#endif
 			cl_player_fullupdate_predicted_origin_fix.GetBool() )
 		{
 			if ( (m_vecHack_RecvProxy_LocalPlayerOrigin.x != FLT_MAX) && 
@@ -3238,6 +3273,7 @@ void C_BasePlayer::RecvProxy_NonLocalCellOriginXY( const CRecvProxyData *pData, 
 
 	player->m_vecCellOrigin.x = pData->m_Value.m_Vector[0];
 	player->m_vecCellOrigin.y = pData->m_Value.m_Vector[1];
+	player->m_bNonLocalCellOriginXYReceived = true;
 
 	register int const cellwidth = player->m_cellwidth; // Load it into a register
 	((float*)pOut)[0] = CoordFromCell( cellwidth, player->m_cellX, pData->m_Value.m_Vector[0] );
@@ -3249,6 +3285,7 @@ void C_BasePlayer::RecvProxy_NonLocalCellOriginZ( const CRecvProxyData *pData, v
 	C_BasePlayer *player = (C_BasePlayer *) pStruct;
 
 	player->m_vecCellOrigin.z = pData->m_Value.m_Float;
+	player->m_bNonLocalCellOriginZReceived = true;
 
 	register int const cellwidth = player->m_cellwidth; // Load it into a register
 	*((float*)pOut) = CoordFromCell( cellwidth, player->m_cellZ, pData->m_Value.m_Float );

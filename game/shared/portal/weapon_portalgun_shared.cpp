@@ -1096,6 +1096,23 @@ PortalPlacementResult_t CWeaponPortalgun::FirePortal( bool bPortal2, Vector *pVe
 		return PORTAL_PLACEMENT_INVALID_VOLUME;
 	}
 
+#if defined( IOS ) && defined( GAME_DLL )
+	// iOS diagnostics: why a shot fails for one color where the other one places
+	{
+		CProp_Portal *pIOSOther = bPortal2 ? m_hPrimaryPortal.Get() : m_hSecondaryPortal.Get();
+		const bool bIOSOtherActive = pIOSOther && pIOSOther->IsActive();
+		CBaseEntity *pIOSHit = placementInfo.tr.m_pEnt;
+		Msg( "[portal] fire %s: result %d at %.0f %.0f %.0f normal %.2f %.2f %.2f on %s (surface %s), other portal %s %.0f, t=%.2f\n",
+			bPortal2 ? "orange" : "blue", (int)placementInfo.ePlacementResult,
+			placementInfo.vecFinalPosition.x, placementInfo.vecFinalPosition.y, placementInfo.vecFinalPosition.z,
+			placementInfo.tr.plane.normal.x, placementInfo.tr.plane.normal.y, placementInfo.tr.plane.normal.z,
+			pIOSHit ? pIOSHit->GetClassname() : "nothing", placementInfo.tr.surface.name ? placementInfo.tr.surface.name : "?",
+			bIOSOtherActive ? "active, distance" : "inactive",
+			bIOSOtherActive ? ( pIOSOther->GetAbsOrigin() - placementInfo.vecFinalPosition ).Length() : -1.0f,
+			gpGlobals->curtime );
+	}
+#endif
+
 
 	// If it was a failure, put the effect at exactly where the player shot instead of where the portal bumped to
 	if ( bTraceSucceeded == false )

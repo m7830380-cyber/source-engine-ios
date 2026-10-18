@@ -2964,6 +2964,21 @@ void CViewRender::RenderView( const CViewSetup &view, const CViewSetup &hudViewS
 				pGround ? ( pGround->GetClassname() ? pGround->GetClassname() : "?" ) : "none",
 				pPlayer ? pPlayer->GetObserverMode() : -1, render->GetViewEntity(),
 				fade[0], fade[1], fade[2], fade[3], bFadeBlend ? " blend" : "", whatToDraw );
+
+			// Dark world with a lit viewmodel at map start: fog, exposure and color correction are the suspects
+			fogparams_t *pIOSFog = pPlayer ? pPlayer->GetFogParams() : NULL;
+			float flIOSFogColor[3] = { 0.0f, 0.0f, 0.0f };
+			if ( pIOSFog )
+				GetFogColor( pIOSFog, flIOSFogColor );
+			CMatRenderContextPtr pIOSRenderContext( materials );
+			Vector vIOSTonemap = pIOSRenderContext->GetToneMappingScaleLinear();
+			pIOSRenderContext.SafeRelease();
+			Msg( "[view]   fog %d start %.0f end %.0f density %.2f color %.2f %.2f %.2f (ctrl %d, lerp %.1f), tonemap %.3f, cc weights %d\n",
+				pIOSFog ? GetFogEnable( pIOSFog ) : -1, pIOSFog ? GetFogStart( pIOSFog ) : 0.0f, pIOSFog ? GetFogEnd( pIOSFog ) : 0.0f,
+				pIOSFog ? GetFogMaxDensity( pIOSFog ) : 0.0f, flIOSFogColor[0], flIOSFogColor[1], flIOSFogColor[2],
+				pPlayer ? ( pPlayer->GetPlayerFog().m_hCtrl.IsValid() ? pPlayer->GetPlayerFog().m_hCtrl.GetEntryIndex() : 0 ) : -1,
+				pIOSFog ? pIOSFog->lerptime - gpGlobals->curtime : 0.0f,
+				vIOSTonemap.x, g_pColorCorrectionMgr->HasNonZeroColorCorrectionWeights() ? 1 : 0 );
 		}
 	}
 

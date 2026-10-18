@@ -44,6 +44,7 @@ BEGIN_DATADESC(CPropExplodingFutbol)
 	DEFINE_THINKFUNC(AnimThink),
 	DEFINE_THINKFUNC(TimerThink),
 	DEFINE_THINKFUNC(KillThink),
+	DEFINE_THINKFUNC(ReleaseThink),
 
 END_DATADESC()
 
@@ -57,6 +58,7 @@ CPropExplodingFutbol::CPropExplodingFutbol()
 	m_flLastTickTime = 0.0f;
 	m_flLastTimerSoundTime = 0.0f;
 	m_flLastTimerSoundTime = 0.0f;
+	m_bExploded = false;
 }
 
 void CPropExplodingFutbol::Precache()
@@ -186,8 +188,26 @@ void CPropExplodingFutbol::VPhysicsUpdate(IPhysicsObject* pPhysics)
 	BaseClass::VPhysicsUpdate(pPhysics);
 }
 
+void CPropExplodingFutbol::ReleaseFromSpawner(float flDelay)
+{
+	SetHolder(EXPLODING_FUTBOL_HELD_BY_SPAWNER);
+	SetContextThink(&CPropExplodingFutbol::ReleaseThink, gpGlobals->curtime + flDelay, g_szExplodingFutbolReleaseThinkContext);
+}
+
+void CPropExplodingFutbol::ReleaseThink()
+{
+	if (m_Holder == EXPLODING_FUTBOL_HELD_BY_SPAWNER)
+		SetHolder(EXPLODING_FUTBOL_HELD_BY_NONE);
+}
+
 void CPropExplodingFutbol::KillFutbol()
 {
+	if (m_bExploded)
+		return;
+	m_bExploded = true;
+
+	ExplodeFutbol();
+
 	CTakeDamageInfo info(this, this, GetHealth(), DMG_BLAST);
 
 	info.SetDamagePosition(GetAbsOrigin());
@@ -204,10 +224,53 @@ void CPropExplodingFutbol::DestroyFutbol(bool bExplode)
 
 void CPropExplodingFutbol::ExplodeFutbol()
 {
-	ExplosionCreate(GetAbsOrigin(), GetAbsAngles(), GetOwnerEntity(), exploding_futbol_explosion_magnitude.GetInt(), exploding_futbol_explosion_radius.GetFloat(), SF_ENVEXPLOSION_NOSPARKS | SF_ENVEXPLOSION_NODLIGHTS | SF_ENVEXPLOSION_NOSMOKE, exploding_futbol_explosion_damage.GetFloat(), this);
+	// The env_explosion is only the effect; damage comes from DoExplosion so exploding_futbol_explosion_damage applies
+	ExplosionCreate(GetAbsOrigin(), GetAbsAngles(), GetOwnerEntity(), exploding_futbol_explosion_magnitude.GetInt(), exploding_futbol_explosion_radius.GetFloat(), SF_ENVEXPLOSION_NOSPARKS | SF_ENVEXPLOSION_NODLIGHTS | SF_ENVEXPLOSION_NOSMOKE | SF_ENVEXPLOSION_NODAMAGE, exploding_futbol_explosion_damage.GetFloat(), this);
+
+	Vector vecCenter = WorldSpaceCenter();
+	DoExplosion(vecCenter, exploding_futbol_explosion_radius.GetFloat(), NULL);
 
 	if (exploding_futbol_physics_punt_player.GetBool())
 	{
 		CreatePhysExplosion(GetAbsOrigin(), exploding_futbol_phys_mag.GetFloat(), exploding_futbol_phys_rad.GetFloat(), NULL_STRING, 25.0f, 31);
 	}
+}
+
+void CPropExplodingFutbol::DoExplosion(Vector& vecCenter, float flExplosionRadius, CPortal_Base2D* pPortal)
+{
+	CBaseEntity* pList[128];
+	int nCount = UTIL_EntitiesInSphere(pList, ARRAYSIZE(pList), vecCenter, flExplosionRadius, 0);
+	for (int i = 0; i < nCount; ++i)
+	{
+		CBaseEntity* pEntity = pList[i];
+		if (!pEntity || pEntity == this || pEntity->m_takedamage == DAMAGE_NO)
+			continue;
+		if (!exploding_futbol_hit_breakables.GetBool() && !pEntity->IsPlayer() && !pEntity->IsNPC())
+			continue;
+
+		Vector vecForward = pEntity->WorldSpaceCenter() - vecCenter;
+		DamageEntity(pEntity, vecCenter, vecForward);
+	}
+}
+
+void CPropExplodingFutbol::DamageEntity(CBaseEntity* pEntity, Vector& vecCenter, Vector& vecForward)
+{
+	// Walls block the blast
+	trace_t tr;
+	UTIL_TraceLine(vecCenter, pEntity->WorldSpaceCenter(), MASK_SOLID_BRUSHONLY, this, COLLISION_GROUP_NONE, &tr);
+	if (tr.fraction < 1.0f && tr.m_pEnt != pEntity)
+		return;
+
+	float flDist = VectorNormalize(vecForward);
+	float flRadius = MAX(exploding_futbol_explosion_radius.GetFloat(), 1.0f);
+	float flFrac = clamp(flDist / flRadius, 0.0f, 1.0f);
+	float flDamage = exploding_futbol_explosion_damage.GetFloat() * (1.0f - flFrac * (1.0f - exploding_futbol_explosion_damage_falloff.GetFloat()));
+
+	CBaseEntity* pAttacker = GetOwnerEntity() ? GetOwnerEntity() : this;
+	CTakeDamageInfo info(this, pAttacker, flDamage, DMG_BLAST);
+	CalculateExplosiveDamageForce(&info, vecForward, vecCenter);
+	pEntity->TakeDamage(info);
+
+	if (exploding_futbol_explosion_debug.GetBool())
+		Msg("exploding futbol hit %s for %.1f at distance %.1f\n", pEntity->GetClassname(), flDamage, flDist);
 }

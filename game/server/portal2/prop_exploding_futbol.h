@@ -10,6 +10,7 @@
 static const char* g_szExplodingFutbolAnimThinkContext = "ExplodingFutbolAnimateThinkContext";
 static const char* g_szExplodingFutbolKillThinkContext = "ExplodingFutbolKillThinkContext";
 static const char* g_szExplodingFutbolTimerThinkContext = "ExplodingFutbolTimerThinkContext";
+static const char* g_szExplodingFutbolReleaseThinkContext = "ExplodingFutbolReleaseThinkContext";
 
 enum ExplodingFutbolHolderType_t
 {
@@ -30,8 +31,10 @@ public:
 	void Precache();
 	void Spawn();
 	void Event_Killed(const CTakeDamageInfo& info);
-	ExplodingFutbolHolderType_t GetHolder{ m_Holder };
-	void SetHolder(ExplodingFutbolHolderType_t type) { GetHolder = type; }
+	ExplodingFutbolHolderType_t GetHolder() const { return m_Holder; }
+	void SetHolder(ExplodingFutbolHolderType_t type) { m_Holder = type; }
+	// Ignores impacts for a moment so a freshly launched futbol doesn't blow up on its launcher
+	void ReleaseFromSpawner(float flDelay);
 	class CPortal_Player* GetLastPlayerToHold() { return m_hLastHeldByPlayer; }
 	void KillThink();
 	void AnimThink();
@@ -44,6 +47,7 @@ public:
 	void OnFizzled();
 	void VPhysicsCollision(int index, gamevcollisionevent_t* pEvent);
 	void VPhysicsUpdate(IPhysicsObject* pPhysics);
+	void ReleaseThink();
 private:
 	void KillFutbol();
 	void DestroyFutbol(bool bExplode);
@@ -64,5 +68,6 @@ private:
 	float m_flLastTickTime;
 	float m_flLastTimerSoundTime;
 	float m_flLastFlashTime;
+	bool m_bExploded;
 };
 #endif //#ifndef PROP_EXPLODING_FUTBOL_H

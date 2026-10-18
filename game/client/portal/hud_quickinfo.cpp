@@ -205,7 +205,7 @@ void CHUDQuickInfo::Paint()
 
 	C_WeaponPortalgun *pPortalgun = dynamic_cast<C_WeaponPortalgun*>( pWeapon );
 
-	bool bPortalPlacability[2];
+	bool bPortalPlacability[2] = { false, false };
 
 	// NOTE: This may not be accurate, but it's good enough for now.
 	if ( pPortalgun )

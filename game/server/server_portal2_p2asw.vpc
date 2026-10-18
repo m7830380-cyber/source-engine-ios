@@ -130,6 +130,7 @@ $Project
 		$File	"$SRCDIR\game\server\portal2\paint\prop_physics_paintable.cpp"
 		$File	"$SRCDIR\game\server\portal2\paint\trigger_paint_cleanser.cpp"
 		$File	"$SRCDIR\game\server\portal2\paint\weapon_paintgun.cpp"
+		$File	"$SRCDIR\game\server\portal2\point_futbol_shooter.cpp"
 		$File	"$SRCDIR\game\server\portal2\point_laser_target.cpp"
 		$File	"$SRCDIR\game\server\portal2\portal2_research_data_tracker.cpp"
 		$File	"$SRCDIR\game\server\portal2\projectedwallentity.cpp"

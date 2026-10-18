@@ -17,10 +17,12 @@
 #include "engine/IEngineTrace.h"
 #include "tier1/utlvector.h"
 
-inline void EngineTrace_GetBrushesInAABB( IEngineTrace *pTrace, const Vector &vMins, const Vector &vMaxs, CUtlVector<int> *pOutput, int iContentsMask = 0xFFFFFFFF )
+// cmodelIndex picks the brush model to search: 0 is the world, N is inline model "*N"
+// (Alien Swarm could only search the world).
+inline void EngineTrace_GetBrushesInAABB( IEngineTrace *pTrace, const Vector &vMins, const Vector &vMaxs, CUtlVector<int> *pOutput, int iContentsMask = 0xFFFFFFFF, int cmodelIndex = 0 )
 {
 	CBrushQuery query;
-	pTrace->GetBrushesInAABB( vMins, vMaxs, query, iContentsMask );
+	pTrace->GetBrushesInAABB( vMins, vMaxs, query, iContentsMask, cmodelIndex );
 	pOutput->SetCount( query.Count() );
 	for ( int i = 0; i < query.Count(); ++i )
 	{

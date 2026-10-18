@@ -2928,9 +2928,13 @@ PaintPowerType UTIL_Paint_TracePower( CBaseEntity* pBrushEntity, const Vector& c
 	Vector vEntitySpaceContactPoint;
 	pBrushEntity->WorldToEntitySpace( contactPoint, &vEntitySpaceContactPoint );
 
+	// The engine compares the normal against the model's surface planes, which are in entity space
+	Vector vEntitySpaceContactNormal;
+	VectorIRotate( vContactNormal, pBrushEntity->EntityToWorldTransform(), vEntitySpaceContactNormal );
+
 	// The engine's paint map returns the power index of each painted surface point in the sphere
 	CUtlVector<BYTE> surfPowers;
-	engine->SphereTracePaintSurface( pBrushEntity->GetModel(), vEntitySpaceContactPoint, vContactNormal, sv_paint_detection_sphere_radius.GetFloat(), surfPowers );
+	engine->SphereTracePaintSurface( pBrushEntity->GetModel(), vEntitySpaceContactPoint, vEntitySpaceContactNormal, sv_paint_detection_sphere_radius.GetFloat(), surfPowers );
 
 	// Most common power wins; ties go to the higher-priority (lower) power, see paint_enum.h
 	int nCount[PAINT_POWER_TYPE_COUNT] = { 0 };

@@ -4563,6 +4563,22 @@ void ComputeAABBContactsWithBrushEntity( ContactVector& contacts, const Vector& 
 	ComputeAABBContactsWithBrushEntity( contacts, NULL, 0, boxOrigin, boxMin, boxMax, pBrushEntity, contentsMask );
 }
 
+// Inline brush model index of a brush entity: 0 for the world, N for model "*N", -1 if unknown.
+// Used to search the entity's own brushes; searching the world's brushes with an entity-space
+// box finds nothing on moving brushes such as func_tracktrain.
+static int GetBrushEntityCModelIndex( CBaseEntity* pBrushEntity )
+{
+	if( pBrushEntity->IsWorld() )
+		return 0;
+
+	const model_t* pModel = pBrushEntity->GetModel();
+	const char* pszName = pModel ? modelinfo->GetModelName( pModel ) : NULL;
+	if( pszName && pszName[0] == '*' )
+		return atoi( pszName + 1 );
+
+	return -1;
+}
+
 void ComputeAABBContactsWithBrushEntity_Old( ContactVector& contacts, const cplane_t *pClipPlanes, int iClipPlaneCount, const Vector& boxOrigin, const Vector& boxMin, const Vector& boxMax, CBaseEntity* pBrushEntity, int contentsMask)
 {
 	//typedef CUtlVector<int>	BrushIndexVector;
@@ -4592,8 +4608,10 @@ void ComputeAABBContactsWithBrushEntity_Old( ContactVector& contacts, const cpla
 	// Get the indices of all the colliding brushes
 	//BrushIndexVector brushIndices;
 	//CBrushQuery brushQuery;
+	// Unknown models keep the old behavior of searching the world
+	const int iBrushModel = MAX( GetBrushEntityCModelIndex( pBrushEntity ), 0 );
 	CUtlVector<int> WorldBrushes;
-	EngineTrace_GetBrushesInAABB( enginetrace, queryBoxMin, queryBoxMax, &WorldBrushes, contentsMask );
+	EngineTrace_GetBrushesInAABB( enginetrace, queryBoxMin, queryBoxMax, &WorldBrushes, contentsMask, iBrushModel );
 
 	// Find the contact regions
 	CUtlVector<BrushSideInfo_t> brushSides;
@@ -4648,7 +4666,13 @@ void ComputeAABBContactsWithBrushEntity_Old( ContactVector& contacts, const cpla
 			//cplane_t cur = brushSides[sideIndex].plane;
 			//cplane_t temp;
 			//MatrixTransformPlane( entityToWorld, cur, temp );
-			const cplane_t &plane = brushSides[sideIndex].plane; // a cplane_t on CS:GO (Vector4D on Alien Swarm)
+			cplane_t plane = brushSides[sideIndex].plane; // a cplane_t on CS:GO (Vector4D on Alien Swarm)
+			if( !pBrushEntity->IsWorld() )
+			{
+				// Non-world brush planes are in entity space
+				cplane_t localPlane = plane;
+				MatrixTransformPlane( pBrushEntity->EntityToWorldTransform(), localPlane, plane );
+			}
 			planes[sideIndex].Init( plane.normal.x, plane.normal.y, plane.normal.z, plane.dist );
 		}
 
@@ -4734,8 +4758,10 @@ void ComputeAABBContactsWithBrushEntity_SIMD( ContactVector& contacts, const cpl
 	// Get the indices of all the colliding brushes
 	//BrushIndexVector brushIndices;
 	//CBrushQuery brushQuery;
+	// Unknown models keep the old behavior of searching the world
+	const int iBrushModel = MAX( GetBrushEntityCModelIndex( pBrushEntity ), 0 );
 	CUtlVector<int> WorldBrushes;
-	EngineTrace_GetBrushesInAABB( enginetrace, queryBoxMin, queryBoxMax, &WorldBrushes, contentsMask );
+	EngineTrace_GetBrushesInAABB( enginetrace, queryBoxMin, queryBoxMax, &WorldBrushes, contentsMask, iBrushModel );
 
 	// Find the contact regions
 	//BrushSideInfoVector brushSides;

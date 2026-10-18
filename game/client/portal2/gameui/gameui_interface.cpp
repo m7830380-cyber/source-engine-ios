@@ -210,6 +210,11 @@ void CGameUI::Initialize( CreateInterfaceFn factory )
 	enginesound = (IEngineSound *)factory(IENGINESOUND_CLIENT_INTERFACE_VERSION, NULL);
 	engine = (IVEngineClient *)factory( VENGINE_CLIENT_INTERFACE_VERSION, NULL );
 	bik = (IBik*)factory( BIK_INTERFACE_VERSION, NULL );
+#if defined( IOS )
+	// No Bink SDK on iOS: the FFmpeg player stands in, and the connects above just cleared it
+	extern void IOS_InstallFFmpegBik();
+	IOS_InstallFFmpegBik();
+#endif
 #ifdef _PS3
 	ps3saveuiapi = (IPS3SaveRestoreToUI*)factory( IPS3SAVEUIAPI_VERSION_STRING, NULL );
 #endif

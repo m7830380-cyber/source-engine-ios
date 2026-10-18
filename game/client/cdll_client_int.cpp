@@ -1445,6 +1445,11 @@ int CHLClient::Connect( CreateInterfaceFn appSystemFactory, CGlobalVarsBase *pGl
 	ConnectTier1Libraries( &appSystemFactory, 1 );
 	ConnectTier2Libraries( &appSystemFactory, 1 );
 	ConnectTier3Libraries( &appSystemFactory, 1 );
+#if defined( IOS ) && defined( PORTAL2 )
+	// No Bink SDK on iOS: movies play through FFmpeg (portal2/ios_bik_ffmpeg.cpp)
+	extern void IOS_InstallFFmpegBik();
+	IOS_InstallFFmpegBik();
+#endif
 
 #if defined( INCLUDE_SCALEFORM )
 	g_pScaleformUI = ( IScaleformUI* ) appSystemFactory( SCALEFORMUI_INTERFACE_VERSION, NULL );
@@ -1769,6 +1774,10 @@ CEG_NOINLINE void CHLClient::PostInit()
 	gTouch.Init();
 #endif
 
+#if defined( IOS ) && defined( PORTAL2 )
+	extern void IOS_InstallFFmpegBik();
+	IOS_InstallFFmpegBik();
+#endif
 	COM_TimestampedLog( "IGameSystem::PostInitAllSystems - Start" );
 	IGameSystem::PostInitAllSystems();
 	COM_TimestampedLog( "IGameSystem::PostInitAllSystems - Finish" );

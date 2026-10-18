@@ -133,9 +133,32 @@ build_protobuf() {
 	)
 }
 
+# Bink movies (menu backgrounds, elevator screens): RAD's SDK has no iOS build,
+# so the client decodes them with FFmpeg's Bink decoder. Only the Bink demuxer
+# and video decoder are built; the client feeds the file through custom I/O.
+build_ffmpeg() {
+	local ver="6.1.1"
+	rm -rf "$BUILD/ffmpeg-$ver"
+	curl -fsSL "https://ffmpeg.org/releases/ffmpeg-${ver}.tar.xz" | tar xJ -C "$BUILD"
+	cd "$BUILD/ffmpeg-$ver"
+	env -u CC -u CXX -u CFLAGS -u CXXFLAGS -u LDFLAGS ./configure \
+		--prefix="$PREFIX" \
+		--enable-cross-compile --target-os=darwin --arch=aarch64 \
+		--cc=clang \
+		--extra-cflags="-arch arm64 -isysroot $SDK -mios-version-min=12.0 -fPIC" \
+		--extra-ldflags="-arch arm64 -isysroot $SDK -mios-version-min=12.0" \
+		--enable-static --disable-shared --enable-pic \
+		--disable-programs --disable-doc --disable-debug --disable-network \
+		--disable-autodetect --disable-asm \
+		--disable-avdevice --disable-avfilter --disable-swscale --disable-swresample --disable-postproc \
+		--disable-everything --enable-demuxer=bink --enable-decoder=bink
+	make -j"$JOBS"
+	make install
+}
+
 # Ensure waf's lib checks find archives in the search path root.
 finalize_libs() {
-	for lib in libz libpng libjpeg libcurl libfreetype2 libbz2; do
+	for lib in libz libpng libjpeg libcurl libfreetype2 libbz2 libavformat libavcodec libavutil; do
 		if [ -f "$PREFIX/lib/${lib}.a" ] && [ ! -f "$PREFIX/${lib}.a" ]; then
 			cp "$PREFIX/lib/${lib}.a" "$PREFIX/${lib}.a"
 		fi
@@ -149,6 +172,7 @@ build_jpeg
 build_freetype
 build_curl
 build_protobuf
+build_ffmpeg
 finalize_libs
 
 echo "iOS deps installed to $PREFIX"

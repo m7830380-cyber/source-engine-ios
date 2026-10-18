@@ -187,12 +187,14 @@ PROJECT_EXTRA_SOURCES = {
 PORTAL2_EXTRA_SOURCES = {
 	'client': ['common/steamid.cpp',
 		# touch controls, from the source-engine port
-		'game/client/touch.cpp', 'game/client/in_touch.cpp'],
+		'game/client/touch.cpp', 'game/client/in_touch.cpp',
+		# Bink movies through FFmpeg (no Bink SDK for iOS)
+		'game/client/portal2/ios_bik_ffmpeg.cpp'],
 	'server': ['common/steamid.cpp'],
 }
 
 PORTAL2_EXTRA_USES = {
-	'client': ['JPEG'],  # common/imageutils.cpp in client_portal2_p2asw.vpc
+	'client': ['JPEG', 'FFMPEG'],  # common/imageutils.cpp in client_portal2_p2asw.vpc; Bink movies
 }
 
 # VPC link dependencies whose source is not part of the leak. Code that
@@ -423,6 +425,7 @@ def check_deps(conf):
 	conf.check(lib='freetype2', uselib_store='FT2')
 	conf.check(lib='protobuf', uselib_store='PROTOBUF')
 	conf.check(lib='curl', uselib_store='CURL')
+	conf.check(lib=['avformat', 'avcodec', 'avutil'], uselib_store='FFMPEG')
 
 # ---------------------------------------------------------------------------
 # VPC driven build

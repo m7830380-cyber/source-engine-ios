@@ -1520,10 +1520,42 @@ bool IsSurfaceInFrontOfPlane( SurfaceHandle_t surfID, const VPlane& plane )
 }
 
 
+#if defined( IOS )
+// Portal 2 iOS diagnostic: at most one line a second while paint is applied or read, so the launch
+// log shows whether blobs reach the paint map and whether the player's contact reads find it
+static int s_nIOSPaintShots, s_nIOSPaintChanged, s_nIOSPaintSurfs, s_nIOSPaintReads, s_nIOSPaintReadsFound;
+static int s_nIOSPaintFoundByColor[8];
+static Vector s_vIOSPaintLastShot;
+static int s_nIOSPaintLastColor = -1;
+static double s_flIOSPaintLastLog;
+static void IOS_PaintStatsFlush()
+{
+	double flNow = Plat_FloatTime();
+	if ( flNow - s_flIOSPaintLastLog < 1.0 || ( !s_nIOSPaintShots && !s_nIOSPaintReadsFound ) )
+		return;
+	s_flIOSPaintLastLog = flNow;
+	Msg( "[paint] %d paint spheres (%d changed paint, %d surfaces in range, last color %d at %.0f %.0f %.0f), %d paint reads, %d found paint (bounce %d reflect %d speed %d portal %d erase %d), maps %d\n",
+		s_nIOSPaintShots, s_nIOSPaintChanged, s_nIOSPaintSurfs, s_nIOSPaintLastColor, s_vIOSPaintLastShot.x, s_vIOSPaintLastShot.y, s_vIOSPaintLastShot.z,
+		s_nIOSPaintReads, s_nIOSPaintReadsFound, s_nIOSPaintFoundByColor[0], s_nIOSPaintFoundByColor[1], s_nIOSPaintFoundByColor[2],
+		s_nIOSPaintFoundByColor[3], s_nIOSPaintFoundByColor[4], g_PaintManager.m_iPaintmaps );
+	s_nIOSPaintShots = s_nIOSPaintChanged = s_nIOSPaintSurfs = s_nIOSPaintReads = s_nIOSPaintReadsFound = 0;
+	V_memset( s_nIOSPaintFoundByColor, 0, sizeof( s_nIOSPaintFoundByColor ) );
+}
+#endif
+
 bool ShootPaintSphere( const model_t *pModel, const Vector& vPosition, BYTE colorIndex, float flSphereRadius, float flPaintCoatPercent )
 {
 	if ( !g_PaintManager.m_bShouldRegister || g_PaintManager.m_pPaintTextureDataArray == NULL )
 	{
+#if defined( IOS )
+		static double s_flIOSIgnoredLog;
+		if ( Plat_FloatTime() - s_flIOSIgnoredLog > 1.0 )
+		{
+			s_flIOSIgnoredLog = Plat_FloatTime();
+			Msg( "[paint] paint sphere dropped: map paint registered %d, paint data %s\n", g_PaintManager.m_bShouldRegister ? 1 : 0,
+				g_PaintManager.m_pPaintTextureDataArray ? "allocated" : "missing" );
+		}
+#endif
 		return false;
 	}
 
@@ -1556,6 +1588,14 @@ bool ShootPaintSphere( const model_t *pModel, const Vector& vPosition, BYTE colo
 			}
 		}
 	}
+#if defined( IOS )
+	++s_nIOSPaintShots;
+	s_nIOSPaintChanged += bChangedPaint ? 1 : 0;
+	s_nIOSPaintSurfs += numSurf;
+	s_nIOSPaintLastColor = colorIndex;
+	s_vIOSPaintLastShot = vPosition;
+	IOS_PaintStatsFlush();
+#endif
 	return bChangedPaint;
 }
 
@@ -1613,6 +1653,15 @@ void TracePaintSphere( const model_t *pModel, const Vector& vPosition, const Vec
 	{
 		GetPaintColorFromSurface( paintinfo.m_aApplySurfs[i], vPosition, vContactNormal, flSphereRadius, paintinfo.m_plane, surfColors );
 	}
+#if defined( IOS )
+	++s_nIOSPaintReads;
+	if ( surfColors.Count() )
+	{
+		++s_nIOSPaintReadsFound;
+		++s_nIOSPaintFoundByColor[ surfColors[0] & 7 ];
+	}
+	IOS_PaintStatsFlush();
+#endif
 }
 
 

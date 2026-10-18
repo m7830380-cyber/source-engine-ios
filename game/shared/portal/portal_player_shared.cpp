@@ -2969,6 +2969,9 @@ PaintPowerState CPortal_Player::ActivateSpeedPower( PaintPowerInfo_t& speedInfo 
 
 	m_flSpeedDecelerationTime = 0.0f;
 
+#if defined( IOS ) && defined( GAME_DLL )
+	Msg( "[paint] player on speed gel: max speed %.0f at %.0f %.0f %.0f, t=%.2f\n", MaxSpeed(), GetAbsOrigin().x, GetAbsOrigin().y, GetAbsOrigin().z, gpGlobals->curtime );
+#endif
 	return ACTIVE_PAINT_POWER;
 }
 
@@ -3015,6 +3018,14 @@ PaintPowerState CPortal_Player::UseSpeedPower( PaintPowerInfo_t& speedInfo )
 	// Use the new max speed or the lower bound if the player has stopped moving completely
 	SetMaxSpeed( GetLocalVelocity().IsZero() ? sv_speed_normal.GetFloat() : flNewMaxSpeed );
 
+#if defined( IOS ) && defined( GAME_DLL )
+	static float s_flIOSSpeedLog;
+	if ( gpGlobals->curtime - s_flIOSSpeedLog > 1.0f || gpGlobals->curtime < s_flIOSSpeedLog )
+	{
+		s_flIOSSpeedLog = gpGlobals->curtime;
+		Msg( "[paint] on speed gel: max speed %.0f, speed %.0f, input %.0f, t=%.2f\n", MaxSpeed(), GetLocalVelocity().Length(), vInputVec.Length(), gpGlobals->curtime );
+	}
+#endif
 	return ACTIVE_PAINT_POWER;
 }
 
@@ -3061,6 +3072,10 @@ PaintPowerState CPortal_Player::DeactivateSpeedPower( PaintPowerInfo_t& speedInf
 	// Set the max speed. Done deactivating if it's normal walking speed
 	newMaxSpeed = clamp( newMaxSpeed, walkSpeed, sv_speed_paint_max.GetFloat() );
 	SetMaxSpeed( newMaxSpeed );
+#if defined( IOS ) && defined( GAME_DLL )
+	if ( newMaxSpeed == walkSpeed && onGround )
+		Msg( "[paint] player off speed gel, t=%.2f\n", gpGlobals->curtime );
+#endif
 	return newMaxSpeed == walkSpeed && onGround ? INACTIVE_PAINT_POWER : DEACTIVATING_PAINT_POWER;
 }
 

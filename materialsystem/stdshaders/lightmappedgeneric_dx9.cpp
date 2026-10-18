@@ -106,6 +106,11 @@ BEGIN_VS_SHADER( LightmappedGeneric,
 				 SHADER_PARAM( LAYERBORDERTINT, SHADER_PARAM_TYPE_COLOR, "[1 1 1]", "color tint for layer border" )
 
 				 SHADER_PARAM( LAYEREDGENORMAL, SHADER_PARAM_TYPE_BOOL, "0", "Enable normals on layer edge" )
+				 // Portal 2 paint pass (DrawLightmappedPaint_DX9); InitParams fills in the paint/ defaults
+				 SHADER_PARAM( PAINTSPLATNORMALMAP, SHADER_PARAM_TYPE_TEXTURE, "paint/splatnormal_default", "paint splat normal map" )
+				 SHADER_PARAM( PAINTSPLATBUBBLELAYOUT, SHADER_PARAM_TYPE_TEXTURE, "paint/bubblelayout", "paint bubble layout" )
+				 SHADER_PARAM( PAINTSPLATBUBBLE, SHADER_PARAM_TYPE_TEXTURE, "paint/bubble", "paint bubble texture" )
+				 SHADER_PARAM( PAINTENVMAP, SHADER_PARAM_TYPE_ENVMAP, "paint/paint_envmap_hdr", "paint envmap" )
 				 SHADER_PARAM( LAYEREDGEPUNCHIN, SHADER_PARAM_TYPE_BOOL, "0", "Invert normals on layer edge" )
 				 SHADER_PARAM( LAYEREDGESTRENGTH, SHADER_PARAM_TYPE_FLOAT, "0.5", "Layer edge normal strength" )
 				 SHADER_PARAM( LAYEREDGESOFTNESS, SHADER_PARAM_TYPE_FLOAT, "0.5", "Layer edge normal blend softness" )
@@ -202,6 +207,11 @@ END_SHADER_PARAMS
 		info.m_nLayerEdgeOffset = LAYEREDGEOFFSET;
 		info.m_nLayerEdgeSoftness = LAYEREDGESOFTNESS;
 		info.m_nLayerEdgeNormal = LAYEREDGENORMAL;
+
+		info.m_nPaintSplatNormal = PAINTSPLATNORMALMAP;
+		info.m_nPaintSplatBubbleLayout = PAINTSPLATBUBBLELAYOUT;
+		info.m_nPaintSplatBubble = PAINTSPLATBUBBLE;
+		info.m_nPaintEnvmap = PAINTENVMAP;
 	}
 
 	SHADER_FALLBACK
@@ -224,7 +234,16 @@ END_SHADER_PARAMS
 
 	SHADER_DRAW
 	{
-		DrawLightmappedGeneric_DX9( this, params, pShaderAPI, pShaderShadow, s_info, pContextDataPtr );
+		// The engine draws painted surfaces a second time with paint rendering on; that pass
+		// (SHADER_USING_PAINT snapshot) must draw the paint, not the surface again
+		if ( IsRenderingPaint( params ) )
+		{
+			DrawLightmappedPaint_DX9( this, params, pShaderAPI, pShaderShadow, s_info, pContextDataPtr );
+		}
+		else
+		{
+			DrawLightmappedGeneric_DX9( this, params, pShaderAPI, pShaderShadow, s_info, pContextDataPtr );
+		}
 	}
 
 	void ExecuteFastPath( int *dynVSIdx, int *dynPSIdx,  IMaterialVar** params, IShaderDynamicAPI * pShaderAPI, 
@@ -232,6 +251,9 @@ END_SHADER_PARAMS
 	{
 		*dynVSIdx = -1;
 		*dynPSIdx = -1;
+		// the paint pass has its own snapshot, the fast path only knows the regular one
+		if ( pShaderAPI && pShaderAPI->IsRenderingPaint() )
+			return;
 
 		DrawLightmappedGeneric_DX9_FastPath( dynVSIdx, dynPSIdx, this, params, pShaderAPI, s_info, pContextDataPtr, bCSMEnabled );
 	}

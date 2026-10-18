@@ -25,22 +25,22 @@ static Color g_PaintColors[PAINT_POWER_TYPE_COUNT_PLUS_NO_POWER];
 static void RegisterPaintColors()
 {
 
-#if defined ( PORTAL2 )
-
+	// The material system is shared with CS:GO and not built with PORTAL2, so look the colors up
+	// whenever they exist. Only maps with "paintinmap" register a paintmap data manager.
 	// These ConVar are defined in src/game/shared/portal/paint_color_manager.cpp
-	static ConVarRef speed_paint_color( "speed_paint_color" );
-	static ConVarRef bounce_paint_color( "bounce_paint_color" );
-	static ConVarRef reflect_paint_color( "reflect_paint_color" );
-	static ConVarRef portal_paint_color( "portal_paint_color" );
-	static ConVarRef erase_color( "erase_color" );
+	ConVarRef speed_paint_color( "speed_paint_color", true );
+	if ( !speed_paint_color.IsValid() )
+		return;
+	ConVarRef bounce_paint_color( "bounce_paint_color" );
+	ConVarRef reflect_paint_color( "reflect_paint_color" );
+	ConVarRef portal_paint_color( "portal_paint_color" );
+	ConVarRef erase_color( "erase_color" );
 
 	g_PaintColors[SPEED_POWER]		= speed_paint_color.GetColor();
 	g_PaintColors[BOUNCE_POWER]		= bounce_paint_color.GetColor();
 	g_PaintColors[PORTAL_POWER]		= portal_paint_color.GetColor();
 	g_PaintColors[REFLECT_POWER]	= reflect_paint_color.GetColor();
 	g_PaintColors[NO_POWER]			= erase_color.GetColor();
-
-#endif
 
 }
 

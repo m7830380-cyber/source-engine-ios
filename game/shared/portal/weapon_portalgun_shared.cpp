@@ -1110,6 +1110,26 @@ PortalPlacementResult_t CWeaponPortalgun::FirePortal( bool bPortal2, Vector *pVe
 			bIOSOtherActive ? "active, distance" : "inactive",
 			bIOSOtherActive ? ( pIOSOther->GetAbsOrigin() - placementInfo.vecFinalPosition ).Length() : -1.0f,
 			gpGlobals->curtime );
+
+		if ( placementInfo.ePlacementResult == PORTAL_PLACEMENT_OVERLAP_LINKED )
+		{
+			extern const CProp_Portal *g_pIOSPlacementBlocker;
+			CProp_Portal *pIOSBlocker = const_cast< CProp_Portal * >( g_pIOSPlacementBlocker );
+			const Vector vIOSSelf = pPortal->GetAbsOrigin();
+			Msg( "[portal]   placing #%d '%s' (now %s at %.0f %.0f %.0f), blocked by %s",
+				pPortal->entindex(), pPortal->GetEntityName() != NULL_STRING ? STRING( pPortal->GetEntityName() ) : "",
+				pPortal->IsActive() ? "active" : "inactive", vIOSSelf.x, vIOSSelf.y, vIOSSelf.z,
+				pIOSBlocker ? "" : "no portal (player standing in this floor portal)\n" );
+			if ( pIOSBlocker )
+			{
+				const Vector vIOSBlock = pIOSBlocker->GetAbsOrigin();
+				Msg( "#%d '%s' %s portal, %s, linkage %d, at %.0f %.0f %.0f, gun's %s portal\n",
+					pIOSBlocker->entindex(), pIOSBlocker->GetEntityName() != NULL_STRING ? STRING( pIOSBlocker->GetEntityName() ) : "",
+					pIOSBlocker->IsPortal2() ? "orange" : "blue", pIOSBlocker->IsActive() ? "active" : "inactive",
+					(int)pIOSBlocker->GetLinkageGroup(), vIOSBlock.x, vIOSBlock.y, vIOSBlock.z,
+					pIOSBlocker == m_hPrimaryPortal.Get() ? "blue" : ( pIOSBlocker == m_hSecondaryPortal.Get() ? "orange" : "NOT a" ) );
+			}
+		}
 	}
 #endif
 

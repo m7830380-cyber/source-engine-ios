@@ -51,6 +51,11 @@ struct CPortalCornerFitData
 CUtlVector<CBaseEntity *> g_FuncBumpingEntityList;
 bool g_bBumpedByLinkedPortal;
 
+#if defined( IOS )
+// iOS diagnostics: the portal that made the last placement fail with PORTAL_PLACEMENT_OVERLAP_LINKED
+const CProp_Portal *g_pIOSPlacementBlocker;
+#endif
+
 ConVar sv_portal_placement_debug("sv_portal_placement_debug", "0", FCVAR_REPLICATED );
 ConVar sv_portal_placement_never_bump("sv_portal_placement_never_bump", "0", FCVAR_REPLICATED | FCVAR_CHEAT );
 
@@ -461,6 +466,9 @@ bool TracePortalCorner( const CProp_Portal *pIgnorePortal, const Vector &vOrigin
 		if ( bBumpedByOwnPortal )
 		{
 			g_bBumpedByLinkedPortal = true;			
+#if defined( IOS )
+			g_pIOSPlacementBlocker = pBumpPortal;
+#endif
 		}
 
 		bSoftBump = !bBumpedByOwnPortal;
@@ -1283,6 +1291,9 @@ PortalPlacementResult_t IsPortalOverlappingOtherPortals( const CProp_Portal *pIg
 					{
 						if ( bLinkedPortal )
 						{
+#if defined( IOS )
+							g_pIOSPlacementBlocker = pTempPortal;
+#endif
 							return PORTAL_PLACEMENT_OVERLAP_LINKED;
 						}
 						else
@@ -1394,6 +1405,9 @@ bool IsPortalOnValidSurface( const Vector &vOrigin, const Vector &vForward, cons
 
 PortalPlacementResult_t VerifyPortalPlacement( const CProp_Portal *pIgnorePortal, Vector &vOrigin, QAngle &qAngles, float fHalfWidth, float fHalfHeight, PortalPlacedBy_t ePlacedBy )
 {
+#if defined( IOS )
+	g_pIOSPlacementBlocker = NULL;
+#endif
 	Vector vOriginalOrigin = vOrigin;
 
 	Vector vForward, vRight, vUp;

@@ -2308,7 +2308,7 @@ void CPortal_Player::ChooseActivePaintPowers( PaintPowerInfoVector& activePowers
 			s_flIOSContactLog = gpGlobals->curtime;
 			Msg( "[paint] contacts %d (%d painted), ground %s, stick normal %.2f %.2f %.2f, painted power %d, active %d, t=%.2f\n",
 				 (int)( touchedPowerRange.second - touchedPowerRange.first ), nPainted, pIOSGround ? pIOSGround->GetClassname() : "none",
-				 XYZ( m_PortalLocal.m_StickNormal ), (int)m_PortalLocal.m_PaintedPowerType, activePowers.Count(), gpGlobals->curtime );
+				 XYZ( m_PortalLocal.m_StickNormal.Get() ), (int)m_PortalLocal.m_PaintedPowerType, activePowers.Count(), gpGlobals->curtime );
 			int nIOSShown = 0;
 			for( PaintPowerConstIter it = touchedPowerRange.first; it != touchedPowerRange.second && nIOSShown < 4; ++it, ++nIOSShown )
 			{
